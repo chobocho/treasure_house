@@ -46,6 +46,11 @@
 - 🔷 **[GWBASIC_in_TypeScript.md](./GWBASIC_in_TypeScript.md)** — 💎 TypeScript 구현 🎯
 - 🎓 **[scheme-gwbasic-full.md](./scheme-gwbasic-full.md)** — λ Scheme 풀버전 🧙‍♂️
 
+### 🔢 수학 & 알고리즘 🧮
+- 📊 **[FFT_큰수곱셈_설명.html](./FFT_큰수곱셈_설명.html)** — 🔬 FFT를 이용한 큰 수 곱셈 설명 📐
+- 🐍 **[fft_bignum.py](./fft_bignum.py)** — 💡 FFT 큰 수 곱셈 Python 구현 🧪
+- 🔀 **[galois_to_lfsr.html](./galois_to_lfsr.html)** — ⚙️ Galois에서 LFSR로의 변환 🔧
+
 ### 🧱 기타 흥미로운 프로젝트 🎁
 - 🟦 **[Scheme Tetris.md](./Scheme%20Tetris.md)** — λ Scheme으로 만드는 테트리스! 🕹️
 - 📱 **[qr_project_spec.html](./qr_project_spec.html)** — 🔲 QR 코드 프로젝트 명세서 📄
