@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEV.LOG // Lua · Scheme · GameDev</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e0a;
+    --panel:#0f160f;
+    --green:#39ff14;
+    --green-dim:#1d8a0c;
+    --amber:#ffb000;
+    --cyan:#00e5ff;
+    --magenta:#ff2e88;
+    --grid:rgba(57,255,20,.06);
+    --scan:rgba(0,0,0,.25);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);
+    color:var(--green);
+    font-family:'JetBrains Mono',monospace;
+    line-height:1.7;
+    overflow-x:hidden;
+    position:relative;
+    min-height:100vh;
+  }
+  /* CRT scanlines + flicker */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;
+    background:repeating-linear-gradient(0deg,transparent 0 2px,var(--scan) 2px 4px);
+    mix-blend-mode:multiply;
+  }
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;
+    background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.55) 100%);
+  }
+  @keyframes flick{0%,100%{opacity:1}97%{opacity:1}98%{opacity:.85}99%{opacity:.95}}
+  .crt{animation:flick 6s infinite}
+
+  /* dotted grid bg */
+  .gridbg{
+    position:fixed;inset:0;z-index:-1;
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:32px 32px;
+  }
+
+  .wrap{max-width:1100px;margin:0 auto;padding:0 20px}
+
+  /* ---- header ---- */
+  header{padding:48px 0 24px;text-align:center;position:relative}
+  .logo{
+    font-family:'Press Start 2P',monospace;
+    font-size:clamp(18px,5vw,40px);
+    color:var(--green);
+    text-shadow:0 0 8px var(--green),0 0 24px var(--green-dim),3px 3px 0 var(--magenta);
+    letter-spacing:2px;line-height:1.4;
+  }
+  .logo .accent{color:var(--amber);text-shadow:0 0 8px var(--amber),3px 3px 0 var(--cyan)}
+  .tagline{
+    font-family:'VT323',monospace;font-size:clamp(16px,3vw,24px);
+    color:var(--cyan);margin-top:14px;opacity:.9;
+  }
+  .blink{animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  .meta-bar{
+    font-family:'VT323',monospace;font-size:18px;color:var(--green-dim);
+    border-top:1px dashed var(--green-dim);border-bottom:1px dashed var(--green-dim);
+    margin-top:28px;padding:8px 0;display:flex;flex-wrap:wrap;justify-content:center;gap:20px;
+  }
+  .meta-bar span{white-space:nowrap}
+  .meta-bar b{color:var(--amber)}
+
+  /* ---- nav tabs ---- */
+  nav{position:sticky;top:0;z-index:100;background:rgba(10,14,10,.92);backdrop-filter:blur(4px);
+      border-bottom:2px solid var(--green-dim);padding:10px 0;margin:24px 0 0}
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  .tab{
+    font-family:'VT323',monospace;font-size:19px;
+    background:transparent;color:var(--green-dim);border:1px solid var(--green-dim);
+    padding:6px 14px;cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:1px;
+  }
+  .tab:hover{color:var(--green);border-color:var(--green);box-shadow:0 0 10px var(--green-dim)}
+  .tab.active{background:var(--green);color:var(--bg);border-color:var(--green);
+    box-shadow:0 0 16px var(--green);font-weight:bold}
+
+  /* ---- sections ---- */
+  section{display:none;padding:40px 0 60px;animation:fadein .4s}
+  section.show{display:block}
+  @keyframes fadein{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  .sec-head{
+    font-family:'Press Start 2P',monospace;font-size:clamp(13px,3vw,20px);
+    color:var(--amber);text-shadow:0 0 10px var(--amber);margin-bottom:6px;
+  }
+  .sec-sub{font-family:'VT323',monospace;font-size:20px;color:var(--cyan);margin-bottom:28px;opacity:.85}
+
+  .card{
+    background:var(--panel);border:1px solid var(--green-dim);
+    padding:22px 24px;margin-bottom:22px;position:relative;
+    box-shadow:inset 0 0 30px rgba(57,255,20,.04);
+  }
+  .card::before{
+    content:"";position:absolute;top:-1px;left:-1px;width:14px;height:14px;
+    border-top:2px solid var(--green);border-left:2px solid var(--green);
+  }
+  .card::after{
+    content:"";position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;
+    border-bottom:2px solid var(--green);border-right:2px solid var(--green);
+  }
+  .card h3{font-family:'VT323',monospace;font-size:24px;color:var(--green);margin-bottom:12px;
+    border-bottom:1px dashed var(--green-dim);padding-bottom:8px}
+  .card h3 .tag{font-size:14px;color:var(--magenta);font-family:'JetBrains Mono';margin-left:8px}
+  .card p{margin-bottom:12px;color:#bfe8b0}
+  .card p:last-child{margin-bottom:0}
+  .lead{color:var(--amber);font-weight:bold;border-left:3px solid var(--amber);padding-left:12px}
+
+  ul.term{list-style:none;margin:10px 0}
+  ul.term li{padding:4px 0 4px 22px;position:relative;color:#bfe8b0}
+  ul.term li::before{content:"►";position:absolute;left:0;color:var(--green);font-size:12px}
+
+  code{background:#06140a;color:var(--cyan);padding:1px 6px;border:1px solid var(--green-dim);
+    font-family:'JetBrains Mono';font-size:.9em}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--green-dim);padding:8px 10px;text-align:left}
+  th{background:#06140a;color:var(--amber);font-family:'VT323';font-size:18px;letter-spacing:1px}
+  td{color:#bfe8b0}
+  tr:hover td{background:rgba(57,255,20,.05)}
+  .win{color:var(--green);font-weight:bold}
+  .lose{color:var(--magenta)}
+  .yes{color:var(--green)}
+  .no{color:var(--magenta)}
+
+  .verdict{
+    border:2px solid var(--amber);background:rgba(255,176,0,.06);padding:18px 22px;margin-top:24px;
+    font-family:'VT323',monospace;font-size:21px;color:var(--amber);
+  }
+  .verdict b{color:var(--green);text-shadow:0 0 8px var(--green)}
+
+  /* ---- tetris demo ---- */
+  .demo-grid{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+  #tetris{
+    border:3px solid var(--green);background:#04080a;
+    box-shadow:0 0 24px var(--green-dim),inset 0 0 40px rgba(0,0,0,.6);
+    image-rendering:pixelated;
+  }
+  .demo-side{flex:1;min-width:200px}
+  .scoreboard{font-family:'VT323',monospace;font-size:22px;color:var(--cyan);margin-bottom:14px}
+  .scoreboard b{color:var(--amber)}
+  .ctl{font-family:'VT323',monospace;font-size:18px;color:var(--green-dim);line-height:1.8}
+  .ctl kbd{background:#06140a;border:1px solid var(--green);color:var(--green);
+    padding:1px 8px;font-family:'JetBrains Mono';font-size:13px;margin-right:4px}
+  .btn{
+    font-family:'VT323',monospace;font-size:20px;background:var(--green);color:var(--bg);
+    border:none;padding:8px 20px;cursor:pointer;margin-top:14px;letter-spacing:1px;
+    box-shadow:0 0 14px var(--green);transition:all .15s;
+  }
+  .btn:hover{background:var(--amber);box-shadow:0 0 18px var(--amber)}
+
+  /* ---- bar chart ---- */
+  .chart{margin:20px 0}
+  .bar-row{display:flex;align-items:center;gap:12px;margin:14px 0}
+  .bar-label{font-family:'VT323';font-size:20px;width:130px;color:var(--cyan)}
+  .bar-track{flex:1;background:#06140a;border:1px solid var(--green-dim);height:30px;position:relative;overflow:hidden}
+  .bar-fill{height:100%;width:0;transition:width 1.2s cubic-bezier(.2,.8,.2,1);position:relative}
+  .bar-fill.lua{background:linear-gradient(90deg,var(--magenta),#ff7ab0)}
+  .bar-fill.scm{background:linear-gradient(90deg,var(--cyan),#7fffff)}
+  .bar-val{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+    font-family:'JetBrains Mono';font-weight:bold;color:var(--bg);font-size:13px}
+
+  /* ---- code viewer ---- */
+  .code-card{padding:0;overflow:hidden}
+  .code-bar{display:flex;align-items:center;justify-content:space-between;
+    background:#06140a;border-bottom:1px solid var(--green-dim);padding:8px 14px}
+  .code-title{font-family:'VT323';font-size:20px;color:var(--amber);letter-spacing:1px}
+  .code-title::before{content:"●●● ";color:var(--green-dim);font-size:12px;letter-spacing:2px}
+  .copy-btn{font-family:'VT323';font-size:16px;background:transparent;color:var(--green);
+    border:1px solid var(--green-dim);padding:3px 12px;cursor:pointer;transition:all .15s;letter-spacing:1px}
+  .copy-btn:hover{background:var(--green);color:var(--bg);box-shadow:0 0 12px var(--green)}
+  .copy-btn.done{background:var(--amber);color:var(--bg);border-color:var(--amber)}
+  pre.code{margin:0;max-height:520px;overflow:auto;padding:16px;background:#04080a;
+    font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.6;tab-size:2}
+  pre.code code{background:none;border:none;padding:0;color:#cfe9c2;white-space:pre;display:block}
+  /* lua syntax highlight */
+  pre.code .kw{color:var(--magenta);font-weight:bold}
+  pre.code .fn{color:var(--cyan)}
+  pre.code .str{color:var(--amber)}
+  pre.code .num{color:#ff9e64}
+  pre.code .cmt{color:var(--green-dim);font-style:italic}
+  pre.code .glb{color:#7fffd4}
+  pre.code::-webkit-scrollbar{width:10px;height:10px}
+  pre.code::-webkit-scrollbar-track{background:#06140a}
+  pre.code::-webkit-scrollbar-thumb{background:var(--green-dim);border:1px solid var(--green)}
+  .code-note{font-family:'VT323';font-size:17px;color:var(--green-dim);padding:10px 16px;
+    border-top:1px dashed var(--green-dim);background:#06140a}
+
+  footer{text-align:center;padding:40px 0;font-family:'VT323';font-size:18px;color:var(--green-dim);
+    border-top:1px dashed var(--green-dim);margin-top:40px}
+  footer .heart{color:var(--magenta)}
+
+  .typed{font-family:'VT323';font-size:20px;color:var(--green);min-height:28px}
+  .cursor-box{display:inline-block;width:10px;height:18px;background:var(--green);margin-left:2px;
+    animation:blink 1s steps(1) infinite;vertical-align:middle}
+
+  @media(max-width:640px){
+    .meta-bar{font-size:15px;gap:12px}
+    .bar-label{width:90px;font-size:16px}
+    th,td{padding:6px 5px;font-size:12px}
+  }
+</style>
+</head>
+<body class="crt">
+<div class="gridbg"></div>
+
+<div class="wrap">
+  <header>
+    <div class="logo">DEV.<span class="accent">LOG</span></div>
+    <div class="tagline">&gt; lua · scheme · gamedev session<span class="blink">_</span></div>
+    <div class="typed" id="typed"></div>
+    <div class="meta-bar">
+      <span>PLAYER: <b>chobocho</b></span>
+      <span>TOPIC: <b>RETRO TETRIS</b></span>
+      <span>LANG: <b>LUA / SCHEME</b></span>
+      <span>SESSION: <b>5 ROUNDS</b></span>
+    </div>
+  </header>
+</div>
+
+<nav>
+  <div class="wrap">
+    <div class="tabs">
+      <button class="tab active" data-tab="t1">01 · 테트리스</button>
+      <button class="tab" data-tab="t2">02 · 라인비교</button>
+      <button class="tab" data-tab="t3">03 · 한달학습</button>
+      <button class="tab" data-tab="t4">04 · 웹개발</button>
+      <button class="tab" data-tab="t5">05 · LÖVE vs Pygame</button>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- ============ SECTION 1 ============ -->
+  <section id="t1" class="show">
+    <div class="sec-head">&gt; LUA TETRIS</div>
+    <div class="sec-sub">LÖVE 2D 기반 구현 + 알고리즘 노트</div>
+
+    <div class="demo-grid">
+      <canvas id="tetris" width="250" height="500"></canvas>
+      <div class="demo-side">
+        <div class="scoreboard">
+          SCORE <b id="score">0</b><br>
+          LINES <b id="lines">0</b><br>
+          LEVEL <b id="level">1</b>
+        </div>
+        <div class="ctl">
+          <kbd>←</kbd><kbd>→</kbd> 이동<br>
+          <kbd>↑</kbd> 회전<br>
+          <kbd>↓</kbd> 소프트드롭<br>
+          <kbd>SPC</kbd> 하드드롭<br>
+        </div>
+        <button class="btn" id="resetBtn">▶ RESTART</button>
+        <p style="font-family:'VT323';font-size:16px;color:var(--green-dim);margin-top:14px">
+          * 실제로 플레이 가능한 데모입니다.<br>캔버스 클릭 후 방향키 사용.
+        </p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:26px">
+      <h3>구현 핵심 <span class="tag">// algorithm notes</span></h3>
+      <ul class="term">
+        <li><b>자료구조</b> — 4×4 행렬로 피스 정의. 회전 중심이 (2.5,2.5)로 통일되어 SRS 구현이 단순.</li>
+        <li><b>회전</b> — <code>new[i][j] = old[N+1-j][i]</code> 공식. 4가지 상태 사전 캐싱하면 O(1) 접근.</li>
+        <li><b>충돌검사</b> — 이동·회전·낙하 모두 단일 <code>collides()</code> 함수로 통합. O(16) 상수.</li>
+        <li><b>라인클리어</b> — Lua table은 참조 타입이라 <b>행 자체를 통째로 교체</b>해 내부 루프 제거.</li>
+        <li><b>7-bag</b> — Fisher-Yates 셔플로 7피스가 7턴마다 정확히 한 번씩 등장 (공정성).</li>
+        <li><b>비트보드</b> — AI 솔버용. 한 행을 16비트 정수로 → 충돌이 AND 한 번. 50× 향상.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>언어별 보드 표현 비교</h3>
+      <table>
+        <tr><th>항목</th><th>Lua</th><th>Python</th><th>C/C++</th><th>Go</th></tr>
+        <tr><td>보드</td><td>1-indexed 2D table</td><td>0-indexed list</td><td>int[H][W] 정적</td><td>[H][W]int</td></tr>
+        <tr><td>라인 시프트</td><td>참조 교체</td><td>numpy slice</td><td>memmove</td><td>copy()</td></tr>
+        <tr><td>회전 캐싱</td><td>table 4종</td><td>numpy 회전</td><td class="win">uint16 비트마스크</td><td>slice 복사</td></tr>
+      </table>
+      <p class="lead">테트리스 보드는 200셀뿐이라 어떤 언어든 성능 이슈 없음. 단 AI 솔버를 만들면 비트보드가 압도적.</p>
+    </div>
+
+    <div class="card code-card">
+      <div class="code-bar">
+        <span class="code-title">main.lua &mdash; LÖVE 2D Tetris</span>
+        <button class="copy-btn" id="copyLua">⧉ COPY</button>
+      </div>
+      <pre class="code"><code id="luaCode">로딩 중...</code></pre>
+      <div class="code-note">&gt; 실행: 이 코드를 main.lua로 저장 후 같은 폴더에서 <code>love .</code> &nbsp;|&nbsp; 위 데모는 이 로직을 JS로 포팅한 것</div>
+    </div>
+  </section>
+
+  <!-- Lua 원본 소스 (렌더링은 JS가 하이라이팅 후 주입) -->
+  <script type="text/plain" id="luaSource">-- ============================================================================
+-- main.lua — LÖVE 2D 테트리스
+-- 실행: love . (이 파일이 있는 디렉토리에서)
+-- ============================================================================
+
+-- ---------- 상수 ----------
+local BOARD_W, BOARD_H = 10, 20
+local CELL = 30                   -- 셀 픽셀 크기
+local OFFSET_X, OFFSET_Y = 40, 40 -- 보드 그리기 시작 좌표
+
+-- 색상 팔레트 (1-indexed). 0은 빈칸이라 사용하지 않음.
+local COLORS = {
+    {0.00, 1.00, 1.00}, -- 1: I (cyan)
+    {1.00, 1.00, 0.00}, -- 2: O (yellow)
+    {0.60, 0.00, 1.00}, -- 3: T (purple)
+    {0.00, 1.00, 0.00}, -- 4: S (green)
+    {1.00, 0.00, 0.00}, -- 5: Z (red)
+    {0.00, 0.30, 1.00}, -- 6: J (blue)
+    {1.00, 0.50, 0.00}, -- 7: L (orange)
+}
+
+local SHAPES = {
+    I = {id=1, m={{0,0,0,0},{1,1,1,1},{0,0,0,0},{0,0,0,0}}},
+    O = {id=2, m={{0,1,1,0},{0,1,1,0},{0,0,0,0},{0,0,0,0}}},
+    T = {id=3, m={{0,1,0,0},{1,1,1,0},{0,0,0,0},{0,0,0,0}}},
+    S = {id=4, m={{0,1,1,0},{1,1,0,0},{0,0,0,0},{0,0,0,0}}},
+    Z = {id=5, m={{1,1,0,0},{0,1,1,0},{0,0,0,0},{0,0,0,0}}},
+    J = {id=6, m={{1,0,0,0},{1,1,1,0},{0,0,0,0},{0,0,0,0}}},
+    L = {id=7, m={{0,0,1,0},{1,1,1,0},{0,0,0,0},{0,0,0,0}}},
+}
+
+local SCORE_TABLE = {0, 100, 300, 500, 800}
+
+-- ---------- 게임 상태 ----------
+local board, piece, nextKind, bag
+local score, lines, level
+local fallTimer, fallInterval
+local gameOver
+
+-- ---------- 유틸 ----------
+
+-- 4x4 시계방향 회전. 새 테이블 반환.
+local function rotateCW(s)
+    local r = {{},{},{},{}}
+    for i = 1, 4 do
+        for j = 1, 4 do
+            r[i][j] = s[5 - j][i]  -- 1-indexed 공식: new[i][j] = old[N+1-j][i]
+        end
+    end
+    return r
+end
+
+-- 빈 보드 생성
+local function newBoard()
+    local b = {}
+    for y = 1, BOARD_H do
+        b[y] = {}
+        for x = 1, BOARD_W do b[y][x] = 0 end
+    end
+    return b
+end
+
+-- Fisher-Yates 셔플 (in-place)
+local function shuffle(t)
+    for i = #t, 2, -1 do
+        local j = math.random(i)
+        t[i], t[j] = t[j], t[i]
+    end
+end
+
+-- 7-bag에서 다음 피스 종류(문자열) 반환
+local function drawFromBag()
+    if not bag or #bag == 0 then
+        bag = {"I","O","T","S","Z","J","L"}
+        shuffle(bag)
+    end
+    return table.remove(bag)
+end
+
+-- 새 피스 객체 생성. 보드 상단 중앙에 스폰.
+local function spawn(kind)
+    local def = SHAPES[kind]
+    return {
+        kind  = kind,
+        shape = def.m,           -- 회전이 잦지 않으면 즉석 회전이 더 단순함
+        color = def.id,
+        x     = math.floor((BOARD_W - 4) / 2) + 1,  -- 4x4 박스 좌측상단 X
+        y     = 1,                                  -- Y는 천장 시작
+    }
+end
+
+-- 충돌 검사. 가상의 (dx,dy) 이동 또는 testShape 회전을 미리 검사.
+local function collides(b, p, dx, dy, testShape)
+    local shape = testShape or p.shape
+    local px, py = p.x + dx, p.y + dy
+    for i = 1, 4 do
+        for j = 1, 4 do
+            if shape[i][j] ~= 0 then
+                local bx, by = px + j - 1, py + i - 1
+                if bx < 1 or bx > BOARD_W or by > BOARD_H then return true end
+                if by >= 1 and b[by][bx] ~= 0 then return true end
+            end
+        end
+    end
+    return false
+end
+
+-- 피스를 보드에 고정(merge)
+local function lockPiece(b, p)
+    for i = 1, 4 do
+        for j = 1, 4 do
+            if p.shape[i][j] ~= 0 then
+                local bx, by = p.x + j - 1, p.y + i - 1
+                if by >= 1 and by <= BOARD_H and bx >= 1 and bx <= BOARD_W then
+                    b[by][bx] = p.color
+                end
+            end
+        end
+    end
+end
+
+-- 라인 클리어 (행 참조 교체 방식). 클리어 수 반환.
+local function clearLines(b)
+    local writeY = BOARD_H
+    local cleared = 0
+    for readY = BOARD_H, 1, -1 do
+        local full = true
+        local row = b[readY]
+        for x = 1, BOARD_W do
+            if row[x] == 0 then full = false; break end
+        end
+        if not full then
+            if writeY ~= readY then b[writeY] = row end
+            writeY = writeY - 1
+        else
+            cleared = cleared + 1
+        end
+    end
+    -- 위쪽 남은 영역 새 빈 행으로 채움
+    for y = writeY, 1, -1 do
+        local r = {}
+        for x = 1, BOARD_W do r[x] = 0 end
+        b[y] = r
+    end
+    return cleared
+end
+
+-- 레벨에 따른 낙하 간격 (초). 표준 가이드라인 공식.
+local function gravityFor(lvl)
+    return math.pow(0.8, lvl - 1)
+end
+
+-- 게임 리셋
+local function reset()
+    math.randomseed(os.time())
+    board = newBoard()
+    bag = nil
+    nextKind = drawFromBag()
+    piece = spawn(drawFromBag())
+    score, lines, level = 0, 0, 1
+    fallTimer = 0
+    fallInterval = gravityFor(level)
+    gameOver = false
+end
+
+-- 피스 한 칸 낙하 시도. 실패 시 lock + 라인클리어 + 새 피스.
+local function step()
+    if collides(board, piece, 0, 1, nil) then
+        lockPiece(board, piece)
+        local n = clearLines(board)
+        if n > 0 then
+            score = score + SCORE_TABLE[n + 1] * level
+            lines = lines + n
+            local newLevel = math.floor(lines / 10) + 1
+            if newLevel ~= level then
+                level = newLevel
+                fallInterval = gravityFor(level)
+            end
+        end
+        piece = spawn(nextKind)
+        nextKind = drawFromBag()
+        if collides(board, piece, 0, 0, nil) then
+            gameOver = true   -- 스폰 위치에서 충돌 = 탑아웃
+        end
+    else
+        piece.y = piece.y + 1
+    end
+end
+
+-- 하드 드롭: 충돌 직전까지 한 번에 떨어뜨림
+local function hardDrop()
+    local drop = 0
+    while not collides(board, piece, 0, drop + 1, nil) do
+        drop = drop + 1
+    end
+    piece.y = piece.y + drop
+    score = score + drop * 2  -- 가이드라인: 하드드롭은 셀당 2점
+    step()  -- 즉시 lock 처리
+end
+
+-- 회전 시도. 단순 구현(SRS 킥 미포함).
+local function tryRotate()
+    if piece.kind == "O" then return end  -- O는 회전 의미 없음
+    local rotated = rotateCW(piece.shape)
+    if not collides(board, piece, 0, 0, rotated) then
+        piece.shape = rotated
+    else
+        -- 간단한 벽킥: 좌우로 1칸 밀어서 시도
+        for _, dx in ipairs({-1, 1, -2, 2}) do
+            if not collides(board, piece, dx, 0, rotated) then
+                piece.x = piece.x + dx
+                piece.shape = rotated
+                return
+            end
+        end
+    end
+end
+
+-- ---------- LÖVE 콜백 ----------
+
+function love.load()
+    love.window.setTitle("Lua Tetris")
+    love.window.setMode(OFFSET_X * 2 + BOARD_W * CELL + 180, OFFSET_Y * 2 + BOARD_H * CELL)
+    reset()
+end
+
+function love.update(dt)
+    if gameOver then return end
+    fallTimer = fallTimer + dt
+    if fallTimer >= fallInterval then
+        fallTimer = fallTimer - fallInterval
+        step()
+    end
+end
+
+function love.keypressed(k)
+    if gameOver then
+        if k == "r" then reset() end
+        return
+    end
+    if k == "left" then
+        if not collides(board, piece, -1, 0, nil) then piece.x = piece.x - 1 end
+    elseif k == "right" then
+        if not collides(board, piece, 1, 0, nil) then piece.x = piece.x + 1 end
+    elseif k == "down" then  -- 소프트 드롭
+        if not collides(board, piece, 0, 1, nil) then
+            piece.y = piece.y + 1
+            score = score + 1
+        end
+    elseif k == "up" or k == "x" then
+        tryRotate()
+    elseif k == "space" then
+        hardDrop()
+    elseif k == "r" then
+        reset()
+    end
+end
+
+-- 셀 한 칸 그리기 (테두리 포함)
+local function drawCell(px, py, colorId)
+    local c = COLORS[colorId]
+    love.graphics.setColor(c[1], c[2], c[3])
+    love.graphics.rectangle("fill", px, py, CELL - 1, CELL - 1)
+    love.graphics.setColor(0, 0, 0, 0.3)
+    love.graphics.rectangle("line", px, py, CELL - 1, CELL - 1)
+end
+
+function love.draw()
+    -- 보드 배경
+    love.graphics.setColor(0.1, 0.1, 0.15)
+    love.graphics.rectangle("fill", OFFSET_X, OFFSET_Y, BOARD_W * CELL, BOARD_H * CELL)
+
+    -- 고정된 블록
+    for y = 1, BOARD_H do
+        for x = 1, BOARD_W do
+            local v = board[y][x]
+            if v ~= 0 then
+                drawCell(OFFSET_X + (x - 1) * CELL, OFFSET_Y + (y - 1) * CELL, v)
+            end
+        end
+    end
+
+    -- 현재 피스
+    if not gameOver then
+        for i = 1, 4 do
+            for j = 1, 4 do
+                if piece.shape[i][j] ~= 0 then
+                    local bx, by = piece.x + j - 1, piece.y + i - 1
+                    if by >= 1 then
+                        drawCell(OFFSET_X + (bx - 1) * CELL,
+                                 OFFSET_Y + (by - 1) * CELL,
+                                 piece.color)
+                    end
+                end
+            end
+        end
+    end
+
+    -- HUD
+    local hx = OFFSET_X + BOARD_W * CELL + 20
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print("SCORE: " .. score, hx, OFFSET_Y)
+    love.graphics.print("LINES: " .. lines, hx, OFFSET_Y + 20)
+    love.graphics.print("LEVEL: " .. level, hx, OFFSET_Y + 40)
+    love.graphics.print("NEXT:  " .. nextKind, hx, OFFSET_Y + 70)
+
+    -- 다음 피스 미니 미리보기
+    local nshape = SHAPES[nextKind].m
+    local ncolor = SHAPES[nextKind].id
+    for i = 1, 4 do
+        for j = 1, 4 do
+            if nshape[i][j] ~= 0 then
+                drawCell(hx + (j - 1) * 16, OFFSET_Y + 90 + (i - 1) * 16, ncolor)
+            end
+        end
+    end
+
+    -- 조작 안내
+    love.graphics.setColor(0.7, 0.7, 0.7)
+    love.graphics.print("Left/Right : move",  hx, OFFSET_Y + 200)
+    love.graphics.print("Down  : soft drop",  hx, OFFSET_Y + 215)
+    love.graphics.print("Up/X  : rotate",     hx, OFFSET_Y + 230)
+    love.graphics.print("Space : hard drop",  hx, OFFSET_Y + 245)
+    love.graphics.print("R     : reset",      hx, OFFSET_Y + 260)
+
+    if gameOver then
+        love.graphics.setColor(1, 0.2, 0.2)
+        love.graphics.printf("GAME OVER\nPress R", 0, OFFSET_Y + 200,
+                             OFFSET_X * 2 + BOARD_W * CELL, "center")
+    end
+end</script>
+
+  <!-- ============ SECTION 2 ============ -->
+  <section id="t2">
+    <div class="sec-head">&gt; LINE COUNT BATTLE</div>
+    <div class="sec-sub">Lua vs Scheme — 같은 게임, 다른 길이</div>
+
+    <div class="card">
+      <h3>측정 결과 <span class="tag">// actual count</span></h3>
+      <div class="chart" id="chart">
+        <div class="bar-row">
+          <div class="bar-label">Lua</div>
+          <div class="bar-track"><div class="bar-fill lua" data-w="100"><span class="bar-val">331줄</span></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Scheme</div>
+          <div class="bar-track"><div class="bar-fill scm" data-w="36"><span class="bar-val">~120줄</span></div></div>
+        </div>
+      </div>
+      <p class="lead">Lua 버전이 약 2.8배 길다. 하지만 이유는 "함수형 vs 명령형"이 아니다.</p>
+    </div>
+
+    <div class="card">
+      <h3>진짜 원인 4가지</h3>
+      <table>
+        <tr><th>원인</th><th>설명</th><th>영향</th></tr>
+        <tr><td>보드 표현</td><td>Scheme=채워진 블록 리스트 / Lua=200칸 배열</td><td class="lose">최대</td></tr>
+        <tr><td>회전 방식</td><td>Scheme=좌표변환 1줄 / Lua=4×4행렬+벽킥</td><td class="lose">큼</td></tr>
+        <tr><td>기능 차이</td><td>Lua만 7-bag·레벨·하드드롭·미리보기·HUD</td><td class="lose">큼</td></tr>
+        <tr><td>언어 특성</td><td>Lua엔 filter 내장 없음 → 직접 루프</td><td>작음</td></tr>
+      </table>
+      <p>같은 기능 범위로 맞추면 격차는 약 <b style="color:var(--amber)">1.5~1.8배</b>로 줄어든다. 나머지는 기능·자료구조 선택의 차이.</p>
+    </div>
+
+    <div class="card">
+      <h3>함수형의 우아함 — 회전 한 줄</h3>
+      <table>
+        <tr><th>Scheme</th><th>Lua</th></tr>
+        <tr>
+          <td><code>(cons (- (cdr pt)) (car pt))</code><br>점 4개에 회전행렬 한 번</td>
+          <td>4중 중첩 루프 + tryRotate 벽킥</td>
+        </tr>
+      </table>
+      <p class="lead">단, Scheme 버전엔 벽킥(wall kick)이 없다. Lua가 길어진 건 기능을 더 넣었기 때문.</p>
+    </div>
+  </section>
+
+  <!-- ============ SECTION 3 ============ -->
+  <section id="t3">
+    <div class="sec-head">&gt; 1-MONTH LEARNING</div>
+    <div class="sec-sub">실용/생산성 목적 — Lua vs Scheme</div>
+
+    <div class="verdict">▶ 결론: <b>Lua 추천.</b> 한 달 + 실용 목적이라면 명확히 앞선다.</div>
+
+    <div class="card" style="margin-top:22px">
+      <h3>학습 곡선</h3>
+      <ul class="term">
+        <li><b>Lua</b> — C/Java/JS/Python 쓰면 1주일이면 익숙. 핵심 문법이 책 200p 안에.</li>
+        <li><b>Scheme</b> — 패러다임 전환 비용. 재귀·매크로·continuation. 보통 3~6개월.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>실용성 — 어디에 쓰이나</h3>
+      <table>
+        <tr><th>영역</th><th>Lua</th><th>Scheme</th></tr>
+        <tr><td>임베디드 스크립팅</td><td class="yes">Redis·Nginx·게임엔진 표준</td><td class="no">거의 없음</td></tr>
+        <tr><td>게임 개발</td><td class="yes">LÖVE·Roblox·Defold</td><td class="no">없음</td></tr>
+        <tr><td>API 게이트웨이</td><td class="yes">OpenResty·Kong</td><td class="no">없음</td></tr>
+        <tr><td>에디터 확장</td><td class="yes">Neovim 공식</td><td>Emacs(Elisp)</td></tr>
+        <tr><td>현업 사용 빈도</td><td class="yes">높음</td><td class="no">학계·교육 위주</td></tr>
+      </table>
+      <p>OpenShift/RHEL 환경이라면 OpenResty·Redis 스크립팅·HAProxy·Neovim 모두 Lua. 배워서 다음 달 바로 써먹는 시나리오.</p>
+    </div>
+
+    <div class="card">
+      <h3>함수형을 채우고 싶다면?</h3>
+      <p class="lead">Scheme 대신 <b style="color:var(--amber)">Clojure</b>. JVM 위라 기존 Java/Kotlin 자산 활용 + 한 달이면 실무 코드 가능.</p>
+      <p>Scheme(Lisp) 학습은 사고력엔 큰 도움. 하지만 그건 "교양"의 영역 — 1년 단위 자기계발이라면 추천, 한 달 실용엔 부적합.</p>
+    </div>
+  </section>
+
+  <!-- ============ SECTION 4 ============ -->
+  <section id="t4">
+    <div class="sec-head">&gt; SCHEME WEB DEV</div>
+    <div class="sec-sub">빡셀까? — 가능하지만 모든 길이 비포장도로</div>
+
+    <div class="verdict">▶ 결론: <b style="color:var(--magenta)">빡세다.</b> 생산성이 목표면 비추. "혼자 쓸 도구"엔 충분.</div>
+
+    <div class="card" style="margin-top:22px">
+      <h3>생태계 격차</h3>
+      <table>
+        <tr><th>항목</th><th>Racket</th><th>Python</th><th>Node</th><th>Clojure</th></tr>
+        <tr><td>패키지 수</td><td class="lose">수백</td><td>50만+</td><td>200만+</td><td>수만</td></tr>
+        <tr><td>ORM 성숙도</td><td class="lose">빈약</td><td>Django/SQLAlchemy</td><td>Prisma</td><td>적당</td></tr>
+        <tr><td>채용 공고</td><td class="lose">거의 0</td><td>수만</td><td>수만</td><td>수백</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>직접 짜야 하는 것들 <span class="tag">// no SDK</span></h3>
+      <ul class="term">
+        <li class="no">Stripe·AWS·Firebase 공식 SDK 없음</li>
+        <li class="no">모던 ORM·마이그레이션 도구 없음</li>
+        <li class="no">OAuth2 클라이언트 직접 구현</li>
+        <li class="no">GraphQL·WebSocket 성숙도 낮음</li>
+        <li class="no">Heroku·Railway·Vercel 공식 지원 X → Docker 직접</li>
+        <li class="no">OpenTelemetry·Prometheus SDK 없음</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>그래도 빛나는 좁은 영역</h3>
+      <ul class="term">
+        <li>DSL 기반 사이트 — 매크로로 도메인 언어 구축 (Scribble이 그 예)</li>
+        <li>continuation 기반 폼 처리 — 다른 언어에 없는 우아함</li>
+        <li>개인 블로그·소형 도구 — 의존성 적고 단일 배포</li>
+      </ul>
+      <p class="lead">"프로덕션 SaaS"엔 빡세지만 "혼자 쓸 도구"엔 OK. Lisp+웹 교집합 원하면 → <b style="color:var(--amber)">Clojure</b>.</p>
+    </div>
+  </section>
+
+  <!-- ============ SECTION 5 ============ -->
+  <section id="t5">
+    <div class="sec-head">&gt; LÖVE+LUA vs PYGAME</div>
+    <div class="sec-sub">게임 제작 — 무엇이 좋은가</div>
+
+    <div class="verdict">▶ 결론: 2D 게임이면 <b>LÖVE + Lua</b>가 명확히 낫다. Pygame은 Python 이미 알고 학습용일 때.</div>
+
+    <div class="card" style="margin-top:22px">
+      <h3>핵심 비교</h3>
+      <table>
+        <tr><th>항목</th><th>LÖVE + Lua</th><th>Pygame</th></tr>
+        <tr><td>렌더링</td><td class="win">OpenGL 가속</td><td>SDL2 소프트웨어</td></tr>
+        <tr><td>런타임</td><td class="win">LuaJIT (C의 1.5~3배)</td><td>CPython (C의 50~100배)</td></tr>
+        <tr><td>스프라이트 1만개</td><td class="win">60 FPS</td><td class="lose">10~20 FPS</td></tr>
+        <tr><td>배포(.exe)</td><td class="win">cat 합치기 30MB</td><td>PyInstaller 100~300MB</td></tr>
+        <tr><td>모바일</td><td class="win">iOS/Android 공식</td><td class="lose">사실상 불가</td></tr>
+        <tr><td>셰이더</td><td class="win">GLSL 1급</td><td class="lose">거의 없음</td></tr>
+        <tr><td>상업 사례</td><td class="win">Balatro·Move or Die</td><td>학습·게임잼 위주</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Pygame이 나은 경우</h3>
+      <ul class="term">
+        <li>이미 numpy/scipy 자산이 많을 때</li>
+        <li>ML/강화학습 게임 환경 (Gym 연동)</li>
+        <li>교육용 — Python 한 언어로 끝</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>규모별 추천</h3>
+      <table>
+        <tr><th>목적</th><th>추천</th></tr>
+        <tr><td>2D 게임 진지하게 (출시까지)</td><td class="win">LÖVE + Lua</td></tr>
+        <tr><td>게임잼·주말·학습</td><td>LÖVE 또는 Pygame</td></tr>
+        <tr><td>ML/RL 환경</td><td>Pygame / Gym</td></tr>
+        <tr><td>3D 또는 큰 프로젝트</td><td class="win">Godot 4</td></tr>
+      </table>
+      <p class="lead">한 줄 요약: 게임을 위해 도구를 고르면 LÖVE+Lua, Python을 쓰려고 게임을 짜면 Pygame.</p>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    &gt; END OF LOG // generated for <span style="color:var(--amber)">chobocho</span> <span class="heart">♥</span><br>
+    <span style="font-size:15px">INSERT COIN TO CONTINUE<span class="blink">_</span></span>
+  </div>
+</footer>
+
+<script>
+/* ---------- 타이핑 헤더 ---------- */
+(function(){
+  const lines=[
+    "$ love tetris.love  # 플레이 가능 데모 →",
+    "$ wc -l *.lua *.rkt # Lua 331 vs Scheme 120",
+    "$ learn --1month    # 추천: Lua",
+    "$ build game        # LÖVE > Pygame (2D)"
+  ];
+  const el=document.getElementById('typed');
+  let li=0,ci=0;
+  function tick(){
+    if(li>=lines.length)li=0;
+    const cur=lines[li];
+    el.innerHTML=cur.slice(0,ci)+'<span class="cursor-box"></span>';
+    ci++;
+    if(ci>cur.length){setTimeout(()=>{ci=0;li++;tick();},1600);return;}
+    setTimeout(tick,45);
+  }
+  tick();
+})();
+
+/* ---------- Lua 코드 하이라이팅 + 주입 ---------- */
+(function(){
+  const src=document.getElementById('luaSource').textContent;
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  const KW=new Set(['local','function','end','if','then','else','elseif','for','do','while',
+    'return','not','and','or','nil','true','false','break','in','repeat','until']);
+  function hl(line){
+    // 주석 우선 분리
+    const ci=line.indexOf('--');
+    let code=line,cmt='';
+    if(ci>=0){code=line.slice(0,ci);cmt=line.slice(ci);}
+    // 토큰 단위 처리: 문자열, 숫자, 식별자, 기타
+    let out='';
+    const re=/("[^"]*")|(\b\d+\.?\d*\b)|([A-Za-z_]\w*)|(\s+)|([^\sA-Za-z_0-9"]+)/g;
+    let m;
+    while((m=re.exec(code))!==null){
+      if(m[1])out+='<span class="str">'+esc(m[1])+'</span>';
+      else if(m[2])out+='<span class="num">'+esc(m[2])+'</span>';
+      else if(m[3]){
+        const w=m[3];
+        if(KW.has(w))out+='<span class="kw">'+w+'</span>';
+        else if(w==='love'||w==='math'||w==='table'||w==='os'||w==='ipairs'||w==='pairs')out+='<span class="glb">'+w+'</span>';
+        else out+=esc(w);
+      }
+      else if(m[4])out+=m[4];
+      else if(m[5])out+=esc(m[5]);
+    }
+    if(cmt)out+='<span class="cmt">'+esc(cmt)+'</span>';
+    return out;
+  }
+  const html=src.split('\n').map(hl).join('\n');
+  document.getElementById('luaCode').innerHTML=html;
+
+  document.getElementById('copyLua').addEventListener('click',function(){
+    navigator.clipboard.writeText(src).then(()=>{
+      this.textContent='✓ COPIED';this.classList.add('done');
+      setTimeout(()=>{this.textContent='⧉ COPY';this.classList.remove('done');},1500);
+    }).catch(()=>{
+      // fallback
+      const ta=document.createElement('textarea');ta.value=src;document.body.appendChild(ta);
+      ta.select();document.execCommand('copy');ta.remove();
+      this.textContent='✓ COPIED';this.classList.add('done');
+      setTimeout(()=>{this.textContent='⧉ COPY';this.classList.remove('done');},1500);
+    });
+  });
+})();
+
+/* ---------- 탭 전환 ---------- */
+const tabs=document.querySelectorAll('.tab');
+const secs=document.querySelectorAll('section');
+tabs.forEach(t=>t.addEventListener('click',()=>{
+  tabs.forEach(x=>x.classList.remove('active'));
+  secs.forEach(x=>x.classList.remove('show'));
+  t.classList.add('active');
+  const sec=document.getElementById(t.dataset.tab);
+  sec.classList.add('show');
+  if(t.dataset.tab==='t2')animateBars();
+  window.scrollTo({top:0,behavior:'smooth'});
+}));
+
+/* ---------- 막대 애니메이션 ---------- */
+function animateBars(){
+  document.querySelectorAll('.bar-fill').forEach(b=>{
+    b.style.width='0';
+    requestAnimationFrame(()=>{setTimeout(()=>{b.style.width=b.dataset.w+'%';},60);});
+  });
+}
+
+/* ============================================================
+   플레이 가능한 미니 테트리스 (대화에서 만든 알고리즘 그대로)
+   ============================================================ */
+(function(){
+  const cv=document.getElementById('tetris'),ctx=cv.getContext('2d');
+  const W=10,H=20,CELL=25;
+  const COLORS=[null,'#00e5ff','#ffb000','#9b30ff','#39ff14','#ff2e88','#0048ff','#ff8800'];
+  const SHAPES={
+    I:{id:1,m:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]]},
+    O:{id:2,m:[[0,1,1,0],[0,1,1,0],[0,0,0,0],[0,0,0,0]]},
+    T:{id:3,m:[[0,1,0,0],[1,1,1,0],[0,0,0,0],[0,0,0,0]]},
+    S:{id:4,m:[[0,1,1,0],[1,1,0,0],[0,0,0,0],[0,0,0,0]]},
+    Z:{id:5,m:[[1,1,0,0],[0,1,1,0],[0,0,0,0],[0,0,0,0]]},
+    J:{id:6,m:[[1,0,0,0],[1,1,1,0],[0,0,0,0],[0,0,0,0]]},
+    L:{id:7,m:[[0,0,1,0],[1,1,1,0],[0,0,0,0],[0,0,0,0]]}
+  };
+  const SCORE_TABLE=[0,100,300,500,800];
+  let board,piece,bag,score,lines,level,fallTimer,fallInterval,over,raf,last;
+
+  function newBoard(){const b=[];for(let y=0;y<H;y++){b.push(new Array(W).fill(0));}return b;}
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}}
+  function drawBag(){if(!bag||!bag.length){bag=['I','O','T','S','Z','J','L'];shuffle(bag);}return bag.pop();}
+  function spawn(k){const d=SHAPES[k];return{kind:k,shape:d.m.map(r=>r.slice()),color:d.id,x:3,y:0};}
+  function rotateCW(s){const r=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];for(let i=0;i<4;i++)for(let j=0;j<4;j++)r[i][j]=s[3-j][i];return r;}
+  function collides(b,p,dx,dy,ts){const sh=ts||p.shape,px=p.x+dx,py=p.y+dy;
+    for(let i=0;i<4;i++)for(let j=0;j<4;j++){if(sh[i][j]){const bx=px+j,by=py+i;
+      if(bx<0||bx>=W||by>=H)return true;if(by>=0&&b[by][bx])return true;}}return false;}
+  function lock(b,p){for(let i=0;i<4;i++)for(let j=0;j<4;j++){if(p.shape[i][j]){const bx=p.x+j,by=p.y+i;
+    if(by>=0&&by<H&&bx>=0&&bx<W)b[by][bx]=p.color;}}}
+  function clearLines(b){let wy=H-1,cl=0;
+    for(let ry=H-1;ry>=0;ry--){const full=b[ry].every(v=>v!==0);
+      if(!full){if(wy!==ry)b[wy]=b[ry];wy--;}else cl++;}
+    for(let y=wy;y>=0;y--)b[y]=new Array(W).fill(0);return cl;}
+  function gravity(l){return Math.pow(0.8,l-1)*1000;}
+
+  function reset(){board=newBoard();bag=null;piece=spawn(drawBag());
+    score=0;lines=0;level=1;fallTimer=0;fallInterval=gravity(1);over=false;updHUD();}
+  function updHUD(){document.getElementById('score').textContent=score;
+    document.getElementById('lines').textContent=lines;
+    document.getElementById('level').textContent=level;}
+
+  function step(){
+    if(collides(board,piece,0,1,null)){
+      lock(board,piece);const n=clearLines(board);
+      if(n){score+=SCORE_TABLE[n]*level;lines+=n;
+        const nl=Math.floor(lines/10)+1;if(nl!==level){level=nl;fallInterval=gravity(level);}}
+      piece=spawn(drawBag());
+      if(collides(board,piece,0,0,null))over=true;
+      updHUD();
+    }else piece.y++;
+  }
+  function hardDrop(){let d=0;while(!collides(board,piece,0,d+1,null))d++;piece.y+=d;score+=d*2;step();updHUD();}
+  function tryRotate(){if(piece.kind==='O')return;const r=rotateCW(piece.shape);
+    if(!collides(board,piece,0,0,r)){piece.shape=r;return;}
+    for(const dx of[-1,1,-2,2])if(!collides(board,piece,dx,0,r)){piece.x+=dx;piece.shape=r;return;}}
+
+  function cell(x,y,id){const c=COLORS[id];ctx.fillStyle=c;ctx.fillRect(x*CELL,y*CELL,CELL-1,CELL-1);
+    ctx.strokeStyle='rgba(0,0,0,.4)';ctx.strokeRect(x*CELL,y*CELL,CELL-1,CELL-1);
+    ctx.fillStyle='rgba(255,255,255,.18)';ctx.fillRect(x*CELL,y*CELL,CELL-1,4);}
+  function draw(){
+    ctx.fillStyle='#04080a';ctx.fillRect(0,0,cv.width,cv.height);
+    // faint grid
+    ctx.strokeStyle='rgba(57,255,20,.05)';
+    for(let x=0;x<=W;x++){ctx.beginPath();ctx.moveTo(x*CELL,0);ctx.lineTo(x*CELL,H*CELL);ctx.stroke();}
+    for(let y=0;y<=H;y++){ctx.beginPath();ctx.moveTo(0,y*CELL);ctx.lineTo(W*CELL,y*CELL);ctx.stroke();}
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(board[y][x])cell(x,y,board[y][x]);
+    if(!over)for(let i=0;i<4;i++)for(let j=0;j<4;j++)if(piece.shape[i][j]){
+      const by=piece.y+i;if(by>=0)cell(piece.x+j,by,piece.color);}
+    if(over){ctx.fillStyle='rgba(0,0,0,.78)';ctx.fillRect(0,0,cv.width,cv.height);
+      ctx.fillStyle='#ff2e88';ctx.font='bold 26px "VT323",monospace';ctx.textAlign='center';
+      ctx.fillText('GAME OVER',cv.width/2,cv.height/2-10);
+      ctx.fillStyle='#39ff14';ctx.font='20px "VT323",monospace';
+      ctx.fillText('press RESTART',cv.width/2,cv.height/2+24);}
+  }
+  function loop(ts){if(!last)last=ts;const dt=ts-last;last=ts;
+    if(!over){fallTimer+=dt;if(fallTimer>=fallInterval){fallTimer-=fallInterval;step();}}
+    draw();raf=requestAnimationFrame(loop);}
+
+  document.addEventListener('keydown',e=>{
+    if(!board)return;
+    if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)){
+      // only hijack keys when tetris tab visible
+      if(!document.getElementById('t1').classList.contains('show'))return;
+      e.preventDefault();
+    }
+    if(over)return;
+    if(e.key==='ArrowLeft'){if(!collides(board,piece,-1,0,null))piece.x--;}
+    else if(e.key==='ArrowRight'){if(!collides(board,piece,1,0,null))piece.x++;}
+    else if(e.key==='ArrowDown'){if(!collides(board,piece,0,1,null)){piece.y++;score++;updHUD();}}
+    else if(e.key==='ArrowUp'){tryRotate();}
+    else if(e.key===' '){hardDrop();}
+  });
+  document.getElementById('resetBtn').addEventListener('click',reset);
+  cv.addEventListener('click',()=>cv.focus());
+
+  reset();raf=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
