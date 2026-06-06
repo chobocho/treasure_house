@@ -18,6 +18,7 @@
 ### 🐹 Go 언어 시리즈 🚀
 - 📘 **[Go 심화.md](./Go%20심화.md)** — 🎓 한 단계 더 깊이! Go의 고급 기법 🏔️
 - 📗 **[Go 패턴.md](./Go%20패턴.md)** — 🧩 실전 디자인 패턴 모음 ✨
+- 🌐 **[go_design_patterns.html](./go_design_patterns.html)** — 🎨 Go 디자인 패턴 웹 가이드 📑
 
 ### 🌙 Lua 언어 시리즈 🎭
 - 📕 **[Lua 심화.md](./Lua%20심화.md)** — 🔬 Lua의 내부를 파헤치다 🕵️
@@ -50,9 +51,29 @@
 - 📊 **[FFT_큰수곱셈_설명.html](./FFT_큰수곱셈_설명.html)** — 🔬 FFT를 이용한 큰 수 곱셈 설명 📐
 - 🐍 **[fft_bignum.py](./fft_bignum.py)** — 💡 FFT 큰 수 곱셈 Python 구현 🧪
 - 🔀 **[galois_to_lfsr.html](./galois_to_lfsr.html)** — ⚙️ Galois에서 LFSR로의 변환 🔧
+- 📕 **[갈루아 필드 → 리드-솔로몬 → LFSR.pdf](./갈루아%20필드%20→%20리드-솔로몬%20→%20LFSR.pdf)** — 📐 부호 이론의 정수 (PDF) 🧠
+
+### 🎮 게임 포팅 & 구현 가이드 🕹️
+- 👹 **[Doom 포팅 가이드.html](./Doom%20포팅%20가이드.html)** — 🔫 둠 포팅의 모든 것 🩸
+- 🐺 **[wolfenstein3d-porting-guide.html](./wolfenstein3d-porting-guide.html)** — 🏰 울펜슈타인 3D 포팅 가이드 🎯
+- 🟦 **[Scheme Tetris.md](./Scheme%20Tetris.md)** — λ Scheme으로 만드는 테트리스! 🕹️
+- 🌐 **[scheme_tetris.html](./scheme_tetris.html)** — 🧩 Scheme 테트리스 웹 데모 ✨
+- 🌙 **[lua_tetris.html](./lua_tetris.html)** — 🎲 Lua로 만든 테트리스 🟥
+
+### ♟️ 보드게임 & 전술 🎲
+- ♛ **[체스_전술집.html](./체스_전술집.html)** — ♚ 체스 전술의 정수 🏆
+- 🀄 **[장기전술집.html](./장기전술집.html)** — 🐎 장기 전술 가이드 ⚔️
+- ⚫ **[오목_묘수_풀이_및_고급_전술집.html](./오목_묘수_풀이_및_고급_전술집.html)** — ⚪ 오목 묘수와 고급 전술 🎯
+
+### 📜 컴퓨팅 역사 & 문화 🏛️
+- 🍎 **[apple2_software_history.html](./apple2_software_history.html)** — 💾 Apple II 소프트웨어의 역사 🕰️
+- 🖥️ **[mac_software_history.html](./mac_software_history.html)** — 📀 매킨토시 소프트웨어 연대기 📚
+- ☎️ **[red-phone.html](./red-phone.html)** — 🔴 레드폰 이야기 📞
+
+### 📐 소프트웨어 설계 📚
+- 🧼 **[Clean_Code_vs_APoSD.html](./Clean_Code_vs_APoSD.html)** — 📖 Clean Code vs A Philosophy of Software Design 비교 ⚖️
 
 ### 🧱 기타 흥미로운 프로젝트 🎁
-- 🟦 **[Scheme Tetris.md](./Scheme%20Tetris.md)** — λ Scheme으로 만드는 테트리스! 🕹️
 - 📱 **[qr_project_spec.html](./qr_project_spec.html)** — 🔲 QR 코드 프로젝트 명세서 📄
 
 ---
