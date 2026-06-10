@@ -235,6 +235,7 @@
   .qr-vis .timing { background: #2d7a3e; }
   .qr-vis .timing-w { background: #b8d9bf; }
   .qr-vis .format { background: #6a4c93; }
+  .qr-vis .darkmod { background: #b8860b; }
   .qr-vis .data { background: #4a90c2; opacity: 0.6; }
 
   .legend {
@@ -416,7 +417,7 @@
 <header class="doc-head">
   <div class="doc-meta">
     <span>DOC ID — QR-GEN-001</span>
-    <span>REV 1.0 · 2026-05</span>
+    <span>REV 1.2 · 2026-06</span>
   </div>
   <div class="doc-title">Pure Python QR Code Generator</div>
   <div class="doc-subtitle">// 외부 라이브러리 없이 처음부터 만드는 QR 생성기</div>
@@ -437,8 +438,8 @@
   <p>
     <code>qrcode</code>, <code>segno</code> 같은 검증된 라이브러리를 두고 직접 만드는 이유는
     <strong>QR 코드 안에 숨겨진 아름다운 수학</strong>을 손에 익히기 위해서다.
-    갈루아 필드, BCH 코드, Reed-Solomon, 그리고 1990년대 NTT가 자동차 부품 추적용으로 설계한
-    이 코드가 어떻게 일부가 가려져도 멀쩡히 읽히는지 이해하는 것이 진짜 목적이다.
+    갈루아 필드, BCH 코드, Reed-Solomon, 그리고 1994년 덴소웨이브(토요타 계열 덴소)가
+    자동차 부품 추적용으로 설계한 이 코드가 어떻게 일부가 가려져도 멀쩡히 읽히는지 이해하는 것이 진짜 목적이다.
   </p>
 
   <h3>최종 산출물</h3>
@@ -474,6 +475,7 @@
     <span><i style="background:#c8410b"></i>Finder Pattern</span>
     <span><i style="background:#2d7a3e"></i>Timing Pattern</span>
     <span><i style="background:#6a4c93"></i>Format Info</span>
+    <span><i style="background:#b8860b"></i>Dark Module</span>
     <span><i style="background:#4a90c2;opacity:0.6"></i>Data + EC</span>
   </div>
 
@@ -546,7 +548,8 @@
   <p>
     이제 중간에 2개가 사라졌다고 하자. 수신측이 <code>[6, _, 18, _, 38]</code>만 받았다.
     여기서 살아남은 점 3개 <code>(1, 6), (3, 18), (5, 38)</code>만으로 <strong>라그랑주 보간법</strong>을
-    돌리면 원래 2차 다항식이 정확히 복원된다. (고등 미적분에서 배우는 그 보간법이 맞다.)
+    돌리면 원래 2차 다항식이 정확히 복원된다. (정식 교육과정엔 없지만, "n+1개 점이 n차 다항식을 유일하게
+    결정한다"는 사실을 식으로 옮긴 것뿐이라 고등 수학 지식만으로 충분히 이해할 수 있다.)
   </p>
 
   <p>
@@ -873,10 +876,15 @@ _init_gf()
     <span class="kw">return</span> buf[-nsym:]          <span class="cm"># 나머지만 반환</span></pre>
 
       <div class="card callout">
-        <h4>검증 방법</h4>
+        <h4>검증 방법 — 기대값이 확정된 테스트 2개</h4>
         <p style="margin:0">
-          <code>rs_encode([0x40, 0xD2, 0x75, 0x47, 0x76], 5)</code>를 호출하면
-          QR 표준 문서에 나와있는 예제 출력과 일치해야 한다. ISO 18004 Annex I.2 참조.
+          ① Section 02의 손계산 예시: <code>rs_encode([5, 3], 2)</code> →
+          정확히 <strong>[30, 24]</strong>가 나와야 한다.<br><br>
+          ② V1 EC-M 크기의 실전 블록 (16 데이터 + 10 EC):<br>
+          <code>rs_encode([0x40, 0xD2, 0x75, 0x47, 0x76, 0x17, 0x32, 0x06, 0x27, 0x26, 0x96, 0xC6, 0xC6, 0x96, 0x70, 0xEC], 10)</code><br>
+          → <strong>[0xBC, 0x2A, 0x90, 0x13, 0x6B, 0xAF, 0xEF, 0xFD, 0x4B, 0xE0]</strong><br>
+          (Thonky 'HELLO WORLD' 표준 예제를 통과한 레퍼런스 구현으로 산출한 값.)
+          하나라도 다르면 GF 테이블이나 다항식 나눗셈 어딘가에 버그가 있는 것.
         </p>
       </div>
     </div>
@@ -900,9 +908,51 @@ _init_gf()
       <ul>
         <li><strong>패딩 바이트는 0xEC와 0x11을 번갈아</strong>가며 채운다 (QR 표준 명시).
           0이나 0xFF로 채우면 마스킹 점수가 나쁘게 나와서 디코딩이 어려워진다.</li>
-        <li>버전이 9까지면 문자수 8비트, 10~26은 16비트. 이건 외워야 한다.</li>
+        <li>Byte 모드 문자수 필드는 버전 1~9가 8비트, 10~40은 16비트. 이건 외워야 한다.</li>
         <li>UTF-8 한글은 글자당 3바이트라 데이터 용량이 빨리 찬다.</li>
       </ul>
+
+      <h4>QR_SPECS — 버전 × EC레벨 블록 구조 테이블 (필수 데이터)</h4>
+      <p>
+        이후 모든 코드가 참조하는 핵심 테이블이다. ISO/IEC 18004 Table 9의 V1~7 부분.
+        값 형식은 <code>(총 코드워드, 블록당 EC 바이트, [(블록 수, 블록당 데이터 바이트), ...])</code>.
+        숫자가 많아 오타가 나기 쉬우니 <strong>import 시점에 정합성을 assert로 검증</strong>해 둔다.
+      </p>
+
+      <pre><span class="filename">qrgen.py — QR_SPECS 테이블 (ISO 18004 Table 9, V1~7)</span>QR_SPECS = {
+    <span class="cm"># (version, ec): (총 코드워드, 블록당 EC, [(블록 수, 블록당 데이터), ...])</span>
+    (1, <span class="str">'L'</span>): (26, 7,  [(1, 19)]),   (1, <span class="str">'M'</span>): (26, 10, [(1, 16)]),
+    (1, <span class="str">'Q'</span>): (26, 13, [(1, 13)]),   (1, <span class="str">'H'</span>): (26, 17, [(1, 9)]),
+    (2, <span class="str">'L'</span>): (44, 10, [(1, 34)]),   (2, <span class="str">'M'</span>): (44, 16, [(1, 28)]),
+    (2, <span class="str">'Q'</span>): (44, 22, [(1, 22)]),   (2, <span class="str">'H'</span>): (44, 28, [(1, 16)]),
+    (3, <span class="str">'L'</span>): (70, 15, [(1, 55)]),   (3, <span class="str">'M'</span>): (70, 26, [(1, 44)]),
+    (3, <span class="str">'Q'</span>): (70, 18, [(2, 17)]),   (3, <span class="str">'H'</span>): (70, 22, [(2, 13)]),
+    (4, <span class="str">'L'</span>): (100, 20, [(1, 80)]),  (4, <span class="str">'M'</span>): (100, 18, [(2, 32)]),
+    (4, <span class="str">'Q'</span>): (100, 26, [(2, 24)]),  (4, <span class="str">'H'</span>): (100, 16, [(4, 9)]),
+    (5, <span class="str">'L'</span>): (134, 26, [(1, 108)]), (5, <span class="str">'M'</span>): (134, 24, [(2, 43)]),
+    (5, <span class="str">'Q'</span>): (134, 18, [(2, 15), (2, 16)]),
+    (5, <span class="str">'H'</span>): (134, 22, [(2, 11), (2, 12)]),
+    (6, <span class="str">'L'</span>): (172, 18, [(2, 68)]),  (6, <span class="str">'M'</span>): (172, 16, [(4, 27)]),
+    (6, <span class="str">'Q'</span>): (172, 24, [(4, 19)]),  (6, <span class="str">'H'</span>): (172, 28, [(4, 15)]),
+    (7, <span class="str">'L'</span>): (196, 20, [(2, 78)]),  (7, <span class="str">'M'</span>): (196, 18, [(4, 31)]),
+    (7, <span class="str">'Q'</span>): (196, 18, [(2, 14), (4, 15)]),
+    (7, <span class="str">'H'</span>): (196, 26, [(4, 13), (1, 14)]),
+}
+
+<span class="cm"># 테이블 오타 방지 — 데이터 + EC = 총 코드워드인지 import 시점에 검증</span>
+<span class="kw">for</span> (_v, _e), (_total, _ec_pb, _blocks) <span class="kw">in</span> QR_SPECS.items():
+    _n_blocks = sum(n <span class="kw">for</span> n, _ <span class="kw">in</span> _blocks)
+    _data_cw = sum(n * d <span class="kw">for</span> n, d <span class="kw">in</span> _blocks)
+    <span class="kw">assert</span> _data_cw + _n_blocks * _ec_pb == _total, (_v, _e)</pre>
+
+      <div class="card tip">
+        <h4>V5-Q처럼 블록 크기가 두 종류인 버전 주의</h4>
+        <p style="margin:0">
+          V5-Q는 <code>[(2, 15), (2, 16)]</code> — 15바이트 블록 2개 + 16바이트 블록 2개다.
+          블록 길이가 달라지는 순간부터 인터리빙(Phase 3)에서 <code>if i &lt; len(blk)</code>
+          경계 처리가 실제로 동작하기 시작한다. V5-Q와 V7-H가 좋은 테스트 케이스.
+        </p>
+      </div>
 
       <pre><span class="filename">qrgen.py — Byte 모드 인코딩</span><span class="kw">def</span> <span class="fn">encode_byte_mode</span>(text: str, version: int, ec_level: str) -&gt; list:
     data = text.encode(<span class="str">'utf-8'</span>)
@@ -921,6 +971,12 @@ _init_gf()
     <span class="kw">for</span> b <span class="kw">in</span> data:                <span class="cm"># 데이터 비트 추가</span>
         <span class="kw">for</span> i <span class="kw">in</span> range(<span class="num">7</span>, -<span class="num">1</span>, -<span class="num">1</span>):
             bits.append((b &gt;&gt; i) &amp; <span class="num">1</span>)
+
+    <span class="cm"># 용량 검사 — 명시적으로 실패시킨다. 안 하면 뒤의 블록 분할이</span>
+    <span class="cm"># 초과분을 조용히 잘라먹어 '스캔 안 되는 멀쩡해 보이는 QR'이 나온다</span>
+    <span class="kw">if</span> len(bits) &gt; total_data_bits:
+        <span class="kw">raise</span> ValueError(
+            <span class="str">f"V{version}-{ec_level} 용량 초과: {len(bits)} &gt; {total_data_bits} bits"</span>)
 
     <span class="cm"># 종료자 (최대 4비트의 0)</span>
     bits.extend([<span class="num">0</span>] * min(<span class="num">4</span>, total_data_bits - len(bits)))
@@ -945,6 +1001,7 @@ _init_gf()
         <span class="kw">for</span> j <span class="kw">in</span> range(<span class="num">8</span>):
             v = (v &lt;&lt; <span class="num">1</span>) | bits[i + j]
         codewords.append(v)
+    <span class="kw">assert</span> len(codewords) == total_data_cw   <span class="cm"># 패딩 후엔 정확히 용량과 일치해야 함</span>
     <span class="kw">return</span> codewords</pre>
     </div>
   </div>
@@ -955,7 +1012,8 @@ _init_gf()
     <div class="phase-body">
       <h3>블록 분할 + 인터리빙</h3>
       <p>
-        Version 5 이상부터 데이터를 여러 블록으로 나눠서 각각 RS 부호화한다.
+        버전과 EC 레벨에 따라 데이터를 여러 블록으로 나눠서 각각 RS 부호화한다
+        (V1~2는 항상 1블록, <strong>V3-Q부터 2블록</strong> — QR_SPECS 테이블 참조).
         그 다음 <strong>블록의 같은 위치 바이트끼리 모아서</strong> 인터리빙한다.
       </p>
 
@@ -979,7 +1037,7 @@ _init_gf()
 인터리빙 후: a1 b1 c1 | a2 b2 c2 | a3 b3 c3 | a4 b4 c4 | a5 b5 c5
 
 → 가운데 5바이트(c2,a3,b3,c3,a4)가 가려져도
-  블록A 손실=2개, B=2개, C=1개 → 각 블록 RS가 충분히 복구</pre>
+  블록A 손실=2개(a3,a4), B=1개(b3), C=2개(c2,c3) → 각 블록 RS가 충분히 복구</pre>
 
       <pre><span class="filename">qrgen.py — 인터리빙</span><span class="kw">def</span> <span class="fn">build_final_codewords</span>(data_cw, version, ec_level):
     total_cw, ec_per_block, blocks = QR_SPECS[(version, ec_level)]
@@ -1084,7 +1142,7 @@ _init_gf()
     n = len(m)
     <span class="kw">for</span> i <span class="kw">in</span> range(<span class="num">8</span>, n - <span class="num">8</span>):
         <span class="kw">if</span> m[<span class="num">6</span>][i] <span class="kw">is</span> <span class="kw">None</span>:
-            m[<span class="num">6</span>][i] = (i + <span class="num">1</span>) % <span class="num">2</span>      <span class="cm"># 짝수=흰, 홀수=검</span>
+            m[<span class="num">6</span>][i] = (i + <span class="num">1</span>) % <span class="num">2</span>      <span class="cm"># 짝수=검, 홀수=흰</span>
         <span class="kw">if</span> m[i][<span class="num">6</span>] <span class="kw">is</span> <span class="kw">None</span>:
             m[i][<span class="num">6</span>] = (i + <span class="num">1</span>) % <span class="num">2</span>
 
@@ -1314,6 +1372,48 @@ FORMAT_MASK = <span class="num">0b101010000010010</span>  <span class="cm"># = 0
     <span class="kw">for</span> i, (r, c) <span class="kw">in</span> enumerate(positions2):
         m[r][c] = bits[i]</pre>
 
+    <h4>Version Information — V7부터 필수! (18비트 BCH)</h4>
+    <p>
+      Version 7 이상은 Format Info와 <strong>별개로</strong> 18비트 Version Information이 필요하다.
+      6비트 버전 번호에 생성다항식 <code>x¹² + x¹¹ + x¹⁰ + x⁹ + x⁸ + x⁵ + x² + 1</code>
+      (<code>0x1F25</code>)로 만든 12비트 BCH 패리티를 붙여 총 18비트.
+      <strong>우상단 Finder 왼쪽의 3×6 블록</strong>과 <strong>좌하단 Finder 위쪽의 6×3 블록</strong>
+      두 곳에 기록한다 (서로 전치 위치).
+    </p>
+    <p>
+      버전 번호는 매트릭스 크기에서 자명한데 왜 굳이 넣을까? 멀리서/비스듬히 찍은 사진은
+      모듈 수 세기가 부정확해서, 큰 QR일수록 크기 추정만으로는 버전을 틀리기 쉽기 때문이다.
+      이 영역은 <strong>데이터 배치 전에 반드시 채워야</strong> 한다 — 빠뜨리면 데이터 비트가
+      그 자리를 침범해서 비트 배치 전체가 표준과 어긋나고, V7 QR은 어떤 스캐너로도 읽히지 않는다.
+    </p>
+
+    <pre><span class="filename">qrgen.py — Version Information (V7+)</span>VERSION_GEN_POLY = <span class="num">0b1111100100101</span>  <span class="cm"># 0x1F25 — Version Info 전용 BCH(18,6)</span>
+
+<span class="kw">def</span> <span class="fn">_place_version</span>(m, version):
+    <span class="str">"""18비트 Version Info를 두 곳에 기록 — V7 이상 필수.
+    마스크와 무관한 고정값이므로 데이터 배치 전(reserved 계산 전)에 호출한다."""</span>
+    <span class="kw">if</span> version &lt; <span class="num">7</span>:
+        <span class="kw">return</span>
+    n = len(m)
+    rem = version
+    <span class="kw">for</span> _ <span class="kw">in</span> range(<span class="num">12</span>):                  <span class="cm"># BCH(18,6) 나눗셈</span>
+        rem = (rem &lt;&lt; <span class="num">1</span>) ^ ((rem &gt;&gt; <span class="num">11</span>) * VERSION_GEN_POLY)
+    bits = (version &lt;&lt; <span class="num">12</span>) | rem         <span class="cm"># 상위 6비트 = 버전, 하위 12비트 = BCH</span>
+    <span class="kw">for</span> i <span class="kw">in</span> range(<span class="num">18</span>):
+        bit = (bits &gt;&gt; i) &amp; <span class="num">1</span>            <span class="cm"># LSB부터 배치 (Format Info와 순서 다름 주의)</span>
+        r, c = i // <span class="num">3</span>, n - <span class="num">11</span> + i % <span class="num">3</span>
+        m[r][c] = bit                    <span class="cm"># 우상단 3×6 블록</span>
+        m[c][r] = bit                    <span class="cm"># 좌하단 6×3 블록 (전치 위치)</span></pre>
+
+    <div class="card callout">
+      <h4>검증값 — V7 Version Info = 0x07C94</h4>
+      <p style="margin:0">
+        <code>(7 &lt;&lt; 12) | rem</code>의 결과는 <strong>0b000111110010010100 = 0x07C94</strong>여야 한다.
+        표준 문서(ISO 18004 Annex D)에 실려 있는 알려진 값이라 그대로 단위 테스트로 쓰면 된다.
+        본 프로젝트는 V7까지만 다루므로 실제로 쓰이는 값은 이 하나뿐.
+      </p>
+    </div>
+
     <h4>ASCII 출력 — 터미널에서 빠른 확인용</h4>
     <p>
       개발 중에 매번 이미지를 열어보긴 번거롭다. 터미널에 바로 출력하면 빠르게 확인할 수 있다.
@@ -1321,12 +1421,12 @@ FORMAT_MASK = <span class="num">0b101010000010010</span>  <span class="cm"># = 0
       가로세로 비율이 거의 맞는다 (대부분의 터미널 글꼴이 세로:가로 약 2:1이라).
     </p>
 
-    <pre><span class="filename">qrgen.py — ASCII 출력</span><span class="kw">def</span> <span class="fn">matrix_to_ascii</span>(m, scale=<span class="num">1</span>):
+    <pre><span class="filename">qrgen.py — ASCII 출력</span><span class="kw">def</span> <span class="fn">matrix_to_ascii</span>(m):
     <span class="str">"""터미널 출력용 — 블록 문자로 시각화 (Quiet Zone 포함)"""</span>
     out = []
     <span class="kw">for</span> row <span class="kw">in</span> m:
         line = <span class="str">''</span>.join((<span class="str">'██'</span> <span class="kw">if</span> v == <span class="num">1</span> <span class="kw">else</span> <span class="str">'  '</span>) <span class="kw">for</span> v <span class="kw">in</span> row)
-        out.append(line * scale)
+        out.append(line)
     <span class="cm"># 위아래 + 좌우 여백 (Quiet Zone — 스캐너가 경계 인식하는 데 필수)</span>
     pad = <span class="str">'  '</span> * (len(m) + <span class="num">8</span>)
     <span class="kw">return</span> <span class="str">'\n'</span>.join([pad] * <span class="num">4</span> + [<span class="str">'        '</span> + l + <span class="str">'        '</span> <span class="kw">for</span> l <span class="kw">in</span> out] + [pad] * <span class="num">4</span>)</pre>
@@ -1466,13 +1566,15 @@ FORMAT_MASK = <span class="num">0b101010000010010</span>  <span class="cm"># = 0
         <li><strong><code>c &gt;&gt; 3</code> = <code>c // 8</code></strong>, <strong><code>c &amp; 7</code> = <code>c % 8</code></strong>:
           시프트/AND가 나눗셈/모듈로보다 빠름 (CPython에서는 차이가 작지만 C/Go 포팅 시 중요)</li>
         <li><strong>흰색만 비트 설정</strong>: <code>bytearray</code>는 0으로 자동 초기화 → 검정 픽셀은 아무것도 안 함 → 분기 1개 절약</li>
-        <li><strong><code>struct.pack</code> 한 번에 묶음 쓰기</strong>: 14바이트 헤더를 5번에 나눠 쓰지 말고 한 번에. write 시스템콜 횟수 감소</li>
+        <li><strong><code>struct.pack</code> 한 번에 묶음 쓰기</strong>: 14바이트 헤더를 5번에 나눠 쓰지 말고 한 번에.
+          (Python 파일 객체는 버퍼링되므로 시스템콜이 아니라 <code>write()</code> 함수 호출 횟수가 주는 것 —
+          그래도 호출 오버헤드 절감 + 코드가 헤더 구조 그대로 읽혀서 더 명확)</li>
       </ul>
 
       <h4>크기 비교 (V3 QR, scale=10, border=4)</h4>
       <table>
         <tr><th>포맷</th><th>파일 크기</th><th>의존성</th><th>코드 라인</th></tr>
-        <tr><td>PGM (P5, 8비트)</td><td>~84 KB</td><td>없음</td><td>~15줄</td></tr>
+        <tr><td>PGM (P5, 8비트)</td><td>~134 KB</td><td>없음</td><td>~15줄</td></tr>
         <tr><td><strong>BMP (1비트)</strong></td><td><strong>~17 KB</strong></td><td>struct (표준)</td><td>~40줄</td></tr>
         <tr><td>PNG (24비트)</td><td>~3 KB</td><td>zlib + CRC32 직접 구현</td><td>~150줄</td></tr>
       </table>
@@ -1552,6 +1654,7 @@ fwrite(&amp;hdr, <span class="kw">sizeof</span>(hdr), <span class="num">1</span>
     _place_alignment(m, version)
     _place_timing(m)
     _reserve_format(m)
+    _place_version(m, version)   <span class="cm"># V7+ 필수 — reserved 계산 전에 호출!</span>
     reserved = [[m[r][c] <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span> <span class="kw">for</span> c <span class="kw">in</span> range(n)] <span class="kw">for</span> r <span class="kw">in</span> range(n)]
 
     <span class="cm"># 5) 데이터 배치</span>
@@ -1633,7 +1736,7 @@ matrix_to_bmp(matrix, <span class="str">"output.bmp"</span>, scale=<span class="
     <tr>
       <td><strong>bytearray + 한번에 write</strong></td>
       <td><code>matrix_to_pgm</code></td>
-      <td>system call 횟수 감소 (한 줄당 1회)</td>
+      <td>픽셀 단위 write 대신 한 줄씩 묶음 write — 호출 횟수 감소 (버퍼링된 I/O라 시스템콜 수와는 별개)</td>
     </tr>
     <tr>
       <td><strong>4의 배수 올림 <code>(n+3)&amp;~3</code></strong></td>
@@ -1648,7 +1751,7 @@ matrix_to_bmp(matrix, <span class="str">"output.bmp"</span>, scale=<span class="
     <tr>
       <td><strong><code>struct.pack</code> 묶음 쓰기</strong></td>
       <td><code>matrix_to_bmp</code> 헤더</td>
-      <td>5번의 write를 1번으로 → 시스템콜 80% 감소</td>
+      <td>5번의 write 호출을 1번으로 (버퍼링 덕에 시스템콜 차이는 작지만, 헤더가 한 덩어리로 읽혀 명확)</td>
     </tr>
   </table>
 
@@ -1698,20 +1801,37 @@ print(<span class="str">f"700개 QR: {elapsed:.2f}s, 평균 {elapsed*1000/700:.1
         <span class="cm"># α^25 * α^1 = α^26 검증</span>
         self.assertEqual(gf_mul(GF_EXP[<span class="num">25</span>], GF_EXP[<span class="num">1</span>]), GF_EXP[<span class="num">26</span>])
 
+    <span class="kw">def</span> <span class="fn">test_gf_mul_hand_calculated</span>(self):
+        <span class="cm"># Section 02 손계산 예시: 5 × 7 = 27 in GF(256)</span>
+        self.assertEqual(gf_mul(<span class="num">5</span>, <span class="num">7</span>), <span class="num">27</span>)
+
     <span class="kw">def</span> <span class="fn">test_gf_mul_commutative</span>(self):
         <span class="kw">for</span> a <span class="kw">in</span> [<span class="num">3</span>, <span class="num">17</span>, <span class="num">200</span>]:
             <span class="kw">for</span> b <span class="kw">in</span> [<span class="num">5</span>, <span class="num">42</span>, <span class="num">100</span>]:
                 self.assertEqual(gf_mul(a, b), gf_mul(b, a))
 
 <span class="kw">class</span> <span class="cls">TestRS</span>(unittest.TestCase):
-    <span class="kw">def</span> <span class="fn">test_rs_encode_iso_example</span>(self):
-        <span class="cm"># ISO 18004 Annex I.2 예제와 일치하는지</span>
+    <span class="kw">def</span> <span class="fn">test_rs_encode_hand_calculated</span>(self):
+        <span class="cm"># Section 02 손계산 예시 — 가장 강력한 단위 테스트</span>
+        self.assertEqual(rs_encode([<span class="num">5</span>, <span class="num">3</span>], <span class="num">2</span>), [<span class="num">30</span>, <span class="num">24</span>])
+
+    <span class="kw">def</span> <span class="fn">test_rs_encode_16byte_block</span>(self):
+        <span class="cm"># V1 EC-M 형태 (16 데이터 + 10 EC)</span>
+        <span class="cm"># 기대값은 Thonky 표준 예제를 통과한 레퍼런스 구현으로 산출</span>
         data = [<span class="num">0x40</span>, <span class="num">0xD2</span>, <span class="num">0x75</span>, <span class="num">0x47</span>, <span class="num">0x76</span>, <span class="num">0x17</span>, <span class="num">0x32</span>,
                 <span class="num">0x06</span>, <span class="num">0x27</span>, <span class="num">0x26</span>, <span class="num">0x96</span>, <span class="num">0xC6</span>, <span class="num">0xC6</span>, <span class="num">0x96</span>,
                 <span class="num">0x70</span>, <span class="num">0xEC</span>]
-        ec = rs_encode(data, <span class="num">10</span>)
-        self.assertEqual(len(ec), <span class="num">10</span>)
-        <span class="cm"># 길이만 확인 — 값은 ISO 문서 참조</span>
+        expected = [<span class="num">0xBC</span>, <span class="num">0x2A</span>, <span class="num">0x90</span>, <span class="num">0x13</span>, <span class="num">0x6B</span>,
+                    <span class="num">0xAF</span>, <span class="num">0xEF</span>, <span class="num">0xFD</span>, <span class="num">0x4B</span>, <span class="num">0xE0</span>]
+        self.assertEqual(rs_encode(data, <span class="num">10</span>), expected)
+
+    <span class="kw">def</span> <span class="fn">test_thonky_hello_world</span>(self):
+        <span class="cm"># Thonky QR Tutorial의 V1-Q 'HELLO WORLD' 예제 (공개된 표준 검증값)</span>
+        data = [<span class="num">32</span>, <span class="num">91</span>, <span class="num">11</span>, <span class="num">120</span>, <span class="num">209</span>, <span class="num">114</span>, <span class="num">220</span>,
+                <span class="num">77</span>, <span class="num">67</span>, <span class="num">64</span>, <span class="num">236</span>, <span class="num">17</span>, <span class="num">236</span>]
+        expected = [<span class="num">168</span>, <span class="num">72</span>, <span class="num">22</span>, <span class="num">82</span>, <span class="num">217</span>, <span class="num">54</span>, <span class="num">156</span>,
+                    <span class="num">0</span>, <span class="num">46</span>, <span class="num">15</span>, <span class="num">180</span>, <span class="num">122</span>, <span class="num">16</span>]
+        self.assertEqual(rs_encode(data, <span class="num">13</span>), expected)
 
 <span class="kw">class</span> <span class="cls">TestGeneration</span>(unittest.TestCase):
     <span class="kw">def</span> <span class="fn">test_v1_size</span>(self):
@@ -1748,6 +1868,8 @@ print(<span class="str">f"700개 QR: {elapsed:.2f}s, 평균 {elapsed*1000/700:.1
       <li>스캐너에 따라 마스크 페널티 계산이 까다로움. 8개 모두 시도 권장</li>
       <li>Format Info 위치는 <strong>두 군데</strong>에 들어가야 함 (좌상/우상+좌하)</li>
       <li>Dark Module (검정 한 픽셀 <code>m[4·V+9][8]</code>) 빠뜨리면 디코딩 실패</li>
+      <li>V7은 <strong>Version Information</strong>(18비트, 우상단+좌하단 두 곳)이 필수.
+        빠뜨리면 데이터 비트가 그 자리를 침범해 V1~6은 되는데 V7만 스캔 실패하는 미스터리를 겪게 됨</li>
     </ul>
   </div>
 </section>
@@ -1761,10 +1883,10 @@ print(<span class="str">f"700개 QR: {elapsed:.2f}s, 평균 {elapsed*1000/700:.1
     <li><strong>Phase 0</strong> — GF(256) 테이블 초기화, <code>gf_mul</code> 통과 (commutative, identity 테스트)</li>
     <li><strong>Phase 1</strong> — <code>rs_generator_poly</code>, <code>rs_encode</code> 구현 및 ISO 예제와 일치</li>
     <li><strong>Phase 2</strong> — <code>encode_byte_mode</code> — 패딩 0xEC/0x11 번갈아 확인</li>
-    <li><strong>Phase 3</strong> — 블록 분할 + 인터리빙. V5 이상에서 블록 수 정확한지</li>
+    <li><strong>Phase 3</strong> — 블록 분할 + 인터리빙. V3-Q 이상 다중 블록에서 블록 수 정확한지</li>
     <li><strong>Phase 4</strong> — Finder/Timing/Alignment 배치, 지그재그 데이터 채움</li>
     <li><strong>Phase 5</strong> — 8개 마스크 모두 시도, 페널티 4규칙 모두 구현</li>
-    <li><strong>Phase 6</strong> — Format Info 두 곳에 배치, Dark Module 설정, PGM + BMP 출력</li>
+    <li><strong>Phase 6</strong> — Format Info 두 곳 + V7 Version Info 두 곳 배치, Dark Module 설정, PGM + BMP 출력</li>
     <li><strong>Verification</strong> — 갤럭시 카메라로 직접 스캔, 한글/영문/URL 모두 통과</li>
     <li><strong>Documentation</strong> — 각 함수에 docstring, 핵심 로직에 주석 (특히 GF 연산)</li>
     <li><strong>Benchmark</strong> — V1~V7 평균 생성 시간 측정, 결과 기록</li>
@@ -1789,7 +1911,8 @@ print(<span class="str">f"700개 QR: {elapsed:.2f}s, 평균 {elapsed*1000/700:.1
     <ul style="margin-bottom:0">
       <li><strong>QR 디코더</strong> 직접 구현 — RS 복호화 (Berlekamp-Massey + Chien search)는 부호화보다 훨씬 어려움</li>
       <li>Numeric/Alphanumeric/Kanji 모드 추가 → 같은 텍스트도 더 작은 QR로</li>
-      <li>Version 8~40 확장 — Alignment Pattern 위치 테이블 + 추가 Version Info (V7부터 필요)</li>
+      <li>Version 8~40 확장 — Alignment Pattern 위치 테이블(ISO Annex E)과 QR_SPECS만 늘리면 됨
+        (Version Info는 Phase 6에서 이미 구현, V8 이상에서도 그대로 동작)</li>
       <li>SVG/PNG 출력 추가 (Python 표준 라이브러리만으로 zlib 직접 활용 가능)</li>
       <li>Galaxy Z Fold 7 unfolded UI에 통합 — 좌측 입력, 우측 실시간 미리보기</li>
     </ul>
@@ -1797,7 +1920,7 @@ print(<span class="str">f"700개 QR: {elapsed:.2f}s, 평균 {elapsed*1000/700:.1
 </section>
 
 <footer>
-  END OF DOCUMENT · CHOBOCHO PROJECT · QR-GEN-001 REV 1.0
+  END OF DOCUMENT · CHOBOCHO PROJECT · QR-GEN-001 REV 1.2
 </footer>
 
 </div>
@@ -1833,12 +1956,12 @@ print(<span class="str">f"700개 QR: {elapsed:.2f}s, 평균 {elapsed*1000/700:.1
     if (r === 6 && c >= 8 && c <= 12) return (c % 2 === 0) ? 'timing' : 'timing-w';
     if (c === 6 && r >= 8 && r <= 12) return (r % 2 === 0) ? 'timing' : 'timing-w';
 
+    // Dark module — m[4V+9][8], V1이면 (13, 8). Format보다 먼저 판정해야 함
+    if (r === 13 && c === 8) return 'darkmod';
+
     // Format info: 8행, 8열 주변
     if (r === 8 && (c <= 8 || c >= 13)) return 'format';
     if (c === 8 && (r <= 8 || r >= 13)) return 'format';
-
-    // Dark module
-    if (r === 13 && c === 8) return 'format';
 
     return 'data';
   }
