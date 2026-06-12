@@ -840,11 +840,12 @@ SDL_PollEvent ──▶ I_GetEvent ──▶ D_PostEvent ──▶ events[] 원�
 <span class="cmt">// data는 zone 메모리에 캐시됨. 다 쓰면 Z_ChangeTag로 PU_CACHE로 강등.</span></pre>
 
 <h2>10.6 미니 헥스 덤프 예제</h2>
-<pre><span class="cmt">// DOOM1.WAD의 첫 12바이트</span>
+<pre><span class="cmt">// DOOM1.WAD(셰어웨어 1.9)의 첫 12바이트 — 리틀엔디안</span>
 49 57 41 44   <span class="cmt">// "IWAD"</span>
-01 04 00 00   <span class="cmt">// 럼프수 0x00000401 = 1025</span>
-00 17 04 00   <span class="cmt">// 디렉터리 오프셋</span>
+F0 04 00 00   <span class="cmt">// 럼프수 0x000004F0 = 1264</span>
+B4 B7 3F 00   <span class="cmt">// 디렉터리 오프셋 0x3FB7B4 = 4175796 (파일 끝 - 16B×1264)</span>
 </pre>
+<p>버전마다 럼프 수가 다르니(정식판 1.9는 2,306개) 아래 실습 10-A로 직접 확인해 보세요. 디렉터리가 파일 맨 끝에 붙어 있는 것도 눈으로 확인할 수 있습니다.</p>
 
 <div class="lab">
 <h4>🔬 실습 10-A: 직접 WAD 헤더 읽기</h4>
@@ -1351,15 +1352,17 @@ LDFLAGS=`pkg-config --libs sdl2` -lm</pre>
 
 <h2>17.6 팔레트 처리 핵심</h2>
 <pre><span class="ty">static uint32_t</span> pal32[<span class="num">256</span>];
-<span class="kw">void</span> I_SetPalette (<span class="ty">byte</span>* palette)
+<span class="kw">void</span> I_SetPalette (<span class="ty">byte</span>* palette)   <span class="cmt">// palette = PLAYPAL 럼프의 R,G,B 768바이트</span>
 {
-    <span class="ty">byte</span>* g = (<span class="ty">byte</span>*)W_CacheLumpName(<span class="str">"GAMMA1"</span>, PU_CACHE);  <span class="cmt">// 감마 보정표 (선택)</span>
+    <span class="ty">byte</span>* g = gammatable[usegamma];   <span class="cmt">// 감마 보정표 (v_video.c, WAD 럼프 아님)</span>
     <span class="kw">for</span> (<span class="ty">int</span> i=<span class="num">0</span>; i&lt;<span class="num">256</span>; i++) {
-        <span class="ty">byte</span> r = g[*palette++], <span class="ty">b</span>... ;  <span class="cmt">// 간단히 g 생략 가능</span>
-        <span class="ty">byte</span> gC = g[*palette++], bC = g[*palette++];
-        pal32[i] = (<span class="num">0xFF</span>&lt;&lt;<span class="num">24</span>) | (r&lt;&lt;<span class="num">16</span>) | (gC&lt;&lt;<span class="num">8</span>) | bC;
+        <span class="ty">byte</span> r = g[*palette++];
+        <span class="ty">byte</span> gC = g[*palette++];
+        <span class="ty">byte</span> b = g[*palette++];
+        pal32[i] = (<span class="num">0xFF</span>&lt;&lt;<span class="num">24</span>) | (r&lt;&lt;<span class="num">16</span>) | (gC&lt;&lt;<span class="num">8</span>) | b;
     }
 }</pre>
+<p>감마 보정은 WAD가 아니라 코드 쪽 데이터입니다. <code>v_video.c</code>의 <code>byte gammatable[5][256]</code>에서 <code>usegamma</code>(F11로 토글) 단계의 표를 골라 쓰는 구조예요. 감마를 생략하려면 <code>g[...]</code> 없이 <code>*palette++</code>를 그대로 쓰면 됩니다.</p>
 
 <h2>17.7 단계 4 — 빠진 함수 구현</h2>
 <table>
@@ -1381,8 +1384,8 @@ LDFLAGS=`pkg-config --libs sdl2` -lm</pre>
 <span class="kw">void</span> I_ShutdownSound(<span class="kw">void</span>) {}</pre>
 
 <div class="callout danger">
-<div class="ct">🔥 가장 큰 함정 — fixed point 곱셈</div>
-원본 <code>m_fixed.c</code>의 <code>FixedMul</code>은 인라인 어셈을 씁니다. 64bit 환경에서는 통하지 않습니다. 다음으로 교체:
+<div class="ct">💡 안심 — fixed point 곱셈은 이미 안전</div>
+DOS 버전의 <code>FixedMul</code>은 어셈으로 짜여 있었지만, linuxdoom-1.10의 <code>m_fixed.c</code>는 이미 <code>(long long)</code> 기반 순수 C라 64bit에서도 그대로 컴파일됩니다. 참고용 표준 구현은 아래와 같습니다(원본과 사실상 동일). <b>이 실습의 진짜 최대 함정은 단계 2(17.4)의 포인터→int 캐스팅</b>이니 그쪽에 시간을 쓰세요.
 <pre><span class="ty">fixed_t</span> FixedMul (<span class="ty">fixed_t</span> a, <span class="ty">fixed_t</span> b)
 {
     <span class="kw">return</span> ((<span class="ty">int64_t</span>)a * b) &gt;&gt; FRACBITS;
