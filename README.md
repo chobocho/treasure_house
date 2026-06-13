@@ -3,6 +3,8 @@
 > 🤖 **AI용 작업 지시서 모음** 📚🎁
 > 🌟 보물창고에 오신 것을 환영합니다! 🚪🎉
 
+🔗 **GitHub Pages 바로가기 👉 [https://chobocho.github.io/treasure_house/](https://chobocho.github.io/treasure_house/)** 🌐✨
+
 ---
 
 ## 🎯 프로젝트 소개 📖
