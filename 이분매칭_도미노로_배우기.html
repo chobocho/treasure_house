@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>이분 매칭 (Bipartite Matching) 도미노로 배우기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Black+Han+Sans&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   이분 매칭 인터랙티브 슬라이드 — 테마: "도미노 (Domino)"
+   초록 펠트 테이블 + 떠다니는 도미노 타일. 핵심 메타포: 체스판을
+   도미노로 덮기 = 최대 이분 매칭. PPT 슬라이드 방식.
+   ===================================================================== */
+:root{
+  --felt-top:  #1d7a55;
+  --felt-mid:  #136245;
+  --felt-bot:  #0c3f2c;
+  --tile:      #f6efdd;     /* 상아색 도미노 */
+  --tile-bd:   #cdbf9c;
+  --pip:       #20232a;     /* 도미노 점 */
+  --ink:       #2a2014;     /* 패널 안 진한 글자 */
+  --ink-soft:  #6b5d44;
+  --cream:     #f6efdd;     /* 펠트 위 밝은 글자 */
+  --cream-soft:#cfe6d8;
+  --match:     #e0533b;     /* 매칭/증가경로 강조(빨강) */
+  --gold:      #e7b54a;     /* 강조 금색 */
+  --black-sq:  #2f3a44;     /* 체스판 검은칸 */
+  --white-sq:  #e9e0c8;     /* 체스판 흰칸 */
+  --panel:     rgba(246,239,221,0.94);
+  --panel-bd:  rgba(255,255,255,0.5);
+  --code-bg:   #16241d;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{
+  font-family:'Noto Sans KR','Gowun Dodum',sans-serif;
+  color:var(--cream);
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 20% 0%,rgba(255,255,255,.06) 0%,transparent 40%),
+    linear-gradient(180deg,var(--felt-top) 0%,var(--felt-mid) 50%,var(--felt-bot) 100%);
+  position:relative;
+}
+/* 펠트 질감 */
+body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;
+  background-image:repeating-linear-gradient(0deg,transparent 0 3px,rgba(0,0,0,.025) 3px 4px),
+                   repeating-linear-gradient(90deg,transparent 0 3px,rgba(0,0,0,.025) 3px 4px);}
+/* 떠다니는 도미노 타일 */
+.tiles{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+.dtile{position:absolute;width:46px;height:92px;border-radius:9px;
+  background:rgba(246,239,221,.10);border:2px solid rgba(246,239,221,.16);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);}
+.dtile::before{content:"";position:absolute;left:8%;right:8%;top:50%;height:2px;
+  background:rgba(246,239,221,.16);}
+.dtile.d1{left:6%;top:-110px;animation:fall 26s linear infinite;}
+.dtile.d2{left:24%;top:-110px;animation:fall 36s linear infinite;animation-delay:-12s;transform:rotate(18deg);}
+.dtile.d3{left:62%;top:-110px;animation:fall 30s linear infinite;animation-delay:-6s;transform:rotate(-12deg);}
+.dtile.d4{left:82%;top:-110px;animation:fall 42s linear infinite;animation-delay:-20s;}
+.dtile.d5{left:45%;top:-110px;animation:fall 33s linear infinite;animation-delay:-26s;transform:rotate(8deg);}
+@keyframes fall{from{transform:translateY(0) rotate(0);}to{transform:translateY(118vh) rotate(160deg);}}
+
+/* ---------- 슬라이드 구조 ---------- */
+#deck{position:relative;z-index:1;height:100%;width:100%;}
+.slide{position:absolute;inset:0;display:none;flex-direction:column;
+  padding:46px 6vw 92px;overflow-y:auto;animation:fade .45s ease;}
+.slide.active{display:flex;}
+@keyframes fade{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+.slide h2{font-family:'Black Han Sans','Noto Sans KR',sans-serif;font-weight:900;
+  font-size:clamp(28px,4.4vw,52px);line-height:1.1;margin-bottom:6px;
+  text-shadow:0 2px 6px rgba(0,0,0,.35);}
+.slide h2 .em{color:var(--gold);}
+.subtitle{font-size:clamp(15px,1.9vw,21px);color:var(--cream-soft);font-weight:500;margin-bottom:22px;}
+.lead{font-size:clamp(16px,2vw,22px);line-height:1.7;max-width:980px;}
+.lead b{color:var(--gold);}
+.mono{font-family:'JetBrains Mono',monospace;}
+
+/* 패널/카드 */
+.panel{background:var(--panel);color:var(--ink);border:1px solid var(--panel-bd);border-radius:20px;
+  padding:24px 28px;box-shadow:0 16px 44px rgba(0,0,0,.32);}
+.panel h3{color:var(--ink);}
+.panel .lead b{color:var(--match);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+ul.clean{list-style:none;}
+ul.clean li{position:relative;padding-left:30px;margin:12px 0;font-size:clamp(15px,1.8vw,19px);line-height:1.6;}
+ul.clean li::before{content:"🁢";position:absolute;left:0;top:0;color:var(--match);font-size:1.05em;}
+.badge{display:inline-block;background:var(--gold);color:#5a3d00;font-weight:700;
+  border-radius:999px;padding:4px 14px;font-size:14px;margin-bottom:14px;box-shadow:0 3px 10px rgba(0,0,0,.3);}
+.eq{font-family:'JetBrains Mono',monospace;background:#fff;border-radius:12px;padding:14px 18px;
+  display:inline-block;font-size:clamp(15px,2.1vw,22px);border:2px solid var(--tile-bd);color:var(--match);font-weight:700;}
+
+/* ---------- 표지 ---------- */
+#s-cover{align-items:center;justify-content:center;text-align:center;}
+#s-cover .big{font-family:'Black Han Sans',sans-serif;font-size:clamp(42px,9.5vw,116px);
+  line-height:1;letter-spacing:-.01em;color:var(--cream);text-shadow:0 4px 0 rgba(0,0,0,.25),0 16px 36px rgba(0,0,0,.4);}
+#s-cover .big .em{color:var(--gold);}
+#s-cover .en{font-family:'JetBrains Mono',monospace;letter-spacing:.5em;color:var(--cream-soft);
+  font-size:clamp(13px,2vw,20px);margin-top:18px;text-transform:uppercase;}
+#s-cover .tag{margin-top:28px;font-size:clamp(15px,2.2vw,22px);color:var(--cream-soft);}
+#s-cover .pills{margin-top:26px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+#s-cover .pills span{background:var(--tile);border:1px solid var(--tile-bd);border-radius:999px;
+  padding:6px 16px;font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--ink);font-weight:700;
+  box-shadow:0 6px 16px rgba(0,0,0,.25);}
+#s-cover .dominorow{margin-top:34px;display:flex;gap:10px;justify-content:center;}
+#s-cover .dominorow .dm{width:42px;height:80px;background:var(--tile);border:2px solid var(--tile-bd);
+  border-radius:10px;position:relative;box-shadow:0 8px 18px rgba(0,0,0,.3);}
+#s-cover .dominorow .dm::before{content:"";position:absolute;left:14%;right:14%;top:50%;height:2px;background:var(--tile-bd);}
+
+/* ---------- 공통 컨트롤 ---------- */
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;}
+button.btn{font-family:'Noto Sans KR',sans-serif;font-size:15px;background:var(--match);color:#fff;border:none;
+  border-radius:12px;padding:10px 18px;font-weight:700;cursor:pointer;box-shadow:0 6px 14px rgba(224,83,59,.4);transition:.15s;}
+button.btn:hover{transform:translateY(-2px);box-shadow:0 9px 18px rgba(224,83,59,.5);}
+button.btn.alt{background:#2c8a60;box-shadow:0 6px 14px rgba(44,138,96,.4);}
+button.btn.ghost{background:#fff;color:var(--ink);border:2px solid var(--tile-bd);box-shadow:none;}
+.label{font-weight:700;color:var(--ink-soft);font-size:14px;}
+input.num{width:60px;padding:8px 10px;border-radius:10px;border:2px solid var(--tile-bd);text-align:center;
+  font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--ink);}
+.log{margin-top:12px;background:var(--code-bg);color:#cfead9;border-radius:12px;padding:12px 16px;
+  font-family:'JetBrains Mono',monospace;font-size:13.5px;line-height:1.6;max-height:160px;overflow:auto;
+  white-space:pre-wrap;}
+.log .ok{color:#8ee6a8;}.log .hl{color:var(--gold);}.log .rd{color:#ff9b8a;}
+.legend{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0;font-size:14px;color:var(--cream-soft);}
+.legend i{display:inline-block;width:18px;height:12px;border-radius:4px;vertical-align:0px;margin-right:6px;}
+
+/* ---------- 이분 그래프 SVG ---------- */
+.graph-wrap{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;}
+.graph-wrap svg{background:#fff;border-radius:16px;border:2px solid var(--tile-bd);max-width:100%;}
+.gp-side{flex:1;min-width:240px;}
+
+/* ---------- 체스판 / 도미노 놀이터 ---------- */
+.board-area{position:relative;margin:8px 0 4px;}
+.board{position:relative;}
+.sq{position:absolute;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:11px;font-weight:700;transition:.12s;user-select:none;}
+.sq.black{background:var(--black-sq);color:#7c91a3;}
+.sq.white{background:var(--white-sq);color:#9c9173;}
+.sq.blocked{background:repeating-linear-gradient(45deg,#5a4634,#5a4634 6px,#4a382a 6px,#4a382a 12px);color:transparent;cursor:pointer;}
+.sq:hover{outline:3px solid var(--gold);outline-offset:-3px;}
+.domino{position:absolute;border-radius:10px;background:linear-gradient(160deg,#fbf6e8,#ece0c2);
+  border:2px solid var(--tile-bd);box-shadow:0 6px 14px rgba(0,0,0,.35);pointer-events:none;
+  display:flex;align-items:center;justify-content:center;gap:14px;animation:pop .25s ease;}
+.domino .pip{width:9px;height:9px;border-radius:50%;background:var(--pip);}
+.domino.h::before{content:"";position:absolute;top:14%;bottom:14%;left:50%;width:2px;background:var(--tile-bd);}
+.domino.v::before{content:"";position:absolute;left:14%;right:14%;top:50%;height:2px;background:var(--tile-bd);}
+@keyframes pop{from{transform:scale(.6);opacity:0;}to{transform:scale(1);opacity:1;}}
+
+/* ---------- 코드 탭 ---------- */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;}
+.tab{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;padding:9px 16px;
+  border-radius:12px 12px 0 0;background:rgba(246,239,221,.55);color:var(--ink);cursor:pointer;}
+.tab.active{background:var(--code-bg);color:#fff;}
+.codebox{background:var(--code-bg);border-radius:0 14px 14px 14px;padding:20px 22px;overflow:auto;
+  max-height:54vh;box-shadow:0 16px 44px rgba(0,0,0,.4);}
+.codebox pre{font-family:'JetBrains Mono',monospace;font-size:13.5px;line-height:1.62;color:#e7f3ec;}
+.codebox .kw{color:#ffb37a;}.codebox .ty{color:#8fe0c0;}.codebox .fn{color:#ffd870;}
+.codebox .cm{color:#6f8c7c;font-style:italic;}.codebox .st{color:#a7eaa0;}
+.run-row{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap;}
+.run-out{flex:1;min-width:260px;background:var(--code-bg);color:#cfead9;border-radius:12px;
+  padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:13.5px;white-space:pre-wrap;min-height:46px;}
+
+/* ---------- 표 ---------- */
+table.cmp{width:100%;border-collapse:collapse;font-size:clamp(14px,1.8vw,19px);}
+table.cmp th,table.cmp td{padding:10px 12px;text-align:left;}
+table.cmp tr{border-bottom:1px solid var(--tile-bd);}
+
+/* ---------- 내비게이션 ---------- */
+#nav{position:fixed;bottom:0;left:0;right:0;z-index:20;height:64px;display:flex;align-items:center;
+  justify-content:space-between;padding:0 22px;background:rgba(12,63,44,.7);backdrop-filter:blur(8px);
+  border-top:1px solid rgba(246,239,221,.25);}
+#nav .nbtn{background:var(--match);color:#fff;border:none;border-radius:12px;width:44px;height:44px;
+  font-size:20px;cursor:pointer;box-shadow:0 5px 12px rgba(224,83,59,.45);transition:.15s;}
+#nav .nbtn:hover{transform:translateY(-2px);}
+#nav .nbtn:disabled{opacity:.35;cursor:default;transform:none;}
+.dots{display:flex;gap:8px;align-items:center;}
+.dot{width:11px;height:11px;border-radius:50%;background:rgba(246,239,221,.3);cursor:pointer;transition:.2s;}
+.dot.active{background:var(--gold);transform:scale(1.35);}
+#crumb{font-weight:700;color:var(--cream-soft);font-size:14px;min-width:200px;}
+#crumb b{color:var(--cream);}
+.hint{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:20;font-size:12.5px;
+  color:var(--cream-soft);background:rgba(12,63,44,.6);padding:5px 14px;border-radius:999px;}
+@media(max-width:680px){
+  .grid2,.grid3{grid-template-columns:1fr;}
+  .slide{padding:30px 5vw 88px;}
+  #crumb{display:none;}
+}
+</style>
+</head>
+<body>
+<div class="tiles">
+  <div class="dtile d1"></div><div class="dtile d2"></div><div class="dtile d3"></div>
+  <div class="dtile d4"></div><div class="dtile d5"></div>
+</div>
+<div class="hint">← → 또는 스페이스바로 이동 · 점을 눌러 이동</div>
+
+<div id="deck">
+
+  <!-- 0. 표지 -->
+  <section class="slide active" id="s-cover">
+    <div class="big">이분 매칭<br><span class="em">도미노로</span> 배우기</div>
+    <div class="en">Bipartite Matching · Kuhn's Algorithm</div>
+    <div class="tag">“두 무리를 <b style="color:var(--gold)">짝지어</b> 최대한 많이” — 도미노 한 장이 곧 하나의 짝</div>
+    <div class="pills">
+      <span>C</span><span>C++</span><span>Go</span><span>JavaScript</span><span>Java</span><span>C#</span><span>Python</span>
+    </div>
+    <div class="dominorow"><div class="dm"></div><div class="dm"></div><div class="dm"></div><div class="dm"></div></div>
+  </section>
+
+  <!-- 1. 문제 -->
+  <section class="slide" id="s1">
+    <span class="badge">왜 필요할까?</span>
+    <h2>문제 : <span class="em">최대한 많이</span> 짝짓기</h2>
+    <p class="subtitle">왼쪽 무리와 오른쪽 무리를, 정해진 연결선 안에서 겹치지 않게 최대로 이어보기</p>
+    <div class="grid2" style="margin-top:8px;">
+      <div class="panel">
+        <h3 style="color:var(--match);margin-bottom:10px;">🁢 이런 상황들</h3>
+        <ul class="clean">
+          <li><b>일꾼 ↔ 작업</b> : 할 수 있는 일만 골라 최대로 배정</li>
+          <li><b>학생 ↔ 자리</b> : 원하는 자리만 배정해 최대로 앉히기</li>
+          <li><b>체스판 ↔ 도미노</b> : 빈 칸을 2×1 도미노로 최대로 덮기</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3 style="margin-bottom:10px;">🎯 매칭(matching)이란?</h3>
+        <p class="lead">한 정점이 <b>최대 하나</b>의 짝만 갖도록 고른 간선들의 모임.
+        그중 <b>간선 수가 가장 많은</b> 것이 <b>최대 매칭</b>이에요.</p>
+        <p class="lead" style="margin-top:12px;">도미노 한 장 = 짝 하나. “도미노를 최대 몇 장 깔 수 있나?”가 바로 최대 매칭 문제!</p>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:22px;">
+      <p class="lead">💡 핵심 한 줄 : <b>“증가 경로(augmenting path)”</b>를 계속 찾아 짝을 한 개씩 늘리면,
+      더는 못 늘릴 때가 곧 <b>최대 매칭</b>입니다.</p>
+    </div>
+  </section>
+
+  <!-- 2. 이분 그래프 / 체스판 2색칠 -->
+  <section class="slide" id="s2">
+    <span class="badge">핵심 구조</span>
+    <h2>왜 <span class="em">이분(二分)</span> 그래프일까?</h2>
+    <p class="subtitle">정점을 두 무리로 나눌 수 있고, 간선은 항상 무리 사이에만 — 체스판이 완벽한 예시!</p>
+    <div class="grid2" style="margin-top:8px;">
+      <div class="panel">
+        <p class="lead">체스판을 <b>검은 칸 / 흰 칸</b>으로 칠하면, 인접한 두 칸은 <b>항상 색이 다릅니다.</b></p>
+        <p class="lead" style="margin-top:12px;">도미노 한 장은 인접한 두 칸을 덮으니 <b>반드시 검은 칸 1 + 흰 칸 1</b>을 덮어요.
+        → 검은 칸 무리와 흰 칸 무리 사이의 <b>이분 매칭</b>이 됩니다!</p>
+        <div class="legend" style="margin-top:14px;color:var(--ink-soft)">
+          <span><i style="background:var(--black-sq)"></i>검은 칸 = 왼쪽 무리</span>
+          <span><i style="background:var(--white-sq)"></i>흰 칸 = 오른쪽 무리</span>
+        </div>
+      </div>
+      <div class="panel" style="display:flex;align-items:center;justify-content:center;">
+        <div id="mini-board" class="board"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 증가 경로 애니메이션 -->
+  <section class="slide" id="s3">
+    <span class="badge">핵심 아이디어</span>
+    <h2>증가 경로로 <span class="em">짝을 한 개씩</span> 늘리기</h2>
+    <p class="subtitle">빈 곳을 찾으면 바로 매칭. 이미 찼으면 "양보 가능?"하고 길을 따라 밀어내며 재배치</p>
+    <div class="graph-wrap">
+      <svg id="aug-svg" viewBox="0 0 480 360" width="480" height="360"></svg>
+      <div class="gp-side">
+        <div class="controls">
+          <button class="btn alt" onclick="augStep(-1)">‹ 이전</button>
+          <button class="btn alt" onclick="augStep(1)">다음 ›</button>
+          <button class="btn" onclick="augAuto()">▶ 자동</button>
+          <button class="btn ghost" onclick="augReset()">처음으로</button>
+        </div>
+        <div class="log" id="aug-log" style="max-height:220px;"></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i style="background:#2c8a60"></i>확정된 매칭</span>
+      <span><i style="background:var(--gold)"></i>시도 중인 간선</span>
+      <span><i style="background:var(--match)"></i>매칭 성사</span>
+    </div>
+  </section>
+
+  <!-- 4. 알고리즘 정리 -->
+  <section class="slide" id="s4">
+    <span class="badge">알고리즘 (쿤 / 헝가리안)</span>
+    <h2>Kuhn 알고리즘 <span class="em">한눈에</span></h2>
+    <div class="grid2" style="margin-top:8px;">
+      <div class="panel">
+        <h3 style="margin-bottom:10px;">📋 절차</h3>
+        <ul class="clean">
+          <li>오른쪽 정점의 짝 <span class="mono">matchR[]</span>을 모두 비움(-1)</li>
+          <li>왼쪽 정점 <span class="mono">u</span>마다 차례로 <b>증가 경로 DFS</b> 시도</li>
+          <li>빈 오른쪽을 찾거나, 기존 짝을 <b>다른 곳으로 밀어낼 수</b> 있으면 성공</li>
+          <li>성공할 때마다 매칭 +1</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3 style="margin-bottom:10px;">🔁 핵심 재귀 tryKuhn(u)</h3>
+        <pre class="mono" style="font-size:14px;line-height:1.7;color:var(--ink);white-space:pre-wrap;">u와 이어진 v 각각에 대해:
+  v를 아직 안 봤다면 표시하고
+    matchR[v]가 비었거나
+    tryKuhn(matchR[v]) 가 성공하면
+      matchR[v] = u;  → 성공!
+모두 실패하면 → 실패</pre>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:20px;">
+      <p class="lead">⏱️ 시간복잡도 <b class="mono">O(V × E)</b> — 정점마다 DFS 한 번.
+      짧은 코드로 충분히 빠르고, 작은~중간 그래프에서 아주 잘 동작합니다.</p>
+    </div>
+  </section>
+
+  <!-- 5. 인터랙티브 도미노 놀이터 -->
+  <section class="slide" id="s5">
+    <span class="badge">직접 깔아보기 🛠️</span>
+    <h2>도미노 <span class="em">최대로 깔기</span> 놀이터</h2>
+    <p class="subtitle">칸을 클릭해 <b>구멍</b>을 뚫고, 버튼을 누르면 <b>실제로 돌아가는</b> 이분 매칭이 도미노를 최대로 깝니다.</p>
+    <div class="panel">
+      <div class="controls">
+        <button class="btn" onclick="solveDomino()">🁢 도미노 최대로 깔기</button>
+        <button class="btn ghost" onclick="clearDominoes()">도미노 치우기</button>
+        <button class="btn ghost" onclick="randomHoles()">랜덤 구멍 🎲</button>
+        <button class="btn ghost" onclick="resetBoard()">구멍 메우기</button>
+      </div>
+      <div class="board-area"><div id="play-board" class="board"></div></div>
+      <div class="log" id="play-log">칸을 클릭하면 구멍이 생깁니다. (검은 칸 ↔ 흰 칸을 잇는 이분 매칭으로 계산해요.)</div>
+    </div>
+  </section>
+
+  <!-- 6. 코드 (7개 언어) -->
+  <section class="slide" id="s6">
+    <span class="badge">소스 코드</span>
+    <h2>7개 언어로 <span class="em">똑같은 이분 매칭</span></h2>
+    <p class="subtitle">JavaScript 탭에서는 <b>실행</b> 버튼으로 브라우저에서 바로 돌려볼 수 있어요.</p>
+    <div class="tabs" id="code-tabs"></div>
+    <div class="codebox"><pre id="code-view"></pre></div>
+    <div class="run-row" id="run-row" style="display:none;">
+      <button class="btn alt" onclick="runJS()">▶ JavaScript 예제 실행</button>
+      <div class="run-out" id="run-out">실행 결과가 여기에 나옵니다.</div>
+    </div>
+  </section>
+
+  <!-- 7. 정리 -->
+  <section class="slide" id="s7">
+    <span class="badge">정리</span>
+    <h2>이분 매칭 <span class="em">3줄 요약</span></h2>
+    <div class="grid3" style="margin-top:8px;">
+      <div class="panel"><h3 style="color:#2c8a60">🧩 무엇을</h3>
+        <p class="lead" style="font-size:17px;margin-top:8px;color:var(--ink)">두 무리 사이 간선으로 <b style="color:var(--match)">최대 짝짓기</b>.</p></div>
+      <div class="panel"><h3 style="color:var(--gold)">🔍 어떻게</h3>
+        <p class="lead" style="font-size:17px;margin-top:8px;color:var(--ink)"><b style="color:var(--match)">증가 경로</b>를 DFS로 찾아 짝을 1개씩 ↑.</p></div>
+      <div class="panel"><h3 style="color:var(--match)">⏱️ 얼마나</h3>
+        <p class="lead" style="font-size:17px;margin-top:8px;color:var(--ink)">Kuhn 알고리즘 <span class="mono">O(V·E)</span>, 코드도 짧음.</p></div>
+    </div>
+    <div class="panel" style="margin-top:22px;">
+      <table class="cmp">
+        <tr style="border-bottom:2px solid var(--tile-bd)"><th>개념</th><th>뜻</th></tr>
+        <tr><td><b>매칭</b></td><td>각 정점이 최대 1개의 짝만 갖는 간선 집합</td></tr>
+        <tr><td><b>증가 경로</b></td><td>비매칭–매칭 간선이 번갈아 나오며 양끝이 자유로운 길</td></tr>
+        <tr><td><b>König 정리</b></td><td>최대 매칭 = 최소 정점 덮개 (이분 그래프에서)</td></tr>
+        <tr style="background:rgba(231,181,74,.3)"><td><b>도미노 타일링</b></td><td>체스판 빈칸 덮기 = 검은칸↔흰칸 최대 이분 매칭</td></tr>
+      </table>
+    </div>
+    <p class="lead" style="margin-top:22px;text-align:center;width:100%;color:var(--cream)">
+      🁢 도미노 한 장이 짝 하나. 증가 경로만 알면 끝! 직접 코딩해 보세요. 🁣</p>
+  </section>
+
+</div>
+
+<!-- 내비게이션 -->
+<div id="nav">
+  <button class="nbtn" id="prev" onclick="go(-1)">‹</button>
+  <div class="dots" id="dots"></div>
+  <span id="crumb"></span>
+  <button class="nbtn" id="next" onclick="go(1)">›</button>
+</div>
+
+<script>
+/* =========================================================
+   Kuhn 알고리즘 (최대 이분 매칭) — 실제 동작
+   ========================================================= */
+function maxMatching(adj, nR){
+  const matchR=new Array(nR).fill(-1);
+  let visited;
+  function tryKuhn(u){
+    for(const v of adj[u]){
+      if(!visited[v]){
+        visited[v]=true;
+        if(matchR[v]===-1||tryKuhn(matchR[v])){ matchR[v]=u; return true; }
+      }
+    }
+    return false;
+  }
+  let cnt=0;
+  for(let u=0;u<adj.length;u++){ visited=new Array(nR).fill(false); if(tryKuhn(u)) cnt++; }
+  return {count:cnt, matchR};
+}
+
+/* ===================== 슬라이드 내비게이션 ===================== */
+const slides=[...document.querySelectorAll('.slide')];
+const titles=['표지','문제','이분 그래프','증가 경로','알고리즘','놀이터','코드','정리'];
+let cur=0;
+const dotsEl=document.getElementById('dots');
+slides.forEach((_,i)=>{const d=document.createElement('div');d.className='dot';d.onclick=()=>show(i);dotsEl.appendChild(d);});
+function show(i){
+  cur=Math.max(0,Math.min(slides.length-1,i));
+  slides.forEach((s,k)=>s.classList.toggle('active',k===cur));
+  [...dotsEl.children].forEach((d,k)=>d.classList.toggle('active',k===cur));
+  document.getElementById('prev').disabled=cur===0;
+  document.getElementById('next').disabled=cur===slides.length-1;
+  document.getElementById('crumb').innerHTML=`<b>${cur+1}</b> / ${slides.length} — ${titles[cur]}`;
+}
+function go(d){show(cur+d);}
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+  if(e.key==='ArrowRight'||e.key===' '){go(1);e.preventDefault();}
+  if(e.key==='ArrowLeft')go(-1);
+});
+
+/* ===================== 2번: 미니 체스판 (구조 설명) ===================== */
+function buildMiniBoard(){
+  const R=4,C=4,CELL=46,GAP=6,STR=CELL+GAP;
+  const b=document.getElementById('mini-board');
+  b.style.width=(C*STR-GAP)+'px';b.style.height=(R*STR-GAP)+'px';b.innerHTML='';
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+    const d=document.createElement('div');
+    d.className='sq '+(((r+c)%2===0)?'black':'white');
+    d.style.left=(c*STR)+'px';d.style.top=(r*STR)+'px';
+    d.style.width=CELL+'px';d.style.height=CELL+'px';d.style.cursor='default';
+    d.style.outline='none';
+    b.appendChild(d);
+  }
+}
+buildMiniBoard();
+
+/* ===================== 3번: 증가 경로 애니메이션 ===================== */
+/* 예제 그래프 (코드 예제와 동일) : 왼쪽 0..3, 오른쪽 0..3 */
+const EXADJ=[[0,1],[0],[1,2],[2,3]];
+const EX_NL=4, EX_NR=4;
+function kuhnFrames(adj,nL,nR){
+  const matchR=new Array(nR).fill(-1);
+  const frames=[];
+  const snap=(log,hi)=>frames.push({matchR:[...matchR],hi:hi||{},log});
+  let visited;
+  function dfs(u){
+    for(const v of adj[u]){
+      if(!visited[v]){
+        visited[v]=true;
+        snap(`L${u+1} → R${v+1} 시도`,{edge:[u,v],kind:'try',node:u});
+        if(matchR[v]===-1){
+          matchR[v]=u;
+          snap(`R${v+1}이 비어있다! → L${u+1}와 매칭 ✔`,{edge:[u,v],kind:'match',node:u});
+          return true;
+        }else{
+          snap(`R${v+1}은 L${matchR[v]+1}가 쓰는 중 → L${matchR[v]+1}를 다른 곳으로 밀어낼 수 있나?`,{edge:[u,v],kind:'busy',node:u});
+          if(dfs(matchR[v])){
+            matchR[v]=u;
+            snap(`경로 갱신! L${u+1} → R${v+1} 로 매칭 ✔`,{edge:[u,v],kind:'match',node:u});
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+  snap('시작: 아직 짝이 하나도 없습니다.',{});
+  for(let u=0;u<nL;u++){
+    visited=new Array(nR).fill(false);
+    snap(`▶ L${u+1} 차례 — 짝을 찾아봅시다.`,{node:u});
+    dfs(u);
+  }
+  const total=matchR.filter(x=>x>=0).length;
+  snap(`🁢 완료! 최대 매칭 = ${total}  (도미노 ${total}장)`,{done:true});
+  return frames;
+}
+const AUG_FRAMES=kuhnFrames(EXADJ,EX_NL,EX_NR);
+let augIdx=0, augTimer=null;
+function nodeY(i){return 50+i*86;}
+function renderGraph(frame){
+  const LX=90,RX=390,Rr=26;
+  let s='';
+  // 간선
+  for(let u=0;u<EX_NL;u++)for(const v of EXADJ[u]){
+    const matched=frame.matchR[v]===u;
+    let stroke='#c9bfa3',w=3,dash='';
+    if(matched){stroke='#2c8a60';w=6;}
+    if(frame.hi.edge&&frame.hi.edge[0]===u&&frame.hi.edge[1]===v){
+      if(frame.hi.kind==='try'){stroke='#e7b54a';w=6;dash='8 6';}
+      else if(frame.hi.kind==='busy'){stroke='#e08a2a';w=6;dash='8 6';}
+      else if(frame.hi.kind==='match'){stroke='#e0533b';w=8;}
+    }
+    s+=`<line x1="${LX+Rr}" y1="${nodeY(u)}" x2="${RX-Rr}" y2="${nodeY(v)}" stroke="${stroke}" stroke-width="${w}" ${dash?`stroke-dasharray="${dash}"`:''} stroke-linecap="round"/>`;
+  }
+  // 노드
+  for(let i=0;i<EX_NL;i++){
+    const cur=frame.hi.node===i;
+    const matched=frame.matchR.includes(i);
+    s+=`<circle cx="${LX}" cy="${nodeY(i)}" r="${Rr}" fill="${matched?'#f6efdd':'#fff'}" stroke="${cur?'#e0533b':'#2a2014'}" stroke-width="${cur?5:2}"/>`;
+    s+=`<text x="${LX}" y="${nodeY(i)+5}" text-anchor="middle" font-family="JetBrains Mono" font-weight="700" font-size="15" fill="#2a2014">L${i+1}</text>`;
+  }
+  for(let v=0;v<EX_NR;v++){
+    const matched=frame.matchR[v]>=0;
+    s+=`<circle cx="${RX}" cy="${nodeY(v)}" r="${Rr}" fill="${matched?'#cdeed8':'#fff'}" stroke="${matched?'#2c8a60':'#2a2014'}" stroke-width="${matched?4:2}"/>`;
+    s+=`<text x="${RX}" y="${nodeY(v)+5}" text-anchor="middle" font-family="JetBrains Mono" font-weight="700" font-size="15" fill="#2a2014">R${v+1}</text>`;
+  }
+  s+=`<text x="${LX}" y="28" text-anchor="middle" font-size="13" fill="#6b5d44">왼쪽</text>`;
+  s+=`<text x="${RX}" y="28" text-anchor="middle" font-size="13" fill="#6b5d44">오른쪽</text>`;
+  document.getElementById('aug-svg').innerHTML=s;
+  const done=frame.matchR.filter(x=>x>=0).length;
+  document.getElementById('aug-log').innerHTML=
+    `<span class="hl">[${augIdx+1}/${AUG_FRAMES.length}]</span> 현재 매칭 수: <span class="ok">${done}</span>\n`+
+    (frame.hi.done?`<span class="ok">${frame.log}</span>`:frame.log);
+}
+function augShow(){renderGraph(AUG_FRAMES[augIdx]);}
+function augStep(d){if(augTimer){clearInterval(augTimer);augTimer=null;}
+  augIdx=Math.max(0,Math.min(AUG_FRAMES.length-1,augIdx+d));augShow();}
+function augReset(){if(augTimer){clearInterval(augTimer);augTimer=null;}augIdx=0;augShow();}
+function augAuto(){if(augTimer){clearInterval(augTimer);augTimer=null;return;}
+  augTimer=setInterval(()=>{if(augIdx>=AUG_FRAMES.length-1){clearInterval(augTimer);augTimer=null;return;}augIdx++;augShow();},1100);}
+augShow();
+
+/* ===================== 5번: 도미노 놀이터 (체스판 타일링) ===================== */
+const ROWS=4, COLS=6, CELL=58, GAP=8, STR=CELL+GAP;
+let blocked=new Set();
+let seed=20240607;
+function rnd(){seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;}
+function idOf(r,c){return r*COLS+c;}
+function rcOf(id){return [Math.floor(id/COLS), id%COLS];}
+function buildBoard(){
+  const b=document.getElementById('play-board');
+  b.style.width=(COLS*STR-GAP)+'px';b.style.height=(ROWS*STR-GAP)+'px';
+  b.innerHTML='';
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const id=idOf(r,c);
+    const d=document.createElement('div');
+    const blk=blocked.has(id);
+    d.className='sq '+(blk?'blocked':(((r+c)%2===0)?'black':'white'));
+    d.style.left=(c*STR)+'px';d.style.top=(r*STR)+'px';
+    d.style.width=CELL+'px';d.style.height=CELL+'px';
+    d.dataset.id=id;
+    d.onclick=()=>{ if(blocked.has(id))blocked.delete(id); else blocked.add(id);
+      clearDominoes(); buildBoard(); };
+    b.appendChild(d);
+  }
+}
+function clearDominoes(){
+  document.querySelectorAll('#play-board .domino').forEach(e=>e.remove());
+  document.getElementById('play-log').textContent='칸을 클릭하면 구멍이 생깁니다. (검은 칸 ↔ 흰 칸을 잇는 이분 매칭으로 계산해요.)';
+}
+function resetBoard(){blocked=new Set();clearDominoes();buildBoard();}
+function randomHoles(){blocked=new Set();
+  for(let i=0;i<ROWS*COLS;i++)if(rnd()<0.18)blocked.add(i);
+  clearDominoes();buildBoard();}
+function solveDomino(){
+  clearDominoes();
+  // 검은 칸(왼쪽), 흰 칸(오른쪽) — 모두 cell-id 그대로 인덱스로 사용
+  const N=ROWS*COLS;
+  const adj=Array.from({length:N},()=>[]);
+  const isBlack=id=>{const[r,c]=rcOf(id);return (r+c)%2===0;};
+  const free=id=>!blocked.has(id);
+  const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+  let blackCnt=0,whiteCnt=0;
+  for(let id=0;id<N;id++){
+    if(!free(id))continue;
+    if(isBlack(id)){blackCnt++;
+      const[r,c]=rcOf(id);
+      for(const[dr,dc]of dirs){const nr=r+dr,nc=c+dc;
+        if(nr<0||nc<0||nr>=ROWS||nc>=COLS)continue;
+        const nid=idOf(nr,nc);
+        if(free(nid)&&!isBlack(nid))adj[id].push(nid);
+      }
+    }else whiteCnt++;
+  }
+  const {count,matchR}=maxMatching(adj,N);
+  // 도미노 그리기
+  const b=document.getElementById('play-board');
+  for(let w=0;w<N;w++){
+    if(matchR[w]<0)continue;
+    const a=matchR[w];               // 검은칸 id, w = 흰칸 id
+    const[r1,c1]=rcOf(a),[r2,c2]=rcOf(w);
+    const minR=Math.min(r1,r2),minC=Math.min(c1,c2);
+    const horiz=(r1===r2);
+    const dom=document.createElement('div');
+    dom.className='domino '+(horiz?'h':'v');
+    dom.style.left=(minC*STR)+'px';dom.style.top=(minR*STR)+'px';
+    dom.style.width=(horiz?CELL*2+GAP:CELL)+'px';
+    dom.style.height=(horiz?CELL:CELL*2+GAP)+'px';
+    dom.innerHTML='<span class="pip"></span><span class="pip"></span>';
+    b.appendChild(dom);
+  }
+  const freeCells=ROWS*COLS-blocked.size;
+  const covered=count*2;
+  document.getElementById('play-log').innerHTML=
+    `빈 칸 ${freeCells}개  (검은 ${blackCnt} · 흰 ${whiteCnt})\n`+
+    `도미노 <span class="hl">${count}</span>장 깔림 → ${covered}칸 덮음, `+
+    `${freeCells-covered}칸 남음.\n`+
+    (freeCells-covered===0
+      ? '<span class="ok">완벽하게 다 덮었어요! ✔</span>'
+      : '<span class="rd">남은 칸은 더 못 덮습니다 (최대 매칭).</span>');
+}
+buildBoard();
+
+/* ===================== 6번: 코드 탭 (7개 언어) ===================== */
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const code={
+"C":
+`#include <stdio.h>
+#include <string.h>
+#define L 4              /* 왼쪽 정점 수 */
+#define R 4              /* 오른쪽 정점 수 */
+
+int adj[L][R];           // adj[u][v]=1 이면 u-v 간선 존재
+int matchR[R];           // 오른쪽 v의 짝(왼쪽 정점), 없으면 -1
+int visited[R];
+
+int tryKuhn(int u){
+    for(int v = 0; v < R; v++){
+        if(adj[u][v] && !visited[v]){
+            visited[v] = 1;
+            if(matchR[v] == -1 || tryKuhn(matchR[v])){
+                matchR[v] = u;          // 증가 경로 발견 → 짝 갱신
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int main(void){
+    int edges[][2] = {{0,0},{0,1},{1,0},{2,1},{2,2},{3,2},{3,3}};
+    for(int i = 0; i < 7; i++) adj[edges[i][0]][edges[i][1]] = 1;
+
+    for(int v = 0; v < R; v++) matchR[v] = -1;
+    int matching = 0;
+    for(int u = 0; u < L; u++){
+        memset(visited, 0, sizeof(visited));
+        if(tryKuhn(u)) matching++;
+    }
+    printf("최대 매칭 = %d\\n", matching);   // 4
+    return 0;
+}`,
+"C++":
+`#include <bits/stdc++.h>
+using namespace std;
+
+int nL, nR;
+vector<vector<int>> adj;     // adj[u] = u와 이어진 오른쪽 정점들
+vector<int> matchR;          // 오른쪽 v의 짝, 없으면 -1
+vector<bool> visited;
+
+bool tryKuhn(int u){
+    for(int v : adj[u]){
+        if(!visited[v]){
+            visited[v] = true;
+            if(matchR[v] == -1 || tryKuhn(matchR[v])){
+                matchR[v] = u;            // 증가 경로 발견
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+int main(){
+    nL = 4; nR = 4;
+    adj = {{0,1}, {0}, {1,2}, {2,3}};
+    matchR.assign(nR, -1);
+    int matching = 0;
+    for(int u = 0; u < nL; u++){
+        visited.assign(nR, false);
+        if(tryKuhn(u)) matching++;
+    }
+    cout << "최대 매칭 = " << matching << "\\n";   // 4
+}`,
+"Go":
+`package main
+
+import "fmt"
+
+var adj [][]int      // adj[u] = u와 이어진 오른쪽 정점들
+var matchR []int     // 오른쪽 v의 짝, 없으면 -1
+var visited []bool
+
+func tryKuhn(u int) bool {
+    for _, v := range adj[u] {
+        if !visited[v] {
+            visited[v] = true
+            if matchR[v] == -1 || tryKuhn(matchR[v]) {
+                matchR[v] = u            // 증가 경로 발견
+                return true
+            }
+        }
+    }
+    return false
+}
+
+func main() {
+    adj = [][]int{{0, 1}, {0}, {1, 2}, {2, 3}}
+    nR := 4
+    matchR = make([]int, nR)
+    for i := range matchR {
+        matchR[i] = -1
+    }
+    matching := 0
+    for u := range adj {
+        visited = make([]bool, nR)
+        if tryKuhn(u) {
+            matching++
+        }
+    }
+    fmt.Println("최대 매칭 =", matching)   // 4
+}`,
+"JavaScript":
+`function maxBipartiteMatching(adj, nR) {
+  const matchR = new Array(nR).fill(-1); // 오른쪽 v의 짝, 없으면 -1
+  let visited;
+
+  function tryKuhn(u) {
+    for (const v of adj[u]) {
+      if (!visited[v]) {
+        visited[v] = true;
+        if (matchR[v] === -1 || tryKuhn(matchR[v])) {
+          matchR[v] = u;                 // 증가 경로 발견
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  let matching = 0;
+  for (let u = 0; u < adj.length; u++) {
+    visited = new Array(nR).fill(false);
+    if (tryKuhn(u)) matching++;
+  }
+  return matching;
+}
+
+const adj = [[0, 1], [0], [1, 2], [2, 3]];
+console.log("최대 매칭 =", maxBipartiteMatching(adj, 4)); // 4`,
+"Java":
+`import java.util.*;
+
+public class BipartiteMatching {
+    static List<List<Integer>> adj;   // adj.get(u) = u의 이웃들
+    static int[] matchR;              // 오른쪽 v의 짝, 없으면 -1
+    static boolean[] visited;
+
+    static boolean tryKuhn(int u) {
+        for (int v : adj.get(u)) {
+            if (!visited[v]) {
+                visited[v] = true;
+                if (matchR[v] == -1 || tryKuhn(matchR[v])) {
+                    matchR[v] = u;        // 증가 경로 발견
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static void main(String[] args) {
+        adj = List.of(List.of(0,1), List.of(0), List.of(1,2), List.of(2,3));
+        int nR = 4;
+        matchR = new int[nR];
+        Arrays.fill(matchR, -1);
+        int matching = 0;
+        for (int u = 0; u < adj.size(); u++) {
+            visited = new boolean[nR];
+            if (tryKuhn(u)) matching++;
+        }
+        System.out.println("최대 매칭 = " + matching);  // 4
+    }
+}`,
+"C#":
+`using System;
+using System.Collections.Generic;
+
+class BipartiteMatching {
+    static List<int>[] adj;     // adj[u] = u의 이웃들
+    static int[] matchR;        // 오른쪽 v의 짝, 없으면 -1
+    static bool[] visited;
+
+    static bool TryKuhn(int u) {
+        foreach (int v in adj[u]) {
+            if (!visited[v]) {
+                visited[v] = true;
+                if (matchR[v] == -1 || TryKuhn(matchR[v])) {
+                    matchR[v] = u;        // 증가 경로 발견
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    static void Main() {
+        adj = new List<int>[] {
+            new() {0, 1}, new() {0}, new() {1, 2}, new() {2, 3}
+        };
+        int nR = 4;
+        matchR = new int[nR];
+        Array.Fill(matchR, -1);
+        int matching = 0;
+        for (int u = 0; u < adj.Length; u++) {
+            visited = new bool[nR];
+            if (TryKuhn(u)) matching++;
+        }
+        Console.WriteLine($"최대 매칭 = {matching}");  // 4
+    }
+}`,
+"Python":
+`import sys
+sys.setrecursionlimit(10000)
+
+def max_bipartite_matching(adj, n_right):
+    match_r = [-1] * n_right            # 오른쪽 v의 짝, 없으면 -1
+
+    def try_kuhn(u, visited):
+        for v in adj[u]:
+            if not visited[v]:
+                visited[v] = True
+                if match_r[v] == -1 or try_kuhn(match_r[v], visited):
+                    match_r[v] = u       # 증가 경로 발견
+                    return True
+        return False
+
+    matching = 0
+    for u in range(len(adj)):
+        if try_kuhn(u, [False] * n_right):
+            matching += 1
+    return matching
+
+
+adj = [[0, 1], [0], [1, 2], [2, 3]]
+print("최대 매칭 =", max_bipartite_matching(adj, 4))   # 4`
+};
+function highlight(src){
+  let s=esc(src);
+  s=s.replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*include[^\n]*|"[^"\n]*"|'[^'\n]*')/g,m=>{
+    if(m.startsWith('//')||m.startsWith('/*'))return `<span class="cm">${m}</span>`;
+    if(m.startsWith('#'))return `<span class="kw">${m}</span>`;
+    return `<span class="st">${m}</span>`;
+  });
+  s=s.replace(/\b(class|struct|public|private|static|void|int|long|bool|boolean|return|for|while|new|using|namespace|package|import|func|def|var|const|let|foreach|range|true|false|this)\b/g,
+    '<span class="kw">$1</span>');
+  s=s.replace(/\b(tryKuhn|try_kuhn|TryKuhn|maxBipartiteMatching|max_bipartite_matching|main|Main|printf|cout|println|print|Println|console|memset|assign|fill|Fill)\b/g,
+    '<span class="fn">$1</span>');
+  return s;
+}
+const langs=Object.keys(code);
+const tabsEl=document.getElementById('code-tabs');
+let curLang='C';
+langs.forEach(l=>{const t=document.createElement('div');t.className='tab'+(l===curLang?' active':'');
+  t.textContent=l;t.onclick=()=>selLang(l);tabsEl.appendChild(t);});
+function selLang(l){
+  curLang=l;
+  [...tabsEl.children].forEach(t=>t.classList.toggle('active',t.textContent===l));
+  document.getElementById('code-view').innerHTML=highlight(code[l]);
+  document.getElementById('run-row').style.display=(l==='JavaScript')?'flex':'none';
+}
+selLang('C');
+function runJS(){
+  const logs=[];
+  const fakeConsole={log:(...a)=>logs.push(a.join(' '))};
+  try{
+    const fn=new Function('console',code['JavaScript']);
+    fn(fakeConsole);
+    document.getElementById('run-out').innerHTML=
+      logs.map(esc).join('\n')+'\n<span style="color:#8ee6a8">— 실행 완료 ✓</span>';
+  }catch(e){
+    document.getElementById('run-out').innerHTML='<span style="color:#ff9b8a">오류: '+esc(e.message)+'</span>';
+  }
+}
+
+show(0);
+</script>
+</body>
+</html>
