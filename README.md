@@ -70,6 +70,9 @@
 - 🀄 **[장기전술집.html](./장기전술집.html)** — 🐎 장기 전술 가이드 ⚔️
 - ⚫ **[오목_묘수_풀이_및_고급_전술집.html](./오목_묘수_풀이_및_고급_전술집.html)** — ⚪ 오목 묘수와 고급 전술 🎯
 
+### 🧮 주산 & 암산 🔢
+- 🧮 **[주판_암산_교재.html](./주판_암산_교재.html)** — 🔢 주판으로 익히는 암산의 기술 ✨
+
 ### 📜 컴퓨팅 역사 & 문화 🏛️
 - 🍎 **[apple2_software_history.html](./apple2_software_history.html)** — 💾 Apple II 소프트웨어의 역사 🕰️
 - 🖥️ **[mac_software_history.html](./mac_software_history.html)** — 📀 매킨토시 소프트웨어 연대기 📚
@@ -77,6 +80,9 @@
 
 ### 📐 소프트웨어 설계 📚
 - 🧼 **[Clean_Code_vs_APoSD.html](./Clean_Code_vs_APoSD.html)** — 📖 Clean Code vs A Philosophy of Software Design 비교 ⚖️
+
+### 🎨 제너러티브 아트 🌌
+- 🌠 **[art.html](./art.html)** — ✨ 캔버스로 그리는 제너러티브 아트 (32,000개 파티클 애니메이션) 🪐
 
 ### 🧱 기타 흥미로운 프로젝트 🎁
 - 📱 **[qr_project_spec.html](./qr_project_spec.html)** — 🔲 QR 코드 프로젝트 명세서 📄
