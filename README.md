@@ -50,6 +50,7 @@
 - 🎓 **[scheme-gwbasic-full.md](./scheme-gwbasic-full.md)** — λ Scheme 풀버전 🧙‍♂️
 
 ### 🔢 수학 & 알고리즘 🧮
+- 🌊 **[유량알고리즘_강줄기로_배우기.html](./유량알고리즘_강줄기로_배우기.html)** — 💧 강물 흘려보내기로 배우는 최대 유량 / Edmonds-Karp (C·C++·Go·JS·Java·C#·Python) 🏞️
 - 🁢 **[이분매칭_도미노로_배우기.html](./이분매칭_도미노로_배우기.html)** — 🧩 도미노 타일링으로 배우는 이분 매칭 (C·C++·Go·JS·Java·C#·Python) 🎯
 - 🌤️ **[펜윅트리_쉽게_배우기.html](./펜윅트리_쉽게_배우기.html)** — ⚡ 인터랙티브 슬라이드로 배우는 Fenwick Tree (C·C++·Go·JS·Java·C#·Python) 🧮
 - 📊 **[FFT_큰수곱셈_설명.html](./FFT_큰수곱셈_설명.html)** — 🔬 FFT를 이용한 큰 수 곱셈 설명 📐
