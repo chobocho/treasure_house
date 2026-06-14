@@ -50,6 +50,7 @@
 - 🎓 **[scheme-gwbasic-full.md](./scheme-gwbasic-full.md)** — λ Scheme 풀버전 🧙‍♂️
 
 ### 🔢 수학 & 알고리즘 🧮
+- 🌤️ **[펜윅트리_쉽게_배우기.html](./펜윅트리_쉽게_배우기.html)** — ⚡ 인터랙티브 슬라이드로 배우는 Fenwick Tree (C·C++·Go·JS·Java·C#·Python) 🧮
 - 📊 **[FFT_큰수곱셈_설명.html](./FFT_큰수곱셈_설명.html)** — 🔬 FFT를 이용한 큰 수 곱셈 설명 📐
 - 🐍 **[fft_bignum.py](./fft_bignum.py)** — 💡 FFT 큰 수 곱셈 Python 구현 🧪
 - 🔀 **[galois_to_lfsr.html](./galois_to_lfsr.html)** — ⚙️ Galois에서 LFSR로의 변환 🔧
