@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>최대 유량 (Max Flow) 강줄기로 배우기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Black+Han+Sans&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   최대 유량 인터랙티브 슬라이드 — 테마: "강줄기 (River)"
+   샘(수원) → 바다(하구)로 강물을 최대로 흘려보내기 = 최대 유량.
+   물길 = 간선, 강폭 = 용량(capacity), 흐르는 물 = 유량(flow).
+   알고리즘: Edmonds-Karp (BFS 기반 Ford-Fulkerson). PPT 슬라이드.
+   ===================================================================== */
+:root{
+  --w1:#3fb6d6;       /* 밝은 물 */
+  --w2:#1f7fb0;       /* 중간 물 */
+  --w3:#0c3f63;       /* 깊은 물 */
+  --foam:#eaf7fc;     /* 물거품(밝은 글자) */
+  --foam-soft:#bfe3f2;
+  --ink:#0a3a58;      /* 패널 안 진한 글자 */
+  --ink-soft:#43708c;
+  --flow:#2fe6e0;     /* 흐르는 강물(시안) */
+  --aug:#ffd152;      /* 증가 경로(금빛) */
+  --bottle:#ff7a59;   /* 병목(코랄) */
+  --panel:rgba(240,250,253,0.95);
+  --panel-bd:rgba(255,255,255,0.55);
+  --code-bg:#0a2a3f;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{
+  font-family:'Noto Sans KR','Gowun Dodum',sans-serif;
+  color:var(--foam);
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 15% 0%,rgba(255,255,255,.10) 0%,transparent 45%),
+    linear-gradient(180deg,var(--w1) 0%,var(--w2) 48%,var(--w3) 100%);
+  position:relative;
+}
+/* 흐르는 물결 currents */
+.river{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+.wave{position:absolute;left:-20%;width:140%;height:120px;opacity:.20;
+  background:radial-gradient(ellipse 60% 100% at 50% 0,rgba(255,255,255,.8),transparent 70%);
+  border-radius:50%;animation:slide 14s linear infinite;}
+.wave.a{top:18%;animation-duration:16s;}
+.wave.b{top:46%;animation-duration:22s;animation-delay:-6s;opacity:.14;}
+.wave.c{top:74%;animation-duration:19s;animation-delay:-3s;opacity:.16;}
+@keyframes slide{from{transform:translateX(-12%);}to{transform:translateX(12%);}}
+/* 떠가는 물거품 */
+.bub{position:absolute;border-radius:50%;background:rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.25);animation:rise linear infinite;}
+@keyframes rise{from{transform:translateY(110vh) scale(.6);opacity:0;}
+  10%{opacity:.7;}90%{opacity:.7;}to{transform:translateY(-10vh) scale(1);opacity:0;}}
+
+/* ---------- 슬라이드 구조 ---------- */
+#deck{position:relative;z-index:1;height:100%;width:100%;}
+.slide{position:absolute;inset:0;display:none;flex-direction:column;
+  padding:46px 6vw 92px;overflow-y:auto;animation:fade .45s ease;}
+.slide.active{display:flex;}
+@keyframes fade{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+.slide h2{font-family:'Black Han Sans','Noto Sans KR',sans-serif;font-weight:900;
+  font-size:clamp(28px,4.4vw,52px);line-height:1.1;margin-bottom:6px;text-shadow:0 2px 8px rgba(0,0,0,.35);}
+.slide h2 .em{color:var(--aug);}
+.subtitle{font-size:clamp(15px,1.9vw,21px);color:var(--foam-soft);font-weight:500;margin-bottom:22px;}
+.lead{font-size:clamp(16px,2vw,22px);line-height:1.7;max-width:980px;}
+.lead b{color:var(--aug);}
+.mono{font-family:'JetBrains Mono',monospace;}
+
+/* 패널 */
+.panel{background:var(--panel);color:var(--ink);border:1px solid var(--panel-bd);border-radius:20px;
+  padding:24px 28px;box-shadow:0 16px 44px rgba(0,20,40,.34);}
+.panel h3{color:var(--ink);}
+.panel .lead b{color:var(--w2);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+ul.clean{list-style:none;}
+ul.clean li{position:relative;padding-left:30px;margin:12px 0;font-size:clamp(15px,1.8vw,19px);line-height:1.6;}
+ul.clean li::before{content:"💧";position:absolute;left:0;top:0;font-size:1em;}
+.badge{display:inline-block;background:var(--aug);color:#5a4300;font-weight:700;
+  border-radius:999px;padding:4px 14px;font-size:14px;margin-bottom:14px;box-shadow:0 3px 10px rgba(0,0,0,.3);}
+.eq{font-family:'JetBrains Mono',monospace;background:#fff;border-radius:12px;padding:14px 18px;
+  display:inline-block;font-size:clamp(15px,2.1vw,22px);border:2px solid #bfe3f2;color:var(--w2);font-weight:700;}
+
+/* ---------- 표지 ---------- */
+#s-cover{align-items:center;justify-content:center;text-align:center;}
+#s-cover .big{font-family:'Black Han Sans',sans-serif;font-size:clamp(42px,9.5vw,116px);
+  line-height:1;color:var(--foam);text-shadow:0 4px 0 rgba(0,0,0,.2),0 16px 40px rgba(0,0,0,.4);}
+#s-cover .big .em{color:var(--aug);}
+#s-cover .en{font-family:'JetBrains Mono',monospace;letter-spacing:.5em;color:var(--foam-soft);
+  font-size:clamp(13px,2vw,20px);margin-top:18px;text-transform:uppercase;}
+#s-cover .tag{margin-top:28px;font-size:clamp(15px,2.2vw,22px);color:var(--foam-soft);}
+#s-cover .pills{margin-top:26px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+#s-cover .pills span{background:#fff;border:1px solid #bfe3f2;border-radius:999px;
+  padding:6px 16px;font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--w2);font-weight:700;
+  box-shadow:0 6px 16px rgba(0,0,0,.22);}
+
+/* ---------- 컨트롤 ---------- */
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;}
+button.btn{font-family:'Noto Sans KR',sans-serif;font-size:15px;background:var(--w2);color:#fff;border:none;
+  border-radius:12px;padding:10px 18px;font-weight:700;cursor:pointer;box-shadow:0 6px 14px rgba(31,127,176,.45);transition:.15s;}
+button.btn:hover{transform:translateY(-2px);box-shadow:0 9px 18px rgba(31,127,176,.55);}
+button.btn.alt{background:#16a6a0;box-shadow:0 6px 14px rgba(22,166,160,.45);}
+button.btn.ghost{background:#fff;color:var(--w2);border:2px solid #bfe3f2;box-shadow:none;}
+.label{font-weight:700;color:var(--ink-soft);font-size:14px;}
+.log{margin-top:12px;background:var(--code-bg);color:#cdeef7;border-radius:12px;padding:12px 16px;
+  font-family:'JetBrains Mono',monospace;font-size:13.5px;line-height:1.6;max-height:200px;overflow:auto;white-space:pre-wrap;}
+.log .ok{color:#7ff0c8;}.log .hl{color:var(--aug);}.log .rd{color:#ff9b8a;}.log .fl{color:var(--flow);}
+.legend{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0;font-size:14px;color:var(--foam-soft);}
+.legend i{display:inline-block;width:18px;height:6px;border-radius:3px;vertical-align:3px;margin-right:6px;}
+
+/* ---------- 네트워크 SVG ---------- */
+.net-wrap{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;}
+.net-wrap svg{background:linear-gradient(180deg,#eaf7fc,#d4ecf6);border-radius:16px;border:2px solid #bfe3f2;max-width:100%;}
+.net-side{flex:1;min-width:250px;}
+.flowline{animation:flowdash 0.8s linear infinite;}
+@keyframes flowdash{to{stroke-dashoffset:-18;}}
+.bigflow{font-family:'Black Han Sans',sans-serif;font-size:clamp(26px,4vw,44px);color:var(--w2);}
+.bigflow .u{font-size:.5em;color:var(--ink-soft);font-family:'Noto Sans KR';}
+
+/* 슬라이더 목록 */
+.sliders{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;}
+.srow{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink);}
+.srow span.e{width:54px;font-weight:700;}
+.srow input[type=range]{flex:1;accent-color:var(--w2);}
+.srow span.v{width:26px;text-align:right;font-weight:700;color:var(--w2);}
+
+/* ---------- 코드 탭 ---------- */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;}
+.tab{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;padding:9px 16px;
+  border-radius:12px 12px 0 0;background:rgba(240,250,253,.55);color:var(--ink);cursor:pointer;}
+.tab.active{background:var(--code-bg);color:#fff;}
+.codebox{background:var(--code-bg);border-radius:0 14px 14px 14px;padding:20px 22px;overflow:auto;
+  max-height:54vh;box-shadow:0 16px 44px rgba(0,20,40,.4);}
+.codebox pre{font-family:'JetBrains Mono',monospace;font-size:13.5px;line-height:1.62;color:#e7f4fb;}
+.codebox .kw{color:#7fd6ff;}.codebox .ty{color:#8fe6e0;}.codebox .fn{color:#ffd870;}
+.codebox .cm{color:#5f86a0;font-style:italic;}.codebox .st{color:#a7e6c0;}
+.run-row{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap;}
+.run-out{flex:1;min-width:260px;background:var(--code-bg);color:#cdeef7;border-radius:12px;
+  padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:13.5px;white-space:pre-wrap;min-height:46px;}
+
+table.cmp{width:100%;border-collapse:collapse;font-size:clamp(14px,1.8vw,19px);}
+table.cmp th,table.cmp td{padding:10px 12px;text-align:left;}
+table.cmp tr{border-bottom:1px solid #bfe3f2;}
+
+/* ---------- 내비게이션 ---------- */
+#nav{position:fixed;bottom:0;left:0;right:0;z-index:20;height:64px;display:flex;align-items:center;
+  justify-content:space-between;padding:0 22px;background:rgba(12,63,99,.7);backdrop-filter:blur(8px);
+  border-top:1px solid rgba(234,247,252,.25);}
+#nav .nbtn{background:var(--w2);color:#fff;border:none;border-radius:12px;width:44px;height:44px;
+  font-size:20px;cursor:pointer;box-shadow:0 5px 12px rgba(31,127,176,.5);transition:.15s;}
+#nav .nbtn:hover{transform:translateY(-2px);}
+#nav .nbtn:disabled{opacity:.35;cursor:default;transform:none;}
+.dots{display:flex;gap:8px;align-items:center;}
+.dot{width:11px;height:11px;border-radius:50%;background:rgba(234,247,252,.3);cursor:pointer;transition:.2s;}
+.dot.active{background:var(--aug);transform:scale(1.35);}
+#crumb{font-weight:700;color:var(--foam-soft);font-size:14px;min-width:200px;}
+#crumb b{color:var(--foam);}
+.hint{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:20;font-size:12.5px;
+  color:var(--foam-soft);background:rgba(12,63,99,.6);padding:5px 14px;border-radius:999px;}
+@media(max-width:680px){
+  .grid2,.grid3,.sliders{grid-template-columns:1fr;}
+  .slide{padding:30px 5vw 88px;}
+  #crumb{display:none;}
+}
+</style>
+</head>
+<body>
+<div class="river">
+  <div class="wave a"></div><div class="wave b"></div><div class="wave c"></div>
+</div>
+<div class="hint">← → 또는 스페이스바로 이동 · 점을 눌러 이동</div>
+
+<div id="deck">
+
+  <!-- 0. 표지 -->
+  <section class="slide active" id="s-cover">
+    <div class="big">최대 유량<br><span class="em">강줄기로</span> 배우기</div>
+    <div class="en">Max Flow · Ford&#45;Fulkerson / Edmonds&#45;Karp</div>
+    <div class="tag">“샘에서 바다까지, 강물을 <b style="color:var(--aug)">최대로</b> 흘려보내기” — 물길마다 정해진 강폭 안에서</div>
+    <div class="pills">
+      <span>C</span><span>C++</span><span>Go</span><span>JavaScript</span><span>Java</span><span>C#</span><span>Python</span>
+    </div>
+  </section>
+
+  <!-- 1. 문제 -->
+  <section class="slide" id="s1">
+    <span class="badge">왜 필요할까?</span>
+    <h2>문제 : <span class="em">샘에서 바다</span>로, 최대 물줄기</h2>
+    <p class="subtitle">물길(간선)마다 견딜 수 있는 강폭(용량)이 정해져 있어요. 한꺼번에 얼마나 흘려보낼 수 있을까?</p>
+    <div class="grid2" style="margin-top:8px;">
+      <div class="panel">
+        <h3 style="margin-bottom:10px;">🏞️ 유량 네트워크</h3>
+        <ul class="clean">
+          <li><b>샘(Source)</b> : 물이 솟아나는 시작점</li>
+          <li><b>바다(Sink)</b> : 물이 도착하는 끝점</li>
+          <li><b>물길(간선)</b> : 방향이 있고, 강폭(용량) 만큼만 흐름</li>
+          <li><b>유량(flow)</b> : 각 물길에 실제로 흐르는 물의 양</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3 style="margin-bottom:10px;">📏 규칙 두 가지</h3>
+        <p class="lead"><b>① 용량 제한</b> : 어떤 물길도 강폭을 넘길 수 없다.</p>
+        <p class="lead" style="margin-top:10px;"><b>② 보존 법칙</b> : 샘·바다를 뺀 모든 지점은
+          <b>들어온 물 = 나간 물</b>. (고이지 않는다!)</p>
+        <p class="lead" style="margin-top:12px;">바다로 도착하는 물의 총량을 <b>최대로</b> 만드는 것이 목표 🌊</p>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:22px;">
+      <p class="lead">💡 핵심 한 줄 : 아직 <b>여유가 있는 물길</b>을 따라 샘→바다 경로를 찾아
+      물을 조금씩 더 흘려보내길 반복 → 더는 못 보낼 때가 <b>최대 유량</b>입니다.</p>
+    </div>
+  </section>
+
+  <!-- 2. 핵심 개념 -->
+  <section class="slide" id="s2">
+    <span class="badge">핵심 개념</span>
+    <h2>잔여 용량 · 증가 경로 · <span class="em">병목</span></h2>
+    <div class="grid3" style="margin-top:8px;">
+      <div class="panel"><h3 style="color:var(--w2)">🪣 잔여 용량</h3>
+        <p class="lead" style="font-size:17px;margin-top:8px;">강폭 − 현재 유량 = <b>아직 더 흘릴 수 있는 양</b>.
+        게다가 흘려보낸 물을 <b>되돌릴(취소할)</b> 역방향 여유도 생겨요.</p></div>
+      <div class="panel"><h3 style="color:#16a6a0">🛶 증가 경로</h3>
+        <p class="lead" style="font-size:17px;margin-top:8px;">잔여 용량이 <b>모두 0보다 큰</b> 샘→바다 경로.
+        이 길이 있으면 물을 더 보낼 수 있다는 뜻!</p></div>
+      <div class="panel"><h3 style="color:var(--bottle)">⛓️ 병목</h3>
+        <p class="lead" style="font-size:17px;margin-top:8px;">경로에서 <b>가장 좁은 물길</b>의 잔여 용량.
+        딱 그만큼만 물을 더 흘릴 수 있어요.</p></div>
+    </div>
+    <div class="panel" style="margin-top:20px;">
+      <p class="lead"><b>역방향(취소) 간선</b>이 왜 필요할까요? 한 번 잘못 보낸 물도
+      나중에 <b>되돌려</b> 더 나은 길로 재배치할 수 있게 해주기 때문이에요. 이게 최대 유량을 보장하는 비밀! 🔁</p>
+      <div style="margin-top:14px;"><span class="eq">최대 유량 = 최소 컷 (Max&#45;Flow Min&#45;Cut 정리)</span></div>
+    </div>
+  </section>
+
+  <!-- 3. 증가 경로 애니메이션 -->
+  <section class="slide" id="s3">
+    <span class="badge">동작 · Edmonds&#45;Karp</span>
+    <h2>증가 경로를 <span class="em">하나씩</span> 흘려보내기</h2>
+    <p class="subtitle">BFS로 가장 짧은 증가 경로를 찾아 병목만큼 물을 흘리길 반복 (간선 라벨 = 유량 / 강폭)</p>
+    <div class="net-wrap">
+      <svg id="aug-svg" viewBox="0 0 560 360" width="560" height="360"></svg>
+      <div class="net-side">
+        <div class="controls">
+          <button class="btn alt" onclick="augStep(-1)">‹ 이전</button>
+          <button class="btn alt" onclick="augStep(1)">다음 ›</button>
+          <button class="btn" onclick="augAuto()">▶ 자동</button>
+          <button class="btn ghost" onclick="augReset()">처음으로</button>
+        </div>
+        <div class="log" id="aug-log"></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--flow)"></i>흐르는 강물</span>
+      <span><i style="background:var(--aug)"></i>이번에 찾은 증가 경로</span>
+      <span><i style="background:var(--bottle)"></i>꽉 찬 물길(병목)</span>
+    </div>
+  </section>
+
+  <!-- 4. 알고리즘 정리 -->
+  <section class="slide" id="s4">
+    <span class="badge">알고리즘</span>
+    <h2>Ford&#45;Fulkerson <span class="em">한눈에</span></h2>
+    <div class="grid2" style="margin-top:8px;">
+      <div class="panel">
+        <h3 style="margin-bottom:10px;">📋 절차</h3>
+        <ul class="clean">
+          <li>모든 유량을 0으로 시작</li>
+          <li>잔여 그래프에서 <b>증가 경로</b>를 찾는다 (BFS = Edmonds&#45;Karp)</li>
+          <li>경로의 <b>병목</b>만큼 정방향 +, 역방향 − 로 갱신</li>
+          <li>경로가 없을 때까지 반복 → 합이 <b>최대 유량</b></li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3 style="margin-bottom:10px;">🔁 핵심 루프</h3>
+        <pre class="mono" style="font-size:14px;line-height:1.7;color:var(--ink);white-space:pre-wrap;">flow = 0
+while (BFS로 증가 경로 발견):
+    b = 경로 위 잔여용량의 최솟값  // 병목
+    경로를 따라:
+        cap[u][v] -= b   // 정방향 사용
+        cap[v][u] += b   // 역방향(취소) 확보
+    flow += b
+return flow</pre>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:20px;">
+      <p class="lead">⏱️ <b>Edmonds&#45;Karp</b>(BFS 사용)는 <b class="mono">O(V·E²)</b> 보장.
+      가장 짧은 경로부터 채우므로 안전하고, 구현도 간결합니다.</p>
+    </div>
+  </section>
+
+  <!-- 5. 인터랙티브 놀이터 -->
+  <section class="slide" id="s5">
+    <span class="badge">직접 흘려보내기 🛠️</span>
+    <h2>강폭을 바꾸며 <span class="em">최대 유량</span> 실험</h2>
+    <p class="subtitle">슬라이더로 물길의 강폭(용량)을 조절하고, 버튼을 누르면 <b>실제로 돌아가는</b> Edmonds&#45;Karp가 최대 유량을 계산해요.</p>
+    <div class="net-wrap">
+      <svg id="pg-svg" viewBox="0 0 560 360" width="560" height="360"></svg>
+      <div class="net-side">
+        <div class="bigflow" id="pg-flow">최대 유량 <span class="u">— ㎥/s</span></div>
+        <div class="controls">
+          <button class="btn" onclick="solveFlow()">💧 물 흘려보내기</button>
+          <button class="btn ghost" onclick="resetCaps()">강폭 초기화</button>
+        </div>
+        <div class="label" style="margin:12px 0 6px;">물길별 강폭(용량) 조절</div>
+        <div class="sliders" id="pg-sliders"></div>
+        <div class="log" id="pg-log" style="max-height:120px;">슬라이더로 강폭을 바꾼 뒤 “물 흘려보내기”를 눌러보세요.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. 코드 -->
+  <section class="slide" id="s6">
+    <span class="badge">소스 코드</span>
+    <h2>7개 언어로 <span class="em">똑같은 최대 유량</span></h2>
+    <p class="subtitle">JavaScript 탭에서는 <b>실행</b> 버튼으로 브라우저에서 바로 돌려볼 수 있어요.</p>
+    <div class="tabs" id="code-tabs"></div>
+    <div class="codebox"><pre id="code-view"></pre></div>
+    <div class="run-row" id="run-row" style="display:none;">
+      <button class="btn alt" onclick="runJS()">▶ JavaScript 예제 실행</button>
+      <div class="run-out" id="run-out">실행 결과가 여기에 나옵니다.</div>
+    </div>
+  </section>
+
+  <!-- 7. 정리 -->
+  <section class="slide" id="s7">
+    <span class="badge">정리</span>
+    <h2>최대 유량 <span class="em">3줄 요약</span></h2>
+    <div class="grid3" style="margin-top:8px;">
+      <div class="panel"><h3 style="color:var(--w2)">🏞️ 무엇을</h3>
+        <p class="lead" style="font-size:17px;margin-top:8px;color:var(--ink)">샘→바다로 흘릴 수 있는 <b style="color:var(--bottle)">최대 물의 양</b>.</p></div>
+      <div class="panel"><h3 style="color:#16a6a0">🔍 어떻게</h3>
+        <p class="lead" style="font-size:17px;margin-top:8px;color:var(--ink)"><b style="color:var(--bottle)">증가 경로</b>를 찾아 병목만큼 반복해 채움.</p></div>
+      <div class="panel"><h3 style="color:var(--bottle)">⏱️ 얼마나</h3>
+        <p class="lead" style="font-size:17px;margin-top:8px;color:var(--ink)">Edmonds&#45;Karp <span class="mono">O(V·E²)</span>, 코드 간결.</p></div>
+    </div>
+    <div class="panel" style="margin-top:22px;">
+      <table class="cmp">
+        <tr style="border-bottom:2px solid #bfe3f2"><th>개념</th><th>강줄기 비유</th></tr>
+        <tr><td><b>용량(capacity)</b></td><td>물길이 견디는 최대 강폭</td></tr>
+        <tr><td><b>유량(flow)</b></td><td>실제로 흐르는 물의 양</td></tr>
+        <tr><td><b>잔여 그래프</b></td><td>아직 더 흘릴 수 있는 여유 + 되돌릴 여유</td></tr>
+        <tr><td><b>증가 경로</b></td><td>여유가 남은 샘→바다 물줄기</td></tr>
+        <tr style="background:rgba(255,209,82,.3)"><td><b>최소 컷</b></td><td>강을 둘로 끊는 가장 좁은 둑 = 최대 유량</td></tr>
+      </table>
+    </div>
+    <p class="lead" style="margin-top:22px;text-align:center;width:100%;color:var(--foam)">
+      🌊 증가 경로가 사라지는 순간이 최대 유량! 직접 코딩해 보세요. 💧</p>
+  </section>
+
+</div>
+
+<!-- 내비게이션 -->
+<div id="nav">
+  <button class="nbtn" id="prev" onclick="go(-1)">‹</button>
+  <div class="dots" id="dots"></div>
+  <span id="crumb"></span>
+  <button class="nbtn" id="next" onclick="go(1)">›</button>
+</div>
+
+<script>
+/* =========================================================
+   예제 유량 네트워크 (코드 예제와 동일)
+   노드 0=샘(S), 1=A, 2=B, 3=C, 4=D, 5=바다(T)
+   ========================================================= */
+const NODES=[
+  {id:0,label:'샘',sub:'S',x:60,y:180,kind:'src'},
+  {id:1,label:'A',sub:'',x:215,y:78},
+  {id:2,label:'B',sub:'',x:215,y:282},
+  {id:3,label:'C',sub:'',x:390,y:78},
+  {id:4,label:'D',sub:'',x:390,y:282},
+  {id:5,label:'바다',sub:'T',x:520,y:180,kind:'sink'},
+];
+const BASE_EDGES=[
+  [0,1,16],[0,2,13],[1,2,10],[1,3,12],[3,2,9],[2,4,14],[4,3,7],[3,5,20],[4,5,4]
+];
+const N=NODES.length, S=0, T=5;
+function nodeById(id){return NODES[id];}
+
+/* ---------- Edmonds-Karp (실제 동작) + 프레임 기록 ---------- */
+function buildCap(edges){
+  const cap=Array.from({length:N},()=>new Array(N).fill(0));
+  for(const[u,v,c]of edges)cap[u][v]+=c;
+  return cap;
+}
+function origCapOf(edges){return buildCap(edges);}
+function edmondsKarp(edges,record){
+  const orig=buildCap(edges);
+  const r=orig.map(row=>row.slice());
+  const frames=[];
+  let maxflow=0;
+  const flowOf=()=>{const f=Array.from({length:N},()=>new Array(N).fill(0));
+    for(const[u,v]of edges)f[u][v]=orig[u][v]-r[u][v];return f;};
+  if(record)frames.push({path:[],bott:0,maxflow:0,flow:flowOf(),msg:'시작: 아직 흐르는 물이 없습니다.'});
+  while(true){
+    const par=new Array(N).fill(-1);par[S]=S;const q=[S];
+    while(q.length){const u=q.shift();
+      for(let v=0;v<N;v++)if(par[v]===-1&&r[u][v]>0){par[v]=u;q.push(v);}}
+    if(par[T]===-1)break;
+    let bott=Infinity;for(let v=T;v!==S;v=par[v])bott=Math.min(bott,r[par[v]][v]);
+    const path=[T];for(let v=T;v!==S;v=par[v])path.push(par[v]);path.reverse();
+    for(let v=T;v!==S;v=par[v]){r[par[v]][v]-=bott;r[v][par[v]]+=bott;}
+    maxflow+=bott;
+    if(record)frames.push({path:[...path],bott,maxflow,flow:flowOf(),
+      msg:`증가 경로 ${path.map(i=>nodeById(i).label).join(' → ')}  ·  병목 ${bott}만큼 흘림`});
+  }
+  // 최소 컷(도달 가능 집합)
+  const vis=new Array(N).fill(false);const q=[S];vis[S]=true;
+  while(q.length){const u=q.shift();for(let v=0;v<N;v++)if(!vis[v]&&r[u][v]>0){vis[v]=true;q.push(v);}}
+  if(record)frames.push({path:[],bott:0,maxflow,flow:flowOf(),done:true,
+    msg:`🌊 완료! 최대 유량 = ${maxflow}`});
+  return {maxflow,frames,reach:vis,orig};
+}
+
+/* ===================== 슬라이드 내비게이션 ===================== */
+const slides=[...document.querySelectorAll('.slide')];
+const titles=['표지','문제','핵심 개념','증가 경로','알고리즘','놀이터','코드','정리'];
+let cur=0;
+const dotsEl=document.getElementById('dots');
+slides.forEach((_,i)=>{const d=document.createElement('div');d.className='dot';d.onclick=()=>show(i);dotsEl.appendChild(d);});
+function show(i){
+  cur=Math.max(0,Math.min(slides.length-1,i));
+  slides.forEach((s,k)=>s.classList.toggle('active',k===cur));
+  [...dotsEl.children].forEach((d,k)=>d.classList.toggle('active',k===cur));
+  document.getElementById('prev').disabled=cur===0;
+  document.getElementById('next').disabled=cur===slides.length-1;
+  document.getElementById('crumb').innerHTML=`<b>${cur+1}</b> / ${slides.length} — ${titles[cur]}`;
+}
+function go(d){show(cur+d);}
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+  if(e.key==='ArrowRight'||e.key===' '){go(1);e.preventDefault();}
+  if(e.key==='ArrowLeft')go(-1);
+});
+
+/* ===================== 네트워크 렌더링 (공용) ===================== */
+function edgeOnPath(path,u,v){
+  for(let i=0;i+1<path.length;i++)if(path[i]===u&&path[i+1]===v)return true;
+  return false;
+}
+function renderNet(svgId,edges,flow,hiPath,bott){
+  hiPath=hiPath||[];
+  const R=26;
+  let defs=`<defs>
+    <marker id="ah-${svgId}" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#5b89a5"/></marker>
+    <marker id="ahf-${svgId}" markerWidth="11" markerHeight="11" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#1f7fb0"/></marker>
+    <marker id="aha-${svgId}" markerWidth="12" markerHeight="12" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#e0a900"/></marker></defs>`;
+  let s=defs;
+  for(const[u,v,cap]of edges){
+    const a=nodeById(u),b=nodeById(v);
+    const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),ux=dx/len,uy=dy/len;
+    const x1=a.x+ux*R,y1=a.y+uy*R,x2=b.x-ux*R,y2=b.y-uy*R;
+    const f=flow?flow[u][v]:0;
+    const sat=(f>=cap&&f>0);
+    const onPath=edgeOnPath(hiPath,u,v);
+    // 바탕 물길 (강폭에 비례한 두께)
+    const baseW=Math.max(3,2+cap*0.4);
+    let baseColor=onPath?'#e0a900':'#9cc2d6';
+    s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${baseColor}" stroke-width="${onPath?baseW+3:baseW}" stroke-linecap="round" marker-end="url(#${onPath?'aha-'+svgId:'ah-'+svgId})"/>`;
+    // 흐르는 물 (유량에 비례)
+    if(f>0){
+      const fw=Math.max(3,2+f*0.5);
+      const col=onPath?'#ffd152':(sat?'#ff7a59':'#2fe6e0');
+      s+=`<line class="flowline" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${Math.min(fw,baseW)}" stroke-linecap="round" stroke-dasharray="9 7" marker-end="url(#ahf-${svgId})"/>`;
+    }
+    // 라벨 유량/강폭
+    const mx=(x1+x2)/2,my=(y1+y2)/2,nx=-uy,ny=ux;
+    const lx=mx+nx*13,ly=my+ny*13;
+    const lblColor=sat?'#d63b1a':(f>0?'#0a3a58':'#5b89a5');
+    s+=`<rect x="${lx-22}" y="${ly-11}" width="44" height="18" rx="6" fill="#ffffff" opacity="0.85"/>`;
+    s+=`<text x="${lx}" y="${ly+3}" text-anchor="middle" font-family="JetBrains Mono" font-weight="700" font-size="12.5" fill="${lblColor}">${f}/${cap}</text>`;
+  }
+  // 노드
+  for(const nd of NODES){
+    const isSE=nd.kind==='src'||nd.kind==='sink';
+    const fill=nd.kind==='src'?'#16a6a0':nd.kind==='sink'?'#1f7fb0':'#ffffff';
+    const txt=isSE?'#ffffff':'#0a3a58';
+    const rr=isSE?30:R;
+    s+=`<circle cx="${nd.x}" cy="${nd.y}" r="${rr}" fill="${fill}" stroke="#0a3a58" stroke-width="2.5"/>`;
+    s+=`<text x="${nd.x}" y="${nd.y+(nd.sub?-2:5)}" text-anchor="middle" font-family="Noto Sans KR" font-weight="900" font-size="${isSE?15:16}" fill="${txt}">${nd.label}</text>`;
+    if(nd.sub)s+=`<text x="${nd.x}" y="${nd.y+13}" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="${isSE?'#dff':'#5b89a5'}">${nd.sub}</text>`;
+  }
+  document.getElementById(svgId).innerHTML=s;
+}
+
+/* ===================== 3번: 증가 경로 애니메이션 ===================== */
+const AUG=edmondsKarp(BASE_EDGES,true);
+let augIdx=0, augTimer=null;
+function augShow(){
+  const fr=AUG.frames[augIdx];
+  renderNet('aug-svg',BASE_EDGES,fr.flow,fr.path,fr.bott);
+  document.getElementById('aug-log').innerHTML=
+    `<span class="hl">[${augIdx+1}/${AUG.frames.length}]</span> 현재 총 유량: <span class="fl">${fr.maxflow}</span>\n`+
+    (fr.done?`<span class="ok">${fr.msg}</span>`:fr.msg);
+}
+function augStep(d){if(augTimer){clearInterval(augTimer);augTimer=null;}
+  augIdx=Math.max(0,Math.min(AUG.frames.length-1,augIdx+d));augShow();}
+function augReset(){if(augTimer){clearInterval(augTimer);augTimer=null;}augIdx=0;augShow();}
+function augAuto(){if(augTimer){clearInterval(augTimer);augTimer=null;return;}
+  augTimer=setInterval(()=>{if(augIdx>=AUG.frames.length-1){clearInterval(augTimer);augTimer=null;return;}augIdx++;augShow();},1300);}
+augShow();
+
+/* ===================== 5번: 인터랙티브 놀이터 ===================== */
+let pgEdges=BASE_EDGES.map(e=>e.slice());
+function buildSliders(){
+  const box=document.getElementById('pg-sliders');box.innerHTML='';
+  pgEdges.forEach((e,i)=>{
+    const[u,v]=e;
+    const row=document.createElement('div');row.className='srow';
+    row.innerHTML=`<span class="e">${nodeById(u).label}→${nodeById(v).label}</span>`+
+      `<input type="range" min="0" max="20" value="${e[2]}" data-i="${i}">`+
+      `<span class="v" id="pgv-${i}">${e[2]}</span>`;
+    const inp=row.querySelector('input');
+    inp.oninput=()=>{pgEdges[i][2]=+inp.value;document.getElementById('pgv-'+i).textContent=inp.value;
+      renderNet('pg-svg',pgEdges,null,[],0);
+      document.getElementById('pg-flow').innerHTML='최대 유량 <span class="u">— ㎥/s</span>';};
+    box.appendChild(row);
+  });
+}
+function solveFlow(){
+  const {maxflow,reach,orig}=edmondsKarp(pgEdges,false);
+  // 표시용 유량 다시 계산
+  const res=edmondsKarp(pgEdges,true);
+  const last=res.frames[res.frames.length-1];
+  renderNet('pg-svg',pgEdges,last.flow,[],0);
+  document.getElementById('pg-flow').innerHTML=`최대 유량 <b>${maxflow}</b> <span class="u">㎥/s</span>`;
+  // 최소 컷 간선
+  const cutEdges=[];
+  for(const[u,v,c]of pgEdges)if(res.reach[u]&&!res.reach[v])cutEdges.push(`${nodeById(u).label}→${nodeById(v).label}(${c})`);
+  document.getElementById('pg-log').innerHTML=
+    `<span class="ok">최대 유량 = ${maxflow}</span>  (증가 경로 ${res.frames.length-2}번 사용)\n`+
+    `최소 컷(강을 끊는 가장 좁은 둑): ${cutEdges.join(', ')}\n`+
+    `합 = ${cutEdges.reduce((s,x)=>s+ +x.match(/\((\d+)\)/)[1],0)}  →  최대 유량과 일치 ✔`;
+}
+function resetCaps(){pgEdges=BASE_EDGES.map(e=>e.slice());buildSliders();
+  renderNet('pg-svg',pgEdges,null,[],0);
+  document.getElementById('pg-flow').innerHTML='최대 유량 <span class="u">— ㎥/s</span>';
+  document.getElementById('pg-log').textContent='슬라이더로 강폭을 바꾼 뒤 “물 흘려보내기”를 눌러보세요.';}
+buildSliders();
+renderNet('pg-svg',pgEdges,null,[],0);
+
+/* ===================== 6번: 코드 탭 (7개 언어) ===================== */
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const code={
+"C":
+`#include <stdio.h>
+#include <string.h>
+#define N 6                  /* 노드 수 (0=샘, 5=바다) */
+#define INF 1000000000
+
+int cap[N][N];               // 잔여 용량 (residual)
+int parent[N];
+
+int bfs(int s, int t){       // 증가 경로 탐색
+    int visited[N]; memset(visited, 0, sizeof(visited));
+    int queue[N], head = 0, tail = 0;
+    queue[tail++] = s; visited[s] = 1; parent[s] = -1;
+    while(head < tail){
+        int u = queue[head++];
+        for(int v = 0; v < N; v++){
+            if(!visited[v] && cap[u][v] > 0){
+                visited[v] = 1; parent[v] = u; queue[tail++] = v;
+                if(v == t) return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int maxFlow(int s, int t){
+    int flow = 0;
+    while(bfs(s, t)){
+        int bott = INF;                     // 병목 = 경로 위 최소 잔여용량
+        for(int v = t; v != s; v = parent[v])
+            if(cap[parent[v]][v] < bott) bott = cap[parent[v]][v];
+        for(int v = t; v != s; v = parent[v]){
+            cap[parent[v]][v] -= bott;      // 정방향 사용
+            cap[v][parent[v]] += bott;      // 역방향(취소) 확보
+        }
+        flow += bott;
+    }
+    return flow;
+}
+
+int main(void){
+    int e[][3] = {{0,1,16},{0,2,13},{1,2,10},{1,3,12},
+                  {3,2,9},{2,4,14},{4,3,7},{3,5,20},{4,5,4}};
+    for(int i = 0; i < 9; i++) cap[e[i][0]][e[i][1]] += e[i][2];
+    printf("최대 유량 = %d\\n", maxFlow(0, 5));   // 23
+    return 0;
+}`,
+"C++":
+`#include <bits/stdc++.h>
+using namespace std;
+const int N = 6;                 // 0=샘, 5=바다
+int cap[N][N], parent_[N];
+
+bool bfs(int s, int t){
+    vector<bool> visited(N, false);
+    queue<int> q; q.push(s); visited[s] = true; parent_[s] = -1;
+    while(!q.empty()){
+        int u = q.front(); q.pop();
+        for(int v = 0; v < N; v++)
+            if(!visited[v] && cap[u][v] > 0){
+                visited[v] = true; parent_[v] = u; q.push(v);
+                if(v == t) return true;
+            }
+    }
+    return false;
+}
+
+int maxFlow(int s, int t){
+    int flow = 0;
+    while(bfs(s, t)){
+        int bott = INT_MAX;
+        for(int v = t; v != s; v = parent_[v])
+            bott = min(bott, cap[parent_[v]][v]);
+        for(int v = t; v != s; v = parent_[v]){
+            cap[parent_[v]][v] -= bott;
+            cap[v][parent_[v]] += bott;
+        }
+        flow += bott;
+    }
+    return flow;
+}
+
+int main(){
+    int e[][3] = {{0,1,16},{0,2,13},{1,2,10},{1,3,12},
+                  {3,2,9},{2,4,14},{4,3,7},{3,5,20},{4,5,4}};
+    for(auto& x : e) cap[x[0]][x[1]] += x[2];
+    cout << "최대 유량 = " << maxFlow(0, 5) << "\\n";   // 23
+}`,
+"Go":
+`package main
+
+import "fmt"
+
+const N = 6        // 0=샘, 5=바다
+
+var cap [N][N]int
+var parent [N]int
+
+func bfs(s, t int) bool {
+    visited := make([]bool, N)
+    queue := []int{s}
+    visited[s] = true
+    parent[s] = -1
+    for len(queue) > 0 {
+        u := queue[0]; queue = queue[1:]
+        for v := 0; v < N; v++ {
+            if !visited[v] && cap[u][v] > 0 {
+                visited[v] = true
+                parent[v] = u
+                queue = append(queue, v)
+                if v == t { return true }
+            }
+        }
+    }
+    return false
+}
+
+func maxFlow(s, t int) int {
+    flow := 0
+    for bfs(s, t) {
+        bott := 1 << 30
+        for v := t; v != s; v = parent[v] {
+            if cap[parent[v]][v] < bott { bott = cap[parent[v]][v] }
+        }
+        for v := t; v != s; v = parent[v] {
+            cap[parent[v]][v] -= bott
+            cap[v][parent[v]] += bott
+        }
+        flow += bott
+    }
+    return flow
+}
+
+func main() {
+    e := [][3]int{{0,1,16},{0,2,13},{1,2,10},{1,3,12},
+        {3,2,9},{2,4,14},{4,3,7},{3,5,20},{4,5,4}}
+    for _, x := range e { cap[x[0]][x[1]] += x[2] }
+    fmt.Println("최대 유량 =", maxFlow(0, 5))   // 23
+}`,
+"JavaScript":
+`function maxFlow(edges, n, s, t) {
+  const cap = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (const [u, v, c] of edges) cap[u][v] += c;
+
+  function bfs(parent) {
+    parent.fill(-1); parent[s] = s;
+    const q = [s];
+    while (q.length) {
+      const u = q.shift();
+      for (let v = 0; v < n; v++)
+        if (parent[v] === -1 && cap[u][v] > 0) {
+          parent[v] = u; q.push(v);
+        }
+    }
+    return parent[t] !== -1;
+  }
+
+  let flow = 0;
+  const parent = new Array(n).fill(-1);
+  while (bfs(parent)) {
+    let bott = Infinity;
+    for (let v = t; v !== s; v = parent[v]) bott = Math.min(bott, cap[parent[v]][v]);
+    for (let v = t; v !== s; v = parent[v]) {
+      cap[parent[v]][v] -= bott;   // 정방향 사용
+      cap[v][parent[v]] += bott;   // 역방향(취소) 확보
+    }
+    flow += bott;
+  }
+  return flow;
+}
+
+const edges = [[0,1,16],[0,2,13],[1,2,10],[1,3,12],
+               [3,2,9],[2,4,14],[4,3,7],[3,5,20],[4,5,4]];
+console.log("최대 유량 =", maxFlow(edges, 6, 0, 5)); // 23`,
+"Java":
+`import java.util.*;
+
+public class MaxFlow {
+    static int N = 6;          // 0=샘, 5=바다
+    static int[][] cap = new int[N][N];
+    static int[] parent = new int[N];
+
+    static boolean bfs(int s, int t) {
+        boolean[] visited = new boolean[N];
+        Queue<Integer> q = new ArrayDeque<>();
+        q.add(s); visited[s] = true; parent[s] = -1;
+        while (!q.isEmpty()) {
+            int u = q.poll();
+            for (int v = 0; v < N; v++)
+                if (!visited[v] && cap[u][v] > 0) {
+                    visited[v] = true; parent[v] = u; q.add(v);
+                    if (v == t) return true;
+                }
+        }
+        return false;
+    }
+
+    static int maxFlow(int s, int t) {
+        int flow = 0;
+        while (bfs(s, t)) {
+            int bott = Integer.MAX_VALUE;
+            for (int v = t; v != s; v = parent[v]) bott = Math.min(bott, cap[parent[v]][v]);
+            for (int v = t; v != s; v = parent[v]) {
+                cap[parent[v]][v] -= bott;
+                cap[v][parent[v]] += bott;
+            }
+            flow += bott;
+        }
+        return flow;
+    }
+
+    public static void main(String[] args) {
+        int[][] e = {{0,1,16},{0,2,13},{1,2,10},{1,3,12},
+                     {3,2,9},{2,4,14},{4,3,7},{3,5,20},{4,5,4}};
+        for (int[] x : e) cap[x[0]][x[1]] += x[2];
+        System.out.println("최대 유량 = " + maxFlow(0, 5)); // 23
+    }
+}`,
+"C#":
+`using System;
+using System.Collections.Generic;
+
+class MaxFlow {
+    const int N = 6;           // 0=샘, 5=바다
+    static int[,] cap = new int[N, N];
+    static int[] parent = new int[N];
+
+    static bool Bfs(int s, int t) {
+        bool[] visited = new bool[N];
+        var q = new Queue<int>();
+        q.Enqueue(s); visited[s] = true; parent[s] = -1;
+        while (q.Count > 0) {
+            int u = q.Dequeue();
+            for (int v = 0; v < N; v++)
+                if (!visited[v] && cap[u, v] > 0) {
+                    visited[v] = true; parent[v] = u; q.Enqueue(v);
+                    if (v == t) return true;
+                }
+        }
+        return false;
+    }
+
+    static int Flow(int s, int t) {
+        int flow = 0;
+        while (Bfs(s, t)) {
+            int bott = int.MaxValue;
+            for (int v = t; v != s; v = parent[v]) bott = Math.Min(bott, cap[parent[v], v]);
+            for (int v = t; v != s; v = parent[v]) {
+                cap[parent[v], v] -= bott;
+                cap[v, parent[v]] += bott;
+            }
+            flow += bott;
+        }
+        return flow;
+    }
+
+    static void Main() {
+        int[,] e = {{0,1,16},{0,2,13},{1,2,10},{1,3,12},
+                    {3,2,9},{2,4,14},{4,3,7},{3,5,20},{4,5,4}};
+        for (int i = 0; i < e.GetLength(0); i++) cap[e[i,0], e[i,1]] += e[i,2];
+        Console.WriteLine($"최대 유량 = {Flow(0, 5)}"); // 23
+    }
+}`,
+"Python":
+`from collections import deque
+
+def max_flow(edges, n, s, t):
+    cap = [[0] * n for _ in range(n)]
+    for u, v, c in edges:
+        cap[u][v] += c
+
+    def bfs(parent):
+        for i in range(n):
+            parent[i] = -1
+        parent[s] = s
+        q = deque([s])
+        while q:
+            u = q.popleft()
+            for v in range(n):
+                if parent[v] == -1 and cap[u][v] > 0:
+                    parent[v] = u
+                    q.append(v)
+        return parent[t] != -1
+
+    flow = 0
+    parent = [-1] * n
+    while bfs(parent):
+        bott = float('inf')
+        v = t
+        while v != s:
+            bott = min(bott, cap[parent[v]][v]); v = parent[v]
+        v = t
+        while v != s:
+            cap[parent[v]][v] -= bott    # 정방향 사용
+            cap[v][parent[v]] += bott    # 역방향(취소) 확보
+            v = parent[v]
+        flow += bott
+    return flow
+
+
+edges = [(0,1,16),(0,2,13),(1,2,10),(1,3,12),
+         (3,2,9),(2,4,14),(4,3,7),(3,5,20),(4,5,4)]
+print("최대 유량 =", max_flow(edges, 6, 0, 5))   # 23`
+};
+function highlight(src){
+  let s=esc(src);
+  s=s.replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*include[^\n]*|"[^"\n]*"|'[^'\n]*')/g,m=>{
+    if(m.startsWith('//')||m.startsWith('/*'))return `<span class="cm">${m}</span>`;
+    if(m.startsWith('#')&&m.includes('include'))return `<span class="kw">${m}</span>`;
+    return `<span class="st">${m}</span>`;
+  });
+  s=s.replace(/\b(class|struct|public|private|static|void|int|long|bool|boolean|return|for|while|new|using|namespace|package|import|func|def|var|const|let|foreach|range|true|false|this|from|while|vector|queue|deque|Queue|ArrayDeque)\b/g,
+    '<span class="kw">$1</span>');
+  s=s.replace(/\b(bfs|Bfs|maxFlow|max_flow|Flow|main|Main|printf|cout|println|print|Println|Console|console|memset|min|Min|append)\b/g,
+    '<span class="fn">$1</span>');
+  return s;
+}
+const langs=Object.keys(code);
+const tabsEl=document.getElementById('code-tabs');
+let curLang='C';
+langs.forEach(l=>{const t=document.createElement('div');t.className='tab'+(l===curLang?' active':'');
+  t.textContent=l;t.onclick=()=>selLang(l);tabsEl.appendChild(t);});
+function selLang(l){
+  curLang=l;
+  [...tabsEl.children].forEach(t=>t.classList.toggle('active',t.textContent===l));
+  document.getElementById('code-view').innerHTML=highlight(code[l]);
+  document.getElementById('run-row').style.display=(l==='JavaScript')?'flex':'none';
+}
+selLang('C');
+function runJS(){
+  const logs=[];
+  const fakeConsole={log:(...a)=>logs.push(a.join(' '))};
+  try{
+    const fn=new Function('console',code['JavaScript']);
+    fn(fakeConsole);
+    document.getElementById('run-out').innerHTML=
+      logs.map(esc).join('\n')+'\n<span style="color:#7ff0c8">— 실행 완료 ✓</span>';
+  }catch(e){
+    document.getElementById('run-out').innerHTML='<span style="color:#ff9b8a">오류: '+esc(e.message)+'</span>';
+  }
+}
+
+/* 떠가는 물거품 생성 */
+(function(){
+  const wrap=document.querySelector('.river');
+  const sizes=[10,16,22,8,14,20,12];
+  for(let i=0;i<7;i++){
+    const b=document.createElement('div');b.className='bub';
+    const sz=sizes[i];
+    b.style.width=sz+'px';b.style.height=sz+'px';
+    b.style.left=(8+i*13)+'%';
+    b.style.animationDuration=(11+i*2)+'s';
+    b.style.animationDelay=(-i*2)+'s';
+    wrap.appendChild(b);
+  }
+})();
+
+show(0);
+</script>
+</body>
+</html>
