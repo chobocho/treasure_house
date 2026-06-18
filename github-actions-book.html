@@ -1,0 +1,1985 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub Actions 기초와 응용</title>
+<meta name="description" content="GitHub Actions 기초와 응용">
+<style>
+  :root {
+    --bg1: #e3f4ff;
+    --bg2: #bfe3ff;
+    --accent: #0288d1;
+    --accent2: #0277bd;
+    --panel: rgba(255,255,255,0.78);
+    --panel-solid: #ffffff;
+    --text: #0c2b44;
+    --muted: #3a6a8f;
+    --border: rgba(2,136,209,0.28);
+    --code-bg: #f1f8fd;
+    --code-border: rgba(2,136,209,0.18);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+                 "Malgun Gothic", "Noto Sans KR", sans-serif;
+    color: var(--text);
+    background: linear-gradient(160deg, var(--bg1) 0%, var(--bg2) 60%, #9bd3ff 100%);
+    background-attachment: fixed;
+    line-height: 1.7;
+    min-height: 100vh;
+    word-break: keep-all;
+  }
+
+  /* ===== Top bar ===== */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 22px;
+    background: rgba(227,244,255,0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    font-size: .95rem;
+  }
+  .topbar a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .topbar a:hover { text-decoration: underline; }
+  .topbar .sep { color: var(--muted); }
+  .topbar .cur { color: var(--muted); font-weight: 600; }
+  .topbar .toc-toggle {
+    margin-left: auto;
+    display: none;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: .85rem;
+    cursor: pointer;
+  }
+
+  /* ===== Layout ===== */
+  .layout {
+    max-width: 1240px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 28px;
+    padding: 28px 22px 80px;
+  }
+
+  /* ===== TOC ===== */
+  nav.toc {
+    position: sticky;
+    top: 70px;
+    align-self: start;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 18px 22px;
+    backdrop-filter: blur(6px);
+    font-size: .9rem;
+  }
+  nav.toc::before {
+    content: "📑 목차";
+    display: block;
+    font-weight: 700;
+    color: var(--accent2);
+    margin-bottom: 10px;
+    font-size: .95rem;
+  }
+  nav.toc ul { list-style: none; margin: 0; padding-left: 0; }
+  nav.toc ul ul { padding-left: 14px; border-left: 1px dashed var(--border); margin: 2px 0 6px; }
+  nav.toc li { margin: 3px 0; }
+  nav.toc a {
+    color: var(--muted);
+    text-decoration: none;
+    display: block;
+    padding: 3px 8px;
+    border-radius: 8px;
+    transition: background .15s, color .15s;
+  }
+  nav.toc a:hover { background: rgba(2,136,209,0.1); color: var(--accent2); }
+  nav.toc > ul > li > a { color: var(--text); font-weight: 600; }
+
+  /* ===== Article ===== */
+  main.prose {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 40px 48px 56px;
+    backdrop-filter: blur(6px);
+    min-width: 0;
+  }
+  main.prose h1, main.prose h2, main.prose h3,
+  main.prose h4, main.prose h5 { line-height: 1.35; scroll-margin-top: 76px; }
+  main.prose h1 {
+    font-size: clamp(1.9rem, 4vw, 2.6rem);
+    margin: .2em 0 .6em;
+    background: linear-gradient(90deg, var(--accent), #4fc3f7, var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  main.prose h2 {
+    font-size: clamp(1.45rem, 3vw, 1.9rem);
+    margin: 1.8em 0 .5em;
+    padding-bottom: .25em;
+    border-bottom: 2px dashed var(--border);
+    color: var(--accent2);
+  }
+  main.prose h3 {
+    font-size: 1.25rem;
+    margin: 1.5em 0 .4em;
+    color: var(--accent2);
+  }
+  main.prose h4 { font-size: 1.08rem; margin: 1.2em 0 .3em; }
+  main.prose p { margin: .7em 0; }
+  main.prose a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--border); }
+  main.prose a:hover { color: var(--accent2); border-bottom-color: var(--accent2); }
+  main.prose strong { color: var(--text); }
+  main.prose hr { border: none; border-top: 2px dashed var(--border); margin: 2em 0; }
+  main.prose ul, main.prose ol { padding-left: 1.4em; }
+  main.prose li { margin: .3em 0; }
+  main.prose blockquote {
+    margin: 1em 0;
+    padding: 10px 18px;
+    border-left: 4px solid var(--accent);
+    background: rgba(2,136,209,0.07);
+    border-radius: 0 10px 10px 0;
+    color: var(--muted);
+  }
+  main.prose blockquote p { margin: .3em 0; }
+
+  /* Inline code */
+  main.prose :not(pre) > code {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: .9em;
+    color: #0b5e8c;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+
+  /* Code blocks */
+  main.prose pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-size: .88rem;
+    line-height: 1.55;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  }
+  main.prose pre code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    background: none;
+    border: none;
+    padding: 0;
+    color: #143a52;
+  }
+
+  /* Tables */
+  main.prose table { border-collapse: collapse; width: 100%; margin: 1.2em 0; font-size: .95rem; }
+  main.prose th, main.prose td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+  main.prose th { background: rgba(2,136,209,0.1); }
+  main.prose tr:nth-child(even) td { background: rgba(2,136,209,0.04); }
+
+  /* Wiki-style cross references (other guides) */
+  .wikilink {
+    background: rgba(2,136,209,0.1);
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 0 7px;
+    font-size: .92em;
+    color: var(--accent2);
+    white-space: nowrap;
+  }
+
+  footer.page {
+    text-align: center;
+    color: var(--muted);
+    padding: 30px 22px 60px;
+    font-size: .9rem;
+  }
+  footer.page a { color: var(--accent); text-decoration: none; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; padding: 18px 14px 60px; }
+    nav.toc {
+      position: static;
+      max-height: none;
+      margin-bottom: 8px;
+    }
+    nav.toc.collapsed { display: none; }
+    .topbar .toc-toggle { display: inline-block; }
+    main.prose { padding: 26px 20px 40px; }
+  }
+
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {  background-color: #f8f8f8; }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ef2929; } /* Alert */
+code span.an { color: #8f5902; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #204a87; } /* Attribute */
+code span.bn { color: #0000cf; } /* BaseN */
+code span.cf { color: #204a87; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4e9a06; } /* Char */
+code span.cn { color: #8f5902; } /* Constant */
+code span.co { color: #8f5902; font-style: italic; } /* Comment */
+code span.cv { color: #8f5902; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #8f5902; font-weight: bold; font-style: italic; } /* Documentation */
+code span.dt { color: #204a87; } /* DataType */
+code span.dv { color: #0000cf; } /* DecVal */
+code span.er { color: #a40000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #0000cf; } /* Float */
+code span.fu { color: #204a87; font-weight: bold; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #8f5902; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #204a87; font-weight: bold; } /* Keyword */
+code span.op { color: #ce5c00; font-weight: bold; } /* Operator */
+code span.ot { color: #8f5902; } /* Other */
+code span.pp { color: #8f5902; font-style: italic; } /* Preprocessor */
+code span.sc { color: #ce5c00; font-weight: bold; } /* SpecialChar */
+code span.ss { color: #4e9a06; } /* SpecialString */
+code span.st { color: #4e9a06; } /* String */
+code span.va { color: #000000; } /* Variable */
+code span.vs { color: #4e9a06; } /* VerbatimString */
+code span.wa { color: #8f5902; font-weight: bold; font-style: italic; } /* Warning */
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="./index.html">🏰 보물창고</a>
+  <span class="sep">/</span>
+  <span class="cur">🐙 GitHub Actions Book</span>
+  <button class="toc-toggle" id="tocToggle" aria-expanded="true">📑 목차</button>
+</div>
+
+<div class="layout">
+  <nav class="toc" id="toc">
+<ul>
+<li><a href="#github-actions-기초와-응용"
+id="toc-github-actions-기초와-응용">GitHub Actions 기초와 응용</a>
+<ul>
+<li><a href="#실무-자동화를-위한-cicd-입문부터-고급-워크플로-설계까지"
+id="toc-실무-자동화를-위한-cicd-입문부터-고급-워크플로-설계까지">실무
+자동화를 위한 CI/CD 입문부터 고급 워크플로 설계까지</a></li>
+</ul></li>
+<li><a href="#머리말" id="toc-머리말">머리말</a></li>
+<li><a href="#이-책의-대상-독자" id="toc-이-책의-대상-독자">이 책의 대상
+독자</a></li>
+<li><a href="#이-책을-읽는-방법" id="toc-이-책을-읽는-방법">이 책을 읽는
+방법</a>
+<ul>
+<li><a href="#1-입문-단계" id="toc-1-입문-단계">1. 입문 단계</a></li>
+<li><a href="#2-실습-단계" id="toc-2-실습-단계">2. 실습 단계</a></li>
+<li><a href="#3-실무-적용-단계" id="toc-3-실무-적용-단계">3. 실무 적용
+단계</a></li>
+</ul></li>
+<li><a href="#목차" id="toc-목차">목차</a></li>
+<li><a href="#1장-github-actions란-무엇인가"
+id="toc-1장-github-actions란-무엇인가">1장. GitHub Actions란
+무엇인가</a>
+<ul>
+<li><a href="#11-왜-자동화가-필요한가"
+id="toc-11-왜-자동화가-필요한가">1.1 왜 자동화가 필요한가</a></li>
+<li><a href="#12-github-actions의-핵심-구성-요소"
+id="toc-12-github-actions의-핵심-구성-요소">1.2 GitHub Actions의 핵심
+구성 요소</a></li>
+<li><a href="#13-cicd와-github-actions"
+id="toc-13-cicd와-github-actions">1.3 CI/CD와 GitHub Actions</a></li>
+<li><a href="#14-학습-관점에서-중요한-점"
+id="toc-14-학습-관점에서-중요한-점">1.4 학습 관점에서 중요한 점</a></li>
+<li><a href="#장-요약" id="toc-장-요약">장 요약</a></li>
+</ul></li>
+<li><a href="#2장-github-actions-시작하기"
+id="toc-2장-github-actions-시작하기">2장. GitHub Actions 시작하기</a>
+<ul>
+<li><a href="#21-워크플로-파일-위치" id="toc-21-워크플로-파일-위치">2.1
+워크플로 파일 위치</a></li>
+<li><a href="#22-기본-구조-읽기" id="toc-22-기본-구조-읽기">2.2 기본
+구조 읽기</a></li>
+<li><a href="#23-첫-실행-과정" id="toc-23-첫-실행-과정">2.3 첫 실행
+과정</a></li>
+<li><a href="#24-최소-예제로-감-잡기"
+id="toc-24-최소-예제로-감-잡기">2.4 최소 예제로 감 잡기</a></li>
+<li><a href="#25-처음-실습할-때-추천-순서"
+id="toc-25-처음-실습할-때-추천-순서">2.5 처음 실습할 때 추천
+순서</a></li>
+<li><a href="#장-요약-1" id="toc-장-요약-1">장 요약</a></li>
+</ul></li>
+<li><a href="#3장-워크플로-yaml-기초"
+id="toc-3장-워크플로-yaml-기초">3장. 워크플로 YAML 기초</a>
+<ul>
+<li><a href="#31-yaml의-기본-규칙" id="toc-31-yaml의-기본-규칙">3.1
+YAML의 기본 규칙</a></li>
+<li><a href="#32-자주-사용하는-키" id="toc-32-자주-사용하는-키">3.2 자주
+사용하는 키</a></li>
+<li><a href="#33-배열과-맵-구조-익히기"
+id="toc-33-배열과-맵-구조-익히기">3.3 배열과 맵 구조 익히기</a></li>
+<li><a href="#34-문자열과-표현식" id="toc-34-문자열과-표현식">3.4
+문자열과 표현식</a></li>
+<li><a href="#35-초보자가-자주-하는-실수"
+id="toc-35-초보자가-자주-하는-실수">3.5 초보자가 자주 하는 실수</a></li>
+<li><a href="#장-요약-2" id="toc-장-요약-2">장 요약</a></li>
+</ul></li>
+<li><a href="#4장-이벤트와-트리거-이해하기"
+id="toc-4장-이벤트와-트리거-이해하기">4장. 이벤트와 트리거 이해하기</a>
+<ul>
+<li><a href="#41-대표-이벤트" id="toc-41-대표-이벤트">4.1 대표
+이벤트</a></li>
+<li><a href="#42-push-이벤트" id="toc-42-push-이벤트">4.2 push
+이벤트</a></li>
+<li><a href="#43-pull_request-이벤트"
+id="toc-43-pull_request-이벤트">4.3 pull_request 이벤트</a></li>
+<li><a href="#44-workflow_dispatch-이벤트"
+id="toc-44-workflow_dispatch-이벤트">4.4 workflow_dispatch
+이벤트</a></li>
+<li><a href="#45-schedule-이벤트" id="toc-45-schedule-이벤트">4.5
+schedule 이벤트</a></li>
+<li><a href="#46-paths와-branches-필터"
+id="toc-46-paths와-branches-필터">4.6 paths와 branches 필터</a></li>
+<li><a href="#장-요약-3" id="toc-장-요약-3">장 요약</a></li>
+</ul></li>
+<li><a href="#5장-잡과-스텝-러너의-실행-구조"
+id="toc-5장-잡과-스텝-러너의-실행-구조">5장. 잡과 스텝, 러너의 실행
+구조</a>
+<ul>
+<li><a href="#51-job이란-무엇인가" id="toc-51-job이란-무엇인가">5.1
+Job이란 무엇인가</a></li>
+<li><a href="#52-step이란-무엇인가" id="toc-52-step이란-무엇인가">5.2
+Step이란 무엇인가</a></li>
+<li><a href="#53-needs로-의존성-만들기"
+id="toc-53-needs로-의존성-만들기">5.3 needs로 의존성 만들기</a></li>
+<li><a href="#54-runner란-무엇인가" id="toc-54-runner란-무엇인가">5.4
+Runner란 무엇인가</a></li>
+<li><a href="#55-실행-구조를-이해하는-이유"
+id="toc-55-실행-구조를-이해하는-이유">5.5 실행 구조를 이해하는
+이유</a></li>
+<li><a href="#장-요약-4" id="toc-장-요약-4">장 요약</a></li>
+</ul></li>
+<li><a href="#6장-액션-재사용하기" id="toc-6장-액션-재사용하기">6장.
+액션 재사용하기</a>
+<ul>
+<li><a href="#61-액션이란-무엇인가" id="toc-61-액션이란-무엇인가">6.1
+액션이란 무엇인가</a></li>
+<li><a href="#62-가장-많이-쓰는-액션"
+id="toc-62-가장-많이-쓰는-액션">6.2 가장 많이 쓰는 액션</a></li>
+<li><a href="#63-uses와-run의-차이" id="toc-63-uses와-run의-차이">6.3
+uses와 run의 차이</a></li>
+<li><a href="#64-with-입력값" id="toc-64-with-입력값">6.4 with
+입력값</a></li>
+<li><a href="#65-액션-사용-시-주의점"
+id="toc-65-액션-사용-시-주의점">6.5 액션 사용 시 주의점</a></li>
+<li><a href="#장-요약-5" id="toc-장-요약-5">장 요약</a></li>
+</ul></li>
+<li><a href="#7장-환경-변수-출력값-컨텍스트"
+id="toc-7장-환경-변수-출력값-컨텍스트">7장. 환경 변수, 출력값,
+컨텍스트</a>
+<ul>
+<li><a href="#71-환경-변수-사용하기" id="toc-71-환경-변수-사용하기">7.1
+환경 변수 사용하기</a></li>
+<li><a href="#72-출력값-만들기" id="toc-72-출력값-만들기">7.2 출력값
+만들기</a></li>
+<li><a href="#73-컨텍스트-이해하기" id="toc-73-컨텍스트-이해하기">7.3
+컨텍스트 이해하기</a></li>
+<li><a href="#74-언제-무엇을-써야-하는가"
+id="toc-74-언제-무엇을-써야-하는가">7.4 언제 무엇을 써야 하는가</a></li>
+<li><a href="#장-요약-6" id="toc-장-요약-6">장 요약</a></li>
+</ul></li>
+<li><a href="#8장-아티팩트와-캐시" id="toc-8장-아티팩트와-캐시">8장.
+아티팩트와 캐시</a>
+<ul>
+<li><a href="#81-아티팩트란-무엇인가"
+id="toc-81-아티팩트란-무엇인가">8.1 아티팩트란 무엇인가</a></li>
+<li><a href="#82-캐시란-무엇인가" id="toc-82-캐시란-무엇인가">8.2 캐시란
+무엇인가</a></li>
+<li><a href="#83-아티팩트와-캐시의-차이"
+id="toc-83-아티팩트와-캐시의-차이">8.3 아티팩트와 캐시의 차이</a></li>
+<li><a href="#84-실무-팁" id="toc-84-실무-팁">8.4 실무 팁</a></li>
+<li><a href="#장-요약-7" id="toc-장-요약-7">장 요약</a></li>
+</ul></li>
+<li><a href="#9장-테스트-자동화-실습"
+id="toc-9장-테스트-자동화-실습">9장. 테스트 자동화 실습</a>
+<ul>
+<li><a href="#91-nodejs-테스트-예제" id="toc-91-nodejs-테스트-예제">9.1
+Node.js 테스트 예제</a></li>
+<li><a href="#92-python-테스트-예제" id="toc-92-python-테스트-예제">9.2
+Python 테스트 예제</a></li>
+<li><a href="#93-테스트-자동화-설계-팁"
+id="toc-93-테스트-자동화-설계-팁">9.3 테스트 자동화 설계 팁</a></li>
+<li><a href="#장-요약-8" id="toc-장-요약-8">장 요약</a></li>
+</ul></li>
+<li><a href="#10장-빌드와-패키징-자동화"
+id="toc-10장-빌드와-패키징-자동화">10장. 빌드와 패키징 자동화</a>
+<ul>
+<li><a href="#101-태그-기반-빌드" id="toc-101-태그-기반-빌드">10.1 태그
+기반 빌드</a></li>
+<li><a href="#102-왜-태그-기반이-유용한가"
+id="toc-102-왜-태그-기반이-유용한가">10.2 왜 태그 기반이
+유용한가</a></li>
+<li><a href="#103-빌드-자동화-체크리스트"
+id="toc-103-빌드-자동화-체크리스트">10.3 빌드 자동화 체크리스트</a></li>
+<li><a href="#장-요약-9" id="toc-장-요약-9">장 요약</a></li>
+</ul></li>
+<li><a href="#11장-docker와-github-actions"
+id="toc-11장-docker와-github-actions">11장. Docker와 GitHub Actions</a>
+<ul>
+<li><a href="#111-기본-docker-빌드" id="toc-111-기본-docker-빌드">11.1
+기본 Docker 빌드</a></li>
+<li><a href="#112-확장-가능한-방향" id="toc-112-확장-가능한-방향">11.2
+확장 가능한 방향</a></li>
+<li><a href="#113-docker-자동화-설계-팁"
+id="toc-113-docker-자동화-설계-팁">11.3 Docker 자동화 설계 팁</a></li>
+<li><a href="#장-요약-10" id="toc-장-요약-10">장 요약</a></li>
+</ul></li>
+<li><a href="#12장-배포-자동화-기초"
+id="toc-12장-배포-자동화-기초">12장. 배포 자동화 기초</a>
+<ul>
+<li><a href="#121-기본-배포-흐름" id="toc-121-기본-배포-흐름">12.1 기본
+배포 흐름</a></li>
+<li><a href="#122-수동-배포-워크플로-예제"
+id="toc-122-수동-배포-워크플로-예제">12.2 수동 배포 워크플로
+예제</a></li>
+<li><a href="#123-왜-수동-배포부터-시작해야-하는가"
+id="toc-123-왜-수동-배포부터-시작해야-하는가">12.3 왜 수동 배포부터
+시작해야 하는가</a></li>
+<li><a href="#124-배포-자동화-설계-원칙"
+id="toc-124-배포-자동화-설계-원칙">12.4 배포 자동화 설계 원칙</a></li>
+<li><a href="#장-요약-11" id="toc-장-요약-11">장 요약</a></li>
+</ul></li>
+<li><a href="#13장-시크릿과-보안" id="toc-13장-시크릿과-보안">13장.
+시크릿과 보안</a>
+<ul>
+<li><a href="#131-왜-시크릿-관리가-중요한가"
+id="toc-131-왜-시크릿-관리가-중요한가">13.1 왜 시크릿 관리가
+중요한가</a></li>
+<li><a href="#132-기본-예제" id="toc-132-기본-예제">13.2 기본
+예제</a></li>
+<li><a href="#133-보안-원칙" id="toc-133-보안-원칙">13.3 보안
+원칙</a></li>
+<li><a href="#134-권한-최소화-예제" id="toc-134-권한-최소화-예제">13.4
+권한 최소화 예제</a></li>
+<li><a href="#장-요약-12" id="toc-장-요약-12">장 요약</a></li>
+</ul></li>
+<li><a href="#14장-매트릭스-빌드와-병렬-처리"
+id="toc-14장-매트릭스-빌드와-병렬-처리">14장. 매트릭스 빌드와 병렬
+처리</a>
+<ul>
+<li><a href="#141-nodejs-버전별-테스트"
+id="toc-141-nodejs-버전별-테스트">14.1 Node.js 버전별 테스트</a></li>
+<li><a href="#142-매트릭스가-필요한-이유"
+id="toc-142-매트릭스가-필요한-이유">14.2 매트릭스가 필요한 이유</a></li>
+<li><a href="#143-주의할-점" id="toc-143-주의할-점">14.3 주의할
+점</a></li>
+<li><a href="#장-요약-13" id="toc-장-요약-13">장 요약</a></li>
+</ul></li>
+<li><a href="#15장-재사용-가능한-워크플로와-컴포지트-액션"
+id="toc-15장-재사용-가능한-워크플로와-컴포지트-액션">15장. 재사용 가능한
+워크플로와 컴포지트 액션</a>
+<ul>
+<li><a href="#151-재사용-가능한-워크플로"
+id="toc-151-재사용-가능한-워크플로">15.1 재사용 가능한 워크플로</a></li>
+<li><a href="#152-컴포지트-액션" id="toc-152-컴포지트-액션">15.2
+컴포지트 액션</a></li>
+<li><a href="#153-언제-무엇을-써야-하는가"
+id="toc-153-언제-무엇을-써야-하는가">15.3 언제 무엇을 써야
+하는가</a></li>
+<li><a href="#장-요약-14" id="toc-장-요약-14">장 요약</a></li>
+</ul></li>
+<li><a href="#16장-승인-환경-보호-운영-배포-전략"
+id="toc-16장-승인-환경-보호-운영-배포-전략">16장. 승인, 환경 보호, 운영
+배포 전략</a>
+<ul>
+<li><a href="#161-환경-분리" id="toc-161-환경-분리">16.1 환경
+분리</a></li>
+<li><a href="#162-운영-배포에-필요한-요소"
+id="toc-162-운영-배포에-필요한-요소">16.2 운영 배포에 필요한
+요소</a></li>
+<li><a href="#163-권장-배포-흐름" id="toc-163-권장-배포-흐름">16.3 권장
+배포 흐름</a></li>
+<li><a href="#장-요약-15" id="toc-장-요약-15">장 요약</a></li>
+</ul></li>
+<li><a href="#17장-문제-해결과-디버깅"
+id="toc-17장-문제-해결과-디버깅">17장. 문제 해결과 디버깅</a>
+<ul>
+<li><a href="#171-실패-시-확인-순서" id="toc-171-실패-시-확인-순서">17.1
+실패 시 확인 순서</a></li>
+<li><a href="#172-디버깅-팁" id="toc-172-디버깅-팁">17.2 디버깅
+팁</a></li>
+<li><a href="#장-요약-16" id="toc-장-요약-16">장 요약</a></li>
+</ul></li>
+<li><a href="#18장-실전-프로젝트-1-nodejs-애플리케이션-cicd"
+id="toc-18장-실전-프로젝트-1-nodejs-애플리케이션-cicd">18장. 실전
+프로젝트 1: Node.js 애플리케이션 CI/CD</a>
+<ul>
+<li><a href="#해설" id="toc-해설">해설</a></li>
+</ul></li>
+<li><a href="#19장-실전-프로젝트-2-python-패키지-배포-자동화"
+id="toc-19장-실전-프로젝트-2-python-패키지-배포-자동화">19장. 실전
+프로젝트 2: Python 패키지 배포 자동화</a>
+<ul>
+<li><a href="#해설-1" id="toc-해설-1">해설</a></li>
+</ul></li>
+<li><a href="#20장-실전-프로젝트-3-정적-사이트-자동-배포"
+id="toc-20장-실전-프로젝트-3-정적-사이트-자동-배포">20장. 실전 프로젝트
+3: 정적 사이트 자동 배포</a>
+<ul>
+<li><a href="#해설-2" id="toc-해설-2">해설</a></li>
+</ul></li>
+<li><a href="#21장-베스트-프랙티스" id="toc-21장-베스트-프랙티스">21장.
+베스트 프랙티스</a>
+<ul>
+<li><a href="#211-설계-원칙" id="toc-211-설계-원칙">21.1 설계
+원칙</a></li>
+<li><a href="#212-유지보수-원칙" id="toc-212-유지보수-원칙">21.2
+유지보수 원칙</a></li>
+<li><a href="#213-팀-적용-팁" id="toc-213-팀-적용-팁">21.3 팀 적용
+팁</a></li>
+<li><a href="#장-요약-17" id="toc-장-요약-17">장 요약</a></li>
+</ul></li>
+<li><a href="#22장-용어집" id="toc-22장-용어집">22장. 용어집</a>
+<ul>
+<li><a href="#workflow-1" id="toc-workflow-1">Workflow</a></li>
+<li><a href="#event-1" id="toc-event-1">Event</a></li>
+<li><a href="#job-1" id="toc-job-1">Job</a></li>
+<li><a href="#step-1" id="toc-step-1">Step</a></li>
+<li><a href="#runner-1" id="toc-runner-1">Runner</a></li>
+<li><a href="#action" id="toc-action">Action</a></li>
+<li><a href="#artifact" id="toc-artifact">Artifact</a></li>
+<li><a href="#cache" id="toc-cache">Cache</a></li>
+<li><a href="#secret" id="toc-secret">Secret</a></li>
+<li><a href="#matrix" id="toc-matrix">Matrix</a></li>
+</ul></li>
+<li><a href="#23장-연습문제" id="toc-23장-연습문제">23장. 연습문제</a>
+<ul>
+<li><a href="#예시-해설-방향" id="toc-예시-해설-방향">예시 해설
+방향</a></li>
+</ul></li>
+<li><a href="#24장-맺음말" id="toc-24장-맺음말">24장. 맺음말</a></li>
+<li><a href="#부록-a-자주-쓰는-짧은-예제-모음"
+id="toc-부록-a-자주-쓰는-짧은-예제-모음">부록 A. 자주 쓰는 짧은 예제
+모음</a>
+<ul>
+<li><a href="#pr에서만-실행" id="toc-pr에서만-실행">PR에서만
+실행</a></li>
+<li><a href="#특정-브랜치-제외" id="toc-특정-브랜치-제외">특정 브랜치
+제외</a></li>
+<li><a href="#특정-경로-변경-시만-실행"
+id="toc-특정-경로-변경-시만-실행">특정 경로 변경 시만 실행</a></li>
+<li><a href="#조건부-실행" id="toc-조건부-실행">조건부 실행</a></li>
+<li><a href="#수동-실행-입력값-받기" id="toc-수동-실행-입력값-받기">수동
+실행 입력값 받기</a></li>
+</ul></li>
+<li><a href="#부록-b-추천-학습-순서" id="toc-부록-b-추천-학습-순서">부록
+B. 추천 학습 순서</a>
+<ul>
+<li><a href="#link-관련-문서" id="toc-link-관련-문서">🔗 관련
+문서</a></li>
+</ul></li>
+</ul>
+  </nav>
+  <main class="prose">
+<h1 id="github-actions-기초와-응용">GitHub Actions 기초와 응용</h1>
+<h2 id="실무-자동화를-위한-cicd-입문부터-고급-워크플로-설계까지">실무
+자동화를 위한 CI/CD 입문부터 고급 워크플로 설계까지</h2>
+<p>저자: OpenAI<br />
+초판: 2026-03-18</p>
+<hr />
+<h1 id="머리말">머리말</h1>
+<p>소프트웨어 개발에서 반복 작업은 생각보다 많습니다.<br />
+코드를 푸시할 때마다 테스트를 실행하고, 린트를 확인하고, 빌드 결과를
+점검하고, 배포 준비를 하는 일은 모두 시간이 드는 작업입니다. 이러한
+과정을 사람이 직접 수행하면 실수가 생기기 쉽고, 팀마다 방식이 달라져
+품질 편차도 커집니다.</p>
+<p>GitHub Actions는 이러한 반복 작업을 자동화하는 강력한 도구입니다.
+저장소에서 일어나는 이벤트를 기준으로 테스트, 빌드, 패키징, 릴리스,
+배포, 알림, 정기 작업 등을 코드로 정의하고 실행할 수 있습니다. 특히
+GitHub를 중심으로 협업하는 팀이라면 별도의 CI 시스템을 따로 구축하지
+않고도 자동화 체계를 빠르게 도입할 수 있다는 장점이 있습니다.</p>
+<p>이 책은 GitHub Actions를 처음 접하는 독자도 차근차근 따라올 수 있도록
+기초부터 시작합니다. 이후에는 실무에서 바로 사용할 수 있는 수준까지
+도달할 수 있도록 테스트 자동화, 매트릭스 빌드, 보안, 재사용 워크플로,
+배포 전략, 디버깅까지 폭넓게 다룹니다.</p>
+<p>이 책의 목적은 단순히 YAML 문법을 설명하는 데 있지 않습니다.<br />
+자동화를 설계하는 관점, 운영 환경에서 안전하게 배포하는 원칙, 재사용
+가능한 워크플로를 만드는 습관까지 함께 익히는 것이 목표입니다.</p>
+<hr />
+<h1 id="이-책의-대상-독자">이 책의 대상 독자</h1>
+<p>이 책은 다음과 같은 독자를 대상으로 합니다.</p>
+<ul>
+<li>GitHub는 사용하고 있지만 GitHub Actions는 처음인 개발자</li>
+<li>테스트 자동화와 CI/CD를 시작하려는 팀</li>
+<li>반복 작업을 코드로 관리하고 싶은 백엔드/프론트엔드 개발자</li>
+<li>오픈소스 프로젝트 유지보수자</li>
+<li>배포 파이프라인을 체계화하려는 DevOps 입문자</li>
+</ul>
+<hr />
+<h1 id="이-책을-읽는-방법">이 책을 읽는 방법</h1>
+<p>이 책은 크게 세 단계로 읽을 수 있습니다.</p>
+<h2 id="1-입문-단계">1. 입문 단계</h2>
+<p>1장부터 6장까지는 GitHub Actions의 핵심 개념과 기본 구조를 익히는 데
+집중합니다.<br />
+처음 접하는 독자는 반드시 이 부분을 먼저 읽고 예제를 직접 실행해보는
+것을 권장합니다.</p>
+<h2 id="2-실습-단계">2. 실습 단계</h2>
+<p>7장부터 14장까지는 환경 변수, 출력값, 캐시, 테스트 자동화, 빌드,
+Docker, 보안, 매트릭스 전략 등을 다룹니다.<br />
+이 단계에서는 직접 저장소를 만들어 워크플로를 반복 수정하며 익히는 것이
+중요합니다.</p>
+<h2 id="3-실무-적용-단계">3. 실무 적용 단계</h2>
+<p>15장부터 마지막 장까지는 재사용 가능한 워크플로, 승인 전략, 운영
+배포, 디버깅, 실전 프로젝트 예제를 중심으로 구성됩니다.<br />
+실제 서비스 저장소에 적용하기 전에 이 장들을 바탕으로 설계 원칙을 잡는
+것을 추천합니다.</p>
+<hr />
+<h1 id="목차">목차</h1>
+<ol type="1">
+<li>GitHub Actions란 무엇인가</li>
+<li>GitHub Actions 시작하기</li>
+<li>워크플로 YAML 기초</li>
+<li>이벤트와 트리거 이해하기</li>
+<li>잡과 스텝, 러너의 실행 구조</li>
+<li>액션 재사용하기</li>
+<li>환경 변수, 출력값, 컨텍스트</li>
+<li>아티팩트와 캐시</li>
+<li>테스트 자동화 실습</li>
+<li>빌드와 패키징 자동화</li>
+<li>Docker와 GitHub Actions</li>
+<li>배포 자동화 기초</li>
+<li>시크릿과 보안</li>
+<li>매트릭스 빌드와 병렬 처리</li>
+<li>재사용 가능한 워크플로와 컴포지트 액션</li>
+<li>승인, 환경 보호, 운영 배포 전략</li>
+<li>문제 해결과 디버깅</li>
+<li>실전 프로젝트 1: Node.js 애플리케이션 CI/CD</li>
+<li>실전 프로젝트 2: Python 패키지 배포 자동화</li>
+<li>실전 프로젝트 3: 정적 사이트 자동 배포</li>
+<li>베스트 프랙티스</li>
+<li>용어집</li>
+<li>연습문제</li>
+<li>맺음말</li>
+</ol>
+<hr />
+<h1 id="1장-github-actions란-무엇인가">1장. GitHub Actions란
+무엇인가</h1>
+<p>GitHub Actions는 GitHub 저장소에서 발생하는 이벤트를 기반으로 자동화
+작업을 실행하는 기능입니다.<br />
+가장 대표적인 용도는 CI(Continuous Integration)와 CD(Continuous
+Delivery/Deployment)이지만, 실제로는 그보다 더 넓은 범위의 자동화를
+처리할 수 있습니다.</p>
+<p>예를 들어 다음과 같은 작업을 자동화할 수 있습니다.</p>
+<ul>
+<li>코드 푸시 시 테스트 자동 실행</li>
+<li>Pull Request 생성 시 린트와 빌드 검증</li>
+<li>태그 생성 시 릴리스 패키지 업로드</li>
+<li>특정 시각마다 정기 스크립트 실행</li>
+<li>이슈 생성 시 자동 라벨 부여</li>
+<li>문서 변경 감지 후 정적 사이트 재배포</li>
+</ul>
+<p>즉 GitHub Actions는 단순한 “테스트 실행 도구”가 아니라, 개발 프로세스
+전체를 자동화할 수 있는 실행 플랫폼입니다.</p>
+<h2 id="11-왜-자동화가-필요한가">1.1 왜 자동화가 필요한가</h2>
+<p>수동 작업은 느리고, 실수가 잦고, 일관성을 유지하기 어렵습니다.<br />
+개발자가 직접 테스트를 실행하고, 빌드 결과를 확인하고, 배포 절차를
+수행하는 방식은 프로젝트가 커질수록 한계가 드러납니다.</p>
+<p>자동화의 장점은 다음과 같습니다.</p>
+<ul>
+<li>사람이 놓칠 수 있는 검증 절차를 항상 실행할 수 있다.</li>
+<li>코드 품질을 일정한 기준으로 유지할 수 있다.</li>
+<li>협업 시 공통된 개발 규칙을 정착시킬 수 있다.</li>
+<li>배포 시간을 줄이고 반복 가능성을 높일 수 있다.</li>
+<li>실패 지점을 빠르게 발견할 수 있다.</li>
+</ul>
+<h2 id="12-github-actions의-핵심-구성-요소">1.2 GitHub Actions의 핵심
+구성 요소</h2>
+<p>GitHub Actions를 이해하려면 다섯 가지 핵심 개념을 먼저 알아야
+합니다.</p>
+<h3 id="workflow">Workflow</h3>
+<p>자동화 전체를 정의한 단위입니다.<br />
+YAML 파일 하나가 하나의 워크플로가 됩니다.</p>
+<h3 id="event">Event</h3>
+<p>워크플로를 실행시키는 계기입니다.<br />
+예를 들어 <code>push</code>, <code>pull_request</code>,
+<code>workflow_dispatch</code>, <code>schedule</code> 등이 있습니다.</p>
+<h3 id="job">Job</h3>
+<p>워크플로 내부에서 실행되는 작업 단위입니다.<br />
+하나의 워크플로에는 여러 개의 job이 있을 수 있습니다.</p>
+<h3 id="step">Step</h3>
+<p>job 안에서 순서대로 실행되는 세부 단계입니다.<br />
+보통 명령어 실행이나 액션 호출이 step으로 표현됩니다.</p>
+<h3 id="runner">Runner</h3>
+<p>job이 실제로 실행되는 환경입니다.<br />
+Ubuntu, Windows, macOS 또는 self-hosted 환경을 사용할 수 있습니다.</p>
+<h2 id="13-cicd와-github-actions">1.3 CI/CD와 GitHub Actions</h2>
+<p>CI는 코드가 변경될 때마다 자동으로 테스트와 검증을 수행하는
+개념입니다.<br />
+CD는 검증된 결과물을 자동 또는 반자동으로 배포하는 과정을 뜻합니다.</p>
+<p>GitHub Actions는 이 둘을 모두 구현할 수 있습니다.</p>
+<ul>
+<li>CI 예시: push → test → lint → build</li>
+<li>CD 예시: tag push → package build → artifact upload → deploy</li>
+</ul>
+<h2 id="14-학습-관점에서-중요한-점">1.4 학습 관점에서 중요한 점</h2>
+<p>GitHub Actions를 배울 때 가장 흔한 실수는 YAML 문법만 외우는
+것입니다.<br />
+하지만 실제로 중요한 것은 다음 세 가지입니다.</p>
+<ul>
+<li>어떤 이벤트에서 무엇을 실행해야 하는가</li>
+<li>어떤 작업을 하나의 job으로 분리해야 하는가</li>
+<li>실패했을 때 어디서 원인을 추적할 것인가</li>
+</ul>
+<p>이 책은 따라서 단순 문법 설명보다 “설계와 운영” 관점까지 함께
+다룹니다.</p>
+<h2 id="장-요약">장 요약</h2>
+<ul>
+<li>GitHub Actions는 GitHub 이벤트 기반 자동화 플랫폼이다.</li>
+<li>CI/CD뿐 아니라 다양한 저장소 작업을 자동화할 수 있다.</li>
+<li>workflow, event, job, step, runner 개념이 핵심이다.</li>
+<li>YAML 문법보다 자동화 흐름 설계가 더 중요하다.</li>
+</ul>
+<hr />
+<h1 id="2장-github-actions-시작하기">2장. GitHub Actions 시작하기</h1>
+<p>GitHub Actions 워크플로는 저장소 내부의
+<code>.github/workflows/</code> 디렉터리에 YAML 파일로 저장합니다.</p>
+<p>가장 간단한 예제는 다음과 같습니다.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Basic CI</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">hello</span><span class="kw">:</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> 코드 체크아웃</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> 인사 출력</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;Hello, GitHub Actions!&quot;</span></span></code></pre></div>
+<h2 id="21-워크플로-파일-위치">2.1 워크플로 파일 위치</h2>
+<p>워크플로 파일은 반드시 다음 경로에 있어야 합니다.</p>
+<p><code>.github/workflows/파일명.yml</code></p>
+<p>예를 들어 다음과 같은 구조를 가집니다.</p>
+<ul>
+<li><code>.github/workflows/ci.yml</code></li>
+<li><code>.github/workflows/test.yml</code></li>
+<li><code>.github/workflows/deploy.yml</code></li>
+</ul>
+<h2 id="22-기본-구조-읽기">2.2 기본 구조 읽기</h2>
+<p>예제의 각 요소를 살펴보겠습니다.</p>
+<ul>
+<li><code>name</code>: 워크플로 이름</li>
+<li><code>on</code>: 실행 조건</li>
+<li><code>jobs</code>: 실행할 작업 목록</li>
+<li><code>runs-on</code>: 실행 환경</li>
+<li><code>steps</code>: 작업 내부 단계들</li>
+<li><code>uses</code>: 액션 사용</li>
+<li><code>run</code>: 쉘 명령 실행</li>
+</ul>
+<h2 id="23-첫-실행-과정">2.3 첫 실행 과정</h2>
+<p>이 워크플로가 실행되는 흐름은 다음과 같습니다.</p>
+<ol type="1">
+<li>개발자가 저장소에 코드를 push한다.</li>
+<li>GitHub가 <code>push</code> 이벤트를 감지한다.</li>
+<li>해당 이벤트와 연결된 워크플로를 찾는다.</li>
+<li>러너를 준비한다.</li>
+<li>job을 시작한다.</li>
+<li>step을 순서대로 실행한다.</li>
+<li>실행 결과를 UI에 기록한다.</li>
+</ol>
+<h2 id="24-최소-예제로-감-잡기">2.4 최소 예제로 감 잡기</h2>
+<p>더 단순한 예제도 가능합니다.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Minimal Example</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">workflow_dispatch</span><span class="kw">:</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">sample</span><span class="kw">:</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;수동 실행 예제&quot;</span></span></code></pre></div>
+<p>이 예제는 저장소 화면에서 직접 수동 실행할 수 있습니다.</p>
+<h2 id="25-처음-실습할-때-추천-순서">2.5 처음 실습할 때 추천 순서</h2>
+<p>처음에는 다음 순서로 익히는 것이 좋습니다.</p>
+<ol type="1">
+<li><code>workflow_dispatch</code>로 수동 실행</li>
+<li><code>push</code> 이벤트 추가</li>
+<li>체크아웃 액션 사용</li>
+<li>간단한 테스트 명령 추가</li>
+<li>실패 로그 확인</li>
+</ol>
+<h2 id="장-요약-1">장 요약</h2>
+<ul>
+<li>워크플로는 <code>.github/workflows/</code> 아래의 YAML
+파일이다.</li>
+<li><code>name</code>, <code>on</code>, <code>jobs</code>,
+<code>steps</code>가 기본 구조다.</li>
+<li><code>workflow_dispatch</code>를 사용하면 처음 실습하기 좋다.</li>
+<li>가장 먼저 “실행 흐름”을 눈으로 익히는 것이 중요하다.</li>
+</ul>
+<hr />
+<h1 id="3장-워크플로-yaml-기초">3장. 워크플로 YAML 기초</h1>
+<p>GitHub Actions는 YAML 형식으로 정의됩니다.<br />
+따라서 YAML 문법을 이해해야 워크플로를 정확하게 작성할 수 있습니다.</p>
+<h2 id="31-yaml의-기본-규칙">3.1 YAML의 기본 규칙</h2>
+<p>YAML은 공백 기반 구조를 사용합니다.<br />
+다음 규칙은 반드시 기억해야 합니다.</p>
+<ul>
+<li>들여쓰기는 공백으로 한다.</li>
+<li>탭은 사용하지 않는다.</li>
+<li>계층 구조는 들여쓰기로 표현한다.</li>
+<li>리스트는 <code>-</code> 기호를 사용한다.</li>
+<li>key-value 형식으로 값을 표현한다.</li>
+</ul>
+<p>예시를 보겠습니다.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Example</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">branches</span><span class="kw">:</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> main</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> develop</span></span></code></pre></div>
+<h2 id="32-자주-사용하는-키">3.2 자주 사용하는 키</h2>
+<p>GitHub Actions에서 자주 쓰는 최상위 키는 다음과 같습니다.</p>
+<ul>
+<li><code>name</code></li>
+<li><code>on</code></li>
+<li><code>permissions</code></li>
+<li><code>env</code></li>
+<li><code>defaults</code></li>
+<li><code>concurrency</code></li>
+<li><code>jobs</code></li>
+</ul>
+<p>job 내부에서는 다음 키를 자주 사용합니다.</p>
+<ul>
+<li><code>runs-on</code></li>
+<li><code>needs</code></li>
+<li><code>if</code></li>
+<li><code>strategy</code></li>
+<li><code>steps</code></li>
+<li><code>outputs</code></li>
+</ul>
+<p>step 내부에서는 다음 키를 자주 사용합니다.</p>
+<ul>
+<li><code>name</code></li>
+<li><code>uses</code></li>
+<li><code>run</code></li>
+<li><code>with</code></li>
+<li><code>env</code></li>
+<li><code>id</code></li>
+<li><code>if</code></li>
+</ul>
+<h2 id="33-배열과-맵-구조-익히기">3.3 배열과 맵 구조 익히기</h2>
+<p>다음은 <code>steps</code>가 배열이라는 점을 보여주는 예제입니다.</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">demo</span><span class="kw">:</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> 첫 번째 단계</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;one&quot;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> 두 번째 단계</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;two&quot;</span></span></code></pre></div>
+<p>각 <code>-</code>가 하나의 step입니다.</p>
+<h2 id="34-문자열과-표현식">3.4 문자열과 표현식</h2>
+<p>GitHub Actions는 <code>${{ ... }}</code> 문법을 사용해 표현식을
+평가합니다.</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">demo</span><span class="kw">:</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;브랜치 이름은 ${{ github.ref_name }}&quot;</span></span></code></pre></div>
+<p>YAML 문자열과 표현식을 혼동하면 오류가 발생할 수 있습니다.<br />
+특히 조건문과 env 설정에서 주의가 필요합니다.</p>
+<h2 id="35-초보자가-자주-하는-실수">3.5 초보자가 자주 하는 실수</h2>
+<ul>
+<li>탭 사용</li>
+<li>잘못된 들여쓰기</li>
+<li><code>steps</code> 아래에 <code>-</code> 누락</li>
+<li><code>uses</code>와 <code>run</code> 혼동</li>
+<li>표현식 괄호 누락</li>
+<li>브랜치 필터 오타</li>
+</ul>
+<h2 id="장-요약-2">장 요약</h2>
+<ul>
+<li>YAML은 공백 기반 문법이므로 들여쓰기가 매우 중요하다.</li>
+<li>GitHub Actions는 YAML 위에 자체 표현식 문법을 추가해 사용한다.</li>
+<li>기본 구조를 이해하면 대부분의 워크플로를 읽을 수 있다.</li>
+<li>작은 문법 실수가 전체 실행 실패로 이어질 수 있다.</li>
+</ul>
+<hr />
+<h1 id="4장-이벤트와-트리거-이해하기">4장. 이벤트와 트리거 이해하기</h1>
+<p>워크플로는 이벤트가 발생할 때 실행됩니다.<br />
+이 이벤트를 정확히 이해해야 원하는 시점에 자동화를 동작시킬 수
+있습니다.</p>
+<h2 id="41-대표-이벤트">4.1 대표 이벤트</h2>
+<p>GitHub Actions에서 자주 사용하는 이벤트는 다음과 같습니다.</p>
+<ul>
+<li><code>push</code></li>
+<li><code>pull_request</code></li>
+<li><code>workflow_dispatch</code></li>
+<li><code>schedule</code></li>
+<li><code>release</code></li>
+<li><code>issues</code></li>
+<li><code>issue_comment</code></li>
+</ul>
+<h2 id="42-push-이벤트">4.2 push 이벤트</h2>
+<p>가장 기본적인 이벤트입니다.</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> On Push</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">demo</span><span class="kw">:</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;push 이벤트 발생&quot;</span></span></code></pre></div>
+<p>특정 브랜치로 제한할 수도 있습니다.</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> On Main Push</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">branches</span><span class="kw">:</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> main</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">demo</span><span class="kw">:</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;main 브랜치 push&quot;</span></span></code></pre></div>
+<h2 id="43-pull_request-이벤트">4.3 pull_request 이벤트</h2>
+<p>코드 리뷰 단계에서 검증을 수행하기 좋습니다.</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Pull Request Check</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">pull_request</span><span class="kw">:</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">test</span><span class="kw">:</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;PR 검증&quot;</span></span></code></pre></div>
+<h2 id="44-workflow_dispatch-이벤트">4.4 workflow_dispatch 이벤트</h2>
+<p>수동으로 실행할 수 있는 이벤트입니다.</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Manual Workflow</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">workflow_dispatch</span><span class="kw">:</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">manual-job</span><span class="kw">:</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;수동 실행&quot;</span></span></code></pre></div>
+<p>운영 배포나 관리용 스크립트에 자주 사용됩니다.</p>
+<h2 id="45-schedule-이벤트">4.5 schedule 이벤트</h2>
+<p>정기 작업에 적합합니다.</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Nightly Schedule</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">schedule</span><span class="kw">:</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> </span><span class="fu">cron</span><span class="kw">:</span><span class="at"> </span><span class="st">&#39;0 0 * * *&#39;</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">nightly</span><span class="kw">:</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;매일 자정 실행&quot;</span></span></code></pre></div>
+<h2 id="46-paths와-branches-필터">4.6 paths와 branches 필터</h2>
+<p>이벤트는 세부 조건으로 필터링할 수 있습니다.</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Path Filter</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">branches</span><span class="kw">:</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> main</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">paths</span><span class="kw">:</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="st">&#39;src/**&#39;</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="st">&#39;.github/workflows/**&#39;</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">filtered</span><span class="kw">:</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;특정 경로가 변경되었을 때만 실행&quot;</span></span></code></pre></div>
+<h2 id="장-요약-3">장 요약</h2>
+<ul>
+<li>워크플로는 이벤트 기반으로 실행된다.</li>
+<li><code>push</code>, <code>pull_request</code>,
+<code>workflow_dispatch</code>, <code>schedule</code>이 가장 자주
+쓰인다.</li>
+<li>브랜치와 경로 필터를 사용하면 불필요한 실행을 줄일 수 있다.</li>
+<li>자동화는 “언제 실행할 것인가”부터 설계해야 한다.</li>
+</ul>
+<hr />
+<h1 id="5장-잡과-스텝-러너의-실행-구조">5장. 잡과 스텝, 러너의 실행
+구조</h1>
+<p>GitHub Actions에서 실제 실행 단위를 이해하려면 job, step, runner의
+관계를 알아야 합니다.</p>
+<h2 id="51-job이란-무엇인가">5.1 Job이란 무엇인가</h2>
+<p>job은 워크플로 안의 큰 작업 단위입니다.<br />
+하나의 workflow에는 여러 job이 있을 수 있으며, 기본적으로 병렬
+실행됩니다.</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Multi Job</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">build</span><span class="kw">:</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;빌드&quot;</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">test</span><span class="kw">:</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;테스트&quot;</span></span></code></pre></div>
+<h2 id="52-step이란-무엇인가">5.2 Step이란 무엇인가</h2>
+<p>step은 job 안에서 순차적으로 실행되는 단계입니다.</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">sample</span><span class="kw">:</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;1단계&quot;</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;2단계&quot;</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;3단계&quot;</span></span></code></pre></div>
+<p>step은 이전 step이 성공해야 다음 step으로 진행되는 것이
+일반적입니다.</p>
+<h2 id="53-needs로-의존성-만들기">5.3 needs로 의존성 만들기</h2>
+<p>job 간 순서를 제어하려면 <code>needs</code>를 사용합니다.</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Job Dependencies</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">build</span><span class="kw">:</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;build&quot;</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">test</span><span class="kw">:</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">needs</span><span class="kw">:</span><span class="at"> build</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;test after build&quot;</span></span></code></pre></div>
+<h2 id="54-runner란-무엇인가">5.4 Runner란 무엇인가</h2>
+<p>runner는 job이 실제 실행되는 머신 또는 환경입니다.<br />
+대표적으로 다음과 같은 GitHub-hosted runner가 있습니다.</p>
+<ul>
+<li><code>ubuntu-latest</code></li>
+<li><code>windows-latest</code></li>
+<li><code>macos-latest</code></li>
+</ul>
+<p>또한 조직이 직접 운영하는 self-hosted runner도 사용할 수
+있습니다.</p>
+<h2 id="55-실행-구조를-이해하는-이유">5.5 실행 구조를 이해하는 이유</h2>
+<p>실행 구조를 이해하면 다음과 같은 설계가 쉬워집니다.</p>
+<ul>
+<li>테스트와 빌드를 병렬로 나누기</li>
+<li>배포 job을 최종 단계로 연결하기</li>
+<li>OS별 검증을 분리하기</li>
+<li>실패 시 어느 단계가 문제인지 빠르게 찾기</li>
+</ul>
+<h2 id="장-요약-4">장 요약</h2>
+<ul>
+<li>job은 큰 실행 단위, step은 세부 실행 단계다.</li>
+<li>job은 기본적으로 병렬, step은 기본적으로 순차 실행된다.</li>
+<li><code>needs</code>를 사용하면 job 간 의존성을 만들 수 있다.</li>
+<li>runner는 실제 실행 환경이다.</li>
+</ul>
+<hr />
+<h1 id="6장-액션-재사용하기">6장. 액션 재사용하기</h1>
+<p>GitHub Actions의 강력한 장점 중 하나는 이미 만들어진 액션을 재사용할
+수 있다는 점입니다.</p>
+<h2 id="61-액션이란-무엇인가">6.1 액션이란 무엇인가</h2>
+<p>액션은 반복적으로 사용하는 자동화 로직을 묶어둔 재사용
+단위입니다.<br />
+예를 들어 소스코드 체크아웃, 특정 언어 런타임 설치, 캐시 설정, 아티팩트
+업로드 등을 액션으로 손쉽게 사용할 수 있습니다.</p>
+<h2 id="62-가장-많이-쓰는-액션">6.2 가장 많이 쓰는 액션</h2>
+<ul>
+<li><code>actions/checkout</code></li>
+<li><code>actions/setup-node</code></li>
+<li><code>actions/setup-python</code></li>
+<li><code>actions/cache</code></li>
+<li><code>actions/upload-artifact</code></li>
+<li><code>actions/download-artifact</code></li>
+</ul>
+<h2 id="63-uses와-run의-차이">6.3 uses와 run의 차이</h2>
+<ul>
+<li><code>uses</code>: 이미 만들어진 액션을 호출</li>
+<li><code>run</code>: 셸 명령을 직접 실행</li>
+</ul>
+<p>예제:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Node CI</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">test</span><span class="kw">:</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/setup-node@v4</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">node-version</span><span class="kw">:</span><span class="at"> </span><span class="dv">20</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm ci</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm test</span></span></code></pre></div>
+<h2 id="64-with-입력값">6.4 with 입력값</h2>
+<p>액션은 <code>with</code>를 사용해 입력값을 받을 수 있습니다.</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/setup-node@v4</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">node-version</span><span class="kw">:</span><span class="at"> </span><span class="dv">20</span></span></code></pre></div>
+<h2 id="65-액션-사용-시-주의점">6.5 액션 사용 시 주의점</h2>
+<ul>
+<li>액션 버전을 명시한다.</li>
+<li>외부 액션의 신뢰성을 검토한다.</li>
+<li>입력값이 정확한지 확인한다.</li>
+<li>보안이 중요한 경우 권한 범위를 점검한다.</li>
+</ul>
+<h2 id="장-요약-5">장 요약</h2>
+<ul>
+<li>액션은 재사용 가능한 자동화 구성 요소다.</li>
+<li><code>uses</code>로 외부 액션을 호출하고, <code>run</code>으로 직접
+명령을 실행한다.</li>
+<li>체크아웃, 런타임 설정, 캐시, 아티팩트 업로드는 대표적인 액션 활용
+사례다.</li>
+<li>버전 관리와 보안 점검이 중요하다.</li>
+</ul>
+<hr />
+<h1 id="7장-환경-변수-출력값-컨텍스트">7장. 환경 변수, 출력값,
+컨텍스트</h1>
+<p>실전 워크플로에서는 데이터 전달이 중요합니다.<br />
+GitHub Actions는 환경 변수, step 출력값, 컨텍스트를 통해 실행 중
+데이터를 다룰 수 있습니다.</p>
+<h2 id="71-환경-변수-사용하기">7.1 환경 변수 사용하기</h2>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Env Example</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="fu">env</span><span class="kw">:</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">APP_NAME</span><span class="kw">:</span><span class="at"> demo-app</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">print-env</span><span class="kw">:</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;App is $APP_NAME&quot;</span></span></code></pre></div>
+<p>환경 변수는 workflow, job, step 범위에서 각각 정의할 수 있습니다.</p>
+<h2 id="72-출력값-만들기">7.2 출력값 만들기</h2>
+<p>step에서 값을 생성하고 다음 job으로 전달할 수 있습니다.</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Output Example</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">first</span><span class="kw">:</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">outputs</span><span class="kw">:</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">version</span><span class="kw">:</span><span class="at"> ${{ steps.setver.outputs.version }}</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">id</span><span class="kw">:</span><span class="at"> setver</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;version=1.0.0&quot; &gt;&gt; $GITHUB_OUTPUT</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">second</span><span class="kw">:</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">needs</span><span class="kw">:</span><span class="at"> first</span></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;Version is ${{ needs.first.outputs.version }}&quot;</span></span></code></pre></div>
+<h2 id="73-컨텍스트-이해하기">7.3 컨텍스트 이해하기</h2>
+<p>컨텍스트는 GitHub Actions가 제공하는 실행 정보 객체입니다.</p>
+<p>자주 사용하는 컨텍스트는 다음과 같습니다.</p>
+<ul>
+<li><code>github</code></li>
+<li><code>env</code></li>
+<li><code>vars</code></li>
+<li><code>secrets</code></li>
+<li><code>steps</code></li>
+<li><code>runner</code></li>
+<li><code>matrix</code></li>
+<li><code>needs</code></li>
+</ul>
+<p>예를 들어 브랜치 이름을 출력할 수 있습니다.</p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;${{ github.ref_name }}&quot;</span></span></code></pre></div>
+<h2 id="74-언제-무엇을-써야-하는가">7.4 언제 무엇을 써야 하는가</h2>
+<ul>
+<li>고정 설정값: <code>env</code></li>
+<li>비밀 값: <code>secrets</code></li>
+<li>이전 step 결과: <code>steps.&lt;id&gt;.outputs</code></li>
+<li>이전 job 결과: <code>needs.&lt;job&gt;.outputs</code></li>
+<li>GitHub 이벤트 정보: <code>github</code></li>
+</ul>
+<h2 id="장-요약-6">장 요약</h2>
+<ul>
+<li>환경 변수는 공통 설정값 관리에 유용하다.</li>
+<li>출력값은 step과 job 사이의 데이터 전달에 사용된다.</li>
+<li>컨텍스트는 실행 환경과 이벤트 메타데이터를 제공한다.</li>
+<li>값의 범위를 구분해서 사용하는 습관이 중요하다.</li>
+</ul>
+<hr />
+<h1 id="8장-아티팩트와-캐시">8장. 아티팩트와 캐시</h1>
+<p>워크플로를 효율적으로 만들려면 실행 결과물과 의존성 데이터를 잘
+다뤄야 합니다.<br />
+그때 사용하는 대표 기능이 아티팩트와 캐시입니다.</p>
+<h2 id="81-아티팩트란-무엇인가">8.1 아티팩트란 무엇인가</h2>
+<p>아티팩트는 워크플로 실행 도중 생성된 파일을 저장하고 나중에
+다운로드하거나 다른 단계에서 활용할 수 있게 해주는 기능입니다.</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Artifact Example</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">build</span><span class="kw">:</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> mkdir dist &amp;&amp; echo &quot;hello&quot; &gt; dist/result.txt</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/upload-artifact@v4</span></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">name</span><span class="kw">:</span><span class="at"> build-output</span></span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">path</span><span class="kw">:</span><span class="at"> dist/</span></span></code></pre></div>
+<h2 id="82-캐시란-무엇인가">8.2 캐시란 무엇인가</h2>
+<p>캐시는 반복 설치 비용이 큰 파일을 재사용하기 위한 기능입니다.<br />
+주로 패키지 매니저 캐시에 사용됩니다.</p>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Cache Example</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">cache-demo</span><span class="kw">:</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/setup-node@v4</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">node-version</span><span class="kw">:</span><span class="at"> </span><span class="dv">20</span></span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">cache</span><span class="kw">:</span><span class="at"> npm</span></span>
+<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm ci</span></span>
+<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm test</span></span></code></pre></div>
+<h2 id="83-아티팩트와-캐시의-차이">8.3 아티팩트와 캐시의 차이</h2>
+<ul>
+<li>아티팩트: 실행 결과물을 저장</li>
+<li>캐시: 이후 실행 속도 개선을 위해 재사용 데이터 저장</li>
+</ul>
+<h2 id="84-실무-팁">8.4 실무 팁</h2>
+<ul>
+<li>테스트 리포트는 아티팩트로 보관한다.</li>
+<li>빌드 결과물도 아티팩트로 관리할 수 있다.</li>
+<li>의존성 캐시는 키 충돌과 무효화 전략을 함께 고려해야 한다.</li>
+</ul>
+<h2 id="장-요약-7">장 요약</h2>
+<ul>
+<li>아티팩트는 결과물 저장, 캐시는 성능 최적화 목적이다.</li>
+<li>둘을 혼동하지 말고 목적에 맞게 사용해야 한다.</li>
+<li>속도와 추적성을 동시에 개선할 수 있다.</li>
+</ul>
+<hr />
+<h1 id="9장-테스트-자동화-실습">9장. 테스트 자동화 실습</h1>
+<p>테스트 자동화는 GitHub Actions를 도입할 때 가장 먼저 시도할 만한
+작업입니다.</p>
+<h2 id="91-nodejs-테스트-예제">9.1 Node.js 테스트 예제</h2>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Test Node App</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">pull_request</span><span class="kw">:</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">branches</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">main</span><span class="kw">]</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">test</span><span class="kw">:</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/setup-node@v4</span></span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">node-version</span><span class="kw">:</span><span class="at"> </span><span class="dv">20</span></span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">cache</span><span class="kw">:</span><span class="at"> npm</span></span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm ci</span></span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm run lint</span></span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm test</span></span></code></pre></div>
+<h2 id="92-python-테스트-예제">9.2 Python 테스트 예제</h2>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Test Python App</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">pull_request</span><span class="kw">:</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">branches</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">main</span><span class="kw">]</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">test</span><span class="kw">:</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/setup-python@v5</span></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">python-version</span><span class="kw">:</span><span class="at"> </span><span class="st">&#39;3.12&#39;</span></span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> pip install -r requirements.txt</span></span>
+<span id="cb23-19"><a href="#cb23-19" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> pytest</span></span></code></pre></div>
+<h2 id="93-테스트-자동화-설계-팁">9.3 테스트 자동화 설계 팁</h2>
+<ul>
+<li>PR 생성 시 반드시 실행되도록 한다.</li>
+<li>main 브랜치 push에도 실행한다.</li>
+<li>린트와 테스트를 분리할지 함께 둘지 결정한다.</li>
+<li>실패 로그를 읽기 쉽게 만든다.</li>
+</ul>
+<h2 id="장-요약-8">장 요약</h2>
+<ul>
+<li>테스트 자동화는 Actions 학습의 가장 좋은 출발점이다.</li>
+<li>언어별 런타임 설정 액션을 적극 활용한다.</li>
+<li>PR 검증 루틴으로 연결하면 협업 품질이 올라간다.</li>
+</ul>
+<hr />
+<h1 id="10장-빌드와-패키징-자동화">10장. 빌드와 패키징 자동화</h1>
+<p>코드 검증이 끝났다면, 다음 단계는 결과물 생성입니다.</p>
+<h2 id="101-태그-기반-빌드">10.1 태그 기반 빌드</h2>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Build Project</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">tags</span><span class="kw">:</span></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="st">&#39;v*.*.*&#39;</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">build</span><span class="kw">:</span></span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;빌드 수행&quot;</span></span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> mkdir out &amp;&amp; echo &quot;binary&quot; &gt; out/app.bin</span></span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/upload-artifact@v4</span></span>
+<span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">name</span><span class="kw">:</span><span class="at"> package</span></span>
+<span id="cb24-19"><a href="#cb24-19" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">path</span><span class="kw">:</span><span class="at"> out/</span></span></code></pre></div>
+<h2 id="102-왜-태그-기반이-유용한가">10.2 왜 태그 기반이 유용한가</h2>
+<p>버전 릴리스 시점에만 빌드를 수행할 수 있어, 릴리스 기준이
+명확해집니다.</p>
+<h2 id="103-빌드-자동화-체크리스트">10.3 빌드 자동화 체크리스트</h2>
+<ul>
+<li>빌드 조건이 명확한가</li>
+<li>빌드 산출물이 보관되는가</li>
+<li>실패 시 원인을 추적할 수 있는가</li>
+<li>릴리스 정책과 연결되어 있는가</li>
+</ul>
+<h2 id="장-요약-9">장 요약</h2>
+<ul>
+<li>빌드는 테스트 이후의 핵심 단계다.</li>
+<li>태그 이벤트를 활용하면 릴리스 자동화와 자연스럽게 연결된다.</li>
+<li>결과물 보관 전략이 중요하다.</li>
+</ul>
+<hr />
+<h1 id="11장-docker와-github-actions">11장. Docker와 GitHub Actions</h1>
+<p>컨테이너 중심 개발에서는 Docker 자동화가 매우 중요합니다.</p>
+<h2 id="111-기본-docker-빌드">11.1 기본 Docker 빌드</h2>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Docker Build</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">branches</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">main</span><span class="kw">]</span></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">docker</span><span class="kw">:</span></span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> docker build -t my-app:latest .</span></span></code></pre></div>
+<h2 id="112-확장-가능한-방향">11.2 확장 가능한 방향</h2>
+<p>실무에서는 다음과 같은 요구가 추가됩니다.</p>
+<ul>
+<li>컨테이너 레지스트리 로그인</li>
+<li>태그 전략 관리</li>
+<li>브랜치별 이미지 이름 분리</li>
+<li>멀티 아키텍처 빌드</li>
+<li>보안 스캔</li>
+</ul>
+<h2 id="113-docker-자동화-설계-팁">11.3 Docker 자동화 설계 팁</h2>
+<ul>
+<li><code>latest</code>만 사용하지 말고 버전 태그를 병행한다.</li>
+<li>배포 환경별 이미지 전략을 분리한다.</li>
+<li>이미지 빌드와 푸시를 명확히 구분한다.</li>
+</ul>
+<h2 id="장-요약-10">장 요약</h2>
+<ul>
+<li>Docker 빌드는 Actions에서 자연스럽게 자동화할 수 있다.</li>
+<li>실무에서는 인증, 태깅, 배포 전략까지 함께 고려해야 한다.</li>
+<li>빌드와 배포를 분리하면 운영 안정성이 높아진다.</li>
+</ul>
+<hr />
+<h1 id="12장-배포-자동화-기초">12장. 배포 자동화 기초</h1>
+<p>배포는 가장 강력하면서도 가장 신중해야 하는 자동화입니다.</p>
+<h2 id="121-기본-배포-흐름">12.1 기본 배포 흐름</h2>
+<p>보통 배포는 다음 순서로 진행됩니다.</p>
+<ol type="1">
+<li>코드 체크아웃</li>
+<li>런타임 설치</li>
+<li>의존성 설치</li>
+<li>테스트</li>
+<li>빌드</li>
+<li>인증</li>
+<li>배포 실행</li>
+</ol>
+<h2 id="122-수동-배포-워크플로-예제">12.2 수동 배포 워크플로 예제</h2>
+<div class="sourceCode" id="cb26"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Deploy App</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">workflow_dispatch</span><span class="kw">:</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">deploy</span><span class="kw">:</span></span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;배포 시작&quot;</span></span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;서버 또는 클라우드로 배포&quot;</span></span></code></pre></div>
+<h2 id="123-왜-수동-배포부터-시작해야-하는가">12.3 왜 수동 배포부터
+시작해야 하는가</h2>
+<p>초기에는 자동 배포보다 수동 배포가 안전합니다.<br />
+파이프라인 검증이 충분히 끝난 후에만 완전 자동 배포로 확장하는 것이
+좋습니다.</p>
+<h2 id="124-배포-자동화-설계-원칙">12.4 배포 자동화 설계 원칙</h2>
+<ul>
+<li>테스트 통과 이후에만 배포</li>
+<li>운영 배포는 승인 단계 추가</li>
+<li>비밀 값은 secrets로 관리</li>
+<li>실패 시 롤백 전략 고려</li>
+</ul>
+<h2 id="장-요약-11">장 요약</h2>
+<ul>
+<li>배포 자동화는 검증된 결과물을 안전하게 전달하는 과정이다.</li>
+<li>처음에는 <code>workflow_dispatch</code> 기반 수동 실행이
+적합하다.</li>
+<li>운영 배포는 항상 통제와 검증을 포함해야 한다.</li>
+</ul>
+<hr />
+<h1 id="13장-시크릿과-보안">13장. 시크릿과 보안</h1>
+<p>자동화가 강력해질수록 보안의 중요성도 함께 커집니다.</p>
+<h2 id="131-왜-시크릿-관리가-중요한가">13.1 왜 시크릿 관리가
+중요한가</h2>
+<p>배포 토큰, API 키, 클라우드 자격 증명처럼 민감한 값이 노출되면 자동화
+환경 자체가 공격 벡터가 될 수 있습니다.</p>
+<h2 id="132-기본-예제">13.2 기본 예제</h2>
+<div class="sourceCode" id="cb27"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Secret Example</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">use-secret</span><span class="kw">:</span></span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;토큰 사용&quot;</span></span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">env</span><span class="kw">:</span></span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">API_TOKEN</span><span class="kw">:</span><span class="at"> ${{ secrets.API_TOKEN }}</span></span></code></pre></div>
+<h2 id="133-보안-원칙">13.3 보안 원칙</h2>
+<ul>
+<li>시크릿을 코드에 직접 쓰지 않는다.</li>
+<li>최소 권한 원칙을 적용한다.</li>
+<li>외부 액션은 신뢰성과 버전을 검토한다.</li>
+<li>PR from fork 상황에서 시크릿 노출을 주의한다.</li>
+<li><code>permissions</code>를 최소화한다.</li>
+</ul>
+<h2 id="134-권한-최소화-예제">13.4 권한 최소화 예제</h2>
+<div class="sourceCode" id="cb28"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="fu">permissions</span><span class="kw">:</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">contents</span><span class="kw">:</span><span class="at"> read</span></span></code></pre></div>
+<p>필요한 권한만 명시하는 습관이 중요합니다.</p>
+<h2 id="장-요약-12">장 요약</h2>
+<ul>
+<li>시크릿은 반드시 안전한 저장소에 보관해야 한다.</li>
+<li>Actions 보안은 권한, 외부 액션, 이벤트 특성을 함께 고려해야
+한다.</li>
+<li>편의성보다 안전성을 우선하는 설계가 필요하다.</li>
+</ul>
+<hr />
+<h1 id="14장-매트릭스-빌드와-병렬-처리">14장. 매트릭스 빌드와 병렬
+처리</h1>
+<p>여러 환경을 동시에 검증하려면 매트릭스 전략이 유용합니다.</p>
+<h2 id="141-nodejs-버전별-테스트">14.1 Node.js 버전별 테스트</h2>
+<div class="sourceCode" id="cb29"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Matrix Build</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">test</span><span class="kw">:</span></span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">strategy</span><span class="kw">:</span></span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">matrix</span><span class="kw">:</span></span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">node-version</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="dv">18</span><span class="kw">,</span><span class="at"> </span><span class="dv">20</span><span class="kw">,</span><span class="at"> </span><span class="dv">22</span><span class="kw">]</span></span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-14"><a href="#cb29-14" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/setup-node@v4</span></span>
+<span id="cb29-15"><a href="#cb29-15" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb29-16"><a href="#cb29-16" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">node-version</span><span class="kw">:</span><span class="at"> ${{ matrix.node-version }}</span></span>
+<span id="cb29-17"><a href="#cb29-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-18"><a href="#cb29-18" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm ci</span></span>
+<span id="cb29-19"><a href="#cb29-19" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm test</span></span></code></pre></div>
+<h2 id="142-매트릭스가-필요한-이유">14.2 매트릭스가 필요한 이유</h2>
+<ul>
+<li>여러 런타임 버전 지원 검증</li>
+<li>여러 운영체제 검증</li>
+<li>구성 조합 자동 테스트</li>
+</ul>
+<h2 id="143-주의할-점">14.3 주의할 점</h2>
+<p>매트릭스는 강력하지만 실행 시간이 늘어나고 비용도 증가할 수
+있습니다.<br />
+따라서 꼭 필요한 조합만 선택해야 합니다.</p>
+<h2 id="장-요약-13">장 요약</h2>
+<ul>
+<li>매트릭스 전략으로 다양한 환경을 자동 검증할 수 있다.</li>
+<li>병렬 처리로 품질 검증 범위를 넓힐 수 있다.</li>
+<li>조합 수가 너무 많아지지 않도록 주의해야 한다.</li>
+</ul>
+<hr />
+<h1 id="15장-재사용-가능한-워크플로와-컴포지트-액션">15장. 재사용 가능한
+워크플로와 컴포지트 액션</h1>
+<p>프로젝트가 커질수록 공통 로직을 재사용하는 구조가 중요해집니다.</p>
+<h2 id="151-재사용-가능한-워크플로">15.1 재사용 가능한 워크플로</h2>
+<div class="sourceCode" id="cb30"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Reusable Workflow</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">workflow_call</span><span class="kw">:</span></span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">reusable-job</span><span class="kw">:</span></span>
+<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb30-10"><a href="#cb30-10" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;재사용 가능한 워크플로&quot;</span></span></code></pre></div>
+<p>호출 예제:</p>
+<div class="sourceCode" id="cb31"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Caller</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">push</span><span class="kw">]</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">call-reusable</span><span class="kw">:</span></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> ./.github/workflows/reusable.yml</span></span></code></pre></div>
+<h2 id="152-컴포지트-액션">15.2 컴포지트 액션</h2>
+<div class="sourceCode" id="cb32"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Setup App</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="fu">description</span><span class="kw">:</span><span class="at"> Setup dependencies</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a><span class="fu">runs</span><span class="kw">:</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">using</span><span class="kw">:</span><span class="at"> composite</span></span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;설정 중&quot;</span></span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">shell</span><span class="kw">:</span><span class="at"> bash</span></span></code></pre></div>
+<h2 id="153-언제-무엇을-써야-하는가">15.3 언제 무엇을 써야 하는가</h2>
+<ul>
+<li>여러 저장소에서 공통 CI 로직 재사용: 재사용 워크플로</li>
+<li>여러 step 묶음을 액션처럼 재사용: 컴포지트 액션</li>
+</ul>
+<h2 id="장-요약-14">장 요약</h2>
+<ul>
+<li>자동화가 커질수록 중복 제거가 중요하다.</li>
+<li>재사용 워크플로와 컴포지트 액션은 유지보수성을 크게 높인다.</li>
+<li>공통 로직은 초기에 구조화해두는 편이 유리하다.</li>
+</ul>
+<hr />
+<h1 id="16장-승인-환경-보호-운영-배포-전략">16장. 승인, 환경 보호, 운영
+배포 전략</h1>
+<p>운영 환경 배포는 개발 환경 배포와 다르게 통제가 핵심입니다.</p>
+<h2 id="161-환경-분리">16.1 환경 분리</h2>
+<p>일반적으로 다음과 같이 나눕니다.</p>
+<ul>
+<li>dev</li>
+<li>staging</li>
+<li>production</li>
+</ul>
+<h2 id="162-운영-배포에-필요한-요소">16.2 운영 배포에 필요한 요소</h2>
+<ul>
+<li>환경 보호</li>
+<li>승인자 지정</li>
+<li>대기 시간</li>
+<li>브랜치 보호 정책</li>
+<li>수동 검토 단계</li>
+</ul>
+<h2 id="163-권장-배포-흐름">16.3 권장 배포 흐름</h2>
+<ol type="1">
+<li>개발 브랜치에서 테스트</li>
+<li>main 병합 후 staging 배포</li>
+<li>승인 후 production 배포</li>
+</ol>
+<h2 id="장-요약-15">장 요약</h2>
+<ul>
+<li>운영 배포는 자동화만큼 통제가 중요하다.</li>
+<li>환경 분리와 승인 절차를 통해 사고를 줄일 수 있다.</li>
+<li>배포 전략은 팀 운영 모델과 함께 설계해야 한다.</li>
+</ul>
+<hr />
+<h1 id="17장-문제-해결과-디버깅">17장. 문제 해결과 디버깅</h1>
+<p>워크플로가 실패하는 것은 자연스러운 일입니다.<br />
+중요한 것은 빠르게 원인을 찾고 재발을 줄이는 것입니다.</p>
+<h2 id="171-실패-시-확인-순서">17.1 실패 시 확인 순서</h2>
+<ol type="1">
+<li>로그를 읽는다.</li>
+<li>어느 step에서 실패했는지 확인한다.</li>
+<li>입력값과 환경 변수를 점검한다.</li>
+<li>액션 버전을 확인한다.</li>
+<li>권한 문제를 검토한다.</li>
+<li>로컬에서 재현해본다.</li>
+</ol>
+<h2 id="172-디버깅-팁">17.2 디버깅 팁</h2>
+<ul>
+<li>중간값을 <code>echo</code>로 출력한다.</li>
+<li>실패 시 아티팩트를 업로드한다.</li>
+<li>큰 job을 작은 job으로 분리한다.</li>
+<li>조건문과 표현식을 하나씩 확인한다.</li>
+</ul>
+<h2 id="장-요약-16">장 요약</h2>
+<ul>
+<li>로그 읽기 능력이 디버깅의 핵심이다.</li>
+<li>실패 지점을 좁히는 구조화가 중요하다.</li>
+<li>관찰 가능한 워크플로를 만드는 습관이 필요하다.</li>
+</ul>
+<hr />
+<h1 id="18장-실전-프로젝트-1-nodejs-애플리케이션-cicd">18장. 실전
+프로젝트 1: Node.js 애플리케이션 CI/CD</h1>
+<div class="sourceCode" id="cb33"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Node CI/CD</span></span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">branches</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">main</span><span class="kw">]</span></span>
+<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">pull_request</span><span class="kw">:</span></span>
+<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-8"><a href="#cb33-8" aria-hidden="true" tabindex="-1"></a><span class="fu">permissions</span><span class="kw">:</span></span>
+<span id="cb33-9"><a href="#cb33-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">contents</span><span class="kw">:</span><span class="at"> read</span></span>
+<span id="cb33-10"><a href="#cb33-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-11"><a href="#cb33-11" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb33-12"><a href="#cb33-12" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">test</span><span class="kw">:</span></span>
+<span id="cb33-13"><a href="#cb33-13" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb33-14"><a href="#cb33-14" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb33-15"><a href="#cb33-15" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb33-16"><a href="#cb33-16" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/setup-node@v4</span></span>
+<span id="cb33-17"><a href="#cb33-17" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb33-18"><a href="#cb33-18" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">node-version</span><span class="kw">:</span><span class="at"> </span><span class="dv">20</span></span>
+<span id="cb33-19"><a href="#cb33-19" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">cache</span><span class="kw">:</span><span class="at"> npm</span></span>
+<span id="cb33-20"><a href="#cb33-20" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm ci</span></span>
+<span id="cb33-21"><a href="#cb33-21" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm run lint</span></span>
+<span id="cb33-22"><a href="#cb33-22" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm test</span></span>
+<span id="cb33-23"><a href="#cb33-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-24"><a href="#cb33-24" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">build</span><span class="kw">:</span></span>
+<span id="cb33-25"><a href="#cb33-25" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">needs</span><span class="kw">:</span><span class="at"> test</span></span>
+<span id="cb33-26"><a href="#cb33-26" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb33-27"><a href="#cb33-27" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb33-28"><a href="#cb33-28" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb33-29"><a href="#cb33-29" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm ci</span></span>
+<span id="cb33-30"><a href="#cb33-30" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm run build</span></span>
+<span id="cb33-31"><a href="#cb33-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-32"><a href="#cb33-32" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">deploy</span><span class="kw">:</span></span>
+<span id="cb33-33"><a href="#cb33-33" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">if</span><span class="kw">:</span><span class="at"> github.ref == &#39;refs/heads/main&#39;</span></span>
+<span id="cb33-34"><a href="#cb33-34" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">needs</span><span class="kw">:</span><span class="at"> build</span></span>
+<span id="cb33-35"><a href="#cb33-35" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb33-36"><a href="#cb33-36" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb33-37"><a href="#cb33-37" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;배포 실행&quot;</span></span></code></pre></div>
+<h2 id="해설">해설</h2>
+<p>이 워크플로는 다음과 같은 흐름을 가집니다.</p>
+<ul>
+<li>PR 또는 main push에서 시작</li>
+<li>먼저 테스트 실행</li>
+<li>테스트 통과 후 빌드</li>
+<li>main 브랜치일 때만 배포</li>
+</ul>
+<p>이 구조는 가장 기본적인 CI/CD 패턴으로 활용할 수 있습니다.</p>
+<hr />
+<h1 id="19장-실전-프로젝트-2-python-패키지-배포-자동화">19장. 실전
+프로젝트 2: Python 패키지 배포 자동화</h1>
+<div class="sourceCode" id="cb34"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Python Package</span></span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">tags</span><span class="kw">:</span></span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="st">&#39;v*.*.*&#39;</span></span>
+<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb34-9"><a href="#cb34-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">build-and-publish</span><span class="kw">:</span></span>
+<span id="cb34-10"><a href="#cb34-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb34-11"><a href="#cb34-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb34-12"><a href="#cb34-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb34-13"><a href="#cb34-13" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/setup-python@v5</span></span>
+<span id="cb34-14"><a href="#cb34-14" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb34-15"><a href="#cb34-15" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">python-version</span><span class="kw">:</span><span class="at"> </span><span class="st">&#39;3.12&#39;</span></span>
+<span id="cb34-16"><a href="#cb34-16" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> pip install build</span></span>
+<span id="cb34-17"><a href="#cb34-17" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> python -m build</span></span>
+<span id="cb34-18"><a href="#cb34-18" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;패키지 업로드&quot;</span></span></code></pre></div>
+<h2 id="해설-1">해설</h2>
+<p>태그 기반 릴리스에 맞춰 패키지를 빌드하는 전형적인 구조입니다.<br />
+여기에 패키지 저장소 인증과 업로드 step을 추가하면 배포 파이프라인이
+완성됩니다.</p>
+<hr />
+<h1 id="20장-실전-프로젝트-3-정적-사이트-자동-배포">20장. 실전 프로젝트
+3: 정적 사이트 자동 배포</h1>
+<div class="sourceCode" id="cb35"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Deploy Static Site</span></span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">branches</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">main</span><span class="kw">]</span></span>
+<span id="cb35-6"><a href="#cb35-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-7"><a href="#cb35-7" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb35-8"><a href="#cb35-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">deploy-pages</span><span class="kw">:</span></span>
+<span id="cb35-9"><a href="#cb35-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb35-10"><a href="#cb35-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb35-11"><a href="#cb35-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v4</span></span>
+<span id="cb35-12"><a href="#cb35-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;정적 사이트 빌드&quot;</span></span>
+<span id="cb35-13"><a href="#cb35-13" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;정적 사이트 배포&quot;</span></span></code></pre></div>
+<h2 id="해설-2">해설</h2>
+<p>문서 사이트, 블로그, 제품 소개 페이지처럼 정적 사이트는 자동 배포
+구조를 가장 먼저 적용하기 좋은 대상입니다.</p>
+<hr />
+<h1 id="21장-베스트-프랙티스">21장. 베스트 프랙티스</h1>
+<h2 id="211-설계-원칙">21.1 설계 원칙</h2>
+<ul>
+<li>워크플로는 작게 시작한다.</li>
+<li>실패를 빨리 드러내는 구조를 만든다.</li>
+<li>공통 로직은 재사용한다.</li>
+<li>권한은 최소화한다.</li>
+<li>시크릿은 코드에 쓰지 않는다.</li>
+<li>운영 배포에는 통제를 둔다.</li>
+</ul>
+<h2 id="212-유지보수-원칙">21.2 유지보수 원칙</h2>
+<ul>
+<li>워크플로 이름을 명확히 작성한다.</li>
+<li>step 이름도 읽기 쉽게 쓴다.</li>
+<li>주석보다 구조를 명확히 만든다.</li>
+<li>외부 액션 버전 정책을 정한다.</li>
+<li>오래된 자동화는 주기적으로 정리한다.</li>
+</ul>
+<h2 id="213-팀-적용-팁">21.3 팀 적용 팁</h2>
+<ul>
+<li>모든 저장소에 동일한 템플릿을 강요하지 않는다.</li>
+<li>공통 정책과 저장소별 예외를 분리한다.</li>
+<li>배포 자동화는 작은 범위부터 확대한다.</li>
+</ul>
+<h2 id="장-요약-17">장 요약</h2>
+<ul>
+<li>좋은 워크플로는 단순하고 관찰 가능하며 안전하다.</li>
+<li>자동화의 목적은 복잡성 증가가 아니라 반복 작업 감소다.</li>
+<li>유지보수 가능한 구조가 장기적으로 가장 중요하다.</li>
+</ul>
+<hr />
+<h1 id="22장-용어집">22장. 용어집</h1>
+<h2 id="workflow-1">Workflow</h2>
+<p>자동화 전체를 정의한 YAML 파일 단위</p>
+<h2 id="event-1">Event</h2>
+<p>워크플로 실행을 유발하는 GitHub 이벤트</p>
+<h2 id="job-1">Job</h2>
+<p>워크플로 내부의 실행 작업 단위</p>
+<h2 id="step-1">Step</h2>
+<p>job 내부의 순차 실행 단계</p>
+<h2 id="runner-1">Runner</h2>
+<p>job이 실제로 실행되는 환경</p>
+<h2 id="action">Action</h2>
+<p>재사용 가능한 자동화 구성 요소</p>
+<h2 id="artifact">Artifact</h2>
+<p>워크플로 실행 결과물 파일</p>
+<h2 id="cache">Cache</h2>
+<p>실행 속도 개선을 위한 재사용 저장 데이터</p>
+<h2 id="secret">Secret</h2>
+<p>민감 정보를 안전하게 저장하는 값</p>
+<h2 id="matrix">Matrix</h2>
+<p>여러 환경 조합을 반복 실행하는 전략</p>
+<hr />
+<h1 id="23장-연습문제">23장. 연습문제</h1>
+<ol type="1">
+<li><code>workflow_dispatch</code>로 수동 실행되는 워크플로를
+작성하라.</li>
+<li><code>push</code> 이벤트에서 main 브랜치에만 실행되도록
+제한하라.</li>
+<li>Node.js 18, 20, 22 버전 매트릭스 테스트를 구성하라.</li>
+<li>테스트 결과 파일을 아티팩트로 업로드하라.</li>
+<li><code>needs</code>를 사용해 build job이 test job 이후 실행되게
+하라.</li>
+<li><code>secrets.DEPLOY_TOKEN</code>을 사용하는 배포 step을
+작성하라.</li>
+<li>재사용 가능한 워크플로를 만들고 다른 워크플로에서 호출하라.</li>
+<li>운영 배포에 승인 단계를 두는 전략을 설명하라.</li>
+</ol>
+<h2 id="예시-해설-방향">예시 해설 방향</h2>
+<p>연습문제는 단순 정답 암기가 아니라 다음을 설명할 수 있어야
+합니다.</p>
+<ul>
+<li>왜 해당 이벤트를 선택했는가</li>
+<li>왜 job을 분리했는가</li>
+<li>왜 시크릿/권한/아티팩트 구성이 필요한가</li>
+</ul>
+<hr />
+<h1 id="24장-맺음말">24장. 맺음말</h1>
+<p>GitHub Actions는 단순한 CI 도구가 아니라 개발 과정을 코드로 정의하고
+개선하는 자동화 플랫폼입니다.<br />
+처음에는 한 개의 워크플로와 두세 개의 step으로 시작할 수 있습니다.
+하지만 그 작은 자동화가 쌓이면 팀의 품질 체계와 배포 문화 자체를 바꾸게
+됩니다.</p>
+<p>중요한 것은 복잡한 자동화를 빠르게 만드는 것이 아닙니다.<br />
+작고 명확하며 안전한 자동화를 만들고, 그것을 점진적으로 개선하는
+것입니다.</p>
+<p>이 책이 GitHub Actions를 처음 배우는 독자에게는 탄탄한
+입문서가,<br />
+이미 사용 중인 실무자에게는 구조를 재점검하는 참고서가 되기를
+바랍니다.</p>
+<hr />
+<h1 id="부록-a-자주-쓰는-짧은-예제-모음">부록 A. 자주 쓰는 짧은 예제
+모음</h1>
+<h2 id="pr에서만-실행">PR에서만 실행</h2>
+<div class="sourceCode" id="cb36"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">pull_request</span><span class="kw">:</span></span></code></pre></div>
+<h2 id="특정-브랜치-제외">특정 브랜치 제외</h2>
+<div class="sourceCode" id="cb37"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">branches-ignore</span><span class="kw">:</span></span>
+<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> experimental</span></span></code></pre></div>
+<h2 id="특정-경로-변경-시만-실행">특정 경로 변경 시만 실행</h2>
+<div class="sourceCode" id="cb38"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">paths</span><span class="kw">:</span></span>
+<span id="cb38-4"><a href="#cb38-4" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="st">&#39;src/**&#39;</span></span>
+<span id="cb38-5"><a href="#cb38-5" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="st">&#39;.github/workflows/**&#39;</span></span></code></pre></div>
+<h2 id="조건부-실행">조건부 실행</h2>
+<div class="sourceCode" id="cb39"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> main 브랜치일 때만</span></span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">if</span><span class="kw">:</span><span class="at"> github.ref == &#39;refs/heads/main&#39;</span></span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">run</span><span class="kw">:</span><span class="at"> echo &quot;main only&quot;</span></span></code></pre></div>
+<h2 id="수동-실행-입력값-받기">수동 실행 입력값 받기</h2>
+<div class="sourceCode" id="cb40"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">workflow_dispatch</span><span class="kw">:</span></span>
+<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">inputs</span><span class="kw">:</span></span>
+<span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">environment</span><span class="kw">:</span></span>
+<span id="cb40-5"><a href="#cb40-5" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">description</span><span class="kw">:</span><span class="at"> 배포 환경</span></span>
+<span id="cb40-6"><a href="#cb40-6" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">required</span><span class="kw">:</span><span class="at"> </span><span class="ch">true</span></span>
+<span id="cb40-7"><a href="#cb40-7" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">default</span><span class="kw">:</span><span class="at"> staging</span></span></code></pre></div>
+<hr />
+<h1 id="부록-b-추천-학습-순서">부록 B. 추천 학습 순서</h1>
+<ul>
+<li>1회독: 1장~6장</li>
+<li>2회독: 7장~14장</li>
+<li>3회독: 15장~21장</li>
+<li>실습: 18장~20장 예제를 직접 저장소에서 실행</li>
+<li>복습: 연습문제 풀이와 자신만의 워크플로 설계</li>
+</ul>
+<hr />
+<hr />
+<h2 id="link-관련-문서">🔗 관련 문서</h2>
+<ul>
+<li><span class="wikilink">🔗 gh-cli-guide</span></li>
+<li><span class="wikilink">🔗 비개발자를 위한 AI 코딩 및 버전 관리
+시스템(Git)</span></li>
+<li><span class="wikilink">🔗 Bedrock</span></li>
+<li><span class="wikilink">🔗 PE 와 IDP 정리</span></li>
+</ul>
+  </main>
+</div>
+
+<footer class="page">
+  🐙 GitHub Actions
+Book · <a href="./index.html">보물창고로 돌아가기</a> 🏰
+</footer>
+
+<script>
+  // Mobile TOC toggle
+  var t = document.getElementById('tocToggle');
+  var toc = document.getElementById('toc');
+  if (t && toc) {
+    t.addEventListener('click', function () {
+      var collapsed = toc.classList.toggle('collapsed');
+      t.setAttribute('aria-expanded', String(!collapsed));
+    });
+    toc.addEventListener('click', function (e) {
+      if (e.target.tagName === 'A' && window.matchMedia('(max-width: 900px)').matches) {
+        toc.classList.add('collapsed');
+        t.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+</script>
+
+</body>
+</html>
