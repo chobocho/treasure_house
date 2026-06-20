@@ -391,7 +391,8 @@ function edmondsKarp(edges,record){
   const orig=buildCap(edges);
   const r=orig.map(row=>row.slice());
   const frames=[];
-  let maxflow=0;
+  let maxflow=0, augCount=0;
+  const lbl=i=>nodeById(i).label;
   const flowOf=()=>{const f=Array.from({length:N},()=>new Array(N).fill(0));
     for(const[u,v]of edges)f[u][v]=orig[u][v]-r[u][v];return f;};
   if(record)frames.push({path:[],bott:0,maxflow:0,flow:flowOf(),msg:'시작: 아직 흐르는 물이 없습니다.'});
@@ -402,17 +403,31 @@ function edmondsKarp(edges,record){
     if(par[T]===-1)break;
     let bott=Infinity;for(let v=T;v!==S;v=par[v])bott=Math.min(bott,r[par[v]][v]);
     const path=[T];for(let v=T;v!==S;v=par[v])path.push(par[v]);path.reverse();
+    augCount++;
+    if(record){
+      // ① 경로를 한 간선씩 따라가며 탐색 (아직 물은 흘리지 않음)
+      const flowBefore=flowOf();
+      for(let k=2;k<path.length;k++){
+        const partial=path.slice(0,k);
+        frames.push({path:partial,bott:0,maxflow,flow:flowBefore,
+          msg:`🛶 증가 경로 ${augCount} 탐색 중 …  ${partial.map(lbl).join(' → ')} 까지 따라왔어요`});
+      }
+      // ② 바다 도착 → 병목 확인 (흘리기 직전)
+      frames.push({path:[...path],bott,maxflow,flow:flowBefore,
+        msg:`🎯 바다 도착! 경로 ${path.map(lbl).join(' → ')}  ·  가장 좁은 물길(병목) = ${bott}`});
+    }
     for(let v=T;v!==S;v=par[v]){r[par[v]][v]-=bott;r[v][par[v]]+=bott;}
     maxflow+=bott;
+    // ③ 병목만큼 실제로 흘려보내기
     if(record)frames.push({path:[...path],bott,maxflow,flow:flowOf(),
-      msg:`증가 경로 ${path.map(i=>nodeById(i).label).join(' → ')}  ·  병목 ${bott}만큼 흘림`});
+      msg:`💧 병목 ${bott}만큼 흘려보냄 → 총 유량 ${maxflow}`});
   }
   // 최소 컷(도달 가능 집합)
   const vis=new Array(N).fill(false);const q=[S];vis[S]=true;
   while(q.length){const u=q.shift();for(let v=0;v<N;v++)if(!vis[v]&&r[u][v]>0){vis[v]=true;q.push(v);}}
   if(record)frames.push({path:[],bott:0,maxflow,flow:flowOf(),done:true,
     msg:`🌊 완료! 최대 유량 = ${maxflow}`});
-  return {maxflow,frames,reach:vis,orig};
+  return {maxflow,frames,reach:vis,orig,augCount};
 }
 
 /* ===================== 슬라이드 내비게이션 ===================== */
@@ -534,7 +549,7 @@ function solveFlow(){
   const cutEdges=[];
   for(const[u,v,c]of pgEdges)if(res.reach[u]&&!res.reach[v])cutEdges.push(`${nodeById(u).label}→${nodeById(v).label}(${c})`);
   document.getElementById('pg-log').innerHTML=
-    `<span class="ok">최대 유량 = ${maxflow}</span>  (증가 경로 ${res.frames.length-2}번 사용)\n`+
+    `<span class="ok">최대 유량 = ${maxflow}</span>  (증가 경로 ${res.augCount}번 사용)\n`+
     `최소 컷(강을 끊는 가장 좁은 둑): ${cutEdges.join(', ')}\n`+
     `합 = ${cutEdges.reduce((s,x)=>s+ +x.match(/\((\d+)\)/)[1],0)}  →  최대 유량과 일치 ✔`;
 }
