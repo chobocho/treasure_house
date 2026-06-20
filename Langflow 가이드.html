@@ -12716,5 +12716,108 @@ runFlow("한 문장으로 응원해줘", { sessionId: "user-42" })
   }
 </script>
 
+<script>
+/* 의존성 없는 경량 구문 강조기 — 기존 테마의 Pandoc 토큰 색상 클래스(kw/st/co/dv/fu/op/at/cn/va)를 재사용 */
+(function(){
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  var KW={
+    bash:{kw:'if then else elif fi for while until do done case esac in function select',
+          fu:'echo cd export curl jq cat grep sed awk sudo docker pip pip3 python python3 uv langflow npm node git ls rm mkdir mv cp set source read exit printf systemctl wget xargs head tail sort uniq tr cut chmod chown env sleep kill ps tee nohup',
+          cn:'true false'},
+    python:{kw:'def class return if elif else for while with as try except finally raise import from in not and or lambda yield async await pass break continue global nonlocal del assert is',
+            cn:'True False None',
+            fu:'print len range str int float dict list tuple set bool open type isinstance enumerate zip map filter sum min max sorted super self requests httpx json os sys time asyncio Exception'},
+    javascript:{kw:'const let var function return if else for while do switch case break continue class extends new delete typeof instanceof in of try catch finally throw async await import export from default this super yield void',
+                cn:'true false null undefined NaN',
+                fu:'console document window fetch JSON Object Array Promise Math Number String Boolean require module process Response Headers ReadableStream TextDecoder TextEncoder setTimeout localStorage AbortController'},
+    generic:{kw:'FROM RUN CMD ENV WORKDIR COPY ADD EXPOSE ENTRYPOINT VOLUME ARG LABEL USER HEALTHCHECK server location listen proxy_pass proxy_set_header upstream include root return ssl_certificate ssl_certificate_key worker_processes worker_connections events http server_name'}
+  };
+  function setOf(s){var o={};(s||'').split(' ').forEach(function(w){if(w)o[w]=1;});return o;}
+  var SETS={};
+  Object.keys(KW).forEach(function(l){SETS[l]={};Object.keys(KW[l]).forEach(function(c){SETS[l][c]=setOf(KW[l][c]);});});
+
+  function detect(cls,code){
+    cls=(cls||'').toLowerCase().replace(/^lang(uage)?-/,'');
+    if(cls==='sh'||cls==='shell'||cls==='console')cls='bash';
+    if(cls==='py')cls='python';
+    if(cls==='js'||cls==='ts'||cls==='typescript'||cls==='jsx')cls='javascript';
+    if(cls==='yml')cls='yaml';
+    if(cls==='docker')cls='dockerfile';
+    var known={bash:1,python:1,javascript:1,json:1,yaml:1,nginx:1,dockerfile:1};
+    if(known[cls])return cls==='nginx'||cls==='dockerfile'?'generic':cls;
+    var c=code;
+    if(/^\s*[\[{]/.test(c)&&/"\s*:/.test(c)&&!/\bdef\b|=>/.test(c))return 'json';
+    if(/\bdef \b|\bimport \b|\bprint\(|\bself\b|->\s*\w/.test(c))return 'python';
+    if(/\bconst \b|\blet \b|=>|console\.|\bfunction\b|\bawait fetch/.test(c))return 'javascript';
+    if(/(^|\n)\s*(curl|cd|export|docker|pip|python|npm|git|sudo|echo|uv|langflow|mkdir|chmod)\b/.test(c)||/^\s*[$#]/.test(c)||/(^|\n)(FROM|RUN|CMD|ENV|WORKDIR|COPY) /.test(c))return /(^|\n)(FROM|RUN|CMD|ENV|WORKDIR|COPY) /.test(c)?'generic':'bash';
+    if(/(^|\n)[\w.-]+\s*:/.test(c)&&!/[{};]|=>/.test(c))return 'yaml';
+    return 'generic';
+  }
+
+  function rulesFor(lang){
+    var R=[{re:/\s+/y}];
+    if(lang==='json'){
+      R.push({re:/"(?:\\.|[^"\\])*"(?=\s*:)/y,cls:'at'});
+      R.push({re:/"(?:\\.|[^"\\])*"/y,cls:'st'});
+      R.push({re:/\b(?:true|false|null)\b/y,cls:'cn'});
+      R.push({re:/-?\d[\d.eE+\-]*/y,cls:'dv'});
+      R.push({re:/[{}\[\]:,]/y,cls:'op'});
+      return R;
+    }
+    if(lang==='yaml'){
+      R.push({re:/#.*/y,cls:'co'});
+      R.push({re:/[A-Za-z_][\w.\-]*(?=\s*:)/y,cls:'at'});
+      R.push({re:/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/y,cls:'st'});
+      R.push({re:/\b(?:true|false|null|yes|no|on|off)\b/yi,cls:'cn'});
+      R.push({re:/-?\d[\d.eE+\-]*/y,cls:'dv'});
+      R.push({re:/[\-:|>]/y,cls:'op'});
+      return R;
+    }
+    if(lang==='javascript'){R.push({re:/\/\/.*/y,cls:'co'});R.push({re:/\/\*[\s\S]*?\*\//y,cls:'co'});}
+    else {R.push({re:/#.*/y,cls:'co'});}
+    if(lang==='python'){R.push({re:/[rbfRBF]{0,2}"""[\s\S]*?"""/y,cls:'st'});R.push({re:/[rbfRBF]{0,2}'''[\s\S]*?'''/y,cls:'st'});}
+    if(lang==='javascript'){R.push({re:/`(?:\\.|[^`\\])*`/y,cls:'st'});}
+    R.push({re:/[rbfRBF]{0,2}"(?:\\.|[^"\\])*"/y,cls:'st'});
+    R.push({re:/[rbfRBF]{0,2}'(?:\\.|[^'\\])*'/y,cls:'st'});
+    if(lang==='python'){R.push({re:/@\w+/y,cls:'at'});}
+    if(lang==='bash'){R.push({re:/\$\{?\w+\}?/y,cls:'va'});}
+    R.push({re:/-?\b\d[\d_]*\.?\d*(?:[eE][+\-]?\d+)?\b/y,cls:'dv'});
+    var sets=SETS[lang]||SETS.generic;
+    R.push({re:/[A-Za-z_][\w\-]*/y,fn:function(t){
+      if(sets.kw&&sets.kw[t])return 'kw';
+      if(sets.cn&&sets.cn[t])return 'cn';
+      if(sets.fu&&sets.fu[t])return 'fu';
+      return null;
+    }});
+    R.push({re:/[\-+*/%=<>!&|^~?:.;(){}\[\]]+/y,cls:'op'});
+    return R;
+  }
+
+  function hl(code,lang){
+    var R=rulesFor(lang),out='',i=0,n=code.length,guard=0;
+    while(i<n){
+      var matched=false;
+      for(var k=0;k<R.length;k++){
+        var r=R[k];r.re.lastIndex=i;var m=r.re.exec(code);
+        if(m&&m.index===i&&m[0].length>0){
+          var t=m[0],cls=r.cls||(r.fn?r.fn(t):null);
+          out+=cls?'<span class="'+cls+'">'+esc(t)+'</span>':esc(t);
+          i+=t.length;matched=true;break;
+        }
+      }
+      if(!matched){out+=esc(code[i]);i++;}
+      if(++guard>2000000)break;
+    }
+    return out;
+  }
+
+  var blocks=document.querySelectorAll('main.prose pre > code');
+  Array.prototype.forEach.call(blocks,function(code){
+    var lang=detect(code.className,code.textContent);
+    try{code.innerHTML=hl(code.textContent,lang);code.setAttribute('data-lang',lang);}catch(e){}
+  });
+})();
+</script>
+
 </body>
 </html>
