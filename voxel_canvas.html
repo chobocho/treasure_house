@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>복셀 엔진 — 바닐라 JS 캔버스 (독립 실행)</title>
+<style>html,body{margin:0;height:100%;background:#0c1016;overflow:hidden}
+#c{display:block;width:100vw;height:100vh;touch-action:none}
+#h{position:fixed;left:10px;top:8px;color:#c3cfc9;font:13px monospace;pointer-events:none}</style>
+</head><body>
+<canvas id="c" width="900" height="640"></canvas>
+<div id="h">드래그: 회전 · 휠: 확대/축소 — 복셀 엔진 (약 110줄, 라이브러리 0)</div>
+<script>
+/* ============================================================
+   복셀 엔진 코어 — 슬라이드 본문 코드와 100% 동일한 알고리즘
+   (브라우저 캔버스 데모와 node 헤드리스 검증이 이 파일을 공유)
+   ============================================================ */
+
+/* ---------- 벡터 ---------- */
+function V(x,y,z){return {x:x,y:y,z:z};}
+function vadd(a,b){return V(a.x+b.x,a.y+b.y,a.z+b.z);}
+function vsub(a,b){return V(a.x-b.x,a.y-b.y,a.z-b.z);}
+function vscale(a,s){return V(a.x*s,a.y*s,a.z*s);}
+function vdot(a,b){return a.x*b.x+a.y*b.y+a.z*b.z;}
+function vlen(a){return Math.sqrt(vdot(a,a));}
+function vnorm(a){const l=vlen(a)||1;return V(a.x/l,a.y/l,a.z/l);}
+
+/* ---------- 카메라: 월드 점을 카메라 공간으로 ---------- */
+/* yaw = Y축 회전(좌우 둘러보기), pitch = X축 회전(위아래).
+   결과 좌표계는 +z 가 화면 안쪽(정면). z>0 이면 카메라 앞. */
+function viewTransform(cam,p){
+  const dx=p.x-cam.pos.x, dy=p.y-cam.pos.y, dz=p.z-cam.pos.z;
+  const cy=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
+  const x1= dx*cy - dz*sy;
+  const z1= dx*sy + dz*cy;
+  const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  const y2= dy*cp - z1*sp;   // pitch>0 이면 위를 바라봄
+  const z2= dy*sp + z1*cp;
+  return {x:x1, y:y2, z:z2};
+}
+/* ---------- 원근 투영: 카메라 공간 → 화면 픽셀 ---------- */
+function project(v,W,H,focal){
+  const s=focal/v.z;
+  return {x:W*0.5 + v.x*s, y:H*0.5 - v.y*s, z:v.z};
+}
+
+/* ---------- 큐브의 6면 정의 ----------
+   각 면: 정점 4개(로컬 0/1 좌표) + 바깥 법선 + 이웃 방향(dx,dy,dz) + 밝기 */
+const FACES=[
+  {n:V( 0, 1, 0), d:[0, 1,0], v:[[0,1,0],[0,1,1],[1,1,1],[1,1,0]], lit:1.00}, // 윗면
+  {n:V( 0,-1, 0), d:[0,-1,0], v:[[0,0,1],[0,0,0],[1,0,0],[1,0,1]], lit:0.45}, // 아랫면
+  {n:V( 0, 0,-1), d:[0,0,-1], v:[[0,0,0],[0,1,0],[1,1,0],[1,0,0]], lit:0.80}, // 북(-z)
+  {n:V( 0, 0, 1), d:[0,0, 1], v:[[1,0,1],[1,1,1],[0,1,1],[0,0,1]], lit:0.80}, // 남(+z)
+  {n:V(-1, 0, 0), d:[-1,0,0], v:[[0,0,1],[0,1,1],[0,1,0],[0,0,0]], lit:0.62}, // 서(-x)
+  {n:V( 1, 0, 0), d:[1,0,0],  v:[[1,0,0],[1,1,0],[1,1,1],[1,0,1]], lit:0.62}  // 동(+x)
+];
+
+/* ---------- 복셀 월드 ---------- */
+function World(sx,sy,sz){
+  return {sx:sx,sy:sy,sz:sz,data:new Uint8Array(sx*sy*sz)};
+}
+function inb(w,x,y,z){return x>=0&&y>=0&&z>=0&&x<w.sx&&y<w.sy&&z<w.sz;}
+function getV(w,x,y,z){return inb(w,x,y,z)?w.data[(y*w.sz+z)*w.sx+x]:0;}
+function setV(w,x,y,z,v){if(inb(w,x,y,z))w.data[(y*w.sz+z)*w.sx+x]=v;}
+
+/* ---------- 팔레트 ---------- */
+const PAL={
+  1:[124,196,84], 2:[150,110,74], 3:[130,132,140], 4:[210,180,70],
+  5:[210,70,60], 6:[70,130,210], 7:[200,120,200], 8:[235,235,240]
+};
+function shade(rgb,f){return 'rgb('+((rgb[0]*f)|0)+','+((rgb[1]*f)|0)+','+((rgb[2]*f)|0)+')';}
+
+/* ---------- 가시 면 추출(이웃 컬링) + 화가 정렬 + 백페이스 컬링 ---------- */
+function buildFaces(w,cam,W,H,focal){
+  const out=[];
+  for(let y=0;y<w.sy;y++)for(let z=0;z<w.sz;z++)for(let x=0;x<w.sx;x++){
+    const block=getV(w,x,y,z);
+    if(!block)continue;
+    for(let fi=0;fi<6;fi++){
+      const F=FACES[fi];
+      // 1) 이웃이 채워져 있으면 내부 면 → 건너뜀
+      if(getV(w,x+F.d[0],y+F.d[1],z+F.d[2]))continue;
+      // 2) 면 중심 + 백페이스 컬링(법선이 카메라를 향할 때만)
+      const cx=x+0.5+F.n.x*0.5, cy=y+0.5+F.n.y*0.5, cz=z+0.5+F.n.z*0.5;
+      const toEye=vsub(cam.pos,V(cx,cy,cz));
+      if(vdot(F.n,toEye)<=0)continue;
+      // 3) 4개 정점을 화면으로 투영, 하나라도 카메라 뒤면 버림
+      const pts=[]; let behind=false, caz=0;
+      for(let k=0;k<4;k++){
+        const lv=F.v[k];
+        const cs=viewTransform(cam,V(x+lv[0],y+lv[1],z+lv[2]));
+        if(cs.z<0.05){behind=true;break;}
+        caz+=cs.z;
+        pts.push(project(cs,W,H,focal));
+      }
+      if(behind)continue;
+      out.push({pts:pts, depth:caz*0.25, color:shade(PAL[block]||PAL[1],F.lit)});
+    }
+  }
+  // 4) 화가 알고리즘: 먼 면 먼저
+  out.sort(function(a,b){return b.depth-a.depth;});
+  return out;
+}
+
+/* ---------- 캔버스로 그리기 ---------- */
+function drawFaces(ctx,faces){
+  for(let i=0;i<faces.length;i++){
+    const f=faces[i], p=f.pts;
+    ctx.beginPath();
+    ctx.moveTo(p[0].x,p[0].y);
+    ctx.lineTo(p[1].x,p[1].y);
+    ctx.lineTo(p[2].x,p[2].y);
+    ctx.lineTo(p[3].x,p[3].y);
+    ctx.closePath();
+    ctx.fillStyle=f.color;
+    ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.18)';
+    ctx.lineWidth=1;
+    ctx.stroke();
+  }
+}
+
+/* ---------- 레이 피킹: 화면 픽셀 → 월드 광선 ----------
+   투영의 역: 카메라 공간 방향 (sx-W/2, -(sy-H/2), focal)을
+   카메라 회전의 역(inverse pitch → inverse yaw)으로 월드로 되돌린다. */
+function screenRay(cam,sx,sy,W,H,focal){
+  // 1) 카메라 공간 광선: 투영식을 거꾸로
+  const dx=sx-W*0.5, dy=-(sy-H*0.5), dz=focal;
+  // 2) 역 pitch (X축 회전 되돌리기)
+  const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  const py=dy*cp+dz*sp, pz=-dy*sp+dz*cp;
+  // 3) 역 yaw (Y축 회전 되돌리기)
+  const cy=Math.cos(cam.yaw), sy2=Math.sin(cam.yaw);
+  const wx=dx*cy+pz*sy2, wy=py, wz=-dx*sy2+pz*cy;
+  // 4) 단위 벡터로
+  const l=Math.hypot(wx,wy,wz)||1;
+  return {x:wx/l, y:wy/l, z:wz/l};
+}
+
+/* ---------- 3D-DDA (Amanatides & Woo): 첫 충돌 복셀 + 면 법선 ---------- */
+function raycastVoxel(w,orig,dir,maxDist){
+  let ix=Math.floor(orig.x);
+  let iy=Math.floor(orig.y);
+  let iz=Math.floor(orig.z);
+  const sX=dir.x>0?1:-1;
+  const sY=dir.y>0?1:-1;
+  const sZ=dir.z>0?1:-1;
+  const tdX=Math.abs(1/dir.x);
+  const tdY=Math.abs(1/dir.y);
+  const tdZ=Math.abs(1/dir.z);
+  let tmX=(dir.x>0?ix+1-orig.x:orig.x-ix)*tdX;
+  let tmY=(dir.y>0?iy+1-orig.y:orig.y-iy)*tdY;
+  let tmZ=(dir.z>0?iz+1-orig.z:orig.z-iz)*tdZ;
+  let nx=0,ny=0,nz=0,t=0;
+  for(let i=0;i<512;i++){
+    if(getV(w,ix,iy,iz))
+      return {hit:true,x:ix,y:iy,z:iz,nx:nx,ny:ny,nz:nz};
+    if(tmX<tmZ&&tmX<tmY){
+      ix+=sX; t=tmX; tmX+=tdX; nx=-sX;ny=0;nz=0;
+    }else if(tmY<tmZ){
+      iy+=sY; t=tmY; tmY+=tdY; nx=0;ny=-sY;nz=0;
+    }else{
+      iz+=sZ; t=tmZ; tmZ+=tdZ; nx=0;ny=0;nz=-sZ;
+    }
+    if(t>maxDist)break;
+  }
+  return {hit:false};
+}
+
+// ---------- 실행용 헬퍼 ----------
+function genTerrain(sx,sy,sz){
+  const w=World(sx,sy,sz);
+  for(let x=0;x<sx;x++)for(let z=0;z<sz;z++){
+    const h=Math.max(1,Math.min(sy,(2+(Math.sin(x*0.5)+Math.cos(z*0.4)+2)*1.4)|0));
+    for(let y=0;y<h;y++)setV(w,x,y,z,(y===h-1)?1:2);
+  }
+  return w;
+}
+function lookAtCam(pos,t){const d=vsub(t,pos),h=Math.hypot(d.x,d.z);
+  return {pos:pos,yaw:Math.atan2(d.x,d.z),pitch:Math.atan2(d.y,h)};}
+
+// ---------- 부트스트랩 ----------
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const world=genTerrain(20,10,20), center=V(10,2,10);
+let yaw=0.7,pitch=0.55,dist=32,drag=false,lx=0,ly=0;
+cv.addEventListener('pointerdown',e=>{drag=true;lx=e.clientX;ly=e.clientY;});
+window.addEventListener('pointerup',()=>drag=false);
+window.addEventListener('pointermove',e=>{if(!drag)return;
+  yaw-=(e.clientX-lx)*0.01;pitch=Math.max(-1.4,Math.min(1.4,pitch+(e.clientY-ly)*0.01));
+  lx=e.clientX;ly=e.clientY;});
+window.addEventListener('wheel',e=>{dist=Math.max(10,Math.min(70,dist+Math.sign(e.deltaY)*2));},{passive:true});
+function loop(){
+  const eye=V(center.x+Math.sin(yaw)*Math.cos(pitch)*dist,
+             center.y+Math.sin(pitch)*dist,
+             center.z+Math.cos(yaw)*Math.cos(pitch)*dist);
+  const cam=lookAtCam(eye,center);
+  const g=ctx.createLinearGradient(0,0,0,cv.height);
+  g.addColorStop(0,'#1a2740');g.addColorStop(1,'#38506a');
+  ctx.fillStyle=g;ctx.fillRect(0,0,cv.width,cv.height);
+  drawFaces(ctx,buildFaces(world,cam,cv.width,cv.height,760));
+  requestAnimationFrame(loop);
+}
+loop();
+
+</script>
+</body></html>
