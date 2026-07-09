@@ -30,6 +30,7 @@ local OFFROAD_DECEL   = -MAX_SPEED / 2
 local OFFROAD_LIMIT   = MAX_SPEED / 4
 local CENTRIFUGAL     = 0.3         -- 원심력 계수
 local CAM_DEPTH                     -- 1/tan(fov/2), love.load 에서 계산
+local PLAYER_Z                      -- 카메라→플레이어 z 거리 = CAM_HEIGHT*CAM_DEPTH
 
 -- ─── 색 팔레트 (라이트/다크 교대) ──────────────────────────────────────────
 local function rgb(r,g,b) return {r/255, g/255, b/255} end
@@ -48,8 +49,7 @@ local trackLength = 0
 local position = 0     -- 카메라의 z 위치(월드)
 local playerX = 0      -- 도로중앙 기준 가로 위치(-1..1 이 도로폭)
 local speed = 0
-local cars = {}        -- 교통 차량
-local sprites = {}      -- (도로변 오브젝트는 세그먼트에 부착)
+local cars = {}        -- 교통 차량 (도로변 오브젝트는 각 세그먼트에 부착)
 local hud = { lap=1, time=0, best=nil }
 local keys = {}
 
@@ -64,7 +64,9 @@ local function project(p, camX, camY, camZ)
   p.camera.x = (p.world.x or 0) - camX
   p.camera.y = (p.world.y or 0) - camY
   p.camera.z = (p.world.z or 0) - camZ
-  p.screen.scale = CAM_DEPTH / p.camera.z
+  -- 카메라 평면(z≈0) 근처에서 0 나눗셈으로 inf/nan 이 생기지 않게 분모 보호
+  -- (camera.z <= CAM_DEPTH 인 세그먼트는 어차피 render 에서 건너뜀)
+  p.screen.scale = CAM_DEPTH / math.max(p.camera.z, 1e-6)
   p.screen.x = math.floor((W/2) + (p.screen.scale * p.camera.x * W/2))
   p.screen.y = math.floor((H/2) - (p.screen.scale * p.camera.y * H/2))
   p.screen.w = math.floor(p.screen.scale * ROAD_W * W/2)
@@ -93,9 +95,10 @@ local function addRoad(enter, hold, leave, curve, y)
   local startY = lastY()
   local endY   = startY + (y or 0) * SEG_LEN
   local total  = enter + hold + leave
-  for i=0,enter-1 do addSegment(easeIn(0,curve,i/enter),      easeInOut(startY,endY,i/total)) end
-  for i=0,hold-1  do addSegment(curve,                        easeInOut(startY,endY,(enter+i)/total)) end
-  for i=0,leave-1 do addSegment(easeInOut(curve,0,i/leave),   easeInOut(startY,endY,(enter+hold+i)/total)) end
+  -- p2(먼 모서리)의 y 를 (i+1)/total 로 두어 마지막 세그먼트가 endY 에 정확히 도달
+  for i=0,enter-1 do addSegment(easeIn(0,curve,i/enter),      easeInOut(startY,endY,(i+1)/total)) end
+  for i=0,hold-1  do addSegment(curve,                        easeInOut(startY,endY,(enter+i+1)/total)) end
+  for i=0,leave-1 do addSegment(easeInOut(curve,0,i/leave),   easeInOut(startY,endY,(enter+hold+i+1)/total)) end
 end
 
 local ROAD = { LENGTH={NONE=0,SHORT=25,MEDIUM=50,LONG=100},
@@ -165,7 +168,7 @@ local function renderSegment(seg, fogAmt)
   quad(p1.x-p1.w,p1.y, p1.x+p1.w,p1.y, p2.x+p2.w,p2.y, p2.x-p2.w,p2.y, mix(SKY_BOT,c.road,fogAmt))
   -- 차선(라이트 색 세그먼트에만)
   if c.lane then
-    local lw1 = p1.w/40*2/LANES*0 + p1.w*0.02
+    local lw1 = p1.w*0.02
     local lw2 = p2.w*0.02
     for l=1,LANES-1 do
       local lx1 = p1.x - p1.w + (p1.w*2)*(l/LANES)
@@ -176,8 +179,12 @@ local function renderSegment(seg, fogAmt)
 end
 
 -- ─── 도로변 스프라이트/차량(빌보드) 렌더 ──────────────────────────────────
+-- 크기는 도로와 같은 월드→화면 계수(scale*ROAD_W*W/2)에 비례시켜야
+-- 원근이 도로와 일치한다. 뒤의 상수는 도로 절반폭 대비 비율.
+local function spriteBase(scale) return scale*ROAD_W*W/2 end
+
 local function drawTree(cx, baseY, scale, fogAmt)
-  local h = scale*260
+  local h = spriteBase(scale)*1.2
   if h < 2 then return end
   local trunkW = math.max(2, h*0.12)
   love.graphics.setColor(mix(SKY_BOT, rgb(70,45,30), fogAmt))
@@ -186,7 +193,7 @@ local function drawTree(cx, baseY, scale, fogAmt)
   love.graphics.polygon('fill', cx,baseY-h, cx-h*0.35,baseY-h*0.30, cx+h*0.35,baseY-h*0.30)
 end
 local function drawPalm(cx, baseY, scale, fogAmt)
-  local h = scale*320
+  local h = spriteBase(scale)*1.5
   if h<2 then return end
   love.graphics.setColor(mix(SKY_BOT, rgb(60,40,26), fogAmt))
   love.graphics.setLineWidth(math.max(2,h*0.05))
@@ -196,8 +203,7 @@ local function drawPalm(cx, baseY, scale, fogAmt)
   for a=-2,2 do love.graphics.line(tx,ty, tx+a*h*0.14, ty+math.abs(a)*h*0.10 - h*0.06) end
 end
 local function drawCar(cx, baseY, scale, col, fogAmt)
-  local w = scale*ROAD_W*W/2 * 0.00110
-  local wpx = math.max(4, scale*260)
+  local wpx = math.max(4, spriteBase(scale)*0.55)  -- 대략 한 차선 폭
   local hpx = wpx*0.6
   love.graphics.setColor(mix(SKY_BOT, col, fogAmt))
   love.graphics.rectangle('fill', cx-wpx/2, baseY-hpx, wpx, hpx, wpx*0.12)
@@ -209,7 +215,6 @@ local function drawCar(cx, baseY, scale, col, fogAmt)
 end
 
 -- ─── 배경(하늘·노을·산) ───────────────────────────────────────────────────
-local skyMesh
 local function drawBackground(baseCurve)
   -- 하늘 그라디언트
   local steps=40
@@ -251,16 +256,15 @@ local function render()
     x  = x + dx
     dx = dx + seg.curve
 
-    if seg.p1.camera.z <= CAM_DEPTH        -- 카메라 뒤
-       or seg.p2.screen.y >= seg.p1.screen.y  -- 뒤집힘
-       or seg.p2.screen.y >= maxy then       -- 이미 가려짐
-      -- skip
-    else
+    local skipped = seg.p1.camera.z <= CAM_DEPTH      -- 카메라 뒤
+       or seg.p2.screen.y >= seg.p1.screen.y          -- 뒤집힘
+       or seg.p2.screen.y >= maxy                     -- 이미 가려짐
+    if not skipped then
       renderSegment(seg, fogAmt)
       maxy = seg.p2.screen.y
     end
     seg._fog = fogAmt
-    seg._drawn = not (seg.p1.camera.z <= CAM_DEPTH)
+    seg._drawn = not skipped   -- 도로가 안 그려진(가려진) 세그먼트는 스프라이트도 생략
   end
 
   -- 스프라이트·차량: 앞에서 뒤로(painter) 그려 원근 겹침 처리
@@ -314,28 +318,33 @@ end
 -- ============================================================================
 --  LÖVE 콜백
 -- ============================================================================
-function love.load()
-  love.window.setMode(900, 540, {resizable=true, minwidth=320, minheight=240})
-  love.graphics.setDefaultFilter('nearest','nearest')
-  W,H = love.graphics.getDimensions()
-  CAM_DEPTH = 1 / math.tan((FOV/2)*math.pi/180)
+local function resetGame()      -- 창은 건드리지 않고 게임 상태만 초기화
   math.randomseed(os.time())
   buildTrack()
   position, playerX, speed = 0,0,0
   hud = {lap=1, time=0, best=nil}
 end
 
+function love.load()
+  love.window.setMode(900, 540, {resizable=true, minwidth=320, minheight=240})
+  love.graphics.setDefaultFilter('nearest','nearest')
+  W,H = love.graphics.getDimensions()
+  CAM_DEPTH = 1 / math.tan((FOV/2)*math.pi/180)
+  PLAYER_Z  = CAM_HEIGHT * CAM_DEPTH
+  resetGame()
+end
+
 function love.resize(w,h) W,H = w,h end
 
 function love.keypressed(k)
   if k=='escape' then love.event.quit() end
-  if k=='r' then love.load() end
+  if k=='r' then resetGame() end
   if k=='space' then playerX = 0 end
 end
 
 function love.update(dt)
   dt = math.min(dt, 1/30)
-  local seg = findSegment(position + CAM_DEPTH)   -- 살짝 앞을 봄
+  local seg = findSegment(position + PLAYER_Z)    -- 플레이어(카메라보다 살짝 앞) 위치의 세그먼트
   local speedPct = speed/MAX_SPEED
   hud.time = hud.time + dt
 
