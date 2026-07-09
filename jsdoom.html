@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSDoom — 레이캐스팅 Doom 클론 (바닐라 JS + Canvas)</title>
+<style>
+  body{margin:0;background:#111;display:flex;flex-direction:column;
+       align-items:center;font-family:monospace;color:#ddd;}
+  h1{font-size:16px;margin:10px 0 6px;}
+  canvas{width:min(96vw,960px);image-rendering:pixelated;background:#000;}
+  #pad{display:flex;gap:8px;margin:10px;flex-wrap:wrap;justify-content:center;}
+  #pad button{font-size:18px;padding:12px 18px;background:#222;color:#eee;
+       border:1px solid #555;border-radius:10px;touch-action:none;user-select:none;}
+  p{font-size:12px;color:#888;}
+</style>
+</head>
+<body>
+<h1>JSDoom — Raycasting Clone</h1>
+<canvas id="screen" width="640" height="400"></canvas>
+<div id="pad">
+  <button data-k="KeyA">&#8634;</button><button data-k="KeyW">&#9650;</button>
+  <button data-k="KeyD">&#8635;</button><button data-k="KeyS">&#9660;</button>
+  <button data-k="Space">FIRE</button><button data-k="KeyF">OPEN</button>
+</div>
+<p>W/S 이동 · A/D 회전 · Q/E 옆걸음 · Space 발사 · F 문 열기 · Tab 미니맵 · R 재시작</p>
+<script>
+'use strict';
+// =============================================================
+//  JSDoom — 레이캐스팅 Doom 클론 (바닐라 JS 단일 파일 완성본)
+// =============================================================
+
+// ---------- 1. 상수 ----------
+var W = 640, H = 400, HALF_H = H >> 1;
+var FOV = Math.PI / 3;            // 시야각 60도
+var MAX_DEPTH = 24;
+var TEX = 64;                     // 텍스처 한 변
+var MOVE_SPD = 3.2, ROT_SPD = 2.6;
+
+// ---------- 2. 맵 ----------
+// 0 빈칸 / 1 벽돌 / 2 돌 / 3 금속 / 4 문 / 5 출구
+var MAP_STR = [
+  '1111111111111111',
+  '1000000110000001',
+  '1020000110000201',
+  '1000000000000001',
+  '1000111141110001',
+  '1000100000010001',
+  '1300100000010031',
+  '1000100000010001',
+  '1000111411110001',
+  '1000000000000001',
+  '1020000330000201',
+  '1000000330000001',
+  '1000000000000051',
+  '1111111111111111'
+];
+var MAP_W = MAP_STR[0].length, MAP_H = MAP_STR.length;
+var world = [];
+function cell(x, y) {
+  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return 1;
+  return world[y][x];
+}
+
+// ---------- 3. 절차적 텍스처 ----------
+// 텍스처는 Uint32Array (ABGR 리틀엔디언) 로 저장한다.
+function rgb(r, g, b) { return (0xff000000 | (b << 16) | (g << 8) | r) >>> 0; }
+
+function makeTexture(id) {
+  var t = new Uint32Array(TEX * TEX), x, y, c, row, off, mortar, n, g;
+  for (y = 0; y < TEX; y++) for (x = 0; x < TEX; x++) {
+    if (id === 1) {                       // 벽돌
+      row = (y >> 4); off = (row & 1) ? 16 : 0;
+      mortar = (y % 16 < 2) || ((x + off) % 32 < 2);
+      c = mortar ? rgb(60, 24, 20) : rgb(150, 60, 44);
+      if (!mortar && (x * 7 + y * 13) % 31 === 0) c = rgb(120, 46, 36);
+    } else if (id === 2) {                // 돌
+      n = (x * x * 3 + y * y * 7 + x * y) % 97;
+      g = 90 + (n % 40); c = rgb(g, g, g + 8);
+      if ((x + y * 3) % 23 === 0) c = rgb(70, 70, 78);
+    } else if (id === 3) {                // 금속판
+      g = 70 + (y % 16) * 3; c = rgb(g - 20, g, g + 14);
+      if (x % 16 < 2 || y % 16 < 2) c = rgb(40, 46, 56);
+      if ((x % 16 === 4 || x % 16 === 12) && (y % 16 === 4 || y % 16 === 12))
+        c = rgb(180, 190, 205);
+    } else if (id === 4) {                // 문
+      c = (((x >> 3) + (y >> 3)) & 1) ? rgb(40, 90, 60) : rgb(30, 70, 46);
+      if (x >= 28 && x < 36) c = rgb(200, 170, 60);
+    } else {                              // 출구
+      c = (((x >> 3) + (y >> 3)) & 1) ? rgb(160, 30, 30) : rgb(240, 220, 210);
+    }
+    t[y * TEX + x] = c;
+  }
+  return t;
+}
+var TEXS = { 1: makeTexture(1), 2: makeTexture(2), 3: makeTexture(3),
+             4: makeTexture(4), 5: makeTexture(5) };
+
+// ---------- 4. 스프라이트 그림 ----------
+// 작은 오프스크린 캔버스에 도형으로 그린 뒤 픽셀 배열로 뽑아 온다.
+function drawToArray(draw) {
+  var cv = document.createElement('canvas');
+  cv.width = TEX; cv.height = TEX;
+  var c = cv.getContext('2d');
+  draw(c);
+  return new Uint32Array(c.getImageData(0, 0, TEX, TEX).data.buffer);
+}
+var IMG_IMP = drawToArray(function (c) {
+  var x, y, dx, dy;
+  c.fillStyle = '#8c4628';
+  for (y = 0; y < TEX; y++) for (x = 0; x < TEX; x++) {
+    dx = x - 32; dy = y - 34;
+    if ((dx * dx >> 1) + dy * dy < 500) c.fillRect(x, y, 1, 1);   // 몸통
+  }
+  c.beginPath(); c.arc(32, 16, 11, 0, 7); c.fill();               // 머리
+  c.fillStyle = '#c8b4a0';                                        // 뿔
+  c.beginPath(); c.moveTo(22, 8); c.lineTo(18, 0); c.lineTo(26, 6); c.fill();
+  c.beginPath(); c.moveTo(42, 8); c.lineTo(46, 0); c.lineTo(38, 6); c.fill();
+  c.fillStyle = '#8c4628';
+  c.fillRect(14, 30, 8, 20); c.fillRect(42, 30, 8, 20);           // 팔
+  c.fillStyle = '#6e3220';
+  c.fillRect(24, 52, 7, 12); c.fillRect(33, 52, 7, 12);           // 다리
+  c.fillStyle = '#fff050';                                        // 눈
+  c.fillRect(25, 12, 4, 4); c.fillRect(35, 12, 4, 4);
+  c.fillStyle = '#000';
+  c.fillRect(26, 13, 2, 2); c.fillRect(36, 13, 2, 2);
+});
+var IMG_MEDKIT = drawToArray(function (c) {
+  c.fillStyle = '#ebebeb'; c.fillRect(16, 34, 32, 22);
+  c.fillStyle = '#c82828'; c.fillRect(28, 38, 8, 14); c.fillRect(25, 41, 14, 8);
+});
+
+// ---------- 5. 게임 상태 ----------
+var player, sprites, over, msg, msgT, gunKick, showMap = true;
+function resetWorld() {
+  var y;
+  world = [];
+  for (y = 0; y < MAP_H; y++) world.push(MAP_STR[y].split('').map(Number));
+  player = { x: 1.5, y: 1.5, ang: 0.3, hp: 100, ammo: 40 };
+  sprites = [
+    { x: 9.5,  y: 1.5,  kind: 'imp', hp: 3, alive: true, cool: 0 },
+    { x: 12.5, y: 6.5,  kind: 'imp', hp: 3, alive: true, cool: 0 },
+    { x: 6.5,  y: 11.5, kind: 'imp', hp: 3, alive: true, cool: 0 },
+    { x: 10.5, y: 10.5, kind: 'imp', hp: 3, alive: true, cool: 0 },
+    { x: 2.5,  y: 12.2, kind: 'imp', hp: 3, alive: true, cool: 0 },
+    { x: 4.5,  y: 9.5,  kind: 'medkit', hp: 0, alive: true, cool: 0 },
+    { x: 14.5, y: 2.5,  kind: 'medkit', hp: 0, alive: true, cool: 0 }
+  ];
+  over = ''; msg = ''; msgT = 0; gunKick = 0;
+}
+resetWorld();
+
+// ---------- 6. DDA 레이캐스팅 ----------
+// 반환: [맞은 칸 값, 거리, 벽면 위 x좌표(0~1), 남북면 여부]
+function castRay(px, py, ang) {
+  var sin = Math.sin(ang), cos = Math.cos(ang);
+  var mapX = px | 0, mapY = py | 0;
+  var ddx = cos === 0 ? 1e30 : Math.abs(1 / cos);
+  var ddy = sin === 0 ? 1e30 : Math.abs(1 / sin);
+  var stepX, stepY, sideX, sideY, side = 0, i, tile, dist, hit;
+  if (cos < 0) { stepX = -1; sideX = (px - mapX) * ddx; }
+  else         { stepX = 1;  sideX = (mapX + 1 - px) * ddx; }
+  if (sin < 0) { stepY = -1; sideY = (py - mapY) * ddy; }
+  else         { stepY = 1;  sideY = (mapY + 1 - py) * ddy; }
+  for (i = 0; i < 64; i++) {
+    if (sideX < sideY) { sideX += ddx; mapX += stepX; side = 0; }
+    else               { sideY += ddy; mapY += stepY; side = 1; }
+    tile = cell(mapX, mapY);
+    if (tile > 0) {
+      dist = side === 0 ? sideX - ddx : sideY - ddy;
+      if (dist < 1e-4) dist = 1e-4;
+      hit = side === 0 ? py + dist * sin : px + dist * cos;
+      return [tile, dist, hit - Math.floor(hit), side];
+    }
+  }
+  return [1, MAX_DEPTH, 0, 0];
+}
+
+// ---------- 7. 렌더링 ----------
+var canvas = document.getElementById('screen');
+var ctx = canvas.getContext('2d');
+var image = ctx.createImageData(W, H);
+var pix = new Uint32Array(image.data.buffer);   // 화면 전체 픽셀 버퍼
+var zbuf = new Float64Array(W);
+
+var C_CEIL = rgb(30, 34, 44), C_FLOOR = rgb(52, 46, 40);
+
+function shade(c, f) {           // 색 c 를 f(0~1) 배율로 어둡게
+  var r = (c & 255) * f, g = ((c >> 8) & 255) * f, b = ((c >> 16) & 255) * f;
+  return rgb(r | 0, g | 0, b | 0);
+}
+
+function renderWalls() {
+  var col, cam, rayAng, hitData, tile, dist, wallX, side, depth;
+  var lineH, y0, y1, texX, step, texPos, y, tex, c, fog;
+  for (col = 0; col < W; col++) {
+    // 화면 x좌표 → 광선 각도 (탄젠트 기반: 균등 간격 투영면)
+    cam = 2 * col / W - 1;
+    rayAng = player.ang + Math.atan(cam * Math.tan(FOV / 2));
+    hitData = castRay(player.x, player.y, rayAng);
+    tile = hitData[0]; dist = hitData[1]; wallX = hitData[2]; side = hitData[3];
+    depth = dist * Math.cos(rayAng - player.ang);      // 어안 보정
+    zbuf[col] = depth;
+    lineH = (H / depth) | 0;
+    y0 = HALF_H - (lineH >> 1); y1 = y0 + lineH;
+    if (y0 < 0) y0 = 0;
+    if (y1 > H) y1 = H;
+    tex = TEXS[tile];
+    texX = (wallX * TEX) | 0;
+    step = TEX / lineH;
+    texPos = (y0 - HALF_H + lineH / 2) * step;
+    fog = 1 - Math.min(1, depth / 14);                 // 거리 안개
+    if (side === 1) fog *= 0.62;                       // 남북 벽면은 그늘
+    for (y = y0; y < y1; y++) {
+      c = tex[((texPos | 0) & (TEX - 1)) * TEX + texX];
+      texPos += step;
+      pix[y * W + col] = shade(c, fog);
+    }
+    // 천장/바닥 (단색 + 거리 그라데이션)
+    for (y = 0; y < y0; y++)
+      pix[y * W + col] = shade(C_CEIL, 1 - y / H * 0.7);
+    for (y = y1; y < H; y++)
+      pix[y * W + col] = shade(C_FLOOR, (y - HALF_H) / HALF_H * 0.9 + 0.1);
+  }
+}
+
+function renderSprites() {
+  var order = sprites.filter(function (s) { return s.alive; });
+  order.sort(function (a, b) {
+    var da = (a.x - player.x) * (a.x - player.x) + (a.y - player.y) * (a.y - player.y);
+    var db = (b.x - player.x) * (b.x - player.x) + (b.y - player.y) * (b.y - player.y);
+    return db - da;                                   // 먼 것부터 그린다
+  });
+  order.forEach(function (s) {
+    var dx = s.x - player.x, dy = s.y - player.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 0.4 || dist > MAX_DEPTH) return;
+    var rel = Math.atan2(dy, dx) - player.ang;
+    rel = ((rel + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+    if (Math.abs(rel) > FOV / 2 + 0.4) return;
+    var depth = dist * Math.cos(rel);
+    var size = (H / depth) | 0;
+    if (size <= 1) return;
+    var sx = (((0.5 + Math.tan(rel) / (2 * Math.tan(FOV / 2))) * W) - size / 2) | 0;
+    var sy = HALF_H - (size >> 1);
+    var img = s.kind === 'imp' ? IMG_IMP : IMG_MEDKIT;
+    var i, y, col, tx, ty, c, fog = 1 - Math.min(1, depth / 14);
+    for (i = 0; i < size; i++) {
+      col = sx + i;
+      if (col < 0 || col >= W || depth >= zbuf[col]) continue;   // z버퍼 검사
+      tx = (i / size * TEX) | 0;
+      for (y = 0; y < size; y++) {
+        var sy2 = sy + y;
+        if (sy2 < 0 || sy2 >= H) continue;
+        ty = (y / size * TEX) | 0;
+        c = img[ty * TEX + tx];
+        if ((c >>> 24) < 128) continue;               // 투명 픽셀 건너뜀
+        pix[sy2 * W + col] = shade(c, fog);
+      }
+    }
+  });
+}
+
+function renderMinimap() {
+  var mm = 6, x, y, i, s;
+  for (y = 0; y < MAP_H * mm; y++) for (x = 0; x < MAP_W * mm; x++) {
+    var t = world[(y / mm) | 0][(x / mm) | 0];
+    pix[y * W + x] = t === 0 ? rgb(10, 10, 14) :
+                     t === 4 ? rgb(60, 160, 90) : rgb(90, 90, 110);
+  }
+  for (i = 0; i < sprites.length; i++) {
+    s = sprites[i];
+    if (s.alive && s.kind === 'imp')
+      fillRectPix((s.x * mm - 1) | 0, (s.y * mm - 1) | 0, 3, 3, rgb(220, 60, 40));
+  }
+  fillRectPix((player.x * mm - 1) | 0, (player.y * mm - 1) | 0, 3, 3, rgb(80, 220, 120));
+  for (i = 0; i < 8; i++) {
+    x = (player.x + Math.cos(player.ang) * i * 0.15) * mm | 0;
+    y = (player.y + Math.sin(player.ang) * i * 0.15) * mm | 0;
+    pix[y * W + x] = rgb(80, 220, 120);
+  }
+}
+function fillRectPix(x0, y0, w, h, c) {
+  var x, y;
+  for (y = y0; y < y0 + h; y++) for (x = x0; x < x0 + w; x++)
+    if (x >= 0 && y >= 0 && x < W && y < H) pix[y * W + x] = c;
+}
+
+function renderHud() {
+  ctx.putImageData(image, 0, 0);      // 픽셀 버퍼를 화면에 복사한 뒤
+  var gx = W / 2 - 22, gy = H - 62 + gunKick * 18;    // 그 위에 총/글자를 그린다
+  ctx.fillStyle = '#373c46';
+  ctx.beginPath();
+  ctx.moveTo(gx, H); ctx.lineTo(gx + 16, gy); ctx.lineTo(gx + 30, gy);
+  ctx.lineTo(gx + 44, H); ctx.fill();
+  ctx.fillStyle = '#23262e'; ctx.fillRect(gx + 17, gy - 14, 12, 20);
+  if (gunKick > 0.55) {                               // 총구 화염
+    ctx.fillStyle = '#ffdc5a';
+    ctx.beginPath(); ctx.arc(gx + 23, gy - 20, 10, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ff781e';
+    ctx.beginPath(); ctx.arc(gx + 23, gy - 20, 5, 0, 7); ctx.fill();
+  }
+  ctx.fillStyle = '#101016'; ctx.fillRect(0, H - 24, W, 24);
+  ctx.font = 'bold 14px monospace';
+  ctx.fillStyle = player.hp > 30 ? '#5adc5a' : '#e64632';
+  ctx.fillText('HP ' + player.hp, 10, H - 8);
+  ctx.fillStyle = '#f0c850';
+  ctx.fillText('AMMO ' + player.ammo, 110, H - 8);
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+  if (msgT > 0) ctx.fillText(msg, W / 2, 40);
+  if (over) {
+    ctx.fillStyle = '#ff5040'; ctx.font = 'bold 22px monospace';
+    ctx.fillText(over, W / 2, HALF_H);
+  }
+  ctx.textAlign = 'left';
+}
+
+// ---------- 8. 게임 로직 ----------
+function tryMove(nx, ny) {           // 벽에 부딪히면 축별로 미끄러진다
+  var r = 0.25;
+  if (cell((nx + (nx > player.x ? r : -r)) | 0, player.y | 0) === 0) player.x = nx;
+  if (cell(player.x | 0, (ny + (ny > player.y ? r : -r)) | 0) === 0) player.y = ny;
+}
+
+function fire() {
+  if (player.ammo <= 0) { msg = '탄약이 없다!'; msgT = 1.2; return; }
+  player.ammo--; gunKick = 1;
+  var best = null, bestD = 1e9;
+  sprites.forEach(function (s) {
+    if (!s.alive || s.kind !== 'imp') return;
+    var d = Math.hypot(s.x - player.x, s.y - player.y);
+    var a = Math.atan2(s.y - player.y, s.x - player.x);
+    var rel = ((a - player.ang + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+    if (Math.abs(rel) < 0.12 && d < bestD) {
+      if (castRay(player.x, player.y, a)[1] > d) { best = s; bestD = d; }
+    }
+  });
+  if (best) {
+    best.hp--;
+    if (best.hp <= 0) { best.alive = false; msg = '악마 처치!'; msgT = 1.2; }
+  }
+}
+
+function updateEnemies(dt) {
+  sprites.forEach(function (s) {
+    if (!s.alive) return;
+    var d = Math.hypot(s.x - player.x, s.y - player.y);
+    if (s.kind === 'medkit') {
+      if (d < 0.5 && player.hp < 100) {
+        player.hp = Math.min(100, player.hp + 25);
+        s.alive = false; msg = '구급상자 +25'; msgT = 1.2;
+      }
+      return;
+    }
+    if (d > 8 || d < 0.001) return;
+    var ang = Math.atan2(player.y - s.y, player.x - s.x);
+    if (castRay(s.x, s.y, ang)[1] < d) return;        // 벽에 가려 안 보임
+    if (d > 1.0) {                                    // 추적
+      var spd = 1.3 * dt;
+      var nx = s.x + Math.cos(ang) * spd, ny = s.y + Math.sin(ang) * spd;
+      if (cell(nx | 0, s.y | 0) === 0) s.x = nx;
+      if (cell(s.x | 0, ny | 0) === 0) s.y = ny;
+    } else {                                          // 공격
+      s.cool -= dt;
+      if (s.cool <= 0) {
+        player.hp -= 8; s.cool = 1; msg = '피격! -8'; msgT = 1.2;
+        if (player.hp <= 0) { player.hp = 0; over = '전사... R로 재시작'; }
+      }
+    }
+  });
+}
+
+function openDoor() {
+  var tx = (player.x + Math.cos(player.ang) * 1.2) | 0;
+  var ty = (player.y + Math.sin(player.ang) * 1.2) | 0;
+  if (cell(tx, ty) === 4) { world[ty][tx] = 0; msg = '문이 열렸다'; msgT = 1.2; }
+  else if (cell(tx, ty) === 5) over = '탈출 성공! R로 재시작';
+}
+
+// ---------- 9. 입력 ----------
+var keys = {};
+window.addEventListener('keydown', function (e) {
+  keys[e.code] = true;
+  if (e.code === 'Space') { e.preventDefault(); if (!over) fire(); }
+  if (e.code === 'KeyF' && !over) openDoor();
+  if (e.code === 'Tab') { e.preventDefault(); showMap = !showMap; }
+  if (e.code === 'KeyR' && over) resetWorld();
+});
+window.addEventListener('keyup', function (e) { keys[e.code] = false; });
+// 터치 버튼 (모바일/폴더블)
+document.querySelectorAll('#pad button').forEach(function (b) {
+  var k = b.dataset.k;
+  function down(e) {
+    e.preventDefault(); keys[k] = true;
+    if (k === 'Space' && !over) fire();
+    if (k === 'KeyF' && !over) openDoor();
+  }
+  function up(e) { e.preventDefault(); keys[k] = false; }
+  b.addEventListener('pointerdown', down);
+  b.addEventListener('pointerup', up);
+  b.addEventListener('pointerleave', up);
+});
+
+// ---------- 10. 메인 루프 ----------
+var last = 0;
+function frame(ts) {
+  var dt = Math.min(0.05, (ts - last) / 1000); last = ts;
+  if (!over) {
+    if (keys.KeyA) player.ang -= ROT_SPD * dt;
+    if (keys.KeyD) player.ang += ROT_SPD * dt;
+    var dx = Math.cos(player.ang) * MOVE_SPD * dt;
+    var dy = Math.sin(player.ang) * MOVE_SPD * dt;
+    if (keys.KeyW) tryMove(player.x + dx, player.y + dy);
+    if (keys.KeyS) tryMove(player.x - dx, player.y - dy);
+    if (keys.KeyQ) tryMove(player.x + dy, player.y - dx);
+    if (keys.KeyE) tryMove(player.x - dy, player.y + dx);
+    updateEnemies(dt);
+  }
+  gunKick = Math.max(0, gunKick - dt * 4);
+  msgT = Math.max(0, msgT - dt);
+  renderWalls();
+  renderSprites();
+  if (showMap) renderMinimap();
+  renderHud();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
