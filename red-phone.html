@@ -58,7 +58,7 @@ a{color:var(--red-soft);text-decoration:none}
 a:hover{text-decoration:underline}
 
 /* ---------- layout ---------- */
-.shell{display:grid;grid-template-columns:262px 1fr;min-height:100vh}
+.shell{display:grid;grid-template-columns:262px minmax(0,1fr);min-height:100vh}
 .sidebar{
   position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;
   border-right:1px solid var(--line);background:rgba(15,18,23,.78);
@@ -227,7 +227,7 @@ details .body{padding:0 16px 14px}
 /* ---------- mobile / Fold ---------- */
 .menu-btn{display:none}
 @media(max-width:920px){
-  .shell{grid-template-columns:1fr}
+  .shell{grid-template-columns:minmax(0,1fr)}
   .sidebar{position:fixed;z-index:50;width:280px;left:-300px;transition:left .25s;box-shadow:0 0 40px rgba(0,0,0,.6)}
   .sidebar.open{left:0}
   .main{padding:74px 18px 110px}
@@ -240,6 +240,9 @@ details .body{padding:0 16px 14px}
   h2.sec{font-size:21px}
   .scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40}
   .scrim.show{display:block}
+  /* 좁은 화면: 넓은 표는 자체 가로 스크롤 (페이지 넘침 방지) */
+  .tbl{display:block;overflow-x:auto;white-space:nowrap}
+  .tbl thead,.tbl tbody{display:table;width:100%;min-width:520px}
 }
 </style>
 </head>
@@ -308,7 +311,7 @@ details .body{padding:0 16px 14px}
         <li><strong>의존성 최소화</strong> — 표준 라이브러리 우선. 외부 패키지는 <em>왜 필요한지</em> 정당화될 때만.</li>
         <li><strong>단일 실행 파일</strong> — 원본처럼 <code>redphone.exe</code> 하나로 무설치 실행. 웹 자산은 <code>embed.FS</code>로 바이너리에 내장.</li>
         <li><strong>서버리스 P2P</strong> — 중앙 서버 0대. 모든 인스턴스가 곧 서버이자 클라이언트.</li>
-        <li><strong>두 가지 종료 경로</strong> — 콘솔에 <code>exit</code> 입력, 또는 웹 UI의 <strong>종료</strong> 버튼. 둘 다 graceful shutdown.</li>
+        <li><strong>세 가지 종료 경로</strong> — 콘솔에 <code>exit</code> 입력, 웹 UI의 <strong>종료</strong> 버튼, 그리고 SIGINT. 셋 다 graceful shutdown.</li>
         <li><strong>성능</strong> — goroutine + channel 기반, 락 경합 최소화, <code>-race</code> 통과를 DoD에 포함.</li>
       </ul>
 
@@ -338,7 +341,7 @@ details .body{padding:0 16px 14px}
         </div>
         <div class="card">
           <h4>embed · 표준</h4>
-          <p><code>//go:embed web/static</code>로 HTML/CSS/JS를 바이너리에 내장.</p>
+          <p><code>//go:embed static</code>(internal/web 패키지 내부 기준)으로 HTML/CSS/JS를 바이너리에 내장.</p>
           <p class="why"><b>WHY</b> "실행 파일 하나" 원칙. 배포 시 자산 누락 없음.</p>
         </div>
         <div class="card">
@@ -376,26 +379,27 @@ details .body{padding:0 16px 14px}
       <p class="sec-sub">하나의 프로세스 안에서 goroutine들이 <code>context.Context</code> 하나를 공유한다. 종료 신호는 어디서 오든 그 context를 취소해 전부 정리한다.</p>
 
       <div class="diagram">
-        <svg viewBox="0 0 660 360" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+        <svg id="arch-svg" viewBox="0 0 660 360" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
           <defs>
             <marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
               <path d="M0,0 L6,3 L0,6 Z" fill="#ff6b6b"/>
             </marker>
             <style>
-              .box{fill:#13161b;stroke:#272d37;stroke-width:1.2;rx:9}
-              .acc{fill:#191d24;stroke:#7c1d20;stroke-width:1.4}
-              .lbl{fill:#dfe4ec;font-size:12px;font-weight:700}
-              .sub{fill:#9aa3b0;font-size:10px}
-              .wire{stroke:#3a4150;stroke-width:1.3;fill:none}
-              .wred{stroke:#ff6b6b;stroke-width:1.4;fill:none;marker-end:url(#ah)}
-              .tw{fill:#6b7480;font-size:9.5px}
+              #arch-svg .box{fill:#13161b;stroke:#272d37;stroke-width:1.2;rx:9}
+              #arch-svg .box.browser{stroke:#37d99a}
+              #arch-svg .acc{fill:#191d24;stroke:#7c1d20;stroke-width:1.4}
+              #arch-svg .lbl{fill:#dfe4ec;font-size:12px;font-weight:700}
+              #arch-svg .sub{fill:#9aa3b0;font-size:10px}
+              #arch-svg .wire{stroke:#3a4150;stroke-width:1.3;fill:none}
+              #arch-svg .wred{stroke:#ff6b6b;stroke-width:1.4;fill:none;marker-end:url(#ah)}
+              #arch-svg .tw{fill:#6b7480;font-size:9.5px}
             </style>
           </defs>
 
           <!-- app core -->
           <rect class="acc" x="240" y="150" width="180" height="60" rx="10"/>
           <text class="lbl" x="330" y="176" text-anchor="middle">App Core</text>
-          <text class="sub" x="330" y="194" text-anchor="middle">context · errgroup</text>
+          <text class="sub" x="330" y="194" text-anchor="middle">context · sync.WaitGroup</text>
 
           <!-- discovery -->
           <rect class="box" x="30" y="30" width="180" height="58" rx="9"/>
@@ -428,7 +432,7 @@ details .body{padding:0 16px 14px}
           <text class="sub" x="120" y="308" text-anchor="middle">"exit" · SIGINT</text>
 
           <!-- browser -->
-          <rect class="box" x="248" y="290" width="164" height="44" rx="9" stroke="#37d99a"/>
+          <rect class="box browser" x="248" y="290" width="164" height="44" rx="9"/>
           <text class="lbl" x="330" y="316" text-anchor="middle">Browser UI</text>
 
           <!-- wires -->
@@ -441,6 +445,8 @@ details .body{padding:0 16px 14px}
           <text class="tw" x="214" y="250">cancel()</text>
           <path class="wred" d="M548 208 L420 300 L412 312"/>
           <text class="tw" x="470" y="262">push (ws)</text>
+          <path class="wire" d="M412 296 L500 88"/>
+          <text class="tw" x="452" y="180">HTTP (UI·API)</text>
           <path class="wire" d="M120 88 L110 150"/>
         </svg>
       </div>
@@ -477,7 +483,7 @@ details .body{padding:0 16px 14px}
       <table class="tbl">
         <thead><tr><th>이름</th><th>값</th><th>용도</th></tr></thead>
         <tbody>
-          <tr><td class="m">DISCOVERY_PORT</td><td><code>17000/udp</code> 고정</td><td>브로드캐스트 송수신 (255.255.255.255)</td></tr>
+          <tr><td class="m">DISCOVERY_PORT</td><td><code>17000/udp</code> 고정</td><td>브로드캐스트 송수신 (255.255.255.255). 고정 바인드라 <strong>호스트당 1인스턴스</strong> — 한 PC에서 2개 띄워 테스트하려면 SO_REUSEADDR/PORT 필요</td></tr>
           <tr><td class="m">HTTP_PORT</td><td><code>17080</code> 우선, 사용 중이면 OS 자동(:0)</td><td>UI·API·inbox·공유. 실제 포트를 HELLO에 실어 광고</td></tr>
         </tbody>
       </table>
@@ -503,6 +509,7 @@ details .body{padding:0 16px 14px}
           <tr><td class="m">GET /</td><td>웹 UI (embed.FS)</td></tr>
           <tr><td class="m">GET /ws</td><td>WebSocket 업그레이드 — 피어 갱신/수신 알림 푸시</td></tr>
           <tr><td class="m">GET /api/peers</td><td>현재 피어 스냅샷(JSON)</td></tr>
+          <tr><td class="m">GET /api/history?peerId=</td><td>해당 피어와의 대화 히스토리(메모리) — 새로고침 복원용</td></tr>
           <tr><td class="m">POST /api/send</td><td><code>{peerId,text}</code> → 상대 <code>/inbox/message</code>로 중계</td></tr>
           <tr><td class="m">POST /api/sendfile</td><td>multipart → 상대 <code>/inbox/file</code>로 중계</td></tr>
           <tr><td class="m">POST /api/share</td><td>multipart 업로드 → 토큰 발급, <code>{url,token,kind}</code> 반환</td></tr>
@@ -521,7 +528,7 @@ details .body{padding:0 16px 14px}
   종료(POST)  ─┼─▶ cancel(ctx) ─▶ ① BYE 브로드캐스트
   SIGINT      ─┘                  ② srv.Shutdown(timeout 3s)
                                   ③ ticker/hub 정지, ws 클라이언트 close
-                                  ④ errgroup.Wait() ─▶ exit(0)</pre>
+                                  ④ wg.Wait() (sync.WaitGroup) ─▶ exit(0)</pre>
       </div>
     </section>
 
@@ -574,6 +581,7 @@ details .body{padding:0 16px 14px}
           <ul>
             <li>피어 선택 → 텍스트 입력 → 전송. 내 백엔드가 상대 <code>/inbox/message</code>로 POST.</li>
             <li>수신 측은 WS로 브라우저에 즉시 푸시, 대화 히스토리(메모리, 인스턴스 수명 동안)에 저장.</li>
+            <li>브라우저 새로고침 시 <code>GET /api/history?peerId=…</code>로 저장된 히스토리를 복원.</li>
             <li><b>AC</b>: A→B 전송 후 B 화면에 ≤1초 내 표시. 상대 오프라인이면 전송 실패를 UI에 명시.</li>
           </ul>
         </div>
@@ -584,7 +592,8 @@ details .body{padding:0 16px 14px}
         <div class="body">
           <ul>
             <li>multipart로 상대 <code>/inbox/file</code>에 전송, 수신 측 <code>./downloads/</code> 저장.</li>
-            <li>파일명 충돌 시 <code>name (2).ext</code> 식으로 회피. 경로 탈출(<code>../</code>) 차단.</li>
+            <li>파일명 충돌 시 <code>name (2).ext</code> 식으로 회피. 경로 탈출(<code>../</code>) 차단.
+              대용량(100MB) 전송 중 RSS 증가 ≤ 32MB (io.Copy 스트리밍, <code>runtime.ReadMemStats</code>로 측정).</li>
             <li><b>AC</b>: 임의 바이너리 왕복 후 SHA-256 동일. 100MB도 메모리 폭증 없이 스트리밍.</li>
           </ul>
         </div>
@@ -627,7 +636,7 @@ details .body{padding:0 16px 14px}
             <li>콘솔에 <code>exit</code>(개행 포함) 입력 → graceful shutdown.</li>
             <li>웹 UI <strong>종료</strong> 버튼 → <code>POST /api/shutdown</code> → 동일 경로.</li>
             <li>둘 다 BYE 브로드캐스트 후 3초 타임아웃 내 서버·goroutine 정리, exit code 0.</li>
-            <li><b>AC</b>: 두 경로 모두 좀비 goroutine 없이 종료(<code>go test -race</code> 통과). 포트 즉시 해제.</li>
+            <li><b>AC</b>: 세 경로(exit·버튼·SIGINT) 모두 좀비 goroutine 없이 종료(<code>go test -race</code> 통과). 포트 즉시 해제.</li>
           </ul>
         </div>
       </details>
@@ -732,14 +741,14 @@ WHY: 사내/가정 LAN에서 "USB로 옮기기"를 대체. 외부 클라우드·
 
 ## Phase 6 — URL 공유 (신규)
 - [ ] #9 share.Store: 토큰 발급/조회/회수 테스트.
-- [ ] #10 GET /s/{token}: image=인라인, text=미리보기, 그 외=다운로드. 404 테스트.
+- [ ] #10 share HTTP 핸들러: POST /api/share · GET /api/shares · DELETE /api/share/{token} · GET /s/{token}(image=인라인, text=미리보기, 그 외=다운로드). 404 테스트.
 
 ## Phase 7 — 웹 UI
 - [ ] #11 index.html/app.js/style.css: 피어목록·대화·첨부·공유·종료버튼. 반응형(Fold).
 - [ ] #12 브라우저 자동 오픈(OS 분기).
 
 ## Phase 8 — Graceful Shutdown 통합
-- [ ] #13 POST /api/shutdown + BYE 브로드캐스트 + Shutdown(3s). 두 경로 모두 -race.
+- [ ] #13 POST /api/shutdown + BYE 브로드캐스트 + Shutdown(3s). 세 경로(exit·버튼·SIGINT) 모두 -race.
 
 ## Phase 9 — 다듬기
 - [ ] #14 구조화 로깅, 설정 플래그(--name --port), README 검증 절, 동시성 단순화.</pre>
@@ -766,20 +775,21 @@ WHY: 사내/가정 LAN에서 "USB로 옮기기"를 대체. 외부 클라우드·
 CLAUDE.md의 제약과 DoD를 반드시 지켜. 범위를 넘기면 안 돼.</pre>
       </div>
 
-      <h3><span class="hash">#</span>Windows PowerShell · settings.json</h3>
+      <h3><span class="hash">#</span>settings.json (권한 최소화)</h3>
+      <p class="sec-sub" style="margin-bottom:10px">개인 프로젝트용 — 권한 프롬프트 최소화 설정. (JSON은 주석을 허용하지 않으므로 아래 블록을 그대로 복사하면 된다.)</p>
       <div class="code">
         <div class="bar"><span class="fname">.claude/settings.json</span><button class="copy" data-copy="c-settings">copy</button></div>
-<pre id="c-settings"><span class="c">// 개인 프로젝트: 권한 프롬프트 최소화</span>
-{
+<pre id="c-settings">{
   <span class="s">"permissions"</span>: { <span class="s">"defaultMode"</span>: <span class="s">"bypassPermissions"</span> },
   <span class="s">"env"</span>: { <span class="s">"GOFLAGS"</span>: <span class="s">"-count=1"</span> }
-}
-<span class="c">// 회사 레포라면 acceptEdits + allowlist(예: Bash(go test:*), Bash(go vet:*))로 좁혀라.</span></pre>
+}</pre>
       </div>
+      <p class="sec-sub" style="margin-top:8px">회사 레포라면 <code>acceptEdits</code> + allowlist(예: <code>Bash(go test:*)</code>, <code>Bash(go vet:*)</code>)로 좁혀라.</p>
 
       <div class="callout ok">
         <span class="tag">// 검증 스모크 테스트</span>
-        <p>빌드 후 같은 PC에서 포트만 바꿔 두 인스턴스를 띄워(<code>--port 17080</code>, <code>--port 17081</code>) 상호 발견·쪽지·공유 링크를 확인.
+        <p>빌드 후 같은 PC에서 HTTP 포트만 바꿔 두 인스턴스를 띄워(<code>--port 17080</code>, <code>--port 17081</code>) 상호 발견·쪽지·공유 링크를 확인.
+        단, UDP 17000은 고정 바인드라 같은 PC 테스트에는 discovery 소켓에 <code>SO_REUSEADDR/SO_REUSEPORT</code> 적용이 전제다(§03 포트 표 참고).
         그다음 다른 PC로 LAN 검증. 마지막에 <code>exit</code>와 종료 버튼 양쪽으로 정상 종료를 확인한다.</p>
       </div>
 
@@ -816,14 +826,14 @@ const PHASES = [
   ]},
   {id:"P6", title:"URL 공유 (신규)", goal:"링크로 노출", tasks:[
     {t:"#9 share.Store: 토큰 발급/조회/회수", dod:"DoD: 발급·회수·미존재 테스트"},
-    {t:"#10 GET /s/{token}: image=인라인 · text=미리보기 · 그 외=다운로드", dod:"DoD: content-type 분기 + 404 테스트"},
+    {t:"#10 share HTTP 핸들러 4종 (POST/GET/DELETE + GET /s/{token})", dod:"DoD: content-type 분기 + 404 테스트"},
   ]},
   {id:"P7", title:"웹 UI", goal:"화면", tasks:[
     {t:"#11 index/app.js/style.css: 피어·대화·첨부·공유·종료버튼, 반응형(Fold)", dod:"DoD: 두 인스턴스 수동 시나리오"},
     {t:"#12 브라우저 자동 오픈(OS 분기)", dod:"DoD: Win/mac/Linux 분기 확인"},
   ]},
   {id:"P8", title:"Graceful Shutdown 통합", goal:"3경로 수렴", tasks:[
-    {t:"#13 POST /api/shutdown + BYE 브로드캐스트 + Shutdown(3s)", dod:"DoD: exit·버튼 두 경로 -race 통과, 포트 즉시 해제"},
+    {t:"#13 POST /api/shutdown + BYE 브로드캐스트 + Shutdown(3s)", dod:"DoD: exit·버튼·SIGINT 세 경로 -race 통과, 포트 즉시 해제"},
   ]},
   {id:"P9", title:"다듬기", goal:"정리·단순화", tasks:[
     {t:"#14 구조화 로깅 · 플래그(--name --port) · README 검증 절 · 동시성 단순화", dod:"DoD: go vet 무경고, README 갱신"},
