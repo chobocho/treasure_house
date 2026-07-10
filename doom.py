@@ -147,7 +147,7 @@ def reset_world():
 
 # ---------- 6. DDA 레이캐스팅 ----------
 def cast_ray(px, py, ang):
-    """(맞은 칸 값, 수직거리, 벽면 x좌표 0~1, 남북면 여부)를 돌려준다."""
+    """(맞은 칸 값, 거리, 벽면 x좌표 0~1, 남북면 여부)를 돌려준다."""
     sin_a, cos_a = math.sin(ang), math.cos(ang)
     map_x, map_y = int(px), int(py)
     # 한 칸 이동에 필요한 광선 길이
