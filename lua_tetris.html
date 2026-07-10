@@ -253,7 +253,7 @@
     <div class="sec-sub">LÖVE 2D 기반 구현 + 알고리즘 노트</div>
 
     <div class="demo-grid">
-      <canvas id="tetris" width="250" height="500"></canvas>
+      <canvas id="tetris" width="250" height="500" tabindex="0"></canvas>
       <div class="demo-side">
         <div class="scoreboard">
           SCORE <b id="score">0</b><br>
@@ -276,12 +276,12 @@
     <div class="card" style="margin-top:26px">
       <h3>구현 핵심 <span class="tag">// algorithm notes</span></h3>
       <ul class="term">
-        <li><b>자료구조</b> — 4×4 행렬로 피스 정의. 회전 중심이 (2.5,2.5)로 통일되어 SRS 구현이 단순.</li>
+        <li><b>자료구조</b> — 모든 피스를 4×4 행렬로 통일해 회전 공식 하나로 처리. (정식 SRS는 J/L/S/T/Z를 3×3 기준으로 회전 — 본 구현은 간이 벽킥만 포함한 단순화판.)</li>
         <li><b>회전</b> — <code>new[i][j] = old[N+1-j][i]</code> 공식. 4가지 상태 사전 캐싱하면 O(1) 접근.</li>
         <li><b>충돌검사</b> — 이동·회전·낙하 모두 단일 <code>collides()</code> 함수로 통합. O(16) 상수.</li>
         <li><b>라인클리어</b> — Lua table은 참조 타입이라 <b>행 자체를 통째로 교체</b>해 내부 루프 제거.</li>
         <li><b>7-bag</b> — Fisher-Yates 셔플로 7피스가 7턴마다 정확히 한 번씩 등장 (공정성).</li>
-        <li><b>비트보드</b> — AI 솔버용. 한 행을 16비트 정수로 → 충돌이 AND 한 번. 50× 향상.</li>
+        <li><b>비트보드</b> — AI 솔버용 확장 아이디어 (본 코드 미구현). 한 행을 16비트 정수로 → 충돌이 AND 한 번, 수십 배 빨라질 수 있음.</li>
       </ul>
     </div>
 
@@ -454,7 +454,7 @@ local function clearLines(b)
     return cleared
 end
 
--- 레벨에 따른 낙하 간격 (초). 표준 가이드라인 공식.
+-- 레벨에 따른 낙하 간격 (초). 가이드라인 근사 공식 (정식: (0.8-(lvl-1)*0.007)^(lvl-1)).
 local function gravityFor(lvl)
     return math.pow(0.8, lvl - 1)
 end
@@ -730,7 +730,7 @@ end</script>
       <h3>생태계 격차</h3>
       <table>
         <tr><th>항목</th><th>Racket</th><th>Python</th><th>Node</th><th>Clojure</th></tr>
-        <tr><td>패키지 수</td><td class="lose">수백</td><td>50만+</td><td>200만+</td><td>수만</td></tr>
+        <tr><td>패키지 수</td><td class="lose">수천</td><td>50만+</td><td>200만+</td><td>수만</td></tr>
         <tr><td>ORM 성숙도</td><td class="lose">빈약</td><td>Django/SQLAlchemy</td><td>Prisma</td><td>적당</td></tr>
         <tr><td>채용 공고</td><td class="lose">거의 0</td><td>수만</td><td>수만</td><td>수백</td></tr>
       </table>
@@ -771,9 +771,9 @@ end</script>
       <table>
         <tr><th>항목</th><th>LÖVE + Lua</th><th>Pygame</th></tr>
         <tr><td>렌더링</td><td class="win">OpenGL 가속</td><td>SDL2 소프트웨어</td></tr>
-        <tr><td>런타임</td><td class="win">LuaJIT (C의 1.5~3배)</td><td>CPython (C의 50~100배)</td></tr>
+        <tr><td>런타임</td><td class="win">LuaJIT (C의 1.5~3배)</td><td>CPython (C의 10~100배)</td></tr>
         <tr><td>스프라이트 1만개</td><td class="win">60 FPS</td><td class="lose">10~20 FPS</td></tr>
-        <tr><td>배포(.exe)</td><td class="win">cat 합치기 30MB</td><td>PyInstaller 100~300MB</td></tr>
+        <tr><td>배포(.exe)</td><td class="win">cat 합치기 30MB</td><td>PyInstaller 50~150MB(의존성에 따라)</td></tr>
         <tr><td>모바일</td><td class="win">iOS/Android 공식</td><td class="lose">사실상 불가</td></tr>
         <tr><td>셰이더</td><td class="win">GLSL 1급</td><td class="lose">거의 없음</td></tr>
         <tr><td>상업 사례</td><td class="win">Balatro·Move or Die</td><td>학습·게임잼 위주</td></tr>
@@ -867,16 +867,18 @@ end</script>
   document.getElementById('luaCode').innerHTML=html;
 
   document.getElementById('copyLua').addEventListener('click',function(){
-    navigator.clipboard.writeText(src).then(()=>{
+    const done=()=>{
       this.textContent='✓ COPIED';this.classList.add('done');
       setTimeout(()=>{this.textContent='⧉ COPY';this.classList.remove('done');},1500);
-    }).catch(()=>{
-      // fallback
+    };
+    const fallback=()=>{
       const ta=document.createElement('textarea');ta.value=src;document.body.appendChild(ta);
-      ta.select();document.execCommand('copy');ta.remove();
-      this.textContent='✓ COPIED';this.classList.add('done');
-      setTimeout(()=>{this.textContent='⧉ COPY';this.classList.remove('done');},1500);
-    });
+      ta.select();document.execCommand('copy');ta.remove();done();
+    };
+    // file:// 등 비보안 컨텍스트에서는 navigator.clipboard가 undefined
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(src).then(done).catch(fallback);
+    }else{fallback();}
   });
 })();
 
@@ -975,15 +977,16 @@ function animateBars(){
       ctx.fillStyle='#39ff14';ctx.font='20px "VT323",monospace';
       ctx.fillText('press RESTART',cv.width/2,cv.height/2+24);}
   }
-  function loop(ts){if(!last)last=ts;const dt=ts-last;last=ts;
-    if(!over){fallTimer+=dt;if(fallTimer>=fallInterval){fallTimer-=fallInterval;step();}}
+  function loop(ts){if(!last)last=ts;const dt=Math.min(ts-last,100);last=ts;
+    const visible=document.getElementById('t1').classList.contains('show');
+    if(!over&&visible){fallTimer+=dt;if(fallTimer>=fallInterval){fallTimer-=fallInterval;step();}}
     draw();raf=requestAnimationFrame(loop);}
 
   document.addEventListener('keydown',e=>{
     if(!board)return;
+    // 테트리스 탭이 보일 때만 게임 입력 처리
+    if(!document.getElementById('t1').classList.contains('show'))return;
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)){
-      // only hijack keys when tetris tab visible
-      if(!document.getElementById('t1').classList.contains('show'))return;
       e.preventDefault();
     }
     if(over)return;
