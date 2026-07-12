@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Vanilla JS Canvas Pinball</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #0b0e1a; height: 100%; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { background: #10142b; box-shadow: 0 0 40px rgba(80,120,255,.35); border-radius: 12px; }
+</style>
+</head>
+<body>
+<canvas id="game" width="480" height="800"></canvas>
+<script>
+"use strict";
+
+/* =========================================================
+ * 1. 벡터 유틸리티 (Vector Math)
+ * 모든 물리 계산의 기반. 불변(immutable) 스타일로 새 벡터를 반환한다.
+ * ========================================================= */
+class Vec2 {
+  constructor(x = 0, y = 0) { this.x = x; this.y = y; }
+  add(v)      { return new Vec2(this.x + v.x, this.y + v.y); }
+  sub(v)      { return new Vec2(this.x - v.x, this.y - v.y); }
+  scale(s)    { return new Vec2(this.x * s, this.y * s); }
+  dot(v)      { return this.x * v.x + this.y * v.y; }          // 내적
+  cross(v)    { return this.x * v.y - this.y * v.x; }          // 2D 외적(스칼라)
+  len()       { return Math.hypot(this.x, this.y); }
+  lenSq()     { return this.x * this.x + this.y * this.y; }
+  norm()      { const l = this.len(); return l > 1e-9 ? this.scale(1 / l) : new Vec2(); }
+  perp()      { return new Vec2(-this.y, this.x); }            // 반시계 90도 수직 벡터
+  neg()       { return new Vec2(-this.x, -this.y); }
+  // 삼각함수를 이용한 회전: 회전행렬 [cosθ -sinθ; sinθ cosθ]
+  rotate(theta) {
+    const c = Math.cos(theta), s = Math.sin(theta);
+    return new Vec2(this.x * c - this.y * s, this.x * s + this.y * c);
+  }
+  angle()     { return Math.atan2(this.y, this.x); }           // 벡터의 방향각
+  static fromAngle(theta, len = 1) {                            // 극좌표 → 직교좌표
+    return new Vec2(Math.cos(theta) * len, Math.sin(theta) * len);
+  }
+}
+
+/* 반사 공식: v' = v - (1+e)(v·n)n  (n은 단위 법선, e는 반발계수) */
+function reflect(v, n, e) {
+  const vn = v.dot(n);
+  if (vn >= 0) return v;            // 이미 표면에서 멀어지는 중이면 그대로
+  return v.sub(n.scale((1 + e) * vn));
+}
+
+/* 점 p에서 선분 a-b 위의 최근접점을 구한다.
+ * t = clamp(((p-a)·(b-a)) / |b-a|², 0, 1) */
+function closestPointOnSegment(p, a, b) {
+  const ab = b.sub(a);
+  const t = Math.max(0, Math.min(1, p.sub(a).dot(ab) / ab.lenSq()));
+  return a.add(ab.scale(t));
+}
+
+/* =========================================================
+ * 2. 게임 상수
+ * ========================================================= */
+const W = 480, H = 800;
+const GRAVITY      = new Vec2(0, 1400);  // px/s²
+const BALL_RADIUS  = 11;
+const WALL_E       = 0.55;   // 벽 반발계수
+const BUMPER_E     = 1.15;   // 범퍼는 에너지를 추가로 준다
+const FLIPPER_E    = 0.35;
+const AIR_DRAG     = 0.999;  // 프레임당 감쇠
+const MAX_SPEED    = 1600;
+const LAUNCH_X     = W - 26; // 발사 레인 중심 x
+
+/* =========================================================
+ * 3. 게임 오브젝트
+ * ========================================================= */
+
+/* 공 */
+class Ball {
+  constructor() { this.reset(); }
+  reset() {
+    this.pos = new Vec2(LAUNCH_X, H - 80);
+    this.vel = new Vec2(0, 0);
+    this.inPlay = false;   // 발사 전 상태
+  }
+  update(dt) {
+    if (!this.inPlay) return;
+    // 반암시적 오일러 적분: v += a·dt, p += v·dt
+    this.vel = this.vel.add(GRAVITY.scale(dt));
+    this.vel = this.vel.scale(AIR_DRAG);
+    const sp = this.vel.len();
+    if (sp > MAX_SPEED) this.vel = this.vel.scale(MAX_SPEED / sp);
+    this.pos = this.pos.add(this.vel.scale(dt));
+  }
+  draw(ctx) {
+    const g = ctx.createRadialGradient(
+      this.pos.x - 4, this.pos.y - 4, 2, this.pos.x, this.pos.y, BALL_RADIUS);
+    g.addColorStop(0, "#ffffff");
+    g.addColorStop(1, "#8a94b8");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, BALL_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* 벽: 선분 하나. 법선은 (b-a)의 수직 벡터 */
+class Wall {
+  constructor(ax, ay, bx, by, e = WALL_E) {
+    this.a = new Vec2(ax, ay);
+    this.b = new Vec2(bx, by);
+    this.e = e;
+  }
+  collide(ball) {
+    const cp = closestPointOnSegment(ball.pos, this.a, this.b);
+    const d  = ball.pos.sub(cp);
+    const dist = d.len();
+    if (dist >= BALL_RADIUS || dist < 1e-9) return false;
+    const n = d.scale(1 / dist);                       // 충돌 법선
+    ball.pos = ball.pos.add(n.scale(BALL_RADIUS - dist)); // 침투 해소
+    ball.vel = reflect(ball.vel, n, this.e);
+    return true;
+  }
+  draw(ctx) {
+    ctx.strokeStyle = "#3d4c8f";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(this.a.x, this.a.y);
+    ctx.lineTo(this.b.x, this.b.y);
+    ctx.stroke();
+  }
+}
+
+/* 범퍼: 원. 부딪히면 점수를 주고 강하게 튕겨낸다 */
+class Bumper {
+  constructor(x, y, r, score = 100) {
+    this.pos = new Vec2(x, y);
+    this.r = r;
+    this.score = score;
+    this.flash = 0;        // 피격 이펙트 타이머
+  }
+  collide(ball, game) {
+    const d = ball.pos.sub(this.pos);
+    const dist = d.len();
+    const minDist = this.r + BALL_RADIUS;
+    if (dist >= minDist || dist < 1e-9) return false;
+    const n = d.scale(1 / dist);
+    ball.pos = this.pos.add(n.scale(minDist));
+    ball.vel = reflect(ball.vel, n, BUMPER_E);
+    // 최소 튕김 속도 보장: 법선 방향 성분을 강제로 키운다
+    const vn = ball.vel.dot(n);
+    if (vn < 420) ball.vel = ball.vel.add(n.scale(420 - vn));
+    game.addScore(this.score);
+    this.flash = 0.15;
+    return true;
+  }
+  update(dt) { this.flash = Math.max(0, this.flash - dt); }
+  draw(ctx) {
+    ctx.fillStyle = this.flash > 0 ? "#ffd75e" : "#e2534f";
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, this.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff55";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = "#10142b";
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, this.r * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* 플리퍼: 피벗을 중심으로 회전하는 캡슐(두꺼운 선분).
+ * 삼각함수로 끝점을 계산하고, 각속도 ω 로 접촉점의 표면 속도를 구한다. */
+class Flipper {
+  constructor(px, py, length, restAngle, activeAngle, key) {
+    this.pivot = new Vec2(px, py);
+    this.length = length;
+    this.restAngle = restAngle;       // 대기 각도 (라디안)
+    this.activeAngle = activeAngle;   // 눌렀을 때 각도
+    this.angle = restAngle;
+    this.omega = 0;                   // 각속도 (rad/s)
+    this.speed = 22;                  // 회전 속도 (rad/s)
+    this.pressed = false;
+    this.key = key;
+    this.thick = 10;                  // 캡슐 반두께
+  }
+  tip() { // 끝점 = 피벗 + 길이 · (cosθ, sinθ)
+    return this.pivot.add(Vec2.fromAngle(this.angle, this.length));
+  }
+  update(dt) {
+    const target = this.pressed ? this.activeAngle : this.restAngle;
+    const diff = target - this.angle;
+    const step = Math.sign(diff) * this.speed * dt;
+    if (Math.abs(step) >= Math.abs(diff)) {
+      this.omega = diff / dt;          // 마지막 프레임의 실제 각속도
+      this.angle = target;
+    } else {
+      this.omega = Math.sign(diff) * this.speed;
+      this.angle += step;
+    }
+    if (Math.abs(diff) < 1e-4) this.omega = 0;
+  }
+  collide(ball) {
+    const a = this.pivot, b = this.tip();
+    const cp = closestPointOnSegment(ball.pos, a, b);
+    const d = ball.pos.sub(cp);
+    const dist = d.len();
+    const minDist = BALL_RADIUS + this.thick;
+    if (dist >= minDist || dist < 1e-9) return false;
+    const n = d.scale(1 / dist);
+    ball.pos = ball.pos.add(n.scale(minDist - dist));
+    // 접촉점의 표면 속도: v = ω × r  →  2D에서는 ω · perp(r)
+    const r = cp.sub(this.pivot);
+    const surfaceVel = r.perp().scale(this.omega);
+    // 상대 속도로 반사한 뒤 표면 속도를 되돌려 준다
+    const relVel = ball.vel.sub(surfaceVel);
+    ball.vel = reflect(relVel, n, FLIPPER_E).add(surfaceVel);
+    return true;
+  }
+  draw(ctx) {
+    const b = this.tip();
+    ctx.strokeStyle = "#f5b942";
+    ctx.lineWidth = this.thick * 2;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(this.pivot.x, this.pivot.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.fillStyle = "#c78b1e";
+    ctx.beginPath();
+    ctx.arc(this.pivot.x, this.pivot.y, this.thick * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* 슬링샷: 삼각형 벽 + 강한 반발. 플리퍼 위쪽 좌우에 배치 */
+class Slingshot {
+  constructor(ax, ay, bx, by, score = 30) {
+    this.wall = new Wall(ax, ay, bx, by, 1.0);
+    this.score = score;
+    this.flash = 0;
+  }
+  collide(ball, game) {
+    const before = ball.vel.len();
+    if (!this.wall.collide(ball)) return false;
+    // 발사면 법선 방향으로 최소 속도 보장
+    const n = ball.pos.sub(closestPointOnSegment(ball.pos, this.wall.a, this.wall.b)).norm();
+    if (ball.vel.len() < before + 200) ball.vel = ball.vel.add(n.scale(300));
+    game.addScore(this.score);
+    this.flash = 0.12;
+    return true;
+  }
+  update(dt) { this.flash = Math.max(0, this.flash - dt); }
+  draw(ctx) {
+    ctx.strokeStyle = this.flash > 0 ? "#ffd75e" : "#7a4fd6";
+    ctx.lineWidth = 6;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(this.wall.a.x, this.wall.a.y);
+    ctx.lineTo(this.wall.b.x, this.wall.b.y);
+    ctx.stroke();
+  }
+}
+
+/* =========================================================
+ * 4. 게임 본체
+ * ========================================================= */
+class Game {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.ball = new Ball();
+    this.score = 0;
+    this.balls = 3;
+    this.launchPower = 0;     // 스페이스 홀드 게이지 0~1
+    this.charging = false;
+    this.gameOver = false;
+    this.buildTable();
+    this.bindInput();
+    this.last = performance.now();
+    requestAnimationFrame(t => this.frame(t));
+  }
+
+  /* 테이블 지오메트리 구성. 상단 곡면은 삼각함수로 호를 선분으로 근사한다. */
+  buildTable() {
+    this.walls = [];
+    const lane = W - 52;   // 발사 레인 왼쪽 벽 x
+
+    // 좌우 외벽 (상단 아치와 y=240 에서 만난다)
+    this.walls.push(new Wall(6, H, 6, 240));
+    this.walls.push(new Wall(W - 6, H - 24, W - 6, 240));
+    // 발사 레인 내벽과 레인 바닥
+    this.walls.push(new Wall(lane, H - 40, lane, 320));
+    this.walls.push(new Wall(lane, H - 24, W - 6, H - 24));
+
+    // 상단 반원 아치: 중심 (W/2, 240), 반경 W/2-6, 180°→360° 를 22개 선분으로
+    const cx = W / 2, cy = 240, R = W / 2 - 6, SEG = 22;
+    for (let i = 0; i < SEG; i++) {
+      const t0 = Math.PI + (Math.PI * i) / SEG;
+      const t1 = Math.PI + (Math.PI * (i + 1)) / SEG;
+      this.walls.push(new Wall(
+        cx + R * Math.cos(t0), cy + R * Math.sin(t0),
+        cx + R * Math.cos(t1), cy + R * Math.sin(t1)));
+    }
+
+    // 하단 깔때기(아웃레인): 플리퍼 쪽으로 공을 모은다
+    this.walls.push(new Wall(6, 620, 134, 712));
+    this.walls.push(new Wall(lane, 620, 294, 712));
+
+    // 플리퍼: 대기 시 아래로 32°, 작동 시 위로 34° (오른쪽은 좌우 대칭 각도)
+    const D = Math.PI / 180;
+    this.flippers = [
+      new Flipper(140, 726, 72,  32 * D,  -34 * D, "left"),
+      new Flipper(288, 726, 72, 148 * D, 214 * D, "right"),
+    ];
+
+    // 범퍼 3개 (상단 삼각 배치)
+    this.bumpers = [
+      new Bumper(150, 250, 26, 100),
+      new Bumper(280, 220, 26, 100),
+      new Bumper(215, 340, 30, 150),
+    ];
+
+    // 슬링샷 (플리퍼 위 좌우)
+    this.slings = [
+      new Slingshot(70, 560, 130, 646),
+      new Slingshot(358, 560, 298, 646),
+    ];
+  }
+
+  bindInput() {
+    addEventListener("keydown", e => {
+      if (e.repeat) return;
+      if (e.code === "ArrowLeft"  || e.code === "KeyZ") this.flippers[0].pressed = true;
+      if (e.code === "ArrowRight" || e.code === "Slash") this.flippers[1].pressed = true;
+      if (e.code === "Space") {
+        if (this.gameOver) { this.restart(); return; }
+        if (!this.ball.inPlay) this.charging = true;
+      }
+    });
+    addEventListener("keyup", e => {
+      if (e.code === "ArrowLeft"  || e.code === "KeyZ") this.flippers[0].pressed = false;
+      if (e.code === "ArrowRight" || e.code === "Slash") this.flippers[1].pressed = false;
+      if (e.code === "Space" && this.charging) {
+        // 발사: 게이지에 비례한 초기 속도를 위로 준다
+        this.ball.vel = new Vec2(0, -(700 + 900 * this.launchPower));
+        this.ball.inPlay = true;
+        this.charging = false;
+        this.launchPower = 0;
+      }
+    });
+  }
+
+  addScore(s) { this.score += s; }
+
+  restart() {
+    this.score = 0;
+    this.balls = 3;
+    this.gameOver = false;
+    this.ball.reset();
+  }
+
+  frame(now) {
+    // dt를 초 단위로, 탭 전환 등으로 인한 폭주 방지 위해 상한을 둔다
+    let dt = Math.min((now - this.last) / 1000, 1 / 30);
+    this.last = now;
+    this.update(dt);
+    this.render();
+    requestAnimationFrame(t => this.frame(t));
+  }
+
+  update(dt) {
+    if (this.charging) this.launchPower = Math.min(1, this.launchPower + dt * 1.2);
+
+    this.flippers.forEach(f => f.update(dt));
+    this.bumpers.forEach(b => b.update(dt));
+    this.slings.forEach(s => s.update(dt));
+
+    if (!this.ball.inPlay || this.gameOver) return;
+
+    // 서브스텝: 빠른 공이 얇은 벽을 뚫는 터널링을 줄인다
+    const STEPS = 4;
+    const sdt = dt / STEPS;
+    for (let i = 0; i < STEPS; i++) {
+      this.ball.update(sdt);
+      this.walls.forEach(w => w.collide(this.ball));
+      this.bumpers.forEach(b => b.collide(this.ball, this));
+      this.slings.forEach(s => s.collide(this.ball, this));
+      this.flippers.forEach(f => f.collide(this.ball));
+    }
+
+    // 공이 발사 레인으로 되돌아와 거의 멈추면 발사 대기 상태로 전환
+    const lane = W - 52;
+    if (this.ball.pos.x > lane && this.ball.pos.y > H - 120 &&
+        this.ball.vel.len() < 60) {
+      this.ball.reset();
+    }
+
+    // 드레인: 공이 바닥 아래로 빠지면 공 하나 소모
+    if (this.ball.pos.y > H + BALL_RADIUS * 2) {
+      this.balls--;
+      if (this.balls <= 0) this.gameOver = true;
+      else this.ball.reset();
+    }
+  }
+
+  render() {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, W, H);
+
+    this.walls.forEach(w => w.draw(ctx));
+    this.slings.forEach(s => s.draw(ctx));
+    this.bumpers.forEach(b => b.draw(ctx));
+    this.flippers.forEach(f => f.draw(ctx));
+    this.ball.draw(ctx);
+
+    // 발사 게이지
+    if (this.charging) {
+      ctx.fillStyle = "#2a3155";
+      ctx.fillRect(LAUNCH_X - 8, H - 200, 16, 130);
+      ctx.fillStyle = "#5ee87f";
+      const h = 130 * this.launchPower;
+      ctx.fillRect(LAUNCH_X - 8, H - 70 - h, 16, h);
+    }
+
+    // HUD
+    ctx.fillStyle = "#e8ecff";
+    ctx.font = "bold 22px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(`SCORE ${this.score}`, 18, 34);
+    ctx.textAlign = "right";
+    ctx.fillText(`BALL ${"●".repeat(Math.max(0, this.balls))}`, W - 18, 34);
+
+    if (!this.ball.inPlay && !this.gameOver) {
+      ctx.textAlign = "center";
+      ctx.font = "16px monospace";
+      ctx.fillStyle = "#9fb0e8";
+      ctx.fillText("SPACE 길게 눌러 발사 · ←/→ 플리퍼", W / 2, H - 24);
+    }
+    if (this.gameOver) {
+      ctx.fillStyle = "#000000aa";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 40px monospace";
+      ctx.fillText("GAME OVER", W / 2, H / 2 - 20);
+      ctx.font = "20px monospace";
+      ctx.fillText(`FINAL SCORE: ${this.score}`, W / 2, H / 2 + 24);
+      ctx.fillText("SPACE 로 재시작", W / 2, H / 2 + 60);
+    }
+  }
+}
+
+new Game(document.getElementById("game"));
+</script>
+</body>
+</html>
