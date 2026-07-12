@@ -225,7 +225,7 @@ interface MapOptions<K> {
 
 ## 3.1 JavaScript 배열의 정체
 
-JavaScript의 `Array`는 사실상 **해시 객체**에 가깝습니다. 인덱스로 접근하지만 내부적으로는 키-값 매핑이고, 빈 공간이 있어도 메모리를 차지합니다.
+JavaScript의 `Array`는 스펙상으로는 **키-값 객체**입니다. 다행히 실제 엔진(V8 등)은 빈틈 없이 채워진 배열을 연속 메모리로 최적화하지만, 아래처럼 구멍(hole)을 만들면 이 최적화가 약해지고 빈 슬롯도 메모리를 차지하게 됩니다.
 
 ```ts
 const a: number[] = [];
@@ -1060,7 +1060,7 @@ measure("Object set", () => {
 });
 ```
 
-대부분의 엔진에서 `Map`이 동등하거나 약간 빠릅니다.
+정수 키를 쓰는 이 벤치마크에서는 대부분의 엔진에서 오히려 `Object` 쪽이 몇 배 빠릅니다. 엔진이 정수 키를 배열처럼 최적화하기 때문입니다. 문자열 키에서는 둘이 엎치락뒤치락하고, 키 추가/삭제가 잦은 워크로드에서는 `Map`이 유리해지는 경우가 많습니다. 요컨대 `Map`을 고르는 기준은 미세 성능이 아니라 **의도의 명확함**입니다.
 
 ## 시간복잡도
 
@@ -1755,12 +1755,14 @@ console.log(topologicalSort(deps));
         root
        /  |  \
       a   c   d
-     /    |
-    p     a
-   /     /
-  p     t
- /
-le
+      |   |   |
+      p   a   o
+      |   |   |
+      p   t   g
+      |
+      l
+      |
+      e
 ```
 
 문자열 N개의 평균 길이가 L일 때, 검색은 **단어 길이만큼만** O(L) — N과 무관!
@@ -2111,7 +2113,7 @@ ac.hit("apple");
 ac.hit("application");
 
 console.log(ac.suggest("app", 3));
-// ["apple", "application", "apply"]
+// ["apple", "application", "appliance"] — 빈도 1 동률(apply·appliance)은 트라이 탐색 순서를 따른다
 ```
 
 ## 14.4 다음 단계
@@ -2190,11 +2192,15 @@ console.log(ac.suggest("app", 3));
 # 컴파일
 tsc
 
-# 실행 (Node 18 이상)
-node --experimental-specifier-resolution=node dist/index.js
-
-# 또는 즉시 실행
+# 즉시 실행 (권장) — 컴파일 없이 바로 실행
 npx tsx src/index.ts
+
+# 컴파일 결과물을 node로 직접 실행하려면 package.json에 "type": "module"을 넣고,
+# 소스의 상대 임포트에 .js 확장자를 붙여야 합니다.
+#   예: import { measure } from "./util/measure.js";
+# (확장자를 생략하게 해 주던 --experimental-specifier-resolution 플래그는
+#  Node 20에서 제거되었습니다)
+node dist/index.js
 ```
 
 ---

@@ -195,14 +195,16 @@ GW-BASIC은 두 모드를 한 화면에서 자연스럽게 오갑니다.
 ```
 Ok
 PRINT 1+2     ← 즉시 실행
-3
+ 3
 Ok
 10 PRINT 1+2  ← 프로그램에 저장
 20 END
 RUN           ← 저장된 프로그램 실행
-3
+ 3
 Ok
 ```
+
+(숫자 앞의 공백 한 칸은 양수의 부호 자리입니다 — 7.5절 참고.)
 
 본 구현에서도 REPL이 두 모드를 모두 지원하도록 설계합니다.
 
@@ -266,7 +268,7 @@ const tokens = lex("10 PRINT 1+2");
 //   { type: "NUMBER", value: 1, line: 1, col: 10 },
 //   { type: "OP", value: "+", line: 1, col: 11 },
 //   { type: "NUMBER", value: 2, line: 1, col: 12 },
-//   { type: "EOL", line: 1, col: 13 },
+//   { type: "EOF", line: 1, col: 13 },
 // ]
 ```
 
@@ -307,7 +309,7 @@ const program = compile(ast);
 ```ts
 const vm = new VM(program, host);
 vm.run();
-// → host.print("3\n")
+// → " 3 " 출력 후 줄바꿈 (host.printAt / host.println)
 ```
 
 ### 2.4 호스트 인터페이스 (Host)
@@ -315,20 +317,41 @@ vm.run();
 VM은 *외부 세계*와 통신하기 위해 **Host** 인터페이스를 사용합니다. 이렇게 분리하면 Node.js 콘솔, 브라우저 Canvas, 테스트용 Mock 등 어떤 환경에서도 같은 VM이 동작합니다.
 
 ```ts
-interface Host {
-  print(s: string): void;
-  inputLine(): Promise<string>;
-  cls(): void;
-  setPixel(x: number, y: number, color: number): void;
-  drawLine(x1: number, y1: number, x2: number, y2: number, color: number): void;
-  drawCircle(x: number, y: number, r: number, color: number): void;
+// src/host/host.ts — 이 인터페이스가 VM·테스트 mock·CanvasHost가 공유하는 최종 계약이다
+export interface Host {
+  // 텍스트 입출력
+  printAt(s: string): void;                 // 커서 위치에 출력 (컬럼 추적 포함)
+  println(s: string): void;
+  column(): number;                         // 현재 커서 컬럼 (1-based)
+  row(): number;                            // 현재 커서 행 (1-based)
+  inputLine(prompt: string): Promise<string | null>;
+  inkey(): string;                          // 비차단 키 입력 (없으면 "")
+  // 화면 제어
+  cls(mode: number): void;
+  setScreen(mode: number): void;
+  setColor(fg: number | null, bg: number | null): void;
+  locate(row: number | null, col: number | null): void;
+  // 그래픽
+  pset(x: number, y: number, color: number | null, step: boolean, preset: boolean): void;
+  drawLine(x1: number | null, y1: number | null, x2: number, y2: number,
+           color: number | null, fromStep: boolean, toStep: boolean,
+           mode: "B" | "BF" | null): void;
+  drawCircle(x: number, y: number, r: number, color: number | null,
+             start: number | null, end: number | null,
+             aspect: number | null, step: boolean): void;
+  paint(x: number, y: number, fill: number | null, border: number | null, step: boolean): void;
+  // 사운드
   sound(freq: number, durationMs: number): Promise<void>;
+  play(mml: string): Promise<void>;
+  // 시간 / 난수
   now(): number;
   random(): number;
+  lastRandom(): number;
+  seedRandom(s: number): void;
 }
 ```
 
-⚠️ **주의**: Host는 가능하면 **얇게** 유지합니다. BASIC 명령 하나에 메서드 하나가 일대일로 대응될 필요는 없습니다. 예를 들어 `LINE`은 내부적으로 `setPixel`을 반복 호출해도 충분합니다. 그러나 성능이 중요한 그래픽 명령은 Host에 직접 위임하는 편이 빠릅니다. 이 균형은 27장에서 다룹니다.
+⚠️ **주의**: Host는 가능하면 **얇게** 유지합니다. BASIC 명령 하나에 메서드 하나가 일대일로 대응될 필요는 없습니다. 예를 들어 `LINE`은 내부적으로 `pset`을 반복 호출해도 충분합니다. 그러나 성능이 중요한 그래픽 명령은 Host에 직접 위임하는 편이 빠릅니다. 이 균형은 27장에서 다룹니다.
 
 ---
 
@@ -468,6 +491,7 @@ export const ERR = {
   OUT_OF_MEMORY: 7,
   UNDEFINED_LINE_NUMBER: 8,
   SUBSCRIPT_OUT_OF_RANGE: 9,
+  DUPLICATE_DEFINITION: 10,
   TYPE_MISMATCH: 13,
   STRING_TOO_LONG: 15,
   DIVISION_BY_ZERO: 11,
@@ -703,12 +727,12 @@ GW-BASIC은 한 줄에 콜론(`:`)으로 여러 문장을 잇습니다. `10 A=1 
 <not-expr>       ::= [ "NOT" ] <rel-expr>
 <rel-expr>       ::= <add-expr> [ <rel-op> <add-expr> ]
 <rel-op>         ::= "=" | "<>" | "<" | "<=" | ">" | ">="
-<add-expr>       ::= <mul-expr>  { ("+" | "-") <mul-expr> }
-<mul-expr>       ::= <intdiv-expr> { ("*" | "/") <intdiv-expr> }
-<intdiv-expr>    ::= <mod-expr>  { "\\" <mod-expr> }
-<mod-expr>       ::= <pow-expr>  { "MOD" <pow-expr> }
-<pow-expr>       ::= <unary-expr> { "^" <unary-expr> }     (* 우결합 *)
-<unary-expr>     ::= ("+" | "-") <unary-expr> | <primary>
+<add-expr>       ::= <mod-expr>  { ("+" | "-") <mod-expr> }
+<mod-expr>       ::= <intdiv-expr> { "MOD" <intdiv-expr> }
+<intdiv-expr>    ::= <mul-expr>  { "\\" <mul-expr> }
+<mul-expr>       ::= <unary-expr> { ("*" | "/") <unary-expr> }
+<unary-expr>     ::= ("+" | "-") <unary-expr> | <pow-expr>
+<pow-expr>       ::= <primary> { "^" <unary-expr> }        (* 우결합 *)
 <primary>        ::= <number>
                    | <string>
                    | <variable>
@@ -764,7 +788,7 @@ GW-BASIC의 어휘 분석에는 미묘한 함정이 있습니다.
 - `IF...THEN` 뒤의 숫자는 라인 번호이지만, 일반 위치에서는 정수 리터럴
 - `REM` 뒤는 줄 끝까지 모두 주석
 - `DATA` 뒤는 콤마/콜론/EOL까지 *bare string* 으로 처리될 수 있음
-- 키워드 사이에 공백이 없어도 됨: `FORI=1TO10` ← 합법
+- 원본 GW-BASIC은 키워드 사이에 공백이 없어도 됨: `FORI=1TO10` ← 합법 (키워드 최장 일치 크런치). 본 구현의 Lexer는 *식별자* 최장 일치를 쓰므로 키워드 **앞**에는 공백이 필요합니다 — 6.2절의 완화와 같은 결정
 
 이런 점들 때문에 Lexer에는 약간의 *문맥* 이 필요합니다. 9장에서 전략을 다룹니다.
 
@@ -777,7 +801,7 @@ GW-BASIC의 어휘 분석에는 미묘한 함정이 있습니다.
 본 구현에서 인식하는 키워드는 다음과 같습니다 (대문자 정규화 후 비교).
 
 ```
-AND  AS  ATN  AUTO  BEEP  BLOAD  BSAVE  CALL  CDBL  CHAIN  CHR$  CINT
+ABS  AND  AS  ASC  ATN  AUTO  BEEP  BLOAD  BSAVE  CALL  CDBL  CHAIN  CHR$  CINT
 CIRCLE  CLEAR  CLOSE  CLS  COLOR  COMMON  CONT  COS  CSNG  CSRLIN  CVD
 CVI  CVS  DATA  DATE$  DEF  DEFDBL  DEFINT  DEFSNG  DEFSTR  DELETE  DIM
 DRAW  EDIT  ELSE  END  ENVIRON  ENVIRON$  EOF  EQV  ERASE  ERL  ERR
@@ -1034,12 +1058,12 @@ export interface Token {
 }
 
 export const KEYWORDS = new Set<string>([
-  "AND","AS","ATN","BEEP","CHR$","CIRCLE","CINT","CLEAR","CLS","COLOR",
-  "COS","CSNG","CDBL","DATA","DEF","DEFINT","DEFSNG","DEFDBL","DEFSTR",
-  "DIM","ELSE","END","EQV","ERASE","ERL","ERR","EXP","FIX","FN","FOR",
+  "ABS","AND","AS","ASC","ATN","BEEP","CHR$","CIRCLE","CINT","CLEAR","CLS",
+  "COLOR","COS","CSNG","CSRLIN","CDBL","DATA","DEF","DEFINT","DEFSNG","DEFDBL",
+  "DEFSTR","DIM","ELSE","END","EQV","ERASE","ERL","ERR","EXP","FIX","FN","FOR",
   "GOSUB","GOTO","HEX$","IF","IMP","INKEY$","INPUT","INSTR","INT","LEFT$",
   "LEN","LET","LINE","LIST","LOAD","LOCATE","LOG","MID$","MOD","NEW",
-  "NEXT","NOT","OCT$","OFF","ON","OR","PAINT","PLAY","PRESET","PRINT",
+  "NEXT","NOT","OCT$","OFF","ON","OR","PAINT","PLAY","POS","PRESET","PRINT",
   "PSET","RANDOMIZE","READ","REM","RESTORE","RETURN","RIGHT$","RND",
   "RUN","SAVE","SCREEN","SGN","SIN","SOUND","SPACE$","SPC","SQR","STEP",
   "STOP","STR$","STRING$","SWAP","SYSTEM","TAB","TAN","THEN","TIMER",
@@ -1418,7 +1442,7 @@ describe("Lexer", () => {
 | 입력 | 토큰 | 비고 |
 |------|------|------|
 | `100A=1` | NUMBER(100), IDENT(A), OP(=), NUMBER(1) | 라인 100, A=1 |
-| `IFA=1THEN` | KEYWORD(IF), IDENT(A), OP(=), NUMBER(1), KEYWORD(THEN) | 키워드 사이 공백 불요 |
+| `IF A=1THEN` | KEYWORD(IF), IDENT(A), OP(=), NUMBER(1), KEYWORD(THEN) | 숫자 *뒤* 키워드는 공백 불요. `IFA=...`는 IDENT(IFA)로 읽힘 (5.7절) |
 | `A$="x"` | IDENT(A$), OP(=), STRING("x") | $는 식별자에 흡수 |
 | `1.E5` | NUMBER(100000) | `1.` 도 부동소수 |
 | `.5` | NUMBER(0.5) | 정수부 생략 가능 |
@@ -1591,6 +1615,12 @@ export class Parser {
       statements.push(parseStatement(this.cur));
     }
 
+    // 문장 끝에 붙은 ' 코멘트 (REM_TEXT) 흡수
+    // 이것이 없으면 `PRINT 1 ' 코멘트` 같은 줄이 Syntax error가 된다
+    if (this.cur.peek().type === "REM_TEXT") {
+      statements.push({ kind: "Rem", text: this.cur.next().value });
+    }
+
     // EOL 소비
     if (!this.cur.isEOF()) this.cur.expect("EOL");
 
@@ -1640,7 +1670,7 @@ const BP: Record<string, [number, number]> = {
 };
 
 const UNARY_BP = 50;   // 단항 + - 의 우측 결합력
-const NOT_BP   = 16;   // NOT의 결합력 (AND보다 약간 약함)
+const NOT_BP   = 16;   // NOT의 결합력 (비교(20)보다 약하고 AND(14)보다 강함)
 ```
 
 좌결합은 `[L, L+1]`, 우결합은 `[L, L-1]`로 표현합니다(우측 bp가 작으면 같은 우선순위에서 오른쪽으로 묶임).
@@ -1761,8 +1791,8 @@ function parseExprList(cur: Cursor): A.Expr[] {
 }
 
 const BUILTIN_FUNCS = new Set([
-  "ABS","ASC","ATN","CDBL","CHR$","CINT","COS","CSNG","EXP","FIX","HEX$",
-  "INKEY$","INSTR","INT","LEFT$","LEN","LOG","MID$","OCT$","RIGHT$","RND",
+  "ABS","ASC","ATN","CDBL","CHR$","CINT","COS","CSNG","CSRLIN","EXP","FIX","HEX$",
+  "INKEY$","INSTR","INT","LEFT$","LEN","LOG","MID$","OCT$","POS","RIGHT$","RND",
   "SGN","SIN","SPACE$","SQR","STR$","STRING$","TAB","TAN","TIMER","VAL",
 ]);
 function isBuiltinFunc(kw: string): boolean { return BUILTIN_FUNCS.has(kw); }
@@ -1976,7 +2006,8 @@ function parsePrint(cur: Cursor): A.Stmt {
   const items: A.PrintItem[] = [];
   let trailing: ";" | "," | null = null;
 
-  while (!cur.isEOL() && !cur.check("COLON") && !cur.check("KEYWORD","ELSE")) {
+  while (!cur.isEOL() && !cur.check("COLON") && !cur.check("KEYWORD","ELSE")
+         && !cur.check("REM_TEXT")) {
     if (cur.match("SEMICOLON")) {
       items.push({ kind: "sep", value: ";" });
       trailing = ";";
@@ -2810,11 +2841,14 @@ private emitStmt(s: A.Stmt, line: A.ProgramLine): void {
       return; // 코드 생성 없음
 
     case "Assign": {
-      this.emitExpr(s.value);
       if (s.target.kind === "VarRef") {
+        this.emitExpr(s.value);
         this.emit({ op: "STORE", name: normName(s.target.name) });
       } else {
+        // ⚠️ 인덱스 먼저, 값은 마지막 — STORE_ARR(16장)가 스택 *최상위*에서
+        // 값을 pop하므로 순서가 어긋나면 값이 인덱스로 쓰인다
         for (const i of s.target.indices) this.emitExpr(i);
+        this.emitExpr(s.value);
         this.emit({ op: "STORE_ARR", name: normName(s.target.name), n: s.target.indices.length });
       }
       return;
@@ -2889,22 +2923,30 @@ private emitStmt(s: A.Stmt, line: A.ProgramLine): void {
     case "OnGoto": {
       // 인덱스(1-based)에 따라 점프. 0 또는 범위 초과면 다음 문장으로 진행
       this.emitExpr(s.expr);
-      // 명령을 풀어 표현: dup, push i, eq, jmp_if_true target
+      // 후보마다: dup, push i, eq → 매치면 트램폴린(POP 후 점프/호출),
+      // 불일치면 skip 점프로 다음 후보로. lineRef는 반드시 JMP/CALL을
+      // emit하는 그 자리에서 호출해야 forward 참조 patch가 올바른 명령에 걸린다.
+      const endJumps: number[] = [];
       for (let i = 0; i < s.targets.length; i++) {
         this.emit({ op: "DUP" });
         this.emit({ op: "PUSH", value: INT(i + 1) });
         this.emit({ op: "EQ" });
-        const jt = this.emit({ op: "JMP_IF_TRUE", target: -1 });
-        const finalTarget = this.lineRef(s.targets[i]!);
-        // 점프 대상 자리에 patch — 점프 후 stack에 ON-식 결과가 남으니 POP 필요
-        // 간단히 처리하기 위해 점프 직전에 POP 하는 코드 트램폴린을 둠
+        const jt = this.emit({ op: "JMP_IF_TRUE", target: -1 });   // 매치 → 트램폴린
+        const skip = this.emit({ op: "JMP", target: -1 });          // 불일치 → 다음 후보
         this.patch(jt, this.code.length);
-        this.emit({ op: "POP" });
-        if (s.mode === "GOTO") this.emit({ op: "JMP", target: finalTarget });
-        else this.emit({ op: "CALL", target: finalTarget });
+        this.emit({ op: "POP" });                                   // ON-식 결과 제거
+        if (s.mode === "GOTO") {
+          this.emit({ op: "JMP", target: this.lineRef(s.targets[i]!) });
+        } else {
+          this.emit({ op: "CALL", target: this.lineRef(s.targets[i]!) });
+          // GOSUB는 RETURN 후 CALL 다음 명령으로 돌아오므로 체인 밖으로 탈출
+          endJumps.push(this.emit({ op: "JMP", target: -1 }));
+        }
+        this.patch(skip, this.code.length);
       }
       // 매치 안 되면 식 결과 POP하고 통과
       this.emit({ op: "POP" });
+      for (const j of endJumps) this.patch(j, this.code.length);
       return;
     }
 
@@ -3124,15 +3166,29 @@ private lineRef(n: number): number {
 ```ts
 compile(prog: A.Program): CompiledProgram {
   this.collectData(prog);
-  // 라인별로 임시 위치를 미리 표시하기 위해 placeholder 사용
   for (const line of prog.lines) {
     if (line.number !== null) this.lineMap.set(line.number, this.code.length);
     for (const s of line.statements) this.emitStmt(s, line);
   }
-  // 라인 참조가 -1 인 명령들은 즉시 lineMap을 보고 변환
+  // 라인 참조가 -1 인 명령들은 lineMap을 보고 일괄 변환
   this.resolveUnresolved();
   this.emit({ op: "END" });
-  return { ... };
+
+  // FOR / WHILE 짝 검사
+  if (this.frame.forStack.length > 0) {
+    throw new BasicError(ERR.FOR_WITHOUT_NEXT, "FOR without NEXT");
+  }
+  if (this.frame.whileStack.length > 0) {
+    throw new BasicError(ERR.SYNTAX, "WHILE without WEND");
+  }
+
+  return {
+    code: this.code,
+    lineMap: this.lineMap,
+    dataPool: this.dataPool,
+    dataLineMap: this.dataLineMap,
+    defFns: this.defFns,
+  };
 }
 
 private unresolved: { line: number; opIndex: number }[] = [];
@@ -3192,7 +3248,7 @@ export function disassemble(p: CompiledProgram): string {
    0: PUSH value={"tag":"INT","v":1}
    1: PUSH value={"tag":"INT","v":3}
    2: PUSH value={"tag":"INT","v":1}
-   3: FOR_INIT varName="I" loopEnd=10
+   3: FOR_INIT varName="I" loopEnd=8
 ; line 20
    4: LOAD name="I"
    5: PRINT_VAL
@@ -3266,6 +3322,8 @@ import {
   cmp, andOp, orOp, xorOp, notOp, toBool, fromBool,
   toNum, toStr,
 } from "../runtime/ops.js";
+import { formatPrintValue, formatSep, splitInput } from "../runtime/print-format.js";
+import { formatUsing } from "../runtime/print-using.js";   // 19장의 확장판
 
 interface ForRecord {
   varName: string;
@@ -3312,7 +3370,10 @@ export class VM {
 ### 16.2 명령 디스패치
 
 ```ts
-private async dispatch(ins: Op): Promise<void> {
+// 동기 명령은 void를, 비동기 명령(INPUT/SOUND/PLAY/BEEP)은 Promise를 반환한다.
+// async 함수로 만들면 동기 명령의 예외까지 rejected Promise로 감싸져
+// 동기 호출 경로(16.5의 dispatchSync)에서 조용히 사라지므로 일반 메서드로 둔다.
+private dispatch(ins: Op): void | Promise<void> {
   switch (ins.op) {
     case "PUSH": this.push(ins.value); return;
     case "POP":  this.pop(); return;
@@ -3462,23 +3523,7 @@ private async dispatch(ins: Op): Promise<void> {
     }
     case "PRINT_NL": this.host.println(""); return;
 
-    case "INPUT": {
-      const promptFinal = ins.prompt + (ins.suppressQuestion ? "" : "? ");
-      const text = await this.host.inputLine(promptFinal);
-      const parts = splitInput(text, ins.vars.length);
-      for (let i = 0; i < ins.vars.length; i++) {
-        const v = ins.vars[i]!;
-        const raw = parts[i] ?? "";
-        const isStr = v.name.endsWith("$");
-        const val: BasicValue = isStr ? STR(raw) : SNG(parseFloat(raw) || 0);
-        if (v.isArray) {
-          // 배열 INPUT은 본 구현에서 비지원 (단순 설계)
-          throw new BasicError(ERR.SYNTAX, "Array INPUT not supported");
-        }
-        this.env.set(v.name, val);
-      }
-      return;
-    }
+    case "INPUT": return this.doInput(ins);   // 아래 doInput 참고
 
     // 그래픽 (Host로 위임)
     case "CLS": {
@@ -3546,19 +3591,17 @@ private async dispatch(ins: Op): Promise<void> {
       return;
     }
 
-    // 사운드
+    // 사운드 (pop은 동기적으로 끝내고 Promise만 반환)
     case "SOUND": {
       const dur = toNum(this.pop());
       const freq = toNum(this.pop());
-      await this.host.sound(freq, dur);
-      return;
+      return this.host.sound(freq, dur);
     }
     case "PLAY": {
       const mml = toStr(this.pop());
-      await this.host.play(mml);
-      return;
+      return this.host.play(mml);
     }
-    case "BEEP": await this.host.sound(800, 200); return;
+    case "BEEP": return this.host.sound(800, 200);
 
     // 함수
     case "CALL_BUILTIN": {
@@ -3567,33 +3610,11 @@ private async dispatch(ins: Op): Promise<void> {
       this.push(callBuiltin(ins.name, args, this));
       return;
     }
-    case "CALL_FN": {
-      const fn = this.program.defFns.get(ins.name);
-      if (!fn) throw new BasicError(ERR.SYNTAX, `Undefined FN ${ins.name}`);
-      if (fn.params.length !== ins.nargs) {
-        throw new BasicError(ERR.SYNTAX, `FN ${ins.name} arity mismatch`);
-      }
-      // 매개변수를 환경에 push (FN은 단일 표현식이므로 임시 frame)
-      const args: BasicValue[] = [];
-      for (let i = 0; i < ins.nargs; i++) args.unshift(this.pop());
-      this.env.pushFrame();
-      for (let i = 0; i < fn.params.length; i++) {
-        this.env.set(fn.params[i]!, args[i]!);
-      }
-      // sub-VM으로 본문 실행
-      const subVM = new VM(
-        { code: fn.body, lineMap: new Map(), dataPool: [], dataLineMap: new Map(), defFns: this.program.defFns },
-        this.host,
-      );
-      subVM.env = this.env;
-      await subVM.run();
-      // sub-VM이 RET으로 끝나면 결과는 그쪽 stack의 최상위
-      // 우리는 sub-VM과 환경을 공유하고 stack은 분리되어 있으므로,
-      // 더 단순한 방법으로 본 책에서는 함수 호출을 *동기 평가*로 구현 (env 공유)
-      this.env.popFrame();
-      // 결과를 받아오기 어려우니 단순화: callBuiltin 경로로 사전 변환
-      return;
-    }
+    case "CALL_FN":
+      // 사용자 정의 함수 호출. sub-VM을 따로 만들면 결과(그쪽 스택의 최상위)를
+      // 돌려받는 경로가 복잡해지므로, 매개변수 스코프(frame)와 함께
+      // DEF FN을 다루는 26장에서 *동기 평가*로 구현한다 (26.3절 코드로 채움).
+      throw new BasicError(ERR.SYNTAX, `FN not yet implemented (26장 참고)`);
 
     case "DEF_FN":
       this.program.defFns.set(ins.name, { params: ins.params, body: ins.body });
@@ -3604,9 +3625,17 @@ private async dispatch(ins: Op): Promise<void> {
       const item = this.program.dataPool[this.dataPtr++];
       if (!item) throw new BasicError(ERR.OUT_OF_DATA, "Out of DATA");
       const isStr = ins.name.endsWith("$");
-      const v: BasicValue = isStr
-        ? STR(typeof item.value === "string" ? item.value : String(item.value))
-        : SNG(typeof item.value === "number" ? item.value : parseFloat(item.value as string));
+      let v: BasicValue;
+      if (isStr) {
+        v = STR(typeof item.value === "string" ? item.value : String(item.value));
+      } else {
+        const n = typeof item.value === "number" ? item.value : parseFloat(item.value as string);
+        if (!Number.isFinite(n)) {
+          // 숫자 변수에 숫자가 아닌 DATA — GW-BASIC은 해당 DATA 라인의 Syntax error
+          throw new BasicError(ERR.SYNTAX, `Syntax error in DATA (line ${item.sourceLine})`);
+        }
+        v = SNG(n);
+      }
       if (ins.isArray) {
         const idx: number[] = [];
         for (let i = 0; i < ins.nIdx; i++) idx.unshift(toNum(this.pop()) | 0);
@@ -3671,6 +3700,25 @@ private async dispatch(ins: Op): Promise<void> {
       return;
   }
 }
+
+// INPUT의 실제 처리 (유일하게 await가 필요한 부분이라 별도 async 메서드)
+private async doInput(ins: Op & { op: "INPUT" }): Promise<void> {
+  // 프롬프트 뒤가 콤마면 물음표 억제: INPUT "p", V
+  const q = (ins.suppressQuestion || ins.promptSep === ",") ? "" : "? ";
+  const text = (await this.host.inputLine(ins.prompt + q)) ?? "";
+  const parts = splitInput(text, ins.vars.length);
+  for (let i = 0; i < ins.vars.length; i++) {
+    const v = ins.vars[i]!;
+    const raw = parts[i] ?? "";
+    const isStr = v.name.endsWith("$");
+    const val: BasicValue = isStr ? STR(raw) : SNG(parseFloat(raw) || 0);
+    if (v.isArray) {
+      // 배열 INPUT은 본 구현에서 비지원 (단순 설계)
+      throw new BasicError(ERR.SYNTAX, "Array INPUT not supported");
+    }
+    this.env.set(v.name, val);
+  }
+}
 ```
 
 ### 16.3 PRINT 포매팅 도우미
@@ -3703,10 +3751,9 @@ function formatNumber(n: number, tag: "INT" | "SNG" | "DBL"): string {
 
 export function formatSep(sep: ";" | ",", curCol: number): string {
   if (sep === ";") return "";
-  // 콤마: 다음 14컬럼 위치
-  const next = Math.ceil(curCol / TAB_WIDTH) * TAB_WIDTH;
-  const need = (next === curCol ? next + TAB_WIDTH : next) - curCol;
-  return " ".repeat(need);
+  // 콤마: 다음 인쇄 구역으로 이동 (폭 14, 시작 컬럼 1, 15, 29, …)
+  const next = Math.floor((curCol - 1) / TAB_WIDTH + 1) * TAB_WIDTH + 1;
+  return " ".repeat(next - curCol);
 }
 
 export function formatUsing(fmt: string, args: import("./value.js").BasicValue[]): string {
@@ -3761,7 +3808,7 @@ export function splitInput(text: string, n: number): string[] {
 
 ### 16.4 비동기 실행 (Async/await)
 
-VM의 `run`이 `async`인 이유는 **INPUT, SOUND, PLAY** 등이 비동기 호스트 호출을 하기 때문입니다. 매 명령마다 `await`가 걸리는 것은 아니고, 동기 명령은 즉시 반환되는 Promise이므로 마이크로태스크 큐 비용만 듭니다. 그럼에도 불구하고 매 명령에 await를 거는 것은 느립니다. 다음 절에서 최적화를 다룹니다.
+VM의 `run`이 `async`인 이유는 **INPUT, SOUND, PLAY, BEEP** 이 비동기 호스트 호출을 하기 때문입니다. 주의할 점은 `dispatch` 자체를 `async` 함수로 만들면 안 된다는 것입니다 — async 함수는 예외를 *동기적으로 던지지 않고* rejected Promise로 감싸므로, 동기 호출 경로에서 에러가 조용히 사라집니다. 그래서 `dispatch`는 일반 메서드로 두고, 비동기 명령에서만 Promise를 반환합니다. `await`는 Promise가 아닌 값에도 쓸 수 있으므로 `await this.dispatch(ins)`는 그대로 동작하지만, 매 명령에 await를 거는 것은 느립니다. 다음 절에서 최적화를 다룹니다.
 
 ### 16.5 동기 / 비동기 분리
 
@@ -3769,7 +3816,14 @@ VM의 `run`이 `async`인 이유는 **INPUT, SOUND, PLAY** 등이 비동기 호�
 
 ```ts
 private isAsyncOp(op: string): boolean {
-  return op === "INPUT" || op === "SOUND" || op === "PLAY";
+  return op === "INPUT" || op === "SOUND" || op === "PLAY" || op === "BEEP";
+}
+
+private dispatchSync(ins: Op): void {
+  const r = this.dispatch(ins);   // 동기 명령은 즉시 완료, 예외도 동기로 던져진다
+  if (r !== undefined) {
+    throw new BasicError(ERR.SYNTAX, `Async op in sync context: ${ins.op}`);
+  }
 }
 
 async run(): Promise<void> {
@@ -3786,7 +3840,7 @@ async run(): Promise<void> {
 }
 ```
 
-`dispatchSync`는 `dispatch`와 같지만 비동기 명령에서 throw 하도록 만듭니다. 이렇게 하면 99%의 명령이 마이크로태스크 비용 없이 실행됩니다.
+`dispatchSync`는 비동기 명령을 만나면 throw 합니다 (BEEP도 비동기임에 주의). 이렇게 하면 99%의 명령이 마이크로태스크 비용 없이 실행됩니다.
 
 ### 16.6 인터럽트와 STOP
 
@@ -4055,7 +4109,7 @@ export class Env {
   // ── 배열 ──────────────────────────────────────
   dim(name: string, upperBounds: number[]): void {
     if (this.arrays.has(name)) {
-      throw new BasicError(ERR.SYNTAX, `Redimensioned array: ${name}`);
+      throw new BasicError(ERR.DUPLICATE_DEFINITION, `Duplicate definition: ${name}`);
     }
     const dims = upperBounds.map(b => b + 1 - this.optionBase);
     let total = 1;
@@ -4105,6 +4159,15 @@ export class Env {
   pushFrame(): void { this.frameStack.push(new Map()); }
   popFrame(): void  { this.frameStack.pop(); }
 
+  // 최상위 frame에 *새 이름*을 만든다 (DEF FN 매개변수 바인딩 전용).
+  // set()은 frame에 이미 있는 이름만 갱신하므로,
+  // 이것 없이 매개변수를 set으로 바인딩하면 전역 변수를 영구히 덮어쓴다.
+  setLocal(name: string, v: BasicValue): void {
+    const f = this.frameStack[this.frameStack.length - 1];
+    if (f) f.set(name, this.coerce(name, v));
+    else this.set(name, v);
+  }
+
   clear(): void {
     this.scalar.clear();
     this.arrays.clear();
@@ -4147,6 +4210,8 @@ function parseDefRange(cur: Cursor, type: "INT"|"SNG"|"DBL"|"STR"): A.Stmt {
 ### 18.4 프레임 스택 (DEF FN)
 
 DEF FN의 매개변수만 별도의 스코프를 갖습니다. `Env.pushFrame` / `popFrame`이 그 역할을 합니다. 일반 변수와 같은 이름의 매개변수는 함수 내부에서만 매개변수를 가리킵니다(섀도잉).
+
+⚠️ 매개변수 바인딩에는 `set`이 아니라 반드시 `setLocal`을 씁니다. `set`은 frame에 이미 존재하는 이름만 갱신하고 없으면 전역에 쓰기 때문에, `set`으로 바인딩하면 새 frame이 비어 있어 매개변수 값이 그대로 전역 변수를 덮어써 버립니다.
 
 ### 18.5 환경 테스트
 
@@ -4202,7 +4267,7 @@ describe("Env", () => {
 GW-BASIC의 PRINT는 단순해 보이지만 의외로 규칙이 많습니다.
 
 1. **숫자 양쪽에 공백** — 양수면 부호 자리에 공백, 항상 끝에 공백 한 칸
-2. **콤마는 14컬럼 탭** — 다음 14의 배수 컬럼으로 이동
+2. **콤마는 14컬럼 인쇄 구역** — 다음 구역 시작 컬럼(1, 15, 29, …)으로 이동
 3. **세미콜론은 공백 없음** — 즉시 이어 출력
 4. **줄 끝 `;` 또는 `,`** — 줄바꿈 억제
 5. **TAB(n)** — n 컬럼으로 절대 이동 (현재 위치보다 앞이면 다음 줄)
@@ -4216,22 +4281,58 @@ Host는 *현재 커서 컬럼* 을 기억해야 합니다.
 
 ```ts
 // src/host/console.ts
+import * as readline from "node:readline";
+import { Host } from "./host.js";
+import { Rng } from "./rng.js";
+
 export class ConsoleHost implements Host {
   private col = 1;        // 1-based
-  private row = 1;
-  private out: NodeJS.WriteStream | { write: (s:string)=>void } = process.stdout;
+  private curRow = 1;
+  private rng = new Rng(Date.now() & 0xFFFF);
+  private rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   printAt(s: string): void {
-    this.out.write(s);
+    process.stdout.write(s);
     for (const ch of s) {
-      if (ch === "\n") { this.row++; this.col = 1; }
+      if (ch === "\n") { this.curRow++; this.col = 1; }
       else if (ch === "\r") { this.col = 1; }
       else this.col++;
     }
   }
   println(s: string): void { this.printAt(s + "\n"); }
   column(): number { return this.col; }
-  // ... INPUT, 그래픽 등은 다음 절들에서
+  row(): number { return this.curRow; }
+
+  inputLine(prompt: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      this.rl.question(prompt, (ans) => { this.curRow++; this.col = 1; resolve(ans); });
+    });
+  }
+  inkey(): string { return ""; }   // 콘솔 비차단 키 입력은 raw mode 필요 — 본 구현 생략
+
+  cls(_mode: number): void { console.clear(); this.col = 1; this.curRow = 1; }
+  setScreen(_mode: number): void {}
+  setColor(_fg: number | null, _bg: number | null): void {}
+  locate(row: number | null, col: number | null): void {
+    if (row !== null) this.curRow = row;
+    if (col !== null) this.col = col;
+  }
+
+  // 콘솔은 그래픽 미지원 — no-op (브라우저의 CanvasHost가 담당)
+  pset(): void {}
+  drawLine(): void {}
+  drawCircle(): void {}
+  paint(): void {}
+
+  async sound(_freq: number, durMs: number): Promise<void> {
+    await new Promise(r => setTimeout(r, durMs));
+  }
+  async play(_mml: string): Promise<void> {}
+
+  now(): number { return Date.now(); }
+  random(): number { return this.rng.next(); }
+  lastRandom(): number { return this.rng.lastValue(); }
+  seedRandom(s: number): void { this.rng.seed(s); }
 }
 ```
 
@@ -4257,7 +4358,7 @@ GW-BASIC의 PRINT USING은 별도의 미니 언어입니다. 구현해야 할 �
 **예제**:
 
 ```basic
-PRINT USING "##.##"; 3.14159     ' "3.14"
+PRINT USING "##.##"; 3.14159     ' " 3.14" (필드 폭 5, 오른쪽 정렬)
 PRINT USING "$$#,###.##"; 1234.5 ' " $1,234.50"
 PRINT USING "\   \"; "Hello"     ' "Hello" (5자리 필드)
 ```
@@ -4351,11 +4452,11 @@ function formatNumberField(fld: string, expCount: number, n: number): string {
   let abs = Math.abs(n);
   let s: string;
   if (expCount > 0) {
-    // 지수 표기
+    // 지수 표기: ^^^^ 는 E±NN — E와 부호를 빼면 지수 자릿수는 expCount - 2
     const expSign = n === 0 ? 0 : Math.floor(Math.log10(abs));
     const mantissa = abs / Math.pow(10, expSign);
     s = mantissa.toFixed(fracDigits) + "E" + (expSign >= 0 ? "+" : "-")
-        + Math.abs(expSign).toString().padStart(expCount - 1, "0");
+        + Math.abs(expSign).toString().padStart(expCount - 2, "0");
   } else {
     s = abs.toFixed(fracDigits);
   }
@@ -4366,11 +4467,12 @@ function formatNumberField(fld: string, expCount: number, n: number): string {
   }
   // 부호
   const sign = n < 0 ? "-" : (leadingPlus || trailingPlus ? "+" : "");
-  // 채움
-  const totalDigitsField = intDigits + (dot < 0 ? 0 : 1) + fracDigits;
+  // 채움: 필드 문자 하나가 출력 한 칸 — 필드 리터럴 전체 길이가 곧 출력 폭이다
+  // (# 개수만 세면 콤마와 $$ 자리가 빠져 "$$#,###.##" 같은 필드의 폭이 어긋난다)
+  const fieldWidth = fld.length + expCount;
   const fill = starFill ? "*" : " ";
   const dollar = dollarPrefix ? "$" : "";
-  const need = totalDigitsField - s.length - sign.length - dollar.length;
+  const need = fieldWidth - s.length - sign.length - dollar.length;
 
   if (need < 0) {
     // 오버플로 → % 부호
@@ -4378,7 +4480,7 @@ function formatNumberField(fld: string, expCount: number, n: number): string {
   }
   let pad = fill.repeat(need);
   if (trailingPlus || trailingMinus) {
-    return dollar + pad + s + (sign || (trailingPlus ? "+" : " "));
+    return pad + dollar + s + (sign || (trailingPlus ? "+" : " "));
   }
   return pad + sign + dollar + s;
 }
@@ -4730,8 +4832,11 @@ export const BUILTINS: Record<string, Builtin> = {
   // 수학
   "ABS": (a) => SNG(Math.abs(toNum(a[0]!))),
   "SGN": (a) => INT(Math.sign(toNum(a[0]!))),
-  "INT": (a) => INT(Math.floor(toNum(a[0]!))),
-  "FIX": (a) => INT(Math.trunc(toNum(a[0]!))),
+  // INT/FIX 결과가 16비트를 넘으면 INT 태그로 넣을 수 없으므로 DBL로
+  "INT": (a) => { const f = Math.floor(toNum(a[0]!));
+                  return (f >= -32768 && f <= 32767) ? INT(f) : DBL(f); },
+  "FIX": (a) => { const t = Math.trunc(toNum(a[0]!));
+                  return (t >= -32768 && t <= 32767) ? INT(t) : DBL(t); },
   "SQR": (a) => DBL(Math.sqrt(toNum(a[0]!))),
   "SIN": (a) => DBL(Math.sin(toNum(a[0]!))),
   "COS": (a) => DBL(Math.cos(toNum(a[0]!))),
@@ -4836,9 +4941,19 @@ function formatStr(v: BasicValue): string {
   const s = formatNumberPlain(n, v.tag as "INT"|"SNG"|"DBL");
   return n >= 0 ? " " + s : s;
 }
-```
 
-(formatNumberPlain은 16장에서 다룬 형식과 동일하지만 *끝 공백은 빼고* 반환)
+// 16장 print-format.ts의 숫자 형식과 동일하되 *끝 공백 없이* 반환
+function formatNumberPlain(n: number, tag: "INT" | "SNG" | "DBL"): string {
+  if (tag === "INT") return Math.trunc(n).toString();
+  if (Number.isInteger(n) && Math.abs(n) < 1e15) return n.toString();
+  const prec = tag === "DBL" ? 16 : 7;
+  let s = n.toPrecision(prec);
+  if (s.includes(".") && !s.includes("E") && !s.includes("e")) {
+    s = s.replace(/0+$/, "").replace(/\.$/, "");
+  }
+  return s;
+}
+```
 
 ### 23.6 VAL
 
@@ -4972,7 +5087,7 @@ RESTORE 100    ' 라인 100의 첫 DATA로
 
 ### 25.3 타입 매칭
 
-READ 대상이 숫자 변수인데 DATA가 문자열이면 `Type mismatch`. 단, DATA의 *bare string* 이 숫자처럼 보이면(예: `DATA 3.14`) 숫자로 파싱됩니다. 본 구현은 컴파일 단계에서 `kind: "num" | "str"`로 분류하므로 명확합니다.
+READ 대상이 숫자 변수인데 DATA 항목이 숫자로 해석되지 않으면 GW-BASIC은 해당 DATA 라인을 가리키는 `Syntax error`를 냅니다 (본 구현도 동일 — 16장 READ 참고). DATA의 *bare string* 이 숫자처럼 보이면(예: `DATA -5`) 숫자로 파싱됩니다. 본 구현은 컴파일 단계에서 `kind: "num" | "str"`로 분류하고, 숫자 READ 시점에 다시 검사합니다.
 
 ### 25.4 OUT OF DATA
 
@@ -5016,34 +5131,34 @@ GW-BASIC의 DEF FN은 *한 줄짜리 표현식 함수* 입니다. 다중 라인 
 
 ### 26.3 컴파일과 호출
 
-15장에서 이미 `DEF_FN` / `CALL_FN` 명령을 만들었습니다. 16장의 `CALL_FN` 디스패치는 다음과 같이 단순화하는 것이 좋습니다.
+15장에서 이미 `DEF_FN` / `CALL_FN` 명령을 만들었습니다. 16장에서 자리만 잡아 둔 `CALL_FN` 디스패치를 여기서 채웁니다. sub-VM을 따로 만들지 않고, 본문(단일 표현식)을 현재 VM에서 *동기 평가*합니다.
 
 ```ts
 case "CALL_FN": {
   const fn = this.program.defFns.get(ins.name);
   if (!fn) throw new BasicError(ERR.SYNTAX, `Undefined FN ${ins.name}`);
+  if (fn.params.length !== ins.nargs) {
+    throw new BasicError(ERR.SYNTAX, `FN ${ins.name} arity mismatch`);
+  }
   const args: BasicValue[] = [];
   for (let i = 0; i < ins.nargs; i++) args.unshift(this.pop());
-  // 매개변수를 frame에 push
+  // 매개변수를 frame에 *새 바인딩*으로 push (setLocal — 18.4절 참고.
+  // set을 쓰면 빈 frame을 지나쳐 전역 변수를 덮어써 섀도잉이 깨진다)
   this.env.pushFrame();
-  for (let i = 0; i < fn.params.length; i++) this.env.set(fn.params[i]!, args[i]!);
+  for (let i = 0; i < fn.params.length; i++) this.env.setLocal(fn.params[i]!, args[i]!);
   // 본문은 단일 표현식이므로 여기서 동기 실행 (sub-VM 없이 직접)
   const savedStack = this.stack;
   this.stack = [];
-  const savedPC = this.pc;
-  const savedCode = this.program.code;
-  // 본문 일시 주입 — 더 깔끔한 방법은 별도 메서드
   this.evalExprBody(fn.body);
   const result = this.pop();
   this.stack = savedStack;
-  this.pc = savedPC;
   this.env.popFrame();
   this.push(result);
   return;
 }
 
 private evalExprBody(body: Op[]): void {
-  // body는 동기 명령들로만 이루어졌다고 가정
+  // body는 동기 명령들로만 이루어졌다고 가정 (표현식에는 비동기 명령이 없다)
   let p = 0;
   while (p < body.length) {
     const ins = body[p++]!;
@@ -5122,6 +5237,7 @@ export const PALETTE_16: [number, number, number][] = [
 import { Host } from "./host.js";
 import { PALETTE_16 } from "./palette.js";
 import { Rng } from "./rng.js";
+import { playMml } from "../runtime/mml.js";   // 28장 — 이 import가 없으면 play()가 컴파일되지 않는다
 
 export class CanvasHost implements Host {
   private ctx: CanvasRenderingContext2D;
@@ -5428,24 +5544,27 @@ export async function playMml(host: CanvasHost, mml: string): Promise<void> {
     return ms * 0.875;     // Normal: 음과 음 사이 약간의 공백
   };
 
+  // noUncheckedIndexedAccess 대응: 범위 밖 인덱스는 빈 문자열로
+  const at = (k: number): string => u[k] ?? "";
+
   const readNum = (): number => {
     let n = "";
-    while (i < u.length && u[i] >= "0" && u[i] <= "9") n += u[i++];
+    while (i < u.length && at(i) >= "0" && at(i) <= "9") n += u[i++];
     return parseInt(n, 10);
   };
 
   while (i < u.length) {
-    const ch = u[i++];
+    const ch = u[i++]!;
     if (ch === " " || ch === "\t") continue;
 
     if (ch >= "A" && ch <= "G") {
       let semi = NOTE_OFFSET[ch]!;
-      if (u[i] === "+" || u[i] === "#") { semi++; i++; }
-      else if (u[i] === "-") { semi--; i++; }
+      if (at(i) === "+" || at(i) === "#") { semi++; i++; }
+      else if (at(i) === "-") { semi--; i++; }
       let len = s.length;
-      if (u[i] >= "0" && u[i] <= "9") len = readNum();
+      if (at(i) >= "0" && at(i) <= "9") len = readNum();
       let dotted = false;
-      if (u[i] === ".") { dotted = true; i++; }
+      if (at(i) === ".") { dotted = true; i++; }
       const freq = NOTE_FREQ_C0 * Math.pow(2, s.octave + semi / 12);
       const ms = noteMs(len, dotted);
       await host.sound(freq, ms);
@@ -5459,7 +5578,7 @@ export async function playMml(host: CanvasHost, mml: string): Promise<void> {
     if (ch === "T") { s.tempo = readNum(); continue; }
     if (ch === "P" || ch === "R") {
       let len = s.length;
-      if (u[i] >= "0" && u[i] <= "9") len = readNum();
+      if (at(i) >= "0" && at(i) <= "9") len = readNum();
       await new Promise(r => setTimeout(r, wholeNoteMs() / len));
       continue;
     }
@@ -5567,6 +5686,7 @@ export class Repl {
       try {
         await this.handle(line);
       } catch (e: any) {
+        if (e.message === "EXIT") break;   // BYE / SYSTEM — 삼키면 종료가 안 된다
         this.host.println(`?${e.message}`);
       }
       this.host.println("Ok");
@@ -5741,8 +5861,9 @@ async run(): Promise<void> {
 PC → BASIC 라인 번호의 역매핑이 필요합니다.
 
 ```ts
-// CompiledProgram에 추가
-pcToLine: number[];   // 인덱스 = pc, 값 = BASIC line (없으면 0)
+// CompiledProgram에 추가 (옵셔널로 — 필수로 하면 15장의 compile() 반환 객체가
+// 이 필드를 만들지 않아 컴파일이 깨진다)
+pcToLine?: number[];   // 인덱스 = pc, 값 = BASIC line (없으면 0)
 ```
 
 컴파일러에서 라인 시작마다 채웁니다.
@@ -5762,7 +5883,7 @@ class StepDebugger implements Debugger {
 
   attach(vm: VM): void {
     vm.onBeforeInstruction = async (pc) => {
-      const line = vm.program.pcToLine[pc] ?? 0;
+      const line = vm.program.pcToLine?.[pc] ?? 0;
       if (this.mode === "step" || this.breaks.has(line)) {
         await new Promise<void>(r => { this.resumeFn = r; });
       }
