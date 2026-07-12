@@ -462,7 +462,7 @@ export function shellSort(arr: number[]): number[] {
 }
 ```
 
-복잡도는 갭 시퀀스에 따라 달라집니다 (O(n^1.5) ~ O(n log² n)).
+복잡도는 갭 시퀀스에 따라 달라집니다. 위처럼 절반씩 줄이는 갭은 최악 O(n²)이고, Hibbard 갭(1, 3, 7, 15, …)은 O(n^1.5), 더 정교한 갭은 O(n log² n)까지 내려갑니다.
 
 ## 시간복잡도 정리
 
@@ -471,7 +471,7 @@ export function shellSort(arr: number[]): number[] {
 | 버블 | O(n) | O(n²) | O(n²) | O(1) | ✓ |
 | 선택 | O(n²) | O(n²) | O(n²) | O(1) | ✗ |
 | 삽입 | O(n) | O(n²) | O(n²) | O(1) | ✓ |
-| 셸 | O(n log n) | ~ | O(n^1.5) | O(1) | ✗ |
+| 셸 | O(n log n) | ~ | O(n²) (절반 갭) | O(1) | ✗ |
 
 ## 핵심 정리
 - O(n²) 정렬 셋은 **n ≤ 수백** 또는 거의 정렬된 입력에서 빛난다.
@@ -691,7 +691,7 @@ console.log(sorted);
 
 ## 5.1 비교 정렬의 하한
 
-n개의 원소를 비교만으로 정렬하려면 **최소 O(n log n)** 비교가 필요하다는 것이 증명되어 있습니다.
+n개의 원소를 비교만으로 정렬하려면 **최소 Ω(n log n)번의 비교**가 필요하다는 것이 증명되어 있습니다.
 
 직관: 가능한 순열은 n!개. 한 번 비교로 절반을 줄이면 log₂(n!) ≈ n log n번 비교가 필요.
 
@@ -859,7 +859,7 @@ console.log(binarySearch(a, 4));  // -1
 복잡도: O(log n).
 
 ### 함정 — 오버플로
-JavaScript 정수 범위가 매우 크기에 `(lo + hi) >> 1`이 안전하지만, 다른 언어에선 `lo + ((hi - lo) >> 1)`을 씁니다.
+다른 언어에선 `lo + hi`가 정수 오버플로를 일으킬 수 있어 `lo + ((hi - lo) >> 1)`을 씁니다. JavaScript는 수 범위가 넓어 덧셈 자체는 안전하지만, `>>`가 피연산자를 32비트 정수로 잘라 계산하므로 길이가 2³⁰을 넘는 배열이라면 `Math.floor((lo + hi) / 2)`를 써야 합니다.
 
 ## 6.3 lower_bound / upper_bound
 
@@ -954,7 +954,7 @@ export function ternarySearchMax(
 }
 
 // 예: f(x) = -(x-7)^2 + 50의 최댓값
-const f = (x: number) => -(x - 7) ** 2 + 50;
+const f = (x: number) => -((x - 7) ** 2) + 50;
 console.log(ternarySearchMax(f, 0, 20)); // 7
 ```
 
@@ -1738,7 +1738,7 @@ console.log(activitySelection([
   { start: 8, end: 9 },
   { start: 5, end: 9 },
 ]));
-// 4개
+// 3개: (1,4) (5,7) (8,9)
 ```
 
 증명 스케치: 가장 빨리 끝나는 활동을 골라 미래 자원을 최대화.
@@ -2831,7 +2831,7 @@ export function extGcd(a: number, b: number): [number, number, number] {
   return [g, y1, x1 - Math.floor(a / b) * y1];
 }
 
-console.log(extGcd(30, 18)); // [6, 1, -1] -> 30*1 + 18*(-1) = 12... 확인: 30 - 18 = 12 ≠ 6. 다시: gcd=6, 30*(-1) + 18*2 = -30+36=6
+console.log(extGcd(30, 18)); // [6, -1, 2] → 30×(-1) + 18×2 = 6
 ```
 
 활용: 모듈러 역원.
@@ -2968,7 +2968,7 @@ export class Comb {
 }
 
 const c = new Comb(100);
-console.log(c.nCr(10, 3));  // 120
+console.log(c.nCr(10, 3));  // 120n
 console.log(c.nCr(50, 25)); // 모듈러 결과
 ```
 
@@ -3415,7 +3415,7 @@ export function twoSumSorted(arr: number[], target: number): [number, number] | 
   return null;
 }
 
-console.log(twoSumSorted([1, 3, 5, 7, 9], 12)); // [2, 4]
+console.log(twoSumSorted([1, 3, 5, 7, 9], 12)); // [1, 4] (3 + 9 = 12)
 ```
 
 ## 20.2 슬라이딩 윈도우
@@ -3533,23 +3533,39 @@ console.log(wordBreak("applepenapple", ["apple", "pen"])); // true
 
 ## 20.7 그리디 + 정렬 — 회의실 K개에서 최대 활동
 
+끝나는 시간이 빠른 순으로 정렬한 뒤, 각 회의를 "가장 늦게 끝났으면서도 겹치지 않는 방"에 배정합니다(best-fit). 빈 방이 없으면 그 회의는 포기합니다.
+
 ```ts
 // src/pattern/maxActivities.ts
-import { MinHeap } from "../ds/MinHeap";
-
 type Meeting = { start: number; end: number };
 
+/** 회의실이 rooms개일 때 진행할 수 있는 최대 회의 수 */
 export function maxActivities(meetings: Meeting[], rooms: number): number {
-  const sorted = meetings.slice().sort((a, b) => a.start - b.start);
-  const heap = new MinHeap<number>(); // 끝나는 시각
+  const sorted = meetings.slice().sort((a, b) => a.end - b.end);
+  const roomEnds: number[] = []; // 사용 중인 각 방의 종료 시각 (오름차순 유지)
+  let count = 0;
   for (const m of sorted) {
-    if (heap.length > 0 && heap.peek()! <= m.start) heap.pop();
-    if (heap.length < rooms) heap.push(m.end);
+    // m.start 이전에 끝난 방 중 가장 늦게 끝난 방을 재사용 (best-fit)
+    let idx = -1;
+    for (let i = roomEnds.length - 1; i >= 0; i--) {
+      if (roomEnds[i] <= m.start) { idx = i; break; }
+    }
+    if (idx >= 0) roomEnds.splice(idx, 1);        // 그 방을 재사용
+    else if (roomEnds.length >= rooms) continue;  // 빈 방 없음 → 이 회의는 포기
+    let pos = roomEnds.length;                    // 정렬 유지하며 종료 시각 삽입
+    while (pos > 0 && roomEnds[pos - 1] > m.end) pos--;
+    roomEnds.splice(pos, 0, m.end);
+    count++;
   }
-  // 끝까지 남은 미팅이 사용한 방의 수가 답이 아니라 — 풀이 의도에 따라 다름.
-  // 여기서는 "동시 진행 가능한 미팅 수"의 최댓값을 반환:
-  return Math.min(meetings.length, rooms);
+  return count;
 }
+
+console.log(maxActivities([
+  { start: 1, end: 4 },
+  { start: 2, end: 5 },
+  { start: 3, end: 6 },
+  { start: 5, end: 7 },
+], 2)); // 3 — 방1: (1,4)→(5,7), 방2: (2,5). (3,6)은 포기
 ```
 
 ## 20.8 LRU 캐시 — 자료구조 합치기
@@ -3683,7 +3699,8 @@ export function findWords(board: string[][], words: string[]): string[] {
 | 병합 정렬 | O(n log n) | O(n) |
 | 퀵 정렬 | O(n log n) avg / O(n²) worst | O(log n) |
 | 힙 정렬 | O(n log n) | O(1) |
-| 계수/기수 정렬 | O(n + k) | O(n + k) |
+| 계수 정렬 | O(n + k) | O(n + k) |
+| 기수 정렬 | O(d(n + b)) | O(n + b) |
 | 이진 탐색 | O(log n) | O(1) |
 | BFS / DFS | O(V + E) | O(V) |
 | 다익스트라 | O((V+E) log V) | O(V) |
