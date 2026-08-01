@@ -1199,19 +1199,33 @@
 
 /* ==============================================================
    계절 배경 파티클 — 「눈·벚꽃 파티클 효과 만들기」 가이드 기반
-   3월~11월: 벚꽃잎이 흩날리고, 12월~2월: 눈이 내립니다.
+   3~5월: 벚꽃잎, 6~9월: 나뭇잎, 10~11월: 은행잎, 12~2월: 눈
    ============================================================== */
 (function () {
   'use strict';
   var month = new Date().getMonth() + 1;
-  var mode = (month >= 3 && month <= 11) ? 'petal' : 'snow';
+  var mode = (month >= 3 && month <= 5) ? 'petal'
+           : (month >= 6 && month <= 9) ? 'leaf'
+           : (month >= 10 && month <= 11) ? 'ginkgo'
+           : 'snow';
+
+  /* 계절별 설정: 바람 세기, 파티클 크기, 배지 문구 */
+  var CFG = {
+    petal:  { windBase: 10, sizeMin: 5, sizeMax: 9,
+              badge: '🌸 지금은 벚꽃잎이 흩날리는 계절입니다 (3월~5월)' },
+    leaf:   { windBase: 14, sizeMin: 6, sizeMax: 11,
+              badge: '🍃 지금은 나뭇잎이 흩날리는 계절입니다 (6월~9월)' },
+    ginkgo: { windBase: 12, sizeMin: 7, sizeMax: 12,
+              badge: '🍂 지금은 은행잎이 물드는 계절입니다 (10월~11월)' },
+    snow:   { windBase: 0,
+              badge: '❄️ 지금은 눈이 내리는 계절입니다 (12월~2월)' }
+  };
+  var cfg = CFG[mode];
 
   var badge = document.getElementById('seasonBadge');
   if (badge) {
     badge.hidden = false;
-    badge.textContent = mode === 'petal'
-      ? '🌸 지금은 벚꽃잎이 흩날리는 계절입니다 (3월~11월)'
-      : '❄️ 지금은 눈이 내리는 계절입니다 (12월~2월)';
+    badge.textContent = cfg.badge;
   }
 
   if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -1268,7 +1282,7 @@
     get: function () { return this.base + this.gust + this.turb; }
   });
 
-  var wind = new Wind(mode === 'petal' ? 10 : 0);
+  var wind = new Wind(cfg.windBase);
   var particles = [];
 
   /* ---- 눈송이: 원근감(크기∝속도) + 좌우 흔들림 ---- */
@@ -1285,8 +1299,8 @@
     return f;
   }
 
-  /* ---- 벚꽃잎: 세 위상(진자 sway·뒤집힘 tumble·회전 rot) ---- */
-  function newPetal(p, anywhere) {
+  /* ---- 낙하 잎(벚꽃·나뭇잎·은행잎 공용): 세 위상(진자 sway·뒤집힘 tumble·회전 rot) ---- */
+  function newDrift(p, anywhere) {
     p = p || {};
     p.x = rand(-20, W + 20);
     p.y = anywhere ? rand(-H, 0) : rand(-40, -10);
@@ -1300,19 +1314,68 @@
     p.tumbleSpd = rand(1.5, 3.5);
     p.rot = rand(0, Math.PI * 2);
     p.rotSpd = rand(-1.5, 1.5);
-    p.size = rand(5, 9);
+    p.size = rand(cfg.sizeMin, cfg.sizeMax);
     p.tint = Math.random();
+    p.state = 'fall';
+    p.groundY = H - rand(2, 10);
     return p;
+  }
+
+  /* ---- 쌓인 눈: 컬럼 높이맵에 쌓이고 서서히 녹음 ---- */
+  var SNOW_COL = 4, snowH = null, snowMax = 0;
+  function initSnowGround() {
+    snowMax = Math.min(90, H * 0.15);
+    snowH = new Float32Array(Math.ceil(W / SNOW_COL) + 2);
+  }
+  function groundAt(x) {
+    if (!snowH) return H;
+    var i = clamp(Math.round(x / SNOW_COL), 0, snowH.length - 1);
+    return H - snowH[i];
+  }
+  function depositSnow(x, r) {
+    var i = clamp(Math.round(x / SNOW_COL), 1, snowH.length - 2);
+    var add = r * 3;
+    snowH[i] = Math.min(snowMax, snowH[i] + add);
+    snowH[i - 1] = Math.min(snowMax, snowH[i - 1] + add * 0.6);
+    snowH[i + 1] = Math.min(snowMax, snowH[i + 1] + add * 0.6);
+  }
+  function meltSnow(dt) {
+    for (var i = 0; i < snowH.length; i++) {
+      if (snowH[i] > 0) {
+        snowH[i] = Math.max(0, snowH[i] - (0.08 + snowH[i] * 0.005) * dt);
+      }
+    }
+    /* 이웃 평균 쪽으로 살짝 무너뜨려 자연스러운 둔덕 유지 */
+    for (var k = 1; k < snowH.length - 1; k++) {
+      snowH[k] += ((snowH[k - 1] + snowH[k + 1]) / 2 - snowH[k]) * Math.min(1, dt * 2);
+    }
+  }
+  function drawSnowGround() {
+    var hasSnow = false;
+    for (var i = 0; i < snowH.length; i++) {
+      if (snowH[i] > 0.5) { hasSnow = true; break; }
+    }
+    if (!hasSnow) return;
+    ctx.beginPath();
+    ctx.moveTo(-SNOW_COL, H + 2);
+    for (var k = 0; k < snowH.length; k++) {
+      ctx.lineTo(k * SNOW_COL, H - snowH[k]);
+    }
+    ctx.lineTo(W + SNOW_COL, H + 2);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fill();
   }
 
   function reset() {
     fitCanvas();
+    if (mode === 'snow') initSnowGround();
     particles.length = 0;
-    var n = mode === 'petal'
-      ? clamp(Math.round(W * H / 18000), 24, 80)
-      : clamp(Math.round(W * H / 9000), 40, 160);
+    var n = mode === 'snow'
+      ? clamp(Math.round(W * H / 9000), 40, 160)
+      : clamp(Math.round(W * H / 18000), 24, 80);
     for (var i = 0; i < n; i++) {
-      particles.push(mode === 'petal' ? newPetal({}, true) : newFlake({}, true));
+      particles.push(mode === 'snow' ? newFlake({}, true) : newDrift({}, true));
     }
   }
 
@@ -1325,17 +1388,40 @@
       f.y += f.vy * dt;
       if (f.x < -30) f.x += W + 60;
       else if (f.x > W + 30) f.x -= W + 60;
-      if (f.y - f.r > H) newFlake(f);
+      if (f.y >= groundAt(f.x) - f.r) { depositSnow(f.x, f.r); newFlake(f); }
     }
   }
 
-  function stepPetal(dt) {
+  function stepDrift(dt) {
     var wv = wind.value;
+    var gust = Math.abs(wind.gust);
     for (var i = 0; i < particles.length; i++) {
       var p = particles[i];
+
+      /* 바닥에 쌓인 잎: 강한 돌풍이 불면 확률적으로 날아오름 */
+      if (p.state === 'rest') {
+        if (gust > 45 && Math.random() < dt * gust / 90) {
+          p.state = 'blow';
+          p.vx = (wv >= 0 ? 1 : -1) * rand(120, 260);
+          p.vyCur = -rand(20, 60);
+          p.rotSpd = rand(-4, 4);
+        }
+        continue;
+      }
+
       p.swayPhase += p.swayFreq * dt;
       p.tumble += p.tumbleSpd * dt;
       p.rot += p.rotSpd * dt;
+
+      /* 날려간 잎: 바람을 타고 화면 밖으로, 벗어나면 하늘에서 재등장 */
+      if (p.state === 'blow') {
+        p.x += (p.vx + wv * 1.5) * dt;
+        p.vyCur += (-12 - p.vyCur) * 0.8 * dt;
+        p.y += (p.vyCur + Math.sin(p.swayPhase * 2) * 25) * dt;
+        if (p.x < -60 || p.x > W + 60 || p.y < -40) newDrift(p);
+        continue;
+      }
+
       p.vx *= Math.pow(0.25, dt);
       p.vyCur += (p.vy - p.vyCur) * 1.8 * dt;
 
@@ -1345,12 +1431,24 @@
 
       if (p.x < -40) p.x += W + 80;
       else if (p.x > W + 40) p.x -= W + 80;
-      if (p.y > H + 40) newPetal(p);
+
+      /* 착지: 납작하게 눕혀 쌓임 — 이미 잔뜩 쌓였으면 그냥 재등장 */
+      if (p.y >= p.groundY) {
+        var resting = 0;
+        for (var j = 0; j < particles.length; j++) {
+          if (particles[j].state === 'rest') resting++;
+        }
+        if (resting >= particles.length * 0.7) { newDrift(p); continue; }
+        p.state = 'rest';
+        p.y = p.groundY;
+        p.tumble = (Math.random() < 0.5 ? 0 : Math.PI) + rand(-0.35, 0.35);
+      }
     }
   }
 
   function drawSnow() {
     ctx.clearRect(0, 0, W, H);
+    drawSnowGround();
     ctx.fillStyle = '#ffffff';
     ctx.globalAlpha = 0.9;
     ctx.shadowColor = 'rgba(100,160,215,0.55)';
@@ -1382,14 +1480,63 @@
     ctx.restore();
   }
 
-  function drawPetal() {
+  /* ---- 나뭇잎: 뾰족한 타원형 잎몸 + 흰 잎맥 (초록 계열) ---- */
+  function drawLeafShape(x, y, rot, size, tint, squash) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.scale(1, squash);
+    var s = size;
+    ctx.fillStyle = 'hsl(' + (90 + tint * 40) + ', 55%, ' + (32 + tint * 16) + '%)';
+    ctx.beginPath();
+    ctx.moveTo(0, s);
+    ctx.bezierCurveTo(-s * 0.75, s * 0.35, -s * 0.75, -s * 0.45, 0, -s);
+    ctx.bezierCurveTo(s * 0.75, -s * 0.45, s * 0.75, s * 0.35, 0, s);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, s * 0.85);
+    ctx.lineTo(0, -s * 0.85);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* ---- 은행잎: 가운데 홈 파인 노란 부채꼴 + 잎자루 ---- */
+  function drawGinkgoShape(x, y, rot, size, tint, squash) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.scale(1, squash);
+    var s = size;
+    ctx.fillStyle = 'hsl(' + (46 + tint * 8) + ', ' + (88 - tint * 10) + '%, ' + (55 + tint * 8) + '%)';
+    ctx.beginPath();
+    ctx.moveTo(0, s * 0.55);
+    ctx.bezierCurveTo(-s * 1.05, s * 0.35, -s * 0.95, -s * 0.85, -s * 0.12, -s * 0.6);
+    ctx.quadraticCurveTo(0, -s * 0.25, s * 0.12, -s * 0.6);
+    ctx.bezierCurveTo(s * 0.95, -s * 0.85, s * 1.05, s * 0.35, 0, s * 0.55);
+    ctx.fill();
+    ctx.strokeStyle = 'hsl(44, 60%, 42%)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, s * 0.5);
+    ctx.lineTo(0, s * 1.3);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  var shapeFn = mode === 'leaf' ? drawLeafShape
+              : mode === 'ginkgo' ? drawGinkgoShape
+              : drawPetalShape;
+
+  function drawDrift() {
     ctx.clearRect(0, 0, W, H);
     ctx.globalAlpha = 0.85;
     for (var i = 0; i < particles.length; i++) {
       var p = particles[i];
       var squash = 0.35 + 0.65 * Math.abs(Math.sin(p.tumble));
-      drawPetalShape(p.x, p.y, p.rot + Math.sin(p.swayPhase) * 0.5,
-                     p.size, p.tint, squash);
+      shapeFn(p.x, p.y, p.rot + Math.sin(p.swayPhase) * 0.5,
+              p.size, p.tint, squash);
     }
     ctx.globalAlpha = 1;
   }
@@ -1398,8 +1545,8 @@
     var dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     wind.update(dt);
-    if (mode === 'petal') { stepPetal(dt); drawPetal(); }
-    else { stepSnow(dt); drawSnow(); }
+    if (mode === 'snow') { stepSnow(dt); meltSnow(dt); drawSnow(); }
+    else { stepDrift(dt); drawDrift(); }
     raf = requestAnimationFrame(frame);
   }
 
