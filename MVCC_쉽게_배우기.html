@@ -1,0 +1,3213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MVCC 쉽게 배우기 — 다중 버전 동시성 제어의 모든 것 (239페이지)</title>
+<style>
+:root {
+  --bg: #0e1420; --card: #172130; --card2: #101827; --fg: #e6edf3;
+  --sub: #9fb3d1; --accent: #5b9dff; --gold: #f0b429; --green: #3ddc84;
+  --red: #ff6b6b; --border: #2a3a52;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: "Noto Sans KR", "Malgun Gothic", -apple-system, sans-serif;
+  font-size: clamp(14px, 1.6vw, 17px); line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+header {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(14,20,32,.92); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+  padding: 8px max(12px, env(safe-area-inset-left));
+}
+header .brand { font-weight: bold; color: var(--gold); white-space: nowrap;
+  font-size: .95em; overflow: hidden; text-overflow: ellipsis; }
+header select {
+  flex: 1; min-width: 0; background: var(--card); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px;
+  font-size: .9em; max-width: 420px; margin-left: auto;
+}
+main { max-width: 860px; margin: 0 auto; padding: 14px clamp(10px, 3vw, 24px); }
+.card {
+  position: relative; background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: clamp(14px, 3vw, 26px); margin: 14px 0;
+}
+.card h3 {
+  margin: 0 0 10px; font-size: clamp(17px, 2.4vw, 22px); color: var(--fg);
+  padding-left: 12px; border-left: 4px solid var(--accent); line-height: 1.35;
+}
+.pno {
+  position: absolute; top: 10px; right: 14px; font-size: 11px;
+  color: var(--sub); font-family: Consolas, monospace;
+}
+ul, ol { margin: 6px 0; padding-left: 1.35em; }
+li { margin: 7px 0; }
+li::marker { color: var(--accent); }
+li.sub { margin-left: 1.1em; color: var(--sub); font-size: .94em; }
+li.sub::marker { color: var(--sub); }
+.section {
+  background: linear-gradient(145deg, #1b2b45, #101827);
+  padding-top: 26px; padding-bottom: 26px;
+  border-color: #35507a;
+}
+.section h1 { margin: 6px 0; font-size: clamp(22px, 4.5vw, 34px); line-height: 1.3; }
+.section h2 { margin: 6px 0; font-size: clamp(20px, 4vw, 30px); line-height: 1.3; }
+.chnum { color: var(--gold); font-weight: bold; letter-spacing: .12em;
+  font-size: .85em; margin: 0; }
+.chsub { color: var(--sub); margin: 8px 0 0; }
+.section ul { color: var(--sub); }
+.fbox {
+  background: var(--card2); border: 1px solid var(--gold); border-radius: 10px;
+  padding: 12px 10px; margin: 10px 0 14px; overflow-x: auto;
+}
+.fx {
+  font-family: Consolas, "Cascadia Mono", monospace; color: var(--gold);
+  font-weight: bold; text-align: center; white-space: nowrap;
+  font-size: clamp(14px, 2.2vw, 19px); padding: 3px 0;
+}
+.fx small { color: var(--sub); font-weight: normal; }
+pre {
+  background: var(--card2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; overflow-x: auto; margin: 10px 0 4px;
+  -webkit-overflow-scrolling: touch;
+}
+code {
+  font-family: Consolas, "Cascadia Mono", "D2Coding", monospace;
+  font-size: clamp(11.5px, 1.5vw, 14px); line-height: 1.55;
+  color: var(--fg); display: block; white-space: pre;
+}
+code .cm { color: var(--green); }
+code .kw { color: var(--accent); }
+code .st { color: var(--gold); }
+.cap { color: var(--sub); font-size: .9em; margin: 0 0 4px; }
+.glance, .toc { columns: 2; column-gap: 26px; font-size: .93em; }
+.glance li, .toc li { break-inside: avoid; }
+.toc a { color: var(--fg); text-decoration: none; }
+.toc a:hover { color: var(--accent); }
+.toc b { color: var(--gold); font-family: Consolas, monospace; }
+.imgf { margin: 12px 0 6px; text-align: center; }
+.imgf img {
+  max-width: 100%; max-height: 46vh; height: auto; border-radius: 10px;
+  background: #fff; border: 1px solid var(--border);
+}
+.imgf.dark img { background: transparent; }
+.imgf figcaption { color: var(--sub); font-size: .85em; margin-top: 6px; }
+table.tb {
+  border-collapse: collapse; margin: 10px auto; font-size: .92em;
+  font-variant-numeric: tabular-nums; max-width: 100%;
+}
+table.tb th, table.tb td {
+  border: 1px solid var(--border); padding: 6px 12px; text-align: left;
+}
+table.tb th { background: var(--card2); color: var(--gold); text-align: center; }
+.tbwrap { overflow-x: auto; }
+/* 트랜잭션 스케줄 표: T1/T2 두 열 */
+table.sched {
+  border-collapse: collapse; margin: 10px auto; font-size: .88em; max-width: 100%;
+  font-family: Consolas, "Cascadia Mono", monospace;
+}
+table.sched th, table.sched td {
+  border: 1px solid var(--border); padding: 5px 10px; text-align: left;
+  white-space: nowrap;
+}
+table.sched th { background: var(--card2); color: var(--gold); text-align: center; }
+table.sched td.t1 { color: #7fc0ff; }
+table.sched td.t2 { color: #ffd27f; }
+table.sched td.bad { color: var(--red); font-weight: bold; }
+table.sched td.ok { color: var(--green); font-weight: bold; }
+/* 버전 체인 CSS 도식 */
+.vc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  justify-content: center; margin: 12px 0; }
+.vbox {
+  background: var(--card2); border: 2px solid var(--accent); border-radius: 10px;
+  padding: 8px 12px; font-size: .85em; text-align: center; line-height: 1.45;
+}
+.vbox b { color: var(--gold); }
+.vbox small { color: var(--sub); display: block; font-family: Consolas, monospace; }
+.vbox.dead { border-color: #55617a; opacity: .55; }
+.vbox.new { border-color: var(--green); }
+.varr { color: var(--sub); font-size: 1.3em; }
+.note {
+  background: rgba(91,157,255,.1); border-left: 4px solid var(--accent);
+  border-radius: 0 8px 8px 0; padding: 10px 12px; margin: 10px 0; font-size: .95em;
+}
+.warn {
+  background: rgba(240,180,41,.1); border-left: 4px solid var(--gold);
+  border-radius: 0 8px 8px 0; padding: 10px 12px; margin: 10px 0; font-size: .95em;
+}
+.bad {
+  background: rgba(255,107,107,.1); border-left: 4px solid var(--red);
+  border-radius: 0 8px 8px 0; padding: 10px 12px; margin: 10px 0; font-size: .95em;
+}
+.demo {
+  background: var(--card2); border: 1px solid var(--green); border-radius: 10px;
+  padding: 12px; margin: 10px 0; touch-action: pan-y;
+}
+.demo canvas { display: block; margin: 0 auto; max-width: 100%; height: auto;
+  background: #0a0f18; border-radius: 8px; }
+.demo .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  justify-content: center; margin: 8px 0 4px; }
+.demo label { color: var(--sub); font-size: .88em; }
+.demo input[type=range] { width: min(46vw, 220px); accent-color: var(--accent); }
+.demo button {
+  background: var(--card); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 12px; font-size: .88em; cursor: pointer;
+}
+.demo button.on { border-color: var(--accent); color: var(--accent); font-weight: bold; }
+.demo .out { text-align: center; color: var(--green); font-size: .92em;
+  font-family: Consolas, monospace; margin-top: 6px; min-height: 1.4em; }
+.demo .log {
+  font-family: Consolas, "Cascadia Mono", monospace; font-size: .82em;
+  background: #0a0f18; border-radius: 8px; padding: 10px 12px; margin-top: 8px;
+  min-height: 6em; max-height: 14em; overflow-y: auto; line-height: 1.5;
+}
+.demo .log .l1 { color: #7fc0ff; }
+.demo .log .l2 { color: #ffd27f; }
+.demo .log .lb { color: var(--red); font-weight: bold; }
+.demo .log .lg { color: var(--green); font-weight: bold; }
+.demo .log .ls { color: var(--sub); }
+@media (max-width: 540px) {
+  .glance, .toc { columns: 1; }
+  header .brand { font-size: .85em; }
+}
+/* ============ PPT 슬라이드 모드 ============ */
+html, body { height: 100%; }
+body {
+  height: 100vh; height: 100dvh; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+#bar {
+  flex: none; height: 3px; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--gold));
+  transition: width .25s;
+}
+header { flex: none; padding-right: max(12px, env(safe-area-inset-right)); }
+#tocBtn {
+  flex: none; background: none; border: 1px solid var(--border); color: var(--fg);
+  border-radius: 8px; font-size: .85em; padding: 7px 10px; cursor: pointer;
+}
+main {
+  flex: 1; max-width: none; margin: 0; width: 100%;
+  overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 14px clamp(10px, 3vw, 24px) calc(66px + env(safe-area-inset-bottom));
+}
+main > article { display: none; }
+main > article.card { max-width: 860px; margin: 14px auto; }
+main > article.on { display: block; animation: fade .2s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+nav#deckNav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: flex; gap: 10px; justify-content: center; align-items: center;
+  padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: linear-gradient(0deg, rgba(14,20,32,.96), rgba(14,20,32,.6) 70%, transparent);
+  pointer-events: none;
+}
+nav#deckNav > * { pointer-events: auto; }
+nav#deckNav button {
+  min-width: 52px; min-height: 40px; border-radius: 10px; border: 1px solid var(--border);
+  background: rgba(23,33,48,.92); color: var(--fg); font-size: 15px; font-weight: 700; cursor: pointer;
+}
+nav#deckNav button:disabled { opacity: .35; }
+#counter {
+  font-size: 13px; color: var(--sub); font-variant-numeric: tabular-nums;
+  min-width: 5.5em; text-align: center;
+}
+#toc {
+  position: fixed; inset: 0; z-index: 40; display: none; overflow-y: auto;
+  background: rgba(9,13,21,.97);
+  padding: 16px max(16px, env(safe-area-inset-right)) 76px max(16px, env(safe-area-inset-left));
+}
+#toc.on { display: block; }
+#toc h3 { margin: 4px 0 12px; }
+.tocsec { margin-bottom: 14px; }
+.tocsec h4 {
+  margin: 4px 0 6px; font-size: 13px; color: var(--gold);
+  position: sticky; top: -16px; background: rgba(9,13,21,.97); padding: 4px 0;
+}
+.tocsec a {
+  display: block; color: var(--fg); text-decoration: none; font-size: 13.5px;
+  padding: 4px 8px; border-radius: 8px;
+}
+.tocsec a:hover, .tocsec a:focus { background: rgba(91,157,255,.12); }
+.tocsec a b {
+  color: var(--sub); font-family: Consolas, monospace; font-weight: 600;
+  display: inline-block; min-width: 2.8em;
+}
+#tocClose {
+  position: fixed; right: max(16px, env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 41;
+  background: var(--accent); color: #fff; border: none; border-radius: 10px;
+  padding: 10px 16px; font-size: 14px; cursor: pointer;
+}
+/* 폴더블: 힌지로 화면이 두 조각이면 다단을 1단으로 */
+@media (horizontal-viewport-segments: 2), (spanning: single-fold-vertical) {
+  .glance, ol.toc { columns: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  main > article.on { animation: none; }
+  html { scroll-behavior: auto; }
+  #bar { transition: none; }
+}
+@media print {
+  body { height: auto; overflow: visible; display: block; }
+  main { overflow: visible; padding: 0; }
+  main > article { display: block !important; page-break-after: always; }
+  #bar, header, nav#deckNav, #toc { display: none !important; }
+}
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<header>
+  <span class="brand">🕰️ MVCC 쉽게 배우기 (239p)</span>
+  <select id="nav" aria-label="챕터 이동">
+    <option value="top">챕터 이동…</option>
+    <option value="ch1">01. 왜 동시성인가 — 문제의 발견</option>
+    <option value="ch2">02. 락의 세계와 그 한계</option>
+    <option value="ch3">03. MVCC 핵심 아이디어</option>
+    <option value="ch4">04. 격리 수준과 이상 현상</option>
+    <option value="ch5">05. 스냅샷 격리 (SI)</option>
+    <option value="ch6">06. PostgreSQL I — 튜플과 가시성</option>
+    <option value="ch7">07. PostgreSQL II — VACUUM과 청소</option>
+    <option value="ch8">08. MySQL InnoDB — undo 로그 방식</option>
+    <option value="ch9">09. Oracle과 SQL Server</option>
+    <option value="ch10">10. 그 밖의 MVCC들</option>
+    <option value="ch11">11. Serializable로 가는 길 — SSI</option>
+    <option value="ch12">12. 분산 MVCC — 시간과의 싸움</option>
+    <option value="ch13">13. 인덱스·스토리지와 MVCC</option>
+    <option value="ch14">14. 실무 운영과 튜닝</option>
+    <option value="ch15">15. 미니 MVCC 직접 만들기</option>
+    <option value="ch16">16. 마무리 — 전체 정리</option>
+  </select>
+  <button id="tocBtn" aria-label="목차 열기">☰</button>
+</header>
+<main>
+<article class="card section cover" id="top">
+<p class="chnum">DATABASE INTERNALS · CONCURRENCY · 2026-08-02</p>
+<h1>MVCC 쉽게 배우기</h1>
+<p class="chsub">다중 버전 동시성 제어(Multi-Version Concurrency Control) — 현대 데이터베이스의 심장을 해부한다</p>
+<ul>
+<li>"읽기는 쓰기를 막지 않고, 쓰기는 읽기를 막지 않는다" — 이 마법이 어떻게 가능한지 바닥부터 이해한다</li>
+<li>PostgreSQL · MySQL InnoDB · Oracle · SQL Server · SQLite · Spanner의 실제 구현 비교</li>
+<li>격리 수준, 이상 현상, VACUUM, 언두 로그, SSI, 분산 타임스탬프까지 한 번에</li>
+<li>인터랙티브 데모 4종 수록 · 좌우 스와이프 또는 방향키로 넘기세요</li>
+</ul></article>
+<article class="card"><h3>전체 목차</h3><ol class="toc">
+<li><a href="#ch1"><b>01</b> 왜 동시성인가 — 문제의 발견</a></li>
+<li><a href="#ch2"><b>02</b> 락의 세계와 그 한계</a></li>
+<li><a href="#ch3"><b>03</b> MVCC 핵심 아이디어</a></li>
+<li><a href="#ch4"><b>04</b> 격리 수준과 이상 현상</a></li>
+<li><a href="#ch5"><b>05</b> 스냅샷 격리 (SI)</a></li>
+<li><a href="#ch6"><b>06</b> PostgreSQL I — 튜플과 가시성</a></li>
+<li><a href="#ch7"><b>07</b> PostgreSQL II — VACUUM과 청소</a></li>
+<li><a href="#ch8"><b>08</b> MySQL InnoDB — undo 로그 방식</a></li>
+<li><a href="#ch9"><b>09</b> Oracle과 SQL Server</a></li>
+<li><a href="#ch10"><b>10</b> 그 밖의 MVCC들</a></li>
+<li><a href="#ch11"><b>11</b> Serializable로 가는 길 — SSI</a></li>
+<li><a href="#ch12"><b>12</b> 분산 MVCC — 시간과의 싸움</a></li>
+<li><a href="#ch13"><b>13</b> 인덱스·스토리지와 MVCC</a></li>
+<li><a href="#ch14"><b>14</b> 실무 운영과 튜닝</a></li>
+<li><a href="#ch15"><b>15</b> 미니 MVCC 직접 만들기</a></li>
+<li><a href="#ch16"><b>16</b> 마무리 — 전체 정리</a></li>
+</ol></article>
+<article class="card"><h3>이 덱의 구성</h3><ul>
+<li>1부 (1~2장): 문제 — 동시성이 왜 어려운지, 락만으로는 왜 부족한지 몸으로 느낀다.</li>
+<li>2부 (3~5장): 개념 — MVCC의 핵심 아이디어, 격리 수준, 스냅샷 격리를 정확히 정의한다.</li>
+<li>3부 (6~10장): 구현 — PostgreSQL, InnoDB, Oracle, SQL Server, SQLite 등이 같은 아이디어를 어떻게 다르게 구현했는지 해부한다.</li>
+<li>4부 (11~13장): 심화 — SSI, 분산 MVCC, 인덱스와의 상호작용.</li>
+<li>5부 (14~16장): 실전 — 운영 노하우, 파이썬으로 미니 MVCC 직접 구현, 전체 정리.</li>
+<li class="sub">초록 테두리 박스는 직접 만져 보는 인터랙티브 데모다 (1·3·4·7장에 하나씩)</li>
+<li class="sub">대상 독자: SQL은 써 봤지만 "트랜잭션 안이 어떻게 돌아가는지"는 궁금했던 개발자</li>
+</ul></article>
+
+<!-- ================= CH 01 ================= -->
+<article class="card section" id="ch1">
+<p class="chnum">1장</p>
+<h2>왜 동시성인가 — 문제의 발견</h2>
+<p class="chsub">데이터베이스에 동시에 손을 대면 무슨 일이 벌어지는가</p></article>
+<article class="card"><h3>1장 한눈에 보기</h3><ol class="glance">
+<li>도서관에 사서가 한 명뿐이라면</li>
+<li>은행 잔액이 증발하는 마술</li>
+<li>Lost Update를 표로 보기</li>
+<li>레이스 컨디션이란</li>
+<li>충돌의 3가지 유형</li>
+<li>트랜잭션이라는 약속</li>
+<li>ACID 네 글자</li>
+<li>트랜잭션의 아버지, Jim Gray</li>
+<li>가장 쉬운 해법: 한 줄로 세우기</li>
+<li>직렬 실행이 느린 이유</li>
+<li>직렬가능성이라는 목표</li>
+<li>스케줄이란 무엇인가</li>
+<li>두 학파: 비관주의 vs 낙관주의</li>
+<li>데모: 잔액 증발 사건 재현</li>
+<li>1장 정리</li>
+</ol></article>
+<article class="card"><h3>도서관에 사서가 한 명뿐이라면</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/SanDiegoCityCollegeLearningResource_-_bookshelf.jpg/960px-SanDiegoCityCollegeLearningResource_-_bookshelf.jpg" alt="도서관 서가" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>도서관 서가 — 데이터베이스는 수만 명이 동시에 드나드는 도서관이다 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>도서관에 이용자가 한 명뿐이라면 규칙이 필요 없다. 아무 책이나 꺼내 읽고, 메모하고, 꽂으면 된다.</li>
+<li>하지만 수천 명이 동시에 드나들면? 누가 책을 고쳐 쓰는 동안 다른 사람이 그 책을 읽으면 무엇을 보게 되는가?</li>
+<li>데이터베이스가 매일 마주하는 상황이 정확히 이것이다 — 수천 개의 연결이 같은 데이터를 읽고 쓴다.</li>
+<li>이 문제를 다루는 분야가 <b>동시성 제어(concurrency control)</b>, 그중 가장 우아한 답이 오늘의 주인공 <b>MVCC</b>다.</li>
+</ul></article>
+<article class="card"><h3>은행 잔액이 증발하는 마술</h3>
+<div class="bad">계좌 잔액 100만 원. 월급 50만 원 입금과 보너스 30만 원 입금이 <b>동시에</b> 실행됐다. 기대 잔액은 180만 원 — 그런데 통장에는 130만 원만 남았다. 50만 원은 어디로 갔을까?</div>
+<ul>
+<li>두 입금 프로그램 모두 "잔액을 읽고 → 더하고 → 저장"하는 3단계로 동작한다.</li>
+<li>둘 다 잔액을 <b>100만 원으로 읽은 뒤</b> 각자 계산해서 저장하면, 나중에 저장한 쪽(100+30=130)이 먼저 저장한 쪽(100+50=150)을 덮어쓴다.</li>
+<li>먼저 쓴 갱신이 흔적도 없이 사라진다 — 이것이 <b>갱신 손실(Lost Update)</b>이다.</li>
+<li>버그처럼 안 보이는 게 무서운 점이다: 각 프로그램은 완벽하게 옳다. 문제는 오직 "동시에" 실행됐다는 것뿐.</li>
+</ul></article>
+<article class="card"><h3>Lost Update를 표로 보기</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1 (월급 +50)</th><th>T2 (보너스 +30)</th></tr>
+<tr><td>t1</td><td class="t1">read(잔액) → 100</td><td></td></tr>
+<tr><td>t2</td><td></td><td class="t2">read(잔액) → 100</td></tr>
+<tr><td>t3</td><td class="t1">write(잔액 = 150)</td><td></td></tr>
+<tr><td>t4</td><td></td><td class="t2">write(잔액 = 130)</td></tr>
+<tr><td>t5</td><td class="bad" colspan="2">최종 잔액 130 — T1의 갱신 증발!</td></tr>
+</table></div>
+<ul>
+<li>이 표를 <b>스케줄(schedule)</b>이라 부른다 — 여러 트랜잭션의 연산이 실제로 실행된 순서.</li>
+<li>t2가 문제의 씨앗이다: T1이 아직 쓰지 않은 시점에 T2가 같은 값을 읽었다.</li>
+<li>이 덱 내내 이런 표가 계속 나온다. 읽는 법을 지금 익혀 두자: 위에서 아래로 시간이 흐른다.</li>
+</ul></article>
+<article class="card"><h3>레이스 컨디션이란</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Race_condition.svg/960px-Race_condition.svg.png" alt="레이스 컨디션 다이어그램" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>두 프로세스가 같은 데이터에 접근할 때 실행 순서에 따라 결과가 달라진다 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li><b>레이스 컨디션(race condition)</b>: 실행 타이밍(경주의 승자)에 따라 결과가 달라지는 상황.</li>
+<li>스레드 프로그래밍의 mutex, OS의 세마포어, DB의 트랜잭션 — 전부 같은 적과 싸우는 다른 무기다.</li>
+<li>DB가 특히 어려운 이유: 참여자가 수천 명이고, 네트워크 건너편에 있고, 언제 죽을지 모르고, 데이터는 디스크에 영구 보존돼야 한다.</li>
+</ul></article>
+<article class="card"><h3>충돌의 3가지 유형</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>유형</th><th>이름</th><th>무슨 일이 생기나</th></tr>
+<tr><td><b>W-W</b></td><td>쓰기-쓰기 충돌</td><td>두 트랜잭션이 같은 데이터를 쓴다 → Lost Update, Dirty Write</td></tr>
+<tr><td><b>W-R</b></td><td>쓰기-읽기 충돌</td><td>커밋 안 된 쓰기를 읽는다 → Dirty Read</td></tr>
+<tr><td><b>R-W</b></td><td>읽기-쓰기 충돌</td><td>읽은 값이 뒤에서 바뀐다 → Non-repeatable Read, Phantom</td></tr>
+</table></div>
+<ul>
+<li>동시성 문제는 결국 이 세 종류 충돌의 조합이다. 4장에서 각각을 이름 붙여 정밀하게 분류한다.</li>
+<li>주목: <b>읽기끼리(R-R)는 충돌하지 않는다.</b> 아무도 값을 바꾸지 않으니까.</li>
+<li>이 관찰이 MVCC의 출발점이 된다 — "읽기가 이렇게 무해하다면, 읽기를 기다리게 하지 말자."</li>
+</ul></article>
+<article class="card"><h3>트랜잭션이라는 약속</h3>
+<ul>
+<li><b>트랜잭션(transaction)</b>: 여러 읽기·쓰기를 묶어 "전부 되거나, 전부 안 되거나"로 취급하는 실행 단위.</li>
+<li>계좌이체가 고전 예시다: "A에서 10만 원 빼기"와 "B에 10만 원 넣기"는 반드시 한 몸이어야 한다.</li>
+</ul>
+<pre><code><span class="kw">BEGIN</span>;
+  <span class="kw">UPDATE</span> accounts <span class="kw">SET</span> balance = balance - 100000 <span class="kw">WHERE</span> id = <span class="st">'A'</span>;
+  <span class="kw">UPDATE</span> accounts <span class="kw">SET</span> balance = balance + 100000 <span class="kw">WHERE</span> id = <span class="st">'B'</span>;
+<span class="kw">COMMIT</span>;  <span class="cm">-- 여기 도달해야 비로소 전체가 확정된다</span></code></pre>
+<ul>
+<li>중간에 서버가 죽으면? <b>ROLLBACK</b> — 아무 일도 없던 것처럼 되돌린다.</li>
+<li>동시성 제어의 질문은 이것이다: "여러 트랜잭션이 <b>겹쳐 실행될 때</b>도 이 약속을 지킬 수 있는가?"</li>
+</ul></article>
+<article class="card"><h3>ACID 네 글자</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>글자</th><th>이름</th><th>뜻</th></tr>
+<tr><td><b>A</b></td><td>원자성 (Atomicity)</td><td>전부 실행되거나 전혀 실행되지 않거나</td></tr>
+<tr><td><b>C</b></td><td>일관성 (Consistency)</td><td>제약 조건(잔액 ≥ 0 등)이 항상 유지된다</td></tr>
+<tr><td><b>I</b></td><td>격리성 (Isolation)</td><td>동시 실행돼도 혼자 실행된 것처럼 보인다</td></tr>
+<tr><td><b>D</b></td><td>지속성 (Durability)</td><td>커밋된 결과는 장애가 나도 살아남는다</td></tr>
+</table></div>
+<ul>
+<li>이 덱의 주인공은 <b>I(격리성)</b>다. MVCC는 격리성을 구현하는 기술이다.</li>
+<li>격리성은 all-or-nothing이 아니라 <b>단계</b>가 있다 — 완벽한 격리는 비싸서, DB들은 "적당한 격리"를 판다. 그 등급표가 4장의 격리 수준이다.</li>
+</ul></article>
+<article class="card"><h3>트랜잭션의 아버지, Jim Gray</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/7/76/Jim_Gray_Computing_in_the_21st_Century_2006.jpg" alt="Jim Gray" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>짐 그레이(Jim Gray, 1944–2007경 실종) — 1998년 튜링상 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>1970년대 IBM System R 프로젝트에서 트랜잭션 개념과 락 이론(granular locking)을 정립했다.</li>
+<li>격리 수준의 원형인 "Degrees of Consistency"(1975)도 그의 작품 — 4장에서 다시 만난다.</li>
+<li>1998년 "데이터베이스와 트랜잭션 처리에 대한 공헌"으로 튜링상 수상.</li>
+<li>2007년 요트 항해 중 실종 — 전 세계 데이터베이스 연구자들이 수색에 나선 일화로도 유명하다.</li>
+</ul></article>
+<article class="card"><h3>가장 쉬운 해법: 한 줄로 세우기</h3>
+<ul>
+<li>동시성 문제의 유일하고 완벽한 해법은 사실 자명하다: <b>동시에 실행하지 않으면 된다.</b></li>
+<li>트랜잭션을 한 줄로 세워 하나씩 실행하면(직렬 실행) 겹침이 없으니 어떤 이상 현상도 생길 수 없다.</li>
+<li>SQLite의 기본 모드가 실제로 이 전략에 가깝다 — 쓰기는 한 번에 하나만.</li>
+<li>Redis도 명령을 단일 스레드로 처리한다 — 명령 하나하나가 원자적인 이유.</li>
+<li>그런데 왜 모든 DB가 이렇게 안 할까? 다음 슬라이드.</li>
+</ul></article>
+<article class="card"><h3>직렬 실행이 느린 이유</h3>
+<ul>
+<li>트랜잭션은 대부분의 시간을 <b>기다리며</b> 보낸다: 디스크 I/O, 네트워크 왕복, 애플리케이션의 다음 쿼리 대기.</li>
+<li>한 줄 세우기는 이 대기 시간에 다른 모든 트랜잭션을 세워 둔다 — CPU와 디스크가 놀면서 처리량이 바닥난다.</li>
+<li>비유: 계산대가 30개인 마트에서 계산대 1개만 열고, 손님이 지갑을 찾는 동안에도 줄 전체가 기다리는 꼴.</li>
+<li>수천 TPS를 처리해야 하는 실전 DB에서 순수 직렬 실행은 선택지가 아니다.</li>
+<li class="sub">예외: 인메모리 DB(VoltDB 등)는 대기가 거의 없어 직렬 실행이 오히려 유리하기도 하다</li>
+</ul></article>
+<article class="card"><h3>직렬가능성이라는 목표</h3>
+<div class="note"><b>직렬가능성(serializability)</b>: 트랜잭션들을 겹쳐 실행하더라도, 그 결과가 <b>어떤 순서로든 하나씩 실행한 것과 같으면</b> 그 스케줄은 직렬가능하다고 한다.</div>
+<ul>
+<li>핵심 통찰: 겹쳐 실행하는 것 자체는 죄가 아니다. <b>결과</b>가 직렬 실행과 같기만 하면 된다.</li>
+<li>즉 "동시에 돌리되, 직렬로 돌린 척하기"가 동시성 제어의 성배다.</li>
+<li>겹침은 최대화하고(성능), 결과는 직렬과 동일하게(정확성) — 이 두 마리 토끼를 쫓는 기술이 락, 그리고 MVCC다.</li>
+<li class="sub">이론적 판정 도구: 선행 그래프(precedence graph)에 사이클이 없으면 직렬가능 — 11장 SSI에서 재등장</li>
+</ul></article>
+<article class="card"><h3>스케줄이란 무엇인가</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1 (이체)</th><th>T2 (잔액 조회)</th></tr>
+<tr><td>t1</td><td class="t1">read(A) → 100</td><td></td></tr>
+<tr><td>t2</td><td class="t1">write(A = 90)</td><td></td></tr>
+<tr><td>t3</td><td></td><td class="t2">read(A) → 90</td></tr>
+<tr><td>t4</td><td></td><td class="t2">read(B) → 50</td></tr>
+<tr><td>t5</td><td class="t1">write(B = 60)</td><td></td></tr>
+<tr><td>t6</td><td class="bad" colspan="2">T2가 본 합계 140 — 실제로는 언제나 150이어야 한다!</td></tr>
+</table></div>
+<ul>
+<li>T2는 "A에서 빠진 뒤, B에 들어가기 전"이라는 <b>존재한 적 없어야 할 중간 세계</b>를 봤다.</li>
+<li>이 스케줄은 직렬가능하지 않다 — T1을 먼저 해도, T2를 먼저 해도 합계는 150이기 때문.</li>
+<li>MVCC는 이 문제를 "T2에게 t1 이전의 세계를 통째로 보여 주는" 방식으로 푼다. 3장에서 확인하자.</li>
+</ul></article>
+<article class="card"><h3>두 학파: 비관주의 vs 낙관주의</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th></th><th>비관적 (Pessimistic)</th><th>낙관적 (Optimistic)</th></tr>
+<tr><td>철학</td><td>"충돌은 흔하다. 미리 막자"</td><td>"충돌은 드물다. 일단 하고 나중에 확인"</td></tr>
+<tr><td>수단</td><td>락 — 접근 전에 잠근다</td><td>버전/검증 — 커밋 때 충돌 검사</td></tr>
+<tr><td>충돌 시</td><td>대기 (또는 데드락)</td><td>한쪽 롤백 후 재시도</td></tr>
+<tr><td>유리한 상황</td><td>같은 데이터를 심하게 다툴 때</td><td>충돌이 드물고 읽기가 많을 때</td></tr>
+</table></div>
+<ul>
+<li>2장에서 비관주의(락)를 먼저 익힌다 — MVCC가 무엇을 극복했는지 알려면 락부터 알아야 한다.</li>
+<li>MVCC는 낙관주의 쪽 도구지만, 실전 DB는 둘을 섞어 쓴다 (예: InnoDB = MVCC 읽기 + 락 쓰기).</li>
+</ul></article>
+<article class="card"><h3>데모: 잔액 증발 사건 재현</h3>
+<div class="demo" id="demoRace">
+<div class="row">
+  <button data-m="0" class="on">보호 없음</button>
+  <button data-m="1">락 사용</button>
+  <button data-m="2">MVCC + 충돌 검사</button>
+</div>
+<div class="row">
+  <button id="raceStep">▶ 다음 단계</button>
+  <button id="raceReset">처음부터</button>
+</div>
+<div class="log" id="raceLog"></div>
+<div class="out" id="raceOut">모드를 고르고 "다음 단계"를 눌러 보세요</div>
+</div>
+<ul>
+<li><b>보호 없음</b>: 1장에서 본 잔액 증발이 그대로 재현된다.</li>
+<li><b>락 사용</b>: T2가 기다린다 — 정확하지만 T2는 멈춰 있어야 한다.</li>
+<li><b>MVCC + 충돌 검사</b>: 둘 다 멈추지 않고 진행, 대신 늦게 커밋한 쪽이 거부된다(재시도 필요).</li>
+</ul></article>
+<article class="card"><h3>1장 정리</h3><ul>
+<li>여러 트랜잭션이 같은 데이터를 겹쳐 다루면 Lost Update 같은 이상 현상이 생긴다 — 각 프로그램이 완벽해도.</li>
+<li>충돌은 W-W, W-R, R-W 세 종류. 읽기끼리는 충돌하지 않는다 (MVCC의 씨앗).</li>
+<li>완벽한 해법인 직렬 실행은 너무 느리다. 목표는 "겹쳐 돌리되 직렬처럼 보이기" = 직렬가능성.</li>
+<li>접근법은 두 갈래: 미리 잠그는 비관주의(락), 일단 진행하고 검증하는 낙관주의(MVCC).</li>
+<li>다음 장: 락 방식을 제대로 이해하고, 그 한계에서 MVCC의 필요성을 끌어낸다.</li>
+</ul></article>
+
+<!-- ================= CH 02 ================= -->
+<article class="card section" id="ch2">
+<p class="chnum">2장</p>
+<h2>락의 세계와 그 한계</h2>
+<p class="chsub">잠그면 안전하다 — 대신 무엇을 잃는가</p></article>
+<article class="card"><h3>2장 한눈에 보기</h3><ol class="glance">
+<li>공유 락과 배타 락</li>
+<li>락 호환성 행렬</li>
+<li>2단계 잠금 (2PL)</li>
+<li>2PL은 왜 옳은가</li>
+<li>Strict 2PL과 연쇄 롤백</li>
+<li>데드락 — 서로를 기다리는 두 사람</li>
+<li>데드락 스케줄 예시</li>
+<li>데드락 대처법</li>
+<li>락 입자성 — 어디까지 잠글까</li>
+<li>읽기가 쓰기를 막는다</li>
+<li>사례: 야간 리포트 vs 주문 처리</li>
+<li>락 방식의 비용 청구서</li>
+<li>꿈의 선언</li>
+<li>2장 정리</li>
+</ol></article>
+<article class="card"><h3>공유 락과 배타 락</h3>
+<ul>
+<li><b>공유 락(S, shared)</b>: "나 이거 읽는 중" — 여러 트랜잭션이 동시에 잡을 수 있다.</li>
+<li><b>배타 락(X, exclusive)</b>: "나 이거 고치는 중" — 오직 한 트랜잭션만. 읽기도 못 들어온다.</li>
+<li>규칙: 읽기 전엔 S락, 쓰기 전엔 X락을 얻어야 한다. 못 얻으면? <b>줄 서서 기다린다.</b></li>
+<li>도서관 비유: S락 = 열람석에서 같이 보기, X락 = 책을 수리실로 가져가 문 잠그기.</li>
+</ul></article>
+<article class="card"><h3>락 호환성 행렬</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>이미 걸린 락 ＼ 요청</th><th>S 요청</th><th>X 요청</th></tr>
+<tr><td><b>S 걸려 있음</b></td><td style="color:var(--green)">허용 — 같이 읽기 OK</td><td style="color:var(--red)">대기 — 읽는 사람 있음</td></tr>
+<tr><td><b>X 걸려 있음</b></td><td style="color:var(--red)">대기 — 고치는 중</td><td style="color:var(--red)">대기 — 고치는 중</td></tr>
+</table></div>
+<ul>
+<li>표에서 허용은 딱 한 칸, S+S뿐이다 — 1장의 "읽기끼리는 충돌 안 함"이 표에 그대로 반영돼 있다.</li>
+<li>나머지 세 칸이 전부 "대기"라는 것, 이것이 락 방식의 모든 비용의 근원이다.</li>
+<li>특히 <b>S가 걸려 있으면 X가 기다린다</b>에 밑줄을 긋자 — 읽기가 쓰기를 막는다는 뜻이다.</li>
+</ul></article>
+<article class="card"><h3>2단계 잠금 (Two-Phase Locking)</h3>
+<div class="fbox">
+<div class="fx">확장 단계: 락을 얻기만 한다 <small>→</small> 축소 단계: 락을 놓기만 한다</div>
+</div>
+<ul>
+<li>락을 걸고 푸는 것만으로는 부족하다 — <b>언제</b> 걸고 푸는지가 정확성을 좌우한다.</li>
+<li><b>2PL 규칙</b>: 트랜잭션은 락을 하나라도 놓은 뒤에는 새 락을 얻을 수 없다.</li>
+<li>즉 트랜잭션의 삶은 두 단계로 나뉜다: 얻기만 하는 전반전, 놓기만 하는 후반전.</li>
+<li>이 단순한 규칙 하나로 직렬가능성이 <b>수학적으로 보장</b>된다 (1976년, Eswaran·Gray 등이 증명).</li>
+</ul></article>
+<article class="card"><h3>2PL은 왜 옳은가 (직관)</h3>
+<ul>
+<li>각 트랜잭션에는 "모든 락을 다 모은 순간"(lock point)이 존재한다 — 전반전의 끝.</li>
+<li>두 트랜잭션이 같은 데이터를 다뤘다면, 락 때문에 반드시 한쪽이 다른 쪽을 기다렸고, lock point의 순서가 갈린다.</li>
+<li>따라서 전체 실행은 <b>lock point 순서로 직렬 실행한 것과 결과가 같다.</b></li>
+<li>비유: 요리사들이 필요한 재료를 전부 확보한 뒤에만 요리를 시작한다면, 결과는 "재료 확보 완료 순서"로 한 명씩 요리한 것과 같다.</li>
+<li class="sub">엄밀한 증명은 선행 그래프에 사이클이 생길 수 없음을 보이는 것 — 데이터베이스 교과서의 고전 정리</li>
+</ul></article>
+<article class="card"><h3>Strict 2PL과 연쇄 롤백</h3>
+<ul>
+<li>순수 2PL의 함정: 축소 단계에서 락을 놓은 뒤 <b>롤백하면</b>, 그 값을 이미 읽은 다른 트랜잭션도 연쇄로 롤백해야 한다 (cascading abort).</li>
+<li>해결: <b>Strict 2PL</b> — 모든 X락(실무에선 대개 모든 락)을 <b>커밋/롤백 순간까지</b> 쥐고 있는다.</li>
+<li>커밋 전의 쓰기를 아무도 못 봤으니 연쇄 롤백이 원천 차단된다.</li>
+<li>실제 락 기반 DB(전통적 SQL Server, DB2)가 쓰는 방식이 바로 이것이다.</li>
+<li>대가: 락을 더 오래 쥔다 → 대기는 더 길어진다. 정확성과 동시성의 맞교환.</li>
+</ul></article>
+<article class="card"><h3>데드락 — 서로를 기다리는 두 사람</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Process_deadlock.svg/960px-Process_deadlock.svg.png" alt="데드락 다이어그램" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>P1은 R2를 기다리고 R2는 P2가 쥐고 있고, P2는 R1을 기다리고 R1은 P1이 쥐고 있다 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>T1이 A를 잠그고 B를 기다리는데, T2는 B를 잠그고 A를 기다린다 — 둘 다 영원히 못 움직인다.</li>
+<li>락이 있는 곳에 데드락이 있다. 락 방식의 숙명적 동반자.</li>
+</ul></article>
+<article class="card"><h3>데드락 스케줄 예시</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1 (A → B 이체)</th><th>T2 (B → A 이체)</th></tr>
+<tr><td>t1</td><td class="t1">X-lock(A) 획득</td><td></td></tr>
+<tr><td>t2</td><td></td><td class="t2">X-lock(B) 획득</td></tr>
+<tr><td>t3</td><td class="t1">X-lock(B) 요청 → 대기</td><td></td></tr>
+<tr><td>t4</td><td></td><td class="t2">X-lock(A) 요청 → 대기</td></tr>
+<tr><td>t5</td><td class="bad" colspan="2">서로가 서로를 기다림 — 데드락 성립</td></tr>
+</table></div>
+<ul>
+<li>맞이체(A→B와 B→A 동시 실행)는 데드락 교과서 1페이지 사례이자, 실제 장애 보고서 단골손님이다.</li>
+<li>두 트랜잭션 모두 규칙(2PL)을 완벽히 지켰다는 점이 핵심 — 규칙 준수가 데드락을 막아 주지 않는다.</li>
+</ul></article>
+<article class="card"><h3>데드락 대처법</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>전략</th><th>방법</th><th>채택 예</th></tr>
+<tr><td>탐지 후 처형</td><td>대기 그래프에서 사이클 발견 시 한 트랜잭션을 강제 롤백</td><td>InnoDB, PostgreSQL, SQL Server</td></tr>
+<tr><td>타임아웃</td><td>일정 시간 대기하면 포기하고 롤백</td><td>lock_timeout 설정, 분산 DB</td></tr>
+<tr><td>예방 — 순서 고정</td><td>모두가 같은 순서(예: id 오름차순)로 락을 얻는다</td><td>애플리케이션 코딩 규칙</td></tr>
+<tr><td>예방 — 우선순위</td><td>wait-die / wound-wait: 타임스탬프로 대기 방향을 한쪽으로 강제</td><td>분산 시스템, 교과서</td></tr>
+</table></div>
+<ul>
+<li>"deadlock detected" 에러는 DB의 버그가 아니라 <b>정상 동작</b>이다 — 애플리케이션은 재시도 코드를 갖춰야 한다.</li>
+</ul></article>
+<article class="card"><h3>락 입자성 — 어디까지 잠글까</h3>
+<ul>
+<li>무엇을 잠그나: 행 하나? 페이지? 테이블 전체? DB 전체? — 이것이 <b>락 입자성(granularity)</b>.</li>
+<li>잘게 잠그면(행) 동시성은 좋지만 락 개수가 폭발하고, 굵게 잠그면(테이블) 관리는 싸지만 다 막힌다.</li>
+<li>현대 DB의 답: 평소엔 행 락, 락이 너무 많아지면 테이블 락으로 승격(escalation) — SQL Server가 대표적.</li>
+<li>의도 락(intent lock, IS/IX): "이 테이블 안 어딘가의 행을 잠글 예정"이라는 예고 표지판. 행 락과 테이블 락이 공존하게 해 준다.</li>
+<li class="sub">Jim Gray의 granular locking 논문(1975)이 이 체계의 원전이다</li>
+</ul></article>
+<article class="card"><h3>읽기가 쓰기를 막는다 — 진짜 문제</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1 (월간 매출 집계, 10분)</th><th>T2 (주문 1건 갱신, 1ms)</th></tr>
+<tr><td>t1</td><td class="t1">S-lock(orders) … 집계 시작</td><td></td></tr>
+<tr><td>t2</td><td></td><td class="t2">X-lock(orders의 행) 요청 → 대기</td></tr>
+<tr><td>t3</td><td class="t1">… 아직 집계 중 …</td><td class="t2">… 계속 대기 …</td></tr>
+<tr><td>t4</td><td class="t1">완료, 락 해제 (10분 후)</td><td class="t2">이제야 실행 — 10분 걸린 1ms 갱신</td></tr>
+</table></div>
+<ul>
+<li>단지 <b>읽기</b>였을 뿐인 T1이 초고속 갱신 T2를 10분간 세워 놨다.</li>
+<li>반대 방향도 성립: 쓰는 중인 행은 읽기가 전부 대기한다. 락 세계에서 읽기와 쓰기는 서로의 적이다.</li>
+</ul></article>
+<article class="card"><h3>사례: 야간 리포트 vs 주문 처리</h3>
+<ul>
+<li>2000년대 초 락 기반 DB 운영의 일상: 야간 배치 리포트가 도는 동안 서비스 응답이 죽는다.</li>
+<li>현장의 땜질 처방들이 등장했다:</li>
+<li class="sub">리포트 전용 복제본(read replica)을 따로 두기 — 돈과 지연으로 해결</li>
+<li class="sub">SQL Server의 NOLOCK 힌트 — 락을 무시하고 읽기. 대신 커밋 안 된 쓰레기 값(dirty read)을 읽을 각오</li>
+<li class="sub">새벽 2시로 배치 옮기기 — 글로벌 서비스엔 새벽이 없다는 게 함정</li>
+<li>전부 "읽기와 쓰기가 서로를 막는다"는 근본 구조를 피해 가는 우회로일 뿐이었다.</li>
+<li>근본 해법은 구조를 바꾸는 것 — 그것이 MVCC다.</li>
+</ul></article>
+<article class="card"><h3>락 방식의 비용 청구서</h3>
+<ul>
+<li><b>대기</b>: 충돌하면 무조건 줄을 선다. 긴 트랜잭션 하나가 뒤의 전부를 세운다.</li>
+<li><b>데드락</b>: 탐지 비용 + 희생자 롤백 + 재시도. 부하가 오를수록 기하급수로 는다.</li>
+<li><b>락 관리 오버헤드</b>: 락 테이블 메모리, 획득/해제 CPU, 락 승격의 급정거.</li>
+<li><b>읽기·쓰기 상호 봉쇄</b>: 분석 쿼리와 OLTP가 한 DB에 못 산다.</li>
+<li>그럼에도 락의 장점은 분명하다: 개념이 단순하고, 충돌이 극심한 워크로드에선 "미리 줄 세우기"가 오히려 낭비(롤백 재시도)가 없다.</li>
+</ul></article>
+<article class="card"><h3>꿈의 선언</h3>
+<div class="fbox">
+<div class="fx">읽기는 쓰기를 막지 않는다 <small>(Readers don't block writers)</small></div>
+<div class="fx">쓰기는 읽기를 막지 않는다 <small>(Writers don't block readers)</small></div>
+</div>
+<ul>
+<li>락의 세계에서 이건 모순이다 — 같은 데이터를 동시에 읽고 쓰면 반드시 한쪽이 이상한 값을 본다.</li>
+<li>탈출구는 전제를 의심하는 것: "같은 데이터"가 꼭 <b>하나</b>여야 하는가?</li>
+<li>데이터의 <b>과거 버전들</b>을 버리지 않고 쌓아 두면, 읽는 쪽은 안정된 과거를, 쓰는 쪽은 새 버전을 각자 만지면 된다.</li>
+<li>서로 다른 것을 만지니 막을 일이 없다 — 이 발상의 전환이 3장의 주제, MVCC다.</li>
+</ul></article>
+<article class="card"><h3>2장 정리</h3><ul>
+<li>락은 S/X 두 종류, 호환은 S+S뿐. 2PL(얻는 단계와 놓는 단계 분리)이 직렬가능성을 보장한다.</li>
+<li>실무는 Strict 2PL — 커밋까지 락을 쥐어 연쇄 롤백을 막는다. 대신 대기가 길어진다.</li>
+<li>데드락은 락의 숙명. 탐지-처형이 표준 대응이고, 애플리케이션엔 재시도 코드가 필요하다.</li>
+<li>최대 약점: 읽기와 쓰기가 서로를 막는다. 긴 분석 쿼리와 OLTP가 공존 불가.</li>
+<li>돌파구는 "데이터를 하나로 유지해야 한다"는 전제를 버리는 것 — 버전을 쌓자.</li>
+</ul></article>
+<!-- ================= CH 03 ================= -->
+<article class="card section" id="ch3">
+<p class="chnum">3장</p>
+<h2>MVCC 핵심 아이디어</h2>
+<p class="chsub">덮어쓰지 말고, 새 버전을 옆에 쌓아라</p></article>
+<article class="card"><h3>3장 한눈에 보기</h3><ol class="glance">
+<li>한 문장 정의</li>
+<li>덮어쓰기의 역사 — 팔림프세스트</li>
+<li>당신은 이미 MVCC를 쓰고 있다: Git</li>
+<li>위키백과의 문서 역사</li>
+<li>버전에 이름표 붙이기</li>
+<li>버전 체인 그려 보기</li>
+<li>스냅샷 — 시점을 얼리는 사진</li>
+<li>읽기 규칙: 내 스냅샷에 맞는 버전 찾기</li>
+<li>쓰기 규칙: 새 버전 추가</li>
+<li>1장의 사고를 MVCC로 다시 풀기</li>
+<li>공짜가 아니다 — 청소 문제</li>
+<li>역사 1978: David Reed의 박사논문</li>
+<li>역사 1984~: 상용화의 길</li>
+<li>데모: 버전 체인 관찰경</li>
+<li>3장 정리</li>
+</ol></article>
+<article class="card"><h3>한 문장 정의</h3>
+<div class="fbox">
+<div class="fx">UPDATE는 덮어쓰기가 아니라</div>
+<div class="fx">"새 버전 추가 + 옛 버전에 은퇴 도장"이다</div>
+</div>
+<ul>
+<li><b>MVCC(Multi-Version Concurrency Control)</b>: 데이터 항목마다 여러 버전을 유지하고, 각 트랜잭션에게는 자신의 시점에 맞는 버전을 골라 보여 주는 동시성 제어 방식.</li>
+<li>읽는 트랜잭션은 이미 확정된 과거 버전을 본다 — 누가 지금 고치고 있어도 상관없다.</li>
+<li>쓰는 트랜잭션은 새 버전을 만든다 — 누가 지금 읽고 있어도 그들의 버전은 건드리지 않는다.</li>
+<li>그래서 읽기와 쓰기가 서로를 기다릴 이유가 사라진다. 2장 끝의 "꿈의 선언"이 이렇게 실현된다.</li>
+</ul></article>
+<article class="card"><h3>덮어쓰기의 역사 — 팔림프세스트</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/Codex_ephremi_%28The_S.S._Teacher%27s_Edition-The_Holy_Bible_-_Plate_XXIV%29.jpg/960px-Codex_ephremi_%28The_S.S._Teacher%27s_Edition-The_Holy_Bible_-_Plate_XXIV%29.jpg" alt="팔림프세스트 사본" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>팔림프세스트 — 양피지가 귀해 옛 글을 긁어내고 그 위에 새 글을 썼다 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>중세엔 양피지가 비싸서 옛 문서를 지우고 재활용했다 — 덮어쓰기(update-in-place)의 원형.</li>
+<li>초기 DB도 같았다: 디스크가 금값이라 옛 값을 지우고 그 자리에 새 값을 썼다. 그래서 락이 필수였다.</li>
+<li>저장 공간이 싸진 순간, 전제가 무너진다: <b>굳이 지울 필요가 있나?</b> 역사를 다 남겨 두면 안 되나?</li>
+</ul></article>
+<article class="card"><h3>당신은 이미 MVCC를 쓰고 있다: Git</h3>
+<figure class="imgf dark"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Git-logo.svg/960px-Git-logo.svg.png" alt="Git 로고" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>Git — 커밋은 불변 스냅샷이다 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>Git에서 커밋은 절대 수정되지 않는다. 파일을 고치면 <b>새 커밋(새 버전)</b>이 생길 뿐.</li>
+<li>당신이 옛 커밋을 체크아웃해 읽는 동안, 동료가 새 커밋을 푸시해도 당신의 화면은 1비트도 안 바뀐다.</li>
+<li>"읽는 사람은 자기 시점의 버전을, 쓰는 사람은 새 버전을" — MVCC 그 자체다.</li>
+<li>DB의 MVCC는 이 아이디어를 행(row) 단위로, 자동으로, 훨씬 짧은 수명으로 굴리는 것이라 보면 된다.</li>
+</ul></article>
+<article class="card"><h3>위키백과의 문서 역사</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/en/thumb/8/80/Wikipedia-logo-v2.svg/960px-Wikipedia-logo-v2.svg.png" alt="위키백과 로고" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>위키백과 — 모든 편집이 새 리비전으로 보존된다</figcaption></figure>
+<ul>
+<li>위키백과 문서를 편집해도 이전 판은 사라지지 않는다 — "역사 보기"에 모든 리비전이 남는다.</li>
+<li>당신이 문서를 읽는 중에 누가 편집해도, 읽던 페이지가 눈앞에서 바뀌진 않는다. 새로고침해야 새 판이 보인다.</li>
+<li>"내가 페이지를 연 순간의 판"이 바로 다음에 배울 <b>스냅샷</b>이다.</li>
+<li>구글 문서의 버전 기록, 맥의 타임머신 백업, 법전의 개정 이력 — 버전 개념은 어디에나 있다.</li>
+</ul></article>
+<article class="card"><h3>버전에 이름표 붙이기</h3>
+<ul>
+<li>버전을 구분하려면 이름표가 필요하다. MVCC DB는 <b>트랜잭션 ID(txid)</b>를 쓴다 — 트랜잭션마다 부여되는 증가하는 번호.</li>
+<li>각 버전에 두 개의 필드를 새긴다:</li>
+<li class="sub"><b>xmin</b> — 이 버전을 <b>만든</b> 트랜잭션의 ID (출생 신고)</li>
+<li class="sub"><b>xmax</b> — 이 버전을 <b>지우거나 대체한</b> 트랜잭션의 ID (은퇴 도장. 현역이면 비어 있음)</li>
+<li>이 두 숫자만으로 "이 버전은 어느 시점의 세계에 속하는가"를 판별할 수 있다.</li>
+<li class="sub">용어는 PostgreSQL 기준. InnoDB는 DB_TRX_ID 등 다른 이름을 쓰지만 원리는 같다 (8장)</li>
+</ul></article>
+<article class="card"><h3>버전 체인 그려 보기</h3>
+<p class="cap">계좌 A의 잔액을 txid 100이 생성 → 105가 150으로 → 112가 130으로 갱신한 상태:</p>
+<div class="vc">
+<div class="vbox dead">잔액 = 100<br><b>v1</b><small>xmin=100 xmax=105</small></div>
+<span class="varr">→</span>
+<div class="vbox dead">잔액 = 150<br><b>v2</b><small>xmin=105 xmax=112</small></div>
+<span class="varr">→</span>
+<div class="vbox new">잔액 = 130<br><b>v3</b><small>xmin=112 xmax=∅</small></div>
+</div>
+<ul>
+<li>한 행의 여러 버전이 사슬처럼 이어진다 — <b>버전 체인(version chain)</b>.</li>
+<li>v1의 xmax와 v2의 xmin이 둘 다 105인 것에 주목: 105의 UPDATE가 "v1 은퇴 + v2 출생"을 동시에 처리했다.</li>
+<li>DELETE는 새 버전 없이 은퇴 도장(xmax)만 찍는 것. INSERT는 출생 신고(xmin)만 있는 새 버전.</li>
+</ul></article>
+<article class="card"><h3>스냅샷 — 시점을 얼리는 사진</h3>
+<div class="note"><b>스냅샷(snapshot)</b>: 트랜잭션이 시작하는 순간 찍는 "세계의 사진". 구체적으로는 <b>그 순간까지 커밋 완료된 트랜잭션의 집합</b>이다.</div>
+<ul>
+<li>사진에 찍힌 것(내 시작 전에 커밋된 변경)만 보인다. 사진 이후의 일은 없는 셈 친다.</li>
+<li>스냅샷을 표현하는 데 필요한 정보는 의외로 작다:</li>
+<li class="sub">지금까지 발급된 txid 범위 + <b>아직 진행 중인 트랜잭션 목록</b></li>
+<li class="sub">"진행 중 목록에 있으면 아직 안 끝난 것 → 안 보임"으로 판정</li>
+<li>트랜잭션 내내 같은 사진을 쓰면 반복 읽기가 일관되고(5장 SI), 문장마다 새로 찍으면 READ COMMITTED가 된다.</li>
+</ul></article>
+<article class="card"><h3>읽기 규칙: 내 스냅샷에 맞는 버전 찾기</h3>
+<pre><code><span class="cm"># 버전 v가 스냅샷 S를 가진 나에게 보이는가?</span>
+<span class="kw">visible</span>(v, S):
+    <span class="kw">return</span> committed_before(v.xmin, S)      <span class="cm"># 출생이 내 사진에 찍혔고</span>
+       <span class="kw">and not</span> committed_before(v.xmax, S)  <span class="cm"># 은퇴는 아직 안 찍혔다</span></code></pre>
+<ul>
+<li>버전 체인을 따라가며 이 조건을 만족하는 버전을 찾는다 — 있으면 그것이 "내가 보는 값".</li>
+<li>만족하는 버전이 하나도 없으면? 내 세계에 그 행은 존재하지 않는 것이다 (아직 안 태어났거나, 이미 지워졌거나).</li>
+<li>중요: 이 판정에 <b>락이 전혀 필요 없다.</b> 숫자 비교 몇 번이면 끝.</li>
+<li class="sub">committed_before의 정확한 구현(커밋 로그 조회)은 6장에서 해부한다</li>
+</ul></article>
+<article class="card"><h3>쓰기 규칙: 새 버전 추가</h3>
+<ul>
+<li>UPDATE의 실제 동작:</li>
+<li class="sub">① 현재 버전에 내 txid로 은퇴 도장(xmax)을 찍고</li>
+<li class="sub">② 새 값으로 새 버전을 만들어 내 txid로 출생 신고(xmin)한다</li>
+<li>내가 커밋하기 전까지, 다른 트랜잭션의 스냅샷엔 내 새 버전이 "미확정"이라 안 보인다 — Dirty Read 원천 차단.</li>
+<li>내가 롤백하면? 새 버전은 "커밋 안 된 출생"이라 영원히 아무에게도 안 보인다. 지울 필요도 없이 그냥 쓰레기가 된다.</li>
+<li>단, <b>쓰기끼리는 여전히 조율이 필요하다</b> — 같은 행을 두 트랜잭션이 동시에 갱신하려 하면 락 또는 충돌 검사가 개입한다 (5장).</li>
+</ul></article>
+<article class="card"><h3>1장의 사고를 MVCC로 다시 풀기</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1 (이체: A−10, B+10)</th><th>T2 (합계 조회, 스냅샷 S₂)</th></tr>
+<tr><td>t1</td><td class="t1">A: 새 버전 90 생성 (미커밋)</td><td></td></tr>
+<tr><td>t2</td><td></td><td class="t2">read(A) → 스냅샷 S₂엔 T1 미커밋 → <b>100</b></td></tr>
+<tr><td>t3</td><td class="t1">B: 새 버전 60 생성, COMMIT</td><td></td></tr>
+<tr><td>t4</td><td></td><td class="t2">read(B) → S₂ 시점 버전 → <b>50</b></td></tr>
+<tr><td>t5</td><td class="ok" colspan="2">T2가 본 합계 150 — 일관된 과거! (기다린 사람도 없음)</td></tr>
+</table></div>
+<ul>
+<li>1장에서 합계 140이 나오던 스케줄이다. 같은 타이밍인데 이제 150이 나온다.</li>
+<li>비결: t4에서 T2는 커밋 완료된 B=60이 아니라 <b>자기 사진에 찍힌</b> B=50을 읽었다.</li>
+</ul></article>
+<article class="card"><h3>공짜가 아니다 — 청소 문제</h3>
+<ul>
+<li>버전을 쌓기만 하면 디스크가 무한히 필요하다. 언젠간 <b>버려야</b> 한다.</li>
+<li>버려도 되는 버전의 조건: <b>어떤 현재·미래 스냅샷에서도 보일 가능성이 없는 버전.</b></li>
+<li class="sub">= 은퇴 도장이 찍혔고, 그 은퇴가 지금 살아 있는 가장 오래된 스냅샷보다도 과거인 버전</li>
+<li>이 청소를 PostgreSQL은 VACUUM(7장), InnoDB는 purge(8장), Oracle은 undo 재사용(9장)이라 부른다.</li>
+<li>MVCC 운영 사고의 90%는 청소 문제다: 청소가 밀리면 디스크 폭발, 청소가 급하면 "snapshot too old".</li>
+<li>미리 기억해 둘 공식: <b>오래 사는 스냅샷 = 청소 불가 = MVCC의 천적.</b></li>
+</ul></article>
+<article class="card"><h3>역사 1978: David Reed의 박사논문</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/4/40/David_P_Reed.JPG" alt="David P. Reed" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>데이비드 리드(David P. Reed) — MVCC의 이론적 창시자 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>1978년 MIT 박사논문 "Naming and Synchronization in a Decentralized Computer System"에서 다중 버전 동기화를 처음 체계화했다.</li>
+<li>"객체의 역사(버전 열)를 유지하고 트랜잭션은 일관된 시점을 본다"는 뼈대가 이미 여기 있다.</li>
+<li>1981년 Bernstein·Goodman의 동시성 제어 서베이가 MVCC를 3대 기법(락·타임스탬프·다중버전)의 하나로 자리매김했다.</li>
+<li class="sub">Reed는 TCP/IP 설계 논쟁의 "end-to-end argument" 논문 공저자이기도 하다 — 컴퓨터과학 두 분야에 발자국</li>
+</ul></article>
+<article class="card"><h3>역사 1984~: 상용화의 길</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>연도</th><th>사건</th></tr>
+<tr><td>1984</td><td>Jim Starkey의 <b>InterBase</b> — 최초의 본격 MVCC 상용 DB ("multi-generational architecture"). 후신이 오픈소스 Firebird</td></tr>
+<tr><td>1984</td><td><b>Oracle V4</b> — 읽기 일관성(read consistency) 도입, 대중 시장에 MVCC적 읽기를 처음 보급</td></tr>
+<tr><td>1986</td><td>Stonebraker의 Berkeley <b>POSTGRES</b> — "덮어쓰지 않는 스토리지"로 타임트래블 쿼리 지원</td></tr>
+<tr><td>1999</td><td><b>PostgreSQL 6.5</b> — Vadim Mikheev가 현재의 MVCC 구현 완성</td></tr>
+<tr><td>2001·2005</td><td>InnoDB가 MySQL에 MVCC를, SQL Server 2005가 스냅샷 격리를 도입</td></tr>
+</table></div>
+<ul>
+<li>2010년대 이후 새로 만들어진 DB(CockroachDB, TiDB, Spanner…)는 <b>거의 예외 없이 MVCC</b>다. 사실상 표준이 됐다.</li>
+</ul></article>
+<article class="card"><h3>데모: 버전 체인 관찰경</h3>
+<div class="demo" id="demoChain">
+<canvas width="640" height="330"></canvas>
+<div class="row">
+  <button id="vcUpd">UPDATE (+10)</button>
+  <button id="vcDel">DELETE</button>
+  <button id="vcVac">VACUUM</button>
+  <button id="vcRst">리셋</button>
+</div>
+<div class="row">
+  <label>관찰자 스냅샷 시점: txid ≤ <span id="vcT">1</span></label>
+  <input type="range" id="vcSnap" min="1" max="1" value="1" step="1">
+</div>
+<div class="out"></div>
+</div>
+<ul>
+<li>UPDATE를 누를 때마다 새 버전이 체인에 붙고, 이전 버전엔 은퇴 도장(xmax)이 찍힌다.</li>
+<li>슬라이더로 "과거 시점의 관찰자"가 되어 보자 — 관찰자마다 <b>다른 버전</b>이 노랗게 빛난다.</li>
+<li>VACUUM은 관찰자 슬라이더보다 과거로 은퇴한(아무도 볼 수 없는) 버전만 지운다. 슬라이더를 과거에 두면 그 버전은 청소되지 않는다 — 긴 트랜잭션이 청소를 막는 원리다.</li>
+</ul></article>
+<article class="card"><h3>3장 정리</h3><ul>
+<li>MVCC = 덮어쓰기 대신 버전 쌓기. 각 버전은 xmin(출생)·xmax(은퇴)를 갖고 체인으로 이어진다.</li>
+<li>트랜잭션은 시작 시 스냅샷(커밋 완료 집합의 사진)을 찍고, 자기 사진에 맞는 버전만 본다.</li>
+<li>읽기는 락 없이 숫자 비교만으로 일관된 과거를 본다. 쓰기는 새 버전을 만들 뿐 읽기를 방해하지 않는다.</li>
+<li>대가는 청소: 안 보이게 된 버전을 회수해야 하고, 오래 사는 스냅샷이 청소를 막는다.</li>
+<li>1978년 이론(Reed) → 1984년 상용화(InterBase, Oracle) → 오늘날 사실상 표준.</li>
+</ul></article>
+
+<!-- ================= CH 04 ================= -->
+<article class="card section" id="ch4">
+<p class="chnum">4장</p>
+<h2>격리 수준과 이상 현상</h2>
+<p class="chsub">완벽한 격리는 비싸다 — 그래서 DB는 격리를 "등급"으로 판다</p></article>
+<article class="card"><h3>4장 한눈에 보기</h3><ol class="glance">
+<li>격리를 왜 등급으로 파는가</li>
+<li>ANSI SQL-92의 4단계</li>
+<li>이상 현상 도감 ① Dirty Write</li>
+<li>이상 현상 도감 ② Dirty Read</li>
+<li>이상 현상 도감 ③ Non-repeatable Read</li>
+<li>이상 현상 도감 ④ Phantom Read</li>
+<li>이상 현상 도감 ⑤ Lost Update</li>
+<li>이상 현상 도감 ⑥ Read Skew</li>
+<li>이상 현상 도감 ⑦ Write Skew</li>
+<li>수준 × 현상 허용표</li>
+<li>1995년의 반란 — ANSI 비판 논문</li>
+<li>실제 DB의 기본값과 방언</li>
+<li>같은 이름, 다른 뜻</li>
+<li>데모: 이상 현상 시뮬레이터</li>
+<li>4장 정리</li>
+</ol></article>
+<article class="card"><h3>격리를 왜 등급으로 파는가</h3>
+<ul>
+<li>완벽한 격리(직렬가능성)는 가장 비싼 상품이다 — 대기든 롤백이든 반드시 비용을 치른다.</li>
+<li>그런데 모든 애플리케이션이 완벽을 요구하진 않는다: 조회수 집계가 1 어긋나는 것과 계좌 잔액이 어긋나는 것은 무게가 다르다.</li>
+<li>그래서 표준은 "얼마나 이상한 현상까지 참을 수 있는가"로 4개 등급을 만들었다 — 싸고 이상한 것부터 비싸고 완벽한 것까지.</li>
+<li>등급을 고르는 것은 DBA가 아니라 <b>애플리케이션 개발자의 책임</b>이다. 그래서 이 장이 이 덱에서 가장 실용적인 장이다.</li>
+<li class="sub">뿌리는 Jim Gray의 1975년 "Degrees of Consistency" — 표준화되며 SQL-92에 들어왔다</li>
+</ul></article>
+<article class="card"><h3>ANSI SQL-92의 4단계</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>수준</th><th>한 줄 설명</th></tr>
+<tr><td><b>READ UNCOMMITTED</b></td><td>커밋 안 된 남의 쓰기도 보인다 — 사실상 무법지대</td></tr>
+<tr><td><b>READ COMMITTED</b></td><td>커밋된 것만 보인다. 단, 문장마다 세상이 바뀔 수 있다</td></tr>
+<tr><td><b>REPEATABLE READ</b></td><td>한 번 읽은 행은 트랜잭션 내내 같은 값 — 새 행(팬텀)은 보장 밖</td></tr>
+<tr><td><b>SERIALIZABLE</b></td><td>직렬 실행과 동일한 결과 보장 — 최고 등급</td></tr>
+</table></div>
+<ul>
+<li>아래로 갈수록 비싸고 안전하다. 표준의 정의는 "어떤 이상 현상을 금지하는가"로 서술된다.</li>
+<li>이제 그 이상 현상들을 하나씩 도감처럼 수집하자 — 면접 단골이자 실무 버그의 이름들이다.</li>
+</ul></article>
+<article class="card"><h3>이상 현상 도감 ① Dirty Write (더티 라이트)</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1</th><th>T2</th></tr>
+<tr><td>t1</td><td class="t1">write(A = 1)  <span class="cm">(미커밋)</span></td><td></td></tr>
+<tr><td>t2</td><td></td><td class="t2">write(A = 2)  <span class="cm">← 미커밋 값을 덮어씀!</span></td></tr>
+<tr><td>t3</td><td class="t1">ROLLBACK — A를 뭘로 되돌리지?</td><td></td></tr>
+</table></div>
+<ul>
+<li>커밋 안 된 쓰기를 다른 트랜잭션이 덮어쓰는 것. 롤백 처리가 불가능해진다.</li>
+<li>이것만은 <b>모든 격리 수준에서, 모든 DB가 금지</b>한다 — READ UNCOMMITTED조차도.</li>
+<li>구현: 같은 행에 대한 쓰기는 커밋까지 락으로 직렬화한다. MVCC DB도 쓰기 락만큼은 쓴다.</li>
+</ul></article>
+<article class="card"><h3>이상 현상 도감 ② Dirty Read (더티 리드)</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1 (이체 중)</th><th>T2 (잔액 확인)</th></tr>
+<tr><td>t1</td><td class="t1">write(A = 900)  <span class="cm">(미커밋)</span></td><td></td></tr>
+<tr><td>t2</td><td></td><td class="t2">read(A) → <b>900</b>  <span class="cm">← 미커밋 값!</span></td></tr>
+<tr><td>t3</td><td class="t1">ROLLBACK (이체 취소)</td><td></td></tr>
+<tr><td>t4</td><td class="bad" colspan="2">T2는 존재한 적 없는 잔액 900으로 의사결정을 했다</td></tr>
+</table></div>
+<ul>
+<li>커밋되지 않은(어쩌면 취소될) 값을 읽는 것. READ UNCOMMITTED에서만 허용된다.</li>
+<li>MVCC에선 공짜로 방지된다: 미커밋 버전은 어떤 스냅샷에도 "커밋 전"이라 안 보인다.</li>
+<li class="sub">SQL Server의 NOLOCK 힌트가 정확히 이 현상을 사서 성능을 얻는 장치다</li>
+</ul></article>
+<article class="card"><h3>이상 현상 도감 ③ Non-repeatable Read (반복 불가능 읽기)</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1 (보고서)</th><th>T2</th></tr>
+<tr><td>t1</td><td class="t1">read(A) → 100</td><td></td></tr>
+<tr><td>t2</td><td></td><td class="t2">write(A = 200), COMMIT</td></tr>
+<tr><td>t3</td><td class="t1">read(A) → <b>200</b>  <span class="cm">← 아까랑 다르다!</span></td><td></td></tr>
+</table></div>
+<ul>
+<li>같은 행을 두 번 읽었는데 값이 달라진 것. 사이에 낀 <b>커밋된</b> 갱신 때문이다 (더티 리드와 구분!).</li>
+<li>READ COMMITTED까지 허용, REPEATABLE READ부터 금지.</li>
+<li>MVCC식 해법: 트랜잭션 내내 <b>같은 스냅샷</b>을 쓰면 두 번째 읽기도 같은 버전을 본다.</li>
+</ul></article>
+<article class="card"><h3>이상 현상 도감 ④ Phantom Read (유령 읽기)</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1 (감사)</th><th>T2</th></tr>
+<tr><td>t1</td><td class="t1">SELECT count(*) WHERE 급여>500 → 3명</td><td></td></tr>
+<tr><td>t2</td><td></td><td class="t2">INSERT (급여=900), COMMIT</td></tr>
+<tr><td>t3</td><td class="t1">같은 SELECT → <b>4명</b>  <span class="cm">← 유령 등장!</span></td><td></td></tr>
+</table></div>
+<ul>
+<li>행 하나의 값이 변한 게 아니라, <b>조건에 걸리는 행의 집합</b>이 변했다 — 새 행이 유령처럼 나타난다.</li>
+<li>행 단위 락으론 못 막는다: 아직 존재하지 않는 행엔 락을 걸 수 없으니까. (해법: 범위 락, 프레디킷 락, 또는 스냅샷)</li>
+<li>표준상 REPEATABLE READ에서도 허용되고 SERIALIZABLE에서만 금지 — 하지만 스냅샷 기반 DB는 REPEATABLE READ에서도 대부분 막아 준다 (다음 장).</li>
+</ul></article>
+<article class="card"><h3>이상 현상 도감 ⑤ Lost Update (갱신 손실)</h3>
+<ul>
+<li>1장의 잔액 증발 사건 — read-modify-write 두 개가 겹치며 한쪽 갱신이 사라지는 것.</li>
+<li>흥미롭게도 <b>ANSI 표준의 공식 3대 현상(더티/반복불가/팬텀)에 없다.</b> 표준의 구멍 중 하나.</li>
+<li>DB별 대응이 갈린다:</li>
+<li class="sub">PostgreSQL REPEATABLE READ: 감지하고 한쪽을 에러로 중단 ("could not serialize access due to concurrent update")</li>
+<li class="sub">MySQL InnoDB REPEATABLE READ: <b>막아 주지 않는다!</b> SELECT FOR UPDATE나 원자적 UPDATE를 써야 한다</li>
+<li class="sub">애플리케이션 레벨: <code style="display:inline;white-space:nowrap">UPDATE t SET n = n + 1</code>처럼 DB 안에서 계산하면 원천 차단</li>
+</ul></article>
+<article class="card"><h3>이상 현상 도감 ⑥ Read Skew (읽기 왜곡)</h3>
+<ul>
+<li>1장 스케줄 슬라이드에서 본 "합계 140" 사건의 정식 이름이다.</li>
+<li>여러 행을 읽는 도중 다른 트랜잭션의 커밋이 끼어들어, <b>행마다 다른 시점</b>의 값을 읽게 되는 것.</li>
+<li>각 읽기는 전부 "커밋된 값"이라 READ COMMITTED 규칙 위반이 아니다 — 그런데 조합하면 존재한 적 없는 세계다.</li>
+<li>피해 단골: 백업(테이블 앞쪽과 뒤쪽이 다른 시점), 집계 리포트, 불변식 검사(A+B=총액).</li>
+<li>해법이 바로 스냅샷: 모든 읽기를 한 시점의 사진에 고정한다. MVCC가 가장 빛나는 지점.</li>
+</ul></article>
+<article class="card"><h3>이상 현상 도감 ⑦ Write Skew (쓰기 왜곡)</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1 (김 박사 퇴근)</th><th>T2 (이 박사 퇴근)</th></tr>
+<tr><td>t1</td><td class="t1">당직 의사 수 확인 → 2명 (OK)</td><td></td></tr>
+<tr><td>t2</td><td></td><td class="t2">당직 의사 수 확인 → 2명 (OK)</td></tr>
+<tr><td>t3</td><td class="t1">나(김) 퇴근 처리, COMMIT</td><td></td></tr>
+<tr><td>t4</td><td></td><td class="t2">나(이) 퇴근 처리, COMMIT</td></tr>
+<tr><td>t5</td><td class="bad" colspan="2">규칙 "당직 최소 1명" 붕괴 — 병원이 비었다</td></tr>
+</table></div>
+<ul>
+<li>둘 다 읽은 것도 옳고, <b>서로 다른 행</b>을 썼으니 쓰기 충돌도 없다 — 그런데 조합하면 규칙이 깨진다.</li>
+<li>같은 행을 다투는 Lost Update의 사촌이지만 훨씬 교활하다. 스냅샷 격리로도 못 막는다 — 5장과 11장의 핵심 떡밥.</li>
+</ul></article>
+<article class="card"><h3>수준 × 현상 허용표</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>수준 ＼ 현상</th><th>Dirty Read</th><th>Non-repeatable</th><th>Phantom</th><th>Write Skew</th></tr>
+<tr><td><b>READ UNCOMMITTED</b></td><td style="color:var(--red)">가능</td><td style="color:var(--red)">가능</td><td style="color:var(--red)">가능</td><td style="color:var(--red)">가능</td></tr>
+<tr><td><b>READ COMMITTED</b></td><td style="color:var(--green)">차단</td><td style="color:var(--red)">가능</td><td style="color:var(--red)">가능</td><td style="color:var(--red)">가능</td></tr>
+<tr><td><b>REPEATABLE READ</b></td><td style="color:var(--green)">차단</td><td style="color:var(--green)">차단</td><td style="color:var(--gold)">표준상 가능</td><td style="color:var(--red)">가능</td></tr>
+<tr><td><b>SERIALIZABLE</b></td><td style="color:var(--green)">차단</td><td style="color:var(--green)">차단</td><td style="color:var(--green)">차단</td><td style="color:var(--green)">차단</td></tr>
+</table></div>
+<ul>
+<li>이 표는 면접의 고전이다. 하지만 외우기 전에 알아야 할 것: <b>이 표는 반쪽짜리다.</b> 다음 슬라이드.</li>
+</ul></article>
+<article class="card"><h3>1995년의 반란 — ANSI 비판 논문</h3>
+<div class="note">"A Critique of ANSI SQL Isolation Levels" (1995) — Berenson, Bernstein, <b>Gray</b>, Melton, O'Neil, O'Neil. 표준 격리 수준 정의가 모호하고 불완전함을 조목조목 격파한 전설의 논문.</div>
+<ul>
+<li>지적 1: 표준의 현상 정의가 모호해 넓게/좁게 두 가지로 읽힌다 — 좁게 읽으면 막아도 데이터가 깨진다.</li>
+<li>지적 2: Lost Update, Read/Write Skew 같은 중요한 현상이 표에 아예 없다.</li>
+<li>지적 3: 락이 아닌 방식(다중 버전)으로 구현된 격리는 표준의 틀로 분류가 안 된다.</li>
+<li>그래서 이 논문이 새 이름을 만들었다 — <b>스냅샷 격리(Snapshot Isolation)</b>. 다음 장 전체가 이 이야기다.</li>
+</ul></article>
+<article class="card"><h3>실제 DB의 기본값과 방언</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>DB</th><th>기본 격리 수준</th><th>비고</th></tr>
+<tr><td>PostgreSQL</td><td>READ COMMITTED</td><td>REPEATABLE READ = 스냅샷 격리(SI)</td></tr>
+<tr><td>MySQL InnoDB</td><td><b>REPEATABLE READ</b></td><td>기본값이 한 단계 높다 — 유일한 메이저</td></tr>
+<tr><td>Oracle</td><td>READ COMMITTED</td><td>SERIALIZABLE을 고르면 실제론 SI가 나온다</td></tr>
+<tr><td>SQL Server</td><td>READ COMMITTED (락 기반)</td><td>RCSI 켜면 MVCC식 READ COMMITTED로 변신</td></tr>
+<tr><td>SQLite</td><td>SERIALIZABLE</td><td>쓰기가 한 번에 하나라 공짜로 달성</td></tr>
+</table></div>
+<ul>
+<li>READ UNCOMMITTED를 기본으로 쓰는 메이저 DB는 없다. PostgreSQL은 골라도 READ COMMITTED로 동작한다.</li>
+</ul></article>
+<article class="card"><h3>같은 이름, 다른 뜻</h3>
+<div class="warn">"REPEATABLE READ"라는 같은 간판 아래에서 PostgreSQL과 MySQL은 <b>다르게 동작한다.</b> 이식할 때 최다 발생 함정.</div>
+<ul>
+<li>PostgreSQL REPEATABLE READ: 진짜 스냅샷 격리. 팬텀도 안 보이고, 동시 갱신 충돌 시 에러를 낸다.</li>
+<li>MySQL REPEATABLE READ: 일반 SELECT는 스냅샷을 읽지만, UPDATE·SELECT FOR UPDATE는 <b>최신 커밋 값</b>을 본다(locking read) — Lost Update 가능, 갭 락으로 팬텀 일부 차단.</li>
+<li>Oracle SERIALIZABLE: 이름은 최고 등급인데 실체는 SI — Write Skew가 뚫린다.</li>
+<li>교훈: 격리 수준은 <b>이름이 아니라 "무엇을 막아 주는가"</b>로 확인해야 한다. 그 확인 도구가 이상 현상 도감이다.</li>
+</ul></article>
+<article class="card"><h3>데모: 이상 현상 시뮬레이터</h3>
+<div class="demo" id="demoIso">
+<div class="row">
+  <button data-a="0" class="on">Dirty Read</button>
+  <button data-a="1">Non-repeatable</button>
+  <button data-a="2">Phantom</button>
+  <button data-a="3">Lost Update</button>
+  <button data-a="4">Write Skew</button>
+</div>
+<div class="row">
+  <label>격리:</label>
+  <button data-i="0" class="on">READ COMMITTED</button>
+  <button data-i="1">SNAPSHOT (RR)</button>
+  <button data-i="2">SERIALIZABLE</button>
+</div>
+<div class="row">
+  <button id="isoStep">▶ 다음 단계</button>
+  <button id="isoReset">처음부터</button>
+</div>
+<div class="log" id="isoLog"></div>
+<div class="out" id="isoOut">현상과 격리 수준을 고르고 실행해 보세요</div>
+</div>
+<ul>
+<li>같은 스케줄을 격리 수준만 바꿔 다시 돌려 보자 — 어떤 수준에서 현상이 사라지는지 직접 확인.</li>
+<li>특히 Write Skew를 SNAPSHOT에서 돌려 보자. 뚫린다. SERIALIZABLE로 바꾸면? 한쪽이 중단된다.</li>
+</ul></article>
+<article class="card"><h3>4장 정리</h3><ul>
+<li>격리는 등급제 상품: READ UNCOMMITTED → READ COMMITTED → REPEATABLE READ → SERIALIZABLE.</li>
+<li>이상 현상 도감 7종: Dirty Write/Read, Non-repeatable, Phantom, Lost Update, Read Skew, Write Skew.</li>
+<li>ANSI 표는 반쪽짜리 — 1995년 비판 논문이 구멍(Lost Update, Skew류)을 밝히고 "스냅샷 격리"를 명명했다.</li>
+<li>같은 격리 이름도 DB마다 실체가 다르다. 이름 말고 "막아 주는 현상 목록"으로 판단하라.</li>
+<li>다음 장: MVCC가 자연스럽게 도달하는 그 지점, 스냅샷 격리를 정밀 해부.</li>
+</ul></article>
+<!-- ================= CH 05 ================= -->
+<article class="card section" id="ch5">
+<p class="chnum">5장</p>
+<h2>스냅샷 격리 (SI)</h2>
+<p class="chsub">MVCC가 자연스럽게 도달하는 격리 수준 — 정확한 정의와 한계</p></article>
+<article class="card"><h3>5장 한눈에 보기</h3><ol class="glance">
+<li>스냅샷 격리의 두 가지 규칙</li>
+<li>규칙 1: 시작 시점 스냅샷</li>
+<li>규칙 2: 첫 커밋자 승리</li>
+<li>충돌 처리의 두 구현</li>
+<li>SI가 차단하는 현상들</li>
+<li>SI 성적표</li>
+<li>구멍 1: Write Skew 재방문</li>
+<li>구멍 2: 읽기 전용 트랜잭션도 이상해진다</li>
+<li>SI는 SERIALIZABLE이 아니다</li>
+<li>그래도 SI가 사랑받는 이유</li>
+<li>READ COMMITTED도 MVCC다</li>
+<li>문장 스냅샷 vs 트랜잭션 스냅샷</li>
+<li>5장 정리</li>
+</ol></article>
+<article class="card"><h3>스냅샷 격리의 두 가지 규칙</h3>
+<div class="fbox">
+<div class="fx">① 읽기: 시작 순간의 스냅샷만 본다</div>
+<div class="fx">② 쓰기: 같은 데이터에 먼저 커밋한 자가 이긴다</div>
+</div>
+<ul>
+<li>1995년 비판 논문이 정식화한 격리 수준. MVCC 엔진이 "트랜잭션당 스냅샷 1장"을 주면 자연히 얻어진다.</li>
+<li>규칙 ①이 읽기의 일관성을, 규칙 ②가 쓰기의 안전(Lost Update 차단)을 담당한다.</li>
+<li>PostgreSQL의 REPEATABLE READ, Oracle의 SERIALIZABLE, SQL Server의 SNAPSHOT이 전부 이것이다.</li>
+</ul></article>
+<article class="card"><h3>규칙 1: 시작 시점 스냅샷</h3>
+<ul>
+<li>트랜잭션의 <b>첫 문장이 실행되는 순간</b> 스냅샷을 찍고, 커밋/롤백까지 그 사진만 본다.</li>
+<li>효과: 트랜잭션 안의 모든 SELECT가 <b>한 시점의 일관된 세계</b>를 본다.</li>
+<li class="sub">반복 읽기가 항상 같고(Non-repeatable 차단), 집계 도중 세상이 안 바뀌고(Read Skew 차단), 새 행도 안 나타난다(Phantom 차단)</li>
+<li>자기 자신의 쓰기는 예외적으로 보인다 — 내가 방금 넣은 행을 내가 못 보면 곤란하니까.</li>
+<li>비유: 트랜잭션 시작 = 도서관 전체를 통째로 복사해 개인 열람실을 받는 것. 남들이 원본을 고쳐도 내 열람실은 고요하다.</li>
+</ul></article>
+<article class="card"><h3>규칙 2: 첫 커밋자 승리 (First-Committer-Wins)</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1</th><th>T2</th></tr>
+<tr><td>t1</td><td class="t1">read(A) → 100</td><td class="t2">read(A) → 100</td></tr>
+<tr><td>t2</td><td class="t1">write(A = 150)</td><td class="t2">write(A = 130)</td></tr>
+<tr><td>t3</td><td class="t1">COMMIT — 먼저 도착, 성공</td><td></td></tr>
+<tr><td>t4</td><td></td><td class="t2">COMMIT 시도 → <b>중단!</b></td></tr>
+<tr><td>t5</td><td class="ok" colspan="2">"내 스냅샷 이후 A가 이미 바뀌었네" — T2는 에러, 재시도하면 150+30=180</td></tr>
+</table></div>
+<ul>
+<li>겹치는 두 트랜잭션이 <b>같은 데이터</b>를 썼다면, 먼저 커밋한 쪽만 성공하고 나중은 중단된다.</li>
+<li>1장의 잔액 증발(Lost Update)이 이 규칙으로 차단된다 — 증발 대신 명시적 에러 + 재시도.</li>
+</ul></article>
+<article class="card"><h3>충돌 처리의 두 구현</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>방식</th><th>동작</th><th>채택</th></tr>
+<tr><td><b>first-committer-wins</b></td><td>커밋 시점에 검사해서 늦은 쪽을 중단</td><td>교과서 정의, 일부 인메모리 DB</td></tr>
+<tr><td><b>first-updater-wins</b></td><td>쓰는 순간 행 락을 잡고, 상대가 커밋하면 그때 중단</td><td>PostgreSQL, Oracle</td></tr>
+</table></div>
+<ul>
+<li>결과는 같다(둘 중 하나만 산다). 다른 건 <b>언제 죽는가</b>: 커밋 때 vs 쓰기 시도 때.</li>
+<li>PostgreSQL의 실제 순서: UPDATE 시도 → 상대가 그 행을 쓰는 중이면 대기 → 상대가 커밋하면 "could not serialize access due to concurrent update" 에러, 롤백하면 계속 진행.</li>
+<li>어느 쪽이든 애플리케이션의 의무는 같다: <b>이 에러는 재시도하라는 신호다.</b></li>
+</ul></article>
+<article class="card"><h3>SI가 차단하는 현상들</h3>
+<ul>
+<li><b>Dirty Read</b> — 미커밋 버전은 스냅샷에 없다. 차단.</li>
+<li><b>Non-repeatable Read</b> — 내내 같은 사진을 보니 두 번째 읽기도 같다. 차단.</li>
+<li><b>Read Skew</b> — 모든 행을 같은 시점으로 읽는다. 차단.</li>
+<li><b>Phantom</b> — 새로 커밋된 행은 내 사진에 없다. 차단 (표준 REPEATABLE READ보다 강하다!).</li>
+<li><b>Lost Update</b> — 첫 커밋자 승리가 차단.</li>
+<li>락 없이, 대기 없이 이만큼을 막는다 — 1995년 논문이 SI에 주목한 이유다.</li>
+</ul></article>
+<article class="card"><h3>SI 성적표</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>현상</th><th>SI에서</th></tr>
+<tr><td>Dirty Write / Dirty Read</td><td style="color:var(--green)">차단</td></tr>
+<tr><td>Non-repeatable Read / Read Skew</td><td style="color:var(--green)">차단</td></tr>
+<tr><td>Phantom Read</td><td style="color:var(--green)">차단</td></tr>
+<tr><td>Lost Update</td><td style="color:var(--green)">차단</td></tr>
+<tr><td><b>Write Skew</b></td><td style="color:var(--red)">통과 — 구멍!</td></tr>
+<tr><td><b>읽기 전용 이상(read-only anomaly)</b></td><td style="color:var(--red)">통과 — 구멍!</td></tr>
+</table></div>
+<ul>
+<li>표준 4단계 어디에도 못 끼는 성적이다: REPEATABLE READ보다 세고(팬텀 차단), SERIALIZABLE보단 약하다(스큐 통과).</li>
+<li>그래서 SI는 표준 사다리 <b>옆에 따로 서 있는</b> 다섯 번째 수준으로 그려진다.</li>
+</ul></article>
+<article class="card"><h3>구멍 1: Write Skew 재방문</h3>
+<ul>
+<li>당직 의사 사건을 SI 규칙으로 검산해 보자:</li>
+<li class="sub">규칙 ① 위반? 아니오 — 둘 다 자기 스냅샷(당직 2명)을 정직하게 읽었다</li>
+<li class="sub">규칙 ② 위반? 아니오 — 김 박사는 김 박사 행을, 이 박사는 이 박사 행을 썼다. <b>같은 데이터가 아니다</b></li>
+<li>SI의 충돌 검사는 <b>쓰기 집합의 겹침</b>만 본다. "읽은 것에 기반해 다른 곳에 썼다"는 연결 고리는 못 본다.</li>
+<li>실전 변형: 재고 마감, 예산 한도 검사, 중복 예약 방지, 아이디 중복 검사 — "조건을 읽고, 조건 밖에 쓰는" 모든 패턴.</li>
+<li>대응은 11장에서: 명시적 락으로 충돌을 만들거나(SELECT FOR UPDATE), SSI로 격상하거나.</li>
+</ul></article>
+<article class="card"><h3>구멍 2: 읽기 전용 트랜잭션도 이상해진다</h3>
+<ul>
+<li>2004년 Fekete·O'Neil·O'Neil이 발견한 충격적 사례: <b>읽기만 하는 제3의 트랜잭션</b>이 "직렬 실행으론 불가능한 순서"의 세계를 목격할 수 있다.</li>
+<li>시나리오 뼈대: 잔액 두 계좌(당좌 0, 저축 0), T1은 저축+20 입금, T2는 당좌−10 인출(합계가 음수면 수수료 1 부과), T3은 잔액 조회.</li>
+<li>T3이 "입금은 됐는데 인출은 안 된" 스냅샷을 봤는데, 최종 결과는 "수수료가 부과된" 세계가 될 수 있다 — 어떤 직렬 순서로도 설명 불가.</li>
+<li>교훈: SI의 스냅샷은 언제나 <b>일관된 과거</b>처럼 보이지만, 그 과거가 "실제 일어난 역사"와 모순일 수 있다.</li>
+<li class="sub">이 발견이 SSI(직렬화 가능한 SI) 연구에 불을 붙였다 — 11장</li>
+</ul></article>
+<article class="card"><h3>SI는 SERIALIZABLE이 아니다</h3>
+<div class="warn">Oracle에서 <code style="display:inline;white-space:nowrap">SET TRANSACTION ISOLATION LEVEL SERIALIZABLE</code>을 실행하면 얻는 것은 진짜 직렬가능성이 아니라 <b>스냅샷 격리</b>다. 2000년대 내내 논쟁을 일으킨 유명한 사실.</div>
+<ul>
+<li>PostgreSQL도 9.0까지는 SERIALIZABLE = SI였다. 9.1(2011)에서 진짜 직렬화(SSI)로 교체했다.</li>
+<li>실무 점검법: 당직 의사 시나리오(Write Skew)를 두 세션으로 직접 돌려 보면 된다. 둘 다 커밋되면 그 DB의 "SERIALIZABLE"은 SI다.</li>
+<li>은행·정산처럼 불변식이 생명인 도메인에선 이 차이가 돈 사고로 직결된다.</li>
+</ul></article>
+<article class="card"><h3>그래도 SI가 사랑받는 이유</h3>
+<ul>
+<li>읽기 전용 작업(리포트, 백업, 분석)에 <b>완벽한 일관성 + 제로 대기</b> — pg_dump가 서비스 중에 돌 수 있는 이유.</li>
+<li>대부분의 OLTP 패턴(한 행 읽고 그 행 고치기)에서 Write Skew가 아예 성립하지 않는다.</li>
+<li>이상 현상 중 가장 흔하고 치명적인 것들(더티, 반복불가, 팬텀, 갱신손실)을 전부 잡는다.</li>
+<li>비용은 버전 저장 공간과 청소뿐 — 락 대기·데드락 비용보다 대개 싸다.</li>
+<li>공학적 판단: "완벽하진 않지만 충분히 좋고 매우 빠른" 스위트 스팟. 그래서 30년째 업계 표준 지위다.</li>
+</ul></article>
+<article class="card"><h3>READ COMMITTED도 MVCC다</h3>
+<ul>
+<li>PostgreSQL·Oracle의 기본값인 READ COMMITTED도 락으로 읽기를 막는 게 아니라 <b>스냅샷으로 구현</b>된다.</li>
+<li>차이는 딱 하나 — 사진을 찍는 주기:</li>
+<li class="sub"><b>READ COMMITTED</b>: 문장(statement)마다 새 스냅샷 — 문장 하나는 일관되게, 문장 사이엔 세상이 바뀔 수 있음</li>
+<li class="sub"><b>SI (REPEATABLE READ)</b>: 트랜잭션에 스냅샷 한 장</li>
+<li>그래서 READ COMMITTED에서도 Dirty Read는 없고, 문장 단위 Read Skew도 없다 — 락 기반 READ COMMITTED보다 강하다.</li>
+<li>단, 트랜잭션 안에서 문장을 여러 번 실행하면 값이 변할 수 있다(Non-repeatable) — 기본값의 함정.</li>
+</ul></article>
+<article class="card"><h3>문장 스냅샷 vs 트랜잭션 스냅샷</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th></th><th>READ COMMITTED</th><th>SNAPSHOT (RR)</th></tr>
+<tr><td>스냅샷 주기</td><td>문장마다</td><td>트랜잭션당 1장</td></tr>
+<tr><td>남의 커밋이 중간에 보이나</td><td>다음 문장부터 보임</td><td>끝까지 안 보임</td></tr>
+<tr><td>동시 갱신 충돌 시</td><td>기다렸다가 <b>새 값 위에서 계속</b></td><td>기다렸다가 <b>에러로 중단</b></td></tr>
+<tr><td>재시도 코드 필요</td><td>거의 불필요</td><td>필수</td></tr>
+<tr><td>어울리는 곳</td><td>짧은 단건 OLTP</td><td>리포트, 다중 읽기 일관성</td></tr>
+</table></div>
+<ul>
+<li>"기본값이면 충분한가?"의 답: 문장 하나로 끝나는 작업이면 대개 충분, 여러 읽기의 일관성이 필요하면 SI로 올려라.</li>
+</ul></article>
+<article class="card"><h3>5장 정리</h3><ul>
+<li>SI = 시작 시점 스냅샷(읽기) + 첫 커밋자 승리(쓰기). MVCC 엔진의 자연스러운 격리 수준.</li>
+<li>더티·반복불가·팬텀·읽기왜곡·갱신손실을 전부 차단 — 표준 REPEATABLE READ보다 강하다.</li>
+<li>구멍은 Write Skew와 읽기 전용 이상 — "읽은 곳과 쓴 곳이 다른" 패턴은 못 본다.</li>
+<li>Oracle의 SERIALIZABLE은 SI다. 이름에 속지 말 것.</li>
+<li>이제 이론은 끝. 다음 다섯 장은 실제 DB들이 이걸 <b>어떻게 구현했는지</b> 뜯어 본다 — 먼저 PostgreSQL.</li>
+</ul></article>
+
+<!-- ================= CH 06 ================= -->
+<article class="card section" id="ch6">
+<p class="chnum">6장</p>
+<h2>PostgreSQL I — 튜플과 가시성</h2>
+<p class="chsub">교과서에 가장 가까운 구현 — 버전을 테이블에 그대로 쌓는다</p></article>
+<article class="card"><h3>6장 한눈에 보기</h3><ol class="glance">
+<li>왜 PostgreSQL부터인가</li>
+<li>혈통: Berkeley와 Stonebraker</li>
+<li>튜플 = 행의 한 버전</li>
+<li>튜플 헤더 해부</li>
+<li>INSERT의 발자국</li>
+<li>UPDATE의 발자국</li>
+<li>DELETE의 발자국</li>
+<li>공식 그림으로 복습</li>
+<li>txid — 32비트 시계</li>
+<li>스냅샷의 실제 구조</li>
+<li>가시성 판정 전체 알고리즘</li>
+<li>커밋 로그(clog)와 힌트 비트</li>
+<li>직접 관찰 실습 ①</li>
+<li>직접 관찰 실습 ②</li>
+<li>6장 정리</li>
+</ol></article>
+<article class="card"><h3>왜 PostgreSQL부터인가</h3>
+<figure class="imgf dark"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Postgresql_elephant.svg/960px-Postgresql_elephant.svg.png" alt="PostgreSQL 엘리펀트 로고" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>PostgreSQL 마스코트 Slonik — 코끼리는 잊지 않는다, 버전도 잊지 않는다 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>PostgreSQL의 MVCC는 3장의 개념도와 구현이 <b>거의 1:1로 대응</b>한다 — 배우기에 최고의 표본.</li>
+<li>xmin/xmax라는 용어 자체가 PostgreSQL의 실제 시스템 컬럼 이름이다.</li>
+<li>모든 것이 문서화·오픈소스라 직접 눈으로 확인할 수 있다 — 이 장 끝에서 실습한다.</li>
+</ul></article>
+<article class="card"><h3>혈통: Berkeley와 Stonebraker</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Michael_Stonebraker_P1120062.jpg/960px-Michael_Stonebraker_P1120062.jpg" alt="Michael Stonebraker" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>마이클 스톤브레이커 — Ingres와 POSTGRES의 창시자, 2014년 튜링상 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>UC 버클리의 Stonebraker는 Ingres(1970년대)에 이어 1986년 POSTGRES 프로젝트를 시작했다.</li>
+<li>POSTGRES의 급진적 설계: "덮어쓰기 없는 스토리지" — 과거를 전부 남겨 <b>타임트래블 쿼리</b>("3월 1일 시점의 이 테이블")까지 지원했다.</li>
+<li>타임트래블은 성능 문제로 훗날 제거됐지만, "버전을 테이블에 쌓는" 뼈대는 살아남아 1999년(6.5) 오늘의 MVCC가 됐다.</li>
+</ul></article>
+<article class="card"><h3>튜플 = 행의 한 버전</h3>
+<ul>
+<li>PostgreSQL 용어로 <b>튜플(tuple)</b>은 "행의 물리적 버전 하나"다. 논리적 행 하나에 튜플 여러 개가 있을 수 있다.</li>
+<li>모든 튜플은 힙(heap) 파일의 8KB 페이지 안에 산다 — 옛 버전도 새 버전도 <b>같은 테이블 공간에 섞여</b> 있다.</li>
+<li>이것이 PostgreSQL 방식의 첫 특징: 버전 보관소가 따로 없다. 테이블 자체가 보관소다.</li>
+<li class="sub">비교 예고: InnoDB·Oracle은 옛 버전을 별도 공간(undo)에 보관한다 — 8·9장에서 장단점 대결</li>
+</ul></article>
+<article class="card"><h3>튜플 헤더 해부</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>필드</th><th>크기</th><th>역할</th></tr>
+<tr><td><b>t_xmin</b></td><td>4B</td><td>이 버전을 만든 트랜잭션 ID (출생)</td></tr>
+<tr><td><b>t_xmax</b></td><td>4B</td><td>이 버전을 지운/대체한 트랜잭션 ID (0이면 현역)</td></tr>
+<tr><td><b>t_ctid</b></td><td>6B</td><td>자기 위치, 갱신됐다면 <b>다음 버전의 위치</b> — 체인의 화살표</td></tr>
+<tr><td>t_infomask</td><td>2B</td><td>상태 비트 모음 — 힌트 비트 포함</td></tr>
+<tr><td>t_cid</td><td>4B</td><td>같은 트랜잭션 내 명령 번호 (자기 쓰기 가시성용)</td></tr>
+</table></div>
+<ul>
+<li>튜플마다 약 23바이트의 헤더가 붙는다 — 버전 관리의 고정 비용.</li>
+<li>3장 개념도의 xmin/xmax/화살표가 여기 그대로 있다. ctid가 버전 체인의 "→"다.</li>
+</ul></article>
+<article class="card"><h3>INSERT의 발자국</h3>
+<pre><code><span class="cm">-- txid 100이 실행:</span>
+<span class="kw">INSERT INTO</span> accounts <span class="kw">VALUES</span> (<span class="st">'A'</span>, 1000);</code></pre>
+<div class="vc">
+<div class="vbox new">('A', 1000)<br><small>xmin=100 xmax=0</small></div>
+</div>
+<ul>
+<li>새 튜플 하나가 페이지의 빈자리에 적힌다. xmin=100, xmax=0(현역).</li>
+<li>txid 100이 커밋하기 전: 다른 트랜잭션의 가시성 판정에서 "출생 미확정" → 안 보인다.</li>
+<li>롤백하면? 튜플은 그대로 남지만 "출생이 취소된" 상태 — 영원히 아무에게도 안 보이는 쓰레기가 되고, 나중에 VACUUM이 회수한다.</li>
+<li>즉 PostgreSQL엔 INSERT를 되돌리는 undo 작업이 없다 — 롤백이 순간인 이유.</li>
+</ul></article>
+<article class="card"><h3>UPDATE의 발자국</h3>
+<pre><code><span class="cm">-- txid 105가 실행:</span>
+<span class="kw">UPDATE</span> accounts <span class="kw">SET</span> balance = 1500 <span class="kw">WHERE</span> id = <span class="st">'A'</span>;</code></pre>
+<div class="vc">
+<div class="vbox dead">('A', 1000)<br><small>xmin=100 <b>xmax=105</b> ctid→</small></div>
+<span class="varr">→</span>
+<div class="vbox new">('A', 1500)<br><small>xmin=105 xmax=0</small></div>
+</div>
+<ul>
+<li>UPDATE = 옛 튜플에 xmax 도장 + 새 튜플 INSERT. <b>제자리 수정이 아니다.</b></li>
+<li>옛 튜플의 ctid가 새 튜플을 가리켜 체인이 이어진다.</li>
+<li>한 글자만 바꿔도 행 전체가 복사된다 — 이것이 PostgreSQL 쓰기 증폭 논쟁의 뿌리 (13장).</li>
+</ul></article>
+<article class="card"><h3>DELETE의 발자국</h3>
+<pre><code><span class="cm">-- txid 112가 실행:</span>
+<span class="kw">DELETE FROM</span> accounts <span class="kw">WHERE</span> id = <span class="st">'A'</span>;</code></pre>
+<div class="vc">
+<div class="vbox dead">('A', 1500)<br><small>xmin=105 <b>xmax=112</b></small></div>
+</div>
+<ul>
+<li>DELETE는 데이터를 지우지 않는다 — xmax 도장 하나 찍는 게 전부다.</li>
+<li>112 커밋 후에도 튜플은 디스크에 그대로 있다. 다만 새 스냅샷들에게 "은퇴 확정"으로 판정돼 안 보일 뿐.</li>
+<li>112보다 먼저 시작한 트랜잭션의 스냅샷에는? 여전히 보인다 — 그래서 지울 수 없는 것이다.</li>
+<li>진짜 삭제는 "아무 스냅샷도 이 튜플을 볼 수 없게 된 후" VACUUM의 몫 — 7장.</li>
+</ul></article>
+<article class="card"><h3>공식 그림으로 복습</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/PostgreSQL_mvcc.svg/960px-PostgreSQL_mvcc.svg.png" alt="PostgreSQL MVCC 다이어그램" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>행 버전들과 트랜잭션 가시성 — 각 트랜잭션은 자기 시점의 버전을 본다 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>가로축이 시간, 상자들이 튜플(버전), 각 트랜잭션이 어느 버전을 보는지가 화살표로 그려져 있다.</li>
+<li>이 그림 한 장을 설명할 수 있으면 6장 전반부를 통과한 것이다.</li>
+</ul></article>
+<article class="card"><h3>txid — 32비트 시계</h3>
+<ul>
+<li>txid는 32비트 부호 없는 정수로, 쓰기 트랜잭션마다 1씩 증가하며 발급된다.</li>
+<li class="sub">읽기 전용 트랜잭션은 txid를 아예 안 받는다 — 번호 절약 + 성능</li>
+<li>32비트 = 약 42억. 초당 1만 쓰기 트랜잭션이면 <b>5일마다 21억(반환점)</b>을 돈다 — 언젠가 반드시 순환한다.</li>
+<li>PostgreSQL의 비교 규칙은 "모듈로 시계": 각 txid에서 앞으로 21억은 미래, 뒤로 21억은 과거.</li>
+<li>순환을 방치하면 "과거가 미래로 둔갑"하는 대참사가 난다 — freeze라는 안전장치가 7장에 등장한다.</li>
+<li class="sub">특수 txid: 0=Invalid, 1=Bootstrap, 2=Frozen("영원한 과거")</li>
+</ul></article>
+<article class="card"><h3>스냅샷의 실제 구조</h3>
+<pre><code><span class="cm">-- 지금 내 스냅샷을 구경하기</span>
+<span class="kw">SELECT</span> pg_current_snapshot();
+<span class="cm">-- 결과 예: 748:754:748,751,752</span>
+<span class="cm">--          xmin:xmax:진행중 목록(xip)</span></code></pre>
+<div class="tbwrap"><table class="tb">
+<tr><th>필드</th><th>뜻</th><th>판정</th></tr>
+<tr><td><b>xmin</b></td><td>진행 중인 것 중 가장 오래된 txid</td><td>이보다 과거 = 무조건 결판남</td></tr>
+<tr><td><b>xmax</b></td><td>아직 발급 안 된 첫 txid</td><td>이상이면 = 미래, 무조건 안 보임</td></tr>
+<tr><td><b>xip 목록</b></td><td>스냅샷 순간 진행 중이던 txid들</td><td>목록에 있으면 = 미커밋, 안 보임</td></tr>
+</table></div>
+<ul>
+<li>주의: 스냅샷의 xmin/xmax와 튜플의 xmin/xmax는 <b>이름만 같은 다른 것</b>이다 — 혼동 최다 지점.</li>
+</ul></article>
+<article class="card"><h3>가시성 판정 전체 알고리즘</h3>
+<pre><code><span class="cm"># 튜플 t가 스냅샷 s에서 보이는가 (단순화)</span>
+<span class="kw">def</span> visible(t, s):
+    <span class="cm"># 1. 출생 확인</span>
+    <span class="kw">if</span> t.xmin == my_txid:  pass            <span class="cm"># 내가 만든 건 보임</span>
+    <span class="kw">elif not</span> committed(t.xmin): <span class="kw">return</span> False   <span class="cm"># 롤백/진행중</span>
+    <span class="kw">elif</span> in_snapshot_future(t.xmin, s): <span class="kw">return</span> False  <span class="cm"># 사진 이후 출생</span>
+    <span class="cm"># 2. 은퇴 확인</span>
+    <span class="kw">if</span> t.xmax == 0: <span class="kw">return</span> True            <span class="cm"># 현역</span>
+    <span class="kw">if</span> t.xmax == my_txid: <span class="kw">return</span> False     <span class="cm"># 내가 지운 것</span>
+    <span class="kw">if not</span> committed(t.xmax): <span class="kw">return</span> True  <span class="cm"># 지운 놈이 미확정 → 아직 보임</span>
+    <span class="kw">return</span> in_snapshot_future(t.xmax, s)   <span class="cm"># 은퇴가 사진 이후면 보임</span></code></pre>
+<ul>
+<li>모든 SELECT의 모든 행마다 이 판정이 돈다. 그런데도 빠른 이유가 다음 슬라이드.</li>
+</ul></article>
+<article class="card"><h3>커밋 로그(clog)와 힌트 비트</h3>
+<ul>
+<li>"txid 105는 커밋됐나?"의 답은 <b>clog(커밋 로그)</b>에 있다 — txid당 2비트(진행/커밋/롤백)를 기록하는 배열.</li>
+<li>매 행마다 clog를 찾아가면 느리다. 그래서 <b>힌트 비트</b>: 한 번 판정한 결과("xmin 커밋 확정" 등)를 튜플 헤더의 infomask에 캐시한다.</li>
+<li>다음 방문자부터는 clog 조회 없이 비트만 보면 끝.</li>
+<li>부작용: 대량 INSERT 직후의 첫 SELECT가 느리고 쓰기 I/O까지 발생하는 미스터리의 정체 — 첫 방문자가 힌트 비트를 다 써 주고 있는 것.</li>
+<li class="sub">그래서 대량 적재 후엔 VACUUM(또는 자동청소)을 한 번 돌려 주는 것이 관례다</li>
+</ul></article>
+<article class="card"><h3>직접 관찰 실습 ①: xmin/xmax 보기</h3>
+<pre><code><span class="kw">CREATE TABLE</span> t (id int, v text);
+<span class="kw">INSERT INTO</span> t <span class="kw">VALUES</span> (1, <span class="st">'a'</span>);
+
+<span class="kw">SELECT</span> xmin, xmax, ctid, * <span class="kw">FROM</span> t;
+<span class="cm">--  xmin | xmax | ctid  | id | v</span>
+<span class="cm">--   748 |    0 | (0,1) |  1 | a      ← 현역 버전</span>
+
+<span class="kw">UPDATE</span> t <span class="kw">SET</span> v = <span class="st">'b'</span>;
+<span class="kw">SELECT</span> xmin, xmax, ctid, * <span class="kw">FROM</span> t;
+<span class="cm">--   749 |    0 | (0,2) |  1 | b      ← 새 버전 (옛 버전은 안 보임)</span></code></pre>
+<ul>
+<li>모든 테이블에서 숨은 컬럼 xmin, xmax, ctid를 그냥 SELECT할 수 있다 — 지금 아무 PostgreSQL에서 해 보라.</li>
+<li>UPDATE 후 ctid가 (0,1)에서 (0,2)로 바뀌었다: 행이 "이사"했다. 새 튜플이 생겼다는 물증이다.</li>
+</ul></article>
+<article class="card"><h3>직접 관찰 실습 ②: 죽은 버전까지 보기</h3>
+<pre><code><span class="cm">-- pageinspect 확장으로 페이지 속 모든 튜플(죽은 것 포함) 열람</span>
+<span class="kw">CREATE EXTENSION</span> pageinspect;
+<span class="kw">SELECT</span> lp, t_xmin, t_xmax, t_ctid
+<span class="kw">FROM</span> heap_page_items(get_raw_page(<span class="st">'t'</span>, 0));
+<span class="cm">--  lp | t_xmin | t_xmax | t_ctid</span>
+<span class="cm">--   1 |    748 |    749 | (0,2)   ← 은퇴한 v1, 아직 디스크에!</span>
+<span class="cm">--   2 |    749 |      0 | (0,2)   ← 현역 v2</span></code></pre>
+<ul>
+<li>일반 SELECT엔 안 보이던 옛 버전이 페이지 안에 그대로 있다 — "DELETE/UPDATE는 지우지 않는다"의 실증.</li>
+<li>lp 1의 t_ctid가 (0,2)를 가리킨다: 버전 체인의 화살표를 눈으로 확인.</li>
+<li>이 죽은 튜플(dead tuple)들의 운명이 다음 장 주제다.</li>
+</ul></article>
+<article class="card"><h3>6장 정리</h3><ul>
+<li>PostgreSQL은 버전(튜플)을 테이블 힙에 그대로 쌓는다 — 별도 undo 공간이 없다.</li>
+<li>튜플 헤더의 xmin/xmax/ctid가 출생·은퇴·체인을 기록. UPDATE = xmax 도장 + 새 튜플.</li>
+<li>스냅샷은 xmin:xmax:진행중목록 세 값. 가시성은 이 값들과 clog(+힌트 비트)로 판정한다.</li>
+<li>롤백이 순간인 대신, 쓰레기(죽은 튜플)가 테이블 안에 쌓인다.</li>
+<li>txid는 32비트 순환 시계 — 그리고 쌓인 쓰레기와 시계 순환, 두 가지 청구서가 7장에서 날아온다.</li>
+</ul></article>
+
+<!-- ================= CH 07 ================= -->
+<article class="card section" id="ch7">
+<p class="chnum">7장</p>
+<h2>PostgreSQL II — VACUUM과 청소</h2>
+<p class="chsub">버전을 쌓는 자, 청소부를 고용하라</p></article>
+<article class="card"><h3>7장 한눈에 보기</h3><ol class="glance">
+<li>죽은 튜플이 쌓인다</li>
+<li>블로트 — 뚱뚱해진 테이블</li>
+<li>VACUUM이 하는 일</li>
+<li>무엇을 지워도 되는가 — xmin horizon</li>
+<li>VACUUM vs VACUUM FULL</li>
+<li>autovacuum — 자동 청소부</li>
+<li>autovacuum 튜닝 다이얼</li>
+<li>가시성 지도와 공간 지도</li>
+<li>freeze — 시계 순환 대비</li>
+<li>wraparound 공포 사례</li>
+<li>청소를 막는 4대 범인</li>
+<li>데모: 블로트 실험실</li>
+<li>모니터링 치트시트</li>
+<li>7장 정리</li>
+</ol></article>
+<article class="card"><h3>죽은 튜플이 쌓인다</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Numatic_Henry_vacuum_cleaner_%283308986870%29_%28cropped%29.jpg/960px-Numatic_Henry_vacuum_cleaner_%283308986870%29_%28cropped%29.jpg" alt="헨리 청소기" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>VACUUM — 이름부터 진공청소기다 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li><b>죽은 튜플(dead tuple)</b>: 은퇴(xmax 커밋)했고, 이제 어떤 스냅샷에서도 보이지 않는 버전.</li>
+<li>UPDATE가 많은 테이블은 죽은 튜플 공장이다: 행 100만 개를 10번 갱신하면 죽은 튜플 1000만 개.</li>
+<li>롤백된 INSERT, 실패한 COPY의 잔해도 전부 죽은 튜플로 남는다.</li>
+</ul></article>
+<article class="card"><h3>블로트 — 뚱뚱해진 테이블</h3>
+<div class="bad">실화 패턴: 행 10만 개짜리 "작은" 상태 테이블이 디스크 40GB를 차지한다. 매초 전 행을 UPDATE하는 잡이 있었고, VACUUM이 따라잡지 못했다. 살아 있는 데이터는 8MB.</div>
+<ul>
+<li><b>블로트(bloat)</b>: 죽은 튜플과 회수 안 된 빈자리가 차지하는 헛살.</li>
+<li>해악 1 — 디스크 낭비는 차라리 약과다.</li>
+<li>해악 2 — <b>스캔이 느려진다</b>: 8MB 읽을 일을 40GB 읽는다. 캐시도 쓰레기로 채워진다.</li>
+<li>해악 3 — 인덱스도 같이 붓는다: 죽은 튜플을 가리키는 포인터가 인덱스에도 쌓인다.</li>
+<li>블로트율 추정: pgstattuple 확장, 또는 커뮤니티의 블로트 추정 쿼리로 정기 점검하는 것이 관례.</li>
+</ul></article>
+<article class="card"><h3>VACUUM이 하는 일</h3>
+<ul>
+<li>① 죽은 튜플을 찾아 <b>빈자리로 표시</b>한다 — 그 공간은 같은 테이블의 새 튜플이 재사용 (파일 크기는 대개 안 줄어든다!).</li>
+<li>② 그 튜플들을 가리키던 <b>인덱스 엔트리 제거</b>.</li>
+<li>③ 힌트 비트 정리, 가시성 지도·공간 지도 갱신.</li>
+<li>④ 오래된 튜플 freeze (뒤에서 설명).</li>
+<li>중요한 성질: 일반 VACUUM은 <b>읽기·쓰기와 동시에 돌 수 있다</b> — 테이블을 잠그지 않는다.</li>
+<li class="sub">"VACUUM 돌리면 서비스 멈추지 않나요?"의 답: 일반 VACUUM은 아니오. FULL이 문제 — 다음 슬라이드</li>
+</ul></article>
+<article class="card"><h3>무엇을 지워도 되는가 — xmin horizon</h3>
+<div class="fbox">
+<div class="fx">지울 수 있다 ⟺ xmax &lt; 모든 살아 있는 스냅샷의 xmin</div>
+</div>
+<ul>
+<li>시스템 전체에서 <b>가장 오래된 활성 스냅샷의 xmin</b>을 horizon(지평선)이라 부른다.</li>
+<li>지평선보다 과거에 은퇴한 튜플만 안전하게 지울 수 있다 — 누군가의 사진에 아직 찍혀 있을 수 있으니.</li>
+<li>따라서 <b>3시간짜리 트랜잭션 하나</b>가 열려 있으면, 그 3시간 동안 전체 DB의 청소가 지평선에 묶인다.</li>
+<li>3장의 예고("오래 사는 스냅샷 = MVCC의 천적")가 여기서 현실이 된다.</li>
+<li class="sub">확인: <code style="display:inline;white-space:nowrap">SELECT backend_xmin FROM pg_stat_activity</code> — 지평선을 붙잡은 범인 찾기</li>
+</ul></article>
+<article class="card"><h3>VACUUM vs VACUUM FULL</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th></th><th>VACUUM</th><th>VACUUM FULL</th></tr>
+<tr><td>동작</td><td>빈자리 표시·재사용</td><td>테이블을 새 파일로 통째 재작성</td></tr>
+<tr><td>파일 크기</td><td>거의 안 줄어듦</td><td>최소로 줄어듦</td></tr>
+<tr><td>락</td><td>없음 (동시 운영 가능)</td><td><b>ACCESS EXCLUSIVE — 전면 차단</b></td></tr>
+<tr><td>여유 공간</td><td>불필요</td><td>테이블 크기만큼 필요</td></tr>
+<tr><td>용도</td><td>일상 청소</td><td>비상 다이어트 (점검 시간에만)</td></tr>
+</table></div>
+<ul>
+<li>운영 중 서비스에 VACUUM FULL은 사실상 장애 유발 버튼이다 — 무중단 대안: pg_repack, pg_squeeze.</li>
+</ul></article>
+<article class="card"><h3>autovacuum — 자동 청소부</h3>
+<ul>
+<li>PostgreSQL 8.3(2008)부터 기본 탑재된 백그라운드 데몬. 테이블별 통계를 보고 알아서 VACUUM/ANALYZE를 돌린다.</li>
+<li>발동 조건(기본값): 죽은 튜플이 <b>전체 행의 20% + 50개</b>를 넘으면.</li>
+<li>흔한 오해와 진실:</li>
+<li class="sub">"autovacuum이 느려서 껐어요" — 최악의 수. 청소가 밀리면 블로트·wraparound로 더 큰 대가를 치른다</li>
+<li class="sub">올바른 방향은 끄기가 아니라 <b>더 자주, 더 세게</b> 돌게 만드는 것</li>
+<li>대형 테이블 함정: 20%면 1억 행 테이블에서 2000만 죽은 튜플 — 발동이 너무 늦다. 테이블별로 비율을 낮춰야 한다.</li>
+</ul></article>
+<article class="card"><h3>autovacuum 튜닝 다이얼</h3>
+<pre><code><span class="cm"># 발동 시점: 대형 테이블은 비율 대신 절대 수치로</span>
+<span class="kw">ALTER TABLE</span> big <span class="kw">SET</span> (autovacuum_vacuum_scale_factor = 0.01);
+
+<span class="cm"># 청소 속도: I/O 제한(기본 200) 완화 — 요즘 SSD면 과감히</span>
+autovacuum_vacuum_cost_limit = 2000
+
+<span class="cm"># 일꾼 수 (기본 3) — 테이블 많으면 증원</span>
+autovacuum_max_workers = 6</code></pre>
+<ul>
+<li>철학: autovacuum이 쓰기 속도를 <b>따라잡을 수 있게</b> 만드는 것이 전부다.</li>
+<li>PostgreSQL 13+에선 인덱스 병렬 VACUUM, 17에선 메모리 관리 개선 등 매 버전 빨라지고 있다 — 업그레이드 자체가 튜닝.</li>
+</ul></article>
+<article class="card"><h3>가시성 지도와 공간 지도</h3>
+<ul>
+<li>테이블마다 두 개의 보조 파일이 따라다닌다:</li>
+<li class="sub"><b>가시성 지도(visibility map, _vm)</b>: "이 페이지의 모든 튜플은 모두에게 보임" 비트를 페이지당 기록</li>
+<li class="sub"><b>공간 지도(free space map, _fsm)</b>: 페이지별 빈 공간 크기 기록 — INSERT가 자리를 빨리 찾게</li>
+<li>가시성 지도의 두 가지 보은:</li>
+<li class="sub">VACUUM이 "전부 보임" 페이지를 통째로 건너뛴다 — 대형 테이블 청소가 견딜 만한 이유</li>
+<li class="sub"><b>index-only scan</b>이 가능해진다 — 13장에서 상세히</li>
+</ul></article>
+<article class="card"><h3>freeze — 시계 순환 대비</h3>
+<ul>
+<li>6장의 복선 회수: txid는 32비트 시계라 21억 차이가 나면 과거·미래 판정이 뒤집힌다.</li>
+<li>이대로면 20억 트랜잭션 전에 만든 행은 "미래에 만들어진 행"으로 둔갑해 <b>안 보이게 된다</b> — 데이터 증발.</li>
+<li>해법: 충분히 늙은 튜플의 xmin을 "영원한 과거" 표시(frozen)로 바꿔 시계 비교에서 제외한다 — 이것이 <b>freeze</b>.</li>
+<li>VACUUM이 겸업한다: vacuum_freeze_min_age(기본 5000만)보다 늙은 튜플을 얼린다.</li>
+<li>테이블 나이(relfrozenxid 기준)가 autovacuum_freeze_max_age(기본 2억)에 달하면, autovacuum이 꺼져 있어도 <b>강제 aggressive vacuum</b>이 발동한다.</li>
+</ul></article>
+<article class="card"><h3>wraparound 공포 사례</h3>
+<div class="bad">최후 방어선: 남은 여유가 300만 txid 아래로 떨어지면 PostgreSQL은 새 쓰기 트랜잭션을 <b>거부</b>하기 시작한다. "database is not accepting commands to avoid wraparound data loss" — 서비스 전면 중단이다.</div>
+<ul>
+<li>2015년 Sentry: wraparound 방어 VACUUM 때문에 수 시간 쓰기 중단 — 사후 분석 블로그가 업계 교과서가 됐다.</li>
+<li>2019년 Mailchimp/Mandrill: 같은 계열 장애로 대규모 메일 발송 중단.</li>
+<li>공통 패턴: 초대형 테이블 + 청소 지연 누적 + 어느 날 갑자기 강제 VACUUM 폭풍.</li>
+<li>예방 지표 딱 하나만 외우자: <code style="display:inline;white-space:nowrap">SELECT max(age(relfrozenxid)) FROM pg_class</code> — 2억에 접근하면 경보.</li>
+<li class="sub">64비트 txid로의 전환이 오래 논의 중이지만, 튜플 헤더 호환성 때문에 아직 32비트다</li>
+</ul></article>
+<article class="card"><h3>청소를 막는 4대 범인</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>범인</th><th>수법</th><th>검거 방법</th></tr>
+<tr><td>긴 트랜잭션</td><td>오래된 스냅샷으로 지평선 고정</td><td>pg_stat_activity에서 xact_start 오래된 것</td></tr>
+<tr><td>idle in transaction</td><td>BEGIN만 하고 방치된 커넥션</td><td>idle_in_transaction_session_timeout 설정</td></tr>
+<tr><td>버려진 복제 슬롯</td><td>죽은 replica가 "나 아직 읽을 거야" 주장</td><td>pg_replication_slots에서 비활성 슬롯 삭제</td></tr>
+<tr><td>준비된 2PC 트랜잭션</td><td>PREPARE 후 방치</td><td>pg_prepared_xacts 점검</td></tr>
+</table></div>
+<ul>
+<li>넷의 공통점: <b>오래된 스냅샷/오래된 xmin을 시스템에 남긴다.</b> MVCC 운영 장애의 배후는 거의 항상 이것이다.</li>
+</ul></article>
+<article class="card"><h3>데모: 블로트 실험실</h3>
+<div class="demo" id="demoVac">
+<canvas width="640" height="300"></canvas>
+<div class="row">
+  <button id="bvUpd">UPDATE ×20</button>
+  <button id="bvVac">VACUUM</button>
+  <label><input type="checkbox" id="bvLong"> 긴 트랜잭션 열어 두기</label>
+  <button id="bvRst">리셋</button>
+</div>
+<div class="out"></div>
+</div>
+<ul>
+<li>UPDATE를 누를 때마다 살아 있는 튜플(초록)이 죽은 튜플(회색)로 바뀌며 페이지가 부풀어 오른다.</li>
+<li>VACUUM을 누르면 죽은 튜플이 빈칸(재사용 가능)으로 바뀐다 — 파일(칸 수)은 안 줄어드는 것도 관찰하자.</li>
+<li>"긴 트랜잭션 열어 두기"를 켠 채 VACUUM을 눌러 보라 — 지평선에 걸린 죽은 튜플은 <b>청소되지 않는다.</b></li>
+</ul></article>
+<article class="card"><h3>모니터링 치트시트</h3>
+<pre><code><span class="cm">-- 테이블별 죽은 튜플과 마지막 청소 시각</span>
+<span class="kw">SELECT</span> relname, n_live_tup, n_dead_tup, last_autovacuum
+<span class="kw">FROM</span> pg_stat_user_tables <span class="kw">ORDER BY</span> n_dead_tup <span class="kw">DESC</span>;
+
+<span class="cm">-- 지평선을 붙잡은 세션 수배</span>
+<span class="kw">SELECT</span> pid, state, age(backend_xmin), xact_start
+<span class="kw">FROM</span> pg_stat_activity <span class="kw">WHERE</span> backend_xmin <span class="kw">IS NOT NULL</span>
+<span class="kw">ORDER BY</span> age(backend_xmin) <span class="kw">DESC</span>;
+
+<span class="cm">-- wraparound 거리</span>
+<span class="kw">SELECT</span> datname, age(datfrozenxid) <span class="kw">FROM</span> pg_database;</code></pre>
+<ul>
+<li>이 세 쿼리를 대시보드에 올려 두면 PostgreSQL MVCC 사고의 대부분을 사전에 본다.</li>
+</ul></article>
+<article class="card"><h3>7장 정리</h3><ul>
+<li>죽은 튜플은 UPDATE/DELETE/롤백의 필연적 부산물. 방치하면 블로트로 스캔·캐시·인덱스가 병든다.</li>
+<li>VACUUM은 지평선(가장 오래된 활성 스냅샷) 아래의 죽은 튜플만 회수한다. FULL은 최후 수단.</li>
+<li>autovacuum은 끄는 게 아니라 세게 트는 것. 대형 테이블은 scale_factor를 낮춰라.</li>
+<li>32비트 txid 순환은 freeze로 방어. age(relfrozenxid) 2억 접근 = 경보.</li>
+<li>긴 트랜잭션, idle in transaction, 버려진 복제 슬롯 — 오래된 xmin을 남기는 모든 것이 적이다.</li>
+</ul></article>
+<!-- ================= CH 08 ================= -->
+<article class="card section" id="ch8">
+<p class="chnum">8장</p>
+<h2>MySQL InnoDB — undo 로그 방식</h2>
+<p class="chsub">같은 MVCC, 정반대 설계 — 옛 버전을 별채에 보관한다</p></article>
+<article class="card"><h3>8장 한눈에 보기</h3><ol class="glance">
+<li>InnoDB 간단 연대기</li>
+<li>설계 철학: 제자리 갱신 + undo</li>
+<li>히든 컬럼 3형제</li>
+<li>undo 로그로 과거 재구성</li>
+<li>버전 체인 방향이 반대다</li>
+<li>Read View — InnoDB의 스냅샷</li>
+<li>가시성 판정 규칙</li>
+<li>RR과 RC의 차이는 한 줄</li>
+<li>일관 읽기 vs 잠금 읽기</li>
+<li>주의: RR에서도 Lost Update</li>
+<li>갭 락 — 팬텀을 락으로 잡기</li>
+<li>purge — InnoDB의 청소부</li>
+<li>history list length 감시</li>
+<li>PostgreSQL vs InnoDB 총정리</li>
+<li>8장 정리</li>
+</ol></article>
+<article class="card"><h3>InnoDB 간단 연대기</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/MySQL_textlogo.svg/960px-MySQL_textlogo.svg.png" alt="MySQL 로고" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>MySQL — 세계에서 가장 널리 배포된 오픈소스 DB (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>핀란드의 Heikki Tuuri가 1990년대에 개발한 스토리지 엔진. 2001년 MySQL에 탑재됐다.</li>
+<li>당시 MySQL 기본 엔진 MyISAM은 트랜잭션도 MVCC도 없었다 — InnoDB가 "진짜 DB" 기능을 가져왔다.</li>
+<li>2005년 Oracle이 InnoDB(Innobase)를, 2010년엔 MySQL(Sun)까지 인수 — 지금은 둘 다 Oracle 소유.</li>
+<li>MySQL 5.5(2010)부터 기본 엔진. 오늘날 "MySQL의 MVCC" = InnoDB의 MVCC다.</li>
+</ul></article>
+<article class="card"><h3>설계 철학: 제자리 갱신 + undo</h3>
+<div class="fbox">
+<div class="fx">PostgreSQL: 새 버전을 테이블에, 옛 버전도 테이블에</div>
+<div class="fx">InnoDB: 최신 버전만 테이블에, 옛 버전은 undo 로그에</div>
+</div>
+<ul>
+<li>InnoDB의 UPDATE는 <b>제자리 갱신</b>이다: 테이블(클러스터드 인덱스)의 행을 직접 새 값으로 고친다.</li>
+<li>대신 고치기 직전, "되돌리는 데 필요한 정보"를 <b>undo 로그</b>라는 별도 공간에 적어 둔다.</li>
+<li>undo 로그의 원래 용도는 롤백(되돌리기)이다 — MVCC는 이를 재활용해 "과거 버전 읽기"에 쓴다.</li>
+<li>결과: 테이블은 항상 날씬하고(최신만), 과거는 별채에 쌓인다. 장단점이 PostgreSQL과 정확히 반대로 갈린다.</li>
+</ul></article>
+<article class="card"><h3>히든 컬럼 3형제</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>필드</th><th>크기</th><th>역할</th></tr>
+<tr><td><b>DB_TRX_ID</b></td><td>6B</td><td>이 행을 마지막으로 고친 트랜잭션 ID — PostgreSQL의 xmin 역</td></tr>
+<tr><td><b>DB_ROLL_PTR</b></td><td>7B</td><td>이 행의 직전 버전이 담긴 undo 레코드를 가리키는 포인터</td></tr>
+<tr><td>DB_ROW_ID</td><td>6B</td><td>PK가 없을 때 쓰는 내부 행 번호 (MVCC와는 무관)</td></tr>
+</table></div>
+<ul>
+<li>InnoDB의 모든 행 뒤에 몰래 붙는 컬럼들이다. SELECT로는 안 보인다.</li>
+<li>xmax에 해당하는 필드가 없다는 점이 눈에 띈다 — 삭제는 행에 delete 마크를 찍고 역시 undo에 기록한다.</li>
+<li>트랜잭션 ID가 48비트라 PostgreSQL의 32비트 wraparound 같은 문제가 사실상 없다.</li>
+</ul></article>
+<article class="card"><h3>undo 로그로 과거 재구성</h3>
+<div class="vc">
+<div class="vbox new">테이블의 행<br>잔액=130<br><small>TRX_ID=112 ROLL_PTR→</small></div>
+<span class="varr">→</span>
+<div class="vbox">undo #2<br>잔액=150<br><small>TRX_ID=105 ROLL_PTR→</small></div>
+<span class="varr">→</span>
+<div class="vbox">undo #1<br>잔액=100<br><small>TRX_ID=100</small></div>
+</div>
+<ul>
+<li>과거 버전이 필요한 읽기는 ROLL_PTR을 따라가 undo 레코드를 적용하며 <b>옛 모습을 즉석에서 복원</b>한다.</li>
+<li>더 과거가 필요하면 체인을 더 따라간다 — 필요한 시점의 버전이 나올 때까지.</li>
+<li>비용 구조: 최신을 읽으면 공짜, 과거로 갈수록 복원 비용 증가. "최신 읽기가 대부분"인 OLTP에 최적화된 도박이다.</li>
+</ul></article>
+<article class="card"><h3>버전 체인 방향이 반대다</h3>
+<ul>
+<li>PostgreSQL의 ctid 체인: 옛 버전 → 새 버전 (앞으로 걷기).</li>
+<li>InnoDB의 ROLL_PTR 체인: 최신 버전 → 옛 버전 (뒤로 걷기).</li>
+<li>이 방향 차이가 성능 특성을 가른다:</li>
+<li class="sub">PostgreSQL: 어떤 버전이든 힙에서 직접 만난다. 대신 스캔이 죽은 버전까지 밟는다</li>
+<li class="sub">InnoDB: 최신은 즉시, 과거는 복원 비용. 대신 스캔은 항상 날씬한 최신만 밟는다</li>
+<li>기억법: PostgreSQL은 "역사책을 본문에 끼워 두는" 방식, InnoDB는 "본문은 최신판, 개정 이력은 부록"인 방식.</li>
+</ul></article>
+<article class="card"><h3>Read View — InnoDB의 스냅샷</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>필드</th><th>뜻</th></tr>
+<tr><td><b>m_ids</b></td><td>생성 순간 활성(미커밋)이던 트랜잭션 ID 목록</td></tr>
+<tr><td><b>m_up_limit_id</b></td><td>m_ids의 최솟값 — 이보다 작으면 무조건 커밋 완료</td></tr>
+<tr><td><b>m_low_limit_id</b></td><td>다음에 발급될 ID — 이상이면 미래</td></tr>
+<tr><td>m_creator_trx_id</td><td>이 뷰를 만든 트랜잭션 자신</td></tr>
+</table></div>
+<ul>
+<li>이름만 다를 뿐 PostgreSQL 스냅샷(xmin:xmax:xip)과 완전히 같은 3요소다.</li>
+<li>개념이 같으니 당연하다 — 스냅샷을 표현하는 최소 정보가 원래 이 세 가지다.</li>
+<li class="sub">up/low라는 이름이 직관과 반대라 악명 높다: up_limit이 아래쪽 경계다. 시험에 나오면 필드 뜻으로 기억하라</li>
+</ul></article>
+<article class="card"><h3>가시성 판정 규칙</h3>
+<pre><code><span class="cm"># 행(또는 undo 버전)의 TRX_ID가 Read View에서 보이는가</span>
+<span class="kw">def</span> visible(trx_id, view):
+    <span class="kw">if</span> trx_id == view.creator:      <span class="kw">return</span> True   <span class="cm"># 내 쓰기</span>
+    <span class="kw">if</span> trx_id &lt; view.up_limit:      <span class="kw">return</span> True   <span class="cm"># 확실한 과거</span>
+    <span class="kw">if</span> trx_id &gt;= view.low_limit:    <span class="kw">return</span> False  <span class="cm"># 미래</span>
+    <span class="kw">return</span> trx_id <span class="kw">not in</span> view.m_ids               <span class="cm"># 활성 목록 검사</span>
+
+<span class="cm"># 안 보이면: ROLL_PTR 따라 undo 체인을 거슬러 보이는 버전까지</span></code></pre>
+<ul>
+<li>6장의 PostgreSQL 알고리즘과 나란히 놓고 보라 — 구조가 판박이다.</li>
+<li>차이는 "안 보일 때 무엇을 하는가"뿐: PostgreSQL은 힙의 다른 튜플을 검사, InnoDB는 undo를 거슬러 복원.</li>
+</ul></article>
+<article class="card"><h3>RR과 RC의 차이는 한 줄</h3>
+<ul>
+<li>InnoDB에서 REPEATABLE READ와 READ COMMITTED의 구현 차이는 단 하나다:</li>
+<li class="sub"><b>REPEATABLE READ</b>: Read View를 <b>첫 SELECT 때 1회</b> 만들고 끝까지 재사용</li>
+<li class="sub"><b>READ COMMITTED</b>: <b>SELECT마다</b> 새 Read View</li>
+<li>5장의 "문장 스냅샷 vs 트랜잭션 스냅샷" 표가 코드 한 줄의 차이로 구현되는 것.</li>
+<li>MySQL 기본값은 REPEATABLE READ — 복제(binlog) 일관성의 역사적 사정 때문에 메이저 중 유일하게 높은 기본값을 쓴다.</li>
+</ul></article>
+<article class="card"><h3>일관 읽기 vs 잠금 읽기</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th></th><th>일관 읽기 (consistent read)</th><th>잠금 읽기 (locking read)</th></tr>
+<tr><td>문장</td><td>일반 SELECT</td><td>SELECT FOR UPDATE / FOR SHARE, UPDATE, DELETE</td></tr>
+<tr><td>읽는 것</td><td>Read View 기준 <b>과거 버전</b></td><td><b>최신 커밋 버전</b> + 행 락</td></tr>
+<tr><td>대기</td><td>없음</td><td>남의 락과 충돌 시 대기</td></tr>
+</table></div>
+<ul>
+<li>InnoDB의 이중생활: 같은 트랜잭션 안에서도 일반 SELECT는 스냅샷을, UPDATE는 최신을 본다.</li>
+<li>그래서 "SELECT로는 있었는데 UPDATE 해 보니 없다(또는 값이 다르다)"는 미스터리가 발생한다 — 버그가 아니라 설계다.</li>
+</ul></article>
+<article class="card"><h3>주의: RR에서도 Lost Update</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1</th><th>T2</th></tr>
+<tr><td>t1</td><td class="t1">SELECT 잔액 → 100 (스냅샷)</td><td class="t2">SELECT 잔액 → 100 (스냅샷)</td></tr>
+<tr><td>t2</td><td class="t1">UPDATE 잔액=150, COMMIT</td><td></td></tr>
+<tr><td>t3</td><td></td><td class="t2">UPDATE 잔액=130 ← <b>최신(150) 위에 덮어씀!</b></td></tr>
+<tr><td>t4</td><td class="bad" colspan="2">COMMIT 성공 — 잔액 130, T1의 +50 증발. 에러도 없다</td></tr>
+</table></div>
+<ul>
+<li>PostgreSQL RR이라면 t3에서 에러가 났을 자리다. InnoDB는 <b>조용히 통과</b>시킨다 — first-committer-wins 검사가 없다.</li>
+<li>InnoDB에서의 처방: <code style="display:inline;white-space:nowrap">SELECT ... FOR UPDATE</code>로 처음부터 잠그거나, <code style="display:inline;white-space:nowrap">UPDATE t SET n=n+50</code>처럼 DB 안 계산으로.</li>
+</ul></article>
+<article class="card"><h3>갭 락 — 팬텀을 락으로 잡기</h3>
+<ul>
+<li>InnoDB RR의 잠금 읽기는 스냅샷의 보호를 못 받는다 — 그럼 팬텀은? 답: <b>갭 락(gap lock)</b>.</li>
+<li>갭 락: 인덱스 레코드 "사이의 빈틈"을 잠가, 그 범위에 새 행이 INSERT되는 것을 막는다.</li>
+<li class="sub">next-key lock = 레코드 락 + 그 앞 갭 락. RR에서 범위 조건 잠금 읽기의 기본 동작</li>
+<li>효과: <code style="display:inline;white-space:nowrap">SELECT ... WHERE k BETWEEN 10 AND 20 FOR UPDATE</code> 후엔 그 범위에 아무도 INSERT 못 한다 — 팬텀 차단.</li>
+<li>부작용: 예상 밖의 락 대기와 데드락의 단골 원인. READ COMMITTED로 내리면 갭 락이 대부분 사라진다 — 이것이 RC로 내려 쓰는 팀이 많은 이유.</li>
+</ul></article>
+<article class="card"><h3>purge — InnoDB의 청소부</h3>
+<ul>
+<li>어떤 Read View에서도 더 이상 필요 없어진 undo 레코드를 지우는 백그라운드 스레드가 <b>purge</b>다.</li>
+<li>PostgreSQL VACUUM과의 결정적 차이: 청소 대상이 테이블이 아니라 <b>undo 공간</b>이다. 테이블은 애초에 안 부푼다.</li>
+<li>delete 마크된 행의 실제 제거와 인덱스 정리도 purge가 담당한다.</li>
+<li>같은 아킬레스건: <b>오래된 Read View(긴 트랜잭션)가 있으면 purge가 밀린다</b> — undo가 자라고, 과거 복원 체인이 길어져 읽기까지 느려진다.</li>
+<li class="sub">플랫폼은 달라도 병명은 같다: "긴 트랜잭션 = MVCC 청소 방해죄"</li>
+</ul></article>
+<article class="card"><h3>history list length 감시</h3>
+<pre><code><span class="cm">-- purge가 못 치운 undo 레코드 수 (InnoDB 건강 제1지표)</span>
+<span class="kw">SHOW ENGINE INNODB STATUS</span>;
+<span class="cm">-- ...History list length 8834219  ← 수백만이면 위험 신호</span>
+
+<span class="cm">-- 범인(오래 달리는 트랜잭션) 수배</span>
+<span class="kw">SELECT</span> trx_id, trx_started, trx_state
+<span class="kw">FROM</span> information_schema.innodb_trx
+<span class="kw">ORDER BY</span> trx_started;</code></pre>
+<ul>
+<li>history list length가 계속 자라면: 긴 트랜잭션을 찾아 죽이고, purge 스레드 수(innodb_purge_threads)를 점검한다.</li>
+<li>PostgreSQL의 n_dead_tup + backend_xmin 조합과 정확히 대응하는 운영 루틴이다.</li>
+</ul></article>
+<article class="card"><h3>PostgreSQL vs InnoDB 총정리</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th></th><th>PostgreSQL</th><th>InnoDB</th></tr>
+<tr><td>옛 버전 위치</td><td>테이블 힙 (본문에 끼움)</td><td>undo 로그 (별채)</td></tr>
+<tr><td>UPDATE 방식</td><td>새 튜플 추가</td><td>제자리 갱신 + undo 기록</td></tr>
+<tr><td>체인 방향</td><td>옛 → 새 (ctid)</td><td>새 → 옛 (ROLL_PTR)</td></tr>
+<tr><td>롤백 비용</td><td>0 (버리면 끝)</td><td>undo 적용 — 클 수 있음</td></tr>
+<tr><td>청소</td><td>VACUUM (테이블·인덱스)</td><td>purge (undo 공간)</td></tr>
+<tr><td>비대해지는 곳</td><td>테이블+인덱스 블로트</td><td>undo/히스토리 리스트</td></tr>
+<tr><td>RR의 Lost Update</td><td>에러로 차단</td><td>통과 (FOR UPDATE 필요)</td></tr>
+</table></div></article>
+<article class="card"><h3>8장 정리</h3><ul>
+<li>InnoDB는 최신 버전만 테이블에 두고, 과거는 undo 로그 체인(ROLL_PTR)으로 복원한다.</li>
+<li>Read View(m_ids, up/low limit)는 PostgreSQL 스냅샷과 동일 개념. RR/RC 차이는 뷰 생성 주기 하나.</li>
+<li>일반 SELECT는 스냅샷, UPDATE·FOR UPDATE는 최신+락 — 이중생활을 이해해야 미스터리가 풀린다.</li>
+<li>RR에서도 Lost Update는 통과된다. 갭 락은 팬텀을 막지만 데드락의 단골.</li>
+<li>purge와 history list length는 VACUUM과 n_dead_tup의 InnoDB 버전이다.</li>
+</ul></article>
+
+<!-- ================= CH 09 ================= -->
+<article class="card section" id="ch9">
+<p class="chnum">9장</p>
+<h2>Oracle과 SQL Server</h2>
+<p class="chsub">MVCC의 원조 상용화, 그리고 락 왕국의 개종</p></article>
+<article class="card"><h3>9장 한눈에 보기</h3><ol class="glance">
+<li>Oracle — 대중화의 원조</li>
+<li>undo 세그먼트와 SCN</li>
+<li>읽기 일관성의 동작</li>
+<li>ORA-01555: snapshot too old</li>
+<li>Oracle 방식의 성격</li>
+<li>SQL Server — 락 왕국</li>
+<li>개종: 2005년의 스냅샷 도입</li>
+<li>RCSI vs SNAPSHOT</li>
+<li>tempdb 버전 스토어</li>
+<li>세 가족 분류법</li>
+<li>어느 방식이 이기는가</li>
+<li>9장 정리</li>
+</ol></article>
+<article class="card"><h3>Oracle — 대중화의 원조</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Oracle_logo.svg/960px-Oracle_logo.svg.png" alt="Oracle 로고" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>Oracle — 1984년 V4부터 읽기 일관성 제공 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>Oracle V4(1984)의 "read consistency"는 MVCC식 읽기를 <b>대중 시장에 처음</b> 가져온 기능이다.</li>
+<li>"쿼리는 시작 시점의 데이터를 본다, 락 없이" — 당시 락 기반 경쟁자들에 대한 강력한 차별화 무기였다.</li>
+<li>수십 년간 Oracle DBA 교육의 제1장이 이 읽기 일관성이었고, 용어(undo, SCN)도 업계 표준어가 됐다.</li>
+</ul></article>
+<article class="card"><h3>undo 세그먼트와 SCN</h3>
+<ul>
+<li>구조는 InnoDB의 원형이다 (정확히는 InnoDB가 Oracle을 참고했다):</li>
+<li class="sub">행은 제자리 갱신, 직전 이미지는 <b>undo 세그먼트</b>(옛 이름 롤백 세그먼트)에 보관</li>
+<li class="sub">블록 헤더에 어떤 트랜잭션이 언제 고쳤는지(ITL 슬롯) 기록</li>
+<li><b>SCN(System Change Number)</b>: 시스템 전역에서 단조 증가하는 논리 시계. 커밋마다 증가한다.</li>
+<li>트랜잭션/문장은 "시작 SCN"을 기억하고, 그보다 나중에 바뀐 블록을 만나면 undo를 적용해 과거 블록을 복원해 읽는다.</li>
+<li>txid 목록 대신 <b>단일 시계값</b>으로 스냅샷을 표현하는 셈 — 12장 분산 MVCC의 타임스탬프 방식과 통한다.</li>
+</ul></article>
+<article class="card"><h3>읽기 일관성의 동작</h3>
+<ul>
+<li>블록을 읽을 때: "이 블록, 내 시작 SCN 이후에 수정됐나?"</li>
+<li>수정됐다면 undo에서 변경 전 정보를 가져와 <b>일관 읽기용 블록 사본(CR block)</b>을 메모리에 만들어 그걸 읽는다.</li>
+<li>여러 단계 과거가 필요하면 undo를 여러 번 적용 — InnoDB의 체인 거슬러 걷기와 동일.</li>
+<li>기본 격리는 READ COMMITTED(문장 SCN), SERIALIZABLE을 고르면 트랜잭션 SCN 고정 = <b>스냅샷 격리</b> (5장에서 본 그 사실).</li>
+<li>Oracle엔 진짜 SERIALIZABLE(SSI류)이 아예 없다 — write skew는 개발자가 SELECT FOR UPDATE로 직접 막아야 한다.</li>
+</ul></article>
+<article class="card"><h3>ORA-01555: snapshot too old</h3>
+<div class="bad">Oracle DBA라면 악몽처럼 아는 에러. 몇 시간째 돌던 대형 리포트가 막판에 "ORA-01555 snapshot too old"로 사망한다 — 처음부터 다시.</div>
+<ul>
+<li>원인: undo 공간은 유한하고 순환 재사용된다. 오래된 undo가 새 트랜잭션에 <b>덮어써지면</b>, 긴 쿼리가 과거 복원에 필요한 재료를 잃는다.</li>
+<li>PostgreSQL과의 대조가 흥미롭다:</li>
+<li class="sub">PostgreSQL: 과거를 지키느라 청소를 멈춘다 → 블로트로 고통 (읽는 자가 이긴다)</li>
+<li class="sub">Oracle: 청소(재사용)를 강행한다 → 긴 쿼리가 죽는다 (쓰는 자가 이긴다)</li>
+<li>"오래된 스냅샷을 누가 이기는가"라는 정책 선택의 문제 — 정답은 없고 트레이드오프만 있다.</li>
+<li class="sub">현대 Oracle은 undo_retention과 자동 튜닝으로 완화하지만 원리는 그대로다</li>
+</ul></article>
+<article class="card"><h3>Oracle 방식의 성격</h3>
+<ul>
+<li>강점: 테이블이 절대 안 부푼다. VACUUM 같은 전면 청소 작업 자체가 없다. OLTP 최신 읽기가 가장 빠른 축.</li>
+<li>약점: 긴 분석 쿼리와 대량 갱신이 공존하면 ORA-01555 리스크. CR 블록 생성이 CPU·메모리를 먹는다.</li>
+<li>롤백이 비싸다: undo를 실제로 적용해 되돌려야 한다. 거대 트랜잭션 롤백은 몇 시간짜리 이벤트가 되기도.</li>
+<li class="sub">PostgreSQL 롤백은 0초(버리면 끝) — 6장에서 본 대조점</li>
+<li>운영 격언: "Oracle에선 undo를 여유 있게, 쿼리는 짧게."</li>
+</ul></article>
+<article class="card"><h3>SQL Server — 락 왕국</h3>
+<ul>
+<li>SQL Server는 전통적으로 <b>순수 락 기반</b>(Strict 2PL)의 대표 주자였다 — 2장에서 배운 방식 그대로.</li>
+<li>READ COMMITTED에서도 읽기가 S락을 잡았고, 읽기-쓰기 봉쇄와 데드락이 일상이었다.</li>
+<li>그래서 현장엔 NOLOCK 힌트(= READ UNCOMMITTED, 더티 리드 감수)가 만연했다 — "빠르지만 가끔 틀린 리포트"의 시대.</li>
+<li>2장의 "락 방식의 비용 청구서"를 그대로 지불하며 사는 왕국이었던 셈.</li>
+</ul></article>
+<article class="card"><h3>개종: 2005년의 스냅샷 도입</h3>
+<ul>
+<li>SQL Server 2005가 <b>행 버전 관리(row versioning)</b>를 도입하며 MVCC 진영에 합류했다.</li>
+<li>두 가지 옵트인 모드가 생겼다:</li>
+<li class="sub"><b>RCSI</b> (Read Committed Snapshot Isolation): READ COMMITTED의 구현을 락에서 문장 스냅샷으로 교체</li>
+<li class="sub"><b>SNAPSHOT</b> 격리: 트랜잭션 스냅샷 — 5장의 SI 그 자체</li>
+<li>기본값은 여전히 락 기반 READ COMMITTED다 (Azure SQL Database는 RCSI가 기본!) — 하위 호환 때문.</li>
+<li>같은 DB가 락 모드와 MVCC 모드를 스위치로 오간다는 점에서, 두 진영의 차이를 몸으로 보여 주는 표본이다.</li>
+</ul></article>
+<article class="card"><h3>RCSI vs SNAPSHOT</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th></th><th>RCSI</th><th>SNAPSHOT</th></tr>
+<tr><td>켜는 법</td><td>DB 옵션 (앱 수정 불필요)</td><td>DB 옵션 + 트랜잭션마다 명시</td></tr>
+<tr><td>스냅샷 주기</td><td>문장마다</td><td>트랜잭션당 1장</td></tr>
+<tr><td>대응 개념</td><td>PostgreSQL READ COMMITTED</td><td>PostgreSQL REPEATABLE READ (SI)</td></tr>
+<tr><td>쓰기 충돌</td><td>대기 후 최신 위에서 계속</td><td>update conflict 에러 (3960)</td></tr>
+</table></div>
+<ul>
+<li>5장의 "문장 스냅샷 vs 트랜잭션 스냅샷" 표가 SQL Server 용어로 재등장한 것뿐이다.</li>
+<li>NOLOCK 지옥에서 탈출하는 표준 처방이 "RCSI 켜기"다 — 리포트가 더티 리드 없이 무대기로 돈다.</li>
+</ul></article>
+<article class="card"><h3>tempdb 버전 스토어</h3>
+<ul>
+<li>SQL Server는 옛 버전을 어디 두는가? 테이블도 undo도 아닌 제3의 답: <b>tempdb의 버전 스토어</b>.</li>
+<li>행이 수정되면 이전 버전을 tempdb에 복사하고, 행에는 14바이트 포인터를 붙여 체인을 만든다.</li>
+<li>결과: 버전 부담이 tempdb로 집중된다 — RCSI를 켠 서버의 tempdb 용량·I/O 설계가 운영 포인트.</li>
+<li>여기도 같은 공식: <b>긴 트랜잭션 → 버전 스토어 청소 불가 → tempdb 폭주.</b> 세 번째 반복이다. 이쯤이면 법칙이다.</li>
+<li class="sub">SQL Server 2019의 ADR은 버전 스토어를 사용자 DB 안으로 옮겨(PVS) 복구 가속에 재활용한다</li>
+</ul></article>
+<article class="card"><h3>세 가족 분류법</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>가족</th><th>옛 버전 보관소</th><th>대표</th><th>고질병</th></tr>
+<tr><td><b>append형</b></td><td>테이블 힙 자체</td><td>PostgreSQL, Firebird</td><td>테이블·인덱스 블로트</td></tr>
+<tr><td><b>undo형</b></td><td>undo 로그/세그먼트</td><td>Oracle, InnoDB</td><td>undo 폭주, snapshot too old</td></tr>
+<tr><td><b>별도 스토어형</b></td><td>tempdb 등 외부 저장소</td><td>SQL Server</td><td>tempdb 병목</td></tr>
+</table></div>
+<ul>
+<li>세상 모든 MVCC 구현은 대략 이 셋 중 하나다. 새 DB를 만나면 "옛 버전을 어디 두지?"부터 물으면 구조가 보인다.</li>
+<li>그리고 셋 모두의 공통 천적은 긴 트랜잭션 — 보관소가 어디든 "버릴 수 없음"은 같기 때문이다.</li>
+</ul></article>
+<article class="card"><h3>어느 방식이 이기는가</h3>
+<ul>
+<li>학계가 실제로 붙여 봤다: CMU의 "An Empirical Evaluation of In-Memory MVCC" (VLDB 2017) 등 비교 연구가 여럿이다.</li>
+<li>결론은 통쾌하지 않다: <b>워크로드에 따라 승자가 바뀐다.</b></li>
+<li class="sub">갱신이 잦고 최신 읽기 위주 → undo형 유리 (테이블이 날씬)</li>
+<li class="sub">롤백이 잦거나, 과거 읽기(리포트)가 많음 → append형 유리</li>
+<li class="sub">긴 분석 + 대량 갱신 혼합 → 모두가 아프다. 그래서 HTAP·복제본 분리가 유행</li>
+<li>면접식 요약: "PostgreSQL과 InnoDB 중 뭐가 낫나요?"의 정답은 방식의 장단점을 워크로드에 연결해 설명하는 것.</li>
+</ul></article>
+<article class="card"><h3>9장 정리</h3><ul>
+<li>Oracle은 1984년부터 undo+SCN으로 읽기 일관성을 제공한 MVCC 대중화의 원조. SERIALIZABLE은 SI다.</li>
+<li>undo 재사용이 긴 쿼리를 죽이는 ORA-01555는 "과거 보존 vs 청소"의 정책 선택을 보여 준다.</li>
+<li>SQL Server는 락 왕국이었으나 2005년 RCSI/SNAPSHOT으로 개종 — 버전은 tempdb에 보관.</li>
+<li>MVCC 구현은 append형 / undo형 / 별도 스토어형 세 가족. 공통 천적은 긴 트랜잭션.</li>
+<li>방식 간 우열은 워크로드가 결정한다 — "어디에 버전을 두고 누가 청소하나"로 모든 구현을 읽어라.</li>
+</ul></article>
+
+<!-- ================= CH 10 ================= -->
+<article class="card section" id="ch10">
+<p class="chnum">10장</p>
+<h2>그 밖의 MVCC들</h2>
+<p class="chsub">임베디드부터 키-밸류, 파일시스템까지 — 버전 아이디어의 확산</p></article>
+<article class="card"><h3>10장 한눈에 보기</h3><ol class="glance">
+<li>Firebird — 원조의 후예</li>
+<li>SQLite — WAL이라는 우회로</li>
+<li>SQLite WAL의 한계와 미덕</li>
+<li>LMDB — copy-on-write 트리</li>
+<li>RocksDB — LSM과 시퀀스 번호</li>
+<li>키-밸류들의 버전: HBase·Cassandra</li>
+<li>인메모리 DB: HANA와 Hekaton</li>
+<li>파일시스템의 MVCC: ZFS·Btrfs</li>
+<li>애플리케이션 레벨 MVCC</li>
+<li>낙관적 락 — 가난한 자의 MVCC</li>
+<li>10장 정리</li>
+</ol></article>
+<article class="card"><h3>Firebird — 원조의 후예</h3>
+<ul>
+<li>3장에서 만난 1984년 InterBase의 직계 오픈소스 후손이다 (2000년 소스 공개 후 포크).</li>
+<li>Jim Starkey의 "multi-generational architecture"를 그대로 잇는다 — 행 버전을 테이블에 쌓는 append형.</li>
+<li>재미있는 설계: 전용 청소 데몬 대신 <b>지나가던 읽기가 청소를 겸한다</b> (cooperative garbage collection) + sweep 주기.</li>
+<li>PostgreSQL과 독립적으로 같은 결론(버전 쌓기 + 청소)에 도달한 평행 진화 사례로, 비교 학습 가치가 크다.</li>
+</ul></article>
+<article class="card"><h3>SQLite — WAL이라는 우회로</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/6/69/SQLite3.png" alt="SQLite" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>SQLite — 세계에서 가장 많이 배포된 DB 엔진 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>기본 모드의 SQLite는 DB 파일 하나 + 통 락 — 쓰는 동안 읽기도 막히는 1장식 세계였다.</li>
+<li>2010년 <b>WAL(Write-Ahead Log) 모드</b>가 게임을 바꿨다: 변경을 원본에 덮어쓰지 않고 별도 WAL 파일에 append한다.</li>
+<li>읽기는 "WAL의 어느 지점까지 반영된 세계"라는 스냅샷을 잡고 읽는다 — 쓰기와 동시에, 막힘 없이.</li>
+<li>"덮어쓰지 않고 옆에 쌓는다 + 시점 고정" — 형태는 달라도 MVCC의 핵심 공식 그대로다.</li>
+</ul></article>
+<article class="card"><h3>SQLite WAL의 한계와 미덕</h3>
+<ul>
+<li>한계: 쓰기는 여전히 <b>한 번에 하나</b>다. 다중 라이터 동시성은 없다 — 필요하면 서버형 DB로 갈 때다.</li>
+<li>체크포인트: WAL이 자라면 내용을 본 파일에 반영하고 줄인다 — 여기서도 <b>오래 열린 읽기가 체크포인트를 막는다</b> (네 번째 반복. 확정적으로 법칙이다).</li>
+<li>미덕: 이 단순한 구조로 "읽기는 절대 안 막힘 + 직렬 쓰기 = 공짜 SERIALIZABLE"을 얻는다.</li>
+<li>모바일 앱(당신의 폰 안 수십 개 앱)이 대부분 이 모드로 돈다 — 아마 지구에서 가장 많이 실행되는 MVCC 유사물.</li>
+</ul></article>
+<article class="card"><h3>LMDB — copy-on-write 트리</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/Fuji_Xerox_Document_Centre_505_and_Taiwan_Xerox_Walk-In_120D_at_ROC_National_Central_Library_20101211.jpg/960px-Fuji_Xerox_Document_Centre_505_and_Taiwan_Xerox_Walk-In_120D_at_ROC_National_Central_Library_20101211.jpg" alt="복사기" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>copy-on-write — 고치기 전에 복사한다 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>LMDB(OpenLDAP의 키-밸류 스토어)는 B+트리를 <b>copy-on-write</b>로 다룬다: 페이지를 고칠 때 새 페이지에 복사해 쓰고, 루트까지 새 경로를 만든다.</li>
+<li>옛 루트에서 내려가면 옛 세계 전체가, 새 루트에서 내려가면 새 세계가 보인다 — <b>루트 포인터 하나가 스냅샷</b>.</li>
+<li>읽기 트랜잭션은 락 제로, 쓰기는 단일 라이터. 구조가 단순해 극도로 빠르고 견고하다.</li>
+</ul></article>
+<article class="card"><h3>RocksDB — LSM과 시퀀스 번호</h3>
+<ul>
+<li>RocksDB(LevelDB 계열, 페이스북)는 <b>LSM 트리</b>: 모든 쓰기가 append이고, 덮어쓰기가 원래 없다.</li>
+<li>모든 키-밸류 항목에 전역 증가 <b>시퀀스 번호</b>가 붙는다 — 사실상 자동 버전 번호.</li>
+<li>스냅샷 = "시퀀스 번호 N 이하만 보기". 같은 키의 여러 버전 중 N 이하 최신을 고른다.</li>
+<li>컴팩션이 청소부 역할: 활성 스냅샷이 필요로 하는 버전은 남기고 나머지 옛 버전을 병합·폐기한다.</li>
+<li>MySQL의 MyRocks, CockroachDB(구 스토리지), TiKV 등이 이 위에 MVCC를 얹는다 — LSM과 MVCC는 천생연분이다.</li>
+</ul></article>
+<article class="card"><h3>키-밸류들의 버전: HBase·Cassandra</h3>
+<ul>
+<li>HBase: 셀(row, column) 하나가 <b>타임스탬프별 다중 버전</b>을 갖는 게 데이터 모델 자체다. "최근 3개 버전 유지" 같은 정책을 테이블에 선언한다.</li>
+<li>Cassandra: 모든 쓰기에 타임스탬프가 붙고, 읽기는 "가장 최근 타임스탬프 승리"로 병합한다. 삭제도 tombstone(묘비) 기록 = xmax의 사촌.</li>
+<li>둘 다 트랜잭션 격리는 약하지만, "버전 + 타임스탬프 + 나중에 청소(컴팩션)"라는 MVCC의 뼈대는 공유한다.</li>
+<li>관찰: 분산 세계로 갈수록 "락으로 합의"보다 "버전으로 공존"이 압도적으로 유리해진다 — 12장의 예고편.</li>
+</ul></article>
+<article class="card"><h3>인메모리 DB: HANA와 Hekaton</h3>
+<ul>
+<li>디스크가 사라지면 락의 비용(캐시 미스, 컨텍스트 스위치)이 상대적으로 거대해진다 — 인메모리 DB가 MVCC에 올인하는 이유.</li>
+<li>SAP HANA: 컬럼 스토어 + MVCC. 델타 저장소에 새 버전을 쌓고 주기적으로 병합한다.</li>
+<li>SQL Server Hekaton(In-Memory OLTP): 완전 락-프리 MVCC — 버전을 메모리에 체인으로 두고, 타임스탬프 검증으로 커밋. 락도 래치도 없다.</li>
+<li>학계 연구(Hekaton, HyPer, 그리고 CMU의 비교 논문들)가 2010년대 MVCC 르네상스를 이끌었다.</li>
+<li class="sub">최신 경향: 낙관적 MVCC + 하드웨어 친화(캐시 라인, NUMA) 설계가 표준 레시피</li>
+</ul></article>
+<article class="card"><h3>파일시스템의 MVCC: ZFS·Btrfs</h3>
+<ul>
+<li>ZFS·Btrfs·APFS는 블록을 덮어쓰지 않는 <b>copy-on-write 파일시스템</b>이다 — LMDB의 대형판.</li>
+<li>스냅샷 기능이 공짜에 가깝다: 현재 루트 포인터를 복사해 두면 그 순간의 파일시스템 전체가 보존된다.</li>
+<li>맥의 타임머신(APFS 스냅샷), Docker 이미지 레이어, VM 스냅샷 — 전부 같은 원리의 산물.</li>
+<li>Git까지 포함하면 그림이 완성된다: <b>"불변 버전 + 포인터 이동 + 가비지 컬렉션"은 데이터 관리의 범용 패턴</b>이고, DB의 MVCC는 그중 트랜잭션에 특화된 갈래다.</li>
+</ul></article>
+<article class="card"><h3>애플리케이션 레벨 MVCC</h3>
+<ul>
+<li>DB 밖에서도 같은 패턴을 직접 구현하는 경우가 많다:</li>
+<li class="sub"><b>이벤트 소싱</b>: 상태를 덮어쓰지 않고 사건(이벤트)을 append — 상태는 이벤트의 누적으로 재구성</li>
+<li class="sub"><b>불변 자료구조</b>(Clojure, Immutable.js): 수정 = 새 버전 생성, 옛 참조는 안전</li>
+<li class="sub"><b>협업 문서</b>(Google Docs류): 작업 로그 + 버전으로 동시 편집 병합</li>
+<li>언제 직접 하나: 감사 이력이 업무 요구일 때(누가 언제 뭘 바꿨나), 도메인이 "정정"을 개념으로 가질 때(회계의 붉은 줄 정정).</li>
+<li>DB의 MVCC 버전은 청소되는 <b>임시물</b>이다 — 감사 이력이 필요하면 별도 테이블에 스스로 쌓아야 한다는 것, 의외로 자주 헷갈리는 지점.</li>
+</ul></article>
+<article class="card"><h3>낙관적 락 — 가난한 자의 MVCC</h3>
+<pre><code><span class="cm">-- 행에 version 컬럼을 두고</span>
+<span class="kw">SELECT</span> id, data, version <span class="kw">FROM</span> doc <span class="kw">WHERE</span> id = 7;   <span class="cm">-- version=3 읽음</span>
+
+<span class="cm">-- 갱신 때 "내가 읽은 버전 그대로일 때만" 조건부 갱신</span>
+<span class="kw">UPDATE</span> doc <span class="kw">SET</span> data = <span class="st">'...'</span>, version = 4
+<span class="kw">WHERE</span> id = 7 <span class="kw">AND</span> version = 3;
+<span class="cm">-- 영향 행 수 0이면 → 누가 먼저 고쳤다 → 다시 읽고 재시도</span></code></pre>
+<ul>
+<li>ORM(JPA @Version, Rails lock_version)의 낙관적 락이 정확히 이 패턴이다.</li>
+<li>first-committer-wins를 UPDATE 한 줄로 구현한 것 — 5장 SI 규칙 ②의 수제 버전.</li>
+<li>웹의 stateless 요청 사이(폼 열어 두고 10분 뒤 저장)처럼 DB 트랜잭션으로 못 묶는 구간에서 특히 유용하다.</li>
+</ul></article>
+<article class="card"><h3>10장 정리</h3><ul>
+<li>Firebird는 원조 InterBase의 후예로 PostgreSQL과 평행 진화한 append형.</li>
+<li>SQLite WAL, LMDB CoW 트리, RocksDB 시퀀스 번호 — 형태는 달라도 "덮지 않고 쌓고, 시점을 고정"은 같다.</li>
+<li>HBase·Cassandra의 타임스탬프 버전, 인메모리 DB의 락-프리 MVCC, ZFS·Git의 스냅샷까지 — 범용 패턴이다.</li>
+<li>version 컬럼 낙관적 락은 애플리케이션에서 손수 굴리는 미니 SI다.</li>
+<li>구현 전체를 관통한 법칙 재확인: 버전을 쌓는 자, 반드시 청소 문제를 만난다.</li>
+</ul></article>
+<!-- ================= CH 11 ================= -->
+<article class="card section" id="ch11">
+<p class="chnum">11장</p>
+<h2>Serializable로 가는 길 — SSI</h2>
+<p class="chsub">스냅샷 격리의 마지막 구멍을 막는 세 가지 방법</p></article>
+<article class="card"><h3>11장 한눈에 보기</h3><ol class="glance">
+<li>문제 복습: SI의 구멍</li>
+<li>처방 1: 충돌을 수제작한다</li>
+<li>처방 2: 락을 명시한다</li>
+<li>처방 3: DB가 감시한다 — SSI</li>
+<li>이론 도구: rw-의존성</li>
+<li>위험한 구조 정리</li>
+<li>당직 의사 사건에 적용</li>
+<li>PostgreSQL의 SSI 구현</li>
+<li>SIREAD 락과 오탐</li>
+<li>SSI의 비용과 튜닝</li>
+<li>재시도 루프 — 필수 장비</li>
+<li>격리 수준 선택 전략</li>
+<li>11장 정리</li>
+</ol></article>
+<article class="card"><h3>문제 복습: SI의 구멍</h3>
+<ul>
+<li>5장의 결론: SI는 Write Skew와 읽기 전용 이상을 통과시킨다.</li>
+<li>공통 구조: 두 트랜잭션이 <b>서로가 읽은 것을 서로가 바꾼다</b> — 그런데 쓰는 곳이 달라 충돌 검사에 안 걸린다.</li>
+<li>당직 의사, 재고 마감, 한도 검사, 중복 예약, 아이디 중복 검사 — 전부 이 구조다.</li>
+<li>목표: 이 패턴까지 잡아 <b>진짜 직렬가능성</b>을 얻되, 락 왕국(2장)으로 돌아가진 않기.</li>
+<li>세 가지 처방이 있다 — 싼 것부터 차례로 보자.</li>
+</ul></article>
+<article class="card"><h3>처방 1: 충돌을 수제작한다 (materialize conflict)</h3>
+<pre><code><span class="cm">-- 당직 규칙을 지키는 자물쇠 행을 하나 만든다</span>
+<span class="kw">CREATE TABLE</span> oncall_guard (ward int <span class="kw">PRIMARY KEY</span>, dummy int);
+
+<span class="cm">-- 퇴근 트랜잭션마다 이 행을 먼저 갱신</span>
+<span class="kw">BEGIN</span>;
+<span class="kw">UPDATE</span> oncall_guard <span class="kw">SET</span> dummy = dummy + 1 <span class="kw">WHERE</span> ward = 3;
+<span class="cm">-- 이제 같은 병동의 두 퇴근은 "같은 행을 쓰는" 사이가 됐다</span>
+<span class="cm">-- → SI의 first-committer-wins가 자동으로 한쪽을 잡는다</span>
+...
+<span class="kw">COMMIT</span>;</code></pre>
+<ul>
+<li>쓰기 집합이 안 겹쳐서 문제라면, <b>일부러 겹치게 만들면</b> 된다 — 충돌의 물질화.</li>
+<li>거칠지만 효과 확실, 모든 MVCC DB에서 동작한다. 단, 그 자물쇠 행이 병목·핫스팟이 되는 게 대가다.</li>
+</ul></article>
+<article class="card"><h3>처방 2: 락을 명시한다 (SELECT FOR UPDATE)</h3>
+<pre><code><span class="kw">BEGIN</span>;
+<span class="cm">-- 조건을 "읽기만" 하지 말고 잠그면서 읽는다</span>
+<span class="kw">SELECT</span> count(*) <span class="kw">FROM</span> doctors
+<span class="kw">WHERE</span> ward = 3 <span class="kw">AND</span> on_call <span class="kw">FOR UPDATE</span>;
+<span class="cm">-- 다른 퇴근 트랜잭션은 여기서 대기 → 순차 실행 강제</span>
+<span class="kw">UPDATE</span> doctors <span class="kw">SET</span> on_call = false <span class="kw">WHERE</span> name = <span class="st">'김'</span>;
+<span class="kw">COMMIT</span>;</code></pre>
+<ul>
+<li>읽은 근거가 바뀌면 안 되는 행들을 X락으로 묶는다 — 국소적으로 2장 방식을 빌려 오는 것.</li>
+<li>범위(팬텀) 문제엔 부족할 수 있다: 새 행 INSERT는 못 막는다 (InnoDB는 갭 락이 보완).</li>
+<li>실무에서 가장 흔한 처방이다. 단점: 개발자가 <b>위험 지점을 스스로 알아내야</b> 한다 — 놓친 곳이 사고 난다.</li>
+</ul></article>
+<article class="card"><h3>처방 3: DB가 감시한다 — SSI</h3>
+<div class="note"><b>SSI(Serializable Snapshot Isolation)</b>: SI로 일단 달리게 두고, DB가 트랜잭션 간 의존 관계를 추적하다가 "직렬화가 깨질 수 있는 패턴"이 보이면 한쪽을 중단시키는 낙관적 기법. Michael Cahill 등의 2008년 SIGMOD 논문(및 박사논문)이 원전.</div>
+<ul>
+<li>발상: 위험한 스케줄은 드물다. 전부 막지(락) 말고, <b>일어나려는 순간만 잡자.</b></li>
+<li>PostgreSQL 9.1(2011)이 세계 최초로 상용 수준 구현 — <code style="display:inline;white-space:nowrap">SET TRANSACTION ISOLATION LEVEL SERIALIZABLE</code>이 곧 SSI다.</li>
+<li>덕분에 PostgreSQL의 SERIALIZABLE은 이름값을 하는 진짜다 (Oracle과의 차별점).</li>
+</ul></article>
+<article class="card"><h3>이론 도구: rw-의존성</h3>
+<ul>
+<li>트랜잭션 사이 의존(간선)의 세 종류:</li>
+<li class="sub"><b>ww</b>: T1이 쓴 것을 T2가 또 씀 — SI가 이미 잡는다 (first-committer-wins)</li>
+<li class="sub"><b>wr</b>: T1이 쓴 것을 T2가 읽음 — 스냅샷 순서로 자연 정렬됨</li>
+<li class="sub"><b>rw</b> (반의존): T1이 <b>읽은</b> 것을 T2가 나중에 <b>씀</b> — "T1은 T2 이전 세계를 봤다"는 뜻</li>
+<li>직렬가능성 판정: 이 간선들로 그래프를 그려 <b>사이클이 없으면</b> 직렬가능 (1장의 선행 그래프 재등장).</li>
+<li>핵심 정리(Fekete 등): SI에서 직렬화가 깨지는 모든 사이클에는 <b>연속한 rw 간선 두 개</b>가 반드시 들어 있다.</li>
+</ul></article>
+<article class="card"><h3>위험한 구조 정리</h3>
+<div class="fbox">
+<div class="fx">T_A --rw--&gt; T_pivot --rw--&gt; T_B</div>
+<div class="fx"><small>연속한 rw 간선 2개 = 위험 구조 (dangerous structure)</small></div>
+</div>
+<ul>
+<li>SSI의 감시 대상은 오직 이 모양이다: 어떤 트랜잭션(pivot)이 rw 간선을 <b>들어오는 쪽과 나가는 쪽 모두</b> 가질 때.</li>
+<li>이 구조가 생기면 사이클이 "생길 수 있다" — SSI는 안전하게 셋 중 하나를 중단시킨다.</li>
+<li>사이클이 "확실할 때만" 잡는 게 아니라는 점이 중요하다 — 그래서 억울한 중단(오탐)이 존재한다. 곧 다시 나온다.</li>
+</ul></article>
+<article class="card"><h3>당직 의사 사건에 적용</h3>
+<div class="tbwrap"><table class="sched">
+<tr><th>시각</th><th>T1 (김 퇴근)</th><th>T2 (이 퇴근)</th></tr>
+<tr><td>t1</td><td class="t1">당직 목록 읽음 (이 박사 행 포함)</td><td></td></tr>
+<tr><td>t2</td><td></td><td class="t2">당직 목록 읽음 (김 박사 행 포함)</td></tr>
+<tr><td>t3</td><td class="t1">김 행 UPDATE → T2가 읽은 것을 씀: <b>T2 --rw--&gt; T1</b></td><td></td></tr>
+<tr><td>t4</td><td></td><td class="t2">이 행 UPDATE → T1이 읽은 것을 씀: <b>T1 --rw--&gt; T2</b></td></tr>
+<tr><td>t5</td><td class="ok" colspan="2">rw 간선 2개 연속 성립 → SSI가 한쪽을 중단! 규칙 사수</td></tr>
+</table></div>
+<ul>
+<li>SI가 놓치던 사건이 rw 간선의 언어로는 선명하게 보인다 — 감시 장치만 있으면 잡을 수 있는 것이다.</li>
+</ul></article>
+<article class="card"><h3>PostgreSQL의 SSI 구현</h3>
+<ul>
+<li>"누가 무엇을 읽었나"를 기록하는 특수 락, <b>SIREAD 락</b>을 도입했다.</li>
+<li class="sub">이름은 락이지만 <b>아무도 막지 않는다</b> — 순수한 흔적 기록용. 튜플/페이지/릴레이션 단위로 승격되며 메모리를 아낀다</li>
+<li>쓰기가 발생하면 그 대상에 SIREAD 흔적이 있는지 확인 → 있으면 rw 간선 기록.</li>
+<li>커밋 시점에 위험 구조(들어오고 나가는 rw)가 완성되면 누군가를 "serialization failure"(40001)로 중단.</li>
+<li>흔적은 트랜잭션이 끝나도 바로 못 지운다 — 겹쳤던 트랜잭션들이 끝날 때까지 유지 (여기서도 긴 트랜잭션이 민폐다).</li>
+</ul></article>
+<article class="card"><h3>SIREAD 락과 오탐</h3>
+<ul>
+<li>SSI는 <b>안전 초과 판정</b>이다: 실제로 사이클이 안 생겼어도 위험 구조만 보이면 중단시킬 수 있다 (false positive).</li>
+<li>오탐을 키우는 것들:</li>
+<li class="sub">순차 스캔 — 테이블 전체에 SIREAD가 잡혀 "모든 쓰기와 관련됨"이 된다 → 인덱스 스캔 유도가 중요</li>
+<li class="sub">락 승격 — 메모리가 부족하면 행 단위가 페이지·테이블 단위로 뭉개져 정밀도 하락 (max_pred_locks_per_* 설정)</li>
+<li>오탐이어도 정확성은 안전한 쪽으로만 틀린다 — 억울하게 재시도할 뿐, 데이터는 절대 안 깨진다.</li>
+<li>벤치마크(원 논문·PostgreSQL 문서): 대부분 워크로드에서 오버헤드 한 자릿수 % — 2PL식 SERIALIZABLE보다 월등히 싸다.</li>
+</ul></article>
+<article class="card"><h3>SSI의 비용과 튜닝</h3>
+<ul>
+<li>비용 1 — 메모리: SIREAD 추적 공간. 긴 트랜잭션·대형 스캔이 있으면 폭증.</li>
+<li>비용 2 — 재시도: 충돌·오탐만큼 트랜잭션이 중단된다. 재시도 코드가 없으면 사용자 에러로 새어 나간다.</li>
+<li>실전 수칙:</li>
+<li class="sub">SERIALIZABLE 트랜잭션은 짧게, 건드리는 행은 적게, 가능하면 인덱스로 접근</li>
+<li class="sub">읽기 전용 트랜잭션엔 <code style="display:inline;white-space:nowrap">SET TRANSACTION READ ONLY, DEFERRABLE</code> — 안전한 스냅샷을 기다렸다 잡아 SSI 추적에서 완전히 빠진다 (리포트·백업에 최고)</li>
+<li class="sub">전부 SERIALIZABLE로 통일하는 것이 오히려 단순하고 안전하다는 것이 PostgreSQL 커뮤니티의 일반적 권고</li>
+</ul></article>
+<article class="card"><h3>재시도 루프 — 필수 장비</h3>
+<pre><code><span class="cm"># SI/SSI 시대의 표준 트랜잭션 래퍼 (의사코드)</span>
+<span class="kw">def</span> run_tx(work, retries=5):
+    <span class="kw">for</span> i <span class="kw">in</span> range(retries):
+        <span class="kw">try</span>:
+            <span class="kw">with</span> db.transaction(isolation=<span class="st">'serializable'</span>):
+                <span class="kw">return</span> work()
+        <span class="kw">except</span> SerializationFailure:     <span class="cm"># 40001, 40P01</span>
+            sleep(random_backoff(i))         <span class="cm"># 지수 백오프 + 지터</span>
+    <span class="kw">raise</span> TooManyRetries</code></pre>
+<ul>
+<li>"could not serialize access", "deadlock detected", InnoDB 1213 — 전부 <b>재시도가 정답</b>인 에러다.</li>
+<li>주의 1: 트랜잭션 <b>전체</b>를 다시 실행해야 한다 — 절반만 다시 하면 지옥문이 열린다.</li>
+<li>주의 2: 트랜잭션 안에서 이메일 발송 같은 부수효과를 일으키면 재시도 때 두 번 발송된다 — 부수효과는 커밋 후로.</li>
+</ul></article>
+<article class="card"><h3>격리 수준 선택 전략</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>상황</th><th>권장</th></tr>
+<tr><td>단건 조회·갱신 위주 웹 OLTP</td><td>READ COMMITTED + 원자적 UPDATE 습관</td></tr>
+<tr><td>여러 읽기의 일관성 필요 (리포트, 내보내기)</td><td>REPEATABLE READ(SI), 가능하면 READ ONLY</td></tr>
+<tr><td>불변식이 생명 (돈, 재고, 정원, 중복 방지)</td><td>SERIALIZABLE(SSI) + 재시도 루프</td></tr>
+<tr><td>SSI 없는 DB (MySQL, Oracle)</td><td>SI + FOR UPDATE / 충돌 물질화 수제 방어</td></tr>
+</table></div>
+<ul>
+<li>기본 철학: <b>격리는 보험이다.</b> 사고의 단가가 높은 곳부터 비싼 보험을 든다.</li>
+<li>그리고 어떤 수준을 고르든 재시도 루프는 공통 장비다 — 데드락은 READ COMMITTED에도 있으니까.</li>
+</ul></article>
+<article class="card"><h3>11장 정리</h3><ul>
+<li>SI의 구멍(Write Skew류)을 막는 3처방: 충돌 물질화, SELECT FOR UPDATE, 그리고 SSI.</li>
+<li>이론 열쇠는 rw-반의존: 연속한 rw 간선 2개(위험 구조)가 모든 SI 이상 현상의 지문이다.</li>
+<li>PostgreSQL 9.1의 SSI는 SIREAD 흔적으로 위험 구조를 탐지, 오탐이 있지만 데이터는 안전한 쪽으로만 틀린다.</li>
+<li>SERIALIZABLE 운용의 필수품: 짧은 트랜잭션, 인덱스 접근, 그리고 지수 백오프 재시도 루프.</li>
+<li>격리는 보험 — 사고 단가로 등급을 정하라.</li>
+</ul></article>
+
+<!-- ================= CH 12 ================= -->
+<article class="card section" id="ch12">
+<p class="chnum">12장</p>
+<h2>분산 MVCC — 시간과의 싸움</h2>
+<p class="chsub">서버가 여러 대가 되는 순간, "언제"가 가장 어려운 질문이 된다</p></article>
+<article class="card"><h3>12장 한눈에 보기</h3><ol class="glance">
+<li>분산에서 무엇이 깨지는가</li>
+<li>진실 1: 시계는 다 다르다</li>
+<li>Spanner의 도발 — TrueTime</li>
+<li>commit wait의 마법</li>
+<li>Spanner가 산 것과 낸 돈</li>
+<li>HLC — 가난한 자의 TrueTime</li>
+<li>CockroachDB의 타협</li>
+<li>Percolator — SI를 조립하다</li>
+<li>TiDB와 후예들</li>
+<li>읽기 전용의 공짜 점심</li>
+<li>12장 정리</li>
+</ol></article>
+<article class="card"><h3>분산에서 무엇이 깨지는가</h3>
+<ul>
+<li>지금까지의 암묵적 전제: txid든 SCN이든 <b>한 기계 안의 단일 카운터</b>가 있었다.</li>
+<li>데이터가 100대에 쪼개지면(샤딩) 이 전제가 무너진다:</li>
+<li class="sub">전역 카운터를 한 대가 발급하면 → 그 한 대가 병목이자 단일 장애점</li>
+<li class="sub">각자 발급하면 → "서울의 tx 500번과 부산의 tx 500번, 누가 먼저인가?"에 답이 없다</li>
+<li>스냅샷의 정의 자체가 "시점"인데, 분산엔 <b>공유된 시점이 없다.</b></li>
+<li>결론: 분산 MVCC의 본질 문제는 데이터가 아니라 <b>시간</b>이다.</li>
+</ul></article>
+<article class="card"><h3>진실 1: 시계는 다 다르다</h3>
+<ul>
+<li>"그냥 각 서버의 벽시계를 쓰면 되잖아?" — 안 된다. NTP로 맞춰도 서버 간 수 ms~수백 ms씩 어긋난다.</li>
+<li>어긋난 시계로 스냅샷을 자르면: 시계가 빠른 서버의 커밋이 "미래"로 밀리고, 인과가 뒤집힌 스냅샷(원인 없이 결과만 보이는)이 찍힌다.</li>
+<li>램포트의 고전적 통찰(1978): 분산에서 믿을 것은 벽시계가 아니라 <b>인과 관계(happens-before)</b>다 — 논리 시계의 탄생.</li>
+<li>그래서 분산 MVCC 진영은 두 갈래로 갈린다: 시계를 <b>고치는</b> 쪽(Spanner)과 시계를 <b>포기하고 논리로 가는</b> 쪽(HLC, Percolator).</li>
+</ul></article>
+<article class="card"><h3>Spanner의 도발 — TrueTime</h3>
+<figure class="imgf"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/GoogleCloudSpannerBooth.jpg/960px-GoogleCloudSpannerBooth.jpg" alt="Google Cloud Spanner 부스" loading="lazy" onerror="this.parentElement.style.display='none'">
+<figcaption>Google Cloud Spanner — 전 지구 규모에서 직렬가능성을 판다 (Wikimedia Commons)</figcaption></figure>
+<ul>
+<li>구글의 2012년 OSDI 논문 Spanner: 데이터센터마다 <b>GPS 수신기와 원자시계</b>를 설치해 시계 문제를 하드웨어로 공격했다.</li>
+<li><b>TrueTime API</b>: "지금 몇 시?"에 시각 대신 <b>구간</b>으로 답한다 — TT.now() = [최소, 최대], "진짜 현재는 이 구간 어딘가".</li>
+<li>구간 폭(오차 ε)은 보통 수 ms 이내로 관리된다 — 불확실성을 없애는 대신 <b>정직하게 정량화</b>한 것.</li>
+</ul></article>
+<article class="card"><h3>commit wait의 마법</h3>
+<div class="fbox">
+<div class="fx">커밋 타임스탬프 s = TT.now().max로 찍고,</div>
+<div class="fx">진짜 시각이 s를 지날 때까지 (~ε) 기다렸다가 결과를 공개한다</div>
+</div>
+<ul>
+<li>이 짧은 대기(<b>commit wait</b>)가 보장하는 것: 커밋이 공개된 후 시작하는 어떤 트랜잭션도 반드시 더 큰 타임스탬프를 받는다.</li>
+<li>효과: 타임스탬프 순서 = 실제 시간 순서. 전 지구 어디서 커밋해도 <b>외부 일관성(external consistency)</b>이 성립한다.</li>
+<li class="sub">외부 일관성: "내가 커밋 완료를 보고 나서 시작한 트랜잭션이 내 커밋을 못 보는 일은 없다" — 직렬가능성보다도 강한 보장</li>
+<li>시계 오차를 없앨 수 없으니, <b>오차만큼 기다려서</b> 오차를 무해하게 만든다 — 문제를 뒤집는 발상.</li>
+</ul></article>
+<article class="card"><h3>Spanner가 산 것과 낸 돈</h3>
+<ul>
+<li>산 것: 전 지구 분산 + SQL + 진짜 직렬가능성(외부 일관성) + MVCC 스냅샷 읽기. "CAP을 이겼다"는 마케팅이 나올 정도의 상품성.</li>
+<li>낸 돈:</li>
+<li class="sub">모든 쓰기에 commit wait ε — 시계 인프라가 나쁘면 대기가 길어진다</li>
+<li class="sub">GPS·원자시계 인프라 — 구글이라서 가능한 투자</li>
+<li class="sub">쓰기는 여전히 Paxos 합의 + 2PC — 물리 법칙(빛의 속도)은 못 이긴다</li>
+<li>읽기의 보상이 크다: 과거 타임스탬프 스냅샷 읽기는 합의 없이 가까운 복제본에서 바로 — MVCC 덕이다.</li>
+</ul></article>
+<article class="card"><h3>HLC — 가난한 자의 TrueTime</h3>
+<ul>
+<li>원자시계가 없는 회사는? <b>HLC(Hybrid Logical Clock)</b> — 벽시계와 논리 시계의 잡종.</li>
+<li>구조: (물리 시각, 논리 카운터) 쌍. 메시지를 주고받을 때마다 상대의 HLC와 max를 취하고 카운터를 올린다.</li>
+<li>보장: 인과 관계가 있으면 HLC 순서가 반드시 그것을 따른다 + 값은 벽시계에 가깝게 유지된다.</li>
+<li>보장 못 하는 것: 통신하지 않은 두 사건의 실제 시간 순서 — 여기가 TrueTime과의 결정적 격차.</li>
+<li>비유: TrueTime은 전 직원에게 지급된 원자시계, HLC는 "만날 때마다 서로 시계를 맞추는" 약속.</li>
+</ul></article>
+<article class="card"><h3>CockroachDB의 타협</h3>
+<ul>
+<li>CockroachDB는 HLC + MVCC로 Spanner를 오픈소스 세계에 재현한 대표작이다.</li>
+<li>commit wait가 불가능하므로(오차 보장이 없다) 다른 안전장치를 쓴다:</li>
+<li class="sub">최대 시계 오차(max offset, 기본 500ms)를 가정하고, 읽기가 그 "불확실 구간" 안의 버전을 만나면 <b>타임스탬프를 밀어 올려 재시도</b>한다 (uncertainty restart)</li>
+<li class="sub">오차 가정을 실제로 초과한 노드는 스스로 클러스터에서 탈락한다</li>
+<li>격리는 기본 SERIALIZABLE — 낙관적 재시도 문화가 프로토콜에 배어 있다.</li>
+<li>교훈: 같은 목표라도 인프라 전제(원자시계 유무)가 프로토콜 모양을 완전히 바꾼다.</li>
+</ul></article>
+<article class="card"><h3>Percolator — SI를 조립하다</h3>
+<ul>
+<li>구글의 또 다른 발명(2010): Bigtable(단일 행 원자성만 있는 스토리지) 위에 <b>범용 SI 트랜잭션</b>을 얹는 프로토콜.</li>
+<li>재료: 중앙 타임스탬프 발급기(TSO) + 데이터에 심는 lock/write 컬럼.</li>
+<li>쓰기(2단계): ① prewrite — 모든 대상 행에 락 기록 + 새 버전 임시 기록, ② commit — primary 행의 락을 커밋 기록으로 바꾸면 그 순간 전체가 원자적으로 확정.</li>
+<li>읽기: 시작 타임스탬프로 스냅샷 읽기. 락을 만나면 잠시 대기하거나 죽은 트랜잭션의 락을 청소해 준다.</li>
+<li>중앙 TSO가 병목이라 전 지구엔 부적합, 한 리전 안에선 단순하고 강력하다 — 원래 용도도 구글 검색 색인의 증분 갱신.</li>
+</ul></article>
+<article class="card"><h3>TiDB와 후예들</h3>
+<ul>
+<li>TiDB(PingCAP)는 Percolator 모델을 그대로 산업화한 대표작이다 — TSO는 PD 컴포넌트가, 스토리지는 TiKV(RocksDB 기반)가 맡는다.</li>
+<li>MySQL 프로토콜 호환이라 "InnoDB 애플리케이션의 수평 확장판"으로 쓰인다 — 격리도 SI(낙관/비관 모드).</li>
+<li>그 밖의 지형 한눈에:</li>
+<li class="sub">YugabyteDB: PostgreSQL 호환 + HLC 계열 — CockroachDB와 같은 어족</li>
+<li class="sub">Amazon Aurora: 스토리지만 분산, 쓰기는 단일 노드 — 단일 시계라 전통 MVCC 유지. "분산의 어려움을 회피한" 영리한 설계</li>
+<li>선택 기준도 시간이 결정한다: 단일 리전이면 TSO/단일 라이터로 충분, 다중 리전이면 HLC 또는 TrueTime급이 필요.</li>
+</ul></article>
+<article class="card"><h3>읽기 전용의 공짜 점심</h3>
+<ul>
+<li>분산 MVCC의 최대 보상은 읽기에서 나온다:</li>
+<li class="sub"><b>팔로워 읽기(follower read)</b>: 몇 초 전 타임스탬프로 스냅샷을 잡으면, 리더 합의 없이 가까운 복제본에서 일관된 읽기</li>
+<li class="sub"><b>시점 조회(AS OF SYSTEM TIME)</b>: "5분 전 상태"를 쿼리 — 백업, 디버깅, 실수 복구에 즉효</li>
+<li class="sub">글로벌 분석 쿼리가 운영 트래픽을 전혀 방해하지 않음 — 2장 야간 리포트 문제의 분산판 해결</li>
+<li>1986년 POSTGRES가 꿈꾸다 접었던 타임트래블(6장)이 분산 시대에 필수 기능으로 부활한 것 — 역사의 재미있는 원환.</li>
+</ul></article>
+<article class="card"><h3>12장 정리</h3><ul>
+<li>분산 MVCC의 본질 난제는 "공유된 시점(시계)이 없다"는 것.</li>
+<li>Spanner는 원자시계+GPS(TrueTime)와 commit wait로 외부 일관성까지 달성 — 오차를 기다림으로 무해화.</li>
+<li>CockroachDB는 HLC+불확실성 재시도로, TiDB는 Percolator(TSO+2단계 쓰기)로 같은 목표에 접근.</li>
+<li>보상은 읽기: 팔로워 읽기, 시점 조회 등 스냅샷의 힘이 분산에서 배가된다.</li>
+<li>설계 선택은 결국 시계 인프라의 전제에서 갈린다.</li>
+</ul></article>
+
+<!-- ================= CH 13 ================= -->
+<article class="card section" id="ch13">
+<p class="chnum">13장</p>
+<h2>인덱스·스토리지와 MVCC</h2>
+<p class="chsub">버전이 늘어나는 순간 인덱스가 겪는 일들</p></article>
+<article class="card"><h3>13장 한눈에 보기</h3><ol class="glance">
+<li>인덱스는 버전을 모른다</li>
+<li>PostgreSQL: 인덱스 폭발 문제</li>
+<li>HOT — 구원의 지름길</li>
+<li>fillfactor 튜닝</li>
+<li>index-only scan과 가시성 지도</li>
+<li>InnoDB: 세컨더리 인덱스의 사정</li>
+<li>2016년 Uber 사건</li>
+<li>사건의 교훈 — 논쟁 정리</li>
+<li>대안 실험: zheap과 OrioleDB</li>
+<li>13장 정리</li>
+</ol></article>
+<article class="card"><h3>인덱스는 버전을 모른다</h3>
+<ul>
+<li>지금까지 테이블만 봤지만, 실전 행에는 인덱스가 3~10개씩 붙어 있다.</li>
+<li>문제: 행에 새 버전이 생길 때 <b>인덱스는 어떻게 하나?</b></li>
+<li class="sub">인덱스에도 버전을 두나? 아니면 인덱스는 항상 한 곳만 가리키나?</li>
+<li class="sub">인덱스만 보고 "이 버전이 내 스냅샷에 보이는가"를 알 수 있나?</li>
+<li>이 질문에 대한 답이 PostgreSQL과 InnoDB에서 정반대로 갈리고, 그 차이가 2016년 업계 최대 논쟁(Uber 사건)을 낳는다.</li>
+</ul></article>
+<article class="card"><h3>PostgreSQL: 인덱스 폭발 문제</h3>
+<ul>
+<li>PostgreSQL 인덱스 엔트리는 튜플의 물리 주소(ctid)를 가리키고, <b>가시성 정보는 없다.</b></li>
+<li>UPDATE로 새 튜플이 생기면 → 주소가 바뀌었으니 <b>모든 인덱스에 새 엔트리가 필요하다.</b></li>
+<li class="sub">인덱스 10개인 테이블에서 관심 없는 컬럼 하나만 고쳐도 인덱스 10개가 전부 갱신된다</li>
+<li>읽기 쪽 비용도 있다: 인덱스는 죽은 버전도 가리키므로, 힙에 가서 가시성을 확인해야 한다.</li>
+<li>이것이 PostgreSQL <b>쓰기 증폭(write amplification)</b>의 정체 — append형 설계의 그림자다.</li>
+</ul></article>
+<article class="card"><h3>HOT — 구원의 지름길</h3>
+<div class="note"><b>HOT(Heap-Only Tuple)</b>, PostgreSQL 8.3(2008): 갱신된 컬럼이 <b>어떤 인덱스에도 안 걸리고</b>, 새 버전이 <b>같은 페이지에</b> 들어갈 수 있으면 — 인덱스는 건드리지 않고 옛 튜플에서 새 튜플로 페이지 내 체인만 잇는다.</div>
+<ul>
+<li>인덱스는 계속 옛 자리를 가리키고, 도착한 읽기가 체인을 한 칸 따라가면 된다.</li>
+<li>효과가 극적이다: 인덱스 10개 갱신 → 0개. "카운터, 상태, 타임스탬프" 같은 자주 갱신되는 컬럼엔 <b>인덱스를 안 거는 것</b>이 그래서 중요하다.</li>
+<li>페이지 내 청소(HOT pruning)도 겸한다 — VACUUM 없이도 체인이 정리되는 미니 청소.</li>
+<li class="sub">확인: pg_stat_user_tables의 n_tup_hot_upd / n_tup_upd 비율 — HOT 적중률</li>
+</ul></article>
+<article class="card"><h3>fillfactor 튜닝</h3>
+<pre><code><span class="cm">-- 페이지를 90%만 채우고 10%는 HOT용 여유로 남긴다</span>
+<span class="kw">ALTER TABLE</span> hot_table <span class="kw">SET</span> (fillfactor = 90);
+<span class="cm">-- (기본값 100 = 빈틈없이 채움 = 같은 페이지에 새 버전 못 넣음)</span></code></pre>
+<ul>
+<li>HOT의 조건 ②("같은 페이지에 자리")를 인위적으로 확보하는 다이얼이다.</li>
+<li>UPDATE가 잦은 테이블은 fillfactor 90~70으로 낮춰 HOT 적중률을 끌어올리는 것이 정석.</li>
+<li>대가는 저장 공간(빈틈만큼)과 스캔 시 페이지 수 증가 — 갱신 빈도에 맞춰 저울질한다.</li>
+<li>"디스크를 조금 낭비해 쓰기 증폭을 줄인다" — MVCC 튜닝은 늘 이런 교환의 연속이다.</li>
+</ul></article>
+<article class="card"><h3>index-only scan과 가시성 지도</h3>
+<ul>
+<li>"인덱스에 필요한 컬럼이 다 있는데 왜 힙까지 가나?" — 가시성 확인 때문이다 (인덱스는 버전을 모르니까).</li>
+<li>구원자는 7장의 <b>가시성 지도</b>: 페이지의 비트가 "전부 보임"이면 힙 확인을 생략해도 된다!</li>
+<li><b>index-only scan</b> = 커버링 인덱스 + 가시성 지도 합작품. EXPLAIN의 "Heap Fetches" 수치가 생략 실패 횟수다.</li>
+<li>따라서 index-only scan의 성능은 <b>VACUUM 상태에 좌우된다</b> — 청소가 밀리면 "전부 보임" 비트가 꺼져 힙행이 부활한다.</li>
+<li>인덱스 설계와 VACUUM 운영이 한 몸이라는 것 — PostgreSQL 성능 튜닝의 숨은 연결 고리다.</li>
+</ul></article>
+<article class="card"><h3>InnoDB: 세컨더리 인덱스의 사정</h3>
+<ul>
+<li>InnoDB 세컨더리 인덱스는 물리 주소가 아니라 <b>PK 값</b>을 가리킨다 — 행이 "이사"해도 인덱스는 무사하다.</li>
+<li>비인덱스 컬럼 갱신 시 세컨더리 인덱스는 무갱신 — PostgreSQL이 HOT으로 겨우 얻는 것을 구조적으로 공짜로 얻는다.</li>
+<li>대가는 읽기에서: 세컨더리 인덱스 조회는 PK 인덱스를 한 번 더 타야 한다 (이중 조회).</li>
+<li>버전 처리: 세컨더리 인덱스도 가시성을 모르므로, 커버링 조회라도 의심스러우면 클러스터드 인덱스+undo로 확인한다.</li>
+<li>요약: <b>쓰기 증폭은 InnoDB가 작고, 읽기 경로는 PostgreSQL이 짧다</b> — 또 하나의 정직한 트레이드오프.</li>
+</ul></article>
+<article class="card"><h3>2016년 Uber 사건</h3>
+<div class="warn">2016년 7월, Uber 엔지니어링 블로그 "Why Uber Engineering Switched from Postgres to MySQL" — PostgreSQL의 MVCC 설계를 정면 비판하며 MySQL로 이주했음을 공개, 업계가 몇 달간 들끓었다.</div>
+<ul>
+<li>비판의 골자 (지금까지 배운 언어로 번역하면):</li>
+<li class="sub">쓰기 증폭 — 갱신마다 행 전체 새 버전 + 모든 인덱스 갱신 (HOT 미적중 워크로드)</li>
+<li class="sub">그 쓰기가 전부 WAL을 타고 복제로 전파 — 복제 대역폭·지연 부담</li>
+<li class="sub">복제본에서 긴 쿼리 vs WAL 재생 충돌, 커넥션 모델 등</li>
+<li>반론(Robert Haas 등 커뮤니티 시니어들): 워크로드 특수성, 튜닝(HOT·fillfactor) 미적용, MySQL 쪽 약점 미언급을 지적.</li>
+</ul></article>
+<article class="card"><h3>사건의 교훈 — 논쟁 정리</h3>
+<ul>
+<li>기술적으로 양쪽 다 맞았다: Uber의 워크로드(소수 컬럼 초고빈도 갱신 + 인덱스 다수)는 정확히 append형의 아픈 곳이었다.</li>
+<li>이 덱의 언어로 한 줄 요약: <b>그들은 8장 표의 오른쪽 열(undo형)이 유리한 워크로드를 갖고 있었다.</b></li>
+<li>일반화는 금물이라는 것도 배웠다 — 같은 시기 수많은 회사는 반대로 MySQL에서 PostgreSQL로 갔다.</li>
+<li>진짜 교훈: DB 선택 논쟁에서 "MVCC를 어디에 쌓고 누가 청소하나"를 짚을 수 있으면, 마케팅이 아니라 공학으로 판단할 수 있다.</li>
+<li class="sub">이 사건 이후 PostgreSQL 진영의 개선 작업(아래)이 눈에 띄게 가속됐다 — 좋은 논쟁의 순기능</li>
+</ul></article>
+<article class="card"><h3>대안 실험: zheap과 OrioleDB</h3>
+<ul>
+<li>"PostgreSQL에 undo형 스토리지를 이식하자"는 시도가 이어지고 있다:</li>
+<li class="sub"><b>zheap</b> (EDB, 2018~): undo 로그 기반 새 힙 포맷 — 제자리 갱신, 블로트 최소화. 본선 합류는 미완</li>
+<li class="sub"><b>OrioleDB</b>: 스토리지 확장으로 undo + 행 단위 WAL — 활발히 개발 중</li>
+<li>발판은 이미 있다: PostgreSQL 12+의 <b>테이블 접근 방법(table AM) API</b> — 힙 포맷을 갈아 끼울 수 있는 플러그인 구조.</li>
+<li>InnoDB 쪽도 정지해 있지 않다: MySQL 8.x의 언두 관리 개선 등 서로의 장점을 흡수 중.</li>
+<li>수렴 진화의 시대 — "append냐 undo냐"는 언젠가 테이블별 선택 옵션이 될지도 모른다.</li>
+</ul></article>
+<article class="card"><h3>13장 정리</h3><ul>
+<li>인덱스는 가시성을 모른다 — 버전 확인은 결국 힙/undo의 몫.</li>
+<li>PostgreSQL: 갱신마다 전 인덱스 갱신 위험 → HOT(비인덱스 컬럼 + 페이지 여유)과 fillfactor가 처방.</li>
+<li>index-only scan은 가시성 지도 의존 — VACUUM 상태가 곧 읽기 성능이다.</li>
+<li>InnoDB는 PK 간접 참조로 쓰기 증폭이 작고, 대신 이중 조회 비용을 낸다.</li>
+<li>Uber 사건은 두 설계의 트레이드오프가 현실 비즈니스를 움직인 사례 — 워크로드가 정답을 정한다.</li>
+</ul></article>
+<!-- ================= CH 14 ================= -->
+<article class="card section" id="ch14">
+<p class="chnum">14장</p>
+<h2>실무 운영과 튜닝</h2>
+<p class="chsub">MVCC와 평화롭게 사는 법 — 현장의 규율들</p></article>
+<article class="card"><h3>14장 한눈에 보기</h3><ol class="glance">
+<li>제1계명: 트랜잭션은 짧게</li>
+<li>긴 트랜잭션 헌팅</li>
+<li>idle in transaction — 조용한 살인자</li>
+<li>대량 UPDATE/DELETE의 함정</li>
+<li>배치 작업 처방전</li>
+<li>핫 로우와 카운터</li>
+<li>커넥션 풀과 트랜잭션 스코프</li>
+<li>ORM이 파는 함정들</li>
+<li>모니터링 대시보드 5종</li>
+<li>장애 시나리오 리허설</li>
+<li>14장 정리</li>
+</ol></article>
+<article class="card"><h3>제1계명: 트랜잭션은 짧게</h3>
+<ul>
+<li>이 덱에서 다섯 번 반복된 법칙을 계명으로 승격하자: <b>긴 트랜잭션(오래된 스냅샷)은 MVCC 시스템 전체의 공공의 적이다.</b></li>
+<li>죄목 총정리: VACUUM 지평선 고정(PG), undo/히스토리 폭주(InnoDB·Oracle), 버전 스토어 폭주(SQL Server), 체크포인트 방해(SQLite), SIREAD 유지(SSI).</li>
+<li>구체 지침:</li>
+<li class="sub">트랜잭션 안에서 외부 API 호출·사용자 입력 대기 금지 — DB 트랜잭션은 "계산과 쿼리만"</li>
+<li class="sub">리포트·마이그레이션은 서비스 DB가 아닌 복제본/시점 스냅샷에서</li>
+<li class="sub">어쩔 수 없는 긴 작업은 새벽·저부하 창에, 감시하에</li>
+</ul></article>
+<article class="card"><h3>긴 트랜잭션 헌팅</h3>
+<pre><code><span class="cm">-- PostgreSQL: 5분 넘게 달리는 트랜잭션</span>
+<span class="kw">SELECT</span> pid, now() - xact_start <span class="kw">AS</span> dur, state, query
+<span class="kw">FROM</span> pg_stat_activity
+<span class="kw">WHERE</span> xact_start &lt; now() - interval <span class="st">'5 min'</span>
+<span class="kw">ORDER BY</span> dur <span class="kw">DESC</span>;
+
+<span class="cm">-- MySQL: 오래 달리는 InnoDB 트랜잭션</span>
+<span class="kw">SELECT</span> trx_id, trx_started, trx_mysql_thread_id
+<span class="kw">FROM</span> information_schema.innodb_trx
+<span class="kw">WHERE</span> trx_started &lt; now() - <span class="kw">INTERVAL</span> 5 <span class="kw">MINUTE</span>;</code></pre>
+<ul>
+<li>이 쿼리를 알림으로 걸어 두는 것이 MVCC 운영의 최소 안전장치다 — "5분 이상 트랜잭션 발견 시 슬랙 호출".</li>
+<li>처형 도구: <code style="display:inline;white-space:nowrap">SELECT pg_terminate_backend(pid)</code> / <code style="display:inline;white-space:nowrap">KILL &lt;thread_id&gt;</code> — 물론 원인 제거(코드 수정)가 본론이다.</li>
+</ul></article>
+<article class="card"><h3>idle in transaction — 조용한 살인자</h3>
+<div class="bad">pg_stat_activity에 state가 "idle in transaction"인 커넥션: BEGIN은 했는데 <b>아무것도 안 하며 스냅샷만 쥐고 있는</b> 좀비다. 쿼리가 안 도니 슬로우 쿼리 모니터링에도 안 잡힌다.</div>
+<ul>
+<li>흔한 발생 경로: 예외 처리에서 commit/rollback 누락, 트랜잭션 열고 외부 API 대기, 디버거로 중단해 둔 개발자 세션.</li>
+<li>방어선:</li>
+<li class="sub"><code style="display:inline;white-space:nowrap">SET idle_in_transaction_session_timeout = '60s'</code> — PostgreSQL의 자동 처형 타이머</li>
+<li class="sub">프레임워크의 트랜잭션 컨텍스트(with 블록, @Transactional)로 누락 원천 차단</li>
+<li>이 설정 하나가 수많은 새벽 장애를 예방한다 — 신규 DB 셋업 체크리스트에 넣어 두자.</li>
+</ul></article>
+<article class="card"><h3>대량 UPDATE/DELETE의 함정</h3>
+<ul>
+<li>"행 5000만 개 일괄 UPDATE" 한 방이 일으키는 연쇄:</li>
+<li class="sub">PostgreSQL: 죽은 튜플 5000만 개 즉조 생산 → 블로트 + autovacuum 폭주 + WAL 폭풍(복제 지연)</li>
+<li class="sub">InnoDB: 거대 undo 생성 → 롤백하면 몇 시간짜리 되돌리기 + 히스토리 리스트 폭발</li>
+<li class="sub">공통: 그 시간 내내 긴 트랜잭션으로서 제1계명 위반</li>
+<li>게다가 실패하면 처음부터 다시 — 대량 작업은 원자성이 오히려 저주가 된다.</li>
+<li>원칙: <b>대량 작업은 잘게 쪼개 커밋한다.</b> 구체 처방은 다음 슬라이드.</li>
+</ul></article>
+<article class="card"><h3>배치 작업 처방전</h3>
+<pre><code><span class="cm">-- 청크 단위 삭제 (PostgreSQL) — 끝날 때까지 반복 실행</span>
+<span class="kw">DELETE FROM</span> logs
+<span class="kw">WHERE</span> id <span class="kw">IN</span> (<span class="kw">SELECT</span> id <span class="kw">FROM</span> logs
+             <span class="kw">WHERE</span> created &lt; now() - interval <span class="st">'90 days'</span>
+             <span class="kw">LIMIT</span> 5000);
+<span class="cm">-- 각 반복이 짧은 트랜잭션 → 스냅샷 지평선이 계속 전진</span></code></pre>
+<ul>
+<li>청크 사이에 짧은 sleep을 넣어 autovacuum·복제가 따라올 틈을 준다.</li>
+<li>더 좋은 설계는 삭제를 안 하는 것: <b>파티셔닝</b> 후 오래된 파티션을 DROP — 죽은 튜플 0개, 순간 완료.</li>
+<li class="sub">"DELETE는 튜플을 남기지만 DROP/TRUNCATE는 파일을 지운다" — MVCC 비용 구조의 차이</li>
+<li>대량 UPDATE도 동일: 키 범위로 쪼개고, 진행 상황을 별도 테이블에 기록해 재시작 가능하게.</li>
+</ul></article>
+<article class="card"><h3>핫 로우와 카운터</h3>
+<ul>
+<li><b>핫 로우(hot row)</b>: 모두가 갱신하는 한 행 — 조회수 카운터, 재고 수량, 잔액 집계 행.</li>
+<li>MVCC라도 <b>쓰기끼리는 직렬화된다</b>(행 락) — 핫 로우는 초당 갱신 수에 상한이 생기고, 죽은 버전을 초당 그만큼 생산한다.</li>
+<li>처방 모음:</li>
+<li class="sub">샤딩 카운터: 카운터를 N행으로 쪼개 무작위 갱신, 읽을 때 SUM</li>
+<li class="sub">지연 집계: 이벤트를 append 테이블에 쌓고 주기적으로 롤업 (이벤트 소싱의 축소판)</li>
+<li class="sub">Redis 등 인메모리로 흡수 후 주기 flush — 정확도 요구와 맞바꿈</li>
+<li>구조 신호: 특정 행의 락 대기가 상위에 보이면 설계를 의심할 때다.</li>
+</ul></article>
+<article class="card"><h3>커넥션 풀과 트랜잭션 스코프</h3>
+<ul>
+<li>커넥션 풀(PgBouncer 등)의 transaction 모드는 "트랜잭션 단위로 커넥션을 빌려 준다" — 트랜잭션 밖 세션 상태(SET, 임시 테이블)가 증발하는 이유.</li>
+<li>MVCC 관점 이점: 애플리케이션이 커넥션을 쥐고 놀아도 <b>트랜잭션만 안 열려 있으면</b> 스냅샷 지평선은 무사하다.</li>
+<li>반대로 최악 조합: 풀 없이 커넥션마다 BEGIN 남발 + 예외 시 방치 — idle in transaction 양식장.</li>
+<li>수칙: "커넥션은 오래, 트랜잭션은 짧게. 트랜잭션 경계는 코드에서 명시적으로."</li>
+</ul></article>
+<article class="card"><h3>ORM이 파는 함정들</h3>
+<ul>
+<li>ORM은 트랜잭션과 락을 숨긴다 — 편리하지만 MVCC 관점의 지뢰가 몇 개 있다:</li>
+<li class="sub"><b>세션 = 트랜잭션 장기화</b>: 뷰 렌더링까지 트랜잭션을 물고 가는 설정(open session in view) — 제1계명 위반 제조기</li>
+<li class="sub"><b>read-modify-write 패턴</b>: 객체 읽고 → 필드 고치고 → save = Lost Update의 정석 코스. 낙관적 락(@Version)이나 원자적 UPDATE로</li>
+<li class="sub"><b>N+1 쿼리로 트랜잭션이 길어짐</b> — 성능 문제가 MVCC 문제로 전이</li>
+<li>ORM을 쓰든 안 쓰든, 최종 방어선은 같다: 실제 발행되는 SQL과 트랜잭션 경계를 <b>로그로 눈으로 확인</b>하는 습관.</li>
+</ul></article>
+<article class="card"><h3>모니터링 대시보드 5종</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>지표</th><th>PostgreSQL</th><th>MySQL/InnoDB</th></tr>
+<tr><td>긴 트랜잭션</td><td>pg_stat_activity.xact_start</td><td>innodb_trx.trx_started</td></tr>
+<tr><td>청소 적체</td><td>n_dead_tup, 블로트 추정 쿼리</td><td>History list length</td></tr>
+<tr><td>wraparound 거리</td><td>age(datfrozenxid)</td><td>(해당 없음 — 48비트)</td></tr>
+<tr><td>충돌·재시도</td><td>serialization failure 수, 데드락 수</td><td>lock wait/deadlock 카운터</td></tr>
+<tr><td>복제 지연</td><td>pg_stat_replication, 슬롯 상태</td><td>replica lag</td></tr>
+</table></div>
+<ul>
+<li>다섯 개면 MVCC발 장애의 대부분을 "터지기 전에" 본다. 특히 위의 두 줄이 조기 경보다.</li>
+</ul></article>
+<article class="card"><h3>장애 시나리오 리허설</h3>
+<ul>
+<li>이 덱에서 배운 지식으로 진단해 보는 모의 장애 3제:</li>
+<li class="sub">① "디스크가 갑자기 가득 참" → 용의자: 대량 UPDATE 후 블로트? 버려진 복제 슬롯이 WAL 붙잡음? undo/tempdb 폭주?</li>
+<li class="sub">② "매일 새벽 특정 시간 전체 성능 저하" → 용의자: 배치가 만든 긴 트랜잭션? autovacuum 폭주(freeze)? 리포트와 OLTP 충돌?</li>
+<li class="sub">③ "간헐적으로 잔액이 안 맞음" → 용의자: read-modify-write Lost Update? RR 신화를 믿은 InnoDB? write skew?</li>
+<li>각 용의자를 어느 지표로 검증할지 말할 수 있다면 — 이 덱의 목표는 달성된 것이다.</li>
+</ul></article>
+<article class="card"><h3>14장 정리</h3><ul>
+<li>제1계명: 트랜잭션은 짧게. 긴 트랜잭션·idle in transaction 헌팅을 자동화하라.</li>
+<li>대량 작업은 청크로 쪼개고, 삭제는 파티션 DROP으로 대체할 수 있으면 최선.</li>
+<li>핫 로우는 MVCC로도 못 구한다 — 샤딩 카운터·지연 집계로 설계를 바꿔라.</li>
+<li>ORM의 편의 뒤에 긴 트랜잭션과 Lost Update가 숨는다 — SQL과 경계를 눈으로 확인.</li>
+<li>대시보드 5종(긴 트랜잭션, 청소 적체, wraparound, 충돌, 복제)이 조기 경보망이다.</li>
+</ul></article>
+
+<!-- ================= CH 15 ================= -->
+<article class="card section" id="ch15">
+<p class="chnum">15장</p>
+<h2>미니 MVCC 직접 만들기</h2>
+<p class="chsub">파이썬 60줄로 스냅샷 격리를 구현하고, 배운 것을 전부 재현한다</p></article>
+<article class="card"><h3>15장 한눈에 보기</h3><ol class="glance">
+<li>설계 목표</li>
+<li>자료구조 — Version과 Tx</li>
+<li>begin — 스냅샷 찍기</li>
+<li>visible — 가시성 판정</li>
+<li>read — 체인에서 고르기</li>
+<li>write — 일단 내 주머니에</li>
+<li>commit — 첫 커밋자 승리</li>
+<li>실험 1: Dirty Read 차단</li>
+<li>실험 2: 반복 읽기와 Lost Update</li>
+<li>실험 3: Write Skew는 뚫린다</li>
+<li>vacuum 붙이기</li>
+<li>더 가 볼 길</li>
+<li>15장 정리</li>
+</ol></article>
+<article class="card"><h3>설계 목표</h3>
+<ul>
+<li>지금까지 배운 개념을 <b>최소 코드로 전부 재현</b>한다: 버전 체인, 스냅샷, 가시성 판정, first-committer-wins, vacuum.</li>
+<li>흉내내는 대상: PostgreSQL의 REPEATABLE READ(= 스냅샷 격리).</li>
+<li>과감히 생략하는 것: 디스크, WAL, 락 대기(충돌 시 즉시 에러로 단순화), 인덱스, 동시 스레드(단일 스레드에서 트랜잭션을 교차 실행해 시뮬레이션).</li>
+<li>전체가 60줄 남짓 — 슬라이드 5장에 나눠 완성한다. 타이핑해 보며 따라오길 강력 추천.</li>
+</ul></article>
+<article class="card"><h3>자료구조 — Version과 Tx</h3>
+<pre><code><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass, field
+
+<span class="kw">@dataclass</span>
+<span class="kw">class</span> Version:
+    val: object
+    xmin: int                 <span class="cm"># 만든 트랜잭션 (출생)</span>
+    xmax: int = 0             <span class="cm"># 대체/삭제한 트랜잭션 (0=현역)</span>
+
+<span class="kw">@dataclass</span>
+<span class="kw">class</span> Tx:
+    txid: int
+    snap_active: set          <span class="cm"># 시작 순간 진행 중이던 txid들</span>
+    snap_max: int             <span class="cm"># 시작 순간의 다음 txid (미래 경계)</span>
+    writes: dict = field(default_factory=dict)  <span class="cm"># 미커밋 쓰기</span>
+
+<span class="kw">class</span> Conflict(Exception): <span class="kw">pass</span></code></pre>
+<ul>
+<li>Version은 6장의 튜플 헤더, Tx의 (snap_active, snap_max)는 스냅샷(xip 목록, xmax)의 축소판이다.</li>
+</ul></article>
+<article class="card"><h3>begin — 스냅샷 찍기</h3>
+<pre><code><span class="kw">class</span> MiniMVCC:
+    <span class="kw">def</span> __init__(self):
+        self.store = {}        <span class="cm"># key → [Version, ...] 버전 체인</span>
+        self.next_txid = 1
+        self.active = set()    <span class="cm"># 진행 중 트랜잭션</span>
+        self.aborted = set()   <span class="cm"># 롤백된 트랜잭션</span>
+
+    <span class="kw">def</span> begin(self):
+        txid = self.next_txid; self.next_txid += 1
+        tx = Tx(txid, snap_active=set(self.active), snap_max=txid)
+        self.active.add(txid)
+        <span class="kw">return</span> tx</code></pre>
+<ul>
+<li>begin의 전부는 "지금 진행 중인 트랜잭션 명단의 복사"다 — 스냅샷이 사진인 이유가 코드로 보인다.</li>
+<li>커밋 여부는 별도 표에 없다: active에도 aborted에도 없으면 커밋된 것으로 취급한다 (clog의 축소판).</li>
+</ul></article>
+<article class="card"><h3>visible — 가시성 판정</h3>
+<pre><code>    <span class="kw">def</span> _committed_in_snap(self, x, tx):
+        <span class="cm"># 트랜잭션 x의 결과가 tx의 사진에 찍혀 있는가?</span>
+        <span class="kw">if</span> x == tx.txid:          <span class="kw">return</span> True   <span class="cm"># 내 것은 보임</span>
+        <span class="kw">if</span> x &gt;= tx.snap_max:      <span class="kw">return</span> False  <span class="cm"># 사진 이후 시작</span>
+        <span class="kw">if</span> x <span class="kw">in</span> tx.snap_active:   <span class="kw">return</span> False  <span class="cm"># 사진 순간 미완</span>
+        <span class="kw">return</span> x <span class="kw">not in</span> self.aborted            <span class="cm"># 롤백만 아니면</span>
+
+    <span class="kw">def</span> visible(self, v, tx):
+        <span class="kw">if not</span> self._committed_in_snap(v.xmin, tx): <span class="kw">return</span> False
+        <span class="kw">if</span> v.xmax == 0: <span class="kw">return</span> True
+        <span class="kw">return not</span> self._committed_in_snap(v.xmax, tx)</code></pre>
+<ul>
+<li>6장의 알고리즘 그대로: <b>출생은 찍혔고, 은퇴는 안 찍힌</b> 버전만 보인다.</li>
+<li>InnoDB의 Read View 판정(8장)과 비교해 보라 — 사실상 같은 코드다.</li>
+</ul></article>
+<article class="card"><h3>read — 체인에서 고르기</h3>
+<pre><code>    <span class="kw">def</span> read(self, tx, key):
+        <span class="kw">if</span> key <span class="kw">in</span> tx.writes:              <span class="cm"># 내 미커밋 쓰기 먼저</span>
+            <span class="kw">return</span> tx.writes[key]
+        <span class="kw">for</span> v <span class="kw">in</span> reversed(self.store.get(key, [])):
+            <span class="kw">if</span> self.visible(v, tx):
+                <span class="kw">return</span> v.val
+        <span class="kw">return</span> None                        <span class="cm"># 내 세계엔 없는 행</span></code></pre>
+<ul>
+<li>체인을 최신부터 거슬러 "내 사진에 찍힌 첫 버전"을 돌려준다 — 락도, 대기도 없다.</li>
+<li>자기 쓰기 우선 규칙(tx.writes 먼저)은 6장 t_cid의 초간단 버전이다.</li>
+<li>read가 store를 <b>전혀 수정하지 않는다</b>는 점을 눈여겨보라 — 읽기가 쓰기를 못 막는 이유가 코드 구조로 자명하다.</li>
+</ul></article>
+<article class="card"><h3>write와 commit — 첫 커밋자 승리</h3>
+<pre><code>    <span class="kw">def</span> write(self, tx, key, val):
+        tx.writes[key] = val               <span class="cm"># 커밋까지 내 주머니에</span>
+
+    <span class="kw">def</span> commit(self, tx):
+        <span class="kw">for</span> key <span class="kw">in</span> tx.writes:             <span class="cm"># ① 충돌 검사</span>
+            <span class="kw">for</span> v <span class="kw">in</span> self.store.get(key, []):
+                fresh = v.xmin &gt;= tx.snap_max <span class="kw">or</span> v.xmin <span class="kw">in</span> tx.snap_active
+                done = v.xmin <span class="kw">not in</span> self.active <span class="kw">and</span> v.xmin <span class="kw">not in</span> self.aborted
+                <span class="kw">if</span> fresh <span class="kw">and</span> done:        <span class="cm"># 내 사진 이후 남이 커밋함</span>
+                    self.abort(tx)
+                    <span class="kw">raise</span> Conflict(key)
+        <span class="kw">for</span> key, val <span class="kw">in</span> tx.writes.items():  <span class="cm"># ② 반영</span>
+            chain = self.store.setdefault(key, [])
+            <span class="kw">if</span> chain: chain[-1].xmax = tx.txid   <span class="cm"># 은퇴 도장</span>
+            chain.append(Version(val, tx.txid))  <span class="cm"># 새 버전</span>
+        self.active.discard(tx.txid)
+
+    <span class="kw">def</span> abort(self, tx):
+        self.active.discard(tx.txid); self.aborted.add(tx.txid)</code></pre>
+<ul>
+<li>충돌 검사 한 문장 요약: "내가 쓰려는 키에, 내 사진 이후 커밋된 새 버전이 있는가?" — 5장 규칙 ②의 직역.</li>
+</ul></article>
+<article class="card"><h3>실험 1: Dirty Read 차단</h3>
+<pre><code>db = MiniMVCC()
+t0 = db.begin(); db.write(t0, <span class="st">'A'</span>, 100); db.commit(t0)
+
+t1 = db.begin()
+db.write(t1, <span class="st">'A'</span>, 900)          <span class="cm"># 미커밋 쓰기</span>
+
+t2 = db.begin()
+print(db.read(t2, <span class="st">'A'</span>))          <span class="cm"># → 100  (900이 안 보인다!)</span>
+
+db.abort(t1)                     <span class="cm"># t1이 마음을 바꿔도</span>
+print(db.read(t2, <span class="st">'A'</span>))          <span class="cm"># → 100  (아무 일도 없다)</span></code></pre>
+<ul>
+<li>t1의 900은 t1.writes 주머니에만 있다가 버려졌다 — 세계는 오염된 적이 없다.</li>
+<li>커밋 후에 쓰기를 반영하는 이 구조에선 Dirty Read가 <b>원리적으로 불가능</b>하다.</li>
+</ul></article>
+<article class="card"><h3>실험 2: 반복 읽기와 Lost Update</h3>
+<pre><code>t1 = db.begin(); t2 = db.begin()
+db.read(t1, <span class="st">'A'</span>)                 <span class="cm"># → 100</span>
+db.read(t2, <span class="st">'A'</span>)                 <span class="cm"># → 100</span>
+
+db.write(t1, <span class="st">'A'</span>, 150)
+db.commit(t1)                    <span class="cm"># 성공 (첫 커밋자)</span>
+
+print(db.read(t2, <span class="st">'A'</span>))          <span class="cm"># → 100  반복 읽기 일관! ✓</span>
+
+db.write(t2, <span class="st">'A'</span>, 130)
+db.commit(t2)                    <span class="cm"># → Conflict('A') 발생! ✓</span></code></pre>
+<ul>
+<li>1장의 잔액 증발 스케줄이 그대로 들어왔는데: t2는 끝까지 자기 사진(100)을 보고, 커밋에서 잡힌다.</li>
+<li>PostgreSQL REPEATABLE READ의 "could not serialize access" 에러를 우리 손으로 재현했다.</li>
+</ul></article>
+<article class="card"><h3>실험 3: Write Skew는 뚫린다</h3>
+<pre><code><span class="cm"># 당직: 김=1(당직), 이=1(당직). 규칙: 합이 1 이상 유지</span>
+t1 = db.begin(); t2 = db.begin()
+<span class="kw">if</span> db.read(t1, <span class="st">'김'</span>) + db.read(t1, <span class="st">'이'</span>) &gt;= 2:
+    db.write(t1, <span class="st">'김'</span>, 0)        <span class="cm"># 김 퇴근</span>
+<span class="kw">if</span> db.read(t2, <span class="st">'김'</span>) + db.read(t2, <span class="st">'이'</span>) &gt;= 2:
+    db.write(t2, <span class="st">'이'</span>, 0)        <span class="cm"># 이 퇴근</span>
+db.commit(t1)                    <span class="cm"># 성공</span>
+db.commit(t2)                    <span class="cm"># 역시 성공! ← 문제</span>
+<span class="cm"># 최종: 김=0, 이=0 — 당직 0명. 불변식 붕괴</span></code></pre>
+<ul>
+<li>충돌 검사는 '김'과 '이'라는 <b>서로 다른 키</b>라 통과 — 5장에서 배운 SI의 구멍이 코드로 증명됐다.</li>
+<li>연습 문제: 11장의 처방 1(충돌 물질화)을 이 코드로 재현해 보라 — 두 트랜잭션이 공통 키 'guard'에 write하게 하면 된다.</li>
+</ul></article>
+<article class="card"><h3>vacuum 붙이기</h3>
+<pre><code>    <span class="kw">def</span> vacuum(self):
+        horizon = min(self.active | {self.next_txid})  <span class="cm"># 지평선</span>
+        removed = 0
+        <span class="kw">for</span> key, chain <span class="kw">in</span> self.store.items():
+            keep = []
+            <span class="kw">for</span> v <span class="kw">in</span> chain:
+                dead = (v.xmax != 0 <span class="kw">and</span> v.xmax &lt; horizon
+                        <span class="kw">and</span> v.xmax <span class="kw">not in</span> self.aborted)
+                garbage = v.xmin <span class="kw">in</span> self.aborted   <span class="cm"># 롤백의 잔해</span>
+                <span class="kw">if</span> dead <span class="kw">or</span> garbage: removed += 1
+                <span class="kw">else</span>: keep.append(v)
+            self.store[key] = keep
+        <span class="kw">return</span> removed</code></pre>
+<ul>
+<li>지평선 = 살아 있는 가장 오래된 트랜잭션 — 그보다 과거에 은퇴한 버전만 지운다 (7장 그대로).</li>
+<li>실험: 긴 트랜잭션 하나를 begin만 하고 방치한 채 vacuum을 불러 보라 — removed가 0에 머문다. 제1계명의 코드 증명.</li>
+</ul></article>
+<article class="card"><h3>더 가 볼 길</h3>
+<ul>
+<li>이 장난감을 확장하며 배우는 로드맵:</li>
+<li class="sub"><b>READ COMMITTED</b>: read마다 스냅샷을 새로 찍는 모드 추가 — 5장의 차이를 코드 한 줄로 체감</li>
+<li class="sub"><b>쓰기 대기</b>: 충돌 시 즉시 에러 대신 "상대 종료까지 대기 후 재검사" — first-updater-wins 재현</li>
+<li class="sub"><b>SSI</b>: read마다 SIREAD 기록을 남기고 rw 간선 2연속을 탐지 — write skew를 잡는 순간의 짜릿함</li>
+<li class="sub"><b>영속화</b>: 버전 체인을 append-only 파일로 — WAL과 복구의 세계로 입장</li>
+<li>참고 구현: CMU 15-445 과제(BusTub), 각종 "toy database" 튜토리얼, 그리고 PostgreSQL 소스의 heapam_visibility.c (진짜 코드도 생각보다 읽을 만하다).</li>
+</ul></article>
+<article class="card"><h3>15장 정리</h3><ul>
+<li>버전 체인 + 스냅샷 + 가시성 판정 + 커밋 검사 = 스냅샷 격리. 전부 합쳐 60줄이었다.</li>
+<li>Dirty Read 차단과 반복 읽기 일관성은 구조에서 공짜로 나왔고, Lost Update는 충돌 검사가 잡았다.</li>
+<li>Write Skew가 뚫리는 것까지 정확히 재현됐다 — SI의 경계를 코드로 확인.</li>
+<li>vacuum과 지평선, 그리고 긴 트랜잭션의 해악도 몇 줄로 증명됐다.</li>
+<li>개념을 코드로 접어 본 사람은 어떤 DB 문서를 읽어도 길을 잃지 않는다.</li>
+</ul></article>
+
+<!-- ================= CH 16 ================= -->
+<article class="card section" id="ch16">
+<p class="chnum">16장</p>
+<h2>마무리 — 전체 정리</h2>
+<p class="chsub">한 장의 지도, 열 개의 문장, 그리고 다음 여정</p></article>
+<article class="card"><h3>여정의 지도</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>구간</th><th>배운 것</th></tr>
+<tr><td>1~2장</td><td>동시성 문제의 정체와 락의 세계 — 읽기·쓰기 상호 봉쇄라는 한계</td></tr>
+<tr><td>3~5장</td><td>버전·스냅샷·가시성이라는 발상, 격리 수준과 이상 현상, SI의 정의와 구멍</td></tr>
+<tr><td>6~10장</td><td>PostgreSQL(append) vs InnoDB·Oracle(undo) vs SQL Server(스토어) — 그리고 청소의 정치학</td></tr>
+<tr><td>11~13장</td><td>SSI의 위험 구조 탐지, 분산의 시간 문제, 인덱스와의 긴장 관계</td></tr>
+<tr><td>14~15장</td><td>운영 계명과 60줄 구현 — 개념의 육화</td></tr>
+</table></div></article>
+<article class="card"><h3>열 문장 요약 (앞 5)</h3>
+<ul>
+<li>① 동시성 이상 현상은 W-W, W-R, R-W 충돌의 조합이고, 읽기끼리는 무해하다.</li>
+<li>② 락은 정확하지만 읽기와 쓰기가 서로를 세운다 — 데드락은 덤.</li>
+<li>③ MVCC는 덮어쓰기 대신 버전을 쌓아, 읽기와 쓰기가 서로 다른 것을 만지게 한다.</li>
+<li>④ 스냅샷은 "커밋 완료 집합의 사진"이고, 가시성은 xmin/xmax와 사진의 비교 연산이다.</li>
+<li>⑤ SI = 트랜잭션당 사진 1장 + 첫 커밋자 승리 — 팬텀까지 막지만 Write Skew는 통과시킨다.</li>
+</ul></article>
+<article class="card"><h3>열 문장 요약 (뒤 5)</h3>
+<ul>
+<li>⑥ 구현은 세 가족: append형(PostgreSQL), undo형(Oracle·InnoDB), 별도 스토어형(SQL Server).</li>
+<li>⑦ 버전을 쌓는 자, 반드시 청소한다 — VACUUM, purge, undo 재사용. 그리고 청소의 적은 긴 트랜잭션.</li>
+<li>⑧ 진짜 SERIALIZABLE이 필요하면 SSI(rw 간선 2연속 탐지) 또는 명시적 락 — 그리고 재시도 루프.</li>
+<li>⑨ 분산 MVCC의 난제는 시간이다 — TrueTime은 기다리고, HLC는 만나서 맞추고, TSO는 한 명이 발급한다.</li>
+<li>⑩ 격리는 보험이다 — 사고 단가로 등급을 고르고, 이름이 아니라 "막아 주는 현상"으로 검증하라.</li>
+</ul></article>
+<article class="card"><h3>구현 비교 최종표</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th></th><th>PostgreSQL</th><th>InnoDB</th><th>Oracle</th><th>SQL Server</th></tr>
+<tr><td>버전 위치</td><td>테이블 힙</td><td>undo 로그</td><td>undo 세그먼트</td><td>tempdb 스토어</td></tr>
+<tr><td>시점 표현</td><td>txid+xip 목록</td><td>Read View</td><td>SCN</td><td>버전 시퀀스</td></tr>
+<tr><td>청소</td><td>VACUUM</td><td>purge</td><td>undo 재사용</td><td>스토어 정리</td></tr>
+<tr><td>기본 격리</td><td>RC</td><td>RR</td><td>RC</td><td>RC(락) / RCSI</td></tr>
+<tr><td>진짜 직렬화</td><td>SSI 있음</td><td>락 병용</td><td>없음(SI)</td><td>락 기반만</td></tr>
+<tr><td>고질병</td><td>블로트·wraparound</td><td>히스토리 폭주</td><td>ORA-01555</td><td>tempdb 병목</td></tr>
+</table></div></article>
+<article class="card"><h3>용어집 ① — 개념</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>용어</th><th>한 줄 정의</th></tr>
+<tr><td>버전 체인</td><td>한 행의 물리 버전들이 포인터로 이어진 사슬</td></tr>
+<tr><td>xmin / xmax</td><td>버전의 출생·은퇴를 기록한 트랜잭션 ID</td></tr>
+<tr><td>스냅샷</td><td>시작 순간의 "커밋 완료 트랜잭션 집합" 사진</td></tr>
+<tr><td>가시성 판정</td><td>버전이 특정 스냅샷에 보이는지의 규칙</td></tr>
+<tr><td>지평선(horizon)</td><td>가장 오래된 활성 스냅샷 — 청소 가능선</td></tr>
+<tr><td>first-committer-wins</td><td>같은 데이터를 쓴 동시 트랜잭션 중 먼저 커밋한 쪽만 생존</td></tr>
+<tr><td>write skew</td><td>서로가 읽은 근거를 서로 바꿔 불변식이 깨지는 SI의 구멍</td></tr>
+<tr><td>rw-반의존</td><td>"내가 읽은 것을 남이 나중에 씀" — SSI 탐지의 단위</td></tr>
+</table></div></article>
+<article class="card"><h3>용어집 ② — 구현·운영</h3>
+<div class="tbwrap"><table class="tb">
+<tr><th>용어</th><th>한 줄 정의</th></tr>
+<tr><td>dead tuple / 블로트</td><td>안 보이게 된 버전 / 그것이 차지한 헛살</td></tr>
+<tr><td>VACUUM / autovacuum</td><td>PostgreSQL의 죽은 버전 회수 작업 / 그 자동화 데몬</td></tr>
+<tr><td>freeze / wraparound</td><td>32비트 txid 순환 대비 영구 과거 처리 / 그 실패 사고</td></tr>
+<tr><td>undo 로그 / purge</td><td>InnoDB·Oracle의 과거 버전 보관소 / InnoDB의 청소 스레드</td></tr>
+<tr><td>Read View</td><td>InnoDB의 스냅샷 (m_ids, up/low limit)</td></tr>
+<tr><td>HOT</td><td>인덱스를 건너뛰는 PostgreSQL의 페이지 내 갱신</td></tr>
+<tr><td>SIREAD 락</td><td>SSI의 읽기 흔적 기록 (아무도 안 막는 락)</td></tr>
+<tr><td>TrueTime / HLC / TSO</td><td>분산 시간의 세 해법: 원자시계 구간 / 잡종 시계 / 중앙 발급</td></tr>
+</table></div></article>
+<article class="card"><h3>더 읽을거리</h3>
+<ul>
+<li><b>책</b>: Kleppmann, "Designing Data-Intensive Applications" 7장 — 격리 수준·SI 설명의 현대 표준. 국내서로는 "데이터 중심 애플리케이션 설계".</li>
+<li><b>책</b>: Petrov, "Database Internals" — 스토리지 엔진 관점의 심화.</li>
+<li><b>논문</b>: "A Critique of ANSI SQL Isolation Levels" (1995) — 4장의 원전, 의외로 읽기 쉽다.</li>
+<li><b>논문</b>: Cahill 외 "Serializable Isolation for Snapshot Databases" (2008), Ports·Grittner "Serializable Snapshot Isolation in PostgreSQL" (2012).</li>
+<li><b>논문</b>: Corbett 외 "Spanner" (OSDI 2012), Peng·Dabek "Percolator" (OSDI 2010).</li>
+<li><b>문서·강의</b>: PostgreSQL 공식 문서 MVCC 장, "The Internals of PostgreSQL" (Suzuki), CMU 15-445 강의(유튜브 공개) MVCC 3부작.</li>
+</ul></article>
+<article class="card"><h3>스스로 점검 — 면접 12문</h3>
+<ol class="glance">
+<li>MVCC가 락 대비 해결하는 문제와 새로 만드는 문제는?</li>
+<li>Dirty/Non-repeatable/Phantom을 스케줄 표로 그려 보라</li>
+<li>스냅샷은 정확히 어떤 정보의 집합인가?</li>
+<li>UPDATE가 PostgreSQL 내부에서 하는 일은?</li>
+<li>VACUUM이 지울 수 있는 튜플의 조건은?</li>
+<li>긴 트랜잭션이 왜, 어떤 DB에서든 해로운가?</li>
+<li>PostgreSQL과 InnoDB의 REPEATABLE READ 차이는?</li>
+<li>write skew 실제 사례를 하나 설계해 보라</li>
+<li>SI 위에서 진짜 직렬성을 얻는 세 방법은?</li>
+<li>ORA-01555와 PostgreSQL 블로트의 공통 뿌리는?</li>
+<li>분산 DB에서 스냅샷 시점은 어떻게 정하나?</li>
+<li>serialization failure를 받으면 앱은 뭘 해야 하나?</li>
+</ol>
+<p class="cap">12문 모두 이 덱 안에 답이 있다 — 막히는 번호의 장으로 돌아가면 된다.</p></article>
+<article class="card section"><p class="chnum">끝</p>
+<h2>버전은 쌓이고, 스냅샷은 고요하다</h2>
+<p class="chsub">MVCC 쉽게 배우기 — 끝까지 읽어 주셔서 감사합니다</p>
+<ul>
+<li>오늘 밤에도 당신의 DB는 초당 수천 장의 사진을 찍고, 수만 개의 버전을 쌓고, 조용히 청소하고 있다.</li>
+<li>이제 당신은 그 소리를 들을 수 있다 — n_dead_tup이 자라는 소리, 지평선이 멈춘 소리, purge가 한숨 쉬는 소리.</li>
+<li>트랜잭션은 짧게, 재시도는 우아하게, 격리는 필요한 만큼 비싸게.</li>
+<li class="sub">피드백·오탈자 제보 환영 — 이 덱 자체도 다음 버전이 쌓일 것이다 (xmax는 아직 0)</li>
+</ul></article>
+</main>
+
+<nav id="deckNav">
+  <button id="prevBtn" aria-label="이전">◀</button>
+  <span id="counter">1 / ?</span>
+  <button id="nextBtn" aria-label="다음">▶</button>
+</nav>
+
+<div id="toc" role="dialog" aria-label="목차">
+  <h3>목차</h3>
+  <div id="tocBody"></div>
+</div>
+<button id="tocClose" style="display:none">닫기</button>
+
+<script>
+// ============================== 슬라이드 엔진 ==============================
+(function () {
+  const slides = [...document.querySelectorAll('main > article')];
+  const TOTAL = slides.length;
+  const stage = document.querySelector('main');
+  const bar = document.getElementById('bar');
+  const counter = document.getElementById('counter');
+  const toc = document.getElementById('toc');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const sel = document.getElementById('nav');
+  let cur = 0;
+
+  // ---- 자동 id·페이지 번호 부여 (하드코딩 금지: 슬라이드 수 변경에 안전) ----
+  slides.forEach((s, i) => {
+    if (!s.id) s.id = 'p' + (i + 1);
+    const sp = document.createElement('span');
+    sp.className = 'pno'; sp.textContent = i + 1;
+    s.prepend(sp);
+  });
+  document.querySelector('#toc h3').textContent = '목차 — 전체 ' + TOTAL + '장';
+
+  const idx = new Map();
+  slides.forEach((s, i) => idx.set(s.id, i));
+
+  // ---- 챕터 그룹 ----
+  const secOf = [];
+  let secTitle = '머리말';
+  slides.forEach((s, i) => {
+    if (s.classList.contains('section') && !s.classList.contains('cover')) {
+      const num = s.querySelector('.chnum');
+      const h = s.querySelector('h1, h2');
+      secTitle = (num ? num.textContent + ' · ' : '') + (h ? h.textContent : '');
+    }
+    secOf[i] = secTitle;
+  });
+
+  // ---- 목차 오버레이 ----
+  const tocBody = document.getElementById('tocBody');
+  let curSec = null, secDiv = null;
+  slides.forEach((s, i) => {
+    if (secOf[i] !== curSec) {
+      curSec = secOf[i];
+      secDiv = document.createElement('div');
+      secDiv.className = 'tocsec';
+      const h4 = document.createElement('h4');
+      h4.textContent = curSec;
+      secDiv.appendChild(h4);
+      tocBody.appendChild(secDiv);
+    }
+    const a = document.createElement('a');
+    a.href = '#' + s.id;
+    a.dataset.go = i;
+    const b = document.createElement('b');
+    b.textContent = i + 1;
+    a.appendChild(b);
+    const h = s.querySelector('h1, h2, h3');
+    a.append(h ? h.textContent : '(제목 없음)');
+    secDiv.appendChild(a);
+  });
+
+  // ---- 슬라이드 전환 ----
+  function show(i, push) {
+    i = Math.max(0, Math.min(TOTAL - 1, i));
+    if (i === cur && push !== 'force') { sync(); return; }
+    slides[cur].classList.remove('on');
+    cur = i;
+    slides[cur].classList.add('on');
+    stage.scrollTop = 0;
+    sync();
+    if (push !== false) history.replaceState(null, '', '#' + slides[cur].id);
+  }
+  function sync() {
+    bar.style.width = ((cur + 1) / TOTAL * 100) + '%';
+    counter.textContent = (cur + 1) + ' / ' + TOTAL;
+    prevBtn.disabled = cur === 0;
+    nextBtn.disabled = cur === TOTAL - 1;
+  }
+
+  // ---- 입력 ----
+  prevBtn.onclick = () => show(cur - 1);
+  nextBtn.onclick = () => show(cur + 1);
+  document.getElementById('tocBtn').onclick = () => { toc.classList.add('on'); tocClose.style.display = 'block'; };
+  const tocClose = document.getElementById('tocClose');
+  function closeToc() { toc.classList.remove('on'); tocClose.style.display = 'none'; }
+  tocClose.onclick = closeToc;
+  toc.addEventListener('click', (e) => {
+    const a = e.target.closest('a[data-go]');
+    if (!a) return;
+    e.preventDefault();
+    closeToc();
+    show(+a.dataset.go);
+  });
+  sel.addEventListener('change', (e) => {
+    if (idx.has(e.target.value)) show(idx.get(e.target.value));
+    e.target.selectedIndex = 0;
+  });
+  addEventListener('keydown', (e) => {
+    if (toc.classList.contains('on')) {
+      if (e.key === 'Escape') closeToc();
+      return;
+    }
+    if (e.target === sel || e.target.tagName === 'INPUT') return;
+    const k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ') { show(cur + 1); e.preventDefault(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp') { show(cur - 1); e.preventDefault(); }
+    else if (k === 'Home') { show(0); e.preventDefault(); }
+    else if (k === 'End') { show(TOTAL - 1); e.preventDefault(); }
+    else if (k === 't' || k === 'T') { toc.classList.contains('on') ? closeToc() : (toc.classList.add('on'), tocClose.style.display = 'block'); }
+  });
+
+  // 스와이프 (코드·공식·데모 영역의 가로 조작과 충돌하지 않게 가드)
+  let tx = 0, ty = 0, tt = 0, guard = false;
+  stage.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) { guard = true; return; }
+    const t = e.touches[0];
+    guard = !!e.target.closest('pre, .fbox, .demo, .tbwrap');
+    tx = t.clientX; ty = t.clientY; tt = Date.now();
+  }, { passive: true });
+  stage.addEventListener('touchend', (e) => {
+    if (guard) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - tx, dy = t.clientY - ty;
+    if (Date.now() - tt < 600 && Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.8)
+      show(cur + (dx < 0 ? 1 : -1));
+  }, { passive: true });
+
+  // ---- 해시 내비게이션 ----
+  function fromHash(push) {
+    const id = decodeURIComponent(location.hash.slice(1));
+    show(idx.has(id) ? idx.get(id) : 0, push);
+  }
+  addEventListener('hashchange', () => fromHash(false));
+  fromHash('force');
+})();
+
+// ============================== 데모 공통 ==============================
+function demoLog(el, cls, text) {
+  const d = document.createElement('div');
+  d.className = cls; d.textContent = text;
+  el.appendChild(d); el.scrollTop = el.scrollHeight;
+}
+
+// ============================== 데모 1: 잔액 레이스 ==============================
+(function () {
+  const root = document.getElementById('demoRace');
+  if (!root) return;
+  const log = document.getElementById('raceLog');
+  const out = document.getElementById('raceOut');
+  const modeBtns = [...root.querySelectorAll('button[data-m]')];
+  let mode = 0, step = 0;
+
+  const SCRIPTS = [
+    [ // 보호 없음
+      ['l1', 'T1 BEGIN — read(잔액) → 100'],
+      ['l2', 'T2 BEGIN — read(잔액) → 100'],
+      ['l1', 'T1 계산 100+50 → write(잔액=150)'],
+      ['l2', 'T2 계산 100+30 → write(잔액=130)  ※ T1의 150을 덮어씀'],
+      ['l1', 'T1 COMMIT'],
+      ['l2', 'T2 COMMIT'],
+      ['lb', '최종 잔액 130 — 50이 증발했다! (기대값 180)']
+    ],
+    [ // 락 사용
+      ['l1', 'T1 BEGIN — X락(잔액) 획득, read → 100'],
+      ['l2', 'T2 BEGIN — X락(잔액) 요청… 대기 시작'],
+      ['l1', 'T1 계산 100+50 → write(잔액=150)'],
+      ['ls', '   (T2는 여전히 줄 서서 대기 중…)'],
+      ['l1', 'T1 COMMIT — 락 해제'],
+      ['l2', 'T2 락 획득! read → 150 (최신값)'],
+      ['l2', 'T2 계산 150+30 → write(잔액=180), COMMIT'],
+      ['lg', '최종 잔액 180 ✓ 정확! 대신 T2는 T1이 끝날 때까지 기다렸다']
+    ],
+    [ // MVCC + 충돌 검사
+      ['l1', 'T1 BEGIN(스냅샷 찍음) — read → 100  (대기 없음)'],
+      ['l2', 'T2 BEGIN(스냅샷 찍음) — read → 100  (대기 없음)'],
+      ['l1', 'T1: 새 버전(150) 생성 — 남의 읽기 방해 없음'],
+      ['l2', 'T2: 새 버전(130) 생성 — 아직은 각자의 주머니 속'],
+      ['l1', 'T1 COMMIT — 첫 커밋자, 성공'],
+      ['l2', 'T2 COMMIT 시도 → 충돌 감지! "내 스냅샷 이후 잔액이 이미 갱신됨" — 중단'],
+      ['l2', 'T2 재시도: read → 150, 계산 150+30, write(180), COMMIT'],
+      ['lg', '최종 잔액 180 ✓ 아무도 기다리지 않았다 — 대신 재시도 1회']
+    ]
+  ];
+
+  function reset() {
+    step = 0; log.innerHTML = '';
+    out.textContent = '"다음 단계"를 눌러 스케줄을 진행하세요';
+  }
+  modeBtns.forEach(b => b.onclick = () => {
+    modeBtns.forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); mode = +b.dataset.m; reset();
+  });
+  document.getElementById('raceStep').onclick = () => {
+    const sc = SCRIPTS[mode];
+    if (step >= sc.length) { out.textContent = '끝 — 모드를 바꿔 다시 비교해 보세요'; return; }
+    demoLog(log, sc[step][0], sc[step][1]);
+    step++;
+    out.textContent = step + ' / ' + sc.length + ' 단계';
+  };
+  document.getElementById('raceReset').onclick = reset;
+  reset();
+})();
+
+// ============================== 데모 2: 버전 체인 관찰경 ==============================
+(function () {
+  const root = document.getElementById('demoChain');
+  if (!root) return;
+  const cv = root.querySelector('canvas'), ctx = cv.getContext('2d');
+  const out = root.querySelector('.out');
+  const slider = document.getElementById('vcSnap');
+  const tLabel = document.getElementById('vcT');
+  let versions, nextTxid;
+
+  function init() {
+    versions = [{ val: 100, xmin: 1, xmax: 0 }];
+    nextTxid = 2;
+    slider.max = 1; slider.value = 1;
+    render();
+  }
+  function live() { return versions.find(v => v.xmax === 0); }
+
+  function render() {
+    const s = +slider.value;
+    tLabel.textContent = s;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.textAlign = 'center';
+    const W = 118, H = 64, GX = 28, perRow = 4;
+    versions.forEach((v, i) => {
+      const row = Math.floor(i / perRow), col = i % perRow;
+      const x = 20 + col * (W + GX), y = 18 + row * (H + 34);
+      const isVisible = v.xmin <= s && (v.xmax === 0 || v.xmax > s);
+      const isLive = v.xmax === 0;
+      // 상자
+      ctx.fillStyle = isVisible ? 'rgba(240,180,41,.16)' : '#101827';
+      ctx.strokeStyle = isVisible ? '#f0b429' : (isLive ? '#3ddc84' : '#55617a');
+      ctx.lineWidth = isVisible ? 3 : 1.5;
+      ctx.beginPath(); ctx.roundRect(x, y, W, H, 8); ctx.fill(); ctx.stroke();
+      // 내용
+      ctx.fillStyle = isVisible ? '#f0b429' : (isLive ? '#3ddc84' : '#7d8aa3');
+      ctx.font = 'bold 16px Consolas, monospace';
+      ctx.fillText('잔액 ' + v.val, x + W / 2, y + 24);
+      ctx.font = '11px Consolas, monospace';
+      ctx.fillStyle = '#9fb3d1';
+      ctx.fillText('xmin=' + v.xmin + ' xmax=' + (v.xmax || '∅'), x + W / 2, y + 44);
+      // 화살표
+      if (i < versions.length - 1) {
+        ctx.strokeStyle = '#3a5178'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (col < perRow - 1) {
+          ctx.moveTo(x + W + 4, y + H / 2); ctx.lineTo(x + W + GX - 4, y + H / 2);
+        } else {
+          ctx.moveTo(x + W / 2, y + H + 4); ctx.lineTo(20 + W / 2, y + H + 30);
+        }
+        ctx.stroke();
+      }
+    });
+    const vis = versions.filter(v => v.xmin <= s && (v.xmax === 0 || v.xmax > s)).length;
+    const dead = versions.filter(v => v.xmax !== 0).length;
+    out.textContent = '버전 ' + versions.length + '개 (은퇴 ' + dead + ') · txid ' + s +
+      ' 스냅샷에 보이는 버전: ' + (vis ? versions.find(v => v.xmin <= s && (v.xmax === 0 || v.xmax > s)).val : '없음 (삭제된 세계)');
+  }
+
+  document.getElementById('vcUpd').onclick = () => {
+    const l = live();
+    if (!l) { out.textContent = '행이 삭제된 상태 — 리셋하세요'; return; }
+    if (versions.length >= 12) { out.textContent = '체인이 가득 — VACUUM 또는 리셋!'; return; }
+    l.xmax = nextTxid;
+    versions.push({ val: l.val + 10, xmin: nextTxid, xmax: 0 });
+    slider.max = nextTxid; slider.value = nextTxid;
+    nextTxid++;
+    render();
+  };
+  document.getElementById('vcDel').onclick = () => {
+    const l = live();
+    if (!l) { out.textContent = '이미 삭제됨'; return; }
+    l.xmax = nextTxid;
+    slider.max = nextTxid; slider.value = nextTxid;
+    nextTxid++;
+    render();
+  };
+  document.getElementById('vcVac').onclick = () => {
+    const s = +slider.value;
+    const before = versions.length;
+    versions = versions.filter(v => !(v.xmax !== 0 && v.xmax <= s));
+    render();
+    out.textContent = 'VACUUM: ' + (before - versions.length) + '개 회수 — 스냅샷(txid ' + s +
+      ')보다 과거에 은퇴한 버전만 지웠다' + (before === versions.length ? ' (지울 것 없음 — 슬라이더가 과거를 붙잡는 중?)' : '');
+  };
+  document.getElementById('vcRst').onclick = init;
+  slider.oninput = render;
+  init();
+})();
+
+// ============================== 데모 3: 이상 현상 시뮬레이터 ==============================
+(function () {
+  const root = document.getElementById('demoIso');
+  if (!root) return;
+  const log = document.getElementById('isoLog');
+  const out = document.getElementById('isoOut');
+  const aBtns = [...root.querySelectorAll('button[data-a]')];
+  const iBtns = [...root.querySelectorAll('button[data-i]')];
+  let anom = 0, iso = 0, step = 0;
+
+  // 스케줄 생성: [클래스, 텍스트] 배열
+  function script(a, i) {
+    const RC = i === 0, SI = i === 1, SER = i === 2;
+    if (a === 0) return [ // Dirty Read — MVCC는 전 수준 차단
+      ['l1', 'T1: UPDATE 잔액=900  (미커밋)'],
+      ['l2', 'T2: SELECT 잔액 → 스냅샷에 미커밋 버전 없음 → 100'],
+      ['l1', 'T1: ROLLBACK — 900은 없던 일로'],
+      ['lg', '결과: T2는 100만 봤다 — Dirty Read 차단 ✓ (MVCC는 모든 수준에서)']
+    ];
+    if (a === 1) return RC ? [
+      ['l2', 'T2: SELECT 잔액 → 100'],
+      ['l1', 'T1: UPDATE 잔액=200, COMMIT'],
+      ['l2', 'T2: SELECT 잔액 → (문장마다 새 스냅샷) → 200'],
+      ['lb', '같은 트랜잭션에서 100 → 200 — Non-repeatable Read 발생!']
+    ] : [
+      ['l2', 'T2: SELECT 잔액 → 100  (트랜잭션 스냅샷 고정)'],
+      ['l1', 'T1: UPDATE 잔액=200, COMMIT'],
+      ['l2', 'T2: SELECT 잔액 → 여전히 100  (같은 사진)'],
+      ['lg', '반복 읽기 일관 — Non-repeatable Read 차단 ✓']
+    ];
+    if (a === 2) return RC ? [
+      ['l2', 'T2: SELECT count(*) WHERE 급여>500 → 3명'],
+      ['l1', 'T1: INSERT (급여=900), COMMIT'],
+      ['l2', 'T2: 같은 SELECT → (새 스냅샷) → 4명'],
+      ['lb', '집합이 변했다 — Phantom 발생!']
+    ] : [
+      ['l2', 'T2: SELECT count(*) WHERE 급여>500 → 3명'],
+      ['l1', 'T1: INSERT (급여=900), COMMIT'],
+      ['l2', 'T2: 같은 SELECT → 여전히 3명 (새 행은 내 사진에 없음)'],
+      ['lg', 'Phantom 차단 ✓ — 스냅샷은 표준 RR보다 강하다']
+    ];
+    if (a === 3) return RC ? [
+      ['l1', 'T1: SELECT 잔액 → 100'],
+      ['l2', 'T2: SELECT 잔액 → 100'],
+      ['l1', 'T1: UPDATE 잔액=150, COMMIT'],
+      ['l2', 'T2: UPDATE 잔액=130 (문장 스냅샷 갱신, 최신 위에), COMMIT'],
+      ['lb', '최종 130 — T1의 +50 증발. Lost Update 발생! (원자적 UPDATE로 회피 가능)']
+    ] : [
+      ['l1', 'T1: SELECT 잔액 → 100'],
+      ['l2', 'T2: SELECT 잔액 → 100'],
+      ['l1', 'T1: UPDATE 잔액=150, COMMIT — 첫 커밋자'],
+      ['l2', 'T2: UPDATE 잔액=130 → 에러! "could not serialize access" — 중단'],
+      ['lg', 'Lost Update 차단 ✓ — T2는 재시도해서 180을 만든다']
+    ];
+    // a === 4: Write Skew
+    if (SER) return [
+      ['l1', 'T1: 당직 수 SELECT → 2명 (김·이) — SIREAD 흔적 기록'],
+      ['l2', 'T2: 당직 수 SELECT → 2명 — SIREAD 흔적 기록'],
+      ['l1', 'T1: UPDATE 김=퇴근 → T2가 읽은 것을 씀 (rw 간선)'],
+      ['l2', 'T2: UPDATE 이=퇴근 → T1이 읽은 것을 씀 (rw 간선 2연속!)'],
+      ['l1', 'T1: COMMIT 성공'],
+      ['l2', 'T2: COMMIT → 위험 구조 탐지 — serialization failure로 중단'],
+      ['lg', 'Write Skew 차단 ✓ — T2 재시도 시 "당직 1명" 확인, 퇴근 포기. SSI의 힘']
+    ];
+    return [
+      ['l1', 'T1: 당직 수 SELECT → 2명 (규칙: 최소 1명)'],
+      ['l2', 'T2: 당직 수 SELECT → 2명'],
+      ['l1', 'T1: UPDATE 김=퇴근, COMMIT (쓴 행: 김)'],
+      ['l2', 'T2: UPDATE 이=퇴근, COMMIT (쓴 행: 이 — 김과 안 겹침, 충돌 검사 통과)'],
+      ['lb', '당직 0명 — Write Skew 발생! ' + (SI ? '스냅샷 격리로도 못 막는다' : '') + ' (처방: FOR UPDATE 또는 SERIALIZABLE)']
+    ];
+  }
+
+  function reset() {
+    step = 0; log.innerHTML = '';
+    out.textContent = '"다음 단계"로 스케줄 진행';
+  }
+  aBtns.forEach(b => b.onclick = () => { aBtns.forEach(x => x.classList.remove('on')); b.classList.add('on'); anom = +b.dataset.a; reset(); });
+  iBtns.forEach(b => b.onclick = () => { iBtns.forEach(x => x.classList.remove('on')); b.classList.add('on'); iso = +b.dataset.i; reset(); });
+  document.getElementById('isoStep').onclick = () => {
+    const sc = script(anom, iso);
+    if (step >= sc.length) { out.textContent = '끝 — 격리 수준을 바꿔 같은 스케줄을 다시 돌려 보세요'; return; }
+    demoLog(log, sc[step][0], sc[step][1]);
+    step++;
+    out.textContent = step + ' / ' + sc.length + ' 단계';
+  };
+  document.getElementById('isoReset').onclick = reset;
+  reset();
+})();
+
+// ============================== 데모 4: 블로트 실험실 ==============================
+(function () {
+  const root = document.getElementById('demoVac');
+  if (!root) return;
+  const cv = root.querySelector('canvas'), ctx = cv.getContext('2d');
+  const out = root.querySelector('.out');
+  const longCk = document.getElementById('bvLong');
+  let slots, tick, snapAt;
+  const LIVE = 20;
+
+  function init() {
+    slots = [];
+    for (let i = 0; i < LIVE; i++) slots.push({ st: 1, deadAt: 0 }); // 1=live
+    tick = 0; snapAt = null; longCk.checked = false;
+    render('행 20개로 시작 — UPDATE를 눌러 보세요');
+  }
+  function render(msg) {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const per = 16, S = 32, G = 6;
+    slots.forEach((sl, i) => {
+      const x = 14 + (i % per) * (S + G), y = 14 + Math.floor(i / per) * (S + G);
+      if (sl.st === 1) { ctx.fillStyle = '#1f5c3d'; ctx.strokeStyle = '#3ddc84'; }
+      else if (sl.st === 2) { ctx.fillStyle = '#2a3040'; ctx.strokeStyle = '#55617a'; }
+      else { ctx.fillStyle = 'transparent'; ctx.strokeStyle = '#2a3a52'; }
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(x, y, S, S, 5);
+      if (sl.st !== 0) ctx.fill();
+      ctx.stroke();
+    });
+    const live = slots.filter(s => s.st === 1).length;
+    const dead = slots.filter(s => s.st === 2).length;
+    const empty = slots.filter(s => s.st === 0).length;
+    const bloat = Math.round(100 * (dead + empty) / slots.length);
+    out.textContent = '살아있음 ' + live + ' · 죽음 ' + dead + ' · 빈칸 ' + empty +
+      ' · 테이블 ' + slots.length + '슬롯 (블로트 ' + bloat + '%)' + (msg ? ' — ' + msg : '');
+  }
+
+  document.getElementById('bvUpd').onclick = () => {
+    if (slots.length >= 160) { render('슬롯 한계 — VACUUM 또는 리셋!'); return; }
+    tick++;
+    if (longCk.checked && snapAt === null) snapAt = tick; // 긴 트랜잭션의 스냅샷 시점
+    let n = 0;
+    for (const sl of slots) {
+      if (n >= LIVE) break;
+      if (sl.st === 1) {
+        sl.st = 2; sl.deadAt = tick; n++;
+        const empty = slots.find(s => s.st === 0);
+        if (empty) { empty.st = 1; empty.deadAt = 0; }
+        else slots.push({ st: 1, deadAt: 0 });
+      }
+    }
+    render('UPDATE ' + n + '행 — 옛 버전이 죽은 튜플로');
+  };
+  document.getElementById('bvVac').onclick = () => {
+    const horizon = (longCk.checked && snapAt !== null) ? snapAt : Infinity;
+    let cleaned = 0, blocked = 0;
+    for (const sl of slots) {
+      if (sl.st === 2) {
+        if (sl.deadAt < horizon) { sl.st = 0; cleaned++; }
+        else blocked++;
+      }
+    }
+    render('VACUUM: ' + cleaned + '개 회수' +
+      (blocked ? ', ' + blocked + '개는 긴 트랜잭션 스냅샷에 붙잡혀 회수 불가!' : ' — 슬롯 수(파일 크기)는 그대로인 것에 주목'));
+  };
+  longCk.onchange = () => {
+    if (longCk.checked) { snapAt = tick; render('긴 트랜잭션 시작 — 지금 시점 스냅샷을 계속 쥔다'); }
+    else { snapAt = null; render('긴 트랜잭션 커밋 — 지평선 전진, 이제 청소 가능'); }
+  };
+  document.getElementById('bvRst').onclick = init;
+  init();
+})();
+</script>
+</body>
+</html>
