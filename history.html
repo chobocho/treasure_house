@@ -2,6 +2,8 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<!-- deck-bookmark: 덱 엔진이 replaceState로 주소를 바꾸기 전에 진입 해시를 잡아둔다 -->
+<script>window.__deckInitHash=location.hash;</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>작업 히스토리 (History)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1142,7 +1144,7 @@ h1 .em{color:var(--accent);}
       <p style="margin-top:10px">📄 <a href="./B트리_쉽게_배우기.html">B트리_쉽게_배우기.html 열기</a></p>
     </div>
   </div>
-<!-- ===== deck-bookmark-shim v1 : IndexedDB 책갈피(읽던 위치 자동 저장 + 이어보기) ===== -->
+<!-- ===== deck-bookmark-shim v2 : IndexedDB 책갈피(읽던 위치 자동 저장 + 이어보기) ===== -->
 <script>
 (function () {
   'use strict';
@@ -1156,11 +1158,30 @@ h1 .em{color:var(--accent);}
   try { FILE = decodeURIComponent(FILE); } catch (e) {}
   if (!FILE || /^index\.html?$/i.test(FILE)) return;   // 포털(index.html)은 저장하지 않는다
 
-  /* ---------- IndexedDB 래퍼 ---------- */
-  var dbp = null;
+  /* ---------- IndexedDB 래퍼 ----------
+     · 실패한 연결은 캐시하지 않는다 — blocked처럼 일시적인 실패 뒤에 다시 시도한다
+     · 버전 변경·저장공간 회수·사이트 데이터 삭제로 연결이 끊기면 버리고 다시 연다
+     · 계속 막히는 환경(file://·시크릿·사이트 데이터 차단)이면 3번 만에 단념하고,
+       첫 실패 한 번만 콘솔에 남긴다 — 화면에는 아무것도 띄우지 않는다              */
+  var dbp = null, conn = null, fails = 0, warned = false, deadp = null;
+
+  function warn(e) {
+    if (warned) return;
+    warned = true;
+    try { console.warn('[bookmark] 책갈피를 건너뜁니다 — IndexedDB 사용 불가:', e); } catch (x) {}
+  }
+  function drop(c) { if (conn === c) { dbp = null; conn = null; } }
+  function dead() {
+    if (!deadp) {
+      deadp = Promise.reject(new Error('bookmark: IndexedDB unavailable'));
+      deadp.catch(function () {});             // 미처리 거부 경고 방지
+    }
+    return deadp;
+  }
   function db() {
+    if (fails >= 3) return dead();
     if (dbp) return dbp;
-    dbp = new Promise(function (res, rej) {
+    var p = dbp = new Promise(function (res, rej) {
       var req;
       try { req = indexedDB.open(DB_NAME, DB_VER); } catch (e) { rej(e); return; }
       req.onupgradeneeded = function () {
@@ -1168,22 +1189,35 @@ h1 .em{color:var(--accent);}
         if (!d.objectStoreNames.contains(STORE))
           d.createObjectStore(STORE, { keyPath: 'id' }).createIndex('updated', 'updated');
       };
-      req.onsuccess = function () { res(req.result); };
-      req.onerror   = function () { rej(req.error); };
-      req.onblocked = function () { rej(new Error('blocked')); };
+      req.onsuccess = function () {
+        var d = req.result;
+        conn = d; fails = 0;
+        d.onversionchange = function () { drop(d); try { d.close(); } catch (x) {} };
+        d.onclose         = function () { drop(d); };
+        res(d);
+      };
+      req.onerror   = function () { rej(req.error || new Error('open error')); };
+      req.onblocked = function () { rej(new Error('open blocked')); };
     });
-    dbp.catch(function () {});                 // 미처리 거부 경고 방지
-    return dbp;
+    p.catch(function (e) {
+      fails++;
+      if (dbp === p) { dbp = null; conn = null; }
+      warn(e);
+    });
+    return p;
   }
   function tx(mode, fn) {
     return db().then(function (d) {
       return new Promise(function (res, rej) {
-        var t = d.transaction(STORE, mode), r = fn(t.objectStore(STORE));
+        var t, r;
+        // 닫힌 연결이면 여기서 InvalidStateError가 난다 — 버리고 다음 호출에서 다시 연다
+        try { t = d.transaction(STORE, mode); r = fn(t.objectStore(STORE)); }
+        catch (e) { drop(d); rej(e); return; }
         t.oncomplete = function () { res(r ? r.result : undefined); };
-        t.onerror    = function () { rej(t.error); };
-        t.onabort    = function () { rej(t.error); };
+        t.onerror    = function () { rej(t.error || new Error('tx ' + mode + ' error')); };
+        t.onabort    = function () { rej(t.error || new Error('tx ' + mode + ' aborted')); };
       });
-    });
+    }).catch(function (e) { warn(e); throw e; });
   }
   function save(rec) { return tx('readwrite', function (os) { return os.put(rec); }); }
   function load(id)  { return tx('readonly',  function (os) { return os.get(id); }); }
@@ -1258,31 +1292,75 @@ h1 .em{color:var(--accent);}
     s.id = FILE;
     s.title = (document.title || FILE).trim();
     s.updated = Date.now();
-    save(s).catch(function () {});
+    // 저장이 실패하면 기준선을 풀어 다음 tick에서 다시 시도한다 — 연결이 끊겼다
+    // 다시 붙는 동안 그 한 번의 위치가 통째로 사라지지 않도록.
+    save(s).catch(function () { if (last === cur) last = ''; });
   }
   setInterval(tick, 1200);
   addEventListener('hashchange', function () { tick(); });
   addEventListener('visibilitychange', function () { if (document.hidden) tick(true); });
   addEventListener('pagehide', function () { tick(true); });
 
-  /* ---------- 이어보기 ---------- */
-  function jump(rec) {
-    if (rec.kind === 'slide') {
-      var el = rec.hash ? document.getElementById(rec.hash.slice(1)) : null;
-      var list = slides();
-      if (!el && list && list[rec.page - 1]) el = list[rec.page - 1];
-      if (!el) return;
-      if (el.id && location.hash.slice(1) !== el.id) location.hash = '#' + el.id;
-      setTimeout(function () {                 // 해시로 안 움직이는 엔진 대비
+  /* ---------- 이어보기 ----------
+     덱 엔진마다 이동 방식이 달라서 세 단계로 시도한다.
+       ① 해시 지정 — hashchange를 듣는 엔진
+       ② 다음/이전 버튼 클릭 또는 ←→ 키 — 해시를 안 듣는 한 장씩 엔진
+       ③ scrollIntoView — 전 장이 이어서 흐르는 덱                        */
+  function navBtn(dir) {
+    var ids = dir > 0 ? ['nextBtn', 'btnNext', 'next'] : ['prevBtn', 'btnPrev', 'prev'];
+    for (var i = 0; i < ids.length; i++) {
+      var e = document.getElementById(ids[i]);
+      if (e && (e.tagName === 'BUTTON' || e.tagName === 'A')) return e;
+    }
+    return null;
+  }
+  function turn(dir) {
+    var b = navBtn(dir);
+    if (b) { if (!b.disabled) b.click(); return; }
+    var k = dir > 0 ? 'ArrowRight' : 'ArrowLeft';
+    document.dispatchEvent(new KeyboardEvent('keydown',
+      { key: k, code: k, bubbles: true, cancelable: true }));
+  }
+  function step(target) {                      // 목표 쪽까지 한 장씩 넘긴다
+    var guard = 400;
+    (function next() {
+      var l = slides();
+      if (!l || --guard <= 0) return;
+      var i = activeIndex(l);
+      if (i < 0 || i === target) return;
+      turn(i < target ? 1 : -1);
+      setTimeout(function () {
         var l2 = slides();
-        if (!l2 || activeIndex(l2) !== rec.page - 1) el.scrollIntoView({ block: 'start' });
-      }, 80);
-    } else {
+        if (!l2) return;
+        if (activeIndex(l2) === i) return;     // 안 움직이는 엔진이면 포기
+        next();
+      }, 30);
+    })();
+  }
+  function jump(rec) {
+    if (rec.kind !== 'slide') {
       var se = document.scrollingElement || document.documentElement;
       var max = Math.max(0, se.scrollHeight - se.clientHeight);
       var y = rec.scrollY <= max ? rec.scrollY : Math.round(rec.ratio * max);
       window.scrollTo({ top: y, behavior: 'smooth' });
+      return;
     }
+    var list = slides();
+    if (!list) return;
+    var target = Math.min(list.length, Math.max(1, rec.page)) - 1;
+    var el = (rec.hash && document.getElementById(rec.hash.slice(1))) || list[target];
+    if (!el) return;
+    var k = Array.prototype.indexOf.call(list, el);
+    if (k >= 0) target = k;
+    if (el.id && location.hash.slice(1) !== el.id) location.hash = '#' + el.id;
+    setTimeout(function () {
+      var l2 = slides();
+      if (!l2) return;
+      var i = activeIndex(l2);
+      if (i === target) return;                // ① 해시로 이동 성공
+      if (i >= 0) step(target);                // ② 한 장씩 넘기는 엔진
+      else el.scrollIntoView({ block: 'start' });   // ③ 이어서 흐르는 덱
+    }, 120);
   }
   function ago(t) {
     var d = Date.now() - t;
@@ -1346,7 +1424,22 @@ h1 .em{color:var(--accent);}
     setTimeout(close, 15000);
   }
 
-  if (!location.hash) {
+  /* 딥링크로 열었으면 안내하지 않는다.
+     이때 location.hash는 못 쓴다 — 덱 엔진 대부분이 첫 장을 그리면서
+     history.replaceState('#top')로 주소를 먼저 바꿔 놓기 때문에, 이 셸이
+     도는 시점에는 늘 해시가 있는 것처럼 보인다(v1이 안내를 못 띄우던 원인).
+     그래서 <head>에서 미리 잡아둔 진입 해시를 쓰고, 없으면 내비게이션
+     타이밍의 원래 주소를 본다. */
+  function openedWithHash() {
+    if (typeof window.__deckInitHash === 'string') return window.__deckInitHash.length > 1;
+    try {
+      var e = performance.getEntriesByType('navigation')[0];
+      if (e && e.name) return new URL(e.name).hash.length > 1;
+    } catch (x) {}
+    return !!location.hash;
+  }
+
+  if (!openedWithHash()) {
     load(FILE).then(function (rec) {
       if (!rec) return;
       var worth = rec.kind === 'slide' ? rec.page > 1 : rec.scrollY > 200;
