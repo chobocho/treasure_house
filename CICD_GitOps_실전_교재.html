@@ -8582,5 +8582,218 @@ function demoLog(el, cls, text) {
   if (pads().length) start();
 })();
 </script>
+<!-- ===== deck-bookmark-shim v1 : IndexedDB 책갈피(읽던 위치 자동 저장 + 이어보기) ===== -->
+<script>
+(function () {
+  'use strict';
+  if (window.__deckBookmarkShim) return;
+  window.__deckBookmarkShim = true;
+  if (!window.indexedDB) return;
+
+  var DB_NAME = 'treasure-house', DB_VER = 1, STORE = 'bookmarks';
+
+  var FILE = location.pathname.split('/').pop() || '';
+  try { FILE = decodeURIComponent(FILE); } catch (e) {}
+  if (!FILE || /^index\.html?$/i.test(FILE)) return;   // 포털(index.html)은 저장하지 않는다
+
+  /* ---------- IndexedDB 래퍼 ---------- */
+  var dbp = null;
+  function db() {
+    if (dbp) return dbp;
+    dbp = new Promise(function (res, rej) {
+      var req;
+      try { req = indexedDB.open(DB_NAME, DB_VER); } catch (e) { rej(e); return; }
+      req.onupgradeneeded = function () {
+        var d = req.result;
+        if (!d.objectStoreNames.contains(STORE))
+          d.createObjectStore(STORE, { keyPath: 'id' }).createIndex('updated', 'updated');
+      };
+      req.onsuccess = function () { res(req.result); };
+      req.onerror   = function () { rej(req.error); };
+      req.onblocked = function () { rej(new Error('blocked')); };
+    });
+    dbp.catch(function () {});                 // 미처리 거부 경고 방지
+    return dbp;
+  }
+  function tx(mode, fn) {
+    return db().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t = d.transaction(STORE, mode), r = fn(t.objectStore(STORE));
+        t.oncomplete = function () { res(r ? r.result : undefined); };
+        t.onerror    = function () { rej(t.error); };
+        t.onabort    = function () { rej(t.error); };
+      });
+    });
+  }
+  function save(rec) { return tx('readwrite', function (os) { return os.put(rec); }); }
+  function load(id)  { return tx('readonly',  function (os) { return os.get(id); }); }
+
+  /* ---------- 지금 읽고 있는 위치 ---------- */
+  var ACTIVE = ['on', 'active', 'current', 'shown', 'is-active'];
+
+  function slides() {                          // 슬라이드 덱이면 슬라이드 목록, 아니면 null
+    var sel = ['main > article', '.slide'];
+    for (var i = 0; i < sel.length; i++) {
+      var n = document.querySelectorAll(sel[i]);
+      if (n.length > 1) return n;
+    }
+    return null;
+  }
+  function activeIndex(list) {                 // 활성 클래스 → URL 해시 순으로 판별
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i].classList;
+      for (var j = 0; j < ACTIVE.length; j++) if (c.contains(ACTIVE[j])) return i;
+    }
+    var id = location.hash.slice(1);
+    try { id = decodeURIComponent(id); } catch (e) {}
+    if (id) for (var k = 0; k < list.length; k++) if (list[k].id === id) return k;
+    return -1;
+  }
+  function visibleIndex(list) {                // 전 슬라이드가 이어서 흐르는 덱용 보조 판별
+    var best = -1, near = Infinity, h = window.innerHeight || 800;
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i].getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= h) continue;
+      var d = Math.abs(r.top);
+      if (d < near) { near = d; best = i; }
+    }
+    return best;
+  }
+  function heading() {                         // 긴 문서용 — 화면 상단을 지난 마지막 제목
+    var hs = document.querySelectorAll('h1[id],h2[id],h3[id]'), out = '';
+    for (var i = 0; i < hs.length; i++) {
+      if (hs[i].getBoundingClientRect().top <= 90) out = '#' + hs[i].id; else break;
+    }
+    return out;
+  }
+  function snap() {
+    var list = slides();
+    if (list) {
+      var i = activeIndex(list);
+      if (i < 0) i = visibleIndex(list);
+      if (i < 0) i = 0;
+      var el = list[i];
+      return { kind: 'slide', page: i + 1, total: list.length, scrollY: 0,
+               hash: el.id ? '#' + el.id : '', ratio: (i + 1) / list.length };
+    }
+    var se = document.scrollingElement || document.documentElement;
+    var max = Math.max(0, se.scrollHeight - se.clientHeight);
+    var y = Math.round(se.scrollTop || window.pageYOffset || 0);
+    return { kind: 'scroll', page: 0, total: 0, scrollY: y,
+             hash: heading(), ratio: max ? Math.min(1, y / max) : 0 };
+  }
+
+  /* ---------- 자동 저장 ----------
+     처음 상태는 기준선으로만 잡고 저장하지 않는다 — 첫 장으로 열자마자
+     지난번 책갈피를 1쪽으로 덮어쓰지 않기 위해서다.                        */
+  function sig(s) {
+    return s.kind + ':' + s.page + ':' + (s.kind === 'scroll' ? Math.round(s.scrollY / 40) : 0);
+  }
+  var last = sig(snap());
+  function tick(force) {
+    if (document.hidden && !force) return;
+    var s = snap(), cur = sig(s);
+    if (cur === last) return;
+    last = cur;
+    s.id = FILE;
+    s.title = (document.title || FILE).trim();
+    s.updated = Date.now();
+    save(s).catch(function () {});
+  }
+  setInterval(tick, 1200);
+  addEventListener('hashchange', function () { tick(); });
+  addEventListener('visibilitychange', function () { if (document.hidden) tick(true); });
+  addEventListener('pagehide', function () { tick(true); });
+
+  /* ---------- 이어보기 ---------- */
+  function jump(rec) {
+    if (rec.kind === 'slide') {
+      var el = rec.hash ? document.getElementById(rec.hash.slice(1)) : null;
+      var list = slides();
+      if (!el && list && list[rec.page - 1]) el = list[rec.page - 1];
+      if (!el) return;
+      if (el.id && location.hash.slice(1) !== el.id) location.hash = '#' + el.id;
+      setTimeout(function () {                 // 해시로 안 움직이는 엔진 대비
+        var l2 = slides();
+        if (!l2 || activeIndex(l2) !== rec.page - 1) el.scrollIntoView({ block: 'start' });
+      }, 80);
+    } else {
+      var se = document.scrollingElement || document.documentElement;
+      var max = Math.max(0, se.scrollHeight - se.clientHeight);
+      var y = rec.scrollY <= max ? rec.scrollY : Math.round(rec.ratio * max);
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  }
+  function ago(t) {
+    var d = Date.now() - t;
+    if (d < 6e4)  return '방금 전';
+    if (d < 36e5) return Math.floor(d / 6e4) + '분 전';
+    if (d < 864e5) return Math.floor(d / 36e5) + '시간 전';
+    if (d < 6048e5) return Math.floor(d / 864e5) + '일 전';
+    return new Date(t).toLocaleDateString('ko-KR');
+  }
+  function bottomInset() {              // 화면 아래 고정 내비(◀ 1/67 ▶) 위로 띄우기
+    var h = window.innerHeight || 800, gap = 14;
+    if (!document.body) return gap;
+    var list = [], c;
+    for (c = document.body.firstElementChild; c; c = c.nextElementSibling) list.push(c);
+    var extra = document.querySelectorAll('nav, footer');
+    for (var i = 0; i < extra.length; i++) list.push(extra[i]);
+    for (var j = 0; j < list.length; j++) {
+      var n = list[j], t = n.tagName;
+      if (t === 'SCRIPT' || t === 'STYLE' || t === 'LINK') continue;
+      var cs = getComputedStyle(n);
+      if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+      if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) continue;
+      var r = n.getBoundingClientRect();
+      if (!r.height || r.height > h * 0.5 || r.bottom < h - 4 || r.top > h) continue;
+      gap = Math.max(gap, Math.round(h - r.top) + 10);
+    }
+    return gap;
+  }
+  function toast(rec) {
+    var gap = bottomInset();
+    var host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147483000;pointer-events:none';
+    var root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
+    var where = rec.kind === 'slide'
+      ? rec.page + ' / ' + rec.total + ' 쪽'
+      : Math.round(rec.ratio * 100) + '% 지점';
+    root.innerHTML =
+      '<style>' +
+      '.w{pointer-events:auto;display:flex;align-items:center;gap:10px;' +
+      'margin:0 auto calc(' + gap + 'px + env(safe-area-inset-bottom,0px));' +
+      'padding:10px 12px 10px 14px;max-width:min(94vw,460px);border-radius:14px;' +
+      'background:rgba(18,28,40,.94);color:#eaf3fb;font:500 14px/1.4 -apple-system,BlinkMacSystemFont,' +
+      '"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35);' +
+      'animation:up .22s ease-out}' +
+      '@keyframes up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}' +
+      '@media (prefers-reduced-motion:reduce){.w{animation:none}}' +
+      '.t{flex:1;min-width:0}.t b{display:block;font-weight:700}' +
+      '.t s{display:block;text-decoration:none;opacity:.72;font-size:12px;margin-top:2px}' +
+      'button{font:inherit;border:0;border-radius:9px;padding:8px 12px;cursor:pointer}' +
+      '.go{background:#4fc3f7;color:#06263a;font-weight:700}' +
+      '.no{background:transparent;color:#9fb6c9;padding:8px 6px}' +
+      '</style>' +
+      '<div class="w"><span aria-hidden="true">🔖</span>' +
+      '<div class="t"><b>지난번 ' + where + '까지 읽었어요</b><s>' + ago(rec.updated) + ' 저장됨</s></div>' +
+      '<button class="go" type="button">이어보기</button>' +
+      '<button class="no" type="button" aria-label="닫기">✕</button></div>';
+    function close() { if (host.parentNode) host.parentNode.removeChild(host); }
+    root.querySelector('.go').onclick = function () { close(); jump(rec); };
+    root.querySelector('.no').onclick = close;
+    document.body.appendChild(host);
+    setTimeout(close, 15000);
+  }
+
+  if (!location.hash) {
+    load(FILE).then(function (rec) {
+      if (!rec) return;
+      var worth = rec.kind === 'slide' ? rec.page > 1 : rec.scrollY > 200;
+      if (worth) toast(rec);
+    }).catch(function () {});
+  }
+})();
+</script>
 </body>
 </html>

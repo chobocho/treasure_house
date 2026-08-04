@@ -505,6 +505,129 @@
 </div>
 <p class="search-count" id="searchCount" aria-live="polite"></p>
 
+<!-- ===== 이어서 읽기 — IndexedDB에 저장된 책갈피 ===== -->
+<style>
+  #resume {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 max(24px, env(safe-area-inset-right)) 0 max(24px, env(safe-area-inset-left));
+    position: relative;
+    z-index: 1;
+  }
+  #resume[hidden] { display: none; }
+  #resume .resume-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 .7em;
+  }
+  #resume h2 {
+    font-size: clamp(1.15rem, 2.6vw, 1.5rem);
+    margin: 0;
+  }
+  #resume .resume-clear {
+    font: inherit;
+    font-size: .82rem;
+    color: var(--link);
+    background: rgba(2,136,209,0.10);
+    border: 1px solid rgba(2,136,209,0.22);
+    border-radius: 999px;
+    padding: 3px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #resume .resume-clear:hover { background: rgba(2,136,209,0.20); }
+  #resume .resume-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(290px, 100%), 1fr));
+    gap: 14px;
+  }
+  a.resume-item {
+    display: block;
+    position: relative;
+    text-decoration: none;
+    color: var(--text);
+    background: var(--card);
+    border: 1px dashed rgba(2,136,209,0.35);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: transform .18s ease, background .18s ease, border-color .18s, box-shadow .18s;
+  }
+  a.resume-item:hover, a.resume-item:focus-visible {
+    transform: translateY(-3px);
+    background: var(--card-hover);
+    border-color: var(--border);
+    box-shadow: var(--shadow);
+  }
+  a.resume-item .r-title {
+    display: block;
+    font-weight: 700;
+    font-size: 1rem;
+    line-height: 1.35;
+    padding-right: 26px;
+    word-break: break-all;
+  }
+  a.resume-item .r-meta {
+    display: block;
+    margin-top: .35em;
+    color: var(--muted);
+    font-size: .82rem;
+  }
+  a.resume-item .r-bar {
+    display: block;
+    height: 6px;
+    margin-top: .6em;
+    border-radius: 999px;
+    background: rgba(2,136,209,0.15);
+    overflow: hidden;
+  }
+  a.resume-item .r-bar i {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--gold), #4fc3f7);
+  }
+  a.resume-item .r-del {
+    position: absolute;
+    top: 8px; right: 8px;
+    width: 26px; height: 26px;
+    line-height: 1;
+    font: inherit;
+    font-size: .8rem;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  a.resume-item .r-del:hover { background: rgba(2,136,209,0.16); color: var(--link); }
+  /* 이미 읽던 문서의 카드에 붙는 진행 배지 */
+  a.card .mark {
+    display: inline-block;
+    margin: .6em .4em 0 0;
+    font-size: .72rem;
+    color: #06405f;
+    background: rgba(79,195,247,0.35);
+    border: 1px solid rgba(2,136,209,0.28);
+    border-radius: 6px;
+    padding: 1px 8px;
+  }
+  @media (max-width: 600px) {
+    #resume .resume-grid { gap: 12px; }
+    a.resume-item { padding: 12px 14px; }
+  }
+</style>
+<section id="resume" hidden aria-labelledby="resumeHead">
+  <div class="resume-head">
+    <h2 id="resumeHead">🔖 이어서 읽기</h2>
+    <button type="button" class="resume-clear" id="resumeClear">전체 지우기</button>
+  </div>
+  <div class="resume-grid" id="resumeGrid"></div>
+</section>
+
 <main>
 
   <!-- ===== 언어 시리즈 ===== -->
@@ -1596,6 +1719,171 @@
 
   reset();
   start();
+})();
+</script>
+
+<!-- ===== portal-bookmark v1 : IndexedDB에 저장된 읽던 위치 불러오기 ===== -->
+<script>
+(function () {
+  'use strict';
+  if (!window.indexedDB) return;
+
+  var DB_NAME = 'treasure-house', DB_VER = 1, STORE = 'bookmarks', LIMIT = 12;
+  var sec  = document.getElementById('resume');
+  var grid = document.getElementById('resumeGrid');
+  var clearBtn = document.getElementById('resumeClear');
+  if (!sec || !grid) return;
+
+  /* ---------- IndexedDB 래퍼 (덱의 deck-bookmark-shim과 같은 스키마) ---------- */
+  var dbp = null;
+  function db() {
+    if (dbp) return dbp;
+    dbp = new Promise(function (res, rej) {
+      var req;
+      try { req = indexedDB.open(DB_NAME, DB_VER); } catch (e) { rej(e); return; }
+      req.onupgradeneeded = function () {
+        var d = req.result;
+        if (!d.objectStoreNames.contains(STORE))
+          d.createObjectStore(STORE, { keyPath: 'id' }).createIndex('updated', 'updated');
+      };
+      req.onsuccess = function () { res(req.result); };
+      req.onerror   = function () { rej(req.error); };
+      req.onblocked = function () { rej(new Error('blocked')); };
+    });
+    dbp.catch(function () {});
+    return dbp;
+  }
+  function tx(mode, fn) {
+    return db().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t = d.transaction(STORE, mode), r = fn(t.objectStore(STORE));
+        t.oncomplete = function () { res(r ? r.result : undefined); };
+        t.onerror    = function () { rej(t.error); };
+        t.onabort    = function () { rej(t.error); };
+      });
+    });
+  }
+
+  /* ---------- 파일명 → 카드 ---------- */
+  var byFile = {};
+  Array.prototype.forEach.call(document.querySelectorAll('a.card'), function (a) {
+    var href = a.getAttribute('href') || '';
+    if (/^[a-z]+:/i.test(href)) return;
+    var name = href.split('#')[0].split('?')[0].split('/').pop();
+    try { name = decodeURIComponent(name); } catch (e) {}
+    if (name && !byFile[name]) byFile[name] = a;
+  });
+
+  function ago(t) {
+    var d = Date.now() - t;
+    if (d < 6e4)   return '방금 전';
+    if (d < 36e5)  return Math.floor(d / 6e4) + '분 전';
+    if (d < 864e5) return Math.floor(d / 36e5) + '시간 전';
+    if (d < 6048e5) return Math.floor(d / 864e5) + '일 전';
+    return new Date(t).toLocaleDateString('ko-KR');
+  }
+  function where(rec) {
+    return rec.kind === 'slide'
+      ? rec.page + ' / ' + rec.total + ' 쪽'
+      : Math.round((rec.ratio || 0) * 100) + '% 지점';
+  }
+  function link(rec) {
+    var card = byFile[rec.id];
+    var base = card ? card.getAttribute('href') : './' + encodeURIComponent(rec.id);
+    return base + (rec.hash ? '#' + encodeURIComponent(rec.hash.slice(1)) : '');
+  }
+  function titleOf(rec) {
+    var card = byFile[rec.id], t = card && card.querySelector('.title');
+    return (t && t.textContent.trim()) || rec.title || rec.id;
+  }
+  function emojiOf(rec) {
+    var card = byFile[rec.id], e = card && card.querySelector('.emoji');
+    return (e && e.textContent.trim()) || '📖';
+  }
+
+  function badge(rec) {                      // 원래 카드에도 진행 상황 표시
+    var card = byFile[rec.id];
+    if (!card) return;
+    var old = card.querySelector('.mark');
+    if (old) old.parentNode.removeChild(old);
+    var ext = card.querySelector('.ext');
+    var m = document.createElement('span');
+    m.className = 'mark';
+    m.textContent = '🔖 ' + where(rec);
+    if (ext) ext.parentNode.insertBefore(m, ext); else card.appendChild(m);
+    card.dataset.search = (card.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+  function unbadge(id) {
+    var card = byFile[id];
+    if (!card) return;
+    var m = card.querySelector('.mark');
+    if (m) m.parentNode.removeChild(m);
+  }
+
+  function item(rec) {
+    var a = document.createElement('a');
+    a.className = 'resume-item';
+    a.href = link(rec);
+    a.innerHTML =
+      '<span class="r-title"></span>' +
+      '<span class="r-meta"></span>' +
+      '<span class="r-bar"><i></i></span>' +
+      '<button type="button" class="r-del" aria-label="책갈피 지우기">✕</button>';
+    a.querySelector('.r-title').textContent = emojiOf(rec) + ' ' + titleOf(rec);
+    a.querySelector('.r-meta').textContent = where(rec) + ' · ' + ago(rec.updated);
+    a.querySelector('.r-bar i').style.width =
+      Math.max(2, Math.min(100, Math.round((rec.ratio || 0) * 100))) + '%';
+    a.querySelector('.r-del').addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      tx('readwrite', function (os) { return os.delete(rec.id); }).then(function () {
+        unbadge(rec.id);
+        if (a.parentNode) a.parentNode.removeChild(a);
+        if (!grid.children.length) sec.hidden = true;
+      }).catch(function () {});
+    });
+    return a;
+  }
+
+  function render(list) {
+    grid.textContent = '';
+    list.forEach(function (rec) {
+      badge(rec);
+      grid.appendChild(item(rec));
+    });
+    sec.hidden = !list.length;
+  }
+
+  clearBtn.addEventListener('click', function () {
+    if (!window.confirm('저장된 읽던 위치를 모두 지울까요?')) return;
+    tx('readwrite', function (os) { return os.clear(); }).then(function () {
+      Array.prototype.forEach.call(document.querySelectorAll('a.card .mark'), function (m) {
+        m.parentNode.removeChild(m);
+      });
+      render([]);
+    }).catch(function () {});
+  });
+
+  // 검색 중에는 이 영역을 숨긴다(검색 결과와 섞이지 않도록)
+  var search = document.getElementById('search');
+  if (search) search.addEventListener('input', function () {
+    if (!grid.children.length) return;
+    sec.hidden = !!search.value.trim();
+  });
+
+  function refresh() {
+    tx('readonly', function (os) { return os.getAll(); }).then(function (rows) {
+      rows = (rows || []).filter(function (r) {
+        return r && r.id && (r.kind === 'slide' ? r.page > 1 : r.scrollY > 200);
+      });
+      rows.sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
+      render(rows.slice(0, LIMIT));
+    }).catch(function () {});
+  }
+  refresh();
+  // 덱을 읽다 뒤로 가기로 돌아오면 최신 위치를 다시 반영
+  addEventListener('pageshow', function (e) { if (e.persisted) refresh(); });
+  addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
 })();
 </script>
 
