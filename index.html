@@ -1722,7 +1722,7 @@
 })();
 </script>
 
-<!-- ===== portal-bookmark v1 : IndexedDB에 저장된 읽던 위치 불러오기 ===== -->
+<!-- ===== portal-bookmark v2 : IndexedDB에 저장된 읽던 위치 불러오기 ===== -->
 <script>
 (function () {
   'use strict';
@@ -1734,11 +1734,30 @@
   var clearBtn = document.getElementById('resumeClear');
   if (!sec || !grid) return;
 
-  /* ---------- IndexedDB 래퍼 (덱의 deck-bookmark-shim과 같은 스키마) ---------- */
-  var dbp = null;
+  /* ---------- IndexedDB 래퍼 (덱의 deck-bookmark-shim과 같은 스키마) ----------
+     · 실패한 연결은 캐시하지 않는다 — blocked처럼 일시적인 실패 뒤에 다시 시도한다
+     · 버전 변경·저장공간 회수·사이트 데이터 삭제로 연결이 끊기면 버리고 다시 연다
+     · 계속 막히는 환경(file://·시크릿·사이트 데이터 차단)이면 3번 만에 단념하고,
+       첫 실패 한 번만 콘솔에 남긴다 — 화면에는 아무것도 띄우지 않는다              */
+  var dbp = null, conn = null, fails = 0, warned = false, deadp = null;
+
+  function warn(e) {
+    if (warned) return;
+    warned = true;
+    try { console.warn('[bookmark] 이어서 읽기 목록를 건너뜁니다 — IndexedDB 사용 불가:', e); } catch (x) {}
+  }
+  function drop(c) { if (conn === c) { dbp = null; conn = null; } }
+  function dead() {
+    if (!deadp) {
+      deadp = Promise.reject(new Error('bookmark: IndexedDB unavailable'));
+      deadp.catch(function () {});             // 미처리 거부 경고 방지
+    }
+    return deadp;
+  }
   function db() {
+    if (fails >= 3) return dead();
     if (dbp) return dbp;
-    dbp = new Promise(function (res, rej) {
+    var p = dbp = new Promise(function (res, rej) {
       var req;
       try { req = indexedDB.open(DB_NAME, DB_VER); } catch (e) { rej(e); return; }
       req.onupgradeneeded = function () {
@@ -1746,22 +1765,35 @@
         if (!d.objectStoreNames.contains(STORE))
           d.createObjectStore(STORE, { keyPath: 'id' }).createIndex('updated', 'updated');
       };
-      req.onsuccess = function () { res(req.result); };
-      req.onerror   = function () { rej(req.error); };
-      req.onblocked = function () { rej(new Error('blocked')); };
+      req.onsuccess = function () {
+        var d = req.result;
+        conn = d; fails = 0;
+        d.onversionchange = function () { drop(d); try { d.close(); } catch (x) {} };
+        d.onclose         = function () { drop(d); };
+        res(d);
+      };
+      req.onerror   = function () { rej(req.error || new Error('open error')); };
+      req.onblocked = function () { rej(new Error('open blocked')); };
     });
-    dbp.catch(function () {});
-    return dbp;
+    p.catch(function (e) {
+      fails++;
+      if (dbp === p) { dbp = null; conn = null; }
+      warn(e);
+    });
+    return p;
   }
   function tx(mode, fn) {
     return db().then(function (d) {
       return new Promise(function (res, rej) {
-        var t = d.transaction(STORE, mode), r = fn(t.objectStore(STORE));
+        var t, r;
+        // 닫힌 연결이면 여기서 InvalidStateError가 난다 — 버리고 다음 호출에서 다시 연다
+        try { t = d.transaction(STORE, mode); r = fn(t.objectStore(STORE)); }
+        catch (e) { drop(d); rej(e); return; }
         t.oncomplete = function () { res(r ? r.result : undefined); };
-        t.onerror    = function () { rej(t.error); };
-        t.onabort    = function () { rej(t.error); };
+        t.onerror    = function () { rej(t.error || new Error('tx ' + mode + ' error')); };
+        t.onabort    = function () { rej(t.error || new Error('tx ' + mode + ' aborted')); };
       });
-    });
+    }).catch(function (e) { warn(e); throw e; });
   }
 
   /* ---------- 파일명 → 카드 ---------- */
