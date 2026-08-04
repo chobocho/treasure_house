@@ -8437,5 +8437,150 @@ function demoLog(el, cls, text) {
   update();
 })();
 </script>
+<!-- ===== deck-input-shim v1 : 방향키(↑↓ 스크롤 / ←→ 페이지) + 게임패드 ===== -->
+<script>
+(function () {
+  'use strict';
+  if (window.__deckInputShim) return;
+  window.__deckInputShim = true;
+
+  /* ---------- 지금 보이는 슬라이드의 스크롤 컨테이너 찾기 ---------- */
+  function scrollableAt(x, y) {
+    if (!document.elementFromPoint) return null;
+    var n = document.elementFromPoint(x, y);
+    while (n && n !== document.documentElement) {
+      var oy = getComputedStyle(n).overflowY;
+      if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+          n.scrollHeight - n.clientHeight > 4) return n;
+      n = n.parentElement;
+    }
+    return null;
+  }
+  function scroller() {
+    var el = scrollableAt(innerWidth / 2, innerHeight / 2) ||
+             scrollableAt(innerWidth / 2, innerHeight * 0.35);
+    if (el) return el;
+    var m = document.querySelector('main');
+    if (m && m.scrollHeight - m.clientHeight > 4) return m;
+    return document.scrollingElement || document.documentElement;
+  }
+  function viewH(el) {
+    return (el === document.scrollingElement || el === document.documentElement)
+      ? innerHeight : el.clientHeight;
+  }
+  function isPageScroller(el) {
+    return el === document.scrollingElement || el === document.documentElement || el === document.body;
+  }
+  function scrollStep(dir, smooth) {
+    var el = scroller();
+    el.scrollBy({ top: dir * Math.max(80, viewH(el) * 0.25),
+                  left: 0, behavior: smooth ? 'smooth' : 'auto' });
+  }
+
+  /* ---------- 페이지 이동 (덱마다 다른 엔진에 공통으로 붙는다) ---------- */
+  function pick(ids) {
+    for (var i = 0; i < ids.length; i++) {
+      var e = document.getElementById(ids[i]);
+      if (e && (e.tagName === 'BUTTON' || e.tagName === 'A')) return e;
+    }
+    return null;
+  }
+  function synth(key) {
+    document.dispatchEvent(new KeyboardEvent('keydown',
+      { key: key, code: key, bubbles: true, cancelable: true }));
+  }
+  function page(dir) {
+    var b = dir > 0 ? pick(['nextBtn', 'btnNext', 'next'])
+                    : pick(['prevBtn', 'btnPrev', 'prev']);
+    if (b) { if (!b.disabled) b.click(); }
+    else synth(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+  }
+  function toggleToc() {
+    var b = pick(['tocBtn', 'btnToc', 'toc-btn', 'tocOpen']);
+    if (b) b.click(); else synth('t');
+  }
+
+  /* ---------- 키보드: ↑↓ = 스크롤 (←→ 페이지는 각 덱 엔진이 처리) ---------- */
+  function interactive(el) {
+    if (!el) return false;
+    var t = (el.tagName || '').toUpperCase();
+    return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' ||
+           t === 'CANVAS' || el.isContentEditable === true;
+  }
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if (e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    if (interactive(e.target) || interactive(document.activeElement)) return;
+    var dir = e.key === 'ArrowDown' ? 1 : -1, repeat = e.repeat;
+    // 이벤트 전파가 끝난 뒤에 판단한다 — 슬라이드 안의 데모(테트리스 등)가
+    // 이 키를 가져갔으면(preventDefault) 스크롤하지 않는다.
+    setTimeout(function () {
+      if (e.defaultPrevented) return;
+      // 문서 자체가 스크롤되는 덱은 브라우저 기본 동작에 맡긴다(이중 스크롤 방지).
+      if (isPageScroller(scroller())) return;
+      scrollStep(dir, !repeat);
+    }, 0);
+  });
+
+  /* ---------- 게임패드 (조이패드) ----------
+     좌스틱/D-pad 상하 = 스크롤, 좌우 = 이전/다음 페이지
+     A·RB·RT = 다음, B·LB·LT = 이전, X·Start = 목차, Back = 첫 장     */
+  var DEAD = 0.4, REPEAT = 320, held = {}, lastTurn = 0, lastDir = 0, raf = 0;
+
+  function pads() {
+    if (!navigator.getGamepads) return [];
+    var out = [], g = navigator.getGamepads();
+    for (var i = 0; i < g.length; i++) if (g[i]) out.push(g[i]);
+    return out;
+  }
+  function down(g, i) { var b = g.buttons[i]; return !!b && (b.pressed || b.value > 0.5); }
+  function edge(name, isDown, fn) {
+    if (isDown) { if (!held[name]) { held[name] = 1; fn(); } }
+    else held[name] = 0;
+  }
+
+  function poll(now) {
+    var list = pads();
+    if (!list.length) { raf = 0; return; }
+    raf = requestAnimationFrame(poll);
+
+    var ax = 0, ay = 0, bNext = false, bPrev = false, bToc = false, bHome = false;
+    for (var k = 0; k < list.length; k++) {
+      var g = list[k];
+      ax += g.axes[0] || 0;
+      ay += g.axes[1] || 0;
+      if (down(g, 15)) ax += 1;
+      if (down(g, 14)) ax -= 1;
+      if (down(g, 13)) ay += 1;
+      if (down(g, 12)) ay -= 1;
+      bNext = bNext || down(g, 0) || down(g, 5) || down(g, 7);
+      bPrev = bPrev || down(g, 1) || down(g, 4) || down(g, 6);
+      bToc  = bToc  || down(g, 2) || down(g, 9);
+      bHome = bHome || down(g, 8);
+    }
+
+    if (Math.abs(ay) > DEAD) {                       // 세로: 부드러운 연속 스크롤
+      var mag = Math.min(1, (Math.abs(ay) - DEAD) / (1 - DEAD));
+      scroller().scrollBy(0, (ay > 0 ? 1 : -1) * (6 + mag * 22));
+    }
+    var dir = Math.abs(ax) > DEAD ? (ax > 0 ? 1 : -1) : 0;
+    if (dir) {                                       // 가로: 페이지 넘김(리핏 간격)
+      if (dir !== lastDir || now - lastTurn > REPEAT) {
+        lastDir = dir; lastTurn = now; page(dir);
+      }
+    } else { lastDir = 0; lastTurn = 0; }
+
+    edge('next', bNext, function () { page(1); });
+    edge('prev', bPrev, function () { page(-1); });
+    edge('toc',  bToc,  toggleToc);
+    edge('home', bHome, function () { synth('Home'); });
+  }
+
+  function start() { if (!raf) raf = requestAnimationFrame(poll); }
+  addEventListener('gamepadconnected', start);
+  addEventListener('focus', function () { if (pads().length) start(); });
+  if (pads().length) start();
+})();
+</script>
 </body>
 </html>
