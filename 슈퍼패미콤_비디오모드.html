@@ -1192,6 +1192,7 @@ function render(dir){
   Array.prototype.forEach.call(dotsEl.children,function(d,i){d.classList.toggle('on',i===s.ch);});
   try{history.replaceState(null,'','#s'+(cur+1));}catch(e){}
 }
+window.__deckGo=function(i){go(i);};   /* 책갈피 이어보기 */
 function go(n,dir){
   n=Math.max(0,Math.min(N-1,n));
   if(n===cur&&stage.children.length)return;
@@ -2122,7 +2123,7 @@ DEMOS.wavy=function(cv,wrap){
   if (pads().length) start();
 })();
 </script>
-<!-- ===== deck-bookmark-shim v2 : IndexedDB 책갈피(읽던 위치 자동 저장 + 이어보기) ===== -->
+<!-- ===== deck-bookmark-shim v3 : IndexedDB 책갈피(읽던 위치 자동 저장 + 이어보기) ===== -->
 <script>
 (function () {
   'use strict';
@@ -2231,6 +2232,31 @@ DEMOS.wavy=function(cv,wrap){
     }
     return best;
   }
+  /* 한 장씩 그려내는 덱(stage.innerHTML = 슬라이드 하나)은 DOM에 슬라이드가
+     늘 하나뿐이라 slides()가 null이다 — v2가 이런 덱 13종을 그냥 '긴 문서'로
+     보고 scrollY 0만 저장해 책갈피가 아예 남지 않았다. 대신 화면의 쪽 표시
+     ('7 / 503')를 읽어 몇 쪽인지 알아낸다.                                  */
+  var cntEl = null;
+  var CNT = /^\s*(\d+)\s*\/\s*(\d+)\s*$/;
+  function counter() {
+    if (cntEl && cntEl.isConnected && CNT.test(cntEl.textContent || '')) return cntEl;
+    cntEl = null;
+    var n = document.querySelectorAll('span, div, b, small, em, strong');
+    for (var i = 0, lim = Math.min(n.length, 4000); i < lim; i++) {
+      if (n[i].children.length) continue;
+      var t = n[i].textContent || '';
+      if (t.length > 16) continue;
+      var m = CNT.exec(t);
+      if (m && +m[2] > 1 && +m[1] >= 1 && +m[1] <= +m[2]) { cntEl = n[i]; break; }
+    }
+    return cntEl;
+  }
+  function vpage() {                           // 쪽 표시가 있으면 {page,total}, 없으면 null
+    var e = counter();
+    if (!e) return null;
+    var m = CNT.exec(e.textContent || '');
+    return m ? { page: +m[1], total: +m[2] } : null;
+  }
   function heading() {                         // 긴 문서용 — 화면 상단을 지난 마지막 제목
     var hs = document.querySelectorAll('h1[id],h2[id],h3[id]'), out = '';
     for (var i = 0; i < hs.length; i++) {
@@ -2247,6 +2273,12 @@ DEMOS.wavy=function(cv,wrap){
       var el = list[i];
       return { kind: 'slide', page: i + 1, total: list.length, scrollY: 0,
                hash: el.id ? '#' + el.id : '', ratio: (i + 1) / list.length };
+    }
+    var v = vpage();                           // 한 장씩 그려내는 덱
+    if (v) {
+      return { kind: 'slide', page: v.page, total: v.total, scrollY: 0,
+               hash: location.hash.length > 1 ? location.hash : '',
+               ratio: v.page / v.total };
     }
     var se = document.scrollingElement || document.documentElement;
     var max = Math.max(0, se.scrollHeight - se.clientHeight);
@@ -2285,7 +2317,8 @@ DEMOS.wavy=function(cv,wrap){
        ② 다음/이전 버튼 클릭 또는 ←→ 키 — 해시를 안 듣는 한 장씩 엔진
        ③ scrollIntoView — 전 장이 이어서 흐르는 덱                        */
   function navBtn(dir) {
-    var ids = dir > 0 ? ['nextBtn', 'btnNext', 'next'] : ['prevBtn', 'btnPrev', 'prev'];
+    var ids = dir > 0 ? ['nextBtn', 'btnNext', 'bNext', 'next', 'nextSlide']
+                      : ['prevBtn', 'btnPrev', 'bPrev', 'prev', 'prevSlide'];
     for (var i = 0; i < ids.length; i++) {
       var e = document.getElementById(ids[i]);
       if (e && (e.tagName === 'BUTTON' || e.tagName === 'A')) return e;
@@ -2315,6 +2348,38 @@ DEMOS.wavy=function(cv,wrap){
       }, 30);
     })();
   }
+  /* 한 장씩 그려내는 덱으로 돌아가기 —
+       ① 엔진이 내놓은 window.__deckGo(0-기반 쪽 번호)  ② 해시  ③ 목차의 번호 입력칸
+       ④ 다음/이전 버튼을 한 장씩(안 움직이면 즉시 포기)                       */
+  function vjump(rec) {
+    var target = rec.page;
+    function at() { var v = vpage(); return v ? v.page : -1; }
+    if (at() === target) return;
+    if (typeof window.__deckGo === 'function') {
+      try { window.__deckGo(target - 1); } catch (e) {}
+      if (at() === target) return;
+    }
+    if (rec.hash && location.hash !== rec.hash) location.hash = rec.hash;
+    setTimeout(function () {
+      if (at() === target) return;
+      var n = document.getElementById('jumpN'), g = document.getElementById('jumpGo');
+      if (n && g) {
+        n.value = String(target);
+        try { g.click(); } catch (e) {}
+        if (at() === target) return;
+      }
+      var guard = 1200;
+      (function nextPage() {
+        var from = at();
+        if (from < 0 || from === target || --guard <= 0) return;
+        turn(from < target ? 1 : -1);
+        requestAnimationFrame(function () {
+          if (at() === from) return;           // 안 움직이는 엔진이면 포기
+          nextPage();
+        });
+      })();
+    }, 150);
+  }
   function jump(rec) {
     if (rec.kind !== 'slide') {
       var se = document.scrollingElement || document.documentElement;
@@ -2324,7 +2389,7 @@ DEMOS.wavy=function(cv,wrap){
       return;
     }
     var list = slides();
-    if (!list) return;
+    if (!list) { vjump(rec); return; }
     var target = Math.min(list.length, Math.max(1, rec.page)) - 1;
     var el = (rec.hash && document.getElementById(rec.hash.slice(1))) || list[target];
     if (!el) return;
@@ -2416,13 +2481,34 @@ DEMOS.wavy=function(cv,wrap){
     } catch (x) {}
     return !!location.hash;
   }
+  function initHash() {
+    if (typeof window.__deckInitHash === 'string' && window.__deckInitHash) return window.__deckInitHash;
+    try {
+      var e = performance.getEntriesByType('navigation')[0];
+      if (e && e.name) return new URL(e.name).hash;
+    } catch (x) {}
+    return location.hash;
+  }
 
   if (!openedWithHash()) {
     load(FILE).then(function (rec) {
       if (!rec) return;
       var worth = rec.kind === 'slide' ? rec.page > 1 : rec.scrollY > 200;
-      if (worth) toast(rec);
+      if (!worth) return;
+      // 덱이 스스로 지난 쪽을 복원해 이미 그 자리라면(주판 암산 교재 등) 굳이 묻지 않는다
+      var now = snap();
+      if (now.kind === rec.kind && rec.kind === 'slide' && now.page === rec.page) return;
+      toast(rec);
     }).catch(function () {});
+  } else {
+    /* 포털의 🔖 링크처럼 '#s42'로 들어왔는데 엔진이 해시를 안 듣는 덱(한 장씩
+       그려내는 6종)은 1쪽에 머문다 — 안내도 안 뜨니 그 쪽으로 옮겨준다. */
+    var m = /^#s?(\d+)$/.exec(initHash() || '');
+    if (m) setTimeout(function () {
+      var v = slides() ? null : vpage();
+      if (v && +m[1] >= 1 && +m[1] <= v.total && v.page !== +m[1])
+        vjump({ page: +m[1], hash: initHash() });
+    }, 250);
   }
 })();
 </script>
