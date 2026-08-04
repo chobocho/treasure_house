@@ -1599,5 +1599,142 @@
 })();
 </script>
 
+<!-- ===== portal-input-shim v1 : 방향키(↑↓ 스크롤 / ←→ 카드 이동) + 게임패드 ===== -->
+<style>
+  /* 게임패드로 옮긴 포커스는 :focus-visible이 안 걸릴 수 있어 :focus에도 테두리를 준다 */
+  a.card:focus { outline: 3px solid var(--focus); outline-offset: 2px; }
+</style>
+<script>
+(function () {
+  'use strict';
+  if (window.__portalInputShim) return;
+  window.__portalInputShim = true;
+
+  /* ---------- 검색으로 걸러지지 않은(보이는) 카드 목록 ---------- */
+  function visible(el) {
+    if (!el || el.style.display === 'none') return false;
+    var sec = el.closest ? el.closest('section') : null;
+    return !(sec && sec.style.display === 'none');
+  }
+  function cards() {
+    var out = [], all = document.querySelectorAll('a.card');
+    for (var i = 0; i < all.length; i++) if (visible(all[i])) out.push(all[i]);
+    return out;
+  }
+  function moveCard(step) {
+    var list = cards();
+    if (!list.length) return;
+    var at = list.indexOf(document.activeElement);
+    var to = at < 0 ? (step > 0 ? 0 : list.length - 1)
+                    : Math.max(0, Math.min(list.length - 1, at + step));
+    var el = list[to];
+    el.focus({ preventScroll: true });
+    if (el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+  function openCard() {
+    var el = document.activeElement;
+    if (el && el.classList && el.classList.contains('card')) el.click();
+    else moveCard(1);
+  }
+
+  /* ---------- 섹션 단위 점프 ---------- */
+  function jumpSection(step) {
+    var secs = [], all = document.querySelectorAll('section.cat');
+    for (var i = 0; i < all.length; i++) if (all[i].style.display !== 'none') secs.push(all[i]);
+    if (!secs.length) return;
+    var y = (window.scrollY || 0) + 4, pick = null;
+    for (var j = 0; j < secs.length; j++) {
+      var top = secs[j].getBoundingClientRect().top + (window.scrollY || 0);
+      if (step > 0 ? top > y + 8 : top < y - 8) { pick = secs[j]; if (step > 0) break; }
+    }
+    (pick || secs[step > 0 ? secs.length - 1 : 0])
+      .scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+  function toTop() {
+    var b = document.getElementById('toTop');
+    if (b) b.click(); else window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function focusSearch() {
+    var s = document.getElementById('search');
+    if (s) { s.focus(); s.select && s.select(); }
+  }
+
+  /* ---------- 키보드: ←→ 카드 이동 (↑↓ 스크롤은 브라우저 기본) ---------- */
+  function interactive(el) {
+    if (!el) return false;
+    var t = (el.tagName || '').toUpperCase();
+    return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' ||
+           t === 'CANVAS' || el.isContentEditable === true;
+  }
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    if (e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    if (interactive(e.target) || interactive(document.activeElement)) return;
+    moveCard(e.key === 'ArrowRight' ? 1 : -1);
+    e.preventDefault();
+  });
+
+  /* ---------- 게임패드 (조이패드) ----------
+     좌스틱/D-pad 상하 = 스크롤, 좌우 = 이전/다음 카드
+     A = 열기, B = 맨 위로, LB/RB = 이전/다음 섹션, Start = 검색           */
+  var DEAD = 0.4, REPEAT = 280, held = {}, lastMove = 0, lastDir = 0, raf = 0;
+
+  function pads() {
+    if (!navigator.getGamepads) return [];
+    var out = [], g = navigator.getGamepads();
+    for (var i = 0; i < g.length; i++) if (g[i]) out.push(g[i]);
+    return out;
+  }
+  function down(g, i) { var b = g.buttons[i]; return !!b && (b.pressed || b.value > 0.5); }
+  function edge(name, isDown, fn) {
+    if (isDown) { if (!held[name]) { held[name] = 1; fn(); } }
+    else held[name] = 0;
+  }
+
+  function poll(now) {
+    var list = pads();
+    if (!list.length) { raf = 0; return; }
+    raf = requestAnimationFrame(poll);
+
+    var ax = 0, ay = 0, bOpen = false, bTop = false, bPrevSec = false, bNextSec = false, bSearch = false;
+    for (var k = 0; k < list.length; k++) {
+      var g = list[k];
+      ax += g.axes[0] || 0;
+      ay += g.axes[1] || 0;
+      if (down(g, 15)) ax += 1;
+      if (down(g, 14)) ax -= 1;
+      if (down(g, 13)) ay += 1;
+      if (down(g, 12)) ay -= 1;
+      bOpen    = bOpen    || down(g, 0);
+      bTop     = bTop     || down(g, 1);
+      bPrevSec = bPrevSec || down(g, 4) || down(g, 6);
+      bNextSec = bNextSec || down(g, 5) || down(g, 7);
+      bSearch  = bSearch  || down(g, 2) || down(g, 9);
+    }
+
+    if (Math.abs(ay) > DEAD) {                       // 세로: 부드러운 연속 스크롤
+      var mag = Math.min(1, (Math.abs(ay) - DEAD) / (1 - DEAD));
+      window.scrollBy(0, (ay > 0 ? 1 : -1) * (6 + mag * 22));
+    }
+    var dir = Math.abs(ax) > DEAD ? (ax > 0 ? 1 : -1) : 0;
+    if (dir) {                                       // 가로: 카드 이동(리핏 간격)
+      if (dir !== lastDir || now - lastMove > REPEAT) {
+        lastDir = dir; lastMove = now; moveCard(dir);
+      }
+    } else { lastDir = 0; lastMove = 0; }
+
+    edge('open', bOpen, openCard);
+    edge('top', bTop, toTop);
+    edge('prevSec', bPrevSec, function () { jumpSection(-1); });
+    edge('nextSec', bNextSec, function () { jumpSection(1); });
+    edge('search', bSearch, focusSearch);
+  }
+
+  function start() { if (!raf) raf = requestAnimationFrame(poll); }
+  addEventListener('gamepadconnected', start);
+  addEventListener('focus', function () { if (pads().length) start(); });
+  if (pads().length) start();
+})();
+</script>
 </body>
 </html>
