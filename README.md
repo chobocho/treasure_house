@@ -41,6 +41,11 @@
 ### 🎬 자동화 & CI/CD 🔄
 - 🐙 **[github-actions-book.md](./github-actions-book.md)** — 🚀 GitHub Actions 완벽 가이드 🎢
 
+### 🌐 웹 & 인증 🔐
+- 🌊 **[React_완전_가이드.html](./React_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — ⚛️ TypeScript와 테트리스로 배우는 훅·성능·내부구조 300장 🎮
+- 🍪 **[쿠키_쉽게_배우기.html](./%EC%BF%A0%ED%82%A4_%EC%89%BD%EA%B2%8C_%EB%B0%B0%EC%9A%B0%EA%B8%B0.html)** — 🧪 만료·Path·Secure·SameSite·HttpOnly를 예제로 🔒
+- 🔐 **[웹_인증_완전_가이드.html](./%EC%9B%B9_%EC%9D%B8%EC%A6%9D_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 🗝️ 1961년 최초의 비밀번호부터 OAuth2·OIDC·패스키까지, React/TS·Python·Go·Java 동작 코드 500장 🔑
+
 ### 🕹️ GW-BASIC 인터프리터 컬렉션 🎮
 > 💡 **하나의 명세, 네 가지 언어** — 같은 인터프리터를 다양한 언어로 구현! 🌈
 - 🇨 **[GWBASIC_in_C.md](./GWBASIC_in_C.md)** — 💻 C 언어 구현 🔩
