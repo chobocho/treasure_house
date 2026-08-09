@@ -31,6 +31,8 @@ h1 .em{color:var(--accent);}
 .entry .date{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--node);font-size:14px;}
 .entry h2{font-size:clamp(19px,3vw,26px);margin:6px 0 10px;}
 .entry p{line-height:1.7;font-size:15.5px;color:var(--ink-soft);}
+/* 폴드7(360px)에서 긴 파일명·경로 토큰이 카드를 뚫고 나가던 것 방지 */
+.entry, .entry p, .entry li, .entry b{overflow-wrap:break-word;word-break:break-word;}
 .entry ul{margin:10px 0 0 18px;line-height:1.8;font-size:15px;}
 .entry a{color:var(--accent);font-weight:700;text-decoration:none;}
 .entry code{font-family:'JetBrains Mono',monospace;font-size:13px;background:#eaf6ff;
@@ -45,6 +47,54 @@ h1 .em{color:var(--accent);}
   <div class="sub">treasure_house 문서 제작 기록 ☁️</div>
 
   <div class="timeline">
+    <div class="entry">
+      <div class="date">2026-08-09</div>
+      <h2>⚒️ 《대장간에서 벼려낸 리스프》 500장 — 그리고 토큰 4백만을 태운 회고</h2>
+      <p>리더 → 컴파일러 → VM을 <b>Go와 Lua로 두 벌</b> 만드는 500장 교재를 냈습니다.
+      <a href="./대장간에서_벼려낸_리스프.html">대장간에서 벼려낸 리스프</a> — 모루 리스프(Moru Lisp)라는
+      작은 Scheme을 정의하고, 두 구현이 공통 적합성 테스트에서 <b>같은 MD5 해시</b>를 찍는 것을 결론으로 삼았습니다.
+      NaN 박싱·SWAR 파싱·피보나치 해싱·매직 넘버 나눗셈·마크 비트맵 GC·copy-and-patch JIT까지,
+      수식은 유도하고 숫자는 이 기기에서 직접 쟀습니다.</p>
+      <ul>
+        <li><b>산출물</b> — 25장 500슬라이드(812KB) · 정본 구현 6,148줄(Go 3,651 / Lua 2,497) ·
+            인터랙티브 데모 24종 · 실험/벤치마크 스크립트 308개 · Playwright 검증 20/20 통과</li>
+        <li><b>정직한 실패도 실었다</b> — 퀵닝·슈퍼명령어 최적화(<code>-hone</code>)는 실측 결과
+            <b>오히려 느렸습니다</b>(Go fib 28: 157.8ms → 186.7ms). 서로 다른 두 작성자가 독립적으로
+            같은 원인(<code>OP_CALL_MONO</code>의 맵 조회, 두 번째 슬롯 재디스패치)에 도달했고,
+            그 실패 분석을 18장 한 장으로 만들었습니다. LuaJIT 미지원·PGO 판정 불가·perf 사용 불가도
+            그대로 적었습니다.</li>
+      </ul>
+      <p style="margin-top:14px"><b>회고 — 왜 세 번이나 중단됐나.</b> 이 작업은 세션 사용량 한도에
+      <b>세 번</b> 걸려 멈췄고, 그 밖에 출력 토큰 상한 초과 1회, 연결 끊김 1회가 있었습니다.
+      서브에이전트 실행은 약 37회, 그중 21회가 중도 사망했습니다. 보고된 16회 실행만 합쳐도
+      <b>228만 토큰</b>, 중단분을 더하면 <b>약 400만 토큰</b>입니다. 원인은 다섯 가지였습니다.</p>
+      <ul>
+        <li><b>1. 재료 준비를 에이전트마다 중복했다</b> — 필수 계약 문서 41KB와 정본 소스 181KB를
+            에이전트 하나하나가 처음부터 다시 읽었습니다. 16회면 같은 문서를 16번 읽은 셈입니다.</li>
+        <li><b>2. 측정을 먼저, 집필을 나중에 시켰다</b> — 죽은 에이전트 대부분이 벤치마크만 돌리다
+            슬라이드를 <b>한 줄도 못 쓰고</b> 끝났습니다. 첫 두 물결에서 이 순서 때문에 통째로 날린
+            작업이 가장 많았습니다.</li>
+        <li><b>3. 거대한 단일 Write</b> — 컴파일러 한 파일을 한 번에 쓰게 했더니 응답이 64k 출력
+            토큰 상한을 넘겨 잘렸고, <b>파일은 아예 저장되지 않았습니다</b>. 20분 작업이 0바이트로.</li>
+        <li><b>4. 병렬 폭이 너무 넓었다</b> — 6~9개를 동시에 돌리니 한도가 빨리 닳았고, 한도에 걸리는
+            순간 <b>전부 동시에</b> 죽었습니다. 분산이 아니라 상관된 실패였습니다.</li>
+        <li><b>5. 체크포인트가 없었다</b> — 디스크에 남지 않은 진행은 재개해도 처음부터입니다.</li>
+      </ul>
+      <p style="margin-top:14px"><b>그래도 통한 것.</b> ① 실험을 <code>scratch/</code>에 파일로 남기는 습관 —
+      죽은 에이전트가 남긴 벤치마크를 다음 주자가 그대로 재활용했습니다. ② 자리표시자 조립 —
+      미완성 장을 자리표시자로 채워 <b>어느 시점에 죽어도 500장 덱이 빌드되는</b> 상태를 유지했습니다.
+      ③ 문맥 유지 재개 — 죽은 에이전트를 새로 띄우지 않고 이어붙여, 이미 돌린 측정을 다시 돌리지
+      않았습니다. ④ 정본 계약 문서 — 25개 장이 서로 다른 코드를 지어내는 사고를 원천 차단했습니다.</p>
+      <p><b>정책화.</b> 위 다섯 가지는 재발 방지를 위해 최상위 <code>CLAUDE.md</code>에
+      「대규모 문서 생성 작업 규약」으로 못 박았습니다 — 동시 실행 상한, 산출물 우선 원칙,
+      쓰기 단위 상한, 공유 재료 1회 준비, 체크포인트 의무.</p>
+      <div>
+        <span class="tag">500장</span><span class="tag">Go + Lua</span><span class="tag">컴파일러 · VM</span>
+        <span class="tag">NaN 박싱</span><span class="tag">JIT</span><span class="tag">데모 24종</span>
+        <span class="tag">회고</span><span class="tag">~4M 토큰</span>
+      </div>
+    </div>
+
     <div class="entry">
       <div class="date">2026-08-02</div>
       <h2>📽️ 문서 14종 PPT형 슬라이드 일괄 전환 — 총 2,323장 (하늘색 테마 통일)</h2>
