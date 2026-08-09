@@ -643,7 +643,7 @@ $ lua5.4 -v
 Lua 5.4.8  Copyright (C) 1994-2025 Lua.org, PUC-Rio</code></pre>
 <ul>
   <li>Go는 1.21 이상이면 된다. 이후 PGO(24장)를 다룰 때 1.21+ 기능을 쓴다.</li>
-  <li>Lua는 5.4 기준으로 작성하되, LuaJIT에서도 돌도록 비트 연산 폴백을 둔다(10장).</li>
+  <li>Lua는 5.4 기준으로 작성하되, 비트 연산만은 LuaJIT에서도 돌도록 폴백을 둔다(10장).</li>
   <li>책의 모든 실측은 같은 기기에서 했다. 기기 상세는 24장에서 한 번만 밝힌다.</li>
 </ul>
 </article>
@@ -912,7 +912,10 @@ anvil                    ; 원자 — 심볼
 <tr><td>출력·기타</td><td><code>display</code> <code>newline</code> <code>not</code> <code>error</code></td></tr>
 </table></div>
 <p>이 중 <code>car</code> <code>cdr</code> <code>cons</code> <code>not</code>과 산술·비교 일부는
-함수 호출 대신 전용 명령어로 컴파일된다 — 명령어 표는 10장에서.</p>
+함수 호출 대신 전용 명령어로 컴파일된다 — 명령어 표는 10장에서.
+여기 없는 <code>dynamic-wind</code>도 실제 구현에서는 특수형식이 아니라
+프리미티브라서, <code>prims.go</code>·<code>prims.lua</code>에 등록된 것은
+48개다(25장).</p>
 </article>
 <article class="card">
 <h3>수 체계 — 픽스넘과 실수</h3>
@@ -941,7 +944,7 @@ anvil                    ; 원자 — 심볼
 func (v Value) Truthy() bool { return v != False }</code></pre>
   </div>
   <div>
-    <span class="lang lua">lua · lua/value.lua</span>
+    <span class="lang lua">lua · moru/value.lua</span>
     <pre><code data-lang="lua">-- Scheme에서 거짓은 #f 하나뿐이다.
 function M.truthy(v) return v ~= false end</code></pre>
   </div>
@@ -984,10 +987,12 @@ Lua의 <code>nil</code>은 절대 값으로 쓰지 않는다 — 테이블에서
   cmd/
     moru/         실행 파일 진입점
   lexer.go        풀무 — 문자 분류표 + SWAR 수 파싱
-  reader.go      화덕 — 명시적 스택 리더
-  value.go        NaN 박싱 값 + 힙 + 마크-스윕 GC
+  reader.go       화덕 — 명시적 스택 리더
+  value.go        NaN 박싱 값 표현과 술어
+  heap.go         객체 힙 + 마크 비트맵 GC
   intern.go       심볼 각인 (FNV-1a + 피보나치 해싱)
-  instr.go        32비트 명령어 인코딩 + 역어셈블러
+  instr.go        32비트 명령어 인코딩 + Proto
+  disasm.go       역어셈블러
   print.go        display/write 출력</code></pre>
 <p>패키지는 <code>package moru</code> 하나다. 컴파일러와 VM의 소스는
 3부·4부에서 이 디렉터리에 더해진다. 각 파일의 내부는
@@ -1032,8 +1037,10 @@ $ lua5.4 main.lua file.scm      # Lua판 — 5.4 인터프리터로</code></pre>
 <ul>
   <li>Go판은 <code>go build -o moru ./cmd/moru</code>로 단일 바이너리를 만들 수 있다.</li>
   <li>Lua판은 빌드가 없다. 소스가 곧 배포물이다.</li>
-  <li><code>instr.lua</code>의 심 덕분에 같은 소스가 LuaJIT 문법 검사도 통과하도록
-      설계했다 — LuaJIT 실측 비교는 5장과 24장에서.</li>
+  <li><code>instr.lua</code>의 심 덕분에 <b>비트 연산만은</b> 5.4 문법과 LuaJIT의
+      bit 라이브러리 양쪽에서 같은 소스로 돈다. 다만 정본 전체는
+      <code>prims.lua</code>의 <code>//</code> 때문에 LuaJIT에서 로드되지 않는다 —
+      부품 단위 LuaJIT 실측은 5장, 전체가 왜 안 도는지는 24장에서.</li>
 </ul>
 <p>인자 없이 실행하면 REPL로 들어간다. REPL 구현은 4부 마지막에 조립한다.</p>
 </article>
@@ -1092,14 +1099,14 @@ escape/main.go:16:2: moved to heap: p</code></pre>
 <p>모든 값이 동적 태그를 달고 다니고, 자료구조는 테이블 하나다.
 테이블은 <b>배열부</b>와 <b>해시부</b>로 나뉘는데 배열부가 훨씬 싸다.
 그래서 가장 뜨거운 타입인 쌍은 배열부만 쓰게 만든다.</p>
-<span class="lang lua">lua · lua/value.lua</span>
+<span class="lang lua">lua · moru/value.lua</span>
 <pre><code data-lang="lua">-- Pair — 가장 뜨거운 타입이라 해시부를 만들지 않는다
 local PAIR = {__name = "pair"}
 function M.cons(a, d) return setmetatable({a, d}, PAIR) end
 function M.is_pair(v) return getmetatable(v) == PAIR end</code></pre>
 <p>전역과 필드 조회는 매번 해시 조회다. 핫 루프 진입 전에 지역 변수로
 끌어올리는 것이 필수 관용구이고, 이 책의 Lua 코드는 전부 이 형태를 따른다.</p>
-<span class="lang lua">lua · lua/lexer.lua</span>
+<span class="lang lua">lua · moru/lexer.lua</span>
 <pre><code data-lang="lua">local byte, sub, find = string.byte, string.sub, string.find</code></pre>
 </article>
 <article class="card">
@@ -1184,7 +1191,7 @@ defer func() {
 }()</code></pre>
   </div>
   <div>
-    <span class="lang lua">lua · lua/value.lua</span>
+    <span class="lang lua">lua · moru/value.lua</span>
     <pre><code data-lang="lua">-- VM 내부에서 던지고 최상위에서 잡는다
 -- (Go판의 panic/recover와 짝)
 local ERR = {__tostring =
@@ -2070,11 +2077,12 @@ OR v가 잡는다. 레인당 합이 최대 0xFE라 자리올림이 이웃을 침
 "(define " -&gt; 0
 "        " -&gt; 8
 "  !!(def" -&gt; 2
-zeroMask 판:  mask=0000000080808080 (b2가 거짓 양성)
+zeroMask 판:  mask=0000000080808080 (b2·b3가 거짓 양성)
 nonzeroMask판: mask=8080808080800000 (정확)</code></pre>
 <p>마지막 두 줄이 zeroMask를 쓰면 안 되는 이유다. <code>'!'</code>는 XOR 후
-0x01이 되는데, 아래 두 진짜 공백(0)에서 출발한 빌림이 이 0x01을 지나며 0으로
-보이게 만든다. 마스크가 0이면 8칸을 통째로 건너뛰고 다음 워드로 간다 —
+0x01이 되는데, 아래 두 진짜 공백(0)에서 출발한 빌림이 그 0x01 <b>둘</b>을
+지나며 0으로 보이게 만든다. 그래서 마스크는 b0~b3 네 자리가 켜지지만
+진짜 공백은 b0·b1뿐이다. 마스크가 0이면 8칸을 통째로 건너뛰고 다음 워드로 간다 —
 연속 공백 한 워드가 반복 8회 대신 연산 몇 개가 된다.</p>
 <div class="warn">정본 <code>skipSpace</code>는 표 루프를 유지한다. 진짜 공백은
 6종에 <code>;</code> 주석까지 섞여 XOR 한 방으로 안 끝나기 때문이다. 이 트릭이
@@ -3903,7 +3911,7 @@ end</code></pre>
   </div>
 </div>
 <p><code>Env</code>/<code>env</code> 필드가 렉시컬 스코프의 실체다.
-클로저가 살아 있는 한 그 환경 사슬 전체가 살아 있고, 8장의 counter
+클로저가 살아 있는 한 그 환경 사슬 전체가 살아 있고, 2장의 counter
 테스트가 되는 이유가 이것이다. 본문은 아직 <b>S-식 그대로</b>다 —
 컴파일된 것이 하나도 없다.</p>
 </article>
@@ -4564,13 +4572,13 @@ JMP  = 2147287049 = 0x7FFD0009  bx=32765 sbx=-3</code></pre>
   for k = 1, #proto.protos do M.disasm(proto.protos[k], out) end
   return table.concat(out, "\n")
 end</code></pre>
-<span class="lang txt">출력 — 4장 슬라이드의 식을 손 조립한 프로토</span>
+<span class="lang txt">출력 — 이 장 4번 슬라이드의 식을 손 조립한 프로토</span>
 <pre><code data-lang="text">; proto expr/4 maxregs=6
    1  OP_MUL       4 0 1
    2  OP_SUB       5 2 3
    3  OP_ADD       4 4 5
    4  OP_RET       4 0 0</code></pre>
-<p>Go 판 <code>Disasm</code>은 moru/instr.go에 있고 같은 프로토에서
+<p>Go 판 <code>Disasm</code>은 moru/disasm.go에 있고 같은 프로토에서
 같은 목록을 낸다(레지스터를 <code>R4</code>처럼 표기하는 차이만 있다).</p>
 </article>
 
@@ -5321,8 +5329,10 @@ moru: 정의되지 않은 변수: mystery   (종료 코드 1)</code></pre>
 전부 스택에 두면 빠르지만 클로저가 깨진다. 이 장은 두 세계를
 잇는 다리 — 업밸류(upvalue) — 를 놓는다.</p>
 <div class="hist">이것이 1960년대 리스프의 <b>funarg 문제</b>다. 초기 리스프는
-동적 스코프로 문제를 피해 갔고, 렉시컬 스코프를 정면으로 구현한 것은
-1975년의 Scheme이 처음이다. 클로저(closure)라는 이름도 이때 자리 잡았다.</div>
+동적 스코프로 문제를 피해 갔고, <b>리스프 계열에서</b> 렉시컬 스코프를
+정면으로 구현한 것은 1975년의 Scheme이 처음이다. 클로저(closure)라는
+이름 자체는 그보다 이르다 — Peter Landin이 1964년 ISWIM 계열 연구에서
+"코드 + 환경"을 가리키는 말로 썼다.</div>
 </article>
 
 <article class="card">
@@ -7477,9 +7487,12 @@ ADD               10945   4.2%</code></pre>
 <p>세 가지가 읽힌다. 첫째, <b><code>MOVE</code>가 29.2%</b>로 압도적이다 —
 호출 인자를 <code>R[a+1]</code>부터 나란히 놓느라 값을 옮기는 비용이고,
 16장의 인자 배치 설계가 곧바로 여기에 걸린다. 둘째,
-<code>CALL</code>·<code>GETGLOBAL</code>·<code>RET</code>이 정확히 같은
+<code>CALL</code>과 <code>GETGLOBAL</code>이 정확히 같은
 21,893회 — <code>fib</code>를 부를 때마다 전역에서 함수를 꺼내고
-있다는 뜻이다(18장 인라인 캐시의 표적). 셋째, 정작 계산인
+있다는 뜻이다(18장 인라인 캐시의 표적). <code>RET</code>·<code>JMPF</code>·
+<code>LT</code>가 21,891회인 것은 <code>fib</code> 호출 횟수 그 자체이고,
+CALL 쪽 두 번이 더 많은 것은 <code>display</code>와 최상위 몫이다.
+셋째, 정작 계산인
 <code>ADD</code>는 4.2%뿐이다.</p>
 <div class="tip">최적화는 산술이 아니라 <b>값을 옮기고 부르는 일</b>에서
 시작해야 한다는 결론이 카운터 한 판에서 나왔다. 이 계측은
@@ -9418,7 +9431,7 @@ bias := int((v + ((v &gt;&gt; 7) &amp; int8(d-1))) &gt;&gt; k) // 절단 나눗�
 </table></div>
 <p>모듈로→마스크는 우리 코드에 이미 산다. 20장의 마크 비트맵이
 64로 나눈 몫과 나머지를 시프트와 마스크로 얻는다.</p>
-<span class="lang go">go · moru/value.go</span>
+<span class="lang go">go · moru/heap.go</span>
 <pre><code data-lang="go">func (h *Heap) mark(i int) { h.marks[i&gt;&gt;6] |= 1 &lt;&lt; uint(i&amp;63) }</code></pre>
 <div class="note">기계어 차원의 강도 감소는 컴파일러가 대부분 해 준다.
 VM 차원의 강도 감소는 우리 몫이다 — OP_ADDK(<code>R[a] = R[b] + K[c]</code>,
@@ -10668,9 +10681,9 @@ local c = {cont = true, nf = nf, top = top, retabs = fabs,
 크게 다르다.</p>
 <div class="tblwrap"><table class="tbl grid tight">
 <tr><th>등급</th><th>되돌아가기</th><th>대표</th></tr>
-<tr><td>탈출 전용</td><td><span class="no">불가</span> — 위로 던지기만</td><td>트리 워커, Lua판 VM</td></tr>
+<tr><td>탈출 전용</td><td><span class="no">불가</span> — 위로 던지기만</td><td>트리 워커(Go·Lua)</td></tr>
 <tr><td>일회용(one-shot)</td><td><span class="mid">지점마다 한 번</span></td><td>Lua 코루틴, OCaml 5</td></tr>
-<tr><td>다회(multi-shot)</td><td><span class="ok">몇 번이든</span></td><td>Go판 VM(같은 깊이), Scheme 완전 구현</td></tr>
+<tr><td>다회(multi-shot)</td><td><span class="ok">몇 번이든</span></td><td>Go판 VM(같은 깊이), Lua판 VM(최상위 안), Scheme 완전 구현</td></tr>
 </table></div>
 </article>
 
@@ -10710,8 +10723,10 @@ vm.exec의 중첩 깊이다. 스냅숏에는 <b>모루 프레임만</b> 담긴�
 <article class="card">
 <h3>OP_CALLCC — Lua 탈출 전용</h3>
 <p>뼈대는 같다 — 스택과 프레임을 테이블로 얕게 복사한다. 다른 점은
-depth 태그가 <b>없다</b>는 것. 이 판은 처음부터 탈출 전용으로 선을
-그었다.</p>
+depth 태그가 <b>없다</b>는 것. NOTES.md가 이 판을 "탈출 전용"이라
+부르는 것은 <b>프림 경계를 넘는 재진입</b>을 지원 범위 밖으로 그었다는
+뜻이다 — 최상위 <code>VM:run</code> 안의 재진입은 뒤에서 보듯 실제로
+동작한다.</p>
 <span class="lang lua">lua · moru/vm.lua</span>
 <pre><code data-lang="lua">elseif op == OP_CALLCC then
   local fabs = base + a
@@ -11576,16 +11591,18 @@ Scheme 전체를 WASM GC와 꼬리 호출 위로 컴파일해 브라우저에서
 moru.lua가 있다 — 이것을 LuaJIT 위에서 돌리면 트레이스 JIT을
 공짜로 얻는다. 다만 LuaJIT은 Lua 5.1 + 확장이라 손질이 필요하다.</p>
 <ul>
-  <li>5.3식 비트 연산자(<code>&amp;</code>, <code>&gt;&gt;</code> 등)가 없다 —
-      bit 라이브러리 호출로 바꿔야 한다. 다행히 계약의 디코드 식은 전부
-      기계적으로 치환된다</li>
+  <li>5.3식 비트 연산자(<code>&amp;</code>, <code>&gt;&gt;</code> 등)와 정수 나눗셈
+      <code>//</code>가 없다 — 앞의 것은 bit 라이브러리 호출로 기계적으로
+      치환되지만, <code>prims.lua</code>의 <code>//</code>는 <b>파싱 단계에서</b>
+      막아 세운다(24장 실측)</li>
   <li>정수 타입이 없고 수가 전부 배정도 실수다 — 48비트 픽스넘은
       53비트 가수 안에 정확히 들어가므로 값은 안전하다</li>
   <li>트레이스가 잘 붙도록: 핫 루프에서 미구현(NYI) 내장 함수를 피하고,
       테이블 모양을 고정하고, 지역 변수 캐싱(우리의 기존 규칙)을 지킨다</li>
 </ul>
 <div class="tip">"우리 VM을 LuaJIT이 트레이스한다" — 인터프리터 위의
-인터프리터도 핫 루프가 단순하면 상당히 빨라진다. 실측은 24장에서 한다.</div>
+인터프리터도 핫 루프가 단순하면 상당히 빨라진다. 24장에서 실제로 시도했고,
+<code>prims.lua</code>의 <code>//</code> 한 줄에서 막힌 전말도 거기 적었다.</div>
 </article>
 
 <article class="card">
@@ -12045,7 +12062,7 @@ PGO의 −1.8%는 잡음 폭 안이라 판정을 보류했다.</p>
   <li>구성은 몰아 재지 말고 교대로 — 클럭 변동을 고르게 퍼뜨린다</li>
   <li>시작 비용을 빼야 짧은 벤치마크의 결론이 뒤집히지 않는다</li>
   <li>프로파일은 기둥을 지나 처음 갈라지는 자리를 본다</li>
-  <li>시간과 함께 메모리를 잰다 — Go는 2.7배 빠르고 2.7배 더 쓴다</li>
+  <li>시간과 함께 메모리를 잰다 — <code>list.scm</code>에서 Go는 7배 빠르고 2.7배 더 쓴다</li>
   <li>문턱값은 측정된 잡음 폭에서 역산한다</li>
 </ul>
 <p>다음 망치질의 순서도 측정이 정해 줬다. Lua판은 <code>band</code>·
@@ -12083,7 +12100,7 @@ GC와 쌍 표현을 손봐야 한다. 대장간의 마지막 규칙은 단순하
 </div>
 <ul>
   <li>명령어 39개 — 기본 32개 + 특화 4개 + 슈퍼명령어 3개, 두 언어 동일</li>
-  <li>프리미티브 48개 — 산술·리스트·벡터·문자열·고차 함수</li>
+  <li>프리미티브 48개 — 2장의 47종에 <code>dynamic-wind</code>(축약형)를 더한 수다</li>
   <li>실행 방식 3가지 — 트리 워커, 레지스터 VM, 담금질 VM</li>
   <li>클로저·업밸류·적정 꼬리 호출·매크로·<code>call/cc</code>·마크 비트맵 GC</li>
   <li>연장: 디스어셈블러, 트레이스, 명령어 카운터, REPL</li>
@@ -12169,8 +12186,9 @@ Lua판은 NaN 박싱을 하지 않는데도 같은 범위를 흉내낸다 — �
 그 차이가 <code>call/cc</code>에서 가장 크게 벌어졌다.</p>
 <div class="tblwrap"><table class="tbl grid tight">
 <tr><th>항목</th><th>Go판</th><th>Lua판</th></tr>
-<tr><td>계속</td><td>프레임 스택 스냅숏</td><td><span class="mid">탈출 전용</span> — 복원 후 되감기</td></tr>
-<tr><td>재진입</td><td>같은 <code>exec</code> 깊이 안에서</td><td><span class="no">미지원</span></td></tr>
+<tr><td>계속</td><td>프레임 스택 스냅숏</td><td>스냅숏 — depth 태그 없음</td></tr>
+<tr><td>재진입</td><td>같은 <code>exec</code> 깊이 안에서</td><td><span class="mid">최상위 <code>VM:run</code> 안에서만</span></td></tr>
+<tr><td>범위 밖 계속 호출</td><td><span class="ok">오류로 거절</span></td><td><span class="no">조용한 오작동(무검사)</span></td></tr>
 <tr><td>오류</td><td><code>panic</code>/<code>recover</code></td><td><code>error</code>/<code>pcall</code></td></tr>
 <tr><td>내부 define</td><td><span class="ok">지원</span></td><td><span class="no">항상 전역</span></td></tr>
 <tr><td>파일 구성</td><td>패키지 1개 14파일</td><td>모듈 13개 (계약은 단일 파일)</td></tr>
