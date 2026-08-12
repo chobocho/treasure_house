@@ -1016,11 +1016,13 @@ static int peek_binop(P *p, const char **op_out, int *prec_out) {
 
 ### 14.3 단항과 거듭제곱
 
+⚠️ `NOT`은 단항이지만 **비교 연산자보다 약하게** 묶인다(GW-BASIC 규칙이자 12.7 BNF의 `<not-expr> ::= "NOT"? <rel-expr>`). 그래서 피연산자를 `parse_unary`가 아니라 `parse_binop(p, 7)`로 읽는다. 이것을 `parse_unary`로 두면 `NOT A = B`가 `(NOT A) = B`로 잘못 묶여, BASIC에서 가장 흔한 조건식이 조용히 어긋난다.
+
 ```c
 static AstNode *parse_unary(P *p) {
     if (accept_t(p, T_MINUS)) { /* unary minus */ ... }
     if (accept_t(p, T_PLUS))  return parse_unary(p);
-    if (accept_kw(p, "NOT"))  { /* unary NOT */ ... }
+    if (accept_kw(p, "NOT"))  { /* NOT: 피연산자는 parse_binop(p,7) = <rel-expr> */ }
     AstNode *base = parse_atom(p);
     if (check(p, T_CARET)) {
         advance_t(p);
@@ -1580,7 +1582,9 @@ case OP_JZ:  { Value v = pop_v(vm); if (!v_truthy(v)) vm->ip = op->iarg; v_relea
 
 ### 20.5 비트 연산
 
-GW-BASIC은 AND/OR/XOR/NOT을 32비트 정수 비트연산으로 정의한다. 우리 구현은 `long`(보통 32 또는 64비트)으로 한다.
+⚠️ 함께 알아 둘 것: 본 구현의 `\`(정수 나눗셈)과 `MOD`는 `floor` 기반이다. 그래서 음수에서 원본 GW-BASIC과 결과가 다르다 — `-7 \ 2`가 −4(원본 −3), `-7 MOD 2`가 1(원본 −1). 원본은 0 방향 절단이고 나머지의 부호가 피제수를 따른다. 자매편 Lua판과 결과를 맞추기 위해 현재 동작을 유지한다.
+
+GW-BASIC은 AND/OR/XOR/NOT을 **16비트** 부호 있는 정수(−32768~32767)의 비트 연산으로 정의한다(범위를 벗어나면 Overflow). 우리 구현은 편의상 `long`(보통 32 또는 64비트)으로 폭을 넓혀 두었으므로, 16비트를 넘는 값에서는 원본과 결과가 달라질 수 있다.
 
 ```c
 static long band_l(long a, long b) { return a & b; }
@@ -1939,22 +1943,26 @@ VM 포인터를 받지만 대부분의 함수는 무시한다(`(void)vm`). `args
 
 ### 26.4 문자열 함수 카탈로그
 
+⚠️ `UCASE$`/`LCASE$`는 **원본 GW-BASIC에는 없는** 함수다(QuickBASIC 4.0에서 도입). 편의를 위해 더한 확장이다.
+
 | 함수 | 의미 |
 |---|---|
-| LEN, LEFT$, RIGHT$, MID$ | 길이/부분 |
+| LEN, LEFT\$, RIGHT\$, MID\$ | 길이/부분 |
 | CHR$, ASC | 코드 ↔ 문자 |
 | STR$, VAL | 숫자 ↔ 문자열 |
-| SPACE$, STRING$ | 공백/반복 |
+| SPACE\$, STRING\$ | 공백/반복 |
 | INSTR | 찾기 |
-| UCASE$, LCASE$ | 대/소문자 |
+| UCASE\$, LCASE\$ | 대/소문자 |
 
 ### 26.5 시간 함수
 
+⚠️ 이 셋은 인자가 없지만 **괄호를 반드시 붙여야** 한다. 우리 파서는 식별자 뒤에 `(`가 올 때만 함수 호출로 보므로(14.4절 `parse_atom`), 원본 GW-BASIC처럼 `PRINT DATE$`라고 쓰면 같은 이름의 *빈 변수*로 읽혀 조용히 `""`/`0`이 된다. `PRINT DATE$()`라고 써야 한다.
+
 | 함수 | 의미 |
 |---|---|
-| TIMER | 시스템 시간(초) |
-| DATE$ | "MM-DD-YYYY" |
-| TIME$ | "HH:MM:SS" |
+| TIMER() | 시스템 시간(초) — epoch 기준. 원본 GW-BASIC은 자정 이후 초 |
+| DATE$() | "MM-DD-YYYY" |
+| TIME$() | "HH:MM:SS" |
 
 ### 26.6 새 함수 추가하기
 
@@ -3058,7 +3066,8 @@ static AstNode *parse_unary(P *p) {
     }
     if (accept_t(p, T_PLUS)) return parse_unary(p);
     if (accept_kw(p, "NOT")) {
-        AstNode *u = ast_new(A_UNOP); u->s1 = xstrdup("NOT"); u->a = parse_unary(p); return u;
+        /* BNF(12.7): <not-expr> ::= "NOT"? <rel-expr> — 비교식까지가 피연산자 */
+        AstNode *u = ast_new(A_UNOP); u->s1 = xstrdup("NOT"); u->a = parse_binop(p, 7); return u;
     }
     /* power */
     AstNode *base = parse_atom(p);
