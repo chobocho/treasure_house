@@ -109,7 +109,7 @@ ts_gwbasic/
 - **20장** 제어 흐름 — GOTO, IF/THEN/ELSE, FOR/NEXT
 - **21장** 서브루틴 — GOSUB / RETURN
 - **22장** 배열 — DIM과 다차원 인덱싱
-- **23장** 문자열 함수 — LEFT$, RIGHT$, MID$, INSTR
+- **23장** 문자열 함수 — LEFT\$, RIGHT\$, MID\$, INSTR
 - **24장** 수학 함수 — SIN, COS, RND, INT
 - **25장** DATA / READ / RESTORE
 - **26장** 사용자 정의 함수 DEF FN
@@ -156,7 +156,7 @@ ts_gwbasic/
 
 ### 1.1 등장 배경
 
-1983년, IBM은 자사의 PC 호환 기종이 아닌 다른 OEM(컴팩, 탠디 등)에도 BASIC을 공급할 필요가 있었습니다. 기존 IBM Cassette BASIC, Disk BASIC, Advanced BASIC(BASICA)는 IBM PC의 ROM에 의존했습니다. 마이크로소프트는 ROM 의존성을 제거한 100% 디스크 기반 인터프리터를 만들었고, 이를 **GW-BASIC**이라 명명했습니다.
+1983년, 마이크로소프트는 IBM PC가 아닌 다른 OEM(컴팩, 탠디 등)에도 BASIC을 공급해야 했습니다. 기존 IBM Cassette BASIC, Disk BASIC, Advanced BASIC(BASICA)는 IBM PC의 ROM에 의존했습니다. 마이크로소프트는 ROM 의존성을 제거한 100% 디스크 기반 인터프리터를 만들었고, 이를 **GW-BASIC**이라 명명했습니다.
 
 GW가 무엇의 약자인지에 대해서는 여러 설(Gee-Whiz, Gates-William, Greg Whitten 등)이 있지만 공식 입장은 없습니다. 본질은 *"BASICA의 ROM-less 클론"* 이라는 점입니다.
 
@@ -344,7 +344,7 @@ export interface Host {
   sound(freq: number, durationMs: number): Promise<void>;
   play(mml: string): Promise<void>;
   // 시간 / 난수
-  now(): number;
+  now(): number;                            // epoch 기준 밀리초 (TIMER가 자정 기준으로 환산)
   random(): number;
   lastRandom(): number;
   seedRandom(s: number): void;
@@ -720,9 +720,9 @@ GW-BASIC은 한 줄에 콜론(`:`)으로 여러 문장을 잇습니다. `10 A=1 
 ### 5.4 표현식
 
 ```ebnf
-<expression>     ::= <or-expr>
-<or-expr>        ::= <xor-expr>  { "OR"  <xor-expr> }
-<xor-expr>       ::= <and-expr>  { "XOR" <and-expr> }
+<expression>     ::= <xor-expr>
+<xor-expr>       ::= <or-expr>   { "XOR" <or-expr> }
+<or-expr>        ::= <and-expr>  { "OR"  <and-expr> }
 <and-expr>       ::= <not-expr>  { "AND" <not-expr> }
 <not-expr>       ::= [ "NOT" ] <rel-expr>
 <rel-expr>       ::= <add-expr> [ <rel-op> <add-expr> ]
@@ -759,8 +759,10 @@ GW-BASIC은 한 줄에 콜론(`:`)으로 여러 문장을 잇습니다. `10 A=1 
 | 8 | `=`, `<>`, `<`, `<=`, `>`, `>=` | 좌결합 |
 | 9 | `NOT` | — |
 | 10 | `AND` | 좌결합 |
-| 11 | `XOR` | 좌결합 |
-| 12 | `OR` | 좌결합 |
+| 11 | `OR` | 좌결합 |
+| 12 | `XOR` | 좌결합 (그 아래로 `EQV`, `IMP` — 본 구현 미지원) |
+
+논리 연산자의 순서는 GW-BASIC 사용설명서의 `NOT` → `AND` → `OR` → `XOR` → `EQV` → `IMP`를 그대로 따릅니다. `OR`가 `XOR`보다 **강하게** 묶이는 점이 다른 언어와 달라 자주 틀리는 부분입니다.
 
 ⚠️ GW-BASIC의 `=`은 비교 연산자이면서 동시에 할당 토큰입니다. 문맥에 따라 구분합니다(`A = 1 = 2` 는 `A = (1 = 2)`로 해석되어 A에 0(false) 또는 -1(true)이 들어갑니다).
 
@@ -1186,7 +1188,7 @@ private scanToken(): void {
     case ",": this.advance(); this.push("COMMA", ","); return;
     case ";": this.advance(); this.push("SEMICOLON", ";"); return;
     case ":": this.advance(); this.push("COLON", ":"); return;
-    case "?": this.advance(); this.push("KEYWORD", "PRINT"); return;
+    case "?": this.advance(); this.push("KEYWORD", "PRINT", { col: this.col - 1 }); return;
   }
 
   // 두 글자 연산자
@@ -1651,8 +1653,8 @@ export class Parser {
 // src/parser/expr.ts
 const BP: Record<string, [number, number]> = {
   // value: [left bp, right bp]
-  "OR":  [10, 11],
-  "XOR": [12, 13],
+  "XOR": [10, 11],
+  "OR":  [12, 13],
   "AND": [14, 15],
   "=":   [20, 21],
   "<>":  [20, 21],
@@ -3601,7 +3603,7 @@ private dispatch(ins: Op): void | Promise<void> {
       const mml = toStr(this.pop());
       return this.host.play(mml);
     }
-    case "BEEP": return this.host.sound(800, 200);
+    case "BEEP": return this.host.sound(800, 250);
 
     // 함수
     case "CALL_BUILTIN": {
@@ -4029,7 +4031,7 @@ import { BasicValue, INT, SNG, DBL, STR } from "./value.js";
 import { BasicError, ERR } from "../common/types.js";
 
 interface ArrayBox {
-  dims: number[];        // 각 차원의 *상한* (포함)  → 길이 = dim+1
+  dims: number[];        // 각 차원의 *길이* (상한 + 1 - optionBase)
   data: BasicValue[];
   baseIsOne: boolean;    // OPTION BASE 1이면 true (기본 false)
 }
@@ -4767,6 +4769,8 @@ case "ERASE": {
 
 `Env.erase(name): void { this.arrays.delete(name); }`.
 
+💡 이 `case`가 컴파일되려면 14장의 `type Op`에 `| { op: "ERASE"; names: string[] }` 갈래를 먼저 추가해야 합니다. 빠뜨리면 `TS2678: Type '"ERASE"' is not comparable…`가 납니다.
+
 ### 22.4 OPTION BASE
 
 프로그램 시작 부분에 한 번 쓸 수 있습니다. 본 구현은 `OPTION BASE 1`을 만나면 즉시 `env.optionBase = 1`로 설정합니다. ⚠️ 이미 DIM된 배열이 있으면 에러.
@@ -4794,6 +4798,8 @@ PRINT LBOUND(A, 2)              ' 2번째 차원의 하한
 ```
 
 내장 함수로 추가. `Env.bounds(name, dim)`로.
+
+⚠️ `LBOUND`/`UBOUND`는 **원본 GW-BASIC에는 없는** 함수입니다(QuickBASIC 4.0에서 도입). 본 구현이 편의를 위해 더한 확장이며, 6.1절 키워드 목록에도 들어 있지 않습니다.
 
 ---
 
@@ -4826,8 +4832,9 @@ export const BUILTINS: Record<string, Builtin> = {
   "ASC":     (a) => INT((toStr(a[0]!).charCodeAt(0) || 0)),
   "STRING$": (a) => stringRepeat(a),
   "SPACE$":  (a) => STR(" ".repeat(Math.max(0, toNum(a[0]!) | 0))),
-  "HEX$":    (a) => STR((toNum(a[0]!) | 0).toString(16).toUpperCase()),
-  "OCT$":    (a) => STR((toNum(a[0]!) | 0).toString(8)),
+  // GW-BASIC은 음수를 16비트 2의 보수로 찍는다: HEX$(-1)="FFFF", OCT$(-1)="177777"
+  "HEX$":    (a) => STR((toNum(a[0]!) & 0xFFFF).toString(16).toUpperCase()),
+  "OCT$":    (a) => STR((toNum(a[0]!) & 0xFFFF).toString(8)),
 
   // 수학
   "ABS": (a) => SNG(Math.abs(toNum(a[0]!))),
@@ -4854,7 +4861,13 @@ export const BUILTINS: Record<string, Builtin> = {
 
   // 환경
   "RND":    (a, vm) => SNG(rndFn(a, vm)),
-  "TIMER":  (_a, vm) => SNG(vm.host.now() / 1000),
+  // TIMER는 "자정 이후 초". epoch 초를 그대로 SNG에 담으면 float32
+  // 정밀도(≈128초 간격) 때문에 값이 뭉개진다.
+  "TIMER":  (_a, vm) => {
+    const d = new Date(vm.host.now());
+    return SNG(d.getHours() * 3600 + d.getMinutes() * 60
+               + d.getSeconds() + d.getMilliseconds() / 1000);
+  },
   "INKEY$": (_a, vm) => STR(vm.host.inkey()),
 
   // 화면
@@ -5419,7 +5432,7 @@ export class CanvasHost implements Host {
   }
 
   // ── 시간 / 난수 ───────────────────────────────
-  now(): number { return performance.now(); }
+  now(): number { return Date.now(); }  // Host.now()의 계약은 epoch ms
   random(): number { return this.rng.next(); }
   lastRandom(): number { return this.rng.lastValue(); }
   seedRandom(s: number): void { this.rng.seed(s); }
@@ -5565,7 +5578,8 @@ export async function playMml(host: CanvasHost, mml: string): Promise<void> {
       if (at(i) >= "0" && at(i) <= "9") len = readNum();
       let dotted = false;
       if (at(i) === ".") { dotted = true; i++; }
-      const freq = NOTE_FREQ_C0 * Math.pow(2, s.octave + semi / 12);
+      // GW-BASIC은 O3가 가온다(C4=261.6Hz)이므로 C0 기준 지수에 +1
+      const freq = NOTE_FREQ_C0 * Math.pow(2, s.octave + 1 + semi / 12);
       const ms = noteMs(len, dotted);
       await host.sound(freq, ms);
       continue;
@@ -5595,7 +5609,7 @@ export async function playMml(host: CanvasHost, mml: string): Promise<void> {
       if (n === 0) {
         await new Promise(r => setTimeout(r, wholeNoteMs() / s.length));
       } else {
-        const freq = 440 * Math.pow(2, (n - 33) / 12);
+        const freq = 440 * Math.pow(2, (n - 46) / 12);   // N46 = O3 A = 440Hz
         await host.sound(freq, noteMs(s.length, false));
       }
       continue;
@@ -5614,7 +5628,7 @@ export async function playMml(host: CanvasHost, mml: string): Promise<void> {
 
 ### 28.5 BEEP
 
-`BEEP`은 본 구현에서 800Hz로 200ms 사운드를 냅니다 (CPU 스피커 흉내).
+`BEEP`은 800Hz로 **1/4초(250ms)** 소리를 냅니다. 원본 GW-BASIC의 BEEP 사양(800Hz · 1/4초)을 그대로 옮긴 것입니다.
 
 ### 28.6 동시 발음?
 
@@ -6296,11 +6310,11 @@ CLAUDE.md 요구대로 `history.md`에 한글로 이력을 남깁니다.
 <system>     ::= "SYSTEM"
 
 (* === 표현식 (우선순위 낮은 → 높은) === *)
-<expression>  ::= <or-expr>
-<or-expr>     ::= <xor-expr> { "OR" <xor-expr> }
-<xor-expr>    ::= <eqv-expr> { "XOR" <eqv-expr> }
-<eqv-expr>    ::= <imp-expr> { "EQV" <imp-expr> }
-<imp-expr>    ::= <and-expr> { "IMP" <and-expr> }
+<expression>  ::= <imp-expr>
+<imp-expr>    ::= <eqv-expr> { "IMP" <eqv-expr> }
+<eqv-expr>    ::= <xor-expr> { "EQV" <xor-expr> }
+<xor-expr>    ::= <or-expr>  { "XOR" <or-expr> }
+<or-expr>     ::= <and-expr> { "OR"  <and-expr> }
 <and-expr>    ::= <not-expr> { "AND" <not-expr> }
 <not-expr>    ::= [ "NOT" ] <rel-expr>
 <rel-expr>    ::= <add-expr> [ <rel-op> <add-expr> ]
@@ -6393,7 +6407,7 @@ CLAUDE.md 요구대로 `history.md`에 한글로 이력을 남깁니다.
 | LOCATE | `LOCATE [r][, c]` |
 | PSET | `PSET (x, y) [, c]` |
 | PRESET | `PRESET (x, y) [, c]` |
-| LINE | `LINE [(x1,y1)]-(x2,y2) [,c [,B|BF]]` |
+| LINE | `LINE [(x1,y1)]-(x2,y2) [,c [,B\|BF]]` |
 | CIRCLE | `CIRCLE (x,y), r [,c [,start,end [,asp]]]` |
 | PAINT | `PAINT (x,y) [,fill [,border]]` |
 
@@ -6410,10 +6424,10 @@ CLAUDE.md 요구대로 `history.md`에 한글로 이력을 남깁니다.
 | 함수 | 반환 | 설명 |
 |------|------|------|
 | LEN(s$) | INT | 길이 |
-| LEFT$(s$, n) | STR | 왼쪽 n자 |
-| RIGHT$(s$, n) | STR | 오른쪽 n자 |
-| MID$(s$, p[, n]) | STR | p부터 n자 |
-| INSTR([start,] s$, t$) | INT | t$의 위치 (없으면 0) |
+| LEFT\$(s\$, n) | STR | 왼쪽 n자 |
+| RIGHT\$(s\$, n) | STR | 오른쪽 n자 |
+| MID\$(s\$, p[, n]) | STR | p부터 n자 |
+| INSTR([start,] s\$, t\$) | INT | t\$의 위치 (없으면 0) |
 | CHR$(n) | STR | ASCII n의 문자 |
 | ASC(s$) | INT | 첫 글자의 ASCII |
 | STR$(n) | STR | 숫자 → 문자열 |
