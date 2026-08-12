@@ -130,7 +130,7 @@ scheme_gwbasic/
 - **20장** 제어 흐름 — GOTO, IF/THEN/ELSE, FOR/NEXT
 - **21장** 서브루틴 — GOSUB / RETURN
 - **22장** 배열 — DIM과 다차원 인덱싱
-- **23장** 문자열 함수 — LEFT$, RIGHT$, MID$, INSTR
+- **23장** 문자열 함수 — LEFT\$, RIGHT\$, MID\$, INSTR
 - **24장** 수학 함수 — SIN, COS, RND, INT
 - **25장** DATA / READ / RESTORE
 - **26장** 사용자 정의 함수 DEF FN — 클로저로 자연스럽게
@@ -445,6 +445,8 @@ sudo apt install guile-3.0
 guile -L lib main.scm
 ```
 
+⚠️ Guile 3.x는 파일 첫 줄의 `#!r7rs` 지시자를 `#! … !#` 블록 주석의 시작으로 읽어 ``unterminated `#! ... !#' comment`` 오류를 냅니다. Guile로 돌릴 때는 그 한 줄을 빼세요(Racket·Chez 전용 지시자입니다). 지시자만 없으면 `(import (scheme base) …)`는 Guile 3에서 그대로 동작합니다.
+
 Guile은 `(srfi srfi-1)` 형태로 import 합니다. 처리계 차이를 흡수하는 `lib/compat.scm`을 두면 좋습니다.
 
 ```scheme
@@ -747,19 +749,19 @@ GW-BASIC은 한 줄에 콜론(`:`)으로 여러 문장을 잇습니다. `10 A=1 
 ### 5.4 표현식 — 우선순위 단계별 BNF
 
 ```ebnf
-<expression>     ::= <or-expr>
-<or-expr>        ::= <xor-expr>  { "OR"  <xor-expr> }
-<xor-expr>       ::= <and-expr>  { "XOR" <and-expr> }
+<expression>     ::= <xor-expr>
+<xor-expr>       ::= <or-expr>   { "XOR" <or-expr> }
+<or-expr>        ::= <and-expr>  { "OR"  <and-expr> }
 <and-expr>       ::= <not-expr>  { "AND" <not-expr> }
 <not-expr>       ::= [ "NOT" ] <rel-expr>
 <rel-expr>       ::= <add-expr> [ <rel-op> <add-expr> ]
 <rel-op>         ::= "=" | "<>" | "<" | "<=" | ">" | ">="
-<add-expr>       ::= <mul-expr>  { ("+" | "-") <mul-expr> }
-<mul-expr>       ::= <intdiv-expr> { ("*" | "/") <intdiv-expr> }
-<intdiv-expr>    ::= <mod-expr>  { "\\" <mod-expr> }
-<mod-expr>       ::= <pow-expr>  { "MOD" <pow-expr> }
-<pow-expr>       ::= <unary-expr> { "^" <unary-expr> }     (* 우결합 *)
-<unary-expr>     ::= ("+" | "-") <unary-expr> | <primary>
+<add-expr>       ::= <mod-expr>    { ("+" | "-") <mod-expr> }
+<mod-expr>       ::= <intdiv-expr> { "MOD" <intdiv-expr> }
+<intdiv-expr>    ::= <mul-expr>    { "\\" <mul-expr> }
+<mul-expr>       ::= <unary-expr>  { ("*" | "/") <unary-expr> }
+<unary-expr>     ::= ("+" | "-") <unary-expr> | <pow-expr>
+<pow-expr>       ::= <primary> { "^" <unary-expr> }     (* 우결합 *)
 <primary>        ::= <number>
                    | <string>
                    | <variable>
@@ -786,8 +788,10 @@ GW-BASIC은 한 줄에 콜론(`:`)으로 여러 문장을 잇습니다. `10 A=1 
 | 8 | `=`, `<>`, `<`, `<=`, `>`, `>=` | 좌결합 |
 | 9 | `NOT` | — |
 | 10 | `AND` | 좌결합 |
-| 11 | `XOR` | 좌결합 |
-| 12 | `OR` | 좌결합 |
+| 11 | `OR` | 좌결합 |
+| 12 | `XOR` | 좌결합 (그 아래로 `EQV`, `IMP` — 본 구현 미지원) |
+
+논리 연산자의 순서는 GW-BASIC 사용설명서의 `NOT` → `AND` → `OR` → `XOR` → `EQV` → `IMP`를 그대로 따릅니다. `OR`가 `XOR`보다 **강하게** 묶이는 점이 다른 언어와 달라 자주 틀리는 부분입니다.
 
 ⚠️ GW-BASIC의 `=`은 비교 연산자이면서 동시에 할당 토큰입니다. 문맥에 따라 구분합니다 — `A = 1 = 2` 는 `A = (1 = 2)` 로 해석되어 A에 0(false) 또는 -1(true)이 들어갑니다.
 
@@ -1907,8 +1911,8 @@ Pratt 파서는 토큰별로 *prefix 동작* 과 *infix 동작 + 결합력* 을 
 ```scheme
 ;; 숫자가 클수록 결합력이 강함 (높은 우선순위)
 (define BP-LOWEST   0)
-(define BP-OR       2)
-(define BP-XOR      3)
+(define BP-XOR      2)
+(define BP-OR       3)
 (define BP-AND      4)
 (define BP-NOT      5)
 (define BP-COMPARE  6)
@@ -2792,7 +2796,7 @@ VM 디버깅의 핵심 도구. 자매서의 `Disassemble` 함수 대응.
     ((op-paint)  (vm-exec-paint! vm ins))
     ((op-sound)  (vm-exec-sound! vm ins))
     ((op-play)   (vm-exec-play! vm ins))
-    ((op-beep)   ((host-sound (vm-host vm)) 800.0 200))
+    ((op-beep)   ((host-sound (vm-host vm)) 800.0 250))
 
     ((op-call-builtin) (vm-call-builtin! vm ins))
     ((op-call-fn)      (vm-call-user-fn! vm ins))
@@ -3484,7 +3488,7 @@ GW-BASIC은 `OPTION BASE 1` 로 *시작 인덱스 1* 도 지원합니다. 본 �
 
 ---
 
-## 23장. 문자열 함수 — LEFT$, RIGHT$, MID$, INSTR
+## 23장. 문자열 함수 — LEFT\$, RIGHT\$, MID\$, INSTR
 
 ### 23.1 builtin 디스패치 표
 
@@ -3512,7 +3516,7 @@ GW-BASIC은 `OPTION BASE 1` 로 *시작 인덱스 1* 도 지원합니다. 본 �
 
 각 절차는 *Value 리스트를 받아 Value 하나를 반환* 합니다.
 
-### 23.2 LEN, LEFT$, RIGHT$
+### 23.2 LEN, LEFT\$, RIGHT\$
 
 ```scheme
 (define (builtin-len vs)
@@ -4043,10 +4047,10 @@ PLAY "T120 O4 L4 C D E F G A B > C"
 ### 28.3 BEEP
 
 ```scheme
-;; 16.4 디스패치에 이미: ((host-sound (vm-host vm)) 800.0 200)
+;; 16.4 디스패치에 이미: ((host-sound (vm-host vm)) 800.0 250)
 ```
 
-자매서가 *800 Hz, 200 ms* 로 정의한 그대로.
+원본 GW-BASIC의 BEEP 사양(800 Hz · 1/4초)을 그대로 옮긴 것입니다. 자매서들도 같은 값으로 맞춰져 있습니다.
 
 ---
 
@@ -4486,19 +4490,19 @@ echo 빌드 완료: release\gwbasic.exe
 <beep-stmt>  ::= "BEEP"
 
 (* ─── 표현식 ─────────────────────────────────── *)
-<expression>     ::= <or-expr>
-<or-expr>        ::= <xor-expr>  { "OR"  <xor-expr> }
-<xor-expr>       ::= <and-expr>  { "XOR" <and-expr> }
+<expression>     ::= <xor-expr>
+<xor-expr>       ::= <or-expr>   { "XOR" <or-expr> }
+<or-expr>        ::= <and-expr>  { "OR"  <and-expr> }
 <and-expr>       ::= <not-expr>  { "AND" <not-expr> }
 <not-expr>       ::= [ "NOT" ] <rel-expr>
 <rel-expr>       ::= <add-expr> [ <rel-op> <add-expr> ]
 <rel-op>         ::= "=" | "<>" | "<" | "<=" | ">" | ">="
-<add-expr>       ::= <mul-expr>  { ("+" | "-") <mul-expr> }
-<mul-expr>       ::= <intdiv-expr> { ("*" | "/") <intdiv-expr> }
-<intdiv-expr>    ::= <mod-expr>  { "\\" <mod-expr> }
-<mod-expr>       ::= <pow-expr>  { "MOD" <pow-expr> }
-<pow-expr>       ::= <unary-expr> { "^" <unary-expr> }
-<unary-expr>     ::= ("+" | "-") <unary-expr> | <primary>
+<add-expr>       ::= <mod-expr>    { ("+" | "-") <mod-expr> }
+<mod-expr>       ::= <intdiv-expr> { "MOD" <intdiv-expr> }
+<intdiv-expr>    ::= <mul-expr>    { "\\" <mul-expr> }
+<mul-expr>       ::= <unary-expr>  { ("*" | "/") <unary-expr> }
+<unary-expr>     ::= ("+" | "-") <unary-expr> | <pow-expr>
+<pow-expr>       ::= <primary> { "^" <unary-expr> }
 <primary>        ::= <number> | <string>
                    | <variable> | <array-ref>
                    | <func-call>
