@@ -986,7 +986,7 @@ end
 | BNF | 코드 |
 |---|---|
 | `<X> ::= a b c` | `parse_a(); parse_b(); parse_c()` 순차 호출 |
-| `<X> ::= a | b` | 첫 토큰을 보고 분기 |
+| `<X> ::= a \| b` | 첫 토큰을 보고 분기 |
 | `<X> ::= a*`   | `while parse_a() do end` |
 | `<X> ::= a?`   | `if check then parse_a() end` |
 
@@ -1074,11 +1074,14 @@ end
 
 ### 11.4 단항과 거듭제곱
 
+⚠️ `NOT`은 단항이지만 **비교 연산자보다 약하게** 묶인다(GW-BASIC 규칙이자 9장 BNF의 `<not-expr> ::= "NOT"? <rel-expr>`, 그리고 `parser.lua` 우선순위 주석과도 같다). 그래서 피연산자를 `parse_unary`가 아니라 `parse_binop(7)`로 읽는다. `parse_unary`로 두면 `NOT A = B`가 `(NOT A) = B`로 잘못 묶여, BASIC에서 가장 흔한 조건식이 조용히 어긋난다.
+
 ```lua
 function Parser:parse_unary()
   if self:accept("MINUS") then return AST.UnOp("-", self:parse_unary()) end
   if self:accept("PLUS") then return self:parse_unary() end
-  if self:eat_kw("NOT") then return AST.UnOp("NOT", self:parse_unary()) end
+  -- BNF: <not-expr> ::= "NOT"? <rel-expr> — 피연산자는 비교식까지
+  if self:eat_kw("NOT") then return AST.UnOp("NOT", self:parse_binop(7)) end
   return self:parse_power()
 end
 
@@ -1768,6 +1771,8 @@ end
 
 ### 17.4 산술 명령들
 
+⚠️ `\`(정수 나눗셈)과 `MOD`는 `math.floor` 기반이다. 그래서 음수에서 원본 GW-BASIC과 결과가 다르다 — `-7 \ 2`가 −4(원본 −3), `-7 MOD 2`가 1(원본 −1). 원본은 0 방향 절단이고 나머지의 부호가 피제수를 따른다. 자매편 C판과 결과를 맞추기 위해 현재 동작을 유지한다.
+
 ```lua
 local function num2(vm)
   local b = tonum(vm:pop())
@@ -2229,22 +2234,26 @@ B["LEFT$"] = function(_, a) return tostr(a[1]):sub(1, tonum(a[2])) end
 
 ### 23.3 문자열 함수 카탈로그
 
+⚠️ `UCASE$`/`LCASE$`는 **원본 GW-BASIC에는 없는** 함수다(QuickBASIC 4.0에서 도입). 편의를 위해 더한 확장이다.
+
 | 함수 | 의미 |
 |---|---|
 | LEN(s$) | 길이 |
-| LEFT$(s$, n) | 왼쪽 n자 |
-| RIGHT$(s$, n) | 오른쪽 n자 |
-| MID$(s$, i [,n]) | i번째부터 n자 (i는 1-base) |
+| LEFT\$(s\$, n) | 왼쪽 n자 |
+| RIGHT\$(s\$, n) | 오른쪽 n자 |
+| MID\$(s\$, i [,n]) | i번째부터 n자 (i는 1-base) |
 | CHR$(n) | 코드 → 1자 문자열 |
 | ASC(s$) | 1자 → 코드 |
 | STR$(n) | 숫자 → 문자열 |
 | VAL(s$) | 문자열 → 숫자 |
 | SPACE$(n) | n칸 공백 |
 | STRING$(n, ch) | ch를 n번 반복 |
-| INSTR([start,] s$, t$) | t$의 위치 (없으면 0) |
-| UCASE$, LCASE$ | 대/소문자 |
+| INSTR([start,] s\$, t\$) | t\$의 위치 (없으면 0) |
+| UCASE\$, LCASE\$ | 대/소문자 |
 
 ### 23.4 시간/시스템 함수
+
+⚠️ 셋 다 인자가 없지만 **괄호를 반드시 붙여야** 한다. 우리 파서는 식별자 뒤에 `(`가 올 때만 함수 호출로 보므로, 원본 GW-BASIC처럼 `PRINT DATE$`라고 쓰면 같은 이름의 *빈 변수*로 읽혀 조용히 `""`/`0`이 된다. `PRINT DATE$()`라고 써야 한다. 또 `TIMER()`는 `os.time()`(epoch 초)이며, 원본 GW-BASIC의 TIMER는 자정 이후 초다.
 
 | 함수 | 의미 |
 |---|---|
@@ -3517,7 +3526,8 @@ end
 function Parser:parse_unary()
   if self:accept("MINUS") then return AST.UnOp("-", self:parse_unary()) end
   if self:accept("PLUS") then return self:parse_unary() end
-  if self:eat_kw("NOT") then return AST.UnOp("NOT", self:parse_unary()) end
+  -- BNF: <not-expr> ::= "NOT"? <rel-expr> — 피연산자는 비교식까지
+  if self:eat_kw("NOT") then return AST.UnOp("NOT", self:parse_binop(7)) end
   return self:parse_power()
 end
 
@@ -4576,7 +4586,7 @@ end
 
 ```
 
-> 본 책의 깃 저장소(`/storage/self/primary/Documents/chobocho_box/lua_gwbasic_book/src/`)에서 같은 파일을 직접 받을 수 있다.
+> 부록 C의 일곱 파일을 그대로 `src/`에 넣고 `lua src/main.lua examples/hello.bas`로 실행하면 된다.
 
 ---
 
