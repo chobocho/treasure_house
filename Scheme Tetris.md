@@ -78,9 +78,9 @@
   (for/or ([pt (tetro-blocks t)])
     (define nx (+ (tetro-x t) (car pt)))
     (define ny (+ (tetro-y t) (cdr pt)))
-    (or (< nx 0) (>= nx W) (>= ny H)
+    (or (< nx 0) (>= nx W) (< ny 0) (>= ny H)
         (for/or ([b board])
-          (and (= nx (block-x b)) (= ny (block-y b))))))))
+          (and (= nx (block-x b)) (= ny (block-y b)))))))
 
 ;; 회전 로직 (90도 회전 행렬 적용)
 (define (rotate t)
@@ -165,6 +165,8 @@
 | **오른쪽 방향키 (Right)** | 테트로미노를 오른쪽으로 한 칸 이동 |
 | **아래 방향키 (Down)** | 테트로미노를 한 칸 빠르게 낙하 (Soft Drop) |
 | **위 방향키 (Up)** | 테트로미노를 90도 회전 |
+
+※ 회전은 도형의 로컬 원점(0,0) 기준이라 표준 테트리스(SRS)와 달리 회전 시 위치가 약간 이동합니다 — 교육용 단순화입니다.
 ## 5. 코드 동작 원리 가이드
  * **상태 불변성 (Immutability)**: 이 코드는 변수의 값을 직접 수정하는 파괴적 할당(set!)을 사용하지 않습니다. tick 함수나 handle-key 함수는 현재의 world 상태를 입력으로 받아, **새롭게 계산된 다음 world 상태를 반환**합니다.
  * **big-bang 아키텍처**: 2htdp/universe의 big-bang은 초기 상태를 인자로 받아 무한 루프를 돌며 on-tick(시간 경과), on-key(키 입력) 이벤트가 발생할 때마다 상태를 업데이트하고, 업데이트된 상태를 to-draw로 전달하여 화면에 새롭게 렌더링합니다.
