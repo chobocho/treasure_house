@@ -79,7 +79,7 @@ scheme_gwbasic/
 └── tests/                    ← golden / 단위 테스트
 ```
 
-> 📌 본 구현은 **R7RS-small + 약간의 SRFI**(SRFI-1 list, SRFI-69 hash-table, SRFI-13 string)를 가정합니다. Racket에서는 `#lang r7rs` 헤더와 `(import (scheme base) (scheme write) (srfi 1) (srfi 69) (srfi 13))`로 시작합니다. 처리계별 차이는 3장에서 정리합니다.
+> 📌 본 구현은 **R7RS-small + 약간의 SRFI**(SRFI-1 list, SRFI-69 hash-table, SRFI-13 string)를 가정합니다. Racket에서는 `#!r7rs` 헤더와 `(import (scheme base) (scheme write) …)`로 시작합니다. SRFI-1·13은 `(scheme base)`와 같은 이름을 다시 내보내므로 `except`가 필요합니다 — 정확한 형태와 처리계별 차이는 3장에서 정리합니다.
 
 ### 본문 표기 약속
 
@@ -111,10 +111,8 @@ scheme_gwbasic/
 ### 제3부 · 프론트엔드 (Frontend)
 
 - **9장** Lexer 완전 구현 — `with-input-from-string`과 문자 단위 스캐너
-- **10장** Parser 기초 — 재귀 하강을 절차로
+- **10장** Parser 기초 — AST를 s-식으로, 재귀 하강으로 문장 파싱
 - **11장** 표현식 파싱 — Pratt를 클로저 테이블로
-- **12장** 문장 파싱 — 라인 번호와 명령어
-- **13장** AST를 s-식으로 — 노드 정의 없이 표현하는 법
 
 ### 제4부 · 백엔드 (Backend)
 
@@ -179,7 +177,7 @@ scheme_gwbasic/
 
 ### 1.1 등장 배경
 
-1983년, IBM은 자사 PC 호환 기종이 아닌 다른 OEM(Compaq, Tandy 등)에도 BASIC을 공급할 필요가 있었습니다. 기존 IBM Cassette BASIC, Disk BASIC, Advanced BASIC(BASICA)는 IBM PC ROM에 의존했습니다. 마이크로소프트는 ROM 의존성을 제거한 100% 디스크 기반 인터프리터를 만들었고, 이를 **GW-BASIC**이라 명명했습니다.
+1983년, 마이크로소프트는 IBM PC 호환 기종을 내놓기 시작한 다른 OEM(Compaq, Tandy 등)에도 BASIC을 공급해야 했습니다. 기존 IBM Cassette BASIC, Disk BASIC, Advanced BASIC(BASICA)는 IBM PC ROM에 의존했습니다. 마이크로소프트는 ROM 의존성을 제거한 100% 디스크 기반 인터프리터를 만들었고, 이를 **GW-BASIC**이라 명명했습니다.
 
 GW가 무엇의 약자인지에 대해서는 여러 설(Gee-Whiz, Gates-William, Greg Whitten 등)이 있지만 공식 입장은 없습니다. 본질은 *"BASICA의 ROM-less 클론"* 이라는 점입니다.
 
@@ -408,6 +406,9 @@ Scheme에는 인터페이스/프로토콜 키워드가 없습니다. 대신 *해
 sudo apt install racket
 # 또는
 pkg install racket    # Termux
+
+# racket 본체에는 r7rs 언어도 SRFI-69도 없다. 따로 받아야 한다.
+raco pkg install r7rs srfi-lib
 ```
 
 `main.scm`:
@@ -419,10 +420,20 @@ pkg install racket    # Termux
         (scheme read)
         (scheme file)
         (scheme process-context)
-        (srfi 1) (srfi 13) (srfi 69))
+        ;; SRFI-1·13은 (scheme base)와 같은 이름을 다시 내보낸다.
+        ;; R7RS에서 한 이름을 두 곳에서 들여오는 것은 오류이므로 걷어낸다.
+        (except (srfi 1) assoc for-each list-copy make-list map member pair?)
+        (except (srfi 13) string->list string-fill! string-for-each
+                          string-hash string-map)
+        (srfi 69))
 
 (display "GW-BASIC Scheme bootstrap OK\n")
 ```
+
+> ⚠️ `except` 없이 `(srfi 1) (srfi 13) (srfi 69)`를 그대로 들여오면
+> `module: identifier already required at: assoc` 로 시작해 열두 개 이름이
+> 차례로 걸립니다. `string-hash`는 SRFI-13과 SRFI-69 양쪽에 있는데
+> 9.2절이 쓰는 것은 SRFI-69 쪽이라 13에서 뺍니다.
 
 ```bash
 racket --require main.scm
@@ -829,7 +840,7 @@ GW-BASIC의 어휘 분석에는 미묘한 함정이 있습니다.
 
 ### 6.1 키워드 목록
 
-본 구현에서 인식하는 키워드는 다음과 같습니다 (대문자 정규화 후 비교).
+GW-BASIC의 예약어는 다음과 같습니다 (대문자 정규화 후 비교).
 
 ```
 AND  AS  ATN  AUTO  BEEP  BLOAD  BSAVE  CALL  CDBL  CHAIN  CHR$  CINT
@@ -849,7 +860,7 @@ USING  USR  VAL  VARPTR  VARPTR$  VIEW  WAIT  WEND  WHILE  WIDTH
 WINDOW  WRITE  XOR
 ```
 
-이 중 본 구현에서 *동작*까지 지원하는 키워드는 80개 정도입니다. 나머지는 인식만 하고 `Unimplemented` 에러를 던집니다.
+이 중 9.2절의 `keyword-list`에 올라 렉서가 키워드로 인식하는 것은 93개, *동작*까지 지원하는 것은 80개 정도입니다. 목록에 없는 나머지는 렉서가 그냥 식별자로 읽습니다.
 
 > 💡 Scheme에서는 이 목록을 **해시 테이블**(`make-hash-table`)에 한 번 적재합니다. `eq?` 또는 `string=?`로 조회. 9장에서 `keyword-set`이라는 톱-레벨 정의를 만듭니다.
 
@@ -1056,7 +1067,7 @@ GW-BASIC의 부울은 **-1(true)** 와 **0(false)**. `AND`, `OR`, `NOT`은 *비�
 
 따라서 `IF X = 1 AND Y = 2`는 `IF (X=1) AND (Y=2)`로 정확히 동작합니다(둘 다 -1이면 -1, 한쪽이 0이면 0).
 
-R7RS는 비트 연산을 `(scheme bitwise)` 또는 SRFI-60에서 제공합니다.
+R7RS-small에는 비트 연산 라이브러리가 없습니다. SRFI-60(Integers as Bits)을 씁니다 — `(scheme bitwise)`는 Guile 3에서도 Racket의 `r7rs`에서도 열리지 않습니다.
 
 ```scheme
 (import (srfi 60))
@@ -1176,7 +1187,14 @@ PRINT "abc" < "ABC"     ' 0  (소문자가 더 큼)
 (define (keyword? s) (hash-table-ref/default keyword-set s #f))
 ```
 
-> 💡 SRFI-69의 `make-hash-table`은 동등성 비교 절차와 해시 함수를 받습니다. 처리계가 `string-hash`를 제공하지 않으면 `(lambda (s) (string->number (string-upcase s) 36))` 같은 거친 해시도 가능합니다 — 키워드는 92개에 불과해 충돌이 거의 없습니다.
+> 💡 SRFI-69의 `make-hash-table`은 동등성 비교 절차와 해시 함수를 받습니다. 키워드는 93개뿐이라 해시가 거칠어도 충돌은 드뭅니다. 다만 `(lambda (s) (string->number (string-upcase s) 36))`은 쓰면 안 됩니다 — `$`가 36진수 숫자가 아니라서 `CHR$` `HEX$` `INKEY$` `LEFT$` `MID$` `OCT$` `RIGHT$` `SPACE$` `STR$` `STRING$` 열 개에서 `#f`를 돌려줍니다. 직접 쓸 거면 자리별 누적이 안전합니다.
+>
+> ```scheme
+> (define (kw-hash s . _)
+>   (let loop ((i 0) (h 5381))
+>     (if (= i (string-length s)) h
+>         (loop (+ i 1) (modulo (+ (* h 33) (char->integer (string-ref s i))) 1000003)))))
+> ```
 
 ### 9.3 입력 커서
 
@@ -1494,7 +1512,7 @@ PRINT "abc" < "ABC"     ' 0  (소문자가 더 큼)
   (tok-val (cadr (lex "10 \"hello\""))))
 ```
 
-> 💡 `test-equal`은 처리계마다 다릅니다. Racket은 `rackunit`, Chez는 `(scheme test)` (R7RS 부록). 본 책은 32장에서 이를 통합한 `lib/test.scm`을 만듭니다.
+> 💡 `test-equal`은 처리계마다 다릅니다. Racket은 `rackunit`, 처리계를 안 가리려면 SRFI-64(`(srfi 64)`). R7RS에 `(scheme test)`라는 라이브러리는 없습니다. 본 책은 32장에서 이를 통합한 `lib/test.scm`을 만듭니다.
 
 ---
 
@@ -1549,7 +1567,7 @@ PRINT "abc" < "ABC"     ' 0  (소문자가 더 큼)
 | 함수호출 | `(call "NAME" <expr> ...)` `(fn "NAME" <expr> ...)` |
 | 리터럴 | `(num <value> <kind>)` `(str <s>)` |
 
-> 💡 자매서의 `PrintStmt`, `IfStmt` 같은 클래스를 정의하지 않아도 *목록의 첫 원소*가 그 역할을 합니다. 매칭은 `(case (car node) ...)` 또는 SRFI-200 패턴 매칭(`match`)으로 합니다.
+> 💡 자매서의 `PrintStmt`, `IfStmt` 같은 클래스를 정의하지 않아도 *목록의 첫 원소*가 그 역할을 합니다. 매칭은 `(case (car node) ...)` 또는 `match` 패턴 매칭으로 합니다 — SRFI-204입니다. SRFI-200은 철회됐습니다.
 
 ### 10.2 파서 상태
 
@@ -2082,6 +2100,12 @@ Pratt 파서는 토큰별로 *prefix 동작* 과 *infix 동작 + 결합력* 을 
           '("AND" "OR" "XOR" "MOD")
           (list BP-AND BP-OR BP-XOR BP-MOD))
 ```
+
+> ⚠️ `EQV`와 `IMP`는 6.1의 예약어 목록과 9.2의 `keyword-list`에 들어 있어
+> 렉서는 키워드로 읽지만, 결합력 상수도 infix 등록도 없습니다. 두 연산자를
+> 쓴 프로그램은 그 자리에서 파싱이 멈춥니다. **자매서도 같은 범위(미지원)**
+> 입니다. 넣으려면 `XOR`보다 약한 `BP-EQV` `BP-IMP`를 11.2 표에 더하고 위
+> `for-each`의 두 리스트에 이름과 결합력을 하나씩 추가하면 됩니다.
 
 ### 11.7 BNF와의 대응 검증
 
