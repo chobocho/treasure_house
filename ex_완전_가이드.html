@@ -1,0 +1,3726 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<!-- deck-bookmark: 덱 엔진이 replaceState로 주소를 바꾸기 전에 진입 해시를 잡아둔다. 반드시 <head> 최상단. -->
+<script>window.__deckInitHash=location.hash;</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- ▼▼▼ 새 덱을 만들 때 여기 3줄만 바꾸면 됩니다 ▼▼▼ -->
+<title>ex 완전 가이드 — 유닉스 줄 편집기의 역사·문법·LLM식 활용</title>
+<meta name="description" content="QED에서 vim까지 — ex 명령어의 역사, 주소·정규식·:g 문법 완전 정복, 그리고 ex를 LLM처럼 부리는 실전 가이드">
+<style>
+/* ============================================================
+   1. 테마 — 색을 바꾸려면 이 블록만 고치면 된다
+   ============================================================ */
+:root {
+  --bg1: #eef1e9;          /* 배경 그라디언트 시작 */
+  --bg2: #dbe3d7;          /* 배경 그라디언트 중간 */
+  --bg3: #c3d0bf;          /* 배경 그라디언트 끝 */
+  --accent: #2b6f5a;       /* 주 강조색 (버튼·테두리·번호) */
+  --accent2: #14453a;      /* 제목용 진한 강조색 */
+  --text: #1b2a24;
+  --muted: #5a6f66;
+  --border: rgba(43, 111, 90, 0.28);
+  --panel: rgba(253, 255, 251, 0.94);
+  --code-bg: #f1f6f1;
+  --code-border: rgba(43, 111, 90, 0.20);
+  --ok: #2e7d4f;           /* 좋은 예 / 성공 */
+  --warn: #b45309;         /* 주의 */
+  --bad: #b3261e;          /* 나쁜 예 / 오류 */
+  --special: #7c3aed;      /* 핵심 강조 */
+}
+
+/* ============================================================
+   2. 기본 골격
+   ============================================================ */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; height: 100%; }
+/* ⚠ 슬라이드 모드 body 높이는 100vh/100dvh 금지 — 삼성 인터넷이 하단 툴바를
+   제외하지 않고 계산해 내비가 본문을 가린다. %(레이아웃 뷰포트) + min-height:0 을 쓴다. */
+body {
+  margin: 0;
+  height: 100%; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+               "Malgun Gothic", "Noto Sans KR", sans-serif;
+  color: var(--text);
+  background: linear-gradient(160deg, var(--bg1) 0%, var(--bg2) 60%, var(--bg3) 100%);
+  background-attachment: scroll;
+  line-height: 1.7;
+  word-break: keep-all;          /* 한국어 어절 단위 줄바꿈 */
+}
+
+/* 진행 막대 */
+#bar {
+  flex: none; height: 3px; width: 0%;
+  background: linear-gradient(90deg, var(--accent), #7aa8e0);
+  transition: width .25s;
+}
+
+/* 상단 바 */
+header.deck {
+  flex: none; position: relative; z-index: 10;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,.86); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+  padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+}
+header.deck .home { text-decoration: none; font-size: 1.05em; flex: none; }
+header.deck .brand {
+  font-weight: 700; color: var(--accent2); white-space: nowrap;
+  font-size: .95em; overflow: hidden; text-overflow: ellipsis;
+}
+header.deck select {
+  flex: 1; min-width: 0; background: #fff; color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px;
+  font-size: .9em; max-width: 420px; margin-left: auto;
+}
+#tocBtn {
+  flex: none; background: #fff; border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; font-size: .85em; padding: 7px 10px; cursor: pointer;
+}
+
+/* ============================================================
+   3. 슬라이드 무대 — main > article 하나가 슬라이드 한 장
+   ============================================================ */
+main.prose {
+  flex: 1; width: 100%; margin: 0; min-width: 0;
+  overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 14px clamp(10px, 3vw, 24px) 18px;
+}
+main.prose > article { display: none; }
+main.prose > article.card {
+  position: relative; max-width: 900px; margin: 14px auto;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 16px; padding: clamp(16px, 3.5vw, 34px);
+  box-shadow: 0 4px 18px rgba(8,64,110,.08);
+  backdrop-filter: blur(6px);
+}
+main.prose > article.on { display: block; animation: fade .2s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+/* 부(部) 표지 */
+main.prose article.section {
+  background: linear-gradient(145deg, #dde8f5, #c3d5ea);
+  border-color: #8fb0d4; padding-top: 30px; padding-bottom: 30px;
+}
+
+/* 제목 — .pno(페이지 번호)가 절대 배치라 오른쪽 여백 64px 필수 */
+main.prose h1, main.prose h2, main.prose h3, main.prose h4 { line-height: 1.35; }
+main.prose article > h1, main.prose article > h2, main.prose article > h3 {
+  padding-right: 64px; overflow-wrap: break-word;
+}
+main.prose article h4 { padding-right: 8px; }
+main.prose h1 {
+  font-size: clamp(1.6rem, 4vw, 2.3rem); margin: .1em 0 .5em;
+  background: linear-gradient(90deg, var(--accent), #6d9bd1, var(--accent2));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+main.prose h2 { font-size: clamp(1.3rem, 3vw, 1.7rem); margin: .2em 0 .5em; color: var(--accent2); }
+main.prose h3 { font-size: 1.2rem; margin: .1em 0 .5em; color: var(--accent2); }
+main.prose h4 { font-size: 1.02rem; margin: 1.1em 0 .3em; }
+main.prose p { margin: .7em 0; }
+main.prose ul, main.prose ol { padding-left: 1.4em; }
+main.prose li { margin: .3em 0; }
+main.prose a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--border); }
+main.prose hr { border: none; border-top: 2px dashed var(--border); margin: 1.6em 0; }
+main.prose blockquote {
+  margin: 1em 0; padding: 10px 18px; border-left: 4px solid var(--accent);
+  background: rgba(58,92,150,.07); border-radius: 0 10px 10px 0; color: var(--muted);
+}
+.lead { font-size: 1.05em; }
+.pno {
+  position: absolute; top: 10px; right: 14px; font-size: 11px;
+  color: var(--muted); font-family: Consolas, monospace;
+}
+.chnum { color: var(--accent2); font-weight: bold; letter-spacing: .12em; font-size: .85em; margin: 0 0 4px; }
+.chnum + h1, .chnum + h2 { margin-top: 0; }
+.chsub { color: var(--muted); margin: 8px 0 0; }
+.cap { color: var(--muted); font-size: .9em; margin: 8px 0 4px; }
+.cap a, .chsub a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+/* 표지 */
+article.cover h1 { font-size: clamp(1.7rem, 5.2vw, 2.7rem); }
+.cover .sub { color: var(--muted); font-size: 1.02em; margin-top: 6px; }
+.cover .cq {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 84px; height: 84px; border-radius: 50%; background: var(--accent2); color: #fff;
+  font-weight: 800; font-size: 1.5rem; font-family: Consolas, monospace; letter-spacing: -.02em;
+  box-shadow: 0 6px 18px rgba(35,55,92,.42), inset 0 0 0 6px rgba(255,255,255,.14); margin-bottom: 6px;
+}
+
+/* ============================================================
+   4. 코드
+   ============================================================ */
+main.prose :not(pre) > code {
+  background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 6px;
+  padding: 1px 6px; font-size: .9em; color: #175a48;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  overflow-wrap: break-word;   /* ⚠ anywhere 금지: 짧은 식별자가 낱말 중간에서 갈라진다 */
+}
+code.nb { white-space: nowrap; }  /* 짧은(≈18자 이하) 인라인 코드에 붙여 분리 방지 */
+main.prose pre {
+  background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 12px;
+  padding: 16px 18px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  font-size: .88rem; line-height: 1.55;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+}
+main.prose pre code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  background: none; border: none; padding: 0; color: #16342c;
+}
+main.prose pre, main.prose code, .term, .cerr, .demo .out, .pkgtree, .sig {
+  tab-size: 4; -moz-tab-size: 4;
+}
+/* 하이라이터가 붙이는 토큰 클래스 */
+code .cm { color: #7e8a99; font-style: italic; }   /* 주석 */
+code .st { color: #1a6b46; }                       /* 문자열 */
+code .kw { color: #1f5d7a; font-weight: 600; }     /* 키워드 */
+code .fn { color: #a45a04; }                       /* 함수 호출 */
+code .nu { color: #6026c9; }                       /* 숫자 */
+code .hd { color: #a45a04; font-weight: 700; }     /* HTTP 헤더 */
+/* 코드 블록 파일명 라벨 */
+.fname {
+  display: inline-block; font-family: Consolas, monospace; font-size: .78rem;
+  color: var(--muted); background: rgba(58,92,150,.08); border: 1px solid var(--code-border);
+  border-bottom: none; border-radius: 8px 8px 0 0; padding: 2px 10px; margin: 10px 0 0;
+}
+.fname + pre { border-radius: 0 10px 10px 10px; margin-top: 0; }
+
+/* ============================================================
+   5. 콜아웃 · 표 · 목록
+   ============================================================ */
+.note, .tip, .warn, .key {
+  border-radius: 10px; padding: 10px 14px; margin: 12px 0;
+  border-left: 4px solid var(--accent); background: rgba(58,92,150,.08);
+  font-size: .95em; overflow-wrap: break-word;
+}
+.tip  { border-left-color: var(--ok);      background: rgba(46,158,91,.09); }
+.warn { border-left-color: var(--warn);    background: rgba(217,119,6,.10); }
+.key  { border-left-color: var(--special); background: rgba(124,58,237,.09); }
+.note b { color: var(--accent2); }
+.tip b  { color: #217a46; }
+.warn b { color: #a45a04; }
+.key b  { color: #6026c9; }
+
+/* 표는 반드시 .tblwrap 으로 감쌀 것 — 좁은 화면에서 카드 밖으로 잘리는 것을 막는다 */
+.tblwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1.2em 0; }
+.tblwrap table { margin: 0; }
+.kv { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 10px 0; }
+.kv th, .kv td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+.kv th { background: rgba(58,92,150,.10); }
+/* ⚠ th 에 white-space:nowrap 을 주지 말 것 — 이름 여러 개가 든 칸이 한 줄을 통째로 차지해
+   다른 열을 화면 밖으로 밀어낸다. 이름마다 <code> 칩을 따로 주는 편이 낫다. */
+
+/* 번호 매겨진 단계 목록 */
+.steps { counter-reset: st; list-style: none; padding-left: 0; margin: 12px 0; }
+.steps > li { counter-increment: st; position: relative; padding-left: 34px; margin: 8px 0; }
+.steps > li::before {
+  content: counter(st); position: absolute; left: 0; top: 1px;
+  width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff;
+  font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+
+/* 배지 */
+.badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .74rem;
+  font-weight: 700; background: rgba(58,92,150,.14); color: var(--accent2);
+  margin-right: 6px; vertical-align: middle;
+}
+.badge.ok  { background: rgba(46,158,91,.16); color: #1e7043; }
+.badge.err { background: rgba(203,44,44,.14); color: #a52020; }
+.badge.new { background: rgba(124,58,237,.14); color: #6026c9; }
+
+/* 인라인 값 칩 */
+.chip {
+  display: inline-block; font-family: Consolas, monospace; font-size: .8rem;
+  border: 1px solid var(--code-border); background: var(--code-bg); border-radius: 5px;
+  padding: 0 6px; margin: 0 2px;
+}
+
+/* ============================================================
+   6. 레이아웃 컴포넌트 (그리드·비교 카드)
+   ============================================================ */
+.g2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin: 12px 0; }
+.g3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin: 12px 0; }
+.g2 > div, .g3 > div { min-width: 0; }
+.g2 pre, .g3 pre { margin: 0; }
+
+.cmp { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
+.cmp > h5 {
+  margin: 0; padding: 6px 12px; font-size: .85rem; letter-spacing: .02em;
+  background: rgba(58,92,150,.12); color: var(--accent2); border-bottom: 1px solid var(--border);
+}
+.cmp.bad > h5  { background: rgba(203,44,44,.12); color: #a52020; }
+.cmp.good > h5 { background: rgba(46,158,91,.14); color: #1e7043; }
+.cmp pre { border: none; border-radius: 0; background: var(--code-bg); }
+.cmp p { margin: 8px 12px; font-size: .92em; color: var(--muted); }
+.cmp .kv { margin: 0; font-size: .86rem; }
+
+/* ============================================================
+   7. 도식 — 박스 문자(┌─│)는 폴드7에서 깨지므로 CSS 도식으로 그린다
+   ============================================================ */
+.flow, .pipe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.flow .box, .pipe .st {
+  border: 1px solid var(--border); background: #fff; border-radius: 10px;
+  padding: 6px 12px; font-size: .88rem; font-weight: 600; color: var(--accent2);
+}
+.flow .box.dim { color: var(--muted); font-weight: 500; }
+.flow .arr, .pipe .arr { color: var(--muted); font-weight: 700; }
+.pipe .ext2 { font-family: Consolas, monospace; color: var(--muted); font-size: .78rem; }
+
+/* 셀 배열 (배열·바이트·큐 그리기) */
+.arr { display: flex; flex-wrap: wrap; gap: 2px; margin: 8px 0; }
+.arr .c {
+  min-width: 34px; text-align: center; padding: 5px 6px; font-family: Consolas, monospace;
+  font-size: .8rem; border: 1px solid var(--code-border); background: var(--code-bg); border-radius: 5px;
+}
+.arr .c.in { border-color: var(--accent); background: rgba(58,92,150,.14); font-weight: 700; color: var(--accent2); }
+.arr .c.dead { opacity: .4; text-decoration: line-through; }
+.arr .idx { font-size: .68rem; color: var(--muted); display: block; line-height: 1.1; }
+
+/* 스택 (아래에서 위로 쌓임) */
+.stack { display: flex; flex-direction: column-reverse; gap: 3px; margin: 10px 0; max-width: 260px; }
+.stack .cell {
+  border: 1px solid var(--code-border); background: var(--code-bg); border-radius: 6px;
+  padding: 4px 10px; font-family: Consolas, monospace; font-size: .82rem; text-align: center;
+}
+.stack .cell.top { border-color: var(--accent); background: rgba(58,92,150,.12); font-weight: 700; }
+.stack .lbl { font-size: .74rem; color: var(--muted); text-align: center; }
+
+/* 트리 / 들여쓴 구조 (공백으로 계층을 표현) */
+.pkgtree {
+  margin: 12px 0; padding: 10px 14px; border-radius: 10px; background: var(--code-bg);
+  border: 1px solid var(--code-border); font-family: Consolas, monospace; font-size: .82rem;
+  line-height: 1.75; overflow-x: auto; white-space: pre;
+}
+.pkgtree b { color: var(--accent2); }
+.pkgtree i { color: var(--muted); font-style: normal; }
+
+/* 시그니처 해부 — 밑줄 + 라벨 */
+.sig {
+  margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: var(--code-bg);
+  border: 1px solid var(--code-border); font-family: Consolas, monospace; font-size: .88rem;
+  overflow-x: auto; white-space: pre; line-height: 2.1;
+}
+.sig u { text-decoration: none; border-bottom: 2px solid var(--accent); padding-bottom: 1px; }
+.sig .lbl {
+  display: inline-block; font-size: .66rem; font-family: system-ui, sans-serif;
+  background: var(--accent); color: #fff; border-radius: 4px; padding: 0 5px; margin-left: 4px;
+  vertical-align: middle; font-weight: 700;
+}
+
+/* 좌·우 대응 도식 */
+.satisfy { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 8px; align-items: center; margin: 12px 0; }
+.satisfy .bx {
+  border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; background: #fff;
+  font-family: Consolas, monospace; font-size: .8rem; line-height: 1.6; min-width: 0; overflow-x: auto;
+}
+.satisfy .bx h6 { margin: 0 0 5px; font-family: system-ui, sans-serif; font-size: .74rem; color: var(--muted); }
+.satisfy .mid { font-size: 1.1rem; color: var(--accent); font-weight: 700; }
+
+/* ============================================================
+   7b. 이 덱 전용 — 버퍼 도식 · 연표 · ex 명령 해부
+   ============================================================ */
+/* 줄 번호가 붙은 버퍼 그림 */
+.buf {
+  margin: 12px 0; border: 1px solid var(--code-border); border-radius: 10px;
+  background: var(--code-bg); overflow: hidden; font-family: Consolas, "Liberation Mono", monospace;
+  font-size: .84rem;
+}
+.buf .ln { display: flex; align-items: flex-start; gap: 10px; padding: 2px 10px; white-space: pre; }
+.buf .ln > i {
+  font-style: normal; color: var(--muted); min-width: 2.4em; text-align: right; flex: none;
+  border-right: 1px solid var(--code-border); padding-right: 8px;
+}
+.buf .ln > s { text-decoration: none; overflow-x: auto; }
+.buf .ln.dot { background: rgba(43,111,90,.14); font-weight: 700; }
+.buf .ln.dot > i::after { content: " ."; color: var(--accent); }
+.buf .ln.sel { background: rgba(180,83,9,.13); }
+.buf .ln.del { opacity: .45; text-decoration: line-through; }
+.buf .ln.add { background: rgba(46,125,79,.14); }
+.buf .cap2 { padding: 4px 10px; font-family: system-ui, sans-serif; font-size: .74rem;
+  color: var(--muted); background: rgba(43,111,90,.07); border-top: 1px solid var(--code-border); }
+
+/* 연표 */
+.tl { margin: 12px 0; border-left: 3px solid var(--accent); padding-left: 0; list-style: none; }
+.tl > li { position: relative; padding: 0 0 12px 18px; margin: 0; }
+.tl > li::before {
+  content: ""; position: absolute; left: -7px; top: 9px; width: 11px; height: 11px;
+  border-radius: 50%; background: var(--accent); border: 2px solid var(--panel);
+}
+.tl .yr { font-family: Consolas, monospace; font-weight: 700; color: var(--accent2); margin-right: 8px; }
+.tl .who { color: var(--muted); font-size: .88em; }
+.tl > li.big::before { background: var(--warn); width: 14px; height: 14px; left: -8.5px; }
+
+/* ex 한 줄 명령 해부 — .sig 의 사촌, 색 라벨 */
+.exa { margin: 12px 0; padding: 12px 12px 8px; border-radius: 10px; background: var(--code-bg);
+  border: 1px solid var(--code-border); font-family: Consolas, monospace; font-size: .95rem;
+  overflow-x: auto; }
+.exa .pc { border-bottom: 2px solid; padding-bottom: 2px; }
+.exa .a1 { border-color: #b45309; color: #8a4008; }   /* 주소 */
+.exa .a2 { border-color: #1f5d7a; color: #16465c; }   /* 명령 */
+.exa .a3 { border-color: #2e7d4f; color: #1e6b3f; }   /* 인자 */
+.exa .a4 { border-color: #7c3aed; color: #5b28c0; }   /* 플래그 */
+.exa .lg { margin: 8px 0 0; font-family: system-ui, sans-serif; font-size: .74rem; color: var(--muted); }
+.exa .lg b { font-weight: 700; }
+.exa .lg .k1 { color: #8a4008; } .exa .lg .k2 { color: #16465c; }
+.exa .lg .k3 { color: #1e6b3f; } .exa .lg .k4 { color: #5b28c0; }
+
+/* 대응표 — 자연어 의도 ↔ ex 한 줄 */
+.ph { margin: 12px 0; display: grid; gap: 8px; }
+.ph .row2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.15fr); gap: 8px;
+  align-items: center; border: 1px solid var(--border); border-radius: 10px; background: #fff; padding: 8px 10px; }
+.ph .say { font-size: .9rem; color: var(--text); }
+.ph .say::before { content: "\201C"; color: var(--muted); }
+.ph .say::after { content: "\201D"; color: var(--muted); }
+.ph .cmd2 { font-family: Consolas, monospace; font-size: .84rem; color: var(--accent2);
+  background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 7px; padding: 4px 8px; overflow-x: auto; white-space: pre; }
+@media (max-width: 620px) { .ph .row2 { grid-template-columns: minmax(0,1fr); } }
+
+/* 데모용 텍스트영역 */
+.demo textarea {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 9px; font-family: Consolas, "Liberation Mono", monospace; font-size: .82rem;
+  line-height: 1.5; background: #fff; color: var(--text); resize: vertical;
+}
+.demo input.wide { max-width: 100%; width: 100%; }
+
+/* ============================================================
+   8. 터미널 · 오류 박스
+   ============================================================ */
+.term {
+  margin: 10px 0; padding: 12px 14px; border-radius: 10px;
+  background: #10222f; color: #d6e9f5; border: 1px solid #0b1a24;
+  font-family: Consolas, "Liberation Mono", monospace; font-size: .84rem;
+  line-height: 1.55; overflow-x: auto; white-space: pre; -webkit-overflow-scrolling: touch;
+}
+.term .p { color: #64d18a; }   /* 프롬프트 */
+.term .c { color: #7fa8c0; }   /* 주석 */
+.term .r { color: #ff9d9d; }   /* 오류 */
+.term .g { color: #9ec8f0; }   /* 강조 */
+.cerr {
+  margin: 10px 0; padding: 10px 12px; border-radius: 10px;
+  background: #fff4f4; border: 1px solid #f0c4c4; color: #8a2020;
+  font-family: Consolas, "Liberation Mono", monospace; font-size: .84rem;
+  line-height: 1.5; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.cerr b { color: #c62828; }
+
+/* ============================================================
+   9. 인터랙티브 데모 · 퀴즈
+   ============================================================ */
+.demo {
+  margin: 12px 0; border: 1px solid var(--border); border-radius: 12px;
+  background: rgba(255,255,255,.85); padding: 12px;
+}
+.demo > h5 { margin: 0 0 8px; font-size: .88rem; color: var(--accent2); }
+.demo .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.demo button {
+  border: 1px solid var(--border); background: var(--accent); color: #fff;
+  border-radius: 9px; padding: 7px 13px; font-size: .87rem; font-weight: 600;
+  cursor: pointer; min-height: 36px;
+}
+.demo button.sec { background: #fff; color: var(--accent2); }
+.demo button:active { transform: translateY(1px); }
+.demo input[type=text], .demo input[type=number], .demo select {
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px;
+  font-size: .87rem; background: #fff; color: var(--text); min-width: 0; max-width: 190px;
+  font-family: Consolas, monospace;
+}
+.demo .out {
+  margin-top: 8px; padding: 10px 12px; border-radius: 9px; background: #10222f; color: #d6e9f5;
+  font-family: Consolas, "Liberation Mono", monospace; font-size: .82rem; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere; min-height: 2.6em;
+}
+.demo .out .ok  { color: #7ee2a8; }
+.demo .out .bad { color: #ff9d9d; }
+.demo .out .dim { color: #7fa8c0; }
+
+.quiz .q { font-weight: 700; color: var(--accent2); margin-bottom: 6px; }
+.quiz .a {
+  display: none; margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+  background: rgba(46,158,91,.09); border-left: 4px solid var(--ok); font-size: .95em;
+}
+.quiz.open .a { display: block; }
+
+/* ============================================================
+   10. 하단 내비 · 목차 오버레이
+   ============================================================ */
+nav#deckNav {
+  /* 본문 흐름 안의 바닥 바 — 오버레이가 아니라서 본문 텍스트를 가리지 않는다.
+     sticky 는 책갈피 셸의 bottomInset() 감지 조건이므로 유지할 것. */
+  flex: none; position: sticky; bottom: 0; z-index: 20;
+  display: flex; gap: 10px; justify-content: center; align-items: center;
+  padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: rgba(255,255,255,.90); backdrop-filter: blur(6px);
+  border-top: 1px solid var(--border);
+}
+nav#deckNav button {
+  min-width: 52px; min-height: 40px; border-radius: 10px; border: 1px solid var(--border);
+  background: rgba(255,255,255,.94); color: var(--text); font-size: 15px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(8,64,110,.12);
+}
+nav#deckNav button:disabled { opacity: .35; }
+#counter {
+  font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums;
+  min-width: 5.5em; text-align: center;
+}
+#deckToc {
+  position: fixed; inset: 0; z-index: 40; display: none; overflow-y: auto;
+  background: rgba(240,245,252,.97);
+  padding: 16px max(16px, env(safe-area-inset-right)) 76px max(16px, env(safe-area-inset-left));
+}
+#deckToc.on { display: block; }
+#deckToc h3 { margin: 4px 0 12px; color: var(--accent2); }
+.tocsec { margin-bottom: 14px; }
+.tocsec h4 {
+  margin: 4px 0 6px; font-size: 13px; color: var(--accent2);
+  position: sticky; top: -16px; background: rgba(240,245,252,.97); padding: 4px 0;
+}
+.tocsec a {
+  display: block; color: var(--text); text-decoration: none; font-size: 13.5px;
+  padding: 4px 8px; border-radius: 8px;
+}
+.tocsec a:hover, .tocsec a:focus { background: rgba(58,92,150,.12); }
+.tocsec a b {
+  color: var(--muted); font-family: Consolas, monospace; font-weight: 600;
+  display: inline-block; min-width: 3.2em;
+}
+#tocClose {
+  position: fixed; right: max(16px, env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 41;
+  background: var(--accent); color: #fff; border: none; border-radius: 10px;
+  padding: 10px 16px; font-size: 14px; cursor: pointer;
+}
+
+/* ============================================================
+   11. 반응형 — 폴더블(갤럭시 폴드7) · 좁은 화면 · 인쇄
+   ============================================================ */
+/* 힌지로 화면이 둘로 갈릴 때는 다단 레이아웃을 전부 1단으로 */
+@media (horizontal-viewport-segments: 2), (spanning: single-fold-vertical) {
+  main.prose > article.card { max-width: 96%; }
+  .g2, .g3, .satisfy { grid-template-columns: minmax(0,1fr); }
+  .satisfy .mid { display: block; transform: rotate(-90deg); }
+  .sig { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 2.4; }
+}
+@media (max-width: 620px) {
+  .g2, .g3, .satisfy { grid-template-columns: minmax(0,1fr); }
+  .satisfy .mid { display: block; transform: rotate(-90deg); }
+  .sig { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 2.4; }
+}
+@media (max-width: 420px) {
+  header.deck .brand { font-size: .8em; }
+  main.prose { padding-left: 8px; padding-right: 8px; }
+  main.prose > article.card { padding: 14px 12px; }
+  main.prose pre { font-size: .8rem; padding: 12px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  main.prose > article.on { animation: none; }
+  html { scroll-behavior: auto; }
+  #bar { transition: none; }
+}
+@media print {
+  body { height: auto; overflow: visible; display: block; }
+  main.prose { overflow: visible; padding: 0; }
+  main.prose > article { display: block !important; page-break-after: always; }
+  #bar, header.deck, nav#deckNav, #deckToc { display: none !important; }
+}
+</style>
+</head>
+<body>
+<div id="bar"></div>
+
+<!-- ===== 상단 바 : brand 와 select 안의 목록만 바꾸면 된다 ===== -->
+<header class="deck">
+  <a class="home" href="./index.html" aria-label="보물창고">🏰</a>
+  <span class="brand">📜 ex 완전 가이드</span>
+  <select id="nav" aria-label="챕터 이동">
+    <option value="top">챕터 이동…</option>
+    <option value="part1">1부 · 역사</option>
+    <option value="ch01">· 종이와 전신 타자기의 시대</option>
+    <option value="ch02">· ed에서 ex로</option>
+    <option value="ch03">· ex의 자손들</option>
+    <option value="part2">2부 · 문법</option>
+    <option value="ch04">· 실행과 모드</option>
+    <option value="ch05">· 주소</option>
+    <option value="ch06">· 명령 사전</option>
+    <option value="ch07">· 정규식과 치환</option>
+    <option value="ch08">· :g — 전역 명령</option>
+    <option value="part3">3부 · 실전</option>
+    <option value="ch09">· 레시피</option>
+    <option value="ch10">· 파일 여럿 · 셸과 함께</option>
+    <option value="ch11">· 함정</option>
+    <option value="part4">4부 · LLM처럼 부리기</option>
+    <option value="ch12">· 왜 LLM과 닮았는가</option>
+    <option value="ch13">· 의도 → ex 문형집</option>
+    <option value="ch14">· LLM에게 ex를 시키기</option>
+    <option value="ch15">· 안전장치</option>
+    <option value="part5">5부 · 부록</option>
+    <option value="ch16">· 치트시트</option>
+  </select>
+  <button id="tocBtn" aria-label="목차 열기">☰</button>
+</header>
+
+<!-- ============================================================
+     본문 : main > article 하나가 슬라이드 한 장이다.
+       · class="card"            일반 슬라이드
+       · class="card section"    부(部) 표지 — 목차의 그룹을 새로 연다
+       · class="card section cover"  덱 표지
+       · id 는 필수 (해시 내비게이션·목차·책갈피가 id 로 슬라이드를 찾는다)
+       · 페이지 번호는 JS 가 자동으로 붙인다 — 절대 손으로 쓰지 말 것
+     ============================================================ -->
+<main class="prose">
+
+<article class="card section cover" id="top">
+<p class="cq">:ex</p>
+<h1>ex 완전 가이드</h1>
+<p class="sub">유닉스 줄 편집기의 역사 · 문법 · 그리고 LLM처럼 부리는 법</p>
+<p class="cap">← → 방향키·스와이프로 넘기기 · ☰ 목차 · <a href="./index.html">🏰 보물창고</a></p>
+</article>
+
+<article class="card" id="intro-what">
+<h3>당신은 이미 ex를 쓰고 있다</h3>
+<p>vim에서 <code class="nb">:wq</code>를 쳐 본 적이 있다면, 당신은 ex 명령을 실행한 것입니다. vi의 콜론 프롬프트는 흉내가 아니라 <b>진짜 ex</b>입니다. <code class="nb">:%s/foo/bar/g</code>도, <code class="nb">:g/TODO/d</code>도 1978년에 이미 그 문법 그대로 존재했습니다.</p>
+<div class="key"><b>한 줄 요약</b> — vi는 ex 위에 씌운 화면 껍데기입니다. 콜론 뒤의 세계가 원래 본체입니다.</div>
+<p>이 덱은 그 본체를 다룹니다. 어디서 왔고, 문법이 왜 그렇게 생겼고, 2020년대에 <b>어떻게 하면 무기가 되는가</b>.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>부</th><th>내용</th></tr>
+<tr><td>1부 · 역사</td><td>QED → ed → em → ex → vi → vim, 그리고 grep·sed의 어원</td></tr>
+<tr><td>2부 · 문법</td><td>주소 · 명령 · 정규식 · 치환 · <code class="nb">:g</code>. ex의 전부</td></tr>
+<tr><td>3부 · 실전</td><td>바로 훔쳐 쓰는 레시피와, 이미 겪은 함정들</td></tr>
+<tr><td>4부 · LLM처럼</td><td>의도를 선언하면 실행되는 인터페이스로 다루기</td></tr>
+<tr><td>5부 · 부록</td><td>치트시트 · 이식성 표 · 체크리스트</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="intro-how">
+<h3>이 덱을 읽는 법</h3>
+<ol class="steps">
+<li><b>터미널을 하나 띄워 두세요.</b> 거의 모든 예제는 <code class="nb">ex</code>·<code class="nb">vim</code>이 설치된 기계에서 그대로 돌아갑니다.</li>
+<li><b>덱 안에서도 실행됩니다.</b> 2부에 <b>ex 인터프리터 데모</b>가 들어 있습니다. 주소·<code class="nb">:s</code>·<code class="nb">:g</code>를 직접 쳐 볼 수 있습니다.</li>
+<li><b>4부만 따로 읽어도 됩니다.</b> 문법을 이미 안다면 <code class="nb">☰</code>에서 4부로 건너뛰세요.</li>
+</ol>
+<div class="note"><b>검증 환경</b> — 이 덱의 명령 출력은 <code class="nb">Vim 9.2</code>가 제공하는 <code class="nb">ex</code>에서 실제로 실행해 확인했습니다. 역사적 ex나 다른 구현과 갈리는 지점은 그때그때 표시했습니다.</div>
+<div class="warn"><b>파일을 지우는 명령이 있습니다</b> — <code class="nb">:g/…/d</code> 계열은 되돌릴 수 있지만, <code class="nb">:w</code>로 저장한 뒤에는 아닙니다. 처음 보는 명령은 <b>사본에서</b> 돌려 보세요. 안전 습관은 4부 마지막 장에 모아 두었습니다.</div>
+</article>
+
+<article class="card section" id="part1">
+<p class="chnum">1부</p>
+<h2>역사</h2>
+<p class="chsub">종이 위에서 태어난 편집기가 어떻게 오늘의 <code>:</code>가 되었나</p>
+</article>
+
+<article class="card" id="ch01">
+<p class="chnum">1장</p>
+<h2>종이와 전신 타자기의 시대</h2>
+<p class="chsub">왜 하필 <b>줄</b> 단위인가</p>
+</article>
+
+<article class="card" id="h-teletype">
+<h3>화면이 없었다</h3>
+<p>1960년대 후반의 단말기는 <b>ASR-33 텔레타이프</b>였습니다. 종이 두루마리에 초당 10글자를 찍는 기계식 프린터입니다. 커서를 위로 올릴 방법이 없습니다. 이미 찍힌 잉크를 지울 방법도 없습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>제약</th><th>결과로 생긴 설계</th></tr>
+<tr><td>출력이 종이 — 되돌릴 수 없음</td><td>화면을 다시 그리지 않는다. 바뀐 줄만 찍는다</td></tr>
+<tr><td>초당 10자 (110 보드)</td><td>명령이 <b>한 글자</b>다. <code>d</code> <code>p</code> <code>s</code> <code>m</code></td></tr>
+<tr><td>커서 이동 불가</td><td>위치를 <b>줄 번호</b>로 말한다 — 이것이 주소</td></tr>
+<tr><td>지면이 아까움</td><td>성공하면 아무것도 출력하지 않는다 (침묵의 미덕)</td></tr>
+</table>
+</div>
+<div class="key"><b>ex의 모든 이상함은 여기서 나왔습니다</b> — 주소·한 글자 명령·과묵함은 취향이 아니라 <b>초당 10글자라는 물리적 사실</b>의 결과입니다.</div>
+</article>
+
+<article class="card" id="h-teletype2">
+<h3>종이 위의 편집 세션</h3>
+<p>실제로 이런 모양이었습니다. 사용자가 친 것과 기계가 찍은 것이 <b>같은 종이 위에 섞입니다</b>.</p>
+<div class="term"><span class="c">(ed 세션 — 1969년 스타일)</span>
+<span class="p">$</span> ed poem.txt
+<span class="g">42</span>          <span class="c">&lt;- 파일 크기(바이트)만 알려준다</span>
+1,3p
+Whose woods these are I think I know.
+His house is in the village though;
+He will not see me stopping here
+2s/village/city/
+w
+<span class="g">38</span>
+q
+<span class="p">$</span></div>
+<div class="note"><b><code>1,3p</code></b> — "1번부터 3번 줄까지 <b>p</b>rint". 주소 두 개와 명령 한 글자. 50년이 지난 지금 vim에서 <code class="nb">:1,3p</code>를 치면 똑같이 동작합니다.</div>
+<div class="warn"><b>ed는 오타를 알려주지 않습니다</b> — 무슨 잘못을 해도 대답은 <code class="nb">?</code> 한 글자였습니다. 종이가 아까웠기 때문입니다. "ed는 표준 텍스트 편집기다"라는 농담의 출처이기도 합니다.</div>
+</article>
+
+<article class="card" id="h-qed">
+<h3>시작점: QED (1965~1967)</h3>
+<ul class="tl">
+<li><span class="yr">1965~66</span> <b>QED</b> — Butler Lampson과 Peter Deutsch가 버클리 타임셰어링 시스템(SDS 940)용으로 작성. <span class="who">이름은 "Quick EDitor".</span></li>
+<li class="big"><span class="yr">1967</span> <b>Ken Thompson의 QED</b> — MIT의 CTSS로 옮기면서, 검색 패턴에 <b>정규 표현식</b>을 넣었습니다. <span class="who">클리니(Kleene)의 정규 집합 이론을 편집기 검색창에 밀어 넣은 최초의 사건.</span></li>
+</ul>
+<div class="key"><b>이때 만들어진 유산</b> — 오늘 당신이 <code class="nb">grep</code>·<code class="nb">sed</code>·<code class="nb">awk</code>·<code class="nb">perl</code>·에디터 검색창·심지어 자바스크립트에서 쓰는 정규식의 뿌리가 여기입니다. Thompson은 정규식을 기계어로 컴파일해 실행하는 방법까지 논문으로 남겼습니다(1968, CACM).</div>
+<p>QED는 유닉스 이전의 편집기였지만, Thompson이 유닉스를 만들 때 <b>그 경험을 그대로 가지고 왔습니다</b>.</p>
+</article>
+
+<article class="card" id="h-ed">
+<h3>ed (1969) — 유닉스 최초의 편집기</h3>
+<p>PDP-7 위에서 유닉스가 태어날 때, 함께 태어난 프로그램이 <code class="nb">ed</code>입니다. QED를 훨씬 작게 깎은 것입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>ed가 확립한 것</th><th>오늘의 흔적</th></tr>
+<tr><td>주소 + 한 글자 명령 문법</td><td><code>:1,5d</code> — vim에서 그대로</td></tr>
+<tr><td>현재 줄(<code>.</code>)과 마지막 줄(<code>$</code>)</td><td>같은 기호, 같은 뜻</td></tr>
+<tr><td><code>/패턴/</code>으로 줄을 찾기</td><td>모든 편집기의 검색</td></tr>
+<tr><td>전역 명령 <code>g/re/p</code></td><td>이름이 통째로 프로그램이 됨 → <b>grep</b></td></tr>
+<tr><td><code>s/old/new/</code></td><td>sed·perl·루비·bash까지</td></tr>
+</table>
+</div>
+<div class="tip"><b>grep의 어원</b> — <code class="nb">g/re/p</code>는 ed 명령입니다. "<b>g</b>lobal, <b>r</b>egular <b>e</b>xpression, <b>p</b>rint". 사용자들이 이 명령만 따로 쓰고 싶어해서 Ken Thompson이 별도 프로그램으로 떼어냈습니다.</div>
+<div class="note"><b>sed도 마찬가지</b> — 1973~74년 Lee McMahon이 벨 연구소에서 만든 <b>s</b>tream <b>ed</b>itor는, 대화형 ed에서 화면을 떼고 파이프에 꽂은 것입니다. 그래서 <code class="nb">sed 's/a/b/'</code>가 ex의 <code class="nb">:s/a/b/</code>와 똑같이 생겼습니다.</div>
+</article>
+
+<article class="card" id="h-family-tree">
+<h3>계보 한 장</h3>
+<div class="pkgtree">QED <i>(1965 Lampson/Deutsch → 1967 Thompson, 정규식)</i>
+  <b>ed</b> <i>(1969 Thompson, 유닉스 1판)</i>
+    grep <i>(1973 — g/re/p 를 떼어낸 것)</i>
+    sed <i>(1974 McMahon — 파이프에 꽂은 ed)</i>
+    <b>em</b> <i>(1975 Coulouris — "editor for mortals", 화면 단말 지원)</i>
+      <b>en</b> <i>(1976 Joy — em을 버클리에서 개작)</i>
+        <b>ex</b> <i>(1977 Joy &amp; Haley — extended)</i>
+          <b>vi</b> <i>(1979 — ex의 visual 모드)</i>
+            nvi <i>(1993 Bostic — BSD 라이선스 정리판)</i>
+            elvis <i>(1990 Kirkendall)</i>
+            vim <i>(1991 Moolenaar — Stevie 경유)</i>
+              neovim <i>(2014 포크)</i>
+    ex-vi <i>(2005~ Ritter — 원조 소스 유지보수판)</i></div>
+<div class="note">굵은 줄이 이 덱의 주인공 라인입니다. 옆가지(grep·sed)는 <b>ex와 형제</b>라는 점이 중요합니다 — 그래서 문법이 서로 닮았습니다.</div>
+</article>
+
+<article class="card" id="ch02">
+<p class="chnum">2장</p>
+<h2>ed에서 ex로</h2>
+<p class="chsub">버클리, 1976~1979 — Bill Joy의 몇 년</p>
+</article>
+
+<article class="card" id="h-em">
+<h3>em — "필멸자를 위한 편집기" (1975)</h3>
+<p>런던 퀸메리 칼리지의 George Coulouris는 학생들에게 ed를 가르치다 지쳤습니다. 그의 실험실에는 <b>화면 단말기</b>가 있었는데, ed는 그걸 여전히 종이처럼 취급했습니다.</p>
+<p>그래서 ed를 고쳐 <b>em(editor for mortals)</b>을 만들었습니다. 한 줄을 고칠 때 화면의 그 줄이 실제로 바뀌는 편집기입니다.</p>
+<div class="tip"><b>이름의 뜻</b> — 당시 벨 연구소 쪽 사람들 사이에 "ed는 신을 위한 편집기"라는 농담이 있었습니다. em은 그에 대한 대꾸입니다.</div>
+<p>Coulouris가 1976년 버클리를 방문하면서 em을 가지고 갔고, 그곳 대학원생이던 <b>Bill Joy</b>의 손에 넘어갔습니다.</p>
+<div class="note"><b>이 계보의 요점</b> — ex는 "새 편집기"로 설계된 적이 없습니다. ed의 개작(em)의 개작(en)의 확장(ex)입니다. 문법이 ed와 같은 이유입니다.</div>
+</article>
+
+<article class="card" id="h-exbirth">
+<h3>ex의 탄생 (1976~1978)</h3>
+<ul class="tl">
+<li><span class="yr">1976</span> Bill Joy와 Chuck Haley가 em을 개작해 <b>en</b>을 만듦. <span class="who">이름은 그저 em 다음 글자.</span></li>
+<li class="big"><span class="yr">1977</span> 기능을 크게 늘리고 <b>ex</b>로 개명. <span class="who">"ex<b>tended</b>" — 확장된 ed라는 뜻.</span></li>
+<li><span class="yr">1978. 3</span> <b>1BSD</b>에 실려 배포. <span class="who">버클리가 배포한 첫 소프트웨어 묶음. 파스칼 컴파일러와 ex가 주된 내용물이었습니다.</span></li>
+</ul>
+<p>ex가 ed에 더한 것 중 오늘도 쓰는 것들:</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>ex가 추가</th><th>명령</th></tr>
+<tr><td>되돌리기</td><td><code>:u</code> — ed에는 없었습니다</td></tr>
+<tr><td>줄 복사</td><td><code>:t</code> / <code>:copy</code></td></tr>
+<tr><td>여러 파일 열기</td><td><code>:n</code> (next), 인자 목록</td></tr>
+<tr><td>매크로·설정</td><td><code>:map</code>, <code>:set</code>, <code>.exrc</code></td></tr>
+<tr><td>비주얼 모드로의 문</td><td><code>:vi</code></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="h-vi">
+<h3>vi — ex 안에서 자란 화면 모드 (1979)</h3>
+<p>Joy는 ex에 <b>화면 전체를 쓰는 모드</b>를 붙였습니다. 이것이 ex 2.0의 <code class="nb">visual</code> 명령이고, 그 모드로 바로 들어가는 이름이 <code class="nb">vi</code>입니다.</p>
+<div class="key"><b>vi는 별도 프로그램이 아닙니다</b> — 원래 vi는 ex와 <b>같은 실행 파일</b>이고, <code class="nb">vi</code>라는 이름으로 실행되면 visual 모드로 시작할 뿐입니다. <code class="nb">ex -v</code>와 <code class="nb">vi</code>는 같은 뜻이었습니다.</div>
+<div class="flow">
+<span class="box">ex 프로그램</span><span class="arr">→</span>
+<span class="box dim">ex 로 실행</span><span class="arr">=</span><span class="box">콜론 모드</span>
+</div>
+<div class="flow">
+<span class="box">같은 프로그램</span><span class="arr">→</span>
+<span class="box dim">vi 로 실행</span><span class="arr">=</span><span class="box">화면 모드</span><span class="arr">, 그 안의 <code>:</code> 가</span><span class="box">ex</span>
+</div>
+<p>그래서 vi에서 <code class="nb">Q</code>를 누르면 ex 모드로 <b>떨어집니다</b>. 위층에서 아래층으로 내려가는 것입니다. 돌아올 때는 <code class="nb">:vi</code>.</p>
+</article>
+
+<article class="card" id="h-adm3a">
+<h3>hjkl은 왜 hjkl인가</h3>
+<p>Joy가 쓰던 단말기는 <b>Lear Siegler ADM-3A</b>였습니다. 이 키보드에는 방향키가 없었고, <code class="nb">h j k l</code> 자리에 <b>화살표가 인쇄되어 있었습니다</b>(Ctrl과 조합해 커서를 옮기는 용도).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>ADM-3A의 사실</th><th>vi에 남은 흔적</th></tr>
+<tr><td>H J K L 키에 ← ↓ ↑ → 인쇄</td><td>커서 이동이 <code>hjkl</code></td></tr>
+<tr><td><code class="nb">Esc</code>가 지금의 <code class="nb">Tab</code> 자리</td><td>모드 탈출이 <code class="nb">Esc</code> — 당시엔 새끼손가락이 닿는 자리였습니다</td></tr>
+<tr><td><code>HOME</code> 키에 <code>~</code>가 함께 인쇄</td><td><code>~</code>가 홈 디렉터리를 뜻하게 된 유래라는 설</td></tr>
+<tr><td>느린 직렬 회선</td><td>화면 갱신을 최소화하는 알고리즘 — 그래서 <b>termcap</b>이 만들어짐</td></tr>
+</table>
+</div>
+<div class="note"><b>termcap도 이때 나왔습니다</b> — 단말기마다 제어 코드가 달라서, Joy는 단말기 능력을 텍스트 데이터베이스로 기술하는 방식을 만들었습니다. 이것이 termcap → terminfo → 오늘의 <code class="nb">TERM</code> 환경변수입니다.</div>
+</article>
+
+<article class="card" id="h-2bsd">
+<h3>1979~1983 — 세상이 vi를 배운다</h3>
+<ul class="tl">
+<li><span class="yr">1979. 5</span> <b>2BSD</b> 배포. ex 2.0과 그 안의 vi가 실려 나갑니다.</li>
+<li><span class="yr">1979</span> 3BSD가 VAX로 옮겨지면서 ex/vi가 사실상 <b>대학 유닉스의 기본 편집기</b>가 됩니다.</li>
+<li><span class="yr">1980~83</span> AT&amp;T의 System V가 vi를 채택. <span class="who">여기서부터 "유닉스에는 vi가 있다"가 상식이 됩니다.</span></li>
+</ul>
+<div class="note"><b>왜 그렇게 빨리 퍼졌나</b> — emacs는 당시 리스프 기계나 큰 메모리를 요구했고, vi는 <b>작았습니다</b>. 그리고 BSD 테이프에 이미 들어 있었습니다. 기본값의 힘입니다.</div>
+<p>Bill Joy는 이후 vi를 거의 손대지 않았습니다. 그는 1982년 Sun Microsystems를 공동 창업하러 떠났고, 훗날 인터뷰에서 vi에 대해 이렇게 회고했습니다 — 다시 만든다면 <b>모드가 없는 편집기</b>를 만들었을 것이고, 오늘날의 vi에서 가장 아쉬운 것은 마우스가 없다는 점이라고.</p>
+<div class="tip"><b>모드 방식은 최적화의 산물</b> — 1200 보드 회선에서는 화면 갱신 한 번이 비쌌습니다. 삽입 모드와 명령 모드를 나누면 <b>키 하나가 곧 명령</b>이 되어 회선을 아낄 수 있었습니다.</div>
+</article>
+
+<article class="card" id="h-license">
+<h3>소스 코드의 긴 감금</h3>
+<p>ex/vi의 원본 소스는 버클리에서 쓰였지만, ed에서 물려받은 코드 때문에 <b>AT&amp;T 유닉스 라이선스</b>에 묶여 있었습니다. 즉 오랫동안 자유롭게 배포할 수 없는 프로그램이었습니다.</p>
+<ol class="steps">
+<li><b>1991~93</b> — 4.4BSD를 AT&amp;T 코드 없이 만들어야 했습니다. Keith Bostic이 Steve Kirkendall의 <b>elvis</b>를 출발점으로 삼아 <b>nvi</b>를 씁니다. 오늘 BSD 계열의 <code class="nb">vi</code>는 대개 nvi입니다.</li>
+<li><b>1990년대</b> — 리눅스 진영에서는 vim·elvis·vile 같은 클론이 자리를 잡습니다.</li>
+<li><b>2002</b> — Caldera가 옛 유닉스 소스를 BSD 계열 라이선스로 공개하면서, <b>원조 ex/vi 소스가 드디어 자유로워집니다</b>. Gunnar Ritter가 이를 현대 시스템에서 빌드되게 손본 것이 <code class="nb">ex-vi</code>(traditional vi)입니다.</li>
+</ol>
+<div class="key"><b>그래서 "vi"는 오늘 최소 네 가지 서로 다른 프로그램의 이름입니다</b> — 원조 ex/vi, nvi, vim, busybox vi. 문법은 대부분 같지만 <b>확장 기능은 완전히 다릅니다</b>. 스크립트를 쓸 때 이 차이가 사람을 잡습니다.</div>
+</article>
+
+<article class="card" id="h-posix">
+<h3>표준이 된 ex</h3>
+<p>ex와 vi는 <b>POSIX(IEEE Std 1003.1)의 셸·유틸리티 편</b>에 명세되어 있습니다. 편집기가 표준 문서에 규격으로 적혀 있다는 사실이 특이한 것입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>표준이 규정하는 것</th><th>예</th></tr>
+<tr><td>주소 문법</td><td><code>.</code> <code>$</code> <code>n</code> <code>'x</code> <code>/re/</code> <code>?re?</code>, <code>+</code> <code>-</code> 산술</td></tr>
+<tr><td>필수 명령 집합</td><td><code>a i c d m t s g v r w e q</code> …</td></tr>
+<tr><td>정규식 방언</td><td>POSIX <b>BRE</b> (기본 정규식)</td></tr>
+<tr><td>옵션</td><td><code>autoindent</code> <code>ignorecase</code> <code>magic</code> <code>wrapscan</code> …</td></tr>
+<tr><td>종료 상태</td><td>오류가 있으면 0이 아님 — 스크립트에서 결정적으로 쓸 수 있는 근거</td></tr>
+</table>
+</div>
+<div class="key"><b>실무적 의미</b> — <code class="nb">:%s/a/b/g</code>, <code class="nb">:g/re/d</code>, <code class="nb">:1,5m0</code> 수준의 명령은 <b>어떤 유닉스에 가져다 놔도 돕니다</b>. 컨테이너 안, 임베디드 보드, 남의 서버 — 설치할 것이 없습니다.</div>
+</article>
+
+<article class="card" id="ch03">
+<p class="chnum">3장</p>
+<h2>ex의 자손들</h2>
+<p class="chsub">vim · neovim, 그리고 오늘 당신이 실제로 쓰는 것</p>
+</article>
+
+<article class="card" id="h-vim">
+<h3>vim (1991~)</h3>
+<ul class="tl">
+<li><span class="yr">1987</span> Tim Thompson이 아타리 ST용 vi 클론 <b>Stevie</b>를 발표. <span class="who">"ST editor for VI enthusiasts".</span></li>
+<li><span class="yr">1988</span> Bram Moolenaar가 Stevie를 아미가로 옮겨 쓰기 시작. 이름은 <b>Vi IMitation</b>.</li>
+<li class="big"><span class="yr">1991. 11</span> Vim 1.14가 공개 배포. <span class="who">Fred Fish 프리웨어 디스크 591번.</span></li>
+<li><span class="yr">1992~93</span> 유닉스·MS-DOS로 이식, 2.0에서 이름이 <b>Vi IMproved</b>로 바뀝니다.</li>
+<li><span class="yr">1998~2016</span> 다단계 undo·구문 강조·폴딩·스크립트 언어·패키지. <span class="who">Vim 8에서 채널·잡·패키지 시스템.</span></li>
+<li><span class="yr">2014</span> <b>Neovim</b> 포크 — 내장 터미널·비동기·Lua·LSP 지향.</li>
+<li><span class="yr">2023. 8</span> Bram Moolenaar 별세. <span class="who">Vim은 이후 관리 위원회 체제로 이어집니다.</span></li>
+</ul>
+<div class="note"><b>ex의 관점에서 보면</b> — vim은 ex 명령 언어를 <b>거대하게 확장한 것</b>입니다. <code class="nb">:global</code>·<code class="nb">:normal</code>·<code class="nb">:argdo</code>·<code class="nb">\=</code> 표현식 치환 같은 것들이 여기서 나옵니다. 대신 이식성은 그만큼 잃습니다.</div>
+</article>
+
+<article class="card" id="h-today">
+<h3>오늘 "ex"를 부르는 다섯 가지 방법</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>부르는 법</th><th>실체</th><th>쓸 곳</th></tr>
+<tr><td><code>ex file</code></td><td>대화형 ex 모드 (콜론 프롬프트만)</td><td>순수 ex 체험</td></tr>
+<tr><td><code>ex -s file &lt; script</code></td><td>배치 모드 — 화면 갱신 없음</td><td><b>스크립트</b></td></tr>
+<tr><td><code>vim -e</code> / <code>vim -es</code></td><td>vim을 ex로 기동 (<code>-s</code>는 silent)</td><td>vim 확장까지 쓰는 스크립트</td></tr>
+<tr><td><code>vi</code> 안에서 <code>:</code></td><td>같은 프로그램의 ex 명령 파서</td><td>일상 편집</td></tr>
+<tr><td><code>ed</code></td><td>선조. 더 작고 더 엄격</td><td>여기서만 되는 이식성이 필요할 때</td></tr>
+</table>
+</div>
+<div class="term"><span class="p">$</span> ex --version | head -1
+VIM - Vi IMproved 9.2 <span class="c">(리눅스 대부분에서 ex는 vim의 다른 이름입니다)</span>
+<span class="p">$</span> ls -l $(which ex)
+lrwxrwxrwx ... /usr/bin/ex -&gt; vim</div>
+<div class="warn"><b>먼저 확인하세요</b> — <code class="nb">ex --version</code>이 VIM을 말하면 vim 확장을 써도 됩니다. <code class="nb">nvi</code>나 BusyBox라면 <b>POSIX 범위만</b> 써야 합니다. 3부 11장에 이식성 표가 있습니다.</div>
+</article>
+
+<article class="card" id="h-why">
+<h3>2020년대에 ex를 배울 이유</h3>
+<div class="g2">
+<div class="cmp good">
+<h5>✔ ex가 이기는 자리</h5>
+<p><b>버퍼 전체를 한 문장으로</b> 다루는 편집. 조건부·순서 있는 대량 변환. 되돌리기가 있는 상태에서의 실험. 그리고 <b>어디에나 이미 설치되어 있음</b>.</p>
+</div>
+<div class="cmp bad">
+<h5>✘ 다른 도구가 낫다</h5>
+<p>스트림 처리는 <code>sed</code>·<code>awk</code>. 구조 인지 리팩터링은 언어 도구(<code>gofmt -r</code>, <code>comby</code>, LSP). 파일 이름 조작은 셸.</p>
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>상황</th><th>ex의 강점</th></tr>
+<tr><td>남의 서버, 컨테이너 안</td><td>설치 불필요. <code>vi</code>가 없는 유닉스는 사실상 없음</td></tr>
+<tr><td>"조건에 맞는 줄에만" 편집</td><td><code>:g</code>는 sed로 쓰기 번거로운 작업을 한 줄로 만듭니다</td></tr>
+<tr><td>여러 단계 변환</td><td>버퍼가 남아 있으므로 <b>중간 결과를 눈으로 확인</b>하고 이어갈 수 있습니다</td></tr>
+<tr><td>실수했을 때</td><td><code>:u</code>, <code>:earlier</code> — 파이프에는 undo가 없습니다</td></tr>
+<tr><td>LLM에게 시킬 때</td><td>짧고, 결정적이고, <b>검증 가능한</b> 출력 형식 (4부)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="h-quiz" data-quiz>
+<h3>1부 정리 퀴즈</h3>
+<p class="q">Q. <code class="nb">grep</code>이라는 이름은 어디서 왔고, 그 사실이 ex에 대해 무엇을 말해 주는가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> ed 명령 <code class="nb">g/re/p</code>(global / regular expression / print)에서 왔습니다. 시사점은 두 가지입니다. ① <b>정규식 검색은 원래 편집기 기능이었고</b> 유닉스 도구들이 거기서 갈라져 나왔습니다. ② 그래서 <code class="nb">:g/패턴/명령</code>은 "grep해서 나온 줄들에 명령을 건다"로 읽으면 정확합니다 — grep이 <code class="nb">p</code>만 고정한 특수한 경우입니다.</div>
+</article>
+
+<article class="card section" id="part2">
+<p class="chnum">2부</p>
+<h2>문법</h2>
+<p class="chsub">ex는 명령이 수십 개인 언어가 아니라, <b>문형이 하나인</b> 언어다</p>
+</article>
+
+<article class="card" id="ch04">
+<p class="chnum">4장</p>
+<h2>실행과 모드</h2>
+<p class="chsub">버퍼 · 현재 줄 · 그리고 배치 실행</p>
+</article>
+
+<article class="card" id="g-model">
+<h3>세계 모형: 버퍼와 점</h3>
+<p>ex의 머릿속에는 딱 세 가지가 있습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>개념</th><th>정체</th><th>기호</th></tr>
+<tr><td><b>버퍼</b></td><td>파일을 읽어 들인 <b>줄들의 배열</b>. 1부터 시작</td><td>—</td></tr>
+<tr><td><b>현재 줄</b></td><td>지금 서 있는 줄. 명령마다 갱신됨</td><td><code>.</code> (dot)</td></tr>
+<tr><td><b>마지막 줄</b></td><td>버퍼의 끝</td><td><code>$</code></td></tr>
+</table>
+</div>
+<div class="buf">
+<div class="ln"><i>1</i><s>#include &lt;stdio.h&gt;</s></div>
+<div class="ln"><i>2</i><s></s></div>
+<div class="ln dot"><i>3</i><s>int main(void) {</s></div>
+<div class="ln"><i>4</i><s>    puts("hi");</s></div>
+<div class="ln"><i>5</i><s>    return 0;</s></div>
+<div class="ln"><i>6</i><s>}</s></div>
+<div class="cap2">현재 줄(.)은 3, 마지막 줄($)은 6. 파일이 아니라 <b>버퍼</b>입니다 — <code>:w</code> 전까지 디스크는 그대로입니다.</div>
+</div>
+<div class="key"><b>이것이 sed와의 결정적 차이입니다</b> — sed는 줄이 흘러가는 파이프이고, ex는 <b>전부 펼쳐 놓은 배열</b>입니다. 그래서 ex는 "10줄 위로 옮겨"나 "끝에 복사해"를 할 수 있습니다.</div>
+</article>
+
+<article class="card" id="g-grammar">
+<h3>문형은 하나뿐이다</h3>
+<div class="exa"><span class="pc a1">:1,10</span><span class="pc a2">s</span><span class="pc a3">/foo/bar/</span><span class="pc a4">g</span>
+<p class="lg"><b class="k1">━ 주소</b> 어느 줄에 · <b class="k2">━ 명령</b> 무엇을 · <b class="k3">━ 인자</b> 어떻게 · <b class="k4">━ 플래그</b> 어떤 방식으로</p>
+</div>
+<p>ex 명령은 전부 이 틀입니다. 명령이 <code class="nb">d</code>든 <code class="nb">m</code>이든 <code class="nb">g</code>든 자리는 같습니다.</p>
+<div class="pkgtree">[주소][,주소] 명령[!] [인자…] [count] [플래그]
+   |          |     |     |        |       |
+   |          |     |     |        |       +- p, #, l (실행 후 출력)
+   |          |     |     |        +--------- 반복 횟수
+   |          |     |     +------------------ /pat/repl/, 파일명, 다른 주소
+   |          |     +------------------------ "강제로" (:w! :q!)
+   |          +------------------------------ 한두 글자
+   +--------------------------------------- 생략하면 현재 줄(.)</div>
+<div class="tip"><b>생략 규칙 두 개만 외우면 됩니다</b> — 주소를 안 쓰면 <b>현재 줄</b>, 명령을 안 쓰면 <b><code>p</code>(출력)</b>. 그래서 <code class="nb">:5</code>는 "5번 줄로 가서 찍어라"가 됩니다.</div>
+</article>
+
+<article class="card" id="g-invoke">
+<h3>실행하는 네 가지 방식</h3>
+<p class="fname">① 대화형 — 콜론 프롬프트</p>
+<div class="term"><span class="p">$</span> ex notes.txt
+"notes.txt" 6 lines, 42 bytes
+<span class="p">:</span>1,3p
+alpha
+bravo
+charlie
+<span class="p">:</span>q</div>
+<p class="fname">② <code>-c</code>로 명령을 붙여 실행 (POSIX)</p>
+<div class="term"><span class="p">$</span> ex -s -c '%s/foo/bar/g' -c 'wq' notes.txt</div>
+<p class="fname">③ 스크립트 파일을 표준 입력으로</p>
+<div class="term"><span class="p">$</span> cat fix.ex
+g/DEBUG/d
+%s/\s\+$//e
+wq
+<span class="p">$</span> ex -s notes.txt &lt; fix.ex</div>
+<p class="fname">④ vim의 확장까지 쓰기</p>
+<div class="term"><span class="p">$</span> vim -es -c 'g/^$/d' -c 'wq' notes.txt
+<span class="p">$</span> vim -es -S fix.vim notes.txt   <span class="c"># -S: 스크립트 파일을 source</span></div>
+<div class="key"><b><code>-s</code>는 반드시 붙입니다</b> — 배치(silent) 모드입니다. 없으면 ex가 화면 제어 코드를 뱉거나 프롬프트를 기다려 파이프라인이 멈춥니다.</div>
+</article>
+
+<article class="card" id="g-batch">
+<h3>배치 모드의 세 가지 사실</h3>
+<div class="warn"><b>① 오류가 조용합니다.</b> 패턴을 못 찾아도 <code class="nb">stderr</code>에 아무것도 나오지 않습니다. 알 수 있는 것은 <b>종료 코드</b>뿐입니다.</div>
+<div class="term"><span class="p">$</span> ex -s -c '%s/ZZZ/x/' -c 'wq' t.txt 2&gt;err.txt
+<span class="p">$</span> echo $?
+<span class="r">1</span>
+<span class="p">$</span> wc -c err.txt
+0 err.txt        <span class="c"># 에러 메시지는 한 글자도 없다</span></div>
+<div class="warn"><b>② 실패해도 뒤 명령은 계속 실행됩니다.</b> 위 예에서 <code class="nb">wq</code>는 그대로 돌아 파일이 저장됩니다. "실패하면 아무 일도 없었을 것"이라고 가정하면 안 됩니다.</div>
+<div class="tip"><b>③ 그래서 두 가지 습관이 필요합니다</b> — 실패를 허용할 치환에는 <code class="nb">e</code> 플래그를 붙이고(<code class="nb">:%s/x/y/ge</code>), 정말 실패해야 할 곳에서는 <b>종료 코드를 검사</b>합니다.</div>
+<div class="g2">
+<div class="cmp bad">
+<h5>✘ 실패를 흘려보냄</h5>
+<pre><code data-lang="sh">ex -s -c '%s/old/new/' -c 'wq' f
+# 패턴이 없어도 파일은 저장됨
+# 스크립트는 성공한 줄 알고 진행</code></pre>
+</div>
+<div class="cmp good">
+<h5>✔ 검사하거나 명시적으로 허용</h5>
+<pre><code data-lang="sh">ex -s -c '%s/old/new/' -c 'wq' f \
+  || { echo "패턴 없음" &gt;&amp;2; exit 1; }
+
+# 없어도 되는 정리 작업이면
+ex -s -c '%s/\s\+$//e' -c 'wq' f</code></pre>
+</div>
+</div>
+</article>
+
+<article class="card" id="g-safe-flags">
+<h3>스크립트에서 켜 두면 좋은 옵션</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>옵션</th><th>뜻</th><th>왜</th></tr>
+<tr><td><code>-s</code></td><td>배치(silent)</td><td>화면 제어 코드·프롬프트 제거. <b>필수</b></td></tr>
+<tr><td><code>-n</code></td><td>스왑 파일 안 씀 <span class="badge">vim</span></td><td>같은 파일을 동시에 열 때 나는 <code>E325</code> 회피</td></tr>
+<tr><td><code>-u NONE</code></td><td>사용자 설정 무시 <span class="badge">vim</span></td><td>남의 <code>.vimrc</code> 때문에 결과가 달라지지 않게</td></tr>
+<tr><td><code>-i NONE</code></td><td>viminfo 안 씀 <span class="badge">vim</span></td><td>홈 디렉터리를 더럽히지 않음 (CI·컨테이너)</td></tr>
+<tr><td><code>--noplugin</code></td><td>플러그인 로드 안 함 <span class="badge">vim</span></td><td>재현성</td></tr>
+<tr><td><code>-R</code></td><td>읽기 전용</td><td>조회만 할 때의 안전벨트</td></tr>
+</table>
+</div>
+<p class="fname">CI에서 쓰는 안전한 기본형</p>
+<pre><code data-lang="sh">vim -es -u NONE -i NONE -n \
+    -c 'set nocompatible' \
+    -c '%s/\&lt;TODO\&gt;/DONE/g' \
+    -c 'wq' target.txt || exit 1</code></pre>
+<div class="note"><code class="nb">-u NONE</code>은 <code class="nb">nocompatible</code>도 끕니다. vim 고유 정규식 문법(<code class="nb">\zs</code>, <code class="nb">\v</code>)이 필요하면 <code class="nb">-c 'set nocompatible'</code>을 앞에 넣거나 <code class="nb">-u NONE</code>을 빼세요.</div>
+</article>
+
+<article class="card" id="ch05">
+<p class="chnum">5장</p>
+<h2>주소</h2>
+<p class="chsub">"어느 줄에" — ex의 절반은 여기서 결정된다</p>
+</article>
+
+<article class="card" id="a-basic">
+<h3>기본 주소</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주소</th><th>뜻</th><th>예</th></tr>
+<tr><td><code>7</code></td><td>7번 줄</td><td><code>:7d</code> 7번 줄 삭제</td></tr>
+<tr><td><code>.</code></td><td>현재 줄</td><td><code>:.d</code> 지금 줄 삭제</td></tr>
+<tr><td><code>$</code></td><td>마지막 줄</td><td><code>:$p</code> 끝 줄 출력</td></tr>
+<tr><td><code>0</code></td><td>첫 줄 <b>앞</b> (가상의 줄)</td><td><code>:m0</code> 맨 앞으로 옮기기</td></tr>
+<tr><td><code>+n</code> <code>-n</code></td><td>현재 줄에서 상대</td><td><code>:-2,+2p</code> 앞뒤 2줄</td></tr>
+<tr><td><code>/re/</code></td><td>아래로 검색해 처음 맞는 줄</td><td><code>:/main/d</code></td></tr>
+<tr><td><code>?re?</code></td><td>위로 검색</td><td><code>:?TODO?p</code></td></tr>
+<tr><td><code>'x</code></td><td>마크 x가 찍힌 줄</td><td><code>:'a,'bd</code></td></tr>
+<tr><td><code>%</code></td><td><code>1,$</code>의 줄임 — 파일 전체</td><td><code>:%s/a/b/g</code></td></tr>
+</table>
+</div>
+<div class="tip"><b><code>0</code>은 줄이 아니라 <b>틈</b>입니다</b> — "첫 줄 앞의 빈자리". <code class="nb">:m0</code>(맨 앞으로 이동), <code class="nb">:0r file</code>(맨 앞에 파일 삽입)처럼 <b>목적지</b>로만 씁니다.</div>
+<div class="warn"><b>그런데 <code>:0d</code>는 오류가 나지 않습니다</b> — POSIX 기준으로는 잘못된 주소지만, Vim 9.2는 <code class="nb">0</code>을 조용히 <code class="nb">1</code>로 취급해 <b>1번 줄을 지웁니다</b>. <code class="nb">:0,1d</code>도 마찬가지입니다. 오류보다 이쪽이 위험합니다 — 경고 없이 한 줄이 사라집니다.</div>
+</article>
+
+<article class="card" id="a-arith">
+<h3>주소 산술과 검색 조합</h3>
+<p>주소는 <b>식</b>입니다. 검색 결과에 숫자를 더할 수 있습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>식</th><th>뜻</th></tr>
+<tr><td><code>/main/+1</code></td><td>main이 있는 줄의 <b>다음</b> 줄</td></tr>
+<tr><td><code>/main/-3</code></td><td>그 줄의 세 줄 위</td></tr>
+<tr><td><code>$-4</code></td><td>끝에서 다섯째 줄</td></tr>
+<tr><td><code>.+10</code> = <code>+10</code></td><td>현재 줄에서 열 줄 아래</td></tr>
+<tr><td><code>/a/;/b/</code></td><td>a를 찾고 <b>거기서부터</b> b를 찾음</td></tr>
+</table>
+</div>
+<div class="key"><b>쉼표와 세미콜론은 다릅니다.</b> <code class="nb">,</code>는 두 주소를 <b>각각 현재 줄 기준</b>으로 계산합니다. <code class="nb">;</code>는 앞 주소를 계산한 뒤 <b>현재 줄을 거기로 옮기고</b> 뒤 주소를 계산합니다.</div>
+<div class="g2">
+<div class="cmp bad">
+<h5>✘ <code>/mid/,+2d</code></h5>
+<p><code>+2</code>가 <b>현재 줄</b>+2로 계산됩니다. 현재 줄이 1이면 3이 되어 "6,3" 같은 역순 범위가 되고, 배치 모드에서는 조용히 실패하며 <b>종료 코드 1</b>만 남습니다.</p>
+</div>
+<div class="cmp good">
+<h5>✔ <code>/mid/;+2d</code></h5>
+<p>먼저 <code>mid</code>를 찾아 현재 줄을 옮기고, 거기서 +2. 의도대로 <b>그 줄부터 세 줄</b>이 지워집니다.</p>
+</div>
+</div>
+<div class="tip"><b>암기법</b> — "찾은 자리에서부터 세고 싶으면 세미콜론". 검색 주소를 범위 앞에 쓸 때는 거의 항상 <code class="nb">;</code>가 맞습니다.</div>
+</article>
+
+<article class="card" id="a-demo">
+<h3>직접 해 보기: 주소 풀이기</h3>
+<div class="demo" data-demo="addr">
+<h5>주소를 입력하면 어느 줄이 잡히는지 보여 줍니다</h5>
+<div class="row">
+<input type="text" data-addr value="/main/;+2" class="wide" style="max-width:260px">
+<button data-run>풀이</button>
+</div>
+<div class="row" data-samples></div>
+<div class="out"></div>
+</div>
+<div class="note"><b>지원</b> — <code class="nb">n</code> <code class="nb">.</code> <code class="nb">$</code> <code class="nb">%</code> <code class="nb">/re/</code> <code class="nb">?re?</code> <code class="nb">+n</code> <code class="nb">-n</code>과 <code class="nb">,</code> <code class="nb">;</code> 조합. 현재 줄은 4로 두었습니다. <code class="nb">/main/,+2</code>와 <code class="nb">/main/;+2</code>를 각각 넣어 비교해 보세요.</div>
+</article>
+
+<article class="card" id="a-marks">
+<h3>마크 — 이름 붙인 줄</h3>
+<p>줄에 이름을 붙여 두고 나중에 주소로 씁니다. 긴 범위를 다룰 때 필수입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>뜻</th></tr>
+<tr><td><code>:10ka</code> 또는 <code>:10mark a</code></td><td>10번 줄에 마크 <code>a</code></td></tr>
+<tr><td><code>:'a</code></td><td>마크 a가 있는 줄 (주소로 사용)</td></tr>
+<tr><td><code>:'a,'bd</code></td><td>a부터 b까지 삭제</td></tr>
+<tr><td><code>:''</code></td><td>직전에 있던 자리 <span class="badge">되돌아가기</span></td></tr>
+</table>
+</div>
+<div class="term"><span class="p">$</span> ex -s -c '2ka' -c '5kb' -c "'a,'bd" -c 'wq' blk.txt
+<span class="c"># 2번 줄에 a, 5번 줄에 b를 찍고 그 사이(2~5)를 삭제</span></div>
+<div class="tip"><b>vi에서 온 사람에게</b> — vi의 <code class="nb">ma</code>가 곧 ex의 <code class="nb">:ka</code>입니다. vi에서 <code class="nb">ma</code>, <code class="nb">mb</code>로 범위를 잡고 <code class="nb">:'a,'b</code>로 명령을 거는 것이 정석 콤보입니다.</div>
+<div class="warn"><b>편집하면 마크가 흔들립니다</b> — 마크 사이의 줄을 지우거나 옮기면 마크가 사라지거나(<code class="nb">E20</code>) 다른 줄을 가리킬 수 있습니다. 마크는 <b>바로 쓰고 버리는 용도</b>로 생각하세요.</div>
+</article>
+
+<article class="card" id="a-pitfall">
+<h3>주소에서 자주 틀리는 곳</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>쓴 것</th><th>실제 뜻</th><th>의도했던 것</th></tr>
+<tr><td><code>:1,5</code></td><td>5번 줄로 이동하며 출력</td><td>명령을 빠뜨림 — 뒤에 <code>d</code>·<code>s</code> 등이 필요</td></tr>
+<tr><td><code>:%d</code></td><td><b>파일 전체 삭제</b></td><td>보통은 <code>:g/re/d</code></td></tr>
+<tr><td><code>:5,1d</code></td><td>역순 범위 — 실패</td><td><code>:1,5d</code></td></tr>
+<tr><td><code>:/a/,/b/d</code></td><td>두 검색이 모두 <b>현재 줄</b>부터 시작</td><td><code>:/a/;/b/d</code></td></tr>
+<tr><td><code>:.,$d</code></td><td>현재 줄부터 끝까지 삭제</td><td>맞습니다 — 다만 "현재 줄"이 어디인지 늘 확인</td></tr>
+<tr><td><code>:0d</code></td><td>오류가 <b>안 남</b> — vim은 1번 줄을 지움</td><td>주소 <code>0</code>은 <code>m</code>·<code>r</code>의 목적지로만</td></tr>
+</table>
+</div>
+<div class="key"><b>버릇 하나</b> — 파괴적 명령을 치기 전에 <b>같은 주소로 <code>p</code>를 먼저</b> 쳐 보세요. <code class="nb">:/a/;/b/p</code>로 범위를 눈으로 확인하고, 맞으면 <code class="nb">p</code>만 <code class="nb">d</code>로 바꿉니다. 4부의 "드라이런"이 이 습관의 확장입니다.</div>
+</article>
+
+<article class="card" id="ch06">
+<p class="chnum">6장</p>
+<h2>명령 사전</h2>
+<p class="chsub">실제로 쓰는 것은 스무 개가 안 된다</p>
+</article>
+
+<article class="card" id="c-core20">
+<h3>이것만 알면 90%</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>긴 이름</th><th>하는 일</th></tr>
+<tr><td><code>p</code></td><td>print</td><td>줄 출력</td></tr>
+<tr><td><code>nu</code> <code>#</code></td><td>number</td><td>줄 번호와 함께 출력</td></tr>
+<tr><td><code>d</code></td><td>delete</td><td>삭제 (레지스터로 잘라내기)</td></tr>
+<tr><td><code>y</code></td><td>yank</td><td>복사</td></tr>
+<tr><td><code>pu</code></td><td>put</td><td>주소 <b>뒤에</b> 붙여넣기</td></tr>
+<tr><td><code>m</code></td><td>move</td><td>줄 옮기기</td></tr>
+<tr><td><code>t</code> <code>co</code></td><td>copy</td><td>줄 복사해 넣기</td></tr>
+<tr><td><code>s</code></td><td>substitute</td><td>치환 — 7장</td></tr>
+<tr><td><code>g</code> <code>v</code></td><td>global</td><td>조건부 실행 — 8장</td></tr>
+<tr><td><code>j</code></td><td>join</td><td>줄 합치기</td></tr>
+<tr><td><code>&gt;</code> <code>&lt;</code></td><td>—</td><td>들여쓰기 밀기/당기기</td></tr>
+<tr><td><code>r</code></td><td>read</td><td>파일·명령 출력을 삽입</td></tr>
+<tr><td><code>w</code> <code>q</code> <code>wq</code></td><td>write/quit</td><td>저장·종료</td></tr>
+<tr><td><code>u</code></td><td>undo</td><td>되돌리기</td></tr>
+<tr><td><code>k</code> <code>ma</code></td><td>mark</td><td>마크 찍기</td></tr>
+<tr><td><code>!</code></td><td>—</td><td>셸 명령으로 <b>거르기</b></td></tr>
+<tr><td><code>normal</code></td><td>—</td><td>vi 키 입력 실행 <span class="badge">vim</span></td></tr>
+</table>
+</div>
+<div class="tip"><b>명령은 앞부분만 쳐도 됩니다</b> — <code class="nb">:substitute</code>는 <code class="nb">:s</code>, <code class="nb">:global</code>은 <code class="nb">:g</code>. 스크립트에 남길 때는 <b>긴 이름</b>이 읽기 좋습니다.</div>
+</article>
+
+<article class="card" id="c-move-copy">
+<h3>옮기기와 복사하기 — <code>m</code>과 <code>t</code></h3>
+<p>둘 다 <b>"어디로"를 주소로 받습니다</b>. 대상 주소 <b>뒤에</b> 놓입니다.</p>
+<div class="exa"><span class="pc a1">:2,3</span><span class="pc a2">m</span><span class="pc a3">$</span>
+<p class="lg"><b class="k1">━ 옮길 줄들</b> · <b class="k2">━ move</b> · <b class="k3">━ 목적지(이 줄 뒤로)</b></p>
+</div>
+<div class="g2">
+<div class="cmp">
+<h5>실행 전</h5>
+<div class="buf">
+<div class="ln"><i>1</i><s>a</s></div>
+<div class="ln sel"><i>2</i><s>b</s></div>
+<div class="ln sel"><i>3</i><s>c</s></div>
+<div class="ln"><i>4</i><s>d</s></div>
+<div class="ln"><i>5</i><s>e</s></div>
+</div>
+</div>
+<div class="cmp good">
+<h5><code>:2,3m$</code> 실행 후</h5>
+<div class="buf">
+<div class="ln"><i>1</i><s>a</s></div>
+<div class="ln"><i>2</i><s>d</s></div>
+<div class="ln"><i>3</i><s>e</s></div>
+<div class="ln add"><i>4</i><s>b</s></div>
+<div class="ln add dot"><i>5</i><s>c</s></div>
+</div>
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>관용구</th><th>뜻</th></tr>
+<tr><td><code>:m0</code></td><td>현재 줄을 <b>맨 앞</b>으로</td></tr>
+<tr><td><code>:m$</code></td><td>맨 뒤로</td></tr>
+<tr><td><code>:m-2</code></td><td>한 줄 위로 (자기 자신 위의 위 뒤)</td></tr>
+<tr><td><code>:m+</code></td><td>한 줄 아래로</td></tr>
+<tr><td><code>:t.</code></td><td>현재 줄을 <b>복제</b></td></tr>
+<tr><td><code>:t$</code></td><td>끝에 복사</td></tr>
+</table>
+</div>
+<div class="key"><code class="nb">:t</code>는 "to"가 아니라 <b>copy의 옛 약자</b>입니다. ed 시절 <code class="nb">t</code>(transfer)에서 왔고, <code class="nb">:co</code>와 같은 명령입니다.</div>
+</article>
+
+<article class="card" id="c-join-shift">
+<h3>합치기 · 들여쓰기 · 삽입</h3>
+<p class="fname">줄 합치기</p>
+<div class="term"><span class="p">$</span> ex -s -c '2,3j' -c 'wq' u.txt   <span class="c"># a b c d e  =&gt;  a / "b c" / d / e</span>
+<span class="c"># :j 는 공백 규칙을 적용해 붙이고, :j! 는 있는 그대로 붙인다</span></div>
+<p class="fname">들여쓰기 — <code>shiftwidth</code> 만큼</p>
+<div class="term"><span class="p">$</span> ex -s -c 'set sw=4' -c '1,2&gt;' -c 'wq' u.txt
+<span class="c"># 1,2 번 줄 앞에 공백 4칸. :&lt; 는 반대. :2,5&gt;&gt; 처럼 두 번 겹치면 두 배</span></div>
+<p class="fname">텍스트 삽입 — <code>a</code>(뒤) <code>i</code>(앞) <code>c</code>(교체)</p>
+<div class="term"><span class="p">$</span> printf '$a\nNEW LINE\n.\nwq\n' | ex -s u.txt
+<span class="c"># 마지막 줄 뒤에 "NEW LINE" 추가. 점 한 개만 있는 줄이 입력의 끝.</span></div>
+<div class="warn"><b>입력 종료는 <code>.</code> 한 글자 줄</b> — ed에서 물려받은 규칙입니다. 삽입할 텍스트 자체에 그런 줄이 있으면 거기서 끊깁니다. 스크립트에서는 <code class="nb">:call append()</code>나 <code class="nb">:r !cat</code> 쪽이 안전합니다.</div>
+</article>
+
+<article class="card" id="c-io">
+<h3>읽고 쓰기 — 파일·셸과의 접점</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>하는 일</th></tr>
+<tr><td><code>:r file</code></td><td>현재 줄 뒤에 파일 내용 삽입</td></tr>
+<tr><td><code>:0r header.txt</code></td><td>맨 앞에 삽입</td></tr>
+<tr><td><code>:r !date</code></td><td>셸 명령의 <b>출력</b>을 삽입</td></tr>
+<tr><td><code>:w</code></td><td>버퍼 저장</td></tr>
+<tr><td><code>:2,5w part.txt</code></td><td>일부만 다른 파일로 저장</td></tr>
+<tr><td><code>:w! &gt;&gt;log.txt</code></td><td>덧붙여 저장 — <b>느낌표 없이는 기존 파일에만</b> (없으면 <code>E212</code>)</td></tr>
+<tr><td><code>:w !cmd</code></td><td>버퍼를 명령의 <b>표준 입력</b>으로 보냄 (버퍼는 안 바뀜)</td></tr>
+<tr><td><code>:%!cmd</code></td><td><b>필터</b> — 버퍼를 명령에 통과시키고 결과로 교체</td></tr>
+<tr><td><code>:e!</code></td><td>저장 안 한 변경을 버리고 파일 다시 읽기</td></tr>
+</table>
+</div>
+<div class="key"><b>필터가 ex의 비밀 병기입니다</b> — <code class="nb">:%!sort</code>, <code class="nb">:%!jq .</code>, <code class="nb">:%!python3 -m json.tool</code>, <code class="nb">:2,10!tr a-z A-Z</code>. ex가 못 하는 변환은 <b>유닉스 도구에게 넘기면</b> 됩니다.</div>
+<div class="term"><span class="p">$</span> ex -s -c '$r !echo INSERTED' -c '1,3!tr a-z A-Z' -c 'wq' i.txt
+<span class="c"># 끝에 한 줄 추가하고, 1~3줄만 대문자로 바꾼다</span></div>
+<div class="warn"><code class="nb">:w !cmd</code>와 <code class="nb">:w! cmd</code>는 완전히 다릅니다. 앞은 <b>명령으로 보내기</b>, 뒤는 <b><code>cmd</code>라는 이름의 파일로 강제 저장</b>입니다. 공백 하나가 파일을 만듭니다.</div>
+</article>
+
+<article class="card" id="c-demo-ex">
+<h3>직접 해 보기: ex 인터프리터</h3>
+<div class="demo" data-demo="exsh">
+<h5>버퍼에 ex 명령을 실행합니다 (:p :d :s :g :v :m :t :j :nu :u)</h5>
+<div class="row">
+<input type="text" data-cmd value="%s/foo/bar/g" class="wide" style="max-width:300px">
+<button data-run>실행</button>
+<button class="sec" data-undo>되돌리기</button>
+<button class="sec" data-reset>초기화</button>
+</div>
+<div class="row" data-ex-samples></div>
+<div class="out"></div>
+</div>
+<div class="note"><b>맛보기 명령</b> — <code class="nb">1,3p</code> · <code class="nb">%nu</code> · <code class="nb">g/foo/d</code> · <code class="nb">v/foo/d</code> · <code class="nb">%s/foo/bar/g</code> · <code class="nb">g/^$/d</code> · <code class="nb">g/^/m0</code> · <code class="nb">2,3m$</code> · <code class="nb">$t$</code> · <code class="nb">1,2j</code></div>
+</article>
+
+<article class="card" id="c-demo-ex2">
+<h3>인터프리터로 확인할 것</h3>
+<ol class="steps">
+<li><code class="nb">%nu</code>로 버퍼를 한 번 보고 시작하세요. 줄 번호가 없으면 주소를 잘못 셉니다.</li>
+<li><code class="nb">g/foo/p</code>를 먼저 치고, 결과가 맞으면 <code class="nb">g/foo/d</code>로 바꿔 보세요. <b>드라이런 습관</b>입니다.</li>
+<li><code class="nb">g/^/m0</code>를 실행해 보세요. 파일이 <b>역순</b>이 됩니다. 왜 그런지는 8장에서 설명합니다.</li>
+<li>망쳤으면 <code class="nb">u</code> — 되돌리기 버튼과 같습니다.</li>
+</ol>
+<div class="tip"><b>이 데모의 한계</b> — 진짜 ex가 아니라 교육용 축소판입니다. <code class="nb">:normal</code>·레지스터·마크·필터는 없고, <code class="nb">:&gt;</code>는 탭 대신 공백 4칸을 넣습니다(<code class="nb">set sw=4 expandtab</code>과 같은 상태). 정규식은 BRE 규칙(<code class="nb">\(</code> <code class="nb">\+</code> 등)을 흉내 내지만 브라우저 엔진 위에서 돌아가므로 미세한 차이가 있습니다.</div>
+<div class="note"><b>결과는 대조 검증했습니다</b> — 맛보기 명령들을 실제 <code class="nb">ex</code>에 같은 버퍼로 돌려 출력이 일치하는지 확인했습니다. <code class="nb">:g</code>의 두 단계 동작, <code class="nb">:j</code>의 공백 규칙, 역순 범위 오류까지 같은 방식으로 동작합니다.</div>
+<div class="warn"><b>진짜와 다른 점 하나</b> — 실제 ex의 <code class="nb">:s</code>는 POSIX BRE라서 <code class="nb">+</code> <code class="nb">?</code> <code class="nb">(</code> <code class="nb">)</code>가 <b>보통 글자</b>이고, 반복·그룹으로 쓰려면 <code class="nb">\+</code> <code class="nb">\?</code> <code class="nb">\(</code> <code class="nb">\)</code>처럼 역슬래시를 붙여야 합니다. 7장에서 다룹니다.</div>
+</article>
+
+<article class="card" id="ch07">
+<p class="chnum">7장</p>
+<h2>정규식과 치환</h2>
+<p class="chsub"><code>:s</code> — 가장 많이 쓰고 가장 많이 틀리는 명령</p>
+</article>
+
+<article class="card" id="s-anatomy">
+<h3><code>:s</code> 해부</h3>
+<div class="exa"><span class="pc a1">:%</span><span class="pc a2">s</span><span class="pc a3">/\&lt;foo\&gt;/bar/</span><span class="pc a4">gc</span>
+<p class="lg"><b class="k1">━ 범위</b> 파일 전체 · <b class="k2">━ substitute</b> · <b class="k3">━ 패턴 / 대체문자열</b> · <b class="k4">━ 플래그</b></p>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>플래그</th><th>뜻</th><th>비고</th></tr>
+<tr><td><code>g</code></td><td>한 줄에서 <b>모두</b> 바꿈</td><td>없으면 줄마다 <b>첫 번째만</b></td></tr>
+<tr><td><code>c</code></td><td>하나씩 확인</td><td>대화형에서만 의미 있음</td></tr>
+<tr><td><code>i</code> / <code>I</code></td><td>대소문자 무시 / 구분</td><td><code>ignorecase</code> 설정을 무시하고 강제</td></tr>
+<tr><td><code>e</code></td><td>못 찾아도 <b>오류 아님</b></td><td>스크립트 필수 <span class="badge">vim</span></td></tr>
+<tr><td><code>n</code></td><td>바꾸지 않고 <b>개수만 셈</b></td><td>드라이런용 <span class="badge">vim</span></td></tr>
+<tr><td><code>&amp;</code></td><td>직전 플래그를 재사용</td><td><code>:%&amp;&amp;</code>는 "같은 치환을 전체에"</td></tr>
+</table>
+</div>
+<div class="key"><b><code>g</code>는 "전역"이 아니라 "한 줄 안에서 전부"입니다.</b> 줄의 범위는 <b>주소</b>가 정합니다. <code class="nb">:%s/a/b/</code>는 모든 줄의 <b>첫 a만</b> 바꿉니다 — 이 오해가 가장 흔한 버그입니다.</div>
+</article>
+
+<article class="card" id="s-sep">
+<h3>구분자와 빈 패턴</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기법</th><th>예</th><th>효과</th></tr>
+<tr><td>구분자 바꾸기</td><td><code>:%s#/usr#/opt#</code></td><td>경로에서 <code>\/</code> 지옥 회피</td></tr>
+<tr><td>빈 패턴</td><td><code>:%s//NEW/g</code></td><td><b>마지막 검색</b> 패턴을 재사용</td></tr>
+<tr><td>빈 대체문자열</td><td><code>:%s/\s\+$//e</code></td><td>지우기 = 빈 것으로 치환</td></tr>
+<tr><td>반복</td><td><code>:&amp;&amp;</code> · <code>:%&amp;&amp;</code></td><td>직전 치환을 다시</td></tr>
+</table>
+</div>
+<div class="term"><span class="p">$</span> ex -s -c '/foo/' -c '%s//BAR/' -c 'wq' n4.txt
+<span class="c"># /foo/ 로 검색해 두고, s//BAR/ 는 그 패턴을 그대로 재사용한다</span></div>
+<div class="tip"><b>구분자는 아무 글자나 됩니다</b> — <code class="nb">#</code> <code class="nb">,</code> <code class="nb">|</code> <code class="nb">+</code> 다 됩니다. URL·경로·정규식을 다룰 때 가독성이 완전히 달라집니다.</div>
+<div class="warn"><b>단, 영숫자·백슬래시·따옴표는 구분자로 쓰지 마세요.</b> <code class="nb">"</code>는 주석 시작으로, <code class="nb">|</code>는 명령 구분자로 해석되는 자리가 있어 <code class="nb">:g</code>와 조합할 때 사고가 납니다.</div>
+</article>
+
+<article class="card" id="s-bre">
+<h3>정규식 방언 — 여기서 사람이 죽는다</h3>
+<p>ex의 기본 정규식은 <b>POSIX BRE</b>입니다. 오늘날 익숙한 PCRE와 <b>메타문자가 반대로 뒤집혀</b> 있습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>하고 싶은 것</th><th>PCRE·JS</th><th>ex 기본(magic)</th></tr>
+<tr><td>1회 이상 반복</td><td><code>a+</code></td><td><code>a\+</code></td></tr>
+<tr><td>0 또는 1회</td><td><code>a?</code></td><td><code>a\?</code></td></tr>
+<tr><td>그룹</td><td><code>(ab)</code></td><td><code>\(ab\)</code></td></tr>
+<tr><td>선택</td><td><code>a|b</code></td><td><code>a\|b</code></td></tr>
+<tr><td>횟수</td><td><code>a{2,3}</code></td><td><code>a\{2,3}</code></td></tr>
+<tr><td>낱말 경계</td><td><code>\bcat\b</code></td><td><code>\&lt;cat\&gt;</code></td></tr>
+<tr><td>글자 그대로 <code>+</code></td><td><code>\+</code></td><td><code>+</code></td></tr>
+</table>
+</div>
+<div class="key"><b>규칙 한 줄</b> — <b>역슬래시의 뜻이 반대</b>입니다. PCRE에서 특수문자였던 것은 ex에서 평범하고, 평범했던 것은 역슬래시를 붙여야 특수해집니다.</div>
+<div class="tip"><b>vim이라면 탈출구가 있습니다</b> — 패턴 앞에 <code class="nb">\v</code>(very magic)를 붙이면 PCRE와 거의 같아집니다: <code class="nb">:%s/\v(foo|bar)+/X/g</code>. 반대로 <code class="nb">\V</code>(very nomagic)는 <b>거의 모든 글자를 리터럴</b>로 만들어, 경로나 정규식 문자열을 그대로 찾을 때 좋습니다.</div>
+</article>
+
+<article class="card" id="s-repl">
+<h3>대체 문자열의 특수 기호</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기호</th><th>뜻</th><th>예</th></tr>
+<tr><td><code>&amp;</code></td><td>매치 전체</td><td><code>:%s/ba./[&amp;]/g</code> → <code>[bar]</code></td></tr>
+<tr><td><code>\1</code>…<code>\9</code></td><td><code>\( \)</code> 캡처 그룹</td><td><code>:%s/\(\w\+\)=\(\w\+\)/\2=\1/</code></td></tr>
+<tr><td><code>\0</code></td><td><code>&amp;</code>와 같음</td><td></td></tr>
+<tr><td><code>~</code></td><td><b>직전 대체 문자열</b></td><td>같은 치환을 다른 패턴에</td></tr>
+<tr><td><code>\u</code> <code>\l</code></td><td>다음 <b>한 글자</b>를 대/소문자로</td><td><code>:%s/_\(.\)/\u\1/g</code> → snake_case를 camelCase로</td></tr>
+<tr><td><code>\U</code> <code>\L</code> … <code>\E</code></td><td><code>\E</code>까지 전부 대/소문자</td><td><code>:%s/.*/\U&amp;/</code></td></tr>
+<tr><td><code>\r</code></td><td><b>줄바꿈</b></td><td>한 줄을 여러 줄로 쪼갬</td></tr>
+<tr><td><code>\=식</code></td><td>vim 표현식의 값 <span class="badge">vim</span></td><td><code>:%s/\d\+/\=submatch(0)*2/</code></td></tr>
+</table>
+</div>
+<div class="term"><span class="p">$</span> ex -s -c '%s/_\(.\)/\u\1/g' -c 'wq' s1.txt
+<span class="c"># user_name → userName,  max_count → maxCount</span>
+<span class="p">$</span> ex -s -c '%s/\d\+/\=submatch(0)*2/' -c 'wq' s3.txt
+<span class="c"># a=1 b=22 c=333  →  a=2 b=44 c=666</span></div>
+<div class="warn"><b>대체문자열의 <code>\n</code>은 줄바꿈이 아닙니다.</b> <b>NUL 바이트</b>가 들어갑니다. 줄을 쪼개려면 <code class="nb">\r</code>를 쓰세요. 패턴 쪽의 <code class="nb">\n</code>은 정상적으로 줄바꿈을 뜻해서 더 헷갈립니다.</div>
+</article>
+
+<article class="card" id="s-nl-proof">
+<h3>증거: <code>\n</code> vs <code>\r</code></h3>
+<div class="term"><span class="p">$</span> printf 'a,b\n' &gt; f; ex -s -c '%s/,/\n/' -c 'wq' f; od -c f
+0000000   a  <span class="r">\0</span>   b  \n        <span class="c">&lt;- NUL 이 박혔다</span>
+
+<span class="p">$</span> printf 'a,b\n' &gt; f; ex -s -c '%s/,/\r/' -c 'wq' f; od -c f
+0000000   a  <span class="g">\n</span>   b  \n        <span class="c">&lt;- 이것이 줄바꿈</span></div>
+<div class="key"><b>왜 이렇게 됐나</b> — 버퍼 안에서 vim은 줄바꿈을 NUL로 표현합니다. 대체문자열의 <code class="nb">\n</code>은 "그 내부 표현을 그대로 넣어라"로 해석됩니다. 역사적 사고이지만 이제 와서 고칠 수 없는 종류의 것입니다.</div>
+<div class="tip"><b>기억법</b> — 치환에서 줄을 <b>나눌</b> 때는 <code class="nb">\r</code>(리턴). 줄을 <b>찾을</b> 때는 <code class="nb">\n</code>.</div>
+</article>
+
+<article class="card" id="s-multiline">
+<h3>여러 줄에 걸친 치환</h3>
+<p>ex의 <code class="nb">:s</code>는 원래 한 줄짜리입니다. 하지만 vim의 패턴은 <code class="nb">\n</code>으로 줄 경계를 넘을 수 있습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>목적</th><th>명령</th></tr>
+<tr><td>두 줄을 한 줄로</td><td><code>:%s/foo\nbar/foobar/</code></td></tr>
+<tr><td>빈 줄 2개 이상을 1개로</td><td><code>:%s/\n\{3,}/\r\r/</code></td></tr>
+<tr><td>쉼표에서 줄 나누기</td><td><code>:%s/,\s*/\r/g</code></td></tr>
+<tr><td>인접 중복 줄 제거</td><td><code>:g/^\(.*\)$\n\1$/d</code></td></tr>
+</table>
+</div>
+<div class="term"><span class="p">$</span> sort t.txt &gt; s.txt
+<span class="p">$</span> ex -s -c 'g/^\(.*\)$\n\1$/d' -c 'wq' s.txt
+<span class="c"># 정렬 후 인접 중복 제거 = uniq. 캡처한 줄과 다음 줄이 같으면 지운다</span></div>
+<div class="warn"><b>여러 줄 패턴은 이식성이 낮습니다</b> — POSIX ex·nvi에서는 대체로 동작하지 않습니다. 이식성이 필요하면 <code class="nb">:%!uniq</code>처럼 <b>외부 도구로 필터링</b>하는 편이 안전합니다.</div>
+</article>
+
+<article class="card quiz" id="s-quiz" data-quiz>
+<h3>치환 퀴즈</h3>
+<p class="q">Q. <code class="nb">:%s/foo/bar/</code>를 실행했더니 각 줄의 <b>첫 foo만</b> 바뀌었습니다. 그리고 <code class="nb">:%s/foo/bar/g</code>로 고쳤더니 이번엔 <code class="nb">food</code>도 <code class="nb">bard</code>가 되었습니다. 두 문제를 한 번에 해결하려면?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code class="nb">:%s/\&lt;foo\&gt;/bar/g</code>. <code class="nb">g</code>는 "한 줄 안에서 전부", <code class="nb">\&lt; \&gt;</code>는 낱말 경계입니다. 두 개는 서로 다른 문제를 풉니다 — <b>범위</b>의 문제와 <b>경계</b>의 문제. 실무에서는 여기에 <code class="nb">e</code>까지 붙여 <code class="nb">:%s/\&lt;foo\&gt;/bar/ge</code>로 씁니다.</div>
+</article>
+
+<article class="card" id="ch08">
+<p class="chnum">8장</p>
+<h2><code>:g</code> — 전역 명령</h2>
+<p class="chsub">ex를 배우는 이유가 이 명령 하나라고 해도 과장이 아니다</p>
+</article>
+
+<article class="card" id="g-idea">
+<h3>발상</h3>
+<div class="exa"><span class="pc a1">:%</span><span class="pc a2">g</span><span class="pc a3">/TODO/</span><span class="pc a4">d</span>
+<p class="lg"><b class="k1">━ 훑을 범위</b> (생략하면 전체) · <b class="k2">━ global</b> · <b class="k3">━ 고를 패턴</b> · <b class="k4">━ 고른 줄에 실행할 ex 명령</b></p>
+</div>
+<p><code class="nb">:g</code>는 <b>두 단계</b>로 동작합니다. 이 순서를 아는 것이 전부입니다.</p>
+<ol class="steps">
+<li><b>표시 단계</b> — 범위를 처음부터 끝까지 한 번 훑으며, 패턴이 맞는 줄에 <b>표를 해 둡니다</b>. 아직 아무것도 바꾸지 않습니다.</li>
+<li><b>실행 단계</b> — 표시된 줄을 차례로 방문해, 그 줄을 현재 줄로 만든 뒤 명령을 실행합니다.</li>
+</ol>
+<div class="key"><b>왜 두 단계인가</b> — 명령이 줄을 지우거나 옮겨서 <b>줄 번호가 흔들려도</b> 표시가 줄 자체에 붙어 있어 안전합니다. 한 단계였다면 <code class="nb">:g/x/d</code>가 자기 발을 밟습니다.</div>
+<div class="tip"><b>명령을 생략하면 <code>p</code></b> — <code class="nb">:g/re/</code>는 곧 <code class="nb">:g/re/p</code>이고, 이것이 바로 <b>grep</b>입니다.</div>
+</article>
+
+<article class="card" id="g-forms">
+<h3>기본 형태</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>뜻</th></tr>
+<tr><td><code>:g/re/p</code></td><td>맞는 줄 출력 (= grep)</td></tr>
+<tr><td><code>:g/re/d</code></td><td>맞는 줄 <b>삭제</b></td></tr>
+<tr><td><code>:v/re/d</code></td><td>맞지 <b>않는</b> 줄 삭제 (= <code>:g!</code> = grep -v)</td></tr>
+<tr><td><code>:g/re/s/a/b/g</code></td><td>맞는 줄에서만 치환</td></tr>
+<tr><td><code>:g/re/m0</code></td><td>맞는 줄을 맨 앞으로 (모아 오기)</td></tr>
+<tr><td><code>:g/re/t$</code></td><td>맞는 줄을 끝에 복사</td></tr>
+<tr><td><code>:g/re/normal A;</code></td><td>맞는 줄 끝에 <code>;</code> 붙이기 <span class="badge">vim</span></td></tr>
+<tr><td><code>:g/re/-1d</code></td><td>맞는 줄의 <b>바로 위</b> 줄 삭제</td></tr>
+<tr><td><code>:g/re/.,+2d</code></td><td>맞는 줄부터 3줄 삭제</td></tr>
+<tr><td><code>:g/A/,/B/d</code></td><td>A부터 B까지의 <b>블록</b> 삭제</td></tr>
+</table>
+</div>
+<div class="note"><code class="nb">:v</code>는 "in<b>v</b>erse"입니다. <code class="nb">:g!</code>와 완전히 같습니다. <code class="nb">:v/^#/d</code>는 "주석이 아닌 줄을 다 지워라"입니다.</div>
+</article>
+
+<article class="card" id="g-reverse">
+<h3>명작: <code>:g/^/m0</code> — 파일 뒤집기</h3>
+<p>세상에서 가장 유명한 ex 한 줄입니다. 왜 이것이 역순 정렬이 되는지 따라가 봅시다.</p>
+<div class="g2">
+<div class="cmp">
+<h5>표시 단계</h5>
+<p><code>^</code>는 모든 줄에 맞습니다. 1~5번 <b>모든 줄에 표시</b>가 붙습니다.</p>
+</div>
+<div class="cmp good">
+<h5>실행 단계</h5>
+<p>표시된 줄을 <b>위에서부터</b> 방문하며 각각 <code>m0</code> — "맨 앞으로 옮겨라".</p>
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>차례</th><th>옮기는 줄</th><th>버퍼 상태</th></tr>
+<tr><td>시작</td><td>—</td><td><code>a b c d e</code></td></tr>
+<tr><td>1</td><td>a</td><td><code>a b c d e</code></td></tr>
+<tr><td>2</td><td>b</td><td><code>b a c d e</code></td></tr>
+<tr><td>3</td><td>c</td><td><code>c b a d e</code></td></tr>
+<tr><td>4</td><td>d</td><td><code>d c b a e</code></td></tr>
+<tr><td>5</td><td>e</td><td><code>e d c b a</code></td></tr>
+</table>
+</div>
+<div class="key">각 줄이 <b>차례로 맨 앞에 꽂히므로</b> 마지막 줄이 결국 첫 줄이 됩니다. 스택에 밀어 넣는 것과 같습니다. <code class="nb">tac</code>이 없는 시스템에서 여전히 쓰이는 관용구입니다.</div>
+<div class="term"><span class="p">$</span> ex -s -c 'g/^/m0' -c 'wq' c.txt   <span class="c"># alpha..echo → echo..alpha</span></div>
+</article>
+
+<article class="card" id="g-block">
+<h3>블록 다루기 — <code>:g</code> 안의 범위</h3>
+<p><code class="nb">:g</code>의 명령 자리에는 <b>주소가 있는 ex 명령</b>을 그대로 쓸 수 있습니다. 여기서 힘이 폭발합니다.</p>
+<p class="fname">BEGIN…END 블록을 통째로 지우기</p>
+<div class="g2">
+<div class="cmp">
+<h5>입력</h5>
+<div class="buf">
+<div class="ln"><i>1</i><s>head</s></div>
+<div class="ln del"><i>2</i><s>BEGIN</s></div>
+<div class="ln del"><i>3</i><s>x1</s></div>
+<div class="ln del"><i>4</i><s>x2</s></div>
+<div class="ln del"><i>5</i><s>END</s></div>
+<div class="ln"><i>6</i><s>mid</s></div>
+<div class="ln del"><i>7</i><s>BEGIN</s></div>
+<div class="ln del"><i>8</i><s>y1</s></div>
+<div class="ln del"><i>9</i><s>END</s></div>
+<div class="ln"><i>10</i><s>tail</s></div>
+</div>
+</div>
+<div class="cmp good">
+<h5><code>:g/^BEGIN/,/^END/d</code></h5>
+<div class="buf">
+<div class="ln"><i>1</i><s>head</s></div>
+<div class="ln"><i>2</i><s>mid</s></div>
+<div class="ln"><i>3</i><s>tail</s></div>
+</div>
+<p>표시된 각 <code>BEGIN</code>에서 시작해 <b>다음 <code>END</code>까지</b>를 삭제합니다. 블록이 몇 개든 상관없습니다.</p>
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>패턴</th><th>용도</th></tr>
+<tr><td><code>:g/^func /,/^}/y A</code></td><td>함수 블록들을 레지스터 A에 모으기 <span class="badge">vim</span></td></tr>
+<tr><td><code>:g/^\[section\]/,/^$/d</code></td><td>INI 섹션 통째로 제거</td></tr>
+<tr><td><code>:g/&lt;!--/,/--&gt;/d</code></td><td>HTML 주석 블록 제거</td></tr>
+<tr><td><code>:g/^$/,/./-1j</code></td><td>연속 빈 줄 정리 (조합형)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="g-normal">
+<h3><code>:g</code> + <code>:normal</code> — vi 손동작을 조건부로 <span class="badge new">vim</span></h3>
+<p><code class="nb">:normal</code>은 <b>vi 노멀 모드 키 입력</b>을 실행합니다. <code class="nb">:g</code>와 합치면 "조건에 맞는 줄에서만 이 손동작을 반복하라"가 됩니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>뜻</th></tr>
+<tr><td><code>:g/^/normal I&gt; </code></td><td>모든 줄 앞에 <code>&gt; </code> 붙이기 (인용)</td></tr>
+<tr><td><code>:g/;$/normal $x</code></td><td>세미콜론으로 끝나는 줄의 마지막 글자 삭제</td></tr>
+<tr><td><code>:g/TODO/normal A  &lt;!&lt;</code></td><td>줄 끝에 표시 추가</td></tr>
+<tr><td><code>:g/^func/normal! zf%</code></td><td>함수마다 폴드 만들기</td></tr>
+<tr><td><code>:g/pattern/normal @q</code></td><td><b>매크로 q를</b> 맞는 줄마다 실행</td></tr>
+</table>
+</div>
+<div class="term"><span class="p">$</span> ex -s -c 'g/o$/normal I&gt; ' -c 'wq' j.txt
+<span class="c"># o 로 끝나는 줄(bravo, echo)에만 인용 표시가 붙는다</span></div>
+<div class="key"><b><code>:g/…/normal @q</code>는 실무의 대들보입니다</b> — 복잡한 편집은 매크로로 한 번 녹화하고, 어디에 적용할지는 <code class="nb">:g</code>가 정합니다. "무엇을"과 "어디에"의 분리입니다.</div>
+<div class="warn"><b><code>normal</code> 뒤의 공백은 유효한 입력입니다.</b> <code class="nb">normal I&gt; </code>의 끝 공백을 지우면 <code class="nb">&gt;</code>만 삽입됩니다. 그리고 <code class="nb">normal!</code>(느낌표)을 쓰면 사용자 매핑을 무시합니다 — <b>스크립트에서는 항상 느낌표</b>를 붙이세요.</div>
+</article>
+
+<article class="card" id="g-pitfall">
+<h3><code>:g</code>의 함정</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>함정</th><th>무슨 일이 나는가</th><th>대책</th></tr>
+<tr><td><code>:g</code> 안에 <code>:g</code></td><td>POSIX가 <b>금지</b>. vim은 실행은 하지만 결과가 직관과 다름</td><td>두 번에 나눠 실행</td></tr>
+<tr><td><code>:g/re/d</code>인데 아무것도 안 지워짐</td><td>패턴이 BRE라 <code>+</code>·<code>(</code>가 리터럴</td><td>먼저 <code>:g/re/p</code>로 확인</td></tr>
+<tr><td>정규식에 <code>|</code> 사용</td><td>ex가 <b>명령 구분자</b>로 해석</td><td><code>\|</code>로 이스케이프하거나 <code>\v</code> 사용</td></tr>
+<tr><td><code>:g/re/s/a/b/ | s/c/d/</code></td><td><code>|</code> 뒤도 <b>같은 줄에서 이어 실행</b>됨 (의도한 것이면 정상)</td><td>정규식 안의 <code>|</code>는 반드시 <code>\|</code></td></tr>
+<tr><td>패턴이 없을 때</td><td>조용히 아무 일 없음, <b>종료 코드 1</b></td><td>배치에서는 <code>$?</code> 검사</td></tr>
+<tr><td>큰 파일에서 <code>:g/re/normal</code></td><td>느림 (줄마다 화면 로직)</td><td>가능하면 <code>:g/re/s/…/</code>로 대체</td></tr>
+</table>
+</div>
+<div class="warn"><b>가장 위험한 오타</b> — <code class="nb">:g/re/d</code>를 치려다 <code class="nb">:g/re/D</code>나 <code class="nb">:%d</code>가 되는 경우. <code class="nb">:%d</code>는 <b>버퍼 전체를 지웁니다</b>. 다행히 <code class="nb">:u</code>로 살아나지만, <code class="nb">:wq</code>까지 쳤다면 아닙니다.</div>
+</article>
+
+<article class="card" id="g-vs-sed">
+<h3><code>:g</code> vs sed vs awk</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>하고 싶은 것</th><th>ex</th><th>sed / awk</th></tr>
+<tr><td>맞는 줄 삭제</td><td><code>:g/re/d</code></td><td><code>sed '/re/d'</code></td></tr>
+<tr><td>안 맞는 줄 삭제</td><td><code>:v/re/d</code></td><td><code>sed -n '/re/p'</code></td></tr>
+<tr><td>맞는 줄에서만 치환</td><td><code>:g/re/s/a/b/g</code></td><td><code>sed '/re/s/a/b/g'</code></td></tr>
+<tr><td>맞는 줄을 <b>맨 앞으로</b></td><td><code>:g/re/m0</code></td><td>—  <span class="badge err">불가</span></td></tr>
+<tr><td>맞는 줄의 <b>윗줄</b> 삭제</td><td><code>:g/re/-1d</code></td><td>어려움 (버퍼가 필요)</td></tr>
+<tr><td>파일 뒤집기</td><td><code>:g/^/m0</code></td><td><code>tac</code> · awk 배열</td></tr>
+<tr><td>스트림 처리 (무한 입력)</td><td>—  <span class="badge err">불가</span></td><td><code>sed</code>/<code>awk</code></td></tr>
+<tr><td>필드 계산</td><td>불편</td><td><code>awk</code> <span class="badge ok">최적</span></td></tr>
+</table>
+</div>
+<div class="key"><b>선택 기준</b> — <b>줄 사이의 관계</b>(이동·복사·앞뒤 참조)가 필요하면 ex, <b>줄 하나씩 흘려보내면</b> sed, <b>필드와 계산</b>이면 awk.</div>
+</article>
+
+<article class="card quiz" id="g-quiz" data-quiz>
+<h3><code>:g</code> 퀴즈</h3>
+<p class="q">Q. 로그에서 <code class="nb">ERROR</code>가 나온 줄과 <b>그 바로 다음 두 줄</b>(스택 트레이스)만 남기고 나머지를 지우려면?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 지우는 방향으로 생각하면 어렵습니다. <b>표시하고 → 표시 안 된 것을 지우는</b> 두 단계로 뒤집으세요.
+<pre><code data-lang="text">:g/ERROR/.,+2s/^/@@KEEP@@/   " 남길 줄에 표를 붙이고
+:v/^@@KEEP@@/d               " 표 없는 줄을 전부 지우고
+:%s/^@@KEEP@@//              " 표를 뗀다</code></pre>
+이 <b>표시-후-역선택</b> 패턴은 <code class="nb">:g</code>로 풀기 어려운 문제 대부분에 통합니다. <code class="nb">:g</code> 안에서 <code class="nb">:g</code>를 못 쓰기 때문에 더 유용합니다.</div>
+</article>
+
+<article class="card section" id="part3">
+<p class="chnum">3부</p>
+<h2>실전</h2>
+<p class="chsub">그대로 훔쳐 쓰는 레시피, 그리고 이미 겪은 함정</p>
+</article>
+
+<article class="card" id="ch09">
+<p class="chnum">9장</p>
+<h2>레시피</h2>
+<p class="chsub">모두 실제로 실행해 확인한 것들</p>
+</article>
+
+<article class="card" id="r-clean">
+<h3>① 텍스트 청소 4종 세트</h3>
+<p class="fname">후행 공백 · 빈 줄 · 주석 · 캐리지 리턴</p>
+<pre><code data-lang="text">:%s/\s\+$//e         " 줄 끝 공백·탭 제거   (e = 없어도 오류 아님)
+:g/^$/d              " 빈 줄 전부 삭제
+:g/^\s*#/d           " # 주석 줄 삭제
+:%s/\r$//e           " CRLF → LF  (윈도우에서 온 파일)
+:%s/\n\{3,}/\r\r/e   " 빈 줄 3개 이상 → 1개로</code></pre>
+<div class="term"><span class="p">$</span> ex -s -c '%s/\s\+$//e' -c 'g/^$/d' -c 'g/^\s*#/d' -c 'wq' cl.txt
+<span class="c"># 세 개를 한 번에 이어 실행. 순서가 중요하다 —</span>
+<span class="c"># 공백을 먼저 지워야 "공백만 있는 줄"이 빈 줄로 인식된다</span></div>
+<div class="key"><b>순서가 결과를 바꿉니다</b> — <code class="nb">:g/^$/d</code>를 먼저 하면 <code class="nb">"   "</code>(공백뿐인 줄)은 <b>살아남습니다</b>. 청소 명령은 항상 <b>정규화 → 삭제</b> 순서로.</div>
+</article>
+
+<article class="card" id="r-number">
+<h3>② 번호 매기기 · 다시 매기기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>목적</th><th>명령</th></tr>
+<tr><td>모든 줄에 번호</td><td><code>:%s/^/\=line(".").". "/</code></td></tr>
+<tr><td>0 채움 3자리</td><td><code>:%s/^/\=printf("%03d. ", line("."))/</code></td></tr>
+<tr><td>기존 번호를 새로 매김</td><td><code>:%s/^\d\+\./\=line(".")."."/</code></td></tr>
+<tr><td>1부터가 아니라 100부터</td><td><code>:%s/^/\=(line(".")+99).". "/</code></td></tr>
+<tr><td>번호 떼기</td><td><code>:%s/^\d\+\.\s*//e</code></td></tr>
+</table>
+</div>
+<div class="term"><span class="p">$</span> ex -s -c '%s/^/\=printf("%03d. ", line("."))/' -c 'wq' nm.txt
+001. x
+002. y
+003. z</div>
+<div class="warn"><b><code>\=</code>는 vim 전용입니다</b> <span class="badge">vim</span> — POSIX ex에는 없습니다. 이식성이 필요하면 <code class="nb">:%!nl -ba -w1 -s'. '</code>처럼 외부 도구로 거르세요.</div>
+<div class="tip"><code class="nb">line(".")</code>은 <b>지금 처리 중인 줄 번호</b>입니다. 치환이 줄마다 실행되므로 자동으로 1씩 늘어납니다. <code class="nb">:g</code>와 조합하면 "특정 줄들에만 번호"도 가능합니다.</div>
+</article>
+
+<article class="card" id="r-csv">
+<h3>③ CSV를 마크다운 표로</h3>
+<div class="g2">
+<div class="cmp">
+<h5>입력</h5>
+<pre><code data-lang="text">name,age
+kim,30
+lee,25</code></pre>
+</div>
+<div class="cmp good">
+<h5>출력</h5>
+<pre><code data-lang="text">| name | age |
+|------|-----|
+| kim | 30 |
+| lee | 25 |</code></pre>
+</div>
+</div>
+<pre><code data-lang="text">:%s/^/| /          " 줄 앞에 파이프
+:%s/,/ | /g        " 쉼표를 파이프로
+:%s/$/ |/          " 줄 끝에 파이프
+:1t1               " 머리글 줄을 복제해 2번 줄로
+:2s/[^|]/-/g       " 복제한 줄의 파이프 아닌 글자를 전부 하이픈으로</code></pre>
+<div class="term"><span class="p">$</span> ex -s -c '%s/^/| /' -c '%s/,/ | /g' -c '%s/$/ |/' \
+       -c '1t1' -c '2s/[^|]/-/g' -c 'wq' csv.txt</div>
+<div class="key"><b>이 레시피의 교훈</b> — <code class="nb">:1t1</code>로 <b>구분선을 만들어 내는</b> 발상입니다. 없는 줄을 새로 타이핑하지 않고, 있는 줄을 복사해서 <b>글자만 바꿉니다</b>. 열 개수가 자동으로 맞습니다.</div>
+<div class="warn">따옴표 안에 쉼표가 있는 진짜 CSV에는 쓰면 안 됩니다. 그럴 때는 <code class="nb">:%!python3 -c '...'</code>로 넘기세요.</div>
+</article>
+
+<article class="card" id="r-escape">
+<h3>④ HTML 이스케이프 — 순서가 전부</h3>
+<pre><code data-lang="text">:%s/&amp;/\&amp;amp;/g      " ← 반드시 먼저!
+:%s/&lt;/\&amp;lt;/g
+:%s/&gt;/\&amp;gt;/g</code></pre>
+<div class="warn"><b><code>&amp;</code>를 먼저 바꾸지 않으면 이중 이스케이프가 됩니다.</b> <code class="nb">&lt;</code>를 먼저 <code class="nb">&amp;lt;</code>로 바꾸면, 나중에 <code class="nb">&amp;</code> 치환이 그 <code class="nb">&amp;</code>를 다시 잡아 <code class="nb">&amp;amp;lt;</code>가 됩니다.</div>
+<div class="tip"><b>대체문자열의 <code>&amp;</code>는 "매치 전체"라는 특수 기호입니다</b> — 글자 그대로의 <code class="nb">&amp;</code>를 넣으려면 <code class="nb">\&amp;</code>로 써야 합니다. 위 레시피에 역슬래시가 붙어 있는 이유입니다.</div>
+<div class="term"><span class="p">$</span> ex -s -c '%s/&amp;/\&amp;amp;/g' -c '%s/&lt;/\&amp;lt;/g' -c '%s/&gt;/\&amp;gt;/g' -c 'wq' he.txt
+<span class="c"># &lt;a href="x"&gt;&amp;&lt;/a&gt;  →  &amp;lt;a href="x"&amp;gt;&amp;amp;&amp;lt;/a&amp;gt;</span></div>
+</article>
+
+<article class="card" id="r-code">
+<h3>⑤ 코드 리팩터링 관용구</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>목적</th><th>명령</th></tr>
+<tr><td>낱말 단위 이름 바꾸기</td><td><code>:%s/\&lt;oldName\&gt;/newName/ge</code></td></tr>
+<tr><td>snake_case → camelCase</td><td><code>:%s/_\(.\)/\u\1/g</code></td></tr>
+<tr><td>camelCase → snake_case</td><td><code>:%s/\(\l\)\(\u\)/\1_\l\2/g</code></td></tr>
+<tr><td>import 줄만 정렬</td><td><code>:g/^import/m0</code> 후 <code>:1,/^[^i]/-1!sort</code></td></tr>
+<tr><td>디버그 출력 제거</td><td><code>:g/console\.log\|printf("DBG/d</code></td></tr>
+<tr><td>함수 인자 순서 바꾸기</td><td><code>:%s/f(\([^,]*\), *\([^)]*\))/f(\2, \1)/g</code></td></tr>
+<tr><td>줄 끝에 세미콜론 보충</td><td><code>:g/[^;{}]$/normal! A;</code></td></tr>
+<tr><td>주석 처리 / 해제</td><td><code>:'a,'bs/^/\/\/ /</code> · <code>:'a,'bs/^\/\/ //e</code></td></tr>
+</table>
+</div>
+<div class="warn"><b><code>:g/^import/m0</code>는 순서를 <u>뒤집습니다</u></b> — <code class="nb">m0</code>가 찾은 줄을 차례로 맨 앞에 꽂기 때문입니다(8장의 파일 뒤집기와 같은 원리). 그래서 뒤에 정렬을 붙입니다. <code class="nb">/^[^i]/</code>는 "import가 아닌 첫 줄"을 찾아 블록의 끝을 잡는 장치입니다.</div>
+<div class="term"><span class="p">$</span> ex -s -c '%s/_\(.\)/\u\1/g' -c 'wq' names.txt
+<span class="c"># user_name → userName · max_count → maxCount · id → id (그대로)</span></div>
+<div class="warn"><b>이름 바꾸기에 <code>\&lt; \&gt;</code>를 빠뜨리지 마세요</b> — <code class="nb">:%s/id/uuid/g</code>는 <code class="nb">valid</code>를 <code class="nb">valuuid</code>로 만듭니다. 실제로 사고가 나는 방식입니다. 그리고 문자열·주석 안까지 바꾼다는 점도 기억하세요 — ex는 <b>구문을 모릅니다</b>.</div>
+</article>
+
+<article class="card" id="r-filter">
+<h3>⑥ 필터 — ex가 못 하는 일을 남에게 시키기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>효과</th></tr>
+<tr><td><code>:%!sort</code></td><td>전체 정렬</td></tr>
+<tr><td><code>:%!sort -u</code></td><td>정렬 + 중복 제거</td></tr>
+<tr><td><code>:%!tac</code></td><td>역순 (없으면 <code>:g/^/m0</code>)</td></tr>
+<tr><td><code>:2,10!column -t</code></td><td>열 맞추기</td></tr>
+<tr><td><code>:%!jq .</code></td><td>JSON 예쁘게</td></tr>
+<tr><td><code>:%!python3 -m json.tool</code></td><td>jq 없을 때</td></tr>
+<tr><td><code>:%!awk '{print $3, $1}'</code></td><td>필드 재배치</td></tr>
+<tr><td><code>:'a,'b!base64 -d</code></td><td>선택 구간만 디코드</td></tr>
+<tr><td><code>:%!clang-format</code></td><td>포매터에 통째로 넘기기</td></tr>
+</table>
+</div>
+<div class="key"><b>필터는 undo가 됩니다</b> — 외부 명령이 버퍼를 망쳐도 <code class="nb">:u</code> 한 번이면 원상복구입니다. 셸에서 <code class="nb">cmd &lt; f &gt; f</code>를 했다가 파일을 날려 본 사람에게는 이것만으로도 ex를 쓸 이유가 됩니다.</div>
+<div class="warn"><b>필터는 버퍼를 명령의 <u>표준 출력</u>으로 통째로 갈아 끼웁니다</b> — 명령이 실패해 아무것도 출력하지 않으면 <b>버퍼가 비어 버립니다</b>. 실제로 <code class="nb">:%!nosuchcmd</code>를 돌리면 파일이 0바이트가 되고, 그런데도 <code class="nb">ex</code>의 종료 코드는 <b>0</b>입니다. 대화형이면 <code class="nb">:u</code>로 살아나지만, <code class="nb">-c 'wq'</code>가 뒤따르는 배치에서는 그대로 저장됩니다.</div>
+</article>
+
+<article class="card" id="ch10">
+<p class="chnum">10장</p>
+<h2>파일 여럿 · 셸과 함께</h2>
+<p class="chsub">한 파일을 넘어설 때</p>
+</article>
+
+<article class="card" id="m-multi">
+<h3>여러 파일에 같은 편집 적용</h3>
+<p class="fname">① find + ex — 가장 이식성 높음</p>
+<pre><code data-lang="sh">find src -name '*.c' -exec \
+  ex -s -c '%s/\&lt;old_api\&gt;/new_api/ge' -c 'wq' {} \;</code></pre>
+<p class="fname">② xargs — 병렬로 빠르게</p>
+<pre><code data-lang="sh">find src -name '*.c' -print0 \
+  | xargs -0 -P4 -n1 ex -s -c '%s/\&lt;old_api\&gt;/new_api/ge' -c 'wq'</code></pre>
+<p class="fname">③ vim의 argdo — 버퍼 목록을 한 번에 <span class="badge">vim</span></p>
+<pre><code data-lang="sh">vim -es -u NONE -i NONE -n \
+  -c 'argdo %s/\&lt;old_api\&gt;/new_api/ge | update' \
+  -c 'qa!' src/*.c</code></pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방식</th><th>장점</th><th>주의</th></tr>
+<tr><td>find -exec</td><td>어디서나 동작. 파일 수 무제한</td><td>파일마다 프로세스 하나 — 느림</td></tr>
+<tr><td>xargs -P</td><td>병렬. 수천 개도 견딤</td><td>공백 있는 파일명 → <code>-print0</code> 필수</td></tr>
+<tr><td>argdo</td><td>프로세스 하나. 레지스터·마크 공유</td><td>vim 전용. <code>update</code>를 빠뜨리면 저장 안 됨</td></tr>
+</table>
+</div>
+<div class="warn"><b><code>ge</code>의 <code>e</code>를 꼭 붙이세요</b> — 패턴이 없는 파일에서 <code class="nb">argdo</code>는 <b>거기서 멈춥니다</b>. <code class="nb">e</code> 없이 200개 파일을 돌리면 세 번째 파일에서 조용히 끝나 있습니다.</div>
+</article>
+
+<article class="card" id="m-shell">
+<h3>셸 파이프라인 속의 ex</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>하고 싶은 것</th><th>방법</th></tr>
+<tr><td>표준 입력을 편집해 표준 출력으로</td><td><code>ex</code>는 부적합 — <code>sed</code>/<code>awk</code>를 쓰세요</td></tr>
+<tr><td>파일을 제자리 편집</td><td><code>ex -s -c '...' -c 'wq' f</code> <span class="badge ok">ex의 자리</span></td></tr>
+<tr><td>편집 결과를 출력만</td><td><code>ex -s -c '...' -c '%p' -c 'q!' f</code></td></tr>
+<tr><td>일부만 잘라 새 파일로</td><td><code>ex -s -c '/BEGIN/;/END/w out.txt' -c 'q!' f</code></td></tr>
+<tr><td>파일 여러 개를 하나로</td><td><code>ex -s -c '$r a.txt' -c '$r b.txt' -c 'w all.txt' -c 'q!' /dev/null</code></td></tr>
+</table>
+</div>
+<div class="key"><b>ex의 자리는 "제자리 편집"입니다.</b> <code class="nb">sed -i</code>는 임시 파일을 만들어 <b>바꿔치기</b>하므로 심볼릭 링크·하드 링크·퍼미션이 깨질 수 있습니다. <code class="nb">ex</code>의 <code class="nb">:w</code>는 원본 아이노드에 <b>그대로 씁니다</b>.</div>
+<div class="term"><span class="p">$</span> ls -li conf.txt; ln -s conf.txt link.txt
+<span class="p">$</span> sed -i 's/a/b/' link.txt   <span class="c"># GNU sed: 심볼릭 링크가 일반 파일로 바뀐다</span>
+<span class="p">$</span> ex -s -c '%s/a/b/' -c 'wq' link.txt   <span class="c"># 링크를 따라가 원본을 고친다</span></div>
+</article>
+
+<article class="card" id="m-quoting">
+<h3>따옴표 지옥 빠져나오기</h3>
+<p>셸에서 ex 명령을 넘길 때 문제의 90%는 <b>따옴표와 역슬래시</b>입니다.</p>
+<ol class="steps">
+<li><b>바깥은 항상 작은따옴표</b>로 감싸세요. <code class="nb">'...'</code> 안에서 셸은 아무것도 해석하지 않습니다. <code class="nb">\d</code>, <code class="nb">$</code>, <code class="nb">*</code>가 그대로 ex에 도착합니다.</li>
+<li>명령 안에 작은따옴표가 필요하면 <code class="nb">'\''</code>로 끊어 붙이거나, ex 스크립트 <b>파일</b>로 빼세요.</li>
+<li>구분자를 <code class="nb">#</code>나 <code class="nb">,</code>로 바꿔 <code class="nb">\/</code>를 없애세요.</li>
+<li>3줄이 넘으면 <b>파일로 빼는 편이 항상 낫습니다</b>.</li>
+</ol>
+<div class="g2">
+<div class="cmp bad">
+<h5>✘ 큰따옴표</h5>
+<pre><code data-lang="sh">ex -s -c "%s/\$HOME/~/g" -c wq f
+# 셸이 $HOME 을 먼저 펼친다
+# \$ 로 막아도 다음 사람이 못 읽는다</code></pre>
+</div>
+<div class="cmp good">
+<h5>✔ 작은따옴표 + 파일</h5>
+<pre><code data-lang="sh">ex -s -c '%s#\$HOME#~#g' -c 'wq' f
+
+# 또는
+cat &gt; fix.ex &lt;&lt;'EOF'
+%s#\$HOME#~#g
+wq
+EOF
+ex -s f &lt; fix.ex</code></pre>
+</div>
+</div>
+<div class="tip"><b>히어독은 <code>&lt;&lt;'EOF'</code></b> — 따옴표 친 <code class="nb">'EOF'</code>여야 셸이 내용을 건드리지 않습니다. 이것 하나로 이스케이프 문제가 통째로 사라집니다.</div>
+</article>
+
+<article class="card" id="ch11">
+<p class="chnum">11장</p>
+<h2>함정</h2>
+<p class="chsub">전부 실제로 밟아 본 것들</p>
+</article>
+
+<article class="card" id="p-table">
+<h3>증상 → 원인 표</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>증상</th><th>원인</th><th>해결</th></tr>
+<tr><td>줄마다 첫 개만 바뀜</td><td><code>g</code> 플래그 누락</td><td><code>:%s/a/b/<b>g</b></code></td></tr>
+<tr><td><code>a+</code>가 안 맞음</td><td>BRE에서 <code>+</code>는 보통 글자</td><td><code>a\+</code> 또는 <code>\v a+</code></td></tr>
+<tr><td>줄이 안 나뉘고 NUL이 박힘</td><td>대체문자열의 <code>\n</code></td><td><code>\r</code>를 쓸 것</td></tr>
+<tr><td>배치 스크립트가 조용히 실패</td><td>오류 메시지가 안 나옴</td><td><code>$?</code> 검사 · <code>e</code> 플래그</td></tr>
+<tr><td><code>argdo</code>가 중간에 멈춤</td><td>패턴 없는 파일에서 오류</td><td><code>%s/…/…/g<b>e</b></code></td></tr>
+<tr><td>범위가 엉뚱함</td><td><code>,</code>를 써서 상대 주소가 현재 줄 기준</td><td><code>;</code>를 쓸 것</td></tr>
+<tr><td>파이프라인이 멈춰 있음</td><td><code>-s</code> 없이 실행</td><td><code>ex -s</code> / <code>vim -es</code></td></tr>
+<tr><td><code>E325 ATTENTION</code></td><td>스왑 파일이 남아 있음</td><td><code>vim -n</code> 또는 <code>.swp</code> 삭제</td></tr>
+<tr><td>남의 서버에서 결과가 다름</td><td>그쪽 <code>.vimrc</code>·<code>.exrc</code></td><td><code>-u NONE</code></td></tr>
+<tr><td>정규식의 <code>|</code>에서 명령이 잘림</td><td><code>|</code>가 명령 구분자</td><td><code>\|</code> 또는 <code>\v(a|b)</code></td></tr>
+<tr><td>대소문자가 멋대로 무시됨</td><td><code>ignorecase</code> 설정</td><td>플래그 <code>I</code>로 강제</td></tr>
+<tr><td>파일 끝에 줄바꿈이 생김/사라짐</td><td><code>endofline</code>·<code>fixeol</code></td><td><code>set noeol nofixeol</code></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p-detail">
+<h3>특히 아픈 세 가지</h3>
+<div class="warn"><b>① <code>:%s</code>의 <code>%</code>를 빠뜨림</b> — <code class="nb">:s/a/b/g</code>는 <b>현재 줄에만</b> 적용됩니다. 대화형에서는 눈에 보이지만, 스크립트에서는 "왜 첫 줄만 바뀌었지"로 나타납니다. <b>스크립트의 <code>:s</code>에는 언제나 범위를 명시</b>하세요.</div>
+<div class="warn"><b>② 문자열·주석 안까지 바뀜</b> — ex는 구문을 모릅니다. <code class="nb">:%s/\&lt;port\&gt;/PORT/g</code>는 주석의 "port"도, 로그 메시지의 "port"도 바꿉니다. 코드 리팩터링에서는 <b>먼저 <code>:g//p</code>로 대상 목록을 눈으로 확인</b>하는 것이 유일한 방어입니다.</div>
+<div class="warn"><b>③ 순서 의존</b> — 치환 여러 개를 이어 실행할 때, 앞 치환의 결과가 뒤 치환의 입력이 됩니다. <code class="nb">a→b</code>, <code class="nb">b→c</code>를 순서대로 하면 원래의 <code class="nb">a</code>가 <code class="nb">c</code>가 됩니다. 교환이 필요하면 <b>임시 표식</b>을 거치세요.</div>
+<pre><code data-lang="text">" ✘ a 와 b 를 맞바꾸려다 전부 b 가 됨
+:%s/a/b/g
+:%s/b/a/g
+
+" ✔ 임시 표식을 경유  (a b a b → b a b a)
+:%s/a/@@SWAP@@/g
+:%s/b/a/g
+:%s/@@SWAP@@/b/g</code></pre>
+</article>
+
+<article class="card" id="p-portability">
+<h3>이식성 — 어디까지가 POSIX인가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기능</th><th>POSIX ex</th><th>vim</th><th>비고</th></tr>
+<tr><td><code>:s</code> <code>:g</code> <code>:v</code> <code>:m</code> <code>:t</code> <code>:d</code></td><td><span class="badge ok">O</span></td><td><span class="badge ok">O</span></td><td>안심하고 쓸 것</td></tr>
+<tr><td><code>\( \)</code> <code>\{n,m\}</code> <code>[[:alpha:]]</code></td><td><span class="badge ok">O</span></td><td><span class="badge ok">O</span></td><td>BRE 표준</td></tr>
+<tr><td><code>\&lt; \&gt;</code></td><td><span class="badge">사실상 O</span></td><td><span class="badge ok">O</span></td><td>원조 vi부터 존재</td></tr>
+<tr><td><code>\+</code> <code>\?</code> <code>\|</code></td><td><span class="badge err">X</span></td><td><span class="badge ok">O</span></td><td>확장. <code>\{1,\}</code>로 대체 가능</td></tr>
+<tr><td><code>e</code> · <code>n</code> 플래그</td><td><span class="badge err">X</span></td><td><span class="badge ok">O</span></td><td>스크립트에서 아쉬운 부분</td></tr>
+<tr><td><code>\zs \ze</code> <code>\v</code> <code>\=</code></td><td><span class="badge err">X</span></td><td><span class="badge ok">O</span></td><td>vim 고유</td></tr>
+<tr><td><code>:normal</code> <code>:argdo</code> <code>:sort</code></td><td><span class="badge err">X</span></td><td><span class="badge ok">O</span></td><td>vim 고유</td></tr>
+<tr><td>여러 줄 패턴 <code>\n</code></td><td><span class="badge err">X</span></td><td><span class="badge ok">O</span></td><td>버퍼 구현에 의존</td></tr>
+</table>
+</div>
+<div class="key"><b>실무 규칙</b> — 내 기계에서 한 번 쓰고 버릴 명령은 vim 확장을 마음껏 쓰세요. <b>저장소에 커밋하거나 남에게 주는 스크립트</b>는 위 표의 <span class="badge ok">O</span>만 쓰고, 최소한 <code class="nb">ex --version</code>을 확인하는 줄을 넣으세요.</div>
+</article>
+
+<article class="card section" id="part4">
+<p class="chnum">4부</p>
+<h2>LLM처럼 부리기</h2>
+<p class="chsub">의도를 선언하면 실행되는 인터페이스 · 그리고 LLM에게 ex를 시키는 법</p>
+</article>
+
+<article class="card" id="ch12">
+<p class="chnum">12장</p>
+<h2>왜 LLM과 닮았는가</h2>
+<p class="chsub">이 부는 두 방향을 모두 다룹니다</p>
+</article>
+
+<article class="card" id="l-two">
+<h3>두 가지 방향</h3>
+<div class="g2">
+<div class="cmp good">
+<h5>방향 A — ex를 LLM처럼 쓴다</h5>
+<p>"어떻게"를 절차로 쓰지 않고, <b>"무엇을 원하는지"를 한 문장</b>으로 선언한다. 루프도 인덱스도 없다. 프롬프트를 쓰는 자세로 ex를 친다.</p>
+<pre><code data-lang="text">:g/^\s*#/d</code></pre>
+<p>= "주석 줄은 다 지워"</p>
+</div>
+<div class="cmp good">
+<h5>방향 B — LLM에게 ex를 시킨다</h5>
+<p>자연어로 의도를 말하고, LLM이 <b>ex 한 줄</b>을 내놓게 한다. 사람이 그 한 줄을 <b>읽고 검증</b>한 뒤 실행한다.</p>
+<pre><code data-lang="text">사람: "로그에서 DEBUG 줄 지워줘"
+LLM : :g/\&lt;DEBUG\&gt;/d</code></pre>
+</div>
+</div>
+<div class="key"><b>두 방향이 만나는 지점이 이 부의 핵심입니다</b> — ex 명령은 <b>자연어 의도와 기계 실행 사이의 좋은 중간 표현</b>입니다. 사람이 읽을 만큼 짧고, 기계가 실행할 만큼 정확하며, <b>실행 전에 검증할 수 있습니다</b>.</div>
+</article>
+
+<article class="card" id="l-analogy">
+<h3>구조적 대응</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>LLM 쪽</th><th>ex 쪽</th><th>대응이 성립하는 이유</th></tr>
+<tr><td>컨텍스트 윈도</td><td><b>버퍼</b></td><td>둘 다 "지금 보고 있는 전체"이고, 그 밖은 모른다</td></tr>
+<tr><td>프롬프트</td><td><b>명령 한 줄</b></td><td>선언적 · 서술형 · 절차 없음</td></tr>
+<tr><td>"이 부분에 대해서만"</td><td><b>주소 / 범위</b></td><td>작업 범위를 말로 좁히는 장치</td></tr>
+<tr><td>조건부 지시</td><td><b><code>:g/패턴/</code></b></td><td>"~인 것들에 대해서만 ~해라"</td></tr>
+<tr><td>퓨샷 예시</td><td><b>정규식 캡처</b></td><td>패턴을 보여 주고 변환을 지정</td></tr>
+<tr><td>온도(temperature)</td><td><b>없음 = 0</b></td><td>ex는 <b>완전히 결정적</b>이다 — 여기가 결정적 차이</td></tr>
+<tr><td>환각</td><td><b>구조적으로 불가</b></td><td>없는 줄을 지어내지 않는다</td></tr>
+<tr><td>토큰 비용</td><td><b>명령 길이</b></td><td>둘 다 짧을수록 좋다</td></tr>
+<tr><td>되돌리기 없음</td><td><b><code>:u</code> 있음</b></td><td>ex가 이기는 지점</td></tr>
+</table>
+</div>
+<div class="warn"><b>비유를 과신하지 마세요</b> — ex는 의미를 이해하지 않습니다. <b>패턴만</b> 봅니다. "TODO 정리해 줘"는 LLM에게는 통하지만 ex에게는 <code class="nb">:g/TODO/d</code>로 <b>번역</b>해 주어야 합니다. 이 부의 나머지는 그 번역을 다룹니다.</div>
+</article>
+
+<article class="card" id="l-declarative">
+<h3>선언형으로 생각하는 연습</h3>
+<p>같은 작업을 <b>절차형</b>과 <b>선언형</b>으로 각각 써 봅니다.</p>
+<div class="g2">
+<div class="cmp bad">
+<h5>✘ 절차형 사고</h5>
+<pre><code data-lang="text">1번 줄로 간다
+TODO 가 있는지 본다
+있으면 지운다
+없으면 다음 줄로 간다
+파일 끝까지 반복한다</code></pre>
+<p>손으로 <code>j</code>와 <code>dd</code>를 300번 누르게 되는 사고방식.</p>
+</div>
+<div class="cmp good">
+<h5>✔ 선언형 사고</h5>
+<pre><code data-lang="text">:g/TODO/d</code></pre>
+<p>"TODO인 줄은 존재하지 않는다"를 <b>선언</b>한다. 순회는 ex가 알아서.</p>
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>절차형으로 말하고 싶어지면</th><th>이렇게 바꿔 말하세요</th></tr>
+<tr><td>"한 줄씩 보면서…"</td><td>"~인 <b>모든</b> 줄에 대해"</td></tr>
+<tr><td>"찾을 때까지 내려가서…"</td><td>"<code>/패턴/</code>부터 <code>/패턴/</code>까지"</td></tr>
+<tr><td>"위에서 세 번째부터…"</td><td>"<code>3</code>부터 <code>$-1</code>까지"</td></tr>
+<tr><td>"조건이 맞으면 …하고 아니면"</td><td><code>:g</code>로 한 번, <code>:v</code>로 한 번</td></tr>
+<tr><td>"카운터를 늘려가며"</td><td><code>\=line(".")</code></td></tr>
+</table>
+</div>
+<div class="key"><b>이것이 프롬프트를 잘 쓰는 법과 같습니다</b> — LLM에게도 "먼저 A하고 그다음 B하고…"보다 <b>원하는 최종 상태</b>를 말하는 편이 낫습니다. ex는 그 훈련을 <b>즉시 채점해 주는</b> 연습장입니다. 틀리면 바로 눈에 보이니까요.</div>
+</article>
+
+<article class="card" id="l-diff">
+<h3>결정적으로 다른 점 — 그리고 그것이 왜 장점인가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>LLM</th><th>ex</th></tr>
+<tr><td>같은 입력 → 같은 출력</td><td>보장 없음</td><td><span class="badge ok">항상</span></td></tr>
+<tr><td>의미 이해</td><td><span class="badge ok">함</span></td><td>안 함 (패턴만)</td></tr>
+<tr><td>모호한 지시</td><td>알아서 해석</td><td>오류 또는 <b>엉뚱한 결과</b></td></tr>
+<tr><td>실행 전 검증</td><td>어려움</td><td><span class="badge ok">가능</span> — 드라이런</td></tr>
+<tr><td>비용</td><td>토큰 · 지연</td><td>사실상 0</td></tr>
+<tr><td>감사 추적</td><td>프롬프트 로그</td><td><span class="badge ok">명령 자체가 기록</span></td></tr>
+<tr><td>대규모 반복</td><td>비쌈 · 흔들림</td><td><span class="badge ok">10만 줄도 즉시</span></td></tr>
+</table>
+</div>
+<div class="key"><b>조합이 정답입니다</b> — <b>애매한 의도를 정확한 명령으로 바꾸는 일</b>은 LLM이 잘합니다. <b>그 명령을 10만 줄에 흔들림 없이 적용하는 일</b>은 ex가 잘합니다. LLM에게 텍스트를 통째로 다시 쓰게 하지 말고, <b>ex 한 줄을 쓰게 하세요.</b></div>
+<div class="flow">
+<span class="box">애매한 의도</span><span class="arr">→</span>
+<span class="box">LLM</span><span class="arr">→</span>
+<span class="box">ex 한 줄</span><span class="arr">→</span>
+<span class="box dim">사람이 검토</span><span class="arr">→</span>
+<span class="box">10만 줄에 적용</span>
+</div>
+</article>
+
+<article class="card" id="ch13">
+<p class="chnum">13장</p>
+<h2>의도 → ex 문형집</h2>
+<p class="chsub">한국어 한 문장을 ex 한 줄로 옮기는 사전</p>
+</article>
+
+<article class="card" id="ph-how">
+<h3>번역의 세 조각</h3>
+<p>어떤 의도든 <b>세 질문</b>으로 분해하면 ex 한 줄이 나옵니다.</p>
+<ol class="steps">
+<li><b>어디에?</b> → 주소. "전부"면 <code class="nb">%</code>, "~인 줄만"이면 <code class="nb">:g/…/</code>, "여기부터 저기까지"면 <code class="nb">/A/;/B/</code>.</li>
+<li><b>무엇을?</b> → 명령. 지운다 <code class="nb">d</code> · 바꾼다 <code class="nb">s</code> · 옮긴다 <code class="nb">m</code> · 복사 <code class="nb">t</code> · 붙인다 <code class="nb">normal A</code>.</li>
+<li><b>어떻게 알아보나?</b> → 정규식. "~로 시작" <code class="nb">^</code> · "~로 끝" <code class="nb">$</code> · "낱말로서" <code class="nb">\&lt; \&gt;</code> · "비어 있음" <code class="nb">^$</code>.</li>
+</ol>
+<div class="exa">"주석이 아닌 줄에서 뒤쪽 공백을 지워줘"
+<p class="lg"><b class="k1">어디에</b> = 주석이 아닌 줄 → <code>:v/^\s*#/</code> · <b class="k2">무엇을</b> = 공백 제거 → <code>s/\s\+$//e</code></p>
+</div>
+<pre><code data-lang="text">:v/^\s*#/s/\s\+$//e</code></pre>
+<div class="key"><b>LLM에게 물을 때도 이 세 조각으로 물으세요</b> — "어디에 / 무엇을 / 어떻게 알아보는지"를 나눠서 주면, 모델이 정규식을 지어낼 여지가 크게 줄어듭니다.</div>
+</article>
+
+<article class="card" id="ph-delete">
+<h3>문형집 ① 지우기</h3>
+<div class="ph">
+<div class="row2"><div class="say">빈 줄 다 지워</div><div class="cmd2">:g/^$/d</div></div>
+<div class="row2"><div class="say">공백만 있는 줄도 지워</div><div class="cmd2">:g/^\s*$/d</div></div>
+<div class="row2"><div class="say">주석 줄 지워</div><div class="cmd2">:g/^\s*#/d</div></div>
+<div class="row2"><div class="say">TODO 들어간 줄 지워</div><div class="cmd2">:g/TODO/d</div></div>
+<div class="row2"><div class="say">TODO 없는 줄을 지워 (= 남겨)</div><div class="cmd2">:v/TODO/d</div></div>
+<div class="row2"><div class="say">뒤에서 10줄만 남기고 다 지워</div><div class="cmd2">:1,$-10d</div></div>
+<div class="row2"><div class="say">ERROR 줄의 바로 윗줄 지워</div><div class="cmd2">:g/ERROR/-1d</div></div>
+<div class="row2"><div class="say">BEGIN부터 END까지 통째로 지워</div><div class="cmd2">:g/^BEGIN/,/^END/d</div></div>
+<div class="row2"><div class="say">중복된 줄 지워 (정렬 후)</div><div class="cmd2">:%!sort -u</div></div>
+<div class="row2"><div class="say">파일 다 지워</div><div class="cmd2">:%d</div></div>
+</div>
+</article>
+
+<article class="card" id="ph-replace">
+<h3>문형집 ② 바꾸기</h3>
+<div class="ph">
+<div class="row2"><div class="say">foo를 bar로 다 바꿔</div><div class="cmd2">:%s/foo/bar/g</div></div>
+<div class="row2"><div class="say">단어 foo만 (food 말고)</div><div class="cmd2">:%s/\&lt;foo\&gt;/bar/g</div></div>
+<div class="row2"><div class="say">대소문자 무시하고</div><div class="cmd2">:%s/foo/bar/gi</div></div>
+<div class="row2"><div class="say">줄 앞에 들여쓰기 넣어</div><div class="cmd2">:%s/^/    /</div></div>
+<div class="row2"><div class="say">줄 끝에 세미콜론 붙여</div><div class="cmd2">:%s/$/;/</div></div>
+<div class="row2"><div class="say">탭을 공백 4칸으로</div><div class="cmd2">:%s/\t/    /g</div></div>
+<div class="row2"><div class="say">경로 /usr를 /opt로</div><div class="cmd2">:%s#/usr#/opt#g</div></div>
+<div class="row2"><div class="say">전부 대문자로</div><div class="cmd2">:%s/.*/\U&amp;/</div></div>
+<div class="row2"><div class="say">key=value를 value=key로</div><div class="cmd2">:%s/\(\w\+\)=\(\w\+\)/\2=\1/</div></div>
+<div class="row2"><div class="say">숫자를 전부 2배로</div><div class="cmd2">:%s/\d\+/\=submatch(0)*2/g</div></div>
+<div class="row2"><div class="say">CSV를 한 줄씩 쪼개</div><div class="cmd2">:%s/,\s*/\r/g</div></div>
+<div class="row2"><div class="say">DEBUG 줄에서만 시간 제거</div><div class="cmd2">:g/DEBUG/s/^\S\+ //</div></div>
+</div>
+</article>
+
+<article class="card" id="ph-move">
+<h3>문형집 ③ 옮기고 · 뽑고 · 붙이기</h3>
+<div class="ph">
+<div class="row2"><div class="say">파일 순서를 거꾸로</div><div class="cmd2">:g/^/m0</div></div>
+<div class="row2"><div class="say">import 줄을 맨 위로 모아</div><div class="cmd2">:g/^import/m0</div></div>
+<div class="row2"><div class="say">ERROR 줄을 맨 아래로 모아</div><div class="cmd2">:g/ERROR/m$</div></div>
+<div class="row2"><div class="say">ERROR 줄을 복사해서 아래에 모아</div><div class="cmd2">:g/ERROR/t$</div></div>
+<div class="row2"><div class="say">현재 줄을 복제</div><div class="cmd2">:t.</div></div>
+<div class="row2"><div class="say">현재 줄을 한 줄 위로</div><div class="cmd2">:m-2</div></div>
+<div class="row2"><div class="say">두 줄을 한 줄로 합쳐</div><div class="cmd2">:1,2j</div></div>
+<div class="row2"><div class="say">전체를 한 줄로</div><div class="cmd2">:%j</div></div>
+<div class="row2"><div class="say">맨 앞에 헤더 파일 끼워 넣어</div><div class="cmd2">:0r header.txt</div></div>
+<div class="row2"><div class="say">맨 뒤에 붙여</div><div class="cmd2">:$r footer.txt</div></div>
+<div class="row2"><div class="say">지금 날짜를 삽입해</div><div class="cmd2">:r !date +\%F</div></div>
+<div class="row2"><div class="say">10~20번 줄만 따로 저장</div><div class="cmd2">:10,20w part.txt</div></div>
+<div class="row2"><div class="say">ERROR 줄만 다른 파일로 모아</div><div class="cmd2">:g/ERROR/.w! &gt;&gt; errors.txt</div></div>
+</div>
+<div class="warn"><b><code>:w &gt;&gt; file</code>은 파일이 <b>이미 있어야</b> 합니다</b> — 없으면 <code class="nb">E212: Can't open file for writing</code>. <code class="nb">:w!</code>(느낌표)를 쓰면 만들어 줍니다. 위 문형에 느낌표가 붙어 있는 이유입니다.</div>
+<div class="note"><code class="nb">:r !date +\%F</code>의 <code class="nb">\%</code>에 주의 — ex 명령줄에서 <code class="nb">%</code>는 <b>현재 파일 이름</b>으로 치환됩니다. 셸에 넘길 <code class="nb">%</code>는 이스케이프해야 합니다.</div>
+</article>
+
+<article class="card" id="ph-inspect">
+<h3>문형집 ④ 보기 · 세기 (파괴하지 않는 것들)</h3>
+<div class="ph">
+<div class="row2"><div class="say">TODO 들어간 줄 보여줘</div><div class="cmd2">:g/TODO/p</div></div>
+<div class="row2"><div class="say">줄 번호와 함께 보여줘</div><div class="cmd2">:g/TODO/nu</div></div>
+<div class="row2"><div class="say">몇 개나 있는지 세줘</div><div class="cmd2">:%s/TODO//gn</div></div>
+<div class="row2"><div class="say">TODO 있는 줄이 몇 줄?</div><div class="cmd2">:%s/^.*TODO.*$//gn</div></div>
+<div class="row2"><div class="say">눈에 안 보이는 문자까지 보여줘</div><div class="cmd2">:%l</div></div>
+<div class="row2"><div class="say">지금 몇 번째 줄이야?</div><div class="cmd2">:=</div></div>
+<div class="row2"><div class="say">전체 몇 줄이야?</div><div class="cmd2">:$=</div></div>
+<div class="row2"><div class="say">파일 정보</div><div class="cmd2">:f</div></div>
+</div>
+<div class="key"><b><code>gn</code> 플래그를 기억하세요</b> <span class="badge">vim</span> — <code class="nb">:%s/패턴//gn</code>은 <b>아무것도 바꾸지 않고 개수만</b> 알려 줍니다. 위험한 치환 전에 항상 이걸 먼저 돌리세요. 이것이 다음 장 "드라이런"의 핵심 도구입니다.</div>
+<div class="tip"><code class="nb">:%l</code>(list)은 탭을 <code class="nb">^I</code>로, 줄 끝을 <code class="nb">$</code>로 보여 줍니다. "왜 패턴이 안 맞지"의 절반은 <b>보이지 않는 탭이나 CR</b> 때문입니다.</div>
+</article>
+
+<article class="card" id="ph-demo">
+<h3>직접 해 보기: 문형 찾기</h3>
+<div class="demo" data-demo="phrase">
+<h5>하고 싶은 일을 한국어로 치면 문형집에서 찾아 줍니다</h5>
+<div class="row">
+<input type="text" data-q value="빈 줄 지우기" class="wide" style="max-width:280px">
+<button data-run>찾기</button>
+</div>
+<div class="row" data-ph-samples></div>
+<div class="out"></div>
+</div>
+<div class="note">이 덱에 실린 문형 전체를 검색합니다. "지우기" "바꾸기" "번호" "정렬" "중복" "빈 줄" "주석" "대문자" 같은 말로 찾아보세요.</div>
+</article>
+
+<article class="card" id="ch14">
+<p class="chnum">14장</p>
+<h2>LLM에게 ex를 시키기</h2>
+<p class="chsub">"파일을 고쳐 줘"가 아니라 "ex 한 줄을 써 줘"</p>
+</article>
+
+<article class="card" id="ai-why">
+<h3>왜 파일이 아니라 명령을 받아야 하는가</h3>
+<div class="g2">
+<div class="cmp bad">
+<h5>✘ 파일을 통째로 고쳐 달라고 하기</h5>
+<ul>
+<li>10만 줄을 넣을 수 없음 (컨텍스트 한계)</li>
+<li>모델이 <b>안 시킨 줄까지</b> 손댐</li>
+<li>공백·따옴표가 미묘하게 달라짐</li>
+<li>재현 불가 — 다시 시키면 다른 결과</li>
+<li>검토할 것이 <b>결과물 전체</b></li>
+</ul>
+</div>
+<div class="cmp good">
+<h5>✔ ex 한 줄을 달라고 하기</h5>
+<ul>
+<li>파일 크기와 무관</li>
+<li>바뀌는 범위가 <b>명령에 적혀 있음</b></li>
+<li>바이트 단위로 결정적</li>
+<li>같은 명령 = 같은 결과, 언제나</li>
+<li>검토할 것이 <b>한 줄</b></li>
+</ul>
+</div>
+</div>
+<div class="key"><b>핵심은 검토 비용입니다</b> — 10만 줄짜리 diff를 사람이 검토할 수는 없습니다. 하지만 <code class="nb">:g/^\s*console\.log/d</code> 한 줄은 <b>3초면 읽습니다</b>. 위험은 결과물이 아니라 <b>명령</b>에 응축되어 있습니다.</div>
+<div class="note"><b>같은 이유로 에이전트도 이렇게 동작합니다</b> — 코딩 에이전트가 파일 전체를 다시 쓰는 대신 치환·패치 도구를 쓰는 것은 토큰 절약만이 아니라 <b>변경 범위를 좁혀 검증 가능하게</b> 만들기 위해서입니다. ex는 그 발상의 50년 된 원형입니다.</div>
+</article>
+
+<article class="card" id="ai-prompt">
+<h3>쓸 만한 프롬프트 틀</h3>
+<pre><code data-lang="text">다음 조건으로 ex 명령을 만들어 줘.
+
+[대상]      파일: app.log (약 12만 줄, LF, UTF-8)
+[샘플]      2026-08-17 10:00:01 INFO  start
+            2026-08-17 10:00:02 DEBUG cache miss
+            2026-08-17 10:00:03 ERROR timeout
+[하고 싶은 것]
+            DEBUG 줄은 지우고,
+            ERROR 줄은 파일 맨 끝으로 모아 줘.
+[제약]
+            - POSIX ex 문법만 (vim 확장 금지)
+            - 배치 실행: ex -s -c '...' -c 'wq' 형태
+            - 파괴 명령 앞에, 대상을 확인하는 드라이런 명령도 같이
+[출력 형식]
+            1) 드라이런 명령
+            2) 실제 명령
+            3) 각 명령이 무엇을 하는지 한 줄 설명</code></pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>왜 필요한가</th></tr>
+<tr><td><b>샘플 줄</b></td><td>정규식이 실제 형식에 맞게 나옵니다. <b>이것 하나가 정확도를 가장 크게 올립니다</b></td></tr>
+<tr><td><b>방언 제약</b></td><td>안 쓰면 모델이 <code>\v</code>·<code>\zs</code>·PCRE를 섞습니다</td></tr>
+<tr><td><b>실행 형태</b></td><td><code>-s</code>·<code>wq</code>가 빠진 명령을 받으면 그대로 붙여넣다 사고가 납니다</td></tr>
+<tr><td><b>드라이런 요구</b></td><td>검증 단계를 <b>모델이 만들게</b> 시키는 것 — 사람이 잊지 않게</td></tr>
+<tr><td><b>파일 크기</b></td><td>"전체를 보여 달라"는 답변을 미리 차단</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="ai-mistakes">
+<h3>LLM이 ex에서 자주 내는 실수</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>실수</th><th>왜 나오는가</th><th>알아보는 법</th></tr>
+<tr><td><code>:%s/(\w+)/[\1]/g</code></td><td>PCRE 습관 — BRE에서 <code>(</code> <code>+</code>는 <b>리터럴</b></td><td>괄호에 역슬래시가 없으면 의심</td></tr>
+<tr><td><code>:%s/a/b\n/g</code></td><td>대체문자열의 <code>\n</code>을 줄바꿈으로 착각</td><td>대체문자열에 <code>\n</code>이 보이면 <code>\r</code>로 고칠 것</td></tr>
+<tr><td><code>:s/a/b/g</code> (범위 없음)</td><td><code>%</code> 누락 — 예시를 짧게 쓰다 생김</td><td><code>:s</code>로 시작하면 무조건 의심</td></tr>
+<tr><td><code>ex -c '...' file</code></td><td><code>-s</code> 누락</td><td>실행하면 터미널이 멈춤</td></tr>
+<tr><td><code>:g/a/g/b/d</code></td><td>중첩 <code>:g</code>가 된다고 가정</td><td><code>:g</code>가 두 번 보이면 나눠 쓸 것</td></tr>
+<tr><td><code>:sort u</code>를 POSIX라고 함</td><td>vim 명령을 표준으로 착각</td><td><code>:sort</code>·<code>:normal</code>·<code>:argdo</code>는 전부 vim 전용</td></tr>
+<tr><td>존재하지 않는 플래그</td><td>sed·perl의 <code>m</code>·<code>s</code> 플래그를 가져옴</td><td>플래그는 <code>g c i I e n &amp;</code>뿐</td></tr>
+<tr><td><code>\d</code>를 POSIX라고 함</td><td>vim 확장. POSIX BRE는 <code>[0-9]</code>·<code>[[:digit:]]</code></td><td>이식성 요구했는데 <code>\d</code>가 보이면 교체</td></tr>
+</table>
+</div>
+<div class="key"><b>검토 요령 — 이 순서로 세 가지만 보세요</b> ① 범위(<code class="nb">%</code>나 <code class="nb">:g</code>가 의도대로인가) ② 괄호·<code class="nb">+</code>·<code class="nb">?</code>에 역슬래시가 붙었는가 ③ 대체문자열에 <code class="nb">\n</code>이 있는가. 이 셋이 실제 오류의 대부분입니다.</div>
+</article>
+
+<article class="card" id="ai-loop">
+<h3>검증 루프 — 실행은 마지막에</h3>
+<div class="flow">
+<span class="box">의도</span><span class="arr">→</span>
+<span class="box">LLM이 명령 생성</span><span class="arr">→</span>
+<span class="box">① 읽기</span><span class="arr">→</span>
+<span class="box">② 세기</span><span class="arr">→</span>
+<span class="box">③ 사본에 적용 + diff</span><span class="arr">→</span>
+<span class="box">④ 실행</span>
+</div>
+<ol class="steps">
+<li><b>읽기</b> — 명령을 사람이 한 번 읽습니다. 위 세 가지 검토 요령.</li>
+<li><b>세기</b> — <code class="nb">:%s/패턴//gn</code>으로 <b>몇 개나 걸리는지</b> 확인. 0이면 패턴이 틀렸고, 예상보다 많으면 범위가 넓습니다.</li>
+<li><b>보기</b> — <code class="nb">:g/패턴/nu</code>로 대상 줄을 <b>눈으로</b> 봅니다.</li>
+<li><b>사본 + diff</b> — 진짜 검증. 아래 스크립트.</li>
+<li><b>실행</b> — 여기까지 왔으면 안전합니다.</li>
+</ol>
+<p class="fname">try-ex — 사본에 적용해 diff만 보여 주는 래퍼</p>
+<pre><code data-lang="sh">#!/bin/sh
+# 사용법: try-ex 파일 'ex명령' ['ex명령' ...]
+set -eu
+f=$1; shift
+tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
+cp "$f" "$tmp"
+
+args=""
+for c in "$@"; do args="$args -c '$c'"; done
+eval ex -s $args -c 'wq' "$tmp" || echo "[경고] ex 종료 코드 $?" &gt;&amp;2
+
+if diff -u "$f" "$tmp"; then
+  echo "[변화 없음] 패턴이 안 맞았을 수 있습니다" &gt;&amp;2
+fi</code></pre>
+<div class="tip"><b>"변화 없음"이 가장 중요한 신호입니다</b> — 배치 ex는 실패해도 조용하므로, <b>diff가 비어 있는 것</b>이 실질적인 유일한 실패 경보입니다.</div>
+</article>
+
+<article class="card" id="ai-loop-proof">
+<h3>실제로 잡히는 장면</h3>
+<p>위 <code class="nb">try-ex</code>를 그대로 실행한 결과입니다. 파일은 <code class="nb">user_id / order_id / name</code> 세 줄.</p>
+<p class="fname">① 올바른 BRE 명령</p>
+<div class="term"><span class="p">$</span> ./try-ex sch.sql '%s/\(\w\+\)_id/\1Id/g'
+--- sch.sql
++++ /tmp/tmp.bGvx8232UI
+@@ -1,3 +1,3 @@
+<span class="r">-user_id</span>
+<span class="r">-order_id</span>
+<span class="g">+userId</span>
+<span class="g">+orderId</span>
+ name</div>
+<p class="fname">② LLM이 흔히 주는 PCRE 문법 명령</p>
+<div class="term"><span class="p">$</span> ./try-ex sch.sql '%s/(\w+)_id/\1Id/g'
+<span class="r">[경고] ex 종료 코드 1</span>
+<span class="r">[변화 없음] 패턴이 안 맞았을 수 있습니다</span>
+<span class="p">$</span> cat sch.sql
+user_id
+order_id
+name          <span class="c"># 원본은 그대로다</span></div>
+<div class="key"><b>이 두 화면의 차이가 전부입니다</b> — 래퍼가 없었다면 ②는 <b>성공한 것처럼 보이면서</b> 아무 일도 하지 않았을 것이고, 그 사실은 한참 뒤에 발견됐을 것입니다.</div>
+</article>
+
+<article class="card" id="ai-count">
+<h3>드라이런 도구 세 가지</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>도구</th><th>명령</th><th>보는 것</th></tr>
+<tr><td>개수</td><td><code>:%s/패턴//gn</code></td><td>"12 matches on 9 lines"</td></tr>
+<tr><td>목록</td><td><code>:g/패턴/nu</code></td><td>줄 번호와 내용</td></tr>
+<tr><td>결과 미리보기</td><td>사본 + <code>diff -u</code></td><td>바뀐 곳 전부</td></tr>
+</table>
+</div>
+<p class="fname">배치에서 개수를 파일로 받기 — 메시지는 화면에 안 나옵니다</p>
+<pre><code data-lang="sh">vim -es -u NONE -i NONE -n \
+  -c 'redir! &gt; /tmp/count.txt' \
+  -c '%s/\&lt;TODO\&gt;//gn' \
+  -c 'redir END' -c 'q!' app.log
+cat /tmp/count.txt        # →  2 matches on 2 lines</code></pre>
+<div class="warn"><b><code>-s</code> 배치 모드에서는 <code>gn</code>의 결과가 화면에 안 나옵니다</b> — 메시지 영역으로 가기 때문입니다. <code class="nb">:redir</code>로 파일에 받아야 합니다. 이걸 모르면 "개수 세기가 동작하지 않는다"고 오해합니다.</div>
+<div class="tip"><b>대화형에서는 그냥 보입니다</b> — <code class="nb">vim file</code>로 열고 <code class="nb">:%s/TODO//gn</code>을 치면 하단에 바로 뜹니다. 급할 때는 이쪽이 빠릅니다.</div>
+</article>
+
+<article class="card" id="ai-agent">
+<h3>에이전트 파이프라인에 넣기</h3>
+<p>LLM이 만든 ex 명령을 자동으로 적용하는 시스템을 만든다면, <b>사람의 검토를 대체할 게이트</b>가 필요합니다.</p>
+<ol class="steps">
+<li><b>허용 목록</b> — 명령이 <code class="nb">s</code>·<code class="nb">g</code>·<code class="nb">v</code>·<code class="nb">m</code>·<code class="nb">t</code>·<code class="nb">d</code>로만 이루어졌는지 검사. <code class="nb">!</code>(셸 실행)·<code class="nb">:r !</code>·<code class="nb">:w</code>가 다른 경로를 가리키면 <b>거부</b>.</li>
+<li><b>영향 범위 상한</b> — <code class="nb">gn</code> 개수가 전체 줄의 N%를 넘으면 중단. "3줄을 고칠 줄 알았는데 4만 줄"을 잡습니다.</li>
+<li><b>사본 + diff</b> — 항상. 원본에 바로 쓰지 않습니다.</li>
+<li><b>커밋 격리</b> — 변경을 별도 커밋/브랜치로. <code class="nb">git diff</code>가 최종 검토 화면이 됩니다.</li>
+<li><b>멱등성 확인</b> — 같은 명령을 <b>두 번</b> 돌려 두 번째에 변화가 없는지 봅니다. 변화가 있으면 그 명령은 반복 적용에 안전하지 않습니다.</li>
+</ol>
+<div class="warn"><b>가장 위험한 것은 <code>!</code>입니다</b> — <code class="nb">:%!cmd</code>, <code class="nb">:r !cmd</code>, <code class="nb">:!cmd</code>는 <b>임의 셸 명령 실행</b>입니다. 모델이 생성한 ex 명령을 검토 없이 실행하는 경로가 있다면, 느낌표는 반드시 차단하세요.</div>
+<div class="key"><b>멱등성 검사는 공짜 검증입니다</b> — <code class="nb">:%s/\&lt;a\&gt;/b/g</code>는 두 번 돌려도 같지만 <code class="nb">:%s/^/  /</code>는 들여쓰기가 계속 늘어납니다. 재시도가 있는 파이프라인에서 이 차이는 치명적입니다.</div>
+</article>
+
+<article class="card" id="ch15">
+<p class="chnum">15장</p>
+<h2>안전장치</h2>
+<p class="chsub">되돌릴 수 있게 만들어 두기</p>
+</article>
+
+<article class="card" id="sf-undo">
+<h3>되돌리기의 층위</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>층</th><th>명령</th><th>범위</th></tr>
+<tr><td>한 단계</td><td><code>:u</code></td><td>직전 명령. <code>:g</code> 하나는 <b>통째로</b> 한 단계</td></tr>
+<tr><td>여러 단계</td><td><code>:undo 5</code> · <code>g-</code> <code>g+</code></td><td>vim의 undo 트리 <span class="badge">vim</span></td></tr>
+<tr><td>시간</td><td><code>:earlier 10m</code> · <code>:later 5m</code></td><td>10분 전 상태로 <span class="badge">vim</span></td></tr>
+<tr><td>파일 다시 읽기</td><td><code>:e!</code></td><td>마지막 저장 시점으로</td></tr>
+<tr><td>세션을 넘어서</td><td><code>set undofile</code></td><td>파일을 닫았다 열어도 undo 유지 <span class="badge">vim</span></td></tr>
+<tr><td>저장한 뒤</td><td><b>git</b> · 백업</td><td>ex가 도와줄 수 없는 영역</td></tr>
+</table>
+</div>
+<div class="key"><b><code>:g</code> 한 번은 undo 한 번입니다</b> — 300줄을 지우는 <code class="nb">:g/x/d</code>도 <code class="nb">:u</code> 한 번에 전부 돌아옵니다. 이것이 <b>손으로 <code>dd</code>를 300번 누르는 것보다 안전한</b> 이유이기도 합니다.</div>
+<div class="term"><span class="p">:</span>set undofile         <span class="c">" ~/.local/state/nvim/undo 등에 저장</span>
+<span class="p">:</span>earlier 1h            <span class="c">" 한 시간 전 버퍼로</span>
+<span class="p">:</span>undolist              <span class="c">" 되돌리기 분기 목록</span></div>
+</article>
+
+<article class="card" id="sf-habits">
+<h3>습관 일곱 개</h3>
+<ol class="steps">
+<li><b>파괴 전에 같은 주소로 <code>p</code>.</b> <code class="nb">:g/x/p</code> → 확인 → <code class="nb">:g/x/d</code>.</li>
+<li><b><code>gn</code>으로 개수 먼저.</b> 예상과 자릿수가 다르면 멈춥니다.</li>
+<li><b>사본에서 먼저.</b> <code class="nb">cp f f.bak</code>는 1초, 복구는 하루입니다.</li>
+<li><b>조회는 <code>-R</code>로.</b> 읽기 전용이라 <code class="nb">:wq</code>가 <code class="nb">E45</code>로 거부됩니다. 다만 <code class="nb">:wq!</code>는 <b>그대로 뚫립니다</b> — 안전벨트지 잠금장치가 아닙니다.</li>
+<li><b>배치 실행에는 <code class="nb">&lt; /dev/null</code>을 붙이기.</b> 확인 프롬프트가 뜨는 상황(<code class="nb">-R</code>인데 <code class="nb">wq</code>, 스왑 파일 충돌)에서 스크립트가 <b>영원히 멈추는</b> 것을 막습니다. 실제로 <code class="nb">-R</code> + <code class="nb">wq</code>는 터미널이 붙어 있으면 응답을 기다리고, <code class="nb">&lt; /dev/null</code>이면 즉시 종료 코드 1로 끝납니다.</li>
+<li><b><code>wq</code>를 미루기.</b> 대화형에서는 <code class="nb">:w</code> 전까지 전부 되돌릴 수 있습니다.</li>
+<li><b>git이 있으면 커밋 후에 작업.</b> 최종 안전망은 ex 밖에 있습니다.</li>
+<li><b>남에게 줄 명령에는 <code>e</code> 플래그와 종료 코드 검사.</b> 조용한 실패는 언젠가 반드시 물어뜯습니다.</li>
+</ol>
+<div class="warn"><b>절대 하지 말 것</b> — 검토하지 않은 명령을 <code class="nb">-c 'wq'</code>와 함께 실행하기, <code class="nb">find … -exec</code>로 수백 개 파일에 <b>한 번에</b> 적용하기(먼저 한 파일로), 그리고 <code class="nb">%d</code>를 손가락이 기억하게 두기.</div>
+</article>
+
+<article class="card quiz" id="ai-quiz" data-quiz>
+<h3>4부 정리 퀴즈</h3>
+<p class="q">Q. LLM이 이 명령을 줬습니다. 실행하기 전에 무엇을 발견해야 할까요?</p>
+<pre><code data-lang="sh">ex -c '%s/(\w+)_id/\1Id/g' -c 'wq' schema.sql</code></pre>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 최소 세 가지입니다.
+<ol>
+<li><b><code class="nb">-s</code>가 없습니다</b> — 스크립트에서 실행하면 터미널이 멈추거나 제어 코드가 섞입니다.</li>
+<li><b>정규식이 PCRE 문법입니다</b> — BRE에서 <code class="nb">(</code>와 <code class="nb">+</code>는 리터럴이라 <b>아무것도 안 맞습니다</b>. <code class="nb">\(\w\+\)_id</code>여야 합니다.</li>
+<li><b>드라이런이 없습니다</b> — <code class="nb">:%s/\(\w\+\)_id//gn</code>으로 개수를 먼저 봤어야 합니다. 그리고 이 치환은 SQL <b>문자열 리터럴과 주석 안</b>도 바꿉니다.</li>
+</ol>
+게다가 조용히 실패한 뒤 <code class="nb">wq</code>는 그대로 실행되어, <b>"성공했는데 아무것도 안 바뀐"</b> 상태가 됩니다. 이것이 4부 전체가 말하는 위험의 전형입니다.</div>
+</article>
+
+<article class="card section" id="part5">
+<p class="chnum">5부</p>
+<h2>부록</h2>
+<p class="chsub">한 장으로 압축한 것들</p>
+</article>
+
+<article class="card" id="ch16">
+<p class="chnum">16장</p>
+<h2>치트시트</h2>
+<p class="chsub">인쇄해서 모니터 옆에 붙일 것</p>
+</article>
+
+<article class="card" id="cs-addr">
+<h3>치트시트 ① 주소</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주소</th><th>뜻</th><th>주소</th><th>뜻</th></tr>
+<tr><td><code>7</code></td><td>7번 줄</td><td><code>/re/</code></td><td>아래로 검색</td></tr>
+<tr><td><code>.</code></td><td>현재 줄</td><td><code>?re?</code></td><td>위로 검색</td></tr>
+<tr><td><code>$</code></td><td>마지막 줄</td><td><code>'x</code></td><td>마크 x</td></tr>
+<tr><td><code>0</code></td><td>첫 줄 앞의 틈</td><td><code>%</code></td><td><code>1,$</code></td></tr>
+<tr><td><code>+3</code> <code>-3</code></td><td>현재 줄 기준 상대</td><td><code>a,b</code></td><td>a부터 b까지</td></tr>
+<tr><td><code>$-4</code></td><td>끝에서 다섯째</td><td><code>a;b</code></td><td>a로 <b>이동한 뒤</b> b</td></tr>
+</table>
+</div>
+<h4>기본형</h4>
+<div class="pkgtree">[주소][,주소] 명령[!] [인자] [플래그]
+  주소 생략 → 현재 줄        명령 생략 → p (출력)</div>
+</article>
+
+<article class="card" id="cs-cmd">
+<h3>치트시트 ② 명령</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>뜻</th><th>명령</th><th>뜻</th></tr>
+<tr><td><code>p</code> <code>nu</code> <code>l</code></td><td>출력 / 번호와 / 특수문자까지</td><td><code>m</code> <code>t</code></td><td>이동 / 복사</td></tr>
+<tr><td><code>d</code> <code>y</code> <code>pu</code></td><td>삭제 / 복사 / 붙이기</td><td><code>j</code></td><td>줄 합치기</td></tr>
+<tr><td><code>s</code></td><td>치환</td><td><code>&gt;</code> <code>&lt;</code></td><td>들여쓰기</td></tr>
+<tr><td><code>g</code> <code>v</code></td><td>조건부 실행 / 반대</td><td><code>k</code></td><td>마크</td></tr>
+<tr><td><code>r</code> <code>w</code> <code>e</code></td><td>읽기 / 쓰기 / 다시 열기</td><td><code>u</code></td><td>되돌리기</td></tr>
+<tr><td><code>!</code></td><td>셸 필터</td><td><code>normal</code></td><td>vi 키 실행 <span class="badge">vim</span></td></tr>
+<tr><td><code>q</code> <code>q!</code> <code>wq</code></td><td>종료</td><td><code>=</code> <code>f</code></td><td>줄 번호 / 파일 정보</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="cs-re">
+<h3>치트시트 ③ 정규식 (BRE)</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>패턴</th><th>뜻</th><th>패턴</th><th>뜻</th></tr>
+<tr><td><code>^</code> <code>$</code></td><td>줄 시작 / 끝</td><td><code>\(…\)</code></td><td>그룹</td></tr>
+<tr><td><code>.</code></td><td>아무 글자</td><td><code>\1</code>…<code>\9</code></td><td>캡처 참조</td></tr>
+<tr><td><code>*</code></td><td>0회 이상</td><td><code>\{2,5}</code></td><td>2~5회</td></tr>
+<tr><td><code>\+</code> <code>\?</code></td><td>1회 이상 / 0~1회 <span class="badge">확장</span></td><td><code>\|</code></td><td>선택 <span class="badge">확장</span></td></tr>
+<tr><td><code>[abc]</code> <code>[^abc]</code></td><td>글자 집합 / 제외</td><td><code>\&lt;</code> <code>\&gt;</code></td><td>낱말 시작 / 끝</td></tr>
+<tr><td><code>[[:digit:]]</code></td><td>숫자 (POSIX)</td><td><code>\d</code> <code>\w</code> <code>\s</code></td><td>숫자/낱말/공백 <span class="badge">vim</span></td></tr>
+<tr><td><code>\zs</code> <code>\ze</code></td><td>매치 시작·끝 지정 <span class="badge">vim</span></td><td><code>\v</code> <code>\V</code></td><td>very magic / nomagic <span class="badge">vim</span></td></tr>
+</table>
+</div>
+<h4>대체 문자열</h4>
+<div class="tblwrap">
+<table class="kv">
+<tr><td><code>&amp;</code></td><td>매치 전체</td><td><code>\r</code></td><td><b>줄바꿈</b> (<code>\n</code> 아님!)</td></tr>
+<tr><td><code>\1</code></td><td>캡처</td><td><code>\u</code> <code>\U</code> <code>\E</code></td><td>대문자화</td></tr>
+<tr><td><code>~</code></td><td>직전 대체문자열</td><td><code>\=식</code></td><td>표현식 <span class="badge">vim</span></td></tr>
+</table>
+</div>
+<h4>치환 플래그</h4>
+<p><code class="nb">g</code> 줄 안 전부 · <code class="nb">c</code> 확인 · <code class="nb">i</code>/<code class="nb">I</code> 대소문자 · <code class="nb">e</code> 오류 무시 · <code class="nb">n</code> 개수만 · <code class="nb">&amp;</code> 플래그 재사용</p>
+</article>
+
+<article class="card" id="cs-oneline">
+<h3>치트시트 ④ 한 줄 관용구 20선</h3>
+<pre><code data-lang="text">:g/^$/d                          빈 줄 삭제
+:g/^\s*$/d                       공백뿐인 줄까지
+:%s/\s\+$//e                     줄 끝 공백 제거
+:%s/\r$//e                       CRLF → LF
+:g/^\s*#/d                       주석 줄 삭제
+:v/pattern/d                     패턴 없는 줄 삭제 (= 남기기)
+:g/^/m0                          파일 뒤집기
+:g/pattern/m0                    해당 줄을 위로 모으기
+:g/pattern/t$                    해당 줄을 아래로 복사
+:g/A/,/B/d                       A~B 블록 삭제
+:g/pattern/-1d                   해당 줄의 윗줄 삭제
+:%s/\&lt;old\&gt;/new/ge               낱말 단위 이름 바꾸기
+:%s/_\(.\)/\u\1/g                snake_case → camelCase
+:%s/\(\l\)\(\u\)/\1_\l\2/g       camelCase → snake_case
+:%s/^/\=line(".").". "/          줄 번호 매기기
+:%s/,\s*/\r/g                    쉼표에서 줄 나누기
+:%s/pattern//gn                  개수만 세기 (드라이런)
+:%!sort -u                       정렬 + 중복 제거
+:%!jq .                          JSON 예쁘게
+:'a,'b!column -t                 선택 구간 열 맞추기</code></pre>
+</article>
+
+<article class="card" id="cs-shell">
+<h3>치트시트 ⑤ 셸에서 부르기</h3>
+<pre><code data-lang="sh"># 한 파일 제자리 편집
+ex -s -c '%s/old/new/ge' -c 'wq' file.txt || echo "실패" &gt;&amp;2
+
+# 스크립트 파일로 (따옴표 지옥 회피)
+cat &gt; fix.ex &lt;&lt;'EOF'
+g/^\s*#/d
+%s/\s\+$//e
+wq
+EOF
+ex -s file.txt &lt; fix.ex
+
+# 여러 파일 (이식성)
+find . -name '*.md' -exec ex -s -c '%s/old/new/ge' -c 'wq' {} \;
+
+# 여러 파일 (빠르게)
+find . -name '*.md' -print0 | xargs -0 -P4 -n1 \
+  ex -s -c '%s/old/new/ge' -c 'wq'
+
+# 여러 파일 (vim argdo)
+vim -es -u NONE -i NONE -n -c 'argdo %s/old/new/ge | update' -c 'qa!' *.md
+
+# 개수만 세기 (메시지를 파일로 받아야 함)
+vim -es -c 'redir! &gt; /tmp/c.txt' -c '%s/old//gn' -c 'redir END' -c 'q!' file.txt
+
+# 사본에 적용해 diff 보기
+cp f f.try &amp;&amp; ex -s -c '%s/old/new/ge' -c 'wq' f.try &amp;&amp; diff -u f f.try</code></pre>
+</article>
+
+<article class="card" id="cs-checklist">
+<h3>내보내기 전 체크리스트</h3>
+<ol class="steps">
+<li><b>범위</b> — <code class="nb">%</code>나 <code class="nb">:g</code>가 의도대로인가. <code class="nb">:s</code>만 있으면 현재 줄뿐이다.</li>
+<li><b>정규식 방언</b> — <code class="nb">(</code> <code class="nb">+</code> <code class="nb">?</code> <code class="nb">|</code>에 역슬래시가 붙었는가. 이식성이 필요하면 <code class="nb">\d</code>·<code class="nb">\v</code>·<code class="nb">\zs</code>를 뺐는가.</li>
+<li><b>대체문자열</b> — 줄바꿈을 <code class="nb">\r</code>로 썼는가. 리터럴 <code class="nb">&amp;</code>에 <code class="nb">\</code>를 붙였는가.</li>
+<li><b>플래그</b> — 줄 안 전부면 <code class="nb">g</code>, 없어도 되면 <code class="nb">e</code>.</li>
+<li><b>실행 형태</b> — <code class="nb">-s</code>가 있는가. 저장이 필요하면 <code class="nb">wq</code>가 있는가.</li>
+<li><b>종료 코드</b> — 실패를 감지하는가.</li>
+<li><b>드라이런</b> — <code class="nb">gn</code>으로 세어 봤는가. 사본에서 <code class="nb">diff</code>를 봤는가.</li>
+<li><b>멱등성</b> — 두 번 돌려도 같은가.</li>
+<li><b>느낌표</b> — 남이 준 명령에 <code class="nb">!</code>(셸 실행)가 숨어 있지 않은가.</li>
+</ol>
+</article>
+
+<article class="card" id="cs-more">
+<h3>더 읽을 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자료</th><th>무엇</th></tr>
+<tr><td><code>man ex</code> · <code>:help ex-cmd-index</code></td><td>가장 정확한 1차 자료. vim은 <code class="nb">:help :global</code>부터</td></tr>
+<tr><td>POSIX <code>ex</code> 규격</td><td>이식성의 기준선. 무엇이 표준인지 확인할 때</td></tr>
+<tr><td><i>An Introduction to Display Editing with Vi</i></td><td>Bill Joy와 Mark Horton이 쓴 원본 매뉴얼 (BSD 문서)</td></tr>
+<tr><td><code>ed</code> 매뉴얼</td><td>ex의 선조. 문법이 어디서 왔는지 한눈에</td></tr>
+<tr><td>nvi / ex-vi 소스</td><td>원조 구현을 직접 읽고 싶을 때</td></tr>
+<tr><td><code>:help usr_10.txt</code></td><td>vim의 "반복 작업" 장 — <code class="nb">:g</code>·매크로·<code class="nb">argdo</code></td></tr>
+</table>
+</div>
+<div class="tip"><b>가장 좋은 다음 단계</b> — 오늘 손으로 반복한 편집 하나를 골라 <code class="nb">:g</code> 한 줄로 바꿔 보세요. 세 번쯤 하고 나면 손이 먼저 콜론을 칩니다.</div>
+</article>
+
+<article class="card section" id="end">
+<h2>끝</h2>
+<p class="lead">1969년에 종이 위에서 만들어진 문법이, 2026년에 언어 모델에게 시킬 명령의 형식으로 아직 쓸 만합니다. <b>짧고, 결정적이고, 검증할 수 있기 때문입니다.</b></p>
+<p class="cap"><a href="./index.html">🏰 보물창고로 돌아가기</a></p>
+</article>
+</main>
+
+<!-- ============================================================
+     코드 하이라이터 — <pre><code data-lang="xx"> 를 런타임에 토크나이징한다.
+     손으로 <span class="kw"> 를 붙이지 말 것. 언어를 추가하려면 KW/CFG 에 한 줄.
+     ============================================================ -->
+<script>
+(function () {
+  'use strict';
+  var KW = {
+    js: 'const|let|var|function|return|if|else|for|while|try|catch|finally|throw|new|class|extends|super|this|async|await|import|export|from|default|typeof|instanceof|delete|in|of|do|switch|case|break|continue|yield|static|get|set|null|undefined|true|false|void',
+    ts: 'const|let|var|function|return|if|else|for|while|try|catch|finally|throw|new|class|extends|implements|interface|type|enum|super|this|async|await|import|export|from|default|typeof|instanceof|delete|in|of|do|switch|case|break|continue|yield|static|readonly|public|private|protected|declare|as|is|keyof|infer|satisfies|null|undefined|true|false|void|never|unknown|any|string|number|boolean|Promise|Record|Set|Map|Array',
+    py: 'def|class|return|if|elif|else|for|while|try|except|finally|raise|with|as|import|from|lambda|yield|async|await|pass|break|continue|global|nonlocal|assert|del|in|is|not|and|or|None|True|False|self|match|case',
+    c: 'auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|inline|int|long|register|restrict|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|_Bool|size_t|NULL|true|false',
+    cpp: 'auto|bool|break|case|catch|char|class|const|constexpr|continue|default|delete|do|double|else|enum|explicit|export|extern|false|float|for|friend|goto|if|inline|int|long|mutable|namespace|new|noexcept|nullptr|operator|private|protected|public|return|short|signed|sizeof|static|struct|switch|template|this|throw|true|try|typedef|typename|union|unsigned|using|virtual|void|volatile|while',
+    go: 'package|import|func|return|if|else|for|range|switch|case|default|break|continue|go|defer|select|chan|map|struct|interface|type|var|const|make|new|len|cap|append|copy|delete|panic|recover|nil|true|false|string|int|int64|uint32|uint8|byte|rune|bool|error|any',
+    rust: 'fn|let|mut|const|static|if|else|match|loop|while|for|in|break|continue|return|struct|enum|impl|trait|type|use|mod|pub|crate|self|Self|where|as|ref|move|dyn|async|await|unsafe|true|false|Some|None|Ok|Err|Option|Result|String|Vec|Box',
+    java: 'package|import|public|private|protected|static|final|abstract|class|interface|enum|record|extends|implements|return|if|else|for|while|do|switch|case|default|break|continue|try|catch|finally|throw|throws|new|this|super|void|int|long|double|boolean|char|byte|String|var|null|true|false|instanceof',
+    lua: 'and|break|do|else|elseif|end|false|for|function|goto|if|in|local|nil|not|or|repeat|return|then|true|until|while|self|require|pairs|ipairs|type|setmetatable|getmetatable|tostring|tonumber|table|string|math|io|os',
+    rb: 'def|end|class|module|if|elsif|else|unless|case|when|while|until|for|in|do|begin|rescue|ensure|raise|return|yield|self|nil|true|false|require|attr_accessor|puts|lambda|proc|then',
+    sh: 'if|then|else|elif|fi|for|in|do|done|while|case|esac|function|return|export|local|source|echo|cd|ls|cat|grep|sed|awk|curl|make|gcc|git|sudo|apt|npm|python3|pip|go|docker|kubectl|systemctl',
+    sql: 'SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|INDEX|ALTER|DROP|PRIMARY|KEY|FOREIGN|REFERENCES|NOT|NULL|DEFAULT|UNIQUE|ON|USING|WITH|JOIN|LEFT|INNER|GROUP|ORDER|BY|LIMIT|AND|OR|IN|AS|BEGIN|COMMIT|TEXT|INTEGER|BOOLEAN|TIMESTAMP',
+    lisp: 'define|lambda|let|let\\*|letrec|if|cond|else|case|when|unless|begin|set!|quote|quasiquote|unquote|and|or|not|car|cdr|cons|list|append|map|for-each|apply|null\\?|eq\\?|equal\\?|display|newline|define-syntax|syntax-rules|do|delay|force',
+    css: 'important|media|import|keyframes|supports|font-face|root|hover|focus|before|after|not|nth-child',
+    json: 'true|false|null',
+    yaml: 'true|false|null|yes|no|on|off',
+    http: 'GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|HTTP',
+    bas: 'PRINT|INPUT|LET|IF|THEN|ELSE|GOTO|GOSUB|RETURN|FOR|TO|STEP|NEXT|WHILE|WEND|DIM|END|STOP|REM|DATA|READ|RESTORE|DEF|FN|ON|CLS|RUN|LIST|LOAD|SAVE|NEW|AND|OR|NOT|MOD'
+  };
+  //  lc = 줄 주석 접두사들 · bc = /* */ 블록 주석 · bt = 백틱 문자열
+  //  tq = 파이썬 삼중 따옴표 · tag = HTML/XML 태그 · header = HTTP 헤더 이름
+  var CFG = {
+    js:   { lc: ['//'], bc: 1, bt: 1, kw: KW.js },
+    ts:   { lc: ['//'], bc: 1, bt: 1, kw: KW.ts },
+    py:   { lc: ['#'], tq: 1, kw: KW.py },
+    c:    { lc: ['//'], bc: 1, kw: KW.c, pp: 1 },
+    cpp:  { lc: ['//'], bc: 1, kw: KW.cpp, pp: 1 },
+    go:   { lc: ['//'], bc: 1, bt: 1, kw: KW.go },
+    rust: { lc: ['//'], bc: 1, kw: KW.rust },
+    java: { lc: ['//'], bc: 1, kw: KW.java },
+    lua:  { lc: ['--'], kw: KW.lua },
+    rb:   { lc: ['#'], kw: KW.rb },
+    sh:   { lc: ['#'], kw: KW.sh },
+    sql:  { lc: ['--'], bc: 1, kw: KW.sql },
+    lisp: { lc: [';'], kw: KW.lisp },
+    html: { tag: 1, kw: '' },
+    xml:  { tag: 1, kw: '' },
+    css:  { bc: 1, kw: KW.css },
+    json: { lc: ['//'], kw: KW.json },
+    yaml: { lc: ['#'], kw: KW.yaml },
+    http: { lc: ['#'], kw: KW.http, header: 1 },
+    bas:  { lc: ["'"], kw: KW.bas },
+    make: { lc: ['#'], kw: KW.sh },
+    text: { kw: '' }
+  };
+  var ALIAS = {
+    javascript: 'js', typescript: 'ts', python: 'py', shell: 'sh', bash: 'sh', zsh: 'sh',
+    'c++': 'cpp', cc: 'cpp', h: 'c', golang: 'go', ruby: 'rb', scheme: 'lisp', racket: 'lisp',
+    clojure: 'lisp', el: 'lisp', basic: 'bas', htm: 'html', yml: 'yaml', makefile: 'make',
+    gomod: 'text', diff: 'text', ini: 'yaml', toml: 'yaml'
+  };
+
+  function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  var cache = {};
+  function reFor(lang) {
+    if (cache[lang]) return cache[lang];
+    var c = CFG[lang] || CFG.text, p = [];
+    if (c.tag) p.push('<' + '!--[\\s\\S]*?--' + '>');
+    if (c.bc) p.push('/\\*[\\s\\S]*?\\*/');
+    (c.lc || []).forEach(function (x) { p.push(escRe(x) + '[^\\n]*'); });
+    if (c.tq) { p.push('"""[\\s\\S]*?"""'); p.push("'''[\\s\\S]*?'''"); }
+    if (c.pp) p.push('^\\s*#\\s*[a-z]+');
+    if (c.header) p.push('^[A-Za-z][A-Za-z0-9-]*(?=:)');
+    if (c.tag) p.push('</?[A-Za-z][A-Za-z0-9-]*');
+    p.push('"(?:\\\\.|[^"\\\\\\n])*"');
+    p.push("'(?:\\\\.|[^'\\\\\\n])*'");
+    if (c.bt) p.push('`(?:\\\\.|[^`\\\\])*`');
+    p.push('\\b\\d[\\dA-Fa-fx_]*(?:\\.\\d+)?\\b');
+    if (c.kw) p.push('\\b(?:' + c.kw + ')\\b');
+    if (!c.tag) p.push('[A-Za-z_$][\\w$]*(?=\\s*\\()');
+    cache[lang] = { re: new RegExp(p.join('|'), 'gm'), cfg: c };
+    return cache[lang];
+  }
+
+  function classify(tok, c) {
+    var ch = tok[0];
+    if (tok.indexOf('/*') === 0 || tok.indexOf('<!--') === 0) return 'cm';
+    for (var i = 0; i < (c.lc || []).length; i++) if (tok.indexOf(c.lc[i]) === 0) return 'cm';
+    if (ch === '<') return 'kw';
+    if (ch === '"' || ch === "'" || ch === '`') return 'st';
+    if (ch >= '0' && ch <= '9') return 'nu';
+    if (tok.charAt(0) === '#' || /^\s*#/.test(tok)) return 'kw';
+    if (c.kw && new RegExp('^(?:' + c.kw + ')$').test(tok)) return 'kw';
+    if (c.header && /^[A-Za-z][A-Za-z0-9-]*$/.test(tok)) return 'hd';
+    return 'fn';
+  }
+
+  function hl(el) {
+    if (el.dataset.hl) return;
+    el.dataset.hl = '1';
+    var lang = (el.dataset.lang || 'text').toLowerCase();
+    lang = ALIAS[lang] || lang;
+    var info = reFor(lang), src = el.textContent, out = '', last = 0, m;
+    info.re.lastIndex = 0;
+    while ((m = info.re.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      out += '<span class="' + classify(m[0], info.cfg) + '">' + esc(m[0]) + '</span>';
+      last = m.index + m[0].length;
+      if (m[0].length === 0) info.re.lastIndex++;
+    }
+    el.innerHTML = out + esc(src.slice(last));
+  }
+
+  window.__highlight = function (root) {
+    (root || document).querySelectorAll('pre > code[data-lang]').forEach(hl);
+  };
+})();
+</script>
+
+<!-- ============================================================
+     데모 프레임워크 — __demo(id, fn) 로 등록하면 해당 슬라이드가
+     처음 열릴 때 한 번 배선된다. 퀴즈(.quiz[data-quiz])도 여기서 처리.
+     ============================================================ -->
+<script>
+(function () {
+  'use strict';
+  var REG = Object.create(null);
+  window.__demo = function (id, fn) { REG[id] = fn; };
+
+  function out(host) { return host.querySelector('.out'); }
+  function w(host, html, cls) {
+    var o = out(host); if (!o) return;
+    o.innerHTML = cls ? '<span class="' + cls + '">' + html + '</span>' : html;
+  }
+  function add(host, html, cls) {
+    var o = out(host); if (!o) return;
+    o.innerHTML += (o.innerHTML ? '\n' : '') + (cls ? '<span class="' + cls + '">' + html + '</span>' : html);
+  }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function num(n) {
+    if (typeof n !== 'number') return String(n);
+    if (!isFinite(n)) return n > 0 ? 'inf' : (n < 0 ? '-inf' : 'nan');
+    if (Number.isInteger(n) && Math.abs(n) < 1e15) return String(n);
+    return String(Number(n.toPrecision(6)));
+  }
+  function show(v) {
+    if (v === null || v === undefined) return 'null';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    if (typeof v === 'number') return num(v);
+    if (Array.isArray(v)) return '[' + v.map(show).join(', ') + ']';
+    return String(v);
+  }
+  var api = { w: w, add: add, esc: esc, show: show, num: num, out: out };
+  window.__api = api;
+
+  window.__initDemos = function (root) {
+    var scope = root || document;
+    // 루트 자신이 대상일 수도 있다 (예: <article class="card quiz" data-quiz>)
+    function all(sel) {
+      var list = [].slice.call(scope.querySelectorAll(sel));
+      if (scope.matches && scope.matches(sel)) list.unshift(scope);
+      return list;
+    }
+    all('.demo[data-demo]').forEach(function (host) {
+      if (host.dataset.wired) return;
+      host.dataset.wired = '1';
+      var fn = REG[host.getAttribute('data-demo')];
+      if (!fn) return;
+      try { fn(host, api); } catch (e) { w(host, '데모 오류: ' + esc(e.message), 'bad'); }
+    });
+    all('.quiz[data-quiz]').forEach(function (q) {
+      if (q.dataset.wired) return;
+      q.dataset.wired = '1';
+      var b = q.querySelector('button');
+      if (!b) return;
+      b.addEventListener('click', function () {
+        q.classList.toggle('open');
+        b.textContent = q.classList.contains('open') ? '답 숨기기' : '답 보기';
+      });
+    });
+  };
+})();
+</script>
+
+<!-- ===== 덱마다 다른 부분: 데모 함수들 ===== -->
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 공통: 아주 작은 ex 엔진 ---------- */
+  function Buf(lines) {
+    this.L = lines.slice();
+    this.I = lines.map(function (_, i) { return i + 1; });   // 줄마다 고유 식별자 (:g 의 "표시"가 붙는 곳)
+    this.seq = lines.length + 1;
+    this.dot = this.L.length;
+  }
+  Buf.prototype.mut = function (start, del, arr, keepIds) {   // start 는 0-based
+    arr = arr || [];
+    var ids = keepIds || [], i;
+    for (i = ids.length; i < arr.length; i++) ids.push(this.seq++);
+    this.L.splice.apply(this.L, [start, del].concat(arr));
+    this.I.splice.apply(this.I, [start, del].concat(ids));
+  };
+  Buf.prototype.lineOf = function (id) { return this.I.indexOf(id) + 1; };   // 없으면 0
+
+  // BRE 를 브라우저 정규식으로 대충 옮긴다 (교육용 근사).
+  function reOf(pat, flags) {
+    var out = '', i = 0;
+    while (i < pat.length) {
+      var c = pat[i];
+      if (c === '\\') {
+        var n = pat[i + 1];
+        if (n === '(' || n === ')' || n === '{' || n === '}' || n === '|' ||
+            n === '+' || n === '?') { out += n; i += 2; continue; }
+        if (n === '<' || n === '>') { out += '\\b'; i += 2; continue; }
+        if (n === 'd' || n === 'w' || n === 's' || n === 'S' || n === 'W' ||
+            n === 'D' || n === 'n' || n === 't' || n === '.' || n === '\\' ||
+            n === '/') { out += '\\' + n; i += 2; continue; }
+        out += '\\' + n; i += 2; continue;
+      }
+      if (c === '(' || c === ')' || c === '+' || c === '?' || c === '{' || c === '}') {
+        out += '\\' + c; i++; continue;   // BRE 에서는 리터럴
+      }
+      out += c; i++;
+    }
+    return new RegExp(out, flags || '');
+  }
+
+  function replTo(js) {   // ex 대체문자열 → JS
+    return js.replace(/\\(\d)/g, '$$$1').replace(/&/g, '$&').replace(/\\&/g, '&');
+  }
+
+  // 주소 하나를 푼다. 반환 {n, rest}
+  function addr1(b, s, base) {
+    var n = null, m;
+    s = s.replace(/^\s+/, '');
+    if ((m = s.match(/^\d+/)))            { n = +m[0]; s = s.slice(m[0].length); }
+    else if (s[0] === '.')                { n = base; s = s.slice(1); }
+    else if (s[0] === '$')                { n = b.L.length; s = s.slice(1); }
+    else if (s[0] === "'")                { n = base; s = s.slice(2); }
+    else if (s[0] === '/' || s[0] === '?') {
+      var q = s[0], j = 1, pat = '';
+      while (j < s.length && s[j] !== q) { if (s[j] === '\\') pat += s[j++]; pat += s[j++]; }
+      s = s.slice(j + 1);
+      var re = reOf(pat), k, found = null;
+      if (q === '/') {
+        for (k = 1; k <= b.L.length; k++) { var idx = ((base + k - 1) % b.L.length) + 1; if (re.test(b.L[idx - 1])) { found = idx; break; } }
+      } else {
+        for (k = 1; k <= b.L.length; k++) { var i2 = ((base - k - 1 + 2 * b.L.length) % b.L.length) + 1; if (re.test(b.L[i2 - 1])) { found = i2; break; } }
+      }
+      if (found === null) throw new Error('패턴을 찾지 못했습니다: ' + pat);
+      n = found;
+    }
+    // 산술 접미 (+3, -2)
+    while ((m = s.match(/^\s*([+-])\s*(\d*)/)) && m[0].trim() !== '') {
+      var d = m[2] === '' ? 1 : +m[2];
+      if (n === null) n = base;
+      n += (m[1] === '+' ? d : -d);
+      s = s.slice(m[0].length);
+    }
+    return { n: n, rest: s };
+  }
+
+  // 범위를 푼다. 반환 {a, b, rest, whole}
+  function addrRange(b, s) {
+    s = s.replace(/^\s+/, '');
+    if (s[0] === '%') return { a: 1, b: b.L.length, rest: s.slice(1), given: true };
+    var first = addr1(b, s, b.dot);
+    if (first.n === null) return { a: b.dot, b: b.dot, rest: s, given: false };
+    var rest = first.rest, a = first.n, bb = a;
+    if (rest[0] === ',' || rest[0] === ';') {
+      var sep = rest[0];
+      var base = sep === ';' ? a : b.dot;
+      var second = addr1(b, rest.slice(1), base);
+      if (second.n === null) throw new Error('두 번째 주소가 없습니다');
+      bb = second.n; rest = second.rest;
+    }
+    return { a: a, b: bb, rest: rest, given: true };
+  }
+
+  function chk(b, a, z) {
+    if (a === null || z === null) throw new Error('주소를 이해하지 못했습니다');
+    if (a < 1 || z > b.L.length) throw new Error('범위를 벗어났습니다 (1~' + b.L.length + ')');
+    if (a > z) throw new Error('역순 범위입니다 (' + a + ',' + z + ') — 실제 ex 도 여기서 실패합니다');
+  }
+
+  // 명령 실행. log 는 출력 줄을 모으는 배열.
+  function run(b, cmdline, log, depth) {
+    var s = cmdline.replace(/^\s*:?/, '').replace(/\s+$/, '');
+    if (!s) return;
+    var R = addrRange(b, s);
+    var rest = R.rest.replace(/^\s+/, ''), a = R.a, z = R.b, m;
+
+    if (rest === '') { chk(b, a, z); b.dot = z; for (var i = a; i <= z; i++) log.push(b.L[i - 1]); return; }
+
+    var cmd = rest[0], arg = rest.slice(1);
+
+    // g / v : 전역
+    if (cmd === 'g' || cmd === 'v') {
+      if (depth) throw new Error(':g 안에서 :g 를 다시 쓸 수 없습니다');
+      var bang = arg[0] === '!'; if (bang) arg = arg.slice(1);
+      var inv = (cmd === 'v') || bang;
+      var sep = arg[0];
+      if (!sep) throw new Error('패턴이 없습니다');
+      var j = 1, pat = '';
+      while (j < arg.length && arg[j] !== sep) { if (arg[j] === '\\') pat += arg[j++]; pat += arg[j++]; }
+      var sub = arg.slice(j + 1) || 'p';
+      if (!R.given) { a = 1; z = b.L.length; }
+      var re = reOf(pat);
+      // ① 표시 단계 — 맞는 줄의 "식별자"를 모은다 (줄 번호가 아니라!)
+      var marked = [];
+      for (var k = a; k <= z; k++) if (re.test(b.L[k - 1]) !== inv) marked.push(b.I[k - 1]);
+      // ② 실행 단계 — 표시된 줄을 차례로 찾아가 명령을 건다
+      for (var q = 0; q < marked.length; q++) {
+        var at = b.lineOf(marked[q]);
+        if (at === 0) continue;              // 앞선 명령이 이미 지운 줄
+        b.dot = at;
+        run(b, String(at) + sub, log, 1);
+      }
+      return;
+    }
+
+    // s : 치환
+    if (cmd === 's' && /^[^a-zA-Z0-9]/.test(arg)) {
+      var sp = arg[0], parts = [''], idx = 1;
+      var cur = '';
+      for (var t = 1; t < arg.length; t++) {
+        if (arg[t] === '\\') { cur += arg[t] + (arg[t + 1] || ''); t++; continue; }
+        if (arg[t] === sp) { parts.push(cur); cur = ''; continue; }
+        cur += arg[t];
+      }
+      parts.push(cur);
+      var pattern = parts[1] || '', repl = parts[2] || '', fl = (parts[3] || '').replace(/[^gicIen]/g, '');
+      if (a === 0) a = 1;
+      if (z === 0) z = 1;
+      chk(b, a, z);
+      var rf = (fl.indexOf('g') >= 0 ? 'g' : '') + (fl.indexOf('i') >= 0 ? 'i' : '');
+      var rx = reOf(pattern, rf), cnt = 0, lines = 0;
+      for (var y = a; y <= z; y++) {
+        var before = b.L[y - 1];
+        if (!reOf(pattern, (fl.indexOf('i') >= 0 ? 'i' : '')).test(before)) continue;
+        lines++;
+        var mm = before.match(new RegExp(rx.source, rf || undefined));
+        cnt += (fl.indexOf('g') >= 0 && mm) ? mm.length : 1;
+        if (fl.indexOf('n') < 0) {
+          var after = before.replace(rx, replTo(repl).replace(/\\r/g, '\n'));
+          if (after.indexOf('\n') >= 0) {          // \r 가 만든 줄바꿈을 실제 줄로 분리
+            var parts2 = after.split('\n');
+            b.mut(y - 1, 1, parts2);
+            z += parts2.length - 1; y += parts2.length - 1;
+          } else {
+            b.L[y - 1] = after;
+          }
+          b.dot = y;
+        }
+      }
+      if (fl.indexOf('n') >= 0) { log.push(cnt + ' matches on ' + lines + ' lines'); return; }
+      if (!lines && fl.indexOf('e') < 0) throw new Error('패턴을 찾지 못했습니다: ' + pattern + '  (E486)');
+      return;
+    }
+
+    if (a === 0) a = 1;      // vim 과 같게: 주소 0 은 조용히 1 로 취급된다
+    if (z === 0) z = 1;
+    chk(b, a, z);
+    switch (cmd) {
+      case 'p': for (var i3 = a; i3 <= z; i3++) log.push(b.L[i3 - 1]); b.dot = z; return;
+      case '#': case 'n':
+        if (cmd === 'n' && arg.replace(/[u\s]/g, '') !== '') break;
+        for (var i4 = a; i4 <= z; i4++) log.push(String(i4).padStart(4, ' ') + '  ' + b.L[i4 - 1]);
+        b.dot = z; return;
+      case 'd': b.mut(a - 1, z - a + 1); b.dot = Math.min(a, b.L.length) || 1; return;
+      case 'j': {
+        // 실제 ex 의 규칙: 앞이 비어 있거나 공백으로 끝나면 공백을 넣지 않는다
+        var joined = '';
+        b.L.slice(a - 1, z).forEach(function (x, ix) {
+          var t2 = ix ? x.replace(/^\s+/, '') : x;
+          if (!ix) { joined = t2; return; }
+          joined += (joined === '' || /\s$/.test(joined)) ? t2 : ' ' + t2;
+        });
+        b.mut(a - 1, z - a + 1, [joined]); b.dot = a; return;
+      }
+      case 'm': case 't': {
+        var dst = addr1(b, arg, b.dot);
+        if (dst.n === null) throw new Error('목적지 주소가 없습니다');
+        var d2 = dst.n;
+        if (d2 < 0 || d2 > b.L.length) throw new Error('목적지가 범위를 벗어났습니다');
+        var chunk = b.L.slice(a - 1, z), keep = null;
+        if (cmd === 'm') {
+          if (d2 >= a && d2 <= z) throw new Error('자기 자신 안으로 옮길 수 없습니다');
+          keep = b.I.slice(a - 1, z);        // 옮겨도 표시는 그 줄을 따라간다
+          b.mut(a - 1, z - a + 1);
+          if (d2 > z) d2 -= (z - a + 1);
+        }
+        b.mut(d2, 0, chunk, keep);
+        b.dot = d2 + chunk.length; return;
+      }
+      case 'c': case 'o': {  // co
+        if (rest.slice(0, 2) === 'co') { return run(b, String(a) + ',' + z + 't' + rest.slice(2), log, depth); }
+        break;
+      }
+      case '=': log.push(String(z)); return;
+      case '>': for (var i5 = a; i5 <= z; i5++) if (b.L[i5 - 1] !== '') b.L[i5 - 1] = '    ' + b.L[i5 - 1]; b.dot = z; return;
+      case '<': for (var i6 = a; i6 <= z; i6++) b.L[i6 - 1] = b.L[i6 - 1].replace(/^ {1,4}/, ''); b.dot = z; return;
+    }
+    throw new Error('이 데모가 모르는 명령입니다: ' + cmd);
+  }
+
+  /* ---------- 데모 1 : ex 인터프리터 ---------- */
+  var SAMPLE = [
+    '#!/bin/sh',
+    '# build script',
+    '',
+    'set -eu',
+    'echo "foo start"',
+    '',
+    'make foo',
+    'echo DEBUG step 1',
+    'make bar',
+    'echo DEBUG step 2',
+    'echo "foo done"'
+  ];
+
+  __demo('exsh', function (host, api) {
+    var buf = new Buf(SAMPLE), hist = [];
+    var inp = host.querySelector('[data-cmd]');
+
+    function render(log, err) {
+      var s = '';
+      if (log && log.length) s += '<span class="dim">— 출력 —</span>\n' + api.esc(log.join('\n')) + '\n\n';
+      if (err) s += '<span class="bad">E: ' + api.esc(err) + '</span>\n\n';
+      s += '<span class="dim">— 버퍼 (' + buf.L.length + '줄, 현재 줄 ' + buf.dot + ') —</span>\n';
+      s += buf.L.map(function (l, i) {
+        var mark = (i + 1 === buf.dot) ? '<span class="ok">.</span>' : ' ';
+        return '<span class="dim">' + String(i + 1).padStart(3, ' ') + '</span>' + mark + ' ' + api.esc(l);
+      }).join('\n');
+      api.w(host, s);
+    }
+
+    function exec(line) {
+      var log = [], err = null;
+      hist.push(buf.L.slice());
+      if (hist.length > 40) hist.shift();
+      try { run(buf, line, log, 0); }
+      catch (e) { err = e.message; hist.pop(); }
+      if (buf.dot > buf.L.length) buf.dot = buf.L.length;
+      if (buf.dot < 1) buf.dot = 1;
+      render(log, err);
+    }
+
+    host.querySelector('[data-run]').addEventListener('click', function () { exec(inp.value); });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); exec(inp.value); }
+    });
+    host.querySelector('[data-undo]').addEventListener('click', function () {
+      if (!hist.length) { render([], '되돌릴 것이 없습니다'); return; }
+      buf.L = hist.pop(); buf.dot = Math.min(buf.dot, buf.L.length) || 1; render(['undo'], null);
+    });
+    host.querySelector('[data-reset]').addEventListener('click', function () {
+      buf = new Buf(SAMPLE); hist = []; render(['버퍼를 되돌렸습니다'], null);
+    });
+
+    var samples = ['%nu', 'g/DEBUG/p', 'g/DEBUG/d', 'g/^$/d', '%s/foo/bar/g', 'g/^/m0', '2,3m$', '$t$', '1,2j'];
+    var box = host.querySelector('[data-ex-samples]');
+    samples.forEach(function (c) {
+      var b2 = document.createElement('button');
+      b2.className = 'sec'; b2.textContent = c; b2.style.fontFamily = 'Consolas, monospace';
+      b2.style.fontSize = '.78rem'; b2.style.padding = '4px 8px'; b2.style.minHeight = '30px';
+      b2.addEventListener('click', function () { inp.value = c; exec(c); });
+      box.appendChild(b2);
+    });
+    render([], null);
+  });
+
+  /* ---------- 데모 2 : 주소 풀이기 ---------- */
+  var ALINES = [
+    'package main', '', 'import "fmt"', '', 'func main() {',
+    '\tfmt.Println("hi")', '}', '', 'func helper() {', '}'
+  ];
+
+  __demo('addr', function (host, api) {
+    var inp = host.querySelector('[data-addr]');
+
+    function solve(expr) {
+      var b = new Buf(ALINES); b.dot = 4;
+      var out = '';
+      try {
+        var R = addrRange(b, expr);
+        if (R.rest.replace(/\s/g, '') !== '') throw new Error('남은 글자: ' + R.rest);
+        if (R.a === null || R.b === null) throw new Error('주소를 이해하지 못했습니다');
+        var lo = R.a, hi = R.b;
+        out += '<span class="ok">' + api.esc(expr) + '</span>  →  ';
+        out += (lo === hi ? lo + '번 줄' : lo + '~' + hi + '번 줄 (' + (hi - lo + 1) + '줄)');
+        if (lo > hi) out += '  <span class="bad">← 역순! 실제 ex 는 여기서 실패합니다</span>';
+        out += '\n<span class="dim">(현재 줄 . = 4 로 고정)</span>\n\n';
+        out += b.L.map(function (l, i) {
+          var n = i + 1, sel = (n >= Math.min(lo, hi) && n <= Math.max(lo, hi) && lo <= hi);
+          var mk = n === 4 ? '.' : ' ';
+          var body = api.esc(l.replace(/\t/g, '    '));
+          return (sel ? '<span class="ok">' : '<span class="dim">') + String(n).padStart(3, ' ') + mk + '</span> ' +
+                 (sel ? '<span class="ok">' + body + '</span>' : body);
+        }).join('\n');
+        api.w(host, out);
+      } catch (e) {
+        api.w(host, '<span class="bad">' + api.esc(e.message) + '</span>');
+      }
+    }
+
+    host.querySelector('[data-run]').addEventListener('click', function () { solve(inp.value); });
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); solve(inp.value); } });
+
+    var ss = ['%', '1,3', '.', '$', '$-2', '/func/', '/func/;+2', '/func/,+2', '5;/^}/'];
+    var box = host.querySelector('[data-samples]');
+    ss.forEach(function (c) {
+      var b2 = document.createElement('button');
+      b2.className = 'sec'; b2.textContent = c; b2.style.fontFamily = 'Consolas, monospace';
+      b2.style.fontSize = '.78rem'; b2.style.padding = '4px 8px'; b2.style.minHeight = '30px';
+      b2.addEventListener('click', function () { inp.value = c; solve(c); });
+      box.appendChild(b2);
+    });
+    solve(inp.value);
+  });
+
+  /* ---------- 데모 3 : 문형 검색 ---------- */
+  var PHRASES = [
+    ['빈 줄 다 지워 삭제 공백', ':g/^$/d'],
+    ['공백만 있는 줄 지워 삭제', ':g/^\\s*$/d'],
+    ['주석 줄 지워 삭제 #', ':g/^\\s*#/d'],
+    ['TODO 들어간 줄 지워 삭제 패턴', ':g/TODO/d'],
+    ['패턴 없는 줄 지워 남겨 반대 역선택', ':v/TODO/d'],
+    ['블록 통째로 지워 삭제 BEGIN END 구간', ':g/^BEGIN/,/^END/d'],
+    ['윗줄 지워 앞줄 삭제', ':g/ERROR/-1d'],
+    ['중복 줄 지워 제거 정렬 uniq', ':%!sort -u'],
+    ['바꿔 치환 전부 교체', ':%s/foo/bar/g'],
+    ['낱말 단위로 바꿔 이름 변경 리네임', ':%s/\\<foo\\>/bar/ge'],
+    ['대소문자 무시하고 바꿔 치환', ':%s/foo/bar/gi'],
+    ['들여쓰기 넣어 앞에 공백 추가', ':%s/^/    /'],
+    ['줄 끝에 붙여 세미콜론 추가', ':%s/$/;/'],
+    ['탭을 공백으로 바꿔', ':%s/\\t/    /g'],
+    ['경로 바꿔 슬래시 구분자', ':%s#/usr#/opt#g'],
+    ['전부 대문자로 바꿔', ':%s/.*/\\U&/'],
+    ['snake_case 를 camelCase 로 바꿔', ':%s/_\\(.\\)/\\u\\1/g'],
+    ['camelCase 를 snake_case 로 바꿔', ':%s/\\(\\l\\)\\(\\u\\)/\\1_\\l\\2/g'],
+    ['줄 번호 매기기 번호 붙이기', ':%s/^/\\=line(".").". "/'],
+    ['0 채운 번호 매기기 세 자리', ':%s/^/\\=printf("%03d. ", line("."))/'],
+    ['숫자 2배로 계산 곱하기', ':%s/\\d\\+/\\=submatch(0)*2/g'],
+    ['쉼표에서 줄 나누기 쪼개기 분할 CSV', ':%s/,\\s*/\\r/g'],
+    ['줄 끝 공백 제거 후행 공백 정리', ':%s/\\s\\+$//e'],
+    ['CRLF 를 LF 로 윈도우 줄바꿈 제거', ':%s/\\r$//e'],
+    ['파일 뒤집기 역순 거꾸로 정렬', ':g/^/m0'],
+    ['맨 위로 모아 이동 정렬', ':g/^import/m0'],
+    ['맨 아래로 모아 이동', ':g/ERROR/m$'],
+    ['복사해서 아래에 모아', ':g/ERROR/t$'],
+    ['현재 줄 복제 복사', ':t.'],
+    ['한 줄 위로 옮겨 이동', ':m-2'],
+    ['두 줄 합쳐 하나로 join', ':1,2j'],
+    ['맨 앞에 파일 끼워 넣어 삽입 헤더', ':0r header.txt'],
+    ['명령 출력 삽입 날짜', ':r !date +\\%F'],
+    ['일부만 따로 저장 잘라내기', ':10,20w part.txt'],
+    ['패턴 줄만 다른 파일로 모아 저장', ':g/ERROR/.w! >> errors.txt'],
+    ['보여줘 출력 확인 검색 grep', ':g/TODO/p'],
+    ['줄 번호와 함께 보여줘 출력', ':g/TODO/nu'],
+    ['개수 세줘 몇 개 카운트 드라이런', ':%s/TODO//gn'],
+    ['안 보이는 문자 보여줘 탭 확인', ':%l'],
+    ['정렬 sort', ':%!sort'],
+    ['JSON 예쁘게 포맷', ':%!jq .'],
+    ['열 맞추기 정렬 컬럼', ':%!column -t'],
+    ['되돌리기 취소 undo', ':u'],
+    ['한 시간 전으로 되돌리기 시간', ':earlier 1h'],
+    ['읽기 전용으로 열기 안전', 'ex -R file'],
+    ['배치 실행 스크립트에서', "ex -s -c '%s/a/b/ge' -c 'wq' file"],
+    ['여러 파일에 적용 일괄', "find . -name '*.md' -exec ex -s -c '%s/a/b/ge' -c 'wq' {} \\;"]
+  ];
+
+  __demo('phrase', function (host, api) {
+    var inp = host.querySelector('[data-q]');
+
+    function search(q) {
+      q = (q || '').trim();
+      if (!q) { api.w(host, '검색어를 넣어 보세요.', 'dim'); return; }
+      var terms = q.split(/\s+/);
+      var hits = PHRASES.map(function (p) {
+        var hay = p[0] + ' ' + p[1], sc = 0;
+        terms.forEach(function (t) { if (hay.indexOf(t) >= 0) sc += 2; else if (t.length > 1 && hay.indexOf(t.slice(0, -1)) >= 0) sc += 1; });
+        return { p: p, sc: sc };
+      }).filter(function (x) { return x.sc > 0; }).sort(function (a, b) { return b.sc - a.sc; }).slice(0, 8);
+
+      if (!hits.length) { api.w(host, '찾지 못했습니다. "지우기" "바꾸기" "번호" "정렬" 같은 낱말로 다시 시도해 보세요.', 'bad'); return; }
+      var s = '<span class="dim">— ' + hits.length + '건 —</span>\n';
+      s += hits.map(function (h) {
+        return '<span class="ok">' + api.esc(h.p[1]) + '</span>\n   <span class="dim">' + api.esc(h.p[0]) + '</span>';
+      }).join('\n\n');
+      api.w(host, s);
+    }
+
+    host.querySelector('[data-run]').addEventListener('click', function () { search(inp.value); });
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); search(inp.value); } });
+
+    var ss = ['지우기', '바꾸기', '번호', '정렬', '중복', '주석', '대문자', '드라이런'];
+    var box = host.querySelector('[data-ph-samples]');
+    ss.forEach(function (c) {
+      var b2 = document.createElement('button');
+      b2.className = 'sec'; b2.textContent = c; b2.style.fontSize = '.8rem';
+      b2.style.padding = '4px 9px'; b2.style.minHeight = '30px';
+      b2.addEventListener('click', function () { inp.value = c; search(c); });
+      box.appendChild(b2);
+    });
+    search(inp.value);
+  });
+})();
+</script>
+
+<!-- ===== 하단 내비 · 목차 오버레이 (id 는 입력 셸이 찾는 이름이므로 바꾸지 말 것) ===== -->
+<nav id="deckNav">
+  <button id="prevBtn" aria-label="이전 슬라이드">◀</button>
+  <span id="counter">1 / 1</span>
+  <button id="nextBtn" aria-label="다음 슬라이드">▶</button>
+</nav>
+<div id="deckToc">
+  <h3>📑 전체 목차</h3>
+  <div id="tocBody"></div>
+  <button id="tocClose">닫기</button>
+</div>
+
+<!-- ============================================================
+     슬라이드 엔진 — 페이지 번호 자동 부여, 목차 생성, 해시 내비게이션,
+     진행 막대, 키보드·스와이프. 덱을 만들 때 고칠 일이 없다.
+     ============================================================ -->
+<script>
+(function () {
+  var slides = [].slice.call(document.querySelectorAll('main > article'));
+  if (!slides.length) return;
+  var TOTAL = slides.length;
+  var stage = document.querySelector('main');
+  var bar = document.getElementById('bar');
+  var counter = document.getElementById('counter');
+  var toc = document.getElementById('deckToc');
+  var prevBtn = document.getElementById('prevBtn');
+  var nextBtn = document.getElementById('nextBtn');
+  var sel = document.getElementById('nav');
+  var cur = 0;
+
+  // ---- 페이지 번호 자동 부여 (하드코딩 금지의 이유) ----
+  slides.forEach(function (s, i) {
+    var p = document.createElement('span');
+    p.className = 'pno'; p.textContent = i + 1; s.prepend(p);
+  });
+
+  var idx = new Map();
+  slides.forEach(function (s, i) { idx.set(s.id, i); });
+  // 슬라이드 안쪽 요소의 id 도 해당 슬라이드로 매핑 — 상호참조 링크 대응
+  var sub = new Map();
+  slides.forEach(function (s, i) {
+    s.querySelectorAll('[id]').forEach(function (el) {
+      if (!idx.has(el.id) && !sub.has(el.id)) sub.set(el.id, i);
+    });
+  });
+
+  // ---- 챕터 그룹: .section 슬라이드가 새 그룹을 연다 ----
+  var secOf = [], secTitle = '표지';
+  slides.forEach(function (s, i) {
+    if (s.classList.contains('section') && !s.classList.contains('cover')) {
+      var h = s.querySelector('h1, h2');
+      secTitle = h ? h.textContent.replace(/\s+/g, ' ').trim() : '';
+    }
+    secOf[i] = secTitle;
+  });
+
+  // ---- 목차 오버레이 생성 ----
+  var tocBody = document.getElementById('tocBody');
+  var curSec = null, secDiv = null;
+  slides.forEach(function (s, i) {
+    if (secOf[i] !== curSec) {
+      curSec = secOf[i];
+      secDiv = document.createElement('div');
+      secDiv.className = 'tocsec';
+      var h4 = document.createElement('h4');
+      h4.textContent = curSec;
+      secDiv.appendChild(h4);
+      tocBody.appendChild(secDiv);
+    }
+    var a = document.createElement('a');
+    a.href = '#' + s.id;
+    a.dataset.go = i;
+    var b = document.createElement('b');
+    b.textContent = i + 1;
+    a.appendChild(b);
+    var h = s.querySelector('h1, h2, h3');
+    a.append(h ? h.textContent.replace(/\s+/g, ' ').trim() : '(제목 없음)');
+    secDiv.appendChild(a);
+  });
+
+  // ---- 슬라이드 전환 ----
+  function show(i, push) {
+    i = Math.max(0, Math.min(TOTAL - 1, i));
+    if (i === cur && push !== 'force') { sync(); return; }
+    slides[cur].classList.remove('on');
+    cur = i;
+    slides[cur].classList.add('on');
+    stage.scrollTop = 0;
+    sync();
+    if (push !== false) history.replaceState(null, '', '#' + slides[cur].id);
+  }
+  function jump(id, push) {
+    if (idx.has(id)) { show(idx.get(id), push); return true; }
+    if (sub.has(id)) {
+      show(sub.get(id), push);
+      var el = document.getElementById(id);
+      if (el) requestAnimationFrame(function () { el.scrollIntoView({ block: 'start' }); });
+      return true;
+    }
+    return false;
+  }
+  function sync() {
+    bar.style.width = ((cur + 1) / TOTAL * 100) + '%';
+    counter.textContent = (cur + 1) + ' / ' + TOTAL;
+    prevBtn.disabled = cur === 0;
+    nextBtn.disabled = cur === TOTAL - 1;
+    // 지금 보이는 슬라이드만 하이라이팅·데모 배선 (첫 진입에서 한 번)
+    if (window.__highlight) window.__highlight(slides[cur]);
+    if (window.__initDemos) window.__initDemos(slides[cur]);
+  }
+
+  // ---- 입력 ----
+  prevBtn.onclick = function () { show(cur - 1); };
+  nextBtn.onclick = function () { show(cur + 1); };
+  document.getElementById('tocBtn').onclick = function () { toc.classList.add('on'); };
+  document.getElementById('tocClose').onclick = function () { toc.classList.remove('on'); };
+  toc.addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-go]');
+    if (!a) return;
+    e.preventDefault();
+    toc.classList.remove('on');
+    show(+a.dataset.go);
+  });
+  if (sel) sel.addEventListener('change', function (e) {
+    if (idx.has(e.target.value)) show(idx.get(e.target.value));
+    e.target.selectedIndex = 0;
+  });
+
+  // 본문 안 앵커 클릭도 슬라이드 점프로
+  stage.addEventListener('click', function (e) {
+    var a = e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var id = decodeURIComponent(a.getAttribute('href').slice(1));
+    if (jump(id)) e.preventDefault();
+  });
+
+  addEventListener('keydown', function (e) {
+    if (toc.classList.contains('on')) {
+      if (e.key === 'Escape') toc.classList.remove('on');
+      return;
+    }
+    if (e.target === sel) return;
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ') { show(cur + 1); e.preventDefault(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp') { show(cur - 1); e.preventDefault(); }
+    else if (k === 'Home') { show(0); e.preventDefault(); }
+    else if (k === 'End') { show(TOTAL - 1); e.preventDefault(); }
+    else if (k === 't' || k === 'T') { toc.classList.toggle('on'); }
+  });
+
+  // 스와이프 — 코드·표·데모의 가로 스크롤과 충돌하지 않게 걸러낸다
+  var tx = 0, ty = 0, tt = 0, guard = false;
+  stage.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) { guard = true; return; }
+    var t = e.touches[0];
+    guard = !!e.target.closest('pre, .tblwrap, .demo, .term, .sig, .pkgtree');
+    tx = t.clientX; ty = t.clientY; tt = Date.now();
+  }, { passive: true });
+  stage.addEventListener('touchend', function (e) {
+    if (guard) return;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - tx, dy = t.clientY - ty;
+    if (Date.now() - tt < 600 && Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.8)
+      show(cur + (dx < 0 ? 1 : -1));
+  }, { passive: true });
+
+  // ---- 시작 슬라이드: URL 해시 우선 ----
+  var h0 = decodeURIComponent(location.hash.slice(1));
+  cur = idx.has(h0) ? idx.get(h0) : (sub.has(h0) ? sub.get(h0) : 0);
+  slides[cur].classList.add('on');
+  sync();
+  addEventListener('hashchange', function () {
+    jump(decodeURIComponent(location.hash.slice(1)), false);
+  });
+})();
+</script>
+<!-- ===== deck-input-shim v1 : 방향키(↑↓ 스크롤 / ←→ 페이지) + 게임패드 ===== -->
+<script>
+(function () {
+  'use strict';
+  if (window.__deckInputShim) return;
+  window.__deckInputShim = true;
+
+  /* ---------- 지금 보이는 슬라이드의 스크롤 컨테이너 찾기 ---------- */
+  function scrollableAt(x, y) {
+    if (!document.elementFromPoint) return null;
+    var n = document.elementFromPoint(x, y);
+    while (n && n !== document.documentElement) {
+      var oy = getComputedStyle(n).overflowY;
+      if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+          n.scrollHeight - n.clientHeight > 4) return n;
+      n = n.parentElement;
+    }
+    return null;
+  }
+  function scroller() {
+    var el = scrollableAt(innerWidth / 2, innerHeight / 2) ||
+             scrollableAt(innerWidth / 2, innerHeight * 0.35);
+    if (el) return el;
+    var m = document.querySelector('main');
+    if (m && m.scrollHeight - m.clientHeight > 4) return m;
+    return document.scrollingElement || document.documentElement;
+  }
+  function viewH(el) {
+    return (el === document.scrollingElement || el === document.documentElement)
+      ? innerHeight : el.clientHeight;
+  }
+  function isPageScroller(el) {
+    return el === document.scrollingElement || el === document.documentElement || el === document.body;
+  }
+  function scrollStep(dir, smooth) {
+    var el = scroller();
+    el.scrollBy({ top: dir * Math.max(80, viewH(el) * 0.25),
+                  left: 0, behavior: smooth ? 'smooth' : 'auto' });
+  }
+
+  /* ---------- 페이지 이동 (덱마다 다른 엔진에 공통으로 붙는다) ---------- */
+  function pick(ids) {
+    for (var i = 0; i < ids.length; i++) {
+      var e = document.getElementById(ids[i]);
+      if (e && (e.tagName === 'BUTTON' || e.tagName === 'A')) return e;
+    }
+    return null;
+  }
+  function synth(key) {
+    document.dispatchEvent(new KeyboardEvent('keydown',
+      { key: key, code: key, bubbles: true, cancelable: true }));
+  }
+  function page(dir) {
+    var b = dir > 0 ? pick(['nextBtn', 'btnNext', 'next'])
+                    : pick(['prevBtn', 'btnPrev', 'prev']);
+    if (b) { if (!b.disabled) b.click(); }
+    else synth(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+  }
+  function toggleToc() {
+    var b = pick(['tocBtn', 'btnToc', 'toc-btn', 'tocOpen']);
+    if (b) b.click(); else synth('t');
+  }
+
+  /* ---------- 키보드: ↑↓ = 스크롤 (←→ 페이지는 각 덱 엔진이 처리) ---------- */
+  function interactive(el) {
+    if (!el) return false;
+    var t = (el.tagName || '').toUpperCase();
+    return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' ||
+           t === 'CANVAS' || el.isContentEditable === true;
+  }
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if (e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    if (interactive(e.target) || interactive(document.activeElement)) return;
+    var dir = e.key === 'ArrowDown' ? 1 : -1, repeat = e.repeat;
+    // 이벤트 전파가 끝난 뒤에 판단한다 — 슬라이드 안의 데모(테트리스 등)가
+    // 이 키를 가져갔으면(preventDefault) 스크롤하지 않는다.
+    setTimeout(function () {
+      if (e.defaultPrevented) return;
+      // 문서 자체가 스크롤되는 덱은 브라우저 기본 동작에 맡긴다(이중 스크롤 방지).
+      if (isPageScroller(scroller())) return;
+      scrollStep(dir, !repeat);
+    }, 0);
+  });
+
+  /* ---------- 게임패드 (조이패드) ----------
+     좌스틱/D-pad 상하 = 스크롤, 좌우 = 이전/다음 페이지
+     A·RB·RT = 다음, B·LB·LT = 이전, X·Start = 목차, Back = 첫 장     */
+  var DEAD = 0.4, REPEAT = 320, held = {}, lastTurn = 0, lastDir = 0, raf = 0;
+
+  function pads() {
+    if (!navigator.getGamepads) return [];
+    var out = [], g = navigator.getGamepads();
+    for (var i = 0; i < g.length; i++) if (g[i]) out.push(g[i]);
+    return out;
+  }
+  function down(g, i) { var b = g.buttons[i]; return !!b && (b.pressed || b.value > 0.5); }
+  function edge(name, isDown, fn) {
+    if (isDown) { if (!held[name]) { held[name] = 1; fn(); } }
+    else held[name] = 0;
+  }
+
+  function poll(now) {
+    var list = pads();
+    if (!list.length) { raf = 0; return; }
+    raf = requestAnimationFrame(poll);
+
+    var ax = 0, ay = 0, bNext = false, bPrev = false, bToc = false, bHome = false;
+    for (var k = 0; k < list.length; k++) {
+      var g = list[k];
+      ax += g.axes[0] || 0;
+      ay += g.axes[1] || 0;
+      if (down(g, 15)) ax += 1;
+      if (down(g, 14)) ax -= 1;
+      if (down(g, 13)) ay += 1;
+      if (down(g, 12)) ay -= 1;
+      bNext = bNext || down(g, 0) || down(g, 5) || down(g, 7);
+      bPrev = bPrev || down(g, 1) || down(g, 4) || down(g, 6);
+      bToc  = bToc  || down(g, 2) || down(g, 9);
+      bHome = bHome || down(g, 8);
+    }
+
+    if (Math.abs(ay) > DEAD) {                       // 세로: 부드러운 연속 스크롤
+      var mag = Math.min(1, (Math.abs(ay) - DEAD) / (1 - DEAD));
+      scroller().scrollBy(0, (ay > 0 ? 1 : -1) * (6 + mag * 22));
+    }
+    var dir = Math.abs(ax) > DEAD ? (ax > 0 ? 1 : -1) : 0;
+    if (dir) {                                       // 가로: 페이지 넘김(리핏 간격)
+      if (dir !== lastDir || now - lastTurn > REPEAT) {
+        lastDir = dir; lastTurn = now; page(dir);
+      }
+    } else { lastDir = 0; lastTurn = 0; }
+
+    edge('next', bNext, function () { page(1); });
+    edge('prev', bPrev, function () { page(-1); });
+    edge('toc',  bToc,  toggleToc);
+    edge('home', bHome, function () { synth('Home'); });
+  }
+
+  function start() { if (!raf) raf = requestAnimationFrame(poll); }
+  addEventListener('gamepadconnected', start);
+  addEventListener('focus', function () { if (pads().length) start(); });
+  if (pads().length) start();
+})();
+</script>
+<!-- ===== deck-bookmark-shim v3 : IndexedDB 책갈피(읽던 위치 자동 저장 + 이어보기) ===== -->
+<script>
+(function () {
+  'use strict';
+  if (window.__deckBookmarkShim) return;
+  window.__deckBookmarkShim = true;
+  if (!window.indexedDB) return;
+
+  var DB_NAME = 'treasure-house', DB_VER = 1, STORE = 'bookmarks';
+
+  var FILE = location.pathname.split('/').pop() || '';
+  try { FILE = decodeURIComponent(FILE); } catch (e) {}
+  if (!FILE || /^index\.html?$/i.test(FILE)) return;   // 포털(index.html)은 저장하지 않는다
+
+  /* ---------- IndexedDB 래퍼 ----------
+     · 실패한 연결은 캐시하지 않는다 — blocked처럼 일시적인 실패 뒤에 다시 시도한다
+     · 버전 변경·저장공간 회수·사이트 데이터 삭제로 연결이 끊기면 버리고 다시 연다
+     · 계속 막히는 환경(file://·시크릿·사이트 데이터 차단)이면 3번 만에 단념하고,
+       첫 실패 한 번만 콘솔에 남긴다 — 화면에는 아무것도 띄우지 않는다              */
+  var dbp = null, conn = null, fails = 0, warned = false, deadp = null;
+
+  function warn(e) {
+    if (warned) return;
+    warned = true;
+    try { console.warn('[bookmark] 책갈피를 건너뜁니다 — IndexedDB 사용 불가:', e); } catch (x) {}
+  }
+  function drop(c) { if (conn === c) { dbp = null; conn = null; } }
+  function dead() {
+    if (!deadp) {
+      deadp = Promise.reject(new Error('bookmark: IndexedDB unavailable'));
+      deadp.catch(function () {});             // 미처리 거부 경고 방지
+    }
+    return deadp;
+  }
+  function db() {
+    if (fails >= 3) return dead();
+    if (dbp) return dbp;
+    var p = dbp = new Promise(function (res, rej) {
+      var req;
+      try { req = indexedDB.open(DB_NAME, DB_VER); } catch (e) { rej(e); return; }
+      req.onupgradeneeded = function () {
+        var d = req.result;
+        if (!d.objectStoreNames.contains(STORE))
+          d.createObjectStore(STORE, { keyPath: 'id' }).createIndex('updated', 'updated');
+      };
+      req.onsuccess = function () {
+        var d = req.result;
+        conn = d; fails = 0;
+        d.onversionchange = function () { drop(d); try { d.close(); } catch (x) {} };
+        d.onclose         = function () { drop(d); };
+        res(d);
+      };
+      req.onerror   = function () { rej(req.error || new Error('open error')); };
+      req.onblocked = function () { rej(new Error('open blocked')); };
+    });
+    p.catch(function (e) {
+      fails++;
+      if (dbp === p) { dbp = null; conn = null; }
+      warn(e);
+    });
+    return p;
+  }
+  function tx(mode, fn) {
+    return db().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t, r;
+        // 닫힌 연결이면 여기서 InvalidStateError가 난다 — 버리고 다음 호출에서 다시 연다
+        try { t = d.transaction(STORE, mode); r = fn(t.objectStore(STORE)); }
+        catch (e) { drop(d); rej(e); return; }
+        t.oncomplete = function () { res(r ? r.result : undefined); };
+        t.onerror    = function () { rej(t.error || new Error('tx ' + mode + ' error')); };
+        t.onabort    = function () { rej(t.error || new Error('tx ' + mode + ' aborted')); };
+      });
+    }).catch(function (e) { warn(e); throw e; });
+  }
+  function save(rec) { return tx('readwrite', function (os) { return os.put(rec); }); }
+  function load(id)  { return tx('readonly',  function (os) { return os.get(id); }); }
+
+  /* ---------- 지금 읽고 있는 위치 ---------- */
+  var ACTIVE = ['on', 'active', 'current', 'shown', 'is-active'];
+
+  function slides() {                          // 슬라이드 덱이면 슬라이드 목록, 아니면 null
+    var sel = ['main > article', '.slide'];
+    for (var i = 0; i < sel.length; i++) {
+      var n = document.querySelectorAll(sel[i]);
+      if (n.length > 1) return n;
+    }
+    return null;
+  }
+  function activeIndex(list) {                 // 활성 클래스 → URL 해시 순으로 판별
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i].classList;
+      for (var j = 0; j < ACTIVE.length; j++) if (c.contains(ACTIVE[j])) return i;
+    }
+    var id = location.hash.slice(1);
+    try { id = decodeURIComponent(id); } catch (e) {}
+    if (id) for (var k = 0; k < list.length; k++) if (list[k].id === id) return k;
+    return -1;
+  }
+  function visibleIndex(list) {                // 전 슬라이드가 이어서 흐르는 덱용 보조 판별
+    var best = -1, near = Infinity, h = window.innerHeight || 800;
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i].getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= h) continue;
+      var d = Math.abs(r.top);
+      if (d < near) { near = d; best = i; }
+    }
+    return best;
+  }
+  /* 한 장씩 그려내는 덱(stage.innerHTML = 슬라이드 하나)은 DOM에 슬라이드가
+     늘 하나뿐이라 slides()가 null이다 — v2가 이런 덱 13종을 그냥 '긴 문서'로
+     보고 scrollY 0만 저장해 책갈피가 아예 남지 않았다. 대신 화면의 쪽 표시
+     ('7 / 503')를 읽어 몇 쪽인지 알아낸다.                                  */
+  var cntEl = null;
+  var CNT = /^\s*(\d+)\s*\/\s*(\d+)\s*$/;
+  function counter() {
+    if (cntEl && cntEl.isConnected && CNT.test(cntEl.textContent || '')) return cntEl;
+    cntEl = null;
+    var n = document.querySelectorAll('span, div, b, small, em, strong');
+    for (var i = 0, lim = Math.min(n.length, 4000); i < lim; i++) {
+      if (n[i].children.length) continue;
+      var t = n[i].textContent || '';
+      if (t.length > 16) continue;
+      var m = CNT.exec(t);
+      if (m && +m[2] > 1 && +m[1] >= 1 && +m[1] <= +m[2]) { cntEl = n[i]; break; }
+    }
+    return cntEl;
+  }
+  function vpage() {                           // 쪽 표시가 있으면 {page,total}, 없으면 null
+    var e = counter();
+    if (!e) return null;
+    var m = CNT.exec(e.textContent || '');
+    return m ? { page: +m[1], total: +m[2] } : null;
+  }
+  function heading() {                         // 긴 문서용 — 화면 상단을 지난 마지막 제목
+    var hs = document.querySelectorAll('h1[id],h2[id],h3[id]'), out = '';
+    for (var i = 0; i < hs.length; i++) {
+      if (hs[i].getBoundingClientRect().top <= 90) out = '#' + hs[i].id; else break;
+    }
+    return out;
+  }
+  function snap() {
+    var list = slides();
+    if (list) {
+      var i = activeIndex(list);
+      if (i < 0) i = visibleIndex(list);
+      if (i < 0) i = 0;
+      var el = list[i];
+      return { kind: 'slide', page: i + 1, total: list.length, scrollY: 0,
+               hash: el.id ? '#' + el.id : '', ratio: (i + 1) / list.length };
+    }
+    var v = vpage();                           // 한 장씩 그려내는 덱
+    if (v) {
+      return { kind: 'slide', page: v.page, total: v.total, scrollY: 0,
+               hash: location.hash.length > 1 ? location.hash : '',
+               ratio: v.page / v.total };
+    }
+    var se = document.scrollingElement || document.documentElement;
+    var max = Math.max(0, se.scrollHeight - se.clientHeight);
+    var y = Math.round(se.scrollTop || window.pageYOffset || 0);
+    return { kind: 'scroll', page: 0, total: 0, scrollY: y,
+             hash: heading(), ratio: max ? Math.min(1, y / max) : 0 };
+  }
+
+  /* ---------- 자동 저장 ----------
+     처음 상태는 기준선으로만 잡고 저장하지 않는다 — 첫 장으로 열자마자
+     지난번 책갈피를 1쪽으로 덮어쓰지 않기 위해서다.                        */
+  function sig(s) {
+    return s.kind + ':' + s.page + ':' + (s.kind === 'scroll' ? Math.round(s.scrollY / 40) : 0);
+  }
+  var last = sig(snap());
+  function tick(force) {
+    if (document.hidden && !force) return;
+    var s = snap(), cur = sig(s);
+    if (cur === last) return;
+    last = cur;
+    s.id = FILE;
+    s.title = (document.title || FILE).trim();
+    s.updated = Date.now();
+    // 저장이 실패하면 기준선을 풀어 다음 tick에서 다시 시도한다 — 연결이 끊겼다
+    // 다시 붙는 동안 그 한 번의 위치가 통째로 사라지지 않도록.
+    save(s).catch(function () { if (last === cur) last = ''; });
+  }
+  setInterval(tick, 1200);
+  addEventListener('hashchange', function () { tick(); });
+  addEventListener('visibilitychange', function () { if (document.hidden) tick(true); });
+  addEventListener('pagehide', function () { tick(true); });
+
+  /* ---------- 이어보기 ----------
+     덱 엔진마다 이동 방식이 달라서 세 단계로 시도한다.
+       ① 해시 지정 — hashchange를 듣는 엔진
+       ② 다음/이전 버튼 클릭 또는 ←→ 키 — 해시를 안 듣는 한 장씩 엔진
+       ③ scrollIntoView — 전 장이 이어서 흐르는 덱                        */
+  function navBtn(dir) {
+    var ids = dir > 0 ? ['nextBtn', 'btnNext', 'bNext', 'next', 'nextSlide']
+                      : ['prevBtn', 'btnPrev', 'bPrev', 'prev', 'prevSlide'];
+    for (var i = 0; i < ids.length; i++) {
+      var e = document.getElementById(ids[i]);
+      if (e && (e.tagName === 'BUTTON' || e.tagName === 'A')) return e;
+    }
+    return null;
+  }
+  function turn(dir) {
+    var b = navBtn(dir);
+    if (b) { if (!b.disabled) b.click(); return; }
+    var k = dir > 0 ? 'ArrowRight' : 'ArrowLeft';
+    document.dispatchEvent(new KeyboardEvent('keydown',
+      { key: k, code: k, bubbles: true, cancelable: true }));
+  }
+  function step(target) {                      // 목표 쪽까지 한 장씩 넘긴다
+    var guard = 400;
+    (function next() {
+      var l = slides();
+      if (!l || --guard <= 0) return;
+      var i = activeIndex(l);
+      if (i < 0 || i === target) return;
+      turn(i < target ? 1 : -1);
+      setTimeout(function () {
+        var l2 = slides();
+        if (!l2) return;
+        if (activeIndex(l2) === i) return;     // 안 움직이는 엔진이면 포기
+        next();
+      }, 30);
+    })();
+  }
+  /* 한 장씩 그려내는 덱으로 돌아가기 —
+       ① 엔진이 내놓은 window.__deckGo(0-기반 쪽 번호)  ② 해시  ③ 목차의 번호 입력칸
+       ④ 다음/이전 버튼을 한 장씩(안 움직이면 즉시 포기)                       */
+  function vjump(rec) {
+    var target = rec.page;
+    function at() { var v = vpage(); return v ? v.page : -1; }
+    if (at() === target) return;
+    if (typeof window.__deckGo === 'function') {
+      try { window.__deckGo(target - 1); } catch (e) {}
+      if (at() === target) return;
+    }
+    if (rec.hash && location.hash !== rec.hash) location.hash = rec.hash;
+    setTimeout(function () {
+      if (at() === target) return;
+      var n = document.getElementById('jumpN'), g = document.getElementById('jumpGo');
+      if (n && g) {
+        n.value = String(target);
+        try { g.click(); } catch (e) {}
+        if (at() === target) return;
+      }
+      var guard = 1200;
+      (function nextPage() {
+        var from = at();
+        if (from < 0 || from === target || --guard <= 0) return;
+        turn(from < target ? 1 : -1);
+        requestAnimationFrame(function () {
+          if (at() === from) return;           // 안 움직이는 엔진이면 포기
+          nextPage();
+        });
+      })();
+    }, 150);
+  }
+  function jump(rec) {
+    if (rec.kind !== 'slide') {
+      var se = document.scrollingElement || document.documentElement;
+      var max = Math.max(0, se.scrollHeight - se.clientHeight);
+      var y = rec.scrollY <= max ? rec.scrollY : Math.round(rec.ratio * max);
+      window.scrollTo({ top: y, behavior: 'smooth' });
+      return;
+    }
+    var list = slides();
+    if (!list) { vjump(rec); return; }
+    var target = Math.min(list.length, Math.max(1, rec.page)) - 1;
+    var el = (rec.hash && document.getElementById(rec.hash.slice(1))) || list[target];
+    if (!el) return;
+    var k = Array.prototype.indexOf.call(list, el);
+    if (k >= 0) target = k;
+    if (el.id && location.hash.slice(1) !== el.id) location.hash = '#' + el.id;
+    setTimeout(function () {
+      var l2 = slides();
+      if (!l2) return;
+      var i = activeIndex(l2);
+      if (i === target) return;                // ① 해시로 이동 성공
+      if (i >= 0) step(target);                // ② 한 장씩 넘기는 엔진
+      else el.scrollIntoView({ block: 'start' });   // ③ 이어서 흐르는 덱
+    }, 120);
+  }
+  function ago(t) {
+    var d = Date.now() - t;
+    if (d < 6e4)  return '방금 전';
+    if (d < 36e5) return Math.floor(d / 6e4) + '분 전';
+    if (d < 864e5) return Math.floor(d / 36e5) + '시간 전';
+    if (d < 6048e5) return Math.floor(d / 864e5) + '일 전';
+    return new Date(t).toLocaleDateString('ko-KR');
+  }
+  function bottomInset() {              // 화면 아래 고정 내비(◀ 1/67 ▶) 위로 띄우기
+    var h = window.innerHeight || 800, gap = 14;
+    if (!document.body) return gap;
+    var list = [], c;
+    for (c = document.body.firstElementChild; c; c = c.nextElementSibling) list.push(c);
+    var extra = document.querySelectorAll('nav, footer');
+    for (var i = 0; i < extra.length; i++) list.push(extra[i]);
+    for (var j = 0; j < list.length; j++) {
+      var n = list[j], t = n.tagName;
+      if (t === 'SCRIPT' || t === 'STYLE' || t === 'LINK') continue;
+      var cs = getComputedStyle(n);
+      if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+      if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) continue;
+      var r = n.getBoundingClientRect();
+      if (!r.height || r.height > h * 0.5 || r.bottom < h - 4 || r.top > h) continue;
+      gap = Math.max(gap, Math.round(h - r.top) + 10);
+    }
+    return gap;
+  }
+  function toast(rec) {
+    var gap = bottomInset();
+    var host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147483000;pointer-events:none';
+    var root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
+    var where = rec.kind === 'slide'
+      ? rec.page + ' / ' + rec.total + ' 쪽'
+      : Math.round(rec.ratio * 100) + '% 지점';
+    root.innerHTML =
+      '<style>' +
+      '.w{pointer-events:auto;display:flex;align-items:center;gap:10px;' +
+      'margin:0 auto calc(' + gap + 'px + env(safe-area-inset-bottom,0px));' +
+      'padding:10px 12px 10px 14px;max-width:min(94vw,460px);border-radius:14px;' +
+      'background:rgba(18,28,40,.94);color:#eaf3fb;font:500 14px/1.4 -apple-system,BlinkMacSystemFont,' +
+      '"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35);' +
+      'animation:up .22s ease-out}' +
+      '@keyframes up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}' +
+      '@media (prefers-reduced-motion:reduce){.w{animation:none}}' +
+      '.t{flex:1;min-width:0}.t b{display:block;font-weight:700}' +
+      '.t s{display:block;text-decoration:none;opacity:.72;font-size:12px;margin-top:2px}' +
+      'button{font:inherit;border:0;border-radius:9px;padding:8px 12px;cursor:pointer}' +
+      '.go{background:#4fc3f7;color:#06263a;font-weight:700}' +
+      '.no{background:transparent;color:#9fb6c9;padding:8px 6px}' +
+      '</style>' +
+      '<div class="w"><span aria-hidden="true">🔖</span>' +
+      '<div class="t"><b>지난번 ' + where + '까지 읽었어요</b><s>' + ago(rec.updated) + ' 저장됨</s></div>' +
+      '<button class="go" type="button">이어보기</button>' +
+      '<button class="no" type="button" aria-label="닫기">✕</button></div>';
+    function close() { if (host.parentNode) host.parentNode.removeChild(host); }
+    root.querySelector('.go').onclick = function () { close(); jump(rec); };
+    root.querySelector('.no').onclick = close;
+    document.body.appendChild(host);
+    setTimeout(close, 15000);
+  }
+
+  /* 딥링크로 열었으면 안내하지 않는다.
+     이때 location.hash는 못 쓴다 — 덱 엔진 대부분이 첫 장을 그리면서
+     history.replaceState('#top')로 주소를 먼저 바꿔 놓기 때문에, 이 셸이
+     도는 시점에는 늘 해시가 있는 것처럼 보인다(v1이 안내를 못 띄우던 원인).
+     그래서 <head>에서 미리 잡아둔 진입 해시를 쓰고, 없으면 내비게이션
+     타이밍의 원래 주소를 본다. */
+  function openedWithHash() {
+    if (typeof window.__deckInitHash === 'string') return window.__deckInitHash.length > 1;
+    try {
+      var e = performance.getEntriesByType('navigation')[0];
+      if (e && e.name) return new URL(e.name).hash.length > 1;
+    } catch (x) {}
+    return !!location.hash;
+  }
+  function initHash() {
+    if (typeof window.__deckInitHash === 'string' && window.__deckInitHash) return window.__deckInitHash;
+    try {
+      var e = performance.getEntriesByType('navigation')[0];
+      if (e && e.name) return new URL(e.name).hash;
+    } catch (x) {}
+    return location.hash;
+  }
+
+  if (!openedWithHash()) {
+    load(FILE).then(function (rec) {
+      if (!rec) return;
+      var worth = rec.kind === 'slide' ? rec.page > 1 : rec.scrollY > 200;
+      if (!worth) return;
+      // 덱이 스스로 지난 쪽을 복원해 이미 그 자리라면(주판 암산 교재 등) 굳이 묻지 않는다
+      var now = snap();
+      if (now.kind === rec.kind && rec.kind === 'slide' && now.page === rec.page) return;
+      toast(rec);
+    }).catch(function () {});
+  } else {
+    /* 포털의 🔖 링크처럼 '#s42'로 들어왔는데 엔진이 해시를 안 듣는 덱(한 장씩
+       그려내는 6종)은 1쪽에 머문다 — 안내도 안 뜨니 그 쪽으로 옮겨준다. */
+    var m = /^#s?(\d+)$/.exec(initHash() || '');
+    if (m) setTimeout(function () {
+      var v = slides() ? null : vpage();
+      if (v && +m[1] >= 1 && +m[1] <= v.total && v.page !== +m[1])
+        vjump({ page: +m[1], hash: initHash() });
+    }, 250);
+  }
+})();
+</script>
+</body>
+</html>
