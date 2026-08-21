@@ -1231,7 +1231,7 @@ static String describe(Object o) {
 <tr><td>JEP 406</td><td>17</td><td>1차 프리뷰 — 가드를 <code>case String s &amp;&amp; (조건)</code>으로</td></tr>
 <tr><td>JEP 420·427</td><td>18·19</td><td>가드가 <code class="nb">when</code> 키워드로 교체</td></tr>
 <tr><td>JEP 433</td><td>20</td><td>제네릭 레코드 패턴 추론 정리</td></tr>
-<tr><td><b>JEP 441</b></td><td><b>21</b></td><td><b>정식</b> — 완성형은 5부 15장에서</td></tr>
+<tr><td><b>JEP 441</b></td><td><b>21</b></td><td><b>정식</b> — 완성형은 5부 9장에서</td></tr>
 </table>
 </div>
 </article>
@@ -1603,7 +1603,7 @@ w.close();</code></pre>
 <article class="card" id="j18-webserver">
 <h3>jwebserver — 정적 파일 서버가 JDK에 <span class="vt v18">18</span></h3>
 <div class="term"><span class="p">$</span> jwebserver -p 9000
-Binding to loopback by default. For all interfaces use "-b 0.0.0.0".
+Binding to loopback by default. For all interfaces use "-b 0.0.0.0" or "-b ::".
 Serving /work/site and subdirectories on 127.0.0.1 port 9000
 URL http://127.0.0.1:9000/</div>
 <ul>
@@ -1738,7 +1738,8 @@ int shifted = Math.ceilMod(-7, 3);        // 짝꿍 나머지 연산
 
 // Duration의 부호 검사 — 타임아웃 계산 코드의 단골
 Duration left = deadline.minus(elapsed);
-if (left.isPositive()) wait(left);        // !left.isNegative() &amp;&amp; !isZero() 축약</code></pre>
+if (left.isPositive())                    // !isNegative() &amp;&amp; !isZero() 축약
+    Thread.sleep(left.toMillis());</code></pre>
 <ul>
 <li>큰 JEP 뒤에 이런 API가 늘 따라옵니다 — 2부 요약에서 빠뜨리기 쉬운 상비약들.</li>
 <li>이 덱의 각 부에 흩어 둔 "작은 API" 카드들(1부 5장·5부 11장)과 함께, 버전별 조각을 <code class="nb">javaalmanac.io</code>로 확인하는 습관을 권합니다.</li>
@@ -1855,7 +1856,9 @@ CompletableFuture&lt;Void&gt; handle(Request req, Response res) {
 
 <article class="card" id="vt-million">
 <h3>실감 — 스레드 백만 개 <span class="vt v19">19</span><span class="vt pv">Preview</span></h3>
-<pre><code data-lang="java">public class Million {
+<pre><code data-lang="java">import java.util.ArrayList;
+
+public class Million {
     public static void main(String[] args) throws Exception {
         var threads = new ArrayList&lt;Thread&gt;();
         for (int i = 0; i &lt; 1_000_000; i++) {
@@ -2476,7 +2479,7 @@ Page load(long uid) throws Exception {
 <ul>
 <li><b>메모리</b> — 가상 스레드 하나의 초기 비용은 수백 바이트~수 KB(얕은 스택 기준). 깊은 호출 스택으로 잠들면 그만큼 힙을 씁니다 — 백만 개 × 깊은 스택이면 힙 수 GB.</li>
 <li><b>마운트 비용</b> — 언마운트/재마운트는 스택 조각 복사입니다. <b>블로킹이 아주 잦고 짧은</b>(마이크로초 단위) 워크로드에서는 문맥 전환 비용이 상대적으로 보일 수 있습니다.</li>
-<li><b>GC 상호작용</b> — 스택이 힙 객체이므로 GC 대상입니다. 세대별 ZGC(11장)와 같은 릴리스에 온 것은 우연이 아닙니다.</li>
+<li><b>GC 상호작용</b> — 스택이 힙 객체이므로 GC 대상입니다. 세대별 ZGC(12장)와 같은 릴리스에 온 것은 우연이 아닙니다.</li>
 <li>결론은 그대로입니다 — I/O 대기가 밀리초 단위인 보통의 서버에서 이 비용들은 <b>측정 오차 수준</b>입니다.</li>
 </ul>
 </article>
@@ -2545,7 +2548,9 @@ static double area(Shape s) {
 
 <article class="card" id="pm21-record">
 <h3>레코드 패턴 정식 — 중첩 분해 <span class="vt v21 lts">21</span></h3>
-<pre><code data-lang="java">sealed interface Json permits JNull, JBool, JNum, JStr, JArr, JObj {}
+<pre><code data-lang="java">import static java.util.stream.Collectors.joining;
+
+sealed interface Json permits JNull, JBool, JNum, JStr, JArr, JObj {}
 record JNull()                       implements Json {}
 record JBool(boolean value)          implements Json {}
 record JNum(double value)            implements Json {}
@@ -4498,13 +4503,16 @@ ScopedValue.where(REQUEST_ID, "outer").run(() -&gt; {
 <h3>상속 — 복사 없이 자식에게 <span class="vt v25 lts">25</span></h3>
 <pre><code data-lang="java">static final ScopedValue&lt;User&gt; USER = ScopedValue.newInstance();
 
-ScopedValue.where(USER, currentUser).run(() -&gt; {
-    try (var scope = StructuredTaskScope.open()) {   // 23장의 그 도구
-        scope.fork(() -&gt; audit());     // 자식 스레드에서도
-        scope.fork(() -&gt; bill());      // USER.get()이 그대로 보인다
-        scope.join();
-    }
-});</code></pre>
+Report serve(User user) throws Exception {
+    return ScopedValue.where(USER, user).call(() -&gt; {
+        try (var scope = StructuredTaskScope.open()) {  // 23장의 그 도구
+            var a = scope.fork(() -&gt; audit());   // 자식 스레드에서도
+            var b = scope.fork(() -&gt; bill());    // USER.get()이 그대로 보인다
+            scope.join();
+            return new Report(a.get(), b.get());
+        }
+    });   // join()의 검사 예외까지 call이 그대로 올려보낸다
+}</code></pre>
 <ul>
 <li>Structured Concurrency로 fork한 자식은 부모의 바인딩을 <b>자동으로, 복사 없이</b> 봅니다 — 불변이라 공유가 안전하기 때문입니다.</li>
 <li><code>InheritableThreadLocal</code>은 자식마다 맵을 <b>복사</b>했습니다 — 가상 스레드 백만 개 시대에 불가능한 비용. 이 차이가 Scoped Values의 존재 이유 절반입니다.</li>
@@ -5163,7 +5171,8 @@ try {
 <h3>개조 ② — 팬아웃: 스레드풀 → 구조적 동시성 <span class="vt v25 lts">25</span></h3>
 <pre><code data-lang="java">public OrderView view(long orderId) throws Exception {
     return ScopedValue.where(TRACE, newTraceId()).call(() -&gt; {
-        try (var scope = StructuredTaskScope.&lt;Object&gt;open(
+        try (var scope = StructuredTaskScope.open(
+                Joiner.&lt;Object&gt;awaitAllSuccessfulOrThrow(),
                 cfg -&gt; cfg.withTimeout(Duration.ofSeconds(2)))) {
             var o = scope.fork(() -&gt; orderApi.find(orderId));
             var s = scope.fork(() -&gt; shipApi.track(orderId));
@@ -5697,8 +5706,10 @@ Point[] pts = new Point[1_000_000];
 <tr><td><b>33장 컨테이너 속 JVM</b></td><td>K8s/도커 배포에서 메모리·CPU가 이상할 때</td></tr>
 <tr><td><b>34장 플래그 치트시트</b></td><td>실행 스크립트를 새로 쓸 때</td></tr>
 <tr><td><b>35장 도구 지도</b></td><td>"JDK에 이런 게 있었나?" 싶을 때</td></tr>
-<tr><td><b>36장 조견표</b></td><td>"이 기능이 몇 버전부터더라?"</td></tr>
-<tr><td><b>37장 용어집 · 38장 문답 · 39장 연습</b></td><td>복습과 자기 점검</td></tr>
+<tr><td><b>36장 조견표 · 37장 사라진 것들</b></td><td>"몇 버전부터더라?" · 제거와 개명의 기록</td></tr>
+<tr><td><b>38장 용어집 · 39장 문답 · 40장 연습</b></td><td>복습과 자기 점검</td></tr>
+<tr><td><b>41장 API 연대기 · 42장 FAQ</b></td><td>String·Stream의 나이테 · 회의실 질문들</td></tr>
+<tr><td><b>43장 통념 대조표 · 44장 트러블슈팅</b></td><td>옛 상식의 유효기간 · 증상에서 장으로</td></tr>
 </table>
 </div>
 <div class="note">본문(1~11부)이 시간 순서였다면, 부록은 <b>주제 순서</b>입니다 — 필요한 장으로 목차(☰)에서 바로 건너뛰세요.</div>
