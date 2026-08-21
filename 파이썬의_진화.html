@@ -1517,11 +1517,13 @@ shm2.close(); shm.close(); shm.unlink()</code></pre>
 <h3>pickle 프로토콜 5, importlib.metadata <span class="vt v38">3.8</span></h3>
 <h4>pickle 5 — 대용량 버퍼의 대역 외 전송 (PEP 574)</h4>
 <pre><code data-lang="py">import pickle
-data = bytearray(10**6)
+data = bytearray(b"hello-world-" * 3)
 buffers = []
-payload = pickle.dumps(data, protocol=5, buffer_callback=buffers.append)
-print(len(payload) &lt; 100, len(buffers))   # True 1 — 본문과 버퍼가 분리됨
-restored = pickle.loads(payload, buffers=buffers)   # 복사 최소화 복원</code></pre>
+payload = pickle.dumps(pickle.PickleBuffer(data), protocol=5,
+                       buffer_callback=buffers.append)
+print(len(payload), len(buffers))    # 4 1 — 본문엔 참조만, 실데이터는 버퍼로
+view = memoryview(pickle.loads(payload, buffers=buffers))
+print(bytes(view[:5]), view.obj is data)   # b'hello' True — 진짜 0복사!</code></pre>
 <p class="cap">multiprocessing·Dask·Ray가 큰 배열을 넘길 때 복사를 피하는 기반이 됐습니다.</p>
 <h4>importlib.metadata — 설치된 패키지 정보를 표준으로</h4>
 <pre><code data-lang="py">from importlib import metadata
@@ -1801,7 +1803,7 @@ print(math.gcd(12, 18, 24))        # 6  — gcd도 다인자로 확장
 print(math.nextafter(1.0, 2.0))    # 1.0000000000000002 — 이웃 float
 print(math.ulp(1.0))               # 2.220446049250313e-16
 
-print(random.Random(42).randbytes(4))   # b'\xa4\x18\x08\x86' — 난수 바이트</code></pre>
+print(random.Random(42).randbytes(4))   # b'\x9dy\xb1\xa3' — 난수 바이트</code></pre>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>변화</th><th>내용</th></tr>
@@ -2222,8 +2224,8 @@ SyntaxError: '{' was never closed</div>
 <table class="kv">
 <tr><th>실수</th><th>3.10의 메시지</th></tr>
 <tr><td><code class="nb">if x == 1</code> (콜론 누락)</td><td><code class="nb">expected ':'</code></td></tr>
-<tr><td><code class="nb">if x = 1:</code></td><td><code>Maybe you meant '==' instead of '='?</code></td></tr>
-<tr><td><code class="nb">[(1,2) (3,4)]</code></td><td><code>Perhaps you forgot a comma?</code></td></tr>
+<tr><td><code class="nb">if x = 1:</code></td><td><code>Maybe you meant '==' or ':=' instead of '='?</code></td></tr>
+<tr><td><code class="nb">[1 2]</code></td><td><code>Perhaps you forgot a comma?</code></td></tr>
 <tr><td>블록 들여쓰기 누락</td><td><code>expected an indented block after 'if' statement on line N</code></td></tr>
 </table>
 </div>
@@ -2235,8 +2237,9 @@ SyntaxError: '{' was never closed</div>
 <pre><code data-lang="py">collections = {}
 collectons["a"] = 1     # 오타!</code></pre>
 <div class="cerr">NameError: name 'collectons' is not defined. Did you mean: 'collections'?</div>
-<pre><code data-lang="py">"hello".uppercase()</code></pre>
-<div class="cerr">AttributeError: 'str' object has no attribute 'uppercase'. Did you mean: 'upper'?</div>
+<pre><code data-lang="py">"hello".upperr()</code></pre>
+<div class="cerr">AttributeError: 'str' object has no attribute 'upperr'. Did you mean: 'upper'?</div>
+<p class="cap">제안은 편집 거리가 가까울 때만 나옵니다 — <code class="nb">uppercase</code>처럼 멀리 벗어난 오타는 제안 없이 AttributeError만 냅니다.</p>
 <ul>
 <li><code class="nb">NameError</code>·​<code class="nb">AttributeError</code>가 현재 스코프·객체에서 <b>가까운 이름을 찾아 제안</b>합니다.</li>
 <li>이 노선은 계속 진화합니다 — 3.11 정밀 위치 표시(5부), 3.12 "import를 잊었나?"·"self.를 잊었나?" 제안(6부).</li>
@@ -2482,8 +2485,8 @@ except* KeyError as eg:
 </div>
 <pre><code data-lang="py">eg = ExceptionGroup("g", [ValueError("v"), KeyError("k")])
 match_part, rest = eg.split(ValueError)
-print(match_part)   # ExceptionGroup('g', [ValueError('v')])
-print(rest)         # ExceptionGroup('g', [KeyError('k')])</code></pre>
+print(repr(match_part))   # ExceptionGroup('g', [ValueError('v')])
+print(repr(rest))         # ExceptionGroup('g', [KeyError('k')])</code></pre>
 </article>
 
 <article class="card" id="add-note">
@@ -2740,7 +2743,7 @@ print(f"{Env.PROD}")         # prod — f-string에서도 값 그대로
 print(datetime.datetime.fromisoformat("2026-08-21T09:30:00Z"))
 # 2026-08-21 09:30:00+00:00
 
-print(math.cbrt(27))         # 3.0 — 세제곱근
+print(math.cbrt(64))         # 4.0 — 세제곱근 (27은 3.0000000000000004 — float의 한계)
 print(math.exp2(10))         # 1024.0
 
 with contextlib.chdir("/tmp"):     # 블록 안에서만 작업 디렉터리 변경
@@ -3366,7 +3369,7 @@ print(copy.replace(d, year=2026))           # 2026-10-07 — datetime 계열도!
 <pre><code data-lang="py">import dbm, os
 
 # dbm의 기본 백엔드가 SQLite로 — 이식성 걱정 없는 초간단 키-값 저장
-with dbm.open("cache", "c") as db:      # cache.db (SQLite 파일) 생성
+with dbm.open("cache", "c") as db:      # 'cache' 파일(SQLite 형식) 생성
     db[b"greeting"] = b"hello"
 
 print(os.process_cpu_count())   # 이 프로세스가 "실제 쓸 수 있는" CPU 수
@@ -3548,7 +3551,8 @@ def safe_html(t: Template) -&gt; str:
 user_input = "&lt;script&gt;alert('xss')&lt;/script&gt;"
 page = safe_html(t"&lt;p&gt;{user_input}&lt;/p&gt;")
 print(page)
-# &lt;p&gt;&amp;lt;script&amp;gt;alert('xss')&amp;lt;/script&amp;gt;&lt;/p&gt; — 무력화!</code></pre>
+# &lt;p&gt;&amp;lt;script&amp;gt;alert(&amp;#x27;xss&amp;#x27;)&amp;lt;/script&amp;gt;&lt;/p&gt; — 무력화!
+# (html.escape는 따옴표도 &amp;#x27;로 바꿉니다)</code></pre>
 <ul>
 <li>Template을 순회하면 <b>리터럴 str과 Interpolation 객체가 번갈아</b> 나옵니다 — 렌더러는 이 둘을 구분해 처리합니다.</li>
 <li>같은 틀로 SQL은 플레이스홀더 바인딩으로, 셸 명령은 <code class="nb">shlex.quote</code>로 — <b>맥락에 맞는 이스케이프</b>가 라이브러리 몫이 됩니다.</li>
@@ -3683,7 +3687,8 @@ def move(p: Point, speed: int) -&gt; None: ...   # Point는 아직 미정의
 
 # 2. FORWARDREF — 미정의 이름은 자리표시자로
 print(annotationlib.get_annotations(move, format=Format.FORWARDREF))
-# {'p': ForwardRef('Point'), 'speed': &lt;class 'int'&gt;, 'return': None}
+# {'p': ForwardRef('Point', owner=&lt;function move at 0x...&gt;),
+#  'speed': &lt;class 'int'&gt;, 'return': None}
 
 # 3. STRING — 소스 문자열 그대로 (문서 도구용)
 print(annotationlib.get_annotations(move, format=Format.STRING))
@@ -4266,7 +4271,7 @@ print(Fraction.from_number(0.5))            # 1/2 — 변환 창구 통일</code
 <div class="tblwrap">
 <table class="kv">
 <tr><th>변화</th><th>내용</th></tr>
-<tr><td><code class="nb">Union[int, str]</code> ≡ <code class="nb">int | str</code></td><td>typing.Union이 <code class="nb">|</code>와 <b>같은 객체</b>를 만들도록 내부 통일 — 3.10 문법(4부)의 마감 공사</td></tr>
+<tr><td><code class="nb">Union[int, str]</code> ≡ <code class="nb">int | str</code></td><td>두 표기가 <b>같은 타입의 동등한 객체</b>로 통일(<code>types.UnionType is typing.Union</code>) — 3.10 문법(4부)의 마감 공사</td></tr>
 <tr><td><code class="nb">hmac</code>·해시 재구현</td><td>형식 검증된 HACL* 코드로 교체 — "증명된" 암호 프리미티브</td></tr>
 <tr><td><code class="nb">getpass</code> 등 보안 손질</td><td>입력 시 * 표시 옵션 등 소소한 현대화</td></tr>
 <tr><td>구식 폐기 진행</td><td><code>from __future__ import</code> 이외 경로들 정리 — 부록의 폐기 일정표 참고</td></tr>
