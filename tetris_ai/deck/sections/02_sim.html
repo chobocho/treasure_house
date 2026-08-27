@@ -1,0 +1,81 @@
+<!--SLIDE sec=2 t="문제: 두어 보고 무를 수가 없다"-->
+<h1><span class="no">{{N}}</span>문제: 두어 보고 무를 수가 없다</h1>
+<p>AI가 하는 일은 결국 한 문장이다.</p>
+<p class="big">가능한 자리를 전부 두어 보고, 가장 좋은 판을 만드는 자리를 고른다.</p>
+<p>“두어 본다”가 문제다. <code>hard_drop()</code> 은 조각을 <strong>진짜로</strong> 굳히고 줄을 지우고 다음 조각을 뽑는다. 무를 방법이 없다. 1편 봇이 고스트로 짐작할 수밖에 없었던 이유다.</p>
+<div class="dia">
+  <div class="dbox"><div class="dh">1편 봇 <small>파괴적 탐색</small></div>
+    <p class="small mut">실제 조각을 움직인다 → 고스트 위치를 읽는다 → 짐작한다 → 되돌린다. 줄이 지워진 뒤의 판은 끝내 못 본다.</p></div>
+  <div class="darrow">↓</div>
+  <div class="dbox acc"><div class="dh">2편 <small>비파괴 탐색</small></div>
+    <p class="small mut"><code>board</code> 240바이트를 복사한다 → 사본에 조각을 박는다 → 사본에서 줄을 지운다 → 사본을 평가한다 → 버린다. 진행 중인 판은 손끝 하나 안 닿는다.</p></div>
+</div>
+
+<!--SLIDE sec=2 t="240바이트가 전부다"-->
+<h1><span class="no">{{N}}</span>240바이트가 전부다</h1>
+<p>필드 전체 상태는 <code>u8 board[24 × 10]</code>, 정확히 <strong>240바이트</strong>다. <code>memcpy</code> 한 번이면 판 하나를 통째로 복제한다.</p>
+<div class="cols">
+  <div class="card a"><h4>복사 비용</h4><p class="small">240바이트 × 후보 ~80개 = 19 KB/수. L1 캐시 안에서 끝난다.</p></div>
+  <div class="card a"><h4>왜 정적 배열인가</h4><p class="small"><code>static u8 sim[H*W]</code> — 힙이 없고, 스택은 64 KB뿐이다. 탐색은 한 번에 하나씩만 돌므로 버퍼 하나를 재사용한다.</p></div>
+  <div class="card b"><h4>왜 규칙을 다시 쓰나</h4><p class="small">원본 <code>collide()</code> 는 전역 <code>board</code> 를 본다. 포인터 인자로 바꾸면 1편의 핫패스가 느려진다. 그래서 <strong>사본 전용 3함수</strong>만 따로 둔다.</p></div>
+  <div class="card b"><h4>중복의 대가</h4><p class="small">규칙이 두 곳에 생긴다 = 어긋날 수 있다. 그래서 11부의 테스트가 <strong>탐색 결과와 실제 판이 완전히 같은지</strong> 200회 검사한다.</p></div>
+</div>
+
+<!--SLIDE sec=2 t="ai.cpp — 머리말과 특징 인덱스"-->
+<h1><span class="no">{{N}}</span>ai.cpp — 머리말과 특징 인덱스</h1>
+<p><code>#include "tetris.cpp"</code> — 헤더가 아니라 <code>.cpp</code> 를 그대로 포함한다. 번역 단위가 하나뿐인 프리스탠딩 빌드에서는 이게 가장 단순하고, 컴파일러가 전 함수를 한꺼번에 보므로 인라인도 잘 된다.</p>
+<!--CODE file=ai.cpp lines=1-26 cap="ai.cpp — 원칙 · 특징 enum · 전역" lang=cpp-->
+
+<!--SLIDE sec=2 t="사본 위의 충돌 검사"-->
+<h1><span class="no">{{N}}</span>사본 위의 충돌 검사</h1>
+<p>원본 <code>collide()</code> 와 한 글자만 다르다 — <code>board</code> 대신 <code>b</code>. 이 한 글자가 “진행 중인 판을 건드리지 않는다”는 원칙 전부를 지탱한다.</p>
+<!--CODE file=ai.cpp lines=27-44 cap="ai.cpp — sim_collide" lang=cpp-->
+
+<!--SLIDE sec=2 t="떨어뜨려 보기"-->
+<h1><span class="no">{{N}}</span>떨어뜨려 보기</h1>
+<p>스폰 줄에서 시작해 부딪힐 때까지 내린다. 스폰 줄 자체가 이미 막혀 있으면 <code>-1</code> — 그 자리는 애초에 놓을 수 없다.</p>
+<p>중력도, 락딜레이도, DAS도 없다. 탐색에서는 시간이 흐르지 않는다.</p>
+<!--CODE file=ai.cpp lines=45-54 cap="ai.cpp — sim_drop" lang=cpp-->
+
+<!--SLIDE sec=2 t="도달 가능성 — 회전은 위에서, 이동은 옆으로"-->
+<h1><span class="no">{{N}}</span>도달 가능성 — 회전은 위에서, 이동은 옆으로</h1>
+<p><code>sim_drop</code> 이 “놓을 수 있다”고 해도, <strong>거기까지 갈 수 있는지</strong>는 별개다. 우리 AI가 인정하는 경로는 딱 하나다.</p>
+<ol class="steps">
+  <li>스폰 자리에서 원하는 회전으로 돌린다</li>
+  <li>스폰 줄을 따라 좌우로 미끄러진다</li>
+  <li>하드드롭</li>
+</ol>
+<p>중간에 벽이나 블록이 있으면 그 자리는 후보에서 뺀다. 그래서 <strong>계획한 수를 실제 키 입력으로 그대로 재현</strong>할 수 있다 — 9부의 <code>AiDriver</code> 가 하는 일이 정확히 이 세 줄이다.</p>
+<div class="warn"><b>이 탐색이 못 하는 것</b>기둥 밑으로 밀어 넣는 <em>턱(tuck)</em>과, 회전으로 비집고 들어가는 <em>스핀</em>. 그래서 이 AI는 T스핀을 <strong>노려서</strong> 하지 않는다 (우연히는 한다). 12부에서 이걸 어떻게 넓히는지 다룬다.</div>
+
+<!--SLIDE sec=2 t="sim_reachable"-->
+<h1><span class="no">{{N}}</span>sim_reachable</h1>
+<!--CODE file=ai.cpp lines=55-62 cap="ai.cpp — sim_reachable" lang=cpp-->
+<p>비용은 최대 <code>|x − 3|</code> 번의 충돌 검사, 즉 6번 이하다. 후보 하나를 버리기 위해 치르는 값으로는 싸다.</p>
+<p class="small mut">스폰 줄이 막혀 있으면 즉시 실패한다 — 그 상황은 사실상 게임 오버 직전이고, <code>ai_plan</code> 은 그때 <code>-1</code> 을 돌려준다.</p>
+
+<!--SLIDE sec=2 t="박아 넣고 지우기"-->
+<h1><span class="no">{{N}}</span>박아 넣고 지우기</h1>
+<p><code>sim_clear</code> 는 원본 <code>clear_lines</code> 에서 <strong>점수·마스크·통계를 전부 뺀</strong> 버전이다. 탐색은 몇 줄이 지워졌는지만 알면 된다.</p>
+<!--CODE file=ai.cpp lines=63-86 cap="ai.cpp — sim_place / sim_clear" lang=cpp-->
+
+<!--SLIDE sec=2 t="조각의 바닥이 어디인가"-->
+<h1><span class="no">{{N}}</span>조각의 바닥이 어디인가</h1>
+<p>착지 높이 특징을 재려면 “이 조각의 가장 아랫줄이 4×4 박스의 몇 번째 행인가”를 알아야 한다. I 조각 rot0 은 1행, rot1 은 3행이다.</p>
+<!--CODE file=ai.cpp lines=87-93 cap="ai.cpp — shape_bottom" lang=cpp-->
+<div class="tip"><b>착지 높이 공식</b><code>land_h = H − (y + shape_bottom)</code> — 바닥줄에 닿으면 1, 천장이면 24. 낮을수록 좋다는 뜻이 되도록 <em>바닥 기준</em>으로 재는 게 핵심이다.</div>
+
+<!--SLIDE sec=2 t="한 수의 비용"-->
+<h1><span class="no">{{N}}</span>한 수의 비용</h1>
+<p>후보 하나를 평가하는 데 드는 일:</p>
+<div class="scroll"><table>
+<tr><th>단계</th><th>비용</th></tr>
+<tr><td><code>sim_drop</code></td><td>최대 24회 × 16비트 테스트</td></tr>
+<tr><td><code>sim_reachable</code></td><td>최대 6회 충돌 검사</td></tr>
+<tr><td><code>memcpy</code> 240바이트</td><td>L1 히트</td></tr>
+<tr><td><code>sim_place</code> + <code>sim_clear</code></td><td>16비트 + 240칸 스캔</td></tr>
+<tr><td><code>features</code></td><td>240칸 × 3패스 (높이·행전이·열전이)</td></tr>
+</table></div>
+<p>후보는 홀드 분기까지 합쳐 최대 104개, 실제로는 30~80개다. <strong>실측 결과 한 수 결정에 약 0.05 ms</strong> — 400조각 한 판이 37 ms 안에 끝난다. GA가 46만 판을 45초에 돌릴 수 있는 이유가 여기 있다.</p>
+<div class="demoWrap" data-demo="ai" data-level="max"></div>
+<p class="demohint">지금 이 판이 매 조각마다 위 표를 80번씩 돌리고 있다.</p>

@@ -1,0 +1,104 @@
+<!--SLIDE sec=4 t="후보를 세어 보자"-->
+<h1><span class="no">{{N}}</span>후보를 세어 보자</h1>
+<p>한 조각을 놓을 수 있는 자리는 몇 개인가?</p>
+<div class="scroll"><table>
+<tr><th>차원</th><th>가짓수</th><th>비고</th></tr>
+<tr><td>홀드를 쓸까 말까</td><td>2</td><td>이미 이 조각에 홀드를 썼으면 1</td></tr>
+<tr><td>회전</td><td>4</td><td>O 조각은 1, I·S·Z는 실질 2</td></tr>
+<tr><td>가로 위치 x</td><td>13</td><td><code>−3 ‥ 9</code> — 4×4 박스의 왼쪽 열이 비어 있을 수 있어 음수까지 본다</td></tr>
+</table></div>
+<p>최대 <strong>2 × 4 × 13 = 104</strong>. 여기서 스폰 줄이 막혔거나 도달 불가능한 자리를 걸러내면 실제로는 30~80개가 남는다.</p>
+<p class="big">80 × 0.6 μs ≈ 0.05 ms</p>
+<p>한 수를 고르는 데 60fps 프레임의 0.3%를 쓴다. 이게 “1수 전탐색”이 가능한 이유이자, GA가 46만 판을 45초에 돌릴 수 있는 이유다.</p>
+
+<!--SLIDE sec=4 t="왜 1수인가"-->
+<h1><span class="no">{{N}}</span>왜 1수인가</h1>
+<div class="cols">
+  <div class="card a"><h4>1수</h4><p class="small">후보 ~80. 평가 80회. <strong>0.05 ms</strong></p></div>
+  <div class="card"><h4>2수</h4><p class="small">80 × 80 = 6,400. <strong>4 ms</strong> — 여전히 실시간 가능하지만 GA 학습은 80배 느려진다</p></div>
+  <div class="card"><h4>3수</h4><p class="small">51만. <strong>0.3초</strong>/수 — 학습은 불가능</p></div>
+</div>
+<p>그리고 <strong>1수만으로도 충분히 강하다</strong>. 잘 고른 특징 8개 + 잘 학습된 가중치면 400조각을 죽지 않고 두면서 155줄을 지운다. 이론상 최대가 160줄이다.</p>
+<div class="note"><b>깊이보다 평가</b>테트리스에서 탐색 깊이를 늘리는 것보다 평가 함수를 개선하는 게 훨씬 남는 장사라는 건 잘 알려진 결과다. 우리가 GA에 시간을 쓰는 이유다. 빔서치로 깊이를 늘리는 방법은 12부에 있다.</div>
+
+<!--SLIDE sec=4 t="홀드 분기"-->
+<h1><span class="no">{{N}}</span>홀드 분기</h1>
+<p>홀드는 “지금 조각을 창고에 넣고 다른 걸 쓴다”이다. 탐색에서는 <strong>후보 조각이 하나 더 생기는 것</strong>일 뿐이다.</p>
+<div class="dia">
+  <div class="dbox acc"><div class="dh">use_hold = 0</div><p class="small mut">후보 조각 = <code>cur_piece</code> (지금 떨어지는 것)</p></div>
+  <div class="dbox pur"><div class="dh">use_hold = 1</div>
+    <p class="small mut">창고가 비었으면 → <code>next_q[0]</code> (홀드하면 다음 조각이 나온다)<br>창고에 있으면 → <code>hold_piece</code> (창고 것과 맞바꾼다)</p>
+    <p class="small mut">이미 이 조각에 홀드를 썼으면(<code>hold_used</code>) 이 가지는 통째로 건너뛴다.</p></div>
+</div>
+<p>홀드를 고려하는 것만으로 실력이 눈에 띄게 오른다. 실측에서 <strong>계획의 37%가 홀드를 쓰는 수</strong>였다 (11부 T3, 200회 중 74회).</p>
+
+<!--SLIDE sec=4 t="ai_plan — 후보 열거"-->
+<h1><span class="no">{{N}}</span>ai_plan — 후보 열거</h1>
+<!--CODE file=ai.cpp lines=151-182 cap="ai.cpp — ai_plan 전반부" lang=cpp-->
+<p class="small mut">O 조각은 네 회전의 비트마스크가 전부 같아서 <code>SHAPES[p][rot] == SHAPES[p][0]</code> 로 걸러진다. I·S·Z는 마스크가 달라(4×4 박스 안의 행 위치가 다르다) 중복 평가가 나지만, 결과가 같으므로 정확성에는 영향이 없고 비용만 조금 든다.</p>
+
+<!--SLIDE sec=4 t="ai_plan — 채점과 접기"-->
+<h1><span class="no">{{N}}</span>ai_plan — 채점과 접기</h1>
+<!--CODE file=ai.cpp lines=183-197 cap="ai.cpp — ai_plan 후반부" lang=cpp-->
+<p>동점이면 먼저 본 자리가 이긴다. 순회 순서가 고정이므로 <strong>같은 판 + 같은 가중치 = 항상 같은 수</strong>다. 결정론은 테스트와 리플레이의 전제 조건이다.</p>
+
+<!--SLIDE sec=4 t="한 수를 정수 하나로"-->
+<h1><span class="no">{{N}}</span>한 수를 정수 하나로</h1>
+<p>wasm 함수는 구조체를 돌려줄 수 없다. 세 값을 비트로 접는다.</p>
+<div class="codewrap"><div class="codecap">packed 레이아웃<span>32비트 정수 · 3줄</span></div><pre class="code txt"><code>  bit  8      7 6 5 4      3 2 1 0
+     [hold]   [ 0 0 rot ]  [ x + 3 ]
+     0 또는 1    0~3          0~12  (x = −3 ‥ 9)</code></pre></div>
+<p><code>x</code> 에 3을 더하는 건 음수 좌표를 4비트 무부호로 담기 위해서다. 실패는 <code>-1</code>.</p>
+<div class="scroll"><table>
+<tr><th>packed</th><th>hold</th><th>rot</th><th>x</th><th>뜻</th></tr>
+<tr><td><code>0x03</code></td><td>0</td><td>0</td><td>0</td><td>회전 없이 맨 왼쪽</td></tr>
+<tr><td><code>0x1C</code></td><td>0</td><td>1</td><td>9</td><td>한 번 돌려 맨 오른쪽</td></tr>
+<tr><td><code>0x123</code></td><td>1</td><td>2</td><td>0</td><td>홀드하고 두 번 돌려 왼쪽</td></tr>
+<tr><td><code>-1</code></td><td colspan="3">—</td><td>둘 자리가 없다 (게임 오버 직전)</td></tr>
+</table></div>
+
+<!--SLIDE sec=4 t="ai_apply — 규칙을 우회하지 않는다"-->
+<h1><span class="no">{{N}}</span>ai_apply — 규칙을 우회하지 않는다</h1>
+<p>고른 자리에 조각을 <strong>순간이동</strong>시키는 것처럼 보이지만, 실제로는 <code>cur_rot</code>·<code>cur_x</code> 만 바꾸고 나머지는 전부 원래 함수에 맡긴다. 홀드는 <code>do_hold()</code>, 낙하는 <code>hard_drop()</code>.</p>
+<!--CODE file=ai.cpp lines=198-219 cap="ai.cpp — ai_apply / ai_step" lang=cpp-->
+<div class="warn"><b>왜 <code>last_was_rot = 0</code> 인가</b>T스핀 판정은 “마지막 동작이 회전이었나”를 본다. 우리는 회전한 게 아니라 값을 대입했으므로 T스핀을 주장할 자격이 없다. 여기서 정직하지 않으면 AI가 공짜 T스핀을 무한히 얻는다.</div>
+
+<!--SLIDE sec=4 t="한 판을 통째로 두기"-->
+<h1><span class="no">{{N}}</span>한 판을 통째로 두기</h1>
+<p>GA의 적합도 함수가 부르는 진입점이다. 시간도, 중력도, 렌더링도 없다 — 계획하고 놓고, 죽거나 상한에 닿을 때까지 반복한다.</p>
+<!--CODE file=ai.cpp lines=220-245 cap="ai.cpp — play_game / ai_play / ai_play_hard" lang=cpp-->
+<p class="small mut"><code>every</code> 인자는 “N조각마다 가비지 1줄이 예약된다”는 뜻이다. 6부에서 이걸로 난이도를 올리려다 <strong>실패한</strong> 실험이 나온다 — 실패도 그대로 싣는다.</p>
+
+<!--SLIDE sec=4 t="바깥으로 내보내는 것들"-->
+<h1><span class="no">{{N}}</span>바깥으로 내보내는 것들</h1>
+<!--CODE file=ai.cpp lines=246-254 cap="ai.cpp — 평가·포인터 익스포트" lang=cpp-->
+<div class="scroll"><table>
+<tr><th>익스포트</th><th>반환</th><th>쓰는 곳</th></tr>
+<tr><td><code>ai_plan()</code></td><td>packed 또는 −1</td><td>AiDriver, 테스트</td></tr>
+<tr><td><code>ai_apply(p)</code></td><td>—</td><td>테스트 (내부 경로 검증)</td></tr>
+<tr><td><code>ai_step()</code></td><td>packed</td><td>한 수 두기</td></tr>
+<tr><td><code>ai_play(seed, n)</code></td><td>지운 줄</td><td>GA 적합도</td></tr>
+<tr><td><code>ai_play_hard(seed, n, every)</code></td><td>지운 줄</td><td>가비지 비 실험</td></tr>
+<tr><td><code>ai_play_attack() / ai_play_placed()</code></td><td>보낸 줄 / 놓은 수</td><td>GA 적합도 · 통계</td></tr>
+<tr><td><code>ai_eval_here()</code></td><td>float 점수</td><td>시각화 데모</td></tr>
+<tr><td><code>ai_weights_ptr() / ai_features_ptr()</code></td><td>주소</td><td>JS의 Float32Array 창</td></tr>
+</table></div>
+
+<!--SLIDE sec=4 t="탐색이 실제 판과 어긋나지 않는가"-->
+<h1><span class="no">{{N}}</span>탐색이 실제 판과 어긋나지 않는가</h1>
+<p>2부에서 규칙을 두 번 썼다. <code>sim_collide</code> 가 <code>collide</code> 와 한 글자라도 어긋나면, AI는 <strong>존재하지 않는 판</strong>을 평가하게 된다. 이건 조용히 실력만 깎아먹는 종류의 버그다.</p>
+<p>그래서 테스트는 같은 수를 두 경로로 실행하고 결과를 해시로 비교한다.</p>
+<div class="dia">
+  <div class="cols">
+    <div class="dbox acc"><div class="dh">경로 A</div><p class="small mut"><code>ai_apply(packed)</code> — 내부에서 직접</p></div>
+    <div class="dbox pur"><div class="dh">경로 B</div><p class="small mut"><code>ts_press(HOLD/CW/LEFT/RIGHT/HARD)</code> — 사람과 똑같은 키 입력</p></div>
+  </div>
+  <div class="darrow">두 판의 FNV-1a 해시가 <b>완전히 같아야 한다</b></div>
+</div>
+<div class="tip"><b>실제 결과</b>200회 시행, 키 입력으로 목표에 도달 실패 <strong>0회</strong>, 판 불일치 <strong>0회</strong>. <code>sim_reachable</code> 이 “스폰 줄에서 미끄러져 갈 수 있는 자리”만 후보로 남긴 덕분이다.</div>
+
+<!--SLIDE sec=4 t="지금 두고 있는 AI"-->
+<h1><span class="no">{{N}}</span>지금 두고 있는 AI</h1>
+<p>여기까지가 AI의 전부다. 특징 8개, 1수 탐색, 가중치 8개. 아래 판은 <strong>50세대를 마친 가중치</strong>로 두고 있다.</p>
+<div class="demoWrap" data-demo="ai" data-level="max"></div>
+<p class="demohint">SENT = 이 판이 지금까지 상대에게 보냈을 줄 수. 한 열을 비워 두고 테트리스를 노리는 습관이 보인다면, 그건 사람이 가르친 게 아니라 <strong>GA가 45초 만에 찾아낸</strong> 전략이다.</p>

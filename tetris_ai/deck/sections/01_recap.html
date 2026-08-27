@@ -1,0 +1,106 @@
+<!--SLIDE sec=1 t="왜 복습부터인가"-->
+<h1><span class="no">{{N}}</span>왜 복습부터인가</h1>
+<p>이 덱의 AI는 <code>tetris.cpp</code> 를 <strong>고치지 않고</strong> 그 위에 얹힌다. <code>ai.cpp</code> 의 첫 줄이 <code>#include "tetris.cpp"</code> 인 이유다.</p>
+<p>그러니 코어가 어떤 이름으로 무엇을 들고 있는지 모르면 2부부터 읽을 수 없다. 이 부에서는 코어의 <strong>앞부분 전문</strong>을 그대로 다시 싣는다. 1편을 읽었다면 훑고 지나가도 좋다 — 다만 마지막 슬라이드(어트랙트 봇의 한계)는 이 덱의 출발점이니 보고 가라.</p>
+<div class="note"><b>2편에서 손댄 곳</b>코어에 더한 것은 딱 네 가지다 — <code>stats</code> 인덱스 3개, <code>pending_garbage</code> 전역 하나, 공격/가비지 함수 두 개, 익스포트 세 개. 전부 <strong>8부</strong>에서 다룬다. 1부에 실린 코드는 1편과 같은 코드다.</p></div>
+<div class="scroll"><table>
+<tr><th>파일</th><th>줄 수</th><th>역할</th></tr>
+<tr><td><code>tetris.cpp</code></td><td>{{LINES:tetris.cpp}}</td><td>규칙 전부 (1편 + 대전 패치)</td></tr>
+<tr><td><code>ai.cpp</code></td><td>{{LINES:ai.cpp}}</td><td>시뮬레이션 · 특징 · 탐색</td></tr>
+<tr><td><code>battle.js</code></td><td>{{LINES:battle.js}}</td><td>렌더 · 입력 · 드라이버 · 심판</td></tr>
+</table></div>
+
+<!--SLIDE sec=1 t="코어와 맺은 세 가지 계약"-->
+<h1><span class="no">{{N}}</span>코어와 맺은 세 가지 계약</h1>
+<p>C++ 과 JS 사이에 헤더 파일도 IDL도 없다. 대신 <strong>숫자 약속</strong> 세 개가 있다.</p>
+<div class="cols">
+  <div class="card a"><h4>① 익스포트 이름</h4><p class="small"><code>ts_init ts_update ts_press ts_release ts_board ts_rows ts_cells ts_overlay ts_stats ts_dims</code> + 2편의 <code>ts_queue_garbage ts_garbage ts_set_piece</code> + AI의 <code>ai_*</code> 11개</p></div>
+  <div class="card a"><h4>② stats[] 인덱스</h4><p class="small">정수 30개짜리 배열 하나가 게임 상태 전부다. 인덱스가 곧 필드 이름이다.</p></div>
+  <div class="card b"><h4>③ 액션 코드</h4><p class="small"><code>0 LEFT · 1 RIGHT · 2 SOFT · 3 CW · 4 CCW · 5 HARD · 6 HOLD · 7 PAUSE · 8 FLIP</code></p></div>
+</div>
+<div class="scroll"><table>
+<tr><th>#</th><th>이름</th><th>뜻</th><th>#</th><th>이름</th><th>뜻</th></tr>
+<tr><td>0</td><td>SCORE</td><td>점수</td><td>15</td><td>PIECES</td><td>스폰한 조각 수</td></tr>
+<tr><td>1</td><td>LINES</td><td>지운 줄</td><td>16</td><td>ELAPSED</td><td>경과 ms</td></tr>
+<tr><td>2</td><td>LEVEL</td><td>레벨 1~20</td><td>17</td><td>GRAVITY</td><td>현재 낙하 ms/칸</td></tr>
+<tr><td>3</td><td>COMBO</td><td>콤보 (−1 = 끊김)</td><td>18–22</td><td>PIECE ROT X Y GHOST</td><td>현재 조각 상태</td></tr>
+<tr><td>4</td><td>B2B</td><td>Back-to-Back 플래그</td><td>23</td><td>EVENT</td><td>락마다 +1 (이벤트 감지용)</td></tr>
+<tr><td>5</td><td>STATE</td><td>0 진행 1 오버 2 일시정지</td><td>24</td><td>ROWMASK</td><td>이번에 지운 줄 비트마스크</td></tr>
+<tr><td>6</td><td>HOLD</td><td>홀드 조각 (−1 없음)</td><td>25</td><td>PERFECT</td><td>퍼펙트 클리어 횟수</td></tr>
+<tr><td>7–11</td><td>NEXT0–4</td><td>다음 조각 5개</td><td>26</td><td>LOCKPCT</td><td>락 진행률 %</td></tr>
+<tr><td>12–14</td><td>CLEAR TSPIN GAIN</td><td>직전 락의 결과</td><td><em>27–29</em></td><td><em>ATTACK PENDING GARBAGE_RECV</em></td><td><em>2편에서 추가</em></td></tr>
+</table></div>
+
+<!--SLIDE sec=1 t="타입과 프리스탠딩의 대가"-->
+<h1><span class="no">{{N}}</span>타입과 프리스탠딩의 대가</h1>
+<p><code>-nostdlib</code> 로 빌드하면 <code>memset</code> 조차 없다. 그런데 컴파일러는 배열 초기화를 <code>memset</code> 호출로 낮춰 버린다. 그래서 우리가 직접 준다.</p>
+<!--CODE file=tetris.cpp lines=1-23 cap="tetris.cpp — 타입·EXPORT 매크로·memset/memcpy" lang=cpp-->
+
+<!--SLIDE sec=1 t="상수: 필드·타이밍·액션"-->
+<h1><span class="no">{{N}}</span>상수: 필드·타이밍·액션</h1>
+<p>필드는 10×20 이지만 배열은 24줄이다. 위 4줄은 <strong>스폰과 월킥이 삐져나갈 여유</strong>다. 2편에서 여기에 가비지 색(8)과 한 번에 올라올 상한(8)이 추가됐다.</p>
+<!--CODE file=tetris.cpp lines=24-50 cap="tetris.cpp — 필드 치수와 타이밍 상수" lang=cpp-->
+
+<!--SLIDE sec=1 t="액션 코드와 stats 인덱스"-->
+<h1><span class="no">{{N}}</span>액션 코드와 stats 인덱스</h1>
+<p>이 두 enum 이 곧 JS 와의 ABI다. 인덱스를 하나만 옮겨도 화면이 통째로 어긋난다 — 그래서 <strong>새 항목은 항상 끝에</strong> 붙인다. 2편의 <code>ST_ATTACK</code> 이하 셋도 그렇게 들어갔다.</p>
+<!--CODE file=tetris.cpp lines=51-62 cap="tetris.cpp — 액션·stats·상태 enum" lang=cpp-->
+
+<!--SLIDE sec=1 t="조각 = 16비트 정수 하나"-->
+<h1><span class="no">{{N}}</span>조각 = 16비트 정수 하나</h1>
+<p>4×4 칸을 비트 16개로. 충돌 검사가 비트 테스트 16번이면 끝나고, 조각 데이터 전체가 <strong>56바이트</strong>다. AI가 초당 수십만 번 이 표를 읽는다.</p>
+<div class="bitrow">
+  <figure><div class="bits J"><i class="f">0</i><i>1</i><i>2</i><i>3</i><i class="f">4</i><i class="f">5</i><i class="f">6</i><i>7</i><i>8</i><i>9</i><i>10</i><i>11</i><i>12</i><i>13</i><i>14</i><i>15</i></div><figcaption>J rot0 = 0x0071</figcaption></figure>
+  <figure><div class="bits T"><i>0</i><i class="f">1</i><i>2</i><i>3</i><i class="f">4</i><i class="f">5</i><i class="f">6</i><i>7</i><i>8</i><i>9</i><i>10</i><i>11</i><i>12</i><i>13</i><i>14</i><i>15</i></div><figcaption>T rot0 = 0x0072</figcaption></figure>
+</div>
+<!--CODE file=tetris.cpp lines=63-84 cap="tetris.cpp — SHAPES 비트마스크 표" lang=cpp-->
+
+<!--SLIDE sec=1 t="SRS 월킥 표"-->
+<h1><span class="no">{{N}}</span>SRS 월킥 표</h1>
+<p>회전이 막히면 다섯 자리를 순서대로 밀어 본다. 이 표가 현대 테트리스의 손맛이고, <strong>T스핀</strong>이 여기서 태어난다. 원본 표는 y축이 위로 +1 이라 우리 좌표계에서는 부호를 뒤집어 쓴다.</p>
+<!--CODE file=tetris.cpp lines=85-116 cap="tetris.cpp — SRS 킥 표 4종" lang=cpp-->
+
+<!--SLIDE sec=1 t="중력표와 전역 상태"-->
+<h1><span class="no">{{N}}</span>중력표와 전역 상태</h1>
+<p>가이드라인 공식 <code>(0.8−0.007(L−1))^(L−1)</code> 는 <code>pow()</code> 가 필요하고, <code>pow()</code> 는 libm 에 있다. 그래서 미리 계산해 ms 로 굳혔다 — 의존성 0, 결정론 100%.</p>
+<p>힙이 없으니 <strong>상태는 전부 이 전역 블록</strong>이다. 이 블록이 곧 세이브 파일이고, 인스턴스를 두 개 만든다는 건 이 블록이 두 벌 생긴다는 뜻이다.</p>
+<!--CODE file=tetris.cpp lines=117-143 cap="tetris.cpp — 중력표와 전역 상태" lang=cpp-->
+
+<!--SLIDE sec=1 t="난수와 7-bag"-->
+<h1><span class="no">{{N}}</span>난수와 7-bag</h1>
+<p>13줄짜리 xorshift32 하나면 충분하다. 7종을 봉지에 넣고 섞어 하나씩 꺼내므로 "S/Z만 10연속" 같은 사고가 원천적으로 불가능하다.</p>
+<p><strong>대전에서 이게 결정적이다</strong> — 두 인스턴스를 같은 시드로 초기화하면 두 사람이 완전히 같은 조각 순서를 받는다. 공평함은 규칙이 아니라 이 한 줄이 만든다.</p>
+<!--CODE file=tetris.cpp lines=144-168 cap="tetris.cpp — xorshift32 와 7-bag" lang=cpp-->
+
+<!--SLIDE sec=1 t="충돌 검사와 고스트"-->
+<h1><span class="no">{{N}}</span>충돌 검사와 고스트</h1>
+<p><code>collide()</code> 는 전역 <code>board</code> 를 본다. 2부에서 AI가 <strong>사본</strong>을 봐야 하기 때문에 이 함수를 그대로 쓸 수 없다는 문제가 바로 여기서 생긴다.</p>
+<p>천장 위(<code>y &lt; 0</code>)는 충돌이 아니다 — 조각이 위로 삐져나오는 건 합법이다.</p>
+<!--CODE file=tetris.cpp lines=169-191 cap="tetris.cpp — collide / ghost_y / fill_queue" lang=cpp-->
+
+<!--SLIDE sec=1 t="스폰과 이동"-->
+<h1><span class="no">{{N}}</span>스폰과 이동</h1>
+<p><code>spawn_next()</code> 는 큐에서 하나 꺼내 스폰 자리에 놓고, 그 자리가 이미 막혀 있으면 <strong>블록아웃</strong>으로 게임을 끝낸다. 대전에서 가비지에 파묻혀 지는 경로가 정확히 이것이다.</p>
+<!--CODE file=tetris.cpp lines=192-217 cap="tetris.cpp — spawn_next / try_move" lang=cpp-->
+
+<!--SLIDE sec=1 t="회전과 킥"-->
+<h1><span class="no">{{N}}</span>회전과 킥</h1>
+<p>다섯 후보를 순서대로 밀어 보고 처음 성공한 곳에 앉힌다. <code>last_was_rot</code> 과 <code>last_kick</code> 을 남기는 게 핵심 — T스핀 판정이 이 둘을 본다.</p>
+<!--CODE file=tetris.cpp lines=218-244 cap="tetris.cpp — try_rotate (SRS)" lang=cpp-->
+
+<!--SLIDE sec=1 t="T스핀 판정"-->
+<h1><span class="no">{{N}}</span>T스핀 판정</h1>
+<p>T 조각 중심의 네 대각 코너를 센다. 앞 2개가 막히고 뒤 1개 이상이면 정식, 앞 1개 + 뒤 2개면 미니. 단 5번째 킥으로 들어갔으면 무조건 정식이다.</p>
+<p>2편에서 T스핀은 <strong>공격 4줄</strong>짜리 기술이 된다 (T스핀 더블 기준). 11부의 테스트가 실제로 이 자리를 만들어 검사한다.</p>
+<!--CODE file=tetris.cpp lines=245-270 cap="tetris.cpp — filled / detect_tspin" lang=cpp-->
+
+<!--SLIDE sec=1 t="1편 어트랙트 봇의 한계"-->
+<h1><span class="no">{{N}}</span>1편 어트랙트 봇의 한계</h1>
+<p>1편에도 자동으로 노는 봇이 있었다. 그 봇은 <strong>진행 중인 판을 실제로 움직여</strong> 40가지 자리를 찔러 보고 고스트로 결과를 짐작했다.</p>
+<div class="cols">
+  <div class="card"><h4>못 하는 것 ①</h4><p class="small">상태를 복사할 수 없으니 "두어 보고 무르기"가 안 된다. 매번 진짜로 움직여야 한다.</p></div>
+  <div class="card"><h4>못 하는 것 ②</h4><p class="small">고스트는 <em>현재 회전·현재 x</em> 의 착지만 알려 준다. 줄이 지워진 <strong>뒤</strong>의 판을 볼 수 없다.</p></div>
+  <div class="card"><h4>못 하는 것 ③</h4><p class="small">홀드를 고려하지 못한다. 홀드를 쓰면 조각이 바뀌어 되돌릴 수 없기 때문이다.</p></div>
+  <div class="card"><h4>못 하는 것 ④</h4><p class="small">평가 상수가 손으로 찍은 값이다. 왜 <code>구멍 × 120</code> 인지 아무도 모른다.</p></div>
+</div>
+<div class="warn"><b>그래서 2부의 첫 문장</b>“AI가 볼 수 있는 <strong>보드 사본</strong>을 만든다.” 이 240바이트가 위 네 가지를 한꺼번에 푼다.</div>

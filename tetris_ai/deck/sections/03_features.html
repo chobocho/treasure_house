@@ -1,0 +1,139 @@
+<!--SLIDE sec=3 t="평가 함수 = AI의 취향"-->
+<h1><span class="no">{{N}}</span>평가 함수 = AI의 취향</h1>
+<p>탐색은 후보를 만들 뿐이다. <strong>어느 판이 더 좋은가</strong>를 정하는 건 평가 함수다. 우리 평가 함수는 무섭도록 단순하다.</p>
+<p class="big">점수 = w₀f₀ + w₁f₁ + … + w₇f₇</p>
+<p>보드를 숫자 8개(<code>f</code>)로 압축하고, 각각에 가중치(<code>w</code>)를 곱해 더한다. 그게 전부다. 신경망도, 룩업 테이블도 없다.</p>
+<div class="cols">
+  <div class="card a"><h4>f — 특징</h4><p class="small">사람이 정한다. “무엇을 볼 것인가”</p></div>
+  <div class="card b"><h4>w — 가중치</h4><p class="small">유전 알고리즘이 정한다. “얼마나 중요한가”</p></div>
+</div>
+<div class="note"><b>왜 선형인가</b>후보 80개를 매 조각마다 채점해야 한다. 곱셈 8번·덧셈 7번이면 15 연산이다. 그리고 선형이면 가중치 8개가 곧 AI의 전 인격이라 <strong>유전자로 삼기 딱 좋다</strong>.</div>
+
+<!--SLIDE sec=3 t="왜 이 8개인가"-->
+<h1><span class="no">{{N}}</span>왜 이 8개인가</h1>
+<p>테트리스 평가 특징은 20년 넘게 다듬어진 분야다. 우리가 쓰는 8개는 두 계보에서 왔다.</p>
+<div class="scroll"><table>
+<tr><th>특징</th><th>이름</th><th>출처</th><th>직관</th></tr>
+<tr><td><code>F_LINES</code></td><td>지운 줄</td><td>공통</td><td>줄을 지우면 좋다 — 다만 <em>얼마나</em> 좋은지가 문제다</td></tr>
+<tr><td><code>F_AGG</code></td><td>높이 총합</td><td>El-Tetris</td><td>낮게 쌓을수록 여유가 있다</td></tr>
+<tr><td><code>F_HOLES</code></td><td>구멍</td><td>공통</td><td>덮인 빈칸은 그 위를 다 걷어내야 쓸 수 있다</td></tr>
+<tr><td><code>F_BUMP</code></td><td>요철</td><td>El-Tetris</td><td>들쭉날쭉하면 맞는 조각이 줄어든다</td></tr>
+<tr><td><code>F_WELLS</code></td><td>우물</td><td>Dellacherie</td><td>깊고 좁은 골은 I 조각만 받는다</td></tr>
+<tr><td><code>F_ROWT</code></td><td>행 전이</td><td>Dellacherie</td><td>한 줄 안에서 채움↔빈칸이 몇 번 뒤집히나</td></tr>
+<tr><td><code>F_COLT</code></td><td>열 전이</td><td>Dellacherie</td><td>한 열에서 같은 것 — 표면의 거칠기</td></tr>
+<tr><td><code>F_LAND</code></td><td>착지 높이</td><td>Dellacherie</td><td>이번 조각을 얼마나 높은 곳에 놓았나</td></tr>
+</table></div>
+<p class="small mut">부호를 미리 정하지 않는다는 점을 기억해 두자. “구멍은 나쁘다”조차 GA에게 알려 주지 않는다. 6부에서 GA가 실제로 어떤 부호를 골랐는지, 그중 하나가 왜 상식과 반대인지 보게 된다.</p>
+
+<!--SLIDE sec=3 t="① 지운 줄 F_LINES"-->
+<h1><span class="no">{{N}}</span>① 지운 줄 <code>F_LINES</code></h1>
+<p>이번 착수로 <strong>사본에서</strong> 사라진 줄 수. 0~4.</p>
+<!--BOARD rows="...#......|.###...##.|####..####|cccccccccc" cap="바닥줄이 채워진다 → F_LINES = 1"-->
+<p>주의: 이 특징은 “지금 지운 줄”이지 “누적 줄”이 아니다. AI에게 누적 기록은 아무 의미가 없다 — 다음 한 수만 고르면 되기 때문이다.</p>
+<div class="tip"><b>함정</b>여기에 큰 양수 가중치를 주면 AI는 <em>지울 수 있으면 무조건 지운다</em>. 싱글을 남발하게 되고, 대전에서는 싱글이 공격 0줄이므로 아무것도 못 보낸다. 6부에서 GA가 이 값을 거의 0으로 깎아 버리는 장면이 나온다.</div>
+
+<!--SLIDE sec=3 t="② 높이 총합 F_AGG"-->
+<h1><span class="no">{{N}}</span>② 높이 총합 <code>F_AGG</code></h1>
+<p>각 열의 높이 = 바닥에서 그 열의 <strong>가장 높은 블록</strong>까지. 그 10개를 더한다.</p>
+<!--BOARD rows="...#......|.###...##.|####..####|###.######" cap="높이 [2,3,3,4,1,1,2,3,3,2] → F_AGG = 24"-->
+<p>구멍 위쪽도 “높이”에 포함된다는 점이 중요하다. 4번 열은 바닥에 구멍이 있어도 높이는 4다.</p>
+<div class="codewrap"><div class="codecap">높이를 재는 방법<span>C++ · 3줄</span></div><pre class="code cpp"><code><i class="kw">int</i> y = <i class="nb">0</i>;
+<i class="kw">while</i> (y &lt; H &amp;&amp; !b[y * W + x]) y++;   <i class="cm">// 위에서 내려오며 첫 블록을 찾는다</i>
+h[x] = H - y;                          <i class="cm">// 빈 열이면 0</i></code></pre></div>
+
+<!--SLIDE sec=3 t="③ 구멍 F_HOLES"-->
+<h1><span class="no">{{N}}</span>③ 구멍 <code>F_HOLES</code></h1>
+<p>그 열의 첫 블록보다 <strong>아래</strong>에 있는 빈칸의 개수. 위가 막혀 있으니 조각을 넣을 수 없다.</p>
+<!--BOARD rows=".####.....|.#xx#.....|.####....." cap="가운데 두 칸이 구멍 → F_HOLES = 2"-->
+<p>구멍 하나를 되살리려면 그 위의 블록을 전부 지워야 한다. 그래서 구멍은 <em>지금의 손해</em>가 아니라 <em>미래의 부채</em>다.</p>
+<p class="small mut">우물(깊고 좁은 골)은 구멍이 아니다 — 위가 뚫려 있어 아직 조각을 넣을 수 있다. 이 둘을 구분하는 게 다음 특징이다.</p>
+
+<!--SLIDE sec=3 t="④ 요철 F_BUMP"-->
+<h1><span class="no">{{N}}</span>④ 요철 <code>F_BUMP</code></h1>
+<p>이웃한 두 열의 높이차를 전부 더한다. 표면이 얼마나 들쭉날쭉한가.</p>
+<!--BOARD rows="#.#.#.#.#.|##########" cap="높이 [2,1,2,1,…] → 차이가 9번 × 1 → F_BUMP = 9"-->
+<p>완전히 평평하면 0이다. 하지만 <strong>0이 최선은 아니다</strong> — 테트리스를 노리려면 한 열은 일부러 비워 둬야 하고, 그러면 요철이 커진다. 이 긴장이 GA가 풀어야 할 문제다.</p>
+
+<!--SLIDE sec=3 t="⑤ 우물 F_WELLS"-->
+<h1><span class="no">{{N}}</span>⑤ 우물 <code>F_WELLS</code></h1>
+<p>양옆(벽은 천장 높이로 친다)보다 <code>d</code> 만큼 파인 열의 비용을 <code>1+2+…+d = d(d+1)/2</code> 로 센다. 깊어질수록 <strong>제곱으로</strong> 비싸진다.</p>
+<!--BOARD rows="####.#####|####.#####|####.#####|####.#####|##########" cap="깊이 4 → 1+2+3+4 = 10 → F_WELLS = 10"-->
+<p>왜 선형이 아니라 누적합인가: 깊이 2짜리 골 두 개(비용 3+3=6)보다 깊이 4짜리 골 하나(비용 10)가 훨씬 위험하다. I 조각 하나에 목숨이 걸리기 때문이다.</p>
+<div class="note"><b>양날의 검</b>테트리스(4줄 클리어)를 하려면 정확히 이 깊이 4 우물이 필요하다. 가중치가 음수면 “우물을 파지 마라”, 양수면 “우물을 파라”가 된다. GA가 어느 쪽을 고를지가 6부의 관전 포인트다.</div>
+
+<!--SLIDE sec=3 t="⑥ 행 전이 F_ROWT"-->
+<h1><span class="no">{{N}}</span>⑥ 행 전이 <code>F_ROWT</code></h1>
+<p>한 줄을 왼쪽 벽부터 오른쪽 벽까지 훑으며 <strong>채움↔빈칸이 뒤집히는 횟수</strong>를 센다. 벽은 “채워진 것”으로 친다.</p>
+<div class="codewrap"><div class="codecap">한 줄의 전이 세기<span>예시 · 3줄</span></div><pre class="code txt"><code>벽 # # . . # # # . . # # 벽
+   └─┘ ↑     ↑   ↑   ↑ └─┘
+전이:   1     2   3   4      → 이 줄의 행 전이 = 4</code></pre></div>
+<p>빈 줄은 벽 때문에 2를 낸다. 그래서 <strong>완전히 빈 판도 24줄 × 2 = 48</strong> 이 나온다. 이 상수는 모든 후보에 똑같이 붙으므로 비교에는 영향이 없다.</p>
+<!--BOARD rows="...#......|.###...##.|####..####|###.######" cap="이 판의 행 전이 = 54 (빈 판 48 대비 +6)"-->
+<p class="small mut">구멍이 많고 표면이 지저분할수록 커진다. 높이만으로는 안 보이는 “결”을 잡아내는 게 이 특징의 역할이다.</p>
+
+<!--SLIDE sec=3 t="⑦ 열 전이 F_COLT"-->
+<h1><span class="no">{{N}}</span>⑦ 열 전이 <code>F_COLT</code></h1>
+<p>같은 것을 세로로. 천장 위는 비어 있고, 바닥 아래는 채워진 것으로 친다.</p>
+<p>빈 열은 “빈칸 → 바닥” 전이 하나만 내므로 <strong>빈 판은 10</strong>이다.</p>
+<!--BOARD rows="...#......|.###...##.|####..####|###.######" cap="이 판의 열 전이 = 12 (빈 판 10 대비 +2)"-->
+<div class="cols">
+  <div class="card"><h4>행 전이가 잡는 것</h4><p class="small">한 줄 안의 구멍·틈. “이 줄을 지우려면 몇 조각이 더 필요한가”에 가깝다.</p></div>
+  <div class="card"><h4>열 전이가 잡는 것</h4><p class="small">기둥 위아래로 뚫린 구멍. 덮인 빈칸이 하나 생길 때마다 2씩 오른다.</p></div>
+</div>
+
+<!--SLIDE sec=3 t="⑧ 착지 높이 F_LAND"-->
+<h1><span class="no">{{N}}</span>⑧ 착지 높이 <code>F_LAND</code></h1>
+<p>이번 조각의 <strong>가장 아랫줄</strong>이 바닥에서 몇 번째인가. 바닥줄에 닿으면 1, 천장이면 24.</p>
+<!--BOARD rows="..........|...oo.....|...oo.....|..######..|.########." cap="조각 바닥이 아래에서 3번째 → F_LAND = 3"-->
+<div class="codewrap"><div class="codecap">ai.cpp 안의 그 한 줄<span>C++ · 1줄</span></div><pre class="code cpp"><code><i class="kw">int</i> land_h = H - (y + <i class="fn">shape_bottom</i>(piece, rot));   <i class="cm">// 바닥줄 = 1</i></code></pre></div>
+<p>다른 7개는 전부 <em>줄을 지운 뒤</em>의 판에서 재는데, 이것만 <em>지우기 전</em>의 위치로 잰다. 착지한 높이 자체가 위험 신호이기 때문이다 — 지워졌든 아니든 그 조각은 거기까지 올라간 것이다.</p>
+
+<!--SLIDE sec=3 t="features() — 높이·구멍·요철·우물"-->
+<h1><span class="no">{{N}}</span>features() — 높이·구멍·요철·우물</h1>
+<p>한 번의 열 스캔으로 높이와 구멍을 동시에 구하고, 그 높이 배열로 나머지 셋을 만든다.</p>
+<!--CODE file=ai.cpp lines=94-121 cap="ai.cpp — features 전반부" lang=cpp-->
+
+<!--SLIDE sec=3 t="features() — 전이와 출력"-->
+<h1><span class="no">{{N}}</span>features() — 전이와 출력</h1>
+<!--CODE file=ai.cpp lines=122-144 cap="ai.cpp — features 후반부" lang=cpp-->
+<p class="small mut"><code>f[]</code> 에 채워 넣는 순서가 곧 <code>weights[]</code> 의 순서이자 JS가 읽는 순서다. 이 8칸이 C++·JS·GA·테스트가 공유하는 세 번째 계약이다.</p>
+
+<!--SLIDE sec=3 t="점수 한 줄"-->
+<h1><span class="no">{{N}}</span>점수 한 줄</h1>
+<!--CODE file=ai.cpp lines=145-150 cap="ai.cpp — score_of" lang=cpp-->
+<p><code>weights</code> 는 <code>static float[8]</code> 이고, JS가 <code>ai_weights_ptr()</code> 로 주소를 받아 <code>Float32Array</code> 창을 내서 <strong>직접 덮어쓴다</strong>. 복사도, 함수 호출도 없다.</p>
+<div class="dia"><div class="dmem">
+  <div><b>ai_weights_ptr() → 1216</b><span>선형 메모리 오프셋</span></div>
+  <div><b>new Float32Array(mem, 1216, 8)</b><span>JS 쪽 창</span></div>
+  <div><b>w.set([0.073, 0.065, −0.478, …])</b><span>다음 ai_plan() 부터 즉시 반영</span></div>
+</div></div>
+<p class="small mut">재컴파일 없이 AI의 성격이 바뀐다. 7부의 브라우저 라이브 학습이 매 세대 이 8칸을 갈아 끼운다.</p>
+
+<!--SLIDE sec=3 t="숫자를 눈으로 보기"-->
+<h1><span class="no">{{N}}</span>숫자를 눈으로 보기</h1>
+<p>AI가 지금 판을 어떤 숫자로 보고 있는지 실시간으로 읽어 보자. 오른쪽 값이 특징, 그 옆이 학습된 가중치다.</p>
+<div class="demoWrap" data-demo="features"></div>
+<p class="demohint">판이 지저분해지면 <code>구멍</code>·<code>행 전이</code>·<code>열 전이</code>가 함께 오르는 걸 볼 수 있다. 점수는 <code>ai_eval_here()</code> 가 매 프레임 계산한다.</p>
+
+<!--SLIDE sec=3 t="손으로 검산하기"-->
+<h1><span class="no">{{N}}</span>손으로 검산하기</h1>
+<p>특징 함수는 AI의 감각기관이다. 여기가 틀리면 그 위의 모든 게 무의미하다. 그래서 <strong>손으로 계산할 수 있는 판</strong>부터 검사한다.</p>
+<div class="scroll"><table>
+<tr><th>판</th><th>agg</th><th>holes</th><th>bump</th><th>wells</th><th>rowt</th><th>colt</th></tr>
+<tr><td>완전히 빈 판</td><td>0</td><td>0</td><td>0</td><td>0</td><td>48</td><td>10</td></tr>
+<tr><td>왼쪽 아래 한 칸</td><td>1</td><td>0</td><td>1</td><td>0</td><td>48</td><td>10</td></tr>
+<tr><td>바닥 위 한 칸을 덮음</td><td>2</td><td>1</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>깊이 4 우물</td><td>—</td><td>0</td><td>—</td><td>10</td><td>—</td><td>—</td></tr>
+</table></div>
+<p>그다음 무작위 판 200개를 만들어 <strong>C++ 결과와 JS로 다시 쓴 같은 정의</strong>를 비교한다. 서로 다른 언어로 두 번 쓰고 맞춰 보는 것 — 가장 싼 형식 검증이다.</p>
+<div class="tip"><b>실제 결과</b><code>무작위 판 200개 × 특징 6종이 JS 재구현과 일치 (0 불일치)</code> — 11부에 전문이 실려 있다.</div>
+
+<!--SLIDE sec=3 t="이 8개가 놓치는 것"-->
+<h1><span class="no">{{N}}</span>이 8개가 놓치는 것</h1>
+<div class="cols">
+  <div class="card"><h4>다음 조각</h4><p class="small">NEXT 큐 5개를 전혀 안 본다. “I가 곧 온다”를 모르니 우물을 안심하고 팔 수 없다.</p></div>
+  <div class="card"><h4>T스핀 자리</h4><p class="small">T 슬롯이 만들어졌는지 알 방법이 없다. 그래서 T스핀은 우연히만 난다.</p></div>
+  <div class="card"><h4>상대의 판</h4><p class="small">대전 중에도 자기 판만 본다. 상대가 죽기 직전인지 모른다.</p></div>
+  <div class="card"><h4>대기 중인 가비지</h4><p class="small"><code>ST_PENDING</code> 을 특징에 넣지 않았다. 곧 8줄이 솟는데도 태연히 높게 쌓는다.</p></div>
+</div>
+<p>이건 결함이 아니라 <strong>이 덱의 범위</strong>다. 특징을 하나 더 넣는 건 <code>F_COUNT</code> 를 9로 바꾸고 <code>features()</code> 에 세 줄을 더하는 일이며, GA는 아무것도 고치지 않아도 새 차원을 학습한다. 12부에서 그 확장을 다룬다.</p>
