@@ -59,7 +59,7 @@ class WSConn:
         self._wlock = asyncio.Lock()
         self._closed = False
 
-    # ── 읽기 ──────────────────────────────────────────────────────────
+    # ── 읽기 ──
     async def _read_frame(self):
         h = await self.reader.readexactly(2)
         if h[0] & 0x70:
@@ -128,7 +128,7 @@ class WSConn:
         except (ValueError, UnicodeDecodeError):
             return {}
 
-    # ── 쓰기 ──────────────────────────────────────────────────────────
+    # ── 쓰기 ──
     async def send(self, op, data: bytes):
         if self._closed:
             return
@@ -157,7 +157,7 @@ class WSConn:
             pass
 
 
-# ── 핸드셰이크 ────────────────────────────────────────────────────────
+# ── 핸드셰이크 ──
 def _parse_head(raw: bytes):
     lines = raw.decode('latin1').split('\r\n')
     parts = lines[0].split(' ')

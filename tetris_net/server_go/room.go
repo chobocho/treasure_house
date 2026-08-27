@@ -28,7 +28,7 @@ func DefaultCfg() Cfg {
 	return Cfg{Max: 8, PerPeer: 2, Target: "random", Delay: 900, Cap: 8, HitTTL: 8000}
 }
 
-// ── 나가는 메시지 ────────────────────────────────────────────────────
+// ── 나가는 메시지 ──
 type SeatInfo struct {
 	I     int    `json:"i"`
 	Pid   int    `json:"pid"`
@@ -82,7 +82,7 @@ type Out struct {
 	M  any
 }
 
-// ── 들어오는 메시지 ──────────────────────────────────────────────────
+// ── 들어오는 메시지 ──
 // 한 구조체로 전부 받는다. 종류별 구조체를 두면 두 번 파싱해야 한다.
 type In struct {
 	T    string `json:"t"`
@@ -143,7 +143,7 @@ func (r *Room) Rng() uint32 {
 	return x
 }
 
-// ── 조회 헬퍼 ────────────────────────────────────────────────────────
+// ── 조회 헬퍼 ──
 func (r *Room) Host() int {
 	h := 0
 	for p := range r.peers {
@@ -198,7 +198,7 @@ func errOut(pid int, code string) []Out { return []Out{{To: pid, M: MsgErr{T: "e
 func (r *Room) Phase() string { return r.phase }
 func (r *Room) Empty() bool   { return len(r.peers) == 0 }
 
-// ── 진입점 ──────────────────────────────────────────────────────────
+// ── 진입점 ──
 func (r *Room) Handle(pid int, raw json.RawMessage, now int64) []Out {
 	var m In
 	if len(raw) > 0 {
@@ -315,7 +315,7 @@ func (r *Room) onStart(pid int) []Out {
 	return []Out{{To: 0, M: MsgStart{T: "start", Seed: r.RoundSeed, Seats: r.seatList()}}}
 }
 
-// ── 공격 라우팅 — 이 게임에서 서버가 하는 유일한 판단 ───────────────────
+// ── 공격 라우팅 — 이 게임에서 서버가 하는 유일한 판단 ──
 func (r *Room) pickTarget(from int, now int64) int {
 	cand := []int{}
 	for _, j := range r.aliveSeats() {

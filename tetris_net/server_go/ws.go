@@ -104,7 +104,7 @@ func Upgrade(w http.ResponseWriter, r *http.Request) (*Conn, error) {
 	return newConn(c, brw.Reader), nil
 }
 
-// ── 프레임 쓰기 ──────────────────────────────────────────────────────
+// ── 프레임 쓰기 ──
 // 머리와 본문을 **한 번에** 쓴다. 두 번 나눠 쓰면 작은 프레임이 두 개의 TCP 세그먼트로
 // 쪼개져 나가고, 상대가 헤더만 읽고 멈추는 상황이 생긴다(테스트가 이걸 잡는다).
 func writeRaw(w io.Writer, fin bool, op byte, p []byte, mask bool) error {
@@ -170,7 +170,7 @@ func (c *Conn) Close() error {
 	return c.c.Close()
 }
 
-// ── 프레임 읽기 ──────────────────────────────────────────────────────
+// ── 프레임 읽기 ──
 func (c *Conn) readFrame() (fin bool, op byte, payload []byte, err error) {
 	var h [2]byte
 	if _, err = io.ReadFull(c.br, h[:]); err != nil {
@@ -286,7 +286,7 @@ func (c *Conn) ReadMessage() (byte, []byte, error) {
 	}
 }
 
-// ── 클라이언트 쪽 ────────────────────────────────────────────────────
+// ── 클라이언트 쪽 ──
 // 서버만 있으면 테스트를 못 쓴다. Dial 은 40줄이면 되고, 운영 도구로도 쓸모가 있다.
 // Client 가 켜지면 방향이 뒤집힌다 — 보낼 때 마스킹하고, 받을 때 마스킹을 요구하지 않는다.
 func Dial(rawurl string) (*Conn, error) {

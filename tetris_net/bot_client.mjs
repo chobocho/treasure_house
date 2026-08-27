@@ -39,7 +39,7 @@ function args(argv) {
 const A = args(process.argv);
 const log = (...x) => { if (!A.quiet) console.log(...x); };
 
-// ── PC 1대 ───────────────────────────────────────────────────────────
+// ── PC 1대 ──
 class Pc {
   constructor(n, opt) {
     this.n = n; this.opt = opt;
@@ -64,7 +64,7 @@ class Pc {
   }
 }
 
-// ── 한 판 ────────────────────────────────────────────────────────────
+// ── 한 판 ──
 async function run() {
   const t0 = Date.now();
   const pcs = [];
@@ -201,11 +201,13 @@ async function run() {
   const tx = pcs.reduce((a, p) => a + p.tx, 0), rx = pcs.reduce((a, p) => a + p.rx, 0);
   const txM = pcs.reduce((a, p) => a + p.txMsg, 0), rxM = pcs.reduce((a, p) => a + p.rxMsg, 0);
 
-  console.log(`\n── 결과 (${secs.toFixed(1)}초, ${frame}프레임) ──`);
-  console.log('등수  좌석  PC  난이도    줄   조각   맞은줄     점수');
+  // 표 머리글은 ASCII 로 쓴다. 한글은 고정폭 폰트에 글리프가 없어 비례폭으로
+  // 대체되는 환경이 있고, 그러면 아래 숫자 열과 눈금이 어긋난다.
+  console.log(`\n-- result (${secs.toFixed(1)}s, ${frame} frames) --`);
+  console.log('place  seat  pc  level     lines  pieces   recv     score');
   for (const r of rows) {
-    console.log(`${String(r.place).padStart(3)}   ${String(r.seat).padStart(3)}  ${r.pc}   ${r.lv.padEnd(7)}` +
-      `${String(r.lines).padStart(5)}${String(r.pieces).padStart(7)}${String(r.recv).padStart(9)}${String(r.score).padStart(9)}`);
+    console.log(`${String(r.place).padStart(4)}   ${String(r.seat).padStart(4)}  ${r.pc}   ${r.lv.padEnd(8)}` +
+      `${String(r.lines).padStart(5)}${String(r.pieces).padStart(8)}${String(r.recv).padStart(7)}${String(r.score).padStart(10)}`);
   }
   console.log(`\n공격 ${world.atkCount}회 → 가비지 배달 ${world.grbCount}회`);
   console.log(`보냄 ${txM}개 / ${(tx / 1024).toFixed(1)} KB   받음 ${rxM}개 / ${(rx / 1024).toFixed(1)} KB`);

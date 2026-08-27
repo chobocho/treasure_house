@@ -109,10 +109,10 @@ func TestCreateJoinAndPlay(t *testing.T) {
 	b.want("joined")
 
 	// PC 1대가 2석씩 — "PC 2대로 4인"
-	a.send(`{"t":"seat","i":-1,"kind":"human","name":"보라"}`)
-	a.send(`{"t":"seat","i":-1,"kind":"ai","name":"봇A","lv":"hard"}`)
-	b.send(`{"t":"seat","i":-1,"kind":"human","name":"다온"}`)
-	b.send(`{"t":"seat","i":-1,"kind":"ai","name":"봇B","lv":"hard"}`)
+	a.send(`{"t":"seat","i":0,"kind":"human","name":"보라"}`)
+	a.send(`{"t":"seat","i":1,"kind":"ai","name":"봇A","lv":"hard"}`)
+	b.send(`{"t":"seat","i":2,"kind":"human","name":"다온"}`)
+	b.send(`{"t":"seat","i":3,"kind":"ai","name":"봇B","lv":"hard"}`)
 	a.send(`{"t":"ready","v":true}`)
 	b.send(`{"t":"ready","v":true}`)
 

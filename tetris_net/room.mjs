@@ -38,7 +38,7 @@ export class Room {
     return x;
   }
 
-  // ── 조회 헬퍼 ──────────────────────────────────────────────────────
+  // ── 조회 헬퍼 ──
   host() { let h = 0; for (const p of this.peers) if (!h || p < h) h = p; return h; }
   occupied() { const o = []; for (let i = 0; i < this.seats.length; i++) if (this.seats[i]) o.push(i); return o; }
   aliveSeats() { return this.occupied().filter((i) => this.seats[i].alive); }
@@ -54,7 +54,7 @@ export class Room {
   roomMsg()  { return [{ to: 0, m: { t: 'room', host: this.host(), seats: this.seatList() } }]; }
   err(pid, code) { return [{ to: pid, m: { t: 'err', code } }]; }
 
-  // ── 진입점 ────────────────────────────────────────────────────────
+  // ── 진입점 ──
   handle(pid, msg, now) {
     const t = msg && msg.t;
     if (t === 'bye') return this.onBye(pid, now);
@@ -123,7 +123,7 @@ export class Room {
     return [{ to: 0, m: { t: 'start', seed: this.roundSeed, seats: this.seatList() } }];
   }
 
-  // ── 공격 라우팅 — 이 게임에서 서버가 하는 유일한 판단 ────────────────
+  // ── 공격 라우팅 — 이 게임에서 서버가 하는 유일한 판단 ──
   pickTarget(from, now) {
     const cand = this.aliveSeats().filter((j) => j !== from);
     if (!cand.length) return -1;

@@ -24,7 +24,7 @@ function fillRow(y, except = -1, color = 1) {
 // (rot, x) 를 ai_apply 의 packed 정수로 접는다 — 2편 ai.cpp 의 인코딩 그대로.
 const packed = (rot, x) => (rot << 4) | (x + 3);
 
-// ── 1. RLE 스냅샷 ────────────────────────────────────────────────────
+// ── 1. RLE 스냅샷 ──
 {
   e.ng_init(1); core.refresh(); clearBoard(); e.ts_set_piece(0); core.refresh();
   const n = e.ng_snapshot();
@@ -47,7 +47,7 @@ const packed = (rot, x) => (rot << 4) | (x + 3);
   eqi('맨 아랫줄 가비지 색', GARBAGE, out[(core.VIS - 1) * core.W + 0]);
 }
 
-// ── 2. 높이 ──────────────────────────────────────────────────────────
+// ── 2. 높이 ──
 {
   e.ng_init(1); core.refresh(); clearBoard(); e.ts_set_piece(0); core.refresh();
   eqi('빈 판 높이', 0, e.ng_height());
@@ -55,7 +55,7 @@ const packed = (rot, x) => (rot << 4) | (x + 3);
   eqi('가비지 3줄 뒤 높이', 3, e.ng_height());
 }
 
-// ── 3. 대기열 ────────────────────────────────────────────────────────
+// ── 3. 대기열 ──
 {
   e.ng_init(1); core.refresh(); clearBoard();
   e.ng_queue(4, 2, 7); e.ng_queue(3, 5, 1); core.refresh();
@@ -75,7 +75,7 @@ function setupTetris() {
   e.ts_set_piece(0); core.refresh();          // I 조각
 }
 
-// ── 4. 상쇄 ──────────────────────────────────────────────────────────
+// ── 4. 상쇄 ──
 {
   e.ng_init(1); core.refresh();
   setupTetris();
@@ -97,7 +97,7 @@ function setupTetris() {
   eqi('take 뒤에는 0 으로 비워진다', 0, e.ng_take_attack());
 }
 
-// ── 5. 솟아오름 ──────────────────────────────────────────────────────
+// ── 5. 솟아오름 ──
 {
   e.ng_init(1); core.refresh(); clearBoard();
   e.ng_queue(2, 3, 5);
@@ -112,7 +112,7 @@ function setupTetris() {
   eqi('막타 귀속', 3, e.ng_last_source());
 }
 
-// ── 6. 유예(delay) — 계속 지워도 시간이 지나면 올라온다 ─────────────────
+// ── 6. 유예(delay) — 계속 지워도 시간이 지나면 올라온다 ──
 {
   e.ng_init(1); core.refresh();
   e.ng_set_delay(100);
@@ -141,7 +141,7 @@ function setupTetris() {
   eqi('대기는 그대로', 2, e.ng_pending());
 }
 
-// ── 7. 한 락당 상한(cap) ─────────────────────────────────────────────
+// ── 7. 한 락당 상한(cap) ──
 {
   e.ng_init(1); core.refresh(); clearBoard();
   e.ng_queue(20, 1, 3);
@@ -161,7 +161,7 @@ function setupTetris() {
   eqi('cap 을 3으로 바꾸면 3줄', 3, V().stats[ST.GARBAGE_RECV]);
 }
 
-// ── 8. 여러 덩어리는 각자의 구멍을 유지한다 ────────────────────────────
+// ── 8. 여러 덩어리는 각자의 구멍을 유지한다 ──
 {
   e.ng_init(1); core.refresh(); clearBoard();
   e.ng_set_cap(8);
@@ -176,7 +176,7 @@ function setupTetris() {
   eqi('윗줄 구멍 = 먼저 덩어리', 0, b[idx(0, core.H - 2)]);
 }
 
-// ── 9. ng_press / ng_update 가 락을 놓치지 않는가 ──────────────────────
+// ── 9. ng_press / ng_update 가 락을 놓치지 않는가 ──
 {
   e.ng_init(1); core.refresh(); clearBoard();
   e.ng_queue(1, 6, 2);
@@ -194,7 +194,7 @@ function setupTetris() {
   ok('ng_update 의 중력 락도 잡는다', V().stats[ST.GARBAGE_RECV] === 1, `guard=${guard}`);
 }
 
-// ── 10. 상태 12칸 ────────────────────────────────────────────────────
+// ── 10. 상태 12칸 ──
 {
   e.ng_init(1); core.refresh(); clearBoard(); e.ts_set_piece(2); core.refresh();
   e.ts_garbage(5, 3); core.refresh();
@@ -205,7 +205,7 @@ function setupTetris() {
   eqi('s[11] hold 없음', -1, s[S.HOLD]);
 }
 
-// ── 11. 통합 — 두 AI 인스턴스를 room 엔진에 붙여 한 판 끝까지 ────────────
+// ── 11. 통합 — 두 AI 인스턴스를 room 엔진에 붙여 한 판 끝까지 ──
 {
   const A = await loadNet(777), B = await loadNet(778);
   const W = new Float32Array([1.0, -0.51, -0.36, -0.18, -0.18, -0.32, -0.93, -0.35]);

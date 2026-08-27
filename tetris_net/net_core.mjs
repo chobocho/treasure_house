@@ -56,7 +56,7 @@ function makeViews(core) {
   return core.views;
 }
 
-// ── 프로토콜 조각 ─────────────────────────────────────────────────────
+// ── 프로토콜 조각 ──
 // 보드 스냅샷: wasm 이 만든 RLE 바이트열을 base64 로. protocol.md §6.
 export function snapshot(core) {
   const n = core.e.ng_snapshot();

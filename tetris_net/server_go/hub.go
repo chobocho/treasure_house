@@ -153,7 +153,7 @@ func (h *Hub) Stats() []map[string]any {
 	return out
 }
 
-// ── 방 고루틴 ────────────────────────────────────────────────────────
+// ── 방 고루틴 ──
 func (rh *RoomHost) loop() {
 	for {
 		select {
@@ -193,7 +193,7 @@ func (rh *RoomHost) dispatch(outs []Out) {
 
 func (rh *RoomHost) now() int64 { return time.Since(rh.t0).Milliseconds() }
 
-// ── 연결 하나의 일생 ─────────────────────────────────────────────────
+// ── 연결 하나의 일생 ──
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	c, err := Upgrade(w, r)
 	if err != nil {
