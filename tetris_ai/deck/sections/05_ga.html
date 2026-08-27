@@ -1,0 +1,139 @@
+<!--SLIDE sec=5 t="왜 경사하강법이 안 되는가"-->
+<h1><span class="no">{{N}}</span>왜 경사하강법이 안 되는가</h1>
+<p>우리가 최적화하려는 함수는 이렇게 생겼다.</p>
+<p class="big">f(w) = 가중치 w 로 400조각을 두면 몇 줄을 보내는가</p>
+<div class="cols">
+  <div class="card"><h4>미분이 안 된다</h4><p class="small"><code>argmax</code> 가 들어 있다. 가중치를 아주 조금 바꾸면 어느 순간 <em>다른 자리</em>가 1등이 되고 결과가 계단처럼 튄다. 기울기가 없다.</p></div>
+  <div class="card"><h4>노이즈가 있다</h4><p class="small">같은 <code>w</code> 라도 시드가 바뀌면 결과가 다르다. 수치 미분을 해도 잡음에 묻힌다.</p></div>
+  <div class="card"><h4>비싸다</h4><p class="small">한 번 평가에 40 ms. 8차원 수치 기울기 한 번이 16번의 평가 = 0.6초다.</p></div>
+  <div class="card a"><h4>그래서 GA</h4><p class="small">GA는 <code>f</code> 를 <strong>넣으면 숫자가 나오는 검은 상자</strong>로만 다룬다. 미분도, 연속성도, 볼록성도 요구하지 않는다.</p></div>
+</div>
+<p class="small mut">같은 이유로 CMA-ES·입자군집·베이지안 최적화도 후보다. GA를 고른 건 구현이 80줄이고, 이 문제의 유전자가 “실수 8개”라는 GA에 가장 잘 맞는 모양이기 때문이다.</p>
+
+<!--SLIDE sec=5 t="유전 알고리즘 한 장"-->
+<h1><span class="no">{{N}}</span>유전 알고리즘 한 장</h1>
+<div class="dia">
+  <div class="dbox acc"><div class="dh">1 · 초기 집단 <small>무작위 개체 32명</small></div>
+    <p class="small mut">각 개체 = 실수 8개짜리 유전자. 아무 지식도 없이 시작한다.</p></div>
+  <div class="darrow">↓</div>
+  <div class="dbox"><div class="dh">2 · 평가 <small>fitness(개체) → 숫자</small></div>
+    <p class="small mut">그 가중치로 400조각을 세 판 두게 하고, 보낸 줄 수의 평균을 적합도로 삼는다.</p></div>
+  <div class="darrow">↓</div>
+  <div class="dbox"><div class="dh">3 · 선택 <small>토너먼트 k=3</small></div>
+    <p class="small mut">무작위 3명 중 1등을 부모로. 강할수록 자주 뽑히지만 약해도 기회가 있다.</p></div>
+  <div class="darrow">↓</div>
+  <div class="dbox"><div class="dh">4 · 교차 + 변이 <small>BLX-α, 가우시안</small></div>
+    <p class="small mut">부모 둘을 섞고 흔들어 자식을 만든다. 상위 2명은 그대로 복사(엘리트).</p></div>
+  <div class="darrow">↑ 50세대 반복</div>
+</div>
+
+<!--SLIDE sec=5 t="유전자 = 실수 8개"-->
+<h1><span class="no">{{N}}</span>유전자 = 실수 8개</h1>
+<p>비트 문자열도, 트리도 아니다. 우리 유전자는 <code>weights[8]</code> 그 자체다.</p>
+<div class="codewrap"><div class="codecap">개체 하나 = 이 배열 하나<span>JavaScript · 1줄</span></div><pre class="code js"><code>[<i class="nb">0.0733</i>, <i class="nb">0.0648</i>, <i class="nb">-0.4780</i>, <i class="nb">0.2103</i>, <i class="nb">-0.0090</i>, <i class="nb">-0.3918</i>, <i class="nb">-0.5047</i>, <i class="nb">-0.5563</i>]
+<i class="cm">// 줄수    높이합   구멍     요철     우물     행전이   열전이   착지높이</i></code></pre></div>
+<p>이 8개 숫자를 wasm 선형 메모리의 정해진 32바이트에 써 넣으면 AI의 성격이 즉시 바뀐다. 유전자와 표현형 사이에 <strong>번역이 없다</strong> — GA를 붙이기 가장 좋은 형태다.</p>
+<div class="scroll"><table>
+<tr><th>GA 용어</th><th>여기서는</th></tr>
+<tr><td>유전자 (genome)</td><td>실수 8개 배열</td></tr>
+<tr><td>표현형 (phenotype)</td><td>그 가중치로 두는 AI</td></tr>
+<tr><td>적합도 (fitness)</td><td>400조각 3판에서 보낸 줄 수의 평균</td></tr>
+<tr><td>집단 (population)</td><td>32명</td></tr>
+<tr><td>세대 (generation)</td><td>50번</td></tr>
+</table></div>
+
+<!--SLIDE sec=5 t="길이를 1로 고정하는 이유"-->
+<h1><span class="no">{{N}}</span>길이를 1로 고정하는 이유</h1>
+<p><code>w</code> 와 <code>2w</code> 는 <strong>완전히 같은 AI</strong>다. 점수가 전부 두 배가 되어도 <code>argmax</code> 는 그대로이기 때문이다.</p>
+<div class="codewrap"><div class="codecap">스케일은 정보가 아니다<span>수식 · 2줄</span></div><pre class="code txt"><code>argmax Σ (2wᵢ)·fᵢ  =  argmax 2·Σ wᵢ·fᵢ  =  argmax Σ wᵢ·fᵢ
+→ 크기는 결과에 아무 영향이 없다. 오직 방향만 의미가 있다.</code></pre></div>
+<p>정규화하지 않으면 집단이 “방향은 같은데 길이만 다른” 복제들로 가득 찬다. 탐색 공간의 <strong>차원 하나가 통째로 낭비</strong>되고, 변이의 세기(σ)도 개체마다 제멋대로 달라진다.</p>
+<p>그래서 유전자를 만들 때마다 단위벡터로 되돌린다. 탐색 공간은 8차원 공간이 아니라 <strong>8차원 구의 표면</strong>이다.</p>
+<div class="tip"><b>테스트로 못 박기</b>무작위 생성·교차·변이 <em>모두</em> 결과가 단위벡터인지 검사한다 (11부 T8). 정규화를 한 곳에서만 빼먹어도 학습 그래프가 조용히 망가진다.</div>
+
+<!--SLIDE sec=5 t="적합도 — 무엇을 잘하길 바라는가"-->
+<h1><span class="no">{{N}}</span>적합도 — 무엇을 잘하길 바라는가</h1>
+<p>GA는 우리가 시킨 것을 정확히 잘하게 된다. 그래서 <strong>적합도를 무엇으로 잡느냐가 설계의 90%</strong>다.</p>
+<div class="scroll"><table>
+<tr><th>후보</th><th>문제</th></tr>
+<tr><td>지운 줄 수</td><td>400조각이면 이론상 최대 160줄인데, 웬만한 가중치도 155줄을 넘긴다 → <strong>천장에 닿아 구별이 안 된다</strong></td></tr>
+<tr><td>살아남은 조각 수</td><td>같은 이유로 전원 만점</td></tr>
+<tr><td>점수</td><td>레벨 보정이 섞여 해석이 어렵다</td></tr>
+<tr><td class="mut">보낸 줄 수 (공격)</td><td class="mut">천장이 멀고(이론상 ~200), 대전 덱의 목적과 정확히 일치한다 → <strong>채택</strong></td></tr>
+</table></div>
+<p>6부에서 첫 번째 후보로 실제 학습을 돌려 <em>천장에 닿는 장면</em>을 보고, 목표를 바꿔 다시 돌린다.</p>
+<p class="small mut">노이즈를 줄이려고 시드 3개(1·2·3)의 평균을 쓴다. 시드를 매 세대 바꾸면 “운 좋은 세대”가 살아남아 그래프가 요동치므로 <strong>고정</strong>한다. 대신 과적합 위험이 생기고, 그건 학습에 안 쓴 시드로 검증한다.</p>
+
+<!--SLIDE sec=5 t="선택 — 토너먼트"-->
+<h1><span class="no">{{N}}</span>선택 — 토너먼트</h1>
+<p>무작위로 <code>k=3</code> 명을 뽑아 그중 적합도 1등을 부모로 쓴다. 그게 전부다.</p>
+<div class="cols">
+  <div class="card a"><h4>룰렛 선택 대비 장점</h4><p class="small">적합도의 <em>절대값</em>을 안 본다. 0점이 절반이어도, 값이 100배로 뛰어도 압력이 그대로다. 우리 적합도는 초반에 대부분 0이라 이게 결정적이다.</p></div>
+  <div class="card b"><h4>k 가 압력이다</h4><p class="small">k=1 이면 완전 무작위, k=집단크기면 항상 1등만. k=3 은 “최강이 약 절반의 확률로 뽑히는” 정도의 압력이다.</p></div>
+</div>
+<div class="tip"><b>실측</b>적합도 <code>[0, 1, 2, 100]</code> 인 4명에서 k=3 토너먼트를 400번 돌리면 최강이 <strong>225회</strong> 뽑힌다 (11부 T8).</div>
+
+<!--SLIDE sec=5 t="교차 — BLX-α"-->
+<h1><span class="no">{{N}}</span>교차 — BLX-α</h1>
+<p>균등 교차(성분마다 부모 중 하나를 고름)는 <strong>부모에 없던 값을 만들 수 없다</strong>. 실수 유전자에서는 치명적인 제약이다.</p>
+<p>혼합 교차는 각 성분마다 두 부모 값 사이 구간을 α만큼 <strong>바깥으로 넓혀</strong> 그 안에서 균등하게 뽑는다.</p>
+<div class="codewrap"><div class="codecap">α = 0.5 일 때<span>수식 · 4줄</span></div><pre class="code txt"><code>부모 A의 성분 = -0.2,  부모 B의 성분 = -0.6
+lo = -0.6, hi = -0.2, d = 0.4
+뽑는 구간 = [lo - 0.5d,  hi + 0.5d] = [-0.8, 0.0]
+                └ 부모 바깥 ┘        └ 부모 바깥 ┘</code></pre></div>
+<p>구간의 절반은 부모 사이, 나머지 절반은 부모 바깥이다. 그래서 집단이 한 점으로 수렴하는 걸 늦추면서도 좋은 방향은 유지한다.</p>
+
+<!--SLIDE sec=5 t="변이 — 유일한 탈출구"-->
+<h1><span class="no">{{N}}</span>변이 — 유일한 탈출구</h1>
+<p>각 성분을 확률 <code>p=0.2</code> 로 정규분포 <code>σ=0.2</code> 만큼 흔든다.</p>
+<p>교차만으로는 집단이 이미 가진 값들의 조합 안에 갇힌다. 어떤 성분이 <strong>모든 개체에서 음수</strong>라면 교차로는 절대 양수가 될 수 없다. 변이만이 그 벽을 넘는다.</p>
+<div class="cols">
+  <div class="card"><h4>σ 가 너무 작으면</h4><p class="small">국소 최적에서 못 빠져나온다. 그래프가 일찍 평평해진다.</p></div>
+  <div class="card"><h4>σ 가 너무 크면</h4><p class="small">좋은 유전자가 매번 부서진다. 사실상 무작위 탐색이 된다.</p></div>
+</div>
+<div class="note"><b>이 덱의 실제 사례</b>학습된 가중치에서 <code>F_BUMP</code>(요철)가 <strong>+0.21</strong>, 즉 “울퉁불퉁한 게 좋다”로 나왔다. 상식과 반대다. 초기 집단에서 이 성분이 대부분 음수였으므로, 이 부호는 <strong>변이가 만들어 낸 것</strong>이다. 왜 그게 옳은지는 6부에서.</div>
+
+<!--SLIDE sec=5 t="엘리트 보존"-->
+<h1><span class="no">{{N}}</span>엘리트 보존</h1>
+<p>상위 2명은 교차도 변이도 거치지 않고 다음 세대로 <strong>그대로</strong> 복사한다.</p>
+<p>이게 없으면 세대 최고 기록이 <em>내려갈 수 있다</em>. 어렵게 찾은 좋은 유전자가 변이 한 번에 부서지고 사라지기 때문이다.</p>
+<div class="codewrap"><div class="codecap">엘리트가 있을 때의 보장<span>불변식 · 1줄</span></div><pre class="code txt"><code>best(세대 n+1)  ≥  best(세대 n)     — 적합도가 결정론적이라면 항상 참</code></pre></div>
+<p>우리 적합도는 시드가 고정이라 결정론적이고, 게다가 캐시까지 한다. 그래서 이 부등식은 <strong>테스트로 검증 가능한 성질</strong>이 된다.</p>
+<div class="tip"><b>실측</b>소규모 진화(개체 8, 5세대) 로그: <code>0 → 1 → 31 → 95 → 95</code>. 단조 비감소 (11부 T8).</div>
+
+<!--SLIDE sec=5 t="하이퍼파라미터"-->
+<h1><span class="no">{{N}}</span>하이퍼파라미터</h1>
+<div class="scroll"><table>
+<tr><th>값</th><th>설정</th><th>이유</th></tr>
+<tr><td>집단 크기</td><td>32</td><td>8차원에서 다양성을 유지하는 최소선. 작으면 조기 수렴, 크면 세대당 시간이 비례해 는다</td></tr>
+<tr><td>세대</td><td>50</td><td>실측상 38세대에 최고 기록이 나오고 이후 정체 → 여유를 두고 50</td></tr>
+<tr><td>엘리트</td><td>2</td><td>1이면 사고에 취약, 많으면 다양성이 죽는다</td></tr>
+<tr><td>토너먼트 k</td><td>3</td><td>중간 압력</td></tr>
+<tr><td>교차 α</td><td>0.5</td><td>BLX 표준값</td></tr>
+<tr><td>변이 σ / p</td><td>0.2 / 0.2</td><td>단위벡터 위에서 약 11°의 회전에 해당</td></tr>
+<tr><td>평가 시드</td><td>[1, 2, 3]</td><td>노이즈를 줄이면서 3배 이상 비싸지지 않게</td></tr>
+<tr><td>조각 상한</td><td>400</td><td>한 판 37 ms. 세대당 96판 ≈ 1.2초</td></tr>
+<tr><td>난수 씨앗</td><td>20260827</td><td><strong>고정</strong> — 덱에 실린 로그가 재현 가능해야 한다</td></tr>
+</table></div>
+
+<!--SLIDE sec=5 t="ga_core.mjs — 난수와 유전자"-->
+<h1><span class="no">{{N}}</span>ga_core.mjs — 난수와 유전자</h1>
+<p>GA의 순수한 부분만 모은 파일이다. wasm도 파일 시스템도 건드리지 않는다. 그래서 <strong>Node 트레이너와 브라우저 라이브 학습이 이 파일 하나를 그대로 나눠 쓴다</strong>.</p>
+<!--CODE file=ga_core.mjs lines=1-37 cap="ga_core.mjs — mulberry32 · gauss · 유전자" lang=js-->
+
+<!--SLIDE sec=5 t="ga_core.mjs — 선택·교차·변이"-->
+<h1><span class="no">{{N}}</span>ga_core.mjs — 선택·교차·변이</h1>
+<!--CODE file=ga_core.mjs lines=38-64 cap="ga_core.mjs — tournament · crossover · mutate" lang=js-->
+<p class="small mut">이 덱에 인라인할 때는 각 줄 앞의 <code>export </code> 만 기계적으로 떼어 낸다. 브라우저는 모듈이 아니라 일반 스크립트로 읽어야 하기 때문이고, <strong>함수 본문은 한 글자도 다르지 않다</strong>.</p>
+
+<!--SLIDE sec=5 t="GA가 잘 실패하는 방식"-->
+<h1><span class="no">{{N}}</span>GA가 잘 실패하는 방식</h1>
+<div class="cols">
+  <div class="card"><h4>적합도 천장</h4><p class="small">전원이 만점이면 선택이 무작위와 같아진다. 6부에서 실제로 겪는다.</p></div>
+  <div class="card"><h4>노이즈에 속기</h4><p class="small">운 좋게 높은 점수를 받은 평범한 개체가 엘리트가 되어 자리를 차지한다. 시드를 여러 개 쓰는 이유.</p></div>
+  <div class="card"><h4>시드 과적합</h4><p class="small">시드 3개에만 잘 맞는 가중치. 학습에 안 쓴 시드로 반드시 다시 재야 한다.</p></div>
+  <div class="card"><h4>조기 수렴</h4><p class="small">한 개체의 자손이 집단을 점령. 정규화·토너먼트·변이가 함께 막는다.</p></div>
+  <div class="card"><h4>재현 불가</h4><p class="small"><code>Math.random()</code> 을 쓰면 덱에 실린 로그를 두 번 다시 못 만든다.</p></div>
+  <div class="card"><h4>목표 오해</h4><p class="small">“줄을 많이 지워라”라고 시키면 싱글만 지운다. 대전에서 싱글은 공격 0이다.</p></div>
+</div>
+<p class="small mut">여섯 개 중 넷을 이 덱에서 실제로 밟았다. 다음 부에서 그 흔적을 그대로 보여 준다.</p>

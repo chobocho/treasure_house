@@ -83,6 +83,8 @@
 - 🟦 **[Scheme Tetris.md](./Scheme%20Tetris.md)** — λ Scheme으로 만드는 테트리스! 🕹️
 - 🌐 **[scheme_tetris.html](./scheme_tetris.html)** — 🧩 Scheme 테트리스 웹 데모 ✨
 - 🌙 **[lua_tetris.html](./lua_tetris.html)** — 🎲 Lua로 만든 테트리스 🟥
+- 🧱 **[C++_WASM_테트리스_만들기.html](./C%2B%2B_WASM_%ED%85%8C%ED%8A%B8%EB%A6%AC%EC%8A%A4_%EB%A7%8C%EB%93%A4%EA%B8%B0.html)** — ⚙️ 표준 라이브러리 없이 clang으로 wasm 빌드, SRS 월킥·7-bag·락딜레이·T스핀까지 구현한 7KB 코어와 라이브 데모, 슬라이드 152장 🕹️
+- 🧬 **[C++_WASM_테트리스_AI_대전.html](./C%2B%2B_WASM_%ED%85%8C%ED%8A%B8%EB%A6%AC%EC%8A%A4_AI_%EB%8C%80%EC%A0%84.html)** — 🤖 1편 코어에 보드 평가 8특징·1수 탐색 AI를 얹고 가중치를 유전 알고리즘으로 실제 학습(50세대 45초, 공격량 12.8→127.3). wasm 인스턴스 둘이 가비지를 주고받는 1:1 대전까지, 슬라이드 186장. `tetris_ai/` 전체 소스가 빠짐없이 실려 있고 130개 검사를 통과합니다 ⚔️
 
 ### ♟️ 보드게임 & 전술 🎲
 - ♛ **[체스_전술집.html](./체스_전술집.html)** — ♚ 체스 전술의 정수 🏆
