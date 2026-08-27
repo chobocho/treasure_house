@@ -670,10 +670,10 @@ class BattleView {
 // 난이도 = (학습 세대, 생각 시간, 손 속도, 실수 확률) 네 개의 조합.
 // 규칙을 봐주는 대신 "덜 배웠고, 느리고, 가끔 틀린다"로 약하게 만든다.
 const LEVELS = {
-  easy:   { label: '쉬움 (1세대)',   thinkMs: 520, moveMs: 110, blunder: 0.22 },
-  normal: { label: '보통 (5세대)',   thinkMs: 380, moveMs: 80,  blunder: 0.10 },
-  hard:   { label: '어려움 (15세대)', thinkMs: 260, moveMs: 55,  blunder: 0.03 },
-  max:    { label: '최종 (50세대)',   thinkMs: 150, moveMs: 32,  blunder: 0 },
+  easy:   { thinkMs: 520, moveMs: 110, blunder: 0.22, label: '쉬움 (1세대)' },
+  normal: { thinkMs: 380, moveMs: 80,  blunder: 0.10, label: '보통 (5세대)' },
+  hard:   { thinkMs: 260, moveMs: 55,  blunder: 0.03, label: '어려움 (15세대)' },
+  max:    { thinkMs: 150, moveMs: 32,  blunder: 0,    label: '최종 (50세대)' },
 };
 function levelOpts(key) {
   const L = LEVELS[key] || LEVELS.hard;
