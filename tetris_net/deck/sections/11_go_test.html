@@ -1,0 +1,97 @@
+<!--SLIDE sec=11 t="Go 테스트 세 층"-->
+<h1><span class="no">{{N}}</span>Go 테스트 세 층</h1>
+<div class="scroll"><table>
+<tr><th>파일</th><th>보는 것</th><th>네트워크</th><th>검사</th></tr>
+<tr><td><code>ws_test.go</code></td><td>프레임 코덱 — 바이트 배열 문제</td><td><code>net.Pipe()</code> 만</td><td>9개</td></tr>
+<tr><td><code>room_test.go</code></td><td>게임 규칙 — 골든 벡터 44스텝</td><td>없음</td><td>3개(서브테스트 10)</td></tr>
+<tr><td><code>hub_test.go</code></td><td>둘을 붙였을 때 — 진짜 소켓, 진짜 한 판</td><td><code>httptest.Server</code></td><td>5개</td></tr>
+</table></div>
+<p>층을 나눈 이유는 <strong>실패했을 때 어디를 볼지 바로 알기 위해서</strong>다. 통합 테스트만 있으면 "8인 대전이 안 된다"는 정보밖에 안 남는다.</p>
+
+<!--SLIDE sec=11 t="net.Pipe 로 프레임을 시험한다"-->
+<h1><span class="no">{{N}}</span>net.Pipe 로 프레임을 시험한다</h1>
+<!--CODE file=server_go/ws_test.go lines=1-34 cap="ws_test.go — RFC 예제와 파이프 헬퍼"-->
+<div class="note"><b>마감을 거는 이유</b><code>net.Pipe</code> 는 버퍼가 없어 한쪽이 멈추면 반대쪽도 영원히 멈춘다. 구현이 덜 됐을 때 <code>go test</code> 가 <strong>매달리는 대신 실패</strong>하게 하려면 마감이 필요하다 — 실제로 스텁 상태에서 2분 타임아웃을 맞고 나서 넣었다.</div>
+
+<!--SLIDE sec=11 t="마스킹과 조각남"-->
+<h1><span class="no">{{N}}</span>마스킹과 조각남</h1>
+<!--CODE file=server_go/ws_test.go lines=35-74 cap="ws_test.go — 마스킹 · 거절 · 이어붙이기"-->
+<p class="small mut"><code>WriteFrame(cli, …, true)</code> — 테스트가 "클라이언트인 척" 마스킹해 보낸다. 서버 코드와 <strong>같은 함수</strong>를 쓰므로 인코더와 디코더가 함께 검증된다.</p>
+
+<!--SLIDE sec=11 t="핑·길이·닫기"-->
+<h1><span class="no">{{N}}</span>핑·길이·닫기</h1>
+<!--CODE file=server_go/ws_test.go lines=75-117 cap="ws_test.go — 자동 퐁 · 길이 3갈래 · 닫기"-->
+<p><code>TestLengthEncoding</code> 이 도는 값은 <code>0 · 125 · 126 · 65535 · 65536</code> — 헤더가 2·2·4·4·10바이트로 바뀌는 <strong>경계 바로 양쪽</strong>이다. 경계값만 고르면 5개로 3갈래를 다 덮는다.</p>
+
+<!--SLIDE sec=11 t="서버는 마스킹하지 않는다"-->
+<h1><span class="no">{{N}}</span>서버는 마스킹하지 않는다</h1>
+<!--CODE file=server_go/ws_test.go lines=118-139 cap="ws_test.go — 무마스킹 확인 · 상한"-->
+<p class="small mut">이 테스트가 "머리와 본문을 한 번에 쓴다"를 강제한다. 나눠 쓰면 <code>cli.Read</code> 가 헤더 2바이트만 받고 <code>hello</code> 를 못 찾는다 — <strong>테스트가 구현 방식을 못 박은 드문 경우</strong>이고, 여기서는 그게 옳다.</p>
+
+<!--SLIDE sec=11 t="골든 벡터 하니스 — 자료형"-->
+<h1><span class="no">{{N}}</span>골든 벡터 하니스 — 자료형</h1>
+<!--CODE file=server_go/room_test.go lines=1-36 cap="room_test.go — 벡터 JSON 을 받는 타입"-->
+<p class="small mut"><code>M json.RawMessage</code> 로 두는 게 요령이다. 메시지 내용을 Go 타입으로 풀지 않고 <strong>바이트 그대로</strong> 들고 있다가 <code>Room.Handle</code> 에 넘긴다 — 하니스가 프로토콜을 두 번 해석하지 않는다.</p>
+
+<!--SLIDE sec=11 t="키 순서까지 맞출 필요는 없다"-->
+<h1><span class="no">{{N}}</span>키 순서까지 맞출 필요는 없다</h1>
+<!--CODE file=server_go/room_test.go lines=37-57 cap="room_test.go — 정규화와 벡터 읽기"-->
+<pre class="code txt"><code>  Go     구조체 필드 선언 순서대로 나온다
+  파이썬 딕셔너리 삽입 순서
+  JS     객체 리터럴 순서
+
+  셋을 억지로 맞추는 건 <b>규격이 아니라 우연</b>을 고정하는 일이다.
+  그래서 세 하니스 모두 양쪽을 값으로 되돌린 뒤 깊은 비교를 한다.</code></pre>
+
+<!--SLIDE sec=11 t="벡터를 도는 고리"-->
+<h1><span class="no">{{N}}</span>벡터를 도는 고리</h1>
+<!--CODE file=server_go/room_test.go lines=58-101 cap="room_test.go — TestGoldenVectors"-->
+<p class="small mut">실패 메시지에 <code>c.Why</code> 를 그대로 끼워 넣는다. <code>#3(무작위 모드의 난수 소비 순서 …): 출력 개수 기대 1, 실제 0</code> — <strong>무엇이 깨졌는지를 표가 직접 말해 준다.</strong></p>
+
+<!--SLIDE sec=11 t="벡터가 다루지 않는 두 가지"-->
+<h1><span class="no">{{N}}</span>벡터가 다루지 않는 두 가지</h1>
+<!--CODE file=server_go/room_test.go lines=102-139 cap="room_test.go — 난수열과 최대 구성"-->
+<div class="cols">
+  <div class="card a"><h4>난수열 그 자체</h4><p>벡터는 <em>결과</em>만 본다. 난수열이 통째로 틀렸는데 우연히 같은 타겟이 나올 수도 있다. 앞 5개를 직접 박아 둔다.</p></div>
+  <div class="card a"><h4>PC 4대 × 2석</h4><p>요구사항 그대로의 <strong>최대 구성</strong>. 좌석 8석이 <code>1,1,2,2,3,3,4,4</code> 로 배분되는지, 9번째 요청이 막히는지.</p></div>
+</div>
+
+<!--SLIDE sec=11 t="통합 테스트 — 진짜 소켓"-->
+<h1><span class="no">{{N}}</span>통합 테스트 — 진짜 소켓</h1>
+<!--CODE file=server_go/hub_test.go lines=1-19 cap="hub_test.go — 머리말"-->
+<!--CODE file=server_go/hub_test.go lines=20-47 cap="hub_test.go — 접속 헬퍼"-->
+<p class="small mut">받은 메시지를 채널에 쌓아 두는 고루틴 하나. <code>Dial</code> 이 있어서 <strong>Go 만으로</strong> 클라이언트 역할이 된다 — 8부에서 40줄을 더 쓴 값을 여기서 받는다.</p>
+
+<!--SLIDE sec=11 t="원하는 메시지를 기다린다"-->
+<h1><span class="no">{{N}}</span>원하는 메시지를 기다린다</h1>
+<!--CODE file=server_go/hub_test.go lines=48-83 cap="hub_test.go — send · want · 서버 띄우기"-->
+<div class="note"><b>want() 가 흘려보내는 이유</b>브로드캐스트가 섞여 온다. <code>start</code> 를 기다리는 동안 <code>room</code> 이 세 개 지나갈 수 있다. "다음 메시지가 X 여야 한다"로 쓰면 <strong>순서에 취약한 테스트</strong>가 되고, 무관한 변경에도 깨진다.</div>
+
+<!--SLIDE sec=11 t="버전 불일치"-->
+<h1><span class="no">{{N}}</span>버전 불일치</h1>
+<!--CODE file=server_go/hub_test.go lines=84-92 cap="hub_test.go — TestHelloVersion"-->
+<p>아홉 줄짜리 테스트가 <strong>두 가지</strong>를 확인한다. 거절이 <code>err ver</code> 로 나가는가, 그리고 <strong>그 메시지가 실제로 소켓에 닿는가</strong>. 두 번째가 <code>finish()</code> 를 만들게 한 테스트다.</p>
+
+<!--SLIDE sec=11 t="PC 2대 × 2석 = 4인 대전"-->
+<h1><span class="no">{{N}}</span>PC 2대 × 2석 = 4인 대전</h1>
+<!--CODE file=server_go/hub_test.go lines=93-130 cap="hub_test.go — 방 만들고 좌석 채우기"-->
+<div class="note"><b>여기서도 경합이 났다</b>처음엔 "좌석 4석이 찬 <code>room</code>"만 기다렸다. 그런데 4석이 차는 시점은 <code>ready</code> 보다 <strong>앞</strong>이라, 곧바로 <code>start</code> 를 누르면 <code>err ready</code> 를 받는다. 조건을 "4석 + 사람 좌석 전부 준비"로 고쳤다 — <strong>테스트의 버그였지 서버의 버그가 아니었다.</strong></div>
+
+<!--SLIDE sec=11 t="같은 시드, 같은 가비지"-->
+<h1><span class="no">{{N}}</span>같은 시드, 같은 가비지</h1>
+<!--CODE file=server_go/hub_test.go lines=131-169 cap="hub_test.go — start 와 grb 확인"-->
+<p class="small mut">두 PC 가 받은 <code>seed</code> 가 같은지, 두 PC 가 받은 <code>grb</code> 의 <code>hole</code> 이 같은지를 본다. 이 둘이 <strong>"모두가 같은 판을 본다"의 전부</strong>다.</p>
+
+<!--SLIDE sec=11 t="없는 방과 왕복 지연"-->
+<h1><span class="no">{{N}}</span>없는 방과 왕복 지연</h1>
+<!--CODE file=server_go/hub_test.go lines=170-192 cap="hub_test.go — nosuch · ping/pong"-->
+
+<!--SLIDE sec=11 t="PC 가 사라지면"-->
+<h1><span class="no">{{N}}</span>PC 가 사라지면</h1>
+<!--CODE file=server_go/hub_test.go lines=193-219 cap="hub_test.go — TestPeerDropKillsSeats"-->
+<p><code>b.c.Close()</code> — 소켓을 그냥 닫는다. 인사도 없다. 그래도 <code>ko</code> 와 <code>end</code> 가 정확히 나온다. <strong>실전에서 가장 흔한 이탈 방식</strong>(와이파이 끊김, 브라우저 탭 닫기)이 바로 이것이다.</p>
+
+<!--SLIDE sec=11 t="실제 출력"-->
+<h1><span class="no">{{N}}</span>실제 출력</h1>
+<!--RUN file=logs/go_test.log cap="go test -count=1 -v ./..."-->
+<p class="small mut"><code>=== RUN</code> 줄만 지웠다. 나머지는 그대로다.</p>

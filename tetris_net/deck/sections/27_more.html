@@ -1,0 +1,72 @@
+<!--SLIDE sec=27 t="지금 상태 — 무엇이 되고 무엇이 안 되나"-->
+<h1><span class="no">{{N}}</span>지금 상태 — 무엇이 되고 무엇이 안 되나</h1>
+<div class="cols">
+  <div class="card a"><h4>되는 것</h4><p>1인용 · 한 PC 2인 · PC 1~8대 최대 8인 · AI 로 빈 자리 채우기 · 타겟팅 4종 · 관전 · 재접속(새로 들어가기) · 서버 2종 · TLS 뒤에 두기</p></div>
+  <div class="card no"><h4>안 되는 것</h4><p>끊긴 자리로 <b>복귀</b>(그 좌석은 죽는다) · 리플레이 저장 · 관전자 전용 모드 UI · 터치 조작 · 부정행위 검증 · 방장 넘기기 · 유휴 방 정리</p></div>
+</div>
+<p class="small mut">"안 되는 것"들은 <strong>구조적으로 막힌 게 아니라 아직 안 쓴 것</strong>이다. 아래에 각각 어디를 건드리면 되는지 적어 둔다.</p>
+
+<!--SLIDE sec=27 t="다음 걸음 ① 부정행위 검증"-->
+<h1><span class="no">{{N}}</span>다음 걸음 ① 부정행위 검증</h1>
+<p>지금은 클라이언트가 "나 4줄 보냈다"고 하면 서버가 믿는다. 이 구조에서 검증까지 가는 길은 생각보다 짧다.</p>
+<pre class="code txt"><code>  ① 입력 로그를 같이 보낸다
+     atk 에 "이번 락까지의 입력 기록(액션 + 시각)"을 붙인다.
+     한 조각당 수십 바이트다.
+
+  ② 서버가 같은 wasm 을 돌린다
+     Go 라면 wazero, 파이썬이라면 wasmtime-py 로 tetris_net.wasm 을 그대로 실행.
+     같은 시드 + 같은 입력 + 같은 가비지 → <b>같은 결과가 나와야 한다</b>.
+
+  ③ 안 맞으면 그 좌석을 무효 처리한다.
+
+  비용:  좌석당 wasm 인스턴스 하나. 8인 방 하나에 8개.
+         ai_plan 이 없으므로 CPU 는 사실상 무시할 만하다.
+  얻는 것: 이 게임이 <b>결정론적</b>이라서 검증이 재실행 한 번으로 끝난다.</code></pre>
+<div class="note"><b>왜 지금 안 했나</b>친구끼리 하는 8인 대전에 필요 없다. 그리고 이걸 넣는 순간 서버가 <strong>게임 규칙을 알아야</strong> 하므로, 2부에서 세운 "서버는 게임을 돌리지 않는다"가 깨진다 — 공개 서비스로 낼 때 치를 값이다.</div>
+
+<!--SLIDE sec=27 t="다음 걸음 ② 복귀와 리플레이"-->
+<h1><span class="no">{{N}}</span>다음 걸음 ② 복귀와 리플레이</h1>
+<div class="cols">
+  <div class="card a"><h4>복귀(reconnect)</h4><p><code>hello</code> 에 <strong>재접속 토큰</strong>을 실어 보내고, <code>room</code> 이 <code>peers</code> 대신 <strong>토큰 → 좌석</strong> 표를 들면 된다. <code>onBye</code> 를 "즉시 죽이기"에서 "30초 유예 뒤 죽이기"로 바꾸고, 그동안의 <code>grb</code> 를 좌석 대기열에 쌓아 둔다.</p></div>
+  <div class="card a"><h4>리플레이</h4><p>이미 <strong>거의 다 있다</strong>. 라운드 시드 + 모든 <code>atk</code>/<code>grb</code>/<code>ko</code> 를 시각과 함께 저장하면 재생이 된다. 화면 스냅샷(<code>st</code>)은 저장할 필요가 없다 — <strong>다시 계산하면 나온다</strong>.</p></div>
+  <div class="card b"><h4>관전자 모드</h4><p>좌석을 안 잡은 PC 도 이미 <code>st</code> 를 다 받는다. <code>arena.js</code> 에서 "내 좌석이 없으면 전체를 격자로" 배치하는 분기 하나만 추가하면 된다.</p></div>
+  <div class="card b"><h4>터치 조작</h4><p>1편 덱에 화면 버튼 구현이 있다. <code>seats.js</code> 에 <code>TouchPad</code> 클래스를 하나 더 만들어 슬롯에 붙이면 끝난다 — <strong>조종자 인터페이스가 이미 추상화돼 있다.</strong></p></div>
+</div>
+
+<!--SLIDE sec=27 t="다음 걸음 ③ 규모를 키우면"-->
+<h1><span class="no">{{N}}</span>다음 걸음 ③ 규모를 키우면</h1>
+<div class="scroll"><table>
+<tr><th>바꾸고 싶은 것</th><th>어디를</th><th>주의</th></tr>
+<tr><td>좌석 99석 (배틀로열)</td><td><code>cfg.max</code> 상한, <code>arena.js</code> 배치</td><td><code>st</code> 중계가 <b>O(n²)</b> 가 된다. 관심 좌석만 구독하는 규칙이 필요하다</td></tr>
+<tr><td><code>st</code> 를 30Hz 로</td><td><code>match.js</code> 의 <code>ST_HZ</code></td><td>대역폭 3배. 그 전에 <b>바이너리 프레임</b>으로 옮기는 게 낫다</td></tr>
+<tr><td>방 수천 개</td><td>서버는 그대로</td><td>Go 는 고루틴 수천 개가 문제없다. 파이썬은 프로세스를 나눠야 한다</td></tr>
+<tr><td>서버 여러 대</td><td>hub 층에 라우팅 추가</td><td>room 은 <b>순수 함수</b>라 어느 서버로 옮겨도 된다 — 상태만 넘기면 된다</td></tr>
+<tr><td>매치메이킹</td><td>hub 층에 대기열</td><td>room 을 건드릴 필요가 없다. 방을 만들어 사람을 넣는 것뿐</td></tr>
+</table></div>
+
+<!--SLIDE sec=27 t="이 프로젝트에서 얻은 것 다섯"-->
+<h1><span class="no">{{N}}</span>이 프로젝트에서 얻은 것 다섯</h1>
+<ol>
+<li><b>층을 순수 함수로 떼어 내면 언어를 넘어 검증할 수 있다.</b> <code>room</code> 에서 시계와 난수를 인자로 밀어낸 것 하나가 44스텝 골든 벡터를 가능하게 했다.</li>
+<li><b>규격의 예제를 테스트로 박아 두라.</b> RFC 6455 §1.3 의 한 줄이 GUID 오타를 잡았다. 그게 없었다면 "브라우저가 그냥 연결을 끊는다"를 몇 시간 들여다봤을 것이다.</li>
+<li><b>같은 규격을 두 번 구현하면 규격의 구멍이 드러난다.</b> 동률 처리, 봉투 타입 충돌, 무한정수 — 한 번만 썼으면 몰랐을 것들이다.</li>
+<li><b>단위를 잘 고르면 요구사항이 특별 케이스가 아니게 된다.</b> "좌석"을 단위로 잡은 덕에 1인용·2인 로컬·AI 혼합·8인 온라인이 <b>전부 같은 코드 경로</b>다.</li>
+<li><b>사람 없이 전체를 돌릴 수단을 먼저 만들라.</b> 헤드리스 봇이 없었다면 8인 대전을 한 번 시험하는 데 브라우저 8개와 손 16개가 필요했다.</li>
+</ol>
+
+<!--SLIDE sec=27 t="세 편을 하나로"-->
+<h1><span class="no">{{N}}</span>세 편을 하나로</h1>
+<div class="scroll"><table>
+<tr><th></th><th>1편</th><th>2편</th><th>3편</th></tr>
+<tr><td>주제</td><td>규칙 — SRS·락다운·7-bag·점수</td><td>판단 — 평가 8특징·1수 탐색·유전 알고리즘</td><td>연결 — 프로토콜·서버 둘·8인 대전</td></tr>
+<tr><td>새 소스</td><td>589줄 (C++)</td><td>2,404줄 (C++·JS)</td><td>5,439줄 (C++·JS·Go·파이썬)</td></tr>
+<tr><td>wasm</td><td>7,340 B</td><td>14,294 B</td><td>17,360 B</td></tr>
+<tr><td>의존성</td><td>0</td><td>0</td><td><b>0</b></td></tr>
+<tr><td>핵심 문장</td><td>"규칙은 C++ 안에만 있다"</td><td>"기준은 진화로 찾는다"</td><td>"서버는 게임을 돌리지 않는다"</td></tr>
+</table></div>
+<p class="small mut">세 편 모두 <code>-nostdlib</code> 프리스탠딩 wasm 이고, 외부 라이브러리·CDN·폰트가 하나도 없다. 각 덱은 HTML 파일 하나로 열린다.</p>
+
+<!--SLIDE sec=27 t="마지막 한 판"-->
+<h1><span class="no">{{N}}</span>마지막 한 판</h1>
+<div class="demoWrap" data-demo="mixed" data-target="attackers"></div>
+<p class="demohint">클릭(탭)한 뒤 <strong>방향키·Space·C</strong> 로 참전하라. 좌석 0이 당신, 나머지 7석은 AI, 타겟팅은 반격이다 — 때리면 되돌아온다. 이 판을 돌리고 있는 것은 이 HTML 파일 하나뿐이다.</p>

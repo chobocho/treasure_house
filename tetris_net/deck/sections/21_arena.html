@@ -1,0 +1,65 @@
+<!--SLIDE sec=21 t="접히는 화면에서 8개 판을 어떻게 놓나"-->
+<h1><span class="no">{{N}}</span>접히는 화면에서 8개 판을 어떻게 놓나</h1>
+<pre class="code txt"><code>  Galaxy Fold 접힘 (~374px)              펼침 (~768px) · 데스크톱
+  ┌───────────────────┐                 ┌──────────────┬──────────────┐
+  │                   │                 │              │ ┌──┬──┬──┐   │
+  │     내 판(들)     │  58%            │   내 판(들)  │ │  │  │  │   │
+  │                   │                 │              │ ├──┼──┼──┤   │
+  ├───────────────────┤                 │              │ │  │  │  │   │
+  │ ┌──┬──┬──┬──┐    │                 │              │ ├──┼──┼──┤   │
+  │ ├──┼──┼──┼──┤    │  42%            │              │ │  │  │  │   │
+  │ └──┴──┴──┴──┘    │                 │              │ └──┴──┴──┘   │
+  └───────────────────┘                 └──────────────┴──────────────┘
+        위아래로                                     좌우로
+
+  경계는 <b>560px</b> 하나. 그 위아래로 배치 방향만 바뀐다.
+  칸 크기는 매 프레임 다시 계산하므로 중간 크기에서도 잘림이 없다.</code></pre>
+<div class="note"><b>왜 DOM 이 아니라 캔버스인가</b>DOM 으로 8개 판(각 200칸 = 1,600개 요소)을 만들면 <strong>매 프레임 1,600번의 스타일 갱신</strong>이 든다. 캔버스는 1,600번의 <code>fillRect</code> 인데, 이건 브라우저가 훨씬 잘한다. 그리고 반응형이 <strong>CSS 미디어쿼리가 아니라 산수</strong>가 된다.</div>
+
+<!--SLIDE sec=21 t="블록 하나 그리기"-->
+<h1><span class="no">{{N}}</span>블록 하나 그리기</h1>
+<!--CODE file=arena.js lines=1-30 cap="arena.js — 머리말과 블록"-->
+<p class="small mut">칸이 3px 미만이면 음영을 포기하고 단색으로 칠한다. 8인 화면의 미니 판은 칸이 3~6px 이라 이 분기가 실제로 걸린다 — <strong>1px 짜리 테두리를 그리려다 칸 전체가 테두리가 되는</strong> 상황을 막는다.</p>
+
+<!--SLIDE sec=21 t="Arena — 무엇을 들고 있나"-->
+<h1><span class="no">{{N}}</span>Arena — 무엇을 들고 있나</h1>
+<!--CODE file=arena.js lines=31-63 cap="arena.js — 상태와 입력"-->
+<div class="cols">
+  <div class="card a"><h4><code>cores</code> vs <code>remote</code></h4><p>내 좌석은 <strong>wasm 메모리를 직접 읽는다</strong>(<code>views.cells</code>). 남의 좌석은 서버가 중계해 준 스냅샷을 푼 <code>Uint8Array</code> 다. 그리는 코드는 거의 같다.</p></div>
+  <div class="card a"><h4><code>rects</code> 를 매 프레임 다시 만드는 이유</h4><p>공격 화살표를 그리려면 <strong>각 판이 화면 어디에 있는지</strong> 알아야 한다. 배치가 매 프레임 계산되므로 위치도 그때 기록한다.</p></div>
+</div>
+
+<!--SLIDE sec=21 t="배치 — 산수 여섯 줄"-->
+<h1><span class="no">{{N}}</span>배치 — 산수 여섯 줄</h1>
+<!--CODE file=arena.js lines=64-80 cap="arena.js — layout()"-->
+<p class="small mut"><code>devicePixelRatio</code> 를 2로 제한한다. 고해상도 폰은 3~4 인데, 캔버스를 그만큼 키우면 <strong>픽셀 수가 9~16배</strong>가 된다. 2배면 이미 충분히 선명하다.</p>
+
+<!--SLIDE sec=21 t="내 판 — 크게"-->
+<h1><span class="no">{{N}}</span>내 판 — 크게</h1>
+<!--CODE file=arena.js lines=81-107 cap="arena.js — drawOwn()"-->
+<p><code>cells</code> 를 먼저 그리고 <code>overlay</code> 를 덮는다. <code>overlay</code> 에는 <strong>떨어지는 조각(1~7)과 고스트(8~14)</strong>가 들어 있다 — 값이 7보다 크면 고스트라서 <code>val - 7</code> 로 색을 찾고 어둡게 칠한다.</p>
+
+<!--SLIDE sec=21 t="옆 패널과 대기 게이지"-->
+<h1><span class="no">{{N}}</span>옆 패널과 대기 게이지</h1>
+<!--CODE file=arena.js lines=108-139 cap="arena.js — drawSide()"-->
+<div class="note"><b>게이지가 색으로 나이를 말한다</b>대기 덩어리마다 <code>age/900</code> 에 따라 주황 → 빨강으로 간다. "곧 솟는다"를 <strong>숫자가 아니라 색</strong>으로 알려 주는 게 이 게임에서 훨씬 빠르다. 이 값은 <code>ng_queue_ptr()</code> 로 낸 <code>Int32Array</code> 를 <strong>복사 없이</strong> 읽는다.</div>
+
+<!--SLIDE sec=21 t="조각 미리보기"-->
+<h1><span class="no">{{N}}</span>조각 미리보기</h1>
+<!--CODE file=arena.js lines=140-149 cap="arena.js — drawPiece()"-->
+<p class="small mut">16비트 정수 하나가 4×4 모양이다. <code>k &amp; 3</code> 이 x, <code>k &gt;&gt; 2</code> 가 y — <code>tetris.cpp</code> 의 <code>SHAPES</code> 표현을 그대로 쓴다. 표를 JS 에 다시 적은 건 <strong>홀드/넥스트를 그리려고 wasm 을 부를 이유가 없어서</strong>다.</p>
+
+<!--SLIDE sec=21 t="남의 판 — 작게, 그러나 살아 있게"-->
+<h1><span class="no">{{N}}</span>남의 판 — 작게, 그러나 살아 있게</h1>
+<!--CODE file=arena.js lines=150-184 cap="arena.js — drawMini()"-->
+<p>스냅샷에는 굳은 블록만 있으므로 <strong>떨어지는 조각을 <code>s[6..9]</code> 로 직접 그린다</strong>. 이게 없으면 남의 판이 "가끔 툭툭 바뀌는 정지 화면"처럼 보인다. 오른쪽의 얇은 막대가 높이 — 초록 → 주황 → 빨강.</p>
+
+<!--SLIDE sec=21 t="죽은 판과 화살표"-->
+<h1><span class="no">{{N}}</span>죽은 판과 화살표</h1>
+<!--CODE file=arena.js lines=185-211 cap="arena.js — drawDim() · drawArrows()"-->
+<div class="note"><b>화살표가 8인 대전의 핵심 UI 다</b>"누가 누구를 때렸나"를 모르면 8명이 각자 노는 것과 구별이 안 된다. 0.7초 동안 굵기 = 줄 수로 선을 긋는 것만으로 판의 흐름이 보인다. <code>grb</code> 를 <strong>브로드캐스트로 만든 이유</strong>가 이것이다(9부).</div>
+
+<!--SLIDE sec=21 t="한 프레임 전체"-->
+<h1><span class="no">{{N}}</span>한 프레임 전체</h1>
+<!--CODE file=arena.js lines=212-251 cap="arena.js — draw() 와 조각 표"-->
+<p class="small mut">격자 열 수를 <code>√(개수 × 가로/세로)</code> 로 잡는다. 남는 좌석이 3개면 1×3 이나 3×1 이 아니라 <strong>영역 모양에 맞는</strong> 배치가 나온다.</p>

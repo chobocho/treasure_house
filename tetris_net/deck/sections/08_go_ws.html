@@ -1,0 +1,56 @@
+<!--SLIDE sec=8 t="ws.go — 머리말과 상수"-->
+<h1><span class="no">{{N}}</span>ws.go — 머리말과 상수</h1>
+<!--CODE file=server_go/ws.go lines=1-29 cap="ws.go — 왜 직접 쓰는지, 무엇을 안 하는지"-->
+<p class="small mut">임포트에 외부 경로가 하나도 없다. <code>go.mod</code> 에는 <code>module tetrisnet</code> 과 <code>go 1.24</code> 두 줄뿐이고 <code>require</code> 가 없다.</p>
+
+<!--SLIDE sec=8 t="opcode 와 마법의 GUID"-->
+<h1><span class="no">{{N}}</span>opcode 와 마법의 GUID</h1>
+<!--CODE file=server_go/ws.go lines=30-62 cap="ws.go — opcode · AcceptKey · Conn"-->
+<p><code>MaxPayload</code> 를 필드로 둔 이유는 테스트 때문이다. 상수면 "상한을 넘으면 끊는가"를 확인하려고 1MB 짜리 프레임을 만들어야 한다. 필드면 <code>srv.MaxPayload = 16</code> 한 줄이면 된다.</p>
+
+<!--SLIDE sec=8 t="Upgrade — 소켓을 통째로 빼앗는다"-->
+<h1><span class="no">{{N}}</span>Upgrade — 소켓을 통째로 빼앗는다</h1>
+<!--CODE file=server_go/ws.go lines=63-98 cap="ws.go — Upgrade()"-->
+<div class="note"><b>hj.Hijack() 가 하는 일</b><code>net/http</code> 에게 "이 연결은 이제 내 것"이라고 선언한다. 그 뒤로 서버는 이 소켓에 손대지 않는다 — 응답도, 타임아웃도, 연결 재사용도 없다. <strong>반환된 <code>bufio.Reader</code> 를 그대로 써야 한다</strong>: 클라이언트가 101 을 기다리지 않고 첫 프레임을 붙여 보냈다면 그 바이트가 이미 그 버퍼 안에 있다.</div>
+
+<!--SLIDE sec=8 t="프레임 쓰기 — 한 번에 쓴다"-->
+<h1><span class="no">{{N}}</span>프레임 쓰기 — 한 번에 쓴다</h1>
+<!--CODE file=server_go/ws.go lines=99-134 cap="ws.go — writeRaw() 전반"-->
+<p class="small mut">길이에 따라 헤더가 2·4·10바이트로 늘어난다. 마스킹까지 하면 4바이트가 더 붙어 최대 14바이트다 — 그래서 <code>var head [14]byte</code> 다.</p>
+
+<!--SLIDE sec=8 t="머리와 본문을 나눠 쓰면 생기는 일"-->
+<h1><span class="no">{{N}}</span>머리와 본문을 나눠 쓰면 생기는 일</h1>
+<!--CODE file=server_go/ws.go lines=135-165 cap="ws.go — 버퍼 하나로 합쳐 한 번에"-->
+<div class="cols">
+  <div class="card no"><h4>나눠 쓰면</h4><p><code>w.Write(head)</code> 다음 <code>w.Write(body)</code>. TCP 에서는 대개 합쳐지지만 <strong>합쳐진다는 보장이 없다</strong>. 상대가 <code>read()</code> 한 번에 헤더만 받고 멈출 수 있다.</p></div>
+  <div class="card a"><h4>테스트가 잡았다</h4><p><code>net.Pipe()</code> 는 버퍼가 없어 <strong>Write 한 번 = Read 한 번</strong>이다. 나눠 쓰면 <code>TestServerWriteUnmasked</code> 가 본문을 못 찾는다. 실전 TCP 보다 가혹한 게 오히려 도움이 됐다.</p></div>
+</div>
+
+<!--SLIDE sec=8 t="쓰기는 잠근다"-->
+<h1><span class="no">{{N}}</span>쓰기는 잠근다</h1>
+<!--CODE file=server_go/ws.go lines=166-201 cap="ws.go — write/Close 와 readFrame 시작"-->
+<p><code>wmu</code> 가 필요한 이유: 이 연결에 쓰는 고루틴이 <strong>둘 이상</strong>이다. 쓰기 고루틴이 방 브로드캐스트를 내보내는 동안, 읽기 고루틴이 핑에 대한 퐁을 끼워 넣을 수 있다. 프레임 중간에 다른 프레임이 섞이면 <strong>연결이 통째로 망가진다</strong> — 상대는 복구할 방법이 없다.</p>
+
+<!--SLIDE sec=8 t="프레임 읽기 — 길이 3갈래"-->
+<h1><span class="no">{{N}}</span>프레임 읽기 — 길이 3갈래</h1>
+<!--CODE file=server_go/ws.go lines=202-236 cap="ws.go — readFrame() 본체"-->
+<p class="small mut"><code>if u &gt; 1&lt;&lt;62</code> 검사는 64비트 길이를 <code>int64</code> 로 옮길 때 부호가 뒤집히는 걸 막는다. 상대가 <code>0xFFFFFFFFFFFFFFFF</code> 를 보내면 <code>int64</code> 로는 -1 이 되고, 그 뒤의 상한 검사(<code>l &gt; MaxPayload</code>)를 <strong>통과해 버린다</strong>.</p>
+
+<!--SLIDE sec=8 t="마스크 해제와 메시지 조립"-->
+<h1><span class="no">{{N}}</span>마스크 해제와 메시지 조립</h1>
+<!--CODE file=server_go/ws.go lines=237-272 cap="ws.go — 마스크 해제 · ReadMessage 시작"-->
+
+<!--SLIDE sec=8 t="제어 프레임을 삼킨다"-->
+<h1><span class="no">{{N}}</span>제어 프레임을 삼킨다</h1>
+<!--CODE file=server_go/ws.go lines=273-308 cap="ws.go — ReadMessage() 나머지 · Dial 시작"-->
+<div class="note"><b>닫기에 짧은 마감을 거는 이유</b>닫기 인사를 돌려주려는데 상대가 이미 사라졌으면 <code>Write</code> 가 영원히 멈춘다. 500ms 마감을 걸고, 실패해도 무시하고 <code>io.EOF</code> 를 돌려준다 — <strong>인사는 예의고 EOF 는 사실이다.</strong></div>
+
+<!--SLIDE sec=8 t="Dial — 40줄이면 클라이언트가 생긴다"-->
+<h1><span class="no">{{N}}</span>Dial — 40줄이면 클라이언트가 생긴다</h1>
+<!--CODE file=server_go/ws.go lines=309-339 cap="ws.go — Dial()"-->
+<div class="cols">
+  <div class="card a"><h4>왜 필요했나</h4><p>서버만 있으면 <strong>통합 테스트를 쓸 수 없다</strong>. <code>hub_test.go</code> 가 진짜 소켓으로 붙어 진짜 한 판을 돌리는 게 이 40줄 덕분이다.</p></div>
+  <div class="card a"><h4>덤으로 얻은 것</h4><p>운영 도구. 서버가 살아 있는지, 방이 도는지 <code>Dial</code> 로 붙어 확인하는 작은 프로그램을 언제든 쓸 수 있다.</p></div>
+  <div class="card b"><h4>Accept 검증까지 한다</h4><p>서버가 준 <code>Sec-WebSocket-Accept</code> 를 다시 계산해 맞춰 본다. 안 맞으면 <strong>웹소켓 서버가 아닌 무언가</strong>에 붙은 것이다.</p></div>
+  <div class="card b"><h4>안 하는 것</h4><p>TLS(<code>wss://</code>), 리다이렉트 추적, 프록시. 테스트와 로컬 운영에는 필요 없다.</p></div>
+</div>

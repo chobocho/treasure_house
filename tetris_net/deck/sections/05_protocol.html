@@ -1,0 +1,91 @@
+<!--SLIDE sec=5 t="규격을 먼저 쓴다"-->
+<h1><span class="no">{{N}}</span>규격을 먼저 쓴다</h1>
+<p>서버를 두 언어로 만들 작정이면 순서가 정해진다. <strong>규격 → 검증표 → 구현 → 구현.</strong></p>
+<pre class="code txt"><code>  ① protocol.md            사람이 읽는 규격. 메시지 표 · 난수 소비 순서 · 오류 코드
+  ② protocol_vectors.json  기계가 읽는 규격. 입력 44스텝과 기대 출력
+  ③ room.mjs               1번째 구현 (JS) — 벡터를 통과시킨다
+  ④ room.go / room.py      2·3번째 구현 — <b>같은 벡터로</b> 통과시킨다
+
+  ②를 ③보다 먼저 <b>손으로</b> 쓰는 게 핵심이다. 구현에서 뽑아낸 표는 검증이 아니라 사진이다.</code></pre>
+<div class="note"><b>실제로 이 순서로 했다</b>벡터 44스텝을 먼저 손으로 적고(난수 값만 xorshift32 를 돌려 계산했다), 그다음 <code>room.mjs</code> 를 썼다. 첫 실행에서 48개 검사가 전부 통과했다 — 규격이 스스로 모순이 없었다는 뜻이다.</div>
+
+<!--SLIDE sec=5 t="protocol.md — 용어와 층"-->
+<h1><span class="no">{{N}}</span>protocol.md — 용어와 층</h1>
+<!--CODE file=protocol.md lines=1-17 cap="protocol.md §0 — 용어" lang=md-->
+<p class="small mut"><strong>peer 는 사람이 아니라 PC</strong> 다. 이 한 줄 때문에 "한 PC 에 2명"이 예외 처리가 아니라 규격의 일부가 된다.</p>
+
+<!--SLIDE sec=5 t="room 엔진 계약과 방 설정"-->
+<h1><span class="no">{{N}}</span>room 엔진 계약과 방 설정</h1>
+<!--CODE file=protocol.md lines=18-50 cap="protocol.md §1~§2 — 계약과 cfg" lang=md-->
+
+<!--SLIDE sec=5 t="난수를 뽑는 자리는 정확히 세 곳"-->
+<h1><span class="no">{{N}}</span>난수를 뽑는 자리는 정확히 세 곳</h1>
+<pre class="code txt"><code>  방 하나 = xorshift32 하나.  seed → 순서대로 소비.
+
+  ① start      라운드 시드   ← 모든 좌석의 7-bag 시드가 된다        1회
+  ② 타겟 선택  random 으로 떨어질 때만                              0 또는 1회
+  ③ 구멍 위치  grb 하나당 정확히 1회                                1회
+
+  예) seed=7, 좌석 4석, target=random
+      start           → 1892583        라운드 시드
+      atk{i:0,n:2}    → 470389255 % 3 = 1  → 후보[1] = 좌석 2
+                      → 3882205507 % 10 = 7 → 구멍 x=7
+                      = grb {i:2, n:2, from:0, hole:7}
+
+  ②와 ③의 순서를 바꾸면?  세 구현이 <b>전부 다른 값</b>을 내고, 골든 벡터가 즉시 잡는다.</code></pre>
+<div class="note"><b>왜 xorshift32 인가</b>3줄이면 어느 언어로든 똑같이 옮겨진다. 파이썬은 무한정수라 <code>&amp; 0xFFFFFFFF</code> 를, JS 는 <code>&gt;&gt;&gt; 0</code> 을 붙여야 32비트가 된다. Go 는 <code>uint32</code> 라 저절로 맞는다 — <strong>이 셋이 다르게 새는 지점</strong>이 정확히 여기다.</div>
+
+<!--SLIDE sec=5 t="메시지 표 — 양방향"-->
+<h1><span class="no">{{N}}</span>메시지 표 — 양방향</h1>
+<!--CODE file=protocol.md lines=51-86 cap="protocol.md §3~§4 — 메시지 전부" lang=md-->
+
+<!--SLIDE sec=5 t="한 판이 오가는 순서"-->
+<h1><span class="no">{{N}}</span>한 판이 오가는 순서</h1>
+<pre class="code txt"><code>  PC1(방장)                     서버                        PC2
+     │  hello {v:3,name}          │                          │
+     │ ─────────────────────────► │                          │
+     │  ◄───────── hi {pid:1}     │                          │
+     │  create {cfg}              │                          │
+     │ ─────────────────────────► │  방 코드 생성            │
+     │  ◄─── joined {code,cfg}    │                          │
+     │                            │  ◄──── hello / join ──── │
+     │  seat {i:0,kind:"human"}   │                          │
+     │ ─────────────────────────► │                          │
+     │  ◄═══════ room {seats} ════╪═════════════════════════►│  (브로드캐스트)
+     │  seat {i:1,kind:"ai"}      │                          │
+     │  ready {v:true}            │                          │
+     │  start                     │  rng① → 라운드 시드      │
+     │ ─────────────────────────► │                          │
+     │  ◄═══ start {seed,seats} ══╪═════════════════════════►│
+     │                            │                          │
+     │  atk {i:0,n:4}             │  rng② 타겟 · rng③ 구멍   │
+     │ ─────────────────────────► │                          │
+     │  ◄══ grb {i:2,n:4,hole:7} ═╪═════════════════════════►│  ← 피해자가 대기열에 넣는다
+     │  st {i:0,b:"…",s:[…]}      │                          │
+     │ ─────────────────────────► │  ──── st 그대로 중계 ───►│
+     │                            │                          │
+     │                            │  ◄──────── ko {i:2} ──── │
+     │  ◄═══ ko {i:2,place:3} ════╪═════════════════════════►│
+     │  ◄═══ end {order:[…]} ═════╪═════════════════════════►│</code></pre>
+
+<!--SLIDE sec=5 t="상태와 스냅샷 규격"-->
+<h1><span class="no">{{N}}</span>상태와 스냅샷 규격</h1>
+<!--CODE file=protocol.md lines=87-112 cap="protocol.md §5~§6 — s[] 와 b" lang=md-->
+
+<!--SLIDE sec=5 t="타겟팅·등수·오류 코드"-->
+<h1><span class="no">{{N}}</span>타겟팅·등수·오류 코드</h1>
+<!--CODE file=protocol.md lines=113-144 cap="protocol.md §7~§9" lang=md-->
+
+<!--SLIDE sec=5 t="실제로 오가는 메시지"-->
+<h1><span class="no">{{N}}</span>실제로 오가는 메시지</h1>
+<div class="demoWrap" data-demo="wire"></div>
+<p class="demohint">가상 PC 2대가 2석씩 잡고 붙는 4인 대전의 <strong>날것 그대로의 메시지</strong>다. ▲ 는 올라가는 것, ▼ 는 내려오는 것. <code>st</code> 와 <code>pong</code> 은 너무 많아 숨겼다. 프로토콜은 정말 이게 전부다.</p>
+
+<!--SLIDE sec=5 t="왜 JSON 인가 — 그리고 언제 아닌가"-->
+<h1><span class="no">{{N}}</span>왜 JSON 인가 — 그리고 언제 아닌가</h1>
+<div class="cols">
+  <div class="card a"><h4>JSON 을 고른 이유</h4><p>세 언어(Go·파이썬·JS)에 <strong>표준 라이브러리로</strong> 들어 있다. 스키마 컴파일러도, 코드 생성도 필요 없다. 골든 벡터를 <b>사람이 손으로 쓸 수 있다</b>는 게 결정적이었다.</p></div>
+  <div class="card a"><h4>대가</h4><p>같은 내용을 바이너리로 짜면 1/3 이하다. 하지만 실측 대역폭이 PC 당 <strong>1.5 KB/s</strong> 라 아낄 이유가 없다.</p></div>
+  <div class="card b"><h4>바이너리가 필요해지는 선</h4><p>좌석이 100석을 넘거나(배틀로열), <code>st</code> 를 30Hz 로 올리거나, 리플레이를 통째로 저장할 때. 그때는 <code>b</code> 필드의 런렝스를 <strong>base64 없이 바이너리 프레임으로</strong> 보내면 33% 가 줄어든다.</p></div>
+  <div class="card b"><h4>남겨 둔 자리</h4><p>WebSocket 은 텍스트/바이너리 프레임을 <strong>같은 연결에서 섞어</strong> 보낼 수 있다. 제어는 JSON, 화면은 바이너리로 가는 길이 열려 있다.</p></div>
+</div>

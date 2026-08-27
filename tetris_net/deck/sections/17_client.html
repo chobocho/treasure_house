@@ -1,0 +1,60 @@
+<!--SLIDE sec=17 t="전송 계층을 갈아 끼운다"-->
+<h1><span class="no">{{N}}</span>전송 계층을 갈아 끼운다</h1>
+<pre class="code txt"><code>              NetClient
+                  │  send(객체) / onmessage(객체)   ← 인터페이스는 이 둘뿐
+        ┌─────────┴─────────┐
+        ▼                   ▼
+  WsTransport         LoopbackTransport
+   진짜 서버            이 페이지 안의 LoopbackHub
+   (Go / 파이썬)        (room.mjs — 세 번째 구현)
+
+  덕분에:
+    · 이 문서 안의 8인 대전 데모가 <b>진짜 코드 경로</b>로 돈다
+    · 1인용이 서버 없이 된다
+    · 지연을 인위적으로 넣어 실험할 수 있다 (LoopbackHub.latency)
+    · 테스트가 브라우저 없이 브라우저 코드를 돌릴 수 있다 (24부)</code></pre>
+
+<!--SLIDE sec=17 t="브라우저 로더"-->
+<h1><span class="no">{{N}}</span>브라우저 로더</h1>
+<!--CODE file=netcore_browser.js lines=1-37 cap="netcore_browser.js — 상수와 base64"-->
+<p class="small mut">색 표에서 8번이 회색(<code>#64748b</code>)이다 — 가비지 줄. 조각 색 7가지와 확실히 구별돼야 "이건 내가 쌓은 게 아니라 맞은 것"이 한눈에 보인다.</p>
+
+<!--SLIDE sec=17 t="모듈 캐시 하나, 인스턴스 여덟"-->
+<h1><span class="no">{{N}}</span>모듈 캐시 하나, 인스턴스 여덟</h1>
+<!--CODE file=netcore_browser.js lines=38-64 cap="netcore_browser.js — compileOnce · loadNet"-->
+<div class="note"><b>base64 도 되고 바이트도 된다</b>덱은 wasm 을 base64 로 <strong>품고 있고</strong>, 진짜 페이지는 <code>fetch('tetris_net.wasm')</code> 로 받아 온다. 두 경로가 같은 모듈 캐시를 쓰도록 <code>compileOnce(src)</code> 가 타입을 보고 갈라진다.</div>
+
+<!--SLIDE sec=17 t="스냅샷 — btoa/atob 로"-->
+<h1><span class="no">{{N}}</span>스냅샷 — btoa/atob 로</h1>
+<!--CODE file=netcore_browser.js lines=65-85 cap="netcore_browser.js — 프로토콜 조각"-->
+<pre class="code txt"><code>  Node    Buffer.from(bytes).toString('base64')
+  브라우저 String.fromCharCode 로 이진 문자열을 만든 뒤 btoa()
+
+  btoa 는 "라틴1 문자열"을 받는다. Uint8Array 를 바로 넘길 수 없어
+  한 바이트씩 문자로 바꿔 이어 붙인다. 200바이트라 이 방식으로 충분하다.
+  (수십 KB 라면 fromCharCode.apply 나 TextDecoder 를 써야 한다)</code></pre>
+
+<!--SLIDE sec=17 t="진짜 전송"-->
+<h1><span class="no">{{N}}</span>진짜 전송</h1>
+<!--CODE file=net_client.js lines=1-33 cap="net_client.js — WsTransport"-->
+<p class="small mut"><code>readyState !== 1</code> 검사가 있는 이유: <code>open</code> 이 오기 전이나 닫힌 뒤에 <code>send</code> 를 부르면 예외가 난다. 게임 루프 안에서 예외가 나면 <code>requestAnimationFrame</code> 사슬이 끊겨 <strong>화면이 통째로 멈춘다</strong>.</p>
+
+<!--SLIDE sec=17 t="이 페이지 안의 서버"-->
+<h1><span class="no">{{N}}</span>이 페이지 안의 서버</h1>
+<!--CODE file=net_client.js lines=34-61 cap="net_client.js — LoopbackHub"-->
+<p><code>latency</code> 를 넣으면 <code>setTimeout</code> 으로 배달을 늦춘다. 편도 지연이므로 왕복은 2배다. 이것만으로 "지연이 있어도 내 조작은 그대로"를 <strong>눈으로 확인</strong>할 수 있다.</p>
+
+<!--SLIDE sec=17 t="hub 를 흉내 내는 세 줄"-->
+<h1><span class="no">{{N}}</span>hub 를 흉내 내는 세 줄</h1>
+<!--CODE file=net_client.js lines=62-82 cap="net_client.js — LoopbackTransport"-->
+<div class="note"><b>왜 hello/create/join 만 가로채나</b><code>room.mjs</code> 는 방 코드도 연결도 모른다 — 그건 hub 의 일이다(2부). 루프백에는 방이 하나뿐이므로 그 셋만 즉석에서 답해 주고 나머지는 <strong>그대로 room 으로 넘긴다</strong>. 가로채는 코드가 딱 세 줄이라는 게 hub/room 분리가 잘 됐다는 증거다.</div>
+
+<!--SLIDE sec=17 t="클라이언트 본체"-->
+<h1><span class="no">{{N}}</span>클라이언트 본체</h1>
+<!--CODE file=net_client.js lines=83-120 cap="net_client.js — NetClient"-->
+<p class="small mut">왕복 지연을 1초에 한 번만 잰다. 이 게임은 지연에 민감하지 않다 — 남의 판을 조금 늦게 보는 것뿐이고, <strong>내 판은 내 PC 에서 돈다</strong>. 표시용 숫자에 대역폭을 쓸 이유가 없다.</p>
+
+<!--SLIDE sec=17 t="보낼 수 있는 것 전부"-->
+<h1><span class="no">{{N}}</span>보낼 수 있는 것 전부</h1>
+<!--CODE file=net_client.js lines=121-148 cap="net_client.js — 송신 API 와 오류 번역"-->
+<p>클라이언트가 보낼 수 있는 메시지가 <strong>아홉 개</strong>다. 그리고 오류 코드 → 한국어 번역표가 여기 있다 — 프로토콜은 코드만 보내고, 사람이 읽는 말은 클라이언트가 고른다(§9). 다국어를 붙일 때 서버를 건드릴 필요가 없다.</p>

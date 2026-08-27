@@ -1,0 +1,67 @@
+<!--SLIDE sec=1 t="물려받은 두 파일"-->
+<h1><span class="no">{{N}}</span>물려받은 두 파일</h1>
+<p>3편은 새 게임을 만들지 않는다. 1·2편이 만든 <strong>두 파일 위에 층을 하나 더</strong> 얹는다.</p>
+<div class="scroll"><table>
+<tr><th>파일</th><th>줄</th><th>무엇</th><th>3편에서</th></tr>
+<tr><td><code>tetris_ai/tetris.cpp</code></td><td>589</td><td>규칙 전부 — SRS 회전·월킥·락다운·7-bag·점수·T스핀·공격표·가비지</td><td><b>한 줄도 고치지 않음</b></td></tr>
+<tr><td><code>tetris_ai/ai.cpp</code></td><td>254</td><td>특징 8가지 평가 · 1수 탐색 · GA 가 찾은 가중치</td><td><b>한 줄도 고치지 않음</b></td></tr>
+<tr><td><code>tetris_ai/weights.json</code></td><td>—</td><td>GA 50세대 결과. 난이도 4단계(easy/normal/hard/max)</td><td>그대로 사용</td></tr>
+<tr><td><code>tetris_net/net.cpp</code></td><td>{{LINES:net.cpp}}</td><td>대기열·서버가 준 구멍·화면 스냅샷</td><td><b>이번에 새로 씀</b></td></tr>
+</table></div>
+<div class="note"><b>왜 고치지 않는가</b>1·2편 덱에는 저 두 파일이 <code>&lt;!--CODE lines=A-B--&gt;</code> 로 줄 번호까지 박혀 실려 있다. 한 줄만 넣어도 그 두 문서의 코드 블록이 전부 어긋난다. <strong>고치지 않는 것이 제약이 아니라, 고치지 않아도 되게 설계하는 것이 목표였다.</strong></div>
+
+<!--SLIDE sec=1 t="wasm 이 내주는 문 14개"-->
+<h1><span class="no">{{N}}</span>wasm 이 내주는 문 14개</h1>
+<p>2편 wasm 의 익스포트 전부. 3편의 멀티플레이 층은 <strong>이것만 써서</strong> 아래층을 부린다.</p>
+<div class="scroll"><table>
+<tr><th>익스포트</th><th>하는 일</th></tr>
+<tr><td><code>ts_init(seed)</code></td><td>판을 초기화한다. 같은 시드 → 같은 조각 순서</td></tr>
+<tr><td><code>ts_update(dt_ms)</code></td><td>시간을 dt 만큼 진행. 중력·DAS/ARR·락다운이 여기서 돈다</td></tr>
+<tr><td><code>ts_press(act)</code> · <code>ts_release(act)</code></td><td>입력. act 는 0~8 (좌·우·소프트·CW·CCW·하드·홀드·일시정지·180)</td></tr>
+<tr><td><code>ts_garbage(n, hole_x)</code></td><td><b>지금 당장</b> n 줄을 밀어 올린다. 구멍은 hole_x</td></tr>
+<tr><td><code>ts_queue_garbage(n)</code></td><td>2편의 대기열. 3편은 <b>쓰지 않는다</b> — 대신 자기 대기열을 만든다</td></tr>
+<tr><td><code>ts_board/cells/overlay/stats</code></td><td>선형 메모리 주소. JS 가 TypedArray 로 창을 낸다</td></tr>
+<tr><td><code>ts_dims()</code> · <code>ts_rows()</code></td><td>10×20, 숨은 줄 4 — 상수를 JS 에 다시 적지 않으려고</td></tr>
+<tr><td><code>ai_plan()</code> · <code>ai_apply(p)</code> · <code>ai_step()</code></td><td>한 수 고르기 / 두기 / 둘 다</td></tr>
+<tr><td><code>ai_weights_ptr()</code></td><td>가중치 8개가 있는 주소. JS 가 덮어쓰면 <b>재컴파일 없이 AI 가 바뀐다</b></td></tr>
+</table></div>
+
+<!--SLIDE sec=1 t="stats[] — JS 와의 계약"-->
+<h1><span class="no">{{N}}</span>stats[] — JS 와의 계약</h1>
+<p>wasm 은 함수 호출로 값을 돌려주지 않는다. <strong>정수 배열 하나를 선형 메모리에 두고</strong> JS 가 그 위에 <code>Int32Array</code> 창을 낸다. 프레임마다 30개 값을 공짜로 읽는다.</p>
+<pre class="code cpp"><code><i class="kw">enum</i> {
+  ST_SCORE = <i class="nb">0</i>, ST_LINES, ST_LEVEL, ST_COMBO, ST_B2B, ST_STATE,
+  ST_HOLD, ST_NEXT0, ST_NEXT1, ST_NEXT2, ST_NEXT3, ST_NEXT4,
+  ST_CLEAR, ST_TSPIN, ST_GAIN, ST_PIECES, ST_ELAPSED, ST_GRAVITY,
+  ST_PIECE, ST_ROT, ST_X, ST_Y, ST_GHOST, ST_EVENT, ST_ROWMASK,
+  ST_PERFECT, ST_LOCKPCT,
+  ST_ATTACK,        <i class="cm">// 이번 락으로 상대에게 보낸 줄 수 (상쇄 후)</i>
+  ST_PENDING,       <i class="cm">// 아직 올라오지 않고 대기 중인 가비지 줄 수</i>
+  ST_GARBAGE_RECV,  <i class="cm">// 지금까지 실제로 밀려 올라온 누적 줄 수</i>
+  ST_COUNT
+};</code></pre>
+<p>3편이 쓰는 칸은 실질적으로 다섯이다: <code>ST_EVENT</code>(락이 났는가) · <code>ST_ATTACK</code>(얼마 보낼까) · <code>ST_CLEAR</code>(줄을 지웠는가) · <code>ST_STATE</code>(죽었는가) · <code>ST_PENDING</code>(대기 몇 줄).</p>
+<div class="note"><b>ST_EVENT 가 핵심이다</b>락이 날 때마다 1씩 는다. 아래층을 고치지 않고 "락 훅"을 만드는 방법이 이것뿐이다 — <strong>부르기 전 값과 부른 뒤 값을 비교</strong>하면 된다.</div>
+
+<!--SLIDE sec=1 t="공격표 — 몇 줄을 보내는가"-->
+<h1><span class="no">{{N}}</span>공격표 — 몇 줄을 보내는가</h1>
+<p>2편에서 이미 C++ 안에 있는 규칙이다. 3편은 이 숫자를 <strong>서버로 실어 나르기만</strong> 한다.</p>
+<div class="scroll"><table>
+<tr><th>지운 줄</th><th>보통</th><th>T스핀</th><th>미니 T스핀</th></tr>
+<tr><td>1 (싱글)</td><td>0</td><td>2</td><td>0</td></tr>
+<tr><td>2 (더블)</td><td>1</td><td>4</td><td>1</td></tr>
+<tr><td>3 (트리플)</td><td>2</td><td>6</td><td>1</td></tr>
+<tr><td>4 (테트리스)</td><td>4</td><td>—</td><td>—</td></tr>
+</table></div>
+<p>여기에 <b>Back-to-Back +1</b>, <b>콤보 보너스</b>(0,0,1,1,1,2,2,3,3,4,4,4,5), <b>퍼펙트 클리어 +10</b> 이 더해진다.</p>
+<div class="note"><b>상쇄가 먼저다</b>내가 낸 공격은 <strong>내 대기열을 먼저 깎고</strong> 남은 만큼만 상대에게 간다. 그래서 맞받아치면 가비지가 아예 올라오지 않는다. 2편은 이 상쇄를 숫자 하나로 했고, 3편은 덩어리 목록에 대고 한다.</div>
+
+<!--SLIDE sec=1 t="2편의 1:1 이 8인으로 갈 때 깨지는 것"-->
+<h1><span class="no">{{N}}</span>2편의 1:1 이 8인으로 갈 때 깨지는 것</h1>
+<div class="cols">
+  <div class="card no"><h4>❶ 가비지가 숫자 하나였다</h4><p>1:1 에서는 "누가 보냈나"가 자명하다. 8인에서는 <strong>막타를 누가 쳤는지</strong>를 알아야 등수 화면이 성립한다.</p></div>
+  <div class="card no"><h4>❷ 구멍을 각자 뽑았다</h4><p>내 판의 구멍은 내 난수로 뽑아도 된다. 그런데 <strong>남이 내 판을 보고 있으면</strong> 그 구멍이 서로 달라진다.</p></div>
+  <div class="card no"><h4>❸ 화면을 보낼 일이 없었다</h4><p>같은 페이지의 두 인스턴스는 메모리를 직접 읽으면 그만이다. 8인은 <strong>200칸을 초당 10번</strong> 남에게 보내야 한다.</p></div>
+  <div class="card no"><h4>❹ 심판이 JS 함수였다</h4><p>2편의 <code>Referee</code> 는 같은 페이지의 객체였다. 8인의 심판은 <strong>다른 기계에서, 다른 언어로</strong> 돈다.</p></div>
+</div>
+<p class="small mut">3부는 ❶❷❸ 을 C++ 층에서 해결하고, 5~15부가 ❹ 를 해결한다.</p>

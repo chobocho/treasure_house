@@ -1,0 +1,69 @@
+<!--SLIDE sec=4 t="8인 대전의 진짜 비용은 화면이다"-->
+<h1><span class="no">{{N}}</span>8인 대전의 진짜 비용은 화면이다</h1>
+<p>공격 메시지는 한 판에 60번쯤 오간다. 반면 <strong>화면</strong>은 좌석마다 초당 10번이다.</p>
+<div class="scroll"><table>
+<tr><th>보내는 것</th><th>빈도</th><th>8석 합계</th></tr>
+<tr><td><code>atk</code> 공격</td><td>조각을 놓고 줄을 지웠을 때만 — 초당 0.3회쯤</td><td>초당 2~3개</td></tr>
+<tr><td><code>ko</code> 탈락</td><td>한 판에 7번</td><td>—</td></tr>
+<tr><td><b><code>st</code> 화면</b></td><td><b>초당 10회 × 좌석</b></td><td><b>초당 80개</b></td></tr>
+</table></div>
+<p>그러니 화면 한 장을 몇 바이트로 접느냐가 곧 이 게임의 대역폭이다. 200칸을 <strong>그냥 보내면</strong> JSON 배열로 400~800바이트, 8석 10Hz 면 <strong>50 KB/s</strong> 가 넘는다.</p>
+
+<!--SLIDE sec=4 t="런렝스 — 한 바이트에 두 정보"-->
+<h1><span class="no">{{N}}</span>런렝스 — 한 바이트에 두 정보</h1>
+<pre class="code txt"><code>  칸값은 0~8 뿐이다:  0 빈칸 · 1~7 조각 색 · 8 가비지        → <b>4비트</b>
+  런길이는 1~16 으로 자른다                                   → <b>4비트</b>
+
+      바이트 = (런길이 - 1) &lt;&lt; 4 | 칸값
+
+  예)  빈칸 16개  → 0xF0        빈칸 8개 → 0x70
+       가비지 10개 → 0x98        L조각 2개 → 0x13
+
+  빈 판 200칸 = 16×12 + 8  →  <b>13바이트</b>  →  base64 20자
+  꽉 찬 판(색이 섞여 있어도) →  대개 60~100바이트
+  최악(한 칸씩 색이 바뀜)   →  200바이트 (실제로는 나올 수 없는 판이다)</code></pre>
+<p class="small mut">4비트/4비트로 나눈 건 우연이 아니다. 칸값이 9종이라 4비트에 딱 들어가고, 남은 4비트로 최대 16런을 표현하면 <strong>가로 10칸짜리 빈 줄이 한 바이트를 넘지 않는다</strong>.</p>
+
+<!--SLIDE sec=4 t="높이 하나면 판을 읽는다"-->
+<h1><span class="no">{{N}}</span>높이 하나면 판을 읽는다</h1>
+<!--CODE file=net.cpp lines=129-137 cap="net.cpp — ng_height()"-->
+<p>서버가 <code>ko</code>·<code>even</code> 타겟팅을 하려면 "누가 죽기 직전인가"를 알아야 한다. 보드 전체를 서버가 해석하게 하면 <strong>서버가 게임 규칙을 알게 된다</strong>. 대신 <strong>정수 하나</strong>만 올려 보낸다.</p>
+<div class="note"><b>O(H×W) = 240회</b>위에서 아래로 훑다가 첫 블록을 만나면 끝이다. 초당 10번 부르는 값이라 이 정도면 공짜다. 열별 높이를 유지·갱신하는 방법도 있지만, 가비지가 밀려 올라올 때마다 전부 다시 계산해야 해서 이득이 없다.</div>
+
+<!--SLIDE sec=4 t="스냅샷 익스포트"-->
+<h1><span class="no">{{N}}</span>스냅샷 익스포트</h1>
+<!--CODE file=net.cpp lines=138-154 cap="net.cpp — ng_snapshot()"-->
+<p class="small mut">버퍼는 정적이고 최대 200바이트다. 반환값은 <strong>길이</strong>고, 주소는 <code>ng_snap_ptr()</code> 로 따로 받는다 — 주소는 변하지 않으므로 JS 가 한 번만 창을 내면 된다.</p>
+
+<!--SLIDE sec=4 t="접는 걸 눈으로"-->
+<h1><span class="no">{{N}}</span>접는 걸 눈으로</h1>
+<div class="demoWrap" data-demo="rle"></div>
+<p class="demohint">진짜 wasm 인스턴스 하나에 가비지를 한 줄씩 밀어 넣으면서 런렝스 바이트 수가 어떻게 변하는지 본다. <code>3×8</code> 은 "가비지(8)가 3칸 연속"이라는 뜻이다.</p>
+
+<!--SLIDE sec=4 t="상태 12칸 — 서버가 읽는 건 두 칸뿐"-->
+<h1><span class="no">{{N}}</span>상태 12칸 — 서버가 읽는 건 두 칸뿐</h1>
+<div class="scroll"><table>
+<tr><th>칸</th><th>이름</th><th>누가 쓰나</th><th>칸</th><th>이름</th><th>누가 쓰나</th></tr>
+<tr><td>0</td><td>state</td><td><b>서버</b> + 관전</td><td>6</td><td>piece</td><td>관전(떨어지는 조각)</td></tr>
+<tr><td>1</td><td>score</td><td>관전</td><td>7</td><td>rot</td><td>관전</td></tr>
+<tr><td>2</td><td>lines</td><td>관전</td><td>8</td><td>x</td><td>관전</td></tr>
+<tr><td>3</td><td>pieces</td><td>관전</td><td>9</td><td>y</td><td>관전</td></tr>
+<tr><td>4</td><td><b>height</b></td><td><b>서버(ko·even 타겟팅)</b></td><td>10</td><td>ghost</td><td>관전</td></tr>
+<tr><td>5</td><td>pending</td><td>관전</td><td>11</td><td>hold</td><td>관전</td></tr>
+</table></div>
+<p>스냅샷에는 <strong>굳은 블록만</strong> 들어 있다. 떨어지는 중인 조각은 <code>s[6..9]</code> 네 정수로 보내고 관전 화면이 직접 그린다 — 그게 런렝스에 넣는 것보다 싸고, 조각이 움직여도 스냅샷이 바뀌지 않아 압축률이 좋아진다.</p>
+<div class="note"><b>고정 길이 배열을 쓴 이유</b>객체(<code>{score: …, lines: …}</code>)로 보내면 키 이름이 매번 실려 간다. 12칸 배열은 JSON 으로 <code>[0,1200,14,63,7,2,5,0,3,1,18,-1]</code> 정도, <strong>40바이트</strong> 안쪽이다.</div>
+
+<!--SLIDE sec=4 t="대역폭 계산 — 그리고 실측"-->
+<h1><span class="no">{{N}}</span>대역폭 계산 — 그리고 실측</h1>
+<pre class="code txt"><code>  st 메시지 하나 = {"t":"st","i":3,"b":"&lt;base64 20~120자&gt;","s":[…12개]}
+                 ≈ 90 ~ 180 바이트 (판이 찰수록 커진다)
+
+  계산:  8석 × 10Hz × 130바이트 ≈ <b>10 KB/s</b>  (서버가 각 PC 로 내려보내는 양)
+         PC 1대가 올려보내는 건 자기 좌석 2석분 ≈ <b>2.6 KB/s</b>
+
+  실측(22부, PC 4대 × 2석, Go 서버, 24.6초):
+         보냄 1,324개 / 151.7 KB      받음 4,044개 / 482.4 KB
+         PC 1대당 평균 <b>1.54 KB/s 업 · 4.91 KB/s 다운</b></code></pre>
+<p>계산보다 실측이 작다. 판이 대체로 비어 있어 런렝스가 잘 먹고, 죽은 좌석은 <code>st</code> 를 보내지 않기 때문이다.</p>
+<div class="note"><b>이 숫자의 의미</b>1990년대 모뎀(56kbps ≈ 7 KB/s)으로도 8인 대전이 된다는 뜻이다. 병목은 대역폭이 아니라 <strong>지연</strong>이고, 이 설계에서 지연은 내 조작에 영향을 주지 않는다.</div>

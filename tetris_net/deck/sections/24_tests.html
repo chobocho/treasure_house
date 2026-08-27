@@ -1,0 +1,96 @@
+<!--SLIDE sec=24 t="검증 지도"-->
+<h1><span class="no">{{N}}</span>검증 지도</h1>
+<div class="scroll"><table>
+<tr><th>층</th><th>파일</th><th>도구</th><th>검사</th><th>무엇을 지키나</th></tr>
+<tr><td>C++ 멀티플레이</td><td><code>test_net.mjs</code></td><td>Node + 진짜 wasm</td><td>46</td><td>대기열·상쇄·유예·상한·스냅샷</td></tr>
+<tr><td>규칙 (JS)</td><td><code>test_room.mjs</code></td><td>Node</td><td>48</td><td>골든 벡터 44스텝</td></tr>
+<tr><td>규칙 (Go)</td><td><code>room_test.go</code></td><td><code>go test</code></td><td>13</td><td>같은 벡터</td></tr>
+<tr><td>규칙 (파이썬)</td><td><code>test_server.py</code></td><td><code>unittest</code></td><td>12</td><td>같은 벡터</td></tr>
+<tr><td>프레임 (Go)</td><td><code>ws_test.go</code></td><td><code>net.Pipe</code></td><td>9</td><td>RFC 6455</td></tr>
+<tr><td>서버 통합</td><td><code>hub_test.go</code></td><td><code>httptest</code></td><td>5</td><td>진짜 소켓으로 한 판</td></tr>
+<tr><td>브라우저 코드</td><td><code>test_browser.mjs</code></td><td>vm + DOM 스텁</td><td>21</td><td>루프백 8인 대전이 끝까지</td></tr>
+<tr><td>전 계통</td><td><code>bot_client.mjs</code></td><td>진짜 웹소켓</td><td>—</td><td>두 서버에 붙여 8인 실측</td></tr>
+</table></div>
+
+<!--SLIDE sec=24 t="wasm 테스트 — 판을 손으로 심는다"-->
+<h1><span class="no">{{N}}</span>wasm 테스트 — 판을 손으로 심는다</h1>
+<!--CODE file=test_net.mjs lines=1-26 cap="test_net.mjs — 헬퍼"-->
+<p>보드를 <strong>직접 써 넣는다</strong>(<code>V().board[idx(x,y)] = 1</code>). 조각을 굴려 상황을 만들면 테스트가 규칙에 의존하게 되고, 규칙이 바뀔 때마다 테스트가 무너진다. 원하는 판을 심고 <strong>한 수만</strong> 두는 게 훨씬 안정적이다.</p>
+
+<!--SLIDE sec=24 t="스냅샷과 높이"-->
+<h1><span class="no">{{N}}</span>스냅샷과 높이</h1>
+<!--CODE file=test_net.mjs lines=27-57 cap="test_net.mjs — RLE 왕복과 높이"-->
+<p class="small mut">"빈 판이 13바이트"는 계산으로 나온 값이다(200 = 16×12 + 8). 이 숫자를 테스트에 박아 두면 <strong>인코딩을 건드렸을 때 즉시 알게 된다.</strong></p>
+
+<!--SLIDE sec=24 t="대기열과 테트리스 만들기"-->
+<h1><span class="no">{{N}}</span>대기열과 테트리스 만들기</h1>
+<!--CODE file=test_net.mjs lines=58-77 cap="test_net.mjs — 대기열 · setupTetris"-->
+<div class="note"><b>잔돌 한 개를 남기는 이유</b>바닥 4줄을 채우고 세로 I 를 꽂으면 4줄이 다 지워져 <strong>판이 완전히 빈다</strong> → 퍼펙트 클리어 보너스 +10줄이 붙어 공격이 4가 아니라 14가 된다. <code>board[(H-5)*W] = 1</code> 한 칸이 그걸 막는다.</div>
+
+<!--SLIDE sec=24 t="상쇄"-->
+<h1><span class="no">{{N}}</span>상쇄</h1>
+<!--CODE file=test_net.mjs lines=78-99 cap="test_net.mjs — 4줄 상쇄와 부분 상쇄"-->
+<p>두 경우를 본다. 대기 4줄 + 공격 4줄 → <strong>둘 다 0</strong>. 대기 1줄 + 공격 4줄 → 대기 0, <strong>보낼 몫 3</strong>. 그리고 <code>ng_take_attack()</code> 을 두 번 불러 <strong>읽으면 비워지는지</strong>까지 확인한다.</p>
+
+<!--SLIDE sec=24 t="솟아오름"-->
+<h1><span class="no">{{N}}</span>솟아오름</h1>
+<!--CODE file=test_net.mjs lines=100-114 cap="test_net.mjs — 줄 못 지운 락"-->
+<p class="small mut">구멍 위치(<code>hole=5</code>)와 막타 귀속(<code>from=3</code>)까지 확인한다. 서버가 정해 준 구멍이 <strong>정확히 그 자리에</strong> 뚫리지 않으면 관전 화면이 갈린다.</p>
+
+<!--SLIDE sec=24 t="유예 — 두 방향으로"-->
+<h1><span class="no">{{N}}</span>유예 — 두 방향으로</h1>
+<!--CODE file=test_net.mjs lines=115-143 cap="test_net.mjs — delay 안과 밖"-->
+<p>같은 상황에서 <code>delay</code> 만 100ms / 5000ms 로 바꿔 <strong>정반대 결과</strong>를 확인한다. 싱글 클리어는 공격이 0이라 상쇄가 일어나지 않으므로, 오직 유예 규칙만 남는다 — <strong>변인 하나만 남긴 실험</strong>이다.</p>
+
+<!--SLIDE sec=24 t="상한과 여러 덩어리"-->
+<h1><span class="no">{{N}}</span>상한과 여러 덩어리</h1>
+<!--CODE file=test_net.mjs lines=144-178 cap="test_net.mjs — cap · 덩어리별 구멍"-->
+<p class="small mut">덩어리 2개(구멍 0, 구멍 9)를 한 락에서 올리면 <strong>먼저 넣은 것이 위, 나중 것이 아래</strong>다. 밀어 올리는 순서가 뒤집히면 이 검사가 잡는다.</p>
+
+<!--SLIDE sec=24 t="락을 놓치지 않는가"-->
+<h1><span class="no">{{N}}</span>락을 놓치지 않는가</h1>
+<!--CODE file=test_net.mjs lines=179-207 cap="test_net.mjs — 세 경로 · 상태 12칸"-->
+<p>하드드롭(<code>ng_press</code>)과 중력(<code>ng_update</code>) 두 경로를 각각 확인한다. <code>ng_apply</code>(AI)는 앞의 테스트들이 이미 쓰고 있다. <strong>세 문 중 하나라도 훅을 빠뜨리면 그 경로의 가비지가 통째로 사라진다.</strong></p>
+
+<!--SLIDE sec=24 t="통합 — 두 AI 를 room 에 붙인다"-->
+<h1><span class="no">{{N}}</span>통합 — 두 AI 를 room 에 붙인다</h1>
+<!--CODE file=test_net.mjs lines=208-249 cap="test_net.mjs — 끝까지 가는 한 판"-->
+<div class="note"><b>이 테스트가 확인하는 것</b>wasm 층과 room 층이 <strong>실제로 맞물리는가</strong>. 공격이 나가고, 서버가 타겟을 고르고, 가비지가 들어오고, 누군가 죽고, <code>end</code> 가 나온다. 단위 테스트 45개가 다 통과해도 이 하나가 실패할 수 있다.</div>
+
+<!--SLIDE sec=24 t="브라우저 없이 브라우저 코드를"-->
+<h1><span class="no">{{N}}</span>브라우저 없이 브라우저 코드를</h1>
+<!--CODE file=test_browser.mjs lines=1-32 cap="test_browser.mjs — DOM 스텁"-->
+<p class="small mut">캔버스 컨텍스트는 <strong>전부 빈 함수</strong>다. 그림이 맞는지는 검사하지 않는다 — <strong>예외 없이 끝까지 그리는지</strong>만 본다. 그것만으로도 레이아웃 산수의 0 나누기나 <code>undefined</code> 참조를 다 잡는다.</p>
+
+<!--SLIDE sec=24 t="샌드박스 — 덱과 같은 순서로"-->
+<h1><span class="no">{{N}}</span>샌드박스 — 덱과 같은 순서로</h1>
+<!--CODE file=test_browser.mjs lines=33-63 cap="test_browser.mjs — vm 컨텍스트"-->
+<pre class="code txt"><code>  ['room.mjs', 'netcore_browser.js', 'net_client.js', 'seats.js', 'arena.js', 'match.js']
+
+  덱 빌더가 &lt;script&gt; 로 인라인하는 순서와 <b>정확히 같다.</b>
+  그리고 room.mjs 의 `export ` 를 떼는 것도 같은 방식이다.
+  → 이 테스트가 통과하면 "덱 안의 데모가 로드된다"까지 확인된 것이다.</code></pre>
+
+<!--SLIDE sec=24 t="코덱·키맵·화면"-->
+<h1><span class="no">{{N}}</span>코덱·키맵·화면</h1>
+<!--CODE file=test_browser.mjs lines=64-109 cap="test_browser.mjs — S2·S3·S4"-->
+<p>키맵이 겹치지 않는지를 <strong>코드로</strong> 확인한다(<code>Object.keys(P1).filter(k =&gt; k in P2)</code>). 사람이 표를 눈으로 보고 확인하는 종류의 실수를 없앤다.</p>
+
+<!--SLIDE sec=24 t="루프백 8인 대전을 테스트로"-->
+<h1><span class="no">{{N}}</span>루프백 8인 대전을 테스트로</h1>
+<!--CODE file=test_browser.mjs lines=110-140 cap="test_browser.mjs — 가상 PC 4대 세우기"-->
+
+<!--SLIDE sec=24 t="rAF 를 손으로 돌린다"-->
+<h1><span class="no">{{N}}</span>rAF 를 손으로 돌린다</h1>
+<!--CODE file=test_browser.mjs lines=141-166 cap="test_browser.mjs — 프레임 펌프와 단언"-->
+<div class="note"><b>시계를 통제한다</b><code>performance.now()</code> 가 <code>CLOCK</code> 변수를 돌려주고, 펌프가 프레임마다 16씩 올린다. <strong>실시간을 기다리지 않으므로</strong> 24초짜리 대전이 몇 초 만에 끝난다. 이게 게임 루프를 테스트 가능하게 만드는 표준 수법이다.</p></div>
+
+<!--SLIDE sec=24 t="make test 실제 출력 ①"-->
+<h1><span class="no">{{N}}</span>make test 실제 출력 ①</h1>
+<!--RUN file=logs/make_test.log lines=1-24 cap="make test — wasm · room 3구현"-->
+<p class="small mut">앞의 네 줄이 이 프로젝트의 등뼈다: wasm 46, JS room 48, Go(벡터+프레임+통합) 27, 파이썬 12.</p>
+
+<!--SLIDE sec=24 t="make test 실제 출력 ②"-->
+<h1><span class="no">{{N}}</span>make test 실제 출력 ②</h1>
+<!--RUN file=logs/make_test.log lines=25-50 cap="make test — 브라우저 코드"-->
+<p class="small mut">마지막 줄의 "가비지가 실제로 오갔다 (grb 74회)"가 중요하다. 화면이 뜨는지가 아니라 <strong>대전이 실제로 성립했는지</strong>를 본다.</p>

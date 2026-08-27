@@ -1,0 +1,93 @@
+<!--SLIDE sec=3 t="아래층을 고치지 않고 층을 얹는 법"-->
+<h1><span class="no">{{N}}</span>아래층을 고치지 않고 층을 얹는 법</h1>
+<p>2편의 <code>ai.cpp</code> 는 <code>tetris.cpp</code> 를 <code>#include</code> 로 삼켰다. 3편도 같은 수를 쓴다.</p>
+<pre class="code txt"><code>  net.cpp
+    └── #include "../tetris_ai/ai.cpp"
+                    └── #include "tetris.cpp"
+
+  번역 단위(translation unit)가 하나이므로 net.cpp 는
+  tetris.cpp 의 static 변수(board, stats, pending_garbage…)와
+  static 함수(collide, push_rows…)를 <b>그대로 볼 수 있다.</b>
+
+  그런데 이 층은 일부러 그러지 않는다 — <b>공개 익스포트만</b> 쓴다.
+    ts_init · ts_update · ts_press · ts_release · ts_garbage · ai_plan · ai_apply
+  왜? 규칙을 두 곳에서 쓰기 시작하면 그때부터 아래층을 고쳐야 하기 때문이다.</code></pre>
+<div class="note"><b>딱 한 군데 예외</b><code>stats[]</code> 배열은 직접 읽고 쓴다. <code>stats[ST_EVENT]</code> 로 락을 감지하고 <code>stats[ST_ATTACK]</code> 을 상쇄 후 값으로 덮어쓴다. 이 배열은 애초에 <strong>"바깥에 보여 주려고 만든" 공개 상태</strong>이고, JS 도 같은 배열을 TypedArray 로 읽는다.</div>
+
+<!--SLIDE sec=3 t="net.cpp — 무엇을 더하는가"-->
+<h1><span class="no">{{N}}</span>net.cpp — 무엇을 더하는가</h1>
+<!--CODE file=net.cpp lines=1-28 cap="net.cpp — 머리말과 상태"-->
+<p class="small mut"><code>Chunk</code> 를 정수 4개짜리 평범한 구조체로 둔 이유: JS 가 <code>Int32Array</code> 로 대기열 전체에 창을 내어 <strong>복사 없이</strong> 게이지를 그린다. 배열이 정적이라 힙도, 할당도 없다.</p>
+
+<!--SLIDE sec=3 t="대기열은 배열 하나"-->
+<h1><span class="no">{{N}}</span>대기열은 배열 하나</h1>
+<!--CODE file=net.cpp lines=29-38 cap="net.cpp — 대기열 헬퍼"-->
+<p><code>ngq_pop</code> 은 앞에서 하나 빼고 나머지를 당긴다 — O(n) 이다. 링버퍼로 만들면 O(1) 이지만 <strong>n 이 최대 24</strong>고, 부르는 건 조각을 놓을 때뿐(초당 5~10회)이다. 링버퍼는 JS 에서 <code>Int32Array</code> 로 순서대로 읽는 코드를 복잡하게 만든다 — 여기서는 단순한 쪽이 이긴다.</p>
+<div class="note"><b>ng_sync_pending 이 하는 일</b>대기 줄 수 합계를 <code>stats[ST_PENDING]</code> 에 써 둔다. JS 가 매 프레임 <code>ng_pending()</code> 을 부르는 대신 이미 읽고 있는 배열에서 가져가게 하려고.</div>
+
+<!--SLIDE sec=3 t="락 한 번에 일어나는 일 전부"-->
+<h1><span class="no">{{N}}</span>락 한 번에 일어나는 일 전부</h1>
+<!--CODE file=net.cpp lines=39-68 cap="net.cpp — ng_on_lock()"-->
+<p class="small mut">순서가 곧 규칙이다. <b>①상쇄 → ②남은 몫 적립 → ③솟아오름</b>. 이 순서를 바꾸면 "맞받아쳤는데도 줄이 올라오는" 게임이 된다.</p>
+
+<!--SLIDE sec=3 t="상쇄를 그림으로"-->
+<h1><span class="no">{{N}}</span>상쇄를 그림으로</h1>
+<pre class="code txt"><code>  대기열      [ 4줄(좌석5) ][ 2줄(좌석1) ][ 3줄(좌석7) ]   합계 9줄
+  내 공격     테트리스 = 4줄
+
+  ① 앞에서부터 깎는다
+              [ 4줄 ] 을 통째로 지운다            남은 공격 0
+  대기열      [ 2줄(좌석1) ][ 3줄(좌석7) ]        합계 5줄
+
+  ② 서버로 보낼 몫 = 0    → atk 메시지를 아예 보내지 않는다
+  ③ 줄을 지웠으므로(clear=4) 솟지 않는다 — 단, 맨 앞 덩어리가 900ms 넘게 묵었으면 솟는다</code></pre>
+<div class="cols">
+  <div class="card a"><h4>왜 앞에서부터인가</h4><p>먼저 온 게 먼저 묵는다. 뒤에서 깎으면 맨 앞 덩어리가 영원히 늙어 <code>delay</code> 규칙이 무의미해진다.</p></div>
+  <div class="card a"><h4>왜 stats[ST_ATTACK] 을 덮어쓰나</h4><p>JS 가 그 값을 그대로 서버에 싣는다. 상쇄 전 값을 보내면 <strong>상쇄한 만큼 상대가 두 번 맞는다</strong>.</p></div>
+</div>
+
+<!--SLIDE sec=3 t="락 훅 — ST_EVENT 를 지켜본다"-->
+<h1><span class="no">{{N}}</span>락 훅 — ST_EVENT 를 지켜본다</h1>
+<!--CODE file=net.cpp lines=69-107 cap="net.cpp — 아래층을 감싸는 문들"-->
+<p class="small mut">락은 세 경로로 난다: 중력(<code>ts_update</code>) · 하드드롭(<code>ts_press</code>) · AI 착수(<code>ai_apply</code>). 셋을 다 감싸야 한다. 하나라도 빠뜨리면 그 경로의 가비지가 통째로 사라진다 — 테스트 두 개가 이걸 지킨다(23부).</p>
+
+<!--SLIDE sec=3 t="dt 상한을 똑같이 맞추는 이유"-->
+<h1><span class="no">{{N}}</span>dt 상한을 똑같이 맞추는 이유</h1>
+<pre class="code cpp"><code>EXPORT(ng_update) <i class="kw">int</i> <i class="fn">ng_update</i>(<i class="kw">int</i> dt_ms) {
+  <i class="kw">if</i> (dt_ms &gt; <i class="nb">100</i>) dt_ms = <i class="nb">100</i>;        <i class="cm">// 아래층과 같은 상한</i>
+  <i class="kw">for</i> (<i class="kw">int</i> i = <i class="nb">0</i>; i &lt; ngq_n; i++) ngq[i].age += dt_ms;
+  <i class="kw">int</i> ev = stats[ST_EVENT];
+  <i class="fn">ts_update</i>(dt_ms);
+  ...</code></pre>
+<p><code>ts_update</code> 는 안에서 <code>dt &gt; 100 → 100</code> 으로 자른다(탭 전환 후 몇 초짜리 dt 를 막으려고). 이 층이 자르지 않고 원래 dt 로 나이를 더하면 <strong>탭을 5초 껐다 켰을 때 대기열만 5초 늙는다</strong> — 판은 100ms 만 흘렀는데.</p>
+<div class="note"><b>이런 종류의 버그</b>두 층이 같은 값을 각자 해석할 때 생긴다. 고치는 방법은 둘 중 하나 — 상한을 한 곳으로 모으거나, 여기처럼 <strong>같은 상한을 명시적으로 되풀이하고 왜 그런지 주석에 적거나</strong>. 아래층을 못 고치는 상황에서는 후자뿐이다.</div>
+
+<!--SLIDE sec=3 t="서버와 주고받는 두 방향"-->
+<h1><span class="no">{{N}}</span>서버와 주고받는 두 방향</h1>
+<!--CODE file=net.cpp lines=108-128 cap="net.cpp — 입출력 익스포트"-->
+<p class="small mut"><code>ng_take_attack()</code> 이 "읽으면 비워진다"인 게 중요하다. JS 가 프레임을 한 번 건너뛰어도 줄 수가 사라지지 않고 다음 프레임에 합쳐서 나간다. 프레임 드롭이 곧 공격 손실이 되면 느린 기계가 불리해진다.</p>
+
+<!--SLIDE sec=3 t="대기열이 넘치면"-->
+<h1><span class="no">{{N}}</span>대기열이 넘치면</h1>
+<pre class="code cpp"><code><i class="kw">if</i> (ngq_n &gt;= NG_MAXQ) { ngq[NG_MAXQ - <i class="nb">1</i>].n += n; <i class="fn">ng_sync_pending</i>(); <i class="kw">return</i>; }</code></pre>
+<p>덩어리 24개가 다 차면 마지막 덩어리에 <strong>합쳐 넣는다</strong>. 버리지 않는다 — 버리면 "때렸는데 안 맞았다"가 되어 대전이 이상해진다. 구멍 위치는 마지막 덩어리 것을 따라간다.</p>
+<div class="cols">
+  <div class="card a"><h4>24개면 충분한가</h4><p>덩어리 하나는 조각 하나를 놓을 때 생긴다. 24개가 쌓이려면 <strong>내가 조각을 한 번도 못 놓는 동안 남들이 24번 공격</strong>해야 한다. 그 전에 이미 죽는다.</p></div>
+  <div class="card a"><h4>왜 상한이 필요한가</h4><p>정적 배열이라서다. 동적 할당을 쓰면 상한이 필요 없지만, 이 wasm 은 <code>-nostdlib</code> 라 <code>malloc</code> 자체가 없다.</p></div>
+</div>
+
+<!--SLIDE sec=3 t="Node 에서 wasm 을 여는 최소 로더"-->
+<h1><span class="no">{{N}}</span>Node 에서 wasm 을 여는 최소 로더</h1>
+<!--CODE file=net_core.mjs lines=1-28 cap="net_core.mjs — 상수는 C++ enum 과 1:1"-->
+<p class="small mut">C++ 의 <code>enum</code> 을 JS 에 손으로 옮겨 적은 표다. 이게 <strong>ABI</strong> 다 — 한쪽만 고치면 조용히 어긋난다. 그래서 테스트가 <code>s[4] === 높이</code> 같은 걸 명시적으로 확인한다.</p>
+
+<!--SLIDE sec=3 t="모듈 하나, 인스턴스 여덟"-->
+<h1><span class="no">{{N}}</span>모듈 하나, 인스턴스 여덟</h1>
+<!--CODE file=net_core.mjs lines=29-57 cap="net_core.mjs — 로더와 메모리 창"-->
+<div class="note"><b>refresh() 를 부르는 이유</b>wasm 이 메모리를 늘리면 기존 <code>TypedArray</code> 는 <strong>detach</strong> 되어 길이 0이 된다. 이 wasm 은 메모리를 늘리지 않지만(전부 정적), 그 가정에 기대는 코드는 언젠가 반드시 깨진다. 창을 다시 만드는 함수를 두고 메모리를 건드릴 만한 호출 뒤에 부른다.</div>
+
+<!--SLIDE sec=3 t="프로토콜 조각을 로더에 붙여 둔다"-->
+<h1><span class="no">{{N}}</span>프로토콜 조각을 로더에 붙여 둔다</h1>
+<!--CODE file=net_core.mjs lines=58-82 cap="net_core.mjs — 스냅샷·상태 만들기"-->
+<p><code>snapshot</code>/<code>packState</code> 를 로더 옆에 둔 이유는 <strong>이것들이 wasm 메모리 배치를 아는 유일한 코드</strong>이기 때문이다. 프로토콜 층은 "문자열 하나와 정수 12개"만 알면 된다.</p>
+<div class="note"><b>브라우저 쪽에도 같은 함수가 있다</b><code>netcore_browser.js</code> — 다른 건 <code>Buffer</code> 대신 <code>btoa/atob</code> 를 쓰는 두 줄뿐이다(16부). 두 벌을 유지하는 대신 한 벌로 합칠 수도 있지만, Node 전용 <code>import</code> 를 브라우저 스크립트에 끌고 들어가는 값이 더 비쌌다.</div>
