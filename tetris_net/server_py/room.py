@@ -41,7 +41,7 @@ class Room:
         self.rng_state = x & MASK32
         return self.rng_state
 
-    # ── 조회 헬퍼 ────────────────────────────────────────────────────
+    # ── 조회 헬퍼 ──
     def host(self):
         return min(self.peers) if self.peers else 0
 
@@ -69,7 +69,7 @@ class Room:
     def err(pid, code):
         return [(pid, {'t': 'err', 'code': code})]
 
-    # ── 진입점 ──────────────────────────────────────────────────────
+    # ── 진입점 ──
     def handle(self, pid, msg, now):
         t = (msg or {}).get('t')
         if t == 'bye':
@@ -148,7 +148,7 @@ class Room:
             s['alive'], s['recv'], s['height'], s['place'], s['hits'] = True, 0, 0, 0, []
         return [(0, {'t': 'start', 'seed': self.round_seed, 'seats': self.seat_list()})]
 
-    # ── 공격 라우팅 — 이 게임에서 서버가 하는 유일한 판단 ─────────────────
+    # ── 공격 라우팅 — 이 게임에서 서버가 하는 유일한 판단 ──
     def pick_target(self, frm, now):
         cand = [j for j in self.alive_seats() if j != frm]
         if not cand:

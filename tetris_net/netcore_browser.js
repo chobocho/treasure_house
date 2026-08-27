@@ -62,7 +62,7 @@ async function loadNet(src, seed) {
   return core;
 }
 
-// ── 프로토콜 조각 (protocol.md §5·§6) ─────────────────────────────────
+// ── 프로토콜 조각 (protocol.md §5·§6) ──
 function snapshot(core) {
   const n = core.e.ng_snapshot(), raw = core.views.snap;
   let s = '';

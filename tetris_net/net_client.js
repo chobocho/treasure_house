@@ -79,7 +79,7 @@ class LoopbackTransport {
   close() { this.hub.peers.delete(this.pid); }
 }
 
-// ── 클라이언트 본체 ──────────────────────────────────────────────────
+// ── 클라이언트 본체 ──
 class NetClient {
   constructor(transport, name) {
     this.tr = transport;

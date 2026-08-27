@@ -153,9 +153,9 @@ class TestServer(unittest.IsolatedAsyncioTestCase):
         await b.send_json({'t': 'join', 'room': code})
         await _read_frames(b, ['joined'])
 
-        for conn, who in ((a, '보라'), (b, '다온')):
-            await conn.send_json({'t': 'seat', 'i': -1, 'kind': 'human', 'name': who})
-            await conn.send_json({'t': 'seat', 'i': -1, 'kind': 'ai', 'name': '봇', 'lv': 'hard'})
+        for k, (conn, who) in enumerate(((a, '보라'), (b, '다온'))):
+            await conn.send_json({'t': 'seat', 'i': k * 2, 'kind': 'human', 'name': who})
+            await conn.send_json({'t': 'seat', 'i': k * 2 + 1, 'kind': 'ai', 'name': '봇', 'lv': 'hard'})
             await conn.send_json({'t': 'ready', 'v': True})
 
         # 좌석 4석이 전부 준비될 때까지 기다린다

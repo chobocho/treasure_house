@@ -60,7 +60,7 @@ class Arena {
   onGarbage(i, n, from) { this.arrows.push({ from, to: i, n, t0: performance.now() }); }
   onKo(i, place) { const s = this.seats.find((x) => x.i === i); if (s) { s.alive = false; s.place = place; } }
 
-  // ── 배치 ────────────────────────────────────────────────────────────
+  // ── 배치 ──
   layout() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = this.host.clientWidth, h = this.host.clientHeight || 360;
