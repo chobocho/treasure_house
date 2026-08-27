@@ -1,0 +1,52 @@
+<!--SLIDE sec=18 t="프레임마다 하는 일 다섯"-->
+<h1><span class="no">{{N}}</span>프레임마다 하는 일 다섯</h1>
+<pre class="code txt"><code>  requestAnimationFrame 마다 (약 16.7ms):
+
+    ① 내 좌석들의 wasm 을 dt 만큼 진행    ng_update(dt)
+    ② AI 좌석이면 한 수 둘 때가 됐는지     ng_step()
+    ③ 쌓인 공격이 있으면 서버로            atk {i, n}
+    ④ 10Hz 로 내 화면을 접어서 보낸다       st {i, b, s}
+    ⑤ 죽었으면 알린다                      ko {i}
+
+  그리고 arena.draw() 한 번.
+
+  남의 판은? 계산하지 않는다. 서버가 중계해 준 st 를 그대로 그린다.</code></pre>
+<p class="small mut">좌석이 2석이어도 루프는 하나다. <code>for (const [i, seat] of this.seats)</code> 안에서 두 번 도는 것뿐 — <strong>"한 PC 에 두 명"이 여기서도 특별 케이스가 아니다.</strong></p>
+
+<!--SLIDE sec=18 t="match.js — 한 판의 준비"-->
+<h1><span class="no">{{N}}</span>match.js — 한 판의 준비</h1>
+<!--CODE file=match.js lines=1-30 cap="match.js — 머리말과 생성자"-->
+
+<!--SLIDE sec=18 t="같은 시드로 인스턴스를 만든다"-->
+<h1><span class="no">{{N}}</span>같은 시드로 인스턴스를 만든다</h1>
+<!--CODE file=match.js lines=31-60 cap="match.js — begin()"-->
+<div class="note"><b>plan 이라는 인자</b><code>[{i, kind, lv, slot}]</code> — "내 좌석 3번은 AI(hard), 5번은 사람이고 2P 키를 쓴다"를 표현한다. 서버는 <code>kind</code> 만 알고 <code>slot</code> 은 모른다 — <strong>어느 키맵을 쓸지는 그 PC 안의 문제</strong>다.</div>
+
+<!--SLIDE sec=18 t="서버에서 오는 것들"-->
+<h1><span class="no">{{N}}</span>서버에서 오는 것들</h1>
+<!--CODE file=match.js lines=61-86 cap="match.js — grb · st · ko · end"-->
+<p class="small mut"><code>onState</code> 가 <code>if (!this.seats.has(m.i))</code> 로 거른다. 내 좌석의 <code>st</code> 는 서버가 나에게 되돌려 보내지 않지만, 만약 보내더라도 <strong>내 판을 남의 스냅샷으로 덮어쓰는 사고</strong>는 나지 않는다.</p>
+
+<!--SLIDE sec=18 t="루프 본체"-->
+<h1><span class="no">{{N}}</span>루프 본체</h1>
+<!--CODE file=match.js lines=87-121 cap="match.js — frame() 과 배선"-->
+<div class="cols">
+  <div class="card a"><h4><code>dt &gt; 100</code> 상한</h4><p>탭을 껐다 켜면 <code>rAF</code> 가 몇 초짜리 dt 를 준다. 자르지 않으면 <strong>돌아왔을 때 판이 이미 죽어 있다</strong>. wasm 안에도 같은 상한이 있지만 여기서도 잘라야 대기열 나이가 맞는다(3부).</p></div>
+  <div class="card a"><h4><code>wireMatch</code> 를 함수로 뺀 이유</h4><p>진짜 페이지(<code>app.js</code>)와 이 문서의 데모(<code>demo.js</code>)가 <strong>둘 다 이걸 부른다</strong>. 배선을 두 곳에 적으면 언젠가 한 곳만 고친다.</p></div>
+</div>
+
+<!--SLIDE sec=18 t="지연을 넣어 본다"-->
+<h1><span class="no">{{N}}</span>지연을 넣어 본다</h1>
+<div class="demoWrap" data-demo="lag" data-latency="200"></div>
+<p class="demohint">편도 200ms(왕복 400ms)를 인위로 넣은 8인 대전이다. 좌석 1을 <strong>직접 조작해 보라</strong> — 클릭한 뒤 방향키·Space. 내 판은 조금도 늦지 않고, 남의 판만 늦게 갱신되며 가비지가 늦게 도착한다. 이것이 "클라이언트 권위"의 값이다.</p>
+
+<!--SLIDE sec=18 t="지연이 실제로 바꾸는 것"-->
+<h1><span class="no">{{N}}</span>지연이 실제로 바꾸는 것</h1>
+<div class="scroll"><table>
+<tr><th>왕복 지연</th><th>내 조작</th><th>남의 판</th><th>상쇄 창</th><th>체감</th></tr>
+<tr><td>0ms (로컬)</td><td>즉시</td><td>즉시</td><td>900ms</td><td>—</td></tr>
+<tr><td>40ms (같은 공유기)</td><td><b>즉시</b></td><td>40ms 늦음</td><td>~880ms</td><td>차이를 못 느낀다</td></tr>
+<tr><td>150ms (다른 지역)</td><td><b>즉시</b></td><td>150ms 늦음</td><td>~750ms</td><td>관전 화면이 조금 굼뜨다</td></tr>
+<tr><td>400ms (위성·모바일 불량)</td><td><b>즉시</b></td><td>0.4초 늦음</td><td>~500ms</td><td>맞받아칠 시간이 줄어 불리하다</td></tr>
+</table></div>
+<p><strong>지연이 공격 도착을 늦춘다는 게 유일한 불이익</strong>이다. 그리고 그건 양방향이라 대칭이다 — 내 공격도 늦게 도착한다. 서버 권위 구조였다면 이 표의 "내 조작" 칸이 전부 지연만큼 늦었을 것이다.</p>

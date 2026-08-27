@@ -1,0 +1,64 @@
+<!--SLIDE sec=22 t="진짜 페이지 — 서버가 같이 내준다"-->
+<h1><span class="no">{{N}}</span>진짜 페이지 — 서버가 같이 내준다</h1>
+<pre class="code sh"><code>$ make web          <i class="cm"># room.mjs 의 export 를 떼고, js·wasm·weights 를 web/ 에 모은다</i>
+$ make run-go       <i class="cm"># 또는 make run-py</i>
+
+각 PC 에서:  http://&lt;서버IP&gt;:8787/
+
+web/
+  index.html            로비 + 대전 화면 (79줄)
+  room.js               ← room.mjs 에서 `export ` 만 뗀 것
+  netcore_browser.js    net_client.js    seats.js    arena.js    match.js
+  app.js                이 페이지만의 배선 (114줄)
+  tetris_net.wasm       17,360 바이트
+  weights.json          2편의 GA 산출물</code></pre>
+<div class="note"><b><code>file://</code> 로는 안 된다</b>브라우저는 <code>file://</code> 페이지에서 웹소켓을 열지 못한다(그리고 <code>fetch</code> 도 막힌다). 그래서 서버가 정적 파일도 같이 내주게 만들었다 — 포트 하나로 끝난다.</div>
+
+<!--SLIDE sec=22 t="index.html — 로비"-->
+<h1><span class="no">{{N}}</span>index.html — 로비</h1>
+<!--CODE file=web/index.html lines=1-30 cap="web/index.html — 스타일" lang=html-->
+<p class="small mut"><code>100dvh</code> 를 쓴다. 모바일 브라우저의 주소창이 접히고 펴질 때 <code>100vh</code> 는 <strong>화면 밖으로 넘치는</strong> 값이 된다.</p>
+
+<!--SLIDE sec=22 t="로비 폼"-->
+<h1><span class="no">{{N}}</span>로비 폼</h1>
+<!--CODE file=web/index.html lines=31-60 cap="web/index.html — 서버·방·좌석 설정" lang=html-->
+
+<!--SLIDE sec=22 t="스크립트 순서"-->
+<h1><span class="no">{{N}}</span>스크립트 순서</h1>
+<!--CODE file=web/index.html lines=61-79 cap="web/index.html — 좌석표와 스크립트" lang=html-->
+<p>일반 스크립트 7개를 순서대로 읽는다. 모듈이 아니라서 <strong>번들러가 필요 없고</strong>, 각 파일의 최상위 <code>const</code>/<code>class</code> 가 전역 렉시컬 스코프에 들어가 서로 보인다. 이 문서(덱)가 같은 파일들을 <code>&lt;script&gt;</code> 로 인라인하는 것과 <strong>정확히 같은 방식</strong>이다.</p>
+
+<!--SLIDE sec=22 t="app.js — 부팅"-->
+<h1><span class="no">{{N}}</span>app.js — 부팅</h1>
+<!--CODE file=app.js lines=1-36 cap="app.js — boot()"-->
+<p class="small mut">서버 주소 기본값을 <code>location.host</code> 에서 만든다. 페이지를 받아 온 그 서버가 웹소켓 서버이기도 하므로, 대부분의 경우 사용자가 주소를 만질 일이 없다.</p>
+
+<!--SLIDE sec=22 t="접속과 배선"-->
+<h1><span class="no">{{N}}</span>접속과 배선</h1>
+<!--CODE file=app.js lines=37-60 cap="app.js — connect()"-->
+<div class="note"><b><code>ERR_KO</code> 가 여기서 쓰인다</b>서버는 <code>{"t":"err","code":"full"}</code> 만 보낸다. "이 PC 는 이미 2석을 쥐고 있습니다"라는 문장은 <strong>클라이언트 안에</strong> 있다 — 서버를 건드리지 않고 말투를 바꾸거나 언어를 추가할 수 있다.</div>
+
+<!--SLIDE sec=22 t="좌석표 — 클릭으로 앉고 선다"-->
+<h1><span class="no">{{N}}</span>좌석표 — 클릭으로 앉고 선다</h1>
+<!--CODE file=app.js lines=61-95 cap="app.js — renderSeats() · onStart()"-->
+<p><code>slot++</code> 가 한 PC 의 사람 좌석에 <strong>1P·2P 를 순서대로</strong> 배정한다. AI 좌석은 슬롯을 먹지 않는다 — 그래서 "사람 1명 + AI 1명"인 PC 에서 그 사람은 1P 키를 쓴다.</p>
+
+<!--SLIDE sec=22 t="1인용 — 서버 없이"-->
+<h1><span class="no">{{N}}</span>1인용 — 서버 없이</h1>
+<!--CODE file=app.js lines=96-114 cap="app.js — solo()"-->
+<pre class="code txt"><code>  좌석 1석 방 + LoopbackHub → 서버가 필요 없다.
+  그런데 코드 경로는 <b>온라인과 완전히 같다</b>:
+      hello → create → seat → ready → start → (게임) → ko → end
+
+  1인용 전용 코드가 <b>0줄</b>이다. 이게 "좌석"을 단위로 잡은 대가로 얻은 것이다.</code></pre>
+
+<!--SLIDE sec=22 t="여러 대로 실제로 붙일 때"-->
+<h1><span class="no">{{N}}</span>여러 대로 실제로 붙일 때</h1>
+<div class="scroll"><table>
+<tr><th>상황</th><th>할 일</th></tr>
+<tr><td>같은 공유기 안</td><td>서버 PC 의 사설 IP(<code>192.168.x.x</code>)로 접속. 방화벽에서 8787 열기</td></tr>
+<tr><td>방장 PC 가 윈도우</td><td>"개인 네트워크"로 잡혀 있는지 확인. 공용으로 잡히면 인바운드가 막힌다</td></tr>
+<tr><td>인터넷 너머</td><td>포트포워딩, 또는 <code>ssh -R</code>/터널. 24부에 nginx + TLS 설정</td></tr>
+<tr><td>HTTPS 로 서비스</td><td>페이지가 <code>https://</code> 면 웹소켓도 <code>wss://</code> 여야 한다 — <code>app.js</code> 가 자동으로 맞춘다</td></tr>
+<tr><td>휴대폰으로 참가</td><td>그대로 된다. 다만 터치 조작은 없다 — 게임패드나 블루투스 키보드가 필요하다</td></tr>
+</table></div>

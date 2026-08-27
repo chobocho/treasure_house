@@ -1,0 +1,97 @@
+<!--SLIDE sec=10 t="동시성 설계가 이 파일의 전부다"-->
+<h1><span class="no">{{N}}</span>동시성 설계가 이 파일의 전부다</h1>
+<pre class="code txt"><code>  규칙 셋:
+    ① 방 하나 = 고루틴 하나.  Room 상태는 그 고루틴만 만진다  →  Room 에 뮤텍스가 없다
+    ② 연결 하나 = 읽기 고루틴 1 + 쓰기 고루틴 1
+    ③ 고루틴 사이는 오직 채널로만 이야기한다
+
+  ┌── 연결 A ──┐   in ch    ┌────────────┐        send ch   ┌── 연결 A ──┐
+  │ 읽기 고루틴 ├──────────►│ 방 고루틴   ├─────────────────►│ 쓰기 고루틴 │
+  └────────────┘            │  Room.Handle│                  └────────────┘
+  ┌── 연결 B ──┐   in ch    │  (순수 함수)│        send ch   ┌── 연결 B ──┐
+  │ 읽기 고루틴 ├──────────►│             ├─────────────────►│ 쓰기 고루틴 │
+  └────────────┘            └────────────┘                  └────────────┘
+
+  이 구조 덕분에 "골든 벡터로 검증한 그 순수 함수"가 <b>그대로 서버에서 돈다.</b>
+  락을 걸고 여기저기서 부르기 시작하면 검증한 것과 도는 것이 달라진다.</code></pre>
+
+<!--SLIDE sec=10 t="hub.go — 머리말과 방 코드"-->
+<h1><span class="no">{{N}}</span>hub.go — 머리말과 방 코드</h1>
+<!--CODE file=server_go/hub.go lines=1-32 cap="hub.go — 상수와 이벤트"-->
+<p class="small mut">방 코드 알파벳에서 <code>0/O</code>, <code>1/I/L</code> 을 뺐다. 방 코드는 <strong>전화로 불러 주는 물건</strong>이라 헷갈리는 글자가 있으면 안 된다. 32글자 × 6자리 = 10억 가지.</p>
+
+<!--SLIDE sec=10 t="Peer — 채널을 닫는 곳이 둘이면"-->
+<h1><span class="no">{{N}}</span>Peer — 채널을 닫는 곳이 둘이면</h1>
+<!--CODE file=server_go/hub.go lines=33-68 cap="hub.go — Peer 와 push()"-->
+<div class="note"><b>실제로 났던 패닉</b><code>panic: send on closed channel</code>. 읽기 고루틴이 끊김을 감지해 채널을 닫는 동안, 방 고루틴이 그 PC 에게 브로드캐스트를 밀어 넣었다. Go 에서 <strong>닫힌 채널에 쓰면 패닉이고, 두 번 닫아도 패닉이다.</strong> <code>dead</code> 플래그와 뮤텍스가 그 둘을 동시에 막는다.</div>
+
+<!--SLIDE sec=10 t="느린 클라이언트는 끊는다"-->
+<h1><span class="no">{{N}}</span>느린 클라이언트는 끊는다</h1>
+<pre class="code go"><code>	<i class="kw">select</i> {
+	<i class="kw">case</i> p.send &lt;- b:
+	<i class="kw">default</i>:
+		<i class="cm">// 큐가 찼다 = 이 PC 가 우리가 보내는 속도를 못 따라온다.</i>
+		<i class="cm">// 기다려 주면 방 고루틴 전체가 그 PC 하나 때문에 멈춘다. 끊는 게 맞다.</i>
+		p.dead = <i class="kw">true</i>
+		<i class="fn">close</i>(p.send)
+		<i class="kw">go</i> p.conn.<i class="fn">Close</i>()
+	}</code></pre>
+<div class="cols">
+  <div class="card a"><h4>기다리면 안 되는 이유</h4><p>방 고루틴은 <strong>모든 좌석의 메시지를 직렬로</strong> 처리한다. 한 PC 의 TCP 창이 막혀 있는데 거기서 대기하면 <strong>방 전체가 멈춘다</strong>. 8인 대전이 한 사람의 와이파이 때문에 정지한다.</p></div>
+  <div class="card a"><h4>64개면 충분한가</h4><p>초당 들어오는 메시지가 80~100개다. 큐 64개가 차려면 <strong>0.6초 넘게</strong> 아무것도 못 읽는 상태여야 한다. 그 정도면 이미 게임을 못 한다.</p></div>
+</div>
+
+<!--SLIDE sec=10 t="우아한 종료 — 마지막 한 마디"-->
+<h1><span class="no">{{N}}</span>우아한 종료 — 마지막 한 마디</h1>
+<!--CODE file=server_go/hub.go lines=69-79 cap="hub.go — finish()"-->
+<p>버전이 안 맞아 <code>err ver</code> 를 보내고 끊을 때, <code>conn.Close()</code> 를 먼저 하면 <strong>그 메시지가 소켓에 닿지 못한다</strong>. 채널만 닫으면 쓰기 고루틴이 남은 큐를 다 비운 뒤에 소켓을 닫는다.</p>
+<div class="note"><b>테스트가 잡았다</b><code>TestHelloVersion</code> 이 "err 를 기다리다 연결이 끊겼다"로 실패했다. 순서를 바꾸는 것만으로 통과했다 — <strong>닫는 순서는 프로토콜의 일부다.</strong></div>
+
+<!--SLIDE sec=10 t="방과 허브"-->
+<h1><span class="no">{{N}}</span>방과 허브</h1>
+<!--CODE file=server_go/hub.go lines=80-112 cap="hub.go — RoomHost · Hub · 방 코드 생성"-->
+<p class="small mut">방 코드와 방 시드는 <code>crypto/rand</code> 로 뽑는다. 여기서는 <strong>예측 불가능성</strong>이 필요하다 — 방 코드를 찍어 맞히면 남의 방에 들어갈 수 있고, 라운드 시드를 미리 알면 조각 순서를 미리 안다.</p>
+
+<!--SLIDE sec=10 t="방 만들기와 찾기"-->
+<h1><span class="no">{{N}}</span>방 만들기와 찾기</h1>
+<!--CODE file=server_go/hub.go lines=113-155 cap="hub.go — createRoom · find · drop · Stats"-->
+<p><code>h.mu</code> 는 <strong>방 목록(map)</strong>만 지킨다. 방 안의 상태는 그 방의 고루틴만 만지므로 이 뮤텍스와 무관하다 — 락의 범위를 이렇게 좁게 유지하는 게 요령이다.</p>
+
+<!--SLIDE sec=10 t="방 고루틴"-->
+<h1><span class="no">{{N}}</span>방 고루틴</h1>
+<!--CODE file=server_go/hub.go lines=156-195 cap="hub.go — loop() · dispatch()"-->
+<div class="note"><b>빈 방은 고루틴째로 사라진다</b>마지막 PC 가 나가면 <code>hub.drop(code)</code> 후 <code>return</code>. 방 객체·채널·고루틴이 전부 GC 대상이 된다. 별도의 청소 타이머가 필요 없다 — <strong>수명이 곧 참조다.</strong></div>
+
+<!--SLIDE sec=10 t="연결 하나의 일생 ①"-->
+<h1><span class="no">{{N}}</span>연결 하나의 일생 ①</h1>
+<!--CODE file=server_go/hub.go lines=196-224 cap="hub.go — ServeWS 시작"-->
+<p class="small mut"><code>defer</code> 안에서 <code>bye</code> 를 방으로 밀어 넣는다. 클라이언트가 곱게 <code>close</code> 를 보내든, 케이블을 뽑든, 패닉이 나든 — <strong>이 경로는 반드시 지나간다</strong>. 좌석이 유령으로 남지 않는 이유다.</p>
+
+<!--SLIDE sec=10 t="봉투 하나로 다 받으면 생기는 일"-->
+<h1><span class="no">{{N}}</span>봉투 하나로 다 받으면 생기는 일</h1>
+<!--CODE file=server_go/hub.go lines=225-259 cap="hub.go — 봉투와 hello"-->
+<div class="cols">
+  <div class="card no"><h4>버그</h4><p><code>V int</code> 로 선언했더니 <code>ready</code> 의 <code>"v":true</code> 가 <strong>파싱 오류</strong>가 되어 메시지가 통째로 버려졌다. 좌석은 잡히는데 준비만 안 되는, 원인을 짐작하기 어려운 증상이었다.</p></div>
+  <div class="card a"><h4>고침</h4><p>hub 가 해석할 필요가 없는 칸은 <code>json.RawMessage</code> 로 그냥 지나가게 둔다. <strong>모르는 것을 모르는 채로 넘기는 것</strong>이 중계자의 일이다.</p></div>
+</div>
+<p class="small mut">동적 언어(파이썬·JS)는 이 버그가 아예 나지 않는다. 같은 규격에서 정적 타입만 넘어지는 자리이고, 그래서 <strong>세 구현을 다 만들어 보면 규격의 약한 곳이 드러난다.</strong></p>
+
+<!--SLIDE sec=10 t="연결 하나의 일생 ②"-->
+<h1><span class="no">{{N}}</span>연결 하나의 일생 ②</h1>
+<!--CODE file=server_go/hub.go lines=260-296 cap="hub.go — create · join · 방으로 넘기기"-->
+<p><code>joined</code> 를 <strong>먼저</strong> 큐에 넣고 그다음에 <code>rh.join &lt;- p</code> 를 한다. 순서를 바꾸면 방 고루틴이 이 PC 를 등록한 직후 브로드캐스트를 보낼 수 있고, <code>joined</code> 보다 <code>room</code> 이 먼저 도착한다.</p>
+
+<!--SLIDE sec=10 t="설정 병합 — 0 은 안 적은 것"-->
+<h1><span class="no">{{N}}</span>설정 병합 — 0 은 안 적은 것</h1>
+<!--CODE file=server_go/hub.go lines=297-323 cap="hub.go — mergeCfg()"-->
+<p class="small mut">엄밀히 하려면 모든 필드를 포인터로 받아야 한다. 하지만 이 설정들은 전부 <strong>0이 의미 없는 값</strong>(좌석 0석, 유예 0ms, 상한 0줄)이라 이 근사가 정확하다. <code>max</code> 만 8로 잘라 준다 — 클라이언트가 100석짜리 방을 요구해도 좌석 배열은 8이 상한이다.</p>
+
+<!--SLIDE sec=10 t="main.go — 플래그와 마운트"-->
+<h1><span class="no">{{N}}</span>main.go — 플래그와 마운트</h1>
+<!--CODE file=server_go/main.go lines=1-22 cap="main.go — 머리말"-->
+<!--CODE file=server_go/main.go lines=23-51 cap="main.go — 라우팅"-->
+
+<!--SLIDE sec=10 t="웹소켓 서버의 타임아웃"-->
+<h1><span class="no">{{N}}</span>웹소켓 서버의 타임아웃</h1>
+<!--CODE file=server_go/main.go lines=52-71 cap="main.go — 서버 설정과 우아한 종료"-->
+<div class="note"><b>ReadTimeout 을 걸면 안 된다</b>웹소켓은 업그레이드 뒤 <strong>몇 시간이고 살아 있어야</strong> 한다. <code>ReadTimeout</code>/<code>WriteTimeout</code> 은 그 연결까지 잘라 버린다. 대신 <code>ReadHeaderTimeout</code> 만 걸어 슬로로리스류(헤더를 한 글자씩 보내며 연결을 붙잡는 공격)를 막는다.</div>

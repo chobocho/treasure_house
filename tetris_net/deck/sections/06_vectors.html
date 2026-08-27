@@ -1,0 +1,102 @@
+<!--SLIDE sec=6 t="두 서버가 같다는 걸 어떻게 아나"-->
+<h1><span class="no">{{N}}</span>두 서버가 같다는 걸 어떻게 아나</h1>
+<p>"Go 서버와 파이썬 서버를 만들었다"는 말은 쉽다. 문제는 <strong>정말 같은가</strong>를 어떻게 보이느냐다.</p>
+<div class="scroll"><table>
+<tr><th>방법</th><th>잡히는 것</th><th>안 잡히는 것</th></tr>
+<tr><td>둘 다 켜 놓고 사람이 붙어 본다</td><td>큰 고장</td><td>난수 순서 · 동률 처리 · 오류 코드 · 경계값 — <b>거의 전부</b></td></tr>
+<tr><td>각 언어에서 단위 테스트를 쓴다</td><td>각자의 버그</td><td>둘이 <b>다르게</b> 맞는 경우. 테스트도 두 벌이라 같이 틀린다</td></tr>
+<tr><td>한쪽을 기준 삼아 출력을 비교한다</td><td>차이</td><td>기준이 틀렸을 때. 그리고 "언제 비교하나"가 늘 문제다</td></tr>
+<tr><td><b>골든 벡터</b> — 언어 밖의 표 하나</td><td><b>전부</b></td><td>표에 없는 상황 (그래서 표를 늘린다)</td></tr>
+</table></div>
+<p>골든 벡터는 <strong>입력 시퀀스와 기대 출력을 언어 중립적인 데이터로 적어 둔 것</strong>이다. 구현이 셋이든 열이든 하니스만 짧게 쓰면 된다.</p>
+
+<!--SLIDE sec=6 t="벡터 한 케이스의 모양"-->
+<h1><span class="no">{{N}}</span>벡터 한 케이스의 모양</h1>
+<pre class="code txt"><code>  {
+    "name": "target-random",
+    "why":  "무엇을 잡아내는 케이스인지 — 실패 메시지에 그대로 찍힌다",
+    "cfg":  { "max": 4, "target": "random" },
+    "seed": 7,
+    "setup": [ … ],          ← <b>출력을 검사하지 않는다.</b> 상태를 만들기만 한다
+    "steps": [
+      { "pid": 1, "at": 1000,
+        "m":   { "t": "atk", "i": 0, "n": 2 },
+        "out": [ { "to": 0, "m": { "t":"grb","i":2,"n":2,"from":0,"hole":7 } } ] }
+    ]
+  }
+
+  setup 을 따로 둔 이유: 좌석 4석을 채우고 준비하고 시작하는 데만 7스텝이 든다.
+  그 7스텝의 출력까지 다 적으면 표가 3배로 부풀고, 정작 보고 싶은 한 줄이 묻힌다.</code></pre>
+<div class="note"><b>비교는 파싱한 뒤에 한다</b>세 언어의 JSON 키 순서까지 맞추는 건 규격이 아니라 우연이다. 하니스 셋 다 <strong>양쪽을 값으로 되돌린 뒤</strong> 깊은 비교를 한다.</div>
+
+<!--SLIDE sec=6 t="벡터 ① 좌석 배정"-->
+<h1><span class="no">{{N}}</span>벡터 ① 좌석 배정</h1>
+<!--CODE file=protocol_vectors.json lines=1-30 cap="protocol_vectors.json — lobby-seat 전반"-->
+
+<!--SLIDE sec=6 t="벡터 ① 계속 — 준비와 시작"-->
+<h1><span class="no">{{N}}</span>벡터 ① 계속 — 준비와 시작</h1>
+<!--CODE file=protocol_vectors.json lines=31-51 cap="protocol_vectors.json — lobby-seat 후반"-->
+<p class="small mut">이 케이스 하나가 <code>err seat</code> · <code>err own</code> · <code>err host</code> · <code>err ready</code> · <code>err phase</code> 다섯 가지 거절을 전부 훑는다. 마지막 스텝은 "대전 중에 좌석을 잡으려 하면"이다.</p>
+
+<!--SLIDE sec=6 t="벡터 ② 한 PC 에 두 명까지"-->
+<h1><span class="no">{{N}}</span>벡터 ② 한 PC 에 두 명까지</h1>
+<!--CODE file=protocol_vectors.json lines=52-70 cap="protocol_vectors.json — per-peer-limit"-->
+<p>요구사항 "한 PC 에서 최대 2명"이 <strong>실행 가능한 형태로</strong> 적힌 자리다. 세 번째 좌석 요청은 <code>err full</code> 로 막히고, 다른 PC 는 문제없이 앉는다.</p>
+
+<!--SLIDE sec=6 t="벡터 ③ 무작위 타겟"-->
+<h1><span class="no">{{N}}</span>벡터 ③ 무작위 타겟</h1>
+<!--CODE file=protocol_vectors.json lines=71-96 cap="protocol_vectors.json — target-random"-->
+<p class="small mut">seed 7 의 난수열은 <code>1892583 · 470389255 · 3882205507 · 3069989445 · 2854842367 · 2098155156 · 258808762</code>. <code>start</code> 가 첫 개를 먹고, 공격마다 두 개씩 먹는다.</p>
+
+<!--SLIDE sec=6 t="벡터 ④ 분산 타겟"-->
+<h1><span class="no">{{N}}</span>벡터 ④ 분산 타겟</h1>
+<!--CODE file=protocol_vectors.json lines=97-119 cap="protocol_vectors.json — target-even"-->
+<p>네 스텝이 <code>recv</code> 누적을 따라간다: 0/0 동률→좌석1, 1/0→좌석2, 1/2→좌석1, 2/2 동률→좌석1. <strong>동률이면 낮은 번호</strong>라는 규칙이 두 번 걸린다 — 이걸 안 정해 두면 언어마다 정렬 안정성이 달라 갈린다.</p>
+
+<!--SLIDE sec=6 t="벡터 ⑤ 막타 타겟과 중계"-->
+<h1><span class="no">{{N}}</span>벡터 ⑤ 막타 타겟과 중계</h1>
+<!--CODE file=protocol_vectors.json lines=120-144 cap="protocol_vectors.json — target-ko"-->
+<p class="small mut">이 케이스는 두 가지를 동시에 본다: <code>st</code> 가 <b>보낸 PC 를 빼고</b> 중계되는가, 그리고 <code>s[4]</code>(높이)가 타겟 선택에 실제로 쓰이는가.</p>
+
+<!--SLIDE sec=6 t="벡터 ⑥ 반격과 기억의 만료"-->
+<h1><span class="no">{{N}}</span>벡터 ⑥ 반격과 기억의 만료</h1>
+<!--CODE file=protocol_vectors.json lines=145-166 cap="protocol_vectors.json — target-attackers"-->
+<p>마지막 스텝이 <code>at: 12000</code> 이다. 마지막으로 맞은 게 2000ms 였으니 10초가 지났고 <code>hitTTL</code>(8초)을 넘겼다 — 기억이 사라져 <code>random</code> 으로 떨어지고, <strong>거기서 난수를 하나 더 먹는다</strong>. 이 한 스텝이 "폴백 경로도 난수 순서가 같은가"를 검사한다.</p>
+
+<!--SLIDE sec=6 t="벡터 ⑦ 등수와 막타 귀속"-->
+<h1><span class="no">{{N}}</span>벡터 ⑦ 등수와 막타 귀속</h1>
+<!--CODE file=protocol_vectors.json lines=167-189 cap="protocol_vectors.json — ko-and-end"-->
+<p class="small mut">세 번째 스텝의 출력이 <b>두 개</b>다: <code>ko</code> 다음에 곧바로 <code>end</code>. 한 메시지가 두 개의 출력을 낳는 경우를 표가 명시적으로 잡아 준다.</p>
+
+<!--SLIDE sec=6 t="벡터 ⑧ 1인용"-->
+<h1><span class="no">{{N}}</span>벡터 ⑧ 1인용</h1>
+<!--CODE file=protocol_vectors.json lines=190-208 cap="protocol_vectors.json — solo"-->
+<p>요구사항의 "1인용"이 <strong>특별한 코드 경로가 아니라는 증거</strong>다. 좌석 1석 방에서 죽으면 그 순간 생존자가 1명이므로 1등이고, 남은 좌석이 0이 되어 곧바로 <code>end</code> 가 나간다. 가운데 스텝의 <code>atk</code> 는 상대가 없어 <strong>아무 출력도 내지 않는다</strong>.</p>
+
+<!--SLIDE sec=6 t="벡터 ⑨ PC 가 끊길 때"-->
+<h1><span class="no">{{N}}</span>벡터 ⑨ PC 가 끊길 때</h1>
+<!--CODE file=protocol_vectors.json lines=209-227 cap="protocol_vectors.json — peer-bye"-->
+<p class="small mut">PC1 이 좌석 0·1 을 쥔 채 끊긴다. 좌석 0 이 먼저 죽고(2등), 그 순간 생존자가 좌석 1 하나뿐이라 <code>end</code> 가 나간다 — 그래서 <strong>좌석 1 의 ko 는 발생하지 않는다</strong>. "end 뒤의 ko 는 처리하지 않는다"를 규격으로 못 박은 자리다.</p>
+
+<!--SLIDE sec=6 t="벡터 ⑩ 로비에서 방장이 나가면"-->
+<h1><span class="no">{{N}}</span>벡터 ⑩ 로비에서 방장이 나가면</h1>
+<!--CODE file=protocol_vectors.json lines=228-248 cap="protocol_vectors.json — lobby-bye"-->
+<p>방장은 <strong>남아 있는 PC 중 가장 작은 pid</strong> 다. 별도의 "방장 위임" 절차가 없다 — 계산으로 정해지므로 세 구현이 갈릴 여지가 없다.</p>
+<div class="note"><b>이 규칙의 대가</b>pid 는 서버가 연결 순서대로 매기므로, 먼저 들어온 사람이 계속 방장이다. 방장을 넘기고 싶으면 프로토콜에 <code>host</code> 메시지를 추가해야 한다 — 26부의 숙제 목록에 있다.</div>
+
+<!--SLIDE sec=6 t="하니스 셋이 하는 일은 같다"-->
+<h1><span class="no">{{N}}</span>하니스 셋이 하는 일은 같다</h1>
+<pre class="code txt"><code>  for 케이스 in 벡터:
+      room = Room(케이스.cfg, 케이스.seed)
+      for s in 케이스.setup:  room.handle(s.pid, s.m, s.at)          ← 출력 버림
+      for s in 케이스.steps:
+          got = room.handle(s.pid, s.m, s.at)
+          assert 깊은비교(s.out, got)                                ← 순서까지
+
+  JS      test_room.mjs          48개 검사
+  Go      server_go/room_test.go TestGoldenVectors + 서브테스트 10개
+  파이썬  server_py/test_server.py TestGoldenVectors.test_vectors (subTest 10개)</code></pre>
+<div class="cols">
+  <div class="card a"><h4>추가로 보는 두 가지</h4><p>하니스마다 <strong>난수열 그 자체</strong>(seed=1 의 앞 5개)와 <strong>8석 4PC 최대 구성</strong>을 따로 검사한다. 벡터가 다루기엔 너무 기본적이거나 너무 큰 것들이다.</p></div>
+  <div class="card a"><h4>실패하면 어떻게 보이나</h4><p><code>#3(무작위 모드의 난수 소비 순서 …): 출력 개수 기대 1, 실제 0</code> — <code>why</code> 필드가 그대로 찍혀서 <strong>무엇이 깨졌는지</strong>를 바로 알려 준다.</p></div>
+</div>

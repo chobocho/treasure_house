@@ -1,0 +1,71 @@
+<!--SLIDE sec=23 t="사람 없이 8인 대전을 돌린다"-->
+<h1><span class="no">{{N}}</span>사람 없이 8인 대전을 돌린다</h1>
+<p>브라우저 8개를 띄워 사람 8명을 앉히지 않고도 전체 시스템을 돌려 볼 방법이 필요하다. <strong>헤드리스 봇 클라이언트</strong>가 그 답이다.</p>
+<pre class="code sh"><code>$ node bot_client.mjs --url ws://127.0.0.1:8787/ws --pcs 4 --seats 2 --max 8 --level mix</code></pre>
+<div class="cols">
+  <div class="card a"><h4>무엇이 진짜인가</h4><p>진짜 WebSocket, 진짜 서버(Go 또는 파이썬), 진짜 wasm AI, 진짜 프로토콜. 브라우저 클라이언트와 <strong>같은 메시지만</strong> 쓴다.</p></div>
+  <div class="card no"><h4>무엇이 진짜가 아닌가</h4><p>PC 4대가 아니라 <strong>한 프로세스 안의 연결 4개</strong>다. 프로토콜과 서버 코드 경로는 완전히 같지만 네트워크 지연은 루프백 값이다. 이 문서는 그 점을 감추지 않는다.</p></div>
+</div>
+<p class="small mut">Node 22 부터 <code>WebSocket</code> 이 전역으로 들어왔다. 그래서 이 클라이언트도 <strong>의존성이 0</strong> 이다.</p>
+
+<!--SLIDE sec=23 t="난이도는 2편의 산출물 그대로"-->
+<h1><span class="no">{{N}}</span>난이도는 2편의 산출물 그대로</h1>
+<!--CODE file=bot_client.mjs lines=1-41 cap="bot_client.mjs — 머리말과 난이도"-->
+<p class="small mut"><code>weights.json</code> 을 <code>../tetris_ai/</code> 에서 읽는다. 3편에서 새로 만든 가중치가 <strong>하나도 없다</strong> — 2편의 GA 가 45초 동안 찾은 값을 그대로 쓴다.</p>
+
+<!--SLIDE sec=23 t="PC 한 대"-->
+<h1><span class="no">{{N}}</span>PC 한 대</h1>
+<!--CODE file=bot_client.mjs lines=42-66 cap="bot_client.mjs — Pc"-->
+<p>보낸/받은 바이트를 세는 게 이 클래스의 숨은 목적이다. 4부의 대역폭 계산이 맞는지 확인할 방법이 <strong>실제로 재는 것</strong>밖에 없다.</p>
+
+<!--SLIDE sec=23 t="메시지 처리"-->
+<h1><span class="no">{{N}}</span>메시지 처리</h1>
+<!--CODE file=bot_client.mjs lines=67-101 cap="bot_client.mjs — onMsg"-->
+<div class="note"><b>브로드캐스트는 PC 수만큼 온다</b>처음엔 <code>grb</code> 를 받을 때마다 세었더니 배달 횟수가 <strong>정확히 4배</strong>로 나왔다(공격 64회 → 배달 256회). PC 4대가 각자 같은 브로드캐스트를 받으니 당연하다. 집계는 1번 PC 것만 센다.</div>
+
+<!--SLIDE sec=23 t="방을 만들고 들어간다"-->
+<h1><span class="no">{{N}}</span>방을 만들고 들어간다</h1>
+<!--CODE file=bot_client.mjs lines=102-127 cap="bot_client.mjs — 접속과 방"-->
+<p class="small mut"><code>await pc.ready</code> — <code>hi</code> 가 올 때까지 기다린다. <code>hello</code> 를 보내자마자 <code>create</code> 를 보내도 서버는 순서대로 처리하지만, <strong>방 코드를 받아야 다음 PC 가 참가할 수 있다</strong>.</p>
+
+<!--SLIDE sec=23 t="좌석 번호를 명시한다 — 겪은 버그"-->
+<h1><span class="no">{{N}}</span>좌석 번호를 명시한다 — 겪은 버그</h1>
+<!--CODE file=bot_client.mjs lines=128-148 cap="bot_client.mjs — 좌석 배정과 시작"-->
+<pre class="code txt"><code>  처음엔 i:-1(자동 배정)을 썼다. 그리고 이런 로그가 쏟아졌다:
+
+      PC4 거절: own
+      PC3 거절: own
+      PC2 거절: own      … 수백 줄
+
+  원인:  연결 4개가 <b>거의 동시에</b> seat 를 보낸다. 서버는 도착 순서대로 배정하는데,
+         그 순서는 TCP·스케줄러가 정한다. 이쪽의 seatNo 장부(PC1→0,1 / PC2→2,3 …)와
+         어긋나면 자기 좌석이 아닌 번호로 atk 를 쏘고 err own 을 받는다.
+
+  고침:  좌석 번호를 명시한다. 진짜 로비도 그렇게 한다 — <b>사람이 자리를 클릭한다.</b></code></pre>
+
+<!--SLIDE sec=23 t="게임 루프"-->
+<h1><span class="no">{{N}}</span>게임 루프</h1>
+<!--CODE file=bot_client.mjs lines=149-189 cap="bot_client.mjs — 타이머 하나가 8석을 민다"-->
+<p class="small mut"><code>match.js</code> 의 <code>frame()</code> 과 하는 일이 같다. 다른 건 <code>requestAnimationFrame</code> 대신 <code>setInterval(16)</code> 이라는 것뿐 — Node 에는 rAF 가 없다.</p>
+
+<!--SLIDE sec=23 t="결과 집계"-->
+<h1><span class="no">{{N}}</span>결과 집계</h1>
+<!--CODE file=bot_client.mjs lines=190-225 cap="bot_client.mjs — 결과와 실측"-->
+<div class="note"><b>우승자만 0등이었다</b>우승자는 <code>ko</code> 를 받지 않으므로 <code>place</code> 가 채워지지 않는다. <code>end.order</code> 로 등수를 다시 매기는 세 줄을 넣고서야 표가 맞았다. <strong>프로토콜을 정확히 이해했는지가 집계 코드에서 드러난다.</strong></div>
+
+<!--SLIDE sec=23 t="Go 서버 실측"-->
+<h1><span class="no">{{N}}</span>Go 서버 실측</h1>
+<!--RUN file=logs/match_go.log cap="node bot_client.mjs --pcs 4 --seats 2 --max 8 --level mix --target ko  (Go 서버)"-->
+
+<!--SLIDE sec=23 t="파이썬 서버 실측"-->
+<h1><span class="no">{{N}}</span>파이썬 서버 실측</h1>
+<!--RUN file=logs/match_py.log cap="같은 명령, 파이썬 서버"-->
+
+<!--SLIDE sec=23 t="숫자에서 읽히는 것"-->
+<h1><span class="no">{{N}}</span>숫자에서 읽히는 것</h1>
+<div class="cols">
+  <div class="card a"><h4>60fps 를 지켰다</h4><p>Go 판 2,870프레임 / 46.9초 = <strong>61.2fps</strong>. wasm 인스턴스 8개 + 소켓 4개가 한 프로세스에서 도는데도 타이머가 밀리지 않았다.</p></div>
+  <div class="card a"><h4>대역폭은 계산의 절반</h4><p>4부 계산은 PC 당 2.6 KB/s 업. 실측은 <strong>1.07~1.54 KB/s</strong>. 판이 대체로 비어 런렝스가 잘 먹고, 죽은 좌석은 <code>st</code> 를 안 보낸다.</p></div>
+  <div class="card b"><h4>공격 = 배달</h4><p>61회 → 61회, 58회 → 58회. <strong>모든 공격이 정확히 한 번씩 배달됐다</strong> — 유실도 중복도 없다.</p></div>
+  <div class="card b"><h4>막타가 몰린다</h4><p><code>ko</code> 타겟팅에서 상위 좌석이 <code>by</code> 로 반복해 찍힌다. 강한 AI 가 <strong>죽어 가는 쪽에 집중포화</strong>하는 규칙이 실제로 그렇게 동작한다.</p></div>
+</div>

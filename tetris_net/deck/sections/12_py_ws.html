@@ -1,0 +1,65 @@
+<!--SLIDE sec=12 t="같은 규격을 파이썬으로"-->
+<h1><span class="no">{{N}}</span>같은 규격을 파이썬으로</h1>
+<p>두 번째 서버는 첫 번째의 번역이 아니다. <strong>같은 규격의 두 번째 독립 구현</strong>이고, 그 차이가 규격의 허술한 곳을 드러낸다.</p>
+<div class="scroll"><table>
+<tr><th></th><th>Go</th><th>파이썬</th></tr>
+<tr><td>동시성</td><td>고루틴 + 채널. 방마다 고루틴 하나로 <b>직렬화</b></td><td>asyncio 코루틴. <code>Room.handle</code> 이 동기 함수라 <b>그 자체로 원자적</b></td></tr>
+<tr><td>방 상태 보호</td><td>방 고루틴만 만진다 (락 없음)</td><td>await 지점이 없으니 끼어들 수 없다 (락 없음)</td></tr>
+<tr><td>HTTP</td><td><code>net/http</code> + <code>Hijack()</code></td><td><code>asyncio.start_server</code> — HTTP 요청줄을 <b>직접 읽는다</b></td></tr>
+<tr><td>느린 클라이언트</td><td>버퍼 채널 + <code>select default</code></td><td><code>asyncio.Queue(maxsize=64)</code> + <code>put_nowait</code></td></tr>
+<tr><td>타입</td><td>메시지마다 구조체. 봉투에서 <b>한 번 넘어졌다</b></td><td>딕셔너리. 그 함정이 아예 없다</td></tr>
+<tr><td>줄 수</td><td>1,218줄 (테스트 제외)</td><td>736줄 (테스트 제외)</td></tr>
+</table></div>
+
+<!--SLIDE sec=12 t="ws.py — 표준 라이브러리만"-->
+<h1><span class="no">{{N}}</span>ws.py — 표준 라이브러리만</h1>
+<!--CODE file=server_py/ws.py lines=1-30 cap="ws.py — 머리말·상수·핸드셰이크 키"-->
+<p class="small mut">임포트 목록이 곧 선언이다. <code>asyncio · base64 · hashlib · json · secrets · struct · urllib.parse</code> — 전부 파이썬에 기본으로 들어 있다.</p>
+
+<!--SLIDE sec=12 t="프레임 만들기 — struct.pack 세 줄"-->
+<h1><span class="no">{{N}}</span>프레임 만들기 — struct.pack 세 줄</h1>
+<!--CODE file=server_py/ws.py lines=31-48 cap="ws.py — build_frame()"-->
+<pre class="code txt"><code>  '!BB'   →  네트워크 바이트 순서, 부호 없는 1바이트 두 개
+  '!BBH'  →  … + 2바이트 (126 형식)
+  '!BBQ'  →  … + 8바이트 (127 형식)
+
+  Go 는 binary.BigEndian.PutUint16 을 손으로 부르고,
+  파이썬은 형식 문자열 한 글자로 끝난다. 같은 일이다.</code></pre>
+
+<!--SLIDE sec=12 t="WSConn — 방향을 뒤집는 스위치"-->
+<h1><span class="no">{{N}}</span>WSConn — 방향을 뒤집는 스위치</h1>
+<!--CODE file=server_py/ws.py lines=49-62 cap="ws.py — WSConn"-->
+<p><code>client=True</code> 하나로 <code>connect()</code> 가 성립한다. Go 의 <code>Conn.Client</code> 와 같은 설계다 — <strong>규격이 대칭이므로 구현도 대칭</strong>이어야 한다.</p>
+
+<!--SLIDE sec=12 t="프레임 읽기"-->
+<h1><span class="no">{{N}}</span>프레임 읽기</h1>
+<!--CODE file=server_py/ws.py lines=63-87 cap="ws.py — _read_frame()"-->
+<div class="note"><b><code>readexactly</code> 가 있어서 편하다</b>Go 의 <code>io.ReadFull</code> 과 같다. TCP 는 <strong>요청한 만큼 준다는 보장이 없으므로</strong> "n 바이트를 다 받을 때까지"를 직접 쓰거나 이런 함수를 써야 한다. <code>read(n)</code> 을 그냥 부르면 큰 프레임에서 가끔 깨진다.</div>
+
+<!--SLIDE sec=12 t="메시지 조립과 제어 프레임"-->
+<h1><span class="no">{{N}}</span>메시지 조립과 제어 프레임</h1>
+<!--CODE file=server_py/ws.py lines=88-130 cap="ws.py — recv() · recv_json()"-->
+<p class="small mut">예외를 <code>None</code> 으로 눌러 담는다. 호출부(<code>hub.serve</code>)는 <code>while True: m = await conn.recv_json(); if m is None: break</code> 한 줄로 끝난다 — 끊김을 <strong>예외가 아니라 값</strong>으로 다루면 정리 코드가 단순해진다.</p>
+
+<!--SLIDE sec=12 t="쓰기 — 락과 한글"-->
+<h1><span class="no">{{N}}</span>쓰기 — 락과 한글</h1>
+<!--CODE file=server_py/ws.py lines=131-159 cap="ws.py — send · send_json · close"-->
+<div class="cols">
+  <div class="card a"><h4><code>asyncio.Lock</code> 이 필요한 이유</h4><p>싱글 스레드여도 <code>await writer.drain()</code> 에서 양보한다. 그 틈에 다른 코루틴이 프레임을 끼워 넣으면 <strong>연결이 통째로 망가진다</strong>. Go 의 뮤텍스와 같은 이유다.</p></div>
+  <div class="card a"><h4><code>ensure_ascii=False</code></h4><p>기본값 <code>True</code> 면 <code>"보라"</code> 가 <code>"\\ubcf4\\ub77c"</code> 로 나간다. 12바이트가 될 것이 <strong>24바이트</strong>가 되고, 사람이 로그를 못 읽는다.</p></div>
+</div>
+
+<!--SLIDE sec=12 t="핸드셰이크 — HTTP 를 손으로 읽는다"-->
+<h1><span class="no">{{N}}</span>핸드셰이크 — HTTP 를 손으로 읽는다</h1>
+<!--CODE file=server_py/ws.py lines=160-190 cap="ws.py — 요청줄 파싱과 serve() 시작"-->
+<div class="note"><b>Go 와 갈리는 지점</b>Go 는 <code>net/http</code> 가 요청을 다 파싱해 준 뒤 <code>Hijack()</code> 으로 소켓을 뺏는다. 파이썬에는 그런 것이 없으므로 <code>readuntil(b'\r\n\r\n')</code> 로 헤더를 직접 읽는다. 대신 <strong>업그레이드가 아닌 요청도 여기서 처리</strong>할 수 있어 정적 파일 서빙이 자연스럽게 붙는다.</div>
+
+<!--SLIDE sec=12 t="101 을 손으로 쓴다"-->
+<h1><span class="no">{{N}}</span>101 을 손으로 쓴다</h1>
+<!--CODE file=server_py/ws.py lines=191-212 cap="ws.py — 업그레이드 응답과 핸들러 호출"-->
+<p class="small mut">업그레이드가 아니면 <code>http(path)</code> 로 넘기고, 그것도 <code>None</code> 이면 404 다. 이 한 갈래 덕분에 같은 포트에서 <strong>정적 파일과 웹소켓이 함께</strong> 서빙된다 — 브라우저가 <code>file://</code> 가 아니라 <code>http://</code> 로 페이지를 받아야 웹소켓을 열 수 있으므로 이게 필요하다.</p>
+
+<!--SLIDE sec=12 t="클라이언트 쪽"-->
+<h1><span class="no">{{N}}</span>클라이언트 쪽</h1>
+<!--CODE file=server_py/ws.py lines=213-234 cap="ws.py — connect()"-->
+<p class="small mut"><code>latin1</code> 로 인코딩하는 게 맞다. HTTP 헤더는 정의상 바이트 단위 프로토콜이고, <code>latin1</code> 은 0~255 를 그대로 바이트로 옮긴다.</p>

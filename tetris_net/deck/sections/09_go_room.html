@@ -1,0 +1,93 @@
+<!--SLIDE sec=9 t="room.go — 부수효과가 없는 서버"-->
+<h1><span class="no">{{N}}</span>room.go — 부수효과가 없는 서버</h1>
+<!--CODE file=server_go/room.go lines=1-30 cap="room.go — 머리말과 방 설정"-->
+<p class="small mut"><code>time</code> 도 <code>net</code> 도 <code>math/rand</code> 도 임포트하지 않는다. <code>encoding/json</code> 과 <code>sort</code> 뿐이다 — 이 목록 자체가 "순수하다"의 증거다.</p>
+
+<!--SLIDE sec=9 t="나가는 메시지를 타입으로"-->
+<h1><span class="no">{{N}}</span>나가는 메시지를 타입으로</h1>
+<!--CODE file=server_go/room.go lines=31-61 cap="room.go — 나가는 메시지 ①"-->
+<p>파이썬·JS 는 딕셔너리를 그냥 만들면 되지만 Go 는 타입을 선언해야 한다. 귀찮아 보이지만 <strong>필드 이름 오타가 컴파일 오류</strong>가 된다 — 동적 언어에서는 골든 벡터가 잡을 때까지 모른다.</p>
+
+<!--SLIDE sec=9 t="나가는 메시지 나머지와 Out"-->
+<h1><span class="no">{{N}}</span>나가는 메시지 나머지와 Out</h1>
+<!--CODE file=server_go/room.go lines=62-84 cap="room.go — 나가는 메시지 ② · Out"-->
+<div class="note"><b>Out.To 가 0이면 브로드캐스트</b>pid 는 1부터 시작하므로 0을 "전체"로 쓸 수 있다. 별도의 열거형을 두는 것보다 짧고, 세 언어에서 똑같이 표현된다.</div>
+
+<!--SLIDE sec=9 t="들어오는 메시지는 구조체 하나로"-->
+<h1><span class="no">{{N}}</span>들어오는 메시지는 구조체 하나로</h1>
+<!--CODE file=server_go/room.go lines=85-115 cap="room.go — In · 좌석 내부 상태"-->
+<div class="cols">
+  <div class="card a"><h4><code>I *int</code> 인 이유</h4><p><code>seat</code> 은 <code>i:-1</code>(자동 배정)이 의미가 있다. <code>int</code> 로 받으면 "안 적었다"와 "0을 적었다"를 구별할 수 없다. 포인터면 <code>nil</code> 이 "안 적었다"다.</p></div>
+  <div class="card a"><h4>좌석 내부 필드</h4><p><code>recv·height·place·hits</code> 는 <strong>밖으로 나가지 않는다</strong>. <code>seatList()</code> 가 공개용 <code>SeatInfo</code> 로 따로 만든다 — 내부 상태가 실수로 새어 나가는 걸 타입이 막는다.</p></div>
+</div>
+
+<!--SLIDE sec=9 t="난수 세 줄"-->
+<h1><span class="no">{{N}}</span>난수 세 줄</h1>
+<!--CODE file=server_go/room.go lines=116-145 cap="room.go — Room 과 xorshift32"-->
+<pre class="code txt"><code>  Go       x ^= x &lt;&lt; 13         uint32 라 저절로 32비트에서 잘린다
+  파이썬   x ^= (x &lt;&lt; 13) &amp; 0xFFFFFFFF     무한정수라 마스크를 손으로 씌운다
+  JS       x ^= (x &lt;&lt; 13) &gt;&gt;&gt; 0            비트연산이 int32 라 부호를 떼야 한다
+
+  같은 알고리즘, 다른 함정. 세 하니스가 전부 seed=1 의 앞 다섯 개를
+  270369 · 67634689 · 2647435461 · 307599695 · 2398689233 로 확인한다.</code></pre>
+
+<!--SLIDE sec=9 t="조회 헬퍼 — 상태를 파생시킨다"-->
+<h1><span class="no">{{N}}</span>조회 헬퍼 — 상태를 파생시킨다</h1>
+<!--CODE file=server_go/room.go lines=146-182 cap="room.go — Host · occupied · aliveSeats · mine"-->
+<p><code>Host()</code> 가 계산이라는 점이 중요하다. "방장" 필드를 따로 두면 <strong>방장이 나갈 때 갱신을 잊는</strong> 버그가 생기고, 세 구현이 갈릴 여지가 생긴다. <code>min(peers)</code> 는 갈릴 수 없다.</p>
+
+<!--SLIDE sec=9 t="공개용 좌석 목록"-->
+<h1><span class="no">{{N}}</span>공개용 좌석 목록</h1>
+<!--CODE file=server_go/room.go lines=183-200 cap="room.go — seatList · roomMsg · errOut"-->
+<p class="small mut"><code>out := []SeatInfo{}</code> 로 시작하는 게 중요하다. <code>var out []SeatInfo</code> 는 <code>nil</code> 이고, Go 의 JSON 은 <code>nil</code> 슬라이스를 <code>[]</code> 가 아니라 <code>null</code> 로 직렬화한다 — 좌석이 하나도 없는 방에서 다른 구현과 갈린다.</p>
+
+<!--SLIDE sec=9 t="진입점 — 한 함수가 전부"-->
+<h1><span class="no">{{N}}</span>진입점 — 한 함수가 전부</h1>
+<!--CODE file=server_go/room.go lines=201-231 cap="room.go — Handle()"-->
+<div class="note"><b><code>bye</code> 만 peers 등록 앞에 있다</b>이미 나간 PC 의 <code>bye</code> 가 다시 들어오면 <code>peers</code> 에 되살아난다. <code>bye</code> 를 먼저 걸러 내면 그 일이 없다 — 그리고 <code>onBye</code> 안에서 <code>peers</code> 에 없으면 아무것도 하지 않는다.</div>
+
+<!--SLIDE sec=9 t="좌석 잡기 — 검사 순서가 규격이다"-->
+<h1><span class="no">{{N}}</span>좌석 잡기 — 검사 순서가 규격이다</h1>
+<!--CODE file=server_go/room.go lines=232-266 cap="room.go — onSeat()"-->
+<p><b>자리를 먼저 확정하고 그다음에 PC 당 좌석 수를 본다.</b> 순서를 바꾸면 "빈 자리도 없고 내 몫도 찼을 때" <code>err seat</code> 이 나가야 하는지 <code>err full</code> 이 나가야 하는지가 구현마다 달라진다. 골든 벡터의 <code>lobby-seat #3</code> 과 <code>per-peer-limit #1</code> 이 이 순서를 고정한다.</p>
+
+<!--SLIDE sec=9 t="좌석 놓기와 준비"-->
+<h1><span class="no">{{N}}</span>좌석 놓기와 준비</h1>
+<!--CODE file=server_go/room.go lines=267-291 cap="room.go — onUnseat · onReady"-->
+<p class="small mut"><code>ready</code> 는 <strong>그 PC 가 가진 좌석 전부</strong>에 적용된다. 한 PC 에 두 사람이 앉았을 때 각자 따로 준비하게 만들 수도 있지만, 같은 키보드 앞에 앉아 있는데 준비 버튼이 둘일 이유가 없다.</p>
+
+<!--SLIDE sec=9 t="시작 — AI 는 준비를 기다리지 않는다"-->
+<h1><span class="no">{{N}}</span>시작 — AI 는 준비를 기다리지 않는다</h1>
+<!--CODE file=server_go/room.go lines=292-317 cap="room.go — onStart()"-->
+<div class="cols">
+  <div class="card a"><h4>왜 AI 는 빼나</h4><p>누를 사람이 없다. AI 좌석에도 준비를 요구하면 좌석을 잡은 PC 가 <strong>대신 눌러 주는 코드</strong>를 클라이언트마다 써야 한다.</p></div>
+  <div class="card a"><h4>여기서 난수 ①</h4><p><code>r.RoundSeed = r.Rng()</code>. 이 한 번이 모든 좌석의 7-bag 시드가 된다. 좌석 8개가 <strong>같은 조각 순서</strong>를 받는 이유다.</p></div>
+</div>
+
+<!--SLIDE sec=9 t="타겟 고르기 — 서버의 유일한 판단"-->
+<h1><span class="no">{{N}}</span>타겟 고르기 — 서버의 유일한 판단</h1>
+<!--CODE file=server_go/room.go lines=318-361 cap="room.go — pickTarget()"-->
+<p class="small mut"><code>attackers</code> 가 <code>break</code> 로 빠져나오는 게 중요하다. <code>hits</code> 는 시간순이므로 <strong>뒤에서부터 훑다 TTL 을 넘기면 그 앞은 볼 필요가 없다</strong>. 그리고 <code>switch</code> 를 빠져나가면 자연스럽게 <code>random</code> 폴백으로 떨어진다.</p>
+
+<!--SLIDE sec=9 t="공격 라우팅"-->
+<h1><span class="no">{{N}}</span>공격 라우팅</h1>
+<!--CODE file=server_go/room.go lines=362-386 cap="room.go — onAtk()"-->
+<div class="note"><b>왜 브로드캐스트인가</b>가비지를 받는 건 한 좌석뿐이지만, 관전 화면이 <strong>"누가 누구를 때렸는지" 화살표</strong>를 그리려면 모두가 알아야 한다. 8석 × 초당 2~3개라 비용이 없다시피 하다.</div>
+
+<!--SLIDE sec=9 t="화면 중계"-->
+<h1><span class="no">{{N}}</span>화면 중계</h1>
+<!--CODE file=server_go/room.go lines=387-415 cap="room.go — onSt()"-->
+<p><code>sort.Ints(ps)</code> 가 없으면 Go 의 맵 순회 순서가 <strong>실행마다 다르다</strong>. 실제 동작에는 아무 영향이 없지만 골든 벡터가 순서까지 비교하므로 무작위로 실패한다 — 이런 종류의 비결정성을 강제로 걷어내는 게 순수 함수로 만든 값이다.</p>
+
+<!--SLIDE sec=9 t="탈락과 등수"-->
+<h1><span class="no">{{N}}</span>탈락과 등수</h1>
+<!--CODE file=server_go/room.go lines=416-450 cap="room.go — kill()"-->
+<p class="small mut"><code>out *[]Out</code> 로 받는 이유: 한 번의 <code>bye</code> 가 좌석 두 개를 죽이고 <code>end</code> 까지 낼 수 있다. 반환값으로 이어 붙이면 호출부가 세 갈래로 갈린다.</p>
+
+<!--SLIDE sec=9 t="탈락 통보와 연결 끊김"-->
+<h1><span class="no">{{N}}</span>탈락 통보와 연결 끊김</h1>
+<!--CODE file=server_go/room.go lines=451-485 cap="room.go — onKo() · onBye()"-->
+<div class="cols">
+  <div class="card a"><h4>대전 중 끊기면</h4><p>그 PC 의 좌석이 <strong>번호 순으로</strong> 죽는다. <code>kill()</code> 이 도중에 <code>phase</code> 를 <code>over</code> 로 바꾸면 나머지는 저절로 무시된다.</p></div>
+  <div class="card a"><h4>로비에서 끊기면</h4><p>좌석이 그냥 빈다. 그리고 <strong>항상</strong> <code>room</code> 을 뿌린다 — 좌석을 안 잡고 있었어도 방장이 바뀔 수 있기 때문이다.</p></div>
+</div>

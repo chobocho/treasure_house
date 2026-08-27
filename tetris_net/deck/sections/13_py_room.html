@@ -1,0 +1,92 @@
+<!--SLIDE sec=13 t="room.py — Go 판과 나란히 놓고 읽을 수 있게"-->
+<h1><span class="no">{{N}}</span>room.py — Go 판과 나란히 놓고 읽을 수 있게</h1>
+<!--CODE file=server_py/room.py lines=1-43 cap="room.py — 기본값과 난수"-->
+<p class="small mut">함수 이름·순서·주석까지 <code>room.go</code>/<code>room.mjs</code> 와 맞췄다. 세 구현이 다르게 생기면 <strong>어디서 갈렸는지 찾는 데만 하루가 든다</strong> — 스타일 통일이 여기서는 취향이 아니라 도구다.</p>
+
+<!--SLIDE sec=13 t="32비트를 손으로 지킨다"-->
+<h1><span class="no">{{N}}</span>32비트를 손으로 지킨다</h1>
+<pre class="code py"><code>MASK32 = <i class="nb">0xFFFFFFFF</i>
+
+<i class="kw">def</i> <i class="fn">rng</i>(<i class="kw">self</i>):
+    x = <i class="kw">self</i>.rng_state
+    x ^= (x &lt;&lt; <i class="nb">13</i>) &amp; MASK32
+    x ^= x &gt;&gt; <i class="nb">17</i>
+    x ^= (x &lt;&lt; <i class="nb">5</i>) &amp; MASK32
+    <i class="kw">self</i>.rng_state = x &amp; MASK32
+    <i class="kw">return</i> <i class="kw">self</i>.rng_state</code></pre>
+<p>파이썬 정수는 <strong>무한 자릿수</strong>다. 마스크를 빼먹으면 <code>x &lt;&lt; 13</code> 이 45비트가 되고, 몇 번만 돌아도 수백 비트짜리 수가 된다. 그래도 <em>동작</em>은 하고 <em>난수처럼</em> 보인다 — 골든 벡터가 없으면 못 잡는 버그다.</p>
+<div class="note"><b>오른쪽 시프트에는 마스크가 없다</b><code>x &gt;&gt; 17</code> 은 자릿수가 줄어들기만 하므로 안전하다. 왼쪽 시프트 두 곳만 씌우면 된다.</div>
+
+<!--SLIDE sec=13 t="조회 헬퍼 — 한 줄씩"-->
+<h1><span class="no">{{N}}</span>조회 헬퍼 — 한 줄씩</h1>
+<!--CODE file=server_py/room.py lines=44-71 cap="room.py — 조회 헬퍼"-->
+<p class="small mut">Go 에서 8줄이던 <code>occupied()</code> 가 리스트 컴프리헨션 한 줄이다. 같은 일을 하고 같은 결과를 낸다 — 골든 벡터가 그걸 보장하므로 <strong>각 언어에서 가장 자연스러운 방식</strong>을 써도 된다.</p>
+
+<!--SLIDE sec=13 t="진입점"-->
+<h1><span class="no">{{N}}</span>진입점</h1>
+<!--CODE file=server_py/room.py lines=72-92 cap="room.py — handle()"-->
+
+<!--SLIDE sec=13 t="좌석 잡기·놓기·준비"-->
+<h1><span class="no">{{N}}</span>좌석 잡기·놓기·준비</h1>
+<!--CODE file=server_py/room.py lines=93-131 cap="room.py — on_seat · on_unseat · on_ready"-->
+<p class="small mut"><code>next((k for k, s in enumerate(self.seats) if s is None), -1)</code> — Go 의 for 루프와 같은 일이다. 검사 순서(자리 먼저, 그다음 PC 당 좌석 수)를 <strong>주석까지 같은 문장으로</strong> 적어 뒀다.</p>
+
+<!--SLIDE sec=13 t="시작"-->
+<h1><span class="no">{{N}}</span>시작</h1>
+<!--CODE file=server_py/room.py lines=132-150 cap="room.py — on_start()"-->
+
+<!--SLIDE sec=13 t="타겟 고르기 — min 과 키 함수"-->
+<h1><span class="no">{{N}}</span>타겟 고르기 — min 과 키 함수</h1>
+<!--CODE file=server_py/room.py lines=151-187 cap="room.py — pick_target · on_atk"-->
+<pre class="code txt"><code>  even :  min(cand, key=lambda j: (self.seats[j]['recv'], j))
+  ko   :  min(cand, key=lambda j: (-self.seats[j]['height'], j))
+
+  튜플의 두 번째 칸이 <b>동률일 때 낮은 번호</b>를 강제한다.
+  Go 는 루프에서 <code>&lt;</code>(엄격 부등호)를 써 첫 번째 것을 유지하는 방식으로 같은 결과를 낸다.
+  두 방식 다 맞지만, 어느 쪽도 <b>규격에 적어 두지 않으면</b> 갈릴 수 있다.</code></pre>
+
+<!--SLIDE sec=13 t="중계·탈락·끊김"-->
+<h1><span class="no">{{N}}</span>중계·탈락·끊김</h1>
+<!--CODE file=server_py/room.py lines=188-226 cap="room.py — on_st · kill"-->
+<p class="small mut"><code>sorted(self.peers)</code> — 파이썬의 <code>set</code> 도 순회 순서가 정해져 있지 않다(문자열 해시 랜덤화 때문에 실행마다 달라질 수 있다). Go 의 <code>sort.Ints</code> 와 같은 이유로 필요하다.</p>
+
+<!--SLIDE sec=13 t="탈락 통보와 연결 끊김"-->
+<h1><span class="no">{{N}}</span>탈락 통보와 연결 끊김</h1>
+<!--CODE file=server_py/room.py lines=227-250 cap="room.py — on_ko · on_bye"-->
+
+<!--SLIDE sec=13 t="hub.py — 락이 필요 없는 이유"-->
+<h1><span class="no">{{N}}</span>hub.py — 락이 필요 없는 이유</h1>
+<!--CODE file=server_py/hub.py lines=1-22 cap="hub.py — 머리말"-->
+<pre class="code txt"><code>  Go   :  방마다 고루틴 하나 + 채널.  "이 상태는 저 고루틴만 만진다"로 직렬화.
+  파이썬:  Room.handle 이 <b>동기 함수</b>다.
+           asyncio 는 await 지점에서만 양보하므로 handle 이 도는 동안
+           다른 코루틴이 끼어들 수 없다 — <b>그 자체로 원자적</b>이다.
+
+  그래서 방 전용 태스크도, 락도 필요 없다.
+  단, handle 안에 await 를 하나라도 넣는 순간 이 보장이 사라진다.
+  room.py 에 async 가 한 줄도 없는 건 우연이 아니다.</code></pre>
+
+<!--SLIDE sec=13 t="Peer — 큐 하나와 쓰기 태스크 하나"-->
+<h1><span class="no">{{N}}</span>Peer — 큐 하나와 쓰기 태스크 하나</h1>
+<!--CODE file=server_py/hub.py lines=23-67 cap="hub.py — Peer"-->
+<div class="note"><b>Go 와 완전히 같은 대책</b>큐가 차면 기다리지 않고 끊는다(<code>put_nowait</code> + <code>QueueFull</code>). <code>finish()</code> 는 <code>None</code> 을 넣어 쓰기 태스크에게 "큐를 다 비우고 나가라"고 알린다 — Go 의 <code>close(send)</code> 와 같은 신호다.</div>
+
+<!--SLIDE sec=13 t="방과 허브"-->
+<h1><span class="no">{{N}}</span>방과 허브</h1>
+<!--CODE file=server_py/hub.py lines=68-106 cap="hub.py — RoomHost · Hub"-->
+<p class="small mut"><code>time.monotonic()</code> 을 쓴다. <code>time.time()</code> 은 NTP 보정이나 서머타임으로 <strong>뒤로 갈 수 있다</strong> — 그러면 <code>hitTTL</code> 판정이 뒤집힌다.</p>
+
+<!--SLIDE sec=13 t="연결 하나의 일생"-->
+<h1><span class="no">{{N}}</span>연결 하나의 일생</h1>
+<!--CODE file=server_py/hub.py lines=107-133 cap="hub.py — serve() 앞부분"-->
+<p class="small mut"><strong>봉투 파싱 문제가 없다</strong> — 딕셔너리는 <code>v</code> 가 정수든 불리언이든 신경 쓰지 않는다. Go 가 넘어졌던 자리(10부)를 파이썬은 그냥 지나간다.</p>
+
+<!--SLIDE sec=13 t="방으로 넘기고, 나갈 때 치운다"-->
+<h1><span class="no">{{N}}</span>방으로 넘기고, 나갈 때 치운다</h1>
+<!--CODE file=server_py/hub.py lines=134-154 cap="hub.py — 방 참가와 정리"-->
+<p><code>finally</code> 안에서 <code>bye</code> 를 넣고 방이 비면 지운다. Go 의 <code>defer</code> 와 정확히 같은 자리다.</p>
+
+<!--SLIDE sec=13 t="설정 병합"-->
+<h1><span class="no">{{N}}</span>설정 병합</h1>
+<!--CODE file=server_py/hub.py lines=155-167 cap="hub.py — merge_cfg()"-->
+<div class="note"><b><code>isinstance(v, bool)</code> 을 먼저 거르는 이유</b>파이썬에서 <code>bool</code> 은 <code>int</code> 의 하위 타입이다. <code>isinstance(True, int)</code> 가 <code>True</code> 이고 <code>True &gt; 0</code> 도 참이라, 거르지 않으면 <code>{"max": true}</code> 가 <strong>좌석 1석</strong>으로 해석된다.</div>
