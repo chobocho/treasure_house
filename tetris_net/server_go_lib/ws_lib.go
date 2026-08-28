@@ -44,7 +44,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(*http.Request) bool { return true },
 }
 
-// Upgrade — ws.go 의 70~155줄(핸드셰이크 86줄)이 이 세 줄로 줄어든다.
+// Upgrade — ws.go 의 70~105줄, 핸드셰이크 36줄이 세 문장으로 줄어든다.
 func Upgrade(w http.ResponseWriter, r *http.Request) (*Conn, error) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
