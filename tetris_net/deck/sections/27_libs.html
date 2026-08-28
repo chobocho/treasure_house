@@ -1,0 +1,125 @@
+<!--SLIDE sec=27 t="반대편을 실제로 만든다"-->
+<h1><span class="no">{{N}}</span>반대편을 실제로 만든다</h1>
+<p>7장에서 "라이브러리를 쓰면 한 줄"이라고 말만 하고 지나갔다. 이 장에서는 그 말을 <strong>실제로 검증한다</strong> — 같은 서버 둘을 웹소켓 라이브러리로 다시 만든다.</p>
+<div class="cols">
+  <div class="card a"><h4>바꾸는 것</h4><p>전송층 하나. Go 는 <code>gorilla/websocket</code>, 파이썬은 <code>websockets</code> 라이브러리가 ws.go(339줄)·ws.py(234줄)의 자리를 대신한다.</p></div>
+  <div class="card a"><h4>안 바꾸는 것</h4><p><code>hub</code>·<code>room</code>·프로토콜·클라이언트 <strong>전부</strong>. Go 쪽은 아예 byte-for-byte 복사로 못 박는다.</p></div>
+  <div class="card b"><h4>판정 기준도 그대로</h4><p>기존 통합 테스트가 무수정으로 통과할 것, 그리고 진짜 웹소켓으로 <strong>8인 대전 실측</strong>이 끝까지 돌 것.</p></div>
+  <div class="card b"><h4>산출물</h4><p><code>server_go_lib/ws_lib.go</code> {{LINES:server_go_lib/ws_lib.go}}줄 · <code>server_py/server_lib.py</code> {{LINES:server_py/server_lib.py}}줄 · 테스트 {{LINES:server_py/test_server_lib.py}}줄 · Makefile 타깃 6개.</p></div>
+</div>
+
+<!--SLIDE sec=27 t="갈아 끼우는 면 — 결합이 얇아야 배관을 바꾼다"-->
+<h1><span class="no">{{N}}</span>갈아 끼우는 면 — 결합이 얇아야 배관을 바꾼다</h1>
+<p>전송층을 통째로 바꾸는 데 필요한 것은 hub 가 연결에 대고 하는 <strong>말의 목록</strong>뿐이다. 그 목록이 짧아서 이 장이 가능하다.</p>
+<div class="scroll"><table>
+<tr><th></th><th>hub 가 아는 말</th><th>직접 구현</th><th>라이브러리판</th></tr>
+<tr><td>Go</td><td><code>Upgrade</code> · <code>Dial</code> · <code>ReadMessage</code> · <code>WriteText</code> · <code>Close</code> · <code>MaxPayload</code></td><td>ws.go 339줄</td><td>ws_lib.go {{LINES:server_go_lib/ws_lib.go}}줄 — 같은 이름, 속만 gorilla</td></tr>
+<tr><td>파이썬</td><td><code>recv_json</code> · <code>send_text</code> · <code>close</code></td><td>ws.py 234줄</td><td>어댑터 <code>LibConn</code> 28줄</td></tr>
+</table></div>
+<div class="note"><b>이 면이 두꺼웠다면</b>hub 가 프레임이나 소켓을 직접 만졌다면 이 장은 "갈아 끼우기"가 아니라 <strong>재작성</strong>이 됐을 것이다. 10장의 동시성 설계(연결은 채널 뒤에 숨는다)가 여기서 두 번째 배당을 준다.</div>
+
+<!--SLIDE sec=27 t="Go — gorilla/websocket 을 들여온다"-->
+<h1><span class="no">{{N}}</span>Go — gorilla/websocket 을 들여온다</h1>
+<p>"의존성 0 이 깨진다"의 실체는 파일 두 개다. 이게 전부다 — 그리고 이제부터 빌드는 네트워크(모듈 캐시)를 한 번은 만나야 한다.</p>
+<!--CODE file=server_go_lib/go.mod cap="server_go_lib/go.mod — require 가 생겼다"-->
+<!--CODE file=server_go_lib/go.sum cap="server_go_lib/go.sum — 내려받은 모듈의 해시 고정"-->
+<div class="cols">
+  <div class="card a"><h4>왜 gorilla 인가</h4><p>Go 웹소켓의 사실상 표준이고, 그 자신도 <strong>의존성이 0</strong>이다 — go.sum 이 두 줄(모듈 하나)로 끝나는 이유.</p></div>
+  <div class="card b"><h4>버전을 못 박는다</h4><p><code>v1.5.3</code> 고정. go.sum 의 해시 덕에 같은 소스는 언제 어디서 빌드해도 같은 바이트를 받는다.</p></div>
+</div>
+
+<!--SLIDE sec=27 t="ws_lib.go ① 겉모양은 ws.go 그대로"-->
+<h1><span class="no">{{N}}</span>ws_lib.go ① 겉모양은 ws.go 그대로</h1>
+<!--CODE file=server_go_lib/ws_lib.go lines=1-30 cap="ws_lib.go — 머리말과 오프코드"-->
+<p class="small mut">오프코드 표를 다시 적는 이유는 hub.go 가 <code>OpText</code> 를 참조하기 때문이다. gorilla 의 메시지 상수가 RFC 오프코드 값 그대로라 변환은 캐스팅 하나다.</p>
+
+<!--SLIDE sec=27 t="ws_lib.go ② 핸드셰이크 86줄 → 세 줄"-->
+<h1><span class="no">{{N}}</span>ws_lib.go ② 핸드셰이크 86줄 → 세 줄</h1>
+<!--CODE file=server_go_lib/ws_lib.go lines=31-63 cap="ws_lib.go — Conn · Upgrade · Dial"-->
+
+<!--SLIDE sec=27 t="ws_lib.go ③ 읽기·쓰기·닫기"-->
+<h1><span class="no">{{N}}</span>ws_lib.go ③ 읽기·쓰기·닫기</h1>
+<!--CODE file=server_go_lib/ws_lib.go lines=64-88 cap="ws_lib.go — ReadMessage · WriteText · Close"-->
+<div class="note"><b>사라진 일들</b>조각 이어붙이기, 핑→퐁 자동 응답, 마스킹 해제, close 코드 협상 — 8장에서 손으로 만들던 전부가 <code>c.ws.ReadMessage()</code> 한 줄 속으로 들어갔다.</div>
+
+<!--SLIDE sec=27 t="복사가 규칙이다 — make lib-copy"-->
+<h1><span class="no">{{N}}</span>복사가 규칙이다 — make lib-copy</h1>
+<p><code>server_go_lib/</code> 의 room.go·hub.go·main.go·테스트 2종은 저장소에 없다. <strong>빌드할 때마다 server_go 에서 새로 복사한다</strong> — 복사본이 원본과 갈라지는 일 자체를 불가능하게 만드는, web/room.js 와 같은 규칙이다.</p>
+<!--CODE file=Makefile lines=83-107 cap="Makefile — 라이브러리판: 복사·테스트·빌드·실행"-->
+
+<!--SLIDE sec=27 t="테스트는 한 글자도 새로 쓰지 않았다 (Go)"-->
+<h1><span class="no">{{N}}</span>테스트는 한 글자도 새로 쓰지 않았다 (Go)</h1>
+<p>복사된 room_test.go 는 골든 벡터 44스텝을, hub_test.go 는 진짜 소켓으로 붙는 통합 시나리오 5개를 그대로 돌린다. 클라이언트 쪽 <code>Dial</code> 도 gorilla 로 바뀌었으니 이 통과는 <strong>서버·클라이언트 양쪽의 교체 증명</strong>이다.</p>
+<!--RUN file=logs/lib_test.log lines=1-4 cap="make test-go-lib — 복사 → vet → 전체 테스트"-->
+<div class="note"><b>ws_test.go 만 못 따라온다</b>그 파일은 프레임 바이트를 검사한다 — 라이브러리판에는 검사할 프레임 코드 자체가 없다. 테스트가 구현 계층에 붙어 있으면 계층과 함께 은퇴한다.</div>
+
+<!--SLIDE sec=27 t="파이썬 — websockets 라이브러리"-->
+<h1><span class="no">{{N}}</span>파이썬 — websockets 라이브러리</h1>
+<p><code>pip install websockets</code> — 파이썬 웹소켓의 사실상 표준(여기서는 17.1). asyncio 판 <code>serve()</code> 에 코루틴 하나를 넘기면 연결마다 그 코루틴이 뜬다. ws.py 의 <code>serve()</code> 와 같은 그림이다.</p>
+<div class="cols">
+  <div class="card a"><h4>공짜로 얻는 것</h4><p>close 코드 협상, 20초 간격 keepalive 핑, 조각 프레임 조립, <code>max_size</code> 읽기 상한, <code>permessage-deflate</code> 압축 협상 — 7장에서 "안 만든다"던 것까지 들어 있다.</p></div>
+  <div class="card b"><h4>값으로 치르는 것</h4><p>"파이썬만 있으면 돈다"가 깨진다. 표준 라이브러리 밖의 첫 <code>pip install</code> 이고, 배포 절차에 단계가 하나 는다.</p></div>
+</div>
+
+<!--SLIDE sec=27 t="server_lib.py ① 머리말"-->
+<h1><span class="no">{{N}}</span>server_lib.py ① 머리말</h1>
+<!--CODE file=server_py/server_lib.py lines=1-28 cap="server_lib.py — 머리말 · 재사용 목록"-->
+<p class="small mut">마지막 두 import 가 이 파일의 요약이다 — hub 는 그대로 쓰고, HTTP 경로 규칙(<code>make_http</code>)도 server.py 것을 그대로 쓴다.</p>
+
+<!--SLIDE sec=27 t="server_lib.py ② 어댑터가 전부다"-->
+<h1><span class="no">{{N}}</span>server_lib.py ② 어댑터가 전부다</h1>
+<!--CODE file=server_py/server_lib.py lines=29-58 cap="server_lib.py — LibConn: hub 가 아는 세 마디"-->
+<div class="note"><b>계약을 옮겨 적는 것이 어댑터다</b>ws.py 의 <code>recv_json</code> 은 "닫히면 None, 못 읽으면 {}"였다. 라이브러리의 예외(<code>ConnectionClosed</code>)를 그 계약으로 번역하는 게 이 클래스의 일의 전부다.</div>
+
+<!--SLIDE sec=27 t="server_lib.py ③ HTTP 겸용과 serve()"-->
+<h1><span class="no">{{N}}</span>server_lib.py ③ HTTP 겸용과 serve()</h1>
+<!--CODE file=server_py/server_lib.py lines=59-82 cap="server_lib.py — process_request 훅 · serve()"-->
+<p class="small mut">ws.py 가 요청줄을 직접 파싱해 가르던 "웹소켓이냐 HTTP 냐"를 라이브러리는 <code>process_request</code> 훅 하나로 연다. <code>serve()</code> 의 시그니처를 ws.serve 와 같게 맞춰 두어 실행부가 그대로 옮겨 온다.</p>
+
+<!--SLIDE sec=27 t="server_lib.py ④ 실행 파일"-->
+<h1><span class="no">{{N}}</span>server_lib.py ④ 실행 파일</h1>
+<!--CODE file=server_py/server_lib.py lines=83-117 cap="server_lib.py — main: server.py 와 같은 뼈대"-->
+
+<!--SLIDE sec=27 t="시험 설계 — 직접 구현으로 라이브러리를 친다"-->
+<h1><span class="no">{{N}}</span>시험 설계 — 직접 구현으로 라이브러리를 친다</h1>
+<p>새 테스트의 클라이언트는 <strong>ws.py 의 직접 구현 <code>connect()</code> 그대로</strong>다. 직접 구현 클라이언트가 라이브러리 서버와 끝까지 대화하면, 양쪽 다 RFC 6455 를 지켰다는 뜻이다 — 상호운용이 곧 규격 준수의 증거다.</p>
+<!--CODE file=server_py/test_server_lib.py lines=1-23 cap="test_server_lib.py — 머리말: 시험하는 주장 둘"-->
+
+<!--SLIDE sec=27 t="test_server_lib.py ① 접속·버전·핑"-->
+<h1><span class="no">{{N}}</span>test_server_lib.py ① 접속·버전·핑</h1>
+<!--CODE file=server_py/test_server_lib.py lines=24-64 cap="test_server_lib.py — 준비 · 경계값 3케이스"-->
+
+<!--SLIDE sec=27 t="test_server_lib.py ② 4인 한 판"-->
+<h1><span class="no">{{N}}</span>test_server_lib.py ② 4인 한 판</h1>
+<!--CODE file=server_py/test_server_lib.py lines=65-103 cap="test_server_lib.py — 시드 합의와 가비지 중계"-->
+
+<!--SLIDE sec=27 t="test_server_lib.py ③ 이탈과 HTTP"-->
+<h1><span class="no">{{N}}</span>test_server_lib.py ③ 이탈과 HTTP</h1>
+<!--CODE file=server_py/test_server_lib.py lines=104-138 cap="test_server_lib.py — 판 중 이탈 · process_request"-->
+<!--RUN file=logs/lib_test.log lines=5-12 cap="make test-py-lib — 6케이스 전부 통과"-->
+
+<!--SLIDE sec=27 t="실측 — 같은 8인 대전을 두 서버에"-->
+<h1><span class="no">{{N}}</span>실측 — 같은 8인 대전을 두 서버에</h1>
+<p>23장의 헤드리스 봇(<code>bot_client.mjs</code>)을 <strong>한 글자도 바꾸지 않고</strong> 라이브러리판 두 서버에 붙인다. 봇의 전송은 Node 내장 WebSocket — 즉 이 실측은 세 번째 구현(undici)까지 낀 상호운용 시험이다.</p>
+<!--CODE file=Makefile lines=108-122 cap="Makefile — match-lib · clean-lib"-->
+
+<!--SLIDE sec=27 t="실측 로그 ① Go · gorilla"-->
+<h1><span class="no">{{N}}</span>실측 로그 ① Go · gorilla</h1>
+<!--RUN file=logs/match_lib_go.log cap="PC 4대 × 2석 = 8인 · gorilla 서버 실측"-->
+
+<!--SLIDE sec=27 t="실측 로그 ② 파이썬 · websockets"-->
+<h1><span class="no">{{N}}</span>실측 로그 ② 파이썬 · websockets</h1>
+<!--RUN file=logs/match_lib_py.log cap="같은 구성 · websockets 서버 실측"-->
+<p class="small mut">판 길이(20.3초 vs 39.1초)는 난수가 정하는 것이라 비교 지표가 아니다. 지표는 하나 — 8석이 붙고, 가비지가 오가고, 순위가 나올 때까지 <strong>끝까지 돈다</strong>.</p>
+
+<!--SLIDE sec=27 t="대차대조표 — 직접 구현 vs 라이브러리"-->
+<h1><span class="no">{{N}}</span>대차대조표 — 직접 구현 vs 라이브러리</h1>
+<div class="scroll"><table>
+<tr><th></th><th>직접 구현 (8·12장)</th><th>라이브러리판 (이 장)</th></tr>
+<tr><td>전송층 코드</td><td>ws.go 339줄 · ws.py 234줄</td><td>ws_lib.go {{LINES:server_go_lib/ws_lib.go}}줄 · LibConn 28줄</td></tr>
+<tr><td>의존성</td><td><b>0</b> — 파일 복사로 배포 끝</td><td>gorilla v1.5.3 · websockets 17.1</td></tr>
+<tr><td>기능</td><td>이 게임에 필요한 만큼</td><td>+압축 협상 · keepalive · close 코드</td></tr>
+<tr><td>hub · room · 클라이언트</td><td colspan="2" style="text-align:center"><b>완전히 동일</b> (Go 쪽은 byte-for-byte 복사)</td></tr>
+<tr><td>검증</td><td>테스트 154개 + 실측</td><td>같은 통합 테스트 + 신규 6개 + 실측</td></tr>
+</table></div>
+<div class="note"><b>그래서 언제 무엇을 쓰나</b>배우거나·의존성이 부담이거나·프로토콜을 통제해야 하면 직접 구현. 그 외의 실무라면 라이브러리 — 다만 <strong>갈아 끼우는 면을 얇게 유지했을 때만</strong> 이 선택이 나중에 공짜로 뒤집힌다. 이 장 전체가 그 한 문장의 증명이다.</div>

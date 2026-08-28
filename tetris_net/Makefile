@@ -80,3 +80,43 @@ deck: b64
 clean:
 	rm -f tetris_net.wasm tetris_net.wasm.b64 server_go/tetris-server
 	rm -rf web/room.js web/*.wasm web/weights.json
+
+# ── 웹소켓 라이브러리판 — gorilla/websocket(Go) · websockets(파이썬) ─────────────
+# 직접 구현(ws.go·ws.py)과 같은 프로토콜·같은 hub·room 을 라이브러리 전송층 위에서 돌린다.
+# Go 쪽 room.go·hub.go·main.go·테스트 2종은 매번 server_go 에서 새로 복사한다 —
+# 복사본이 원본과 갈라지는 일 자체를 불가능하게 만든다 (web/room.js 와 같은 규칙).
+.PHONY: lib-copy test-lib test-go-lib test-py-lib server-lib run-go-lib run-py-lib match-lib clean-lib
+
+lib-copy:
+	cp server_go/room.go server_go/hub.go server_go/main.go \
+	   server_go/room_test.go server_go/hub_test.go server_go_lib/
+
+test-lib: test-go-lib test-py-lib
+	@printf '\n라이브러리판 통과.\n'
+test-go-lib: lib-copy
+	cd server_go_lib && go vet ./... && go test -count=1 ./...
+test-py-lib:
+	cd server_py && python3 -m unittest test_server_lib
+
+server-lib: lib-copy
+	cd server_go_lib && go build -o tetris-server-lib .
+
+run-go-lib: server-lib web
+	cd server_go_lib && ./tetris-server-lib -addr :$(PORT) -dir ../web
+run-py-lib: web
+	cd server_py && python3 server_lib.py --port $(PORT) --dir ../web
+
+# 진짜 웹소켓 8인 대전을 라이브러리판 두 서버에도 똑같이 붙여 본다 (match 와 같은 구성)
+match-lib: server-lib tetris_net.wasm
+	@echo '── Go 서버 (gorilla/websocket)'
+	@cd server_go_lib && (./tetris-server-lib -addr :18789 & echo $$! > /tmp/tn_go_lib.pid) && sleep 1
+	-node bot_client.mjs --url ws://127.0.0.1:18789/ws --pcs 4 --seats 2 --max 8 --level mix
+	@kill $$(cat /tmp/tn_go_lib.pid) 2>/dev/null || true
+	@echo '\n── 파이썬 서버 (websockets)'
+	@cd server_py && (python3 server_lib.py --port 18790 & echo $$! > /tmp/tn_py_lib.pid) && sleep 1
+	-node bot_client.mjs --url ws://127.0.0.1:18790/ws --pcs 4 --seats 2 --max 8 --level mix
+	@kill $$(cat /tmp/tn_py_lib.pid) 2>/dev/null || true
+
+clean-lib:
+	rm -f server_go_lib/tetris-server-lib server_go_lib/room.go server_go_lib/hub.go \
+	      server_go_lib/main.go server_go_lib/room_test.go server_go_lib/hub_test.go
