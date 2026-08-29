@@ -11,7 +11,7 @@
 // ── 판의 크기 ────────────────────────────────────────────────────────
 export const W = 10; // 필드 가로 (칸)
 export const VIS = 20; // 화면에 보이는 세로 (칸)
-export const HIDDEN = 4; // 천장 위 숨은 줄 — 스폰과 위쪽 월킥(-2칸)을 흡수한다
+export const HIDDEN = 4; // 천장 위 숨은 줄 — 위쪽 월킥(-2칸)과 밀려 올라간 스택을 흡수한다 (스폰은 그 아래 보이는 줄)
 export const H = VIS + HIDDEN; // 실제 배열 세로 = 24
 export const SPAWN_X = 3;
 export const SPAWN_Y = HIDDEN; // 4x4 박스의 좌상단 = 보이는 필드의 맨 윗줄
@@ -191,7 +191,7 @@ export class Tetris {
 
   /** 마지막 이동이 회전이었는가 — T스핀 판정의 전제 조건 */
   lastWasRot = 0;
-  /** 성공한 킥의 인덱스. 5번째(4)면 무조건 정식 T스핀 */
+  /** 성공한 킥의 인덱스. 5번째(4)면 미니 T스핀이 정식으로 올라간다 */
   lastKick = 0;
   private eventId = 0;
   /** 상대가 보냈지만 아직 필드에 올라오지 않은 줄 */
@@ -306,7 +306,7 @@ export class Tetris {
       if (!this.collide(this.curPiece, to, nx, ny)) {
         this.curRot = to; this.curX = nx; this.curY = ny;
         this.lastWasRot = 1; // T스핀 판정에 쓰인다
-        this.lastKick = k; // 5번째(k===4) 킥은 항상 정식 T스핀
+        this.lastKick = k; // 5번째(k===4) 킥은 미니 T스핀을 정식으로 올린다
         if (this.grounded && this.lockResets < LOCK_RESET) {
           this.lockTimer = 0;
           this.lockResets++;
@@ -329,7 +329,7 @@ export class Tetris {
    *   * "앞" 두 코너 = T 가 가리키는 방향 쪽 두 개
    *   * 앞 2개 + 뒤 1개 이상이 막힘 → 정식 T스핀
    *   * 앞 1개 + 뒤 2개가 막힘  → 미니 T스핀
-   *   * 단, 5번째 킥으로 들어갔으면 무조건 정식
+   *   * 단, 5번째 킥으로 들어갔으면 미니 패턴도 정식으로 친다
    *  반환: 0=없음 1=미니 2=정식 */
   private detectTspin(): number {
     if (this.curPiece !== 5 || !this.lastWasRot) return 0;
