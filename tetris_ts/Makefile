@@ -43,14 +43,14 @@ train: build
 	$(NODE) dist/train.js --pop $(POP) --gen $(GEN)
 
 ## run — 8인 서버 (web/ 정적 파일 + /ws 엔드포인트)
-run: web
+run: build
 	$(NODE) dist/src/net/server.js --port $(PORT)
 
 ## match — 서버 + 봇 8석 실측 대전
-match: web
+match: build
 	$(NODE) dist/bot_client.js --match --port $(PORT)
 
-## web — 브라우저 번들 조립 (dist/ 의 컴파일 결과를 web/ 로 복사)
+## web — 브라우저 번들 조립 (dist/ 의 컴파일 결과를 web/js/ 로 복사)
 web: build
 	$(NODE) tools/bundle_web.mjs
 
