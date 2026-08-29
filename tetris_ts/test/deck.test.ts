@@ -58,17 +58,32 @@ test('지시자가 남김없이 확장된다', () => {
   assert.ok(!/\{\{LINES:/.test(html), 'LINES 치환자가 남았다');
 });
 
+/**
+ * 코드 블록(인용된 소스)을 걷어 낸 나머지 = 덱 자신의 마크업.
+ *
+ * 이 덱은 자기 테스트 코드까지 통째로 싣는다. 그래서 여기 적힌 검사 문자열이 덱 본문에
+ * 그대로 등장한다 — 외부 리소스를 부르는 게 아니라 **인용된 글자**다. 마크업을 볼 때는
+ * 코드 블록을 먼저 걷어 내야 그 둘을 구분할 수 있다.
+ */
+function markupOnly(html: string): string {
+  return html.replace(/<pre class="code[^"]*"><code>[\s\S]*?<\/code><\/pre>/g, '');
+}
+
 test('자기완결형이다 — 외부 리소스를 하나도 안 부른다', () => {
   const { html } = build();
+  const m = markupOnly(html);
+  // <script src> 와 <link> 는 코드 블록 안이면 &lt; 로 이스케이프되므로 전체에서 봐도 안전하다.
   assert.ok(!/<script[^>]+\ssrc=/i.test(html), '외부 <script src> 가 있다');
-  assert.ok(!/<link[^>]+rel=["']?stylesheet/i.test(html), '외부 스타일시트를 참조한다');
-  assert.ok(!/@import\s/i.test(html), 'CSS @import 가 있다');
-  assert.ok(!/(?:src|href)=["']https?:\/\//i.test(html), 'http(s) 리소스를 참조한다');
+  assert.ok(!/<link[^>]+rel=["\']?stylesheet/i.test(html), '외부 스타일시트를 참조한다');
+  assert.ok(!/@import\s/i.test(m), 'CSS @import 가 있다');
+  assert.ok(!/(?:src|href)=["\']https?:\/\//i.test(m), 'http(s) 리소스를 참조한다');
 });
 
 test('한글이 깨지지 않는다 (UTF-8 왕복)', () => {
   const { html } = build();
-  assert.ok(!html.includes('�'), '치환 문자(U+FFFD)가 있다 — 인코딩이 깨졌다');
+  // 진짜 성질은 "파일 바이트가 올바른 UTF-8 인가"다. 엄격 디코더가 그걸 직접 확인한다.
+  new TextDecoder('utf-8', { fatal: true }).decode(readFileSync(DECK));
+  assert.ok(!markupOnly(html).includes('\uFFFD'), '치환 문자(U+FFFD)가 있다 — 인코딩이 깨졌다');
   assert.ok(html.includes('테트리스'), '한글 제목이 사라졌다');
 });
 

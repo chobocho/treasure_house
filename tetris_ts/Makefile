@@ -14,7 +14,7 @@ POP     ?= 32
 GEN     ?= 50
 DECK    ?= ../TypeScript_테트리스_AI_8인_대전.html
 
-.PHONY: all deps build golden test train run match web deck deck-check page-check clean distclean
+.PHONY: all deps build golden test train run match web deck deck-check page-check lib clean distclean
 
 all: build
 
@@ -65,6 +65,12 @@ deck-check: deck
 ## page-check — 진짜 서버를 띄우고 진짜 브라우저로 붙어 한 판 돌려 본다
 page-check: web
 	$(NODE) tools/check_page.mjs
+
+## lib — 부록: 같은 서버를 ws 라이브러리로. 본편 빌드와 섞이지 않게 따로 컴파일한다.
+lib: build
+	npm install --no-save ws @types/ws
+	$(NPX) tsc -p tsconfig.lib.json
+	$(NODE) tools/check_lib.mjs
 
 clean:
 	rm -rf dist
