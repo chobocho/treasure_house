@@ -1,9 +1,92 @@
-<!--SLIDE sec=12 t="RFC 6455 직접 구현"-->
-<h1><span class="no">{{N}}</span>RFC 6455 직접 구현</h1>
-<p class="mut">핸드셰이크 · 프레이밍 · 마스킹 · close — 의존성 0</p>
-<ul>
-  <li>Sec-WebSocket-Accept 계산</li>
-  <li>프레임 파서와 TCP 경계</li>
-  <li>제어 프레임과 종료 절차</li>
-</ul>
-<div class="note"><b>이 파트는 아직 뼈대다</b>예정 ~45장. 슬라이드는 <code>deck/sections/12_rfc6455.html</code> 에서 채운다 — 완성된 덱 본문을 직접 고치면 커버리지 보증이 깨진다.</div>
+<!--SLIDE sec=12 t="RFC 6455 — 바닥부터"-->
+<h1><span class="no">{{N}}</span>웹소켓을 직접 쓴다</h1>
+<p class="mut">이 게임이 웹소켓에게 요구하는 건 "텍스트 프레임을 주고받는다" 하나뿐이다. 그걸 위해 라이브러리를 넣으면 정작 <strong>무슨 일이 벌어지는지</strong>가 <code>node_modules</code> 안으로 숨는다.</p>
+<!--CODE file=src/net/ws.ts lines=1-22 cap="src/net/ws.ts — 범위와 함정 둘"-->
+<div class="scroll"><table>
+<tr><th>구현한다</th><th>안 한다</th></tr>
+<tr><td>핸드셰이크(101), 텍스트/바이너리 프레임</td><td>permessage-deflate (압축)</td></tr>
+<tr><td>조각화(continuation), ping/pong, close</td><td>확장·서브프로토콜 협상</td></tr>
+<tr><td>마스킹 해제, 길이 검증</td><td>클라이언트 역할(봇은 Node 표준 것을 쓴다)</td></tr>
+</table></div>
+
+<!--SLIDE sec=12 t="핸드셰이크"-->
+<h1><span class="no">{{N}}</span>매직 문자열 하나</h1>
+<p class="mut">클라이언트가 보낸 <code>Sec-WebSocket-Key</code> 뒤에 규격이 못박은 GUID 를 붙여 SHA-1 하고 base64 한다. 이유는 없다 — 규격이 그렇다. 이 값이 맞아야 브라우저가 연결을 인정한다.</p>
+<pre class="code txt"><code>클라이언트 → GET /ws HTTP/1.1
+              Upgrade: websocket
+              Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+
+서버      → HTTP/1.1 101 Switching Protocols
+              Upgrade: websocket
+              Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
+                                    └ base64(sha1(key + GUID))</code></pre>
+<!--CODE file=src/net/ws.ts lines=23-56 cap="GUID · acceptKey · 옵코드 · 프레임 모양"-->
+<div class="warn"><b>GUID 는 마지막 그룹 순서를 틀리기 쉽다</b><code>258EAFA5-E914-47DA-95CA-C5AB0DC85B11</code>. 한 글자만 어긋나도 브라우저는 조용히 연결을 끊는다. 테스트가 RFC 의 예제 키·응답 쌍을 그대로 대조한다.</div>
+
+<!--SLIDE sec=12 t="TCP 는 프레임 경계를 지켜 주지 않는다"-->
+<h1><span class="no">{{N}}</span>파서를 따로 두는 이유</h1>
+<p class="mut">한 번의 <code>data</code> 이벤트에 프레임이 세 개 올 수도 있고, 헤더가 반만 올 수도 있다. 소켓 콜백 안에서 즉석으로 해석하면 이 경우들이 전부 버그가 된다.</p>
+<!--CODE file=src/net/ws.ts lines=57-100 cap="FrameParser — 버퍼를 이어 붙이고 잘라 낸다"-->
+<p class="small mut">파서는 소켓을 모른다. 바이트를 넣으면 완성된 프레임 목록이 나오는 순수한 물건이라, 테스트가 <strong>1바이트씩</strong> 흘려 넣어 같은 결과가 나오는지 확인할 수 있다.</p>
+
+<!--SLIDE sec=12 t="길이 세 가지"-->
+<h1><span class="no">{{N}}</span>7비트 · 16비트 · 64비트</h1>
+<pre class="code txt"><code>  0                   1                   2
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0
+ +-+-+-+-+-------+-+-------------+---------
+ |F|R|R|R| op    |M| payload len | 확장 길이
+ |I|S|S|S| (4)   |A|    (7)      | 126 → 2바이트
+ |N|V|V|V|       |S|             | 127 → 8바이트
+ | |1|2|3|       |K|             |
+ +-+-+-+-+-------+-+-------------+---------
+   └ 조각의 마지막인가        └ 마스킹돼 있는가 (클라 → 서버는 항상 1)</code></pre>
+<!--CODE file=src/net/ws.ts lines=101-139 cap="길이 해석과 마스킹 해제"-->
+<div class="note"><b>메모리 고갈 방어</b>64비트 길이의 상위 4바이트가 0이 아니면 그 자리에서 거부한다. 안 그러면 악의적인 헤더 하나로 4 GB 버퍼를 잡으려다 프로세스가 죽는다. 상한은 1 MiB 로 뒀다 — 우리 메시지는 가장 클 때도 몇 백 바이트다.</div>
+
+<!--SLIDE sec=12 t="인코더"-->
+<h1><span class="no">{{N}}</span>서버는 절대 마스킹하지 않는다</h1>
+<!--CODE file=src/net/ws.ts lines=140-183 cap="encodeFrame"-->
+<p class="mut">방향이 다르다. 클라이언트 → 서버는 <strong>반드시</strong> 마스킹, 서버 → 클라이언트는 <strong>절대</strong> 마스킹 금지. 규격이 마스킹을 요구하는 이유는 보안이 아니라 중간 프록시가 프레임을 HTTP 로 오인해 캐시하는 사고를 막기 위해서다.</p>
+<p class="small mut"><code>mask = true</code> 경로는 봇 클라이언트가 아니라 <em>테스트</em>가 쓴다. 우리 파서가 마스킹된 프레임을 제대로 푸는지 확인하려면 마스킹해서 넣어 볼 수 있어야 한다.</p>
+
+<!--SLIDE sec=12 t="연결 하나"-->
+<h1><span class="no">{{N}}</span>소켓과 파서를 잇는다</h1>
+<!--CODE file=src/net/ws.ts lines=184-220 cap="WsConn — 필드와 생성자, 소켓에서 파서로"-->
+<div class="tip"><b>101 을 쓰기 전에 온 바이트</b>업그레이드 시점에 이미 도착해 있던 바이트가 <code>head</code> 로 넘어온다. 버리면 첫 메시지를 잃는다. 다만 지금 바로 처리하면 호출자가 <code>onMessage</code> 를 붙이기 전이라, <code>setImmediate</code> 로 이번 틱이 끝난 뒤에 흘려 넣는다.</div>
+
+<!--SLIDE sec=12 t="프레임 하나를 받으면"-->
+<h1><span class="no">{{N}}</span>조각·제어·데이터</h1>
+<!--CODE file=src/net/ws.ts lines=221-278 cap="onFrame — 조각 모으기와 제어 프레임"-->
+<p class="small mut">제어 프레임(ping/pong/close)은 조각난 메시지 <strong>사이에</strong> 끼어들 수 있다. 그래서 조각 버퍼를 건드리지 않고 따로 처리한다 — 이걸 놓치면 큰 메시지를 받는 도중에 ping 이 오면 메시지가 깨진다.</p>
+
+<!--SLIDE sec=12 t="보내기와 닫기"-->
+<h1><span class="no">{{N}}</span>close 는 인사를 주고받는다</h1>
+<!--CODE file=src/net/ws.ts lines=279-329 cap="deliver · send · ping · close"-->
+<p class="mut">닫을 때는 코드와 이유를 담은 close 프레임을 보내고 상대의 close 를 기다린다. 그냥 소켓을 끊으면 상대는 1006(비정상 종료)으로 보고, 로그에 원인이 남지 않는다.</p>
+
+<!--SLIDE sec=12 t="업그레이드"-->
+<h1><span class="no">{{N}}</span>HTTP 에서 웹소켓으로</h1>
+<!--CODE file=src/net/ws.ts lines=330-353 cap="upgrade — 헤더를 보고 101 을 쓴다"-->
+<p class="small mut">헤더 검사는 최소한만 한다. <code>Upgrade: websocket</code> 과 키가 있으면 받아들이고, 없으면 400 을 쓰고 끊는다. 브라우저가 아닌 무언가가 잘못 붙었을 때 조용히 매달려 있지 않게 하는 게 목적이다.</p>
+
+<!--SLIDE sec=12 t="파서를 어떻게 검사하나"-->
+<h1><span class="no">{{N}}</span>1바이트씩, 세 개 한꺼번에</h1>
+<!--CODE file=test/ws.test.ts lines=41-102 cap="test/ws.test.ts — 핸드셰이크와 프레임 파서"-->
+<p class="mut">같은 프레임을 <strong>1바이트씩</strong> 흘려 넣어도, 세 개를 <strong>한꺼번에</strong> 넣어도 결과가 같아야 한다. TCP 가 어떻게 쪼개든 상관없다는 성질을 이 두 테스트가 붙잡는다.</p>
+
+<!--SLIDE sec=12 t="거절해야 하는 것들"-->
+<h1><span class="no">{{N}}</span>깨진 입력에 어떻게 반응하나</h1>
+<!--CODE file=test/ws.test.ts lines=103-129 cap="RSV 비트 · 제어 프레임 길이 · 상한"-->
+<div class="scroll"><table>
+<tr><th>입력</th><th>반응</th><th>왜</th></tr>
+<tr><td>RSV 비트가 켜짐</td><td>1002 프로토콜 오류</td><td>확장을 협상한 적이 없다</td></tr>
+<tr><td>제어 프레임 126바이트</td><td>1002</td><td>규격이 125로 못박았다</td></tr>
+<tr><td>제어 프레임이 조각남</td><td>1002</td><td>제어는 쪼갤 수 없다</td></tr>
+<tr><td>길이 헤더가 상한 초과</td><td>1009</td><td>메모리 고갈 방어</td></tr>
+</table></div>
+
+<!--SLIDE sec=12 t="남의 클라이언트로 확인한다"-->
+<h1><span class="no">{{N}}</span>우리끼리만 말이 통하면 소용없다</h1>
+<p class="mut">우리 파서와 우리 인코더가 서로 맞는 건 당연하다. 진짜 검사는 <strong>남이 붙었을 때</strong>다 — Node 24 의 표준 <code>WebSocket</code> 클라이언트로 진짜 포트에 접속해 왕복시킨다.</p>
+<!--CODE file=test/ws.test.ts lines=376-415 cap="표준 클라이언트로 붙어 보기"-->
+<p class="small mut">이 테스트가 통과한다는 건 핸드셰이크 헤더, accept 키 계산, 마스킹 규칙, 프레임 배치가 전부 규격대로라는 뜻이다. 단위 테스트 수십 개보다 이 한 개가 무겁다.</p>
