@@ -208,6 +208,16 @@ export interface BattleOptions {
   delay?: number;
   /** AI 기본 착수 간격(ms) */
   intervalMs?: number;
+  /**
+   * 모든 좌석이 **같은 조각 순서**를 받는가.
+   *
+   * 온라인 규격(protocol.md §4)은 start 의 seed 하나를 전원이 공유한다 — 대전에서
+   * 조각 운이 갈리면 실력 겨루기가 성립하지 않기 때문이다. 아레나 데모를 그 규칙과
+   * 같게 두려면 true 로 켠다. 기본값이 false 인 이유는, 같은 가중치·같은 간격의
+   * AI 여덟이 같은 조각을 받으면 처음 몇 수가 완전히 똑같아서 데모가 밋밋해지기
+   * 때문이다(가비지가 오가기 시작하면 곧 갈라지긴 한다).
+   */
+  sharedSeed?: boolean;
 }
 
 /**
@@ -241,9 +251,10 @@ export class Battle {
     this.ref = new Referee({ max: opts.seats.length, target: opts.target ?? 'random' }, this.seed);
 
     opts.seats.forEach((spec, i) => {
-      // 좌석마다 시드를 달리한다. 같은 시드면 8명이 똑같은 조각 순서를 받아
-      // 똑같이 두게 되고, 그건 대전이 아니라 8중 복사다.
-      const game = new Tetris(((this.seed + i * 0x9e3779b9) >>> 0) || 1);
+      const seatSeed = opts.sharedSeed
+        ? (this.seed >>> 0)
+        : ((this.seed + i * 0x9e3779b9) >>> 0) || 1;
+      const game = new Tetris(seatSeed);
       const ai = spec.kind === 'ai' ? new Ai(game, spec.weights ?? DEFAULT_WEIGHTS) : null;
       this.ref.seats[i] = newRefereeSeat();
       this.seats.push({
