@@ -179,8 +179,8 @@ export function scoreOf(weights: Float32Array, f: Float32Array): number {
   return s;
 }
 
-/** 기본 가중치 — tetris_ai/weights.json 의 'max' (50세대 GA 학습 결과).
- *  train.ts 가 새로 학습하면 갈아 끼운다. */
+/** 기본 가중치 — weights.json 의 'max'. `make train`(개체 32 · 50세대)이 낸 실측값이고,
+ *  부 2 의 C++/JS 학습 결과와 소수점까지 같다(코어·AI 파리티가 맞으니 당연한 결과다). */
 export const DEFAULT_WEIGHTS: readonly number[] = [
   0.07328, 0.064795, -0.477997, 0.210324, -0.008971, -0.391833, -0.504655, -0.556259,
 ];

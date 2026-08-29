@@ -30,10 +30,12 @@ build: deps
 golden: build
 	$(NODE) tools/trace_wasm.mjs
 	$(NODE) tools/trace_ai_wasm.mjs
+	$(NODE) tools/trace_ga_js.mjs
 
 ## test — 전체 테스트. 골든 파일이 없으면 먼저 만든다.
 test: build
-	@test -f test/golden/core_traces.json -a -f test/golden/ai_traces.json || $(MAKE) golden
+	@test -f test/golden/core_traces.json -a -f test/golden/ai_traces.json \
+	     -a -f test/golden/ga_traces.json || $(MAKE) golden
 	$(NODE) --test 'dist/test/*.test.js'
 
 ## train — GA 실학습. weights.json 과 ga_log.json 을 갱신한다.
