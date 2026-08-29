@@ -1,9 +1,110 @@
-<!--SLIDE sec=17 t="부록 — 더 나아가기"-->
-<h1><span class="no">{{N}}</span>부록 — 더 나아가기</h1>
-<p class="mut">ws 라이브러리판 서버 · 다음에 해 볼 것</p>
-<ul>
-  <li>의존성을 들이면 무엇이 줄어드는가</li>
-  <li>남은 과제</li>
-  <li>참고 자료</li>
-</ul>
-<div class="note"><b>이 파트는 아직 뼈대다</b>예정 ~15장. 슬라이드는 <code>deck/sections/17_more.html</code> 에서 채운다 — 완성된 덱 본문을 직접 고치면 커버리지 보증이 깨진다.</div>
+<!--SLIDE sec=17 t="부록 — 라이브러리를 쓰면 어떻게 되나"-->
+<h1><span class="no">{{N}}</span>300줄은 필요했나</h1>
+<p class="mut">파트 12에서 RFC 6455 를 직접 구현했다. 정말 필요했는지 알려면 <strong>같은 서버를 라이브러리로 한 벌 더</strong> 만들어 맞대어 보는 수밖에 없다.</p>
+<div class="cols">
+  <div class="card a"><h4>안 바뀌는 것</h4><p class="small mut">허브·룸·프로토콜·클라이언트·봇. 규칙은 한 줄도 안 건드린다.</p></div>
+  <div class="card b"><h4>바뀌는 것</h4><p class="small mut">"소켓에서 프레임을 꺼내는 방법" 하나. 그게 정확히 라이브러리가 해 주는 일이다.</p></div>
+</div>
+<p class="small mut">이 파일은 <code>tsconfig</code> 의 <code>exclude</code> 에 있다. 본편 빌드는 <code>ws</code> 없이도 돌아야 하므로, <code>make lib</code> 가 설치와 컴파일을 따로 한다.</p>
+
+<!--SLIDE sec=17 t="라이브러리판 서버"-->
+<h1><span class="no">{{N}}</span>같은 모양, 짧아진 속</h1>
+<!--CODE file=src/net/server_lib.ts lines=1-45 cap="src/net/server_lib.ts — 머리와 정적 파일"-->
+<p class="small mut">정적 파일 처리와 <code>safeJoin</code>·MIME 표는 본편에서 그대로 가져다 쓴다. 두 서버가 다른 규칙으로 파일을 내보낼 이유가 없다.</p>
+
+<!--SLIDE sec=17 t="한 줄로 사라지는 300줄"-->
+<h1><span class="no">{{N}}</span>WebSocketServer({ server, path })</h1>
+<!--CODE file=src/net/server_lib.ts lines=46-84 cap="연결 처리 — 핸드셰이크도 파서도 없다"-->
+<!--CODE file=src/net/server_lib.ts lines=85-109 cap="listen · close"-->
+<p class="mut">본편의 <code>upgrade</code> 핸들러와 <code>WsConn</code> 이 있던 자리가 통째로 비었다. 핸드셰이크·accept 키 계산·프레임 파서·조각 모으기·마스킹 해제가 전부 <code>node_modules</code> 안으로 들어갔다.</p>
+
+<!--SLIDE sec=17 t="무엇이 줄고 무엇이 늘었나"-->
+<h1><span class="no">{{N}}</span>줄 수와 의존성</h1>
+<div class="scroll"><table>
+<tr><th></th><th>직접 구현(본편)</th><th>ws 라이브러리판</th></tr>
+<tr><td>서버 코드</td><td><code>ws.ts</code> {{LINES:src/net/ws.ts}}줄 + <code>server.ts</code> {{LINES:src/net/server.ts}}줄</td><td><code>server_lib.ts</code> {{LINES:src/net/server_lib.ts}}줄</td></tr>
+<tr><td>런타임 의존성</td><td><strong>0개</strong></td><td>ws 8.21.3 (약 5,000줄, 203 KB)</td></tr>
+<tr><td>설치</td><td>필요 없음</td><td><code>npm install ws</code></td></tr>
+<tr><td>무슨 일이 벌어지는지</td><td>코드에 다 보인다</td><td>패키지 안에 있다</td></tr>
+<tr><td>확장·압축·서브프로토콜</td><td>없다</td><td>있다(permessage-deflate 등)</td></tr>
+<tr><td>깨진 입력 방어</td><td>내가 짠 만큼만</td><td>수년간 다듬어졌다</td></tr>
+</table></div>
+<p class="mut">숫자만 보면 라이브러리판이 이긴다. 그런데 이 문서의 목적은 <strong>무슨 일이 벌어지는지 보이는 것</strong>이었다 — 그 목적에서는 300줄이 값을 했다.</p>
+
+<!--SLIDE sec=17 t="두 서버를 맞대어 본다"-->
+<h1><span class="no">{{N}}</span>클라이언트는 구분하지 못한다</h1>
+<!--CODE file=tools/check_lib.mjs lines=1-40 cap="tools/check_lib.mjs — 같은 봇을 라이브러리판에 붙인다"-->
+<!--CODE file=tools/check_lib.mjs lines=41-67 cap="완주 · 배달 · 트래픽 확인"-->
+
+<!--SLIDE sec=17 t="따로 컴파일하기"-->
+<h1><span class="no">{{N}}</span>본편 빌드를 오염시키지 않는다</h1>
+<!--CODE file=tsconfig.lib.json lines=1-6 cap="tsconfig.lib.json — 부록만 컴파일"-->
+<pre class="code sh"><code>$ make lib
+npm install --no-save ws @types/ws
+npx tsc -p tsconfig.lib.json
+node tools/check_lib.mjs</code></pre>
+<p class="small mut">본편은 <code>ws</code> 가 없어도 빌드되고 테스트가 돈다. 부록 하나 때문에 프로젝트 전체가 의존성을 짊어질 이유는 없다.</p>
+
+<!--SLIDE sec=17 t="실측 — 라이브러리판 8인 대전"-->
+<h1><span class="no">{{N}}</span>같은 시드, 같은 결과</h1>
+<!--RUN file=logs/lib.log lines=1-4 cap="make lib — 실제 출력"-->
+<div class="scroll"><table>
+<tr><th></th><th>본편 (make match)</th><th>라이브러리판 (make lib)</th></tr>
+<tr><td>등수 순 좌석</td><td>0, 3, 7, 5, 2, 1, 4, 6</td><td><strong>0, 3, 7, 5, 2, 1, 4, 6</strong></td></tr>
+<tr><td>공격 → 배달</td><td>51회 → 51회</td><td>51회 → 51회</td></tr>
+<tr><td>보냄</td><td>154.3 KB</td><td>154.3 KB</td></tr>
+<tr><td>받음</td><td>483.8 KB</td><td>483.0 KB</td></tr>
+<tr><td>경기 시간</td><td>21.8초</td><td>21.8초</td></tr>
+</table></div>
+<p class="mut">등수도 공격 횟수도 바이트 수도 사실상 같다. 받은 바이트가 0.8 KB 다른 건 경기가 끝나는 순간 마지막 상태 갱신 몇 개가 더/덜 도착했기 때문이다 — <strong>규칙이 아니라 타이밍</strong>의 차이다.</p>
+
+<!--SLIDE sec=17 t="언제 무엇을 고를까"-->
+<h1><span class="no">{{N}}</span>직접 구현 vs 라이브러리</h1>
+<div class="cols">
+  <div class="card a"><h4>직접 구현이 나은 때</h4><p class="small mut">배우려고 할 때. 의존성을 못 넣는 환경일 때. 필요한 기능이 규격의 아주 일부일 때(우리처럼 텍스트 프레임 하나).</p></div>
+  <div class="card b"><h4>라이브러리가 나은 때</h4><p class="small mut">남의 클라이언트가 무엇을 보낼지 모를 때. 압축·확장이 필요할 때. 그리고 <strong>거의 언제나</strong> — 프로덕션이라면.</p></div>
+</div>
+<div class="note"><b>이 프로젝트의 답</b>본편은 직접 구현으로 간다. 이 문서가 "웹소켓이 어떻게 도는지"를 보여 주는 게 목적이고, 그 목적에는 300줄이 정확히 맞는 값이었다. 다만 라이브러리판을 <strong>같이 두고 실측으로 맞대어</strong> 뒀다 — 어느 쪽을 고르든 근거를 갖고 고르라는 뜻이다.</div>
+
+<!--SLIDE sec=17 t="더 나아가기 — 게임"-->
+<h1><span class="no">{{N}}</span>여기서 더 할 수 있는 것</h1>
+<div class="cols">
+  <div class="card a"><h4>2수 탐색</h4><p class="small mut">다음 조각까지 보면 눈에 띄게 세진다. 후보가 제곱으로 늘어나므로 가지치기가 필요하다 — 지금 구조에서 <code>plan()</code> 만 손대면 된다.</p></div>
+  <div class="card a"><h4>끼워넣기·스핀</h4><p class="small mut">지금 AI 는 스폰 줄을 따라 미끄러져 갈 수 있는 자리만 후보로 본다. 도달 가능성 판정을 넓히면 T스핀을 노릴 수 있다.</p></div>
+  <div class="card b"><h4>적합도 바꾸기</h4><p class="small mut">"보낸 줄" 대신 "생존 시간"이나 "공격 효율"로 학습시키면 완전히 다른 성격의 AI 가 나온다. 파트 7의 한 줄만 바꾸면 된다.</p></div>
+  <div class="card b"><h4>사람 대 AI</h4><p class="small mut">지금도 좌석 하나를 사람이 잡을 수 있다(<code>make run</code>). 난이도 프리셋 넷과 8석을 섞으면 그대로 게임이 된다.</p></div>
+</div>
+
+<!--SLIDE sec=17 t="더 나아가기 — 서버"-->
+<h1><span class="no">{{N}}</span>진짜 서비스로 가려면</h1>
+<div class="scroll"><table>
+<tr><th>과제</th><th>지금</th><th>필요한 것</th></tr>
+<tr><td>재연결</td><td>끊기면 좌석이 죽는다</td><td>세션 토큰 + 유예 시간 안의 복귀</td></tr>
+<tr><td>부정 방지</td><td>클라이언트가 자기 판을 스스로 보고한다</td><td>서버가 코어를 돌려 검증(또는 리플레이 검사)</td></tr>
+<tr><td>지연 보정</td><td>없음(가비지 유예 900ms 로 흡수)</td><td>RTT 측정 + 서버 시각 기준 정렬</td></tr>
+<tr><td>확장</td><td>프로세스 하나에 방 전부</td><td>방 단위 샤딩, 상태를 방 밖으로 안 내보내기</td></tr>
+<tr><td>관전·리플레이</td><td>스냅샷을 흘려보낸다</td><td>입력 로그만 저장하면 재생이 된다(결정론 덕)</td></tr>
+</table></div>
+<p class="small mut">마지막 줄이 이 프로젝트의 성질을 잘 보여 준다. 코어가 결정론이라 <strong>시드와 입력만 저장하면</strong> 판 전체를 되돌릴 수 있다 — 리플레이는 사실상 공짜다.</p>
+
+<!--SLIDE sec=17 t="시리즈 정리"-->
+<h1><span class="no">{{N}}</span>C++ 3부작과 이 문서</h1>
+<div class="scroll"><table>
+<tr><th></th><th>C++ / wasm 3부작</th><th>이 문서 (TypeScript)</th></tr>
+<tr><td>코어</td><td>C++ → wasm 7 KB</td><td>TS {{LINES:src/core.ts}}줄, 트레이스로 파리티 증명</td></tr>
+<tr><td>AI</td><td>ai.cpp + GA(JS)</td><td>같은 8특징, 같은 f32 연산까지</td></tr>
+<tr><td>서버</td><td>Go · 파이썬 (RFC 6455 직접)</td><td>TS (직접 + 라이브러리판 부록)</td></tr>
+<tr><td>검증</td><td>골든 벡터 3구현</td><td>같은 벡터의 <strong>네 번째</strong> 구현</td></tr>
+<tr><td>덱</td><td>152 + 186 + 307장</td><td>{{TOTAL}}장 (코어~서버 한 권)</td></tr>
+</table></div>
+<p class="mut">언어를 바꿔 다시 만드는 일의 값은 "TS 로도 된다"가 아니었다. <strong>같은 규칙을 다른 언어로 두 번 쓰면 규격이 드러난다</strong> — 어디까지가 본질이고 어디부터가 그 언어의 습관인지가 갈린다.</p>
+
+<!--SLIDE sec=17 t="마치며"-->
+<h1><span class="no">{{N}}</span>이 문서가 지킨 약속</h1>
+<div class="cols">
+  <div class="card a"><h4>전문 수록</h4><p class="small mut">소스 {{LINES:src/core.ts}}줄짜리 코어부터 테스트·빌드 도구까지, <strong>10,168줄 전부</strong>가 이 문서 안에 정확히 한 번씩 실렸다. 빌더가 매번 세어 확인한다.</p></div>
+  <div class="card a"><h4>실측만</h4><p class="small mut">학습 곡선도 순위표도 대역폭도 이 기계에서 돌린 로그를 그대로 인용했다. 지어낸 숫자는 없다.</p></div>
+  <div class="card b"><h4>도는 코드</h4><p class="small mut">이 문서 안에서 게임도, AI 도, 유전 알고리즘도, 8인 대전도 실제로 돈다 — 슬라이드에 실린 그 코드로.</p></div>
+  <div class="card b"><h4>의존성 0</h4><p class="small mut"><code>node_modules</code> 에 들어간 건 <code>typescript</code> 하나뿐이다(부록의 <code>ws</code> 제외).</p></div>
+</div>
+<p class="small mut">읽어 줘서 고맙다. 코드는 전부 이 문서 안에 있으니, 마음에 드는 조각이 있으면 그대로 가져다 쓰면 된다.</p>

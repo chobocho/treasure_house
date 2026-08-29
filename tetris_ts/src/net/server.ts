@@ -25,7 +25,8 @@ import { Hub } from './hub.js';
 
 // ── 정적 파일 ─────────────────────────────────────────────────────────
 
-const MIME: Record<string, string> = {
+/** 부록의 라이브러리판 서버도 같은 표를 쓴다 — 정적 파일 규칙이 갈라질 이유가 없다. */
+export const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
