@@ -46,6 +46,13 @@ export interface ViewOptions {
   bot?: boolean;
   /** AI 착수 간격(ms) */
   botMs?: number;
+  /**
+   * 한 번 그릴 때마다 부르는 훅.
+   *
+   * 특징 값 표처럼 "판 옆에 붙어 같이 갱신되는 것"을 렌더러 안에 넣지 않으려고 둔 문이다.
+   * 렌더러가 특징이나 AI 를 알게 되면 파트 5·6의 개념이 화면 코드로 새어 든다.
+   */
+  onDraw?: () => void;
 }
 
 /**
@@ -91,6 +98,7 @@ export class TetrisView {
   private readonly now: () => number;
   private readonly ai: Ai | null;
   private readonly botMs: number;
+  private readonly onDraw: (() => void) | null;
   private botAcc = 0;
   private handle = 0;
   private last = 0;
@@ -108,6 +116,7 @@ export class TetrisView {
     this.now = opts.now ?? (() => (g.performance ? g.performance.now() : Date.now()));
     this.ai = opts.bot ? new Ai(game, DEFAULT_WEIGHTS) : null;
     this.botMs = opts.botMs ?? 220;
+    this.onDraw = opts.onDraw ?? null;
 
     const doc = (host as unknown as { ownerDocument: Doc }).ownerDocument;
     const avail = opts.maxWidth ?? (Math.round(host.getBoundingClientRect().width) || 360);
@@ -249,6 +258,7 @@ export class TetrisView {
     this.info.textContent =
       `점수 ${this.game.stats[ST.SCORE]} · 줄 ${this.game.stats[ST.LINES]} · 레벨 ${this.game.stats[ST.LEVEL]}`
       + ((this.game.stats[ST.PENDING] as number) > 0 ? ` · 대기 ${this.game.stats[ST.PENDING]}줄` : '');
+    if (this.onDraw) this.onDraw();
   }
 
   /** 옆 패널 — 홀드 하나와 다음 다섯. 미니 조각은 4×4 박스를 반 칸 크기로 그린다. */

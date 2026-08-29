@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 
 import { Tetris, ACT, ST } from '../src/core.js';
 import { TetrisView, KEYMAP } from '../src/view.js';
+import { FEATURE_NAMES } from '../src/ai.js';
 import { mountDemo, DEMOS } from '../src/demo.js';
 
 // ── DOM 스텁 ──────────────────────────────────────────────────────────
@@ -210,4 +211,33 @@ test('모르는 데모 이름이면 기본 데모로 떨어진다 (덱이 죽지
   assert.ok(v, '아무것도 못 붙였다');
   v.stop();
   assert.ok(Object.keys(DEMOS).length >= 1);
+});
+
+/** 스텁 트리 전체의 글자를 모은다 — 데모가 무엇을 써 놓았는지 보려고. */
+function textOf(node: Record<string, unknown>): string {
+  const kids = (node.children as Record<string, unknown>[]) ?? [];
+  return String(node.textContent ?? '') + kids.map(textOf).join(' ');
+}
+
+test('onDraw 훅이 그릴 때마다 불린다', () => {
+  let n = 0;
+  const { view, c } = mount({ onDraw: (): void => { n++; } });
+  const base = n; // 생성자가 이미 한 번 그렸다
+  view.start();
+  c.tick(16); c.tick(16);
+  assert.ok(n >= base + 2, `프레임마다 불려야 한다 (${base} → ${n})`);
+});
+
+test('feat 데모는 특징 여덟 개를 이름과 값으로 보여 준다', async () => {
+  const doc = fakeDoc();
+  const host = el('div', doc);
+  (host.dataset as Record<string, string>).demo = 'feat';
+  const cl = clock();
+  const v = await mountDemo(host as unknown as HTMLElement, { raf: cl.raf, caf: cl.caf, now: cl.now });
+  const txt = textOf(host);
+  for (const name of FEATURE_NAMES) {
+    assert.ok(txt.includes(name), `${name} 이 화면에 없다`);
+  }
+  assert.ok(/점수/.test(txt), '합계 점수를 안 보여 준다');
+  v.stop();
 });
