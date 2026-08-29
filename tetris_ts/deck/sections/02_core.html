@@ -1,10 +1,291 @@
-<!--SLIDE sec=2 t="코어 엔진"-->
+<!--SLIDE sec=2 t="코어 엔진 — 무엇을 만드는가"-->
 <h1><span class="no">{{N}}</span>코어 엔진</h1>
-<p class="mut">10×20 판 · 7-bag · SRS 회전 · 중력 · 줄 지우기 · 점수</p>
-<ul>
-  <li>타입과 메모리 배치</li>
-  <li>7-bag 난수와 시드</li>
-  <li>월킥 표와 T스핀</li>
-  <li>락 딜레이와 가비지</li>
-</ul>
-<div class="note"><b>이 파트는 아직 뼈대다</b>예정 ~70장. 슬라이드는 <code>deck/sections/02_core.html</code> 에서 채운다 — 완성된 덱 본문을 직접 고치면 커버리지 보증이 깨진다.</div>
+<p class="mut">이 파트에서 <code>src/core.ts</code> {{LINES:src/core.ts}}줄을 <strong>한 줄도 빠짐없이</strong> 읽는다. 이 파일 하나가 게임의 규칙 전부다 — 렌더링도, AI 도, 네트워크도 여기 없다.</p>
+<div class="cols">
+  <div class="card a"><h4>규칙만 담는다</h4><p class="small mut">캔버스도 DOM 도 모른다. 입력은 액션 코드, 출력은 배열 세 개와 <code>stats[]</code>. 그래서 브라우저·Node·테스트에서 같은 코드가 돈다.</p></div>
+  <div class="card a"><h4>정수 시간</h4><p class="small mut">시간은 <code>update(dtMs)</code> 로만 흐르고 dt 는 정수 밀리초다. 실수로 흘리면 같은 조작이 기기마다 다른 판을 만든다.</p></div>
+  <div class="card b"><h4>정답지가 있다</h4><p class="small mut">1편의 C++ wasm 이 뽑은 트레이스가 정답이다. 파트 4에서 이 코어가 그걸 그대로 재현하는지 대조한다.</p></div>
+  <div class="card b"><h4>대전까지 포함</h4><p class="small mut">가비지·상쇄·공격 계산이 코어 안에 있다. 심판은 숫자 하나를 옮기는 배달부일 뿐이다(파트 10).</p></div>
+</div>
+
+<!--SLIDE sec=2 t="이식의 원칙 — 비트 단위로 같게"-->
+<h1><span class="no">{{N}}</span>이식의 원칙</h1>
+<p class="mut">C++ 을 TS 로 옮길 때 가장 위험한 충동은 "이건 TS 답게 고쳐 쓰자"다. 그 유혹을 전부 참았다. RNG 한 줄, 나눗셈 하나만 달라져도 골든 트레이스가 통째로 어긋나기 때문이다.</p>
+<!--CODE file=src/core.ts lines=1-10 cap="src/core.ts — 파일 머리"-->
+<div class="note"><b>딱 한 가지만 바꿨다</b>전역 변수 대신 클래스 필드를 쓴다. wasm 은 인스턴스를 새로 만들면 상태도 새로 생기지만 TS 모듈의 최상위 변수는 하나뿐이다. 8인 대전에는 판이 여덟 개 필요하다.</div>
+
+<!--SLIDE sec=2 t="판은 24줄이다"-->
+<h1><span class="no">{{N}}</span>보이는 20줄, 숨은 4줄</h1>
+<p class="mut">배열은 24줄이고 화면에는 아래 20줄만 그린다. 위 4줄은 스폰 자리이자, 위로 2칸 밀어 올리는 월킥을 받아 주는 여유다.</p>
+<div style="display:flex;gap:1em;flex-wrap:wrap;align-items:flex-start">
+<!--BOARD rows="..........|...ooo....|....o.....|..........|..........|.......###|..#....###|.####.####" cap="위 4줄(숨김) · 아래가 보이는 필드"-->
+<div style="min-width:12em;flex:1">
+<table class="small">
+<tr><td><code>W</code></td><td>10칸</td></tr>
+<tr><td><code>VIS</code></td><td>20줄 (화면)</td></tr>
+<tr><td><code>HIDDEN</code></td><td>4줄 (천장 위)</td></tr>
+<tr><td><code>H</code></td><td>24줄 (배열)</td></tr>
+<tr><td><code>SPAWN_X/Y</code></td><td>(3, 4)</td></tr>
+</table>
+</div>
+</div>
+<!--CODE file=src/core.ts lines=11-18 cap="판의 크기"-->
+<p class="small mut">y 는 <strong>아래로</strong> 증가한다. SRS 원문 표는 y 가 위로 증가하므로 나중에 부호를 뒤집는다 — 이 한 줄이 회전 버그의 단골 원인이다.</p>
+
+<!--SLIDE sec=2 t="손맛을 정하는 다섯 숫자"-->
+<h1><span class="no">{{N}}</span>손맛은 상수 다섯 개다</h1>
+<div class="scroll"><table>
+<tr><th>상수</th><th>값</th><th>없으면 생기는 일</th></tr>
+<tr><td><code>DAS_MS</code></td><td>170</td><td>키를 누르자마자 미끄러진다. 한 칸 조준이 불가능해진다.</td></tr>
+<tr><td><code>ARR_MS</code></td><td>40</td><td>자동반복이 느리면 벽까지 가는 데 한나절이다.</td></tr>
+<tr><td><code>SOFT_DIV</code></td><td>20</td><td>소프트드롭이 중력과 같아지면 누를 이유가 없다.</td></tr>
+<tr><td><code>LOCK_MS</code></td><td>500</td><td>닿자마자 굳으면 미끄러뜨리기(finesse)가 불가능하다.</td></tr>
+<tr><td><code>LOCK_RESET</code></td><td>15</td><td>제한이 없으면 좌우로 흔들며 <strong>영원히 안 굳는</strong> 판이 된다.</td></tr>
+</table></div>
+<!--CODE file=src/core.ts lines=19-27 cap="타이밍·가비지 상수"-->
+<p class="small mut">가비지 색을 8로 둔 건 조각 색 1~7 과 겹치지 않게 하려는 것뿐이다. 렌더러는 8을 회색으로 그린다.</p>
+
+<!--SLIDE sec=2 t="조작 프로토콜 — ACT"-->
+<h1><span class="no">{{N}}</span>ACT — 유일한 조작 통로</h1>
+<p class="mut">키보드도, 게임패드도, AI 도, 네트워크 너머의 상대도 결국 이 아홉 개 숫자 중 하나를 코어에 준다. 코어는 <strong>누가 눌렀는지 모른다</strong>.</p>
+<!--CODE file=src/core.ts lines=28-33 cap="액션 코드 — C++ enum 과 같은 값"-->
+<div class="note"><b><code>as const</code> 가 하는 일</b>없으면 <code>ACT.LEFT</code> 의 타입이 <code>number</code> 로 넓어진다. 붙이면 리터럴 <code>0</code> 으로 좁혀지고, <code>Act</code> 타입이 "이 아홉 값 중 하나"라는 뜻을 갖는다. C++ 의 <code>enum</code> 이 공짜로 주던 것을 TS 에서는 이렇게 산다.</div>
+
+<!--SLIDE sec=2 t="stats[] — 두 번째 프로토콜"-->
+<h1><span class="no">{{N}}</span>숫자 상태는 배열 하나에</h1>
+<p class="mut">점수·레벨·콤보·현재 조각 위치까지 전부 <code>Int32Array</code> 한 줄에 담는다. wasm 판에서 JS 가 선형 메모리를 읽던 배치를 그대로 유지한 것이라, 1편의 테스트 하니스를 거의 그대로 쓸 수 있다.</p>
+<!--CODE file=src/core.ts lines=34-49 cap="stats[] 인덱스와 게임 상태"-->
+<p class="small mut">뒤쪽 셋(<code>ATTACK</code>·<code>PENDING</code>·<code>GARBAGE_RECV</code>)이 대전용이다. 1인 플레이에서는 늘 0이고, 대전에서는 이 세 칸만 보면 판세를 안다.</p>
+
+<!--SLIDE sec=2 t="조각을 16비트 정수 하나로"-->
+<h1><span class="no">{{N}}</span>조각 = 16비트 정수</h1>
+<p class="mut">4×4 칸을 비트 16개로 본다. 비트 인덱스가 <code>y*4 + x</code> 이므로 <code>0x0071</code> 은 bit0·4·5·6 — 아래 그림 그대로다.</p>
+<!--BOARD rows="p...|ppp.|....|...." cap="0x0071 — J 조각의 스폰 상태"-->
+<!--CODE file=src/core.ts lines=50-72 cap="SHAPES — 7종 × 4회전"-->
+
+<!--SLIDE sec=2 t="왜 배열이 아니라 비트인가"-->
+<h1><span class="no">{{N}}</span>왜 비트로 두는가</h1>
+<div class="scroll"><table>
+<tr><th></th><th>2차원 배열</th><th>16비트 정수</th></tr>
+<tr><td>조각 데이터 전체</td><td>7×4×4×4 = 448개 수</td><td><strong>28개 수</strong></td></tr>
+<tr><td>충돌 검사 한 번</td><td>중첩 루프 + 경계 검사</td><td>비트 테스트 16번</td></tr>
+<tr><td>회전</td><td>행렬 돌리기(또는 표)</td><td>표에서 꺼내기</td></tr>
+<tr><td>복사 비용</td><td>배열 할당</td><td>없음 (숫자다)</td></tr>
+</table></div>
+<div class="tip"><b>AI 가 이걸 고맙게 쓴다</b>파트 6의 1수 탐색은 한 조각마다 회전 4가지 × 가로 13곳에 홀드까지 곱해 <strong>백 가지 안팎</strong>의 착수를 전부 놓아 본다. 착수 하나가 비트 테스트 16번이면 초당 수만 번도 거뜬하다. 배열이었으면 여기서 프레임을 잡아먹었을 것이다.</div>
+
+<!--SLIDE sec=2 t="SRS — 회전이 막히면 다섯 자리를 밀어 본다"-->
+<h1><span class="no">{{N}}</span>월킥 표가 곧 손맛이다</h1>
+<p class="mut">회전이 벽이나 블록에 막혔을 때 그냥 실패시키면 현대 테트리스가 아니다. 정해진 순서로 다섯 자리를 시도하고 처음 되는 곳에 앉힌다. T스핀도 이 표에서 태어난다.</p>
+<!--CODE file=src/core.ts lines=73-81 cap="킥 표의 좌표계 — y 부호가 반대다"-->
+<div class="warn"><b>여기서 틀리면 조용히 이상해진다</b>부호를 뒤집지 않아도 게임은 돌아간다. 다만 벽에 붙은 회전이 원본과 다른 자리로 들어가고, 골든 트레이스가 수백 스텝 뒤에야 어긋난다. 그래서 표를 옮길 때 부호 규약을 주석으로 못 박았다.</div>
+
+<!--SLIDE sec=2 t="JLSTZ 킥 표"-->
+<h1><span class="no">{{N}}</span>다섯 후보를 읽는 법</h1>
+<p class="mut">각 줄이 <em>어느 회전에서 어느 회전으로</em> 가는지를 나타내고, 그 안의 다섯 쌍이 시도 순서다. 첫 후보는 언제나 <code>[0,0]</code> — 제자리에서 되면 밀지 않는다.</p>
+<!--CODE file=src/core.ts lines=82-93 cap="JLSTZ 5종이 공유하는 킥 표"-->
+<p class="small mut">O 조각은 회전해도 모양이 같아서 첫 후보에서 바로 성공한다. 그래서 전용 표가 없다.</p>
+
+<!--SLIDE sec=2 t="I 조각만 표가 다르다"-->
+<h1><span class="no">{{N}}</span>I 조각의 회전축은 칸 경계에 있다</h1>
+<p class="mut">다른 조각은 가운데 칸을 중심으로 돈다. I 는 네 칸이 일렬이라 중심이 칸과 칸 사이에 놓이고, 그래서 밀어 볼 자리도 ±2칸까지 벌어진다.</p>
+<!--CODE file=src/core.ts lines=94-107 cap="I 전용 킥 표"-->
+<p class="small mut">이 표 덕분에 I 조각이 우물 안으로 눕혀 들어가는 유명한 수(<em>I-spin</em>)가 성립한다. 표를 JLSTZ 와 공유하면 그 수가 사라진다.</p>
+
+<!--SLIDE sec=2 t="중력 표를 굳혀 온 이유"-->
+<h1><span class="no">{{N}}</span>왜 <code>Math.pow</code> 를 안 쓰는가</h1>
+<p class="mut">가이드라인 공식은 <code>(0.8 - 0.007×(레벨-1))^(레벨-1)</code> 초/칸이다. C++ 판은 <code>-nostdlib</code> 라 <code>pow()</code> 를 못 써서 미리 계산해 굳혔다. TS 는 쓸 수 있지만 <strong>안 쓴다</strong>.</p>
+<!--CODE file=src/core.ts lines=108-119 cap="레벨별 낙하 간격(ms)"-->
+<div class="note"><b>결정론 &gt; 우아함</b>부동소수점 반올림은 엔진과 플랫폼에 따라 마지막 자리가 다를 수 있다. 그 한 자리가 <code>Math.trunc</code> 를 지나면 정수 1의 차이가 되고, 그때부터 두 구현은 다른 게임이 된다. 표는 22개 숫자면 끝이다.</div>
+
+<!--SLIDE sec=2 t="콤보 공격 표"-->
+<h1><span class="no">{{N}}</span>연속으로 지우면 붙는 보너스</h1>
+<p class="mut">콤보는 "락마다 줄을 지웠는가"의 연속 횟수다. 12를 넘으면 표의 마지막 값에서 멈춘다 — 무한히 커지면 한 명이 시작한 콤보로 판이 끝나 버린다.</p>
+<!--CODE file=src/core.ts lines=120-132 cap="COMBO_ATK 표와 attackFor 의 규칙 설명"-->
+
+<!--SLIDE sec=2 t="attackFor — 싱글이 0인 이유"-->
+<h1><span class="no">{{N}}</span>공격량을 정하는 함수</h1>
+<p class="mut">한 줄씩 지우는 플레이는 공격이 되지 않는다. 이 0 하나가 "쌓아서 한 번에 지운다"는 대전 테트리스의 성격을 통째로 만든다.</p>
+<!--CODE file=src/core.ts lines=133-152 cap="공격량 계산 — 표를 고르고, B2B 와 콤보를 얹는다"-->
+<div class="scroll"><table>
+<tr><th></th><th>1줄</th><th>2줄</th><th>3줄</th><th>4줄</th></tr>
+<tr><td>보통</td><td>0</td><td>1</td><td>2</td><td><strong>4</strong></td></tr>
+<tr><td>T스핀</td><td>2</td><td>4</td><td>6</td><td>—</td></tr>
+<tr><td>미니 T스핀</td><td>0</td><td>1</td><td>1</td><td>—</td></tr>
+</table></div>
+<p class="small mut">여기에 B2B +1, 콤보 표, 퍼펙트 클리어 +10 이 더해진다. <code>b2bBefore</code> 를 따로 받는 이유는 다음 슬라이드들에서 <code>lockPiece</code> 가 그 값을 <em>덮어쓰기 전에</em> 붙잡아 두기 때문이다.</p>
+
+<!--SLIDE sec=2 t="Tetris 클래스 = 1인분"-->
+<h1><span class="no">{{N}}</span>인스턴스 하나가 판 하나</h1>
+<p class="mut">배열 네 개가 상태의 전부다. 이 네 개만 복사하면 판을 통째로 저장하거나 남에게 보낼 수 있다.</p>
+<!--CODE file=src/core.ts lines=153-168 cap="클래스 머리와 공개 버퍼들"-->
+<div class="cols">
+  <div class="card"><h4><code>board</code> 24×10</h4><p class="small mut">굳은 블록만. 0=빈칸, 1~7=조각 색, 8=가비지.</p></div>
+  <div class="card"><h4><code>cells</code> 20×10</h4><p class="small mut">화면용으로 잘라 낸 굳은 블록.</p></div>
+  <div class="card"><h4><code>overlay</code> 20×10</h4><p class="small mut">지금 조각(1~7)과 고스트(8~14).</p></div>
+  <div class="card"><h4><code>stats</code> 30칸</h4><p class="small mut">숫자 상태 전부.</p></div>
+</div>
+
+<!--SLIDE sec=2 t="필드를 성격별로 나눠 보면"-->
+<h1><span class="no">{{N}}</span>남은 필드 열아홉 개</h1>
+<p class="mut">이름만 봐서는 뒤죽박죽 같지만 성격은 넷뿐이다: <strong>조각 상태</strong>, <strong>난수</strong>, <strong>타이머</strong>, <strong>판정 흔적</strong>.</p>
+<!--CODE file=src/core.ts lines=169-199 cap="내부 상태 — 여기 있는 게 전부다"-->
+<p class="small mut"><code>lastWasRot</code>·<code>lastKick</code> 이 "판정 흔적"이다. 회전으로 들어왔는지, 몇 번째 킥으로 들어왔는지를 락 순간에 T스핀 판정이 다시 꺼내 본다.</p>
+
+<!--SLIDE sec=2 t="xorshift32 와 >>> 0 함정"-->
+<h1><span class="no">{{N}}</span>난수 한 줄이 판 전체를 정한다</h1>
+<p class="mut">C++ 의 <code>u32</code> 연산을 JS 로 옮길 때 함정은 <code>&lt;&lt;</code> 가 <strong>부호 있는</strong> 32비트를 낸다는 것이다. 매 단계 <code>&gt;&gt;&gt; 0</code> 으로 되돌리지 않으면 음수가 섞이고, 그때부터 조각 순서가 갈린다.</p>
+<!--CODE file=src/core.ts lines=200-215 cap="생성자와 xorshift32"-->
+<div class="warn"><b>증상이 늦게 나타난다</b><code>&gt;&gt;&gt; 0</code> 을 한 군데 빼먹어도 처음 몇 십 조각은 같게 나올 수 있다. 파트 4의 골든 트레이스가 이런 종류의 버그를 잡으려고 존재한다.</div>
+
+<!--SLIDE sec=2 t="7-bag — 사고를 원천 봉쇄한다"-->
+<h1><span class="no">{{N}}</span>봉지에서 꺼낸다</h1>
+<p class="mut">7종을 봉지에 넣고 섞어 하나씩 꺼낸다. 다 꺼내면 새 봉지를 채운다. "S/Z 만 열 번 연속" 같은 사고가 <strong>확률적으로 드문</strong> 게 아니라 <strong>불가능</strong>해진다.</p>
+<!--CODE file=src/core.ts lines=216-235 cap="Fisher-Yates 셔플과 봉지 꺼내기"-->
+<div class="note"><b>최악 대기는 12개</b>같은 조각이 봉지 맨 앞에 나온 뒤 다음 봉지 맨 뒤에 나오는 경우다. I 조각을 12개 동안 못 받을 수는 있어도 13개는 없다 — 우물을 파는 전략이 성립하는 근거다.</div>
+
+<!--SLIDE sec=2 t="충돌 검사 = 비트 테스트 16번"-->
+<h1><span class="no">{{N}}</span>겹치는가?</h1>
+<p class="mut">규칙은 셋뿐이다. 좌우·바닥 밖이면 충돌, <strong>천장 위는 충돌 아님</strong>, 굳은 블록이면 충돌.</p>
+<!--CODE file=src/core.ts lines=236-260 cap="collide 와 고스트 계산"-->
+<div class="note"><b>천장 위를 허용해야 하는 이유</b>스폰 직후 조각의 윗부분은 숨은 4줄에 걸쳐 있다. 여기를 충돌로 치면 게임이 시작하자마자 끝난다. 대신 <em>스폰 자리가 이미 막혔을 때</em>만 게임 오버로 친다(블록아웃).</div>
+
+<!--SLIDE sec=2 t="스폰과 블록아웃"-->
+<h1><span class="no">{{N}}</span>다음 조각을 꺼낸다</h1>
+<p class="mut">큐에서 앞을 꺼내 쓰고 뒤에 봉지에서 한 개를 채운다. 조각이 바뀔 때 타이머와 판정 흔적을 <strong>전부</strong> 초기화하는 게 중요하다 — 안 지우면 이전 조각의 T스핀 흔적이 다음 락에 묻어 간다.</p>
+<!--CODE file=src/core.ts lines=261-283 cap="큐 채우기와 스폰"-->
+
+<!--SLIDE sec=2 t="이동과 회전, 그리고 락 리셋"-->
+<h1><span class="no">{{N}}</span>회전은 다섯 번 시도한다</h1>
+<p class="mut">킥 후보를 순서대로 밀어 보고 처음 되는 자리에 앉힌다. 성공하면 <code>lastWasRot</code> 을 세우고 몇 번째 킥이었는지도 남긴다 — 락 순간의 T스핀 판정이 이 두 값을 본다.</p>
+<!--CODE file=src/core.ts lines=284-319 cap="tryMove 와 tryRotate"-->
+<div class="note"><b>락 리셋은 15번까지</b>바닥에 닿은 뒤 움직이거나 돌리면 굳는 시간이 되살아난다. 제한이 없으면 좌우로 흔들며 영원히 안 굳힐 수 있다. 15번은 가이드라인 값이고, C++ 판과 같은 수를 그대로 썼다.</div>
+
+<!--SLIDE sec=2 t="T스핀 판정 — 코너 세 개"-->
+<h1><span class="no">{{N}}</span>네 코너 중 몇 개가 막혔나</h1>
+<p class="mut">T 조각이 <strong>회전으로</strong> 들어왔을 때만 따진다. 가리키는 방향의 앞 두 코너와 뒤 두 코너를 세어 정식/미니를 가른다.</p>
+<!--CODE file=src/core.ts lines=320-357 cap="filled 와 detectTspin"-->
+<p class="small mut">벽과 바닥은 "막힌 것"으로 센다. 천장 위는 뚫린 것으로 센다 — 판 꼭대기에서 공짜 T스핀이 나오는 걸 막는다.</p>
+
+<!--SLIDE sec=2 t="정식과 미니를 가르는 자리"-->
+<h1><span class="no">{{N}}</span>같은 T, 다른 판정</h1>
+<div style="display:flex;gap:1.2em;flex-wrap:wrap">
+<!--BOARD rows="#.#|.p.|ppp|#.#" cap="앞 2 + 뒤 1 이상 → 정식 (공격 4줄)"-->
+<!--BOARD rows="#..|.p.|ppp|#.#" cap="앞 1 + 뒤 2 → 미니 (공격 1줄)"-->
+</div>
+<div class="tip"><b>다섯 번째 킥은 무조건 정식이다</b>가장 크게 밀려 들어간 자리는 사람이 노려서 만든 수일 수밖에 없다. 그래서 코너를 세지 않고 바로 정식으로 친다(<code>lastKick === 4</code>). 이 예외가 없으면 유명한 T스핀 형태 몇 가지가 미니로 깎인다.</div>
+<p class="small mut">판정 하나에 공격 4줄과 1줄이 갈린다. 대전에서는 이 차이가 승패다.</p>
+
+<!--SLIDE sec=2 t="가비지는 같은 구멍으로 올라온다"-->
+<h1><span class="no">{{N}}</span>바닥에서 밀어 올리기</h1>
+<p class="mut">n 줄이 한꺼번에 올라올 때 구멍의 x 는 <strong>같다</strong>. 줄마다 구멍이 다르면 사실상 복구가 불가능해서 대전이 성립하지 않는다.</p>
+<!--BOARD rows="..........|..........|.####.....|##.####.##|###.######|###.######" cap="구멍이 한 줄로 뚫려 있어야 I 하나로 복구된다"-->
+<!--CODE file=src/core.ts lines=358-377 cap="pushRows — 클린 가비지"-->
+<p class="small mut">천장 밖으로 밀려난 줄은 그냥 사라진다. 배열이 곧 필드 전체이므로 따로 처리할 게 없다.</p>
+
+<!--SLIDE sec=2 t="줄 지우기와 ROWMASK"-->
+<h1><span class="no">{{N}}</span>지우고, 위를 끌어내린다</h1>
+<p class="mut">아래에서 위로 훑으며 꽉 찬 줄을 지운다. 지운 뒤 <code>y++</code> 로 같은 y 를 다시 보는 게 요령이다 — 위 줄이 내려와 그 자리를 채웠기 때문이다.</p>
+<!--CODE file=src/core.ts lines=378-398 cap="clearLines — 지운 줄의 위치를 비트마스크로 남긴다"-->
+<div class="note"><b>ROWMASK 는 렌더러를 위한 것이다</b>어느 줄이 지워졌는지 알아야 번쩍이는 연출을 그 줄에만 줄 수 있다. 규칙에는 영향이 없지만, 없으면 화면이 무슨 일이 일어났는지 말해 주지 못한다.</div>
+
+<!--SLIDE sec=2 t="락 — 점수 규칙"-->
+<h1><span class="no">{{N}}</span>굳는 순간에 벌어지는 일</h1>
+<p class="mut">조각을 판에 박고, 줄을 지우고, 점수를 매기고, 공격을 계산하고, 다음 조각을 스폰한다. 이 함수 하나가 게임의 심장이다.</p>
+<!--CODE file=src/core.ts lines=399-433 cap="lockPiece — 판에 박고 점수의 기본값을 고른다"-->
+<p class="small mut">T스핀 판정을 <strong>맨 먼저</strong> 한다. 조각을 판에 박고 나면 그 자리가 굳은 블록이 되어 코너 개수가 달라진다.</p>
+
+<!--SLIDE sec=2 t="B2B · 콤보 · 레벨 · 퍼펙트"-->
+<h1><span class="no">{{N}}</span>보너스 네 겹</h1>
+<!--CODE file=src/core.ts lines=434-462 cap="점수·레벨·퍼펙트 클리어"-->
+<div class="scroll"><table>
+<tr><th>보너스</th><th>조건</th><th>효과</th></tr>
+<tr><td>Back-to-Back</td><td>어려운 클리어(테트리스·T스핀) 연속</td><td>점수 ×1.5, 공격 +1</td></tr>
+<tr><td>콤보</td><td>락마다 줄을 지움</td><td>50 × 콤보 × 레벨</td></tr>
+<tr><td>레벨</td><td>지운 줄 10마다 +1 (최대 20)</td><td>중력이 빨라진다</td></tr>
+<tr><td>퍼펙트 클리어</td><td>판이 완전히 빔</td><td>1000 × 레벨, 공격 +10</td></tr>
+</table></div>
+<div class="warn"><b><code>Math.trunc</code> 를 빼먹으면 안 된다</b>C++ 은 정수 나눗셈이라 <code>gain*3/2</code> 가 자동으로 내림이다. JS 는 실수라 <code>1.5</code> 배가 그대로 남는다. 점수가 1점 어긋나면 골든 트레이스가 그 자리에서 멈춘다.</div>
+
+<!--SLIDE sec=2 t="상쇄 순서가 규칙의 전부다"-->
+<h1><span class="no">{{N}}</span>맞받아치면 안 올라온다</h1>
+<p class="mut">내가 보낼 공격은 먼저 <strong>내</strong> 대기줄을 지우고, 남은 만큼만 상대에게 간다. 그리고 대기 중인 가비지는 <em>줄을 못 지운 락</em>에서만 실제로 솟아오른다.</p>
+<pre class="code txt"><code>줄을 지웠다
+  ↓
+공격량 계산 (표 + B2B + 콤보 + 퍼펙트)
+  ↓
+내 대기줄과 상쇄  ← 여기서 깎인 만큼은 서로 없던 일이 된다
+  ↓
+남은 만큼 stats[ATTACK] 로 내보낸다 (심판이 가져간다)
+
+줄을 못 지웠다
+  ↓
+대기줄이 있으면 최대 8줄까지 실제로 밀어 올린다</code></pre>
+<!--CODE file=src/core.ts lines=463-487 cap="공격 → 상쇄 → 가비지 → 이벤트"-->
+
+<!--SLIDE sec=2 t="유예가 없으면 대전이 아니다"-->
+<h1><span class="no">{{N}}</span>왜 바로 올리지 않는가</h1>
+<div class="cols">
+  <div class="card a"><h4>바로 올리면</h4><p class="small mut">맞은 쪽은 손쓸 새 없이 판이 밀려 올라간다. 잘하는 쪽이 먼저 때리면 그대로 끝이다 — 실력이 아니라 선공이 이긴다.</p></div>
+  <div class="card b"><h4>한 락 미루면</h4><p class="small mut">맞은 쪽에게 "지금 지워서 되받아칠 것인가"라는 선택지가 생긴다. 대전의 긴장은 전부 이 한 박자에서 나온다.</p></div>
+</div>
+<p class="mut">코어는 이 유예를 <strong>락 단위</strong>로 구현한다. 시간 단위 유예(파트 10의 <code>delay</code>)는 심판 쪽에 따로 있다 — 둘은 다른 문제를 푼다.</p>
+<div class="note"><b>한 번에 최대 8줄</b><code>GARBAGE_CAP</code> 이다. 대기줄이 20줄 쌓여도 한 락에 8줄까지만 올라온다. 나머지는 다음 락으로 미뤄져, 맞는 쪽이 매번 숨 쉴 틈을 갖는다.</div>
+
+<!--SLIDE sec=2 t="하드드롭과 홀드"-->
+<h1><span class="no">{{N}}</span>즉시 내리기, 그리고 보관</h1>
+<p class="mut">하드드롭은 부딪힐 때까지 내리고 칸당 2점을 준 뒤 바로 굳힌다. 홀드는 조각당 한 번 — 제한이 없으면 두 조각을 무한히 바꿔치기할 수 있다.</p>
+<!--CODE file=src/core.ts lines=488-518 cap="hardDrop · doHold"-->
+<p class="small mut"><code>hardDrop()</code> 을 공개해 둔 이유는 AI 때문이다. AI 는 목표 자리까지 옮긴 뒤 이 함수로 마무리한다 — 규칙을 우회하는 별도 경로를 만들지 않으려는 것이다.</p>
+
+<!--SLIDE sec=2 t="화면 버퍼 — cells 와 overlay"-->
+<h1><span class="no">{{N}}</span>그리기 좋은 모양으로 접어 둔다</h1>
+<p class="mut">렌더러가 <code>board</code> 를 직접 읽게 두면 숨은 4줄, 고스트 계산, 조각 겹치기를 렌더러마다 다시 짜야 한다. 코어가 미리 <strong>보이는 20줄짜리 배열 두 장</strong>으로 접어 준다.</p>
+<!--CODE file=src/core.ts lines=519-548 cap="buildView — 굳은 블록 · 고스트 · 현재 조각"-->
+<p class="small mut">고스트를 먼저 칠하고 현재 조각으로 덮는다. 순서를 뒤집으면 조각이 고스트에 가려 지워진 것처럼 보인다.</p>
+
+<!--SLIDE sec=2 t="init — 재현 가능한 시작"-->
+<h1><span class="no">{{N}}</span>시드 하나가 판 하나</h1>
+<p class="mut">같은 시드로 <code>init</code> 하면 조각 순서가 완전히 같다. 골든 트레이스도, 8인 대전의 공평함도, GA 학습의 재현성도 전부 이 한 줄에 기대고 있다.</p>
+<!--CODE file=src/core.ts lines=549-570 cap="init — wasm 판의 ts_init 과 1:1"-->
+<div class="note"><b>시드 0 은 시드가 아니다</b>xorshift 는 상태가 0이면 영원히 0을 낸다. <code>(seed &gt;&gt;&gt; 0) || 0x9e3779b9</code> 로 0을 황금비 상수로 바꿔치기한다 — C++ 판도 같은 값을 쓴다.</div>
+
+<!--SLIDE sec=2 t="update — 시간이 흐르는 세 갈래"-->
+<h1><span class="no">{{N}}</span>한 프레임에 일어나는 일</h1>
+<p class="mut">자동반복(DAS/ARR) → 중력 → 락다운. 순서가 곧 규칙이다.</p>
+<!--CODE file=src/core.ts lines=571-600 cap="update 앞부분 — DAS/ARR 과 중력"-->
+<p class="small mut">탭을 전환했다 돌아오면 <code>dt</code> 가 몇 초씩 되기도 한다. 100ms 로 잘라 두지 않으면 그 한 프레임에 조각이 바닥까지 떨어져 굳는다.</p>
+
+<!--SLIDE sec=2 t="락다운을 매 프레임 검사하는 이유"-->
+<h1><span class="no">{{N}}</span>중력 틱에서 검사하면 늦는다</h1>
+<p class="mut">레벨 1의 중력은 1000ms/칸이다. 착지 판정을 중력 틱에서만 하면, 바닥에 닿고도 최대 1초를 그냥 서 있다가 그때부터 500ms 를 세기 시작한다.</p>
+<!--CODE file=src/core.ts lines=601-621 cap="update 뒷부분 — 락다운"-->
+<div class="tip"><b>옆으로 빠져나가면 타이머가 0으로</b>바닥에 닿아 있다가 좌우로 움직여 허공으로 나오면 <code>lockTimer</code> 를 아예 0으로 되돌린다. 리셋 횟수(15회)를 쓰지 않고도 되살아나는 이 경로가 미끄러뜨리기의 손맛을 만든다.</div>
+
+<!--SLIDE sec=2 t="입력 — press 와 release"-->
+<h1><span class="no">{{N}}</span>누름과 뗌을 나눠 받는다</h1>
+<p class="mut">DAS 는 "누르고 있는 동안"의 개념이라 뗌 신호가 필요하다. 회전·하드드롭·홀드처럼 순간적인 조작은 <code>press</code> 만 쓴다.</p>
+<!--CODE file=src/core.ts lines=622-659 cap="press · release"-->
+<p class="small mut">180도 회전(<code>FLIP</code>)은 시계 회전을 두 번 하는 것으로 구현했다. 전용 킥 표를 두는 구현도 있지만, 그러면 C++ 판과 결과가 갈린다.</p>
+
+<!--SLIDE sec=2 t="바깥에서 부르는 나머지"-->
+<h1><span class="no">{{N}}</span>대전 훅과 테스트 훅</h1>
+<p class="mut"><code>queueGarbage</code> 는 심판이 쓰고, <code>garbage</code>·<code>setPiece</code> 는 테스트와 데모가 쓴다. 게임 로직은 뒤의 둘을 <strong>절대</strong> 부르지 않는다.</p>
+<!--CODE file=src/core.ts lines=660-702 cap="queueGarbage · garbage · setPiece · pending"-->
+<div class="note"><b>왜 테스트 훅을 코어에 두는가</b>"T스핀 자리에서 T 조각이 나온 상황"을 재현하려면 조각을 강제할 방법이 필요하다. 이걸 밖에서 하려면 <code>curPiece</code> 를 공개해야 하고, 그러면 아무나 규칙을 우회할 수 있게 된다. 좁은 문을 하나 내고 주석으로 못 박는 쪽을 골랐다.</div>
+
+<!--SLIDE sec=2 t="boardHash — 같은 판인가"-->
+<h1><span class="no">{{N}}</span>판 하나를 숫자 하나로</h1>
+<p class="mut">두 구현이 같은 판을 만들었는지 보려면 240칸을 전부 비교해야 한다. FNV-1a 로 32비트 하나로 굳혀 두면 트레이스 파일도 작아지고 비교도 한 번이면 끝난다.</p>
+<!--CODE file=src/core.ts lines=703-725 cap="boardHash · dumpBoard"-->
+<div class="tip"><b>해시가 다르면 <code>dumpBoard</code> 를 찍는다</b>해시는 "다르다"까지만 말해 준다. 어디가 다른지는 사람이 봐야 하고, 그때 20줄짜리 문자열이 가장 빠른 도구다. 파트 4의 파리티 테스트가 정확히 이 순서로 움직인다.</div>
+
+<!--SLIDE sec=2 t="코어가 지키는 약속"-->
+<h1><span class="no">{{N}}</span>정리 — 이 {{LINES:src/core.ts}}줄이 지키는 것</h1>
+<div class="cols">
+  <div class="card a"><h4>같은 입력 → 같은 판</h4><p class="small mut">시드와 정수 dt 만 같으면 어느 기계에서도 같은 게임이 나온다. 온라인 대전의 락스텝이 여기 기댄다.</p></div>
+  <div class="card a"><h4>규칙은 전부 안에</h4><p class="small mut">상쇄도 공격량도 코어가 계산한다. 바깥(심판·서버)은 숫자를 옮길 뿐이라 서버를 몇 개로 다시 짜도 규칙이 갈라지지 않는다.</p></div>
+  <div class="card b"><h4>화면을 모른다</h4><p class="small mut">캔버스도 DOM 도 없다. 그래서 Node 의 테스트와 브라우저의 데모가 같은 코드를 돌린다.</p></div>
+  <div class="card b"><h4>C++ 과 비트 단위로 같다</h4><p class="small mut">다음 파트에서 그걸 증명한다 — 말이 아니라 트레이스로.</p></div>
+</div>
+<p class="small mut">다음은 파트 3(렌더링과 조작)에서 이 코어에 화면과 키를 붙이고, 파트 4에서 wasm 과 맞대어 본다.</p>
