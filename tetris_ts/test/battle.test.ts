@@ -152,6 +152,13 @@ test('좌석마다 다른 조각 순서를 받는다 (같으면 8중 복사다)'
   assert.ok(first.length === 4);
 });
 
+test('sharedSeed 를 켜면 좌석 전부가 같은 조각 순서를 받는다 (온라인 규격과 같게)', () => {
+  const b = new Battle({ seats: aiSeats(8), seed: 7, sharedSeed: true });
+  const queues = b.seats.map((s) => Array.from(s.game.nextQ).join(','));
+  assert.equal(new Set(queues).size, 1, `한 시드를 나눠 쓰면 큐가 같아야 한다: ${queues}`);
+  assert.equal(new Set(b.seats.map((s) => s.game.curPiece)).size, 1);
+});
+
 test('같은 시드·같은 dt 면 같은 경기가 나온다', () => {
   const play = (): string => {
     const b = new Battle({ seats: aiSeats(4), seed: 31, target: 'even' });
