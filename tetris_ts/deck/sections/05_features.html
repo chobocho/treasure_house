@@ -1,9 +1,114 @@
-<!--SLIDE sec=5 t="AI 8특징"-->
-<h1><span class="no">{{N}}</span>AI 8특징</h1>
-<p class="mut">높이·구멍·울퉁불퉁함… 판을 숫자 여덟 개로 줄이기</p>
-<ul>
-  <li>특징 하나씩 도해로</li>
-  <li>가중치와 점수식</li>
-  <li>특징 값 눈으로 보기 데모</li>
-</ul>
-<div class="note"><b>이 파트는 아직 뼈대다</b>예정 ~40장. 슬라이드는 <code>deck/sections/05_features.html</code> 에서 채운다 — 완성된 덱 본문을 직접 고치면 커버리지 보증이 깨진다.</div>
+<!--SLIDE sec=5 t="AI 8특징 — 판을 숫자 여덟 개로"-->
+<h1><span class="no">{{N}}</span>판을 숫자 여덟 개로</h1>
+<p class="mut">AI 가 하는 일은 결국 둘이다. <strong>판을 숫자로 바꾸고</strong>(이 파트), 그 숫자로 후보를 고른다(다음 파트). 판 240칸을 숫자 여덟 개로 줄이는 게 먼저다.</p>
+<div class="cols">
+  <div class="card a"><h4>왜 여덟인가</h4><p class="small mut">더 넣으면 학습이 느려지고, 빼면 판의 결을 놓친다. C++ 판에서 고른 여덟 개를 그대로 쓴다 — 그래야 파리티를 잴 수 있다.</p></div>
+  <div class="card b"><h4>가중치는 밖에서</h4><p class="small mut">여덟 개의 가중치는 파일에서 온다. 재컴파일 없이 AI 가 바뀌고, 파트 7의 유전 알고리즘이 그 숫자를 찾는다.</p></div>
+</div>
+
+<!--SLIDE sec=5 t="라이브 — 숫자를 눈으로"-->
+<h1><span class="no">{{N}}</span>지금 이 판의 여덟 숫자</h1>
+<div class="demoWrap" data-demo="feat"></div>
+<p class="demohint">AI 가 천천히 두는 동안 특징 값(가운데)과 <em>값 × 가중치</em>(오른쪽)가 같이 갱신된다. 구멍이 하나 생기는 순간 <code>F_HOLES</code> 항이 어떻게 떨어지는지 보라.</p>
+
+<!--SLIDE sec=5 t="이식에서 가장 조심한 것"-->
+<h1><span class="no">{{N}}</span>float32 를 흉내 내야 한다</h1>
+<p class="mut">C++ 의 가중치는 <code>float</code> 이고 wasm 은 <code>f32.mul</code>/<code>f32.add</code> 를 쓴다. TS 의 <code>number</code> 는 전부 float64 다. 그냥 곱하면 값이 미세하게 달라지고, 그 미세한 차이가 <code>s &gt; bestS</code> 비교를 뒤집어 <strong>다른 수를 고르게</strong> 만든다.</p>
+<!--CODE file=src/ai.ts lines=1-16 cap="src/ai.ts — 설계 원칙과 float32 경고"-->
+<div class="tip"><b>FMA 가 없어서 다행이다</b>wasm 에는 곱셈-누산 융합(FMA) 명령이 없다. 곱한 뒤 반드시 f32 로 접히므로, <code>Math.fround</code> 를 곱셈과 덧셈마다 넣는 흉내가 <strong>비트 단위로 정확</strong>하다. FMA 가 있었다면 이 방법으로는 못 맞췄다.</div>
+
+<!--SLIDE sec=5 t="특징 여덟 개"-->
+<h1><span class="no">{{N}}</span>무엇을 재는가</h1>
+<!--CODE file=src/ai.ts lines=17-32 cap="F — 특징 인덱스와 이름"-->
+<div class="scroll"><table>
+<tr><th>특징</th><th>재는 것</th><th>왜 필요한가</th></tr>
+<tr><td><code>F_LINES</code></td><td>이 수로 지워지는 줄</td><td>지우는 행동에 값을 매긴다</td></tr>
+<tr><td><code>F_AGG</code></td><td>열 높이의 합</td><td>전체적으로 얼마나 높은가</td></tr>
+<tr><td><code>F_HOLES</code></td><td>덮인 빈칸</td><td>되돌리기 가장 어려운 손해</td></tr>
+<tr><td><code>F_BUMP</code></td><td>이웃 열 높이차의 합</td><td>표면이 얼마나 울퉁불퉁한가</td></tr>
+<tr><td><code>F_WELLS</code></td><td>우물 깊이의 누적 비용</td><td>I 조각 없이는 못 메우는 골</td></tr>
+<tr><td><code>F_ROWT</code></td><td>행 전이 수</td><td>가로로 얼마나 끊겨 있나</td></tr>
+<tr><td><code>F_COLT</code></td><td>열 전이 수</td><td>세로로 얼마나 끊겨 있나</td></tr>
+<tr><td><code>F_LAND</code></td><td>조각이 놓인 높이</td><td>낮게 두는 습관</td></tr>
+</table></div>
+
+<!--SLIDE sec=5 t="규칙의 사본 셋"-->
+<h1><span class="no">{{N}}</span>탐색은 사본 위에서만</h1>
+<p class="mut">후보를 평가하려면 조각을 <em>가상으로</em> 놓아 봐야 한다. 진행 중인 판을 건드릴 수는 없으니 사본 위에서 도는 충돌·낙하 함수가 따로 있다.</p>
+<!--CODE file=src/ai.ts lines=33-58 cap="simCollide · simDrop"-->
+<div class="note"><b>중복처럼 보이지만 중복이 아니다</b>코어의 <code>collide</code> 를 "어느 배열이든 받도록" 일반화하면 게임 루프의 핫패스에 간접 호출이 하나 붙는다. 규칙의 진짜 사본은 이 세 함수뿐이고 점수·락·가비지는 전부 코어를 그대로 쓴다 — 사본의 경계를 여기서 끊는다.</div>
+
+<!--SLIDE sec=5 t="도달할 수 있는 자리만"-->
+<h1><span class="no">{{N}}</span>놓을 수 있어도 갈 수 없으면 후보가 아니다</h1>
+<p class="mut">AI 가 고른 수는 나중에 <strong>실제 키 입력</strong>으로 재현된다. 스폰 줄을 따라 미끄러져 갈 수 없는 자리는 후보에서 뺀다 — 끼워 넣기(tuck)와 스핀은 1수 탐색의 범위 밖이다.</p>
+<!--CODE file=src/ai.ts lines=59-95 cap="simReachable · simPlace · simClear"-->
+<!--BOARD rows="..........|..........|###....###|###.o..###|###ooo.###|##########" cap="스폰 줄이 막히면 그 뒤로는 못 간다"-->
+<p class="small mut">이 제약이 AI 를 약하게 만드는 건 사실이다. 대신 "고른 수를 반드시 둘 수 있다"가 보장돼서, 탐색과 실행 사이가 어긋날 일이 없다.</p>
+
+<!--SLIDE sec=5 t="특징 함수의 계약"-->
+<h1><span class="no">{{N}}</span>무엇을 받아 무엇을 채우나</h1>
+<!--CODE file=src/ai.ts lines=96-118 cap="shapeBottom 과 features 의 계약"-->
+<p class="mut">받는 판은 <strong>줄을 지운 뒤</strong>의 판이다. 지우기 전 판을 넘기면 방금 완성한 줄이 "높이"로 잡혀 좋은 수가 나쁘게 평가된다.</p>
+<p class="small mut">O(H·W) 시간에 추가 공간은 열 높이 배열 10칸뿐이다. 한 수에 수십 번 불리는 함수라 할당을 만들지 않는 게 중요하다.</p>
+
+<!--SLIDE sec=5 t="높이 · 구멍 · 울퉁불퉁 · 우물"-->
+<h1><span class="no">{{N}}</span>한 번 훑어 네 가지를 센다</h1>
+<!--CODE file=src/ai.ts lines=119-139 cap="features 앞부분"-->
+<div style="display:flex;gap:1em;flex-wrap:wrap">
+<!--BOARD rows="....o.....|##..#.....|##.###....|##.###.##.|##x###.##." cap="x = 구멍(덮인 빈칸). 위가 막혀 있어 지우기 전엔 못 쓴다"-->
+<!--BOARD rows="......c...|##....c...|##.##.c.##|##.##.c.##|##.##.c.##" cap="깊이 4짜리 우물 — 비용 1+2+3+4 = 10"-->
+</div>
+
+<!--SLIDE sec=5 t="우물 비용이 삼각수인 이유"-->
+<h1><span class="no">{{N}}</span>깊이 4는 깊이 2의 두 배가 아니다</h1>
+<p class="mut">우물 깊이 d 의 비용을 <code>d(d+1)/2</code> 로 둔다. 깊이 2 짜리 두 개(비용 3+3=6)보다 깊이 4 짜리 하나(비용 10)를 더 나쁘게 본다는 뜻이다.</p>
+<div class="cols">
+  <div class="card a"><h4>얕은 골</h4><p class="small mut">아무 조각으로나 메울 수 있다. L·J·S·Z 다 들어간다.</p></div>
+  <div class="card b"><h4>깊은 골</h4><p class="small mut">I 조각이 아니면 메울 수 없고, I 는 최악 12조각을 기다려야 한다(7-bag). 그동안 판은 계속 높아진다.</p></div>
+</div>
+<p class="small mut">선형으로 매기면 이 비대칭이 사라진다. 학습이 "깊은 우물 하나"를 얕은 골 두 개와 같은 값으로 보게 되고, 실제로 그런 가중치는 금방 죽는다.</p>
+
+<!--SLIDE sec=5 t="행 전이 · 열 전이"-->
+<h1><span class="no">{{N}}</span>높이만으로는 안 보이는 결</h1>
+<p class="mut">채움↔빈칸이 뒤집히는 횟수를 센다. 벽과 바닥은 "채워진 것"으로 친다. 같은 높이라도 구멍이 숭숭하면 이 값이 커진다 — Dellacherie 가 제안한 고전적인 특징이다.</p>
+<!--CODE file=src/ai.ts lines=140-172 cap="행/열 전이와 결과 채우기"-->
+<div style="display:flex;gap:1em;flex-wrap:wrap">
+<!--BOARD rows="##########" cap="행 전이 0 — 꽉 찬 줄"-->
+<!--BOARD rows="#.#.#.#.#." cap="행 전이 10 — 같은 5칸인데 최악"-->
+</div>
+
+<!--SLIDE sec=5 t="점수 = 특징 · 가중치"-->
+<h1><span class="no">{{N}}</span>내적 한 줄, 그러나 float32 로</h1>
+<!--CODE file=src/ai.ts lines=173-187 cap="scoreOf 와 학습된 기본 가중치"-->
+<p class="mut"><code>Math.fround</code> 를 빼면 값이 float64 정밀도로 남고, 어떤 판에서는 1등과 2등 후보의 순서가 뒤집힌다. 그 한 수가 갈리면 그다음 판이 통째로 달라진다.</p>
+<div class="warn"><b>"거의 같다"는 파리티에서 통하지 않는다</b>점수 차이가 10<sup>-9</sup> 이어도 argmax 는 이산적으로 갈린다. 파트 6의 AI 파리티 테스트가 정확히 이 지점을 노린다.</div>
+
+<!--SLIDE sec=5 t="가중치가 말하는 전략"-->
+<h1><span class="no">{{N}}</span>학습된 여덟 숫자 읽기</h1>
+<div class="scroll"><table>
+<tr><th>특징</th><th>가중치</th><th>읽는 법</th></tr>
+<tr><td><code>F_LINES</code></td><td>+0.073</td><td>지우는 건 좋지만 <strong>아주 약하게</strong>만 좋다</td></tr>
+<tr><td><code>F_AGG</code></td><td>+0.065</td><td>높이 자체는 벌하지 않는다 (오히려 살짝 +)</td></tr>
+<tr><td><code>F_HOLES</code></td><td>−0.478</td><td>구멍은 크게 벌한다</td></tr>
+<tr><td><code>F_BUMP</code></td><td>+0.210</td><td>울퉁불퉁함에 <strong>+</strong> — 우물을 파도 좋다는 뜻</td></tr>
+<tr><td><code>F_WELLS</code></td><td>−0.009</td><td>거의 0 — 우물을 사실상 안 벌한다</td></tr>
+<tr><td><code>F_ROWT</code></td><td>−0.392</td><td>가로로 끊긴 판을 싫어한다</td></tr>
+<tr><td><code>F_COLT</code></td><td>−0.505</td><td>세로로 끊긴 판을 더 싫어한다</td></tr>
+<tr><td><code>F_LAND</code></td><td>−0.556</td><td>가장 강한 항 — 낮게 둔다</td></tr>
+</table></div>
+<div class="note"><b>이 가중치는 "공격"을 목표로 학습됐다</b>줄 수가 아니라 <strong>보낸 줄</strong>을 적합도로 삼았기 때문에(파트 7), 한 줄씩 야금야금 지우는 대신 우물을 파고 테트리스를 노리는 쪽으로 기울었다. <code>F_BUMP</code> 가 +인 것과 <code>F_WELLS</code> 가 0에 가까운 것이 그 흔적이다. 오래 버티는 AI 를 원한다면 적합도부터 바꿔야 한다.</div>
+
+<!--SLIDE sec=5 t="특징 데모는 어떻게 붙였나"-->
+<h1><span class="no">{{N}}</span>렌더러는 특징을 모른다</h1>
+<p class="mut">특징 표를 렌더러 안에 넣으면 AI 의 개념이 화면 코드로 새어 든다. 대신 <code>onDraw</code> 훅 하나만 열어 두고, 표는 데모 쪽에서 붙인다.</p>
+<!--CODE file=src/demo.ts lines=60-100 cap="feat 데모 — 판 옆에 여덟 줄"-->
+<p class="small mut"><code>evalHere()</code> 는 조각을 놓지 않고 <strong>지금 판 그대로</strong> 평가한다. 그래서 이 표는 "AI 가 다음 수를 고를 때 보는 숫자"가 아니라 "지금 판의 상태"다 — 다음 파트에서 후보마다 이 계산이 수십 번 돈다.</p>
+
+<!--SLIDE sec=5 t="정리"-->
+<h1><span class="no">{{N}}</span>여기까지가 '판을 읽는' 절반</h1>
+<div class="cols">
+  <div class="card a"><h4>240칸 → 8숫자</h4><p class="small mut">그중 다섯(구멍·전이·착지높이)이 실제로 무게를 갖는다.</p></div>
+  <div class="card a"><h4>사본 위에서만</h4><p class="small mut">진행 중인 판은 절대 안 건드린다. 그래서 탐색이 게임을 오염시키지 않는다.</p></div>
+  <div class="card b"><h4>float32 흉내</h4><p class="small mut">이 한 가지를 안 지키면 파리티가 무너진다.</p></div>
+  <div class="card b"><h4>다음</h4><p class="small mut">이 점수로 백 가지 후보 중 하나를 고른다.</p></div>
+</div>

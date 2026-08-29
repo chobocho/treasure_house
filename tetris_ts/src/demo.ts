@@ -8,6 +8,7 @@
 // 클래스다. 데모용으로 규칙을 흉내 낸 코드는 한 줄도 없다.
 
 import { Tetris } from './core.js';
+import { Ai, DEFAULT_WEIGHTS, FEATURE_NAMES, F } from './ai.js';
 import { TetrisView, fillRows, type ViewOptions } from './view.js';
 
 export interface Demo {
@@ -52,8 +53,53 @@ function tspin(host: HTMLElement, opts: ViewOptions): Demo {
   return new TetrisView(host, game, opts);
 }
 
+/**
+ * 특징 여덟 개를 판 옆에 실시간으로 띄운다 — "판을 숫자 여덟 개로 줄인다"는 말을
+ * 눈으로 보는 자리다. AI 가 천천히 두는 동안 어느 숫자가 오르내리는지 보인다.
+ */
+function feat(host: HTMLElement, opts: ViewOptions): Demo {
+  const game = new Tetris(seed());
+  const ai = new Ai(game, DEFAULT_WEIGHTS);
+  const doc = (host as unknown as { ownerDocument: { createElement(t: string): PanelEl } }).ownerDocument;
+  const panel = doc.createElement('div');
+  panel.style.cssText = 'font-size:.72em;color:#94a3b8;margin-top:.4em;display:grid;'
+    + 'grid-template-columns:auto auto auto;gap:.05em .6em;justify-content:center';
+  const rows = FEATURE_NAMES.map((name) => {
+    const n = doc.createElement('span'); n.textContent = name;
+    const v = doc.createElement('span'); v.textContent = '0';
+    const c = doc.createElement('span'); c.textContent = '0';
+    panel.appendChild(n); panel.appendChild(v); panel.appendChild(c);
+    return { v, c };
+  });
+  const total = doc.createElement('div');
+  total.style.cssText = 'font-size:.75em;color:#22d3ee;text-align:center;margin-top:.2em';
+
+  const update = (): void => {
+    const s = ai.evalHere(); // 지금 판을 그대로 평가한다 (조각을 놓지 않고)
+    for (let i = 0; i < F.COUNT; i++) {
+      const f = ai.lastFeat[i] as number;
+      const w = ai.weights[i] as number;
+      (rows[i] as { v: PanelEl; c: PanelEl }).v.textContent = String(f);
+      (rows[i] as { v: PanelEl; c: PanelEl }).c.textContent = (f * w).toFixed(2);
+    }
+    total.textContent = `점수 ${s.toFixed(2)} = Σ(특징 × 가중치)`;
+  };
+  const view = new TetrisView(host, game, { ...opts, bot: true, botMs: opts.botMs ?? 700, onDraw: update });
+  (host as unknown as { appendChild(c: unknown): unknown }).appendChild(panel);
+  (host as unknown as { appendChild(c: unknown): unknown }).appendChild(total);
+  update();
+  return view;
+}
+
+/** feat 데모가 DOM 에 요구하는 모양 — view.ts 의 Elm 과 같은 이유로 좁게 적는다. */
+interface PanelEl {
+  style: { cssText: string };
+  textContent: string;
+  appendChild(c: unknown): unknown;
+}
+
 export const DEMOS: Record<string, (host: HTMLElement, opts: ViewOptions) => Demo> = {
-  play, bot, garbage, tspin,
+  play, bot, garbage, tspin, feat,
 };
 
 /**

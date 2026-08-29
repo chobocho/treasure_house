@@ -1,9 +1,142 @@
-<!--SLIDE sec=6 t="1수 탐색"-->
-<h1><span class="no">{{N}}</span>1수 탐색</h1>
-<p class="mut">가능한 착수를 전부 세고, 평가하고, 실행한다</p>
-<ul>
-  <li>착수 열거</li>
-  <li>평가와 선택</li>
-  <li>AI 가 두는 것을 보는 데모</li>
-</ul>
-<div class="note"><b>이 파트는 아직 뼈대다</b>예정 ~30장. 슬라이드는 <code>deck/sections/06_search.html</code> 에서 채운다 — 완성된 덱 본문을 직접 고치면 커버리지 보증이 깨진다.</div>
+<!--SLIDE sec=6 t="1수 탐색 — 백 개 중 하나"-->
+<h1><span class="no">{{N}}</span>고르는 절반</h1>
+<p class="mut">판을 숫자로 바꿨으니 이제 고른다. 가능한 착수를 <strong>전부</strong> 놓아 보고, 각각을 여덟 숫자로 줄이고, 점수가 가장 높은 하나를 둔다. 그게 전부다 — 탐색 깊이는 1이다.</p>
+<div class="scroll"><table>
+<tr><th></th><th>후보 수</th><th>한 수에 드는 계산</th></tr>
+<tr><td>홀드 안 씀</td><td>회전 4 × x −3‥9 = 최대 52</td><td rowspan="2">유효 후보 30~80개 × (낙하 + 특징 추출)</td></tr>
+<tr><td>홀드 씀</td><td>같은 만큼 한 벌 더</td></tr>
+</table></div>
+<p class="small mut">2수·3수로 늘리면 강해지지만 계산이 수십 배가 된다. 여덟 판이 동시에 도는 브라우저에서 그 값을 치를 수 없다 — 그리고 이 정도로도 400조각을 버틴다(뒤에서 실측을 본다).</p>
+
+<!--SLIDE sec=6 t="라이브 — AI 가 두는 판"-->
+<h1><span class="no">{{N}}</span>초당 네 수</h1>
+<div class="demoWrap" data-demo="bot"></div>
+<p class="demohint">한 수마다 후보 수십 개를 전부 놓아 보고 고른 결과다. 우물을 남기고 테트리스를 노리는 습관이 보이면, 그건 파트 7에서 <em>공격</em>을 목표로 학습시킨 흔적이다.</p>
+
+<!--SLIDE sec=6 t="Ai 클래스"-->
+<h1><span class="no">{{N}}</span>버퍼를 재사용한다</h1>
+<p class="mut">후보 하나마다 240바이트짜리 보드 사본과 특징 배열을 새로 만들면 한 수에 백 번 가까이 GC 를 자극한다. 인스턴스마다 하나씩 들고 재사용한다.</p>
+<!--CODE file=src/ai.ts lines=188-213 cap="Ai — 필드와 가중치 교체"-->
+<p class="small mut"><code>setWeights</code> 가 <code>readonly number[]</code> 도 <code>Float32Array</code> 도 받는다. 파일에서 읽은 배열(파트 8)과 GA 가 만든 유전자(파트 7)를 같은 문으로 받기 위해서다.</p>
+
+<!--SLIDE sec=6 t="후보 열거"-->
+<h1><span class="no">{{N}}</span>홀드 × 회전 × 가로</h1>
+<!--CODE file=src/ai.ts lines=214-245 cap="plan — 후보를 펼친다"-->
+<p class="mut">x 를 −3부터 시작하는 이유: 조각의 4×4 박스 왼쪽이 벽 밖으로 나가도 <strong>블록 자체는</strong> 판 안에 들어올 수 있다. −3을 빼면 왼쪽 벽에 딱 붙이는 수가 사라진다.</p>
+<div class="note"><b>O 조각은 회전을 건너뛴다</b><code>shapes[rot] === shapes[0]</code> 이면 같은 모양이라 평가가 똑같다. 후보가 4분의 1로 줄고, 무엇보다 <strong>동점 후보</strong>가 사라진다 — 동점이 있으면 어느 쪽을 고르느냐가 구현마다 갈릴 수 있다.</div>
+
+<!--SLIDE sec=6 t="놓아 보고, 재고, 고른다"-->
+<h1><span class="no">{{N}}</span>후보 하나를 평가하는 다섯 줄</h1>
+<!--CODE file=src/ai.ts lines=246-267 cap="plan — 평가와 argmax"-->
+<pre class="code txt"><code>sim ← 현재 판 복사
+sim 에 조각을 놓는다        simPlace
+착지 높이를 기록한다        landH = H - (y + shapeBottom)
+꽉 찬 줄을 지운다           lines = simClear(sim)
+여덟 숫자로 줄인다          features(sim, lines, landH, f)
+가중치와 내적한다           s = scoreOf(weights, f)</code></pre>
+<p class="small mut">비교는 <code>s &gt; bestS</code> — <strong>엄격 부등호</strong>다. 동점이면 먼저 나온 후보가 이긴다. 이 규칙이 두 구현에서 같아야 파리티가 맞는다.</p>
+
+<!--SLIDE sec=6 t="수를 정수 하나로"-->
+<h1><span class="no">{{N}}</span>packed = (hold&lt;&lt;8) | (rot&lt;&lt;4) | (x+3)</h1>
+<pre class="code txt"><code>  비트   8      7 6 5 4     3 2 1 0
+       ┌────┬──────────┬──────────┐
+       │hold│   rot    │  x + 3   │
+       └────┴──────────┴──────────┘
+         0/1     0..3      0..12     →  x = (packed & 15) - 3
+
+  예) 홀드 쓰고, 1회전, x = 6   →  (1<<8)|(1<<4)|9 = 0x119</code></pre>
+<p class="mut">x 에 3을 더하는 건 −3까지 가는 좌표를 4비트 무부호로 담기 위해서다. 수 하나가 정수 하나면 트레이스 파일에 그대로 적을 수 있고, 두 구현이 "같은 수를 골랐다"를 <strong>숫자 하나로</strong> 비교할 수 있다.</p>
+<p class="small mut">−1 은 "둘 수 있는 수가 없다"는 뜻이다. 게임 오버거나, 스폰 줄이 막혀 어디로도 못 가는 판이다.</p>
+
+<!--SLIDE sec=6 t="고른 수를 실제로 둔다"-->
+<h1><span class="no">{{N}}</span>규칙을 우회하지 않는다</h1>
+<p class="mut">홀드는 <code>doHold()</code>, 낙하는 <code>hardDrop()</code> 을 그대로 부른다. 판에 조각을 직접 박아 넣는 지름길을 만들면 점수·콤보·가비지 규칙이 통째로 빠진다.</p>
+<!--CODE file=src/ai.ts lines=268-296 cap="apply · step"-->
+<div class="warn"><b>회전으로 들어간 게 아니다</b>AI 는 좌표를 직접 설정하므로 <code>lastWasRot</code> 을 0으로 되돌린다. 안 그러면 T 조각을 아무 데나 떨어뜨려도 T스핀으로 판정되어 공짜 공격이 나온다 — 그리고 wasm 판과 결과가 갈린다.</div>
+
+<!--SLIDE sec=6 t="한 판을 끝까지"-->
+<h1><span class="no">{{N}}</span>비가 새는 배 모드</h1>
+<p class="mut">GA 의 적합도 함수가 부르는 함수다. <code>every</code> 조각마다 가비지 한 줄이 예약된다 — 가비지가 없으면 웬만한 가중치도 400조각을 안 죽고 버텨서, 전원이 만점을 받아 <strong>누가 더 나은지 구별할 수 없게</strong> 된다.</p>
+<!--CODE file=src/ai.ts lines=297-328 cap="evalHere · play"-->
+<p class="small mut">공격량과 놓은 조각 수를 따로 들고 있는 이유는 파트 7에서 밝혀진다 — 적합도를 "지운 줄"이 아니라 "보낸 줄"로 삼기 때문이다.</p>
+
+<!--SLIDE sec=6 t="AI 파리티는 더 까다롭다"-->
+<h1><span class="no">{{N}}</span>마지막 비트 하나가 수를 바꾼다</h1>
+<p class="mut">코어 파리티는 정수 연산이라 맞으면 맞고 틀리면 틀린다. AI 는 다르다 — 점수가 float32 라, 마지막 비트 하나만 달라도 argmax 가 다른 후보를 고르고 그때부터 판이 통째로 갈라진다.</p>
+<!--CODE file=src/trace_ai.ts lines=1-13 cap="src/trace_ai.ts — 왜 따로 재는가"-->
+<p class="small mut">그래서 세 겹으로 잰다: ① 특징과 점수만 (평가), ② 고른 수 자체 (탐색), ③ 400조각 실전 판의 누적 결과.</p>
+
+<!--SLIDE sec=6 t="AiTarget"-->
+<h1><span class="no">{{N}}</span>AI 를 붙인 코어의 손잡이</h1>
+<!--CODE file=src/trace_ai.ts lines=14-34 cap="AiTarget — wasm 과 TS 가 각각 구현한다"-->
+<p class="mut">코어 파리티의 <code>TraceTarget</code> 과 같은 구조다. 다른 점은 <code>plan()</code>·<code>features()</code> 처럼 <strong>AI 내부를 들여다보는</strong> 창이 있다는 것 — 결과만 비교하면 어디서 갈렸는지 알 수 없다.</p>
+
+<!--SLIDE sec=6 t="가중치 세트와 판"-->
+<h1><span class="no">{{N}}</span>극단값도 넣는다</h1>
+<!--CODE file=src/trace_ai.ts lines=35-60 cap="WEIGHT_SETS"-->
+<p class="mut">학습된 가중치 넷(2편 GA 의 난이도별 값)에 손으로 만든 셋을 더한다 — <strong>전부 0</strong>(동점 처리 확인), <strong>전부 양수</strong>(일부러 최악의 수를 고른다), <strong>2의 거듭제곱 부호 교대</strong>(f32 반올림의 구석).</p>
+<p class="small mut">부호가 뒤집힌 가중치가 중요한 이유: AI 가 판을 일부러 높이 쌓아서 "블록아웃 직전"과 "둘 수 있는 수 없음(−1)" 경로를 밟아 준다. 잘 도는 값만으로는 그 코드가 영원히 안 불린다.</p>
+
+<!--SLIDE sec=6 t="무작위 판 만들기"-->
+<h1><span class="no">{{N}}</span>판도 손으로만 짜지 않는다</h1>
+<!--CODE file=src/trace_ai.ts lines=61-81 cap="randomBoards — 재현되는 무작위 판"-->
+<p class="small mut">시드가 고정이라 도구와 테스트가 <strong>같은 판</strong>을 만든다. 판이 다르면 비교 자체가 성립하지 않으므로, 판 생성기도 트레이스의 일부다.</p>
+
+<!--SLIDE sec=6 t="탐색 트레이스"-->
+<h1><span class="no">{{N}}</span>무엇을 기록하나</h1>
+<!--CODE file=src/trace_ai.ts lines=82-98 cap="PlanCase — 고른 수 · 특징 · 둔 뒤의 상태"-->
+<p class="mut">고른 수만 비교하면 "우연히 같은 수를 골랐지만 이유는 다른" 경우를 놓친다. 그래서 그 수를 고를 때의 <strong>특징 벡터</strong>와, 실제로 <strong>두고 난 뒤의 판</strong>까지 함께 남긴다.</p>
+
+<!--SLIDE sec=6 t="전수로 돌린다"-->
+<h1><span class="no">{{N}}</span>판 × 조각 × 가중치</h1>
+<!--CODE file=src/trace_ai.ts lines=99-126 cap="runPlanTrace"-->
+<p class="small mut">판 29(무작위 24 + 경계 5) × 조각 7 × 가중치 7 = <strong>1421경우</strong>. 경우마다 <code>init</code> 부터 다시 하므로 앞 경우의 상태가 새지 않는다.</p>
+<!--RUN file=logs/golden.log lines=17-17 cap="실측 — 탐색 트레이스"-->
+<p class="small mut">"둘 수 없음 91"과 "홀드 사용 267"이 중요하다. 그 경로를 한 번도 안 밟았다면 <code>-1</code> 반환과 홀드 분기는 검증되지 않은 채 남는다 — 테스트가 이 둘의 존재를 따로 확인한다.</p>
+
+<!--SLIDE sec=6 t="실전 트레이스"-->
+<h1><span class="no">{{N}}</span>400조각을 끝까지</h1>
+<!--CODE file=src/trace_ai.ts lines=127-147 cap="PlayCase · PLAY_SEEDS"-->
+<p class="mut">평가와 탐색이 한 수짜리 대조라면, 실전은 <strong>누적</strong>이다. 400조각을 두는 동안 한 번이라도 다른 수를 고르면 지운 줄·공격·최종 판이 전부 달라진다.</p>
+
+<!--SLIDE sec=6 t="실전 루프"-->
+<h1><span class="no">{{N}}</span>가중치 × 시드 × 가비지 모드</h1>
+<!--CODE file=src/trace_ai.ts lines=148-169 cap="runPlayTrace"-->
+<p class="small mut">가중치 7 × 시드 4 × 모드 2(가비지 없음 / 12조각마다 한 줄) = <strong>56판</strong>.</p>
+<!--RUN file=logs/golden.log lines=18-18 cap="실측 — 실전 트레이스"-->
+<p class="small mut">56판 중 최고가 159줄이다. 1수 탐색치고 나쁘지 않지만, 가비지가 새는 모드에서는 훨씬 일찍 죽는다 — 그 차이가 파트 7의 적합도를 만든다.</p>
+
+<!--SLIDE sec=6 t="평가만 따로"-->
+<h1><span class="no">{{N}}</span>가장 좁은 대조부터</h1>
+<!--CODE file=src/trace_ai.ts lines=170-191 cap="runEvalTrace — 특징과 점수만"-->
+<p class="mut">탐색이 갈렸을 때 원인이 특징 추출인지 argmax 인지 알아야 한다. 판만 심고 <code>evalHere()</code> 를 부르는 이 트레이스가 그 절반을 먼저 잘라 준다.</p>
+
+<!--SLIDE sec=6 t="판 목록을 고정한다"-->
+<h1><span class="no">{{N}}</span>도구와 테스트가 같은 수를 써야 한다</h1>
+<!--CODE file=src/trace_ai.ts lines=192-214 cap="AI_BOARD_COUNT · 경계 판 · aiBoards"-->
+<p class="small mut">판 개수를 도구 쪽에만 적어 두면, 나중에 테스트에서 숫자를 바꿨을 때 "정답지에 없는 판"이 생겨 엉뚱한 실패가 난다. 상수 하나를 공유하는 게 싸다.</p>
+
+<!--SLIDE sec=6 t="wasm AI 어댑터"-->
+<h1><span class="no">{{N}}</span>정답지를 뽑는 쪽</h1>
+<!--CODE file=tools/trace_ai_wasm.mjs lines=1-15 cap="tools/trace_ai_wasm.mjs — 머리"-->
+<!--CODE file=tools/trace_ai_wasm.mjs lines=16-47 cap="wasm 의 ai_* 익스포트를 AiTarget 으로"-->
+
+<!--SLIDE sec=6 t="세 트레이스를 뽑아 저장"-->
+<h1><span class="no">{{N}}</span>149 KB 짜리 AI 정답지</h1>
+<!--CODE file=tools/trace_ai_wasm.mjs lines=48-78 cap="평가 · 탐색 · 실전을 차례로"-->
+<!--RUN file=logs/golden.log lines=16-20 cap="make golden — AI 정답지"-->
+
+<!--SLIDE sec=6 t="TS 쪽 어댑터와 파리티"-->
+<h1><span class="no">{{N}}</span>같은 수를 고르는가</h1>
+<!--CODE file=test/ai.test.ts lines=24-42 cap="test/ai.test.ts — TsAiTarget"-->
+<!--CODE file=test/ai.test.ts lines=250-268 cap="탐색 파리티 + 표본 건전성"-->
+<p class="small mut">실패 메시지에 특징 벡터를 이름과 함께 찍는다. "packed 가 다르다"만으로는 어느 특징이 어긋났는지 알 수 없기 때문이다.</p>
+
+<!--SLIDE sec=6 t="정리"-->
+<h1><span class="no">{{N}}</span>AI 는 이걸로 끝이다</h1>
+<div class="cols">
+  <div class="card a"><h4>구조는 단순하다</h4><p class="small mut">후보 전수 + 여덟 숫자 + 내적 + argmax. 여기에 학습이 붙으면 세진다.</p></div>
+  <div class="card a"><h4>깊이 1의 한계</h4><p class="small mut">다음 조각을 보지 않는다. 홀드 한 벌을 후보에 넣은 게 그 절반을 메운다.</p></div>
+  <div class="card b"><h4>파리티 세 겹</h4><p class="small mut">특징·점수 → 고른 수 → 400조각 누적. 갈라지는 지점을 좁혀서 잡는다.</p></div>
+  <div class="card b"><h4>다음</h4><p class="small mut">여덟 숫자를 <strong>어떻게 찾을 것인가</strong> — 유전 알고리즘.</p></div>
+</div>
