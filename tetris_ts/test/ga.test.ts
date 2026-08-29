@@ -13,7 +13,7 @@ import { Tetris } from '../src/core.js';
 import { Ai } from '../src/ai.js';
 import {
   mulberry32, gauss, normalize, randomGenome, tournament, crossover, mutate,
-  makeFitness, evolve, DIM, type Genome, type GenRecord,
+  makeFitness, evolve, LiveGa, DIM, type Genome, type GenRecord,
 } from '../src/ga.js';
 import {
   runGaOpsTrace, EVOLVE_CHECK, EVOLVE_CHECK_HARD, type GaOpsTrace,
@@ -295,4 +295,41 @@ test('난이도 프리셋은 학습 순서대로 강해진다 (easy < normal < h
   assert.ok(hard > normal, `hard 가 normal 보다 세야 한다 — ${line}`);
   assert.ok(max > hard, `max 가 hard 보다 세야 한다 — ${line}`);
   assert.equal(+max.toFixed(1), w.fitness, `max 프리셋의 공격량이 곧 기록된 적합도 — ${line}`);
+});
+
+// ── 5. 브라우저 라이브 학습 ───────────────────────────────────────────
+// 라이브 학습은 프레임을 쪼개 쓰는 것 말고는 트레이너와 완전히 같아야 한다.
+// 다르면 덱 안의 데모가 "비슷하지만 다른 것"을 보여 주는 셈이 된다.
+const LIVE_CFG = { pop: 8, gen: 3, maxPieces: 60, seeds: [1], rngSeed: 991, elite: 2 } as const;
+
+test('라이브 학습은 트레이너(evolve)와 같은 곡선을 낸다', () => {
+  const want = evolve({ ...LIVE_CFG, ai: new Ai(new Tetris(1)) }).log;
+  const live = new LiveGa({ ...LIVE_CFG, ai: new Ai(new Tetris(1)) });
+  while (live.log.length < LIVE_CFG.gen) live.step();
+  assert.equal(live.log.length, want.length);
+  for (let i = 0; i < want.length; i++) {
+    const a = { ...(live.log[i] as GenRecord), ms: 0 };
+    const b = { ...(want[i] as GenRecord), ms: 0 }; // 소요 시간만 다르다
+    assert.deepEqual(a, b, `${i + 1}세대의 기록이 다르다`);
+  }
+});
+
+test('예산을 잘게 쪼개도 결과가 같다 (한 프레임에 한 개체씩)', () => {
+  const want = evolve({ ...LIVE_CFG, ai: new Ai(new Tetris(1)) });
+  const live = new LiveGa({ ...LIVE_CFG, ai: new Ai(new Tetris(1)) });
+  let guard = 0;
+  while (live.log.length < LIVE_CFG.gen && guard++ < 1000) live.step(0); // 예산 0 = 최소 한 개체
+  assert.equal(live.log.length, LIVE_CFG.gen, '세대가 끝나지 않았다');
+  assert.deepEqual(live.best, want.best, '최고 유전자가 다르다');
+  assert.equal(live.bestFit, want.bestFit);
+});
+
+test('진행률은 0에서 1 사이를 오간다', () => {
+  const live = new LiveGa({ ...LIVE_CFG, ai: new Ai(new Tetris(1)) });
+  assert.equal(live.progress, 0);
+  live.step(0);
+  assert.ok(live.progress > 0 && live.progress < 1, `중간 진행률이 이상하다 (${live.progress})`);
+  while (live.log.length < 1) live.step(0);
+  assert.equal(live.gen, 2, '한 세대가 끝나면 다음 세대로 넘어간다');
+  assert.equal(live.progress, 0, '새 세대는 0에서 시작한다');
 });

@@ -100,3 +100,17 @@ test('하이라이터가 TypeScript 를 안다', () => {
   }
   assert.ok(outHtml.includes('<i class="ty">number</i>'), 'number 를 타입으로 안 칠했다');
 });
+
+test('학습 곡선은 ga_log.json 의 실측값으로 그린다', () => {
+  const { html } = build();
+  const log = JSON.parse(readFileSync(join(ROOT, 'ga_log.json'), 'utf8')) as
+    { gen: number; best: number; mean: number }[];
+  assert.ok(html.includes('class="chart"'), '학습 곡선 차트가 덱에 없다');
+  const m = /<polyline[^>]*data-series="best"[^>]*points="([^"]+)"/.exec(html);
+  assert.ok(m, 'best 계열이 없다');
+  const pts = (m as RegExpExecArray)[1]!.trim().split(/\s+/);
+  assert.equal(pts.length, log.length, `점 개수가 세대 수와 다르다 (${pts.length} vs ${log.length})`);
+  // 최고 적합도는 지어낸 수가 아니라 로그의 최대값이어야 한다.
+  const best = Math.max(...log.map((r) => r.best));
+  assert.ok(html.includes(String(best)), `최고 적합도 ${best} 가 덱에 안 보인다`);
+});

@@ -53,7 +53,10 @@ try {
       wide: [...document.querySelectorAll('.slide')]
         .filter((s) => s.style.display !== 'none')
         .flatMap((s) => [...s.querySelectorAll('*')])
-        .filter((el) => el.scrollWidth > el.clientWidth + 2 &&
+        // SVG 안쪽은 제외한다 — viewBox 로 스케일되므로 scrollWidth/clientWidth 비교가
+        // 의미가 없다(차트의 <text> 가 늘 '넘친 것'으로 잡힌다).
+        .filter((el) => !(el instanceof SVGElement) &&
+          el.scrollWidth > el.clientWidth + 2 &&
           getComputedStyle(el).overflowX === 'visible')
         .map((el) => el.tagName + '.' + (el.className || '') + ' ' + el.scrollWidth + '>' + el.clientWidth)
         .slice(0, 5),
