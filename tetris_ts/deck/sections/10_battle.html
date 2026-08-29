@@ -1,9 +1,102 @@
-<!--SLIDE sec=10 t="대전 규칙"-->
-<h1><span class="no">{{N}}</span>대전 규칙</h1>
-<p class="mut">가비지 표 · 심판 · 1:N 로컬 아레나</p>
-<ul>
-  <li>보낸 줄과 상쇄</li>
-  <li>타겟팅 네 가지</li>
-  <li>8석 아레나 데모</li>
-</ul>
-<div class="note"><b>이 파트는 아직 뼈대다</b>예정 ~30장. 슬라이드는 <code>deck/sections/10_battle.html</code> 에서 채운다 — 완성된 덱 본문을 직접 고치면 커버리지 보증이 깨진다.</div>
+<!--SLIDE sec=10 t="대전 규칙 — 여덟이 서로 때린다"-->
+<h1><span class="no">{{N}}</span>1인용을 대전으로</h1>
+<p class="mut">코어에는 이미 가비지와 공격 계산이 들어 있다(파트 2). 남은 건 <strong>누가 누구를 때리는가</strong> 하나뿐이다. 그 판단만 하는 게 심판(<code>Referee</code>)이고, 판 여럿을 굴리는 게 <code>Battle</code> 이다.</p>
+<div class="demoWrap" data-demo="arena"></div>
+<p class="demohint">여덟 판이 동시에 돈다. 판이 흐려지면 탈락이고, 마지막까지 남은 좌석이 1등이다. 끝나면 몇 초 뒤 새 판이 시작된다.</p>
+
+<!--SLIDE sec=10 t="심판이 하는 일은 하나뿐"-->
+<h1><span class="no">{{N}}</span>대상 고르기</h1>
+<p class="mut">공격량은 코어가 계산했고, 상쇄도 코어가 했다. 심판은 "이 줄이 <em>누구에게</em> 갈 것인가"만 정한다. 그래서 규칙이 서버·브라우저·봇 어디에 있든 같은 결과가 나온다.</p>
+<!--CODE file=src/battle.ts lines=1-18 cap="src/battle.ts — 머리와 타겟팅 모드"-->
+<div class="scroll"><table>
+<tr><th>모드</th><th>대상</th><th>느낌</th></tr>
+<tr><td><code>random</code></td><td>살아 있는 아무나</td><td>기본값. 운이 섞여 판이 잘 흩어진다</td></tr>
+<tr><td><code>even</code></td><td>가장 덜 맞은 쪽</td><td>피해가 고르게 퍼진다 — 오래 간다</td></tr>
+<tr><td><code>ko</code></td><td>가장 높이 쌓인 쪽</td><td>죽기 직전인 쪽에 집중포화</td></tr>
+<tr><td><code>attackers</code></td><td>최근에 나를 때린 쪽</td><td>반격. 원한이 쌓인다</td></tr>
+</table></div>
+
+<!--SLIDE sec=10 t="심판이 들고 있는 것"-->
+<h1><span class="no">{{N}}</span>좌석 하나당 여섯 값</h1>
+<!--CODE file=src/battle.ts lines=19-52 cap="설정값 · 타격 기록 · 좌석 상태"-->
+<p class="mut"><code>hits</code> 는 "누가 언제 나를 때렸나"의 목록이다. 반격 타겟팅과 <strong>막타 판정</strong>(누가 죽였는가)이 이 목록을 읽는다.</p>
+<p class="small mut"><code>hitTTL</code> 8초가 그 기억의 유효기간이다. 무제한이면 경기 초반에 한 번 때린 사람이 영원히 "막타"로 기록된다.</p>
+
+<!--SLIDE sec=10 t="사건으로 말한다"-->
+<h1><span class="no">{{N}}</span>심판은 사건 목록을 낸다</h1>
+<p class="mut">심판이 화면을 그리거나 소켓에 쓰지 않는다. <code>grb</code>(가비지 배달)·<code>ko</code>(탈락)·<code>end</code>(종료) 사건을 배열로 돌려줄 뿐이다 — 그걸 누가 어떻게 쓰는지는 바깥의 문제다.</p>
+<!--CODE file=src/battle.ts lines=53-83 cap="RefEvent · Referee · 난수"-->
+<div class="note"><b>난수는 심판 것 하나뿐</b>타겟팅과 구멍 위치가 이 xorshift 하나를 쓴다. 소비 순서가 곧 규격이다 — 파트 13에서 이 순서가 어긋나면 골든 벡터가 즉시 잡는다.</div>
+
+<!--SLIDE sec=10 t="누구에게 보낼까"-->
+<h1><span class="no">{{N}}</span>모드 넷의 실제 구현</h1>
+<!--CODE file=src/battle.ts lines=84-133 cap="occupied · aliveSeats · pickTarget"-->
+<p class="small mut"><code>even</code> 과 <code>ko</code> 는 난수를 <strong>쓰지 않는다</strong>(결정론적 최솟값·최댓값). <code>attackers</code> 는 기억이 있을 때만 결정론적이고 없으면 무작위로 떨어진다. 그래서 난수 소비 시점이 모드마다 다르다 — 구현 간 대조에서 가장 잘 어긋나는 자리다.</p>
+
+<!--SLIDE sec=10 t="때리기와 죽이기"-->
+<h1><span class="no">{{N}}</span>공격 한 번, 탈락 한 번</h1>
+<!--CODE file=src/battle.ts lines=134-171 cap="attack · kill"-->
+<p class="mut">등수는 <strong>탈락 순서의 역순</strong>이다. 여덟 명 중 첫 탈락자가 8등, 마지막 생존자가 1등. 그래서 <code>place</code> 는 죽는 순간 "지금 살아 있는 수"로 정해진다.</p>
+
+<!--SLIDE sec=10 t="좌석과 소포"-->
+<h1><span class="no">{{N}}</span>가비지는 소포로 배달된다</h1>
+<!--CODE file=src/battle.ts lines=172-202 cap="SeatSpec · BattleSeat · Parcel"-->
+<p class="mut">공격이 즉시 도착하면 맞는 쪽이 상쇄할 시간이 없다. 심판이 정한 대상·구멍을 <strong>소포</strong>로 만들어 유예(기본 900ms) 뒤에 배달한다.</p>
+<div class="note"><b>코어의 유예와 다른 것이다</b>코어는 "줄을 못 지운 락"에서만 대기 가비지를 올린다(파트 2). 이건 <em>사건 단위</em> 유예고, 여기 소포는 <em>시간 단위</em> 유예다. 둘은 서로 다른 문제를 푼다 — 하나는 상쇄 기회를, 하나는 반응 시간을 준다.</div>
+
+<!--SLIDE sec=10 t="대전을 세운다"-->
+<h1><span class="no">{{N}}</span>좌석마다 다른 조각 순서</h1>
+<!--CODE file=src/battle.ts lines=203-233 cap="BattleOptions"-->
+<p class="mut">기본값은 좌석마다 <strong>다른</strong> 시드다. 같은 시드를 주면 같은 가중치의 AI 여덟이 처음 몇 수를 완전히 똑같이 둬서, 대전이 아니라 8중 복사가 된다.</p>
+<p class="small mut">온라인 규격(파트 11)은 반대로 시드 하나를 전원이 공유한다 — 사람끼리 겨룰 때 조각 운이 갈리면 실력 겨루기가 안 되기 때문이다. <code>sharedSeed</code> 로 그 조건을 재현해 볼 수 있다.</p>
+
+<!--SLIDE sec=10 t="Battle 의 뼈대"-->
+<h1><span class="no">{{N}}</span>판 여덟과 심판 하나</h1>
+<!--CODE file=src/battle.ts lines=234-267 cap="Battle — 필드와 생성자"-->
+
+<!--SLIDE sec=10 t="공격을 심판에게 넘긴다"-->
+<h1><span class="no">{{N}}</span>이벤트 번호로 락을 감지한다</h1>
+<p class="mut">코어는 조각이 굳을 때마다 <code>stats[EVENT]</code> 를 하나 올린다. 그 번호가 바뀌었을 때만 <code>stats[ATTACK]</code> 을 읽으면, 같은 공격을 두 번 배달하는 사고가 원천적으로 없다.</p>
+<!--CODE file=src/battle.ts lines=268-294 cap="heightOf · drain"-->
+<p class="small mut">높이도 이때 갱신한다. <code>ko</code> 타겟팅이 이 값을 보고 "죽기 직전인 쪽"을 고른다.</p>
+
+<!--SLIDE sec=10 t="사람 좌석과 탈락 감시"-->
+<h1><span class="no">{{N}}</span>키를 누르는 즉시 배달한다</h1>
+<!--CODE file=src/battle.ts lines=295-324 cap="press · release · checkDeaths"-->
+<p class="mut">하드드롭은 키를 누른 그 자리에서 조각을 굳힌다. 다음 <code>update</code> 를 기다렸다가 공격을 배달하면 최대 한 프레임이 밀리고, 대전에서는 그 16ms 가 승패를 가르기도 한다.</p>
+
+<!--SLIDE sec=10 t="한 틱"-->
+<h1><span class="no">{{N}}</span>배달 → 착수 → 탈락 검사</h1>
+<!--CODE file=src/battle.ts lines=325-361 cap="update — 순서가 규칙이다"-->
+<p class="small mut">도착할 때가 된 소포를 <strong>먼저</strong> 배달한다. 착수 뒤에 배달하면 방금 지운 줄로 상쇄할 수 있었던 공격이 한 틱 늦게 도착해, 같은 입력이 다른 결과를 낸다.</p>
+
+<!--SLIDE sec=10 t="끝까지 돌리기"-->
+<h1><span class="no">{{N}}</span>테스트가 쓰는 두 함수</h1>
+<!--CODE file=src/battle.ts lines=362-379 cap="run · summary"-->
+<p class="mut"><code>run</code> 은 화면 없이 경기를 끝까지 돌린다. "8인 대전이 반드시 끝나는가", "보낸 줄 합계와 맞은 줄 합계가 같은가" 같은 성질을 이걸로 확인한다.</p>
+
+<!--SLIDE sec=10 t="아레나 화면"-->
+<h1><span class="no">{{N}}</span>작은 판 여덟 장</h1>
+<p class="mut">8석을 한 화면에 넣으면 판 하나의 칸이 9px 안팎이 된다. 고스트·격자·다음 조각을 전부 뺐다 — 작은 판에서는 정보를 더 넣을수록 아무것도 안 보인다.</p>
+<!--CODE file=src/arena_view.ts lines=1-36 cap="src/arena_view.ts — 머리와 옵션"-->
+
+<!--SLIDE sec=10 t="칸 크기와 배치"-->
+<h1><span class="no">{{N}}</span>2열 · 4열</h1>
+<!--CODE file=src/arena_view.ts lines=37-99 cap="ArenaView — 필드와 생성자"-->
+<p class="small mut">좌석이 둘이면 나란히, 넷이면 2열, 여덟이면 4열이다. 접힘 화면(374px)에서 8석이면 칸이 8px 까지 내려간다.</p>
+
+<!--SLIDE sec=10 t="판을 새로 시작하기"-->
+<h1><span class="no">{{N}}</span>끝나면 몇 초 뒤 다시</h1>
+<!--CODE file=src/arena_view.ts lines=100-147 cap="newBattle · 루프"-->
+<p class="mut">덱을 보는 사람이 "끝난 화면"만 보고 있지 않도록, 경기가 끝나면 4초 뒤 새 판을 연다. 시드는 선형합동으로 이어 뽑아서 매 판 다르되 <strong>재현은 가능하게</strong> 뒀다.</p>
+
+<!--SLIDE sec=10 t="그리기"-->
+<h1><span class="no">{{N}}</span>죽은 판은 흐리게</h1>
+<!--CODE file=src/arena_view.ts lines=148-193 cap="draw · updateInfo"-->
+<p class="small mut">탈락한 좌석은 투명도 0.35 로 칠하고 이름 옆에 등수를 적는다. 여덟 판 중 누가 남았는지를 색만으로 알 수 있어야 한다.</p>
+
+<!--SLIDE sec=10 t="1:1 로 보면 더 잘 보인다"-->
+<h1><span class="no">{{N}}</span>가비지가 오가는 순간</h1>
+<div class="demoWrap" data-demo="duel"></div>
+<p class="demohint">둘만 두면 판이 커져서 줄이 지워지고 가비지가 솟는 순간이 눈에 들어온다. 아래 줄의 "보낸 줄 합계"가 오르는 박자를 보라.</p>
+<!--CODE file=src/demo.ts lines=108-133 cap="arena · duel 데모"-->

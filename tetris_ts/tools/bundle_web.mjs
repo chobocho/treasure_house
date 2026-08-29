@@ -25,7 +25,7 @@ const OUTD = join(ROOT, 'web', 'js');
 // 브라우저에 실을 모듈만 고른다. ws/server 는 node 전용, trace 는 검증 도구다.
 const MODULES = [
   'core.js', 'ai.js', 'ga.js', 'battle.js', 'net/protocol.js', 'net/room.js',
-  'view.js', 'ga_view.js', 'demo.js',   // ← 화면·데모 글루. demo.js 가 window.__mountDemo 를 건다.
+  'view.js', 'ga_view.js', 'arena_view.js', 'demo.js',   // ← 화면·데모 글루. demo.js 가 window.__mountDemo 를 건다.
 ];
 
 const IMPORT_RE = /^import\s[^\n]*?from\s*['"]([^'"]+)['"];?\s*$/gm;
