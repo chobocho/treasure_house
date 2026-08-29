@@ -26,13 +26,14 @@ deps:
 build: deps
 	$(NPX) tsc
 
-## golden — C++ wasm 코어에서 정답지를 뽑는다 (tetris_ai/tetris_ai.wasm 필요)
+## golden — C++ wasm 에서 정답지를 뽑는다 (tetris_ai/tetris_ai.wasm 필요)
 golden: build
 	$(NODE) tools/trace_wasm.mjs
+	$(NODE) tools/trace_ai_wasm.mjs
 
 ## test — 전체 테스트. 골든 파일이 없으면 먼저 만든다.
 test: build
-	@test -f test/golden/core_traces.json || $(MAKE) golden
+	@test -f test/golden/core_traces.json -a -f test/golden/ai_traces.json || $(MAKE) golden
 	$(NODE) --test 'dist/test/*.test.js'
 
 ## train — GA 실학습. weights.json 과 ga_log.json 을 갱신한다.

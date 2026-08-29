@@ -44,7 +44,7 @@ export const SNAP_EVERY = 100;
 
 /** 시나리오 생성용 난수. 게임 RNG 와 **다른** 수열이어야 한다.
  *  같은 수열을 쓰면 "RNG 가 틀렸는데 시나리오도 같이 틀려서 결과가 맞아 보이는" 상황이 생긴다. */
-function scriptRng(seed: number): () => number {
+export function scriptRng(seed: number): () => number {
   let s = (seed ^ 0x5bf03635) >>> 0;
   if (s === 0) s = 0x1234567;
   return () => {
