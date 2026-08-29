@@ -163,68 +163,130 @@ export interface EvolveResult {
 }
 
 /**
+ * 한 세대를 **조각내어** 돌릴 수 있는 진화 루프.
+ *
  * 한 세대에서 벌어지는 일은 네 줄로 요약된다.
  *   1) 전원을 평가한다
  *   2) 상위 elite 명은 그대로 다음 세대로 복사한다 (최고 기록이 사라지지 않게)
  *   3) 나머지는 토너먼트로 부모 둘을 뽑아 교차 + 변이로 만든다
  *   4) 반복
+ *
+ * 문제는 1)이 오래 걸린다는 것이다. 개체 32명을 한 번에 평가하면 몇 초가 걸리고,
+ * 브라우저에서 그러면 화면이 그동안 얼어붙는다. 그래서 "예산(ms)만큼만 평가하고
+ * 돌아오는" 모양으로 짰다. 트레이너(evolve)는 예산 없이 이걸 돌리는 얇은 껍데기다.
+ * 두 경로가 같은 코드를 쓰므로 덱 안의 라이브 학습과 `make train` 의 곡선은
+ * 갈라질 수 없다 — 테스트가 두 로그를 통째로 비교한다.
  */
-export function evolve(opts: EvolveOptions = {}): EvolveResult {
-  const {
-    pop: POP = 32, gen: GEN = 30, elite = 2, k = 3,
-    sigma = 0.2, mutP = 0.2, alpha = 0.5,
-    seeds = [1, 2, 3], maxPieces = 400, rngSeed = 20260827,
-    objective = 'attack', every = 0,
-    ai = new Ai(new Tetris(1)), onGen = null,
-  } = opts;
+export class LiveGa {
+  pop: Genome[];
+  readonly log: GenRecord[] = [];
+  best: Genome | null = null;
+  bestFit = -1;
+  /** 지금 진행 중인 세대 번호 (1부터) */
+  gen = 1;
+  /** 이번 세대에서 평가를 마친 개체 수 */
+  idx = 0;
 
-  const rnd = mulberry32(rngSeed);
-  const fitness = makeFitness(ai, seeds, maxPieces, every);
+  private evals: Fitness[] = [];
+  private readonly rnd: () => number;
+  private readonly fit: FitnessFn;
+  private readonly POP: number;
+  private readonly elite: number;
+  private readonly k: number;
+  private readonly sigma: number;
+  private readonly mutP: number;
+  private readonly alpha: number;
+  private readonly objective: 'attack' | 'lines';
+  private readonly onGen: ((r: GenRecord) => void) | null;
+  private spentMs = 0;
 
-  let popArr: Genome[] = Array.from({ length: POP }, () => randomGenome(rnd));
-  const log: GenRecord[] = [];
-  let best: Genome | null = null;
-  let bestFit = -1;
+  constructor(opts: EvolveOptions = {}) {
+    const {
+      pop: POP = 32, elite = 2, k = 3, sigma = 0.2, mutP = 0.2, alpha = 0.5,
+      seeds = [1, 2, 3], maxPieces = 400, rngSeed = 20260827,
+      objective = 'attack', every = 0,
+      ai = new Ai(new Tetris(1)), onGen = null,
+    } = opts;
+    this.POP = POP; this.elite = elite; this.k = k;
+    this.sigma = sigma; this.mutP = mutP; this.alpha = alpha;
+    this.objective = objective; this.onGen = onGen;
+    this.rnd = mulberry32(rngSeed);
+    this.fit = makeFitness(ai, seeds, maxPieces, every);
+    this.pop = Array.from({ length: POP }, () => randomGenome(this.rnd));
+  }
 
-  for (let g = 1; g <= GEN; g++) {
-    const t0 = Date.now();
-    const evals = popArr.map(fitness);
-    const fits = evals.map((x) => x[objective]);
+  /** 이번 세대의 진행률 (0~1). 세대가 넘어가면 다시 0. */
+  get progress(): number {
+    return this.idx / this.pop.length;
+  }
 
+  /**
+   * 예산 안에서 개체를 평가한다.
+   *
+   * 개체 하나는 **반드시** 평가한다. 예산이 0이라고 아무것도 안 하면 호출자가
+   * 무한히 불러도 진도가 안 나간다 — 프레임마다 부르는 쪽에서 가장 흔한 사고다.
+   *
+   * @returns 이번 호출로 한 세대가 끝났으면 true
+   */
+  step(budgetMs = Infinity, now: () => number = Date.now): boolean {
+    const t0 = now();
+    do {
+      this.evals[this.idx] = this.fit(this.pop[this.idx] as Genome);
+      this.idx++;
+    } while (this.idx < this.pop.length && now() - t0 < budgetMs);
+    this.spentMs += now() - t0;
+    if (this.idx < this.pop.length) return false;
+    this.closeGen();
+    return true;
+  }
+
+  /** 세대 마무리 — 기록을 남기고 다음 개체군을 낳는다. */
+  private closeGen(): void {
+    const fits = this.evals.map((x) => x[this.objective]);
     const order = fits
       .map((f, i) => [f, i] as [number, number])
       .sort((a, b) => b[0] - a[0]);
     const gBestI = (order[0] as [number, number])[1];
-    if ((fits[gBestI] as number) > bestFit) {
-      bestFit = fits[gBestI] as number;
-      best = (popArr[gBestI] as Genome).slice();
+    if ((fits[gBestI] as number) > this.bestFit) {
+      this.bestFit = fits[gBestI] as number;
+      this.best = (this.pop[gBestI] as Genome).slice();
     }
 
     const mean = fits.reduce((s, x) => s + x, 0) / fits.length;
     const rec: GenRecord = {
-      gen: g,
+      gen: this.gen,
       best: +(fits[gBestI] as number).toFixed(1),
       mean: +mean.toFixed(1),
       worst: +(order[order.length - 1] as [number, number])[0].toFixed(1),
-      lines: +(evals[gBestI] as Fitness).lines.toFixed(1),
-      attack: +(evals[gBestI] as Fitness).attack.toFixed(1),
-      placed: +(evals[gBestI] as Fitness).placed.toFixed(0),
-      ms: 0,
-      weights: (popArr[gBestI] as Genome).map((v) => +v.toFixed(4)),
+      lines: +(this.evals[gBestI] as Fitness).lines.toFixed(1),
+      attack: +(this.evals[gBestI] as Fitness).attack.toFixed(1),
+      placed: +(this.evals[gBestI] as Fitness).placed.toFixed(0),
+      ms: this.spentMs,
+      weights: (this.pop[gBestI] as Genome).map((v) => +v.toFixed(4)),
     };
 
-    // 다음 세대 만들기
-    const next: Genome[] = order.slice(0, elite).map(([, i]) => (popArr[i] as Genome).slice());
-    while (next.length < POP) {
-      const a = tournament(popArr, fits, k, rnd);
-      const b = tournament(popArr, fits, k, rnd);
-      next.push(mutate(crossover(a, b, rnd, alpha), rnd, sigma, mutP));
+    // 다음 세대 만들기 — 난수 소비 순서가 곧 재현성이다. 엘리트 복사에는 난수를
+    // 쓰지 않고, 자식 하나마다 토너먼트 2회 + 교차 + 변이 순서로만 쓴다.
+    const next: Genome[] = order.slice(0, this.elite).map(([, i]) => (this.pop[i] as Genome).slice());
+    while (next.length < this.POP) {
+      const a = tournament(this.pop, fits, this.k, this.rnd);
+      const b = tournament(this.pop, fits, this.k, this.rnd);
+      next.push(mutate(crossover(a, b, this.rnd, this.alpha), this.rnd, this.sigma, this.mutP));
     }
-    popArr = next;
-
-    rec.ms = Date.now() - t0;
-    log.push(rec);
-    if (onGen) onGen(rec);
+    this.pop = next;
+    this.evals = [];
+    this.idx = 0;
+    this.spentMs = 0;
+    this.gen++;
+    this.log.push(rec);
+    if (this.onGen) this.onGen(rec);
   }
-  return { best: best ?? randomGenome(rnd), bestFit, log };
+}
+
+/** 트레이너용 — 끝까지 돌린다. 브라우저와 같은 코드를 쓰되 예산을 두지 않을 뿐이다. */
+export function evolve(opts: EvolveOptions = {}): EvolveResult {
+  const GEN = opts.gen ?? 30;
+  const ga = new LiveGa(opts);
+  while (ga.log.length < GEN) ga.step();
+  return { best: ga.best ?? (ga.pop[0] as Genome), bestFit: ga.bestFit, log: ga.log };
 }

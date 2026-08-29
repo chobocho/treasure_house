@@ -10,6 +10,7 @@
 import { Tetris } from './core.js';
 import { Ai, DEFAULT_WEIGHTS, FEATURE_NAMES, F } from './ai.js';
 import { TetrisView, fillRows, type ViewOptions } from './view.js';
+import { GaView } from './ga_view.js';
 
 export interface Demo {
   start: () => void;
@@ -98,8 +99,18 @@ interface PanelEl {
   appendChild(c: unknown): unknown;
 }
 
+/** 브라우저 라이브 학습 — 트레이너와 같은 LiveGa 를 프레임에 나눠 돌린다. */
+function ga(host: HTMLElement, opts: ViewOptions): Demo {
+  return new GaView(host, {
+    ...(opts.raf ? { raf: opts.raf } : {}),
+    ...(opts.caf ? { caf: opts.caf } : {}),
+    ...(opts.now ? { now: opts.now } : {}),
+    ...(opts.maxWidth ? { maxWidth: opts.maxWidth } : {}),
+  });
+}
+
 export const DEMOS: Record<string, (host: HTMLElement, opts: ViewOptions) => Demo> = {
-  play, bot, garbage, tspin, feat,
+  play, bot, garbage, tspin, feat, ga,
 };
 
 /**

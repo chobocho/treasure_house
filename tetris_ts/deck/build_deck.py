@@ -39,7 +39,7 @@ EXTLANG = {'ts': 'ts', 'mts': 'ts', 'tsx': 'ts', 'js': 'js', 'mjs': 'js', 'json'
 # 아직 없으면 건너뛴다 — 뼈대 단계에서도 덱은 열려야 하기 때문이다.
 DEMO_JS = ['web/js/core.js', 'web/js/ai.js', 'web/js/ga.js', 'web/js/battle.js',
            'web/js/protocol.js', 'web/js/room.js',
-           'web/js/view.js', 'web/js/demo.js']   # 전부 make web 생성물 (원본은 src/*.ts)
+           'web/js/view.js', 'web/js/ga_view.js', 'web/js/demo.js']   # 전부 make web 생성물 (원본은 src/*.ts)
 
 _files, _cover, _partial = {}, {}, set()
 
@@ -126,6 +126,56 @@ def run_block(a):
             '<pre class="code txt"><code>%s</code></pre></div>'
             % (a.get('cap', name), hi - lo + 1, _h.escape(body)))
 
+# <!--CHART file=ga_log.json x=gen y=best,mean cap="…"--> → 실측 로그를 그대로 그린 SVG.
+# 차트도 "지어내지 않는다"는 규칙을 따른다. 눈금과 점이 전부 파일에서 온다.
+CHART_RE = re.compile(r'<!--CHART\s+(.*?)-->', re.S)
+SERIES_COLOR = {'best': 'var(--acc)', 'mean': 'var(--acc2)', 'worst': 'var(--mut)'}
+SERIES_KO = {'best': '최고', 'mean': '평균', 'worst': '최저'}
+
+def chart_block(a):
+    """세로 눈금은 로그의 최대값에서 뽑는다 — 보기 좋은 수로 반올림하면 그 순간
+    화면의 수와 파일의 수가 달라진다. 축에 적히는 값이 곧 실측값이어야 한다."""
+    name = a['file']
+    _partial.add(name)  # 데이터 파일은 커버리지 대상이 아니다
+    rows = json.load(io.open(os.path.join(SRC, name), encoding='utf-8'))
+    xk = a.get('x', 'gen')
+    keys = a.get('y', 'best,mean').split(',')
+    W_, H_, PAD = 640, 260, 34
+    xs = [float(r[xk]) for r in rows]
+    ys = [float(r[k]) for k in keys for r in rows]
+    x0, x1 = min(xs), max(xs)
+    y1 = max(ys)
+    sx = lambda v: PAD + (v - x0) / ((x1 - x0) or 1) * (W_ - PAD * 2)
+    sy = lambda v: H_ - PAD - (v / (y1 or 1)) * (H_ - PAD * 2)
+    out = ['<figure class="chart" style="margin:.4em 0">',
+           '<svg viewBox="0 0 %d %d" width="100%%" role="img" aria-label="%s" '
+           'style="max-width:100%%;height:auto">' % (W_, H_, a.get('cap', '차트'))]
+    # 가로 눈금선 넷 + 값
+    for i in range(5):
+        v = y1 * i / 4
+        y = sy(v)
+        out.append('<line x1="%d" y1="%.1f" x2="%d" y2="%.1f" stroke="var(--line2)" stroke-width="1"/>'
+                   % (PAD, y, W_ - PAD, y))
+        out.append('<text x="%d" y="%.1f" fill="var(--mut)" font-size="11" text-anchor="end">%s</text>'
+                   % (PAD - 4, y + 4, ('%g' % round(v, 1))))
+    for k in keys:
+        pts = ' '.join('%.1f,%.1f' % (sx(float(r[xk])), sy(float(r[k]))) for r in rows)
+        out.append('<polyline data-series="%s" points="%s" fill="none" stroke="%s" stroke-width="2"/>'
+                   % (k, pts, SERIES_COLOR.get(k, 'var(--acc)')))
+    # 가로축 양 끝과 범례
+    out.append('<text x="%d" y="%d" fill="var(--mut)" font-size="11">%s</text>' % (PAD, H_ - 8, '%g' % x0))
+    out.append('<text x="%d" y="%d" fill="var(--mut)" font-size="11" text-anchor="end">%s</text>'
+               % (W_ - PAD, H_ - 8, '%g' % x1))
+    for i, k in enumerate(keys):
+        out.append('<rect x="%d" y="10" width="14" height="3" fill="%s"/>' % (PAD + i * 78, SERIES_COLOR.get(k, 'var(--acc)')))
+        out.append('<text x="%d" y="15" fill="var(--mut)" font-size="11">%s</text>'
+                   % (PAD + i * 78 + 18, SERIES_KO.get(k, k)))
+    out.append('</svg>')
+    if a.get('cap'):
+        out.append('<figcaption class="small mut" style="text-align:center">%s</figcaption>' % a['cap'])
+    out.append('</figure>')
+    return ''.join(out)
+
 DIR_RE = re.compile(r'<!--CODE\s+(.*?)-->', re.S)
 def parse_attrs(s):
     out = {}
@@ -142,6 +192,7 @@ def expand(text):
             _partial.add(f)
         return code_block(f, lo, hi, a.get('cap'), lang_of(f, a))
     text = RUN_RE.sub(lambda m: run_block(parse_attrs(m.group(1))), text)
+    text = CHART_RE.sub(lambda m: chart_block(parse_attrs(m.group(1))), text)
     text = BOARD_RE.sub(lambda m: board_block(parse_attrs(m.group(1))), text)
     return DIR_RE.sub(sub, text)
 

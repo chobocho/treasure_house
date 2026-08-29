@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { Tetris, ACT, ST } from '../src/core.js';
 import { TetrisView, KEYMAP } from '../src/view.js';
 import { FEATURE_NAMES } from '../src/ai.js';
+import { GaView } from '../src/ga_view.js';
 import { mountDemo, DEMOS } from '../src/demo.js';
 
 // ── DOM 스텁 ──────────────────────────────────────────────────────────
@@ -239,5 +240,51 @@ test('feat 데모는 특징 여덟 개를 이름과 값으로 보여 준다', as
     assert.ok(txt.includes(name), `${name} 이 화면에 없다`);
   }
   assert.ok(/점수/.test(txt), '합계 점수를 안 보여 준다');
+  v.stop();
+});
+
+// ── 브라우저 라이브 학습 ──────────────────────────────────────────────
+test('라이브 학습 뷰는 프레임마다 한 걸음씩 나아간다', () => {
+  const doc = fakeDoc();
+  const host = el('div', doc);
+  const c = clock();
+  const v = new GaView(host as unknown as HTMLElement, {
+    raf: c.raf, caf: c.caf, now: c.now, maxWidth: 400,
+    ga: { pop: 4, maxPieces: 40, seeds: [1], rngSeed: 7 },
+  });
+  v.start();
+  const before = v.ga.idx + v.ga.log.length * 100;
+  c.tick(16);
+  const after = v.ga.idx + v.ga.log.length * 100;
+  assert.ok(after > before, `한 프레임에 적어도 한 개체는 평가해야 한다 (${before} → ${after})`);
+  v.stop();
+  assert.equal(c.pending, 0, '멈췄는데 프레임이 예약돼 있다');
+});
+
+test('라이브 학습 뷰는 세대가 끝나면 곡선을 그린다', () => {
+  const doc = fakeDoc();
+  const host = el('div', doc);
+  const c = clock();
+  const v = new GaView(host as unknown as HTMLElement, {
+    raf: c.raf, caf: c.caf, now: c.now, maxWidth: 400,
+    ga: { pop: 3, maxPieces: 30, seeds: [1], rngSeed: 11 },
+  });
+  v.start();
+  for (let i = 0; i < 20 && v.ga.log.length < 2; i++) c.tick(16);
+  assert.ok(v.ga.log.length >= 2, `세대가 진행돼야 한다 (${v.ga.log.length})`);
+  const ctx = (v.canvas as unknown as { __ctx: Rec }).__ctx;
+  assert.ok(ctx.calls.some((x) => x.fn === 'lineTo'), '곡선을 안 그렸다');
+  assert.ok(textOf(host).includes('세대'), '세대 표시가 없다');
+  v.stop();
+});
+
+test('ga 데모가 레지스트리에 있다', async () => {
+  const doc = fakeDoc();
+  const host = el('div', doc);
+  (host.dataset as Record<string, string>).demo = 'ga';
+  const c = clock();
+  const v = await mountDemo(host as unknown as HTMLElement, { raf: c.raf, caf: c.caf, now: c.now });
+  assert.ok(DEMOS['ga'], 'ga 데모가 등록되지 않았다');
+  assert.equal(typeof v.start, 'function');
   v.stop();
 });
