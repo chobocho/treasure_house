@@ -14,6 +14,7 @@ import { Tetris, ACT, ST } from '../src/core.js';
 import { TetrisView, KEYMAP } from '../src/view.js';
 import { FEATURE_NAMES } from '../src/ai.js';
 import { GaView } from '../src/ga_view.js';
+import { ArenaView } from '../src/arena_view.js';
 import { mountDemo, DEMOS } from '../src/demo.js';
 
 // ── DOM 스텁 ──────────────────────────────────────────────────────────
@@ -287,4 +288,65 @@ test('ga 데모가 레지스트리에 있다', async () => {
   assert.ok(DEMOS['ga'], 'ga 데모가 등록되지 않았다');
   assert.equal(typeof v.start, 'function');
   v.stop();
+});
+
+// ── 로컬 아레나 ───────────────────────────────────────────────────────
+function arena(seats: number, opts: Record<string, unknown> = {}): {
+  host: Record<string, unknown>; view: ArenaView; c: ReturnType<typeof clock>;
+} {
+  const doc = fakeDoc();
+  const host = el('div', doc);
+  const c = clock();
+  const view = new ArenaView(host as unknown as HTMLElement, {
+    seats, maxWidth: 400, restart: false, intervalMs: 20, seed: 4242,
+    raf: c.raf, caf: c.caf, now: c.now, ...opts,
+  });
+  return { host, view, c };
+}
+
+test('아레나 뷰는 좌석 수만큼 판을 그린다', () => {
+  for (const n of [2, 8]) {
+    const { view } = arena(n);
+    assert.equal(view.battle.seats.length, n, `${n}석이 앉아야 한다`);
+    const ctx = (view.canvas as unknown as { __ctx: Rec }).__ctx;
+    // 배경 1 + 좌석마다 판 배경 1 = 최소 n+1 번은 칠한다
+    assert.ok(ctx.calls.filter((x) => x.fn === 'fillRect').length >= n + 1);
+  }
+});
+
+test('아레나는 프레임마다 대전을 진행한다', () => {
+  const { view, c } = arena(4);
+  view.start();
+  const count = (): number => view.battle.seats
+    .reduce((a: number, x) => a + (x.game.stats[ST.PIECES] as number), 0);
+  const before = count();
+  for (let i = 0; i < 20; i++) c.tick(100);
+  const after = count();
+  assert.ok(after > before, `조각이 놓여야 한다 (${before} → ${after})`);
+  view.stop();
+});
+
+test('경기가 끝나면 순위를 보여 주고 멈춘다', () => {
+  const { host, view, c } = arena(2);
+  view.start();
+  for (let i = 0; i < 4000 && !view.battle.over; i++) c.tick(100);
+  assert.ok(view.battle.over, `경기가 끝나야 한다 (${view.battle.now}ms 진행)`);
+  const txt = textOf(host);
+  assert.ok(/등/.test(txt), `순위 표시가 없다: ${txt.slice(0, 80)}`);
+  const pending = c.pending;
+  c.tick(100);
+  assert.equal(view.battle.now, view.battle.now, '끝난 뒤에는 시간이 더 흐르지 않는다');
+  assert.ok(pending <= 1);
+});
+
+test('arena·duel 데모가 등록돼 있다', async () => {
+  for (const name of ['arena', 'duel']) {
+    const doc = fakeDoc();
+    const host = el('div', doc);
+    (host.dataset as Record<string, string>).demo = name;
+    const c = clock();
+    const v = await mountDemo(host as unknown as HTMLElement, { raf: c.raf, caf: c.caf, now: c.now });
+    assert.ok(DEMOS[name], `${name} 데모가 없다`);
+    v.stop();
+  }
 });

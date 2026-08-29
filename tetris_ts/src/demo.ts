@@ -11,6 +11,7 @@ import { Tetris } from './core.js';
 import { Ai, DEFAULT_WEIGHTS, FEATURE_NAMES, F } from './ai.js';
 import { TetrisView, fillRows, type ViewOptions } from './view.js';
 import { GaView } from './ga_view.js';
+import { ArenaView } from './arena_view.js';
 
 export interface Demo {
   start: () => void;
@@ -101,16 +102,37 @@ interface PanelEl {
 
 /** 브라우저 라이브 학습 — 트레이너와 같은 LiveGa 를 프레임에 나눠 돌린다. */
 function ga(host: HTMLElement, opts: ViewOptions): Demo {
-  return new GaView(host, {
-    ...(opts.raf ? { raf: opts.raf } : {}),
-    ...(opts.caf ? { caf: opts.caf } : {}),
-    ...(opts.now ? { now: opts.now } : {}),
-    ...(opts.maxWidth ? { maxWidth: opts.maxWidth } : {}),
-  });
+  return new GaView(host, pick(opts));
+}
+
+/** 로컬 대전 — 좌석 여덟이 서로 때린다. 규칙은 전부 battle.ts 안에 있다. */
+function arena(host: HTMLElement, opts: ViewOptions): Demo {
+  return new ArenaView(host, { ...pick(opts), seats: 8, target: 'random', intervalMs: 220 });
+}
+
+/** 1:1 — 같은 코드를 좌석 둘로. 가비지가 오가는 걸 보기에는 이쪽이 낫다. */
+function duel(host: HTMLElement, opts: ViewOptions): Demo {
+  return new ArenaView(host, { ...pick(opts), seats: 2, target: 'random', intervalMs: 180 });
+}
+
+/**
+ * 주입 옵션만 골라 넘긴다.
+ *
+ * `exactOptionalPropertyTypes` 가 켜져 있으면 `{ raf: undefined }` 와 "키가 아예 없음"이
+ * 다른 타입이다. 실수로 undefined 를 흘려보내면 기본값(브라우저 rAF)이 안 잡힌다.
+ */
+function pick(o: ViewOptions): { raf?: (cb: (t: number) => void) => number;
+  caf?: (h: number) => void; now?: () => number; maxWidth?: number } {
+  return {
+    ...(o.raf ? { raf: o.raf } : {}),
+    ...(o.caf ? { caf: o.caf } : {}),
+    ...(o.now ? { now: o.now } : {}),
+    ...(o.maxWidth ? { maxWidth: o.maxWidth } : {}),
+  };
 }
 
 export const DEMOS: Record<string, (host: HTMLElement, opts: ViewOptions) => Demo> = {
-  play, bot, garbage, tspin, feat, ga,
+  play, bot, garbage, tspin, feat, ga, arena, duel,
 };
 
 /**

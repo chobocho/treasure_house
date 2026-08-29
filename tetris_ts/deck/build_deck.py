@@ -39,7 +39,8 @@ EXTLANG = {'ts': 'ts', 'mts': 'ts', 'tsx': 'ts', 'js': 'js', 'mjs': 'js', 'json'
 # 아직 없으면 건너뛴다 — 뼈대 단계에서도 덱은 열려야 하기 때문이다.
 DEMO_JS = ['web/js/core.js', 'web/js/ai.js', 'web/js/ga.js', 'web/js/battle.js',
            'web/js/protocol.js', 'web/js/room.js',
-           'web/js/view.js', 'web/js/ga_view.js', 'web/js/demo.js']   # 전부 make web 생성물 (원본은 src/*.ts)
+           'web/js/view.js', 'web/js/ga_view.js',
+           'web/js/arena_view.js', 'web/js/demo.js']   # 전부 make web 생성물 (원본은 src/*.ts)
 
 _files, _cover, _partial = {}, {}, set()
 
