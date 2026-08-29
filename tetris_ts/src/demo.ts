@@ -12,6 +12,7 @@ import { Ai, DEFAULT_WEIGHTS, FEATURE_NAMES, F } from './ai.js';
 import { TetrisView, fillRows, type ViewOptions } from './view.js';
 import { GaView } from './ga_view.js';
 import { ArenaView } from './arena_view.js';
+import { NetArenaView } from './net_view.js';
 
 export interface Demo {
   start: () => void;
@@ -131,8 +132,16 @@ function pick(o: ViewOptions): { raf?: (cb: (t: number) => void) => number;
   };
 }
 
+/**
+ * 프로토콜을 그대로 지나가는 8인 대전 — PC 4대가 페이지 안에서 허브에 붙는다.
+ * 로컬 아레나(arena)와 화면은 비슷하지만, 이쪽은 좌석·공격·탈락이 전부 메시지로 오간다.
+ */
+function net(host: HTMLElement, opts: ViewOptions): Demo {
+  return new NetArenaView(host, { ...pick(opts), pcs: 4, perPc: 2, intervalMs: 220 });
+}
+
 export const DEMOS: Record<string, (host: HTMLElement, opts: ViewOptions) => Demo> = {
-  play, bot, garbage, tspin, feat, ga, arena, duel,
+  play, bot, garbage, tspin, feat, ga, arena, duel, net,
 };
 
 /**
@@ -149,7 +158,7 @@ export function mountDemo(host: HTMLElement, opts: ViewOptions = {}): Promise<De
 }
 
 // 브라우저에서만 전역에 건다. 노드에서 임포트할 때는 아무 일도 일어나지 않는다.
-const w = globalThis as unknown as { __mountDemo?: (h: HTMLElement) => Promise<Demo>; document?: unknown };
-if (w.document) {
-  w.__mountDemo = (host: HTMLElement): Promise<Demo> => mountDemo(host);
+const g = globalThis as unknown as { __mountDemo?: (h: HTMLElement) => Promise<Demo>; document?: unknown };
+if (g.document) {
+  g.__mountDemo = (host: HTMLElement): Promise<Demo> => mountDemo(host);
 }
