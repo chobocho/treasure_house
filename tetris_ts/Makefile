@@ -54,8 +54,8 @@ match: build
 web: build
 	$(NODE) tools/bundle_web.mjs
 
-## deck — 슬라이드 덱 생성 (덱에 싣기 전에 소스가 컴파일되는지부터 확인한다)
-deck: build
+## deck — 슬라이드 덱 생성 (덱에 싣기 전에 소스가 컴파일되는지부터 확인하고, 데모 번들도 새로 뽑는다)
+deck: web
 	python3 deck/build_deck.py
 
 ## deck-check — 만든 덱을 진짜 브라우저로 열어 폴더블 두 폭(374/768px)에서 점검
