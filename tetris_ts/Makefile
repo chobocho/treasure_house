@@ -14,7 +14,7 @@ POP     ?= 32
 GEN     ?= 50
 DECK    ?= ../TypeScript_테트리스_AI_8인_대전.html
 
-.PHONY: all deps build golden test train run match web deck deck-check clean distclean
+.PHONY: all deps build golden test train run match web deck deck-check page-check clean distclean
 
 all: build
 
@@ -61,6 +61,10 @@ deck: web
 ## deck-check — 만든 덱을 진짜 브라우저로 열어 폴더블 두 폭(374/768px)에서 점검
 deck-check: deck
 	$(NODE) tools/check_deck.mjs
+
+## page-check — 진짜 서버를 띄우고 진짜 브라우저로 붙어 한 판 돌려 본다
+page-check: web
+	$(NODE) tools/check_page.mjs
 
 clean:
 	rm -rf dist

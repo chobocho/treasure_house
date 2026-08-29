@@ -15,6 +15,7 @@ import { TetrisView, KEYMAP } from '../src/view.js';
 import { FEATURE_NAMES } from '../src/ai.js';
 import { GaView } from '../src/ga_view.js';
 import { ArenaView } from '../src/arena_view.js';
+import { NetArenaView } from '../src/net_view.js';
 import { mountDemo, DEMOS } from '../src/demo.js';
 
 // ── DOM 스텁 ──────────────────────────────────────────────────────────
@@ -349,4 +350,44 @@ test('arena·duel 데모가 등록돼 있다', async () => {
     assert.ok(DEMOS[name], `${name} 데모가 없다`);
     v.stop();
   }
+});
+
+// ── 네트워크 아레나(루프백) ───────────────────────────────────────────
+test('루프백 아레나는 8석을 세우고 진행한다', async () => {
+  const doc = fakeDoc();
+  const host = el('div', doc);
+  const c = clock();
+  const v = new NetArenaView(host as unknown as HTMLElement, {
+    raf: c.raf, caf: c.caf, now: c.now, maxWidth: 400,
+    pcs: 4, perPc: 2, intervalMs: 20, seed: 777,
+  });
+  v.start();
+  await new Promise((r) => { setTimeout(r, 0); }); // 루프백 접속(다음 틱)
+  await new Promise((r) => { setTimeout(r, 0); });
+  for (let i = 0; i < 40; i++) c.tick(50);
+  assert.equal(v.peers.length, 4, 'PC 4대가 붙어야 한다');
+  const seats = v.peers.reduce((a, p) => a + p.m.seats.length, 0);
+  assert.equal(seats, 8, `좌석 8석이 서야 한다 (${seats})`);
+  const placed = v.peers.reduce(
+    (a, p) => a + p.m.seats.reduce((b, s) => b + (s.game.stats[ST.PIECES] as number), 0), 0);
+  assert.ok(placed > 8, `조각이 놓여야 한다 (${placed})`);
+  v.stop();
+});
+
+test('남의 판은 스냅샷을 풀어서 그린다', async () => {
+  const doc = fakeDoc();
+  const host = el('div', doc);
+  const c = clock();
+  const v = new NetArenaView(host as unknown as HTMLElement, {
+    raf: c.raf, caf: c.caf, now: c.now, maxWidth: 400,
+    pcs: 2, perPc: 1, intervalMs: 20, seed: 31,
+  });
+  v.start();
+  await new Promise((r) => { setTimeout(r, 0); });
+  await new Promise((r) => { setTimeout(r, 0); });
+  for (let i = 0; i < 60; i++) c.tick(50);
+  // 1번 PC 시점에서 좌석 1(남의 좌석)은 스냅샷으로만 채워진다.
+  const other = v.cellsOf(1);
+  assert.ok(other.some((x) => x !== 0), '남의 판이 비어 있다 — 스냅샷이 안 풀렸다');
+  v.stop();
 });

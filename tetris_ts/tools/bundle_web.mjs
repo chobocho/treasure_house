@@ -24,8 +24,11 @@ const OUTD = join(ROOT, 'web', 'js');
 
 // 브라우저에 실을 모듈만 고른다. ws/server 는 node 전용, trace 는 검증 도구다.
 const MODULES = [
-  'core.js', 'ai.js', 'ga.js', 'battle.js', 'net/protocol.js', 'net/room.js',
-  'view.js', 'ga_view.js', 'arena_view.js', 'demo.js',   // ← 화면·데모 글루. demo.js 가 window.__mountDemo 를 건다.
+  'core.js', 'ai.js', 'ga.js', 'battle.js',
+  'net/protocol.js', 'net/room.js', 'net/hub.js',        // ← 서버가 쓰는 그 룸·허브
+  'net/client.js', 'net/loopback.js', 'net/match.js',    // ← 브라우저 쪽 네트워크 층
+  'view.js', 'ga_view.js', 'arena_view.js', 'net_view.js',
+  'app.js', 'demo.js',   // ← app.js 는 진짜 페이지, demo.js 는 덱 데모(window.__mountDemo)
 ];
 
 const IMPORT_RE = /^import\s[^\n]*?from\s*['"]([^'"]+)['"];?\s*$/gm;
@@ -50,6 +53,14 @@ function strip(src, file) {
 }
 
 mkdirSync(OUTD, { recursive: true });
+
+// 페이지가 난이도 프리셋을 알아야 한다. weights.json 을 전역 하나로 감싸 둔다.
+// (덱은 build_deck.py 가 같은 값을 직접 인라인한다 — 파일을 못 부르니까.)
+const wpath = join(ROOT, 'weights.json');
+const levels = JSON.parse(readFileSync(wpath, 'utf8')).levels ?? {};
+writeFileSync(join(OUTD, 'weights.js'),
+  `// 생성물 — weights.json 의 levels.\nconst TS_WEIGHTS = ${JSON.stringify(levels)};\n`
+  + 'globalThis.TS_WEIGHTS = TS_WEIGHTS;\n', 'utf8');
 const seen = new Map();
 const made = [];
 for (const rel of MODULES) {

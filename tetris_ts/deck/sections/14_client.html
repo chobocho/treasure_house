@@ -1,9 +1,180 @@
-<!--SLIDE sec=14 t="클라이언트·로비·아레나"-->
-<h1><span class="no">{{N}}</span>클라이언트·로비·아레나</h1>
-<p class="mut">네트 클라이언트 · 좌석 UI · 덱 안의 8인 라이브 아레나</p>
-<ul>
-  <li>로컬과 네트워크가 같은 코드 경로</li>
-  <li>로비와 방 코드</li>
-  <li>관전 화면</li>
-</ul>
-<div class="note"><b>이 파트는 아직 뼈대다</b>예정 ~50장. 슬라이드는 <code>deck/sections/14_client.html</code> 에서 채운다 — 완성된 덱 본문을 직접 고치면 커버리지 보증이 깨진다.</div>
+<!--SLIDE sec=14 t="클라이언트·로비·아레나 — 진짜로 붙는다"-->
+<h1><span class="no">{{N}}</span>이제 소켓을 붙인다</h1>
+<p class="mut">규칙(파트 10)도, 프로토콜(11)도, 웹소켓(12)도, 룸(13)도 다 있다. 남은 건 이것들을 이어 붙여 <strong>실제로 붙는 것</strong>이다 — 서버 한 대, 페이지 하나, 그리고 이 문서 안에서 도는 8인 대전.</p>
+<div class="demoWrap" data-demo="net"></div>
+<p class="demohint">PC 네 대가 이 페이지 안에서 허브에 붙어 좌석을 잡고 대전한다. <span style="color:#22d3ee">하늘색 이름</span>이 1번 PC 의 좌석이고, 나머지 여섯은 <strong>초당 10회 올라오는 스냅샷을 풀어서</strong> 그린 남의 화면이다.</p>
+
+<!--SLIDE sec=14 t="층을 다시 정리하면"-->
+<h1><span class="no">{{N}}</span>아래로 갈수록 순수하다</h1>
+<pre class="code txt"><code>  브라우저 페이지 (app.ts)          덱 데모 (net_view.ts)      봇 (bot_client.ts)
+        │                                  │                        │
+        └──────────── NetClient (client.ts) ────────────────────────┘
+                             │ Transport
+             ┌───────────────┴───────────────┐
+        WebSocket                       LoopbackHub
+             │                               │
+        server.ts (소켓·파일)            같은 페이지 안
+             └───────────────┬───────────────┘
+                          Hub (hub.ts)      ← 방 코드·pid·라우팅
+                             │
+                          Room (room.ts)    ← 게임 규칙, 순수 상태 기계</code></pre>
+<p class="mut">전송 계층만 바꿔 끼우면 같은 코드가 세 곳에서 돈다. 덱 데모가 "그럴듯한 흉내"가 아닌 이유이자, 테스트가 소켓 없이 대전을 끝까지 돌릴 수 있는 이유다.</p>
+
+<!--SLIDE sec=14 t="허브"-->
+<h1><span class="no">{{N}}</span>방 코드와 pid</h1>
+<p class="mut">허브는 소켓을 모른다. <code>handle()</code> 이 <strong>받는 사람이 확정된</strong> 메시지 목록을 돌려주므로 바깥 층은 그대로 write 하기만 하면 된다.</p>
+<!--CODE file=src/net/hub.ts lines=1-32 cap="src/net/hub.ts — 방 코드 글자와 피어"-->
+<div class="note"><b>0·O·1·I·L 을 뺀 이유</b>방 코드는 사람이 전화로 불러 줘야 한다. 헷갈리는 글자를 빼면 31글자가 남고, 네 자리로 92만 가지다 — 동시에 열려 있을 방 수를 생각하면 충분하다.</div>
+
+<!--SLIDE sec=14 t="난수와 코드 발급"-->
+<h1><span class="no">{{N}}</span>충돌하면 다시 뽑는다</h1>
+<!--CODE file=src/net/hub.ts lines=33-96 cap="Hub — 난수 · 코드 · 접속 · 라우팅"-->
+<p class="small mut"><code>fan</code> 이 <code>to: 0</code>(방 전체)을 실제 pid 목록으로 풀어 준다. 이걸 아래층에서 하면 소켓 층이 방 구성을 알아야 하고, 그러면 층 나눔이 무너진다.</p>
+
+<!--SLIDE sec=14 t="hello 부터 bye 까지"-->
+<h1><span class="no">{{N}}</span>허브가 직접 답하는 것</h1>
+<!--CODE file=src/net/hub.ts lines=97-153 cap="handle · disconnect"-->
+<p class="mut">허브가 직접 처리하는 건 <code>hello</code>·<code>create</code>·<code>join</code>·<code>ping</code> 넷뿐이다. 나머지는 전부 방으로 넘긴다 — 방에 안 들어간 사람이 좌석을 요구하면 <code>nosuch</code> 로 막는다.</p>
+<div class="tip"><b>빈 방은 치운다</b>마지막 사람이 나가면 방을 지운다. 안 그러면 방 코드가 영원히 쌓여 재사용도 안 되고 메모리도 샌다.</div>
+
+<!--SLIDE sec=14 t="서버 — 소켓과 파일"-->
+<h1><span class="no">{{N}}</span>이 층만 더럽다</h1>
+<p class="mut">시계·소켓·파일을 만지는 유일한 층이다. 그 아래는 전부 순수하므로, 여기서 버그가 나면 <strong>여기서만</strong> 난다.</p>
+<!--CODE file=src/net/server.ts lines=1-50 cap="src/net/server.ts — 정적 파일과 경로 안전"-->
+<div class="warn"><b><code>..</code> 를 막지 않으면 파일 서버가 아니라 파일 유출기다</b><code>safeJoin</code> 이 정규화 뒤 루트 밖을 가리키면 거절한다. 널 바이트도 막는다 — 옛 라이브러리들이 이걸로 뚫렸다. 테스트가 <code>../../etc/passwd</code> 류를 직접 넣어 본다.</div>
+
+<!--SLIDE sec=14 t="업그레이드와 배달"-->
+<h1><span class="no">{{N}}</span>101 뒤로는 메시지만 오간다</h1>
+<!--CODE file=src/net/server.ts lines=51-110 cap="createServer — 업그레이드와 라우팅"-->
+<p class="small mut">연결 하나가 pid 하나다. 소켓이 끊기면 <code>hub.disconnect</code> 를 부르고, 그 결과로 나온 메시지(좌석 비움·탈락·종료)를 남은 사람들에게 배달한다.</p>
+
+<!--SLIDE sec=14 t="띄우기"-->
+<h1><span class="no">{{N}}</span>make run</h1>
+<!--CODE file=src/net/server.ts lines=111-151 cap="listen · close · CLI"-->
+<pre class="code txt"><code>$ make run
+node dist/src/net/server.js --port 8787
+서버 시작 — http://localhost:8787  (web/ + /ws)</code></pre>
+<p class="small mut">정적 파일 루트는 <code>web/</code> 이다. <code>make web</code> 이 만든 번들과 <code>index.html</code> 이 그 안에 있다.</p>
+
+<!--SLIDE sec=14 t="클라이언트"-->
+<h1><span class="no">{{N}}</span>전송 계층은 밖에서 넣는다</h1>
+<p class="mut">이 파일은 자기가 소켓 위에 있는지 루프백 위에 있는지 <strong>구분하지 못한다</strong>. 그래서 "덱에서 도는 것과 서버에 붙는 것이 같은 코드"라는 말이 성립한다.</p>
+<!--CODE file=src/net/client.ts lines=1-56 cap="src/net/client.ts — Transport 와 방 상태"-->
+
+<!--SLIDE sec=14 t="상태 먼저, 사건 나중"-->
+<h1><span class="no">{{N}}</span>구독자가 볼 때 이미 최신이어야 한다</h1>
+<!--CODE file=src/net/client.ts lines=57-105 cap="recv · 보내는 쪽 API"-->
+<p class="mut">메시지가 오면 방 상태를 먼저 갱신하고 그다음에 사건을 낸다. 순서를 바꾸면 콜백 안에서 <code>client.seats</code> 를 읽었을 때 <em>한 박자 전</em> 목록이 나온다 — 찾기 어려운 종류의 버그다.</p>
+<p class="small mut">깨진 JSON 은 조용히 버린다. 우리가 고칠 수 있는 게 없고, 던져 봐야 화면만 죽는다.</p>
+
+<!--SLIDE sec=14 t="루프백"-->
+<h1><span class="no">{{N}}</span>소켓 없이 서버에 붙기</h1>
+<!--CODE file=src/net/loopback.ts lines=1-68 cap="src/net/loopback.ts — 전송 계층 바꿔치기"-->
+<p class="mut">허브도 룸도 클라이언트도 그대로다. 바뀐 건 "보내면 어디로 가는가" 하나뿐이다. 지연(<code>latency</code>)을 주면 진짜 네트워크처럼 늦게 도착하는 상황도 재현할 수 있다.</p>
+<div class="note"><b><code>onOpen</code> 을 다음 틱에 부르는 이유</b>생성자가 돌아가기 전에 부르면 구독자가 아직 없다. 진짜 WebSocket 도 마찬가지라, 이렇게 두면 두 전송 계층의 <strong>타이밍 성질까지</strong> 같아진다.</div>
+
+<!--SLIDE sec=14 t="경기 진행"-->
+<h1><span class="no">{{N}}</span>내 좌석만 굴린다</h1>
+<p class="mut">클라이언트는 방에 대한 사실만 안다. 실제로 판을 굴리는 건 이 파일이고, 하는 일은 넷이다: AI 를 두게 하고, 굳을 때마다 공격을 보고하고, 화면을 주기적으로 올리고, 내려온 가비지를 유예 뒤에 얹는다.</p>
+<!--CODE file=src/net/match.ts lines=1-62 cap="src/net/match.ts — 좌석과 시작"-->
+<p class="small mut">시드는 <code>start</code> 로 내려온 하나를 전원이 공유한다. 그래서 여덟 판의 조각 순서가 같다 — 실력만 남는다.</p>
+
+<!--SLIDE sec=14 t="유예는 클라이언트가 지킨다"-->
+<h1><span class="no">{{N}}</span>서버가 아니라 여기서</h1>
+<!--CODE file=src/net/match.ts lines=63-104 cap="press · garbage"-->
+<div class="tip"><b>서버가 보낸 <code>hole</code> 은 쓰지 않는다</b>코어의 <code>pushRows</code> 가 자기 난수로 구멍을 고르고, 관전 화면은 내가 보내는 스냅샷을 그대로 그린다. 그러니 어긋날 데가 없다 — <code>hole</code> 은 공격 연출용 정보다.</div>
+
+<!--SLIDE sec=14 t="한 틱"-->
+<h1><span class="no">{{N}}</span>두고 · 보고하고 · 올린다</h1>
+<!--CODE file=src/net/match.ts lines=105-143 cap="update · report"-->
+<p class="mut">이벤트 번호로 락을 감지하므로 같은 공격을 두 번 보내지 않는다(파트 10의 <code>drain</code> 과 같은 수법이다). 화면 상태는 초당 10회 — 규격 권장값이다.</p>
+
+<!--SLIDE sec=14 t="관전 화면"-->
+<h1><span class="no">{{N}}</span>두 종류의 판</h1>
+<p class="mut">덱 데모의 화면에는 성격이 다른 판이 섞여 있다. 내 좌석은 <strong>내 프로세스가 굴리는 판</strong>이고, 남의 좌석은 <strong>스냅샷을 푼 결과</strong>다. 남의 판이 제대로 보인다는 건 런렝스·base64·스냅샷이 전부 맞는다는 뜻이다.</p>
+<!--CODE file=src/net_view.ts lines=1-44 cap="src/net_view.ts — 무엇이 다른가"-->
+
+<!--SLIDE sec=14 t="네 대를 붙인다"-->
+<h1><span class="no">{{N}}</span>페이지 안의 PC 넷</h1>
+<!--CODE file=src/net_view.ts lines=45-119 cap="NetArenaView — 필드와 생성자"-->
+<p class="small mut">좌석 수는 PC 대수 × PC 당 좌석이다. 4×2 = 8석이 기본이고, 2×1 로 줄이면 1:1 이 된다 — 규격을 바꾸지 않고 숫자만 바꾼다.</p>
+
+<!--SLIDE sec=14 t="붙는 순서"-->
+<h1><span class="no">{{N}}</span>hi → create/join → seat → ready → start</h1>
+<!--CODE file=src/net_view.ts lines=120-177 cap="connectAll — 네 대가 각자 하는 일"-->
+<p class="mut">1번 PC 만 방을 만들고 나머지는 그 코드로 들어간다. 좌석이 다 차면 방장이 <code>start</code> 를 누른다 — 사람이 로비에서 하는 일과 똑같은 순서다.</p>
+<p class="small mut">스냅샷을 푸는 건 1번 PC 시점뿐이다. 화면이 하나뿐이니 나머지 세 대는 받아서 버린다 — 진짜 8대라면 각자 자기 화면을 그린다.</p>
+
+<!--SLIDE sec=14 t="프레임과 새 판"-->
+<h1><span class="no">{{N}}</span>허브의 시계도 같이 민다</h1>
+<!--CODE file=src/net_view.ts lines=178-223 cap="start · frame · reset"-->
+<p class="small mut">룸은 시계를 주입받는다(<code>hitTTL</code> 과 막타 판정이 그걸 본다). 데모에서는 프레임의 dt 를 그대로 밀어 준다 — 서버라면 <code>Date.now()</code> 가 들어갈 자리다.</p>
+
+<!--SLIDE sec=14 t="그리기"-->
+<h1><span class="no">{{N}}</span>버퍼만 받는 격자</h1>
+<!--CODE file=src/net_view.ts lines=224-255 cap="내 판 채우기와 그리기"-->
+<p class="mut">데이터가 어디서 왔는지는 그리는 쪽의 관심사가 아니다. 그래서 격자를 따로 뺐고, 덱 데모와 진짜 페이지가 <strong>같은 그림</strong>을 그린다.</p>
+
+<!--SLIDE sec=14 t="SeatGrid"-->
+<h1><span class="no">{{N}}</span>좌석 여덟을 격자로</h1>
+<!--CODE file=src/net_view.ts lines=256-314 cap="paintSeat · SeatGrid"-->
+<p class="small mut">고스트(오버레이 8~14)는 남의 화면에 그리지 않는다. 내 판에서만 쓸모 있는 정보이고, 스냅샷에도 들어가지 않는다.</p>
+
+<!--SLIDE sec=14 t="진짜 페이지"-->
+<h1><span class="no">{{N}}</span>make run 으로 여는 그 화면</h1>
+<p class="mut">덱 데모와 다른 점은 전송 계층 하나다. 여기서는 진짜 WebSocket 이 들어오고, 방 코드를 사람이 입력한다.</p>
+<!--CODE file=src/app.ts lines=1-46 cap="src/app.ts — 옵션과 WebSocket 감싸기"-->
+<div class="note"><b>전송 계층을 주입받게 둔 값</b>테스트가 루프백을 넣어 <strong>소켓 없이</strong> 이 페이지를 끝까지 돌려 본다 — 방 만들기, 좌석 잡기, 시작, 조각 놓기까지.</div>
+
+<!--SLIDE sec=14 t="페이지 조립"-->
+<h1><span class="no">{{N}}</span>버튼 여섯과 캔버스 하나</h1>
+<!--CODE file=src/app.ts lines=47-113 cap="App — 필드와 생성자"-->
+
+<!--SLIDE sec=14 t="서버 메시지를 화면으로"-->
+<h1><span class="no">{{N}}</span>여섯 가지만 다루면 된다</h1>
+<!--CODE file=src/app.ts lines=114-168 cap="wire · buildBar"-->
+<p class="small mut">방 코드는 사람이 읽고 전화로 불러 줘야 하므로 로그 줄에 그대로 띄운다. 다른 기기에서 같은 주소로 들어와 <b>코드로 참가</b>를 누르면 같은 방이다.</p>
+
+<!--SLIDE sec=14 t="사람 좌석"-->
+<h1><span class="no">{{N}}</span>키는 사람이 앉았을 때만</h1>
+<!--CODE file=src/app.ts lines=169-231 cap="onKey · 루프 · 그리기 · 자동 시작"-->
+<p class="mut">사람 좌석이 없으면 키를 아예 건드리지 않는다(관전 모드). 있으면 방향키를 가져간다 — 덱과 달리 이 페이지에는 넘길 슬라이드가 없으니 자동 포커스로 충분하다.</p>
+
+<!--SLIDE sec=14 t="페이지 자체"-->
+<h1><span class="no">{{N}}</span>index.html 은 46줄이다</h1>
+<!--CODE file=web/index.html lines=1-46 cap="web/index.html — 서버가 내보내는 유일한 HTML"-->
+<p class="small mut">스크립트 순서가 곧 의존 순서다. 모듈이 아니라 평범한 스크립트라, <code>make web</code> 이 만든 번들을 순서대로 넣으면 그만이다(파트 3에서 본 그 번들이다).</p>
+
+<!--SLIDE sec=14 t="진짜로 붙는지 어떻게 아나"-->
+<h1><span class="no">{{N}}</span>서버 + 브라우저를 함께 띄운다</h1>
+<p class="mut">루프백 데모는 전송 계층을 바꿔치기한 것이라 "소켓까지 포함해서 도는가"는 증명하지 못한다. 마지막 칸은 이 도구가 채운다.</p>
+<!--CODE file=tools/check_page.mjs lines=1-45 cap="tools/check_page.mjs — 서버를 띄우고 기다린다"-->
+
+<!--SLIDE sec=14 t="눌러 보고, 픽셀을 센다"-->
+<h1><span class="no">{{N}}</span>make page-check</h1>
+<!--CODE file=tools/check_page.mjs lines=46-90 cap="로비 버튼을 눌러 대전을 시작시킨다"-->
+<pre class="code txt"><code>$ make page-check
+✔ 페이지 — 방 XP2P, 좌석 2석(내 몫 2), 조각 64개, 칠해진 픽셀 11386,
+  콘솔 오류 0건 (PC 1대 = 2석 상한)</code></pre>
+<p class="mut"><strong>좌석이 2석인 게 정답이다.</strong> 규격상 한 PC 는 두 자리까지 쥔다 — 도구는 일부러 세 번 눌러 세 번째가 <code>full</code> 로 막히는 것까지 확인한다.</p>
+
+<!--SLIDE sec=14 t="데모로 등록"-->
+<h1><span class="no">{{N}}</span>슬라이드 한 줄이면 붙는다</h1>
+<!--CODE file=src/demo.ts lines=134-142 cap="net 데모"-->
+<p class="mut">파트 10의 <code>arena</code> 와 화면은 비슷하지만 속은 완전히 다르다. 저쪽은 판 여덟을 한 프로세스가 직접 굴렸고, 이쪽은 좌석·공격·탈락이 <strong>전부 메시지로</strong> 오간다.</p>
+<div class="scroll"><table>
+<tr><th></th><th>arena (파트 10)</th><th>net (여기)</th></tr>
+<tr><td>판을 굴리는 주체</td><td>Battle 하나</td><td>PC 4대의 Match 넷</td></tr>
+<tr><td>공격 전달</td><td>함수 호출</td><td>atk → 허브 → grb 메시지</td></tr>
+<tr><td>남의 화면</td><td>같은 메모리</td><td>스냅샷을 풀어서</td></tr>
+<tr><td>시드</td><td>좌석마다 다름</td><td>전원이 공유</td></tr>
+</table></div>
+
+<!--SLIDE sec=14 t="정리"-->
+<h1><span class="no">{{N}}</span>같은 코드가 세 곳에서 돈다</h1>
+<div class="cols">
+  <div class="card a"><h4>덱 데모</h4><p class="small mut">루프백. 이 문서 안에서 PC 4대가 붙는다.</p></div>
+  <div class="card a"><h4>진짜 페이지</h4><p class="small mut">WebSocket. <code>make run</code> 뒤 브라우저로 연다.</p></div>
+  <div class="card b"><h4>테스트</h4><p class="small mut">루프백 + 가짜 시계. 소켓 없이 대전을 끝까지 돌린다.</p></div>
+  <div class="card b"><h4>다음</h4><p class="small mut">브라우저도 없이, 봇 여덟으로 <strong>실측</strong>한다.</p></div>
+</div>
