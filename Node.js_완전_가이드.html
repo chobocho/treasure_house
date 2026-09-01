@@ -508,6 +508,27 @@ nav#deckNav button:disabled { opacity: .35; }
 .tl b { color: var(--accent2); }
 .tl .d { color: var(--muted); font-size: .9em; }
 
+/* 이벤트 루프 단계 흐름 — 화살표는 문자가 아니라 CSS 삼각형으로 그린다 */
+.flow { list-style: none; padding: 0; margin: 14px 0; }
+.flow > li {
+  position: relative; border: 1px solid var(--border); border-radius: 10px;
+  background: #fff; padding: 8px 12px; margin: 0 0 20px;
+}
+.flow > li::after {
+  content: ""; position: absolute; left: 50%; bottom: -15px; transform: translateX(-50%);
+  border-left: 6px solid transparent; border-right: 6px solid transparent;
+  border-top: 8px solid var(--accent);
+}
+.flow > li:last-child { margin-bottom: 0; }
+.flow > li:last-child::after { display: none; }
+.flow > li.mic { border-style: dashed; background: rgba(124,58,237,.07); }
+.flow b { display: block; color: var(--accent2); font-size: .95rem; }
+.flow .d { color: var(--muted); font-size: .88rem; }
+.flow .n {
+  display: inline-block; min-width: 18px; margin-right: 6px;
+  color: var(--accent); font-weight: 800; font-size: .82rem;
+}
+
 /* 미작성 자리 표시 — Phase 2 에서 전부 사라져야 한다 */
 .todo {
   border: 1px dashed var(--border); border-radius: 10px;
@@ -1713,10 +1734,120 @@ console.log('패턴 별칭 :', shout('되는군요'));</code></pre>
 <p class="chsub">실제로 동작에 영향을 주는 필드들</p>
 </article>
 
-<article class="card" id="ch-pkgjson-fill">
-<!-- FILL:ch-pkgjson -->
-<h3>package.json 낱낱이 — 작성 예정</h3>
-<div class="todo"><b>이 자리에 6장</b>이 들어갑니다. 예제를 실행해 출력을 채록한 뒤 이 카드를 대체합니다.</div>
+<article class="card" id="ch-pkgjson-identity">
+<h3>이름과 버전 — 패키지의 신분증</h3>
+<p class="lead">이 두 필드가 npm 세계에서 패키지를 가리키는 좌표입니다. <code class="nb">npm pkg get</code>으로 파일을 열지 않고도 읽을 수 있습니다.</p>
+<pre><code data-lang="sh">npm pkg get name version license engines</code></pre>
+<pre class="term">{
+  "name": "@chobocho/toolbox",
+  "version": "1.4.2",
+  "license": "MIT",
+  "engines": {
+    "node": "&gt;=20"
+  }
+}</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드</th><th>규칙</th></tr>
+<tr><td><code>name</code></td><td>소문자·214자 이하. <code>@범위/이름</code> 형태를 쓰면 이름 충돌을 피할 수 있습니다</td></tr>
+<tr><td><code>version</code></td><td>반드시 SemVer. 배포한 버전은 <b>덮어쓸 수 없습니다</b></td></tr>
+<tr><td><code>private</code></td><td><code>true</code>면 실수로 <code>npm publish</code>해도 npm이 막아 줍니다</td></tr>
+<tr><td><code>license</code></td><td>SPDX 식별자. 없으면 남이 쓸 수 있는지 판단할 수 없습니다</td></tr>
+</table>
+</div>
+<div class="tip"><b>사내용이라면 첫 줄에 <code class="nb">"private": true</code></b> — 공개 저장소로 나갈 일이 없는 패키지에서 이 한 줄이 가장 값싼 보험입니다.</div>
+</article>
+
+<article class="card" id="ch-pkgjson-entry">
+<h3>진입점 — type · exports · bin</h3>
+<p class="lead">25장에서 본 <code class="nb">exports</code>가 여기 자리합니다. <code class="nb">bin</code>은 이 패키지를 설치했을 때 생기는 <b>명령어</b>를 정의합니다.</p>
+<pre><code data-lang="json">{
+  "name": "@chobocho/toolbox",
+  "version": "1.4.2",
+  "description": "슬라이드용 예제 패키지",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./slug": "./src/slug.mjs"
+  },
+  "bin": {
+    "toolbox": "src/cli.mjs"
+  },</code></pre>
+<pre><code data-lang="js">#!/usr/bin/env node
+import { slugify } from './slug.mjs';
+console.log(slugify(process.argv[2] ?? 'Hello World'));</code></pre>
+<pre class="term">슬라이드-덱-만들기</pre>
+<div class="note"><b><code class="nb">type</code>이 <code class="nb">.js</code>의 운명을 정합니다</b> — <code class="nb">"module"</code>이면 그 폴더 아래 <code class="nb">.js</code>가 전부 ESM이 됩니다. 없으면 CJS입니다. <code class="nb">bin</code> 스크립트에는 <code class="nb">#!/usr/bin/env node</code> 첫 줄이 필요합니다.</div>
+</article>
+
+<article class="card" id="ch-pkgjson-deps">
+<h3>의존성 네 종류</h3>
+<pre><code data-lang="json">{
+  "name": "app",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "greeter": "1.0.0"
+  }
+}</code></pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>종류</th><th>언제 깔리나</th><th>쓰임</th></tr>
+<tr><td><code>dependencies</code></td><td>이 패키지를 설치한 사람에게도 함께</td><td>실행에 꼭 필요한 것</td></tr>
+<tr><td><code>devDependencies</code></td><td>이 저장소에서 개발할 때만</td><td>테스트·린터·빌드 도구</td></tr>
+<tr><td><code>peerDependencies</code></td><td>설치되지 않음. 맞는지 검사만</td><td>플러그인이 본체 버전을 요구할 때</td></tr>
+<tr><td><code>optionalDependencies</code></td><td>실패해도 설치를 계속</td><td>플랫폼별 네이티브 가속기 등</td></tr>
+</table>
+</div>
+<div class="warn"><b>가장 흔한 실수</b> — 라이브러리를 만들면서 런타임에 필요한 것을 <code class="nb">devDependencies</code>에 넣는 것입니다. 내 컴퓨터에서는 잘 돌아가지만, 설치한 사람은 <code class="nb">MODULE_NOT_FOUND</code>를 봅니다.</div>
+</article>
+
+<article class="card" id="ch-pkgjson-files">
+<h3>files와 engines — 무엇을 담고, 어디서 돌 것인가</h3>
+<p class="lead"><code class="nb">files</code>는 <b>화이트리스트</b>입니다. 여기 적힌 것만 배포본에 들어갑니다. 적지 않으면 <code class="nb">.npmignore</code>나 <code class="nb">.gitignore</code>에 걸리지 않은 모든 파일이 딸려 갑니다.</p>
+<pre><code data-lang="json">  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": "&gt;=20"
+  }</code></pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드</th><th>효과</th></tr>
+<tr><td><code>files</code></td><td>배포 tarball에 넣을 목록. <code>package.json</code>·<code>README</code>·<code>LICENSE</code>는 적지 않아도 항상 포함</td></tr>
+<tr><td><code>engines</code></td><td>맞지 않으면 경고. <code>.npmrc</code>에 <code>engine-strict=true</code>가 있어야 실제로 막힙니다(18장)</td></tr>
+<tr><td><code>os</code> · <code>cpu</code></td><td>플랫폼 제한. 네이티브 애드온을 담은 패키지에서 씁니다</td></tr>
+</table>
+</div>
+<div class="tip"><b>정말 무엇이 나가는지는 짐작하지 마세요</b> — <code class="nb">npm pack --dry-run</code> 한 줄이면 목록이 그대로 나옵니다. 29장에서 이 패키지로 직접 확인합니다.</div>
+</article>
+
+<article class="card" id="ch-pkgjson-scripts">
+<h3>scripts와 pre/post 훅</h3>
+<p class="lead">npm은 <code class="nb">X</code>를 실행할 때 <code class="nb">preX</code>와 <code class="nb">postX</code>가 있으면 자동으로 앞뒤에 끼워 넣습니다. 시키지 않아도 그렇게 합니다.</p>
+<pre><code data-lang="json">  "scripts": {
+    "prebuild": "node -e \"console.log('1. prebuild 가 먼저')\"",
+    "build": "node -e \"console.log('2. build 본체')\"",
+    "postbuild": "node -e \"console.log('3. postbuild 가 마지막')\"",
+    "greet": "node src/greet.mjs"
+  }</code></pre>
+<p class="cap"><code class="nb">npm run build</code> 한 번으로:</p>
+<pre class="term">&gt; @chobocho/toolbox@1.4.2 prebuild
+&gt; node -e "console.log('1. prebuild 가 먼저')"
+
+1. prebuild 가 먼저
+
+&gt; @chobocho/toolbox@1.4.2 build
+&gt; node -e "console.log('2. build 본체')"
+
+2. build 본체
+
+&gt; @chobocho/toolbox@1.4.2 postbuild
+&gt; node -e "console.log('3. postbuild 가 마지막')"
+
+3. postbuild 가 마지막</pre>
+<div class="warn"><b>이 자동 연결이 공급망 공격의 통로입니다</b> — <code class="nb">preinstall</code>·<code class="nb">postinstall</code>은 <b>설치만 해도</b> 돕니다. 28장에서 실제로 돌려 보고 막는 법을 봅니다.</div>
 </article>
 
 <article class="card" id="ch-npmcli">
@@ -1725,10 +1856,152 @@ console.log('패턴 별칭 :', shout('되는군요'));</code></pre>
 <p class="chsub">스크립트 · npx · 워크스페이스 · 대안 도구 대조</p>
 </article>
 
-<article class="card" id="ch-npmcli-fill">
-<!-- FILL:ch-npmcli -->
-<h3>npm CLI — 작성 예정</h3>
-<div class="todo"><b>이 자리에 9장</b>이 들어갑니다. 예제를 실행해 출력을 채록한 뒤 이 카드를 대체합니다.</div>
+<article class="card" id="ch-npmcli-install">
+<h3>install과 ci는 다른 명령이다</h3>
+<p class="lead">둘 다 의존성을 깔지만, <b>무엇을 진실로 보느냐</b>가 다릅니다. 이 차이가 "내 컴퓨터에서는 되는데"의 큰 몫을 차지합니다.</p>
+<pre><code data-lang="sh"># install 은 package.json 을 보고 필요하면 락파일을 고친다
+npm install --no-audit --no-fund
+
+# ci 는 락파일만 보고, node_modules 를 통째로 지우고 다시 깐다
+npm ci --no-audit --no-fund</code></pre>
+<pre class="term">up to date in ~2.0s
+
+added 1 package in ~2.0s</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th><code>npm install</code></th><th><code>npm ci</code></th></tr>
+<tr><td>기준</td><td><code>package.json</code></td><td><code>package-lock.json</code>만</td></tr>
+<tr><td>락파일</td><td>필요하면 고침</td><td>고치지 않음. 어긋나면 실패</td></tr>
+<tr><td>node_modules</td><td>있는 것에 얹음</td><td>통째로 지우고 다시</td></tr>
+<tr><td>쓰는 곳</td><td>개발 중</td><td>CI·배포</td></tr>
+</table>
+</div>
+<div class="key"><b>CI에서는 <code class="nb">npm ci</code>를 쓰세요</b> — <code class="nb">npm ci</code>는 락파일과 <code class="nb">package.json</code>이 어긋나면 조용히 맞춰 주는 대신 <b>실패</b>합니다. 락파일 커밋을 빠뜨린 것을 배포 전에 잡아 줍니다.</div>
+</article>
+
+<article class="card" id="ch-npmcli-scripts">
+<h3>npm run — 인자는 -- 뒤에</h3>
+<p class="lead">스크립트에 인자를 넘기려 하면 npm이 먼저 가로챕니다. <code class="nb">--</code>가 "여기서부터는 내 것이 아니다"라는 표시입니다.</p>
+<pre><code data-lang="sh"># 스크립트에 인자를 넘기려면 -- 로 경계를 긋는다
+npm run greet -- --color green
+
+# 없는 스크립트는 오류지만, --if-present 를 붙이면 조용히 넘어간다
+npm run --if-present nothing-here
+echo "종료 코드: $?"</code></pre>
+<pre class="term">&gt; @chobocho/toolbox@1.4.2 greet
+&gt; node src/greet.mjs --color green
+
+받은 인자: [ '--color', 'green' ]
+종료 코드: 0</pre>
+<div class="tip"><b><code class="nb">--if-present</code>는 CI에서 값집니다</b> — 모든 패키지가 <code class="nb">lint</code> 스크립트를 갖고 있지는 않습니다. 워크스페이스 전체에 같은 명령을 돌릴 때, 없는 곳에서 파이프라인이 깨지지 않게 해 줍니다.</div>
+</article>
+
+<article class="card" id="ch-npmcli-npx">
+<h3>npx — 깔지 않고 실행하기, 깔려 있으면 그것으로</h3>
+<p class="lead"><code class="nb">npx</code>는 먼저 <code class="nb">node_modules/.bin</code>을 봅니다. 거기 있으면 네트워크를 아예 쓰지 않습니다. 없을 때만 내려받아 임시로 실행합니다.</p>
+<pre><code data-lang="sh"># npx 는 node_modules/.bin 을 먼저 본다 — 이미 깔린 것이면 내려받지 않는다
+npx semver 1.2.9 1.3.0 2.0.0 --range "^1.2.3"
+
+# 로컬 바이너리 위치
+ls node_modules/.bin</code></pre>
+<pre class="term">1.2.9
+1.3.0
+semver</pre>
+<div class="warn"><b><code class="nb">2.0.0</code>이 결과에 없습니다</b> — <code class="nb">^1.2.3</code>은 메이저를 넘지 않기 때문입니다. 그리고 <code class="nb">npx</code>로 <b>설치돼 있지 않은</b> 패키지를 실행하면 그 순간 레지스트리에서 코드를 받아 바로 실행합니다. 이름을 잘못 치면 남의 코드가 돕니다.</div>
+</article>
+
+<article class="card" id="ch-npmcli-ls">
+<h3>왜 이게 깔려 있지? — ls와 explain</h3>
+<p class="lead">의존성 트리가 커지면 "이 패키지는 누가 데려왔나"가 늘 문제입니다. npm이 직접 답해 줍니다.</p>
+<pre><code data-lang="sh"># 무엇이 왜 깔려 있는지 묻는다
+npm ls --all
+
+npm explain semver</code></pre>
+<pre class="term">semver-demo@1.0.0 /…/examples/pkg/semver-demo
+`-- semver@7.8.5
+
+semver@7.8.5
+node_modules/semver
+  semver@"^7.8.5" from the root project</pre>
+<div class="note"><b>취약점 보고서를 받았을 때 첫 명령입니다</b> — <code class="nb">npm explain 패키지이름</code>이 그 패키지까지 이르는 경로를 보여 줍니다. 직접 의존성이면 내가 올리면 되고, 남의 패키지 안쪽이면 그 패키지를 올려야 합니다.</div>
+</article>
+
+<article class="card" id="ch-npmcli-workspaces">
+<h3>워크스페이스 — 한 저장소에 여러 패키지</h3>
+<p class="lead">루트 <code class="nb">package.json</code>에 <code class="nb">workspaces</code>를 적으면, npm이 하위 패키지들을 <code class="nb">node_modules</code>에 <b>심볼릭 링크</b>로 걸어 줍니다. 별도 도구가 필요 없습니다.</p>
+<pre><code data-lang="json">{
+  "name": "ws-root",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}</code></pre>
+<pre><code data-lang="sh"># 워크스페이스 루트에서 한 번 설치하면 하위 패키지가 심볼릭 링크로 연결된다
+ls node_modules
+readlink node_modules/greeter
+
+# app 은 greeter 를 보통 패키지처럼 import 한다
+node packages/app/index.mjs</code></pre>
+<pre class="term">app
+greeter
+../packages/greeter
+안녕, 워크스페이스</pre>
+<div class="key"><b>링크라서 즉시 반영됩니다</b> — <code class="nb">greeter</code>를 고치면 <code class="nb">app</code>이 바로 그 코드를 씁니다. 빌드도, 재설치도, <code class="nb">npm link</code>도 필요 없습니다.</div>
+</article>
+
+<article class="card" id="ch-npmcli-config">
+<h3>설정 — .npmrc와 npm config</h3>
+<p class="lead">레지스트리 주소, 캐시 위치, 인증 토큰이 모두 설정입니다. 프로젝트·사용자·전역 순서로 겹쳐 읽힙니다.</p>
+<pre><code data-lang="sh"># 설정은 .npmrc 파일과 npm config 로 읽고 쓴다
+npm config get registry
+npm config get cache
+
+# 이 프로젝트에만 적용되는 설정을 남긴다
+npm config set save-exact true --location project
+cat .npmrc</code></pre>
+<pre class="term">https://registry.npmjs.org/
+/…/.npm
+save-exact=true</pre>
+<div class="warn"><b>토큰을 <code class="nb">.npmrc</code>에 적어 커밋하지 마세요</b> — 프로젝트 <code class="nb">.npmrc</code>는 저장소에 들어갑니다. 인증 정보는 사용자 홈의 <code class="nb">~/.npmrc</code>나 환경 변수(<code class="nb">NPM_TOKEN</code>)에 두고, 프로젝트 파일에는 <code class="nb">${NPM_TOKEN}</code> 형태로 참조만 남깁니다.</div>
+</article>
+
+<article class="card" id="ch-npmcli-cache">
+<h3>캐시 — 두 번째 설치가 빠른 이유</h3>
+<p class="lead">한 번 내려받은 tarball은 로컬 캐시에 해시와 함께 남습니다. 같은 버전을 다시 설치할 때는 네트워크를 타지 않습니다.</p>
+<pre><code data-lang="sh"># 내려받은 것은 캐시에 남는다. 위치는 설정으로 확인한다
+npm config get cache
+
+# 캐시에 있는 것으로 먼저 해결해 본다 (네트워크를 되도록 쓰지 않는다)
+npm install --prefer-offline --no-audit --no-fund</code></pre>
+<pre class="term">/…/.npm
+
+up to date in ~2.0s</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>하는 일</th></tr>
+<tr><td><code>--prefer-offline</code></td><td>캐시를 먼저 쓰고, 없는 것만 받음</td></tr>
+<tr><td><code>--offline</code></td><td>네트워크를 아예 쓰지 않음. 캐시에 없으면 실패</td></tr>
+<tr><td><code>npm cache verify</code></td><td>캐시 무결성 검사 + 쓰레기 정리</td></tr>
+</table>
+</div>
+<div class="note"><b>"캐시를 지우면 고쳐진다"는 대개 오해입니다</b> — 캐시는 내용 해시로 관리돼서 손상된 항목은 자동으로 걸러집니다. <code class="nb">npm cache clean --force</code>가 필요한 경우는 실제로 드뭅니다.</div>
+</article>
+
+<article class="card" id="ch-npmcli-alt">
+<h3>pnpm · yarn · bun — 무엇이 다른가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>npm</th><th>pnpm</th><th>yarn</th><th>bun</th></tr>
+<tr><td>node_modules 배치</td><td>평탄화 복사</td><td>내용 주소 저장소 + 하드링크</td><td>평탄화 또는 PnP</td><td>평탄화 복사</td></tr>
+<tr><td>락파일</td><td><code>package-lock.json</code></td><td><code>pnpm-lock.yaml</code></td><td><code>yarn.lock</code></td><td><code>bun.lock</code></td></tr>
+<tr><td>디스크</td><td>프로젝트마다 사본</td><td>전역 저장소 공유</td><td>사본 또는 zip</td><td>프로젝트마다 사본</td></tr>
+<tr><td>선언 안 한 의존성</td><td>접근됨</td><td><b>차단됨</b></td><td>PnP면 차단</td><td>접근됨</td></tr>
+<tr><td>함께 오는 것</td><td>Node에 내장</td><td>별도 설치</td><td>별도 설치</td><td>런타임·번들러·테스트 포함</td></tr>
+</table>
+</div>
+<div class="warn"><b>이 표는 각 도구의 공식 문서를 근거로 정리한 것이며, 이 덱의 다른 출력과 달리 실행해서 얻은 결과가 아닙니다.</b> 이 기기에는 pnpm·yarn·bun이 설치돼 있지 않아 실측할 수 없었습니다. 숫자로 된 성능 비교를 넣지 않은 것도 같은 이유입니다.</div>
+<div class="tip"><b>고르는 기준</b> — 특별한 이유가 없으면 npm으로 충분합니다. 저장소에 패키지가 수십 개라 디스크와 설치 시간이 아프면 pnpm이, 선언하지 않은 의존성을 실수로 쓰는 것을 원천 차단하고 싶어도 pnpm이 답입니다.</div>
 </article>
 
 <article class="card" id="ch-semver">
@@ -1737,10 +2010,84 @@ console.log('패턴 별칭 :', shout('되는군요'));</code></pre>
 <p class="chsub">락파일 · audit · 설치 스크립트의 위험</p>
 </article>
 
-<article class="card" id="ch-semver-fill">
-<!-- FILL:ch-semver -->
-<h3>SemVer 와 공급망 — 작성 예정</h3>
-<div class="todo"><b>이 자리에 5장</b>이 들어갑니다. 예제를 실행해 출력을 채록한 뒤 이 카드를 대체합니다.</div>
+<article class="card" id="ch-semver-range">
+<h3>범위 기호가 실제로 무엇을 허용하는가</h3>
+<p class="lead"><code class="nb">^</code>와 <code class="nb">~</code>를 감으로 쓰지 말고, npm이 쓰는 바로 그 <code class="nb">semver</code> 구현에 직접 물어봅시다.</p>
+<pre><code data-lang="js">// npm 이 실제로 쓰는 semver 구현을 그대로 불러 확인한다
+import semver from 'semver';
+
+const versions = ['1.2.3', '1.2.9', '1.3.0', '2.0.0'];
+const ranges = ['^1.2.3', '~1.2.3', '1.2.x', '&gt;=1.2.3', '1.2.3'];
+
+for (const range of ranges) {
+  const ok = versions.filter((v) =&gt; semver.satisfies(v, range));
+  console.log(range.padEnd(9), '-&gt;', ok.join(' '));
+}</code></pre>
+<pre class="term">^1.2.3    -&gt; 1.2.3 1.2.9 1.3.0
+~1.2.3    -&gt; 1.2.3 1.2.9
+1.2.x     -&gt; 1.2.3 1.2.9
+&gt;=1.2.3   -&gt; 1.2.3 1.2.9 1.3.0 2.0.0
+1.2.3     -&gt; 1.2.3</pre>
+<div class="key"><b>한 줄 요약</b> — <code class="nb">^</code>는 <b>마이너까지</b> 올리고(메이저 고정), <code class="nb">~</code>는 <b>패치까지만</b> 올립니다. <code class="nb">npm install</code>이 기본으로 붙이는 것은 <code class="nb">^</code>입니다.</div>
+<div class="warn"><b>0.x는 규칙이 다릅니다</b> — <code class="nb">^0.2.3</code>은 <code class="nb">0.3.0</code>을 허용하지 <b>않습니다</b>. 1.0 이전에는 마이너 인상도 파괴적 변경으로 보기 때문입니다.</div>
+</article>
+
+<article class="card" id="ch-semver-lock">
+<h3>락파일 — 범위가 아니라 사실을 적는다</h3>
+<p class="lead"><code class="nb">package.json</code>에는 <b>희망</b>(<code class="nb">^7.8.5</code>)이 적히고, <code class="nb">package-lock.json</code>에는 <b>실제로 깔린 것</b>이 해시까지 함께 적힙니다.</p>
+<pre><code data-lang="js">const lock = require('./package-lock.json');
+const entry = lock.packages['node_modules/semver'];
+console.log('lockfileVersion:', lock.lockfileVersion);
+console.log('version:', entry.version);
+console.log('resolved:', entry.resolved);
+console.log('integrity:', entry.integrity.slice(0, 24) + '...');</code></pre>
+<pre class="term">lockfileVersion: 3
+version: 7.8.5
+resolved: https://registry.npmjs.org/semver/-/semver-7.8.5.tgz
+integrity: sha512-Y7/KDsb8LjooZpwaq...</pre>
+<div class="key"><b><code class="nb">integrity</code>가 핵심입니다</b> — 내려받은 tarball의 해시입니다. 레지스트리가 같은 버전에 다른 내용을 돌려주면 설치가 <b>실패</b>합니다. 락파일은 편의가 아니라 <b>무결성 장치</b>입니다.</div>
+<div class="tip"><b>애플리케이션은 커밋하고, 라이브러리는 하지 않습니다</b> — 앱은 재현 가능한 배포가 목적이라 커밋합니다. 라이브러리의 락파일은 설치하는 쪽에서 무시되므로 커밋해도 소용이 없습니다.</div>
+</article>
+
+<article class="card" id="ch-semver-audit">
+<h3>npm audit — 알려진 취약점 대조</h3>
+<p class="lead">설치된 의존성 목록을 레지스트리의 취약점 데이터베이스와 맞춰 봅니다.</p>
+<pre><code data-lang="sh">npm audit</code></pre>
+<pre class="term">found 0 vulnerabilities</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>하는 일</th></tr>
+<tr><td><code>npm audit</code></td><td>보고만 함</td></tr>
+<tr><td><code>npm audit fix</code></td><td>범위 안에서 올릴 수 있는 것을 올림</td></tr>
+<tr><td><code>npm audit fix --force</code></td><td>파괴적 변경도 감수하고 올림</td></tr>
+<tr><td><code>npm audit --omit=dev</code></td><td>운영에 실제로 나가는 것만 검사</td></tr>
+</table>
+</div>
+<div class="warn"><b>숫자에 겁먹지 마세요</b> — 빌드 도구 안쪽의 취약점은 사용자에게 노출되지 않는 경우가 많습니다. <code class="nb">--force</code>는 메이저를 넘겨 버려 앱을 깨뜨리기 쉬우니, 먼저 <code class="nb">npm explain</code>(27장)으로 경로를 확인하세요.</div>
+</article>
+
+<article class="card" id="ch-semver-supply">
+<h3>설치만 해도 코드가 돈다</h3>
+<p class="lead">26장에서 예고한 부분입니다. <code class="nb">preinstall</code>·<code class="nb">postinstall</code>은 <code class="nb">npm install</code>만으로 실행됩니다. 이것이 공급망 공격의 주된 통로입니다.</p>
+<pre><code data-lang="json">  "scripts": {
+    "preinstall": "node -e \"console.log('[preinstall] 이 자리에서 무엇이든 할 수 있다')\""
+  }</code></pre>
+<pre><code data-lang="sh"># 설치 스크립트는 임의의 코드를 실행할 수 있다
+npm install --no-audit --no-fund
+
+echo "--- 이번엔 스크립트를 막고 ---"
+npm install --ignore-scripts --no-audit --no-fund</code></pre>
+<pre class="term">&gt; risky-demo@1.0.0 preinstall
+&gt; node -e "console.log('[preinstall] 이 자리에서 무엇이든 할 수 있다')"
+
+[preinstall] 이 자리에서 무엇이든 할 수 있다
+
+up to date in ~2.0s
+--- 이번엔 스크립트를 막고 ---
+
+up to date in ~2.0s</pre>
+<div class="warn"><b>두 번째에는 아무것도 찍히지 않았습니다</b> — <code class="nb">--ignore-scripts</code>가 통째로 막았습니다. CI에서는 이것을 기본으로 두고, 네이티브 빌드가 정말 필요한 패키지만 예외로 허용하는 것이 안전합니다.</div>
+<div class="tip"><b>함께 쓸 습관</b> — <code class="nb">npm ci</code>로 락파일을 강제하고, <code class="nb">--ignore-scripts</code>로 실행을 막고, 새 의존성을 추가할 때는 주간 다운로드 수보다 <b>마지막 배포일과 관리자 수</b>를 보세요.</div>
 </article>
 
 <article class="card" id="ch-publish">
@@ -1749,10 +2096,80 @@ console.log('패턴 별칭 :', shout('되는군요'));</code></pre>
 <p class="chsub">npm pack 과 publish --dry-run 실물 출력</p>
 </article>
 
-<article class="card" id="ch-publish-fill">
-<!-- FILL:ch-publish -->
-<h3>패키지 배포하기 — 작성 예정</h3>
-<div class="todo"><b>이 자리에 5장</b>이 들어갑니다. 예제를 실행해 출력을 채록한 뒤 이 카드를 대체합니다.</div>
+<article class="card" id="ch-publish-files">
+<h3>작업 폴더와 배포본은 다르다</h3>
+<p class="lead">배포 사고의 절반은 여기서 납니다. 내 폴더에 있는 것이 전부 나가는 것도 아니고, 안 나갈 것 같은 것이 나가기도 합니다.</p>
+<pre><code data-lang="sh"># 작업 폴더에 실제로 있는 파일들
+find . -type f -not -path './node_modules/*' | sort</code></pre>
+<pre class="term">./NOTES.md
+./package.json
+./src/cli.mjs
+./src/greet.mjs
+./src/index.mjs
+./src/slug.mjs
+./test/slug.test.mjs</pre>
+<p class="cap">일곱 개가 있습니다. 이 가운데 배포본에 들어가는 것은 <code class="nb">files: ["src"]</code>에 걸린 것뿐입니다.</p>
+<div class="note"><b>확인 없이 배포하지 마세요</b> — <code class="nb">.env</code>·비공개 키·내부 문서가 이렇게 새어 나갑니다. 한 번 배포된 버전은 지워도 이미 받아 간 사람에게는 남습니다.</div>
+</article>
+
+<article class="card" id="ch-publish-pack">
+<h3>npm pack --dry-run — 나갈 것을 미리 본다</h3>
+<pre><code data-lang="sh">npm pack --dry-run</code></pre>
+<pre class="term">npm notice package: @chobocho/toolbox@1.4.2
+npm notice Tarball Contents
+npm notice 643B package.json
+npm notice 114B src/cli.mjs
+npm notice 144B src/greet.mjs
+npm notice 70B src/index.mjs
+npm notice 91B src/slug.mjs
+npm notice Tarball Details
+npm notice name: @chobocho/toolbox
+npm notice version: 1.4.2
+npm notice filename: chobocho-toolbox-1.4.2.tgz
+npm notice package size: 795 B
+npm notice unpacked size: 1.1 kB
+npm notice shasum: 98fd541e5d992b55f73b270261d3b51ba8071704
+npm notice integrity: sha512-+DQZo+kKWoLqw[...]YKfRwkg9Lji1A==
+npm notice total files: 5</pre>
+<div class="key"><b>일곱 개 중 다섯 개</b> — <code class="nb">NOTES.md</code>와 <code class="nb">test/slug.test.mjs</code>가 빠졌습니다. <code class="nb">files</code>에 <code class="nb">"src"</code>만 적었기 때문이고, <code class="nb">package.json</code>은 적지 않아도 항상 들어갑니다.</div>
+<div class="tip"><b><code class="nb">--dry-run</code>을 빼면</b> 같은 내용의 <code class="nb">.tgz</code>가 실제로 만들어집니다. 그 파일을 다른 프로젝트에서 <code>npm install ./chobocho-toolbox-1.4.2.tgz</code>로 깔아 보면, 레지스트리에 올리기 전에 설치까지 시험할 수 있습니다.</div>
+</article>
+
+<article class="card" id="ch-publish-dryrun">
+<h3>npm publish --dry-run — 올리기 직전까지만</h3>
+<p class="lead">실제로 올리는 것 빼고 전부 합니다. 로그인 여부, 이름 충돌, 담길 파일까지 확인해 줍니다.</p>
+<pre><code data-lang="sh">npm publish --dry-run</code></pre>
+<pre class="term">npm notice filename: chobocho-toolbox-1.4.2.tgz
+npm notice package size: 795 B
+npm notice unpacked size: 1.1 kB
+npm notice shasum: 98fd541e5d992b55f73b270261d3b51ba8071704
+npm notice integrity: sha512-+DQZo+kKWoLqw[...]YKfRwkg9Lji1A==
+npm notice total files: 5
+npm notice
+npm warn publish This command requires you to be logged in to https://registry.npmjs.org/ (dry-run)
+npm notice Publishing to https://registry.npmjs.org/ with tag latest and default access (dry-run)</pre>
+<div class="note"><b>마지막 줄이 중요합니다</b> — <code class="nb">tag latest</code>와 <code class="nb">default access</code>. 범위 패키지(<code class="nb">@범위/이름</code>)는 기본이 <b>비공개</b>라, 공개하려면 <code class="nb">--access public</code>이 필요합니다. 처음 배포할 때 가장 많이 걸리는 곳입니다.</div>
+<div class="warn"><b>경고도 그냥 넘기지 마세요</b> — npm은 <code class="nb">package.json</code>의 일부 오류를 조용히 고쳐서 배포합니다. 그런 경고가 보이면 <code class="nb">npm pkg fix</code>로 원본을 먼저 바로잡으세요.</div>
+</article>
+
+<article class="card" id="ch-publish-checklist">
+<h3>배포 전 점검표</h3>
+<ol class="steps">
+<li><code class="nb">npm pack --dry-run</code>으로 <b>담길 파일 목록</b>을 눈으로 확인합니다.</li>
+<li><code class="nb">version</code>을 올립니다. 같은 버전은 두 번 올릴 수 없습니다.</li>
+<li><code class="nb">exports</code>·<code class="nb">bin</code>이 <b>배포본에 실제로 있는 파일</b>을 가리키는지 봅니다. <code class="nb">src</code>를 <code class="nb">files</code>에서 빠뜨리면 설치 즉시 깨집니다.</li>
+<li>범위 패키지를 공개하려면 <code class="nb">--access public</code>.</li>
+<li><code class="nb">npm publish --dry-run</code>으로 마지막 확인.</li>
+</ol>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>실수했을 때</th><th>할 수 있는 일</th></tr>
+<tr><td>잘못 배포함</td><td>72시간 안이면 <code>npm unpublish</code>. 그 뒤엔 불가</td></tr>
+<tr><td>쓰지 말라고 알리고 싶음</td><td><code>npm deprecate</code>로 설치할 때 경고를 띄움</td></tr>
+<tr><td>비밀이 새어 나감</td><td>지우는 것보다 <b>키를 폐기</b>하는 것이 먼저입니다</td></tr>
+</table>
+</div>
+<div class="key"><b>배포는 되돌릴 수 없다고 생각하고 움직이세요</b> — <code class="nb">unpublish</code>에는 시간 제한이 있고, 이미 락파일에 그 버전을 적어 둔 사람들이 있습니다.</div>
 </article>
 
 <article class="card section" id="part-async">
@@ -1767,10 +2184,153 @@ console.log('패턴 별칭 :', shout('되는군요'));</code></pre>
 <p class="chsub">timers · pending · poll · check · close 와 libuv 스레드풀</p>
 </article>
 
-<article class="card" id="ch-eventloop-fill">
-<!-- FILL:ch-eventloop -->
-<h3>이벤트 루프 6단계 — 작성 예정</h3>
-<div class="todo"><b>이 자리에 8장</b>이 들어갑니다. 예제를 실행해 출력을 채록한 뒤 이 카드를 대체합니다.</div>
+<article class="card" id="ch-eventloop-why">
+<h3>스레드 하나로 어떻게 여럿을 감당하는가</h3>
+<p class="lead">1장에서 본 그 발상입니다. Node는 기다리는 동안 <b>아무것도 하지 않는 시간</b>을 없앱니다. 같은 파일을 두 방식으로 읽어 보면 차이가 그대로 드러납니다.</p>
+<pre><code data-lang="js">import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+
+// 동기: 파일을 다 읽을 때까지 다음 줄로 넘어가지 못한다
+console.log('동기 시작');
+readFileSync('./blocking.mjs', 'utf8');
+console.log('동기 끝');
+
+// 비동기: 읽기를 맡겨 두고 곧장 다음 줄로 간다
+console.log('비동기 시작');
+readFile('./blocking.mjs', 'utf8').then(() =&gt; console.log('비동기 완료 콜백'));
+console.log('비동기 끝 (파일은 아직 안 읽혔다)');</code></pre>
+<pre class="term">동기 시작
+동기 끝
+비동기 시작
+비동기 끝 (파일은 아직 안 읽혔다)
+비동기 완료 콜백</pre>
+<div class="key"><b>마지막 줄의 위치가 전부입니다</b> — 비동기 쪽은 "완료 콜백"이 <b>맨 끝</b>에 찍혔습니다. 그사이 프로그램은 다른 일을 했습니다. 동기 쪽에는 그런 틈이 없습니다.</div>
+</article>
+
+<article class="card" id="ch-eventloop-phases">
+<h3>한 바퀴는 여섯 단계로 돈다</h3>
+<ul class="flow">
+<li><b><span class="n">1</span>timers</b><span class="d">기한이 찬 <code>setTimeout</code>·<code>setInterval</code> 콜백</span></li>
+<li><b><span class="n">2</span>pending callbacks</b><span class="d">지난 바퀴에서 미뤄진 시스템 콜백 (일부 TCP 오류 등)</span></li>
+<li><b><span class="n">3</span>idle, prepare</b><span class="d">libuv 내부용. 우리 코드는 여기 들어가지 않는다</span></li>
+<li><b><span class="n">4</span>poll</b><span class="d">새 I/O 이벤트를 받아 콜백을 실행한다. 할 일이 없으면 <b>여기서 기다린다</b></span></li>
+<li><b><span class="n">5</span>check</b><span class="d"><code>setImmediate</code> 콜백</span></li>
+<li><b><span class="n">6</span>close callbacks</b><span class="d"><code>socket.on('close')</code> 같은 정리 콜백</span></li>
+<li class="mic"><b>단계와 단계 사이</b><span class="d"><code>process.nextTick</code> 큐 → 마이크로태스크 큐를 <b>완전히 비운 뒤</b> 다음 단계로</span></li>
+</ul>
+<div class="note"><b>4번 poll이 이 그림의 심장입니다</b> — 할 일이 없을 때 루프가 잠드는 자리이자, 파일·소켓에서 온 데이터가 프로그램으로 들어오는 문입니다.</div>
+</article>
+
+<article class="card" id="ch-eventloop-order">
+<h3>순서를 직접 찍어 본다</h3>
+<pre><code data-lang="js">const { readFile } = require('node:fs');
+
+// 한 바퀴 안에서 각 단계가 어떤 순서로 불리는지 표시만 남긴다
+setTimeout(() =&gt; console.log('3. timers 단계'), 0);
+setImmediate(() =&gt; console.log('4. check 단계'));
+
+readFile(__filename, () =&gt; console.log('5. poll 에서 온 I/O 콜백'));
+
+process.nextTick(() =&gt; console.log('2-1. nextTick 큐'));
+Promise.resolve().then(() =&gt; console.log('2-2. 마이크로태스크 큐'));
+
+console.log('1. 동기 코드');</code></pre>
+<pre class="term">1. 동기 코드
+2-1. nextTick 큐
+2-2. 마이크로태스크 큐
+3. timers 단계
+4. check 단계
+5. poll 에서 온 I/O 콜백</pre>
+<div class="key"><b>동기 코드가 먼저, 그다음이 큐입니다</b> — 지금 실행 중인 자바스크립트가 끝나야 루프가 움직입니다. 무거운 계산으로 스레드를 붙잡고 있으면 타이머도 I/O도 그동안 멈춰 있습니다.</div>
+</article>
+
+<article class="card" id="ch-eventloop-check">
+<h3>최상위의 setTimeout과 setImmediate는 순서가 정해져 있지 않다</h3>
+<p class="lead">면접 단골 질문인데, 정답은 "그때그때 다르다"입니다.</p>
+<pre><code data-lang="js">// 최상위에서는 순서가 정해져 있지 않다.
+// 루프가 시작될 때까지 걸린 시간이 1ms 를 넘었는지에 따라 갈린다.
+setTimeout(() =&gt; console.log('timeout'), 0);
+setImmediate(() =&gt; console.log('immediate'));</code></pre>
+<p class="cap">이 기기에서 25번씩 세 차례 세어 본 결과입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>측정</th><th><code>immediate</code>가 먼저</th><th><code>timeout</code>이 먼저</th></tr>
+<tr><td>1회차</td><td>25</td><td>0</td></tr>
+<tr><td>2회차</td><td>22</td><td>3</td></tr>
+<tr><td>3회차</td><td>22</td><td>3</td></tr>
+</table>
+</div>
+<div class="warn"><b>같은 코드, 같은 기기, 그런데 비율조차 일정하지 않습니다</b> — <code class="nb">setTimeout(fn, 0)</code>은 사실 <b>1밀리초</b>입니다. 루프가 timers 단계에 닿았을 때 그 1밀리초가 지났는지가 프로세스 시작 속도와 그때의 시스템 부하에 달려 있습니다. 1회차에서는 뒤집힌 경우가 한 번도 나오지 않았습니다.</div>
+<div class="tip"><b>그래서 이 순서에 기대는 코드를 쓰면 안 됩니다</b> — 스물다섯 번에 세 번, 어떤 날은 아예 나오지 않는 버그는 재현하기 가장 어려운 종류입니다. 이 표의 숫자를 외우지 마세요. 외울 것은 <b>정해져 있지 않다</b>는 사실입니다.</div>
+</article>
+
+<article class="card" id="ch-eventloop-io">
+<h3>단, I/O 콜백 안에서는 언제나 결정적이다</h3>
+<p class="lead">위치를 바꾸기만 하면 순서가 확정됩니다. 이번에도 20번 돌렸습니다.</p>
+<pre><code data-lang="js">import { readFile } from 'node:fs';
+
+// I/O 콜백 안(poll 단계)에서는 항상 check 단계가 먼저다
+readFile('./inside-io.mjs', () =&gt; {
+  setTimeout(() =&gt; console.log('timeout'), 0);
+  setImmediate(() =&gt; console.log('immediate'));
+});</code></pre>
+<pre class="term"># 20/20 회
+immediate
+timeout</pre>
+<div class="key"><b>20번 모두 같습니다</b> — 이 콜백은 <b>poll 단계</b>에서 돌고 있습니다. poll 바로 다음이 check(<code class="nb">setImmediate</code>)이고, timers는 다음 바퀴를 한 바퀴 돌아야 옵니다. 그래서 <code class="nb">setImmediate</code>가 항상 이깁니다.</div>
+<div class="tip"><b>I/O 콜백 안에서 "다음 바퀴에 하고 싶다"면</b> <code class="nb">setTimeout(fn, 0)</code>이 아니라 <code class="nb">setImmediate(fn)</code>입니다. 이름과 달리 <code class="nb">setImmediate</code>가 더 예측 가능합니다.</div>
+</article>
+
+<article class="card" id="ch-eventloop-threadpool">
+<h3>libuv 스레드풀 — 사실 스레드가 더 있다</h3>
+<p class="lead">"Node는 싱글 스레드"는 <b>자바스크립트가</b> 싱글 스레드라는 뜻입니다. 파일 I/O나 암호 연산 같은 것은 뒤에서 스레드풀이 처리합니다. 크기를 바꿔 보면 드러납니다.</p>
+<pre><code data-lang="js">// pbkdf2 는 libuv 스레드풀에서 돈다. 풀 크기만큼만 동시에 진행된다.
+import { pbkdf2 } from 'node:crypto';
+
+const N = 4;
+const started = Date.now();
+const times = [];
+
+console.log('UV_THREADPOOL_SIZE =', process.env.UV_THREADPOOL_SIZE ?? '(기본 4)');
+
+for (let i = 0; i &lt; N; i++) {
+  pbkdf2('password', 'salt', 200000, 32, 'sha512', () =&gt; {
+    times.push(Date.now() - started);
+    if (times.length &lt; N) return;
+    // 절대 시간은 기기마다 다르므로, 첫 완료와 마지막 완료의 간격만 본다
+    const spread = Math.max(...times) - Math.min(...times);
+    console.log('완료 개수:', times.length);
+    console.log(spread &lt; 100
+      ? '첫 완료와 마지막 완료의 간격 100ms 미만 — 넷이 사실상 동시에 끝났다'
+      : '첫 완료와 마지막 완료의 간격 100ms 이상 — 하나씩 차례로 끝났다');
+  });
+}</code></pre>
+<pre class="term">UV_THREADPOOL_SIZE = 4
+완료 개수: 4
+첫 완료와 마지막 완료의 간격 100ms 미만 — 넷이 사실상 동시에 끝났다
+---
+UV_THREADPOOL_SIZE = 1
+완료 개수: 4
+첫 완료와 마지막 완료의 간격 100ms 이상 — 하나씩 차례로 끝났다</pre>
+<div class="key"><b>코드는 한 글자도 안 바꿨습니다</b> — 환경 변수 하나로 동시성이 달라졌습니다. 스레드풀 기본 크기는 <b>4</b>이고, <code class="nb">fs</code>·<code class="nb">crypto</code>·<code class="nb">zlib</code>·<code class="nb">dns.lookup</code>이 이 풀을 함께 씁니다.</div>
+</article>
+
+<article class="card" id="ch-eventloop-blocking">
+<h3>루프를 막는다는 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>하는 일</th><th>어디서 도나</th><th>루프를 막나</th></tr>
+<tr><td><code>JSON.parse</code>(큰 문자열)</td><td>메인 스레드</td><td><b>막는다</b></td></tr>
+<tr><td><code>readFileSync</code></td><td>메인 스레드</td><td><b>막는다</b></td></tr>
+<tr><td><code>readFile</code>(콜백/프로미스)</td><td>스레드풀</td><td>막지 않는다</td></tr>
+<tr><td><code>crypto.pbkdf2</code>(콜백)</td><td>스레드풀</td><td>막지 않는다</td></tr>
+<tr><td><code>crypto.pbkdf2Sync</code></td><td>메인 스레드</td><td><b>막는다</b></td></tr>
+<tr><td>긴 <code>for</code> 반복</td><td>메인 스레드</td><td><b>막는다</b></td></tr>
+<tr><td>네트워크 요청</td><td>커널 (epoll)</td><td>막지 않는다</td></tr>
+</table>
+</div>
+<div class="warn"><b>이름에 <code class="nb">Sync</code>가 붙었으면 루프가 멈춥니다</b> — 서버가 요청을 처리하는 길목에서는 쓰지 마세요. 시작할 때 설정 파일을 한 번 읽는 것처럼, <b>아직 아무도 기다리지 않을 때</b>는 오히려 편합니다.</div>
+<div class="key"><b>CPU를 오래 쓰는 일은 애초에 이 그림 밖으로 보내야 합니다</b> — 그 방법이 10부의 <code class="nb">worker_threads</code>입니다.</div>
 </article>
 
 <article class="card" id="ch-micro">
@@ -1779,10 +2339,97 @@ console.log('패턴 별칭 :', shout('되는군요'));</code></pre>
 <p class="chsub">nextTick 대 Promise, 기아 현상 실측</p>
 </article>
 
-<article class="card" id="ch-micro-fill">
-<!-- FILL:ch-micro -->
-<h3>마이크로태스크 — 작성 예정</h3>
-<div class="todo"><b>이 자리에 6장</b>이 들어갑니다. 예제를 실행해 출력을 채록한 뒤 이 카드를 대체합니다.</div>
+<article class="card" id="ch-micro-what">
+<h3>단계 사이에 끼어드는 두 개의 큐</h3>
+<p class="lead">30장의 여섯 단계는 <b>매크로태스크</b>입니다. 그 사이사이에 훨씬 급한 두 줄이 따로 있습니다. Node는 한 단계를 마칠 때마다 이 둘을 <b>완전히 비운 뒤</b>에야 다음 단계로 갑니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>큐</th><th>무엇이 들어가나</th><th>우선순위</th></tr>
+<tr><td><code>nextTick</code> 큐</td><td><code>process.nextTick()</code></td><td>가장 높음. Node 고유</td></tr>
+<tr><td>마이크로태스크 큐</td><td>프로미스 <code>.then</code>, <code>await</code> 이후, <code>queueMicrotask()</code></td><td>그다음. 자바스크립트 표준</td></tr>
+<tr><td>매크로태스크</td><td>타이머, I/O 콜백, <code>setImmediate</code></td><td>가장 낮음. 한 번에 하나씩</td></tr>
+</table>
+</div>
+<div class="key"><b>"비운다"는 말이 중요합니다</b> — 마이크로태스크를 처리하는 도중에 새 마이크로태스크가 생기면 <b>그것까지 처리하고</b> 넘어갑니다. 큐가 빌 때까지입니다. 이 성질이 뒤에 나올 기아 현상의 원인입니다.</div>
+</article>
+
+<article class="card" id="ch-micro-order">
+<h3>nextTick과 프로미스, 어느 쪽이 먼저인가</h3>
+<p class="lead">문서는 <code class="nb">nextTick</code>이 먼저라고 말합니다. 실제로 그렇습니다 — <b>CommonJS에서는</b>.</p>
+<div class="cmp good">
+<h5>CommonJS — 문서대로</h5>
+<pre><code data-lang="js">// CommonJS 진입점에서의 순서 — 문서가 말하는 그대로다
+process.nextTick(() =&gt; console.log('nextTick'));
+Promise.resolve().then(() =&gt; console.log('promise'));
+console.log('sync');</code></pre>
+<pre class="term">sync
+nextTick
+promise</pre>
+</div>
+<div class="cmp bad">
+<h5>ESM — 같은 코드인데 뒤집힌다</h5>
+<pre><code data-lang="js">// 똑같은 코드를 ESM 으로 돌리면 두 줄의 순서가 뒤집힌다
+process.nextTick(() =&gt; console.log('nextTick'));
+Promise.resolve().then(() =&gt; console.log('promise'));
+console.log('sync');</code></pre>
+<pre class="term">sync
+promise
+nextTick</pre>
+</div>
+<div class="warn"><b>확장자만 바꿔도 순서가 달라집니다</b> — ESM 모듈의 본문 자체가 프로미스 작업 안에서 실행되기 때문입니다. 이미 마이크로태스크 큐를 처리하는 중이라, 새로 등록된 <code class="nb">.then</code>이 그 자리에서 이어 돌고 <code class="nb">nextTick</code>은 그 뒤로 밀립니다.</div>
+<div class="key"><b>교훈은 "외우자"가 아니라 "기대지 말자"입니다</b> — 두 큐 사이의 상대 순서에 로직을 걸면, 파일을 CJS에서 ESM으로 옮기는 날 조용히 깨집니다.</div>
+</article>
+
+<article class="card" id="ch-micro-between">
+<h3>매 콜백마다 비워진다 — 한 번에 몰아서가 아니라</h3>
+<p class="lead">타이머 두 개가 같은 단계에 있을 때, 첫 타이머가 만든 마이크로태스크는 <b>두 번째 타이머보다 먼저</b> 돕니다.</p>
+<pre><code data-lang="js">// 마이크로태스크 큐는 "단계 사이"마다 통째로 비워진다
+setTimeout(() =&gt; {
+  console.log('타이머 1');
+  Promise.resolve().then(() =&gt; console.log('  타이머 1 이 만든 마이크로태스크'));
+}, 0);
+
+setTimeout(() =&gt; {
+  console.log('타이머 2');
+  Promise.resolve().then(() =&gt; console.log('  타이머 2 가 만든 마이크로태스크'));
+}, 0);</code></pre>
+<pre class="term">타이머 1
+  타이머 1 이 만든 마이크로태스크
+타이머 2
+  타이머 2 가 만든 마이크로태스크</pre>
+<div class="note"><b>번갈아 나옵니다</b> — "타이머 1, 타이머 2, 마이크로태스크, 마이크로태스크"가 아닙니다. Node는 <b>콜백 하나를 마칠 때마다</b> 마이크로태스크 큐를 비웁니다. 브라우저도 같은 규칙입니다.</div>
+</article>
+
+<article class="card" id="ch-micro-starve">
+<h3>기아 — 큐를 비울 수 없게 만들기</h3>
+<p class="lead">"큐가 빌 때까지 처리한다"는 규칙에는 함정이 있습니다. 처리하는 도중에 계속 새로 넣으면 <b>영원히 비지 않습니다</b>.</p>
+<pre><code data-lang="js">// nextTick 을 재귀로 걸면 루프가 다음 단계로 넘어가지 못한다
+let ticks = 0;
+
+setTimeout(() =&gt; console.log('타이머가 드디어 돌았다. 그때까지 tick 수:', ticks), 0);
+
+function spin() {
+  if (++ticks &lt; 1000) process.nextTick(spin);
+}
+spin();</code></pre>
+<pre class="term">타이머가 드디어 돌았다. 그때까지 tick 수: 1000</pre>
+<div class="warn"><b>타이머는 1000번을 다 기다렸습니다</b> — 여기서는 1000에서 멈추게 해 뒀지만, 조건을 빼면 타이머는 <b>영원히</b> 돌지 않습니다. 프로세스는 CPU를 100% 쓰면서 아무 요청도 처리하지 않는 상태가 됩니다.</div>
+<div class="tip"><b>재귀로 일을 나눠 처리해야 한다면</b> <code class="nb">process.nextTick</code>이 아니라 <code class="nb">setImmediate</code>를 쓰세요. <code class="nb">setImmediate</code>는 check 단계라 루프가 한 바퀴 돌 기회를 줍니다.</div>
+</article>
+
+<article class="card" id="ch-micro-rule">
+<h3>그래서 무엇을 쓸 것인가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>하고 싶은 일</th><th>쓸 것</th></tr>
+<tr><td>지금 이 함수가 끝난 직후, 다른 무엇보다 먼저</td><td><code>process.nextTick</code></td></tr>
+<tr><td>표준적인 "다음 틱"</td><td><code>queueMicrotask</code> 또는 <code>Promise.resolve().then</code></td></tr>
+<tr><td>루프에 한 바퀴 돌 기회를 주고 나서</td><td><code>setImmediate</code></td></tr>
+<tr><td>일정 시간 뒤에</td><td><code>setTimeout</code></td></tr>
+<tr><td>무거운 계산을 나눠서</td><td><code>setImmediate</code> 또는 워커 스레드(10부)</td></tr>
+</table>
+</div>
+<div class="key"><b>실무에서 <code class="nb">process.nextTick</code>이 필요한 경우는 드뭅니다</b> — 생성자에서 등록한 이벤트 리스너가 붙을 틈을 주는 것처럼, 라이브러리를 만들 때 쓰는 도구입니다. 애플리케이션 코드라면 거의 언제나 <code class="nb">queueMicrotask</code>나 <code class="nb">setImmediate</code>가 맞습니다.</div>
 </article>
 
 <article class="card" id="ch-callback">
@@ -1791,10 +2438,68 @@ console.log('패턴 별칭 :', shout('되는군요'));</code></pre>
 <p class="chsub">에러 우선 콜백과 promisify</p>
 </article>
 
-<article class="card" id="ch-callback-fill">
-<!-- FILL:ch-callback -->
-<h3>콜백 규약 — 작성 예정</h3>
-<div class="todo"><b>이 자리에 5장</b>이 들어갑니다. 예제를 실행해 출력을 채록한 뒤 이 카드를 대체합니다.</div>
+<article class="card" id="ch-callback-convention">
+<h3>에러 우선 콜백 — Node가 정한 약속</h3>
+<p class="lead">프로미스가 생기기 전, Node의 모든 비동기 함수는 이 규약 하나로 통일돼 있었습니다. <b>첫 인자는 에러, 결과는 그다음.</b></p>
+<pre><code data-lang="js">const { readFile } = require('node:fs');
+
+// Node 의 콜백 규약: 첫 인자가 에러, 그 다음이 결과
+readFile('./cb-convention.cjs', 'utf8', (err, data) =&gt; {
+  if (err) return console.error('실패:', err.code);
+  console.log('성공. 첫 줄:', data.split('\n')[0]);
+});
+
+readFile('./없는파일.txt', 'utf8', (err, data) =&gt; {
+  if (err) return console.error('실패:', err.code);
+  console.log('여기는 오지 않는다');
+});</code></pre>
+<pre class="term">성공. 첫 줄: const { readFile } = require('node:fs');
+
+실패: ENOENT</pre>
+<div class="warn"><b><code class="nb">try/catch</code>로는 못 잡습니다</b> — 콜백은 나중에, 완전히 다른 스택에서 불립니다. 그때 <code class="nb">try</code> 블록은 이미 끝나 있습니다. 그래서 에러를 <b>인자로</b> 넘기는 것입니다.</div>
+</article>
+
+<article class="card" id="ch-callback-zalgo">
+<h3>때로는 동기, 때로는 비동기 — 가장 고약한 버그</h3>
+<p class="lead">캐시를 붙이면서 흔히 저지르는 실수입니다. 캐시 적중이면 즉시 콜백을 부르고, 아니면 나중에 부릅니다. 이렇게 만들면 <b>호출 순서가 상황에 따라 달라집니다</b>.</p>
+<pre><code data-lang="js">// 캐시가 있으면 동기로, 없으면 비동기로 부르는 함수 — 절대 이렇게 만들면 안 된다
+const cache = new Map();
+
+function fetchValue(key, cb) {
+  if (cache.has(key)) return cb(null, cache.get(key));   // 동기 호출
+  setTimeout(() =&gt; { cache.set(key, key.toUpperCase()); cb(null, cache.get(key)); }, 0);
+}</code></pre>
+<pre class="term">첫 번째: 첫 호출 다음 줄 -&gt; 첫 호출 콜백 A
+두 번째: 두 번째 호출 콜백 A -&gt; 두 번째 호출 다음 줄</pre>
+<div class="warn"><b>두 줄의 순서가 뒤집혔습니다</b> — 첫 호출에서는 콜백이 <b>나중</b>에, 두 번째 호출에서는 <b>먼저</b> 불렸습니다. 콜백 안에서 초기화한 변수를 그 아래 줄에서 쓰고 있었다면, 캐시가 차는 순간부터 동작이 달라집니다.</div>
+<div class="tip"><b>고치는 법은 한 줄입니다</b> — 동기 경로도 <code class="nb">process.nextTick(() =&gt; cb(null, 값))</code>으로 감싸 <b>항상 비동기</b>로 만드세요. "일관성 있게 느린" 것이 "가끔 빠른" 것보다 낫습니다.</div>
+</article>
+
+<article class="card" id="ch-callback-promisify">
+<h3>promisify — 규약을 지켰다면 기계적으로 바뀐다</h3>
+<p class="lead">에러 우선 규약의 진짜 값어치가 여기서 나옵니다. 형태가 정해져 있으니 자동 변환이 가능합니다.</p>
+<pre><code data-lang="js">const { promisify } = require('node:util');
+const { readFile } = require('node:fs');
+
+// 에러 우선 규약을 지키는 함수는 기계적으로 프로미스로 바꿀 수 있다
+const readFileAsync = promisify(readFile);
+
+readFileAsync('./cb-promisify.cjs', 'utf8')
+  .then((data) =&gt; console.log('promisify 성공, 길이:', data.length &gt; 0))
+  .catch((err) =&gt; console.error('실패:', err.code));</code></pre>
+<pre class="term">promisify 성공, 길이: true</pre>
+<div class="tip"><b>내장 모듈에는 이미 프로미스판이 있습니다</b> — <code class="nb">node:fs/promises</code>, <code class="nb">node:dns/promises</code>, <code class="nb">node:timers/promises</code>. <code class="nb">promisify</code>는 <b>남의 오래된 라이브러리</b>를 감쌀 때 씁니다.</div>
+</article>
+
+<article class="card" id="ch-callback-rules">
+<h3>콜백을 다룰 때의 네 가지 규칙</h3>
+<ol class="steps">
+<li><b>에러를 먼저 처리하고 <code class="nb">return</code>하세요.</b> <code class="nb">if (err) return cb(err)</code>. <code class="nb">return</code>을 빠뜨리면 아래 코드가 그대로 이어 돕니다.</li>
+<li><b>콜백은 정확히 한 번만 부르세요.</b> 두 번 부르면 그 뒤 로직이 두 번 돕니다. 프로미스는 두 번째 <code class="nb">resolve</code>를 무시하지만, 콜백에는 그런 보호 장치가 없습니다.</li>
+<li><b>동기와 비동기를 섞지 마세요.</b> 앞 장에서 본 그것입니다.</li>
+<li><b>콜백 안에서 던지지 마세요.</b> 아무도 못 잡고 <code class="nb">uncaughtException</code>으로 갑니다.</li>
+</ol>
+<div class="key"><b>새 코드라면 콜백을 직접 쓸 일은 거의 없습니다</b> — 프로미스와 <code class="nb">async/await</code>가 위 네 가지를 문법 차원에서 막아 줍니다. 이 장이 필요한 이유는 <b>남의 코드를 읽고 감싸야 하기 때문</b>입니다. 다음 장에서 그 프로미스를 제대로 봅니다.</div>
 </article>
 
 <article class="card" id="ch-promise">
@@ -1803,10 +2508,98 @@ console.log('패턴 별칭 :', shout('되는군요'));</code></pre>
 <p class="chsub">all · allSettled · race · any · withResolvers</p>
 </article>
 
-<article class="card" id="ch-promise-fill">
-<!-- FILL:ch-promise -->
-<h3>프로미스 조합 — 작성 예정</h3>
-<div class="todo"><b>이 자리에 6장</b>이 들어갑니다. 예제를 실행해 출력을 채록한 뒤 이 카드를 대체합니다.</div>
+<article class="card" id="ch-promise-basics">
+<h3>프로미스가 고친 것</h3>
+<p class="lead">앞 장의 네 가지 규칙을 다시 보면, 프로미스는 그것들을 <b>지킬 수밖에 없게</b> 만든 장치입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>콜백의 문제</th><th>프로미스의 답</th></tr>
+<tr><td>콜백을 두 번 부를 수 있다</td><td>한 번 확정되면 다시 바뀌지 않는다</td></tr>
+<tr><td>동기·비동기가 섞인다</td><td><code>.then</code>은 <b>언제나</b> 마이크로태스크로</td></tr>
+<tr><td>에러를 인자로 날라야 한다</td><td><code>try/catch</code>가 통한다</td></tr>
+<tr><td>중첩이 깊어진다</td><td>체이닝·<code>await</code>로 평평해진다</td></tr>
+</table>
+</div>
+<div class="key"><b>"언제나 마이크로태스크"가 조용한 핵심입니다</b> — 이미 확정된 프로미스에 <code class="nb">.then</code>을 붙여도 콜백은 즉시 불리지 않고, 현재 동기 코드가 끝난 뒤에 불립니다. 앞 장에서 본 그 버그가 문법상 불가능해집니다.</div>
+</article>
+
+<article class="card" id="ch-promise-combinators">
+<h3>네 가지 조합기</h3>
+<pre><code data-lang="js">const ok = (v, ms) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r(v), ms));
+const fail = (e, ms) =&gt; new Promise((_, j) =&gt; setTimeout(() =&gt; j(new Error(e)), ms));
+
+console.log('all       :', await Promise.all([ok('a', 10), ok('b', 20)]));
+console.log('allSettled:', (await Promise.allSettled([ok('a', 10), fail('b', 20)]))
+  .map((r) =&gt; r.status).join(', '));
+console.log('race      :', await Promise.race([ok('빠름', 10), ok('느림', 50)]));
+console.log('any       :', await Promise.any([fail('먼저 실패', 10), ok('나중 성공', 30)]));
+
+try {
+  await Promise.all([ok('a', 10), fail('b', 20)]);
+} catch (e) {
+  console.log('all 은 하나만 실패해도 전체가 실패:', e.message);
+}</code></pre>
+<pre class="term">all       : [ 'a', 'b' ]
+allSettled: fulfilled, rejected
+race      : 빠름
+any       : 나중 성공
+all 은 하나만 실패해도 전체가 실패: b</pre>
+<div class="note"><b><code class="nb">any</code>와 <code class="nb">race</code>의 차이</b> — <code class="nb">race</code>는 <b>먼저 끝난 것</b>(실패여도)을 택하고, <code class="nb">any</code>는 <b>먼저 성공한 것</b>을 택합니다. 위에서 <code class="nb">any</code>는 10ms의 실패를 건너뛰고 30ms의 성공을 골랐습니다.</div>
+</article>
+
+<article class="card" id="ch-promise-parallel">
+<h3>await를 반복문에 넣으면 병렬이 아니다</h3>
+<p class="lead">가장 자주 보는 성능 실수입니다. 문법이 너무 자연스러워서, 순차로 도는 줄 모른 채 지나갑니다.</p>
+<pre><code data-lang="js">const work = (name) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r(name), 100));
+
+// 순차: 앞의 것이 끝나야 다음이 시작된다
+const t1 = Date.now();
+for (const n of ['a', 'b', 'c']) await work(n);
+const seq = Date.now() - t1;
+
+// 병렬: 셋을 한꺼번에 띄우고 모두 끝나기를 기다린다
+const t2 = Date.now();
+await Promise.all(['a', 'b', 'c'].map(work));
+const par = Date.now() - t2;
+
+console.log('순차가 병렬보다 오래 걸렸나:', seq &gt; par * 2);
+console.log('순차는 대략 3배:', Math.round(seq / par));</code></pre>
+<pre class="term">순차가 병렬보다 오래 걸렸나: true
+순차는 대략 3배: 3</pre>
+<div class="warn"><b>세 개라서 3배입니다. 백 개면 100배입니다</b> — 서로 의존하지 않는 작업이라면 먼저 전부 시작해 두고 <code class="nb">Promise.all</code>로 모으세요. <b>앞의 결과가 뒤의 입력일 때만</b> 반복문 안의 <code class="nb">await</code>가 옳습니다.</div>
+<div class="tip"><b>다만 무한정 병렬은 답이 아닙니다</b> — 1만 개를 한꺼번에 띄우면 파일 핸들이나 상대 서버가 먼저 무너집니다. 동시 개수를 제한하는 방법은 11부에서 다룹니다.</div>
+</article>
+
+<article class="card" id="ch-promise-errors">
+<h3>아무도 잡지 않은 거부</h3>
+<p class="lead">거부된 프로미스에 <code class="nb">.catch</code>가 없으면 Node는 그것을 <b>치명적</b>으로 취급합니다. 기본 동작은 프로세스 종료입니다.</p>
+<pre><code data-lang="js">// 아무도 잡지 않은 거부는 프로세스를 죽인다
+process.on('unhandledRejection', (reason) =&gt; {
+  console.log('unhandledRejection 훅이 잡았다:', reason.message);
+  process.exitCode = 0;
+});
+
+Promise.reject(new Error('아무도 안 잡음'));
+console.log('동기 코드는 그대로 끝난다');</code></pre>
+<pre class="term">동기 코드는 그대로 끝난다
+unhandledRejection 훅이 잡았다: 아무도 안 잡음</pre>
+<div class="warn"><b>훅은 로그를 남기는 용도지, 무시하는 용도가 아닙니다</b> — 여기서는 보여 주려고 <code class="nb">exitCode = 0</code>으로 덮었지만, 실제 서비스에서는 <b>기록을 남기고 우아하게 종료</b>하는 것이 맞습니다. 잡히지 않은 거부가 있다는 것은 이미 어딘가 상태가 어긋났다는 뜻입니다.</div>
+<div class="tip"><b>가장 흔한 원인</b> — <code class="nb">async</code> 함수를 <code class="nb">await</code> 없이 부르는 것입니다. <code class="nb">doWork()</code>라고만 쓰면 그 안의 실패는 아무도 받지 못합니다. 일부러 기다리지 않는 것이라면 <code class="nb">.catch(log)</code>를 반드시 붙이세요.</div>
+</article>
+
+<article class="card" id="ch-promise-withresolvers">
+<h3>Promise.withResolvers — 밖에서 풀어야 할 때</h3>
+<p class="lead">이벤트 하나를 기다리는 프로미스를 만들 때, 예전에는 <code class="nb">let resolve;</code>를 밖에 두고 생성자 안에서 대입하는 군더더기가 필요했습니다. 이제 한 줄입니다.</p>
+<pre><code data-lang="js">// resolve / reject 를 밖으로 꺼내야 할 때 쓴다 (ES2024)
+const { promise, resolve } = Promise.withResolvers();
+
+setTimeout(() =&gt; resolve('밖에서 풀었다'), 10);
+
+console.log('withResolvers 가 준 키:', Object.keys(Promise.withResolvers()).join(', '));
+console.log('결과:', await promise);</code></pre>
+<pre class="term">withResolvers 가 준 키: promise, resolve, reject
+결과: 밖에서 풀었다</pre>
+<div class="tip"><b>어디에 쓰나</b> — 이벤트 에미터의 한 번짜리 이벤트를 기다릴 때, 큐에 넣은 작업의 완료를 나중에 알려 줄 때처럼 <b>프로미스를 만드는 곳과 확정하는 곳이 다를 때</b>입니다. ES2024 표준이며 이 덱의 기준 런타임 v24에서 그대로 동작합니다.</div>
 </article>
 
 <article class="card" id="ch-abort">
@@ -1815,10 +2608,118 @@ console.log('패턴 별칭 :', shout('되는군요'));</code></pre>
 <p class="chsub">AbortSignal.timeout/any 와 AsyncLocalStorage 맛보기</p>
 </article>
 
-<article class="card" id="ch-abort-fill">
-<!-- FILL:ch-abort -->
-<h3>취소와 컨텍스트 — 작성 예정</h3>
-<div class="todo"><b>이 자리에 6장</b>이 들어갑니다. 예제를 실행해 출력을 채록한 뒤 이 카드를 대체합니다.</div>
+<article class="card" id="ch-abort-controller">
+<h3>AbortController — 취소를 위한 표준 손잡이 <span class="vt e2">v15</span></h3>
+<p class="lead">프로미스에는 취소가 없습니다. 대신 브라우저에서 온 <code class="nb">AbortController</code>가 그 자리를 맡습니다. 컨트롤러가 <b>스위치</b>, 시그널이 <b>배선</b>입니다.</p>
+<pre><code data-lang="js">// AbortController 하나로 여러 작업을 한꺼번에 끊는다
+const ac = new AbortController();
+
+const sleep = (ms, signal) =&gt; new Promise((resolve, reject) =&gt; {
+  const t = setTimeout(resolve, ms);
+  signal.addEventListener('abort', () =&gt; { clearTimeout(t); reject(signal.reason); }, { once: true });
+});
+
+setTimeout(() =&gt; ac.abort(new Error('사용자가 취소함')), 20);
+
+try {
+  await sleep(1000, ac.signal);
+  console.log('여기는 오지 않는다');
+} catch (err) {
+  console.log('취소됨:', err.message);
+  console.log('signal.aborted:', ac.signal.aborted);
+}</code></pre>
+<pre class="term">취소됨: 사용자가 취소함
+signal.aborted: true</pre>
+<div class="note"><b>1초짜리 대기가 20밀리초 만에 끝났습니다</b> — 시그널 하나를 여러 작업에 나눠 주면 <code class="nb">abort()</code> 한 번으로 전부 끊깁니다. <code class="nb">fetch</code>·<code class="nb">fs</code>·<code class="nb">timers/promises</code>·<code class="nb">events.once</code>가 모두 <code class="nb">signal</code> 옵션을 받습니다.</div>
+</article>
+
+<article class="card" id="ch-abort-timeout">
+<h3>AbortSignal.timeout — 시간 제한만 필요할 때 <span class="vt e2">v17.3</span></h3>
+<p class="lead">타이머를 만들고, 지우고, 컨트롤러를 붙이는 상투적인 코드를 한 줄이 대신합니다.</p>
+<pre><code data-lang="js">import { setTimeout as delay } from 'node:timers/promises';
+
+// 시간 제한만 필요하면 컨트롤러를 만들 필요가 없다
+try {
+  await delay(1000, undefined, { signal: AbortSignal.timeout(20) });
+} catch (err) {
+  console.log('name:', err.name);
+  console.log('code:', err.code);
+}</code></pre>
+<pre class="term">name: AbortError
+code: ABORT_ERR</pre>
+<div class="tip"><b>취소를 구분해서 다루세요</b> — 취소는 <code class="nb">name === 'AbortError'</code>(코드는 <code class="nb">ABORT_ERR</code>)로 옵니다. 사용자가 창을 닫아서 생긴 취소를 서버 장애로 집계하면 대시보드가 거짓말을 하게 됩니다.</div>
+</article>
+
+<article class="card" id="ch-abort-any">
+<h3>AbortSignal.any — 사유가 여럿일 때 <span class="vt e3">v20.3</span></h3>
+<p class="lead">"사용자가 취소하거나, 30초가 지나거나, 서버가 종료되면" 같은 조건은 시그널 여러 개를 하나로 묶어 표현합니다.</p>
+<pre><code data-lang="js">import { setTimeout as delay } from 'node:timers/promises';
+
+// 여러 취소 사유 중 무엇이든 먼저 오면 끊는다
+const userCancel = new AbortController();
+const combined = AbortSignal.any([userCancel.signal, AbortSignal.timeout(500)]);
+
+setTimeout(() =&gt; userCancel.abort(new Error('사용자가 먼저 눌렀다')), 20);
+
+try {
+  await delay(1000, undefined, { signal: combined });
+} catch (err) {
+  // delay 는 자기 몫의 AbortError 를 던진다
+  console.log('던져진 오류:', err.name);
+  // 진짜 사유는 신호에 남아 있다
+  console.log('신호에 적힌 사유:', combined.reason.message);
+}</code></pre>
+<pre class="term">던져진 오류: AbortError
+신호에 적힌 사유: 사용자가 먼저 눌렀다</pre>
+<div class="warn"><b>던져진 오류에는 사유가 안 담깁니다</b> — <code class="nb">timers/promises</code>는 자기 몫의 <code class="nb">AbortError</code>를 던집니다. <b>왜</b> 취소됐는지 알려면 <code class="nb">signal.reason</code>을 직접 읽어야 합니다. 타임아웃과 사용자 취소를 나눠 기록하려면 이 구분이 필요합니다.</div>
+</article>
+
+<article class="card" id="ch-abort-als">
+<h3>AsyncLocalStorage — 인자로 나르지 않고 문맥을 잇는다 <span class="vt e2">v16 안정</span></h3>
+<p class="lead">요청 id를 로그에 남기려고 모든 함수에 인자를 하나씩 더한 적이 있다면, 그 문제를 푸는 도구입니다. 비동기 경계를 넘어가며 값이 따라다닙니다.</p>
+<pre><code data-lang="js">import { AsyncLocalStorage } from 'node:async_hooks';
+
+// 비동기 호출을 건너가며 따라다니는 문맥 저장소
+const als = new AsyncLocalStorage();
+
+function deepInside() {
+  // 인자로 넘기지 않았는데도 요청 id 를 알 수 있다
+  console.log('  깊은 곳에서 본 요청 id:', als.getStore()?.requestId);
+}
+
+async function handle(id) {
+  await als.run({ requestId: id }, async () =&gt; {
+    await new Promise((r) =&gt; setTimeout(r, 10));
+    deepInside();
+  });
+}
+
+await Promise.all([handle('req-1'), handle('req-2')]);
+console.log('바깥에서 본 저장소:', als.getStore());</code></pre>
+<pre class="term">  깊은 곳에서 본 요청 id: req-1
+  깊은 곳에서 본 요청 id: req-2
+바깥에서 본 저장소: undefined</pre>
+<div class="key"><b>두 요청이 동시에 돌았는데 섞이지 않았습니다</b> — <code class="nb">await</code>를 건너뛰고도 각자의 <code class="nb">req-1</code>·<code class="nb">req-2</code>를 지켰습니다. 전역 변수였다면 뒤에 시작한 쪽이 앞의 값을 덮었을 것입니다. 그리고 <code class="nb">run</code> 바깥에서는 <code class="nb">undefined</code>입니다.</div>
+</article>
+
+<article class="card" id="ch-abort-patterns">
+<h3>정리 — 취소와 문맥을 다루는 기본형</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>상황</th><th>쓸 것</th></tr>
+<tr><td>시간 제한만</td><td><code>AbortSignal.timeout(ms)</code></td></tr>
+<tr><td>사용자·상위에서 끊을 수 있어야</td><td><code>new AbortController()</code> + <code>signal</code> 전달</td></tr>
+<tr><td>사유가 여럿</td><td><code>AbortSignal.any([...])</code></td></tr>
+<tr><td>이미 취소된 상태에서 시작</td><td><code>signal.throwIfAborted()</code>를 함수 첫 줄에</td></tr>
+<tr><td>요청 id·사용자 정보를 깊은 곳까지</td><td><code>AsyncLocalStorage</code></td></tr>
+</table>
+</div>
+<ul>
+<li><b>내가 만드는 비동기 함수도 <code class="nb">signal</code>을 받게 하세요.</b> 받아서 그대로 아래로 넘기기만 해도 취소가 끝까지 전달됩니다.</li>
+<li><b>리스너는 <code class="nb">{ once: true }</code>로 붙이세요.</b> 하나의 시그널에 리스너를 계속 붙이면 그 자체가 누수입니다.</li>
+<li><b><code class="nb">AsyncLocalStorage</code>를 값 전달의 지름길로 쓰지 마세요.</b> 로그 문맥·추적 id처럼 <b>모든 층이 알아야 하지만 업무 로직과 무관한 것</b>에만 씁니다.</li>
+</ul>
+<div class="key"><b>6부를 마치며</b> — 이벤트 루프의 단계, 두 마이크로태스크 큐, 콜백 규약, 프로미스 조합, 그리고 취소. 여기까지가 Node에서 "비동기"라고 부르는 것의 전부입니다. 7부부터는 이 위에서 실제 일을 합니다.</div>
 </article>
 
 <article class="card section" id="part-core1">
