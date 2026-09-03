@@ -6955,11 +6955,954 @@ SQL을 그대로 보고 싶을 때</pre></div>
 <div class="key"><b>다음</b> &mdash; 9부에서는 같은 두 엔진을 Go의 <code class="nb">database/sql</code>로 다룹니다. 커넥션 풀과 <code>context</code> 취소가 새로 등장합니다.</div>
 </article>
 
-<!-- ===== part09.html (1장) ===== -->
+<!-- ===== part09.html (36장) ===== -->
 <article class="card section" id="part9">
 <p class="chnum">9부</p>
 <h2>Go</h2>
 <p class="chsub">database/sql의 설계와 순수 Go SQLite, go-duckdb</p>
+</article>
+
+<article class="card" id="go-overview">
+<h3>표준 라이브러리에는 드라이버가 없습니다</h3>
+<p class="lead">Go의 <code class="nb">database/sql</code>은 엔진과 직접 말을 섞지 않습니다. 인터페이스만 정해 두고, 통신은 밖에서 등록된 드라이버가 맡습니다.</p>
+<p>엔진마다 프로토콜은 다르지만 응용이 원하는 동작은 <b>연결을 빌리고 · 문장을 보내고 · 행을 받고 · 커밋한다</b>로 같습니다. 공통 부분만 표준에 남기고 나머지를 떼어 낸 설계입니다.</p>
+<div class="flow"><span class="box">응용</span><span class="arr">→</span><span class="box">database/sql</span><span class="arr">→</span><span class="box">driver 인터페이스</span><span class="arr">→</span><span class="box dim">드라이버 · 엔진</span></div>
+<p class="fname">examples/p09/01-open-ping.go</p>
+<pre><code data-lang="go" data-src="p09/01-open-ping.go" data-lines="1-9">package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+
+	_ "modernc.org/sqlite"
+)</code></pre>
+<p>이름 없는 임포트 <code>_</code>는 &quot;패키지를 쓰지는 않지만 <b>init 함수는 돌려라</b>&quot;는 뜻입니다. 드라이버의 init이 <code>sql.Register(&quot;sqlite&quot;, …)</code>를 부르고, 그 순간부터 그 이름을 <code>sql.Open</code>에 쓸 수 있습니다.</p>
+<div class="note"><b>공식 문서 그대로</b> — &quot;No database drivers are included in the Go standard library.&quot; 드라이버는 언제나 제삼자 패키지입니다.</div>
+</article>
+
+<article class="card" id="go-open-ping">
+<h3>sql.Open은 연결하지 않습니다</h3>
+<p>이름과 달리 <code>sql.Open</code>은 <b>풀 객체를 만들 뿐</b>입니다. 인자만 확인하고 끝날 수도 있습니다. 그래서 DSN이 틀려도 여기서는 조용하고, 첫 질의나 <code>Ping</code>에서야 드러납니다.</p>
+<p class="fname">examples/p09/01-open-ping.go</p>
+<pre><code data-lang="go" data-src="p09/01-open-ping.go" data-lines="11-24">func main() {
+	// sql.Open 은 연결하지 않는다 — 드라이버 이름과 DSN 만 기억해 둔 풀을 돌려준다
+	db, err := sql.Open("sqlite", "file:data/shop.db?mode=ro")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Ping(); err != nil { // 여기서 비로소 연결이 열린다
+		log.Fatal(err)
+	}
+	var n int
+	err = db.QueryRow("SELECT count(*) FROM customers").Scan(&amp;n)
+	fmt.Println("customers:", n, "err:", err)
+}</code></pre>
+<pre class="term" data-out="p09/01-open-ping.go"><span class="p">$</span> GOOS=linux CGO_ENABLED=1 CC=/usr/bin/gcc go run examples/p09/01-open-ping.go
+customers: 60 err: &lt;nil&gt;</pre>
+<p class="cap">이 환경의 Go는 안드로이드용이라 리눅스 바이너리로 교차 빌드해 돌립니다. 이후 슬라이드에서는 앞의 환경 변수를 생략하고 <code>go run …</code>만 적습니다.</p>
+<div class="key"><b>Open은 한 번만</b> — 문서가 못 박고 있습니다. &quot;the Open function should be called just once. It is rarely necessary to close a DB.&quot; 요청마다 Open하는 코드는 풀을 요청마다 새로 만드는 셈입니다.</div>
+</article>
+
+<article class="card" id="go-query-rows">
+<h3>Rows 순회에는 세 가지 규율이 있습니다</h3>
+<p>여러 행을 읽는 동안 <code class="nb">*sql.Rows</code>는 연결 하나를 붙잡고 있습니다. 그래서 닫는 일과 오류를 확인하는 일이 성능과 정확성 양쪽에 걸립니다.</p>
+<p class="fname">examples/p09/02-query-rows.go</p>
+<pre><code data-lang="go" data-src="p09/02-query-rows.go" data-lines="11-39">type Product struct {
+	ID    int
+	Name  string
+	Price int
+}
+
+func main() {
+	db, _ := sql.Open("sqlite", "file:data/shop.db?mode=ro")
+	defer db.Close()
+
+	rows, err := db.Query("SELECT id, name, price FROM products WHERE category = ? ORDER BY price DESC", "도서")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close() // 커서를 닫아야 연결이 풀로 돌아간다
+
+	var books []Product
+	for rows.Next() {
+		var p Product
+		if err := rows.Scan(&amp;p.ID, &amp;p.Name, &amp;p.Price); err != nil {
+			log.Fatal(err)
+		}
+		books = append(books, p)
+	}
+	if err := rows.Err(); err != nil { // 순회 도중 난 오류는 여기서만 보인다
+		log.Fatal(err)
+	}
+	fmt.Printf("%d권, 첫 번째: %+v\n", len(books), books[0])
+}</code></pre>
+<pre class="term" data-out="p09/02-query-rows.go"><span class="p">$</span> go run examples/p09/02-query-rows.go
+8권, 첫 번째: {ID:14 Name:타입스크립트 입문 Price:199000}</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>규율</th><th>이유</th></tr>
+<tr><td><code>defer rows.Close()</code></td><td>중간에 빠져나가도 연결이 풀로 돌아갑니다</td></tr>
+<tr><td>루프 안에서 <code>Scan</code> 오류 확인</td><td>타입이 안 맞는 행에서 조용히 0이 남지 않습니다</td></tr>
+<tr><td>루프 뒤에서 <code>rows.Err()</code></td><td>순회 도중 끊긴 오류는 여기서만 보입니다</td></tr>
+</table>
+</div>
+<div class="warn"><b>가장 흔한 누락</b> — <code>rows.Err()</code>를 빼먹으면 네트워크가 끊겨 절반만 읽은 결과가 &quot;정상적으로 끝난 결과&quot;와 구분되지 않습니다.</div>
+</article>
+
+<article class="card" id="go-null-values">
+<h3>NULL은 string으로 받을 수 없습니다</h3>
+<p>Go의 <code>string</code>에는 &quot;값이 없음&quot;을 나타낼 자리가 없습니다. 빈 문자열은 엄연히 값입니다. 그래서 <code>database/sql</code>은 NULL을 string에 넣지 않고 오류를 냅니다.</p>
+<p class="fname">examples/p09/03-null-values.go</p>
+<pre><code data-lang="go" data-src="p09/03-null-values.go" data-lines="10-32">func main() {
+	db, _ := sql.Open("sqlite", ":memory:")
+	defer db.Close()
+	db.Exec("CREATE TABLE t (name TEXT, nick TEXT)")
+	db.Exec("INSERT INTO t VALUES ('민준', NULL), ('서연', '연이')")
+
+	// NULL 이 올 수 있는 열은 sql.NullString 이나 포인터로 받는다
+	rows, _ := db.Query("SELECT name, nick, nick FROM t")
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		var nick sql.NullString
+		var nickPtr *string
+		if err := rows.Scan(&amp;name, &amp;nick, &amp;nickPtr); err != nil {
+			panic(err)
+		}
+		fmt.Printf("%s Valid=%v String=%q ptr=%v\n", name, nick.Valid, nick.String, nickPtr == nil)
+	}
+	// string 에 바로 받으면 Scan 이 실패한다
+	var s string
+	err := db.QueryRow("SELECT nick FROM t WHERE name = '민준'").Scan(&amp;s)
+	fmt.Println("string 에 NULL 을 Scan:", err)
+}</code></pre>
+<pre class="term" data-out="p09/03-null-values.go"><span class="p">$</span> go run examples/p09/03-null-values.go
+민준 Valid=false String="" ptr=true
+서연 Valid=true String="연이" ptr=false
+string 에 NULL 을 Scan: sql: Scan error on column index 0, name "nick": converting NULL to string is unsupported</pre>
+<p>같은 열을 <code class="nb">sql.NullString</code>과 <code>*string</code> 두 가지로 받아 보았습니다. 앞은 <code>Valid</code> 플래그로, 뒤는 <code>nil</code>로 없음을 나타냅니다.</p>
+<div class="tip"><b>고르는 기준</b> — JSON으로 그대로 내보낼 값이면 포인터가 편하고, 구조체 필드로 오래 들고 다닐 값이면 <code class="nb">NullString</code>이 nil 역참조 사고를 막아 줍니다.</div>
+</article>
+
+<article class="card" id="go-exec-result">
+<h3>행을 돌려주지 않는 문장은 Exec으로</h3>
+<p><code>Query</code>는 커서를 열지만 <code>Exec</code>은 열지 않습니다. INSERT · UPDATE · DDL처럼 결과 집합이 없는 문장에 <code>Query</code>를 쓰면 아무 행도 읽지 않은 커서가 연결을 붙든 채 남습니다.</p>
+<p class="fname">examples/p09/04-exec-result.go</p>
+<pre><code data-lang="go" data-src="p09/04-exec-result.go" data-lines="12-28">func main() {
+	db, _ := sql.Open("sqlite", filepath.Join(os.Getenv("DBDECK_TMP"), "t.db"))
+	defer db.Close()
+	db.Exec("CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)")
+
+	res, err := db.Exec("INSERT INTO notes (body) VALUES (?), (?)", "하나", "둘")
+	if err != nil {
+		panic(err)
+	}
+	id, _ := res.LastInsertId()
+	n, _ := res.RowsAffected()
+	fmt.Println("lastInsertId:", id, "rowsAffected:", n)
+
+	res, _ = db.Exec("UPDATE notes SET body = body || '!' WHERE id &gt; ?", 0)
+	n, _ = res.RowsAffected()
+	fmt.Println("updated:", n)
+}</code></pre>
+<pre class="term" data-out="p09/04-exec-result.go"><span class="p">$</span> go run examples/p09/04-exec-result.go
+lastInsertId: 2 rowsAffected: 2
+updated: 2</pre>
+<p><code class="nb">sql.Result</code>가 주는 값은 <code>LastInsertId()</code>와 <code>RowsAffected()</code> 둘뿐이고, 둘 다 <b>오류를 함께</b> 돌려줍니다.</p>
+<div class="note"><b>왜 오류가 따라오나</b> — 표준 문서가 &quot;Not all databases support this feature&quot;라고 적어 둔 대로, 지원하지 않는 엔진이 있기 때문입니다. DuckDB가 바로 그런 경우입니다(뒤에서 봅니다).</div>
+</article>
+
+<article class="card" id="go-prepared">
+<h3>같은 문장을 여러 번 쓸 때</h3>
+<p>질의문 하나를 반복해 실행하면 엔진은 매번 같은 파싱과 계획 수립을 되풀이합니다. <code>Prepare</code>는 그 결과를 붙잡아 두고 값만 갈아 끼웁니다.</p>
+<p class="fname">examples/p09/05-prepared.go</p>
+<pre><code data-lang="go" data-src="p09/05-prepared.go" data-lines="10-25">func main() {
+	db, _ := sql.Open("sqlite", "file:data/shop.db?mode=ro")
+	defer db.Close()
+
+	// 한 번 컴파일해 여러 번 실행 — 반복 질의에서 파싱 비용을 아낀다
+	stmt, err := db.Prepare("SELECT count(*) FROM orders WHERE customer_id = ? AND status = ?")
+	if err != nil {
+		panic(err)
+	}
+	defer stmt.Close()
+	for _, cid := range []int{1, 2, 3} {
+		var n int
+		stmt.QueryRow(cid, "paid").Scan(&amp;n)
+		fmt.Printf("customer %d: %d paid orders\n", cid, n)
+	}
+}</code></pre>
+<pre class="term" data-out="p09/05-prepared.go"><span class="p">$</span> go run examples/p09/05-prepared.go
+customer 1: 5 paid orders
+customer 2: 9 paid orders
+customer 3: 9 paid orders</pre>
+<div class="key"><b>보안이 먼저입니다</b> — 자리표 <code>?</code>를 쓰는 순간 값은 절대 문장이 되지 못합니다. 속도는 그다음 이유입니다. <code>Query</code>·<code>Exec</code>에 인자를 넘기면 드라이버가 내부적으로 준비된 문장을 쓰므로, 반복하지 않는 질의라면 <code>Prepare</code>를 따로 부를 이유가 없습니다.</div>
+<div class="warn"><b>닫는 것을 잊지 마세요</b> — <code class="nb">*sql.Stmt</code>는 엔진 쪽 자원을 잡고 있습니다. <code>defer stmt.Close()</code>가 빠지면 누수입니다.</div>
+</article>
+
+<article class="card" id="go-transaction">
+<h3>트랜잭션은 defer 롤백으로 감쌉니다</h3>
+<p>커밋에 이르지 못한 트랜잭션은 <b>반드시</b> 롤백되어야 합니다. 그런데 중간에서 <code>return</code>하는 길이 여럿이라, 각 자리에 롤백을 적으면 언젠가 하나를 빠뜨립니다. 이름 붙인 반환값과 <code>defer</code>로 한자리에 모읍니다.</p>
+<p class="fname">examples/p09/06-transaction.go</p>
+<pre><code data-lang="go" data-src="p09/06-transaction.go" data-lines="14-39">// 잔액 이체: 둘 다 성공하거나 둘 다 없던 일이 되어야 한다
+func transfer(ctx context.Context, db *sql.DB, from, to, amount int) (err error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback() // 오류가 나면 되돌린다 — Commit 뒤의 Rollback 은 no-op
+		}
+	}()
+	if _, err = tx.ExecContext(ctx, "UPDATE acct SET bal = bal - ? WHERE id = ?", amount, from); err != nil {
+		return err
+	}
+	var bal int
+	if err = tx.QueryRowContext(ctx, "SELECT bal FROM acct WHERE id = ?", from).Scan(&amp;bal); err != nil {
+		return err
+	}
+	if bal &lt; 0 {
+		return errors.New("잔액 부족")
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE acct SET bal = bal + ? WHERE id = ?", amount, to); err != nil {
+		return err
+	}
+	return tx.Commit()
+}</code></pre>
+<pre class="term" data-out="p09/06-transaction.go"><span class="p">$</span> go run examples/p09/06-transaction.go
+30 이체: &lt;nil&gt;
+500 이체: 잔액 부족
+잔액: 70 30</pre>
+<p>500을 이체하려던 두 번째 호출은 잔액 검사에서 걸려 통째로 없던 일이 되었습니다. 잔액이 70과 30으로 남은 것이 그 증거입니다.</p>
+<div class="key"><b>왜 이 패턴이 안전한가</b> — 반환값 <code>err</code>에 이름을 붙였기 때문에 <code>defer</code> 안에서 마지막 err를 볼 수 있습니다. 커밋이 성공하면 err는 nil이라 롤백을 건너뛰고, 설령 불러도 이미 끝난 트랜잭션의 <code>Rollback</code>은 아무 일도 하지 않습니다.</div>
+</article>
+
+<article class="card" id="go-context-timeout">
+<h3>오래 걸리는 질의는 문맥으로 끊습니다</h3>
+<p>Go 1.8이 <code class="nb">database/sql</code>에 <code>context.Context</code>를 들여왔습니다. 요청이 취소되면 그 요청이 시작한 질의도 함께 멈추고, 잡고 있던 연결이 풀로 돌아가야 하기 때문입니다.</p>
+<p class="fname">examples/p09/07-context-timeout.go</p>
+<pre><code data-lang="go" data-src="p09/07-context-timeout.go" data-lines="12-26">func main() {
+	db, _ := sql.Open("sqlite", ":memory:")
+	defer db.Close()
+
+	// 일부러 오래 걸리는 질의: 재귀 CTE 로 큰 수열을 만들어 합친다
+	slow := "WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM s WHERE n &lt; 30000000) SELECT sum(n) FROM s"
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	var total int64
+	err := db.QueryRowContext(ctx, slow).Scan(&amp;total)
+	fmt.Println("err:", err)
+	fmt.Println("200ms 안에 끝났나:", time.Since(start) &lt; 2*time.Second)
+}</code></pre>
+<pre class="term" data-out="p09/07-context-timeout.go"><span class="p">$</span> go run examples/p09/07-context-timeout.go
+err: context deadline exceeded
+200ms 안에 끝났나: true</pre>
+<p>3천만 행을 만드는 재귀 CTE가 200밀리초에서 끊겼습니다. 돌아온 오류는 <code>context.DeadlineExceeded</code>입니다.</p>
+<div class="note"><b>Go 1.8이 함께 넣은 것</b> — <code>DB.BeginTx</code>의 격리 수준과 읽기 전용 옵션, <code>Rows.ColumnTypes</code>, 여러 결과 집합을 넘기는 <code>Rows.NextResultSet</code>, 이름 있는 인자 <code>sql.Named</code>가 같은 판에 들어왔습니다.</div>
+</article>
+
+<article class="card" id="go-pool-memory">
+<h3>풀이 있다는 사실이 드러나는 순간</h3>
+<p><code class="nb">*sql.DB</code>는 연결이 아니라 <b>연결 풀</b>입니다. 평소에는 그 사실을 잊고 써도 되지만, 연결마다 상태가 다른 경우에는 바로 문제가 됩니다. SQLite의 <code>:memory:</code>가 그 대표입니다.</p>
+<p class="fname">examples/p09/08-pool-memory-gotcha.go</p>
+<pre><code data-lang="go" data-src="p09/08-pool-memory-gotcha.go" data-lines="10-30">// 함정: :memory: 는 "연결마다" 다른 DB 다 — 풀이 두 번째 연결을 열면 표가 없다
+func main() {
+	db, _ := sql.Open("sqlite", ":memory:")
+	db.Exec("CREATE TABLE t (x)")
+	tx, _ := db.Begin()               // 연결 1 을 트랜잭션이 붙잡는다
+	_, err := db.Exec("INSERT INTO t VALUES (1)") // 풀이 연결 2 를 새로 연다
+	fmt.Println("두 번째 연결:", err)
+	tx.Rollback()
+	db.Close()
+
+	// 해법 1: 풀 크기를 1 로   해법 2: 공유 캐시 URI
+	db2, _ := sql.Open("sqlite", "file:memdb1?mode=memory&amp;cache=shared")
+	db2.SetMaxOpenConns(1)
+	db2.Exec("CREATE TABLE t (x)")
+	tx2, _ := db2.Begin()
+	tx2.Exec("INSERT INTO t VALUES (1)")
+	tx2.Commit()
+	var n int
+	db2.QueryRow("SELECT count(*) FROM t").Scan(&amp;n)
+	fmt.Println("rows:", n, "stats:", db2.Stats().OpenConnections, "open")
+}</code></pre>
+<pre class="term" data-out="p09/08-pool-memory-gotcha.go"><span class="p">$</span> go run examples/p09/08-pool-memory-gotcha.go
+두 번째 연결: SQL logic error: no such table: t (1)
+rows: 1 stats: 1 open</pre>
+<p>트랜잭션이 연결 1을 붙잡은 사이 <code>db.Exec</code>이 연결 2를 새로 열었고, 그 연결에는 방금 만든 표가 없었습니다. <code>:memory:</code>는 연결마다 별개의 데이터베이스이기 때문입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>해법</th><th>쓰는 곳</th></tr>
+<tr><td><code>db.SetMaxOpenConns(1)</code></td><td>테스트용 인메모리 DB. 가장 확실합니다</td></tr>
+<tr><td><code>file:이름?mode=memory&amp;cache=shared</code></td><td>여러 연결이 같은 인메모리 DB를 봐야 할 때</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="go-pool-settings">
+<h3>풀을 설정하고 들여다보기</h3>
+<p>풀 크기를 정하는 네 가지 손잡이가 있고, <code>db.Stats()</code>로 지금 상태를 직접 볼 수 있습니다. 숫자를 추측하지 말고 이 값을 지표로 내보내는 것이 정석입니다.</p>
+<p class="fname">examples/p09/09-pool-settings.go</p>
+<pre><code data-lang="go" data-src="p09/09-pool-settings.go" data-lines="11-25">func main() {
+	db, _ := sql.Open("sqlite", "file:data/shop.db?mode=ro")
+	defer db.Close()
+	db.SetMaxOpenConns(4)                  // 동시에 열 최대 연결
+	db.SetMaxIdleConns(2)                  // 놀고 있어도 유지할 연결
+	db.SetConnMaxLifetime(30 * time.Minute) // 오래된 연결은 갈아 끼운다
+	db.SetConnMaxIdleTime(5 * time.Minute)
+
+	rows, _ := db.Query("SELECT id FROM customers")
+	s := db.Stats()
+	fmt.Println("open:", s.OpenConnections, "inUse:", s.InUse, "idle:", s.Idle)
+	rows.Close()
+	s = db.Stats()
+	fmt.Println("open:", s.OpenConnections, "inUse:", s.InUse, "idle:", s.Idle)
+}</code></pre>
+<pre class="term" data-out="p09/09-pool-settings.go"><span class="p">$</span> go run examples/p09/09-pool-settings.go
+open: 1 inUse: 1 idle: 0
+open: 1 inUse: 0 idle: 1</pre>
+<p>커서를 열고 있는 동안 그 연결은 <code class="nb">inUse</code>였다가, <code>rows.Close()</code> 뒤에 <code class="nb">idle</code>로 돌아갔습니다. 행을 다 읽지 않고 버리는 코드가 왜 연결을 굶기는지 이 두 줄이 보여 줍니다.</p>
+<div class="tip"><b>지표로 삼을 값</b> — <code class="nb">WaitCount</code>와 <code class="nb">WaitDuration</code>이 늘고 있다면 <code>MaxOpenConns</code>가 부족하거나 어디선가 커서를 닫지 않고 있습니다.</div>
+</article>
+
+<article class="card" id="go-dsn-pragmas">
+<h3>연결마다 걸어야 할 설정은 DSN에</h3>
+<p>SQLite의 <code>PRAGMA</code> 상당수는 <b>연결 단위</b> 설정입니다. 풀이 연결을 새로 열 때마다 다시 걸어 주어야 하는데, 손으로 하면 반드시 어긋납니다. modernc 드라이버는 DSN에 <code>_pragma</code>를 적어 두면 새 연결마다 자동으로 적용합니다.</p>
+<p class="fname">examples/p09/12-dsn-pragmas.go</p>
+<pre><code data-lang="go" data-src="p09/12-dsn-pragmas.go" data-lines="12-23">func main() {
+	// DSN 의 _pragma 로 연결마다 적용할 설정을 건다 — WAL·busy_timeout·foreign_keys 가 단골
+	dsn := "file:" + filepath.Join(os.Getenv("DBDECK_TMP"), "app.db") +
+		"?_pragma=journal_mode(WAL)&amp;_pragma=busy_timeout(5000)&amp;_pragma=foreign_keys(1)"
+	db, _ := sql.Open("sqlite", dsn)
+	defer db.Close()
+	for _, p := range []string{"journal_mode", "busy_timeout", "foreign_keys"} {
+		var v string
+		db.QueryRow("PRAGMA " + p).Scan(&amp;v)
+		fmt.Printf("%-13s %s\n", p, v)
+	}
+}</code></pre>
+<pre class="term" data-out="p09/12-dsn-pragmas.go"><span class="p">$</span> go run examples/p09/12-dsn-pragmas.go
+journal_mode  wal
+busy_timeout  5000
+foreign_keys  1</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>단골 PRAGMA</th><th>왜 거는가</th></tr>
+<tr><td><code>journal_mode(WAL)</code></td><td>읽기와 쓰기가 서로를 막지 않습니다</td></tr>
+<tr><td><code>busy_timeout(5000)</code></td><td>잠김을 즉시 실패로 보지 않고 기다립니다</td></tr>
+<tr><td><code>foreign_keys(1)</code></td><td>외래 키 검사는 기본이 꺼져 있습니다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="go-generic-scan">
+<h3>제네릭으로 Scan 반복을 걷어냅니다</h3>
+<p>행을 구조체로 옮기는 코드는 표마다 모양이 같습니다. Go 1.18의 타입 매개변수를 쓰면 &quot;행 하나를 T로 만드는 함수&quot;만 넘겨받는 도우미를 열 줄 남짓으로 만들 수 있습니다. ORM 없이 반복만 없애는 방법입니다.</p>
+<p class="fname">examples/p09/10-generic-scan.go</p>
+<pre><code data-lang="go" data-src="p09/10-generic-scan.go" data-lines="10-22">// 작은 제네릭 도우미: Scan 을 넘겨받아 []T 로 모은다 — ORM 없이도 반복이 사라진다
+func Collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
+	defer rows.Close()
+	var out []T
+	for rows.Next() {
+		v, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}</code></pre>
+<p>쓰는 쪽은 <code>Scan</code> 한 줄만 적으면 됩니다.</p>
+<pre><code data-lang="go" data-src="p09/10-generic-scan.go" data-lines="29-38">func main() {
+	db, _ := sql.Open("sqlite", "file:data/shop.db?mode=ro")
+	defer db.Close()
+	rows, _ := db.Query("SELECT city, count(*) FROM customers GROUP BY city ORDER BY 2 DESC, 1 LIMIT 3")
+	cities, err := Collect(rows, func(r *sql.Rows) (City, error) {
+		var c City
+		return c, r.Scan(&amp;c.Name, &amp;c.Count)
+	})
+	fmt.Println(cities, err)
+}</code></pre>
+<pre class="term" data-out="p09/10-generic-scan.go"><span class="p">$</span> go run examples/p09/10-generic-scan.go
+[{부산 9} {울산 7} {창원 7}] &lt;nil&gt;</pre>
+<div class="key"><b>이득의 정체</b> — <code>Close</code>와 <code>rows.Err()</code>를 도우미 한 곳에 가둬 두었습니다. 호출자가 아무리 늘어도 그 두 규율을 빠뜨릴 자리가 없습니다.</div>
+</article>
+
+<article class="card" id="go-constraint-error">
+<h3>제약 위반은 문자열이 아니라 코드로 가려냅니다</h3>
+<p>&quot;이메일 중복이면 409, 그 밖의 오류면 500&quot; 같은 분기를 오류 <b>메시지</b>로 판단하면 드라이버가 문구를 바꾸는 날 무너집니다. 드라이버 고유 오류 타입을 <code>errors.As</code>로 꺼내 숫자 코드로 비교해야 합니다.</p>
+<p class="fname">examples/p09/11-constraint-error.go</p>
+<pre><code data-lang="go" data-src="p09/11-constraint-error.go" data-lines="8-9">	sqlite "modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"</code></pre>
+<pre><code data-lang="go" data-src="p09/11-constraint-error.go" data-lines="12-24">func main() {
+	db, _ := sql.Open("sqlite", ":memory:")
+	defer db.Close()
+	db.Exec("CREATE TABLE u (email TEXT UNIQUE)")
+	db.Exec("INSERT INTO u VALUES ('a@x.com')")
+	_, err := db.Exec("INSERT INTO u VALUES ('a@x.com')")
+
+	var se *sqlite.Error
+	if errors.As(err, &amp;se) { // 드라이버 오류 타입으로 꺼내면 코드로 분기할 수 있다
+		fmt.Println("code:", se.Code(), "unique?", se.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE)
+	}
+	fmt.Println("msg:", err)
+}</code></pre>
+<pre class="term" data-out="p09/11-constraint-error.go"><span class="p">$</span> go run examples/p09/11-constraint-error.go
+code: 2067 unique? true
+msg: constraint failed: UNIQUE constraint failed: u.email (2067)</pre>
+<p>2067은 SQLite의 확장 결과 코드 <code class="nb">SQLITE_CONSTRAINT_UNIQUE</code>입니다. 상수 이름은 드라이버가 <code>modernc.org/sqlite/lib</code>에 그대로 옮겨 두었습니다.</p>
+<div class="note"><b>왜 As이고 Is가 아닌가</b> — <code>errors.Is</code>는 &quot;이 오류가 그 값인가&quot;를, <code>errors.As</code>는 &quot;이 오류 사슬에 그 타입이 있는가&quot;를 묻습니다. 코드를 꺼내려면 타입이 필요하므로 <code>As</code>입니다.</div>
+</article>
+
+<article class="card" id="go-embed-migrations">
+<h3>마이그레이션을 바이너리 안에 넣습니다</h3>
+<p>Go의 배포 단위는 파일 하나짜리 실행 파일입니다. 스키마 파일을 옆에 두고 배포하면 그 장점이 사라지므로, <code>embed</code>로 SQL을 바이너리에 넣고 적용된 버전을 표로 관리합니다.</p>
+<p class="fname">examples/p09/13-embed-migrations.go</p>
+<pre><code data-lang="go" data-src="p09/13-embed-migrations.go" data-lines="12-13">//go:embed migrations/*.sql
+var migrations embed.FS</code></pre>
+<p>적용은 &quot;이미 했는가&quot;를 묻고 넘어가는 반복입니다. 파일 하나가 트랜잭션 하나입니다.</p>
+<pre><code data-lang="go" data-src="p09/13-embed-migrations.go" data-lines="24-39">	for _, name := range names {
+		var done int
+		db.QueryRow("SELECT count(*) FROM schema_version WHERE v = ?", name).Scan(&amp;done)
+		if done &gt; 0 {
+			continue
+		}
+		body, _ := migrations.ReadFile("migrations/" + name)
+		tx, _ := db.Begin()
+		if _, err := tx.Exec(string(body)); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		tx.Exec("INSERT INTO schema_version (v) VALUES (?)", name)
+		tx.Commit()
+		fmt.Println("applied", name)
+	}</code></pre>
+<pre class="term" data-out="p09/13-embed-migrations.go"><span class="p">$</span> go run examples/p09/13-embed-migrations.go
+applied 001_init.sql
+applied 002_email.sql
+1st: &lt;nil&gt;
+2nd: &lt;nil&gt;</pre>
+<div class="key"><b>멱등성이 전부</b> — 두 번째 실행이 아무 일도 하지 않아야 배포를 마음 놓고 다시 돌릴 수 있습니다. 위 출력의 <code class="nb">2nd</code> 줄에 <code>applied</code>가 없는 것이 그 확인입니다.</div>
+</article>
+
+<article class="card" id="go-orm-table">
+<h3>SQL을 어디까지 감출 것인가</h3>
+<p>Go 생태계의 선택지는 크게 셋입니다. 셋 다 결국 <code class="nb">database/sql</code> 위에 서 있으므로, 지금까지 본 규율은 어느 쪽을 골라도 그대로 쓰입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>도구</th><th>출발점</th><th>주는 것</th></tr>
+<tr><td><code class="nb">sqlc</code></td><td>내가 쓴 SQL</td><td>질의마다 타입이 붙은 Go 함수를 생성합니다</td></tr>
+<tr><td><code class="nb">ent</code></td><td>Go로 적은 스키마</td><td>스키마에서 클라이언트 코드를 생성합니다</td></tr>
+<tr><td><code class="nb">GORM</code></td><td>구조체 태그</td><td>실행 시점에 SQL을 조립하는 ORM입니다</td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>고르는 기준</th><th>기울어지는 쪽</th></tr>
+<tr><td>나가는 SQL을 눈으로 보고 싶다</td><td>sqlc · 맨손 <code class="nb">database/sql</code></td></tr>
+<tr><td>모델이 크고 관계를 타고 다닌다</td><td>ent · GORM</td></tr>
+<tr><td>DuckDB처럼 방언이 특이한 엔진</td><td>맨손이 가장 덜 싸웁니다</td></tr>
+</table>
+</div>
+<p class="cap">sqlc는 &quot;SQL에서 완전히 타입 안전한 관용적 Go 코드를 생성한다&quot;고, ent는 &quot;큰 데이터 모델을 다루는 애플리케이션을 위한 엔티티 프레임워크&quot;라고 자신을 소개합니다. 셋 다 SQLite를 지원합니다.</p>
+</article>
+
+<article class="card" id="go-error-summary">
+<h3>오류를 네 갈래로 나눠 봅니다</h3>
+<p>DB 오류를 뭉뚱그려 500으로 돌려보내면 재시도해야 할 것과 재시도하면 안 되는 것이 섞입니다. 판단 기준을 미리 정해 두는 편이 낫습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>갈래</th><th>가려내는 법</th><th>대응</th></tr>
+<tr><td>행이 없음</td><td><code>errors.Is(err, sql.ErrNoRows)</code></td><td>404 · 빈 결과. 장애가 아닙니다</td></tr>
+<tr><td>제약 위반</td><td><code>errors.As</code>로 드라이버 코드</td><td>409 · 입력 오류. 재시도 무의미</td></tr>
+<tr><td>취소 · 마감</td><td><code>errors.Is(err, context.DeadlineExceeded)</code></td><td>이미 늦었습니다. 그대로 돌려보냅니다</td></tr>
+<tr><td>잠김 · 일시적</td><td>드라이버 코드(SQLITE_BUSY 등)</td><td>짧게 물러났다 재시도</td></tr>
+</table>
+</div>
+<div class="warn"><b>메시지 비교는 금물</b> — <code>strings.Contains(err.Error(), &quot;UNIQUE&quot;)</code>는 오늘만 맞습니다. 드라이버 판을 올리는 날 조용히 깨집니다.</div>
+<div class="tip"><b>감싸되 잃지 않기</b> — <code>fmt.Errorf(&quot;주문 저장: %w&quot;, err)</code>의 <code>%w</code>는 원래 오류를 사슬에 남겨 둡니다. <code>%v</code>로 감싸면 위의 <code>Is</code>·<code>As</code>가 전부 무력해집니다.</div>
+</article>
+
+<article class="card" id="go-duckdb-query">
+<h3>드라이버만 바꾸면 코드는 그대로입니다</h3>
+<p class="lead">지금까지의 코드에서 임포트 한 줄과 드라이버 이름 하나만 바꾸면 분석 엔진 위에서 그대로 돕니다. 인터페이스를 표준에 둔 설계의 값이 여기서 나옵니다.</p>
+<p class="fname">examples/p09/20-duckdb-query.go</p>
+<pre><code data-lang="go" data-src="p09/20-duckdb-query.go">package main
+
+import (
+	"database/sql"
+	"fmt"
+
+	_ "github.com/marcboeker/go-duckdb/v2"
+)
+
+func main() {
+	db, _ := sql.Open("duckdb", "data/shop.duckdb?access_mode=read_only")
+	defer db.Close()
+
+	rows, _ := db.Query(`SELECT c.city, count(*) AS n, sum(p.amount) AS revenue
+	                     FROM payments p JOIN orders o ON o.id = p.order_id
+	                     JOIN customers c ON c.id = o.customer_id
+	                     GROUP BY ALL ORDER BY revenue DESC LIMIT 3`)
+	defer rows.Close()
+	for rows.Next() {
+		var city string
+		var n, revenue int64
+		rows.Scan(&amp;city, &amp;n, &amp;revenue)
+		fmt.Printf("%-4s %3d %10d\n", city, n, revenue)
+	}
+}</code></pre>
+<pre class="term" data-out="p09/20-duckdb-query.go"><span class="p">$</span> go run examples/p09/20-duckdb-query.go
+부산    95   48629900
+창원    80   39112000
+울산    72   36777300</pre>
+<p>세 표를 조인해 도시별 매출을 뽑았습니다. <code>GROUP BY ALL</code>은 DuckDB의 확장 문법이지만, Go 쪽에서는 그냥 문자열일 뿐이라 아무 차이가 없습니다.</p>
+<div class="tip"><b>읽기 전용으로 여는 법</b> — DSN 뒤에 <code>?access_mode=read_only</code>를 붙이면 파일을 건드리지 않습니다. 여러 프로세스가 같은 파일을 읽을 때 필요합니다.</div>
+</article>
+
+<article class="card" id="go-duckdb-parquet">
+<h3>파일을 표처럼 질의합니다</h3>
+<p>적재 단계가 없다는 것이 DuckDB를 쓰는 가장 큰 이유입니다. Parquet·CSV 경로를 표 이름 자리에 그대로 적으면 되고, 자리표도 평소처럼 씁니다.</p>
+<p class="fname">examples/p09/21-duckdb-parquet.go</p>
+<pre><code data-lang="go" data-src="p09/21-duckdb-parquet.go" data-lines="10-26">func main() {
+	db, _ := sql.Open("duckdb", "") // 빈 DSN = 인메모리
+	defer db.Close()
+	// 파일을 표처럼 — DB 에 넣지 않고 Parquet·CSV 를 바로 읽는다
+	var n int
+	var top string
+	db.QueryRow(`SELECT count(*), max(name) FROM 'data/parquet/products.parquet' WHERE price &gt;= ?`, 300000).Scan(&amp;n, &amp;top)
+	fmt.Println("expensive:", n, "last by name:", top)
+	rows, _ := db.Query(`SELECT status, count(*) FROM 'data/csv/orders.csv' GROUP BY ALL ORDER BY ALL`)
+	defer rows.Close()
+	for rows.Next() {
+		var s string
+		var c int
+		rows.Scan(&amp;s, &amp;c)
+		fmt.Println(s, c)
+	}
+}</code></pre>
+<pre class="term" data-out="p09/21-duckdb-parquet.go"><span class="p">$</span> go run examples/p09/21-duckdb-parquet.go
+expensive: 6 last by name: 탁상 스탠드
+cancelled 60
+paid 577
+pending 54
+shipped 109</pre>
+<p>빈 DSN <code>&quot;&quot;</code>은 인메모리 데이터베이스입니다. 표를 하나도 만들지 않았는데 800행짜리 CSV를 집계할 수 있었습니다.</p>
+<div class="note"><b>Go 쪽 이득</b> — CSV 파서도, Parquet 리더도 직접 붙일 필요가 없습니다. 파일 형식을 다루는 코드가 통째로 사라집니다.</div>
+</article>
+
+<article class="card" id="go-duckdb-appender">
+<h3>대량 적재는 Appender로</h3>
+<p>행마다 <code>INSERT</code>를 보내면 문장 처리 비용이 행 수만큼 곱해집니다. DuckDB의 Appender는 열 단위 버퍼에 값을 쌓았다가 한 번에 밀어 넣는 드라이버 고유 API입니다.</p>
+<p>표준 인터페이스에는 없는 기능이라 <code>sql.Open</code> 대신 <code>Connector</code>를 직접 만들고, 거기서 얻은 연결을 넘겨야 합니다.</p>
+<p class="fname">examples/p09/22-duckdb-appender.go</p>
+<pre><code data-lang="go" data-src="p09/22-duckdb-appender.go" data-lines="13-36">// Appender: 행 단위 INSERT 보다 훨씬 빠른 대량 적재 — 드라이버 고유 API 라 Connector 를 직접 만든다
+func main() {
+	path := filepath.Join(os.Getenv("DBDECK_TMP"), "log.duckdb")
+	connector, _ := duckdb.NewConnector(path, nil)
+	db := sql.OpenDB(connector)
+	defer db.Close()
+	db.Exec("CREATE TABLE hits (id INTEGER, path VARCHAR, ms DOUBLE)")
+
+	conn, _ := connector.Connect(context.Background())
+	app, err := duckdb.NewAppenderFromConn(conn, "", "hits")
+	if err != nil {
+		panic(err)
+	}
+	for i := 0; i &lt; 10000; i++ {
+		app.AppendRow(int32(i), fmt.Sprintf("/p/%d", i%7), float64(i%50))
+	}
+	app.Close()
+	conn.Close()
+
+	var n int
+	var avg float64
+	db.QueryRow("SELECT count(*), avg(ms) FROM hits").Scan(&amp;n, &amp;avg)
+	fmt.Println("rows:", n, "avg ms:", avg)
+}</code></pre>
+<pre class="term" data-out="p09/22-duckdb-appender.go"><span class="p">$</span> go run examples/p09/22-duckdb-appender.go
+rows: 10000 avg ms: 24.5</pre>
+<div class="warn"><b>Close가 곧 flush</b> — <code>app.Close()</code>를 부르기 전까지 행은 버퍼에만 있습니다. 이 호출을 빠뜨리면 표는 비어 있고 오류도 나지 않습니다.</div>
+</article>
+
+<article class="card" id="go-duckdb-types">
+<h3>중첩 타입은 any로 돌아옵니다</h3>
+<p>리스트·구조체·맵 같은 DuckDB의 중첩 타입에는 대응하는 Go 정적 타입이 없습니다. 드라이버는 이들을 <code>[]any</code>와 <code>map[string]any</code>로 풀어 주고, 그 뒤는 응용의 몫입니다.</p>
+<p class="fname">examples/p09/23-duckdb-types.go</p>
+<pre><code data-lang="go" data-src="p09/23-duckdb-types.go" data-lines="10-22">func main() {
+	db, _ := sql.Open("duckdb", "")
+	defer db.Close()
+	// 중첩 타입은 Go 의 []any / map[string]any 로 돌아온다 — 정적 타입이 아니라 any 다
+	var list, strct, ts any
+	db.QueryRow(`SELECT [1, 2, 3], {'a': 1, 'b': 'x'}, TIMESTAMP '2026-09-03 10:00:00'`).Scan(&amp;list, &amp;strct, &amp;ts)
+	fmt.Printf("%T %v\n", list, list)
+	fmt.Printf("%T %v\n", strct, strct)
+	fmt.Printf("%T %v\n", ts, ts)
+	var big string
+	db.QueryRow(`SELECT (1::HUGEINT &lt;&lt; 70)::VARCHAR`).Scan(&amp;big)
+	fmt.Println("hugeint as string:", big)
+}</code></pre>
+<pre class="term" data-out="p09/23-duckdb-types.go"><span class="p">$</span> go run examples/p09/23-duckdb-types.go
+[]interface {} [1 2 3]
+map[string]interface {} map[a:1 b:x]
+time.Time 2026-09-03 10:00:00 +0000 UTC
+hugeint as string: 1180591620717411303424</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>DuckDB 타입</th><th>Go로 오는 모습</th></tr>
+<tr><td><code>LIST</code></td><td><code>[]interface {}</code> — 원소마다 다시 단언이 필요합니다</td></tr>
+<tr><td><code>STRUCT</code> · <code>MAP</code></td><td><code>map[string]interface {}</code></td></tr>
+<tr><td><code>TIMESTAMP</code></td><td><code class="nb">time.Time</code></td></tr>
+<tr><td><code>HUGEINT</code></td><td>Go에 128비트 정수가 없습니다</td></tr>
+</table>
+</div>
+<div class="tip"><b>HUGEINT 다루기</b> — SQL 쪽에서 <code>::VARCHAR</code>로 캐스팅해 문자열로 받고, 필요하면 <code class="nb">math/big</code>으로 옮기는 편이 안전합니다.</div>
+</article>
+
+<article class="card" id="go-duckdb-tx-returning">
+<h3>새로 넣은 행의 키는 RETURNING으로</h3>
+<p>SQLite에서 쓰던 <code>LastInsertId()</code>가 DuckDB에서는 쓸 수 없습니다. 자동 증가 rowid라는 개념 자체가 없기 때문입니다. 대신 표준 SQL의 <code>RETURNING</code>으로 방금 만들어진 값을 되받습니다.</p>
+<p class="fname">examples/p09/24-duckdb-tx-returning.go</p>
+<pre><code data-lang="go" data-src="p09/24-duckdb-tx-returning.go" data-lines="10-27">func main() {
+	db, _ := sql.Open("duckdb", "")
+	defer db.Close()
+	db.Exec("CREATE SEQUENCE seq_id START 1")
+	db.Exec("CREATE TABLE notes (id INTEGER DEFAULT nextval('seq_id'), body VARCHAR)")
+
+	// DuckDB 는 LastInsertId 를 지원하지 않는다 — RETURNING 으로 받는다
+	var id int
+	db.QueryRow("INSERT INTO notes (body) VALUES (?) RETURNING id", "첫 메모").Scan(&amp;id)
+	fmt.Println("returned id:", id)
+
+	tx, _ := db.Begin()
+	tx.Exec("INSERT INTO notes (body) VALUES ('롤백될 메모')")
+	tx.Rollback()
+	var n int
+	db.QueryRow("SELECT count(*) FROM notes").Scan(&amp;n)
+	fmt.Println("rows:", n)
+}</code></pre>
+<pre class="term" data-out="p09/24-duckdb-tx-returning.go"><span class="p">$</span> go run examples/p09/24-duckdb-tx-returning.go
+returned id: 1
+rows: 1</pre>
+<p>트랜잭션도 그대로 동작합니다. 롤백한 두 번째 메모는 남지 않아 행이 하나뿐입니다.</p>
+<div class="key"><b>RETURNING이 더 나은 이유</b> — <code>LastInsertId</code>는 한 번에 한 값이지만, <code>RETURNING</code>은 여러 행 · 여러 열을 한 번에 돌려줍니다. SQLite도 3.35.0부터 지원하므로 양쪽에 같은 코드를 쓸 수 있습니다.</div>
+</article>
+
+<article class="card" id="go-duckdb-bundled">
+<h3>드라이버가 엔진을 통째로 안고 있습니다</h3>
+<p><code class="nb">go-duckdb</code>는 미리 빌드된 DuckDB 라이브러리를 바이너리에 <b>정적으로 링크</b>합니다. 별도 설치가 필요 없다는 장점과, 엔진 판이 드라이버 판에 묶인다는 제약이 한 몸입니다.</p>
+<p class="fname">examples/p09/25-duckdb-version.go</p>
+<pre><code data-lang="go" data-src="p09/25-duckdb-version.go" data-lines="10-25">func main() {
+	db, _ := sql.Open("duckdb", "")
+	defer db.Close()
+	// 드라이버가 정적으로 링크해 들고 있는 엔진 버전 — CLI 나 파이썬 쪽 버전과 별개다
+	var ver string
+	db.QueryRow("SELECT version()").Scan(&amp;ver)
+	fmt.Println("go-duckdb 가 링크한 엔진:", ver)
+
+	db.Exec("CREATE SEQUENCE s START 1")
+	db.Exec("CREATE TABLE t (id INTEGER DEFAULT nextval('s'), body VARCHAR)")
+	res, _ := db.Exec("INSERT INTO t (body) VALUES ('x'), ('y')")
+	id, err := res.LastInsertId() // DuckDB 에는 자동 증가 rowid 개념이 없다
+	fmt.Println("LastInsertId:", id, "err:", err)
+	n, err := res.RowsAffected()
+	fmt.Println("RowsAffected:", n, "err:", err)
+}</code></pre>
+<pre class="term" data-out="p09/25-duckdb-version.go"><span class="p">$</span> go run examples/p09/25-duckdb-version.go
+go-duckdb 가 링크한 엔진: v1.4.1
+LastInsertId: 0 err: &lt;nil&gt;
+RowsAffected: 2 err: &lt;nil&gt;</pre>
+<p>드라이버 v2.4.3이 링크한 엔진은 <span class="chip">v1.4.1</span>입니다. 같은 기계의 CLI나 파이썬이 1.5.5를 쓰고 있어도 이 바이너리 안은 1.4.1입니다.</p>
+<div class="warn"><b>조용한 함정</b> — 같은 출력의 <code>LastInsertId</code> 줄을 보세요. 오류 없이 <span class="chip">0</span>이 돌아옵니다. 드라이버가 <code>return 0, nil</code>로 구현해 두었기 때문에, 이 값을 믿고 쓰면 아무 경고 없이 틀립니다.</div>
+</article>
+
+<article class="card" id="go-cgo-build">
+<h3>cgo가 필요한 쪽과 아닌 쪽</h3>
+<p>SQLite 예제는 순수 Go라 아무 도구 없이 빌드되지만, DuckDB 예제는 C 라이브러리를 링크하므로 cgo와 C 컴파일러가 있어야 합니다. 이 덱은 안드로이드용 Go로 리눅스 바이너리를 교차 빌드해 돌렸습니다.</p>
+<div class="sig">GOOS=linux <u>CGO_ENABLED=1</u><span class="lbl">cgo 켜기</span> <u>CC=/usr/bin/gcc</u><span class="lbl">glibc 컴파일러</span> go run …</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>modernc.org/sqlite</th><th>go-duckdb</th></tr>
+<tr><td>cgo</td><td>필요 없음</td><td><code>CGO_ENABLED=1</code> 필수</td></tr>
+<tr><td>C 컴파일러</td><td>필요 없음</td><td>필요합니다</td></tr>
+<tr><td>미리 빌드된 대상</td><td>여러 OS·아키텍처를 한 소스로</td><td>macOS·리눅스 amd64/arm64, 윈도우 amd64</td></tr>
+<tr><td>빌드 시간</td><td>짧습니다</td><td>정적 라이브러리를 링크해 깁니다</td></tr>
+</table>
+</div>
+<div class="note"><b>알파인 리눅스 주의</b> — 미리 빌드된 라이브러리는 glibc용입니다. musl 기반 이미지에서 링크하려면 별도 준비가 필요하므로, 컨테이너 베이스 이미지를 고를 때 미리 확인하는 편이 좋습니다.</div>
+</article>
+
+<article class="card" id="go-driver-choice">
+<h3>SQLite 드라이버 두 갈래</h3>
+<p>Go에서 SQLite를 쓰는 길은 크게 둘입니다. C 라이브러리를 그대로 링크하는 쪽과, C 코드를 Go로 옮겨 심은 쪽입니다. 이 덱은 교차 빌드가 쉬운 순수 Go 쪽을 골랐습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기준</th><th><code class="nb">modernc.org/sqlite</code></th><th><code class="nb">mattn/go-sqlite3</code></th></tr>
+<tr><td>드라이버 이름</td><td><code>sqlite</code></td><td><code>sqlite3</code></td></tr>
+<tr><td>구현</td><td>C를 Go로 옮긴 이식판</td><td>C 원본을 cgo로 링크</td></tr>
+<tr><td>빌드</td><td><code>CGO_ENABLED=0</code>으로도 됩니다</td><td>cgo와 gcc가 필요합니다</td></tr>
+<tr><td>확장 기능</td><td>드라이버가 정한 범위</td><td>빌드 태그로 FTS5·JSON 등 선택</td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이럴 때</th><th>고르는 쪽</th></tr>
+<tr><td>여러 OS로 교차 빌드해 배포한다</td><td>modernc</td></tr>
+<tr><td>C 확장을 로드해야 한다</td><td>mattn</td></tr>
+<tr><td>C 툴체인을 두고 싶지 않다</td><td>modernc</td></tr>
+</table>
+</div>
+<p class="cap">두 드라이버 모두 <code class="nb">database/sql</code> 인터페이스를 구현하므로, 바꾸더라도 응용 코드는 임포트와 드라이버 이름만 손대면 됩니다.</p>
+</article>
+
+<article class="card" id="go-scan-types">
+<h3>Scan이 받아 주는 대상</h3>
+<p><code>Scan</code>은 아무 포인터에나 값을 넣어 주지 않습니다. 표준이 정한 목록이 있고, 그 밖의 타입은 <code class="nb">sql.Scanner</code>를 직접 구현해야 합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>받는 곳</th><th>비고</th></tr>
+<tr><td><code>*string</code> · <code>*[]byte</code> · <code>*bool</code></td><td>가장 흔한 세 가지입니다</td></tr>
+<tr><td><code>*int</code> 계열 · <code>*uint</code> 계열</td><td>넘칠 값이면 오류를 냅니다</td></tr>
+<tr><td><code>*float32</code> · <code>*float64</code></td><td>실수 열은 float64로 받는 것이 안전합니다</td></tr>
+<tr><td><code>*any</code></td><td>드라이버가 준 값을 변환 없이 그대로 받습니다</td></tr>
+<tr><td><code class="nb">sql.Scanner</code> 구현 타입</td><td>내가 만든 타입을 여기에 끼웁니다</td></tr>
+</table>
+</div>
+<p>드라이버가 넘겨 주는 원본 값은 <code>int64</code> · <code>float64</code> · <code>bool</code> · <code>[]byte</code> · <code>string</code> · <code class="nb">time.Time</code> · <code>nil</code> 일곱 가지뿐입니다. 나머지 변환은 전부 <code class="nb">database/sql</code>이 그 위에서 해 줍니다.</p>
+<div class="warn"><b>RawBytes 주의</b> — <code class="nb">sql.RawBytes</code>는 복사를 피해 드라이버 메모리를 그대로 가리킵니다. 다음 <code>Scan</code>이 불리면 내용이 바뀌므로 밖으로 들고 나가면 안 됩니다.</div>
+</article>
+
+<article class="card" id="go-null-types">
+<h3>NULL을 담는 그릇들</h3>
+<p>표준이 제공하는 <code class="nb">NullXxx</code> 구조체는 전부 &quot;값 + Valid 플래그&quot; 한 쌍입니다. Go 1.22부터는 제네릭 판 <code class="nb">sql.Null[T]</code> 하나로 대신할 수 있습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>그릇</th><th>담는 값</th></tr>
+<tr><td><code class="nb">sql.NullString</code></td><td><code>String string</code> · <code>Valid bool</code></td></tr>
+<tr><td><code class="nb">sql.NullInt16</code> · <code class="nb">NullInt32</code> · <code class="nb">NullInt64</code></td><td>정수 폭별로 따로 있습니다</td></tr>
+<tr><td><code class="nb">sql.NullFloat64</code> · <code class="nb">NullBool</code> · <code class="nb">NullByte</code></td><td>실수 · 참거짓 · 바이트</td></tr>
+<tr><td><code class="nb">sql.NullTime</code></td><td><code class="nb">time.Time</code></td></tr>
+<tr><td><code class="nb">sql.Null[T]</code></td><td>Go 1.22 추가. T는 위 타입 중 하나</td></tr>
+</table>
+</div>
+<div class="g2">
+<div><b>포인터로 받기</b><br>없으면 <code>nil</code>. JSON으로 그대로 내보내기 좋습니다.</div>
+<div><b>NullXxx로 받기</b><br><code>Valid</code>를 확인하지 않으면 영값이 섞입니다. 대신 nil 역참조가 없습니다.</div>
+</div>
+<div class="tip"><b>가장 나은 답</b> — 애초에 <code>NOT NULL DEFAULT</code>를 걸어 NULL이 들어오지 못하게 하는 것입니다. 그릇을 고르는 고민 자체가 사라집니다.</div>
+</article>
+
+<article class="card" id="go-errnorows">
+<h3>QueryRow는 오류를 미뤄 둡니다</h3>
+<p>한 행만 필요하면 <code>QueryRow</code>가 <code>Query</code>보다 낫습니다. 커서를 자동으로 닫아 주기 때문입니다. 대신 오류가 <code>Scan</code>까지 미뤄지고, 행이 없을 때는 <code class="nb">sql.ErrNoRows</code>가 옵니다.</p>
+<p class="fname">examples/p09/31-errnorows.go</p>
+<pre><code data-lang="go" data-src="p09/31-errnorows.go" data-lines="11-31">// 행이 없는 것은 장애가 아니라 흔한 정상 경로다 — 그래서 따로 걸러 낸다
+func findCity(db *sql.DB, id int) (string, error) {
+	var city string
+	err := db.QueryRow("SELECT city FROM customers WHERE id = ?", id).Scan(&amp;city)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("고객 %d 없음", id)
+	}
+	return city, err
+}
+
+func main() {
+	db, _ := sql.Open("sqlite", "file:data/shop.db?mode=ro")
+	defer db.Close()
+	fmt.Println(findCity(db, 1))
+	fmt.Println(findCity(db, 9999))
+
+	// Query 는 행이 0 개여도 오류가 아니다 — Next 가 처음부터 false 일 뿐이다
+	rows, err := db.Query("SELECT city FROM customers WHERE id = ?", 9999)
+	fmt.Println("Query err:", err, "| 첫 Next:", rows.Next(), "| rows.Err:", rows.Err())
+	rows.Close()
+}</code></pre>
+<pre class="term" data-out="p09/31-errnorows.go"><span class="p">$</span> go run examples/p09/31-errnorows.go
+대전 &lt;nil&gt;
+ 고객 9999 없음
+Query err: &lt;nil&gt; | 첫 Next: false | rows.Err: &lt;nil&gt;</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>행이 0개일 때</th><th>QueryRow</th><th>Query</th></tr>
+<tr><td>돌아오는 것</td><td><code class="nb">sql.ErrNoRows</code></td><td>오류 없음</td></tr>
+<tr><td>알아채는 법</td><td><code>Scan</code>의 반환값</td><td>첫 <code>Next()</code>가 false</td></tr>
+<tr><td>닫기</td><td>자동입니다</td><td><code>Close</code>는 내 몫</td></tr>
+</table>
+</div>
+<div class="key"><b>ErrNoRows는 장애가 아닙니다</b> — 로그에 error로 남기면 정상 조회가 경보를 울립니다. 위 코드처럼 도메인 오류로 바꿔 두는 편이 낫습니다.</div>
+</article>
+
+<article class="card" id="go-stmt-pool">
+<h3>준비된 문장은 연결을 따라다닙니다</h3>
+<p>준비는 <b>연결 위에서</b> 일어납니다. 그런데 <code class="nb">*sql.DB</code>는 풀이라 다음 실행이 다른 연결에 배정될 수 있습니다. 표준 라이브러리는 이때 그 연결에 <b>자동으로 다시 준비</b>합니다.</p>
+<div class="flow"><span class="box">db.Prepare</span><span class="arr">→</span><span class="box">연결 1에 준비</span><span class="arr">→</span><span class="box dim">연결 2 배정</span><span class="arr">→</span><span class="box">연결 2에 다시 준비</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>준비한 곳</th><th>수명과 묶임</th></tr>
+<tr><td><code>db.Prepare</code></td><td>DB가 살아 있는 동안 유효. 새 연결마다 자동 재준비</td></tr>
+<tr><td><code>tx.Prepare</code> · <code>conn.Prepare</code></td><td>그 연결에 영원히 묶임. 트랜잭션이 끝나면 못 씁니다</td></tr>
+</table>
+</div>
+<div class="warn"><b>숨은 비용</b> — 풀이 크고 문장이 많으면 &quot;연결 수 × 문장 수&quot;만큼 준비가 엔진 쪽에 쌓입니다. 오래 사는 <code class="nb">*sql.Stmt</code>를 수백 개 들고 있는 설계는 다시 생각해 볼 만합니다.</div>
+<div class="tip"><b>트랜잭션 안에서는</b> — <code>tx.Stmt(stmt)</code>로 DB용 문장을 트랜잭션용으로 옮겨 쓸 수 있습니다. 트랜잭션이 끝나면 그 사본도 끝납니다.</div>
+</article>
+
+<article class="card" id="go-tx-mistake">
+<h3>트랜잭션 안에서 db를 부르면</h3>
+<p><code>db.Begin()</code>이 돌려준 <code class="nb">*sql.Tx</code>는 연결 하나를 독점합니다. 그 사이에 <code>db.Query</code>를 부르면 풀은 <b>다른 연결</b>을 내줍니다. 같은 함수 안에 두 줄이 나란히 있어도 서로 다른 트랜잭션인 셈입니다.</p>
+<div class="g2">
+<div class="cmp bad"><h5>다른 연결로 새어 나감</h5><pre>tx, _ := db.Begin()
+tx.Exec("UPDATE ...")
+db.QueryRow("SELECT ...")</pre></div>
+<div class="cmp good"><h5>같은 트랜잭션 안</h5><pre>tx, _ := db.Begin()
+tx.Exec("UPDATE ...")
+tx.QueryRow("SELECT ...")</pre></div>
+</div>
+<div class="warn"><b>증상이 제각각입니다</b> — SQLite 파일이면 아직 커밋되지 않은 변경이 안 보이고, 잠금이 걸려 <code class="nb">SQLITE_BUSY</code>가 날 수도 있습니다. <code>:memory:</code>였다면 아예 &quot;표가 없다&quot;가 됩니다(앞의 풀 함정 슬라이드).</div>
+<div class="key"><b>구조로 막는 법</b> — 트랜잭션이 필요한 함수는 <code class="nb">*sql.DB</code>가 아니라 &quot;<code>ExecContext</code>·<code>QueryContext</code>를 가진 인터페이스&quot;를 받도록 씁니다. <code class="nb">*sql.DB</code>와 <code class="nb">*sql.Tx</code>가 둘 다 그 인터페이스를 만족하므로 호출자가 무엇을 넘겨도 안전합니다.</div>
+</article>
+
+<article class="card" id="go-ctx-propagation">
+<h3>취소는 어디까지 흐르는가</h3>
+<p>HTTP 요청이 끊기면 <code class="nb">http.Request</code>의 문맥이 취소됩니다. 그 문맥을 질의까지 그대로 넘겨 두면, 아무도 기다리지 않는 질의가 연결을 붙들고 있는 일이 사라집니다.</p>
+<div class="flow"><span class="box">클라이언트 끊김</span><span class="arr">→</span><span class="box">req.Context() 취소</span><span class="arr">→</span><span class="box">QueryContext 중단</span><span class="arr">→</span><span class="box dim">연결 반납</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>취소가 닿는 곳</th><th>무슨 일이 일어나나</th></tr>
+<tr><td>풀에서 연결을 기다리는 중</td><td>기다림을 포기하고 바로 오류를 돌려줍니다</td></tr>
+<tr><td>질의 실행 중</td><td>드라이버가 지원하면 엔진 쪽 실행을 끊습니다</td></tr>
+<tr><td><code class="nb">*sql.Rows</code>를 읽는 중</td><td>Rows가 닫히고 <code>rows.Err()</code>에 오류가 남습니다</td></tr>
+<tr><td><code class="nb">*sql.Tx</code></td><td>문맥이 끝나면 트랜잭션이 롤백됩니다</td></tr>
+</table>
+</div>
+<div class="warn"><b>Background를 습관으로 쓰지 마세요</b> — <code>context.Background()</code>를 그대로 넘기면 위의 어느 것도 일어나지 않습니다. 요청의 문맥을 함수 첫 인자로 계속 들고 다니는 것이 Go의 관례입니다.</div>
+</article>
+
+<article class="card" id="go-pool-params">
+<h3>풀 파라미터 네 개와 기본값</h3>
+<p>기본값을 그대로 두면 &quot;연결 수 무제한, 놀고 있는 연결 2개, 수명 무한&quot;입니다. 파일 기반 SQLite에서는 대개 문제가 없지만, 자원이 한정된 환경에서는 반드시 손봐야 합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>설정</th><th>기본값</th><th>정하는 기준</th></tr>
+<tr><td><code>SetMaxOpenConns</code></td><td>0 = 무제한</td><td>엔진과 기계가 감당할 동시 실행 수</td></tr>
+<tr><td><code>SetMaxIdleConns</code></td><td>2</td><td>재연결 비용을 아끼고 싶은 만큼</td></tr>
+<tr><td><code>SetConnMaxLifetime</code></td><td>0 = 무한</td><td>앞단에 프록시가 있다면 그 시간보다 짧게</td></tr>
+<tr><td><code>SetConnMaxIdleTime</code></td><td>0 = 무한</td><td>한산할 때 연결을 놓아 주고 싶은 시간</td></tr>
+</table>
+</div>
+<div class="note"><b>서로 물립니다</b> — <code>MaxIdleConns</code>가 <code>MaxOpenConns</code>보다 크면 자동으로 줄어듭니다. 반대로 <code>MaxIdleConns</code>가 너무 작으면 연결을 닫고 다시 여는 일이 반복됩니다.</div>
+<div class="tip"><b>SQLite라면</b> — 쓰기는 어차피 한 번에 하나입니다. 쓰기용 풀은 <code>SetMaxOpenConns(1)</code>로 두고 읽기용 <code class="nb">*sql.DB</code>를 따로 여는 구성이 잠금 경합을 크게 줄여 줍니다.</div>
+</article>
+
+<article class="card" id="go-valuer-scanner">
+<h3>내가 만든 타입을 값으로 오가게 하기</h3>
+<p>표준이 아는 타입은 일곱 가지뿐입니다. 그 밖의 타입을 쓰려면 나가는 길 <code class="nb">driver.Valuer</code>와 들어오는 길 <code class="nb">sql.Scanner</code>를 직접 이어 주면 됩니다. 이 두 인터페이스가 확장점의 전부입니다.</p>
+<p class="fname">examples/p09/32-valuer-scanner.go</p>
+<pre><code data-lang="go" data-src="p09/32-valuer-scanner.go" data-lines="13-30">// 태그 목록을 한 열에 담는 사용자 정의 타입 — Valuer 로 나가고 Scanner 로 들어온다
+type Tags []string
+
+func (t Tags) Value() (driver.Value, error) { return strings.Join(t, ","), nil }
+
+func (t *Tags) Scan(src any) error {
+	switch v := src.(type) {
+	case nil:
+		*t = nil
+	case string:
+		*t = strings.Split(v, ",")
+	case []byte:
+		*t = strings.Split(string(v), ",")
+	default:
+		return errors.New("Tags: 지원하지 않는 원본 타입")
+	}
+	return nil
+}</code></pre>
+<pre class="term" data-out="p09/32-valuer-scanner.go"><span class="p">$</span> go run examples/p09/32-valuer-scanner.go
+Go 와 SQL -&gt; main.Tags{"go", "db", "sql"} (3개)
+표에 실제로 담긴 값: go,db,sql</pre>
+<div class="satisfy">
+<div class="bx"><h6>나갈 때</h6><code>Value()</code>가 돌려준 값이<br>자리표에 꽂힙니다</div>
+<div class="mid">⇄</div>
+<div class="bx"><h6>들어올 때</h6><code>Scan(src)</code>가 원본을<br>내 타입으로 되살립니다</div>
+</div>
+<div class="warn"><b>src 타입은 드라이버가 정합니다</b> — 같은 TEXT 열이라도 드라이버에 따라 <code>string</code>으로 올 수도, <code>[]byte</code>로 올 수도 있습니다. 위 코드처럼 두 갈래를 모두 받아 두어야 드라이버를 바꿔도 깨지지 않습니다.</div>
+</article>
+
+<article class="card" id="go-bench">
+<h3>추측하지 말고 재 봅니다</h3>
+<p>Go의 벤치마크는 <code>go test</code> 안에만 있는 것이 아닙니다. <code>testing.Benchmark</code>는 보통 프로그램에서도 벤치 함수를 돌려 주고, <code>b.N</code>은 1초를 채울 때까지 프레임워크가 알아서 늘립니다.</p>
+<p class="fname">examples/p09/30-bench.go</p>
+<pre><code data-lang="go" data-src="p09/30-bench.go" data-lines="27-47">// testing.Benchmark 은 go test 없이도 벤치 함수를 돌린다 — b.N 은 1초를 채울 때까지 프레임워크가 늘린다
+func main() {
+	dsn := "file:" + filepath.Join(os.Getenv("DBDECK_TMP"), "b.db") + "?_pragma=journal_mode(WAL)"
+	db, _ := sql.Open("sqlite", dsn)
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	db.Exec("CREATE TABLE t (v INTEGER)")
+
+	each := testing.Benchmark(func(b *testing.B) {
+		for i := 0; i &lt; b.N; i++ {
+			insert(db, 50, false)
+		}
+	})
+	batch := testing.Benchmark(func(b *testing.B) {
+		for i := 0; i &lt; b.N; i++ {
+			insert(db, 50, true)
+		}
+	})
+	fmt.Println("50행 낱개 커밋   :", each)
+	fmt.Println("50행 한 트랜잭션 :", batch)
+	fmt.Printf("%.1f배 빠릅니다\n", float64(each.NsPerOp())/float64(batch.NsPerOp()))</code></pre>
+<pre class="term" data-out="p09/30-bench.go"><span class="p">$</span> go run examples/p09/30-bench.go
+50행 낱개 커밋   :       72	  19412213 ns/op
+50행 한 트랜잭션 :     1672	    712051 ns/op
+27.3배 빠릅니다</pre>
+<p class="cap">이 기계에서 실측한 값이라 실행할 때마다 조금씩 달라집니다. 봐야 할 것은 절대 수치가 아니라 두 자릿수 배율입니다.</p>
+<div class="key"><b>왜 이렇게 차이가 나나</b> — 낱개 커밋은 50번의 커밋마다 디스크 동기화를 요구합니다. 한 트랜잭션으로 묶으면 그 비용이 한 번으로 줄어듭니다. Go 코드를 아무리 다듬어도 이 배율은 나오지 않습니다.</div>
+</article>
+
+<article class="card" id="go-db-singleton">
+<h3>sql.DB는 프로그램에 하나면 됩니다</h3>
+<p><code class="nb">*sql.DB</code>는 여러 고루틴이 동시에 써도 안전합니다. 이미 안에 풀이 들어 있으므로 그 위에 또 풀을 만들 이유가 없습니다. 요청마다 <code>Open</code>하고 <code>Close</code>하는 코드가 가장 흔한 성능 사고입니다.</p>
+<div class="g2">
+<div class="cmp bad"><h5>요청마다 Open</h5><pre>func handler() {
+  db, _ := sql.Open(...)
+  defer db.Close()
+}</pre></div>
+<div class="cmp good"><h5>시작할 때 한 번</h5><pre>var db *sql.DB  // 시작 시 Open
+func handler() {
+  db.QueryContext(ctx, ...)
+}</pre></div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>흔한 오해</th><th>사실</th></tr>
+<tr><td>DB는 연결 하나다</td><td>풀입니다. 뮤텍스로 감쌀 필요가 없습니다</td></tr>
+<tr><td>Close를 자주 불러야 한다</td><td>&quot;It is rarely necessary to close a DB&quot;</td></tr>
+<tr><td>Open이 느리니 지연 생성한다</td><td>Open은 연결하지 않아 이미 빠릅니다</td></tr>
+</table>
+</div>
+<div class="tip"><b>여러 개가 필요한 경우</b> — 엔진이 다를 때(SQLite 하나, DuckDB 하나)와, 같은 파일이라도 읽기용과 쓰기용 풀을 나눌 때입니다. 그 밖에는 하나로 충분합니다.</div>
+</article>
+
+<article class="card" id="go-summary">
+<h3>9부 요약</h3>
+<p class="lead">표준은 인터페이스만 정하고, 규율은 응용이 지킵니다. 이 여덟 줄이 9부의 전부입니다.</p>
+<ol class="steps">
+<li><code>sql.Open</code>은 풀을 만들 뿐입니다. 확인은 <code>Ping</code>으로, 호출은 프로그램당 한 번.</li>
+<li><code class="nb">*sql.Rows</code>는 연결을 붙잡습니다. <code>defer Close</code>와 <code>rows.Err()</code>는 선택이 아닙니다.</li>
+<li>NULL은 <code class="nb">NullXxx</code> · 포인터 · <code class="nb">sql.Null[T]</code>로 받습니다. <code>string</code>은 실패합니다.</li>
+<li>트랜잭션은 이름 붙인 err와 <code>defer</code> 롤백으로 감싸고, 그 안에서는 <code>tx</code>만 씁니다.</li>
+<li>취소와 마감은 <code>context</code>로 흘려보냅니다. <code>Background()</code>를 습관으로 쓰지 않습니다.</li>
+<li>오류는 <code>errors.Is</code>·<code>errors.As</code>로 갈래를 나눕니다. 메시지 비교는 언젠가 깨집니다.</li>
+<li>SQLite는 순수 Go 드라이버로, DuckDB는 cgo와 정적 링크로 붙습니다. 코드는 같습니다.</li>
+<li>DuckDB에서는 <code>LastInsertId</code> 대신 <code>RETURNING</code>, 대량 적재는 Appender입니다.</li>
+</ol>
+<div class="key"><b>다음</b> — 10부에서 같은 이야기를 JDBC로 다시 봅니다. 풀 · 준비된 문장 · 트랜잭션이라는 뼈대가 언어를 바꿔도 그대로 남는지 확인하게 됩니다.</div>
 </article>
 
 <!-- ===== part10.html (1장) ===== -->
