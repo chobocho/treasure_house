@@ -8695,11 +8695,756 @@ ResultSet 순회 · 자원 닫기
 <p class="cap">다음 부에서는 같은 두 엔진을 Node.js의 <code class="nb">node:sqlite</code>와 <code class="nb">@duckdb/node-api</code>로 다시 다룹니다. 동기 API와 비동기 API의 설계 차이가 주제입니다.</p>
 </article>
 
-<!-- ===== part11.html (1장) ===== -->
+<!-- ===== part11.html (36장) ===== -->
 <article class="card section" id="part11">
 <p class="chnum">11부</p>
 <h2>JavaScript</h2>
 <p class="chsub">내장 node:sqlite와 @duckdb/node-api</p>
+</article>
+
+<article class="card" id="js-why-builtin">
+<h3>왜 Node 가 SQLite 를 품었나</h3>
+<p class="lead">Node 에서 SQLite 를 쓰려면 오랫동안 <b>네이티브 애드온</b>이 필요했습니다. 설치할 때 C 코드를 컴파일하고, Node 를 올릴 때마다 다시 컴파일합니다.</p>
+<p>작은 CLI 나 테스트 픽스처에서는 이 마찰이 유난히 비쌉니다. 그래서 Node 22.5 는 SQLite 를 런타임 안에 넣고 <code class="nb">node:sqlite</code>로 열어 주었습니다. 설치 단계가 통째로 사라집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이름</th><th>설치</th><th>API</th></tr>
+<tr><td><code class="nb">node:sqlite</code></td><td>없음 — 런타임 내장</td><td>동기</td></tr>
+<tr><td><code class="nb">better-sqlite3</code></td><td>네이티브 애드온</td><td>동기</td></tr>
+<tr><td><code class="nb">sqlite3</code></td><td>네이티브 애드온</td><td>콜백(비동기)</td></tr>
+</table>
+</div>
+<div class="note"><b>동기가 왜 낫나</b> — better-sqlite3 는 &quot;node-sqlite3 는 CPU 에 매이거나 어차피 직렬화되는 일에 비동기 API 를 쓴다&quot;며, 그것이 &quot;뮤텍스 스래싱&quot;을 부른다고 지적합니다. 파일 하나를 읽는 일에 스레드를 오가는 값이 이득보다 큽니다.</div>
+</article>
+
+<article class="card" id="js-status">
+<h3>실험에서 릴리스 후보까지</h3>
+<p>내장이라고 해서 처음부터 안정이었던 것은 아닙니다. 아래가 공식 문서에 적힌 연표입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>버전</th><th>변화</th></tr>
+<tr><td>v22.5.0</td><td>추가됨 — <code class="nb">--experimental-sqlite</code> 플래그가 필요했습니다</td></tr>
+<tr><td>v22.13.0 · v23.4.0</td><td>플래그가 없어졌습니다. 다만 여전히 실험 단계였습니다</td></tr>
+<tr><td>v24.15.0</td><td>릴리스 후보 — Stability 1.2</td></tr>
+</table>
+</div>
+<p>이 덱의 예제는 Node <span class="chip">24.19.0</span> 에서 실행했고, 그 안에 묶인 SQLite 는 <span class="chip">3.53.3</span> 입니다. <code>process.versions.sqlite</code> 로 언제든 확인할 수 있습니다.</p>
+<div class="warn"><b>아직 2 단계가 아닙니다</b> — 릴리스 후보는 세부가 바뀔 수 있다는 뜻입니다. 실무에 넣는다면 Node 버전을 고정하고 올릴 때 변경 이력을 읽으십시오.</div>
+</article>
+
+<article class="card" id="js-open-prepare">
+<h3>열고 · 준비하고 · 읽습니다</h3>
+<p class="lead">API 의 뼈대는 두 개뿐입니다. 파일을 여는 <code class="nb">DatabaseSync</code>, 질의 하나를 담는 <code class="nb">StatementSync</code>.</p>
+<div class="flow"><span class="box">DatabaseSync</span><span class="arr">prepare</span><span class="box">StatementSync</span><span class="arr">get·all·run</span><span class="box dim">결과</span></div>
+<p class="fname">examples/p11/01-open-prepare.mjs</p>
+<pre><code data-lang="js" data-src="p11/01-open-prepare.mjs">// node:sqlite (Node 22.5+ 실험, 24 에서 안정화 진행): 동기 API — 열고, 준비하고, get/all/run
+import { DatabaseSync } from 'node:sqlite';
+
+const db = new DatabaseSync('data/shop.db', { readOnly: true });
+const one = db.prepare('SELECT id, name, city FROM customers WHERE id = ?');
+console.log(one.get(1));
+const many = db.prepare('SELECT name, price FROM products WHERE category = ? ORDER BY price DESC LIMIT 2');
+console.log(many.all('도서'));
+console.log(db.prepare('SELECT count(*) AS n FROM orders').get().n);
+db.close();</code></pre>
+<pre class="term" data-out="p11/01-open-prepare.mjs"><span class="p">$</span> node examples/p11/01-open-prepare.mjs
+[Object: null prototype] { id: 1, name: '최민준', city: '대전' }
+[
+  [Object: null prototype] { name: '타입스크립트 입문', price: 199000 },
+  [Object: null prototype] { name: 'DuckDB 실전', price: 129000 }
+]
+800</pre>
+<div class="note"><b>프로토타입 없는 객체</b> — 행이 <code>[Object: null prototype]</code> 로 찍힙니다. 열 이름이 <code>toString</code> 이나 <code>__proto__</code> 여도 프로토타입 오염이 없도록 일부러 그렇게 만듭니다.</div>
+</article>
+
+<article class="card" id="js-params">
+<h3>값은 문자열로 잇지 않습니다</h3>
+<p>SQL 문자열에 값을 이어 붙이는 순간, 값이 문법이 됩니다. 바인딩은 값을 문법 밖에 두는 방법이고, 위치 <code>?</code> 와 이름 <code>$x</code> 두 가지를 씁니다.</p>
+<div class="g2">
+<div class="cmp bad"><h5>이어 붙이기</h5><pre>`... WHERE email = '${input}'`</pre></div>
+<div class="cmp good"><h5>바인딩</h5><pre>prepare('... WHERE email = ?').get(input)</pre></div>
+</div>
+<p class="fname">examples/p11/02-params.mjs</p>
+<pre><code data-lang="js" data-src="p11/02-params.mjs">// 파라미터: 위치(?)와 이름($x · :x · @x) — 값은 절대 문자열로 잇지 않는다
+import { DatabaseSync } from 'node:sqlite';
+
+const db = new DatabaseSync('data/shop.db', { readOnly: true });
+console.log(db.prepare('SELECT count(*) AS n FROM orders WHERE status = ? AND ordered_at &gt;= ?')
+              .get('paid', '2025-06-01'));
+console.log(db.prepare('SELECT name FROM products WHERE category = $cat AND price &lt; $max ORDER BY price')
+              .all({ cat: '도서', max: 20000 }).map(r =&gt; r.name));
+const evil = "' OR '1'='1";
+console.log('바인딩:', db.prepare('SELECT count(*) AS n FROM customers WHERE email = ?').get(evil).n, '행');</code></pre>
+<pre class="term" data-out="p11/02-params.mjs"><span class="p">$</span> node examples/p11/02-params.mjs
+[Object: null prototype] { n: 80 }
+[ '데이터베이스 내부 구조', 'SQL 첫걸음' ]
+바인딩: 0 행</pre>
+<p>마지막 줄이 요점입니다. <code>&#39; OR &#39;1&#39;=&#39;1</code> 은 조건이 되지 못하고 그냥 &quot;그런 이메일&quot;을 찾다가 0 행을 냅니다.</p>
+</article>
+
+<article class="card" id="js-run-changes">
+<h3>바꾸는 문장은 run() 입니다</h3>
+<p>읽는 문장은 <code>get</code>·<code>all</code>·<code>iterate</code>, 바꾸는 문장은 <code>run</code> 입니다. <code>run</code> 은 결과 행 대신 &quot;몇 행이 바뀌었나&quot;와 &quot;마지막에 붙은 rowid&quot;를 돌려줍니다.</p>
+<p class="fname">examples/p11/03-run-changes.mjs</p>
+<pre><code data-lang="js" data-src="p11/03-run-changes.mjs">// run(): 변경 문장 실행 — changes 와 lastInsertRowid 를 돌려준다
+import { DatabaseSync } from 'node:sqlite';
+import path from 'node:path';
+
+const db = new DatabaseSync(path.join(process.env.DBDECK_TMP, 'notes.db'));
+db.exec('CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL)');
+const ins = db.prepare('INSERT INTO notes (body) VALUES (?)');
+console.log(ins.run('첫 메모'));
+console.log(ins.run('둘째 메모'));
+console.log(db.prepare("UPDATE notes SET body = body || '!'").run());
+console.log(db.prepare('SELECT * FROM notes').all());</code></pre>
+<pre class="term" data-out="p11/03-run-changes.mjs"><span class="p">$</span> node examples/p11/03-run-changes.mjs
+{ changes: 1, lastInsertRowid: 1 }
+{ changes: 1, lastInsertRowid: 2 }
+{ changes: 2, lastInsertRowid: 2 }
+[
+  [Object: null prototype] { id: 1, body: '첫 메모!' },
+  [Object: null prototype] { id: 2, body: '둘째 메모!' }
+]</pre>
+<div class="tip"><b>재사용이 이득입니다</b> — <code>ins</code> 하나를 두 번 <code>run</code> 했습니다. 준비는 파싱과 코드 생성을 한 번만 하는 일이라, 반복 삽입에서는 이 재사용이 곧 속도입니다.</div>
+</article>
+
+<article class="card" id="js-iterate">
+<h3>큰 결과는 iterate() 로 흘려보냅니다</h3>
+<p><code>all()</code> 은 결과 전체를 배열로 만들어 메모리에 올립니다. 200만 행이면 200만 개의 객체가 한꺼번에 생깁니다. <code>iterate()</code> 는 한 행씩 꺼내 주므로 그럴 일이 없습니다.</p>
+<p class="fname">examples/p11/04-iterate.mjs</p>
+<pre><code data-lang="js" data-src="p11/04-iterate.mjs">// iterate(): 결과를 한 행씩 게으르게 — 큰 결과를 배열로 다 올리지 않는다
+import { DatabaseSync } from 'node:sqlite';
+
+const db = new DatabaseSync('data/shop.db', { readOnly: true });
+let total = 0, rows = 0;
+for (const r of db.prepare('SELECT qty * unit_price AS amount FROM order_items').iterate()) {
+  total += r.amount; rows += 1;
+  if (rows === 100) break;          // 중간에 멈춰도 커서가 정리된다
+}
+console.log({ rows, total });</code></pre>
+<pre class="term" data-out="p11/04-iterate.mjs"><span class="p">$</span> node examples/p11/04-iterate.mjs
+{ rows: 100, total: 18855700 }</pre>
+<div class="note"><b>중간에 멈춰도 됩니다</b> — <code>break</code> 로 빠져나오면 반복자의 정리 절차가 돌아 커서를 닫습니다. 남은 행을 다 읽어야 할 의무가 없습니다.</div>
+</article>
+
+<article class="card" id="js-transaction">
+<h3>트랜잭션은 그냥 try/catch 입니다</h3>
+<p class="lead">비동기 API 였다면 &quot;BEGIN 과 COMMIT 사이에 다른 질의가 끼어들지 않는가&quot;를 걱정해야 합니다. 동기 API 에서는 그 걱정 자체가 없습니다.</p>
+<p class="fname">examples/p11/05-transaction.mjs</p>
+<pre><code data-lang="js" data-src="p11/05-transaction.mjs" data-lines="9-23">function transfer(from, to, amount) {
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE acct SET bal = bal - ? WHERE id = ?').run(amount, from);
+    db.prepare('UPDATE acct SET bal = bal + ? WHERE id = ?').run(amount, to);
+    db.exec('COMMIT');
+    return 'ok';
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return 'rolled back: ' + e.message;
+  }
+}
+console.log(transfer(1, 2, 30));
+console.log(transfer(1, 2, 500));
+console.log(db.prepare('SELECT * FROM acct').all());</code></pre>
+<pre class="term" data-out="p11/05-transaction.mjs"><span class="p">$</span> node examples/p11/05-transaction.mjs
+ok
+rolled back: CHECK constraint failed: bal &gt;= 0
+[
+  [Object: null prototype] { id: 1, bal: 70 },
+  [Object: null prototype] { id: 2, bal: 30 }
+]</pre>
+<p>두 번째 이체는 <code>CHECK (bal &gt;= 0)</code> 에 걸려 예외가 되고, <code>ROLLBACK</code> 이 첫 <code>UPDATE</code> 까지 되돌립니다. 잔액은 70/30 으로 남습니다.</p>
+</article>
+
+<article class="card" id="js-open-options">
+<h3>열 때 정하는 것들</h3>
+<p>연결의 성격은 여는 순간 정해집니다. 읽기 전용인지, 외래 키를 검사할지, 잠금을 얼마나 기다릴지가 그렇습니다.</p>
+<p class="fname">examples/p11/06-open-options.mjs</p>
+<pre><code data-lang="js" data-src="p11/06-open-options.mjs">// 열기 옵션: 인메모리·읽기 전용·외래 키·잠금 대기 시간
+import { DatabaseSync } from 'node:sqlite';
+
+const mem = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, timeout: 2000 });
+mem.exec('CREATE TABLE p (id INTEGER PRIMARY KEY); CREATE TABLE c (pid INTEGER REFERENCES p(id))');
+try { mem.exec('INSERT INTO c VALUES (99)'); } catch (e) { console.log('FK:', e.message); }
+console.log('foreign_keys =', mem.prepare('PRAGMA foreign_keys').get().foreign_keys);
+
+const ro = new DatabaseSync('data/shop.db', { readOnly: true });
+try { ro.exec('DELETE FROM customers'); } catch (e) { console.log('RO:', e.message); }
+console.log('isOpen', ro.isOpen, 'location', ro.location().split('/').pop());</code></pre>
+<pre class="term" data-out="p11/06-open-options.mjs"><span class="p">$</span> node examples/p11/06-open-options.mjs
+FK: FOREIGN KEY constraint failed
+foreign_keys = 1
+RO: attempt to write a readonly database
+isOpen true location shop.db</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>옵션</th><th>기본값</th><th>뜻</th></tr>
+<tr><td><code class="nb">readOnly</code></td><td>false</td><td>쓰기 시도를 거부합니다</td></tr>
+<tr><td><code class="nb">enableForeignKeyConstraints</code></td><td>true</td><td>외래 키를 검사합니다</td></tr>
+<tr><td><code class="nb">timeout</code></td><td>0</td><td>잠긴 DB 를 기다릴 밀리초입니다</td></tr>
+<tr><td><code class="nb">allowExtension</code></td><td>false</td><td>확장 로드를 허용합니다</td></tr>
+</table>
+</div>
+<p class="cap">SQLite CLI 와 달리 외래 키 검사가 기본으로 켜져 있습니다. 6부에서 본 <code>PRAGMA foreign_keys</code> 를 손으로 켤 필요가 없습니다.</p>
+</article>
+
+<article class="card" id="js-statement-options">
+<h3>문장이 스스로 말하는 것들</h3>
+<p>준비된 문장은 자기 SQL 과 열 정보를 들고 있습니다. 로그를 남기거나 결과를 매핑할 때 이 정보가 필요합니다.</p>
+<p class="fname">examples/p11/07-statement-options.mjs</p>
+<pre><code data-lang="js" data-src="p11/07-statement-options.mjs" data-lines="5-11">const st = db.prepare('SELECT id, name, price FROM products WHERE id = ?');
+console.log(st.sourceSQL);
+st.get(3);
+console.log(st.expandedSQL);                 // 값이 끼워진 실제 SQL (로그용)
+console.log(st.columns().map(c =&gt; c.name + ':' + c.type));
+st.setReadBigInts(true);   console.log(st.get(3));
+st.setReturnArrays(true);  console.log(st.get(3));</code></pre>
+<pre class="term" data-out="p11/07-statement-options.mjs"><span class="p">$</span> node examples/p11/07-statement-options.mjs
+SELECT id, name, price FROM products WHERE id = ?
+SELECT id, name, price FROM products WHERE id = 3.0
+[ 'id:INTEGER', 'name:TEXT', 'price:INTEGER' ]
+[Object: null prototype] { id: 3n, name: 'USB-C 허브', price: 15000n }
+[ 3n, 'USB-C 허브', 15000n ]</pre>
+<div class="warn"><b>3 이 3.0 으로 보입니다</b> — 자바스크립트 <code>number</code> 는 배정밀도 실수라, 바인딩되면 SQLite 쪽에서도 <code>real</code> 이 됩니다. 정수로 넣고 싶으면 <code>3n</code> 처럼 <code>bigint</code> 를 쓰십시오.</div>
+<p><code>setReadBigInts(true)</code> 는 INTEGER 를 <code>bigint</code> 로 읽어 옵니다. 안전 정수 범위를 넘는 값은 이 옵션 없이 읽으면 <code class="nb">ERR_OUT_OF_RANGE</code> 로 던져집니다.</p>
+</article>
+
+<article class="card" id="js-function">
+<h3>자바스크립트 함수를 SQL 안으로</h3>
+<p class="lead">SQLite 에 없는 계산은 SQL 로 억지로 짜는 대신 함수를 등록해 버립니다. 데이터를 애플리케이션으로 끌어오지 않고 엔진 안에서 처리하는 길입니다.</p>
+<p class="fname">examples/p11/08-function.mjs</p>
+<pre><code data-lang="js" data-src="p11/08-function.mjs" data-lines="4-8">const db = new DatabaseSync('data/shop.db', { readOnly: true });
+db.function('mask_email', { deterministic: true }, (s) =&gt; s.slice(0, 2) + '***@' + s.split('@')[1]);
+db.function('vat', { deterministic: true }, (p) =&gt; Math.round(p * 1.1));
+console.log(db.prepare('SELECT mask_email(email) AS e FROM customers WHERE id = 1').get());
+console.log(db.prepare('SELECT name, vat(price) AS with_vat FROM products WHERE id &lt;= 2').all());</code></pre>
+<pre class="term" data-out="p11/08-function.mjs"><span class="p">$</span> node examples/p11/08-function.mjs
+[Object: null prototype] { e: 'us***@example.com' }
+[
+  [Object: null prototype] { name: '무선 이어폰', with_vat: 16500 },
+  [Object: null prototype] { name: '기계식 키보드', with_vat: 141900 }
+]</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>옵션</th><th>기본값</th><th>뜻</th></tr>
+<tr><td><code class="nb">deterministic</code></td><td>false</td><td>같은 입력이면 같은 출력 — 인덱스에 쓸 수 있게 됩니다</td></tr>
+<tr><td><code class="nb">varargs</code></td><td>false</td><td>인자 개수를 고정하지 않습니다</td></tr>
+<tr><td><code class="nb">useBigIntArguments</code></td><td>false</td><td>정수 인자를 <code>bigint</code> 로 받습니다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="js-aggregate">
+<h3>집계 함수도 직접 만듭니다</h3>
+<p>SQLite 에는 중앙값이 없습니다. <code>aggregate()</code> 에 시작값·행마다 할 일·마무리 세 가지를 주면 새 집계가 생깁니다.</p>
+<div class="flow"><span class="box">start</span><span class="arr">→</span><span class="box">step (행마다)</span><span class="arr">→</span><span class="box dim">result</span></div>
+<p class="fname">examples/p11/09-aggregate.mjs</p>
+<pre><code data-lang="js" data-src="p11/09-aggregate.mjs" data-lines="4-11">const db = new DatabaseSync('data/shop.db', { readOnly: true });
+db.aggregate('median', {
+  start: () =&gt; [],
+  step: (acc, v) =&gt; { acc.push(v); return acc; },
+  result: (acc) =&gt; { acc.sort((a, b) =&gt; a - b); const m = acc.length &gt;&gt; 1;
+                     return acc.length % 2 ? acc[m] : (acc[m - 1] + acc[m]) / 2; },
+});
+console.log(db.prepare('SELECT category, median(price) AS med FROM products GROUP BY category ORDER BY med DESC LIMIT 3').all());</code></pre>
+<pre class="term" data-out="p11/09-aggregate.mjs"><span class="p">$</span> node examples/p11/09-aggregate.mjs
+[
+  [Object: null prototype] { category: '전자기기', med: 67000 },
+  [Object: null prototype] { category: '식품', med: 52000 },
+  [Object: null prototype] { category: '도서', med: 38500 }
+]</pre>
+<div class="note"><b>윈도우 함수까지</b> — 여기에 <code>inverse</code> 를 더 주면 프레임에서 빠지는 행을 되돌릴 수 있어, 이 집계를 <code>OVER (...)</code> 와 함께 윈도우 함수로도 쓸 수 있습니다.</div>
+</article>
+
+<article class="card" id="js-backup">
+<h3>돌아가는 DB 를 복사합니다</h3>
+<p>파일을 그냥 <code>cp</code> 하면 그 순간 쓰기 중이던 페이지가 섞여 깨진 사본이 나옵니다. <code>backup()</code> 은 SQLite 의 온라인 백업 API 를 써서 일관된 사본을 만듭니다.</p>
+<p class="fname">examples/p11/10-backup.mjs</p>
+<pre><code data-lang="js" data-src="p11/10-backup.mjs" data-lines="6-11">const src = new DatabaseSync('data/shop.db', { readOnly: true });
+const dst = path.join(process.env.DBDECK_TMP, 'copy.db');
+const pages = await backup(src, dst, { rate: 16, progress: ({ totalPages, remainingPages }) =&gt;
+  console.log(`  ${totalPages - remainingPages}/${totalPages}`) });
+console.log('copied pages:', pages, 'size:', fs.statSync(dst).size);
+console.log(new DatabaseSync(dst, { readOnly: true }).prepare('SELECT count(*) AS n FROM orders').get());</code></pre>
+<pre class="term" data-out="p11/10-backup.mjs"><span class="p">$</span> node examples/p11/10-backup.mjs
+  16/44
+  32/44
+copied pages: 44 size: 180224
+[Object: null prototype] { n: 800 }</pre>
+<ol class="steps">
+<li><code>rate</code> 만큼의 페이지를 한 묶음으로 복사합니다 — 여기서는 16 페이지씩입니다.</li>
+<li>묶음 사이에 <code>progress</code> 콜백이 남은 페이지 수를 알려 줍니다.</li>
+<li>끝나면 복사한 총 페이지 수로 <code>Promise</code> 가 이행됩니다 — 44 페이지, 180,224 바이트였습니다.</li>
+</ol>
+<p class="cap"><code>backup()</code> 은 이 모듈에서 유일하게 비동기입니다. 복사가 오래 걸릴 수 있어서입니다.</p>
+</article>
+
+<article class="card" id="js-exec-schema">
+<h3>스키마 파일은 exec() 로 한 번에</h3>
+<p><code>prepare()</code> 는 문장 하나만 받습니다. 세미콜론으로 이어진 여러 문장을 한꺼번에 던지려면 결과를 돌려주지 않는 <code>exec()</code> 를 씁니다. 마이그레이션 적용이 딱 이 모양입니다.</p>
+<p class="fname">examples/p11/11-exec-schema.mjs</p>
+<pre><code data-lang="js" data-src="p11/11-exec-schema.mjs">// exec(): 결과 없는 여러 문장을 한 번에 — 스키마 파일 적용에 쓴다
+import { DatabaseSync } from 'node:sqlite';
+import fs from 'node:fs';
+
+const db = new DatabaseSync(':memory:');
+db.exec(fs.readFileSync('data/schema_sqlite.sql', 'utf8'));
+console.log(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(r =&gt; r.name));</code></pre>
+<pre class="term" data-out="p11/11-exec-schema.mjs"><span class="p">$</span> node examples/p11/11-exec-schema.mjs
+[ 'customers', 'order_items', 'orders', 'payments', 'products' ]</pre>
+<div class="warn"><b>값을 넣지 마십시오</b> — <code>exec()</code> 에는 바인딩이 없습니다. 사용자 입력이 섞일 수 있는 문장은 반드시 <code>prepare()</code> 로 가야 합니다.</div>
+</article>
+
+<article class="card" id="js-errors">
+<h3>오류에는 SQLite 결과 코드가 붙습니다</h3>
+<p>&quot;제약 위반&quot;이라고만 알면 대응할 수 없습니다. 유일성 위반인지 NOT NULL 위반인지에 따라 사용자에게 할 말이 다릅니다. <code>errcode</code> 가 그것을 숫자로 알려 줍니다.</p>
+<p class="fname">examples/p11/12-errors.mjs</p>
+<pre><code data-lang="js" data-src="p11/12-errors.mjs" data-lines="4-9">const db = new DatabaseSync(':memory:');
+db.exec('CREATE TABLE u (email TEXT UNIQUE NOT NULL)');
+db.exec("INSERT INTO u VALUES ('a@x.com')");
+for (const sql of ["INSERT INTO u VALUES ('a@x.com')", 'INSERT INTO u VALUES (NULL)', 'SELECT * FROM nope']) {
+  try { db.exec(sql); } catch (e) { console.log(e.errcode, e.code, '-', e.message); }
+}</code></pre>
+<pre class="term" data-out="p11/12-errors.mjs"><span class="p">$</span> node examples/p11/12-errors.mjs
+2067 ERR_SQLITE_ERROR - UNIQUE constraint failed: u.email
+1299 ERR_SQLITE_ERROR - NOT NULL constraint failed: u.email
+1 ERR_SQLITE_ERROR - no such table: nope</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>errcode</th><th>이름</th><th>뜻</th></tr>
+<tr><td>2067</td><td>SQLITE_CONSTRAINT_UNIQUE</td><td>유일 제약 위반 — 이미 있는 값</td></tr>
+<tr><td>1299</td><td>SQLITE_CONSTRAINT_NOTNULL</td><td>NOT NULL 위반 — 빠진 값</td></tr>
+<tr><td>1</td><td>SQLITE_ERROR</td><td>일반 오류 — 여기서는 없는 표</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="js-sync-cost">
+<h3>동기의 대가 — 이벤트 루프가 멈춥니다</h3>
+<p class="lead">동기 API 는 공짜가 아닙니다. 질의가 도는 동안 그 스레드는 오직 질의만 합니다. 타이머도, 들어오는 요청도 그동안 대기합니다.</p>
+<p class="fname">examples/p11/29-blocking.mjs</p>
+<pre><code data-lang="js" data-src="p11/29-blocking.mjs" data-lines="8-22">let worst = 0, prev = Date.now();
+const timer = setInterval(() =&gt; {          // 20ms 마다 깨어나야 하는 타이머
+  const now = Date.now();
+  worst = Math.max(worst, now - prev - 20);
+  prev = now;
+}, 20);
+
+await new Promise((r) =&gt; setTimeout(r, 200));      // 먼저 200ms 는 정상으로 돈다
+console.log('한가할 때 타이머 지연:', worst, 'ms');
+const t0 = Date.now();
+console.log(db.prepare(HEAVY).get());              // 이 한 줄 동안 아무것도 못 한다
+const took = Date.now() - t0;
+await new Promise((r) =&gt; setTimeout(r, 30));       // 밀린 타이머가 깨어나게 둔다
+clearInterval(timer);
+console.log(`질의 ${took}ms · 타이머가 놓친 지연 ${worst}ms`);</code></pre>
+<pre class="term" data-out="p11/29-blocking.mjs"><span class="p">$</span> node examples/p11/29-blocking.mjs
+한가할 때 타이머 지연: 1 ms
+[Object: null prototype] { n: 3000000 }
+질의 930ms · 타이머가 놓친 지연 944ms</pre>
+<p class="cap">이 기기에서 측정한 값이라 실행할 때마다 달라집니다. 요점은 숫자의 크기가 아니라, 놓친 지연이 질의 시간과 거의 같다는 사실입니다.</p>
+<div class="key"><b>기준선</b> — 인덱스를 탄 한 행 조회는 마이크로초 단위입니다. 문제가 되는 것은 큰 집계·전체 스캔처럼 수백 밀리초를 넘는 질의입니다.</div>
+</article>
+
+<article class="card" id="js-api-table">
+<h3>node:sqlite 한 장 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>대상</th><th>멤버</th><th>쓰임</th></tr>
+<tr><td rowspan="4"><code class="nb">DatabaseSync</code></td><td>prepare · exec</td><td>문장 준비 · 여러 문장 실행</td></tr>
+<tr><td>function · aggregate</td><td>사용자 정의 함수 · 집계</td></tr>
+<tr><td>isOpen · isTransaction · location()</td><td>연결 상태 확인</td></tr>
+<tr><td>close · open</td><td>닫기 · 다시 열기</td></tr>
+<tr><td rowspan="3"><code class="nb">StatementSync</code></td><td>get · all · iterate · run</td><td>한 행 · 전부 · 게으르게 · 변경</td></tr>
+<tr><td>columns() · sourceSQL · expandedSQL</td><td>열 정보 · 원본 SQL · 값이 끼워진 SQL</td></tr>
+<tr><td>setReadBigInts · setReturnArrays</td><td>정수를 bigint 로 · 행을 배열로</td></tr>
+<tr><td><code class="nb">backup()</code></td><td>모듈 함수</td><td>온라인 백업 — 유일한 비동기</td></tr>
+</table>
+</div>
+<p class="cap">이름에 붙은 <code>Sync</code> 가 약속입니다. 이 표에서 <code>backup()</code> 만 <code>Promise</code> 를 돌려줍니다.</p>
+</article>
+
+<article class="card" id="js-duck-model">
+<h3>DuckDB 쪽은 세 겹입니다</h3>
+<p class="lead">SQLite 가 &quot;파일 하나 = 연결 하나&quot;라면, DuckDB 는 <b>인스턴스</b>가 파일을 잡고 그 위에 <b>연결</b>이 여럿 붙는 구조입니다.</p>
+<div class="flow"><span class="box">DuckDBInstance</span><span class="arr">connect</span><span class="box">DuckDBConnection</span><span class="arr">run</span><span class="box dim">결과 리더</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>겹</th><th>맡는 일</th><th>개수</th></tr>
+<tr><td>인스턴스</td><td>파일을 열고 버퍼 풀·설정을 소유합니다</td><td>파일당 하나</td></tr>
+<tr><td>연결</td><td>트랜잭션 문맥과 임시 객체를 가집니다</td><td>여러 개</td></tr>
+<tr><td>결과</td><td>열 이름·타입과 행 데이터를 담습니다</td><td>질의마다</td></tr>
+</table>
+</div>
+<p>패키지는 두 층으로 나뉩니다. 응용을 위한 고수준 <code class="nb">@duckdb/node-api</code>, 그리고 &quot;DuckDB 의 C API 에 바싹 붙은&quot; 저수준 <code class="nb">@duckdb/node-bindings</code> 입니다.</p>
+</article>
+
+<article class="card" id="js-duck-basics">
+<h3>열고, 잇고, 실행합니다</h3>
+<p>모든 호출이 <code>Promise</code> 를 돌려줍니다. 이 패키지는 &quot;Promise 를 기본으로 지원하므로 별도의 duckdb-async 래퍼가 필요 없다&quot;고 밝힙니다.</p>
+<p class="fname">examples/p11/20-duckdb-basics.mjs</p>
+<pre><code data-lang="js" data-src="p11/20-duckdb-basics.mjs" data-lines="4-10">const instance = await DuckDBInstance.create('data/shop.duckdb', { access_mode: 'READ_ONLY' });
+const conn = await instance.connect();
+const result = await conn.runAndReadAll('SELECT status, count(*)::INTEGER AS n FROM orders GROUP BY status ORDER BY status');
+console.log(result.columnNames(), result.columnTypes().map(t =&gt; t.toString()));
+console.log(result.getRowObjects());
+console.log(result.getRows());
+conn.closeSync();</code></pre>
+<pre class="term" data-out="p11/20-duckdb-basics.mjs"><span class="p">$</span> node examples/p11/20-duckdb-basics.mjs
+[ 'status', 'n' ] [ 'VARCHAR', 'INTEGER' ]
+[
+  { status: 'cancelled', n: 60 },
+  { status: 'paid', n: 577 },
+  { status: 'pending', n: 54 },
+  { status: 'shipped', n: 109 }
+]
+[
+  [ 'cancelled', 60 ],
+  [ 'paid', 577 ],
+  [ 'pending', 54 ],
+  [ 'shipped', 109 ]
+]</pre>
+<p>결과 하나에서 열 이름과 타입을 먼저 얻고, 같은 결과를 객체 배열로도 배열의 배열로도 꺼냅니다. 행을 다시 질의하지 않습니다.</p>
+<div class="tip"><b>읽기 전용으로 여는 습관</b> — <code>{ access_mode: &#39;READ_ONLY&#39; }</code> 는 실수로 원본을 바꾸는 일을 막고, 같은 파일을 여러 프로세스에서 함께 읽을 수 있게 합니다.</div>
+</article>
+
+<article class="card" id="js-duck-params">
+<h3>파라미터는 배열 또는 객체</h3>
+<p>위치 인자 <code>?</code> 에는 배열을, 이름 인자 <code>$s</code> 에는 객체를 줍니다. 같은 문장을 값만 바꿔 여러 번 돌릴 때는 <code>prepare()</code> 로 준비해 두고 <code>bind()</code> 만 갈아 끼웁니다.</p>
+<p class="fname">examples/p11/21-duckdb-params.mjs</p>
+<pre><code data-lang="js" data-src="p11/21-duckdb-params.mjs" data-lines="4-9">const conn = await (await DuckDBInstance.create('data/shop.duckdb', { access_mode: 'READ_ONLY' })).connect();
+const r1 = await conn.runAndReadAll('SELECT name FROM products WHERE category = ? AND price &lt; ? ORDER BY price', ['도서', 20000]);
+console.log(r1.getRows().flat());
+const prepared = await conn.prepare('SELECT count(*)::INTEGER AS n FROM orders WHERE status = $s AND ordered_at &gt;= $d');
+prepared.bind({ s: 'paid', d: '2025-06-01' });
+console.log((await prepared.runAndReadAll()).getRowObjects());</code></pre>
+<pre class="term" data-out="p11/21-duckdb-params.mjs"><span class="p">$</span> node examples/p11/21-duckdb-params.mjs
+[ '데이터베이스 내부 구조', 'SQL 첫걸음' ]
+[ { n: 80 } ]</pre>
+<div class="note"><b>SQLite 와 같은 이유</b> — 분석 질의라고 인젝션이 안전한 것이 아닙니다. DuckDB 도 파일을 읽고 쓰는 함수를 가지고 있어, 문자열을 이어 붙이면 훨씬 더 나쁜 일이 생길 수 있습니다.</div>
+</article>
+
+<article class="card" id="js-duck-values">
+<h3>값을 잃지 않고 돌려줍니다</h3>
+<p class="lead">DuckDB 의 타입은 자바스크립트보다 넓습니다. <code>BIGINT</code>·<code>DECIMAL</code>·<code>DATE</code>·<code>LIST</code>·<code>STRUCT</code> 를 <code>number</code> 하나로 뭉개면 값이 상합니다.</p>
+<p>그래서 이 패키지는 &quot;모든 DuckDB 데이터 타입의 값을 무손실로&quot; 다루는 것을 목표로 삼고, 변환 정도가 다른 세 가지 읽기를 제공합니다.</p>
+<p class="fname">examples/p11/22-duckdb-values.mjs</p>
+<pre><code data-lang="js" data-src="p11/22-duckdb-values.mjs" data-lines="4-10">const conn = await (await DuckDBInstance.create(':memory:')).connect();
+const r = await conn.runAndReadAll(`SELECT 42::BIGINT AS big, 1.5::DECIMAL(4,2) AS dec, DATE '2026-09-03' AS d,
+                                           [1, 2] AS l, {'a': 1} AS s`);
+const raw = r.getRowObjects()[0];
+console.log(typeof raw.big, raw.dec.toString(), raw.d.toString(), raw.l.toString(), raw.s.toString());
+console.log(r.getRowObjectsJS()[0]);
+console.log(r.getRowObjectsJson()[0]);</code></pre>
+<pre class="term" data-out="p11/22-duckdb-values.mjs"><span class="p">$</span> node examples/p11/22-duckdb-values.mjs
+bigint 1.50 2026-09-03 [1, 2] {'a': 1}
+{
+  big: 42n,
+  dec: 1.5,
+  d: 2026-09-03T00:00:00.000Z,
+  l: [ 1, 2 ],
+  s: { a: 1 }
+}
+{ big: '42', dec: '1.50', d: '2026-09-03', l: [ 1, 2 ], s: { a: 1 } }</pre>
+</article>
+
+<article class="card" id="js-duck-typemap">
+<h3>읽기 세 가지를 골라 씁니다</h3>
+<p>앞 슬라이드의 한 행을 세 방식으로 읽으면 이렇게 나옵니다. 목적이 다르니 값의 모양도 다릅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>DuckDB 값</th><th>getRowObjects()</th><th>...JS()</th><th>...Json()</th></tr>
+<tr><td>42::BIGINT</td><td>42n</td><td>42n</td><td>&#39;42&#39;</td></tr>
+<tr><td>1.5::DECIMAL(4,2)</td><td>전용 값 객체</td><td>1.5</td><td>&#39;1.50&#39;</td></tr>
+<tr><td>DATE &#39;2026-09-03&#39;</td><td>전용 값 객체</td><td>Date</td><td>&#39;2026-09-03&#39;</td></tr>
+<tr><td>[1, 2]</td><td>전용 값 객체</td><td>[1, 2]</td><td>[1, 2]</td></tr>
+<tr><td>{&#39;a&#39;: 1}</td><td>전용 값 객체</td><td>{ a: 1 }</td><td>{ a: 1 }</td></tr>
+</table>
+</div>
+<div class="key"><b>고르는 기준</b> — 정밀도를 지켜야 하면 기본형, 애플리케이션 로직에 바로 쓰려면 <code>JS</code>, HTTP 응답으로 내보내려면 <code>Json</code> 입니다. <code>JSON.stringify</code> 는 <code>bigint</code> 를 만나면 예외를 던지므로 마지막이 필요합니다.</div>
+</article>
+
+<article class="card" id="js-duck-files">
+<h3>파일이 곧 표입니다</h3>
+<p>DuckDB 에서는 CSV 나 Parquet 를 미리 적재하지 않아도 됩니다. 경로를 표 자리에 쓰면 그대로 읽고, <code>COPY ... TO</code> 로 결과를 다시 파일로 씁니다.</p>
+<p class="fname">examples/p11/23-duckdb-files.mjs</p>
+<pre><code data-lang="js" data-src="p11/23-duckdb-files.mjs" data-lines="5-10">const conn = await (await DuckDBInstance.create(':memory:')).connect();
+const out = path.join(process.env.DBDECK_TMP, 'city.parquet');
+await conn.run(`COPY (SELECT city, count(*) AS n FROM 'data/csv/customers.csv' GROUP BY ALL ORDER BY n DESC, city)
+                TO '${out}' (FORMAT parquet)`);
+const r = await conn.runAndReadAll(`SELECT * FROM read_parquet('${out}') LIMIT 3`);
+console.log(r.getRowObjectsJS());</code></pre>
+<pre class="term" data-out="p11/23-duckdb-files.mjs"><span class="p">$</span> node examples/p11/23-duckdb-files.mjs
+[ { city: '부산', n: 9n }, { city: '울산', n: 7n }, { city: '창원', n: 7n } ]</pre>
+<div class="warn"><b>경로를 이어 붙였습니다</b> — 예제는 우리가 만든 임시 경로라 안전하지만, 사용자가 준 경로라면 반드시 파라미터로 넘기십시오. SQL 문자열에 들어간 경로는 값이 아니라 문법입니다.</div>
+</article>
+
+<article class="card" id="js-duck-read-modes">
+<h3>결과를 언제 읽을지 고릅니다</h3>
+<p>같은 질의라도 &quot;끝까지 돌리고 안 읽기&quot;, &quot;끝까지 돌리고 다 읽기&quot;, &quot;읽을 때 게으르게 평가하기&quot; 셋이 다릅니다. 결과 크기에 따라 골라야 합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>메서드</th><th>행을 읽는 시점</th><th>쓸 때</th></tr>
+<tr><td><code class="nb">run</code></td><td>읽지 않습니다</td><td>DDL·INSERT 처럼 결과가 필요 없을 때</td></tr>
+<tr><td><code class="nb">runAndReadAll</code></td><td>즉시 전부</td><td>결과가 메모리에 들어갈 크기일 때</td></tr>
+<tr><td><code class="nb">stream</code></td><td>읽을 때 게으르게</td><td>결과가 크거나 앞부분만 필요할 때</td></tr>
+</table>
+</div>
+<p class="cap">문서의 표현으로는 스트리밍 결과는 &quot;행을 읽을 때 게으르게 평가&quot;되며, &quot;행은 2048 개 청크 단위로&quot; 읽힙니다. 이 2048 은 7부에서 본 DuckDB 벡터 크기와 같은 숫자입니다.</p>
+</article>
+
+<article class="card" id="js-duck-stream">
+<h3>청크 단위로 흘려 읽습니다</h3>
+<p>1만 행을 스트리밍으로 읽으면 청크가 다섯 번 옵니다. 2048 씩 네 번, 그리고 남은 1808 이 한 번입니다.</p>
+<div class="arr"><span class="c in">2048</span><span class="c in">2048</span><span class="c in">2048</span><span class="c in">2048</span><span class="c">1808</span></div>
+<p class="fname">examples/p11/24-duckdb-stream.mjs</p>
+<pre><code data-lang="js" data-src="p11/24-duckdb-stream.mjs" data-lines="4-13">const conn = await (await DuckDBInstance.create(':memory:')).connect();
+const result = await conn.stream('SELECT range AS n, n * n AS sq FROM range(10000)');
+let chunks = 0, rows = 0, last = null;
+for (;;) {
+  const chunk = await result.fetchChunk();
+  if (!chunk || chunk.rowCount === 0) break;
+  chunks += 1; rows += chunk.rowCount;
+  last = chunk.getRows().at(-1);
+}
+console.log({ chunks, rows, last: last.map(String) });</code></pre>
+<pre class="term" data-out="p11/24-duckdb-stream.mjs"><span class="p">$</span> node examples/p11/24-duckdb-stream.mjs
+{ chunks: 5, rows: 10000, last: [ '9999', '99980001' ] }</pre>
+<div class="note"><b>끝을 알아채는 법</b> — <code>fetchChunk()</code> 가 빈 청크를 돌려주면 끝입니다. 반환값이 <code>null</code> 인 경우까지 함께 검사해야 무한 루프에 빠지지 않습니다.</div>
+</article>
+
+<article class="card" id="js-duck-appender">
+<h3>대량 적재는 Appender 로</h3>
+<p><code>INSERT</code> 한 문장씩 1만 번 실행하면 파싱·최적화·트랜잭션 처리가 1만 번 반복됩니다. Appender 는 그 단계를 건너뛰고 열 단위 버퍼에 값을 바로 쌓습니다.</p>
+<p class="fname">examples/p11/25-duckdb-appender.mjs</p>
+<pre><code data-lang="js" data-src="p11/25-duckdb-appender.mjs" data-lines="5-13">const conn = await (await DuckDBInstance.create(path.join(process.env.DBDECK_TMP, 'log.duckdb'))).connect();
+await conn.run('CREATE TABLE hits (id INTEGER, path VARCHAR, ms DOUBLE)');
+const app = await conn.createAppender('hits');
+for (let i = 0; i &lt; 10000; i++) {
+  app.appendInteger(i); app.appendVarchar('/p/' + (i % 7)); app.appendDouble(i % 50); app.endRow();
+}
+app.closeSync();
+const r = await conn.runAndReadAll('SELECT count(*)::INTEGER AS n, avg(ms) AS avg_ms FROM hits');
+console.log(r.getRowObjects()[0]);</code></pre>
+<pre class="term" data-out="p11/25-duckdb-appender.mjs"><span class="p">$</span> node examples/p11/25-duckdb-appender.mjs
+{ n: 10000, avg_ms: 24.5 }</pre>
+<p>타입마다 메서드가 따로입니다 — <code>appendInteger</code>·<code>appendVarchar</code>·<code>appendDouble</code>. 한 행이 끝나면 <code>endRow()</code>, 다 끝나면 <code>closeSync()</code> 로 남은 버퍼를 밀어 냅니다.</p>
+<div class="tip"><b>플러시는 자동입니다</b> — Appender 는 2048 행(벡터 하나)이 차면 알아서 내보냅니다. 애플리케이션에서 배치 크기를 또 만들 이유가 없습니다.</div>
+</article>
+
+<article class="card" id="js-duck-transaction">
+<h3>트랜잭션 — 한 연결은 한 번에 하나</h3>
+<p class="lead">비동기라고 해서 한 연결에 질의를 동시에 던지면 안 됩니다. 연결 하나가 트랜잭션 문맥 하나를 들고 있기 때문입니다.</p>
+<p><code>await</code> 를 빠짐없이 붙이는 것이 곧 직렬화입니다. <code>Promise.all</code> 로 같은 연결에 여러 질의를 묶는 순간 순서가 무너집니다.</p>
+<p class="fname">examples/p11/26-duckdb-transaction.mjs</p>
+<pre><code data-lang="js" data-src="p11/26-duckdb-transaction.mjs" data-lines="4-11">const conn = await (await DuckDBInstance.create(':memory:')).connect();
+await conn.run('CREATE TABLE acct (id INTEGER, bal INTEGER)');
+await conn.run('INSERT INTO acct VALUES (1, 100), (2, 0)');
+await conn.run('BEGIN');
+await conn.run('UPDATE acct SET bal = bal - 30 WHERE id = 1');
+await conn.run('UPDATE acct SET bal = bal + 30 WHERE id = 2');
+await conn.run('ROLLBACK');
+console.log((await conn.runAndReadAll('SELECT * FROM acct ORDER BY id')).getRowObjectsJS());</code></pre>
+<pre class="term" data-out="p11/26-duckdb-transaction.mjs"><span class="p">$</span> node examples/p11/26-duckdb-transaction.mjs
+[ { id: 1, bal: 100 }, { id: 2, bal: 0 } ]</pre>
+<div class="warn"><b>동시성이 필요하면</b> — 연결을 더 만드십시오. 인스턴스 하나에 연결은 여럿 붙습니다. 연결마다 트랜잭션이 따로 돌아갑니다.</div>
+</article>
+
+<article class="card" id="js-duck-instance-cache">
+<h3>같은 파일을 두 번 열지 않습니다</h3>
+<p>문서의 경고는 짧습니다. &quot;한 프로세스 안의 여러 인스턴스가 같은 데이터베이스를 붙잡으면 안 된다. 그것을 막으려고 인스턴스 캐시를 쓴다.&quot;</p>
+<p class="fname">examples/p11/27-duckdb-instance-cache.mjs</p>
+<pre><code data-lang="js" data-src="p11/27-duckdb-instance-cache.mjs" data-lines="5-11">const file = path.join(process.env.DBDECK_TMP, 'shared.duckdb');
+const cache = new DuckDBInstanceCache();
+const a = await cache.getOrCreateInstance(file);
+const b = await cache.getOrCreateInstance(file);          // 같은 파일 → 같은 인스턴스를 돌려준다
+const c1 = await a.connect(), c2 = await b.connect();
+await c1.run('CREATE TABLE t AS SELECT 1 AS x');
+console.log('b 에서 보이나:', (await c2.runAndReadAll('SELECT * FROM t')).getRowObjectsJS());</code></pre>
+<pre class="term" data-out="p11/27-duckdb-instance-cache.mjs"><span class="p">$</span> node examples/p11/27-duckdb-instance-cache.mjs
+b 에서 보이나: [ { x: 1 } ]</pre>
+<p>같은 경로로 두 번 부른 <code>getOrCreateInstance</code> 가 같은 인스턴스를 돌려줍니다. 그래서 <code>a</code> 로 만든 표가 <code>b</code> 의 연결에서 그대로 보입니다.</p>
+<div class="note"><b>기본 캐시도 있습니다</b> — 직접 캐시를 만들지 않아도 <code>DuckDBInstance.fromCache(path)</code> 가 프로세스 공용 캐시를 씁니다. 파일을 여는 자리가 여러 군데면 이쪽이 편합니다.</div>
+</article>
+
+<article class="card" id="js-duck-async-cost">
+<h3>비동기의 값어치</h3>
+<p>같은 실험을 DuckDB 로 해 봅니다. 4억 행을 세는 동안 메인 스레드의 20ms 타이머가 몇 번이나 깨어나는지 봅니다.</p>
+<p class="fname">examples/p11/34-duckdb-nonblocking.mjs</p>
+<pre><code data-lang="js" data-src="p11/34-duckdb-nonblocking.mjs" data-lines="4-15">const conn = await (await DuckDBInstance.create(':memory:')).connect();
+let ticks = 0;
+const timer = setInterval(() =&gt; { ticks += 1; }, 20);   // 20ms 마다 깨어나는 타이머
+
+const t0 = Date.now();
+const r = await conn.runAndReadAll(
+  'SELECT count(*) AS n, sum(range) AS s FROM range(400000000)');
+const took = Date.now() - t0;
+
+clearInterval(timer);
+console.log(r.getRowObjectsJS()[0]);
+console.log(`질의 ${took}ms · 그 사이 타이머가 돈 횟수 ${ticks}`);</code></pre>
+<pre class="term" data-out="p11/34-duckdb-nonblocking.mjs"><span class="p">$</span> node examples/p11/34-duckdb-nonblocking.mjs
+{ n: 400000000n, s: 79999999800000000n }
+질의 1527ms · 그 사이 타이머가 돈 횟수 75</pre>
+<p class="cap">이 기기에서 측정한 값이라 실행할 때마다 달라집니다. 질의가 도는 내내 타이머가 20ms 간격을 지켰습니다 — 자바스크립트 스레드는 놀고 있었다는 뜻입니다. 앞의 node:sqlite 실험과 정반대입니다.</p>
+<div class="key"><b>왜 다른가</b> — 질의는 자바스크립트 스레드가 아닌 곳에서 돌고, 끝나면 <code>Promise</code> 로 결과만 돌아옵니다. 분석 질의가 초 단위로 길어지는 DuckDB 에서는 이 설계가 필수입니다.</div>
+</article>
+
+<article class="card" id="js-duck-errors">
+<h3>실패는 거부된 Promise 로 옵니다</h3>
+<p>SQLite 쪽이 예외를 던졌다면 여기서는 <code>await</code> 지점에서 거부가 됩니다. 메시지 첫 줄에 오류의 종류가 붙어 있어, 그것으로 갈래를 나눌 수 있습니다.</p>
+<p class="fname">examples/p11/28-duckdb-errors.mjs</p>
+<pre><code data-lang="js" data-src="p11/28-duckdb-errors.mjs" data-lines="4-10">const conn = await (await DuckDBInstance.create(':memory:')).connect();
+await conn.run('CREATE TABLE t (n INTEGER)');
+for (const sql of ['SELECT * FROM nope', "INSERT INTO t VALUES ('둘')", 'SELECT n FROM t WHERE']) {
+  try { await conn.run(sql); }
+  catch (e) { console.log(e.constructor.name, '|', e.message.split('\n')[0]); }
+}
+console.log('연결은 살아 있다:', (await conn.runAndReadAll('SELECT 1 AS ok')).getRowObjectsJS());</code></pre>
+<pre class="term" data-out="p11/28-duckdb-errors.mjs"><span class="p">$</span> node examples/p11/28-duckdb-errors.mjs
+Error | Catalog Error: Table with name nope does not exist!
+Error | Conversion Error: Could not convert string '둘' to INT32
+Error | Parser Error: syntax error at end of input
+연결은 살아 있다: [ { ok: 1 } ]</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>머리말</th><th>언제</th></tr>
+<tr><td>Catalog Error</td><td>없는 표·열·함수를 가리켰습니다</td></tr>
+<tr><td>Conversion Error</td><td>값을 그 타입으로 바꿀 수 없습니다</td></tr>
+<tr><td>Parser Error</td><td>SQL 문법이 어긋났습니다</td></tr>
+</table>
+</div>
+<p>마지막 줄이 중요합니다. 질의 하나가 실패해도 연결은 살아 있습니다. 다시 만들 필요가 없습니다.</p>
+</article>
+
+<article class="card" id="js-duck-old-vs-neo">
+<h3>옛 duckdb 패키지는 정리되었습니다</h3>
+<p>npm 에는 아직 <code class="nb">duckdb</code> 라는 이름의 옛 패키지가 있습니다. 검색하면 먼저 나오지만, 새 코드에서 고를 이유는 없습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>duckdb (옛)</th><th>@duckdb/node-api</th></tr>
+<tr><td>비동기</td><td>오류 우선 콜백</td><td>Promise</td></tr>
+<tr><td>구성</td><td>Database · Connection · PreparedStatement</td><td>인스턴스 · 연결 · 결과 리더</td></tr>
+<tr><td>바이너리</td><td>설치할 때 빌드</td><td>배포된 DuckDB 바이너리를 감쌉니다</td></tr>
+<tr><td>상태</td><td>1.4.x 가 마지막</td><td>현행</td></tr>
+</table>
+</div>
+<blockquote>이 패키지의 원래 DuckDB &lt;&gt; Node.js 바인딩은 새 <code>@duckdb/node-api</code> 패키지를 위해 폐기되었습니다. 현재 계획은 이 패키지를 DuckDB 1.4.x 계열까지만 내고 1.5.x 계열부터는 더 내지 않는 것입니다.</blockquote>
+<p class="cap">duckdb-node 저장소의 README 에 적힌 공지입니다.</p>
+</article>
+
+<article class="card" id="js-sync-vs-async">
+<h3>동기와 비동기, 무엇을 언제</h3>
+<p class="lead">두 API 의 차이는 취향이 아니라 대상의 성격에서 나옵니다. 한쪽은 마이크로초짜리 조회, 다른 쪽은 초 단위 집계를 위해 만들어졌습니다.</p>
+<div class="satisfy">
+<div class="bx"><h6>node:sqlite</h6><p>한 행 조회는 마이크로초입니다. 스레드를 오가는 비용이 질의 자체보다 큽니다.</p></div>
+<div class="mid">&#8646;</div>
+<div class="bx"><h6>@duckdb/node-api</h6><p>수억 행 집계는 초가 걸립니다. 그동안 루프를 붙잡고 있을 수 없습니다.</p></div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>상황</th><th>고를 것</th></tr>
+<tr><td>CLI · 빌드 스크립트 · 테스트 픽스처</td><td>node:sqlite 를 그대로</td></tr>
+<tr><td>HTTP 핸들러의 인덱스 조회</td><td>node:sqlite 를 그대로</td></tr>
+<tr><td>수백 ms 를 넘는 SQLite 질의</td><td>워커 스레드로 밀어내기</td></tr>
+<tr><td>파일 스캔 · 대용량 집계</td><td>@duckdb/node-api</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="js-worker">
+<h3>무거운 동기 질의는 워커로</h3>
+<p>이벤트 루프를 지키는 방법은 단순합니다. 질의를 다른 스레드로 옮기면 됩니다. 워커 안에서는 동기 API 를 그대로 쓰고, 바깥과는 메시지로 주고받습니다.</p>
+<p class="fname">examples/p11/30-worker-sqlite.mjs</p>
+<pre><code data-lang="js" data-src="p11/30-worker-sqlite.mjs" data-lines="4-16">const WORKER = `
+  const { DatabaseSync } = require('node:sqlite');
+  const { parentPort, workerData } = require('node:worker_threads');
+  const db = new DatabaseSync(workerData.file, { readOnly: true });
+  parentPort.on('message', (sql) =&gt; parentPort.postMessage(db.prepare(sql).get()));
+`;
+const w = new Worker(WORKER, { eval: true, workerData: { file: 'data/shop.db' } });
+
+let queue = Promise.resolve();             // 워커도 한 번에 한 질의만 — 요청을 줄 세운다
+const ask = (sql) =&gt; (queue = queue.then(() =&gt; new Promise((res) =&gt; {
+  w.once('message', res);
+  w.postMessage(sql);
+})));</code></pre>
+<pre class="term" data-out="p11/30-worker-sqlite.mjs"><span class="p">$</span> node examples/p11/30-worker-sqlite.mjs
+[ { n: 3000000 }, { n: 800 } ] 메인 스레드 타이머가 돈 횟수: 54</pre>
+<p class="cap">메인 스레드에서 20ms 타이머를 세면서 무거운 질의를 워커에 맡겼습니다. 측정값은 기기마다 다르지만 타이머가 계속 돈다는 점은 같습니다.</p>
+<div class="warn"><b>줄을 세워야 합니다</b> — 워커도 한 번에 한 질의만 합니다. <code>queue</code> 로 요청을 이어 붙이지 않으면 응답이 엉뚱한 요청에 매칭됩니다.</div>
+</article>
+
+<article class="card" id="js-http-handler">
+<h3>서버 안에서의 연결 관리</h3>
+<p>요청마다 <code>new DatabaseSync(...)</code> 를 부르면 파일을 열고 닫는 비용이 매 요청에 붙습니다. 연결도 준비된 문장도 모듈 수준에서 한 번만 만드는 것이 정석입니다.</p>
+<p class="fname">examples/p11/31-http-handler.mjs</p>
+<pre><code data-lang="js" data-src="p11/31-http-handler.mjs" data-lines="5-17">const db = new DatabaseSync('data/shop.db', { readOnly: true });
+const byId = db.prepare('SELECT id, name, city FROM customers WHERE id = ?');
+const top  = db.prepare('SELECT name, price FROM products ORDER BY price DESC LIMIT ?');
+
+const server = createServer((req, res) =&gt; {
+  const url = new URL(req.url, 'http://x');
+  res.setHeader('content-type', 'application/json');
+  try {
+    if (url.pathname === '/customer') res.end(JSON.stringify(byId.get(Number(url.searchParams.get('id'))) ?? null));
+    else if (url.pathname === '/top')  res.end(JSON.stringify(top.all(2)));
+    else { res.statusCode = 404; res.end('null'); }
+  } catch (e) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
+});</code></pre>
+<pre class="term" data-out="p11/31-http-handler.mjs"><span class="p">$</span> node examples/p11/31-http-handler.mjs
+200 /customer?id=7 {"id":7,"name":"송지아","city":"울산"}
+200 /customer?id=999 null
+200 /top [{"name":"모니터 27인치","price":349000},{"name":"무선 마우스","price":349000}]
+404 /nope null</pre>
+<ol class="steps">
+<li>연결 하나와 준비된 문장 두 개를 프로세스가 뜰 때 만듭니다.</li>
+<li>핸들러는 바인딩만 바꿔 재사용합니다 — 파싱이 다시 일어나지 않습니다.</li>
+<li>없는 고객은 <code>undefined</code> 라서 <code>?? null</code> 로 JSON 에 담습니다.</li>
+</ol>
+</article>
+
+<article class="card" id="js-open-once">
+<h3>파일을 여는 자리는 한 곳으로</h3>
+<p class="lead">SQLite 든 DuckDB 든, 같은 파일을 한 프로세스에서 여러 번 여는 코드가 사고의 출발점입니다. 특히 DuckDB 는 설정이 다르면 아예 거부합니다.</p>
+<p class="fname">examples/p11/32-duckdb-config-conflict.mjs</p>
+<pre><code data-lang="js" data-src="p11/32-duckdb-config-conflict.mjs" data-lines="5-13">const file = path.join(process.env.DBDECK_TMP, 'shop.duckdb');
+const cache = new DuckDBInstanceCache();
+await cache.getOrCreateInstance(file);                          // 기본 설정으로 먼저 연다
+await DuckDBInstance.create(file);                              // 설정이 같으면 통과한다
+try {
+  await cache.getOrCreateInstance(file, { access_mode: 'READ_ONLY' });
+} catch (e) {
+  console.log('설정이 다르면:', e.message.split('\n')[0]);
+}</code></pre>
+<pre class="term" data-out="p11/32-duckdb-config-conflict.mjs"><span class="p">$</span> node examples/p11/32-duckdb-config-conflict.mjs
+설정이 다르면: Connection Error: Can't open a connection to same database file with a different configuration than existing connections</pre>
+<p>설정이 같으면 두 번째 열기도 통과합니다. 그래서 문제는 조용히 숨어 있다가, 누군가 한 군데만 <code>READ_ONLY</code> 로 바꾸는 날 터집니다.</p>
+<div class="key"><b>규칙</b> — 데이터베이스를 여는 모듈을 하나 만들고, 나머지는 거기서 연결만 받아 쓰십시오. DuckDB 는 인스턴스 캐시가, SQLite 는 모듈 스코프의 <code>DatabaseSync</code> 하나가 그 역할을 합니다.</div>
+</article>
+
+<article class="card" id="js-summary">
+<h3>11부 요약</h3>
+<div class="g2">
+<div>
+<p><span class="badge">node:sqlite</span></p>
+<p>설치가 필요 없는 내장 모듈입니다. <code>prepare</code> 로 문장을 만들고 <code>get</code>·<code>all</code>·<code>iterate</code>·<code>run</code> 으로 씁니다. 전부 동기라 트랜잭션이 <code>try</code>/<code>catch</code> 한 겹으로 끝납니다.</p>
+</div>
+<div>
+<p><span class="badge new">@duckdb/node-api</span></p>
+<p>전부 <code>Promise</code> 입니다. 인스턴스에 연결이 붙고, 결과는 무손실 값 객체로 옵니다. 파일을 바로 질의하고, 대량 적재는 Appender 가 맡습니다.</p>
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기억할 것</th><th>이유</th></tr>
+<tr><td>값은 항상 바인딩</td><td>이어 붙인 값은 문법이 됩니다</td></tr>
+<tr><td>number 는 real 로 들어갑니다</td><td>정수가 필요하면 <code>bigint</code> 를 쓰십시오</td></tr>
+<tr><td>큰 결과는 iterate · stream</td><td>배열로 다 올리면 메모리가 터집니다</td></tr>
+<tr><td>파일을 여는 자리는 한 곳</td><td>중복 열기와 설정 충돌을 막습니다</td></tr>
+</table>
+</div>
+<p class="cap">다음 12부에서는 같은 API 를 TypeScript 로 감싸, 행의 모양을 타입으로 붙잡는 방법을 봅니다.</p>
 </article>
 
 <!-- ===== part12.html (1장) ===== -->
