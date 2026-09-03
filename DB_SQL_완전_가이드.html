@@ -11536,11 +11536,571 @@ print('시도 %d회 만에 성공, 잔액 =' % n, db.execute('SELECT bal FROM ac
 <p class="cap">다음 15부에서는 백업&middot;복구, 마이그레이션, ETL 같은 실전 운영을 다룹니다.</p>
 </article>
 
-<!-- ===== part15.html (1장) ===== -->
+<!-- ===== part15.html (30장) ===== -->
 <article class="card section" id="part15">
 <p class="chnum">15부</p>
 <h2>실전</h2>
 <p class="chsub">백업·마이그레이션·ETL·보안·테스트, 그리고 무엇을 언제 쓸까</p>
+</article>
+
+<article class="card" id="pr-backup-three">
+<h3>백업은 복사가 아니라 &quot;일관된 시점&quot;입니다</h3>
+<p class="lead">실행 중인 DB 파일을 <code>cp</code>로 복사하면 트랜잭션 중간 상태가 섞여 열리지 않는 사본이 나올 수 있습니다.</p>
+<p>그래서 SQLite는 백업을 엔진에게 시킵니다. CLI가 주는 방법은 셋이고, 목적이 서로 다릅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>결과물</th><th>성격</th></tr>
+<tr><td><code>.backup</code></td><td>같은 형식의 DB 파일</td><td>온라인 백업 API로 페이지를 나눠 복사합니다. 원본을 오래 잠그지 않습니다.</td></tr>
+<tr><td><code>VACUUM INTO</code></td><td>조각 없는 DB 파일</td><td>새 파일로 다시 써서 더 작습니다. 그 대신 한 번에 끝납니다.</td></tr>
+<tr><td><code>.dump</code></td><td>SQL 텍스트</td><td>사람이 읽을 수 있고 다른 엔진으로 옮길 수 있습니다.</td></tr>
+</table>
+</div>
+<p class="fname">examples/p15/01-backup-cli.sh</p>
+<pre><code data-lang="sh" data-src="p15/01-backup-cli.sh"># 백업 세 가지: CLI 의 .backup(온라인 백업 API), VACUUM INTO(압축 복사), .dump(SQL 텍스트)
+sqlite3 data/shop.db ".backup $DBDECK_TMP/backup.db"
+sqlite3 data/shop.db "VACUUM INTO '$DBDECK_TMP/compact.db'"
+sqlite3 data/shop.db .dump &gt; "$DBDECK_TMP/dump.sql"
+for f in backup.db compact.db dump.sql; do printf '%8s bytes  %s\n' "$(stat -c %s "$DBDECK_TMP/$f")" "$f"; done
+head -n 4 "$DBDECK_TMP/dump.sql"
+echo "restore from dump:"; sqlite3 "$DBDECK_TMP/restored.db" &lt; "$DBDECK_TMP/dump.sql" &amp;&amp; sqlite3 "$DBDECK_TMP/restored.db" "SELECT count(*) FROM orders"</code></pre>
+<pre class="term" data-out="p15/01-backup-cli.sh"><span class="p">$</span> bash examples/p15/01-backup-cli.sh
+  180224 bytes  backup.db
+  176128 bytes  compact.db
+  221244 bytes  dump.sql
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+CREATE TABLE customers (
+  id      INTEGER PRIMARY KEY,
+restore from dump:
+800</pre>
+<p>같은 800건 데이터가 세 형태로 나왔고, 텍스트 덤프를 다시 넣은 DB에서도 주문 800건이 그대로 나옵니다.</p>
+</article>
+
+<article class="card" id="pr-backup-duckdb">
+<h3>DuckDB는 디렉터리 하나로 내보냅니다</h3>
+<p>DuckDB 파일도 단일 파일이지만, 백업은 <code>EXPORT DATABASE</code> 쪽이 안전합니다. 저장 포맷 자체가 아니라 스키마 SQL과 표별 데이터 파일로 풀어 두기 때문에, 나중에 버전이 달라져도 읽을 수 있습니다.</p>
+<p class="fname">examples/p15/02-duckdb-export.sql</p>
+<pre><code data-lang="sql" data-src="p15/02-duckdb-export.sql">-- DuckDB 백업: EXPORT DATABASE 는 스키마 SQL + 표 데이터(Parquet) 디렉터리 — IMPORT DATABASE 로 복원
+EXPORT DATABASE 'tmp/p15/02-duckdb-export.sql/export' (FORMAT parquet);
+ATTACH ':memory:' AS restored;
+USE restored;
+IMPORT DATABASE 'tmp/p15/02-duckdb-export.sql/export';
+SELECT table_name, estimated_size FROM duckdb_tables() WHERE database_name = 'restored' ORDER BY table_name;</code></pre>
+<pre class="term" data-out="p15/02-duckdb-export.sql"><span class="p">$</span> bin/duckdb -column $TMP/shop.duckdb &lt; examples/p15/02-duckdb-export.sql
+table_name   estimated_size
+-----------  --------------
+customers    60            
+order_items  2022          
+orders       800           
+payments     686           
+products     40            </pre>
+<p>빈 메모리 DB에 되읽어 표 다섯 개가 원래 행 수 그대로 복원됐습니다.</p>
+<div class="note"><b>디렉터리 안</b> &mdash; <code class="nb">schema.sql</code>(CREATE 문), <code class="nb">load.sql</code>(COPY 문), 표마다 데이터 파일 하나가 생깁니다. <code>FORMAT</code> 기본값은 csv이고 parquet을 고르면 <code>COMPRESSION</code> 같은 옵션도 함께 줄 수 있습니다.</div>
+</article>
+
+<article class="card" id="pr-backup-verify">
+<h3>복원해 보지 않은 백업은 백업이 아닙니다</h3>
+<p>백업 스크립트가 매일 초록불을 켜도, 그 파일이 실제로 열리는지 확인하지 않으면 사고 당일에야 알게 됩니다. 검증은 세 가지를 봅니다. 열리는가, 무결성 검사를 통과하는가, 행 수가 원본과 같은가.</p>
+<p class="fname">examples/p15/12-restore-verify.sh</p>
+<pre><code data-lang="sh" data-src="p15/12-restore-verify.sh"># 백업은 복원해 봐야 백업이다 — 복원본에 무결성 검사와 행 수 대조까지 해야 검증이 끝난다
+sqlite3 data/shop.db ".backup $DBDECK_TMP/nightly.db"
+src=$(sqlite3 -readonly data/shop.db "SELECT count(*) FROM orders")
+echo "integrity : $(sqlite3 "$DBDECK_TMP/nightly.db" 'PRAGMA integrity_check')"
+echo "fk_check  : $(sqlite3 "$DBDECK_TMP/nightly.db" 'PRAGMA foreign_key_check' | wc -l) rows"
+dst=$(sqlite3 "$DBDECK_TMP/nightly.db" "SELECT count(*) FROM orders")
+echo "orders    : source=$src restored=$dst"
+[ "$src" = "$dst" ] &amp;&amp; echo "RESTORE OK" || { echo "RESTORE FAILED"; exit 1; }</code></pre>
+<pre class="term" data-out="p15/12-restore-verify.sh"><span class="p">$</span> bash examples/p15/12-restore-verify.sh
+integrity : ok
+fk_check  : 0 rows
+orders    : source=800 restored=800
+RESTORE OK</pre>
+<div class="key"><b>두 검사는 다른 것을 봅니다</b> &mdash; <code>integrity_check</code>는 페이지와 인덱스의 형식을 보고, 문제가 없으면 <code>ok</code> 한 행만 돌려줍니다. 외래 키는 보지 않으므로 <code>foreign_key_check</code>를 따로 돌려야 합니다.</div>
+</article>
+
+<article class="card" id="pr-backup-wal">
+<h3>WAL 파일을 두고 오면 백업이 깨집니다</h3>
+<p>WAL 모드에서 최근 커밋은 아직 본체 파일에 없고 <code class="nb">-wal</code>에 있습니다. 본체만 복사하면 그 커밋이 사라지거나 파일 자체가 깨집니다.</p>
+<div class="flow"><span class="box">app.db</span><span class="box">app.db-wal</span><span class="box dim">app.db-shm</span></div>
+<blockquote>WAL 파일은 데이터베이스가 지닌 지속 상태의 일부이며, 데이터베이스를 복사하거나 옮길 때 함께 가야 합니다. 분리되면 이미 커밋된 트랜잭션이 사라지거나 파일이 손상될 수 있습니다.</blockquote>
+<p class="cap">SQLite 공식 문서 &mdash; WAL</p>
+<div class="tip"><b>그래서 파일 복사를 쓰지 않습니다</b> &mdash; <code>.backup</code>이나 <code>VACUUM INTO</code>는 이 문제를 엔진이 대신 처리해 줍니다. 굳이 파일로 옮겨야 한다면 마지막 연결을 닫아 체크포인트가 끝난 뒤에 옮기십시오.</div>
+<pre><code data-lang="sh">sqlite3 app.db &quot;PRAGMA wal_checkpoint(TRUNCATE);&quot;</code></pre>
+</article>
+
+<article class="card" id="pr-backup-pitr">
+<h3>시점 복구는 서버 DB의 능력입니다</h3>
+<p>&quot;어제 오후 3시 상태&quot;로 되돌리려면 그 시각까지의 변경 기록이 남아 있어야 합니다. 서버 DB는 로그를 계속 보관해 그 일을 해냅니다. 파일 DB에는 그런 상시 아카이브가 없습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>엔진</th><th>시점 복구</th><th>근거가 되는 장치</th></tr>
+<tr><td>SQLite</td><td><span class="badge err">없음</span></td><td>백업 파일이 만들어진 시각 단위로만 돌아갑니다.</td></tr>
+<tr><td>DuckDB</td><td><span class="badge err">없음</span></td><td>같습니다. <code>EXPORT</code>나 파일 스냅숏 단위입니다.</td></tr>
+<tr><td>PostgreSQL</td><td><span class="badge ok">있음</span></td><td>베이스 백업과 WAL 아카이브를 계속 쌓아 재생을 중간에 멈춥니다.</td></tr>
+<tr><td>MySQL</td><td><span class="badge ok">있음</span></td><td>전체 백업을 복원한 뒤 바이너리 로그로 그 시점까지 따라잡습니다.</td></tr>
+</table>
+</div>
+<div class="key"><b>결정에 쓰는 방식</b> &mdash; SQLite·DuckDB에서 복구 단위를 줄이는 방법은 백업 주기를 줄이는 것뿐입니다. &quot;분 단위로 되돌릴 수 있어야 한다&quot;가 요구사항이라면, 그것이 곧 서버 DB로 옮길 이유가 됩니다.</div>
+</article>
+
+<article class="card" id="pr-etl-to-parquet">
+<h3>운영 SQLite를 분석용 Parquet로</h3>
+<p>분석 질의를 운영 DB에 그대로 던지면 서비스가 느려집니다. DuckDB로 운영 파일을 <b>읽기 전용</b>으로 붙여 집계한 뒤 Parquet로 떨어뜨리면, 원본은 손대지 않고 분석은 파일 하나로 끝납니다.</p>
+<p class="fname">examples/p15/03-sqlite-to-parquet.py</p>
+<pre><code data-lang="py" data-src="p15/03-sqlite-to-parquet.py"># ETL 한 줄: 운영 SQLite 를 분석용 Parquet 로 — DuckDB 가 읽고 쓰기를 모두 맡는다
+import os, duckdb
+
+out = os.path.join(os.environ['DBDECK_TMP'], 'orders_by_month.parquet')
+con = duckdb.connect()
+con.execute("ATTACH 'data/shop.db' AS lite (TYPE sqlite, READ_ONLY)")
+con.execute(f"""
+  COPY (SELECT date_trunc('month', ordered_at::TIMESTAMP)::DATE AS month, status, count(*) AS orders
+        FROM lite.orders GROUP BY ALL ORDER BY ALL)
+  TO '{out}' (FORMAT parquet, COMPRESSION zstd)""")
+print(os.path.getsize(out), 'bytes')
+print(con.execute(f"SELECT * FROM '{out}' WHERE status = 'paid' LIMIT 3").fetchall())</code></pre>
+<pre class="term" data-out="p15/03-sqlite-to-parquet.py"><span class="p">$</span> python3 examples/p15/03-sqlite-to-parquet.py
+789 bytes
+[(datetime.date(2024, 1, 1), 'paid', 17), (datetime.date(2024, 2, 1), 'paid', 29), (datetime.date(2024, 3, 1), 'paid', 28)]</pre>
+<p>주문 800건을 월·상태로 접은 결과가 zstd로 압축되어 789바이트입니다. 이 파일 하나면 대시보드는 운영 DB를 건드릴 일이 없습니다.</p>
+<div class="note"><b><code>READ_ONLY</code>가 핵심</b> &mdash; 추출 작업은 원본을 바꿀 이유가 없습니다. 읽기 전용으로 붙이면 잠금 경합도, 실수로 인한 변경도 함께 사라집니다.</div>
+</article>
+
+<article class="card" id="pr-etl-csv-clean">
+<h3>지저분한 CSV는 SQL로 정제합니다</h3>
+<p>바깥에서 받은 파일은 늘 깨져 있습니다. 그래서 <b>전부 문자열로 읽고</b>, 타입 변환은 실패해도 예외 대신 NULL을 주는 <code>try_cast</code>로 합니다. 한 줄이 잘못되어도 적재가 멈추지 않고, 거부된 행을 따로 셀 수 있습니다.</p>
+<p class="fname">examples/p15/04-csv-cleaning.py</p>
+<pre><code data-lang="py" data-src="p15/04-csv-cleaning.py" data-lines="6-20">open(raw, 'w', encoding='utf-8').write("""id,email,amount,paid_on
+1,A@Example.com,1000,2026-01-05
+2,b@example.com,,2026-01-06
+2,b@example.com,,2026-01-06
+3,c@example.com,abc,2026-01-07
+4,D@EXAMPLE.COM,2500,2026/01/08
+""")
+con = duckdb.connect()
+con.execute(f"""CREATE TABLE staged AS
+  SELECT DISTINCT id, lower(trim(email)) AS email,
+         try_cast(amount AS INTEGER) AS amount,
+         coalesce(try_strptime(paid_on, '%Y-%m-%d'), try_strptime(paid_on, '%Y/%m/%d'))::DATE AS paid_on
+  FROM read_csv('{raw}', all_varchar = true)""")
+print(con.execute("SELECT * FROM staged ORDER BY id").fetchall())
+print('rejected:', con.execute("SELECT id FROM staged WHERE amount IS NULL OR paid_on IS NULL ORDER BY id").fetchall())</code></pre>
+<pre class="term" data-out="p15/04-csv-cleaning.py"><span class="p">$</span> python3 examples/p15/04-csv-cleaning.py
+[('1', 'a@example.com', 1000, datetime.date(2026, 1, 5)), ('2', 'b@example.com', None, datetime.date(2026, 1, 6)), ('3', 'c@example.com', None, datetime.date(2026, 1, 7)), ('4', 'd@example.com', 2500, datetime.date(2026, 1, 8))]
+rejected: [('2',), ('3',)]</pre>
+<p>중복된 2번 행이 하나로 접히고, 이메일은 소문자로, <code>2026/01/08</code>은 날짜로 바뀌었습니다. 숫자가 아닌 <code>abc</code>와 빈 금액은 NULL로 남아 거부 목록에 잡혔습니다.</p>
+<div class="warn"><b>조용한 실패를 세십시오</b> &mdash; <code>try_cast</code>와 <code>try_strptime</code>은 실패를 NULL로 바꿉니다. NULL 행 수를 반드시 세고, 임계값을 넘으면 적재를 실패시켜야 합니다.</div>
+</article>
+
+<article class="card" id="pr-etl-pipeline">
+<h3>파이프라인은 파일로 끊어 둡니다</h3>
+<p>추출·변환·적재를 한 프로그램에 몰아넣으면 어디서 틀어졌는지 알 수 없고, 다시 돌리려면 처음부터 해야 합니다. 단계 사이를 파일로 끊으면 각 칸을 따로 검사하고 따로 다시 돌릴 수 있습니다.</p>
+<div class="flow"><span class="box">운영 SQLite</span><span class="arr">추출</span><span class="box">Parquet</span><span class="arr">적재</span><span class="box dim">DuckDB 분석</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>단계</th><th>하는 일</th><th>실패했을 때</th></tr>
+<tr><td>추출</td><td>읽기 전용으로 붙여 기간을 잘라 냅니다.</td><td>원본이 그대로이므로 그냥 다시 돌립니다.</td></tr>
+<tr><td>정제</td><td>타입·중복·결측을 SQL로 정리합니다.</td><td>거부 행만 보고 규칙을 고칩니다.</td></tr>
+<tr><td>적재</td><td>파티션 단위로 다시 씁니다.</td><td>그 파티션만 다시 씁니다.</td></tr>
+</table>
+</div>
+<div class="key"><b>중간 산출물을 남기는 이유</b> &mdash; Parquet 파일 하나가 곧 &quot;그날의 증거&quot;입니다. 결과가 이상할 때 어느 칸에서 틀어졌는지 파일을 열어 보면 바로 압니다.</div>
+</article>
+
+<article class="card" id="pr-etl-idempotent">
+<h3>두 번 돌려도 결과가 같아야 합니다</h3>
+<p>파이프라인은 언젠가 반드시 두 번 돌아갑니다. 재시도, 늦게 도착한 데이터, 사람의 수동 실행 때문입니다. 그래서 적재를 &quot;더하기&quot;가 아니라 <b>&quot;그 파티션을 통째로 다시 쓰기&quot;</b>로 설계합니다.</p>
+<p class="fname">examples/p15/13-idempotent-load.py</p>
+<pre><code data-lang="py" data-src="p15/13-idempotent-load.py" data-lines="8-19">def load(month):
+    rows = src.execute("""SELECT strftime('%Y-%m', ordered_at), status, count(*)
+                          FROM orders WHERE strftime('%Y-%m', ordered_at) = ?
+                          GROUP BY 1, 2""", (month,)).fetchall()
+    with mart:                                    # 한 트랜잭션 안에서 지우고 다시 넣는다
+        mart.execute('DELETE FROM monthly WHERE month = ?', (month,))
+        mart.executemany('INSERT INTO monthly VALUES (?, ?, ?)', rows)
+    return len(rows)
+
+for run in (1, 2, 3):
+    n = load('2024-10')
+    print('run %d: %d rows loaded, table now %s' % (run, n, mart.execute('SELECT count(*), sum(orders) FROM monthly').fetchone()))</code></pre>
+<pre class="term" data-out="p15/13-idempotent-load.py"><span class="p">$</span> python3 examples/p15/13-idempotent-load.py
+run 1: 4 rows loaded, table now (4, 40)
+run 2: 4 rows loaded, table now (4, 40)
+run 3: 4 rows loaded, table now (4, 40)</pre>
+<p>세 번 돌렸지만 표에는 여전히 4행, 합계 40건입니다. 세 번 더 돌려도 같습니다.</p>
+<div class="tip"><b>지우기와 넣기는 한 트랜잭션에</b> &mdash; 둘 사이에서 프로세스가 죽으면 파티션이 빈 채로 남습니다. <code>with con:</code> 한 줄이 그 사고를 막습니다.</div>
+</article>
+
+<article class="card" id="pr-etl-schema-evolution">
+<h3>열이 늘어나도 옛 파일은 그대로 둡니다</h3>
+<p>Parquet 파일은 자기 스키마를 파일 안에 담고 있습니다. 그래서 열을 하나 추가해도 지난 파일을 다시 쓸 필요가 없습니다. 다만 그냥 읽으면 <b>첫 파일의 스키마가 기준</b>이 되어 새 열이 조용히 사라집니다.</p>
+<p class="fname">examples/p15/14-schema-evolution.py</p>
+<pre><code data-lang="py" data-src="p15/14-schema-evolution.py" data-lines="5-12">con = duckdb.connect()
+con.execute(f"COPY (SELECT 1 AS id, 'a' AS name) TO '{tmp}/v1.parquet' (FORMAT parquet)")
+con.execute(f"COPY (SELECT 2 AS id, 'b' AS name, 'KR' AS country) TO '{tmp}/v2.parquet' (FORMAT parquet)")
+files = f"['{tmp}/v1.parquet', '{tmp}/v2.parquet']"
+
+# 기본값은 첫 파일의 스키마 — 나중에 늘어난 country 가 조용히 사라진다
+print('기본        :', con.execute(f'SELECT * FROM read_parquet({files}) ORDER BY id').fetchall())
+print('union_by_name:', con.execute(f'SELECT * FROM read_parquet({files}, union_by_name = true) ORDER BY id').fetchall())</code></pre>
+<pre class="term" data-out="p15/14-schema-evolution.py"><span class="p">$</span> python3 examples/p15/14-schema-evolution.py
+기본        : [(1, 'a'), (2, 'b')]
+union_by_name: [(1, 'a', None), (2, 'b', 'KR')]</pre>
+<div class="warn"><b>오류가 아니라 손실입니다</b> &mdash; 기본 읽기는 <code class="nb">country</code>를 말없이 버렸습니다. 여러 세대의 파일을 함께 읽을 때는 <code>union_by_name = true</code>를 습관으로 붙이십시오. 없는 값은 NULL로 채워집니다.</div>
+</article>
+
+<article class="card" id="pr-sec-injection">
+<h3>인젝션은 문자열을 붙이는 순간 생깁니다</h3>
+<p>SQL 인젝션은 입력값이 <b>값</b>이 아니라 <b>문법</b>으로 해석되면서 생깁니다. 문자열을 이어 붙여 질의를 만드는 한, 어떤 필터를 덧붙여도 근본 원인은 그대로 남습니다.</p>
+<div class="g2">
+<div class="cmp bad"><h5>연결 &mdash; 입력이 문법이 됩니다</h5><pre>&quot;... email = &#39;&quot; + s + &quot;&#39;&quot;</pre></div>
+<div class="cmp good"><h5>바인딩 &mdash; 입력은 값으로 남습니다</h5><pre>&quot;... email = ?&quot;, (s,)</pre></div>
+</div>
+<p>바인딩한 질의문은 값이 무엇이든 모양이 바뀌지 않습니다. 엔진은 자리표시자에 값을 넣을 뿐 다시 파싱하지 않기 때문입니다.</p>
+<div class="warn"><b>자리표시자로 바꿀 수 없는 곳</b> &mdash; 표 이름과 열 이름은 값이 아니라 식별자여서 바인딩할 수 없습니다. 이때는 미리 정해 둔 허용 목록에 있는지 확인한 뒤에만 붙이십시오.</div>
+<p class="cap">언어별 실증은 <a href="#part8">8부</a>(Python)와 <a href="#part11">11부</a>(JavaScript)에 있습니다.</p>
+</article>
+
+<article class="card" id="pr-sec-least-privilege">
+<h3>읽기만 하는 코드는 읽기 전용으로 엽니다</h3>
+<p>권한은 사고를 수습하는 장치가 아니라 사고를 <b>불가능하게</b> 만드는 장치입니다. 읽기 전용으로 연 연결은 버그가 어떤 문장을 보내든 데이터를 지우지 못합니다.</p>
+<p class="fname">examples/p15/05-least-privilege.py</p>
+<pre><code data-lang="py" data-src="p15/05-least-privilege.py"># 최소 권한: 읽기만 하는 코드는 읽기 전용으로 연다 — 버그가 데이터를 지우는 사고를 구조적으로 막는다
+import sqlite3, duckdb
+
+ro = sqlite3.connect('file:data/shop.db?mode=ro', uri=True)
+try: ro.execute('DROP TABLE orders')
+except sqlite3.OperationalError as e: print('sqlite ro:', e)
+
+d = duckdb.connect('data/shop.duckdb', read_only=True)
+try: d.execute('DROP TABLE orders')
+except duckdb.Error as e: print('duckdb ro:', str(e).splitlines()[0])
+
+con = sqlite3.connect(':memory:')
+con.execute('CREATE TABLE t (x)')
+con.set_authorizer(lambda act, *a: sqlite3.SQLITE_DENY if act in (sqlite3.SQLITE_DROP_TABLE, sqlite3.SQLITE_DELETE) else sqlite3.SQLITE_OK)
+try: con.execute('DROP TABLE t')
+except sqlite3.DatabaseError as e: print('authorizer:', e)</code></pre>
+<pre class="term" data-out="p15/05-least-privilege.py"><span class="p">$</span> python3 examples/p15/05-least-privilege.py
+sqlite ro: attempt to write a readonly database
+duckdb ro: Invalid Input Error: Cannot execute statement of type "DROP" on database "shop" which is attached in read-only mode!
+authorizer: not authorized</pre>
+<div class="note"><b>세 층</b> &mdash; SQLite는 URI에 <code>mode=ro</code>, DuckDB는 <code>read_only=True</code>로 연결 전체를 잠급니다. 더 세밀하게는 <code>set_authorizer</code>로 문장 종류마다 허용과 거부를 정할 수 있습니다.</div>
+</article>
+
+<article class="card" id="pr-sec-encryption">
+<h3>SQLite 파일은 그냥 읽힙니다</h3>
+<p>공식 SQLite에는 암호화가 없습니다. 파일 앞 16바이트를 그대로 들여다보면 헤더 문자열이 보입니다. 디스크나 백업 파일이 유출되면 내용은 전부 노출됩니다.</p>
+<p class="fname">examples/p15/09-encryption-note.sql</p>
+<pre><code data-lang="sql" data-src="p15/09-encryption-note.sql">-- 공식 SQLite 에는 암호화가 없다 — 파일 헤더가 그대로 보인다 (SEE·SQLCipher 같은 확장이 그 자리를 채운다)
+.system head -c 16 data/shop.db | od -c | head -1
+SELECT 'file header is plain text' AS note;</code></pre>
+<pre class="term" data-out="p15/09-encryption-note.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p15/09-encryption-note.sql
+0000000   S   Q   L   i   t   e       f   o   r   m   a   t       3  \0
+          note
+-------------------------
+file header is plain text</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방법</th><th>알고리즘</th><th>비고</th></tr>
+<tr><td>SQLite SEE</td><td>AES-256 OFB 등</td><td>공식 확장이지만 유료 라이선스입니다. 메타데이터까지 암호화합니다.</td></tr>
+<tr><td>SQLCipher</td><td>AES-256 CBC</td><td>PBKDF2-HMAC-SHA512 25만 6천 회, 페이지마다 HMAC을 붙입니다.</td></tr>
+<tr><td>DuckDB 1.4+</td><td>AES-GCM 256</td><td><code>ATTACH</code>에 <code>ENCRYPTION_KEY</code>를 주면 본체·WAL·임시 파일이 모두 암호화됩니다.</td></tr>
+</table>
+</div>
+<div class="warn"><b>암호화가 지켜 주는 범위</b> &mdash; 저장 암호화는 파일이 밖으로 나갔을 때만 유효합니다. 실행 중인 프로세스의 권한을 얻은 공격자에게는 아무 도움이 되지 않습니다.</div>
+</article>
+
+<article class="card" id="pr-sec-file-perms">
+<h3>권한은 파일이 아니라 디렉터리에 겁니다</h3>
+<p>WAL을 쓰면 DB 하나가 파일 셋입니다. 게다가 SQLite는 필요할 때 <code class="nb">-wal</code>과 <code class="nb">-shm</code>을 새로 만듭니다. 그래서 디렉터리에 쓰기 권한이 열려 있으면 파일 권한만 조여도 소용이 없습니다.</p>
+<p class="fname">examples/p15/16-file-permissions.py</p>
+<pre><code data-lang="py" data-src="p15/16-file-permissions.py"># 파일 권한: WAL 을 쓰면 DB 하나가 파일 셋이다 — 권한은 파일이 아니라 디렉터리에 걸어야 한다
+import os, sqlite3, stat
+
+tmp = os.environ['DBDECK_TMP']
+os.umask(0o077)                                  # 새로 만드는 파일은 소유자만 읽고 쓰게
+con = sqlite3.connect(os.path.join(tmp, 'app.db'))
+con.execute('PRAGMA journal_mode = WAL')
+con.execute('CREATE TABLE t (x)')
+con.execute('INSERT INTO t VALUES (1)')          # 연결을 열어 둔 채로 살펴본다
+
+print('%-10s %s' % ('(dir)', stat.filemode(os.stat(tmp).st_mode)))
+for f in sorted(os.listdir(tmp)):
+    print('%-10s %s' % (f, stat.filemode(os.stat(os.path.join(tmp, f)).st_mode)))</code></pre>
+<pre class="term" data-out="p15/16-file-permissions.py"><span class="p">$</span> python3 examples/p15/16-file-permissions.py
+(dir)      drwxr-xr-x
+app.db     -rw-------
+app.db-shm -rw-------
+app.db-wal -rw-------</pre>
+<p><code>umask(0o077)</code> 덕분에 세 파일 모두 소유자만 읽고 쓸 수 있습니다. 그러나 디렉터리는 여전히 <code class="nb">drwxr-xr-x</code>입니다.</p>
+<div class="tip"><b>배포할 때</b> &mdash; DB는 전용 디렉터리에 두고 그 디렉터리를 <code class="nb">0700</code>으로, 소유자를 서비스 계정으로 잡으십시오. 웹 서버가 정적 파일로 내려 줄 수 있는 경로는 특히 피해야 합니다.</div>
+</article>
+
+<article class="card" id="pr-sec-password">
+<h3>비밀번호는 DB가 할 일이 아닙니다</h3>
+<p>DB에 넣기 전에 이미 되돌릴 수 없는 형태여야 합니다. 그래야 덤프가 유출되어도 비밀번호 자체는 새어 나가지 않습니다. 여기서 쓰는 함수는 <b>일부러 느린</b> 함수입니다. 빠른 해시는 공격자에게만 유리하기 때문입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>저장 방식</th><th>판정</th><th>이유</th></tr>
+<tr><td>평문</td><td><span class="badge err">금지</span></td><td>유출이 곧 전원 계정 탈취입니다.</td></tr>
+<tr><td>MD5 · SHA-256</td><td><span class="badge err">금지</span></td><td>너무 빨라 초당 수억 번을 시도할 수 있습니다.</td></tr>
+<tr><td>bcrypt · scrypt</td><td><span class="badge ok">가능</span></td><td>bcrypt는 작업 계수 10 이상, 입력은 72바이트까지입니다.</td></tr>
+<tr><td>Argon2id</td><td><span class="badge ok">권장</span></td><td>메모리 19 MiB 이상, 반복 2회, 병렬도 1이 최소 권고입니다.</td></tr>
+</table>
+</div>
+<div class="key"><b>DB에는 결과만 넣습니다</b> &mdash; 해시 계산은 애플리케이션에서 하고, DB에는 알고리즘 이름·파라미터·솔트가 함께 담긴 문자열 하나를 저장합니다. 그래야 나중에 파라미터를 올릴 때 옛 값도 계속 검증할 수 있습니다.</div>
+</article>
+
+<article class="card" id="pr-sec-log">
+<h3>로그에 값을 남기지 않습니다</h3>
+<p>질의를 로그로 남기는 것은 좋은 습관이지만, 추적 콜백은 <b>값이 채워진</b> SQL을 넘겨줍니다. 그대로 적으면 이메일과 주민번호가 로그 파일에 쌓입니다. 로그는 대개 DB보다 접근 권한이 헐겁습니다.</p>
+<p class="fname">examples/p15/15-log-redaction.py</p>
+<pre><code data-lang="py" data-src="p15/15-log-redaction.py"># 로그 사고: 추적 콜백은 값이 채워진 SQL 을 그대로 넘긴다 — 그대로 적으면 개인정보가 로그에 남는다
+import re, sqlite3
+
+con = sqlite3.connect('file:data/shop.db?mode=ro', uri=True)
+seen = []
+con.set_trace_callback(seen.append)
+con.execute('SELECT id FROM customers WHERE email = ?', ('user07@example.com',)).fetchall()
+
+def redact(sql):                       # 문자열 리터럴만 지운다 — SQL 모양은 그대로 남아 분석에 쓸 수 있다
+    return re.sub(r"'[^']*'", "'***'", ' '.join(sql.split()))
+
+print('raw     :', seen[-1])
+print('redacted:', redact(seen[-1]))</code></pre>
+<pre class="term" data-out="p15/15-log-redaction.py"><span class="p">$</span> python3 examples/p15/15-log-redaction.py
+raw     : SELECT id FROM customers WHERE email = 'user07@example.com'
+redacted: SELECT id FROM customers WHERE email = '***'</pre>
+<div class="tip"><b>모양은 남기고 값만 지웁니다</b> &mdash; 가려도 SQL의 구조는 그대로여서 느린 질의 분석에는 아무 지장이 없습니다. 값이 정말 필요하면 값 대신 해시나 마지막 네 자리만 남기십시오.</div>
+</article>
+
+<article class="card" id="pr-test-fixture">
+<h3>테스트는 인메모리 DB에 스키마만 올립니다</h3>
+<p>운영 데이터를 복사해 테스트하면 느리고, 테스트끼리 서로를 오염시킵니다. 스키마 파일 하나를 <code>:memory:</code>에 부어 넣으면 테스트마다 완전히 새 DB를 얻습니다. 디스크를 건드리지 않으므로 빠릅니다.</p>
+<p class="fname">examples/p15/06-unittest-fixture.py</p>
+<pre><code data-lang="py" data-src="p15/06-unittest-fixture.py" data-lines="5-8">def make_db():
+    con = sqlite3.connect(':memory:')
+    con.executescript(Path('data/schema_sqlite.sql').read_text(encoding='utf-8'))
+    return con</code></pre>
+<p><code>setUp</code>이 이 함수를 부르므로 두 테스트는 서로의 행을 볼 수 없습니다. 검증 대상은 합계 계산과 외래 키 위반 두 가지입니다.</p>
+<pre><code data-lang="py" data-src="p15/06-unittest-fixture.py" data-lines="22-29">    def test_order_total(self):
+        oid = place_order(self.con, 1, [(1, 3, 1000)])
+        total = self.con.execute('SELECT sum(qty * unit_price) FROM order_items WHERE order_id = ?', (oid,)).fetchone()[0]
+        self.assertEqual(total, 3000)
+    def test_fk_enforced(self):
+        self.con.execute('PRAGMA foreign_keys = ON')
+        with self.assertRaises(sqlite3.IntegrityError):
+            place_order(self.con, 999, [(1, 1, 1000)])</code></pre>
+<pre class="term" data-out="p15/06-unittest-fixture.py" data-lines="2-8"><span class="p">$</span> python3 examples/p15/06-unittest-fixture.py
+test_fk_enforced (__main__.OrderTest.test_fk_enforced) ... ok
+test_order_total (__main__.OrderTest.test_order_total) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in N s
+
+OK</pre>
+<div class="warn"><b>진짜 스키마를 쓰십시오</b> &mdash; 테스트용으로 따로 만든 축약 스키마는 제약을 빠뜨리기 쉽습니다. 배포에 쓰는 <code class="nb">schema_sqlite.sql</code> 그대로 올려야 위 <code>test_fk_enforced</code> 같은 검증이 의미를 가집니다.</div>
+</article>
+
+<article class="card" id="pr-obs-slow-log">
+<h3>느린 질의만 골라 기록합니다</h3>
+<p>모든 질의를 로그로 남기면 로그가 서비스보다 무거워집니다. 실행 시간을 재서 임계값을 넘는 것만, 그것도 <b>실행 계획과 함께</b> 남기면 원인을 바로 알 수 있습니다.</p>
+<p class="fname">examples/p15/07-slow-query-log.py</p>
+<pre><code data-lang="py" data-src="p15/07-slow-query-log.py" data-lines="4-18">class TimedConnection:
+    def __init__(self, path, slow_ms=5.0):
+        self.con = sqlite3.connect(path, uri=True); self.slow_ms = slow_ms; self.log = []
+    def execute(self, sql, params=()):
+        t0 = time.perf_counter(); cur = self.con.execute(sql, params); rows = cur.fetchall()
+        ms = (time.perf_counter() - t0) * 1000
+        if ms &gt; self.slow_ms:
+            plan = self.con.execute('EXPLAIN QUERY PLAN ' + sql, params).fetchall()[0][3]
+            self.log.append((round(ms), sql.split()[0], plan))
+        return rows
+
+db = TimedConnection('file:data/events.db?mode=ro')
+db.execute('SELECT count(*) FROM events WHERE id = ?', (5,))
+db.execute("SELECT count(*) FROM events WHERE kind = 'cart'")
+for ms, verb, plan in db.log: print('SLOW %4d ms %s ... %s' % (ms, verb, plan))</code></pre>
+<pre class="term" data-out="p15/07-slow-query-log.py"><span class="p">$</span> python3 examples/p15/07-slow-query-log.py
+SLOW  160 ms SELECT ... SCAN events</pre>
+<p>기본 키로 한 행을 찾는 질의는 임계값 아래여서 조용했고, 인덱스 없는 <code class="nb">kind</code> 조건만 걸렸습니다. 남은 <code class="nb">SCAN events</code>가 곧 해야 할 일입니다.</p>
+<p class="cap">이 기기에서 측정한 값이며 실행마다 달라집니다.</p>
+</article>
+
+<article class="card" id="pr-ops-schema-drift">
+<h3>배포된 DB가 기대한 스키마인지 봅니다</h3>
+<p>마이그레이션은 언젠가 한 서버에서만 빠집니다. 그때 애플리케이션은 &quot;없는 열&quot; 오류로 죽습니다. 스키마 전체를 해시로 접어 두면 시작할 때 한 번의 비교로 이 사고를 잡아낼 수 있습니다.</p>
+<p class="fname">examples/p15/08-schema-drift-check.py</p>
+<pre><code data-lang="py" data-src="p15/08-schema-drift-check.py"># 운영 점검: 스키마 해시로 배포된 DB 가 기대한 스키마인지 확인한다 (마이그레이션 누락 탐지)
+import hashlib, sqlite3
+
+def schema_hash(con):
+    rows = con.execute("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type, name").fetchall()
+    return hashlib.sha256('\n'.join(r[2] for r in rows).encode()).hexdigest()[:12], len(rows)
+
+prod = sqlite3.connect('file:data/shop.db?mode=ro', uri=True)
+expected = sqlite3.connect(':memory:'); expected.executescript(open('data/schema_sqlite.sql', encoding='utf-8').read())
+print('prod    :', schema_hash(prod))
+print('expected:', schema_hash(expected))
+print('match   :', schema_hash(prod) == schema_hash(expected))</code></pre>
+<pre class="term" data-out="p15/08-schema-drift-check.py"><span class="p">$</span> python3 examples/p15/08-schema-drift-check.py
+prod    : ('c8317762ded5', 7)
+expected: ('c8317762ded5', 7)
+match   : True</pre>
+<div class="note"><b>번호를 함께 쓰면 더 좋습니다</b> &mdash; <code>PRAGMA user_version</code>은 애플리케이션이 마음대로 쓰라고 헤더에 마련된 정수입니다. 마이그레이션 번호를 여기 적어 두면 &quot;몇 번까지 적용됐는지&quot;를 해시보다 먼저 알 수 있습니다.</div>
+</article>
+
+<article class="card" id="pr-ci-integrity">
+<h3>CI가 매번 같은 점검을 돌립니다</h3>
+<p>사람이 기억해서 하는 점검은 결국 빠집니다. 배포 파이프라인에 넣어 두면 매번 같은 순서로 돌아갑니다. 셸 두 줄이면 두 엔진의 상태를 모두 확인할 수 있습니다.</p>
+<p class="fname">examples/p15/10-integrity-in-ci.sh</p>
+<pre><code data-lang="sh" data-src="p15/10-integrity-in-ci.sh"># CI 에서 돌리는 점검: 무결성·외래 키·스키마 버전 (SQLite), 표 수·파일 크기 (DuckDB)
+sqlite3 -readonly data/shop.db "PRAGMA integrity_check; PRAGMA foreign_key_check; PRAGMA user_version;"
+bin/duckdb -readonly -column data/shop.duckdb -c "SELECT count(*) AS tables FROM duckdb_tables();" -c "SELECT database_size, total_blocks FROM pragma_database_size();"</code></pre>
+<pre class="term" data-out="p15/10-integrity-in-ci.sh"><span class="p">$</span> bash examples/p15/10-integrity-in-ci.sh
+ok
+0
+tables
+------
+5     
+database_size  total_blocks
+-------------  ------------
+4.2 MiB        17          </pre>
+<p><code>integrity_check</code>는 <code>ok</code>, 외래 키 위반은 없고, 스키마 번호는 0입니다. DuckDB 쪽은 표 다섯 개에 파일 4.2 MiB입니다.</p>
+<div class="tip"><b>더 빠른 대안</b> &mdash; DB가 커서 <code>integrity_check</code>가 오래 걸리면 <code>quick_check</code>를 쓰십시오. UNIQUE 제약과 인덱스 대조를 건너뛰어 O(N)에 끝납니다.</div>
+</article>
+
+<article class="card" id="pr-ops-extension-check">
+<h3>확장은 있는지 먼저 확인합니다</h3>
+<p>DuckDB의 원격 파일 읽기는 <code class="nb">httpfs</code> 확장이 맡습니다. 처음 쓸 때 자동으로 내려받아 붙지만, 그 말은 곧 <b>네트워크가 있어야 한다</b>는 뜻입니다. 오프라인 빌드나 폐쇄망에서는 배포 시점에 미리 심어 두어야 합니다.</p>
+<p class="fname">examples/p15/11-duckdb-httpfs-note.sql</p>
+<pre><code data-lang="sql" data-src="p15/11-duckdb-httpfs-note.sql">-- 원격 파일: httpfs 확장으로 S3·HTTP 의 Parquet 를 직접 읽는다 (이 환경은 오프라인이라 설치 여부만 확인)
+SELECT extension_name, installed, loaded FROM duckdb_extensions() WHERE extension_name = 'httpfs';</code></pre>
+<pre class="term" data-out="p15/11-duckdb-httpfs-note.sql"><span class="p">$</span> bin/duckdb -column :memory: &lt; examples/p15/11-duckdb-httpfs-note.sql
+extension_name  installed  loaded
+--------------  ---------  ------
+httpfs          false      false </pre>
+<p>이 기기는 오프라인이라 설치되지 않은 상태입니다. 확장이 있다면 S3나 HTTP 주소의 Parquet를 로컬 파일처럼 <code>SELECT</code>할 수 있습니다. HTTP(S)는 읽기만, S3 API는 읽기·쓰기·글롭까지 됩니다.</p>
+<div class="warn"><b>운영에서는 명시적으로</b> &mdash; 자동 적재에 기대면 첫 질의가 네트워크 사정에 따라 실패합니다. 기동할 때 <code>INSTALL httpfs; LOAD httpfs;</code>를 명시하고, 실패하면 바로 알 수 있게 하십시오.</div>
+</article>
+
+<article class="card" id="pr-obs-metrics">
+<h3>무엇을 재야 하는가</h3>
+<p>&quot;느려요&quot;라는 신고를 받고 나서 재기 시작하면 이미 늦습니다. 다음 다섯 가지는 평소에 값을 쌓아 두어야 의미가 생깁니다. 어제와 비교할 수 있어야 판단이 되기 때문입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>지표</th><th>어디서</th><th>이상 신호</th></tr>
+<tr><td>질의 소요 시간 분포</td><td>애플리케이션의 계측 래퍼</td><td>평균이 아니라 상위 1%가 튀는 것</td></tr>
+<tr><td>잠금 대기 · 재시도 횟수</td><td><code class="nb">SQLITE_BUSY</code> 예외 수</td><td>0에서 벗어나 계속 늘어나는 것</td></tr>
+<tr><td>DB 파일 크기</td><td><code>PRAGMA page_count</code></td><td>행 수는 그대로인데 커지는 것</td></tr>
+<tr><td>WAL 크기</td><td><code class="nb">-wal</code> 파일 바이트</td><td>체크포인트가 밀려 줄지 않는 것</td></tr>
+<tr><td>무결성 점검 결과</td><td>야간 배치</td><td><code>ok</code>가 아닌 모든 것</td></tr>
+</table>
+</div>
+<div class="key"><b>지표는 원인이 아니라 질문입니다</b> &mdash; 값이 튀면 13부의 실행 계획 읽기로, 잠금이 늘면 14부의 트랜잭션 길이로 넘어갑니다. 관측의 역할은 어느 문으로 들어갈지 알려 주는 것입니다.</div>
+</article>
+
+<article class="card" id="pr-choose-tree">
+<h3>무엇을 쓸지는 세 가지 질문으로 갈립니다</h3>
+<p>엔진 선택은 취향이 아니라 제약으로 정해집니다. SQLite 공식 문서가 권하는 순서를 그대로 따라가면 대부분 한 번에 결론이 납니다.</p>
+<ol class="steps">
+<li><b>데이터가 네트워크 건너편에 있습니까?</b> 그렇다면 클라이언트·서버 DB입니다. 파일 DB를 네트워크 파일 시스템에 두는 것은 손상의 지름길입니다.</li>
+<li><b>동시에 쓰는 주체가 많습니까?</b> SQLite는 한 번에 한 명만 씁니다. 쓰기가 밀리기 시작하면 서버 DB입니다.</li>
+<li><b>데이터가 아주 큽니까?</b> SQLite 파일의 상한은 281 테라바이트지만, 실무의 갈림길은 대체로 1 테라바이트 근처입니다.</li>
+<li><b>질의가 많은 행을 훑어 요약합니까?</b> 그렇다면 DuckDB입니다. 열 단위로 읽고 벡터로 처리하므로 집계에서 자릿수가 달라집니다.</li>
+<li>여기까지 모두 아니라면 <b>SQLite</b>입니다. 기기 안에 담기고, 쓰기 경합이 낮으며, 1 테라바이트 미만이면 거의 언제나 더 나은 선택입니다.</li>
+</ol>
+</article>
+
+<article class="card" id="pr-choose-together">
+<h3>둘을 함께 쓰는 것이 기본 구성입니다</h3>
+<p>SQLite와 DuckDB는 경쟁 관계가 아닙니다. 한쪽은 한 행씩 자주 고치는 일을, 다른 쪽은 많은 행을 한꺼번에 훑는 일을 잘합니다. 같은 프로세스 안에서 둘을 이어 붙일 수 있으므로 고를 필요가 없습니다.</p>
+<div class="flow"><span class="box">앱 &middot; SQLite 쓰기</span><span class="arr">야간 추출</span><span class="box">Parquet</span><span class="arr">읽기</span><span class="box dim">DuckDB 리포트</span></div>
+<div class="g2">
+<div><b>SQLite가 맡는 일</b><br>주문 넣기, 상태 바꾸기, 한 건 조회. 트랜잭션이 짧고 잦은 모든 작업.</div>
+<div><b>DuckDB가 맡는 일</b><br>월별 집계, 코호트 분석, CSV·Parquet 결합. 오래 걸려도 되는 큰 읽기.</div>
+</div>
+<div class="tip"><b>추출을 건너뛸 수도 있습니다</b> &mdash; DuckDB는 <code>sqlite</code> 확장으로 운영 파일을 읽기 전용으로 직접 붙일 수 있습니다. 데이터가 작고 리포트가 드물다면 중간 Parquet 없이 그대로 질의해도 됩니다(7부).</div>
+</article>
+
+<article class="card" id="pr-choose-limits">
+<h3>한계는 성능이 아니라 구조에서 옵니다</h3>
+<p>SQLite와 DuckDB가 느려서 못 쓰는 경우는 생각보다 드뭅니다. 막히는 지점은 대개 &quot;여러 주체가 동시에&quot;와 &quot;네트워크 너머에서&quot;입니다. 이것은 튜닝으로 넘을 수 있는 벽이 아닙니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>SQLite</th><th>DuckDB</th><th>서버 DB</th></tr>
+<tr><td>동시 쓰기</td><td>한 번에 하나</td><td>프로세스 하나</td><td>여럿</td></tr>
+<tr><td>동시 읽기</td><td>제한 없음</td><td>제한 없음</td><td>여럿</td></tr>
+<tr><td>네트워크 접근</td><td>없음</td><td>없음</td><td>기본 기능</td></tr>
+<tr><td>사용자 · 권한</td><td>파일 권한뿐</td><td>파일 권한뿐</td><td>계정 &middot; 역할 &middot; 열 단위</td></tr>
+<tr><td>실무 크기 한계</td><td>대략 1 TB</td><td>메모리보다 커도 처리</td><td>수십 TB 이상</td></tr>
+</table>
+</div>
+<div class="warn"><b>가장 흔한 오해</b> &mdash; &quot;서버가 여러 대니까 파일을 공유 스토리지에 두면 되지 않나&quot;. 네트워크 파일 시스템의 잠금은 신뢰할 수 없어 손상으로 이어집니다. 이 순간이 이관을 결정할 때입니다.</div>
+</article>
+
+<article class="card" id="pr-migrate-path">
+<h3>SQLite에서 서버 DB로 옮기는 길</h3>
+<p>이관은 데이터를 옮기는 일이 아니라 <b>타입과 제약을 다시 선언하는</b> 일입니다. SQLite는 타입을 권고로 보고 열 이름에 적힌 것을 그대로 지키지 않기 때문에, 옮기는 쪽에서는 실제 값을 보고 타입을 정해야 합니다.</p>
+<ol class="steps">
+<li><b>스키마를 다시 씁니다.</b> 각 열의 실제 값 분포를 확인해 정수·문자열·날짜·불리언을 확정합니다. <code>datetime</code>을 문자열로 두었다면 여기서 진짜 타입으로 바꿉니다.</li>
+<li><b>제약을 명시합니다.</b> SQLite에서 꺼져 있던 외래 키를 켜고, 위반 행을 먼저 정리해야 적재가 통과합니다.</li>
+<li><b>데이터를 옮깁니다.</b> 전용 도구는 스키마를 자동으로 읽어 표를 만들고, 기본 변환 규칙(정수는 bigint, varchar는 text 등)을 적용한 뒤 대량 적재로 행을 넣고 인덱스를 다시 만듭니다.</li>
+<li><b>양쪽을 대조합니다.</b> 표마다 행 수와 주요 합계를 비교합니다. 인코딩과 날짜 경계에서 어긋나는 경우가 가장 많습니다.</li>
+<li><b>읽기만 먼저 넘깁니다.</b> 쓰기를 옮기기 전에 조회 트래픽을 새 DB로 보내 계획과 인덱스를 검증합니다.</li>
+</ol>
+<p class="cap">여기서 언급한 도구는 pgloader이며, 이 덱은 서버 DB를 설치하거나 실행하지 않으므로 명령은 싣지 않습니다.</p>
+</article>
+
+<article class="card" id="pr-incidents">
+<h3>흔한 사고 다섯</h3>
+<p>여기까지의 규칙은 모두 실제로 자주 일어나는 사고에서 나왔습니다. 원인을 한 줄로 적어 두면 코드 리뷰에서 바로 알아볼 수 있습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>사고</th><th>원인</th><th>예방</th></tr>
+<tr><td>백업이 열리지 않음</td><td>실행 중 파일을 <code>cp</code>로 복사</td><td><code>.backup</code> · <code>VACUUM INTO</code>, 그리고 복원 테스트</td></tr>
+<tr><td>최근 하루가 사라짐</td><td>본체만 옮기고 <code class="nb">-wal</code>을 빠뜨림</td><td>체크포인트 후 이동, 또는 엔진 백업 사용</td></tr>
+<tr><td>재실행에 데이터가 두 배</td><td>적재가 더하기로 되어 있음</td><td>파티션 삭제 후 삽입을 한 트랜잭션으로</td></tr>
+<tr><td>새 열이 리포트에서 사라짐</td><td>Parquet를 첫 파일 스키마로 읽음</td><td><code>union_by_name = true</code></td></tr>
+<tr><td>로그에 개인정보</td><td>값이 채워진 SQL을 그대로 기록</td><td>문자열 리터럴을 가린 뒤 기록</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="pr-checklist">
+<h3>운영 전 점검표</h3>
+<p>새 서비스를 띄우기 전에 이 여덟 줄을 확인하십시오. 전부 이 부에서 근거를 본 항목입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>확인 내용</th></tr>
+<tr><td>백업</td><td>엔진 백업으로 만들고, 복원 · 무결성 · 행 수까지 자동으로 확인합니다.</td></tr>
+<tr><td>WAL</td><td>파일 셋을 함께 다루고, 체크포인트가 밀리지 않는지 봅니다.</td></tr>
+<tr><td>권한</td><td>읽기 전용 연결을 기본으로, 디렉터리는 <code class="nb">0700</code>으로 잡습니다.</td></tr>
+<tr><td>인젝션</td><td>문자열 연결이 남아 있지 않은지 검색해 확인합니다.</td></tr>
+<tr><td>비밀</td><td>비밀번호는 Argon2id 계열로, 로그에는 값이 남지 않게 합니다.</td></tr>
+<tr><td>테스트</td><td>진짜 스키마를 인메모리에 올려 제약까지 검증합니다.</td></tr>
+<tr><td>관측</td><td>느린 질의를 계획과 함께 기록하고 지표를 쌓습니다.</td></tr>
+<tr><td>스키마</td><td>기동할 때 <code>user_version</code>이나 해시로 기대한 스키마인지 봅니다.</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="pr-summary">
+<h3>15부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>기억할 한 줄</th></tr>
+<tr><td>백업</td><td>엔진에게 시키고, 복원해 본 것만 백업으로 셉니다.</td></tr>
+<tr><td>시점 복구</td><td>파일 DB에는 없습니다. 필요하면 그것이 서버 DB로 갈 이유입니다.</td></tr>
+<tr><td>ETL</td><td>단계를 파일로 끊고, 파티션 단위로 다시 쓰면 멱등해집니다.</td></tr>
+<tr><td>보안</td><td>바인딩 · 읽기 전용 · 디렉터리 권한 · 로그 가리기 순으로 값이 큽니다.</td></tr>
+<tr><td>테스트 · 관측</td><td>인메모리 픽스처로 빠르게, 느린 질의는 계획과 함께 기록합니다.</td></tr>
+<tr><td>선택</td><td>네트워크 · 동시 쓰기 · 크기 세 가지가 아니라면 SQLite와 DuckDB로 충분합니다.</td></tr>
+</table>
+</div>
+<div class="key"><b>한 문장으로</b> &mdash; 실전에서 DB를 지키는 것은 화려한 기능이 아니라, 복원해 본 백업 · 읽기 전용 연결 · 두 번 돌려도 같은 적재 같은 지루한 습관입니다.</div>
+<p class="cap">다음 16부는 방언 차이표와 함수 치트시트, 용어집, 퀴즈로 덱을 마무리합니다.</p>
 </article>
 
 <!-- ===== part16.html (1장) ===== -->
