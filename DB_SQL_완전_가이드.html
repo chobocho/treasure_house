@@ -5065,11 +5065,895 @@ compact.db 크기 = 176128 바이트</pre>
 <div class="key"><b>다음 부로</b> — 7부의 DuckDB 는 정반대 방향의 설계입니다. 같은 &quot;서버 없는 엔진&quot; 이지만 행이 아니라 열로 저장하고, 한 행씩이 아니라 벡터 단위로 실행합니다. 6부에서 본 선택들과 하나씩 비교하며 읽으면 훨씬 선명합니다.</div>
 </article>
 
-<!-- ===== part07.html (1장) ===== -->
+<!-- ===== part07.html (44장) ===== -->
 <article class="card section" id="part7">
 <p class="chnum">7부</p>
 <h2>DuckDB 깊이</h2>
 <p class="chsub">프로세스 안의 분석 엔진 — 컬럼 저장·벡터화 실행·Parquet·친절한 SQL</p>
+</article>
+
+<article class="card" id="dk-why-olap">
+<h3>같은 SQL, 정반대의 접근 패턴</h3>
+<p class="lead">DuckDB 는 스스로를 &quot;분석 질의 부하(OLAP)를 위해 설계되었고, 별도 프로세스로 돌지 않고 호스트 프로세스 안에 완전히 내장된다&quot;고 소개합니다.</p>
+<p>분석 질의에서 가장 큰 비용은 계산이 아니라 데이터를 옮기는 일입니다. 엔진이 응용과 같은 프로세스에 있으면 그 전송 비용이 사라지고, 남는 것은 &quot;어떻게 적게 읽느냐&quot;뿐입니다.</p>
+<div class="g2">
+<div><h5>OLTP — 주문 한 건</h5><p>행 하나를 찾아 고치고 커밋합니다. 열은 거의 전부 건드리고 행은 하나뿐이라 지연 시간이 전부입니다.</p></div>
+<div><h5>OLAP — 1년치 매출</h5><p>수백만 행에서 열 두세 개만 읽어 합칩니다. 행 하나의 지연은 뜻이 없고 처리량이 전부입니다.</p></div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기준</th><th>OLTP</th><th>OLAP</th></tr>
+<tr><td>한 질의가 읽는 행</td><td>몇 개</td><td>수백만</td></tr>
+<tr><td>한 질의가 읽는 열</td><td>거의 전부</td><td>두세 개</td></tr>
+<tr><td>이기는 저장 방식</td><td>행 저장</td><td>열 저장</td></tr>
+</table>
+</div>
+<div class="key"><b>분석판 SQLite</b> — 서버도 설치도 없이 라이브러리 하나로 끝난다는 점은 SQLite 와 같습니다. 그 안의 실행 방식만 정반대입니다.</div>
+</article>
+
+<article class="card" id="dk-row-vs-col">
+<h3>행으로 눕히느냐, 열로 세우느냐</h3>
+<p><code>SELECT sum(price) FROM products</code> 하나를 생각해 보십시오. 행 저장에서는 <code class="nb">price</code> 를 읽으려고 그 옆의 이름·분류·재고까지 디스크에서 함께 끌려옵니다.</p>
+<p class="cap">행 저장 — 한 행의 모든 열이 붙어 있습니다</p>
+<div class="arr"><span class="c">1<span class="idx">id</span></span><span class="c">이어폰<span class="idx">name</span></span><span class="c in">15000<span class="idx">price</span></span><span class="c">35<span class="idx">stock</span></span><span class="c">2<span class="idx">id</span></span><span class="c">키보드<span class="idx">name</span></span><span class="c in">129000<span class="idx">price</span></span><span class="c">12<span class="idx">stock</span></span></div>
+<p class="cap">열 저장 — 같은 열의 값끼리 붙어 있습니다</p>
+<div class="arr"><span class="c dead">1</span><span class="c dead">2</span><span class="c dead">이어폰</span><span class="c dead">키보드</span><span class="c in">15000</span><span class="c in">129000</span><span class="c in">…</span></div>
+<p class="cap">합계를 구할 때 실제로 읽는 것은 강조된 <code class="nb">price</code> 덩어리뿐입니다. 흐리게 그은 값들은 디스크에서 아예 올라오지 않습니다.</p>
+<div class="g2">
+<div><h5>읽는 양</h5><p>필요한 열만 읽습니다. 열 폭이 비슷하다면 스무 열 가운데 둘만 쓸 때 읽는 양이 대략 10분의 1이 됩니다.</p></div>
+<div><h5>압축률</h5><p>한 덩어리에 같은 타입, 비슷한 값만 모입니다. 그래서 압축이 훨씬 잘 듣습니다.</p></div>
+</div>
+<div class="warn"><b>대가</b> — 행 하나를 통째로 넣거나 지우려면 열 수만큼의 자리를 건드려야 합니다. 낱개 갱신이 잦은 일에는 불리합니다.</div>
+</article>
+
+<article class="card" id="dk-compression">
+<h3>열마다 압축 방식을 따로 고릅니다</h3>
+<p>같은 열에 모인 값은 성질이 비슷합니다. 그래서 엔진은 표 전체가 아니라 <b>열마다</b> 가장 잘 듣는 압축을 고릅니다. 그 결정은 <code>pragma_storage_info</code> 로 직접 볼 수 있습니다.</p>
+<p class="fname">examples/p07/18-storage-info.sql</p>
+<pre><code data-lang="sql" data-src="p07/18-storage-info.sql">-- 컬럼 저장 들여다보기: 열마다 세그먼트·압축 방식이 다르다
+SELECT column_name, segment_type, compression, count
+FROM pragma_storage_info('orders')
+WHERE segment_type &lt;&gt; 'VALIDITY'
+ORDER BY column_id, start
+LIMIT 8;</code></pre>
+<pre class="term" data-out="p07/18-storage-info.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/18-storage-info.sql
+column_name  segment_type  compression  count
+-----------  ------------  -----------  -----
+id           INTEGER       BitPacking   800  
+customer_id  INTEGER       BitPacking   800  
+ordered_at   TIMESTAMP     BitPacking   800  
+status       VARCHAR       Dictionary   800  </pre>
+<p>범위가 좁은 정수와 타임스탬프는 <b>비트 패킹</b>으로, 값이 네 가지뿐인 <code class="nb">status</code> 문자열은 <b>사전</b>으로 접혔습니다. 사전 압축은 반복되는 문자열을 짧은 정수 코드로 바꿉니다.</p>
+<div class="note"><b>행 그룹</b> — 저장은 행 그룹(row group)으로 나뉘고, 압축도 병렬 처리도 그 단위 위에서 이뤄집니다. Parquet 의 행 그룹과 같은 개념입니다.</div>
+</article>
+
+<article class="card" id="dk-threads">
+<h3>기본값이 이미 병렬입니다</h3>
+<p>튜닝하지 않아도 DuckDB 는 코어 수만큼 스레드를 쓰고 메모리 한도를 시스템 RAM 의 약 80%로 잡습니다. 설정은 전부 <code>duckdb_settings()</code> 라는 <b>표</b>로 보이고 <code>SET</code> 으로 바꿉니다.</p>
+<p class="fname">examples/p07/19-threads-settings.sql</p>
+<pre><code data-lang="sql" data-src="p07/19-threads-settings.sql">-- 실행 설정: 스레드 수·메모리 한도 — 벡터화 엔진은 코어를 자동으로 나눠 쓴다
+SELECT name, value FROM duckdb_settings()
+WHERE name IN ('threads', 'memory_limit', 'default_order', 'access_mode');
+SET threads = 2;
+SELECT current_setting('threads') AS threads_now;</code></pre>
+<pre class="term" data-out="p07/19-threads-settings.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/19-threads-settings.sql
+name           value    
+-------------  ---------
+access_mode    read_only
+default_order  ASCENDING
+memory_limit   11.7 GiB 
+threads        8        
+threads_now
+-----------
+2          </pre>
+<p class="cap">이 출력은 이 기기(8코어·RAM 15 GB)에서 측정한 값입니다. 스레드 수와 메모리 한도는 실행 환경마다 다릅니다.</p>
+<div class="tip"><b>줄여야 할 때도 있습니다</b> — 메모리가 빠듯하거나 여러 질의를 동시에 돌릴 때는 <code>SET threads</code> 로 낮추는 편이 오히려 빠릅니다.</div>
+</article>
+
+<article class="card" id="dk-file-is-table">
+<h3>파일 이름을 표 이름 자리에 씁니다</h3>
+<p>분석의 첫 단계는 대개 &quot;일단 적재&quot;입니다. DuckDB 는 그 단계를 지웁니다. <code>FROM</code> 뒤에 파일 경로를 문자열로 적으면 그것이 곧 표입니다. <code>CREATE TABLE</code> 도 <code>IMPORT</code> 도 없습니다.</p>
+<p class="fname">examples/p07/01-query-csv-directly.sql</p>
+<pre><code data-lang="sql" data-src="p07/01-query-csv-directly.sql">-- 파일이 곧 표다: CSV 를 적재 없이 바로 질의한다
+SELECT city, count(*) AS n
+FROM 'data/csv/customers.csv'
+GROUP BY city ORDER BY n DESC, city
+LIMIT 4;</code></pre>
+<pre class="term" data-out="p07/01-query-csv-directly.sql"><span class="p">$</span> bin/duckdb -column :memory: &lt; examples/p07/01-query-csv-directly.sql
+city  n
+----  -
+부산  9
+울산  7
+창원  7
+대전  6</pre>
+<p>읽고 집계만 하므로 데이터베이스 파일조차 필요 없어 <code>:memory:</code> 로 열었습니다. CSV 파일은 그대로 두고 결과만 얻습니다.</p>
+<div class="note"><b>확장자로 고릅니다</b> — <code>.csv</code>·<code>.parquet</code>·<code>.json</code> 을 보고 알맞은 읽기 함수를 붙입니다. 명시하려면 <code>read_csv</code>·<code>read_parquet</code>·<code>read_json</code> 을 직접 부릅니다.</div>
+</article>
+
+<article class="card" id="dk-parquet-glob">
+<h3>글롭 하나가 표 하나</h3>
+<p>Parquet 은 열 저장 파일 포맷이라 DuckDB 의 저장 방식과 결이 같습니다. 여러 파일을 <code>*</code> 로 묶으면 한 표처럼 읽히고, <code>filename = true</code> 를 주면 각 행이 어느 파일에서 왔는지가 열로 붙습니다.</p>
+<p class="fname">examples/p07/02-read-parquet-glob.sql</p>
+<pre><code data-lang="sql" data-src="p07/02-read-parquet-glob.sql">-- Parquet 도 마찬가지 — 글롭으로 여러 파일을 한 표처럼, filename 으로 출처를 남긴다
+SELECT filename, count(*) AS rows
+FROM read_parquet('data/parquet/*.parquet', filename = true)
+GROUP BY filename ORDER BY filename;</code></pre>
+<pre class="term" data-out="p07/02-read-parquet-glob.sql"><span class="p">$</span> bin/duckdb -column :memory: &lt; examples/p07/02-read-parquet-glob.sql
+filename                          rows
+--------------------------------  ----
+data/parquet/customers.parquet    60  
+data/parquet/order_items.parquet  2022
+data/parquet/orders.parquet       800 
+data/parquet/payments.parquet     686 
+data/parquet/products.parquet     40  </pre>
+<p>디렉터리의 다섯 파일이 한 표로 읽혔고, 출처 열로 다시 갈라 세었습니다. 파일 목록을 코드로 만들 필요도, 하나씩 <code>UNION ALL</code> 로 이을 필요도 없습니다.</p>
+<div class="key"><b>왜 출처 열이 중요한가</b> — 날짜별로 나뉜 디렉터리를 통째로 읽을 때 파일 이름 자체가 사실상 파티션 키입니다. 어느 파일이 이상한지 추적할 때도 이 열이 유일한 단서입니다.</div>
+</article>
+
+<article class="card" id="dk-csv-sniffer">
+<h3>CSV 는 포맷이 아니라 관습입니다</h3>
+<p>구분자도, 헤더 유무도, 따옴표 규칙도 파일마다 다릅니다. DuckDB 는 앞부분을 조금 읽어 이 규칙과 열 타입을 추론하는 <b>스니퍼</b>를 먼저 돌립니다. 무엇으로 읽기로 했는지는 <code>sniff_csv</code> 로 확인합니다.</p>
+<p class="fname">examples/p07/03-csv-sniffer.sql</p>
+<pre><code data-lang="sql" data-src="p07/03-csv-sniffer.sql">-- CSV 스니퍼: 구분자·헤더·타입을 추론한다 — 무엇으로 읽었는지 sniff_csv 로 확인
+SELECT Delimiter, HasHeader, Columns[3] AS third_column
+FROM sniff_csv('data/csv/orders.csv');</code></pre>
+<pre class="term" data-out="p07/03-csv-sniffer.sql"><span class="p">$</span> bin/duckdb -column :memory: &lt; examples/p07/03-csv-sniffer.sql
+Delimiter  HasHeader  third_column                           
+---------  ---------  ---------------------------------------
+,          true       {'name': ordered_at, 'type': TIMESTAMP}</pre>
+<p>세 번째 열 <code class="nb">ordered_at</code> 이 문자열이 아니라 <code>TIMESTAMP</code> 로 잡혔습니다. 덕분에 날짜 산술을 바로 쓸 수 있습니다.</p>
+<div class="warn"><b>추론은 결국 추측입니다</b> — 자동 추론이 틀리면 <code>read_csv</code> 에 <code>delim</code>·<code>columns</code>·<code>types</code> 를 직접 지정하십시오. 되풀이 도는 파이프라인에서는 명시가 안전합니다.</div>
+</article>
+
+<article class="card" id="dk-read-json">
+<h3>중첩된 JSON 도 표로 폅니다</h3>
+<p>JSON 은 값 안에 값이 들어가는 구조라 평평한 표와 어긋납니다. DuckDB 는 그 구조를 <code>STRUCT</code>·<code>LIST</code> 라는 실제 타입으로 받아들여, 점 표기와 첨자로 바로 꺼내 씁니다.</p>
+<p class="fname">examples/p07/26-read-json.sql</p>
+<pre><code data-lang="sql" data-src="p07/26-read-json.sql">-- JSON 파일도 표다: 중첩 구조를 STRUCT/LIST 로 자동 추론한다
+COPY (SELECT id, name, {'city': city, 'joined': joined} AS profile, [1, 2] AS tags
+      FROM customers LIMIT 2) TO 'tmp/p07/26-read-json.sql/c.json';
+SELECT id, profile.city, tags[1] AS first_tag FROM read_json('tmp/p07/26-read-json.sql/c.json');</code></pre>
+<pre class="term" data-out="p07/26-read-json.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/26-read-json.sql
+id  city  first_tag
+--  ----  ---------
+1   대전  1        
+2   제주  1        </pre>
+<p>먼저 <code>COPY</code> 로 중첩 구조를 가진 JSON 을 쓰고, 다시 읽어 <code>profile.city</code> 와 <code>tags[1]</code> 로 안쪽 값을 꺼냈습니다. 파싱 코드는 한 줄도 없습니다.</p>
+<div class="note"><b>첨자는 1 부터</b> — DuckDB 의 리스트 첨자는 0 이 아니라 1 에서 시작합니다.</div>
+</article>
+
+<article class="card" id="dk-copy-export">
+<h3>결과를 다시 파일로 되돌립니다</h3>
+<p>읽기만큼 중요한 것이 내보내기입니다. <code>COPY (질의) TO '파일'</code> 한 문장이면 질의 결과가 그대로 Parquet 이나 CSV 파일이 됩니다. 그 파일은 다른 어떤 도구로도 읽히므로, 파일 자체가 교환 형식이 됩니다.</p>
+<p class="fname">examples/p07/14-copy-export.sql</p>
+<pre><code data-lang="sql" data-src="p07/14-copy-export.sql">-- 내보내기: 질의 결과를 Parquet·CSV 로 — 파일 하나가 곧 데이터 교환 형식
+COPY (SELECT category, count(*) AS n, sum(price * stock) AS inventory_value
+      FROM products GROUP BY ALL ORDER BY ALL)
+  TO 'tmp/p07/14-copy-export.sql/inventory.parquet' (FORMAT parquet);
+COPY (FROM products LIMIT 3) TO 'tmp/p07/14-copy-export.sql/top3.csv' (HEADER, DELIMITER ',');
+SELECT * FROM 'tmp/p07/14-copy-export.sql/inventory.parquet';</code></pre>
+<pre class="term" data-out="p07/14-copy-export.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/14-copy-export.sql
+category  n  inventory_value
+--------  -  ---------------
+도서      8  22514600.0     
+생활      8  52294800.0     
+스포츠    8  43252900.0     
+식품      8  85513000.0     
+전자기기  8  57642000.0     </pre>
+<p>마지막 줄에서 방금 쓴 Parquet 을 곧바로 다시 읽었습니다. 쓰고 읽는 데 스키마 선언이 한 줄도 필요 없습니다.</p>
+<div class="tip"><b>왜 Parquet 인가</b> — 열 저장·압축·타입 정보를 파일 안에 함께 담습니다. CSV 와 달리 다시 읽을 때 타입을 추측할 일이 없습니다.</div>
+</article>
+
+<article class="card" id="dk-from-first">
+<h3>FROM 을 먼저 쓸 수 있습니다</h3>
+<p>SQL 의 논리적 평가 순서는 <code>FROM</code> 이 먼저입니다(3부). 그런데 쓰는 순서는 <code>SELECT</code> 가 먼저라, 어떤 표를 볼지 정하기도 전에 열 이름을 적어야 합니다. DuckDB 는 쓰는 순서를 실행 순서에 맞출 수 있게 열어 두었습니다.</p>
+<p class="fname">examples/p07/04-friendly-from-first.sql</p>
+<pre><code data-lang="sql" data-src="p07/04-friendly-from-first.sql">-- 친절한 SQL 1: FROM 을 먼저 쓰고, SELECT 를 생략하면 * 다
+FROM products SELECT name, price ORDER BY price DESC LIMIT 2;
+FROM products WHERE id = 1;</code></pre>
+<pre class="term" data-out="p07/04-friendly-from-first.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/04-friendly-from-first.sql
+name           price 
+-------------  ------
+모니터 27인치  349000
+무선 마우스    349000
+id  name         category  price  stock
+--  -----------  --------  -----  -----
+1   무선 이어폰  전자기기  15000  35   </pre>
+<p>둘째 문장에는 <code>SELECT</code> 가 아예 없습니다. 생략하면 <code>SELECT *</code> 입니다. 표를 잠깐 들여다볼 때 타이핑이 크게 줄고, 자동완성도 열 이름을 제대로 제안합니다.</p>
+<div class="note"><b>표준은 아닙니다</b> — 이 뒤로 이어지는 &quot;친절한 SQL&quot;은 모두 DuckDB 의 확장 문법입니다. 다른 엔진으로 옮길 질의라면 표준 형태로 쓰십시오.</div>
+</article>
+
+<article class="card" id="dk-exclude-replace">
+<h3>* 에서 빼고, 바꾸고, 골라내기</h3>
+<p><code>SELECT *</code> 는 편하지만 필요 없는 열까지 딸려옵니다. 그렇다고 스무 개 열을 다 적기도 어렵습니다. <code>EXCLUDE</code> 는 몇 개를 빼고, <code>REPLACE</code> 는 몇 개만 식으로 갈아 끼웁니다.</p>
+<p class="fname">examples/p07/05-friendly-exclude-replace.sql</p>
+<pre><code data-lang="sql" data-src="p07/05-friendly-exclude-replace.sql">-- 친절한 SQL 2: * 에서 빼고(EXCLUDE) 바꾸고(REPLACE), 패턴으로 열 고르기(COLUMNS)
+SELECT * EXCLUDE (email, joined) REPLACE (upper(city) AS city) FROM customers LIMIT 2;
+SELECT COLUMNS('.*_id') FROM order_items LIMIT 2;</code></pre>
+<pre class="term" data-out="p07/05-friendly-exclude-replace.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/05-friendly-exclude-replace.sql
+id  name    city
+--  ------  ----
+1   최민준  대전
+2   윤하은  제주
+order_id  product_id
+--------  ----------
+1         10        
+1         13        </pre>
+<p><code>COLUMNS('.*_id')</code> 는 정규식에 맞는 열을 한꺼번에 고릅니다. 열 이름 규칙이 잘 잡힌 표에서는 이 한 줄이 열 목록을 대신합니다.</p>
+<div class="warn"><b>탐색용입니다</b> — 결과의 모양이 스키마에 따라 조용히 바뀐다는 점은 <code>*</code> 와 똑같습니다. 저장해 두고 쓸 질의에는 열을 명시하십시오.</div>
+</article>
+
+<article class="card" id="dk-group-by-all">
+<h3>GROUP BY ALL — 같은 목록을 두 번 적지 않기</h3>
+<p>집계 질의에서 가장 흔한 실수는 <code>SELECT</code> 에 적은 비집계 열을 <code>GROUP BY</code> 에 또 적다가 하나를 빠뜨리는 것입니다. <code>GROUP BY ALL</code> 은 그 목록을 엔진이 스스로 채웁니다.</p>
+<p class="fname">examples/p07/06-friendly-group-by-all.sql</p>
+<pre><code data-lang="sql" data-src="p07/06-friendly-group-by-all.sql">-- 친절한 SQL 3: GROUP BY ALL / ORDER BY ALL — 집계 아닌 열을 자동으로 묶는다
+SELECT category, status, count(*) AS n
+FROM order_items oi JOIN products p ON p.id = oi.product_id
+JOIN orders o ON o.id = oi.order_id
+WHERE status IN ('paid', 'cancelled') AND category IN ('도서', '식품')
+GROUP BY ALL ORDER BY ALL;</code></pre>
+<pre class="term" data-out="p07/06-friendly-group-by-all.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/06-friendly-group-by-all.sql
+category  status     n  
+--------  ---------  ---
+도서      cancelled  36 
+도서      paid       293
+식품      cancelled  40 
+식품      paid       271</pre>
+<p><code>ORDER BY ALL</code> 도 같은 방식으로 결과 열을 왼쪽부터 정렬 키로 씁니다. 열을 하나 더 넣거나 빼도 아래 두 절은 손댈 일이 없습니다.</p>
+<div class="key"><b>정확히 무엇을 묶는가</b> — 집계 함수가 아닌 모든 결과 식입니다. 여기서는 <code class="nb">category</code> 와 <code class="nb">status</code> 이고 <code>count(*)</code> 는 빠집니다.</div>
+</article>
+
+<article class="card" id="dk-qualify">
+<h3>QUALIFY — 윈도우 결과로 바로 거릅니다</h3>
+<p>윈도우 함수는 <code>WHERE</code> 보다 나중에 계산되므로 <code>WHERE rn &lt;= 2</code> 는 쓸 수 없습니다. 그래서 표준 SQL 에서는 CTE 로 한 번 감싼 뒤 바깥에서 걸러야 합니다(4부). <code>QUALIFY</code> 는 그 껍데기를 없앱니다.</p>
+<p class="fname">examples/p07/07-qualify.sql</p>
+<pre><code data-lang="sql" data-src="p07/07-qualify.sql">-- QUALIFY: 윈도우 함수 결과로 바로 거른다 — CTE 없이 그룹별 상위 N
+SELECT category, name, price,
+       row_number() OVER (PARTITION BY category ORDER BY price DESC, name) AS rn
+FROM products
+QUALIFY rn &lt;= 2
+ORDER BY category, rn;</code></pre>
+<pre class="term" data-out="p07/07-qualify.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/07-qualify.sql
+category  name               price   rn
+--------  -----------------  ------  --
+도서      타입스크립트 입문  199000  1 
+도서      DuckDB 실전        129000  2 
+생활      탁상 스탠드        349000  1 
+생활      에코백             199000  2 
+스포츠    물병 1L            349000  1 
+스포츠    줄넘기             45000   2 
+식품      견과류 믹스 1kg    349000  1 
+식품      그래놀라           349000  2 
+전자기기  모니터 27인치      349000  1 
+전자기기  무선 마우스        349000  2 </pre>
+<p><code>HAVING</code> 이 <code>GROUP BY</code> 의 결과를 거르듯, <code>QUALIFY</code> 는 윈도우 함수의 결과를 거릅니다. &quot;분류별 상위 2개&quot;가 한 문장으로 끝났습니다.</p>
+<div class="note"><b>이식성</b> — 이 기기의 SQLite 3.53.4 는 <code>QUALIFY</code> 를 문법 오류로 거부합니다. 옮길 때는 CTE 로 감싸는 4부의 형태로 되돌리면 됩니다.</div>
+</article>
+
+<article class="card" id="dk-pivot">
+<h3>PIVOT — 행을 열로 폅니다</h3>
+<p>사람이 읽는 보고서는 대개 가로로 퍼진 표입니다. 상태 값 네 개가 열이 되어야 한눈에 들어옵니다. 표준 SQL 로는 상태 수만큼 <code>CASE</code> 를 적어야 하지만, <code>PIVOT</code> 은 어떤 값이 있는지도 스스로 찾아냅니다.</p>
+<p class="fname">examples/p07/08-pivot.sql</p>
+<pre><code data-lang="sql" data-src="p07/08-pivot.sql">-- PIVOT: 행을 열로 — 도시별 주문 상태 분포를 가로로 편다
+PIVOT (SELECT c.city, o.status FROM orders o JOIN customers c ON c.id = o.customer_id
+       WHERE c.city IN ('서울', '부산', '제주'))
+ON status USING count(*) GROUP BY city ORDER BY city;</code></pre>
+<pre class="term" data-out="p07/08-pivot.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/08-pivot.sql
+city  cancelled  paid  pending  shipped
+----  ---------  ----  -------  -------
+부산  8          82    11       13     
+서울  5          51    3        9      
+제주  8          47    4        13     </pre>
+<p><code>ON status</code> 가 열이 될 값을, <code>USING count(*)</code> 가 각 칸에 들어갈 집계를, <code>GROUP BY city</code> 가 행을 정합니다.</p>
+<div class="warn"><b>열 이름이 데이터에 달립니다</b> — 상태 값이 하나 늘면 결과의 열도 하나 늡니다. 프로그램이 받아 쓰는 질의로는 위험하고, 사람이 보는 요약에 알맞습니다.</div>
+</article>
+
+<article class="card" id="dk-unpivot">
+<h3>UNPIVOT — 열을 행으로 되돌립니다</h3>
+<p>엑셀에서 넘어온 표는 월별로 열이 벌어져 있기 일쑤입니다. 이런 모양은 &quot;4월이 오면 스키마가 바뀐다&quot;는 문제를 안고 있습니다. 세로로 세워 두면 스키마가 고정되고 집계도 쉬워집니다.</p>
+<p class="fname">examples/p07/09-unpivot.sql</p>
+<pre><code data-lang="sql" data-src="p07/09-unpivot.sql">-- UNPIVOT: 열을 행으로 — 가로로 퍼진 월별 열을 세로 표로 되돌린다
+CREATE TABLE sales_wide AS
+  SELECT * FROM (VALUES ('도서', 120, 135, 150), ('식품', 300, 280, 310)) AS t(category, jan, feb, mar);
+UNPIVOT sales_wide ON jan, feb, mar INTO NAME month VALUE amount;</code></pre>
+<pre class="term" data-out="p07/09-unpivot.sql"><span class="p">$</span> bin/duckdb -column :memory: &lt; examples/p07/09-unpivot.sql
+category  month  amount
+--------  -----  ------
+도서      jan    120   
+도서      feb    135   
+도서      mar    150   
+식품      jan    300   
+식품      feb    280   
+식품      mar    310   </pre>
+<p><code>INTO NAME month VALUE amount</code> 는 &quot;열 이름은 <code class="nb">month</code> 열에, 값은 <code class="nb">amount</code> 열에 담아라&quot;라는 뜻입니다. 5부에서 본 제1정규형으로 되돌리는 연산입니다.</p>
+<div class="tip"><b>짝을 이룹니다</b> — 저장은 세로로, 보고서는 <code>PIVOT</code> 으로 가로로. 두 방향을 오갈 수 있으면 표의 모양 때문에 스키마를 타협할 일이 없습니다.</div>
+</article>
+
+<article class="card" id="dk-macro">
+<h3>매크로 — 인자를 받는 SQL 조각</h3>
+<p>같은 식이 여러 질의에 되풀이되면 이름 붙일 곳이 필요합니다. 뷰는 질의 하나를 통째로 고정하지만, 매크로는 <b>인자를 받습니다</b>. 스칼라 매크로는 값을, 테이블 매크로는 표를 돌려줍니다.</p>
+<p class="fname">examples/p07/20-macro.sql</p>
+<pre><code data-lang="sql" data-src="p07/20-macro.sql">-- 매크로: 함수처럼 재사용하는 SQL 조각 (스칼라·테이블 매크로)
+CREATE MACRO vat(price) AS round(price * 1.1);
+CREATE MACRO top_products(cat, n) AS TABLE
+  SELECT name, price FROM products WHERE category = cat ORDER BY price DESC LIMIT n;
+SELECT name, price, vat(price) AS with_vat FROM top_products('도서', 3);</code></pre>
+<pre class="term" data-out="p07/20-macro.sql"><span class="p">$</span> bin/duckdb -column $TMP/shop.duckdb &lt; examples/p07/20-macro.sql
+name               price   with_vat
+-----------------  ------  --------
+타입스크립트 입문  199000  218900  
+DuckDB 실전        129000  141900  
+SQLite 핸드북      129000  141900  </pre>
+<p><code>top_products('도서', 3)</code> 이 표처럼 <code>FROM</code> 자리에 들어갔고 <code>vat(price)</code> 는 함수처럼 쓰였습니다. 둘 다 카탈로그에 남으므로 다음 연결에서도 그대로 부를 수 있습니다.</p>
+<div class="note"><b>쓰기 예제입니다</b> — 카탈로그를 바꾸므로 공유 데이터베이스 대신 임시 복사본에서 실행했습니다. 이 덱의 예제는 <code>data/</code> 를 절대 건드리지 않습니다.</div>
+</article>
+
+<article class="card" id="dk-nested">
+<h3>리스트·구조체·맵이 일급 값입니다</h3>
+<p>관계형 모델의 제1정규형은 &quot;칸 하나에 값 하나&quot;를 요구합니다. 그러나 분석에서는 한 행에 딸린 여러 값을 그대로 들고 다니는 편이 빠를 때가 많습니다. DuckDB 는 중첩 타입을 정식 타입으로 지원합니다.</p>
+<p class="fname">examples/p07/10-list-struct-map.sql</p>
+<pre><code data-lang="sql" data-src="p07/10-list-struct-map.sql">-- 중첩 타입: LIST·STRUCT·MAP 이 일급 값이다
+SELECT [1, 2, 3] AS l,
+       {'name': '민준', 'age': 30} AS s,
+       MAP {'ko': '안녕', 'en': 'hi'} AS m;
+SELECT l[2] AS second, s.name AS name, m['en'] AS en, len(l) AS n
+FROM (SELECT [1, 2, 3] AS l, {'name': '민준', 'age': 30} AS s, MAP {'ko': '안녕', 'en': 'hi'} AS m);</code></pre>
+<pre class="term" data-out="p07/10-list-struct-map.sql"><span class="p">$</span> bin/duckdb -column :memory: &lt; examples/p07/10-list-struct-map.sql
+l          s                          m               
+---------  -------------------------  ----------------
+[1, 2, 3]  {'name': 민준, 'age': 30}  {ko=안녕, en=hi}
+second  name  en  n
+------  ----  --  -
+2       민준  hi  3</pre>
+<p>첨자 <code>l[2]</code>, 점 표기 <code>s.name</code>, 키 조회 <code>m['en']</code> 이 모두 평범한 SQL 식입니다. 이 타입들은 Parquet·JSON 을 읽을 때 자동으로 만들어집니다.</p>
+<div class="warn"><b>남용 주의</b> — 조인 키가 될 값을 리스트 안에 숨기면 조인도 필터 푸시다운도 쓸 수 없습니다. 5부의 안티패턴이 그대로 되살아납니다.</div>
+</article>
+
+<article class="card" id="dk-lambda">
+<h3>람다 — 리스트 안으로 들어가는 함수</h3>
+<p>리스트가 값이 되면 &quot;모든 원소에 이것을 하라&quot;는 표현이 필요해집니다. DuckDB 는 이를 람다로 받습니다. 행으로 폈다가 다시 접는 대신 리스트 안에서 끝냅니다.</p>
+<p class="fname">examples/p07/11-list-lambda.sql</p>
+<pre><code data-lang="sql" data-src="p07/11-list-lambda.sql">-- 리스트 함수와 람다: 리스트 안에서 map·filter·reduce 를 SQL 로
+SELECT list_transform([1, 2, 3, 4], lambda x: x * x)          AS squares,
+       list_filter([1, 2, 3, 4], lambda x: x % 2 = 0)         AS evens,
+       list_reduce([1, 2, 3, 4], lambda a, b: a + b)          AS total,
+       [x * 10 FOR x IN [1, 2, 3] IF x &lt;&gt; 2]                  AS comprehension,
+       list_aggregate([3, 1, 2], 'max')                       AS mx;</code></pre>
+<pre class="term" data-out="p07/11-list-lambda.sql"><span class="p">$</span> bin/duckdb -column :memory: &lt; examples/p07/11-list-lambda.sql
+squares        evens   total  comprehension  mx
+-------------  ------  -----  -------------  --
+[1, 4, 9, 16]  [2, 4]  10     [10, 30]       3 </pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>표현</th><th>하는 일</th></tr>
+<tr><td><code>list_transform</code></td><td>모든 원소를 식으로 바꿉니다</td></tr>
+<tr><td><code>list_filter</code></td><td>조건에 맞는 원소만 남깁니다</td></tr>
+<tr><td><code>list_reduce</code></td><td>왼쪽부터 접어 값 하나로 만듭니다</td></tr>
+<tr><td><code>[식 FOR x IN 리스트]</code></td><td>파이썬식 리스트 내포 표기</td></tr>
+</table>
+</div>
+<div class="note"><b>왜 필요한가</b> — 리스트를 행으로 폈다가 다시 모으려면 <code>unnest</code> 와 <code>list</code> 를 오가며 그룹 키를 붙들어야 합니다. 람다는 그 왕복을 없앱니다.</div>
+</article>
+
+<article class="card" id="dk-unnest">
+<h3>접었다 펴기 — list() 와 unnest()</h3>
+<p>보통의 집계는 여러 행을 값 하나로 줄입니다. <code>list()</code> 는 줄이지 않고 <b>모읍니다</b>. 반대로 <code>unnest()</code> 는 리스트를 다시 행으로 폅니다. 이 한 쌍이 있으면 중간 표 없이 결과의 모양을 바꿀 수 있습니다.</p>
+<p class="fname">examples/p07/12-unnest-list-agg.sql</p>
+<pre><code data-lang="sql" data-src="p07/12-unnest-list-agg.sql">-- 접었다 펴기: list() 로 행을 리스트로 모으고, unnest 로 다시 행으로
+WITH per_city AS (
+  SELECT city, list(name ORDER BY name) AS names FROM customers
+  WHERE city IN ('제주', '세종', '광주') GROUP BY city
+)
+SELECT city, len(names) AS n, names[1:2] AS first_two FROM per_city ORDER BY city;
+SELECT city, unnest(names) AS name FROM (SELECT city, list(name ORDER BY name) AS names
+  FROM customers WHERE city = '광주' GROUP BY city);</code></pre>
+<pre class="term" data-out="p07/12-unnest-list-agg.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/12-unnest-list-agg.sql
+city  n  first_two       
+----  -  ----------------
+광주  4  [송하은, 신현우]
+제주  5  [강준서, 김다은]
+city  name  
+----  ------
+광주  송하은
+광주  신현우
+광주  오서윤
+광주  정예준</pre>
+<p><code>list(name ORDER BY name)</code> 처럼 모으는 순서까지 지정할 수 있고, <code>names[1:2]</code> 로 리스트를 잘라낼 수도 있습니다.</p>
+<div class="key"><b>문자열로 잇는 것과 다릅니다</b> — 4부의 <code>string_agg</code> 는 결국 다시 쪼개야 합니다. 리스트로 모으면 원소의 타입이 그대로 남습니다.</div>
+</article>
+
+<article class="card" id="dk-decimal">
+<h3>0.1 + 0.2 가 0.3 인 이유</h3>
+<p>대부분의 언어에서 이 식은 거짓입니다. 소수 리터럴을 이진 부동소수점으로 읽기 때문입니다. DuckDB 는 소수 리터럴을 <code>DECIMAL</code> 로 읽습니다. 그래서 참이 되고, 돈 계산에서 사고가 줄어듭니다.</p>
+<p class="fname">examples/p07/23-types.sql</p>
+<pre><code data-lang="sql" data-src="p07/23-types.sql">-- 타입 시스템: 소수 리터럴은 DECIMAL 이라 0.1 + 0.2 = 0.3 이 참이다 (DOUBLE 로 바꾸면 거짓)
+CREATE TYPE mood AS ENUM ('happy', 'ok', 'sad');
+SELECT 0.1 + 0.2 = 0.3                                   AS decimal_literal,
+       0.1::DOUBLE + 0.2::DOUBLE = 0.3::DOUBLE            AS double_math,
+       typeof(0.1)                                        AS literal_type,
+       (1::HUGEINT &lt;&lt; 100)::VARCHAR                       AS big,
+       'ok'::mood                                         AS m,
+       range(1, 4)                                        AS r;</code></pre>
+<pre class="term" data-out="p07/23-types.sql"><span class="p">$</span> bin/duckdb -column :memory: &lt; examples/p07/23-types.sql
+decimal_literal  double_math  literal_type  big                              m   r        
+---------------  -----------  ------------  -------------------------------  --  ---------
+true             false        DECIMAL(2,1)  1267650600228229401496703205376  ok  [1, 2, 3]</pre>
+<p><code>typeof(0.1)</code> 이 <code>DECIMAL(2,1)</code> 입니다. 같은 식을 <code>DOUBLE</code> 로 캐스팅하면 다시 거짓이 됩니다. <code>HUGEINT</code> 는 128비트라 1을 왼쪽으로 100비트 민 값도 정확히 담습니다. <code>ENUM</code> 은 <code>CREATE TYPE</code> 으로 만드는 사용자 타입입니다.</p>
+<div class="key"><b>강타입의 대가와 보상</b> — 3부에서 본 대로 DuckDB 는 열 타입에 맞지 않는 값을 거부합니다. 그 대신 타입이 계산의 뜻을 지켜 줍니다.</div>
+</article>
+
+<article class="card" id="dk-strings">
+<h3>문자열 정제를 SQL 안에서 끝냅니다</h3>
+<p>데이터 정제의 절반은 문자열입니다. 정규식 추출·분할·포맷이 엔진에 들어 있으면 파이썬으로 꺼냈다 다시 넣는 왕복이 사라집니다.</p>
+<p class="fname">examples/p07/25-regex-strings.sql</p>
+<pre><code data-lang="sql" data-src="p07/25-regex-strings.sql">-- 문자열: 정규식 추출·분할·포맷이 내장돼 있다
+SELECT email,
+       regexp_extract(email, '^(\w+)@', 1)   AS local_part,
+       split_part(email, '@', 2)             AS domain,
+       string_split(email, '@')              AS parts,
+       format('{}({})', name, city)          AS label
+FROM customers WHERE id &lt;= 2;</code></pre>
+<pre class="term" data-out="p07/25-regex-strings.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/25-regex-strings.sql
+email               local_part  domain       parts                  label       
+------------------  ----------  -----------  ---------------------  ------------
+user01@example.com  user01      example.com  [user01, example.com]  최민준(대전)
+user02@example.com  user02      example.com  [user02, example.com]  윤하은(제주)</pre>
+<p><code>string_split</code> 은 리스트를 돌려주므로 앞 슬라이드의 리스트 함수와 그대로 이어집니다. <code>format('{}({})', …)</code> 는 자리표시자에 값을 채웁니다.</p>
+<div class="note"><b>정규식 엔진은 RE2</b> — 캡처 그룹은 <code>\1</code>부터 <code>\9</code>까지 아홉 개만 지원하며, 두 자리 이상의 그룹 번호는 쓸 수 없습니다.</div>
+</article>
+
+<article class="card" id="dk-asof">
+<h3>ASOF JOIN — 그 시점에 유효했던 값</h3>
+<p>환율표·가격표·센서 값은 &quot;값이 바뀐 시각&quot;만 기록합니다. 거래 시각에 맞는 환율을 찾으려면 &quot;그 시각 이하의 마지막 행&quot;을 골라야 하는데, 등호 조인으로는 표현되지 않습니다. 상관 서브쿼리로 쓰면 행마다 표를 다시 훑습니다.</p>
+<p class="fname">examples/p07/13-asof-join.sql</p>
+<pre><code data-lang="sql" data-src="p07/13-asof-join.sql">-- ASOF JOIN: "그 시점에 유효했던 값" 을 잇는다 — 환율·가격표·센서 값의 정석
+CREATE TABLE fx (ts TIMESTAMP, usd_krw DECIMAL(8,2));
+INSERT INTO fx VALUES ('2024-01-01', 1300.00), ('2024-01-10', 1320.50), ('2024-01-20', 1290.00);
+CREATE TABLE deals (deal_at TIMESTAMP, usd INTEGER);
+INSERT INTO deals VALUES ('2024-01-05', 100), ('2024-01-15', 200), ('2024-01-25', 50);
+SELECT d.deal_at::DATE AS deal_on, d.usd, fx.ts::DATE AS rate_on, fx.usd_krw,
+       (d.usd * fx.usd_krw)::INTEGER AS krw
+FROM deals d ASOF JOIN fx ON d.deal_at &gt;= fx.ts
+ORDER BY d.deal_at;</code></pre>
+<pre class="term" data-out="p07/13-asof-join.sql"><span class="p">$</span> bin/duckdb -column :memory: &lt; examples/p07/13-asof-join.sql
+deal_on     usd  rate_on     usd_krw  krw   
+----------  ---  ----------  -------  ------
+2024-01-05  100  2024-01-01  1300.00  130000
+2024-01-15  200  2024-01-10  1320.50  264100
+2024-01-25  50   2024-01-20  1290.00  64500 </pre>
+<p>1월 5일 거래에는 1일 환율이, 15일 거래에는 10일 환율이, 25일 거래에는 20일 환율이 붙었습니다. 조건은 <code>d.deal_at &gt;= fx.ts</code> 한 줄뿐입니다.</p>
+<div class="key"><b>왜 전용 연산자인가</b> — 의도가 문법에 드러나므로 옵티마이저가 &quot;정렬해 두고 나란히 훑기&quot;라는 전용 알고리즘을 고를 수 있습니다. 같은 뜻의 서브쿼리로는 그 정보가 사라집니다.</div>
+</article>
+
+<article class="card" id="dk-agg-extras">
+<h3>분석에 필요한 집계가 이미 있습니다</h3>
+<p>&quot;가장 비싼 상품의 <b>이름</b>&quot;을 표준 SQL 로 구하려면 최댓값을 구한 뒤 원래 표에 다시 조인해야 합니다. <code>arg_max</code> 는 한 번의 스캔으로 끝냅니다.</p>
+<p class="fname">examples/p07/21-agg-extras.sql</p>
+<pre><code data-lang="sql" data-src="p07/21-agg-extras.sql">-- 분석용 집계: arg_max·quantile·mode·histogram — 한 번의 스캔으로 통계를 뽑는다
+SELECT category,
+       arg_max(name, price)                  AS priciest,
+       quantile_cont(price, 0.5)             AS median,
+       mode(price)                           AS most_common,
+       count(DISTINCT price)                 AS distinct_prices
+FROM products GROUP BY ALL ORDER BY ALL LIMIT 3;</code></pre>
+<pre class="term" data-out="p07/21-agg-extras.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/21-agg-extras.sql
+category  priciest           median   most_common  distinct_prices
+--------  -----------------  -------  -----------  ---------------
+도서      타입스크립트 입문  38500.0  32000        6              
+생활      탁상 스탠드        13500.0  12000        7              
+스포츠    물병 1L            32000.0  32000        5              </pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>집계</th><th>돌려주는 값</th></tr>
+<tr><td><code>arg_max(a, b)</code></td><td><code>b</code> 가 가장 큰 행의 <code>a</code></td></tr>
+<tr><td><code>quantile_cont(x, 0.5)</code></td><td>보간한 중앙값</td></tr>
+<tr><td><code>mode(x)</code></td><td>가장 자주 나온 값</td></tr>
+<tr><td><code>count(DISTINCT x)</code></td><td>서로 다른 값의 개수</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="dk-sample">
+<h3>표본으로 먼저 봅니다</h3>
+<p>수억 행짜리 표를 처음 만났을 때 <code>LIMIT 10</code> 은 &quot;앞의 10행&quot;이라 대표성이 없습니다. <code>USING SAMPLE</code> 은 고르게 뽑고, <code>REPEATABLE</code> 로 난수 씨앗을 고정하면 같은 표본이 다시 나옵니다.</p>
+<p class="fname">examples/p07/22-sample.sql</p>
+<pre><code data-lang="sql" data-src="p07/22-sample.sql">-- 표본 추출: 큰 표를 훑어보는 도구 — REPEATABLE 로 재현 가능하게
+SELECT id, name, city FROM customers USING SAMPLE reservoir(3 ROWS) REPEATABLE (42);</code></pre>
+<pre class="term" data-out="p07/22-sample.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/22-sample.sql
+id  name    city
+--  ------  ----
+19  오서윤  광주
+28  한예준  울산
+58  윤현우  서울</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방식</th><th>행 수 지정</th><th>비율 지정</th></tr>
+<tr><td><code>reservoir</code></td><td>가능(정확히 N행)</td><td>가능</td></tr>
+<tr><td><code>bernoulli</code></td><td>불가</td><td>가능(행마다 동전)</td></tr>
+<tr><td><code>system</code></td><td>불가</td><td>가능(벡터마다 동전)</td></tr>
+</table>
+</div>
+<div class="warn"><b>씨앗의 한계</b> — 문서에 따르면 씨앗을 지정해도 <b>다중 스레드가 꺼져 있을 때만</b> 같은 표본이 보장됩니다. 재현이 꼭 필요하면 결과를 파일로 남기십시오.</div>
+</article>
+
+<article class="card" id="dk-dates">
+<h3>날짜는 타입이지 문자열이 아닙니다</h3>
+<p>SQLite 는 날짜를 문자열이나 숫자로 저장하고 함수로 해석합니다(3부). DuckDB 에는 <code>DATE</code>·<code>TIMESTAMP</code>·<code>INTERVAL</code> 이 실제 타입으로 있어, 자르기와 더하기가 타입 수준에서 이뤄집니다.</p>
+<p class="fname">examples/p07/24-dates.sql</p>
+<pre><code data-lang="sql" data-src="p07/24-dates.sql">-- 날짜·시간: date_trunc·generate_series·간격 산술이 타입 수준에서 된다
+SELECT date_trunc('month', ordered_at)::DATE AS month, count(*) AS n
+FROM orders WHERE ordered_at &lt; DATE '2024-04-01'
+GROUP BY ALL ORDER BY ALL;
+SELECT unnest(generate_series(DATE '2024-01-29', DATE '2024-02-02', INTERVAL 1 DAY))::DATE AS d;</code></pre>
+<pre class="term" data-out="p07/24-dates.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/24-dates.sql
+month       n 
+----------  --
+2024-01-01  28
+2024-02-01  36
+2024-03-01  49
+d         
+----------
+2024-01-29
+2024-01-30
+2024-01-31
+2024-02-01
+2024-02-02</pre>
+<p><code>date_trunc('month', …)</code> 로 월 단위로 접었고, <code>generate_series</code> 에 <code>INTERVAL 1 DAY</code> 를 주어 달을 넘나드는 날짜 목록을 만들었습니다. 월말 경계는 타입이 알아서 처리합니다.</p>
+<div class="tip"><b>시간대가 필요하면</b> — 시간대와 콜레이션은 <code class="nb">icu</code> 확장이 담당합니다. 확장 이야기는 이 부 끝에서 다시 다룹니다.</div>
+</article>
+
+<article class="card" id="dk-window">
+<h3>첫 주문에서 재구매까지 걸린 시간</h3>
+<p>실제 분석 질의는 대개 이런 모양입니다. 고객별로 줄을 세우고, 이웃한 두 행의 차이를 보고, 그중 첫 줄만 남깁니다. 윈도우 함수와 타입 산술이 함께 있어야 한 문장으로 끝납니다.</p>
+<p class="fname">examples/p07/28-window-in-analytics.sql</p>
+<pre><code data-lang="sql" data-src="p07/28-window-in-analytics.sql">-- 분석 질의 예: 고객별 첫 주문과 재구매까지 걸린 날짜 (윈도우 + 날짜 산술)
+WITH firsts AS (
+  SELECT customer_id, ordered_at,
+         lead(ordered_at) OVER (PARTITION BY customer_id ORDER BY ordered_at) AS next_at,
+         row_number()     OVER (PARTITION BY customer_id ORDER BY ordered_at) AS rn
+  FROM orders
+)
+SELECT customer_id, ordered_at::DATE AS first_order, (next_at - ordered_at) AS until_next
+FROM firsts WHERE rn = 1 ORDER BY until_next LIMIT 3;</code></pre>
+<pre class="term" data-out="p07/28-window-in-analytics.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/28-window-in-analytics.sql
+customer_id  first_order  until_next
+-----------  -----------  ----------
+36           2024-01-08   07:27:00  
+53           2024-01-02   07:52:00  
+57           2024-02-07   18:17:00  </pre>
+<p><code>lead()</code> 로 같은 고객의 다음 주문 시각을 같은 행에 끌어왔고, <code>row_number()</code> 로 첫 주문만 남겼습니다. 두 타임스탬프의 차는 <code>INTERVAL</code> 이라 그대로 정렬됩니다.</p>
+<div class="key"><b>4부와 같은 문법</b> — 윈도우 함수 자체는 표준이고 SQLite 에도 있습니다. 달라지는 것은 타입 산술과 <code>QUALIFY</code> 같은 편의 문법입니다.</div>
+</article>
+
+<article class="card" id="dk-vectorized">
+<h3>한 번에 한 행이 아니라 2048행씩</h3>
+<p>전통적 엔진은 연산자마다 함수를 불러 행 하나를 넘깁니다. 행이 100만이고 연산자가 다섯이면 호출이 500만 번입니다. 계산보다 호출 자체가 비쌉니다. DuckDB 는 한 번의 호출에 <b>벡터</b> 하나, 기본 2048개의 값을 넘깁니다.</p>
+<div class="flow"><span class="box">스캔</span><span class="arr">→</span><span class="box">필터</span><span class="arr">→</span><span class="box">투영</span><span class="arr">→</span><span class="box dim">집계</span></div>
+<p class="cap">화살표마다 2048개짜리 벡터 하나가 넘어갑니다. 게다가 아래에서 위로 <b>밀어 올리는</b>(push-based) 구조라, 파이프라인을 여러 스레드로 나누기도 쉽습니다.</p>
+<div class="demo" data-demo="vectorized"><h5>튜플 단위 vs 벡터 단위 — 호출 횟수 모델</h5><div class="row"><label>행 수 <input type="number" data-rows value="1000000" style="width:8em"></label><label>연산자 수 <input type="number" data-ops value="5" style="width:4em"></label><button data-run>계산</button><button class="sec" data-reset>초기화</button></div><div class="out"></div></div>
+<p class="cap">호출 오버헤드를 30ns, 값 하나 처리를 1ns 로 잡은 <b>모델</b> 계산입니다. 실제 이득에는 캐시 적중률과 SIMD 까지 더해집니다.</p>
+</article>
+
+<article class="card" id="dk-explain">
+<h3>물리 계획은 아래에서 위로 읽습니다</h3>
+<p><code>EXPLAIN</code> 은 질의를 실행하지 않고 엔진이 고른 <b>물리 계획</b>을 보여 줍니다. 잎이 아래에, 마지막 연산자가 위에 있습니다. 계획이 길므로 아래쪽 스캔과 조인만 잘라 봅니다.</p>
+<p class="fname">examples/p07/15-explain.sql</p>
+<pre><code data-lang="sql" data-src="p07/15-explain.sql">-- EXPLAIN: 물리 실행 계획 — 해시 조인·프로젝션·필터 푸시다운을 트리로 보여 준다
+EXPLAIN SELECT c.city, count(*) FROM orders o JOIN customers c ON c.id = o.customer_id
+WHERE o.status = 'paid' GROUP BY c.city;</code></pre>
+<pre class="term" data-out="p07/15-explain.sql" data-lines="43-68"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/15-explain.sql
++-------------+-------------+
+|         HASH_JOIN         |
+|    --------------------   |
+|      Join Type: INNER     |
+|                           |
+|        Conditions:        +--------------+
+|      customer_id = id     |              |
+|                           |              |
+|         ~214 rows         |              |
++-------------+-------------+              |
++-------------+-------------++-------------+-------------+
+|          SEQ_SCAN         ||          SEQ_SCAN         |
+|    --------------------   ||    --------------------   |
+|           Table:          ||           Table:          |
+|      shop.main.orders     ||    shop.main.customers    |
+|                           ||                           |
+|   Type: Sequential Scan   ||   Type: Sequential Scan   |
+|                           ||                           |
+|        Projections:       ||        Projections:       |
+|        customer_id        ||             id            |
+|                           ||            city           |
+|          Filters:         ||                           |
+|       status='paid'       ||                           |
+|                           ||                           |
+|         ~200 rows         ||          ~60 rows         |
++---------------------------++---------------------------+</pre>
+<p class="cap">전체 계획 68줄 가운데 아래쪽 26줄만 잘랐습니다.</p>
+<p><code class="nb">orders</code> 스캔 상자 안에 <code>Filters: status='paid'</code> 와 <code>Projections: customer_id</code> 가 들어가 있습니다. 조건과 필요한 열이 스캔까지 <b>밀려 내려간</b> 것입니다. 그래서 800행 중 약 200행만 위로 올라갑니다.</p>
+</article>
+
+<article class="card" id="dk-explain-analyze">
+<h3>EXPLAIN ANALYZE — 추정 대신 실측</h3>
+<p><code>EXPLAIN</code> 의 행 수는 추정치입니다. 추정이 크게 틀리면 조인 순서도 틀립니다. <code>EXPLAIN ANALYZE</code> 는 질의를 실제로 실행해 연산자마다 <b>실제 행 수와 걸린 시간</b>을 답니다.</p>
+<p class="fname">examples/p07/16-explain-analyze.sql</p>
+<pre><code data-lang="sql" data-src="p07/16-explain-analyze.sql">-- EXPLAIN ANALYZE: 실제로 실행해 연산자별 시간과 행 수를 단다 (수치는 실행마다 다르다)
+EXPLAIN ANALYZE SELECT status, count(*) FROM orders GROUP BY status;</code></pre>
+<pre class="term" data-out="p07/16-explain-analyze.sql" data-lines="1-11"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/16-explain-analyze.sql
++-------------------------------------+
+|+-----------------------------------+|
+||    Query Profiling Information    ||
+|+-----------------------------------+|
++-------------------------------------+
+EXPLAIN ANALYZE SELECT status, count(*) FROM orders GROUP BY status;
++------------------------------------------------+
+|+----------------------------------------------+|
+||              Total Time: 0.0043s             ||
+|+----------------------------------------------+|
++------------------------------------------------+</pre>
+<p class="cap">맨 아래 연산자에는 실제로 읽은 행 수와 시간이 붙습니다.</p>
+<pre class="term" data-out="p07/16-explain-analyze.sql" data-lines="68-81">+-------------+-------------+
+|         TABLE_SCAN        |
+|    --------------------   |
+|           Table:          |
+|      shop.main.orders     |
+|                           |
+|   Type: Sequential Scan   |
+|    Projections: status    |
+|                           |
+|                           |
+|                           |
+|          800 rows         |
+|           0.00s           |
++---------------------------+</pre>
+<div class="warn"><b>수치는 실행마다 다릅니다</b> — 이 출력은 이 기기에서 한 번 측정한 값입니다. 시간은 캐시 상태와 다른 부하에 따라 달라지므로, 비교할 때는 여러 번 돌린 뒤의 경향을 보십시오.</div>
+</article>
+
+<article class="card" id="dk-morsel">
+<h3>일감을 잘게 나누고, 남으면 훔쳐 갑니다</h3>
+<p>스레드마다 표를 8분의 1씩 미리 나눠 주면, 한 조각이 유난히 느릴 때 나머지 일곱이 놀게 됩니다. DuckDB 는 작업을 <b>모즐(morsel)</b> 이라는 작은 단위로 쪼개 스레드 풀에 동적으로 나눠 주고, 먼저 끝낸 스레드가 남은 일감을 가져갑니다.</p>
+<div class="arr"><span class="c in">모즐 1<span class="idx">t1</span></span><span class="c in">모즐 2<span class="idx">t2</span></span><span class="c in">모즐 3<span class="idx">t3</span></span><span class="c">모즐 4</span><span class="c">모즐 5</span><span class="c">모즐 6</span></div>
+<p class="cap">먼저 끝낸 스레드가 남은 모즐을 집어 갑니다(work stealing). 조각이 작을수록 부하가 고르게 퍼집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>단계</th><th>하는 일</th></tr>
+<tr><td>Sink</td><td>스레드마다 들어오는 벡터를 자기 몫의 상태에 쌓습니다</td></tr>
+<tr><td>Combine</td><td>스레드별 상태를 하나로 합칩니다</td></tr>
+<tr><td>Finalize</td><td>합친 상태에서 결과를 만들어 다음 파이프라인으로 넘깁니다</td></tr>
+</table>
+</div>
+<div class="note"><b>막는 연산자</b> — 정렬이나 해시 집계처럼 입력을 다 받아야 결과가 나오는 연산자가 이 세 단계를 갖습니다. 파이프라인이 여기서 한 번 끊깁니다.</div>
+</article>
+
+<article class="card" id="dk-mvcc">
+<h3>동시성 — 한 프로세스 안의 MVCC</h3>
+<p>DuckDB 는 다중 버전 동시성 제어(MVCC)에 낙관적 동시성 제어를 얹었습니다. 읽는 쪽은 자기 시점의 스냅샷을 보고, 쓰는 쪽은 커밋할 때에야 충돌을 확인합니다. 대량 적재에 맞춰 설계된 방식입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>두 트랜잭션이</th><th>결과</th></tr>
+<tr><td>서로 다른 행을 추가</td><td>충돌하지 않습니다</td></tr>
+<tr><td>서로 다른 행을 수정</td><td>충돌하지 않습니다</td></tr>
+<tr><td>같은 행을 수정</td><td>트랜잭션 충돌 오류가 납니다</td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>여는 방식</th><th>프로세스</th></tr>
+<tr><td>읽기·쓰기</td><td>한 프로세스만 열 수 있고, 그 안에서는 여러 연결과 스레드가 함께 씁니다</td></tr>
+<tr><td>읽기 전용</td><td>여러 프로세스가 동시에 읽습니다. 아무도 쓰지 못합니다</td></tr>
+</table>
+</div>
+<div class="note"><b>14부 예고</b> — 충돌을 실제로 일으켜 오류 메시지를 보고, SQLite 의 잠금 모델과 나란히 비교합니다.</div>
+</article>
+
+<article class="card" id="dk-catalog">
+<h3>카탈로그도 그냥 표입니다</h3>
+<p>스키마를 보려고 CLI 전용 명령을 외울 필요가 없습니다. <code>duckdb_tables()</code>·<code>duckdb_extensions()</code> 는 평범한 표라서 <code>WHERE</code>·<code>ORDER BY</code>·조인이 그대로 듣습니다.</p>
+<p class="fname">examples/p07/27-catalog.sql</p>
+<pre><code data-lang="sql" data-src="p07/27-catalog.sql">-- 카탈로그 함수: 표·열·확장 목록을 SQL 로 본다
+SELECT table_name, estimated_size AS rows, column_count FROM duckdb_tables() ORDER BY table_name;
+SELECT extension_name, loaded, installed FROM duckdb_extensions()
+WHERE extension_name IN ('json', 'parquet', 'sqlite_scanner', 'httpfs') ORDER BY extension_name;</code></pre>
+<pre class="term" data-out="p07/27-catalog.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/27-catalog.sql
+table_name   rows  column_count
+-----------  ----  ------------
+customers    60    5           
+order_items  2022  5           
+orders       800   4           
+payments     686   5           
+products     40    5           
+extension_name  loaded  installed
+--------------  ------  ---------
+httpfs          false   false    
+json            true    true     
+parquet         true    true     
+sqlite_scanner  false   true     </pre>
+<p><code class="nb">estimated_size</code> 로 표 크기를 가늠할 수 있습니다. 확장 목록에서는 <code class="nb">json</code>·<code class="nb">parquet</code> 이 이미 적재돼 있고, <code class="nb">sqlite_scanner</code> 는 설치는 되었지만 아직 적재되지 않았음이 보입니다.</p>
+<div class="tip"><b>표준 뷰도 있습니다</b> — <code>information_schema</code> 를 쓰면 다른 엔진과 같은 이름으로 스키마를 조회할 수 있습니다.</div>
+</article>
+
+<article class="card" id="dk-attach-sqlite">
+<h3>SQLite 파일을 그대로 붙입니다</h3>
+<p>6부에서 다룬 SQLite 파일을 옮겨 담을 필요가 없습니다. <code>ATTACH … (TYPE sqlite)</code> 로 붙이면 그 표들이 DuckDB 의 표처럼 보이고, 한 질의 안에서 두 엔진의 표를 조인할 수 있습니다.</p>
+<p class="fname">examples/p07/17-attach-sqlite.sql</p>
+<pre><code data-lang="sql" data-src="p07/17-attach-sqlite.sql">-- SQLite 파일을 DuckDB 에서 바로 읽는다 — sqlite 확장(자동 설치)으로 ATTACH
+ATTACH 'data/shop.db' AS lite (TYPE sqlite, READ_ONLY);
+SELECT status, count(*) AS n FROM lite.orders GROUP BY status ORDER BY status;
+-- 두 엔진의 표를 한 질의에서 잇는다
+SELECT count(*) AS same_rows
+FROM lite.customers l JOIN customers d ON d.id = l.id AND d.email = l.email;</code></pre>
+<pre class="term" data-out="p07/17-attach-sqlite.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p07/17-attach-sqlite.sql
+status     n  
+---------  ---
+cancelled  60 
+paid       577
+pending    54 
+shipped    109
+same_rows
+---------
+60       </pre>
+<p>둘째 질의는 SQLite 쪽 <code class="nb">customers</code> 와 DuckDB 쪽 <code class="nb">customers</code> 를 조인해 60행이 완전히 같음을 확인합니다. <code>READ_ONLY</code> 를 붙여 원본을 건드리지 않게 했습니다.</p>
+<div class="key"><b>이주하지 않는 이주</b> — 트랜잭션은 SQLite 에 두고 분석만 DuckDB 로 붙여서 하는 구성이 그대로 가능합니다. ETL 파이프라인 하나가 통째로 사라집니다.</div>
+</article>
+
+<article class="card" id="dk-extensions">
+<h3>핵심은 작게, 나머지는 확장으로</h3>
+<p>DuckDB 본체에는 외부 의존성이 없습니다. 그 약속을 지키려면 기능을 무한정 넣을 수 없으므로, 대부분을 확장으로 뺐습니다. 확장은 필요할 때 자동으로 설치·적재됩니다(<code class="nb">autoinstall_known_extensions</code>·<code class="nb">autoload_known_extensions</code> 가 기본 참).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>확장</th><th>하는 일</th></tr>
+<tr><td><code class="nb">parquet</code></td><td>Parquet 파일 읽기·쓰기 (기본 적재)</td></tr>
+<tr><td><code class="nb">json</code></td><td>JSON 연산 (기본 적재)</td></tr>
+<tr><td><code class="nb">httpfs</code></td><td>HTTP(S) 로 파일 읽기·쓰기</td></tr>
+<tr><td><code class="nb">sqlite</code></td><td>SQLite 데이터베이스 파일 읽기·쓰기</td></tr>
+<tr><td><code class="nb">spatial</code></td><td>공간 데이터와 공간 함수</td></tr>
+<tr><td><code class="nb">excel</code></td><td>엑셀식 서식 문자열과 <code>.xlsx</code> 읽기·쓰기</td></tr>
+<tr><td><code class="nb">icu</code></td><td>시간대와 콜레이션</td></tr>
+</table>
+</div>
+<div class="note"><b>이름이 둘인 확장</b> — SQLite 확장은 <code class="nb">sqlite</code>·<code class="nb">sqlite_scanner</code>·<code class="nb">sqlite3</code> 라는 별칭을 함께 가집니다. 카탈로그에는 <code class="nb">sqlite_scanner</code> 로 보입니다. <code>.xls</code> 는 지원하지 않습니다.</div>
+</article>
+
+<article class="card" id="dk-arrow">
+<h3>Arrow 객체를 표처럼 질의합니다</h3>
+<p>판다스·폴라스를 비롯한 분석 도구들이 Apache Arrow 라는 열 지향 메모리 포맷 위에 모였습니다. DuckDB 의 실행 엔진도 열 지향이라, 두 세계 사이에 행 단위 변환 계층을 둘 이유가 없습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>Arrow 객체</th><th>DuckDB 에서</th></tr>
+<tr><td>Table</td><td>지역 변수 이름을 표처럼 <code>FROM</code> 에 씁니다</td></tr>
+<tr><td>Dataset</td><td>같습니다. 파일 여러 개를 묶은 것도 표 하나입니다</td></tr>
+<tr><td>Scanner</td><td>같습니다</td></tr>
+<tr><td>RecordBatchReader</td><td>스트리밍 이진 포맷의 리더도 표처럼 읽습니다</td></tr>
+</table>
+</div>
+<div class="key"><b>푸시다운</b> — 문서에 따르면 DuckDB 는 열 선택과 행 필터를 데이터셋 스캔까지 밀어 넣어, 필요한 데이터만 메모리로 끌어옵니다.</div>
+<div class="note"><b>8부 예고</b> — 파이썬에서 데이터프레임·Arrow·Parquet 을 오가는 실제 코드는 8부에서 다룹니다.</div>
+</article>
+
+<article class="card" id="dk-clients">
+<h3>어느 언어에서든 같은 엔진</h3>
+<p>DuckDB 는 라이브러리이므로 모든 클라이언트가 같은 프로세스 안의 같은 엔진을 부릅니다. 언어를 바꿔도 질의의 뜻과 성능이 같습니다. 문서는 클라이언트를 1차와 2차로 나눕니다. 1차가 새 기능을 먼저 받고 커뮤니티 지원 대상입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>클라이언트</th><th>등급</th><th>이 덱에서</th></tr>
+<tr><td>Python</td><td>1차</td><td>8부</td></tr>
+<tr><td>Go</td><td>1차</td><td>9부</td></tr>
+<tr><td>Java (JDBC)</td><td>1차</td><td>10부</td></tr>
+<tr><td>Node.js (node-neo)</td><td>1차</td><td>11·12부</td></tr>
+<tr><td>C · CLI · ODBC · R · Rust · Wasm</td><td>1차</td><td>다루지 않습니다</td></tr>
+<tr><td>ADBC · C# · C++</td><td>2차</td><td>다루지 않습니다</td></tr>
+</table>
+</div>
+<div class="note"><b>MotherDuck</b> — DuckDB 를 로컬과 클라우드에 걸쳐 쓰게 해 주는 상용 플랫폼입니다. 엔진 자체는 MIT 라이선스로 남아 있고 재단이 지적 재산을 보유합니다(2부).</div>
+</article>
+
+<article class="card" id="dk-storage-format">
+<h3>파일 하나에 담기고, 체크포인트로 정리됩니다</h3>
+<p>DuckDB 데이터베이스도 파일 하나입니다. 파일은 64비트 체크섬, 매직 바이트 <code>DUCK</code>, 저장 포맷 버전으로 시작합니다. 안쪽은 행 그룹으로 나뉘고, 압축과 병렬 처리가 모두 그 단위 위에서 이뤄집니다.</p>
+<div class="flow"><span class="box">체크섬 + DUCK + 버전</span><span class="arr">→</span><span class="box">행 그룹</span><span class="arr">→</span><span class="box dim">열 세그먼트</span></div>
+<p>변경은 먼저 WAL 에 적히고 <code>CHECKPOINT</code> 가 그것을 본 파일로 옮깁니다. WAL 크기가 임계값을 넘으면 자동으로 일어납니다. 이 기기의 기본 임계값은 16.0 MiB 였습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>문장</th><th>동작</th></tr>
+<tr><td><code>CHECKPOINT</code></td><td>실행 중인 트랜잭션이 있으면 실패합니다</td></tr>
+<tr><td><code>FORCE CHECKPOINT</code></td><td>체크포인트 잠금을 얻을 때까지 기다린 뒤 실행합니다</td></tr>
+</table>
+</div>
+<div class="note"><b>6부와 이름만 같습니다</b> — SQLite 의 WAL 은 페이지 프레임 단위이고 기본 임계값이 1000쪽입니다. 구조도 잠금 방식도 다릅니다.</div>
+</article>
+
+<article class="card" id="dk-memory-spill">
+<h3>메모리보다 큰 질의는 흘려보냅니다</h3>
+<p>정렬과 해시 집계는 중간 결과를 메모리에 쌓습니다. 한도를 넘으면 죽는 대신 디스크로 흘려보냅니다(스필). 그래서 RAM 보다 큰 데이터도 다룰 수 있습니다. 흘려보낼 자리가 <code class="nb">temp_directory</code> 입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>설정</th><th>기본값</th><th>뜻</th></tr>
+<tr><td><code class="nb">memory_limit</code></td><td>RAM 의 약 80%</td><td>버퍼 관리자가 쓰는 상한</td></tr>
+<tr><td><code class="nb">temp_directory</code></td><td>데이터베이스 파일 옆 <code>.tmp</code></td><td>스필 파일이 쌓이는 곳</td></tr>
+<tr><td><code class="nb">threads</code></td><td>코어 수</td><td>동시에 도는 스레드 수</td></tr>
+<tr><td><code class="nb">preserve_insertion_order</code></td><td>true</td><td>false 로 두면 순서를 재배열해 메모리를 아낍니다</td></tr>
+</table>
+</div>
+<div class="tip"><b>메모리가 모자랄 때 순서</b> — 먼저 <code>threads</code> 를 줄이고(스레드마다 상태를 갖습니다), 다음으로 <code>preserve_insertion_order</code> 를 끄고, 마지막으로 디스크가 넉넉한 곳으로 <code>temp_directory</code> 를 옮기십시오.</div>
+<div class="note"><b>인메모리도 스필합니다</b> — 이 기기의 <code>:memory:</code> 연결에서도 <code class="nb">temp_directory</code> 는 <code>.tmp</code> 로 잡혀 있었습니다.</div>
+</article>
+
+<article class="card" id="dk-order-default">
+<h3>정렬 기본값 — 오름차순, NULL 은 뒤</h3>
+<p>SQL 표준은 NULL 을 어디에 둘지 정하지 않았습니다. 그래서 엔진마다 다르고, 엔진을 옮기면 &quot;결과가 미묘하게 달라지는&quot; 사고가 납니다. DuckDB 는 오름차순에 NULL 을 뒤에 둡니다. PostgreSQL 과 같은 순서입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>엔진</th><th><code>ORDER BY v</code> 결과</th></tr>
+<tr><td>SQLite 3.53.4</td><td>NULL, 1, 2</td></tr>
+<tr><td>DuckDB 1.5.5</td><td>1, 2, NULL</td></tr>
+</table>
+</div>
+<p class="cap">같은 세 행 <code>(2, NULL, 1)</code> 을 두 엔진에서 정렬해 이 기기에서 측정했습니다.</p>
+<div class="tip"><b>고치는 법은 둘</b> — 질의에 <code>NULLS FIRST</code>·<code>NULLS LAST</code> 를 명시하거나, 연결 설정 <code class="nb">default_null_order</code>·<code class="nb">default_order</code> 를 바꿉니다. 이식할 질의라면 명시가 낫습니다.</div>
+</article>
+
+<article class="card" id="dk-identifiers">
+<h3>따옴표를 씌워도 대소문자를 가리지 않습니다</h3>
+<p>문서의 표현 그대로입니다. &quot;DuckDB 의 식별자는 PostgreSQL 처럼 언제나 대소문자를 구분하지 않는다. 다만 PostgreSQL(및 다른 주요 구현)과 달리 <b>따옴표로 감싼 식별자도</b> 구분하지 않는다.&quot; 그러면서 &quot;원래의 대소문자 표기는 보존한다&quot;고 덧붙입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>만든 이름</th><th>질의에 쓴 이름</th><th>DuckDB</th></tr>
+<tr><td><code>CosineOfPi</code></td><td><code>cosineofpi</code></td><td>같은 열입니다</td></tr>
+<tr><td><code>CosineOfPi</code></td><td><code>&quot;COSINEOFPI&quot;</code></td><td>같은 열입니다</td></tr>
+<tr><td colspan="2">결과에 찍히는 열 이름</td><td><code>CosineOfPi</code></td></tr>
+</table>
+</div>
+<div class="warn"><b>이식성 함정</b> — PostgreSQL 에서는 <code>&quot;Name&quot;</code> 과 <code>name</code> 이 서로 다른 열입니다. 두 엔진을 오갈 스키마라면 처음부터 소문자와 밑줄로 통일하십시오. 문자열 <b>값</b>의 비교는 두 엔진 모두 대소문자를 가립니다.</div>
+</article>
+
+<article class="card" id="dk-hard-limits">
+<h3>문서가 밝힌 한계</h3>
+<p>&quot;큰 데이터&quot;라는 말은 애매합니다. 문서에 적힌 수치로 바꿔 두면 판단이 쉬워집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>한계</th></tr>
+<tr><td>문자열 하나</td><td>4 GB</td></tr>
+<tr><td>BLOB 하나</td><td>4 GB</td></tr>
+<tr><td>배열 원소 수</td><td>100,000</td></tr>
+<tr><td>식 중첩 깊이</td><td>1,000 (<code class="nb">max_expression_depth</code> 로 조정)</td></tr>
+<tr><td>벡터 하나의 메모리</td><td>128 GB</td></tr>
+</table>
+</div>
+<div class="key"><b>데이터베이스 파일 크기</b> — 문서는 &quot;단일 DuckDB 데이터베이스 파일 크기에 실질적인 제한은 없다&quot;고 말하며 15 TB 이상을 쓰는 사례를 듭니다. 다만 아주 커지면 연결과 체크포인트가 느려질 수 있다고 덧붙입니다.</div>
+</article>
+
+<article class="card" id="dk-not-a-fit">
+<h3>DuckDB 가 맞지 않는 자리</h3>
+<p>DuckDB 는 분석 질의를 위해 설계되었습니다. 그 설계가 곧 한계이기도 합니다. 아래의 오른쪽에 해당한다면 도구를 바꾸는 편이 빠릅니다.</p>
+<div class="g2">
+<div class="cmp good"><h5>잘 맞는 자리</h5><pre>노트북·CI 안의 로컬 데이터 분석
+CSV·Parquet·JSON 파일 더미의 집계
+데이터프레임 코드를 대신하는 SQL
+SQLite 나 Parquet 에서 뽑는 리포트
+큰 표를 훑어 요약하는 배치 작업</pre></div>
+<div class="cmp bad"><h5>다른 것을 쓰십시오</h5><pre>여러 프로세스가 동시에 쓰는 공유 저장소
+초당 수천 건의 짧은 갱신(OLTP)
+네트워크 너머의 데이터베이스 서버
+사용자별 권한과 감사가 필요한 다중 사용자
+행 하나의 응답 지연이 중요한 서비스</pre></div>
+</div>
+<div class="key"><b>기준 하나로 줄이면</b> — &quot;쓰는 프로세스가 둘 이상인가?&quot;입니다. 읽기·쓰기 모드로는 한 프로세스만 파일을 열 수 있습니다. 이 조건에 걸리면 클라이언트·서버 엔진의 자리입니다.</div>
+</article>
+
+<article class="card" id="dk-summary">
+<h3>7부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>기억할 한 줄</th></tr>
+<tr><td>왜 열 저장인가</td><td>분석은 열을 훑습니다. 필요한 열만 읽고, 같은 열끼리 잘 압축됩니다.</td></tr>
+<tr><td>파일이 곧 표</td><td>CSV·Parquet·JSON 경로를 <code>FROM</code> 에 적으면 적재 단계가 사라집니다.</td></tr>
+<tr><td>친절한 SQL</td><td><code>FROM</code> 먼저, <code>EXCLUDE</code>, <code>GROUP BY ALL</code>, <code>QUALIFY</code>, <code>PIVOT</code> 은 모두 DuckDB 확장입니다.</td></tr>
+<tr><td>중첩 타입</td><td>리스트·구조체·맵이 값이고, 람다와 <code>unnest</code> 로 접었다 폅니다.</td></tr>
+<tr><td>실행 엔진</td><td>2048행 벡터를 밀어 올리고, 모즐 단위로 병렬 처리합니다.</td></tr>
+</table>
+</div>
+<div class="key"><b>한 문장으로</b> — DuckDB 는 &quot;서버 없는 분석 엔진&quot;입니다. 파일과 프로세스 사이의 거리를 없애 얻은 속도이지, 마법이 아닙니다. 쓰는 프로세스가 둘이 되는 순간 그 전제가 깨집니다.</div>
+<div class="note"><b>다음</b> — 8부부터는 이 엔진을 프로그래밍 언어에서 부릅니다. 파이썬의 <code>duckdb</code> 모듈과 <code>sqlite3</code> 모듈을 나란히 놓고 시작합니다.</div>
 </article>
 
 <!-- ===== part08.html (1장) ===== -->
