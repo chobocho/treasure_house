@@ -7112,7 +7112,7 @@ string 에 NULL 을 Scan: sql: Scan error on column index 0, name "nick": conver
 lastInsertId: 2 rowsAffected: 2
 updated: 2</pre>
 <p><code class="nb">sql.Result</code>가 주는 값은 <code>LastInsertId()</code>와 <code>RowsAffected()</code> 둘뿐이고, 둘 다 <b>오류를 함께</b> 돌려줍니다.</p>
-<div class="note"><b>왜 오류가 따라오나</b> — 표준 문서가 &quot;Not all databases support this feature&quot;라고 적어 둔 대로, 지원하지 않는 엔진이 있기 때문입니다. DuckDB가 바로 그런 경우입니다(뒤에서 봅니다).</div>
+<div class="note"><b>왜 오류가 따라오나</b> — 표준 문서가 &quot;Not all databases support this feature&quot;라고 적어 둔 대로, 지원하지 않는 엔진이 있기 때문입니다. 다만 go-duckdb는 오류 대신 0을 조용히 돌려주므로(뒤에서 봅니다) 오류만 믿어서도 안 됩니다.</div>
 </article>
 
 <article class="card" id="go-prepared">
@@ -7155,7 +7155,7 @@ func transfer(ctx context.Context, db *sql.DB, from, to, amount int) (err error)
 	}
 	defer func() {
 		if err != nil {
-			tx.Rollback() // 오류가 나면 되돌린다 — Commit 뒤의 Rollback 은 no-op
+			tx.Rollback() // 오류가 나면 되돌린다 — Commit 뒤의 Rollback 은 ErrTxDone 만 돌려준다
 		}
 	}()
 	if _, err = tx.ExecContext(ctx, "UPDATE acct SET bal = bal - ? WHERE id = ?", amount, from); err != nil {
@@ -7178,7 +7178,7 @@ func transfer(ctx context.Context, db *sql.DB, from, to, amount int) (err error)
 500 이체: 잔액 부족
 잔액: 70 30</pre>
 <p>500을 이체하려던 두 번째 호출은 잔액 검사에서 걸려 통째로 없던 일이 되었습니다. 잔액이 70과 30으로 남은 것이 그 증거입니다.</p>
-<div class="key"><b>왜 이 패턴이 안전한가</b> — 반환값 <code>err</code>에 이름을 붙였기 때문에 <code>defer</code> 안에서 마지막 err를 볼 수 있습니다. 커밋이 성공하면 err는 nil이라 롤백을 건너뛰고, 설령 불러도 이미 끝난 트랜잭션의 <code>Rollback</code>은 아무 일도 하지 않습니다.</div>
+<div class="key"><b>왜 이 패턴이 안전한가</b> — 반환값 <code>err</code>에 이름을 붙였기 때문에 <code>defer</code> 안에서 마지막 err를 볼 수 있습니다. 커밋이 성공하면 err는 nil이라 롤백을 건너뛰고, 설령 불러도 이미 끝난 트랜잭션의 <code>Rollback</code>은 <code class="nb">sql.ErrTxDone</code>을 돌려줄 뿐입니다.</div>
 </article>
 
 <article class="card" id="go-context-timeout">
@@ -7198,11 +7198,11 @@ func transfer(ctx context.Context, db *sql.DB, from, to, amount int) (err error)
 	var total int64
 	err := db.QueryRowContext(ctx, slow).Scan(&amp;total)
 	fmt.Println("err:", err)
-	fmt.Println("200ms 안에 끝났나:", time.Since(start) &lt; 2*time.Second)
+	fmt.Println("2초 안에 끝났나:", time.Since(start) &lt; 2*time.Second)
 }</code></pre>
 <pre class="term" data-out="p09/07-context-timeout.go"><span class="p">$</span> go run examples/p09/07-context-timeout.go
 err: context deadline exceeded
-200ms 안에 끝났나: true</pre>
+2초 안에 끝났나: true</pre>
 <p>3천만 행을 만드는 재귀 CTE가 200밀리초에서 끊겼습니다. 돌아온 오류는 <code>context.DeadlineExceeded</code>입니다.</p>
 <div class="note"><b>Go 1.8이 함께 넣은 것</b> — <code>DB.BeginTx</code>의 격리 수준과 읽기 전용 옵션, <code>Rows.ColumnTypes</code>, 여러 결과 집합을 넘기는 <code>Rows.NextResultSet</code>, 이름 있는 인자 <code>sql.Named</code>가 같은 판에 들어왔습니다.</div>
 </article>
@@ -7211,7 +7211,7 @@ err: context deadline exceeded
 <h3>풀이 있다는 사실이 드러나는 순간</h3>
 <p><code class="nb">*sql.DB</code>는 연결이 아니라 <b>연결 풀</b>입니다. 평소에는 그 사실을 잊고 써도 되지만, 연결마다 상태가 다른 경우에는 바로 문제가 됩니다. SQLite의 <code>:memory:</code>가 그 대표입니다.</p>
 <p class="fname">examples/p09/08-pool-memory-gotcha.go</p>
-<pre><code data-lang="go" data-src="p09/08-pool-memory-gotcha.go" data-lines="10-30">// 함정: :memory: 는 "연결마다" 다른 DB 다 — 풀이 두 번째 연결을 열면 표가 없다
+<pre><code data-lang="go" data-src="p09/08-pool-memory-gotcha.go" data-lines="10-29">// 함정: :memory: 는 "연결마다" 다른 DB 다 — 풀이 두 번째 연결을 열면 표가 없다
 func main() {
 	db, _ := sql.Open("sqlite", ":memory:")
 	db.Exec("CREATE TABLE t (x)")
@@ -7223,7 +7223,6 @@ func main() {
 
 	// 해법 1: 풀 크기를 1 로   해법 2: 공유 캐시 URI
 	db2, _ := sql.Open("sqlite", "file:memdb1?mode=memory&amp;cache=shared")
-	db2.SetMaxOpenConns(1)
 	db2.Exec("CREATE TABLE t (x)")
 	tx2, _ := db2.Begin()
 	tx2.Exec("INSERT INTO t VALUES (1)")
@@ -7243,6 +7242,7 @@ rows: 1 stats: 1 open</pre>
 <tr><td><code>file:이름?mode=memory&amp;cache=shared</code></td><td>여러 연결이 같은 인메모리 DB를 봐야 할 때</td></tr>
 </table>
 </div>
+<div class="warn"><b>공유 캐시는 구식입니다</b> — SQLite 공식 문서는 shared-cache 모드를 &quot;쓰지 않기를 권하는 낡은 기능&quot;이라 부릅니다. 테스트용 인메모리 DB라면 <code>SetMaxOpenConns(1)</code>이 더 단순하고 안전합니다.</div>
 </article>
 
 <article class="card" id="go-pool-settings">
@@ -7421,7 +7421,7 @@ applied 002_email.sql
 <tr><th>갈래</th><th>가려내는 법</th><th>대응</th></tr>
 <tr><td>행이 없음</td><td><code>errors.Is(err, sql.ErrNoRows)</code></td><td>404 · 빈 결과. 장애가 아닙니다</td></tr>
 <tr><td>제약 위반</td><td><code>errors.As</code>로 드라이버 코드</td><td>409 · 입력 오류. 재시도 무의미</td></tr>
-<tr><td>취소 · 마감</td><td><code>errors.Is(err, context.DeadlineExceeded)</code></td><td>이미 늦었습니다. 그대로 돌려보냅니다</td></tr>
+<tr><td>취소 · 마감</td><td><code>errors.Is(err, context.DeadlineExceeded)</code> · <code>context.Canceled</code></td><td>이미 늦었습니다. 그대로 돌려보냅니다</td></tr>
 <tr><td>잠김 · 일시적</td><td>드라이버 코드(SQLITE_BUSY 등)</td><td>짧게 물러났다 재시도</td></tr>
 </table>
 </div>
@@ -7528,7 +7528,7 @@ func main() {
 }</code></pre>
 <pre class="term" data-out="p09/22-duckdb-appender.go"><span class="p">$</span> go run examples/p09/22-duckdb-appender.go
 rows: 10000 avg ms: 24.5</pre>
-<div class="warn"><b>Close가 곧 flush</b> — <code>app.Close()</code>를 부르기 전까지 행은 버퍼에만 있습니다. 이 호출을 빠뜨리면 표는 비어 있고 오류도 나지 않습니다.</div>
+<div class="warn"><b>Close가 마지막 flush</b> — 드라이버는 2,048행 덩어리를 C Appender에 넘기고, 그쪽은 204,800행마다 자동으로 내보냅니다. 그 사이의 행은 <code>Close()</code>(또는 <code>Flush()</code>)를 부르기 전까지 표에 없습니다. 이 호출을 빠뜨리면 마지막 덩어리가 조용히 사라지고 오류도 나지 않습니다.</div>
 </article>
 
 <article class="card" id="go-duckdb-types">
@@ -7557,17 +7557,18 @@ hugeint as string: 1180591620717411303424</pre>
 <table class="kv">
 <tr><th>DuckDB 타입</th><th>Go로 오는 모습</th></tr>
 <tr><td><code>LIST</code></td><td><code>[]interface {}</code> — 원소마다 다시 단언이 필요합니다</td></tr>
-<tr><td><code>STRUCT</code> · <code>MAP</code></td><td><code>map[string]interface {}</code></td></tr>
+<tr><td><code>STRUCT</code></td><td><code>map[string]interface {}</code></td></tr>
+<tr><td><code>MAP</code></td><td><code>duckdb.Map</code> (<code>map[any]any</code>)</td></tr>
 <tr><td><code>TIMESTAMP</code></td><td><code class="nb">time.Time</code></td></tr>
-<tr><td><code>HUGEINT</code></td><td>Go에 128비트 정수가 없습니다</td></tr>
+<tr><td><code>HUGEINT</code></td><td><code>*big.Int</code> — <code>*any</code>나 <code>*big.Int</code>로 Scan하면 그대로 받습니다</td></tr>
 </table>
 </div>
-<div class="tip"><b>HUGEINT 다루기</b> — SQL 쪽에서 <code>::VARCHAR</code>로 캐스팅해 문자열로 받고, 필요하면 <code class="nb">math/big</code>으로 옮기는 편이 안전합니다.</div>
+<div class="tip"><b>HUGEINT 다루기</b> — 드라이버가 <code>*big.Int</code>로 돌려주므로 그대로 Scan해도 되고, 위 예제처럼 SQL 쪽에서 <code>::VARCHAR</code>로 문자열을 받아 <code class="nb">math/big</code>으로 옮기는 길도 있습니다.</div>
 </article>
 
 <article class="card" id="go-duckdb-tx-returning">
 <h3>새로 넣은 행의 키는 RETURNING으로</h3>
-<p>SQLite에서 쓰던 <code>LastInsertId()</code>가 DuckDB에서는 쓸 수 없습니다. 자동 증가 rowid라는 개념 자체가 없기 때문입니다. 대신 표준 SQL의 <code>RETURNING</code>으로 방금 만들어진 값을 되받습니다.</p>
+<p>SQLite에서 쓰던 <code>LastInsertId()</code>가 DuckDB에서는 쓸 수 없습니다. SQLite의 <code>last_insert_rowid()</code>에 해당하는 것이 없기 때문입니다(<code>rowid</code> 의사 열은 있지만 마지막 삽입 값을 알려 주지는 않습니다). 대신 표준 SQL의 <code>RETURNING</code>으로 방금 만들어진 값을 되받습니다.</p>
 <p class="fname">examples/p09/24-duckdb-tx-returning.go</p>
 <pre><code data-lang="go" data-src="p09/24-duckdb-tx-returning.go" data-lines="10-27">func main() {
 	db, _ := sql.Open("duckdb", "")
@@ -7674,7 +7675,7 @@ RowsAffected: 2 err: &lt;nil&gt;</pre>
 <tr><td><code class="nb">sql.Scanner</code> 구현 타입</td><td>내가 만든 타입을 여기에 끼웁니다</td></tr>
 </table>
 </div>
-<p>드라이버가 넘겨 주는 원본 값은 <code>int64</code> · <code>float64</code> · <code>bool</code> · <code>[]byte</code> · <code>string</code> · <code class="nb">time.Time</code> · <code>nil</code> 일곱 가지뿐입니다. 나머지 변환은 전부 <code class="nb">database/sql</code>이 그 위에서 해 줍니다.</p>
+<p>드라이버가 넘겨 주는 원본 값은 <code>int64</code> · <code>float64</code> · <code>bool</code> · <code>[]byte</code> · <code>string</code> · <code class="nb">time.Time</code> · <code>nil</code> 일곱 가지가 표준의 기본 목록입니다. 드라이버는 그 밖의 타입도 넘길 수 있고(go-duckdb의 <code>[]any</code>·<code>map</code>·<code>*big.Int</code>), 그런 값은 <code>*any</code>나 같은 타입의 포인터로 받습니다. 나머지 변환은 전부 <code class="nb">database/sql</code>이 그 위에서 해 줍니다.</p>
 <div class="warn"><b>RawBytes 주의</b> — <code class="nb">sql.RawBytes</code>는 복사를 피해 드라이버 메모리를 그대로 가리킵니다. 다음 <code>Scan</code>이 불리면 내용이 바뀌므로 밖으로 들고 나가면 안 됩니다.</div>
 </article>
 
@@ -7802,7 +7803,7 @@ tx.QueryRow("SELECT ...")</pre></div>
 
 <article class="card" id="go-valuer-scanner">
 <h3>내가 만든 타입을 값으로 오가게 하기</h3>
-<p>표준이 아는 타입은 일곱 가지뿐입니다. 그 밖의 타입을 쓰려면 나가는 길 <code class="nb">driver.Valuer</code>와 들어오는 길 <code class="nb">sql.Scanner</code>를 직접 이어 주면 됩니다. 이 두 인터페이스가 확장점의 전부입니다.</p>
+<p>표준이 기본으로 아는 타입은 일곱 가지입니다. 그 밖의 타입을 쓰려면 나가는 길 <code class="nb">driver.Valuer</code>와 들어오는 길 <code class="nb">sql.Scanner</code>를 직접 이어 주면 됩니다. 이 두 인터페이스가 확장점의 전부입니다.</p>
 <p class="fname">examples/p09/32-valuer-scanner.go</p>
 <pre><code data-lang="go" data-src="p09/32-valuer-scanner.go" data-lines="13-30">// 태그 목록을 한 열에 담는 사용자 정의 타입 — Valuer 로 나가고 Scanner 로 들어온다
 type Tags []string
@@ -8193,7 +8194,7 @@ rows=1000 sum=499500</pre>
 
 <article class="card" id="jv-metadata">
 <h3>메타데이터 — 스키마를 코드로 읽습니다</h3>
-<p>DB 도구와 ORM은 표 목록을 어떻게 알까요. 표준 SQL에는 그런 질의가 없어서 JDBC가 따로 두 가지 메타데이터 인터페이스를 정해 두었습니다. 하나는 결과 집합의 모양을, 다른 하나는 데이터베이스 전체의 카탈로그를 알려 줍니다.</p>
+<p>DB 도구와 ORM은 표 목록을 어떻게 알까요. 표준 SQL에는 <code>INFORMATION_SCHEMA</code>가 있지만 엔진마다 구현 여부와 모양이 달라서(SQLite는 <code>sqlite_master</code>와 PRAGMA), JDBC가 따로 두 가지 메타데이터 인터페이스를 정해 두었습니다. 하나는 결과 집합의 모양을, 다른 하나는 데이터베이스 전체의 카탈로그를 알려 줍니다.</p>
 <p class="fname">examples/p10/JdbcMetadata.java</p>
 <pre><code data-lang="java" data-src="p10/JdbcMetadata.java" data-lines="6-17">    try (Connection con = DriverManager.getConnection("jdbc:sqlite:data/shop.db")) {
       try (ResultSet rs = con.createStatement().executeQuery("SELECT id, name, price * 1.1 AS vat FROM products LIMIT 1")) {
@@ -8249,7 +8250,7 @@ SQLiteException code=1 : [SQLITE_ERROR] SQL error or missing database (no such t
 <tr><td><code>getNextException()</code></td><td>이어 붙은 다음 예외(사슬)</td></tr>
 </table>
 </div>
-<p class="cap">유일성 위반과 NOT NULL 위반이 벤더 코드로는 똑같이 19입니다. 둘을 가르려면 메시지 머리표에 실린 확장 결과 코드(<code>SQLITE_CONSTRAINT_UNIQUE</code> 등)를 봐야 합니다.</p>
+<p class="cap">유일성 위반과 NOT NULL 위반이 벤더 코드로는 똑같이 19입니다. 둘을 가르려면 <code>SQLiteException</code>으로 캐스팅해 <code>getResultCode()</code>가 주는 <code>SQLiteErrorCode</code>(<code>SQLITE_CONSTRAINT_UNIQUE</code>=2067, <code>SQLITE_CONSTRAINT_NOTNULL</code>=1299)를 비교합니다. 메시지 머리표에 같은 이름이 보이지만 그것을 파싱하지는 마십시오.</p>
 </article>
 
 <article class="card" id="jv-exception-tree">
@@ -8301,7 +8302,7 @@ c.close();</pre></div>
 <tr><th>설정</th><th>기본값</th><th>뜻</th></tr>
 <tr><td><code>maximumPoolSize</code></td><td>10</td><td>실제 연결 최대 개수</td></tr>
 <tr><td><code>connectionTimeout</code></td><td>30초</td><td>빌리기를 기다리는 한계</td></tr>
-<tr><td><code>idleTimeout</code></td><td>10분</td><td>놀고 있는 연결을 버리는 시각</td></tr>
+<tr><td><code>idleTimeout</code></td><td>10분</td><td>놀고 있는 연결을 버리는 시각(<code>minimumIdle</code> &lt; <code>maximumPoolSize</code>일 때만)</td></tr>
 <tr><td><code>maxLifetime</code></td><td>30분</td><td>연결 하나의 수명</td></tr>
 </table>
 </div>
@@ -8532,7 +8533,7 @@ write blocked: Cannot execute statement of type "DELETE" on database "shop" whic
     }</code></pre>
 <pre class="term" data-out="p10/DuckAppender.java"><span class="p">$</span> java -cp build/java:lib/* DuckAppender
 rows=10000 avg=24.5</pre>
-<p>한 행은 <code>beginRow()</code>와 <code>endRow()</code> 사이에서 열 순서대로 <code>append</code>합니다. 남은 행은 <code>close()</code> 때 밀려 나가므로 try-with-resources가 곧 커밋 지점입니다.</p>
+<p>한 행은 <code>beginRow()</code>와 <code>endRow()</code> 사이에서 열 순서대로 <code>append</code>합니다. 2,048행 덩어리마다 자동으로 밀려 나가고 남은 행은 <code>close()</code>(또는 <code>flush()</code>) 때 나가므로, try-with-resources가 마지막 flush 지점입니다.</p>
 <div class="key"><b>배치 크기를 정할 필요가 없습니다</b> — Appender는 2,048행(DuckDB 벡터 하나)씩 내부에서 끊어 보냅니다. 응용이 그 위에 또 배치를 얹어도 빨라지지 않습니다.</div>
 </article>
 
@@ -8591,7 +8592,7 @@ date=2026-09-03 class=LocalDate</pre>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>같은 것</th><th>다른 것</th></tr>
-<tr><td>자동 커밋 기본값 · commit · rollback</td><td>DuckDB는 낙관적 동시성 — 충돌은 커밋 시점에 드러납니다</td></tr>
+<tr><td>자동 커밋 기본값 · commit · rollback</td><td>DuckDB는 낙관적 동시성 — 같은 행을 두 트랜잭션이 고치면 두 번째 <code>UPDATE</code>가 즉시 충돌 오류를 냅니다(14부)</td></tr>
 </table>
 </div>
 </article>
@@ -8705,7 +8706,7 @@ ResultSet 순회 · 자원 닫기
 
 <article class="card" id="js-why-builtin">
 <h3>왜 Node 가 SQLite 를 품었나</h3>
-<p class="lead">Node 에서 SQLite 를 쓰려면 오랫동안 <b>네이티브 애드온</b>이 필요했습니다. 설치할 때 C 코드를 컴파일하고, Node 를 올릴 때마다 다시 컴파일합니다.</p>
+<p class="lead">Node 에서 SQLite 를 쓰려면 오랫동안 <b>네이티브 애드온</b>이 필요했습니다. 미리 빌드된 바이너리를 내려받되 맞는 것이 없으면 설치 때 C 코드를 컴파일하고, Node 의 ABI 가 바뀌면 새 빌드가 필요합니다.</p>
 <p>작은 CLI 나 테스트 픽스처에서는 이 마찰이 유난히 비쌉니다. 그래서 Node 22.5 는 SQLite 를 런타임 안에 넣고 <code class="nb">node:sqlite</code>로 열어 주었습니다. 설치 단계가 통째로 사라집니다.</p>
 <div class="tblwrap">
 <table class="kv">
@@ -8906,7 +8907,7 @@ SELECT id, name, price FROM products WHERE id = 3.0
 [ 'id:INTEGER', 'name:TEXT', 'price:INTEGER' ]
 [Object: null prototype] { id: 3n, name: 'USB-C 허브', price: 15000n }
 [ 3n, 'USB-C 허브', 15000n ]</pre>
-<div class="warn"><b>3 이 3.0 으로 보입니다</b> — 자바스크립트 <code>number</code> 는 배정밀도 실수라, 바인딩되면 SQLite 쪽에서도 <code>real</code> 이 됩니다. 정수로 넣고 싶으면 <code>3n</code> 처럼 <code>bigint</code> 를 쓰십시오.</div>
+<div class="warn"><b>3 이 3.0 으로 보입니다</b> — <code class="nb">node:sqlite</code> 는 <code>number</code> 를 언제나 <code>sqlite3_bind_double</code> 로 묶습니다. 그래서 식·<code>expandedSQL</code>·타입 친화성이 없는 열에서는 <code>real</code> 이 됩니다(INTEGER 친화성 열에 넣으면 3.0 은 정수 3 으로 저장됩니다). 정수로 넣고 싶으면 <code>3n</code> 처럼 <code>bigint</code> 를 쓰십시오.</div>
 <p><code>setReadBigInts(true)</code> 는 INTEGER 를 <code>bigint</code> 로 읽어 옵니다. 안전 정수 범위를 넘는 값은 이 옵션 없이 읽으면 <code class="nb">ERR_OUT_OF_RANGE</code> 로 던져집니다.</p>
 </article>
 
@@ -9067,7 +9068,7 @@ console.log(`질의 ${took}ms · 타이머가 놓친 지연 ${worst}ms`);</code>
 
 <article class="card" id="js-duck-model">
 <h3>DuckDB 쪽은 세 겹입니다</h3>
-<p class="lead">SQLite 가 &quot;파일 하나 = 연결 하나&quot;라면, DuckDB 는 <b>인스턴스</b>가 파일을 잡고 그 위에 <b>연결</b>이 여럿 붙는 구조입니다.</p>
+<p class="lead">SQLite 가 연결이 파일을 직접 여는 구조라면, DuckDB 는 <b>인스턴스</b>가 파일을 잡고 그 위에 <b>연결</b>이 여럿 붙는 구조입니다.</p>
 <div class="flow"><span class="box">DuckDBInstance</span><span class="arr">connect</span><span class="box">DuckDBConnection</span><span class="arr">run</span><span class="box dim">결과 리더</span></div>
 <div class="tblwrap">
 <table class="kv">
@@ -9230,7 +9231,7 @@ console.log(r.getRowObjects()[0]);</code></pre>
 <pre class="term" data-out="p11/25-duckdb-appender.mjs"><span class="p">$</span> node examples/p11/25-duckdb-appender.mjs
 { n: 10000, avg_ms: 24.5 }</pre>
 <p>타입마다 메서드가 따로입니다 — <code>appendInteger</code>·<code>appendVarchar</code>·<code>appendDouble</code>. 한 행이 끝나면 <code>endRow()</code>, 다 끝나면 <code>closeSync()</code> 로 남은 버퍼를 밀어 냅니다.</p>
-<div class="tip"><b>플러시는 자동입니다</b> — Appender 는 2048 행(벡터 하나)이 차면 알아서 내보냅니다. 애플리케이션에서 배치 크기를 또 만들 이유가 없습니다.</div>
+<div class="tip"><b>플러시 시점</b> — 이 클라이언트의 Appender 는 204,800행이 차거나 <code>flushSync()</code>·<code>closeSync()</code> 를 부를 때 표에 넣습니다(이 기기에서 실측). 그 전에는 다른 연결에서 행이 보이지 않으니, 중간 결과가 필요하면 <code>flushSync()</code> 를 부르십시오. 배치 크기를 응용에서 또 만들 이유는 없습니다.</div>
 </article>
 
 <article class="card" id="js-duck-transaction">
@@ -9326,7 +9327,7 @@ Error | Parser Error: syntax error at end of input
 <tr><th>항목</th><th>duckdb (옛)</th><th>@duckdb/node-api</th></tr>
 <tr><td>비동기</td><td>오류 우선 콜백</td><td>Promise</td></tr>
 <tr><td>구성</td><td>Database · Connection · PreparedStatement</td><td>인스턴스 · 연결 · 결과 리더</td></tr>
-<tr><td>바이너리</td><td>설치할 때 빌드</td><td>배포된 DuckDB 바이너리를 감쌉니다</td></tr>
+<tr><td>바이너리</td><td>미리 빌드된 바이너리(없으면 설치 때 빌드)</td><td>배포된 DuckDB 바이너리를 감쌉니다</td></tr>
 <tr><td>상태</td><td>1.4.x 가 마지막</td><td>현행</td></tr>
 </table>
 </div>
@@ -9440,7 +9441,7 @@ try {
 <table class="kv">
 <tr><th>기억할 것</th><th>이유</th></tr>
 <tr><td>값은 항상 바인딩</td><td>이어 붙인 값은 문법이 됩니다</td></tr>
-<tr><td>number 는 real 로 들어갑니다</td><td>정수가 필요하면 <code>bigint</code> 를 쓰십시오</td></tr>
+<tr><td>number 는 real 로 바인딩됩니다</td><td>정수가 필요하면 <code>bigint</code> 를 쓰십시오</td></tr>
 <tr><td>큰 결과는 iterate · stream</td><td>배열로 다 올리면 메모리가 터집니다</td></tr>
 <tr><td>파일을 여는 자리는 한 곳</td><td>중복 열기와 설정 충돌을 막습니다</td></tr>
 </table>
@@ -9514,7 +9515,7 @@ try {
     "verbatimModuleSyntax": true
   }
 }</code></pre>
-<div class="tip"><b>왜 5.8 이상인가</b> &mdash; <code class="nb">erasableSyntaxOnly</code>는 &quot;실행 시점 동작이 있는 TypeScript 고유 문법&quot;에 오류를 냅니다. 실행해 보고 나서 깨닫는 대신, 편집기에서 바로 빨간 줄이 그어집니다.</div>
+<div class="tip"><b>왜 5.8 이상인가</b> &mdash; <code class="nb">erasableSyntaxOnly</code>는 &quot;실행 시점 동작이 있는 TypeScript 고유 문법&quot;에 오류를 냅니다. 실행해 보고 나서 깨닫는 대신, 편집기에서 바로 빨간 줄이 그어집니다. 여기에 <code>&quot;strict&quot;: true</code>를 더하십시오 &mdash; 이 부의 null 안전성(<code>T | undefined</code>가 <code>missing.name</code>을 막는 것)과 필드 타입 추론은 <code class="nb">strictNullChecks</code>·<code class="nb">noImplicitAny</code>에 달려 있습니다.</div>
 </article>
 
 <article class="card" id="ts-enum-error">
@@ -9561,8 +9562,8 @@ constructor(db: DatabaseSync) { this.db = db; }</pre></div>
 <pre><code data-lang="ts" data-src="p12/04-repository.ts" data-lines="8-9">  #insert; #byId; #all; #toggle;
   constructor(db: DatabaseSync) {           // 주의: constructor(private db) 같은 매개변수 프로퍼티는 타입 스트리핑에서 못 쓴다</code></pre>
 <p class="fname">examples/p12/05-query-builder.ts</p>
-<pre><code data-lang="ts" data-src="p12/05-query-builder.ts" data-lines="8-9">  private table: string; private cols: (keyof T &amp; string)[];
-  constructor(table: string, cols: (keyof T &amp; string)[]) { this.table = table; this.cols = cols; }</code></pre>
+<pre><code data-lang="ts" data-src="p12/05-query-builder.ts" data-lines="8-9">  private table: string; private cols: K[];
+  constructor(table: string, cols: K[]) { this.table = table; this.cols = cols; }</code></pre>
 <p class="cap">04는 생성자가 받은 <code>db</code>를 필드로 남기지 않고 준비된 문장만 비공개 필드에 담았고, 05는 <code>table</code>·<code>cols</code>를 직접 선언한 뒤 생성자에서 대입합니다.</p>
 </article>
 
@@ -9573,7 +9574,7 @@ constructor(db: DatabaseSync) { this.db = db; }</pre></div>
 <pre><code data-lang="ts" data-src="p12/02-query-helper.ts" data-lines="2-2">import { DatabaseSync, type SQLInputValue } from 'node:sqlite';</code></pre>
 <p class="fname">examples/p12/07-duckdb-typed.ts</p>
 <pre><code data-lang="ts" data-src="p12/07-duckdb-typed.ts" data-lines="2-2">import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';</code></pre>
-<p><code class="nb">SQLInputValue</code>와 <code class="nb">DuckDBConnection</code>은 타입일 뿐 실행 시점에는 없는 이름입니다. <code>type</code>을 붙였으니 그 자리만 정확히 지워집니다.</p>
+<p><code class="nb">SQLInputValue</code>는 타입일 뿐 실행 시점에는 없는 이름이고, <code class="nb">DuckDBConnection</code>은 클래스로 존재하지만 이 파일에서는 타입으로만 씁니다. <code>type</code>은 &quot;존재하느냐&quot;가 아니라 &quot;이 파일에서 어떻게 쓰느냐&quot;를 표시하며, 붙였으니 그 자리만 정확히 지워집니다.</p>
 <div class="tip"><b>컴파일러에게도 알려 주십시오</b> &mdash; <code class="nb">verbatimModuleSyntax</code>를 켜면 임포트 문이 있는 그대로 유지되고, 타입 임포트에 <code>type</code>을 빠뜨린 곳을 컴파일러가 짚어 줍니다.</div>
 </article>
 
@@ -9631,7 +9632,7 @@ console.log(missing?.name ?? '(없음)');</code></pre>
 <pre class="term" data-out="p12/02-query-helper.ts"><span class="p">$</span> node examples/p12/02-query-helper.ts
 부산=9 울산=7 창원=7
 (없음)</pre>
-<p>호출부에는 <code>as</code>가 한 번도 나오지 않습니다. 타입 인자만 적으면 되고, <code>one&lt;T&gt;</code>는 없을 수도 있음을 <code>T | undefined</code>로 정직하게 말합니다. 그래서 <code>missing?.name</code>처럼 물음표를 붙이지 않으면 컴파일러가 막습니다.</p>
+<p>호출부에는 <code>as</code>가 한 번도 나오지 않습니다. 타입 인자만 적으면 되고, <code>one&lt;T&gt;</code>는 없을 수도 있음을 <code>T | undefined</code>로 정직하게 말합니다. 그래서 <code>missing?.name</code>처럼 물음표를 붙이지 않으면 컴파일러가 막습니다(<code class="nb">strictNullChecks</code>가 켜져 있을 때).</p>
 <div class="key"><b>경계가 두 줄로 줄었습니다</b> &mdash; 위험한 캐스팅은 <code>query</code>와 <code>one</code> 안에만 있습니다. 검증을 넣기로 마음먹었을 때 고칠 곳도 그 두 줄뿐입니다.</div>
 </article>
 
@@ -9703,7 +9704,7 @@ console.log('깨진 객체:', isCustomer(broken));</code></pre>
 
 <article class="card" id="ts-const-enum">
 <h3>enum 대신 <code>as const</code> 객체</h3>
-<p><code>orders.status</code>처럼 값이 정해진 열은 enum이 딱 맞아 보이지만, 스트리핑에서는 쓸 수 없습니다. 대안이 오히려 더 낫습니다. 값이 <b>문자열 그대로</b>라 SQL 파라미터로 바로 갈 수 있기 때문입니다.</p>
+<p><code>orders.status</code>처럼 값이 정해진 열은 enum이 딱 맞아 보이지만, 스트리핑에서는 쓸 수 없습니다. 대안이 오히려 더 낫습니다. 실행 시점 코드를 만들지 않아 스트리핑으로 지울 수 있고, 값이 <b>문자열 그대로</b>라 SQL 파라미터로 바로 갈 수 있기 때문입니다.</p>
 <p class="fname">examples/p12/09-const-enum.ts</p>
 <pre><code data-lang="ts" data-src="p12/09-const-enum.ts">// 타입 스트리핑에서는 enum 을 못 쓴다 — as const 객체 + 유니온 타입이 대안이고, 값도 그대로 SQL 에 간다
 import { DatabaseSync } from 'node:sqlite';
@@ -9853,10 +9854,10 @@ true [Object: null prototype] { id: 1, body: '타입 붙이기', done: 1 }
 <h3>작은 쿼리 빌더 &mdash; <code>keyof</code>로 열 이름을 묶습니다</h3>
 <p>리포지토리로도 못 막는 것이 있습니다. 조건이 조합으로 늘어나는 목록 화면입니다. 이때 열 이름을 문자열로 이어 붙이면 오타가 실행 시점까지 살아남습니다. <code>keyof T &amp; string</code>이 그 오타를 컴파일 오류로 바꿉니다.</p>
 <p class="fname">examples/p12/05-query-builder.ts</p>
-<pre><code data-lang="ts" data-src="p12/05-query-builder.ts" data-lines="6-14">class Select&lt;T extends object&gt; {
+<pre><code data-lang="ts" data-src="p12/05-query-builder.ts" data-lines="6-14">class Select&lt;T extends object, K extends keyof T &amp; string&gt; {
   private conds: string[] = []; private params: SQLInputValue[] = []; private order = ''; private lim = '';
-  private table: string; private cols: (keyof T &amp; string)[];
-  constructor(table: string, cols: (keyof T &amp; string)[]) { this.table = table; this.cols = cols; }
+  private table: string; private cols: K[];
+  constructor(table: string, cols: K[]) { this.table = table; this.cols = cols; }
   where(col: keyof T &amp; string, op: '=' | '&lt;' | '&gt;' | 'LIKE', v: SQLInputValue) {
     this.conds.push(`${col} ${op} ?`); this.params.push(v); return this;
   }
@@ -9874,13 +9875,13 @@ true [Object: null prototype] { id: 1, body: '타입 붙이기', done: 1 }
     const w = this.conds.length ? ` WHERE ${this.conds.join(' AND ')}` : '';
     return { sql: `SELECT ${this.cols.join(', ')} FROM ${this.table}${w}${this.order}${this.lim}`, params: this.params };
   }
-  run(db: DatabaseSync): Pick&lt;T, typeof this.cols[number]&gt;[] {
+  run(db: DatabaseSync): Pick&lt;T, K&gt;[] {
     const { sql, params } = this.toSQL();
-    return db.prepare(sql).all(...params) as Pick&lt;T, typeof this.cols[number]&gt;[];
+    return db.prepare(sql).all(...params) as unknown as Pick&lt;T, K&gt;[];
   }
 }
 
-const q = new Select&lt;Product&gt;('products', ['name', 'price']).where('category', '=', '도서').where('price', '&lt;', 50000).orderBy('price', 'DESC').limit(2);
+const q = new Select&lt;Product, 'name' | 'price'&gt;('products', ['name', 'price']).where('category', '=', '도서').where('price', '&lt;', 50000).orderBy('price', 'DESC').limit(2);
 console.log(q.toSQL());
 console.log(q.run(new DatabaseSync('data/shop.db', { readOnly: true })));</code></pre>
 <pre class="term" data-out="p12/05-query-builder.ts"><span class="p">$</span> node examples/p12/05-query-builder.ts
@@ -9892,7 +9893,7 @@ console.log(q.run(new DatabaseSync('data/shop.db', { readOnly: true })));</code>
   [Object: null prototype] { name: '자바의 정석', price: 45000 },
   [Object: null prototype] { name: '파이썬 완전 정복', price: 32000 }
 ]</pre>
-<p>조건 두 개가 <code>AND</code>로 이어졌고, 값 <code>&#39;도서&#39;</code>와 <code>50000</code>은 SQL 문자열이 아니라 <code>params</code> 배열에 있습니다. 반환 타입은 <code>Pick&lt;T, &hellip;&gt;</code>이라 고른 두 열만 들어 있습니다.</p>
+<p>조건 두 개가 <code>AND</code>로 이어졌고, 값 <code>&#39;도서&#39;</code>와 <code>50000</code>은 SQL 문자열이 아니라 <code>params</code> 배열에 있습니다. 반환 타입은 <code>Pick&lt;T, K&gt;</code>라 고른 두 열만 들어 있습니다. <code>K</code>를 열 이름 리터럴로 받기 때문에 <code>q.run(db)[0].stock</code>은 컴파일 오류입니다.</p>
 <div class="tip"><b>여기까지가 손으로 만들 만한 범위입니다</b> &mdash; 조인·서브쿼리·집계까지 손으로 확장하기 시작하면 곧 라이브러리를 다시 만들게 됩니다. 그 지점이 오면 마지막 슬라이드의 도구들을 보십시오.</div>
 </article>
 
@@ -10061,7 +10062,7 @@ console.log({ chunks, total });</code></pre>
 <tr><td><code class="nb">AUTOMATIC INDEX</code></td><td>이 문장만 쓸 인덱스를 즉석에서 만듦</td><td>인덱스가 없다는 신호</td></tr>
 </table>
 </div>
-<div class="note"><b>문서의 정의</b> — &quot;SCAN is used for a full-table scan&quot;, &quot;SEARCH indicates that only a subset of the table rows are visited.&quot; 임시 트리 줄은 <code>USE TEMP B-TREE FOR xxx</code> 꼴이고 xxx는 ORDER BY · GROUP BY · DISTINCT 중 하나입니다.</div>
+<div class="note"><b>문서의 정의</b> — &quot;SCAN is used for a full-table scan&quot;, &quot;SEARCH indicates that only a subset of the table rows are visited.&quot; 임시 트리 줄은 <code>USE TEMP B-TREE FOR xxx</code> 꼴이고 xxx는 ORDER BY · GROUP BY · DISTINCT 중 하나이며, 일부만 정렬하면 <code>LAST TERM OF ORDER BY</code> 같은 변형도 나옵니다.</div>
 <div class="warn"><b>형식은 바뀝니다</b> — 문서가 &quot;The output format may change between SQLite releases&quot;라고 못 박습니다. 계획 문자열을 프로그램이 파싱하게 만들지 마십시오.</div>
 </article>
 
@@ -10296,7 +10297,7 @@ QUERY PLAN
 `--SCAN events USING COVERING INDEX idx_uk</pre>
 <p>앞 두 질의는 <code>SEARCH</code>지만 <code>kind</code>만 쓴 세 번째는 <code>SCAN</code>으로 떨어졌습니다. 인덱스를 읽기는 하지만 처음부터 끝까지 훑는다는 뜻입니다.</p>
 <div class="tip"><b>왼쪽 접두사 규칙</b> — 인덱스는 &quot;왼쪽에서부터 연속으로&quot; 쓰는 열까지만 탐색에 쓸 수 있습니다. 그래서 <b>등호로 걸 열을 앞에, 범위로 걸 열을 뒤에</b> 두는 것이 기본입니다.</div>
-<p class="cap"><code>$TMP/shop.db</code>는 <code>data/events.db</code>(100만 행)를 실행 때마다 새로 복사한 사본입니다. 예제는 공유 데이터를 절대 건드리지 않습니다.</p>
+<p class="cap">이 예제의 <code>$TMP/shop.db</code>는 <code>data/events.db</code>(100만 행)를 실행 때마다 새로 복사한 사본입니다. 예제는 공유 데이터를 절대 건드리지 않습니다.</p>
 </article>
 
 <article class="card" id="pf-covering">
@@ -10407,7 +10408,7 @@ QUERY PLAN
 <tr><th>알고리즘</th><th>등호 조인만?</th><th>메모리</th><th>이 덱의 엔진</th></tr>
 <tr><td>중첩 루프</td><td>아니오</td><td>거의 안 씀</td><td>SQLite</td></tr>
 <tr><td>해시</td><td>예</td><td>작은 쪽 크기</td><td>DuckDB</td></tr>
-<tr><td>정렬 병합</td><td>아니오</td><td>정렬 버퍼</td><td>둘 다 조인에는 안 씀</td></tr>
+<tr><td>정렬 병합</td><td>아니오</td><td>정렬 버퍼</td><td>SQLite 안 씀 · DuckDB는 부등호 조인에 <code>PIECEWISE_MERGE_JOIN</code>/<code>IE_JOIN</code></td></tr>
 </table>
 </div>
 <div class="key"><b>등호 조인만 해시가 됩니다</b> — <code>a.x = b.y</code>는 해시로 되지만 <code>a.x &lt; b.y</code>는 안 됩니다. 해시는 &quot;같은 값&quot;만 찾아 줄 수 있기 때문입니다.</div>
@@ -10488,13 +10489,13 @@ QUERY PLAN
 |         ~200 rows         ||          ~60 rows         |
 +---------------------------++---------------------------+</pre>
 <div class="satisfy"><div class="bx"><h6>빌드 쪽</h6>작은 표(customers 60행)를 통째로 읽어 <code>id</code>를 키로 하는 해시 표를 메모리에 만듭니다.</div><div class="mid">⇄</div><div class="bx"><h6>프로브 쪽</h6>큰 표(orders)를 흘려보내며 <code>customer_id</code>로 해시 표를 두드립니다. 한 번씩만 지나갑니다.</div></div>
-<p><code>status='paid'</code> 필터가 <code>orders</code> 스캔에 붙어 있어, 조인까지 올라오는 행이 800에서 추정 200으로 줄었습니다. 필터를 먼저 거는 것이 조인을 싸게 만드는 첫걸음입니다.</p>
-<div class="tip"><b>중첩 루프는 피합니다</b> — DuckDB 성능 문서의 조언 그대로 &quot;Avoid nested loop joins in favor of hash joins.&quot; 계획에 <code>NESTED_LOOP_JOIN</code>이 보인다면 조인 조건이 등호가 아닐 가능성이 큽니다.</div>
+<p><code>status='paid'</code> 필터가 <code>orders</code> 스캔에 붙어 있어, 조인까지 올라오는 행이 800에서 추정 200(실제는 577)으로 줄었습니다. 필터를 먼저 거는 것이 조인을 싸게 만드는 첫걸음입니다.</p>
+<div class="tip"><b>중첩 루프는 피합니다</b> — DuckDB 성능 문서의 조언 그대로 &quot;Avoid nested loop joins in favor of hash joins.&quot; 부등호 조인이면 DuckDB는 먼저 <code>PIECEWISE_MERGE_JOIN</code>(범위 조건이 둘이면 <code>IE_JOIN</code>)을 쓰고, 그것도 안 되는 조건(OR 등)일 때만 <code>NESTED_LOOP_JOIN</code>으로 물러납니다.</div>
 </article>
 
 <article class="card" id="pf-bulk-insert">
 <h3>적재 속도는 트랜잭션이 정합니다</h3>
-<p>같은 2만 행을 넣는데 방식만 바꿔 재 봅니다. 문장마다 커밋하면 커밋마다 디스크 동기화가 일어납니다. 그것이 비용의 거의 전부입니다.</p>
+<p>2만 행(자동 커밋만 2천 행)을 넣는데 방식만 바꿔 재 봅니다. 문장마다 커밋하면 커밋마다 디스크 동기화가 일어납니다. 그것이 비용의 거의 전부입니다.</p>
 <p class="fname">examples/p13/09-bulk-insert-modes.py</p>
 <pre><code data-lang="py" data-src="p13/09-bulk-insert-modes.py" data-lines="9-18">    t0 = time.perf_counter()
     if label == 'autocommit each':
@@ -10616,7 +10617,7 @@ offset= 900000  OFFSET  31.00 ms   keyset   0.52 ms   same=True</pre>
 </table>
 </div>
 <div class="g2">
-<div><b>SQLite를 고르는 때</b><br>한 행씩 자주 읽고 쓰는 앱, 동시 쓰기가 있는 저장소, 파일 하나로 배포해야 하는 경우.</div>
+<div><b>SQLite를 고르는 때</b><br>한 행씩 자주 읽고 쓰는 앱, 여러 프로세스가 차례로 써야 하는 저장소, 파일 하나로 배포해야 하는 경우.</div>
 <div><b>DuckDB를 고르는 때</b><br>많은 행을 훑는 집계·리포트, CSV·Parquet 분석, 열 몇 개만 보는 질의.</div>
 </div>
 <div class="tip"><b>둘 다 쓰면 됩니다</b> — 같은 프로세스 안에서 SQLite 파일을 DuckDB로 붙여 읽을 수 있습니다. 저장은 SQLite, 분석은 DuckDB라는 조합이 성립합니다(7부·15부).</div>
@@ -10960,7 +10961,7 @@ buy_only  both  groups
 <table class="kv">
 <tr><th>구문</th><th>쓰기 잠금을 잡는 시점</th></tr>
 <tr><td><code>BEGIN DEFERRED</code><br>(기본값)</td><td>첫 문장이 실행될 때. 읽기로 시작했다가 쓰기로 승격하려는 순간 <code class="nb">SQLITE_BUSY</code>가 날 수 있습니다.</td></tr>
-<tr><td><code>BEGIN IMMEDIATE</code></td><td>즉시. 다른 쓰기 트랜잭션이 이미 있으면 이 자리에서 바로 실패합니다.</td></tr>
+<tr><td><code>BEGIN IMMEDIATE</code></td><td>즉시. 다른 쓰기 트랜잭션이 이미 있으면 <code>busy_timeout</code>만큼 기다린 뒤 실패합니다.</td></tr>
 <tr><td><code>BEGIN EXCLUSIVE</code></td><td>즉시. WAL에서는 IMMEDIATE와 같고, 롤백 저널에서는 다른 연결의 읽기까지 막습니다.</td></tr>
 </table>
 </div>
@@ -11069,14 +11070,14 @@ atomic update x2   : 20</pre>
 <p>표준은 &quot;어떻게 구현하라&quot;가 아니라 &quot;어떤 현상을 허용하지 않는가&quot;로 수준을 정의합니다. 그래서 엔진마다 구현이 달라도 약속은 비교할 수 있습니다.</p>
 <div class="tblwrap">
 <table class="kv">
-<tr><th>격리 수준</th><th>더티 리드</th><th>반복 불가</th><th>팬텀</th><th>갱신 손실</th></tr>
+<tr><th>격리 수준</th><th>더티 리드</th><th>반복 불가</th><th>팬텀</th><th>갱신 손실(표준 외)</th></tr>
 <tr><td>READ UNCOMMITTED</td><td><span class="badge err">허용</span></td><td><span class="badge err">허용</span></td><td><span class="badge err">허용</span></td><td><span class="badge err">허용</span></td></tr>
 <tr><td>READ COMMITTED</td><td><span class="badge ok">막음</span></td><td><span class="badge err">허용</span></td><td><span class="badge err">허용</span></td><td><span class="badge err">허용</span></td></tr>
 <tr><td>REPEATABLE READ</td><td><span class="badge ok">막음</span></td><td><span class="badge ok">막음</span></td><td><span class="badge err">허용</span></td><td><span class="badge ok">막음</span></td></tr>
 <tr><td>SERIALIZABLE</td><td><span class="badge ok">막음</span></td><td><span class="badge ok">막음</span></td><td><span class="badge ok">막음</span></td><td><span class="badge ok">막음</span></td></tr>
 </table>
 </div>
-<div class="note"><b>표는 하한선입니다</b> &mdash; 엔진은 더 강하게 구현해도 됩니다. PostgreSQL은 네 수준을 받아들이지만 내부적으로는 셋뿐이라, READ UNCOMMITTED는 READ COMMITTED처럼 동작하고 REPEATABLE READ는 팬텀까지 막습니다. 기본값은 READ COMMITTED, MySQL InnoDB의 기본값은 REPEATABLE READ입니다.</div>
+<div class="note"><b>표는 하한선입니다</b> &mdash; 엔진은 더 강하게 구현해도 됩니다. PostgreSQL은 네 수준을 받아들이지만 내부적으로는 셋뿐이라, READ UNCOMMITTED는 READ COMMITTED처럼 동작하고 REPEATABLE READ는 팬텀까지 막습니다. 기본값은 READ COMMITTED, MySQL InnoDB의 기본값은 REPEATABLE READ입니다. 마지막 열은 표준에 없는 관례로 PostgreSQL 기준이며, InnoDB의 REPEATABLE READ는 읽고-고쳐-쓰는 갱신 손실을 막지 않습니다.</div>
 </article>
 
 <article class="card" id="tx-read-uncommitted">
@@ -11097,6 +11098,7 @@ read_uncommitted
                1</pre>
 <p>기본값은 0(꺼짐)이고 1로 켤 수 있습니다. 다만 이 설정은 <b>공유 캐시 모드</b>에서 같은 캐시를 쓰는 연결 사이에서만 뜻이 있습니다. 별개의 연결끼리는 여전히 커밋 전 값을 볼 수 없습니다.</p>
 <div class="key"><b>공식 문서의 문장</b> &mdash; &quot;공유 캐시 연결에서 <code>read_uncommitted</code>를 켠 경우를 빼면, SQLite의 모든 트랜잭션은 <i>serializable</i> 격리를 보인다.&quot; 그리고 그 구현 방법은 &quot;쓰기를 실제로 직렬화하는 것&quot;입니다.</div>
+<div class="note"><b>공유 캐시 모드 자체가 낡았습니다</b> &mdash; 공식 문서는 공유 캐시를 &quot;쓰지 않기를 권하는 구식 기능&quot;이라 부르며 대부분의 용도는 WAL 모드가 더 낫다고 합니다. <code>read_uncommitted</code>는 그 공유 캐시 안에서 표 읽기 잠금을 건너뛰게 할 뿐입니다.</div>
 </article>
 
 <article class="card" id="tx-snapshot-vs-serial">
@@ -11218,7 +11220,7 @@ print('lesson: 쓸 트랜잭션은 BEGIN IMMEDIATE 로 시작한다')</code></pr
 a (deferred) upgrade: database is locked
 lesson: 쓸 트랜잭션은 BEGIN IMMEDIATE 로 시작한다</pre>
 <p>a가 한 일은 <code>SELECT</code> 하나뿐이었는데, 쓰려는 순간 이미 늦었습니다. 여기서 아픈 점은 <b>실패 시점</b>입니다. 읽어서 계산한 결과를 다 만들어 놓고 마지막에 버려야 합니다.</p>
-<div class="key"><b>왜 앞에서 실패하는 편이 나은가</b> &mdash; <code>BEGIN IMMEDIATE</code>는 시작하자마자 잠금을 잡습니다. 실패해도 아직 아무 일도 하지 않았으니, 통째로 다시 시도하기가 쉽습니다.</div>
+<div class="key"><b>왜 앞에서 실패하는 편이 나은가</b> &mdash; <code>BEGIN IMMEDIATE</code>는 시작하자마자 잠금을 잡습니다. 실패해도 아직 아무 일도 하지 않았으니, 통째로 다시 시도하기가 쉽습니다. 더 중요한 이유가 하나 더 있습니다 &mdash; 읽기에서 쓰기로 승격하다 막히면 SQLite는 교착을 피하려 <code>busy_timeout</code>을 건너뛰고 바로 실패시키므로, 기다림으로는 해결되지 않습니다(교착 슬라이드).</div>
 </article>
 
 <article class="card" id="tx-journal-readers">
@@ -11258,7 +11260,7 @@ sqlite3.connect(db).execute('PRAGMA journal_mode = WAL').fetchone()
 
 reader = sqlite3.connect(db, isolation_level=None)
 writer = sqlite3.connect(db, isolation_level=None)
-reader.execute('BEGIN')                                       # 읽기 트랜잭션 시작 = 스냅숏 고정
+reader.execute('BEGIN')                                       # BEGIN 뒤 첫 SELECT 가 스냅숏을 고정
 print('reader snapshot:', reader.execute('SELECT count(*) FROM customers').fetchone()[0])
 writer.execute("INSERT INTO customers (name, email, joined) VALUES ('new', 'new@example.com', '2026-09-03')")
 print('writer committed; reader still sees:', reader.execute('SELECT count(*) FROM customers').fetchone()[0])
@@ -11281,7 +11283,7 @@ new read transaction sees: 61</pre>
 
 <article class="card" id="tx-deadlock">
 <h3>SQLite에는 교착이 없습니다</h3>
-<p>교착은 둘이 서로가 쥔 자원을 기다릴 때 생깁니다. SQLite의 쓰기 잠금은 <b>데이터베이스 전체에 하나</b>뿐이라 기다림의 고리가 만들어지지 않습니다. 한쪽이 곧바로 물러날 뿐입니다.</p>
+<p>교착은 둘이 서로가 쥔 자원을 기다릴 때 생깁니다. SQLite의 쓰기 잠금은 <b>데이터베이스 전체에 하나</b>뿐이라 잠금 단계의 조합이 몇 가지 안 되고, 고리가 될 조합(읽기→쓰기 승격 대 쓰기→배타 승격)을 엔진이 알아봅니다. 그때는 busy 처리기를 부르지 않고 곧바로 <code class="nb">SQLITE_BUSY</code>를 돌려 한쪽을 물러나게 합니다.</p>
 <p class="fname">examples/p14/13-deadlock-avoidance.py</p>
 <pre><code data-lang="py" data-src="p14/13-deadlock-avoidance.py"># 교착(deadlock): SQLite 는 잠금이 하나뿐이라 두 쓰기 트랜잭션이 서로 기다리는 대신 한쪽이 SQLITE_BUSY 로 바로 물러난다
 import os, shutil, sqlite3, threading, time
@@ -11306,7 +11308,7 @@ for line in sorted(log): print(line)</code></pre>
 <pre class="term" data-out="p14/13-deadlock-avoidance.py"><span class="p">$</span> python3 examples/p14/13-deadlock-avoidance.py
 T1: commit
 T2: database is locked</pre>
-<p>행 1과 행 2를 서로 엇갈린 순서로 잠그는, 다른 엔진이라면 교착이 되는 고전적인 배치입니다. SQLite에서는 한쪽이 커밋하고 다른 쪽은 <code class="nb">SQLITE_BUSY</code>로 끝납니다.</p>
+<p>행 1과 행 2를 서로 엇갈린 순서로 잠그는, 다른 엔진이라면 교착이 되는 고전적인 배치입니다. SQLite에서는 한쪽이 커밋하고 다른 쪽은 <code class="nb">SQLITE_BUSY</code>로 끝납니다. T2에 <code>timeout=0.5</code>가 있는데도 즉시 실패한 것이 그 증거입니다 &mdash; 승격 교착에서는 <code>busy_timeout</code>이 적용되지 않습니다. 쓸 트랜잭션을 <code>BEGIN IMMEDIATE</code>로 여는 진짜 이유가 여기 있습니다.</p>
 <p class="cap">이 기기에서 실측했으며, 어느 스레드가 이기는지는 실행마다 달라질 수 있습니다.</p>
 <div class="note"><b>대가</b> &mdash; 교착이 없는 대신 동시 쓰기 처리량이 하나로 묶입니다. 잠금 범위를 넓게 잡아 얻는 단순함이자, 그것이 곧 SQLite의 한계입니다.</div>
 </article>
@@ -11338,9 +11340,9 @@ skip a@x.com - UNIQUE constraint failed: u.email
 
 <article class="card" id="tx-duck-conflict">
 <h3>DuckDB는 먼저 하고 나중에 확인합니다</h3>
-<p>분석 엔진의 트랜잭션은 대개 길고 큽니다. 시작부터 잠가 두면 아무도 일하지 못하므로, DuckDB는 일단 각자 진행시키고 <b>커밋 직전에</b> 충돌을 검사합니다. 이것이 낙관적 동시성 제어입니다.</p>
+<p>분석 엔진의 트랜잭션은 대개 길고 큽니다. 시작부터 잠가 두면 아무도 일하지 못하므로, DuckDB는 잠금 대신 스냅숏 위에서 각자 진행시키고, 다른 트랜잭션이 이미 고친 행을 <b>쓰려는 순간</b> 충돌로 실패시킵니다(상대가 커밋 전이든, 내 스냅숏 뒤에 커밋했든). 교과서의 낙관적 동시성 제어(검증은 커밋 때)를 쓰기 시점으로 앞당긴 변형입니다.</p>
 <p class="fname">examples/p14/09-duckdb-write-conflict.py</p>
-<pre><code data-lang="py" data-src="p14/09-duckdb-write-conflict.py"># DuckDB 의 낙관적 동시성: 같은 프로세스 안의 두 연결이 같은 행을 고치면 나중 커밋이 충돌로 거부된다
+<pre><code data-lang="py" data-src="p14/09-duckdb-write-conflict.py"># DuckDB 의 낙관적 동시성: 같은 프로세스 안의 두 연결이 같은 행을 고치면 나중 쓰기가 충돌로 거부된다
 import os, duckdb
 
 db = duckdb.connect(os.path.join(os.environ['DBDECK_TMP'], 't.duckdb'))
@@ -11363,9 +11365,9 @@ final: 90</pre>
 
 <article class="card" id="tx-duck-snapshot">
 <h3>DuckDB의 읽기는 사진 한 장을 봅니다</h3>
-<p>충돌을 나중에 검사하려면 각 트랜잭션이 서로 간섭 없이 진행되어야 합니다. 그래서 DuckDB도 다중 버전 동시성 제어(MVCC)를 씁니다. 읽는 쪽은 시작 시점의 스냅숏에 고정됩니다.</p>
+<p>충돌을 나중에 검사하려면 각 트랜잭션이 서로 간섭 없이 진행되어야 합니다. 그래서 DuckDB도 다중 버전 동시성 제어(MVCC)를 씁니다. 읽는 쪽은 첫 읽기 시점의 스냅숏에 고정됩니다.</p>
 <p class="fname">examples/p14/10-duckdb-snapshot.py</p>
-<pre><code data-lang="py" data-src="p14/10-duckdb-snapshot.py"># DuckDB 의 MVCC: 트랜잭션은 시작 시점의 스냅숏을 본다 — 다른 연결의 커밋이 중간에 끼어들어도 흔들리지 않는다
+<pre><code data-lang="py" data-src="p14/10-duckdb-snapshot.py"># DuckDB 의 MVCC: 트랜잭션은 첫 읽기 시점의 스냅숏을 본다 — 다른 연결의 커밋이 중간에 끼어들어도 흔들리지 않는다
 import os, duckdb
 
 db = duckdb.connect(os.path.join(os.environ['DBDECK_TMP'], 't.duckdb'))
@@ -11417,7 +11419,7 @@ after close: opened</pre>
 <tr><td>프로세스 안</td><td>연결 여럿이 동시에 읽고 씁니다.</td><td>같은 행을 고치면 충돌 오류가 납니다.</td></tr>
 </table>
 </div>
-<div class="key"><b>설계 의도</b> &mdash; DuckDB는 &quot;여러 응용이 붙는 공유 서버&quot;가 아니라 &quot;한 프로세스 안의 분석 엔진&quot;입니다. 동시 쓰기를 포기한 대가로 벡터화 실행과 압축 저장을 얻었습니다.</div>
+<div class="key"><b>설계 의도</b> &mdash; DuckDB는 &quot;여러 응용이 붙는 공유 서버&quot;가 아니라 &quot;한 프로세스 안의 분석 엔진&quot;입니다. 쓰기 프로세스가 하나뿐인 것은 서버 없이 파일 하나를 잠가 쓰는 임베디드 설계에서 따라오는 제약이고, 벡터화 실행과 압축 저장은 그 위에 얹은 분석 최적화입니다.</div>
 </article>
 
 <article class="card" id="tx-pg-mysql">
@@ -11456,12 +11458,12 @@ after close: opened</pre>
 충돌이 잦을 때 유리
 대기 시간이 비용
 실패가 앞쪽에서 난다</pre></div>
-<div class="cmp bad"><h5>낙관(나중에 검사)</h5><pre>DuckDB 의 커밋 시점 충돌 검사
+<div class="cmp bad"><h5>낙관(나중에 검사)</h5><pre>DuckDB 의 쓰기 시점 충돌 검사
 충돌이 드물 때 유리
 버린 작업이 비용
-실패가 맨 뒤에서 난다</pre></div>
+실패가 첫 쓰기 뒤에 난다</pre></div>
 </div>
-<p>이름의 <code>bad</code>는 나쁘다는 뜻이 아니라 &quot;비용이 뒤로 몰린다&quot;는 뜻으로 읽으십시오. 낙관적 방식은 실패가 커밋 직전에 오므로, 재시도 경로를 반드시 준비해야 합니다.</p>
+<p>&quot;낙관&quot;은 성격이 아니라 &quot;비용이 뒤로 몰린다&quot;는 뜻으로 읽으십시오. 낙관적 방식은 읽고 계산한 뒤에야 실패가 오므로, 재시도 경로를 반드시 준비해야 합니다.</p>
 <div class="tip"><b>고르는 기준</b> &mdash; 재시도가 싸면(짧은 트랜잭션) 낙관적으로, 재시도가 비싸면(큰 배치) 비관적으로 가십시오.</div>
 </article>
 
@@ -11530,7 +11532,7 @@ print('시도 %d회 만에 성공, 잔액 =' % n, db.execute('SELECT bal FROM ac
 <tr><td>이상 현상</td><td>더티 리드&middot;반복 불가&middot;팬텀&middot;갱신 손실&middot;쓰기 스큐 다섯을 이름으로 구분합니다.</td></tr>
 <tr><td>SQLite</td><td>쓰기를 하나로 직렬화합니다. 잠금 다섯 단계, <code class="nb">SQLITE_BUSY</code>, <code>busy_timeout</code>이 전부입니다.</td></tr>
 <tr><td>WAL</td><td>읽기와 쓰기가 서로를 막지 않습니다. 롤백 저널에서는 막습니다.</td></tr>
-<tr><td>DuckDB</td><td>프로세스는 하나, 프로세스 안에서는 MVCC와 커밋 시점 충돌 검사입니다.</td></tr>
+<tr><td>DuckDB</td><td>프로세스는 하나, 프로세스 안에서는 MVCC와 쓰기 시점 충돌 검사입니다.</td></tr>
 </table>
 </div>
 <div class="key"><b>한 문장으로</b> &mdash; 동시성 문제의 해법은 대부분 &quot;더 강한 격리 수준&quot;이 아니라 &quot;더 짧은 트랜잭션과 재시도&quot;입니다.</div>
@@ -11729,7 +11731,7 @@ run 1: 4 rows loaded, table now (4, 40)
 run 2: 4 rows loaded, table now (4, 40)
 run 3: 4 rows loaded, table now (4, 40)</pre>
 <p>세 번 돌렸지만 표에는 여전히 4행, 합계 40건입니다. 세 번 더 돌려도 같습니다.</p>
-<div class="tip"><b>지우기와 넣기는 한 트랜잭션에</b> &mdash; 둘 사이에서 프로세스가 죽으면 파티션이 빈 채로 남습니다. <code>with con:</code> 한 줄이 그 사고를 막습니다.</div>
+<div class="tip"><b>지우기와 넣기는 한 트랜잭션에</b> &mdash; 둘 사이에서 프로세스가 죽으면 파티션이 빈 채로 남습니다. <code>with con:</code> 한 줄이 그 사고를 막습니다(기본 <code>isolation_level</code>일 때. <code>isolation_level=None</code>으로 열었다면 <code>BEGIN</code>·<code>COMMIT</code>을 직접 적어야 합니다).</div>
 </article>
 
 <article class="card" id="pr-etl-schema-evolution">
@@ -11845,7 +11847,7 @@ app.db-wal -rw-------</pre>
 <table class="kv">
 <tr><th>저장 방식</th><th>판정</th><th>이유</th></tr>
 <tr><td>평문</td><td><span class="badge err">금지</span></td><td>유출이 곧 전원 계정 탈취입니다.</td></tr>
-<tr><td>MD5 · SHA-256</td><td><span class="badge err">금지</span></td><td>너무 빨라 초당 수억 번을 시도할 수 있습니다.</td></tr>
+<tr><td>MD5 · SHA-256</td><td><span class="badge err">금지</span></td><td>너무 빨라 GPU 한 장으로 초당 수백억 번을 시도할 수 있습니다.</td></tr>
 <tr><td>bcrypt · scrypt</td><td><span class="badge ok">가능</span></td><td>bcrypt는 작업 계수 10 이상, 입력은 72바이트까지입니다.</td></tr>
 <tr><td>Argon2id</td><td><span class="badge ok">권장</span></td><td>메모리 19 MiB 이상, 반복 2회, 병렬도 1이 최소 권고입니다.</td></tr>
 </table>
@@ -12147,7 +12149,7 @@ httpfs          false      false </pre>
 <tr><td>위치 찾기</td><td><code>instr</code></td><td><code>instr</code>·<code>strpos</code></td><td><code>strpos</code>·<code>position</code></td><td><code>LOCATE</code>·<code>INSTR</code></td></tr>
 </table>
 </div>
-<div class="warn"><b>MySQL의 <code>||</code></b> &mdash; MySQL에서 <code>||</code>는 문자열 잇기가 아니라 논리 OR입니다. 이식할 때 가장 조용히 틀리는 자리라서, 네 엔진을 오갈 코드라면 처음부터 <code>CONCAT</code> 계열을 쓰는 편이 안전합니다.</div>
+<div class="warn"><b>MySQL의 <code>||</code></b> &mdash; MySQL에서 <code>||</code>는 기본 <code>sql_mode</code>에서 문자열 잇기가 아니라 논리 OR입니다(<code>PIPES_AS_CONCAT</code>을 켜면 잇기). 이식할 때 가장 조용히 틀리는 자리라서, 네 엔진을 오갈 코드라면 처음부터 <code>CONCAT</code> 계열을 쓰는 편이 안전합니다. 위치 찾기는 인자 순서도 다릅니다 &mdash; <code>instr</code>·<code>strpos</code>·<code>INSTR</code>은 (문자열, 찾을 것), <code>position(찾을 것 IN 문자열)</code>·<code>LOCATE(찾을 것, 문자열)</code>은 찾을 것이 먼저입니다.</div>
 </article>
 
 <article class="card" id="ap-dialect-date">
@@ -12177,11 +12179,13 @@ httpfs          false      false </pre>
 <tr><td>기본 문법</td><td colspan="3"><code>INSERT &hellip; ON CONFLICT (col) DO UPDATE SET &hellip;</code></td><td><code>ON DUPLICATE KEY UPDATE</code></td></tr>
 <tr><td>넣던 값 참조</td><td><code>excluded.</code></td><td><code>excluded.</code></td><td><code>EXCLUDED.</code></td><td>행 별칭(<code>AS new</code>)</td></tr>
 <tr><td>무시하기</td><td><code>DO NOTHING</code></td><td><code>DO NOTHING</code></td><td><code>DO NOTHING</code></td><td><code>INSERT IGNORE</code></td></tr>
-<tr><td>짧은 표기</td><td><code>INSERT OR IGNORE</code></td><td><code>INSERT OR IGNORE</code></td><td>없음</td><td><code>REPLACE</code></td></tr>
+<tr><td>무시 짧은 표기</td><td><code>INSERT OR IGNORE</code></td><td><code>INSERT OR IGNORE</code></td><td>없음</td><td><code>INSERT IGNORE</code></td></tr>
+<tr><td>지우고 다시 넣기</td><td><code>INSERT OR REPLACE</code></td><td><code>INSERT OR REPLACE</code></td><td>없음</td><td><code>REPLACE</code></td></tr>
 <tr><td>조건부 갱신</td><td><code>DO UPDATE &hellip; WHERE</code></td><td><code>DO UPDATE &hellip; WHERE</code></td><td><code>DO UPDATE &hellip; WHERE</code></td><td>없음 &mdash; <code>IF()</code>로</td></tr>
 </table>
 </div>
 <div class="note"><b>버전 주의</b> &mdash; SQLite의 UPSERT는 3.24.0(2018-06-04)에 들어왔고, <code>ON CONFLICT</code>를 여러 개 이어 쓰거나 대상 열을 생략하는 문법은 3.35.0(2021-03-12)부터입니다. 오래된 빌드에서는 문법 오류가 납니다.</div>
+<div class="warn"><b>REPLACE는 UPSERT가 아닙니다</b> &mdash; SQLite·DuckDB의 <code>INSERT OR REPLACE</code>와 MySQL의 <code>REPLACE</code>는 충돌 행을 <code>DELETE</code>한 뒤 <code>INSERT</code>하므로 DELETE 트리거·<code>ON DELETE CASCADE</code>·자동 증가 값에 영향을 줍니다. MySQL의 행 별칭(<code>AS new</code>)은 8.0.19부터이고, 그 전에는 <code>VALUES(col)</code>을 씁니다.</div>
 </article>
 
 <article class="card" id="ap-dialect-limit">
@@ -12197,7 +12201,7 @@ httpfs          false      false </pre>
 <tr><td>재귀 CTE</td><td>지원</td><td>지원</td><td>지원</td><td>8.0부터</td></tr>
 </table>
 </div>
-<div class="warn"><b>MySQL의 두 인자 LIMIT</b> &mdash; <code>LIMIT 5,10</code>은 &quot;5개 자르고 10개&quot;라는 뜻이라 앞뒤 순서가 나머지 셋과 반대입니다. MySQL도 <code>LIMIT n OFFSET k</code>를 함께 받아 주므로, 이식할 코드라면 이쪽만 쓰십시오.</div>
+<div class="warn"><b>MySQL의 두 인자 LIMIT</b> &mdash; <code>LIMIT 5,10</code>은 &quot;5개 건너뛰고 10개&quot;라는 뜻이라 앞뒤 순서가 나머지 셋과 반대입니다. MySQL도 <code>LIMIT n OFFSET k</code>를 함께 받아 주므로, 이식할 코드라면 이쪽만 쓰십시오.</div>
 </article>
 
 <article class="card" id="ap-dialect-ident">
@@ -12231,7 +12235,7 @@ httpfs          false      false </pre>
 <tr><td>7</td><td><code>LIMIT</code></td><td>7</td><td><code>ORDER BY</code> · <code>LIMIT</code></td></tr>
 </table>
 </div>
-<div class="key"><b>이 표로 풀리는 세 가지</b> &mdash; <code>SELECT</code>에서 지은 별칭을 <code>WHERE</code>가 못 쓰는 이유, <code>WHERE</code>에 집계를 못 쓰는 이유, <code>ORDER BY</code>에서만 별칭이 통하는 이유가 모두 이 순서 하나로 설명됩니다.</div>
+<div class="key"><b>이 표로 풀리는 세 가지</b> &mdash; 표준에서 <code>SELECT</code>의 별칭을 <code>WHERE</code>가 못 쓰는 이유, <code>WHERE</code>에 집계를 못 쓰는 이유, <code>ORDER BY</code>에서 별칭이 통하는 이유(세 엔진은 <code>GROUP BY</code>에서도 받아 줍니다)가 모두 이 순서 하나로 설명됩니다.</div>
 </article>
 
 <article class="card" id="ap-cheat-join">
@@ -12424,7 +12428,7 @@ httpfs          false      false </pre>
 <tr><td>N+1</td><td>목록 한 번, 상세 N번을 따로 질의하는 사고</td><td>13</td></tr>
 <tr><td>ACID</td><td>원자성·일관성·격리성·지속성</td><td>14</td></tr>
 <tr><td>쓰기 스큐</td><td>각자 옳은 두 트랜잭션이 함께 규칙을 깨는 이상</td><td>14</td></tr>
-<tr><td>낙관적 동시성</td><td>먼저 하고 커밋할 때 충돌을 확인하는 방식</td><td>14</td></tr>
+<tr><td>낙관적 동시성</td><td>먼저 하고 쓰거나 커밋할 때 충돌을 확인하는 방식</td><td>14</td></tr>
 <tr><td>멱등성</td><td>두 번 돌려도 결과가 같은 성질</td><td>15</td></tr>
 </table>
 </div>
@@ -12448,7 +12452,7 @@ httpfs          false      false </pre>
 <h3>퀴즈 &mdash; 3부 관계형 모델과 SQL 기초</h3>
 <p class="q">Q. <code>WHERE</code>와 <code>HAVING</code>을 가르는 기준은 무엇입니까?</p>
 <button>답 보기</button>
-<div class="a"><b>A.</b> 걸러 내는 대상이 다릅니다. <code>WHERE</code>는 그룹을 짓기 전의 개별 행을, <code>HAVING</code>은 <code>GROUP BY</code>로 접은 뒤의 그룹을 거릅니다. 그래서 집계 함수는 <code>HAVING</code>에만 쓸 수 있고, 행 단위 조건은 <code>WHERE</code>에 두어야 접기 전에 데이터가 줄어 더 빠릅니다.</div>
+<div class="a"><b>A.</b> 걸러 내는 대상이 다릅니다. <code>WHERE</code>는 그룹을 짓기 전의 개별 행을, <code>HAVING</code>은 <code>GROUP BY</code>로 접은 뒤의 그룹을 거릅니다. 그래서 집계 함수는 <code>WHERE</code>에는 못 쓰고 <code>HAVING</code>에는 쓸 수 있고, 행 단위 조건은 <code>WHERE</code>에 두어야 접기 전에 데이터가 줄어 더 빠릅니다.</div>
 </article>
 
 <article class="card quiz" id="q-04" data-quiz>
@@ -12469,7 +12473,7 @@ httpfs          false      false </pre>
 <h3>퀴즈 &mdash; 6부 SQLite 깊이</h3>
 <p class="q">Q. 롤백 저널과 WAL의 가장 큰 차이는 무엇입니까?</p>
 <button>답 보기</button>
-<div class="a"><b>A.</b> 무엇을 먼저 적느냐입니다. 롤백 저널은 원본 페이지를 따로 베껴 둔 뒤 본 파일을 고치므로 쓰는 동안 읽기가 막힙니다. WAL은 변경분을 별도 파일에 덧붙이므로 읽는 쪽이 옛 스냅숏을 계속 볼 수 있고, 쌓인 프레임은 체크포인트가 본 파일로 옮깁니다.</div>
+<div class="a"><b>A.</b> 무엇을 먼저 적느냐입니다. 롤백 저널은 원본 페이지를 따로 베껴 둔 뒤 본 파일을 고치므로 커밋하는 순간에는 읽기까지 막힙니다. WAL은 변경분을 별도 파일에 덧붙이므로 읽는 쪽이 옛 스냅숏을 계속 볼 수 있고, 쌓인 프레임은 체크포인트가 본 파일로 옮깁니다.</div>
 </article>
 
 <article class="card quiz" id="q-07" data-quiz>
