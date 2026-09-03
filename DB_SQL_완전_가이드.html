@@ -9447,11 +9447,579 @@ try {
 <p class="cap">다음 12부에서는 같은 API 를 TypeScript 로 감싸, 행의 모양을 타입으로 붙잡는 방법을 봅니다.</p>
 </article>
 
-<!-- ===== part12.html (1장) ===== -->
+<!-- ===== part12.html (28장) ===== -->
 <article class="card section" id="part12">
 <p class="chnum">12부</p>
 <h2>TypeScript</h2>
-<p class="chsub">타입 안전한 질의 — 타입 스트리핑 실행, 리포지토리, 작은 빌더</p>
+<p class="chsub">타입 안전한 질의 &mdash; 타입 스트리핑 실행, 리포지토리, 작은 빌더</p>
+</article>
+
+<article class="card" id="ts-overview">
+<h3>타입은 SQL 문자열 안을 보지 못합니다</h3>
+<p class="lead">컴파일러에게 질의문은 그냥 문자열입니다. <code>db.prepare(sql).all()</code>이 무엇을 돌려줄지 알아낼 방법이 없습니다.</p>
+<p>그래서 DB 코드의 타입 작업은 결국 한 가지 일로 모입니다. 모양 없는 값이 타입 있는 값으로 바뀌는 <b>경계</b>를 좁게 만들고, 그 경계를 몇 군데로 줄이는 것입니다. 경계를 어디에 두느냐가 12부의 주제입니다.</p>
+<div class="flow"><span class="box">SQL 문자열</span><span class="arr">엔진</span><span class="box">이름만 있는 객체</span><span class="arr">경계</span><span class="box dim">Product[]</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>경계를 세우는 법</th><th>거기서 실제로 하는 일</th><th>대가</th></tr>
+<tr><td><code>as Product[]</code></td><td>아무것도 하지 않습니다. 선언뿐입니다</td><td>틀리면 실행 시점에 조용히 <code>undefined</code></td></tr>
+<tr><td>실행 시점 검증</td><td>값의 모양을 실제로 확인합니다</td><td>코드와 실행 비용이 늘어납니다</td></tr>
+<tr><td>스키마에서 타입 생성</td><td>도구가 타입을 만들어 줍니다</td><td>빌드 단계와 의존성이 늘어납니다</td></tr>
+</table>
+</div>
+<div class="key"><b>세 방법 모두 씁니다</b> &mdash; 안쪽 코드는 캐스팅으로 가볍게, 바깥에서 들어온 데이터는 검증으로, 스키마가 자주 바뀌는 곳은 생성으로. 12부는 앞의 둘을 손으로 만들어 봅니다.</div>
+</article>
+
+<article class="card" id="ts-strip">
+<h3>Node는 타입을 공백으로 지우고 실행합니다</h3>
+<p class="lead">Node 24는 <code class="nb">.ts</code> 파일을 그대로 받습니다. 별도 빌드 단계도, 로더 등록도 없습니다.</p>
+<p>원리는 이름 그대로입니다. &quot;Node.js는 TypeScript 문법을 공백으로 바꾸며, 타입 검사는 수행하지 않습니다.&quot; 타입이 있던 자리에 같은 길이의 공백이 남으므로 줄 번호와 열 번호가 그대로입니다. 그래서 문서는 &quot;소스맵이 필요 없고, Node.js는 생성하지도 않는다&quot;고 적습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>버전</th><th>변화</th></tr>
+<tr><td>v22.6.0</td><td>추가됨 &mdash; <code class="nb">--experimental-strip-types</code> 필요</td></tr>
+<tr><td>v22.7.0</td><td><code class="nb">--experimental-transform-types</code> 추가</td></tr>
+<tr><td>v23.6.0</td><td>타입 스트리핑이 기본으로 켜졌습니다</td></tr>
+<tr><td>v24.3.0</td><td>실험 경고가 사라졌습니다</td></tr>
+<tr><td>v24.12.0</td><td>안정 &mdash; Stability 2</td></tr>
+</table>
+</div>
+<p>이 덱은 Node <span class="chip">24.19.0</span>에서 예제를 실행했으므로, 아래 <code class="nb">.ts</code> 예제는 모두 플래그 없이 돕니다.</p>
+<div class="warn"><b>tsconfig.json은 읽지 않습니다</b> &mdash; 문서가 &quot;의도적으로 지원하지 않는다&quot;고 못박습니다. <code>paths</code> 별칭도, 옛 문법으로의 변환도 없습니다. 확장자를 생략한 <code>import &#39;./file&#39;</code>도 안 되고 <code>import &#39;./file.ts&#39;</code>라고 적어야 합니다.</div>
+</article>
+
+<article class="card" id="ts-erasable">
+<h3>지울 수 있는 문법만 허용됩니다</h3>
+<p>공백으로 바꾸는 방식이라면, 자바스크립트 코드를 <b>새로 만들어야</b> 하는 문법은 원리상 불가능합니다. 문서의 표현으로는 &quot;TypeScript 문법을 새 자바스크립트 문법으로 <i>대체</i>하는 기능은 모두 오류&quot;입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>안 되는 문법</th><th>왜 안 되나</th></tr>
+<tr><td><code>enum</code> 선언</td><td>실행 시점 객체를 만들어야 합니다</td></tr>
+<tr><td>런타임 코드가 있는 <code>namespace</code></td><td>즉시 실행 함수로 펼쳐야 합니다</td></tr>
+<tr><td>매개변수 프로퍼티</td><td>생성자 안에 대입문을 넣어야 합니다</td></tr>
+<tr><td>import 별칭(<code>import =</code>)</td><td>모듈 문법으로 바꿔야 합니다</td></tr>
+<tr><td>데코레이터</td><td>아직 TC39 3단계 제안이라 파서 오류입니다</td></tr>
+</table>
+</div>
+<p>이 제약을 컴파일 시점에 미리 잡으라고, TypeScript 5.8이 같은 이름의 옵션을 넣었습니다. Node 문서가 권장하는 설정은 이렇습니다.</p>
+<p class="fname">tsconfig.json (Node 공식 문서 권장)</p>
+<pre><code data-lang="json" data-src="p12/15-tsconfig.json">{
+  "compilerOptions": {
+    "noEmit": true,
+    "target": "esnext",
+    "module": "nodenext",
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true
+  }
+}</code></pre>
+<div class="tip"><b>왜 5.8 이상인가</b> &mdash; <code class="nb">erasableSyntaxOnly</code>는 &quot;실행 시점 동작이 있는 TypeScript 고유 문법&quot;에 오류를 냅니다. 실행해 보고 나서 깨닫는 대신, 편집기에서 바로 빨간 줄이 그어집니다.</div>
+</article>
+
+<article class="card" id="ts-enum-error">
+<h3>enum을 쓰면 이렇게 멈춥니다</h3>
+<p>말로 하는 것보다 한 번 보는 편이 빠릅니다. 세 줄짜리 파일입니다.</p>
+<p class="fname">examples/p12/12-strip-types-limits.ts</p>
+<pre><code data-lang="ts" data-src="p12/12-strip-types-limits.ts">// 타입 스트리핑의 한계: enum 처럼 "실행 코드를 만들어야 하는" 문법은 그냥 실행하면 오류다
+enum Color { Red, Green }
+console.log(Color.Red);</code></pre>
+<pre class="term" data-out="p12/12-strip-types-limits.ts" data-lines="6-12"><span class="p">$</span> node examples/p12/12-strip-types-limits.ts
+file://~/dbdeck/examples/p12/12-strip-types-limits.ts:2
+// 타입 스트리핑의 한계: enum 처럼 "실행 코드를 만들어야 하는" 문법은 그냥 실행하면 오류다
+enum Color { Red, Green }
+^^^^^^^^^^^^^^^^^^^^^^^^^
+console.log(Color.Red);
+
+SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode</pre>
+<p class="cap">오류 메시지 뒤의 스택 추적은 줄였습니다. 종료 코드는 1입니다.</p>
+<div class="note"><b>읽는 법</b> &mdash; <code class="nb">ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX</code>는 &quot;타입 문제&quot;가 아니라 &quot;이 문법은 지울 수 없다&quot;는 뜻입니다. 타입 검사는 애초에 하지 않으므로, 타입이 틀려서 나는 오류는 여기서 절대 나오지 않습니다.</div>
+</article>
+
+<article class="card" id="ts-transform-types">
+<h3>탈출구가 있지만 값을 치릅니다</h3>
+<p>플래그 하나로 변환을 켤 수 있습니다. 그러면 <code>enum</code>과 매개변수 프로퍼티까지 코드로 바꿔 실행합니다.</p>
+<p class="fname">examples/p12/14-transform-types.sh</p>
+<pre><code data-lang="sh" data-src="p12/14-transform-types.sh"># 탈출구: --experimental-transform-types 를 주면 enum 도 코드로 바꿔 실행한다
+node --experimental-transform-types examples/p12/12-strip-types-limits.ts</code></pre>
+<pre class="term" data-out="p12/14-transform-types.sh"><span class="p">$</span> bash examples/p12/14-transform-types.sh
+0</pre>
+<p><code>Color.Red</code>가 <span class="chip">0</span>으로 찍혔습니다. 앞 슬라이드에서 멈추던 파일이 그대로 돕니다.</p>
+<div class="warn"><b>공짜가 아닙니다</b> &mdash; 이제 코드 생성이 일어나므로 줄 번호가 어긋나고, 그래서 이 플래그를 켜면 소스맵이 기본으로 함께 켜집니다. 게다가 이 플래그는 여전히 실험 단계입니다. 팀 코드라면 처음부터 지울 수 있는 문법만 쓰는 편이 싸게 먹힙니다.</div>
+</article>
+
+<article class="card" id="ts-param-props">
+<h3>이 덱이 실제로 걸린 자리 &mdash; 매개변수 프로퍼티</h3>
+<p class="lead">클래스에 의존성을 주입할 때 가장 흔히 쓰는 축약형이 하필 금지 목록에 있습니다.</p>
+<div class="g2">
+<div class="cmp bad"><h5>못 씁니다</h5><pre>constructor(private db: DatabaseSync) {}</pre></div>
+<div class="cmp good"><h5>이렇게 풀어 씁니다</h5><pre>private db: DatabaseSync;
+constructor(db: DatabaseSync) { this.db = db; }</pre></div>
+</div>
+<p>12부의 리포지토리 예제와 쿼리 빌더 예제도 이 제약을 그대로 안고 쓰였습니다. 축약형을 쓰지 못한 자국이 코드에 남아 있습니다.</p>
+<p class="fname">examples/p12/04-repository.ts</p>
+<pre><code data-lang="ts" data-src="p12/04-repository.ts" data-lines="8-9">  #insert; #byId; #all; #toggle;
+  constructor(db: DatabaseSync) {           // 주의: constructor(private db) 같은 매개변수 프로퍼티는 타입 스트리핑에서 못 쓴다</code></pre>
+<p class="fname">examples/p12/05-query-builder.ts</p>
+<pre><code data-lang="ts" data-src="p12/05-query-builder.ts" data-lines="8-9">  private table: string; private cols: (keyof T &amp; string)[];
+  constructor(table: string, cols: (keyof T &amp; string)[]) { this.table = table; this.cols = cols; }</code></pre>
+<p class="cap">04는 생성자가 받은 <code>db</code>를 필드로 남기지 않고 준비된 문장만 비공개 필드에 담았고, 05는 <code>table</code>·<code>cols</code>를 직접 선언한 뒤 생성자에서 대입합니다.</p>
+</article>
+
+<article class="card" id="ts-type-import">
+<h3>타입만 가져올 때는 <code>type</code>을 붙입니다</h3>
+<p>스트리핑은 파일 하나만 보고 타입을 지웁니다. 다른 모듈에 무엇이 있는지 모르므로, <b>이름만 보고</b> 지울지 남길지 정해야 합니다. 그래서 문서는 &quot;타입 임포트를 올바로 지우려면 <code>type</code> 키워드가 필요하다&quot;고 말합니다. 빠뜨리면 값 임포트로 보고 실행 시점 오류가 납니다.</p>
+<p class="fname">examples/p12/02-query-helper.ts</p>
+<pre><code data-lang="ts" data-src="p12/02-query-helper.ts" data-lines="2-2">import { DatabaseSync, type SQLInputValue } from 'node:sqlite';</code></pre>
+<p class="fname">examples/p12/07-duckdb-typed.ts</p>
+<pre><code data-lang="ts" data-src="p12/07-duckdb-typed.ts" data-lines="2-2">import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';</code></pre>
+<p><code class="nb">SQLInputValue</code>와 <code class="nb">DuckDBConnection</code>은 타입일 뿐 실행 시점에는 없는 이름입니다. <code>type</code>을 붙였으니 그 자리만 정확히 지워집니다.</p>
+<div class="tip"><b>컴파일러에게도 알려 주십시오</b> &mdash; <code class="nb">verbatimModuleSyntax</code>를 켜면 임포트 문이 있는 그대로 유지되고, 타입 임포트에 <code>type</code>을 빠뜨린 곳을 컴파일러가 짚어 줍니다.</div>
+</article>
+
+<article class="card" id="ts-toolchain">
+<h3>TypeScript를 실행하는 네 갈래</h3>
+<p>&quot;TypeScript를 실행한다&quot;는 말은 도구마다 뜻이 다릅니다. 핵심 차이는 하나, <b>타입 검사를 누가 언제 하는가</b>입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>도구</th><th>타입 검사</th><th>실행 방식</th></tr>
+<tr><td>Node 타입 스트리핑</td><td>하지 않습니다</td><td>공백 치환 후 바로 실행</td></tr>
+<tr><td><code class="nb">tsc</code></td><td>합니다 &mdash; 이것이 본업</td><td>자바스크립트를 내보냅니다</td></tr>
+<tr><td><code class="nb">tsx</code></td><td>&quot;스스로 하지 않습니다&quot;</td><td>esbuild로 변환해 실행</td></tr>
+<tr><td><code class="nb">ts-node</code></td><td>기본으로 합니다</td><td><code class="nb">transpileOnly</code>로 끌 수 있습니다</td></tr>
+</table>
+</div>
+<div class="key"><b>검사는 어차피 따로 돌립니다</b> &mdash; Node 공식 안내도 tsx에 대해 &quot;<code>tsc</code>로 먼저 타입을 검사하고 배포 전에 tsx로 실행하라&quot;고 권합니다. 스트리핑 실행 + <code>tsc --noEmit</code>을 CI에 두는 조합이 지금 가장 단순한 구성입니다.</div>
+<p class="cap">Node는 <code>node_modules</code> 아래의 <code class="nb">.ts</code> 파일 처리를 거부합니다. 패키지는 자바스크립트로 배포하라는 뜻입니다.</p>
+</article>
+
+<article class="card" id="ts-typed-rows">
+<h3>행에 이름을 붙입니다</h3>
+<p class="lead">첫걸음은 인터페이스 하나입니다. &quot;이 질의는 이런 모양의 행을 준다&quot;는 약속을 코드로 적습니다.</p>
+<p class="fname">examples/p12/01-typed-rows.ts</p>
+<pre><code data-lang="ts" data-src="p12/01-typed-rows.ts">// 행에 타입을 준다: node:sqlite 는 unknown 에 가까운 객체를 주므로 인터페이스로 "약속" 한다
+import { DatabaseSync } from 'node:sqlite';
+
+interface Product { id: number; name: string; category: string; price: number; stock: number }
+
+const db = new DatabaseSync('data/shop.db', { readOnly: true });
+const rows = db.prepare('SELECT * FROM products WHERE category = ? ORDER BY price DESC LIMIT 2').all('도서') as Product[];
+for (const p of rows) console.log(`${p.name}: ${p.price.toLocaleString('ko-KR')}원`);   // price 는 number 로 추론된다</code></pre>
+<pre class="term" data-out="p12/01-typed-rows.ts"><span class="p">$</span> node examples/p12/01-typed-rows.ts
+타입스크립트 입문: 199,000원
+DuckDB 실전: 129,000원</pre>
+<p><code>p.price</code>가 <code>number</code>로 추론되니 <code>toLocaleString</code>이 자동완성으로 나오고, <code>p.prize</code>라고 잘못 적으면 편집기가 바로 잡습니다. 이것만으로도 값이 있습니다.</p>
+<div class="warn"><b>약속일 뿐입니다</b> &mdash; <code>as Product[]</code>는 확인이 아니라 선언입니다. 질의가 <code>price</code>를 빼먹어도 컴파일러는 모릅니다. 그 틈을 다음 슬라이드들에서 메웁니다.</div>
+</article>
+
+<article class="card" id="ts-query-helper">
+<h3>캐스팅을 한 곳에 모읍니다</h3>
+<p>캐스팅이 코드 곳곳에 흩어지면, 스키마가 바뀔 때 고쳐야 할 자리를 찾을 수 없습니다. 제네릭 함수 두 개로 그 자리를 두 곳으로 줄입니다.</p>
+<p class="fname">examples/p12/02-query-helper.ts</p>
+<pre><code data-lang="ts" data-src="p12/02-query-helper.ts" data-lines="6-17">function query&lt;T&gt;(sql: string, ...params: SQLInputValue[]): T[] {
+  return db.prepare(sql).all(...params) as T[];
+}
+function one&lt;T&gt;(sql: string, ...params: SQLInputValue[]): T | undefined {
+  return db.prepare(sql).get(...params) as T | undefined;
+}
+
+type CityCount = { city: string; n: number };
+const top = query&lt;CityCount&gt;('SELECT city, count(*) AS n FROM customers GROUP BY city ORDER BY n DESC, city LIMIT 3');
+console.log(top.map(r =&gt; `${r.city}=${r.n}`).join(' '));
+const missing = one&lt;{ name: string }&gt;('SELECT name FROM customers WHERE id = ?', 9999);
+console.log(missing?.name ?? '(없음)');</code></pre>
+<pre class="term" data-out="p12/02-query-helper.ts"><span class="p">$</span> node examples/p12/02-query-helper.ts
+부산=9 울산=7 창원=7
+(없음)</pre>
+<p>호출부에는 <code>as</code>가 한 번도 나오지 않습니다. 타입 인자만 적으면 되고, <code>one&lt;T&gt;</code>는 없을 수도 있음을 <code>T | undefined</code>로 정직하게 말합니다. 그래서 <code>missing?.name</code>처럼 물음표를 붙이지 않으면 컴파일러가 막습니다.</p>
+<div class="key"><b>경계가 두 줄로 줄었습니다</b> &mdash; 위험한 캐스팅은 <code>query</code>와 <code>one</code> 안에만 있습니다. 검증을 넣기로 마음먹었을 때 고칠 곳도 그 두 줄뿐입니다.</div>
+</article>
+
+<article class="card" id="ts-as-lies">
+<h3><code>as</code>는 검사하지 않습니다</h3>
+<p class="lead">캐스팅은 컴파일러에게 &quot;믿어라&quot;라고 말하는 것입니다. 실행 시점에는 아무 일도 일어나지 않습니다.</p>
+<p class="fname">examples/p12/13-as-lies.ts</p>
+<pre><code data-lang="ts" data-src="p12/13-as-lies.ts">// as 는 검사가 아니라 선언이다 — 컴파일러에게 "믿어라"라고 말할 뿐, 실행 시점에는 아무 일도 하지 않는다
+import { DatabaseSync } from 'node:sqlite';
+
+type Order = { id: number; total: number };      // orders 에 total 이라는 열은 없다
+
+const db = new DatabaseSync('data/shop.db', { readOnly: true });
+const row = db.prepare('SELECT id, status FROM orders WHERE id = 1').get() as Order;
+console.log('실제로 온 것:', row);
+console.log('row.total 의 타입은 number 라고 적혀 있지만 →', row.total, typeof row.total);</code></pre>
+<pre class="term" data-out="p12/13-as-lies.ts"><span class="p">$</span> node examples/p12/13-as-lies.ts
+실제로 온 것: [Object: null prototype] { id: 1, status: 'paid' }
+row.total 의 타입은 number 라고 적혀 있지만 → undefined undefined</pre>
+<p><code>total</code>은 타입에서 <code>number</code>이고 편집기도 그렇게 안내하지만, 실제로는 <code>undefined</code>입니다. 이 값이 <code>total.toFixed(2)</code>까지 흘러가면 그제야 예외가 나고, 그 지점은 원인에서 한참 떨어져 있습니다.</p>
+<div class="warn"><b>가장 아픈 형태</b> &mdash; 질의문에서 열 하나를 빼거나 이름을 바꿨을 때입니다. 코드는 그대로 컴파일되고, 배포도 되고, 특정 화면에서만 <code>undefined</code>가 새어 나옵니다.</div>
+</article>
+
+<article class="card" id="ts-runtime-validation">
+<h3>타입은 사라지므로 실행 시점에 확인합니다</h3>
+<p>타입이 공백으로 지워진다는 사실이 여기서 실감납니다. 실행 중인 프로그램에는 <code>Customer</code>라는 것이 존재하지 않습니다. 그러니 DB에서 온 값이 그 모양인지 확인하려면, <b>확인하는 코드를 직접 남겨야</b> 합니다.</p>
+<p class="fname">examples/p12/03-runtime-validation.ts</p>
+<pre><code data-lang="ts" data-src="p12/03-runtime-validation.ts" data-lines="4-10">type Customer = { id: number; name: string; email: string; joined: string };
+
+function isCustomer(v: unknown): v is Customer {
+  const o = v as Record&lt;string, unknown&gt;;
+  return typeof o?.id === 'number' &amp;&amp; typeof o.name === 'string'
+      &amp;&amp; typeof o.email === 'string' &amp;&amp; /^\d{4}-\d{2}-\d{2}$/.test(String(o.joined));
+}</code></pre>
+<p>반환 타입이 <code>boolean</code>이 아니라 <code>v is Customer</code>인 것이 요점입니다. 이 <b>타입 술어</b>는 컴파일러에게 &quot;이 함수가 true를 주면 그 값은 <code>Customer</code>다&quot;라고 알려 줍니다. 확인은 실행 시점에 실제로 일어나고, 그 결과가 타입으로도 반영됩니다.</p>
+<div class="tip"><b>어디까지 검사할까</b> &mdash; 전부는 과합니다. 바깥에서 들어온 데이터, 스키마가 바뀔 수 있는 경계, 그리고 형식이 있는 문자열(위의 날짜 정규식)만 검사해도 사고의 대부분이 막힙니다.</div>
+</article>
+
+<article class="card" id="ts-narrowing">
+<h3><code>unknown</code>을 좁히는 자리를 하나로</h3>
+<p>검증 함수를 <code>filter</code>에 넘기면 배열의 타입까지 함께 좁혀집니다. 경계가 한 줄이 됩니다.</p>
+<p class="fname">examples/p12/03-runtime-validation.ts</p>
+<pre><code data-lang="ts" data-src="p12/03-runtime-validation.ts" data-lines="12-17">const db = new DatabaseSync('data/shop.db', { readOnly: true });
+const raw = db.prepare('SELECT id, name, email, joined FROM customers LIMIT 3').all();
+const good = raw.filter(isCustomer);
+console.log(`검증 통과 ${good.length}/${raw.length}`, good[0]);
+const broken: unknown = { id: '1', name: 'x' };
+console.log('깨진 객체:', isCustomer(broken));</code></pre>
+<pre class="term" data-out="p12/03-runtime-validation.ts"><span class="p">$</span> node examples/p12/03-runtime-validation.ts
+검증 통과 3/3 [Object: null prototype] {
+  id: 1,
+  name: '최민준',
+  email: 'user01@example.com',
+  joined: '2025-01-29'
+}
+깨진 객체: false</pre>
+<p><code>raw</code>는 이름 없는 객체 배열이지만 <code>good</code>은 <code>Customer[]</code>입니다. 깨진 객체는 <span class="badge err">false</span>로 걸러집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>좁히는 방법</th><th>쓰는 자리</th></tr>
+<tr><td><code>typeof x === &#39;number&#39;</code></td><td>원시값 하나</td></tr>
+<tr><td><code>&#39;id&#39; in obj</code></td><td>속성이 있는지</td></tr>
+<tr><td><code>Array.isArray(x)</code></td><td>배열인지</td></tr>
+<tr><td>타입 술어 <code>v is T</code></td><td>객체 한 덩어리</td></tr>
+<tr><td>판별 유니온의 <code>if (r.ok)</code></td><td>성공·실패 갈래</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="ts-const-enum">
+<h3>enum 대신 <code>as const</code> 객체</h3>
+<p><code>orders.status</code>처럼 값이 정해진 열은 enum이 딱 맞아 보이지만, 스트리핑에서는 쓸 수 없습니다. 대안이 오히려 더 낫습니다. 값이 <b>문자열 그대로</b>라 SQL 파라미터로 바로 갈 수 있기 때문입니다.</p>
+<p class="fname">examples/p12/09-const-enum.ts</p>
+<pre><code data-lang="ts" data-src="p12/09-const-enum.ts">// 타입 스트리핑에서는 enum 을 못 쓴다 — as const 객체 + 유니온 타입이 대안이고, 값도 그대로 SQL 에 간다
+import { DatabaseSync } from 'node:sqlite';
+
+const OrderStatus = { Pending: 'pending', Paid: 'paid', Shipped: 'shipped', Cancelled: 'cancelled' } as const;
+type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
+
+function countByStatus(db: DatabaseSync, status: OrderStatus): number {
+  return (db.prepare('SELECT count(*) AS n FROM orders WHERE status = ?').get(status) as { n: number }).n;
+}
+const db = new DatabaseSync('data/shop.db', { readOnly: true });
+for (const s of Object.values(OrderStatus)) console.log(s.padEnd(9), countByStatus(db, s));</code></pre>
+<pre class="term" data-out="p12/09-const-enum.ts"><span class="p">$</span> node examples/p12/09-const-enum.ts
+pending   54
+paid      577
+shipped   109
+cancelled 60</pre>
+<p>객체와 타입에 같은 이름을 쓴 것이 편리한 관용구입니다. <code>OrderStatus.Paid</code>는 값이고, <code>status: OrderStatus</code>는 <code>&#39;pending&#39; | &#39;paid&#39; | &#39;shipped&#39; | &#39;cancelled&#39;</code>라는 유니온입니다.</p>
+<div class="key"><b>DB 제약과 짝을 맞추십시오</b> &mdash; 스키마의 <code>CHECK (status IN (&hellip;))</code>과 이 유니온이 같은 네 값이어야 합니다. 한쪽만 늘리면 반대편에서 조용히 어긋납니다.</div>
+</article>
+
+<article class="card" id="ts-result-union">
+<h3>실패를 타입으로 돌려줍니다</h3>
+<p>예외는 시그니처에 나타나지 않습니다. 호출부가 처리를 잊어도 컴파일러가 아무 말도 하지 않습니다. 성공과 실패를 <b>판별 유니온</b>으로 돌려주면 그 누락이 컴파일 오류가 됩니다.</p>
+<p class="fname">examples/p12/08-result-union.ts</p>
+<pre><code data-lang="ts" data-src="p12/08-result-union.ts" data-lines="4-6">type Ok&lt;T&gt; = { ok: true; value: T };
+type Err = { ok: false; code: number; message: string };
+type Result&lt;T&gt; = Ok&lt;T&gt; | Err;</code></pre>
+<p class="fname">examples/p12/08-result-union.ts (이어서)</p>
+<pre><code data-lang="ts" data-src="p12/08-result-union.ts" data-lines="11-22">function insertUser(email: string): Result&lt;number&gt; {
+  try {
+    return { ok: true, value: Number(db.prepare('INSERT INTO u VALUES (?)').run(email).lastInsertRowid) };
+  } catch (e) {
+    const err = e as { errcode?: number; message: string };
+    return { ok: false, code: err.errcode ?? -1, message: err.message };
+  }
+}
+for (const r of [insertUser('a@x.com'), insertUser('a@x.com')]) {
+  if (r.ok) console.log('inserted id', r.value);
+  else console.log('failed', r.code, r.message);        // 여기서 r 은 Err 로 좁혀진다
+}</code></pre>
+<pre class="term" data-out="p12/08-result-union.ts"><span class="p">$</span> node examples/p12/08-result-union.ts
+inserted id 1
+failed 2067 UNIQUE constraint failed: u.email</pre>
+<p><code>ok</code>가 리터럴 타입 <code>true</code>·<code>false</code>이므로 <code>if (r.ok)</code> 한 줄에 갈래가 갈립니다. <code>else</code> 안에서 <code>r.value</code>를 적으면 컴파일 오류이고, <code>r.code</code>는 자동완성으로 나옵니다.</p>
+<div class="note"><b>어디에 쓰나</b> &mdash; 제약 위반처럼 <i>일어날 만한</i> 실패에 씁니다. 디스크 오류처럼 손쓸 수 없는 것까지 감싸면 코드만 늘어납니다.</div>
+</article>
+
+<article class="card" id="ts-duckdb-typed">
+<h3>DuckDB에도 같은 도우미를 씌웁니다</h3>
+<p>비동기라는 점만 다릅니다. <code>runAndReadAll</code>의 결과를 제네릭으로 감싸면 호출부 모양이 SQLite 쪽과 똑같아집니다.</p>
+<p class="fname">examples/p12/07-duckdb-typed.ts</p>
+<pre><code data-lang="ts" data-src="p12/07-duckdb-typed.ts" data-lines="1-14">// DuckDB 타입을 TS 타입으로: getRowObjectsJS 의 결과를 제네릭으로 받는 도우미
+import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';
+
+type Row = Record&lt;string, unknown&gt;;
+async function rows&lt;T extends Row&gt;(conn: DuckDBConnection, sql: string, params?: unknown[]): Promise&lt;T[]&gt; {
+  const r = await conn.runAndReadAll(sql, params as never);
+  return r.getRowObjectsJS() as T[];
+}
+
+type CategoryStat = { category: string; n: number; avg_price: number };   // count 는 INTEGER 로 캐스팅해야 number 로 온다
+const conn = await (await DuckDBInstance.create('data/shop.duckdb', { access_mode: 'READ_ONLY' })).connect();
+const stats = await rows&lt;CategoryStat&gt;(conn,
+  'SELECT category, count(*)::INTEGER AS n, round(avg(price))::INTEGER AS avg_price FROM products GROUP BY ALL ORDER BY avg_price DESC LIMIT 3');
+for (const s of stats) console.log(`${s.category.padEnd(4)} ${s.n}개 평균 ${s.avg_price.toLocaleString('ko-KR')}원`);</code></pre>
+<pre class="term" data-out="p12/07-duckdb-typed.ts" data-lines="1-3"><span class="p">$</span> node examples/p12/07-duckdb-typed.ts
+전자기기 8개 평균 125,375원
+식품   8개 평균 110,088원
+생활   8개 평균 82,600원</pre>
+<p><code>T extends Row</code>라는 제약이 &quot;행은 객체다&quot;를 못박아, 실수로 <code>rows&lt;number&gt;</code> 같은 것을 부를 수 없게 합니다.</p>
+<div class="tip"><b>집계 결과는 캐스팅해서 받으십시오</b> &mdash; <code>count(*)</code>는 <code class="nb">BIGINT</code>라 자바스크립트에서 <code>bigint</code>로 옵니다. <code>::INTEGER</code>를 붙여 <code>number</code>로 받아야 타입에 적은 <code>n: number</code>와 맞습니다.</div>
+</article>
+
+<article class="card" id="ts-bigint">
+<h3><code>bigint</code>는 섞이지 않습니다</h3>
+<p class="lead">자바스크립트가 정확히 다룰 수 있는 정수의 상한은 <span class="chip">9007199254740991</span>입니다. 그 위의 정수를 <code>number</code>로 받으면 조용히 값이 바뀝니다.</p>
+<p class="fname">examples/p12/07-duckdb-typed.ts</p>
+<pre><code data-lang="ts" data-src="p12/07-duckdb-typed.ts" data-lines="15-16">const big = await rows&lt;{ b: bigint }&gt;(conn, 'SELECT 9007199254740993::BIGINT AS b');
+console.log(typeof big[0].b, big[0].b);      // BIGINT 는 bigint 로 — number 로는 정밀도가 깨진다</code></pre>
+<pre class="term" data-out="p12/07-duckdb-typed.ts" data-lines="4-4"><span class="p">$</span> node examples/p12/07-duckdb-typed.ts
+bigint 9007199254740993n</pre>
+<p class="cap">앞 슬라이드와 같은 실행의 마지막 줄입니다.</p>
+<p>9007199254740993을 <code>number</code>로 받았다면 &hellip;992로 내려앉습니다. <code>bigint</code>로 오면 값이 보존되지만, 대신 <code>number</code>와 직접 더할 수 없고 <code>JSON.stringify</code>도 예외를 던집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>상황</th><th>이렇게 적습니다</th></tr>
+<tr><td>ID·금액처럼 큰 정수</td><td>타입도 <code>bigint</code>로 두고 끝까지 그대로</td></tr>
+<tr><td>집계 결과를 화면에 표시</td><td>SQL에서 <code>::INTEGER</code>로 좁혀 받기</td></tr>
+<tr><td>JSON 응답으로 내보내기</td><td>문자열로 변환해 담기</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="ts-type-map">
+<h3>DB 타입을 TS 타입으로 적는 표</h3>
+<p>인터페이스에 무엇이라고 적어야 하는지는 엔진이 정합니다. 아래는 이 덱에서 실제로 확인한 대응입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>SQLite 저장 클래스</th><th>읽으면 오는 값</th><th>TS로 적을 때</th></tr>
+<tr><td><code class="nb">NULL</code></td><td>null</td><td><code>string | null</code>처럼 유니온으로</td></tr>
+<tr><td><code class="nb">INTEGER</code></td><td>number(설정하면 bigint)</td><td><code>number</code></td></tr>
+<tr><td><code class="nb">REAL</code></td><td>number</td><td><code>number</code></td></tr>
+<tr><td><code class="nb">TEXT</code></td><td>string</td><td><code>string</code></td></tr>
+<tr><td><code class="nb">BLOB</code></td><td>Uint8Array</td><td><code>Uint8Array</code></td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>DuckDB 타입</th><th>getRowObjectsJS()</th><th>TS로 적을 때</th></tr>
+<tr><td><code class="nb">INTEGER</code></td><td>number</td><td><code>number</code></td></tr>
+<tr><td><code class="nb">BIGINT</code></td><td>bigint</td><td><code>bigint</code></td></tr>
+<tr><td><code class="nb">DECIMAL</code></td><td>number</td><td><code>number</code></td></tr>
+<tr><td><code class="nb">DATE</code></td><td>Date</td><td><code>Date</code></td></tr>
+<tr><td><code class="nb">LIST</code> · <code class="nb">STRUCT</code></td><td>배열 · 객체</td><td><code>number[]</code> · 인터페이스</td></tr>
+</table>
+</div>
+<div class="warn"><b>NULL을 빠뜨리기 쉽습니다</b> &mdash; <code>NOT NULL</code>이 아닌 열은 반드시 <code>| null</code>을 붙이십시오. 외부 조인의 결과 열도 마찬가지입니다.</div>
+</article>
+
+<article class="card" id="ts-repository">
+<h3>리포지토리 &mdash; SQL을 한 곳에 가둡니다</h3>
+<p class="lead">SQL이 화면 코드와 서비스 코드에 흩어지면 스키마를 바꿀 때마다 전수 조사를 해야 합니다. 표 하나에 클래스 하나를 두면 그 범위가 파일 하나로 닫힙니다.</p>
+<p class="fname">examples/p12/04-repository.ts</p>
+<pre><code data-lang="ts" data-src="p12/04-repository.ts" data-lines="7-20">class NoteRepo {
+  #insert; #byId; #all; #toggle;
+  constructor(db: DatabaseSync) {           // 주의: constructor(private db) 같은 매개변수 프로퍼티는 타입 스트리핑에서 못 쓴다
+    db.exec('CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0)');
+    this.#insert = db.prepare('INSERT INTO notes (body) VALUES (?) RETURNING *');
+    this.#byId = db.prepare('SELECT * FROM notes WHERE id = ?');
+    this.#all = db.prepare('SELECT * FROM notes ORDER BY id');
+    this.#toggle = db.prepare('UPDATE notes SET done = 1 - done WHERE id = ?');
+  }
+  add(body: string): Note { return this.#insert.get(body) as Note; }
+  get(id: number): Note | undefined { return this.#byId.get(id) as Note | undefined; }
+  list(): Note[] { return this.#all.all() as Note[]; }
+  toggle(id: number): boolean { return this.#toggle.run(id).changes === 1; }
+}</code></pre>
+<pre class="term" data-out="p12/04-repository.ts"><span class="p">$</span> node examples/p12/04-repository.ts
+true [Object: null prototype] { id: 1, body: '타입 붙이기', done: 1 }
+[ '1:타입 붙이기:1', '2:검증 넣기:0' ]</pre>
+<p>바깥에서 보이는 것은 <code>add</code>·<code>get</code>·<code>list</code>·<code>toggle</code> 네 메서드와 <code>Note</code> 타입뿐입니다. <code>as</code> 캐스팅도 전부 이 클래스 안에 있습니다.</p>
+<div class="key"><b>준비된 문장을 필드로</b> &mdash; 생성자에서 <code>prepare</code>를 한 번만 하고 비공개 필드(<code>#insert</code>)에 담아 둡니다. 질의마다 다시 준비하지 않으니 빠르고, 문장 목록이 곧 이 표의 접근 경로 목록이 됩니다.</div>
+</article>
+
+<article class="card" id="ts-query-builder">
+<h3>작은 쿼리 빌더 &mdash; <code>keyof</code>로 열 이름을 묶습니다</h3>
+<p>리포지토리로도 못 막는 것이 있습니다. 조건이 조합으로 늘어나는 목록 화면입니다. 이때 열 이름을 문자열로 이어 붙이면 오타가 실행 시점까지 살아남습니다. <code>keyof T &amp; string</code>이 그 오타를 컴파일 오류로 바꿉니다.</p>
+<p class="fname">examples/p12/05-query-builder.ts</p>
+<pre><code data-lang="ts" data-src="p12/05-query-builder.ts" data-lines="6-14">class Select&lt;T extends object&gt; {
+  private conds: string[] = []; private params: SQLInputValue[] = []; private order = ''; private lim = '';
+  private table: string; private cols: (keyof T &amp; string)[];
+  constructor(table: string, cols: (keyof T &amp; string)[]) { this.table = table; this.cols = cols; }
+  where(col: keyof T &amp; string, op: '=' | '&lt;' | '&gt;' | 'LIKE', v: SQLInputValue) {
+    this.conds.push(`${col} ${op} ?`); this.params.push(v); return this;
+  }
+  orderBy(col: keyof T &amp; string, dir: 'ASC' | 'DESC' = 'ASC') { this.order = ` ORDER BY ${col} ${dir}`; return this; }
+  limit(n: number) { this.lim = ` LIMIT ${Math.trunc(n)}`; return this; }</code></pre>
+<p><code>where(&#39;categoy&#39;, &hellip;)</code>라고 적으면 <code>Product</code>에 그런 키가 없으므로 컴파일되지 않습니다. 연산자도 <code>&#39;=&#39; | &#39;&lt;&#39; | &#39;&gt;&#39; | &#39;LIKE&#39;</code>로 못박혀 있어 아무 문자열이나 들어가지 못합니다.</p>
+<div class="warn"><b>열 이름과 값은 다릅니다</b> &mdash; 열 이름은 타입으로 막고, 값은 반드시 <code>?</code> 파라미터로 보냅니다. 값까지 문자열로 이어 붙이는 순간 인젝션 구멍이 됩니다.</div>
+</article>
+
+<article class="card" id="ts-builder-run">
+<h3>빌더가 만든 SQL을 눈으로 확인합니다</h3>
+<p>빌더를 만들 때는 <code>toSQL()</code>을 반드시 밖으로 꺼내 두십시오. 무엇이 만들어졌는지 볼 수 없는 빌더는 디버깅이 불가능합니다.</p>
+<p class="fname">examples/p12/05-query-builder.ts</p>
+<pre><code data-lang="ts" data-src="p12/05-query-builder.ts" data-lines="15-27">  toSQL() {
+    const w = this.conds.length ? ` WHERE ${this.conds.join(' AND ')}` : '';
+    return { sql: `SELECT ${this.cols.join(', ')} FROM ${this.table}${w}${this.order}${this.lim}`, params: this.params };
+  }
+  run(db: DatabaseSync): Pick&lt;T, typeof this.cols[number]&gt;[] {
+    const { sql, params } = this.toSQL();
+    return db.prepare(sql).all(...params) as Pick&lt;T, typeof this.cols[number]&gt;[];
+  }
+}
+
+const q = new Select&lt;Product&gt;('products', ['name', 'price']).where('category', '=', '도서').where('price', '&lt;', 50000).orderBy('price', 'DESC').limit(2);
+console.log(q.toSQL());
+console.log(q.run(new DatabaseSync('data/shop.db', { readOnly: true })));</code></pre>
+<pre class="term" data-out="p12/05-query-builder.ts"><span class="p">$</span> node examples/p12/05-query-builder.ts
+{
+  sql: 'SELECT name, price FROM products WHERE category = ? AND price &lt; ? ORDER BY price DESC LIMIT 2',
+  params: [ '도서', 50000 ]
+}
+[
+  [Object: null prototype] { name: '자바의 정석', price: 45000 },
+  [Object: null prototype] { name: '파이썬 완전 정복', price: 32000 }
+]</pre>
+<p>조건 두 개가 <code>AND</code>로 이어졌고, 값 <code>&#39;도서&#39;</code>와 <code>50000</code>은 SQL 문자열이 아니라 <code>params</code> 배열에 있습니다. 반환 타입은 <code>Pick&lt;T, &hellip;&gt;</code>이라 고른 두 열만 들어 있습니다.</p>
+<div class="tip"><b>여기까지가 손으로 만들 만한 범위입니다</b> &mdash; 조인·서브쿼리·집계까지 손으로 확장하기 시작하면 곧 라이브러리를 다시 만들게 됩니다. 그 지점이 오면 마지막 슬라이드의 도구들을 보십시오.</div>
+</article>
+
+<article class="card" id="ts-migrations">
+<h3>마이그레이션 러너를 손으로 만듭니다</h3>
+<p>스키마 변경은 &quot;아직 적용하지 않은 것만, 순서대로, 각각 원자적으로&quot; 적용해야 합니다. 이 세 조건만 지키면 러너는 짧습니다.</p>
+<ol class="steps">
+<li>적용 이력을 담을 <code class="nb">schema_version</code> 표를 만듭니다.</li>
+<li>현재 최대 버전을 읽습니다.</li>
+<li>그보다 큰 마이그레이션만 골라 버전 순으로 돕니다.</li>
+<li>각각을 트랜잭션으로 감싸고, 성공하면 이력에 한 줄 남깁니다.</li>
+</ol>
+<p class="fname">examples/p12/06-migrations.ts</p>
+<pre><code data-lang="ts" data-src="p12/06-migrations.ts" data-lines="10-23">function migrate(db: DatabaseSync): number[] {
+  db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, name TEXT, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)');
+  const current = (db.prepare('SELECT coalesce(max(version), 0) AS v FROM schema_version').get() as { v: number }).v;
+  const applied: number[] = [];
+  for (const m of migrations.filter(m =&gt; m.version &gt; current).sort((a, b) =&gt; a.version - b.version)) {
+    db.exec('BEGIN');
+    try {
+      db.exec(m.up);
+      db.prepare('INSERT INTO schema_version (version, name) VALUES (?, ?)').run(m.version, m.name);
+      db.exec('COMMIT'); applied.push(m.version);
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+  }
+  return applied;
+}</code></pre>
+<pre class="term" data-out="p12/06-migrations.ts"><span class="p">$</span> node examples/p12/06-migrations.ts
+1st run: [ 1, 2 ]
+2nd run: []
+[ 'id', 'name', 'email' ]</pre>
+<p>두 번째 실행에서는 적용할 것이 없어 빈 배열이 나옵니다. <b>여러 번 돌려도 결과가 같다</b>는 이 성질이 마이그레이션 러너의 핵심입니다.</p>
+<div class="warn"><b>SQLite에서는 DDL도 트랜잭션 안입니다</b> &mdash; 그래서 <code>BEGIN</code>&hellip;<code>COMMIT</code>이 실제로 의미가 있습니다. 다만 <code>ALTER TABLE</code>로 할 수 있는 일이 제한적이라, 열 제거 같은 변경은 표를 새로 만들어 옮기는 절차가 필요합니다.</div>
+</article>
+
+<article class="card" id="ts-with-transaction">
+<h3><code>withTransaction&lt;T&gt;</code> &mdash; 커밋을 잊지 못하게</h3>
+<p><code>BEGIN</code>과 <code>COMMIT</code>을 손으로 짝지으면 언젠가 한쪽을 빠뜨립니다. 특히 중간에 예외가 날 때 그렇습니다. 제네릭 도우미 하나가 그 짝을 대신 맞춰 줍니다.</p>
+<p class="fname">examples/p12/10-with-transaction.ts</p>
+<pre><code data-lang="ts" data-src="p12/10-with-transaction.ts" data-lines="4-8">function withTransaction&lt;T&gt;(db: DatabaseSync, fn: () =&gt; T): T {
+  db.exec('BEGIN');
+  try { const v = fn(); db.exec('COMMIT'); return v; }
+  catch (e) { db.exec('ROLLBACK'); throw e; }
+}</code></pre>
+<p class="fname">examples/p12/10-with-transaction.ts (이어서)</p>
+<pre><code data-lang="ts" data-src="p12/10-with-transaction.ts" data-lines="15-18">const after = withTransaction(db, () =&gt; { move.run(-30, 1); move.run(30, 2); return db.prepare('SELECT bal FROM acct WHERE id = 2').get(); });
+console.log('committed:', after);
+try { withTransaction(db, () =&gt; { move.run(-500, 1); }); } catch (e) { console.log('rolled back:', (e as Error).message); }
+console.log(db.prepare('SELECT * FROM acct').all());</code></pre>
+<pre class="term" data-out="p12/10-with-transaction.ts"><span class="p">$</span> node examples/p12/10-with-transaction.ts
+committed: [Object: null prototype] { bal: 30 }
+rolled back: CHECK constraint failed: bal &gt;= 0
+[
+  [Object: null prototype] { id: 1, bal: 70 },
+  [Object: null prototype] { id: 2, bal: 30 }
+]</pre>
+<p>타입 인자 <code>T</code> 덕분에 콜백이 돌려준 값이 그대로 밖으로 나옵니다. <code>after</code>는 <code>unknown</code>이 아니라 콜백의 반환 타입 그대로입니다.</p>
+<div class="key"><b>롤백은 실제로 일어났습니다</b> &mdash; <code class="nb">CHECK</code> 제약이 잔액을 음수로 만드는 갱신을 막았고, 계좌 잔액은 70과 30 그대로입니다. 예외를 삼키지 않고 다시 던지는 것도 중요합니다.</div>
+</article>
+
+<article class="card" id="ts-async-stream">
+<h3>비동기 이터레이터로 결과를 흘려보냅니다</h3>
+<p>결과가 커지면 전부 배열로 받는 순간 메모리가 터집니다. DuckDB의 스트리밍 결과를 <code>AsyncGenerator</code>로 감싸면, 호출부는 <code>for await</code> 한 줄로 청크를 소비합니다.</p>
+<p class="fname">examples/p12/11-async-stream.ts</p>
+<pre><code data-lang="ts" data-src="p12/11-async-stream.ts" data-lines="4-11">async function* stream&lt;T&gt;(conn: DuckDBConnection, sql: string): AsyncGenerator&lt;T[]&gt; {
+  const result = await conn.stream(sql);
+  for (;;) {
+    const chunk = await result.fetchChunk();
+    if (!chunk || chunk.rowCount === 0) return;
+    yield chunk.getRowObjects(result.deduplicatedColumnNames()) as T[];
+  }
+}</code></pre>
+<p class="fname">examples/p12/11-async-stream.ts (이어서)</p>
+<pre><code data-lang="ts" data-src="p12/11-async-stream.ts" data-lines="16-19">for await (const batch of stream&lt;Item&gt;(conn, 'SELECT id, qty * unit_price AS amount FROM order_items')) {
+  chunks++; for (const r of batch) total += r.amount;
+}
+console.log({ chunks, total });</code></pre>
+<pre class="term" data-out="p12/11-async-stream.ts"><span class="p">$</span> node examples/p12/11-async-stream.ts
+{ chunks: 1, total: 380646000 }</pre>
+<p>반환 타입 <code>AsyncGenerator&lt;T[]&gt;</code>가 &quot;<code>T</code>의 배열이 여러 번 온다&quot;는 뜻을 그대로 담습니다. 2,022행은 벡터 하나에 다 들어가므로 청크가 <span class="chip">1</span>개입니다.</p>
+<div class="note"><b>청크 단위가 곧 벡터입니다</b> &mdash; DuckDB는 행을 2,048개씩 묶어 처리합니다. 그래서 <code>fetchChunk</code>가 주는 덩어리 크기도 그 단위를 따릅니다.</div>
+</article>
+
+<article class="card" id="ts-helpers">
+<h3>12부에서 만든 제네릭 도우미 다섯</h3>
+<p>여기까지 만든 것을 모으면, 라이브러리 없이도 쓸 만한 얇은 층 하나가 됩니다. 전부 합쳐 서른 줄 남짓입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>도우미</th><th>시그니처의 요점</th><th>막아 주는 것</th></tr>
+<tr><td><code>query&lt;T&gt;</code> · <code>one&lt;T&gt;</code></td><td><code>T[]</code> · <code>T | undefined</code></td><td>흩어진 캐스팅, 없는 행 무시</td></tr>
+<tr><td><code>isCustomer</code></td><td><code>v is Customer</code></td><td>모양이 다른 데이터 유입</td></tr>
+<tr><td><code>Result&lt;T&gt;</code></td><td><code>Ok&lt;T&gt; | Err</code></td><td>처리하지 않은 실패</td></tr>
+<tr><td><code>withTransaction&lt;T&gt;</code></td><td><code>(db, () =&gt; T) =&gt; T</code></td><td>빠뜨린 커밋·롤백</td></tr>
+<tr><td><code>stream&lt;T&gt;</code></td><td><code>AsyncGenerator&lt;T[]&gt;</code></td><td>전부 배열로 받아 터지는 메모리</td></tr>
+</table>
+</div>
+<div class="key"><b>공통점</b> &mdash; 다섯 모두 <b>경계를 한 곳에 모으는</b> 장치입니다. 타입 인자는 호출부가 정하고, 위험한 변환과 자원 관리는 도우미 안에 갇힙니다.</div>
+</article>
+
+<article class="card" id="ts-libraries">
+<h3>더 나아가려면 &mdash; 세 가지 도구</h3>
+<p>스키마가 커지고 조인이 늘면, 손으로 적은 인터페이스가 실제 표와 어긋나기 시작합니다. 그때부터는 타입을 <b>스키마에서 만들어 내는</b> 도구가 값을 합니다. 셋 다 SQLite를 지원합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>도구</th><th>스스로 밝힌 성격</th><th>타입의 출처</th></tr>
+<tr><td>Kysely</td><td>&quot;타입 안전한 SQL 쿼리 빌더&quot;</td><td>손으로 적은 스키마 인터페이스</td></tr>
+<tr><td>Drizzle</td><td>&quot;머리 달린 헤드리스 TypeScript ORM&quot;</td><td>TypeScript로 적은 스키마 선언</td></tr>
+<tr><td>Prisma</td><td>&quot;스키마 하나. 모든 질의가 타입 안전&quot;</td><td>스키마 파일에서 클라이언트 생성</td></tr>
+</table>
+</div>
+<p>Kysely는 SQL의 모양을 그대로 두고 타입만 입힙니다. Drizzle은 SQL을 닮은 API에 마이그레이션 도구(Drizzle Kit)를 함께 줍니다. Prisma는 전용 스키마 파일을 두고 거기서 클라이언트와 마이그레이션을 만들어 냅니다.</p>
+<div class="warn"><b>스트리핑과의 궁합</b> &mdash; 생성 단계가 있는 도구는 실행 전에 생성 명령을 돌려야 합니다. &quot;빌드가 없다&quot;는 타입 스트리핑의 장점이 그만큼 줄어듭니다. 그 값이 아깝지 않을 만큼 스키마가 커졌는지가 판단 기준입니다.</div>
+</article>
+
+<article class="card" id="ts-summary">
+<h3>12부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>기억할 한 줄</th></tr>
+<tr><td>실행</td><td>Node 24는 타입을 공백으로 지우고 바로 실행합니다. 타입 검사는 하지 않습니다</td></tr>
+<tr><td>제약</td><td>enum·namespace·매개변수 프로퍼티·데코레이터는 못 씁니다</td></tr>
+<tr><td>임포트</td><td>타입만 가져올 때는 <code>type</code> 키워드를 붙입니다</td></tr>
+<tr><td>경계</td><td><code>as</code>는 선언일 뿐입니다. 확인이 필요하면 타입 술어로 실행 시점에 합니다</td></tr>
+<tr><td>구조</td><td>리포지토리로 SQL을 가두고, 제네릭 도우미로 캐스팅을 모읍니다</td></tr>
+</table>
+</div>
+<div class="key"><b>한 문장으로</b> &mdash; TypeScript는 DB가 무엇을 줄지 알지 못합니다. 그러니 &quot;안다&quot;고 선언한 자리를 최소한으로 줄이고, 그 자리에서만 실제로 확인하십시오.</div>
+<p class="cap">다음 13부에서는 백만 행을 놓고 실행 계획과 성능을 다룹니다. 언어가 아니라 엔진이 주인공이 됩니다.</p>
 </article>
 
 <!-- ===== part13.html (1장) ===== -->
