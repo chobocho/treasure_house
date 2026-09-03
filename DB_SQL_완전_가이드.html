@@ -3450,11 +3450,655 @@ join_rows  join_distinct
 <div class="key"><b>다음</b> — 5부에서는 이 질의들이 편해지는 <b>표의 모양</b>을 설계합니다. 정규화와 반정규화, 그리고 그 사이에서 무엇을 근거로 고를지를 다룹니다.</div>
 </article>
 
-<!-- ===== part05.html (1장) ===== -->
+<!-- ===== part05.html (30장) ===== -->
 <article class="card section" id="part5">
 <p class="chnum">5부</p>
 <h2>데이터 모델링</h2>
 <p class="chsub">요구사항에서 테이블까지 — 정규화와 그 반대, 이력과 마이그레이션</p>
+</article>
+
+<article class="card" id="mdl-why-design">
+<h3>표는 가장 늦게까지 남습니다</h3>
+<p class="lead">코드는 다음 배포로 되돌릴 수 있지만, 잘못 설계된 표가 만들어 낸 데이터는 되돌릴 수 없습니다.</p>
+<p>애플리케이션은 몇 번이고 다시 쓰입니다. 그동안 표에는 값이 계속 쌓입니다. 그래서 설계의 목표는 &quot;예쁜 그림&quot;이 아니라 <b>나중에 고칠 일을 줄이는 것</b>입니다. 순서를 지키면 고칠 일이 줄어듭니다.</p>
+<div class="flow"><span class="box">요구사항</span><span class="arr">→</span><span class="box">개념 (ER)</span><span class="arr">→</span><span class="box">논리 (표·키)</span><span class="arr">→</span><span class="box dim">물리 (인덱스·타입)</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>단계</th><th>답해야 할 질문</th><th>산출물</th></tr>
+<tr><td>요구사항</td><td>무엇을 기록하고, 무엇을 물어볼 것인가</td><td>문장 목록</td></tr>
+<tr><td>개념 설계</td><td>세상에 어떤 개체와 관계가 있는가</td><td>ER 모형</td></tr>
+<tr><td>논리 설계</td><td>그것을 어떤 표와 키로 적을 것인가</td><td>정규화된 스키마</td></tr>
+<tr><td>물리 설계</td><td>이 엔진에서 어떻게 빨라지는가</td><td>인덱스 · 타입 · 저장 옵션</td></tr>
+</table>
+</div>
+<div class="key"><b>순서가 중요한 이유</b> — 물리 설계는 언제든 바꿀 수 있습니다. 인덱스는 지웠다 다시 만들면 그만입니다. 하지만 논리 설계를 잘못하면 이미 쌓인 값을 옮겨야 합니다.</div>
+</article>
+
+<article class="card" id="mdl-er-notation">
+<h3>ER — 명사와 동사를 먼저 적습니다</h3>
+<p>개체-관계 모형(entity-relationship model)은 표를 그리기 전에 세상을 적는 언어입니다. 요구사항 문장에서 <b>명사</b>를 뽑으면 개체가 되고, <b>동사</b>를 뽑으면 관계가 됩니다. 그 관계가 몇 대 몇인지를 정하는 것이 카디널리티입니다.</p>
+<div class="satisfy"><div class="bx"><h6>말로 쓴 요구사항</h6>&quot;고객 한 명이 주문을 여러 번 한다&quot;</div><div class="mid">&#8646;</div><div class="bx"><h6>ER 조각</h6>고객 &mdash;(주문한다 1:N)&mdash; 주문</div></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>카디널리티</th><th>뜻</th><th>표로 옮기는 법</th></tr>
+<tr><td>1:1</td><td>양쪽 모두 짝이 최대 하나</td><td>한쪽에 <code>UNIQUE</code> 외래 키</td></tr>
+<tr><td>1:N</td><td>한쪽이 여럿을 가진다</td><td>N쪽 표에 외래 키</td></tr>
+<tr><td>N:M</td><td>양쪽 모두 여럿을 가진다</td><td>연결 표(junction table) 하나</td></tr>
+</table>
+</div>
+<div class="tip"><b>선택성도 함께</b> — &quot;반드시 있어야 하는가&quot;는 <code>NOT NULL</code>로, &quot;없을 수도 있는가&quot;는 널 허용으로 적습니다. 카디널리티만으로는 이 구분이 표에 남지 않습니다.</div>
+</article>
+
+<article class="card" id="mdl-er-shop">
+<h3>샘플 쇼핑몰을 ER로 읽으면</h3>
+<p>3부부터 쓰고 있는 다섯 표는 아래 네 문장에서 나왔습니다. 문장 하나가 관계 하나이고, 관계 하나가 외래 키 하나 또는 표 하나가 됩니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>요구사항 문장</th><th>관계</th><th>스키마에 남은 자리</th></tr>
+<tr><td>고객이 주문을 낸다</td><td>1:N</td><td><code class="nb">orders.customer_id</code></td></tr>
+<tr><td>주문에 상품이 여러 개 담긴다</td><td>N:M</td><td><code class="nb">order_items</code> 표</td></tr>
+<tr><td>주문 하나에 결제 하나</td><td>1:1</td><td><code class="nb">payments.order_id UNIQUE</code></td></tr>
+<tr><td>상품은 분류에 속한다</td><td>N:1</td><td><code class="nb">products.category</code></td></tr>
+</table>
+</div>
+<div class="flow"><span class="box">customers</span><span class="arr">1:N</span><span class="box">orders</span><span class="arr">1:N</span><span class="box">order_items</span><span class="arr">N:1</span><span class="box dim">products</span></div>
+<p class="cap">주문과 상품 사이의 N:M 관계가 <code class="nb">order_items</code>라는 표로 나타난 것에 주목하세요. 관계에 수량과 단가라는 자기 속성이 생기면서, 관계가 개체로 승격한 경우입니다.</p>
+</article>
+
+<article class="card" id="mdl-unnormalized">
+<h3>스프레드시트를 그대로 옮기면</h3>
+<p>엑셀에서는 한 칸에 &quot;이어폰 2개, 텀블러 1개&quot;라고 적어도 사람이 읽어 줍니다. 데이터베이스는 읽어 주지 않습니다. 한 칸이 문자열 하나일 뿐이라, 그 안을 뒤지는 방법은 문자열 검색밖에 없습니다.</p>
+<p class="fname">examples/p05/01-unnormalized.sql</p>
+<pre><code data-lang="sql" data-src="p05/01-unnormalized.sql">-- 정규화 전: 스프레드시트를 그대로 옮긴 표 — 한 칸에 여러 값, 같은 사실이 여러 행에 반복
+CREATE TABLE orders_flat (
+  order_id INTEGER, customer TEXT, customer_city TEXT,
+  items TEXT,            -- '무선 이어폰 x2, 텀블러 x1' 처럼 한 칸에 여러 상품
+  ordered_on TEXT
+);
+INSERT INTO orders_flat VALUES
+  (1, '최민준', '대전', '무선 이어폰 x2, 텀블러 500ml x1', '2024-01-05'),
+  (2, '최민준', '대전', '텀블러 500ml x3',                 '2024-01-09'),
+  (3, '윤하은', '제주', '무선 이어폰 x1',                  '2024-01-11');
+-- "텀블러를 산 주문"을 찾으려면 문자열 검색뿐이다
+SELECT order_id, customer FROM orders_flat WHERE items LIKE '%텀블러%';</code></pre>
+<pre class="term" data-out="p05/01-unnormalized.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/01-unnormalized.sql
+order_id  customer
+--------  --------
+       1  최민준
+       2  최민준</pre>
+<div class="warn"><b>이 표가 못 하는 일</b> — 상품별 판매 수량 합계를 낼 수 없고, 인덱스를 걸 수 없고, &quot;텀블러&quot;라는 글자가 상품명인지 메모인지 구별할 수 없습니다.</div>
+</article>
+
+<article class="card" id="mdl-1nf">
+<h3>1정규형 — 한 칸에 값 하나</h3>
+<p>1정규형(1NF)은 모든 칸이 더 쪼갤 수 없는 <b>원자값</b>이고, 표에 기본 키가 있다는 조건입니다. 목록을 칸 안에 두는 대신 행으로 펴면, 문자열 검색이 집계와 조인으로 바뀝니다.</p>
+<p class="fname">examples/p05/02-1nf.sql</p>
+<pre><code data-lang="sql" data-src="p05/02-1nf.sql">-- 1NF: 한 칸에는 값 하나 — 상품 목록을 행으로 편다 (원자값 + 기본 키)
+CREATE TABLE order_lines (
+  order_id INTEGER, customer TEXT, customer_city TEXT,
+  product TEXT, qty INTEGER, ordered_on TEXT,
+  PRIMARY KEY (order_id, product)
+);
+INSERT INTO order_lines VALUES
+  (1, '최민준', '대전', '무선 이어폰',   2, '2024-01-05'),
+  (1, '최민준', '대전', '텀블러 500ml',  1, '2024-01-05'),
+  (2, '최민준', '대전', '텀블러 500ml',  3, '2024-01-09'),
+  (3, '윤하은', '제주', '무선 이어폰',   1, '2024-01-11');
+SELECT product, sum(qty) AS total_qty FROM order_lines GROUP BY product;</code></pre>
+<pre class="term" data-out="p05/02-1nf.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/02-1nf.sql
+  product     total_qty
+------------  ---------
+무선 이어폰           3
+텀블러 500ml          4</pre>
+<div class="key"><b>얻은 것</b> — <code>GROUP BY product</code> 한 줄로 상품별 합계가 나옵니다. 앞 슬라이드의 표에서는 이 질의를 쓸 방법이 아예 없었습니다.</div>
+</article>
+
+<article class="card" id="mdl-anomalies">
+<h3>세 가지 이상(anomaly)</h3>
+<p>1NF까지 왔지만 고객의 도시가 주문 행마다 복사되어 있습니다. 같은 사실이 여러 곳에 적혀 있으면, 한 곳만 고쳤을 때 데이터가 서로 다른 말을 하기 시작합니다.</p>
+<p class="fname">examples/p05/03-update-anomaly.sql</p>
+<pre><code data-lang="sql" data-src="p05/03-update-anomaly.sql">-- 갱신 이상: 고객 도시가 주문 행마다 복사돼 있어, 한 행만 고치면 사실이 둘로 갈린다
+CREATE TABLE order_lines (order_id INTEGER, customer TEXT, customer_city TEXT, product TEXT, qty INTEGER);
+INSERT INTO order_lines VALUES (1, '최민준', '대전', '무선 이어폰', 2), (2, '최민준', '대전', '텀블러 500ml', 3);
+UPDATE order_lines SET customer_city = '세종' WHERE order_id = 1;   -- 이사했다
+SELECT customer, customer_city, count(*) AS rows_saying_so
+FROM order_lines GROUP BY customer, customer_city;</code></pre>
+<pre class="term" data-out="p05/03-update-anomaly.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/03-update-anomaly.sql
+customer  customer_city  rows_saying_so
+--------  -------------  --------------
+최민준    대전                        1
+최민준    세종                        1</pre>
+<p>한 사람이 두 도시에 삽니다. 이런 문제는 세 얼굴로 나타납니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이상</th><th>언제</th><th>증상</th></tr>
+<tr><td>삽입 이상</td><td>주문하지 않은 고객을 등록할 때</td><td>주문 행이 없어 고객을 적을 자리가 없습니다</td></tr>
+<tr><td>갱신 이상</td><td>고객이 이사했을 때</td><td>모든 주문 행을 빠짐없이 고쳐야 합니다</td></tr>
+<tr><td>삭제 이상</td><td>마지막 주문을 취소할 때</td><td>고객 정보까지 함께 사라집니다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="mdl-fd">
+<h3>함수 종속 — 정규화의 문법</h3>
+<p>정규화는 감이 아니라 규칙입니다. 그 규칙의 유일한 재료가 <b>함수 종속(functional dependency)</b>입니다. &quot;X를 알면 Y가 하나로 정해진다&quot;를 <code>X &rarr; Y</code>로 적습니다.</p>
+<div class="sig"><u>customer_id</u><span class="lbl">결정자</span> &rarr; <u>name, city</u><span class="lbl">종속자</span></div>
+<p>이 화살표는 값이 아니라 <b>규칙</b>에 대한 주장입니다. 지금 데이터가 우연히 그렇다는 뜻이 아니라, 앞으로도 그래야 한다는 뜻입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>종속</th><th>읽는 법</th><th>참인가</th></tr>
+<tr><td><code>id &rarr; name</code></td><td>고객 번호를 알면 이름이 정해진다</td><td><span class="badge ok">참</span></td></tr>
+<tr><td><code>name &rarr; id</code></td><td>이름을 알면 고객 번호가 정해진다</td><td><span class="badge err">거짓</span> 동명이인</td></tr>
+<tr><td><code>(order_id, product_id) &rarr; qty</code></td><td>어느 주문의 어느 상품인지 알면 수량이 정해진다</td><td><span class="badge ok">참</span></td></tr>
+</table>
+</div>
+<div class="note"><b>후보 키의 정의</b> — 표의 모든 속성을 결정하면서 더는 줄일 수 없는 속성 묶음이 후보 키입니다. 정규형 판정은 &quot;어떤 종속이 후보 키에서 출발하는가&quot;를 묻는 일입니다.</div>
+</article>
+
+<article class="card" id="mdl-2nf-3nf">
+<h3>2정규형과 3정규형 — 사실을 제자리로</h3>
+<p>2NF는 &quot;키의 <b>일부</b>에만 딸린 사실&quot;을, 3NF는 &quot;키가 <b>아닌</b> 열에 딸린 사실&quot;을 밖으로 내보냅니다. 둘 다 목적은 같습니다. 사실 하나가 오직 한 곳에만 적히게 하는 것입니다.</p>
+<p class="fname">examples/p05/04-2nf-3nf.sql</p>
+<pre><code data-lang="sql" data-src="p05/04-2nf-3nf.sql" data-lines="2-7">CREATE TABLE customers   (id INTEGER PRIMARY KEY, name TEXT NOT NULL, city TEXT);
+CREATE TABLE products    (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, price INTEGER NOT NULL);
+CREATE TABLE orders      (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id),
+                          ordered_on TEXT NOT NULL);
+CREATE TABLE order_items (order_id INTEGER REFERENCES orders(id), product_id INTEGER REFERENCES products(id),
+                          qty INTEGER NOT NULL CHECK (qty &gt; 0), PRIMARY KEY (order_id, product_id));</code></pre>
+<p>고객의 도시는 <code class="nb">customers</code>에만 있습니다. 이사 한 번에 <code>UPDATE</code> 한 행이면 끝나고, 조인이 나머지를 채워 줍니다.</p>
+<pre><code data-lang="sql" data-src="p05/04-2nf-3nf.sql" data-lines="12-16">UPDATE customers SET city = '세종' WHERE id = 1;          -- 이제 한 곳만 고친다
+SELECT o.id AS order_id, c.name, c.city, p.name AS product, oi.qty
+FROM orders o JOIN customers c ON c.id = o.customer_id
+JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id
+ORDER BY o.id, p.id;</code></pre>
+<pre class="term" data-out="p05/04-2nf-3nf.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/04-2nf-3nf.sql
+order_id   name   city    product     qty
+--------  ------  ----  ------------  ---
+       1  최민준  세종  무선 이어폰     2
+       1  최민준  세종  텀블러 500ml    1
+       2  최민준  세종  텀블러 500ml    3
+       3  윤하은  제주  무선 이어폰     1</pre>
+<div class="key"><b>한 줄 요약</b> — 3NF까지의 정규화란 &quot;모든 비키 속성이 키에, 키 전체에, 키에만 의존한다&quot;는 상태를 만드는 일입니다.</div>
+</article>
+
+<article class="card" id="mdl-bcnf">
+<h3>BCNF — 3정규형이 놓치는 자리</h3>
+<p>3NF는 &quot;키가 아닌 열에 딸린 사실&quot;만 봅니다. 그래서 종속자가 <b>키의 일부</b>이면 그냥 넘어갑니다. 보이스-코드 정규형(BCNF)은 그 예외를 없애고, 모든 결정자가 슈퍼키일 것을 요구합니다.</p>
+<p>고전적인 예는 수강 표입니다. 학생(S) · 과목(C) · 교수(P) 세 열에, 교수는 과목을 하나만 가르친다고 합시다.</p>
+<div class="sig"><u>S C</u><span class="lbl">후보 키</span> &rarr; P    /    <u>P</u><span class="lbl">슈퍼키가 아니다</span> &rarr; C</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>확인</th><th>결과</th></tr>
+<tr><td>후보 키</td><td>(S, C)와 (S, P) 둘 다 후보 키입니다</td></tr>
+<tr><td>3NF인가</td><td><span class="badge ok">예</span> 모든 속성이 어느 후보 키엔가 들어 있습니다</td></tr>
+<tr><td>BCNF인가</td><td><span class="badge err">아니오</span> <code>P &rarr; C</code>의 P가 슈퍼키가 아닙니다</td></tr>
+<tr><td>증상</td><td>교수가 담당 과목을 바꾸면 수강 행을 전부 고쳐야 합니다</td></tr>
+</table>
+</div>
+<div class="tip"><b>해법과 대가</b> — (P, C)를 따로 떼면 BCNF가 됩니다. 다만 &quot;한 과목에 배정된 학생&quot; 같은 원래 종속을 한 표에서 검사할 수 없게 되는 경우가 있어, 실무에서는 3NF에 머무는 선택도 흔합니다.</div>
+</article>
+
+<article class="card" id="mdl-normalize-demo">
+<h3>정규형 판정기</h3>
+<p>정규형 판정은 계산입니다. 함수 종속 목록만 있으면 후보 키를 구하고 위반을 찾는 절차가 기계적으로 정해집니다. 아래 상자에 종속을 넣어 직접 확인해 보세요.</p>
+<div class="demo" data-demo="normalize-quiz"><h5>정규형 판정기 &mdash; 함수 종속을 넣으면 후보 키와 최고 정규형을 계산합니다</h5><div class="row"><input type="text" data-fds value="AB->C, B->D" style="width:16em"><button data-run>판정</button><button class="sec" data-reset>초기화</button></div><div class="out"></div></div>
+<p class="cap">속성은 한 글자 대문자로 씁니다(예: <code>A-&gt;B, AB-&gt;C</code>). 여덟 개까지 받습니다. 앞 슬라이드의 수강 표는 <code>SC-&gt;P, P-&gt;C</code>로 넣으면 됩니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>판정</th><th>뜻</th></tr>
+<tr><td>1NF</td><td>키의 일부에만 딸린 종속(부분 종속)이 남아 있습니다</td></tr>
+<tr><td>2NF</td><td>부분 종속은 없지만, 키가 아닌 열에 딸린 종속(이행 종속)이 있습니다</td></tr>
+<tr><td>3NF</td><td>이행 종속은 없지만, 슈퍼키가 아닌 결정자가 있습니다</td></tr>
+<tr><td>BCNF</td><td>모든 자명하지 않은 종속의 결정자가 슈퍼키입니다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="mdl-nf-summary">
+<h3>정규형 다섯 줄 요약</h3>
+<p>각 정규형은 앞 단계를 포함합니다. 아래로 갈수록 조건이 강해지고, 같은 사실이 두 곳에 적힐 여지가 줄어듭니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>정규형</th><th>조건</th><th>없애는 문제</th></tr>
+<tr><td>비정규형</td><td>한 칸에 여러 값이 들어 있다</td><td>&mdash;</td></tr>
+<tr><td>1NF</td><td>모든 칸이 원자값이고 기본 키가 있다</td><td>문자열 안을 뒤지는 질의</td></tr>
+<tr><td>2NF</td><td>1NF + 부분 종속이 없다</td><td>복합 키의 일부에 딸린 중복</td></tr>
+<tr><td>3NF</td><td>2NF + 이행 종속이 없다</td><td>비키 열에 딸린 중복</td></tr>
+<tr><td>BCNF</td><td>모든 결정자가 슈퍼키다</td><td>후보 키가 겹칠 때 남는 중복</td></tr>
+</table>
+</div>
+<div class="note"><b>그 위</b> — 4NF는 서로 무관한 다중 값 속성이 한 표에 섞인 경우(다치 종속), 5NF는 세 갈래 이상으로 쪼개야만 사라지는 중복(조인 종속)을 다룹니다. 실무에서 직접 판정할 일은 드물어 이름만 알아 두면 충분합니다.</div>
+</article>
+
+<article class="card" id="mdl-price-snapshot">
+<h3>일부러 베껴 두는 값도 있습니다</h3>
+<p>정규화의 규칙은 &quot;같은 사실을 두 번 적지 말라&quot;입니다. 그런데 주문서에 적힌 단가와 상품표의 현재 가격은 <b>같은 사실이 아닙니다</b>. 하나는 그때의 값이고 하나는 지금의 값입니다. 그래서 <code class="nb">order_items.unit_price</code>는 중복이 아니라 스냅숏입니다.</p>
+<p class="fname">examples/p05/05-price-snapshot.sql</p>
+<pre><code data-lang="sql" data-src="p05/05-price-snapshot.sql">-- 의도적 반정규화: 주문 당시 단가는 products.price 를 참조하면 안 된다 — 값이 바뀌기 때문
+SELECT oi.order_id, p.name, oi.unit_price AS price_then, p.price AS price_now
+FROM order_items AS oi JOIN products AS p ON p.id = oi.product_id
+WHERE oi.order_id = 1;
+UPDATE products SET price = 99000 WHERE id = (SELECT product_id FROM order_items WHERE order_id = 1 LIMIT 1);
+SELECT oi.order_id, p.name, oi.unit_price AS price_then, p.price AS price_now
+FROM order_items AS oi JOIN products AS p ON p.id = oi.product_id
+WHERE oi.order_id = 1;</code></pre>
+<pre class="term" data-out="p05/05-price-snapshot.sql" data-lines="7-12"><span class="p">$</span> sqlite3 -header -column $TMP/shop.db &lt; examples/p05/05-price-snapshot.sql
+order_id           name           price_then  price_now
+--------  ----------------------  ----------  ---------
+       1  데이터베이스 내부 구조        9900      99000
+       1  자바의 정석                  45000      45000
+       1  탁상 스탠드                 349000     349000
+       1  타입스크립트 입문           199000     199000</pre>
+<p>가격을 99,000원으로 올린 뒤에도 <code class="nb">price_then</code>은 9,900원 그대로입니다. 상품표만 참조했다면 지난달 매출이 오늘 바뀌었을 것입니다.</p>
+<div class="key"><b>판단 기준</b> — &quot;이 값이 나중에 바뀌면 과거 기록도 함께 바뀌어야 하는가&quot;를 물으세요. 아니라면 그 값은 복사해서 얼려 두어야 합니다.</div>
+</article>
+
+<article class="card" id="mdl-denorm-checklist">
+<h3>언제 반정규화하나</h3>
+<p>반정규화는 정규화의 반대가 아니라 <b>정규화 다음에 하는 일</b>입니다. 정규화된 스키마를 먼저 만들고, 측정한 뒤에, 근거를 적고 되돌립니다. 순서를 바꾸면 그냥 잘못 설계한 표가 됩니다.</p>
+<ol class="steps">
+<li>정규화된 스키마로 먼저 만듭니다.</li>
+<li>실제 질의와 실제 데이터 양으로 <b>측정</b>합니다. 느리다는 느낌은 근거가 아닙니다.</li>
+<li>인덱스 · 질의 수정 · 뷰로 먼저 해결해 봅니다. 대부분 여기서 끝납니다.</li>
+<li>그래도 부족하면 중복을 도입하되, <b>동기화 책임을 어디에 둘지</b>(트리거 · 배치 · 애플리케이션) 함께 정합니다.</li>
+<li>결정과 근거를 스키마 주석에 남깁니다.</li>
+</ol>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>정당한 중복</th><th>위험한 중복</th></tr>
+<tr><td>과거 시점을 얼린 값 (주문 단가)</td><td>지금 값을 그냥 베낀 열 (고객 도시)</td></tr>
+<tr><td>계산 비용이 큰 집계의 캐시</td><td>&quot;조인이 귀찮아서&quot; 붙인 열</td></tr>
+</table>
+</div>
+<div class="warn"><b>대가는 항상 갱신 쪽</b> — 중복은 읽기를 빠르게 하고 쓰기를 느리고 위험하게 만듭니다. 읽기가 압도적으로 많을 때만 이득입니다.</div>
+</article>
+
+<article class="card" id="mdl-surrogate-natural">
+<h3>대리 키 vs 자연 키</h3>
+<p>자연 키는 이미 뜻이 있는 값(이메일, 주민번호, 상품 코드)을 키로 쓰는 것이고, 대리 키는 뜻이 없는 번호를 새로 만드는 것입니다. 차이는 <b>값이 바뀔 때</b> 드러납니다.</p>
+<p class="fname">examples/p05/06-surrogate-natural.sql</p>
+<pre><code data-lang="sql" data-src="p05/06-surrogate-natural.sql">-- 대리 키 vs 자연 키: 이메일을 키로 쓰면 이메일이 바뀔 때 참조가 전부 깨진다
+CREATE TABLE members (email TEXT PRIMARY KEY, name TEXT);
+CREATE TABLE posts (id INTEGER PRIMARY KEY, author_email TEXT REFERENCES members(email), title TEXT);
+PRAGMA foreign_keys = ON;
+INSERT INTO members VALUES ('a@x.com', '민준');
+INSERT INTO posts (author_email, title) VALUES ('a@x.com', '첫 글');
+UPDATE members SET email = 'b@x.com' WHERE email = 'a@x.com';   -- 자식이 가리키는 값이라 거부된다</code></pre>
+<pre class="term" data-out="p05/06-surrogate-natural.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/06-surrogate-natural.sql
+--- stderr ---
+Error near line 7: FOREIGN KEY constraint failed
+[exit 1]</pre>
+<p>이메일 하나 바꾸는 일이 외래 키 위반이 되었습니다. <code>ON UPDATE CASCADE</code>로 자식까지 함께 고칠 수는 있지만, 그 값이 여러 표에 퍼져 있다면 갱신 비용이 그만큼 늘어납니다.</p>
+<div class="tip"><b>실무 기본값</b> — 뜻 없는 정수 대리 키를 기본 키로 두고, 이메일 같은 자연 키에는 <code>UNIQUE</code>를 겁니다. 유일성은 지키되 참조는 흔들리지 않습니다.</div>
+</article>
+
+<article class="card" id="mdl-uuid-vs-int">
+<h3>UUID인가 정수인가</h3>
+<p>대리 키를 정했다면 다음 질문은 &quot;누가 번호를 매기는가&quot;입니다. 정수 자동 증가는 데이터베이스가, UUID는 클라이언트가 매길 수 있습니다. 이 차이가 나머지 전부를 결정합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기준</th><th>정수 자동 증가</th><th>UUID</th></tr>
+<tr><td>크기</td><td>4&ndash;8바이트</td><td>16바이트 (문자열이면 36)</td></tr>
+<tr><td>발급 주체</td><td>DB (삽입해야 알 수 있다)</td><td>어디서든 미리 만든다</td></tr>
+<tr><td>인덱스 지역성</td><td>끝에만 붙어 좋다</td><td>v4는 흩어져 나쁘다</td></tr>
+<tr><td>추측 가능성</td><td>URL에 노출하면 셀 수 있다</td><td>추측이 사실상 불가능</td></tr>
+<tr><td>병합</td><td>두 DB를 합치면 충돌</td><td>충돌하지 않는다</td></tr>
+</table>
+</div>
+<div class="note"><b>UUIDv7</b> — RFC 9562(2024년 5월)는 앞자리에 유닉스 밀리초 시각을 넣은 UUIDv7을 정의합니다. 표준은 &quot;시간순 UUID는 새 값이 인덱스에서 서로 가까이 놓여 지역성이 좋아진다&quot;고 설명합니다. DuckDB에는 <code>uuidv7()</code> 함수가 있고, <code>uuid()</code>·<code>gen_random_uuid()</code>·<code>uuidv4()</code>는 무작위 v4를 돌려줍니다.</div>
+<div class="warn"><b>SQLite에는 UUID 타입이 없습니다</b> — 16바이트 <code>BLOB</code>이나 텍스트로 직접 저장해야 합니다. 텍스트 36자로 넣으면 인덱스가 정수 키의 몇 배로 커집니다.</div>
+</article>
+
+<article class="card" id="mdl-composite-key">
+<h3>복합 키 — 순서가 곧 인덱스입니다</h3>
+<p>두 열이 함께여야 행 하나를 지목하는 경우가 있습니다. 연결 표의 <code>(post_id, tag_id)</code>, 수강 표의 <code>(student_id, course_id)</code>가 그렇습니다. 이때 기본 키는 유일성 제약인 동시에 <b>인덱스</b>이고, 인덱스는 적은 순서대로 정렬됩니다.</p>
+<p class="fname">examples/p05/17-composite-key.sql</p>
+<pre><code data-lang="sql" data-src="p05/17-composite-key.sql">-- 복합 키: 두 열이 함께 행 하나를 지목한다. 그리고 열의 순서가 곧 인덱스의 순서다
+CREATE TABLE enrollments (
+  student_id INTEGER, course_id INTEGER, enrolled_on TEXT NOT NULL,
+  PRIMARY KEY (student_id, course_id)
+) WITHOUT ROWID;
+INSERT INTO enrollments VALUES (1, 10, '2026-03-02'), (1, 20, '2026-03-02'),
+                               (2, 10, '2026-03-03');
+EXPLAIN QUERY PLAN SELECT * FROM enrollments WHERE student_id = 1;   -- 앞 열: 탐색
+EXPLAIN QUERY PLAN SELECT * FROM enrollments WHERE course_id = 10;   -- 뒤 열만: 전체 스캔</code></pre>
+<pre class="term" data-out="p05/17-composite-key.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/17-composite-key.sql
+QUERY PLAN
+`--SEARCH enrollments USING PRIMARY KEY (student_id=?)
+QUERY PLAN
+`--SCAN enrollments</pre>
+<p>앞 열로 찾으면 <span class="badge ok">SEARCH</span>, 뒤 열만으로 찾으면 <span class="badge err">SCAN</span>입니다. 전화번호부를 성으로는 찾을 수 있지만 이름만으로는 못 찾는 것과 같습니다.</p>
+<div class="tip"><b>순서 정하는 법</b> — 자주 단독으로 조회하는 열을 앞에 둡니다. 뒤 열로도 자주 찾는다면 <code>(course_id, student_id)</code> 인덱스를 하나 더 만듭니다.</div>
+</article>
+
+<article class="card" id="mdl-history-table">
+<h3>이력 표 — 덮어쓰지 않고 쌓습니다</h3>
+<p><code>UPDATE</code>는 과거를 지웁니다. 가격이 바뀐 뒤에는 어제 얼마였는지 물어볼 방법이 없습니다. 값이 바뀔 때마다 새 행을 넣고 유효 기간을 붙이는 방식을 데이터 웨어하우스에서는 <b>SCD 2형</b>(느리게 변하는 차원)이라고 부릅니다.</p>
+<p class="fname">examples/p05/07-history-table.sql</p>
+<pre><code data-lang="sql" data-src="p05/07-history-table.sql" data-lines="2-10">CREATE TABLE product_price_hist (
+  product_id INTEGER, price INTEGER,
+  valid_from TEXT NOT NULL, valid_to TEXT,             -- NULL = 현재 유효
+  PRIMARY KEY (product_id, valid_from)
+);
+INSERT INTO product_price_hist VALUES
+  (1, 15000, '2024-01-01', '2024-06-30'),
+  (1, 17000, '2024-07-01', '2025-02-28'),
+  (1, 16000, '2025-03-01', NULL);</code></pre>
+<pre><code data-lang="sql" data-src="p05/07-history-table.sql" data-lines="11-16">-- 2024-09-15 에 유효했던 가격은?
+SELECT price FROM product_price_hist
+WHERE product_id = 1 AND valid_from &lt;= '2024-09-15'
+  AND (valid_to IS NULL OR valid_to &gt;= '2024-09-15');
+-- 현재 가격은?
+SELECT price AS current_price FROM product_price_hist WHERE product_id = 1 AND valid_to IS NULL;</code></pre>
+<pre class="term" data-out="p05/07-history-table.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/07-history-table.sql
+price
+-----
+17000
+current_price
+-------------
+        16000</pre>
+<div class="key"><b>핵심 두 가지</b> — 기본 키에 <code class="nb">valid_from</code>이 들어가야 같은 대상의 여러 시점이 공존할 수 있고, 열려 있는 구간(<code>valid_to IS NULL</code>)은 대상마다 정확히 하나여야 합니다.</div>
+</article>
+
+<article class="card" id="mdl-valid-range">
+<h3>유효 기간으로 조인하기</h3>
+<p>이력 표의 값어치는 &quot;그때 그 값&quot;으로 사실을 다시 계산할 수 있다는 데 있습니다. 사건의 시각이 어느 구간에 들어가는지로 조인하면 됩니다. 이때 구간을 <b>반열린 구간</b> <code>[from, to)</code>로 잡는 것이 중요합니다.</p>
+<p class="fname">examples/p05/14-valid-range-join.sql</p>
+<pre><code data-lang="sql" data-src="p05/14-valid-range-join.sql" data-lines="9-13">-- 각 주문을 "그때 유효했던" 이력 행 하나에 붙인다
+SELECT s.order_id, s.sold_on, h.price, s.qty * h.price AS amount
+FROM sales AS s JOIN price_hist AS h ON h.product_id = s.product_id
+ AND s.sold_on &gt;= h.valid_from
+ AND s.sold_on &lt;  coalesce(h.valid_to, '9999-12-31');</code></pre>
+<pre class="term" data-out="p05/14-valid-range-join.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/14-valid-range-join.sql
+order_id   sold_on    price  amount
+--------  ----------  -----  ------
+      11  2024-03-02  15000   30000
+      12  2024-08-19  17000   17000
+overlaps
+--------
+       0</pre>
+<p>3월 주문은 15,000원, 8월 주문은 17,000원으로 계산되었습니다. 끝을 <code>&lt;</code>로 비교하므로 경계일이 두 구간에 겹쳐 잡히지 않습니다.</p>
+<div class="warn"><b>겹침은 조용히 부풀립니다</b> — 구간이 겹치면 조인 결과의 행 수가 늘어 합계가 커집니다. 예제 마지막 질의처럼 겹침 개수를 세는 점검 질의를 배치로 돌려 두세요. 결과는 항상 0이어야 합니다.</div>
+</article>
+
+<article class="card" id="mdl-soft-delete">
+<h3>소프트 삭제 vs 이력 표</h3>
+<p>&quot;지운 것도 남겨 두자&quot;는 요구는 두 가지로 갈립니다. <b>되살릴 수 있으면 충분한가</b>(소프트 삭제), 아니면 <b>바뀐 과정을 모두 알아야 하는가</b>(이력 표). 답이 다르면 설계도 달라집니다.</p>
+<p class="fname">examples/p05/15-soft-delete.sql</p>
+<pre><code data-lang="sql" data-src="p05/15-soft-delete.sql" data-lines="2-7">CREATE TABLE members (id INTEGER PRIMARY KEY, email TEXT NOT NULL, deleted_at TEXT);
+CREATE UNIQUE INDEX ux_members_email                -- 부분 인덱스: 살아 있는 행만 유일
+  ON members(email) WHERE deleted_at IS NULL;
+INSERT INTO members VALUES (1, 'a@x.com', NULL);
+UPDATE members SET deleted_at = '2026-03-01' WHERE id = 1;   -- 탈퇴
+INSERT INTO members VALUES (2, 'a@x.com', NULL);             -- 같은 주소로 재가입된다</code></pre>
+<pre class="term" data-out="p05/15-soft-delete.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/15-soft-delete.sql
+id   email
+--  -------
+ 2  a@x.com
+stored_rows
+-----------
+          2</pre>
+<p>부분 인덱스 덕분에 살아 있는 행끼리만 이메일이 유일합니다. 탈퇴한 주소로 다시 가입할 수 있습니다.</p>
+<div class="warn"><b>소프트 삭제의 세금</b> — 모든 질의가 <code>WHERE deleted_at IS NULL</code>을 달아야 하고, 한 번이라도 빠뜨리면 지운 데이터가 화면에 나타납니다. 뷰를 만들어 그쪽만 쓰게 하는 편이 안전합니다.</div>
+</article>
+
+<article class="card" id="mdl-audit-log">
+<h3>감사 로그 — 누가 언제 바꿨는가</h3>
+<p>이력 표가 &quot;값의 역사&quot;라면 감사 로그는 &quot;변경의 역사&quot;입니다. 규정이나 사고 조사 때문에 필요하며, 업무 질의는 이 표를 읽지 않습니다. 그래서 본 표와 분리해 두는 편이 좋습니다. 트리거를 쓰면 애플리케이션이 잊어버려도 기록이 남습니다.</p>
+<p class="fname">examples/p05/16-audit-trigger.sql</p>
+<pre><code data-lang="sql" data-src="p05/16-audit-trigger.sql" data-lines="5-10">CREATE TRIGGER trg_price_audit AFTER UPDATE OF price ON products
+WHEN old.price IS NOT new.price
+BEGIN
+  INSERT INTO products_audit (product_id, col, old_val, new_val, changed_at)
+  VALUES (old.id, 'price', old.price, new.price, '2026-09-03 11:20:00');
+END;</code></pre>
+<pre class="term" data-out="p05/16-audit-trigger.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/16-audit-trigger.sql
+product_id   col   old_val  new_val      changed_at
+----------  -----  -------  -------  -------------------
+         1  price  15000    17000    2026-09-03 11:20:00</pre>
+<p>이름만 바꾼 두 번째 <code>UPDATE</code>는 기록되지 않았습니다. <code>AFTER UPDATE OF price</code>와 <code>WHEN</code> 절이 함께 걸러 낸 결과입니다. 트리거 문법은 4부에서 다뤘습니다.</p>
+<div class="note"><b>한계</b> — SQLite 트리거는 &quot;누가&quot;를 모릅니다. 사용자 식별자는 애플리케이션이 넘겨 주거나, 연결마다 임시 표에 적어 두어야 합니다.</div>
+</article>
+
+<article class="card" id="mdl-migration">
+<h3>스키마도 버전을 가집니다</h3>
+<p>스키마 변경을 손으로 하면, 개발 · 스테이징 · 운영 데이터베이스가 조금씩 달라집니다. 해법은 하나입니다. <b>변경을 파일로 적고, 어디까지 적용했는지 데이터베이스 자신이 기억하게</b> 하는 것입니다.</p>
+<p class="fname">examples/p05/08-migration.sql</p>
+<pre><code data-lang="sql" data-src="p05/08-migration.sql">-- 스키마 마이그레이션: 버전 표를 두고, 각 변경을 한 트랜잭션으로 적용한다
+CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+BEGIN;
+ALTER TABLE customers ADD COLUMN phone TEXT;
+INSERT INTO schema_version VALUES (1, '2026-09-03 10:00:00');
+COMMIT;
+BEGIN;
+CREATE INDEX idx_customers_city ON customers(city);
+INSERT INTO schema_version VALUES (2, '2026-09-03 10:01:00');
+COMMIT;
+SELECT version, applied_at FROM schema_version;
+SELECT name FROM pragma_table_info('customers');</code></pre>
+<pre class="term" data-out="p05/08-migration.sql"><span class="p">$</span> sqlite3 -header -column $TMP/shop.db &lt; examples/p05/08-migration.sql
+version      applied_at
+-------  -------------------
+      1  2026-09-03 10:00:00
+      2  2026-09-03 10:01:00
+ name
+------
+id
+name
+email
+city
+joined
+phone</pre>
+<div class="key"><b>한 트랜잭션에 하나</b> — 스키마 변경과 버전 기록을 같은 트랜잭션에 넣으면, 중간에 실패해도 &quot;반쯤 적용된 상태&quot;가 남지 않습니다. SQLite와 DuckDB 모두 DDL을 트랜잭션 안에서 되돌릴 수 있습니다.</div>
+</article>
+
+<article class="card" id="mdl-migration-rules">
+<h3>마이그레이션 세 가지 원칙</h3>
+<p>운영 중인 데이터베이스는 멈추지 않습니다. 옛 코드와 새 코드가 잠시 함께 도는 시간이 반드시 생기고, 그 시간을 견디도록 변경을 쪼개는 것이 원칙의 전부입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>원칙</th><th>뜻</th></tr>
+<tr><td>전진만 한다</td><td>이미 적용한 파일은 고치지 않습니다. 되돌릴 일이 생기면 새 번호로 되돌리는 변경을 적습니다.</td></tr>
+<tr><td>작게 나눈다</td><td>한 파일에 한 가지 변경. 실패했을 때 어디까지 갔는지가 분명해집니다.</td></tr>
+<tr><td>되돌림을 미리 정한다</td><td>배포 전에 &quot;틀어지면 무엇을 실행하는가&quot;를 적어 둡니다. 사고 중에 생각해서는 늦습니다.</td></tr>
+</table>
+</div>
+<p>열 하나를 없애는 일조차 한 번에 하지 않습니다. 이 순서를 확장-수축(expand&ndash;contract)이라고 부릅니다.</p>
+<ol class="steps">
+<li><b>확장</b> — 새 열을 널 허용으로 추가합니다. 옛 코드는 아무 영향을 받지 않습니다.</li>
+<li><b>이중 쓰기</b> — 새 코드를 배포해 옛 열과 새 열에 함께 씁니다.</li>
+<li><b>메우기</b> — 과거 행의 새 열을 배치로 채웁니다.</li>
+<li><b>전환</b> — 읽기를 새 열로 옮기고 한동안 지켜봅니다.</li>
+<li><b>수축</b> — 옛 열을 지웁니다. 여기까지 오는 데 며칠이 걸려도 정상입니다.</li>
+</ol>
+</article>
+
+<article class="card" id="mdl-sqlite-alter">
+<h3>SQLite의 ALTER는 다섯 가지뿐입니다</h3>
+<p>SQLite는 스키마를 파일 안의 텍스트로 들고 있고, 표를 통째로 다시 쓰지 않고는 열의 모양을 바꾸지 못합니다. 그래서 <code>ALTER TABLE</code>이 할 수 있는 일이 매우 적습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>되는 것</th><th>안 되는 것</th></tr>
+<tr><td><code>RENAME TO</code> · <code>ADD COLUMN</code></td><td>열의 타입 바꾸기</td></tr>
+<tr><td><code>RENAME COLUMN</code> (3.25.0, 2018-09-15)</td><td><code>CHECK</code>·<code>UNIQUE</code> 제약 추가·삭제</td></tr>
+<tr><td><code>DROP COLUMN</code> (3.35.0, 2021-03-12)</td><td>열 순서 바꾸기</td></tr>
+<tr><td><code>ALTER COLUMN</code>의 <code>NOT NULL</code> 설정·해제 (3.53.0, 2026-04-09)</td><td>기본 키·외래 키 변경</td></tr>
+</table>
+</div>
+<div class="warn"><b>DROP COLUMN도 조건부</b> — 그 열이 기본 키의 일부이거나, <code>UNIQUE</code>·인덱스·<code>CHECK</code>·외래 키·생성 열 식에 쓰이거나, 트리거나 뷰에 나오면 거절당합니다.</div>
+<p>나머지는 공식 문서가 정한 절차를 따릅니다. 새 표를 만들고, 옮겨 담고, 이름을 물려주는 것입니다.</p>
+<ol class="steps">
+<li><code>PRAGMA foreign_keys=OFF</code> 후 트랜잭션을 엽니다.</li>
+<li><code>sqlite_schema</code>에서 딸린 인덱스 · 트리거 · 뷰를 적어 둡니다.</li>
+<li>원하는 모양으로 <code class="nb">new_X</code>를 만들고 <code>INSERT ... SELECT</code>로 옮깁니다.</li>
+<li><code>DROP TABLE X</code> 후 <code>ALTER TABLE new_X RENAME TO X</code>.</li>
+<li>인덱스 · 트리거 · 뷰를 다시 만듭니다.</li>
+<li><code>PRAGMA foreign_key_check</code>로 확인하고 커밋한 뒤 외래 키를 다시 켭니다.</li>
+</ol>
+<p class="fname">examples/p05/18-table-rebuild.sql</p>
+<pre><code data-lang="sql" data-src="p05/18-table-rebuild.sql" data-lines="5-14">CREATE TABLE new_orders (                        -- 4. 'refunded' 를 허용하는 새 표
+  id INTEGER PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  ordered_at TEXT NOT NULL,
+  status TEXT NOT NULL
+    CHECK (status IN ('pending','paid','shipped','cancelled','refunded')));
+INSERT INTO new_orders SELECT id, customer_id, ordered_at, status FROM orders;  -- 5.
+DROP TABLE orders;                               -- 6. 옛 표를 버리고
+ALTER TABLE new_orders RENAME TO orders;         -- 7. 이름을 물려준다
+CREATE INDEX idx_orders_customer ON orders(customer_id);   -- 8. 인덱스·트리거·뷰 재생성</code></pre>
+<pre class="term" data-out="p05/18-table-rebuild.sql" data-lines="5-7"><span class="p">$</span> sqlite3 -header -column $TMP/shop.db &lt; examples/p05/18-table-rebuild.sql
+refunded
+--------
+       1</pre>
+<p class="cap">800행을 옮기고 <code>status</code>에 <code>&#39;refunded&#39;</code>를 허용하도록 <code>CHECK</code>를 바꾼 결과입니다. <code>PRAGMA foreign_key_check</code>는 아무것도 출력하지 않았습니다. 깨진 참조가 없다는 뜻입니다.</p>
+</article>
+
+<article class="card" id="mdl-duckdb-describe">
+<h3>DuckDB로 설계 결과를 들여다보기</h3>
+<p>스키마를 바꾼 뒤에는 &quot;정말 의도대로 되었는가&quot;를 확인해야 합니다. DuckDB의 <code>DESCRIBE</code>는 열의 모양을, <code>SUMMARIZE</code>는 값의 분포를 한 번에 보여 줍니다. 널 비율과 고유값 개수는 정규화 판단에도 곧바로 쓰입니다.</p>
+<p class="fname">examples/p05/13-duckdb-describe.sql</p>
+<pre><code data-lang="sql" data-src="p05/13-duckdb-describe.sql">-- 설계 결과를 확인하는 DuckDB 도구: DESCRIBE 와 SUMMARIZE
+DESCRIBE orders;
+SELECT column_name, column_type, min, max, approx_unique, null_percentage
+FROM (SUMMARIZE orders);</code></pre>
+<pre class="term" data-out="p05/13-duckdb-describe.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p05/13-duckdb-describe.sql
+column_name  column_type  null  key   default  extra
+-----------  -----------  ----  ----  -------  -----
+id           INTEGER      NO    PRI   NULL     NULL 
+customer_id  INTEGER      NO    NULL  NULL     NULL 
+ordered_at   TIMESTAMP    NO    NULL  NULL     NULL 
+status       VARCHAR      NO    NULL  NULL     NULL 
+column_name  column_type  min                  max                  approx_unique  null_percentage
+-----------  -----------  -------------------  -------------------  -------------  ---------------
+id           INTEGER      1                    800                  959            0.00           
+customer_id  INTEGER      1                    60                   56             0.00           
+ordered_at   TIMESTAMP    2024-01-01 14:44:00  2025-08-22 15:48:00  855            0.00           
+status       VARCHAR      cancelled            shipped              4              0.00           </pre>
+<div class="note"><b>SUMMARIZE가 계산하는 것</b> — 열마다 min · max · approx_unique · avg · std · q25 · q50 · q75 · count에 널 비율까지 냅니다. <code>SUMMARIZE 표이름</code>이나 <code>SUMMARIZE SELECT ...</code> 두 가지 방식으로 씁니다.</div>
+<p class="cap"><code class="nb">status</code>의 <code class="nb">approx_unique</code>가 4입니다. 값이 네 개뿐이라면 그 열은 참조 표나 <code>CHECK</code>로 묶을 후보라는 신호입니다. 이름 그대로 근삿값이라 <code class="nb">id</code>처럼 값이 많은 열에서는 실제 행 수(800)와 조금 어긋납니다.</p>
+</article>
+
+<article class="card" id="mdl-eav">
+<h3>안티패턴 &mdash; EAV</h3>
+<p>&quot;속성이 나중에 추가될지 모르니 열 대신 행으로 저장하자&quot;는 발상이 EAV(개체-속성-값)입니다. 스키마 변경을 피하려다 데이터베이스의 기능을 거의 전부 포기하게 됩니다.</p>
+<p class="fname">examples/p05/09-eav-antipattern.sql</p>
+<pre><code data-lang="sql" data-src="p05/09-eav-antipattern.sql">-- 안티패턴 EAV(엔티티-속성-값): 열을 행으로 저장하면 "가격이 2만 원 미만인 파란 상품" 하나에도 조인이 쌓인다
+CREATE TABLE attrs (item INTEGER, attr TEXT, val TEXT);
+INSERT INTO attrs VALUES (1, 'color', '파랑'), (1, 'price', '15000'),
+                         (2, 'color', '파랑'), (2, 'price', '25000'),
+                         (3, 'color', '빨강'), (3, 'price', '9000');
+SELECT c.item
+FROM attrs AS c JOIN attrs AS p ON p.item = c.item
+WHERE c.attr = 'color' AND c.val = '파랑'
+  AND p.attr = 'price' AND CAST(p.val AS INTEGER) &lt; 20000;   -- 타입도 매번 캐스팅</code></pre>
+<pre class="term" data-out="p05/09-eav-antipattern.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/09-eav-antipattern.sql
+item
+----
+   1</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>잃는 것</th><th>왜</th></tr>
+<tr><td>타입</td><td>모든 값이 텍스트라 비교마다 캐스팅이 필요합니다</td></tr>
+<tr><td>제약</td><td><code>NOT NULL</code>·<code>CHECK</code>를 속성별로 걸 수 없습니다</td></tr>
+<tr><td>질의 가독성</td><td>조건 하나에 자기 조인이 하나씩 늘어납니다</td></tr>
+</table>
+</div>
+<div class="tip"><b>대안</b> — 정말 예측 불가능한 속성만 <code>JSON</code> 열 하나에 담고, 아는 속성은 열로 둡니다. SQLite와 DuckDB 모두 JSON 함수와 생성 열 인덱스를 지원합니다.</div>
+</article>
+
+<article class="card" id="mdl-csv-column">
+<h3>안티패턴 &mdash; 한 칸에 쉼표 목록</h3>
+<p>태그 목록을 <code>&#39;1,5,9&#39;</code>처럼 한 칸에 넣는 것은 1NF 위반의 가장 흔한 형태입니다. 겉보기에는 간단하지만 검색이 곧바로 무너집니다.</p>
+<p class="fname">examples/p05/10-csv-column-antipattern.sql</p>
+<pre><code data-lang="sql" data-src="p05/10-csv-column-antipattern.sql">-- 안티패턴 쉼표 목록: 태그를 '1,5,9' 로 넣으면 인덱스도 무결성도 잃는다 — 연결 표가 정답
+CREATE TABLE posts_bad (id INTEGER PRIMARY KEY, tag_ids TEXT);
+INSERT INTO posts_bad VALUES (1, '1,5,9'), (2, '5'), (3, '15,19');
+-- 태그 5 를 가진 글: LIKE '%5%' 는 15·19 까지 잡는다
+SELECT id FROM posts_bad WHERE tag_ids LIKE '%5%';
+-- 올바른 검색조차 문자열 곡예가 필요하다
+SELECT id FROM posts_bad WHERE ',' || tag_ids || ',' LIKE '%,5,%';</code></pre>
+<pre class="term" data-out="p05/10-csv-column-antipattern.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/10-csv-column-antipattern.sql
+id
+--
+ 1
+ 2
+ 3
+id
+--
+ 1
+ 2</pre>
+<p>태그 5를 찾았더니 15와 19를 가진 글까지 딸려 나왔습니다. 구분자를 앞뒤에 덧붙이면 답은 맞지만, 그 순간 인덱스는 쓸 수 없고 표는 전부 훑어야 합니다.</p>
+<div class="warn"><b>더 큰 문제</b> — 없는 태그 번호를 넣어도 막을 방법이 없습니다. 외래 키를 걸 자리 자체가 없기 때문입니다.</div>
+</article>
+
+<article class="card" id="mdl-junction">
+<h3>정답 &mdash; 연결 표</h3>
+<p>N:M 관계는 표 하나로 적습니다. 두 외래 키를 열로 두고, 그 둘을 묶어 기본 키로 삼습니다. 이 한 번의 결정으로 앞 슬라이드의 문제가 모두 사라집니다.</p>
+<p class="fname">examples/p05/11-junction-table.sql</p>
+<pre><code data-lang="sql" data-src="p05/11-junction-table.sql" data-lines="2-8">CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT UNIQUE);
+CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT);
+CREATE TABLE post_tags (post_id INTEGER REFERENCES posts(id), tag_id INTEGER REFERENCES tags(id),
+                        PRIMARY KEY (post_id, tag_id));
+INSERT INTO tags VALUES (1, 'sql'), (5, 'sqlite'), (9, 'duckdb'), (15, 'go');
+INSERT INTO posts VALUES (1, 'SQLite 시작'), (2, 'SQLite 심화'), (3, 'Go 와 DB');
+INSERT INTO post_tags VALUES (1, 1), (1, 5), (1, 9), (2, 5), (3, 15), (3, 9);</code></pre>
+<pre><code data-lang="sql" data-src="p05/11-junction-table.sql" data-lines="9-12">SELECT p.title FROM posts AS p JOIN post_tags AS pt ON pt.post_id = p.id
+WHERE pt.tag_id = 5;
+SELECT p.title, count(*) AS tags FROM posts AS p JOIN post_tags AS pt ON pt.post_id = p.id
+GROUP BY p.id ORDER BY tags DESC, p.id;</code></pre>
+<pre class="term" data-out="p05/11-junction-table.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/11-junction-table.sql
+   title
+-----------
+SQLite 시작
+SQLite 심화
+   title     tags
+-----------  ----
+SQLite 시작     3
+Go 와 DB        2
+SQLite 심화     1</pre>
+<div class="key"><b>덤으로 얻는 것</b> — 기본 키가 같은 태그를 두 번 붙이는 것을 막고, 외래 키가 없는 태그를 막고, 인덱스가 검색을 받쳐 줍니다. 관계에 속성(붙인 시각, 붙인 사람)이 생겨도 열만 더하면 됩니다.</div>
+</article>
+
+<article class="card" id="mdl-check-enum">
+<h3>안티패턴 &mdash; 자유 문자열 상태값</h3>
+<p>주문 상태를 아무 문자열로 두면 <code>&#39;paid&#39;</code>와 <code>&#39;payed&#39;</code>가 나란히 저장됩니다. 오타가 데이터가 되어 버리고, 몇 달 뒤 집계에서야 발견됩니다. 허용 값을 스키마에 적어 두면 그 순간 막힙니다.</p>
+<p class="fname">examples/p05/12-check-enum.sql</p>
+<pre><code data-lang="sql" data-src="p05/12-check-enum.sql">-- 열거값은 CHECK 나 참조 표로 묶는다 — 오타가 데이터가 되는 것을 막는다
+CREATE TABLE order_status (code TEXT PRIMARY KEY);
+INSERT INTO order_status VALUES ('pending'), ('paid'), ('shipped'), ('cancelled');
+CREATE TABLE orders2 (id INTEGER PRIMARY KEY, status TEXT NOT NULL REFERENCES order_status(code));
+PRAGMA foreign_keys = ON;
+INSERT INTO orders2 (status) VALUES ('paid');
+INSERT INTO orders2 (status) VALUES ('payed');</code></pre>
+<pre class="term" data-out="p05/12-check-enum.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p05/12-check-enum.sql
+--- stderr ---
+Error near line 7: FOREIGN KEY constraint failed
+[exit 1]</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방법</th><th>장점</th><th>단점</th></tr>
+<tr><td><code>CHECK (status IN (...))</code></td><td>표 하나로 끝</td><td>값을 늘리려면 표를 다시 만들어야 합니다</td></tr>
+<tr><td>참조 표 + 외래 키</td><td>값 추가가 <code>INSERT</code> 한 줄</td><td>조인이 하나 늘고 표가 하나 늘어납니다</td></tr>
+</table>
+</div>
+<p class="cap">우리 샘플 스키마는 <code class="nb">orders.status</code>에 <code>CHECK</code>를 썼습니다. 값이 네 개로 고정이고 늘어날 계획이 없기 때문입니다.</p>
+</article>
+
+<article class="card" id="mdl-wrap">
+<h3>5부 정리 &mdash; 결정 목록</h3>
+<p>설계에서 내리는 결정은 대체로 아래 여섯 가지입니다. 기본값을 정해 두고, 벗어날 때만 이유를 적으면 대부분의 스키마는 무난해집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>결정</th><th>기본값</th><th>벗어나는 경우</th></tr>
+<tr><td>정규형</td><td>3NF까지</td><td>측정된 성능 문제</td></tr>
+<tr><td>기본 키</td><td>뜻 없는 정수 대리 키</td><td>분산 생성이면 UUIDv7</td></tr>
+<tr><td>자연 키</td><td><code>UNIQUE</code> 제약으로</td><td>&mdash;</td></tr>
+<tr><td>과거 값</td><td>스냅숏으로 얼린다</td><td>항상 현재 값이어야 할 때</td></tr>
+<tr><td>열거값</td><td><code>CHECK</code> 또는 참조 표</td><td>값이 사용자 정의일 때</td></tr>
+<tr><td>스키마 변경</td><td>번호 붙인 마이그레이션</td><td>&mdash;</td></tr>
+</table>
+</div>
+<div class="key"><b>설계의 목적</b> — 빠른 스키마가 아니라 <b>틀린 값을 저장할 수 없는 스키마</b>입니다. 속도는 인덱스로 나중에 얻을 수 있지만, 이미 들어간 잘못된 값은 되돌릴 수 없습니다.</div>
 </article>
 
 <!-- ===== part06.html (1장) ===== -->
