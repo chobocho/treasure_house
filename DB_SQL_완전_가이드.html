@@ -2462,11 +2462,992 @@ ordered_at           d           month    due                  days_left
 <div class="key"><b>다음</b> — 4부에서는 이 골격 위에 서브쿼리 · CTE · 윈도우 함수를 올려, 한 질의 안에서 &quot;다른 행을 보는&quot; 방법을 배웁니다.</div>
 </article>
 
-<!-- ===== part04.html (1장) ===== -->
+<!-- ===== part04.html (44장) ===== -->
 <article class="card section" id="part4">
 <p class="chnum">4부</p>
 <h2>SQL 중급</h2>
 <p class="chsub">서브쿼리·CTE·윈도우 함수·제약·트리거·UPSERT·JSON</p>
+</article>
+
+<article class="card" id="mid-overview">
+<h3>3부의 한계 — 한 행은 다른 행을 모릅니다</h3>
+<p class="lead">3부의 <code>WHERE</code>는 행을 하나씩 따로 봅니다. 그래서 &quot;평균보다 비싼 상품&quot;처럼 <b>다른 행을 알아야 답할 수 있는 질문</b>은 3부의 도구만으로는 쓸 수 없습니다.</p>
+<p>4부는 그 벽을 넘는 네 가지 장치를 배웁니다. 질의 안에 질의를 넣고(서브쿼리), 그 질의에 이름을 붙이고(CTE), 행을 접지 않은 채 옆 행을 보고(윈도우 함수), 잘못된 데이터가 애초에 들어오지 못하게 막습니다(제약·트리거).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>도구</th><th>답할 수 있게 되는 질문</th></tr>
+<tr><td>1</td><td>서브쿼리</td><td>평균보다 비싼 상품은?</td></tr>
+<tr><td>2</td><td>CTE · 재귀 CTE</td><td>이 사람 밑에 딸린 조직 전부는?</td></tr>
+<tr><td>3</td><td>윈도우 함수</td><td>분류별 1·2등과 전월 대비 증감은?</td></tr>
+<tr><td>4</td><td>제약 · 트리거 · UPSERT</td><td>잘못된 값을 어떻게 막고 고치나?</td></tr>
+</table>
+</div>
+<p class="cap">모든 예제는 3부와 같은 쇼핑몰 데이터(<code class="nb">customers</code> 60 · <code class="nb">products</code> 40 · <code class="nb">orders</code> 800 · <code class="nb">order_items</code> 2022 · <code class="nb">payments</code> 686)를 씁니다.</p>
+</article>
+
+<article class="card" id="mid-scalar">
+<h3>스칼라 서브쿼리 — 질의를 값처럼</h3>
+<p>값 하나(1행 1열)만 돌려주는 질의는 상수를 쓸 수 있는 자리라면 어디에나 놓을 수 있습니다. 평균 가격처럼 <b>표 전체를 봐야 나오는 값</b>을 각 행의 계산에 끌어오는 가장 짧은 방법입니다.</p>
+<p class="fname">examples/p04/01-scalar-subquery.sql</p>
+<pre><code data-lang="sql" data-src="p04/01-scalar-subquery.sql">-- 스칼라 서브쿼리: 값 하나를 돌려주는 질의를 값처럼 쓴다
+SELECT name, price,
+       price - (SELECT round(avg(price)) FROM products) AS diff_from_avg
+FROM products
+ORDER BY diff_from_avg DESC
+LIMIT 3;</code></pre>
+<pre class="term" data-out="p04/01-scalar-subquery.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/01-scalar-subquery.sql
+    name       price   diff_from_avg
+-------------  ------  -------------
+모니터 27인치  349000       257067.0
+무선 마우스    349000       257067.0
+탁상 스탠드    349000       257067.0</pre>
+<p>괄호 안 질의는 행마다 다시 계산되지 않습니다. 바깥 행을 참조하지 않으므로 엔진은 한 번만 구해 두고 800번이든 재사용합니다.</p>
+<div class="warn"><b>두 행이 돌아오면</b> — SQLite는 첫 행만 쓰고 조용히 넘어가지만, DuckDB는 오류로 막습니다. 스칼라 자리에는 반드시 한 행만 오도록 <code>LIMIT 1</code>이나 집계로 못 박으십시오.</div>
+</article>
+
+<article class="card" id="mid-in">
+<h3>IN 서브쿼리 — 목록을 질의로 만듭니다</h3>
+<p><code>IN ('대구', '울산')</code>처럼 목록을 손으로 적는 대신, 목록 자체를 질의로 계산합니다. 조건이 &quot;다른 표에 이런 행이 있는 것&quot;일 때 쓰는 형태입니다.</p>
+<p class="fname">examples/p04/02-in-subquery.sql</p>
+<pre><code data-lang="sql" data-src="p04/02-in-subquery.sql">-- IN 서브쿼리: 목록을 질의로 만든다 — 한 번이라도 취소한 고객
+SELECT id, name, city
+FROM customers
+WHERE id IN (SELECT customer_id FROM orders WHERE status = 'cancelled')
+ORDER BY id
+LIMIT 4;</code></pre>
+<pre class="term" data-out="p04/02-in-subquery.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/02-in-subquery.sql
+id   name   city
+--  ------  ----
+ 2  윤하은  제주
+ 3  최다은  고양
+ 6  김다은  제주
+ 9  강지아  대전</pre>
+<p>안쪽 질의는 취소 주문을 낸 고객 번호의 목록을 만들고, 바깥 질의는 그 목록에 든 고객만 남깁니다. 목록에 같은 번호가 여러 번 나와도 <code>IN</code>은 &quot;들어 있는가&quot;만 보므로 중복은 문제가 되지 않습니다.</p>
+<div class="tip"><b>열 개수를 맞추십시오</b> — <code>IN</code>의 안쪽 질의는 열이 정확히 하나여야 합니다. <code>SELECT *</code>를 넣으면 열 개수가 맞지 않아 오류입니다.</div>
+</article>
+
+<article class="card" id="mid-exists">
+<h3>상관 서브쿼리와 EXISTS</h3>
+<p>안쪽 질의가 바깥 행의 값을 참조하면 <b>상관 서브쿼리</b>입니다. 바깥 행마다 다시 평가되므로 &quot;이 행에 짝이 있는가&quot;를 묻는 데 알맞습니다. <code>EXISTS</code>는 값이 아니라 <b>행이 하나라도 있는지</b>만 보므로, 하나 찾으면 즉시 멈춥니다.</p>
+<p class="fname">examples/p04/03-correlated-exists.sql</p>
+<pre><code data-lang="sql" data-src="p04/03-correlated-exists.sql">-- 상관 서브쿼리 + EXISTS: 바깥 행마다 "짝이 있는가"만 묻는다 — 취소 이력이 없는 고객
+SELECT c.id, c.name
+FROM customers AS c
+WHERE NOT EXISTS (SELECT 1 FROM orders AS o
+                  WHERE o.customer_id = c.id AND o.status = 'cancelled')
+ORDER BY c.id
+LIMIT 5;</code></pre>
+<pre class="term" data-out="p04/03-correlated-exists.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/03-correlated-exists.sql
+id   name
+--  ------
+ 1  최민준
+ 4  신서연
+ 5  조하은
+ 7  송지아
+ 8  류시우</pre>
+<p><code>SELECT 1</code>이라고 쓴 이유가 여기 있습니다. 무엇을 고르든 결과에 쓰이지 않으니 가장 싼 상수를 적는 관례입니다.</p>
+<div class="key"><b>NOT EXISTS의 미덕</b> — 짝이 없는 행을 찾는 표준 표현입니다. 다음 슬라이드에서 보듯 <code>NOT IN</code>과 달리 NULL에 무너지지 않습니다.</div>
+</article>
+
+<article class="card" id="mid-notin-trap">
+<h3>NOT IN의 함정 — NULL 하나면 결과가 빕니다</h3>
+<p><code>x NOT IN (1, NULL)</code>은 <code>x &lt;&gt; 1 AND x &lt;&gt; NULL</code>로 풀립니다. 뒤쪽이 늘 <b>알 수 없음</b>이므로 전체가 참이 될 수 없고, 결과는 통째로 0행이 됩니다. 오류가 아니라 <b>조용한 0행</b>이라 더 위험합니다.</p>
+<div class="g2">
+<div class="cmp bad"><h5>NOT IN — 0행</h5><pre>WHERE id NOT IN (SELECT 1
+                 UNION ALL SELECT NULL)</pre></div>
+<div class="cmp good"><h5>NOT EXISTS — 39행</h5><pre>WHERE NOT EXISTS (SELECT 1 FROM x
+                  WHERE x.id = p.id)</pre></div>
+</div>
+<p class="fname">examples/p04/04-not-in-null-trap.sql</p>
+<pre><code data-lang="sql" data-src="p04/04-not-in-null-trap.sql">-- NOT IN 의 함정: 목록에 NULL 이 하나라도 있으면 결과가 통째로 비어 버린다
+SELECT count(*) AS not_in_result
+FROM products WHERE id NOT IN (SELECT 1 UNION ALL SELECT NULL);
+
+SELECT count(*) AS not_exists_result
+FROM products AS p
+WHERE NOT EXISTS (SELECT 1 FROM (SELECT 1 AS id UNION ALL SELECT NULL) AS x WHERE x.id = p.id);</code></pre>
+<pre class="term" data-out="p04/04-not-in-null-trap.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/04-not-in-null-trap.sql
+not_in_result
+-------------
+            0
+not_exists_result
+-----------------
+               39</pre>
+<div class="warn"><b>습관으로 정하십시오</b> — 목록이 될 열에 <code>NOT NULL</code>이 보장되지 않으면 <code>NOT IN</code>을 쓰지 말고 <code>NOT EXISTS</code>를 쓰십시오. 성능도 대개 손해가 없습니다.</div>
+</article>
+
+<article class="card" id="mid-derived">
+<h3>파생 테이블 — FROM 절에 놓는 서브쿼리</h3>
+<p>관계에 연산을 하면 다시 관계가 나옵니다(3부). 그래서 질의의 결과를 <code>FROM</code> 자리에 그대로 표처럼 놓을 수 있습니다. 이것을 파생 테이블이라 부릅니다.</p>
+<p class="fname">examples/p04/05-derived-table.sql</p>
+<pre><code data-lang="sql" data-src="p04/05-derived-table.sql">-- FROM 절의 서브쿼리(파생 테이블): 중간 결과를 표처럼 이어 쓴다
+SELECT c.name, t.orders, t.amount
+FROM (SELECT o.customer_id, count(DISTINCT o.id) AS orders,
+             sum(oi.qty * oi.unit_price) AS amount
+      FROM orders AS o JOIN order_items AS oi ON oi.order_id = o.id
+      WHERE o.status = 'paid'
+      GROUP BY o.customer_id) AS t
+JOIN customers AS c ON c.id = t.customer_id
+ORDER BY t.amount DESC
+LIMIT 3;</code></pre>
+<pre class="term" data-out="p04/05-derived-table.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/05-derived-table.sql
+ name   orders  amount
+------  ------  -------
+송건우      14  9705300
+서도윤       9  8474600
+최도윤      10  8299500</pre>
+<p>먼저 주문 금액을 고객별로 집계해 표 하나를 만들고, 그 표를 <code class="nb">customers</code>와 이어 이름을 붙였습니다. 집계와 조인을 한 단계씩 나누면 각 단계를 따로 검증할 수 있습니다.</p>
+<div class="note"><b>별칭은 필수</b> — 파생 테이블에는 반드시 이름(<code>AS t</code>)을 붙여야 바깥에서 열을 <code>t.amount</code>처럼 가리킬 수 있습니다.</div>
+</article>
+
+<article class="card" id="mid-subquery-kinds">
+<h3>서브쿼리 네 가지를 한자리에</h3>
+<p>같은 &quot;질의 안의 질의&quot;라도 놓이는 자리에 따라 규칙과 비용이 다릅니다. 고를 때 보는 기준은 <b>몇 행 몇 열을 돌려주는가</b>입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>종류</th><th>자리</th><th>모양</th><th>평가 횟수</th></tr>
+<tr><td>스칼라</td><td><code>SELECT</code> · <code>WHERE</code></td><td>1행 1열</td><td>한 번</td></tr>
+<tr><td>목록(<code>IN</code>)</td><td><code>WHERE</code></td><td>N행 1열</td><td>한 번</td></tr>
+<tr><td>상관 · <code>EXISTS</code></td><td><code>WHERE</code></td><td>있는지만</td><td>바깥 행마다</td></tr>
+<tr><td>파생 테이블</td><td><code>FROM</code></td><td>N행 M열</td><td>한 번</td></tr>
+</table>
+</div>
+<div class="key"><b>상관인지 보는 법</b> — 안쪽 질의에서 바깥 표의 별칭이 보이면 상관 서브쿼리입니다. 그 한 글자가 &quot;한 번&quot;과 &quot;행마다&quot;를 가릅니다.</div>
+</article>
+
+<article class="card" id="mid-cte">
+<h3>CTE — 파생 테이블에 이름을 붙입니다</h3>
+<p>파생 테이블은 괄호가 깊어질수록 읽기 어렵습니다. <code>WITH</code>는 같은 일을 하되 중간 결과를 <b>위에서 아래로</b> 늘어놓아, 질의를 문단처럼 읽히게 만듭니다.</p>
+<p class="fname">examples/p04/06-cte.sql</p>
+<pre><code data-lang="sql" data-src="p04/06-cte.sql">-- CTE(WITH): 파생 테이블에 이름을 붙여 위에서 아래로 읽히게 한다
+WITH paid AS (
+  SELECT o.id, o.customer_id, sum(oi.qty * oi.unit_price) AS amount
+  FROM orders AS o JOIN order_items AS oi ON oi.order_id = o.id
+  WHERE o.status = 'paid'
+  GROUP BY o.id
+),
+per_customer AS (
+  SELECT customer_id, count(*) AS orders, sum(amount) AS total FROM paid GROUP BY customer_id
+)
+SELECT c.name, p.orders, p.total
+FROM per_customer AS p JOIN customers AS c ON c.id = p.customer_id
+ORDER BY p.total DESC
+LIMIT 3;</code></pre>
+<pre class="term" data-out="p04/06-cte.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/06-cte.sql
+ name   orders   total
+------  ------  -------
+송건우      14  9705300
+서도윤       9  8474600
+최도윤      10  8299500</pre>
+<p>앞 슬라이드의 파생 테이블과 결과가 같습니다. 달라진 것은 사람이 읽는 순서뿐입니다. 뒤에 정의한 CTE가 앞의 CTE를 참조할 수 있다는 점도 중요합니다.</p>
+<div class="tip"><b>이름값</b> — <code class="nb">paid</code>, <code class="nb">per_customer</code> 같은 이름이 곧 주석입니다. 단계마다 이름을 붙이면 리뷰에서 &quot;이 괄호가 무엇을 만드나&quot;를 다시 묻지 않게 됩니다.</div>
+</article>
+
+<article class="card" id="mid-recursive-series">
+<h3>재귀 CTE — 자기 자신을 참조합니다</h3>
+<p>SQL에는 반복문이 없습니다. 대신 <code>WITH RECURSIVE</code>가 <b>기저(anchor)</b>에서 출발해 <b>재귀 단계</b>를 결과가 더 늘지 않을 때까지 되풀이합니다. SQL:1999에서 표준에 들어온 기능입니다.</p>
+<div class="flow"><span class="box">기저 SELECT 1</span><span class="arr">UNION ALL</span><span class="box">재귀 n+1</span><span class="arr">반복</span><span class="box dim">0행이면 종료</span></div>
+<p class="fname">examples/p04/07-recursive-series.sql</p>
+<pre><code data-lang="sql" data-src="p04/07-recursive-series.sql">-- 재귀 CTE 1: 숫자 열 만들기 — 기저(anchor) UNION ALL 재귀 단계
+WITH RECURSIVE seq(n) AS (
+  SELECT 1
+  UNION ALL
+  SELECT n + 1 FROM seq WHERE n &lt; 5
+)
+SELECT n, n * n AS square FROM seq;</code></pre>
+<pre class="term" data-out="p04/07-recursive-series.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p04/07-recursive-series.sql
+n  square
+-  ------
+1       1
+2       4
+3       9
+4      16
+5      25</pre>
+<div class="warn"><b>종료 조건이 곧 안전장치</b> — <code>WHERE n &lt; 5</code>를 빠뜨리면 재귀가 멈추지 않습니다. 기저와 재귀 단계를 잇는 것은 <code>UNION ALL</code>이며, 중복 제거가 필요하면 <code>UNION</code>을 씁니다.</div>
+</article>
+
+<article class="card" id="mid-recursive-tree">
+<h3>재귀 CTE로 조직도 훑기</h3>
+<p>재귀 CTE가 진짜 힘을 내는 곳은 <b>깊이를 모르는 계층</b>입니다. 부모를 가리키는 열 하나만 있으면, 조인을 몇 번 써야 할지 미리 알지 못해도 전체를 펼칠 수 있습니다.</p>
+<p class="fname">examples/p04/08-recursive-tree.sql</p>
+<pre><code data-lang="sql" data-src="p04/08-recursive-tree.sql">-- 재귀 CTE 2: 조직도 훑기 — 깊이와 경로를 함께 만든다
+CREATE TABLE staff (id INTEGER PRIMARY KEY, name TEXT, boss INTEGER REFERENCES staff(id));
+INSERT INTO staff VALUES (1, '대표', NULL), (2, '개발본부장', 1), (3, '영업본부장', 1),
+                         (4, '백엔드 팀장', 2), (5, '프런트 팀장', 2), (6, '백엔드 개발자', 4);
+WITH RECURSIVE org(id, name, depth, path) AS (
+  SELECT id, name, 0, name FROM staff WHERE boss IS NULL
+  UNION ALL
+  SELECT s.id, s.name, o.depth + 1, o.path || ' &gt; ' || s.name
+  FROM staff AS s JOIN org AS o ON s.boss = o.id
+)
+SELECT depth, path FROM org ORDER BY path;</code></pre>
+<pre class="term" data-out="p04/08-recursive-tree.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p04/08-recursive-tree.sql
+depth                       path
+-----  -----------------------------------------------
+    0  대표
+    1  대표 &gt; 개발본부장
+    2  대표 &gt; 개발본부장 &gt; 백엔드 팀장
+    3  대표 &gt; 개발본부장 &gt; 백엔드 팀장 &gt; 백엔드 개발자
+    2  대표 &gt; 개발본부장 &gt; 프런트 팀장
+    1  대표 &gt; 영업본부장</pre>
+<p>재귀 단계에서 <code>o.depth + 1</code>과 <code>o.path || ' &gt; ' || s.name</code>을 함께 쌓았습니다. 깊이는 들여쓰기에, 경로는 정렬에 씁니다. <code>ORDER BY path</code> 하나로 트리 순서가 만들어집니다.</p>
+<div class="note"><b>순환 대비</b> — 데이터에 고리가 생기면 재귀가 끝나지 않습니다. 실무에서는 경로에 이미 등장한 노드를 걸러 내거나 깊이 상한을 조건으로 둡니다.</div>
+</article>
+
+<article class="card" id="mid-cte-vs-view">
+<h3>파생 테이블 · CTE · 뷰 — 무엇을 고르나</h3>
+<p>셋 다 &quot;질의에 이름을 붙이는&quot; 일을 합니다. 차이는 <b>이름이 얼마나 오래 사는가</b>입니다. 이 기준 하나로 대개 결정됩니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>도구</th><th>사는 범위</th><th>고르는 때</th></tr>
+<tr><td>파생 테이블</td><td>그 절 안에서만</td><td>한 번 쓰고 버릴 중간 결과</td></tr>
+<tr><td>CTE</td><td>그 질의 안에서만</td><td>한 질의에서 두 번 이상 쓰거나 단계를 나눠 읽고 싶을 때</td></tr>
+<tr><td>뷰</td><td>스키마에 남습니다</td><td>여러 질의·여러 사람이 같은 정의를 공유할 때</td></tr>
+</table>
+</div>
+<div class="key"><b>공통점</b> — 셋 다 저장하는 것은 <b>질의문</b>이지 결과가 아닙니다. 결과를 저장하고 싶다면 표를 만들어야 하고, 그 순간 &quot;언제 갱신하나&quot;라는 문제가 따라옵니다.</div>
+</article>
+
+<article class="card" id="mid-window-idea">
+<h3>윈도우 함수 — 행을 접지 않고 옆을 봅니다</h3>
+<p class="lead"><code>GROUP BY</code>는 여러 행을 한 행으로 <b>접습니다</b>. 접고 나면 개별 행은 사라집니다. 윈도우 함수는 행을 그대로 둔 채, 각 행에서 <b>정해진 이웃 범위</b>를 내다보고 값을 하나 더 붙입니다.</p>
+<p>아래에서 <b>현재</b>라고 적힌 칸이 지금 계산 중인 행이고, 테두리 친 세 칸이 그 행에서 보이는 범위(윈도우)입니다. 흐린 칸은 범위 밖이라 계산에 들어가지 않습니다.</p>
+<div class="arr">
+<span class="c in">199000<span class="idx">1행</span></span>
+<span class="c in">129000<span class="idx">현재</span></span>
+<span class="c in">129000<span class="idx">3행</span></span>
+<span class="c dead">45000<span class="idx">밖</span></span>
+</div>
+<div class="sig">avg(price) OVER (<u>PARTITION BY category</u><span class="lbl">나누기</span> <u>ORDER BY price DESC</u><span class="lbl">줄 세우기</span> <u>ROWS BETWEEN …</u><span class="lbl">프레임</span>)</div>
+<div class="key"><b>세 부품</b> — 어떻게 나누고(PARTITION BY), 어떤 순서로 세우고(ORDER BY), 그 안에서 몇 행을 볼지(프레임). 이 셋만 정하면 윈도우 함수는 끝입니다.</div>
+</article>
+
+<article class="card" id="mid-window-rownumber">
+<h3>row_number — 그룹 안에서 번호를 매깁니다</h3>
+<p>가장 자주 쓰는 윈도우 함수입니다. <code>PARTITION BY</code>로 나눈 칸마다 1부터 다시 시작하는 일련번호를 붙입니다. 순위표, 중복 제거, 그룹별 상위 N이 전부 여기서 출발합니다.</p>
+<p class="fname">examples/p04/09-window-rownumber.sql</p>
+<pre><code data-lang="sql" data-src="p04/09-window-rownumber.sql">-- 윈도우 함수: 행을 접지 않고 "옆 행들"을 본다 — 범주별 가격 순위
+SELECT category, name, price,
+       row_number() OVER (PARTITION BY category ORDER BY price DESC) AS rn
+FROM products
+WHERE category IN ('도서', '식품')
+ORDER BY category, rn
+LIMIT 6;</code></pre>
+<pre class="term" data-out="p04/09-window-rownumber.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/09-window-rownumber.sql
+category        name         price   rn
+--------  -----------------  ------  --
+도서      타입스크립트 입문  199000   1
+도서      DuckDB 실전        129000   2
+도서      SQLite 핸드북      129000   3
+도서      자바의 정석         45000   4
+도서      파이썬 완전 정복    32000   5
+도서      Go 프로그래밍       32000   6</pre>
+<p>분류가 바뀌는 지점에서 번호가 1로 되돌아갑니다. 결과 행 수는 줄지 않았습니다. <code class="nb">rn</code>이라는 열이 하나 더 붙었을 뿐입니다.</p>
+<div class="note"><b>동점이라도 다른 번호</b> — <code>row_number</code>는 값이 같아도 반드시 서로 다른 번호를 줍니다. 어느 쪽이 1이 될지는 <code>ORDER BY</code>에 결정적인 기준을 더 넣어야 정해집니다.</div>
+</article>
+
+<article class="card" id="mid-window-rank">
+<h3>rank와 dense_rank — 동점을 다루는 두 방식</h3>
+<p>등수는 동점 처리 규칙이 곧 정의입니다. <code>rank</code>는 공동 2등 다음을 4등으로 <b>건너뛰고</b>, <code>dense_rank</code>는 3등으로 <b>이어 갑니다</b>. 어느 쪽도 틀리지 않으며, 세려는 것이 &quot;순위&quot;냐 &quot;서로 다른 값의 단계&quot;냐의 차이입니다.</p>
+<p class="fname">examples/p04/10-window-rank.sql</p>
+<pre><code data-lang="sql" data-src="p04/10-window-rank.sql">-- rank 는 동점이면 번호를 건너뛰고, dense_rank 는 건너뛰지 않는다
+SELECT name, price,
+       rank()       OVER (ORDER BY price DESC) AS rnk,
+       dense_rank() OVER (ORDER BY price DESC) AS dense
+FROM products
+WHERE category = '도서'
+ORDER BY price DESC, name;</code></pre>
+<pre class="term" data-out="p04/10-window-rank.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/10-window-rank.sql
+         name           price   rnk  dense
+----------------------  ------  ---  -----
+타입스크립트 입문       199000    1      1
+DuckDB 실전             129000    2      2
+SQLite 핸드북           129000    2      2
+자바의 정석              45000    4      3
+Go 프로그래밍            32000    5      4
+파이썬 완전 정복         32000    5      4
+SQL 첫걸음               15000    7      5
+데이터베이스 내부 구조    9900    8      6</pre>
+<p>129000원 두 상품이 나란히 2위이고, 그다음 45000원이 <code class="nb">rnk</code> 4 · <code class="nb">dense</code> 3입니다. 8행 중 서로 다른 가격이 6가지이므로 <code>dense_rank</code>의 최댓값은 6입니다.</p>
+<div class="tip"><b>고르는 법</b> — &quot;상위 3등까지&quot;처럼 사람이 읽을 등수는 <code>rank</code>, &quot;가격대 세 단계&quot;처럼 값의 종류를 세려면 <code>dense_rank</code>를 씁니다.</div>
+</article>
+
+<article class="card" id="mid-window-lag">
+<h3>lag와 lead — 앞뒤 행의 값을 끌어옵니다</h3>
+<p>&quot;전월 대비 증감&quot;은 지금 행과 바로 앞 행을 함께 봐야 나옵니다. 예전에는 같은 표를 두 번 조인해 한 달씩 어긋나게 붙였지만, <code>lag</code>는 그 일을 한 줄로 합니다.</p>
+<p class="fname">examples/p04/11-window-lag.sql</p>
+<pre><code data-lang="sql" data-src="p04/11-window-lag.sql">-- lag/lead: 앞뒤 행의 값을 끌어온다 — 월별 결제액과 전월 대비 증감
+WITH monthly AS (
+  SELECT strftime('%Y-%m', paid_at) AS month, sum(amount) AS amount
+  FROM payments GROUP BY month
+)
+SELECT month, amount,
+       amount - lag(amount) OVER (ORDER BY month) AS delta
+FROM monthly
+ORDER BY month
+LIMIT 4;</code></pre>
+<pre class="term" data-out="p04/11-window-lag.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/11-window-lag.sql
+ month    amount    delta
+-------  --------  -------
+2024-01  14392800  NULL
+2024-02  13468100  -924700
+2024-03  15394600  1926500
+2024-04  23040400  7645800</pre>
+<p>첫 행의 <code class="nb">delta</code>가 NULL인 것이 정상입니다. 앞 행이 없으니 &quot;모른다&quot;가 맞는 답입니다. 기본값을 주고 싶으면 <code>lag(amount, 1, 0)</code>처럼 세 번째 인자를 씁니다.</p>
+<div class="key"><b>정렬이 곧 의미</b> — <code>lag</code>가 말하는 &quot;앞&quot;은 <code>OVER (ORDER BY …)</code>가 정한 순서의 앞입니다. 표에 담긴 물리적 순서와는 아무 관계가 없습니다.</div>
+</article>
+
+<article class="card" id="mid-window-frame">
+<h3>프레임 — 창의 크기를 직접 정합니다</h3>
+<p>같은 <code>sum</code>이라도 &quot;처음부터 지금까지&quot;면 누적 합이고, &quot;앞 두 행부터 지금까지&quot;면 3개월 이동 평균입니다. 그 범위를 적는 자리가 <code>ROWS BETWEEN</code>입니다.</p>
+<div class="arr">
+<span class="c dead">01월<span class="idx">밖</span></span>
+<span class="c in">02월<span class="idx">2 앞</span></span>
+<span class="c in">03월<span class="idx">1 앞</span></span>
+<span class="c in">04월<span class="idx">현재</span></span>
+<span class="c dead">05월<span class="idx">밖</span></span>
+</div>
+<p class="cap"><code>ROWS BETWEEN 2 PRECEDING AND CURRENT ROW</code>가 04월 행에서 보는 범위입니다.</p>
+<p class="fname">examples/p04/12-window-running.sql</p>
+<pre><code data-lang="sql" data-src="p04/12-window-running.sql">-- 프레임: 누적 합과 이동 평균 — ROWS BETWEEN 으로 창의 크기를 정한다
+WITH monthly AS (
+  SELECT strftime('%Y-%m', paid_at) AS month, sum(amount) AS amount
+  FROM payments GROUP BY month
+)
+SELECT month, amount,
+       sum(amount) OVER (ORDER BY month ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running,
+       round(avg(amount) OVER (ORDER BY month ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)) AS avg3
+FROM monthly
+ORDER BY month
+LIMIT 5;</code></pre>
+<pre class="term" data-out="p04/12-window-running.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/12-window-running.sql
+ month    amount   running      avg3
+-------  --------  --------  ----------
+2024-01  14392800  14392800  14392800.0
+2024-02  13468100  27860900  13930450.0
+2024-03  15394600  43255500  14418500.0
+2024-04  23040400  66295900  17301033.0
+2024-05  10870900  77166800  16435300.0</pre>
+<p>04월의 <code class="nb">avg3</code> 17301033은 02·03·04월 세 값의 평균입니다. <code class="nb">running</code>은 <code>UNBOUNDED PRECEDING</code>이라 첫 행부터 계속 더해집니다.</p>
+</article>
+
+<article class="card" id="mid-window-topn">
+<h3>그룹별 상위 N — 윈도우 함수의 대표 용례</h3>
+<p>&quot;분류마다 비싼 것 두 개&quot;는 <code>GROUP BY</code>로는 쓸 수 없습니다. 집계는 그룹을 한 행으로 접어 버리는데, 우리는 그룹 안의 개별 행 두 개를 원하기 때문입니다. 번호를 매긴 뒤 거르는 것이 정석입니다.</p>
+<p class="fname">examples/p04/13-window-topn.sql</p>
+<pre><code data-lang="sql" data-src="p04/13-window-topn.sql">-- 그룹별 상위 N: 윈도우 함수 + CTE 가 정석 (SQLite 는 WHERE 에서 윈도우를 못 쓴다)
+WITH ranked AS (
+  SELECT category, name, price,
+         row_number() OVER (PARTITION BY category ORDER BY price DESC, name) AS rn
+  FROM products
+)
+SELECT category, name, price FROM ranked WHERE rn &lt;= 2 ORDER BY category, rn;</code></pre>
+<pre class="term" data-out="p04/13-window-topn.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/13-window-topn.sql
+category        name         price
+--------  -----------------  ------
+도서      타입스크립트 입문  199000
+도서      DuckDB 실전        129000
+생활      탁상 스탠드        349000
+생활      에코백             199000
+스포츠    물병 1L            349000
+스포츠    줄넘기              45000
+식품      견과류 믹스 1kg    349000
+식품      그래놀라           349000
+전자기기  모니터 27인치      349000
+전자기기  무선 마우스        349000</pre>
+<div class="warn"><b>왜 CTE가 필요한가</b> — 윈도우 함수는 <code>WHERE</code>가 끝난 뒤에 계산됩니다. 그래서 <code>WHERE rn &lt;= 2</code>를 같은 절에 쓸 수 없고, 한 겹 감싸야 합니다. DuckDB에는 이 감싸기를 대신하는 <code>QUALIFY</code>가 있습니다(7부).</div>
+</article>
+
+<article class="card" id="mid-window-frame-table">
+<h3>프레임 옵션 조견표</h3>
+<p>프레임은 <b>단위</b>(ROWS · RANGE)와 <b>양 끝</b>으로 적습니다. 자주 쓰는 조합은 사실상 넷뿐입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>적는 법</th><th>보이는 범위</th><th>쓰는 곳</th></tr>
+<tr><td><code>UNBOUNDED PRECEDING AND CURRENT ROW</code></td><td>첫 행부터 지금까지</td><td>누적 합</td></tr>
+<tr><td><code>2 PRECEDING AND CURRENT ROW</code></td><td>앞 2행과 지금</td><td>이동 평균</td></tr>
+<tr><td><code>1 PRECEDING AND 1 FOLLOWING</code></td><td>앞뒤 한 행씩</td><td>평활화</td></tr>
+<tr><td><code>UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING</code></td><td>파티션 전체</td><td>전체 대비 비율</td></tr>
+</table>
+</div>
+<div class="note"><b>ROWS와 RANGE</b> — <code>ROWS</code>는 행을 셉니다. <code>RANGE</code>는 <code>ORDER BY</code> 값이 같은 행을 한 덩어리로 묶어 셉니다. 동점이 있으면 두 결과가 달라집니다.</div>
+<div class="tip"><b>기본값 주의</b> — <code>ORDER BY</code>를 쓰고 프레임을 생략하면 기본이 <code>RANGE UNBOUNDED PRECEDING AND CURRENT ROW</code>입니다. 동점 행이 한꺼번에 들어오므로 누적 합이 계단처럼 뜁니다.</div>
+</article>
+
+<article class="card" id="mid-window-vs-groupby">
+<h3>윈도우 vs GROUP BY — 같은 평균, 다른 모양</h3>
+<p>둘 다 <code>avg(price)</code>를 씁니다. 차이는 결과에 남는 행 수입니다. 집계는 접고, 윈도우는 붙입니다.</p>
+<p class="fname">examples/p04/31-window-vs-groupby.sql</p>
+<pre><code data-lang="sql" data-src="p04/31-window-vs-groupby.sql">-- 같은 평균, 다른 결과 모양: GROUP BY 는 행을 접고 윈도우는 행을 남긴다
+SELECT category, round(avg(price)) AS avg_price
+FROM products WHERE category IN ('도서', '식품')
+GROUP BY category;
+
+SELECT category, name, price,
+       round(avg(price) OVER (PARTITION BY category)) AS avg_price
+FROM products WHERE category IN ('도서', '식품')
+ORDER BY category, price DESC
+LIMIT 4;</code></pre>
+<pre class="term" data-out="p04/31-window-vs-groupby.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/31-window-vs-groupby.sql
+category  avg_price
+--------  ---------
+도서        73863.0
+식품       110088.0
+category        name         price   avg_price
+--------  -----------------  ------  ---------
+도서      타입스크립트 입문  199000    73863.0
+도서      DuckDB 실전        129000    73863.0
+도서      SQLite 핸드북      129000    73863.0
+도서      자바의 정석         45000    73863.0</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기준</th><th>GROUP BY</th><th>윈도우 함수</th></tr>
+<tr><td>결과 행 수</td><td>그룹 수만큼</td><td>입력 행 수 그대로</td></tr>
+<tr><td>개별 값</td><td>사라집니다</td><td>남습니다</td></tr>
+<tr><td>답하는 질문</td><td>분류별 평균은?</td><td>이 상품은 분류 평균보다 비싼가?</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="mid-case">
+<h3>CASE — 행마다 조건으로 갈라집니다</h3>
+<p><code>CASE</code>는 문장이 아니라 <b>식</b>입니다. 값이 올 수 있는 자리라면 어디든 놓을 수 있고, 그래서 <code>sum</code> 안에 넣으면 &quot;조건에 맞는 것만 세기&quot;가 됩니다.</p>
+<p class="fname">examples/p04/14-case.sql</p>
+<pre><code data-lang="sql" data-src="p04/14-case.sql">-- CASE: 행마다 조건 분기 — 가격대 라벨과 조건부 집계
+SELECT CASE WHEN price &lt; 10000 THEN '저가'
+            WHEN price &lt; 100000 THEN '중가'
+            ELSE '고가' END AS band,
+       count(*) AS n,
+       sum(CASE WHEN stock = 0 THEN 1 ELSE 0 END) AS sold_out
+FROM products
+GROUP BY band
+ORDER BY min(price);</code></pre>
+<pre class="term" data-out="p04/14-case.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/14-case.sql
+band  n   sold_out
+----  --  --------
+저가   7         0
+중가  22         1
+고가  11         0</pre>
+<p><code>sum(CASE WHEN stock = 0 THEN 1 ELSE 0 END)</code>가 조건부 개수 세기의 고전적인 형태입니다. 위에서부터 처음 참이 되는 가지 하나만 쓰이므로, 가지의 순서가 곧 우선순위입니다.</p>
+<div class="tip"><b>더 짧게</b> — SQLite 3.30.0(2019-10-04)부터 <code>count(*) FILTER (WHERE stock = 0)</code>로도 같은 일을 할 수 있습니다. DuckDB도 <code>FILTER</code>를 지원합니다.</div>
+</article>
+
+<article class="card" id="mid-setops">
+<h3>집합 연산 — 결과끼리 더하고 빼기</h3>
+<p>조인이 표를 <b>옆으로</b> 붙인다면, 집합 연산은 결과를 <b>위아래로</b> 붙입니다. 열 개수와 순서만 맞으면 됩니다.</p>
+<p class="fname">examples/p04/15-set-ops.sql</p>
+<pre><code data-lang="sql" data-src="p04/15-set-ops.sql">-- 집합 연산: UNION 은 중복 제거, UNION ALL 은 그대로, INTERSECT 는 교집합, EXCEPT 는 차집합
+WITH a(city) AS (VALUES ('서울'), ('부산'), ('대구')),
+     b(city) AS (VALUES ('부산'), ('대구'), ('광주'))
+SELECT 'UNION' AS op, group_concat(city) AS cities FROM (SELECT city FROM a UNION SELECT city FROM b)
+UNION ALL
+SELECT 'UNION ALL', group_concat(city) FROM (SELECT city FROM a UNION ALL SELECT city FROM b)
+UNION ALL
+SELECT 'INTERSECT', group_concat(city) FROM (SELECT city FROM a INTERSECT SELECT city FROM b)
+UNION ALL
+SELECT 'EXCEPT', group_concat(city) FROM (SELECT city FROM a EXCEPT SELECT city FROM b);</code></pre>
+<pre class="term" data-out="p04/15-set-ops.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p04/15-set-ops.sql
+   op                 cities
+---------  -----------------------------
+UNION      광주,대구,부산,서울
+UNION ALL  서울,부산,대구,부산,대구,광주
+INTERSECT  대구,부산
+EXCEPT     서울</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>연산</th><th>하는 일</th><th>중복</th></tr>
+<tr><td><code>UNION</code></td><td>합집합</td><td>제거합니다</td></tr>
+<tr><td><code>UNION ALL</code></td><td>그냥 이어 붙이기</td><td>남깁니다</td></tr>
+<tr><td><code>INTERSECT</code></td><td>양쪽 모두에 있는 것</td><td>제거합니다</td></tr>
+<tr><td><code>EXCEPT</code></td><td>왼쪽에만 있는 것</td><td>제거합니다</td></tr>
+</table>
+</div>
+<div class="warn"><b>기본값이 비쌉니다</b> — <code>UNION</code>은 중복 제거를 위해 정렬이나 해시를 씁니다. 중복이 없다는 것을 안다면 <code>UNION ALL</code>을 쓰십시오. 큰 표에서는 차이가 큽니다.</div>
+</article>
+
+<article class="card" id="mid-string">
+<h3>문자열 함수 — 자르고 찾고 바꿉니다</h3>
+<p>데이터 정제의 절반은 문자열 다루기입니다. 이름은 엔진마다 조금씩 다르지만, 하는 일은 길이·부분 문자열·위치 찾기·치환·잇기 다섯 가지로 정리됩니다.</p>
+<p class="fname">examples/p04/16-string-funcs.sql</p>
+<pre><code data-lang="sql" data-src="p04/16-string-funcs.sql">-- 문자열 함수 (SQLite): 길이·자르기·찾기·바꾸기·붙이기
+SELECT email,
+       length(email)                          AS len,
+       substr(email, 1, instr(email, '@') - 1) AS local_part,
+       upper(substr(name, 1, 1))              AS initial,
+       replace(email, 'example.com', 'shop.kr') AS moved,
+       name || ' &lt;' || email || '&gt;'           AS display
+FROM customers WHERE id = 1;</code></pre>
+<pre class="term" data-out="p04/16-string-funcs.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/16-string-funcs.sql
+      email         len  local_part  initial      moved                 display
+------------------  ---  ----------  -------  --------------  ---------------------------
+user01@example.com   18  user01      최       user01@shop.kr  최민준 &lt;user01@example.com&gt;</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>하는 일</th><th>SQLite</th><th>DuckDB</th></tr>
+<tr><td>위치 찾기</td><td><code>instr(s, x)</code></td><td><code>instr</code> · <code>position(x IN s)</code></td></tr>
+<tr><td>부분 문자열</td><td colspan="2"><code>substr(s, 시작, 길이)</code> — 시작 위치는 1부터</td></tr>
+<tr><td>잇기</td><td colspan="2"><code>||</code> (MySQL만 <code>CONCAT()</code>)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="mid-agg-string">
+<h3>여러 행을 한 문자열로</h3>
+<p>목록을 화면에 한 줄로 보여 줄 때 쓰는 집계입니다. 이름과 정렬 지정 방법이 두 엔진에서 다릅니다.</p>
+<p class="cap">SQLite — <code>group_concat</code>은 정렬을 인자로 받지 못해 안쪽에서 미리 정렬합니다.</p>
+<p class="fname">examples/p04/17-group-concat.sql</p>
+<pre><code data-lang="sql" data-src="p04/17-group-concat.sql" data-lines="2-4">SELECT category, group_concat(name, ', ') AS items
+FROM (SELECT category, name FROM products WHERE price &gt;= 199000 ORDER BY name)
+GROUP BY category;</code></pre>
+<pre class="term" data-out="p04/17-group-concat.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/17-group-concat.sql
+category            items
+--------  --------------------------
+도서      타입스크립트 입문
+생활      에코백, 탁상 스탠드
+스포츠    물병 1L
+식품      견과류 믹스 1kg, 그래놀라
+전자기기  모니터 27인치, 무선 마우스</pre>
+<p class="cap">DuckDB — <code>string_agg(… ORDER BY …)</code>로 집계 안에서 바로 정렬하고, <code>list()</code>로 배열도 만듭니다.</p>
+<p class="fname">examples/p04/17-string-agg-duck.sql</p>
+<pre><code data-lang="sql" data-src="p04/17-string-agg-duck.sql" data-lines="2-6">SELECT category,
+       string_agg(name, ', ' ORDER BY name) AS items,
+       list(price ORDER BY name)            AS prices
+FROM products WHERE price &gt;= 199000
+GROUP BY category ORDER BY category;</code></pre>
+<pre class="term" data-out="p04/17-string-agg-duck.sql"><span class="p">$</span> bin/duckdb -column data/shop.duckdb &lt; examples/p04/17-string-agg-duck.sql
+category  items                       prices          
+--------  --------------------------  ----------------
+도서      타입스크립트 입문           [199000]        
+생활      에코백, 탁상 스탠드         [199000, 349000]
+스포츠    물병 1L                     [349000]        
+식품      견과류 믹스 1kg, 그래놀라   [349000, 349000]
+전자기기  모니터 27인치, 무선 마우스  [349000, 349000]</pre>
+<div class="note"><b>왜 결과 모양이 다른가</b> — DuckDB의 <code class="nb">prices</code>는 문자열이 아니라 진짜 리스트 타입입니다. 리스트·구조체 같은 중첩 타입은 7부에서 다룹니다.</div>
+</article>
+
+<article class="card" id="mid-coalesce">
+<h3>NULL을 다루는 세 함수</h3>
+<p>NULL은 &quot;값이 없다&quot;가 아니라 &quot;모른다&quot;입니다(3부). 그래서 계산에 섞이면 결과 전체가 NULL이 됩니다. 그 전에 값을 갈아 끼우거나, 반대로 특정 값을 NULL로 바꿔 위험한 연산을 피합니다.</p>
+<p class="fname">examples/p04/28-coalesce-nullif.sql</p>
+<pre><code data-lang="sql" data-src="p04/28-coalesce-nullif.sql">-- NULL 다루기: coalesce(첫 비-NULL), nullif(같으면 NULL), ifnull
+SELECT coalesce(NULL, NULL, '기본값') AS first_non_null,
+       nullif('a', 'a')              AS same_becomes_null,
+       nullif('a', 'b')              AS different_stays,
+       ifnull(NULL, 0)               AS ifnull_demo,
+       10 / nullif(0, 0)             AS safe_division;   -- 0 나누기를 NULL 로 피한다</code></pre>
+<pre class="term" data-out="p04/28-coalesce-nullif.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p04/28-coalesce-nullif.sql
+first_non_null  same_becomes_null  different_stays  ifnull_demo  safe_division
+--------------  -----------------  ---------------  -----------  -------------
+기본값          NULL               a                          0  NULL</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>함수</th><th>하는 일</th><th>쓰는 곳</th></tr>
+<tr><td><code>coalesce(a, b, …)</code></td><td>처음 나오는 NULL 아닌 값</td><td>기본값 채우기</td></tr>
+<tr><td><code>nullif(a, b)</code></td><td>같으면 NULL, 다르면 a</td><td>0 나누기 막기</td></tr>
+<tr><td><code>ifnull(a, b)</code></td><td>인자 두 개짜리 coalesce</td><td>SQLite 전용 축약형</td></tr>
+</table>
+</div>
+<div class="key"><b>0 나누기</b> — <code>10 / nullif(0, 0)</code>은 오류 대신 NULL을 냅니다. 비율을 구할 때 분모가 0일 수 있으면 이 관용구를 기억해 두십시오.</div>
+</article>
+
+<article class="card" id="mid-view">
+<h3>뷰 — 질의에 이름을 붙여 스키마에 남깁니다</h3>
+<p>같은 집계를 여러 곳에서 쓰면 정의가 조금씩 어긋납니다. 뷰는 그 정의를 한 곳에 두고 이름으로 부르게 합니다. 저장되는 것은 <b>질의문</b>이므로, 뷰를 읽을 때마다 원본 표의 최신 값이 반영됩니다.</p>
+<p class="fname">examples/p04/18-view.sql</p>
+<pre><code data-lang="sql" data-src="p04/18-view.sql">-- 뷰: 자주 쓰는 질의에 이름을 붙인다 — 저장되는 건 질의문이지 결과가 아니다
+CREATE VIEW order_totals AS
+  SELECT o.id AS order_id, o.customer_id, o.status,
+         sum(oi.qty * oi.unit_price) AS amount
+  FROM orders AS o JOIN order_items AS oi ON oi.order_id = o.id
+  GROUP BY o.id;
+
+SELECT status, count(*) AS n, sum(amount) AS amount
+FROM order_totals GROUP BY status ORDER BY status;</code></pre>
+<pre class="term" data-out="p04/18-view.sql"><span class="p">$</span> sqlite3 -header -column $TMP/shop.db &lt; examples/p04/18-view.sql
+ status     n    amount
+---------  ---  ---------
+cancelled   60   23742000
+paid       577  276928200
+pending     54   27070900
+shipped    109   52904900</pre>
+<p>바깥 질의는 <code class="nb">order_totals</code>를 보통 표처럼 씁니다. 실제로는 엔진이 뷰의 정의를 그 자리에 펼쳐 넣고 한 질의로 만들어 실행합니다.</p>
+<div class="warn"><b>뷰는 캐시가 아닙니다</b> — 읽을 때마다 다시 계산합니다. 무거운 집계를 뷰로 감싸도 빨라지지 않습니다. 결과를 미리 저장하려면 표로 만들어야 하고, 그때부터 갱신 책임이 생깁니다.</div>
+</article>
+
+<article class="card" id="mid-index-plan">
+<h3>인덱스 — 실행 계획이 바뀌는 것을 봅니다</h3>
+<p>인덱스는 질의의 <b>뜻</b>을 바꾸지 않습니다. 결과는 그대로 두고 찾는 방법만 바꿉니다. 그 &quot;방법&quot;을 눈으로 보는 도구가 <code>EXPLAIN QUERY PLAN</code>입니다.</p>
+<p class="fname">examples/p04/19-index-plan.sql</p>
+<pre><code data-lang="sql" data-src="p04/19-index-plan.sql">-- 인덱스가 실행 계획을 바꾼다 — EXPLAIN QUERY PLAN 으로 전후를 본다
+EXPLAIN QUERY PLAN SELECT name FROM customers WHERE city = '부산';
+CREATE INDEX idx_customers_city ON customers(city);
+EXPLAIN QUERY PLAN SELECT name FROM customers WHERE city = '부산';</code></pre>
+<pre class="term" data-out="p04/19-index-plan.sql"><span class="p">$</span> sqlite3 -header -column $TMP/shop.db &lt; examples/p04/19-index-plan.sql
+QUERY PLAN
+`--SCAN customers
+QUERY PLAN
+`--SEARCH customers USING INDEX idx_customers_city (city=?)</pre>
+<div class="flow"><span class="box">SCAN customers</span><span class="arr">인덱스 생성</span><span class="box dim">SEARCH USING INDEX</span></div>
+<p><code>SCAN</code>은 표를 처음부터 끝까지 훑는다는 뜻이고, <code>SEARCH</code>는 인덱스로 필요한 자리만 찾아간다는 뜻입니다. 이 단어 두 개만 구별해도 느린 질의의 절반은 진단됩니다.</p>
+<div class="note"><b>공짜가 아닙니다</b> — 인덱스는 디스크를 더 쓰고, <code>INSERT</code>·<code>UPDATE</code>마다 함께 갱신됩니다. 어떤 열에 어떤 순서로 만들지는 13부에서 실측과 함께 다룹니다.</div>
+</article>
+
+<article class="card" id="mid-check">
+<h3>CHECK 제약 — 들어올 때 막습니다</h3>
+<p>애플리케이션에서 검사하는 규칙은 그 코드를 거치지 않는 경로에서 무너집니다. 관리자 콘솔, 일회성 스크립트, 다른 서비스가 그렇습니다. 제약은 <b>엔진 안에</b> 규칙을 두어 모든 경로를 한 번에 막습니다.</p>
+<p>우리 스키마에는 이미 이렇게 적혀 있습니다.</p>
+<pre><code data-lang="sql">price INTEGER NOT NULL CHECK (price &gt;= 0),</code></pre>
+<p class="fname">examples/p04/20-constraints.sql</p>
+<pre><code data-lang="sql" data-src="p04/20-constraints.sql">-- 제약은 잘못된 데이터를 "들어올 때" 막는다
+PRAGMA foreign_keys = ON;
+INSERT INTO products (name, category, price, stock) VALUES ('음수 가격', '생활', -1, 0);</code></pre>
+<pre class="term" data-out="p04/20-constraints.sql"><span class="p">$</span> sqlite3 -header -column $TMP/shop.db &lt; examples/p04/20-constraints.sql
+--- stderr ---
+Error near line 3: CHECK constraint failed: price &gt;= 0
+[exit 1]</pre>
+<p>오류 메시지에 위반한 제약의 조건이 그대로 나옵니다. 값은 표에 남지 않았습니다.</p>
+<div class="key"><b>제약은 문서입니다</b> — 스키마만 읽어도 &quot;가격은 음수일 수 없다&quot;를 알 수 있습니다. 주석과 달리 낡을 수가 없습니다. 어기는 순간 실패하기 때문입니다.</div>
+</article>
+
+<article class="card" id="mid-unique-fk">
+<h3>UNIQUE와 FOREIGN KEY 위반 메시지</h3>
+<p>제약마다 오류 메시지가 다릅니다. 실무에서 로그를 볼 때 이 문구를 구별할 수 있어야 원인을 바로 찾습니다. 세 가지를 한 번에 어겨 봤습니다.</p>
+<p class="fname">examples/p04/21-unique-fk.sql</p>
+<pre><code data-lang="sql" data-src="p04/21-unique-fk.sql">-- UNIQUE 와 FOREIGN KEY 위반 — 어떤 메시지가 나오는지 보기 (.bail off 로 계속 진행)
+.bail off
+PRAGMA foreign_keys = ON;
+INSERT INTO customers (name, email, joined) VALUES ('중복', 'user01@example.com', '2026-01-01');
+INSERT INTO orders (customer_id, ordered_at, status) VALUES (9999, '2026-01-01 00:00:00', 'paid');
+INSERT INTO orders (customer_id, ordered_at, status) VALUES (1, '2026-01-01 00:00:00', 'lost');
+SELECT count(*) AS orders_after FROM orders;</code></pre>
+<pre class="term" data-out="p04/21-unique-fk.sql"><span class="p">$</span> sqlite3 -header -column $TMP/shop.db &lt; examples/p04/21-unique-fk.sql
+orders_after
+------------
+         800
+--- stderr ---
+Error near line 4: UNIQUE constraint failed: customers.email
+Error near line 5: FOREIGN KEY constraint failed
+Error near line 6: CHECK constraint failed: status IN ('pending','paid','shipped','cancelled')
+[exit 1]</pre>
+<p>세 <code>INSERT</code>가 모두 거부됐고 주문 수는 800 그대로입니다. 실패한 문장은 흔적을 남기지 않습니다.</p>
+<div class="tip"><b><code>.bail off</code>가 하는 일</b> — <code>sqlite3</code> CLI는 스크립트 실행 중 오류가 나면 기본으로 멈춥니다. 이 예제는 세 오류를 모두 보여 주려고 &quot;멈추지 말고 계속&quot;으로 바꿨습니다. 제약과는 무관한 CLI 설정입니다.</div>
+<div class="warn"><b>외래 키는 켜야 합니다</b> — SQLite는 하위 호환 때문에 <code>PRAGMA foreign_keys = ON</code>을 연결마다 켜 줘야 검사합니다. 켜지 않으면 없는 고객을 가리키는 주문이 조용히 들어갑니다.</div>
+</article>
+
+<article class="card" id="mid-trigger">
+<h3>트리거 — 변경에 반응하는 규칙</h3>
+<p>제약이 &quot;막는&quot; 장치라면 트리거는 &quot;따라 하는&quot; 장치입니다. 어떤 표가 바뀔 때 자동으로 다른 문장을 실행합니다. 가격 이력처럼 <b>빠뜨리면 안 되는 부수 기록</b>에 씁니다. SQL:1999에서 표준에 들어왔습니다.</p>
+<p class="fname">examples/p04/22-trigger.sql</p>
+<pre><code data-lang="sql" data-src="p04/22-trigger.sql">-- 트리거: 가격이 바뀔 때마다 이력을 자동으로 남긴다
+CREATE TABLE price_log (product_id INTEGER, old_price INTEGER, new_price INTEGER,
+                        changed_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TRIGGER trg_price AFTER UPDATE OF price ON products
+  WHEN old.price &lt;&gt; new.price
+BEGIN
+  INSERT INTO price_log (product_id, old_price, new_price) VALUES (old.id, old.price, new.price);
+END;
+
+UPDATE products SET price = 16000 WHERE id = 1;
+UPDATE products SET price = 16000 WHERE id = 1;   -- 값이 같으면 기록되지 않는다
+SELECT product_id, old_price, new_price FROM price_log;</code></pre>
+<pre class="term" data-out="p04/22-trigger.sql"><span class="p">$</span> sqlite3 -header -column $TMP/shop.db &lt; examples/p04/22-trigger.sql
+product_id  old_price  new_price
+----------  ---------  ---------
+         1      15000      16000</pre>
+<p><code>UPDATE</code>를 두 번 했지만 이력은 한 줄뿐입니다. <code>WHEN old.price &lt;&gt; new.price</code> 조건이 값이 실제로 바뀐 경우에만 걸리게 했기 때문입니다.</p>
+<div class="warn"><b>보이지 않는 코드</b> — 트리거는 질의문 어디에도 나타나지 않습니다. &quot;이 표가 왜 바뀌지?&quot;를 며칠 추적하게 만들 수 있으므로, 꼭 필요한 곳에만 쓰고 스키마와 함께 문서로 남기십시오.</div>
+</article>
+
+<article class="card" id="mid-generated">
+<h3>생성 열 — 늘 계산되어 있는 열</h3>
+<p>금액처럼 다른 열에서 유도되는 값을 따로 저장하면, 둘이 어긋나는 순간이 반드시 옵니다. 생성 열은 식만 선언해 두고 값을 직접 넣지 못하게 막아 그 어긋남을 원천 차단합니다.</p>
+<p class="fname">examples/p04/27-generated-column.sql</p>
+<pre><code data-lang="sql" data-src="p04/27-generated-column.sql">-- 생성 열: 식으로 정의된 열 — 값을 직접 넣지 않고 늘 계산돼 있다
+CREATE TABLE line (qty INTEGER, unit_price INTEGER,
+                   amount INTEGER GENERATED ALWAYS AS (qty * unit_price) VIRTUAL);
+INSERT INTO line (qty, unit_price) VALUES (3, 4900), (2, 15000);
+SELECT * FROM line;</code></pre>
+<pre class="term" data-out="p04/27-generated-column.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p04/27-generated-column.sql
+qty  unit_price  amount
+---  ----------  ------
+  3        4900   14700
+  2       15000   30000</pre>
+<p><code>INSERT</code>에 <code class="nb">amount</code>를 적지 않았는데도 값이 채워져 있습니다. 직접 넣으려 하면 거부됩니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>종류</th><th>저장</th><th>특징</th></tr>
+<tr><td><code>VIRTUAL</code></td><td>안 합니다</td><td>읽을 때 계산 — 기본값, 공간을 쓰지 않습니다</td></tr>
+<tr><td><code>STORED</code></td><td>합니다</td><td>쓸 때 계산 — 읽기가 싸고 인덱스에 유리합니다</td></tr>
+</table>
+</div>
+<p class="cap">SQLite는 3.31.0(2020-01-22)부터 생성 열을 지원합니다.</p>
+</article>
+
+<article class="card" id="mid-constraint-table">
+<h3>제약 다섯 가지 조견표</h3>
+<p>제약은 &quot;이 표에서 참이어야 하는 문장&quot;입니다. 무엇을 보장하는지와 언제 검사하는지를 함께 기억하십시오.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>제약</th><th>보장하는 것</th><th>우리 스키마의 예</th></tr>
+<tr><td><code>NOT NULL</code></td><td>값이 반드시 있음</td><td><code class="nb">customers.name</code></td></tr>
+<tr><td><code>PRIMARY KEY</code></td><td>행을 유일하게 지목</td><td>모든 표의 <code class="nb">id</code></td></tr>
+<tr><td><code>UNIQUE</code></td><td>같은 값이 둘일 수 없음</td><td><code class="nb">customers.email</code></td></tr>
+<tr><td><code>CHECK</code></td><td>임의의 조건식</td><td><code class="nb">price &gt;= 0</code></td></tr>
+<tr><td><code>FOREIGN KEY</code></td><td>가리키는 행이 실재함</td><td><code class="nb">orders.customer_id</code></td></tr>
+</table>
+</div>
+<div class="key"><b>가장 싼 검증</b> — 제약은 데이터가 들어오는 모든 경로에 한 번에 적용되고, 코드 리뷰가 필요 없으며, 잊어버릴 수도 없습니다. 애플리케이션 검증은 그 위에 얹는 사용자 경험 장치로 보십시오.</div>
+</article>
+
+<article class="card" id="mid-upsert">
+<h3>UPSERT — 있으면 갱신, 없으면 삽입</h3>
+<p>&quot;먼저 <code>SELECT</code>로 있는지 보고 <code>INSERT</code>나 <code>UPDATE</code>&quot;는 두 문장 사이에 다른 연결이 끼어들 수 있습니다. <code>ON CONFLICT</code>는 이 판단을 엔진 안에서 한 문장으로 끝냅니다.</p>
+<p class="fname">examples/p04/23-upsert.sql</p>
+<pre><code data-lang="sql" data-src="p04/23-upsert.sql">-- UPSERT: 있으면 갱신, 없으면 삽입 — 재고 동기화의 정석
+CREATE TABLE stock_sync (product_id INTEGER PRIMARY KEY, stock INTEGER, synced INTEGER DEFAULT 1);
+INSERT INTO stock_sync (product_id, stock) VALUES (1, 10), (2, 20);
+INSERT INTO stock_sync (product_id, stock) VALUES (2, 25), (3, 30)
+  ON CONFLICT (product_id) DO UPDATE SET stock = excluded.stock, synced = synced + 1;
+SELECT * FROM stock_sync ORDER BY product_id;</code></pre>
+<pre class="term" data-out="p04/23-upsert.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p04/23-upsert.sql
+product_id  stock  synced
+----------  -----  ------
+         1     10       1
+         2     25       2
+         3     30       1</pre>
+<p>2번은 이미 있었으므로 재고가 25로 갱신되고 <code class="nb">synced</code>가 2로 올랐습니다. 3번은 없었으므로 삽입되어 1입니다. <code>excluded</code>는 &quot;넣으려다 충돌한 그 행&quot;을 가리키는 예약 이름입니다.</p>
+<div class="note"><b>표준과의 관계</b> — 표준 SQL의 대응물은 <code>MERGE</code>(SQL:2003)입니다. SQLite는 PostgreSQL 문법을 따라 3.24.0(2018-06-04)부터 <code>ON CONFLICT</code>를 지원하며, DuckDB도 같은 문법을 씁니다.</div>
+</article>
+
+<article class="card" id="mid-returning">
+<h3>RETURNING — 바꾼 행을 바로 돌려받습니다</h3>
+<p>새로 만든 행의 자동 증가 <code class="nb">id</code>를 알아야 할 때가 많습니다. 다시 <code>SELECT</code>하면 왕복이 한 번 더 들고, 그사이 다른 연결이 값을 바꿀 수도 있습니다. <code>RETURNING</code>은 변경과 조회를 한 문장으로 묶습니다.</p>
+<p class="fname">examples/p04/24-returning.sql</p>
+<pre><code data-lang="sql" data-src="p04/24-returning.sql">-- RETURNING: 바꾼 행을 바로 돌려받는다 — 다시 SELECT 할 필요가 없다
+INSERT INTO customers (name, email, city, joined)
+VALUES ('신규', 'new@example.com', '세종', '2026-09-03')
+RETURNING id, name, joined;
+
+UPDATE products SET stock = stock - 1 WHERE id = 1 RETURNING id, name, stock;</code></pre>
+<pre class="term" data-out="p04/24-returning.sql"><span class="p">$</span> sqlite3 -header -column $TMP/shop.db &lt; examples/p04/24-returning.sql
+id  name    joined
+--  ----  ----------
+61  신규  2026-09-03
+id     name      stock
+--  -----------  -----
+ 1  무선 이어폰     34</pre>
+<p><code>INSERT</code>가 만든 <code class="nb">id</code> 61이 그대로 돌아왔고, <code>UPDATE</code>는 <b>바뀐 뒤</b>의 재고를 돌려줬습니다. <code>DELETE</code>에도 붙일 수 있어 지운 행을 감사 로그로 남기기 좋습니다.</p>
+<div class="tip"><b>지원 시기</b> — SQLite는 3.35.0(2021-03-12)부터 지원합니다. 그 이전 버전을 쓰는 환경이라면 <code>last_insert_rowid()</code>로 대신해야 합니다.</div>
+</article>
+
+<article class="card" id="mid-json-sqlite">
+<h3>JSON (SQLite) — 문자열에 담고 함수로 꺼냅니다</h3>
+<p>스키마를 미리 정할 수 없는 데이터가 있습니다. 이벤트 로그, 외부 API 응답 같은 것들입니다. SQLite는 이런 값을 텍스트로 담아 두고 JSON 함수로 꺼내 씁니다.</p>
+<p class="fname">examples/p04/25-json-sqlite.sql</p>
+<pre><code data-lang="sql" data-src="p04/25-json-sqlite.sql">-- JSON (SQLite): 문자열로 저장하고 json 함수로 꺼낸다 — -&gt;&gt; 는 값을 SQL 타입으로
+CREATE TABLE events (id INTEGER PRIMARY KEY, body TEXT);
+INSERT INTO events (body) VALUES
+  ('{"type":"click","user":7,"tags":["a","b"]}'),
+  ('{"type":"view","user":9,"tags":[]}');
+SELECT id, body -&gt;&gt; '$.type' AS type, body -&gt;&gt; '$.user' AS user_id,
+       json_array_length(body, '$.tags') AS ntags
+FROM events;
+SELECT e.id, t.value AS tag FROM events AS e, json_each(e.body, '$.tags') AS t;</code></pre>
+<pre class="term" data-out="p04/25-json-sqlite.sql"><span class="p">$</span> sqlite3 -header -column :memory: &lt; examples/p04/25-json-sqlite.sql
+id  type   user_id  ntags
+--  -----  -------  -----
+ 1  click        7      2
+ 2  view         9      0
+id  tag
+--  ---
+ 1  a
+ 1  b</pre>
+<p><code>-&gt;&gt;</code>는 값을 SQL 타입(숫자·문자열)으로, <code>-&gt;</code>는 JSON 조각으로 꺼냅니다. <code>json_each</code>는 배열을 행으로 펼쳐, 배열 원소마다 한 행씩 만듭니다.</p>
+<div class="note"><b>지원 시기</b> — JSON 함수는 3.9.0(2015-10-14)에 확장으로 들어왔고, 3.38.0(2022-02-22)부터 기본 내장이며 <code>-&gt;</code>·<code>-&gt;&gt;</code> 연산자가 추가됐습니다. 경로는 <code>'$.type'</code>처럼 씁니다.</div>
+</article>
+
+<article class="card" id="mid-json-duckdb">
+<h3>JSON (DuckDB) — 진짜 타입입니다</h3>
+<p>DuckDB에는 <code>JSON</code> 타입이 있습니다. 경로 문자열 대신 키 이름을 바로 쓰고, 결과를 리스트나 구조체 같은 <b>중첩 타입</b>으로 받아 그대로 이어 계산할 수 있습니다.</p>
+<p class="fname">examples/p04/25-json-duckdb.sql</p>
+<pre><code data-lang="sql" data-src="p04/25-json-duckdb.sql">-- JSON (DuckDB): JSON 타입과 -&gt; / -&gt;&gt; 연산자, 구조체로 바로 풀기
+CREATE TABLE events (id INTEGER, body JSON);
+INSERT INTO events VALUES
+  (1, '{"type":"click","user":7,"tags":["a","b"]}'),
+  (2, '{"type":"view","user":9,"tags":[]}');
+SELECT id, body -&gt;&gt; 'type' AS type, (body -&gt; 'user')::INTEGER AS user_id,
+       json_array_length(body -&gt; 'tags') AS ntags
+FROM events;
+SELECT id, unnest(from_json(body -&gt; 'tags', '["VARCHAR"]')) AS tag FROM events;</code></pre>
+<pre class="term" data-out="p04/25-json-duckdb.sql"><span class="p">$</span> bin/duckdb -column :memory: &lt; examples/p04/25-json-duckdb.sql
+id  type   user_id  ntags
+--  -----  -------  -----
+1   click  7        2    
+2   view   9        0    
+id  tag
+--  ---
+1   a  
+1   b  </pre>
+<p>같은 <code>-&gt;&gt;</code> 연산자를 쓰지만 경로 표기가 <code>'type'</code>으로 짧습니다. <code>unnest</code>는 SQLite의 <code>json_each</code>에 해당하며, 리스트를 행으로 펼칩니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>하는 일</th><th>SQLite</th><th>DuckDB</th></tr>
+<tr><td>값 꺼내기</td><td><code>body -&gt;&gt; '$.type'</code></td><td><code>body -&gt;&gt; 'type'</code></td></tr>
+<tr><td>배열 펼치기</td><td><code>json_each(x, '$.tags')</code></td><td><code>unnest(…)</code></td></tr>
+<tr><td>저장 타입</td><td>TEXT (또는 JSONB)</td><td><code>JSON</code> 타입</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="mid-transaction">
+<h3>트랜잭션 맛보기 — 전부 되거나 전부 안 되거나</h3>
+<p>재고를 줄이고 주문을 넣는 두 문장 중 하나만 성공하면 데이터는 앞뒤가 맞지 않게 됩니다. <code>BEGIN</code>과 <code>COMMIT</code> 사이는 하나의 덩어리이고, <code>ROLLBACK</code>은 그 덩어리를 통째로 없던 일로 만듭니다.</p>
+<p class="fname">examples/p04/26-transaction.sql</p>
+<pre><code data-lang="sql" data-src="p04/26-transaction.sql">-- 트랜잭션: 여러 문장을 하나로 — 중간에 ROLLBACK 하면 전부 없던 일이 된다
+BEGIN;
+UPDATE products SET stock = stock - 5 WHERE id = 1;
+INSERT INTO orders (customer_id, ordered_at, status) VALUES (1, '2026-09-03 10:00:00', 'pending');
+SELECT stock AS stock_inside_tx FROM products WHERE id = 1;
+ROLLBACK;
+SELECT stock AS stock_after_rollback FROM products WHERE id = 1;
+SELECT count(*) AS orders FROM orders;</code></pre>
+<pre class="term" data-out="p04/26-transaction.sql"><span class="p">$</span> sqlite3 -header -column $TMP/shop.db &lt; examples/p04/26-transaction.sql
+stock_inside_tx
+---------------
+             30
+stock_after_rollback
+--------------------
+                  35
+orders
+------
+   800</pre>
+<p>트랜잭션 안에서는 재고가 30으로 보였지만, <code>ROLLBACK</code> 뒤에는 35로 돌아왔고 주문 수도 800 그대로입니다. 중간에 보이던 값은 그 연결 안에서만 보이던 값입니다.</p>
+<div class="key"><b>더 깊이</b> — 다른 연결에는 무엇이 언제 보이는가, 동시에 같은 행을 고치면 어떻게 되는가는 14부에서 ACID·격리 수준·잠금과 함께 실측합니다.</div>
+</article>
+
+<article class="card" id="mid-dialect">
+<h3>4부에서 만난 방언 차이</h3>
+<p>표준 SQL은 골격이고 세부는 엔진마다 다릅니다. 4부에서 실제로 부딪힌 차이만 모았습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>SQLite</th><th>DuckDB</th></tr>
+<tr><td>문자열 집계</td><td><code>group_concat(x, ', ')</code></td><td><code>string_agg(x, ', ' ORDER BY …)</code></td></tr>
+<tr><td>집계 안 정렬</td><td>안쪽 질의에서 미리</td><td>집계 인자에 <code>ORDER BY</code></td></tr>
+<tr><td>JSON 경로</td><td><code>-&gt;&gt; '$.type'</code></td><td><code>-&gt;&gt; 'type'</code></td></tr>
+<tr><td>배열 펼치기</td><td><code>json_each()</code></td><td><code>unnest()</code></td></tr>
+<tr><td>윈도우 뒤 거르기</td><td>CTE로 한 겹 감싸기</td><td><code>QUALIFY</code> 한 줄</td></tr>
+</table>
+</div>
+<p>문자열을 잇는 <code>||</code>와 <code>ON CONFLICT</code> UPSERT 문법은 두 엔진이 같습니다. PostgreSQL도 이 둘을 같은 표기로 쓰지만, MySQL은 잇기에 <code>CONCAT()</code>을, UPSERT에 <code>ON DUPLICATE KEY UPDATE</code>를 씁니다.</p>
+<div class="warn"><b>이식성의 원칙</b> — 방언에 기대는 부분은 한곳에 모으십시오. 흩어져 있으면 엔진을 바꿀 때가 아니라 버전을 올릴 때 먼저 무너집니다.</div>
+</article>
+
+<article class="card" id="mid-mistakes">
+<h3>흔한 실수 다섯</h3>
+<p>4부의 도구는 강력한 만큼 조용히 틀리기 쉽습니다. 아래 다섯은 오류를 내지 않고 <b>틀린 답</b>을 주는 경우들입니다.</p>
+<div class="warn"><b>1. NOT IN에 NULL</b> — 목록에 NULL이 하나만 있어도 결과가 0행입니다. <code>NOT EXISTS</code>로 바꾸십시오.</div>
+<div class="warn"><b>2. 조인 뒤 집계</b> — 1:N 조인은 왼쪽 행을 복제합니다. <code>sum</code>이 부풀지 않았는지 <code>count(DISTINCT …)</code>로 확인하십시오.</div>
+<div class="warn"><b>3. 프레임 생략</b> — <code>OVER (ORDER BY …)</code>만 쓰면 기본 프레임이 <code>RANGE</code>라 동점 행이 한꺼번에 들어옵니다. 누적 합에는 <code>ROWS</code>를 명시하십시오.</div>
+<div class="warn"><b>4. WHERE에서 윈도우</b> — 계산 시점이 <code>WHERE</code>보다 뒤라 쓸 수 없습니다. CTE로 감싸십시오.</div>
+<div class="warn"><b>5. 뷰를 캐시로 착각</b> — 뷰는 읽을 때마다 다시 계산합니다. 느린 질의를 뷰로 감싸도 그대로 느립니다.</div>
+</article>
+
+<article class="card" id="mid-nulls-order">
+<h3>정렬에서 NULL은 어디에 놓이나</h3>
+<p>표준은 NULL의 위치를 구현에 맡깁니다. 그래서 엔진마다 다르고, 같은 질의가 이식하는 순간 순서가 뒤집힐 수 있습니다. 위치를 직접 적는 문법이 <code>NULLS FIRST</code>·<code>NULLS LAST</code>입니다.</p>
+<p class="fname">examples/p04/29-nulls-order.sql</p>
+<pre><code data-lang="sql" data-src="p04/29-nulls-order.sql">-- 정렬에서 NULL 은 어디에 놓이는가 — 기본 위치와 NULLS FIRST / NULLS LAST
+SELECT o.id, o.status, p.amount
+FROM orders AS o LEFT JOIN payments AS p ON p.order_id = o.id
+WHERE o.id &lt;= 6
+ORDER BY p.amount;                 -- SQLite 기본: NULL 을 가장 작게 본다
+
+SELECT o.id, o.status, p.amount
+FROM orders AS o LEFT JOIN payments AS p ON p.order_id = o.id
+WHERE o.id &lt;= 6
+ORDER BY p.amount NULLS LAST;      -- 3.30.0 부터 위치를 직접 지정할 수 있다</code></pre>
+<pre class="term" data-out="p04/29-nulls-order.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/29-nulls-order.sql
+id   status    amount
+--  ---------  -------
+ 5  cancelled  NULL
+ 6  pending    NULL
+ 2  paid         27000
+ 3  paid        128000
+ 4  paid        432900
+ 1  paid       1788900
+id   status    amount
+--  ---------  -------
+ 2  paid         27000
+ 3  paid        128000
+ 4  paid        432900
+ 1  paid       1788900
+ 5  cancelled  NULL
+ 6  pending    NULL</pre>
+<p>기본에서는 결제가 없는 주문(NULL)이 맨 앞에 왔고, <code>NULLS LAST</code>를 붙이자 맨 뒤로 갔습니다. SQLite는 3.30.0(2019-10-04)부터 이 문법을 지원합니다.</p>
+<div class="tip"><b>기본값이 서로 다릅니다</b> — SQLite는 오름차순에서 NULL을 가장 작게 보아 앞에 놓지만, DuckDB의 기본은 <code>NULLS LAST</code>라 뒤에 놓습니다(PostgreSQL과 같은 기본값입니다). 기본에 기대지 말고 명시하십시오.</div>
+</article>
+
+<article class="card" id="mid-sort-stability">
+<h3>정렬은 안정적이지 않습니다</h3>
+<p>동점인 행들끼리의 순서는 <b>정해져 있지 않습니다</b>. 오늘 같은 순서로 나오는 것은 우연이며, 인덱스가 하나 생기거나 행이 늘어나면 바뀝니다. 페이지 나누기에서 같은 행이 두 번 보이거나 아예 빠지는 사고가 여기서 납니다.</p>
+<pre><code data-lang="sql">ORDER BY price DESC, id   -- 결정적인 열을 마지막에 하나 더</code></pre>
+<div class="key"><b>규칙</b> — <code>ORDER BY</code>의 마지막에는 유일한 열(대개 기본 키)을 하나 넣으십시오. 그 순간부터 순서는 재현 가능해집니다.</div>
+<p>정렬은 비쌉니다. <code>LIMIT</code>이 없는 <code>ORDER BY</code>는 결과 전체를 늘어놓아야 끝나므로, 화면에 10행만 보여 줄 것이라면 <code>LIMIT</code>을 반드시 함께 적으십시오.</p>
+<div class="note"><b>같은 이유로</b> — 3부에서 본 대로 <code>ORDER BY</code> 없는 <code>LIMIT 5</code>는 &quot;앞의 5행&quot;이 아니라 &quot;아무 5행&quot;입니다. 둘은 늘 짝으로 붙어 다닙니다.</div>
+</article>
+
+<article class="card" id="mid-rewrite-join">
+<h3>서브쿼리를 조인으로 다시 쓸 때</h3>
+<p>&quot;취소 이력이 있는 고객 수&quot;는 <code>IN</code> 서브쿼리로도, 조인으로도 쓸 수 있습니다. 다만 조인은 <b>행을 복제</b>합니다. 한 고객이 취소를 두 번 했다면 그 고객이 두 행으로 나옵니다.</p>
+<p class="fname">examples/p04/30-rewrite-join.sql</p>
+<pre><code data-lang="sql" data-src="p04/30-rewrite-join.sql">-- 같은 질문을 두 가지로 쓴다: IN 서브쿼리 vs 조인 — 조인은 DISTINCT 가 필요하다
+SELECT count(*) AS by_subquery
+FROM customers
+WHERE id IN (SELECT customer_id FROM orders WHERE status = 'cancelled');
+
+SELECT count(c.id) AS join_rows, count(DISTINCT c.id) AS join_distinct
+FROM customers AS c JOIN orders AS o ON o.customer_id = c.id
+WHERE o.status = 'cancelled';</code></pre>
+<pre class="term" data-out="p04/30-rewrite-join.sql"><span class="p">$</span> sqlite3 -header -column data/shop.db &lt; examples/p04/30-rewrite-join.sql
+by_subquery
+-----------
+         42
+join_rows  join_distinct
+---------  -------------
+       60             42</pre>
+<p>조인 결과는 60행이지만 실제 고객은 42명입니다. <code>DISTINCT</code>를 빠뜨리면 18명을 더 세게 됩니다. 서브쿼리 쪽은 &quot;들어 있는가&quot;만 보므로 애초에 복제가 일어나지 않습니다.</p>
+<div class="key"><b>고르는 기준</b> — 존재 여부만 필요하면 <code>IN</code>·<code>EXISTS</code>가 뜻이 분명합니다. 상대 표의 <b>열도 함께 필요하면</b> 조인을 쓰되, 복제되는 쪽을 먼저 집계해 1:1로 만든 뒤 붙이십시오.</div>
+</article>
+
+<article class="card" id="mid-eval-order">
+<h3>새 도구들이 놓이는 자리</h3>
+<p>3부의 평가 순서에 4부의 도구를 끼워 넣으면, &quot;왜 여기서는 쓸 수 있고 저기서는 못 쓰는가&quot;가 한눈에 풀립니다.</p>
+<ol class="steps">
+<li><b>CTE · 파생 테이블</b> — 가장 먼저 표 하나를 만들어 놓습니다.</li>
+<li><b>FROM · JOIN</b> — 표를 정하고 이어 붙입니다.</li>
+<li><b>WHERE</b> — 행을 거릅니다. 윈도우 함수는 아직 계산되지 않았습니다.</li>
+<li><b>GROUP BY · HAVING</b> — 접고, 집계값으로 그룹을 거릅니다.</li>
+<li><b>윈도우 함수 · SELECT</b> — 이제 계산되어 열로 붙습니다.</li>
+<li><b>ORDER BY · LIMIT</b> — 줄을 세우고 잘라 냅니다.</li>
+</ol>
+<div class="key"><b>따라 나오는 결론</b> — 윈도우 함수를 <code>WHERE</code>에 못 쓰는 이유(4단계 뒤에 계산됩니다), <code>SELECT</code>의 별칭을 <code>ORDER BY</code>에서는 쓸 수 있는 이유(5단계가 먼저입니다)가 모두 이 순서에서 나옵니다.</div>
+</article>
+
+<article class="card" id="mid-recap">
+<h3>4부 요약 — 도구 하나에 질문 하나</h3>
+<p>4부의 도구는 저마다 답하려는 질문의 모양이 정해져 있습니다. 질문을 먼저 문장으로 적으면 어떤 도구를 쓸지는 대개 저절로 정해집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>질문의 모양</th><th>도구</th></tr>
+<tr><td>표 전체를 봐야 나오는 값이 각 행에 필요하다</td><td>스칼라 서브쿼리 · 윈도우 함수</td></tr>
+<tr><td>다른 표에 짝이 있는지만 알면 된다</td><td><code>EXISTS</code> · <code>NOT EXISTS</code></td></tr>
+<tr><td>중간 결과를 단계로 나눠 읽고 싶다</td><td>CTE</td></tr>
+<tr><td>깊이를 모르는 계층을 펼쳐야 한다</td><td>재귀 CTE</td></tr>
+<tr><td>그룹 안의 순위·이웃 값이 필요하다</td><td>윈도우 함수</td></tr>
+<tr><td>잘못된 값이 아예 못 들어오게 하고 싶다</td><td>제약 · 트리거</td></tr>
+</table>
+</div>
+<div class="key"><b>다음</b> — 5부에서는 이 질의들이 편해지는 <b>표의 모양</b>을 설계합니다. 정규화와 반정규화, 그리고 그 사이에서 무엇을 근거로 고를지를 다룹니다.</div>
 </article>
 
 <!-- ===== part05.html (1장) ===== -->
