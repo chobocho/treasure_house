@@ -7905,11 +7905,794 @@ func handler() {
 <div class="key"><b>다음</b> — 10부에서 같은 이야기를 JDBC로 다시 봅니다. 풀 · 준비된 문장 · 트랜잭션이라는 뼈대가 언어를 바꿔도 그대로 남는지 확인하게 됩니다.</div>
 </article>
 
-<!-- ===== part10.html (1장) ===== -->
+<!-- ===== part10.html (36장) ===== -->
 <article class="card section" id="part10">
 <p class="chnum">10부</p>
 <h2>Java</h2>
 <p class="chsub">JDBC 계보와 PreparedStatement, sqlite-jdbc, duckdb_jdbc</p>
+</article>
+
+<article class="card" id="jv-overview">
+<h3>자바는 규격만 정하고 구현은 밖에 둡니다</h3>
+<p class="lead"><code class="nb">java.sql</code> 패키지의 알맹이는 인터페이스와 예외입니다. 표준 자체는 어떤 데이터베이스와도 직접 말하지 않습니다.</p>
+<p>엔진마다 통신 방식은 제각각이지만 응용이 원하는 일은 <b>연결을 얻고 · 문장을 보내고 · 행을 받고 · 커밋한다</b>로 같습니다. 공통된 어휘만 표준에 남기고 나머지를 드라이버로 밀어낸 설계입니다. 덕분에 질의문을 그대로 두고 드라이버 jar만 바꾸는 일이 가능합니다.</p>
+<div class="flow"><span class="box">응용</span><span class="arr">→</span><span class="box">java.sql API</span><span class="arr">→</span><span class="box">드라이버</span><span class="arr">→</span><span class="box dim">엔진</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>계층</th><th>누가 만드나</th><th>이 부의 예</th></tr>
+<tr><td>응용 코드</td><td>우리</td><td><code class="nb">JdbcConnect</code></td></tr>
+<tr><td><code class="nb">java.sql</code> 인터페이스</td><td>자바 표준</td><td><code>Connection</code> · <code>ResultSet</code></td></tr>
+<tr><td>드라이버</td><td>엔진 제작자 · 제삼자</td><td>sqlite-jdbc · duckdb_jdbc</td></tr>
+<tr><td>엔진</td><td>엔진 제작자</td><td>SQLite 3.49.1 · DuckDB 1.5.5</td></tr>
+</table>
+</div>
+<div class="key"><b>인터페이스가 곧 계약</b> — 응용은 <code>Connection</code>이라는 이름만 알면 됩니다. 그 뒤에 있는 것이 파일 한 개인지 원격 서버인지는 알 필요가 없습니다.</div>
+</article>
+
+<article class="card" id="jv-lineage">
+<h3>1997년에 정해진 어휘를 아직 씁니다</h3>
+<p>JDBC는 JDK 1.1과 함께 1997년 2월 19일에 나왔습니다. 그 뒤 30년 가까이 이름이 바뀐 인터페이스는 거의 없고, 새 판은 대부분 <b>덧붙이기</b>였습니다. 오래된 코드가 지금도 컴파일되는 이유입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>JDBC</th><th>함께 나온 자바</th><th>발표일</th></tr>
+<tr><td>1.1</td><td>JDK 1.1</td><td>1997-02-19</td></tr>
+<tr><td>3.0</td><td>J2SE 1.4</td><td>2002-05-09</td></tr>
+<tr><td>4.0</td><td>Java SE 6</td><td>2006-12-11</td></tr>
+<tr><td>4.1</td><td>Java SE 7</td><td>2011-10-13</td></tr>
+<tr><td>4.2</td><td>Java SE 8</td><td>2014-03-04</td></tr>
+<tr><td>4.3</td><td>Java SE 9</td><td>2017-09-21</td></tr>
+</table>
+</div>
+<p class="cap">주요 릴리스와 유지보수 릴리스만 적었습니다. 이 덱의 예제는 Java 21에서 돌리며, 쓰는 API는 4.3 그대로입니다.</p>
+<div class="note"><b>표준이 오래 산 대가</b> — 편의 기능이 적습니다. 그래서 그 위에 <code>JdbcTemplate</code>·jOOQ·JPA 같은 층이 따로 생겼습니다(이 부의 끝에서 다룹니다).</div>
+</article>
+
+<article class="card" id="jv-driver-types">
+<h3>드라이버는 네 가지 형식으로 나눕니다</h3>
+<p>1990년대에는 &quot;자바 코드가 어디까지 순수한가&quot;가 중요한 문제였습니다. 그래서 드라이버를 네 형식으로 나누어 불렀고, 이 분류는 지금도 쓰입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>형식</th><th>어떻게 말하나</th><th>오늘날</th></tr>
+<tr><td>1형</td><td>그 컴퓨터의 ODBC 드라이버를 호출</td><td>사실상 사라짐</td></tr>
+<tr><td>2형</td><td>클라이언트 쪽 벤더 네이티브 라이브러리를 호출</td><td>인프로세스 엔진</td></tr>
+<tr><td>3형</td><td>순수 자바, 서버 쪽 미들웨어와 통신</td><td>드묾</td></tr>
+<tr><td>4형</td><td>순수 자바, 엔진의 네이티브 프로토콜을 직접 구현</td><td>주류</td></tr>
+</table>
+</div>
+<p>PostgreSQL·MySQL의 자바 드라이버는 소켓으로 프로토콜을 직접 말하는 4형입니다. 반대로 이 부에서 쓰는 두 드라이버는 <b>같은 프로세스 안의 C 라이브러리</b>를 JNI로 부르므로 2형에 가깝습니다.</p>
+<div class="tip"><b>다만 설치는 없습니다</b> — 2형의 옛 약점은 &quot;클라이언트마다 네이티브 라이브러리를 따로 깔아야 한다&quot;였습니다. sqlite-jdbc와 duckdb_jdbc는 그 라이브러리를 jar 안에 넣어 다닙니다.</div>
+</article>
+
+<article class="card" id="jv-connect">
+<h3>연결 · 문장 · 결과, 세 단계</h3>
+<p>JDBC의 기본 흐름은 <code>Connection</code> → <code>Statement</code> → <code>ResultSet</code> 세 단계이고, 셋 다 <code>AutoCloseable</code>이라 <code>try</code>의 괄호 안에 한 번에 적을 수 있습니다.</p>
+<p class="fname">examples/p10/JdbcConnect.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcConnect.java" data-lines="5-16">  public static void main(String[] args) throws SQLException {
+    String url = "jdbc:sqlite:data/shop.db";
+    try (Connection con = DriverManager.getConnection(url);
+         Statement st = con.createStatement();
+         ResultSet rs = st.executeQuery("SELECT id, name, city FROM customers ORDER BY id LIMIT 3")) {
+      while (rs.next()) {
+        System.out.printf("%d %s %s%n", rs.getInt("id"), rs.getString("name"), rs.getString(3));
+      }
+      DatabaseMetaData md = con.getMetaData();
+      System.out.println(md.getDatabaseProductName() + " " + md.getDatabaseProductVersion()
+          + " / driver " + md.getDriverVersion());
+    }</code></pre>
+<pre class="term" data-out="p10/JdbcConnect.java"><span class="p">$</span> javac -encoding UTF-8 -cp lib/* -d build/java examples/p10/JdbcConnect.java
+<span class="p">$</span> java -cp build/java:lib/* JdbcConnect
+1 최민준 대전
+2 윤하은 제주
+3 최다은 고양
+SQLite 3.49.1 / driver 3.49.1.0</pre>
+<p><code>DriverManager</code>는 URL의 <code>jdbc:sqlite:</code> 부분만 보고 그 URL을 받아 줄 드라이버를 고릅니다. 뒤쪽 <code>data/shop.db</code>는 드라이버가 알아서 해석합니다.</p>
+<p class="cap">이후 슬라이드에서는 <code>javac</code> 줄을 생략하고 <code>java</code> 줄만 적습니다.</p>
+</article>
+
+<article class="card" id="jv-autoload">
+<h3><code>Class.forName</code>은 왜 사라졌나</h3>
+<p>예전에는 연결 전에 드라이버 클래스를 손으로 적재해야 했습니다. JDBC 4.0(2006)부터 <code>DriverManager</code>가 <b>서비스 제공자 방식</b>으로 클래스패스를 훑어 스스로 찾습니다. jar 안의 파일 한 개가 그 선언입니다.</p>
+<p class="fname">examples/p10/50-jar-services.sh</p>
+<pre><code data-lang="sh" data-src="p10/50-jar-services.sh"># JDBC 4.0 부터 드라이버는 jar 안의 서비스 파일로 스스로를 등록한다 — Class.forName 이 필요 없다
+for jar in lib/sqlite-jdbc-3.49.1.0.jar lib/duckdb_jdbc-1.5.5.1.jar; do
+  echo "$jar"
+  echo "  META-INF/services/java.sql.Driver -&gt; $(unzip -p "$jar" META-INF/services/java.sql.Driver)"
+done</code></pre>
+<pre class="term" data-out="p10/50-jar-services.sh"><span class="p">$</span> bash examples/p10/50-jar-services.sh
+lib/sqlite-jdbc-3.49.1.0.jar
+  META-INF/services/java.sql.Driver -&gt; org.sqlite.JDBC
+lib/duckdb_jdbc-1.5.5.1.jar
+  META-INF/services/java.sql.Driver -&gt; org.duckdb.DuckDBDriver</pre>
+<p>파일 이름이 인터페이스 이름(<code>java.sql.Driver</code>)이고, 내용이 구현 클래스 이름입니다. jar를 클래스패스에 넣는 것만으로 등록이 끝납니다.</p>
+<div class="note"><b>남아 있는 두 경로</b> — <code>jdbc.drivers</code> 시스템 속성에 클래스 이름을 콜론으로 이어 적는 방법도 그대로 있고, GraalVM 네이티브 이미지에서는 정적 분석이 서비스 파일을 못 보므로 <code>Class.forName</code>을 여전히 명시합니다.</div>
+</article>
+
+<article class="card" id="jv-resultset">
+<h3>ResultSet은 표가 아니라 커서입니다</h3>
+<p>결과 전체를 메모리에 담아 돌려주면 큰 질의에서 바로 무너집니다. 그래서 <code>ResultSet</code>은 <b>첫 행 앞</b>에 서 있는 커서로 시작하고, <code>next()</code>가 참을 돌려주는 동안만 한 행씩 앞으로 갑니다.</p>
+<p class="fname">examples/p10/JdbcConnect.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcConnect.java" data-lines="10-12">      while (rs.next()) {
+        System.out.printf("%d %s %s%n", rs.getInt("id"), rs.getString("name"), rs.getString(3));
+      }</code></pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>열 지정</th><th>예</th><th>성질</th></tr>
+<tr><td>번호</td><td><code>rs.getString(3)</code></td><td><b>1부터</b> 셉니다. 0은 없습니다</td></tr>
+<tr><td>라벨</td><td><code>rs.getString(&quot;name&quot;)</code></td><td>SELECT 목록이 바뀌어도 안전합니다</td></tr>
+</table>
+</div>
+<div class="warn"><b>수명은 문장에 묶입니다</b> — <code>Statement</code>를 닫으면 그 <code>ResultSet</code>도 함께 닫힙니다. 또 기본적으로 <code>Statement</code> 하나당 열려 있는 <code>ResultSet</code>은 하나뿐이라, 두 결과를 번갈아 읽으려면 문장을 따로 만들어야 합니다.</div>
+</article>
+
+<article class="card" id="jv-prepared">
+<h3>PreparedStatement — 값을 문장에서 떼어 냅니다</h3>
+<p>문장은 &quot;미리 컴파일된 SQL&quot;로 한 번만 준비되고, <code>?</code> 자리에 값만 갈아 끼우며 몇 번이든 다시 씁니다. 파싱과 계획 수립을 되풀이하지 않으므로 반복 질의에서 특히 유리합니다.</p>
+<p class="fname">examples/p10/JdbcPrepared.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcPrepared.java" data-lines="5-17">  public static void main(String[] args) throws SQLException {
+    try (Connection con = DriverManager.getConnection("jdbc:sqlite:data/shop.db");
+         PreparedStatement ps = con.prepareStatement(
+             "SELECT name, price FROM products WHERE category = ? AND price &lt; ? ORDER BY price")) {
+      for (String cat : new String[] {"도서", "식품"}) {
+        ps.setString(1, cat);
+        ps.setInt(2, 20000);
+        try (ResultSet rs = ps.executeQuery()) {
+          StringBuilder sb = new StringBuilder(cat + ":");
+          while (rs.next()) sb.append(' ').append(rs.getString(1)).append('(').append(rs.getInt(2)).append(')');
+          System.out.println(sb);
+        }
+      }</code></pre>
+<pre class="term" data-out="p10/JdbcPrepared.java" data-lines="1-2"><span class="p">$</span> java -cp build/java:lib/* JdbcPrepared
+도서: 데이터베이스 내부 구조(9900) SQL 첫걸음(15000)
+식품: 현미 5kg(4900) 꿀 500g(4900) 녹차 티백 50개(9900)</pre>
+<p>자리표는 <b>1번부터</b> 셉니다. 타입에 맞는 <code>setXxx</code>를 써야 하고, NULL을 넣을 때는 <code>setNull(i, Types.INTEGER)</code>처럼 SQL 타입을 함께 알려 줘야 합니다.</p>
+<div class="tip"><b>재사용의 단위</b> — 같은 <code>PreparedStatement</code>에 <code>setString</code>만 바꿔 두 번 실행했습니다. 반복문마다 <code>prepareStatement</code>를 부르면 이 이점이 사라집니다.</div>
+</article>
+
+<article class="card" id="jv-injection">
+<h3>바인딩된 값은 문법이 되지 못합니다</h3>
+<p>문자열을 이어 붙이면 사용자의 입력이 <b>SQL 문법으로 해석</b>됩니다. 바인딩은 문장과 값을 다른 통로로 보내므로, 입력에 따옴표가 있든 <code>OR</code>가 있든 끝까지 값 한 개로 남습니다.</p>
+<div class="g2">
+<div class="cmp bad"><h5>연결 — 입력이 문법이 됩니다</h5><pre>"... email = '" + s + "'"</pre></div>
+<div class="cmp good"><h5>바인딩 — 입력은 값입니다</h5><pre>"... email = ?"  +  setString(1, s)</pre></div>
+</div>
+<p class="fname">examples/p10/JdbcPrepared.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcPrepared.java" data-lines="18-22">      String evil = "' OR '1'='1";
+      try (PreparedStatement q = con.prepareStatement("SELECT count(*) FROM customers WHERE email = ?")) {
+        q.setString(1, evil);
+        try (ResultSet rs = q.executeQuery()) { rs.next(); System.out.println("바인딩 결과: " + rs.getInt(1)); }
+      }</code></pre>
+<pre class="term" data-out="p10/JdbcPrepared.java" data-lines="3-3"><span class="p">$</span> java -cp build/java:lib/* JdbcPrepared
+바인딩 결과: 0</pre>
+<p><code>&#39; OR &#39;1&#39;=&#39;1</code>은 &quot;그런 이메일 주소&quot;를 찾는 조건이 되었고, 그런 고객은 없으므로 0이 나왔습니다. 문자열을 이어 붙였다면 60명 전부가 나왔을 것입니다.</p>
+</article>
+
+<article class="card" id="jv-null-types">
+<h3>getInt는 NULL을 0으로 돌려줍니다</h3>
+<p>자바의 <code>int</code>에는 &quot;값이 없음&quot;을 담을 자리가 없습니다. 그래서 JDBC는 NULL을 만나면 그 타입의 기본값(0, false)을 돌려주고, 진짜 NULL이었는지는 <b>직후에</b> <code>wasNull()</code>로 물어보게 했습니다.</p>
+<p class="fname">examples/p10/JdbcNullTypes.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcNullTypes.java" data-lines="8-19">      st.execute("CREATE TABLE t (name TEXT, score INTEGER, ratio REAL, raw BLOB)");
+      st.execute("INSERT INTO t VALUES ('a', NULL, 0.5, X'0102'), ('b', 7, NULL, NULL)");
+      try (ResultSet rs = st.executeQuery("SELECT * FROM t")) {
+        while (rs.next()) {
+          int score = rs.getInt("score");
+          boolean scoreNull = rs.wasNull();
+          Object ratio = rs.getObject("ratio");
+          byte[] raw = rs.getBytes("raw");
+          System.out.printf("%s score=%d(null=%b) ratio=%s raw=%s%n", rs.getString("name"),
+              score, scoreNull, ratio, raw == null ? "null" : raw.length + " bytes");
+        }
+      }</code></pre>
+<pre class="term" data-out="p10/JdbcNullTypes.java"><span class="p">$</span> java -cp build/java:lib/* JdbcNullTypes
+a score=0(null=true) ratio=0.5 raw=2 bytes
+b score=7(null=false) ratio=null raw=null</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>받는 법</th><th>NULL일 때</th><th>쓸 곳</th></tr>
+<tr><td><code>getInt</code> + <code>wasNull</code></td><td>0 + <code>true</code></td><td>기본형이 필요할 때</td></tr>
+<tr><td><code>getObject</code></td><td><code>null</code> 참조</td><td>가장 단순합니다</td></tr>
+<tr><td><code>getBytes</code> 등 참조형</td><td><code>null</code> 참조</td><td>BLOB · 문자열</td></tr>
+</table>
+</div>
+<div class="warn"><b>순서가 전부</b> — <code>wasNull()</code>은 &quot;직전에 읽은 열&quot;을 가리킵니다. 다른 열을 하나라도 읽고 나서 물으면 엉뚱한 답이 옵니다.</div>
+</article>
+
+<article class="card" id="jv-execute-update">
+<h3>바뀐 행 수와 새로 생긴 키</h3>
+<p>결과 집합이 없는 문장은 <code>executeUpdate</code>로 보내고, 돌아오는 정수는 <b>바뀐 행 수</b>입니다. DDL처럼 아무것도 돌려주지 않는 문장은 0입니다. 자동 증가 키는 문장을 준비할 때 미리 요청해야 받을 수 있습니다.</p>
+<p class="fname">examples/p10/JdbcExecuteUpdate.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcExecuteUpdate.java" data-lines="7-20">    String url = "jdbc:sqlite:" + Path.of(System.getenv("DBDECK_TMP"), "notes.db");
+    try (Connection con = DriverManager.getConnection(url); Statement st = con.createStatement()) {
+      st.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL)");
+      try (PreparedStatement ps = con.prepareStatement("INSERT INTO notes (body) VALUES (?)",
+                                                       Statement.RETURN_GENERATED_KEYS)) {
+        ps.setString(1, "첫 메모");
+        int n = ps.executeUpdate();
+        try (ResultSet keys = ps.getGeneratedKeys()) {
+          keys.next();
+          System.out.println("inserted=" + n + " key=" + keys.getLong(1));
+        }
+      }
+      System.out.println("updated=" + st.executeUpdate("UPDATE notes SET body = body || '!'"));
+    }</code></pre>
+<pre class="term" data-out="p10/JdbcExecuteUpdate.java"><span class="p">$</span> java -cp build/java:lib/* JdbcExecuteUpdate
+inserted=1 key=1
+updated=1</pre>
+<p><code>Statement.RETURN_GENERATED_KEYS</code>를 붙여야 <code>getGeneratedKeys()</code>가 행을 돌려줍니다. 그 결과도 <code>ResultSet</code>이므로 <code>next()</code>로 한 번 나아간 뒤 읽습니다.</p>
+<div class="warn"><b>SQLite의 한계</b> — 생성 키는 <code>last_insert_rowid()</code>로 구현되어 있어 여러 행을 한꺼번에 넣어도 <b>하나만</b> 돌아옵니다. 여러 개가 필요하면 <code>INSERT … RETURNING</code>을 쓰십시오.</div>
+</article>
+
+<article class="card" id="jv-batch">
+<h3>배치 — 왕복을 한 번으로 묶습니다</h3>
+<p>행 1,000개를 하나씩 보내면 문장을 1,000번 넘겨야 합니다. <code>addBatch()</code>로 쌓아 두었다가 <code>executeBatch()</code>로 한 번에 넘기면 그 왕복이 사라지고, 자동 커밋을 꺼 두었으므로 전체가 한 트랜잭션이 됩니다.</p>
+<p class="fname">examples/p10/JdbcBatch.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcBatch.java" data-lines="8-22">    try (Connection con = DriverManager.getConnection(url)) {
+      con.createStatement().execute("CREATE TABLE t (i INTEGER, s TEXT)");
+      con.setAutoCommit(false);
+      try (PreparedStatement ps = con.prepareStatement("INSERT INTO t VALUES (?, ?)")) {
+        for (int i = 0; i &lt; 1000; i++) {
+          ps.setInt(1, i); ps.setString(2, "row-" + i); ps.addBatch();
+        }
+        int[] counts = ps.executeBatch();
+        con.commit();
+        System.out.println("batch size=" + counts.length + " first=" + counts[0]);
+      }
+      try (ResultSet rs = con.createStatement().executeQuery("SELECT count(*), sum(i) FROM t")) {
+        rs.next(); System.out.println("rows=" + rs.getInt(1) + " sum=" + rs.getLong(2));
+      }
+    }</code></pre>
+<pre class="term" data-out="p10/JdbcBatch.java"><span class="p">$</span> java -cp build/java:lib/* JdbcBatch
+batch size=1000 first=1
+rows=1000 sum=499500</pre>
+<p>돌아온 <code>int[]</code>는 명령 하나당 한 칸으로, 각 칸은 바뀐 행 수입니다. 행 수를 알 수 없으면 <code>SUCCESS_NO_INFO</code>, 실패했으면 <code>EXECUTE_FAILED</code>가 들어갑니다.</p>
+<div class="key"><b>진짜 이득은 트랜잭션</b> — SQLite에서 배치가 빨라지는 가장 큰 이유는 왕복이 아니라 <code>setAutoCommit(false)</code>입니다. 자동 커밋이면 삽입마다 디스크 동기화가 일어납니다.</div>
+</article>
+
+<article class="card" id="jv-transaction">
+<h3>자동 커밋을 끄는 순간 트랜잭션이 시작됩니다</h3>
+<p>JDBC 연결은 기본이 자동 커밋이라 문장 하나가 곧 트랜잭션 하나입니다. 계좌 이체처럼 두 갱신이 <b>함께</b> 성공해야 하는 일에서는 이 기본값을 꺼야 합니다. <code>BEGIN</code>을 직접 쓰지 않는다는 점이 SQL CLI와 다릅니다.</p>
+<p class="fname">examples/p10/JdbcTransaction.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcTransaction.java" data-lines="6-19">  static void transfer(Connection con, int from, int to, int amount) throws SQLException {
+    con.setAutoCommit(false);
+    try (PreparedStatement ps = con.prepareStatement("UPDATE acct SET bal = bal - ? WHERE id = ?")) {
+      ps.setInt(1, amount); ps.setInt(2, from); ps.executeUpdate();
+      ps.setInt(1, -amount); ps.setInt(2, to); ps.executeUpdate();
+      con.commit();
+      System.out.println("이체 " + amount + ": ok");
+    } catch (SQLException e) {
+      con.rollback();
+      System.out.println("이체 " + amount + ": rollback (" + e.getMessage() + ")");
+    } finally {
+      con.setAutoCommit(true);
+    }
+  }</code></pre>
+<pre class="term" data-out="p10/JdbcTransaction.java" data-lines="1-2"><span class="p">$</span> java -cp build/java:lib/* JdbcTransaction
+이체 30: ok
+이체 500: rollback ([SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: bal &gt;= 0))</pre>
+<p>두 번째 이체는 잔액이 음수가 되어 <code>CHECK</code> 제약에 걸렸고, <code>catch</code>에서 <code>rollback()</code>했으므로 첫 갱신도 없던 일이 됩니다.</p>
+<div class="tip"><b><code>finally</code>에서 되돌리기</b> — 자동 커밋을 다시 켜 두었습니다. 연결을 풀에 돌려줄 때 모드가 남아 있으면 다음 사용자가 영문 모를 상태를 물려받습니다.</div>
+</article>
+
+<article class="card" id="jv-savepoint">
+<h3>세이브포인트 — 일부만 되돌립니다</h3>
+<p>긴 작업 중 한 단계만 실패했는데 전부 버리는 것은 아깝습니다. 세이브포인트는 트랜잭션 안에 표시를 남겨 두고, 그 지점까지만 되감게 해 줍니다.</p>
+<p class="fname">examples/p10/JdbcTransaction.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcTransaction.java" data-lines="28-33">      con.setAutoCommit(false);
+      st.execute("UPDATE acct SET bal = 0 WHERE id = 1");
+      Savepoint sp = con.setSavepoint();
+      st.execute("UPDATE acct SET bal = 0 WHERE id = 2");
+      con.rollback(sp);            // id 2 만 되돌린다
+      con.commit();</code></pre>
+<pre class="term" data-out="p10/JdbcTransaction.java" data-lines="3-4"><span class="p">$</span> java -cp build/java:lib/* JdbcTransaction
+1 -&gt; 0
+2 -&gt; 30</pre>
+<div class="flow"><span class="box">UPDATE id=1</span><span class="arr">→</span><span class="box">setSavepoint()</span><span class="arr">→</span><span class="box dim">UPDATE id=2</span><span class="arr">rollback(sp)</span><span class="box">commit()</span></div>
+<p>1번 계좌의 갱신은 세이브포인트보다 <b>앞</b>이라 남았고(<code>1 -&gt; 0</code>), 뒤에 한 2번 계좌의 갱신만 사라져 앞서 이체받은 30이 그대로입니다.</p>
+<div class="note"><b>커밋은 여전히 한 번</b> — <code>rollback(sp)</code>는 트랜잭션을 끝내지 않습니다. 표시 지점 이후만 지우고, 트랜잭션은 <code>commit()</code>이나 전체 <code>rollback()</code>까지 계속됩니다.</div>
+</article>
+
+<article class="card" id="jv-metadata">
+<h3>메타데이터 — 스키마를 코드로 읽습니다</h3>
+<p>DB 도구와 ORM은 표 목록을 어떻게 알까요. 표준 SQL에는 그런 질의가 없어서 JDBC가 따로 두 가지 메타데이터 인터페이스를 정해 두었습니다. 하나는 결과 집합의 모양을, 다른 하나는 데이터베이스 전체의 카탈로그를 알려 줍니다.</p>
+<p class="fname">examples/p10/JdbcMetadata.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcMetadata.java" data-lines="6-17">    try (Connection con = DriverManager.getConnection("jdbc:sqlite:data/shop.db")) {
+      try (ResultSet rs = con.createStatement().executeQuery("SELECT id, name, price * 1.1 AS vat FROM products LIMIT 1")) {
+        ResultSetMetaData md = rs.getMetaData();
+        for (int i = 1; i &lt;= md.getColumnCount(); i++)
+          System.out.println(md.getColumnLabel(i) + " : " + md.getColumnTypeName(i) + " / " + md.getColumnClassName(i));
+      }
+      try (ResultSet t = con.getMetaData().getTables(null, null, "%", new String[] {"TABLE"})) {
+        StringBuilder sb = new StringBuilder("tables:");
+        while (t.next()) sb.append(' ').append(t.getString("TABLE_NAME"));
+        System.out.println(sb);
+      }
+    }</code></pre>
+<pre class="term" data-out="p10/JdbcMetadata.java"><span class="p">$</span> java -cp build/java:lib/* JdbcMetadata
+id : INTEGER / java.lang.Integer
+name : TEXT / java.lang.String
+vat : FLOAT / java.lang.Double
+tables: customers order_items orders payments products</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>인터페이스</th><th>얻는 것</th></tr>
+<tr><td><code>ResultSetMetaData</code></td><td>열 개수 · 라벨 · 타입 이름 · 자바 클래스 이름</td></tr>
+<tr><td><code>DatabaseMetaData</code></td><td>표 · 열 · 키 · 인덱스 목록, 엔진과 드라이버 버전</td></tr>
+</table>
+</div>
+<p class="cap">계산해서 만든 <code class="nb">vat</code> 열에는 저장된 타입이 없어 드라이버가 <code>FLOAT</code>으로 보고했습니다. 이렇게 메타데이터는 엔진마다 답이 조금씩 다릅니다.</p>
+</article>
+
+<article class="card" id="jv-exceptions">
+<h3>SQLException은 세 겹으로 말합니다</h3>
+<p>&quot;무엇이 잘못됐나&quot;를 사람이 읽을 메시지, 표준화된 <b>SQLState</b>, 엔진 고유의 <b>벤더 코드</b>로 나누어 담습니다. 메시지는 판올림마다 바뀔 수 있으니 코드로 분기해야 합니다.</p>
+<p class="fname">examples/p10/JdbcExceptions.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcExceptions.java" data-lines="6-15">    try (Connection con = DriverManager.getConnection("jdbc:sqlite::memory:"); Statement st = con.createStatement()) {
+      st.execute("CREATE TABLE u (email TEXT UNIQUE NOT NULL)");
+      st.execute("INSERT INTO u VALUES ('a@x.com')");
+      for (String sql : new String[] {"INSERT INTO u VALUES ('a@x.com')", "INSERT INTO u VALUES (NULL)", "SELECT * FROM nope"}) {
+        try { st.execute(sql); }
+        catch (SQLException e) {
+          System.out.println(e.getClass().getSimpleName() + " code=" + e.getErrorCode() + " : " + e.getMessage());
+        }
+      }
+    }</code></pre>
+<pre class="term" data-out="p10/JdbcExceptions.java"><span class="p">$</span> java -cp build/java:lib/* JdbcExceptions
+SQLiteException code=19 : [SQLITE_CONSTRAINT_UNIQUE] A UNIQUE constraint failed (UNIQUE constraint failed: u.email)
+SQLiteException code=19 : [SQLITE_CONSTRAINT_NOTNULL] A NOT NULL constraint failed (NOT NULL constraint failed: u.email)
+SQLiteException code=1 : [SQLITE_ERROR] SQL error or missing database (no such table: nope)</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>얻는 법</th><th>내용</th></tr>
+<tr><td><code>getMessage()</code></td><td>사람이 읽는 설명. 분기 조건으로 쓰지 않습니다</td></tr>
+<tr><td><code>getSQLState()</code></td><td>X/Open 또는 SQL:2003 규약의 다섯 글자 코드</td></tr>
+<tr><td><code>getErrorCode()</code></td><td>엔진 고유의 정수. 여기서는 SQLite 결과 코드</td></tr>
+<tr><td><code>getNextException()</code></td><td>이어 붙은 다음 예외(사슬)</td></tr>
+</table>
+</div>
+<p class="cap">유일성 위반과 NOT NULL 위반이 벤더 코드로는 똑같이 19입니다. 둘을 가르려면 메시지 머리표에 실린 확장 결과 코드(<code>SQLITE_CONSTRAINT_UNIQUE</code> 등)를 봐야 합니다.</p>
+</article>
+
+<article class="card" id="jv-exception-tree">
+<h3>다시 시도할 만한 오류인가</h3>
+<p>JDBC 4.0은 <code>SQLException</code> 아래에 하위 클래스를 두어, <b>같은 문장을 다시 보내도 되는지</b>를 타입만으로 판단할 수 있게 했습니다. 재시도 로직을 메시지 문자열 대신 <code>catch</code> 절로 쓸 수 있다는 뜻입니다.</p>
+<div class="pkgtree">SQLException
+  <b>SQLTransientException</b>      <i>원인이 사라지면 그대로 재시도 가능</i>
+    SQLTimeoutException
+    SQLTransactionRollbackException
+  <b>SQLNonTransientException</b>   <i>고치지 않으면 몇 번을 해도 같음</i>
+    SQLSyntaxErrorException
+    SQLIntegrityConstraintViolationException
+  <b>SQLRecoverableException</b>    <i>연결을 새로 열면 될 수도</i>
+  SQLWarning · BatchUpdateException</div>
+<div class="tip"><b>드라이버마다 다릅니다</b> — 앞 슬라이드에서 sqlite-jdbc는 제약 위반에도 <code>SQLiteException</code> 하나만 던졌습니다. 하위 클래스를 얼마나 세밀하게 쓰는지는 드라이버의 재량입니다.</div>
+</article>
+
+<article class="card" id="jv-twr">
+<h3>try-with-resources는 선택이 아닙니다</h3>
+<p>JDBC 자원은 자바 힙이 아니라 <b>드라이버와 엔진 쪽</b>에 있습니다. 가비지 컬렉터는 그것을 모르므로, 닫지 않은 연결은 프로그램이 끝날 때까지 남아 파일 잠금과 메모리를 붙들고 있습니다.</p>
+<div class="g2">
+<div class="cmp bad"><h5>닫히지 않는 길</h5><pre>Connection c = ...getConnection(url);
+Statement s = c.createStatement();
+// 여기서 예외가 나면 둘 다 샙니다
+c.close();</pre></div>
+<div class="cmp good"><h5>괄호 안에 선언</h5><pre>try (Connection c = ...;
+     Statement s = c.createStatement()) {
+  ...
+}   // 역순으로 자동 close</pre></div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>규율</th><th>이유</th></tr>
+<tr><td>선언 순서대로 적기</td><td>닫기는 역순이라 <code>ResultSet</code>이 먼저 닫힙니다</td></tr>
+<tr><td><code>ResultSet</code>도 괄호 안에</td><td>커서가 열려 있으면 문장이 자원을 붙듭니다</td></tr>
+<tr><td>연결을 메서드 밖으로 넘기지 않기</td><td>누가 닫을지 모르는 순간 새는 코드가 됩니다</td></tr>
+</table>
+</div>
+<div class="key"><b>닫으면 딸린 것도 닫힙니다</b> — <code>Statement</code>를 닫으면 그 <code>ResultSet</code>이, 연결을 닫으면 그 문장들이 닫힙니다. 그래도 셋을 다 적는 이유는 <b>언제</b> 닫히는지를 코드로 못 박기 위해서입니다.</div>
+</article>
+
+<article class="card" id="jv-pool">
+<h3>연결은 비쌉니다 — 그래서 빌려 씁니다</h3>
+<p>서버 엔진에서 연결 하나를 여는 일은 TCP 접속과 인증, 서버 쪽 자원 할당까지 포함합니다. 요청마다 새로 열면 그 비용이 질의보다 커집니다. 연결 풀은 열어 둔 연결을 빌려주고 <code>close()</code> 때 실제로 닫는 대신 <b>풀에 돌려받습니다</b>.</p>
+<div class="flow"><span class="box">요청</span><span class="arr">빌림</span><span class="box">풀</span><span class="arr">반납</span><span class="box dim">요청</span></div>
+<p>자바에서 사실상 표준은 HikariCP입니다. 스스로를 &quot;오버헤드 없는 운영용 JDBC 연결 풀&quot;이라 부르며, 기본값이 보수적인 것이 특징입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>설정</th><th>기본값</th><th>뜻</th></tr>
+<tr><td><code>maximumPoolSize</code></td><td>10</td><td>실제 연결 최대 개수</td></tr>
+<tr><td><code>connectionTimeout</code></td><td>30초</td><td>빌리기를 기다리는 한계</td></tr>
+<tr><td><code>idleTimeout</code></td><td>10분</td><td>놀고 있는 연결을 버리는 시각</td></tr>
+<tr><td><code>maxLifetime</code></td><td>30분</td><td>연결 하나의 수명</td></tr>
+</table>
+</div>
+<div class="note"><b>인프로세스 엔진에서는</b> — SQLite와 DuckDB는 접속도 인증도 없어 풀의 이득이 훨씬 작습니다. 그래도 쓰는 이유는 &quot;동시 접근 수를 제한한다&quot;는 두 번째 효능 때문입니다.</div>
+</article>
+
+<article class="card" id="jv-datasource">
+<h3>DataSource — 설정을 객체로 넘깁니다</h3>
+<p><code>DriverManager</code>는 URL 문자열 하나에 모든 것을 담습니다. 설정을 바꾸려면 문자열을 조립해야 하고, 그 문자열이 코드 곳곳에 흩어집니다. <code>DataSource</code>는 그 설정을 객체 하나에 모아 두고 필요할 때 연결을 꺼내 씁니다.</p>
+<p class="fname">examples/p10/JdbcDataSource.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcDataSource.java" data-lines="6-18">public class JdbcDataSource {
+  static long count(DataSource ds, String sql) throws SQLException {
+    try (Connection con = ds.getConnection(); ResultSet rs = con.createStatement().executeQuery(sql)) {
+      rs.next(); return rs.getLong(1);
+    }
+  }
+  public static void main(String[] args) throws SQLException {
+    SQLiteDataSource ds = new SQLiteDataSource();
+    ds.setUrl("jdbc:sqlite:data/shop.db");
+    ds.setReadOnly(true);
+    System.out.println("customers=" + count(ds, "SELECT count(*) FROM customers"));
+    System.out.println("paid=" + count(ds, "SELECT count(*) FROM orders WHERE status = 'paid'"));
+  }</code></pre>
+<pre class="term" data-out="p10/JdbcDataSource.java"><span class="p">$</span> java -cp build/java:lib/* JdbcDataSource
+customers=60
+paid=577</pre>
+<p><code>count</code> 메서드는 <code>DataSource</code> 인터페이스만 압니다. 여기에 <code>SQLiteDataSource</code>를 넣든 HikariCP의 풀을 넣든 코드는 그대로입니다.</p>
+<div class="key"><b>풀이 끼어드는 자리</b> — 연결 풀은 모두 <code>javax.sql.DataSource</code>를 구현합니다. 응용이 <code>DriverManager</code> 대신 이 인터페이스에 기대어 있으면 풀 도입이 설정 한 줄이 됩니다.</div>
+</article>
+
+<article class="card" id="jv-type-map">
+<h3>같은 자바 타입, 다른 SQL 타입</h3>
+<p>JDBC는 <code>java.sql.Types</code>에 SQL 타입의 이름표를 정해 두었을 뿐, 엔진이 그것을 어떻게 저장하는지는 관여하지 않습니다. 그래서 같은 <code>getObject</code>가 엔진마다 다른 클래스를 돌려줍니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자바</th><th>SQLite에 저장</th><th>DuckDB 타입</th></tr>
+<tr><td><code>int</code> · <code>long</code></td><td>INTEGER (가변 길이)</td><td>INTEGER · BIGINT</td></tr>
+<tr><td><code>double</code></td><td>REAL (8바이트)</td><td>DOUBLE</td></tr>
+<tr><td><code>String</code></td><td>TEXT</td><td>VARCHAR</td></tr>
+<tr><td><code>byte[]</code></td><td>BLOB</td><td>BLOB</td></tr>
+<tr><td><code>BigInteger</code></td><td>없음</td><td>HUGEINT</td></tr>
+</table>
+</div>
+<div class="warn"><b>날짜에 주의</b> — SQLite에는 날짜 타입이 없어 텍스트나 정수로 저장됩니다. <code>getDate</code>가 무엇을 돌려줄지는 넣을 때의 형식에 달려 있습니다. DuckDB에는 진짜 <code>DATE</code>가 있어 <code>LocalDate</code>가 그대로 나옵니다(뒤에서 실측합니다).</div>
+<div class="tip"><b>가장 안전한 습관</b> — 열의 타입을 확신할 수 없으면 <code>getObject</code>로 받아 클래스를 찍어 보십시오. 추측보다 한 줄이 빠릅니다.</div>
+</article>
+
+<article class="card" id="jv-sqlite-config">
+<h3>PRAGMA를 연결 속성으로 넘깁니다</h3>
+<p>SQLite의 동작은 대부분 <code>PRAGMA</code>로 정하는데, 이 중 몇 가지는 <b>연결을 연 직후</b>에 걸어야 뜻이 있습니다. sqlite-jdbc는 <code>SQLiteConfig</code>에 모아 <code>Properties</code>로 바꿔 넘기게 해 이 순서 문제를 없앴습니다.</p>
+<p class="fname">examples/p10/JdbcSqliteConfig.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcSqliteConfig.java" data-lines="8-19">  public static void main(String[] args) throws SQLException {
+    SQLiteConfig cfg = new SQLiteConfig();
+    cfg.setJournalMode(SQLiteConfig.JournalMode.WAL);
+    cfg.enforceForeignKeys(true);
+    cfg.setBusyTimeout(5000);
+    Properties props = cfg.toProperties();
+    String url = "jdbc:sqlite:" + Path.of(System.getenv("DBDECK_TMP"), "app.db");
+    try (Connection con = DriverManager.getConnection(url, props); Statement st = con.createStatement()) {
+      for (String p : new String[] {"journal_mode", "foreign_keys", "busy_timeout"}) {
+        try (ResultSet rs = st.executeQuery("PRAGMA " + p)) { rs.next(); System.out.println(p + " = " + rs.getString(1)); }
+      }
+    }</code></pre>
+<pre class="term" data-out="p10/JdbcSqliteConfig.java"><span class="p">$</span> java -cp build/java:lib/* JdbcSqliteConfig
+journal_mode = wal
+foreign_keys = 1
+busy_timeout = 5000</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>설정</th><th>왜 켜나</th></tr>
+<tr><td>WAL 저널</td><td>읽기와 쓰기가 서로를 막지 않습니다(6부)</td></tr>
+<tr><td>외래 키 강제</td><td>SQLite는 하위 호환을 위해 기본이 꺼짐입니다</td></tr>
+<tr><td><code>busy_timeout</code></td><td>잠김을 만나면 바로 실패하지 않고 기다립니다</td></tr>
+</table>
+</div>
+<div class="note"><b>연결마다입니다</b> — <code>foreign_keys</code>와 <code>busy_timeout</code>은 연결 단위 설정이라 풀에서 새 연결을 열 때마다 다시 걸려야 합니다. <code>Properties</code>에 담아 두면 자동으로 그렇게 됩니다.</div>
+</article>
+
+<article class="card" id="jv-sqlite-backup">
+<h3>백업 — 열려 있는 DB를 그대로 뜹니다</h3>
+<p>파일을 그냥 복사하면 복사 도중의 쓰기가 섞여 깨진 사본이 나올 수 있습니다. SQLite는 이를 위해 온라인 백업 API를 두었고, sqlite-jdbc는 그것을 SQL처럼 생긴 확장 명령 두 개로 열어 두었습니다.</p>
+<p class="fname">examples/p10/JdbcSqliteBackup.java</p>
+<pre><code data-lang="java" data-src="p10/JdbcSqliteBackup.java" data-lines="6-15">  public static void main(String[] args) throws Exception {
+    Path copy = Path.of(System.getenv("DBDECK_TMP"), "copy.db");
+    try (Connection con = DriverManager.getConnection("jdbc:sqlite:data/shop.db"); Statement st = con.createStatement()) {
+      st.executeUpdate("backup to " + copy);
+    }
+    System.out.println("copied bytes: " + Files.size(copy));
+    try (Connection c2 = DriverManager.getConnection("jdbc:sqlite:" + copy);
+         ResultSet rs = c2.createStatement().executeQuery("SELECT count(*) FROM orders")) {
+      rs.next(); System.out.println("orders in copy: " + rs.getInt(1));
+    }</code></pre>
+<pre class="term" data-out="p10/JdbcSqliteBackup.java"><span class="p">$</span> java -cp build/java:lib/* JdbcSqliteBackup
+copied bytes: 180224
+orders in copy: 800</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명령</th><th>하는 일</th></tr>
+<tr><td><code>backup to &lt;파일&gt;</code></td><td>지금 연결의 DB를 그 파일로 복제</td></tr>
+<tr><td><code>restore from &lt;파일&gt;</code></td><td>그 파일의 내용으로 지금 DB를 덮어쓰기</td></tr>
+</table>
+</div>
+<p>사본을 열어 <code class="nb">orders</code>를 세어 보니 800행 그대로였습니다. 표준 JDBC에는 없는 기능이라 <code>executeUpdate</code>에 실어 보냅니다.</p>
+<div class="tip"><b>인메모리 DB의 저장</b> — <code>jdbc:sqlite::memory:</code>로 작업한 결과를 <code>backup to</code> 한 줄로 파일에 남길 수 있습니다. 테스트 픽스처를 만들 때 편합니다.</div>
+</article>
+
+<article class="card" id="jv-sqlite-native">
+<h3>jar 하나가 여러 OS를 덮습니다</h3>
+<p>SQLite는 C 라이브러리라 JVM이 직접 부를 수 없습니다. sqlite-jdbc는 플랫폼별로 미리 빌드한 공유 라이브러리를 jar에 넣고 다니다가, 드라이버가 적재될 때 <b>그 컴퓨터에 맞는 하나</b>를 임시 폴더에 풀어 씁니다.</p>
+<p class="fname">examples/p10/51-jar-natives.sh</p>
+<pre><code data-lang="sh" data-src="p10/51-jar-natives.sh" data-lines="5-8">echo "-- sqlite-jdbc: OS 별 네이티브 개수 (합계 = 파일 수)"
+unzip -l lib/sqlite-jdbc-3.49.1.0.jar |
+  awk '$4 ~ /^org\/sqlite\/native\/.*(so|dll|dylib)$/ { split($4, p, "/"); print p[4] }' |
+  sort | uniq -c</code></pre>
+<pre class="term" data-out="p10/51-jar-natives.sh" data-lines="1-9"><span class="p">$</span> bash examples/p10/51-jar-natives.sh
+lib/sqlite-jdbc-3.49.1.0.jar  13 MiB
+lib/duckdb_jdbc-1.5.5.1.jar  81 MiB
+-- sqlite-jdbc: OS 별 네이티브 개수 (합계 = 파일 수)
+      3 FreeBSD
+      8 Linux
+      4 Linux-Android
+      3 Linux-Musl
+      2 Mac
+      4 Windows</pre>
+<p>이 아카이브에 든 네이티브는 모두 24개입니다. 리눅스만 해도 x86 · x86_64 · aarch64 · armv6 · armv7 · arm · ppc64 · riscv64로 여덟 가지입니다.</p>
+<div class="note"><b>푸는 자리 바꾸기</b> — 기본은 <code>java.io.tmpdir</code>입니다. 컨테이너에서 <code>/tmp</code>가 읽기 전용이면 <code>-Dorg.sqlite.tmpdir=&hellip;</code>로 옮깁니다.</div>
+</article>
+
+<article class="card" id="jv-sqlite-url">
+<h3>URL 하나로 파일 · 메모리 · 자원</h3>
+<p>sqlite-jdbc의 URL은 <code>jdbc:sqlite:</code> 뒤에 무엇을 적느냐로 대상이 정해집니다. 옵션은 물음표 뒤에 붙이거나 <code>SQLiteConfig</code>로 넘깁니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>URL</th><th>여는 것</th></tr>
+<tr><td><code>jdbc:sqlite:/경로/a.db</code></td><td>그 파일</td></tr>
+<tr><td><code>jdbc:sqlite::memory:</code></td><td>메모리 DB. 연결을 닫으면 사라집니다</td></tr>
+<tr><td><code>jdbc:sqlite:</code></td><td>임시 DB(엔진이 자리를 정합니다)</td></tr>
+<tr><td><code>jdbc:sqlite::resource:경로</code></td><td>클래스패스나 URL의 DB — 읽기 전용</td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자주 쓰는 옵션</th><th>효과</th></tr>
+<tr><td><code>jdbc.get_generated_keys=false</code></td><td>생성 키 조회를 끕니다. 대량 삽입이 빨라집니다</td></tr>
+<tr><td><code>-Dorg.sqlite.lib.path</code></td><td>번들 대신 지정한 네이티브 라이브러리를 씁니다</td></tr>
+</table>
+</div>
+<div class="tip"><b><code>:resource:</code>의 쓸모</b> — 참조용 데이터를 jar에 넣어 배포하고 그대로 질의할 수 있습니다. 사전이나 지역 코드표처럼 바뀌지 않는 표에 잘 맞습니다.</div>
+</article>
+
+<article class="card" id="jv-duck-query">
+<h3>URL만 바꾸면 DuckDB입니다</h3>
+<p>표준에 기댄 코드의 값어치가 여기서 드러납니다. <code>jdbc:duckdb:</code>로 연결하는 순간, 같은 <code>Statement</code>와 <code>ResultSet</code>으로 컬럼 저장 분석 엔진을 쓰게 됩니다. 파일을 미리 적재할 필요도 없이 Parquet를 표처럼 질의합니다.</p>
+<p class="fname">examples/p10/DuckQuery.java</p>
+<pre><code data-lang="java" data-src="p10/DuckQuery.java" data-lines="5-15">  public static void main(String[] args) throws SQLException {
+    try (Connection con = DriverManager.getConnection("jdbc:duckdb:");
+         Statement st = con.createStatement()) {
+      try (ResultSet rs = st.executeQuery(
+          "SELECT p.category, sum(oi.qty) AS qty FROM 'data/parquet/order_items.parquet' oi " +
+          "JOIN 'data/parquet/products.parquet' p ON p.id = oi.product_id GROUP BY ALL ORDER BY qty DESC LIMIT 3")) {
+        while (rs.next()) System.out.println(rs.getString(1) + " " + rs.getLong(2));
+      }
+      try (ResultSet rs = st.executeQuery("SELECT version()")) { rs.next(); System.out.println(rs.getString(1)); }
+    }
+  }</code></pre>
+<pre class="term" data-out="p10/DuckQuery.java"><span class="p">$</span> java -cp build/java:lib/* DuckQuery
+도서 843
+전자기기 818
+생활 814
+v1.5.5</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>URL</th><th>여는 것</th></tr>
+<tr><td><code>jdbc:duckdb:</code></td><td>그 연결만 쓰는 메모리 DB</td></tr>
+<tr><td><code>jdbc:duckdb:memory:이름</code></td><td>다른 연결과 공유하는 메모리 DB</td></tr>
+<tr><td><code>jdbc:duckdb:/경로/a.duckdb</code></td><td>디스크의 파일</td></tr>
+<tr><td><code>&hellip;;threads=4;memory_limit=4GB</code></td><td>세미콜론으로 옵션을 이어 붙입니다</td></tr>
+</table>
+</div>
+<p class="cap"><code>GROUP BY ALL</code>은 DuckDB의 확장 문법입니다(7부). 드라이버는 SQL을 해석하지 않으므로 엔진의 방언이 그대로 통합니다.</p>
+</article>
+
+<article class="card" id="jv-duck-readonly">
+<h3>읽기 전용으로 열면 여럿이 봅니다</h3>
+<p>DuckDB 파일은 기본적으로 <b>쓰기 프로세스 하나</b>만 붙을 수 있습니다. 여러 프로세스가 같은 파일을 읽기만 하려면 모두 읽기 전용으로 열어야 하고, 그 선언이 연결 속성 <code>duckdb.read_only</code>입니다.</p>
+<p class="fname">examples/p10/DuckReadOnly.java</p>
+<pre><code data-lang="java" data-src="p10/DuckReadOnly.java" data-lines="6-19">  public static void main(String[] args) throws SQLException {
+    Properties p = new Properties();
+    p.setProperty("duckdb.read_only", "true");
+    try (Connection con = DriverManager.getConnection("jdbc:duckdb:data/shop.duckdb", p);
+         Statement st = con.createStatement()) {
+      try (ResultSet rs = st.executeQuery("SELECT status, count(*) FROM orders GROUP BY status ORDER BY status")) {
+        while (rs.next()) System.out.println(rs.getString(1) + " " + rs.getLong(2));
+      }
+      try { st.execute("DELETE FROM orders"); }
+      catch (SQLException e) {
+        String m = e.getMessage();
+        System.out.println("write blocked: " + m.substring(m.lastIndexOf("Error: ") + 7).trim());
+      }
+    }</code></pre>
+<pre class="term" data-out="p10/DuckReadOnly.java"><span class="p">$</span> java -cp build/java:lib/* DuckReadOnly
+cancelled 60
+paid 577
+pending 54
+shipped 109
+write blocked: Cannot execute statement of type "DELETE" on database "shop" which is attached in read-only mode!</pre>
+<p>집계는 정상으로 돌았고 <code>DELETE</code>만 엔진이 막았습니다. 응용의 실수로 원본 데이터가 바뀌는 사고를 코드가 아니라 <b>연결 설정</b>으로 막은 것입니다.</p>
+<div class="note"><b>옵션은 인스턴스 단위</b> — 같은 파일에 연결이 여럿이면 옵션이 모두 같아야 합니다. 옵션은 첫 연결이 열릴 때 적용되므로, 뒤에서 다른 <code>access_mode</code>를 요구하는 연결은 거부됩니다.</div>
+</article>
+
+<article class="card" id="jv-duck-appender">
+<h3>Appender — 대량 적재의 전용 통로</h3>
+<p>배치도 결국 <code>INSERT</code>를 만들어 실행 엔진을 거칩니다. Appender는 그 경로를 건너뛰고 값을 <b>컬럼 벡터에 곧장</b> 쌓습니다. DuckDB 문서가 대량 삽입에는 Appender를 먼저 권하는 이유입니다.</p>
+<p class="fname">examples/p10/DuckAppender.java</p>
+<pre><code data-lang="java" data-src="p10/DuckAppender.java" data-lines="8-21">  public static void main(String[] args) throws SQLException {
+    String url = "jdbc:duckdb:" + Path.of(System.getenv("DBDECK_TMP"), "log.duckdb");
+    try (DuckDBConnection con = (DuckDBConnection) DriverManager.getConnection(url);
+         Statement st = con.createStatement()) {
+      st.execute("CREATE TABLE hits (id INTEGER, path VARCHAR, ms DOUBLE)");
+      try (DuckDBAppender app = con.createAppender(DuckDBConnection.DEFAULT_SCHEMA, "hits")) {
+        for (int i = 0; i &lt; 10000; i++) {
+          app.beginRow(); app.append(i); app.append("/p/" + (i % 7)); app.append((double) (i % 50)); app.endRow();
+        }
+      }
+      try (ResultSet rs = st.executeQuery("SELECT count(*), avg(ms) FROM hits")) {
+        rs.next(); System.out.println("rows=" + rs.getLong(1) + " avg=" + rs.getDouble(2));
+      }
+    }</code></pre>
+<pre class="term" data-out="p10/DuckAppender.java"><span class="p">$</span> java -cp build/java:lib/* DuckAppender
+rows=10000 avg=24.5</pre>
+<p>한 행은 <code>beginRow()</code>와 <code>endRow()</code> 사이에서 열 순서대로 <code>append</code>합니다. 남은 행은 <code>close()</code> 때 밀려 나가므로 try-with-resources가 곧 커밋 지점입니다.</p>
+<div class="key"><b>배치 크기를 정할 필요가 없습니다</b> — Appender는 2,048행(DuckDB 벡터 하나)씩 내부에서 끊어 보냅니다. 응용이 그 위에 또 배치를 얹어도 빨라지지 않습니다.</div>
+</article>
+
+<article class="card" id="jv-duck-types">
+<h3>리스트와 구조체가 JDBC로 건너옵니다</h3>
+<p>DuckDB에는 관계형 표준에 없는 타입이 있습니다. JDBC는 <code>java.sql.Array</code>와 <code>java.sql.Struct</code>라는 자리를 미리 비워 두었고, 드라이버가 거기에 값을 실어 보냅니다.</p>
+<p class="fname">examples/p10/DuckTypes.java</p>
+<pre><code data-lang="java" data-src="p10/DuckTypes.java" data-lines="5-15">  public static void main(String[] args) throws SQLException {
+    try (Connection con = DriverManager.getConnection("jdbc:duckdb:"); Statement st = con.createStatement();
+         ResultSet rs = st.executeQuery("SELECT [1, 2, 3] AS l, {'a': 1, 'b': 'x'} AS s, (1::HUGEINT &lt;&lt; 70) AS h, DATE '2026-09-03' AS d")) {
+      rs.next();
+      Object[] list = (Object[]) rs.getArray("l").getArray();
+      Struct s = (Struct) rs.getObject("s");
+      System.out.println("list len=" + list.length + " first=" + list[0]);
+      System.out.println("struct attrs=" + java.util.Arrays.toString(s.getAttributes()));
+      System.out.println("hugeint=" + rs.getBigDecimal("h") + " class=" + rs.getObject("h").getClass().getSimpleName());
+      System.out.println("date=" + rs.getDate("d") + " class=" + rs.getObject("d").getClass().getSimpleName());
+    }</code></pre>
+<pre class="term" data-out="p10/DuckTypes.java"><span class="p">$</span> java -cp build/java:lib/* DuckTypes
+list len=3 first=1
+struct attrs=[1, x]
+hugeint=1180591620717411303424 class=BigInteger
+date=2026-09-03 class=LocalDate</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>DuckDB</th><th>자바로 오는 모습</th></tr>
+<tr><td><code>LIST</code></td><td><code>java.sql.Array</code> → <code>Object[]</code></td></tr>
+<tr><td><code>STRUCT</code></td><td><code>java.sql.Struct</code> → <code>getAttributes()</code></td></tr>
+<tr><td><code>HUGEINT</code>(128비트)</td><td><code>BigInteger</code></td></tr>
+<tr><td><code>DATE</code></td><td><code>LocalDate</code></td></tr>
+</table>
+</div>
+<p class="cap">1을 70비트 왼쪽으로 민 값은 <code>long</code>에 들어가지 않습니다. 128비트 정수를 표준 타입으로 가진 엔진이라 <code>BigInteger</code>가 나옵니다.</p>
+</article>
+
+<article class="card" id="jv-duck-tx">
+<h3>트랜잭션 어휘는 그대로입니다</h3>
+<p>엔진의 동시성 모델은 SQLite와 전혀 다르지만(14부), 응용이 쓰는 말은 같습니다. <code>setAutoCommit(false)</code> · <code>commit()</code> · <code>rollback()</code> 세 개면 됩니다.</p>
+<p class="fname">examples/p10/DuckTransaction.java</p>
+<pre><code data-lang="java" data-src="p10/DuckTransaction.java" data-lines="5-16">  public static void main(String[] args) throws SQLException {
+    try (Connection con = DriverManager.getConnection("jdbc:duckdb:"); Statement st = con.createStatement()) {
+      st.execute("CREATE TABLE acct (id INTEGER, bal INTEGER)");
+      st.execute("INSERT INTO acct VALUES (1, 100), (2, 0)");
+      con.setAutoCommit(false);
+      st.execute("UPDATE acct SET bal = bal - 30 WHERE id = 1");
+      st.execute("UPDATE acct SET bal = bal + 30 WHERE id = 2");
+      con.rollback();
+      try (ResultSet rs = st.executeQuery("SELECT id, bal FROM acct ORDER BY id")) {
+        while (rs.next()) System.out.println(rs.getInt(1) + " -&gt; " + rs.getInt(2));
+      }
+    }</code></pre>
+<pre class="term" data-out="p10/DuckTransaction.java"><span class="p">$</span> java -cp build/java:lib/* DuckTransaction
+1 -&gt; 100
+2 -&gt; 0</pre>
+<p>30을 옮기는 두 갱신을 되돌렸더니 잔액이 처음 그대로입니다. 앞의 <code class="nb">JdbcTransaction</code>과 코드 모양이 같다는 점이 요점입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>같은 것</th><th>다른 것</th></tr>
+<tr><td>자동 커밋 기본값 · commit · rollback</td><td>DuckDB는 낙관적 동시성 — 충돌은 커밋 시점에 드러납니다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="jv-duck-jar">
+<h3>81MiB짜리 드라이버</h3>
+<p>duckdb_jdbc는 분석 엔진 전체를 담고 있어 sqlite-jdbc보다 여섯 배 넘게 큽니다. 대신 이 jar 하나만 클래스패스에 있으면 설치도 서버도 없이 컬럼 저장 · 벡터 실행 · Parquet 읽기가 전부 됩니다.</p>
+<p class="fname">examples/p10/51-jar-natives.sh</p>
+<pre><code data-lang="sh" data-src="p10/51-jar-natives.sh" data-lines="9-10">echo "-- duckdb_jdbc: 네이티브 목록 (압축 풀린 바이트)"
+unzip -l lib/duckdb_jdbc-1.5.5.1.jar | awk '/libduckdb_java/ { printf "%11d  %s\n", $1, $4 }'</code></pre>
+<pre class="term" data-out="p10/51-jar-natives.sh" data-lines="10-14"><span class="p">$</span> bash examples/p10/51-jar-natives.sh
+-- duckdb_jdbc: 네이티브 목록 (압축 풀린 바이트)
+   60780968  libduckdb_java.so_linux_amd64
+  108682352  libduckdb_java.so_osx_universal
+   35090432  libduckdb_java.so_windows_amd64
+   53584160  libduckdb_java.so_linux_arm64</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>sqlite-jdbc 3.49.1.0</th><th>duckdb_jdbc 1.5.5.1</th></tr>
+<tr><td>jar 크기</td><td>13 MiB</td><td>81 MiB</td></tr>
+<tr><td>네이티브 개수</td><td>24 (6개 OS)</td><td>4</td></tr>
+<tr><td>덮는 플랫폼</td><td>Android · musl 포함</td><td>리눅스 · macOS · 윈도우</td></tr>
+</table>
+</div>
+<div class="warn"><b>배포 크기가 문제라면</b> — 두 드라이버 모두 필요 없는 플랫폼의 네이티브를 걷어낸 jar를 빌드에서 따로 만들 수 있습니다. 컨테이너 이미지에서는 그 차이가 그대로 용량입니다.</div>
+</article>
+
+<article class="card" id="jv-jpa">
+<h3>JPA와 Hibernate — 객체를 저장한다는 발상</h3>
+<p>업무 코드는 객체를 다루는데 데이터베이스는 행을 다룹니다. 그 사이를 손으로 옮기는 코드가 응용의 상당 부분을 차지하자, 이를 규격으로 만든 것이 JPA(현 Jakarta Persistence)이고 가장 널리 쓰이는 구현이 Hibernate입니다.</p>
+<div class="satisfy"><div class="bx"><h6>자바 세계</h6>엔티티 객체<br>필드 · 참조</div><div class="mid">⇄</div><div class="bx"><h6>DB 세계</h6>행<br>열 · 외래 키</div></div>
+<p>Hibernate는 자체 API와 나란히 JPA 규격의 구현을 함께 제공합니다. 순서가 반대로 알려져 있는데, 실은 <b>Hibernate 2의 성공이 JPA 1의 밑그림</b>이 되었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>얻는 것</th><th>내주는 것</th></tr>
+<tr><td>CRUD 코드가 사라짐 · 변경 추적 · 지연 적재</td><td>어떤 SQL이 나가는지 즉시 보이지 않음</td></tr>
+<tr><td>엔진 이동이 쉬움</td><td>N+1 질의 같은 성능 함정</td></tr>
+</table>
+</div>
+<div class="warn"><b>SQLite에서는</b> — sqlite-jdbc 문서는 Hibernate와 함께 쓸 때 읽기 전용 트랜잭션을 위한 별도 설정이 필요하다고 안내합니다. SQLite가 읽기 전용 트랜잭션을 쓰기로 자동 승격하면서 <code>SQLITE_BUSY</code>가 나기 때문입니다.</div>
+</article>
+
+<article class="card" id="jv-jooq">
+<h3>jOOQ — SQL을 자바 문법으로 씁니다</h3>
+<p>반대 방향의 답도 있습니다. 객체를 감추는 대신 <b>SQL을 그대로 두되 컴파일러에게 검사시키자</b>는 것입니다. jOOQ는 데이터베이스에서 자바 코드를 생성하고, 그 위에서 유창한 API로 질의를 조립합니다.</p>
+<div class="flow"><span class="box">DB 스키마</span><span class="arr">코드 생성</span><span class="box">자바 클래스</span><span class="arr">컴파일</span><span class="box dim">타입 안전 질의</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주장</th><th>뜻</th></tr>
+<tr><td>데이터베이스 우선</td><td>스키마가 먼저이고 코드가 따라갑니다</td></tr>
+<tr><td>타입 안전 SQL</td><td>열 이름 오타를 자바 컴파일러가 잡습니다</td></tr>
+<tr><td>방언 변환</td><td>같은 질의를 엔진별 SQL로 바꿔 냅니다</td></tr>
+</table>
+</div>
+<div class="note"><b>고르는 기준</b> — 스키마가 자주 바뀌고 SQL이 복잡할수록 jOOQ가, 도메인 객체가 중심이고 질의가 단순할수록 JPA가 맞습니다. 한 프로젝트에서 섞어 쓰기도 합니다.</div>
+</article>
+
+<article class="card" id="jv-jdbctemplate">
+<h3>JdbcTemplate — 반복만 걷어냅니다</h3>
+<p>JDBC 코드에서 실제로 다른 부분은 SQL과 행을 객체로 옮기는 두 줄뿐이고, 나머지는 늘 같습니다. 스프링의 <code>JdbcTemplate</code>은 그 반복을 가져가고 다른 두 가지만 우리에게 맡깁니다.</p>
+<div class="g2">
+<div class="cmp good"><h5>템플릿이 하는 일</h5><pre>연결을 얻고 돌려주기
+문장 만들고 실행하기
+ResultSet 순회 · 자원 닫기
+예외를 DataAccessException 으로 번역</pre></div>
+<div class="cmp good"><h5>우리가 하는 일</h5><pre>SQL 적기
+행에서 값 꺼내기</pre></div>
+</div>
+<p>번역이 특히 중요합니다. 벤더 코드 19가 아니라 <code>DuplicateKeyException</code>(기본 키·유일 제약 위반)으로 잡히므로, 엔진이 바뀌어도 <code>catch</code> 절이 그대로 남습니다. 설정이 끝난 인스턴스는 스레드 안전해 하나를 여러 DAO가 공유합니다.</p>
+<div class="tip"><b>ORM과 겹치지 않습니다</b> — <code>JdbcTemplate</code>은 SQL을 감추지 않습니다. 그래서 JPA를 쓰는 프로젝트에서도 통계·배치 질의는 여기로 내려 쓰는 일이 흔합니다.</div>
+</article>
+
+<article class="card" id="jv-choose">
+<h3>무엇을 쓸지 고르는 기준</h3>
+<p>네 층은 경쟁 관계가 아니라 <b>추상화의 높이</b>가 다릅니다. 낮을수록 통제권이 크고 코드가 길며, 높을수록 짧아지는 대신 무엇이 실행되는지 멀어집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>층</th><th>잘 맞는 일</th><th>대가</th></tr>
+<tr><td>맨 JDBC</td><td>도구 · 마이그레이션 · 드라이버 실험</td><td>같은 코드를 계속 씁니다</td></tr>
+<tr><td>JdbcTemplate</td><td>SQL은 직접 쓰되 반복은 싫을 때</td><td>스프링 의존</td></tr>
+<tr><td>jOOQ</td><td>복잡한 질의 · 스키마 우선</td><td>빌드에 코드 생성 단계가 붙음</td></tr>
+<tr><td>JPA · Hibernate</td><td>도메인 객체 중심 CRUD</td><td>나가는 SQL이 보이지 않음</td></tr>
+</table>
+</div>
+<div class="key"><b>바닥은 어차피 하나</b> — 어느 층을 쓰든 마지막에는 <code>Connection</code>과 <code>PreparedStatement</code>가 실행됩니다. 이 부의 앞부분을 아는 사람만이 위층이 만들어 낸 SQL을 읽고 고칠 수 있습니다.</div>
+</article>
+
+<article class="card" id="jv-summary">
+<h3>10부에서 확인한 것</h3>
+<p>1997년의 인터페이스 몇 개로 성격이 정반대인 두 엔진을 같은 방식으로 다뤘습니다. 바뀐 것은 URL과 jar뿐이었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>기억할 한 줄</th></tr>
+<tr><td>연결</td><td>드라이버는 서비스 파일로 스스로 등록합니다</td></tr>
+<tr><td>질의</td><td>값은 <code>?</code>로 묶습니다. 이어 붙이지 않습니다</td></tr>
+<tr><td>NULL</td><td><code>getInt</code>는 0을 줍니다. <code>wasNull()</code>로 확인합니다</td></tr>
+<tr><td>자원</td><td>셋 다 try-with-resources 괄호 안에 적습니다</td></tr>
+<tr><td>대량 적재</td><td>SQLite는 배치+트랜잭션, DuckDB는 Appender</td></tr>
+</table>
+</div>
+<div class="flow"><span class="box">10부 Java</span><span class="arr">→</span><span class="box dim">11부 JavaScript</span></div>
+<p class="cap">다음 부에서는 같은 두 엔진을 Node.js의 <code class="nb">node:sqlite</code>와 <code class="nb">@duckdb/node-api</code>로 다시 다룹니다. 동기 API와 비동기 API의 설계 차이가 주제입니다.</p>
 </article>
 
 <!-- ===== part11.html (1장) ===== -->
