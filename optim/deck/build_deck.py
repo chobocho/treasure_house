@@ -133,15 +133,15 @@ def fill_code(m):
 
 
 def fill_out(m, manifest):
-    """<div class="term" data-out="이름"></div> 를 실제 실행 출력으로 채운다."""
-    name = m.group(1)
+    """<div class="term ..." data-out="이름"></div> 를 실제 실행 출력으로 채운다."""
+    cls, name = m.group(1), m.group(2)
     rec = manifest.get(name)
     if rec is None:
         errors.append('실행 출력 없음: %s (run_all.py 를 먼저 돌릴 것)' % name)
         return m.group(0)
     stats['out'] += 1
     body = ('<span class="p">$</span> %s\n%s' % (esc(rec['cmd']), esc(rec['stdout']))).rstrip()
-    return '<div class="term" data-out="%s">%s</div>' % (esc(name), body)
+    return '<div class="term%s" data-out="%s">%s</div>' % (cls, esc(name), body)
 
 
 def build_nav(body):
@@ -179,7 +179,7 @@ def main():
     body = '\n'.join(chunks)
 
     body = re.sub(r'<pre><code([^>]*data-src="[^"]*"[^>]*)>\s*</code></pre>', fill_code, body)
-    body = re.sub(r'<div class="term" data-out="([^"]+)">\s*</div>',
+    body = re.sub(r'<div class="term([^"]*)" data-out="([^"]+)">\s*</div>',
                   lambda m: fill_out(m, manifest), body)
 
     stats['pages'] = len(re.findall(r'<article class="card', body))
