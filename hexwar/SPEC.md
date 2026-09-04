@@ -63,8 +63,10 @@ Equivalent axial form used by the code (avoids computing y):
 
 ### 1.7 Rotation and reflection
 
-Rotate one step counter-clockwise about the origin:  `(x,y,z) -> (-z,-x,-y)`.
-Clockwise: `(x,y,z) -> (-y,-z,-x)`. Rotation about a center `c`: translate to origin,
+Directions are named for the screen (`r` grows downward), so `E -> SE` is clockwise
+and the direction table of §1.5 (E, NE, NW, ...) runs counter-clockwise.
+Rotate one step clockwise about the origin:  `(x,y,z) -> (-z,-x,-y)`.
+Counter-clockwise: `(x,y,z) -> (-y,-z,-x)`. Rotation about a center `c`: translate to origin,
 rotate, translate back. Reflection across the q axis: `(x,y,z) -> (x,z,y)`.
 
 ### 1.8 Ring and spiral
@@ -183,7 +185,7 @@ columns are the side panel and the bottom 32 rows are the message bar.
 ### 4.2 Hex outline (stretched hexagon, integer slopes)
 
 A 32x32 bounding box is NOT a regular hexagon (a regular pointy-top hex 32 wide is
-27.7 tall). DOS games stretched it on purpose so the slanted edges land on integer
+36.95 tall). DOS games stretched it on purpose so the slanted edges land on integer
 slopes. Vertices of the hex whose bounding box top-left is `(L, T)`:
 
     (L+16, T)      (L+32, T+8)    (L+32, T+24)

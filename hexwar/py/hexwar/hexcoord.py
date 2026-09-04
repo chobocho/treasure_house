@@ -78,12 +78,12 @@ def neighbors(q, r):
 
 # ------------------------------------------------------------ 회전·반사
 def rotate_cw(x, y, z):
-    """원점 기준 시계 방향 60도. SPEC §1.7 — 좌표를 밀고 부호만 뒤집는다."""
-    return (-y, -z, -x)
+    """원점 기준 시계 방향 60도(화면 기준: E→SE). SPEC §1.7 — DIRS 순서는 반시계다."""
+    return (-z, -x, -y)
 
 
 def rotate_ccw(x, y, z):
-    return (-z, -x, -y)
+    return (-y, -z, -x)
 
 
 def rotate_about(q, r, cq, cr, steps):

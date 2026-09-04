@@ -54,11 +54,11 @@ export function neighbors(q: number, r: number): Array<[number, number]> {
 }
 
 export function rotateCw(x: number, y: number, z: number): [number, number, number] {
-  return [-y, -z, -x];
+  return [-z, -x, -y];
 }
 
 export function rotateCcw(x: number, y: number, z: number): [number, number, number] {
-  return [-z, -x, -y];
+  return [-y, -z, -x];
 }
 
 export function rotateAbout(q: number, r: number, cq: number, cr: number,
