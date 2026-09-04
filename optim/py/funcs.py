@@ -11,6 +11,11 @@
 import math
 import random
 
+# math.fsum 대신 이것을 쓴다 — 실수에는 fsum(정확한 합)을, 자동미분의
+# 이중수·그래프 마디에는 보통의 덧셈을 적용해 준다(py/autodiff.py 참고).
+# 덕분에 같은 시험함수를 해석적 미분·수치미분·자동미분 셋 모두에 쓸 수 있다.
+from py.autodiff import fsum
+
 
 class Problem(object):
     """최적화 문제 하나. hess 가 None 이면 2차 정보를 제공하지 않는 문제다."""
@@ -49,12 +54,12 @@ class Quadratic(Problem):
 
     def f(self, x):
         n = len(x)
-        q = math.fsum(x[i] * self.Q[i][j] * x[j] for i in range(n) for j in range(n))
-        return 0.5 * q - math.fsum(self.c[i] * x[i] for i in range(n))
+        q = fsum(x[i] * self.Q[i][j] * x[j] for i in range(n) for j in range(n))
+        return 0.5 * q - fsum(self.c[i] * x[i] for i in range(n))
 
     def grad(self, x):
         n = len(x)
-        return [math.fsum(self.Q[i][j] * x[j] for j in range(n)) - self.c[i] for i in range(n)]
+        return [fsum(self.Q[i][j] * x[j] for j in range(n)) - self.c[i] for i in range(n)]
 
     def hess(self, x):
         return [row[:] for row in self.Q]
@@ -80,13 +85,16 @@ class Rosenbrock(Problem):
 
     def __init__(self, n=2):
         self.nn = n
-        self.x0 = [-1.2, 1.0] + [1.0] * (n - 2) if n >= 2 else [-1.2]
+        # 관례적인 출발점 (−1.2, 1, −1.2, 1, …). 홀수 자리를 −1.2 로 번갈아 두는 것이
+        # 표준이다. (−1.2, 1, 1, 1, …) 처럼 뒤를 전부 1 로 채우면 n ≥ 4 에서
+        # f ≈ 3.99 의 국소 최소로 빨려 들어가 알고리즘 비교가 왜곡된다.
+        self.x0 = [(-1.2 if i % 2 == 0 else 1.0) for i in range(n)] if n >= 2 else [-1.2]
         self.argmin = [1.0] * n
         self.fmin = 0.0
         self.name = 'rosenbrock(%d)' % n
 
     def f(self, x):
-        return math.fsum(100.0 * (x[i + 1] - x[i] ** 2) ** 2 + (1.0 - x[i]) ** 2
+        return fsum(100.0 * (x[i + 1] - x[i] ** 2) ** 2 + (1.0 - x[i]) ** 2
                          for i in range(len(x) - 1))
 
     def grad(self, x):
@@ -158,12 +166,12 @@ class Beale(Problem):
         return [self._K[i] - x[0] + x[0] * x[1] ** (i + 1) for i in range(3)]
 
     def f(self, x):
-        return math.fsum(r * r for r in self._r(x))
+        return fsum(r * r for r in self._r(x))
 
     def grad(self, x):
         r = self._r(x)
-        gx = math.fsum(2.0 * r[i] * (-1.0 + x[1] ** (i + 1)) for i in range(3))
-        gy = math.fsum(2.0 * r[i] * (x[0] * (i + 1) * x[1] ** i) for i in range(3))
+        gx = fsum(2.0 * r[i] * (-1.0 + x[1] ** (i + 1)) for i in range(3))
+        gy = fsum(2.0 * r[i] * (x[0] * (i + 1) * x[1] ** i) for i in range(3))
         return [gx, gy]
 
     def hess(self, x):
@@ -205,7 +213,7 @@ class LogisticRegression(Problem):
         X, y = [], []
         for _ in range(n):
             xi = [rng.gauss(0.0, 1.0) for _ in range(d)]
-            z = math.fsum(a * b for a, b in zip(w_true, xi))
+            z = fsum(a * b for a, b in zip(w_true, xi))
             p = 1.0 / (1.0 + math.exp(-z))
             y.append(1.0 if rng.random() < p else -1.0)
             X.append(xi)
@@ -220,15 +228,15 @@ class LogisticRegression(Problem):
 
     def f(self, w):
         n = len(self.X)
-        s = math.fsum(self._logexp(self.y[i] * math.fsum(a * b for a, b in zip(w, self.X[i])))
+        s = fsum(self._logexp(self.y[i] * fsum(a * b for a, b in zip(w, self.X[i])))
                       for i in range(n))
-        return s / n + 0.5 * self.lam * math.fsum(v * v for v in w)
+        return s / n + 0.5 * self.lam * fsum(v * v for v in w)
 
     def grad(self, w):
         n, d = len(self.X), len(w)
         g = [self.lam * v for v in w]
         for i in range(n):
-            z = self.y[i] * math.fsum(a * b for a, b in zip(w, self.X[i]))
+            z = self.y[i] * fsum(a * b for a, b in zip(w, self.X[i]))
             # −σ(−z) = −1/(1+e^{z}) — 넘침을 피해 부호로 갈라 쓴다
             s = -1.0 / (1.0 + math.exp(z)) if z > -700 else -1.0
             c = s * self.y[i] / n
@@ -241,7 +249,7 @@ class LogisticRegression(Problem):
         n, d = len(self.X), len(w)
         H = [[self.lam if i == j else 0.0 for j in range(d)] for i in range(d)]
         for i in range(n):
-            z = self.y[i] * math.fsum(a * b for a, b in zip(w, self.X[i]))
+            z = self.y[i] * fsum(a * b for a, b in zip(w, self.X[i]))
             sig = 1.0 / (1.0 + math.exp(-z)) if z > -700 else 0.0
             c = sig * (1.0 - sig) / n
             xi = self.X[i]
