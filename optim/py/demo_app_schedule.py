@@ -25,7 +25,7 @@ def demo_wspt():
     print('  WSPT 규칙(p/w 오름차순) 결과 %.0f, 전수 조사(%d! = %d가지) 최적 %.0f — 일치.'
           % (total, len(jobs), 24, best))
     print('  정렬 O(n log n) 으로 최적이 <증명>되는 드문 경우다. 증명은 교환 논법이며')
-    print('  13부 51장에 있다.\n')
+    print('  13부 52장에 있다.\n')
 
 
 def demo_wspt_scale():

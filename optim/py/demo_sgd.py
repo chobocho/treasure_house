@@ -63,7 +63,9 @@ def demo_constant_step():
             base = d / a
     print(fmt.table(rows, align='rrrr'))
     print('  마지막 열(거리/alpha)이 alpha 를 100배 바꾸는 동안 3~5 사이에 머문다 —')
-    print('  최종 거리가 alpha 에 비례한다는 뜻이고, 정리 33.3 의 O(alpha) 공이다.')
+    print('  최종 거리가 alpha 에 비례한다. 정리 33.2 는 거리의 <제곱>이 alpha 에 비례한다는')
+    print('  (거리는 sqrt(alpha)) 복원추출 기준의 상한이고, 이 구현은 에폭마다 표본을 섞어')
+    print('  쓰므로 에폭 안에서 잡음이 상쇄돼 그보다 좋은 O(alpha) 가 관측된다.')
     print('  잡음이 있는 한 이 공은 없앨 수 없다. 줄이려면 보폭을 줄이거나 분산을 줄여야 한다.\n')
 
 

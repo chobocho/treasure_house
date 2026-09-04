@@ -22,7 +22,7 @@ def demo_stepsize():
                      '수렴' if amp < 1 else ('진동' if amp == 1 else '발산')])
     print(fmt.table(rows, align='rrrrl'))
     print('  경계는 정확히 alpha = 2/L = 0.5 다. 그 위로는 가장 가파른 좌표가 증폭된다.')
-    print('  정리 3부-2.2 가 요구하는 alpha <= 1/L 은 안전판이고, 실제 경계는 2/L 이다.\n')
+    print('  3부 보조정리 9.1 이 요구하는 alpha <= 1/L 은 안전판이고, 실제 경계는 2/L 이다.\n')
 
 
 def demo_rate_vs_kappa():

@@ -26,7 +26,7 @@ def demo_three_solvers():
     print(fmt.table(rows, align='rrrrrr'))
     print('  eps=1e-3 에서 이미 정규방정식이 QR 보다 다섯 자리 나쁘고, eps>=1e-8 에서는')
     print('  1+eps^2 가 1 로 반올림되어 A^T A 가 아예 특이해진다 — 정보가 행렬을')
-    print('  만드는 단계에서 사라진 것이다(정리 15.4). QR 과 SVD 는 끝까지 멀쩡하다.\n')
+    print('  만드는 단계에서 사라진 것이다(정리 15.3). QR 과 SVD 는 끝까지 멀쩡하다.\n')
 
 
 def demo_vandermonde():

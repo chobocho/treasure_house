@@ -21,7 +21,7 @@ def demo_iterations():
                      '%.1f' % math.sqrt(kappa)])
     print(fmt.table(rows, align='rrrrr'))
     print("  반복 수의 비율이 sqrt(kappa) 를 대체로 따라간다 — 수렴 인자가 (kappa-1)/(kappa+1)")
-    print('  에서 (sqrt(kappa)-1)/(sqrt(kappa)+1) 로 바뀌었기 때문이다(정리 34.2).')
+    print('  에서 (sqrt(kappa)-1)/(sqrt(kappa)+1) 로 바뀌었기 때문이다(정리 34.1).')
     print('  kappa = 10000 이면 100배 빨라진다.\n')
 
 

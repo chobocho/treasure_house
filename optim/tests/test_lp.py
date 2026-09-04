@@ -148,3 +148,43 @@ class TestModeling(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestSimplexRules(unittest.TestCase):
+    """리뷰에서 드러난 두 결함 — 반복 상한을 'optimal' 로 보고하던 것과,
+       Bland 동률 처리가 첨자를 비교하지 않던 것."""
+
+    def _beale(self):
+        c = [-0.75, 150.0, -0.02, 6.0]
+        A = [[0.25, -60.0, -0.04, 9.0],
+             [0.5, -90.0, -0.02, 3.0],
+             [0.0, 0.0, 1.0, 0.0]]
+        b = [0.0, 0.0, 1.0]
+        return c, A, b
+
+    def test_maxiter_is_not_reported_as_optimal(self):
+        # Dantzig 규칙은 Beale 예제에서 순환한다. 상한에 걸리면 그 사실을 알려야지
+        # 엉뚱한 목적값(0.0, 참값은 -0.05)을 'optimal' 로 돌려주면 안 된다.
+        c, A, b = self._beale()
+        r = lp.solve_lp(c, A_ub=A, b_ub=b, rule='dantzig', maxiter=500)
+        self.assertEqual(r.status, 'maxiter')
+        self.assertIsNone(r.obj)
+
+    def test_optimal_is_still_reported_when_it_converges(self):
+        c, A, b = self._beale()
+        r = lp.solve_lp(c, A_ub=A, b_ub=b, rule='bland', maxiter=500)
+        self.assertEqual(r.status, 'optimal')
+        self.assertAlmostEqual(r.obj, -0.05, places=9)
+
+    def test_bland_ratio_tie_picks_smallest_basis_index(self):
+        # 두 행의 비율이 똑같이 1.0 — Bland 규칙은 기저 첨자가 작은 행을 내보낸다.
+        T = [[1.0, 0.0, 2.0, 2.0],      # 행 0: 기저 5, 비율 2/2 = 1
+             [0.0, 1.0, 1.0, 1.0],      # 행 1: 기저 3, 비율 1/1 = 1
+             [0.0, 0.0, -1.0, 0.0]]
+        basis = [5, 3]
+        row, ratio = lp._ratio_test(T, 2, 'bland', basis)
+        self.assertEqual(row, 1)
+        self.assertAlmostEqual(ratio, 1.0)
+        # 첨자 순서를 뒤집으면 선택도 뒤집혀야 한다
+        row2, _ = lp._ratio_test(T, 2, 'bland', [3, 5])
+        self.assertEqual(row2, 0)

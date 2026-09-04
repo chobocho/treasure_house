@@ -58,7 +58,7 @@ def demo_integrality():
     print(fmt.table(rows, align='lrrl'))
     print('  LP 최적값 %.4f, 흐름 알고리즘 %d — 같다.' % (r.obj, cost))
     print('  흐름 문제의 제약행렬(노드-간선 접속행렬)은 완전단모듈이라,')
-    print('  우변이 정수이면 LP 의 꼭짓점이 자동으로 정수가 된다(정리 30.3).\n')
+    print('  우변이 정수이면 LP 의 꼭짓점이 자동으로 정수가 된다(정리 30.2).\n')
 
 
 def demo_bottleneck():
