@@ -2,11 +2,11 @@
 """선형계획 — 심플렉스법과 원-쌍대 내부점법.
 
    모든 것이 선형이면 세 가지가 참이 된다.
-     · 실행가능집합은 다면체이고, 최적해가 있으면 <b>꼭짓점</b>에 있다.
+     · 실행가능집합은 다면체이고, 최적해가 있으면 꼭짓점에 있다.
      · 꼭짓점은 기저해와 일대일 대응한다 → 유한 탐색이 가능하다(심플렉스).
      · 쌍대성이 완벽히 대칭이고 간격이 0 이다(강쌍대성이 언제나 성립).
 
-   여기서는 교재용으로 <b>전체 타블로</b> 심플렉스를 쓴다. 실무 구현은 기저 역행렬을
+   여기서는 교재용으로 전체 타블로 심플렉스를 쓴다. 실무 구현은 기저 역행렬을
    갱신하는 개정 심플렉스(revised simplex)를 쓰지만, 타블로 쪽이 매 단계에서 무슨
    일이 일어나는지 눈에 보인다. 큰 문제에서는 O(m·n) 메모리가 문제가 된다.
 """
@@ -54,7 +54,7 @@ def _choose_entering(T, cols, rule):
     """들어올 열을 고른다. 축소비용이 음수인 열만 후보다.
 
        Dantzig: 가장 음수인 것 — 보통 빠르지만 순환할 수 있다.
-       Bland  : 첨자가 가장 작은 것 — 느리지만 <b>순환하지 않음이 증명</b>된다.
+       Bland  : 첨자가 가장 작은 것 — 느리지만 순환하지 않음이 증명된다.
     """
     obj = T[-1]
     best, bestv = -1, -TOL
@@ -142,7 +142,7 @@ def _standard_form(c, A_ub, b_ub, A_eq, b_eq):
 def _find_unit_columns(A, b):
     """이미 기저가 되어 있는 열을 찾는다 — 슬랙 열이 대개 여기 해당한다.
 
-       인공변수를 <b>필요한 행에만</b> 붙이기 위한 준비다. 모든 행에 인공변수를
+       인공변수를 필요한 행에만 붙이기 위한 준비다. 모든 행에 인공변수를
        붙여도 답은 같지만, 1단계가 실제 최적화를 대신 해 버려서 2단계에서 아무
        일도 일어나지 않는다 — 배울 것이 사라진다. 실무 구현도 이렇게 한다.
     """
@@ -214,8 +214,13 @@ def _two_phase(A, b, c, rule='dantzig', maxiter=20000, trace=None):
 
 
 def solve_lp(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
-             method='simplex', rule='dantzig', maxiter=20000, keep_history=False):
-    """min cᵀx  s.t.  A_ub x ≤ b_ub,  A_eq x = b_eq,  x ≥ 0."""
+             method='simplex', rule='dantzig', maxiter=20000, keep_history=False,
+             return_tableau=False):
+    """min cᵀx  s.t.  A_ub x ≤ b_ub,  A_eq x = b_eq,  x ≥ 0.
+
+       return_tableau=True 이면 결과에 최종 타블로와 기저를 붙여 준다 —
+       고모리 절단(7부 31장)이 그 타블로의 한 행에서 만들어지기 때문이다.
+    """
     A, b, cc, n, m1 = _standard_form(c, A_ub, b_ub, A_eq, b_eq)
     if method == 'interior':
         return _interior_point(A, b, cc, n, m1, keep_history=keep_history)
@@ -236,8 +241,13 @@ def solve_lp(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
     x = z[:n]
     obj = math.fsum(cc[j] * z[j] for j in range(ntot))
     dual = _dual_from_tableau(T, basis, cc, ntot, m1)
-    return LPResult('optimal', x=x, obj=obj, dual=dual, nit=nit, basis=list(basis),
-                    history=trace)
+    res = LPResult('optimal', x=x, obj=obj, dual=dual, nit=nit, basis=list(basis),
+                   history=trace)
+    if return_tableau:
+        res.tableau = T
+        res.nvars = ntot
+        res.nx = n
+    return res
 
 
 def _dual_from_tableau(T, basis, c, ntot, m1):
@@ -262,11 +272,11 @@ def _interior_point(A, b, c, n, m1, tol=1e-10, maxiter=200, sigma=0.1,
 
        KKT 조건
            Ax = b,   Aᵀy + s = c,   x ≥ 0, s ≥ 0,   xᵢsᵢ = 0
-       에서 마지막 상보여유를 xᵢsᵢ = σμ 로 <b>완화</b>하고 뉴턴법을 한 걸음 적용한다.
+       에서 마지막 상보여유를 xᵢsᵢ = σμ 로 완화하고 뉴턴법을 한 걸음 적용한다.
        μ = xᵀs/n 을 줄여 가면 해에 다가간다 — 5부 정리 22.4 의 중심 경로다.
 
        각 반복의 비용은 정규방정식 (A X S⁻¹ Aᵀ)Δy = r 한 번, 즉 O(m²n + m³).
-       심플렉스와 달리 <b>반복 수가 문제 크기에 거의 무관</b>하다(대개 20~50회).
+       심플렉스와 달리 반복 수가 문제 크기에 거의 무관하다(대개 20~50회).
     """
     m, ntot = len(A), len(A[0])
     x = [1.0] * ntot
