@@ -441,3 +441,173 @@
     draw();
   });
 })();
+
+(function () {
+  'use strict';
+
+  // ── 데모 4 · 곡선 맞추기 (차수 · 릿지 · 후버) ──────────────────────
+  // 파이썬 py/leastsq.py 와 같은 알고리즘을 자바스크립트로 옮긴 것이다.
+  function qrLstsq(A, b, lam) {
+    // 확대 행렬로 릿지를 처리하고, 정규방정식 대신 가우스 소거로 푼다.
+    var m = A.length, n = A[0].length, i, j, k;
+    var rows = [];
+    for (i = 0; i < m; i++) rows.push(A[i].slice());
+    var rhs = b.slice();
+    if (lam > 0) {
+      var r = Math.sqrt(lam);
+      for (i = 0; i < n; i++) {
+        var row = new Array(n).fill(0);
+        row[i] = r;
+        rows.push(row);
+        rhs.push(0);
+      }
+    }
+    // 정규방정식 (작은 n 이라 실용상 충분하다) + 부분 피벗팅
+    var M = [], v = [];
+    for (i = 0; i < n; i++) {
+      M.push(new Array(n).fill(0));
+      v.push(0);
+      for (k = 0; k < rows.length; k++) {
+        v[i] += rows[k][i] * rhs[k];
+        for (j = 0; j < n; j++) M[i][j] += rows[k][i] * rows[k][j];
+      }
+    }
+    for (i = 0; i < n; i++) M[i][i] += 1e-12;
+    for (k = 0; k < n; k++) {
+      var p = k;
+      for (i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[p][k])) p = i;
+      if (Math.abs(M[p][k]) < 1e-300) return null;
+      var t = M[k]; M[k] = M[p]; M[p] = t;
+      var tv = v[k]; v[k] = v[p]; v[p] = tv;
+      for (i = k + 1; i < n; i++) {
+        var f = M[i][k] / M[k][k];
+        for (j = k; j < n; j++) M[i][j] -= f * M[k][j];
+        v[i] -= f * v[k];
+      }
+    }
+    var x = new Array(n).fill(0);
+    for (i = n - 1; i >= 0; i--) {
+      var s = v[i];
+      for (j = i + 1; j < n; j++) s -= M[i][j] * x[j];
+      x[i] = s / M[i][i];
+    }
+    return x;
+  }
+
+  __demo('curvefit', function (host, api) {
+    var cv = host.querySelector('canvas');
+    var slD = host.querySelector('[data-deg]');
+    var slL = host.querySelector('[data-lam]');
+    var selLoss = host.querySelector('[data-loss]');
+    var btn = host.querySelector('[data-reset]');
+    var XR = [0, 10], YR = [-3, 3];
+    var pts = [[1, 0.6], [2, 1.4], [3, 1.9], [4, 1.6], [5, 0.7],
+               [6, -0.4], [7, -1.3], [8, -1.7], [9, -1.4]];
+
+    function design(xs, deg) {
+      return xs.map(function (x) {
+        var t = 2 * (x - XR[0]) / (XR[1] - XR[0]) - 1;   // 체비쇼프 기저
+        var row = [1];
+        if (deg >= 1) row.push(t);
+        for (var k = 2; k <= deg; k++) row.push(2 * t * row[k - 1] - row[k - 2]);
+        return row;
+      });
+    }
+
+    function fit() {
+      var deg = +slD.value;
+      var lam = +slL.value <= -80 ? 0 : Math.pow(10, +slL.value / 10);
+      if (pts.length < 1) return null;
+      var A = design(pts.map(function (p) { return p[0]; }), deg);
+      var b = pts.map(function (p) { return p[1]; });
+      var x = qrLstsq(A, b, lam);
+      if (!x) return null;
+      if (selLoss.value === 'huber') {
+        var delta = 0.4;
+        for (var it = 0; it < 30; it++) {
+          var w = A.map(function (row, i) {
+            var r = row.reduce(function (s, v, j) { return s + v * x[j]; }, 0) - b[i];
+            return Math.abs(r) <= delta ? 1 : delta / Math.abs(r);
+          });
+          var Aw = A.map(function (row, i) {
+            return row.map(function (v) { return Math.sqrt(w[i]) * v; });
+          });
+          var bw = b.map(function (v, i) { return Math.sqrt(w[i]) * v; });
+          var xn = qrLstsq(Aw, bw, lam);
+          if (!xn) break;
+          x = xn;
+        }
+      }
+      return { coef: x, deg: deg, lam: lam };
+    }
+
+    function draw() {
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      var w = cv.clientWidth || 320, h = cv.clientHeight || 220;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      var ctx = cv.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+      function px(x) { return (x - XR[0]) / (XR[1] - XR[0]) * w; }
+      function py(y) { return h - (y - YR[0]) / (YR[1] - YR[0]) * h; }
+
+      ctx.strokeStyle = 'rgba(58,92,150,.18)'; ctx.lineWidth = 1;
+      for (var g = 0; g <= 10; g++) {
+        ctx.beginPath(); ctx.moveTo(px(g), 0); ctx.lineTo(px(g), h); ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(58,92,150,.4)';
+      ctx.beginPath(); ctx.moveTo(0, py(0)); ctx.lineTo(w, py(0)); ctx.stroke();
+
+      var r = fit();
+      if (r) {
+        var xs = [];
+        for (var i = 0; i <= 300; i++) xs.push(XR[0] + (XR[1] - XR[0]) * i / 300);
+        var D = design(xs, r.deg);
+        ctx.strokeStyle = '#7c3aed'; ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        for (i = 0; i < xs.length; i++) {
+          var y = D[i].reduce(function (s, v, j) { return s + v * r.coef[j]; }, 0);
+          if (i === 0) ctx.moveTo(px(xs[i]), py(y)); else ctx.lineTo(px(xs[i]), py(y));
+        }
+        ctx.stroke();
+      }
+      pts.forEach(function (p) {
+        ctx.fillStyle = '#cb2c2c';
+        ctx.beginPath(); ctx.arc(px(p[0]), py(p[1]), 4, 0, 6.2832); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.stroke();
+      });
+
+      if (!r) { api.w(host, '점을 두 개 이상 찍어 주세요.', 'dim'); return; }
+      var A = design(pts.map(function (p) { return p[0]; }), r.deg);
+      var rss = 0, mx = 0;
+      A.forEach(function (row, i) {
+        var e = row.reduce(function (s, v, j) { return s + v * r.coef[j]; }, 0) - pts[i][1];
+        rss += e * e; mx = Math.max(mx, Math.abs(e));
+      });
+      var nrm = Math.sqrt(r.coef.reduce(function (s, v) { return s + v * v; }, 0));
+      api.w(host,
+        '<b>점</b> ' + pts.length + '개 · <b>차수</b> ' + r.deg +
+        ' · <b>λ</b> = ' + (r.lam === 0 ? '0' : r.lam.toExponential(2)) +
+        ' · <b>손실</b> ' + selLoss.options[selLoss.selectedIndex].text +
+        '<br>잔차제곱합 ‖r‖² = <b>' + rss.toFixed(5) + '</b>' +
+        ' · 최대 잔차 ' + mx.toFixed(4) +
+        ' · 계수 노름 ‖x‖ = <b>' + nrm.toFixed(4) + '</b>' +
+        (r.deg >= pts.length ? '<br>⚠ 차수 ≥ 점 개수 — 정칙화가 없으면 해가 유일하지 않다' : ''),
+        'ok');
+    }
+
+    cv.addEventListener('click', function (e) {
+      var rect = cv.getBoundingClientRect();
+      var x = XR[0] + (e.clientX - rect.left) / cv.clientWidth * (XR[1] - XR[0]);
+      var y = YR[0] + (cv.clientHeight - (e.clientY - rect.top)) / cv.clientHeight * (YR[1] - YR[0]);
+      pts.push([x, y]);
+      draw();
+    });
+    btn.addEventListener('click', function () { pts = []; draw(); });
+    slD.addEventListener('input', draw);
+    slL.addEventListener('input', draw);
+    selLoss.addEventListener('change', draw);
+    window.addEventListener('resize', draw);
+    draw();
+  });
+})();
