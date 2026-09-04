@@ -1,0 +1,255 @@
+<article class="card section" id="part14">
+<p class="chnum">14부</p>
+<h2>검증과 파리티</h2>
+<p class="chsub">세 구현이 같다는 것을 어떻게 증명하는가</p>
+</article>
+
+<article class="card" id="ch32">
+<p class="chnum">32장</p>
+<h2>검증 전략</h2>
+<p class="chsub">세 층으로 나눈다</p>
+</article>
+
+<article class="card" id="s14-layers">
+<h3>층을 나누는 이유</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>층</th><th>무엇을 확인하나</th><th>깨지면 알 수 있는 것</th></tr>
+<tr><td><b>1. 프리미티브</b></td><td>좌표·거리·라인·픽킹·난수·해시</td><td>어느 <b>함수</b>가 틀렸는지</td></tr>
+<tr><td><b>2. 성질</b></td><td>공식 ↔ BFS · 픽커 ↔ 점-포함 · A* ↔ 다익스트라 · 언두 불변식</td><td>어느 <b>규칙</b>이 틀렸는지</td></tr>
+<tr><td><b>3. 트레이스</b></td><td>119스텝의 상태 해시 · 17장의 화면 해시</td><td>어딘가 틀렸다 (범위는 스텝 번호로)</td></tr>
+</table>
+</div>
+<div class="key"><b>층이 없으면 3층만 남습니다.</b> 그러면 '119번째 스텝에서 다르다'는 것만 알고, 원인을 찾으려면 전체를 뒤져야 합니다. 실제로 루아 포팅에서 <b>논리 시프트 문제와 1-베이스 문제를 1층이 잡았습니다</b> — 게임을 한 번도 돌리기 전에 좌표 함수만으로.</div>
+</article>
+
+<article class="card" id="s14-oracle">
+<h3>오라클은 다른 알고리즘이어야 한다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>확인 대상</th><th>엔진의 방법</th><th>오라클의 방법</th></tr>
+<tr><td>거리</td><td>큐브 공식 O(1)</td><td><b>이웃 그래프 BFS</b></td></tr>
+<tr><td>픽킹</td><td>벽돌 + 마스크 표</td><td><b>육각형 점-포함 판정 전수</b></td></tr>
+<tr><td>라인</td><td>고정소수 보간</td><td><b>부동소수 보간</b></td></tr>
+<tr><td>링</td><td>걸어서 만들기</td><td>BFS 거리로 검증</td></tr>
+<tr><td>경로</td><td>양동이 큐</td><td><b>이진 힙 다익스트라</b></td></tr>
+</table>
+</div>
+<div class="warn"><b>같은 코드를 두 번 돌려 비교하는 것은 검증이 아닙니다.</b> 세 언어의 파리티만으로는 '셋 다 같은 방식으로 틀렸을' 가능성을 배제하지 못합니다. 오라클이 독립적일 때만 '옳다'에 가까워집니다.</div>
+<div class="note"><b>그래도 완전하지 않습니다</b> — 오라클과 엔진이 같은 <b>규격</b>을 따르므로, 규격 자체가 틀렸다면 둘 다 틀립니다. 그 층은 사람이 읽고 성질로 확인하는 수밖에 없습니다(2층이 하는 일).</div>
+</article>
+
+<article class="card" id="s14-genprim">
+<h3>골든 프리미티브 생성기</h3>
+<div class="src"><b>tools/gen_prim.py</b><span class="ln">179줄</span><span>오라클</span></div>
+<p>이 파일이 <code class="nb">golden/prim.txt</code>와 <code class="nb">golden/pick_mask.txt</code>를 만듭니다. 엔진을 <b>import 하지 않습니다</b> — 그것이 독립성의 조건입니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=tools/gen_prim.py prefix=t-genprim title=gen_prim.py-->
+
+<article class="card" id="s14-golden-files">
+<h3>골든 파일</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>파일</th><th>내용</th><th>누가 만드나</th></tr>
+<tr><td><code>prim.txt</code></td><td>좌표·거리·라인·픽킹·난수·해시 정답 77줄</td><td>gen_prim.py (오라클)</td></tr>
+<tr><td><code>pick_mask.txt</code></td><td>24줄 × 32자 마스크 표</td><td>gen_prim.py</td></tr>
+<tr><td><code>palette.txt</code></td><td>256줄 <code>r g b</code> (0–63)</td><td>gen_palette.py</td></tr>
+<tr><td><code>tiles.rle</code></td><td>스프라이트 29개 RLE</td><td>gen_tiles.py</td></tr>
+<tr><td><code>scenario.txt</code></td><td>지형·고도·도로·유닛·목표</td><td>gen_scenario.py</td></tr>
+<tr><td><code>script.txt</code></td><td>입력 119개 (녹화된 한 판)</td><td>gen_script.py</td></tr>
+<tr><td><code>trace.jsonl</code></td><td>119스텝의 상태·화면 해시</td><td>파이썬 기준 구현</td></tr>
+</table>
+</div>
+<div class="key"><b>앞의 여섯은 데이터, 마지막 하나만 기준 구현이 만듭니다.</b> 그래서 <code class="nb">trace.jsonl</code>은 '파이썬이 맞다'는 가정 위에 서 있고, 그 가정을 1·2층이 떠받칩니다.</div>
+</article>
+
+<article class="card" id="s14-script">
+<h3>입력 스크립트 녹화기</h3>
+<div class="src"><b>tools/gen_script.py</b><span class="ln">135줄</span><span>데모 리플레이 녹화</span></div>
+<p>사람 대신 간단한 계획기가 마우스를 움직이고, 그 <b>입력만</b> 파일로 남깁니다. 7부에서 본 '상태를 바꾸는 모든 것은 이벤트를 거친다'는 규칙이 여기서 지켜져야 재생이 성립합니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=tools/gen_script.py prefix=t-genscript title=gen_script.py-->
+
+<article class="card" id="ch33">
+<p class="chnum">33장</p>
+<h2>테스트 전문</h2>
+<p class="chsub">946줄 — 세 언어의 검사 코드 전부</p>
+</article>
+
+<article class="card" id="s14-t-pyprim">
+<h3>test_prim.py — 1층</h3>
+<div class="src"><b>py/tests/test_prim.py</b><span class="ln">102줄</span><span>골든 프리미티브 대조</span></div>
+<p><code class="nb">golden/prim.txt</code>를 한 줄씩 읽어 키에 따라 함수를 부르고 답을 견줍니다. 루아·타입스크립트판이 <b>같은 파일을 같은 순서로</b> 읽습니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/tests/test_prim.py prefix=t-pyprim title=test_prim.py-->
+
+<article class="card" id="s14-t-pyengine">
+<h3>test_engine.py — 2층</h3>
+<div class="src"><b>py/tests/test_engine.py</b><span class="ln">283줄</span><span>성질 검사 14종</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>검사</th><th>확인하는 성질</th></tr>
+<tr><td><code>t_neighbor_table</code></td><td>델타 표 ↔ 축좌표 변환 (432칸 × 6방향)</td></tr>
+<tr><td><code>t_picker_exhaustive</code></td><td>마스크 픽커 ↔ 점-포함 (21만 픽셀 × 카메라 4곳)</td></tr>
+<tr><td><code>t_paths</code></td><td>A* ↔ 다익스트라 · 예산 · 경로 무결성</td></tr>
+<tr><td><code>t_undo_*</code></td><td>언두가 유닛·난수를 정확히 되돌린다</td></tr>
+<tr><td><code>t_rng_period_bits</code></td><td>LCG 하위 비트의 주기가 짧다는 사실 자체</td></tr>
+<tr><td><code>t_fog_monotone</code></td><td>한 번 본 칸은 미탐색으로 돌아가지 않는다</td></tr>
+</table>
+</div>
+</article>
+
+<!--FULLSRC lang=py file=py/tests/test_engine.py prefix=t-pyengine title=test_engine.py-->
+
+<article class="card" id="s14-t-pytrace">
+<h3>test_trace.py — 3층</h3>
+<div class="src"><b>py/tests/test_trace.py</b><span class="ln">43줄</span><span>골든 트레이스 대조</span></div>
+<p>필드별로 비교해 <b>어느 스텝의 어느 필드가</b> 다른지 알려 줍니다. 통째로 문자열 비교하면 '다르다'만 알게 됩니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/tests/test_trace.py prefix=t-pytrace title=test_trace.py-->
+
+<article class="card" id="s14-t-lua">
+<h3>루아 테스트</h3>
+<div class="src"><b>lua/tests/</b><span class="ln">169줄</span><span>prim 134 + trace 35</span></div>
+<p>루아판은 트레이스를 <b>문자열 그대로</b> 비교합니다. JSON 파서가 없어도 되고, 어차피 바이트 단위로 같아야 하기 때문입니다.</p>
+</article>
+
+<!--FULLSRC lang=lua file=lua/tests/test_prim.lua prefix=t-luaprim title=test_prim.lua-->
+
+<!--FULLSRC lang=lua file=lua/tests/test_trace.lua prefix=t-luatrace title=test_trace.lua-->
+
+<article class="card" id="s14-t-ts">
+<h3>타입스크립트 테스트</h3>
+<div class="src"><b>ts/tests/</b><span class="ln">150줄 + 벤치 199줄</span><span>prim · trace · bench_ds</span></div>
+<p>구조는 루아판과 같습니다. 추가로 <code class="nb">bench_ds.ts</code>가 5부·8부의 자료구조 실측을 담당합니다.</p>
+</article>
+
+<!--FULLSRC lang=ts file=ts/tests/test_prim.ts prefix=t-tsprim title=test_prim.ts-->
+
+<!--FULLSRC lang=ts file=ts/tests/test_trace.ts prefix=t-tstrace title=test_trace.ts-->
+
+<!--FULLSRC lang=ts file=ts/tests/bench_ds.ts prefix=t-tsbench title=bench_ds.ts-->
+
+<article class="card" id="ch34">
+<p class="chnum">34장</p>
+<h2>파리티 결과</h2>
+<p class="chsub">실제로 무엇이 같은가</p>
+</article>
+
+<article class="card" id="s14-result">
+<h3>전체 검증 실행</h3>
+<!--OUT file=verify_all.txt note=make all-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>대조 대상</th><th>단위</th><th>결과</th></tr>
+<tr><td>프리미티브</td><td>77줄 + 마스크 768칸</td><td>세 언어 일치</td></tr>
+<tr><td>성질 검사</td><td>14종</td><td>통과</td></tr>
+<tr><td>트레이스</td><td>119스텝 × 8필드</td><td>세 언어 + 골든 일치</td></tr>
+<tr><td>화면 해시</td><td>17프레임</td><td>세 언어 일치</td></tr>
+<tr><td>렌더 결과</td><td>192,015바이트 PPM</td><td><b>바이트 단위로 동일</b></td></tr>
+</table>
+</div>
+<div class="key"><b>192,015바이트가 한 바이트도 다르지 않습니다.</b> 이것은 좌표·경로·시야·전투·난수·스프라이트 디코딩·클리핑·글꼴 렌더링이 <b>전부</b> 같다는 뜻입니다. 어느 한 곳이라도 다르면 픽셀이 갈립니다.</div>
+</article>
+
+<article class="card" id="s14-caught">
+<h3>실제로 잡힌 것들</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>사고</th><th>어느 층이 잡았나</th><th>증상</th></tr>
+<tr><td>루아 <code class="nb">&gt;&gt;</code>가 논리 시프트</td><td>1층 (음수 좌표 벡터)</td><td>맵 밖 좌표에서 폭주</td></tr>
+<tr><td>루아 for 제어 변수가 상수</td><td>파싱</td><td>즉시 오류</td></tr>
+<tr><td>녹화기가 이벤트를 거치지 않고 카메라를 옮김</td><td>3층 (재생 불일치)</td><td>클릭 좌표가 엉뚱한 헥스를 가리킴</td></tr>
+<tr><td>시나리오의 <code class="nb">#</code>이 주석과 충돌</td><td>로더의 자체 검증</td><td>바다가 있는 세 줄이 사라짐</td></tr>
+<tr><td>벤치마크가 결과 조립을 재고 있었음</td><td>사람 (숫자가 이상해서)</td><td>양동이 큐가 부당하게 느려 보임</td></tr>
+</table>
+</div>
+<div class="note"><b>다섯 번째는 검증 도구 자체의 버그입니다.</b> 힙 구현이 결과 자료구조를 만들지 않아 '탐색'이 아니라 '조립'을 재고 있었습니다. <b>측정 코드도 코드입니다</b> — 숫자가 직관과 어긋나면 먼저 측정을 의심해야 합니다.</div>
+</article>
+
+<article class="card" id="s14-notcaught">
+<h3>이 검증이 못 잡는 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>못 잡는 것</th><th>왜</th><th>대안</th></tr>
+<tr><td>규격 자체의 오류</td><td>엔진도 오라클도 같은 규격을 따른다</td><td>성질 검사 · 사람의 검토</td></tr>
+<tr><td>스크립트가 안 밟는 경로</td><td>트레이스는 실행된 것만 본다</td><td>성질 검사 · 커버리지</td></tr>
+<tr><td>화면의 '보기 좋음'</td><td>해시는 같음만 본다</td><td>사람이 눈으로</td></tr>
+<tr><td>성능 회귀</td><td>정답만 본다</td><td>벤치마크 (별도)</td></tr>
+<tr><td>산문의 사실 오류</td><td>코드가 아니다</td><td>출처 확인 · 재검토</td></tr>
+</table>
+</div>
+<div class="warn"><b>119스텝이 상태 기계의 모든 간선을 밟지는 않습니다.</b> 예를 들어 대화상자에서 <code class="nb">NO</code>를 누르는 경로는 스크립트에 없습니다. 이런 자리는 성질 검사로 메우거나, 스크립트를 늘려야 합니다 — 검증의 완전성은 언제나 <b>정도</b>의 문제입니다.</div>
+</article>
+
+<article class="card" id="ch35">
+<p class="chnum">35장</p>
+<h2>성능</h2>
+<p class="chsub">세 언어를 나란히 놓고</p>
+</article>
+
+<article class="card" id="s14-bench">
+<h3>같은 알고리즘, 세 런타임</h3>
+<!--OUT file=bench.txt note=같은 기계 · 같은 입력-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>작업</th><th>Python 3.14</th><th>Lua 5.5</th><th>Node 24</th></tr>
+<tr><td>이동 범위 1회</td><td>222 µs</td><td>330 µs</td><td><b>33 µs</b></td></tr>
+<tr><td>한 프레임 그리기</td><td>8.9 ms</td><td><b>7.0 ms</b></td><td><b>1.2 ms</b></td></tr>
+</table>
+</div>
+<div class="key"><b>읽는 법</b> — 경로 탐색은 파이썬이 루아보다 빠릅니다. <code class="nb">bytearray</code> 인덱싱과 리스트 연산이 C로 구현돼 있기 때문입니다. 반대로 프레임 그리기는 루아가 빠릅니다 — 픽셀 루프가 순수 인터프리터 코드라 <b>인터프리터 자체의 속도</b>가 드러납니다. Node는 JIT이 있어 두 자릿수 차이입니다.</div>
+<div class="note"><b>도스와 비교하면</b> — 386DX-33에서 한 프레임(64,000픽셀 복사 + 타일 블릿)이 대략 20~40ms였습니다. 지금 파이썬이 8.9ms이니, <b>인터프리터 위의 파이썬이 386 어셈블리보다 빠릅니다.</b> 30년의 하드웨어 발전이 언어 층위 두세 단계를 삼킨 셈입니다.</div>
+</article>
+
+<article class="card" id="s14-tools">
+<h3>나머지 도구들</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>도구</th><th class="num">줄</th><th>역할</th><th>본문</th></tr>
+<tr><td><code>gen_prim.py</code></td><td class="num">179</td><td>골든 프리미티브 오라클</td><td>이 부</td></tr>
+<tr><td><code>gen_tiles.py</code></td><td class="num">304</td><td>스프라이트 코퍼스 · RLE</td><td>6부</td></tr>
+<tr><td><code>gen_scenario.py</code></td><td class="num">96</td><td>시나리오 텍스트</td><td>5부</td></tr>
+<tr><td><code>gen_script.py</code></td><td class="num">135</td><td>입력 녹화 (리플레이)</td><td>이 부</td></tr>
+<tr><td><code>gen_palette.py</code></td><td class="num">58</td><td>VGA 팔레트</td><td>1부</td></tr>
+<tr><td><code>gen_figs.py</code></td><td class="num">395</td><td>이 문서의 SVG 도해</td><td>—</td></tr>
+<tr><td><code>measure.py</code></td><td class="num">190</td><td>덱에 인용하는 수치 측정</td><td>5·8·10부</td></tr>
+<tr><td><code>ppm2png.py</code></td><td class="num">71</td><td>화면 캡처 변환</td><td>6부</td></tr>
+<tr><td><code>dump_map.py</code></td><td class="num">62</td><td>지도·안개 덤프</td><td>5부</td></tr>
+<tr><td><code>check_demos.js</code></td><td class="num">62</td><td>덱 데모를 DOM 스텁으로 실행</td><td>이 부</td></tr>
+</table>
+</div>
+<!--OUT file=demo_check.txt note=이 문서의 데모 6종-->
+<div class="note"><b>데모도 코드입니다.</b> 브라우저를 띄울 수 없는 환경이라 최소 DOM 스텁으로 실행해 예외만 잡습니다 — 그림이 맞는지는 못 보지만, <b>열자마자 터지는 것</b>은 막습니다.</div>
+</article>
+
+<article class="card" id="s14-deckbuild">
+<h3>이 문서 자체의 검증</h3>
+<p>덱의 모든 코드 블록은 <code class="nb">data-src</code>로 실제 파일의 줄을 가리키고, 조립할 때마다 다시 대조합니다.</p>
+<div class="term"><span class="p">$</span> python3 deck/build_deck.py
+<span class="c"># 슬라이드 수 · 소스 커버리지 · 빠진 줄</span>
+<span class="p">$</span> python3 deck/verify_deck.py
+<span class="c"># 코드 블록과 원본을 바이트 비교 · 출력 블록도</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>검사</th><th>막는 사고</th></tr>
+<tr><td>코드 블록 ↔ 원본 바이트 비교</td><td>소스를 고치고 덱을 다시 안 만든 것</td></tr>
+<tr><td>출력 블록 ↔ <code class="nb">out/</code> 비교</td><td>낡은 실행 결과를 그대로 둔 것</td></tr>
+<tr><td>커버리지(빠진 줄)</td><td>'전문 게재'가 사실은 발췌인 것</td></tr>
+<tr><td>중복 id · 태그 균형</td><td>조립 사고</td></tr>
+<tr><td>외부 자원 참조</td><td>CDN·웹폰트가 섞여 들어간 것</td></tr>
+</table>
+</div>
+<div class="key"><b>이름으로 코드를 가리킵니다.</b> <code class="nb">sym=reachable</code>처럼 함수 이름을 적으면 조립기가 줄 범위를 찾습니다 — 소스가 밀려도 덱이 조용히 엉뚱한 코드를 보여 주지 않습니다.</div>
+</article>
+
+<article class="card quiz" id="s14-quiz" data-quiz>
+<h3>퀴즈</h3>
+<p class="q">Q. 세 언어의 렌더 결과가 바이트 단위로 같다는 것이 왜 그렇게 강한 증거인가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 한 프레임은 <b>거의 모든 계층의 출력이 합쳐진 것</b>이기 때문입니다. 픽셀 하나가 결정되기까지 좌표 변환 → 카메라 → 그릴 행 계산 → 지형 조회 → 스프라이트 디코딩 → 클리핑 → 안개 상태 → 이동/공격 오버레이(경로 탐색과 사거리 판정의 결과) → 유닛 위치(전투와 AI의 결과) → 글꼴 렌더링이 전부 개입합니다. <b>어느 한 곳에서 한 칸만 어긋나도 수백 픽셀이 달라집니다.</b> 그래서 192,015바이트가 같다는 것은 사실상 엔진 전체가 같다는 뜻이고, 그것을 17개 프레임에서 반복 확인합니다.</div>
+</article>

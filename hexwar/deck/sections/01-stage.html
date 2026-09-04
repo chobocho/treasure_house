@@ -1,0 +1,264 @@
+<article class="card section" id="part1">
+<p class="chnum">1부</p>
+<h2>도스라는 무대</h2>
+<p class="chsub">설계를 이해하려면 먼저 제약을 알아야 한다</p>
+</article>
+
+<article class="card" id="ch01">
+<p class="chnum">1장</p>
+<h2>기계</h2>
+<p class="chsub">FPU 없는 정수 세계와 640KB의 벽</p>
+</article>
+
+<article class="card" id="s1-cpu">
+<h3>어떤 기계에서 돌았는가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>연도</th><th>CPU</th><th>클럭</th><th>부동소수</th></tr>
+<tr><td>1981</td><td>8088 / 8086</td><td>4.77 MHz</td><td>없음 (8087 별매)</td></tr>
+<tr><td>1984</td><td>80286</td><td>6–12 MHz</td><td>없음 (80287 별매)</td></tr>
+<tr><td>1987</td><td>80386</td><td>16–33 MHz</td><td>없음 (80387 별매)</td></tr>
+<tr><td>1989</td><td>80486DX</td><td>25–50 MHz</td><td><b>내장</b></td></tr>
+</table>
+</div>
+<p>1994년에 나온 <b>Panzer General</b>의 요구 사양이 386DX-33이었습니다. 즉 이 장르의 전성기 내내, <b>부동소수 연산 장치가 있다고 가정할 수 없었습니다.</b> 코프로세서가 없는 기계에서 <code class="nb">float</code>를 쓰면 라이브러리가 소프트웨어로 흉내 내는데, 곱셈 한 번이 수백 사이클입니다.</p>
+<div class="key"><b>그래서 좌표 계층에 부동소수가 없습니다</b> — 이 문서의 엔진도 좌표·거리·경로·시야를 전부 정수로 계산합니다. 옛 흉내가 아니라, 그렇게 하면 <b>기계·언어·최적화 옵션이 달라도 답이 같기 때문</b>입니다. 14부에서 이 성질이 어떻게 증명으로 이어지는지 봅니다.</div>
+</article>
+
+<article class="card" id="s1-cycles">
+<h3>정수 연산도 공짜가 아니었다</h3>
+<p>8086 기준 대략적인 사이클 수입니다. 요즘 CPU 감각과는 자릿수가 다릅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>연산</th><th class="num">사이클(8086, 대략)</th><th>비고</th></tr>
+<tr><td><code>ADD</code> reg, reg</td><td class="num">3</td><td>기준</td></tr>
+<tr><td><code>SHL</code> reg, 1</td><td class="num">2</td><td>2로 나누기·곱하기</td></tr>
+<tr><td><code>MOV</code> reg, [mem]</td><td class="num">8+</td><td>메모리는 비싸다</td></tr>
+<tr><td><code>MUL</code> reg16</td><td class="num">~120</td><td>덧셈 40번 값</td></tr>
+<tr><td><code>DIV</code> reg16</td><td class="num">~150</td><td>덧셈 50번 값</td></tr>
+</table>
+</div>
+<div class="note"><b>이 표에서 나오는 습관 셋</b><br>① 나눗셈은 시프트로 바꾼다 — 그래서 격자 크기가 32, 24, 16 같은 수다.<br>② 곱셈은 미리 계산해 표로 만든다 — 그래서 룩업 테이블이 도처에 있다.<br>③ 메모리 접근을 줄인다 — 그래서 한 바이트에 여러 정보를 욱여넣는다(5부).</div>
+</article>
+
+<article class="card" id="s1-640k">
+<h3>640KB의 벽과 세그먼트</h3>
+<p>실모드 8086의 주소는 <b>세그먼트:오프셋</b> 두 조각입니다. 물리 주소는 <code class="nb">세그먼트×16 + 오프셋</code>이고, 오프셋이 16비트라 <b>한 세그먼트는 64KB</b>입니다.</p>
+<div class="flow">
+<span class="box">세그먼트 16비트</span><span class="arr">×16</span>
+<span class="box">+ 오프셋 16비트</span><span class="arr">=</span>
+<span class="box">20비트 물리 주소</span><span class="arr">→</span>
+<span class="box dim">1MB</span>
+</div>
+<p>그 1MB 중 위쪽 384KB는 비디오 메모리·ROM BIOS가 차지하므로, 프로그램이 쓸 수 있는 것은 <b>아래쪽 640KB</b>입니다. 여기서 DOS와 드라이버가 먼저 먹고 남는 것이 실제 게임 몫이었습니다.</p>
+<div class="tip"><b>설계에 미친 영향</b> — 자료 구조 하나가 64KB를 넘어가면 세그먼트 레지스터를 갈아 끼워야 해서 인덱싱이 통째로 느려집니다. 그래서 <b>맵은 64KB 안에 들어가도록 설계</b>했습니다. 24×18 맵에 한 칸 1바이트면 432바이트 — 여유가 넘칩니다. 128×128 맵이라도 16KB입니다.</div>
+</article>
+
+<article class="card" id="s1-ems">
+<h3>640KB를 넘는 세 가지 길</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방법</th><th>어떻게</th><th>대가</th></tr>
+<tr><td>EMS (LIM)</td><td>64KB 창으로 확장 메모리를 뱅크 전환</td><td>창 밖의 데이터는 직접 못 만진다</td></tr>
+<tr><td>XMS</td><td>확장 메모리에 복사해 두고 필요할 때 되가져옴</td><td>복사 비용 · 실행은 못 함</td></tr>
+<tr><td>DOS 익스텐더</td><td>보호 모드로 넘어가 32비트 평탄 주소를 씀</td><td>익스텐더를 끼워 팔아야 함</td></tr>
+</table>
+</div>
+<p>Panzer General이 <b>DOS/4GW</b>(Rational Systems)로 돌았고 XMS 약 2.7MB를 요구했다는 것은, 1994년쯤에는 세 번째 길이 표준이 되었다는 뜻입니다. 게임을 실행하면 맨 위에 뜨던 <code class="nb">DOS/4GW Protected Mode Run-time</code> 한 줄이 그 흔적입니다.</p>
+<div class="note"><b>그래도 습관은 남았다</b> — 주소 공간이 넓어진 뒤에도 맵을 바이트 배열로 두는 관행은 그대로였습니다. 이유가 메모리에서 <b>캐시</b>로 바뀌었을 뿐입니다(5부에서 측정합니다).</div>
+</article>
+
+<article class="card" id="ch02">
+<p class="chnum">2장</p>
+<h2>화면</h2>
+<p class="chsub">한 바이트가 한 픽셀이던 시절</p>
+</article>
+
+<article class="card" id="s1-video">
+<h3>비디오 카드 계보</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>표준</th><th>연도</th><th>대표 모드</th><th>메모리 배치</th></tr>
+<tr><td>CGA</td><td>1981</td><td>320×200 4색 / 640×200 흑백</td><td>인터리브 2뱅크</td></tr>
+<tr><td>EGA</td><td>1984</td><td>640×350 16색</td><td><b>플레인 4장</b></td></tr>
+<tr><td>VGA</td><td>1987</td><td>320×200 256색(13h) · 640×480 16색</td><td>13h는 <b>선형</b></td></tr>
+<tr><td>SVGA/VESA</td><td>1990~</td><td>640×480 256색 이상</td><td>뱅크 전환 또는 선형</td></tr>
+</table>
+</div>
+<p>헥스 워게임에 결정적이었던 것은 <b>VGA 모드 13h</b>입니다. 픽셀 하나가 바이트 하나라 스프라이트를 붙이는 코드가 그냥 메모리 복사가 되기 때문입니다. EGA에서는 같은 일을 하려면 플레인 4장을 따로 건드려야 했고, 마스크가 있는 스프라이트는 훨씬 성가셨습니다.</p>
+<div class="warn"><b>다만 256색은 곧 좁아졌습니다</b> — Panzer General(1994)은 <b>640×480 256색 VESA SVGA</b>로 갔습니다. 유닛 아이콘과 지형을 한 화면에 더 많이 담아야 하는 워게임에서는 해상도가 색보다 급했습니다.</div>
+</article>
+
+<article class="card" id="s1-13h">
+<h3>모드 13h 해부</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>값</th></tr>
+<tr><td>해상도</td><td>320 × 200</td></tr>
+<tr><td>색</td><td>256 (팔레트 인덱스)</td></tr>
+<tr><td>화면 메모리 시작</td><td><code class="nb">A000:0000</code></td></tr>
+<tr><td>크기</td><td>320 × 200 = <b>64,000바이트</b></td></tr>
+<tr><td>픽셀 주소</td><td><code class="nb">A000:[y*320 + x]</code></td></tr>
+<tr><td>화소 비율</td><td>1:1.2 (정사각형이 아니다)</td></tr>
+</table>
+</div>
+<p>64,000바이트는 <b>한 세그먼트(64KB=65,536)에 아슬아슬하게 들어갑니다.</b> 이것이 13h가 그토록 편했던 진짜 이유입니다 — 세그먼트를 <code class="nb">A000h</code>로 한 번 맞춰 놓으면 화면 전체를 오프셋 하나로 다룰 수 있습니다.</p>
+<p>주소 계산에 곱셈이 하나 있는데, 그것마저 <code class="nb">y*320 = y*256 + y*64 = (y&lt;&lt;8) + (y&lt;&lt;6)</code>으로 시프트 두 번과 덧셈 하나로 바꾸는 것이 관용구였습니다.</p>
+<div class="key"><b>우리 엔진도 같습니다</b> — 프레임버퍼는 <code class="nb">320*200</code>짜리 바이트 배열 하나이고, 픽셀 주소는 <code class="nb">y*w + x</code>입니다. 파이썬은 <code class="nb">bytearray</code>, 타입스크립트는 <code class="nb">Uint8Array</code>, 루아는 정수 테이블입니다.</div>
+</article>
+
+<article class="card" id="s1-dac">
+<h3>팔레트와 6비트 DAC</h3>
+<p>모드 13h의 픽셀 값은 색이 아니라 <b>번호</b>입니다. 번호를 실제 RGB로 바꾸는 것은 DAC의 팔레트 표 256칸이고, 각 성분은 <b>0..63</b>입니다 — 채널당 6비트.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>값</th><th>결과</th></tr>
+<tr><td>팔레트 칸</td><td>256</td><td>한 화면에 동시에 쓸 수 있는 색</td></tr>
+<tr><td>성분 범위</td><td>0–63</td><td>18비트 = <b>262,144색</b> 중에서 고름</td></tr>
+<tr><td>포트</td><td><code class="nb">3C8h</code> 인덱스 / <code class="nb">3C9h</code> 데이터</td><td>R,G,B 세 번 write</td></tr>
+</table>
+</div>
+<!--CODE file=tools/gen_palette.py lang=py lines=1-12 note=왜 0..63인가-->
+<div class="note">PPM으로 내보낼 때만 <code class="nb">v*255//63</code>으로 8비트로 폅니다. 내부 표현은 끝까지 6비트를 유지합니다 — 그래야 팔레트 페이드가 정확히 64단계가 됩니다.</div>
+</article>
+
+<article class="card" id="s1-palette-tricks">
+<h3>팔레트로 하는 마술</h3>
+<p>픽셀을 하나도 건드리지 않고 화면 전체를 바꿀 수 있다는 점이 인덱스 컬러의 힘이었습니다. 팔레트 768바이트만 다시 쓰면 됩니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>효과</th><th>방법</th><th>비용</th></tr>
+<tr><td>페이드 인/아웃</td><td>모든 성분을 63→0으로 64단계</td><td>프레임당 768바이트 write</td></tr>
+<tr><td>팀 컬러</td><td>진영 색만 램프 16칸을 교체</td><td>48바이트</td></tr>
+<tr><td>물결·용암 애니메이션</td><td>램프 안에서 색을 순환(color cycling)</td><td>몇 바이트</td></tr>
+<tr><td>밤/낮</td><td>전체 램프를 어둡게 재계산</td><td>768바이트</td></tr>
+</table>
+</div>
+<p>이 문서의 팔레트도 <b>지형마다 16칸짜리 램프</b>를 잡아 두는 도스식 배치를 그대로 씁니다. 평지 16..31, 숲 32..47, 언덕 48..63… 이렇게 나눠 두면 명암 조절이 <b>인덱스 덧셈</b>이 됩니다.</p>
+<!--CODE file=tools/gen_palette.py lang=py lines=26-52 note=램프 배치-->
+</article>
+
+<article class="card" id="s1-modex">
+<h3>Mode X — VGA의 숨은 모드</h3>
+<p>1991년 7월, Michael Abrash가 <i>Dr. Dobb's Journal</i>의 "Ramblings in Realtime" 칼럼에서 <b>Mode X</b>를 알렸습니다. VGA를 언체인드(플레인) 모드로 되돌려 <b>320×240 256색</b>을 만드는 방법입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>모드 13h</th><th>Mode X</th></tr>
+<tr><td>해상도</td><td>320×200</td><td>320×240</td></tr>
+<tr><td>화소 비율</td><td>1:1.2</td><td><b>1:1 정사각</b></td></tr>
+<tr><td>메모리 배치</td><td>선형 64,000바이트</td><td>플레인 4장 × 19,200</td></tr>
+<tr><td>쓸 수 있는 페이지</td><td>1장</td><td><b>3장 이상</b></td></tr>
+<tr><td>픽셀 하나 쓰기</td><td>바이트 하나</td><td>플레인 선택 후 write</td></tr>
+</table>
+</div>
+<div class="key"><b>헥스 게임에 특히 중요했던 것은 정사각 화소입니다.</b> 13h에서 그린 정육각형은 화면에서 세로로 20% 늘어납니다. 타일을 미리 눌러 그리면 되지만, 마우스 좌표를 헥스로 되돌릴 때 그 왜곡을 계산에 넣어야 합니다 — 4부에서 이 문제를 정면으로 다룹니다.</div>
+<div class="note">Mode X는 페이지 플리핑이 가능해 티어링 없는 스크롤을 만들 수 있었습니다. 대신 픽셀 하나를 찍을 때마다 플레인 마스크를 설정해야 해서, <b>세로줄 단위로 그리는</b> 코드로 바꿔야 이득이 났습니다.</div>
+</article>
+
+<article class="card" id="s1-retrace">
+<h3>수직 귀선과 티어링</h3>
+<p>화면을 그리는 도중에 프레임버퍼를 갈아 치우면 위쪽은 새 그림, 아래쪽은 옛 그림이 보입니다. 이것이 티어링입니다. VGA는 지금 화면을 그리는 중인지를 상태 포트로 알려 줍니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>포트</th><th>비트</th><th>뜻</th></tr>
+<tr><td><code class="nb">3DAh</code></td><td>비트 3</td><td>1이면 수직 귀선(vertical retrace) 중</td></tr>
+<tr><td><code class="nb">3DAh</code></td><td>비트 0</td><td>1이면 화면을 그리지 않는 구간</td></tr>
+</table>
+</div>
+<div class="pipe">
+<span class="st">귀선 끝날 때까지 대기</span><span class="arr">▸</span>
+<span class="st">귀선 시작될 때까지 대기</span><span class="arr">▸</span>
+<span class="st">지금 복사</span>
+</div>
+<div class="warn"><b>대기가 곧 프레임 상한</b> — 60Hz 화면에서 매 프레임 귀선을 기다리면 최대 60fps입니다. 그리는 데 1/60초를 넘기면 곧장 30fps로 떨어집니다. 그래서 <b>바뀐 곳만 다시 그리는 더티 사각형</b>(6부)이 그토록 중요했습니다.</div>
+</article>
+
+<article class="card" id="ch03">
+<p class="chnum">3장</p>
+<h2>입력과 시간</h2>
+<p class="chsub">마우스는 인터럽트로 오고, 시계는 18.2번 울린다</p>
+</article>
+
+<article class="card" id="s1-mouse">
+<h3>INT 33h — 마우스 드라이버</h3>
+<p>도스에는 마우스 API가 없었습니다. <code class="nb">MOUSE.COM</code> 같은 드라이버를 먼저 올리면 그것이 인터럽트 벡터 <code class="nb">33h</code>를 잡고, 게임은 그 인터럽트를 호출해 상태를 물었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>AX</th><th>기능</th><th>돌려주는 것</th></tr>
+<tr><td>00h</td><td>드라이버 초기화·확인</td><td>AX=FFFFh면 있음, BX=버튼 수</td></tr>
+<tr><td>01h / 02h</td><td>커서 보이기 / 숨기기</td><td>—</td></tr>
+<tr><td>03h</td><td>위치와 버튼 상태</td><td>CX=x, DX=y, BX=버튼 비트</td></tr>
+<tr><td>04h</td><td>커서 위치 설정</td><td>—</td></tr>
+<tr><td>0Bh</td><td>상대 이동량 읽기</td><td>CX, DX (밀리미터 단위 mickey)</td></tr>
+</table>
+</div>
+<div class="warn"><b>좌표계 함정</b> — 모드 13h에서 드라이버는 대개 <b>가로를 640 기준으로</b> 돌려줍니다. 그대로 쓰면 화면의 오른쪽 절반을 가리킬 수 없습니다. <code class="nb">x &gt;&gt; 1</code>로 나눠야 320 좌표가 됩니다. 이 한 줄을 빠뜨려 오른쪽 절반이 안 눌리는 것이 도스 시절 단골 버그였습니다.</div>
+</article>
+
+<article class="card" id="s1-cursor">
+<h3>소프트웨어 커서 — 지우고, 그리고, 되돌리기</h3>
+<p>그래픽 모드에서 드라이버의 커서는 느리고 못생겨서, 게임들은 대개 커서를 직접 그렸습니다. 하드웨어 오버레이가 없으니 절차는 늘 셋이었습니다.</p>
+<ol class="steps">
+<li><b>저장</b> — 커서가 놓일 자리의 픽셀 16×16을 어딘가에 복사한다</li>
+<li><b>그리기</b> — 그 위에 커서 스프라이트를 마스크 블릿한다</li>
+<li><b>복원</b> — 커서를 옮기기 직전에 저장해 둔 픽셀을 되돌린다</li>
+</ol>
+<div class="key"><b>이 순서를 화면 갱신과 섞으면 즉시 깨집니다.</b> 배경을 다시 그리는 동안 커서가 화면에 남아 있으면, 복원 단계가 <b>새 배경 위에 옛 픽셀</b>을 덮어 버립니다. 그래서 규칙은 하나였습니다 — <b>그리기 전에 커서를 지우고, 다 그린 다음 다시 그린다.</b></div>
+<div class="note">이 문서의 엔진은 커서를 <b>헥스 테두리 스프라이트</b>로 그려 이 문제를 우회합니다. 맵을 다시 그릴 때 커서도 같이 다시 그려지므로 저장·복원이 필요 없습니다. 대신 마우스가 움직일 때마다 그 헥스를 다시 그려야 합니다 — 더티 사각형이 정확히 그 일을 합니다.</div>
+</article>
+
+<article class="card" id="s1-keyboard">
+<h3>키보드 — 스캔코드와 INT 9</h3>
+<p>도스의 <code class="nb">INT 16h</code>는 <b>눌렀다 뗀</b> 문자를 줍니다. 게임에는 부족합니다 — 방향키를 누르고 있는 동안 계속 스크롤해야 하고, 두 키를 동시에 눌러 대각선으로 가야 하기 때문입니다.</p>
+<p>그래서 게임들은 <code class="nb">INT 9</code>(키보드 하드웨어 인터럽트)를 직접 가로채 <b>스캔코드 표</b>를 유지했습니다. 눌림은 스캔코드, 뗌은 스캔코드+0x80입니다.</p>
+<div class="cerr">주의: 인터럽트 핸들러 안에서는 도스 함수를 부를 수 없다.
+DOS 는 재진입이 안 되므로, 파일을 읽는 도중 인터럽트가 걸려
+그 안에서 또 DOS 를 부르면 그대로 얼어붙는다.</div>
+<div class="tip"><b>지금도 같은 구조입니다</b> — 브라우저의 <code class="nb">keydown</code>/<code class="nb">keyup</code>으로 상태 표를 만들고 프레임마다 읽는 코드가 바로 그 후손입니다. 이 덱의 데모들도 그렇게 만들어져 있습니다.</div>
+</article>
+
+<article class="card" id="s1-timer">
+<h3>18.2Hz — 도스의 기본 심장 박동</h3>
+<p>PC의 타이머 칩(8253/8254)은 1,193,182Hz로 돌고, BIOS는 분주비를 65536으로 잡습니다.</p>
+<div class="sig"><u>1193182 / 65536</u><span class="lbl">Hz</span> = <u>18.2065…</u><span class="lbl">초당 틱</span></div>
+<p>그래서 <code class="nb">0040:006C</code>의 틱 카운터는 초당 약 18.2번 증가합니다. 애니메이션에 쓰기에는 너무 성깁니다. 게임들은 분주비를 다시 잡아 70Hz나 100Hz로 올리고, 원래 18.2Hz 핸들러는 <b>알맞은 횟수마다 한 번씩</b> 불러 주었습니다 — 그러지 않으면 도스의 시계가 느려집니다.</p>
+<div class="note"><b>턴제 워게임은 이 문제에서 자유로웠습니다.</b> 프레임을 매초 60번 만들 필요가 없으니, 입력이 있을 때만 그리면 됩니다. 이 문서의 엔진도 <b>이벤트 구동</b>입니다 — 클릭이나 키가 들어올 때만 상태가 바뀌고 그때만 다시 그립니다.</div>
+</article>
+
+<article class="card" id="s1-scope">
+<h3>이 문서가 재현하는 것과 하지 않는 것</h3>
+<div class="g2">
+<div class="cmp good">
+<h5>✔ 재현한다</h5>
+<p>320×200 8비트 인덱스 프레임버퍼 · 256색 팔레트(6비트 DAC) · 마스크 스프라이트와 RLE · 한 칸 1바이트 맵 · 정수 전용 좌표·경로·시야 · 룩업 테이블 픽킹 · 위젯 트리와 히트 테스트 · 명령 스택 되돌리기 · 32비트 LCG</p>
+</div>
+<div class="cmp bad">
+<h5>✘ 재현하지 않는다</h5>
+<p>실모드 세그먼트 주소 지정 · 어셈블리 최적화 · EMS 뱅크 전환 · INT 33h·INT 9 후킹 · 수직 귀선 대기 · 사운드 블래스터 · 한글 조합형 글꼴</p>
+</div>
+</div>
+<div class="key"><b>기준은 하나입니다</b> — <b>설계에 영향을 준 제약</b>은 그대로 재현하고, <b>플랫폼에만 매인 배관</b>은 뺍니다. 나눗셈이 비싸서 생긴 자료구조는 남기고, 인터럽트 벡터를 가로채는 법은 이야기로만 다룹니다.</div>
+</article>
+
+<article class="card quiz" id="s1-quiz" data-quiz>
+<h3>퀴즈</h3>
+<p class="q">Q. 모드 13h의 화면 크기가 정확히 64,000바이트라는 사실이 왜 실무적으로 중요했는가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 실모드의 한 세그먼트가 64KB(65,536바이트)라, 화면 전체가 <b>세그먼트 하나에 들어갑니다</b>. 세그먼트 레지스터를 <code class="nb">A000h</code>로 한 번만 맞춰 두면 모든 픽셀을 16비트 오프셋 하나로 접근할 수 있습니다. 640×480 256색(307,200바이트)에서는 이것이 불가능해, 뱅크 전환이나 보호 모드가 필요했습니다.</div>
+</article>
+
+<article class="card" id="s1-sum">
+<h3>1부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>제약</th><th>그래서 생긴 설계</th><th>이 문서에서 보는 곳</th></tr>
+<tr><td>FPU 없음</td><td>모든 좌표 계산이 정수</td><td>3·4·9부</td></tr>
+<tr><td>나눗셈 ~150사이클</td><td>격자 크기를 2의 거듭제곱 근처로</td><td>4부</td></tr>
+<tr><td>메모리 접근이 비쌈</td><td>한 칸 1바이트에 세 정보 패킹</td><td>5부</td></tr>
+<tr><td>세그먼트 64KB</td><td>맵을 배열 하나로</td><td>5부</td></tr>
+<tr><td>VRAM 쓰기가 느림</td><td>더티 사각형·오프스크린 버퍼</td><td>6부</td></tr>
+<tr><td>툴킷 없음</td><td>위젯 트리를 직접 만듦</td><td>7부</td></tr>
+</table>
+</div>
+<p class="cap">다음 부에서는 질문을 하나 던집니다 — <b>왜 하필 육각형이었을까?</b></p>
+</article>

@@ -1,0 +1,267 @@
+<article class="card section" id="part10">
+<p class="chnum">10부</p>
+<h2>유닛 · 턴 · 전투</h2>
+<p class="chsub">워게임을 워게임으로 만드는 규칙</p>
+</article>
+
+<article class="card" id="ch29">
+<p class="chnum">29장</p>
+<h2>유닛</h2>
+<p class="chsub">고정 풀과 프리 리스트</p>
+</article>
+
+<article class="card" id="s10-record">
+<h3>유닛 레코드</h3>
+<!--CODE file=py/hexwar/units.py sym=Unit lang=py note=한 유닛의 전체 상태-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드</th><th>바뀌는 때</th><th>세이브에 필요</th></tr>
+<tr><td><code>id · side · kind</code></td><td>생성 이후 불변</td><td>예</td></tr>
+<tr><td><code>q · r</code></td><td>이동</td><td>예</td></tr>
+<tr><td><code>hp · ammo</code></td><td>전투</td><td>예</td></tr>
+<tr><td><code>mp</code></td><td>이동 · 턴 시작</td><td>예</td></tr>
+<tr><td><code>ent</code></td><td>참호 — 가만히 있으면 오름</td><td>예</td></tr>
+<tr><td><code>moved</code></td><td>턴 안에서만 의미</td><td>예(참호 판정에 씀)</td></tr>
+</table>
+</div>
+<!--CODE file=py/hexwar/units.py sym=Unit.serialize lang=py note=정규 직렬화 — 골든 해시가 먹는 문자열-->
+<div class="key"><b>직렬화 형식이 규격입니다.</b> 필드 순서·구분자·줄바꿈이 세 언어에서 같아야 <code class="nb">unitHash</code>가 일치합니다. 이 한 줄이 매 스텝 해시되어 트레이스에 들어갑니다.</div>
+</article>
+
+<article class="card" id="s10-pool">
+<h3>고정 풀 — malloc 없는 세상</h3>
+<!--CODE file=py/hexwar/units.py sym=UnitPool lang=py note=배열 + 프리 리스트-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기법</th><th>도스에서의 이유</th><th>지금</th></tr>
+<tr><td>고정 크기 배열</td><td>640KB에서 조각화는 복구 불가</td><td>GC 압력 감소 · 캐시 지역성</td></tr>
+<tr><td>인덱스로 참조</td><td>세이브가 덤프 한 번</td><td>직렬화가 여전히 쉬움</td></tr>
+<tr><td>프리 리스트</td><td>아이디 재사용</td><td>객체 풀링으로 계승</td></tr>
+</table>
+</div>
+<div class="note"><b>프리 리스트는 '빈 슬롯을 빈 슬롯 안에 링크로 저장'하는 기법입니다.</b> 죽은 유닛 자리에 다음 빈 슬롯 번호를 적어 두면, 별도 자료구조 없이 빈 자리 목록이 유지됩니다. 이 문서는 읽기 쉽게 <code class="nb">nextfree</code> 배열을 따로 뒀지만, 도스 코드는 대개 <b>유닛 구조체의 첫 워드를 재사용</b>했습니다.</div>
+</article>
+
+<article class="card" id="s10-ghost">
+<h3>아이디 재사용의 위험 — 유령 참조</h3>
+<div class="g2">
+<div class="cmp bad">
+<h5>✘ 이렇게 되면</h5>
+<p>UI가 <code class="nb">sel_unit = 7</code>을 들고 있다.<br>유닛 7이 죽고 프리 리스트로.<br>새 유닛이 생기며 아이디 7을 받음.<br>→ UI가 <b>엉뚱한 유닛을 선택한 상태</b>가 된다.</p>
+</div>
+<div class="cmp good">
+<h5>✔ 방어</h5>
+<p>행동 뒤 <code class="nb">after_action()</code>에서 유닛이 살아 있는지 다시 확인하고, 없으면 즉시 선택 해제.</p>
+<p>세대 카운터(generation)를 아이디에 얹는 방법도 있다 — <code class="nb">id = 인덱스 | (세대 &lt;&lt; 16)</code>.</p>
+</div>
+</div>
+<!--CODE file=py/hexwar/ui.py sym=Ui.after_action lang=py note=죽었으면 선택 해제-->
+<div class="key"><b>이 게임에서는 한 판에 유닛이 새로 생기지 않으므로</b> 재사용이 실제로 일어나는 곳은 <b>공격 언두</b>뿐입니다. 그래서 부활 코드가 프리 리스트에서 아이디를 <b>정확히 도로 빼내야</b> 합니다(7부). 증원이 있는 게임이라면 세대 카운터가 사실상 필수입니다.</div>
+</article>
+
+<article class="card" id="s10-kinds">
+<h3>병종표</h3>
+<!--CODE file=py/hexwar/units.py sym=KINDS lang=py note=네 병종-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>병종</th><th class="num">MP</th><th class="num">공격</th><th class="num">방어</th><th class="num">사거리</th><th class="num">시야</th><th class="num">체력</th><th class="num">탄약</th></tr>
+<tr><td>보병</td><td class="num">6</td><td class="num">4</td><td class="num">5</td><td class="num">1</td><td class="num">2</td><td class="num">10</td><td class="num">6</td></tr>
+<tr><td>전차</td><td class="num">12</td><td class="num">8</td><td class="num">6</td><td class="num">1</td><td class="num">2</td><td class="num">10</td><td class="num">6</td></tr>
+<tr><td>포병</td><td class="num">6</td><td class="num">10</td><td class="num">2</td><td class="num"><b>3</b></td><td class="num">2</td><td class="num">8</td><td class="num">5</td></tr>
+<tr><td>정찰</td><td class="num"><b>16</b></td><td class="num">3</td><td class="num">3</td><td class="num">1</td><td class="num"><b>4</b></td><td class="num">10</td><td class="num">4</td></tr>
+</table>
+</div>
+<div class="tip"><b>표만 봐도 역할이 읽힙니다</b> — 포병은 사거리 3에 공격 10이지만 방어 2라 접근당하면 죽습니다. 정찰은 이동 16·시야 4로 눈 노릇을 하되 전투력이 없습니다. <b>밸런스가 코드가 아니라 데이터에 있다</b>는 것이 이 설계의 요점입니다.</div>
+</article>
+
+<article class="card" id="ch30">
+<p class="chnum">30장</p>
+<h2>전투</h2>
+<p class="chsub">종이 표에서 온 공식</p>
+</article>
+
+<article class="card" id="s10-crt">
+<h3>CRT — 전투 결과표의 유래</h3>
+<p>보드 워게임의 전투는 <b>표를 찾는 일</b>이었습니다. 공격력과 방어력의 비를 구해 표의 열을 고르고, 주사위를 굴려 행을 고르면 결과가 나옵니다. 컴퓨터로 옮기면서 비(比) 대신 <b>차(差)</b>를 쓰게 되었는데, 나눗셈이 비쌌기 때문입니다.</p>
+<!--CODE file=py/hexwar/combat.py sym=resolve lang=py note=SPEC §7-->
+<div class="sig">점수 = <u>공격력</u> − <u>방어력</u> + <u>2d6</u> − 7<span class="lbl">0을 중심으로</span></div>
+</article>
+
+<article class="card" id="s10-2d6">
+<h3>왜 2d6인가</h3>
+<!--OUT file=measure.txt sec=8 note=분포 실측 60,000회-->
+<div class="key"><b>2d6은 삼각분포입니다.</b> 7이 가장 흔하고(16.7%) 2와 12는 드뭅니다(2.8%). 그래서 <b>전력 차가 결과를 대체로 결정하되, 가끔 뒤집힙니다.</b> 균등분포(1d12)를 쓰면 극단값이 6배 흔해져 전력 차의 의미가 사라집니다.</div>
+</article>
+
+<article class="card" id="s10-crt-table">
+<h3>전력 차가 만드는 기댓값</h3>
+<p>위 출력의 아래쪽 표가 이 게임의 실질적 밸런스입니다. 전력 차 <code class="nb">d</code>에 따른 방어측 손실 기댓값을 보면, <b>차이가 1일 때 1.67, 3일 때 2.25</b>로 완만하게 오릅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>전력 차</th><th>방어측 기대 손실</th><th>의미</th></tr>
+<tr><td>−3</td><td>0.50</td><td>불리한 공격은 거의 무의미</td></tr>
+<tr><td>0</td><td>1.33</td><td>대등하면 서로 갉는다</td></tr>
+<tr><td>+3</td><td>2.25</td><td>유리하면 확실히 이긴다</td></tr>
+<tr><td>+6</td><td>2.83</td><td>천장에 가까움 — 손실 3이 최대</td></tr>
+</table>
+</div>
+<div class="note"><b>천장이 있는 것이 중요합니다.</b> 한 번의 공격으로 최대 3만 깎이므로, 체력 10인 유닛을 죽이려면 최소 <b>네 번</b>의 공격이 필요합니다. 이것이 전선을 유지하게 만들고, 한 방에 무너지는 것을 막습니다.</div>
+</article>
+
+<article class="card" id="s10-counter">
+<h3>반격과 참호</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>규칙</th><th>조건</th><th>효과</th></tr>
+<tr><td>반격</td><td>인접 · 방어측 생존 · 탄약 있음</td><td>받은 피해의 절반(내림)을 되돌려준다</td></tr>
+<tr><td>참호</td><td>턴 시작 시 <b>지난 턴에 안 움직였을 때</b></td><td>방어력 +1 (최대 3)</td></tr>
+<tr><td>참호 해제</td><td>이동하는 즉시</td><td>0으로</td></tr>
+</table>
+</div>
+<!--CODE file=py/hexwar/combat.py sym=defense_of..attack_of lang=py note=유효 전력-->
+<div class="key"><b>체력이 전력에 곱해집니다</b> — <code class="nb">K_ATK[kind] * hp / 10</code>. 다친 유닛은 약해지고, 그래서 <b>집중 공격이 효율적</b>입니다. 두 유닛을 반씩 깎는 것보다 하나를 죽이는 것이 낫다는 워게임의 기본 원리가 이 한 줄에서 나옵니다.</div>
+<div class="note"><b>포병은 반격을 안 받습니다</b> — 사거리 3에서 때리면 <code class="nb">distance == 1</code>이 아니므로 반격 조건에 걸리지 않습니다. 대신 인접당하면 방어 2라 순식간에 죽습니다. 규칙 두 줄이 병종의 성격을 만듭니다.</div>
+</article>
+
+<article class="card" id="s10-rng">
+<h3>난수 — LCG와 하위 비트</h3>
+<!--CODE file=py/hexwar/rng.py sym=Rng lang=py note=32비트 LCG-->
+<!--OUT file=measure.txt sec=5 note=하위 비트의 주기-->
+<div class="warn"><b>최하위 비트의 주기가 2입니다.</b> <code class="nb">state &amp; 1</code>은 0,1,0,1… 로 반복하고, <code class="nb">state &amp; 7</code>은 주기 8입니다. LCG의 <b>k번째 하위 비트는 주기가 2ᵏ</b>이라는 알려진 성질입니다. 방향을 <code class="nb">state &amp; 7</code>로 뽑으면 여덟 번마다 같은 패턴이 돌아, 플레이어가 알아챕니다.</div>
+<div class="key"><b>그래서 주사위는 상위 비트에서 뽑습니다</b> — <code class="nb">(state &gt;&gt; 16) % 6</code>. 이 한 줄이 도스 게임 소스에서 자주 보이는 이유가 이것입니다. 지금도 <code class="nb">rand() % n</code>이 나쁜 관용구인 것은 같은 이유입니다.</div>
+</article>
+
+<article class="card" id="s10-imul">
+<h3>32비트 곱셈 — 세 언어의 함정</h3>
+<div class="tri">
+<div>
+<h6>Python — 무한 정수</h6>
+<!--CODE file=py/hexwar/rng.py sym=Rng.next lang=py note=-->
+</div>
+<div>
+<h6>Lua — 64비트 정수</h6>
+<!--CODE file=lua/hexwar/rng.lua sym=Rng:next lang=lua note=-->
+</div>
+<div>
+<h6>TypeScript — 배정밀도 실수</h6>
+<!--CODE file=ts/src/rng.ts sym=Rng.next lang=ts note=-->
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>언어</th><th>수의 표현</th><th>32비트를 지키는 방법</th></tr>
+<tr><td>Python</td><td>무한 정밀도 정수</td><td><code class="nb">&amp; 0xFFFFFFFF</code></td></tr>
+<tr><td>Lua 5.3+</td><td>64비트 정수</td><td><code class="nb">&amp; 0xFFFFFFFF</code></td></tr>
+<tr><td>TypeScript</td><td><b>배정밀도 실수(53비트 가수)</b></td><td><code class="nb">Math.imul</code> + <code class="nb">&gt;&gt;&gt; 0</code></td></tr>
+</table>
+</div>
+<div class="key"><b>타입스크립트가 유일하게 위험합니다.</b> <code class="nb">state * 1664525</code>는 결과가 최대 2⁵² 근처라 <b>아슬아슬하게 정확</b>하지만, 그것을 믿는 코드는 상수를 바꾸는 순간 깨집니다. <code class="nb">Math.imul</code>은 두 수를 32비트로 자른 뒤 32비트 곱의 하위 32비트를 정확히 돌려줍니다.</div>
+</article>
+
+<article class="card" id="ch31">
+<p class="chnum">31장</p>
+<h2>턴과 승리</h2>
+<p class="chsub">한 판을 끝내는 방법</p>
+</article>
+
+<article class="card" id="s10-turn">
+<h3>턴 구조</h3>
+<!--CODE file=py/hexwar/game.py sym=Game.end_turn lang=py note=턴 넘기기-->
+<div class="pipe">
+<span class="st">승리 판정</span><span class="arr">▸</span>
+<span class="st">진영 교대</span><span class="arr">▸</span>
+<span class="st">이동력 회복 · 참호</span><span class="arr">▸</span>
+<span class="st">안개 갱신</span>
+</div>
+<div class="warn"><b>승리 판정이 진영 교대보다 먼저입니다.</b> 목표 점령은 '청군 턴이 끝나는 시점'에 판정하므로, 교대 뒤에 검사하면 <code class="nb">side</code>가 이미 바뀌어 조건이 어긋납니다. 이런 순서 의존은 주석으로 남겨 두지 않으면 나중에 반드시 뒤바뀝니다.</div>
+<!--CODE file=py/hexwar/game.py sym=Game._check_victory_on_end lang=py note=승리 조건 셋-->
+</article>
+
+<article class="card" id="s10-victory">
+<h3>승리 조건</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>조건</th><th>승자</th><th>왜 이렇게</th></tr>
+<tr><td>적 전멸</td><td>남은 쪽</td><td>당연</td></tr>
+<tr><td>청군이 목표 둘을 모두 점령한 채 턴 종료</td><td>청군</td><td>공세를 강제한다</td></tr>
+<tr><td>20턴 경과</td><td>무승부</td><td>무한정 늘어지지 않게</td></tr>
+</table>
+</div>
+<div class="key"><b>목표 점령에 '턴 종료 시점'을 붙인 이유</b> — 점령 즉시 승리로 하면 정찰이 빈 도시에 뛰어들어 이기는 김빠지는 결말이 납니다. 한 턴을 버텨야 한다는 조건이 붙으면 <b>점령 뒤 방어</b>라는 국면이 생깁니다. 규칙 한 줄이 게임의 마지막 5분을 만듭니다.</div>
+</article>
+
+<article class="card" id="s10-save">
+<h3>세이브 — 배열 덤프의 힘</h3>
+<p>유닛이 인덱스로만 참조되므로, 세이브는 <b>배열을 그대로 쓰는 일</b>입니다. 포인터를 인덱스로 바꾸는 변환이 없습니다.</p>
+<!--CODE file=py/hexwar/units.py sym=UnitPool.serialize lang=py note=살아 있는 유닛만-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>세이브에 필요한 것</th><th>크기(바이너리로 하면)</th></tr>
+<tr><td>맵 셀</td><td>432바이트</td></tr>
+<tr><td>안개</td><td>432바이트 (2비트로 하면 108)</td></tr>
+<tr><td>점유</td><td>계산 가능 — 저장 불필요</td></tr>
+<tr><td>유닛 64개</td><td>64 × 10 = 640바이트</td></tr>
+<tr><td>턴 · 진영 · <b>난수 상태</b></td><td>10바이트</td></tr>
+<tr><td><b>합계</b></td><td><b>약 1.5KB</b></td></tr>
+</table>
+</div>
+<div class="note"><b>난수 상태를 저장하지 않으면</b> 세이브·로드로 주사위를 다시 굴릴 수 있습니다. 언두와 같은 문제이고, 같은 해법(4바이트)입니다. 도스 게임 중 상당수가 이것을 빠뜨려 '세이브 스커밍'이 가능했습니다.</div>
+</article>
+
+<article class="card" id="s10-replay">
+<h3>리플레이 — 입력만 저장하면 된다</h3>
+<div class="sig">시나리오 + <u>시드</u> + <u>입력 목록</u> = <u>한 판 전체</u><span class="lbl">결정적 엔진의 선물</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>저장 방식</th><th>이 게임에서의 크기</th></tr>
+<tr><td>매 프레임 화면</td><td>64KB × 프레임 수</td></tr>
+<tr><td>매 턴 전체 상태</td><td>1.5KB × 40턴 = 60KB</td></tr>
+<tr><td><b>입력만</b></td><td><b>119줄 ≈ 1.4KB</b></td></tr>
+</table>
+</div>
+<!--CODE file=golden/script.txt lines=1-12 lang=text note=녹화된 한 판-->
+<div class="key"><b>이 파일이 14부의 검증 전체를 지탱합니다.</b> 같은 파일을 세 언어에 먹여 119스텝의 상태 해시와 17장의 화면 해시를 대조합니다 — 리플레이 기능과 회귀 테스트가 <b>같은 물건</b>입니다.</div>
+</article>
+
+<article class="card quiz" id="s10-quiz1" data-quiz>
+<h3>퀴즈 1</h3>
+<p class="q">Q. 공격력에 체력을 곱하는 규칙(<code class="nb">atk × hp / 10</code>)을 빼면 게임이 어떻게 달라지는가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>집중 공격의 이점이 사라집니다.</b> 체력 1짜리 유닛이 온전한 유닛과 똑같이 때리면, 유닛을 죽이는 것보다 여러 유닛을 조금씩 깎는 것이 더 이득일 수 있습니다. 결과적으로 전선이 뭉개지고, '마무리'라는 결정이 사라집니다. 반대로 곱하기를 제곱으로 강하게 하면(<code class="nb">atk × (hp/10)²</code>) 첫 타격이 지나치게 결정적이 되어 선공이 전부가 됩니다. <b>선형이 대개 좋은 타협</b>입니다.</div>
+</article>
+
+<article class="card quiz" id="s10-quiz2" data-quiz>
+<h3>퀴즈 2</h3>
+<p class="q">Q. LCG 대신 좋은 난수 생성기(예: 메르센 트위스터)를 쓰면 무엇이 좋아지고 무엇이 나빠지는가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 좋아지는 것은 통계적 품질뿐인데, <b>주사위 하나에는 필요 없습니다.</b> 나빠지는 것은 셋입니다. ① <b>상태가 큽니다</b> — MT19937은 2,496바이트라 언두 명령마다 저장할 수 없고 세이브도 무거워집니다. ② <b>세 언어에서 똑같이 구현하기 어렵습니다</b> — 32비트 연산이 훨씬 많아 한 곳만 틀려도 갈립니다. ③ <b>느립니다.</b> 게임의 난수는 '재현 가능하고 편향이 눈에 안 띌 것'이면 충분하고, 그 조건에서는 32비트 LCG가 최적에 가깝습니다.</div>
+</article>
+
+<article class="card" id="s10-demo">
+<h3>만져 보기 — 전투 결과표</h3>
+<div class="demo" data-demo="crt">
+<h5>전력 차를 바꿔 보세요</h5>
+<div class="row">
+<label>공격력 − 방어력 <input type="range" data-diff min="-8" max="8" value="0"></label>
+<span data-diffval>+0</span>
+</div>
+<div class="out"></div>
+</div>
+<div class="note">전력 차가 0일 때도 방어측이 한 대도 안 맞을 확률이 16.7%나 됩니다. 이 '가끔 뒤집힘'이 2d6 삼각분포가 주는 맛입니다 — 균등분포였다면 이 확률이 훨씬 커져 전력 차의 의미가 흐려집니다.</div>
+</article>
+
+<article class="card" id="s10-sum">
+<h3>10부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>결정</th><th>이유</th></tr>
+<tr><td>고정 풀 + 인덱스 참조</td><td>세이브가 덤프 · 조각화 없음</td></tr>
+<tr><td>2d6 + 차이 기반 CRT</td><td>삼각분포 · 나눗셈 회피</td></tr>
+<tr><td>손실 상한 3</td><td>전선이 한 방에 무너지지 않게</td></tr>
+<tr><td>체력이 전력에 곱해짐</td><td>집중 공격의 이점</td></tr>
+<tr><td>32비트 LCG</td><td>상태 4바이트 — 언두·세이브·파리티 전부</td></tr>
+<tr><td>목표 점령은 턴 종료 시점</td><td>점령 뒤 방어 국면을 만든다</td></tr>
+</table>
+</div>
+<p class="cap">여기까지가 엔진입니다. 다음 세 부는 <b>전체 소스</b>입니다.</p>
+</article>
