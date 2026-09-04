@@ -217,3 +217,104 @@
   window.__optimPlot = Plot;
   window.__optimFN = FN;
 })();
+
+(function () {
+  'use strict';
+
+  // ── 데모 2 · 젠센 부등식 시각화 ────────────────────────────────────
+  // 볼록성의 정의를 그림 하나로 만든다: 현이 곡선 위에 있는가.
+  var F1 = {
+    sq:      { f: function (x) { return x * x; },                 label: 'x²',    yr: [-0.3, 4.2] },
+    abs:     { f: function (x) { return Math.abs(x); },           label: '|x|',   yr: [-0.3, 2.2] },
+    exp:     { f: function (x) { return Math.exp(x); },           label: 'eˣ',    yr: [-0.5, 7.5] },
+    sin:     { f: function (x) { return Math.sin(3 * x); },       label: 'sin 3x', yr: [-1.4, 1.4] },
+    sqrtabs: { f: function (x) { return Math.sqrt(Math.abs(x)); },label: '√|x|',  yr: [-0.2, 1.6] },
+    cube:    { f: function (x) { return x * x * x; },             label: 'x³',    yr: [-8.5, 8.5] }
+  };
+
+  __demo('jensen', function (host, api) {
+    var cv = host.querySelector('canvas');
+    var sel = host.querySelector('[data-fn2]');
+    var s1 = host.querySelector('[data-x1]');
+    var s2 = host.querySelector('[data-x2]');
+    var XR = [-2, 2];
+
+    function draw() {
+      var spec = F1[sel.value];
+      var f = spec.f, YR = spec.yr;
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      var w = cv.clientWidth || 320, h = cv.clientHeight || 220;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      var ctx = cv.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+
+      function px(x) { return (x - XR[0]) / (XR[1] - XR[0]) * w; }
+      function py(y) { return h - (y - YR[0]) / (YR[1] - YR[0]) * h; }
+
+      // 축
+      ctx.strokeStyle = 'rgba(58,92,150,.25)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px(XR[0]), py(0)); ctx.lineTo(px(XR[1]), py(0));
+      ctx.moveTo(px(0), 0); ctx.lineTo(px(0), h);
+      ctx.stroke();
+
+      // 곡선
+      ctx.strokeStyle = '#23375c'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (var i = 0; i <= 400; i++) {
+        var x = XR[0] + (XR[1] - XR[0]) * i / 400, y = f(x);
+        if (i === 0) ctx.moveTo(px(x), py(y)); else ctx.lineTo(px(x), py(y));
+      }
+      ctx.stroke();
+
+      var x1 = XR[0] + (XR[1] - XR[0]) * (+s1.value + 100) / 200;
+      var x2 = XR[0] + (XR[1] - XR[0]) * (+s2.value + 100) / 200;
+      var y1 = f(x1), y2 = f(x2);
+
+      // 현 — 위반 구간은 붉게
+      var N = 200, worst = 0, worstT = 0;
+      for (var k = 0; k <= N; k++) {
+        var t = k / N;
+        var xm = (1 - t) * x1 + t * x2;
+        var chord = (1 - t) * y1 + t * y2;
+        var gap = chord - f(xm);          // 볼록이면 ≥ 0
+        if (gap < worst) { worst = gap; worstT = t; }
+      }
+      ctx.lineWidth = 3;
+      for (var k2 = 0; k2 < N; k2++) {
+        var ta = k2 / N, tb = (k2 + 1) / N;
+        var xa = (1 - ta) * x1 + ta * x2, xb = (1 - tb) * x1 + tb * x2;
+        var ca = (1 - ta) * y1 + ta * y2, cb = (1 - tb) * y1 + tb * y2;
+        var bad = (ca - f(xa) < -1e-12) || (cb - f(xb) < -1e-12);
+        ctx.strokeStyle = bad ? '#cb2c2c' : '#2e9e5b';
+        ctx.beginPath(); ctx.moveTo(px(xa), py(ca)); ctx.lineTo(px(xb), py(cb)); ctx.stroke();
+      }
+
+      // 끝점
+      [[x1, y1], [x2, y2]].forEach(function (p) {
+        ctx.fillStyle = '#3a5c96';
+        ctx.beginPath(); ctx.arc(px(p[0]), py(p[1]), 4.5, 0, 6.2832); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+      });
+
+      var xw = (1 - worstT) * x1 + worstT * x2;
+      api.w(host,
+        '<b>f</b> = ' + spec.label +
+        ' · x₁ = ' + x1.toFixed(3) + ', x₂ = ' + x2.toFixed(3) +
+        '<br>최악의 젠센 간격 &nbsp;min<sub>t</sub> [ t·f(x₁)+(1−t)·f(x₂) − f(tx₁+(1−t)x₂) ] = <b>' +
+        worst.toFixed(6) + '</b>' +
+        (worst < -1e-9
+          ? '<br>→ <b>반례</b>: t = ' + worstT.toFixed(3) + ' (x = ' + xw.toFixed(3) + ') 에서 현이 곡선 아래로 내려간다'
+          : '<br>→ 이 현에서는 위반 없음 (현이 곡선 위에 있다)'),
+        worst < -1e-9 ? 'bad' : 'ok');
+    }
+
+    sel.addEventListener('change', draw);
+    s1.addEventListener('input', draw);
+    s2.addEventListener('input', draw);
+    window.addEventListener('resize', draw);
+    draw();
+  });
+})();
