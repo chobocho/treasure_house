@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<!-- deck-bookmark: 덱 엔진이 replaceState로 주소를 바꾸기 전에 진입 해시를 잡아둔다. 반드시 <head> 최상단. -->
+<script>window.__deckInitHash=location.hash;</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- ▼▼▼ 새 덱을 만들 때 여기 3줄만 바꾸면 됩니다 ▼▼▼ -->
+<title>수학적 최적화 완전 가이드</title>
+<meta name="description" content="컴퓨터공학 4학년을 위한 수학적 최적화 교재 — 볼록성·KKT·쌍대성·선형계획·정수계획·확률적 최적화의 증명과, 순수 파이썬 구현, 그리고 프로세스 마이닝">
+<style>
+/* ============================================================
+   1. 테마 — 색을 바꾸려면 이 블록만 고치면 된다
+   ============================================================ */
+:root {
+  --bg1: #e8eef6;          /* 배경 그라디언트 시작 */
+  --bg2: #cddaea;          /* 배경 그라디언트 중간 */
+  --bg3: #b6c9de;          /* 배경 그라디언트 끝 */
+  --accent: #3a5c96;       /* 주 강조색 (버튼·테두리·번호) */
+  --accent2: #23375c;      /* 제목용 진한 강조색 */
+  --text: #16283d;
+  --muted: #55708f;
+  --border: rgba(58, 92, 150, 0.28);
+  --panel: rgba(255, 255, 255, 0.93);
+  --code-bg: #f2f6fb;
+  --code-border: rgba(58, 92, 150, 0.18);
+  --ok: #2e9e5b;           /* 좋은 예 / 성공 */
+  --warn: #d97706;         /* 주의 */
+  --bad: #cb2c2c;          /* 나쁜 예 / 오류 */
+  --special: #7c3aed;      /* 핵심 강조 */
+}
+
+/* ============================================================
+   2. 기본 골격
+   ============================================================ */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; height: 100%; }
+/* ⚠ 슬라이드 모드 body 높이는 100vh/100dvh 금지 — 삼성 인터넷이 하단 툴바를
+   제외하지 않고 계산해 내비가 본문을 가린다. %(레이아웃 뷰포트) + min-height:0 을 쓴다. */
+body {
+  margin: 0;
+  height: 100%; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+               "Malgun Gothic", "Noto Sans KR", sans-serif;
+  color: var(--text);
+  background: linear-gradient(160deg, var(--bg1) 0%, var(--bg2) 60%, var(--bg3) 100%);
+  background-attachment: scroll;
+  line-height: 1.7;
+  word-break: keep-all;          /* 한국어 어절 단위 줄바꿈 */
+}
+
+/* 진행 막대 */
+#bar {
+  flex: none; height: 3px; width: 0%;
+  background: linear-gradient(90deg, var(--accent), #7aa8e0);
+  transition: width .25s;
+}
+
+/* 상단 바 */
+header.deck {
+  flex: none; position: relative; z-index: 10;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,.86); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+  padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+}
+header.deck .home { text-decoration: none; font-size: 1.05em; flex: none; }
+header.deck .brand {
+  font-weight: 700; color: var(--accent2); white-space: nowrap;
+  font-size: .95em; overflow: hidden; text-overflow: ellipsis;
+}
+header.deck select {
+  flex: 1; min-width: 0; background: #fff; color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px;
+  font-size: .9em; max-width: 420px; margin-left: auto;
+}
+#tocBtn {
+  flex: none; background: #fff; border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; font-size: .85em; padding: 7px 10px; cursor: pointer;
+}
+
+/* ============================================================
+   3. 슬라이드 무대 — main > article 하나가 슬라이드 한 장
+   ============================================================ */
+main.prose {
+  flex: 1; width: 100%; margin: 0; min-width: 0;
+  overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 14px clamp(10px, 3vw, 24px) 18px;
+}
+main.prose > article { display: none; }
+main.prose > article.card {
+  position: relative; max-width: 900px; margin: 14px auto;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 16px; padding: clamp(16px, 3.5vw, 34px);
+  box-shadow: 0 4px 18px rgba(8,64,110,.08);
+  backdrop-filter: blur(6px);
+}
+main.prose > article.on { display: block; animation: fade .2s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+/* 부(部) 표지 */
+main.prose article.section {
+  background: linear-gradient(145deg, #dde8f5, #c3d5ea);
+  border-color: #8fb0d4; padding-top: 30px; padding-bottom: 30px;
+}
+
+/* 제목 — .pno(페이지 번호)가 절대 배치라 오른쪽 여백 64px 필수 */
+main.prose h1, main.prose h2, main.prose h3, main.prose h4 { line-height: 1.35; }
+main.prose article > h1, main.prose article > h2, main.prose article > h3 {
+  padding-right: 64px; overflow-wrap: break-word;
+}
+main.prose article h4 { padding-right: 8px; }
+main.prose h1 {
+  font-size: clamp(1.6rem, 4vw, 2.3rem); margin: .1em 0 .5em;
+  background: linear-gradient(90deg, var(--accent), #6d9bd1, var(--accent2));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+main.prose h2 { font-size: clamp(1.3rem, 3vw, 1.7rem); margin: .2em 0 .5em; color: var(--accent2); }
+main.prose h3 { font-size: 1.2rem; margin: .1em 0 .5em; color: var(--accent2); }
+main.prose h4 { font-size: 1.02rem; margin: 1.1em 0 .3em; }
+main.prose p { margin: .7em 0; }
+main.prose ul, main.prose ol { padding-left: 1.4em; }
+main.prose li { margin: .3em 0; }
+main.prose a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--border); }
+main.prose hr { border: none; border-top: 2px dashed var(--border); margin: 1.6em 0; }
+main.prose blockquote {
+  margin: 1em 0; padding: 10px 18px; border-left: 4px solid var(--accent);
+  background: rgba(58,92,150,.07); border-radius: 0 10px 10px 0; color: var(--muted);
+}
+.lead { font-size: 1.05em; }
+.pno {
+  position: absolute; top: 10px; right: 14px; font-size: 11px;
+  color: var(--muted); font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace;
+}
+.chnum { color: var(--accent2); font-weight: bold; letter-spacing: .12em; font-size: .85em; margin: 0 0 4px; }
+.chnum + h1, .chnum + h2 { margin-top: 0; }
+.chsub { color: var(--muted); margin: 8px 0 0; }
+.cap { color: var(--muted); font-size: .9em; margin: 8px 0 4px; }
+.cap a, .chsub a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+/* 표지 */
+article.cover h1 { font-size: clamp(1.7rem, 5.2vw, 2.7rem); }
+.cover .sub { color: var(--muted); font-size: 1.02em; margin-top: 6px; }
+.cover .cq {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 84px; height: 84px; border-radius: 50%; background: var(--accent2); color: #fff;
+  font-weight: 800; font-size: 1.5rem; font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; letter-spacing: -.02em;
+  box-shadow: 0 6px 18px rgba(35,55,92,.42), inset 0 0 0 6px rgba(255,255,255,.14); margin-bottom: 6px;
+}
+
+/* ============================================================
+   4. 코드
+   ============================================================ */
+main.prose :not(pre) > code {
+  background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 6px;
+  padding: 1px 6px; font-size: .9em; color: #1c4e78;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace;
+  overflow-wrap: break-word;   /* ⚠ anywhere 금지: 짧은 식별자가 낱말 중간에서 갈라진다 */
+}
+code.nb { white-space: nowrap; }  /* 짧은(≈18자 이하) 인라인 코드에 붙여 분리 방지 */
+main.prose pre {
+  background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 12px;
+  padding: 16px 18px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  font-size: .88rem; line-height: 1.55;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+}
+main.prose pre code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace;
+  background: none; border: none; padding: 0; color: #143a52;
+}
+main.prose pre, main.prose code, .term, .cerr, .demo .out, .pkgtree, .sig {
+  tab-size: 4; -moz-tab-size: 4;
+}
+/* 하이라이터가 붙이는 토큰 클래스 */
+code .cm { color: #7e8a99; font-style: italic; }   /* 주석 */
+code .st { color: #1e7043; }                       /* 문자열 */
+code .kw { color: #2b4d85; font-weight: 600; }     /* 키워드 */
+code .fn { color: #a45a04; }                       /* 함수 호출 */
+code .nu { color: #6026c9; }                       /* 숫자 */
+code .hd { color: #a45a04; font-weight: 700; }     /* HTTP 헤더 */
+/* 코드 블록 파일명 라벨 */
+.fname {
+  display: inline-block; font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .78rem;
+  color: var(--muted); background: rgba(58,92,150,.08); border: 1px solid var(--code-border);
+  border-bottom: none; border-radius: 8px 8px 0 0; padding: 2px 10px; margin: 10px 0 0;
+}
+.fname + pre { border-radius: 0 10px 10px 10px; margin-top: 0; }
+
+/* ============================================================
+   5. 콜아웃 · 표 · 목록
+   ============================================================ */
+.note, .tip, .warn, .key {
+  border-radius: 10px; padding: 10px 14px; margin: 12px 0;
+  border-left: 4px solid var(--accent); background: rgba(58,92,150,.08);
+  font-size: .95em; overflow-wrap: break-word;
+}
+.tip  { border-left-color: var(--ok);      background: rgba(46,158,91,.09); }
+.warn { border-left-color: var(--warn);    background: rgba(217,119,6,.10); }
+.key  { border-left-color: var(--special); background: rgba(124,58,237,.09); }
+.note b { color: var(--accent2); }
+.tip b  { color: #217a46; }
+.warn b { color: #a45a04; }
+.key b  { color: #6026c9; }
+
+/* 표는 반드시 .tblwrap 으로 감쌀 것 — 좁은 화면에서 카드 밖으로 잘리는 것을 막는다 */
+.tblwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1.2em 0; }
+.tblwrap table { margin: 0; }
+.kv { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 10px 0; }
+.kv th, .kv td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+.kv th { background: rgba(58,92,150,.10); }
+/* ⚠ th 에 white-space:nowrap 을 주지 말 것 — 이름 여러 개가 든 칸이 한 줄을 통째로 차지해
+   다른 열을 화면 밖으로 밀어낸다. 이름마다 <code> 칩을 따로 주는 편이 낫다. */
+
+/* 번호 매겨진 단계 목록 */
+.steps { counter-reset: st; list-style: none; padding-left: 0; margin: 12px 0; }
+.steps > li { counter-increment: st; position: relative; padding-left: 34px; margin: 8px 0; }
+.steps > li::before {
+  content: counter(st); position: absolute; left: 0; top: 1px;
+  width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff;
+  font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+
+/* 배지 */
+.badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .74rem;
+  font-weight: 700; background: rgba(58,92,150,.14); color: var(--accent2);
+  margin-right: 6px; vertical-align: middle;
+}
+.badge.ok  { background: rgba(46,158,91,.16); color: #1e7043; }
+.badge.err { background: rgba(203,44,44,.14); color: #a52020; }
+.badge.new { background: rgba(124,58,237,.14); color: #6026c9; }
+
+/* 인라인 값 칩 */
+.chip {
+  display: inline-block; font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .8rem;
+  border: 1px solid var(--code-border); background: var(--code-bg); border-radius: 5px;
+  padding: 0 6px; margin: 0 2px;
+}
+
+/* ============================================================
+   6. 레이아웃 컴포넌트 (그리드·비교 카드)
+   ============================================================ */
+.g2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin: 12px 0; }
+.g3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin: 12px 0; }
+.g2 > div, .g3 > div { min-width: 0; }
+.g2 pre, .g3 pre { margin: 0; }
+
+.cmp { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
+.cmp > h5 {
+  margin: 0; padding: 6px 12px; font-size: .85rem; letter-spacing: .02em;
+  background: rgba(58,92,150,.12); color: var(--accent2); border-bottom: 1px solid var(--border);
+}
+.cmp.bad > h5  { background: rgba(203,44,44,.12); color: #a52020; }
+.cmp.good > h5 { background: rgba(46,158,91,.14); color: #1e7043; }
+.cmp pre { border: none; border-radius: 0; background: var(--code-bg); }
+.cmp p { margin: 8px 12px; font-size: .92em; color: var(--muted); }
+.cmp .kv { margin: 0; font-size: .86rem; }
+
+/* ============================================================
+   7. 도식 — 박스 문자(┌─│)는 폴드7에서 깨지므로 CSS 도식으로 그린다
+   ============================================================ */
+.flow, .pipe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.flow .box, .pipe .st {
+  border: 1px solid var(--border); background: #fff; border-radius: 10px;
+  padding: 6px 12px; font-size: .88rem; font-weight: 600; color: var(--accent2);
+}
+.flow .box.dim { color: var(--muted); font-weight: 500; }
+.flow .arr, .pipe .arr { color: var(--muted); font-weight: 700; }
+.pipe .ext2 { font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; color: var(--muted); font-size: .78rem; }
+
+/* 셀 배열 (배열·바이트·큐 그리기) */
+.arr { display: flex; flex-wrap: wrap; gap: 2px; margin: 8px 0; }
+.arr .c {
+  min-width: 34px; text-align: center; padding: 5px 6px; font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace;
+  font-size: .8rem; border: 1px solid var(--code-border); background: var(--code-bg); border-radius: 5px;
+}
+.arr .c.in { border-color: var(--accent); background: rgba(58,92,150,.14); font-weight: 700; color: var(--accent2); }
+.arr .c.dead { opacity: .4; text-decoration: line-through; }
+.arr .idx { font-size: .68rem; color: var(--muted); display: block; line-height: 1.1; }
+
+/* 스택 (아래에서 위로 쌓임) */
+.stack { display: flex; flex-direction: column-reverse; gap: 3px; margin: 10px 0; max-width: 260px; }
+.stack .cell {
+  border: 1px solid var(--code-border); background: var(--code-bg); border-radius: 6px;
+  padding: 4px 10px; font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .82rem; text-align: center;
+}
+.stack .cell.top { border-color: var(--accent); background: rgba(58,92,150,.12); font-weight: 700; }
+.stack .lbl { font-size: .74rem; color: var(--muted); text-align: center; }
+
+/* 트리 / 들여쓴 구조 (공백으로 계층을 표현) */
+.pkgtree {
+  margin: 12px 0; padding: 10px 14px; border-radius: 10px; background: var(--code-bg);
+  border: 1px solid var(--code-border); font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .82rem;
+  line-height: 1.75; overflow-x: auto; white-space: pre;
+}
+.pkgtree b { color: var(--accent2); }
+.pkgtree i { color: var(--muted); font-style: normal; }
+
+/* 시그니처 해부 — 밑줄 + 라벨 */
+.sig {
+  margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: var(--code-bg);
+  border: 1px solid var(--code-border); font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .88rem;
+  overflow-x: auto; white-space: pre; line-height: 2.1;
+}
+.sig u { text-decoration: none; border-bottom: 2px solid var(--accent); padding-bottom: 1px; }
+.sig .lbl {
+  display: inline-block; font-size: .66rem; font-family: system-ui, sans-serif;
+  background: var(--accent); color: #fff; border-radius: 4px; padding: 0 5px; margin-left: 4px;
+  vertical-align: middle; font-weight: 700;
+}
+
+/* 좌·우 대응 도식 */
+.satisfy { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 8px; align-items: center; margin: 12px 0; }
+.satisfy .bx {
+  border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; background: #fff;
+  font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .8rem; line-height: 1.6; min-width: 0; overflow-x: auto;
+}
+.satisfy .bx h6 { margin: 0 0 5px; font-family: system-ui, sans-serif; font-size: .74rem; color: var(--muted); }
+.satisfy .mid { font-size: 1.1rem; color: var(--accent); font-weight: 700; }
+
+/* ============================================================
+   8. 터미널 · 오류 박스
+   ============================================================ */
+/* ⚠ .term · .cerr 는 <pre> 에 붙는다. `main.prose pre`(0,1,2)가 클래스 하나(0,1,0)보다
+   우선순위가 높아 배경이 밝은 코드 배경으로 덮이면 글자가 안 보인다. 선택자를 반드시 더 길게 쓸 것. */
+main.prose pre.term, .term {
+  margin: 10px 0; padding: 12px 14px; border-radius: 10px;
+  background: #10222f; color: #d6e9f5; border: 1px solid #0b1a24;
+  font-family: Consolas, "Liberation Mono","D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .84rem;
+  line-height: 1.55; overflow-x: auto; white-space: pre; -webkit-overflow-scrolling: touch;
+  box-shadow: none;   /* main.prose pre 의 흰색 inset 하이라이트가 어두운 배경에 줄로 남는다 */
+}
+.term .p { color: #64d18a; }   /* 프롬프트 */
+.term .c { color: #7fa8c0; }   /* 주석 */
+.term .r { color: #ff9d9d; }   /* 오류 */
+.term .g { color: #9ec8f0; }   /* 강조 */
+main.prose pre.cerr, .cerr {
+  margin: 10px 0; padding: 10px 12px; border-radius: 10px;
+  background: #fff4f4; border: 1px solid #f0c4c4; color: #8a2020;
+  font-family: Consolas, "Liberation Mono","D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .84rem;
+  line-height: 1.5; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.cerr b { color: #c62828; }
+
+/* ============================================================
+   9. 인터랙티브 데모 · 퀴즈
+   ============================================================ */
+.demo {
+  margin: 12px 0; border: 1px solid var(--border); border-radius: 12px;
+  background: rgba(255,255,255,.85); padding: 12px;
+}
+.demo > h5 { margin: 0 0 8px; font-size: .88rem; color: var(--accent2); }
+.demo .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.demo button {
+  border: 1px solid var(--border); background: var(--accent); color: #fff;
+  border-radius: 9px; padding: 7px 13px; font-size: .87rem; font-weight: 600;
+  cursor: pointer; min-height: 36px;
+}
+.demo button.sec { background: #fff; color: var(--accent2); }
+.demo button:active { transform: translateY(1px); }
+.demo input[type=text], .demo input[type=number], .demo select {
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px;
+  font-size: .87rem; background: #fff; color: var(--text); min-width: 0; max-width: 190px;
+  font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace;
+}
+.demo .out {
+  margin-top: 8px; padding: 10px 12px; border-radius: 9px; background: #10222f; color: #d6e9f5;
+  font-family: Consolas, "Liberation Mono","D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .82rem; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere; min-height: 2.6em;
+}
+.demo .out .ok  { color: #7ee2a8; }
+.demo .out .bad { color: #ff9d9d; }
+.demo .out .dim { color: #7fa8c0; }
+
+.quiz .q { font-weight: 700; color: var(--accent2); margin-bottom: 6px; }
+.quiz .a {
+  display: none; margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+  background: rgba(46,158,91,.09); border-left: 4px solid var(--ok); font-size: .95em;
+}
+.quiz.open .a { display: block; }
+
+/* ============================================================
+   10. 하단 내비 · 목차 오버레이
+   ============================================================ */
+nav#deckNav {
+  /* 본문 흐름 안의 바닥 바 — 오버레이가 아니라서 본문 텍스트를 가리지 않는다.
+     sticky 는 책갈피 셸의 bottomInset() 감지 조건이므로 유지할 것. */
+  flex: none; position: sticky; bottom: 0; z-index: 20;
+  display: flex; gap: 10px; justify-content: center; align-items: center;
+  padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: rgba(255,255,255,.90); backdrop-filter: blur(6px);
+  border-top: 1px solid var(--border);
+}
+nav#deckNav button {
+  min-width: 52px; min-height: 40px; border-radius: 10px; border: 1px solid var(--border);
+  background: rgba(255,255,255,.94); color: var(--text); font-size: 15px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(8,64,110,.12);
+}
+nav#deckNav button:disabled { opacity: .35; }
+#counter {
+  font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums;
+  min-width: 5.5em; text-align: center;
+}
+#deckToc {
+  position: fixed; inset: 0; z-index: 40; display: none; overflow-y: auto;
+  background: rgba(240,245,252,.97);
+  padding: 16px max(16px, env(safe-area-inset-right)) 76px max(16px, env(safe-area-inset-left));
+}
+#deckToc.on { display: block; }
+#deckToc h3 { margin: 4px 0 12px; color: var(--accent2); }
+.tocsec { margin-bottom: 14px; }
+.tocsec h4 {
+  margin: 4px 0 6px; font-size: 13px; color: var(--accent2);
+  position: sticky; top: -16px; background: rgba(240,245,252,.97); padding: 4px 0;
+}
+.tocsec a {
+  display: block; color: var(--text); text-decoration: none; font-size: 13.5px;
+  padding: 4px 8px; border-radius: 8px;
+}
+.tocsec a:hover, .tocsec a:focus { background: rgba(58,92,150,.12); }
+.tocsec a b {
+  color: var(--muted); font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-weight: 600;
+  display: inline-block; min-width: 3.2em;
+}
+#tocClose {
+  position: fixed; right: max(16px, env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 41;
+  background: var(--accent); color: #fff; border: none; border-radius: 10px;
+  padding: 10px 16px; font-size: 14px; cursor: pointer;
+}
+
+/* ============================================================
+   11. 반응형 — 폴더블(갤럭시 폴드7) · 좁은 화면 · 인쇄
+   ============================================================ */
+/* 힌지로 화면이 둘로 갈릴 때는 다단 레이아웃을 전부 1단으로 */
+@media (horizontal-viewport-segments: 2), (spanning: single-fold-vertical) {
+  main.prose > article.card { max-width: 96%; }
+  .g2, .g3, .satisfy { grid-template-columns: minmax(0,1fr); }
+  .satisfy .mid { display: block; transform: rotate(-90deg); }
+  .sig { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 2.4; }
+}
+@media (max-width: 620px) {
+  .g2, .g3, .satisfy { grid-template-columns: minmax(0,1fr); }
+  .satisfy .mid { display: block; transform: rotate(-90deg); }
+  .sig { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 2.4; }
+}
+@media (max-width: 420px) {
+  header.deck .brand { font-size: .8em; }
+  main.prose { padding-left: 8px; padding-right: 8px; }
+  main.prose > article.card { padding: 14px 12px; }
+  main.prose pre { font-size: .8rem; padding: 12px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  main.prose > article.on { animation: none; }
+  html { scroll-behavior: auto; }
+  #bar { transition: none; }
+}
+@media print {
+  body { height: auto; overflow: visible; display: block; }
+  main.prose { overflow: visible; padding: 0; }
+  main.prose > article { display: block !important; page-break-after: always; }
+  #bar, header.deck, nav#deckNav, #deckToc { display: none !important; }
+}
+
+/* ============================================================
+   6. 수식 키트 — 외부 수식 라이브러리(MathJax·KaTeX) 없이 순수 CSS로
+      분수·큰 연산자·행렬·경우나눔·근호를 조판한다.
+      원칙: 변수는 <i>, 함수·연산자 이름은 <b class="fn">, 숫자는 그대로.
+      좁은 화면 대응: 모든 블록 수식은 스스로 가로 스크롤을 만든다.
+   ============================================================ */
+.eq, .eqn {
+  display: block; margin: 14px 0; padding: 12px 16px;
+  background: #fff; border: 1px solid var(--code-border); border-left: 3px solid var(--accent);
+  border-radius: 10px; overflow-x: auto; overflow-y: hidden;
+  font-family: "Cambria Math", "STIX Two Math", Cambria, "Times New Roman", Georgia, serif;
+  font-size: clamp(15px, 2.4vw, 19px); line-height: 2.1; text-align: center;
+  -webkit-overflow-scrolling: touch;
+}
+.eq.left, .eqn.left { text-align: left; }
+/* 번호식 — 오른쪽에 (3.1) 을 붙인다. 좁으면 아래로 내려간다. */
+.eqn { display: flex; align-items: center; gap: 12px; text-align: left; }
+.eqn > .body { flex: 1; min-width: 0; overflow-x: auto; text-align: center; }
+.eqn > .tag { flex: none; color: var(--muted); font-size: .8em; font-family: inherit; }
+
+/* 인라인 수식 — 문장 속에서 쓴다 */
+.mi { font-family: "Cambria Math", "STIX Two Math", Cambria, "Times New Roman", Georgia, serif;
+      white-space: nowrap; }
+.eq i, .eqn i, .mi i { font-style: italic; }
+.eq b.fn, .eqn b.fn, .mi b.fn { font-weight: 400; font-style: normal; }
+/* 굵은 벡터·행렬 표기 */
+.eq .vec, .eqn .vec, .mi .vec { font-weight: 700; font-style: italic; }
+
+/* 분수 */
+.frac { display: inline-grid; vertical-align: -0.62em; text-align: center; line-height: 1.25;
+        margin: 0 .18em; }
+.frac > .num { padding: 0 .34em; border-bottom: 1px solid currentColor; }
+.frac > .den { padding: 0 .34em; }
+.frac.sm { font-size: .84em; vertical-align: -0.55em; }
+
+/* 큰 연산자(∑ ∏ ∫ ⋃)의 위·아래 첨자 */
+.oplim { display: inline-grid; vertical-align: -0.5em; text-align: center; line-height: 1.05;
+         margin: 0 .16em; }
+.oplim > .up { font-size: .6em; }
+.oplim > .dn { font-size: .6em; }
+.oplim > .op { font-size: 1.5em; font-style: normal; }
+/* argmin/argmax 아래 첨자 */
+.uset { display: inline-grid; vertical-align: -0.5em; text-align: center; line-height: 1.1;
+        margin: 0 .12em; }
+.uset > .dn { font-size: .62em; }
+
+/* 근호 — √ 뒤 내용에 윗줄을 그어 덮개를 만든다 */
+.sqrt { white-space: nowrap; }
+.sqrt > .rad { border-top: 1px solid currentColor; padding: 0 .18em 0 .1em; margin-left: -.06em; }
+
+/* 행렬·벡터 — 대괄호는 문자가 아니라 테두리로 그린다(글꼴 폭 문제 회피) */
+.mat { display: inline-flex; align-items: stretch; vertical-align: middle; margin: 0 .2em; }
+.mat > .brk { width: .34em; border: 1.6px solid currentColor; }
+.mat > .brk.l { border-right: 0; border-radius: 3px 0 0 3px; }
+.mat > .brk.r { border-left: 0; border-radius: 0 3px 3px 0; }
+.mat > .brk.pl { border-radius: 60% 0 0 60% / 50%; }
+.mat > .brk.pr { border-radius: 0 60% 60% 0 / 50%; }
+.mat table { border-collapse: collapse; margin: 0; }
+.mat td { padding: .12em .42em; text-align: center; border: 0; line-height: 1.35; font-size: .95em; }
+
+/* 경우 나눔 — 왼쪽 중괄호를 세로 테두리로 대신한다 */
+.cases { display: inline-flex; align-items: stretch; vertical-align: middle; text-align: left; }
+.cases > .brk { width: .4em; border: 1.6px solid currentColor; border-right: 0;
+                border-radius: 6px 0 0 6px; }
+.cases table { border-collapse: collapse; margin: 0; }
+.cases td { padding: .1em .5em; text-align: left; line-height: 1.5; font-size: .95em; }
+
+/* 밑줄 친 설명(수식 아래 라벨) */
+.ubrace { display: inline-grid; vertical-align: top; text-align: center; }
+.ubrace > .lbl { font-size: .58em; color: var(--muted); font-style: normal;
+                 border-top: 1px solid var(--border); padding-top: 1px; }
+
+/* ---- 정리 · 증명 상자 ---- */
+.thm, .lem, .cor, .defn, .prop, .proof, .rem {
+  margin: 14px 0; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--panel);
+}
+.thm  { border-left: 4px solid var(--special); background: rgba(124, 58, 237, .06); }
+.prop { border-left: 4px solid var(--special); background: rgba(124, 58, 237, .05); }
+.lem  { border-left: 4px solid var(--accent);  background: rgba(58, 92, 150, .06); }
+.cor  { border-left: 4px solid var(--accent);  background: rgba(58, 92, 150, .05); }
+.defn { border-left: 4px solid var(--ok);      background: rgba(46, 158, 91, .07); }
+.rem  { border-left: 4px solid var(--warn);    background: rgba(217, 119, 6, .07); }
+.proof{ border-left: 4px solid var(--muted);   background: rgba(85, 112, 143, .05); }
+.thm > .h, .lem > .h, .cor > .h, .defn > .h, .prop > .h, .proof > .h, .rem > .h {
+  display: block; font-weight: 700; margin-bottom: 6px; font-size: .95em;
+}
+.thm > .h  { color: var(--special); }
+.prop > .h { color: var(--special); }
+.lem > .h, .cor > .h { color: var(--accent2); }
+.defn > .h { color: var(--ok); }
+.rem > .h  { color: var(--warn); }
+.proof > .h { color: var(--muted); font-style: italic; }
+/* 증명 끝 기호 — 마지막 줄 끝에 ∎ 를 자동으로 붙인다 */
+.proof > :last-child::after { content: " ∎"; font-weight: 700; color: var(--muted); }
+.proof.cont > :last-child::after { content: ""; }
+.thm .eq, .lem .eq, .proof .eq, .defn .eq, .cor .eq, .prop .eq { background: rgba(255,255,255,.75); }
+
+/* 증명 단계 목록 — 번호가 아니라 근거를 보여 준다 */
+ol.pf { margin: 8px 0 0 0; padding-left: 1.3em; }
+ol.pf > li { margin: 5px 0; }
+ol.pf > li > .why { display: block; color: var(--muted); font-size: .86em; }
+
+/* 알고리즘 의사코드 블록 — 실행 코드가 아니라 수식 수준의 서술일 때만 */
+.algo { margin: 12px 0; padding: 12px 14px; background: var(--code-bg);
+        border: 1px solid var(--code-border); border-radius: 10px; overflow-x: auto; }
+.algo .an { display: block; font-weight: 700; color: var(--accent2); margin-bottom: 6px; }
+.algo ol { margin: 0; padding-left: 1.5em; }
+.algo li { margin: 3px 0; line-height: 1.6; }
+.algo .kw { color: var(--special); font-weight: 700; }
+
+/* 수렴 속도·복잡도 요약 표에서 쓰는 작은 배지 */
+.rate { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: .82em;
+        border: 1px solid var(--border); background: #fff; white-space: nowrap; }
+/* 파일명 라벨 옆의 인용 줄 범위 — 빌더가 붙인다 */
+.fname .ln { color: var(--muted); font-weight: 400; font-size: .88em; }
+/* 실행 출력 블록이 길 때 높이를 묶어 둔다 */
+.term.tall { max-height: 62vh; overflow: auto; }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+
+<!-- ===== 상단 바 : brand 와 select 안의 목록만 바꾸면 된다 ===== -->
+<header class="deck">
+  <a class="home" href="./index.html" aria-label="보물창고">🏰</a>
+  <span class="brand">📐 수학적 최적화 완전 가이드</span>
+  <select id="nav" aria-label="챕터 이동">
+<option value="top">챕터 이동…</option>
+</select>
+  <button id="tocBtn" aria-label="목차 열기">☰</button>
+</header>
+
+<!-- ============================================================
+     본문 : main > article 하나가 슬라이드 한 장이다.
+       · class="card"            일반 슬라이드
+       · class="card section"    부(部) 표지 — 목차의 그룹을 새로 연다
+       · class="card section cover"  덱 표지
+       · id 는 필수 (해시 내비게이션·목차·책갈피가 id 로 슬라이드를 찾는다)
+       · 페이지 번호는 JS 가 자동으로 붙인다 — 절대 손으로 쓰지 말 것
+     ============================================================ -->
+<main class="prose">
+
+<article class="card section cover" id="top">
+<p class="cq">📐</p>
+<h1>수학적 최적화 완전 가이드</h1>
+<p class="sub">증명하고, 구현하고, 돌려 본다 — 볼록성부터 KKT·쌍대성·정수계획·확률적 최적화, 그리고 프로세스 마이닝까지</p>
+<p class="cap">← → 방향키·스와이프로 넘기기 · ☰ 목차 · <a href="./index.html">🏰 보물창고</a></p>
+</article>
+
+<article class="card" id="what-is-this">
+<h3>이 책은 무엇인가</h3>
+<p class="lead">최적화는 “가장 좋은 것을 고르는 일”을 수학으로 옮긴 분야다. 학습률을 정하는 일도, 배송 경로를 짜는 일도, 공정의 병목을 찾는 일도 결국 같은 문제의 다른 얼굴이다.</p>
+<div class="g2">
+<div class="cmp good">
+<h5>✔ 이 책이 하는 것</h5>
+<ul>
+<li>정리를 <b>끝까지 증명</b>한다 — “알려져 있다”로 넘어가지 않는다</li>
+<li>모든 알고리즘을 <b>순수 파이썬으로 처음부터</b> 만든다</li>
+<li>수렴 속도를 <b>실제로 측정</b>해 이론과 대조한다</li>
+<li>실패하는 경우를 일부러 만들어 <b>왜 실패하는지</b> 본다</li>
+</ul>
+</div>
+<div class="cmp bad">
+<h5>✘ 이 책이 하지 않는 것</h5>
+<ul>
+<li>솔버 API 사용법 나열 — 그건 문서를 보면 된다</li>
+<li>검증하지 않은 의사코드</li>
+<li>“직관적으로 자명하다”로 끝내는 설명</li>
+<li>측정 없이 “빠르다”고 주장하기</li>
+</ul>
+</div>
+</div>
+<div class="key"><b>한 줄 요약</b> — 이 책은 <b>최적화 알고리즘을 스스로 만들어 낼 수 있게</b> 하는 것이 목표다. 고르는 법이 아니라 만드는 법이다.</div>
+</article>
+
+<article class="card" id="who-for">
+<h3>누구를 위한 책인가</h3>
+<p>컴퓨터공학 4학년, 혹은 그 정도의 배경을 가진 개발자를 상정했다. 구체적으로는 이런 사람이다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>알고 있다고 가정하는 것</th><th>어디서 쓰는가</th></tr>
+<tr><td>편미분 · 연쇄법칙</td><td>1부부터 끝까지. ∂f/∂x 를 계산할 줄 알면 된다</td></tr>
+<tr><td>테일러 급수 (1변수)</td><td>2·3부. 다변수 확장은 1부 3장에서 직접 유도한다</td></tr>
+<tr><td>행렬 곱셈 · 역행렬의 뜻</td><td>1부 2장에서 필요한 만큼 다시 세운다</td></tr>
+<tr><td>극한 · 연속 · 상한/하한</td><td>존재성 증명에서만. 엄밀한 해석학은 요구하지 않는다</td></tr>
+<tr><td>파이썬 기본 문법</td><td>모든 예제. 라이브러리 지식은 필요 없다</td></tr>
+<tr><td>시간복잡도 표기</td><td>알고리즘 비교 전반</td></tr>
+</table>
+</div>
+<div class="note"><b>가정하지 않는 것</b> — 실해석학, 측도론, 함수해석, 볼록해석 강의를 들었을 필요가 없다. 필요한 도구는 그때그때 세워서 쓴다. 라그랑주 승수를 “배운 적 있는 공식”이 아니라 <b>유도해서 얻는 것</b>으로 다룬다.</div>
+</article>
+
+<article class="card" id="questions">
+<h3>이 책이 답하는 질문들</h3>
+<ol class="steps">
+<li>경사하강법은 <b>왜</b> 수렴하는가? 얼마나 빨리? 그 속도를 무엇이 결정하는가?</li>
+<li>학습률을 크게 잡으면 왜 발산하는가? 안전한 상한은 정확히 얼마인가?</li>
+<li>모멘텀은 왜 빠른가? “관성” 말고 수식으로 설명할 수 있는가?</li>
+<li>볼록이면 왜 국소 최소가 전역 최소인가?</li>
+<li>라그랑주 승수는 어디서 나온 물건인가? 그 값은 무엇을 뜻하는가?</li>
+<li>쌍대 문제는 왜 항상 볼록인가? 언제 원문제와 값이 같아지는가?</li>
+<li>심플렉스법은 왜 꼭짓점만 봐도 되는가?</li>
+<li>정수 제약 하나가 왜 문제를 NP-난해로 만드는가?</li>
+<li>SGD 는 잡음이 있는데 왜 답에 가까워지는가?</li>
+<li>Adam 은 무엇을 적응시키는가? 언제 실패하는가?</li>
+<li>라쏘는 왜 계수를 정확히 0 으로 만드는가?</li>
+<li>이벤트 로그에서 프로세스 모델을 <b>어떻게</b> 뽑아내는가?</li>
+<li>“이 로그가 이 모델에 얼마나 맞는가”를 재는 일이 왜 최적화 문제인가?</li>
+<li>공정의 병목을 데이터만으로 어떻게 찾아내는가?</li>
+<li>내 문제를 어떤 종류의 최적화 문제로 <b>정식화</b>해야 하는가?</li>
+</ol>
+</article>
+
+<article class="card" id="roadmap">
+<h3>전체 지도 — 14부</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>부</th><th>제목</th><th>핵심 질문</th></tr>
+<tr><td>1</td><td>준비 — 최적화의 언어</td><td>문제를 어떻게 적는가</td></tr>
+<tr><td>2</td><td>볼록성</td><td>왜 어떤 문제는 쉬운가</td></tr>
+<tr><td>3</td><td>무제약 최적화</td><td>기울기만으로 어디까지 가는가</td></tr>
+<tr><td>4</td><td>최소제곱과 회귀</td><td>데이터에 곡선을 맞춘다는 것</td></tr>
+<tr><td>5</td><td>제약 최적화와 쌍대성</td><td>KKT 는 어디서 오는가</td></tr>
+<tr><td>6</td><td>선형계획법</td><td>꼭짓점만 봐도 되는 이유</td></tr>
+<tr><td>7</td><td>정수·조합 최적화</td><td>정수 하나가 왜 그리 비싼가</td></tr>
+<tr><td>8</td><td>확률적·대규모 최적화</td><td>기울기를 흘끗 보고도 되는가</td></tr>
+<tr><td>9</td><td>비평활·전역 최적화</td><td>미분이 없으면 무엇을 하는가</td></tr>
+<tr><td>10</td><td>프로세스 마이닝 ① 로그와 발견</td><td>기록에서 모델을 뽑는 법</td></tr>
+<tr><td>11</td><td>프로세스 마이닝 ② 적합도와 정렬</td><td>맞음을 재는 것 = 최적화</td></tr>
+<tr><td>12</td><td>프로세스 마이닝 ③ 성능·개선</td><td>병목을 찾아 고치는 법</td></tr>
+<tr><td>13</td><td>응용 — 정식화 연습</td><td>현실을 수식으로 옮기기</td></tr>
+<tr><td>14</td><td>마무리</td><td>실무에서 무엇을 쓸 것인가</td></tr>
+</table>
+</div>
+<div class="tip"><b>순서대로 읽는 것을 권한다</b> — 5부의 KKT 는 2부의 볼록성을, 11부의 정렬은 7부의 분지한정을 그대로 쓴다. 뒤에서 앞을 참조할 때는 <b>“(3부 2장)”</b>처럼 어디를 보면 되는지 항상 밝혀 두었다.</div>
+</article>
+
+<article class="card" id="how-to-read">
+<h3>읽는 법 — 세 겹으로 되어 있다</h3>
+<div class="g3">
+<div class="cmp">
+<h5>① 수식과 증명</h5>
+<p>정리는 <span class="badge">보라색</span> 상자, 증명은 <span class="badge">회색</span> 상자에 들어 있다. 증명의 각 줄에는 <b>무엇을 근거로 그 줄이 나왔는지</b>가 적혀 있다.</p>
+</div>
+<div class="cmp">
+<h5>② 코드</h5>
+<p>모든 코드는 <code class="nb">optim/py/</code> 안의 실제 파일에서 <b>그대로 읽어 온 것</b>이다. 손으로 옮겨 적은 코드는 이 책에 한 줄도 없다.</p>
+</div>
+<div class="cmp">
+<h5>③ 실행 결과</h5>
+<p>검은 터미널 화면은 <b>실제로 그 명령을 돌려서 나온 출력</b>이다. 숫자를 지어내지 않았다.</p>
+</div>
+</div>
+<div class="defn"><span class="h">상자 색의 뜻</span>
+<b style="color:var(--special)">정리·명제</b>는 증명이 뒤따르는 주장 · <b style="color:var(--accent2)">보조정리·따름정리</b>는 다른 증명의 부품 · <b style="color:var(--ok)">정의</b>는 용어를 세우는 곳 · <b style="color:var(--warn)">참고</b>는 흔한 오해를 바로잡는 곳이다.</div>
+<div class="note"><b>증명을 건너뛰어도 좋다</b> — 처음 읽을 때는 정리의 <b>진술</b>과 <b>코드</b>만 따라가도 된다. 다만 “왜 이 조건이 붙어 있지?”가 궁금해지는 순간이 오는데, 그 답은 대부분 증명 안에 있다.</div>
+</article>
+
+<article class="card" id="notation">
+<h3>표기 규약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기호</th><th>뜻</th><th>비고</th></tr>
+<tr><td><span class="mi"><i>x</i> ∈ ℝ<sup><i>n</i></sup></span></td><td><i>n</i>차원 실벡터. 언제나 <b>열</b>벡터</td><td>코드에서는 길이 <i>n</i> 의 리스트</td></tr>
+<tr><td><span class="mi"><i>A</i> ∈ ℝ<sup><i>m</i>×<i>n</i></sup></span></td><td><i>m</i>행 <i>n</i>열 행렬</td><td><code class="nb">A[i][j]</code></td></tr>
+<tr><td><span class="mi"><i>x</i><sup>⊤</sup><i>y</i></span></td><td>내적 <span class="mi">Σ<i>x<sub>i</sub>y<sub>i</sub></i></span></td><td><code class="nb">dot(x, y)</code></td></tr>
+<tr><td><span class="mi">‖<i>x</i>‖</span></td><td>유클리드(2-)노름</td><td>다른 노름은 ‖·‖₁, ‖·‖<sub>∞</sub> 로 명시</td></tr>
+<tr><td><span class="mi">∇<i>f</i>(<i>x</i>)</span></td><td>기울기 벡터 (열벡터)</td><td><code class="nb">p.grad(x)</code></td></tr>
+<tr><td><span class="mi">∇²<i>f</i>(<i>x</i>)</span></td><td>헤세 행렬 (대칭)</td><td><code class="nb">p.hess(x)</code></td></tr>
+<tr><td><span class="mi"><i>f</i> ∈ <i>C</i><sup>1</sup>, <i>C</i><sup>2</sup></span></td><td>1번·2번 연속미분 가능</td><td>정리마다 어느 쪽이 필요한지 밝힌다</td></tr>
+<tr><td><span class="mi"><i>x</i><sup>⋆</sup></span></td><td>최적해</td><td><span class="mi"><i>f</i><sup>⋆</sup> = <i>f</i>(<i>x</i><sup>⋆</sup>)</span></td></tr>
+<tr><td><span class="mi"><i>x<sub>k</sub></i></span></td><td><i>k</i>번째 반복점</td><td>수열의 첨자는 항상 아래</td></tr>
+<tr><td><span class="mi"><i>A</i> ≻ 0, <i>A</i> ⪰ 0</span></td><td>양의 정부호 / 반정부호</td><td>대칭행렬에만 쓴다</td></tr>
+<tr><td><span class="mi">⟨<i>S</i>⟩, |<i>S</i>|</span></td><td>집합의 크기</td><td>다중집합은 <span class="mi">[<i>a</i>², <i>b</i>]</span> 꼴로</td></tr>
+</table>
+</div>
+<div class="warn"><b>⊤ 는 전치, ⋆ 는 최적</b> — 별표를 곱셈으로 읽지 말 것. 곱은 언제나 붙여 쓰거나 <span class="mi">·</span> 로 적는다.</div>
+</article>
+
+<article class="card" id="code-policy">
+<h3>코드 규약 — 왜 numpy 를 쓰지 않는가</h3>
+<p>이 책의 예제는 <b>파이썬 표준 라이브러리만</b> 쓴다. 행렬은 리스트의 리스트, 벡터는 리스트다.</p>
+<div class="g2">
+<div class="cmp good">
+<h5>✔ 그래서 얻는 것</h5>
+<ul>
+<li>LU 의 <b>피벗팅이 왜 필요한지</b>가 코드에 그대로 보인다</li>
+<li>촐레스키가 <b>어디서 실패하는지</b>를 직접 만난다</li>
+<li>설치 없이 어떤 파이썬에서도 돌아간다</li>
+<li>알고리즘의 비용이 눈에 보인다 — 숨은 C 루프가 없다</li>
+</ul>
+</div>
+<div class="cmp bad">
+<h5>✘ 그래서 잃는 것</h5>
+<ul>
+<li>속도. 실무에서 <i>n</i>이 10⁴ 이 넘으면 numpy·BLAS 를 써야 한다</li>
+<li>희소행렬 자료구조의 정교함</li>
+<li>검증된 LAPACK 루틴의 수치 안정성</li>
+</ul>
+<p class="cap">14부에서 “언제 직접 짜고 언제 솔버를 부를 것인가”를 따로 다룬다.</p>
+</div>
+</div>
+<p class="fname">예제를 돌려 보는 법</p>
+<div class="term"><span class="p">$</span> cd optim
+<span class="p">$</span> PYTHONPATH=. python3 py/demo_linalg.py
+<span class="p">$</span> python3 -m unittest discover -s tests -t . -v
+<span class="c"># 덱 다시 만들기 (소스를 고쳤다면)</span>
+<span class="p">$</span> python3 run_all.py &amp;&amp; python3 deck/build_deck.py</div>
+</article>
+
+<article class="card" id="code-truth">
+<h3>이 책의 코드가 진짜라는 증거</h3>
+<p>교재의 코드가 실제로 돌아가지 않는 일은 너무 흔하다. 그래서 이 책은 <b>구조적으로</b> 그럴 수 없게 만들었다.</p>
+<div class="flow">
+<span class="box">optim/py/*.py<br><span class="cap">진짜 소스</span></span><span class="arr">→</span>
+<span class="box">unittest<br><span class="cap">전부 통과해야</span></span><span class="arr">→</span>
+<span class="box">run_all.py<br><span class="cap">실제 실행·출력 수집</span></span><span class="arr">→</span>
+<span class="box">build_deck.py<br><span class="cap">소스·출력을 덱에 주입</span></span><span class="arr">→</span>
+<span class="box">verify_deck.py<br><span class="cap">덱 ↔ 소스 대조</span></span>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>규율</th><th>기계가 강제하는 방법</th></tr>
+<tr><td>덱의 코드 = 실제 파일의 코드</td><td><code class="nb">data-src</code>+<code class="nb">data-sym</code> 로 <b>이름</b>을 가리킨다. 줄 번호를 손으로 적지 않으므로 소스를 고쳐도 어긋나지 않는다</td></tr>
+<tr><td>덱의 출력 = 실제 실행 출력</td><td><code class="nb">run_all.py</code> 가 모든 <code class="nb">demo_*.py</code> 를 돌려 <code class="nb">out/manifest.json</code> 에 저장하고, 빌더가 그것만 삽입한다</td></tr>
+<tr><td>도함수가 맞다</td><td>모든 시험함수의 ∇f·∇²f 를 수치미분과 대조하는 테스트가 있다 (1부 4장)</td></tr>
+<tr><td>0 아닌 종료코드는 즉시 실패</td><td><code class="nb">run_all.py</code> 가 stderr 한 줄만 나와도 빌드를 막는다</td></tr>
+</table>
+</div>
+<div class="key"><b>그래서</b> — 이 책에서 본 코드를 그대로 복사해 붙이면 그대로 돌아간다. 파일 이름과 인용한 줄 범위가 코드 블록마다 적혀 있다.</div>
+</article>
+
+<article class="card" id="one-page">
+<h3>최적화 한 장 요약</h3>
+<p>이 책에 나오는 거의 모든 알고리즘은 아래 골격의 변주다. 어디가 달라지는지만 보면 된다.</p>
+<div class="algo"><span class="an">반복형 최적화의 공통 골격</span>
+<ol>
+<li><span class="kw">시작</span>: 초기점 <span class="mi"><i>x</i><sub>0</sub></span> 를 고른다</li>
+<li><span class="kw">반복</span> <span class="mi"><i>k</i> = 0, 1, 2, …</span>
+  <ol>
+  <li><b>방향</b> <span class="mi"><i>d<sub>k</sub></i></span> 를 정한다 &nbsp;— 여기가 알고리즘의 정체다</li>
+  <li><b>보폭</b> <span class="mi"><i>α<sub>k</sub></i> &gt; 0</span> 을 정한다 &nbsp;— 고정 / 라인서치 / 신뢰영역</li>
+  <li><b>이동</b>: <span class="mi"><i>x</i><sub><i>k</i>+1</sub> = <i>x<sub>k</sub></i> + <i>α<sub>k</sub>d<sub>k</sub></i></span></li>
+  </ol>
+</li>
+<li><span class="kw">종료</span>: <span class="mi">‖∇<i>f</i>(<i>x<sub>k</sub></i>)‖ ≤ <i>ε</i></span> 이거나 더 나아지지 않을 때</li>
+</ol></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>알고리즘</th><th>방향 <span class="mi"><i>d<sub>k</sub></i></span></th><th>드는 정보</th><th>부</th></tr>
+<tr><td>경사하강</td><td><span class="mi">−∇<i>f</i></span></td><td>기울기</td><td>3</td></tr>
+<tr><td>뉴턴</td><td><span class="mi">−(∇²<i>f</i>)<sup>−1</sup>∇<i>f</i></span></td><td>기울기 + 헤세</td><td>3</td></tr>
+<tr><td>준뉴턴(BFGS)</td><td><span class="mi">−<i>B<sub>k</sub></i><sup>−1</sup>∇<i>f</i></span></td><td>기울기 이력</td><td>3</td></tr>
+<tr><td>켤레기울기</td><td><span class="mi">−∇<i>f</i> + <i>β<sub>k</sub>d</i><sub><i>k</i>−1</sub></span></td><td>기울기</td><td>3</td></tr>
+<tr><td>SGD</td><td><span class="mi">−∇<i>f<sub>i</sub></i> (표본 하나)</span></td><td>기울기 일부</td><td>8</td></tr>
+<tr><td>근접경사</td><td>경사 후 <span class="mi">prox</span> 투영</td><td>기울기 + 근접연산자</td><td>8</td></tr>
+<tr><td>심플렉스</td><td>인접 꼭짓점으로의 모서리</td><td>기저 교환</td><td>6</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="why-procmining">
+<h3>프로세스 마이닝은 왜 이 책에 있는가</h3>
+<p class="lead">프로세스 마이닝은 “실제로 무슨 일이 어떤 순서로 일어났는가”를 기록(이벤트 로그)에서 되짚어 내는 분야다. 언뜻 최적화와 무관해 보이지만, 핵심 계산이 전부 최적화 문제다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>프로세스 마이닝의 질문</th><th>실제로 푸는 최적화 문제</th><th>이 책의 어디</th></tr>
+<tr><td>로그와 모델이 얼마나 맞는가 (적합도)</td><td>최소비용 <b>정렬</b> — A* 최단경로 / ILP</td><td>11부 · 7부의 분지한정</td></tr>
+<tr><td>어떤 모델이 로그를 가장 잘 설명하는가</td><td>구조 제약 아래의 조합 탐색</td><td>10부 · 7부</td></tr>
+<tr><td>어디가 병목인가</td><td>대기시간 최대화 구간 탐색 · 큐 모형</td><td>12부</td></tr>
+<tr><td>자원을 어떻게 배치해야 하는가</td><td>할당 문제 — 헝가리안 / 최소비용흐름</td><td>12부 · 7부</td></tr>
+<tr><td>케이스를 어떤 순서로 처리할 것인가</td><td>스케줄링 — 정수계획</td><td>13부</td></tr>
+</table>
+</div>
+<div class="key"><b>이 책의 논지</b> — 프로세스 마이닝은 “로그 분석 도구 모음”이 아니라, <b>이산 최적화가 현실 데이터를 만나는 자리</b>다. 그래서 1~9부를 읽은 사람에게는 10~12부가 새로운 응용으로 읽힌다.</div>
+</article>
+
+</main>
+
+<!-- ============================================================
+     코드 하이라이터 — <pre><code data-lang="xx"> 를 런타임에 토크나이징한다.
+     손으로 <span class="kw"> 를 붙이지 말 것. 언어를 추가하려면 KW/CFG 에 한 줄.
+     ============================================================ -->
+<script>
+(function () {
+  'use strict';
+  var KW = {
+    js: 'const|let|var|function|return|if|else|for|while|try|catch|finally|throw|new|class|extends|super|this|async|await|import|export|from|default|typeof|instanceof|delete|in|of|do|switch|case|break|continue|yield|static|get|set|null|undefined|true|false|void',
+    ts: 'const|let|var|function|return|if|else|for|while|try|catch|finally|throw|new|class|extends|implements|interface|type|enum|super|this|async|await|import|export|from|default|typeof|instanceof|delete|in|of|do|switch|case|break|continue|yield|static|readonly|public|private|protected|declare|as|is|keyof|infer|satisfies|null|undefined|true|false|void|never|unknown|any|string|number|boolean|Promise|Record|Set|Map|Array',
+    py: 'def|class|return|if|elif|else|for|while|try|except|finally|raise|with|as|import|from|lambda|yield|async|await|pass|break|continue|global|nonlocal|assert|del|in|is|not|and|or|None|True|False|self|match|case',
+    c: 'auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|inline|int|long|register|restrict|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|_Bool|size_t|NULL|true|false',
+    cpp: 'auto|bool|break|case|catch|char|class|const|constexpr|continue|default|delete|do|double|else|enum|explicit|export|extern|false|float|for|friend|goto|if|inline|int|long|mutable|namespace|new|noexcept|nullptr|operator|private|protected|public|return|short|signed|sizeof|static|struct|switch|template|this|throw|true|try|typedef|typename|union|unsigned|using|virtual|void|volatile|while',
+    go: 'package|import|func|return|if|else|for|range|switch|case|default|break|continue|go|defer|select|chan|map|struct|interface|type|var|const|make|new|len|cap|append|copy|delete|panic|recover|nil|true|false|string|int|int64|uint32|uint8|byte|rune|bool|error|any',
+    rust: 'fn|let|mut|const|static|if|else|match|loop|while|for|in|break|continue|return|struct|enum|impl|trait|type|use|mod|pub|crate|self|Self|where|as|ref|move|dyn|async|await|unsafe|true|false|Some|None|Ok|Err|Option|Result|String|Vec|Box',
+    java: 'package|import|public|private|protected|static|final|abstract|class|interface|enum|record|extends|implements|return|if|else|for|while|do|switch|case|default|break|continue|try|catch|finally|throw|throws|new|this|super|void|int|long|double|boolean|char|byte|String|var|null|true|false|instanceof',
+    lua: 'and|break|do|else|elseif|end|false|for|function|goto|if|in|local|nil|not|or|repeat|return|then|true|until|while|self|require|pairs|ipairs|type|setmetatable|getmetatable|tostring|tonumber|table|string|math|io|os',
+    rb: 'def|end|class|module|if|elsif|else|unless|case|when|while|until|for|in|do|begin|rescue|ensure|raise|return|yield|self|nil|true|false|require|attr_accessor|puts|lambda|proc|then',
+    sh: 'if|then|else|elif|fi|for|in|do|done|while|case|esac|function|return|export|local|source|echo|cd|ls|cat|grep|sed|awk|curl|make|gcc|git|sudo|apt|npm|python3|pip|go|docker|kubectl|systemctl',
+    sql: 'SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|INDEX|ALTER|DROP|PRIMARY|KEY|FOREIGN|REFERENCES|NOT|NULL|DEFAULT|UNIQUE|ON|USING|WITH|JOIN|LEFT|INNER|GROUP|ORDER|BY|LIMIT|AND|OR|IN|AS|BEGIN|COMMIT|TEXT|INTEGER|BOOLEAN|TIMESTAMP',
+    lisp: 'define|lambda|let|let\\*|letrec|if|cond|else|case|when|unless|begin|set!|quote|quasiquote|unquote|and|or|not|car|cdr|cons|list|append|map|for-each|apply|null\\?|eq\\?|equal\\?|display|newline|define-syntax|syntax-rules|do|delay|force',
+    css: 'important|media|import|keyframes|supports|font-face|root|hover|focus|before|after|not|nth-child',
+    json: 'true|false|null',
+    yaml: 'true|false|null|yes|no|on|off',
+    http: 'GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|HTTP',
+    bas: 'PRINT|INPUT|LET|IF|THEN|ELSE|GOTO|GOSUB|RETURN|FOR|TO|STEP|NEXT|WHILE|WEND|DIM|END|STOP|REM|DATA|READ|RESTORE|DEF|FN|ON|CLS|RUN|LIST|LOAD|SAVE|NEW|AND|OR|NOT|MOD'
+  };
+  //  lc = 줄 주석 접두사들 · bc = /* */ 블록 주석 · bt = 백틱 문자열
+  //  tq = 파이썬 삼중 따옴표 · tag = HTML/XML 태그 · header = HTTP 헤더 이름
+  var CFG = {
+    js:   { lc: ['//'], bc: 1, bt: 1, kw: KW.js },
+    ts:   { lc: ['//'], bc: 1, bt: 1, kw: KW.ts },
+    py:   { lc: ['#'], tq: 1, kw: KW.py },
+    c:    { lc: ['//'], bc: 1, kw: KW.c, pp: 1 },
+    cpp:  { lc: ['//'], bc: 1, kw: KW.cpp, pp: 1 },
+    go:   { lc: ['//'], bc: 1, bt: 1, kw: KW.go },
+    rust: { lc: ['//'], bc: 1, kw: KW.rust },
+    java: { lc: ['//'], bc: 1, kw: KW.java },
+    lua:  { lc: ['--'], kw: KW.lua },
+    rb:   { lc: ['#'], kw: KW.rb },
+    sh:   { lc: ['#'], kw: KW.sh },
+    sql:  { lc: ['--'], bc: 1, kw: KW.sql },
+    lisp: { lc: [';'], kw: KW.lisp },
+    html: { tag: 1, kw: '' },
+    xml:  { tag: 1, kw: '' },
+    css:  { bc: 1, kw: KW.css },
+    json: { lc: ['//'], kw: KW.json },
+    yaml: { lc: ['#'], kw: KW.yaml },
+    http: { lc: ['#'], kw: KW.http, header: 1 },
+    bas:  { lc: ["'"], kw: KW.bas },
+    make: { lc: ['#'], kw: KW.sh },
+    text: { kw: '' }
+  };
+  var ALIAS = {
+    javascript: 'js', typescript: 'ts', python: 'py', shell: 'sh', bash: 'sh', zsh: 'sh',
+    'c++': 'cpp', cc: 'cpp', h: 'c', golang: 'go', ruby: 'rb', scheme: 'lisp', racket: 'lisp',
+    clojure: 'lisp', el: 'lisp', basic: 'bas', htm: 'html', yml: 'yaml', makefile: 'make',
+    gomod: 'text', diff: 'text', ini: 'yaml', toml: 'yaml'
+  };
+
+  function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  var cache = {};
+  function reFor(lang) {
+    if (cache[lang]) return cache[lang];
+    var c = CFG[lang] || CFG.text, p = [];
+    if (c.tag) p.push('<' + '!--[\\s\\S]*?--' + '>');
+    if (c.bc) p.push('/\\*[\\s\\S]*?\\*/');
+    (c.lc || []).forEach(function (x) { p.push(escRe(x) + '[^\\n]*'); });
+    if (c.tq) { p.push('"""[\\s\\S]*?"""'); p.push("'''[\\s\\S]*?'''"); }
+    if (c.pp) p.push('^\\s*#\\s*[a-z]+');
+    if (c.header) p.push('^[A-Za-z][A-Za-z0-9-]*(?=:)');
+    if (c.tag) p.push('</?[A-Za-z][A-Za-z0-9-]*');
+    p.push('"(?:\\\\.|[^"\\\\\\n])*"');
+    p.push("'(?:\\\\.|[^'\\\\\\n])*'");
+    if (c.bt) p.push('`(?:\\\\.|[^`\\\\])*`');
+    p.push('\\b\\d[\\dA-Fa-fx_]*(?:\\.\\d+)?\\b');
+    if (c.kw) p.push('\\b(?:' + c.kw + ')\\b');
+    if (!c.tag) p.push('[A-Za-z_$][\\w$]*(?=\\s*\\()');
+    cache[lang] = { re: new RegExp(p.join('|'), 'gm'), cfg: c };
+    return cache[lang];
+  }
+
+  function classify(tok, c) {
+    var ch = tok[0];
+    if (tok.indexOf('/*') === 0 || tok.indexOf('<!--') === 0) return 'cm';
+    for (var i = 0; i < (c.lc || []).length; i++) if (tok.indexOf(c.lc[i]) === 0) return 'cm';
+    if (ch === '<') return 'kw';
+    if (ch === '"' || ch === "'" || ch === '`') return 'st';
+    if (ch >= '0' && ch <= '9') return 'nu';
+    if (tok.charAt(0) === '#' || /^\s*#/.test(tok)) return 'kw';
+    if (c.kw && new RegExp('^(?:' + c.kw + ')$').test(tok)) return 'kw';
+    if (c.header && /^[A-Za-z][A-Za-z0-9-]*$/.test(tok)) return 'hd';
+    return 'fn';
+  }
+
+  function hl(el) {
+    if (el.dataset.hl) return;
+    el.dataset.hl = '1';
+    var lang = (el.dataset.lang || 'text').toLowerCase();
+    lang = ALIAS[lang] || lang;
+    var info = reFor(lang), src = el.textContent, out = '', last = 0, m;
+    info.re.lastIndex = 0;
+    while ((m = info.re.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      out += '<span class="' + classify(m[0], info.cfg) + '">' + esc(m[0]) + '</span>';
+      last = m.index + m[0].length;
+      if (m[0].length === 0) info.re.lastIndex++;
+    }
+    el.innerHTML = out + esc(src.slice(last));
+  }
+
+  window.__highlight = function (root) {
+    (root || document).querySelectorAll('pre > code[data-lang]').forEach(hl);
+  };
+})();
+</script>
+
+<!-- ============================================================
+     데모 프레임워크 — __demo(id, fn) 로 등록하면 해당 슬라이드가
+     처음 열릴 때 한 번 배선된다. 퀴즈(.quiz[data-quiz])도 여기서 처리.
+     ============================================================ -->
+<script>
+(function () {
+  'use strict';
+  var REG = Object.create(null);
+  window.__demo = function (id, fn) { REG[id] = fn; };
+
+  function out(host) { return host.querySelector('.out'); }
+  function w(host, html, cls) {
+    var o = out(host); if (!o) return;
+    o.innerHTML = cls ? '<span class="' + cls + '">' + html + '</span>' : html;
+  }
+  function add(host, html, cls) {
+    var o = out(host); if (!o) return;
+    o.innerHTML += (o.innerHTML ? '\n' : '') + (cls ? '<span class="' + cls + '">' + html + '</span>' : html);
+  }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function num(n) {
+    if (typeof n !== 'number') return String(n);
+    if (!isFinite(n)) return n > 0 ? 'inf' : (n < 0 ? '-inf' : 'nan');
+    if (Number.isInteger(n) && Math.abs(n) < 1e15) return String(n);
+    return String(Number(n.toPrecision(6)));
+  }
+  function show(v) {
+    if (v === null || v === undefined) return 'null';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    if (typeof v === 'number') return num(v);
+    if (Array.isArray(v)) return '[' + v.map(show).join(', ') + ']';
+    return String(v);
+  }
+  var api = { w: w, add: add, esc: esc, show: show, num: num, out: out };
+  window.__api = api;
+
+  window.__initDemos = function (root) {
+    var scope = root || document;
+    // 루트 자신이 대상일 수도 있다 (예: <article class="card quiz" data-quiz>)
+    function all(sel) {
+      var list = [].slice.call(scope.querySelectorAll(sel));
+      if (scope.matches && scope.matches(sel)) list.unshift(scope);
+      return list;
+    }
+    all('.demo[data-demo]').forEach(function (host) {
+      if (host.dataset.wired) return;
+      host.dataset.wired = '1';
+      var fn = REG[host.getAttribute('data-demo')];
+      if (!fn) return;
+      try { fn(host, api); } catch (e) { w(host, '데모 오류: ' + esc(e.message), 'bad'); }
+    });
+    all('.quiz[data-quiz]').forEach(function (q) {
+      if (q.dataset.wired) return;
+      q.dataset.wired = '1';
+      var b = q.querySelector('button');
+      if (!b) return;
+      b.addEventListener('click', function () {
+        q.classList.toggle('open');
+        b.textContent = q.classList.contains('open') ? '답 숨기기' : '답 보기';
+      });
+    });
+  };
+})();
+</script>
+
+<!-- ===== 덱마다 다른 부분: 데모 함수들 — deck/demos.js 를 빌더가 여기에 넣는다 ===== -->
+<script>
+
+</script>
+<!-- ===== 하단 내비 · 목차 오버레이 (id 는 입력 셸이 찾는 이름이므로 바꾸지 말 것) ===== -->
+<nav id="deckNav">
+  <button id="prevBtn" aria-label="이전 슬라이드">◀</button>
+  <span id="counter">1 / 1</span>
+  <button id="nextBtn" aria-label="다음 슬라이드">▶</button>
+</nav>
+<div id="deckToc">
+  <h3>📑 전체 목차</h3>
+  <div id="tocBody"></div>
+  <button id="tocClose">닫기</button>
+</div>
+
+<!-- ============================================================
+     슬라이드 엔진 — 페이지 번호 자동 부여, 목차 생성, 해시 내비게이션,
+     진행 막대, 키보드·스와이프. 덱을 만들 때 고칠 일이 없다.
+     ============================================================ -->
+<script>
+(function () {
+  var slides = [].slice.call(document.querySelectorAll('main > article'));
+  if (!slides.length) return;
+  var TOTAL = slides.length;
+  var stage = document.querySelector('main');
+  var bar = document.getElementById('bar');
+  var counter = document.getElementById('counter');
+  var toc = document.getElementById('deckToc');
+  var prevBtn = document.getElementById('prevBtn');
+  var nextBtn = document.getElementById('nextBtn');
+  var sel = document.getElementById('nav');
+  var cur = 0;
+
+  // ---- 페이지 번호 자동 부여 (하드코딩 금지의 이유) ----
+  slides.forEach(function (s, i) {
+    var p = document.createElement('span');
+    p.className = 'pno'; p.textContent = i + 1; s.prepend(p);
+  });
+
+  var idx = new Map();
+  slides.forEach(function (s, i) { idx.set(s.id, i); });
+  // 슬라이드 안쪽 요소의 id 도 해당 슬라이드로 매핑 — 상호참조 링크 대응
+  var sub = new Map();
+  slides.forEach(function (s, i) {
+    s.querySelectorAll('[id]').forEach(function (el) {
+      if (!idx.has(el.id) && !sub.has(el.id)) sub.set(el.id, i);
+    });
+  });
+
+  // ---- 챕터 그룹: .section 슬라이드가 새 그룹을 연다 ----
+  var secOf = [], secTitle = '표지';
+  slides.forEach(function (s, i) {
+    if (s.classList.contains('section') && !s.classList.contains('cover')) {
+      var h = s.querySelector('h1, h2');
+      secTitle = h ? h.textContent.replace(/\s+/g, ' ').trim() : '';
+    }
+    secOf[i] = secTitle;
+  });
+
+  // ---- 목차 오버레이 생성 ----
+  var tocBody = document.getElementById('tocBody');
+  var curSec = null, secDiv = null;
+  slides.forEach(function (s, i) {
+    if (secOf[i] !== curSec) {
+      curSec = secOf[i];
+      secDiv = document.createElement('div');
+      secDiv.className = 'tocsec';
+      var h4 = document.createElement('h4');
+      h4.textContent = curSec;
+      secDiv.appendChild(h4);
+      tocBody.appendChild(secDiv);
+    }
+    var a = document.createElement('a');
+    a.href = '#' + s.id;
+    a.dataset.go = i;
+    var b = document.createElement('b');
+    b.textContent = i + 1;
+    a.appendChild(b);
+    var h = s.querySelector('h1, h2, h3');
+    a.append(h ? h.textContent.replace(/\s+/g, ' ').trim() : '(제목 없음)');
+    secDiv.appendChild(a);
+  });
+
+  // ---- 슬라이드 전환 ----
+  function show(i, push) {
+    i = Math.max(0, Math.min(TOTAL - 1, i));
+    if (i === cur && push !== 'force') { sync(); return; }
+    slides[cur].classList.remove('on');
+    cur = i;
+    slides[cur].classList.add('on');
+    stage.scrollTop = 0;
+    sync();
+    if (push !== false) history.replaceState(null, '', '#' + slides[cur].id);
+  }
+  function jump(id, push) {
+    if (idx.has(id)) { show(idx.get(id), push); return true; }
+    if (sub.has(id)) {
+      show(sub.get(id), push);
+      var el = document.getElementById(id);
+      if (el) requestAnimationFrame(function () { el.scrollIntoView({ block: 'start' }); });
+      return true;
+    }
+    return false;
+  }
+  function sync() {
+    bar.style.width = ((cur + 1) / TOTAL * 100) + '%';
+    counter.textContent = (cur + 1) + ' / ' + TOTAL;
+    prevBtn.disabled = cur === 0;
+    nextBtn.disabled = cur === TOTAL - 1;
+    // 지금 보이는 슬라이드만 하이라이팅·데모 배선 (첫 진입에서 한 번)
+    if (window.__highlight) window.__highlight(slides[cur]);
+    if (window.__initDemos) window.__initDemos(slides[cur]);
+  }
+
+  // ---- 입력 ----
+  prevBtn.onclick = function () { show(cur - 1); };
+  nextBtn.onclick = function () { show(cur + 1); };
+  document.getElementById('tocBtn').onclick = function () { toc.classList.add('on'); };
+  document.getElementById('tocClose').onclick = function () { toc.classList.remove('on'); };
+  toc.addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-go]');
+    if (!a) return;
+    e.preventDefault();
+    toc.classList.remove('on');
+    show(+a.dataset.go);
+  });
+  if (sel) sel.addEventListener('change', function (e) {
+    if (idx.has(e.target.value)) show(idx.get(e.target.value));
+    e.target.selectedIndex = 0;
+  });
+
+  // 본문 안 앵커 클릭도 슬라이드 점프로
+  stage.addEventListener('click', function (e) {
+    var a = e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var id = decodeURIComponent(a.getAttribute('href').slice(1));
+    if (jump(id)) e.preventDefault();
+  });
+
+  addEventListener('keydown', function (e) {
+    if (toc.classList.contains('on')) {
+      if (e.key === 'Escape') toc.classList.remove('on');
+      return;
+    }
+    if (e.target === sel) return;
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ') { show(cur + 1); e.preventDefault(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp') { show(cur - 1); e.preventDefault(); }
+    else if (k === 'Home') { show(0); e.preventDefault(); }
+    else if (k === 'End') { show(TOTAL - 1); e.preventDefault(); }
+    else if (k === 't' || k === 'T') { toc.classList.toggle('on'); }
+  });
+
+  // 스와이프 — 코드·표·데모의 가로 스크롤과 충돌하지 않게 걸러낸다
+  var tx = 0, ty = 0, tt = 0, guard = false;
+  stage.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) { guard = true; return; }
+    var t = e.touches[0];
+    guard = !!e.target.closest('pre, .tblwrap, .demo, .term, .sig, .pkgtree');
+    tx = t.clientX; ty = t.clientY; tt = Date.now();
+  }, { passive: true });
+  stage.addEventListener('touchend', function (e) {
+    if (guard) return;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - tx, dy = t.clientY - ty;
+    if (Date.now() - tt < 600 && Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.8)
+      show(cur + (dx < 0 ? 1 : -1));
+  }, { passive: true });
+
+  // ---- 시작 슬라이드: URL 해시 우선 ----
+  var h0 = decodeURIComponent(location.hash.slice(1));
+  cur = idx.has(h0) ? idx.get(h0) : (sub.has(h0) ? sub.get(h0) : 0);
+  slides[cur].classList.add('on');
+  sync();
+  addEventListener('hashchange', function () {
+    jump(decodeURIComponent(location.hash.slice(1)), false);
+  });
+})();
+</script>
+<!-- ===== deck-input-shim v1 : 방향키(↑↓ 스크롤 / ←→ 페이지) + 게임패드 ===== -->
+<script>
+(function () {
+  'use strict';
+  if (window.__deckInputShim) return;
+  window.__deckInputShim = true;
+
+  /* ---------- 지금 보이는 슬라이드의 스크롤 컨테이너 찾기 ---------- */
+  function scrollableAt(x, y) {
+    if (!document.elementFromPoint) return null;
+    var n = document.elementFromPoint(x, y);
+    while (n && n !== document.documentElement) {
+      var oy = getComputedStyle(n).overflowY;
+      if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+          n.scrollHeight - n.clientHeight > 4) return n;
+      n = n.parentElement;
+    }
+    return null;
+  }
+  function scroller() {
+    var el = scrollableAt(innerWidth / 2, innerHeight / 2) ||
+             scrollableAt(innerWidth / 2, innerHeight * 0.35);
+    if (el) return el;
+    var m = document.querySelector('main');
+    if (m && m.scrollHeight - m.clientHeight > 4) return m;
+    return document.scrollingElement || document.documentElement;
+  }
+  function viewH(el) {
+    return (el === document.scrollingElement || el === document.documentElement)
+      ? innerHeight : el.clientHeight;
+  }
+  function isPageScroller(el) {
+    return el === document.scrollingElement || el === document.documentElement || el === document.body;
+  }
+  function scrollStep(dir, smooth) {
+    var el = scroller();
+    el.scrollBy({ top: dir * Math.max(80, viewH(el) * 0.25),
+                  left: 0, behavior: smooth ? 'smooth' : 'auto' });
+  }
+
+  /* ---------- 페이지 이동 (덱마다 다른 엔진에 공통으로 붙는다) ---------- */
+  function pick(ids) {
+    for (var i = 0; i < ids.length; i++) {
+      var e = document.getElementById(ids[i]);
+      if (e && (e.tagName === 'BUTTON' || e.tagName === 'A')) return e;
+    }
+    return null;
+  }
+  function synth(key) {
+    document.dispatchEvent(new KeyboardEvent('keydown',
+      { key: key, code: key, bubbles: true, cancelable: true }));
+  }
+  function page(dir) {
+    var b = dir > 0 ? pick(['nextBtn', 'btnNext', 'next'])
+                    : pick(['prevBtn', 'btnPrev', 'prev']);
+    if (b) { if (!b.disabled) b.click(); }
+    else synth(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+  }
+  function toggleToc() {
+    var b = pick(['tocBtn', 'btnToc', 'toc-btn', 'tocOpen']);
+    if (b) b.click(); else synth('t');
+  }
+
+  /* ---------- 키보드: ↑↓ = 스크롤 (←→ 페이지는 각 덱 엔진이 처리) ---------- */
+  function interactive(el) {
+    if (!el) return false;
+    var t = (el.tagName || '').toUpperCase();
+    return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' ||
+           t === 'CANVAS' || el.isContentEditable === true;
+  }
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if (e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    if (interactive(e.target) || interactive(document.activeElement)) return;
+    var dir = e.key === 'ArrowDown' ? 1 : -1, repeat = e.repeat;
+    // 이벤트 전파가 끝난 뒤에 판단한다 — 슬라이드 안의 데모(테트리스 등)가
+    // 이 키를 가져갔으면(preventDefault) 스크롤하지 않는다.
+    setTimeout(function () {
+      if (e.defaultPrevented) return;
+      // 문서 자체가 스크롤되는 덱은 브라우저 기본 동작에 맡긴다(이중 스크롤 방지).
+      if (isPageScroller(scroller())) return;
+      scrollStep(dir, !repeat);
+    }, 0);
+  });
+
+  /* ---------- 게임패드 (조이패드) ----------
+     좌스틱/D-pad 상하 = 스크롤, 좌우 = 이전/다음 페이지
+     A·RB·RT = 다음, B·LB·LT = 이전, X·Start = 목차, Back = 첫 장     */
+  var DEAD = 0.4, REPEAT = 320, held = {}, lastTurn = 0, lastDir = 0, raf = 0;
+
+  function pads() {
+    if (!navigator.getGamepads) return [];
+    var out = [], g = navigator.getGamepads();
+    for (var i = 0; i < g.length; i++) if (g[i]) out.push(g[i]);
+    return out;
+  }
+  function down(g, i) { var b = g.buttons[i]; return !!b && (b.pressed || b.value > 0.5); }
+  function edge(name, isDown, fn) {
+    if (isDown) { if (!held[name]) { held[name] = 1; fn(); } }
+    else held[name] = 0;
+  }
+
+  function poll(now) {
+    var list = pads();
+    if (!list.length) { raf = 0; return; }
+    raf = requestAnimationFrame(poll);
+
+    var ax = 0, ay = 0, bNext = false, bPrev = false, bToc = false, bHome = false;
+    for (var k = 0; k < list.length; k++) {
+      var g = list[k];
+      ax += g.axes[0] || 0;
+      ay += g.axes[1] || 0;
+      if (down(g, 15)) ax += 1;
+      if (down(g, 14)) ax -= 1;
+      if (down(g, 13)) ay += 1;
+      if (down(g, 12)) ay -= 1;
+      bNext = bNext || down(g, 0) || down(g, 5) || down(g, 7);
+      bPrev = bPrev || down(g, 1) || down(g, 4) || down(g, 6);
+      bToc  = bToc  || down(g, 2) || down(g, 9);
+      bHome = bHome || down(g, 8);
+    }
+
+    if (Math.abs(ay) > DEAD) {                       // 세로: 부드러운 연속 스크롤
+      var mag = Math.min(1, (Math.abs(ay) - DEAD) / (1 - DEAD));
+      scroller().scrollBy(0, (ay > 0 ? 1 : -1) * (6 + mag * 22));
+    }
+    var dir = Math.abs(ax) > DEAD ? (ax > 0 ? 1 : -1) : 0;
+    if (dir) {                                       // 가로: 페이지 넘김(리핏 간격)
+      if (dir !== lastDir || now - lastTurn > REPEAT) {
+        lastDir = dir; lastTurn = now; page(dir);
+      }
+    } else { lastDir = 0; lastTurn = 0; }
+
+    edge('next', bNext, function () { page(1); });
+    edge('prev', bPrev, function () { page(-1); });
+    edge('toc',  bToc,  toggleToc);
+    edge('home', bHome, function () { synth('Home'); });
+  }
+
+  function start() { if (!raf) raf = requestAnimationFrame(poll); }
+  addEventListener('gamepadconnected', start);
+  addEventListener('focus', function () { if (pads().length) start(); });
+  if (pads().length) start();
+})();
+</script>
+<!-- ===== deck-bookmark-shim v3 : IndexedDB 책갈피(읽던 위치 자동 저장 + 이어보기) ===== -->
+<script>
+(function () {
+  'use strict';
+  if (window.__deckBookmarkShim) return;
+  window.__deckBookmarkShim = true;
+  if (!window.indexedDB) return;
+
+  var DB_NAME = 'treasure-house', DB_VER = 1, STORE = 'bookmarks';
+
+  var FILE = location.pathname.split('/').pop() || '';
+  try { FILE = decodeURIComponent(FILE); } catch (e) {}
+  if (!FILE || /^index\.html?$/i.test(FILE)) return;   // 포털(index.html)은 저장하지 않는다
+
+  /* ---------- IndexedDB 래퍼 ----------
+     · 실패한 연결은 캐시하지 않는다 — blocked처럼 일시적인 실패 뒤에 다시 시도한다
+     · 버전 변경·저장공간 회수·사이트 데이터 삭제로 연결이 끊기면 버리고 다시 연다
+     · 계속 막히는 환경(file://·시크릿·사이트 데이터 차단)이면 3번 만에 단념하고,
+       첫 실패 한 번만 콘솔에 남긴다 — 화면에는 아무것도 띄우지 않는다              */
+  var dbp = null, conn = null, fails = 0, warned = false, deadp = null;
+
+  function warn(e) {
+    if (warned) return;
+    warned = true;
+    try { console.warn('[bookmark] 책갈피를 건너뜁니다 — IndexedDB 사용 불가:', e); } catch (x) {}
+  }
+  function drop(c) { if (conn === c) { dbp = null; conn = null; } }
+  function dead() {
+    if (!deadp) {
+      deadp = Promise.reject(new Error('bookmark: IndexedDB unavailable'));
+      deadp.catch(function () {});             // 미처리 거부 경고 방지
+    }
+    return deadp;
+  }
+  function db() {
+    if (fails >= 3) return dead();
+    if (dbp) return dbp;
+    var p = dbp = new Promise(function (res, rej) {
+      var req;
+      try { req = indexedDB.open(DB_NAME, DB_VER); } catch (e) { rej(e); return; }
+      req.onupgradeneeded = function () {
+        var d = req.result;
+        if (!d.objectStoreNames.contains(STORE))
+          d.createObjectStore(STORE, { keyPath: 'id' }).createIndex('updated', 'updated');
+      };
+      req.onsuccess = function () {
+        var d = req.result;
+        conn = d; fails = 0;
+        d.onversionchange = function () { drop(d); try { d.close(); } catch (x) {} };
+        d.onclose         = function () { drop(d); };
+        res(d);
+      };
+      req.onerror   = function () { rej(req.error || new Error('open error')); };
+      req.onblocked = function () { rej(new Error('open blocked')); };
+    });
+    p.catch(function (e) {
+      fails++;
+      if (dbp === p) { dbp = null; conn = null; }
+      warn(e);
+    });
+    return p;
+  }
+  function tx(mode, fn) {
+    return db().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t, r;
+        // 닫힌 연결이면 여기서 InvalidStateError가 난다 — 버리고 다음 호출에서 다시 연다
+        try { t = d.transaction(STORE, mode); r = fn(t.objectStore(STORE)); }
+        catch (e) { drop(d); rej(e); return; }
+        t.oncomplete = function () { res(r ? r.result : undefined); };
+        t.onerror    = function () { rej(t.error || new Error('tx ' + mode + ' error')); };
+        t.onabort    = function () { rej(t.error || new Error('tx ' + mode + ' aborted')); };
+      });
+    }).catch(function (e) { warn(e); throw e; });
+  }
+  function save(rec) { return tx('readwrite', function (os) { return os.put(rec); }); }
+  function load(id)  { return tx('readonly',  function (os) { return os.get(id); }); }
+
+  /* ---------- 지금 읽고 있는 위치 ---------- */
+  var ACTIVE = ['on', 'active', 'current', 'shown', 'is-active'];
+
+  function slides() {                          // 슬라이드 덱이면 슬라이드 목록, 아니면 null
+    var sel = ['main > article', '.slide'];
+    for (var i = 0; i < sel.length; i++) {
+      var n = document.querySelectorAll(sel[i]);
+      if (n.length > 1) return n;
+    }
+    return null;
+  }
+  function activeIndex(list) {                 // 활성 클래스 → URL 해시 순으로 판별
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i].classList;
+      for (var j = 0; j < ACTIVE.length; j++) if (c.contains(ACTIVE[j])) return i;
+    }
+    var id = location.hash.slice(1);
+    try { id = decodeURIComponent(id); } catch (e) {}
+    if (id) for (var k = 0; k < list.length; k++) if (list[k].id === id) return k;
+    return -1;
+  }
+  function visibleIndex(list) {                // 전 슬라이드가 이어서 흐르는 덱용 보조 판별
+    var best = -1, near = Infinity, h = window.innerHeight || 800;
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i].getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= h) continue;
+      var d = Math.abs(r.top);
+      if (d < near) { near = d; best = i; }
+    }
+    return best;
+  }
+  /* 한 장씩 그려내는 덱(stage.innerHTML = 슬라이드 하나)은 DOM에 슬라이드가
+     늘 하나뿐이라 slides()가 null이다 — v2가 이런 덱 13종을 그냥 '긴 문서'로
+     보고 scrollY 0만 저장해 책갈피가 아예 남지 않았다. 대신 화면의 쪽 표시
+     ('7 / 503')를 읽어 몇 쪽인지 알아낸다.                                  */
+  var cntEl = null;
+  var CNT = /^\s*(\d+)\s*\/\s*(\d+)\s*$/;
+  function counter() {
+    if (cntEl && cntEl.isConnected && CNT.test(cntEl.textContent || '')) return cntEl;
+    cntEl = null;
+    var n = document.querySelectorAll('span, div, b, small, em, strong');
+    for (var i = 0, lim = Math.min(n.length, 4000); i < lim; i++) {
+      if (n[i].children.length) continue;
+      var t = n[i].textContent || '';
+      if (t.length > 16) continue;
+      var m = CNT.exec(t);
+      if (m && +m[2] > 1 && +m[1] >= 1 && +m[1] <= +m[2]) { cntEl = n[i]; break; }
+    }
+    return cntEl;
+  }
+  function vpage() {                           // 쪽 표시가 있으면 {page,total}, 없으면 null
+    var e = counter();
+    if (!e) return null;
+    var m = CNT.exec(e.textContent || '');
+    return m ? { page: +m[1], total: +m[2] } : null;
+  }
+  function heading() {                         // 긴 문서용 — 화면 상단을 지난 마지막 제목
+    var hs = document.querySelectorAll('h1[id],h2[id],h3[id]'), out = '';
+    for (var i = 0; i < hs.length; i++) {
+      if (hs[i].getBoundingClientRect().top <= 90) out = '#' + hs[i].id; else break;
+    }
+    return out;
+  }
+  function snap() {
+    var list = slides();
+    if (list) {
+      var i = activeIndex(list);
+      if (i < 0) i = visibleIndex(list);
+      if (i < 0) i = 0;
+      var el = list[i];
+      return { kind: 'slide', page: i + 1, total: list.length, scrollY: 0,
+               hash: el.id ? '#' + el.id : '', ratio: (i + 1) / list.length };
+    }
+    var v = vpage();                           // 한 장씩 그려내는 덱
+    if (v) {
+      return { kind: 'slide', page: v.page, total: v.total, scrollY: 0,
+               hash: location.hash.length > 1 ? location.hash : '',
+               ratio: v.page / v.total };
+    }
+    var se = document.scrollingElement || document.documentElement;
+    var max = Math.max(0, se.scrollHeight - se.clientHeight);
+    var y = Math.round(se.scrollTop || window.pageYOffset || 0);
+    return { kind: 'scroll', page: 0, total: 0, scrollY: y,
+             hash: heading(), ratio: max ? Math.min(1, y / max) : 0 };
+  }
+
+  /* ---------- 자동 저장 ----------
+     처음 상태는 기준선으로만 잡고 저장하지 않는다 — 첫 장으로 열자마자
+     지난번 책갈피를 1쪽으로 덮어쓰지 않기 위해서다.                        */
+  function sig(s) {
+    return s.kind + ':' + s.page + ':' + (s.kind === 'scroll' ? Math.round(s.scrollY / 40) : 0);
+  }
+  var last = sig(snap());
+  function tick(force) {
+    if (document.hidden && !force) return;
+    var s = snap(), cur = sig(s);
+    if (cur === last) return;
+    last = cur;
+    s.id = FILE;
+    s.title = (document.title || FILE).trim();
+    s.updated = Date.now();
+    // 저장이 실패하면 기준선을 풀어 다음 tick에서 다시 시도한다 — 연결이 끊겼다
+    // 다시 붙는 동안 그 한 번의 위치가 통째로 사라지지 않도록.
+    save(s).catch(function () { if (last === cur) last = ''; });
+  }
+  setInterval(tick, 1200);
+  addEventListener('hashchange', function () { tick(); });
+  addEventListener('visibilitychange', function () { if (document.hidden) tick(true); });
+  addEventListener('pagehide', function () { tick(true); });
+
+  /* ---------- 이어보기 ----------
+     덱 엔진마다 이동 방식이 달라서 세 단계로 시도한다.
+       ① 해시 지정 — hashchange를 듣는 엔진
+       ② 다음/이전 버튼 클릭 또는 ←→ 키 — 해시를 안 듣는 한 장씩 엔진
+       ③ scrollIntoView — 전 장이 이어서 흐르는 덱                        */
+  function navBtn(dir) {
+    var ids = dir > 0 ? ['nextBtn', 'btnNext', 'bNext', 'next', 'nextSlide']
+                      : ['prevBtn', 'btnPrev', 'bPrev', 'prev', 'prevSlide'];
+    for (var i = 0; i < ids.length; i++) {
+      var e = document.getElementById(ids[i]);
+      if (e && (e.tagName === 'BUTTON' || e.tagName === 'A')) return e;
+    }
+    return null;
+  }
+  function turn(dir) {
+    var b = navBtn(dir);
+    if (b) { if (!b.disabled) b.click(); return; }
+    var k = dir > 0 ? 'ArrowRight' : 'ArrowLeft';
+    document.dispatchEvent(new KeyboardEvent('keydown',
+      { key: k, code: k, bubbles: true, cancelable: true }));
+  }
+  function step(target) {                      // 목표 쪽까지 한 장씩 넘긴다
+    var guard = 400;
+    (function next() {
+      var l = slides();
+      if (!l || --guard <= 0) return;
+      var i = activeIndex(l);
+      if (i < 0 || i === target) return;
+      turn(i < target ? 1 : -1);
+      setTimeout(function () {
+        var l2 = slides();
+        if (!l2) return;
+        if (activeIndex(l2) === i) return;     // 안 움직이는 엔진이면 포기
+        next();
+      }, 30);
+    })();
+  }
+  /* 한 장씩 그려내는 덱으로 돌아가기 —
+       ① 엔진이 내놓은 window.__deckGo(0-기반 쪽 번호)  ② 해시  ③ 목차의 번호 입력칸
+       ④ 다음/이전 버튼을 한 장씩(안 움직이면 즉시 포기)                       */
+  function vjump(rec) {
+    var target = rec.page;
+    function at() { var v = vpage(); return v ? v.page : -1; }
+    if (at() === target) return;
+    if (typeof window.__deckGo === 'function') {
+      try { window.__deckGo(target - 1); } catch (e) {}
+      if (at() === target) return;
+    }
+    if (rec.hash && location.hash !== rec.hash) location.hash = rec.hash;
+    setTimeout(function () {
+      if (at() === target) return;
+      var n = document.getElementById('jumpN'), g = document.getElementById('jumpGo');
+      if (n && g) {
+        n.value = String(target);
+        try { g.click(); } catch (e) {}
+        if (at() === target) return;
+      }
+      var guard = 1200;
+      (function nextPage() {
+        var from = at();
+        if (from < 0 || from === target || --guard <= 0) return;
+        turn(from < target ? 1 : -1);
+        requestAnimationFrame(function () {
+          if (at() === from) return;           // 안 움직이는 엔진이면 포기
+          nextPage();
+        });
+      })();
+    }, 150);
+  }
+  function jump(rec) {
+    if (rec.kind !== 'slide') {
+      var se = document.scrollingElement || document.documentElement;
+      var max = Math.max(0, se.scrollHeight - se.clientHeight);
+      var y = rec.scrollY <= max ? rec.scrollY : Math.round(rec.ratio * max);
+      window.scrollTo({ top: y, behavior: 'smooth' });
+      return;
+    }
+    var list = slides();
+    if (!list) { vjump(rec); return; }
+    var target = Math.min(list.length, Math.max(1, rec.page)) - 1;
+    var el = (rec.hash && document.getElementById(rec.hash.slice(1))) || list[target];
+    if (!el) return;
+    var k = Array.prototype.indexOf.call(list, el);
+    if (k >= 0) target = k;
+    if (el.id && location.hash.slice(1) !== el.id) location.hash = '#' + el.id;
+    setTimeout(function () {
+      var l2 = slides();
+      if (!l2) return;
+      var i = activeIndex(l2);
+      if (i === target) return;                // ① 해시로 이동 성공
+      if (i >= 0) step(target);                // ② 한 장씩 넘기는 엔진
+      else el.scrollIntoView({ block: 'start' });   // ③ 이어서 흐르는 덱
+    }, 120);
+  }
+  function ago(t) {
+    var d = Date.now() - t;
+    if (d < 6e4)  return '방금 전';
+    if (d < 36e5) return Math.floor(d / 6e4) + '분 전';
+    if (d < 864e5) return Math.floor(d / 36e5) + '시간 전';
+    if (d < 6048e5) return Math.floor(d / 864e5) + '일 전';
+    return new Date(t).toLocaleDateString('ko-KR');
+  }
+  function bottomInset() {              // 화면 아래 고정 내비(◀ 1/67 ▶) 위로 띄우기
+    var h = window.innerHeight || 800, gap = 14;
+    if (!document.body) return gap;
+    var list = [], c;
+    for (c = document.body.firstElementChild; c; c = c.nextElementSibling) list.push(c);
+    var extra = document.querySelectorAll('nav, footer');
+    for (var i = 0; i < extra.length; i++) list.push(extra[i]);
+    for (var j = 0; j < list.length; j++) {
+      var n = list[j], t = n.tagName;
+      if (t === 'SCRIPT' || t === 'STYLE' || t === 'LINK') continue;
+      var cs = getComputedStyle(n);
+      if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+      if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) continue;
+      var r = n.getBoundingClientRect();
+      if (!r.height || r.height > h * 0.5 || r.bottom < h - 4 || r.top > h) continue;
+      gap = Math.max(gap, Math.round(h - r.top) + 10);
+    }
+    return gap;
+  }
+  function toast(rec) {
+    var gap = bottomInset();
+    var host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147483000;pointer-events:none';
+    var root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
+    var where = rec.kind === 'slide'
+      ? rec.page + ' / ' + rec.total + ' 쪽'
+      : Math.round(rec.ratio * 100) + '% 지점';
+    root.innerHTML =
+      '<style>' +
+      '.w{pointer-events:auto;display:flex;align-items:center;gap:10px;' +
+      'margin:0 auto calc(' + gap + 'px + env(safe-area-inset-bottom,0px));' +
+      'padding:10px 12px 10px 14px;max-width:min(94vw,460px);border-radius:14px;' +
+      'background:rgba(18,28,40,.94);color:#eaf3fb;font:500 14px/1.4 -apple-system,BlinkMacSystemFont,' +
+      '"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35);' +
+      'animation:up .22s ease-out}' +
+      '@keyframes up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}' +
+      '@media (prefers-reduced-motion:reduce){.w{animation:none}}' +
+      '.t{flex:1;min-width:0}.t b{display:block;font-weight:700}' +
+      '.t s{display:block;text-decoration:none;opacity:.72;font-size:12px;margin-top:2px}' +
+      'button{font:inherit;border:0;border-radius:9px;padding:8px 12px;cursor:pointer}' +
+      '.go{background:#4fc3f7;color:#06263a;font-weight:700}' +
+      '.no{background:transparent;color:#9fb6c9;padding:8px 6px}' +
+      '</style>' +
+      '<div class="w"><span aria-hidden="true">🔖</span>' +
+      '<div class="t"><b>지난번 ' + where + '까지 읽었어요</b><s>' + ago(rec.updated) + ' 저장됨</s></div>' +
+      '<button class="go" type="button">이어보기</button>' +
+      '<button class="no" type="button" aria-label="닫기">✕</button></div>';
+    function close() { if (host.parentNode) host.parentNode.removeChild(host); }
+    root.querySelector('.go').onclick = function () { close(); jump(rec); };
+    root.querySelector('.no').onclick = close;
+    document.body.appendChild(host);
+    setTimeout(close, 15000);
+  }
+
+  /* 딥링크로 열었으면 안내하지 않는다.
+     이때 location.hash는 못 쓴다 — 덱 엔진 대부분이 첫 장을 그리면서
+     history.replaceState('#top')로 주소를 먼저 바꿔 놓기 때문에, 이 셸이
+     도는 시점에는 늘 해시가 있는 것처럼 보인다(v1이 안내를 못 띄우던 원인).
+     그래서 <head>에서 미리 잡아둔 진입 해시를 쓰고, 없으면 내비게이션
+     타이밍의 원래 주소를 본다. */
+  function openedWithHash() {
+    if (typeof window.__deckInitHash === 'string') return window.__deckInitHash.length > 1;
+    try {
+      var e = performance.getEntriesByType('navigation')[0];
+      if (e && e.name) return new URL(e.name).hash.length > 1;
+    } catch (x) {}
+    return !!location.hash;
+  }
+  function initHash() {
+    if (typeof window.__deckInitHash === 'string' && window.__deckInitHash) return window.__deckInitHash;
+    try {
+      var e = performance.getEntriesByType('navigation')[0];
+      if (e && e.name) return new URL(e.name).hash;
+    } catch (x) {}
+    return location.hash;
+  }
+
+  if (!openedWithHash()) {
+    load(FILE).then(function (rec) {
+      if (!rec) return;
+      var worth = rec.kind === 'slide' ? rec.page > 1 : rec.scrollY > 200;
+      if (!worth) return;
+      // 덱이 스스로 지난 쪽을 복원해 이미 그 자리라면(주판 암산 교재 등) 굳이 묻지 않는다
+      var now = snap();
+      if (now.kind === rec.kind && rec.kind === 'slide' && now.page === rec.page) return;
+      toast(rec);
+    }).catch(function () {});
+  } else {
+    /* 포털의 🔖 링크처럼 '#s42'로 들어왔는데 엔진이 해시를 안 듣는 덱(한 장씩
+       그려내는 6종)은 1쪽에 머문다 — 안내도 안 뜨니 그 쪽으로 옮겨준다. */
+    var m = /^#s?(\d+)$/.exec(initHash() || '');
+    if (m) setTimeout(function () {
+      var v = slides() ? null : vpage();
+      if (v && +m[1] >= 1 && +m[1] <= v.total && v.page !== +m[1])
+        vjump({ page: +m[1], hash: initHash() });
+    }, 250);
+  }
+})();
+</script>
+</body>
+</html>
