@@ -1,0 +1,310 @@
+<article class="card section" id="part7">
+<p class="chnum">7부</p>
+<h2>GUI 셸</h2>
+<p class="chsub">툴킷 없이 만드는 인터페이스</p>
+</article>
+
+<article class="card" id="ch18">
+<p class="chnum">18장</p>
+<h2>위젯 트리</h2>
+<p class="chsub">사각형과 부모·자식, 그게 전부</p>
+</article>
+
+<article class="card" id="s7-notoolkit">
+<h3>도스에는 툴킷이 없었다</h3>
+<p>버튼도, 대화상자도, 이벤트 시스템도 없었습니다. 게임마다 직접 만들었고, 그래서 <b>GUI 코드가 게임 코드의 30~40%</b>를 차지하는 일이 흔했습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필요한 것</th><th>도스에서 직접 만든 것</th></tr>
+<tr><td>마우스 위치</td><td><code class="nb">INT 33h</code> AX=3 폴링</td></tr>
+<tr><td>클릭 판정</td><td>버튼 비트의 상승 에지를 직접 추적</td></tr>
+<tr><td>버튼 그리기</td><td>사각형 + 테두리 + 텍스트</td></tr>
+<tr><td>'어디를 눌렀나'</td><td>사각형 목록을 훑는 히트 테스트</td></tr>
+<tr><td>모달</td><td>플래그 하나로 아래 입력을 무시</td></tr>
+</table>
+</div>
+<div class="key"><b>이 문서의 GUI는 그때 코드의 골격을 그대로 옮겼습니다.</b> 위젯 트리 · 히트 테스트 · 상태 기계 · 명령 스택 — 넷이면 헥스 워게임의 인터페이스가 전부 만들어집니다.</div>
+</article>
+
+<article class="card" id="s7-loop">
+<h3>이벤트 루프의 모양</h3>
+<div class="g2">
+<div>
+<h4>도스식 (폴링)</h4>
+<p class="cap">↓ 관용구 발췌 — 이 저장소에서 실행되지 않습니다</p>
+<pre><code data-lang="c" data-illus="dos-idiom">for (;;) {
+  mouse_read(&amp;mx, &amp;my, &amp;btn);
+  if (btn &amp; 1 &amp;&amp; !prev_btn)
+     on_click(mx, my);
+  if (kbhit()) on_key(getch());
+  if (dirty) redraw();
+  prev_btn = btn;
+}</code></pre>
+</div>
+<div>
+<h4>이 문서 (이벤트 재생)</h4>
+<!--CODE file=py/hexwar/ui.py sym=Ui.handle lang=py note=-->
+</div>
+</div>
+<div class="note"><b>구조는 같습니다</b> — 입력 하나가 들어오면 상태를 바꾸고, 바뀌었으면 다시 그립니다. 다른 것은 입력이 <b>어디서 오는가</b>뿐입니다. 도스는 마우스 드라이버에서, 우리는 문자열 목록에서 옵니다. 이 분리가 나중에 <b>재생 가능한 테스트</b>를 공짜로 만들어 줍니다(14부).</div>
+</article>
+
+<article class="card" id="s7-widget">
+<h3>위젯 레코드</h3>
+<!--CODE file=py/hexwar/ui.py sym=Widget lang=py note=사각형 + 자식-->
+<div class="fig" data-svg="fig_widget.svg"></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드</th><th>쓰임</th></tr>
+<tr><td><code>id</code></td><td>클릭 처리에서 문자열로 분기 — 정수 상수보다 읽기 쉽다</td></tr>
+<tr><td><code>x,y,w,h</code></td><td>히트 테스트와 그리기 양쪽</td></tr>
+<tr><td><code>kind</code></td><td>어떻게 그릴지 · 클릭을 받는지</td></tr>
+<tr><td><code>visible</code></td><td>대화상자를 껐다 켜는 스위치</td></tr>
+<tr><td><code>enabled</code></td><td>회색 버튼 — 히트 테스트에서 통과시킨다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s7-build">
+<h3>배치는 코드에 박는다</h3>
+<!--CODE file=py/hexwar/ui.py sym=build_ui lang=py note=화면 배치-->
+<div class="tip"><b>왜 리소스 파일로 빼지 않는가</b> — 지원 해상도가 320×200 하나뿐이기 때문입니다. 해상도가 여럿이거나 지역화가 필요하면 그때 빼는 것이 맞습니다. 도스 게임에서도 대화상자 좌표를 <code class="nb">.RES</code> 파일로 빼는 경우는 <b>여러 언어판을 낼 때</b>가 대부분이었습니다.</div>
+</article>
+
+<article class="card" id="s7-hittest">
+<h3>히트 테스트 — 뒤에서 앞으로</h3>
+<!--CODE file=py/hexwar/ui.py sym=hit_test lang=py note=재귀 · 역순-->
+<div class="satisfy">
+<div class="bx"><h6>그리기</h6>부모 → 자식
+앞에서 뒤로
+(너비 우선)</div>
+<div class="mid">⇄</div>
+<div class="bx"><h6>히트 테스트</h6>자식 → 부모
+뒤에서 앞으로
+(깊이 우선 · 역순)</div>
+</div>
+<div class="key"><b>이 대칭 하나가 모달 대화상자를 공짜로 만듭니다.</b> 대화상자를 자식 목록의 <b>맨 뒤</b>에 두면, 그리기에서는 마지막에 그려져 위에 얹히고, 히트 테스트에서는 <b>가장 먼저</b> 검사되어 클릭을 가로챕니다. 별도의 '모달 플래그'가 없어도 겹침이 자연스럽게 처리됩니다.</div>
+<div class="warn"><b>단, 대화상자 밖 클릭은 따로 막아야 합니다.</b> 대화상자가 화면 전체를 덮지 않으므로, 그 바깥을 누르면 히트 테스트가 아래 위젯을 돌려줍니다. 그래서 상태가 <code class="nb">DIALOG</code>일 때는 <b>대화상자 안의 버튼이 아니면 전부 버립니다</b>.</div>
+</article>
+
+<article class="card" id="s7-modal">
+<h3>모달 처리</h3>
+<!--CODE file=py/hexwar/ui.py sym=Ui.on_click lang=py note=상태가 먼저-->
+<p>클릭 처리의 첫 분기가 <b>상태 검사</b>인 것이 핵심입니다. 위젯을 찾는 것보다 먼저, '지금 무엇을 받을 수 있는 상태인가'를 봅니다.</p>
+<!--CODE file=py/hexwar/ui.py sym=Ui.open_dialog..Ui.close_dialog lang=py note=열고 닫기-->
+<div class="note"><code class="nb">prev_state</code>를 저장했다 되돌리는 것이 요령입니다. 대화상자를 닫으면 <b>열기 전 상태로</b> 돌아가야 합니다 — 유닛을 고른 채로 '턴 종료?'를 열었다가 취소하면 선택이 유지되어야 합니다.</div>
+</article>
+
+<article class="card" id="ch19">
+<p class="chnum">19장</p>
+<h2>상태 기계</h2>
+<p class="chsub">같은 클릭이 상태에 따라 다른 뜻이 된다</p>
+</article>
+
+<article class="card" id="s7-fsm">
+<h3>다섯 가지 상태</h3>
+<div class="fig" data-svg="fig_fsm.svg"></div>
+<!--CODE file=py/hexwar/ui.py sym=IDLE..STATE_NAMES lang=py note=상태 상수-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>상태</th><th>지도 클릭의 뜻</th><th>나가는 길</th></tr>
+<tr><td>IDLE</td><td>아군을 고른다</td><td>선택 성공 → SELECTED</td></tr>
+<tr><td>SELECTED</td><td>이동 · 공격 · 다른 유닛 선택 · 해제</td><td>ESC · 빈 칸 · 행동 완료</td></tr>
+<tr><td>TARGETING</td><td>공격 대상만 받는다</td><td>ESC · 공격 실행</td></tr>
+<tr><td>DIALOG</td><td>무시 (모달)</td><td>YES · NO · ESC</td></tr>
+<tr><td>GAMEOVER</td><td>무시</td><td>없음</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s7-mapclick">
+<h3>지도 클릭 — 상태별 분기</h3>
+<!--CODE file=py/hexwar/ui.py sym=Ui.on_map_click lang=py note=한 함수에 전부-->
+<div class="key"><b>순서가 규칙입니다.</b> SELECTED에서 공격을 이동보다 먼저 검사합니다. 적이 서 있는 칸은 이동 오버레이에 들어가지 않으므로 실제로는 겹치지 않지만, <b>순서를 명시해 두면 나중에 규칙이 바뀌어도 의도가 남습니다</b>.</div>
+<div class="warn"><b>마지막 <code class="nb">deselect()</code>가 중요합니다</b> — 어떤 분기에도 걸리지 않은 클릭(빈 땅, 적 유닛, 안 보이는 칸)은 선택 해제입니다. 이 '기본 동작'을 빼먹으면 잘못 누른 뒤 빠져나갈 방법이 없어집니다.</div>
+</article>
+
+<article class="card" id="s7-select">
+<h3>선택 — 오버레이를 여기서 계산한다</h3>
+<!--CODE file=py/hexwar/ui.py sym=Ui.select lang=py note=이동 범위와 공격 대상-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>계산</th><th>언제</th><th>비용</th></tr>
+<tr><td>이동 범위</td><td>선택할 때 한 번</td><td>O(V+E+maxMP)</td></tr>
+<tr><td>공격 대상</td><td>선택할 때 한 번</td><td>O(유닛 수)</td></tr>
+<tr><td>그리기</td><td>매 프레임</td><td>집합 조회 O(1)</td></tr>
+</table>
+</div>
+<div class="tip"><b>'선택할 때 한 번'이 핵심입니다.</b> 매 프레임 이동 범위를 다시 계산하면 도스에서는 프레임이 죽습니다. 선택은 사람이 클릭할 때만 일어나므로, 그 순간에 비싼 계산을 몰아넣고 그 뒤로는 조회만 합니다.</div>
+<!--CODE file=py/hexwar/ui.py sym=Ui._attack_targets lang=py note=보이는 적만-->
+<div class="note"><b>안개에 가려진 적은 공격 대상이 아닙니다</b> — <code class="nb">fog[i] != FOG_VISIBLE</code>이면 건너뜁니다. 이 검사를 빼면 '보이지 않는 적을 클릭해서 위치를 알아내는' 치트가 생깁니다.</div>
+</article>
+
+<article class="card" id="s7-nextunit">
+<h3>다음 유닛 — 워게임의 관용 조작</h3>
+<!--CODE file=py/hexwar/ui.py sym=Ui.next_unit lang=py note=TAB-->
+<p>이동력이 남은 아군을 아이디 순으로 돌면서 카메라를 그 유닛에 맞춥니다. 유닛이 20개를 넘어가면 마우스로 하나씩 찾는 것이 고역이라, 이 키가 사실상 주 조작이 됩니다.</p>
+<div class="note"><b>순환의 시작점을 현재 선택에서 잡는 것</b>이 요령입니다. 매번 첫 유닛으로 돌아가면 TAB을 눌러도 제자리입니다. <code class="nb">ids.index(self.sel_unit)</code>가 없으면(선택이 없거나 이미 다 움직였으면) 첫 번째부터 시작합니다.</div>
+</article>
+
+<article class="card" id="s7-noflags">
+<h3>상태 기계 없이 짜면</h3>
+<div class="g2">
+<div class="cmp bad">
+<h5>✘ 플래그 지옥</h5>
+<pre><code data-lang="c" data-illus="anti-pattern">if (selected &amp;&amp; !targeting
+    &amp;&amp; !dialog_open
+    &amp;&amp; !animating
+    &amp;&amp; !game_over) {
+  ...
+}</code></pre>
+<p>플래그가 n개면 조합이 2ⁿ입니다. 대부분의 조합은 <b>불가능한 상태</b>인데 코드는 그것을 모릅니다.</p>
+</div>
+<div class="cmp good">
+<h5>✔ 상태 하나</h5>
+<pre><code data-lang="c" data-illus="pattern">switch (state) {
+  case SELECTED: ...
+  case TARGETING: ...
+  case DIALOG: ...
+}</code></pre>
+<p>가능한 상태가 정확히 열거되고, 전이가 눈에 보입니다.</p>
+</div>
+</div>
+<div class="key"><b>불가능한 상태를 표현할 수 없게 만드는 것</b>이 이 설계의 요점입니다. '선택되어 있으면서 동시에 대화상자가 열린' 상태는 존재하지 않아야 하는데, 플래그로는 그것을 표현할 수 있어 버립니다.</div>
+</article>
+
+<article class="card" id="ch20">
+<p class="chnum">20장</p>
+<h2>명령과 되돌리기</h2>
+<p class="chsub">640KB에서 언두를 구현하는 법</p>
+</article>
+
+<article class="card" id="s7-command">
+<h3>모든 상태 변화는 명령을 거친다</h3>
+<!--CODE file=py/hexwar/game.py sym=Command lang=py note=되돌리기에 필요한 최소 정보-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>저장하는 것</th><th>왜</th></tr>
+<tr><td>유닛의 이동력·참호·이동 여부</td><td>이동으로 바뀌므로</td></tr>
+<tr><td>출발·도착 인덱스</td><td>위치를 되돌리려고</td></tr>
+<tr><td>공격 전 체력·탄약 (양쪽)</td><td>전투로 바뀌므로</td></tr>
+<tr><td><b>난수 상태</b></td><td>주사위를 되돌리려고 — 아래 참조</td></tr>
+<tr><td>죽은 유닛의 전체 정보</td><td>부활시키려고</td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>저장하지 않는 것</th><th>왜</th></tr>
+<tr><td>안개 배열</td><td>다시 계산하는 편이 싸고 틀릴 여지가 없다</td></tr>
+<tr><td>이동 범위·오버레이</td><td>UI가 다시 계산한다</td></tr>
+<tr><td>화면</td><td>다시 그린다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s7-undo-rng">
+<h3>난수를 되돌리지 않으면 생기는 일</h3>
+<div class="warn"><b>공격 → 결과가 나쁨 → 무르기 → 다시 공격.</b> 난수 상태를 되돌리지 않으면 두 번째 공격의 주사위가 다릅니다. 플레이어는 <b>원하는 결과가 나올 때까지 무르고 다시 하면 됩니다.</b> 언두 기능이 그대로 치트가 됩니다.</div>
+<!--CODE file=py/hexwar/game.py sym=Game.attack lang=py note=명령을 만들고 난수를 저장-->
+<div class="key">해법은 간단합니다 — 명령을 만들 때 <code class="nb">rng.save()</code>로 상태를 적어 두고, 언두에서 <code class="nb">rng.restore()</code>합니다. LCG의 상태가 32비트 정수 하나라서 <b>4바이트</b>면 됩니다. 이것이 도스 게임들이 메르센 트위스터 같은 것을 쓰지 않은 실무적 이유이기도 합니다 — 상태가 크면 언두와 세이브가 모두 무거워집니다.</div>
+<!--CODE file=py/tests/test_engine.py sym=t_undo_attack_rng lang=py note=검사-->
+</article>
+
+<article class="card" id="s7-undo">
+<h3>되돌리기 구현</h3>
+<!--CODE file=py/hexwar/game.py sym=Game.undo lang=py note=명령 종류별로-->
+<div class="warn"><b>죽은 유닛을 되살리는 것이 가장 까다롭습니다.</b> 유닛 풀은 죽은 아이디를 프리 리스트에 넣어 재사용하므로, 부활시키려면 <b>프리 리스트에서 그 아이디를 빼내야</b> 합니다. 단일 연결 리스트라 앞 노드를 찾아 이어 줘야 합니다.</div>
+<!--CODE file=py/hexwar/game.py sym=Game._revive lang=py note=프리 리스트에서 빼내기-->
+<div class="note"><b>더 간단한 대안</b>은 죽은 유닛을 지우지 않고 <code class="nb">alive=False</code>로만 두는 것입니다. 그러면 부활이 플래그 하나이고, 대신 아이디가 재사용되지 않아 풀이 계속 자랍니다. 한 판이 20턴인 게임에서는 그쪽이 낫습니다 — 이 문서가 프리 리스트를 쓴 것은 <b>그 기법을 보여 주기 위해서</b>이고, 그 대가로 이 20줄이 생겼습니다.</div>
+</article>
+
+<article class="card" id="s7-fog-hole">
+<h3>안개는 복원하지 않는다 — 의도된 구멍</h3>
+<p>언두 뒤에 안개를 다시 계산하면, <b>정찰이 밝힌 지역은 그대로 남습니다.</b> 유닛은 제자리로 돌아갔는데 지도는 밝아진 채입니다.</p>
+<!--CODE file=py/tests/test_engine.py sym=t_undo_restores_everything lang=py note=성질로 못 박아 둔다-->
+<div class="key"><b>이것은 버그가 아니라 결정입니다.</b> 안개를 되돌리려면 432바이트를 명령마다 저장해야 하고, 그러면 언두 스택이 순식간에 커집니다. 도스 워게임들도 대부분 이 상태였고, '정찰 보내고 무르기'는 알려진 악용이었습니다. <b>중요한 것은 이것이 알려지지 않은 버그가 아니라 문서화된 성질이라는 점</b>입니다 — 테스트가 그 사실을 못 박습니다.</div>
+<div class="note"><b>제대로 막으려면</b> 안개를 '유닛이 본 것'이 아니라 '턴 시작 시점의 스냅샷 + 이번 턴의 관측'으로 나눠 두면 됩니다. 그러면 언두는 이번 턴 관측만 되돌리면 되고, 저장할 것도 훨씬 적습니다.</div>
+</article>
+
+<article class="card" id="s7-undo-clear">
+<h3>턴이 넘어가면 언두 스택을 버린다</h3>
+<!--CODE file=py/hexwar/game.py sym=Game.end_turn lang=py note=턴 경계-->
+<p>이유가 셋입니다.</p>
+<ol class="steps">
+<li><b>적의 수를 보고 무를 수 없어야 합니다.</b> 적 턴이 끝난 뒤 내 턴 행동을 무르면 완전한 치트입니다.</li>
+<li><b>턴 시작 처리가 여러 유닛을 한꺼번에 바꿉니다</b>(이동력 회복·참호·안개). 이것을 되돌리려면 명령 하나에 전체 상태가 들어가야 합니다.</li>
+<li><b>메모리</b> — 도스에서는 이것이 결정적이었습니다. 20턴 × 12유닛 × 명령 하나 100바이트면 24KB이고, 640KB에서 무시할 수 없습니다.</li>
+</ol>
+</article>
+
+<article class="card" id="ch21">
+<p class="chnum">21장</p>
+<h2>입력을 데이터로</h2>
+<p class="chsub">덤으로 얻는 데모 리플레이</p>
+</article>
+
+<article class="card" id="s7-events">
+<h3>이벤트 문자열이라는 인터페이스</h3>
+<!--CODE file=py/hexwar/ui.py sym=Ui.handle lang=py note=문자열 하나가 입력 하나-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이벤트</th><th>뜻</th></tr>
+<tr><td><code class="nb">click 128 84</code></td><td>화면 (128,84) 왼쪽 클릭</td></tr>
+<tr><td><code class="nb">key TAB</code></td><td>다음 유닛</td></tr>
+<tr><td><code class="nb">key E</code> / <code class="nb">key ENTER</code></td><td>턴 종료 대화상자 열기 / 확인</td></tr>
+<tr><td><code class="nb">key U</code></td><td>되돌리기</td></tr>
+<tr><td><code class="nb">render</code></td><td>이 시점의 화면을 해시로 남긴다</td></tr>
+<tr><td><code class="nb">ai</code></td><td>적군 턴 실행</td></tr>
+</table>
+</div>
+<div class="key"><b>입력을 문자열로 정의한 대가는 파싱 비용뿐이고, 얻는 것은 셋입니다.</b> ① 테스트가 사람의 조작을 그대로 재현할 수 있다. ② 세 언어가 <b>같은 입력</b>을 먹는다는 것이 자명해진다. ③ 데모 리플레이가 공짜로 생긴다.</div>
+</article>
+
+<article class="card" id="s7-record">
+<h3>스크립트 녹화 = 도스의 데모 리플레이</h3>
+<p>도스 게임의 데모(자동 시연)는 화면을 저장한 것이 아니라 <b>입력만 저장</b>한 것이었습니다. 엔진이 결정적이면 같은 입력에서 같은 화면이 나오므로, 리플레이 파일이 수십 KB면 충분했습니다.</p>
+<!--CODE file=tools/gen_script.py sym=Recorder.ensure_visible lang=py note=카메라 이동도 입력이다-->
+<div class="warn"><b>여기서 한 번 사고가 났습니다.</b> 처음 녹화기는 계획을 세우려고 <code class="nb">ui.select()</code>와 <code class="nb">ui.center_on()</code>을 직접 불렀습니다. 그 호출은 이벤트로 남지 않으므로, <b>재생할 때 카메라가 다른 자리에 있고 클릭 좌표가 엉뚱한 헥스를 가리켰습니다.</b> 규칙은 하나입니다 — <b>상태를 바꾸는 모든 것은 이벤트를 거친다.</b></div>
+<!--CODE file=golden/script.txt lines=1-10 lang=text note=녹화된 입력-->
+</article>
+
+<article class="card" id="s7-minimap">
+<h3>미니맵 클릭</h3>
+<!--CODE file=py/hexwar/ui.py sym=Ui.on_minimap lang=py note=2픽셀이 헥스 하나-->
+<!--CODE file=py/hexwar/ui.py sym=Ui.center_on lang=py note=중앙에 놓고 물리기-->
+<div class="tip"><b>물림(clamp)이 <code class="nb">center_on</code> 안에 있는 것이 중요합니다.</b> 지도 구석을 클릭하면 카메라가 범위를 벗어나는데, 호출자마다 물리게 하면 언젠가 한 곳을 빠뜨립니다. 카메라를 바꾸는 <b>모든 경로</b>가 같은 함수를 지나가게 두는 편이 안전합니다.</div>
+</article>
+
+<article class="card" id="s7-shot-dialog">
+<h3>모달 대화상자가 뜬 화면</h3>
+<img class="shot" data-shot="frame_76.png" alt="게임 화면">
+<p class="shotcap">76번째 입력 직후 — 오른쪽 패널의 상태 표시가 현재 FSM 상태를 그대로 보여 준다</p>
+<div class="note">패널 아래쪽에 <code class="nb">IDLE</code>·<code class="nb">SELECTED</code> 같은 상태 이름을 그대로 찍어 두었습니다. 디버그용이지만 실제로도 유용합니다 — 사용자가 '왜 클릭이 안 먹지'라고 느낄 때, 상태가 <code class="nb">TARGETING</code>이라는 것이 보이면 답이 됩니다.</div>
+</article>
+
+<article class="card quiz" id="s7-quiz1" data-quiz>
+<h3>퀴즈 1</h3>
+<p class="q">Q. 히트 테스트를 '앞에서 뒤로'(그리기와 같은 순서) 하면 무엇이 깨지는가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>겹친 위젯 중 아래 것이 클릭을 먹습니다.</b> 대화상자가 지도 위에 떠 있어도 지도가 먼저 검사되어, 대화상자 뒤의 지도를 클릭하게 됩니다. 나아가 부모를 자식보다 먼저 검사하면 <b>자식이 영원히 클릭을 못 받습니다</b> — 패널을 누르면 언제나 패널이지 버튼이 아닙니다. 그리기와 히트 테스트가 정확히 역순이어야 하는 이유입니다.</div>
+</article>
+
+<article class="card quiz" id="s7-quiz2" data-quiz>
+<h3>퀴즈 2</h3>
+<p class="q">Q. 언두를 '전체 상태 스냅샷'으로 구현하면 무엇이 좋고 무엇이 나쁜가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 좋은 점은 <b>정확성</b>입니다 — 안개든 무엇이든 빠짐없이 되돌아가고, 새 필드를 추가해도 언두 코드를 고칠 필요가 없습니다. 나쁜 점은 <b>크기</b>입니다. 이 게임의 전체 상태는 맵 432 + 안개 432 + 점유 864 + 유닛 64×~20 ≈ 3KB이고, 명령마다 3KB면 20턴에 수백 KB입니다. 640KB에서는 불가능했습니다. <b>지금이라면 스냅샷이 옳은 선택일 수 있습니다</b> — 메모리가 남고, 버그가 훨씬 적기 때문입니다. 제약이 사라지면 설계도 바뀌어야 합니다.</div>
+</article>
+
+<article class="card" id="s7-sum">
+<h3>7부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>조각</th><th>핵심</th></tr>
+<tr><td>위젯 트리</td><td>사각형 + 자식. 그리기와 히트 테스트가 정확히 역순</td></tr>
+<tr><td>상태 기계</td><td>같은 클릭에 다른 뜻. 불가능한 상태를 만들 수 없게</td></tr>
+<tr><td>명령 레코드</td><td>되돌리는 데 필요한 최소한 + <b>난수 상태</b></td></tr>
+<tr><td>이벤트 문자열</td><td>테스트·리플레이·언어 간 파리티가 전부 여기서 나온다</td></tr>
+</table>
+</div>
+</article>

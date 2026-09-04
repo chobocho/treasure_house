@@ -1,0 +1,74 @@
+// 데모를 브라우저 없이 실행해 본다 — 최소 DOM 스텁으로 예외만 잡는다.
+// (렌더 결과는 확인하지 못한다. 논리 오류가 아니라 '터지는지'를 본다.)
+'use strict';
+const fs = require('fs');
+
+const listeners = [];
+function stubCtx() {
+  const noop = () => {};
+  return new Proxy({}, {
+    get(_t, k) {
+      if (k === 'canvas') return null;
+      if (k === 'measureText') return () => ({ width: 10 });
+      return noop;
+    },
+    set() { return true; }
+  });
+}
+function mkEl(tag) {
+  const el = {
+    tagName: tag, style: {}, children: [], width: 0, height: 0,
+    getContext: () => stubCtx(),
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: el.width || 300, height: el.height || 200 }),
+    addEventListener: (t, f) => listeners.push([el, t, f]),
+    removeEventListener: () => {},
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    insertBefore: (n) => { el.children.push(n); return n; },
+    appendChild: (n) => { el.children.push(n); return n; },
+    setAttribute: () => {}, getAttribute: () => null,
+    textContent: ''
+  };
+  return el;
+}
+global.document = { createElement: mkEl };
+global.window = {
+  addEventListener: (t, f) => listeners.push([global.window, t, f]),
+  __demoRegistry: {}
+};
+global.window.__demo = (id, fn) => { global.window.__demoRegistry[id] = fn; };
+global.self = global.window;
+
+const src = fs.readFileSync(process.argv[2] || 'deck/demos.js', 'utf8');
+new Function('window', 'document', src)(global.window, global.document);
+
+const api = {
+  w: () => {}, add: () => {}, esc: (s) => s, show: () => {}
+};
+let ok = 0, bad = 0;
+for (const [id, fn] of Object.entries(global.window.__demoRegistry)) {
+  const host = mkEl('div');
+  host.querySelector = (sel) => (sel === '.out' ? mkEl('div') : null);
+  host.querySelectorAll = () => [];
+  try {
+    fn(host, api);
+    // 등록된 이벤트 핸들러를 몇 개 흉내내 본다
+    for (const [el, t, f] of listeners) {
+      if (el !== host && (t === 'mousemove' || t === 'click' || t === 'mousedown')) {
+        try { f({ clientX: 120, clientY: 90, preventDefault() {}, shiftKey: false }); } catch (e) {
+          console.log('  [' + id + '] ' + t + ' 핸들러에서 예외: ' + e.message);
+          bad++;
+        }
+      }
+    }
+    console.log('demo ' + id + ' OK');
+    ok++;
+  } catch (e) {
+    console.log('demo ' + id + ' 실패: ' + e.message);
+    console.log(e.stack.split('\n').slice(0, 4).join('\n'));
+    bad++;
+  }
+  listeners.length = 0;
+}
+console.log(ok + '개 통과 · ' + bad + '건 실패');
+process.exit(bad ? 1 : 0);

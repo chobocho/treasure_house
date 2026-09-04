@@ -1,0 +1,199 @@
+<article class="card section" id="part11">
+<p class="chnum">11부</p>
+<h2>파이썬 전문</h2>
+<p class="chsub">기준 구현 2,244줄 — 한 줄도 빠짐없이</p>
+</article>
+
+<article class="card" id="s11-map">
+<h3>모듈 지도</h3>
+<div class="pkgtree"><b>py/hexwar/</b>
+  hexcoord.py  <i>좌표계 · 거리 · 링 · 라인 (3부)</i>
+  picker.py    <i>화면↔헥스 · 마스크 표 (4부)</i>
+  hexmap.py    <i>맵 · 셀 바이트 · 지형표 (5부)</i>
+  scenario.py  <i>시나리오 로더</i>
+  units.py     <i>유닛 풀 · 병종표 (10부)</i>
+  rng.py       <i>32비트 LCG · FNV-1a</i>
+  path.py      <i>양동이 큐 · A* (8부)</i>
+  los.py       <i>시야선 · 안개 (9부)</i>
+  combat.py    <i>전투 판정 (10부)</i>
+  ai.py        <i>적군 AI</i>
+  game.py      <i>턴 · 명령 · 되돌리기 (7·10부)</i>
+  ui.py        <i>위젯 · 상태 기계 (7부)</i>
+  font.py      <i>5x7 비트맵 글꼴</i>
+  render.py    <i>프레임버퍼 · 스프라이트 (6부)</i>
+  main.py      <i>trace · render · bench</i></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>층</th><th>모듈</th><th>의존 방향</th></tr>
+<tr><td>순수 수학</td><td>hexcoord · rng</td><td>아무것도 import 하지 않는다</td></tr>
+<tr><td>자료구조</td><td>hexmap · units · picker</td><td>hexcoord 만</td></tr>
+<tr><td>규칙</td><td>path · los · combat · scenario</td><td>자료구조까지</td></tr>
+<tr><td>상태</td><td>game · ai</td><td>규칙까지</td></tr>
+<tr><td>표현</td><td>ui · render · font</td><td>상태까지 — 반대 방향은 없다</td></tr>
+</table>
+</div>
+<div class="key"><b>의존이 한 방향입니다.</b> <code class="nb">hexcoord</code>는 게임을 모르고, <code class="nb">game</code>은 화면을 모릅니다. 그래서 렌더러 없이 트레이스를 돌릴 수 있고(<code class="nb">render_frames=False</code>), 그것이 루아·타입스크립트 포팅을 층 단위로 쪼갤 수 있게 했습니다.</div>
+</article>
+
+<article class="card" id="s11-style">
+<h3>읽기 전에 — 이 코드의 규칙</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>규칙</th><th>이유</th></tr>
+<tr><td>좌표 계층에 부동소수 없음</td><td>세 언어 파리티 · 도스 고증</td></tr>
+<tr><td>순회 순서를 언어에 맡기지 않음</td><td><code class="nb">set</code>·<code class="nb">dict</code> 순서 대신 인덱스 오름차순 목록</td></tr>
+<tr><td>동점은 언제나 명시적 규칙</td><td>작은 아이디 · 작은 인덱스</td></tr>
+<tr><td><code class="nb">__slots__</code> 사용</td><td>도스식 레코드에 가장 가까운 표현</td></tr>
+<tr><td>'없음'은 <code class="nb">-1</code></td><td>호출부 분기를 줄인다</td></tr>
+<tr><td>주석은 why</td><td>what 은 코드가 말한다</td></tr>
+</table>
+</div>
+<div class="note">이 부의 코드 블록은 전부 <code class="nb">py/hexwar/</code>의 실제 파일에서 줄 번호를 지정해 가져온 것입니다. 슬라이드 오른쪽 위의 <span class="badge">3/9</span>는 그 파일의 몇 번째 조각인지를 뜻합니다.</div>
+</article>
+
+<article class="card" id="s11-f-hexcoord">
+<h3>hexcoord.py — 좌표계</h3>
+<div class="src"><b>py/hexwar/hexcoord.py</b><span class="ln">191줄</span><span>5조각</span></div>
+<p>이 파일이 나머지 전부의 기초입니다. 방향 표·거리·링·나선·라인·큐브 반올림이 전부 여기 있고, <b>부동소수가 한 번도 나오지 않습니다.</b></p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>함수</th><th>복잡도</th><th>본문</th></tr>
+<tr><td><code>distance</code></td><td>O(1)</td><td>3부</td></tr>
+<tr><td><code>ring</code> / <code>spiral</code></td><td>O(n) / O(n²)</td><td>3부</td></tr>
+<tr><td><code>line</code></td><td>O(N)</td><td>3부 · 9부</td></tr>
+<tr><td><code>cube_round</code></td><td>O(1)</td><td>3부</td></tr>
+</table>
+</div>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/hexcoord.py prefix=py-hexcoord title=hexcoord.py-->
+
+<article class="card" id="s11-f-rng">
+<h3>rng.py — 난수와 해시</h3>
+<div class="src"><b>py/hexwar/rng.py</b><span class="ln">59줄</span><span>2조각</span></div>
+<p>32비트 LCG 하나와 FNV-1a 하나. 이 59줄이 <b>전투 판정·언두·세이브·골든 해시</b>를 전부 지탱합니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/rng.py prefix=py-rng title=rng.py-->
+
+<article class="card" id="s11-f-hexmap">
+<h3>hexmap.py — 맵</h3>
+<div class="src"><b>py/hexwar/hexmap.py</b><span class="ln">175줄</span><span>5조각</span></div>
+<p>셀 바이트 패킹, 지형표, 세 개의 평행 배열, 이웃 델타 표. <code class="nb">neighbors_with_dir</code>가 경로 탐색의 가장 뜨거운 함수입니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/hexmap.py prefix=py-hexmap title=hexmap.py-->
+
+<article class="card" id="s11-f-picker">
+<h3>picker.py — 화면과 헥스 사이</h3>
+<div class="src"><b>py/hexwar/picker.py</b><span class="ln">88줄</span><span>2조각</span></div>
+<p>768바이트 마스크 표와 그것을 쓰는 <code class="nb">pick</code>. 4부 전체가 이 두 조각으로 압축됩니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/picker.py prefix=py-picker title=picker.py-->
+
+<article class="card" id="s11-f-units">
+<h3>units.py — 유닛 풀</h3>
+<div class="src"><b>py/hexwar/units.py</b><span class="ln">112줄</span><span>4조각</span></div>
+<p>병종표, 유닛 레코드, 고정 배열 + 프리 리스트. <code class="nb">alive_ids</code>가 아이디 오름차순을 보장하는 것이 결정성의 한 축입니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/units.py prefix=py-units title=units.py-->
+
+<article class="card" id="s11-f-scenario">
+<h3>scenario.py — 로더</h3>
+<div class="src"><b>py/hexwar/scenario.py</b><span class="ln">71줄</span><span>2조각</span></div>
+<p>블록 다섯 개를 읽어 맵·유닛 풀·목표를 만듭니다. 너비와 높이를 즉시 검증합니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/scenario.py prefix=py-scenario title=scenario.py-->
+
+<article class="card" id="s11-f-path">
+<h3>path.py — 경로</h3>
+<div class="src"><b>py/hexwar/path.py</b><span class="ln">203줄</span><span>6조각</span></div>
+<p>ZOC 마스크, 한 걸음 비용, Dial 양동이 큐, 경로 역추적, A*. <code class="nb">Reach</code> 클래스의 <code class="nb">list</code> 필드가 세 언어의 순회 순서를 묶습니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/path.py prefix=py-path title=path.py-->
+
+<article class="card" id="s11-f-los">
+<h3>los.py — 시야</h3>
+<div class="src"><b>py/hexwar/los.py</b><span class="ln">93줄</span><span>3조각</span></div>
+<p>고도 판정 부등식 한 줄이 이 파일의 핵심입니다. 나머지는 나선을 돌며 그 한 줄을 부르는 배관입니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/los.py prefix=py-los title=los.py-->
+
+<article class="card" id="s11-f-combat">
+<h3>combat.py — 전투</h3>
+<div class="src"><b>py/hexwar/combat.py</b><span class="ln">68줄</span><span>2조각</span></div>
+<p>CRT 판정과 반격. 난수 상태를 저장하는 것은 호출자(<code class="nb">game.py</code>)의 책임입니다 — 전투 함수는 난수를 받아 쓰기만 합니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/combat.py prefix=py-combat title=combat.py-->
+
+<article class="card" id="s11-f-ai">
+<h3>ai.py — 적군</h3>
+<div class="src"><b>py/hexwar/ai.py</b><span class="ln">85줄</span><span>3조각</span></div>
+<p>점수표 둘과 결정적 동점 규칙 셋. 이 85줄이 골든 트레이스의 적군 턴을 만듭니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/ai.py prefix=py-ai title=ai.py-->
+
+<article class="card" id="s11-f-game">
+<h3>game.py — 상태와 명령</h3>
+<div class="src"><b>py/hexwar/game.py</b><span class="ln">247줄</span><span>6조각</span></div>
+<p>이동·공격·턴 종료·되돌리기. 되돌리기가 난수 상태까지 되감는 것과, 죽은 유닛을 프리 리스트에서 도로 빼내는 것이 까다로운 부분입니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/game.py prefix=py-game title=game.py-->
+
+<article class="card" id="s11-f-ui">
+<h3>ui.py — GUI 셸</h3>
+<div class="src"><b>py/hexwar/ui.py</b><span class="ln">347줄</span><span>8조각</span></div>
+<p>위젯 트리, 히트 테스트, 상태 기계, 이벤트 처리. 이 파일이 가장 길지만 구조는 단순합니다 — 상태별 분기 하나와 위젯 조작 몇 개입니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/ui.py prefix=py-ui title=ui.py-->
+
+<article class="card" id="s11-f-font">
+<h3>font.py — 5×7 글꼴</h3>
+<div class="src"><b>py/hexwar/font.py</b><span class="ln">48줄</span><span>2조각</span></div>
+<p>글자 하나가 7바이트. 54자만 있으면 이 게임의 화면에 필요한 글자가 전부 나옵니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/font.py prefix=py-font title=font.py-->
+
+<article class="card" id="s11-f-render">
+<h3>render.py — 렌더러</h3>
+<div class="src"><b>py/hexwar/render.py</b><span class="ln">360줄</span><span>9조각</span></div>
+<p>프레임버퍼, 스프라이트 로더, 더티 사각형, 지도·패널·미니맵·메시지·위젯 그리기, PPM 출력. 가장 긴 파일이고, 그중 절반이 '무엇을 어떤 순서로 그리는가'입니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/render.py prefix=py-render title=render.py-->
+
+<article class="card" id="s11-f-main">
+<h3>main.py — 진입점</h3>
+<div class="src"><b>py/hexwar/main.py</b><span class="ln">133줄</span><span>4조각</span></div>
+<p><code class="nb">trace</code>·<code class="nb">render</code>·<code class="nb">bench</code> 세 하위 명령. 세 언어가 <b>같은 명령·같은 출력 형식</b>을 갖는 것이 14부 검증의 전제입니다.</p>
+</article>
+
+<!--FULLSRC lang=py file=py/hexwar/main.py prefix=py-main title=main.py-->
+
+<article class="card" id="s11-sum">
+<h3>11부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>파일</th><th class="num">줄</th><th>역할</th></tr>
+<tr><td>hexcoord.py</td><td class="num">191</td><td>좌표계 — 나머지 전부의 기초</td></tr>
+<tr><td>render.py</td><td class="num">360</td><td>렌더러 — 가장 길다</td></tr>
+<tr><td>ui.py</td><td class="num">347</td><td>GUI 셸</td></tr>
+<tr><td>game.py</td><td class="num">247</td><td>상태와 되돌리기</td></tr>
+<tr><td>path.py</td><td class="num">203</td><td>경로 탐색</td></tr>
+<tr><td>hexmap.py</td><td class="num">175</td><td>맵</td></tr>
+<tr><td>나머지 9개</td><td class="num">721</td><td>units · picker · los · main · combat · scenario · rng · ai · font</td></tr>
+<tr><td><b>합계</b></td><td class="num"><b>2,244</b></td><td>이 부에 전부 실려 있습니다</td></tr>
+</table>
+</div>
+<div class="key">다음 두 부는 <b>같은 알고리즘의 루아·타입스크립트 판</b>입니다. 파이썬판을 읽었다면 구조는 이미 아는 것이고, 볼 것은 <b>언어가 강요하는 차이</b>뿐입니다.</div>
+</article>

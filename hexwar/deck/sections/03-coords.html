@@ -1,0 +1,325 @@
+<article class="card section" id="part3">
+<p class="chnum">3부</p>
+<h2>좌표계의 수학</h2>
+<p class="chsub">헥스 게임의 절반은 여기서 결판난다</p>
+</article>
+
+<article class="card" id="ch06">
+<p class="chnum">6장</p>
+<h2>세 가지 좌표계</h2>
+<p class="chsub">저장용 · 계산용 · 대칭용</p>
+</article>
+
+<article class="card" id="s3-three">
+<h3>왜 하나로는 안 되는가</h3>
+<p>육각 격자에는 <b>서로 다른 일을 잘하는 좌표계 세 개</b>가 있습니다. 하나만 고르면 반드시 어딘가에서 코드가 지저분해집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>좌표계</th><th>모양</th><th>잘하는 일</th><th>못하는 일</th></tr>
+<tr><td>오프셋 <span class="chip">col,row</span></td><td>배열 첨자 그대로</td><td>저장 · 화면 배치 · 사람이 읽기</td><td>이웃·거리 계산</td></tr>
+<tr><td>축 <span class="chip">q,r</span></td><td>2성분 정수</td><td>이웃 · 저장도 2워드</td><td>회전·반사가 비대칭</td></tr>
+<tr><td>큐브 <span class="chip">x,y,z</span></td><td>x+y+z=0</td><td>거리 · 회전 · 보간</td><td>메모리 1.5배</td></tr>
+</table>
+</div>
+<div class="key"><b>실무의 답은 '전부 쓴다'입니다.</b> 저장은 오프셋, 계산은 축, 거리·회전·라인은 큐브로 잠깐 올라갔다 내려옵니다. 변환이 전부 정수 덧셈과 시프트라 비용이 거의 없습니다 — 이것이 도스에서도 통했던 이유입니다.</div>
+</article>
+
+<article class="card" id="s3-offset">
+<h3>오프셋 좌표 — 배열과 화면에 붙어 있는 좌표</h3>
+<div class="fig" data-svg="fig_offsets.svg"></div>
+<p>맵을 <code class="nb">cells[row * W + col]</code>로 담으려면 결국 <code class="nb">(col, row)</code>가 필요합니다. 화면에 그릴 때도 마찬가지입니다. 문제는 <b>어긋난 행(또는 열)을 어느 쪽으로 밀 것인가</b>가 네 가지라는 점입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이름</th><th>머리 방향</th><th>어긋남</th><th>흔한 곳</th></tr>
+<tr><td>odd-r</td><td>뾰족(pointy)</td><td>홀수 <b>행</b>을 오른쪽으로</td><td>가로로 긴 지도</td></tr>
+<tr><td>even-r</td><td>뾰족</td><td>짝수 행을 오른쪽으로</td><td>취향 차이</td></tr>
+<tr><td>odd-q</td><td>납작(flat)</td><td>홀수 <b>열</b>을 아래로</td><td>세로로 긴 지도</td></tr>
+<tr><td>even-q</td><td>납작</td><td>짝수 열을 아래로</td><td>취향 차이</td></tr>
+</table>
+</div>
+<div class="warn"><b>네 가지를 섞어 쓰면 반드시 사고가 납니다.</b> 이 문서의 엔진은 <b>odd-r 하나</b>로 고정하고, odd-q 변환은 배우기 위해서만 구현합니다. 규격에 못 박아 두면(SPEC §1.2) 세 언어가 어긋날 여지가 없습니다.</div>
+</article>
+
+<article class="card" id="s3-offset-pain">
+<h3>오프셋의 진짜 문제 — 이웃이 행마다 다르다</h3>
+<p>odd-r에서 <code class="nb">(3,4)</code>의 북동쪽 이웃은 <code class="nb">(3,3)</code>이지만, <code class="nb">(3,5)</code>의 북동쪽 이웃은 <code class="nb">(4,4)</code>입니다. 행의 홀짝에 따라 열 델타가 달라집니다.</p>
+<!--CODE file=py/hexwar/hexmap.py lang=py sym=NEIGHBOR_DELTA note=행 홀짝별 이웃 델타-->
+<p>표로 만들어 두면 이웃 찾기가 '표 읽기 + 덧셈 두 번'이 됩니다. 축좌표로 바꿨다가 다시 돌아오는 것보다 훨씬 쌉니다 — 그래서 뜨거운 경로(경로 탐색)는 이 표를 씁니다.</p>
+<div class="tip"><b>그러나 표는 검증해야 합니다.</b> 손으로 적은 12개의 델타 중 하나만 틀려도 특정 방향의 이동만 조용히 어긋납니다. 이 문서는 그 표를 <b>축좌표 변환과 대조해</b> 432칸 × 6방향 전부에서 확인합니다.</div>
+<!--CODE file=py/tests/test_engine.py lang=py sym=t_neighbor_table note=델타 표 전수 검증-->
+</article>
+
+<article class="card" id="s3-axial">
+<h3>축좌표 — 이웃 델타가 하나로 통일된다</h3>
+<div class="fig" data-svg="fig_axial.svg"></div>
+<p>축좌표에서는 여섯 방향의 델타가 <b>행과 무관하게 항상 같습니다.</b> 이 표 하나가 회전·링·라인·거리의 기초가 됩니다.</p>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=DIRS..NUDGE note=방향 표-->
+<div class="key"><b>방향 인덱스 0..5는 규격입니다.</b> 경로를 되짚을 때 '어디서 들어왔는지'를 방향 번호로 저장하고, 세이브 파일과 골든 트레이스에도 그 번호가 들어갑니다. 순서를 바꾸면 저장된 데이터가 전부 어긋납니다 — 그래서 SPEC §1.5에 표로 못 박혀 있습니다.</div>
+</article>
+
+<article class="card" id="s3-cube">
+<h3>큐브 좌표 — 3차원의 대각 평면</h3>
+<div class="fig" data-svg="fig_cube.svg"></div>
+<p>큐브 좌표는 3차원 정수 격자에서 <b>x + y + z = 0인 평면</b>만 떼어낸 것입니다. 육각 격자가 그 평면 위의 정수점과 정확히 일대일 대응합니다.</p>
+<div class="satisfy">
+<div class="bx"><h6>축 → 큐브</h6>x = q
+y = -q - r
+z = r</div>
+<div class="mid">⇄</div>
+<div class="bx"><h6>큐브 → 축</h6>q = x
+r = z
+(y 는 버린다)</div>
+</div>
+<p>여섯 방향이 <code class="nb">(+1,-1,0)</code>과 그 순환·부호 반전이 되어, 세 성분을 대칭적으로 다룰 수 있습니다. 이 대칭 덕분에 <b>거리·회전·보간이 전부 짧은 식</b>이 됩니다.</p>
+<div class="note"><b>메모리는 저장하지 않습니다</b> — <code class="nb">y = -x-z</code>이므로 언제든 만들 수 있습니다. 저장은 축좌표(2워드), 계산할 때만 잠깐 큐브로 올립니다.</div>
+</article>
+
+<article class="card" id="s3-convert">
+<h3>변환식 — 전부 시프트와 덧셈</h3>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=axial_to_oddr..oddq_to_axial note=네 가지 오프셋 변환-->
+<p>핵심은 <code class="nb">(r - (r &amp; 1)) &gt;&gt; 1</code>입니다. 이것은 <code class="nb">floor(r / 2)</code>인데, <b>음수에서도 맞습니다.</b> <code class="nb">r &amp; 1</code>이 r의 <b>수학적 홀짝</b>(0 또는 1)을 주므로 <code class="nb">r - (r&amp;1)</code>이 항상 짝수가 되고, 짝수를 산술 시프트로 반으로 줄이면 내림과 같습니다.</p>
+<div class="warn"><b>그냥 <code class="nb">r / 2</code>를 쓰면 안 됩니다</b> — C의 <code class="nb">/</code>는 0 방향으로 자르므로 <code class="nb">-3/2 = -1</code>인데, 우리가 원하는 것은 <code class="nb">-2</code>입니다. 맵 밖 좌표(카메라가 왼쪽 끝을 넘어갈 때)가 들어오면 여기서 한 칸씩 어긋납니다.</div>
+</article>
+
+<article class="card" id="s3-shift-langs">
+<h3>같은 식, 세 언어 — 시프트의 함정</h3>
+<div class="tri">
+<div>
+<h6>Python</h6>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=axial_to_oddr note=-->
+</div>
+<div>
+<h6>Lua</h6>
+<!--CODE file=lua/hexwar/hexcoord.lua lang=lua sym=M.axial_to_oddr note=-->
+</div>
+<div>
+<h6>TypeScript</h6>
+<!--CODE file=ts/src/hexcoord.ts lang=ts sym=axialToOddr note=-->
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>언어</th><th><code>&gt;&gt;</code> 의 의미</th><th>음수에서</th><th>그래서</th></tr>
+<tr><td>Python</td><td>산술 시프트(무한 비트)</td><td>내림 ✔</td><td><code class="nb">&gt;&gt; 1</code> 그대로</td></tr>
+<tr><td>Lua 5.3+</td><td><b>논리 시프트(64비트)</b></td><td>거대한 양수 ✘</td><td><code class="nb">// 2</code> 를 써야 한다</td></tr>
+<tr><td>TypeScript</td><td>산술 시프트(32비트)</td><td>내림 ✔</td><td><code class="nb">&gt;&gt; 1</code> 그대로</td></tr>
+</table>
+</div>
+<div class="key"><b>루아에서 <code class="nb">-2 &gt;&gt; 1</code>은 9223372036854775807입니다.</b> 이 한 줄 때문에 맵 왼쪽 밖을 클릭하면 좌표가 폭주합니다. 골든 벡터에 음수 좌표(<code class="nb">-4,5</code>, <code class="nb">-5,-6</code>)를 넣어 둔 이유가 정확히 이것입니다.</div>
+</article>
+
+<article class="card" id="ch07">
+<p class="chnum">7장</p>
+<h2>거리와 이웃</h2>
+<p class="chsub">공식 하나를 증명하고, 다른 방법으로 확인한다</p>
+</article>
+
+<article class="card" id="s3-dist-proof">
+<h3>큐브 거리 공식 유도</h3>
+<p>큐브 좌표에서 한 걸음은 <b>한 성분이 +1, 다른 성분이 -1, 나머지는 0</b>입니다. A에서 B로 가는 변위를 <code class="nb">(dx, dy, dz)</code>라 하면 <code class="nb">dx + dy + dz = 0</code>입니다.</p>
+<ol class="steps">
+<li>각 걸음이 한 성분을 1 늘리고 다른 하나를 1 줄이므로, <b>걸음 수 N번이면 성분 절댓값의 합이 최대 2N</b>입니다. 따라서 <code class="nb">N ≥ (|dx|+|dy|+|dz|) / 2</code>.</li>
+<li>거꾸로, 합이 0이므로 세 성분 중 <b>양수인 것들의 합과 음수인 것들의 합이 크기가 같습니다.</b> 양수 성분 하나와 음수 성분 하나를 짝지어 한 걸음씩 소모하면 정확히 <code class="nb">(|dx|+|dy|+|dz|)/2</code>번에 도달합니다.</li>
+<li>따라서 등호가 성립하고, <code class="nb">dist = (|dx|+|dy|+|dz|) / 2</code>입니다. ∎</li>
+</ol>
+<div class="note"><b>합이 항상 짝수입니다</b> — 양수 쪽 합과 음수 쪽 합이 같으므로 총합은 그 두 배입니다. 그래서 나눗셈이 아니라 <b>시프트 한 번</b>으로 끝납니다.</div>
+</article>
+
+<article class="card" id="s3-dist-axial">
+<h3>y를 만들지 않는 축좌표 거리</h3>
+<p><code class="nb">dy = -(dx + dz)</code>이므로 <code class="nb">|dy| = |dq + dr|</code>입니다. y를 계산하지 않고 바로 씁니다.</p>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=distance note=거리-->
+<p>절댓값 3번, 덧셈 3번, 시프트 1번. 8086에서도 20사이클 남짓입니다. 이 함수가 경로 탐색의 휴리스틱, 사거리 판정, 시야 반경, AI의 목표 선택에 전부 들어갑니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이 거리가 쓰이는 곳</th><th>이 문서에서</th></tr>
+<tr><td>A* 휴리스틱</td><td>8부 · 허용성 증명 포함</td></tr>
+<tr><td>사거리 판정</td><td>10부 · <code class="nb">can_attack</code></td></tr>
+<tr><td>시야 반경</td><td>9부 · <code class="nb">spiral(vis)</code></td></tr>
+<tr><td>AI 목표 선택</td><td>10부 · <code class="nb">nearest_enemy</code></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s3-dist-verify">
+<h3>공식을 믿지 않고 확인하기</h3>
+<p>거리 공식이 맞는지 확인하는 방법으로 <b>같은 공식을 다시 쓰는 것</b>은 아무 의미가 없습니다. 그래서 검증은 <b>완전히 다른 알고리즘</b>으로 합니다 — 이웃 그래프에서 너비 우선 탐색을 돌려 실제 걸음 수를 셉니다.</p>
+<!--CODE file=tools/gen_prim.py lang=py sym=bfs_dist note=공식을 쓰지 않는 오라클-->
+<!--OUT file=measure.txt sec=7 note=거리 공식 vs BFS-->
+<div class="key"><b>이것이 이 문서 전체의 검증 철학입니다.</b> 골든 벡터를 만드는 오라클은 <b>엔진과 다른 방법</b>을 씁니다 — 거리는 BFS로, 픽킹은 점-포함 판정으로, 라인은 부동소수 보간으로. 같은 코드를 두 번 돌려 비교하는 것은 검증이 아닙니다.</div>
+</article>
+
+<article class="card" id="s3-rotate">
+<h3>회전과 반사</h3>
+<p>큐브 좌표에서 원점 기준 60° 회전은 <b>성분을 한 칸 밀고 전부 부호를 뒤집는 것</b>입니다.</p>
+<div class="sig">시계 방향: <u>(x, y, z) → (-y, -z, -x)</u><span class="lbl">60°</span></div>
+<div class="sig">반시계: <u>(x, y, z) → (-z, -x, -y)</u><span class="lbl">60°</span></div>
+<p>왜 그런가: 여섯 방향 벡터가 <code class="nb">(1,-1,0)</code>에서 시작해 성분을 순환하며 부호를 번갈아 뒤집은 것들입니다. <code class="nb">(1,-1,0) → (0,1,-1)?</code> 아닙니다 — 시계 방향 이웃 순서는 <code class="nb">(1,-1,0), (1,0,-1), (0,1,-1), (-1,1,0), (-1,0,1), (0,-1,1)</code>이고, 이 목록에 위 변환을 적용하면 정확히 <b>한 칸씩 이동</b>합니다.</p>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=rotate_cw..reflect_q note=회전·반사-->
+<div class="note"><b>어디에 쓰나</b> — 유닛 방향(facing)이 있는 워게임에서 포탑 회전과 측면 판정에 씁니다. 이 문서의 엔진은 방향을 쓰지 않지만, 회전은 링 순회의 정당성을 이해하는 데 필요해 넣었습니다.</div>
+</article>
+
+<article class="card" id="ch08">
+<p class="chnum">8장</p>
+<h2>링 · 나선 · 라인</h2>
+<p class="chsub">시야와 폭발 반경이 여기서 나온다</p>
+</article>
+
+<article class="card" id="s3-ring">
+<h3>링 — 거리가 정확히 n인 칸들</h3>
+<div class="fig" data-svg="fig_ring.svg"></div>
+<p>중심에서 거리 n인 칸을 모으는 순진한 방법은 <b>반경 n 안의 모든 칸을 훑으며 거리를 재는 것</b>입니다. O(n²)이고, 거리 계산이 n² 번 들어갑니다.</p>
+<p>링은 그럴 필요가 없습니다. <b>한 모퉁이에서 시작해 여섯 방향으로 n칸씩 걸으면</b> 정확히 링이 됩니다. 거리 계산이 한 번도 없고 O(n)입니다.</p>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=ring note=링-->
+</article>
+
+<article class="card" id="s3-ring-proof">
+<h3>왜 6n개인가</h3>
+<ol class="steps">
+<li>링은 중심을 기준으로 <b>60° 회전에 대해 닫혀 있습니다</b>(회전은 거리를 보존하므로). 따라서 링은 6개의 합동인 조각으로 나뉩니다.</li>
+<li>한 조각은 '한 꼭짓점에서 다음 꼭짓점까지'이고, 그 사이에 n걸음이 들어갑니다.</li>
+<li>따라서 총 6n개. n=0은 예외로 중심 한 칸입니다. ∎</li>
+</ol>
+<p>나선은 링의 누적입니다.</p>
+<div class="sig"><u>|spiral(n)| = 1 + Σ<sub>k=1..n</sub> 6k = 1 + 6·n(n+1)/2 = 1 + 3n(n+1)</u><span class="lbl">칸 수</span></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th class="num">n</th><th class="num">링</th><th class="num">나선(누적)</th><th>쓰임</th></tr>
+<tr><td class="num">0</td><td class="num">1</td><td class="num">1</td><td>자기 칸</td></tr>
+<tr><td class="num">1</td><td class="num">6</td><td class="num">7</td><td>인접·ZOC</td></tr>
+<tr><td class="num">2</td><td class="num">12</td><td class="num">19</td><td>보병 시야</td></tr>
+<tr><td class="num">3</td><td class="num">18</td><td class="num">37</td><td>포병 사거리</td></tr>
+<tr><td class="num">4</td><td class="num">24</td><td class="num">61</td><td>정찰 시야</td></tr>
+</table>
+</div>
+<div class="tip"><b>시야가 왜 나선인가</b> — 안쪽부터 바깥으로 훑으면, 가까운 칸의 차단 여부를 먼저 알게 되어 바깥 칸을 건너뛸 수 있습니다. 이 문서의 구현은 단순함을 위해 매번 시야선을 다시 긋지만(9부), 나선 순서 자체는 그 최적화의 전제입니다.</div>
+</article>
+
+<article class="card" id="s3-line">
+<h3>라인 — 두 칸을 잇는 유일한 경로</h3>
+<div class="fig" data-svg="fig_line.svg"></div>
+<p>사각 격자의 브레젠험처럼, 헥스에도 '직선에 가장 가까운 칸들'이 있습니다. 방법은 <b>큐브 좌표에서 선형 보간하고 가장 가까운 헥스로 반올림</b>하는 것입니다.</p>
+<div class="sig"><u>P(t) = A + (B − A)·t</u><span class="lbl">t = i/N, i = 0..N</span></div>
+<p>N은 거리이므로, 매 단계가 정확히 한 칸씩 전진합니다. 문제는 <b>t가 유리수</b>이고 결과가 <b>정확히 두 칸의 경계</b>에 놓이는 경우가 흔하다는 점입니다.</p>
+<div class="warn"><b>동점이 왜 위험한가</b> — (0,0)에서 (2,-1)로 가는 선의 중간점은 두 칸의 모서리에 정확히 걸칩니다. 어느 쪽을 고르느냐가 부동소수 반올림 방향에 달리면, <b>컴파일러 최적화 옵션이나 CPU에 따라 시야 판정이 달라집니다.</b> 멀티플레이에서 두 기계의 화면이 갈리는 고전적 원인입니다.</div>
+</article>
+
+<article class="card" id="s3-nudge">
+<h3>넛지 — 동점을 없애는 아주 작은 밀기</h3>
+<p>해법은 시작점을 <b>아주 조금</b> 밀어 두는 것입니다. 밀린 양이 한 칸보다 훨씬 작으면 결과는 바뀌지 않으면서, 모서리에 정확히 걸리는 일만 사라집니다.</p>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=SCALE..NUDGE note=넛지 상수-->
+<p>세 성분의 합이 <code class="nb">1 + 1 - 2 = 0</code>이라, 밀어도 <code class="nb">x+y+z=0</code> 평면을 벗어나지 않습니다. 이것이 중요합니다 — 평면을 벗어나면 큐브 반올림이 엉뚱한 칸을 고릅니다.</p>
+<div class="key"><b>넛지는 '적당히'가 아니라 '정확히 이 값'이어야 합니다.</b> 세 언어가 같은 라인을 그리려면 넛지도 규격의 일부입니다(SPEC §9.1). 값이 다르면 모서리에 걸친 선에서만 결과가 갈리는데, 그런 버그는 몇 달 뒤에야 발견됩니다.</div>
+</article>
+
+<article class="card" id="s3-fixed">
+<h3>고정소수 보간 — 부동소수를 아예 쓰지 않는다</h3>
+<p>보간을 1/1024 단위 정수로 합니다. <code class="nb">t = i/N</code> 대신 <code class="nb">ti = i·1024/N</code>을 정수 나눗셈으로 구합니다.</p>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=line note=라인-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>왜 1024인가</th><th>이유</th></tr>
+<tr><td>2의 거듭제곱</td><td>나눗셈이 시프트가 된다</td></tr>
+<tr><td>충분히 크다</td><td>N ≤ 32에서 t의 오차가 1/1024 미만 — 칸 하나의 1/1000 이하</td></tr>
+<tr><td>충분히 작다</td><td>좌표 × 1024가 16비트를 넘지 않는다(맵이 ±32면 32768 이내)</td></tr>
+</table>
+</div>
+<div class="note"><b>도스에서도 그대로 통합니다</b> — 곱셈 3번, 나눗셈 3번(전부 1024로 나누므로 시프트), 반올림 3번. 8086에서 한 칸당 100사이클 안쪽입니다.</div>
+</article>
+
+<article class="card" id="s3-cuberound">
+<h3>큐브 반올림 — 셋 중 하나를 버린다</h3>
+<p>보간 결과 <code class="nb">(x, y, z)</code>는 정수가 아닙니다. 각각을 따로 반올림하면 <b>합이 0이 아닐 수 있습니다.</b></p>
+<div class="sig">예: <u>(1.4, −2.9, 1.5)</u> → 따로 반올림 → <u>(1, −3, 2)</u> → 합 <u>0</u> ✔<br>예: <u>(1.6, −2.9, 1.3)</u> → 따로 반올림 → <u>(2, −3, 1)</u> → 합 <u>0</u> ✔<br>예: <u>(1.5, −2.5, 1.0)</u> → 따로 반올림 → <u>(2, −2, 1)</u> → 합 <u>1</u> ✘</div>
+<p>해법: <b>오차가 가장 큰 성분 하나를 버리고</b> 나머지 둘로 다시 만듭니다. 버려진 성분은 정의상 나머지 둘의 음의 합입니다.</p>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=cube_round note=고정소수 큐브 반올림-->
+<div class="warn"><b>비교 순서가 규격입니다</b> — <code class="nb">dx</code>를 먼저 보고 그다음 <code class="nb">dy</code>를 봅니다. 세 오차가 같은 경우(정확히 세 칸이 만나는 꼭짓점)에 어느 칸을 고를지가 이 순서로 결정됩니다.</div>
+</article>
+
+<article class="card" id="s3-round">
+<h3>반올림의 함정 — 파이썬 round()는 짝수로 붙는다</h3>
+<p>세 언어의 기본 반올림이 서로 다릅니다. 이 하나만으로도 골든 벡터가 깨집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>언어</th><th>기본 반올림</th><th>round(0.5)</th><th>round(2.5)</th><th>round(-0.5)</th></tr>
+<tr><td>Python</td><td>은행가(짝수로)</td><td>0</td><td>2</td><td>0</td></tr>
+<tr><td>JS <code>Math.round</code></td><td>+∞ 방향</td><td>1</td><td>3</td><td><b>-0</b></td></tr>
+<tr><td>Lua</td><td>기본 함수 없음</td><td>—</td><td>—</td><td>—</td></tr>
+</table>
+</div>
+<!--OUT file=measure.txt sec=4 note=세 언어의 반올림-->
+<p>그래서 반올림도 직접 정의합니다. <b>0에서 먼 쪽</b>으로 붙이는 규칙 하나만 쓰고, 세 언어가 같은 코드를 옮겨 씁니다.</p>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=round_div note=round_div-->
+</article>
+
+<article class="card" id="s3-round-tri">
+<h3>세 언어의 round_div</h3>
+<div class="tri">
+<div>
+<h6>Python</h6>
+<!--CODE file=py/hexwar/hexcoord.py lang=py sym=round_div note=-->
+</div>
+<div>
+<h6>Lua</h6>
+<!--CODE file=lua/hexwar/hexcoord.lua lang=lua sym=M.round_div note=-->
+</div>
+<div>
+<h6>TypeScript</h6>
+<!--CODE file=ts/src/hexcoord.ts lang=ts sym=roundDiv note=-->
+</div>
+</div>
+<div class="note">셋 다 <b>양수와 음수를 갈라</b> 처리합니다. 언어의 나눗셈이 내림인지(파이썬·루아의 <code class="nb">//</code>) 자르기인지에 관계없이 같은 답이 나오게 하려는 것입니다. 타입스크립트에서는 <code class="nb">Math.floor</code>를 명시적으로 씁니다 — <code class="nb">/</code>가 실수를 주기 때문입니다.</div>
+</article>
+
+<article class="card" id="s3-golden">
+<h3>골든 프리미티브 — 이 부의 결론을 파일로 굳힌다</h3>
+<p>3부에서 만든 함수들의 정답을 파일 하나에 얼려 둡니다. 세 언어의 테스트가 <b>같은 파일을 같은 순서로</b> 읽습니다.</p>
+<!--CODE file=golden/prim.txt lang=text lines=1-14 note=앞부분-->
+<p>형식이 JSON이 아니라 '키 + 정수 나열'인 이유는 <b>루아가 JSON 파서 없이 읽을 수 있어야</b> 하기 때문입니다. 검증 도구가 무거우면 검증을 건너뛰게 됩니다.</p>
+<!--OUT file=py_prim.txt  note=파이썬-->
+<!--OUT file=lua_prim.txt  note=루아-->
+<!--OUT file=ts_prim.txt  note=타입스크립트-->
+</article>
+
+<article class="card quiz" id="s3-quiz1" data-quiz>
+<h3>퀴즈 1</h3>
+<p class="q">Q. <code class="nb">axial_to_oddr(q, r)</code>에서 <code class="nb">(r - (r &amp; 1)) &gt;&gt; 1</code> 대신 <code class="nb">r &gt;&gt; 1</code>을 쓰면 무엇이 깨지는가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 사실 <b>양수 r에서는 아무것도 깨지지 않습니다</b> — 정수 시프트는 이미 내림이기 때문입니다. 문제는 <b>음수</b>입니다. 파이썬·타입스크립트의 산술 시프트는 <code class="nb">-3 &gt;&gt; 1 = -2</code>로 내림이라 역시 맞습니다. 진짜 함정은 <b>루아</b>인데, 거기서는 <code class="nb">&gt;&gt;</code>가 논리 시프트라 <code class="nb">-3 &gt;&gt; 1</code>이 거대한 양수가 됩니다. 그래서 루아판은 <code class="nb">// 2</code>를 씁니다. <code class="nb">r - (r&amp;1)</code>을 먼저 빼는 것은 <b>의도를 드러내기 위한 것</b>이기도 합니다 — '짝수로 만든 뒤 반으로'라는 뜻이 코드에 남습니다.</div>
+</article>
+
+<article class="card quiz" id="s3-quiz2" data-quiz>
+<h3>퀴즈 2</h3>
+<p class="q">Q. 넛지 값을 <code class="nb">(1, 1, -2)</code> 대신 <code class="nb">(1, 0, 0)</code>으로 하면?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 합이 0이 아니므로 보간점이 <code class="nb">x+y+z=0</code> 평면을 벗어납니다. 큐브 반올림은 '오차가 가장 큰 성분을 버리고 나머지로 재구성'하므로 결과 자체는 여전히 유효한 헥스가 나오지만, <b>어느 칸이 나오는지가 체계적으로 한쪽으로 치우칩니다.</b> 라인이 미세하게 휘고, 그 휘어짐이 시야 판정에 그대로 반영됩니다. 넛지는 '동점 깨기'이지 '평행 이동'이 아니어야 합니다.</div>
+</article>
+
+<article class="card" id="s3-demo">
+<h3>만져 보기 — 세 좌표계</h3>
+<div class="demo" data-demo="coords">
+<h5>같은 칸, 세 가지 이름</h5>
+<div class="row">
+<button data-mode="axial">축 (q,r)</button>
+<button class="sec" data-mode="cube">큐브 (x,y,z)</button>
+<button class="sec" data-mode="oddr">오프셋 (col,row)</button>
+</div>
+<div class="out"></div>
+</div>
+<div class="note">가운데 칸이 원점입니다. 마우스를 올리면 그 칸까지의 거리가 나옵니다 — 여섯 방향 어디로 가도 한 칸이 정확히 1이라는 것을 눈으로 확인할 수 있습니다.</div>
+</article>
+
+<article class="card" id="s3-sum">
+<h3>3부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>개념</th><th>핵심</th><th>비용</th></tr>
+<tr><td>오프셋 ↔ 축</td><td><code class="nb">(r-(r&amp;1))&gt;&gt;1</code> — 음수 주의</td><td>덧셈+시프트</td></tr>
+<tr><td>축 ↔ 큐브</td><td><code class="nb">y = -x-z</code> — 저장하지 않는다</td><td>공짜</td></tr>
+<tr><td>거리</td><td><code class="nb">(|dq|+|dr|+|dq+dr|)&gt;&gt;1</code></td><td>O(1)</td></tr>
+<tr><td>링 · 나선</td><td>걸어서 만든다 · 6n, 1+3n(n+1)</td><td>O(n), O(n²)</td></tr>
+<tr><td>라인</td><td>고정소수 보간 + 넛지 + 큐브 반올림</td><td>O(N)</td></tr>
+</table>
+</div>
+<div class="key"><b>여기까지가 순수 수학입니다.</b> 다음 부에서 이 좌표들이 <b>화면의 픽셀</b>과 만나고, 거기서 도스식 최적화의 백미가 나옵니다.</div>
+</article>

@@ -1,0 +1,319 @@
+<article class="card section" id="part8">
+<p class="chnum">8부</p>
+<h2>경로 탐색</h2>
+<p class="chsub">한 유닛을 고르는 순간 끝나야 하는 계산</p>
+</article>
+
+<article class="card" id="ch22">
+<p class="chnum">22장</p>
+<h2>비용 모형</h2>
+<p class="chsub">규칙을 숫자로 바꾸기</p>
+</article>
+
+<article class="card" id="s8-mp">
+<h3>이동력이라는 자원</h3>
+<p>턴마다 유닛에게 <b>이동 점수(MP)</b>가 주어지고, 칸에 들어갈 때마다 그 칸의 비용만큼 깎입니다. 남은 MP로 갈 수 없는 칸은 이번 턴에 못 갑니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>병종</th><th class="num">MP</th><th>대략 갈 수 있는 거리</th></tr>
+<tr><td>보병</td><td class="num">6</td><td>평지 3칸 · 숲 1.5칸</td></tr>
+<tr><td>전차</td><td class="num">12</td><td>평지 6칸 · 도로 12칸</td></tr>
+<tr><td>포병</td><td class="num">6</td><td>보병과 같음</td></tr>
+<tr><td>정찰</td><td class="num">16</td><td>도로로 지도를 가로지른다</td></tr>
+</table>
+</div>
+<div class="key"><b>비용을 1이 아니라 2를 기본으로 잡은 이유</b> — 도로를 1로 만들기 위해서입니다. 정수만 쓰면서 '도로는 평지의 절반'을 표현하려면 기준을 2 이상으로 올려야 합니다. 도스 워게임들이 이동력을 큰 수(20, 60)로 잡은 것도 같은 이유입니다 — <b>분수를 정수로 표현하려면 분모만큼 곱해 두면 됩니다.</b></div>
+</article>
+
+<article class="card" id="s8-cost">
+<h3>한 걸음의 비용</h3>
+<!--CODE file=py/hexwar/path.py sym=step_cost lang=py note=SPEC §6.1-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>조건</th><th>비용</th><th>이유</th></tr>
+<tr><td>바다</td><td>-1 (불가)</td><td>지상 유닛</td></tr>
+<tr><td>누군가 서 있음</td><td>-1 (불가)</td><td>겹침 금지 — 스택 없음</td></tr>
+<tr><td>도로 → 도로</td><td>1</td><td>지형 무시</td></tr>
+<tr><td>그 외</td><td>지형표</td><td>평지 2 · 숲/언덕 4 · 산/강/늪 6</td></tr>
+</table>
+</div>
+<div class="warn"><b>도로 판정이 '출발 칸도 도로일 때'인 것이 중요합니다.</b> 도착 칸만 보면 들판에서 도로로 뛰어드는 것도 1MP가 되어, 도로가 순간이동 통로가 됩니다. 두 칸이 모두 도로여야 <b>도로를 따라간 것</b>입니다.</div>
+<div class="note"><b>적 유닛이 서 있는 칸을 '불가'로 처리</b>하므로, 공격은 이동이 아니라 별도 명령입니다. 이동으로 적을 밀어내는 규칙(overrun)을 넣으려면 여기가 바뀝니다.</div>
+</article>
+
+<article class="card" id="s8-zoc">
+<h3>통제 지역(ZOC)</h3>
+<div class="fig" data-svg="fig_zoc.svg"></div>
+<!--CODE file=py/hexwar/path.py sym=zoc_mask lang=py note=적 인접 칸 칠하기-->
+<div class="key"><b>ZOC는 헥스 워게임의 핵심 규칙입니다.</b> 이것이 없으면 유닛이 적 사이를 자유롭게 통과해 후방을 헤집을 수 있고, <b>전선이라는 개념이 성립하지 않습니다.</b> 육각 격자에서 여섯 방향이 등거리라는 점과 맞물려, 유닛 몇 개로 통로를 봉쇄하는 전술이 자연스럽게 나옵니다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>ZOC 규칙의 변종</th><th>효과</th></tr>
+<tr><td>진입하면 이동 종료 <b>(이 문서)</b></td><td>부드럽다 — 한 칸은 들어갈 수 있다</td></tr>
+<tr><td>ZOC → ZOC 이동 금지</td><td>고전 보드 규칙 — 전선이 단단하다</td></tr>
+<tr><td>ZOC 진입에 추가 비용</td><td>가장 부드럽다 — 뚫고 지나갈 수 있다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="ch23">
+<p class="chnum">23장</p>
+<h2>도달 범위</h2>
+<p class="chsub">예산이 있는 단일 출발 최단거리</p>
+</article>
+
+<article class="card" id="s8-problem">
+<h3>문제 정의</h3>
+<div class="sig">입력: <u>맵 G=(V,E)</u>, <u>출발 s</u>, <u>예산 B</u>, <u>간선 비용 w: E → {1..6}</u><br>출력: <u>d(v) ≤ B 인 모든 v</u> 와 <u>각 v 까지의 최단 경로</u></div>
+<p>일반 다익스트라와 다른 점이 둘 있습니다.</p>
+<ol class="steps">
+<li><b>예산이 있습니다</b> — 비용이 B를 넘으면 더 볼 필요가 없습니다. 탐색 공간이 자동으로 잘립니다.</li>
+<li><b>비용이 작은 정수입니다</b> — 1..6. 이 성질이 우선순위 큐를 없앨 수 있게 합니다.</li>
+</ol>
+<div class="note"><b>ZOC가 이 문제를 조금 비틀어 놓습니다</b> — ZOC 칸은 도달할 수는 있지만 <b>거기서 더 뻗어나갈 수 없습니다</b>. 그래프 이론의 용어로는 그 정점이 '흡수 상태'가 됩니다. 최단거리의 최적 부분구조가 깨지므로, <b>ZOC를 지나는 더 짧은 경로가 있어도 찾지 못할 수 있습니다</b> — 규칙이 그것을 의도합니다.</div>
+</article>
+
+<article class="card" id="s8-dial">
+<h3>Dial의 양동이 큐</h3>
+<div class="fig" data-svg="fig_dial.svg"></div>
+<p>다익스트라의 힙이 하는 일은 <b>'가장 싼 정점 꺼내기'</b>입니다. 그런데 비용이 0..B 범위의 정수라면, 힙 대신 <b>B+1개의 양동이</b>에 담고 0번부터 차례로 비우면 됩니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>이진 힙</th><th>양동이 큐(Dial)</th></tr>
+<tr><td>꺼내기</td><td>O(log V)</td><td>O(1)</td></tr>
+<tr><td>넣기</td><td>O(log V)</td><td>O(1)</td></tr>
+<tr><td>전체</td><td>O((V+E) log V)</td><td><b>O(V + E + B)</b></td></tr>
+<tr><td>필요 조건</td><td>없음</td><td>정수 비용 · 유한한 최대 거리</td></tr>
+<tr><td>추가 메모리</td><td>힙 배열</td><td>양동이 B+1개</td></tr>
+</table>
+</div>
+<div class="key"><b>왜 성립하는가</b> — 양동이 c를 비우는 동안 새로 생기는 항목은 비용이 <code class="nb">c + w ≥ c + 1</code>이므로 <b>항상 뒤쪽 양동이</b>로 들어갑니다. 따라서 앞에서부터 순서대로 비우면 꺼내는 순서가 비용 오름차순이 되고, 이것이 다익스트라가 요구하는 전부입니다.</div>
+</article>
+
+<article class="card" id="s8-reachable">
+<h3>구현</h3>
+<!--CODE file=py/hexwar/path.py sym=reachable lang=py note=Dial 양동이 큐-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>줄</th><th>왜 그렇게</th></tr>
+<tr><td><code class="nb">if best[cur] != c: continue</code></td><td>더 싼 길로 이미 갱신된 낡은 항목 — 지연 삭제</td></tr>
+<tr><td><code class="nb">if cur != start and zoc[cur]: continue</code></td><td>ZOC 칸은 도달만, 확장 없음</td></tr>
+<tr><td><code class="nb">while bi &lt; len(b)</code></td><td>비우는 도중 <b>같은 양동이에 추가될 수 있다</b>(비용 0 간선은 없으므로 실제로는 없지만, 안전하게)</td></tr>
+<tr><td>마지막 전체 훑기</td><td>결과를 인덱스 오름차순 목록으로 — 순회 순서를 언어에 맡기지 않는다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s8-determinism">
+<h3>왜 결정적인가 — 골든 벡터에 담을 수 있는 이유</h3>
+<p>양동이 큐는 <b>같은 비용의 정점을 꺼내는 순서</b>가 완전히 정해져 있습니다. 양동이에 넣은 순서대로 꺼내므로, 이웃을 방향 0..5 순서로 훑는 한 결과가 유일합니다.</p>
+<div class="g2">
+<div class="cmp bad">
+<h5>✘ 비결정적인 것들</h5>
+<p>파이썬 <code class="nb">set</code>의 순회 순서 · 루아 <code class="nb">pairs</code> · 힙의 동점 처리 · 부동소수 비교 · 해시 순회</p>
+</div>
+<div class="cmp good">
+<h5>✔ 이 엔진이 쓰는 것</h5>
+<p>인덱스 오름차순 목록 · 방향 0..5 고정 순서 · 정수 비교 · 동점은 명시적 규칙(작은 인덱스)</p>
+</div>
+</div>
+<div class="key"><b>결정성은 성능이 아니라 검증을 위한 성질입니다.</b> 이것이 없으면 세 언어의 트레이스를 바이트 단위로 비교할 수 없고, 그러면 '같은 구현'이라는 주장을 증명할 방법이 사라집니다.</div>
+</article>
+
+<article class="card" id="s8-trace">
+<h3>경로 역추적</h3>
+<!--CODE file=py/hexwar/path.py sym=trace_path lang=py note=반대 방향으로 되짚기-->
+<p><code class="nb">came[i]</code>에 '들어온 방향'을 넣어 두었으므로, 되돌아가려면 <b>반대 방향</b>(<code class="nb">(d+3) % 6</code>)의 델타를 더하면 됩니다. 부모 인덱스를 저장하는 것과 비교하면 <b>바이트 하나 대 워드 하나</b>이고, 도스에서는 그 차이가 컸습니다.</p>
+<div class="note"><b>(d+3)%6이 반대 방향인 이유</b> — 방향 표가 60°씩 도는 순서로 정렬되어 있으므로, 세 칸 건너면 180°입니다. E(0)의 반대는 W(3), NE(1)의 반대는 SW(4)입니다. 표 순서를 정할 때 이 성질을 의도적으로 넣어 두면 이런 계산이 공짜가 됩니다.</div>
+</article>
+
+<article class="card" id="s8-tri-reach">
+<h3>세 언어의 도달 범위</h3>
+<div class="tri">
+<div>
+<h6>Python</h6>
+<!--CODE file=py/hexwar/path.py sym=reachable lang=py note=-->
+</div>
+<div>
+<h6>Lua</h6>
+<!--CODE file=lua/hexwar/path.lua sym=M.reachable lang=lua note=-->
+</div>
+<div>
+<h6>TypeScript</h6>
+<!--CODE file=ts/src/path.ts sym=reachable lang=ts note=-->
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>언어</th><th>방문 배열</th><th>결과 자료구조</th></tr>
+<tr><td>Python</td><td><code>list</code> of int</td><td><code>dict</code> + list</td></tr>
+<tr><td>Lua</td><td>테이블</td><td>테이블 두 개 + 배열</td></tr>
+<tr><td>TypeScript</td><td><code>Int32Array</code></td><td><code>Map</code> + array</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s8-bench">
+<h3>실측 — 이론과 현실</h3>
+<p>양동이 큐가 힙보다 빠르다는 것이 이론입니다. 실제로 재 보면 이야기가 조금 다릅니다.</p>
+<!--OUT file=bench_ds.txt sec=1 note=작은 맵 (24×18, MP 12)-->
+<div class="warn"><b>차이가 없습니다.</b> 이유는 두 가지입니다. ① 432칸에서 log₂432 ≈ 8.8이고, 힙 연산 하나가 몇 나노초라 <b>절대 시간이 너무 작습니다.</b> ② 두 구현 모두 <code class="nb">Int32Array(432)</code> 할당과 결과 <code class="nb">Map</code> 조립에 대부분의 시간을 씁니다 — <b>탐색이 아니라 부대 비용이 지배합니다.</b></div>
+<!--OUT file=bench_ds.txt sec=4 note=큰 맵 (160×120, MP 60)-->
+<div class="key"><b>정점이 19,200개가 되어서야 이론이 드러납니다</b> — 그래도 1.1~1.2배입니다. 이것이 정직한 결과이고, 도스 시절의 선택이 <b>성능보다 단순함</b> 때문이었을 가능성을 시사합니다. 양동이 큐는 힙보다 코드가 짧고, 비교 함수도 포인터도 필요 없습니다.</div>
+</article>
+
+<article class="card" id="s8-bench-py">
+<h3>파이썬에서는 더 뒤집힌다</h3>
+<!--OUT file=measure.txt sec=1 note=파이썬 3.14-->
+<div class="note">파이썬의 <code class="nb">heapq</code>는 C로 구현돼 있고, 우리 양동이 큐는 파이썬 바이트코드입니다. <b>알고리즘의 이점이 구현 층위 차이에 완전히 묻힙니다.</b> 실무에서 '이론적으로 더 빠른 자료구조'를 넣기 전에 반드시 재 봐야 하는 이유입니다.</div>
+<div class="key"><b>그래도 이 문서는 양동이 큐를 씁니다.</b> 이유는 <b>결정성</b>입니다 — 힙의 동점 처리는 구현마다 다르고, 파이썬 <code class="nb">heapq</code>·루아 손수 만든 힙·자바스크립트 배열 힙이 같은 순서를 보장하지 않습니다. 양동이 큐는 순서가 자명합니다.</div>
+</article>
+
+<article class="card" id="ch24">
+<p class="chnum">24장</p>
+<h2>A*</h2>
+<p class="chsub">예산 밖의 목표까지</p>
+</article>
+
+<article class="card" id="s8-astar-why">
+<h3>여러 턴에 걸친 경로</h3>
+<p>이번 턴에 닿지 못하는 곳으로 유닛을 보내려면 <b>예산 없는</b> 최단 경로가 필요합니다. 정점이 432개뿐이라 다익스트라로도 충분하지만, A*는 목표 방향으로만 뻗어 <b>탐색 정점을 크게 줄입니다.</b></p>
+<div class="sig">f(v) = <u>g(v)</u><span class="lbl">지금까지 비용</span> + <u>h(v)</u><span class="lbl">남은 비용 추정</span></div>
+<!--CODE file=py/hexwar/path.py sym=astar lang=py note=이진 힙 + 삽입 순번-->
+</article>
+
+<article class="card" id="s8-admissible">
+<h3>휴리스틱의 허용성 증명</h3>
+<div class="sig">h(v) = <u>dist(v, goal) × MIN_COST</u>, MIN_COST = 1</div>
+<ol class="steps">
+<li><b>주장</b>: h는 실제 남은 비용 h*를 절대 넘지 않는다(허용 가능, admissible).</li>
+<li>v에서 goal까지 어떤 경로든 최소 <code class="nb">dist(v, goal)</code>번의 걸음이 필요합니다 — 헥스 거리의 정의가 곧 최소 걸음 수이기 때문입니다.</li>
+<li>모든 걸음의 비용은 <code class="nb">≥ 1</code>입니다 — 가장 싼 간선(도로→도로)이 1이고, 그보다 싼 간선은 없습니다.</li>
+<li>따라서 <code class="nb">h*(v) ≥ dist(v,goal) × 1 = h(v)</code>. ∎</li>
+</ol>
+<div class="key"><b>허용성이 보장하는 것</b>: A*가 <b>최적해</b>를 찾습니다. 만약 <code class="nb">MIN_COST</code>를 2로 잘못 잡으면(평지 비용) 도로 경로를 과대평가해 <b>더 긴 경로를 답으로 내놓을 수 있습니다.</b> 휴리스틱을 부풀리는 것은 속도를 위해 정확성을 파는 일이고, 그럴 거면 의도적으로 해야 합니다.</div>
+</article>
+
+<article class="card" id="s8-consistent">
+<h3>일관성 — 닫힌 정점을 다시 열지 않아도 되는 이유</h3>
+<div class="sig">모든 간선 (u,v)에 대해 <u>h(u) ≤ w(u,v) + h(v)</u><span class="lbl">일관성 · consistency</span></div>
+<ol class="steps">
+<li>헥스 거리는 삼각부등식을 만족합니다: <code class="nb">dist(u,goal) ≤ dist(u,v) + dist(v,goal)</code>.</li>
+<li>인접한 u, v에서 <code class="nb">dist(u,v) = 1</code>이고 <code class="nb">w(u,v) ≥ 1</code>이므로<br><code class="nb">h(u) = dist(u,goal) ≤ 1 + dist(v,goal) ≤ w(u,v) + h(v)</code>. ∎</li>
+</ol>
+<p>일관적인 휴리스틱에서는 <b>정점을 닫을 때 이미 g값이 최적</b>입니다. 그래서 <code class="nb">closed</code>에 들어간 정점을 다시 열 필요가 없고, 코드가 단순해집니다.</p>
+<!--CODE file=py/hexwar/path.py lines=1-14 lang=py note=모듈 머리말-->
+</article>
+
+<article class="card" id="s8-tiebreak">
+<h3>동점 처리 — 삽입 순번이 규격인 이유</h3>
+<p>f값이 같은 정점이 여럿일 때 어느 것을 먼저 꺼내는가는 <b>구현마다 다릅니다.</b> 결과 경로의 비용은 같아도 <b>경로 자체가 달라집니다.</b></p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>언어</th><th>기본 힙</th><th>동점에서</th></tr>
+<tr><td>Python <code>heapq</code></td><td>튜플 비교</td><td>두 번째 원소로 넘어감</td></tr>
+<tr><td>Lua</td><td>없음 — 직접 구현</td><td>비교 함수에 달림</td></tr>
+<tr><td>JS</td><td>없음 — 직접 구현</td><td>같음</td></tr>
+</table>
+</div>
+<div class="key">그래서 힙의 키를 <code class="nb">(f, 삽입순번, 인덱스)</code>로 만들고, 삽입 순번을 <b>단조 증가 카운터</b>로 둡니다. 세 언어가 정확히 같은 순서로 삽입하므로 같은 순번이 붙고, 결과 경로가 유일해집니다.</div>
+</article>
+
+<article class="card" id="s8-astar-verify">
+<h3>A*가 정말 최단인지 확인하기</h3>
+<!--CODE file=py/tests/test_engine.py sym=dijkstra_full lang=py note=기준선-->
+<!--CODE file=py/tests/test_engine.py sym=t_paths lang=py note=성질 검사-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>검사</th><th>확인하는 성질</th></tr>
+<tr><td>모든 도달 칸의 비용 ≤ 예산</td><td>예산 초과 없음</td></tr>
+<tr><td>역추적 경로의 양 끝</td><td>출발·도착이 맞다</td></tr>
+<tr><td>경로에 같은 칸이 두 번 없다</td><td>사이클 없음</td></tr>
+<tr><td>도달 비용 ≥ 예산 없는 다익스트라</td><td>ZOC 때문에 더 비쌀 수는 있어도 더 싸지는 못한다</td></tr>
+<tr><td>A* 경로 비용 = 다익스트라 비용</td><td><b>최적성</b></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="ch25">
+<p class="chnum">25장</p>
+<h2>AI</h2>
+<p class="chsub">1994년의 인공지능은 점수표였다</p>
+</article>
+
+<article class="card" id="s8-ai">
+<h3>점수표 AI</h3>
+<p>탐색 트리도, 학습도 없습니다. 유닛마다 두 규칙이면 사람이 보기에 '싸우는 것처럼' 보입니다.</p>
+<!--CODE file=py/hexwar/ai.py sym=score_attack..best_attack lang=py note=공격 매력도-->
+<div class="sig">점수 = <u>(공격력 − 방어력) × 4</u><span class="lbl">전력 차</span> + <u>(10 − 상대 체력) × 2</u><span class="lbl">마무리 보너스</span></div>
+<div class="note"><b>계수 4와 2는 임의입니다</b> — 다만 '전력 차가 체력보다 두 배 중요하다'는 판단이 들어 있습니다. 이런 가중치를 표로 빼면 밸런스 조정이 코드 수정이 아니게 되고, 나아가 <b>유전 알고리즘으로 학습시킬 수도 있습니다</b>(이 저장소의 테트리스 AI 덱이 그 방향입니다).</div>
+</article>
+
+<article class="card" id="s8-ai-det">
+<h3>AI도 결정적이어야 한다</h3>
+<!--CODE file=py/hexwar/ai.py sym=take_turn lang=py note=적군 한 턴-->
+<div class="key"><b>동점 규칙이 세 군데 있습니다.</b> ① 공격 대상: 점수 같으면 <b>작은 아이디</b>. ② 이동 목표: 거리·비용 같으면 <b>작은 인덱스</b>. ③ 유닛 처리 순서: <b>아이디 오름차순</b>. 셋 중 하나만 빠져도 언어마다 적군의 수가 갈리고, 골든 트레이스가 깨집니다.</div>
+<div class="sig">이동 목표 점수 = <u>목표까지 거리 × 100</u> + <u>이동에 쓴 비용</u><span class="lbl">가까울수록, 같으면 싸게</span></div>
+<div class="note"><b>×100이 하는 일</b> — 거리를 1순위, 비용을 2순위로 만드는 사전식 정렬을 정수 하나로 압축한 것입니다. 비용이 100을 넘지 않는다는 것을 알기 때문에 가능합니다. 도스 코드가 즐겨 쓰던 관용구입니다.</div>
+</article>
+
+<article class="card" id="s8-ai-limits">
+<h3>이 AI가 못하는 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>못하는 것</th><th>왜</th><th>고치려면</th></tr>
+<tr><td>포위</td><td>유닛끼리 협력하지 않는다</td><td>목표 배정을 전역으로</td></tr>
+<tr><td>후퇴</td><td>언제나 가장 가까운 적으로 간다</td><td>체력·전력비 평가</td></tr>
+<tr><td>목표 점령</td><td>목표 헥스를 아예 모른다</td><td>목표를 점수에 넣기</td></tr>
+<tr><td>지형 활용</td><td>방어 보너스를 고려하지 않는다</td><td>도착 칸 점수에 지형 방어 더하기</td></tr>
+</table>
+</div>
+<div class="key"><b>그런데도 플레이가 성립합니다.</b> 도스 워게임 AI의 상당수가 이 수준이었고, 부족함은 <b>병력 우위</b>로 메웠습니다(적에게 유닛을 더 주는 것). 지금 기준으로는 게으른 해법이지만, 8086에서 한 턴을 1초 안에 끝내야 했다는 제약을 생각하면 다른 선택지가 많지 않았습니다.</div>
+</article>
+
+<article class="card quiz" id="s8-quiz1" data-quiz>
+<h3>퀴즈 1</h3>
+<p class="q">Q. 양동이 큐에서 <code class="nb">if best[cur] != c: continue</code>를 빼면 무엇이 잘못되는가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 결과 자체는 <b>대개 맞습니다</b> — 낡은 항목으로 확장해도 <code class="nb">nc &lt; best[ni]</code> 검사에서 걸러지기 때문입니다. 문제는 <b>성능과 결정성</b>입니다. 낡은 항목마다 이웃 6개를 다시 훑으므로 일이 늘고, 더 중요하게는 <b>확장 순서가 달라져</b> 같은 비용의 칸에 기록되는 <code class="nb">came</code> 방향이 바뀔 수 있습니다. 경로가 달라지면 골든 트레이스가 깨집니다.</div>
+</article>
+
+<article class="card quiz" id="s8-quiz2" data-quiz>
+<h3>퀴즈 2</h3>
+<p class="q">Q. A*의 휴리스틱을 <code class="nb">dist × 2</code>(평지 비용)로 바꾸면 무엇이 좋고 무엇이 나빠지는가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 좋아지는 것: <b>탐색이 훨씬 빨라집니다</b> — 휴리스틱이 클수록 목표 방향으로 곧장 뻗습니다. 나빠지는 것: <b>허용성이 깨져 최적해를 놓칠 수 있습니다.</b> 도로가 있는 지도에서 특히 그렇습니다 — 도로 경로의 실제 비용이 <code class="nb">dist × 1</code>인데 휴리스틱이 <code class="nb">dist × 2</code>로 추정하면, A*는 도로를 '멀다'고 판단해 지나칩니다. <b>가중 A*</b>라 부르는 이 기법은 '최적이 아니어도 되는' 상황에서만 의도적으로 씁니다.</div>
+</article>
+
+<article class="card" id="s8-demo">
+<h3>만져 보기 — 양동이 큐</h3>
+<div class="demo" data-demo="reach">
+<h5>지형을 칠하고 이동 범위를 보세요</h5>
+<div class="row">
+<button data-ter="0">평지 2</button>
+<button class="sec" data-ter="1">숲 4</button>
+<button class="sec" data-ter="2">언덕 4</button>
+<button class="sec" data-ter="3">산 6</button>
+<button class="sec" data-ter="4">바다 ✕</button>
+</div>
+<div class="row">
+<label>이동력 <input type="range" data-mp min="2" max="20" value="12"></label>
+<span data-mpval>12</span>
+</div>
+<div class="out"></div>
+</div>
+<div class="note">칸의 숫자가 그 칸까지 쓴 이동력입니다. 오른쪽 버튼(또는 길게 누르기)으로 출발 칸을 옮길 수 있습니다. 바다로 통로를 막으면 우회 경로의 비용이 어떻게 오르는지 보입니다.</div>
+</article>
+
+<article class="card" id="s8-sum">
+<h3>8부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>선택</th><th>이유</th><th>실측</th></tr>
+<tr><td>양동이 큐(Dial)</td><td>정수 비용 · <b>결정성</b></td><td>작은 맵 1.0배 · 큰 맵 1.1–1.2배</td></tr>
+<tr><td>방향 인덱스로 역추적</td><td>바이트 하나 vs 워드 하나</td><td>—</td></tr>
+<tr><td>A* + 삽입 순번</td><td>최적성 + 언어 간 동일 경로</td><td>다익스트라와 비용 일치 확인</td></tr>
+<tr><td>점수표 AI</td><td>1994년의 현실 · 결정적</td><td>골든 트레이스에 적군 턴 포함</td></tr>
+</table>
+</div>
+</article>
