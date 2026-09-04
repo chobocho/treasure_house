@@ -74,9 +74,9 @@ bench:
 
 frames:
 	@mkdir -p $(OUT)
-	cd $(ROOT)/py && for s in 1 12 40 76 119; do \
+	cd $(ROOT)/py && for s in 1 12 40 72 76 119; do \
 	  $(PY) -m hexwar.main render $(OUT)/frame_$$s.ppm $$s; done
-	cd $(ROOT) && for s in 1 12 40 76 119; do \
+	cd $(ROOT) && for s in 1 12 40 72 76 119; do \
 	  $(PY) tools/ppm2png.py $(OUT)/frame_$$s.ppm $(OUT)/frame_$$s.png 2; done
 
 golden:

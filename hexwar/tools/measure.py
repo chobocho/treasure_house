@@ -163,6 +163,21 @@ def main():
 
     say()
     say('== 7. 거리 공식과 BFS 가 모든 쌍에서 같은가 ==')
+    # 오라클은 공식을 쓰지 않는다 — 이웃 그래프를 너비 우선으로 걸어 걸음 수를 센다.
+    # 원점에서 각 칸까지의 BFS 거리를 한 번 구해 두고(평행 이동 불변), 모든 쌍을 대조한다.
+    bfs = {(0, 0): 0}
+    frontier = [(0, 0)]
+    d = 0
+    while d < 16:                     # 범위 ±4 이면 최대 거리 16
+        d += 1
+        nxt = []
+        for (q, r) in frontier:
+            for (dq, dr) in H.DIRS:
+                n = (q + dq, r + dr)
+                if n not in bfs:
+                    bfs[n] = d
+                    nxt.append(n)
+        frontier = nxt
     bad = 0
     tested = 0
     for aq in range(-4, 5):
@@ -170,12 +185,9 @@ def main():
             for bq in range(-4, 5):
                 for br in range(-4, 5):
                     tested += 1
-                    d1 = H.distance(aq, ar, bq, br)
-                    dx, dy, dz = aq - bq, (-aq - ar) - (-bq - br), ar - br
-                    d2 = (abs(dx) + abs(dy) + abs(dz)) // 2
-                    if d1 != d2:
+                    if H.distance(aq, ar, bq, br) != bfs[(bq - aq, br - ar)]:
                         bad += 1
-    say('   축좌표 공식 vs 큐브 공식: %d쌍 중 불일치 %d' % (tested, bad))
+    say('   축좌표 공식 vs BFS 걸음 수: %d쌍 중 불일치 %d' % (tested, bad))
 
     say()
     say('== 8. 2d6 분포와 전투 결과표 ==')

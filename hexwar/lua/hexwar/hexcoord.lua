@@ -67,11 +67,11 @@ function M.neighbors(q, r)
 end
 
 function M.rotate_cw(x, y, z)
-  return -y, -z, -x
+  return -z, -x, -y
 end
 
 function M.rotate_ccw(x, y, z)
-  return -z, -x, -y
+  return -y, -z, -x
 end
 
 function M.rotate_about(q, r, cq, cr, steps)
