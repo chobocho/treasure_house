@@ -67,7 +67,7 @@ def _choose_entering(T, cols, rule):
     return best
 
 
-def _ratio_test(T, col, rule):
+def _ratio_test(T, col, rule, basis=None):
     """나갈 행을 고른다 — 최소 비율. 동률이면 Bland 규칙으로 첨자가 작은 기저를 뺀다."""
     m = len(T) - 1
     best, bestr = -1, INF
@@ -77,7 +77,10 @@ def _ratio_test(T, col, rule):
             if r < bestr - 1e-12:
                 best, bestr = i, r
             elif abs(r - bestr) <= 1e-12 and best >= 0 and rule == 'bland':
-                best = i if T[i][col] > 0 else best
+                # 동률: 기저 첨자가 더 작은 행을 내보낸다. 예전 코드는 첨자를 보지
+                # 않고 뒤 행을 골라, 정리 24.5 의 보장이 구현에 적용되지 않았다.
+                if basis is not None and basis[i] < basis[best]:
+                    best, bestr = i, r
     return best, bestr
 
 
@@ -94,7 +97,7 @@ def _simplex(T, basis, cols, rule='dantzig', maxiter=10000, trace=None):
                               'enter': None, 'leave': None,
                               'rc': [T[-1][j] for j in cols]})
             return 'optimal', k
-        row, ratio = _ratio_test(T, col, rule)
+        row, ratio = _ratio_test(T, col, rule, basis)
         if trace is not None:
             trace.append({'k': k, 'basis': list(basis), 'obj': -T[-1][-1],
                           'enter': col, 'leave': (basis[row] if row >= 0 else None),
@@ -189,6 +192,8 @@ def _two_phase(A, b, c, rule='dantzig', maxiter=20000, trace=None):
             T[-1][j] = -math.fsum(T[i][j] for i in need)
         T[-1][-1] = -math.fsum(b[i] for i in need)
         st, k1 = _simplex(T, basis, range(n), rule, maxiter)
+        if st == 'maxiter':
+            return 'maxiter', None, None, k1
         if -T[-1][-1] > 1e-7:
             return 'infeasible', None, None, k1
         for i in range(m):                  # 기저에 남은 인공변수를 밀어낸다
@@ -232,6 +237,11 @@ def solve_lp(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
                         history=trace)
     if st == 'unbounded':
         return LPResult('unbounded', nit=nit, msg='개선 방향이 유계가 아니다',
+                        history=trace)
+    if st == 'maxiter':
+        # 반복 상한에 걸린 것을 'optimal' 로 포장하면 안 된다 — 퇴화 문제에서
+        # Dantzig 규칙이 순환할 때 엉뚱한 목적값을 최적이라 보고하던 버그였다.
+        return LPResult('maxiter', nit=nit, msg='반복 상한 도달 — 순환이 의심된다',
                         history=trace)
     ntot = len(A[0])
     z = [0.0] * ntot

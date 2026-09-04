@@ -26,7 +26,7 @@ def demo_multiplier_meaning():
         rows.append(['%.1f' % b, '%.8f' % p, '%.8f' % lam, '%.8f' % num,
                      '%.2e' % abs(num - lam)])
     print(fmt.table(rows, align='rrrrr'))
-    print('  승수가 최적값의 민감도와 소수점 여덟 자리까지 같다(정리 19.6).')
+    print('  승수가 최적값의 민감도와 소수점 여덟 자리까지 같다(정리 19.8).')
     print('  그래서 승수를 "그림자 가격(shadow price)"이라 부른다 — 제약을 완화할 때')
     print('  목적값이 얼마나 개선되는가를 그대로 말해 준다.\n')
 

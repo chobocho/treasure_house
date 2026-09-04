@@ -82,7 +82,7 @@ def demo_noise():
         rows.append(['%.0f%%' % (100 * noise), '%d' % len(var),
                      '%.1f%%' % (100.0 * top / 500), '%d' % singles])
     print(fmt.table(rows, align='rrrr'))
-    print('  잡음이 늘면 변형 수가 폭발하고, 그 대부분은 <한 번만> 나타난다.')
+    print('  잡음이 늘면 변형 수가 폭발하고, 그중 40% 가량은 <한 번만> 나타난다.')
     print('  알파 알고리즘은 "한 번이라도 관측됐으면 참"으로 다루므로 여기서 무너진다.')
     print('  휴리스틱·인덕티브 마이너가 빈도를 보는 이유다.')
 
