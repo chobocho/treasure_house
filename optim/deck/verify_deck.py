@@ -96,7 +96,8 @@ def main():
 
     # ── 3. 챕터 이동 목록이 실제 id 를 가리키는가 ────────────────
     idset = set(ids)
-    for v in re.findall(r'<option value="([^"]+)">', body_only):
+    nav = re.search(r'<select id="nav"[^>]*>(.*?)</select>', body_only, re.S)
+    for v in re.findall(r'<option value="([^"]+)">', nav.group(1) if nav else ''):
         if v != 'top' and v not in idset:
             problems.append('[nav] 없는 슬라이드를 가리킨다: %s' % v)
 
@@ -132,7 +133,7 @@ def main():
     # ── 5. 실행 출력 = manifest ─────────────────────────────────
     mpath = os.path.join(BASE, 'out', 'manifest.json')
     manifest = json.loads(read(mpath)) if os.path.exists(mpath) else {}
-    for m in re.finditer(r'<div class="term" data-out="([^"]+)">(.*?)</div>', body_only, re.S):
+    for m in re.finditer(r'<div class="term[^"]*" data-out="([^"]+)">(.*?)</div>', body_only, re.S):
         name, inner = m.group(1), m.group(2)
         st['out'] += 1
         rec = manifest.get(name)

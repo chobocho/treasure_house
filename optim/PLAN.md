@@ -28,7 +28,7 @@ python3 optim/deck/verify_deck.py               # 덱 ↔ 소스 역검증
 | 부 | 제목 | 목표 장수 | 상태 |
 |---|---|---|---|
 | 앞 | 표지·서문 | 11 | ✅ |
-| 1 | 준비 — 최적화의 언어 | 42 | ⬜ |
+| 1 | 준비 — 최적화의 언어 | 42 | ✅ 40장 |
 | 2 | 볼록성 | 42 | ⬜ |
 | 3 | 무제약 최적화 | 60 | ⬜ |
 | 4 | 최소제곱과 회귀 | 40 | ⬜ |
@@ -53,3 +53,12 @@ python3 optim/deck/verify_deck.py               # 덱 ↔ 소스 역검증
   `deck/base/head.html`(수식 CSS 포함) `deck/build_deck.py` `deck/verify_deck.py` `run_all.py`,
   `deck/sections/00-front.html`(11장).
 - **검증:** 42 passed, 0 failed. 데모 2개 실행 성공. 덱 빌드 11장, 역검증 문제 0건.
+
+### [2026-09-04] 1부 — 준비
+- **기획:** 표준형·존재성(바이어슈트라스·강제성) → 선형대수(코시–슈바르츠·레일리·조건수·SVD)
+  → 다변수 미적분(최급강하·테일러·하강 보조정리) → 수치의 현실(최적 차분 스텝·복소 스텝).
+- **TC:** `test_fmt.py` 4개 추가(한글·결합문자 폭). 전체 42 passed.
+- **개발:** `deck/sections/01-prep.html`(40장), `py/demo_linalg.py` `py/demo_numdiff.py`
+  `py/fmt.py`, `deck/demos.js`(방향도함수 탐색기).
+- **검증:** 42 passed / 0 failed. 덱 51장, 코드 인용 11블록, 실행 출력 2개, 역검증 0건.
+- **비고:** 증명 12건 수록. 괘선 문자 대신 ASCII 하이픈 규칙을 `fmt.table` 에 고정.
