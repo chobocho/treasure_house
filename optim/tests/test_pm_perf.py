@@ -144,3 +144,16 @@ class TestAllocation(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestDemoUsesOneLog(unittest.TestCase):
+    """12부 데모의 병목 표(§2)와 배낭 표(§6)는 같은 로그에서 나와야 한다 —
+       그래야 "예산 1 의 절감 = 1위 병목의 총 대기 절반"이 표끼리 맞아떨어진다."""
+
+    def test_knapsack_matches_bottleneck_table(self):
+        from py import demo_pm_perf
+        lg = demo_pm_perf.base_log()
+        top = perf.bottlenecks(lg)[0]
+        plan = AL.capacity_plan(lg, budget=1)
+        self.assertEqual(plan['chosen'], [top['activity']])
+        self.assertEqual(plan['saved'], int(round(0.5 * top['total_waiting'])))
