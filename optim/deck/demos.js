@@ -611,3 +611,159 @@
     draw();
   });
 })();
+
+(function () {
+  'use strict';
+
+  // ── 데모 5 · 선형계획: 다면체와 심플렉스 경로 ──────────────────────
+  // 제약 5개(x<=4, 2y<=12, 3x+2y<=18, x>=0, y>=0)로 만든 다각형 위에서
+  // 목적 방향을 돌리며 최적 꼭짓점과 심플렉스가 걷는 경로를 본다.
+  var ROWS = [[1, 0], [0, 2], [3, 2], [-1, 0], [0, -1]];
+  var RHS = [4, 12, 18, 0, 0];
+  var LBL = ['x ≤ 4', '2y ≤ 12', '3x + 2y ≤ 18', 'x ≥ 0', 'y ≥ 0'];
+
+  function feasible(p) {
+    for (var k = 0; k < ROWS.length; k++) {
+      if (ROWS[k][0] * p[0] + ROWS[k][1] * p[1] > RHS[k] + 1e-9) return false;
+    }
+    return true;
+  }
+  function active(p) {
+    var a = [];
+    for (var k = 0; k < ROWS.length; k++) {
+      if (Math.abs(ROWS[k][0] * p[0] + ROWS[k][1] * p[1] - RHS[k]) < 1e-9) a.push(k);
+    }
+    return a;
+  }
+  function vertices() {
+    var out = [];
+    for (var i = 0; i < ROWS.length; i++) {
+      for (var j = i + 1; j < ROWS.length; j++) {
+        var det = ROWS[i][0] * ROWS[j][1] - ROWS[i][1] * ROWS[j][0];
+        if (Math.abs(det) < 1e-12) continue;
+        var p = [(RHS[i] * ROWS[j][1] - ROWS[i][1] * RHS[j]) / det,
+                 (ROWS[i][0] * RHS[j] - RHS[i] * ROWS[j][0]) / det];
+        if (!feasible(p)) continue;
+        var dup = out.some(function (q) {
+          return Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) < 1e-9;
+        });
+        if (!dup) out.push(p);
+      }
+    }
+    return out;
+  }
+
+  __demo('lppoly', function (host, api) {
+    var cv = host.querySelector('canvas');
+    var sl = host.querySelector('[data-th]');
+    var V = vertices();
+    // 다각형 순서로 정렬 (무게중심 기준 각도)
+    var cx = V.reduce(function (s, p) { return s + p[0]; }, 0) / V.length;
+    var cy = V.reduce(function (s, p) { return s + p[1]; }, 0) / V.length;
+    var poly = V.slice().sort(function (a, b) {
+      return Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx);
+    });
+
+    function walk(c) {
+      // 원점에서 시작해 인접 꼭짓점 중 가장 좋아지는 곳으로 이동 (심플렉스의 골격)
+      var cur = V.reduce(function (best, p) {
+        return (Math.hypot(p[0], p[1]) < Math.hypot(best[0], best[1])) ? p : best;
+      }, V[0]);
+      var path = [cur], seen = 0;
+      while (seen++ < 20) {
+        var av = active(cur), best = null, bestv = c[0] * cur[0] + c[1] * cur[1] + 1e-9;
+        for (var i = 0; i < V.length; i++) {
+          var w = V[i];
+          if (Math.abs(w[0] - cur[0]) + Math.abs(w[1] - cur[1]) < 1e-9) continue;
+          var shared = active(w).filter(function (k) { return av.indexOf(k) >= 0; });
+          if (shared.length === 0) continue;          // 모서리로 이어져 있지 않다
+          var val = c[0] * w[0] + c[1] * w[1];
+          if (val > bestv) { bestv = val; best = w; }
+        }
+        if (!best) break;
+        cur = best;
+        path.push(cur);
+      }
+      return path;
+    }
+
+    function draw() {
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      var w = cv.clientWidth || 320, h = cv.clientHeight || 240;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      var ctx = cv.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+      var XR = [-0.6, 7], YR = [-0.6, 7.5];
+      function px(x) { return (x - XR[0]) / (XR[1] - XR[0]) * w; }
+      function py(y) { return h - (y - YR[0]) / (YR[1] - YR[0]) * h; }
+
+      var th = +sl.value * Math.PI / 180;
+      var c = [Math.cos(th), Math.sin(th)];
+
+      // 실행가능 영역
+      ctx.beginPath();
+      poly.forEach(function (p, i) {
+        if (i === 0) ctx.moveTo(px(p[0]), py(p[1])); else ctx.lineTo(px(p[0]), py(p[1]));
+      });
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(58,92,150,.14)'; ctx.fill();
+      ctx.strokeStyle = '#3a5c96'; ctx.lineWidth = 2; ctx.stroke();
+
+      // 목적함수 등위선 몇 개
+      var best = V.reduce(function (a, b) {
+        return (c[0] * b[0] + c[1] * b[1] > c[0] * a[0] + c[1] * a[1]) ? b : a;
+      }, V[0]);
+      var vbest = c[0] * best[0] + c[1] * best[1];
+      ctx.setLineDash([4, 4]);
+      for (var t = -2; t <= 0; t++) {
+        var lev = vbest + t * 2.2;
+        ctx.strokeStyle = t === 0 ? '#7c3aed' : 'rgba(124,58,237,.35)';
+        ctx.lineWidth = t === 0 ? 2 : 1;
+        // c·(x,y) = lev 직선을 화면 범위에서 그린다
+        var pts = [];
+        if (Math.abs(c[1]) > 1e-9) {
+          pts = [[XR[0], (lev - c[0] * XR[0]) / c[1]], [XR[1], (lev - c[0] * XR[1]) / c[1]]];
+        } else {
+          pts = [[lev / c[0], YR[0]], [lev / c[0], YR[1]]];
+        }
+        ctx.beginPath();
+        ctx.moveTo(px(pts[0][0]), py(pts[0][1]));
+        ctx.lineTo(px(pts[1][0]), py(pts[1][1]));
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      // 심플렉스 경로
+      var path = walk(c);
+      ctx.strokeStyle = '#d97706'; ctx.lineWidth = 3;
+      ctx.beginPath();
+      path.forEach(function (p, i) {
+        if (i === 0) ctx.moveTo(px(p[0]), py(p[1])); else ctx.lineTo(px(p[0]), py(p[1]));
+      });
+      ctx.stroke();
+
+      V.forEach(function (p) {
+        ctx.fillStyle = '#3a5c96';
+        ctx.beginPath(); ctx.arc(px(p[0]), py(p[1]), 4, 0, 6.2832); ctx.fill();
+      });
+      ctx.fillStyle = '#2e9e5b';
+      ctx.beginPath(); ctx.arc(px(best[0]), py(best[1]), 6.5, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+
+      var act = active(best).map(function (k) { return LBL[k]; });
+      api.w(host,
+        '<b>목적</b> max ' + c[0].toFixed(3) + '·x + ' + c[1].toFixed(3) + '·y' +
+        ' &nbsp;(각도 ' + sl.value + '°)' +
+        '<br><b>최적 꼭짓점</b> (' + best[0].toFixed(3) + ', ' + best[1].toFixed(3) + ')' +
+        ' · 최적값 ' + vbest.toFixed(4) +
+        '<br><b>활성 제약</b> ' + (act.length ? act.join(', ') : '없음') +
+        ' · <b>심플렉스가 지난 꼭짓점</b> ' + path.length + '개',
+        'ok');
+    }
+
+    sl.addEventListener('input', draw);
+    window.addEventListener('resize', draw);
+    draw();
+  });
+})();
