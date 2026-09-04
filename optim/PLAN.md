@@ -30,7 +30,7 @@ python3 optim/deck/verify_deck.py               # 덱 ↔ 소스 역검증
 | 앞 | 표지·서문 | 11 | ✅ |
 | 1 | 준비 — 최적화의 언어 | 42 | ✅ 40장 |
 | 2 | 볼록성 | 42 | ✅ 33장 |
-| 3 | 무제약 최적화 | 60 | ⬜ |
+| 3 | 무제약 최적화 | 60 | ✅ 46장 |
 | 4 | 최소제곱과 회귀 | 40 | ⬜ |
 | 5 | 제약 최적화와 쌍대성 | 55 | ⬜ |
 | 6 | 선형계획법 | 50 | ⬜ |
@@ -71,3 +71,14 @@ python3 optim/deck/verify_deck.py               # 덱 ↔ 소스 역검증
   `deck/demos.js` 에 젠센 시각화 데모 추가.
 - **검증:** 59 passed / 0 failed. 덱 84장, 역검증 0건.
 - **비고:** 증명 17건. 단체 투영의 유도는 5부 KKT 를 앞당겨 썼다고 본문에 명시.
+
+### [2026-09-04] 3부 — 무제약 최적화
+- **기획:** 최적성 조건 → 경사하강 수렴 정리 4종 → 라인서치(Armijo·Wolfe·Zoutendijk)
+  → 뉴턴(이차수렴 증명) → 준뉴턴(BFGS 정부호 유지) → CG·신뢰영역 → 자동미분.
+- **TC:** `test_unconstrained.py` 22개(발산 경계 2/L, 수렴 인자 (k-1)/(k+1) 8자리 일치,
+  CG n회 유한 종료, 뉴턴 이차수렴, f 단조 감소), `test_autodiff.py` 10개.
+- **개발:** `py/unconstrained.py` `py/autodiff.py`, 데모 7종(`demo_gd/methods/newton/cg/
+  lbfgs/linesearch/autodiff.py`), `deck/sections/03-uncon.html`(46장), 경사하강 궤적 데모.
+- **검증:** 91 passed / 0 failed. 덱 130장, 코드 인용 25블록, 실행 출력 10개, 역검증 0건.
+- **비고:** 증명 20건. funcs.py 의 math.fsum 을 자동미분 대응 fsum 으로 교체(형 디스패치).
+  Rosenbrock 의 기본 출발점을 관례적인 교대 형태로 정정(그 전 값은 n>=4 에서 국소해로 빠졌다).

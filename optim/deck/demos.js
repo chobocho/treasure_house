@@ -318,3 +318,126 @@
     draw();
   });
 })();
+
+(function () {
+  'use strict';
+
+  // ── 데모 3 · 경사하강 궤적 ─────────────────────────────────────────
+  // 보폭 하나로 수렴·지그재그·발산이 갈리는 것을 눈으로 본다.
+  var Plot = window.__optimPlot, FN = window.__optimFN;
+
+  // 2×2 헤세 (뉴턴 데모용) — 파이썬 funcs.py 의 식과 같다.
+  var HESS = {
+    quad: function () { return [[1, 0], [0, 20]]; },
+    rosen: function (x, y) {
+      return [[-400 * (y - x * x) + 800 * x * x + 2, -400 * x], [-400 * x, 200]];
+    },
+    himmel: function (x, y) {
+      return [[12 * x * x + 4 * y - 42, 4 * x + 4 * y],
+              [4 * x + 4 * y, 4 * x + 12 * y * y - 26]];
+    }
+  };
+
+  function solve2(H, b) {                   // 2×2 연립방정식, 특이하면 null
+    var det = H[0][0] * H[1][1] - H[0][1] * H[1][0];
+    if (Math.abs(det) < 1e-14) return null;
+    return [(b[0] * H[1][1] - H[0][1] * b[1]) / det,
+            (H[0][0] * b[1] - b[0] * H[1][0]) / det];
+  }
+
+  __demo('gdpath', function (host, api) {
+    var cv = host.querySelector('canvas');
+    var selF = host.querySelector('[data-fn3]');
+    var selM = host.querySelector('[data-method]');
+    var slA = host.querySelector('[data-alpha]');
+    var start = [-1.5, 0.9];
+
+    function run(F, method, alpha) {
+      var x = start.slice(), pts = [x.slice()], k = 0, v = [0, 0];
+      var MAX = 400;
+      for (k = 0; k < MAX; k++) {
+        var g = F.g(x[0], x[1]);
+        if (!isFinite(g[0]) || !isFinite(g[1])) break;
+        if (Math.hypot(g[0], g[1]) < 1e-10) break;
+        var d;
+        if (method === 'newton') {
+          var H = HESS[selF.value](x[0], x[1]);
+          var s = solve2(H, [-g[0], -g[1]]);
+          d = s || [-g[0], -g[1]];
+          if (d[0] * g[0] + d[1] * g[1] > 0) d = [-g[0], -g[1]];   // 오르막이면 물러선다
+        } else {
+          d = [-g[0], -g[1]];
+        }
+        var a = alpha;
+        if (method === 'gdls' || method === 'newton') {            // Armijo 되추적
+          a = method === 'newton' ? 1 : alpha;
+          var f0 = F.f(x[0], x[1]), gtd = g[0] * d[0] + g[1] * d[1];
+          for (var t = 0; t < 40; t++) {
+            if (F.f(x[0] + a * d[0], x[1] + a * d[1]) <= f0 + 1e-4 * a * gtd) break;
+            a *= 0.5;
+          }
+        }
+        if (method === 'mom') {
+          v = [0.9 * v[0] + d[0], 0.9 * v[1] + d[1]];
+          d = v;
+        }
+        x = [x[0] + a * d[0], x[1] + a * d[1]];
+        if (!isFinite(x[0]) || !isFinite(x[1]) || Math.hypot(x[0], x[1]) > 1e6) {
+          pts.push(x.slice());
+          break;
+        }
+        pts.push(x.slice());
+      }
+      return pts;
+    }
+
+    function draw() {
+      var F = FN[selF.value];
+      var plot = new Plot(cv, F);
+      plot.resize(); plot.field(); plot.contours(F.levels);
+
+      var alpha = Math.pow(10, +slA.value / 10);
+      var method = selM.value;
+      var pts = run(F, method, alpha);
+      var last = pts[pts.length - 1];
+      var diverged = !isFinite(last[0]) || Math.hypot(last[0], last[1]) > 1e5;
+
+      plot.path(pts, diverged ? '#cb2c2c' : '#7c3aed', 1.8);
+      for (var i = 0; i < pts.length; i += Math.max(1, Math.floor(pts.length / 40))) {
+        plot.dot(pts[i][0], pts[i][1], 'rgba(124,58,237,.85)', 2.4);
+      }
+      plot.dot(start[0], start[1], '#cb2c2c', 4.5);
+      if (!diverged) plot.dot(last[0], last[1], '#2e9e5b', 4.5);
+
+      var g = F.g(last[0], last[1]);
+      api.w(host,
+        '<b>방법</b> ' + selM.options[selM.selectedIndex].text +
+        ' · <b>α</b> = ' + alpha.toExponential(3) +
+        ' · <b>반복</b> ' + (pts.length - 1) +
+        '<br>' + (diverged
+          ? '<b>발산</b> — 보폭이 2/L 을 넘었다. 가장 가파른 좌표의 증폭 인자 |1−αL| 이 1 을 넘는다.'
+          : '<b>도착</b> (' + last[0].toFixed(4) + ', ' + last[1].toFixed(4) + ')' +
+            ' · f = ' + F.f(last[0], last[1]).toExponential(3) +
+            ' · ‖∇f‖ = ' + Math.hypot(g[0], g[1]).toExponential(3)),
+        diverged ? 'bad' : 'ok');
+    }
+
+    cv.addEventListener('click', function (e) {
+      var r = cv.getBoundingClientRect();
+      var F = FN[selF.value];
+      var p = new Plot(cv, F);
+      p.w = cv.clientWidth; p.h = cv.clientHeight;
+      start = p.toXY(e.clientX - r.left, e.clientY - r.top);
+      draw();
+    });
+    selF.addEventListener('change', function () {
+      var F = FN[selF.value];
+      start = [F.xr[0] + (F.xr[1] - F.xr[0]) * 0.2, F.yr[0] + (F.yr[1] - F.yr[0]) * 0.75];
+      draw();
+    });
+    selM.addEventListener('change', draw);
+    slA.addEventListener('input', draw);
+    window.addEventListener('resize', draw);
+    draw();
+  });
+})();
