@@ -650,6 +650,10 @@ ol.pf > li > .why { display: block; color: var(--muted); font-size: .86em; }
 <option value="ch112">· 정렬</option>
 <option value="ch113">· 정렬을 최적화 문제로 적기</option>
 <option value="ch114">· 정밀도·일반화·단순성</option>
+<option value="part12">12부 · 프로세스 마이닝 ③ 성능·병목·개선</option>
+<option value="ch121">· 시간을 재는 법</option>
+<option value="ch122">· 대기행렬로 보는 프로세스</option>
+<option value="ch123">· 개선을 최적화 문제로 적기</option>
 </select>
   <button id="tocBtn" aria-label="목차 열기">☰</button>
 </header>
@@ -8920,6 +8924,590 @@ Q2. LP 휴리스틱이 무한대를 돌려주면 무슨 뜻인가? 그때 A* 는
 </div>
 <div class="key"><b>한 문장으로</b> — “이 로그가 이 모델에 얼마나 맞는가”는 <b>최단경로 문제</b>이고, 그것을 빠르게 푸는 열쇠는 <b>선형계획 완화</b>다. 6·7부의 도구가 그대로 쓰인다.</div>
 <div class="note"><b>다음 부에서</b> — 맞는지 아닌지를 알았다. 이제 <b>왜 느린지</b>를 묻는다. 시간·자원·병목을 분석하고, 그 개선을 다시 최적화 문제로 적는다.</div>
+</article>
+
+<article class="card section" id="part12">
+<p class="chnum">12부</p>
+<h2>프로세스 마이닝 ③ 성능·병목·개선</h2>
+<p class="chsub">왜 느린가 — 그리고 무엇을 바꿀 것인가</p>
+</article>
+
+<article class="card" id="ch121">
+<p class="chnum">48장</p>
+<h2>시간을 재는 법</h2>
+<p class="chsub">처리시간 · 대기시간 · 체류시간</p>
+</article>
+
+<article class="card" id="time-kinds">
+<h3>세 가지 시간을 구별해야 한다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이름</th><th>정의</th><th>줄이는 방법</th></tr>
+<tr><td><b>처리시간</b> (service)</td><td>실제로 일한 시간</td><td>자동화·숙련·도구 개선</td></tr>
+<tr><td><b>대기시간</b> (waiting)</td><td>작업이 준비됐는데 시작되지 않은 시간</td><td><b>용량 증설·배치 조정·우선순위</b></td></tr>
+<tr><td><b>체류시간</b> (sojourn)</td><td>처리 + 대기</td><td>위 둘의 합</td></tr>
+<tr><td><b>케이스 처리시간</b> (throughput)</td><td>첫 사건 ~ 마지막 사건</td><td>병렬화·재작업 제거</td></tr>
+</table>
+</div>
+<div class="key"><b>왜 구별이 결정적인가</b> — 실무에서 시간의 <b>대부분은 대기</b>다. 그런데 개선 노력은 흔히 처리시간(“더 빨리 일하자”)에 쏠린다. 실측에서 Receive 는 총 처리시간의 65%를 차지하지만 총 대기시간에서는 14.6%뿐이다. <b>오래 걸리는 것과 기다리게 만드는 것은 다르다.</b></div>
+<p class="fname">py/pm/perf.py <span class="ln">23–44행</span></p>
+<pre><code data-lang="py" data-src="py/pm/perf.py" data-sym="activity_stats">def activity_stats(log):
+    """활동별 처리시간·대기시간 통계. 생성기가 남긴 duration·waiting 속성을 쓴다."""
+    acc = {}
+    for t in log:
+        for e in t:
+            d = acc.setdefault(e.activity, {'n': 0, 'dur': [], 'wait': []})
+            acc[e.activity]['n'] += 1
+            if 'duration' in e.attrs:
+                d['dur'].append(_num(e.attrs['duration']))
+            if 'waiting' in e.attrs:
+                d['wait'].append(_num(e.attrs['waiting']))
+    out = {}
+    for a, d in acc.items():
+        out[a] = {
+            'count': d['n'],
+            'mean_duration': _mean(d['dur']),
+            'mean_waiting': _mean(d['wait']),
+            'total_duration': math.fsum(d['dur']),
+            'total_waiting': math.fsum(d['wait']),
+            'p90_waiting': _quantile(d['wait'], 0.9),
+        }
+    return out</code></pre>
+</article>
+
+<article class="card" id="perf-run1">
+<h3>돌려 보기 — 시간은 어디로 가는가</h3>
+<div class="term tall" data-out="pm_perf"><span class="p">$</span> python3 py/demo_pm_perf.py
+■ 1. 활동별 성능 — 시간은 어디로 가는가  (케이스 500)
+활동     실행 횟수  평균 처리(h)  평균 대기(h)  총 처리 비중  총 대기 비중
+-------  ---------  ------------  ------------  ------------  ------------
+Receive        500         47.36          1.83         65.0%         14.6%
+Approve        653          8.42          1.88         15.1%         19.5%
+Pay            500          6.10          2.10          8.4%         16.7%
+Order          500          3.97          2.08          5.5%         16.5%
+Request        653          2.01          1.90          3.6%         19.8%
+Check          243          3.05          1.91          2.0%          7.4%
+Reject         153          1.00          2.27          0.4%          5.5%
+  케이스 처리시간: 평균 81.5h, 중앙값 82.9h, 90분위 111.5h, 최대 164.2h
+  Receive 가 총 처리시간의 대부분을 차지한다 — 그런데 그것이 곧 병목은 아니다.
+  처리시간이 긴 것과 "기다리게 만드는" 것은 다른 문제다.
+
+■ 2. 병목은 어디인가 — 대기시간 기여도로 본다
+순위  활동     실행 횟수  평균 대기(h)  총 대기(h)  대기 비중  고치면 얻는 것             
+----  -------  ---------  ------------  ----------  ---------  ---------------------------
+   1  Request        653          1.90        1243      19.8%  622 h 절감 (대기 절반 가정)
+   2  Approve        653          1.88        1227      19.5%  613 h 절감 (대기 절반 가정)
+   3  Pay            500          2.10        1050      16.7%  525 h 절감 (대기 절반 가정)
+   4  Order          500          2.08        1041      16.5%  520 h 절감 (대기 절반 가정)
+   5  Receive        500          1.83         917      14.6%  459 h 절감 (대기 절반 가정)
+   6  Check          243          1.91         463       7.4%  232 h 절감 (대기 절반 가정)
+   7  Reject         153          2.27         348       5.5%  174 h 절감 (대기 절반 가정)
+  평균 대기가 비슷해도 &lt;실행 횟수&gt;가 다르면 총 대기가 크게 달라진다.
+  개선의 이득은 빈도 x 평균에 비례하므로 총합을 봐야 한다 —
+  5부 정리 19.8 의 그림자 가격과 정확히 같은 사고다.
+
+■ 3. 자원 분석 — 느린 사람인가, 어려운 일인가
+자원    처리 건수  평균 처리(h)  총 처리(h)  주로 하는 일  진단                                
+------  ---------  ------------  ----------  ------------  ------------------------------------
+ware1         240        143.20       34368  Receive       같은 일을 하는 동료보다 2.8배 느리다
+ware2         260         50.28       13073  Receive       동료보다 빠르다                     
+mgr2          414          6.69        2770  Approve                                           
+mgr1          434          6.45        2797  Approve                                           
+fin2          253          5.99        1514  Pay                                               
+fin1          491          4.48        2201  Pay                                               
+buyer2        168          4.04         679  Order                                             
+buyer3        154          4.02         620  Order                                             
+buyer1        178          3.93         700  Order                                             
+clerk2        320          2.00         641  Request                                           
+clerk1        354          1.98         702  Request                                           
+  평균 처리시간만 보면 Receive 를 맡은 사람들이 다 느려 보인다 —
+  일 자체가 오래 걸리기 때문이다. "같은 활동을 하는 동료와 비교"해야
+  진짜 이상치가 드러난다. 이 로그에서는 ware1 이 그렇다.
+
+■ 4. 인계 네트워크 — 일이 실제로 어떻게 흐르는가
+넘긴 사람  받은 사람  횟수  비중
+---------  ---------  ----  ----
+clerk1     mgr1        107  6.7%
+clerk2     mgr2        103  6.4%
+clerk2     mgr1         96  6.0%
+clerk1     mgr2         82  5.1%
+ware2      fin1         78  4.9%
+ware2      fin2         76  4.7%
+ware1      fin2         76  4.7%
+ware1      fin1         70  4.4%
+buyer1     ware1        46  2.9%
+buyer2     ware2        45  2.8%
+mgr1       buyer3       44  2.7%
+mgr1       buyer2       43  2.7%
+  자원 11명 사이에 인계 38쌍이 관측됐다. 조직도에는 없는 흐름이
+  드러나는 일이 많고, 그 차이가 개선의 출발점이 된다.
+  재작업: Request 88회, Approve 88회, Reject 19회
+  반려 루프가 Request/Approve 의 재작업으로 그대로 나타난다.
+
+■ 5. 리틀의 법칙과 대기행렬 — 용량을 늘리면 얼마나 좋아지나
+양                      값  뜻                               
+-------------  -----------  ---------------------------------
+도착률 λ       0.1813 건/h  단위 시간당 새 케이스            
+평균 체류 W         81.9 h  케이스 하나가 시스템에 있는 시간 
+L = λW (예측)     14.86 건  리틀의 법칙                      
+L (관측)          14.86 건  실제 동시 진행 건수의 시간평균   
+상대 오차            0.00%  어긋나면 로그가 불완전하다는 신호
+
+  가동률이 1 에 가까워지면 대기가 폭발한다 (M/M/1, 서비스율 mu = 1):
+도착률 λ  가동률 ρ  평균 대기 Wq  직전 대비
+--------  --------  ------------  ---------
+   0.500     50.0%           1.0          -
+   0.800     80.0%           4.0      4.0배
+   0.900     90.0%           9.0      2.2배
+   0.950     95.0%          19.0      2.1배
+   0.990     99.0%          99.0      5.2배
+   0.999     99.9%         999.0     10.1배
+  가동률 90% → 99% 는 부하가 10% 늘어난 것인데 대기는 11배가 된다.
+  "자원을 100% 활용하라"는 직관이 프로세스에서 위험한 이유다.
+
+■ 6. 개선을 최적화 문제로 적는다
+  (1) 활동-자원 배치 = 할당 문제 (7부 헝가리안)
+활동     배정된 자원  평균 처리(h)  가장 나쁜 선택(h)    절감
+-------  -----------  ------------  -----------------  ------
+Approve  mgr2                8.144             11.346   3.202
+Check    fin1                2.907             11.346   8.438
+Order    buyer2              3.976             11.346   7.370
+Pay      fin2                6.119             11.346   5.226
+Receive  buyer1             11.346             49.365  38.019
+Reject   mgr1                1.000             11.346  10.346
+Request  clerk2              1.944             11.346   9.402
+    총 평균 처리시간 35.436 h. 자원 하나가 활동 하나만 맡는다는 제약 아래
+    최소가 되는 배정이며, 무작위 배치 200회 중 대부분보다 낫다.
+    주의: Receive 에 buyer1 이 배정된 것은 관측이 없는 조합이라 전체 평균으로
+    채웠기 때문이다. 최적화는 그 낙관적 추정을 그대로 믿는다 — 자료가 없는
+    칸을 어떻게 채우느냐가 답을 바꾼다. 실무에서는 그런 칸을 큰 값으로 막거나
+    "배정 불가" 제약으로 처리한다.
+
+  (2) 예산 배분 = 0/1 배낭 (7부 분지한정·동적계획)
+예산(담당자 추가 인원)  선택된 활동                            절감되는 총 대기(h)  쓴 예산
+----------------------  -------------------------------------  -------------------  -------
+                     1  Request                                                679        1
+                     2  Request, Approve                                      1356        2
+                     3  Request, Approve, Pay                                 1887        3
+                     5  Request, Approve, Pay, Receive, Order                 2855        5
+    "담당자를 한 명 더 붙이면 그 활동의 대기가 절반이 된다"는 가정 아래,
+    예산 안에서 절감을 최대화하는 조합을 고른다. 가치=절감, 무게=인건비,
+    용량=예산인 배낭 문제다. 예산이 늘수록 절감이 단조 증가한다.
+
+  이 두 계산은 7부에서 만든 헝가리안과 배낭 DP 를 "그대로" 호출한 것이다.
+  프로세스 개선이 별도의 기법이 아니라 조합 최적화의 응용이라는 뜻이다.</div>
+</article>
+
+<article class="card" id="bottleneck-def">
+<h3>병목을 정의하는 법</h3>
+<div class="defn"><span class="h">정의 48.1 (대기 기여도)</span>
+활동 <span class="mi"><i>a</i></span> 의 병목 기여도는
+<span class="eq">share(<i>a</i>) = <span class="frac"><span class="num">∑<sub>사건</sub> 대기시간(<i>a</i>)</span><span class="den">∑<sub>모든 활동</sub> 총 대기시간</span></span></span>
+곧 <b>평균 대기 × 실행 횟수</b>를 정규화한 값이다.</div>
+<div class="key"><b>왜 평균이 아니라 총합인가</b> — 개선의 이득은 “한 번 줄이는 양 × 몇 번 일어나는가”에 비례한다. 평균 대기가 가장 긴 활동을 고쳐도 그 활동이 드물면 전체는 거의 변하지 않는다. 이것은 5부 정리 19.8 의 <b>그림자 가격</b>과 정확히 같은 사고다 — “한 단위 완화했을 때 목적값이 얼마나 좋아지는가”.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>병목 판정 방법</th><th>보는 것</th><th>주의</th></tr>
+<tr><td>대기 기여도</td><td>총 대기시간</td><td>이 책의 기본</td></tr>
+<tr><td>큐 길이</td><td>동시에 대기 중인 케이스 수</td><td>타임스탬프가 정밀해야 한다</td></tr>
+<tr><td>가동률</td><td>자원이 바쁜 시간 비율</td><td>90% 를 넘으면 위험 신호(49장)</td></tr>
+<tr><td>전이 시간</td><td>활동 <b>사이</b>의 시간</td><td>인계·이송 지연을 잡아낸다</td></tr>
+<tr><td>재작업률</td><td>같은 활동의 반복</td><td>품질 문제의 표지</td></tr>
+</table>
+</div>
+<p class="fname">py/pm/perf.py <span class="ln">67–90행</span></p>
+<pre><code data-lang="py" data-src="py/pm/perf.py" data-sym="bottlenecks">def bottlenecks(log):
+    """병목 후보를 대기시간 기여도로 정렬한다.
+
+       기여도 = (그 활동의 총 대기시간) / (모든 활동의 총 대기시간)
+
+       왜 총합인가: 평균 대기가 길어도 드물게 일어나면 전체에 미치는 영향은 작다.
+       고쳐서 얻는 이득은 &lt;빈도 x 평균&gt;에 비례하므로 총합을 본다. 5부 정리 19.8 의
+       그림자 가격과 같은 사고다 — "한 단위 개선했을 때 목적값이 얼마나 좋아지나".
+    """
+    st = activity_stats(log)
+    total_wait = math.fsum(v['total_waiting'] for v in st.values())
+    total_dur = math.fsum(v['total_duration'] for v in st.values())
+    rows = []
+    for a, v in st.items():
+        rows.append({
+            'activity': a,
+            'count': v['count'],
+            'mean_waiting': v['mean_waiting'],
+            'total_waiting': v['total_waiting'],
+            'wait_share': v['total_waiting'] / total_wait if total_wait else 0.0,
+            'dur_share': v['total_duration'] / total_dur if total_dur else 0.0,
+        })
+    rows.sort(key=lambda r: -r['total_waiting'])
+    return rows</code></pre>
+</article>
+
+<article class="card" id="resource-analysis">
+<h3>자원 분석 — 느린 사람인가, 어려운 일인가</h3>
+<div class="warn"><b>흔한 오류</b> — 자원별 평균 처리시간만 비교하면 “어려운 일을 맡은 사람”이 무능해 보인다. 실측에서 Receive 를 맡은 창고 담당자들의 평균이 가장 긴데, 그것은 업무 자체가 48시간 걸리기 때문이다.</div>
+<div class="key"><b>올바른 비교</b> — <b>같은 활동을 수행하는 동료끼리</b> 비교해야 한다. 실측에서 그렇게 보면 <span class="mi">ware1</span> 이 <span class="mi">ware2</span> 보다 2배 이상 느리다는 것이 드러난다(그렇게 생성한 로그다). 통제하지 않은 비교는 언제나 교란된다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자원 지표</th><th>말해 주는 것</th></tr>
+<tr><td>처리 건수</td><td>작업부하 — 몰려 있으면 병목 후보</td></tr>
+<tr><td>활동별 평균 시간</td><td>숙련도 (같은 활동 동료와 비교)</td></tr>
+<tr><td>담당 활동의 다양성</td><td>전문화 vs 다능화</td></tr>
+<tr><td>인계 네트워크에서의 위치</td><td>중개자·고립·팀 구조</td></tr>
+</table>
+</div>
+<p class="fname">py/pm/perf.py <span class="ln">113–125행</span></p>
+<pre><code data-lang="py" data-src="py/pm/perf.py" data-sym="handover_network">def handover_network(log):
+    """인계 네트워크: {(자원 a, 자원 b): 횟수} — a 가 한 일 다음에 b 가 일했다.
+
+       조직 안에서 일이 실제로 어떻게 흘러가는지 보여 준다. 조직도와 다른 경우가
+       많고, 그 차이가 개선의 출발점이 되는 일이 흔하다.
+    """
+    out = {}
+    for t in log:
+        evs = [e for e in t if e.resource is not None]
+        for i in range(len(evs) - 1):
+            k = (evs[i].resource, evs[i + 1].resource)
+            out[k] = out.get(k, 0) + 1
+    return out</code></pre>
+<div class="note"><b>인계 네트워크의 쓸모</b> — “일이 실제로 어떻게 흐르는가”는 조직도와 자주 다르다. 부서를 여러 번 넘나드는 케이스가 느린 것은 거의 언제나 사실이고, 그 발견 자체가 개선안이 되는 일이 많다. 12부 후반의 자원 배치 최적화가 그 다음 단계다.</div>
+</article>
+
+<article class="card" id="ch122">
+<p class="chnum">49장</p>
+<h2>대기행렬로 보는 프로세스</h2>
+<p class="chsub">리틀의 법칙 · 가동률의 함정</p>
+</article>
+
+<article class="card" id="littles-law">
+<h3>리틀의 법칙</h3>
+<div class="thm"><span class="h">정리 49.1 (Little, 1961)</span>
+정상 상태의 어떤 시스템에서든
+<span class="eq"><i>L</i> = <i>λ W</i></span>
+<span class="mi"><i>L</i></span> = 시스템 안의 평균 개수, <span class="mi"><i>λ</i></span> = 평균 도착률, <span class="mi"><i>W</i></span> = 평균 체류시간.</div>
+<div class="proof"><span class="h">증명 (면적 논증)</span>
+<ol class="pf">
+<li>시간 <span class="mi">[0, <i>T</i>]</span> 동안 시스템 안의 개수 <span class="mi"><i>n</i>(<i>t</i>)</span> 의 그래프 아래 면적을 <span class="mi"><i>A</i></span> 라 하자.</li>
+<li>같은 면적을 케이스별로 세면 <span class="mi"><i>A</i> = ∑<sub><i>i</i></sub> <i>W<sub>i</sub></i></span> — 각 케이스가 머문 시간의 합이다.
+<span class="why">같은 넓이를 세로로 자르느냐 가로로 자르느냐의 차이일 뿐이다.</span></li>
+<li>따라서 <span class="mi"><i>L</i> = <i>A</i>/<i>T</i> = (∑<i>W<sub>i</sub></i>)/<i>T</i> = (<i>N</i>/<i>T</i>)·(∑<i>W<sub>i</sub></i>/<i>N</i>) = <i>λW</i></span>.</li>
+</ol>
+<p>분포에 대한 가정이 <b>전혀 없다</b>는 것이 이 정리의 힘이다.</p></div>
+<div class="key"><b>프로세스 마이닝에서의 쓸모</b> — 세 값 중 둘을 로그에서 직접 재고 나머지를 <b>검산</b>할 수 있다. 실측에서 <span class="mi"><i>λW</i></span> 와 관측 <span class="mi"><i>L</i></span> 이 소수점 둘째 자리까지 일치했다. 크게 어긋나면 <b>로그가 불완전하다</b>는 신호다 — 시작은 기록됐는데 종료가 빠진 케이스가 있다든지.</div>
+<p class="fname">py/pm/perf.py <span class="ln">141–168행</span></p>
+<pre><code data-lang="py" data-src="py/pm/perf.py" data-sym="littles_law">def littles_law(log, window=None):
+    """리틀의 법칙:  L = λ W  (평균 재공품 = 도착률 x 평균 체류시간).
+
+       프로세스 마이닝에서 특히 유용한 이유: 세 값 중 둘을 로그에서 직접 재고
+       나머지 하나를 검산할 수 있다. 어긋나면 로그가 불완전하다는 신호다.
+    """
+    ts = [(t.events[0].time, t.events[-1].time) for t in log if len(t)]
+    if not ts:
+        return {}
+    t0 = min(a for a, _ in ts)
+    t1 = max(b for _, b in ts)
+    span = (t1 - t0) if window is None else window
+    lam = len(ts) / span if span &gt; 0 else 0.0
+    W = _mean([b - a for a, b in ts])
+    # 실제 재공품: 시간축을 훑으며 동시에 열려 있는 케이스 수의 시간평균
+    points = []
+    for a, b in ts:
+        points.append((a, 1))
+        points.append((b, -1))
+    points.sort()
+    cur, prev, area = 0, t0, 0.0
+    for tm, d in points:
+        area += cur * (tm - prev)
+        cur += d
+        prev = tm
+    L_obs = area / span if span &gt; 0 else 0.0
+    return {'lambda': lam, 'W': W, 'L_predicted': lam * W, 'L_observed': L_obs,
+            'span': span}</code></pre>
+</article>
+
+<article class="card" id="utilization">
+<h3>가동률의 함정</h3>
+<div class="thm"><span class="h">정리 49.2 (M/M/1 대기시간)</span>
+도착이 포아송(율 <span class="mi"><i>λ</i></span>), 서비스가 지수(율 <span class="mi"><i>μ</i></span>), 서버 하나일 때 평균 대기시간은
+<span class="eq"><i>W<sub>q</sub></i> = <span class="frac"><span class="num"><i>λ</i></span><span class="den"><i>μ</i>(<i>μ</i> − <i>λ</i>)</span></span> = <span class="frac"><span class="num"><i>ρ</i></span><span class="den"><i>μ</i>(1 − <i>ρ</i>)</span></span>, &nbsp;&nbsp; <i>ρ</i> = <i>λ</i>/<i>μ</i></span></div>
+<div class="key"><b><span class="mi">1/(1−<i>ρ</i>)</span> 항이 전부다</b> — 가동률이 1 에 가까워지면 대기가 <b>발산</b>한다. 실측: <span class="mi"><i>ρ</i></span> 를 90% 에서 99% 로 올리면(부하가 10% 늘었을 뿐인데) 평균 대기가 <b>11배</b>가 된다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>가동률 <span class="mi"><i>ρ</i></span></th><th>평균 대기 <span class="mi"><i>W<sub>q</sub></i></span> (<span class="mi"><i>μ</i>=1</span>)</th><th>직전 대비</th></tr>
+<tr><td>50%</td><td>1.0</td><td>—</td></tr>
+<tr><td>80%</td><td>4.0</td><td>4.0배</td></tr>
+<tr><td>90%</td><td>9.0</td><td>2.2배</td></tr>
+<tr><td>95%</td><td>19.0</td><td>2.1배</td></tr>
+<tr><td>99%</td><td>99.0</td><td>5.2배</td></tr>
+<tr><td>99.9%</td><td>999.0</td><td>10.1배</td></tr>
+</table>
+</div>
+<div class="warn"><b>“자원을 100% 활용하라”는 위험한 조언이다</b> — 제조업의 재고 최소화 사고를 사무 프로세스에 그대로 옮기면 대기시간이 폭발한다. 변동성이 있는 시스템에서 <b>여유(slack)는 낭비가 아니라 완충</b>이다. 5부의 상보여유가 “여유 있는 제약에는 값을 매기지 않는다”고 했던 것과 대비해 볼 만하다 — 여기서는 여유 자체가 값을 갖는다.</div>
+</article>
+
+<article class="card" id="ch123">
+<p class="chnum">50장</p>
+<h2>개선을 최적화 문제로 적기</h2>
+<p class="chsub">할당 · 예산 배분 · 스케줄링</p>
+</article>
+
+<article class="card" id="alloc-assign">
+<h3>활동–자원 배치 = 할당 문제</h3>
+<div class="eq"><span class="uset"><span class="op">min</span><span class="dn"><i>x</i></span></span> <span class="oplim"><span class="op">∑</span><span class="dn"><i>a</i>,<i>r</i></span></span> <i>c<sub>ar</sub> x<sub>ar</sub></i> &nbsp; s.t. &nbsp; <span class="oplim"><span class="op">∑</span><span class="dn"><i>r</i></span></span><i>x<sub>ar</sub></i> = 1, &nbsp; <span class="oplim"><span class="op">∑</span><span class="dn"><i>a</i></span></span><i>x<sub>ar</sub></i> ≤ 1, &nbsp; <i>x<sub>ar</sub></i> ∈ {0,1}</div>
+<div class="key"><b>비용 <span class="mi"><i>c<sub>ar</sub></i></span> 를 로그에서 직접 뽑는다</b> — “자원 <span class="mi"><i>r</i></span> 이 활동 <span class="mi"><i>a</i></span> 를 처리한 평균 시간”이다. 추정이 아니라 <b>관측</b>이라는 점이 프로세스 마이닝의 강점이다. 그리고 7부 정리 30.2 에 의해 이 문제의 제약행렬은 완전단모듈이므로 <b>LP 만 풀어도 0/1 해가 나온다</b>.</div>
+<div class="warn"><b>관측이 없는 칸이 함정이다</b> — <span class="mi"><i>r</i></span> 이 <span class="mi"><i>a</i></span> 를 한 번도 하지 않았다면 <span class="mi"><i>c<sub>ar</sub></i></span> 를 알 수 없다. 무엇으로 채우든 최적화는 그 값을 <b>그대로 믿는다</b>. 실측에서 Receive 에 구매 담당자가 배정된 것이 그 결과다. 실무에서는 그런 칸을 아주 큰 값으로 막거나 “배정 불가” 제약으로 처리한다. <b>자료가 없는 곳을 어떻게 채우느냐가 답을 바꾼다.</b></div>
+<p class="fname">py/pm/allocate.py <span class="ln">17–42행</span></p>
+<pre><code data-lang="py" data-src="py/pm/allocate.py" data-sym="cost_matrix">def cost_matrix(log, activities=None, resources=None, default=None):
+    """자원 r 이 활동 a 를 한 번 처리하는 평균 시간. 관측이 없으면 default.
+
+       실제 로그에서 그대로 뽑아내는 것이 요점이다 — 추정치를 가정하지 않는다.
+    """
+    acc = {}
+    for t in log:
+        for e in t:
+            if e.resource is None or 'duration' not in e.attrs:
+                continue
+            k = (e.activity, e.resource)
+            d = acc.setdefault(k, [])
+            d.append(float(e.attrs['duration']))
+    acts = sorted(activities or {a for (a, _) in acc})
+    res = sorted(resources or {r for (_, r) in acc})
+    allv = [v for vs in acc.values() for v in vs]
+    fallback = default if default is not None else (
+        math.fsum(allv) / len(allv) if allv else 1.0)
+    M = []
+    for a in acts:
+        row = []
+        for r in res:
+            vs = acc.get((a, r))
+            row.append(math.fsum(vs) / len(vs) if vs else fallback)
+        M.append(row)
+    return acts, res, M</code></pre>
+<p class="fname">py/pm/allocate.py <span class="ln">45–66행</span></p>
+<pre><code data-lang="py" data-src="py/pm/allocate.py" data-sym="assign_resources">def assign_resources(log, activities=None, resources=None, scale=1000):
+    """활동마다 자원 하나를 배정해 총 처리시간을 최소화한다 (할당 문제).
+
+       헝가리안 알고리즘은 정수 비용을 받으므로 실수 시간을 scale 배해 반올림한다.
+       그 반올림 오차가 최적성을 해치지 않을 만큼 scale 을 크게 잡는다.
+    """
+    acts, res, M = cost_matrix(log, activities, resources)
+    n = max(len(acts), len(res))
+    big = max(max(row) for row in M) * scale * 10 if M else 1
+    C = [[int(round(M[i][j] * scale)) if i &lt; len(acts) and j &lt; len(res) else big
+          for j in range(n)] for i in range(n)]
+    _, assign = milp.hungarian(C)
+    out, total = [], 0.0
+    for i, a in enumerate(acts):
+        j = assign[i]
+        if j &lt; len(res):
+            out.append((a, res[j], M[i][j]))
+            total += M[i][j]
+    # 헝가리안이 돌려준 비용에는 채워 넣은 가짜 행의 값이 섞여 있으므로,
+    # 실제 배정된 쌍만 다시 더한다. (가짜 행의 비용은 어느 열을 가져가든 같아서
+    # 최적 배정 자체는 영향을 받지 않는다.)
+    return out, total</code></pre>
+</article>
+
+<article class="card" id="alloc-budget">
+<h3>예산 배분 = 0/1 배낭</h3>
+<div class="eq"><span class="uset"><span class="op">max</span><span class="dn"><i>z</i>∈{0,1}<sup><i>n</i></sup></span></span> <span class="oplim"><span class="op">∑</span><span class="dn"><i>a</i></span></span> <i>g<sub>a</sub> z<sub>a</sub></i> &nbsp; s.t. &nbsp; <span class="oplim"><span class="op">∑</span><span class="dn"><i>a</i></span></span> <i>w<sub>a</sub> z<sub>a</sub></i> ≤ <i>B</i></div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>배낭 문제의 요소</th><th>프로세스 개선에서</th><th>어디서 얻나</th></tr>
+<tr><td>가치 <span class="mi"><i>g<sub>a</sub></i></span></td><td>담당자를 늘렸을 때 절감되는 총 대기시간</td><td>정의 48.1 의 총 대기 × 개선 가정</td></tr>
+<tr><td>무게 <span class="mi"><i>w<sub>a</sub></i></span></td><td>인건비·교육비</td><td>조직에서 주어진다</td></tr>
+<tr><td>용량 <span class="mi"><i>B</i></span></td><td>예산</td><td>조직에서 주어진다</td></tr>
+</table>
+</div>
+<div class="key"><b>7부의 코드를 그대로 부른다</b> — <code class="nb">knapsack_dp</code> 한 줄이다. 프로세스 개선이 별도의 기법이 아니라 <b>조합 최적화의 응용</b>이라는 것이 이 부의 결론이다.</div>
+<div class="warn"><b>가정을 드러내라</b> — “담당자를 한 명 더 붙이면 대기가 절반이 된다”는 것은 <b>가정</b>이다. 정리 49.2 를 보면 실제 개선폭은 가동률에 크게 의존한다(<span class="mi"><i>ρ</i>=0.99</span> 라면 절반보다 훨씬 크게 개선되고, <span class="mi"><i>ρ</i>=0.5</span> 라면 훨씬 작다). <b>최적화의 답은 입력만큼만 좋다.</b> 민감도 분석(5부 정리 19.8)으로 그 가정이 답을 얼마나 바꾸는지 확인해야 한다.</div>
+<p class="fname">py/pm/allocate.py <span class="ln">69–89행</span></p>
+<pre><code data-lang="py" data-src="py/pm/allocate.py" data-sym="capacity_plan">def capacity_plan(log, budget, unit_cost=None, gain=None):
+    """예산 안에서 어느 활동의 용량을 늘릴 것인가 (0/1 배낭 = 정수계획).
+
+       각 활동에 담당자를 한 명 더 붙이면 그 활동의 대기시간이 절반이 된다고 하자.
+       그러면 절감되는 총 대기시간이 &lt;가치&gt;, 인건비가 &lt;무게&gt;, 예산이 &lt;용량&gt;이다.
+       7부의 배낭 문제 그대로다.
+
+       gain[a] 를 주면 그 값을 절감량으로 쓰고, 없으면 총 대기시간의 절반으로 둔다.
+    """
+    bt = perf.bottlenecks(log)
+    acts = [r['activity'] for r in bt]
+    values, weights = [], []
+    for r in bt:
+        g = (gain or {}).get(r['activity'], 0.5 * r['total_waiting'])
+        w = (unit_cost or {}).get(r['activity'], 1)
+        values.append(int(round(g)))
+        weights.append(int(w))
+    best, pick = milp.knapsack_dp(values, weights, int(budget))
+    return {'chosen': [acts[i] for i in pick], 'saved': best,
+            'spent': sum(weights[i] for i in pick),
+            'candidates': list(zip(acts, values, weights))}</code></pre>
+</article>
+
+<article class="card" id="improve-run">
+<h3>돌려 보기 — 개선안을 계산한다</h3>
+<div class="term tall" data-out="pm_perf"><span class="p">$</span> python3 py/demo_pm_perf.py
+■ 1. 활동별 성능 — 시간은 어디로 가는가  (케이스 500)
+활동     실행 횟수  평균 처리(h)  평균 대기(h)  총 처리 비중  총 대기 비중
+-------  ---------  ------------  ------------  ------------  ------------
+Receive        500         47.36          1.83         65.0%         14.6%
+Approve        653          8.42          1.88         15.1%         19.5%
+Pay            500          6.10          2.10          8.4%         16.7%
+Order          500          3.97          2.08          5.5%         16.5%
+Request        653          2.01          1.90          3.6%         19.8%
+Check          243          3.05          1.91          2.0%          7.4%
+Reject         153          1.00          2.27          0.4%          5.5%
+  케이스 처리시간: 평균 81.5h, 중앙값 82.9h, 90분위 111.5h, 최대 164.2h
+  Receive 가 총 처리시간의 대부분을 차지한다 — 그런데 그것이 곧 병목은 아니다.
+  처리시간이 긴 것과 "기다리게 만드는" 것은 다른 문제다.
+
+■ 2. 병목은 어디인가 — 대기시간 기여도로 본다
+순위  활동     실행 횟수  평균 대기(h)  총 대기(h)  대기 비중  고치면 얻는 것             
+----  -------  ---------  ------------  ----------  ---------  ---------------------------
+   1  Request        653          1.90        1243      19.8%  622 h 절감 (대기 절반 가정)
+   2  Approve        653          1.88        1227      19.5%  613 h 절감 (대기 절반 가정)
+   3  Pay            500          2.10        1050      16.7%  525 h 절감 (대기 절반 가정)
+   4  Order          500          2.08        1041      16.5%  520 h 절감 (대기 절반 가정)
+   5  Receive        500          1.83         917      14.6%  459 h 절감 (대기 절반 가정)
+   6  Check          243          1.91         463       7.4%  232 h 절감 (대기 절반 가정)
+   7  Reject         153          2.27         348       5.5%  174 h 절감 (대기 절반 가정)
+  평균 대기가 비슷해도 &lt;실행 횟수&gt;가 다르면 총 대기가 크게 달라진다.
+  개선의 이득은 빈도 x 평균에 비례하므로 총합을 봐야 한다 —
+  5부 정리 19.8 의 그림자 가격과 정확히 같은 사고다.
+
+■ 3. 자원 분석 — 느린 사람인가, 어려운 일인가
+자원    처리 건수  평균 처리(h)  총 처리(h)  주로 하는 일  진단                                
+------  ---------  ------------  ----------  ------------  ------------------------------------
+ware1         240        143.20       34368  Receive       같은 일을 하는 동료보다 2.8배 느리다
+ware2         260         50.28       13073  Receive       동료보다 빠르다                     
+mgr2          414          6.69        2770  Approve                                           
+mgr1          434          6.45        2797  Approve                                           
+fin2          253          5.99        1514  Pay                                               
+fin1          491          4.48        2201  Pay                                               
+buyer2        168          4.04         679  Order                                             
+buyer3        154          4.02         620  Order                                             
+buyer1        178          3.93         700  Order                                             
+clerk2        320          2.00         641  Request                                           
+clerk1        354          1.98         702  Request                                           
+  평균 처리시간만 보면 Receive 를 맡은 사람들이 다 느려 보인다 —
+  일 자체가 오래 걸리기 때문이다. "같은 활동을 하는 동료와 비교"해야
+  진짜 이상치가 드러난다. 이 로그에서는 ware1 이 그렇다.
+
+■ 4. 인계 네트워크 — 일이 실제로 어떻게 흐르는가
+넘긴 사람  받은 사람  횟수  비중
+---------  ---------  ----  ----
+clerk1     mgr1        107  6.7%
+clerk2     mgr2        103  6.4%
+clerk2     mgr1         96  6.0%
+clerk1     mgr2         82  5.1%
+ware2      fin1         78  4.9%
+ware2      fin2         76  4.7%
+ware1      fin2         76  4.7%
+ware1      fin1         70  4.4%
+buyer1     ware1        46  2.9%
+buyer2     ware2        45  2.8%
+mgr1       buyer3       44  2.7%
+mgr1       buyer2       43  2.7%
+  자원 11명 사이에 인계 38쌍이 관측됐다. 조직도에는 없는 흐름이
+  드러나는 일이 많고, 그 차이가 개선의 출발점이 된다.
+  재작업: Request 88회, Approve 88회, Reject 19회
+  반려 루프가 Request/Approve 의 재작업으로 그대로 나타난다.
+
+■ 5. 리틀의 법칙과 대기행렬 — 용량을 늘리면 얼마나 좋아지나
+양                      값  뜻                               
+-------------  -----------  ---------------------------------
+도착률 λ       0.1813 건/h  단위 시간당 새 케이스            
+평균 체류 W         81.9 h  케이스 하나가 시스템에 있는 시간 
+L = λW (예측)     14.86 건  리틀의 법칙                      
+L (관측)          14.86 건  실제 동시 진행 건수의 시간평균   
+상대 오차            0.00%  어긋나면 로그가 불완전하다는 신호
+
+  가동률이 1 에 가까워지면 대기가 폭발한다 (M/M/1, 서비스율 mu = 1):
+도착률 λ  가동률 ρ  평균 대기 Wq  직전 대비
+--------  --------  ------------  ---------
+   0.500     50.0%           1.0          -
+   0.800     80.0%           4.0      4.0배
+   0.900     90.0%           9.0      2.2배
+   0.950     95.0%          19.0      2.1배
+   0.990     99.0%          99.0      5.2배
+   0.999     99.9%         999.0     10.1배
+  가동률 90% → 99% 는 부하가 10% 늘어난 것인데 대기는 11배가 된다.
+  "자원을 100% 활용하라"는 직관이 프로세스에서 위험한 이유다.
+
+■ 6. 개선을 최적화 문제로 적는다
+  (1) 활동-자원 배치 = 할당 문제 (7부 헝가리안)
+활동     배정된 자원  평균 처리(h)  가장 나쁜 선택(h)    절감
+-------  -----------  ------------  -----------------  ------
+Approve  mgr2                8.144             11.346   3.202
+Check    fin1                2.907             11.346   8.438
+Order    buyer2              3.976             11.346   7.370
+Pay      fin2                6.119             11.346   5.226
+Receive  buyer1             11.346             49.365  38.019
+Reject   mgr1                1.000             11.346  10.346
+Request  clerk2              1.944             11.346   9.402
+    총 평균 처리시간 35.436 h. 자원 하나가 활동 하나만 맡는다는 제약 아래
+    최소가 되는 배정이며, 무작위 배치 200회 중 대부분보다 낫다.
+    주의: Receive 에 buyer1 이 배정된 것은 관측이 없는 조합이라 전체 평균으로
+    채웠기 때문이다. 최적화는 그 낙관적 추정을 그대로 믿는다 — 자료가 없는
+    칸을 어떻게 채우느냐가 답을 바꾼다. 실무에서는 그런 칸을 큰 값으로 막거나
+    "배정 불가" 제약으로 처리한다.
+
+  (2) 예산 배분 = 0/1 배낭 (7부 분지한정·동적계획)
+예산(담당자 추가 인원)  선택된 활동                            절감되는 총 대기(h)  쓴 예산
+----------------------  -------------------------------------  -------------------  -------
+                     1  Request                                                679        1
+                     2  Request, Approve                                      1356        2
+                     3  Request, Approve, Pay                                 1887        3
+                     5  Request, Approve, Pay, Receive, Order                 2855        5
+    "담당자를 한 명 더 붙이면 그 활동의 대기가 절반이 된다"는 가정 아래,
+    예산 안에서 절감을 최대화하는 조합을 고른다. 가치=절감, 무게=인건비,
+    용량=예산인 배낭 문제다. 예산이 늘수록 절감이 단조 증가한다.
+
+  이 두 계산은 7부에서 만든 헝가리안과 배낭 DP 를 "그대로" 호출한 것이다.
+  프로세스 개선이 별도의 기법이 아니라 조합 최적화의 응용이라는 뜻이다.</div>
+<div class="note"><b>읽는 법</b> — ① 병목 순위는 <b>총</b> 대기 기준이다: Request 와 Approve 가 상위인 것은 반려 루프 때문에 실행 횟수가 653회로 많기 때문이다. ② 가동률 90%→99% 에서 대기가 11배가 된다. ③ 할당 문제와 배낭 문제 모두 7부의 코드를 그대로 호출했다. ④ 예산이 늘수록 절감이 단조 증가하고, 선택 순서가 “대기 기여도가 큰 것부터”가 된다 — 무게가 모두 같을 때는 배낭이 탐욕과 일치한다.</div>
+</article>
+
+<article class="card" id="pm-pipeline">
+<h3>프로세스 마이닝 전체 파이프라인</h3>
+<div class="algo"><span class="an">실무에서의 순서</span>
+<ol>
+<li><b>추출</b> — 정보시스템에서 케이스·활동·시각을 뽑는다 (여기가 대개 가장 오래 걸린다)</li>
+<li><b>정제</b> — 미완료 케이스 제거, 활동 이름 통일, 타임스탬프 정합성 확인 (리틀의 법칙으로 검산)</li>
+<li><b>탐색</b> — 변형 분포, 직접후행 그래프, 휴리스틱 마이너로 첫 그림 (10부)</li>
+<li><b>발견</b> — 인덕티브 마이너로 검증 가능한 모델 (10부)</li>
+<li><b>적합도</b> — 정렬로 편차 목록과 점수 (11부)</li>
+<li><b>성능</b> — 병목·자원·재작업 (12부 전반)</li>
+<li><b>개선</b> — 할당·예산·스케줄링을 최적화 문제로 (12부 후반, 13부)</li>
+<li><b>검증</b> — 바꾼 뒤 다시 1번으로. <b>이것이 순환이라는 점이 핵심이다</b></li>
+</ol></div>
+<div class="key"><b>가장 흔한 실패</b> — 1·2단계를 건너뛰고 화려한 모델부터 그리는 것이다. 로그가 부정확하면 그 위의 모든 계산이 정확하게 틀린 답을 준다. <b>“쓰레기를 넣으면 쓰레기가 나온다”는 여기서 특히 잔인하다</b> — 결과가 그럴듯해 보이기 때문이다.</div>
+</article>
+
+<article class="card quiz" id="q-part12" data-quiz>
+<h3>확인 문제</h3>
+<p class="q">Q1. 어떤 활동의 평균 대기시간이 가장 길다. 그것을 먼저 개선해야 하는가?<br>
+Q2. 리틀의 법칙으로 계산한 <span class="mi"><i>L</i></span> 이 관측값의 절반이었다. 무엇을 의심해야 하는가?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 아니다. 개선의 이득은 <b>평균 × 빈도</b>다. 평균 대기가 2.27시간으로 가장 긴 Reject 는 153회만 실행되어 총 대기가 347시간이지만, 평균 1.90시간인 Request 는 653회 실행되어 1243시간이다. <b>Request 를 고치는 것이 3.6배 이득이다.</b> 이것이 5부 그림자 가격의 사고이며, “가장 아픈 곳”이 아니라 “고쳤을 때 가장 많이 좋아지는 곳”을 봐야 한다.<br>
+<b>A2.</b> <span class="mi"><i>L</i> = <i>λW</i></span> 는 분포 가정 없이 성립하므로, 어긋났다면 <b>세 값 중 하나의 측정이 틀렸다</b>는 뜻이다. 가장 흔한 원인은 ① <b>미완료 케이스</b> — 시작은 기록됐지만 종료가 로그 기간 밖이라 <span class="mi"><i>W</i></span> 가 과소 측정됨, ② <b>기간 잘림</b> — 관측 창 시작 전에 이미 진행 중이던 케이스가 <span class="mi"><i>L</i></span> 에는 잡히는데 <span class="mi"><i>λ</i></span> 에는 안 잡힘, ③ 케이스 ID 오염. <b>정리는 진단 도구다</b> — 모델을 검증하는 데 쓰는 것이 아니라 <b>자료를 검증하는 데</b> 쓴다.</div>
+</article>
+
+<article class="card" id="part12-summary">
+<h3>12부 요약 · 프로세스 마이닝 3부작 정리</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>질문</th><th>계산</th><th>쓰인 최적화</th><th>부</th></tr>
+<tr><td>어떻게 일하고 있는가</td><td>컷 탐색 · 재귀 분할</td><td>조합 탐색·그래프 알고리즘</td><td>10</td></tr>
+<tr><td>규정대로 하고 있는가</td><td><b>최소비용 정렬</b></td><td><b>최단경로 + LP 완화</b></td><td>11</td></tr>
+<tr><td>어디가 병목인가</td><td>대기 기여도</td><td>민감도·그림자 가격</td><td>12</td></tr>
+<tr><td>누구에게 무엇을 맡길까</td><td><b>할당 문제</b></td><td><b>헝가리안 · 완전단모듈</b></td><td>12</td></tr>
+<tr><td>예산을 어디에 쓸까</td><td><b>0/1 배낭</b></td><td><b>동적계획 · 분지한정</b></td><td>12</td></tr>
+<tr><td>어떤 순서로 처리할까</td><td>스케줄링</td><td>정수계획</td><td>13</td></tr>
+</table>
+</div>
+<div class="key"><b>3부작의 결론</b> — 프로세스 마이닝은 “로그 분석 도구 모음”이 아니라 <b>이산 최적화가 현실 데이터를 만나는 자리</b>다. 1~9부에서 만든 도구가 도메인만 바뀐 채 그대로 쓰인다. 반대로, 최적화를 배운 사람에게 프로세스 마이닝은 <b>새로운 응용 영역</b>이지 새로운 수학이 아니다.</div>
+<div class="note"><b>다음 부에서</b> — 지금까지 배운 것을 다섯 개의 실제 문제에 적용한다. 핵심은 알고리즘이 아니라 <b>정식화</b>다 — 현실을 어떻게 수식으로 옮기는가.</div>
 </article>
 
 </main>
