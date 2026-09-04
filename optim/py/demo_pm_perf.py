@@ -8,9 +8,15 @@ from py.pm import log as L
 from py.pm import perf
 
 
+def base_log():
+    """§1·§2·§6 이 공유하는 로그. 병목 표와 배낭 표가 같은 로그에서 나와야
+       "예산 1 의 절감 = 1위 병목의 총 대기 절반"이 표끼리 맞아떨어진다."""
+    return L.generate(n_cases=500, seed=101)
+
+
 def demo_activity():
     print('■ 1. 활동별 성능 — 시간은 어디로 가는가  (케이스 500)')
-    lg = L.generate(n_cases=500, seed=101)
+    lg = base_log()
     st = perf.activity_stats(lg)
     total_d = math.fsum(v['total_duration'] for v in st.values())
     total_w = math.fsum(v['total_waiting'] for v in st.values())
@@ -32,7 +38,7 @@ def demo_activity():
 
 def demo_bottleneck():
     print('■ 2. 병목은 어디인가 — 대기시간 기여도로 본다')
-    lg = L.generate(n_cases=500, seed=101)
+    lg = base_log()
     bt = perf.bottlenecks(lg)
     rows = [['순위', '활동', '실행 횟수', '평균 대기(h)', '총 대기(h)', '대기 비중',
              '고치면 얻는 것']]
@@ -119,8 +125,8 @@ def demo_queue():
 
 
 def demo_optimize():
-    print('■ 6. 개선을 최적화 문제로 적는다')
-    lg = L.generate(n_cases=500, seed=105)
+    print('■ 6. 개선을 최적화 문제로 적는다  (§1·§2 와 같은 로그)')
+    lg = base_log()
 
     print('  (1) 활동-자원 배치 = 할당 문제 (7부 헝가리안)')
     out, total = AL.assign_resources(lg)
@@ -148,7 +154,8 @@ def demo_optimize():
     print(fmt.table(rows, align='rlrr'))
     print('    "담당자를 한 명 더 붙이면 그 활동의 대기가 절반이 된다"는 가정 아래,')
     print('    예산 안에서 절감을 최대화하는 조합을 고른다. 가치=절감, 무게=인건비,')
-    print('    용량=예산인 배낭 문제다. 예산이 늘수록 절감이 단조 증가한다.')
+    print('    용량=예산인 배낭 문제다. 예산이 늘수록 절감이 단조 증가하고, 예산 1 의')
+    print('    절감은 2번 표의 1위 병목 "고치면 얻는 것"과 같은 수다 — 같은 로그다.')
     print()
     print('  이 두 계산은 7부에서 만든 헝가리안과 배낭 DP 를 "그대로" 호출한 것이다.')
     print('  프로세스 개선이 별도의 기법이 아니라 조합 최적화의 응용이라는 뜻이다.')
