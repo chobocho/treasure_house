@@ -1,0 +1,551 @@
+<!--SLIDE sec=4 t="core 패키지"-->
+<h1>테트리스 규칙과 코어 엔진</h1>
+<p class="lead">이 부에는 <b>Bubble Tea 도 Lip Gloss 도 한 번 안 나온다.</b>
+규칙은 화면과 아무 상관이 없기 때문이다.</p>
+<!--CODE file=core/piece.go lines=1-11 cap="core/piece.go — 패키지 주석이 곧 설계 근거"-->
+<p>규칙을 화면에서 떼어 놓으면 셋을 얻는다.</p>
+<ol class="steps">
+  <li>터미널 없이 테스트할 수 있다 — 이 패키지의 테스트는 화면을 한 번도 안 그린다</li>
+  <li>1인용·2인용·AI 대전이 같은 규칙을 공유한다</li>
+  <li>C++ 로 먼저 만든 판과 <b>한 스텝씩 대조</b>할 수 있다</li>
+</ol>
+<p>마지막 항목이 이 패키지의 존재 이유다. 이 코드는 새로 지어낸 규칙이 아니라
+이 저장소의 <code>tetris_ai/tetris.cpp</code> 를 <b>이식</b>한 것이고,
+<code>test/golden/</code> 의 정답지가 그 사실을 증명한다.</p>
+
+<!--SLIDE sec=4 t="판의 크기"-->
+<h2>판은 왜 24줄인가</h2>
+<!--CODE file=core/piece.go lines=13-42 cap="core/piece.go — 크기와 타이밍 상수"-->
+<p>보이는 20줄 위에 <b>숨은 4줄</b>이 있다. 이유가 있다.</p>
+<ul>
+  <li>조각은 보이는 판의 맨 윗줄에서 태어난다 (<code>SpawnY = Hidden</code>)</li>
+  <li>SRS 에는 조각을 <b>위로 두 칸</b> 밀어 올리는 킥이 있다 (<code>{0,-2}</code>)</li>
+  <li>여유가 없으면 그 킥이 늘 실패해서 손맛이 절반쯤 사라진다</li>
+  <li>블록아웃(스폰 자리가 막힘) 판정도 이 여유 위에서 이뤄진다</li>
+</ul>
+<!--BOARD rows="..........|..........|..........|..........|...cc.....|..........|..........|..........|#########.|##########" cap="위 4줄이 숨은 줄. 조각은 그 아래 첫 줄에서 태어난다"-->
+
+<!--SLIDE sec=4 t="조각을 16비트로"-->
+<h2>조각 하나를 16비트 정수로</h2>
+<!--CODE file=core/piece.go lines=43-79 cap="core/piece.go — 조각 번호와 모양 표"-->
+<p>4×4 상자의 각 칸을 비트 하나로 본다. 비트 인덱스 = <code>y*4 + x</code>.</p>
+<div class="bitrow">
+  <figure><div class="bits J"><i class="f">0</i><i>1</i><i>2</i><i>3</i><i class="f">4</i><i class="f">5</i><i class="f">6</i><i>7</i><i>8</i><i>9</i><i>10</i><i>11</i><i>12</i><i>13</i><i>14</i><i>15</i></div>
+  <figcaption>J rot0 = 0x0071</figcaption></figure>
+  <figure><div class="bits"><i>0</i><i>1</i><i>2</i><i>3</i><i class="f">4</i><i class="f">5</i><i class="f">6</i><i class="f">7</i><i>8</i><i>9</i><i>10</i><i>11</i><i>12</i><i>13</i><i>14</i><i>15</i></div>
+  <figcaption>I rot0 = 0x00F0</figcaption></figure>
+  <figure><div class="bits Z"><i class="f">0</i><i class="f">1</i><i>2</i><i>3</i><i>4</i><i class="f">5</i><i class="f">6</i><i>7</i><i>8</i><i>9</i><i>10</i><i>11</i><i>12</i><i>13</i><i>14</i><i>15</i></div>
+  <figcaption>Z rot0 = 0x0063</figcaption></figure>
+</div>
+<p>이 표현의 장점: 충돌 검사가 <b>16번의 비트 테스트</b>로 끝나고,
+조각 데이터 전체가 7×4×2 = <b>56바이트</b>다. 캐시에 통째로 들어간다.</p>
+
+<!--SLIDE sec=4 t="비트에서 칸으로"-->
+<h2>비트를 칸 목록으로</h2>
+<!--CODE file=core/piece.go lines=81-112 cap="core/piece.go — Blocks 와 ShapeBottom"-->
+<p>비트를 직접 훑는 코드가 여러 군데 생기는 걸 막으려고 한 곳에 모았다.
+반환이 슬라이스가 아니라 <b>배열 값</b>이라 할당이 없고, 호출자가 마음대로 써도 안전하다.</p>
+<p><code>rot&amp;3</code> 으로 회전 인덱스를 감싸는 것도 작은 안전장치다.
+회전 계산에서 <code>&amp; 3</code> 을 한 번 잊어도 여기서 막힌다.</p>
+<p class="small mut">시간 복잡도는 둘 다 O(16) — 사실상 상수다. 코어에서 가장 자주 불리는 함수라
+비트마스크를 직접 훑는 편이 낫다.</p>
+
+<!--SLIDE sec=4 t="난수 — xorshift"-->
+<h2>난수는 왜 직접 만드는가</h2>
+<!--CODE file=core/rng.go lines=1-38 cap="core/rng.go — xorshift32"-->
+<p>Go 에는 <code>math/rand</code> 가 있다. 그런데 여기서 쓰면 안 된다.
+<b>같은 시드에서 C++ 판과 같은 조각 순서가 나와야</b> 골든 트레이스가 성립하기 때문이다.</p>
+<p>그래서 알고리즘까지 이식했다. 세 번의 시프트-XOR 만으로 주기 2³²−1 을 얻는다.
+통계적으로 훌륭한 난수는 아니지만, 조각 일곱 개를 섞는 데는 차고 넘친다.</p>
+<div class="warn"><b>시드 0 은 함정이다</b>
+xorshift 는 상태가 0 이면 영원히 0 을 낸다 — 조각이 언제나 같은 하나만 나오는 판이 된다.
+그래서 시드 0 을 황금비의 32비트 근삿값으로 바꾼다. 이 처리도 원본과 같아야 한다.</div>
+
+<!--SLIDE sec=4 t="편향까지 이식한다"-->
+<h2>편향까지 이식한다</h2>
+<!--CODE file=core/rng.go lines=40-51 cap="core/rng.go — IntN"-->
+<p>나머지 연산에는 편향이 있다. 2³² 가 n 으로 안 나눠떨어지면 앞쪽 값이 조금 더 자주 나온다.
+Go 의 <code>math/rand</code> 는 재시도(rejection sampling)로 이걸 없앤다.</p>
+<div class="note"><b>그런데 여기서는 일부러 그대로 둔다</b>
+편향까지 같아야 C++ 과 <b>같은 순열</b>이 나오기 때문이다.
+"더 나은 코드"가 여기서는 "다른 코드"다. 목표가 정확함이 아니라 <b>같음</b>일 때
+이런 판단이 나온다 — 6부에서 같은 상황을 한 번 더 만난다.</div>
+
+<!--SLIDE sec=4 t="7-bag"-->
+<h2>7-bag — "S/Z만 열 번 연속"을 없애는 법</h2>
+<p>가이드라인의 표준 랜더마이저다. 일곱 종을 한 봉지에 넣고 섞어서 하나씩 꺼낸다.
+봉지가 비면 새 봉지를 채운다.</p>
+<!--CODE file=core/rng.go lines=52-90 cap="core/rng.go — Bag"-->
+<p>이 방식의 성질: 같은 조각 사이의 <b>최악 대기가 12개</b>다
+(봉지 앞에서 나오고 다음 봉지 뒤에서 나오는 경우). 순수 난수라면 이론상 무한이다.</p>
+<div class="warn"><b>첫 봉지를 "이미 다 쓴" 상태로 시작한다</b>
+<code>NewBag</code> 이 <code>idx = 7</code> 로 두는 한 줄이다. 이게 없으면 첫 일곱 조각이
+I,J,L,O,S,T,Z 순서로 고정된다 — 섞기 전의 배열을 그대로 꺼내기 때문이다.</div>
+
+<!--SLIDE sec=4 t="Fisher-Yates 의 방향"-->
+<h2>섞는 방향도 규칙이다</h2>
+<p><code>refill</code> 은 Fisher-Yates 로 섞는데, <b>뒤에서부터</b> 돈다.
+앞에서부터 돌아도 "고르게 섞이는" 것은 같지만, <b>같은 난수열에서 다른 순열</b>이 나온다.</p>
+<pre class="code txt"><code>뒤에서부터 (원본·우리)          앞에서부터 (흔한 변형)
+  i = 6,5,4,3,2,1               i = 0,1,2,3,4,5
+  j = rnd() % (i+1)             j = i + rnd() % (7-i)
+  swap(bag[i], bag[j])          swap(bag[i], bag[j])
+
+  같은 시드 → 다른 결과. 골든 트레이스가 그 자리에서 깨진다.</code></pre>
+<p>"같은 알고리즘"이 아니라 <b>"같은 결과"</b>가 목표라는 것을 계속 붙잡고 있어야 한다.</p>
+<p class="small mut">O(7) 시간, 할당 없음. 봉지 배열이 구조체 안에 있어서 힙을 안 건드린다.</p>
+
+<!--SLIDE sec=4 t="판 자료구조"-->
+<h2>판은 배열 하나다</h2>
+<!--CODE file=core/board.go lines=1-30 cap="core/board.go — Board 와 접근자"-->
+<p><code>[][]uint8</code> 로 두면 줄마다 포인터를 따라가야 하고 메모리에서 흩어진다.
+240바이트짜리 <b>연속 배열</b>이면 판 전체가 캐시에 가깝게 들어오고,
+줄을 끌어내리는 연산이 <code>copy()</code> 한 번으로 끝난다.</p>
+<p><code>At</code> 이 범위 밖에서 0 을 돌려주는 것도 의도다.
+호출자가 매번 경계를 검사하지 않아도 된다.</p>
+
+<!--SLIDE sec=4 t="충돌 검사"-->
+<h2>충돌 검사 — 경계 규칙이 셋이다</h2>
+<!--CODE file=core/board.go lines=32-65 cap="core/board.go — Collide 와 Filled"-->
+<table>
+  <tr><th>좌우·바닥 밖</th><td>충돌</td></tr>
+  <tr><th>천장 위 (y &lt; 0)</th><td><b>충돌 아님</b> — 조각이 위로 삐져나오는 건 합법이다</td></tr>
+  <tr><th>굳은 블록</th><td>충돌</td></tr>
+</table>
+<div class="warn"><b>Filled 는 Collide 와 경계 규칙이 다르다</b>
+벽과 바닥은 "막힌 것", 천장 위는 "빈 것"으로 센다.
+이 차이 위에 T스핀 판정이 서 있다 — <b>벽에 붙은 T스핀이 성립하는 이유</b>가 정확히 이것이다.
+두 함수가 비슷하게 생겨서 하나로 합치고 싶어지는데, 합치면 규칙이 바뀐다.</div>
+
+<!--SLIDE sec=4 t="줄 지우기"-->
+<h2>줄 지우기 — 한 줄이 빠지면 테트리스가 안 난다</h2>
+<!--CODE file=core/board.go lines=66-89 cap="core/board.go — Place 와 DropY"-->
+<!--CODE file=core/board.go lines=90-123 cap="core/board.go — ClearLines"-->
+<p>아래에서 위로 훑으면서 지운 뒤 <b>같은 y 를 다시 검사한다.</b>
+끌어내린 줄이 또 꽉 차 있을 수 있기 때문이다.</p>
+<div class="warn"><b>y++ 한 줄이 빠지면</b>
+붙어 있는 네 줄(테트리스) 중 <b>두 줄만</b> 지워진다. 그리고 게임은 멀쩡히 돌아간다.
+4부 끝의 골든 파리티가 이 버그를 시드 2654435769 의 1018스텝에서 잡아냈다 —
+사람이 손으로 찾을 수 있는 종류의 버그가 아니다.</div>
+<p class="small mut">마스크 비트는 "지운 <b>순간</b>의 y"다. 붙어 있는 두 줄은 둘 다 같은 자리에서
+지워지므로 비트가 하나만 선다. 보기에는 어색하지만 원본이 그렇고, 여기서는 파리티가 우선이다.</p>
+
+<!--SLIDE sec=4 t="가비지 밀어 올리기"-->
+<h2>가비지 — 구멍은 공유한다</h2>
+<!--CODE file=core/board.go lines=124-160 cap="core/board.go — PushRows 와 Empty"-->
+<p>한 번에 올라오는 n 줄은 <b>같은 구멍</b>을 쓴다("클린 가비지").
+구멍이 매 줄 달라지면 사실상 복구가 불가능해서 대전이 성립하지 않는다.</p>
+<!--BOARD rows="..........|..........|##########|########.#|########.#|########.#" cap="세 줄이 같은 구멍(x=8)을 공유한다"-->
+<p>천장 밖으로 밀려난 줄은 그냥 사라진다 — 배열이 곧 필드 전체이기 때문이다.</p>
+
+<!--SLIDE sec=4 t="판을 그림으로 심기"-->
+<h2>테스트를 위한 두 함수</h2>
+<!--CODE file=core/board.go lines=161-202 cap="core/board.go — Paint 와 Rows"-->
+<p><code>Paint</code> 는 문자열 그림으로 판을 덮어쓴다. <b>그림의 마지막 줄이 바닥줄</b>이다.
+이 방향을 헷갈리면 모든 테스트가 위아래 뒤집힌 판 위에서 돌게 된다.</p>
+<p>항상 판 전체를 먼저 지운다. 안 그러면 트레이스의 라운드 사이에 이전 판이 남아
+두 구현이 그 자리에서 갈라진다.</p>
+<p><code>Rows</code> 는 그 반대다 — 테스트가 실패했을 때 판이 어떻게 생겼는지
+사람이 볼 수 있게 해 준다. 이런 함수가 없으면 디버깅이 지옥이 된다.</p>
+
+<!--SLIDE sec=4 t="판 해시"-->
+<h2>판을 4바이트로 — FNV-1a</h2>
+<!--CODE file=core/board.go lines=203-221 cap="core/board.go — BoardHash"-->
+<p>골든 트레이스는 1500스텝 × 6시드의 판을 저장해야 한다. 판을 통째로 저장하면
+파일이 20 MB 를 넘는다. <b>해시 하나면 4바이트</b>다.</p>
+<p>충돌 확률은 무시할 수 있고, 어긋난 지점을 알려 주는 데는 그걸로 충분하다.
+어디가 왜 다른지는 100스텝마다 저장하는 stats 스냅샷이 알려 준다.</p>
+<div class="note"><b>시작값과 곱수가 JS 쪽 도구와 같아야 한다</b>
+2166136261 과 16777619 — FNV-1a 32비트의 표준값이다. 이 둘이 다르면
+정답지와 아예 대조가 안 된다.</div>
+
+<!--SLIDE sec=4 t="SRS 킥 표"-->
+<h2>SRS — 현대 테트리스의 손맛</h2>
+<p>회전이 벽이나 블록에 막히면 그냥 실패시키지 않는다. 정해진 순서로 <b>다섯 위치</b>를 시도한다.
+이 표가 곧 손맛이고, <b>T스핀도 여기서 태어난다.</b></p>
+<!--CODE file=core/srs.go lines=1-27 cap="core/srs.go — JLSTZ 표"-->
+<p>SRS 는 Tetris Guideline 의 회전 표준이고, 월킥이 들어간 것은 2001년 <i>Tetris Worlds</i> 부터다.</p>
+<div class="note"><b>표는 원본 그대로 둔다</b>
+원본 SRS 표는 y축이 <b>위로 +1</b> 이다. 우리 좌표계는 아래로 +1 이라 부호를 뒤집어야 하는데,
+표에 미리 뒤집어 적어 두지 않고 <b>쓸 때 뒤집는다.</b>
+미리 뒤집으면 다른 문헌과 대조할 수 없게 되기 때문이다.</div>
+
+<!--SLIDE sec=4 t="I 조각 전용 표"-->
+<h2>I 조각만 다른 표를 쓴다</h2>
+<!--CODE file=core/srs.go lines=28-58 cap="core/srs.go — I 표와 KickTable"-->
+<p>I 조각은 회전축이 칸 한가운데가 아니라 <b>칸 경계</b>에 있다. 그래서 킥 후보가 다르다.
+±2 칸짜리 이동이 나오는 것도 그 때문이다.</p>
+<p>O 조각은 표가 따로 없다. 모양이 회전에 불변이라 어느 표를 쓰든
+<b>첫 후보 (0,0) 에서 바로 성공</b>하기 때문이다.</p>
+<div class="tip"><b>표의 구조를 테스트로 지킨다</b>
+① 다섯 후보의 첫 번째는 언제나 (0,0) — 안 막힌 회전이 제자리에서 성공해야 한다
+② CCW 표는 CW 표의 <b>부호 반전</b>이다 — SRS 의 정의가 그렇다
+이 두 성질을 테스트로 못 박아 두면 표를 손으로 옮기다 낸 오타가 잡힌다. 실제로 잡았다.</div>
+
+<!--SLIDE sec=4 t="T스핀 코너"-->
+<h2>T스핀 — 네 코너를 센다</h2>
+<!--CODE file=core/srs.go lines=59-83 cap="core/srs.go — 코너 표"-->
+<p>T 조각의 중심 기준 <b>네 대각 코너</b> 중 몇 개가 막혔는지로 가린다.</p>
+<table>
+  <tr><th>앞 2개 + 뒤 1개 이상</th><td>정식 T스핀</td></tr>
+  <tr><th>앞 1개 + 뒤 2개</th><td>미니 T스핀</td></tr>
+  <tr><th>단, 5번째 킥으로 들어갔으면</th><td>무조건 정식</td></tr>
+</table>
+<!--BOARD rows="..#..#....|###ooo####|####o#####|#########." cap="1번 판의 T스핀 더블 자리 — 오버행 둘 + 3칸 방 + 노치"-->
+<p class="small mut">"앞"은 T 가 가리키는 방향 쪽 두 코너다. 회전 상태마다 어느 쪽이 앞인지가
+달라지므로 표 두 개(<code>tspinFront</code>, <code>tspinBack</code>)로 들고 있다.</p>
+
+<!--SLIDE sec=4 t="중력표"-->
+<h2>중력 — 표로 굳혀 둔 이유</h2>
+<!--CODE file=core/score.go lines=1-40 cap="core/score.go — 중력표와 Gravity"-->
+<p>가이드라인 공식은 <code>(0.8 − 0.007×(레벨−1))^(레벨−1)</code> 초/칸 이다.
+C++ 코어는 <code>-nostdlib</code> 라 <code>pow()</code> 를 못 써서 미리 계산해 굳혔다.</p>
+<p>Go 에는 <code>math.Pow</code> 가 있다. <b>그래도 표를 그대로 쓴다</b> —
+부동소수점 반올림이 한 밀리초라도 다르면 골든 트레이스가 갈라지기 때문이다.
+부수 효과로 런타임 의존성 0, 조회 O(1) 이라는 이득도 그대로 따라온다.</p>
+<p class="small mut">레벨 1 이 1000ms, 레벨 20 이 1ms. 20에서 표가 끝나고 더 안 빨라진다.</p>
+
+<!--SLIDE sec=4 t="점수표"-->
+<h2>점수 — 어려운 클리어의 정의</h2>
+<!--CODE file=core/score.go lines=41-66 cap="core/score.go — LineScore 와 LevelFor"-->
+<table>
+  <tr><th></th><th>0줄</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>
+  <tr><th>보통</th><td>0</td><td>100</td><td>300</td><td>500</td><td><b>800</b></td></tr>
+  <tr><th>T스핀</th><td>400</td><td><b>800</b></td><td><b>1200</b></td><td><b>1600</b></td><td>—</td></tr>
+  <tr><th>미니</th><td>100</td><td><b>200</b></td><td><b>400</b></td><td>—</td><td>—</td></tr>
+</table>
+<p>굵은 것이 <b>"어려운 클리어"</b> — 테트리스이거나 T스핀이면서 줄을 지운 경우다.
+어려운 클리어가 연속되면 Back-to-Back 으로 ×1.5 가 붙는다.</p>
+<div class="note"><b>0줄 T스핀은 어려운 클리어가 아니다</b>
+점수는 주지만 B2B 는 안 이어진다. 이 구분을 놓치면 B2B 가 영원히 안 끊긴다.
+그리고 같은 정의를 <b>공격표도 쓴다</b> — 그래서 판정을 한 곳에만 뒀다.</div>
+
+<!--SLIDE sec=4 t="공격표"-->
+<h2>대전 규칙 — 싱글은 공격이 안 된다</h2>
+<!--CODE file=core/garbage.go lines=1-27 cap="core/garbage.go — 공격표"-->
+<table>
+  <tr><th></th><th>싱글</th><th>더블</th><th>트리플</th><th>테트리스</th></tr>
+  <tr><th>보통</th><td><b>0</b></td><td>1</td><td>2</td><td>4</td></tr>
+  <tr><th>T스핀</th><td>2</td><td>4</td><td>6</td><td>—</td></tr>
+  <tr><th>미니</th><td>0</td><td>1</td><td>—</td><td>—</td></tr>
+</table>
+<p><b>싱글이 0 인 게 이 표의 핵심이다.</b> 한 줄씩 지우는 플레이는 공격이 되지 않는다.
+그래서 "쌓아 두었다가 한 번에 지우는" 대전 특유의 리듬이 생긴다.</p>
+<p>여기에 Back-to-Back +1, 콤보 보너스 표, 퍼펙트 클리어 +10 이 붙는다.</p>
+
+<!--SLIDE sec=4 t="공격 계산"-->
+<h2>공격 계산 — 인자 이름에 함정이 적혀 있다</h2>
+<!--CODE file=core/garbage.go lines=28-63 cap="core/garbage.go — Attack"-->
+<div class="warn"><b>b2bBefore — "before" 가 이름에 박혀 있는 이유</b>
+이번 락이 B2B 상태를 <b>덮어쓰기 전</b>의 값을 넘겨야 한다.
+이 순서를 틀리면 테트리스 연속에서 +1 이 한 박자씩 밀린다.
+호출부에서 실수하기 딱 좋은 자리라 인자 이름으로 못 박았다.</div>
+<p>"어려운 클리어"의 판정을 <code>LineScore</code> 에서 가져다 쓴다는 점도 보라.
+점수 규칙과 공격 규칙이 같은 정의를 써야 하고, 정의는 한 곳에만 있어야 한다.</p>
+
+<!--SLIDE sec=4 t="상태를 구조체로"-->
+<h2>C++ 의 배열을 Go 의 구조체로</h2>
+<!--CODE file=core/game.go lines=1-34 cap="core/game.go — Action 과 상태 상수"-->
+<p><code>Action</code> 이 키 이름이 아니라 <b>뜻</b>이라는 점이 중요하다.
+1인용은 화살표, 2인용의 왼쪽 자리는 WASD, AI 는 아예 키를 안 누른다.
+셋이 전부 같은 규칙 위에서 돌려면 코어는 "왼쪽 키"가 아니라 <b>"왼쪽으로"</b>만 알아야 한다.</p>
+<p class="small mut">키 배치는 <code>ui</code> 패키지의 일이다 — 5부에서 그 표를 본다.</p>
+
+<!--SLIDE sec=4 t="Stats"-->
+<h2>Stats — 순서가 곧 계약이다</h2>
+<!--CODE file=core/game.go lines=35-71 cap="core/game.go — Stats 구조체"-->
+<p>C++ 코어에서는 이게 <code>int</code> 배열 하나였다. JS 와 선형 메모리를 공유해야 했으므로
+"인덱스가 곧 프로토콜"이었다.</p>
+<p>Go 에는 그런 제약이 없으니 이름 있는 구조체로 편다.
+다만 필드 <b>순서</b>는 원본 배열 그대로 두었다 — <code>Pack()</code> 이 그 배열을 되살려서
+골든 트레이스의 stats 해시를 그대로 대조할 수 있어야 하기 때문이다.</p>
+
+<!--SLIDE sec=4 t="Pack 과 해시"-->
+<h2>Pack — 손으로 나열한 이유</h2>
+<!--CODE file=core/game.go lines=72-101 cap="core/game.go — Pack 과 StatsHash"-->
+<p>서른 개를 손으로 나열하는 게 촌스러워 보이지만, <b>순서가 곧 계약</b>이라
+눈으로 읽히는 편이 낫다.</p>
+<div class="warn"><b>reflect 나 unsafe 로 자동화하면</b>
+필드를 하나 옮겼을 때 <b>조용히</b> 어긋난다. 컴파일도 되고 테스트도 대부분 통과하는데
+파리티만 깨진다 — 그리고 원인을 찾는 데 반나절이 든다.</div>
+<p>해시는 32비트 리틀엔디언 순서로 바이트를 먹인다. JS 쪽 도구가
+<code>Int32Array</code> 를 그렇게 훑기 때문이다. 음수도 2의 보수 그대로 들어간다.</p>
+
+<!--SLIDE sec=4 t="Game 구조체"-->
+<h2>Game — 전역 상태가 하나도 없다</h2>
+<!--CODE file=core/game.go lines=102-139 cap="core/game.go — Game 과 pieceState"-->
+<p>C++ 원본과의 가장 큰 차이가 이것이다. 원본은 <b>wasm 인스턴스 하나가 곧 판 하나</b>였고,
+두 판을 돌리려면 인스턴스를 두 개 띄워야 했다.</p>
+<p>Go 에서는 구조체를 두 개 만들면 끝이다. 7부의 2인용이 정확히 그렇게 한다 —
+<code>core.New(seed)</code> 를 두 번 부르는 것이 전부다.</p>
+
+<!--SLIDE sec=4 t="초기화와 스폰"-->
+<h2>초기화와 스폰</h2>
+<!--CODE file=core/game.go lines=140-173 cap="core/game.go — New 와 Init"-->
+<!--CODE file=core/game.go lines=174-193 cap="core/game.go — spawnNext"-->
+<p><code>Init</code> 이 새 할당 없이 제자리에서 되돌리는 이유: 게임오버 뒤 재시작이
+깔끔해야 트레이스가 이어진다. 골든 트레이스는 판이 죽으면 <b>그 자리에서 파생 시드로
+재시작</b>하는데, 매번 새 <code>Game</code> 을 만들면 그 지점을 맞추기 어려워진다.</p>
+<p><b>블록아웃</b>은 여기 한 줄이다 — 스폰 자리가 이미 막혔으면 게임 오버.</p>
+
+<!--SLIDE sec=4 t="이동과 회전"-->
+<h2>이동과 회전 — 킥을 밀어 본다</h2>
+<!--CODE file=core/game.go lines=194-227 cap="core/game.go — tryMove 와 tryRotate"-->
+<p>다섯 킥 후보를 순서대로 밀어 보고 <b>처음 성공한 곳</b>에 앉힌다.
+<code>ny := g.cur.y - int(tbl[k][1])</code> 의 뺄셈이 앞에서 말한 y 부호 반전이다.</p>
+<p>성공하면 <code>lastWasRot</code> 과 <code>lastKick</code> 을 남긴다.
+둘 다 T스핀 판정에 쓰인다 — <b>"회전으로 들어왔는가"</b>가 T스핀의 전제이기 때문이다.</p>
+
+<!--SLIDE sec=4 t="락다운 유예"-->
+<h2>락다운 유예 — 되살릴 수 있는 횟수에 상한이 있다</h2>
+<!--CODE file=core/game.go lines=228-266 cap="core/game.go — resetLockDelay 와 detectTSpin"-->
+<p>바닥에 닿아도 500ms 동안은 안 굳는다. 그동안 움직이거나 돌리면 유예가 되살아난다.
+이게 현대 테트리스가 "손이 느려도 할 만한" 이유다.</p>
+<div class="warn"><b>상한이 없으면 영원히 안 굳는다</b>
+조각을 계속 좌우로 굴리면서 무한히 버틸 수 있다. 그래서 되살리기 횟수를
+<b>15번</b>으로 제한한다(<code>LockReset</code>).</div>
+
+<!--SLIDE sec=4 t="락 — 순서가 규칙이다"-->
+<h2>락 — 이 함수의 순서가 곧 규칙이다</h2>
+<!--CODE file=core/game.go lines=267-302 cap="core/game.go — lockPiece 앞부분"-->
+<p>순서를 지켜야 하는 자리가 셋 있다.</p>
+<ol class="steps">
+  <li><b>T스핀 판정을 먼저</b> — 조각을 판에 굳히기 전에 코너를 세야 한다</li>
+  <li><b>b2bBefore 를 미리 붙잡는다</b> — 아래에서 <code>stats.B2B</code> 를 덮어쓰기 전에</li>
+  <li><b>콤보를 올린 뒤 점수를 더한다</b> — 콤보 보너스가 새 콤보 값을 쓴다</li>
+</ol>
+
+<!--SLIDE sec=4 t="락 — 공격과 상쇄"-->
+<h2>공격 → 상쇄 → 솟아오름</h2>
+<!--CODE file=core/game.go lines=303-341 cap="core/game.go — lockPiece 뒷부분"-->
+<!--CODE file=core/game.go lines=342-355 cap="core/game.go — pushRows"-->
+<p>이 세 줄의 <b>순서가 대전 규칙의 전부</b>다.</p>
+<ol class="steps">
+  <li>이번 락의 공격을 계산한다</li>
+  <li>그 공격이 먼저 <b>내 대기줄</b>을 지운다(상쇄). 그래서 맞받아치면 가비지가 안 올라온다</li>
+  <li>남은 만큼만 상대에게 간다</li>
+</ol>
+<div class="tip"><b>대기 가비지는 "줄을 못 지운 락"에서만 솟는다</b>
+이 유예가 없으면 상쇄할 기회 자체가 없다. 그리고 한 번에 올라오는 줄에는
+상한(8줄)이 있다 — 없으면 20줄이 한꺼번에 솟아 즉사한다.</div>
+
+<!--SLIDE sec=4 t="드롭과 홀드"-->
+<h2>하드드롭과 홀드</h2>
+<!--CODE file=core/game.go lines=356-385 cap="core/game.go — hardDrop 과 doHold"-->
+<p>하드드롭은 <b>1칸당 2점</b>이다. 소프트드롭은 1칸당 1점 — 뒤에 나온다.</p>
+<p>홀드는 <b>조각당 한 번</b>이다. 무한 스왑을 막는 규칙이고,
+<code>holdUsed</code> 가 스폰할 때 꺼진다.</p>
+<p>홀드가 비어 있으면 "다음 조각을 당겨 오는" 동작이 된다.
+차 있으면 맞바꾼다 — 그리고 맞바꾼 조각은 <b>스폰 자리에서 다시 시작</b>한다.</p>
+
+<!--SLIDE sec=4 t="Press"-->
+<h2>Press — 조작 하나가 들어오는 문</h2>
+<!--CODE file=core/game.go lines=386-429 cap="core/game.go — Press"-->
+<!--CODE file=core/game.go lines=430-441 cap="core/game.go — Release"-->
+<p>일시정지는 <b>상태 검사보다 먼저</b> 처리한다. 그러지 않으면 정지 상태에서
+정지를 풀 수가 없다.</p>
+<div class="note"><b>Release 는 TUI 에서 거의 안 쓴다</b>
+터미널이 "키를 뗐다"를 안 알려 주기 때문이다(1부). 그래도 그대로 이식했다 —
+골든 트레이스가 이 경로를 밟기 때문이고, 5부에서 <b>우리가 직접</b> 부르게 된다.</div>
+
+<!--SLIDE sec=4 t="Update — 시간이 흐르는 곳"-->
+<h2>Update — DAS → 중력 → 락다운</h2>
+<!--CODE file=core/game.go lines=442-470 cap="core/game.go — Update ① DAS/ARR"-->
+<!--CODE file=core/game.go lines=471-502 cap="core/game.go — Update ② 중력 ③ 락다운"-->
+<p>세 단계가 순서대로 돈다.</p>
+<div class="tip"><b>락다운은 왜 매 프레임 검사하는가</b>
+"닿아 있는가"를 <b>중력 틱에서만</b> 검사하면, 레벨 1(1000ms/칸)에서 착지한 뒤
+최대 1초를 그냥 서 있게 된다. 그동안 유예 타이머가 안 돌아서 조각이 안 굳는다.
+매 프레임 검사해야 손맛이 맞는다.</div>
+<p><code>dtMs</code> 를 100 으로 자르는 것도 이유가 있다. 브라우저 탭을 전환했다 돌아오면
+거대한 <code>dt</code> 가 들어오는데, 그대로 흘리면 조각이 순간이동한다.</p>
+
+<!--SLIDE sec=4 t="가비지와 테스트 훅"-->
+<h2>가비지와 테스트 훅</h2>
+<!--CODE file=core/game.go lines=503-546 cap="core/game.go — QueueGarbage · PushGarbage · SetPiece · Paint"-->
+<p><code>SetPiece</code> 와 <code>Paint</code> 는 게임 로직이 <b>절대 부르지 않는</b> 함수다.
+테스트에서 "이 조각이 지금 나와야 한다" · "판이 이렇게 생겨야 한다"를 강제할 방법이 필요해서 있다.</p>
+<div class="note"><b>테스트 전용 훅을 두는 것은 타협인가</b>
+그렇다. 하지만 대안이 더 나쁘다 — 훅이 없으면 T스핀 자리를 만들려고
+난수 시드를 수천 개 뒤져야 한다. 그런 테스트는 느리고, 깨지기 쉽고,
+무엇보다 <b>무엇을 시험하는지 읽히지 않는다.</b></div>
+
+<!--SLIDE sec=4 t="화면용 두 층"-->
+<h2>화면이 읽는 두 층</h2>
+<!--CODE file=core/game.go lines=547-583 cap="core/game.go — buildView"-->
+<!--CODE file=core/game.go lines=584-603 cap="core/game.go — 화면이 읽는 접근자"-->
+<p><code>cells</code> 는 굳은 블록, <code>overlay</code> 는 현재 조각(1~7)과 고스트(8~14)다.
+둘을 나눠 두면 화면이 "굳은 것"과 "떨어지는 것"을 다른 색으로 칠하기 쉽다.</p>
+<p>고스트를 <b>먼저</b> 그리고 현재 조각을 나중에 그린다 — 겹치는 칸에서 조각이 이겨야 하기 때문이다.</p>
+
+<!--SLIDE sec=4 t="AI 용 접근자"-->
+<h2>AI 층이 쓰는 최소한</h2>
+<!--CODE file=core/game.go lines=604-633 cap="core/game.go — CurrentPiece · Hold · DropAt"-->
+<p><code>core</code> 는 <code>ai</code> 를 모른다. 의존 방향이 한쪽이어야 하므로,
+AI 가 판을 읽고 수를 두는 데 필요한 최소한만 여기서 열어 준다.</p>
+<div class="tip"><b>DropAt 은 T스핀 판정을 끈다</b>
+AI 는 회전 키를 눌러 들어온 게 아니다. 우연히 T스핀 자리에 조각을 떨어뜨렸다고
+T스핀 점수를 주면, <b>사람과 다른 규칙으로 노는 셈</b>이 된다.
+그래서 <code>lastWasRot</code> 을 끄고 하드드롭한다.</div>
+
+<!--SLIDE sec=4 t="골든 트레이스란"-->
+<h2>골든 트레이스 — 이 코드가 옳다는 것을 어떻게 아는가</h2>
+<p>단위 테스트는 <b>내가 생각한 경우</b>만 본다. 내가 생각 못 한 경우는 영영 안 본다.
+규칙이 이렇게 많은 프로그램에서 그건 큰 구멍이다.</p>
+<p>그래서 다른 방법을 쓴다. 이 저장소에는 같은 규칙을 구현한 <b>C++ wasm 코어</b>가
+이미 있다(1편). 그 코어에 시나리오를 먹여 뽑아 둔 결과가 <code>test/golden/</code> 이다.</p>
+<svg class="diag" viewBox="0 0 640 180" role="img" aria-label="골든 트레이스 구조">
+  <rect x="230" y="10" width="180" height="44" rx="9" fill="#101827" stroke="#22d3ee"/>
+  <text x="320" y="32" fill="#e8eefc" font-size="13" text-anchor="middle" font-weight="700">시나리오 생성기</text>
+  <text x="320" y="48" fill="#93a4c4" font-size="10" text-anchor="middle">core/trace.go · 한 곳에만 있다</text>
+
+  <rect x="20" y="110" width="230" height="50" rx="9" fill="#0c1322" stroke="#93a4c4"/>
+  <text x="135" y="132" fill="#e8eefc" font-size="13" text-anchor="middle" font-weight="700">C++ wasm 코어</text>
+  <text x="135" y="148" fill="#93a4c4" font-size="10" text-anchor="middle">→ test/golden/core_traces.json</text>
+
+  <rect x="390" y="110" width="230" height="50" rx="9" fill="#0c1322" stroke="#4ade80"/>
+  <text x="505" y="132" fill="#e8eefc" font-size="13" text-anchor="middle" font-weight="700">이 Go 코어</text>
+  <text x="505" y="148" fill="#93a4c4" font-size="10" text-anchor="middle">→ 매 스텝 해시</text>
+
+  <path d="M280 54 L135 110" fill="none" stroke="#22d3ee" stroke-width="2"/>
+  <path d="M360 54 L505 110" fill="none" stroke="#22d3ee" stroke-width="2"/>
+  <path d="M250 135 L390 135" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="5 4"/>
+  <text x="320" y="128" fill="#fbbf24" font-size="11" text-anchor="middle">한 스텝씩 대조</text>
+</svg>
+<p><b>시나리오 생성기가 한 곳에만 있다</b>는 점이 핵심이다. 두 구현이 각자 시나리오를 만들면
+서로 다른 길을 걸어 놓고 "도착지가 다르네" 하고 헤매게 된다.</p>
+
+<!--SLIDE sec=4 t="시나리오 난수"-->
+<h2>시나리오용 난수는 게임 난수와 달라야 한다</h2>
+<!--CODE file=core/trace.go lines=1-31 cap="core/trace.go — 머리와 시드"-->
+<!--CODE file=core/trace.go lines=32-52 cap="core/trace.go — ScriptRng"-->
+<div class="warn"><b>같은 수열을 쓰면 안 되는 이유</b>
+"RNG 가 틀렸는데 시나리오도 같이 틀려서 <b>결과가 맞아 보이는</b>" 상황이 생긴다.
+그래서 시드를 한 번 비틀고, 시프트 값도 다른 조합(7/9/8)을 쓴다.</div>
+
+<!--SLIDE sec=4 t="조각 단위 계획"-->
+<h2>무작위 키 난타는 왜 안 되는가</h2>
+<!--CODE file=core/trace.go lines=53-81 cap="core/trace.go — LowestColumn 과 TraceStep"-->
+<!--CODE file=core/trace.go lines=82-116 cap="core/trace.go — PlanPiece 앞부분"-->
+<p>무작위로 키를 누르면 조각이 한곳에 쌓여 <b>17조각 만에 죽는다.</b>
+그러면 줄 지우기·콤보·B2B·레벨업이 트레이스에 <b>한 번도 안 들어온다.</b></p>
+<p>그래서 목표 열을 "지금 판에서 가장 낮은 열"로 정한다. 판이 평평해지고,
+줄이 지워지고, 게임이 길어진다. 그리고 판만 보고 정하므로
+<b>두 구현이 같은 판 위에서 반드시 같은 답</b>을 낸다.</p>
+
+<!--SLIDE sec=4 t="계획의 나머지"-->
+<h2>드물게 일어나는 경로도 밟게 만든다</h2>
+<!--CODE file=core/trace.go lines=117-148 cap="core/trace.go — PlanPiece 뒷부분"-->
+<p>확률을 붙여 둔 자리들이 있다. 전부 <b>"이 경로를 안 밟으면 검증이 안 되는 것"</b>이다.</p>
+<table>
+  <tr><td>1/9</td><td>홀드를 쓴다</td></tr>
+  <tr><td>1/9</td><td>DAS 를 진짜로 돌린다(누른 채로 200ms)</td></tr>
+  <tr><td>1/5</td><td>소프트드롭으로 가라앉힌다 — 회전 뒤에 하면 스핀이 나온다</td></tr>
+  <tr><td>1/11</td><td>하드드롭 없이 <b>자연 낙하 + 락다운 유예</b>로 굳힌다</td></tr>
+  <tr><td>1/45</td><td>가비지를 1~4줄 예약한다</td></tr>
+</table>
+
+<!--SLIDE sec=4 t="트레이스 실행"-->
+<h2>죽으면 그 자리에서 다시 시작한다</h2>
+<!--CODE file=core/trace.go lines=149-169 cap="core/trace.go — 트레이스 결과의 모양"-->
+<!--CODE file=core/trace.go lines=170-210 cap="core/trace.go — RunTrace"-->
+<p>게임오버가 나면 파생 시드로 재시작한다. 그러지 않으면 트레이스의 뒷부분이 전부
+"아무 일도 안 일어남"이 되어 검증력이 사라진다.</p>
+<p>재시작 시드는 <b>원래 시드와 스텝 번호만으로</b> 정해진다.
+그래서 두 구현이 반드시 같은 지점에서 같은 시드로 다시 시작한다.</p>
+
+<!--SLIDE sec=4 t="배치 트레이스"-->
+<h2>배치 트레이스 — 우연을 기다릴 수 없는 것들</h2>
+<!--CODE file=core/trace.go lines=211-249 cap="core/trace.go — 판 5종과 연산"-->
+<p>플레이 트레이스는 "길게 돌려서 많이 밟기"다. 그걸로는 SRS 킥의 구석이나
+T스핀 판정처럼 <b>우연히 걸리기를 기다릴 수 없는</b> 것들에 못 닿는다.</p>
+<p>그래서 판을 심어 놓고 짧은 입력 단어를 <b>전수로</b> 넣는다.</p>
+<div class="tip"><b>1번 판이 이 트레이스의 핵심이다</b>
+T스핀 더블 자리를 <b>스폰 높이 근처</b>에 만들어 뒀다. 바닥에 만들면 조각이 15칸을
+내려가야 하는데, 그동안 락다운 타이머가 돌아 "회전할 기회"가 사라진다.
+함정을 위로 올려야 스핀이 실제로 성립한다.</div>
+
+<!--SLIDE sec=4 t="스핀 단어"-->
+<h2>손으로 짠 스핀 단어</h2>
+<!--CODE file=core/trace.go lines=250-273 cap="core/trace.go — SpinWords"-->
+<!--CODE file=core/trace.go lines=274-290 cap="core/trace.go — RandomWords"-->
+<div class="warn"><b>무작위 단어 48개로는 T스핀이 한 번도 안 나왔다</b>
+실제로 0회였다. T스핀은 <b>"가라앉힌 다음 회전"</b>이라는 순서가 반드시 필요한데,
+무작위 단어에는 <b>시간을 흘리는 연산 자체가 없기</b> 때문이다.</div>
+<p>그래서 첫 단어는 킥 표를 따라가며 손으로 맞췄다:
+CW(rot1) → LEFT → 소프트드롭 1칸 → CW 에서 k=0,1 이 막히고
+k=2 <code>{+1,-1}</code> 이 조각을 오른쪽 아래로 밀어 노치에 앉힌다 →
+앞 코너 2개 + 뒤 1개 = 정식 T스핀.</p>
+
+<!--SLIDE sec=4 t="배치 트레이스 실행"-->
+<h2>판 5 × 조각 7 × 단어 56 = 1960 경우</h2>
+<!--CODE file=core/trace.go lines=291-333 cap="core/trace.go — InputWords · PlacementCase · RunPlacementTrace"-->
+<p>경우마다 <code>Init</code> 하므로 락이 딱 한 번씩만 일어난다.
+그래서 이 트레이스가 재는 것은 <b>"한 번의 배치가 옳은가"</b>다 —
+킥이 맞는가, T스핀이 맞게 잡히는가, 점수가 맞는가.</p>
+<p class="small mut">보드 해시를 stats 와 따로 두는 이유: 해시는 부호 없는 32비트라
+<code>int32</code> 에 안 들어간다. 정답지 JSON 에서도 42억까지 올라가는 수로 적혀 있다.</p>
+
+<!--SLIDE sec=4 t="연쇄 트레이스"-->
+<h2>연쇄 트레이스 — 여러 번 이어져야 드러나는 규칙</h2>
+<!--CODE file=core/trace.go lines=334-368 cap="core/trace.go — 연쇄 시나리오의 재료"-->
+<p>배치 트레이스는 락이 한 번씩만 일어나므로 <b>이어져야 드러나는 규칙</b>을 하나도 못 밟는다:
+콤보 누적, Back-to-Back ×1.5, 10줄마다 레벨업, 대기 가비지의 상쇄와 솟아오름.</p>
+<p>여기서는 인스턴스를 유지한 채 <b>판만 다시 심어서</b> 그 연쇄를 강제로 만든다.
+판을 다시 심어도 콤보·B2B·레벨은 stats 에 남아 있으므로 연쇄가 끊기지 않는다.</p>
+
+<!--SLIDE sec=4 t="연쇄 시나리오 넷"-->
+<h2>연쇄 시나리오 넷</h2>
+<!--CODE file=core/trace.go lines=369-392 cap="core/trace.go — 시나리오 ①②"-->
+<!--CODE file=core/trace.go lines=393-414 cap="core/trace.go — 시나리오 ③④"-->
+<table>
+  <tr><th>테트리스 8연속</th><td>B2B 가 계속 붙고(×1.5), 콤보가 0→7 로 자라고, 32줄에 레벨 4</td></tr>
+  <tr><th>테트리스와 싱글 교차</th><td>싱글에서 B2B 가 <b>끊기고</b> 다음 테트리스에서 다시 붙는다</td></tr>
+  <tr><th>T스핀 더블 6연속</th><td>T스핀도 "어려운 클리어"라 B2B 가 붙는다</td></tr>
+  <tr><th>콤보 끊기와 가비지</th><td>콤보가 매번 끊기고, 예약한 가비지가 실제로 솟는다</td></tr>
+</table>
+
+<!--SLIDE sec=4 t="연쇄 트레이스 실행"-->
+<h2>연쇄 트레이스 실행</h2>
+<!--CODE file=core/trace.go lines=415-452 cap="core/trace.go — RunComboTrace"-->
+<p>기록하는 값이 열둘이다 — 보드 해시, 점수, 이번 획득, 지운 줄, T스핀, 콤보, B2B,
+레벨, 누적 줄, 공격, 대기, 퍼펙트. <b>연쇄로만 드러나는 것들</b>이 전부 여기 있다.</p>
+
+<!--SLIDE sec=4 t="파리티 결과"-->
+<h2>그래서 — 맞았는가</h2>
+<!--RUN file=out/core_parity.txt cap="go test -v ./core/ -run 'Parity|Exercise' (실제 출력)"-->
+<p>시드 6개 × 1500스텝 = <b>9,000스텝</b>의 보드 해시와 stats 해시가 전부 같다.
+배치 <b>1,960경우</b>, 연쇄 <b>36라운드</b>도 전부 같다.</p>
+<p>덕분에 이 덱은 "규칙을 옳게 이식했다"가 아니라
+<b>"규칙이 원본과 같다"</b>고 말할 수 있다.</p>
+
+<!--SLIDE sec=4 t="검출력 — 변이 테스트"-->
+<h2>이 테스트가 실제로 뭘 잡는가</h2>
+<p>테스트가 통과하는 것만으로는 부족하다. <b>틀렸을 때 잡히는지</b>를 확인해야 한다.
+그래서 코드를 일부러 망가뜨려 봤다.</p>
+<table>
+  <tr><th>변이</th><th>잡은 곳</th></tr>
+  <tr><td><code>ClearLines</code> 의 <code>y++</code> 제거<br><span class="small mut">(테트리스가 두 줄만 지워진다)</span></td>
+      <td><b>파리티</b> — 시드 2654435769 의 1018스텝에서
+      "보드 해시 2662659911 (정답 1195005900)"</td></tr>
+  <tr><td>킥 표의 마지막 후보 한 칸 변조</td>
+      <td><b>파리티는 못 잡았다</b>(그 킥을 트레이스가 안 밟는다).
+      대신 구조 단위 테스트 "CCW 는 CW 의 역"이 잡았다</td></tr>
+</table>
+<div class="tip"><b>둘이 서로를 메운다</b>
+파리티는 "실제로 일어나는 일"을 넓게 훑고, 구조 테스트는 "표가 표답게 생겼는가"를 좁게 본다.
+어느 한쪽만으로는 구멍이 남는다.</div>
+
+<!--SLIDE sec=4 t="4부 정리"-->
+<h2>4부 정리</h2>
+<table>
+  <tr><th>core 는</th><td>규칙만. Bubble Tea 를 import 하지 않는다</td></tr>
+  <tr><th>조각은</th><td>16비트 정수 하나. 충돌 검사가 비트 테스트 16번</td></tr>
+  <tr><th>난수는</th><td>xorshift32 를 <b>편향까지</b> 이식. 7-bag 은 뒤에서부터 섞는다</td></tr>
+  <tr><th>판은</th><td>240바이트 연속 배열. 줄 끌어내리기가 <code>copy()</code> 한 번</td></tr>
+  <tr><th>SRS 는</th><td>다섯 후보를 순서대로. 표는 원본대로 두고 쓸 때 부호를 뒤집는다</td></tr>
+  <tr><th>락은</th><td>T스핀 → 점수 → 공격 → 상쇄 → 솟아오름. <b>순서가 규칙이다</b></td></tr>
+  <tr><th>증명은</th><td>골든 트레이스. 9,000스텝 + 1,960경우 + 36라운드가 전부 일치</td></tr>
+</table>
+<p class="small mut">다음 부에서 이 코어에 화면을 붙인다. 2~3부에서 배운 것들이
+드디어 한자리에 모인다.</p>

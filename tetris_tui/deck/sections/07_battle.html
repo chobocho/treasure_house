@@ -1,0 +1,360 @@
+<!--SLIDE sec=7 t="1:1 대전"-->
+<h1>1:1 대전 — 사람·AI·둘 다</h1>
+<p class="lead">세 모드가 <b>한 모델</b>을 공유한다. 다른 것은 "각 자리를 누가 조종하는가"뿐이고,
+규칙도 화면도 완전히 같다.</p>
+<table>
+  <tr><th>2인용</th><td>왼쪽 사람(WASD) · 오른쪽 사람(화살표)</td></tr>
+  <tr><th>AI 대전</th><td>왼쪽 사람(화살표) · 오른쪽 AI</td></tr>
+  <tr><th>AI vs AI</th><td>왼쪽 AI(최종) · 오른쪽 AI(고른 난이도)</td></tr>
+</table>
+<p>이렇게 나눠야 <b>"AI 는 사람과 다른 규칙으로 논다"는 의심이 원천적으로 생기지 않는다.</b>
+AI 자리에 사람을 앉혀도, 사람 자리에 AI 를 앉혀도 코드가 그대로다.</p>
+<!--PLAYER name=aivai cap="AI 최종 대 AI 보통 — 26프레임(한 프레임이 20틱)"-->
+
+<!--SLIDE sec=7 t="심판"-->
+<h2>심판이 하는 일은 놀랄 만큼 적다</h2>
+<!--CODE file=battle/rules.go lines=1-29 cap="battle/rules.go — 자리"-->
+<p>규칙은 전부 <code>core</code> 안에 있다. 심판이 하는 일은 하나다:</p>
+<p class="big">"A 의 이번 락이 n 줄을 보냈다" → B 의 대기열에 n 을 넣는다</p>
+<p>여기에 승패 판정과 라운드 관리가 붙는다. 그게 전부다.</p>
+
+<!--SLIDE sec=7 t="난이도"-->
+<h2>난이도 — 규칙을 봐주지 않는다</h2>
+<!--CODE file=battle/rules.go lines=30-61 cap="battle/rules.go — Level 과 표"-->
+<p>난이도를 "AI 에게 불리한 규칙을 주는" 방식으로 만들지 않았다. 네 가지를 조합한다.</p>
+<table>
+  <tr><th></th><th>가중치</th><th>생각 시간</th><th>손 속도</th><th>실수</th></tr>
+  <tr><th>쉬움</th><td>1세대</td><td>520ms</td><td>110ms</td><td>22%</td></tr>
+  <tr><th>보통</th><td>5세대</td><td>380ms</td><td>80ms</td><td>10%</td></tr>
+  <tr><th>어려움</th><td>15세대</td><td>260ms</td><td>55ms</td><td>3%</td></tr>
+  <tr><th>최종</th><td>50세대</td><td>150ms</td><td>32ms</td><td>0%</td></tr>
+</table>
+<p>숫자는 2편의 표를 그대로 옮겼다. <b>덜 배웠고 · 느리고 · 가끔 틀린다</b> —
+사람이 약한 방식과 같다.</p>
+
+<!--SLIDE sec=7 t="난이도 조회"-->
+<h2>가중치는 한 곳에서만 온다</h2>
+<!--CODE file=battle/rules.go lines=62-92 cap="battle/rules.go — Levels 와 LevelByName"-->
+<p>난이도 표에 가중치 숫자를 다시 적지 않는다. 실행 시점에
+<code>ai.Level(이름)</code> 으로 가져온다. 여기에 또 적으면
+<b>두 곳이 어긋날 여지</b>가 생긴다.</p>
+<p><code>Short</code> 와 <code>Label</code> 을 나눈 것도 이유가 있다 —
+판 제목처럼 좁은 자리에는 "어려움", 도움말처럼 넉넉한 자리에는 "어려움 (15세대)".
+5부의 함정 ⑧ 이 그 결과다.</p>
+
+<!--SLIDE sec=7 t="Match"-->
+<h2>두 판을 같은 시드로</h2>
+<!--CODE file=battle/rules.go lines=93-127 cap="battle/rules.go — Match 와 NewMatch"-->
+<div class="tip"><b>조각 순서가 같아야 대전이 공평하다</b>
+"운이 나빠서 졌다"가 성립하면 실력 비교가 아니게 된다.
+AI 와의 대전은 특히 그 의심을 사기 쉬우므로, 두 판을 <b>같은 시드</b>로 시작한다.</div>
+<p><code>core.New(seed)</code> 를 두 번 부르는 것이 전부다.
+C++ 원본에서는 wasm 인스턴스를 두 개 띄워야 했던 일이,
+Go 에서는 구조체 두 개다.</p>
+
+<!--SLIDE sec=7 t="공격 배달"-->
+<h2>같은 공격을 두 번 배달하면 안 된다</h2>
+<!--CODE file=battle/rules.go lines=128-158 cap="battle/rules.go — Advance 와 Transfer"-->
+<div class="warn"><b>"새로 일어난 락"을 어떻게 아는가</b>
+코어는 락이 일어날 때마다 <code>Event</code> 번호를 1 올린다.
+그 번호가 지난번에 본 것과 다르면 새 락이다.
+<b>이게 없으면 같은 공격을 매 프레임 다시 배달해서, 한 번의 테트리스가 상대를 즉사시킨다.</b></div>
+<p><code>Advance</code> 의 순서도 정해져 있다: 두 판을 굴리고 → 공격을 옮기고 → 승패를 본다.
+공격을 옮기기 전에 승패를 보면 "죽는 순간에 보낸 공격"이 사라진다.</p>
+
+<!--SLIDE sec=7 t="승패"-->
+<h2>동시에 죽으면 — 아무도 안 이긴다</h2>
+<!--CODE file=battle/rules.go lines=159-203 cap="battle/rules.go — judge 와 조회"-->
+<div class="note"><b>왜 무승부인가</b>
+같은 프레임에 둘 다 죽었을 때 한쪽을 임의로 골라 주면 <b>그게 곧 규칙이 된다.</b>
+그런데 아무도 그 규칙에 동의한 적이 없다. 드문 경우일수록
+"그냥 정해 버리기"의 유혹이 큰데, 그때가 정직하게 무승부로 두어야 할 때다.</div>
+<p>라운드가 끝나면 <code>Advance</code> 가 아무 일도 안 한다.
+그래서 죽은 뒤에도 상대 판이 계속 도는 일이 없다.</p>
+
+<!--SLIDE sec=7 t="라운드"-->
+<h2>라운드와 대전</h2>
+<!--CODE file=battle/rules.go lines=204-247 cap="battle/rules.go — 라운드 관리"-->
+<p>3판 2선승이 기본이다. 라운드마다 시드를 한 칸 굴린다 —
+같은 시드로 다시 하면 <b>2라운드가 1라운드의 복사</b>가 되어 버린다.</p>
+<p>그래도 <b>두 자리는 서로 같은 시드</b>를 쓴다. 라운드가 바뀌어도 공평함은 유지된다.</p>
+
+<!--SLIDE sec=7 t="AI 를 어디서 돌릴 것인가"-->
+<h2>AI 를 어디서 돌릴 것인가</h2>
+<p><code>ai.Best</code> 는 1밀리초도 안 걸려 답을 낸다. 그렇다면 <code>Update</code> 안에서
+그냥 불러도 되지 않을까?</p>
+<div class="warn"><b>두 가지 이유로 안 된다</b>
+① <b>사람 눈에 순간이동으로 보인다.</b> 조각이 스폰하자마자 바닥에 꽂힌다.
+무슨 일이 일어났는지 배울 수가 없다.<br>
+② <b>Update 가 무거워진다.</b> AI vs AI 면 한 틱에 두 번이다.
+탐색이 조금만 무거워져도 화면이 끊긴다.</div>
+<p>그래서 둘로 나눈다.</p>
+<ol class="steps">
+  <li>탐색은 <b>Cmd 안</b>에서 — Update 밖의 다른 고루틴</li>
+  <li>고른 수는 <b>키를 하나씩 눌러</b> 재현 — 사람과 완전히 같은 경로</li>
+</ol>
+
+<!--SLIDE sec=7 t="드라이버"-->
+<h2>드라이버 — AI 의 "손"</h2>
+<!--CODE file=battle/driver.go lines=1-40 cap="battle/driver.go — 머리와 지시"-->
+<p>이 파일에는 <b>탐색이 없다.</b> 드라이버는 "지금 탐색을 시작해 달라"고 요청하고,
+결과를 <code>SetTarget</code> 으로 받는다.</p>
+<p><code>guardMax = 24</code> 는 상한이다. 목표에 못 가는 경우가 있다 —
+회전이 막혔거나, 실수로 도달 불가능한 자리를 골랐거나.
+상한이 없으면 드라이버가 같은 키를 무한히 누르며 <b>판이 멈춘다.</b></p>
+
+<!--SLIDE sec=7 t="드라이버 상태 기계"-->
+<h2>드라이버 — 상태가 셋뿐이다</h2>
+<!--CODE file=battle/driver.go lines=41-75 cap="battle/driver.go — Driver 와 Tick (1/2)"-->
+<!--CODE file=battle/driver.go lines=76-111 cap="battle/driver.go — Driver 와 Tick (2/2)"-->
+<table>
+  <tr><th>목표 없음 + 안 기다림</th><td><code>ThinkMs</code> 를 채우면 <b>StepPlan</b></td></tr>
+  <tr><th>목표 없음 + 기다리는 중</th><td>아무것도 안 함 (결과가 <code>SetTarget</code> 으로 온다)</td></tr>
+  <tr><th>목표 있음</th><td><code>MoveMs</code> 마다 <b>StepPress</b> 하나</td></tr>
+</table>
+<p>시드가 있는 난수를 쓰는 이유: 실수(blunder)를 <code>math/rand</code> 로 뽑으면
+기록을 다시 돌렸을 때 다른 판이 나온다. 브라우저 판(2편)은 <code>Math.random</code> 을 썼지만,
+여기서는 <code>out/frames_*.json</code> 이 <b>바이트까지 재현</b>돼야 한다.</p>
+
+<!--SLIDE sec=7 t="키 목록을 미리 만들지 않는다"-->
+<h2>키 목록을 미리 만들면 안 되는 이유</h2>
+<!--CODE file=battle/driver.go lines=112-142 cap="battle/driver.go — nextAction 과 finish"-->
+<div class="warn"><b>회전은 킥으로 x 를 민다</b>
+"CW 두 번, 왼쪽 세 번, 하드드롭" 같은 목록을 미리 만들면,
+킥이 일어난 순간 <b>어긋나고 조각이 엉뚱한 자리에 떨어진다.</b></div>
+<p>그래서 매 틱 <b>지금 판을 보고</b> 다음 키 하나만 고른다.
+회전이 x 를 밀어도 다음 틱에 "아직 x 가 다르네" 하고 <b>저절로 교정된다.</b></p>
+<p><code>finish</code> 가 <code>t = -ThinkMs</code> 로 두는 것도 요령이다 —
+"다음 조각은 다시 생각 시간부터"가 된다.</p>
+
+<!--SLIDE sec=7 t="실수"-->
+<h2>실수 — 난이도를 낮추는 정직한 방법</h2>
+<!--CODE file=battle/driver.go lines=143-164 cap="battle/driver.go — SetTarget 과 Reset"-->
+<p>회전과 위치를 아무렇게나 바꾼다. 약한 AI 를 만들려고 <b>규칙을 봐주는 게 아니라</b>
+"가끔 잘못 둔다"로 만든다.</p>
+<p>실수를 여기서 적용하는 이유도 있다 — 탐색을 도는 Cmd 는 <b>다른 고루틴</b>이라
+드라이버의 난수 상태를 건드리면 안 된다.</p>
+<div class="tip"><b>도달 불가능한 자리를 골라도 괜찮다</b>
+실수로 이상한 자리를 골랐다면 <code>guardMax</code> 가 24번 만에 포기하고
+그냥 떨어뜨린다. 그게 사람이 실수했을 때 일어나는 일과 비슷하다.</div>
+
+<!--SLIDE sec=7 t="대전 모델"-->
+<h2>대전 모델 — 세 모드가 한 구조체</h2>
+<!--CODE file=battle/model.go lines=1-39 cap="battle/model.go — Mode 와 메시지 (1/2)"-->
+<!--CODE file=battle/model.go lines=40-46 cap="battle/model.go — Mode 와 메시지 (2/2)"-->
+<div class="warn"><b>AIMoveMsg 에 Seat 이 들어 있는 이유</b>
+두 AI 가 <b>동시에</b> 생각할 수 있고, 결과가 도착하는 <b>순서는 보장되지 않는다.</b>
+"어느 자리의 결과인가"를 메시지가 스스로 말해야 한다.</div>
+
+<!--SLIDE sec=7 t="자리 배치"-->
+<h2>누가 어느 자리에 앉는가</h2>
+<!--CODE file=battle/model.go lines=47-86 cap="battle/model.go — Model 과 옵션 (1/2)"-->
+<!--CODE file=battle/model.go lines=87-95 cap="battle/model.go — Model 과 옵션 (2/2)"-->
+<p>모드가 정하는 것은 세 배열뿐이다 — <code>human</code>, <code>keys</code>, <code>names</code>.
+그리고 사람이 아닌 자리에 드라이버를 붙인다.</p>
+<p><code>WithLevel</code> 이 모르는 이름을 <b>조용히 무시</b>하는 것도 의도다.
+화면이 이미 떠 있는데 난이도 하나 때문에 프로그램이 죽으면 안 된다.</p>
+
+<!--SLIDE sec=7 t="모델 만들기"-->
+<h2>드라이버마다 다른 시드</h2>
+<!--CODE file=battle/model.go lines=96-122 cap="battle/model.go — New 와 접근자 (1/2)"-->
+<!--CODE file=battle/model.go lines=123-158 cap="battle/model.go — New 와 접근자 (2/2)"-->
+<p>AI 자리마다 시드를 다르게 준다. 같으면 <b>두 AI 의 실수가 똑같은 순간에
+똑같이 일어난다</b> — 보기에 이상하고, 무엇보다 "둘이 같은 난수를 쓰는구나"가
+바로 눈에 띈다.</p>
+<p>AI vs AI 에서 왼쪽은 언제나 <code>max</code> 다. 난이도 차이가 눈에 보여야 시연이 되기 때문이다.</p>
+
+<!--SLIDE sec=7 t="Update"-->
+<h2>Update — 네 종류의 메시지</h2>
+<!--CODE file=battle/update.go lines=1-39 cap="battle/update.go — Init 과 Update (1/2)"-->
+<!--CODE file=battle/update.go lines=40-46 cap="battle/update.go — Init 과 Update (2/2)"-->
+<p>1인용과 다른 것은 <code>AIMoveMsg</code> 하나가 늘었다는 점뿐이다.
+탐색이 끝나면 드라이버가 목표를 세우고, 그다음부터 키를 누르기 시작한다.</p>
+
+<!--SLIDE sec=7 t="틱 — §5.3 의 패턴"-->
+<h2>틱 — 탐색이 Update 밖으로 나가는 곳</h2>
+<!--CODE file=battle/update.go lines=47-79 cap="battle/update.go — tick"-->
+<p>여기가 이 부의 핵심이다. <b>탐색은 이 함수 안에서 돌지 않는다.</b>
+드라이버가 "생각할 때"라고 하면 <code>Cmd</code> 를 하나 만들어 돌려주고,
+결과는 나중에 <code>AIMoveMsg</code> 로 돌아온다.</p>
+<p>그동안에도 <code>Update</code> 는 계속 키와 틱을 처리한다 —
+<b>AI 가 생각하는 동안에도 사람의 판이 멈추지 않는다.</b></p>
+
+<!--SLIDE sec=7 t="thinkCmd"-->
+<h2>Cmd 안에서 지켜야 하는 규칙</h2>
+<!--CODE file=battle/update.go lines=80-105 cap="battle/update.go — thinkCmd 와 releaseSoftDrops"-->
+<div class="tip"><b>규칙은 하나다</b>
+이 함수가 돌려주는 함수 안에서는 <b>모델을 건드리지 않는다.</b>
+필요한 것은 전부 인자로 복사해서 들어왔고(<code>ai.Snapshot</code>),
+결과는 오직 반환하는 메시지로만 나간다.</div>
+<p>2부의 <code>07_cmds</code> 에서 배운 규칙이 여기서 그대로 쓰인다.
+그때는 "생각하는 척"이었고, 지금은 진짜다.</p>
+
+<!--SLIDE sec=7 t="두 자리의 키"-->
+<h2>키 하나가 어느 자리로 가는가</h2>
+<!--CODE file=battle/update.go lines=106-135 cap="battle/update.go — press (1/2)"-->
+<!--CODE file=battle/update.go lines=136-152 cap="battle/update.go — press (2/2)"-->
+<p>두 자리의 키맵을 <b>차례로</b> 뒤진다. 자리마다 키가 겹치지 않는다는 것은
+<code>ui</code> 패키지의 테스트가 지켜 준다 —
+겹치면 <b>한 번의 입력이 양쪽을 동시에 움직인다.</b></p>
+<p>Enter 는 라운드가 끝났을 때만 뜻이 있다. 대전이 끝났으면 처음부터 다시 시작한다.</p>
+
+<!--SLIDE sec=7 t="자리별 조작"-->
+<h2>자리별 조작 — 1인용과 같은 규칙</h2>
+<!--CODE file=battle/update.go lines=153-178 cap="battle/update.go — applyTo 와 resetSeats"-->
+<p>좌우는 누르자마자 놓고, 소프트드롭은 타임아웃으로 놓는다.
+자리가 둘이라 <code>softOn</code>·<code>softIdle</code> 도 배열이 됐을 뿐,
+규칙은 5부와 똑같다.</p>
+<p>AI 자리도 <b>같은 함수</b>를 지난다. 드라이버가 낸 키가 사람이 누른 키와
+완전히 같은 경로로 들어간다.</p>
+
+<!--SLIDE sec=7 t="대전 화면"-->
+<h2>화면 — 판이 바깥, 숫자가 안쪽</h2>
+<!--CODE file=battle/view.go lines=1-31 cap="battle/view.go — View (1/2)"-->
+<!--CODE file=battle/view.go lines=32-59 cap="battle/view.go — View (2/2)"-->
+<pre class="code txt"><code>[판 왼쪽][패널 왼쪽][패널 오른쪽][판 오른쪽]
+   22        14         14         22      = 72칸</code></pre>
+<p>대전 화면의 관례다. 판이 바깥에 있어야 두 사람이 각자의 쪽을 보기 쉽고,
+숫자가 가운데 모여 있어야 <b>"누가 이기고 있나"를 한눈에</b> 본다.</p>
+
+<!--SLIDE sec=7 t="자리별 표시"-->
+<h2>줄 수가 흔들리면 안 된다</h2>
+<!--CODE file=battle/view.go lines=60-95 cap="battle/view.go — seatNote 와 도움말 (1/2)"-->
+<!--CODE file=battle/view.go lines=96-114 cap="battle/view.go — seatNote 와 도움말 (2/2)"-->
+<div class="warn"><b>"생각 중…" 이 있다 없다 하면</b>
+AI 가 생각을 시작할 때마다 패널이 한 줄씩 늘었다 줄었다 한다.
+그래서 그 자리를 <b>늘 한 줄</b> 차지하게 만들었다 — 생각 안 할 때는 공백 한 칸.</div>
+<p>도움말도 짧게 유지한다. 80칸에서 잘리면 "Esc 나" 처럼 끝이 사라져서
+<b>안내가 아니라 소음</b>이 된다. 난이도 전체 이름은 F1 을 눌렀을 때만 보여 준다.</p>
+
+<!--SLIDE sec=7 t="2인용 화면"-->
+<h2>2인용 — 실제 화면</h2>
+<!--CAP file=out/tmux_2p.html cap="tmux 80×24 · 왼쪽에 aaf, 오른쪽에 ←←스페이스"-->
+<p>왼쪽 사람이 <code>a a f</code> 로 조각을 왼쪽에 놓고, 오른쪽 사람이
+<code>← ← 스페이스</code> 로 자기 조각을 놓았다. <b>같은 키보드, 다른 자리.</b></p>
+<!--PLAYER name=2p cap="2인용 35프레임 — 두 자리가 번갈아 움직인다"-->
+
+<!--SLIDE sec=7 t="터미널의 한계 — 정직하게"-->
+<h2>같은 키보드 2인용의 진짜 한계</h2>
+<p>1부에서 말한 제약이 여기서 가장 아프다. 정직하게 적어 둔다.</p>
+<table>
+  <tr><th>동시 입력이 없다</th><td>두 사람이 같은 순간에 키를 눌러도
+    <b>터미널은 하나씩 순서대로</b> 보낸다. 동시성이라는 개념 자체가 없다</td></tr>
+  <tr><th>누르고 있기가 없다</th><td>둘 다 "누르고 있는 동안"을 못 쓴다.
+    소프트드롭의 타임아웃도 자리마다 따로 돈다</td></tr>
+  <tr><th>자동반복이 겹친다</th><td>한 사람이 ← 를 누르고 있으면 OS 가 그 키만 반복한다.
+    그동안 다른 사람의 키는 <b>사이사이에</b> 낀다</td></tr>
+  <tr><th>키가 부족하다</th><td>수정자 없이 겹치지 않는 키가 그리 많지 않다.
+    그래서 배치가 빡빡하다</td></tr>
+</table>
+<div class="note"><b>그래도 놀 만하다</b>
+테트리스가 <b>턴제에 가까운</b> 게임이라서다. 격투 게임이었다면 성립하지 않았을 것이다.
+Kitty 프로토콜을 쓰면 나아지지만, 그러면 "어떤 터미널에서만 되는 게임"이 된다.</div>
+
+<!--SLIDE sec=7 t="AI 대전 화면"-->
+<h2>사람 대 AI — 실제 화면</h2>
+<!--CAP file=out/tmux_ai.html cap="tmux 80×24 · 5초 뒤. 사람 30점, AI(어려움) 418점"-->
+<p>사람은 조각 하나를 놓았고, AI 는 그동안 여러 개를 놓았다.
+<b>손 속도(55ms)와 생각 시간(260ms)이 그대로 보인다.</b></p>
+<!--PLAYER name=ai cap="AI 대전 18프레임 — AI 가 스스로 두는 것을 넘겨 보라"-->
+
+<!--SLIDE sec=7 t="함정 — 값과 포인터"-->
+<h2>함정 — 모델은 값이지만 판은 공유된다</h2>
+<p>테스트를 쓰다 실제로 밟았다. 5부에서 예고한 그 함정이다.</p>
+<pre class="code go"><code>m := <i class="fn">headless</i>(t, Local2P)
+m2, _ := m.<i class="fn">Update</i>(<i class="fn">key</i>(<i class="st">"a"</i>))
+
+<i class="cm">// 옛 모델에서 읽었는데 **새 값**이 나온다</i>
+m.<i class="fn">Match</i>().<i class="fn">Game</i>(Left).<i class="fn">Stats</i>().X   <i class="cm">// 움직인 뒤의 x</i>
+m2.(Model).<i class="fn">Match</i>().<i class="fn">Game</i>(Left).<i class="fn">Stats</i>().X <i class="cm">// 같은 값</i></code></pre>
+<p>Update 가 모델을 복사해도 <b>두 복사본이 같은 <code>*core.Game</code> 을 가리킨다.</b>
+그래서 "업데이트 전"에서 읽으면 업데이트 <b>후</b>의 값이 나온다.</p>
+<div class="tip"><b>고치는 법</b>
+예전 값을 비교하려면 <code>Update</code> 를 부르기 <b>전에</b> 숫자를 따로 붙잡아 둔다.
+이 프로젝트는 이 함정 자체를 테스트로 만들어 뒀다 —
+다음에 누가 같은 실수를 하면 그 테스트가 설명해 준다.</div>
+
+<!--SLIDE sec=7 t="함정 — 자료 경쟁"-->
+<h2>함정 — Cmd 는 다른 고루틴이다</h2>
+<p>탐색 Cmd 가 진행 중인 판을 들여다보면 자료 경쟁이다.
+같은 순간 <code>Update</code> 가 그 판에 조각을 굳히고 있을 수 있다.</p>
+<div class="warn"><b>이 기계에서는 -race 를 쓸 수 없었다</b>
+<code>go build -race</code> 가 <code>-race is not supported on android/arm64</code> 로 거절한다.
+그래서 <b>검출기 대신 설계로</b> 막았다 — 애초에 공유가 없게 만들고,
+"탐색 Cmd 가 판과 stats 를 안 건드린다"를 테스트로 못 박았다.</div>
+<pre class="code go"><code>before := core.<i class="fn">BoardHash</i>(g.<i class="fn">Board</i>())
+stats := g.<i class="fn">Stats</i>()
+<i class="fn">cmd</i>()                       <i class="cm">// 탐색을 실제로 돌린다</i>
+<i class="kw">if</i> core.<i class="fn">BoardHash</i>(g.<i class="fn">Board</i>()) != before { <i class="cm">/* 실패 */</i> }</code></pre>
+<p class="small mut">완벽한 대체는 아니다. 레이스 검출기는 "우연히 안 겹친 경우"도 잡지만
+이 테스트는 못 잡는다. 쓸 수 있는 환경이라면 <b>둘 다</b> 하는 것이 맞다.</p>
+
+<!--SLIDE sec=7 t="함정 — 같은 락 두 번"-->
+<h2>함정 — 같은 락을 두 번 배달</h2>
+<p><code>Transfer</code> 에서 이벤트 번호를 안 보면 어떻게 되는지 상상해 보라.</p>
+<pre class="code txt"><code>틱 1: A 가 테트리스 → Attack=4 → B 에게 4줄
+틱 2: (아무 일 없음)  → Attack=4 (그대로) → B 에게 또 4줄
+틱 3: 또 4줄 …
+
+초당 30틱 × 4줄 = 1초에 120줄. 즉사.</code></pre>
+<p><code>stats.Attack</code> 은 <b>"마지막 락의 결과"</b>지 "지금 보낼 것"이 아니다.
+값을 읽을 때는 그 값이 <b>언제의 것인지</b>를 늘 생각해야 한다.</p>
+<div class="tip"><b>테스트로 못 박는 법</b>
+<code>Transfer()</code> 를 <b>세 번 연달아</b> 부르고 대기줄이 4 인지 본다.
+같은 락이 여러 번 배달되면 12 가 된다.</div>
+
+<!--SLIDE sec=7 t="함정 — 드라이버 초기화"-->
+<h2>함정 — 라운드가 바뀌었는데 드라이버가 그대로</h2>
+<p>새 라운드가 시작됐는데 드라이버가 <b>이전 판의 목표</b>를 들고 있으면,
+새 조각을 엉뚱한 자리로 옮기려 한다.</p>
+<p>더 나쁜 경우: 드라이버가 <code>busy = true</code>(결과 대기 중)인 채로 라운드가 바뀌면,
+결과가 영영 안 와서 <b>AI 가 아무것도 안 한다.</b></p>
+<pre class="code go"><code><i class="kw">func</i> (m *Model) <i class="fn">resetSeats</i>() {
+	<i class="kw">for</i> s := <i class="fn">Seat</i>(<i class="nb">0</i>); s &lt; Seats; s++ {
+		m.softOn[s], m.softIdle[s] = <i class="kw">false</i>, <i class="nb">0</i>
+		<i class="kw">if</i> m.drv[s] != <i class="kw">nil</i> {
+			m.drv[s].<i class="fn">Reset</i>()      <i class="cm">// ← 이게 빠지면 AI 가 멈춘다</i>
+		}
+	}
+}</code></pre>
+<p class="small mut">라운드 전환과 대전 재시작, 두 경로 모두에서 부른다.
+"경로가 둘인데 한쪽만 고쳤다"가 이런 버그의 전형이다.</p>
+
+<!--SLIDE sec=7 t="함정 — Batch 를 안 쓰면"-->
+<h2>함정 — Cmd 가 둘 이상일 때</h2>
+<p>한 틱에 만들어질 수 있는 Cmd 가 최대 셋이다 — 다음 틱 예약,
+왼쪽 AI 의 탐색, 오른쪽 AI 의 탐색.</p>
+<pre class="code go"><code><i class="cm">// 틀린 코드 — 마지막 것만 살아남는다</i>
+<i class="kw">return</i> m, <i class="fn">Tick</i>()
+
+<i class="cm">// 맞는 코드</i>
+cmds = <i class="ty">append</i>(cmds, <i class="fn">Tick</i>())
+<i class="kw">return</i> m, tea.<i class="fn">Batch</i>(cmds...)</code></pre>
+<p><code>Update</code> 는 Cmd 를 <b>하나만</b> 돌려줄 수 있다.
+여럿을 내보내려면 <code>tea.Batch</code> 로 묶어야 한다.</p>
+<div class="warn"><b>이걸 놓치면 나타나는 증상</b>
+"AI 가 가끔 멈춘다" 또는 "화면이 가끔 얼어붙는다".
+어느 Cmd 가 버려졌느냐에 따라 증상이 달라져서 재현이 어렵다.</div>
+
+<!--SLIDE sec=7 t="AI vs AI"-->
+<h2>AI 대 AI — 세대 차이를 눈으로</h2>
+<!--CAP file=out/tmux_aivai.html cap="tmux 80×24 · 12초 뒤. 최종 978점, 보통 212점"-->
+<p>같은 조각을 받고, 같은 규칙으로 두고, 같은 시간이 흘렀다.
+차이는 <b>가중치와 속도뿐</b>이다.</p>
+<p>왼쪽(50세대)의 판은 평평하고 구멍이 거의 없다.
+오른쪽(5세대)은 이미 높이 쌓였다 — <code>F_HOLES</code> 가중치가
+−0.71 대 −0.48 인 것의 실제 결과다.</p>
+
+<!--SLIDE sec=7 t="7부 정리"-->
+<h2>7부 정리</h2>
+<table>
+  <tr><th>세 모드는</th><td>한 모델. 다른 것은 "누가 어느 자리에 앉는가"뿐</td></tr>
+  <tr><th>심판은</th><td>락 이벤트 번호로 <b>새 공격만</b> 배달한다</td></tr>
+  <tr><th>공평함은</th><td>두 판을 같은 시드로. 라운드마다 시드를 굴린다</td></tr>
+  <tr><th>AI 탐색은</th><td><code>Update</code> 밖 <b>Cmd</b> 에서. 판의 <b>사본</b>만 넘긴다</td></tr>
+  <tr><th>AI 의 손은</th><td>매 틱 지금 판을 보고 <b>다음 키 하나</b>만 고른다</td></tr>
+  <tr><th>난이도는</th><td>덜 배웠고 · 느리고 · 가끔 틀린다. 규칙은 안 봐준다</td></tr>
+  <tr><th>Cmd 는</th><td>여럿이면 <code>tea.Batch</code> 로 묶는다. 안 그러면 버려진다</td></tr>
+</table>
+<p class="small mut">다음 부에서 이 모든 것을 <b>어떻게 시험했는지</b> 본다.
+프로그램을 한 번도 안 띄우고.</p>
