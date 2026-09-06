@@ -6971,13 +6971,352 @@ def brushfire(m, kind):
 <article class="card section" id="s14">
 <p class="chnum">14부</p>
 <h2>이동·충돌·군집</h2>
-<p class="chsub">서브타일 이동과 타일 예약 불변식.<br>교착은 풀리지 않는다 — 포기할 뿐이다</p>
+<p class="chsub">한 칸을 둘이 쥐지 않게 하는 규칙 하나와,<br>그것으로도 풀리지 않는 교착</p>
 </article>
 
-<article class="card" id="s14-todo">
-<h3>이동·충돌·군집 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>34장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s14-state">
+<h3>유닛은 두 칸 사이에 있다</h3>
+<p class="lead">유닛의 위치를 픽셀로 들고 있으면 "어느 칸에 있는가"를 매번 계산해야 합니다. 대신 <b>걸음</b>을 상태로 둡니다.</p>
+<pre class="term">from_t   출발 타일 번호
+to_t     도착 타일 번호   (정지 상태면 from_t 와 같다)
+prog     0 ≤ prog ≤ 65536,  현재 걸음의 진행률</pre>
+<p>이 셋이면 충분합니다. 유닛은 항상 "타일 a 에 서 있거나" "a 에서 b 로 가는 도중"입니다. 어중간한 상태가 없습니다.</p>
+<div class="key">화면 위치는 <b>파생값</b>입니다. 상태가 아닙니다. 그래서 세이브에 픽셀을 저장하지 않고, 되돌리기가 정확히 복원됩니다.</div>
+<div class="src"><b>py/rts/move.py</b><span class="ln">51–57</span><span>from_t·to_t·prog 로부터 계산한다</span></div>
+<pre><code data-lang="py" data-src="py/rts/move.py" data-lines="51-57">def pos_of(w, m, i):
+    """화면 위치는 상태가 아니라 from_t·to_t·prog 의 파생값이다 (§13.1)."""
+    fx, fy = w.from_t[i] % m.w, w.from_t[i] // m.w
+    tx, ty = w.to_t[i] % m.w, w.to_t[i] // m.w
+    px = F.fp(fx * C.TILE) + F.fp_mul(F.fp((tx - fx) * C.TILE), w.prog[i])
+    py = F.fp(fy * C.TILE) + F.fp_mul(F.fp((ty - fy) * C.TILE), w.prog[i])
+    return px, py</code></pre>
+</article>
+
+<article class="card" id="s14-diag">
+<h3>정리 13.1 — 대각 보정</h3>
+<p class="lead">대각 걸음의 기하학적 길이는 <code class="nb">TILE·√2</code> 픽셀입니다. 진행률을 같은 속도로 올리면 대각이 <b>41 % 빨라집니다.</b></p>
+<div class="src"><b>py/rts/move.py</b><span class="ln">32–48</span><span>대각은 1/√2 를 곱한다</span></div>
+<pre><code data-lang="py" data-src="py/rts/move.py" data-lines="32-48">def step_amount(speed, d, float_bug=False):
+    """방향 d 로 한 틱에 늘어나는 진행률 (16.16).
+
+       대각 보정을 빼면 유닛이 대각으로 √2 = 41 % 빨라진다. 도스 시절에도
+       이 버그를 그대로 둔 게임이 있었고, 그래서 플레이어들이 지그재그로
+       움직였다 — 14부에서 이 버그를 일부러 넣은 데모를 보여 준다.
+
+       `float_bug` 는 §19.4 의 **일부러 넣은** 디싱크다. 1/√2 는 이진 소수로
+       끝나지 않으므로 진행률이 정수가 아니게 되고, 그 누적 차이가 px·py 를
+       통해 상태 해시에 바로 나타난다. 엔진의 다른 어느 곳도 실수를 쓰지 않는다.
+    """
+    st = F.fp_div(speed, F.fp(C.TILE))
+    if F.DCOST[d] == F.D_DIAG:
+        if float_bug:
+            return st / _SQRT2
+        return F.fp_mul(st, F.FP_DIAG)
+    return st</code></pre>
+<p><b>정리 13.1.</b> 이렇게 하면 유닛의 화면상 속도가 방향과 무관하게 일정하다.</p>
+<p><b>증명.</b> 대각 걸음의 길이는 <code class="nb">TILE·√2</code> 픽셀입니다. 진행률이 틱당 <code class="nb">step_straight/√2</code> 씩 늘면 한 걸음에 <code class="nb">√2·TILE/speed</code> 틱이 걸리고, 픽셀 속도는 <code class="nb">TILE·√2 / (√2·TILE/speed) = speed</code> 입니다. ∎</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>보병 속도 1.5 px/틱</th><th>진행량</th><th>한 걸음</th></tr>
+<tr><td>직선</td><td class="num">6144</td><td class="num">11틱</td></tr>
+<tr><td>대각</td><td class="num">4344</td><td class="num">16틱</td></tr>
+<tr><td>비율</td><td class="num">0.7070</td><td class="num">1/√2 = 0.70711</td></tr>
+</table>
+</div>
+<div class="warn">보정을 빼먹으면 유닛이 대각으로 41 % 빨라집니다. 도스 게임 중에도 이 버그를 그대로 둔 것이 있었고, 그래서 플레이어들이 <b>지그재그로 움직였습니다.</b> 최적 플레이가 보기 흉해지는 종류의 버그입니다.</div>
+</article>
+
+<article class="card" id="s14-resv">
+<h3>불변식 R</h3>
+<svg class="diag" viewBox="0 0 660 250" role="img">
+<title>타일 예약 불변식 R — 두 칸을 쥐는 구간</title>
+<text class="lbl" x="78" y="34" text-anchor="middle">걸음 전</text>
+<rect class="tl on" x="24" y="60" width="54" height="54"/>
+<text class="lbl" x="51" y="91" text-anchor="middle">a</text>
+<rect class="tl" x="84" y="60" width="54" height="54"/>
+<text class="lbl" x="111" y="91" text-anchor="middle">b</text>
+<circle class="tl hot" cx="51" cy="140" r="9"/>
+<text class="lbl" x="78" y="170" text-anchor="middle">resv[a]=나</text>
+<text class="lbl" x="236" y="34" text-anchor="middle">걸음 시작</text>
+<rect class="tl on" x="182" y="60" width="54" height="54"/>
+<text class="lbl" x="209" y="91" text-anchor="middle">a</text>
+<rect class="tl hot" x="242" y="60" width="54" height="54"/>
+<text class="lbl" x="269" y="91" text-anchor="middle">b</text>
+<circle class="tl hot" cx="218" cy="140" r="9"/>
+<text class="lbl" x="236" y="170" text-anchor="middle">resv[b]=나 (두 칸)</text>
+<text class="lbl" x="394" y="34" text-anchor="middle">진행 중</text>
+<rect class="tl on" x="340" y="60" width="54" height="54"/>
+<text class="lbl" x="367" y="91" text-anchor="middle">a</text>
+<rect class="tl on" x="400" y="60" width="54" height="54"/>
+<text class="lbl" x="427" y="91" text-anchor="middle">b</text>
+<circle class="tl hot" cx="409" cy="140" r="9"/>
+<text class="lbl" x="394" y="170" text-anchor="middle">prog &lt; 1</text>
+<text class="lbl" x="552" y="34" text-anchor="middle">도착</text>
+<rect class="tl" x="498" y="60" width="54" height="54"/>
+<text class="lbl" x="525" y="91" text-anchor="middle">a</text>
+<rect class="tl on" x="558" y="60" width="54" height="54"/>
+<text class="lbl" x="585" y="91" text-anchor="middle">b</text>
+<circle class="tl hot" cx="585" cy="140" r="9"/>
+<text class="lbl" x="552" y="170" text-anchor="middle">resv[a]=0</text>
+<text x="24" y="20" text-anchor="start">한 칸만 쥐면 두 유닛이 서로의 칸으로 동시에 들어가 겹친다</text>
+<text class="lbl" x="24" y="232" text-anchor="start">주황 칸이 이번 걸음에 새로 쥔 칸 · 아래 원이 유닛의 실제 위치</text>
+</svg>
+<p><b>불변식 R.</b> 어떤 타일도 두 엔티티에게 동시에 예약되지 않는다.</p>
+<pre class="term">걸음을 시작할 때:
+    resv[next] 가 남의 것이면 → 걸음을 시작하지 않는다 (막힘)
+    resv[next] = 내 핸들            ← 이제 두 칸을 쥔다
+prog 가 65536 에 닿으면:
+    resv[from_t] = 0,  from_t = to_t,  prog = 0</pre>
+<div class="key"><b>두 칸을 쥐는 구간이 있는 것이 핵심입니다.</b> 한 칸만 쥐면 두 유닛이 서로의 칸으로 동시에 들어가 겹칩니다. 겹친 유닛은 화면에서 하나로 보이고, 그 다음부터는 무엇이 잘못됐는지 알 수 없습니다.</div>
+</article>
+
+<article class="card" id="s14-resv-code">
+<h3>예약과 반납</h3>
+<div class="src"><b>py/rts/move.py</b><span class="ln">143–149</span><span>제 예약을 다시 잡는 것은 성공</span></div>
+<pre><code data-lang="py" data-src="py/rts/move.py" data-lines="143-149">    # ── SPEC §13.2 예약 ────────────────────────────────────────────────────
+    def reserve(self, tile, h):
+        cur = self.resv[tile]
+        if cur != 0 and cur != h:
+            return False
+        self.resv[tile] = h
+        return True</code></pre>
+<p>건물은 발자국의 모든 타일을 <b>영구 예약</b>합니다. 그리고 통행 비트도 내립니다(4부) — 예약만으로는 경로 탐색이 건물을 관통하기 때문입니다.</p>
+<p>무작위 24기를 600틱 돌리며 매 틱 확인합니다.</p>
+<pre class="term">불변식 R — 600틱 동안 한 칸을 둘이 예약한 적    0
+제가 선 칸은 늘 제 예약이다                     0건 위반
+두 유닛이 같은 타일에 선 적                     0</pre>
+</article>
+
+<article class="card" id="s14-blocked">
+<h3>막힘 — 8틱과 24틱</h3>
+<pre class="term">blocked[i]      연속으로 막힌 틱 수
+blocked == 8    경로를 다시 찾는다 (목표는 그대로)
+blocked >= 24   명령을 포기하고 IDLE 로</pre>
+<p>8틱은 "잠깐 비켜 주겠지"를 기다리는 시간이고, 24틱은 "이건 안 되겠다"를 인정하는 시간입니다. 1.3초와 반올림해도 되는 값들입니다.</p>
+<div class="note">재탐색이 <code class="nb">blocked</code> 를 <b>0 으로 되돌리지 않습니다.</b> 되돌리면 8틱마다 재탐색만 반복하며 영원히 포기하지 않습니다. 같은 그래프에서 같은 A* 를 돌리므로 같은 경로가 나올 텐데도요.</div>
+</article>
+
+<article class="card" id="s14-push">
+<h3>밀어내기</h3>
+<p class="lead">앞을 막은 것이 <b>정지한 아군</b>이면 밀어냅니다.</p>
+<div class="src"><b>py/rts/move.py</b><span class="ln">106–124</span><span>반대 방향에서 시계로 훑는다</span></div>
+<pre><code data-lang="py" data-src="py/rts/move.py" data-lines="106-124"># ── SPEC §13.3 밀어내기 ─────────────────────────────────────────────────────
+def push_dir(mv, i, from_dir):
+    """i 를 어느 방향으로 비키게 할지. 없으면 255.
+
+       훑는 순서는 미는 쪽 진행 방향의 **반대에서 시작해 시계 방향**이다.
+       순서를 명세로 고정하지 않으면 세 언어가 다른 칸을 고르고, 그 차이는
+       한 틱 뒤 위치 차이가 되어 그대로 디싱크다.
+    """
+    w, m = mv.w, mv.m
+    kind = C.MOVE_KIND[w.kind[i]]
+    for k in range(8):
+        d = F.fmod(from_dir + 4 + k, 8)
+        u, v = w.tx[i] + F.DX[d], w.ty[i] + F.DY[d]
+        if not m.passable_terrain(u, v, kind):
+            continue
+        if mv.resv[v * m.w + u] != 0:
+            continue
+        return d
+    return STOP_DIR</code></pre>
+<p>훑는 순서는 미는 쪽 진행 방향의 <b>반대에서 시작해 시계 방향</b>입니다. 뒤로 물러나는 것을 먼저 시도하고, 안 되면 옆으로 비킵니다.</p>
+<div class="key">순서를 명세로 고정하지 않으면 세 언어가 다른 칸을 고르고, 그 차이는 한 틱 뒤 위치 차이가 되어 그대로 디싱크입니다. "아무 빈 칸으로" 는 명세가 아닙니다.</div>
+<p>밀린 유닛은 한 걸음짜리 명령을 받습니다. 걷는 중에는 "정지한 아군"이 아니므로 다시 밀리지 않습니다.</p>
+</article>
+
+<article class="card" id="s14-deadlock">
+<h3>교착은 사라지지 않는다</h3>
+<p class="lead">폭 1 통로에서 마주 오는 두 유닛. 서로 다른 플레이어라 밀어낼 수도 없습니다.</p>
+<pre class="term">틱  0   A(0,1) → 목표 (4,1)          B(4,1) → 목표 (0,1)
+틱 20   A(1,1)                       B(3,1)
+틱 30   A(2,1)  blocked=9            B(3,1)  blocked=9
+틱 45   A(2,1)  goal=-1  포기        B(3,1)  goal=-1  포기</pre>
+<p>45틱에 둘 다 명령을 포기합니다. <b>이것은 해결이 아니라 포기입니다.</b> 덱에 그렇게 적습니다.</p>
+<div class="warn">완전한 해법 — 협상 기반 재배치, 우선순위 교환, 통로 예약 — 은 이 엔진의 범위 밖입니다. 도스 시절 게임들도 대부분 이 자리에서 포기했고, 플레이어는 "유닛이 멍청하다"고 말했습니다. 그 멍청함의 정확한 출처가 이 24 라는 숫자입니다.</div>
+</article>
+
+<article class="card" id="s14-arrive">
+<h3>도착 반경</h3>
+<p class="lead">무리 여덟 기에게 같은 칸을 클릭했습니다. 한 칸에는 하나만 설 수 있습니다.</p>
+<div class="src"><b>py/rts/move.py</b><span class="ln">280–297</span><span>목표 칸이 남의 것이고 2타일 안이면 도착</span></div>
+<pre><code data-lang="py" data-src="py/rts/move.py" data-lines="280-297">    def _arrived(self, i, h):
+        """§13.4 목표 칸이 남의 것이고 ARRIVE_R 안이면 도착으로 친다.
+
+           이것이 없으면 무리의 마지막 한 기가 영원히 목표 칸을 두드린다.
+        """
+        w, m = self.w, self.m
+        g = self.goal[i]
+        if g &lt; 0:
+            return False
+        taken = self.resv[g]
+        if taken == 0 or taken == h:
+            return False
+        if F.dinf(g % m.w - w.tx[i], g // m.w - w.ty[i]) &gt; ARRIVE_R:
+            return False
+        self.path[i] = []
+        self.goal[i] = -1
+        self.blocked[i] = 0
+        return True</code></pre>
+<p>이것이 없으면 마지막 한 기가 <b>영원히 목표 칸을 두드립니다.</b> 24틱마다 포기하고 다시 명령받고 다시 두드립니다.</p>
+<p>2타일이라는 숫자는 대형(아래)과 맞물립니다. 8기짜리 BOX 대형의 반지름이 대략 그만큼이니, 도착 반경이 그보다 작으면 대형이 완성되기 전에 포기가 먼저 옵니다.</p>
+</article>
+
+<article class="card" id="s14-rot8">
+<h3>대형 — 회전은 표다</h3>
+<pre class="term">LINE    슬롯 k = (k − ⌊(n−1)/2⌋,  0)          이동 방향에 수직
+COLUMN  슬롯 k = (0,  k)                       이동 방향으로
+BOX     한 변 w = ⌈√n⌉,  슬롯 k = (k mod w − ⌊(w−1)/2⌋,  ⌊k/w⌋)</pre>
+<div class="src"><b>py/rts/move.py</b><span class="ln">60–77</span><span>45도 회전은 정수 격자를 보존하지 않는다</span></div>
+<pre><code data-lang="py" data-src="py/rts/move.py" data-lines="60-77"># ── SPEC §13.5 회전과 대형 ──────────────────────────────────────────────────
+def rot8(d, ox, oy):
+    """이동 방향 d 로 오프셋을 돌린다. 행렬이 아니라 8방향 표다.
+
+       45° 회전은 정수 격자를 보존하지 않으므로 대각은 이웃한 두 직교 방향의
+       결과를 더해 2로 내림 나눗셈한다 — 근사이며, 그렇다고 적어 둔다.
+    """
+    if d == 0:
+        return ox, oy
+    if d == 2:
+        return -oy, ox
+    if d == 4:
+        return -ox, -oy
+    if d == 6:
+        return oy, -ox
+    ax, ay = rot8(d - 1, ox, oy)
+    bx, by = rot8((d + 1) % 8, ox, oy)
+    return F.floordiv(ax + bx, 2), F.floordiv(ay + by, 2)</code></pre>
+<p>회전은 행렬이 아니라 <b>8방향 표</b>입니다. 직교 넷은 정확하고, 대각 넷은 이웃한 두 직교 방향의 결과를 더해 2로 내림 나눗셈합니다.</p>
+<div class="note">대각 회전이 근사인 이유는 45° 회전이 정수 격자를 보존하지 않기 때문입니다. 정확한 회전은 소수 좌표를 낳고, 그것을 반올림하면 <b>두 슬롯이 같은 칸에 겹칩니다.</b> 근사가 겹침보다 낫습니다.</p>
+</article>
+
+<article class="card" id="s14-slot">
+<h3>슬롯이 막혀 있으면</h3>
+<div class="src"><b>py/rts/move.py</b><span class="ln">80–103</span><span>맵 밖이나 통행 불가면 목표 타일로 접는다</span></div>
+<pre><code data-lang="py" data-src="py/rts/move.py" data-lines="80-103">def formation(n, shape, d, gx, gy, m, kind):
+    """목표 주위 n 개의 슬롯 타일. 슬롯 순서 = 핸들 오름차순으로 나눠 준다.
+
+       맵 밖이거나 통행 불가인 슬롯은 목표 타일 자체로 접는다. 슬롯을 다시
+       찾아 주지는 않는다 — 반쯤 성공하는 재배치가 교착보다 나쁜 그림을 만든다.
+    """
+    out = []
+    if n &lt;= 0:
+        return out
+    side = F.isqrt(n - 1) + 1                  # ceil(sqrt(n)) — §2.5 정수 제곱근
+    for k in range(n):
+        if shape == LINE:
+            ox, oy = k - F.floordiv(n - 1, 2), 0
+        elif shape == COLUMN:
+            ox, oy = 0, k
+        else:
+            ox = F.fmod(k, side) - F.floordiv(side - 1, 2)
+            oy = F.floordiv(k, side)
+        rx, ry = rot8(d, ox, oy)
+        x, y = gx + rx, gy + ry
+        if not m.passable_terrain(x, y, kind):
+            x, y = gx, gy
+        out.append((x, y))
+    return out</code></pre>
+<p>슬롯을 다시 찾아 주지 <b>않습니다.</b> 그 유닛만 목표 타일 자체를 씁니다.</p>
+<div class="key">재배치를 넣지 않은 이유는 교착과 같습니다 — <b>반쯤 성공하는 재배치가 실패보다 나쁜 그림을 만듭니다.</b> 슬롯을 못 받은 유닛 셋이 서로의 대체 슬롯을 뺏으며 도는 장면을 상상해 보세요. 차라리 목표 칸 근처에 몰려 서는 편이 낫습니다.</div>
+<p>슬롯을 유닛에 나눠 주는 순서는 <b>핸들 오름차순</b>입니다. 11부의 상자 선택이 핸들 순으로 정렬해 돌려주는 이유가 이것입니다 — 선택 순서가 대형 배정을 그대로 결정합니다.</p>
+</article>
+
+<article class="card" id="s14-stop">
+<h3>STOP 은 걸음을 마친 뒤에</h3>
+<div class="src"><b>py/rts/move.py</b><span class="ln">219–227</span><span>시작하지 않은 걸음의 예약만 반납</span></div>
+<pre><code data-lang="py" data-src="py/rts/move.py" data-lines="219-227">    def stop(self, i):
+        """§12.4 STOP — 아직 시작하지 않은 걸음의 예약만 반납한다(§13.2)."""
+        w = self.w
+        self.path[i] = []
+        self.goal[i] = -1
+        self.blocked[i] = 0
+        if w.prog[i] == 0 and w.to_t[i] != w.from_t[i]:
+            self.release(w.to_t[i], w.handle(i))
+            w.to_t[i] = w.from_t[i]</code></pre>
+<p>걸음 도중에 <code class="nb">to_t</code> 의 예약을 놓으면 다른 유닛이 그 칸을 가져갑니다. 그런데 이쪽은 이미 절반쯤 들어와 있습니다.</p>
+<p><b>불변식 R 이 깨지는 유일한 경로가 그것입니다.</b> 그래서 <code class="nb">STOP</code> 이 즉시 반납하는 예약은 아직 시작하지 않은 걸음의 것뿐입니다.</p>
+<pre class="term">prog == 0  and  to_t != from_t   →  예약을 반납한다
+prog  > 0                         →  이번 걸음은 끝까지 간다</pre>
+</article>
+
+<article class="card" id="s14-crossed">
+<h3>타일을 넘은 유닛만 기억한다</h3>
+<div class="src"><b>py/rts/move.py</b><span class="ln">264–278</span><span>넘은 사실을 crossed 에 남긴다</span></div>
+<pre><code data-lang="py" data-src="py/rts/move.py" data-lines="264-278">    def _finish_step(self, i, h):
+        w, m = self.w, self.m
+        old = w.from_t[i]
+        self.release(old, h)
+        m.occupy(old % m.w, old // m.w, False)
+        w.from_t[i] = w.to_t[i]
+        w.prog[i] = 0
+        nx, ny = w.to_t[i] % m.w, w.to_t[i] // m.w
+        w.move_tile(i, nx, ny)
+        m.occupy(nx, ny, True)
+        self.crossed.append((i, old, w.to_t[i]))
+        if self.path[i] and self.path[i][0] == w.to_t[i]:
+            self.path[i] = self.path[i][1:]
+        if not self.path[i]:
+            self.goal[i] = -1</code></pre>
+<p>시뮬레이션의 7단계(시야 갱신)는 <b>이 목록만</b> 봅니다. 매 틱 유닛 전부의 시야를 다시 계산하는 대신, 타일을 넘은 것만 remove/add 합니다.</p>
+<p>그런데 여기에 함정이 있었습니다 — 15부에서 본, 그 틱에 죽은 유닛의 시야를 어디서 빼느냐 하는 문제입니다.</p>
+</article>
+
+<article class="card" id="s14-demo">
+<h3>직접 해 보기 — 무리 이동</h3>
+<div class="demo" data-demo="group-move">
+<h5>여덟 기를 한 점으로 보내면</h5>
+<div class="row">
+<label>대형 <select data-shape><option value="2">BOX</option><option value="0">LINE</option><option value="1">COLUMN</option></select></label>
+<label>유닛 수 <input type="number" data-n value="8" min="1" max="24"></label>
+<button data-run>보내기</button>
+<button data-reset>처음으로</button>
+</div>
+<div class="out"></div>
+</div>
+<p>예약된 칸이 어떻게 겹치지 않는지, 그리고 막힌 유닛의 <code class="nb">blocked</code> 카운터가 어떻게 오르는지 봅니다. 좁은 통로로 보내면 24틱 포기를 직접 볼 수 있습니다.</p>
+</article>
+
+<article class="card" id="s14-sum">
+<h3>14부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>상태</td><td>from_t · to_t · prog 셋</td><td>화면 위치는 파생값</td></tr>
+<tr><td>대각</td><td>1/√2 를 곱한다</td><td>정리 13.1 · 안 하면 41 % 빠르다</td></tr>
+<tr><td>예약</td><td>걸음 중에는 두 칸을 쥔다</td><td>불변식 R · 600틱 0건</td></tr>
+<tr><td>막힘</td><td>8틱 재탐색 · 24틱 포기</td><td>재탐색은 카운터를 되돌리지 않는다</td></tr>
+<tr><td>밀어내기</td><td>반대 방향에서 시계로</td><td>순서가 곧 결정론</td></tr>
+<tr><td>교착</td><td>45틱에 양쪽 다 포기 — 해결이 아니다</td><td>실측 트레이스</td></tr>
+<tr><td>도착</td><td>목표가 점유돼 있고 2타일 안이면 도착</td><td>마지막 한 기가 두드리지 않게</td></tr>
+<tr><td>대형</td><td>rot8 표 · 대각은 근사 · 슬롯은 접는다</td><td>정수 격자 보존</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s14-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">걸음을 시작할 때 도착 칸을 예약하지 <b>않고</b>, 도착한 뒤에 예약한다면 어떤 장면이 나오는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>마주 오는 두 유닛이 <b>서로의 칸으로 동시에 들어갑니다.</b> A 는 b 로, B 는 a 로. 둘 다 도착 시점에 예약을 시도하고, 둘 다 성공합니다 — 상대가 그 칸을 이미 떠났으니까요.</p>
+<p>화면에서는 두 유닛이 <b>서로를 통과</b>합니다. 겹치지도 않고 부딪히지도 않고 그냥 지나갑니다. 그리고 그 뒤로는 "왜 벽이 유닛을 못 막지?" 를 묻게 됩니다.</p>
+<p>먼저 쥐는 규칙은 이 장면을 원천적으로 막습니다. A 가 b 를 쥐는 순간 B 는 b 로 들어갈 수 없고, B 는 막힘 카운터를 올리다가 밀어내기나 재탐색으로 넘어갑니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s14-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">교착을 24틱이 아니라 <b>200틱</b>에 포기하게 하면 게임이 어떻게 달라지는가? 더 참을성 있는 유닛이 더 좋은 유닛 아닌가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>두 유닛이 통로에서 <b>11초 동안</b> 마주 본 채 서 있습니다. 플레이어는 그 사이 명령을 다시 내리고, 그 명령도 같은 자리에서 막힙니다.</p>
+<p>더 나쁜 것은 <b>포기가 곧 재계획</b>이라는 점입니다. 포기해야 상위 로직(AI 나 채집기 FSM)이 다른 목표를 잡습니다. 24틱이 길면 채집기가 200틱 동안 아무것도 캐지 않습니다 — 17부의 수입률이 그만큼 떨어집니다.</p>
+<p>반대로 너무 짧으면(예: 4틱) 잠깐 스치는 유닛 때문에 명령이 취소됩니다. 24 는 "지나가는 유닛은 기다리고, 마주 선 유닛은 포기한다"를 가르는 값이고, 그 근거는 <b>한 타일을 건너는 데 11~16틱</b>이라는 이동 속도입니다. 두 걸음쯤 기다려 보는 셈입니다.</p>
+</div>
+</div>
 </article>
 
 <!-- ===== 15-fog.html ===== -->
