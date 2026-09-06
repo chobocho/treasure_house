@@ -267,6 +267,21 @@ English into a user-facing message; translate and condense.
 
 ## Progress log (newest first; Korean, ≤12 lines each, same shape as history.md)
 
+- 2026-09-06 18:30 — **10단계: 전수 리뷰 — 사실오류 4건·표기 5건·소스 1건 정정**.
+  숫자를 실제 출력과 전수 대조: 점수(사람 30/AI 418, 최종 978/보통 212)·파리티 수치·
+  프레임 수·소스 줄 수 전부 일치. **사실오류 4건**: ① "Go 1.27 이상이 필요한 이유가
+  `//go:embed`·`clear()`" → 둘 다 훨씬 전부터 있다(go.mod 의 선언일 뿐) ② AI vs AI 의
+  세대 차이를 `F_HOLES` 로 설명 → **거꾸로였다**(5세대가 −0.71 로 더 싫어한다).
+  실제로 갈린 것은 `F_LAND`(−0.556 대 −0.124)와 `F_COLT`(−0.505 대 −0.260) ③ Dellacherie 의
+  여섯 번째는 "지워진 칸"인데 우리 `F_LINES` 는 "지운 줄 수"라 같지 않다 → 대응을 정확히 적음
+  ④ 다른 OS 동작을 단정 → **Termux 한 곳에서만 돌려 봤다**고 밝히고 "확인함/예상"으로 나눔.
+  **표기 5건**: Makefile 캡션 3장이 실제 범위와 어긋남(logs 가 다른 슬라이드에 있었다),
+  16패키지 "전부 통과" → 테스트가 있는 15개, 빌더가 잡은 개수 4/15 → 6/39,
+  `<pre>` 안 박스 문자 도해 5개를 ASCII 로, 키 자동반복 "30~50ms" 단정 제거.
+  **소스 1건**: `examples/05_window` 주석의 "2인용 80×24" → 72×24(계산값과 어긋났다).
+  claims.md 에 확인 항목 5건·확인 못 한 항목 3건 추가. 소스가 1줄 늘어 11,233 으로 동기화.
+  검증: gofmt 0건 · vet 0건 · 15패키지 통과 · `make deck` 0건 · `make deck-check` 0건.
+
 - 2026-09-06 17:55 — **9단계: index 카드 · README 줄 · 덱 HTML 첫 커밋**.
   `Go_Bubble_Tea_테트리스_만들기.html` (339장 · 1,388 KB) 을 저장소 루트에 커밋.
   `index.html` 카드와 `README.md` 줄을 같은 커밋에서 함께 갱신 —
