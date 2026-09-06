@@ -1,0 +1,202 @@
+<article class="card section" id="s10">
+<p class="chnum">10부</p>
+<h2>이동과 경로</h2>
+<p class="chsub">여덟 방향에서 대각선은 얼마인가.<br>그리고 A* 가 최단 경로를 놓치지 않으려면</p>
+</article>
+
+<article class="card" id="s10-dirs">
+<h3>여덟 방향</h3>
+<!--CODE file=py/isorpg/path.py lang=py sym=DIRX..DIR_NAME note=인덱스 순서가 세이브·트레이스에 들어간다-->
+<p>인덱스 순서는 <b>명세</b>입니다. 세이브 파일과 골든 트레이스에 방향 인덱스가 그대로 들어가므로, 순서를 바꾸면 옛 세이브가 깨집니다.</p>
+<p>이름은 타일 좌표계 기준입니다. 6부에서 봤듯 화면에서는 45도 어긋나 보입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>d</th><th>이름</th><th>Δ</th><th>대각</th><th>기본 비용</th></tr>
+<tr><td class="num">0</td><td>E</td><td class="num">(+1, 0)</td><td>아니오</td><td class="num">10</td></tr>
+<tr><td class="num">1</td><td>SE</td><td class="num">(+1, +1)</td><td>예</td><td class="num">14</td></tr>
+<tr><td class="num">2</td><td>S</td><td class="num">(0, +1)</td><td>아니오</td><td class="num">10</td></tr>
+<tr><td class="num">3</td><td>SW</td><td class="num">(-1, +1)</td><td>예</td><td class="num">14</td></tr>
+</table>
+</div>
+<p><b>10 과 14 는 어디서 왔는가</b> — <code class="nb">10·√2 = 14.142</code> 의 정수 근사입니다. 대각선을 1.4배로 세는 것이죠. 오차는 1%. <code class="nb">100 : 141</code> 로 하면 0.1% 지만 비용 값이 커져 양동이 큐가 커집니다.</p>
+</article>
+
+<article class="card" id="s10-step">
+<h3>한 걸음의 조건과 비용</h3>
+<!--CODE file=py/isorpg/path.py lang=py sym=step_ok note=마지막 조건이 모서리 자르기 금지-->
+<div class="steps">
+<ol>
+<li><b>도착 칸이 통행 가능</b>해야 한다.</li>
+<li><b>높이 차가 1 이하</b>여야 한다 — 절벽은 못 오른다.</li>
+<li>대각선이면 <b>두 직교 이웃이 모두 통행 가능</b>해야 한다.</li>
+</ol>
+</div>
+<p>세 번째가 <b>모서리 자르기 금지</b>입니다. 벽 두 장이 만나는 모서리를 대각선으로 스쳐 지나가면 캐릭터가 벽을 뚫은 것처럼 보입니다.</p>
+<pre class="term">   . #        대각선 이동 (0,0) → (1,1) 은
+   # .        두 직교 이웃 (1,0) 과 (0,1) 이 모두 벽이므로 금지
+
+   . #        (1,0) 만 벽이면? 이 규칙에서는 여전히 금지.
+   . .        더 느슨한 규칙(하나만 열려 있으면 허용)도 있지만
+              모서리를 스치는 그림이 나온다.</pre>
+<!--CODE file=py/isorpg/path.py lang=py sym=step_cost note=도착 칸의 지형으로 값을 매긴다-->
+<div class="key"><b>떠나는 칸이 아니라 도착 칸의 지형</b>으로 값을 매깁니다. 그래야 늪에서 나오는 것이 늪에 들어가는 것보다 싸집니다 — 직관과 맞고, 대칭성도 유지됩니다(A→B 와 B→A 의 비용 합이 경로 방향과 무관).</div>
+</article>
+
+<article class="card" id="s10-heur-wrong">
+<h3>흔한 옥타일 휴리스틱이 여기서는 틀린다</h3>
+<p class="lead">이 문서가 실제로 겪은 버그입니다.</p>
+<p>격자 A* 의 표준 휴리스틱은</p>
+<pre class="term">h = 10·(dx + dy) - 6·min(dx, dy)</pre>
+<p>입니다. 걸음값이 10/14 로 균일할 때의 정확한 최단거리죠. 그런데 이 엔진에서는 <b>지형마다 비용이 다릅니다.</b> 가장 싼 ROAD 에서 직진 한 걸음이 <code class="nb">⌊10×8/10⌋ = 8</code> 입니다. 10 이 아닙니다.</p>
+<p>그래서 지형 최소 비용을 곱해 보정하려 했습니다.</p>
+<pre class="term">h = ⌊(10·(dx+dy) - 6·min) × 8 / 10⌋      ← 이것이 틀렸다</pre>
+<div class="cmp bad">
+<h5>무엇이 깨지는가 1 — 허용성</h5>
+<pre>(0,0) → (47,47)
+  이 식:      526
+  실제 최소:  517     (ROAD 만 밟았을 때)
+
+h &gt; 실제 비용 → A* 가 최단 경로를 놓친다</pre>
+</div>
+<div class="cmp bad">
+<h5>무엇이 깨지는가 2 — 일관성</h5>
+<pre>⌊A/10⌋ - ⌊B/10⌋  이  ⌊(A-B)/10⌋ 보다 1 클 수 있다
+
+예: A=120, B=9  →  12 - 0 = 12
+    (120-9)/10 = 11.1 → 11
+
+h 의 감소량이 실제 걸음값보다 커지는 간선이 생긴다</pre>
+</div>
+<div class="warn"><b>테스트가 잡았습니다</b> — 맵 전체의 모든 합법 간선에 대해 <code class="nb">h(a) - h(n) ≤ cost</code> 를 확인하는 검사에서 위반 간선이 <b>정확히 1개</b> 나왔습니다. 하나. 실제 게임 화면에서는 절대 눈에 띄지 않았을 겁니다.</div>
+</article>
+
+<article class="card" id="s10-heur">
+<h3>정리 8.1, 8.2 — 나눗셈을 없애면 된다</h3>
+<p>내림이 문제라면 내림을 하지 않으면 됩니다. 가장 싼 지형에서의 <b>정확한</b> 최단거리를 그대로 쓰면 됩니다.</p>
+<pre class="term">STRAIGHT_MIN = ⌊10 × 8 / 10⌋ = 8       (ROAD 직진)
+DIAG_MIN     = ⌊14 × 8 / 10⌋ = 11      (ROAD 대각)
+
+h = 8·max(dx,dy) + 3·min(dx,dy)</pre>
+<!--CODE file=py/isorpg/path.py lang=py sym=octile note=나눗셈이 없다-->
+<p><b>정리 8.1 (허용성).</b> 8방향 격자에서 <code class="nb">a→b</code> 경로가 대각 <code class="nb">q</code> 번, 직진 <code class="nb">p</code> 번이면 <code class="nb">p+q ≥ hi</code>, <code class="nb">p+2q ≥ dx+dy</code> 여야 합니다. 걸음 수를 최소로 하면 <code class="nb">q = lo</code>, <code class="nb">p = hi - lo</code>. 모든 걸음의 실제 비용이 직진 ≥ 8, 대각 ≥ 11 이므로 실제 비용 <code class="nb">≥ 8(hi-lo) + 11·lo = 8·hi + 3·lo = h</code>. ∎</p>
+<p><b>정리 8.2 (일관성).</b> <code class="nb">h</code> 는 "모든 직진이 8, 모든 대각이 11 인 완화된 격자"에서의 <b>정확한 최단거리</b>입니다. 정확한 최단거리는 삼각부등식을 만족합니다: <code class="nb">h(a,b) ≤ c'(a,n) + h(n,b)</code>. 그리고 <code class="nb">c'(a,n) ≤ step_cost(n,d)</code>. 둘을 합치면 됩니다. ∎</p>
+<div class="key">증명이 <b>짧아졌습니다.</b> 내림이 있는 형태는 부등식을 하나하나 따져야 했고 등호가 아슬아슬했습니다. 나눗셈을 없애니 "완화된 그래프의 최단거리"라는 한 문장으로 끝납니다. <b>정리가 짧아지면 대개 그것이 옳은 형태입니다.</b></div>
+</article>
+
+<article class="card" id="s10-oct-fig">
+<h3>옥타일 거리 그림</h3>
+<div class="fig" data-svg="fig_octile.svg"></div>
+<!--OUT file=py_prim.txt sec=11 note=골든 여덟 쌍-->
+<p><code class="nb">(0,0) → (47,47)</code> 이 <b>517</b> 인 것을 확인하세요. 내림 두 번 형태의 526 과 9 차이입니다.</p>
+</article>
+
+<article class="card" id="s10-bucket">
+<h3>양동이 큐 — 힙보다 빠른 이유</h3>
+<p>다익스트라와 A* 모두 "가장 작은 키를 꺼내는" 자료구조가 필요합니다. 이진 힙이 표준이지만, <b>키의 범위가 좁으면</b> 더 빠른 방법이 있습니다.</p>
+<!--CODE file=py/isorpg/path.py lang=py sym=Bucket note=원형 배열 — 비교가 없다-->
+<p><b>정리 8.3.</b> 모든 간선 비용이 <code class="nb">[0, BUCKET_N)</code> 이면 활성 키의 폭이 <code class="nb">BUCKET_N</code> 미만이므로 원형 양동이 큐가 이진 힙과 같은 순서로 최소값을 준다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>push</th><th>pop_min</th><th>비교</th></tr>
+<tr><td>이진 힙</td><td class="num">O(log n)</td><td class="num">O(log n)</td><td>있음</td></tr>
+<tr><td>양동이 큐</td><td class="num">O(1)</td><td class="num">O(1) 분할상환</td><td><b>없음</b></td></tr>
+</table>
+</div>
+<p>커서가 한 바퀴 도는 비용은 전체에 걸쳐 <code class="nb">O(최대키)</code> 로 분산됩니다. 그래서 분할상환 O(1).</p>
+<p><code class="nb">BUCKET_N = 64</code> 로 잡았습니다. 최대 간선 비용이 <code class="nb">⌊14×20/10⌋ = 28</code>(늪 대각)이니 넉넉합니다. 테스트가 실제 맵의 최대 간선 비용을 재서 확인합니다.</p>
+<div class="key"><b>A* 에서도 쓸 수 있는가</b> — 있습니다. <code class="nb">h</code> 가 일관적이므로 <code class="nb">f = g + h</code> 는 경로를 따라 단조 증가하고, 한 걸음에 최대 28 늘어납니다. 활성 폭이 <code class="nb">BUCKET_N</code> 미만이라는 조건이 그대로 성립합니다.</div>
+</article>
+
+<article class="card" id="s10-astar">
+<h3>A*</h3>
+<!--CODE file=py/isorpg/path.py lang=py sym=astar note=같은 양동이 큐에 f = g + h 를 넣는다-->
+<p><code class="nb">closed</code> 배열이 필요한 이유는 양동이 큐가 <b>키를 갱신하지 않기</b> 때문입니다. 더 나은 경로를 찾으면 같은 노드를 다시 넣고, 꺼낼 때 이미 처리한 것이면 버립니다(lazy deletion). 힙에서도 흔히 쓰는 방식입니다.</p>
+</article>
+
+<article class="card" id="s10-astar-cost">
+<h3>A* 가 얼마나 덜 보는가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>본 노드 수</th><th>비고</th></tr>
+<tr><td>다익스트라 (도달 가능 전부)</td><td class="num">1,737</td><td>목표를 모르니 전부 본다</td></tr>
+<tr><td>A* (24,34) → (24,20)</td><td class="num"><b>15</b></td><td class="num">116배 적다</td></tr>
+</table>
+</div>
+<p>15개. 경로 길이가 14 칸이니 <b>거의 경로만 보고 끝났습니다.</b> 두 점이 길 위에 있고 길이 곧게 뻗어 있어서, 휴리스틱이 그 구간에서 <b>정확한 값</b>을 주기 때문입니다.</p>
+<p>휴리스틱이 정확하면 A* 는 최단 경로만 따라갑니다. 부정확할수록 옆으로 퍼집니다. 이것이 A* 의 전부입니다.</p>
+<div class="warn"><b>대신 지형이 섞이면 급격히 나빠집니다.</b> 숲(16)과 늪(20) 사이를 지나야 하면 <code class="nb">h</code> 가 ROAD 기준이라 크게 과소평가하고, A* 는 거의 다익스트라가 됩니다. 휴리스틱의 품질은 <b>지형 비용의 분산</b>에 달려 있습니다.</div>
+</article>
+
+<article class="card" id="s10-verify">
+<h3>테스트가 확인하는 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>검사</th><th>범위</th><th>결과</th></tr>
+<tr><td>허용성 (h ≤ 실제 비용)</td><td>도달 가능한 모든 칸</td><td>위반 0</td></tr>
+<tr><td>일관성 (h(a)−h(n) ≤ cost)</td><td>맵 전체의 모든 합법 간선</td><td>위반 0</td></tr>
+<tr><td>모서리 자르기</td><td class="num">46×46×4 대각 걸음</td><td>위반 0</td></tr>
+<tr><td>오르막 제한</td><td>모든 걸음</td><td>위반 0</td></tr>
+<tr><td>A* 비용 == 다익스트라</td><td>목표 7곳</td><td>일치</td></tr>
+<tr><td>경로의 각 걸음이 합법</td><td>실제 경로</td><td>일치</td></tr>
+<tr><td>걸음 비용 합 == A* 비용</td><td>실제 경로</td><td>일치</td></tr>
+<tr><td>최대 간선 비용 &lt; BUCKET_N</td><td>맵 전체</td><td>참</td></tr>
+</table>
+</div>
+<div class="key"><b>"A* 비용 == 다익스트라 비용"</b> 이 가장 중요한 검사입니다. 다익스트라는 휴리스틱을 안 쓰니 언제나 옳고, 그것과 같다면 A* 도 옳습니다. 허용성이 깨지면 이 검사가 먼저 터집니다.</div>
+</article>
+
+<article class="card" id="s10-subtile">
+<h3>부분 타일 이동</h3>
+<p>캐릭터는 타일 사이를 부드럽게 지나갑니다. 위치는 타일 단위 16.16.</p>
+<pre class="term">SPEED       = 13107      한 틱에 0.2타일 = ⌊65536/5⌋
+DIAG_FACTOR = 46341      round(65536/√2)</pre>
+<p><b>정리 8.4.</b> <code class="nb">46341/65536 = 0.7071075…</code> 이고 <code class="nb">1/√2 = 0.7071068…</code> 이므로 상대 오차가 <code class="nb">1.1×10⁻⁶</code> 미만이다. 대각 이동 속도가 직진 속도와 <b>백만분의 일 수준까지</b> 같다. ∎</p>
+<!--CODE file=py/isorpg/game.py lang=py sym=Game.move_entity note=막히면 축을 하나씩 떼어 미끄러진다-->
+<p>도스 RPG 의 조작감은 <b>미끄러짐</b>에서 옵니다. 벽에 비스듬히 부딪혔을 때 딱 멈추면 답답하고, 벽을 타고 흐르면 자연스럽습니다. 대각선 이동을 x 성분과 y 성분으로 쪼개 각각 시도하면 그 효과가 공짜로 나옵니다.</p>
+<div class="note"><code class="nb">46341</code> 이 5부의 <code class="nb">COS[32] = SIN[32]</code> 와 같은 수입니다. 우연이 아닙니다 — 둘 다 "대각선 한 걸음의 길이"를 묻고 있습니다.</div>
+</article>
+
+<article class="card" id="s10-demo">
+<h3>직접 해 보기 — A* 옥타일</h3>
+<div class="demo" data-demo="astar-octile">
+<h5>시작점과 목표를 끌어 보세요</h5>
+<div class="row">
+<label><input type="checkbox" data-visited checked> 방문한 칸</label>
+<label><input type="checkbox" data-dij> 다익스트라와 비교</label>
+<label><input type="checkbox" data-cut checked> 모서리 자르기 금지</label>
+</div>
+<div class="out"></div>
+</div>
+<div class="note">"다익스트라와 비교"를 켜면 두 알고리즘이 본 칸 수를 나란히 보여 줍니다. "모서리 자르기 금지"를 끄면 캐릭터가 벽 모서리를 스쳐 지나가는 경로가 나오는 것을 볼 수 있습니다.</div>
+</article>
+
+<article class="card" id="s10-quiz">
+<h3>확인 문제</h3>
+<div class="quiz" data-quiz>
+<p class="q">ROAD 의 이동 비용을 8 에서 6 으로 내리면 무엇이 깨지는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p><b>허용성이 깨집니다.</b> <code class="nb">MIN_MOVE</code> 가 6 이 되므로 직진 최소 비용이 <code class="nb">⌊10×6/10⌋ = 6</code>, 대각이 <code class="nb">⌊14×6/10⌋ = 8</code> 입니다. 그런데 <code class="nb">h</code> 를 그대로 8/3 으로 두면 길 위의 먼 두 점에서 <code class="nb">h &gt; 실제 비용</code> 이 됩니다.</p>
+<p>고치려면 <code class="nb">STRAIGHT_MIN</code> 과 <code class="nb">DIAG_MIN</code> 을 다시 계산해야 합니다. 코드에는 그렇게 쓰여 있습니다 — <code class="nb">MIN_MOVE</code> 에서 유도하도록. 그래서 지형표만 고치면 휴리스틱이 따라옵니다.</p>
+<p><b>그리고 테스트가 즉시 잡습니다.</b> "A* 비용 == 다익스트라" 검사에서 터집니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s10-sum">
+<h3>10부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>내용</th></tr>
+<tr><td>여덟 방향</td><td class="num">직진 10, 대각 14 (= 10√2 의 정수 근사)</td></tr>
+<tr><td>모서리 자르기</td><td>대각선은 두 직교 이웃이 열려야 허용</td></tr>
+<tr><td>오르막</td><td class="num">높이 차 1 이하</td></tr>
+<tr><td>휴리스틱</td><td class="num">h = 8·max + 3·min — 나눗셈 없음</td></tr>
+<tr><td>허용성·일관성</td><td>완화된 격자의 정확한 최단거리라는 한 문장</td></tr>
+<tr><td>큐</td><td>원형 양동이 64칸, 비교 없이 O(1)</td></tr>
+<tr><td>A* 효율</td><td class="num">15 노드 vs 다익스트라 1,737</td></tr>
+<tr><td>대각 속도</td><td class="num">46341/65536 — 오차 1.1ppm</td></tr>
+</table>
+</div>
+<div class="key">다음 부는 <b>보이는가</b> 입니다 — 브레젠험, 높이 시야, 안개, 조명.</div>
+</article>
