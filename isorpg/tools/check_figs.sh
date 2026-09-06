@@ -4,7 +4,7 @@
 set -e
 OUT=${1:-/tmp/figs}
 mkdir -p "$OUT"
-STYLE='<style>text{font-family:"Nanum Gothic",sans-serif;font-size:11px;fill:#23301c}.hx{fill:#dfe6cd;stroke:#4a6b34;stroke-width:1.2}.hx.on{fill:#f4d98a}.hx.hot{fill:#e8a37a}.hx.dim{fill:#cfd4c2}.lbl{font-size:9px;fill:#5d6b4e}.ax{stroke:#b04a2a;stroke-width:1.4;fill:none}</style><rect width="100%" height="100%" fill="#f4f6ec"/>'
+STYLE='<style>text{font-family:"Nanum Gothic",sans-serif;font-size:11px;fill:#2a2118}.tl{fill:#e6dcc6;stroke:#8a5a2b;stroke-width:1.2}.tl.on{fill:#f4d98a}.tl.hot{fill:#e8a37a}.tl.dim{fill:#d6cdb8}.tl.cool{fill:#b9cbdc}.tl.none{fill:none;stroke-dasharray:4 3}.gd{stroke:rgba(138,90,43,.35);stroke-width:.8;fill:none}.lbl{font-size:9px;fill:#6b5b46}.ax{stroke:#b04a2a;stroke-width:1.4;fill:none}</style><rect width="100%" height="100%" fill="#f6f1e6"/>'
 for f in deck/figs/*.svg; do
   n=$(basename "$f" .svg)
   sed -e 's|<svg class="diag" |<svg xmlns="http://www.w3.org/2000/svg" class="diag" |' \
