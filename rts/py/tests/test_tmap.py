@@ -127,4 +127,25 @@ H.check('시작 맵 크기', (gs.w, gs.h), (64, 64))
 H.check('시작점 2개', gs.starts, [(8, 8), (55, 55)])
 H.check('시작점 주변은 흙', gs.terrain_at(8, 8), T.DIRT)
 
+# ── SPEC §4.3 건물이 선 칸 ──────────────────────────────────────────────────
+bm = T.TMap(4, 4)
+for _y in range(4):
+    for _x in range(4):
+        bm.set_terrain(_x, _y, T.DIRT)
+_v = bm.version
+bm.set_building(1, 1, True)
+H.check('건물 칸은 보병·차량 통행 불가',
+        [bm.passable_terrain(1, 1, 0), bm.passable_terrain(1, 1, 1)],
+        [False, False])
+H.check('건물 칸은 건설도 불가', bm.buildable(1, 1), False)
+H.check_true('건물은 version 을 올린다 — 경로 캐시가 무효가 된다',
+             bm.version > _v)
+bm.set_building(1, 1, False)
+H.check('철거하면 통행이 돌아온다', bm.passable_terrain(1, 1, 0), True)
+H.check('철거하면 점유 비트도 내려간다', bm.buildable(1, 1), True)
+bm.set_building(2, 2, True)
+bm.set_terrain(2, 2, T.RUBBLE)
+H.check('잔해로 바꾸는 것만으로 통행이 복구된다 (§4.3)',
+        bm.passable_terrain(2, 2, 0), True)
+
 H.done()
