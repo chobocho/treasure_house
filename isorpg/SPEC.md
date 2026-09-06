@@ -156,44 +156,56 @@ oct_dist(dx, dy):
 표는 실행 시각에 **정수 CORDIC** 으로 만든다. 데이터 파일이 아니라 알고리즘이므로
 세 언어가 같은 값을 얻는 것이 곧 이식이 맞다는 증거가 된다.
 
-CORDIC 상수 (16.16, `atan(2^-i)` 를 brad 로 환산해 반올림):
+CORDIC 상수. 각 반복의 회전각을 brad 로 환산해 16.16 으로 반올림한 것이다.
 
 ```
-ATAN_BRAD[i] = round( atan(2^-i) / (2*pi) * 256 * 65536 )   i = 0..15
-K_INV        = 39797                                        # 1/1.6467602581 을 16.16 으로
+N_ITER = 20 ; GUARD = 8
+ATAN_BRAD[i] = round( atan(2^-i) / (2*pi) * 256 * 65536 )      i = 0..19
+             = 2097152 1238021 654136 332050 166669 83416 41718 20860
+               10430 5215 2608 1304 652 326 163 81 41 20 10 5
+K_INV        = 10188014        # round( 65536 * 2^GUARD / prod_i sqrt(1 + 4^-i) )
 ```
 
-두 상수 배열은 `tools/gen_cordic.py` 가 만들어 `golden/cordic.txt` 에 적고,
-세 엔진은 그 파일을 읽는 대신 **소스에 박힌 리터럴**로 갖는다(생성기는 값이 맞는지 검증만 한다).
+`ATAN_BRAD[0] = 32 * 65536` — 45도가 정확히 32 brad 라서 첫 항이 딱 떨어진다.
+`sum(ATAN_BRAD) / 65536 = 71.03 brad > 64 brad` 이므로 1사분면 전체를 덮는다(수렴 조건).
 
-회전 CORDIC:
+회전 CORDIC. 안쪽에서는 `GUARD = 8` 비트를 더 들고 다니다가 끝에서 반올림해 버린다.
+이 여덟 비트가 없으면 20번의 내림이 누적돼 최대 오차가 5까지 벌어진다.
 
 ```
-cordic(theta_brad_fp):                 # 입력은 16.16 brad, 0 <= theta < 256*65536
-    # 1) 사분면 접기 — CORDIC 은 |theta| <= 90도 에서만 수렴한다
-    t = fmod(theta_brad_fp, 256 * 65536)
+cordic(theta):                         # theta 는 16.16 brad
+    t = fmod(theta, 256 * 65536)
     quad = floordiv(t, 64 * 65536)     # 0..3
     t = t - quad * 64 * 65536
     x = K_INV ; y = 0 ; z = t
-    for i in 0..15:
-        d = +1 if z >= 0 else -1
-        nx = x - d * ashr_signed(y, i)
-        ny = y + d * ashr_signed(x, i)
+    for i in 0..N_ITER-1:
+        d  = +1 if z >= 0 else -1
+        nx = x - d * floordiv(y, 2^i)
+        ny = y + d * floordiv(x, 2^i)
         z  = z - d * ATAN_BRAD[i]
         x, y = nx, ny
-    # 2) 사분면 되돌리기
+    x = floordiv(x + 128, 256) ; y = floordiv(y + 128, 256)      # GUARD 반올림 제거
     quad == 0: (cos, sin) = ( x,  y)
     quad == 1: (cos, sin) = (-y,  x)
     quad == 2: (cos, sin) = (-x, -y)
     quad == 3: (cos, sin) = ( y, -x)
 ```
 
-`ashr_signed(v, i) = floordiv(v, 2^i)` 를 쓴다(음수도 내림).
+`floordiv(v, 2^i)` 는 음수에서도 내림이다.
 
 표는 `SIN[a] = cordic(fp(a)).sin`, `COS[a] = cordic(fp(a)).cos`, `a = 0..255`.
-`test_fixed` 는 표의 모든 항목이 `round(65536*sin(2*pi*a/256))` 과 **±2** 이내임을 확인한다
-(허용 오차 2는 명세의 일부다 — 세 언어는 CORDIC 결과가 서로 **완전히 같아야** 하고,
-참값과의 오차만 ±2 를 허용한다).
+`test_fixed` 는 표의 모든 항목이 `round(65536*sin(2*pi*a/256))` 과 **±1** 이내임을 확인한다.
+허용 오차 1은 명세의 일부다 — 세 언어의 CORDIC 결과는 서로 **완전히 같아야** 하고,
+참값과의 오차만 ±1 을 허용한다.
+
+실측 확인:
+
+```
+  SIN[0]  = 0        COS[0]  = 65536
+  SIN[32] = 46341    COS[32] = 46341        # 45도. 대각 이동 계수 DIAG_FACTOR 와 같은 수다
+  SIN[64] = 65536    COS[64] = 0
+  최대 오차 1
+```
 
 ---
 
@@ -568,7 +580,32 @@ behind(A, B)  =  A.x1 <= B.x0  or  A.y1 <= B.y0  or  A.z1 <= B.z0
 순서는 아무래도 상관없으므로, 간선은 **화면 경계상자가 겹치는 쌍에만** 건다.
 그래도 세 상자가 도는 순환은 남으며(`golden/sortcase.txt` 의 6번), 이때는 잘라야 한다.
 
-### 6.3 위상 정렬
+### 6.3 화면 경계상자
+
+```
+box_bbox(b):
+    (x,y) in {(x0,y0),(x1,y0),(x0,y1),(x1,y1)} 와 z in {z0,z1} 의 8개 조합에 대해
+        sx = 16*(x - y) ;  sy = 8*(x + y) - z*TZ
+    (min sx, min sy, max sx, max sy)
+
+bbox_overlap(a, b) = not (a.x1 <= b.x0 or b.x1 <= a.x0 or a.y1 <= b.y0 or b.y1 <= a.y0)
+```
+
+**보조정리 6.2** `behind(A,B)` 와 `behind(B,A)` 가 **x 조건과 y 조건 때문에** 동시에 참이면
+두 상자의 화면 경계상자는 절대 겹치지 않는다.
+
+*증명.* `A.x1 <= B.x0` 이고 `B.y1 <= A.y0` 라 하자. 그러면
+`A.x1 - A.y0 <= B.x0 - B.y1` 이고, 양변에 16을 곱하면 좌변은 A 의 `max sx`,
+우변은 B 의 `min sx` 다. 따라서 `A.maxsx <= B.minsx` — 겹치지 않는다. ∎
+
+그러므로 `bbox_overlap` 으로 거른 뒤에도 남는 상호 관계는 **x-z 나 y-z 조합뿐**이다.
+`golden/sortcase.txt` 의 5번이 그 예다(x 로는 A 가 뒤, z 로는 B 가 뒤).
+이때는 간선을 걸지 않고 `depth_key` 로 정한다.
+
+3-순환은 여전히 가능하다. 6번 사례가 실제 예다:
+`0 -> 1` (y), `1 -> 2` (z), `2 -> 0` (x) 로 정확히 한 방향씩 돌아간다.
+
+### 6.4 위상 정렬
 
 ```
 depth_key(A) = (A.x0 + A.y0, A.z0, A.id)          # 사전식
@@ -785,7 +822,7 @@ A* 는 같은 큐에 `f = g + h` 를 키로 넣는다. `f` 의 폭도 `BUCKET_N`
 엔티티는 타일 단위 16.16 좌표를 갖는다.
 
 ```
-SPEED       = 3277        # 한 틱에 0.05타일 = fp(1)/20 (내림)
+SPEED       = 13107       # 한 틱에 0.2타일 = floordiv(fp(1), 5). 18.2Hz 기준 초당 3.6타일
 DIAG_FACTOR = 46341       # round(65536 / sqrt(2))
 
 move_step(fx, fy, d):
