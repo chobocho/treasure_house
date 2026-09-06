@@ -470,3 +470,13 @@ prime 16777619.
   포팅에서 나온 발견 하나: `raster.text()` 는 **UTF-8 코드포인트** 단위로 돌아야 한다.
   파이썬의 `for ch in s` 가 글자당 6px 를 전진하는데 바이트로 돌면 한글 한 글자에서
   12px 가 밀려 PPM 파리티가 깨진다.
+- 2026-09-06 13:05 — **6단계 완료 (서브에이전트)**: `ts/src` 25파일 6,593줄 + `ts/tests` 27파일
+  4,319줄. `make ts` 871 checks / 0, `tsc --strict` 오류 0(noUnusedLocals·noImplicitReturns 포함).
+  prim·trace·hashes 세 골든 **바이트 일치**. `out/ts_tests.txt` 도 `py_tests.txt` 와 바이트 일치.
+  **세 언어 파리티 전부 통과**(out/parity.txt): 골든 셋 × 3언어, 렌더 PPM 192,015바이트가
+  py == lua == ts, 시험 로그도 셋이 같다.
+  TS 쪽 발견: `Math.floor(a/b)` 는 2^53 근처에서 한 단위를 잃는다 — CPython 의 float_divmod
+  알고리즘을 그대로 옮겼다. 비트 연산자는 `ts/src` 전체에 없고 `1 << k` 는 POW2 표로 대체.
+  printf 가 없어 `ts/src/fmt.ts`(68줄) 를 따로 두었다 — `pyRepr` 이 13절의 파이썬 `%r` 을 재현한다.
+  `.gitignore` 에 `/rts/ts/node_modules/`·`/rts/ts/dist/` 추가(26MB·555KB, 재생성 가능).
+  Next: 7단계 프런트엔드(pygame·LÖVE·Canvas + 덱 데모), 9단계 나머지 부.
