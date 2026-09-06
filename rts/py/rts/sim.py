@@ -77,27 +77,29 @@ class _Hash(object):
         self.h = F.FNV_OFFSET
 
     def b1(self, v):
-        self.h = F.fnv1a_step(self.h, v % 256)
+        # int() 를 한 번 거치는 이유는 §19.4 의 주입 버그 때문이다. 그때만
+        # prog·px·py 가 실수가 되고, 해시는 그 잘린 값을 그대로 본다.
+        self.h = F.fnv1a_step(self.h, int(v) % 256)
 
     def b2(self, v):
-        v %= 65536                              # 음수는 2의 보수로 접는다
+        v = int(v) % 65536                              # 음수는 2의 보수로 접는다
         self.b1(v // 256)
         self.b1(v % 256)
 
     def b4(self, v):
-        v %= 4294967296
+        v = int(v) % 4294967296
         self.b2(v // 65536)
         self.b2(v % 65536)
 
 
 class Sim(object):
-    def __init__(self, m, seed, players=2):
+    def __init__(self, m, seed, players=2, float_bug=False):
         self.m = m
         self.players = players
         self.w = S.World(m.w, m.h)
         self.fog = FG.Fog(m.w, m.h)
         self.ec = E.Econ(m)
-        self.mv = M.Movement(self.w, m)
+        self.mv = M.Movement(self.w, m, float_bug)
         self.pj = CB.Projectiles(m.w)
         self.rng = R.LCG(seed)
         self.orders = SEL.Orders()

@@ -10,6 +10,8 @@
    명령을 포기하는 것으로 풀린다 — 해결이 아니라 포기다(§13.3).
 """
 
+import math
+
 from . import const as C
 from . import fixed as F
 from . import path as P
@@ -24,15 +26,24 @@ STOP_DIR = 255
 
 
 # ── SPEC §13.1 타일 사이 보간 ───────────────────────────────────────────────
-def step_amount(speed, d):
+_SQRT2 = math.sqrt(2.0)          # §19.4 의 주입 버그에서만 쓴다
+
+
+def step_amount(speed, d, float_bug=False):
     """방향 d 로 한 틱에 늘어나는 진행률 (16.16).
 
        대각 보정을 빼면 유닛이 대각으로 √2 = 41 % 빨라진다. 도스 시절에도
        이 버그를 그대로 둔 게임이 있었고, 그래서 플레이어들이 지그재그로
        움직였다 — 14부에서 이 버그를 일부러 넣은 데모를 보여 준다.
+
+       `float_bug` 는 §19.4 의 **일부러 넣은** 디싱크다. 1/√2 는 이진 소수로
+       끝나지 않으므로 진행률이 정수가 아니게 되고, 그 누적 차이가 px·py 를
+       통해 상태 해시에 바로 나타난다. 엔진의 다른 어느 곳도 실수를 쓰지 않는다.
     """
     st = F.fp_div(speed, F.fp(C.TILE))
     if F.DCOST[d] == F.D_DIAG:
+        if float_bug:
+            return st / _SQRT2
         return F.fp_mul(st, F.FP_DIAG)
     return st
 
@@ -116,9 +127,10 @@ def push_dir(mv, i, from_dir):
 class Movement(object):
     """예약판과 유닛별 경로. sim 이 하나만 들고 있는다 (§18.2 4단계)."""
 
-    def __init__(self, world, tmap):
+    def __init__(self, world, tmap, float_bug=False):
         self.w = world
         self.m = tmap
+        self.float_bug = float_bug
         self.resv = [0] * (tmap.w * tmap.h)
         self.blocked = [0] * C.MAX_ENT
         self.path = [[] for _ in range(C.MAX_ENT)]
@@ -226,7 +238,8 @@ class Movement(object):
         w, m = self.w, self.m
         h = w.handle(i)
         if w.prog[i] > 0:                       # 걸음 도중 — 끝까지 마친다
-            w.prog[i] += step_amount(C.SPEED[w.kind[i]], w.dir[i])
+            w.prog[i] += step_amount(C.SPEED[w.kind[i]], w.dir[i],
+                                     self.float_bug)
             if w.prog[i] >= F.FP_ONE:
                 self._finish_step(i, h)
             w.px[i], w.py[i] = pos_of(w, m, i)
@@ -243,7 +256,7 @@ class Movement(object):
         self.blocked[i] = 0
         w.dir[i] = d
         w.to_t[i] = nxt
-        w.prog[i] = step_amount(C.SPEED[w.kind[i]], d)
+        w.prog[i] = step_amount(C.SPEED[w.kind[i]], d, self.float_bug)
         if w.prog[i] >= F.FP_ONE:               # 아주 빠른 유닛은 한 틱에 넘는다
             self._finish_step(i, h)
         w.px[i], w.py[i] = pos_of(w, m, i)
