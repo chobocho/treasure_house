@@ -146,5 +146,5 @@ func MinSize(seats int) (w, h int) {
 	if seats < 1 {
 		seats = 1
 	}
-	return BoardWidth*seats + PanelWidth, BoardHeight + 2
+	return (BoardWidth + PanelWidth) * seats, BoardHeight + 2
 }

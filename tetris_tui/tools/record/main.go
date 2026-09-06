@@ -142,9 +142,9 @@ func keyMsg(name string) tea.KeyPressMsg {
 // 첫 프레임은 아무것도 누르기 전의 화면이다. 이게 없으면 재생기에서
 // "무엇이 어떻게 바뀌었나"의 출발점이 사라진다.
 //
-// Cmd 는 일부러 실행하지 않는다. 대부분의 Cmd 는 시간을 먹는 예약이라
-// 기록의 결정론을 깨뜨린다. 시간이 필요한 모델은 TickMsg 를 직접 받도록 만들었고,
-// 그 틱은 스크립트의 wait 가 준다.
+// Cmd 는 feed 가 실행해서 되먹인다(아래 feed·drain). 다만 틱만은 버린다 —
+// 시간을 먹는 예약이라 기록의 결정론을 깨뜨리기 때문이다. 시간이 필요한 모델은
+// TickMsg 를 직접 받도록 만들었고, 그 틱은 스크립트의 wait 가 준다.
 func Run(name string, m tea.Model, tick tea.Msg, steps []Step) Recording {
 	rec := Recording{Name: name, Frames: []Frame{{I: 0, Label: "시작", Content: m.View().Content}}}
 	var script []string

@@ -30,7 +30,7 @@ const logMax = 8
 // 아무 결과도 없는 "끝났다" 신호.
 type doneMsg struct{}
 
-// AI 가 고른 수. 6부의 aiMoveMsg 가 이것의 진짜 판이다.
+// AI 가 고른 수. 7부의 battle.AIMoveMsg 가 이것의 진짜 판이다.
 type moveMsg struct{ col int }
 
 type model struct {

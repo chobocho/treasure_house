@@ -148,9 +148,11 @@ func (m Model) View() tea.View {
 	b.WriteString("\n\n")
 
 	for i, e := range entries {
-		line := fmt.Sprintf("  %d) %-18s %s", i+1, e.Label, e.Desc)
+		// %-18s 는 룬 수로 채워서 한글 라벨은 열이 어긋난다. 칸 수로 채운다.
+		label := lipgloss.NewStyle().Width(18).Render(e.Label)
+		line := fmt.Sprintf("  %d) %s %s", i+1, label, e.Desc)
 		if i == m.sel {
-			line = selStyle.Render(fmt.Sprintf("▶ %d) %-18s %s", i+1, e.Label, e.Desc))
+			line = selStyle.Render(fmt.Sprintf("▶ %d) %s %s", i+1, label, e.Desc))
 		}
 		b.WriteString(line)
 		b.WriteByte('\n')

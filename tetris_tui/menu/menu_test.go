@@ -187,3 +187,27 @@ func TestViewBeforeAnySize(t *testing.T) {
 		t.Error("크기를 모를 때 화면이 비었다")
 	}
 }
+
+// 라벨에 한글이 섞이면 %-18s 는 룬 수로 채워서 설명 열이 줄마다 어긋난다.
+// 네 줄의 설명이 같은 칸에서 시작해야 한다 — 칸 수는 lipgloss.Width 로 센다(색 이스케이프 제외).
+func TestViewDescriptionColumnIsAligned(t *testing.T) {
+	got := New(1, "hard", 3).View().Content // 이스케이프는 lipgloss.Width 가 알아서 뺀다
+	col := -1
+	for _, e := range Entries() {
+		for _, line := range strings.Split(got, "\n") {
+			at := strings.Index(line, e.Desc)
+			if at < 0 {
+				continue
+			}
+			c := lipgloss.Width(line[:at])
+			if col < 0 {
+				col = c
+			} else if c != col {
+				t.Errorf("%q 의 설명이 %d칸에서 시작한다 (첫 줄은 %d칸):\n%s", e.Label, c, col, got)
+			}
+		}
+	}
+	if col < 0 {
+		t.Fatal("설명을 하나도 못 찾았다")
+	}
+}

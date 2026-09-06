@@ -250,6 +250,11 @@ make deck-check                                # DOM-stub: player mounts on ever
 
 - No box-drawing characters (─ │ ┌) inside `<pre>`; the Fold's fonts misalign them.
   Frame captures may contain them only inside the player (rendered per-cell as spans).
+- (2026-09-06) The deck now embeds a D2Coding subset (`deck/gen_fonts.py`, called by
+  `build_deck.py`; contract tested by `deck/test_fonts.py`): every char used in
+  `<code>/<pre>` and in the frames, Latin/box/block/shade = 500, Hangul = 1000 units.
+  So `pre.term` / `.plscreen` render identically on phones. Keep the rule above for
+  hand-written diagrams anyway — the checker (`cells2`) still assumes 1 cell per box char.
 - In `<pre class="code txt">` never put Korean at the start of a column that other
   columns align to; put Korean at line ends or use `<table>` / `svg.diag`.
 - Code block ≤45 lines; slide must not need horizontal scroll at 374 px.
@@ -266,6 +271,20 @@ English into a user-facing message; translate and condense.
 ---
 
 ## Progress log (newest first; Korean, ≤12 lines each, same shape as history.md)
+
+- 2026-09-06 23:42 — **11단계: 글꼴 내장 + 2차 전수 리뷰 — 소스 버그 2종·캡처 1건·사실오류 8건·표기 20건·코드 범위 145곳 정정**.
+  폰에서 2장부터 캡처가 깨진 원인: "한글 2칸·박스 1칸"을 지키는 글꼴이 기기에 없다.
+  `deck/gen_fonts.py` 가 코드·캡처·프레임에 쓰인 글자만 D2Coding(OFL)에서 잘라 woff2 로 싣고
+  (+64 KB), 폭 계약(반각 500·전각 1000)을 어기면 빌드가 죽는다. `test_fonts.py` 10건, `check_deck.js` 검사 추가.
+  **소스 버그**: `ui.MinSize(2)` 가 58(판×2+패널)이라 58~71칸에서 잘린 화면이 나옴 → 72(자리마다 판+패널);
+  메뉴 설명 열이 `%-18s`(룬 수) 때문에 줄마다 어긋남 → `lipgloss.Width(18)`. 둘 다 RED→GREEN 테스트.
+  **캡처**: 07_cmds 가 빈 화면(sleep 3 이 콜드 빌드에 부족) → 재캡처, Makefile sleep 8.
+  **사실오류**: X3.64 는 1979 채택·1994 철회, Alt+[ 는 ESC [ 두 바이트, 위로 두 칸 킥은 {0,+2},
+  음수 폭 Place 는 패닉 아님(그대로 반환), features 는 세 번 훑음, 클래스 바이트 22/10,
+  "17조각/8조각" → 재 보니 11~26조각, record.Run 주석(Cmd 를 실행함), tmux 화면 다섯 → 열둘.
+  **표기**: 도해 정렬 4곳·캡션 12곳·설명 4곳. **범위**: 다음 함수의 주석 중간에서 잘리던 블록 145곳을
+  빈 줄+주석 시작점으로 옮김(snap 스크립트, ±8줄). 부록 필러가 줄어 337장, 소스 11,261줄.
+  검증: gofmt 0건 · vet 0건 · 15패키지 통과 · `make record` diff 없음 · `make deck`/`deck-check` 0건.
 
 - 2026-09-06 18:30 — **10단계: 전수 리뷰 — 사실오류 4건·표기 5건·소스 1건 정정**.
   숫자를 실제 출력과 전수 대조: 점수(사람 30/AI 418, 최종 978/보통 212)·파리티 수치·
