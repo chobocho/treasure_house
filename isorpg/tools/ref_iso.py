@@ -175,7 +175,7 @@ def crc16(data):
 
 
 # ---------------------------------------------------------------- 다이아몬드-스퀘어
-def gen_height(n, corners, scale, seed, rough_num=55, rough_den=100):
+def gen_height(n, corners, scale, seed, rough_num=58, rough_den=100):
     size = n + 1
     h = [[0] * size for _ in range(size)]
     h[0][0], h[0][n], h[n][0], h[n][n] = corners
@@ -208,7 +208,8 @@ MIN_MOVE = 8
 
 def octile(ax, ay, bx, by):
     dx, dy = abs(ax - bx), abs(ay - by)
-    return (10 * (dx + dy) - 6 * min(dx, dy)) * MIN_MOVE // 10
+    hi, lo = max(dx, dy), min(dx, dy)
+    return 8 * hi + 3 * lo
 
 
 # ---------------------------------------------------------------- 정렬 (SPEC §6)

@@ -9,6 +9,7 @@ H.title('raster')
 
 pal = R.load_palette()
 H.check('팔레트 256색', len(pal), 256)
+H.check('중복된 색이 없다 (명암표 항등을 깨뜨린다)', len(set(pal)), 256)
 H.check_true('DAC 는 6비트', all(0 <= c <= 63 for rgb in pal for c in rgb))
 H.check('0번은 검정', pal[0], (0, 0, 0))
 
@@ -60,13 +61,21 @@ f.clear(7)
 f.blit_rle(spr[0], 16, 0, 15)
 H.check_true('투명 픽셀은 배경이 남는다', f.px(0, 0) == 7)
 
-# ---- 명암
+# ---- 명암: 인덱스 합이 아니라 실제 밝기(팔레트 값)로 재야 한다
+def screen_brightness(frame):
+    return sum(sum(pal[v]) for v in frame.fb)
+
 f.clear(0)
 f.blit_rle(spr[3], 16, 0, 15)
-bright = sum(f.fb)
+bright = screen_brightness(f)
 f.clear(0)
-f.blit_rle(spr[3], 16, 0, 4)
-H.check_true('어두운 단계가 더 어둡다', sum(f.fb) != bright)
+f.blit_rle(spr[3], 16, 0, 8)
+mid = screen_brightness(f)
+f.clear(0)
+f.blit_rle(spr[3], 16, 0, 2)
+dark = screen_brightness(f)
+H.note('같은 타일 밝기 합 — 15단계 %d, 8단계 %d, 2단계 %d', bright, mid, dark)
+H.check_true('단계가 낮을수록 어둡다', dark < mid < bright)
 
 # ---- 더티 렉트
 d = R.Dirty()

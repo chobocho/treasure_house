@@ -53,9 +53,12 @@ cnt = Counter()
 for py in range(0, 160):
     for px in range(-160, 160):
         cnt[P.screen_to_tile(px, py)] += 1
+# 표본 영역에 마름모가 통째로 들어오는 타일만 센다 — 가장자리는 잘려서 당연히 적다
 inner = [v for k, v in cnt.items()
-         if -3 <= k[0] <= 12 and -3 <= k[1] <= 12]
-H.check('안쪽 타일은 모두 256픽셀', sorted(set(inner)), [256])
+         if -160 <= 16 * (k[0] - k[1]) - 16 and 16 * (k[0] - k[1]) + 16 < 160
+         and 0 <= 8 * (k[0] + k[1]) and 8 * (k[0] + k[1]) + 16 < 160]
+H.check_true('온전히 담긴 타일이 여럿', len(inner) > 20)
+H.check('그 타일들은 모두 256픽셀', sorted(set(inner)), [256])
 
 # ---- 가시 범위: 무식하게 센 것과 같은가
 bad = 0
