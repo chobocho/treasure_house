@@ -1,11 +1,171 @@
 <article class="card section" id="s13">
 <p class="chnum">13부</p>
 <h2>경로 탐색 II</h2>
-<p class="chsub">HPA*·JPS·흐름장·클리어런스.<br>같은 격자 위에서 네 방법을 실측으로 비교한다</p>
+<p class="chsub">A* 를 40번 부르지 않는 세 가지 방법 —<br>계층화·가지치기·장(field)</p>
 </article>
 
-<article class="card" id="s13-todo">
-<h3>경로 탐색 II — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>40장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s13-three">
+<h3>A* 만으로는 부족한 순간</h3>
+<p class="lead">유닛 마흔 기를 한 칸으로 몰면 A* 를 마흔 번 부르게 됩니다. 같은 답을 마흔 번 계산하는 셈입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방법</th><th>줄이는 것</th><th>대가</th><th>쓰는 자리</th></tr>
+<tr><td>HPA*</td><td>탐색 공간을 계층으로</td><td><b>최적이 아니다</b></td><td>먼 거리 한 기</td></tr>
+<tr><td>JPS</td><td>연 노드 수</td><td>훑는 칸은 그대로</td><td>개활지 한 기</td></tr>
+<tr><td>흐름장</td><td>유닛 수와 무관하게 한 번</td><td>목표가 바뀌면 다시</td><td><b>무리 이동</b></td></tr>
+</table>
+</div>
+<p>셋 다 같은 격자(8방향·10/14·코너 컷 허용) 위에서 돕니다. 그래야 비용을 나란히 비교할 수 있습니다.</p>
+</article>
+
+<article class="card" id="s13-hpa-cluster">
+<h3>HPA* — 맵을 클러스터로 자른다</h3>
+<div class="fig" data-svg="hpa_clusters.svg"></div>
+<p>맵을 8×8 클러스터로 자르고, 클러스터 <b>경계</b>에서 양쪽이 모두 통행 가능한 구간을 찾습니다. 그 구간의 대표 칸이 <b>입구</b>이고, 입구끼리 이은 것이 <b>추상 그래프</b>입니다.</p>
+<p>탐색은 추상 그래프 위에서 돕니다. 칸 4,096개가 아니라 노드 수십 개입니다.</p>
+</article>
+
+<article class="card" id="s13-hpa-ent">
+<h3>입구 만들기</h3>
+<!--CODE file=py/rts/hpa.py lang=py sym=entrances note=경계의 연속 구간마다 대표를 하나씩-->
+<p>연속 구간 하나에 입구를 <b>하나</b>만 둡니다. 구간이 길면 가운데를, 짧으면 그 칸을 씁니다. 구간마다 입구를 여럿 두면 추상 그래프가 커지고, 그러면 계층화의 이득이 사라집니다.</p>
+<!--CODE file=py/rts/hpa.py lang=py sym=_place note=구간의 대표를 고르는 규칙-->
+<div class="note">규칙을 명세로 고정하는 이유는 늘 같습니다. 세 언어가 다른 입구를 고르면 추상 경로가 달라지고, 그 차이가 화면에 나옵니다.</div>
+</article>
+
+<article class="card" id="s13-hpa-graph">
+<h3>추상 그래프와 질의</h3>
+<!--CODE file=py/rts/hpa.py lang=py sym=Abstract.__init__ note=클러스터 안은 A* 로 미리 재 둔다-->
+<p>클러스터 <b>안</b>의 입구끼리는 실제 A* 로 거리를 재서 간선으로 둡니다. 클러스터 하나는 64칸이므로 그 A* 는 싸고, 한 번만 합니다.</p>
+<p>질의할 때는 출발·도착을 임시 노드로 붙이고 추상 그래프에서 A* 를 돌린 뒤, 구간마다 실제 경로로 <b>정련</b>합니다.</p>
+<!--CODE file=py/rts/hpa.py lang=py sym=search note=추상에서 찾고 실제로 편다-->
+</article>
+
+<article class="card" id="s13-hpa-cost">
+<h3>HPA* 는 최적이 아니다</h3>
+<p class="lead">원 논문은 "1 % 이내"라고 말합니다. 우리 맵에서는 어땠을까요?</p>
+<!--OUT file=py_prim.txt sec=8 note=맵 여섯 장 × 네 쌍 — A*·JPS·HPA* 를 나란히-->
+<p>마지막 열이 <code class="nb">HPA*/A*</code> 를 천분율로 적은 것입니다. <b>1.000 에서 1.321</b> 사이, 평균 1.082 입니다.</p>
+<div class="warn">논문의 숫자를 그대로 인용하지 않습니다. 우리 맵은 논문의 맵이 아니고, 클러스터 크기도 입구 규칙도 다릅니다. <b>실측한 것만 적습니다</b> — 최악 32 % 를 감추면 이 덱이 거짓말이 됩니다.</div>
+<p>32 % 는 언제 나올까요. 입구가 경로를 <b>우회시키는</b> 자리입니다. 클러스터 경계가 최단 경로를 비스듬히 가로지르면, 추상 경로는 입구를 거쳐야 하므로 꺾입니다.</p>
+</article>
+
+<article class="card" id="s13-jps-prune">
+<h3>JPS — 볼 필요 없는 이웃을 버린다</h3>
+<div class="fig" data-svg="jps_prune.svg"></div>
+<p class="lead">동쪽으로 들어온 유닛은 동쪽만 보면 됩니다. 서쪽 이웃으로 가는 경로는 <b>이미 부모가 더 싸게 갈 수 있으니까요.</b></p>
+<p>그 규칙이 깨지는 자리가 <b>강제 이웃</b>(forced neighbour)입니다. 막힌 칸이 있어서 부모가 돌아갈 수 없는 방향이 생기면, 그 대각 이웃만 살려 둡니다.</p>
+<!--CODE file=py/rts/jps.py lang=py sym=_forced note=막힌 칸이 있어야 강제 이웃이 생긴다-->
+</article>
+
+<article class="card" id="s13-jps-jump">
+<h3>점프</h3>
+<!--CODE file=py/rts/jps.py lang=py sym=jump note=강제 이웃이나 목표를 만날 때까지 달린다-->
+<p>가지치기하고 남은 방향으로 <b>한 방향으로 계속 달립니다.</b> 강제 이웃이나 목표를 만나면 거기가 점프점이고, 그 점만 열린 목록에 넣습니다.</p>
+<p>대각으로 달릴 때는 매 칸에서 두 직교 방향으로 <b>먼저 점프해 봅니다.</b> 그쪽에 점프점이 있으면 지금 칸도 점프점입니다 — 그 갈림길을 건너뛰면 최적해를 놓칩니다.</p>
+</article>
+
+<article class="card" id="s13-jps-proof">
+<h3>정리 10.1 — 증명 대신 전수 검사</h3>
+<p><b>정리 10.1.</b> 코너 컷을 허용하는 균일 비용 8방향 격자에서 JPS 가 찾은 경로의 비용은 A* 의 최적 비용과 같다.</p>
+<p><b>증명 방침.</b> 가지치기된 이웃에 대해 항상 같은 비용의 <b>대칭 경로</b>가 존재합니다. 따라서 최적해 하나는 반드시 점프점만 거치는 형태로 다시 쓸 수 있습니다. 자세한 논증은 원 논문(Harabor–Grastien 2011)의 정리 1–3 에 있습니다.</p>
+<div class="key"><b>이 저장소의 증명은 전수 검사입니다.</b> 정리를 옮겨 적는 대신, 골든 맵 여섯 장에서 무작위 720쌍을 뽑아 A* 비용과 JPS 비용을 전부 비교합니다. 한 건이라도 다르면 시험이 실패합니다.</div>
+<p>왜 그렇게 했을까요. 우리가 코너 컷을 <b>허용</b>하기로 했기 때문입니다(12부). 금지하는 격자였다면 강제 이웃 조건이 통째로 달라지고, 논문의 정리를 그대로 쓸 수 없습니다.</p>
+</article>
+
+<article class="card" id="s13-jps-what">
+<h3>무엇이 줄어드나</h3>
+<p class="lead">JPS 는 <b>연 노드 수</b>를 줄입니다. 훑는 칸을 줄이지는 않습니다.</p>
+<p>점프 자체가 격자를 한 칸씩 훑기 때문입니다. 열린 목록에 들어가는 노드는 급격히 줄지만, 그 노드를 찾기 위해 지나간 칸은 A* 가 연 칸과 비슷하거나 더 많을 수 있습니다.</p>
+<!--OUT file=bench.txt note=A* 와 JPS 의 실제 시간-->
+<div class="warn">파이썬에서 JPS 가 A* 보다 <b>빠르지 않을 수 있습니다.</b> 위 실측이 그것을 그대로 보여 줍니다. 힙 연산이 줄어드는 이득과 점프 루프의 비용이 비슷한 크기이기 때문입니다. 결과가 그렇게 나오면 그렇게 싣습니다.</div>
+<p>JPS 가 확실히 이기는 자리는 <b>개활지</b>입니다. 장애물이 없으면 점프가 한 번에 목표까지 달립니다.</p>
+</article>
+
+<article class="card" id="s13-flow">
+<h3>흐름장 — 목표에서 거꾸로 한 번</h3>
+<div class="fig" data-svg="flow_field.svg"></div>
+<p>목표에서 역방향 다익스트라를 돌려 모든 칸에 비용을 채웁니다. 한 번 계산하면 <b>유닛 수와 무관하게</b> 모든 유닛이 같은 장을 읽습니다.</p>
+<!--CODE file=py/rts/flow.py lang=py sym=integration note=막힌 목표는 무시한다-->
+<p>INF 는 65535 로 <b>고정</b>합니다. 이 숫자가 골든 표와 덱 그림에 그대로 찍히므로 세 언어가 같은 수를 내야 합니다.</p>
+</article>
+
+<article class="card" id="s13-flowdir">
+<h3>경사장과 동점 규칙</h3>
+<!--CODE file=py/rts/flow.py lang=py sym=flow_dirs note=등호를 빼면 작은 방향 번호가 이긴다-->
+<p>각 칸에서 <b>가장 싼 이웃</b> 쪽으로 화살표를 둡니다. 동점이면 방향 번호가 작은 쪽입니다.</p>
+<div class="key">동점 규칙이 명세인 이유가 여기서 특히 분명합니다. 대칭적인 맵에서는 동점이 흔하고, 언어별 <code class="nb">min</code> 구현이 동점을 다르게 처리하면 <b>유닛 무리가 좌우로 갈립니다.</b> 그 갈림은 화면에서 바로 보이고 PPM 바이트 비교에서 잡힙니다.</div>
+<p>그림에서 목표 칸(비용 0)이 이웃을 가리키는 것에 주의하세요. 목표 자신은 "가장 싼 이웃"을 고르므로 오르막을 가리킵니다. 유닛은 이미 도착했으므로 그 화살표를 읽지 않습니다.</p>
+</article>
+
+<article class="card" id="s13-flow-tradeoff">
+<h3>손익분기</h3>
+<pre class="term">A* 를 n 번        vs        다익스트라 1번 + 화살표 읽기 n 번</pre>
+<p>흐름장은 맵 전체를 채우므로 한 번의 비용이 A* 한 번보다 큽니다. 유닛이 적으면 손해입니다.</p>
+<p>그런데 무리 이동에서는 다른 이득이 더 큽니다 — <b>모든 유닛이 같은 장을 읽으므로 서로 어긋나지 않습니다.</b> A* 를 마흔 번 부르면 마흔 개의 경로가 조금씩 다르고, 그 차이가 14부의 예약 충돌을 늘립니다.</p>
+<div class="note">이 엔진의 무리 이동은 여전히 유닛별 A* 를 씁니다. 흐름장은 모듈로 갖추고 골든으로 검증하되, 시나리오에서는 쓰지 않습니다 — 40기가 한 곳으로 몰리는 상황이 이 시나리오에 없기 때문입니다. <b>쓰지 않는 것을 쓴다고 적지 않습니다.</b></div>
+</article>
+
+<article class="card" id="s13-clearance">
+<h3>클리어런스 — 큰 유닛은 어디를 지나는가</h3>
+<div class="fig" data-svg="clearance.svg"></div>
+<p><b>정리 11.1.</b> <code class="nb">clear[x][y]</code> 는 <code class="nb">(x,y)</code> 를 좌상단으로 하는 <b>모두 통행 가능한 정사각형의 최대 변 길이</b>와 같다.</p>
+<p><b>증명.</b> 귀납. <code class="nb">k × k</code> 정사각형이 <code class="nb">(x,y)</code> 에 놓이려면 <code class="nb">(x+1,y)</code>, <code class="nb">(x,y+1)</code>, <code class="nb">(x+1,y+1)</code> 각각에 <code class="nb">(k−1) × (k−1)</code> 이 놓여야 하고, 역도 성립합니다. ∎</p>
+<!--CODE file=py/rts/flow.py lang=py sym=clearance note=오른쪽 아래에서 한 번 훑으면 끝-->
+<p>크기 <code class="nb">s</code> 인 유닛은 <code class="nb">clear[i] ≥ s</code> 인 칸만 지납니다. 맵 한 번 훑기로 2×2 유닛의 통행 그래프가 나옵니다.</p>
+</article>
+
+<article class="card" id="s13-brushfire">
+<h3>브러시파이어 — 벽에서 얼마나 떨어졌나</h3>
+<!--CODE file=py/rts/flow.py lang=py sym=brushfire note=맵 밖도 막힌 칸이다-->
+<p>모든 막힌 칸을 거리 0 으로 놓고 다중 시작점 다익스트라를 돌립니다. 결과는 "가장 가까운 장애물까지의 옥타일 비용"입니다.</p>
+<p>두 가지를 명세로 못박았습니다.</p>
+<ul>
+<li><b>맵 밖은 막힌 칸입니다</b>(§4.2 의 규약과 같습니다). 그래서 가장자리 자유 칸의 값은 10 이고, AI 가 맵 끝에 건물을 붙이지 않습니다.</li>
+<li><b>확장은 통행 가능한 칸으로만</b> 들어갑니다. 막힌 칸끼리 이으면 두꺼운 바위 덩어리를 가로질러 반대편까지 0 이 새어 나갑니다.</li>
+</ul>
+<p>17부의 AI 가 건물 자리를 고를 때 이 값을 점수에 넣습니다 — 벽에 붙이지 않으려는 항입니다.</p>
+</article>
+
+<article class="card" id="s13-sum">
+<h3>13부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>HPA*</td><td>클러스터 8 · 구간마다 입구 하나</td><td>노드 수십 개 대 칸 4,096개</td></tr>
+<tr><td>HPA* 의 대가</td><td>1.000–1.321배 (평균 1.082)</td><td>실측 · 논문 숫자를 인용하지 않는다</td></tr>
+<tr><td>JPS</td><td>강제 이웃까지 달린다</td><td>정리 10.1 · 720쌍 전수 검사</td></tr>
+<tr><td>JPS 의 이득</td><td>연 노드는 줄고 훑는 칸은 아니다</td><td>bench 실측</td></tr>
+<tr><td>흐름장</td><td>목표에서 한 번 · 유닛 수와 무관</td><td>INF = 65535 고정</td></tr>
+<tr><td>동점</td><td>방향 번호가 작은 쪽</td><td>무리가 좌우로 갈리지 않게</td></tr>
+<tr><td>클리어런스</td><td>한 번 훑기로 큰 유닛의 그래프</td><td>정리 11.1</td></tr>
+<tr><td>브러시파이어</td><td>맵 밖도 벽 · 자유 칸으로만 확장</td><td>AI 의 배치 점수</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s13-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">HPA* 의 클러스터를 8 에서 <b>16</b> 으로 키우면 무엇이 좋아지고 무엇이 나빠지는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>클러스터 수가 <b>1/4</b> 로 줄고 입구도 줄어듭니다. 추상 그래프가 작아지므로 <b>질의가 빨라집니다.</b></p>
+<p>대신 두 가지가 나빠집니다. 첫째, 클러스터 안의 A* 가 64칸이 아니라 256칸 위에서 돌아야 하므로 <b>준비 비용이 네 배</b>입니다. 둘째, 입구가 성글어져 <b>경로가 더 많이 우회합니다</b> — 최적 대비 비율이 1.321 보다 나빠집니다.</p>
+<p>극단을 생각하면 분명합니다. 클러스터를 맵 크기로 키우면 입구가 없고 추상 그래프는 노드 둘(출발·도착)이며, 그 사이 간선을 재려면 결국 <b>전체 A*</b> 를 돌려야 합니다. 계층화가 사라집니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s13-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">흐름장의 동점 규칙을 "방향 번호가 <b>큰</b> 쪽"으로 바꾸면 게임에서 무엇이 달라지는가? 비용은 그대로인데 문제가 되는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>경로의 <b>비용은 같습니다.</b> 동점이므로 어느 쪽으로 가든 목표까지의 총비용이 같습니다. 그런 뜻에서는 문제가 없습니다.</p>
+<p>그런데 <b>유닛이 밟는 칸이 달라집니다.</b> 그러면 14부의 예약 충돌이 다른 자리에서 일어나고, 다른 유닛이 다른 틱에 멈추고, 전투가 다른 자리에서 벌어집니다. 상태 해시는 첫 갈림에서 바로 다릅니다.</p>
+<p>즉 <b>이것은 성능이나 품질의 문제가 아니라 결정론의 문제</b>입니다. 세 언어 중 하나만 규칙을 다르게 구현하면 그 순간 파리티가 끝납니다. 그래서 "동점이면 무엇"이 이 저장소에서 스무 번쯤 반복되는 문장입니다.</p>
+</div>
+</div>
 </article>
