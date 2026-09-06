@@ -1,0 +1,152 @@
+<article class="card section" id="s6">
+<p class="chnum">6부</p>
+<h2>카메라와 가시 영역</h2>
+<p class="chsub">화면은 맵의 일부만 본다.<br>어디를 보고 있는지, 그리고 무엇을 그려야 하는지</p>
+</article>
+
+<article class="card" id="s6-world">
+<h3>월드 픽셀 공간</h3>
+<p class="lead">타일 좌표와 화면 좌표 사이에 한 겹을 더 둡니다. <b>월드 픽셀</b> — 맵 전체를 한 장의 큰 그림으로 봤을 때의 픽셀 좌표입니다.</p>
+<pre class="term">타일 (tx, ty)  →  월드 픽셀 (16(tx-ty), 8(tx+ty))
+월드 픽셀 (wx, wy)  →  화면 픽셀 (wx - camX, wy - camY)</pre>
+<p>카메라는 그저 뺄셈 두 개입니다. 이 단순함이 중요합니다 — 픽킹을 할 때 화면 픽셀에 카메라를 <b>더해</b> 월드로 되돌린 뒤 4부의 식을 그대로 쓰면 되니까요.</p>
+<p>48×48 마름모 맵의 월드 픽셀 범위는</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>경계</th><th>식</th><th>값</th></tr>
+<tr><td>WORLD_X0</td><td class="num">-16(MAP_H-1) - 16</td><td class="num">-768</td></tr>
+<tr><td>WORLD_X1</td><td class="num">16(MAP_W-1) + 16</td><td class="num">768</td></tr>
+<tr><td>WORLD_Y0</td><td class="num">-MAXH · TZ</td><td class="num">-120</td></tr>
+<tr><td>WORLD_Y1</td><td class="num">8(MAP_W+MAP_H-2) + 16</td><td class="num">768</td></tr>
+</table>
+</div>
+<p>가로가 세로의 두 배입니다. 마름모 배치의 필연입니다 — 대각선 한 칸이 가로로 32, 세로로 16 이니까요.</p>
+<div class="note"><code class="nb">WORLD_Y0 = -120</code> 인 것은 <b>높이 15 인 타일이 화면에서 120픽셀 위로 올라가기</b> 때문입니다. 카메라가 거기까지 못 가면 산꼭대기가 잘립니다.</div>
+</article>
+
+<article class="card" id="s6-clamp">
+<h3>클램프</h3>
+<!--CODE file=py/isorpg/camera.py lang=py sym=clamp_cam note=카메라를 맵 안에 가둔다-->
+<p>상한이 <code class="nb">WORLD_X1 - SCR_W</code> 인 것에 주의하세요. 카메라는 화면의 <b>왼쪽 위</b> 모서리를 가리키므로, 오른쪽 끝을 맞추려면 화면 폭만큼 빼야 합니다.</p>
+<div class="warn"><b>맵이 화면보다 작으면</b> 하한이 상한보다 커집니다. 그러면 이 코드는 상한을 이깁니다(<code class="nb">cx &lt; lo</code> 를 먼저 검사하므로 <code class="nb">hi</code> 가 최종). 실전에서는 그때 화면 가운데에 맵을 놓는 별도 분기가 필요합니다. 이 맵(1536×888)은 화면(320×200)보다 항상 크므로 그 분기를 두지 않았습니다.</div>
+</article>
+
+<article class="card" id="s6-deadzone">
+<h3>데드존 — 흔들리지 않는 추적</h3>
+<p>카메라를 매 틱 캐릭터 중앙에 붙이면 걸을 때마다 화면 전체가 미세하게 흔들립니다. 캐릭터는 한 틱에 0.2타일, 화면으로는 3~4픽셀씩 움직이니까요.</p>
+<p>도스 RPG 들의 답은 화면 가운데에 <b>네모난 여유</b>를 두는 것이었습니다.</p>
+<!--CODE file=py/isorpg/camera.py lang=py sym=follow note=데드존 추적-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>상수</th><th>값</th><th>뜻</th></tr>
+<tr><td>DEADZONE_X</td><td class="num">48</td><td>화면 폭 320 의 약 30%</td></tr>
+<tr><td>DEADZONE_Y</td><td class="num">24</td><td>화면 높이 200 의 약 24%</td></tr>
+</table>
+</div>
+<p>가로 데드존이 세로의 두 배인 것은 마름모 배치 때문입니다. 같은 걸음이 가로로는 16픽셀, 세로로는 8픽셀 움직이니 여유도 그 비율이어야 균형이 맞습니다.</p>
+<div class="key"><b>데드존은 상태가 없습니다.</b> 현재 카메라와 목표 위치만으로 다음 카메라가 정해집니다. 그래서 세이브에 카메라만 저장하면 되고, 되돌리기가 정확히 복원됩니다.</div>
+</article>
+
+<article class="card" id="s6-range">
+<h3>정리 3.3 — 무엇을 그려야 하는가</h3>
+<p class="lead">48×48 = 2,304 타일 전부를 매 프레임 그릴 수는 없습니다. 화면에 걸치는 것만 골라야 합니다.</p>
+<div class="fig" data-svg="fig_viewport.svg"></div>
+<p>뷰포트는 월드 픽셀 공간의 직사각형입니다. 네 모서리를 역투영해 <code class="nb">tx</code>, <code class="nb">ty</code> 의 최대·최소를 얻으면 됩니다.</p>
+<p><b>정리 3.3.</b> <code class="nb">a = px + 2py</code> 는 <code class="nb">(px, py)</code> 의 선형함수이므로 볼록다각형 위에서 최대·최소를 꼭짓점에서 취한다. <code class="nb">a</code> 의 계수가 둘 다 양수이므로 최소는 좌상, 최대는 우하에서 난다. <code class="nb">b = 2py - px</code> 는 <code class="nb">px</code> 계수가 음수이므로 최소는 <b>우상</b>, 최대는 <b>좌하</b>에서 난다. ∎</p>
+<!--CODE file=py/isorpg/proj.py lang=py sym=visible_range note=네 모서리만 역투영하면 된다-->
+<div class="note">모서리 넷을 각각 <code class="nb">screen_to_tile</code> 로 돌린 뒤 min/max 를 취해도 같은 결과입니다. 위 코드는 <code class="nb">a</code>, <code class="nb">b</code> 를 직접 다뤄 나눗셈을 네 번으로 줄였습니다.</div>
+</article>
+
+<article class="card" id="s6-margin">
+<h3>여백을 얼마나 줄 것인가</h3>
+<p>중심이 화면 밖이어도 마름모가 화면에 걸칠 수 있습니다. 그래서 뷰포트를 넓혀 놓고 역투영합니다.</p>
+<pre class="term">MARGIN_X = TW/2 = 16
+MARGIN_Y = TH/2  +  MAXH · TZ  +  SPRITE_MAX_H
+         =   8   +    15 × 8   +      32        = 160</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항</th><th>값</th><th>왜 필요한가</th></tr>
+<tr><td>TH/2</td><td class="num">8</td><td>마름모 반쪽이 아래로 걸침</td></tr>
+<tr><td>MAXH · TZ</td><td class="num">120</td><td>높이 15 인 기둥이 위로 120픽셀 솟음</td></tr>
+<tr><td>SPRITE_MAX_H</td><td class="num">32</td><td>가장 큰 스프라이트(나무)의 높이</td></tr>
+</table>
+</div>
+<p>세로 여백이 가로의 열 배입니다. 높이 때문입니다 — 화면 아래쪽 바깥에 있는 타일이라도 <b>높으면</b> 화면 안으로 솟아오릅니다.</p>
+<!--OUT file=py_prim.txt sec=4 note=카메라 다섯 위치의 가시 범위-->
+<p>마지막에서 두 번째 줄 <code class="nb">700 700 → 55 1 47 44</code> 를 보세요. <code class="nb">tx0 = 55 &gt; tx1 = 47</code> 입니다. <b>빈 범위</b>라는 뜻이고, 카메라가 맵 바깥으로 나갔을 때 그렇습니다. 실제로는 클램프가 막지만, 함수는 그 경우에도 올바르게 동작해야 합니다.</p>
+<div class="warn"><b>여백을 아끼면 생기는 버그</b> — 높이 여백을 빼면 산꼭대기가 화면 위쪽에서 사라졌다 나타났다 합니다. 스프라이트 여백을 빼면 나무 꼭대기가 화면 아래 가장자리에서 잘립니다. 둘 다 <b>움직일 때만</b> 보여서 정지 화면 테스트로는 잡히지 않습니다.</div>
+</article>
+
+<article class="card" id="s6-count">
+<h3>얼마나 절약되는가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>타일 수</th><th>비율</th></tr>
+<tr><td>맵 전체</td><td class="num">2,304</td><td class="num">100%</td></tr>
+<tr><td>가시 범위 (카메라 0,0)</td><td class="num">34 × 24 = 816</td><td class="num">35%</td></tr>
+<tr><td>실제로 화면에 픽셀이 있는 타일</td><td class="num">약 300</td><td class="num">13%</td></tr>
+</table>
+</div>
+<p>가시 범위는 <b>직사각 근사</b>입니다. 실제 화면에 걸치는 타일 집합은 마름모 모양이라 직사각형보다 작죠. 그래도 2,304 에서 816 으로 줄이는 것만으로 충분합니다 — 정확한 마름모 판정을 넣으면 판정 비용이 절약분을 먹습니다.</p>
+<div class="key"><b>여기가 도스식 사고의 좋은 예입니다.</b> "정확하게 고르는 것"과 "대충 고르고 넘겨 그리는 것" 중에서, 넘겨 그리는 비용이 판정 비용보다 싸면 넘겨 그립니다. 8부의 클리핑도 같은 정신입니다 — 픽셀마다 검사하지 않고 <b>런 단위로</b> 자릅니다.</div>
+</article>
+
+<article class="card" id="s6-name">
+<h3>방향 이름의 함정</h3>
+<p>이 엔진의 여덟 방향 표를 봅시다.</p>
+<!--CODE file=py/isorpg/path.py lang=py sym=DIRX..DIR_NAME note=여덟 방향 — 이름은 화면 기준이 아니다-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>d</th><th>이름</th><th>타일 변화</th><th>화면에서 실제 방향</th></tr>
+<tr><td class="num">0</td><td>E</td><td class="num">(+1, 0)</td><td>오른쪽-아래</td></tr>
+<tr><td class="num">1</td><td>SE</td><td class="num">(+1, +1)</td><td><b>정확히 아래</b></td></tr>
+<tr><td class="num">2</td><td>S</td><td class="num">(0, +1)</td><td>왼쪽-아래</td></tr>
+<tr><td class="num">3</td><td>SW</td><td class="num">(-1, +1)</td><td><b>정확히 왼쪽</b></td></tr>
+<tr><td class="num">4</td><td>W</td><td class="num">(-1, 0)</td><td>왼쪽-위</td></tr>
+<tr><td class="num">6</td><td>N</td><td class="num">(0, -1)</td><td>오른쪽-위</td></tr>
+</table>
+</div>
+<p>타일 좌표계의 "동쪽"이 화면에서는 남동쪽으로 보입니다. 45도 어긋나 있는 것이죠. <b>이것이 쿼터뷰 게임의 조작이 헷갈리는 이유</b>입니다 — 위쪽 방향키를 누르면 캐릭터가 오른쪽 위로 갑니다.</p>
+<div class="key">도스 게임들은 두 가지로 갈렸습니다. <b>숫자패드 8방향을 타일 축에 맞추는</b> 쪽(<i>X-COM</i>)과 <b>화면 방향에 맞추는</b> 쪽(<i>Ultima VIII</i>). 후자는 방향키 하나가 대각 이동이 됩니다. 이 문서는 전자를 씁니다 — 이름과 타일 변화가 일치하는 쪽이 코드에서 덜 헷갈리기 때문입니다.</div>
+</article>
+
+<article class="card" id="s6-demo">
+<h3>직접 해 보기 — 가시 범위</h3>
+<div class="demo" data-demo="viewport-range">
+<h5>카메라를 끌어 보세요</h5>
+<div class="row">
+<label><input type="checkbox" data-margin checked> 여백 포함</label>
+<label><input type="checkbox" data-real> 실제로 걸치는 타일만</label>
+</div>
+<div class="out"></div>
+</div>
+<div class="note">노란 영역이 <code class="nb">visible_range</code> 가 돌려준 직사각 범위입니다. "실제로 걸치는 타일만"을 켜면 그 안에서 정말 화면에 픽셀이 있는 타일이 얼마나 되는지 볼 수 있습니다 — 대략 3분의 1입니다.</div>
+</article>
+
+<article class="card" id="s6-quiz">
+<h3>확인 문제</h3>
+<div class="quiz" data-quiz>
+<p class="q">맵을 96×96 으로 늘리면 <code class="nb">MARGIN_Y</code> 를 바꿔야 하는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p><b>아니오.</b> <code class="nb">MARGIN_Y</code> 는 <code class="nb">TH/2 + MAXH·TZ + SPRITE_MAX_H</code> 로, 맵 크기와 무관합니다. 최대 높이와 최대 스프라이트 크기에만 의존하니까요.</p>
+<p>대신 <code class="nb">WORLD_*</code> 경계는 전부 바뀝니다. 그리고 <code class="nb">visible_range</code> 가 돌려주는 타일 수는 <b>그대로</b>입니다 — 화면 크기가 같으니까요. 이것이 이 설계의 장점입니다. 맵을 아무리 키워도 한 프레임의 비용이 늘지 않습니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s6-sum">
+<h3>6부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>개념</th><th>구현</th><th>비용</th></tr>
+<tr><td>카메라</td><td>월드 픽셀 뺄셈 두 번</td><td class="num">O(1)</td></tr>
+<tr><td>클램프</td><td>네 경계에 자르기</td><td class="num">O(1)</td></tr>
+<tr><td>데드존 추적</td><td>상태 없음 — 현재+목표만</td><td class="num">O(1)</td></tr>
+<tr><td>가시 범위</td><td>네 모서리 역투영, 나눗셈 4번</td><td class="num">O(1)</td></tr>
+<tr><td>여백</td><td class="num">가로 16, 세로 160</td><td>높이 때문에 세로가 열 배</td></tr>
+<tr><td>절약</td><td class="num">2,304 → 816 타일</td><td class="num">35%</td></tr>
+</table>
+</div>
+<div class="key">다음 부가 이 문서에서 가장 어려운 곳입니다 — <b>무엇을 먼저 그릴 것인가.</b> 순서가 부분순서일 뿐이고, 그 부분순서에 순환이 생깁니다.</div>
+</article>

@@ -92,6 +92,21 @@ class Fog(object):
     def count_visible(self):
         return self.n_vis
 
+    def recount(self):
+        """비트에서 누적 개수를 다시 센다. 세이브를 되돌린 직후에 부른다.
+
+           개수는 세이브에 넣지 않는다 — 비트에서 유도되는 값이라 넣으면
+           두 곳에 같은 사실이 적히고, 둘이 어긋나면 어느 쪽이 옳은지 알 수 없다.
+        """
+        seen = vis = 0
+        for v in self.bits:
+            if v % 2:
+                seen += 1
+            if (v // 2) % 2:
+                vis += 1
+        self.n_seen = seen
+        self.n_vis = vis
+
     def update(self, m, px, py):
         """지금 보이는 칸을 다시 세운다. 기억(bit0)은 지우지 않는다."""
         bits = self.bits

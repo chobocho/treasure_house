@@ -976,14 +976,19 @@ crc16(bytes):
 
 ```
 "ISO1"                       4바이트 매직
-u16 tick_lo, u16 tick_hi     틱 카운터 (32비트)
+u32 tick_n                   틱 카운터
 u32 rng_state
+i32 cam_x                    카메라 — 이것이 없으면 되돌린 뒤 트레이스가 갈린다
+i32 cam_y
 u16 entity 수
-엔티티마다: u8 kind, i32 fx, i32 fy, u8 h, u16 hp, u16 maxhp,
+엔티티마다 (24바이트): u8 kind, i32 fx, i32 fy, u8 h, u16 hp, u16 maxhp,
             u8 lv, u32 xp, u8 atk, u8 def, u8 armor, u8 dir, u8 alive
 u16 안개 바이트 수, 그만큼의 바이트 (타일 4개당 1바이트, 2비트씩)
 u16 crc16(위 전체)
 ```
+
+안개를 되돌릴 때는 비트뿐 아니라 **누적 개수(n_seen, n_vis)도 다시 세야 한다.**
+비트만 되돌리고 개수를 그대로 두면, 되돌린 뒤의 트레이스가 복원된 상태의 함수가 아니게 된다.
 
 `i32` 는 2의 보수 빅 엔디언이다: `u32 = fmod(v, 4294967296)`.
 `load` 는 CRC 를 검사하고 틀리면 오류다. `save -> load -> save` 가 바이트 동일해야 한다.

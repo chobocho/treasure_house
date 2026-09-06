@@ -30,8 +30,9 @@ all: py lua ts parity
 
 py:
 	@mkdir -p $(OUT)
-	@{ for t in $(PYTESTS); do cd $(ROOT)/py/tests && $(PY) $$t.py || exit 1; done; } \
-	  | tee $(OUT)/py_tests.txt
+	@set -o pipefail; { for t in $(PYTESTS); do \
+	    cd $(ROOT)/py/tests && $(PY) $$t.py || { echo "★ $$t 실패"; exit 1; }; \
+	  done; } | tee $(OUT)/py_tests.txt
 	cd $(ROOT)/py && $(PY) -m isorpg.main prim  > $(OUT)/py_prim.txt
 	cd $(ROOT)/py && $(PY) -m isorpg.main trace > $(OUT)/py_trace.jsonl
 	@cmp $(OUT)/py_prim.txt $(GOLDEN)/prim.txt && echo '  py prim  == golden OK'

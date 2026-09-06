@@ -89,6 +89,23 @@ export class Fog {
     return this.nVis;
   }
 
+  /** 비트에서 누적 개수를 다시 센다. 세이브를 되돌린 직후에 부른다.
+   *
+   *  개수는 세이브에 넣지 않는다 — 비트에서 유도되는 값이라 넣으면 같은 사실이
+   *  두 곳에 적히고, 둘이 어긋나면 어느 쪽이 옳은지 알 수 없다. */
+  recount(): void {
+    let seen = 0;
+    let vis = 0;
+    const bits = this.bits;
+    for (let i = 0; i < bits.length; i++) {
+      const v = bits[i] as number;
+      if (v % 2 === 1) seen++;
+      if (Math.floor(v / 2) % 2 === 1) vis++;
+    }
+    this.nSeen = seen;
+    this.nVis = vis;
+  }
+
   /** 지금 보이는 칸을 다시 세운다. 기억(bit0)은 지우지 않는다. */
   update(m: GameMap, px: number, py: number): void {
     const bits = this.bits;
