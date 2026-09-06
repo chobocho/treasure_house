@@ -2501,13 +2501,416 @@ def atan8(dx, dy):
 <article class="card section" id="s19">
 <p class="chnum">19부</p>
 <h2>결정론과 락스텝</h2>
-<p class="chsub">1,500명의 궁수를 28.8 kbps 로 보내는 법.<br>그리고 부동소수점 한 줄로 그것을 부수는 법</p>
+<p class="chsub">28.8 kbps 모뎀으로 200기를 동기화하는 법,<br>그리고 그 대가로 무엇을 포기해야 하는가</p>
 </article>
 
-<article class="card" id="s19-todo">
-<h3>결정론과 락스텝 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>38장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s19-problem">
+<h3>두 기계가 같은 게임을 봐야 한다</h3>
+<p class="lead">멀티플레이어 RTS 의 문제는 하나입니다. 내 화면의 전차와 상대 화면의 전차가 <b>같은 자리에</b> 있어야 합니다.</p>
+<p>방법은 둘뿐입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>상태를 보낸다</th><th>명령을 보낸다</th></tr>
+<tr><td>보내는 것</td><td>유닛 200기의 위치·체력·상태</td><td>"12번 유닛 (30,40) 으로"</td></tr>
+<tr><td>틱당 크기</td><td class="num">수 KB</td><td class="num">대개 0바이트</td></tr>
+<tr><td>요구</td><td>대역폭</td><td><b>모든 기계가 같은 계산</b></td></tr>
+<tr><td>틀렸을 때</td><td>다음 패킷이 고쳐 준다</td><td>영원히 갈린다</td></tr>
+</table>
+</div>
+<p>1990년대의 대역폭은 <b>28.8 kbps</b> 였습니다. 초당 3.6 KB. 전자는 시작부터 불가능합니다.</p>
+</article>
+
+<article class="card" id="s19-1500">
+<h3>1500 Archers on a 28.8</h3>
+<p>Age of Empires 의 네트워크 설계를 정리한 GDC 2001 발표가 이 주제의 고전입니다. 원문 표지의 저자는 <b>Paul Bettner</b> 가 먼저, Mark Terrano 가 다음입니다 — 흔히 인용되는 "Terrano &amp; Bettner"와 반대입니다.</p>
+<p>원문에 이렇게 적혀 있습니다.</p>
+<pre class="term">commands were being processed for one turn ... and sent out
+for execution two turns in the future</pre>
+<p>이 엔진의 <code class="nb">ORDER_DELAY = 2</code> 가 바로 그 관행입니다.</p>
+<div class="note">발표 제목의 "1500 Archers"는 과장이 아니라 설계 목표였습니다. 유닛 1,500기의 상태를 보내는 것은 불가능하지만, 그들에게 내리는 <b>명령</b>은 한 줄이면 됩니다.</div>
+</article>
+
+<article class="card" id="s19-price">
+<h3>대가 — 결정론</h3>
+<p class="lead">명령만 보내려면 모든 기계가 <b>같은 명령에서 같은 상태</b>를 만들어야 합니다. 한 비트라도 어긋나면 그 뒤로 두 게임은 영원히 다릅니다.</p>
+<p>필요한 것은 셋입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>조건</th><th>이 엔진의 답</th><th>부</th></tr>
+<tr><td>같은 입력</td><td>명령은 정렬된 목록으로만 들어온다</td><td>18부</td></tr>
+<tr><td>같은 순서</td><td>틱의 아홉 단계·동점 규칙 전부 명세</td><td>12·14·16부</td></tr>
+<tr><td>같은 산술</td><td>16.16 정수, 실수 금지</td><td>6부</td></tr>
+</table>
+</div>
+<div class="key">이 덱 전체가 사실은 이 한 장의 각주입니다. "동점이면 핸들 오름차순", "양동이 큐를 쓴다", "손으로 쓴 힙" — 전부 여기서 나옵니다.</div>
+</article>
+
+<article class="card" id="s19-gate">
+<h3>명령이 들어오는 문은 하나다</h3>
+<pre class="term">sim.step(orders)      상태를 바꾸는 함수는 이것 하나뿐이다</pre>
+<p>렌더는 상태를 읽기만 하고, UI 는 명령을 만들 뿐이며, AI 조차 같은 자료형의 명령으로 말합니다.</p>
+<div class="src"><b>py/rts/sim.py</b><span class="ln">177–180</span><span>정렬되지 않았으면 그 자리에서 터진다</span></div>
+<pre><code data-lang="py" data-src="py/rts/sim.py" data-lines="177-180">    def _check_sorted(self, orders):
+        for k in range(1, len(orders)):
+            if orders[k - 1] &gt; orders[k]:
+                raise ValueError('명령 목록이 정렬되어 있지 않다 (SPEC §18.1)')</code></pre>
+<p>정렬을 <b>대신 해 주지 않습니다.</b> 조용히 정렬하면 호출자의 버그가 숨고, 그 버그는 다른 기계에서 다른 순서로 나타납니다. 그때는 이미 늦습니다.</p>
+<div class="warn">UI 코드가 <code class="nb">sim</code> 의 상태를 직접 건드리는 경로는 <b>존재하지 않습니다.</b> "이것 하나만 예외로" 가 락스텝을 죽입니다 — 그 한 줄은 내 기계에서만 실행되니까요.</div>
+</article>
+
+<article class="card" id="s19-net">
+<h3>지연과 지터</h3>
+<svg class="diag" viewBox="0 0 720 230" role="img">
+<title>락스텝 타임라인 — 실행 틱은 보낼 때 정해진다</title>
+<line class="gd" x1="118" y1="40" x2="118" y2="176"/>
+<text class="lbl" x="118" y="32" text-anchor="middle">t+0</text>
+<line class="gd" x1="170" y1="40" x2="170" y2="176"/>
+<text class="lbl" x="170" y="32" text-anchor="middle">t+1</text>
+<line class="gd" x1="222" y1="40" x2="222" y2="176"/>
+<text class="lbl" x="222" y="32" text-anchor="middle">t+2</text>
+<line class="gd" x1="274" y1="40" x2="274" y2="176"/>
+<text class="lbl" x="274" y="32" text-anchor="middle">t+3</text>
+<line class="gd" x1="326" y1="40" x2="326" y2="176"/>
+<text class="lbl" x="326" y="32" text-anchor="middle">t+4</text>
+<line class="gd" x1="378" y1="40" x2="378" y2="176"/>
+<text class="lbl" x="378" y="32" text-anchor="middle">t+5</text>
+<line class="gd" x1="430" y1="40" x2="430" y2="176"/>
+<text class="lbl" x="430" y="32" text-anchor="middle">t+6</text>
+<line class="gd" x1="482" y1="40" x2="482" y2="176"/>
+<text class="lbl" x="482" y="32" text-anchor="middle">t+7</text>
+<line class="gd" x1="534" y1="40" x2="534" y2="176"/>
+<text class="lbl" x="534" y="32" text-anchor="middle">t+8</text>
+<line class="gd" x1="586" y1="40" x2="586" y2="176"/>
+<text class="lbl" x="586" y="32" text-anchor="middle">t+9</text>
+<line class="gd" x1="638" y1="40" x2="638" y2="176"/>
+<text class="lbl" x="638" y="32" text-anchor="middle">t+10</text>
+<text class="lbl" x="12" y="74" text-anchor="start">플레이어 0</text>
+<rect class="tl hot" x="108" y="56" width="20" height="20"/>
+<rect class="tl cool" x="212" y="56" width="20" height="20"/>
+<rect class="tl on" x="212" y="84" width="20" height="20"/>
+<path class="ax" d="M157 66 L183 66"/>
+<path class="ax" d="M183 66 L173.9 61.32"/>
+<path class="ax" d="M183 66 L173.9 70.68"/>
+<text class="lbl" x="12" y="130" text-anchor="start">플레이어 1</text>
+<rect class="tl hot" x="108" y="112" width="20" height="20"/>
+<rect class="tl cool" x="316" y="112" width="20" height="20"/>
+<rect class="tl on" x="212" y="140" width="20" height="20"/>
+<path class="ax" d="M157 122 L183 122"/>
+<path class="ax" d="M183 122 L173.9 117.32"/>
+<path class="ax" d="M183 122 L173.9 126.68"/>
+<text class="lbl" x="108" y="200" text-anchor="start">주황 = 보냄</text>
+<text class="lbl" x="248" y="200" text-anchor="start">파랑 = 도착(지터 0~2틱)</text>
+<text class="lbl" x="448" y="200" text-anchor="start">노랑 = 실행 (항상 t+2)</text>
+<text class="lbl" x="24" y="220" text-anchor="start">늦게 도착하면 그 틱을 기다릴 뿐이다 — 앞당겨 실행하는 경로는 없다</text>
+</svg>
+<p><b>명령의 실행 틱은 보낼 때 정해집니다.</b> 틱 <code class="nb">t</code> 에 만든 명령은 <code class="nb">t+2</code> 에 실행됩니다. 네트워크가 얼마나 느리든 상관없습니다.</p>
+<p>지터는 <b>도착</b>만 늦춥니다. 늦게 도착하면 그 틱을 <b>기다릴 뿐</b>입니다.</p>
+<div class="src"><b>py/rts/net.py</b><span class="ln">32–43</span><span>실행 틱과 도착 틱은 다른 것이다</span></div>
+<pre><code data-lang="py" data-src="py/rts/net.py" data-lines="32-43">    def exec_of(self, tick, player):
+        """실행 틱은 지터와 무관하다."""
+        return tick + self.latency
+
+    def arrive_of(self, tick, player):
+        key = (tick, player)
+        if key not in self.delay:
+            j = self.rng.roll(self.jitter_max + 1) if self.jitter_max else 0
+            self.delay[key] = tick + self.latency + j
+            if j &gt; 0:
+                self.stalls += 1
+        return self.delay[key]</code></pre>
+<div class="key">늦게 도착한 명령을 <b>앞당겨 실행하는 경로는 없습니다.</b> 그런 경로가 하나라도 있으면 락스텝은 그 자리에서 끝납니다 — 두 기계의 "지금"이 달라지니까요.</div>
+</article>
+
+<article class="card" id="s19-empty">
+<h3>빈 턴도 보낸다</h3>
+<div class="src"><b>py/rts/net.py</b><span class="ln">53–59</span><span>명령이 없어도 "없음"을 보낸다</span></div>
+<pre><code data-lang="py" data-src="py/rts/net.py" data-lines="53-59">    def flush(self, tick, player):
+        """빈 턴도 보낸다. 그래야 상대가 영원히 기다리지 않는다."""
+        et = self.exec_of(tick, player)
+        if et not in self.sealed:
+            self.sealed[et] = {}
+        self.sealed[et][player] = self.arrive_of(tick, player)
+        return et</code></pre>
+<p>플레이어가 아무것도 하지 않는 틱이 대부분입니다. 그래도 패킷을 보내야 합니다. 안 보내면 상대는 <b>아직 안 온 것</b>과 <b>보낼 것이 없는 것</b>을 구별하지 못하고 영원히 기다립니다.</p>
+<p>빈 턴 패킷은 몇 바이트입니다. 18.2 Hz × 2명 × 8바이트 = 초당 291바이트 — 28.8 kbps 의 8 % 입니다.</p>
+</article>
+
+<article class="card" id="s19-rng">
+<h3>난수는 하나뿐이다</h3>
+<p class="lead">시뮬레이션의 RNG 는 <b>정확히 하나</b>입니다. 렌더나 UI 가 그것을 한 번이라도 뽑으면 두 기계의 수열이 갈립니다.</p>
+<p>그런데 네트워크 지터에도 난수가 필요합니다. 그래서 <code class="nb">Net</code> 은 <b>전용 RNG</b> 를 따로 듭니다.</p>
+<pre class="term">sim.rng    시뮬레이션용 — 피해량·맵 생성
+net.rng    지터용 — 시뮬레이션 상태에 영향을 주지 않는다</pre>
+<div class="warn">둘을 합치면 <b>네트워크 사정이 게임 내용을 바꿉니다.</b> 지연이 큰 날에 전차가 더 아프게 때립니다. 그것이야말로 디싱크의 정의입니다.</div>
+</article>
+
+<article class="card" id="s19-hash">
+<h3>상태 해시 — FNV-1a</h3>
+<p class="lead">두 기계가 같은 상태인지 어떻게 압니까? 상태 전체를 보내면 애초에 명령만 보낼 이유가 없습니다.</p>
+<p>해시 하나(4바이트)를 매 틱 주고받습니다.</p>
+<div class="src"><b>py/rts/fixed.py</b><span class="ln">227–233</span><span>XOR 도 곱셈도 비트 연산자 없이</span></div>
+<pre><code data-lang="py" data-src="py/rts/fixed.py" data-lines="227-233">def fnv1a_step(h, b):
+    """바이트 하나. XOR 은 하위 8비트만 바뀌므로 xor8 로 끝나고,
+       곱셈은 분할한다 — hl * 16777619 &lt; 2^40 이라 53비트 가수에 담긴다."""
+    h = xor_low8(h, b)
+    hh = h // 65536
+    hl = h % 65536
+    return (hl * FNV_PRIME + (hh * FNV_PRIME % 65536) * 65536) % 4294967296</code></pre>
+<p>XOR 은 하위 8비트만 바뀌므로 <code class="nb">xor8</code> 로 끝나고, 곱셈은 6부의 분할 곱과 같은 이유로 쪼갭니다. <code class="nb">hl · 16777619 &lt; 2⁴⁰</code> 이라 53비트 가수에 담깁니다.</p>
+</article>
+
+<article class="card" id="s19-hashbytes">
+<h3>무엇을 해시에 넣는가</h3>
+<svg class="diag" viewBox="0 0 660 300" role="img">
+<title>상태 해시의 바이트열 — 순서가 명세다</title>
+<rect class="tl on" x="300" y="33" width="88" height="15"/>
+<text class="lbl" x="296" y="44" text-anchor="end">틱</text>
+<text class="lbl" x="396" y="44" text-anchor="start">4바이트</text>
+<rect class="tl on" x="300" y="47" width="88" height="15"/>
+<text class="lbl" x="296" y="58" text-anchor="end">rng 상태</text>
+<text class="lbl" x="396" y="58" text-anchor="start">4바이트</text>
+<rect class="tl on" x="300" y="61" width="88" height="15"/>
+<text class="lbl" x="296" y="72" text-anchor="end">플레이어×4: 크레딧</text>
+<text class="lbl" x="396" y="72" text-anchor="start">4바이트</text>
+<rect class="tl on" x="300" y="75" width="44" height="15"/>
+<text class="lbl" x="296" y="86" text-anchor="end">  인구 사용</text>
+<text class="lbl" x="352" y="86" text-anchor="start">2바이트</text>
+<rect class="tl on" x="300" y="89" width="44" height="15"/>
+<text class="lbl" x="296" y="100" text-anchor="end">  인구 상한</text>
+<text class="lbl" x="352" y="100" text-anchor="start">2바이트</text>
+<rect class="tl on" x="300" y="103" width="22" height="15"/>
+<text class="lbl" x="296" y="114" text-anchor="end">엔티티 i: alive</text>
+<text class="lbl" x="330" y="114" text-anchor="start">1바이트</text>
+<rect class="tl on" x="300" y="117" width="88" height="15"/>
+<text class="lbl" x="296" y="128" text-anchor="end">  owner kind tx ty</text>
+<text class="lbl" x="396" y="128" text-anchor="start">4바이트</text>
+<rect class="tl on" x="300" y="131" width="44" height="15"/>
+<text class="lbl" x="296" y="142" text-anchor="end">  hp</text>
+<text class="lbl" x="352" y="142" text-anchor="start">2바이트</text>
+<rect class="tl on" x="300" y="145" width="44" height="15"/>
+<text class="lbl" x="296" y="156" text-anchor="end">  dir state</text>
+<text class="lbl" x="352" y="156" text-anchor="start">2바이트</text>
+<rect class="tl on" x="300" y="159" width="176" height="15"/>
+<text class="lbl" x="296" y="170" text-anchor="end">  px py</text>
+<text class="lbl" x="484" y="170" text-anchor="start">8바이트</text>
+<rect class="tl on" x="300" y="173" width="88" height="15"/>
+<text class="lbl" x="296" y="184" text-anchor="end">  target load</text>
+<text class="lbl" x="396" y="184" text-anchor="start">4바이트</text>
+<rect class="tl on" x="300" y="187" width="88" height="15"/>
+<text class="lbl" x="296" y="198" text-anchor="end">  prog</text>
+<text class="lbl" x="396" y="198" text-anchor="start">4바이트</text>
+<rect class="tl on" x="300" y="201" width="88" height="15"/>
+<text class="lbl" x="296" y="212" text-anchor="end">  from_t to_t</text>
+<text class="lbl" x="396" y="212" text-anchor="start">4바이트</text>
+<rect class="tl hot" x="300" y="215" width="88" height="15"/>
+<text class="lbl" x="296" y="226" text-anchor="end">  cool timer</text>
+<text class="lbl" x="396" y="226" text-anchor="start">4바이트</text>
+<rect class="tl on" x="300" y="229" width="44" height="15"/>
+<text class="lbl" x="296" y="240" text-anchor="end">투사체: 개수 + 항목들</text>
+<text class="lbl" x="352" y="240" text-anchor="start">2바이트</text>
+<rect class="tl on" x="300" y="243" width="22" height="15"/>
+<text class="lbl" x="296" y="254" text-anchor="end">생산 큐</text>
+<text class="lbl" x="330" y="254" text-anchor="start">1바이트</text>
+<rect class="tl on" x="300" y="257" width="88" height="15"/>
+<text class="lbl" x="296" y="268" text-anchor="end">광맥 잔량</text>
+<text class="lbl" x="396" y="268" text-anchor="start">4바이트</text>
+<rect class="tl on" x="300" y="271" width="88" height="15"/>
+<text class="lbl" x="296" y="282" text-anchor="end">map_hash</text>
+<text class="lbl" x="396" y="282" text-anchor="start">4바이트</text>
+<text x="20" y="24" text-anchor="start">FNV-1a 32비트에 이 순서로 흘려 넣는다</text>
+<text class="lbl" x="20" y="304" text-anchor="start">주황: cool·timer 를 빠뜨리면 재장전이 한 틱 어긋나도 해시가 같다.</text>
+<text class="lbl" x="20" y="320" text-anchor="start">그러면 디싱크가 첫 발이 어긋난 다음 틱에야 잡힌다.</text>
+</svg>
+<p>순서가 명세입니다. 한 필드라도 순서가 다르면 두 언어의 해시가 다르고, 그러면 락스텝 검증이 <b>아무것도 증명하지 못합니다.</b></p>
+<div class="warn"><code class="nb">cool</code>(재장전)과 <code class="nb">timer</code>(반납·건설 카운트다운)를 빠뜨리면 안 됩니다. 둘은 매 틱 바뀌는 상태이고, 빠져 있으면 두 기계의 재장전이 한 틱 어긋나도 해시가 같습니다. 그러면 디싱크가 <b>첫 발이 어긋난 다음 틱에야</b> 잡힙니다.</div>
+<p>명세 초안에는 이 둘이 없었습니다. 골든 해시를 만들기 직전에 넣었습니다 — 한 번 얼리고 나면 고치는 값이 비싸집니다.</p>
+</article>
+
+<article class="card" id="s19-maphash">
+<h3>맵은 캐시한다</h3>
+<div class="src"><b>py/rts/sim.py</b><span class="ln">547–558</span><span>지형이 바뀔 때만 다시 계산</span></div>
+<pre><code data-lang="py" data-src="py/rts/sim.py" data-lines="547-558">    # ── SPEC §18.4 상태 해시 ───────────────────────────────────────────────
+    def map_hash(self):
+        """지형이 바뀔 때만 다시 계산한다. 캐시지만 상태의 순수 함수다."""
+        if self._map_hash_version != self.m.version:
+            hh = _Hash()
+            for v in self.m.terrain:
+                hh.b1(v)
+            for v in self.m.pass_:
+                hh.b1(v)
+            self._map_hash = hh.h
+            self._map_hash_version = self.m.version
+        return self._map_hash</code></pre>
+<p>지형 4,096칸 + 통행 4,096칸을 매 틱 해시하면 그것만으로 틱 시간이 두 배가 됩니다. 지형은 건물이 서고 부서질 때만 바뀌므로 <code class="nb">version</code> 으로 무효화합니다.</p>
+<p>캐시이지만 <b>상태의 순수 함수</b>입니다. 같은 지형이면 항상 같은 값이고, 두 기계가 다른 시점에 계산해도 같습니다.</p>
+</article>
+
+<article class="card" id="s19-verify">
+<h3>검증 — 1,200틱을 두 번 돌린다</h3>
+<pre class="term">1. 같은 시드로 시뮬 둘을 만든다
+2. golden/script.txt 의 명령을 각각의 Net 에 넣는다
+3. 매 틱 두 시뮬의 해시를 비교한다
+4. golden/hashes.txt 와 바이트 단위로 대조한다</pre>
+<div class="src"><b>out/lockstep.txt</b><span class="ln">전체 3줄</span><span>make lockstep 의 출력 그대로</span></div>
+<pre class="term" data-out="lockstep.txt">락스텝 400틱 일치
+float_bug: 해시가 갈린 틱 1 · 타일 좌표가 갈린 틱 -1
+타일이 -1 이면 400틱 동안 화면에서는 같아 보였다는 뜻이다</pre>
+<p>3번과 4번은 다른 검사입니다. 3번은 "같은 기계에서 두 번 돌려 같은가", 4번은 "<b>어제의 결과와 오늘의 결과가 같은가</b>"입니다. 후자가 세 언어 비교의 기준선이 됩니다.</p>
+</article>
+
+<article class="card" id="s19-inject-plan">
+<h3>디싱크를 일부러 만들어 본다</h3>
+<p class="lead">"부동소수점을 쓰면 디싱크한다"는 말은 자주 인용됩니다. 그런데 <b>정말 그런지</b> 확인해야 합니다.</p>
+<p>명세 초안은 이렇게 적고 있었습니다.</p>
+<pre class="term">fpmul(a, b)  →  floor(a · b / 65536.0)      실수로 계산한다
+|a·b| 가 2^53 을 넘는 순간 하위 비트가 잘리고 ...</pre>
+<p>그래서 그대로 구현하고 두 시뮬을 붙여 보았습니다. <b>1,200틱 내내 한 비트도 어긋나지 않았습니다.</b></p>
+</article>
+
+<article class="card" id="s19-inject-why">
+<h3>왜 어긋나지 않았는가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>양</th><th>크기</th></tr>
+<tr><td>16.16 값의 실제 범위</td><td class="num">|x| ≤ 2²²  (fp(64) = 4,194,304)</td></tr>
+<tr><td>두 값의 곱</td><td class="num">≤ 2⁴⁴</td></tr>
+<tr><td>배정밀도 가수</td><td class="num">53비트</td></tr>
+<tr><td>65536 으로 나누기</td><td>2 의 거듭제곱 — <b>오차 없음</b></td></tr>
+</table>
+</div>
+<p>곱이 2⁵³ 아래에 있으면 실수 곱셈은 <b>정확</b>합니다. 나누는 수가 2의 거듭제곱이면 나눗셈도 정확합니다. 바닥함수도 정확합니다.</p>
+<p>시험이 24쌍에 대해 <code class="nb">fp_mul(a,b) == int(a·b/65536.0)</code> 을 확인합니다. 전부 같습니다.</p>
+<div class="key">검증하지 않고 적었으면 <b>거짓말</b>이 될 뻔했습니다. 명세를 고치고, 그 정정을 이 덱에 그대로 싣습니다.</div>
+</article>
+
+<article class="card" id="s19-inject-real">
+<h3>실제로 어긋나는 것 — 누적</h3>
+<p>곱셈 한 번은 정확합니다. 그런데 <b>끝나지 않는 소수를 계속 더하면</b> 이야기가 다릅니다.</p>
+<div class="src"><b>py/rts/move.py</b><span class="ln">32–48</span><span>대각 진행량만 실수로 바꾼다</span></div>
+<pre><code data-lang="py" data-src="py/rts/move.py" data-lines="32-48">def step_amount(speed, d, float_bug=False):
+    """방향 d 로 한 틱에 늘어나는 진행률 (16.16).
+
+       대각 보정을 빼면 유닛이 대각으로 √2 = 41 % 빨라진다. 도스 시절에도
+       이 버그를 그대로 둔 게임이 있었고, 그래서 플레이어들이 지그재그로
+       움직였다 — 14부에서 이 버그를 일부러 넣은 데모를 보여 준다.
+
+       `float_bug` 는 §19.4 의 **일부러 넣은** 디싱크다. 1/√2 는 이진 소수로
+       끝나지 않으므로 진행률이 정수가 아니게 되고, 그 누적 차이가 px·py 를
+       통해 상태 해시에 바로 나타난다. 엔진의 다른 어느 곳도 실수를 쓰지 않는다.
+    """
+    st = F.fp_div(speed, F.fp(C.TILE))
+    if F.DCOST[d] == F.D_DIAG:
+        if float_bug:
+            return st / _SQRT2
+        return F.fp_mul(st, F.FP_DIAG)
+    return st</code></pre>
+<p><code class="nb">1/√2 = 0.70710678…</code> 은 이진 소수로 끝나지 않습니다. 고정소수점은 이것을 <b>46341</b> 이라는 정수로 한 번 반올림하고 끝내지만, 실수는 매 틱 조금씩 다른 값을 누적합니다.</p>
+<p>그 차이가 <code class="nb">px</code>·<code class="nb">py</code> 를 통해 상태 해시에 <b>즉시</b> 나타납니다.</p>
+</article>
+
+<article class="card" id="s19-inject-measure">
+<h3>측정 — 해시는 1틱, 화면은 400틱</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>무엇이</th><th>언제 갈렸나</th></tr>
+<tr><td>상태 해시</td><td class="num">1틱</td></tr>
+<tr><td>유닛의 타일 좌표</td><td class="num">400틱까지 한 칸도 안 갈림</td></tr>
+</table>
+</div>
+<p>첫 틱에 채집기가 대각으로 한 걸음 내딛는 순간 <code class="nb">px</code> 가 1/65536 픽셀 어긋납니다. 그런데 <b>화면에는 아무 일도 일어나지 않습니다.</b> 픽셀은 정수로 반올림되고, 타일 경계는 한참 멀리 있습니다.</p>
+<div class="key">이것이 상태 해시를 두는 이유 전부입니다. 해시가 없으면 이 버그는 <b>"어쩐지 결과가 다른 게임"</b> 으로만 나타납니다 — 몇 분 뒤, 전투 한 번의 승패가 갈린 다음에요. 그때 원인을 찾는 일은 사실상 불가능합니다.</div>
+</article>
+
+<article class="card" id="s19-honest">
+<h3>이 실험이 증명하지 않는 것</h3>
+<p class="lead">일부러 넣은 버그입니다. 덱에 그렇게 적습니다.</p>
+<p>말할 수 있는 것은 <b>"이 조건에서 이렇게 어긋났다"</b> 뿐입니다. 말할 수 없는 것은 이렇습니다.</p>
+<ul>
+<li><b>"부동소수점을 쓰면 반드시 디싱크한다"</b> — 아닙니다. 위에서 곱셈 하나는 세 언어가 비트 단위로 같은 답을 냈습니다.</li>
+<li><b>"IEEE 754 면 안전하다"</b> — 아닙니다. 같은 규격이라도 컴파일러가 곱셈 순서를 바꾸거나 확장 정밀도를 쓰면 갈립니다.</li>
+<li><b>"정수만 쓰면 안전하다"</b> — 아닙니다. 정렬 순서 하나만 달라도 갈립니다. 12부의 손으로 쓴 힙이 그 이야기입니다.</li>
+</ul>
+<p>정확히 말하면 이렇습니다 — <b>결정론은 산술의 성질이 아니라 명세의 성질입니다.</b> 실수를 쓰면 명세할 것이 늘어날 뿐입니다.</p>
+</article>
+
+<article class="card" id="s19-dos">
+<h3>도스 시절의 실제 사정</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>수단</th><th>인원</th><th>특징</th></tr>
+<tr><td>IPX/SPX (Novell)</td><td>여럿</td><td>브로드캐스트가 싸서 N 명 방송에 적합</td></tr>
+<tr><td>널모뎀 직결</td><td class="num">2</td><td>시리얼 케이블, 2·3핀 교차</td></tr>
+<tr><td>모뎀 (14.4/28.8k)</td><td class="num">2</td><td>왕복 지연 100–200 ms</td></tr>
+</table>
+</div>
+<p>18.2 Hz 틱에서 왕복 150 ms 는 <b>2.7틱</b>입니다. <code class="nb">ORDER_DELAY = 2</code> 는 그 관행을 따른 값입니다 — 지연을 더 줄이면 패킷이 제때 못 오고, 더 늘리면 클릭이 굼떠집니다.</p>
+<div class="note">IPX/SPX 가 도스 멀티플레이어의 사실상 표준이었던 것과 널모뎀 직결이 널리 쓰인 것은 확인했습니다. 다만 특정 RTS 가 어떤 모뎀 속도를 썼는지는 1차 자료로 확인하지 못했고, 위 표의 속도는 V.32bis/V.34 표준값입니다.</div>
+</article>
+
+<article class="card" id="s19-maphack">
+<h3>맵 핵이 쉬웠던 이유</h3>
+<p class="lead">도스 RTS 의 맵 핵은 놀랄 만큼 간단했습니다. 안개를 그리는 코드 한 줄만 건너뛰면 됐으니까요.</p>
+<p>이 엔진도 같습니다. <b>시뮬레이션은 안개를 무시합니다.</b> 유닛은 안개 속에서도 정상적으로 움직이고 싸웁니다. 안개는 그리기 단계에서만 적용됩니다.</p>
+<p>그럴 수밖에 없습니다. 안개를 시뮬레이션의 일부로 만들면 <b>플레이어마다 다른 상태</b>가 생기고, 그러면 락스텝의 전제(모든 기계가 같은 상태)가 무너집니다.</p>
+<div class="key">현대의 답은 <b>서버 권위</b>입니다. 서버가 각 클라이언트에게 그가 볼 수 있는 것만 보냅니다. 그러려면 서버가 있어야 하고, 대역폭이 있어야 합니다 — 1995년에는 둘 다 없었습니다.</div>
+</article>
+
+<article class="card" id="s19-demo">
+<h3>직접 해 보기 — 두 시뮬 나란히</h3>
+<div class="demo" data-demo="lockstep-two-sims">
+<h5>지연·지터를 바꿔도 결과는 같은가</h5>
+<div class="row">
+<label>지연 <input type="range" data-lat value="2" min="0" max="6" step="1"></label>
+<label>지터 <input type="range" data-jit value="0" min="0" max="4" step="1"></label>
+<label><input type="checkbox" data-bug> float bug</label>
+<button data-run>돌리기</button>
+</div>
+<div class="out"></div>
+</div>
+<p>두 캔버스가 같은 명령을 다른 지연으로 받습니다. 해시 띠가 나란히 초록이면 일치, 하나라도 붉으면 그 틱에서 갈린 것입니다. <code class="nb">float bug</code> 를 켜면 몇 틱에 갈리는지 보세요.</p>
+</article>
+
+<article class="card" id="s19-sum">
+<h3>19부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>왜 명령인가</td><td>상태 수 KB 대 명령 0바이트</td><td>28.8 kbps</td></tr>
+<tr><td>지연</td><td>ORDER_DELAY = 2 (실행 틱은 보낼 때 고정)</td><td>1500 Archers · 왕복 150 ms</td></tr>
+<tr><td>지터</td><td>도착만 늦춘다 · 앞당겨 실행하지 않는다</td><td>60틱 해시열 일치</td></tr>
+<tr><td>난수</td><td>시뮬용과 지터용을 분리</td><td>네트워크가 게임을 바꾸면 안 된다</td></tr>
+<tr><td>해시</td><td>FNV-1a · cool·timer 포함</td><td>빠지면 한 틱 늦게 잡힌다</td></tr>
+<tr><td>실수 곱셈</td><td>이 크기에서는 정수와 같다</td><td>2⁴⁴ &lt; 2⁵³ · 24쌍 확인</td></tr>
+<tr><td>실수 누적</td><td>해시 1틱 · 화면 400틱</td><td>make lockstep</td></tr>
+<tr><td>안개</td><td>그리기 단계에서만</td><td>락스텝의 전제</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s19-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">지터가 커서 상대의 턴 패킷이 실행 틱보다 늦게 도착했다. 내 시뮬은 무엇을 하는가? 그리고 <b>화면</b>은 무엇을 하는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>시뮬은 <b>멈춥니다.</b> <code class="nb">ready(exec_tick)</code> 가 거짓이면 <code class="nb">step</code> 을 부르지 않습니다. 상대의 명령 없이 한 틱이라도 진행하면 두 기계가 갈리니까요.</p>
+<p>화면은 <b>계속 그립니다.</b> 렌더는 상태를 읽기만 하므로 마지막 상태를 다시 그리면 됩니다. 플레이어에게는 "화면이 잠깐 멈춘 것"으로 보입니다 — 도스 시절 멀티플레이 RTS 의 그 특유의 뚝뚝 끊김이 정확히 이것입니다.</p>
+<p>현대의 롤백 넷코드는 반대로 합니다. <b>추측해서 진행하고</b>, 실제 입력이 오면 그 시점으로 되감아 다시 계산합니다. 격투 게임처럼 상태가 작을 때 가능한 방법이고, 유닛 200기에는 되감기 비용이 너무 큽니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s19-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">상태 해시에서 <code class="nb">px</code>·<code class="nb">py</code> 를 빼고 <code class="nb">tx</code>·<code class="nb">ty</code>(타일 좌표)만 넣으면 어떻게 되는가? 파일이 작아지니 좋은 생각 아닌가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>해시가 <b>거짓 음성</b>을 냅니다. 이번 부의 실험이 정확히 그 경우입니다 — 타일 좌표는 400틱 동안 같았고 픽셀만 달랐습니다. <code class="nb">px</code> 를 빼면 그 400틱 동안 "일치"라고 보고합니다.</p>
+<p>더 나쁜 것은 이렇습니다. 401틱째에 타일이 갈리면 그때 디싱크가 <b>처음</b> 보고됩니다. 그런데 원인은 1틱에 있습니다. 400틱치의 트레이스를 뒤져야 하고, 그 사이 다른 차이들이 파생되어 원인을 가립니다.</p>
+<p><b>해시는 작으라고 두는 것이 아니라 빨리 울리라고 두는 것입니다.</b> 상태의 모든 가변 필드를 넣는 것이 옳고, 그래서 <code class="nb">cool</code>·<code class="nb">timer</code>·생산 큐·광맥 잔량까지 넣었습니다.</p>
+</div>
+</div>
 </article>
 
 <!-- ===== 20-replay.html ===== -->
