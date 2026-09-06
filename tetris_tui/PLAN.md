@@ -267,6 +267,14 @@ English into a user-facing message; translate and condense.
 
 ## Progress log (newest first; Korean, ≤12 lines each, same shape as history.md)
 
+- 2026-09-06 17:55 — **9단계: index 카드 · README 줄 · 덱 HTML 첫 커밋**.
+  `Go_Bubble_Tea_테트리스_만들기.html` (339장 · 1,388 KB) 을 저장소 루트에 커밋.
+  `index.html` 카드와 `README.md` 줄을 같은 커밋에서 함께 갱신 —
+  숫자(339장 · 11,232줄)는 빌더 출력에서 그대로 가져왔다.
+  `make deck-check` 오류 0건: 슬라이드 수 = 카운터 = 목차 항목 339,
+  기록 4종의 전 프레임 재생 정상(1p 68칸, 나머지 72칸 × 24줄),
+  재생기 DOM 스텁 마운트 정상, 플레이스홀더 0, 터미널 캡처 16개 최대 72칸.
+
 - 2026-09-06 17:40 — **6~8단계: 기록 변환기·재생기·덱 도구·본문 10부 전부**.
   `tools/ansi2html`(ANSI→HTML, 클래스 표 + **줄 차이 저장**으로 1.49 MB → 0.49 MB) ·
   `deck/player.js`(90줄, 의존성 0, 키는 `[` `]` — ←/→ 는 덱이 쓴다) ·
