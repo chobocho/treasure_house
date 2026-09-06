@@ -64,7 +64,7 @@ func TestRunCapturesOneFrameForTheInitialStateAndEachStep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := Run("t", counter{}, steps)
+	rec := Run("t", counter{}, TickMsg{}, steps)
 	// 첫 프레임은 아무것도 누르기 전의 화면이다 — 이게 없으면 "무엇이 어떻게 바뀌었나"를 못 본다.
 	if len(rec.Frames) != len(steps)+1 {
 		t.Fatalf("프레임이 %d개다 — %d개여야 한다", len(rec.Frames), len(steps)+1)
@@ -79,7 +79,7 @@ func TestRunCapturesOneFrameForTheInitialStateAndEachStep(t *testing.T) {
 
 func TestFrameLabelsSayWhatHappened(t *testing.T) {
 	steps, _ := ParseScript("right wait 80x24")
-	rec := Run("t", counter{}, steps)
+	rec := Run("t", counter{}, TickMsg{}, steps)
 	want := []string{"시작", "right", "wait", "80x24"}
 	for i, w := range want {
 		if rec.Frames[i].Label != w {
@@ -90,7 +90,7 @@ func TestFrameLabelsSayWhatHappened(t *testing.T) {
 
 func TestResizeStepSendsWindowSize(t *testing.T) {
 	steps, _ := ParseScript("100x40")
-	rec := Run("t", counter{}, steps)
+	rec := Run("t", counter{}, TickMsg{}, steps)
 	if !strings.Contains(rec.Frames[1].Content, "size=100x40") {
 		t.Errorf("크기가 안 들어갔다: %q", rec.Frames[1].Content)
 	}
@@ -102,7 +102,7 @@ func TestEmptyScript(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := Run("t", counter{}, steps)
+	rec := Run("t", counter{}, TickMsg{}, steps)
 	if len(rec.Frames) != 1 {
 		t.Fatalf("프레임이 %d개다", len(rec.Frames))
 	}
@@ -112,8 +112,8 @@ func TestEmptyScript(t *testing.T) {
 // `make record` 뒤의 git diff 가 비어 있고, 덱의 그림이 소스와 어긋나지 않는다.
 func TestRunIsDeterministic(t *testing.T) {
 	steps, _ := ParseScript("right space left wait 80x24")
-	a, _ := json.Marshal(Run("t", counter{}, steps))
-	b, _ := json.Marshal(Run("t", counter{}, steps))
+	a, _ := json.Marshal(Run("t", counter{}, TickMsg{}, steps))
+	b, _ := json.Marshal(Run("t", counter{}, TickMsg{}, steps))
 	if string(a) != string(b) {
 		t.Error("같은 스크립트를 두 번 돌렸는데 결과가 다르다")
 	}
@@ -123,7 +123,7 @@ func TestWriteRecordingIsIndentedJSON(t *testing.T) {
 	dir := t.TempDir()
 	steps, _ := ParseScript("right")
 	path := filepath.Join(dir, "frames_t.json")
-	if err := WriteRecording(path, Run("t", counter{}, steps)); err != nil {
+	if err := WriteRecording(path, Run("t", counter{}, TickMsg{}, steps)); err != nil {
 		t.Fatalf("쓰기 실패: %v", err)
 	}
 	raw, err := os.ReadFile(path)
@@ -147,5 +147,12 @@ func TestWriteRecordingIsIndentedJSON(t *testing.T) {
 func TestLookupUnknownMode(t *testing.T) {
 	if _, ok := Lookup("없는모드"); ok {
 		t.Error("없는 모드가 조회됐다")
+	}
+	md, ok := Lookup("1p")
+	if !ok {
+		t.Fatal("1p 모드가 등록되어 있지 않다")
+	}
+	if md.New == nil || md.Tick == nil {
+		t.Error("1p 모드에 생성자나 틱 메시지가 없다")
 	}
 }
