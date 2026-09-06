@@ -77,9 +77,9 @@ parity:
 bench:
 	@mkdir -p $(OUT)
 	@{ \
-	  echo '=== python3 ==='; cd $(ROOT)/py  && $(PY) -m isorpg.main bench; \
-	  echo '=== luajit ===' ; cd $(ROOT)/lua && $(LUA) isorpg/main.lua bench; \
-	  echo '=== node ==='   ; cd $(ROOT)/ts  && $(NODE) dist/src/main.js bench; \
+	  echo '== 1. python3 =='; cd $(ROOT)/py  && $(PY) -m isorpg.main bench; \
+	  echo '== 2. luajit ==' ; cd $(ROOT)/lua && $(LUA) isorpg/main.lua bench; \
+	  echo '== 3. node =='   ; cd $(ROOT)/ts  && $(NODE) dist/src/main.js bench; \
 	} | tee $(OUT)/bench.txt
 
 frames:
