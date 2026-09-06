@@ -22,14 +22,19 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+
+	"treasure/tetris_tui/game"
 )
 
-// TickMsg 는 레코더가 스스로 만들어 넣는 시간 진행 신호다.
+// TickMsg 는 이 도구의 자체 시험용 시간 진행 신호다.
 //
-// 진짜 프로그램에서는 tea.Tick 이 만든 메시지가 이 자리에 온다. 하지만 tea.Tick 은
-// 실제로 잠을 자므로 기록에 쓸 수 없다 — 300프레임이면 30초가 걸린다.
-// 그래서 모델은 "틱 메시지의 *타입*"만 보고 판단하도록 만들어져 있고,
-// 레코더는 같은 타입을 시간 없이 즉시 밀어 넣는다.
+// 진짜 모드는 각자의 틱 메시지 타입을 갖고 있고(예: game.TickMsg),
+// 등록부가 그 값을 함께 들고 있다가 Run 에 넘긴다.
+//
+// 왜 시각을 안 담는가. tea.Tick 은 실제로 잠을 자므로 기록에 쓸 수 없다 —
+// 300프레임이면 30초가 걸리고, 무엇보다 결과가 시계에 좌우된다.
+// 그래서 모델은 틱 메시지의 *타입*만 보고 판단하도록 만들어져 있고,
+// 레코더는 같은 타입의 값을 시간 없이 즉시 밀어 넣는다.
 type TickMsg struct{}
 
 // Frame 하나 = 어떤 조작 직후의 화면 전체.
@@ -124,7 +129,7 @@ func keyMsg(name string) tea.KeyPressMsg {
 // Cmd 는 일부러 실행하지 않는다. 대부분의 Cmd 는 시간을 먹는 예약이라
 // 기록의 결정론을 깨뜨린다. 시간이 필요한 모델은 TickMsg 를 직접 받도록 만들었고,
 // 그 틱은 스크립트의 wait 가 준다.
-func Run(name string, m tea.Model, steps []Step) Recording {
+func Run(name string, m tea.Model, tick tea.Msg, steps []Step) Recording {
 	rec := Recording{Name: name, Frames: []Frame{{I: 0, Label: "시작", Content: m.View().Content}}}
 	var script []string
 	for i, st := range steps {
@@ -133,7 +138,7 @@ func Run(name string, m tea.Model, steps []Step) Recording {
 		case stepKey:
 			msg = keyMsg(st.Name)
 		case stepTick:
-			msg = TickMsg{}
+			msg = tick
 		case stepResize:
 			msg = tea.WindowSizeMsg{Width: st.W, Height: st.H}
 		}
@@ -156,11 +161,28 @@ func WriteRecording(path string, r Recording) error {
 	return os.WriteFile(path, append(raw, '\n'), 0o644)
 }
 
-// 기록할 수 있는 모드의 등록부.
-// 4~6단계에서 1인용·2인용·AI 대전 모델이 여기 등록된다.
-var registry = map[string]func() tea.Model{}
+// Mode 하나 = 기록할 수 있는 화면 하나.
+//
+// Tick 을 함께 담는 이유: 모드마다 "시간이 흘렀다"를 뜻하는 메시지 타입이 다르다.
+// 레코더가 그 타입을 알아야 wait 스텝을 그 모드가 알아듣는 신호로 바꿀 수 있다.
+type Mode struct {
+	New  func() tea.Model
+	Tick tea.Msg
+}
 
-func Lookup(name string) (func() tea.Model, bool) {
+// 기록할 수 있는 모드의 등록부. 5~6단계에서 2인용과 AI 대전이 여기 붙는다.
+//
+// 시드를 고정해 둔다. 기록은 다시 돌렸을 때 바이트까지 같아야 하는 물건이다.
+var registry = map[string]Mode{
+	"1p": {
+		New: func() tea.Model {
+			return game.New(game.WithSeed(1), game.WithoutTimer())
+		},
+		Tick: game.TickMsg{},
+	},
+}
+
+func Lookup(name string) (Mode, bool) {
 	f, ok := registry[name]
 	return f, ok
 }
@@ -185,7 +207,7 @@ func main() {
 			strings.Join(modes(), " "))
 		os.Exit(2)
 	}
-	newModel, ok := Lookup(*mode)
+	md, ok := Lookup(*mode)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "모르는 모드 %q. 등록된 모드: %s\n", *mode, strings.Join(modes(), " "))
 		os.Exit(2)
@@ -195,7 +217,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	rec := Run(*mode, newModel(), steps)
+	rec := Run(*mode, md.New(), md.Tick, steps)
 	if *out == "" {
 		*out = "out/frames_" + *mode + ".json"
 	}

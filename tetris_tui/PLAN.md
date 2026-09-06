@@ -267,6 +267,20 @@ English into a user-facing message; translate and condense.
 
 ## Progress log (newest first; Korean, ≤12 lines each, same shape as history.md)
 
+- 2026-09-06 15:35 — **4단계: ui/ · game/ 1인용 · cmd/tetris · 기록·tmux**.
+  `ui`: 키 배치를 **데이터로**(Arrows/Wasd/전역, 도움말은 바인딩에서 자동 생성),
+  두 자리 키 충돌·전역 키 충돌을 테스트로 막았다. 판은 테두리를 직접 그린다(제목 때문).
+  `game`: Model/Update/View + 함수형 옵션(WithSeed/WithoutTimer/WithKeys).
+  **터미널에는 키-업이 없다**를 두 가지로 나눠 처리했다 — 좌우는 누르자마자 놓아
+  코어 DAS 를 끄고(안 그러면 조각이 혼자 벽까지 간다), 소프트드롭은 120ms 타임아웃으로 놓는다.
+  `cmd/tetris --mode 1p --seed N`. 레코더 등록부에 1p 추가(모드마다 틱 메시지 타입이
+  달라서 `Mode{New, Tick}` 으로 바꿨다). `make record` → `out/frames_1p.json` 37장,
+  두 번 돌려 git diff 비어 있음 확인. `make tmux-smoke` → `out/tmux_1p.txt`(80×24 실제 PTY).
+  함정 하나: lipgloss 의 `Width` 는 **테두리를 포함한** 폭이다. `Width(PanelWidth-2)` 로
+  쓰면 완성품이 두 칸 좁아져 옆의 판이 밀린다.
+  계획 §5.6 의 "2인용 80×24" 는 실제 레이아웃 계산으로 대체했다(1인용 36×24, 2인용 58×24).
+  검증: `go vet` 0건 · `go test -p 1 ./...` 12패키지 통과 · gofmt 0건.
+
 - 2026-09-06 14:55 — **3단계: ai/ 이식 + ai_traces 파리티 (전 경우 일치)**.
   `weights.go`(//go:embed weights.json, 특징 이름·순서를 로드 시 검증) ·
   `features.go`(8특징) · `search.go`(1수 탐색·Pack/Unpack·Apply·Play) · `trace.go`.
