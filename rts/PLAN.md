@@ -335,3 +335,17 @@ prime 16777619.
   "1500 Archers", not Terrano. Dune II / Warcraft I tile pixel sizes could NOT be confirmed —
   do not state them as fact in part 2.
   Next: step 2 (golden generators + `golden/*` + python tests, RED).
+- 2026-09-06 06:35 — step 2 done: golden generators (`gen_maps.py`, `gen_autotile.py`,
+  `gen_circle.py`, `gen_prim.py`, `gen_script.py`) + `golden/` (prim.txt 294 lines, autotile.txt,
+  circle.txt, map_1..6, map_start, script.txt) + `out/analysis.txt` (float-only analysis the engine
+  must NOT produce). `gen_prim.py` imports nothing from the engine — it is the independent reference.
+  Verified across 6 maps × 24 pairs: Dijkstra == A* == JPS cost everywhere; HPA* measures 1.000–1.321×
+  optimal (do NOT quote the paper's "1 %"). Three SPEC bugs found while generating and fixed:
+  classic midpoint *outline* plots points outside the disc (r=2 → (2,1)) so §6.2 is now an
+  addition-only exact row-span scan; α-max-β-min needed rounding (`dab(1,0)` was 0); the Lanchester
+  loop must stop at `>= FP_ONE` or it never terminates (floor makes the decrement 0). All three are
+  deck material. Added SPEC §25 (unit/building table, tech DAG, start conditions) and §18.6
+  (scenario selector format). Scenario is **1200 ticks**, not 600 — a 47-tile diagonal takes an
+  infantryman ~500 ticks. Tests are NOT written yet: an ImportError is not RED, so per-module
+  tests are written in step 3 immediately before each module.
+  Next: step 3 (py/rts in dependency order, RED→GREEN per module, commit per 3–4 modules).
