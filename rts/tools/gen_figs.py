@@ -526,6 +526,219 @@ def fig_fog_planes():
     return sv.save('fog_planes.svg')
 
 
+# ── 16부: 란체스터 ──────────────────────────────────────────────────────────
+def fig_lanchester():
+    """제곱 법칙 — 정수 이산 시뮬과 폐형해를 나란히."""
+    import math
+    a0, b0, al, be = 50, 40, 1311, 1311      # 골든 11절의 여섯째 줄
+    a, b = F.fp(a0), F.fp(b0)
+    ha, hb = [a], [b]
+    while a >= F.FP_ONE and b >= F.FP_ONE and len(ha) < 200:
+        da, db = F.fp_mul(be, b), F.fp_mul(al, a)
+        a = max(0, a - da)
+        b = max(0, b - db)
+        ha.append(a)
+        hb.append(b)
+    n = len(ha) - 1
+    sv = Svg(660, 300, '란체스터 제곱 법칙 — 50 대 40')
+    x0, y0, w, h = 60, 40, 480, 190
+    top = F.fp(a0)
+
+    def px(k):
+        return x0 + w * k // max(n, 1)
+
+    def py(v):
+        return y0 + h - h * v // top
+
+    for series, cls in ((ha, 'ax'), (hb, 'gd')):
+        d = 'M%g %g' % (px(0), py(series[0]))
+        for k in range(1, len(series)):
+            d += ' L%g %g' % (px(k), py(series[k]))
+        sv.path(d, cls)
+    # 폐형해 (실수 — 도구는 실수를 써도 된다)
+    alf, bef = al / 65536.0, be / 65536.0
+    inv = alf * a0 * a0 - bef * b0 * b0
+    tstar = (1.0 / (2 * math.sqrt(alf * bef))) * math.log(
+        (math.sqrt(alf) * a0 + math.sqrt(bef) * b0)
+        / (math.sqrt(alf) * a0 - math.sqrt(bef) * b0))
+    sv.line(px(0), py(F.fp(int(math.sqrt(inv / alf)))),
+            px(n), py(F.fp(int(math.sqrt(inv / alf)))))
+    sv.text(px(n) + 6, py(F.fp(int(math.sqrt(inv / alf)))) + 4,
+            '√(αA₀²−βB₀²)/α = %.1f' % math.sqrt(inv / alf), 'lbl', 'start')
+    sv.text(x0, 24, '굵은 선 A(50기) · 가는 선 B(40기) · α = β · 가로는 틱',
+            None, 'start')
+    sv.text(x0, y0 + h + 26,
+            '이산 시뮬은 %d틱에 B 를 0 으로 만들었고 폐형해는 %.1f틱을 준다 — '
+            '부대가 작을수록 이산성이 지배한다' % (n, tstar), 'lbl', 'start')
+    sv.text(x0, y0 + h + 44,
+            'α·A² − β·B² 는 불변이다(정리 15.3). 그래서 수가 2배면 전투력이 4배다.',
+            'lbl', 'start')
+    for k in range(0, n + 1, max(1, n // 8)):
+        sv.text(px(k), y0 + h + 12, '%d' % k, 'lbl')
+    return sv.save('lanchester.svg')
+
+
+# ── 17부: 수입률 ────────────────────────────────────────────────────────────
+def fig_income_rate():
+    """정리 16.1 — 왕복 거리가 늘면 수입은 이렇게 준다."""
+    from rts import econ as E
+    v = C.SPEED[C.HARV] // C.TILE
+    xs = list(range(0, 33))
+    ys = [E.income10000(d, v) for d in xs]
+    sv = Svg(660, 300, '채집 수입률 — 정리 16.1')
+    x0, y0, w, h = 60, 40, 480, 190
+    top = ys[0]
+
+    def px(k):
+        return x0 + w * k // xs[-1]
+
+    def py(val):
+        return y0 + h - h * val // top
+
+    d = 'M%g %g' % (px(0), py(ys[0]))
+    for k in range(1, len(ys)):
+        d += ' L%g %g' % (px(xs[k]), py(ys[k]))
+    sv.path(d)
+    for k in (0, 4, 8, 16, 32):
+        sv.circle(px(k), py(ys[k]), 4, 'tl hot')
+        sv.text(px(k), py(ys[k]) - 10, '%d.%02d' % (ys[k] // 10000,
+                                                    ys[k] % 10000 // 100), 'lbl')
+        sv.text(px(k), y0 + h + 14, '%d' % k, 'lbl')
+    sv.text(x0, 24, '가로: 왕복 타일 · 세로: 크레딧/틱 (채집기 속도 1.2 px/틱)',
+            None, 'start')
+    sv.text(x0, y0 + h + 38,
+            'rate = 적재 / (2·d/v + 적재/채굴속도 + 반납틱) — '
+            '분모의 세 항이 왕복·채굴·반납이다', 'lbl', 'start')
+    sv.text(x0, y0 + h + 56,
+            'd = 0 이어도 100/(20+12) = 3.125 를 넘지 못한다. '
+            '정제소를 광맥에 붙여도 상한이 있다.', 'lbl', 'start')
+    sv.text(x0, y0 + h + 74,
+            '1200틱 시나리오의 실측은 3333/10000 — 차이는 채집기끼리의 길막이다.',
+            'lbl', 'start')
+    return sv.save('income_rate.svg')
+
+
+# ── 22부: PIT 분주값 오차 ───────────────────────────────────────────────────
+def fig_pit_divisor():
+    """정수 분주값이 만드는 음정 오차 — 센트."""
+    import math
+    from rts import speaker as SK
+    sv = Svg(700, 280, 'PIT 분주값의 음정 오차 (센트)')
+    x0, y0, h = 50, 40, 170
+    mid = y0 + h // 2
+    bw = 600 // len(SK.NOTE_HZ)
+    worst, worst_note = 0.0, ''
+    for k, f in enumerate(SK.NOTE_HZ):
+        act = SK.actual100(f) / 100.0
+        cents = 1200 * math.log(act / f) / math.log(2)
+        if abs(cents) > abs(worst):
+            worst, worst_note = cents, SK.NOTE_NAME[k]
+        bh = int(cents * (h // 2) / 6.0)
+        sv.rect(x0 + k * bw, mid if bh >= 0 else mid + bh, bw - 3,
+                abs(bh) if bh else 1, 'tl hot' if cents < 0 else 'tl on')
+        if k % 2 == 0:
+            sv.text(x0 + k * bw + bw / 2, mid + h // 2 + 16,
+                    SK.NOTE_NAME[k], 'lbl')
+    sv.line(x0 - 8, mid, x0 + len(SK.NOTE_HZ) * bw + 8, mid)
+    sv.text(x0, 24, '분주값 = round(1193182 / f) 이므로 실제 음은 목표에서 조금 벗어난다',
+            None, 'start')
+    sv.text(x0, mid + h // 2 + 40,
+            '최악 %s %+.1f센트 — 사람이 겨우 구별하는 한계가 5센트 근처다'
+            % (worst_note, worst), 'lbl', 'start')
+    sv.text(x0, mid + h // 2 + 58,
+            '센트는 로그가 필요해 엔진이 아니라 도구가 계산한다. '
+            '엔진은 분주값과 몫·나머지만 낸다.', 'lbl', 'start')
+    sv.text(x0, mid + h // 2 + 76, '눈금 한 칸 = 6센트', 'lbl', 'start')
+    return sv.save('pit_divisor.svg')
+
+
+# ── 5부: 미니맵 축소 ────────────────────────────────────────────────────────
+def fig_minimap_scale():
+    """최근접과 다수결 — 128 맵을 64 픽셀에 넣을 때 갈리는 지점."""
+    from rts import render as RD
+    m = T.TMap.load_text(io.open(os.path.join(BASE, 'golden', 'map_start.txt'),
+                                 encoding='utf-8').read())
+    cell = 5
+    sv = Svg(2 * (C.MINI_W * cell + 30) + 240, C.MINI_H * cell + 70,
+             '미니맵 축소 — 최근접 대 다수결')
+    for pane, fn in enumerate((RD.minimap_nearest, RD.minimap_majority)):
+        ox = 20 + pane * (C.MINI_W * cell + 30)
+        sv.text(ox + C.MINI_W * cell / 2, 22,
+                ['최근접(한 점만 본다)', '다수결(블록 전체를 센다)'][pane], 'lbl')
+        for sy in range(C.MINI_H):
+            for sx in range(C.MINI_W):
+                t = fn(m, sx, sy)
+                cls = {T.WATER: 'tl cool', T.ROCK: 'tl dim', T.ORE: 'tl hot',
+                       T.HILL: 'tl dim'}.get(t, 'tl on')
+                sv.rect(ox + sx * cell, 30 + sy * cell, cell, cell, cls)
+    tx = 20 + 2 * (C.MINI_W * cell + 30)
+    sv.text(tx, 46, '이 맵은 64×64 이고 미니맵도 64×64 다.', 'lbl', 'start')
+    sv.text(tx, 62, '한 타일이 한 픽셀이므로 두 방식이 같다.', 'lbl', 'start')
+    sv.text(tx, 86, '맵이 128 이 되면 갈린다 — 최근접은', 'lbl', 'start')
+    sv.text(tx, 102, '가느다란 길을 통째로 놓치고,', 'lbl', 'start')
+    sv.text(tx, 118, '다수결은 놓치지 않는 대신 네 배 느리다.', 'lbl', 'start')
+    sv.text(tx, 142, '축소 코드를 미리 갖춰 두는 이유다.', 'lbl', 'start')
+    return sv.save('minimap_scale.svg')
+
+
+# ── 8부: 5방향으로 8방향 ────────────────────────────────────────────────────
+def fig_sprite_mirror():
+    """그린 것은 다섯 방향뿐 — 나머지 셋은 좌우 반전이다."""
+    sv = Svg(660, 250, '5장으로 8방향 — 좌우 반전')
+    r = 74
+    cx, cy = 200, 130
+    for d in range(8):
+        x = cx + F.DX[d] * r
+        y = cy + F.DY[d] * r
+        drawn = d <= 4
+        sv.rect(x - 20, y - 20, 40, 40, 'tl on' if drawn else 'tl cool')
+        sv.text(x, y - 2, F.DNAME[d], 'lbl')
+        sv.text(x, y + 12, '그림 %d' % (d if drawn else 8 - d), 'lbl')
+    sv.circle(cx, cy, 14, 'tl hot')
+    sv.text(cx, cy + 4, '유닛', 'lbl')
+    tx = 360
+    sv.text(tx, 44, '노랑 = 실제로 그린 다섯 장 (N NE E SE S)', 'lbl', 'start')
+    sv.text(tx, 62, '파랑 = 반전으로 얻는 세 장 (SW W NW)', 'lbl', 'start')
+    sv.text(tx, 90, '메모리와 아티스트 시간을 동시에 아끼는', 'lbl', 'start')
+    sv.text(tx, 106, '도스 시절의 표준 요령이다.', 'lbl', 'start')
+    sv.text(tx, 134, '반전은 블릿 안에서 런의 순서와', 'lbl', 'start')
+    sv.text(tx, 150, '런 안의 픽셀 순서를 뒤집어 처리한다 —', 'lbl', 'start')
+    sv.text(tx, 166, '별도의 스프라이트를 만들지 않는다.', 'lbl', 'start')
+    sv.text(tx, 194, '상자 안에서 뒤집으므로 기준점이 1px 옮겨진다.', 'lbl', 'start')
+    sv.text(tx, 210, '세 언어가 같은 자리에 그리는 것이 그보다 중요하다.',
+            'lbl', 'start')
+    return sv.save('sprite_mirror.svg')
+
+
+# ── 19부: 상태 해시 바이트열 ────────────────────────────────────────────────
+def fig_hash_bytes():
+    """해시에 무엇이 어떤 순서로 들어가는가 (§18.4)."""
+    sv = Svg(660, 300, '상태 해시의 바이트열 — 순서가 명세다')
+    rows = [('틱', 4), ('rng 상태', 4), ('플레이어×4: 크레딧', 4),
+            ('  인구 사용', 2), ('  인구 상한', 2), ('엔티티 i: alive', 1),
+            ('  owner kind tx ty', 4), ('  hp', 2), ('  dir state', 2),
+            ('  px py', 8), ('  target load', 4), ('  prog', 4),
+            ('  from_t to_t', 4), ('  cool timer', 4),
+            ('투사체: 개수 + 항목들', 2), ('생산 큐', 1), ('광맥 잔량', 4),
+            ('map_hash', 4)]
+    y = 44
+    for name, nbytes in rows:
+        hot = name.strip().startswith('cool')
+        sv.rect(300, y - 11, min(nbytes * 22, 200), 15,
+                'tl hot' if hot else 'tl on')
+        sv.text(296, y, name, 'lbl', 'end')
+        sv.text(300 + min(nbytes * 22, 200) + 8, y, '%d바이트' % nbytes,
+                'lbl', 'start')
+        y += 14
+    sv.text(20, 24, 'FNV-1a 32비트에 이 순서로 흘려 넣는다', None, 'start')
+    sv.text(20, y + 8,
+            '주황: cool·timer 를 빠뜨리면 재장전이 한 틱 어긋나도 해시가 같다.',
+            'lbl', 'start')
+    sv.text(20, y + 24,
+            '그러면 디싱크가 첫 발이 어긋난 다음 틱에야 잡힌다.', 'lbl', 'start')
+    return sv.save('hash_bytes.svg')
+
+
 def main():
     if not os.path.isdir(FIGS):
         os.makedirs(FIGS)
@@ -533,7 +746,9 @@ def main():
             fig_circle_counterexample(), fig_metrics_error(), fig_hpa_clusters(),
             fig_jps_prune(), fig_flow_field(), fig_clearance(),
             fig_reservation(), fig_damage_dist(), fig_tech_tree(),
-            fig_fog_planes(), fig_parabola(), fig_lockstep()]
+            fig_fog_planes(), fig_parabola(), fig_lanchester(),
+            fig_income_rate(), fig_pit_divisor(), fig_minimap_scale(),
+            fig_sprite_mirror(), fig_hash_bytes(), fig_lockstep()]
     for n in made:
         print('  deck/figs/%s' % n)
     print('도해 %d장' % len(made))
