@@ -231,3 +231,4 @@ Doom 16.16 fixed point (`FRACBITS 16`).
 (append below: `- YYYY-MM-DD HH:MM — step N: what, commit hash`)
 - 2026-09-06 00:44 — plan approved by the user as written (LÖVE screenshot limitation accepted, deck name and isorpg/ dir confirmed). Next: step 1 (SPEC.md + claims.md).
 - 2026-09-06 00:57 — step 1: SPEC.md(14장, 정리 3.1~8.4) + deck/claims.md(32건 검증) + 툴체인 복사(build_deck/verify_deck/chunks/ppm2png/check_figs/check_demos)
+- 2026-09-06 01:13 — step 2: 골든 벡터(prim 208줄·pick_mask·palette 256색·tiles.rle 48스프라이트·sortcase 6·script 204틱) + 파이썬 테스트 12종 RED. CORDIC 은 N=20/GUARD=8 로 오차 ±1 실측
