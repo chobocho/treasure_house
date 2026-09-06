@@ -543,11 +543,12 @@ height_of_value(v):
 ```
 TOWN_X0=18 TOWN_Y0=18 TOWN_X1=30 TOWN_Y1=30      # 반개구간
 
+TOWN_H = 2 ; TOWN_WALL_H = 4        # 성벽은 두 단계 높다 — 그래야 옆면이 보인다
 for ty in [TOWN_Y0, TOWN_Y1): for tx in [TOWN_X0, TOWN_X1):
-    height = 2
-    terrain = WALL   if tx in {TOWN_X0, TOWN_X1-1} or ty in {TOWN_Y0, TOWN_Y1-1}
-            else ROAD if tx == 24 or ty == 24
-            else FLOOR
+    tx in {TOWN_X0, TOWN_X1-1} or ty in {TOWN_Y0, TOWN_Y1-1}
+        -> (WALL, TOWN_WALL_H)
+    tx == 24 or ty == 24  -> (ROAD,  TOWN_H)
+    그 밖                 -> (FLOOR, TOWN_H)
 문(門): (24, TOWN_Y0), (24, TOWN_Y1-1), (TOWN_X0, 24), (TOWN_X1-1, 24) 는 ROAD 로 되돌린다.
 길: tx = 24, ty in [0, TOWN_Y0) 와 ty in [TOWN_Y1, MAP_H) 는 ROAD, height = 2 로 평탄화.
 ```
@@ -896,7 +897,7 @@ visible(src, dst):
 light_of(tile):
     bit1 (지금 보임): 
         d = oct_dist((tx-px)*256, (ty-py)*256)
-        return clamp(15 - floordiv(10 * d, SIGHT_R * 256), 5, 15)
+        return clamp(15 - floordiv(8 * d, SIGHT_R * 256), 7, 15)
     bit0 만 (기억):  return 4
     아무것도 아님:   return 0
 ```
@@ -1002,6 +1003,10 @@ kind: 0 = 플레이어, 1 = 몬스터, 2 = 상자, 3 = NPC
 
 ```
 플레이어: 타일 (24, 34), 즉 fx = fp(24) + 32768, fy = fp(34) + 32768   (타일 중앙)
+          hp = maxhp = 60, atk = 4, def = 3, armor = 2, lv = 1
+몬스터 k번(0부터): hp = maxhp = 8 + k, atk = 1, def = 0, armor = 0
+GAME_SEED = 20260906, SPEED = 13107, MON_SPEED = 9830, AGGRO_R = 7,
+ATTACK_EVERY = 12, PATH_EVERY = 8
 몬스터 6마리: (20,20) (28,21) (21,28) (27,27) (24,14) (24,40) 순서대로 id 1..6
 상자 3개: (22,22) (26,26) (24,20)
 NPC 2명: (23,25) (25,23)
@@ -1044,8 +1049,12 @@ mark <label>           트레이스에 표식만 남긴다 (틱 소비 없음)
 ```
 {"t":<tick>,"px":<fx>,"py":<fy>,"ph":<h>,"hp":<hp>,"lv":<lv>,"xp":<xp>,
  "rng":<rng 상태>,"cam":[<camX>,<camY>],"seen":<bit0 세워진 타일 수>,
- "vis":<bit1 세워진 타일 수>,"cyc":<누적 cycle_breaks>,"crc":<지금 세이브의 crc16>}
+ "vis":<bit1 세워진 타일 수>,"mon":<살아 있는 몬스터 수>,"crc":<세이브 끝의 crc16>}
 ```
+
+`crc` 는 `pack_state` 가 끝에 붙여 둔 두 바이트를 그대로 읽은 값이다.
+세이브 전체를 다시 `crc16` 하면 언제나 0이 나온다 — CCITT-FALSE 의 성질이라
+값으로 쓸 수 없다. 이 함정은 덱 13부에서 따로 보인다.
 
 (실제 출력은 한 줄이며 줄바꿈이 없다.) `mark` 는 별도 줄
 `{"mark":"<label>","t":<tick>}` 을 낸다.

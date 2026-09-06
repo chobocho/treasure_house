@@ -30,12 +30,25 @@ H.check('재현성', G.run_script_trace(), got)
 import json                                                    # noqa: E402
 ticks = [json.loads(l) for l in gl if l.startswith('{"t"')]
 marks = [json.loads(l) for l in gl if l.startswith('{"mark"')]
-H.check('표식 개수', len(marks), 12)
-H.check_true('204틱', len(ticks) == 204)
+H.check('표식 개수', len(marks), 11)
+H.check_true('222줄의 틱 (되돌린 뒤 다시 진행한 몫 포함)', len(ticks) == 222)
+H.check_true('몬스터가 줄었다', ticks[-1]['mon'] < ticks[0]['mon'])
+H.check_true('레벨이 올랐다', ticks[-1]['lv'] > ticks[0]['lv'])
+H.check_true('되돌리기가 실제로 시간을 되돌렸다',
+             any(ticks[i + 1]['t'] < ticks[i]['t'] for i in range(len(ticks) - 1)))
 H.check_true('플레이어가 움직였다', ticks[0]['px'] != ticks[-1]['px']
              or ticks[0]['py'] != ticks[-1]['py'])
 H.check_true('본 칸이 늘었다', ticks[-1]['seen'] > ticks[0]['seen'])
-H.check_true('부동소수점 표기가 없다', all(('.' not in l and 'e' not in l.split('"cam"')[0])
-                                          for l in gl))
+# 숫자 자리에 부동소수점 표기가 섞이면 언어마다 자릿수가 달라져 파리티가 깨진다.
+import re                                                      # noqa: E402
+numpat = re.compile(r'-?\d+$')
+bad = 0
+for l in gl:
+    if not l.startswith('{"t"'):
+        continue
+    for tok in re.findall(r':\s*(-?[\d.eE+]+)', l):
+        if not numpat.match(tok):
+            bad += 1
+H.check('정수가 아닌 숫자 토큰', bad, 0)
 
 H.done()

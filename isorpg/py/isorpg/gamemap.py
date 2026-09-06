@@ -194,6 +194,7 @@ def height_of_value(v):
 TOWN_X0, TOWN_Y0, TOWN_X1, TOWN_Y1 = 18, 18, 30, 30
 TOWN_MID = 24
 TOWN_H = 2
+TOWN_WALL_H = 4         # 성벽은 바닥보다 두 단계 높다 — 그래야 옆면이 보인다
 
 
 def stamp_town(m):
@@ -201,11 +202,9 @@ def stamp_town(m):
     for ty in range(TOWN_Y0, TOWN_Y1):
         for tx in range(TOWN_X0, TOWN_X1):
             if tx in (TOWN_X0, TOWN_X1 - 1) or ty in (TOWN_Y0, TOWN_Y1 - 1):
-                t = T_WALL
-            elif tx == TOWN_MID or ty == TOWN_MID:
-                t = T_ROAD
-            else:
-                t = T_FLOOR
+                m.put(tx, ty, make_cell(T_WALL, TOWN_WALL_H))
+                continue
+            t = T_ROAD if (tx == TOWN_MID or ty == TOWN_MID) else T_FLOOR
             m.put(tx, ty, make_cell(t, TOWN_H))
     for tx, ty in ((TOWN_MID, TOWN_Y0), (TOWN_MID, TOWN_Y1 - 1),
                    (TOWN_X0, TOWN_MID), (TOWN_X1 - 1, TOWN_MID)):

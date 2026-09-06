@@ -5,6 +5,8 @@
    차지하는 물체다. '뒤에 있다' 는 관계가 반대칭이 아니라서, 순진하게
    비교 정렬을 돌리면 비교 함수가 모순을 일으킨다. 그래서 위상 정렬을 쓴다.
 """
+import heapq
+
 from .proj import HH, HW, TZ
 
 # 상자 = (id, x0, y0, z0, x1, y1, z1). 전부 반개구간 [a, b).
@@ -56,38 +58,58 @@ def depth_key(b):
 def topo_sort(items):
     """칸 알고리즘. 순환이 남으면 depth_key 가 가장 작은 것을 강제로 뽑는다.
 
-       O(n^2) 로 간선을 만든다. 한 화면의 물체는 수십 개라 그게 가장 싸다.
-       (n 이 커지면 화면 격자로 나눠 이웃만 비교해야 한다 — 덱 7부에서 다룬다.)
+       간선은 화면 x 로 훑으며 만든다(쓸어내기). 정렬 자체는 O((V+E) log V).
+       우선순위 큐의 키에 id 가 들어 있어 동점이 없다. 그래서 어떤 힙 구현을 써도
+       결과가 같다 — 세 언어가 각자의 힙을 써도 되는 이유다.
        반환: (id 순서, 순환을 자른 횟수)
     """
     n = len(items)
     bb = [box_bbox(b) for b in items]
     adj = [[] for _ in range(n)]
     indeg = [0] * n
-    for i in range(n):
-        for j in range(n):
-            if i == j or not bbox_overlap(bb[i], bb[j]):
+    # 화면 x 로 훑는 쓸어내기. 모든 쌍을 보면 O(n^2) 인데, 한 화면에 상자가
+    # 600개쯤 되면 18만 번이다. x 구간이 겹치는 것끼리만 보면 그 4분의 1로 준다.
+    idx = sorted(range(n), key=lambda i: (bb[i][0], i))
+    for a in range(n):
+        i = idx[a]
+        bi = bb[i]
+        ii = items[i]
+        ri = bi[2]
+        for b in range(a + 1, n):
+            j = idx[b]
+            bj = bb[j]
+            if bj[0] >= ri:
+                break                      # 이후는 전부 오른쪽 — 더 볼 필요가 없다
+            if bi[3] <= bj[1] or bj[3] <= bi[1]:
                 continue
+            jj = items[j]
+            aij = behind(ii, jj)
+            aji = behind(jj, ii)
             # 양쪽 다 참이면 순서가 무의미하다 — 간선을 걸지 않는다 (보조정리 6.2)
-            if behind(items[i], items[j]) and not behind(items[j], items[i]):
+            if aij and not aji:
                 adj[i].append(j)
                 indeg[j] += 1
+            elif aji and not aij:
+                adj[j].append(i)
+                indeg[i] += 1
+    heap = []
+    for i in range(n):
+        if indeg[i] == 0:
+            heapq.heappush(heap, (depth_key(items[i]), i))
     done = [False] * n
     order = []
     breaks = 0
-    while len(order) < n:
-        pick = -1
-        best = None
-        for i in range(n):
-            if done[i] or indeg[i] != 0:
+    left = n
+    while left > 0:
+        if heap:
+            _k, pick = heapq.heappop(heap)
+            if done[pick]:
                 continue
-            k = depth_key(items[i])
-            if best is None or k < best:
-                best = k
-                pick = i
-        if pick < 0:
-            # 순환이다. 가장 뒤에 있어야 할 것을 강제로 방출하고 진입간선을 끊는다.
+        else:
+            # 순환이다. 남은 것 중 가장 뒤에 있어야 할 것을 강제로 방출한다.
             breaks += 1
+            pick = -1
+            best = None
             for i in range(n):
                 if done[i]:
                     continue
@@ -100,8 +122,11 @@ def topo_sort(items):
                     adj[i].remove(pick)
                     indeg[pick] -= 1
         done[pick] = True
+        left -= 1
         order.append(items[pick][I_ID])
         for j in adj[pick]:
             indeg[j] -= 1
+            if indeg[j] == 0 and not done[j]:
+                heapq.heappush(heap, (depth_key(items[j]), j))
         adj[pick] = []
     return (order, breaks)

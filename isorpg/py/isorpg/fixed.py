@@ -153,6 +153,31 @@ def _build_trig():
 COS, SIN = _build_trig()
 
 
+def _nib_table():
+    t = [0] * 256
+    for a in range(16):
+        for b in range(16):
+            r = 0
+            p = 1
+            x, y = a, b
+            for _ in range(4):
+                if x % 2 != y % 2:
+                    r += p
+                x //= 2
+                y //= 2
+                p *= 2
+            t[a * 16 + b] = r
+    return t
+
+
+NIB_XOR = _nib_table()
+
+
+def xor8(a, b):
+    """8비트 배타적 논리합. 니블 표 두 번이면 끝난다 — 256칸짜리 표 하나로 족하다."""
+    return NIB_XOR[(a // 16) * 16 + (b // 16)] * 16 + NIB_XOR[(a % 16) * 16 + (b % 16)]
+
+
 def xor16(a, b):
     """표 없이 만든 16비트 배타적 논리합.
 
