@@ -209,3 +209,28 @@ def atan8(dx, dy):
     if diag:
         return 3 if dx > 0 else 5
     return 4
+
+
+# ── SPEC §20.1 CRC-16/CCITT-FALSE ───────────────────────────────────────────
+# 여기 있는 이유: tmap(맵 파일)과 replay(리플레이 꼬리)가 둘 다 쓰는데,
+# fixed 는 아무것도 참조하지 않으므로 순환이 생기지 않는다.
+def xor16(a, b):
+    """16비트 XOR — 바이트 두 번으로 나눠 xor8 을 쓴다."""
+    return xor8(a // 256, b // 256) * 256 + xor8(a % 256, b % 256)
+
+
+def crc16(data):
+    """poly 0x1021, init 0xFFFF, 반사 없음. crc16(b'123456789') == 0x29B1.
+
+       `c >= 32768` 이 "최상위 비트가 1"과 같다. 이것이 GF(2) 위의 다항식
+       나눗셈이며, 곱셈 2 가 다항식의 x 곱이다.
+    """
+    c = 65535
+    for b in bytearray(data):
+        c = xor16(c, b * 256)
+        for _ in range(8):
+            if c >= 32768:
+                c = xor16((c * 2) % 65536, 0x1021)
+            else:
+                c = (c * 2) % 65536
+    return c
