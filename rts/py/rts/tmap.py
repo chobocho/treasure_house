@@ -101,6 +101,21 @@ class TMap(object):
         self.pass_[i] = (F.setbit(self.pass_[i], OCC_BIT) if on
                          else F.clrbit(self.pass_[i], OCC_BIT))
 
+    def set_building(self, x, y, on):
+        """건물이 선 칸 — 통행 비트를 내리고 점유 비트를 세운다 (SPEC §4.3).
+
+           유닛과 달리 건물은 비키지 않는다. 예약(§13.2)만으로 막으면 유닛이
+           건물을 향해 24틱을 두드리다 포기하므로, 경로 그래프에서 아예 뺀다.
+           `version` 이 오르니 경로 캐시와 연결 성분이 함께 무효가 된다.
+        """
+        i = y * self.w + x
+        if on:
+            self.pass_[i] = 8                      # 점유 비트만 남긴다
+        else:
+            self._repass(i)
+            self.pass_[i] = F.clrbit(self.pass_[i], OCC_BIT)
+        self._bump()
+
     def walkable(self, x, y, kind):
         if not self.in_map(x, y):
             return False

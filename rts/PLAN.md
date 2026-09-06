@@ -361,3 +361,14 @@ prime 16777619.
   golden ones. HPA* measures 1.000–1.321× optimal (mean 1.082).
   Next: `flow` → `move` → `fog` → `combat` → `econ` → `ai` → `select` → `sim` → `net` → `replay`
   → `speaker` → `raster` → `render` → `main`.
+- 2026-09-06 07:30 — step 3 계속: `const`, `flow`, `move`, `fog` 넷 추가, 각각 RED 확인 후 GREEN.
+  누적 356 checks / 0 failures (const 22 · flow 26 · move 64 · fog 35 포함). SPEC 선행 수정:
+  §11.1 INF=65535 고정 + 막힌 목표는 무시, §11.2 INF 칸도 후보에서 제외, §11.3 맵 밖은 0,
+  §11.4 **맵 밖은 막힌 칸**(가장자리 fire=10)이고 확장은 통행 가능 칸으로만, §13.2 STOP 은
+  걷던 걸음을 마친 뒤 멈춘다, §13.5 LINE/COLUMN/BOX 슬롯 공식과 접기 규칙, §25.1 이동 종류
+  (TANK·HARV 만 차량), §0·§25 는 `const` 모듈이 소유(§26 파일 목록에 추가).
+  §4.3 에 **건물은 통행 비트를 내린다**(`tmap.set_building`)를 못 박았다 — 예약만으로 막으면
+  유닛이 건물을 향해 24틱을 두드리다 포기한다. `test_const` 는 SPEC.md 의 마크다운 표를 직접
+  파싱해 대조한다(손으로 옮긴 숫자는 반드시 한 자리가 틀린다). 좁은 통로 정면 교착은 45틱에
+  포기로 풀리는 것을 트레이스로 확인 — 해결이 아니라 포기이며 14부에 그렇게 적는다.
+  Next: `combat` → `econ` → `ai` → `select` → `sim`.

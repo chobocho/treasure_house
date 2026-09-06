@@ -24,7 +24,7 @@ NODE    := node
 TSC     := $(ROOT)/ts/node_modules/.bin/tsc
 
 # 모듈 순서는 SPEC.md 의 절 순서와 같다 — 의존 방향이기도 하다.
-PYTESTS := test_fixed test_rng test_tmap test_mapgen test_circle test_spatial \
+PYTESTS := test_const test_fixed test_rng test_tmap test_mapgen test_circle test_spatial \
            test_select test_path test_hpa test_jps test_flow test_move \
            test_fog test_combat test_econ test_ai test_sim test_net \
            test_replay test_speaker test_raster test_render test_prim test_trace

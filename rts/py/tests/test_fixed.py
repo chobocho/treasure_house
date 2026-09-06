@@ -121,4 +121,12 @@ for d in range(8):
 H.check('여덟 방향의 대표 벡터가 자기 번호로 돌아온다', bad, 0)
 H.note('경계각 tan22.5 ~ 5/12: (12,5)는 대각, (12,4)는 직각 방향')
 
+# ── fixed 와 const 에 두 번 적힌 값은 서로 같아야 한다 (SPEC §0) ────────────
+from rts import const as C                                        # noqa: E402
+H.check('fixed 와 const 의 §0 값이 일치',
+        [F.FP_BITS, F.FP_ONE, F.FP_HALF, F.FP_DIAG, F.FP_SQRT2M1,
+         F.D_STRAIGHT, F.D_DIAG],
+        [C.FP_BITS, C.FP_ONE, C.FP_HALF, C.FP_DIAG, C.FP_SQRT2M1,
+         C.D_STRAIGHT, C.D_DIAG])
+
 H.done()
