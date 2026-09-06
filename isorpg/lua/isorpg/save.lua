@@ -208,6 +208,9 @@ function M.unpack_state(data, g)
       p = p * 4
     end
   end
+  -- 비트만 되돌리고 누적 개수를 그대로 두면, 되돌린 뒤의 트레이스가
+  -- 복원된 상태의 함수가 아니게 된다. 개수는 비트에서 다시 센다.
+  g.fog:recount()
   return g
 end
 

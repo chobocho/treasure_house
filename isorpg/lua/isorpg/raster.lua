@@ -229,7 +229,11 @@ function Frame:blit_rle(spr, x, y, level)
           local b = px + count
           if b > SCR_W then b = SCR_W end
           if a < b then
-            local v = light and light[lbase + color + 1] or color
+            -- 루아에서는 0 도 참이라 `light and light[..] or color` 도 사실 옳지만,
+            -- 표에서 꺼낸 색이 0(검정)일 때 무너지지 않는 이유를 읽는 사람이
+            -- 따져 봐야 한다. 조건문으로 또박또박 쓰는 편이 낫다.
+            local v
+            if light then v = light[lbase + color + 1] else v = color end
             for i = base + a + 1, base + b do fb[i] = v end
           end
         end

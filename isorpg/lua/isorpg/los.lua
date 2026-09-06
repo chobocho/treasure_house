@@ -95,6 +95,21 @@ function Fog:count_visible()
   return self.n_vis
 end
 
+-- 비트에서 누적 개수를 다시 센다. 세이브를 되돌린 직후에 부른다.
+-- 개수는 세이브에 넣지 않는다 — 비트에서 유도되는 값이라 넣으면 같은 사실이
+-- 두 곳에 적히고, 둘이 어긋나면 어느 쪽이 옳은지 알 수 없다.
+function Fog:recount()
+  local seen, vis = 0, 0
+  local bits = self.bits
+  for i = 1, self.w * self.h do
+    local v = bits[i]
+    if v - 2 * floor(v / 2) == 1 then seen = seen + 1 end
+    if floor(v / 2) - 2 * floor(v / 4) == 1 then vis = vis + 1 end
+  end
+  self.n_seen = seen
+  self.n_vis = vis
+end
+
 -- 지금 보이는 칸을 다시 세운다. 기억(bit0)은 지우지 않는다.
 function Fog:update(m, px, py)
   local bits = self.bits

@@ -107,7 +107,7 @@ export interface SaveGame {
   camX: number;
   camY: number;
   ents: SaveEntity[];
-  fog: { bits: Uint8Array };
+  fog: { bits: Uint8Array; recount(): void };
 }
 
 /** 게임 상태를 바이트열로. 끝에 CRC 2바이트가 붙는다. */
@@ -199,5 +199,8 @@ export function unpackState(data: Uint8Array, g: SaveGame): SaveGame {
       p *= 4;
     }
   }
+  // 비트만 되돌리고 누적 개수를 그대로 두면, 되돌린 뒤의 트레이스가
+  // 복원된 상태의 함수가 아니게 된다. 개수는 비트에서 다시 센다.
+  g.fog.recount();
   return g;
 }

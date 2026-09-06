@@ -1,0 +1,209 @@
+<article class="card section" id="s7">
+<p class="chnum">7부</p>
+<h2>그리기 순서</h2>
+<p class="chsub">뒤에 있는 것부터 그린다 — 그런데 '뒤'가 부분순서일 뿐이고,<br>그 부분순서에는 순환이 생긴다</p>
+</article>
+
+<article class="card" id="s7-painter">
+<h3>화가 알고리즘</h3>
+<p class="lead">z 버퍼가 없던 시절의 답은 단순했습니다. <b>뒤에 있는 것부터 순서대로 덮어 그린다.</b> 화가가 배경부터 칠하듯이.</p>
+<p>바닥 타일에 대해서는 이것이 완벽하게 작동합니다.</p>
+<div class="fig" data-svg="fig_paint.svg"></div>
+<p><b>정리 6.1.</b> 타일 <code class="nb">A</code> 의 마름모가 <code class="nb">B</code> 의 마름모를 가릴 수 있으려면 <code class="nb">A.tx ≥ B.tx</code> 이고 <code class="nb">A.ty ≥ B.ty</code> 이며 둘 중 하나는 진부등호여야 한다. 그러면 <code class="nb">A.tx + A.ty &gt; B.tx + B.ty</code> 이므로 <code class="nb">d = tx + ty</code> 오름차순이 곧 화가 알고리즘이다. ∎</p>
+<p><b>증명.</b> 마름모는 높이 0 에서 서로 겹치지 않습니다. 가릴 수 있는 것은 <code class="nb">A</code> 가 <code class="nb">B</code> 보다 화면에서 <b>아래</b>에 있을 때뿐이고, 화면 y 좌표가 <code class="nb">8(tx+ty)</code> 이므로 <code class="nb">d</code> 가 큰 쪽이 아래입니다. ∎</p>
+<div class="key"><b>정렬이 필요 없습니다.</b> 이중 반복문의 순서만 맞추면 됩니다. <code class="nb">for d in ...: for tx in ...:</code> 이면 끝. 이것이 도스 시절 바닥 렌더링이 그렇게 빨랐던 이유입니다.</div>
+</article>
+
+<article class="card" id="s7-break">
+<h3>그런데 물체가 들어오면 깨진다</h3>
+<p>바닥은 1×1 이고 평평합니다. 물체는 그렇지 않습니다.</p>
+<div class="g2">
+<div>
+<h4>깨지는 경우 1 — 여러 칸을 차지</h4>
+<p>가로 4칸짜리 성벽은 <code class="nb">tx+ty</code> 하나로 대표할 수 없습니다. 어느 칸을 기준으로 삼든 다른 칸에서 틀립니다.</p>
+</div>
+<div>
+<h4>깨지는 경우 2 — 높이</h4>
+<p>높이 3 인 절벽 위의 캐릭터와, 그 앞 낮은 땅의 나무. 타일 좌표로는 캐릭터가 뒤인데 화면에서는 캐릭터가 아래에 그려집니다.</p>
+</div>
+</div>
+<p>그래서 정렬 대상을 <b>축 정렬 상자</b>로 일반화합니다. 타일 단위 반개구간 <code class="nb">[x0,x1) × [y0,y1)</code> 과 높이 반개구간 <code class="nb">[z0,z1)</code>.</p>
+<pre class="term">1×1 물체:   x1 = x0+1,  y1 = y0+1
+캐릭터:     높이 3칸짜리 상자 (z1 = z0+3)
+지형 기둥:  [0, h+1) 만큼의 높이</pre>
+<div class="note">이 문서의 렌더러는 <b>지형 기둥까지 같은 통에 넣어</b> 정렬합니다. 지형을 빼고 물체끼리만 정렬하면 절벽 뒤에 선 캐릭터가 절벽 위로 떠 보입니다 — 도스 시절 게임들이 실제로 겪던 문제입니다.</div>
+</article>
+
+<article class="card" id="s7-behind">
+<h3>'뒤에 있다' 관계</h3>
+<!--CODE file=py/isorpg/sortdag.py lang=py sym=behind note=셋 중 하나만 성립해도 참-->
+<p>셋 중 하나만 성립해도 참입니다. 세 축 중 하나에서 완전히 뒤에 있으면 뒤라는 뜻이죠.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>조건</th><th>뜻</th></tr>
+<tr><td class="num">A.x1 ≤ B.x0</td><td>A 가 x 축으로 완전히 뒤 (화면 왼쪽-위)</td></tr>
+<tr><td class="num">A.y1 ≤ B.y0</td><td>A 가 y 축으로 완전히 뒤 (화면 오른쪽-위)</td></tr>
+<tr><td class="num">A.z1 ≤ B.z0</td><td>A 가 B 보다 완전히 아래 (더 낮음)</td></tr>
+</table>
+</div>
+<p>이 느슨함이 화면에서는 대개 옳습니다. 그런데 <b>반대칭이 아닙니다.</b></p>
+<div class="warn"><code class="nb">A.x1 ≤ B.x0</code> 이면서 <code class="nb">B.y1 ≤ A.y0</code> 이면 <b>behind(A,B) 와 behind(B,A) 가 둘 다 참</b>입니다. 이것을 그냥 비교 함수로 써서 정렬을 돌리면, 언어에 따라 예외가 나거나(파이썬의 <code class="nb">sorted</code> 는 아니지만 C++ <code class="nb">std::sort</code> 는 UB) 조용히 엉뚱한 순서가 나옵니다.</div>
+</article>
+
+<article class="card" id="s7-lemma">
+<h3>보조정리 6.2 — x/y 상호는 겹칠 수 없다</h3>
+<p>다행히 <code class="nb">A.x1 ≤ B.x0</code> 과 <code class="nb">B.y1 ≤ A.y0</code> 이 동시에 성립하면, 두 상자의 <b>화면 경계상자가 절대 겹치지 않습니다.</b></p>
+<p><b>증명.</b> <code class="nb">A.x1 ≤ B.x0</code> 이고 <code class="nb">B.y1 ≤ A.y0</code> 라 하자. 그러면</p>
+<pre class="term">A.x1 - A.y0  ≤  B.x0 - B.y1</pre>
+<p>양변에 16을 곱하면 좌변은 A 의 화면 x 최대값, 우변은 B 의 화면 x 최소값입니다(투영식 <code class="nb">sx = 16(x-y)</code>). 따라서 <code class="nb">A.maxsx ≤ B.minsx</code> — 겹치지 않습니다. ∎</p>
+<div class="key">겹치지 않으면 그리는 순서가 화면에 영향을 주지 않습니다. 그러므로 <b>간선을 걸지 않아도 됩니다.</b> 그래서 이 엔진은 화면 경계상자가 겹치는 쌍에만 간선을 만듭니다.</div>
+<p>그럼 남는 상호 관계는 <b>x-z 나 y-z 조합뿐</b>입니다. 예를 들어 A 가 x 로는 뒤인데 z 로는 B 가 뒤인 경우. 이때는 어느 쪽도 명백하지 않으므로 간선을 걸지 않고 깊이 키로 정합니다.</p>
+<!--OUT file=py_prim.txt sec=14 note=여섯 사례의 정렬 결과-->
+<p>5번 <code class="nb">mutual</code> 이 그 경우입니다 — 겹침쌍 1, 상호쌍 1. 6번은 겹침쌍 3 에 순환 절단 1.</p>
+</article>
+
+<article class="card" id="s7-cycle">
+<h3>3-순환이 실제로 존재한다</h3>
+<p class="lead">둘 사이의 순환은 보조정리로 막았습니다. 그런데 <b>셋이 돌아가는 순환</b>은 막을 수 없습니다.</p>
+<div class="fig" data-svg="fig_cycle.svg"></div>
+<pre class="term">A = [3,6) × [1,4) × [1,3)
+B = [2,5) × [4,6) × [0,2)
+C = [2,3) × [3,5) × [2,4)
+
+behind(A,B):  A.y1 = 4 ≤ B.y0 = 4   ✓   (y 조건)
+behind(B,C):  B.z1 = 2 ≤ C.z0 = 2   ✓   (z 조건)
+behind(C,A):  C.x1 = 3 ≤ A.x0 = 3   ✓   (x 조건)
+
+세 반대 방향은 전부 거짓. 셋의 화면 경계상자는 서로 겹친다.</pre>
+<p>정확히 한 방향씩만 성립해 순환이 닫힙니다. <b>이 배치를 올바르게 그릴 방법은 없습니다.</b> 어떤 순서로 그려도 하나는 틀립니다.</p>
+<div class="warn"><b>실제 게임에서 이런 배치가 나오는가</b> — 나옵니다. L자로 꺾인 성벽, 계단 옆의 기둥, 다리 아래를 지나는 캐릭터. <i>Ultima VIII</i> 과 <i>Crusader</i> 의 유명한 렌더링 결함들이 대부분 이 문제입니다.</div>
+<div class="key">해결책은 두 가지뿐입니다. (1) 상자를 잘라 순환을 없앤다. (2) 순환을 감지하고 <b>임의로 하나를 골라</b> 끊는다. 이 엔진은 (2) 를 씁니다 — 잘라 내면 상자 개수가 늘어 정렬이 더 느려지고, 잘린 조각의 스프라이트를 다시 만들어야 하기 때문입니다.</div>
+</article>
+
+<article class="card" id="s7-dag">
+<h3>위상 정렬</h3>
+<p>'뒤에 있다' 관계를 방향 그래프로 보면, 그리는 순서는 <b>위상 정렬</b>입니다.</p>
+<!--CODE file=py/isorpg/sortdag.py lang=py sym=depth_key note=동점을 가르는 기준-->
+<p><code class="nb">id</code> 가 마지막에 들어가는 것이 중요합니다. 그러면 키에 동점이 없고, <b>어떤 우선순위 큐 구현을 써도 결과가 같습니다.</b> 세 언어가 각자의 힙을 써도 되는 이유입니다.</p>
+<!--CODE file=py/isorpg/sortdag.py lang=py sym=topo_sort note=칸 알고리즘 + 순환 강제 절단-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>단계</th><th>하는 일</th><th>복잡도</th></tr>
+<tr><td>경계상자</td><td>상자마다 여덟 꼭짓점 투영</td><td class="num">O(n)</td></tr>
+<tr><td>간선</td><td>화면 x 로 훑으며 겹치는 쌍만</td><td class="num">O(n log n + k)</td></tr>
+<tr><td>정렬</td><td>칸 알고리즘 + 이진 힙</td><td class="num">O((V+E) log V)</td></tr>
+<tr><td>순환 절단</td><td>남은 것 중 깊이 키 최소</td><td class="num">절단마다 O(n)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s7-sweep">
+<h3>간선 만들기가 병목이다</h3>
+<p>한 화면에 상자가 600개쯤 됩니다. 모든 쌍을 보면 <code class="nb">600 × 599 / 2 = 179,700</code> 번. 파이썬에서 300ms 가 넘습니다.</p>
+<p>해법은 <b>화면 x 로 훑는 쓸어내기</b>입니다. 상자를 경계상자의 왼쪽 끝으로 정렬해 두고, 각 상자에 대해 <code class="nb">bj.minx &lt; bi.maxx</code> 인 동안만 앞으로 나아갑니다.</p>
+<pre class="term">idx = 상자를 bbox.minx 로 정렬
+for a in 0..n-1:
+    i = idx[a]
+    for b in a+1..n-1:
+        j = idx[b]
+        if bb[j].minx >= bb[i].maxx: break     ← 이후는 전부 오른쪽
+        ...</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>비교 횟수</th><th>파이썬 한 프레임</th></tr>
+<tr><td>모든 쌍</td><td class="num">약 180,000</td><td class="num">304 ms</td></tr>
+<tr><td>x 쓸어내기</td><td class="num">약 45,000</td><td class="num"><b>104 ms</b></td></tr>
+</table>
+</div>
+<div class="key">3배입니다. 더 줄이려면 화면을 격자로 나눠 같은 칸의 상자끼리만 보면 됩니다. 그런데 격자 관리 비용이 붙고, 상자가 600개 수준에서는 쓸어내기가 충분히 빠릅니다. <b>루아와 타입스크립트에서는 한 프레임이 밀리초 단위</b>입니다.</div>
+</article>
+
+<article class="card" id="s7-cases">
+<h3>여섯 가지 사례</h3>
+<p>골든 벡터에 손으로 짠 배치 여섯 개가 들어 있습니다. 세 언어가 전부 같은 순서를 내야 합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>번호</th><th>이름</th><th>무엇을 시험하는가</th><th>기대</th></tr>
+<tr><td class="num">1</td><td>disjoint</td><td>겹치지 않는 둘 — 간선 없음</td><td class="num">0 1, 절단 0</td></tr>
+<tr><td class="num">2</td><td>depth-x</td><td>x 로 앞뒤가 갈리는 둘</td><td class="num">0 1, 절단 0</td></tr>
+<tr><td class="num">3</td><td>stacked</td><td>같은 칸에 쌓인 둘 — z 조건</td><td class="num">0 1, 절단 0</td></tr>
+<tr><td class="num">4</td><td>wall-and-actor</td><td>3칸 성벽과 캐릭터 둘</td><td class="num">2 0 1, 절단 0</td></tr>
+<tr><td class="num">5</td><td>mutual</td><td>x-z 상호 — 겹치는데 간선이 없다</td><td class="num">0 1, 절단 0</td></tr>
+<tr><td class="num">6</td><td>three-cycle</td><td><b>진짜 3-순환</b></td><td class="num">0 1 2, 절단 1</td></tr>
+</table>
+</div>
+<p>4번이 실전 배치입니다. 성벽(2번 상자가 아니라 0번)이 아니라 <b>2번이 먼저</b> 나오는 것에 주목하세요 — 캐릭터 하나가 성벽보다 뒤에 있기 때문입니다.</p>
+<div class="note">테스트는 여기에 더해 무작위 상자 60,000쌍을 만들어 <b>보조정리 6.2 의 반례가 있는지</b> 확인합니다. x/y 상호 사례가 8,152건 생성됐고 반례는 0 이었습니다.</div>
+</article>
+
+<article class="card" id="s7-order">
+<h3>렌더 순서 전체</h3>
+<p>한 프레임에 정렬 대상이 무엇인지 봅시다.</p>
+<!--CODE file=py/isorpg/game.py lang=py sym=Game._boxes note=지형 기둥·엔티티·장식을 한 통에-->
+<p>지형 기둥이 <code class="nb">[0, h+1)</code> 인 것에 주의하세요. 높이 0 인 평지도 <code class="nb">[0,1)</code> 짜리 상자를 가집니다. 그래야 그 위에 선 캐릭터(<code class="nb">[h, h+3)</code>)와 z 조건으로 순서가 잡힙니다.</p>
+<p>장식(나무·바위)의 배치는 좌표만으로 정합니다 — <code class="nb">(tx·7 + ty·13) % 5 == 0</code>. 난수를 쓰지 않는 이유는 <b>결정적이어야</b> 하기 때문입니다. 난수를 쓰면 렌더가 게임 상태를 바꾸게 되고, 그러면 프레임을 몇 장 그렸느냐에 따라 게임이 달라집니다.</p>
+<div class="warn"><b>렌더는 상태를 바꾸면 안 된다</b> — 이 원칙을 어기면 파리티 검증이 불가능해집니다. 테스트가 "같은 상태를 두 번 그리면 같은 그림"을 확인하는 이유입니다.</div>
+</article>
+
+<article class="card" id="s7-demo">
+<h3>직접 해 보기 — 상자 정렬</h3>
+<div class="demo" data-demo="painter-sort">
+<h5>상자를 끌어 옮겨 보세요</h5>
+<div class="row">
+<button data-add>상자 추가</button>
+<button data-cycle class="sec">순환 사례</button>
+<button data-reset class="sec">초기화</button>
+</div>
+<div class="out"></div>
+</div>
+<div class="note">간선이 화살표로 표시됩니다. 순환이 생기면 붉게 바뀌고 절단 횟수가 올라갑니다. "순환 사례" 버튼은 골든 벡터 6번 배치를 그대로 놓습니다.</div>
+</article>
+
+<article class="card" id="s7-modern">
+<h3>지금은 어떻게 하는가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>도스 쿼터뷰</th><th>지금</th></tr>
+<tr><td>깊이 판정</td><td>상자 부분순서 + 위상정렬</td><td>픽셀마다 z 버퍼</td></tr>
+<tr><td>순환</td><td>존재. 끊어야 한다</td><td>존재하지 않는다</td></tr>
+<tr><td>비용</td><td class="num">O(n log n + k) / 프레임</td><td class="num">O(픽셀 수), GPU 병렬</td></tr>
+<tr><td>메모리</td><td class="num">0</td><td class="num">화면 크기 × 4바이트</td></tr>
+<tr><td>반투명</td><td>순서가 정확해야 함</td><td><b>여전히 순서가 정확해야 함</b></td></tr>
+</table>
+</div>
+<p>z 버퍼가 순환 문제를 없앤 것은 <b>판정 단위를 상자에서 픽셀로 내렸기</b> 때문입니다. 픽셀 하나에는 깊이가 하나뿐이라 순환이 생길 여지가 없습니다.</p>
+<div class="key"><b>그런데 반투명에서는 지금도 같은 문제가 남습니다.</b> 알파 블렌딩은 순서에 의존하므로 반투명 물체는 여전히 뒤에서 앞으로 정렬해야 하고, 그 정렬은 여전히 부분순서이며, 여전히 순환이 생깁니다. 1994년의 문제가 2026년에도 그대로 있습니다.</div>
+</article>
+
+<article class="card" id="s7-quiz">
+<h3>확인 문제</h3>
+<div class="quiz" data-quiz>
+<p class="q">상자 A 가 <code class="nb">[0,2)×[0,2)×[0,1)</code>, B 가 <code class="nb">[1,3)×[1,3)×[0,1)</code> 이다. <code class="nb">behind(A,B)</code> 는?</p>
+<button>답 보기</button>
+<div class="a">
+<p><code class="nb">A.x1 = 2 ≤ B.x0 = 1</code>? 아니오.<br>
+<code class="nb">A.y1 = 2 ≤ B.y0 = 1</code>? 아니오.<br>
+<code class="nb">A.z1 = 1 ≤ B.z0 = 0</code>? 아니오.<br>
+→ <b>거짓</b>. 반대도 마찬가지로 거짓입니다.</p>
+<p>두 상자가 <b>겹쳐 있어서</b> 어느 쪽도 명백히 뒤가 아닙니다. 간선이 없으므로 깊이 키로 정해집니다: <code class="nb">A: (0+0, 0, id)</code>, <code class="nb">B: (1+1, 0, id)</code> → A 가 먼저.</p>
+<p>실전에서 상자가 겹치는 것은 대개 <b>버그</b>입니다. 두 물체가 같은 공간을 차지하고 있다는 뜻이니까요. 렌더러는 그래도 결정적인 답을 내야 합니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s7-sum">
+<h3>7부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>사실</th><th>내용</th></tr>
+<tr><td>바닥 타일</td><td class="num">d = tx + ty 오름차순이면 언제나 옳다 (정리 6.1)</td></tr>
+<tr><td>물체</td><td>축 정렬 상자의 부분순서 — 반대칭이 아니다</td></tr>
+<tr><td>x/y 상호</td><td>화면에서 겹칠 수 없다 (보조정리 6.2)</td></tr>
+<tr><td>x/z, y/z 상호</td><td>겹칠 수 있다 — 간선을 걸지 않고 깊이 키로</td></tr>
+<tr><td>3-순환</td><td><b>존재한다.</b> 끊는 수밖에 없다</td></tr>
+<tr><td>간선 만들기</td><td>x 쓸어내기로 18만 → 4.5만 비교</td></tr>
+<tr><td>지금</td><td>z 버퍼가 해결. 단 반투명은 여전히 같은 문제</td></tr>
+</table>
+</div>
+<div class="key">다음 부에서는 정렬된 상자를 <b>실제로 화면에 올리는</b> 일을 봅니다 — RLE·클리핑·명암표·팔레트 사이클링.</div>
+</article>

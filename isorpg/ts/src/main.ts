@@ -304,10 +304,12 @@ function fmtFixed1(v: number, width: number): string {
 /** 구간별 성능. 기계마다 다르므로 파리티 대상이 아니다. */
 export function bench(): string {
   const out: string[] = [];
+  // Date.now() 는 밀리초 눈금이라 %8.1f 의 소수 자리가 늘 .0 이 된다.
+  // 파이썬의 time.time() 과 같은 해상도를 내려면 performance.now() 를 써야 한다.
   const t = (name: string, fn: () => void, n: number): void => {
-    const s = Date.now();
+    const s = performance.now();
     for (let i = 0; i < n; i++) fn();
-    const d = (Date.now() - s) / 1000;
+    const d = (performance.now() - s) / 1000;
     out.push(padRight(name, 22) + ' ' + fmtInt(n, 6) + ' x  '
       + fmtFixed1(d * 1000, 8) + ' ms  ' + fmtFixed1((d * 1000000) / n, 10) + ' us/call');
   };

@@ -24,7 +24,7 @@ RAMPS = [
     ('dirt',   (14, 9, 4),   (48, 36, 22)),
     ('rock',   (10, 10, 12), (52, 52, 56)),
     ('forest', (2, 9, 3),    (20, 44, 18)),
-    ('road',   (20, 14, 7),  (58, 44, 24)),   # 흙길 — 돌바닥과 색이 갈려야 한다
+    ('road',   (21, 14, 6),  (58, 45, 25)),   # 흙길 — 돌바닥과 색이 갈려야 하고, 다른 램프와 겹쳐도 안 된다
     ('floor',  (10, 10, 13), (44, 44, 52)),   # 돌바닥 — 살짝 푸른 회색
     ('wall',   (15, 13, 11), (52, 48, 42)),
     ('wood',   (12, 7, 2),   (44, 28, 12)),
@@ -52,6 +52,15 @@ def build():
     assert len(pal) == 256, len(pal)
     for r, g, b in pal:
         assert 0 <= r <= 63 and 0 <= g <= 63 and 0 <= b <= 63
+    # 중복 색이 하나라도 있으면 명암표의 항등 성질이 깨진다.
+    # LIGHT[15][c] 가 c 가 아니라 더 작은 인덱스를 가리키게 되고,
+    # 그 색은 최대 밝기에서도 조용히 다른 색으로 그려진다. 여기서 막는다.
+    if len(set(pal)) != 256:
+        dup = {}
+        for i, c in enumerate(pal):
+            dup.setdefault(c, []).append(i)
+        bad = [(c, v) for c, v in dup.items() if len(v) > 1]
+        raise ValueError('팔레트에 중복 색 %d건: %r' % (len(bad), bad[:5]))
     return pal
 
 
