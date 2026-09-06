@@ -124,6 +124,9 @@ class Movement(object):
         self.path = [[] for _ in range(C.MAX_ENT)]
         self.goal = [-1] * C.MAX_ENT
         self.cache = P.Cache()
+        # 이번 틱에 타일을 넘은 유닛 (i, 이전 타일, 새 타일). sim 의 7단계가
+        # 이것만 보고 시야를 remove/add 한다 — 전수 재계산을 피하는 유일한 길이다.
+        self.crossed = []
 
     # ── SPEC §13.2 예약 ────────────────────────────────────────────────────
     def reserve(self, tile, h):
@@ -214,6 +217,7 @@ class Movement(object):
     # ── SPEC §18.2 4단계: 핸들 오름차순으로 한 틱 ──────────────────────────
     def step(self):
         w = self.w
+        self.crossed = []
         for i in range(1, C.MAX_ENT):
             if w.alive[i] == 1 and C.IS_BUILDING[w.kind[i]] == 0:
                 self.step_one(i)
@@ -254,6 +258,7 @@ class Movement(object):
         nx, ny = w.to_t[i] % m.w, w.to_t[i] // m.w
         w.move_tile(i, nx, ny)
         m.occupy(nx, ny, True)
+        self.crossed.append((i, old, w.to_t[i]))
         if self.path[i] and self.path[i][0] == w.to_t[i]:
             self.path[i] = self.path[i][1:]
         if not self.path[i]:

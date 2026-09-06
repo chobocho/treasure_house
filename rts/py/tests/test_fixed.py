@@ -121,6 +121,34 @@ for d in range(8):
 H.check('여덟 방향의 대표 벡터가 자기 번호로 돌아온다', bad, 0)
 H.note('경계각 tan22.5 ~ 5/12: (12,5)는 대각, (12,4)는 직각 방향')
 
+# ── 골든 13절 CRC·FNV (SPEC §20.1, §18.4) ───────────────────────────────────
+_g = H.golden('prim.txt').split('\n')
+_i = _g.index('== 13. CRC 와 FNV ==') + 1
+_bad = 0
+_n = 0
+while _i < len(_g) and _g[_i].strip():
+    _parts = _g[_i].split()
+    _fn, _hex = _parts[0], _parts[-1]
+    _arg = _g[_i][len(_fn):].rsplit(None, 2)[0].strip()
+    if _arg == 'bytes(0..15)':
+        _data = bytes(bytearray(range(16)))
+    else:
+        _data = eval(_arg).encode('ascii')          # 골든이 repr 로 적었다
+    _got = F.crc16(_data) if _fn == 'crc16' else F.fnv1a(_data)
+    if _got != int(_hex, 16):
+        _bad += 1
+        H.note('%s %s 기대 %s 실제 %d', _fn, _arg, _hex, _got)
+    _n += 1
+    _i += 1
+H.check('골든 13절 %d줄 (crc16·fnv1a)' % _n, _bad, 0)
+H.check('FNV 오프셋과 소수', [F.FNV_OFFSET, F.FNV_PRIME], [2166136261, 16777619])
+H.check('빈 입력의 fnv1a 는 오프셋 그대로', F.fnv1a(b''), F.FNV_OFFSET)
+H.check('한 바이트 차이가 해시를 바꾼다',
+        F.fnv1a(b'\x00') != F.fnv1a(b'\x01'), True)
+H.check('32비트를 넘지 않는다',
+        max(F.fnv1a(bytes(bytearray([k]))) for k in range(256)) < 4294967296,
+        True)
+
 # ── fixed 와 const 에 두 번 적힌 값은 서로 같아야 한다 (SPEC §0) ────────────
 from rts import const as C                                        # noqa: E402
 H.check('fixed 와 const 의 §0 값이 일치',

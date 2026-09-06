@@ -121,6 +121,10 @@ while w.prog[i] != 0:
     mv.step()
 H.check('걸음이 끝나면 다시 한 칸', len([1 for v in mv.resv if v == h]), 1)
 H.check('타일이 넘어갔다', (w.tx[i], w.ty[i]), (1, 1))
+H.check('넘은 사실이 crossed 에 남는다 — sim 7단계의 시야 갱신이 이것만 본다',
+        mv.crossed, [(i, 1 * m.w + 0, 1 * m.w + 1)])
+mv.step()
+H.check('crossed 는 매 틱 비운다', mv.crossed, [])
 
 # ── 무작위 시나리오에서 불변식 R 을 매 틱 확인 ──────────────────────────────
 ROWS = [

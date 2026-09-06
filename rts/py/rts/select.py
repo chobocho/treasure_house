@@ -12,7 +12,9 @@ from . import econ as E
 from . import fixed as F
 from . import spatial as S
 
-MOVE, ATTACK, ATTACK_MOVE, HARVEST, BUILD, STOP, HOLD = range(7)
+# TRAIN 만 유닛이 아니라 건물에게 내리는 명령이다 — UI·AI·스크립트가 모두
+# 같은 자료형으로 sim.step 에 들어와야 락스텝이 성립한다(§12.4).
+MOVE, ATTACK, ATTACK_MOVE, HARVEST, BUILD, STOP, HOLD, TRAIN = range(8)
 ORDER_MAX = 8                    # §12.4 유닛당 명령 큐 상한
 SELECT_MAX = 32                  # §12.2 한 번에 고를 수 있는 유닛 수
 PICK_R = 2                       # §12.1 버킷 질의 반경 (타일)
