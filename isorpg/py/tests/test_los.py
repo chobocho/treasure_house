@@ -41,7 +41,8 @@ m = M.gen_map()
 
 # ---- 벽 너머는 안 보인다
 H.check_true('자기 자신은 보인다', L.visible(m, 24, 25, 24, 25))
-H.check_true('마을 벽 바깥은 안 보인다', not L.visible(m, 24, 25, 24, 17))
+H.check_true('북문(24,18)은 길이라 그 너머가 보인다', L.visible(m, 24, 25, 24, 17))
+H.check_true('벽(22,18) 너머는 안 보인다', not L.visible(m, 22, 25, 22, 16))
 
 # ---- 안개
 fog = L.Fog(48, 48)
@@ -56,16 +57,18 @@ H.check_true('시야 반경 안에만 보인다',
                  for y in range(48) for x in range(48) if fog.is_visible(x, y)))
 fog.update(m, 24, 30)
 H.check_true('한 번 본 칸은 기억한다', fog.count_seen() >= seen1)
-H.check_true('멀어지면 보이지 않게 된다', not fog.is_visible(24, 39))
-H.check_true('기억은 남는다', fog.is_seen(24, 39) or not fog.is_seen(24, 39))
+H.check_true('시야 반경 밖은 보이지 않는다', not fog.is_visible(24, 45))
+fog.update(m, 24, 20)
+H.check_true('멀어져도 기억은 남는다 (%d칸)' % fog.count_seen(),
+             fog.is_seen(24, 34) and not fog.is_visible(24, 34))
 
 # ---- 조명 단계
 fog.update(m, 24, 34)
 H.check('발밑은 가장 밝다', fog.light_of(24, 34, 24, 34), 15)
 H.check_true('멀수록 어둡다',
              fog.light_of(24 + 6, 34, 24, 34) < fog.light_of(24 + 1, 34, 24, 34))
-H.check_true('보이는 칸의 조명은 5..15',
-             all(5 <= fog.light_of(x, y, 24, 34) <= 15
+H.check_true('보이는 칸의 조명은 7..15',
+             all(7 <= fog.light_of(x, y, 24, 34) <= 15
                  for y in range(48) for x in range(48) if fog.is_visible(x, y)))
 H.check('안 본 칸은 0', fog.light_of(0, 0, 24, 34), 0)
 

@@ -68,8 +68,11 @@ H.check('마을 네 귀퉁이는 벽', [M.terrain_of(m.at(x, y))
                                 for x, y in [(18, 18), (29, 18), (18, 29), (29, 29)]],
         [M.T_WALL] * 4)
 H.check('남문은 길', M.terrain_of(m.at(24, 29)), M.T_ROAD)
-H.check('마을 안 높이는 2', sorted(set(M.height_of(m.at(x, y))
-                                      for y in range(18, 30) for x in range(18, 30))), [2])
+H.check('마을 바닥은 높이 2, 성벽은 4',
+        sorted(set(M.height_of(m.at(x, y))
+                   for y in range(18, 30) for x in range(18, 30))), [2, 4])
+H.check('성벽 한 줄', [M.terrain_of(m.at(x, 18)) for x in range(19, 24)],
+        [M.T_WALL] * 5)
 H.check('마을 남쪽 길', [M.terrain_of(m.at(24, y)) for y in (31, 35, 40, 47)],
         [M.T_ROAD] * 4)
 H.check_true('지형이 7종 이상 나온다',
