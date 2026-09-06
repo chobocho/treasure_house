@@ -30,7 +30,7 @@ PYTESTS := test_const test_fixed test_rng test_tmap test_mapgen test_circle test
            test_replay test_speaker test_raster test_render test_prim test_trace
 
 .PHONY: all py lua love ts web demos parity lockstep bench frames shots \
-        golden deck verify-log clean
+        golden measure figs deck verify-log clean
 
 all: py lua ts web demos parity lockstep
 	@echo '── 전부 통과 ──'
@@ -152,6 +152,12 @@ measure:
 	cd $(ROOT)/py && $(PY) -m rts.main bench   | tee $(OUT)/bench.txt
 	cd $(ROOT)/py && $(PY) -m rts.main lockstep 400 | tee $(OUT)/lockstep.txt
 	cd $(ROOT)/py && $(PY) -m rts.main speaker $(OUT)/tune.wav
+	cd $(ROOT) && $(PY) tools/measure.py > /dev/null
+	@echo '측정값을 out/measure.txt 에 모았다 — 덱은 여기서만 숫자를 인용한다'
+
+figs:
+	cd $(ROOT) && $(PY) tools/gen_figs.py
+	cd $(ROOT) && sh tools/check_figs.sh $(OUT)/figs
 
 deck:
 	cd $(ROOT) && $(PY) deck/build_deck.py
