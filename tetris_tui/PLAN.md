@@ -267,6 +267,19 @@ English into a user-facing message; translate and condense.
 
 ## Progress log (newest first; Korean, ≤12 lines each, same shape as history.md)
 
+- 2026-09-06 14:20 — **2단계: core/ 이식 + 골든 파리티 (전 스텝 일치)**.
+  §5.1 의 파리티 범위 결정: **full step-parity**. 시드 6개 × 1500스텝의 보드 해시·
+  stats 해시가 **전부** 정답지와 같고, 배치 1960경우·연쇄 36라운드도 전부 같다.
+  `piece/rng/srs/board/score/garbage/game/trace.go` + 테스트 7개(단위 60건 + 파리티 5건).
+  Stats 는 C++ 의 int 배열 대신 이름 있는 구조체 — 다만 필드 **순서**는 원본 그대로 두고
+  `Pack()` 이 배열을 되살려 해시를 대조한다. 정답지 두 개는 tetris_ts 에서 test/golden 으로 복사.
+  **변이 테스트로 검출력 확인**: ClearLines 의 `y++` 제거 → 파리티가 시드 2654435769 의
+  1018스텝에서 잡음. 킥 표 한 칸 변조 → 파리티는 못 잡고(그 킥을 안 밟는다)
+  구조 단위 테스트(CCW = CW 의 역)가 잡음. 둘이 서로를 메운다.
+  내 테스트 기대값 3건이 틀려서 고쳤다: RowMask 는 "지운 순간의 y"라 붙은 두 줄이 한 비트,
+  `Update` 는 dt 를 100ms 로 자른다, 우물 4줄만 심으면 퍼펙트 클리어가 돼 공격이 +10.
+  검증: `go vet` 0건 · `go test -p 1 ./...` 9패키지 통과 · gofmt 0건.
+
 - 2026-09-06 13:35 — **1단계: 모듈·예제 사다리 7개·레코더 뼈대**.
   `go.mod`(module `treasure/tetris_tui`, `charm.land/bubbletea/v2 v2.0.9` ·
   `lipgloss/v2 v2.0.6` 고정, bubbles 는 안 쓰기로 결정 — 의존성 최소화) ·
