@@ -110,8 +110,9 @@ function M.topo_sort(items)
   local adj = {}
   local indeg = {}
   for i = 1, n do adj[i] = {}; indeg[i] = 0 end
-  -- 화면 x 로 훑는 쓸어내기. 모든 쌍을 보면 O(n^2) 인데 x 구간이 겹치는
-  -- 것끼리만 보면 그 4분의 1로 준다.
+  -- 화면 x 로 훑는 쓸어내기. 모든 쌍을 보면 O(n^2) 인데, 한 화면에 상자가
+  -- 2,100개쯤 되면 220만 번이다. x 구간이 겹치는 것끼리만 보면 10만 번으로,
+  -- 22분의 1로 준다.
   local idx = {}
   for i = 1, n do idx[i] = i end
   table.sort(idx, function(p, q)

@@ -22,8 +22,14 @@
     if (builtin && n === 'path') {
       // 경로 계산은 모듈을 불러올 때 바로 돈다(raster.ts 의 ROOT 상수).
       // 값을 쓰지는 않으므로 문자열만 이어 준다.
+      // join 만 진짜로 만든다. resolve 와 dirname 은 브라우저에서 쓸 일이 없고,
+      // 그럴듯한 값을 돌려주면 나중에 누가 쓸 때 조용히 틀린 경로가 흘러다닌다.
       var join = function () { return Array.prototype.join.call(arguments, '/'); };
-      return { join: join, resolve: join, dirname: function (q) { return String(q); } };
+      var nope = function (what) {
+        return function () { throw new Error('브라우저에서는 path.' + what + ' 를 쓸 수 없다'); };
+      };
+      return { join: join, resolve: join, dirname: nope('dirname'),
+               basename: nope('basename'), relative: nope('relative') };
     }
     if (builtin && n === 'fs') {
       // 브라우저에는 파일이 없다. 조용히 넘어가지 않고 터지게 둔다.
@@ -35,12 +41,21 @@
     var f = __mods[n] || __mods['web/' + n];
     if (!f) throw new Error('모듈 없음: ' + name);
     var m = { exports: {} };
+    // 순환 참조를 위해 평가 전에 미리 넣는다. 대신 평가가 터지면 반드시 걷어낸다 —
+    // 안 그러면 다음 require 가 반쯤 만들어진 exports 를 조용히 돌려준다.
     __cache[n] = m.exports;
-    f(m.exports, __req, m);
+    try {
+      // tsc 가 낸 코드에는 __dirname 이 남아 있다(raster/game 의 ROOT 상수).
+      // 브라우저에는 그런 전역이 없으므로 여기서 넣어 준다. 값은 쓰이지 않는다.
+      f(m.exports, __req, m, '/');
+    } catch (e) {
+      delete __cache[n];
+      throw e;
+    }
     __cache[n] = m.exports;
     return m.exports;
   }
-  __def('fixed', function (exports, require, module) {
+  __def('fixed', function (exports, require, module, __dirname) {
 "use strict";
 // 16.16 고정소수점 — SPEC §2.
 //
@@ -256,7 +271,7 @@ function xor16(a, b) {
     return r;
 }
   });
-  __def('proj', function (exports, require, module) {
+  __def('proj', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MARGIN_Y = exports.MARGIN_X = exports.PICK_MASK = exports.HH = exports.HW = exports.MAXH = exports.MAP_H = exports.MAP_W = exports.SCR_H = exports.SCR_W = exports.TZ = exports.TH = exports.TW = void 0;
@@ -374,7 +389,7 @@ function visibleRange(x0, y0, x1, y1) {
     return [tx0, ty0, tx1, ty1];
 }
   });
-  __def('rng', function (exports, require, module) {
+  __def('rng', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Rng = exports.LCG_M = exports.LCG_C = exports.LCG_A = void 0;
@@ -421,7 +436,7 @@ class Rng {
 }
 exports.Rng = Rng;
   });
-  __def('camera', function (exports, require, module) {
+  __def('camera', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WORLD_Y1 = exports.WORLD_Y0 = exports.WORLD_X1 = exports.WORLD_X0 = exports.DEADZONE_Y = exports.DEADZONE_X = void 0;
@@ -473,7 +488,7 @@ function follow(cx, cy, tgtX, tgtY) {
     return clampCam(x, y);
 }
   });
-  __def('gamemap', function (exports, require, module) {
+  __def('gamemap', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TOWN_WALL_H = exports.TOWN_H = exports.TOWN_MID = exports.TOWN_Y1 = exports.TOWN_X1 = exports.TOWN_Y0 = exports.TOWN_X0 = exports.DS_BLUR = exports.DS_OFF = exports.DS_ROUGH_DEN = exports.DS_ROUGH_NUM = exports.DS_SCALE = exports.DS_CORNER = exports.DS_SEED = exports.DS_N = exports.GameMap = exports.MIN_MOVE = exports.OPAQUE = exports.MOVE = exports.TERRAIN = exports.T_VOID = exports.T_LAVA = exports.T_SWAMP = exports.T_SNOW = exports.T_BRIDGE = exports.T_WALL = exports.T_FLOOR = exports.T_ROAD = exports.T_MOUNTAIN = exports.T_FOREST = exports.T_ROCK = exports.T_DIRT = exports.T_GRASS = exports.T_SAND = exports.T_WATER = exports.T_DEEP = exports.MAXH = exports.MAP_H = exports.MAP_W = void 0;
@@ -786,7 +801,7 @@ function loadRle(text) {
     return new GameMap(w, h, Uint8Array.from(cells));
 }
   });
-  __def('sortdag', function (exports, require, module) {
+  __def('sortdag', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.I_Z1 = exports.I_Y1 = exports.I_X1 = exports.I_Z0 = exports.I_Y0 = exports.I_X0 = exports.I_ID = void 0;
@@ -932,7 +947,8 @@ function topoSort(items) {
         adj.push([]);
     const indeg = new Array(n).fill(0);
     // 화면 x 로 훑는 쓸어내기. 모든 쌍을 보면 O(n^2) 인데, 한 화면에 상자가
-    // 600개쯤 되면 18만 번이다. x 구간이 겹치는 것끼리만 보면 그 4분의 1로 준다.
+    // 2,100개쯤 되면 220만 번이다. x 구간이 겹치는 것끼리만 보면 10만 번으로,
+    // 22분의 1로 준다.
     const idx = [];
     for (let i = 0; i < n; i++)
         idx.push(i);
@@ -1019,7 +1035,7 @@ function topoSort(items) {
     return [order, breaks];
 }
   });
-  __def('raster', function (exports, require, module) {
+  __def('raster', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Dirty = exports.Frame = exports.Sprite = exports.GOLDEN = exports.ROOT = exports.WATER_HI = exports.WATER_LO = exports.DAC_MAX = exports.LIGHT_LEVELS = exports.PAL_SIZE = exports.SCR_H = exports.SCR_W = void 0;
@@ -1338,7 +1354,7 @@ function toPpm(fb, pal) {
     return out;
 }
   });
-  __def('path', function (exports, require, module) {
+  __def('path', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Bucket = exports.DIAG_MIN = exports.STRAIGHT_MIN = exports.UNREACHED = exports.BUCKET_N = exports.MIN_MOVE = exports.CLIMB_MAX = exports.DIR_NAME = exports.STEP_BASE = exports.DIAG = exports.DIRY = exports.DIRX = void 0;
@@ -1531,7 +1547,7 @@ function astar(m, sx, sy, gx, gy) {
     return { path: pathOut, cost: gcost[gi], expanded };
 }
   });
-  __def('los', function (exports, require, module) {
+  __def('los', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Fog = exports.SIGHT_R = exports.EYE = void 0;
@@ -1703,7 +1719,7 @@ class Fog {
 }
 exports.Fog = Fog;
   });
-  __def('dice', function (exports, require, module) {
+  __def('dice', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.dist = dist;
@@ -1769,7 +1785,7 @@ function xpToNext(lv) {
     return 20 * lv * lv + 30 * lv;
 }
   });
-  __def('save', function (exports, require, module) {
+  __def('save', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MAGIC = exports.Reader = exports.CRC_TBL = exports.CRC_INIT = exports.CRC_POLY = void 0;
@@ -1953,7 +1969,7 @@ function unpackState(data, g) {
     return g;
 }
   });
-  __def('game', function (exports, require, module) {
+  __def('game', function (exports, require, module, __dirname) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Game = exports.PLACE_NPC = exports.PLACE_CHEST = exports.PLACE_MON = exports.Entity = exports.SPRDIR = exports.K_NPC = exports.K_CHEST = exports.K_MON = exports.K_PLAYER = exports.GAME_SEED = exports.PATH_EVERY = exports.ATTACK_EVERY = exports.AGGRO_R = exports.DIAG_FACTOR = exports.MON_SPEED = exports.SPEED = exports.GOLDEN = exports.ROOT = void 0;
@@ -2469,7 +2485,7 @@ function runScriptTrace(scriptPath) {
     return out.join('\n') + '\n';
 }
   });
-  __def('web/data', function (exports, require, module) {
+  __def('web/data', function (exports, require, module, __dirname) {
 "use strict";
 // 이 파일은 tools/gen_webdata.py 가 만든다. 손으로 고치지 말 것.
 // 골든 데이터를 브라우저용으로 박아 넣은 것이고, 내용은 golden/ 과 같다.
@@ -3787,7 +3803,7 @@ hold SE 12
 mark end
 `;
   });
-  __def('web/canvas', function (exports, require, module) {
+  __def('web/canvas', function (exports, require, module, __dirname) {
 "use strict";
 // 캔버스 프런트엔드 — 8비트 인덱스 버퍼를 팔레트로 풀어 화면에 올린다.
 //
@@ -3822,7 +3838,9 @@ class CanvasView {
         cv.style.height = String(raster_1.SCR_H * scale) + 'px';
         cv.style.imageRendering = 'pixelated';
         cv.style.display = 'block';
-        cv.style.maxWidth = '100%';
+        // max-width 를 걸면 좁은 화면에서 폭만 줄고 height 는 그대로라 그림이 찌그러진다.
+        // 정수 배율을 지키는 것이 목적이므로 상한을 두지 않고 fit() 에서 폭을 맞춘다.
+        cv.style.margin = '0 auto';
         this.canvas = cv;
         const c = cv.getContext('2d');
         if (!c)
@@ -3831,7 +3849,10 @@ class CanvasView {
         this.img = this.ctx.createImageData(raster_1.SCR_W, raster_1.SCR_H);
         this.buf = this.img.data;
     }
-    /** 화면 폭에 맞춰 CSS 크기를 다시 잡는다. 정수 배율만 쓴다 — 그래야 픽셀이 안 뭉갠다. */
+    /** 화면 폭에 맞춰 CSS 크기를 다시 잡는다. 정수 배율만 쓴다 — 그래야 픽셀이 안 뭉갠다.
+     *
+     *  폭이 320 이 안 되면 1배로 두고 넘치게 둔다. 0.9배 같은 소수 배율로 줄이면
+     *  도스 픽셀이 들쭉날쭉해지는데, 그것이 이 문서에서 가장 보이면 안 되는 그림이다. */
     fit(availWidth) {
         let s = Math.floor(availWidth / raster_1.SCR_W);
         if (s < 1)
@@ -3865,7 +3886,7 @@ class CanvasView {
 }
 exports.CanvasView = CanvasView;
   });
-  __def('web/minirpg', function (exports, require, module) {
+  __def('web/minirpg', function (exports, require, module, __dirname) {
 "use strict";
 // 덱 안에서 도는 미니 RPG — 14~16부에 실린 그 엔진 그대로다.
 //
@@ -3909,12 +3930,17 @@ function boot(host, api) {
     wrap.appendChild(hud);
     out.innerHTML = '';
     out.appendChild(wrap);
+    // 방향키는 여러 개가 동시에 눌릴 수 있다. 스칼라 하나로 들고 있으면
+    // 대각선으로 가다가 한 키만 떼었을 때 남은 키를 무시하고 멈춘다.
+    const down = new Set();
     let held = -1;
     let act = 0;
     let atk = 0;
     let acc = 0;
     let last = 0;
     let running = true;
+    let replaying = false;
+    let visible = () => true;
     function status() {
         const p = g.ents[0];
         if (!p)
@@ -3930,6 +3956,11 @@ function boot(host, api) {
     function step(now) {
         if (!running)
             return;
+        if (!visible()) {
+            last = 0;
+            requestAnimationFrame(step);
+            return;
+        }
         if (last === 0)
             last = now;
         let dt = (now - last) * 1000;
@@ -3956,15 +3987,21 @@ function boot(host, api) {
         }
         requestAnimationFrame(step);
     }
-    function onKey(e, down) {
+    function onKey(e, isDown) {
         const d = KEY_DIR[e.key];
         if (d !== undefined) {
             // 방향키를 먹지 않으면 덱이 슬라이드를 넘겨 버린다.
             e.preventDefault();
-            held = down ? d : (held === d ? -1 : held);
+            if (isDown)
+                down.add(d);
+            else
+                down.delete(d);
+            // 남아 있는 것 중 가장 나중에 들어온 것을 쓴다.
+            held = -1;
+            down.forEach((v) => { held = v; });
             return;
         }
-        if (!down)
+        if (!isDown)
             return;
         if (e.key === ' ') {
             e.preventDefault();
@@ -4013,6 +4050,8 @@ function boot(host, api) {
     const btnStop = host.querySelector('[data-stop]');
     if (btnStop) {
         btnStop.addEventListener('click', () => {
+            if (replaying)
+                return; // 재생 중에는 step 루프를 다시 띄우지 않는다
             running = !running;
             btnStop.textContent = running ? '멈춤' : '계속';
             if (running) {
@@ -4024,34 +4063,59 @@ function boot(host, api) {
     const btnAuto = host.querySelector('[data-auto]');
     if (btnAuto) {
         btnAuto.addEventListener('click', () => {
-            // 골든 시나리오 222틱을 그대로 재생한다. 트레이스와 같은 길을 걷는다.
+            // 재진입을 막지 않으면 재생 사슬이 겹치고, 끝날 때마다 step 루프가 하나씩 늘어난다.
+            if (replaying)
+                return;
+            replaying = true;
             running = false;
+            // 골든 시나리오 222틱을 그대로 재생한다. 트레이스와 같은 길을 걷는다.
             const g2 = new game_1.Game();
             g2.setSprites(g.sprites());
             let i = 0;
             const frames = [];
             g2.runScriptText(data_1.SCRIPT_TXT, () => {
+                // 팔레트 위상도 그때 그 값을 같이 적어 둔다. 임의로 만들면 물결이 트레이스와 달라진다.
                 if (i % 3 === 0)
-                    frames.push(g2.render().slice());
+                    frames.push([g2.render().slice(), g2.palPhase]);
                 i++;
             });
             let k = 0;
             const play = () => {
                 if (k >= frames.length) {
+                    replaying = false;
                     running = true;
                     last = 0;
                     requestAnimationFrame(step);
                     return;
                 }
-                view.setPhase(Math.floor(k / 2));
-                view.draw(frames[k]);
+                const fr = frames[k];
+                view.setPhase(fr[1]);
+                view.draw(fr[0]);
                 k++;
-                setTimeout(play, 40);
+                window.setTimeout(play, 40);
             };
             play();
         });
     }
-    window.addEventListener('resize', () => view.fit(host.clientWidth || 320));
+    // 이 덱은 슬라이드가 463장이다. 한 번 연 데모가 끝까지 60Hz 로 돌면
+    // 300장 뒤에서도 배터리를 먹는다. 화면에 없으면 틱을 건너뛴다.
+    let onScreen = true;
+    if (typeof IntersectionObserver === 'function') {
+        const io = new IntersectionObserver((es) => {
+            const first = es[0];
+            onScreen = first ? first.isIntersecting : true;
+            if (onScreen)
+                last = 0; // 돌아오면 밀린 시간을 따라잡지 않는다
+        });
+        io.observe(host);
+    }
+    visible = () => onScreen;
+    const onResize = () => {
+        const w = host.clientWidth;
+        if (w > 0)
+            view.fit(w); // 숨은 슬라이드에서는 0 이 온다
+    };
+    window.addEventListener('resize', onResize);
     view.fit(host.clientWidth || 320);
     api.w(host, '', 'dim');
     out.innerHTML = '';

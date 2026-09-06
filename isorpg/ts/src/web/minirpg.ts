@@ -48,12 +48,17 @@ export function boot(host: HTMLElement, api: DemoApi): void {
   out.innerHTML = '';
   out.appendChild(wrap);
 
+  // 방향키는 여러 개가 동시에 눌릴 수 있다. 스칼라 하나로 들고 있으면
+  // 대각선으로 가다가 한 키만 떼었을 때 남은 키를 무시하고 멈춘다.
+  const down = new Set<number>();
   let held = -1;
   let act = 0;
   let atk = 0;
   let acc = 0;
   let last = 0;
   let running = true;
+  let replaying = false;
+  let visible = (): boolean => true;
 
   function status(): void {
     const p = g.ents[0];
@@ -69,6 +74,7 @@ export function boot(host: HTMLElement, api: DemoApi): void {
 
   function step(now: number): void {
     if (!running) return;
+    if (!visible()) { last = 0; requestAnimationFrame(step); return; }
     if (last === 0) last = now;
     let dt = (now - last) * 1000;
     last = now;
@@ -94,15 +100,19 @@ export function boot(host: HTMLElement, api: DemoApi): void {
     requestAnimationFrame(step);
   }
 
-  function onKey(e: KeyboardEvent, down: boolean): void {
+  function onKey(e: KeyboardEvent, isDown: boolean): void {
     const d = KEY_DIR[e.key];
     if (d !== undefined) {
       // 방향키를 먹지 않으면 덱이 슬라이드를 넘겨 버린다.
       e.preventDefault();
-      held = down ? d : (held === d ? -1 : held);
+      if (isDown) down.add(d);
+      else down.delete(d);
+      // 남아 있는 것 중 가장 나중에 들어온 것을 쓴다.
+      held = -1;
+      down.forEach((v) => { held = v; });
       return;
     }
-    if (!down) return;
+    if (!isDown) return;
     if (e.key === ' ') { e.preventDefault(); atk = 1; }
     else if (e.key === 'Enter' || e.key === 'f') { e.preventDefault(); act = 1; }
   }
@@ -136,6 +146,7 @@ export function boot(host: HTMLElement, api: DemoApi): void {
   const btnStop = host.querySelector('[data-stop]');
   if (btnStop) {
     btnStop.addEventListener('click', () => {
+      if (replaying) return;               // 재생 중에는 step 루프를 다시 띄우지 않는다
       running = !running;
       (btnStop as HTMLElement).textContent = running ? '멈춤' : '계속';
       if (running) { last = 0; requestAnimationFrame(step); }
@@ -144,29 +155,57 @@ export function boot(host: HTMLElement, api: DemoApi): void {
   const btnAuto = host.querySelector('[data-auto]');
   if (btnAuto) {
     btnAuto.addEventListener('click', () => {
-      // 골든 시나리오 222틱을 그대로 재생한다. 트레이스와 같은 길을 걷는다.
+      // 재진입을 막지 않으면 재생 사슬이 겹치고, 끝날 때마다 step 루프가 하나씩 늘어난다.
+      if (replaying) return;
+      replaying = true;
       running = false;
+      // 골든 시나리오 222틱을 그대로 재생한다. 트레이스와 같은 길을 걷는다.
       const g2 = new Game();
       g2.setSprites(g.sprites());
       let i = 0;
-      const frames: Uint8Array[] = [];
+      const frames: Array<[Uint8Array, number]> = [];
       g2.runScriptText(SCRIPT_TXT, () => {
-        if (i % 3 === 0) frames.push(g2.render().slice());
+        // 팔레트 위상도 그때 그 값을 같이 적어 둔다. 임의로 만들면 물결이 트레이스와 달라진다.
+        if (i % 3 === 0) frames.push([g2.render().slice(), g2.palPhase]);
         i++;
       });
       let k = 0;
       const play = (): void => {
-        if (k >= frames.length) { running = true; last = 0; requestAnimationFrame(step); return; }
-        view.setPhase(Math.floor(k / 2));
-        view.draw(frames[k] as Uint8Array);
+        if (k >= frames.length) {
+          replaying = false;
+          running = true;
+          last = 0;
+          requestAnimationFrame(step);
+          return;
+        }
+        const fr = frames[k] as [Uint8Array, number];
+        view.setPhase(fr[1]);
+        view.draw(fr[0]);
         k++;
-        setTimeout(play, 40);
+        window.setTimeout(play, 40);
       };
       play();
     });
   }
 
-  window.addEventListener('resize', () => view.fit(host.clientWidth || 320));
+  // 이 덱은 슬라이드가 463장이다. 한 번 연 데모가 끝까지 60Hz 로 돌면
+  // 300장 뒤에서도 배터리를 먹는다. 화면에 없으면 틱을 건너뛴다.
+  let onScreen = true;
+  if (typeof IntersectionObserver === 'function') {
+    const io = new IntersectionObserver((es) => {
+      const first = es[0];
+      onScreen = first ? first.isIntersecting : true;
+      if (onScreen) last = 0;               // 돌아오면 밀린 시간을 따라잡지 않는다
+    });
+    io.observe(host);
+  }
+  visible = () => onScreen;
+
+  const onResize = (): void => {
+    const w = host.clientWidth;
+    if (w > 0) view.fit(w);                 // 숨은 슬라이드에서는 0 이 온다
+  };
+  window.addEventListener('resize', onResize);
   view.fit(host.clientWidth || 320);
   api.w(host, '', 'dim');
   out.innerHTML = '';

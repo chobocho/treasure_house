@@ -43,10 +43,23 @@ global.window.__demo = (id, fn) => { global.window.__demoRegistry[id] = fn; };
 global.self = global.window;
 
 // 엔진 번들이 먼저다 — 미니 RPG 데모가 window.__isorpg 를 쓴다.
+// require() 로 부르면 노드가 __dirname 과 process 를 주므로, 브라우저에서만 터지는
+// 버그를 놓친다. 빈 VM 컨텍스트에서 돌려 브라우저와 같은 조건을 만든다.
 global.requestAnimationFrame = () => 0;
 const path = require('path');
+const vm = require('vm');
 const engine = path.join(__dirname, '..', 'deck', 'engine.js');
-if (fs.existsSync(engine)) require(engine);
+if (fs.existsSync(engine)) {
+  const win = global.window;
+  win.window = win;
+  win.globalThis = win;
+  win.document = global.document;
+  win.requestAnimationFrame = global.requestAnimationFrame;
+  win.setTimeout = setTimeout;
+  win.clearTimeout = clearTimeout;
+  vm.runInContext(fs.readFileSync(engine, 'utf8'), vm.createContext(win),
+                  { filename: 'deck/engine.js' });
+}
 
 const src = fs.readFileSync(process.argv[2] || 'deck/demos.js', 'utf8');
 new Function('window', 'document', src)(global.window, global.document);

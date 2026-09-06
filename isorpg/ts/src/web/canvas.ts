@@ -40,7 +40,9 @@ export class CanvasView {
     cv.style.height = String(SCR_H * scale) + 'px';
     cv.style.imageRendering = 'pixelated';
     cv.style.display = 'block';
-    cv.style.maxWidth = '100%';
+    // max-width 를 걸면 좁은 화면에서 폭만 줄고 height 는 그대로라 그림이 찌그러진다.
+    // 정수 배율을 지키는 것이 목적이므로 상한을 두지 않고 fit() 에서 폭을 맞춘다.
+    cv.style.margin = '0 auto';
     this.canvas = cv;
     const c = cv.getContext('2d');
     if (!c) throw new Error('2d 컨텍스트를 못 얻었다');
@@ -49,7 +51,10 @@ export class CanvasView {
     this.buf = this.img.data;
   }
 
-  /** 화면 폭에 맞춰 CSS 크기를 다시 잡는다. 정수 배율만 쓴다 — 그래야 픽셀이 안 뭉갠다. */
+  /** 화면 폭에 맞춰 CSS 크기를 다시 잡는다. 정수 배율만 쓴다 — 그래야 픽셀이 안 뭉갠다.
+   *
+   *  폭이 320 이 안 되면 1배로 두고 넘치게 둔다. 0.9배 같은 소수 배율로 줄이면
+   *  도스 픽셀이 들쭉날쭉해지는데, 그것이 이 문서에서 가장 보이면 안 되는 그림이다. */
   fit(availWidth: number): void {
     let s = Math.floor(availWidth / SCR_W);
     if (s < 1) s = 1;

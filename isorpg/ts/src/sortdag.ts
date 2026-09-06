@@ -138,7 +138,8 @@ export function topoSort(items: Box[]): [number[], number] {
   for (let i = 0; i < n; i++) adj.push([]);
   const indeg: number[] = new Array<number>(n).fill(0);
   // 화면 x 로 훑는 쓸어내기. 모든 쌍을 보면 O(n^2) 인데, 한 화면에 상자가
-  // 600개쯤 되면 18만 번이다. x 구간이 겹치는 것끼리만 보면 그 4분의 1로 준다.
+  // 2,100개쯤 되면 220만 번이다. x 구간이 겹치는 것끼리만 보면 10만 번으로,
+  // 22분의 1로 준다.
   const idx: number[] = [];
   for (let i = 0; i < n; i++) idx.push(i);
   idx.sort((a, b) => {

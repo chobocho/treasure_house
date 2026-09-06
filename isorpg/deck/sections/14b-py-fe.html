@@ -1,0 +1,38 @@
+<article class="card" id="s14-fe">
+<h3>pygame 프런트엔드</h3>
+<p class="lead">엔진은 320×200 짜리 8비트 인덱스 배열만 만듭니다. 프런트엔드가 하는 일은 그것을 팔레트로 풀어 창에 올리는 것뿐입니다 — 모드 13h 시절 VGA DAC 가 하던 일과 정확히 같습니다.</p>
+<!--CODE file=py/isorpg_pygame/main.py lang=py sym=Screen.upload note=한 번의 memcpy — 픽셀마다 파이썬을 돌지 않는다-->
+<p><code class="nb">pygame.Surface(depth=8)</code> 를 만들고 <code class="nb">set_palette()</code> 로 팔레트를 넣은 뒤, 프레임버퍼를 <code class="nb">get_buffer().write()</code> 로 통째로 밀어 넣습니다. 픽셀 하나하나를 파이썬에서 만지지 않으므로 프레임당 비용이 거의 0 입니다.</p>
+<div class="warn"><b>numpy 를 쓰지 않았습니다.</b> <code class="nb">surfarray.pixels2d</code> 가 더 편하지만 numpy 가 필요하고, 이 엔진의 "표준 라이브러리만" 약속이 깨집니다. 폭 320 이 4의 배수라 <code class="nb">get_pitch() == 320</code> 이고, 그래서 버퍼 전체 쓰기가 유효합니다 — 생성 시점에 확인합니다.</div>
+</article>
+
+<article class="card" id="s14-fe2">
+<h3>확대에서 걸린 것</h3>
+<p><code class="nb">pygame.transform.scale(src, size, dest)</code> 로 8비트 서피스를 32비트 창에 바로 확대하려 하면</p>
+<pre class="term">ValueError: Source and destination surfaces need to be compatible formats</pre>
+<p>가 납니다. 그래서 창 크기의 <b>8비트 임시 서피스</b>를 하나 캐시해 두고 거기로 확대한 뒤, 그것을 창에 블릿합니다. 8→32비트 변환이 블릿 안에서 C 로 한 번에 일어납니다.</p>
+<!--CODE file=py/isorpg_pygame/main.py lang=py sym=Screen.present_to note=8비트끼리 확대한 뒤 한 번만 변환한다-->
+<div class="note">HUD(체력 막대)도 <b>프레임버퍼 안에</b> 그립니다. pygame 폰트를 쓰면 8비트 세계 밖으로 나가고, 그러면 화면 캡처가 PPM 과 바이트 비교가 되지 않습니다. 캡처할 때는 HUD 를 끕니다.</div>
+</article>
+
+<article class="card" id="s14-shots">
+<h3>헤드리스 캡처와 그 검증</h3>
+<p>이 문서에 실린 화면은 <b>이 코드가 만든 진짜 프레임버퍼</b>입니다. 그것을 증명하려면 캡처가 CLI 렌더와 같은지 확인해야 합니다.</p>
+<!--CODE file=py/isorpg_pygame/shots.py lang=py sym=main note=PNG 를 다시 읽어 PPM 과 픽셀 단위로 대조-->
+<div class="steps">
+<ol>
+<li><code class="nb">SDL_VIDEODRIVER=dummy</code> 로 창 없이 렌더하고 <code class="nb">pygame.image.save()</code> 로 PNG 를 만든다.</li>
+<li>그 PNG 를 <b>다시 읽어</b> RGB 바이트로 편다.</li>
+<li><b>별도 프로세스</b>가 <code class="nb">python3 -m isorpg.main render out/frame_N.ppm N</code> 로 만든 PPM 과 바이트 비교한다.</li>
+</ol>
+</div>
+<!--OUT file=shots.txt note=make shots 의 검사 결과-->
+<div class="key">별도 프로세스를 쓰는 것이 중요합니다. 같은 프로세스 안에서 만든 두 이미지를 비교하면 <b>같은 실수를 두 번 하고 통과</b>할 수 있습니다.</div>
+</article>
+
+<article class="card" id="s14-shot-img">
+<h3>실제 창 화면</h3>
+<img class="shot" data-shot="shots/pygame_scaled.png" alt="3배 확대한 960x600 창 — 성벽에 둘린 마을, 상자와 NPC, 몬스터">
+<p class="shotcap">3배 확대 (960×600). 최근접 확대라 도스 픽셀이 그대로 큽니다</p>
+<div class="note">이 그림도 <code class="nb">out/frame_97.ppm</code> 을 최근접 3배로 늘린 것과 576,000 픽셀 전부 일치하는 것을 확인했습니다.</div>
+</article>
