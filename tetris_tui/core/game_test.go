@@ -421,3 +421,63 @@ func TestStatsHashChanges(t *testing.T) {
 		t.Error("점수가 다른데 해시가 같다")
 	}
 }
+
+// ── AI 층이 쓰는 접근자 ────────────────────────────────────────────────
+
+func TestCurrentPieceAndHoldAccessors(t *testing.T) {
+	g := New(1)
+	if g.CurrentPiece() != int(g.Stats().Piece) {
+		t.Errorf("CurrentPiece 가 %d — stats 는 %d 다", g.CurrentPiece(), g.Stats().Piece)
+	}
+	p, used := g.Hold()
+	if p != -1 || used {
+		t.Errorf("시작 홀드가 (%d, %v) 다 — (-1, false) 여야 한다", p, used)
+	}
+	first := g.CurrentPiece()
+	g.Press(ActHold)
+	p, used = g.Hold()
+	if p != first || !used {
+		t.Errorf("홀드 뒤가 (%d, %v) 다 — (%d, true) 여야 한다", p, used, first)
+	}
+}
+
+// DropAt 은 AI 전용 지름길이다. 회전과 x 를 지정해 곧바로 굳힌다.
+// 규칙을 우회하지는 않는다 — 낙하와 락은 하드드롭 경로를 그대로 쓴다.
+func TestDropAtPlacesAndLocks(t *testing.T) {
+	g := New(1)
+	g.SetPiece(PieceO)
+	pieces := g.Stats().Pieces
+	g.DropAt(0, 6)
+	if g.Stats().Pieces != pieces+1 {
+		t.Error("DropAt 이 조각을 안 굳혔다")
+	}
+	// O 조각은 x+1, x+2 열을 차지한다 → 바닥 두 줄의 7·8열이 차 있어야 한다
+	if g.Board().At(7, H-1) == 0 || g.Board().At(8, H-1) == 0 {
+		t.Errorf("지정한 자리에 안 놓였다:\n%v", g.Board().Rows()[Vis-3:])
+	}
+}
+
+// 놓을 수 없는 자리를 주면 회전·이동을 하지 않고 그 자리에서 떨어뜨린다.
+// (원본 ai_apply 와 같은 처리 — AI 가 이상한 수를 줘도 판이 깨지지 않는다)
+func TestDropAtIgnoresImpossiblePlacement(t *testing.T) {
+	g := New(1)
+	g.SetPiece(PieceO)
+	g.DropAt(0, 99)
+	if x := g.Stats().X; x < -3 || x > W {
+		t.Errorf("조각이 판 밖으로 나갔다: x=%d", x)
+	}
+	if g.Stats().Pieces < 2 {
+		t.Error("그래도 굳기는 해야 한다")
+	}
+}
+
+// DropAt 은 회전으로 들어간 게 아니므로 T스핀으로 세면 안 된다.
+func TestDropAtIsNotATSpin(t *testing.T) {
+	g := New(1)
+	g.Paint(append([]string{"..#..#....", "###...####", "####.#####"}, rep("#########.", 15)...))
+	g.SetPiece(PieceT)
+	g.DropAt(2, 3)
+	if g.Stats().TSpin != TSpinNone {
+		t.Errorf("T스핀 %d 로 잡혔다 — DropAt 은 회전이 아니다", g.Stats().TSpin)
+	}
+}
