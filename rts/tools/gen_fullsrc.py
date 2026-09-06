@@ -19,6 +19,11 @@ MODULES = [
      '이 파일만 다른 모듈을 하나도 참조하지 않는다. 나머지 전부가 여기에 기댄다. '
      '분할 곱셈(정리 2.1)·뉴턴 제곱근(정리 2.2)·네 가지 거리 척도·비교만으로 하는 8방향 판별이 들어 있다. '
      '<b>시프트 연산자가 한 번도 나오지 않는다</b> — 그것이 세 언어를 건너는 값이다.'),
+    ('const', '상수표와 유닛·건물표',
+     '§0 의 상수와 §25 의 유닛·건물표가 여기 한 곳에 있다. 함수가 없고 숫자만 있다. '
+     '같은 상수를 두 군데 적으면 한 쪽만 고치는 날이 오고, 그날 세 언어가 갈린다 — '
+     '<code class="nb">test_const</code> 가 이 파일을 <code class="nb">SPEC.md</code> 의 '
+     '마크다운 표와 직접 대조한다.'),
     ('rng', '난수',
      '볼랜드 계열 LCG 하나. 짧지만 <b>분할 곱</b>이 없으면 루아와 타입스크립트에서 조용히 틀린다. '
      '주기가 2<sup>32</sup> 인 것은 Hull–Dobell 로 보장되고, 모듈로 편향을 없애는 기각 루프가 붙어 있다.'),
@@ -80,6 +85,17 @@ MODULES = [
      '<code class="nb">prim_report</code> 의 서식 문자열 하나하나가 명세다 — 세 언어가 같은 줄을 찍어야 한다.'),
 ]
 
+# 언어 하나에만 있는 파일. 타입스크립트에는 printf 가 없어서 서식 도우미가
+# 따로 필요했다 — 세 언어가 같은 모듈 목록을 갖는다는 원칙의 유일한 예외이며,
+# 그래서 여기 따로 적는다.
+EXTRA = {
+    'ts': [('fmt', '서식 도우미',
+            '자바스크립트에는 printf 가 없다. <code class="nb">prim</code> 보고서는 '
+            '294줄이 열 맞춰 있고 한 칸만 어긋나도 <code class="nb">cmp</code> 가 실패하므로, '
+            '자리맞춤과 16진 서식을 손으로 만들었다. '
+            '<code class="nb">pyRepr</code> 은 13절의 파이썬 <code class="nb">%r</code> 을 재현한다.')],
+}
+
 LANGS = [
     ('24', 'py', 'py/rts/%s.py', '파이썬', 'py',
      '파이썬 구현은 <b>참조</b>다. 표준 라이브러리만 쓰고, 골든 벡터를 여기서 얼린다. '
@@ -108,7 +124,8 @@ def main():
         total_lines = 0
         total_chunks = 0
         rows = []
-        for mod, title, _ in MODULES:
+        mods = MODULES + EXTRA.get(lang, [])
+        for mod, title, _ in mods:
             path = pat % mod
             lines, text = count_lines(path)
             parts = chunks.split('\n'.join(lines), lang)
@@ -141,7 +158,7 @@ def main():
                    '한 조각은 최대 46줄입니다.</div>')
         out.append('</article>\n')
 
-        for (mod, title, desc), (_m, path, nl, nc, _t) in zip(MODULES, rows):
+        for (mod, title, desc), (_m, path, nl, nc, _t) in zip(mods, rows):
             out.append('<article class="card" id="s%s-f-%s">' % (num, mod))
             out.append('<h3>%s — %s</h3>' % (os.path.basename(path), title))
             out.append('<div class="src"><b>%s</b><span class="ln">%d줄</span>'

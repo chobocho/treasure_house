@@ -389,16 +389,34 @@ def build_nav(body):
     return '\n'.join(opts)
 
 
+# 엔진 소스가 사는 곳. 커버리지는 **여기 있는 파일 전부**를 세야 한다 —
+# 덱에 한 번도 안 나온 파일은 covered 에 없으므로, 그것만 보면 통째로 빠진
+# 모듈이 100 % 로 보인다. 실제로 const 가 그렇게 빠져 있었다.
+ENGINE_DIRS = [('py/rts', '.py'), ('lua/rts', '.lua'), ('ts/src', '.ts')]
+
+
+def engine_files():
+    out = []
+    for d, ext in ENGINE_DIRS:
+        full = os.path.join(BASE, d)
+        if not os.path.isdir(full):
+            continue
+        for name in sorted(os.listdir(full)):
+            if name.endswith(ext) and name != '__init__.py':
+                out.append('%s/%s' % (d, name))
+    return out
+
+
 def coverage_report():
-    files = sorted(covered)
+    files = sorted(set(covered) | set(engine_files()))
     rows = []
     total_have = total_all = 0
     for f in files:
         n = len(src_lines(f))
-        have = len(covered[f] & set(range(1, n + 1)))
+        have = len(covered.get(f, set()) & set(range(1, n + 1)))
         total_have += have
         total_all += n
-        missing = sorted(set(range(1, n + 1)) - covered[f])
+        missing = sorted(set(range(1, n + 1)) - covered.get(f, set()))
         rows.append((f, have, n, missing))
     return rows, total_have, total_all
 
