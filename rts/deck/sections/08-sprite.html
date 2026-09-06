@@ -1,11 +1,163 @@
 <article class="card section" id="s8">
 <p class="chnum">8부</p>
 <h2>스프라이트·팔레트·플레이어 색</h2>
-<p class="chsub">색 여덟 벌을 그리지 않고 네 진영을 만드는 법.<br>그리고 다섯 방향으로 여덟 방향을 그리는 법</p>
+<p class="chsub">256색으로 네 진영을 그리는 법,<br>그리고 프레임버퍼를 건드리지 않는 애니메이션</p>
 </article>
 
-<article class="card" id="s8-todo">
-<h3>스프라이트·팔레트·플레이어 색 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>32장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s8-pal">
+<h3>팔레트 — 256색, 성분은 0…63</h3>
+<p class="lead">Mode 13h 의 한 픽셀은 <b>1바이트</b>입니다. 색이 아니라 <b>번호</b>입니다.</p>
+<p>번호를 색으로 바꾸는 것이 팔레트이고, VGA DAC 의 각 성분은 <b>6비트</b>(0…63)입니다. 24비트가 아닙니다.</p>
+<pre class="term">fb[320 · 200]     팔레트 인덱스 (0..255)
+pal[256][3]       각 성분 0..63</pre>
+<div class="key">세 언어 모두 프레임버퍼가 <b>1차원 정수 배열</b>입니다. 이것이 세 구현을 <b>바이트 단위로 비교 가능</b>하게 만드는 유일한 이유입니다 — <code class="nb">make parity</code> 가 192,015바이트 PPM 을 <code class="nb">cmp</code> 합니다.</div>
+</article>
+
+<article class="card" id="s8-pal-build">
+<h3>표를 옮겨 적지 않는다</h3>
+<p>768개의 숫자를 세 언어에 옮겨 적는 것은 <b>틀리기 좋은 일</b>입니다. 대신 정수식으로 만듭니다.</p>
+<!--CODE file=py/rts/raster.py lang=py sym=ramp note=두 끝색 사이의 정수 보간-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>범위</th><th>내용</th></tr>
+<tr><td class="num">0</td><td>검정</td></tr>
+<tr><td class="num">1–15</td><td>도스 16색 (표준 EGA 값을 0…63 로)</td></tr>
+<tr><td class="num">16–31</td><td>회색 16단계</td></tr>
+<tr><td class="num">160–191</td><td><b>플레이어 색 4벌 × 8단계</b></td></tr>
+<tr><td class="num">192–207</td><td>UI 색</td></tr>
+<tr><td class="num">208–255</td><td>지형 램프 6벌 × 8단계</td></tr>
+</table>
+</div>
+<p>결과는 <code class="nb">golden/palette.txt</code> 에 얼려 두고 세 언어가 대조합니다. 생성기(<code class="nb">tools/gen_palette.py</code>)는 <b>독립 구현이 아니라 동결기</b>이며, 파일 첫머리에 그렇게 적어 두었습니다 — 데이터를 두 번 구현해 봐야 같은 실수를 두 번 하거나 서로 다른 표를 갖게 될 뿐입니다.</p>
+</article>
+
+<article class="card" id="s8-light">
+<h3>명암표 — 시작할 때 한 번</h3>
+<!--CODE file=py/rts/raster.py lang=py sym=build_light note=256 × 256 × 4 = 262,144회 비교-->
+<pre class="term">light[l][c] = pal[c] 의 각 성분에 l/3 을 곱한 색과 가장 가까운 팔레트 항목
+거리 = (dr)² + (dg)² + (db)²        최소, 동점이면 인덱스 최소</pre>
+<p>안개(15부)가 이 표를 씁니다. 어둡게 그릴 때 <b>색 계산을 하지 않고</b> 표에서 읽습니다.</p>
+<p>262,144회 비교는 실측 0.065초입니다. 시작할 때 한 번이므로 문제가 되지 않고, 매 픽셀 계산으로 돌리면 프레임당 45,056번이 됩니다.</p>
+<div class="note">3단계(원색)가 <b>항등이 아닙니다.</b> 같은 색이 팔레트에 둘 있으면 인덱스가 작은 쪽으로 갑니다. 예를 들어 회색 램프의 첫 항목(16번)은 검정이라 0번으로 접힙니다. 시험이 이것을 "같은 색이면 인덱스가 작은 쪽"으로 확인합니다.</p>
+</article>
+
+<article class="card" id="s8-sprite">
+<h3>스프라이트 — 헤더 넷과 RLE</h3>
+<pre class="term">헤더: w(1) h(1) ox(1) oy(1)        ox, oy 는 발밑 기준점
+본문: (count, value) 쌍. value 0 은 투명(컬러키)</pre>
+<p>기준점이 <b>발밑</b>인 이유는 유닛이 발밑 y 로 정렬되기 때문입니다(§23.3). 중심으로 두면 큰 유닛과 작은 유닛의 정렬이 어긋납니다.</p>
+<p>이 엔진의 스프라이트도 정수식으로 그립니다 — 아티스트가 없으므로 그림은 소박하지만, <b>세 언어가 같은 바이트를 내는 것</b>이 목적입니다.</p>
+<!--CODE file=py/rts/raster.py lang=py sym=unit_sprite note=몸통은 6부의 행 span 원-->
+<div class="note">몸통 원만은 골든 생성기가 <b>정의</b>(dx² + dy² ≤ r²)로 그리고 엔진은 §6.2 의 덧셈만 쓰는 span 알고리즘으로 그립니다. 두 결과가 같은지 대조하는 것이 그 알고리즘의 검증입니다.</p>
+</article>
+
+<article class="card" id="s8-blit">
+<h3>정리 22.1 — 런 단위 클리핑</h3>
+<!--CODE file=py/rts/raster.py lang=py sym=blit note=픽셀마다 경계를 검사하지 않는다-->
+<p><b>정리 22.1.</b> 런 단위로 자르면 픽셀당 비교가 사라진다. 완전히 화면 밖인 스프라이트는 <b>런을 하나도 훑지 않고</b> 반환한다.</p>
+<pre class="term">투명 런(value == 0)   →  pos += run,  건너뛴다
+불투명 런             →  이 줄에 걸치는 만큼만 잘라 쓴다</pre>
+<p>16×16 스프라이트의 픽셀은 256개지만 런은 대개 30–50개입니다. 경계 검사를 픽셀에서 런으로 옮기면 검사 횟수가 <b>다섯 배 줄어듭니다.</b></p>
+</article>
+
+<article class="card" id="s8-remap">
+<h3>플레이어 색 리맵</h3>
+<pre class="term">PLAYER_BASE = 160,  플레이어당 8단계
+스프라이트는 항상 160…167 로 그려져 있고, 블릿할 때 owner · 8 을 더한다</pre>
+<p>색을 여덟 벌 그리지 않습니다. <b>도스 시절의 표준 요령</b>이며, 스프라이트 한 벌로 네 진영을 그립니다.</p>
+<p>그림자(251번)는 리맵하지 않습니다. 조건이 <code class="nb">160 ≤ val &lt; 168</code> 이라 자동으로 걸러집니다 — 별도의 마스크가 필요 없습니다.</p>
+<div class="key">이 요령이 팔레트 모드에서만 가능한 이유를 보세요. 트루컬러라면 픽셀마다 색을 <b>계산</b>해야 하고, 그러면 블릿이 곱셈 세 번을 더 하게 됩니다. 인덱스 하나에 8 을 더하는 것과는 비교가 안 됩니다.</div>
+</article>
+
+<article class="card" id="s8-mirror">
+<h3>5장으로 8방향</h3>
+<div class="fig" data-svg="sprite_mirror.svg"></div>
+<!--CODE file=py/rts/raster.py lang=py sym=sprite_for note=5방향만 그린다-->
+<p>메모리와 아티스트 시간을 동시에 아끼는 요령입니다. 4부의 오토타일이 47장을 14장으로 줄인 것과 <b>같은 종류의 절약</b>입니다 — 대칭을 쓰는 것.</p>
+<p>반전은 블릿 안에서 <b>런의 순서와 각 런 안의 픽셀 순서를 뒤집어</b> 처리합니다. 별도의 스프라이트를 만들지 않습니다.</p>
+<div class="warn">상자 안에서 뒤집으므로 기준점이 <code class="nb">w − 1 − 2·ox</code> 픽셀만큼 옮겨집니다(폭 16·ox 8 이면 1px). 유닛이 서쪽을 볼 때 1픽셀 흔들립니다. <b>세 언어가 같은 자리에 그리는 것</b>이 그 1픽셀보다 중요해서 그대로 두었고, 주석에 적어 두었습니다.</div>
+</article>
+
+<article class="card" id="s8-cycle">
+<h3>팔레트 사이클링 — 공짜 애니메이션</h3>
+<!--CODE file=py/rts/raster.py lang=py sym=cycle_water note=프레임버퍼는 건드리지 않는다-->
+<p>물 색 인덱스 232…239 를 8틱마다 한 칸씩 돌립니다. <b>프레임버퍼는 그대로입니다.</b></p>
+<p>픽셀을 하나도 쓰지 않고 물이 흐릅니다. 팔레트 모드의 가장 큰 장점이었고, 폭포·용암·깜빡이는 불빛이 전부 이 요령이었습니다.</p>
+<div class="note">사이클 위치는 상태의 일부(<code class="nb">pal_phase</code>)이며 렌더 결과를 바꾸므로 <b>PPM 비교에 영향을 줍니다.</b> 그래서 해시에는 넣지 않되(시뮬레이션이 아니므로) 트레이스에는 넣습니다 — 파리티 검사에서 두 언어의 물 색이 다르면 잡혀야 하니까요.</p>
+</article>
+
+<article class="card" id="s8-font">
+<h3>6×8 폰트 — 49자</h3>
+<p>ASCII 32…126 의 자리를 두되 <b>실제로 그린 글자는 49자</b>입니다. 공백, <code class="nb">A</code>–<code class="nb">Z</code>, <code class="nb">0</code>–<code class="nb">9</code>, 그리고 <code class="nb">. , : - + / % ( ) ! ? #</code>.</p>
+<p><b>소문자가 없습니다.</b> 도스 게임 UI 가 대문자만 쓴 이유도 대개 같았습니다 — 아티스트 시간과 ROM 공간.</p>
+<pre class="term">글자당 8바이트 · 95자 = 760바이트
+5×7 획으로 그려 6×8 칸의 왼쪽 위에 놓는다</pre>
+<div class="key">표는 <code class="nb">tools/gen_font.py</code> 가 획 정의에서 만들어 <b>16진 문자열 하나</b>로 얼립니다. 세 언어는 그 문자열을 그대로 박습니다 — 760바이트를 세 번 옮겨 적는 것보다 문자열 하나를 세 번 붙여 넣는 편이 틀릴 자리가 적습니다.</div>
+</article>
+
+<article class="card" id="s8-ppm">
+<h3>PPM — 0…63 을 0…255 로</h3>
+<!--CODE file=py/rts/raster.py lang=py sym=expand note=v*255/63 이 아니다-->
+<pre class="term">expand(v) = v · 4 + ⌊v / 16⌋
+expand(0) = 0     expand(63) = 252 + 3 = 255</pre>
+<p><code class="nb">v · 255 / 63</code> 은 나눗셈이 63 이라 세 언어의 내림이 갈릴 여지가 있습니다. 위 식은 곱셈 하나와 나눗셈 하나(2의 거듭제곱)뿐이고 양 끝이 정확히 맞습니다.</p>
+<pre class="term">"P6\n320 200\n255\n" (15바이트) + 320·200·3 = 192,000  →  총 192,015바이트</pre>
+<p>이 숫자가 세 언어 파리티의 단위입니다. <code class="nb">cmp</code> 가 통과하면 <b>모든 픽셀이 같다</b>는 뜻입니다.</p>
+</article>
+
+<article class="card" id="s8-demo">
+<h3>직접 해 보기 — 플레이어 색</h3>
+<div class="demo" data-demo="palette-remap">
+<h5>한 벌로 네 진영</h5>
+<div class="row">
+<label>소유자 <input type="range" data-owner value="0" min="0" max="3"></label>
+<label>방향 <input type="range" data-dir value="0" min="0" max="7"></label>
+<label><input type="checkbox" data-cycle> 물 사이클</label>
+</div>
+<div class="out"></div>
+</div>
+<p>소유자를 바꾸면 같은 스프라이트가 다른 색이 됩니다. 방향을 5 이상으로 올리면 반전된 그림이 나오는 것도 확인해 보세요.</p>
+</article>
+
+<article class="card" id="s8-sum">
+<h3>8부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>프레임버퍼</td><td>1차원 정수 배열</td><td>세 언어를 바이트로 비교한다</td></tr>
+<tr><td>팔레트</td><td>정수식으로 만들고 골든으로 얼린다</td><td>768개를 세 번 적지 않는다</td></tr>
+<tr><td>명암표</td><td>시작할 때 262,144회 · 0.065초</td><td>안개가 색 계산을 안 한다</td></tr>
+<tr><td>블릿</td><td>런 단위 클리핑</td><td>정리 22.1 · 검사 다섯 배 감소</td></tr>
+<tr><td>플레이어 색</td><td>owner · 8 을 더한다</td><td>팔레트 모드에서만 가능한 요령</td></tr>
+<tr><td>방향</td><td>5장 + 반전</td><td>오토타일 14장과 같은 절약</td></tr>
+<tr><td>사이클링</td><td>프레임버퍼를 안 건드린다</td><td>해시 밖, 트레이스 안</td></tr>
+<tr><td>폰트</td><td>49자 · 소문자 없음</td><td>도스 UI 가 대문자만 쓴 이유</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s8-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">플레이어 색 리맵의 조건이 <code class="nb">160 ≤ val &lt; 168</code> 이다. 스프라이트에 <b>168번</b> 색을 하나 쓰면 무슨 일이 일어나는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>168 은 플레이어 1 의 첫 단계입니다. 리맵되지 않으므로 <b>모든 플레이어의 유닛에 파란색 점이 하나 찍힙니다.</b></p>
+<p>더 나쁜 경우는 플레이어 3(owner 3)의 유닛입니다. 리맵된 다른 픽셀은 <code class="nb">160 + 24 = 184</code> 부터인데 그 점만 168 이라 <b>다른 진영의 색</b>이 섞입니다.</p>
+<p>이런 실수를 막는 방법은 스프라이트를 정수식으로 만드는 것입니다 — <code class="nb">PLAYER_BASE + k</code> (k = 0…6) 만 쓰도록 코드로 강제하면 168 을 쓸 방법이 없습니다. 손으로 그린 스프라이트라면 검증 도구가 필요합니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s8-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">물 사이클을 8틱이 아니라 <b>매 틱</b> 돌리면 무엇이 문제인가? 더 부드러워지지 않는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>부드러워지지 않습니다. 램프가 8단계뿐이므로 매 틱 돌리면 <b>8틱마다 제자리</b>로 돌아옵니다 — 18.2 Hz 에서 초당 2.3회 깜빡이는 물이 됩니다. 흐르는 것이 아니라 떨리는 것으로 보입니다.</p>
+<p>8틱(약 0.44초)에 한 칸이면 한 바퀴에 3.5초입니다. 그 정도가 "흐른다"로 읽히는 속도입니다.</p>
+<p>그리고 트레이스가 커집니다. 사이클 위상이 트레이스에 들어가므로 매 틱 바뀌면 압축이 덜 됩니다 — 20부의 리플레이 크기와 같은 종류의 대가입니다.</p>
+</div>
+</div>
 </article>

@@ -1,11 +1,122 @@
 <article class="card section" id="s5">
 <p class="chnum">5부</p>
 <h2>스크롤·뷰포트·미니맵</h2>
-<p class="chsub">1024픽셀짜리 세계를 256픽셀 창으로 보기.<br>그리고 그 창을 64픽셀 지도로 되돌리기</p>
+<p class="chsub">64×64 맵의 16×11 만 보인다.<br>어디를 보고 있는지를 정수 둘로 적는 법</p>
 </article>
 
-<article class="card" id="s5-todo">
-<h3>스크롤·뷰포트·미니맵 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>24장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s5-layout">
+<h3>화면을 나누는 결정</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>영역</th><th>크기</th><th>타일</th></tr>
+<tr><td>전장 뷰포트</td><td class="num">256 × 176</td><td class="num">16 × 11</td></tr>
+<tr><td>우측 패널</td><td class="num">64 × 200</td><td>미니맵 64×64 + 선택 정보</td></tr>
+<tr><td>하단 바</td><td class="num">256 × 24</td><td>크레딧 · 인구 · 메시지</td></tr>
+<tr><td>합계</td><td class="num">320 × 200</td><td>Mode 13h</td></tr>
+</table>
+</div>
+<p><code class="nb">VIEW_H = 176</code> 은 11타일입니다. 12타일(192px)로 하면 하단 바가 8px 밖에 남지 않아 6×8 폰트 한 줄도 못 넣습니다. <code class="nb">176 + 24 = 200</code> 이 정확히 화면 높이입니다.</p>
+<div class="note">미니맵이 64×64 인 것은 맵이 64×64 이기 때문입니다 — <b>한 타일이 한 픽셀</b>이라 축소가 필요 없습니다. 우연이 아니라 그렇게 되도록 맵 크기를 골랐습니다.</p>
+</article>
+
+<article class="card" id="s5-cam">
+<h3>카메라는 정수 픽셀이다</h3>
+<!--CODE file=py/rts/render.py lang=py sym=View.first_tile note=나눗셈 하나, 나머지 하나-->
+<pre class="term">첫 타일   = ⌊cam_x / 16⌋       픽셀 오프셋 = cam_x mod 16
+그릴 타일 = 16 + 1 = 17열</pre>
+<p>서브픽셀 스크롤(16.16 카메라)은 도스 시절 흔치 않았습니다. 정수로 두면 타일 그리기가 <b>오프셋 하나</b>로 끝납니다.</p>
+<p>17열을 그리는 이유는 오프셋 때문입니다. 카메라가 타일 경계에 정확히 맞지 않으면 왼쪽과 오른쪽에 반 칸씩 걸치므로, 16열로는 오른쪽 끝에 빈 줄이 생깁니다.</p>
+</article>
+
+<article class="card" id="s5-clamp">
+<h3>클램프</h3>
+<!--CODE file=py/rts/render.py lang=py sym=View._clamp note=상한은 맵 폭 빼기 뷰포트 폭-->
+<pre class="term">0 ≤ cam_x ≤ 64·16 − 256 = 768
+0 ≤ cam_y ≤ 64·16 − 176 = 848</pre>
+<p>카메라는 화면의 <b>왼쪽 위</b>를 가리키므로, 오른쪽 끝을 맞추려면 뷰포트 폭을 빼야 합니다.</p>
+<div class="warn">맵이 화면보다 작으면 상한이 하한보다 작아집니다. 그때 이 코드는 <b>상한이 이깁니다</b>(하한을 먼저 검사하므로). 실전에서는 그때 맵을 화면 가운데 놓는 분기가 필요합니다. 이 맵(1024×1024)은 뷰포트보다 항상 크므로 그 분기를 두지 않았고, <b>그렇게 적어 둡니다.</b></div>
+</article>
+
+<article class="card" id="s5-edge">
+<h3>가장자리 스크롤</h3>
+<!--CODE file=py/rts/render.py lang=py sym=edge_scroll note=뷰포트 밖에서는 움직이지 않는다-->
+<pre class="term">마우스가 뷰포트 가장자리 8px 안  →  그 방향으로 4px/틱</pre>
+<p>4px/틱은 18.2 Hz 에서 초당 73픽셀 — 화면 하나를 가로지르는 데 3.5초입니다. 도스 RTS 의 체감과 비슷한 값이고, 튜닝값이라고 적습니다.</p>
+<p><b>패널 위에서는 움직이지 않습니다.</b> 마우스가 미니맵으로 가는 길에 화면이 오른쪽으로 흘러가면 클릭하기 어렵습니다.</p>
+</article>
+
+<article class="card" id="s5-minimap">
+<h3>미니맵 — 축소가 필요 없을 때와 필요할 때</h3>
+<div class="fig" data-svg="minimap_scale.svg"></div>
+<!--CODE file=py/rts/render.py lang=py sym=minimap_majority note=128 맵을 대비한 코드-->
+<p>64×64 맵을 64×64 픽셀에 그리므로 두 방식이 <b>같은 답</b>을 냅니다. 그런데도 다수결 코드를 갖춰 둡니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>최근접</th><th>다수결</th></tr>
+<tr><td>비용</td><td>한 점</td><td>블록 전체 (4배)</td></tr>
+<tr><td>가느다란 길</td><td><b>통째로 놓친다</b></td><td>놓치지 않는다</td></tr>
+<tr><td>동점</td><td>없음</td><td>지형 번호 최소</td></tr>
+</table>
+</div>
+<p>맵이 128 이 되면 한 픽셀이 네 타일을 대표합니다. 폭 1 짜리 통로는 최근접에서 <b>사라지고</b>, 플레이어는 미니맵만 보고 "저기는 막혔다"고 판단합니다.</p>
+</article>
+
+<article class="card" id="s5-click">
+<h3>미니맵 클릭의 역변환</h3>
+<!--CODE file=py/rts/render.py lang=py sym=minimap_to_tile note=픽셀에서 타일로-->
+<pre class="term">tx = sx · MAP_W / MINI_W
+그 타일이 뷰포트 중앙에 오도록 카메라를 옮긴 뒤 클램프</pre>
+<p>클램프가 <b>나중</b>인 것이 중요합니다. 먼저 클램프하면 맵 가장자리를 클릭했을 때 카메라가 엉뚱한 곳으로 갑니다.</p>
+<p>그리고 클릭한 타일이 <b>정확히</b> 중앙에 오지 않을 수 있습니다 — 클램프에 걸리면요. 그것이 옳은 동작입니다. 맵 밖을 보여 주는 것보다 낫습니다.</p>
+</article>
+
+<article class="card" id="s5-dirty">
+<h3>더티 렉트 — 여덟 개까지</h3>
+<!--CODE file=py/rts/raster.py lang=py sym=Dirty.rects note=여덟 개를 넘으면 전체를 다시 그린다-->
+<p>바뀐 사각형만 다시 그리면 빠릅니다. 그런데 사각형이 많아지면 <b>합치는 비용</b>이 이득을 넘습니다.</p>
+<p>여덟 개라는 값은 실측으로 정했습니다 — 그 아래에서는 부분 갱신이 이기고 그 위에서는 전체가 이깁니다.</p>
+<div class="note">이 엔진은 사실 매 프레임 전체를 다시 그립니다. 320×200 을 채우는 것이 현대 기계에서 0.006초이기 때문입니다(<code class="nb">out/bench.txt</code> 6절). 더티 렉트는 <b>도스 시절의 필수 기법</b>으로 갖춰 두고 9부에서 그 비용을 재 봅니다 — 쓰지 않는 것을 쓴다고 적지 않습니다.</p>
+</article>
+
+<article class="card" id="s5-demo">
+<h3>직접 해 보기 — 미니맵 축소</h3>
+<div class="demo" data-demo="minimap-scale">
+<h5>128 맵을 64 픽셀에 넣으면</h5>
+<div class="row">
+<label>맵 크기 <select data-size><option value="64">64</option><option value="128">128</option><option value="256">256</option></select></label>
+<label><input type="checkbox" data-major> 다수결</label>
+</div>
+<div class="out"></div>
+</div>
+<p>128 과 256 에서 최근접과 다수결을 번갈아 보세요. 가느다란 통로가 나타났다 사라지는 것이 보입니다.</p>
+</article>
+
+<article class="card" id="s5-sum">
+<h3>5부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>뷰포트</td><td>256×176 = 16×11 타일</td><td>176 + 24 = 200</td></tr>
+<tr><td>카메라</td><td>정수 픽셀</td><td>타일 그리기가 오프셋 하나</td></tr>
+<tr><td>그릴 열</td><td>17 (16 + 1)</td><td>오프셋 때문에 반 칸씩 걸친다</td></tr>
+<tr><td>클램프</td><td>상한 = 맵 − 뷰포트</td><td>작은 맵 분기는 없다고 적는다</td></tr>
+<tr><td>미니맵</td><td>한 타일 한 픽셀</td><td>맵 크기를 그렇게 골랐다</td></tr>
+<tr><td>축소</td><td>최근접은 가는 길을 놓친다</td><td>128 맵을 대비한 코드</td></tr>
+<tr><td>더티 렉트</td><td>여덟 개 넘으면 전체</td><td>실측 · 이 엔진은 안 쓴다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s5-quiz">
+<h3>확인 문제</h3>
+<div class="quiz" data-quiz>
+<p class="q">카메라를 16.16 고정소수점으로 바꾸면(서브픽셀 스크롤) 무엇이 좋아지고 무엇이 나빠지는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>좋아지는 것은 <b>부드러움</b>입니다. 4px/틱 대신 1.5px/틱 같은 속도가 가능해지고, 유닛을 따라가는 카메라가 덜 덜컹거립니다.</p>
+<p>나빠지는 것이 셋입니다. 첫째, 타일 그리기에 <b>소수 오프셋</b>이 생겨 블릿이 한 겹 복잡해집니다 — 팔레트 인덱스 프레임버퍼에서는 픽셀을 섞을 수 없으므로 결국 내림해야 하고, 그러면 부드러움이 사라집니다.</p>
+<p>둘째, <b>픽킹의 역변환</b>이 소수를 다뤄야 합니다. 화면 좌표에 카메라를 더할 때 내림 위치가 달라지면 한 픽셀 어긋난 픽킹이 나옵니다.</p>
+<p>셋째, 카메라가 <b>상태</b>라면 해시에 들어가야 합니다. 지금은 UI 상태라 해시 밖인데, 16.16 이 되면 "카메라가 시뮬레이션의 일부인가"라는 질문이 다시 열립니다. 정수로 두면 그 질문 자체가 사라집니다.</p>
+</div>
+</div>
 </article>
