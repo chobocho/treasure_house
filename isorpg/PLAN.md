@@ -230,3 +230,4 @@ Doom 16.16 fixed point (`FRACBITS 16`).
 ## Progress log
 (append below: `- YYYY-MM-DD HH:MM — step N: what, commit hash`)
 - 2026-09-06 00:44 — plan approved by the user as written (LÖVE screenshot limitation accepted, deck name and isorpg/ dir confirmed). Next: step 1 (SPEC.md + claims.md).
+- 2026-09-06 00:57 — step 1: SPEC.md(14장, 정리 3.1~8.4) + deck/claims.md(32건 검증) + 툴체인 복사(build_deck/verify_deck/chunks/ppm2png/check_figs/check_demos)
