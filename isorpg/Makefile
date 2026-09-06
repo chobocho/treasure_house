@@ -62,15 +62,15 @@ parity:
 	cd $(ROOT)/lua && $(LUA) isorpg/main.lua render $(OUT)/frame_final_lua.ppm
 	cd $(ROOT)/ts  && $(NODE) dist/src/main.js render $(OUT)/frame_final_ts.ppm
 	@{ \
-	  echo '프리미티브 보고서 (208줄)'; \
+	  echo '== 1. 프리미티브 보고서 (208줄) =='; \
 	  cmp $(GOLDEN)/prim.txt $(OUT)/py_prim.txt  && echo '  python == golden OK'; \
 	  cmp $(GOLDEN)/prim.txt $(OUT)/lua_prim.txt && echo '  lua    == golden OK'; \
 	  cmp $(GOLDEN)/prim.txt $(OUT)/ts_prim.txt  && echo '  ts     == golden OK'; \
-	  echo '시나리오 트레이스 (233줄)'; \
+	  echo '== 2. 시나리오 트레이스 (233줄) =='; \
 	  cmp $(GOLDEN)/trace.jsonl $(OUT)/py_trace.jsonl  && echo '  python == golden OK'; \
 	  cmp $(GOLDEN)/trace.jsonl $(OUT)/lua_trace.jsonl && echo '  lua    == golden OK'; \
 	  cmp $(GOLDEN)/trace.jsonl $(OUT)/ts_trace.jsonl  && echo '  ts     == golden OK'; \
-	  echo '렌더 결과 바이트 비교 (320x200 8비트 인덱스 · PPM 192,015바이트)'; \
+	  echo '== 3. 렌더 결과 바이트 비교 (320x200 8비트 인덱스 · PPM 192,015바이트) =='; \
 	  cmp $(OUT)/frame_final.ppm $(OUT)/frame_final_lua.ppm && echo '  python == lua  OK'; \
 	  cmp $(OUT)/frame_final.ppm $(OUT)/frame_final_ts.ppm  && echo '  python == ts   OK'; \
 	} | tee $(OUT)/parity.txt
