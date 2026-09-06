@@ -143,8 +143,10 @@ func TestMinSizeFitsTheRealLayout(t *testing.T) {
 		t.Errorf("1인용 최소 높이가 %d — 판 높이가 %d 다", h, BoardHeight)
 	}
 	w2, _ := MinSize(2)
-	if w2 < BoardWidth*2+PanelWidth {
-		t.Errorf("2인용 최소 폭이 %d — 판 둘 + 패널은 %d 다", w2, BoardWidth*2+PanelWidth)
+	// 2인용 화면은 판·패널·패널·판 이라 자리마다 (판+패널)이 든다. 판만 두 배로 세면
+	// 58~71칸에서 "키워 주세요" 대신 잘린 화면이 나온다.
+	if w2 != (BoardWidth+PanelWidth)*2 {
+		t.Errorf("2인용 최소 폭이 %d — 판·패널·패널·판은 %d 다", w2, (BoardWidth+PanelWidth)*2)
 	}
 	if w2 <= w {
 		t.Error("2인용이 1인용보다 넓지 않다")

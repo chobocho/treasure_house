@@ -21,6 +21,7 @@ base64 로 싣던 자리에 프레임 묶음을 싣는다.
     <!--BOARD rows="..#|###" cap="…"-->                  판 도해
 """
 import io, os, re, sys, json
+import html as _html
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from hl import highlight
 
@@ -311,8 +312,39 @@ def build():
 
     glue, missing = frame_glue()
     out = head + '\n' + '\n'.join(body) + '\n' + nav + '\n'.join(glue) + '\n' + tail
+    out, font_warn = embed_font(out)
     io.open(OUT, 'w', encoding='utf-8', newline='').write(out)
-    return total, out, missing
+    return total, out, missing, font_warn
+
+
+def embed_font(out):
+    """코드·터미널에 쓰이는 글자만 담은 D2Coding 서브셋을 <style> 맨 앞에 싣고,
+    고정폭 글꼴 목록의 맨 앞에 그 이름을 둔다.
+
+    보는 쪽 기기에 한글 고정폭 글꼴이 없으면(폰·태블릿이 그렇다) 한글이 비례폭으로,
+    박스 문자가 다른 글꼴로 와서 터미널 캡처의 상자와 판이 어긋난다. 글꼴을 싣는 것이
+    "어디서 열어도 같은 그림"을 지키는 유일한 길이다. 글자 집합은 조립이 끝난 덱에서
+    직접 뽑으므로 새 화면·새 주석이 생겨도 따로 손댈 것이 없다.
+    """
+    import gen_fonts
+    used = set()
+    for m in re.finditer(r'<(?:code|pre)\b[^>]*>([\s\S]*?)</(?:code|pre)>', out):
+        used |= set(_html.unescape(re.sub(r'<[^>]+>', '', m.group(1))))
+    for m in re.finditer(r'window\.__FRAMES=(\{.*?\});</script>', out):
+        used |= set(_html.unescape(re.sub(r'<[^>]+>', '', m.group(1))))
+    text = ''.join(sorted(used))
+    css = gen_fonts.font_face_css(text)
+    # 머리의 첫 <style> 이 덱 전체의 CSS 다. 그 맨 앞에 두어야 뒤의 글꼴 목록이 참조할 수 있다.
+    assert '<style>' in out, '<style> 을 찾지 못했다'
+    out = out.replace('<style>', '<style>\n' + css, 1)
+    n = out.count('font-family:"D2Coding",')
+    assert n >= 4, '고정폭 글꼴 목록을 찾지 못했다'
+    out = out.replace('font-family:"D2Coding",', 'font-family:"%s","D2Coding",' % gen_fonts.FAMILY)
+    warn = []
+    skipped = gen_fonts.unsupported(text)
+    if skipped:
+        warn.append('글꼴에 없어 시스템 글꼴로 남는 글자 %d개: %s' % (len(skipped), ''.join(skipped)))
+    return out, warn
 
 
 SECTIONS = {}
@@ -333,10 +365,12 @@ def ranges(nums):
 def main():
     global SECTIONS
     SECTIONS = json.load(io.open(os.path.join(SECD, 'sections.json'), encoding='utf-8'))
-    total, out, missing = build()
+    total, out, missing, font_warn = build()
     print('슬라이드 %d장 · %.0f KB → %s' % (total, len(out.encode('utf-8')) / 1024, os.path.basename(OUT)))
     if missing:
         print('  (기록 %d개 미생성: %s)' % (len(missing), ', '.join(missing)))
+    for w in font_warn:
+        print('  (글꼴: %s)' % w)
     print('\n── 소스 커버리지 (덱에 실린 줄 / 전체 줄)')
     bad, tot_l, tot_c = 0, 0, 0
     for name in sorted(_cover):

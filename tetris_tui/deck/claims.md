@@ -12,11 +12,11 @@
 | C5 | 7-bag = 일곱 조각을 한 봉지에서 무작위로 모두 뽑은 뒤 다음 봉지를 채우는 방식이 Guideline 의 표준 랜더마이저다 | https://tetris.wiki/Tetris_Guideline | 4부 |
 | C6 | Pierre Dellacherie 의 여섯 특징: 구멍 수, 착지 높이, 행 전이, 열 전이, 우물 누적, 지워진 칸(eroded cells) | https://ar5iv.labs.arxiv.org/html/1905.01652 (The Game of Tetris in Machine Learning) | 6부 |
 | C7 | 행 전이는 한 줄을 끝에서 끝까지 훑을 때 "찬 칸↔빈 칸"이 뒤집히는 횟수, 열 전이는 열 방향으로 같은 것 | 같은 논문 | 6부 |
-| C8 | ECMA-48 초판은 1976년, ANSI 가 X3.64 로 채택한 것은 1981년(1997년 철회) | https://en.wikipedia.org/wiki/ANSI_escape_code | 1부 |
+| C8 | ECMA-48 초판은 1976년, ANSI 가 X3.64 로 채택한 것은 1979년(1994년 철회, 1981년은 FIPS 86 채택) | https://en.wikipedia.org/wiki/ANSI_escape_code | 1부 |
 | C9 | 이 시퀀스를 지원한 첫 인기 비디오 터미널은 1978년의 DEC VT100 | https://en.wikipedia.org/wiki/VT100 · https://en.wikipedia.org/wiki/ANSI_escape_code | 1부 |
 | C10 | SGR 30–37 이 글자색, 40–47 이 배경색 | https://en.wikipedia.org/wiki/ANSI_escape_code | 1부 |
 | C11 | 대체 화면 버퍼는 `ESC[?1049h` 로 들어가고 `ESC[?1049l` 로 나온다 | https://en.wikipedia.org/wiki/ANSI_escape_code | 1부 |
-| C12 | 전통적인 터미널 입력에서는 Esc, Alt+[, Ctrl+[ 가 모두 같은 한 바이트(0x1b)로 온다 | https://sw.kovidgoyal.net/kitty/keyboard-protocol/ | 1부·7부 |
+| C12 | 전통적인 터미널 입력에서는 Esc 와 Ctrl+[ 가 같은 한 바이트(0x1b)로 오고, Alt+[ 는 ESC [ 두 바이트라 CSI 의 시작과 같다 | https://sw.kovidgoyal.net/kitty/keyboard-protocol/ | 1부·7부 |
 | C13 | Kitty 키보드 프로토콜은 누름·자동반복·뗌을 구분한다. 플래그 2를 켜면 `CSI … ; 수정자:이벤트종류 u` 형태로 오고 이벤트 종류 3이 "뗌"이다 | https://sw.kovidgoyal.net/kitty/keyboard-protocol/ | 7부 |
 | C14 | Kitty 키보드 프로토콜을 지원하는 터미널로 kitty·alacritty·foot·ghostty·iTerm2·rio·WezTerm 이 알려져 있다 | https://sw.kovidgoyal.net/kitty/keyboard-protocol/ | 7부 |
 
@@ -25,6 +25,8 @@
 | C17 | macOS Terminal.app 은 24비트 색을 안 내고 256색까지만 낸다 | https://gist.github.com/CMCDragonkai/146100155ecd79c7dac19a9e23e6a362 · https://medium.com/@skeough117/the-mac-default-terminal-lacks-true-color-capabilities-7ee42eb27aa1 | 9부 |
 | C18 | Bubble Tea v1 의 `Model.View()` 는 `string` 을, v2 는 `View` 구조체를 돌려준다 | 모듈 캐시의 `charm.land/bubbletea@v1.3.10/tea.go:55` 와 v2 의 `go doc` | 2부 |
 | C19 | `charm.land/bubbles/v2` 에 list·viewport·textinput·help·spinner·progress 가 있다 | 모듈 캐시 `charm.land/bubbles/v2@v2.2.1/` 의 디렉터리 목록 | 9부 |
+| C20 | D2Coding 은 네이버가 SIL OFL 1.1 로 배포하는 한글 고정폭 글꼴이다 (덱에 서브셋을 싣는 근거) | https://github.com/naver/d2codingfont | 8부
+| C21 | Go `fmt` 의 폭(`%-18s`)은 바이트나 화면 칸이 아니라 **유니코드 코드 포인트 수**로 잰다 | https://pkg.go.dev/fmt ("Width and precision are measured in units of Unicode code points") | 9부
 
 ## 확인하지 못한 것 (그래서 덱에 안 적은 것)
 

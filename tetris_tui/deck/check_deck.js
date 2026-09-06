@@ -128,6 +128,19 @@ for (const m of html.matchAll(/<pre class="term"><code>([\s\S]*?)<\/code><\/pre>
 if (capMax > 84) fail(`터미널 캡처가 ${capMax}칸 — 80칸을 넘는다`);
 else ok(`터미널 캡처 ${capCount}개 · 최대 ${capMax}칸`);
 
+// ── 6b) 내장 글꼴 ──────────────────────────────────────────────────
+// 캡처는 "한글 2칸·나머지 1칸" 규칙 위의 그림이라, 보는 기기의 글꼴에 맡기면 깨진다.
+// 덱이 D2Coding 서브셋을 woff2 로 싣고, 고정폭 글꼴 목록마다 그것을 맨 앞에 둬야 한다.
+const styleHead = html.split('</style>')[0];
+const faces = (styleHead.match(/@font-face\{font-family:"DeckMono"/g) || []).length;
+const isWoff2 = /src:url\(data:font\/woff2;base64,d09GMg/.test(styleHead);   // 'wOF2' 의 base64
+const stacks = [...styleHead.matchAll(/font-family:([^;}]*monospace[^;}]*)/g)].map(m => m[1]);
+const badStacks = stacks.filter(s => !s.startsWith('"DeckMono"'));
+if (faces !== 1) fail(`내장 글꼴 @font-face 가 ${faces}개 — 정확히 1개여야 한다`);
+else if (!isWoff2) fail('내장 글꼴이 woff2 가 아니다');
+else if (badStacks.length) fail(`DeckMono 로 시작하지 않는 고정폭 글꼴 목록 ${badStacks.length}개`);
+else ok(`내장 글꼴 DeckMono(woff2) · 고정폭 목록 ${stacks.length}개 전부 그것을 먼저 본다`);
+
 // ── 7) 재생기를 실제로 마운트해 본다 ─────────────────────────────────
 // 재생기 스크립트 조각을 찾는다 — __player 를 노출하는 <script> 하나다.
 const pm = (function () {

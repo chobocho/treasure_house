@@ -90,7 +90,7 @@ tmux-smoke:
 	@for ex in 01_hello 02_counter 03_keys 04_tick 05_window 06_lipgloss 07_cmds; do \
 		tmux kill-session -t tui_$$ex 2>/dev/null || true; \
 		tmux new-session -d -s tui_$$ex -x 80 -y 24 "$(GO) run ./examples/$$ex"; \
-		sleep 3; \
+		sleep 8; \
 		tmux capture-pane -e -p -t tui_$$ex > $(OUT)/tmux_$$ex.txt; \
 		tmux send-keys -t tui_$$ex q 2>/dev/null || true; \
 		sleep 1; \
