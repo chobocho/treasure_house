@@ -37,8 +37,10 @@ def main():
         p = os.path.join(DIST, name + '.js')
         code = io.open(p, encoding='utf-8').read().rstrip('\n')
         total += len(code)
-        parts.append("  __def('%s', function (exports, require, module) {\n%s\n  });\n"
-                     % (name, code))
+        # __dirname 을 인자로 받는다 — tsc 가 낸 코드에 그것이 남아 있고,
+        # 브라우저에는 그런 전역이 없다. 없으면 모듈을 부르는 즉시 터진다.
+        parts.append("  __def('%s', function (exports, require, module, __dirname) {\n"
+                     "%s\n  });\n" % (name, code))
     parts.append(read('loader_tail.js'))
     text = ''.join(parts)
     io.open(OUT, 'w', encoding='utf-8').write(text)

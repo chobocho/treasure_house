@@ -22,8 +22,14 @@
     if (builtin && n === 'path') {
       // 경로 계산은 모듈을 불러올 때 바로 돈다(raster.ts 의 ROOT 상수).
       // 값을 쓰지는 않으므로 문자열만 이어 준다.
+      // join 만 진짜로 만든다. resolve 와 dirname 은 브라우저에서 쓸 일이 없고,
+      // 그럴듯한 값을 돌려주면 나중에 누가 쓸 때 조용히 틀린 경로가 흘러다닌다.
       var join = function () { return Array.prototype.join.call(arguments, '/'); };
-      return { join: join, resolve: join, dirname: function (q) { return String(q); } };
+      var nope = function (what) {
+        return function () { throw new Error('브라우저에서는 path.' + what + ' 를 쓸 수 없다'); };
+      };
+      return { join: join, resolve: join, dirname: nope('dirname'),
+               basename: nope('basename'), relative: nope('relative') };
     }
     if (builtin && n === 'fs') {
       // 브라우저에는 파일이 없다. 조용히 넘어가지 않고 터지게 둔다.
@@ -35,8 +41,17 @@
     var f = __mods[n] || __mods['web/' + n];
     if (!f) throw new Error('모듈 없음: ' + name);
     var m = { exports: {} };
+    // 순환 참조를 위해 평가 전에 미리 넣는다. 대신 평가가 터지면 반드시 걷어낸다 —
+    // 안 그러면 다음 require 가 반쯤 만들어진 exports 를 조용히 돌려준다.
     __cache[n] = m.exports;
-    f(m.exports, __req, m);
+    try {
+      // tsc 가 낸 코드에는 __dirname 이 남아 있다(raster/game 의 ROOT 상수).
+      // 브라우저에는 그런 전역이 없으므로 여기서 넣어 준다. 값은 쓰이지 않는다.
+      f(m.exports, __req, m, '/');
+    } catch (e) {
+      delete __cache[n];
+      throw e;
+    }
     __cache[n] = m.exports;
     return m.exports;
   }

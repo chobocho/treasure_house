@@ -74,8 +74,15 @@
     var st = { cv: cv, ctx: ctx, lw: lw, lh: lh, scale: 1, draw: null };
 
     st.fit = function () {
+      // clientWidth 는 패딩을 포함한다(box-sizing: border-box). 그대로 쓰면
+      // 접힌 폴드(374px)에서 캔버스가 .demo 상자를 22픽셀 삐져나간다.
       var w = host.clientWidth || 320;
-      w = w - 2;
+      var pad = 0;
+      try {
+        var cs = window.getComputedStyle(host);
+        pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+      } catch (err) { pad = 26; }
+      w = w - pad - 2;
       if (w > 340) w = 340;
       if (w < 200) w = 200;
       var h = Math.round(w * lh / lw);
@@ -102,12 +109,10 @@
       return { x: (e.clientX - r.left) * lw / rw, y: (e.clientY - r.top) * lh / rh };
     };
     st.fit();
-    if (window.addEventListener) {
-      window.addEventListener('resize', function () {
-        st.fit();
-        if (st.draw) st.draw();
-      });
-    }
+    // 리사이즈 리스너를 데모마다 하나씩 달면 슬라이드 463장짜리 문서에서
+    // 열어 본 데모 수만큼 쌓인다. 하나만 달고 명부를 훑는다.
+    STAGES.push(st);
+    installResize();
     // 슬라이드가 막 열린 순간에는 clientWidth 가 0 일 수 있다 — 한 프레임 뒤 다시 맞춘다
     if (window.requestAnimationFrame) {
       window.requestAnimationFrame(function () {
@@ -116,6 +121,25 @@
       });
     }
     return st;
+  }
+
+  // 살아 있는 캔버스 명부. 리사이즈 한 번에 전부 다시 맞춘다.
+  var STAGES = [];
+  var resizeBound = false;
+  function installResize() {
+    if (resizeBound || !window.addEventListener) return;
+    resizeBound = true;
+    window.addEventListener('resize', function () {
+      for (var i = 0; i < STAGES.length; i++) {
+        var st = STAGES[i];
+        // 숨은 슬라이드에서는 clientWidth 가 0 이라 엉뚱한 폭이 박힌다. 건너뛴다.
+        if (!st.cv || !st.cv.parentNode) continue;
+        var before = st.cv.style.width;
+        st.fit();
+        if (st.cv.style.width === '0px') { st.cv.style.width = before; continue; }
+        if (st.draw) st.draw();
+      }
+    });
   }
 
   /* ---------- 포인터 ----------
@@ -146,6 +170,13 @@
     cv.addEventListener('pointerdown', onDown);
     cv.addEventListener('pointermove', onMove);
     cv.addEventListener('pointerup', onUp);
+    // 캔버스 밖에서 손을 떼거나 브라우저가 스크롤을 가져가면 여기로 온다.
+    // 이것이 없으면 down 이 참으로 남아 버튼을 뗀 뒤에도 드래그가 이어진다.
+    if (window.addEventListener) {
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+      window.addEventListener('mouseup', onUp);
+    }
     cv.addEventListener('pointercancel', onUp);
     if (!window.PointerEvent) {
       cv.addEventListener('mousedown', onDown);
@@ -575,7 +606,10 @@
         }
       }
     }
-    return { seen: seen, vis: vis, checked: checked };
+    // 맵 가장자리에서는 사각형이 잘린다. 절약률을 원 덕분이라고 말하려면
+    // 잘린 사각형과 비교해야 한다 — 잘린 몫까지 원의 공으로 돌리면 거짓말이 된다.
+    return { seen: seen, vis: vis, checked: checked,
+             square: (x1 - x0 + 1) * (y1 - y0 + 1) };
   }
   function lightOf(bits, x, y, px, py, R) {
     var v = bits[y * MAP_W + x];
@@ -1304,7 +1338,9 @@
         drag = { i: i, p: p, x0: boxes[i][1], y0: boxes[i][2] };
       },
       move: function (p) {
-        if (!drag) return;
+        // 드래그 중에 초기화/순환 버튼을 누르면 boxes 가 통째로 바뀐다.
+        // 옛 인덱스를 그대로 쓰면 undefined 를 짚고 터진다.
+        if (!drag || !boxes[drag.i]) { drag = null; return; }
         var dsx = (p.x - drag.p.x) / S, dsy = (p.y - drag.p.y) / S;
         var dtx = Math.round((dsx + 2 * dsy) / 32), dty = Math.round((2 * dsy - dsx) / 32);
         var b = boxes[drag.i];
@@ -1327,8 +1363,8 @@
       boxes.push([n, x, y, z, x + 1, y + 1, z + 2]);
       draw();
     });
-    on(bCycle, 'click', function () { boxes = sceneCycle(); draw(); });
-    on(bReset, 'click', function () { boxes = sceneWall(); draw(); });
+    on(bCycle, 'click', function () { drag = null; boxes = sceneCycle(); draw(); });
+    on(bReset, 'click', function () { drag = null; boxes = sceneWall(); draw(); });
     draw();
   });
 
@@ -1800,7 +1836,8 @@
       ctx.strokeStyle = C.stroke;
       ctx.strokeRect(PAD - 0.5, PAD - 0.5, MAP_W * CS + 1, MAP_H * CS + 1);
 
-      var sq = (2 * R + 1) * (2 * R + 1);
+      // 맵 가장자리에서는 훑는 사각형이 잘린다. 잘린 몫까지 원의 공으로 돌리면 거짓말이 된다.
+      var sq = st2.square;
       put(host, api, [
         '관찰자 (' + p[0] + ', ' + p[1] + ') · 시야 반경 ' + R
           + ' · 기억 ' + (checked(cMem, true) ? '남김' : span('bad', '안 남김')),

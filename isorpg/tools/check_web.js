@@ -6,11 +6,21 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = path.resolve(__dirname, '..');
-global.window = { addEventListener() {} };
-require(path.join(ROOT, 'deck', 'engine.js'));
+const vm = require('vm');
 
-const R = global.window.__isorpg.require;
+const ROOT = path.resolve(__dirname, '..');
+
+// require() 로 부르면 안 된다. 노드의 모듈 스코프는 __dirname 과 process 를 주는데
+// 브라우저에는 그런 것이 없다. require 로 검사하면 브라우저에서만 터지는 버그를 놓친다.
+// (실제로 놓쳤다 — raster 와 game 이 최상위에서 __dirname 을 쓰고 있었다.)
+const win = { addEventListener() {}, setTimeout: setTimeout, clearTimeout: clearTimeout };
+win.window = win;
+win.globalThis = win;
+const ctx = vm.createContext(win);
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'deck', 'engine.js'), 'utf8'), ctx,
+                { filename: 'deck/engine.js' });
+
+const R = win.__isorpg.require;
 const RA = R('raster');
 const G = R('game');
 const D = R('web/data');
