@@ -647,10 +647,766 @@ table.kv td.num, table.kv th.num { text-align: right; font-variant-numeric: tabu
 <p class="chsub">FPU 없이 소수를 다루는 16.16,<br>그리고 제곱근 없이 거리를 재는 네 가지 방법</p>
 </article>
 
-<article class="card" id="s6-todo">
-<h3>고정소수점과 정수 기하 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>38장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s6-why">
+<h3>왜 소수를 정수로 다루는가</h3>
+<p class="lead">1992년의 386SX 에는 부동소수점 장치가 없었습니다. 387 코프로세서는 별매였고, 게이머의 기계에 그것이 꽂혀 있으리라고 가정할 수 없었습니다.</p>
+<p>그런데 유닛은 한 틱에 1.5픽셀씩 움직여야 합니다. 정수만으로는 1 아니면 2 뿐이고, 1 로 두면 느리고 2 로 두면 빠릅니다. 소수가 필요합니다.</p>
+<p>답은 <b>단위를 바꾸는 것</b>이었습니다. 1픽셀을 65,536 으로 세면 1.5픽셀은 98,304 이라는 <b>정수</b>가 됩니다.</p>
+<div class="key">이 덱이 30년 뒤에도 같은 선택을 하는 이유는 FPU 가 없어서가 아닙니다. <b>세 언어가 같은 답을 내야 하기 때문</b>입니다. 19부에서 보겠지만, 실수 한 줄이 락스텝을 무너뜨립니다.</div>
+</article>
+
+<article class="card" id="s6-repr">
+<h3>16.16 — 정의</h3>
+<p>32비트 정수 하나를 상위 16비트(정수부)와 하위 16비트(소수부)로 나눠 읽습니다.</p>
+<pre class="term">실수 v  ↔  정수 x = v · 65536
+1.0   = 65536      0.5  = 32768      1.5  = 98304
+1/√2  = 46341      √2−1 = 27146     −1.0  = −65536</pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>연산</th><th>16.16 구현</th><th>왜</th></tr>
+<tr><td>정수 → 고정</td><td class="num">x = n · 65536</td><td>곱셈 하나</td></tr>
+<tr><td>고정 → 정수</td><td class="num">floordiv(x, 65536)</td><td><b>내림</b>이지 자름이 아니다</td></tr>
+<tr><td>더하기·빼기</td><td class="num">그냥 + −</td><td>단위가 같으므로</td></tr>
+<tr><td>곱하기</td><td class="num">floordiv(a·b, 65536)</td><td>단위가 두 번 곱해졌으므로 한 번 나눈다</td></tr>
+<tr><td>나누기</td><td class="num">floordiv(a·65536, b)</td><td>먼저 올려놓고 나눈다</td></tr>
+</table>
+</div>
+<p>덧셈과 뺄셈은 손댈 것이 없습니다. 값의 범위를 <code class="nb">|x| &lt; 2³¹</code> 로 제한해 두면 <code class="nb">|a| + |b| &lt; 2³²</code> 이라 세 언어 모두 정확합니다.</p>
+</article>
+
+<article class="card" id="s6-floor">
+<h3>왜 자름이 아니라 내림인가</h3>
+<p class="lead">−1.5 를 정수로 바꾸면 −1 입니까, −2 입니까?</p>
+<p>C 의 <code class="nb">/</code> 는 0 쪽으로 자릅니다(−1). 파이썬의 <code class="nb">//</code> 는 −∞ 쪽으로 내립니다(−2). <b>둘 다 맞지만 하나만 골라야 합니다.</b></p>
+<div class="src"><b>py/rts/fixed.py</b><span class="ln">33–36</span><span>명세는 내림이다</span></div>
+<pre><code data-lang="py" data-src="py/rts/fixed.py" data-lines="33-36"># ── SPEC §1 정수 연산 규약 ──────────────────────────────────────────────────
+def floordiv(a, b):
+    """b &gt; 0 일 때 -무한대 방향 내림. 파이썬의 // 가 이미 그렇다."""
+    return a // b</code></pre>
+<p>내림을 고른 이유는 <b>타일 좌표</b> 때문입니다. 월드 픽셀 −1 은 타일 −1 에 속해야 합니다. 자름을 쓰면 −15…−1 이 전부 타일 0 이 되어 맵 왼쪽 가장자리에서 한 칸이 두 배로 넓어집니다.</p>
+<div class="warn">루아 5.1 에는 정수 나눗셈이 없고, 자바스크립트의 <code class="nb">/</code> 는 실수 나눗셈입니다. 두 언어 모두 <code class="nb">floordiv</code> 를 손으로 만들어 <b>모든 나눗셈</b>에 써야 합니다. <code class="nb">Math.floor(a/b)</code> 는 큰 값에서 정밀도를 잃습니다.</div>
+</article>
+
+<article class="card" id="s6-mulproblem">
+<h3>곱셈의 함정 — 2⁵³</h3>
+<p class="lead">정의는 <code class="nb">floordiv(a·b, 65536)</code> 입니다. 그런데 <code class="nb">a·b</code> 는 최대 2⁶² 입니다.</p>
+<p>루아 5.1 의 숫자와 자바스크립트의 숫자는 배정밀도 실수이고, 가수는 <b>53비트</b>입니다. 2⁵³ 을 넘는 정수는 더 이상 정확하지 않습니다.</p>
+<pre class="term">2^53     = 9007199254740992
+2^53 + 1 = 9007199254740992   ← 배정밀도에서는 같은 수다</pre>
+<p>파이썬은 임의 정밀도라 아무 문제가 없습니다. 그래서 <b>파이썬만 보고 만들면 이 함정이 보이지 않습니다.</b> 세 언어를 동시에 맞추기로 한 이유 중 하나입니다.</p>
+</article>
+
+<article class="card" id="s6-mul">
+<h3>정리 2.1 — 분할 곱</h3>
+<p><code class="nb">a</code> 를 상·하위로 쪼개면 중간값이 2⁵³ 아래로 내려옵니다.</p>
+<pre class="term">ah = floordiv(a, 65536)     −32768 ≤ ah &lt; 32768
+al = fmod(a, 65536)              0 ≤ al &lt; 65536
+fpmul(a, b) = ah·b + floordiv(al·b, 65536)</pre>
+<p><b>정리 2.1.</b> 위 식은 <code class="nb">floordiv(a·b, 65536)</code> 과 항상 같다.</p>
+<p><b>증명.</b> <code class="nb">a = ah·2¹⁶ + al</code> 이므로 <code class="nb">a·b = ah·b·2¹⁶ + al·b</code>. 양변을 2¹⁶ 으로 나누고 바닥함수를 취하면 <code class="nb">⌊a·b/2¹⁶⌋ = ah·b + ⌊al·b/2¹⁶⌋</code> 입니다. 첫 항이 정수이므로 바닥함수 밖으로 나올 수 있습니다. ∎</p>
+<p><b>크기.</b> <code class="nb">|ah·b| &lt; 2¹⁵·2³¹ = 2⁴⁶</code>, <code class="nb">|al·b| &lt; 2¹⁶·2³¹ = 2⁴⁷</code>. 둘 다 2⁵³ 아래이므로 세 언어가 정확히 같은 값을 냅니다.</p>
+<div class="src"><b>py/rts/fixed.py</b><span class="ln">106–115</span><span>쪼개는 쪽은 a 다</span></div>
+<pre><code data-lang="py" data-src="py/rts/fixed.py" data-lines="106-115"># ── SPEC §2.3 곱셈 (분할 곱) ────────────────────────────────────────────────
+def fp_mul(a, b):
+    """floor(a*b / 65536). a 를 상·하위로 쪼개 중간값을 2^53 아래로 붙든다.
+
+       a = ah·2^16 + al 이므로 a·b/2^16 = ah·b + al·b/2^16 이고,
+       첫 항이 정수라 바닥함수 밖으로 나온다 (SPEC 정리 2.1).
+    """
+    ah = a // FP_ONE
+    al = a % FP_ONE
+    return ah * b + (al * b) // FP_ONE</code></pre>
+</article>
+
+<article class="card" id="s6-div">
+<h3>나눗셈은 쪼갤 필요가 없다</h3>
+<div class="src"><b>py/rts/fixed.py</b><span class="ln">118–122</span><span>b == 0 은 호출자의 버그다</span></div>
+<pre><code data-lang="py" data-src="py/rts/fixed.py" data-lines="118-122">def fp_div(a, b):
+    """floor(a*65536 / b). b == 0 은 호출자의 버그이므로 그냥 터진다."""
+    if b == 0:
+        raise ZeroDivisionError('fp_div: b == 0')
+    return (a * FP_ONE) // b</code></pre>
+<p><code class="nb">|a| &lt; 2³¹</code> 이므로 <code class="nb">|a·65536| &lt; 2⁴⁷</code> — 이미 안전합니다.</p>
+<div class="key"><code class="nb">b == 0</code> 에서 <b>조용히 0 을 돌려주지 않습니다.</b> 세 언어 모두 즉시 실패합니다. 0 을 돌려주면 유닛 하나가 이상한 자리로 순간이동하고, 그 원인을 1,200틱 뒤에 찾게 됩니다.</div>
+</article>
+
+<article class="card" id="s6-isqrt">
+<h3>정수 제곱근 — 뉴턴</h3>
+<p class="lead">거리를 재려면 제곱근이 필요합니다. 그런데 <code class="nb">sqrt</code> 는 실수 함수입니다.</p>
+<div class="src"><b>py/rts/fixed.py</b><span class="ln">125–135</span><span>초기값과 종료 조건까지 명세다</span></div>
+<pre><code data-lang="py" data-src="py/rts/fixed.py" data-lines="125-135"># ── SPEC §2.5 정수 제곱근 ───────────────────────────────────────────────────
+def isqrt(n):
+    """뉴턴 반복. 초기값과 종료 조건까지 명세다 — 세 언어가 같은 횟수를 돈다."""
+    if n &lt; 2:
+        return n
+    x = n
+    y = (x + 1) // 2
+    while y &lt; x:
+        x = y
+        y = (x + n // x) // 2
+    return x</code></pre>
+<p><b>정리 2.2.</b> 위 반복은 <code class="nb">⌊√n⌋</code> 에서 멈춘다.</p>
+<p><b>증명 스케치.</b> <code class="nb">x &gt; ⌊√n⌋</code> 인 동안 <code class="nb">f(x) = ⌊(x + ⌊n/x⌋)/2⌋ &lt; x</code> 이므로 수열은 순감소합니다. 정수 하한이 있으므로 유한 번에 멈춥니다. 멈추는 지점 <code class="nb">x</code> 는 <code class="nb">⌊n/x⌋ ≥ x</code>, 즉 <code class="nb">x² ≤ n</code> 을 만족하고, 순감소성에서 직전 값이 <code class="nb">&gt; ⌊√n⌋</code> 였으므로 <code class="nb">x = ⌊√n⌋</code> 입니다. ∎</p>
+<div class="note">초기값과 종료 조건을 명세에 박은 이유는 결과가 아니라 <b>횟수</b> 때문입니다. 결과는 어느 초기값에서든 같지만, 23부의 성능 표를 세 언어에서 비교하려면 같은 횟수를 돌아야 합니다.</div>
+</article>
+
+<article class="card" id="s6-isqrt-out">
+<h3>제곱근 검산</h3>
+<div class="src"><b>out/py_prim.txt</b><span class="ln">24–38</span><span>경계값 열셋 — isqrt² ≤ n &lt; (isqrt+1)²</span></div>
+<pre class="term" data-out="py_prim.txt" data-lines="24-38">== 2. 정수 제곱근 ==
+          n     isqrt          isqrt^2      (isqrt+1)^2
+          0         0                0                1
+          1         1                1                4
+          2         1                1                4
+          3         1                1                4
+         15         3                9               16
+         16         4               16               25
+         17         4               16               25
+         99         9               81              100
+        100        10              100              121
+      65535       255            65025            65536
+      65536       256            65536            66049
+    1000000      1000          1000000          1002001
+ 2147483647     46340       2147395600       2147488281</pre>
+<p>마지막 줄을 보세요. <code class="nb">n = 2147483647</code> (2³¹−1) 에서 <code class="nb">isqrt = 46340</code> 입니다. 46340² = 2,147,395,600 이고 46341² = 2,147,488,281 로 n 을 넘습니다.</p>
+<p>46341 이라는 숫자가 낯익다면 맞습니다 — <code class="nb">FP_DIAG</code> 와 같은 수입니다. 우연이 아닙니다. 1/√2 를 65536 배 한 것과 2³¹ 의 제곱근이 둘 다 65536/√2 = 46340.95… 이기 때문입니다.</p>
+</article>
+
+<article class="card" id="s6-metrics">
+<h3>거리 다섯 가지</h3>
+<p class="lead">제곱근 없이 거리를 재는 방법은 하나가 아닙니다. 다섯 가지를 모두 갖추고, 자리마다 다른 것을 씁니다.</p>
+<pre class="term">d1(dx, dy)   = |dx| + |dy|                    L1 · 맨해튼 · 4방향 이동
+dinf(dx, dy) = max(|dx|, |dy|)                L∞ · 체비셰프 · 8방향 이동
+d83(dx, dy)  = mx + floordiv(3·mn, 8)         옥타일 8분의 3 근사
+doct(dx, dy) = 10·mx + 4·mn                   경로 비용 단위 (직선 10 · 대각 14)
+dab(dx, dy)  = floordiv(62943·mx + 26072·mn + 32768, 65536)   α-max β-min</pre>
+<p>여기서 <code class="nb">mx = max(|dx|,|dy|)</code>, <code class="nb">mn = min(|dx|,|dy|)</code> 입니다.</p>
+<div class="src"><b>py/rts/fixed.py</b><span class="ln">143–158</span><span>두 값을 한 번만 구해 돌려 쓴다</span></div>
+<pre><code data-lang="py" data-src="py/rts/fixed.py" data-lines="143-158"># ── SPEC §2.6 거리 척도 ─────────────────────────────────────────────────────
+def _mxmn(dx, dy):
+    ax = dx if dx &gt;= 0 else -dx
+    ay = dy if dy &gt;= 0 else -dy
+    return (ax, ay) if ax &gt;= ay else (ay, ax)
+
+
+def d1(dx, dy):
+    """L1 (맨해튼) — 4방향 이동의 정확한 걸음 수."""
+    return (dx if dx &gt;= 0 else -dx) + (dy if dy &gt;= 0 else -dy)
+
+
+def dinf(dx, dy):
+    """L∞ (체비셰프) — 8방향 이동의 정확한 걸음 수. 사거리 판정은 전부 이것."""
+    mx, _mn = _mxmn(dx, dy)
+    return mx</code></pre>
+</article>
+
+<article class="card" id="s6-dinf">
+<h3>체비셰프가 정확한 자리</h3>
+<p><code class="nb">dinf</code> 는 <b>근사가 아닙니다.</b> 8방향으로 한 칸씩 움직이는 격자에서 <code class="nb">(0,0)</code> 에서 <code class="nb">(dx,dy)</code> 까지의 <b>걸음 수</b>가 정확히 <code class="nb">max(|dx|,|dy|)</code> 입니다.</p>
+<p>대각 한 걸음이 x 와 y 를 <b>동시에</b> 1 씩 줄이므로, 짧은 쪽은 긴 쪽을 줄이는 김에 공짜로 줄어듭니다.</p>
+<div class="key">그래서 <b>사거리 판정은 전부 <code class="nb">dinf</code></b> 입니다(§15.1). "사거리 4" 는 "네 걸음 안"과 같은 뜻이 되고, 플레이어가 화면에서 세는 것과 정확히 일치합니다.</div>
+<p>반면 <b>거리 비교</b>에는 쓰기 어렵습니다. (4,4) 와 (4,0) 이 둘 다 4 니까요. 그래서 "가장 가까운 적"에는 다른 척도를 씁니다.</p>
+</article>
+
+<article class="card" id="s6-d83">
+<h3>d83 — √2−1 을 3/8 로</h3>
+<p>옥타일 거리의 참값은 <code class="nb">mx + (√2−1)·mn</code> 이고 <code class="nb">√2−1 = 0.41421356…</code> 입니다. 이것을 <b>3/8 = 0.375</b> 로 바꾼 것이 <code class="nb">d83</code> 입니다.</p>
+<p>√2−1 의 연분수는 <code class="nb">[0;2,2,2,…]</code> 이고 수렴분수는 1/2, 2/5, 5/12, 12/29, 29/70 … (펠 수의 비)입니다. <b>3/8 은 그 중 어느 것도 아닙니다.</b> 5/12 가 훨씬 정확한데도 3/8 을 쓴 이유는 하나입니다 — 8 로 나누는 것이 시프트 세 번이기 때문입니다.</p>
+<pre class="term">3·mn / 8   →  (mn + mn + mn) >> 3     곱셈도 나눗셈도 없다
+5·mn / 12  →  12 로 나누려면 나눗셈이 필요하다</pre>
+<p>45° 방향에서 참값 1.41421 대신 1.375 — <b>−2.8 %</b> 입니다. 항상 <b>과소평가</b>합니다.</p>
+</article>
+
+<article class="card" id="s6-dab">
+<h3>α-max β-min — 오차를 0 중심으로</h3>
+<p><code class="nb">d83</code> 이 늘 짧게 나오는 것이 싫다면 계수 둘을 모두 조정하면 됩니다.</p>
+<pre class="term">d ≈ α·mx + β·mn      α = 0.96043387, β = 0.39782473
+16.16 으로 반올림하면  62943, 26072</pre>
+<p>최대 상대오차 ±3.96 %. <code class="nb">d83</code>(−0 %…−8.6 %)과 달리 오차가 <b>0 을 중심으로 흩어집니다.</b></p>
+<div class="warn"><b>마지막에 32768 을 더하는 것(반올림)이 없으면 안 됩니다.</b> 내림으로 두면 <code class="nb">dab(1,0) = ⌊62943/65536⌋ = 0</code> 입니다. 거리 1 이 0 으로 나오고 사거리 판정과 타깃 선택이 통째로 무너집니다. 이 버그는 골든 벡터를 처음 만들 때 오차 −100 % 로 드러났습니다.</div>
+<div class="src"><b>py/rts/fixed.py</b><span class="ln">173–180</span><span>반올림 항 32768 이 핵심이다</span></div>
+<pre><code data-lang="py" data-src="py/rts/fixed.py" data-lines="173-180">def dab(dx, dy):
+    """alpha-max-beta-min. 마지막 반올림(+32768)이 없으면 dab(1,0) = 0 이 된다.
+
+       거리 1 이 0 으로 나오면 사거리 판정과 타깃 선택이 통째로 무너진다.
+       골든 벡터를 처음 만들 때 오차 −100 % 로 드러난 자리다(SPEC §2.6).
+    """
+    mx, mn = _mxmn(dx, dy)
+    return (62943 * mx + 26072 * mn + FP_HALF) // FP_ONE</code></pre>
+</article>
+
+<article class="card" id="s6-error">
+<h3>실측 — 어느 것이 얼마나 틀리는가</h3>
+<svg class="diag" viewBox="0 0 700 300" role="img">
+<title>거리 척도의 오차 — 유클리드 대비 천분율</title>
+<line class="gd" x1="60" y1="130" x2="656" y2="130"/>
+<rect class="tl on" x="70" y="130" width="12" height="1"/>
+<rect class="tl hot" x="85" y="130" width="12" height="1"/>
+<rect class="tl on" x="106" y="130" width="12" height="1"/>
+<rect class="tl hot" x="121" y="130" width="12" height="1"/>
+<rect class="tl on" x="142" y="-90" width="12" height="220"/>
+<rect class="tl hot" x="157" y="-90" width="12" height="220"/>
+<rect class="tl on" x="178" y="50" width="12" height="80"/>
+<rect class="tl hot" x="193" y="50" width="12" height="80"/>
+<rect class="tl on" x="214" y="91" width="12" height="39"/>
+<rect class="tl hot" x="229" y="91" width="12" height="39"/>
+<rect class="tl on" x="250" y="4" width="12" height="126"/>
+<rect class="tl hot" x="265" y="130" width="12" height="81"/>
+<rect class="tl on" x="286" y="130" width="12" height="1"/>
+<rect class="tl hot" x="301" y="130" width="12" height="1"/>
+<rect class="tl on" x="322" y="16" width="12" height="114"/>
+<rect class="tl hot" x="337" y="121" width="12" height="9"/>
+<rect class="tl on" x="358" y="130" width="12" height="39"/>
+<rect class="tl hot" x="373" y="130" width="12" height="39"/>
+<rect class="tl on" x="394" y="130" width="12" height="1"/>
+<rect class="tl hot" x="409" y="130" width="12" height="1"/>
+<rect class="tl on" x="430" y="69" width="12" height="61"/>
+<rect class="tl hot" x="445" y="121" width="12" height="9"/>
+<rect class="tl on" x="466" y="124" width="12" height="6"/>
+<rect class="tl hot" x="481" y="124" width="12" height="6"/>
+<rect class="tl on" x="502" y="86" width="12" height="44"/>
+<rect class="tl hot" x="517" y="86" width="12" height="44"/>
+<rect class="tl on" x="538" y="130" width="12" height="1"/>
+<rect class="tl hot" x="553" y="130" width="12" height="1"/>
+<rect class="tl on" x="574" y="130" width="12" height="1"/>
+<rect class="tl hot" x="589" y="130" width="12" height="57"/>
+<rect class="tl on" x="610" y="130" width="12" height="39"/>
+<rect class="tl hot" x="625" y="130" width="12" height="39"/>
+<text x="70" y="24" text-anchor="start">d83(왼쪽·노랑)과 α-max β-min(오른쪽·주황) · 위가 과대평가</text>
+<text class="lbl" x="70" y="254" text-anchor="start">최악 오차 293/1000 · 눈금 한 칸 = 120/1000</text>
+<text class="lbl" x="70" y="272" text-anchor="start">옥타일은 유클리드 근사가 아니므로 여기 넣지 않는다 — 8방향 격자의 참 길이다</text>
+<text class="lbl" x="84" y="236" text-anchor="middle">1,0</text>
+<text class="lbl" x="120" y="236" text-anchor="middle">0,1</text>
+<text class="lbl" x="156" y="236" text-anchor="middle">1,1</text>
+<text class="lbl" x="192" y="236" text-anchor="middle">2,1</text>
+<text class="lbl" x="228" y="236" text-anchor="middle">3,1</text>
+<text class="lbl" x="264" y="236" text-anchor="middle">3,2</text>
+<text class="lbl" x="300" y="236" text-anchor="middle">4,3</text>
+<text class="lbl" x="336" y="236" text-anchor="middle">5,5</text>
+<text class="lbl" x="372" y="236" text-anchor="middle">8,3</text>
+<text class="lbl" x="408" y="236" text-anchor="middle">10,0</text>
+<text class="lbl" x="444" y="236" text-anchor="middle">10,10</text>
+<text class="lbl" x="480" y="236" text-anchor="middle">-7,4</text>
+<text class="lbl" x="516" y="236" text-anchor="middle">-6,-6</text>
+<text class="lbl" x="552" y="236" text-anchor="middle">0,-9</text>
+<text class="lbl" x="588" y="236" text-anchor="middle">12,-5</text>
+<text class="lbl" x="624" y="236" text-anchor="middle">-3,11</text>
+</svg>
+<p>열여섯 쌍에 대한 유클리드 대비 천분율 편차입니다. <code class="nb">d83</code> 은 막대가 전부 아래(과소평가)로만 가고, <code class="nb">dab</code> 은 위아래로 흩어집니다.</p>
+</article>
+
+<article class="card" id="s6-error-out">
+<h3>표 그대로</h3>
+<div class="src"><b>out/py_prim.txt</b><span class="ln">1–22</span><span>거리 척도 열여섯 쌍</span></div>
+<pre class="term" data-out="py_prim.txt" data-lines="1-22">== 1. 거리 척도 ==
+  dx   dy     d1  dinf   d83   dab   doct     eu3  d83pm  dabpm doctpm
+   1    0      1     1     1     1     10    1000      0      0      0
+   0    1      1     1     1     1     10    1000      0      0      0
+   1    1      2     1     1     1     14    1414   -293   -293    -10
+   2    1      3     2     2     2     24    2236   -106   -106     73
+   3    1      4     3     3     3     34    3162    -52    -52     75
+   3    2      5     3     3     4     38    3605   -168    109     54
+   4    3      7     4     5     5     52    5000      0      0     40
+   5    5     10     5     6     7     70    7071   -152    -11    -11
+   8    3     11     8     9     9     92    8544     53     53     76
+  10    0     10    10    10    10    100   10000      0      0      0
+  10   10     20    10    13    14    140   14142    -81    -11    -11
+  -7    4     11     7     8     8     86    8062     -8     -8     66
+  -6   -6     12     6     8     8     84    8485    -58    -58    -11
+   0   -9      9     9     9     9     90    9000      0      0      0
+  12   -5     17    12    13    14    140   13000      0     76     76
+  -3   11     14    11    12    12    122   11401     52     52     70
+eu3 = floor(sqrt(dx^2+dy^2) * 1000)
+d83pm dabpm = 유클리드 대비 천분율 편차
+doctpm = 유클리드*10 대비. 옥타일은 유클리드 근사가 아니므로 참고값이며,
+참 옥타일과의 비교는 out/analysis.txt 2절에 있다.</pre>
+<p><code class="nb">(1,1)</code> 줄의 <code class="nb">d83pm = −293</code> 이 최악입니다. 대각선 한 칸에서 참값 1.414 대신 1 이 나옵니다 — 짧은 거리에서 정수 척도의 해상도가 부족한 것이지 공식이 나쁜 것이 아닙니다.</p>
+<p><code class="nb">(12,−5)</code> 줄을 보세요. <code class="nb">d83 = 13</code> 으로 정확한데 <code class="nb">dab = 14</code> 로 +76/1000 만큼 넘칩니다. <b>어느 척도도 늘 이기지 않습니다.</b></p>
+</article>
+
+<article class="card" id="s6-which">
+<h3>어느 자리에 무엇을 쓰는가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>척도</th><th>쓰는 곳</th><th>이유</th></tr>
+<tr><td>dinf</td><td>사거리·스플래시 링·시야 반경 판정</td><td>8방향 걸음 수와 정확히 같다</td></tr>
+<tr><td>doct</td><td>A*·JPS·다익스트라의 비용과 휴리스틱</td><td><b>허용적</b>인 유일한 척도</td></tr>
+<tr><td>d83</td><td>"가장 가까운 것" 고르기 (표적·광맥·반납처)</td><td>싸고, 동점 규칙이 따로 있으므로 정확도가 덜 중요</td></tr>
+<tr><td>dab</td><td>도구·비교용</td><td>엔진의 판정에는 쓰지 않는다</td></tr>
+<tr><td>d1</td><td>비교용</td><td>4방향 이동이 없으므로 이 엔진에는 쓸 자리가 없다</td></tr>
+</table>
+</div>
+<div class="warn"><b>거리 함수를 A\* 휴리스틱으로 아무거나 쓸 수 없습니다.</b> 허용성이 필요하고, <code class="nb">doct</code> 만 그것을 만족합니다. 증명은 12부에 있습니다. <code class="nb">d83</code> 을 휴리스틱으로 쓰면 <b>더 짧은 경로를 놓칩니다</b> — 과소평가라 안전할 것 같지만, 비용 단위가 10/14 이고 d83 은 1/0.375 단위라 축척이 어긋나기 때문입니다.</div>
+</article>
+
+<article class="card" id="s6-atan8">
+<h3>8방향 판별 — 비교만으로</h3>
+<p class="lead">벡터 하나를 여덟 방향 중 하나로 바꿔야 합니다. <code class="nb">atan2</code> 없이.</p>
+<p>대각 구역의 경계는 22.5° 이고 <code class="nb">tan 22.5° = √2 − 1 = 0.41421…</code> 입니다. 이것을 <b>5/12</b> 로 근사하면(연분수 수렴분수 셋째) 판정이 곱셈 두 번과 비교 하나가 됩니다.</p>
+<pre class="term">대각인가?   12·mn &gt; 5·mx
+5/12 = 0.41667   참값 0.41421   오차 +0.6%</pre>
+<div class="src"><b>py/rts/fixed.py</b><span class="ln">183–211</span><span>주축을 먼저 정하고 대각 여부를 묻는다</span></div>
+<pre><code data-lang="py" data-src="py/rts/fixed.py" data-lines="183-211"># ── SPEC §2.7 8방향 판별 ────────────────────────────────────────────────────
+def atan8(dx, dy):
+    """비교만으로 8방향을 고른다. 나눗셈도 삼각함수도 없다.
+
+       경계는 22.5°이고 tan 22.5° = √2−1 = 0.414214 다. 5/12 = 0.416667 로
+       바꾸면 경계각이 22.62° — 0.12° 넓어질 뿐이다. √2−1 의 연분수 수렴분수가
+       1/2, 2/5, 5/12, 12/29 … (펠 수의 비)이므로 5/12 는 우연이 아니다.
+    """
+    if dx == 0 and dy == 0:
+        return 2                                   # 규약: 정지 상태는 E 를 본다
+    ax = dx if dx &gt;= 0 else -dx
+    ay = dy if dy &gt;= 0 else -dy
+    mx, mn = (ax, ay) if ax &gt;= ay else (ay, ax)
+    diag = 12 * mn &gt; 5 * mx
+    if ax &gt;= ay:                                   # 동서가 주축
+        if dx &gt; 0:
+            if diag:
+                return 1 if dy &lt; 0 else 3
+            return 2
+        if diag:
+            return 7 if dy &lt; 0 else 5
+        return 6
+    if dy &lt; 0:                                     # 남북이 주축
+        if diag:
+            return 1 if dx &gt; 0 else 7
+        return 0
+    if diag:
+        return 3 if dx &gt; 0 else 5
+    return 4</code></pre>
+<div class="note">여기서는 3/8 이 아니라 <b>5/12</b> 를 씁니다. 나눗셈이 없기 때문입니다 — 부등식의 양변에 12 를 곱해 버리면 분모가 사라집니다. 같은 상수를 근사하는데 자리마다 다른 분수를 쓰는 것이 이상해 보이지만, 각 자리의 연산 비용이 다릅니다.</div>
+</article>
+
+<article class="card" id="s6-atan8-out">
+<h3>경계에서 무슨 일이 일어나는가</h3>
+<div class="src"><b>out/py_prim.txt</b><span class="ln">40–57</span><span>경계각 부근 열여섯 벡터</span></div>
+<pre class="term" data-out="py_prim.txt" data-lines="40-57">== 3. 8방향 판별 ==
+  dx   dy  12*mn  5*mx  대각  방향  이름
+  12    5     60    60     0     2  E
+  12   -5     60    60     0     2  E
+  12    6     72    60     1     3  SE
+   5   12     60    60     0     4  S
+  12    4     48    60     0     2  E
+ -12    5     60    60     0     6  W
+  -5  -12     60    60     0     0  N
+   0    0      0     0     0     2  E
+   1    0      0     5     0     2  E
+   0   -1      0     5     0     0  N
+   7    3     36    35     1     3  SE
+   3    7     36    35     1     3  SE
+  -9   -4     48    45     1     7  NW
+   4   -9     48    45     1     1  NE
+ 100   41    492   500     0     2  E
+ 100   42    504   500     1     3  SE</pre>
+<p><code class="nb">(12,5)</code> 는 <code class="nb">12·5 = 60</code>, <code class="nb">5·12 = 60</code> 으로 <b>정확히 같습니다.</b> 부등식이 엄격(<code class="nb">&gt;</code>)이므로 대각이 아니고 E 가 됩니다. <code class="nb">(12,6)</code> 은 72 &gt; 60 이라 SE 입니다.</p>
+<p><code class="nb">(100,41)</code> → 492 vs 500 → E, <code class="nb">(100,42)</code> → 504 vs 500 → SE. 경계가 41.67 근처라는 것이 이 두 줄에 그대로 보입니다.</p>
+<div class="key"><code class="nb">(0,0)</code> 은 E(2) 를 돌려줍니다. "방향 없음"을 따로 두지 않았습니다 — 정지한 유닛도 어딘가를 보고 있어야 하고, 그 기본값을 <b>명세로 고정</b>해야 세 언어의 스프라이트가 같은 방향을 봅니다.</div>
+</article>
+
+<article class="card" id="s6-circle-why">
+<h3>원 마스크 — 고전 알고리즘이 틀리는 자리</h3>
+<p class="lead">시야 반경 4 의 유닛이 보는 칸은 어디까지입니까? "미드포인트 원 알고리즘"이 답일 것 같지만 아닙니다.</p>
+<svg class="diag" viewBox="0 0 500 246" role="img">
+<title>미드포인트 외곽선의 반례 — r=2 에서 (2,1)</title>
+<rect class="tl dim" x="20" y="30" width="37" height="37"/>
+<text class="lbl" x="38" y="52" text-anchor="middle">8</text>
+<rect class="tl cool" x="60" y="30" width="37" height="37"/>
+<text class="lbl" x="78" y="52" text-anchor="middle">5</text>
+<rect class="tl on" x="100" y="30" width="37" height="37"/>
+<text class="lbl" x="118" y="52" text-anchor="middle">4</text>
+<rect class="tl cool" x="140" y="30" width="37" height="37"/>
+<text class="lbl" x="158" y="52" text-anchor="middle">5</text>
+<rect class="tl dim" x="180" y="30" width="37" height="37"/>
+<text class="lbl" x="198" y="52" text-anchor="middle">8</text>
+<rect class="tl cool" x="20" y="70" width="37" height="37"/>
+<text class="lbl" x="38" y="92" text-anchor="middle">5</text>
+<rect class="tl on" x="60" y="70" width="37" height="37"/>
+<text class="lbl" x="78" y="92" text-anchor="middle">2</text>
+<rect class="tl on" x="100" y="70" width="37" height="37"/>
+<text class="lbl" x="118" y="92" text-anchor="middle">1</text>
+<rect class="tl on" x="140" y="70" width="37" height="37"/>
+<text class="lbl" x="158" y="92" text-anchor="middle">2</text>
+<rect class="tl cool" x="180" y="70" width="37" height="37"/>
+<text class="lbl" x="198" y="92" text-anchor="middle">5</text>
+<rect class="tl on" x="20" y="110" width="37" height="37"/>
+<text class="lbl" x="38" y="132" text-anchor="middle">4</text>
+<rect class="tl on" x="60" y="110" width="37" height="37"/>
+<text class="lbl" x="78" y="132" text-anchor="middle">1</text>
+<rect class="tl on" x="100" y="110" width="37" height="37"/>
+<text class="lbl" x="118" y="132" text-anchor="middle">0</text>
+<rect class="tl on" x="140" y="110" width="37" height="37"/>
+<text class="lbl" x="158" y="132" text-anchor="middle">1</text>
+<rect class="tl on" x="180" y="110" width="37" height="37"/>
+<text class="lbl" x="198" y="132" text-anchor="middle">4</text>
+<rect class="tl cool" x="20" y="150" width="37" height="37"/>
+<text class="lbl" x="38" y="172" text-anchor="middle">5</text>
+<rect class="tl on" x="60" y="150" width="37" height="37"/>
+<text class="lbl" x="78" y="172" text-anchor="middle">2</text>
+<rect class="tl on" x="100" y="150" width="37" height="37"/>
+<text class="lbl" x="118" y="172" text-anchor="middle">1</text>
+<rect class="tl on" x="140" y="150" width="37" height="37"/>
+<text class="lbl" x="158" y="172" text-anchor="middle">2</text>
+<rect class="tl cool" x="180" y="150" width="37" height="37"/>
+<text class="lbl" x="198" y="172" text-anchor="middle">5</text>
+<rect class="tl dim" x="20" y="190" width="37" height="37"/>
+<text class="lbl" x="38" y="212" text-anchor="middle">8</text>
+<rect class="tl cool" x="60" y="190" width="37" height="37"/>
+<text class="lbl" x="78" y="212" text-anchor="middle">5</text>
+<rect class="tl on" x="100" y="190" width="37" height="37"/>
+<text class="lbl" x="118" y="212" text-anchor="middle">4</text>
+<rect class="tl cool" x="140" y="190" width="37" height="37"/>
+<text class="lbl" x="158" y="212" text-anchor="middle">5</text>
+<rect class="tl dim" x="180" y="190" width="37" height="37"/>
+<text class="lbl" x="198" y="212" text-anchor="middle">8</text>
+<text class="lbl" x="236" y="46" text-anchor="start">칸 안의 숫자는 i² + j²</text>
+<text class="lbl" x="236" y="66" text-anchor="start">r² = 4 이므로 5 는 원 밖이다</text>
+<text class="lbl" x="236" y="86" text-anchor="start">그런데 외곽선 알고리즘은 (2,1) 을 찍는다</text>
+<text class="lbl" x="236" y="106" text-anchor="start">시야 마스크로 쓰면 칸 수가</text>
+<text class="lbl" x="236" y="122" text-anchor="start">가우스 원 문제의 값과 어긋난다</text>
+<text class="lbl" x="236" y="146" text-anchor="start">그래서 이 엔진은 행 span 을 쓴다 (§6.2)</text>
+</svg>
+<p>미드포인트 원은 <b>외곽선을 그리는</b> 알고리즘입니다. 참원에 가장 가까운 격자점을 고르므로, 그 점이 원 <b>안</b>이라는 보장이 없습니다.</p>
+<p>r = 2 에서 (2,1) 을 찍는데 2² + 1² = 5 &gt; 4 입니다. 시야 마스크로 쓰면 칸 수가 가우스 원 문제의 값과 어긋납니다.</p>
+<div class="note">이 반례는 골든 벡터를 처음 만들 때 <b>개수가 맞지 않아</b> 드러났습니다. 화면으로는 알아채기 어렵습니다 — 한 칸이 더 보일 뿐이니까요.</div>
+</article>
+
+<article class="card" id="s6-spans">
+<h3>정리 6.2 — 덧셈만으로 행 span 구하기</h3>
+<p>필요한 것은 외곽선이 아니라 <b>채워진 원판</b>입니다. 행마다 "원 안에 드는 최대 |i|" 하나만 알면 됩니다.</p>
+<pre class="term">span[j] = ⌊√(r² − j²)⌋</pre>
+<p>제곱근을 행마다 부르는 대신, x 가 결코 늘지 않는다는 성질을 씁니다.</p>
+<div class="src"><b>py/rts/circle.py</b><span class="ln">14–32</span><span>곱셈도 제곱근도 없다</span></div>
+<pre><code data-lang="py" data-src="py/rts/circle.py" data-lines="14-32">def spans(r):
+    """span[j] = 행 j 에서 원 안에 드는 최대 |i|. 덧셈과 뺄셈만 쓴다.
+
+       불변식은 t = r² − j² − x² &gt;= 0 이고 x 가 그 조건을 만족하는 최대값이다.
+       x 는 결코 늘지 않으므로 전체 비용이 O(r) 이다 (SPEC 정리 6.2).
+    """
+    if r in _span_cache:
+        return _span_cache[r]
+    out = [0] * (r + 1)
+    out[0] = r
+    x, t = r, 0
+    for j in range(1, r + 1):
+        t -= 2 * (j - 1) + 1
+        while t &lt; 0:
+            t += 2 * x - 1
+            x -= 1
+        out[j] = x
+    _span_cache[r] = out
+    return out</code></pre>
+<p><b>정리 6.2.</b> 매 <code class="nb">j</code> 마다 <code class="nb">span[j] = ⌊√(r²−j²)⌋</code> 이다. 따라서 전체 비용은 <code class="nb">O(r)</code> 이다.</p>
+<p><b>증명 스케치.</b> 불변식은 <code class="nb">t = r² − j² − x² ≥ 0</code> 이고 <code class="nb">x</code> 가 그 조건을 만족하는 최대값이라는 것입니다. <code class="nb">j</code> 가 1 늘면 <code class="nb">t</code> 가 <code class="nb">2j−1</code> 만큼 줄고, <code class="nb">x</code> 를 1 줄이면 <code class="nb">2x−1</code> 만큼 늡니다. 내부 <code class="nb">while</code> 이 도는 총 횟수는 <code class="nb">x</code> 가 <code class="nb">r</code> 에서 0 까지 내려가는 횟수뿐이므로 전체 <code class="nb">O(r)</code> 입니다. ∎</p>
+</article>
+
+<article class="card" id="s6-gauss">
+<h3>정리 6.1 — 가우스 원 문제</h3>
+<p>반경 r 원판 안의 격자점 개수 <code class="nb">N(r)</code> 은 정수론의 고전 문제입니다. 우리 마스크의 칸 수가 바로 그것입니다.</p>
+<div class="src"><b>out/py_prim.txt</b><span class="ln">106–115</span><span>r=1..8 의 칸 수와 행 span</span></div>
+<pre class="term" data-out="py_prim.txt" data-lines="106-115">== 6. 원 마스크 ==
+ r    개수  span
+ 1       5  1 0
+ 2      13  2 1 0
+ 3      29  3 2 2 0
+ 4      49  4 3 3 2 0
+ 5      81  5 4 4 4 3 0
+ 6     113  6 5 5 5 4 3 0
+ 7     149  7 6 6 6 5 4 3 0
+ 8     197  8 7 7 7 6 6 5 3 0</pre>
+<svg class="diag" viewBox="0 0 455 235" role="img">
+<title>원 마스크 — 행 span 과 미드포인트 외곽선</title>
+<rect class="tl dim" x="20" y="24" width="13" height="13"/>
+<rect class="tl dim" x="35" y="24" width="13" height="13"/>
+<rect class="tl dim" x="50" y="24" width="13" height="13"/>
+<rect class="tl dim" x="65" y="24" width="13" height="13"/>
+<rect class="tl cool" x="80" y="24" width="13" height="13"/>
+<rect class="tl cool" x="95" y="24" width="13" height="13"/>
+<rect class="tl hot" x="110" y="24" width="13" height="13"/>
+<rect class="tl cool" x="125" y="24" width="13" height="13"/>
+<rect class="tl cool" x="140" y="24" width="13" height="13"/>
+<rect class="tl dim" x="155" y="24" width="13" height="13"/>
+<rect class="tl dim" x="170" y="24" width="13" height="13"/>
+<rect class="tl dim" x="185" y="24" width="13" height="13"/>
+<rect class="tl dim" x="200" y="24" width="13" height="13"/>
+<text class="lbl" x="223" y="34" text-anchor="start">span 0</text>
+<rect class="tl dim" x="20" y="39" width="13" height="13"/>
+<rect class="tl dim" x="35" y="39" width="13" height="13"/>
+<rect class="tl dim" x="50" y="39" width="13" height="13"/>
+<rect class="tl hot" x="65" y="39" width="13" height="13"/>
+<rect class="tl on" x="80" y="39" width="13" height="13"/>
+<rect class="tl on" x="95" y="39" width="13" height="13"/>
+<rect class="tl on" x="110" y="39" width="13" height="13"/>
+<rect class="tl on" x="125" y="39" width="13" height="13"/>
+<rect class="tl on" x="140" y="39" width="13" height="13"/>
+<rect class="tl hot" x="155" y="39" width="13" height="13"/>
+<rect class="tl dim" x="170" y="39" width="13" height="13"/>
+<rect class="tl dim" x="185" y="39" width="13" height="13"/>
+<rect class="tl dim" x="200" y="39" width="13" height="13"/>
+<text class="lbl" x="223" y="49" text-anchor="start">span 3</text>
+<rect class="tl dim" x="20" y="54" width="13" height="13"/>
+<rect class="tl dim" x="35" y="54" width="13" height="13"/>
+<rect class="tl hot" x="50" y="54" width="13" height="13"/>
+<rect class="tl on" x="65" y="54" width="13" height="13"/>
+<rect class="tl on" x="80" y="54" width="13" height="13"/>
+<rect class="tl on" x="95" y="54" width="13" height="13"/>
+<rect class="tl on" x="110" y="54" width="13" height="13"/>
+<rect class="tl on" x="125" y="54" width="13" height="13"/>
+<rect class="tl on" x="140" y="54" width="13" height="13"/>
+<rect class="tl on" x="155" y="54" width="13" height="13"/>
+<rect class="tl hot" x="170" y="54" width="13" height="13"/>
+<rect class="tl dim" x="185" y="54" width="13" height="13"/>
+<rect class="tl dim" x="200" y="54" width="13" height="13"/>
+<text class="lbl" x="223" y="64" text-anchor="start">span 4</text>
+<rect class="tl dim" x="20" y="69" width="13" height="13"/>
+<rect class="tl hot" x="35" y="69" width="13" height="13"/>
+<rect class="tl on" x="50" y="69" width="13" height="13"/>
+<rect class="tl on" x="65" y="69" width="13" height="13"/>
+<rect class="tl on" x="80" y="69" width="13" height="13"/>
+<rect class="tl on" x="95" y="69" width="13" height="13"/>
+<rect class="tl on" x="110" y="69" width="13" height="13"/>
+<rect class="tl on" x="125" y="69" width="13" height="13"/>
+<rect class="tl on" x="140" y="69" width="13" height="13"/>
+<rect class="tl on" x="155" y="69" width="13" height="13"/>
+<rect class="tl on" x="170" y="69" width="13" height="13"/>
+<rect class="tl hot" x="185" y="69" width="13" height="13"/>
+<rect class="tl dim" x="200" y="69" width="13" height="13"/>
+<text class="lbl" x="223" y="79" text-anchor="start">span 5</text>
+<rect class="tl cool" x="20" y="84" width="13" height="13"/>
+<rect class="tl on" x="35" y="84" width="13" height="13"/>
+<rect class="tl on" x="50" y="84" width="13" height="13"/>
+<rect class="tl on" x="65" y="84" width="13" height="13"/>
+<rect class="tl on" x="80" y="84" width="13" height="13"/>
+<rect class="tl on" x="95" y="84" width="13" height="13"/>
+<rect class="tl on" x="110" y="84" width="13" height="13"/>
+<rect class="tl on" x="125" y="84" width="13" height="13"/>
+<rect class="tl on" x="140" y="84" width="13" height="13"/>
+<rect class="tl on" x="155" y="84" width="13" height="13"/>
+<rect class="tl on" x="170" y="84" width="13" height="13"/>
+<rect class="tl on" x="185" y="84" width="13" height="13"/>
+<rect class="tl cool" x="200" y="84" width="13" height="13"/>
+<text class="lbl" x="223" y="94" text-anchor="start">span 5</text>
+<rect class="tl cool" x="20" y="99" width="13" height="13"/>
+<rect class="tl on" x="35" y="99" width="13" height="13"/>
+<rect class="tl on" x="50" y="99" width="13" height="13"/>
+<rect class="tl on" x="65" y="99" width="13" height="13"/>
+<rect class="tl on" x="80" y="99" width="13" height="13"/>
+<rect class="tl on" x="95" y="99" width="13" height="13"/>
+<rect class="tl on" x="110" y="99" width="13" height="13"/>
+<rect class="tl on" x="125" y="99" width="13" height="13"/>
+<rect class="tl on" x="140" y="99" width="13" height="13"/>
+<rect class="tl on" x="155" y="99" width="13" height="13"/>
+<rect class="tl on" x="170" y="99" width="13" height="13"/>
+<rect class="tl on" x="185" y="99" width="13" height="13"/>
+<rect class="tl cool" x="200" y="99" width="13" height="13"/>
+<text class="lbl" x="223" y="109" text-anchor="start">span 5</text>
+<rect class="tl hot" x="20" y="114" width="13" height="13"/>
+<rect class="tl on" x="35" y="114" width="13" height="13"/>
+<rect class="tl on" x="50" y="114" width="13" height="13"/>
+<rect class="tl on" x="65" y="114" width="13" height="13"/>
+<rect class="tl on" x="80" y="114" width="13" height="13"/>
+<rect class="tl on" x="95" y="114" width="13" height="13"/>
+<rect class="tl on" x="110" y="114" width="13" height="13"/>
+<rect class="tl on" x="125" y="114" width="13" height="13"/>
+<rect class="tl on" x="140" y="114" width="13" height="13"/>
+<rect class="tl on" x="155" y="114" width="13" height="13"/>
+<rect class="tl on" x="170" y="114" width="13" height="13"/>
+<rect class="tl on" x="185" y="114" width="13" height="13"/>
+<rect class="tl hot" x="200" y="114" width="13" height="13"/>
+<text class="lbl" x="223" y="124" text-anchor="start">span 6</text>
+<rect class="tl cool" x="20" y="129" width="13" height="13"/>
+<rect class="tl on" x="35" y="129" width="13" height="13"/>
+<rect class="tl on" x="50" y="129" width="13" height="13"/>
+<rect class="tl on" x="65" y="129" width="13" height="13"/>
+<rect class="tl on" x="80" y="129" width="13" height="13"/>
+<rect class="tl on" x="95" y="129" width="13" height="13"/>
+<rect class="tl on" x="110" y="129" width="13" height="13"/>
+<rect class="tl on" x="125" y="129" width="13" height="13"/>
+<rect class="tl on" x="140" y="129" width="13" height="13"/>
+<rect class="tl on" x="155" y="129" width="13" height="13"/>
+<rect class="tl on" x="170" y="129" width="13" height="13"/>
+<rect class="tl on" x="185" y="129" width="13" height="13"/>
+<rect class="tl cool" x="200" y="129" width="13" height="13"/>
+<text class="lbl" x="223" y="139" text-anchor="start">span 5</text>
+<rect class="tl cool" x="20" y="144" width="13" height="13"/>
+<rect class="tl on" x="35" y="144" width="13" height="13"/>
+<rect class="tl on" x="50" y="144" width="13" height="13"/>
+<rect class="tl on" x="65" y="144" width="13" height="13"/>
+<rect class="tl on" x="80" y="144" width="13" height="13"/>
+<rect class="tl on" x="95" y="144" width="13" height="13"/>
+<rect class="tl on" x="110" y="144" width="13" height="13"/>
+<rect class="tl on" x="125" y="144" width="13" height="13"/>
+<rect class="tl on" x="140" y="144" width="13" height="13"/>
+<rect class="tl on" x="155" y="144" width="13" height="13"/>
+<rect class="tl on" x="170" y="144" width="13" height="13"/>
+<rect class="tl on" x="185" y="144" width="13" height="13"/>
+<rect class="tl cool" x="200" y="144" width="13" height="13"/>
+<text class="lbl" x="223" y="154" text-anchor="start">span 5</text>
+<rect class="tl dim" x="20" y="159" width="13" height="13"/>
+<rect class="tl hot" x="35" y="159" width="13" height="13"/>
+<rect class="tl on" x="50" y="159" width="13" height="13"/>
+<rect class="tl on" x="65" y="159" width="13" height="13"/>
+<rect class="tl on" x="80" y="159" width="13" height="13"/>
+<rect class="tl on" x="95" y="159" width="13" height="13"/>
+<rect class="tl on" x="110" y="159" width="13" height="13"/>
+<rect class="tl on" x="125" y="159" width="13" height="13"/>
+<rect class="tl on" x="140" y="159" width="13" height="13"/>
+<rect class="tl on" x="155" y="159" width="13" height="13"/>
+<rect class="tl on" x="170" y="159" width="13" height="13"/>
+<rect class="tl hot" x="185" y="159" width="13" height="13"/>
+<rect class="tl dim" x="200" y="159" width="13" height="13"/>
+<text class="lbl" x="223" y="169" text-anchor="start">span 5</text>
+<rect class="tl dim" x="20" y="174" width="13" height="13"/>
+<rect class="tl dim" x="35" y="174" width="13" height="13"/>
+<rect class="tl hot" x="50" y="174" width="13" height="13"/>
+<rect class="tl on" x="65" y="174" width="13" height="13"/>
+<rect class="tl on" x="80" y="174" width="13" height="13"/>
+<rect class="tl on" x="95" y="174" width="13" height="13"/>
+<rect class="tl on" x="110" y="174" width="13" height="13"/>
+<rect class="tl on" x="125" y="174" width="13" height="13"/>
+<rect class="tl on" x="140" y="174" width="13" height="13"/>
+<rect class="tl on" x="155" y="174" width="13" height="13"/>
+<rect class="tl hot" x="170" y="174" width="13" height="13"/>
+<rect class="tl dim" x="185" y="174" width="13" height="13"/>
+<rect class="tl dim" x="200" y="174" width="13" height="13"/>
+<text class="lbl" x="223" y="184" text-anchor="start">span 4</text>
+<rect class="tl dim" x="20" y="189" width="13" height="13"/>
+<rect class="tl dim" x="35" y="189" width="13" height="13"/>
+<rect class="tl dim" x="50" y="189" width="13" height="13"/>
+<rect class="tl hot" x="65" y="189" width="13" height="13"/>
+<rect class="tl on" x="80" y="189" width="13" height="13"/>
+<rect class="tl on" x="95" y="189" width="13" height="13"/>
+<rect class="tl on" x="110" y="189" width="13" height="13"/>
+<rect class="tl on" x="125" y="189" width="13" height="13"/>
+<rect class="tl on" x="140" y="189" width="13" height="13"/>
+<rect class="tl hot" x="155" y="189" width="13" height="13"/>
+<rect class="tl dim" x="170" y="189" width="13" height="13"/>
+<rect class="tl dim" x="185" y="189" width="13" height="13"/>
+<rect class="tl dim" x="200" y="189" width="13" height="13"/>
+<text class="lbl" x="223" y="199" text-anchor="start">span 3</text>
+<rect class="tl dim" x="20" y="204" width="13" height="13"/>
+<rect class="tl dim" x="35" y="204" width="13" height="13"/>
+<rect class="tl dim" x="50" y="204" width="13" height="13"/>
+<rect class="tl dim" x="65" y="204" width="13" height="13"/>
+<rect class="tl cool" x="80" y="204" width="13" height="13"/>
+<rect class="tl cool" x="95" y="204" width="13" height="13"/>
+<rect class="tl hot" x="110" y="204" width="13" height="13"/>
+<rect class="tl cool" x="125" y="204" width="13" height="13"/>
+<rect class="tl cool" x="140" y="204" width="13" height="13"/>
+<rect class="tl dim" x="155" y="204" width="13" height="13"/>
+<rect class="tl dim" x="170" y="204" width="13" height="13"/>
+<rect class="tl dim" x="185" y="204" width="13" height="13"/>
+<rect class="tl dim" x="200" y="204" width="13" height="13"/>
+<text class="lbl" x="223" y="214" text-anchor="start">span 0</text>
+<text x="20" y="16" text-anchor="start">r=6 · 안에 드는 칸 113개 (가우스 원 문제 N(r))</text>
+<text class="lbl" x="305" y="211" text-anchor="start">주황: 외곽선이 찍은 칸 중 원 안</text>
+<text class="lbl" x="305" y="225" text-anchor="start">파랑: 외곽선이 찍었으나 원 밖</text>
+</svg>
+<p><code class="nb">N(r) = 1 + 4·Σ(⌊r²/(4k+1)⌋ − ⌊r²/(4k+3)⌋)</code> 로도 셀 수 있고, 우리 알고리즘의 결과가 그 값과 <b>일치해야 합니다.</b> 시험이 매번 확인합니다.</p>
+<p>r = 8 에서 197칸. 원의 넓이 π·64 = 201.06 과 4칸 차이입니다. 이 오차항의 상계가 가우스 원 문제의 본론이고, 우리에게는 "면적으로 어림해도 몇 % 안"이라는 사실만 필요합니다.</p>
+</article>
+
+<article class="card" id="s6-order">
+<h3>마스크의 순서까지 명세다</h3>
+<div class="src"><b>py/rts/circle.py</b><span class="ln">35–50</span><span>dy 오름차순, 같은 dy 안에서 dx 오름차순</span></div>
+<pre><code data-lang="py" data-src="py/rts/circle.py" data-lines="35-50">def offsets(r):
+    """(dx, dy) 목록. dy 오름차순, 같은 dy 안에서 dx 오름차순으로 **고정**한다.
+
+       순서가 다르면 참조 카운트 결과는 같지만 이벤트 로그의 순서가 달라지고,
+       그 차이가 상태 해시를 가른다(SPEC §6.3).
+    """
+    if r in _off_cache:
+        return _off_cache[r]
+    sp = spans(r)
+    out = []
+    for j in range(-r, r + 1):
+        w = sp[j if j &gt;= 0 else -j]
+        for i in range(-w, w + 1):
+            out.append((i, j))
+    _off_cache[r] = out
+    return out</code></pre>
+<p>참조 카운트(15부)는 순서와 무관하게 같은 결과를 냅니다. 그런데도 순서를 명세로 고정하는 이유는 <b>이벤트 로그</b> 때문입니다.</p>
+<p>시야가 켜지는 순서가 다르면 트레이스의 줄 순서가 달라지고, 세 언어의 <code class="nb">trace.jsonl</code> 이 바이트 단위로 갈립니다. 결과는 같은데 파일이 다르면, 그 파일로는 아무것도 증명할 수 없습니다.</p>
+<div class="key">캐시를 두는 것도 명세의 일부입니다. 반경은 최대 8 이고 종류가 여덟 개뿐이라, 한 번 만든 오프셋 목록을 계속 돌려 씁니다. 매 틱 유닛마다 다시 만들면 그것만으로 시뮬 시간이 두 배가 됩니다.</div>
+</article>
+
+<article class="card" id="s6-los">
+<h3>시야에는 시선 판정이 없다</h3>
+<p class="lead">벽 뒤가 보입니다. 일부러 그렇게 두었습니다.</p>
+<p>시선(line of sight) 판정을 넣으면 유닛마다 반경 안 모든 칸에 브레젠험 선을 그어야 합니다. 반경 5 면 81칸, 유닛 40기면 매 틱 3,240번의 선긋기입니다.</p>
+<p>도스 시절 RTS 대부분이 같은 선택을 했습니다. 시선 판정이 있던 것은 <b>고저차가 있는</b> 게임들이었고, 이 엔진에는 고저차가 없습니다.</p>
+<div class="note">이것은 성능 때문에 정확도를 포기한 자리입니다. 15부에서 시선 판정을 넣으면 얼마나 느려지는지 실측으로 보입니다 — 그리고 그것이 왜 <b>안개의 모양</b>을 바꾸는지도요.</div>
+</article>
+
+<article class="card" id="s6-demo-metrics">
+<h3>직접 해 보기 — 거리 척도</h3>
+<div class="demo" data-demo="dist-metrics">
+<h5>다섯 척도를 한 벡터에 동시에</h5>
+<div class="row">
+<label>dx <input type="number" data-dx value="12" step="1" min="-40" max="40"></label>
+<label>dy <input type="number" data-dy value="5" step="1" min="-40" max="40"></label>
+<button data-run>계산</button>
+</div>
+<div class="out"></div>
+</div>
+<p>유클리드 값과 나란히 놓고 편차를 봅니다. <code class="nb">dx</code> 나 <code class="nb">dy</code> 하나를 0 으로 두면 다섯 척도가 전부 같은 값을 냅니다 — 축 위에서는 근사할 것이 없으니까요.</p>
+</article>
+
+<article class="card" id="s6-demo-circle">
+<h3>직접 해 보기 — 원 마스크</h3>
+<div class="demo" data-demo="circle-mask">
+<h5>행 span 과 미드포인트 외곽선</h5>
+<div class="row">
+<label>반경 <input type="number" data-r value="5" step="1" min="1" max="12"></label>
+<label><input type="checkbox" data-outline> 외곽선 겹쳐 보기</label>
+</div>
+<div class="out"></div>
+</div>
+<p>반경을 키우면 두 알고리즘이 어긋나는 칸이 늘어납니다. 외곽선이 원 밖을 찍는 자리가 어디인지 눈으로 확인해 보세요.</p>
+</article>
+
+<article class="card" id="s6-sum">
+<h3>6부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>16.16</td><td>1픽셀 = 65536</td><td>FPU 없음 + 세 언어 일치</td></tr>
+<tr><td>곱셈</td><td>a 를 쪼갠다</td><td>정리 2.1 · 중간값 2⁴⁷</td></tr>
+<tr><td>나눗셈</td><td>내림 고정, b=0 은 즉시 실패</td><td>타일 좌표의 음수 영역</td></tr>
+<tr><td>제곱근</td><td>뉴턴, 초기값·종료 조건 고정</td><td>정리 2.2</td></tr>
+<tr><td>사거리</td><td>dinf — 근사가 아니다</td><td>8방향 걸음 수와 동치</td></tr>
+<tr><td>경로 비용</td><td>doct(10/14) — 유일하게 허용적</td><td>12부의 정리 8.1</td></tr>
+<tr><td>최근접 고르기</td><td>d83 — 3/8 은 시프트 세 번</td><td>−2.8 % (45°)</td></tr>
+<tr><td>방향 판별</td><td>12·mn &gt; 5·mx</td><td>tan22.5 ≈ 5/12</td></tr>
+<tr><td>원 마스크</td><td>행 span — 외곽선이 아니다</td><td>정리 6.1·6.2 · r=2 반례</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s6-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q"><code class="nb">dab</code> 의 반올림 항 32768 을 빼면 <code class="nb">dab(1,0)</code> 이 0 이 된다. 그런데 <code class="nb">dab(0,1)</code> 도 0 인가? 그리고 그 버그가 게임에서 어떻게 보이는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p><code class="nb">mx</code> 와 <code class="nb">mn</code> 은 부호도 축도 보지 않고 <b>큰 쪽·작은 쪽</b>만 봅니다. <code class="nb">(0,1)</code> 도 <code class="nb">mx=1, mn=0</code> 이므로 똑같이 0 입니다.</p>
+<p>게임에서는 <b>붙어 있는 적을 못 때리는</b> 것이 아니라 그 반대입니다. 거리가 0 이면 "가장 가까운 것" 비교에서 <b>모든 인접 후보가 동점</b>이 되고, 타이브레이크(핸들 오름차순)가 전부를 결정합니다. 그러면 유닛이 등 뒤의 적을 놔두고 핸들이 작은 먼 적을 쫓습니다.</p>
+<p>더 나쁜 것은 이 버그가 <b>대칭이라 결정론을 깨지 않는다</b>는 점입니다. 세 언어가 똑같이 틀리므로 파리티 검사를 전부 통과합니다. 골든 벡터의 오차 열(<code class="nb">dabpm = −1000</code>)이 아니었으면 못 봤을 것입니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s6-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">시야 반경을 8 에서 9 로 늘리면 마스크의 칸 수는 몇 개가 되는가? 그리고 <code class="nb">spans</code> 의 <code class="nb">while</code> 문은 몇 번 더 도는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>칸 수는 <code class="nb">N(9) = 253</code> 입니다(197 → 253, +28 %). 넓이 <code class="nb">π·81 = 254.5</code> 와 1.5칸 차이입니다.</p>
+<p><code class="nb">while</code> 은 <b>전체를 통틀어 r 번</b> 돕니다 — <code class="nb">x</code> 가 <code class="nb">r</code> 에서 0 까지 내려가는 횟수가 전부이기 때문입니다(정리 6.2). r=8 에서 8번, r=9 에서 9번. 바깥 <code class="nb">for</code> 도 r 번이므로 총 비용은 여전히 <code class="nb">O(r)</code> 입니다.</p>
+<p>실제로 늘어나는 비용은 마스크를 <b>쓰는</b> 쪽입니다. 시야 갱신은 칸마다 카운트를 올리므로 197 → 253 만큼 더 듭니다. 반경 하나를 올리는 결정이 시야 비용을 28 % 올린다는 뜻이고, 그래서 <code class="nb">SIGHT_MAX = 8</code> 이 상수표에 있습니다.</p>
+</div>
+</div>
 </article>
 
 <!-- ===== 07-random.html ===== -->
