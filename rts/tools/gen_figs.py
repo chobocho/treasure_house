@@ -739,12 +739,123 @@ def fig_hash_bytes():
     return sv.save('hash_bytes.svg')
 
 
+# ── 12부: A* 가 여는 노드 ───────────────────────────────────────────────────
+def fig_astar_expand():
+    """같은 문제에서 다익스트라와 A* 가 **닫은 칸**을 나란히.
+
+       엔진의 astar 는 연 노드 수만 돌려주므로, 도해용으로 같은 알고리즘을
+       여기서 다시 구현해 닫힌 집합을 모은다. 비용과 연 노드 수가 엔진의
+       값과 같은지 그 자리에서 확인한다 — 다르면 도해가 거짓말이 된다.
+    """
+    from rts import path as P
+    m = T.TMap.load_text(io.open(os.path.join(BASE, 'golden', 'map_2.txt'),
+                                 encoding='utf-8').read())
+    s0, t0 = m.pairs[0]
+    si, ti = s0[1] * m.w + s0[0], t0[1] * m.w + t0[0]
+
+    def search(use_h):
+        dist = {si: 0}
+        closed = []
+        heap = P.Heap()
+        h0 = P.h_oct(s0[0], s0[1], t0[0], t0[1]) if use_h else 0
+        heap.push(h0, h0, si)
+        seen = set()
+        while len(heap):
+            _f, _hh, p = heap.pop()
+            if p in seen:
+                continue
+            seen.add(p)
+            closed.append(p)
+            if p == ti:
+                return dist[p], closed
+            x, y = p % m.w, p // m.w
+            for d, u, v in P.neighbours(m, x, y, 0):
+                j = v * m.w + u
+                nd = dist[p] + F.DCOST[d]
+                if nd < dist.get(j, P.INF):
+                    dist[j] = nd
+                    hn = P.h_oct(u, v, t0[0], t0[1]) if use_h else 0
+                    heap.push(nd + hn, hn, j)
+        return -1, closed
+
+    cost_d, closed_d = search(False)
+    cost_a, closed_a = search(True)
+    ref_cost, _tiles, ref_ex = P.astar(m, 0, s0, t0)
+    assert cost_a == ref_cost == cost_d, '도해가 엔진과 다른 답을 냈다'
+    assert len(closed_a) == ref_ex, '도해의 연 노드 수가 엔진과 다르다'
+    cell = 11
+    sv = Svg(2 * (m.w * cell + 26) + 250, m.h * cell + 56,
+             '다익스트라와 A* 가 닫는 칸')
+    panes = [('다익스트라 — %d칸' % len(closed_d), closed_d),
+             ('A* — %d칸' % len(closed_a), closed_a)]
+    for k, (title, closed) in enumerate(panes):
+        ox = 20 + k * (m.w * cell + 26)
+        sv.text(ox + m.w * cell / 2, 22, title, 'lbl')
+        mark = set(closed)
+        for y in range(m.h):
+            for x in range(m.w):
+                i = y * m.w + x
+                if not m.passable_terrain(x, y, 0):
+                    cls = 'tl dim'
+                elif i in mark:
+                    cls = 'tl hot' if k else 'tl on'
+                else:
+                    cls = 'tl'
+                sv.rect(ox + x * cell, 30 + y * cell, cell - 1, cell - 1, cls)
+        for (px_, py_) in (s0, t0):
+            sv.rect(ox + px_ * cell, 30 + py_ * cell, cell - 1, cell - 1,
+                    'tl cool')
+    tx = 20 + 2 * (m.w * cell + 26)
+    sv.text(tx, 46, '파랑 = 출발·도착', 'lbl', 'start')
+    sv.text(tx, 64, '색칠 = 그 알고리즘이 닫은 칸', 'lbl', 'start')
+    sv.text(tx, 90, '두 알고리즘의 비용은 %d 로 같다.' % cost_a, 'lbl', 'start')
+    sv.text(tx, 106, '다른 것은 훑는 양뿐이다.', 'lbl', 'start')
+    sv.text(tx, 132, '%d칸 → %d칸 (%d%%)'
+            % (len(closed_d), len(closed_a),
+               len(closed_a) * 100 // len(closed_d)), 'lbl', 'start')
+    sv.text(tx, 158, '휴리스틱이 허용적이면(정리 8.1)', 'lbl', 'start')
+    sv.text(tx, 174, 'A* 는 같은 답을 더 적은 노드로 낸다.', 'lbl', 'start')
+    return sv.save('astar_expand.svg')
+
+
+# ── 12부: 양동이 큐 ─────────────────────────────────────────────────────────
+def fig_bucket_queue():
+    """정리 8.3 — 간선 비용이 10 과 14 뿐이면 양동이 15개로 충분하다."""
+    sv = Svg(680, 260, '다이얼 양동이 큐 — 원형 15칸')
+    cx, cy, r = 200, 130, 84
+    import math
+    for k in range(15):
+        a = -math.pi / 2 + 2 * math.pi * k / 15
+        x = cx + r * math.cos(a)
+        y = cy + r * math.sin(a)
+        cls = 'tl hot' if k == 4 else ('tl on' if k in (14, 3) else 'tl')
+        sv.rect(x - 13, y - 11, 26, 22, cls)
+        sv.text(x, y + 4, '%d' % k, 'lbl')
+    sv.circle(cx, cy, 16, 'tl hot')
+    sv.text(cx, cy + 4, 'cur', 'lbl')
+    tx = 320
+    sv.text(tx, 44, '지금 처리 중인 거리 cur 의 양동이(주황)에서', 'lbl', 'start')
+    sv.text(tx, 60, '칸을 꺼낸다. 새로 갱신되는 거리 nd 는', 'lbl', 'start')
+    sv.text(tx, 76, 'cur + 10 이나 cur + 14 다.', 'lbl', 'start')
+    sv.text(tx, 102, '정리 8.3.  cur ≤ nd < cur + 15', 'lbl', 'start')
+    sv.text(tx, 126, '따라서 nd mod 15 는 cur mod 15 와', 'lbl', 'start')
+    sv.text(tx, 142, '절대 겹치지 않는다 — 원형 15칸이면', 'lbl', 'start')
+    sv.text(tx, 158, '덮어쓰기가 일어나지 않는다.', 'lbl', 'start')
+    sv.text(tx, 184, '힙이 필요 없다. push/pop 이 O(1) 이고', 'lbl', 'start')
+    sv.text(tx, 200, '언어별 정렬 구현에 의존하지도 않는다.', 'lbl', 'start')
+    sv.text(24, 240,
+            '간선 비용이 두 종류(직선 10 · 대각 14)뿐이라 가능한 최적화다.',
+            'lbl', 'start')
+    return sv.save('bucket_queue.svg')
+
+
 def main():
     if not os.path.isdir(FIGS):
         os.makedirs(FIGS)
     made = [fig_autotile_classes(), fig_autotile_corner(), fig_circle_spans(),
             fig_circle_counterexample(), fig_metrics_error(), fig_hpa_clusters(),
-            fig_jps_prune(), fig_flow_field(), fig_clearance(),
+            fig_jps_prune(), fig_astar_expand(), fig_bucket_queue(),
+            fig_flow_field(), fig_clearance(),
             fig_reservation(), fig_damage_dist(), fig_tech_tree(),
             fig_fog_planes(), fig_parabola(), fig_lanchester(),
             fig_income_rate(), fig_pit_divisor(), fig_minimap_scale(),

@@ -1,11 +1,189 @@
 <article class="card section" id="s12">
 <p class="chnum">12부</p>
 <h2>경로 탐색 I</h2>
-<p class="chsub">BFS·다익스트라·A*.<br>허용성과 일관성을 증명하고, 양동이 큐로 힙을 없앤다</p>
+<p class="chsub">BFS 에서 A* 까지,<br>그리고 허용성이라는 두 줄짜리 증명이 사는 자리</p>
 </article>
 
-<article class="card" id="s12-todo">
-<h3>경로 탐색 I — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>40장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s12-graph">
+<h3>이동 그래프</h3>
+<p class="lead">타일 맵 위의 경로 탐색은 결국 <b>그래프 탐색</b>입니다. 노드는 칸, 간선은 이웃입니다.</p>
+<pre class="term">8방향 이동
+직선 비용 10  ·  대각 비용 14        14/10 = 1.4  vs  √2 = 1.41421 (−1.005 %)</pre>
+<p>왜 1 과 1.414 가 아니라 10 과 14 일까요? <b>정수만 쓰기 위해서</b>입니다. 실수를 쓰면 19부의 락스텝이 끝납니다.</p>
+<!--CODE file=py/rts/path.py lang=py sym=neighbours note=코너 컷 허용 — 도착 칸만 본다-->
+</article>
+
+<article class="card" id="s12-corner">
+<h3>코너 컷 — 허용한다</h3>
+<p class="lead">바위 두 개가 대각으로 놓여 있습니다. 그 틈으로 유닛이 지나갈 수 있습니까?</p>
+<pre class="term">. #        유닛이 좌하 → 우상 으로 대각 이동
+# .        양옆이 둘 다 막혀 있다</pre>
+<p>이 엔진은 <b>허용합니다.</b> 대각 이동은 도착 칸만 검사합니다. 선택이며, 세 가지 이유가 있습니다.</p>
+<ol>
+<li>JPS(13부)의 가지치기 규칙이 <b>코너 컷을 허용하는 격자 위에서</b> 정의되어 있습니다. 금지하면 강제 이웃 조건이 통째로 달라지고 "JPS 의 비용이 A* 와 같다"는 정리도 다시 증명해야 합니다.</li>
+<li>흐름장과 HPA* 도 같은 격자를 써야 세 방법의 비용을 비교할 수 있습니다.</li>
+<li>도스 시절 구현 상당수가 도착 칸만 검사했습니다.</li>
+</ol>
+<div class="warn">셋째 이유를 <b>고증 주장으로 쓰지 않습니다.</b> 1차 자료로 확인한 것이 아니므로 덱에서는 "이 덱의 규칙"이라고 적습니다. 대가도 정직하게 적습니다 — <b>벽으로 길을 막는 전술이 성립하지 않습니다.</b></div>
+</article>
+
+<article class="card" id="s12-nopass">
+<h3>경로 탐색은 유닛을 보지 않는다</h3>
+<p class="lead">A* 가 다른 유닛을 장애물로 보면 어떻게 될까요?</p>
+<p>유닛이 매 틱 움직이므로 <b>경로가 매 틱 달라집니다.</b> 무리 40기가 서로를 피해 다니느라 아무도 목적지에 닿지 못합니다.</p>
+<pre class="term">passable_terrain(x, y, kind)   지형만 본다     ← 경로 탐색이 쓴다
+walkable(x, y, kind)           점유도 본다     ← 배치 판정이 쓴다</pre>
+<p>움직이는 유닛끼리의 충돌은 14부의 <b>예약</b>이 국소적으로 처리합니다. 전역 계획(경로)과 국소 회피(예약)를 분리하는 것이 이 설계의 뼈대입니다.</p>
+<div class="note">건물은 다릅니다. 건물은 비키지 않으므로 <b>통행 비트를 내립니다</b>(4부). 예약만으로 막으면 유닛이 벽 앞에서 24틱을 두드립니다.</div>
+</article>
+
+<article class="card" id="s12-bfs">
+<h3>BFS — 걸음 수만 필요할 때</h3>
+<!--CODE file=py/rts/path.py lang=py sym=bfs note=대각도 한 걸음이다-->
+<p>가중치가 없으므로 큐 하나면 됩니다. 대각도 한 걸음으로 세므로 결과는 <b>체비셰프 거리</b>와 같습니다 — 장애물이 없다면요.</p>
+<p>엔진은 이것을 경로에 쓰지 않습니다. 골든 표에서 <b>다익스트라·A* 와 견주는 기준선</b>으로만 씁니다. 걸음 수와 비용이 어떻게 다른지 한 눈에 보이니까요.</p>
+</article>
+
+<article class="card" id="s12-dial">
+<h3>다익스트라 — 힙이 필요 없다</h3>
+<div class="fig" data-svg="bucket_queue.svg"></div>
+<p><b>정리 8.3.</b> 처리 중인 최소 거리 <code class="nb">cur</code> 와 새로 갱신되는 거리 <code class="nb">nd</code> 는 항상 <code class="nb">cur ≤ nd &lt; cur + 15</code> 다.</p>
+<p><b>증명.</b> <code class="nb">nd = cur + c</code> 이고 <code class="nb">c ∈ {10, 14}</code> 이므로 자명합니다. ∎</p>
+<p>따라서 <code class="nb">nd mod 15</code> 는 <code class="nb">cur mod 15</code> 와 절대 겹치지 않습니다. 원형 양동이 <b>15개</b>면 덮어쓰기가 일어나지 않습니다.</p>
+<!--CODE file=py/rts/path.py lang=py sym=dijkstra note=감소키를 구현하지 않는다-->
+</article>
+
+<article class="card" id="s12-lazy">
+<h3>감소키 대신 낡은 항목</h3>
+<p>교과서의 다익스트라는 이미 큐에 있는 노드의 키를 <b>내립니다</b>(decrease-key). 그러려면 노드가 큐 어디에 있는지 알아야 하고, 그 색인을 유지하는 비용이 붙습니다.</p>
+<p>대신 <b>그냥 하나 더 넣습니다.</b> 꺼낼 때 <code class="nb">dist[p] != cur</code> 이면 낡은 항목이므로 버립니다.</p>
+<pre class="term">if dist[p] != cur:  continue        낡은 항목 — 이미 더 짧은 길로 확정되었다</pre>
+<div class="key">양동이가 조금 더 커지는 대신 코드가 절반이 됩니다. 그리고 <b>세 언어에서 같은 순서로 돕니다</b> — 감소키를 구현하면 자료구조 내부 순서가 언어마다 갈릴 여지가 생깁니다.</div>
+</article>
+
+<article class="card" id="s12-heap">
+<h3>손으로 쓴 힙</h3>
+<p class="lead">A* 에는 우선순위 큐가 필요합니다. 그런데 <code class="nb">heapq</code>·<code class="nb">table.sort</code>·<code class="nb">Array.sort</code> 를 쓸 수 없습니다.</p>
+<p>세 언어의 정렬은 <b>동점에서 다른 순서</b>를 낼 수 있습니다. 그러면 A* 가 같은 비용의 다른 경로를 고르고, 유닛이 다른 칸을 밟고, 상태 해시가 갈립니다.</p>
+<!--CODE file=py/rts/path.py lang=py sym=Heap.push note=비교자가 전순서면 손으로 쓴 힙이 세 언어에서 같다-->
+<p>비교자는 <code class="nb">(f, h, idx)</code> 입니다. <code class="nb">idx</code> 가 타일 번호이므로 <b>같은 키를 갖는 두 항목이 존재하지 않습니다</b> — 전순서입니다.</p>
+<div class="warn"><code class="nb">f</code> 만 비교하면 동점이 생기고, 동점 처리는 힙 구현마다 다릅니다. <code class="nb">h</code> 를 둘째 키로 둔 것은 <b>목표에 가까운 쪽을 먼저</b> 열어 탐색을 좁히려는 것이고, <code class="nb">idx</code> 는 순전히 전순서를 만들기 위한 것입니다.</div>
+</article>
+
+<article class="card" id="s12-astar">
+<h3>A*</h3>
+<!--CODE file=py/rts/path.py lang=py sym=astar note=일관적이므로 재개방하지 않는다-->
+<p><code class="nb">f = g + h</code>. <code class="nb">g</code> 는 여기까지의 실제 비용, <code class="nb">h</code> 는 남은 거리의 <b>추정</b>입니다.</p>
+<pre class="term">h(a, b) = 10·mx + 4·mn        옥타일 휴리스틱 (§2.6 의 doct 와 같은 식)</pre>
+</article>
+
+<article class="card" id="s12-admissible">
+<h3>정리 8.1 — 허용성</h3>
+<p><b>정리 8.1.</b> 어떤 경로든 비용이 <code class="nb">h</code> 이상이다.</p>
+<p><b>증명.</b> 직선 이동 <code class="nb">s</code> 회, 대각 이동 <code class="nb">d</code> 회로 이루어진 경로를 봅니다.</p>
+<pre class="term">한 번의 이동이 max(|dx|,|dy|) 를 1 이상 줄이지 못한다   →  s + d  ≥ mx
+한 번의 이동이 |dx| + |dy| 를 2 이상 줄이지 못한다      →  s + 2d ≥ mx + mn</pre>
+<p>두 부등식에 각각 6 과 4 를 곱해 더하면</p>
+<pre class="term">6(s + d) + 4(s + 2d) = 10s + 14d ≥ 6·mx + 4·(mx + mn) = 10·mx + 4·mn = h</pre>
+<p>좌변이 정확히 경로 비용입니다. ∎</p>
+<div class="key">계수 6, 4 는 우연이 아닙니다. <code class="nb">λ + μ ≤ 10</code>, <code class="nb">λ + 2μ ≤ 14</code> 를 만족하면서 <code class="nb">λ·mx + μ·(mx+mn)</code> 을 최대로 하는 <b>선형계획의 해</b>가 <code class="nb">(6, 4)</code> 입니다. 즉 옥타일 휴리스틱은 이 형태에서 가능한 <b>가장 강한</b> 허용 휴리스틱입니다.</div>
+</article>
+
+<article class="card" id="s12-consistent">
+<h3>정리 8.2 — 일관성, 그리고 없어도 되는 코드</h3>
+<p><b>정리 8.2.</b> <code class="nb">h</code> 는 일관적이다: 인접한 두 칸에 대해 <code class="nb">h(n) ≤ c(n,n') + h(n')</code>.</p>
+<p><b>증명.</b> <code class="nb">h</code> 자체가 옥타일 거리이고 옥타일 거리는 삼각부등식을 만족합니다. 한 걸음의 비용은 그 걸음의 옥타일 거리와 같습니다(직선 10, 대각 14). 따라서 <code class="nb">h(n) ≤ d_oct(n,n') + h(n') = c(n,n') + h(n')</code>. ∎</p>
+<p>일관적이면 A* 는 닫힌 노드를 <b>다시 열 필요가 없습니다.</b></p>
+<pre class="term">closed.add(p)      재개방(reopening) 코드는 아예 넣지 않았다
+                   그 근거가 정리 8.2 다</pre>
+<div class="note">허용적이지만 일관적이지 않은 휴리스틱도 있습니다. 그때는 재개방이 필요하고, 최악의 경우 노드 하나를 여러 번 엽니다. 우리는 그 코드를 <b>쓰지 않기 위해</b> 정리를 증명합니다 — 증명이 코드를 줄이는 자리입니다.</div>
+</article>
+
+<article class="card" id="s12-expand">
+<h3>휴리스틱이 무엇을 아끼는가</h3>
+<div class="fig" data-svg="astar_expand.svg"></div>
+<p>같은 문제, 같은 답(비용 308). 다익스트라는 636칸을 닫고 A* 는 144칸을 닫습니다 — <b>22 %</b> 입니다.</p>
+<p>왼쪽 그림에서 다익스트라가 목표 <b>반대편</b>까지 고르게 퍼지는 것을 보세요. 목표가 어디인지 모르기 때문입니다.</p>
+</article>
+
+<article class="card" id="s12-golden">
+<h3>골든 — 네 알고리즘을 한 표에</h3>
+<!--OUT file=py_prim.txt sec=7 note=맵 여섯 장 × 네 쌍-->
+<p><b>다익스트라와 A* 의 비용이 모든 줄에서 같아야 합니다.</b> 하나라도 다르면 휴리스틱이 허용적이지 않다는 뜻이고, 정리 8.1 이 틀렸거나 구현이 틀린 것입니다.</p>
+<p>BFS 걸음 수와 비용을 견줘 보세요. 같은 걸음 수라도 대각이 많으면 비용이 큽니다 — 그것이 10/14 를 두는 이유입니다.</p>
+</article>
+
+<article class="card" id="s12-unreachable">
+<h3>닿을 수 없는 목표</h3>
+<p class="lead">플레이어가 섬 건너편을 클릭했습니다. A* 는 <b>맵 전체를 훑고서야</b> 실패합니다.</p>
+<p>4부의 연결 성분이 그 최악을 없앱니다. <code class="nb">label[start] != label[goal]</code> 이면 탐색을 시작하지 않고, 대신 같은 성분에서 <b>목표에 가장 가까운 칸</b>을 새 목표로 삼습니다.</p>
+<!--CODE file=py/rts/path.py lang=py sym=closest_reachable note=섬 건너편 클릭 한 번이 맵 전체를 펴게 하지 않는다-->
+<div class="warn">이 규칙에는 함정이 있습니다. <b>동점이면 타일 번호가 작은 쪽이 이기므로, 답이 "지금 서 있는 칸"이 될 수 있습니다.</b> 목표가 건물일 때 이 규칙을 그대로 쓰면 채집기가 제자리에 굳습니다 — 17부에서 실제로 그랬습니다.</div>
+</article>
+
+<article class="card" id="s12-cache">
+<h3>경로 캐시</h3>
+<!--CODE file=py/rts/path.py lang=py sym=Cache.get note=지형이 바뀌면 통째로 비운다-->
+<p>같은 출발·도착·종류의 질의가 반복됩니다. 64칸짜리 LRU 하나면 상당수를 걸러 냅니다.</p>
+<div class="key"><b>LRU 순서는 상태가 아닙니다.</b> 상태 해시에 넣지 않습니다. 캐시는 같은 답을 더 빨리 줄 뿐이고, <b>다른 답을 주면 그것은 버그</b>입니다. 이 구분이 없으면 캐시 적중 순서가 두 기계에서 달라졌을 때 해시가 갈립니다 — 게임은 멀쩡한데요.</div>
+<p>지형이 바뀌면(<code class="nb">version</code> 이 오르면) 통째로 비웁니다. 낡은 경로는 곧 디싱크입니다.</p>
+</article>
+
+<article class="card" id="s12-demo">
+<h3>직접 해 보기 — A* 한 걸음씩</h3>
+<div class="demo" data-demo="astar-step">
+<h5>열린 목록과 닫힌 목록을 눈으로</h5>
+<div class="row">
+<button data-step>한 걸음</button>
+<button data-run>끝까지</button>
+<button data-reset>처음으로</button>
+<label><input type="checkbox" data-h checked> 휴리스틱 켜기</label>
+</div>
+<div class="out"></div>
+</div>
+<p>휴리스틱을 끄면 다익스트라가 됩니다. 같은 맵에서 닫는 칸 수가 어떻게 달라지는지 세어 보세요.</p>
+</article>
+
+<article class="card" id="s12-sum">
+<h3>12부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>이동 그래프</td><td>8방향 · 10/14 · 코너 컷 허용</td><td>JPS 의 전제 · 이 덱의 규칙</td></tr>
+<tr><td>점유</td><td>경로는 보지 않는다</td><td>매 틱 흔들리면 무리가 무너진다</td></tr>
+<tr><td>다익스트라</td><td>양동이 15개 · 감소키 없음</td><td>정리 8.3</td></tr>
+<tr><td>우선순위 큐</td><td>손으로 쓴 힙 · (f, h, idx)</td><td>언어별 정렬이 동점을 다르게 푼다</td></tr>
+<tr><td>휴리스틱</td><td>옥타일 10·mx + 4·mn</td><td>정리 8.1 · 선형계획의 해</td></tr>
+<tr><td>재개방</td><td>코드 자체가 없다</td><td>정리 8.2</td></tr>
+<tr><td>실측</td><td>636칸 → 144칸 (22 %)</td><td>같은 비용 308</td></tr>
+<tr><td>도달 불가</td><td>연결 성분으로 먼저 거른다</td><td>최악의 경우를 없앤다</td></tr>
+<tr><td>캐시</td><td>64칸 LRU · 순서는 상태가 아니다</td><td>버전으로 무효화</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s12-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">대각 비용을 14 가 아니라 <b>15</b> 로 두면 무슨 일이 일어나는가? 휴리스틱은 그대로 <code class="nb">10·mx + 4·mn</code> 이라고 하자.</p>
+<button>답 보기</button>
+<div class="a">
+<p>휴리스틱이 <b>과대평가</b>하게 됩니다. 대각 한 걸음의 실제 비용이 15 인데 휴리스틱은 그 걸음을 14 로 세니까요 — 아니, 반대입니다. 휴리스틱이 <b>과소평가</b>하는 것은 안전합니다. 실제 비용이 커졌으므로 <code class="nb">h ≤ 실제</code> 는 더 여유롭게 성립합니다.</p>
+<p>그래서 <b>A* 는 여전히 최적 경로를 찾습니다.</b> 다만 휴리스틱이 실제보다 헐거워져 <b>더 많은 노드를 엽니다.</b> 극단적으로 <code class="nb">h = 0</code> 이면 다익스트라가 되고, 그것이 위 도해의 왼쪽 그림입니다.</p>
+<p>진짜 문제는 다른 데 있습니다. 15/10 = 1.5 는 √2 = 1.41421 에서 <b>+6 %</b> 벗어납니다. 대각이 비싸지므로 유닛이 계단 모양으로 걷기 시작하고, 그것은 <b>보기에 이상합니다.</b> 14 를 고른 것은 정확도(−1 %)와 정수(나눗셈 없음)를 함께 만족하는 값이기 때문입니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s12-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">양동이를 15개가 아니라 <b>14개</b>로 두면 어떤 버그가 생기는가? 언제 드러나는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p><code class="nb">nd = cur + 14</code> 일 때 <code class="nb">nd mod 14 == cur mod 14</code> 입니다. <b>지금 처리 중인 양동이에 새 항목이 들어갑니다.</b></p>
+<p>파이썬 리스트로 구현하면 <code class="nb">while not b:</code> 루프가 그 항목을 <b>지금 거리에서</b> 꺼냅니다. 거리 <code class="nb">cur + 14</code> 인 칸이 <code class="nb">cur</code> 로 확정되고, 그 칸에서 뻗은 모든 거리가 14 씩 작아집니다.</p>
+<p>언제 드러날까요. <b>대각 이동이 있는 경로에서만</b>, 그리고 <b>그 칸이 최단 경로에 실제로 쓰일 때만</b> 입니다. 직선만으로 풀리는 맵에서는 영원히 안 보입니다. 골든 표의 "다익스트라 == A*" 열이 이 버그를 잡는 자리이고, 그래서 맵을 여섯 장이나 두었습니다.</p>
+</div>
+</div>
 </article>
