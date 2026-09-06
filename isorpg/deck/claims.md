@@ -71,3 +71,35 @@
 
 | # | 슬라이드 id |
 |---|---|
+| A1 | s1-mode13 · s1-sum |
+| A2 | s1-dac · s8-ppm |
+| A3 | s1-pit · s13-pit |
+| A4 | s1-mem |
+| A5 | s1-nofpu |
+| A6 | s1-modex |
+| B7 | s2-name · s2-angle · s3-3d |
+| B8 | s2-name · s2-why21 |
+| B9 | s2-angle |
+| C10 | s2-lineage |
+| C11 | s2-lineage |
+| C12 | s2-lineage |
+| C13 | s2-dos |
+| C14 | s2-dos |
+| C15 | s2-dos |
+| C16 | s2-dos |
+| C17 | s2-dos |
+| C18 | s2-dos |
+| C19 | s2-korea · s17-limits |
+| C20 | s2-korea · s17-limits |
+| C21 | s2-lineage |
+| C22 | s2-lineage |
+| D23 | s9-lcg |
+| D24 | s9-hull |
+| D25 | s9-ds |
+| D26 | s13-crc-theory · s13-crc-check |
+| D27 | (덱에서 쓰지 않음 — 대조용) |
+| D28 | s5-why |
+| D29 | s11-bres |
+| D30 | s5-oct |
+| D31 | s5-why · s5-mul-check · s10-subtile |
+| D32 | s10-heur-wrong · s10-heur |
