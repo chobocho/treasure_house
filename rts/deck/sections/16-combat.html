@@ -1,11 +1,232 @@
 <article class="card section" id="s16">
 <p class="chnum">16부</p>
 <h2>전투의 수학</h2>
-<p class="chsub">피해식의 기대값과 분산, 포물선 투사체,<br>그리고 수의 제곱에 비례하는 전력</p>
+<p class="chsub">주사위 하나에서 란체스터 법칙까지,<br>그리고 어디까지가 문서이고 어디부터가 우리 규칙인가</p>
 </article>
 
-<article class="card" id="s16-todo">
-<h3>전투의 수학 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>42장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s16-range">
+<h3>사거리는 체비셰프다</h3>
+<pre class="term">in_range(a, b) = dinf(tx(a) − tx(b), ty(a) − ty(b)) ≤ range(a)</pre>
+<p>6부에서 본 대로 <code class="nb">dinf</code> 는 8방향 격자에서 <b>정확한 걸음 수</b>입니다. "사거리 4" 가 "네 걸음 안"과 같은 뜻이 되고, 플레이어가 화면에서 세는 것과 정확히 맞습니다.</p>
+<p>유클리드 사거리를 쓰면 대각선 방향의 사거리가 줄어 보입니다. 격자 게임에서는 <b>격자 거리</b>가 옳습니다.</p>
+</article>
+
+<article class="card" id="s16-target">
+<h3>표적 우선순위 — 먼저 맞는 것이 답</h3>
+<!--CODE file=py/rts/combat.py lang=py sym=pick_target note=규칙 순서가 곧 우선순위-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>순서</th><th>규칙</th><th>왜</th></tr>
+<tr><td class="num">1</td><td>현재 표적이 살아 있고 사거리 안이면 그대로</td><td>표적이 매 틱 흔들리지 않게</td></tr>
+<tr><td class="num">2</td><td>나를 때린 적이 사거리 안이면 그것</td><td>반격은 직관적이다</td></tr>
+<tr><td class="num">3</td><td>사거리 안의 적 중 d83 최소, 동점이면 핸들 오름차순</td><td>가까운 것부터</td></tr>
+<tr><td class="num">4</td><td>없으면 사거리 + 2 를 훑어 접근 (ATTACK_MOVE 만)</td><td>공격 이동의 정의</td></tr>
+</table>
+</div>
+<div class="key">1번이 없으면 유닛이 <b>매 틱 표적을 바꿉니다.</b> 두 적이 같은 거리에 있으면 번갈아 겨누다가 아무도 죽이지 못합니다. 재장전이 24틱인 전차에게 이것은 치명적입니다.</div>
+<p>3번의 동점 규칙은 지금까지와 같은 이유입니다 — 대칭 맵에서 두 적이 정확히 같은 거리에 있는 상황은 흔합니다.</p>
+</article>
+
+<article class="card" id="s16-damage">
+<h3>피해 공식 — 출처를 밝힌다</h3>
+<p class="lead">Warcraft II 의 공식을 씁니다. 그리고 <b>어디까지가 블리자드 문서이고 어디부터가 이 덱의 규칙인지</b> 나눠 적습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>내용</th><th>출처</th></tr>
+<tr><td>최대 피해 = (기본 − 방어) + 관통</td><td><b>블리자드 공식 전략 가이드</b></td></tr>
+<tr><td>실제 피해는 최대치의 50 %–100 % 균등 난수</td><td><b>블리자드 공식 전략 가이드</b></td></tr>
+<tr><td>50 % 의 반올림 방향이 <b>올림</b>(ceil)</td><td>팬 사이트의 역산 (2차 출처)</td></tr>
+<tr><td>최대 피해의 하한 1</td><td><b>이 덱의 규칙</b> (문서에 없다)</td></tr>
+</table>
+</div>
+<!--CODE file=py/rts/combat.py lang=py sym=max_damage note=하한 1 은 이 덱의 규칙이다-->
+<p>하한이 없으면 방어력이 높은 유닛이 <b>절대 죽지 않습니다.</b> 전차(방어 4)를 사수(기본 4 · 관통 6)가 때리면 4 − 4 + 6 = 6 이니 괜찮지만, 방어 5 인 정제소를 기본 4 짜리가 때리면 −1 이 됩니다.</p>
+</article>
+
+<article class="card" id="s16-expect">
+<h3>정리 15.1 — 기대값과 분산</h3>
+<div class="fig" data-svg="damage_dist.svg"></div>
+<pre class="term">mx = max(1, 기본 − 방어 + 관통)
+lo = ⌈mx/2⌉ = ⌊(mx+1)/2⌋
+dmg ~ Uniform{lo, …, mx},  n = mx − lo + 1
+
+E[dmg] = (lo + mx)/2        Var[dmg] = (n² − 1)/12</pre>
+<p><b>짝수</b> <code class="nb">mx</code> 면 <code class="nb">lo = mx/2</code> 이므로 <code class="nb">E = 0.75·mx</code> 로 딱 떨어지고, <b>홀수</b>면 <code class="nb">lo = (mx+1)/2</code> 이므로 <code class="nb">E = 0.75·mx + 0.25</code> 입니다.</p>
+<div class="warn">이 명세의 초안은 <b>짝수와 홀수를 뒤집어</b> 적고 있었습니다. 시험이 잡았습니다 — 짝수 19개와 홀수 19개를 각각 확인하는 시험을 쓰자마자요. 올림이 홀수에서만 값을 한 칸 올리기 때문입니다.</div>
+</article>
+
+<article class="card" id="s16-golden">
+<h3>표와 시뮬을 나란히</h3>
+<!--OUT file=py_prim.txt sec=11 note=피해 조합 열둘과 란체스터 여덟-->
+<p>마지막 두 열이 <b>이론 기대값 × 100</b> 과 <b>1,000회 시뮬 평균 × 100</b> 입니다. 첫 줄 <code class="nb">700</code> 대 <code class="nb">700</code> 처럼 정확히 맞는 줄도 있고 <code class="nb">550</code> 대 <code class="nb">548</code> 처럼 조금 벗어나는 줄도 있습니다.</p>
+<p>1,000회의 표준오차가 그만큼입니다. 시뮬이 이론과 <b>정확히</b> 같으면 오히려 의심해야 합니다 — 난수가 난수가 아니라는 뜻이니까요.</p>
+<div class="note">DPS 는 <code class="nb">E[dmg] / 재장전</code> 이며 틱당 값입니다. 보병은 <code class="nb">4.5/12 = 0.375</code>, 전차는 <code class="nb">12.75/24 = 0.531</code> — 전차가 보병 1.4배입니다. 비용은 3배(300 대 100)이므로 <b>돈당 화력은 보병이 낫습니다.</b> 전차의 값어치는 hp 90 과 방어 4 에 있습니다.</p>
+</article>
+
+<article class="card" id="s16-straight">
+<h3>직선 투사체</h3>
+<p class="lead">사수의 화살은 즉시 맞지 않습니다. 날아갑니다.</p>
+<!--CODE file=py/rts/combat.py lang=py sym=Projectiles.launch note=발사 시점의 위치로 날아간다-->
+<pre class="term">d   = isqrt(dx² + dy²)                      픽셀 거리 (정수)
+vx  = fpmul(fpdiv(fp(dx), fp(d)), speed)    단위벡터 × 속도
+ttl = floordiv(fp(d), speed) + 2            도달 예정 틱 + 여유 2</pre>
+<p>여유 2 가 필요한 이유는 <code class="nb">vx</code>·<code class="nb">vy</code> 가 내림으로 계산되어 투사체가 목표 타일에 <b>한두 틱 늦게</b> 닿기 때문입니다. 여유가 없으면 화살이 목표 코앞에서 사라집니다.</p>
+<div class="key"><b>표적을 쫓지 않습니다.</b> 발사 시점의 위치로 날아가므로 빠른 유닛은 화살을 피할 수 있습니다. 이것도 이 덱의 규칙이며, 유도 투사체는 매 틱 속도를 다시 계산하는 변형입니다 — 그러면 회피가 불가능해지고 사수가 너무 강해집니다.</div>
+</article>
+
+<article class="card" id="s16-arc">
+<h3>포물선 — 정리 15.2</h3>
+<div class="fig" data-svg="parabola.svg"></div>
+<pre class="term">T   = max(6, ⌊d/24⌋)                      비행 시간 (틱)
+vx  = fpdiv(fp(x1 − x0), fp(T))           수평은 등속
+vy0 = fpdiv(fp(y1 − y0), fp(T)) − fpmul(G, fpdiv(fp(T), fp(2)))
+매 틱:  vy += G;  x += vx;  y += vy       G = 1638 (0.025 px/틱²)</pre>
+<p><b>정리 15.2.</b> 위 <code class="nb">vy0</code> 은 T 틱 뒤에 정확히 <code class="nb">y1</code> 에 닿는 초기 속도다.</p>
+<p><b>증명.</b> 이산 적분으로 <code class="nb">y(T) = y0 + T·vy0 + G·T(T+1)/2</code> 입니다. 연속 근사 <code class="nb">y0 + T·vy0 + G·T²/2</code> 를 쓰면 <code class="nb">vy0 = (y1−y0)/T − G·T/2</code> 를 얻습니다. 이산과 연속의 차이는 <code class="nb">G·T/2</code> 입니다. ∎</p>
+</article>
+
+<article class="card" id="s16-arc-error">
+<h3>보정하지 않기로 한 결정</h3>
+<p>착탄점은 목표보다 <code class="nb">G·T/2</code> 만큼 아래입니다. T = 12, G = 1638 이면 <b>9,828/65536 = 0.15픽셀</b>입니다.</p>
+<p>명중 판정은 <b>타일 단위</b>입니다. 0.15픽셀은 16픽셀 타일의 1 % 도 되지 않으므로 판정을 바꾸지 않습니다.</p>
+<div class="key">보정할 수도 있었습니다. <code class="nb">vy0</code> 에서 <code class="nb">G/2</code> 를 한 번 더 빼면 정확해집니다. 하지 않은 이유는 <b>정확도가 필요 없는 자리에서 식을 복잡하게 만들지 않기 위해서</b>이고, 그 판단을 명세에 적어 두었습니다 — <b>놓친 것이 아니라 결정한 것</b>임을 구별하려고요.</div>
+</article>
+
+<article class="card" id="s16-splash">
+<h3>스플래시 — 링 단위 감쇠</h3>
+<pre class="term">링 0 (명중 칸)    dmg
+링 1 (dinf == 1)  ⌊dmg/2⌋
+링 2 (dinf == 2)  ⌊dmg/4⌋
+링 3 이상          0</pre>
+<!--CODE file=py/rts/combat.py lang=py sym=splash_hits note=아군도 맞는다-->
+<p>거리의 제곱에 반비례하는 연속 감쇠 대신 <b>세 개의 링</b>입니다. 정수 나눗셈 두 번이면 끝나고, 플레이어가 "여기까지"를 눈으로 셀 수 있습니다.</p>
+<div class="warn"><b>아군도 맞습니다.</b> 이것이 17부 AI 의 제약이 됩니다 — 박격포를 아군 근처에 쏘면 자기 유닛이 죽습니다. 아군 오사를 끄면 박격포가 무조건 이득인 유닛이 되고, 그러면 게임이 단순해집니다.</p>
+<p>같은 유닛이 두 링에 걸치는 일은 없습니다. 유닛의 <b>대표 타일 하나</b>로 판정하기 때문입니다.</p>
+</article>
+
+<article class="card" id="s16-simul">
+<h3>피해는 모아서 적용한다</h3>
+<p class="lead">두 유닛이 서로를 죽일 만큼 때렸습니다. 누가 먼저 죽습니까?</p>
+<p><b>둘 다 죽습니다.</b> 5단계에서 모든 발사를 처리해 피해를 모아 두었다가, 단계 끝에 한꺼번에 적용합니다.</p>
+<pre class="term">5. 전투   표적 선택 → 발사 → 투사체 갱신 → 피해 적용
+6. 사망   hp <= 0 인 엔티티 제거</pre>
+<div class="key">즉시 적용하면 <b>먼저 처리된 유닛이 유리합니다.</b> 핸들이 작은 유닛이 항상 이기는 게임이 되고, 그것은 플레이어가 알 수 없는 규칙입니다. 시험이 이 상황(hp 3 대 3, 서로 사거리 안)을 만들어 둘 다 죽는지 확인합니다.</p>
+</article>
+
+<article class="card" id="s16-lanchester">
+<h3>란체스터 제곱 법칙</h3>
+<div class="fig" data-svg="lanchester.svg"></div>
+<pre class="term">조준 사격:  dA/dt = −β·B      dB/dt = −α·A</pre>
+<p><b>정리 15.3.</b> <code class="nb">α·A² − β·B²</code> 는 시간에 대해 불변이다.</p>
+<p><b>증명.</b> <code class="nb">d/dt(α·A² − β·B²) = 2α·A·A′ − 2β·B·B′ = 2α·A·(−β·B) − 2β·B·(−α·A) = 0</code>. ∎</p>
+<p>따라서 A 가 이기는 조건은 <code class="nb">α·A₀² &gt; β·B₀²</code> 입니다. <b>전력은 수의 제곱에 비례합니다</b> — 수가 2배면 전투력이 4배입니다.</p>
+<div class="key">RTS 에서 병력을 나눠 보내면 안 되는 이유가 이것입니다. 10기 부대 둘을 따로 보내면 각각 <code class="nb">10² = 100</code> 이지만, 합쳐 보내면 <code class="nb">20² = 400</code> 입니다. 각개격파가 강력한 것도 같은 식의 뒷면입니다.</div>
+</article>
+
+<article class="card" id="s16-lanchester2">
+<h3>선형 법칙과 그 차이</h3>
+<pre class="term">비조준 사격:  dA/dt = −β·A·B     dB/dt = −α·A·B     →  α·A − β·B 가 불변</pre>
+<p>사수가 지역을 향해 쏘고 밀집도에 비례해 맞으면 전력이 수에 <b>비례</b>합니다. 제곱이 아닙니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>제곱 법칙</th><th>선형 법칙</th></tr>
+<tr><td>가정</td><td>모든 사수가 살아 있는 적을 정확히 노린다</td><td>지역을 향해 쏜다</td></tr>
+<tr><td>불변량</td><td class="num">α·A² − β·B²</td><td class="num">α·A − β·B</td></tr>
+<tr><td>수의 값어치</td><td>제곱</td><td>비례</td></tr>
+<tr><td>이 엔진</td><td><b>이쪽에 가깝다</b> — 표적을 하나씩 고른다</td><td>스플래시가 조금 섞인다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s16-closed">
+<h3>정리 15.4 — 섬멸 시각, 그리고 그것을 엔진이 계산하지 않는 이유</h3>
+<p><code class="nb">α·A₀² &gt; β·B₀²</code> 일 때 B 가 0 이 되는 시각은</p>
+<pre class="term">T = (1 / (2√(αβ))) · ln( (√α·A₀ + √β·B₀) / (√α·A₀ − √β·B₀) )</pre>
+<p>로그와 제곱근이 있습니다. <b>엔진은 이 식을 쓰지 않습니다.</b> 실수 연산이 들어오는 순간 19부의 락스텝이 위태로워지니까요.</p>
+<!--CODE file=py/rts/combat.py lang=py sym=lanchester_sim note=정수 이산 시뮬레이터-->
+<p>폐형해는 <code class="nb">tools/gen_figs.py</code>(엔진 밖, 실수 허용)가 계산해 도해에만 씁니다. 위 그림에서 이산 시뮬이 54틱, 폐형해가 54.9틱을 줍니다.</p>
+<div class="warn">종료 조건이 <code class="nb">&gt;= FP_ONE</code> 인 것이 중요합니다. <code class="nb">&gt; 0</code> 으로 두면 A 가 0.5 인 상태에서 감소량이 내림으로 0 이 되어 <b>영원히 돌지 않습니다.</b> 골든을 처음 만들 때 이 무한 루프에 걸렸습니다.</div>
+</article>
+
+<article class="card" id="s16-discrete">
+<h3>언제 근사가 무너지는가</h3>
+<p>50 대 40 에서는 이산과 연속이 54 대 54.9 로 거의 같습니다. <b>부대가 작으면</b> 달라집니다.</p>
+<p>5 대 5 (골든 다섯째 줄)에서는 8틱에 양쪽이 동시에 소멸합니다. 연속 모형은 대칭인 경우 <b>무한 시간</b>을 예측합니다 — <code class="nb">√α·A₀ − √β·B₀ = 0</code> 이라 로그가 발산하니까요.</p>
+<div class="key">유닛 다섯 기의 전투를 미분방정식으로 설명하는 것은 무리입니다. 란체스터 법칙은 <b>큰 수의 근사</b>이고, RTS 의 한 판은 대개 큰 수가 아닙니다. 그래도 유용한 이유는 예측이 아니라 <b>방향</b> 때문입니다 — 뭉치는 것이 낫다, 각개격파가 강하다.</div>
+</article>
+
+<article class="card" id="s16-demo1">
+<h3>직접 해 보기 — 투사체</h3>
+<div class="demo" data-demo="projectile">
+<h5>직선과 포물선</h5>
+<div class="row">
+<label>거리 <input type="range" data-d value="96" min="16" max="240" step="8"></label>
+<label>속도 <input type="range" data-sp value="4" min="1" max="12" step="1"></label>
+<label><input type="checkbox" data-arc> 포물선</label>
+<button data-run>발사</button>
+</div>
+<div class="out"></div>
+</div>
+<p>포물선을 켜면 착탄점이 목표보다 <code class="nb">G·T/2</code> 만큼 아래인 것을 확인할 수 있습니다. 거리를 늘리면 T 가 커지고 오차도 커집니다.</p>
+</article>
+
+<article class="card" id="s16-demo2">
+<h3>직접 해 보기 — 란체스터</h3>
+<div class="demo" data-demo="lanchester">
+<h5>수를 나누면 얼마나 손해인가</h5>
+<div class="row">
+<label>A <input type="number" data-a value="20" min="1" max="100"></label>
+<label>B <input type="number" data-b value="10" min="1" max="100"></label>
+<label><input type="checkbox" data-split> A 를 둘로 나눠 축차 투입</label>
+<button data-run>싸우기</button>
+</div>
+<div class="out"></div>
+</div>
+<p>20 대 10 을 한 번에 붙이면 A 가 17기쯤 남습니다. 10기씩 두 번 보내면 훨씬 적게 남습니다 — 제곱 법칙의 값이 그 차이입니다.</p>
+</article>
+
+<article class="card" id="s16-sum">
+<h3>16부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>사거리</td><td>체비셰프</td><td>격자 걸음 수와 동치</td></tr>
+<tr><td>표적</td><td>유지 → 반격 → 최근접 → 접근</td><td>순서가 곧 우선순위</td></tr>
+<tr><td>피해</td><td>(기본−방어)+관통 의 50~100 %</td><td>블리자드 공식 문서</td></tr>
+<tr><td>올림·하한 1</td><td>2차 출처 · 이 덱의 규칙</td><td>구분해 적는다</td></tr>
+<tr><td>기대값</td><td>짝수 0.75mx · 홀수 +0.25</td><td>정리 15.1 · 초안의 오류를 정정</td></tr>
+<tr><td>직선 투사체</td><td>발사 시점 위치로 · ttl 여유 2</td><td>회피가 가능하다</td></tr>
+<tr><td>포물선</td><td>착탄 오차 G·T/2 = 0.15px</td><td>정리 15.2 · 보정하지 않기로 결정</td></tr>
+<tr><td>스플래시</td><td>링 셋 · 아군도 맞는다</td><td>AI 의 제약이 된다</td></tr>
+<tr><td>피해 적용</td><td>모아서 한꺼번에</td><td>서로 죽일 수 있어야 한다</td></tr>
+<tr><td>란체스터</td><td>제곱 법칙 · 뭉쳐라</td><td>정리 15.3 · 작은 부대에서는 무너진다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s16-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">방어력이 피해를 <b>곱셈으로</b> 줄이도록(예: 피해 × 100/(100+방어)) 바꾸면 하한 1 이 필요 없어진다. 그런데 왜 뺄셈을 쓰는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>곱셈은 <b>나눗셈</b>을 부릅니다. 그것도 방어력마다 다른 나눗셈을요. 정수 나눗셈의 내림이 어디서 일어나는지에 따라 세 언어가 갈릴 여지가 늘고, 무엇보다 매 발사마다 나눗셈이 하나 붙습니다.</p>
+<p>게임 디자인의 이유가 더 큽니다. 뺄셈은 <b>"이 유닛으로는 저것을 못 뚫는다"</b>를 만듭니다. 기본 4 짜리 사수가 방어 5 짜리 정제소를 때리면 하한 1 만 들어가고, 플레이어는 다른 유닛을 데려와야 합니다. 곱셈은 그런 벽을 만들지 않습니다 — 뭐든 시간만 들이면 부술 수 있게 됩니다.</p>
+<p>도스 시절 RTS 가 대부분 뺄셈을 쓴 이유이고, 현대 게임이 곱셈(방어 관통율)으로 옮겨 간 이유이기도 합니다. 어느 쪽이 옳은 것이 아니라 <b>다른 게임</b>이 됩니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s16-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">피해를 즉시 적용하되 <b>핸들이 큰 유닛부터</b> 처리하면 어떻게 되는가? 순서를 명세로 고정했으니 결정론은 지켜지는데?</p>
+<button>답 보기</button>
+<div class="a">
+<p>결정론은 지켜집니다. 세 언어가 같은 순서로 처리하면 해시도 같습니다. 그러나 <b>게임이 이상해집니다.</b></p>
+<p>핸들이 큰 유닛(나중에 만들어진 유닛)이 항상 먼저 때립니다. 서로 죽일 만큼의 화력이 오갈 때 <b>새 유닛이 항상 이깁니다.</b> 플레이어는 이 규칙을 알 수 없고, 알아도 쓸 수 없습니다 — 유닛 생산 순서를 전투 결과 때문에 조절하지는 않으니까요.</p>
+<p>모아서 적용하면 그 편향이 사라집니다. 대신 <b>서로 죽는 일이 생깁니다.</b> 그것은 플레이어가 이해할 수 있는 결과입니다 — "둘 다 마지막 일격을 날렸다".</p>
+<p>정리하면, <b>결정론은 필요조건이지 충분조건이 아닙니다.</b> 규칙이 결정론적이면서도 나쁠 수 있고, 이 덱이 동점 규칙마다 이유를 적는 이유가 그것입니다.</p>
+</div>
+</div>
 </article>
