@@ -43,6 +43,62 @@ func (c counter) View() tea.View {
 	return tea.NewView("n=" + strconv.Itoa(c.n) + " size=" + c.size)
 }
 
+// Cmd 를 돌려주는 모델. AI 모드가 이 모양이다 — 탐색이 Cmd 안에서 돈다.
+type withCmd struct {
+	n     int
+	fired int
+}
+
+type bumpMsg struct{}
+
+func (c withCmd) Init() tea.Cmd { return nil }
+
+func (c withCmd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case TickMsg:
+		c.n++
+		// 틱마다 "나중에 한 번 더 올려 달라"는 주문서를 낸다.
+		return c, func() tea.Msg { return bumpMsg{} }
+	case bumpMsg:
+		c.fired++
+	}
+	return c, nil
+}
+
+func (c withCmd) View() tea.View {
+	return tea.NewView("n=" + strconv.Itoa(c.n) + " fired=" + strconv.Itoa(c.fired))
+}
+
+// 레코더는 Cmd 를 실행하고 그 결과 메시지를 모델에 되먹여야 한다.
+// 안 그러면 AI 가 고른 수가 영영 도착하지 않아 기록 속 AI 가 한 수도 안 둔다.
+func TestRunExecutesCommands(t *testing.T) {
+	steps, _ := ParseScript("wait wait")
+	rec := Run("t", withCmd{}, TickMsg{}, steps)
+	last := rec.Frames[len(rec.Frames)-1].Content
+	if last != "n=2 fired=2" {
+		t.Errorf("마지막 프레임이 %q — Cmd 결과가 안 들어갔다", last)
+	}
+}
+
+// waitN 은 틱 N 번을 한 프레임으로 압축한다.
+// AI 대 AI 한 판은 수천 틱이라, 틱마다 프레임을 남기면 파일이 수 MB 가 된다.
+func TestRepeatedWait(t *testing.T) {
+	steps, err := ParseScript("wait5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 1 {
+		t.Fatalf("스텝이 %d개다", len(steps))
+	}
+	rec := Run("t", counter{}, TickMsg{}, steps)
+	if len(rec.Frames) != 2 {
+		t.Fatalf("프레임이 %d장이다 — 2장이어야 한다", len(rec.Frames))
+	}
+	if got := rec.Frames[1].Content; got != "n=500 size=" {
+		t.Errorf("마지막 프레임이 %q — 틱이 5번 안 돌았다", got)
+	}
+}
+
 func TestParseStepKinds(t *testing.T) {
 	steps, err := ParseScript("right right left space wait wait 100x40")
 	if err != nil {

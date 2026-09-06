@@ -39,16 +39,34 @@ test:
 # 화면 기록 — 모델을 터미널 없이 돌려 프레임을 JSON 으로 남긴다.
 # 결정론이 계약이다: 다시 돌린 뒤 git diff 가 비어 있어야 한다.
 # 모드는 4~6단계에서 tools/record 의 등록부에 채워진다.
-record: $(OUT)/frames_1p.json
+MODES = 1p 2p ai aivai
+FRAMES = $(addprefix $(OUT)/frames_,$(addsuffix .json,$(MODES)))
+SRCGO = $(shell find core ai ui game battle menu tools -name '*.go' 2>/dev/null)
 
-$(OUT)/frames_1p.json: $(shell find core ai ui game tools -name '*.go' 2>/dev/null)
-	@mkdir -p $(OUT)
-	$(GO) run ./tools/record -mode 1p -script "$(SCRIPT_1P)" -out $@
+record: $(FRAMES)
 
-# 1인용 기록 스크립트. 조작 → 낙하 → 줄 지우기까지 한 판에 다 나오게 짰다.
-SCRIPT_1P = 80x24 left left space wait wait right right space wait wait \
+# 1인용 — 조작 → 낙하 → 줄 지우기 → 일시정지까지 한 판에 다 나오게 짰다.
+SCRIPT_1p = 80x24 left left space wait wait right right space wait wait \
             c up space wait down down down wait wait space wait wait wait \
             left left left left space wait wait p wait wait p wait
+
+# 2인용 — 두 자리가 서로 다른 키로 동시에 움직인다는 것을 보인다.
+SCRIPT_2p = 80x24 a a f wait left left space wait w a a f wait \
+            up right space wait s wait wait d d f wait \
+            left space wait wait e wait c wait wait
+
+# 사람 대 AI — 사람이 몇 수 두는 동안 AI 가 생각하고 스스로 둔다.
+SCRIPT_ai = 80x24 wait10 left left space wait10 right space wait10 \
+            wait10 wait10 wait10 c space wait10 wait10 wait10
+
+# AI 대 AI — 최종 가중치 대 보통. 길게 돌려서 가비지가 오가는 것까지 본다.
+SCRIPT_aivai = 80x24 wait20 wait20 wait20 wait20 wait20 wait20 wait20 wait20 \
+               wait20 wait20 wait20 wait20 wait20 wait20 wait20 wait20 \
+               wait20 wait20 wait20 wait20 wait20 wait20 wait20 wait20
+
+$(OUT)/frames_%.json: $(SRCGO)
+	@mkdir -p $(OUT)
+	$(GO) run ./tools/record -mode $* -script "$(SCRIPT_$*)" -out $@
 
 # 진짜 PTY 에서 진짜로 도는지 확인하는 유일한 방법.
 # 에이전트 세션에는 터미널이 없으므로 tmux 를 하나 띄워서 그 화면을 긁어 온다.
@@ -65,9 +83,17 @@ tmux-smoke:
 		tmux kill-session -t tui_$$ex 2>/dev/null || true; \
 		echo "  $(OUT)/tmux_$$ex.txt"; \
 	done
+	@tmux kill-session -t tui_menu 2>/dev/null || true
+	@tmux new-session -d -s tui_menu -x 80 -y 24 "$(GO) run ./cmd/tetris -seed 1"
+	@sleep 5
+	@tmux capture-pane -e -p -t tui_menu > $(OUT)/tmux_menu.txt
+	@tmux send-keys -t tui_menu q 2>/dev/null || true
+	@sleep 1
+	@tmux kill-session -t tui_menu 2>/dev/null || true
+	@echo "  $(OUT)/tmux_menu.txt"
 	@tmux kill-session -t tui_1p 2>/dev/null || true
-	@tmux new-session -d -s tui_1p -x 80 -y 24 "$(GO) run ./cmd/tetris --mode 1p --seed 1"
-	@sleep 4
+	@tmux new-session -d -s tui_1p -x 80 -y 24 "$(GO) run ./cmd/tetris -mode 1p -seed 1"
+	@sleep 5
 	@tmux send-keys -t tui_1p Left Left Space
 	@sleep 1
 	@tmux send-keys -t tui_1p Right Space
@@ -77,6 +103,36 @@ tmux-smoke:
 	@sleep 1
 	@tmux kill-session -t tui_1p 2>/dev/null || true
 	@echo "  $(OUT)/tmux_1p.txt"
+	@tmux kill-session -t tui_2p 2>/dev/null || true
+	@tmux new-session -d -s tui_2p -x 80 -y 24 "$(GO) run ./cmd/tetris -mode 2p -seed 2"
+	@sleep 5
+	@tmux send-keys -t tui_2p a a f
+	@sleep 1
+	@tmux send-keys -t tui_2p Left Left Space
+	@sleep 1
+	@tmux capture-pane -e -p -t tui_2p > $(OUT)/tmux_2p.txt
+	@tmux send-keys -t tui_2p Escape 2>/dev/null || true
+	@sleep 1
+	@tmux kill-session -t tui_2p 2>/dev/null || true
+	@echo "  $(OUT)/tmux_2p.txt"
+	@tmux kill-session -t tui_ai 2>/dev/null || true
+	@tmux new-session -d -s tui_ai -x 80 -y 24 "$(GO) run ./cmd/tetris -mode ai -level hard -seed 3"
+	@sleep 5
+	@tmux send-keys -t tui_ai Left Space
+	@sleep 4
+	@tmux capture-pane -e -p -t tui_ai > $(OUT)/tmux_ai.txt
+	@tmux send-keys -t tui_ai Escape 2>/dev/null || true
+	@sleep 1
+	@tmux kill-session -t tui_ai 2>/dev/null || true
+	@echo "  $(OUT)/tmux_ai.txt"
+	@tmux kill-session -t tui_aivai 2>/dev/null || true
+	@tmux new-session -d -s tui_aivai -x 80 -y 24 "$(GO) run ./cmd/tetris -mode aivai -level normal -seed 4"
+	@sleep 12
+	@tmux capture-pane -e -p -t tui_aivai > $(OUT)/tmux_aivai.txt
+	@tmux send-keys -t tui_aivai Escape 2>/dev/null || true
+	@sleep 1
+	@tmux kill-session -t tui_aivai 2>/dev/null || true
+	@echo "  $(OUT)/tmux_aivai.txt"
 	@$(PY) deck/untab.py $(OUT)/tmux_*.txt
 
 deck:

@@ -267,6 +267,22 @@ English into a user-facing message; translate and condense.
 
 ## Progress log (newest first; Korean, ≤12 lines each, same shape as history.md)
 
+- 2026-09-06 16:25 — **5단계: battle/ 2인용·AI 대전·AI vs AI, menu/, 기록 4종**.
+  `rules.go` 심판(락 이벤트 번호로 새 공격만 배달 · KO · 무승부 · 3판 2선승) ·
+  `driver.go` AI 의 손(2편 표 그대로: think 520/380/260/150, move 110/80/55/32,
+  blunder 22/10/3/0%) · 모델 하나로 세 모드. 난이도는 규칙을 안 봐주고
+  "덜 배웠고·느리고·가끔 틀린다"로 만든다. 실수는 시드 있는 난수 — 기록 재현용.
+  **§5.3 을 그대로 구현**: 탐색은 Update 밖 Cmd 에서 돌고, 판의 사본(`ai.Snapshot`)만
+  넘긴다. 드라이버는 미리 키 목록을 만들지 않고 **매번 지금 판을 보고** 다음 키를
+  고른다(회전 킥이 x 를 밀어도 저절로 교정된다). guard 24 를 넘으면 그냥 떨어뜨린다.
+  함정: 모델은 값이지만 `*core.Game` 은 포인터라 "옛 모델"에서 읽어도 새 값이 나온다 —
+  테스트가 이걸 밟아서 함정 자체를 테스트로 만들었다.
+  레코더에 Cmd 실행(틱만 버림)과 `waitN` 압축을 추가. 기록 4종 재현 확인.
+  ⚠ `go build -race` 는 이 기계에서 **못 쓴다**("-race is not supported on android/arm64").
+  대신 "Cmd 가 판·stats 를 안 건드린다"를 테스트로 못 박았다.
+  검증: `go vet` 0건 · `go test -p 1 ./...` 15패키지 통과 · gofmt 0건 ·
+  tmux 80×24 에서 메뉴·1p·2p·ai(사람 30 대 AI 418)·aivai(최종 978 대 보통 212) 캡처.
+
 - 2026-09-06 15:35 — **4단계: ui/ · game/ 1인용 · cmd/tetris · 기록·tmux**.
   `ui`: 키 배치를 **데이터로**(Arrows/Wasd/전역, 도움말은 바인딩에서 자동 생성),
   두 자리 키 충돌·전역 키 충돌을 테스트로 막았다. 판은 테두리를 직접 그린다(제목 때문).

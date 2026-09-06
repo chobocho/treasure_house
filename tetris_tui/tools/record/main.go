@@ -16,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -23,6 +24,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"treasure/tetris_tui/battle"
 	"treasure/tetris_tui/game"
 )
 
@@ -64,10 +66,14 @@ type Step struct {
 	Kind stepKind
 	Name string // 키 이름 ("left", "space", "z" …) 또는 라벨
 	W, H int    // stepResize 일 때만
+	N    int    // stepTick 일 때 반복 횟수 (1 이상)
 }
 
-// "100x40" 처럼 생긴 스텝은 창 크기 변경이다.
-var sizeRe = regexp.MustCompile(`^(\d+)x(\d+)$`)
+// "100x40" 처럼 생긴 스텝은 창 크기 변경, "wait30" 은 틱 30번이다.
+var (
+	sizeRe = regexp.MustCompile(`^(\d+)x(\d+)$`)
+	waitRe = regexp.MustCompile(`^wait(\d+)$`)
+)
 
 // 특수 키 이름 → Code. 여기 없는 한 글자짜리 이름은 그 글자 자체로 취급한다.
 var specialKeys = map[string]rune{
@@ -87,7 +93,11 @@ var specialKeys = map[string]rune{
 //
 //	left right space   키 누르기
 //	wait               틱 하나 (시간 진행)
+//	wait30             틱 30번 — 프레임은 그래도 한 장만 남는다
 //	100x40             창 크기 변경
+//
+// wait30 이 왜 필요한가. AI 대 AI 한 판은 수천 틱이다. 틱마다 프레임을 남기면
+// JSON 이 수 MB 가 되어 덱에 실을 수가 없다. 여러 틱을 한 프레임으로 접는다.
 //
 // 모르는 낱말은 오류다. 조용히 무시하면 "왜 이 키가 기록에 없지?"로 한나절을 쓴다.
 func ParseScript(s string) ([]Step, error) {
@@ -95,7 +105,13 @@ func ParseScript(s string) ([]Step, error) {
 	for _, tok := range strings.Fields(s) {
 		switch {
 		case tok == "wait":
-			out = append(out, Step{Kind: stepTick, Name: "wait"})
+			out = append(out, Step{Kind: stepTick, Name: "wait", N: 1})
+		case waitRe.MatchString(tok):
+			n, _ := strconv.Atoi(waitRe.FindStringSubmatch(tok)[1])
+			if n < 1 {
+				n = 1
+			}
+			out = append(out, Step{Kind: stepTick, Name: tok, N: n})
 		case sizeRe.MatchString(tok):
 			m := sizeRe.FindStringSubmatch(tok)
 			w, _ := strconv.Atoi(m[1])
@@ -133,21 +149,63 @@ func Run(name string, m tea.Model, tick tea.Msg, steps []Step) Recording {
 	rec := Recording{Name: name, Frames: []Frame{{I: 0, Label: "시작", Content: m.View().Content}}}
 	var script []string
 	for i, st := range steps {
-		var msg tea.Msg
 		switch st.Kind {
 		case stepKey:
-			msg = keyMsg(st.Name)
-		case stepTick:
-			msg = tick
+			m = feed(m, keyMsg(st.Name), tick)
 		case stepResize:
-			msg = tea.WindowSizeMsg{Width: st.W, Height: st.H}
+			m = feed(m, tea.WindowSizeMsg{Width: st.W, Height: st.H}, tick)
+		case stepTick:
+			n := st.N
+			if n < 1 {
+				n = 1
+			}
+			for k := 0; k < n; k++ {
+				m = feed(m, tick, tick)
+			}
 		}
-		m, _ = m.Update(msg)
 		rec.Frames = append(rec.Frames, Frame{I: i + 1, Label: st.Name, Content: m.View().Content})
 		script = append(script, st.Name)
 	}
 	rec.Script = strings.Join(script, " ")
 	return rec
+}
+
+// cmdDepth 는 Cmd 가 만든 메시지를 몇 겹까지 따라갈지.
+// 서로를 다시 예약하는 Cmd 사슬에 빠지지 않게 막는 안전장치다.
+const cmdDepth = 8
+
+// feed 는 메시지를 하나 넣고, 그 결과로 나온 Cmd 를 실행해 되먹인다.
+//
+// 왜 Cmd 를 실행하는가. AI 의 탐색은 Cmd 안에서 돈다(7부). 레코더가 Cmd 를
+// 무시하면 "고른 수"가 영영 도착하지 않아, 기록 속 AI 가 한 수도 안 둔다.
+//
+// 단, **틱 메시지는 되먹이지 않는다.** 틱은 스크립트가 주는 것이고,
+// 모델이 예약한 틱까지 따라가면 시간이 두 배로 흐른다.
+func feed(m tea.Model, msg tea.Msg, tick tea.Msg) tea.Model {
+	m, cmd := m.Update(msg)
+	for _, back := range drain(cmd, tick, cmdDepth) {
+		m, _ = m.Update(back)
+	}
+	return m
+}
+
+// drain 은 Cmd 가 만드는 메시지를 전부 꺼낸다. Batch 는 펼치고, 틱은 버린다.
+func drain(cmd tea.Cmd, tick tea.Msg, depth int) []tea.Msg {
+	if cmd == nil || depth <= 0 {
+		return nil
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range batch {
+			out = append(out, drain(c, tick, depth-1)...)
+		}
+		return out
+	}
+	if reflect.TypeOf(msg) == reflect.TypeOf(tick) {
+		return nil // 틱은 스크립트가 준다
+	}
+	return []tea.Msg{msg}
 }
 
 // WriteRecording 은 들여쓴 JSON 으로 저장한다.
@@ -179,6 +237,26 @@ var registry = map[string]Mode{
 			return game.New(game.WithSeed(1), game.WithoutTimer())
 		},
 		Tick: game.TickMsg{},
+	},
+	"2p": {
+		New: func() tea.Model {
+			return battle.New(battle.Local2P, battle.WithSeed(2), battle.WithoutTimer())
+		},
+		Tick: battle.TickMsg{},
+	},
+	"ai": {
+		New: func() tea.Model {
+			return battle.New(battle.VsAI, battle.WithSeed(3),
+				battle.WithLevel("hard"), battle.WithoutTimer())
+		},
+		Tick: battle.TickMsg{},
+	},
+	"aivai": {
+		New: func() tea.Model {
+			return battle.New(battle.AIvsAI, battle.WithSeed(4),
+				battle.WithLevel("normal"), battle.WithoutTimer())
+		},
+		Tick: battle.TickMsg{},
 	},
 }
 
