@@ -166,6 +166,34 @@ H.check('못 짓는 자리에도 짓지 않는다',
          len([i for i in range(1, C.MAX_ENT)
               if s4.w.alive[i] and s4.w.kind[i] == C.POW]))[1], 1)
 
+# ── §16.5 내 유닛이 막고 있으면 비키게 한다 ────────────────────────────────
+#   채집 경로 위에 건물 자리를 잡으면 재시도가 전부 막힌다 — 실제로 그래서
+#   플레이어 1 의 발전소가 1200틱 내내 서지 않았다.
+s4b = SIM.Sim(flat(16), 10, 2)
+hq4b = add(s4b, 0, C.HQ, 4, 4)
+s4b.ec.credits[0] = 1000
+s4b.ec.recount_supply(s4b.w)
+blocker = add(s4b, 0, C.INF, 9, 4)
+H.check('그 칸은 내 유닛이 쥐고 있다', s4b.mv.resv[4 * 16 + 9],
+        s4b.w.handle(blocker))
+s4b.step([(0, s4b.w.handle(hq4b), SEL.BUILD, C.POW, 8, 4)])
+H.check('막힌 배치는 실패한다',
+        len([i for i in range(1, C.MAX_ENT)
+             if s4b.w.alive[i] and s4b.w.kind[i] == C.POW]), 0)
+H.check('돈은 나가지 않았다', s4b.ec.credits[0], 1000)
+H.check_true('대신 막은 유닛에게 한 걸음 명령이 갔다',
+             s4b.mv.goal[blocker] >= 0 or s4b.w.prog[blocker] > 0)
+for _t in range(40):
+    s4b.step([])
+    if (s4b.w.tx[blocker], s4b.w.ty[blocker]) != (9, 4):
+        break
+H.check_true('유닛이 비켰다', (s4b.w.tx[blocker], s4b.w.ty[blocker]) != (9, 4))
+s4b.step([(0, s4b.w.handle(hq4b), SEL.BUILD, C.POW, 8, 4)])
+H.check('다음 시도는 성공한다',
+        len([i for i in range(1, C.MAX_ENT)
+             if s4b.w.alive[i] and s4b.w.kind[i] == C.POW]), 1)
+H.note('밀면서 동시에 짓지는 않는다 — 서 있는 유닛 위에 건물을 얹으면 불변식 R 이 깨진다')
+
 # ── SPEC §18.5 트리거 ───────────────────────────────────────────────────────
 s5 = SIM.Sim(flat(16), 11, 2)
 s5.add_trigger((SIM.CT_TICK_GE, 3, 0, 0, 0),

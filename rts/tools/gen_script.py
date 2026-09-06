@@ -35,7 +35,33 @@ def load_start():
 
 
 def occupied_hq(bx, by):
-    return set((bx - 1 + dx, by - 1 + dy) for dx in range(3) for dy in range(3))
+    """사령부 3×3 과 시작 채집기 두 칸 (SPEC §25.4).
+
+       채집기 칸을 빼먹으면 시나리오가 채집기가 서 있는 자리에 정제소를
+       세우려 들고, 그 명령은 조용히 실패한다 — 실제로 한 번 그랬다.
+    """
+    cells = set((bx - 1 + dx, by - 1 + dy) for dx in range(3) for dy in range(3))
+    cells.add((bx + 2, by + 1))
+    cells.add((bx + 2, by + 2))
+    return cells
+
+
+def mirror_spot(spot, kind):
+    """2회 대칭 — 발자국이 뒤집혀도 같은 칸들을 덮도록 좌상단을 옮긴다."""
+    f = FOOT[kind]
+    return (63 - spot[0] - (f - 1), 63 - spot[1] - (f - 1))
+
+
+def foot_cells(kind, spot, pad=0):
+    """발자국(pad>0 이면 그만큼 둘러싼 고리까지).
+
+       정제소 둘레는 채집기가 계속 드나드는 **도크**다(SPEC §16.2). 거기에
+       다음 건물을 예약해 두면 배치가 영원히 실패한다 — 실제로 플레이어 1 의
+       발전소가 그래서 1200틱 내내 서지 않았다.
+    """
+    f = FOOT[kind]
+    return set((spot[0] + dx, spot[1] + dy)
+               for dx in range(-pad, f + pad) for dy in range(-pad, f + pad))
 
 
 def find_spot(g, w, h, base, kind, taken, want_ore=False):
@@ -85,8 +111,21 @@ def find_spot(g, w, h, base, kind, taken, want_ore=False):
 DELAY = 45
 
 
+BUILD_RETRY = (0, 25, 50, 75, 100)   # SPEC §18.6 — 유닛이 지나가면 배치가 실패한다
+
+
 def plan(pid, base, spots, mirror):
-    """(틱, 플레이어, 선택자, 명령, a, b, c) 목록."""
+    """(틱, 플레이어, 선택자, 명령, a, b, c) 목록.
+
+       건설 명령은 **세 번** 낸다. 유닛이 그 칸을 지나가는 중이면 배치 판정이
+       실패하고(§16.5), 한 번만 내면 그 건물은 게임 내내 서지 않는다.
+       사람 플레이어도 그럴 때 다시 클릭한다 — 스크립트도 그렇게 한다.
+       이미 지어졌으면 뒤따르는 시도는 조용히 실패하고 돈도 나가지 않는다.
+    """
+    def build(o, t, kind, spot):
+        for r in BUILD_RETRY:
+            o.append((t + r, pid, 'K10', 'BUILD', kind, spot[0], spot[1]))
+
     def M(p):
         return (63 - p[0], 63 - p[1]) if mirror else p
     ref, barr, pow_, fact = spots
@@ -94,35 +133,44 @@ def plan(pid, base, spots, mirror):
     enemy = M((55, 55)) if not mirror else (8, 8)
     o = []
     o.append((1 + d, pid, 'K4', 'HARVEST', 0, 0, 0))
-    o.append((4 + d, pid, 'K10', 'BUILD', BARR, barr[0], barr[1]))
-    o.append((8 + d, pid, 'K10', 'BUILD', REF, ref[0], ref[1]))
+    build(o, 4 + d, BARR, barr)
+    build(o, 8 + d, REF, ref)
     o.append((12 + d, pid, 'K10', 'TRAIN', HARV, 0, 0))
     o.append((110 + d, pid, 'N', 'HARVEST', 0, 0, 0))
     o.append((115 + d, pid, 'K10', 'TRAIN', HARV, 0, 0))
     o.append((215 + d, pid, 'N', 'HARVEST', 0, 0, 0))
-    o.append((220 + d, pid, 'K10', 'BUILD', POW, pow_[0], pow_[1]))
+    build(o, 220 + d, POW, pow_)
     for k, t in enumerate((215, 280, 345, 410, 475, 540, 605, 670)):
         o.append((t + d, pid, 'K12', 'TRAIN', INF if k % 3 else ARCHER, 0, 0))
-    o.append((360 + d, pid, 'K10', 'BUILD', FACT, fact[0], fact[1]))
+    build(o, 520 + d, FACT, fact)
     # 모아서 전진 — 기지 앞 집결지를 거쳐 적 기지로
     rally = (base[0] + (6 if not mirror else -6), base[1] + (6 if not mirror else -6))
-    o.append((700 + d, pid, 'F', 'MOVE', rally[0], rally[1], 0))
-    o.append((760 + d, pid, 'F', 'AMOVE', enemy[0], enemy[1], 0))
+    o.append((480 + d, pid, 'F', 'MOVE', rally[0], rally[1], 0))
+    o.append((540 + d, pid, 'F', 'AMOVE', enemy[0], enemy[1], 0))
     o.append((900 + d, pid, 'K13', 'TRAIN', TANK, 0, 0))
-    o.append((1000 + d, pid, 'F', 'AMOVE', enemy[0], enemy[1], 0))
+    o.append((900 + d, pid, 'F', 'AMOVE', enemy[0], enemy[1], 0))
     return o
 
 
 def main():
     g, w, h, starts = load_start()
     rows = []
-    for pid, base in enumerate(starts):
-        taken = occupied_hq(*base)
-        ref = find_spot(g, w, h, base, REF, taken, want_ore=True)
-        barr = find_spot(g, w, h, base, BARR, taken)
-        pw = find_spot(g, w, h, base, POW, taken)
-        fact = find_spot(g, w, h, base, FACT, taken)
-        rows += plan(pid, base, (ref, barr, pw, fact), mirror=(pid == 1))
+    # 배치는 **플레이어 0 것만 고르고 1 은 2회 대칭으로 뒤집는다.** 각자 고르게
+    # 두면 정제소가 광맥에서 서로 다른 거리에 서고, 그 차이가 그대로 수입 차이가
+    # 되어 시나리오가 한쪽으로 기운다 — 실제로 360틱에 560 대 1460 이었다.
+    base0 = starts[0]
+    taken = occupied_hq(*base0)
+    spots = []
+    for kind in (REF, BARR, POW, FACT):
+        sp = find_spot(g, w, h, base0, kind, taken)              if kind != REF else find_spot(g, w, h, base0, kind, taken,
+                                          want_ore=True)
+        taken |= foot_cells(kind, sp, 1 if kind == REF else 0)
+        spots.append(sp)
+    ref, barr, pw, fact = spots
+    rows += plan(0, base0, (ref, barr, pw, fact), mirror=False)
+    mir = [mirror_spot(sp, kind) for sp, kind in
+           zip(spots, (REF, BARR, POW, FACT))]
+    rows += plan(1, starts[1], (mir[0], mir[1], mir[2], mir[3]), mirror=True)
     rows.sort(key=lambda r: (r[0], r[1], r[2], r[3]))
     out = ['RTSS 1', 'ticks 1200', 'players 2',
            '# 틱 플레이어 선택자 명령 a b c   (SPEC §18.6)']
