@@ -1,11 +1,107 @@
 <article class="card section" id="s22">
 <p class="chnum">22부</p>
 <h2>PC 스피커</h2>
-<p class="chsub">1193182 을 주파수로 나눈 몫이 음이 된다.<br>그 반올림 오차가 몇 센트인가</p>
+<p class="chsub">사각파 하나로 음악을 만들던 시절,<br>그리고 오차가 어디서 오는지 따져 보기</p>
 </article>
 
-<article class="card" id="s22-todo">
-<h3>PC 스피커 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>14장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s22-pit">
+<h3>채널 2 — 소리를 내는 유일한 방법</h3>
+<p class="lead">사운드 카드가 없는 기계에는 스피커가 하나 있었습니다. 그리고 그것을 울리는 방법은 <b>타이머</b> 뿐이었습니다.</p>
+<p>8253/8254 PIT(Programmable Interval Timer)의 채널 2 를 스피커에 연결하고, 분주값을 넣으면 그 주파수의 <b>사각파</b>가 나옵니다.</p>
+<pre class="term">divisor(f) = round(PIT_HZ / f)          PIT_HZ = 1,193,182
+actual(f)  = PIT_HZ / divisor(f)        실제로 나는 음</pre>
+<div class="key">PIT 은 사각파만 낼 수 있었습니다. <b>음량 조절이 없었고</b> 듀티비도 고정이었습니다. 그래서 도스 게임의 스피커 음악은 전부 같은 음색입니다 — 그것이 그 시대의 소리로 기억되는 이유입니다.</div>
+</article>
+
+<article class="card" id="s22-divisor">
+<h3>분주값과 반올림</h3>
+<!--CODE file=py/rts/speaker.py lang=py sym=divisor note=반올림 나눗셈 · 1 아래로 내려가지 않는다-->
+<p><code class="nb">PIT_HZ = 1,193,182</code> 는 <b>반올림값</b>입니다. 정확한 값은 <code class="nb">14.31818 MHz / 12 = 1,193,181.8181…</code> Hz 입니다.</p>
+<p>이 0.18 Hz 차이가 분주값에 주는 영향은 <b>거의 없습니다.</b> 분주값이 4,554 인 C4 에서 <code class="nb">0.18/1193182 × 4554 = 0.0007</code> — 반올림하면 사라집니다.</p>
+<!--CODE file=py/rts/speaker.py lang=py sym=actual note=몫과 나머지만 낸다-->
+<p>엔진은 <b>분주값과 정수 나눗셈의 몫·나머지</b>만 냅니다. 센트 오차 계산에는 로그가 필요하므로 도구(<code class="nb">tools/gen_prim.py</code>)의 몫입니다 — 엔진에 실수를 들이지 않기 위해서입니다.</p>
+</article>
+
+<article class="card" id="s22-cents">
+<h3>오차는 어디서 오는가</h3>
+<div class="fig" data-svg="pit_divisor.svg"></div>
+<p>그림은 <b>정수 Hz 표 대비</b> 분주값의 오차입니다. 최악이 B5 의 −0.47센트 — 사람이 구별할 수 있는 한계(5센트 근처)의 10분의 1 입니다.</p>
+<p>그런데 진짜 오차는 다른 데 있습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>단계</th><th>최악 오차</th><th>어디서</th></tr>
+<tr><td>12평균율 참값 → 정수 Hz 표</td><td class="num">+2.48센트 (C4)</td><td><b>우리가 만든 오차</b></td></tr>
+<tr><td>정수 Hz 표 → PIT 분주값</td><td class="num">−0.47센트 (B5)</td><td>하드웨어의 오차</td></tr>
+</table>
+</div>
+<div class="key">C4 의 참값은 <b>261.63 Hz</b> 인데 표에는 <b>262</b> 로 적혀 있습니다. 그 반올림이 PIT 의 정수 분주보다 <b>다섯 배</b> 큰 오차를 냅니다. "하드웨어가 부정확했다"는 이야기를 하려 했다면 거짓말이 될 뻔했습니다 — 이 엔진에서 음정을 흐리는 것은 <b>우리 표</b>입니다.</div>
+</article>
+
+<article class="card" id="s22-table">
+<h3>왜 표를 소스에 박는가</h3>
+<!--CODE file=py/rts/speaker.py lang=py sym=NOTE_HZ note=실수 계산 대신 정수 표-->
+<p><code class="nb">440 · 2^((k−9)/12)</code> 를 세 언어에서 계산하면 마지막 자리가 갈릴 수 있습니다. <code class="nb">pow</code> 의 구현이 다르고, 반올림 시점이 다릅니다.</p>
+<p>24개의 정수를 소스에 박으면 그 문제가 <b>존재하지 않습니다.</b> 대가는 위에서 본 2.48센트이고, 그것은 사람이 겨우 알아챌까 말까 한 크기입니다.</p>
+<div class="note">이것이 이 저장소의 반복되는 선택입니다 — <b>정확도를 조금 내주고 일치를 얻는다.</b> 6부의 3/8 근사, 12부의 10/14 비용, 여기의 정수 Hz 표가 전부 같은 거래입니다.</div>
+</article>
+
+<article class="card" id="s22-square">
+<h3>사각파 합성</h3>
+<!--CODE file=py/rts/speaker.py lang=py sym=square note=반주기마다 진폭을 뒤집는다-->
+<pre class="term">샘플레이트 22050 · 8비트 부호 없는 모노
+반주기 = ⌊22050 / (2 · 실제주파수)⌋
+진폭은 0x40 과 0xC0 두 값뿐 · 쉼표는 0x80</pre>
+<p>440 Hz 의 실제 주파수는 439 Hz(분주값 2,712)이고 반주기는 <code class="nb">22050/878 = 25</code> 샘플입니다. 25샘플마다 진폭을 뒤집으면 사각파가 됩니다.</p>
+<p>진폭이 <b>두 값뿐</b>인 것이 PIT 의 재현입니다. 0x00 과 0xFF 를 쓰지 않은 이유는 클리핑을 피하려는 것이고, 0x40/0xC0 은 진폭 50 % 입니다.</p>
+</article>
+
+<article class="card" id="s22-wav">
+<h3>WAV 44바이트</h3>
+<!--CODE file=py/rts/speaker.py lang=py sym=wav note=헤더도 정수 쓰기로만-->
+<p>RIFF 헤더 44바이트 + PCM. 리틀 엔디언 정수 쓰기 함수 하나면 충분합니다.</p>
+<pre class="term">"RIFF" 크기 "WAVE" "fmt " 16 PCM=1 채널=1 22050 22050 블록=1 비트=8 "data" 크기</pre>
+<div class="key"><b>소리를 재생하지 않습니다.</b> 헤드리스 환경이고, 무엇보다 <b>바이트가 같으면 소리도 같습니다.</b> 세 언어가 만든 WAV 의 FNV-1a 를 비교하는 것이 스피커에 대한 우리의 검증 전부입니다.</div>
+<pre class="term">out/tune.wav   8,844바이트 · FNV-1a 599A15B9   (py == lua == ts)</pre>
+</article>
+
+<article class="card" id="s22-demo">
+<h3>직접 해 보기 — 분주값</h3>
+<div class="demo" data-demo="speaker-divisor">
+<h5>목표 주파수와 실제로 나는 음</h5>
+<div class="row">
+<label>주파수 <input type="number" data-f value="440" min="20" max="8000"></label>
+<button data-run>계산</button>
+<button data-play>소리 내기</button>
+</div>
+<div class="out"></div>
+</div>
+<p>분주값·실제 주파수·센트 오차를 함께 보여 줍니다. 높은 음일수록 분주값이 작아 오차가 커지는 것을 확인해 보세요 — 8,000 Hz 에서는 분주값이 149 라 한 칸 차이가 크게 벌어집니다.</p>
+</article>
+
+<article class="card" id="s22-sum">
+<h3>22부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>PIT</td><td>채널 2 · 사각파만 · 음량 없음</td><td>도스 스피커 음악의 음색</td></tr>
+<tr><td>분주값</td><td>round(1193182 / f)</td><td>PIT_HZ 는 반올림값</td></tr>
+<tr><td>오차</td><td>표 반올림 2.48센트 &gt; 분주값 0.47센트</td><td>흐리는 것은 우리 표다</td></tr>
+<tr><td>음표표</td><td>정수 Hz 를 소스에 박는다</td><td>세 언어의 pow 를 믿지 않는다</td></tr>
+<tr><td>합성</td><td>22050 · 8비트 · 두 진폭</td><td>PIT 의 재현</td></tr>
+<tr><td>검증</td><td>WAV 바이트의 FNV 비교</td><td>재생하지 않는다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s22-quiz">
+<h3>확인 문제</h3>
+<div class="quiz" data-quiz>
+<p class="q">샘플레이트를 22050 에서 44100 으로 올리면 무엇이 좋아지는가? 그리고 <b>무엇이 좋아지지 않는가</b>?</p>
+<button>답 보기</button>
+<div class="a">
+<p>반주기가 두 배로 커지므로 <b>주파수 해상도</b>가 좋아집니다. 440 Hz 의 반주기가 25샘플에서 50샘플이 되고, ⌊⌋ 로 잃는 상대 오차가 절반이 됩니다.</p>
+<p>좋아지지 않는 것은 <b>음색</b>입니다. 사각파는 여전히 사각파이고, 진폭은 여전히 두 값입니다. PIT 이 낼 수 있는 것을 재현하는 것이 목적이므로 샘플레이트를 올려도 "더 좋은 소리"가 나지 않습니다 — 같은 소리를 더 촘촘히 적을 뿐입니다.</p>
+<p>그리고 파일이 두 배가 됩니다. 8,844바이트가 17,644바이트로요. 덱에 넣을 것이라면 그 크기가 곧 대가입니다.</p>
+</div>
+</div>
 </article>

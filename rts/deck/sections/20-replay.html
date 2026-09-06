@@ -1,11 +1,139 @@
 <article class="card section" id="s20">
 <p class="chnum">20부</p>
 <h2>시간·저장·리플레이·압축</h2>
-<p class="chsub">명령만 저장하면 게임 전체가 재생된다.<br>CRC 는 GF(2) 위의 나눗셈이다</p>
+<p class="chsub">1,200틱 게임을 1,153바이트에 담는 법 —<br>상태를 한 바이트도 저장하지 않고</p>
 </article>
 
-<article class="card" id="s20-todo">
-<h3>시간·저장·리플레이·압축 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>28장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s20-tick">
+<h3>틱은 PIT 이 정했다</h3>
+<pre class="term">PIT 기본 분주값 65536  →  1,193,182 / 65536 = 18.2065 Hz
+한 틱 = 54,925.4 µs   →  이 엔진은 TICK_US = 54925 로 고정</pre>
+<p>도스 게임의 기본 틱은 하드웨어가 정했습니다. 타이머 인터럽트가 초당 18.2번 오고, 게임은 그 리듬에 맞췄습니다.</p>
+<p>이 엔진도 같은 숫자를 씁니다. 0.4 µs 를 버린 오차는 0.0007 % 이고, <b>세 언어가 같은 정수를 쓰는 것</b>이 그 오차보다 중요합니다.</p>
+<div class="key">시뮬레이션은 <b>틱 단위로만</b> 움직입니다. 실제 시간이 얼마나 흘렀는지 보지 않습니다. 그래서 느린 기계에서는 게임이 느려질 뿐, 결과가 달라지지 않습니다 — 19부 락스텝의 전제입니다.</div>
+</article>
+
+<article class="card" id="s20-crc">
+<h3>CRC-16 — 다항식 나눗셈</h3>
+<pre class="term">poly = 0x1021 · init = 0xFFFF · 반사 없음 · xorout = 0
+crc16("123456789") = 0x29B1</pre>
+<p>정식 이름은 <b>CRC-16/IBM-3740</b> 이고 <b>CCITT-FALSE</b> 는 널리 퍼진 별칭입니다. RevEng 카탈로그의 이름을 따릅니다.</p>
+<!--CODE file=py/rts/fixed.py lang=py sym=crc16 note=비트 연산자 없이 GF(2) 나눗셈-->
+<p><code class="nb">c &gt;= 32768</code> 이 "최상위 비트가 1"과 같습니다. 그것이 GF(2) 위의 다항식 나눗셈이며, 곱셈 2 가 다항식의 <code class="nb">x</code> 곱입니다.</p>
+<pre class="term">비트 시프트 없이:  c * 2 를 65536 으로 나눈 나머지   ← 왼쪽 시프트
+XOR 없이:          xor16(a, b) = xor8 두 번          ← 8회 루프 × 2</pre>
+</article>
+
+<article class="card" id="s20-crc-use">
+<h3>CRC 를 어디에 쓰는가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>왜</th></tr>
+<tr><td>맵 파일 꼬리 (§4.7)</td><td>깨진 맵을 조용히 읽으면 두 기계의 맵이 달라진다</td></tr>
+<tr><td>리플레이 꼬리 (§20.2)</td><td>같은 이유</td></tr>
+</table>
+</div>
+<p>상태 해시(19부)는 FNV-1a 이고 파일 검사는 CRC-16 입니다. 다른 것을 쓰는 이유는 목적이 다르기 때문입니다.</p>
+<pre class="term">FNV-1a   빠르게 흘려 넣기 · 매 틱 수천 바이트 · 충돌보다 속도
+CRC-16   전송 오류 검출 · 파일당 한 번 · 버스트 오류에 강하다</pre>
+<div class="note">CRC 는 <b>버스트 오류</b>(연속된 비트가 뒤집히는 것)에 강하도록 설계된 것이고, 그것이 전송·저장 매체의 실제 고장 모양입니다. 해시 함수는 그런 보장을 하지 않습니다.</div>
+</article>
+
+<article class="card" id="s20-replay">
+<h3>리플레이는 명령 로그다</h3>
+<pre class="term">헤더  "RTSR" · 버전 1 · 시드(4) · 플레이어 수(1) · 총 틱 수(4) · 묶음 수(2)
+본문  틱 오름차순. 각 묶음: 틱(4) · 명령 개수(1) · 명령들
+      명령: player(1) kind(1) issuer(2) a(1) b(1) c(2)
+꼬리  CRC-16 (2)</pre>
+<!--CODE file=py/rts/replay.py lang=py sym=save note=상태는 한 바이트도 저장하지 않는다-->
+<p><b>상태를 한 바이트도 저장하지 않습니다.</b> 재생한다는 것은 같은 시드로 시뮬을 새로 만들어 같은 명령을 같은 틱에 먹이는 것이고, 결과가 같다는 증명은 <code class="nb">hashes.txt</code> 와의 대조가 대신합니다.</p>
+</article>
+
+<article class="card" id="s20-size">
+<h3>1,153바이트 대 4.8메가바이트</h3>
+<!--OUT file=measure.txt sec=3 note=리플레이와 상태 스냅샷의 크기 비교-->
+<p>1,200틱 게임의 명령은 <b>100줄</b>입니다. 그 100줄이 1,153바이트이고, 같은 게임을 매 틱 스냅샷으로 저장하면 4,915,200바이트입니다.</p>
+<p><b>4,262배.</b> 이것이 도스 시절 RTS 가 리플레이를 가질 수 있었던 이유입니다 — 플로피 한 장에 게임 수백 판이 들어갑니다.</p>
+<div class="key">현대의 리플레이도 대부분 같은 원리입니다. 다르게 만든 것은 <b>결정론을 포기한 게임들</b>이고, 그런 게임은 영상을 녹화하거나 주기적 스냅샷 + 보간을 씁니다. 리플레이의 크기는 결정론의 부산물입니다.</div>
+</article>
+
+<article class="card" id="s20-replay-bug">
+<h3>재생이 안 맞았던 이유</h3>
+<p class="lead">처음 만든 리플레이는 <b>불일치</b>를 냈습니다. 같은 명령을 먹였는데 마지막 해시가 달랐습니다.</p>
+<p>원인은 재생 쪽 시뮬을 만들 때 <code class="nb">setup_start()</code> 를 기본값으로 불러 <b>AI 가 켜져 있었기</b> 때문입니다. 원본은 스크립트가 몰았고 AI 는 꺼져 있었습니다.</p>
+<pre class="term">원본   setup_start(ai=False)   스크립트가 명령을 낸다
+재생   setup_start()           ← AI 가 자기 명령을 추가로 낸다</pre>
+<div class="warn">교훈은 이렇습니다 — <b>리플레이는 명령만으로 재현되지 않습니다.</b> "같은 시드 + 같은 명령 + <b>같은 초기 설정</b>" 셋이 다 맞아야 합니다. 그래서 헤더에 시드와 플레이어 수를 넣고, 초기 설정을 바꾸는 플래그가 늘어나면 그것도 헤더에 들어가야 합니다.</div>
+<p>명령이 없는 틱은 아예 적지 않습니다. 재생은 헤더의 총 틱 수만큼 돌면서 해당 틱에만 명령을 먹입니다 — 그래서 6,818바이트가 1,153바이트가 되었습니다.</p>
+</article>
+
+<article class="card" id="s20-rle">
+<h3>RLE</h3>
+<!--CODE file=py/rts/replay.py lang=py sym=rle_encode note=개수는 1..255-->
+<p><code class="nb">(개수, 값)</code> 쌍. 개수가 0 인 쌍은 나타나지 않고, 256칸 이상 이어지면 255씩 끊습니다.</p>
+<p>이 규칙이 없으면 0 을 "끝"으로 읽는 구현과 "256"으로 읽는 구현이 갈립니다. <b>포맷의 모호함은 언젠가 반드시 두 구현을 다르게 만듭니다.</b></p>
+<pre class="term">64×64 지형 평면  4,096바이트  →  RLE 1,090바이트 (26 %)</pre>
+<p>반복이 없는 데이터에서는 <b>두 배로 늘어납니다.</b> 그것도 정직하게 적습니다 — RLE 는 타일 맵과 스프라이트처럼 같은 값이 이어지는 데이터에만 씁니다.</p>
+</article>
+
+<article class="card" id="s20-lzss">
+<h3>LZSS — LZ77 의 최소판</h3>
+<pre class="term">창(window) 4096 · 최소 일치 3 · 최대 일치 18
+플래그 바이트 1개당 토큰 8개
+  비트 1: 리터럴 1바이트
+  비트 0: (offset 12비트, len−3 4비트) = 2바이트</pre>
+<!--CODE file=py/rts/replay.py lang=py sym=_match note=가장 긴 일치, 동점이면 가장 가까운 것-->
+<p>일치 탐색은 <b>탐욕적</b>입니다. 가장 긴 일치를 고르고, 동점이면 가장 가까운 것을 고릅니다.</p>
+<p>최적 파싱(lazy matching — 지금 짧게 잡고 다음에 길게 잡는 편이 나은지 보는 것)을 하지 않는 이유는 <b>결정론이 아니라 단순함</b>입니다. 결정론은 탐욕적이어도 지켜집니다.</p>
+<pre class="term">64×64 지형 평면  4,096바이트  →  LZSS 697바이트 (17 %)</pre>
+</article>
+
+<article class="card" id="s20-lzss-detail">
+<h3>겹치는 일치</h3>
+<!--CODE file=py/rts/replay.py lang=py sym=lzss_decode note=한 바이트씩 복사 — 겹침 허용-->
+<p><code class="nb">"AAAAAAAA"</code> 를 압축하면 리터럴 <code class="nb">A</code> 하나와 <code class="nb">(offset 1, len 7)</code> 토큰 하나입니다. offset 1 은 <b>직전 한 바이트</b>를 가리키고, 길이 7 은 그것을 넘어섭니다.</p>
+<p>복사를 <b>한 바이트씩</b> 하면 이것이 저절로 동작합니다. 방금 쓴 바이트를 다시 읽으니까요. <code class="nb">memcpy</code> 로 한 번에 옮기면 깨집니다.</p>
+<pre class="term">encode(b"A"*8) = [0x01, 'A', 0x00, 0x04]      플래그·리터럴·토큰 2바이트 = 4바이트</pre>
+<div class="note">이 겹침 규칙이 RLE 를 LZSS 안에 포함시킵니다. 같은 바이트의 반복은 offset 1 짜리 일치가 되고, 그것이 곧 RLE 입니다. 그래서 LZSS 가 RLE 보다 항상 작거나 같습니다 — 위 실측 697 대 1,090 이 그것입니다.</p>
+</article>
+
+<article class="card" id="s20-sum">
+<h3>20부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>틱</td><td>18.2065 Hz · TICK_US = 54925</td><td>PIT 기본 분주값</td></tr>
+<tr><td>CRC-16</td><td>IBM-3740 · 비트 연산자 없이</td><td>GF(2) 다항식 나눗셈</td></tr>
+<tr><td>리플레이</td><td>명령 로그 · 상태 0바이트</td><td>1,153 대 4,915,200 (4,262배)</td></tr>
+<tr><td>재현 조건</td><td>시드 + 명령 + <b>초기 설정</b></td><td>AI 플래그 하나가 재생을 깼다</td></tr>
+<tr><td>RLE</td><td>4,096 → 1,090 (26 %)</td><td>반복 없으면 두 배가 된다</td></tr>
+<tr><td>LZSS</td><td>4,096 → 697 (17 %) · 탐욕적</td><td>겹치는 일치가 RLE 를 포함한다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s20-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">리플레이 파일에서 <b>시드</b>를 빼도 되는가? 명령이 전부 들어 있는데.</p>
+<button>답 보기</button>
+<div class="a">
+<p>안 됩니다. 시드가 피해량을 정합니다(§3.3). 같은 명령이라도 시드가 다르면 <b>다른 주사위</b>가 나오고, 첫 전투에서 게임이 갈립니다.</p>
+<p>더 미묘한 것은 <b>맵</b>입니다. 이 엔진의 골든 맵은 파일로 얼려 두었지만, 절차적으로 생성하는 게임이라면 맵 시드도 헤더에 있어야 합니다. 이 포맷이 시드를 하나만 두는 것은 맵이 파일이기 때문이고, 그 사실이 포맷의 <b>암묵적 전제</b>입니다.</p>
+<p>일반화하면 리플레이 헤더에는 <b>"시뮬을 만드는 데 필요한 모든 것"</b>이 들어가야 합니다. 그것이 무엇인지는 생성자의 인자 목록을 보면 됩니다 — <code class="nb">Sim(m, seed, players, float_bug)</code> 네 개 중 셋이 헤더에 있고, 넷째는 실험용이라 없습니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s20-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">LZSS 의 최대 일치를 18 에서 <b>66</b> 으로 늘리면(len−3 을 6비트로) 압축률이 좋아지는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>토큰이 <b>2바이트에서 2.25바이트</b>가 됩니다(12 + 6 = 18비트). 바이트 정렬을 지키려면 3바이트가 되고, 그러면 짧은 일치가 손해로 바뀝니다 — 3바이트 일치를 3바이트 토큰으로 적으면 아무것도 아끼지 못합니다.</p>
+<p>최소 일치를 4 로 올려 균형을 맞출 수는 있습니다. 그러면 3바이트 일치를 놓치는 대신 긴 일치를 길게 적습니다. <b>어느 쪽이 나은지는 데이터에 달렸습니다</b> — 지형 평면처럼 같은 값이 길게 이어지는 데이터에는 긴 일치가 유리하고, 스프라이트처럼 짧은 패턴이 흩어진 데이터에는 불리합니다.</p>
+<p>정답은 재 보는 것입니다. 이 저장소의 규칙은 <b>"압축률은 out/ 의 실제 숫자만 쓴다"</b> 이고, 그래서 이 부의 모든 퍼센트가 실측입니다. 12/4 비트 배분은 도스 시절의 표준 선택이고, 우리는 그것을 재현했을 뿐 최적화하지 않았습니다.</p>
+</div>
+</div>
 </article>
