@@ -23,10 +23,10 @@ export const GOLDEN = path.join(ROOT, 'golden');
 
 export type Rgb = [number, number, number];
 
-/** golden/palette.txt -> [r,g,b] 256개. 값은 6비트 DAC (0..63). */
-export function loadPalette(p?: string): Rgb[] {
-  const text = fs.readFileSync(p ?? path.join(GOLDEN, 'palette.txt'), 'utf8')
-    .trim().split('\n');
+/** golden/palette.txt 의 내용을 판다. 파일 읽기와 나눠 둔 것은 브라우저 때문이다 —
+ *  덱 안에서 도는 미니 RPG 는 같은 문자열을 소스에 박아 넣고 이 함수만 부른다. */
+export function parsePalette(raw: string): Rgb[] {
+  const text = raw.trim().split('\n');
   const head = (text[0] as string).split(/\s+/);
   if (head[0] !== 'ISORPG-PAL') throw new Error('팔레트 매직이 다르다: ' + head[0]);
   const pal: Rgb[] = [];
@@ -40,6 +40,11 @@ export function loadPalette(p?: string): Rgb[] {
   }
   if (pal.length !== PAL_SIZE) throw new Error('팔레트가 ' + pal.length + '색');
   return pal;
+}
+
+/** golden/palette.txt -> [r,g,b] 256개. 값은 6비트 DAC (0..63). */
+export function loadPalette(p?: string): Rgb[] {
+  return parsePalette(fs.readFileSync(p ?? path.join(GOLDEN, 'palette.txt'), 'utf8'));
 }
 
 /** 명암표 16 x 256. LIGHT[l*256 + c] = 색 c 를 l/15 로 어둡게 한 것에 가장 가까운 색.
@@ -88,10 +93,9 @@ export class Sprite {
   ) {}
 }
 
-/** golden/tiles.rle 을 읽는다. 색 0 은 투명. */
-export function loadSprites(p?: string): Sprite[] {
-  const lines = fs.readFileSync(p ?? path.join(GOLDEN, 'tiles.rle'), 'utf8')
-    .replace(/\n+$/, '').split('\n');
+/** golden/tiles.rle 의 내용을 판다. 색 0 은 투명. */
+export function parseSprites(raw: string): Sprite[] {
+  const lines = raw.replace(/\n+$/, '').split('\n');
   const head = (lines[0] as string).split(/\s+/);
   if (head[0] !== 'ISORPG-TILES') throw new Error('스프라이트 매직이 다르다: ' + head[0]);
   const out: Sprite[] = [];
@@ -130,12 +134,22 @@ export function loadSprites(p?: string): Sprite[] {
   return out;
 }
 
+/** golden/tiles.rle 을 읽는다. */
+export function loadSprites(p?: string): Sprite[] {
+  return parseSprites(fs.readFileSync(p ?? path.join(GOLDEN, 'tiles.rle'), 'utf8'));
+}
+
 let _lightCache: number[] | null = null;
 
 /** 기본 명암표. 만드는 데 시간이 걸리므로 한 번만 만들어 둔다. */
 export function getLight(): number[] {
   if (_lightCache === null) _lightCache = buildLight(loadPalette());
   return _lightCache;
+}
+
+/** 명암표를 밖에서 넣는다. 브라우저에는 파일이 없어 팔레트를 읽을 수 없기 때문이다. */
+export function setLight(tbl: number[]): void {
+  _lightCache = tbl;
 }
 
 /** 프레임버퍼 하나. Uint8Array 가 곧 모드 13h 의 A000 세그먼트다. */
