@@ -10,6 +10,9 @@ function stubCtx() {
     get(_t, k) {
       if (k === 'canvas') return null;
       if (k === 'measureText') return () => ({ width: 10 });
+      if (k === 'createImageData') {
+        return (w, h) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h });
+      }
       return noop;
     },
     set() { return true; }
@@ -18,7 +21,7 @@ function stubCtx() {
 function mkEl(tag) {
   const el = {
     tagName: tag, style: {}, children: [], width: 0, height: 0,
-    getContext: () => stubCtx(),
+    getContext: () => stubCtx(), focus: () => {}, innerHTML: '',
     getBoundingClientRect: () => ({ left: 0, top: 0, width: el.width || 300, height: el.height || 200 }),
     addEventListener: (t, f) => listeners.push([el, t, f]),
     removeEventListener: () => {},
@@ -38,6 +41,12 @@ global.window = {
 };
 global.window.__demo = (id, fn) => { global.window.__demoRegistry[id] = fn; };
 global.self = global.window;
+
+// 엔진 번들이 먼저다 — 미니 RPG 데모가 window.__isorpg 를 쓴다.
+global.requestAnimationFrame = () => 0;
+const path = require('path');
+const engine = path.join(__dirname, '..', 'deck', 'engine.js');
+if (fs.existsSync(engine)) require(engine);
 
 const src = fs.readFileSync(process.argv[2] || 'deck/demos.js', 'utf8');
 new Function('window', 'document', src)(global.window, global.document);

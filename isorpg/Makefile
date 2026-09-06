@@ -24,9 +24,9 @@ TSC     := $(ROOT)/ts/node_modules/.bin/tsc
 PYTESTS := test_fixed test_proj test_sort test_map test_path test_raster \
            test_los test_dice test_save test_prim test_trace test_engine
 
-.PHONY: all py lua love ts parity bench frames shots golden clean verify-log
+.PHONY: all py lua love ts web demos parity bench frames shots golden clean verify-log
 
-all: py lua ts web parity
+all: py lua ts web demos parity
 	@echo '── 전부 통과 ──'
 
 py:
@@ -41,7 +41,7 @@ py:
 
 lua:
 	@mkdir -p $(OUT)
-	cd $(ROOT)/lua && $(LUA) tests/run.lua | tee $(OUT)/lua_tests.txt
+	@set -o pipefail; cd $(ROOT)/lua && $(LUA) tests/run.lua | tee $(OUT)/lua_tests.txt
 	cd $(ROOT)/lua && $(LUA) isorpg/main.lua prim  > $(OUT)/lua_prim.txt
 	cd $(ROOT)/lua && $(LUA) isorpg/main.lua trace > $(OUT)/lua_trace.jsonl
 
@@ -53,7 +53,7 @@ love:
 ts:
 	@mkdir -p $(OUT)
 	cd $(ROOT)/ts && $(TSC) -p tsconfig.json
-	cd $(ROOT)/ts && $(NODE) dist/tests/run.js | tee $(OUT)/ts_tests.txt
+	@set -o pipefail; cd $(ROOT)/ts && $(NODE) dist/tests/run.js | tee $(OUT)/ts_tests.txt
 	cd $(ROOT)/ts && $(NODE) dist/src/main.js prim  > $(OUT)/ts_prim.txt
 	cd $(ROOT)/ts && $(NODE) dist/src/main.js trace > $(OUT)/ts_trace.jsonl
 
@@ -62,7 +62,11 @@ web:
 	cd $(ROOT)/ts && $(TSC) -p tsconfig.web.json
 	cd $(ROOT) && $(PY) tools/gen_webdata.py
 	cd $(ROOT) && $(PY) tools/bundle_web.py
-	cd $(ROOT) && $(NODE) tools/check_web.js | tee $(OUT)/check_web.txt
+	@set -o pipefail; cd $(ROOT) && $(NODE) tools/check_web.js | tee $(OUT)/check_web.txt
+
+demos:
+	@set -o pipefail; cd $(ROOT) && $(NODE) tools/check_demos.js deck/demos.js \
+	  | tee $(OUT)/check_demos.txt
 
 parity:
 	@mkdir -p $(OUT)
