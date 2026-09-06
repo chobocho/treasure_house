@@ -20,9 +20,20 @@
 | C13 | Kitty 키보드 프로토콜은 누름·자동반복·뗌을 구분한다. 플래그 2를 켜면 `CSI … ; 수정자:이벤트종류 u` 형태로 오고 이벤트 종류 3이 "뗌"이다 | https://sw.kovidgoyal.net/kitty/keyboard-protocol/ | 7부 |
 | C14 | Kitty 키보드 프로토콜을 지원하는 터미널로 kitty·alacritty·foot·ghostty·iTerm2·rio·WezTerm 이 알려져 있다 | https://sw.kovidgoyal.net/kitty/keyboard-protocol/ | 7부 |
 
+| C15 | 가이드라인 중력 공식 (0.8 − 0.007×(레벨−1))^(레벨−1) 초/칸 | 저장소 안에서 자체 확인: 이 식이 `core/score.go` 의 `GravityMs` 표를 그대로 재현한다 (레벨 1 → 1000 ms, 5 → 355, 10 → 64, 20 → 1) | 4부 |
+| C16 | Dellacherie 의 여섯 번째 특징 "지워진 칸"은 *지운 줄 수 × 그 줄에서 이번 조각이 채운 칸 수* 이고, 이 프로젝트는 그것을 더 단순한 "지운 줄 수"로 대신했다 | 같은 논문 + 이 저장소의 `ai/features.go` | 6부 |
+| C17 | macOS Terminal.app 은 24비트 색을 안 내고 256색까지만 낸다 | https://gist.github.com/CMCDragonkai/146100155ecd79c7dac19a9e23e6a362 · https://medium.com/@skeough117/the-mac-default-terminal-lacks-true-color-capabilities-7ee42eb27aa1 | 9부 |
+| C18 | Bubble Tea v1 의 `Model.View()` 는 `string` 을, v2 는 `View` 구조체를 돌려준다 | 모듈 캐시의 `charm.land/bubbletea@v1.3.10/tea.go:55` 와 v2 의 `go doc` | 2부 |
+| C19 | `charm.land/bubbles/v2` 에 list·viewport·textinput·help·spinner·progress 가 있다 | 모듈 캐시 `charm.land/bubbles/v2@v2.2.1/` 의 디렉터리 목록 | 9부 |
+
 ## 확인하지 못한 것 (그래서 덱에 안 적은 것)
 
 - Bubble Tea 의 **최초** 공개 시점. pkg.go.dev 에 v0.7.0(2020-05-26)이 가장 오래된 것으로
   남아 있을 뿐, 그 이전 태그가 있었는지는 확인하지 못했다. 그래서 덱에는
   "가장 오래된 공개 버전이 2020년 5월"이라고만 적는다.
 - Charm(Charmbracelet)의 설립 연도. 찾지 못해 덱에서 아예 뺐다.
+- OS 의 키 자동반복 **간격**. 흔히 수십 밀리초라고 하지만 운영체제 설정이라
+  값을 못 박을 수 없다. 그래서 "대개 수십 밀리초"로만 적고, 소프트드롭 타임아웃(120 ms)의
+  근거는 "흔한 값보다 두세 배"라고만 썼다.
+- macOS·Windows·Linux 에서의 **실제 동작**. 이 프로젝트는 Termux(android/arm64)
+  한 곳에서만 돌려 봤다. 9부의 표는 "확인함"과 "예상"을 나눠 적었다.
