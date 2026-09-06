@@ -1,0 +1,212 @@
+<article class="card section" id="s3">
+<p class="chnum">3부</p>
+<h2>투영의 선형대수</h2>
+<p class="chsub">타일 (tx, ty) 는 화면 어디에 놓이는가.<br>답은 2×2 행렬 하나이고, 그 행렬식이 모든 것을 정한다</p>
+</article>
+
+<article class="card" id="s3-3d">
+<h3>3차원에서 시작하기</h3>
+<p class="lead">쿼터뷰 화면은 3차원 공간을 평면에 눌러 놓은 것입니다. 눌러 놓는 방법을 정하면 나머지는 전부 따라옵니다.</p>
+<p>지면 위의 점 <code class="nb">(X, Y, Z)</code> 를 생각합시다. X 는 동쪽, Y 는 남쪽, Z 는 위쪽입니다. 카메라를 남동쪽 위에서 내려다보게 두면, 화면 좌표는 두 번의 회전으로 얻어집니다.</p>
+<div class="steps">
+<ol>
+<li><b>수직축 회전 45°</b> — X 축과 Y 축이 화면에서 좌우 대칭이 되도록 돌립니다.</li>
+<li><b>수평축 회전 φ</b> — 위에서 내려다보도록 기울입니다. 등각이면 <code class="nb">φ = arctan(1/√2) = 35.264°</code>.</li>
+<li><b>Z 축 방향으로 정사영</b> — 깊이를 버리고 평면에 찍습니다.</li>
+</ol>
+</div>
+<p>두 회전을 합치면 화면 좌표는</p>
+<pre class="term">sx = (X - Y) · cos 45°
+sy = (X + Y) · cos 45° · sin φ  -  Z · cos φ</pre>
+<p>가 됩니다. <b>여기서 결정적인 관찰</b>: 상수 <code class="nb">cos 45°</code> 와 <code class="nb">cos 45°·sin φ</code> 는 그저 가로·세로 축척일 뿐입니다. 게임은 이 둘을 각도로 정하지 않고 <b>픽셀 수로</b> 정합니다.</p>
+<div class="key">가로 축척을 <code class="nb">TW/2 = 16</code>, 세로 축척을 <code class="nb">TH/2 = 8</code> 로 고정하면 각도는 자동으로 정해집니다. 그리고 그 각도가 <code class="nb">arctan(8/16) = arctan(1/2) = 26.565°</code> 입니다. 도스 게임이 한 것이 바로 이것입니다 — 각도를 고르고 픽셀을 계산한 것이 아니라, <b>픽셀을 고르고 각도를 받아들였습니다.</b></p>
+</article>
+
+<article class="card" id="s3-def">
+<h3>정의 3.1 — 타일에서 화면으로</h3>
+<p>타일 <code class="nb">(tx, ty)</code> 의 마름모는 <b>꼭대기 꼭짓점</b>이 월드 픽셀</p>
+<pre class="term">Vx(tx, ty) = (tx - ty) · TW/2 = 16 · (tx - ty)
+Vy(tx, ty) = (tx + ty) · TH/2 =  8 · (tx + ty)</pre>
+<p>에 놓입니다. 높이 <code class="nb">h</code> 인 타일은 화면에서 <code class="nb">h · TZ = 8h</code> 픽셀만큼 <b>위로</b> 올라갑니다.</p>
+<!--CODE file=py/isorpg/proj.py lang=py sym=tile_to_screen note=투영 — 곱셈 두 번과 덧셈 두 번-->
+<p>기준점을 마름모 중심이 아니라 꼭대기 꼭짓점으로 잡은 것은 편의가 아니라 필요입니다. 스프라이트를 그릴 때 왼쪽 위 모서리를 계산해야 하고, 꼭짓점 기준이면 그 계산에 상수가 하나도 안 들어갑니다.</p>
+<div class="note">중심이 필요할 때는 <code class="nb">(Vx, Vy + 8)</code> 입니다. 마름모의 세로 지름이 16 이니 반이 8 이죠.</div>
+</article>
+
+<article class="card" id="s3-basis">
+<h3>기저 벡터</h3>
+<p>타일 좌표를 1 늘리면 화면이 얼마나 움직이는가 — 그것이 기저 벡터입니다.</p>
+<div class="fig" data-svg="fig_basis.svg"></div>
+<pre class="term">e_x = 투영(1, 0) - 투영(0, 0) = ( 16, 8)
+e_y = 투영(0, 1) - 투영(0, 0) = (-16, 8)</pre>
+<p>두 벡터의 길이가 같고(<code class="nb">√(16²+8²) = 8√5</code>), 사잇각이 같지 않습니다. 그래서 <b>다이메트릭</b>입니다 — 두 축은 같게 단축됐지만 세 번째 축(높이)은 다르게 단축됐습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>축</th><th>화면 벡터</th><th>길이</th></tr>
+<tr><td>tx (+1)</td><td class="num">(16, 8)</td><td class="num">8√5 ≈ 17.89</td></tr>
+<tr><td>ty (+1)</td><td class="num">(-16, 8)</td><td class="num">8√5 ≈ 17.89</td></tr>
+<tr><td>h (+1)</td><td class="num">(0, -8)</td><td class="num">8</td></tr>
+</table>
+</div>
+<p>높이 축만 짧습니다. 이 비율(<code class="nb">8 : 8√5</code>)이 화면의 "입체감"을 정합니다. 높이 축을 더 길게 하면 산이 더 높아 보이고, 짧게 하면 평평해 보입니다.</p>
+</article>
+
+<article class="card" id="s3-matrix">
+<h3>정리 3.1 — 행렬식이 2의 거듭제곱이다</h3>
+<p>두 기저 벡터를 열로 세우면 투영 행렬이 나옵니다.</p>
+<pre class="term">      | 16  -16 |
+  M = |  8    8 |          det M = 16·8 - (-16)·8 = 128 + 128 = 256 = 2^8
+
+           1  |  8   16 |
+  M^-1 = ---- | -8   16 |
+          256 |         |</pre>
+<p><b>정리.</b> <code class="nb">TW = 2·TH</code> 일 때, 그리고 그때만, <code class="nb">M^-1 · det M</code> 의 성분이 전부 2의 거듭제곱 배수가 된다.</p>
+<p><b>증명 스케치.</b> 일반적으로 <code class="nb">M = [[w, -w], [h, h]]</code>(<code class="nb">w = TW/2</code>, <code class="nb">h = TH/2</code>) 이고 <code class="nb">det M = 2wh</code>, <code class="nb">M^-1 · det M = [[h, w], [-h, w]]</code> 입니다. 성분이 <code class="nb">±h, w</code> 뿐이므로 둘 다 2의 거듭제곱이어야 하고, 마름모가 되려면 <code class="nb">w = 2h</code>. 그래서 <code class="nb">h = 8, w = 16</code> 이 가장 작은 실용적 선택입니다. ∎</p>
+<div class="key"><b>이것이 2:1 을 고른 진짜 이유입니다.</b> 30° 등각을 쓰면 <code class="nb">w/h = √3</code> 이라 역행렬에 무리수가 들어옵니다. 정수 산술로는 근사할 수밖에 없고, 근사하면 픽킹이 타일 경계에서 어긋납니다.</div>
+</article>
+
+<article class="card" id="s3-check">
+<h3>실제 값으로 확인</h3>
+<p>엔진이 찍은 투영 결과입니다. 손으로 옮긴 것이 아니라 <code class="nb">main prim</code> 의 출력입니다.</p>
+<!--OUT file=py_prim.txt sec=1 note=타일 열두 개의 투영 결과-->
+<p>몇 줄만 읽어 봅시다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>입력</th><th>출력</th><th>뜻</th></tr>
+<tr><td class="num">1 0 0</td><td class="num">16 8</td><td>tx 를 1 늘리면 오른쪽-아래로</td></tr>
+<tr><td class="num">0 1 0</td><td class="num">-16 8</td><td>ty 를 1 늘리면 왼쪽-아래로</td></tr>
+<tr><td class="num">1 1 0</td><td class="num">0 16</td><td>둘 다 늘리면 정확히 아래로</td></tr>
+<tr><td class="num">5 3 1</td><td class="num">32 56</td><td>높이 1 이 8픽셀 위로 (64 → 56)</td></tr>
+<tr><td class="num">5 3 7</td><td class="num">32 8</td><td>높이 7 이 56픽셀 위로</td></tr>
+<tr><td class="num">47 47 0</td><td class="num">0 752</td><td>맵 대각선 끝 — 가로는 0, 세로는 752</td></tr>
+</table>
+</div>
+<div class="note"><code class="nb">(1,1)</code> 이 <code class="nb">(0,16)</code> 인 것이 마름모 배치의 핵심입니다. 대각선으로 한 칸 가면 화면에서 <b>정확히 한 타일 높이만큼</b> 내려갑니다. 그래서 마름모가 위아래로 맞물립니다.</div>
+</article>
+
+<article class="card" id="s3-layout">
+<h3>다이아몬드 배치 vs 지그재그 배치</h3>
+<p>같은 마름모 타일이라도 저장 방식은 두 가지입니다.</p>
+<div class="g2">
+<div>
+<h4>다이아몬드 (이 문서)</h4>
+<p>배열 인덱스 <code class="nb">(tx, ty)</code> 를 그대로 투영합니다. 맵 전체가 화면에서 마름모 모양이 됩니다.</p>
+<pre>sx = 16(tx - ty)
+sy =  8(tx + ty)</pre>
+<p class="cap">장점: 수식이 대칭이고 역행렬이 깔끔<br>단점: 직사각 화면에 마름모 맵 — 귀퉁이가 빈다</p>
+</div>
+<div>
+<h4>지그재그 (staggered)</h4>
+<p>홀수 행을 반 칸 밀어 저장합니다. 맵이 화면에서 직사각형이 됩니다.</p>
+<pre>sx = 32·tx + (ty odd ? 16 : 0)
+sy =  8·ty</pre>
+<p class="cap">장점: 화면을 꽉 채운다<br>단점: 이웃 계산에 홀짝 분기가 붙는다</p>
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>다이아몬드</th><th>지그재그</th></tr>
+<tr><td>이웃 (동)</td><td class="num">(tx+1, ty)</td><td class="num">(tx+1, ty)</td></tr>
+<tr><td>이웃 (남동)</td><td class="num">(tx+1, ty+1)</td><td class="num">홀짝에 따라 다름</td></tr>
+<tr><td>역투영</td><td>나눗셈 두 번</td><td>나눗셈 + 홀짝 보정</td></tr>
+<tr><td>맵 모양</td><td>마름모</td><td>직사각</td></tr>
+</table>
+</div>
+<div class="key">이 문서는 <b>다이아몬드</b>를 씁니다. 수식이 대칭이라 증명이 짧고, 4부의 모서리 마스크가 네 값으로 떨어지기 때문입니다. 지그재그였다면 마스크가 홀짝 두 벌 필요합니다.</div>
+</article>
+
+<article class="card" id="s3-height">
+<h3>높이 항</h3>
+<p>높이는 세로 좌표에서 빼기만 하면 됩니다. <code class="nb">sy - h·TZ</code>. 이 단순함에는 대가가 있습니다.</p>
+<p><b>높이 h 인 타일은 (tx-h, ty-h) 위치의 높이 0 타일과 화면상 같은 자리에 옵니다.</b> 왜냐하면</p>
+<pre class="term">투영(tx, ty, h) = (16(tx-ty),  8(tx+ty) - 8h)
+투영(tx-k, ty-k, 0) = (16(tx-ty),  8(tx+ty) - 16k)</pre>
+<p><code class="nb">h = 2k</code> 일 때 정확히 같습니다. 즉 <b>높이 2 는 대각선 한 칸 뒤와 구별되지 않습니다.</b> 이것이 쿼터뷰의 근본적 모호함이고, 게임들이 절벽 옆면에 그림자와 무늬를 넣어 구별시키는 이유입니다.</p>
+<div class="warn"><b>픽킹에서 이 모호함이 문제가 됩니다</b> — 마우스가 가리킨 픽셀이 "높이 0 의 먼 타일"인지 "높이 2 의 가까운 타일"인지 화면만으로는 알 수 없습니다. 4부에서는 <b>높이를 무시한 지면 픽킹</b>을 다루고, 진짜 높이 픽킹은 7부의 정렬 결과를 역으로 훑어야 합니다.</div>
+</article>
+
+<article class="card" id="s3-cube">
+<h3>기둥 그리기 — 큐브 한 장으로 어떤 높이든</h3>
+<div class="fig" data-svg="fig_cube.svg"></div>
+<p>스프라이트를 높이마다 따로 만들 필요가 없습니다. <b>큐브 한 장</b>(윗면 마름모 + 아래로 8픽셀 옆면)을 <code class="nb">k = 1..h</code> 에 차례로 올리면 됩니다. 아래부터 올리므로 마지막에 올린 윗면이 맨 위에 남고, 옆면은 8h 픽셀만큼 이어 붙습니다.</p>
+<div class="note">스프라이트 뱅크에는 지형 16종의 마름모 16장과 큐브 16장이 들어 있습니다. 합쳐 32장으로 높이 0..12 의 모든 지형을 그립니다.</div>
+</article>
+
+<article class="card" id="s3-diamond">
+<h3>마름모는 L1 단위공이다</h3>
+<div class="fig" data-svg="fig_diamond.svg"></div>
+<p>타일 중심을 원점으로 두면, 마름모 내부는</p>
+<pre class="term">|u| / 16  +  |v| / 8  ≤  1        ⟺        |u| + 2|v| ≤ 16</pre>
+<p>입니다. 이것은 <b>L1 노름의 단위공</b>을 u 축으로 두 배 늘인 것입니다. 유클리드 원이 L2 공이듯, 마름모는 L1 공입니다.</p>
+<p>이 관찰이 4부 전체를 끌고 갑니다. L1 공은 좌표를 45° 돌리면 정사각형이 되기 때문입니다 — 그리고 정사각형 안에 있는지 확인하는 것은 <b>나눗셈 두 번</b>이면 끝납니다.</p>
+<div class="key"><b>넓이 확인</b> — 마름모 넓이는 대각선 곱의 반, 즉 <code class="nb">32 × 16 / 2 = 256</code> 픽셀입니다. 4부에서 실제로 세어 보면 정확히 256개가 나옵니다.</div>
+</article>
+
+<article class="card" id="s3-world">
+<h3>타일 사이에 있을 때 — 16.16 좌표</h3>
+<p>캐릭터는 타일 격자에 딱 맞춰 서 있지 않습니다. 타일 단위 <b>16.16 고정소수점</b> 좌표를 갖습니다.</p>
+<!--CODE file=py/isorpg/proj.py lang=py sym=world_to_screen note=고정소수점 좌표의 투영-->
+<p>정수 투영과 형태가 같고 마지막에 65,536 으로 내림 나눗셈만 붙습니다. 범위 확인이 중요합니다 — <code class="nb">|fx|, |fy| &lt; 48 × 65536 &lt; 2²²</code> 이므로 <code class="nb">(fx+fy)·8 &lt; 2²⁶</code> 로, 배정밀도 가수 53비트 안에 넉넉히 들어갑니다.</p>
+<div class="warn"><b>왜 범위를 따지는가</b> — 루아 5.1 과 자바스크립트에서 정수는 배정밀도 실수입니다. 2<sup>53</sup> 을 넘으면 조용히 틀린 값이 나옵니다. 이 문서의 모든 곱셈에는 이런 범위 계산이 붙어 있습니다. 5부에서 본격적으로 다룹니다.</div>
+</article>
+
+<article class="card" id="s3-demo">
+<h3>직접 해 보기 — 투영 실험실</h3>
+<div class="demo" data-demo="proj-playground">
+<h5>타일 좌표와 높이를 바꿔 보세요</h5>
+<div class="row">
+<label>tx <input type="number" data-tx value="2" min="-4" max="8" step="1"></label>
+<label>ty <input type="number" data-ty value="1" min="-4" max="8" step="1"></label>
+<label>h <input type="number" data-h value="0" min="0" max="6" step="1"></label>
+</div>
+<div class="row">
+<label>TW <input type="number" data-tw value="32" min="8" max="64" step="8"></label>
+<label>TH <input type="number" data-th value="16" min="4" max="32" step="4"></label>
+</div>
+<div class="out"></div>
+</div>
+<p>TW 와 TH 를 바꿔 보면 행렬식이 어떻게 변하는지 볼 수 있습니다. <code class="nb">TW = 2·TH</code> 일 때만 역행렬 성분이 깔끔하게 떨어집니다.</p>
+</article>
+
+<article class="card" id="s3-quiz1">
+<h3>확인 문제</h3>
+<div class="quiz" data-quiz>
+<p class="q">타일 <code class="nb">(10, 4)</code> 의 높이가 3 이라면 화면 좌표는? (카메라 오프셋 0)</p>
+<button>답 보기</button>
+<div class="a">
+<p><code class="nb">Vx = 16 × (10 - 4) = 96</code><br>
+<code class="nb">Vy = 8 × (10 + 4) - 3 × 8 = 112 - 24 = 88</code><br>
+답은 <b>(96, 88)</b>.</p>
+<p>확인: 높이가 0 이면 (96, 112) 이고, 높이 3 이 24픽셀만큼 들어 올립니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s3-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">타일 크기를 <code class="nb">TW=48, TH=24</code> 로 바꾸면 행렬식은? 그리고 여전히 시프트만으로 역투영할 수 있는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p><code class="nb">w = 24, h = 12</code> 이므로 <code class="nb">det = 2wh = 576</code>.</p>
+<p>576 = 2<sup>6</sup> × 3<sup>2</sup> 이라 <b>2의 거듭제곱이 아닙니다.</b> 역행렬 성분이 <code class="nb">12/576 = 1/48</code>, <code class="nb">24/576 = 1/24</code> 이 되어 3 으로 나누는 연산이 필요합니다.</p>
+<p>비율 2:1 은 지켜지므로 화면 각도는 그대로 26.565° 입니다. 하지만 <b>산술은 더 이상 공짜가 아닙니다.</b> 이것이 도스 게임의 타일 크기가 거의 언제나 32×16 이나 64×32 였던 이유입니다 — 둘 다 <code class="nb">det = 2<sup>8</sup></code>, <code class="nb">2<sup>10</sup></code> 입니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s3-sum">
+<h3>3부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>개념</th><th>식</th><th>왜 중요한가</th></tr>
+<tr><td>투영</td><td class="num">sx = 16(tx-ty), sy = 8(tx+ty) - 8h</td><td>곱셈 두 번, 덧셈 두 번</td></tr>
+<tr><td>기저</td><td class="num">e_x=(16,8), e_y=(-16,8)</td><td>둘의 길이가 같다 = 다이메트릭</td></tr>
+<tr><td>행렬식</td><td class="num">256 = 2<sup>8</sup></td><td>역투영이 시프트만으로 끝난다</td></tr>
+<tr><td>마름모</td><td class="num">|u| + 2|v| ≤ 16</td><td>L1 단위공 — 4부의 출발점</td></tr>
+<tr><td>넓이</td><td class="num">256 픽셀</td><td>화면이 정확히 나뉜다는 검산</td></tr>
+<tr><td>높이 모호성</td><td class="num">h=2k ↔ 대각 k칸 뒤</td><td>픽킹과 정렬이 어려워지는 근본 원인</td></tr>
+</table>
+</div>
+<div class="key">다음 부에서는 이 행렬을 <b>거꾸로</b> 돌립니다. 마우스가 짚은 픽셀이 어느 타일인지.</div>
+</article>

@@ -1,0 +1,204 @@
+<article class="card section" id="s4">
+<p class="chnum">4부</p>
+<h2>픽셀에서 타일로</h2>
+<p class="chsub">마우스가 짚은 픽셀은 어느 타일인가.<br>대수적으로 푸는 길과, 도스가 실제로 쓴 표 조회</p>
+</article>
+
+<article class="card" id="s4-problem">
+<h3>문제</h3>
+<p class="lead">투영은 쉽습니다. 곱셈 두 번이면 끝나니까요. 어려운 것은 그 반대입니다 — 화면 픽셀 하나가 주어졌을 때 그 픽셀을 품은 마름모를 찾는 것.</p>
+<p>직사각 격자였다면 <code class="nb">floor(px/W), floor(py/H)</code> 로 끝났을 겁니다. 마름모는 서로 맞물려 있어서 그렇게 되지 않습니다. 한 픽셀 열에 두 타일이 걸치고, 한 픽셀 행에도 두 타일이 걸칩니다.</p>
+<div class="warn"><b>이것이 진짜 문제였습니다</b> — 도스 시절 쿼터뷰 게임의 조작은 대부분 마우스였고, 클릭 한 번마다 이 계산이 돌아야 했습니다. 그리고 <b>나눗셈은 비쌌습니다.</b> 386 에서 32비트 나눗셈이 38 사이클, 곱셈이 9~38 사이클, 시프트가 3 사이클이었습니다.</div>
+</article>
+
+<article class="card" id="s4-idea">
+<h3>착상 — 좌표를 갈아타면 마름모가 정사각형이 된다</h3>
+<p>3부에서 마름모는 <code class="nb">|u| + 2|v| ≤ 16</code> 이라는 L1 공이었습니다. L1 공은 좌표를 45° 돌리면 L∞ 공, 즉 정사각형이 됩니다.</p>
+<pre class="term">a = px + 2·py
+b = 2·py - px</pre>
+<p>이 변환의 야코비 행렬식은 <code class="nb">1·2 - 2·(-1) = 4 ≠ 0</code> 이라 가역입니다. 그리고 타일 <code class="nb">(tx, ty)</code> 의 중심 <code class="nb">(16(tx-ty), 8(tx+ty)+8)</code> 을 넣어 보면</p>
+<pre class="term">a_c = 32·tx + 16
+b_c = 32·ty + 16</pre>
+<p>타일 중심들이 <code class="nb">(a, b)</code> 공간에서 <b>간격 32의 정사각 격자</b> 위에 놓입니다. 마름모 하나가 변 32짜리 정사각형이 되는 것이죠.</p>
+<div class="key">그러면 답은 자명합니다. <code class="nb">tx = ⌊a/32⌋</code>, <code class="nb">ty = ⌊b/32⌋</code>.</div>
+</article>
+
+<article class="card" id="s4-thm">
+<h3>정리 3.2 — 대수적 역투영</h3>
+<p><b>정리.</b> 화면 픽셀 <code class="nb">(px, py)</code> 를 품는 타일은 정확히 하나이고,</p>
+<pre class="term">tx = floordiv(px + 2·py, 32)
+ty = floordiv(2·py - px, 32)</pre>
+<p><b>증명.</b> <code class="nb">a = px + 2py</code>, <code class="nb">b = 2py - px</code> 로 두면 가역 선형변환입니다. 타일 중심에서 <code class="nb">a_c = 32tx + 16</code>, <code class="nb">b_c = 32ty + 16</code> 입니다.</p>
+<p>중심 기준 상대 좌표 <code class="nb">u = px - cx</code>, <code class="nb">v = py - cy</code> 에 대해 마름모 내부 조건은 <code class="nb">|u| + 2|v| ≤ 16</code> 입니다. <code class="nb">A = u + 2v</code>, <code class="nb">B = 2v - u</code> 로 두면 <code class="nb">u = (A-B)/2</code>, <code class="nb">2v = (A+B)/2</code> 이므로</p>
+<pre class="term">|u| + |2v| = |A-B|/2 + |A+B|/2 = max(|A|, |B|)</pre>
+<p>(마지막 등식은 <code class="nb">|p|+|q| = max(|p+q|, |p-q|)</code> 의 다른 표기입니다.) 따라서 내부 조건은 <code class="nb">max(|A|, |B|) ≤ 16</code> 이고, <code class="nb">A = a - a_c</code>, <code class="nb">B = b - b_c</code> 이므로</p>
+<pre class="term">타일 (tx,ty) = { (a,b) : 32tx ≤ a ≤ 32tx+32,  32ty ≤ b ≤ 32ty+32 }</pre>
+<p>변 32짜리 정사각형들이 격자를 이뤄 평면을 덮습니다. 반개구간으로 자르면 내림 나눗셈이 정확히 하나를 줍니다. ∎</p>
+<div class="note">경계 픽셀은 <code class="nb">a</code>, <code class="nb">b</code> 가 큰 쪽 타일이 가져갑니다. 겹침도 빈틈도 없습니다 — 뒤에서 64,000 픽셀 전수로 확인합니다.</div>
+</article>
+
+<article class="card" id="s4-code">
+<h3>코드는 두 줄이다</h3>
+<!--CODE file=py/isorpg/proj.py lang=py sym=screen_to_tile note=대수적 역투영-->
+<p>나눗셈 두 번. 곱셈은 <code class="nb">2·py</code> 하나인데 그것도 시프트입니다.</p>
+<p>여기서 <code class="nb">floordiv</code> 를 쓰는 것이 중요합니다. <b>C 의 <code class="nb">/</code> 는 0 방향 절단</b>이라 음수에서 답이 틀립니다.</p>
+<div class="cmp bad">
+<h5>0 방향 절단 (C, 자바)</h5>
+<pre>-1 / 32 = 0       ← 틀렸다
+-33 / 32 = -1     ← 틀렸다
+
+카메라가 원점 왼쪽으로 가면
+타일 인덱스가 0 근처에서 두 번 나온다</pre>
+</div>
+<div class="cmp good">
+<h5>내림 (파이썬 //, math.floor)</h5>
+<pre>floordiv(-1, 32) = -1
+floordiv(-33, 32) = -2
+
+경계가 균일하게 이어진다</pre>
+</div>
+<div class="warn"><b>이 버그는 조용합니다</b> — 맵 안쪽에서는 절대 나타나지 않고, 카메라가 맵 왼쪽 위 바깥으로 나갈 때만 타일 하나가 두 번 선택됩니다. 그래서 <b>테스트에 반드시 음수 픽셀을 넣어야</b> 합니다.</div>
+</article>
+
+<article class="card" id="s4-verify-slow">
+<h3>믿지 말고 세어 보기</h3>
+<p>두 줄짜리 식이 정말 마름모를 나타내는지, 마름모 정의로 직접 찾은 결과와 비교합니다.</p>
+<!--CODE file=py/isorpg/proj.py lang=py sym=screen_to_tile_slow note=마름모 정의로 직접 찾는 느린 버전-->
+<p>후보 25개를 훑으며 <code class="nb">|u| + 2|v| ≤ 16</code> 을 만족하는 것을 찾습니다. 경계에서는 여러 타일이 조건을 만족하므로, <code class="nb">floor</code> 규칙과 같은 것을 고르려면 <code class="nb">a</code>, <code class="nb">b</code> 가 큰 쪽을 택해야 합니다.</p>
+<!--OUT file=py_prim.txt sec=2 note=스무 개의 픽셀 — 음수와 경계를 포함-->
+<div class="key">마지막 줄이 핵심입니다. 스무 개 전부 두 방법이 같은 답을 냈습니다. 테스트는 129×81 = 10,449 픽셀에 대해 같은 비교를 합니다.</div>
+</article>
+
+<article class="card" id="s4-dos">
+<h3>도스는 다르게 했다 — 사각형 + 모서리 마스크</h3>
+<p class="lead">나눗셈 두 번도 아까웠습니다. 도스 게임들은 <b>512바이트짜리 표</b>를 들고 다녔습니다.</p>
+<p>화면을 32×16 사각형으로 나눕니다. <code class="nb">px = 32·rc + ox</code>, <code class="nb">py = 16·rr + oy</code> 로 쓰면 정리 3.2 의 식은</p>
+<pre class="term">tx = (rc + rr) + floordiv(ox + 2·oy, 32)
+ty = (rr - rc) + floordiv(2·oy - ox, 32)</pre>
+<p>가 됩니다. 그런데 <code class="nb">ox ∈ [0,32)</code>, <code class="nb">oy ∈ [0,16)</code> 이므로</p>
+<pre class="term">ox + 2·oy  ∈ [0, 61]    →  A = floordiv(..., 32) ∈ {0, 1}
+2·oy - ox  ∈ [-31, 30]  →  B = floordiv(..., 32) ∈ {-1, 0}</pre>
+<p><b>네 가지 경우뿐입니다.</b> 사각형 안의 위치가 어느 경우인지만 알면 되고, 그것은 32×16 = 512칸짜리 표에 미리 적어 둘 수 있습니다.</p>
+<div class="key">이것이 도스 시절 "코너 마스크" 또는 "픽 마스크"의 정체입니다. 나눗셈 두 번이 <b>표 조회 한 번</b>이 됩니다.</div>
+</article>
+
+<article class="card" id="s4-mask-fig">
+<h3>마스크의 모양</h3>
+<div class="fig" data-svg="fig_mask.svg"></div>
+<p>두 직선 <code class="nb">ox + 2oy = 32</code>(기울기 -1/2)와 <code class="nb">2oy - ox = 0</code>(기울기 +1/2)이 사각형 중심 <code class="nb">(16, 8)</code> 에서 만나 넷으로 자릅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>영역</th><th>A</th><th>B</th><th>마스크 값</th><th>타일</th></tr>
+<tr><td>왼쪽</td><td class="num">0</td><td class="num">0</td><td class="num">1</td><td class="num">(rc+rr, rr-rc)</td></tr>
+<tr><td>위</td><td class="num">0</td><td class="num">-1</td><td class="num">0</td><td class="num">(rc+rr, rr-rc-1)</td></tr>
+<tr><td>아래</td><td class="num">1</td><td class="num">0</td><td class="num">3</td><td class="num">(rc+rr+1, rr-rc)</td></tr>
+<tr><td>오른쪽</td><td class="num">1</td><td class="num">-1</td><td class="num">2</td><td class="num">(rc+rr+1, rr-rc-1)</td></tr>
+</table>
+</div>
+<p>네 조각의 넓이는 각각 <code class="nb">512/4 = 128</code> 픽셀 — 마름모 넓이 256 의 <b>절반</b>입니다. 사각형 하나에 마름모 두 개 몫이 들어간다는 계산과 정확히 맞습니다.</p>
+<div class="note"><b>마름모 하나가 사각형 두 개에 걸쳐 있습니다.</b> 그래서 사각형 넷으로 나눈 조각이 반쪽짜리인 것이죠.</div>
+</article>
+
+<article class="card" id="s4-mask-code">
+<h3>표 만들기와 쓰기</h3>
+<!--CODE file=py/isorpg/proj.py lang=py sym=_build_mask note=마스크 표 생성 — 왜 네 값뿐인지를 코드가 보여 준다-->
+<!--CODE file=py/isorpg/proj.py lang=py sym=pick_mask note=표를 쓰는 쪽-->
+<p>도스 게임은 이 표를 파일로 들고 다녔습니다. 우리는 시작할 때 만듭니다 — <b>왜 네 값뿐인지가 코드에 남아야</b> 하기 때문입니다. 상수 배열로 박아 두면 그 이유가 사라집니다.</p>
+<div class="key">마스크 값을 <code class="nb">2A + (B+1)</code> 로 인코딩한 것은 0..3 에 담기 위해서입니다. 두 비트면 충분하니 도스 시절에는 네 칸을 한 바이트에 넣어 <b>128바이트</b>로 줄이기도 했습니다.</div>
+</article>
+
+<article class="card" id="s4-mask-table">
+<h3>표 자체</h3>
+<!--OUT file=py_prim.txt sec=3 note=32x16 마스크 전체와 전수 확인 결과-->
+<p>열여섯 줄, 서른두 글자. 계단이 <b>가로 2칸에 세로 1칸</b>씩 지는 것이 보입니다 — 2:1 기울기가 표에 그대로 새겨져 있습니다.</p>
+<p>값 분포가 136/136/120/120 으로 정확히 128씩은 아닙니다. 경계 픽셀 소유권이 <code class="nb">floor</code> 규칙에 따라 한쪽으로 쏠리기 때문입니다. 합은 정확히 512 입니다.</p>
+<div class="key"><b>전수 확인</b> — 카메라 오프셋 다섯 개(양수·음수·큰 값)에 대해 화면 64,000 픽셀 전부에서 두 방법이 일치했습니다. 총 320,000 픽셀, 불일치 0.</div>
+</article>
+
+<article class="card" id="s4-bench">
+<h3>그런데 표가 더 느리다</h3>
+<p class="lead">도스에서는 표 조회가 나눗셈보다 압도적으로 빨랐습니다. 지금은 아닙니다.</p>
+<!--OUT file=bench.txt sec=1 note=파이썬 실측 — 1000회 호출을 20번-->
+<p>파이썬에서 마스크 방식이 대수적 방식보다 <b>약 1.8배 느립니다.</b> 이유는 셋입니다.</p>
+<div class="steps">
+<ol>
+<li><b>나눗셈이 싸졌다</b> — 현대 CPU 의 정수 나눗셈은 20~40 사이클이고, 컴파일러는 상수 나눗셈을 곱셈과 시프트로 바꿔 버립니다. 32 로 나누는 것은 시프트 한 번입니다.</li>
+<li><b>메모리가 비싸졌다</b> — 512바이트 표는 L1 캐시에 들어가지만, 캐시 히트도 4~5 사이클입니다. 시프트는 1 사이클입니다.</li>
+<li><b>인터프리터 오버헤드</b> — 파이썬·루아·자바스크립트에서는 배열 인덱싱 자체가 함수 호출급 비용입니다.</li>
+</ol>
+</div>
+<div class="warn"><b>"룩업 표가 빠르다"는 통념은 유효기간이 있었습니다.</b> 1990년의 386 에서는 맞았고, 2020년대의 어떤 언어에서도 틀립니다. 17부에서 세 언어의 실측을 나란히 놓고 다시 봅니다.</div>
+</article>
+
+<article class="card" id="s4-count">
+<h3>타일 하나가 정확히 256픽셀인가</h3>
+<p>이론상 마름모 넓이는 256 입니다. 실제로 세어 봅시다.</p>
+<pre class="term">화면 영역 [-160, 160) × [0, 160) 의 모든 픽셀을
+screen_to_tile 로 분류해 타일마다 개수를 센다.
+영역에 마름모가 통째로 들어오는 타일만 골라 보면 —
+
+    전부 256픽셀.</pre>
+<p>가장자리 타일은 잘려서 적게 나오므로 제외합니다. 안쪽 타일이 모두 정확히 256 이라는 것은 <b>겹침도 빈틈도 없다</b>는 뜻입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>행 y</th><th>x 범위</th><th>폭</th></tr>
+<tr><td class="num">0</td><td class="num">16 ~ 16</td><td class="num">1</td></tr>
+<tr><td class="num">1</td><td class="num">14 ~ 18</td><td class="num">5</td></tr>
+<tr><td class="num">4</td><td class="num">8 ~ 24</td><td class="num">17</td></tr>
+<tr><td class="num">7</td><td class="num">2 ~ 30</td><td class="num">29</td></tr>
+<tr><td class="num">8</td><td class="num">1 ~ 31</td><td class="num">31</td></tr>
+<tr><td class="num">9</td><td class="num">3 ~ 29</td><td class="num">27</td></tr>
+<tr><td class="num">15</td><td class="num">15 ~ 17</td><td class="num">3</td></tr>
+</table>
+</div>
+<p>폭이 1, 5, 9, …, 29, 31, 27, …, 3 으로 갑니다. 합이 정확히 256 입니다. 가운데 행이 33 이 아니라 <b>31</b> 인 것은, 양 끝 픽셀 <code class="nb">x=0</code> 과 <code class="nb">x=32</code> 가 이웃 타일 몫이기 때문입니다.</p>
+<div class="key"><b>스프라이트도 이 모양이어야 합니다.</b> 손으로 그린 예쁜 마름모를 쓰면 그리는 모양과 고르는 모양이 한 픽셀씩 어긋납니다. 이 문서의 지형 스프라이트는 <code class="nb">screen_to_tile</code> 규칙에서 그대로 뽑아 만듭니다.</div>
+</article>
+
+<article class="card" id="s4-demo">
+<h3>직접 해 보기 — 픽킹</h3>
+<div class="demo" data-demo="pick">
+<h5>마우스를 움직여 보세요 (터치도 됩니다)</h5>
+<div class="row">
+<label><input type="checkbox" data-rect checked> 32×16 사각형 격자</label>
+<label><input type="checkbox" data-mask> 마스크 색칠</label>
+</div>
+<div class="out"></div>
+</div>
+<div class="note">노란 마름모가 지금 짚고 있는 타일입니다. "마스크 색칠"을 켜면 각 사각형이 네 영역으로 갈린 모습이 보입니다 — 두 방식이 언제나 같은 타일을 가리키는 것도 함께 볼 수 있습니다.</div>
+</article>
+
+<article class="card" id="s4-quiz">
+<h3>확인 문제</h3>
+<div class="quiz" data-quiz>
+<p class="q">픽셀 <code class="nb">(-17, 8)</code> 은 어느 타일인가? 그리고 C 의 <code class="nb">/</code> 를 썼다면 어떤 답이 나왔을까?</p>
+<button>답 보기</button>
+<div class="a">
+<p><code class="nb">a = -17 + 16 = -1</code> → <code class="nb">tx = ⌊-1/32⌋ = -1</code><br>
+<code class="nb">b = 16 + 17 = 33</code> → <code class="nb">ty = ⌊33/32⌋ = 1</code><br>
+답은 <b>(-1, 1)</b>.</p>
+<p>C 의 <code class="nb">/</code> 로는 <code class="nb">-1/32 = 0</code> 이 되어 <b>(0, 1)</b> 이 나옵니다. 타일 (0,1) 은 화면 오른쪽에 있는 다른 타일입니다. 카메라가 맵 왼쪽 바깥에 있을 때만 나타나는 버그라 눈에 잘 띄지 않습니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s4-sum">
+<h3>4부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방법</th><th>연산</th><th>메모리</th><th>도스</th><th>지금</th></tr>
+<tr><td>대수적 역</td><td>나눗셈 2</td><td class="num">0 B</td><td>느림</td><td><b>빠름</b></td></tr>
+<tr><td>사각형 + 마스크</td><td>나눗셈 2 + 표 조회 1</td><td class="num">512 B</td><td><b>빠름</b></td><td>1.8배 느림</td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>확인한 것</th><th>결과</th></tr>
+<tr><td>대수적 역 == 마름모 정의 (10,449 픽셀)</td><td>일치</td></tr>
+<tr><td>마스크 == 대수적 역 (320,000 픽셀)</td><td>일치</td></tr>
+<tr><td>타일 하나의 픽셀 수</td><td class="num">정확히 256</td></tr>
+<tr><td>마스크 값 분포</td><td class="num">136/136/120/120, 합 512</td></tr>
+</table>
+</div>
+<div class="key">다음 부에서는 이 좌표들이 <b>정수가 아닐 때</b> 어떻게 하는지를 봅니다. FPU 없이 소수를 다루는 법.</div>
+</article>
