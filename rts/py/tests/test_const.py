@@ -164,6 +164,19 @@ def has_cycle():
 
 H.check('기술 트리는 순환이 없다', has_cycle(), False)
 
+# ── §17.1 FSM 상태 번호표 ───────────────────────────────────────────────────
+bad = 0
+names = []
+for cells in table_rows('### 17.1 유닛 FSM'):
+    name = cells[1].replace('`', '')
+    names.append(name)
+    if getattr(C, name, None) != int(cells[0]):
+        H.note('%s 기대 %s 실제 %r', name, cells[0], getattr(C, name, None))
+        bad += 1
+H.check('§17.1 상태 번호 %d개' % len(names), bad, 0)
+H.check('상태 번호는 0..9 로 겹치지 않는다',
+        sorted(getattr(C, n) for n in names), list(range(10)))
+
 # ── §25.4 시작 조건 ─────────────────────────────────────────────────────────
 H.check('시작 크레딧 1000', C.START_CREDITS, 1000)
 H.check('시작 채집기 2기', C.START_HARV, 2)
