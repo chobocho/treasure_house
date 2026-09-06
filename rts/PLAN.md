@@ -460,3 +460,13 @@ prime 16777619.
   것은 생산이 아니라 정찰과 이동 거리다. `main aigame7` 로 재현한다.
   리플레이 1153바이트 vs 상태 스냅샷 1200틱 × 4KB. bench: A* 480회 0.55초 · 시뮬 200틱 1.03초.
   Next: 5단계(lua/rts) · 6단계(ts/src) — 두 서브에이전트로 병렬 가능.
+- 2026-09-06 12:40 — **5단계 완료 (서브에이전트)**: `lua/rts` 24파일 7,596줄 + `lua/tests` 27파일
+  5,161줄 + `lua/tools/love_headless`. `make lua` 871 checks / 0, `make love` 동일.
+  prim·trace·hashes 세 골든 모두 **바이트 일치**(오케스트레이터가 직접 cmp 로 확인).
+  덤: `out/py_tests.txt` 와 `out/lua_tests.txt` 가 **바이트 단위로 같다** — 두 언어의 시험
+  로그를 줄 단위로 diff 할 수 있다. LuaJIT·Lua 5.5·LÖVE 11.5 셋 다 통과.
+  제약 감사 통과: `lua/rts` 에 비트 연산자·bit 라이브러리·goto·정수나눗셈 연산자 없음,
+  실수는 `move.lua` 의 `SQRT2`(주입 버그 전용) 하나뿐, UTF-8 no BOM·LF.
+  포팅에서 나온 발견 하나: `raster.text()` 는 **UTF-8 코드포인트** 단위로 돌아야 한다.
+  파이썬의 `for ch in s` 가 글자당 6px 를 전진하는데 바이트로 돌면 한글 한 글자에서
+  12px 가 밀려 PPM 파리티가 깨진다.
