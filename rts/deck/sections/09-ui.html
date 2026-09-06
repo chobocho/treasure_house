@@ -1,11 +1,104 @@
 <article class="card section" id="s9">
 <p class="chnum">9부</p>
 <h2>지형·UI 렌더링</h2>
-<p class="chsub">레이어 여덟 겹을 320×200 안에 쌓는다.<br>안개는 왜 스프라이트 위에 오는가</p>
+<p class="chsub">여덟 겹을 쌓아 320×200 을 만든다.<br>그리고 그 순서가 왜 명세인가</p>
 </article>
 
-<article class="card" id="s9-todo">
-<h3>지형·UI 렌더링 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>26장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s9-layers">
+<h3>레이어 여덟 겹</h3>
+<pre class="term">1. 지형 타일 (뷰포트)
+2. 건물·유닛 스프라이트 (y 정렬)
+3. 투사체
+4. 체력바·선택 표시
+5. 안개 오버레이
+6. 우측 패널 (미니맵 + 선택 정보)
+7. 하단 바 (크레딧·인구·메시지)
+8. 커서</pre>
+<img class="shot" data-shot="shots/shot_t0300_build.png" alt="틱 300 — 정제소와 병영이 선 기지">
+<p>틱 300 의 기지입니다. 붉은 건물이 사령부·정제소·병영, 그 옆의 작은 점들이 채집기, 초록 막대가 체력바입니다. 오른쪽 검은 영역이 미탐험 안개입니다.</p>
+</article>
+
+<article class="card" id="s9-terrain">
+<h3>지형은 그림이 아니라 색이다</h3>
+<p class="lead">아티스트가 없습니다. 그래서 타일 한 칸을 <b>색으로 채우고</b>, 오토타일 마스크가 가리키는 "나와 다른 지형" 쪽 가장자리 1px 만 어둡게 긋습니다.</p>
+<!--CODE file=py/rts/render.py lang=py sym=_draw_terrain note=4부의 마스크가 화면에서 하는 일-->
+<p>4부에서 256 → 47 로 접은 그 마스크가 여기서 <b>네 개의 비트</b>로만 쓰입니다 — 북·남·서·동. 모서리 비트는 이 그림 방식에서 아무 일도 하지 않습니다.</p>
+<div class="note">진짜 타일 그림이 있었다면 47장을 전부 썼을 것입니다. 색과 선만으로 그리면 <b>변 넷</b>이면 충분합니다. 오토타일의 값어치는 그림이 있을 때 드러나고, 그 사실을 감추지 않고 적습니다.</p>
+</article>
+
+<article class="card" id="s9-ysort">
+<h3>y 정렬 — 발밑으로</h3>
+<!--CODE file=py/rts/render.py lang=py sym=sort_key note=발밑 y · x · 핸들-->
+<p>스프라이트를 <b>발밑 y</b> 로 정렬합니다. 동점이면 x, 그다음 핸들.</p>
+<p>키가 <b>전순서</b>이므로 정렬의 안정성(stable sort)에 의존하지 않습니다. 세 언어의 정렬이 동점을 다르게 처리해도 결과가 같습니다.</p>
+<!--CODE file=py/rts/render.py lang=py sym=y_order note=삽입 정렬 — 프레임 사이에 거의 정렬되어 있다-->
+<p>삽입 정렬을 쓰는 이유는 <b>거의 정렬된 목록</b>이기 때문입니다. 유닛은 한 틱에 한 칸도 못 움직이므로 프레임 사이의 순서 변화가 작고, 삽입 정렬이 그 경우 거의 O(n) 입니다.</p>
+</article>
+
+<article class="card" id="s9-fog">
+<h3>안개는 위에, 유닛은 그 전에</h3>
+<img class="shot" data-shot="shots/shot_t0900_fog.png" alt="틱 900 — 안개 경계">
+<p>안개가 스프라이트 <b>위</b>에 옵니다 — 지형을 어둡게 하려면 그려진 뒤여야 하니까요.</p>
+<div class="warn"><b>유닛을 숨기는 것은 5단계가 못 합니다.</b> 명암표는 색을 어둡게 만들 뿐이라 탐험된 칸의 유닛이 비쳐 보입니다. 그래서 유닛은 <b>2단계에서 visible 인 칸의 것만</b> 그립니다. 명세 초안이 이것을 5단계의 몫으로 적고 있었고, 구현해 보니 틀렸습니다.</div>
+<!--CODE file=py/rts/render.py lang=py sym=visible_entities note=보이는 칸의 것만-->
+</article>
+
+<article class="card" id="s9-panel">
+<h3>패널과 하단 바</h3>
+<!--CODE file=py/rts/render.py lang=py sym=credits_text note=자릿수 고정-->
+<p>숫자는 <b>고정 폭</b>입니다. <code class="nb">50</code> 이 <code class="nb">"   50"</code> 으로 나옵니다.</p>
+<p>이유는 더티 렉트입니다(5부). 숫자가 흔들리면 다시 그려야 할 사각형이 커지고, 자릿수가 바뀔 때마다 그 사각형의 크기도 바뀝니다.</p>
+<p>넘치면 잘라 붙입니다 — <code class="nb">1234567 → "99999"</code>. 크레딧이 십만을 넘는 게임이 아니므로 그 이상은 표시하지 않습니다.</p>
+</article>
+
+<article class="card" id="s9-frames">
+<h3>같은 게임의 여섯 순간</h3>
+<img class="shot" data-shot="shots/shot_t0001_base.png" alt="틱 1">
+<img class="shot" data-shot="shots/shot_t0600_army.png" alt="틱 600">
+<p>틱 1 은 사령부와 채집기 둘뿐입니다. 틱 600 이면 정제소·병영·발전소가 서고 보병대가 모여 있습니다.</p>
+<p>이 그림들은 <b>pygame 프런트엔드가 헤드리스로 찍은 것</b>이고, 같은 틱의 프레임버퍼가 <code class="nb">out/frame_1200.ppm</code> 과 바이트 단위로 같습니다 — 24부에서 그 검증을 봅니다.</p>
+</article>
+
+<article class="card" id="s9-combat">
+<h3>첫 접촉</h3>
+<img class="shot" data-shot="shots/shot_t0972_combat.png" alt="틱 972 — 첫 전투">
+<p>틱 972. 골든 트레이스의 <b>첫 명중이 970틱</b>이고, 이 그림이 그 두 틱 뒤입니다.</p>
+<p>붉은 유닛 하나가 푸른 셋과 마주 섰습니다. 체력바 하나가 이미 붉게 깎여 있습니다. 안개 경계가 전장을 둘러싸고 있고, 미니맵에는 탐험된 대각선 통로만 밝습니다.</p>
+<div class="key">이 한 장이 이 저장소의 여러 부를 동시에 보여 줍니다 — 4부의 지형, 8부의 플레이어 색, 14부의 이동, 15부의 안개 네 단계, 16부의 피해, 그리고 18부의 정찰이 만든 통로.</div>
+</article>
+
+<article class="card" id="s9-perf">
+<h3>얼마나 걸리는가</h3>
+<!--OUT file=bench.txt note=여섯 항목의 실측-->
+<p>렌더 10프레임이 0.06초입니다 — 프레임당 6밀리초. 18.2 Hz 틱(55밀리초)의 11 % 입니다.</p>
+<p>파이썬에서 이 숫자가 나오는 것은 프레임버퍼가 <b>1차원 정수 배열</b>이고 블릿이 런 단위이기 때문입니다. 픽셀마다 객체를 만들었다면 100배 느렸을 것입니다.</p>
+<div class="note">그래서 이 엔진은 더티 렉트를 <b>쓰지 않습니다.</b> 매 프레임 전체를 다시 그립니다. 도스 시절에는 그럴 수 없었고(386 에서 6밀리초는 불가능했습니다), 그 제약이 사라진 것이 30년의 차이입니다.</p>
+</article>
+
+<article class="card" id="s9-sum">
+<h3>9부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>레이어</td><td>여덟 겹 · 순서가 명세</td><td>안개는 스프라이트 위</td></tr>
+<tr><td>지형</td><td>색 + 가장자리 1px</td><td>그림이 없으면 변 넷이면 된다</td></tr>
+<tr><td>정렬</td><td>발밑 y · x · 핸들 (전순서)</td><td>안정 정렬에 의존하지 않는다</td></tr>
+<tr><td>유닛 숨기기</td><td>2단계에서 거른다</td><td>명암표는 어둡게만 한다</td></tr>
+<tr><td>숫자</td><td>고정 폭</td><td>더티 렉트가 커지지 않게</td></tr>
+<tr><td>성능</td><td>프레임당 6밀리초</td><td>1차원 배열 + 런 블릿</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s9-quiz">
+<h3>확인 문제</h3>
+<div class="quiz" data-quiz>
+<p class="q">y 정렬의 키에서 <b>핸들</b>을 빼고 (발밑 y, x) 만 쓰면 무엇이 잘못되는가? 두 유닛이 정확히 같은 자리에 있을 수는 없는데.</p>
+<button>답 보기</button>
+<div class="a">
+<p>같은 자리에 <b>있을 수 있습니다.</b> 14부의 예약은 <b>타일</b>을 하나씩 나눠 주지만, 발밑 픽셀 좌표는 두 유닛이 같을 수 있습니다 — 서로 다른 타일에 있어도 <code class="nb">py</code> 가 같고 <code class="nb">px</code> 가 같은 경우는 없지만, <b>건물</b>이 끼면 다릅니다. 3×3 건물의 발밑 y 는 좌상단 + 3타일이므로, 그 아래 두 칸에 선 유닛과 값이 같아집니다.</p>
+<p>그러면 정렬 결과가 <b>구현에 달립니다.</b> 파이썬의 <code class="nb">sorted</code> 는 안정이라 원래 순서를 지키고, 다른 언어의 정렬은 그렇지 않을 수 있습니다. 두 언어가 스프라이트를 다른 순서로 그리면 겹치는 픽셀이 달라지고, <b>PPM 바이트 비교가 깨집니다.</b></p>
+<p>핸들을 셋째 키로 두면 키가 전순서가 되어 그 문제가 사라집니다. 12부의 힙 비교자 <code class="nb">(f, h, idx)</code> 와 정확히 같은 처방입니다.</p>
+</div>
+</div>
 </article>
