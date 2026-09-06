@@ -1,11 +1,164 @@
 <article class="card section" id="s7">
 <p class="chnum">7부</p>
 <h2>난수와 랜덤 맵</h2>
-<p class="chsub">LCG 한 줄에서 동굴과 대륙이 나온다.<br>단, 하위 비트를 쓰면 안 된다</p>
+<p class="chsub">같은 씨앗에서 같은 세계가 나와야 한다 —<br>그 제약이 난수 발생기의 모양을 정한다</p>
 </article>
 
-<article class="card" id="s7-todo">
-<h3>난수와 랜덤 맵 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>30장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s7-why">
+<h3>난수는 하나뿐이다</h3>
+<p class="lead">시뮬레이션의 RNG 는 <b>정확히 하나</b>입니다. 렌더나 UI 가 그것을 한 번이라도 뽑으면 두 기계의 수열이 갈립니다.</p>
+<pre class="term">sim.rng    피해량 · 맵 생성 · AI 의 흔들림
+net.rng    네트워크 지터 전용 (§19)
+tools      골든 생성기 — 엔진 밖이라 무엇을 써도 된다</pre>
+<div class="key">"이 한 번만 <code class="nb">random()</code> 을" 이 락스텝을 죽입니다. 파티클 하나의 색을 정하려고 뽑은 난수가 다음 전투의 피해량을 바꿉니다 — 수열이 한 칸 밀렸으니까요.</div>
+</article>
+
+<article class="card" id="s7-lcg">
+<h3>선형 합동 생성기</h3>
+<pre class="term">s' = (22695477 · s + 1) mod 2³²
+next15() = ⌊s' / 65536⌋ mod 32768        상위 15비트를 쓴다</pre>
+<!--CODE file=py/rts/rng.py lang=py sym=LCG.next15 note=분할 곱 · 상위 비트만 쓴다-->
+<p>승수 22695477 은 볼랜드 C 계열의 값입니다. 이 값을 고른 이유는 고증이 아니라 <b>주기가 최대</b>이기 때문입니다.</p>
+<p><b>정리 3.2 (Hull–Dobell).</b> <code class="nb">x' = (a·x + c) mod m</code> 의 주기가 모든 초기값에서 <code class="nb">m</code> 인 필요충분조건은 (1) <code class="nb">c</code> 와 <code class="nb">m</code> 이 서로소, (2) <code class="nb">a − 1</code> 이 <code class="nb">m</code> 의 모든 소인수로 나누어떨어짐, (3) <code class="nb">m</code> 이 4의 배수면 <code class="nb">a − 1</code> 도 4의 배수.</p>
+<pre class="term">m = 2³²  ·  c = 1 (홀수, 서로소)  ·  a − 1 = 22695476 = 4 × 5673869
+→ 세 조건 모두 만족 → 주기 2³²</pre>
+</article>
+
+<article class="card" id="s7-lowbits">
+<h3>하위 비트를 쓰면 안 되는 이유</h3>
+<!--OUT file=py_prim.txt sec=4 note=상태·next15·하위 비트의 주기·roll 도수-->
+<p>골든 4절의 <code class="nb">bit0</code> 줄을 보세요. <b>0, 1, 0, 1</b> 이 반복됩니다.</p>
+<p>2의 거듭제곱 모듈러스에서 <code class="nb">k</code> 번째 하위 비트의 주기는 <code class="nb">2^(k+1)</code> 입니다. 최하위 비트는 주기 2, 그다음은 4 — 난수라고 부를 수 없습니다.</p>
+<div class="warn"><code class="nb">s % 6</code> 으로 주사위를 굴리면 <b>최하위 비트 세 개</b>를 쓰는 셈이고, 그 비트들의 주기는 8 이하입니다. 이 엔진이 상위 15비트만 쓰는 이유이고, C 의 <code class="nb">rand()</code> 가 <code class="nb">RAND_MAX = 32767</code> 인 이유이기도 합니다.</div>
+</article>
+
+<article class="card" id="s7-bias">
+<h3>모듈로 편향</h3>
+<p class="lead"><code class="nb">next15() % 6</code> 은 균등하지 않습니다.</p>
+<pre class="term">32768 = 6 × 5461 + 2
+0..32767 중  0 과 1 은 5462번,  2..5 는 5461번 나온다
+편향 = 1/5461 ≈ 0.018 %</pre>
+<!--CODE file=py/rts/rng.py lang=py sym=LCG.roll note=기각 표본추출 — 루프도 결정론적이다-->
+<p>남는 2 개를 <b>버립니다.</b> <code class="nb">limit = 32768 − 32768 mod n</code> 이상이 나오면 다시 뽑습니다.</p>
+<p><b>정리 3.3.</b> <code class="nb">roll(n)</code> 은 0…n−1 위의 균등분포다. <b>증명.</b> 기각 후 남은 구간의 크기가 <code class="nb">n</code> 의 배수이고 <code class="nb">next15</code> 가 그 위에서 균등하므로, <code class="nb">mod n</code> 이 균등을 보존합니다. ∎</p>
+<div class="key">기각 <b>횟수</b>도 결정론적입니다. 두 기계가 같은 횟수를 기각하고 같은 값을 얻습니다. 골든 4절이 기각 횟수를 함께 찍는 이유입니다 — 그 숫자가 다르면 수열이 갈렸다는 뜻입니다.</div>
+</article>
+
+<article class="card" id="s7-cave">
+<h3>셀룰러 오토마타 — 동굴 만들기</h3>
+<pre class="term">1) 각 칸을 확률 45 % 로 바위:  wall = (roll(100) < 45)
+2) 4세대 반복:
+       w = 8이웃 중 바위 개수 (맵 밖은 바위)
+       next = 1 if (cur == 1 and w >= 4) or (cur == 0 and w >= 5) else 0
+3) 가장 큰 통행 성분만 남기고 나머지는 메운다</pre>
+<!--CODE file=py/rts/mapgen.py lang=py sym=cellular_step note=규칙 이름으로는 B5678/S45678-->
+<p>2세대면 덩어리가 덜 뭉치고, 6세대면 좁은 통로가 전부 막힙니다. <b>4세대</b>가 이 맵 크기에서 통로와 개활지가 함께 남는 값입니다.</p>
+<p>3번이 없으면 <b>고립된 동굴</b>이 생깁니다. 유닛이 갈 수 없는 곳에 광맥이 놓이고, 채집기가 영원히 서 있습니다(17부에서 실제로 겪은 그 버그의 다른 얼굴입니다).</p>
+</article>
+
+<article class="card" id="s7-ds">
+<h3>다이아몬드-스퀘어 — 지형 높이</h3>
+<!--CODE file=py/rts/mapgen.py lang=py sym=diamond_square note=평균은 내림이다-->
+<pre class="term">65×65 격자에서 돌리고 왼쪽 위 64×64 를 잘라 쓴다
+jitter(step) = roll(2·amp + 1) − amp,   amp = ⌊step · 255 / 128⌋</pre>
+<p>네 꼭짓점에서 시작해 중앙을 채우고(다이아몬드), 마름모의 중앙을 채우고(스퀘어), 간격을 절반으로 줄이며 반복합니다.</p>
+<div class="warn">평균이 <b>반올림이 아니라 내림</b>입니다. 세 언어가 같아야 하므로 명세로 못 박았습니다. 반올림으로 두면 언어별 <code class="nb">round</code> 의 절반값 처리(은행가 반올림 대 사사오입)가 갈립니다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>높이</th><th>지형</th></tr>
+<tr><td class="num">0 – 63</td><td>물</td></tr>
+<tr><td class="num">64 – 95</td><td>모래</td></tr>
+<tr><td class="num">96 – 175</td><td>흙</td></tr>
+<tr><td class="num">176 – 207</td><td>언덕</td></tr>
+<tr><td class="num">208 – 255</td><td>바위</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s7-poisson">
+<h3>정수 포아송 디스크 — 광맥 배치</h3>
+<!--CODE file=py/rts/mapgen.py lang=py sym=place_ore note=제곱근을 쓰지 않는다-->
+<p>광맥이 뭉치면 한쪽 플레이어가 유리해지고, 고르게 흩으면 격자처럼 보입니다. 포아송 디스크는 <b>최소 간격을 지키면서 무작위</b>인 배치입니다.</p>
+<pre class="term">rmin = 9,  n = 12,  tries 상한 4000
+거리 판정:  dx² + dy² < rmin²        ← 제곱근 없이</pre>
+<div class="key"><code class="nb">tries</code> 상한이 <b>반드시</b> 필요합니다. 없으면 배치가 실패할 때 무한 루프가 되고, 그것은 디싱크보다 나쁩니다 — 게임이 멈추니까요. 상한에 걸려 광맥이 12개보다 적게 놓이는 것은 <b>받아들일 수 있는 결과</b>이고, 무한 루프는 아닙니다.</div>
+</article>
+
+<article class="card" id="s7-symmetry">
+<h3>2회 대칭 — 공평한 맵</h3>
+<!--CODE file=py/rts/mapgen.py lang=py sym=symmetrize note=180도 회전 대칭-->
+<p>맵의 왼쪽 위 절반을 180° 돌려 오른쪽 아래에 복사합니다. 그러면 두 플레이어의 시작 조건이 <b>정확히</b> 같습니다.</p>
+<p>거울 대칭(좌우 반전)이 아니라 <b>점 대칭</b>인 이유는 대각선 배치 때문입니다. 시작점이 (8,8) 과 (55,55) 이므로 점 대칭이 두 기지를 정확히 마주 보게 합니다.</p>
+<div class="note">17부에서 이 대칭이 실제로 값을 했습니다. 처음에는 두 플레이어의 건물 자리를 각자 고르게 두었는데, 정제소와 광맥의 거리가 달라 <b>360틱에 560 대 1,460</b> 크레딧이 되었습니다. 배치도 대칭으로 뒤집자 그 차이가 사라졌습니다. 맵이 대칭이어도 그 위의 결정이 비대칭이면 소용없습니다.</p>
+</article>
+
+<article class="card" id="s7-demo1">
+<h3>직접 해 보기 — LCG 의 비트</h3>
+<div class="demo" data-demo="lcg-bits">
+<h5>상위 비트와 하위 비트</h5>
+<div class="row">
+<label>씨앗 <input type="number" data-seed value="1" min="0" max="99999"></label>
+<label>비트 <input type="range" data-bit value="0" min="0" max="31"></label>
+<button data-run>뽑기</button>
+</div>
+<div class="out"></div>
+</div>
+<p>비트 0 을 고르면 0101 이 반복되고, 비트 30 을 고르면 무작위로 보입니다. 그 사이 어디쯤에서 패턴이 사라지는지 찾아보세요.</p>
+</article>
+
+<article class="card" id="s7-demo2">
+<h3>직접 해 보기 — 동굴 생성</h3>
+<div class="demo" data-demo="ca-map">
+<h5>세대를 늘리면 무엇이 사라지는가</h5>
+<div class="row">
+<label>씨앗 <input type="number" data-seed value="3" min="0" max="9999"></label>
+<label>채움 % <input type="range" data-fill value="45" min="30" max="60"></label>
+<label>세대 <input type="range" data-gen value="4" min="0" max="8"></label>
+</div>
+<div class="out"></div>
+</div>
+<p>세대 0 은 소금후추 노이즈, 4 는 동굴, 8 은 막힌 덩어리입니다. 채움 비율을 55 % 로 올리면 4세대에서도 통로가 사라집니다.</p>
+</article>
+
+<article class="card" id="s7-sum">
+<h3>7부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>개수</td><td>시뮬 RNG 는 하나뿐</td><td>수열이 밀리면 게임이 갈린다</td></tr>
+<tr><td>LCG</td><td>a = 22695477 · c = 1 · m = 2³²</td><td>Hull–Dobell 세 조건</td></tr>
+<tr><td>비트</td><td>상위 15비트만</td><td>하위 k비트의 주기는 2^(k+1)</td></tr>
+<tr><td>범위 난수</td><td>기각 표본추출</td><td>정리 3.3 · 기각 횟수도 결정론</td></tr>
+<tr><td>동굴</td><td>B5678/S45678 · 4세대</td><td>2면 덜 뭉치고 6이면 막힌다</td></tr>
+<tr><td>지형</td><td>다이아몬드-스퀘어 · 평균은 내림</td><td>언어별 round 를 믿지 않는다</td></tr>
+<tr><td>광맥</td><td>정수 포아송 · tries 상한 필수</td><td>무한 루프는 디싱크보다 나쁘다</td></tr>
+<tr><td>대칭</td><td>180° 점 대칭 · 배치도 뒤집는다</td><td>맵만 대칭이면 소용없다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s7-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">기각 표본추출 대신 <code class="nb">next15() · n / 32768</code> 로 범위를 줄이면 편향이 사라지는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>사라지지 않습니다. 32768 을 <code class="nb">n</code> 조각으로 나눌 때 <code class="nb">n</code> 이 32768 을 나누지 못하면 조각의 크기가 <b>고르지 않습니다.</b> <code class="nb">n = 6</code> 이면 조각이 5461 또는 5462 개의 값을 받습니다 — 나머지 연산과 <b>같은 크기의 편향</b>입니다.</p>
+<p>다만 편향의 <b>모양</b>은 다릅니다. 나머지 방식은 작은 값들이 유리하고, 곱셈 방식은 편향이 구간에 흩어집니다. 어느 쪽도 균등하지 않습니다.</p>
+<p>그리고 곱셈 방식에는 함정이 하나 더 있습니다 — <code class="nb">next15() · n</code> 이 32비트를 넘을 수 있습니다. <code class="nb">n</code> 이 크면 오버플로가 나고, 그러면 편향이 아니라 <b>완전히 틀린 값</b>이 나옵니다. 기각 방식은 곱셈이 없습니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s7-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">맵 생성기가 <code class="nb">roll</code> 을 부르는 <b>횟수</b>가 두 언어에서 다르면 어떻게 되는가? 결과 맵이 같다면 괜찮은가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>맵이 같아도 <b>RNG 의 상태가 다릅니다.</b> 맵 생성이 끝난 시점의 <code class="nb">s</code> 가 다르므로, 그다음에 뽑는 모든 난수가 갈립니다 — 첫 전투의 피해량부터요.</p>
+<p>그래서 이 저장소는 맵을 <b>파일로 얼려</b> 둡니다(<code class="nb">golden/map_start.txt</code>). 시뮬레이션은 맵을 생성하지 않고 읽습니다. 생성기는 골든 맵을 만들 때만 돌고, 그때는 세 언어가 아니라 파이썬 하나만 돕니다.</p>
+<p>절차적 맵을 게임 중에 만드는 엔진이라면 이 문제를 정면으로 다뤄야 합니다. 방법은 둘입니다 — 생성 전용 RNG 를 따로 두거나(그러면 생성 후 시뮬 RNG 를 <b>정해진 시드로 초기화</b>), 생성 알고리즘의 <code class="nb">roll</code> 호출 횟수까지 명세하거나. 후자는 사실상 불가능합니다.</p>
+</div>
+</div>
 </article>

@@ -2345,13 +2345,297 @@ def atan8(dx, dy):
 <article class="card section" id="s7">
 <p class="chnum">7부</p>
 <h2>난수와 랜덤 맵</h2>
-<p class="chsub">LCG 한 줄에서 동굴과 대륙이 나온다.<br>단, 하위 비트를 쓰면 안 된다</p>
+<p class="chsub">같은 씨앗에서 같은 세계가 나와야 한다 —<br>그 제약이 난수 발생기의 모양을 정한다</p>
 </article>
 
-<article class="card" id="s7-todo">
-<h3>난수와 랜덤 맵 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>30장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s7-why">
+<h3>난수는 하나뿐이다</h3>
+<p class="lead">시뮬레이션의 RNG 는 <b>정확히 하나</b>입니다. 렌더나 UI 가 그것을 한 번이라도 뽑으면 두 기계의 수열이 갈립니다.</p>
+<pre class="term">sim.rng    피해량 · 맵 생성 · AI 의 흔들림
+net.rng    네트워크 지터 전용 (§19)
+tools      골든 생성기 — 엔진 밖이라 무엇을 써도 된다</pre>
+<div class="key">"이 한 번만 <code class="nb">random()</code> 을" 이 락스텝을 죽입니다. 파티클 하나의 색을 정하려고 뽑은 난수가 다음 전투의 피해량을 바꿉니다 — 수열이 한 칸 밀렸으니까요.</div>
+</article>
+
+<article class="card" id="s7-lcg">
+<h3>선형 합동 생성기</h3>
+<pre class="term">s' = (22695477 · s + 1) mod 2³²
+next15() = ⌊s' / 65536⌋ mod 32768        상위 15비트를 쓴다</pre>
+<div class="src"><b>py/rts/rng.py</b><span class="ln">23–36</span><span>분할 곱 · 상위 비트만 쓴다</span></div>
+<pre><code data-lang="py" data-src="py/rts/rng.py" data-lines="23-36">    # ── SPEC §3.1 ──────────────────────────────────────────────────────────
+    def next15(self):
+        """상태를 한 번 굴리고 상위 15비트(비트 30..16)를 돌려준다.
+
+           하위 비트는 주기가 짧다 — 최하위 비트는 0,1,0,1 을 반복한다.
+           그래서 rand() 가 돌려주는 것도 상위 비트다.
+        """
+        s = self.s
+        sh = s // 65536
+        sl = s % 65536
+        lo = A * sl                      # &lt; 2^41
+        hi = (A * sh) % 65536            # &lt; 2^16
+        self.s = (lo + hi * 65536 + 1) % M32
+        return (self.s // 65536) % 32768</code></pre>
+<p>승수 22695477 은 볼랜드 C 계열의 값입니다. 이 값을 고른 이유는 고증이 아니라 <b>주기가 최대</b>이기 때문입니다.</p>
+<p><b>정리 3.2 (Hull–Dobell).</b> <code class="nb">x' = (a·x + c) mod m</code> 의 주기가 모든 초기값에서 <code class="nb">m</code> 인 필요충분조건은 (1) <code class="nb">c</code> 와 <code class="nb">m</code> 이 서로소, (2) <code class="nb">a − 1</code> 이 <code class="nb">m</code> 의 모든 소인수로 나누어떨어짐, (3) <code class="nb">m</code> 이 4의 배수면 <code class="nb">a − 1</code> 도 4의 배수.</p>
+<pre class="term">m = 2³²  ·  c = 1 (홀수, 서로소)  ·  a − 1 = 22695476 = 4 × 5673869
+→ 세 조건 모두 만족 → 주기 2³²</pre>
+</article>
+
+<article class="card" id="s7-lowbits">
+<h3>하위 비트를 쓰면 안 되는 이유</h3>
+<div class="src"><b>out/py_prim.txt</b><span class="ln">59–77</span><span>상태·next15·하위 비트의 주기·roll 도수</span></div>
+<pre class="term" data-out="py_prim.txt" data-lines="59-77">== 4. LCG ==
+  i           상태   next15
+  1       22695478      346
+  2     2156045615      130
+  3     2867233980    10982
+  4       71484141     1090
+  5     2911408402    11656
+  6     2613937339     7117
+  7     1153135800    17595
+  8      420428313     6415
+  9     1503962414    22948
+ 10     4187371143    31126
+하위 비트의 짧은 주기 — 상태의 최하위 1·2비트
+  bit0: 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1
+  bit10: 2 3 0 1 2 3 0 1 2 3 0 1 2 3 0 1
+roll(6) x20: 4 0 1 4 2 0 2 1 4 0 5 4 0 1 0 4 0 5 4 1
+기각 횟수 0
+roll(6) x6000 도수: 997 1015 976 995 1003 1014
+기각 횟수 1</pre>
+<p>골든 4절의 <code class="nb">bit0</code> 줄을 보세요. <b>0, 1, 0, 1</b> 이 반복됩니다.</p>
+<p>2의 거듭제곱 모듈러스에서 <code class="nb">k</code> 번째 하위 비트의 주기는 <code class="nb">2^(k+1)</code> 입니다. 최하위 비트는 주기 2, 그다음은 4 — 난수라고 부를 수 없습니다.</p>
+<div class="warn"><code class="nb">s % 6</code> 으로 주사위를 굴리면 <b>최하위 비트 세 개</b>를 쓰는 셈이고, 그 비트들의 주기는 8 이하입니다. 이 엔진이 상위 15비트만 쓰는 이유이고, C 의 <code class="nb">rand()</code> 가 <code class="nb">RAND_MAX = 32767</code> 인 이유이기도 합니다.</div>
+</article>
+
+<article class="card" id="s7-bias">
+<h3>모듈로 편향</h3>
+<p class="lead"><code class="nb">next15() % 6</code> 은 균등하지 않습니다.</p>
+<pre class="term">32768 = 6 × 5461 + 2
+0..32767 중  0 과 1 은 5462번,  2..5 는 5461번 나온다
+편향 = 1/5461 ≈ 0.018 %</pre>
+<div class="src"><b>py/rts/rng.py</b><span class="ln">38–48</span><span>기각 표본추출 — 루프도 결정론적이다</span></div>
+<pre><code data-lang="py" data-src="py/rts/rng.py" data-lines="38-48">    # ── SPEC §3.2 ──────────────────────────────────────────────────────────
+    def roll(self, n):
+        """0 &lt;= 결과 &lt; n 인 균등 난수. 기각 루프도 결정론적이다."""
+        if n &lt;= 1:
+            return 0
+        limit = 32768 - 32768 % n
+        while True:
+            r = self.next15()
+            if r &lt; limit:
+                return r % n
+            self.rejects += 1</code></pre>
+<p>남는 2 개를 <b>버립니다.</b> <code class="nb">limit = 32768 − 32768 mod n</code> 이상이 나오면 다시 뽑습니다.</p>
+<p><b>정리 3.3.</b> <code class="nb">roll(n)</code> 은 0…n−1 위의 균등분포다. <b>증명.</b> 기각 후 남은 구간의 크기가 <code class="nb">n</code> 의 배수이고 <code class="nb">next15</code> 가 그 위에서 균등하므로, <code class="nb">mod n</code> 이 균등을 보존합니다. ∎</p>
+<div class="key">기각 <b>횟수</b>도 결정론적입니다. 두 기계가 같은 횟수를 기각하고 같은 값을 얻습니다. 골든 4절이 기각 횟수를 함께 찍는 이유입니다 — 그 숫자가 다르면 수열이 갈렸다는 뜻입니다.</div>
+</article>
+
+<article class="card" id="s7-cave">
+<h3>셀룰러 오토마타 — 동굴 만들기</h3>
+<pre class="term">1) 각 칸을 확률 45 % 로 바위:  wall = (roll(100) < 45)
+2) 4세대 반복:
+       w = 8이웃 중 바위 개수 (맵 밖은 바위)
+       next = 1 if (cur == 1 and w >= 4) or (cur == 0 and w >= 5) else 0
+3) 가장 큰 통행 성분만 남기고 나머지는 메운다</pre>
+<div class="src"><b>py/rts/mapgen.py</b><span class="ln">35–57</span><span>규칙 이름으로는 B5678/S45678</span></div>
+<pre><code data-lang="py" data-src="py/rts/mapgen.py" data-lines="35-57"># ── SPEC §5.1 셀룰러 오토마타 ───────────────────────────────────────────────
+def cellular_step(cur, w, h):
+    """B5678/S45678 한 세대. 맵 밖은 벽으로 센다.
+
+       살아 있는 벽은 이웃 벽이 4 이상이면 남고, 빈 칸은 5 이상이면 벽이 된다.
+       2세대면 덩어리가 덜 뭉치고 6세대면 좁은 통로가 전부 막힌다 —
+       4세대가 통로와 개활지가 함께 남는 자리다.
+    """
+    nxt = [0] * (w * h)
+    for y in range(h):
+        for x in range(w):
+            n = 0
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    u, v = x + dx, y + dy
+                    n += 1 if not (0 &lt;= u &lt; w and 0 &lt;= v &lt; h) else cur[v * w + u]
+            if cur[y * w + x] == 1:
+                nxt[y * w + x] = 1 if n &gt;= 4 else 0
+            else:
+                nxt[y * w + x] = 1 if n &gt;= 5 else 0
+    return nxt</code></pre>
+<p>2세대면 덩어리가 덜 뭉치고, 6세대면 좁은 통로가 전부 막힙니다. <b>4세대</b>가 이 맵 크기에서 통로와 개활지가 함께 남는 값입니다.</p>
+<p>3번이 없으면 <b>고립된 동굴</b>이 생깁니다. 유닛이 갈 수 없는 곳에 광맥이 놓이고, 채집기가 영원히 서 있습니다(17부에서 실제로 겪은 그 버그의 다른 얼굴입니다).</p>
+</article>
+
+<article class="card" id="s7-ds">
+<h3>다이아몬드-스퀘어 — 지형 높이</h3>
+<div class="src"><b>py/rts/mapgen.py</b><span class="ln">67–96</span><span>평균은 내림이다</span></div>
+<pre><code data-lang="py" data-src="py/rts/mapgen.py" data-lines="67-96"># ── SPEC §5.2 다이아몬드-스퀘어 ─────────────────────────────────────────────
+def diamond_square(rand):
+    """(2^6)+1 = 65 칸 격자. 평균은 반올림이 아니라 내림이다 — 명세다."""
+    n = 65
+    h = [[0] * n for _ in range(n)]
+    for (x, y) in ((0, 0), (0, 64), (64, 0), (64, 64)):
+        h[y][x] = rand.roll(256)
+    step = 64
+    while step &gt; 1:
+        half = step // 2
+        amp = step * 255 // 128
+        for y in range(0, n - 1, step):
+            for x in range(0, n - 1, step):
+                a = (h[y][x] + h[y][x + step]
+                     + h[y + step][x] + h[y + step][x + step]) // 4
+                h[y + half][x + half] = _clamp(a + rand.roll(2 * amp + 1) - amp)
+        row = 0
+        for y in range(0, n, half):
+            start = half if row % 2 == 0 else 0
+            for x in range(start, n, step):
+                t, c = 0, 0
+                for dx, dy in ((-half, 0), (half, 0), (0, -half), (0, half)):
+                    u, v = x + dx, y + dy
+                    if 0 &lt;= u &lt; n and 0 &lt;= v &lt; n:
+                        t += h[v][u]
+                        c += 1
+                h[y][x] = _clamp(t // c + rand.roll(2 * amp + 1) - amp)
+            row += 1
+        step = half
+    return h</code></pre>
+<pre class="term">65×65 격자에서 돌리고 왼쪽 위 64×64 를 잘라 쓴다
+jitter(step) = roll(2·amp + 1) − amp,   amp = ⌊step · 255 / 128⌋</pre>
+<p>네 꼭짓점에서 시작해 중앙을 채우고(다이아몬드), 마름모의 중앙을 채우고(스퀘어), 간격을 절반으로 줄이며 반복합니다.</p>
+<div class="warn">평균이 <b>반올림이 아니라 내림</b>입니다. 세 언어가 같아야 하므로 명세로 못 박았습니다. 반올림으로 두면 언어별 <code class="nb">round</code> 의 절반값 처리(은행가 반올림 대 사사오입)가 갈립니다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>높이</th><th>지형</th></tr>
+<tr><td class="num">0 – 63</td><td>물</td></tr>
+<tr><td class="num">64 – 95</td><td>모래</td></tr>
+<tr><td class="num">96 – 175</td><td>흙</td></tr>
+<tr><td class="num">176 – 207</td><td>언덕</td></tr>
+<tr><td class="num">208 – 255</td><td>바위</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s7-poisson">
+<h3>정수 포아송 디스크 — 광맥 배치</h3>
+<div class="src"><b>py/rts/mapgen.py</b><span class="ln">99–125</span><span>제곱근을 쓰지 않는다</span></div>
+<pre><code data-lang="py" data-src="py/rts/mapgen.py" data-lines="99-125"># ── SPEC §5.3 정수 포아송 디스크 ────────────────────────────────────────────
+def place_ore(m, rand, n=ORE_COUNT, rmin=ORE_RMIN):
+    """앞쪽 절반에만 놓고 대칭 복사한다. 시도 상한이 반드시 있어야 한다 —
+       상한 없는 재시도는 디싱크보다 나쁘다(맵 생성이 영원히 끝나지 않는다)."""
+    pts, tries = [], 0
+    while len(pts) &lt; n and tries &lt; ORE_TRIES:
+        tries += 1
+        x, y = rand.roll(MW), rand.roll(MH // 2)
+        if m.terrain[y * MW + x] not in (T.DIRT, T.SAND):
+            continue
+        ok = True
+        for (px, py) in pts:
+            if (x - px) * (x - px) + (y - py) * (y - py) &lt; rmin * rmin:
+                ok = False
+                break
+        if ok:
+            pts.append((x, y))
+    for (px, py) in pts:
+        for dy in range(-2, 3):
+            for dx in range(-2, 3):
+                if dx * dx + dy * dy &gt; 4:
+                    continue
+                u, v = px + dx, py + dy
+                if 0 &lt;= u &lt; MW and 0 &lt;= v &lt; MH and m.terrain[v * MW + u] in (T.DIRT, T.SAND):
+                    m.terrain[v * MW + u] = T.ORE
+                    m.terrain[(MH - 1 - v) * MW + (MW - 1 - u)] = T.ORE
+    return pts, tries</code></pre>
+<p>광맥이 뭉치면 한쪽 플레이어가 유리해지고, 고르게 흩으면 격자처럼 보입니다. 포아송 디스크는 <b>최소 간격을 지키면서 무작위</b>인 배치입니다.</p>
+<pre class="term">rmin = 9,  n = 12,  tries 상한 4000
+거리 판정:  dx² + dy² < rmin²        ← 제곱근 없이</pre>
+<div class="key"><code class="nb">tries</code> 상한이 <b>반드시</b> 필요합니다. 없으면 배치가 실패할 때 무한 루프가 되고, 그것은 디싱크보다 나쁩니다 — 게임이 멈추니까요. 상한에 걸려 광맥이 12개보다 적게 놓이는 것은 <b>받아들일 수 있는 결과</b>이고, 무한 루프는 아닙니다.</div>
+</article>
+
+<article class="card" id="s7-symmetry">
+<h3>2회 대칭 — 공평한 맵</h3>
+<div class="src"><b>py/rts/mapgen.py</b><span class="ln">128–134</span><span>180도 회전 대칭</span></div>
+<pre><code data-lang="py" data-src="py/rts/mapgen.py" data-lines="128-134"># ── SPEC §5.4 대칭과 시작 지점 ──────────────────────────────────────────────
+def symmetrize(m):
+    """180도 회전 대칭. 앞쪽 절반이 원본이다."""
+    for y in range(MH):
+        for x in range(MW):
+            if y * MW + x &lt; MW * MH // 2:
+                m.terrain[(MH - 1 - y) * MW + (MW - 1 - x)] = m.terrain[y * MW + x]</code></pre>
+<p>맵의 왼쪽 위 절반을 180° 돌려 오른쪽 아래에 복사합니다. 그러면 두 플레이어의 시작 조건이 <b>정확히</b> 같습니다.</p>
+<p>거울 대칭(좌우 반전)이 아니라 <b>점 대칭</b>인 이유는 대각선 배치 때문입니다. 시작점이 (8,8) 과 (55,55) 이므로 점 대칭이 두 기지를 정확히 마주 보게 합니다.</p>
+<div class="note">17부에서 이 대칭이 실제로 값을 했습니다. 처음에는 두 플레이어의 건물 자리를 각자 고르게 두었는데, 정제소와 광맥의 거리가 달라 <b>360틱에 560 대 1,460</b> 크레딧이 되었습니다. 배치도 대칭으로 뒤집자 그 차이가 사라졌습니다. 맵이 대칭이어도 그 위의 결정이 비대칭이면 소용없습니다.</p>
+</article>
+
+<article class="card" id="s7-demo1">
+<h3>직접 해 보기 — LCG 의 비트</h3>
+<div class="demo" data-demo="lcg-bits">
+<h5>상위 비트와 하위 비트</h5>
+<div class="row">
+<label>씨앗 <input type="number" data-seed value="1" min="0" max="99999"></label>
+<label>비트 <input type="range" data-bit value="0" min="0" max="31"></label>
+<button data-run>뽑기</button>
+</div>
+<div class="out"></div>
+</div>
+<p>비트 0 을 고르면 0101 이 반복되고, 비트 30 을 고르면 무작위로 보입니다. 그 사이 어디쯤에서 패턴이 사라지는지 찾아보세요.</p>
+</article>
+
+<article class="card" id="s7-demo2">
+<h3>직접 해 보기 — 동굴 생성</h3>
+<div class="demo" data-demo="ca-map">
+<h5>세대를 늘리면 무엇이 사라지는가</h5>
+<div class="row">
+<label>씨앗 <input type="number" data-seed value="3" min="0" max="9999"></label>
+<label>채움 % <input type="range" data-fill value="45" min="30" max="60"></label>
+<label>세대 <input type="range" data-gen value="4" min="0" max="8"></label>
+</div>
+<div class="out"></div>
+</div>
+<p>세대 0 은 소금후추 노이즈, 4 는 동굴, 8 은 막힌 덩어리입니다. 채움 비율을 55 % 로 올리면 4세대에서도 통로가 사라집니다.</p>
+</article>
+
+<article class="card" id="s7-sum">
+<h3>7부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>개수</td><td>시뮬 RNG 는 하나뿐</td><td>수열이 밀리면 게임이 갈린다</td></tr>
+<tr><td>LCG</td><td>a = 22695477 · c = 1 · m = 2³²</td><td>Hull–Dobell 세 조건</td></tr>
+<tr><td>비트</td><td>상위 15비트만</td><td>하위 k비트의 주기는 2^(k+1)</td></tr>
+<tr><td>범위 난수</td><td>기각 표본추출</td><td>정리 3.3 · 기각 횟수도 결정론</td></tr>
+<tr><td>동굴</td><td>B5678/S45678 · 4세대</td><td>2면 덜 뭉치고 6이면 막힌다</td></tr>
+<tr><td>지형</td><td>다이아몬드-스퀘어 · 평균은 내림</td><td>언어별 round 를 믿지 않는다</td></tr>
+<tr><td>광맥</td><td>정수 포아송 · tries 상한 필수</td><td>무한 루프는 디싱크보다 나쁘다</td></tr>
+<tr><td>대칭</td><td>180° 점 대칭 · 배치도 뒤집는다</td><td>맵만 대칭이면 소용없다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s7-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">기각 표본추출 대신 <code class="nb">next15() · n / 32768</code> 로 범위를 줄이면 편향이 사라지는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>사라지지 않습니다. 32768 을 <code class="nb">n</code> 조각으로 나눌 때 <code class="nb">n</code> 이 32768 을 나누지 못하면 조각의 크기가 <b>고르지 않습니다.</b> <code class="nb">n = 6</code> 이면 조각이 5461 또는 5462 개의 값을 받습니다 — 나머지 연산과 <b>같은 크기의 편향</b>입니다.</p>
+<p>다만 편향의 <b>모양</b>은 다릅니다. 나머지 방식은 작은 값들이 유리하고, 곱셈 방식은 편향이 구간에 흩어집니다. 어느 쪽도 균등하지 않습니다.</p>
+<p>그리고 곱셈 방식에는 함정이 하나 더 있습니다 — <code class="nb">next15() · n</code> 이 32비트를 넘을 수 있습니다. <code class="nb">n</code> 이 크면 오버플로가 나고, 그러면 편향이 아니라 <b>완전히 틀린 값</b>이 나옵니다. 기각 방식은 곱셈이 없습니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s7-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">맵 생성기가 <code class="nb">roll</code> 을 부르는 <b>횟수</b>가 두 언어에서 다르면 어떻게 되는가? 결과 맵이 같다면 괜찮은가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>맵이 같아도 <b>RNG 의 상태가 다릅니다.</b> 맵 생성이 끝난 시점의 <code class="nb">s</code> 가 다르므로, 그다음에 뽑는 모든 난수가 갈립니다 — 첫 전투의 피해량부터요.</p>
+<p>그래서 이 저장소는 맵을 <b>파일로 얼려</b> 둡니다(<code class="nb">golden/map_start.txt</code>). 시뮬레이션은 맵을 생성하지 않고 읽습니다. 생성기는 골든 맵을 만들 때만 돌고, 그때는 세 언어가 아니라 파이썬 하나만 돕니다.</p>
+<p>절차적 맵을 게임 중에 만드는 엔진이라면 이 문제를 정면으로 다뤄야 합니다. 방법은 둘입니다 — 생성 전용 RNG 를 따로 두거나(그러면 생성 후 시뮬 RNG 를 <b>정해진 시드로 초기화</b>), 생성 알고리즘의 <code class="nb">roll</code> 호출 횟수까지 명세하거나. 후자는 사실상 불가능합니다.</p>
+</div>
+</div>
 </article>
 
 <!-- ===== 08-sprite.html ===== -->
@@ -18824,6 +19108,258 @@ function boot(host, api) {
     });
   }
 })(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+/* ============================================================
+   덱의 살아 있는 데모 여덟.
+
+   규칙 하나: **숫자를 내는 계산은 전부 엔진이 한다.** 여기서 하는 일은 슬라이드가
+   이미 갖고 있는 입력(data-dx·data-r·data-step…)을 읽어 window.__rts.require() 로
+   꺼낸 진짜 모듈에 넘기고, 결과를 캔버스와 글로 옮기는 것뿐이다.
+   데모가 제 나름의 A* 를 갖기 시작하면 그것은 덱이 설명하는 엔진이 아니게 되고,
+   틀려도 아무도 모른다 — 거짓말하는 데모는 없는 데모보다 나쁘다.
+
+   .out 패널은 두 테마 모두에서 어두운 색(#10222f)이다. 그래서 캔버스는 자기
+   배경을 직접 칠하고, 글자 색은 데모 틀의 .ok/.bad/.dim 을 쓴다.
+   ============================================================ */
+(function () {
+  'use strict';
+
+  // ── 공용 ──────────────────────────────────────────────────────────────────
+  function R(name) {
+    if (!window.__rts) throw new Error('엔진 번들(deck/engine.js)이 없습니다');
+    return window.__rts.require(name);
+  }
+
+  // .out 패널을 비우고 돌려준다. 캔버스를 그 안에 넣으므로 api.w 는 쓰지 않는다.
+  function panel(host, api) {
+    var o = api && api.out ? api.out(host) : null;
+    if (!o) {
+      o = document.createElement('div');
+      o.className = 'out';
+      host.appendChild(o);
+    }
+    o.innerHTML = '';
+    return o;
+  }
+
+  function canvas(o, w, h) {
+    var cv = document.createElement('canvas');
+    cv.width = w;
+    cv.height = h;
+    cv.style.width = '100%';
+    cv.style.maxWidth = w + 'px';
+    cv.style.display = 'block';
+    cv.style.imageRendering = 'pixelated';
+    cv.style.borderRadius = '6px';
+    cv.style.touchAction = 'none';
+    o.appendChild(cv);
+    return cv;
+  }
+
+  function textBox(o) {
+    var d = document.createElement('div');
+    d.style.marginTop = '8px';
+    d.style.whiteSpace = 'pre-wrap';
+    o.appendChild(d);
+    return d;
+  }
+
+  // 캔버스 좌표 — CSS 로 늘어난 만큼 되돌린다. 손가락도 마우스와 같은 길로.
+  function at(cv, e) {
+    var r = cv.getBoundingClientRect();
+    var sx = r.width > 0 ? cv.width / r.width : 1;
+    var sy = r.height > 0 ? cv.height / r.height : 1;
+    return [Math.floor((e.clientX - r.left) * sx),
+            Math.floor((e.clientY - r.top) * sy)];
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function pad(s, n) {
+    var t = String(s);
+    while (t.length < n) t += ' ';
+    return t;
+  }
+
+  function padL(s, n) {
+    var t = String(s);
+    while (t.length < n) t = ' ' + t;
+    return t;
+  }
+
+  // 어두운 패널 위에서 읽히는 색. 데모끼리 같은 뜻에 같은 색을 쓴다.
+  var COL = {
+    bg: '#0d1c27', grid: '#24455a', wall: '#16293a', floor: '#2c5670',
+    open: '#4aa3d0', closed: '#8f7ad6', path: '#7ee2a8', mark: '#ffd479',
+    txt: '#d6e9f5', bad: '#ff9d9d', dim: '#6f93a8', foe: '#e07a5f'
+  };
+
+  function clear(g, w, h) {
+    g.fillStyle = COL.bg;
+    g.fillRect(0, 0, w, h);
+  }
+
+  // 정수 값을 읽는다. 빈 칸이나 글자는 0 으로 본다.
+  function intOf(el, lo, hi, dflt) {
+    if (!el) return dflt;
+    var v = Math.round(Number(el.value));
+    if (!isFinite(v)) v = dflt;
+    if (v < lo) v = lo;
+    if (v > hi) v = hi;
+    return v;
+  }
+
+  function on(el, type, fn) {
+    if (el) el.addEventListener(type, fn);
+  }
+
+  function checked(el, dflt) {
+    return el ? !!el.checked : dflt;
+  }
+
+  // ── 1. 거리 척도 다섯 ─────────────────────────────────────────────────────
+  // §2.5 의 다섯 근사를 한 벡터에 동시에 걸고 유클리드와의 편차를 본다.
+  // 값은 전부 fixed 모듈이 낸다 — 여기서 다시 유도하지 않는다.
+  window.__demo('dist-metrics', function (host, api) {
+    var F = R('fixed');
+    var ix = host.querySelector('[data-dx]');
+    var iy = host.querySelector('[data-dy]');
+    var o = panel(host, api);
+    var cv = canvas(o, 300, 124);
+    var g = cv.getContext('2d');
+    var txt = textBox(o);
+
+    // [이름, 원값, 타일 환산]. doct 만 10/14 단위라 10 으로 나눈다.
+    function rows(dx, dy) {
+      var eu2 = dx * dx + dy * dy;
+      return [
+        ['d1   맨해튼', F.d1(dx, dy), F.d1(dx, dy)],
+        ['dinf 체비셰프', F.dinf(dx, dy), F.dinf(dx, dy)],
+        ['d83  3/8 근사', F.d83(dx, dy), F.d83(dx, dy)],
+        ['doct 10/14', F.doct(dx, dy), F.doct(dx, dy) / 10],
+        ['dab  α·max+β·min', F.dab(dx, dy), F.dab(dx, dy)],
+        ['fpSqrt 유클리드', F.fpSqrt(F.fp(eu2)), F.fpSqrt(F.fp(eu2)) / 65536]
+      ];
+    }
+
+    function bars(rs, eu) {
+      clear(g, cv.width, cv.height);
+      var mid = 168;
+      var px = 5.6;                       // 1 % 당 픽셀 (±25 % 가 화면에 든다)
+      g.fillStyle = COL.grid;
+      g.fillRect(mid, 0, 1, cv.height);
+      g.font = '10px monospace';
+      for (var i = 0; i < rs.length; i += 1) {
+        var y = 6 + i * 19;
+        var dev = eu > 0 ? (rs[i][2] - eu) / eu * 100 : 0;
+        var wdt = Math.max(-25, Math.min(25, dev)) * px;
+        g.fillStyle = COL.dim;
+        g.fillText(rs[i][0].slice(0, 16), 4, y + 11);
+        g.fillStyle = dev >= 0 ? COL.open : COL.foe;
+        if (wdt >= 0) g.fillRect(mid, y + 3, wdt, 11);
+        else g.fillRect(mid + wdt, y + 3, -wdt, 11);
+        g.fillStyle = COL.txt;
+        g.fillText((dev >= 0 ? '+' : '') + dev.toFixed(1) + '%',
+                   mid + (wdt >= 0 ? wdt + 4 : -4 - 40), y + 12);
+      }
+    }
+
+    function run() {
+      var dx = intOf(ix, -40, 40, 12);
+      var dy = intOf(iy, -40, 40, 5);
+      var eu = Math.sqrt(dx * dx + dy * dy);
+      var rs = rows(dx, dy);
+      bars(rs, eu);
+      var out = [pad('척도', 18) + padL('원값', 8) + padL('타일', 10)
+                 + padL('편차', 9)];
+      for (var i = 0; i < rs.length; i += 1) {
+        var dev = eu > 0 ? (rs[i][2] - eu) / eu * 100 : 0;
+        out.push(pad(rs[i][0], 18) + padL(rs[i][1], 8)
+                 + padL(rs[i][2].toFixed(3), 10)
+                 + padL(eu > 0 ? (dev >= 0 ? '+' : '') + dev.toFixed(2) + '%'
+                        : '-', 9));
+      }
+      out.push(pad('참유클리드', 18) + padL('', 8) + padL(eu.toFixed(3), 10)
+               + padL('0%', 9));
+      var note = (dx === 0 || dy === 0)
+        ? '<span class="ok">축 위에서는 다섯이 모두 같습니다 — 근사할 것이 없습니다.</span>'
+        : '<span class="dim">doct 는 10/14 단위라 10 으로 나눠 타일로 옮겼습니다.</span>';
+      txt.innerHTML = esc(out.join('\n')) + '\n' + note;
+    }
+
+    on(host.querySelector('[data-run]'), 'click', run);
+    on(ix, 'input', run);
+    on(iy, 'input', run);
+    run();
+  });
+
+  // ── 2. 원 마스크 ─────────────────────────────────────────────────────────
+  // 행 span 원판(엔진이 쓰는 것)과 미드포인트 외곽선(쓰지 않는 것)을 겹쳐 본다.
+  window.__demo('circle-mask', function (host, api) {
+    var CI = R('circle');
+    var ir = host.querySelector('[data-r]');
+    var iout = host.querySelector('[data-outline]');
+    var o = panel(host, api);
+    var cv = canvas(o, 312, 312);
+    var g = cv.getContext('2d');
+    var txt = textBox(o);
+
+    function run() {
+      var r = intOf(ir, 1, 12, 5);
+      var n = 2 * r + 1;
+      var cell = Math.floor(300 / n);
+      var size = cell * n;
+      var off = Math.floor((cv.width - size) / 2);
+      clear(g, cv.width, cv.height);
+      var offs = CI.offsets(r);
+      var i;
+      // 원판 — 엔진의 시야·스플래시가 정확히 이 칸들이다.
+      g.fillStyle = COL.floor;
+      for (i = 0; i < offs.length; i += 1) {
+        g.fillRect(off + (offs[i][0] + r) * cell + 1,
+                   off + (offs[i][1] + r) * cell + 1, cell - 2, cell - 2);
+      }
+      // 격자
+      g.fillStyle = COL.grid;
+      for (i = 0; i <= n; i += 1) {
+        g.fillRect(off + i * cell, off, 1, size);
+        g.fillRect(off, off + i * cell, size, 1);
+      }
+      var outside = 0;
+      if (checked(iout, false)) {
+        var pts = CI.midpointOutline(r);
+        for (i = 0; i < pts.length; i += 1) {
+          var dx = pts[i][0];
+          var dy = pts[i][1];
+          var bad = !CI.inDisc(dx, dy, r);
+          if (bad) outside += 1;
+          g.fillStyle = bad ? COL.bad : COL.mark;
+          g.fillRect(off + (dx + r) * cell + cell / 2 - 2,
+                     off + (dy + r) * cell + cell / 2 - 2, 4, 4);
+        }
+      }
+      var sp = CI.spans(r);
+      var lines = ['반경 ' + r + ' · 원판 ' + CI.count(r) + '칸'
+                   + '  (πr² ≈ ' + (Math.PI * r * r).toFixed(1) + ')',
+                   'spans = [' + sp.join(', ') + ']'];
+      if (checked(iout, false)) {
+        lines.push('미드포인트 외곽선 ' + CI.midpointOutline(r).length + '점 중 '
+                   + outside + '점이 원 **밖**입니다');
+        lines.push(outside > 0
+                   ? '붉은 점이 그것입니다 — 외곽선을 시야 마스크로 쓰면 안 되는 이유.'
+                   : '이 반경에서는 어긋나지 않습니다. r 을 키워 보세요.');
+      }
+      txt.innerHTML = esc(lines.join('\n'));
+    }
+
+    on(ir, 'input', run);
+    on(iout, 'change', run);
+    run();
+  });
 </script>
 </body>
 </html>
