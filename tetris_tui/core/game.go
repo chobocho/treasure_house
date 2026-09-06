@@ -600,3 +600,34 @@ func (g *Game) Next(n int) []int {
 	copy(out, g.nextQ[:n])
 	return out
 }
+
+// ── AI 층이 쓰는 접근자 ────────────────────────────────────────────────
+//
+// core 는 ai 패키지를 모른다(의존 방향이 한쪽이다). 그래서 AI 가 판을 읽고
+// 수를 두는 데 필요한 최소한만 여기서 열어 준다.
+
+// CurrentPiece 는 지금 떨어지는 조각의 종류.
+func (g *Game) CurrentPiece() int { return g.cur.piece }
+
+// Hold 는 홀드 칸의 조각(-1 = 비어 있음)과 이번 조각에서 이미 홀드를 썼는지를 돌려준다.
+func (g *Game) Hold() (piece int, used bool) { return g.holdPiece, g.holdUsed }
+
+// DropAt 은 회전과 x 를 지정해 곧바로 하드드롭한다. AI 전용 지름길이다.
+//
+// 규칙을 우회하지는 않는다 — 낙하와 락은 사람이 하드드롭할 때와 같은 경로를 쓴다.
+// 다만 회전으로 들어간 게 아니므로 T스핀 판정은 끈다. AI 가 우연히 T스핀 자리에
+// 조각을 떨어뜨렸다고 T스핀 점수를 주면, 사람과 다른 규칙으로 노는 셈이 된다.
+//
+// 놓을 수 없는 자리를 받으면 회전·이동을 하지 않고 그 자리에서 떨어뜨린다.
+// AI 가 이상한 수를 내도 판이 깨지지 않아야 하기 때문이다.
+func (g *Game) DropAt(rot, x int) {
+	if g.stats.State != StatePlay {
+		return
+	}
+	if !g.board.Collide(g.cur.piece, rot, x, g.cur.y) {
+		g.cur.rot, g.cur.x = rot&3, x
+	}
+	g.lastWasRot, g.lastKick = false, 0
+	g.hardDrop()
+	g.buildView()
+}

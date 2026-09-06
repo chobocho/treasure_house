@@ -267,6 +267,19 @@ English into a user-facing message; translate and condense.
 
 ## Progress log (newest first; Korean, ≤12 lines each, same shape as history.md)
 
+- 2026-09-06 14:55 — **3단계: ai/ 이식 + ai_traces 파리티 (전 경우 일치)**.
+  `weights.go`(//go:embed weights.json, 특징 이름·순서를 로드 시 검증) ·
+  `features.go`(8특징) · `search.go`(1수 탐색·Pack/Unpack·Apply·Play) · `trace.go`.
+  파리티 전부 일치: 평가 203경우(float32 비트까지) · 탐색 1421경우(고른 수·특징·둔 뒤 판) ·
+  실전 56판 × 400조각(줄·공격·조각·점수·레벨·상태·보드해시).
+  **함정 하나를 실제로 밟았다 — FMA**. `s += w[i]*f[i]` 는 arm64 에서 `FMADDS` 하나로
+  융합되고(Go 사양이 허용) 중간 반올림이 사라져 정답지와 1 ULP 어긋난다
+  (−153.53358 대 −153.53359985). `float32(w[i]*f[i])` 로 반올림을 강제하면 맞는다.
+  어셈블리 증거를 `out/fma_asm.txt` 에 남겼다(FMADDS 대 FMULS+FADDS).
+  core 에 AI 용 접근자 추가: `CurrentPiece` · `Hold` · `DropAt`(회전으로 안 들어갔으니 T스핀 없음).
+  트레이스 분기 확인: 둘 수 없음 91경우, 홀드 사용 267경우.
+  검증: `go vet` 0건 · `go test -p 1 ./...` 10패키지 통과 · gofmt 0건.
+
 - 2026-09-06 14:20 — **2단계: core/ 이식 + 골든 파리티 (전 스텝 일치)**.
   §5.1 의 파리티 범위 결정: **full step-parity**. 시드 6개 × 1500스텝의 보드 해시·
   stats 해시가 **전부** 정답지와 같고, 배치 1960경우·연쇄 36라운드도 전부 같다.
