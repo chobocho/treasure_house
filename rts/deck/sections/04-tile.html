@@ -1,11 +1,261 @@
 <article class="card section" id="s4">
 <p class="chnum">4부</p>
 <h2>타일 맵과 오토타일</h2>
-<p class="chsub">이웃 8칸의 비트마스크가 그림 한 장을 고른다.<br>256가지가 47가지가 되고, 다시 14가지가 된다</p>
+<p class="chsub">256가지 이웃 조합이 47장의 그림으로 접히고,<br>그 47장은 다시 14장으로 접힌다</p>
 </article>
 
-<article class="card" id="s4-todo">
-<h3>타일 맵과 오토타일 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>36장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s4-why">
+<h3>왜 타일인가</h3>
+<p class="lead">1992년의 기계가 320×200 화면을 매 프레임 다시 그릴 수는 없었습니다. 64,000픽셀을 18.2 Hz 로 채우려면 초당 116만 번의 메모리 쓰기가 필요합니다.</p>
+<p>답은 화면을 <b>같은 크기의 조각</b>으로 나누고, 조각 하나를 통째로 복사하는 것이었습니다. 픽셀 단위 계산이 타일 단위 계산으로 줄어듭니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>단위</th><th>개수</th><th>비고</th></tr>
+<tr><td>화면 픽셀</td><td class="num">320 × 200 = 64,000</td><td>Mode 13h</td></tr>
+<tr><td>뷰포트 픽셀</td><td class="num">256 × 176 = 45,056</td><td>우측 패널 64px 제외</td></tr>
+<tr><td>뷰포트 타일</td><td class="num">16 × 11 = 176</td><td><b>364배 적다</b></td></tr>
+<tr><td>맵 타일</td><td class="num">64 × 64 = 4,096</td><td>맵 전체</td></tr>
+</table>
+</div>
+<p>경로 탐색·시야·충돌이 전부 4,096칸 위에서 벌어집니다. 6만 픽셀이 아니라요.</p>
+</article>
+
+<article class="card" id="s4-size">
+<h3>16×16 인가 32×32 인가</h3>
+<p>Dune II(1992)와 Command &amp; Conquer(1995)는 320×200 에 16×16 타일을 썼습니다. Warcraft II(1995)는 640×480 SVGA 에 32×32 를 썼습니다.</p>
+<p>둘은 <b>화면에 보이는 타일 수</b>가 거의 같습니다.</p>
+<pre class="term">320×200, 16×16  →  가로 20칸 (뷰포트 16칸)
+640×480, 32×32  →  가로 20칸</pre>
+<p>해상도가 두 배가 되자 타일도 두 배가 된 것입니다. 화면에 몇 칸이 보이느냐가 <b>게임의 시야</b>를 정하고, 그것은 해상도와 무관하게 지켜야 할 설계값이었습니다.</p>
+<div class="note">이 엔진은 320×200 · 16×16 을 고릅니다. 2부에서 본 대로 Dune II 와 Warcraft I 의 정확한 타일 픽셀 크기는 1차 자료로 확인하지 못했습니다. 그래서 <b>이 덱의 선택</b>이라고 적습니다.</div>
+</article>
+
+<article class="card" id="s4-planes">
+<h3>한 칸에 두 바이트</h3>
+<p class="lead">한 칸의 정보를 비트로 우겨 넣지 않습니다. 두 배열로 나눕니다.</p>
+<pre class="term">terrain[i]   지형 종류 (0..7)
+pass[i]      통행 비트 4개</pre>
+<p><code class="nb">pass</code> 가 <code class="nb">terrain</code> 에서 파생되는 값인데도 따로 두는 이유는 <b>건물</b> 때문입니다. 건물이 서면 그 칸이 막히고, 부서지면 다시 열립니다. 지형은 그대로인데 통행만 바뀝니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>번호</th><th>지형</th><th>글자</th><th>보병</th><th>차량</th><th>건설</th></tr>
+<tr><td class="num">0</td><td>모래</td><td class="num">.</td><td>○</td><td>○</td><td>○</td></tr>
+<tr><td class="num">1</td><td>바위</td><td class="num">#</td><td>×</td><td>×</td><td>×</td></tr>
+<tr><td class="num">2</td><td>물</td><td class="num">~</td><td>×</td><td>×</td><td>×</td></tr>
+<tr><td class="num">3</td><td>흙</td><td class="num">,</td><td>○</td><td>○</td><td>○</td></tr>
+<tr><td class="num">4</td><td>광맥</td><td class="num">*</td><td>○</td><td>○</td><td><b>×</b></td></tr>
+<tr><td class="num">5</td><td>언덕</td><td class="num">^</td><td>○</td><td><b>×</b></td><td>×</td></tr>
+<tr><td class="num">6</td><td>잔해</td><td class="num">;</td><td>○</td><td>○</td><td>○</td></tr>
+<tr><td class="num">7</td><td>도로</td><td class="num">=</td><td>○</td><td>○</td><td>○</td></tr>
+</table>
+</div>
+<p>표에서 굵은 두 칸이 이 게임의 지형 규칙 전부입니다 — <b>차량은 언덕에 못 오르고, 광맥 위에는 못 짓습니다.</b></p>
+</article>
+
+<article class="card" id="s4-bits">
+<h3>통행 비트 넷</h3>
+<!--CODE file=py/rts/tmap.py lang=py sym=TMap._repass note=지형에서 비트를 다시 만든다-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>비트</th><th>값</th><th>뜻</th><th>보는 쪽</th></tr>
+<tr><td class="num">0</td><td class="num">1</td><td>보병 통행</td><td>경로 탐색</td></tr>
+<tr><td class="num">1</td><td class="num">2</td><td>차량 통행</td><td>경로 탐색</td></tr>
+<tr><td class="num">2</td><td class="num">4</td><td>건설 가능</td><td>배치 판정</td></tr>
+<tr><td class="num">3</td><td class="num">8</td><td>점유됨</td><td>배치 판정·픽킹</td></tr>
+</table>
+</div>
+<p>비트 번호 0 과 1 이 <b>이동 종류 번호</b>와 같습니다(0 = 보병, 1 = 차량). 그래서 <code class="nb">bit(pass[i], kind)</code> 한 줄로 두 종류를 함께 다룹니다.</p>
+<div class="key"><b>경로 탐색은 점유 비트를 보지 않습니다.</b> 움직이는 유닛 때문에 경로가 매 틱 흔들리면 무리 이동이 통째로 무너집니다. 점유는 14부의 예약 규칙이 국소적으로 처리합니다.</div>
+</article>
+
+<article class="card" id="s4-outside">
+<h3>맵 밖은 바위다</h3>
+<!--CODE file=py/rts/tmap.py lang=py sym=TMap.terrain_at note=경계 검사를 호출자에게 미루지 않는다-->
+<p>맵 밖을 물어보면 <code class="nb">ROCK</code> 을 돌려줍니다. 이 한 줄이 두 가지를 동시에 해결합니다.</p>
+<ul>
+<li>호출자가 경계 검사를 하지 않아도 됩니다. 오토타일 마스크는 이웃 여덟 칸을 무조건 읽습니다.</li>
+<li>맵 가장자리에서 그림이 <b>자연스럽게 닫힙니다.</b> 밖이 바위이므로 가장자리 타일이 "경계가 있는" 그림을 고릅니다.</li>
+</ul>
+<div class="note">§11.4 의 브러시파이어도 같은 규약을 씁니다 — 맵 밖을 막힌 칸으로 보므로 가장자리 칸의 "장애물까지의 거리"가 10 이 되고, AI 가 맵 끝에 건물을 붙이지 않습니다.</div>
+</article>
+
+<article class="card" id="s4-building">
+<h3>건물이 선 칸</h3>
+<p class="lead">건물은 유닛과 다릅니다. 비키지 않습니다.</p>
+<!--CODE file=py/rts/tmap.py lang=py sym=TMap.set_building note=통행 비트를 내리고 점유 비트를 세운다-->
+<p>처음에는 건물도 유닛처럼 <b>예약</b>만으로 막으려 했습니다. 그러면 경로 탐색이 건물을 지나가는 경로를 만들고, 유닛이 벽 앞에서 24틱을 두드리다 명령을 포기합니다.</p>
+<div class="warn">이것은 명세 초안의 오류였고 구현하면서 드러났습니다. 건물은 <b>경로 그래프에서 아예 빠져야</b> 합니다. 부서질 때는 그 칸을 <code class="nb">RUBBLE</code> 로 바꾸는 것만으로 통행이 복구됩니다 — 잔해는 통행 가능한 지형이니까요.</div>
+<p><code class="nb">version</code> 이 오르는 것도 중요합니다. 경로 캐시와 연결 성분이 함께 무효가 됩니다. 낡은 경로는 곧 디싱크입니다.</p>
+</article>
+
+<article class="card" id="s4-mask">
+<h3>오토타일 — 이웃 여덟 칸이 정한다</h3>
+<p class="lead">모래밭과 흙밭이 만나는 자리에 <b>경계 그림</b>이 필요합니다. 그 그림을 어떻게 고를까요?</p>
+<p>한 칸이 어떤 그림을 쓸지는 <b>이웃 여덟 칸이 나와 같은 지형인가</b>로 결정됩니다. 방향 번호(§2.7)를 그대로 비트 번호로 씁니다.</p>
+<pre class="term">mask(x, y) = Σ  2^d   (d = 0..7, 이웃 d 가 나와 같은 지형이면)
+
+     7  0  1        NW  N  NE
+     6  ·  2         W  ·  E
+     5  4  3        SW  S  SE</pre>
+<!--CODE file=py/rts/tmap.py lang=py sym=TMap.mask note=비트 연산자를 쓰지 않는다-->
+<p>256가지 조합이 나옵니다. 그림을 256장 그려야 할까요?</p>
+</article>
+
+<article class="card" id="s4-corner">
+<h3>정리 4.1 — 모서리는 언제 보이는가</h3>
+<div class="fig" data-svg="autotile_corner.svg"></div>
+<p><b>정리 4.1.</b> 모서리 이웃 <code class="nb">c</code> 는 그 양옆의 변 이웃 두 개가 <b>모두</b> 같을 때만 그림에 영향을 준다. 이 규칙으로 정규화한 마스크는 정확히 <b>47가지</b>다.</p>
+<p><b>이유.</b> 변 이웃 하나라도 다르면 그 방향에 이미 경계선이 그려집니다. 모서리 칸의 상태는 그 선에 <b>가려 보이지 않습니다.</b></p>
+<!--CODE file=py/rts/tmap.py lang=py sym=canon note=모서리 비트를 지우는 정규화-->
+<p>256개를 전부 <code class="nb">canon</code> 에 통과시키면 상(image)이 47원소입니다. 증명이라기보다 <b>전수 확인</b>이고, <code class="nb">tools/gen_autotile.py</code> 가 256줄을 그대로 찍어 둡니다.</p>
+</article>
+
+<article class="card" id="s4-47">
+<h3>47장</h3>
+<div class="fig" data-svg="autotile_classes.svg"></div>
+<p>가운데가 자기 칸, 둘레 여덟 칸이 이웃입니다. 밝은 칸이 "나와 같은 지형"입니다.</p>
+<p>0번은 완전히 고립된 칸, 46번은 사방이 모두 같은 칸(내부)입니다. 나머지 45장이 온갖 모양의 경계입니다.</p>
+</article>
+
+<article class="card" id="s4-47-out">
+<h3>정규화 표</h3>
+<!--OUT file=py_prim.txt sec=5 note=마스크 256개의 정규화 인덱스와 클래스별 개수-->
+<p>16×16 표에서 같은 숫자가 반복되는 자리가 <b>모서리 비트만 다른</b> 마스크들입니다. 예를 들어 0·2·8·10 이 전부 클래스 0 입니다 — 변 이웃이 하나도 없으니 모서리는 무의미하니까요.</p>
+<p>아래 "클래스별 마스크 개수"를 보면 클래스 하나가 최대 <b>16개</b>의 마스크를 대표합니다. 네 모서리가 전부 자유로운 경우(<code class="nb">2⁴ = 16</code>)입니다.</p>
+</article>
+
+<article class="card" id="s4-d4">
+<h3>정리 4.2 — 47장도 많다</h3>
+<p class="lead">47장을 그리는 것도 아티스트에게는 큰일입니다. 도스 시절의 답은 <b>회전과 반사</b>였습니다.</p>
+<p><b>정리 4.2.</b> 47개 클래스는 정사각형의 대칭군 D₄(회전 4 × 반사 2 = 8원소) 아래에서 <b>14개 궤도</b>로 떨어진다. 궤도 크기는 1, 1, 1, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 8 이다.</p>
+<!--OUT file=golden/autotile.txt sec=3 note=궤도 대표원소와 같은 궤도의 마스크들-->
+<p>궤도 크기의 합이 47 이어야 합니다. 골든 파일 마지막 줄이 그것을 확인합니다.</p>
+</article>
+
+<article class="card" id="s4-d4-why">
+<h3>14장을 그리고 여덟 번 돌린다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>궤도 크기</th><th>개수</th><th>뜻</th></tr>
+<tr><td class="num">1</td><td class="num">3</td><td>회전·반사에 불변 (빈 칸·십자·꽉 참)</td></tr>
+<tr><td class="num">2</td><td class="num">2</td><td>180° 회전에만 불변</td></tr>
+<tr><td class="num">4</td><td class="num">8</td><td>가장 흔한 경우</td></tr>
+<tr><td class="num">8</td><td class="num">1</td><td>대칭이 전혀 없는 모양</td></tr>
+</table>
+</div>
+<p>궤도 대표 14장만 그리고 나머지는 블릿할 때 뒤집으면 됩니다. 스프라이트를 좌우 반전으로 절반 줄이는 것(8부)과 같은 요령이고, 여기서는 <b>3.4배</b>를 아낍니다.</p>
+<div class="note">번사이드 보조정리로 궤도 수를 셀 수도 있습니다. 다만 <code class="nb">canon</code> 의 상이 D₄ 작용에 닫혀 있다는 것부터 확인해야 하고, 그것은 전수 확인이 더 빠릅니다 — 256개짜리 문제니까요.</div>
+</article>
+
+<article class="card" id="s4-corners16">
+<h3>다른 방식 — 꼭짓점에 값을 두면</h3>
+<p class="lead">타일 <b>중심</b>이 아니라 <b>꼭짓점</b>에 0/1 을 두면 한 타일은 네 꼭짓점의 조합 — 16가지가 됩니다.</p>
+<!--CODE file=py/rts/tmap.py lang=py sym=corner_mask note=마칭 스퀘어와 같은 표다-->
+<!--OUT file=golden/autotile.txt sec=4 note=16케이스 전부-->
+<p>등고선을 그리는 <b>마칭 스퀘어</b>와 정확히 같은 표입니다. 지형 경계를 등고선으로 보면 그렇게 됩니다.</p>
+</article>
+
+<article class="card" id="s4-4747vs16">
+<h3>47 대 16 — 어느 쪽을 쓸 것인가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>8이웃 47케이스</th><th>4모서리 16케이스</th></tr>
+<tr><td>값을 두는 곳</td><td>타일 중심</td><td>타일 꼭짓점</td></tr>
+<tr><td>그림 장수</td><td class="num">47 (궤도 14)</td><td class="num">16</td></tr>
+<tr><td>표현력</td><td>대각 경계까지</td><td>부드러운 곡선</td></tr>
+<tr><td>편집</td><td>칸을 칠한다</td><td>꼭짓점을 칠한다 — 직관적이지 않다</td></tr>
+<tr><td>이 엔진</td><td>모든 지형</td><td><b>도로만</b></td></tr>
+</table>
+</div>
+<p>도로에만 16케이스를 쓰는 이유는 도로가 <b>선</b>이기 때문입니다. 선은 꼭짓점 사이를 잇는 것이 자연스럽고, 47케이스로 그리면 T자 교차로에서 그림이 어긋납니다.</p>
+</article>
+
+<article class="card" id="s4-cc">
+<h3>연결 성분 — A* 를 시작하지 않기 위해</h3>
+<p class="lead">섬 건너편을 클릭하면 어떻게 됩니까? A* 는 <b>맵 전체를 훑고서야</b> 실패합니다.</p>
+<!--CODE file=py/rts/tmap.py lang=py sym=TMap.labels note=유니온-파인드, 경로 압축-->
+<p>통행 가능한 칸을 <b>8방향</b>으로 묶습니다. 4방향이 아닌 이유는 대각 이동이 있기 때문입니다 — 대각으로만 이어진 두 칸도 같은 성분입니다.</p>
+<p>보병용과 차량용 <b>두 벌</b>이 필요합니다. 언덕이 보병에게는 길이고 차량에게는 벽이니까요. 같은 맵에서 두 종류의 통행 그래프가 갈립니다.</p>
+</article>
+
+<article class="card" id="s4-cc-use">
+<h3>한 줄 검사가 없애는 최악</h3>
+<pre class="term">label[start] != label[goal]   →   A* 를 시작하지 않는다</pre>
+<p>대신 §8.6 의 규칙으로 <b>같은 성분에서 목표에 가장 가까운 칸</b>을 새 목표로 삼습니다. 유닛은 물가까지 걸어가서 멈춥니다 — 플레이어가 기대하는 그대로입니다.</p>
+<div class="warn">이 "가장 가까운 도달점" 규칙에는 함정이 있었습니다. 반납처를 건물 <b>원점</b>으로 지정하면, 원점이 통행 불가라서 대체 목표를 찾는데 그 답이 <b>지금 서 있는 칸</b>이 될 수 있습니다. 채집기가 정제소 반대편에 서서 1,000틱을 기다렸습니다. 17부에서 그 이야기를 합니다.</div>
+<p>라벨은 지형이 바뀔 때 전부 다시 계산합니다. 증분 삭제가 되는 유니온–파인드는 복잡하고, 4,096칸 재계산은 1 ms 미만입니다.</p>
+</article>
+
+<article class="card" id="s4-rle">
+<h3>맵 파일 — RLE 와 CRC</h3>
+<!--CODE file=py/rts/tmap.py lang=py sym=TMap.save_rle note=지형 평면 먼저, 그다음 통행 평면-->
+<pre class="term">헤더  "RTSM" · 버전 1 · 폭 · 높이          (각 1바이트)
+본문  (개수, 값) 쌍. 개수는 1..255
+꼬리  CRC-16/CCITT-FALSE 2바이트, 빅 엔디언</pre>
+<p>64×64 맵의 지형 평면 4,096바이트가 RLE 로 <b>1,090바이트</b>가 됩니다. 20부의 LZSS 는 같은 평면을 697바이트로 줄입니다 — 실측값이며, "보통 절반쯤 줄어든다" 같은 문장은 쓰지 않습니다.</p>
+<div class="key"><code class="nb">count == 0</code> 은 나타나지 않습니다. 256칸 이상 이어지면 255씩 끊습니다. 이 규칙이 없으면 0 을 "끝"으로 읽는 구현과 "256"으로 읽는 구현이 갈립니다.</div>
+</article>
+
+<article class="card" id="s4-crc">
+<h3>꼬리의 두 바이트</h3>
+<p>맵 파일 끝의 CRC-16 은 <b>깨진 파일을 조용히 읽지 않기 위한</b> 것입니다.</p>
+<p>불러오기가 CRC 를 확인하고 어긋나면 즉시 실패합니다. 한 바이트가 뒤집힌 맵을 읽어 들이면 유닛이 벽 안에서 시작하거나, 더 나쁘게는 <b>두 기계의 맵이 달라져</b> 락스텝이 첫 틱부터 갈립니다.</p>
+<div class="note">CRC-16/CCITT-FALSE 의 정식 이름은 <b>CRC-16/IBM-3740</b> 입니다. CCITT-FALSE 는 널리 퍼진 별칭이고, 20부에서 이 이름의 내력과 GF(2) 다항식 나눗셈을 다룹니다.</div>
+</article>
+
+<article class="card" id="s4-demo">
+<h3>직접 해 보기 — 오토타일 칠하기</h3>
+<div class="demo" data-demo="autotile-paint">
+<h5>칸을 칠하면 마스크가 어떻게 접히는가</h5>
+<div class="row">
+<button data-clear>비우기</button>
+<button data-fill>채우기</button>
+<label><input type="checkbox" data-canon checked> 정규화 적용</label>
+</div>
+<div class="out"></div>
+</div>
+<p>가운데 칸의 마스크와 정규화 결과, 클래스 번호가 함께 나옵니다. 모서리만 칠했다 지워도 클래스가 바뀌지 않는 것을 확인해 보세요.</p>
+</article>
+
+<article class="card" id="s4-sum">
+<h3>4부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>타일 크기</td><td>16×16 (이 덱의 선택)</td><td>화면에 보이는 칸 수가 설계값</td></tr>
+<tr><td>한 칸</td><td>지형 1바이트 + 통행 1바이트</td><td>건물이 통행만 바꾼다</td></tr>
+<tr><td>맵 밖</td><td>바위로 본다</td><td>경계 검사를 없애고 그림을 닫는다</td></tr>
+<tr><td>건물</td><td>통행 비트를 내린다</td><td>예약만으로는 경로가 관통한다</td></tr>
+<tr><td>오토타일</td><td>256 → 47 → 궤도 14</td><td>정리 4.1 · 4.2</td></tr>
+<tr><td>도로</td><td>4모서리 16케이스</td><td>선은 꼭짓점을 잇는 것이 자연스럽다</td></tr>
+<tr><td>연결 성분</td><td>보병·차량 두 벌, 8방향</td><td>A* 를 시작하지 않기 위해</td></tr>
+<tr><td>맵 파일</td><td>RLE + CRC-16</td><td>4096 → 1090바이트 (실측)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s4-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">이웃 마스크가 <code class="nb">0b00000010</code>(북동 모서리만) 인 칸과 <code class="nb">0b00000000</code>(이웃 없음) 인 칸은 같은 그림을 쓴다. 그런데 <code class="nb">0b00000011</code>(북 + 북동) 은 어떤가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>여전히 <b>북만 있는 것</b>과 같은 그림입니다. 북동 모서리가 살아남으려면 북(<code class="nb">bit 0</code>)과 <b>동</b>(<code class="nb">bit 2</code>)이 둘 다 있어야 하는데, 동이 없습니다.</p>
+<p><code class="nb">canon(3) = 1</code> 이고 클래스 번호는 1 입니다. 골든 표 <code class="nb">golden/autotile.txt</code> 1절의 <code class="nb">mask 3</code> 줄이 그것입니다.</p>
+<p>모서리 하나가 살아나려면 <b>세 비트가 동시에</b> 있어야 합니다. 그래서 47이라는 숫자가 나옵니다 — 네 모서리 각각이 "양옆 변이 둘 다 있을 때만" 자유롭기 때문입니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s4-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">연결 성분을 <b>4방향</b>으로 묶으면 어떤 버그가 생기는가? 대각으로만 이어진 통로를 떠올려 보라.</p>
+<button>답 보기</button>
+<div class="a">
+<p>대각으로만 이어진 두 방이 <b>다른 성분</b>으로 잡힙니다. 그러면 <code class="nb">label[start] != label[goal]</code> 검사가 참이 되어 A* 를 아예 시작하지 않고, 유닛은 "갈 수 없다"며 통로 앞에서 멈춥니다.</p>
+<p>실제로는 갈 수 있습니다. 이 엔진은 <b>코너 컷을 허용</b>하므로(§8.1) 대각 이동이 도착 칸만 봅니다. 즉 이동 그래프는 8방향이고, 연결 성분도 같은 그래프 위에서 세어야 합니다.</p>
+<p>일반화하면 이렇습니다 — <b>연결 성분은 반드시 경로 탐색과 같은 그래프에서 계산해야 합니다.</b> 둘이 어긋나면 "도달 가능한데 못 간다"거나 "도달 불가인데 A* 가 맵 전체를 훑는" 두 방향의 버그가 모두 생깁니다.</p>
+</div>
+</div>
 </article>

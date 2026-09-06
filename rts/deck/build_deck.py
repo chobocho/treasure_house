@@ -235,6 +235,15 @@ def expand_codedir(m):
             % (label, lang, path, a, b, esc(body)))
 
 
+def out_path(name):
+    """출력은 out/ 에 있다. 다만 골든 표(오토타일·원·팔레트…)도 생성물이므로
+       `file=golden/autotile.txt` 처럼 앞에 golden/ 을 붙여 인용할 수 있게 둔다.
+       복사본을 out/ 에 만들면 둘이 어긋나는 날이 온다."""
+    if name.startswith('golden/'):
+        return os.path.join(BASE, name)
+    return os.path.join(OUTDIR, name)
+
+
 def expand_outdir(m):
     args = m.group('args')
     mm = re.search(r'\bfile=(\S+)', args)
@@ -246,9 +255,9 @@ def expand_outdir(m):
     sec = re.search(r'\bsec=(\d+)', args)
     note = re.search(r'\bnote=(.+)$', args)
     note = note.group(1).strip() if note else ''
-    p = os.path.join(OUTDIR, name)
+    p = out_path(name)
     if not os.path.exists(p):
-        errors.append('출력 파일 없음: out/%s' % name)
+        errors.append('출력 파일 없음: %s' % name)
         return ''
     text = read(p).rstrip('\n')
     total = len(text.split('\n'))
@@ -282,16 +291,17 @@ def expand_outdir(m):
         span = '전체 %d줄' % total
     label = ''
     if note:
-        label = ('<div class="src"><b>out/%s</b><span class="ln">%s</span>'
-                 '<span>%s</span></div>\n' % (esc(name), span, esc(note)))
+        shown = name if name.startswith('golden/') else 'out/' + name
+        label = ('<div class="src"><b>%s</b><span class="ln">%s</span>'
+                 '<span>%s</span></div>\n' % (esc(shown), span, esc(note)))
     return ('%s<pre class="term" data-out="%s"%s>%s</pre>'
             % (label, esc(name), attrs, esc(text)))
 
 
 def expand_term(m):
-    p = os.path.join(OUTDIR, m.group('out'))
+    p = out_path(m.group('out'))
     if not os.path.exists(p):
-        errors.append('출력 파일 없음: out/%s' % m.group('out'))
+        errors.append('출력 파일 없음: %s' % m.group('out'))
         return '<pre class="term">(없음)</pre>'
     text = read(p).rstrip('\n')
     if m.group('lines'):
