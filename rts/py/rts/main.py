@@ -344,8 +344,18 @@ def scenario(ticks=None, float_bug=False):
     m = T.TMap.load_text(golden('map_start.txt'))
     sc = SIM.parse_script(golden('script.txt'))
     s = SIM.Sim(m, 1, sc.players, float_bug=float_bug)
-    s.setup_start()
+    s.setup_start(ai=False)              # §18.6 — 스크립트가 몬다
     return s, sc, (sc.ticks if ticks is None else ticks)
+
+
+def ai_game(ticks, seed=1, seven=False):
+    """§17.5 의 러시 타이밍을 재는 별도 실행. 스크립트 없이 AI 끼리 붙인다."""
+    m = T.TMap.load_text(golden('map_start.txt'))
+    s = SIM.Sim(m, seed, 2)
+    s.setup_start(ai=True)
+    if seven:
+        s.ai_rules = AI.RULES7
+    return s, ticks
 
 
 def ev_json(e):
@@ -369,6 +379,21 @@ def cmd_trace(ticks=None):
                       ','.join(str(s.ec.supply_cap[p])
                                for p in range(sc.players)),
                       alive,
+                      ','.join(ev_json(e) for e in s.events)))
+    return '\n'.join(out) + '\n'
+
+
+def cmd_aigame(ticks=1200, seven=False):
+    s, n = ai_game(ticks, 1, seven)
+    out = []
+    for t in range(1, n + 1):
+        h = s.step([])
+        alive = len([1 for i in range(1, C.MAX_ENT) if s.w.alive[i]])
+        out.append('{"t":%d,"h":"%08X","cr":[%d,%d],"su":[%d,%d],"sc":[%d,%d],'
+                   '"n":%d,"ev":[%s]}'
+                   % (t, h, s.ec.credits[0], s.ec.credits[1],
+                      s.ec.supply_used[0], s.ec.supply_used[1],
+                      s.ec.supply_cap[0], s.ec.supply_cap[1], alive,
                       ','.join(ev_json(e) for e in s.events)))
     return '\n'.join(out) + '\n'
 
@@ -434,24 +459,27 @@ def cmd_lockstep(ticks=300):
 
 
 def cmd_replay(path, ticks=None):
+    """§20.2 — **상태는 한 바이트도 저장하지 않는다.** 명령이 없는 틱은 아예
+       적지 않고, 재생은 머리의 총 틱 수만큼 돌면서 해당 틱에만 명령을 먹인다."""
     s, sc, n = scenario(ticks)
     log = []
     for t in range(1, n + 1):
         orders = s.script_orders(sc, t)
-        log.append((t, orders))
+        if orders:
+            log.append((t, orders))
         s.step(orders)
     blob = RP.save(1, sc.players, n, log)
     io.open(path, 'wb').write(blob)
     seed, players, tk, log2 = RP.load(blob)
     s2 = SIM.Sim(T.TMap.load_text(golden('map_start.txt')), seed, players)
-    s2.setup_start()
-    ok = True
-    for (t, orders) in log2:
-        s2.step(orders)
-    return ('리플레이 %d바이트 · %d틱 · 재생 해시 %08X %s\n'
-            % (len(blob), tk, s2.state_hash(),
-               '일치' if (ok and s2.state_hash() == s.state_hash())
-               else '불일치'))
+    s2.setup_start(ai=False)             # 원본과 같은 조건이어야 한다
+    at = dict(log2)
+    for t in range(1, tk + 1):
+        s2.step(at.get(t, []))
+    same = s2.state_hash() == s.state_hash()
+    return ('리플레이 %d바이트 · %d틱 · 명령 %d줄 · 재생 해시 %08X %s\n'
+            % (len(blob), tk, sum(len(o) for (_t, o) in log2),
+               s2.state_hash(), '일치' if same else '불일치'))
 
 
 def cmd_bench():
@@ -501,14 +529,19 @@ def cmd_speaker(path):
 
 def main(argv):
     if not argv:
-        sys.stdout.write('부명령: prim trace hashes render lockstep replay'
-                         ' bench speaker\n')
+        sys.stdout.write('부명령: prim trace hashes aigame render lockstep'
+                         ' replay bench speaker\n')
         return 1
     cmd = argv[0]
     if cmd == 'prim':
         sys.stdout.write(cmd_prim())
     elif cmd == 'trace':
         sys.stdout.write(cmd_trace(int(argv[1]) if len(argv) > 1 else None))
+    elif cmd == 'aigame':
+        sys.stdout.write(cmd_aigame(int(argv[1]) if len(argv) > 1 else 1200))
+    elif cmd == 'aigame7':
+        sys.stdout.write(cmd_aigame(int(argv[1]) if len(argv) > 1 else 1200,
+                                    True))
     elif cmd == 'hashes':
         sys.stdout.write(cmd_hashes(int(argv[1]) if len(argv) > 1 else None))
     elif cmd == 'render':

@@ -89,12 +89,21 @@ class Econ(object):
         self.ore_target = [-1] * C.MAX_ENT
 
     # ── SPEC §16.1 자원 ────────────────────────────────────────────────────
-    def nearest_ore(self, m, x, y):
-        """d83 최소, 동점이면 타일 번호 오름차순. 없으면 −1."""
+    def nearest_ore(self, m, x, y, kind=0):
+        """**도달 가능한** 광맥 중 d83 최소, 동점이면 타일 번호 오름차순. 없으면 −1.
+
+           도달 가능 판정을 빼면 채집기가 바위 건너편 광맥을 잡고 §8.6 의 대체
+           목표가 제자리를 돌려주어 영원히 선다(SPEC §16.2). 연결 성분은
+           지형 version 마다 한 번만 계산되므로 여기서 불러도 싸다.
+        """
+        lab = m.labels(kind)
+        here = lab[y * m.w + x] if m.in_map(x, y) else -1
         best, bd = -1, -1
         for i in range(m.w * m.h):
             if self.ore[i] <= 0:
                 continue
+            if here >= 0 and lab[i] != here:
+                continue                       # 다른 성분 — 걸어서 못 간다
             d = F.d83(i % m.w - x, i // m.w - y)
             if bd < 0 or d < bd:
                 bd, best = d, i
@@ -120,11 +129,23 @@ class Econ(object):
         if self.credits[p] < C.COST[kind]:
             return False
         if C.IS_BUILDING[kind] == 0:
-            if self.supply_used[p] + C.POP[kind] > self.supply_cap[p]:
-                return False
+            if (self.supply_used[p] + self.reserved(w, p) + C.POP[kind]
+                    > self.supply_cap[p]):
+                return False        # 큐에 든 것도 인구를 먹는다 (§16.7)
         self.credits[p] -= C.COST[kind]        # 선불
         self.queue[bi].append(kind)
         return True
+
+    def reserved(self, w, p):
+        """큐에 들어 있는 유닛이 예약한 인구. 이것을 빼면 상한이 헐거워진다."""
+        n = 0
+        for bi in range(1, C.MAX_ENT):
+            if w.alive[bi] == 0 or w.owner[bi] != p:
+                continue
+            for kind in self.queue[bi]:
+                if C.IS_BUILDING[kind] == 0:
+                    n += C.POP[kind]
+        return n
 
     def cancel(self, w, bi, k):
         """환불은 100 %. 이 덱의 규칙이며, 부분 환불은 반올림 규칙을 하나 더 만든다."""
@@ -236,6 +257,35 @@ class Econ(object):
                 bd, best = d, w.handle(j)
         return best
 
+    def dock(self, w, m, mv, i, bi):
+        """건물 발자국을 둘러싼 고리에서 채집기가 붙을 칸 (SPEC §16.2).
+
+           건물 원점으로 그냥 명령하면 §8.6 의 대체 목표가 "건물 반대편"이나
+           심지어 "지금 서 있는 칸"을 고를 수 있다 — d83 동점에서 타일 번호가
+           작은 쪽이 이기기 때문이다. 그러면 채집기가 적재를 든 채 굳는다.
+        """
+        kind = C.MOVE_KIND[w.kind[i]]
+        f = C.FOOT[w.kind[bi]]
+        best = None
+        for ignore_resv in (False, True):
+            bd, bt = -1, -1
+            for dy in range(-1, f + 1):
+                for dx in range(-1, f + 1):
+                    if 0 <= dx < f and 0 <= dy < f:
+                        continue                   # 발자국 내부는 도크가 아니다
+                    x, y = w.tx[bi] + dx, w.ty[bi] + dy
+                    if not m.passable_terrain(x, y, kind):
+                        continue
+                    t = y * m.w + x
+                    if not ignore_resv and mv.resv[t] not in (0, w.handle(i)):
+                        continue
+                    d = F.d83(x - w.tx[i], y - w.ty[i])
+                    if bd < 0 or d < bd or (d == bd and t < bt):
+                        best, bd, bt = (x, y), d, t
+            if best is not None:
+                return best
+        return None
+
     def _stuck(self, w, mv, i):
         """이동이 포기된 상태 — §13.3 이 24틱 만에 명령을 버렸다는 뜻이다."""
         return mv.goal[i] < 0 and not mv.path[i] and w.prog[i] == 0
@@ -245,7 +295,7 @@ class Econ(object):
         st = w.state[i]
         p = w.owner[i]
         if st == H_SEEK:
-            tile = self.nearest_ore(m, w.tx[i], w.ty[i])
+            tile = self.nearest_ore(m, w.tx[i], w.ty[i], C.MOVE_KIND[w.kind[i]])
             if tile < 0:
                 w.state[i] = H_IDLE            # 캘 것이 없으면 멈춘다
                 return
@@ -274,7 +324,9 @@ class Econ(object):
                     return                     # 반납처가 없으면 실어 둔 채 기다린다
                 w.target[i] = h
                 bi = h // 256
-                mv.order(i, w.tx[bi], w.ty[bi])
+                d = self.dock(w, m, mv, i, bi)
+                if d is not None:
+                    mv.order(i, d[0], d[1])
                 w.state[i] = H_TO_BASE
             elif got == 0:
                 w.state[i] = H_SEEK            # 칸이 말랐다
@@ -292,7 +344,9 @@ class Econ(object):
                 w.state[i] = H_UNLOAD
                 w.timer[i] = UNLOAD_TICKS
             elif self._stuck(w, mv, i):
-                mv.order(i, w.tx[bi], w.ty[bi])
+                d = self.dock(w, m, mv, i, bi)
+                if d is not None:
+                    mv.order(i, d[0], d[1])
             return
         if st == H_UNLOAD:
             w.timer[i] -= 1

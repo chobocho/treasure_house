@@ -229,13 +229,25 @@ def _rule_defend(w, ec, mem, p):
     return ('DEFEND',)
 
 
+def _rule_power(w, ec, mem, p):
+    """일곱째 줄 — 실험용이다(§17.5). 여섯 줄짜리 AI 는 인구 10 에서 멈춘다."""
+    if ec.supply_cap[p] - ec.supply_used[p] >= 2:
+        return None
+    if ec.supply_cap[p] >= E.SUPPLY_MAX:
+        return None
+    return ('BUILD', C.POW) if _can_build(w, ec, p, C.POW, 200) else None
+
+
 # 여섯 줄이 AI 전부다. 위에서부터 훑어 처음으로 조건을 만족하는 하나를 실행한다.
 RULES = [_rule_harvester, _rule_refinery, _rule_barracks,
          _rule_infantry, _rule_attack, _rule_defend]
+# 발전소 한 줄을 더한 판. 18부가 두 실행을 나란히 놓는다.
+RULES7 = [_rule_harvester, _rule_refinery, _rule_barracks, _rule_power,
+          _rule_infantry, _rule_attack, _rule_defend]
 
 
-def build_order(w, ec, mem, p):
-    for rule in RULES:
+def build_order(w, ec, mem, p, rules=None):
+    for rule in (rules if rules is not None else RULES):
         act = rule(w, ec, mem, p)
         if act is not None:
             return act

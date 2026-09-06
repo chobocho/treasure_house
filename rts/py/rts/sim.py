@@ -105,6 +105,7 @@ class Sim(object):
         self.orders = SEL.Orders()
         self.mem = [AI.Memory(m.w, m.h) for _ in range(C.MAX_PLAYER)]
         self.ai_enabled = [False] * C.MAX_PLAYER
+        self.ai_rules = None                    # None 이면 §17.5 의 여섯 줄
         self.tick = 0
         self.events = []
         self.triggers = []
@@ -138,8 +139,9 @@ class Sim(object):
             self.w.state[i] = C.ST_SEEK
         return h
 
-    def setup_start(self):
-        """§25.4 시작 조건. AI 는 여기서 켠다 — 스크립트가 몰 때는 꺼 둔다."""
+    def setup_start(self, ai=True):
+        """§25.4 시작 조건. 골든 시나리오는 스크립트가 몰므로 AI 를 끈다 —
+           한 지갑을 둘이 쓰면 서로의 건설을 굶긴다(§18.6)."""
         for p in range(min(self.players, len(self.m.starts))):
             sx, sy = self.m.starts[p]
             self.spawn(p, C.HQ, sx - 1, sy - 1)
@@ -149,7 +151,7 @@ class Sim(object):
                     x, y = sx, sy + 2 + k
                 self.spawn(p, C.HARV, x, y)
             self.ec.credits[p] = C.START_CREDITS
-            self.ai_enabled[p] = True
+            self.ai_enabled[p] = ai
         self.ec.recount_supply(self.w)
 
     def add_trigger(self, cond, act, once):
@@ -221,6 +223,7 @@ class Sim(object):
         if self.ec.credits[p] < C.COST[kind]:
             return False
         if not self.ec.placeable(self.w, self.m, self.mv, kind, x, y, p):
+            self._shove(p, kind, x, y)      # §16.5 — 내 유닛이면 비키게 한다
             return False
         self.ec.credits[p] -= C.COST[kind]      # 선불
         h = self.spawn(p, kind, x, y)
@@ -232,6 +235,33 @@ class Sim(object):
         self.w.hp[i] = 1
         self.w.timer[i] = C.BUILD_TICKS[kind]
         return True
+
+    def _shove(self, p, kind, x, y):
+        """발자국을 막은 내 유닛들에게 바깥으로 한 걸음 명령을 준다 (§16.5).
+
+           밀면서 동시에 짓지는 않는다 — 아직 그 칸에 선 유닛 위에 건물을
+           얹으면 불변식 R 이 깨진다. 다음 재시도에서 자리가 빈다.
+        """
+        w, m = self.w, self.m
+        f = C.FOOT[kind]
+        cx, cy = x + f // 2, y + f // 2
+        for dy in range(f):
+            for dx in range(f):
+                u, v = x + dx, y + dy
+                if not m.in_map(u, v):
+                    continue
+                h = self.mv.resv[v * m.w + u]
+                if not w.valid(h):
+                    continue
+                j = S.index(h)
+                if w.owner[j] != p or C.IS_BUILDING[w.kind[j]]:
+                    continue
+                out = F.atan8(w.tx[j] - cx, w.ty[j] - cy)
+                pd = M.push_dir(self.mv, j, F.fmod(out + 4, 8))
+                if pd != M.STOP_DIR:
+                    t = ((w.ty[j] + F.DY[pd]) * m.w + w.tx[j] + F.DX[pd])
+                    self.mv.path[j] = [t]
+                    self.mv.goal[j] = t
 
     # ── 2단계 AI ───────────────────────────────────────────────────────────
     def _phase_ai(self):
@@ -253,7 +283,7 @@ class Sim(object):
         return self._fire
 
     def _ai_decide(self, p):
-        act = AI.build_order(self.w, self.ec, self.mem[p], p)
+        act = AI.build_order(self.w, self.ec, self.mem[p], p, self.ai_rules)
         if act[0] == 'TRAIN':
             self.ec.enqueue(self.w, act[2], act[1])
         elif act[0] == 'BUILD':
@@ -269,12 +299,21 @@ class Sim(object):
             for i in self._army(p):
                 self.mv.order(i, act[1], act[2])
                 self.w.state[i] = C.ST_MOVE
-        else:                                   # DEFEND
+        else:                                   # DEFEND (+ §17.6 정찰)
             centre = self._base_of(p)
             if centre is None:
                 return
-            for i in self._army(p):
-                if self.w.state[i] == C.ST_IDLE and not self.mv.path[i]:
+            army = self._army(p)
+            spots = AI.scout_targets(self.m, self.fog, p)
+            for k, i in enumerate(army):
+                if self.w.state[i] != C.ST_IDLE or self.mv.path[i]:
+                    continue
+                if k == 0 and spots:
+                    # 첫 유닛 하나만 정찰. 이것이 없으면 적 기지를 영영 모르고
+                    # 빌드 오더의 다섯째 줄(전군 공격)이 발화하지 않는다.
+                    self.mv.order(i, spots[0][0], spots[0][1])
+                    self.w.state[i] = C.ST_MOVE
+                else:
                     self.mv.order(i, centre[0], centre[1])
 
     def _base_of(self, p):

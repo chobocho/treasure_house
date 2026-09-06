@@ -176,6 +176,11 @@ w4.hp[p2] = 150
 ec4.recount_supply(w4)
 H.check('발전소가 상한을 10 올린다', ec4.supply_cap[0], 20)
 H.check('이제는 들어간다', ec4.enqueue(w4, hq4, C.HARV), True)
+H.check('큐에 든 것도 인구를 먹는다 (§16.7)', ec4.reserved(w4, 0), C.POP[C.HARV])
+H.check('큐 상한 5칸까지만 더 들어간다 (인구 여유는 10)',
+        [ec4.enqueue(w4, hq4, C.HARV) for _k in range(12)].count(True),
+        E.QUEUE_MAX - 1)
+H.note('이 예약이 없으면 큐 다섯 칸이 상한을 조용히 넘어선다 — 실제로 16/10 이 나왔다')
 H.check('전차는 인구 2 를 먹는다', C.POP[C.TANK], 2)
 for _k in range(50):
     u = S.index(w4.spawn(0, C.INF, 5, 5))
@@ -218,6 +223,54 @@ H.check_true('광맥이 실제로 줄었다',
 rate = ec5.credits[0] * 10000 // 1200
 H.note('실측 수입률 %d/10000 크레딧/틱 — 정리 16.1 의 이론값과 17부에서 대조', rate)
 H.check_true('실측이 이론 상한을 넘지 않는다', rate <= 31250)
+
+# ── §16.2 도크 — 건물 원점으로 명령하면 안 되는 이유 ───────────────────────
+#   실제로 겪은 버그다: 정제소가 세 면이 막혀 동쪽으로만 열려 있었는데,
+#   북서쪽 채집기가 §8.6 의 대체 목표로 "지금 서 있는 칸"을 받아 굳었다.
+md = grid(['.' * 10] * 10)
+wd = S.World(10, 10)
+mvd = M.Movement(wd, md)
+ecd = E.Econ(md)
+refd = S.index(wd.spawn(0, C.REF, 4, 4))       # 2x2 = (4,4)-(5,5)
+wd.hp[refd] = C.HP[C.REF]
+mvd.claim(refd)
+for _x in range(3, 7):                          # 북·서·남을 막는다
+    md.set_terrain(_x, 3, T.ROCK)
+    md.set_terrain(_x, 6, T.ROCK)
+for _y in range(3, 7):
+    md.set_terrain(3, _y, T.ROCK)
+hvd = S.index(wd.spawn(0, C.HARV, 1, 1))
+wd.hp[hvd] = C.HP[C.HARV]
+mvd.claim(hvd)
+dock = ecd.dock(wd, md, mvd, hvd, refd)
+H.check_true('도크는 발자국에 접한 칸이다',
+             dock is not None and F.dinf(dock[0] - 4, dock[1] - 4) <= 2)
+H.check('도크는 통행 가능하다', md.passable_terrain(dock[0], dock[1], 0), True)
+H.check('막힌 면에는 도크를 잡지 않는다',
+        md.terrain_at(dock[0], dock[1]) != T.ROCK, True)
+H.check('도크는 건물 안이 아니다',
+        (4 <= dock[0] <= 5 and 4 <= dock[1] <= 5), False)
+wd.load[hvd] = E.LOAD_MAX
+wd.state[hvd] = E.H_MINE
+ecd.ore_target[hvd] = 0
+for _t in range(400):
+    ecd.harvest_tick(wd, hvd, md, mvd)
+    mvd.step()
+    if ecd.credits[0] > 0:
+        break
+H.check_true('세 면이 막힌 정제소에도 결국 반납한다 (%d틱)' % _t,
+             ecd.credits[0] == E.LOAD_MAX)
+
+# ── §16.2 도달 가능한 광맥만 고른다 ────────────────────────────────────────
+mr = grid(['....#....*', '....#.....', '....#.....', '....#.....', '....#.....',
+           '....#.....', '....#.....', '..*.#.....', '....#.....', '....#....'])
+ecr = E.Econ(mr)
+H.check('벽 이쪽의 광맥을 고른다', ecr.nearest_ore(mr, 0, 0), 7 * 10 + 2)
+H.check('벽 저쪽의 광맥은 고르지 않는다',
+        ecr.nearest_ore(mr, 0, 0) != 0 * 10 + 9, True)
+H.check('벽 저쪽에서 보면 저쪽 것을 고른다', ecr.nearest_ore(mr, 9, 0),
+        0 * 10 + 9)
+H.note('도달 판정을 빼면 채집기가 바위 건너편을 향해 영원히 선다')
 
 # 광맥이 없으면 IDLE
 m6 = grid(['.' * 8] * 8)

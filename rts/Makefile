@@ -136,11 +136,22 @@ golden:
 	cd $(ROOT) && $(PY) tools/gen_circle.py
 	cd $(ROOT) && $(PY) tools/gen_palette.py
 	cd $(ROOT) && $(PY) tools/gen_sprites.py
+	cd $(ROOT) && $(PY) tools/gen_font.py
 	cd $(ROOT) && $(PY) tools/gen_maps.py
 	cd $(ROOT) && $(PY) tools/gen_script.py
 	cd $(ROOT)/py && $(PY) -m rts.main trace  > $(GOLDEN)/trace.jsonl
 	cd $(ROOT)/py && $(PY) -m rts.main hashes > $(GOLDEN)/hashes.txt
+	cd $(ROOT)/py && $(PY) -m rts.main replay $(GOLDEN)/replay.bin
 	@echo '골든 갱신 완료 — make all 로 세 언어를 다시 맞춰 볼 것'
+
+# 덱에 실을 측정값 — 골든이 아니라 출력이다 (재현되지만 비교 대상은 아니다)
+measure:
+	@mkdir -p $(OUT)
+	cd $(ROOT)/py && $(PY) -m rts.main aigame  > $(OUT)/aigame.jsonl
+	cd $(ROOT)/py && $(PY) -m rts.main aigame7 > $(OUT)/aigame7.jsonl
+	cd $(ROOT)/py && $(PY) -m rts.main bench   | tee $(OUT)/bench.txt
+	cd $(ROOT)/py && $(PY) -m rts.main lockstep 400 | tee $(OUT)/lockstep.txt
+	cd $(ROOT)/py && $(PY) -m rts.main speaker $(OUT)/tune.wav
 
 deck:
 	cd $(ROOT) && $(PY) deck/build_deck.py
