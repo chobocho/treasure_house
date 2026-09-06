@@ -500,3 +500,17 @@ prime 16777619.
   (5) `render.draw` 가 쓰지 않는 팔레트를 인자로 받는다.
   (6) `select.in_view` 는 화면 좌표, `render.edge_scroll` 은 뷰포트 좌표 — VIEW_X=0 이라
       우연히 일치할 뿐이다.
+- 2026-09-06 14:55 — **7단계 완료 (서브에이전트)**: `ts/src/web`(canvas·minirts·data) + `tsconfig.web.json`
+  + `tools/gen_webdata.py`·`bundle_web.py`·`check_web.js`·`check_demos.js` + `deck/engine.js`(273KB,
+  모듈 27개) + `deck/demos.js`(77KB). `make web` 이 **브라우저 번들로 골든 트레이스를 다시 만들어
+  100,608바이트 바이트 비교**를 통과한다(vm 의 가짜 window 에서 평가 — require 로 하면 브라우저
+  전용 버그를 놓친다). `make demos` 19개 전부 통과, `make ts` 여전히 871/0.
+  덱이 요구한 데모는 8개였는데 내가 그동안 부를 더 써서 19개가 되었고 전부 구현되었다.
+  전부 `window.__rts.require` 로 **진짜 엔진**을 부른다 — 재구현이 하나 있는데(`influence-map`
+  의 확산 슬라이더, `ai.spread` 가 모듈 사설이라) 그 데모가 스스로 `ai.influence()` 와
+  704/704칸 일치를 확인하고 어긋나면 붉게 표시한다.
+  받은 지적 둘을 반영: `make web` 의 `gen_webdata` 를 `tsc` 앞으로 옮겼고(낡은 data.ts 를 묶는
+  사고 방지), 27부에 `mini-rts` 데모 슬라이드를 넣었다.
+  `check_demos.js` 가 다시 쓰였다 — 이제 `deck/sections/*.html` 의 실제 마크업을 파싱해 DOM 을
+  만들고, **등록되지 않은 data-demo 가 있으면 실패**한다. 옛 스텁은 모든 선택자에 null 을
+  돌려줘서 깨진 데모도 통과시켰다.
