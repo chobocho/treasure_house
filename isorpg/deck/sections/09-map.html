@@ -1,0 +1,208 @@
+<article class="card section" id="s9">
+<p class="chnum">9부</p>
+<h2>지형·높이·맵 생성</h2>
+<p class="chsub">한 바이트에 무엇을 담을 것인가.<br>그리고 그 바이트들을 어떻게 만들어 낼 것인가</p>
+</article>
+
+<article class="card" id="s9-cell">
+<h3>한 칸은 한 바이트</h3>
+<p class="lead">48×48 = 2,304 칸. 칸마다 지형과 높이를 담아야 합니다. 두 바이트를 쓰면 4,608바이트, 한 바이트면 2,304바이트.</p>
+<pre class="term">cell  =  terrain  |  (height &lt;&lt; 4)
+
+      비트 7 6 5 4 | 3 2 1 0
+           높이     |  지형
+           0..15    |  0..15</pre>
+<!--CODE file=py/isorpg/gamemap.py lang=py sym=make_cell..height_of note=시프트 대신 곱셈과 나눗셈-->
+<p>시프트를 쓰지 않은 것에 주목하세요. 루아 5.1 에는 비트 연산자가 없고, 자바스크립트의 <code class="nb">&gt;&gt;</code> 는 32비트로 잘립니다. <code class="nb">×16</code> 과 <code class="nb">÷16</code> 은 어디서든 같습니다.</p>
+<div class="key"><b>640KB 시절의 사고</b> — 2,304바이트를 아끼는 것이 지금 기준으로는 우스워 보이지만, 그때는 맵이 여러 장이었고 그걸 전부 메모리에 올려야 했습니다. 그리고 지금도 <b>캐시</b> 때문에 여전히 의미가 있습니다 — 2 KB 는 L1 에 통째로 들어가고 4.5 KB 는 아슬아슬합니다.</div>
+</article>
+
+<article class="card" id="s9-terrain">
+<h3>지형표</h3>
+<!--CODE file=py/isorpg/gamemap.py lang=py sym=TERRAIN note=이름·이동비용·시야차단-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>id</th><th>이름</th><th>이동</th><th>시야차단</th><th>비고</th></tr>
+<tr><td class="num">0–1</td><td>DEEP / WATER</td><td class="num">0</td><td>아니오</td><td>못 지나가지만 너머는 보인다</td></tr>
+<tr><td class="num">3</td><td>GRASS</td><td class="num">10</td><td>아니오</td><td>기준 비용</td></tr>
+<tr><td class="num">6</td><td>FOREST</td><td class="num">16</td><td><b>예</b></td><td>느리고 시야를 막는다</td></tr>
+<tr><td class="num">7</td><td>MOUNTAIN</td><td class="num">0</td><td>예</td><td>벽 노릇</td></tr>
+<tr><td class="num">8</td><td>ROAD</td><td class="num"><b>8</b></td><td>아니오</td><td>가장 싸다 — 10부의 MIN_MOVE</td></tr>
+<tr><td class="num">10</td><td>WALL</td><td class="num">0</td><td>예</td><td>성벽</td></tr>
+<tr><td class="num">13</td><td>SWAMP</td><td class="num">20</td><td>아니오</td><td>가장 비싸다</td></tr>
+</table>
+</div>
+<p>이동 비용 0 이 "못 지나감"입니다. 별도 불리언을 두지 않은 이유는 <b>표를 한 번만 보면 되기</b> 때문입니다. 통행 가능 여부와 비용을 따로 두면 두 번 봐야 하고, 둘이 어긋날 여지가 생깁니다.</p>
+<div class="warn"><b>ROAD 의 8 이 중요합니다</b> — 이 값이 A* 휴리스틱의 하계를 정합니다. 8 아래로 내리면 10부의 일관성 증명이 깨집니다. 지형표의 한 숫자가 경로탐색의 정확성을 좌우하는 것이죠.</div>
+</article>
+
+<article class="card" id="s9-lcg">
+<h3>난수 — 볼랜드의 LCG</h3>
+<p>맵을 만들려면 난수가 필요합니다. 그런데 <b>같은 씨앗이면 언제나 같은 맵</b>이어야 합니다 — 세 언어가 같은 맵을 만들어야 하니까요.</p>
+<pre class="term">x' = (22695477 · x + 1)  mod  2^32
+rand15 = (x' &gt;&gt; 16) &amp; 0x7FFF          → 0 .. 32767</pre>
+<p>승수 22695477 은 도스 시절 터보 C 의 <code class="nb">rand()</code> 가 쓰던 값입니다. 문헌에 따라 법을 2<sup>31</sup> 로 적기도 하는데, <b>출력 비트(30..16)의 값은 완전히 같습니다</b> — 2<sup>31</sup> 로 줄여도 잘려 나가는 것은 비트 31뿐이기 때문입니다.</p>
+<div class="warn"><b>여기서 또 2<sup>53</sup> 문제가 나옵니다.</b> <code class="nb">22695477 × 2³²</code> 은 약 2<sup>57</sup>. 배정밀도 가수를 넘습니다. 그래서 상태를 상·하위 16비트로 쪼개 두 번 곱합니다.</div>
+<!--CODE file=py/isorpg/rng.py lang=py sym=Rng.next note=분할 곱 — 중간값이 2^42 미만-->
+<p><b>정리 5.1.</b> <code class="nb">a·s mod 2³²</code> 를 위와 같이 계산하면 중간값이 모두 2<sup>42</sup> 미만이라 배정밀도에서 정확하다.</p>
+<p><b>증명.</b> <code class="nb">s = sh·2¹⁶ + sl</code> 이므로 <code class="nb">a·s = a·sh·2¹⁶ + a·sl</code>. <code class="nb">mod 2³²</code> 를 취할 때 <code class="nb">a·sh·2¹⁶ mod 2³² = (a·sh mod 2¹⁶)·2¹⁶</code>. <code class="nb">a·sh &lt; 22695477·2¹⁶ &lt; 2⁴¹</code>, <code class="nb">a·sl + 1 &lt; 2⁴¹</code>, 합은 <code class="nb">65535·65536 + 2⁴¹ &lt; 2⁴²</code>. ∎</p>
+<div class="note">테스트는 2만 걸음에 대해 분할 곱이 파이썬의 큰 정수 곱과 같은지 확인합니다.</div>
+</article>
+
+<article class="card" id="s9-hull">
+<h3>정리 5.2 — Hull–Dobell</h3>
+<p>LCG 의 주기가 최대(법 <code class="nb">m</code> 전체)가 되는 조건은 1962년 Hull 과 Dobell 이 밝혔습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>조건</th><th>우리 값</th><th>만족?</th></tr>
+<tr><td class="num">gcd(c, m) = 1</td><td class="num">c = 1</td><td>예</td></tr>
+<tr><td>a−1 이 m 의 모든 소인수로 나누어짐</td><td class="num">a−1 = 22695476, m 의 소인수는 2뿐</td><td>예 (짝수)</td></tr>
+<tr><td>4 | m 이면 4 | a−1</td><td class="num">22695476 = 4 × 5673869</td><td>예</td></tr>
+</table>
+</div>
+<p>세 조건을 모두 만족하므로 <b>주기가 정확히 2<sup>32</sup></b> 입니다.</p>
+<p>그런데 주기가 최대라는 것이 "좋은 난수"를 뜻하지는 않습니다.</p>
+<!--OUT file=py_prim.txt sec=9 note=씨앗 1 의 처음 여덟 걸음-->
+<p>상태의 <b>최하위 비트</b>를 보면 0, 1, 0, 1, … 로 번갈아 갑니다. 주기가 2 입니다. 그 위 비트는 주기 4, 그 위는 8. <b>k번째 하위 비트의 주기는 2<sup>k+1</sup></b> 입니다.</p>
+<div class="key"><b>그래서 <code class="nb">rand() % 2</code> 는 절대 쓰면 안 됩니다.</b> 도스 시절 rand() 가 비트 30..16 을 꺼내 쓴 이유가 이것입니다 — 하위 비트를 버리는 것이죠. 이 문서의 <code class="nb">rand_below(n)</code> 도 이미 15비트로 잘린 값을 쓰므로 안전합니다.</div>
+</article>
+
+<article class="card" id="s9-ds">
+<h3>다이아몬드-스퀘어</h3>
+<p>프랙탈 중점 변위. Fournier · Fussell · Carpenter 가 1982년 CACM 논문에서 소개했습니다.</p>
+<div class="fig" data-svg="fig_ds.svg"></div>
+<div class="steps">
+<ol>
+<li><b>네 귀퉁이</b>에 값을 놓는다.</li>
+<li><b>다이아몬드</b> — 정사각형 네 꼭짓점의 평균에 흔들림을 더해 가운데를 채운다.</li>
+<li><b>스퀘어</b> — 마름모 네 꼭짓점(격자 밖은 제외)의 평균에 흔들림을 더해 변의 중점을 채운다.</li>
+<li>간격을 반으로 줄이고, 흔들림 폭에 거칠기 비를 곱해 반복.</li>
+</ol>
+</div>
+<p>격자는 <code class="nb">2<sup>k</sup> + 1</code> 이어야 합니다. 중점을 계속 반으로 접으려면 양 끝이 모두 격자점이어야 하니까요. 이 문서는 65×65 를 만들어 가운데 48×48 을 오려 씁니다.</p>
+<!--CODE file=py/isorpg/gamemap.py lang=py sym=gen_height note=반복 순서가 난수 소비 순서를 정한다-->
+<div class="warn"><b>반복 순서가 명세의 일부입니다.</b> y 바깥, x 안쪽, 다이아몬드 먼저. 순서를 바꾸면 난수를 소비하는 차례가 달라져 <b>완전히 다른 맵</b>이 나옵니다. 세 언어가 같은 맵을 만들려면 이것까지 맞춰야 합니다.</div>
+</article>
+
+<article class="card" id="s9-ds-check">
+<h3>5×5 로 손검산</h3>
+<p>64×64 격자는 눈으로 확인할 수 없습니다. 그래서 골든 벡터에 4×4(격자 5×5) 짜리 미니 버전을 넣었습니다.</p>
+<!--OUT file=py_prim.txt sec=10 note=n=4, seed=1, scale=100 의 5x5 격자-->
+<p>네 귀퉁이가 50, 60, 70, 80 입니다. 가운데 <code class="nb">h[2][2] = 110</code> 은 네 귀퉁이 평균 65 에 흔들림 +45 가 더해진 값입니다.</p>
+<div class="key">이 스물다섯 개의 숫자가 세 언어에서 전부 같아야 합니다. 하나라도 다르면 난수 소비 순서나 나눗셈 방향이 어긋났다는 뜻입니다. <b>실제로 이 검사가 이식 중에 값을 했습니다.</b></div>
+</article>
+
+<article class="card" id="s9-smooth">
+<h3>평활 — 프랙탈은 게임 맵이 아니다</h3>
+<p class="lead">다이아몬드-스퀘어를 그대로 쓰면 타일 눈금에서 <b>잡음처럼</b> 보입니다. 인접한 칸이 물이었다가 산이었다가 합니다.</p>
+<!--CODE file=py/isorpg/gamemap.py lang=py sym=smooth note=3x3 상자 흐리기 두 번-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>RLE 런 개수</th><th>평균 런 길이</th></tr>
+<tr><td>평활 전</td><td class="num">1,264</td><td class="num">1.8</td></tr>
+<tr><td>평활 후 (2회)</td><td class="num"><b>794</b></td><td class="num">2.9</td></tr>
+</table>
+</div>
+<p>같은 지형이 넓게 뭉치니 <b>RLE 가 실제로 압축이 됩니다.</b> 게임 맵처럼 보이는 것과 압축이 잘 되는 것이 같은 성질의 두 얼굴이라는 점이 흥미롭습니다 — 둘 다 "공간적 상관"의 다른 이름입니다.</p>
+<div class="note">도스 시절 맵 편집기들이 마지막에 '평활' 버튼을 두었던 이유이기도 합니다.</div>
+</article>
+
+<article class="card" id="s9-assign">
+<h3>값에서 지형과 높이로</h3>
+<p>평활한 값(29..942)을 문턱으로 잘라 지형을, 나누어 높이를 정합니다.</p>
+<!--CODE file=py/isorpg/gamemap.py lang=py sym=terrain_of_value note=문턱은 이 씨앗의 실제 분포에 맞춰 골랐다-->
+<!--CODE file=py/isorpg/gamemap.py lang=py sym=height_of_value note=205 아래는 물이라 높이 0-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>지형</th><th>칸 수</th><th>비율</th></tr>
+<tr><td>GRASS</td><td class="num">약 820</td><td class="num">36%</td></tr>
+<tr><td>FOREST</td><td class="num">약 460</td><td class="num">20%</td></tr>
+<tr><td>ROCK</td><td class="num">약 315</td><td class="num">14%</td></tr>
+<tr><td>WATER / DEEP</td><td class="num">약 340</td><td class="num">15%</td></tr>
+<tr><td>MOUNTAIN</td><td class="num">약 185</td><td class="num">8%</td></tr>
+<tr><td>SAND</td><td class="num">약 170</td><td class="num">7%</td></tr>
+</table>
+</div>
+<div class="warn"><b>문턱값은 씨앗에 묶여 있습니다.</b> 이 씨앗의 실제 분위수를 보고 고른 것이라, 씨앗을 바꾸면 다시 골라야 합니다. 그래서 문턱과 씨앗을 함께 명세에 박아 두었습니다. 절대적인 값처럼 적으면 나중에 반드시 사고가 납니다.</div>
+</article>
+
+<article class="card" id="s9-town">
+<h3>마을 스탬프 — 프랙탈 위에 사람의 흔적을</h3>
+<p>프랙탈은 자연을 만들지 사람이 만든 것을 만들지 못합니다. 마을은 <b>고정 좌표에 찍습니다</b>.</p>
+<!--CODE file=py/isorpg/gamemap.py lang=py sym=stamp_town note=벽을 먼저 두르고 문을 나중에 뚫는다-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>요소</th><th>범위</th><th>지형</th><th>높이</th></tr>
+<tr><td>성벽</td><td>[18,30) 의 테두리</td><td>WALL</td><td class="num">4</td></tr>
+<tr><td>길 십자로</td><td class="num">tx=24 또는 ty=24</td><td>ROAD</td><td class="num">2</td></tr>
+<tr><td>바닥</td><td>나머지</td><td>FLOOR</td><td class="num">2</td></tr>
+<tr><td>문 넷</td><td>십자로가 성벽과 만나는 곳</td><td>ROAD</td><td class="num">2</td></tr>
+<tr><td>바깥 길</td><td class="num">tx=24, ty ∈ [0,18) ∪ [30,48)</td><td>ROAD</td><td class="num">2</td></tr>
+</table>
+</div>
+<p>성벽을 바닥보다 <b>두 단계 높게</b> 둔 것이 시각적으로 결정적입니다. 같은 높이면 성벽과 바닥이 색만 다른 평면이 되어 마을처럼 보이지 않습니다.</p>
+<div class="key"><b>순서가 중요합니다.</b> 벽을 먼저 두르고 문을 나중에 뚫습니다. 반대로 하면 벽이 문을 덮습니다. 이런 '스탬프 순서'는 절차적 생성에서 늘 나오는 문제입니다.</div>
+</article>
+
+<article class="card" id="s9-rle">
+<h3>RLE 로 저장하기</h3>
+<!--CODE file=py/isorpg/gamemap.py lang=py sym=save_rle note=행 우선으로 훑어 같은 값을 묶는다-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>형식</th><th>크기</th><th>비고</th></tr>
+<tr><td>원본 (한 칸 1바이트)</td><td class="num">2,304 B</td><td>—</td></tr>
+<tr><td>이진 RLE (런 하나 2바이트)</td><td class="num">1,588 B</td><td class="num">1.45 : 1</td></tr>
+<tr><td>텍스트 RLE (이 문서)</td><td class="num">3,902 B</td><td>사람이 읽으려고 늘려 쓴 것</td></tr>
+</table>
+</div>
+<p>텍스트 형식은 원본보다 <b>깁니다.</b> 압축이 목적이 아니라 <b>골든 벡터가 사람 눈에 보여야</b> 하기 때문입니다. 도스 시절 파일이었다면 이진으로 1,588바이트였을 겁니다.</p>
+<div class="key"><b>세 언어가 자체 생성한 맵이 <code class="nb">golden/map.txt</code> 와 바이트 단위로 같은지</b> 검사합니다. 다이아몬드-스퀘어의 난수 소비 순서, 평활, 문턱, 마을 스탬프가 전부 맞아야 통과합니다. 이 한 줄이 9부 전체의 회귀 테스트입니다.</div>
+</article>
+
+<article class="card" id="s9-demo">
+<h3>직접 해 보기 — 다이아몬드-스퀘어</h3>
+<div class="demo" data-demo="diamond-square">
+<h5>거칠기와 씨앗을 바꿔 보세요</h5>
+<div class="row">
+<label>씨앗 <input type="number" data-seed value="1" min="1" max="9999"></label>
+<label>거칠기 % <input type="range" data-rough min="30" max="80" value="58"></label>
+<label>평활 <input type="range" data-blur min="0" max="4" value="2"></label>
+</div>
+<div class="row">
+<button data-run>다시 만들기</button>
+<label><input type="checkbox" data-terrain checked> 지형 색</label>
+</div>
+<div class="out"></div>
+</div>
+<div class="note">거칠기를 30% 로 내리면 부드러운 언덕이, 80% 로 올리면 뾰족한 산악이 나옵니다. 평활을 0 으로 두면 타일 눈금에서 잡음처럼 보이는 것을 직접 확인할 수 있습니다.</div>
+</article>
+
+<article class="card" id="s9-quiz">
+<h3>확인 문제</h3>
+<div class="quiz" data-quiz>
+<p class="q">거칠기 비를 100% 로 두면(흔들림 폭이 줄지 않으면) 어떤 지형이 나오는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p><b>백색 잡음에 가까워집니다.</b> 프랙탈 지형이 지형처럼 보이는 이유는 <b>공간 주파수가 높아질수록 진폭이 작아지기</b> 때문입니다(<code class="nb">1/f</code> 잡음). 거칠기 비가 진폭 감쇠율이고, 100% 면 감쇠가 없어 모든 주파수의 진폭이 같아집니다.</p>
+<p>거칠기 비 <code class="nb">r</code> 과 프랙탈 차원 <code class="nb">D</code> 의 관계는 대략 <code class="nb">r = 2^(-H)</code>, <code class="nb">D = 3 - H</code> 입니다. 이 문서의 0.58 은 <code class="nb">H ≈ 0.786</code>, <code class="nb">D ≈ 2.21</code> — 실제 지형의 관측값(2.1~2.3)과 같은 자리입니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s9-sum">
+<h3>9부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>내용</th></tr>
+<tr><td>셀 형식</td><td class="num">1바이트 = 지형 4비트 + 높이 4비트</td></tr>
+<tr><td>난수</td><td>볼랜드 LCG, 분할 곱으로 2<sup>53</sup> 회피</td></tr>
+<tr><td>주기</td><td class="num">2³² (Hull–Dobell 세 조건 만족)</td></tr>
+<tr><td>하위 비트</td><td>k번째 비트의 주기는 2<sup>k+1</sup> — % 2 금지</td></tr>
+<tr><td>지형 생성</td><td>다이아몬드-스퀘어 65×65 → 48×48 오림</td></tr>
+<tr><td>평활</td><td class="num">3×3 두 번 — 런 1,264 → 794</td></tr>
+<tr><td>마을</td><td>고정 좌표 스탬프, 벽 먼저 문 나중</td></tr>
+<tr><td>검증</td><td>세 언어의 맵이 golden/map.txt 와 바이트 일치</td></tr>
+</table>
+</div>
+<div class="key">다음 부는 이 맵 위를 <b>걷는</b> 일입니다 — 여덟 방향, 옥타일 A*, 그리고 부분 타일 이동.</div>
+</article>
