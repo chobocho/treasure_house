@@ -71,7 +71,7 @@
     if (out && host.insertBefore) host.insertBefore(cv, out);
     else if (host.appendChild) host.appendChild(cv);
     var ctx = cv.getContext('2d');
-    var st = { cv: cv, ctx: ctx, lw: lw, lh: lh, scale: 1, draw: null };
+    var st = { cv: cv, ctx: ctx, lw: lw, lh: lh, scale: 1, draw: null, host: host };
 
     st.fit = function () {
       // clientWidth 는 패딩을 포함한다(box-sizing: border-box). 그대로 쓰면
@@ -132,11 +132,11 @@
     window.addEventListener('resize', function () {
       for (var i = 0; i < STAGES.length; i++) {
         var st = STAGES[i];
-        // 숨은 슬라이드에서는 clientWidth 가 0 이라 엉뚱한 폭이 박힌다. 건너뛴다.
         if (!st.cv || !st.cv.parentNode) continue;
-        var before = st.cv.style.width;
+        // 숨은 슬라이드에서는 clientWidth 가 0 이다. 그대로 맞추면 하한(200px)이 박히고,
+        // 다시 열어도 되맞추지 않아 그 폭이 그대로 남는다. 아예 건너뛴다.
+        if (!st.host || !st.host.clientWidth) continue;
         st.fit();
-        if (st.cv.style.width === '0px') { st.cv.style.width = before; continue; }
         if (st.draw) st.draw();
       }
     });
@@ -147,6 +147,18 @@
      PointerEvent 가 없는 환경(검증 스텁 포함)에서는 마우스 이벤트로 떨어진다. */
   function bindPointer(st, h) {
     var down = false, cv = st.cv;
+    // 포인터 이동은 초당 60~120번 온다. 그때마다 A* 를 다시 돌리고 2,304칸을 칠하면
+    // 접힌 폴드에서 프레임을 떨어뜨린다. 더럽다고 표시만 하고 한 프레임에 한 번 그린다.
+    var pending = false;
+    st.invalidate = function () {
+      if (pending || !st.draw) return;
+      if (!window.requestAnimationFrame) { st.draw(); return; }
+      pending = true;
+      window.requestAnimationFrame(function () {
+        pending = false;
+        if (st.draw) st.draw();
+      });
+    };
     function pd(e) { if (e && e.preventDefault) e.preventDefault(); }
     function onDown(e) {
       pd(e);
@@ -988,9 +1000,9 @@
     on(cRect, 'change', draw);
     on(cMask, 'change', draw);
     bindPointer(st, {
-      hover: function (p) { mx = p.x; my = p.y; draw(); },
+      hover: function (p) { mx = p.x; my = p.y; st.invalidate(); },
       down: function (p) { mx = p.x; my = p.y; draw(); },
-      move: function (p) { mx = p.x; my = p.y; draw(); }
+      move: function (p) { mx = p.x; my = p.y; st.invalidate(); }
     });
     draw();
   });
@@ -1352,7 +1364,7 @@
         if (ny + h > 8) ny = 8 - h;
         b[1] = nx; b[4] = nx + w;
         b[2] = ny; b[5] = ny + h;
-        draw();
+        st.invalidate();
       },
       up: function () { drag = null; }
     });
@@ -1773,7 +1785,7 @@
         var c = cellAt(p);
         if (!passable(goldMap(), c[0], c[1])) return;
         if (grab === 0) s = c; else g = c;
-        draw();
+        st.invalidate();
       }
     });
     draw();
