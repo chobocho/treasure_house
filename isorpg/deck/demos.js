@@ -24,9 +24,12 @@
   function fmod(a, b) { return a - b * Math.floor(a / b); }
 
   function fmt(n, k) {
-    // 지수 표기 없이 고정 소수점으로. toFixed 가 없는 값은 그냥 문자열로.
+    // 지수 표기 없이 고정 소수점으로. 다만 자릿수가 터지면 유효숫자로 돌린다 —
+    // 1.95^500 같은 값을 toFixed 로 찍으면 백 자리가 넘는 줄이 나온다.
     if (typeof n !== 'number' || !isFinite(n)) return String(n);
-    return k === undefined ? String(n) : n.toFixed(k);
+    if (k === undefined) return String(n);
+    if (n !== 0 && (Math.abs(n) >= 1e9 || Math.abs(n) < 1e-9)) return n.toPrecision(6);
+    return n.toFixed(k);
   }
   function comma(n) {
     var s = String(n), out = '', i, c = 0, neg = s.charAt(0) === '-';
