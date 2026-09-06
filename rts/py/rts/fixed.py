@@ -219,6 +219,27 @@ def xor16(a, b):
     return xor8(a // 256, b // 256) * 256 + xor8(a % 256, b % 256)
 
 
+# ── SPEC §18.4 FNV-1a 32비트 ────────────────────────────────────────────────
+FNV_OFFSET = 2166136261
+FNV_PRIME = 16777619
+
+
+def fnv1a_step(h, b):
+    """바이트 하나. XOR 은 하위 8비트만 바뀌므로 xor8 로 끝나고,
+       곱셈은 분할한다 — hl * 16777619 < 2^40 이라 53비트 가수에 담긴다."""
+    h = xor_low8(h, b)
+    hh = h // 65536
+    hl = h % 65536
+    return (hl * FNV_PRIME + (hh * FNV_PRIME % 65536) * 65536) % 4294967296
+
+
+def fnv1a(data):
+    h = FNV_OFFSET
+    for b in bytearray(data):
+        h = fnv1a_step(h, b)
+    return h
+
+
 def crc16(data):
     """poly 0x1021, init 0xFFFF, 반사 없음. crc16(b'123456789') == 0x29B1.
 

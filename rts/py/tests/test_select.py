@@ -123,9 +123,9 @@ H.check('꺼낸 만큼 준다', len(q.q[i]), SEL.ORDER_MAX - 1)
 q.push(i, (SEL.STOP, 0, 0, 0), True)
 H.check('STOP 은 큐를 비운다', q.q[i], [])
 H.check('빈 큐에서 꺼내면 None', q.pop(i), None)
-H.check('명령 종류는 일곱',
+H.check('명령 종류는 여덟 — TRAIN 만 건물에게 내린다',
         sorted([SEL.MOVE, SEL.ATTACK, SEL.ATTACK_MOVE, SEL.HARVEST,
-                SEL.BUILD, SEL.STOP, SEL.HOLD]), list(range(7)))
+                SEL.BUILD, SEL.STOP, SEL.HOLD, SEL.TRAIN]), list(range(8)))
 
 # ── SPEC §12.4 우클릭 문맥 규칙 ─────────────────────────────────────────────
 m = grid(['.....', '..*..', '.....', '.....', '.....'])

@@ -184,7 +184,11 @@ class Projectiles(object):
         return True
 
     def step(self):
-        """한 틱. 명중한 것을 (핸들, 피해, 착탄 타일, 착탄 y) 로 돌려주고 지운다."""
+        """한 틱. 명중한 것을 (핸들, 피해, 착탄 타일, 착탄 y, 종류) 로 돌려주고 지운다.
+
+           마지막 칸이 종류인 이유는 sim 이 포물선 명중에만 스플래시(§15.5)를
+           적용해야 하기 때문이다.
+        """
         hits = []
         keep = []
         for k in range(len(self.x)):
@@ -196,7 +200,7 @@ class Projectiles(object):
             if (self._tile(self.x[k], self.y[k]) == self.dest[k]
                     or self.ttl[k] <= 0):
                 hits.append((self.target[k], self.dmg[k], self.dest[k],
-                             self.y[k]))
+                             self.y[k], self.kind[k]))
             else:
                 keep.append(k)
         if len(keep) != len(self.x):
