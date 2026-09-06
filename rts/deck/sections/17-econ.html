@@ -1,11 +1,196 @@
 <article class="card section" id="s17">
 <p class="chnum">17부</p>
 <h2>경제·생산·기술 트리</h2>
-<p class="chsub">왕복 거리에서 수입률을 유도하고,<br>기술 트리를 위상 정렬한다</p>
+<p class="chsub">채집기 한 기가 버는 돈에는 상한이 있다.<br>그 상한을 식으로 쓰고, 실측과 견줘 본다</p>
 </article>
 
-<article class="card" id="s17-todo">
-<h3>경제·생산·기술 트리 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>28장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s17-loop">
+<h3>RTS 의 심장 — 채집 루프</h3>
+<p class="lead">전략게임의 긴장은 대부분 <b>돈이 모자란다</b>는 데서 옵니다. 그 돈이 어디서 오는지가 이 부의 주제입니다.</p>
+<pre class="term">SEEK    → 도달 가능한 광맥 중 가장 가까운 것을 찾는다
+TO_ORE  → 걸어간다. 닿으면 MINE
+MINE    → load += 5, 광맥 잔량 −5. 100 이 차면 TO_BASE
+TO_BASE → 반납처로 걸어간다. 닿으면 UNLOAD
+UNLOAD  → 12틱 뒤 credits += 100, load = 0, SEEK</pre>
+<p>다섯 상태짜리 FSM 하나가 이 게임 경제의 전부입니다. 그런데 이 다섯 줄에서 버그가 <b>둘</b> 나왔습니다.</p>
+</article>
+
+<article class="card" id="s17-rate">
+<h3>정리 16.1 — 수입률</h3>
+<p>왕복 거리 <code class="nb">d</code> 타일, 속도 <code class="nb">v</code> 타일/틱인 채집기 한 기의 정상 상태 수입률은</p>
+<pre class="term">rate = 적재 / ( 2·d/v  +  적재/채굴속도  +  반납틱 )    [크레딧/틱]
+        = 100 / ( 2·d/v  +  20  +  12 )</pre>
+<p>분모의 세 항이 <b>왕복 이동·채굴·반납</b>입니다.</p>
+<!--CODE file=py/rts/econ.py lang=py sym=round_trip_ticks note=세 항을 그대로 옮긴 것-->
+<div class="key"><code class="nb">d = 0</code> 이어도 <code class="nb">100/(20+12) = 3.125</code> 를 넘지 못합니다. <b>정제소를 광맥에 붙여도 상한이 있습니다.</b> 채굴과 반납에 드는 시간은 거리와 무관하니까요.</div>
+</article>
+
+<article class="card" id="s17-rate-fig">
+<h3>거리가 늘면 얼마나 주는가</h3>
+<div class="fig" data-svg="income_rate.svg"></div>
+<!--OUT file=py_prim.txt sec=12 note=여섯 조합의 총틱과 수입률-->
+<p>왕복 8타일에서 191틱, 수입률 0.5235 크레딧/틱입니다. 16타일로 늘리면 351틱, 0.2849 — <b>거리가 두 배가 되면 수입이 거의 절반</b>입니다.</p>
+<p>그래서 정제소를 어디에 짓는가가 이 게임에서 가장 값비싼 결정입니다. 17부의 AI 가 정제소 자리에만 광맥 거리 항을 넣는 이유입니다.</p>
+</article>
+
+<article class="card" id="s17-measure">
+<h3>이론과 실측이 어긋나는 만큼</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>값</th><th>출처</th></tr>
+<tr><td>이론 (d=9, v=1.2px/틱)</td><td class="num">0.3676 크레딧/틱</td><td>정리 16.1</td></tr>
+<tr><td>실측 (1,200틱 시나리오)</td><td class="num">0.3333 크레딧/틱</td><td>시험 로그</td></tr>
+<tr><td>차이</td><td class="num">−9.3 %</td><td></td></tr>
+</table>
+</div>
+<p>차이의 주범은 <b>채집기끼리의 길막</b>입니다. 네 기가 같은 광맥과 같은 정제소를 오가면 서로의 칸을 밟습니다. 14부의 예약 규칙이 그때마다 한 기를 세웁니다.</p>
+<div class="note">이 9 %를 없애려면 채집기마다 다른 광맥을 주거나 도크를 여러 개 두면 됩니다. 하지 않았습니다 — <b>길막이 보이는 것</b>이 이 덱에서는 값어치가 있으니까요. 14부의 교착 이야기와 같은 현상입니다.</div>
+</article>
+
+<article class="card" id="s17-bug1">
+<h3>버그 하나 — 수입이 0 이었다</h3>
+<p class="lead">1,200틱을 처음 돌렸을 때 플레이어 0 의 수입이 <b>게임 내내 0</b> 이었습니다. 채집기 넷은 멀쩡히 살아 있었고, 적재는 100 으로 가득 차 있었습니다.</p>
+<p>원인은 이랬습니다. 반납처로 갈 때 <b>건물 원점</b>을 목표로 명령했는데, 건물 원점은 통행 불가입니다. 그러면 §8.6 의 "가장 가까운 도달점" 규칙이 대체 목표를 고릅니다.</p>
+<pre class="term">정제소 (8,10)  ← 사령부와 병영에 둘러싸여 동쪽으로만 열림
+채집기 (6,8)   ← 북서쪽
+
+d83((6,8) → (8,10))   = 2      ← 채집기가 서 있는 칸
+d83((10,10) → (8,10)) = 2      ← 정제소 동쪽 입구
+동점 → 타일 번호가 작은 쪽이 이긴다 → (6,8)</pre>
+<p>채집기는 <b>자기가 서 있는 칸</b>을 목표로 받았고, 즉시 "도착"했고, 그런데 정제소에 닿지 않았으므로 영원히 기다렸습니다.</p>
+</article>
+
+<article class="card" id="s17-dock">
+<h3>고침 — 도크</h3>
+<!--CODE file=py/rts/econ.py lang=py sym=Econ.dock note=발자국에 접한 칸을 직접 고른다-->
+<p>건물 원점이 아니라 <b>발자국을 한 칸 둘러싼 고리</b>에서 목표를 고릅니다. 통행 가능하고 남이 예약하지 않은 칸 중 가장 가까운 것, 동점이면 타일 번호가 작은 것.</p>
+<p>빈 칸이 하나도 없으면 예약을 무시하고 다시 고릅니다 — 붐비는 기지에서 채집기가 멈추는 것보다 잠깐 밀리는 편이 낫습니다.</p>
+<div class="warn">교훈은 이렇습니다. <b>"가장 가까운 도달점" 규칙은 목표가 건물일 때 쓰면 안 됩니다.</b> 그 규칙은 "플레이어가 물 위를 클릭했다" 같은 경우를 위한 것이고, 건물처럼 <b>둘레에 붙어야 하는</b> 목표에는 도크를 따로 골라야 합니다.</div>
+</article>
+
+<article class="card" id="s17-bug2">
+<h3>버그 둘 — 바위 건너편의 광맥</h3>
+<p><code class="nb">nearest_ore</code> 가 <b>도달 가능성</b>을 보지 않았습니다. 채집기가 바위 건너편 광맥을 목표로 잡으면 같은 일이 벌어집니다 — 대체 목표가 제자리를 주고, 그 자리에 영원히 섭니다.</p>
+<!--CODE file=py/rts/econ.py lang=py sym=Econ.nearest_ore note=연결 성분으로 먼저 거른다-->
+<p>4부의 연결 성분이 여기서 값을 합니다. 라벨은 지형 버전마다 한 번만 계산되므로, 광맥마다 한 번 비교하는 것은 공짜에 가깝습니다.</p>
+<div class="key">두 버그의 모양이 같습니다 — <b>"도달할 수 없는 목표"를 "가장 가까운 도달점"으로 바꾸는 규칙이, 답으로 제자리를 줄 수 있다.</b> 그 규칙을 쓰는 자리를 전부 찾아 점검해야 했고, 그래서 시험 둘을 새로 넣었습니다.</div>
+</article>
+
+<article class="card" id="s17-queue">
+<h3>생산 큐 — 선불</h3>
+<!--CODE file=py/rts/econ.py lang=py sym=Econ.enqueue note=큐에 넣는 순간 돈이 빠진다-->
+<p>후불로 두면 "완성 시점에 돈이 없는" 상태가 생기고, 그 처리 규칙이 언어마다 미묘하게 갈릴 여지가 생깁니다. <b>결정론을 위해 게임 디자인을 고른 자리</b>입니다.</p>
+<p>취소는 100 % 환불입니다. 부분 환불로 두면 반올림 규칙을 하나 더 명세해야 합니다.</p>
+<div class="note">도스 시절 게임들은 대개 후불이거나 "진행률만큼 환불"이었습니다. 싱글 플레이에서는 문제가 없습니다 — 기계가 하나니까요. 락스텝을 하려는 순간 이런 사소한 규칙 하나하나가 명세가 됩니다.</div>
+</article>
+
+<article class="card" id="s17-supply">
+<h3>인구 상한 — 큐도 자리를 예약한다</h3>
+<p class="lead">인구 상한 10 인데 인구가 <b>16</b> 이 되었습니다.</p>
+<p>큐 다섯 칸에 유닛을 넣을 때마다 "지금 인구 + 이 유닛"만 확인했기 때문입니다. 다섯이 모두 통과하고, 다섯이 모두 완성되면 상한을 넘습니다.</p>
+<pre class="term">잘못  supply_used + cost > supply_cap        →  큐 5칸이 상한을 넘어선다
+바름  supply_used + reserved + cost > cap    →  reserved = 큐에 든 유닛의 인구 합</pre>
+<!--CODE file=py/rts/econ.py lang=py sym=Econ.reserved note=큐에 든 것도 인구를 먹는다-->
+<div class="warn">상한이 있는 척만 하는 상한은 없느니만 못합니다. 플레이어는 상한을 믿고 계획을 세우니까요.</div>
+</article>
+
+<article class="card" id="s17-tech">
+<h3>기술 트리는 DAG 다</h3>
+<div class="fig" data-svg="tech_tree.svg"></div>
+<p>노드는 유닛·건물, 간선은 "X 를 만들려면 Y 가 있어야 한다"입니다. 이 그래프가 <b>비순환</b>이어야 하고, 그것은 위상 정렬이 존재하는 것과 동치입니다.</p>
+<p>선행이 <b>둘</b>인 노드는 공장 하나뿐입니다(병영 + 발전소). 위상 정렬이 실제로 필요한 유일한 자리이고, 그래서 일부러 넣었습니다.</p>
+</article>
+
+<article class="card" id="s17-topo">
+<h3>칸 알고리즘</h3>
+<!--CODE file=py/rts/econ.py lang=py sym=topo_order note=진입차수 0 을 번호 오름차순으로 꺼낸다-->
+<p>진입차수 0 인 노드를 <b>번호 오름차순</b>으로 꺼냅니다. 순서를 고정하지 않으면 세 언어가 다른 순서를 내고, 그것이 화면에 나오는 순간 갈립니다.</p>
+<p>순환이 있으면 남은 노드가 생기고, 그때는 <b>즉시 실패</b>합니다.</p>
+<div class="key">기술 트리는 <b>데이터</b>입니다. 데이터가 잘못되면 조용히 넘어가는 것보다 터지는 편이 낫습니다. 조용히 넘어가면 "왜 전차가 안 나오지?" 를 게임 중에 알게 됩니다.</div>
+</article>
+
+<article class="card" id="s17-canbuild">
+<h3>선행은 "살아 있는가"를 본다</h3>
+<!--CODE file=py/rts/econ.py lang=py sym=Econ.can_build note=완성된 채 살아 있어야 한다-->
+<p>병영이 부서지면 보병을 못 뽑습니다. 짓는 중인 병영으로도 못 뽑습니다 — <code class="nb">hp &gt; 0</code> 만으로는 부족하고 완성 여부를 봐야 합니다.</p>
+<p>이 규칙이 <b>기지 공격의 값어치</b>를 만듭니다. 병영 하나를 부수면 상대의 보병 생산이 멈춥니다. 유닛을 죽이는 것과 다른 종류의 이득입니다.</p>
+</article>
+
+<article class="card" id="s17-place">
+<h3>배치 판정 — 4타일 규칙</h3>
+<!--CODE file=py/rts/econ.py lang=py sym=Econ.placeable note=발자국·지형·예약·기지 거리-->
+<p>4타일 규칙은 기지를 <b>한 덩어리</b>로 유지시킵니다. 그래야 AI 의 방어가 단순해지고(§17.4), 플레이어도 기지를 지킬 수 있습니다.</p>
+<p>첫 건물은 면제입니다 — 그러지 않으면 아무것도 지을 수 없으니까요.</p>
+</article>
+
+<article class="card" id="s17-shove">
+<h3>내 유닛이 막고 있으면</h3>
+<p class="lead">채집 경로 위에 건물 자리를 잡으면 배치가 <b>영원히</b> 실패합니다. 채집기가 그 칸을 계속 지나가니까요.</p>
+<p>실제로 그랬습니다. 플레이어 1 의 발전소 자리가 정제소와 광맥 사이 통로였고, 25틱 간격 다섯 번의 재시도가 전부 채집기에 막혔습니다.</p>
+<!--CODE file=py/rts/sim.py lang=py sym=Sim._shove note=밀면서 동시에 짓지는 않는다-->
+<p>발자국을 예약한 것이 <b>내 유닛뿐</b>이면, 각 유닛에게 바깥 방향부터 한 걸음 명령을 주고 이번 배치는 실패로 둡니다. 다음 시도에서 자리가 비어 있습니다.</p>
+<div class="warn">밀면서 <b>동시에</b> 짓지 않는 이유는 불변식 R 입니다(14부). 아직 그 칸에 서 있는 유닛 위에 건물을 얹으면 한 칸을 둘이 쥐게 됩니다.</div>
+</article>
+
+<article class="card" id="s17-retry">
+<h3>사람도 다시 클릭한다</h3>
+<p>시나리오 스크립트는 건설 명령을 <b>같은 자리에 다섯 번</b>(0·25·50·75·100틱) 냅니다.</p>
+<p>한 번만 내면 그 건물은 게임 내내 서지 않습니다. 사람 플레이어도 배치가 거부되면 다시 클릭합니다 — 스크립트도 그렇게 합니다.</p>
+<div class="note">이미 지어졌으면 뒤따르는 시도는 조용히 실패하고 <b>돈도 나가지 않습니다.</b> 배치 판정이 지불보다 먼저이기 때문입니다. 순서 하나가 "재시도해도 안전하다"를 보장합니다.</div>
+</article>
+
+<article class="card" id="s17-demo">
+<h3>직접 해 보기 — 기술 트리</h3>
+<div class="demo" data-demo="tech-tree">
+<h5>선행을 지우면 무엇이 잠기는가</h5>
+<div class="row">
+<button data-reset>처음으로</button>
+<label><input type="checkbox" data-topo> 위상 정렬 순서 보기</label>
+</div>
+<div class="out"></div>
+</div>
+<p>건물을 눌러 부수면 그것에 의존하는 유닛이 잠깁니다. 공장이 둘에 의존하는 유일한 노드라는 것을 확인해 보세요.</p>
+</article>
+
+<article class="card" id="s17-sum">
+<h3>17부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>수입률</td><td>거리 0 이어도 3.125 상한</td><td>정리 16.1</td></tr>
+<tr><td>실측</td><td>이론보다 9.3 % 낮다</td><td>채집기끼리의 길막</td></tr>
+<tr><td>반납</td><td>원점이 아니라 도크로</td><td>대체 목표가 제자리를 줄 수 있다</td></tr>
+<tr><td>광맥</td><td>도달 가능한 것만</td><td>같은 모양의 버그</td></tr>
+<tr><td>생산</td><td>선불 · 100 % 환불</td><td>후불은 명세할 것이 는다</td></tr>
+<tr><td>인구</td><td>큐도 자리를 예약한다</td><td>16/10 이 나왔다</td></tr>
+<tr><td>기술 트리</td><td>DAG · 칸 알고리즘 · 번호 오름차순</td><td>공장만 선행이 둘</td></tr>
+<tr><td>배치</td><td>4타일 규칙 · 막은 유닛은 비킨다</td><td>채집 경로 위의 자리</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s17-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">채집기를 두 배로 늘리면 수입도 두 배가 되는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>이론상으로는 그렇습니다. 정리 16.1 은 <b>한 기</b>의 정상 상태 수입률이고, 서로 방해하지 않는다면 합은 선형입니다.</p>
+<p>실제로는 아닙니다. 실측에서 넷이 이론값의 90.7 % 를 냈습니다. 여덟이면 더 떨어집니다 — 같은 도크, 같은 광맥 칸을 두고 예약 경쟁이 늘기 때문입니다.</p>
+<p>이것이 RTS 의 고전적 결정입니다. <b>채집기를 더 뽑을 것인가, 정제소를 하나 더 지을 것인가.</b> 전자는 수확 체감이고 후자는 300 크레딧과 건설 시간이 듭니다. 이 엔진의 숫자로는 왕복 거리를 절반으로 줄이는 편(정제소 추가)이 대개 이깁니다 — 분모의 이동 항이 지배적이니까요.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s17-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">기술 트리에 <code class="nb">발전소 → 사령부</code> 간선을 실수로 넣으면 무슨 일이 일어나는가? (사령부 → 병영 → 공장 → ... 와 함께)</p>
+<button>답 보기</button>
+<div class="a">
+<p>순환이 생깁니다. 사령부 → 병영 → 공장의 선행에 발전소가 있고, 발전소의 선행이 사령부이므로 <b>사령부 → … → 발전소 → 사령부</b> 입니다.</p>
+<p><code class="nb">topo_order()</code> 가 <code class="nb">None</code> 을 돌려주고, 그것을 확인하는 시험이 즉시 실패합니다. 게임을 돌려 보기 전에 잡힙니다.</p>
+<p>순환을 검사하지 않으면 어떻게 될까요? <code class="nb">can_build</code> 는 재귀가 아니라 <b>직계 선행만</b> 보므로 무한 루프에 빠지지는 않습니다. 대신 사령부를 지을 수 없게 되고 — 시작 건물이라 이미 있으므로 — <b>게임은 멀쩡히 돌아갑니다.</b> 그래서 더 위험합니다. 데이터의 오류가 조용히 묻히는 자리이고, 그것이 위상 정렬을 실제로 돌려 보는 이유입니다.</p>
+</div>
+</div>
 </article>
