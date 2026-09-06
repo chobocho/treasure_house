@@ -151,7 +151,7 @@ w('seed 12345 의 처음 8개 rand15: ' + ' '.join(str(r.next()) for _ in range(
 w()
 
 # ------------------------------------------------------------------ 10. 다이아몬드-스퀘어
-sec(10, '다이아몬드-스퀘어 5x5 (n=4, seed=1, scale=100, corners 50/60/70/80)')
+sec(10, '다이아몬드-스퀘어 5x5 (n=4, seed=1, scale=100, rough 58/100, corners 50/60/70/80)')
 for row in R.gen_height(4, [50, 60, 70, 80], 100, 1):
     w(' '.join('%4d' % v for v in row))
 w()

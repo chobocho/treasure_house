@@ -232,3 +232,4 @@ Doom 16.16 fixed point (`FRACBITS 16`).
 - 2026-09-06 00:44 — plan approved by the user as written (LÖVE screenshot limitation accepted, deck name and isorpg/ dir confirmed). Next: step 1 (SPEC.md + claims.md).
 - 2026-09-06 00:57 — step 1: SPEC.md(14장, 정리 3.1~8.4) + deck/claims.md(32건 검증) + 툴체인 복사(build_deck/verify_deck/chunks/ppm2png/check_figs/check_demos)
 - 2026-09-06 01:13 — step 2: 골든 벡터(prim 208줄·pick_mask·palette 256색·tiles.rle 48스프라이트·sortcase 6·script 204틱) + 파이썬 테스트 12종 RED. CORDIC 은 N=20/GUARD=8 로 오차 ±1 실측
+- 2026-09-06 01:24 — step 3a: 파이썬 엔진 8모듈 GREEN (fixed proj camera rng gamemap sortdag path raster). 옥타일 h 를 8*hi+3*lo 정확형으로 교체(내림 2회 형태는 일관성·허용성 둘 다 깨짐), 맵에 3x3 평활 2회 추가
