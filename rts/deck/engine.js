@@ -236,7 +236,7 @@ exports.RANGE = tab([[exports.INF, 1], [exports.ARCHER, 4], [exports.TANK, 3], [
     [exports.TOWER, 5]]);
 exports.RELOAD = tab([[exports.INF, 12], [exports.ARCHER, 16], [exports.TANK, 24], [exports.MORTAR, 40],
     [exports.TOWER, 20]]);
-// 16.16 px/틱. 1.5 px/틱 = 0.094 타일/틱 — 47타일 대각선에 500틱이 든다.
+// 16.16 px/틱. 1.5 px/틱 = 0.094 타일/틱 — 47타일 대각선에 752틱이 든다(대각 보정 포함, §25.4).
 exports.SPEED = tab([[exports.INF, 98304], [exports.ARCHER, 91750], [exports.TANK, 131072],
     [exports.MORTAR, 65536], [exports.HARV, 78643]]);
 exports.SIGHT = tab([[exports.INF, 4], [exports.ARCHER, 5], [exports.TANK, 5], [exports.MORTAR, 4],
