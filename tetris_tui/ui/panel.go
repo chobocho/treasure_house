@@ -18,12 +18,18 @@ const nextPreview = 3
 
 // RenderPanel 은 다음 조각·홀드·점수 패널을 그린다.
 //
+// title 은 자리 이름("1P", "AI 어려움 1승"…). 2인용에서 어느 패널이 누구 것인지
+// 알려면 이게 있어야 한다. 빈 문자열이면 줄을 차지하지 않는다.
+//
 // 폭과 높이가 **언제나 같아야** 한다. 점수가 여섯 자리가 되거나 홀드가 비었다고
 // 패널의 크기가 변하면, 옆에 붙어 있는 판이 매 프레임 좌우로 흔들린다.
 // 그래서 값이 없는 자리도 "-" 로 채우고, 미리보기는 늘 같은 개수를 그린다.
-func RenderPanel(s core.Stats, next []int, help string) string {
+func RenderPanel(title string, s core.Stats, next []int, help string) string {
 	lines := make([]string, 0, 20)
 
+	if title != "" {
+		lines = append(lines, TitleStyle.Render(title))
+	}
 	lines = append(lines, LabelStyle.Render("다음"))
 	for i := 0; i < nextPreview; i++ {
 		p := -1

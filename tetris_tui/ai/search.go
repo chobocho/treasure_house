@@ -75,39 +75,76 @@ func simReachable(b *core.Board, piece, rot, x int) bool {
 	return true
 }
 
-// Best 는 지금 판에서 가장 좋은 한 수를 고른다.
+// Snapshot 은 탐색에 필요한 판 상태를 통째로 떼어 낸 사본이다.
+//
+// 왜 필요한가. 7부에서 AI 의 탐색은 Update 바깥의 **다른 고루틴**에서 돈다(Cmd).
+// 그 고루틴이 진행 중인 *core.Game 을 들여다보면, 같은 순간 Update 가 그 판을
+// 고치고 있을 수 있다 — 자료 경쟁이고, Go 의 레이스 검출기가 잡아 준다.
+// 그래서 탐색을 시작하기 전에 필요한 것만 값으로 복사해 넘긴다.
+//
+// 판이 240바이트라 복사가 싸다. "공유하지 말고 복사하라"가 여기서는 성능 손해가 아니다.
+type Snapshot struct {
+	Board    core.Board
+	Playing  bool
+	Piece    int
+	Hold     int
+	HoldUsed bool
+	Next     int
+}
+
+// SnapshotOf 는 지금 판의 사본을 뜬다. Update 안에서 부른다.
+func SnapshotOf(g *core.Game) Snapshot {
+	hold, used := g.Hold()
+	next := g.Next(1)
+	n := -1
+	if len(next) > 0 {
+		n = next[0]
+	}
+	return Snapshot{
+		Board:    *g.Board(),
+		Playing:  g.Stats().State == core.StatePlay,
+		Piece:    g.CurrentPiece(),
+		Hold:     hold,
+		HoldUsed: used,
+		Next:     n,
+	}
+}
+
+// Best 는 지금 판에서 가장 좋은 한 수를 고른다. 사본을 떠서 BestOf 에 넘긴다.
+func (s *Searcher) Best(g *core.Game, w Weights) (Move, [FCount]float32, bool) {
+	return s.BestOf(SnapshotOf(g), w)
+}
+
+// BestOf 는 사본 위에서 가장 좋은 한 수를 고른다.
 //
 // 후보 = (홀드 쓸까 말까) × (회전 4) × (x −3‥9) ≈ 최대 104개, 실제 유효한 건 30~80개.
 // 1수 앞만 본다. 2수 앞을 보면 후보가 1만 개로 늘고, TUI 의 한 프레임 안에 안 끝난다.
 //
 // 동점 처리가 중요하다: `s > best` 로 비교하므로 **먼저 본 후보가 이긴다**.
 // 이 규칙이 다르면 가중치가 같아도 다른 수가 나오고, 판이 통째로 갈라진다.
-func (s *Searcher) Best(g *core.Game, w Weights) (Move, [FCount]float32, bool) {
+func (s *Searcher) BestOf(snap Snapshot, w Weights) (Move, [FCount]float32, bool) {
 	var feat [FCount]float32
-	if g.Stats().State != core.StatePlay {
+	if !snap.Playing {
 		return Move{}, feat, false
 	}
-	board := g.Board()
+	board := &snap.Board
 
 	var best Move
 	var bestScore float32
 	have := false
 
-	holdPiece, holdUsed := g.Hold()
-	next := g.Next(1)
-
 	for useHold := 0; useHold < 2; useHold++ {
 		var piece int
 		if useHold == 0 {
-			piece = g.CurrentPiece()
+			piece = snap.Piece
 		} else {
-			if holdUsed {
+			if snap.HoldUsed {
 				continue // 조각당 홀드 1회
 			}
 			// 홀드가 비어 있으면 홀드는 "다음 조각을 당겨 오는" 동작이 된다.
-			piece = holdPiece
+			piece = snap.Hold
 			if piece < 0 {
-				piece = next[0]
+				piece = snap.Next
 			}
 		}
 		for rot := 0; rot < 4; rot++ {

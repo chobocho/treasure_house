@@ -33,7 +33,7 @@ func (m Model) View() tea.View {
 
 	s := m.g.Stats()
 	board := ui.RenderBoard(m.g.Cells(), m.g.Overlay(), "1인용", s.State == core.StateOver)
-	panel := ui.RenderPanel(s, m.g.Next(3), "")
+	panel := ui.RenderPanel("1인용", s, m.g.Next(3), "")
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, board, panel)
 
