@@ -80,7 +80,9 @@ def main():
                 continue
             stats['out'] += 1
             spec = re.search(r'data-lines="([^"]+)"', attrs)
-            f = os.path.join(OUTDIR, o.group(1))
+            f = (os.path.join(BASE, o.group(1))
+                 if o.group(1).startswith('golden/')
+                 else os.path.join(OUTDIR, o.group(1)))
             if not os.path.exists(f):
                 stats['out_bad'] += 1
                 problems.append(('출력 없음', sid, o.group(1)))
