@@ -9,6 +9,8 @@
    골든 데이터는 ts/src/web/data.ts 에 문자열로 박혀 있다. 스텁이 불리면 즉시 터진다 —
    조용히 빈 값을 돌려주는 것보다 낫다.
 
+   묶은 결과가 정말 같은 엔진인지는 tools/check_web.js 가 확인한다.
+
    실행:  cd ts && ./node_modules/.bin/tsc -p tsconfig.web.json
           python3 tools/bundle_web.py
 """
@@ -20,9 +22,13 @@ DIST = os.path.join(BASE, 'ts', 'distweb')
 OUT = os.path.join(BASE, 'deck', 'engine.js')
 
 # 순서는 상관없다 — 로더가 필요할 때 평가한다. 읽기 좋으라고 의존 순서로 둔다.
-MODULES = ['fixed', 'rng', 'tmap', 'mapgen', 'circle', 'spatial', 'select',
-           'path', 'hpa', 'jps', 'flow', 'move', 'fog', 'combat', 'econ', 'ai',
-           'sim', 'net', 'replay', 'speaker', 'raster', 'render',
+# 엔진 24개 전부를 넣는다. 데모가 쓰지 않는 것(mapgen·net·replay·speaker)도
+# 넣는 이유는 하나다 — "덱 안에서 도는 것은 ts/src 전부"라는 말이 참이어야 한다.
+# main.ts 만 없다. 그것은 fs 로 골든 파일을 읽는 CLI 이고, 브라우저에는 파일이 없다.
+MODULES = ['fmt', 'const', 'fixed', 'rng', 'tmap', 'mapgen', 'circle',
+           'spatial', 'select', 'path', 'hpa', 'jps', 'flow', 'move', 'fog',
+           'combat', 'econ', 'ai', 'sim', 'net', 'replay', 'speaker',
+           'raster', 'render',
            'web/data', 'web/canvas', 'web/minirts']
 
 LOADER = os.path.join(BASE, 'deck', 'base')

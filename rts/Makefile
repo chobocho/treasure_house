@@ -69,8 +69,9 @@ ts:
 
 web:
 	@mkdir -p $(OUT)
-	cd $(ROOT)/ts && $(TSC) -p tsconfig.web.json
+	# 데이터 생성이 먼저다 — tsc 가 낡은 web/data.ts 를 묶으면 골든과 어긋난다
 	cd $(ROOT) && $(PY) tools/gen_webdata.py
+	cd $(ROOT)/ts && $(TSC) -p tsconfig.web.json
 	cd $(ROOT) && $(PY) tools/bundle_web.py
 	@set -o pipefail; cd $(ROOT) && $(NODE) tools/check_web.js | tee $(OUT)/check_web.txt
 
