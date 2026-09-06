@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<!-- deck-bookmark: 덱 엔진이 replaceState로 주소를 바꾸기 전에 진입 해시를 잡아둔다. 반드시 <head> 최상단. -->
+<script>window.__deckInitHash=location.hash;</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- ▼▼▼ 새 덱을 만들 때 여기 3줄만 바꾸면 됩니다 ▼▼▼ -->
+<title>도스 RTS 전략게임 수학 해부 — 경로탐색·안개·락스텝</title>
+<meta name="description" content="도스 시절 실시간 전략게임을 떠받친 수학 — 오토타일 비트마스크, 16.16 고정소수점과 옥타일 거리, A*·JPS·HPA*·흐름장, 참조 카운트 안개, 란체스터 법칙, 결정론 락스텝 동기화를 파이썬·루아·타입스크립트 세 언어의 실행되는 전체 소스로">
+<style>
+/* ============================================================
+   1. 테마 — 색을 바꾸려면 이 블록만 고치면 된다
+   ============================================================ */
+:root {
+  --bg1: #f1ece0;          /* 배경 그라디언트 시작 — 색 바랜 매뉴얼 종이 */
+  --bg2: #e0d6c2;          /* 배경 그라디언트 중간 */
+  --bg3: #c9bda4;          /* 배경 그라디언트 끝 */
+  --accent: #8a5a2b;       /* 주 강조색 (버튼·테두리·번호) — 흙길 */
+  --accent2: #5c3a18;      /* 제목용 진한 강조색 */
+  --text: #2a2118;
+  --muted: #6b5b46;
+  --border: rgba(138, 90, 43, 0.30);
+  --panel: rgba(255, 253, 248, 0.94);
+  --code-bg: #f6f1e6;
+  --code-border: rgba(138, 90, 43, 0.20);
+  --ok: #2e9e5b;           /* 좋은 예 / 성공 */
+  --warn: #d97706;         /* 주의 */
+  --bad: #cb2c2c;          /* 나쁜 예 / 오류 */
+  --special: #7c3aed;      /* 핵심 강조 */
+}
+
+/* ============================================================
+   2. 기본 골격
+   ============================================================ */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; height: 100%; }
+/* ⚠ 슬라이드 모드 body 높이는 100vh/100dvh 금지 — 삼성 인터넷이 하단 툴바를
+   제외하지 않고 계산해 내비가 본문을 가린다. %(레이아웃 뷰포트) + min-height:0 을 쓴다. */
+body {
+  margin: 0;
+  height: 100%; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+               "Malgun Gothic", "Noto Sans KR", sans-serif;
+  color: var(--text);
+  background: linear-gradient(160deg, var(--bg1) 0%, var(--bg2) 60%, var(--bg3) 100%);
+  background-attachment: scroll;
+  line-height: 1.7;
+  word-break: keep-all;          /* 한국어 어절 단위 줄바꿈 */
+}
+
+/* 진행 막대 */
+#bar {
+  flex: none; height: 3px; width: 0%;
+  background: linear-gradient(90deg, var(--accent), #7aa8e0);
+  transition: width .25s;
+}
+
+/* 상단 바 */
+header.deck {
+  flex: none; position: relative; z-index: 10;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,.86); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+  padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+}
+header.deck .home { text-decoration: none; font-size: 1.05em; flex: none; }
+header.deck .brand {
+  font-weight: 700; color: var(--accent2); white-space: nowrap;
+  font-size: .95em; overflow: hidden; text-overflow: ellipsis;
+}
+header.deck select {
+  flex: 1; min-width: 0; background: #fff; color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px;
+  font-size: .9em; max-width: 420px; margin-left: auto;
+}
+#tocBtn {
+  flex: none; background: #fff; border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; font-size: .85em; padding: 7px 10px; cursor: pointer;
+}
+
+/* ============================================================
+   3. 슬라이드 무대 — main > article 하나가 슬라이드 한 장
+   ============================================================ */
+main.prose {
+  flex: 1; width: 100%; margin: 0; min-width: 0;
+  overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 14px clamp(10px, 3vw, 24px) 18px;
+}
+main.prose > article { display: none; }
+main.prose > article.card {
+  position: relative; max-width: 900px; margin: 14px auto;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 16px; padding: clamp(16px, 3.5vw, 34px);
+  box-shadow: 0 4px 18px rgba(8,64,110,.08);
+  backdrop-filter: blur(6px);
+}
+main.prose > article.on { display: block; animation: fade .2s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+/* 부(部) 표지 */
+main.prose article.section {
+  background: linear-gradient(145deg, #dde8f5, #c3d5ea);
+  border-color: #8fb0d4; padding-top: 30px; padding-bottom: 30px;
+}
+
+/* 제목 — .pno(페이지 번호)가 절대 배치라 오른쪽 여백 64px 필수 */
+main.prose h1, main.prose h2, main.prose h3, main.prose h4 { line-height: 1.35; }
+main.prose article > h1, main.prose article > h2, main.prose article > h3 {
+  padding-right: 64px; overflow-wrap: break-word;
+}
+main.prose article h4 { padding-right: 8px; }
+main.prose h1 {
+  font-size: clamp(1.6rem, 4vw, 2.3rem); margin: .1em 0 .5em;
+  background: linear-gradient(90deg, var(--accent), #6d9bd1, var(--accent2));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+main.prose h2 { font-size: clamp(1.3rem, 3vw, 1.7rem); margin: .2em 0 .5em; color: var(--accent2); }
+main.prose h3 { font-size: 1.2rem; margin: .1em 0 .5em; color: var(--accent2); }
+main.prose h4 { font-size: 1.02rem; margin: 1.1em 0 .3em; }
+main.prose p { margin: .7em 0; }
+main.prose ul, main.prose ol { padding-left: 1.4em; }
+main.prose li { margin: .3em 0; }
+main.prose a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--border); }
+main.prose hr { border: none; border-top: 2px dashed var(--border); margin: 1.6em 0; }
+main.prose blockquote {
+  margin: 1em 0; padding: 10px 18px; border-left: 4px solid var(--accent);
+  background: rgba(58,92,150,.07); border-radius: 0 10px 10px 0; color: var(--muted);
+}
+.lead { font-size: 1.05em; }
+.pno {
+  position: absolute; top: 10px; right: 14px; font-size: 11px;
+  color: var(--muted); font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace;
+}
+.chnum { color: var(--accent2); font-weight: bold; letter-spacing: .12em; font-size: .85em; margin: 0 0 4px; }
+.chnum + h1, .chnum + h2 { margin-top: 0; }
+.chsub { color: var(--muted); margin: 8px 0 0; }
+.cap { color: var(--muted); font-size: .9em; margin: 8px 0 4px; }
+.cap a, .chsub a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+/* 표지 */
+article.cover h1 { font-size: clamp(1.7rem, 5.2vw, 2.7rem); }
+.cover .sub { color: var(--muted); font-size: 1.02em; margin-top: 6px; }
+.cover .cq {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 84px; height: 84px; border-radius: 50%; background: var(--accent2); color: #fff;
+  font-weight: 800; font-size: 1.5rem; font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; letter-spacing: -.02em;
+  box-shadow: 0 6px 18px rgba(35,55,92,.42), inset 0 0 0 6px rgba(255,255,255,.14); margin-bottom: 6px;
+}
+
+/* ============================================================
+   4. 코드
+   ============================================================ */
+main.prose :not(pre) > code {
+  background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 6px;
+  padding: 1px 6px; font-size: .9em; color: #1c4e78;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace;
+  overflow-wrap: break-word;   /* ⚠ anywhere 금지: 짧은 식별자가 낱말 중간에서 갈라진다 */
+}
+code.nb { white-space: nowrap; }  /* 짧은(≈18자 이하) 인라인 코드에 붙여 분리 방지 */
+main.prose pre {
+  background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 12px;
+  padding: 16px 18px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  font-size: .88rem; line-height: 1.55;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+}
+main.prose pre code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace;
+  background: none; border: none; padding: 0; color: #143a52;
+}
+main.prose pre, main.prose code, .term, .cerr, .demo .out, .pkgtree, .sig {
+  tab-size: 4; -moz-tab-size: 4;
+}
+/* 하이라이터가 붙이는 토큰 클래스 */
+code .cm { color: #7e8a99; font-style: italic; }   /* 주석 */
+code .st { color: #1e7043; }                       /* 문자열 */
+code .kw { color: #2b4d85; font-weight: 600; }     /* 키워드 */
+code .fn { color: #a45a04; }                       /* 함수 호출 */
+code .nu { color: #6026c9; }                       /* 숫자 */
+code .hd { color: #a45a04; font-weight: 700; }     /* HTTP 헤더 */
+/* 코드 블록 파일명 라벨 */
+.fname {
+  display: inline-block; font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .78rem;
+  color: var(--muted); background: rgba(58,92,150,.08); border: 1px solid var(--code-border);
+  border-bottom: none; border-radius: 8px 8px 0 0; padding: 2px 10px; margin: 10px 0 0;
+}
+.fname + pre { border-radius: 0 10px 10px 10px; margin-top: 0; }
+
+/* ============================================================
+   5. 콜아웃 · 표 · 목록
+   ============================================================ */
+.note, .tip, .warn, .key {
+  border-radius: 10px; padding: 10px 14px; margin: 12px 0;
+  border-left: 4px solid var(--accent); background: rgba(58,92,150,.08);
+  font-size: .95em; overflow-wrap: break-word;
+}
+.tip  { border-left-color: var(--ok);      background: rgba(46,158,91,.09); }
+.warn { border-left-color: var(--warn);    background: rgba(217,119,6,.10); }
+.key  { border-left-color: var(--special); background: rgba(124,58,237,.09); }
+.note b { color: var(--accent2); }
+.tip b  { color: #217a46; }
+.warn b { color: #a45a04; }
+.key b  { color: #6026c9; }
+
+/* 표는 반드시 .tblwrap 으로 감쌀 것 — 좁은 화면에서 카드 밖으로 잘리는 것을 막는다 */
+.tblwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1.2em 0; }
+.tblwrap table { margin: 0; }
+.kv { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 10px 0; }
+.kv th, .kv td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+.kv th { background: rgba(58,92,150,.10); }
+/* ⚠ th 에 white-space:nowrap 을 주지 말 것 — 이름 여러 개가 든 칸이 한 줄을 통째로 차지해
+   다른 열을 화면 밖으로 밀어낸다. 이름마다 <code> 칩을 따로 주는 편이 낫다. */
+
+/* 번호 매겨진 단계 목록 */
+.steps { counter-reset: st; list-style: none; padding-left: 0; margin: 12px 0; }
+.steps > li { counter-increment: st; position: relative; padding-left: 34px; margin: 8px 0; }
+.steps > li::before {
+  content: counter(st); position: absolute; left: 0; top: 1px;
+  width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff;
+  font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+
+/* 배지 */
+.badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .74rem;
+  font-weight: 700; background: rgba(58,92,150,.14); color: var(--accent2);
+  margin-right: 6px; vertical-align: middle;
+}
+.badge.ok  { background: rgba(46,158,91,.16); color: #1e7043; }
+.badge.err { background: rgba(203,44,44,.14); color: #a52020; }
+.badge.new { background: rgba(124,58,237,.14); color: #6026c9; }
+
+/* 인라인 값 칩 */
+.chip {
+  display: inline-block; font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .8rem;
+  border: 1px solid var(--code-border); background: var(--code-bg); border-radius: 5px;
+  padding: 0 6px; margin: 0 2px;
+}
+
+/* ============================================================
+   6. 레이아웃 컴포넌트 (그리드·비교 카드)
+   ============================================================ */
+.g2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin: 12px 0; }
+.g3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin: 12px 0; }
+.g2 > div, .g3 > div { min-width: 0; }
+.g2 pre, .g3 pre { margin: 0; }
+
+.cmp { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
+.cmp > h5 {
+  margin: 0; padding: 6px 12px; font-size: .85rem; letter-spacing: .02em;
+  background: rgba(58,92,150,.12); color: var(--accent2); border-bottom: 1px solid var(--border);
+}
+.cmp.bad > h5  { background: rgba(203,44,44,.12); color: #a52020; }
+.cmp.good > h5 { background: rgba(46,158,91,.14); color: #1e7043; }
+.cmp pre { border: none; border-radius: 0; background: var(--code-bg); }
+.cmp p { margin: 8px 12px; font-size: .92em; color: var(--muted); }
+.cmp .kv { margin: 0; font-size: .86rem; }
+
+/* ============================================================
+   7. 도식 — 박스 문자(┌─│)는 폴드7에서 깨지므로 CSS 도식으로 그린다
+   ============================================================ */
+.flow, .pipe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.flow .box, .pipe .st {
+  border: 1px solid var(--border); background: #fff; border-radius: 10px;
+  padding: 6px 12px; font-size: .88rem; font-weight: 600; color: var(--accent2);
+}
+.flow .box.dim { color: var(--muted); font-weight: 500; }
+.flow .arr, .pipe .arr { color: var(--muted); font-weight: 700; }
+.pipe .ext2 { font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; color: var(--muted); font-size: .78rem; }
+
+/* 셀 배열 (배열·바이트·큐 그리기) */
+.arr { display: flex; flex-wrap: wrap; gap: 2px; margin: 8px 0; }
+.arr .c {
+  min-width: 34px; text-align: center; padding: 5px 6px; font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace;
+  font-size: .8rem; border: 1px solid var(--code-border); background: var(--code-bg); border-radius: 5px;
+}
+.arr .c.in { border-color: var(--accent); background: rgba(58,92,150,.14); font-weight: 700; color: var(--accent2); }
+.arr .c.dead { opacity: .4; text-decoration: line-through; }
+.arr .idx { font-size: .68rem; color: var(--muted); display: block; line-height: 1.1; }
+
+/* 스택 (아래에서 위로 쌓임) */
+.stack { display: flex; flex-direction: column-reverse; gap: 3px; margin: 10px 0; max-width: 260px; }
+.stack .cell {
+  border: 1px solid var(--code-border); background: var(--code-bg); border-radius: 6px;
+  padding: 4px 10px; font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .82rem; text-align: center;
+}
+.stack .cell.top { border-color: var(--accent); background: rgba(58,92,150,.12); font-weight: 700; }
+.stack .lbl { font-size: .74rem; color: var(--muted); text-align: center; }
+
+/* 트리 / 들여쓴 구조 (공백으로 계층을 표현) */
+.pkgtree {
+  margin: 12px 0; padding: 10px 14px; border-radius: 10px; background: var(--code-bg);
+  border: 1px solid var(--code-border); font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .82rem;
+  line-height: 1.75; overflow-x: auto; white-space: pre;
+}
+.pkgtree b { color: var(--accent2); }
+.pkgtree i { color: var(--muted); font-style: normal; }
+
+/* 시그니처 해부 — 밑줄 + 라벨 */
+.sig {
+  margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: var(--code-bg);
+  border: 1px solid var(--code-border); font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .88rem;
+  overflow-x: auto; white-space: pre; line-height: 2.1;
+}
+.sig u { text-decoration: none; border-bottom: 2px solid var(--accent); padding-bottom: 1px; }
+.sig .lbl {
+  display: inline-block; font-size: .66rem; font-family: system-ui, sans-serif;
+  background: var(--accent); color: #fff; border-radius: 4px; padding: 0 5px; margin-left: 4px;
+  vertical-align: middle; font-weight: 700;
+}
+
+/* 좌·우 대응 도식 */
+.satisfy { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 8px; align-items: center; margin: 12px 0; }
+.satisfy .bx {
+  border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; background: #fff;
+  font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .8rem; line-height: 1.6; min-width: 0; overflow-x: auto;
+}
+.satisfy .bx h6 { margin: 0 0 5px; font-family: system-ui, sans-serif; font-size: .74rem; color: var(--muted); }
+.satisfy .mid { font-size: 1.1rem; color: var(--accent); font-weight: 700; }
+
+/* ============================================================
+   8. 터미널 · 오류 박스
+   ============================================================ */
+/* ⚠ .term · .cerr 는 <pre> 에 붙는다. `main.prose pre`(0,1,2)가 클래스 하나(0,1,0)보다
+   우선순위가 높아 배경이 밝은 코드 배경으로 덮이면 글자가 안 보인다. 선택자를 반드시 더 길게 쓸 것. */
+main.prose pre.term, .term {
+  margin: 10px 0; padding: 12px 14px; border-radius: 10px;
+  background: #10222f; color: #d6e9f5; border: 1px solid #0b1a24;
+  font-family: Consolas, "Liberation Mono","D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .84rem;
+  line-height: 1.55; overflow-x: auto; white-space: pre; -webkit-overflow-scrolling: touch;
+  box-shadow: none;   /* main.prose pre 의 흰색 inset 하이라이트가 어두운 배경에 줄로 남는다 */
+}
+.term .p { color: #64d18a; }   /* 프롬프트 */
+.term .c { color: #7fa8c0; }   /* 주석 */
+.term .r { color: #ff9d9d; }   /* 오류 */
+.term .g { color: #9ec8f0; }   /* 강조 */
+main.prose pre.cerr, .cerr {
+  margin: 10px 0; padding: 10px 12px; border-radius: 10px;
+  background: #fff4f4; border: 1px solid #f0c4c4; color: #8a2020;
+  font-family: Consolas, "Liberation Mono","D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .84rem;
+  line-height: 1.5; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.cerr b { color: #c62828; }
+
+/* ============================================================
+   9. 인터랙티브 데모 · 퀴즈
+   ============================================================ */
+.demo {
+  margin: 12px 0; border: 1px solid var(--border); border-radius: 12px;
+  background: rgba(255,255,255,.85); padding: 12px;
+}
+.demo > h5 { margin: 0 0 8px; font-size: .88rem; color: var(--accent2); }
+.demo .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.demo button {
+  border: 1px solid var(--border); background: var(--accent); color: #fff;
+  border-radius: 9px; padding: 7px 13px; font-size: .87rem; font-weight: 600;
+  cursor: pointer; min-height: 36px;
+}
+.demo button.sec { background: #fff; color: var(--accent2); }
+.demo button:active { transform: translateY(1px); }
+.demo input[type=text], .demo input[type=number], .demo select {
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px;
+  font-size: .87rem; background: #fff; color: var(--text); min-width: 0; max-width: 190px;
+  font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace;
+}
+.demo .out {
+  margin-top: 8px; padding: 10px 12px; border-radius: 9px; background: #10222f; color: #d6e9f5;
+  font-family: Consolas, "Liberation Mono","D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-size: .82rem; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere; min-height: 2.6em;
+}
+.demo .out .ok  { color: #7ee2a8; }
+.demo .out .bad { color: #ff9d9d; }
+.demo .out .dim { color: #7fa8c0; }
+
+.quiz .q { font-weight: 700; color: var(--accent2); margin-bottom: 6px; }
+.quiz .a {
+  display: none; margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+  background: rgba(46,158,91,.09); border-left: 4px solid var(--ok); font-size: .95em;
+}
+.quiz.open .a { display: block; }
+
+/* ============================================================
+   10. 하단 내비 · 목차 오버레이
+   ============================================================ */
+nav#deckNav {
+  /* 본문 흐름 안의 바닥 바 — 오버레이가 아니라서 본문 텍스트를 가리지 않는다.
+     sticky 는 책갈피 셸의 bottomInset() 감지 조건이므로 유지할 것. */
+  flex: none; position: sticky; bottom: 0; z-index: 20;
+  display: flex; gap: 10px; justify-content: center; align-items: center;
+  padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: rgba(255,255,255,.90); backdrop-filter: blur(6px);
+  border-top: 1px solid var(--border);
+}
+nav#deckNav button {
+  min-width: 52px; min-height: 40px; border-radius: 10px; border: 1px solid var(--border);
+  background: rgba(255,255,255,.94); color: var(--text); font-size: 15px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(8,64,110,.12);
+}
+nav#deckNav button:disabled { opacity: .35; }
+#counter {
+  font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums;
+  min-width: 5.5em; text-align: center;
+}
+#deckToc {
+  position: fixed; inset: 0; z-index: 40; display: none; overflow-y: auto;
+  background: rgba(240,245,252,.97);
+  padding: 16px max(16px, env(safe-area-inset-right)) 76px max(16px, env(safe-area-inset-left));
+}
+#deckToc.on { display: block; }
+#deckToc h3 { margin: 4px 0 12px; color: var(--accent2); }
+.tocsec { margin-bottom: 14px; }
+.tocsec h4 {
+  margin: 4px 0 6px; font-size: 13px; color: var(--accent2);
+  position: sticky; top: -16px; background: rgba(240,245,252,.97); padding: 4px 0;
+}
+.tocsec a {
+  display: block; color: var(--text); text-decoration: none; font-size: 13.5px;
+  padding: 4px 8px; border-radius: 8px;
+}
+.tocsec a:hover, .tocsec a:focus { background: rgba(58,92,150,.12); }
+.tocsec a b {
+  color: var(--muted); font-family: Consolas,"D2Coding","Nanum Gothic Coding","Noto Sans Mono CJK KR","Noto Sans Mono","DejaVu Sans Mono",monospace; font-weight: 600;
+  display: inline-block; min-width: 3.2em;
+}
+#tocClose {
+  position: fixed; right: max(16px, env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 41;
+  background: var(--accent); color: #fff; border: none; border-radius: 10px;
+  padding: 10px 16px; font-size: 14px; cursor: pointer;
+}
+
+/* ============================================================
+   11. 반응형 — 폴더블(갤럭시 폴드7) · 좁은 화면 · 인쇄
+   ============================================================ */
+/* 힌지로 화면이 둘로 갈릴 때는 다단 레이아웃을 전부 1단으로 */
+@media (horizontal-viewport-segments: 2), (spanning: single-fold-vertical) {
+  main.prose > article.card { max-width: 96%; }
+  .g2, .g3, .satisfy { grid-template-columns: minmax(0,1fr); }
+  .satisfy .mid { display: block; transform: rotate(-90deg); }
+  .sig { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 2.4; }
+}
+@media (max-width: 620px) {
+  .g2, .g3, .satisfy { grid-template-columns: minmax(0,1fr); }
+  .satisfy .mid { display: block; transform: rotate(-90deg); }
+  .sig { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 2.4; }
+}
+@media (max-width: 420px) {
+  header.deck .brand { font-size: .8em; }
+  main.prose { padding-left: 8px; padding-right: 8px; }
+  main.prose > article.card { padding: 14px 12px; }
+  main.prose pre { font-size: .8rem; padding: 12px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  main.prose > article.on { animation: none; }
+  html { scroll-behavior: auto; }
+  #bar { transition: none; }
+}
+@media print {
+  body { height: auto; overflow: visible; display: block; }
+  main.prose { overflow: visible; padding: 0; }
+  main.prose > article { display: block !important; page-break-after: always; }
+  #bar, header.deck, nav#deckNav, #deckToc { display: none !important; }
+}
+
+/* ============================================================
+   9. 이 덱 전용 추가 스타일
+   ============================================================ */
+/* 320x200 화면 캡처 — 확대해도 픽셀이 뭉개지지 않게 */
+.shot {
+  display: block; margin: 10px auto; max-width: 100%;
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  border: 2px solid var(--accent2); border-radius: 4px;
+  background: #000;
+}
+.shotcap { text-align: center; font-size: .82em; color: var(--muted); margin: -4px 0 10px; }
+/* 소스 파일 라벨 — 파일명 + 줄 번호 범위 */
+.src {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline;
+  font-size: .82em; margin: 10px 0 -6px;
+}
+.src b { color: var(--accent2); font-family: ui-monospace, "DejaVu Sans Mono", monospace; }
+.src span { color: var(--muted); }
+.src .ln {
+  font-family: ui-monospace, "DejaVu Sans Mono", monospace;
+  background: var(--code-bg); border: 1px solid var(--code-border);
+  border-radius: 5px; padding: 0 6px;
+}
+/* 세 언어 비교 — 좁은 화면에서는 세로로 쌓인다 */
+.tri { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 10px 0; }
+@media (min-width: 720px) { .tri { grid-template-columns: 1fr 1fr 1fr; } }
+.tri > div { min-width: 0; }
+.tri h6 {
+  margin: 0 0 4px; font-size: .8em; letter-spacing: .04em;
+  color: var(--accent2); text-transform: uppercase;
+}
+/* 인라인 SVG 도해 */
+svg.diag { display: block; width: 100%; height: auto; margin: 10px 0; }
+svg.diag text { font-family: -apple-system, "Malgun Gothic", sans-serif; font-size: 11px; fill: var(--text); }
+svg.diag .tl { fill: #e6dcc6; stroke: var(--accent); stroke-width: 1.2; }
+svg.diag .tl.on { fill: #f4d98a; }
+svg.diag .tl.hot { fill: #e8a37a; }
+svg.diag .tl.dim { fill: #d6cdb8; }
+svg.diag .tl.cool { fill: #b9cbdc; }
+svg.diag .tl.none { fill: none; stroke-dasharray: 4 3; }
+svg.diag .gd { stroke: rgba(138,90,43,.35); stroke-width: .8; fill: none; }
+svg.diag .lbl { font-size: 9px; fill: var(--muted); }
+svg.diag .ax { stroke: #b04a2a; stroke-width: 1.4; fill: none; }
+/* 커버리지 표에서 숫자 열 오른쪽 정렬 */
+table.kv td.num, table.kv th.num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+
+<!-- ===== 상단 바 : brand 와 select 안의 목록만 바꾸면 된다 ===== -->
+<header class="deck">
+  <a class="home" href="./index.html" aria-label="보물창고">🏰</a>
+  <span class="brand">◆ 도스 RTS 전략게임 수학 해부</span>
+  <select id="nav" aria-label="챕터 이동">
+<!--NAV-->
+  </select>
+  <button id="tocBtn" aria-label="목차 열기">☰</button>
+</header>
+
+<!-- ============================================================
+     본문 : main > article 하나가 슬라이드 한 장이다.
+       · class="card"            일반 슬라이드
+       · class="card section"    부(部) 표지 — 목차의 그룹을 새로 연다
+       · class="card section cover"  덱 표지
+       · id 는 필수 (해시 내비게이션·목차·책갈피가 id 로 슬라이드를 찾는다)
+       · 페이지 번호는 JS 가 자동으로 붙인다 — 절대 손으로 쓰지 말 것
+     ============================================================ -->

@@ -322,3 +322,16 @@ prime 16777619.
 ## Progress log
 (append below: `- YYYY-MM-DD HH:MM — step N: what, commit hash`)
 - 2026-09-06 05:42 — plan approved by the user as written (320×200/16×16, deck name, rts/ dir, LÖVE no-screenshot limitation accepted). Next: step 1 (SPEC.md + claims.md).
+- 2026-09-06 06:05 — step 1 done: `SPEC.md` (2,022 lines, §0–§25, 29 theorems), `deck/claims.md`
+  (32 claims verified by WebSearch: 21 확인 / 6 부분 확인 / 5 정정), tooling copied from isorpg
+  (`build_deck.py`, `verify_deck.py`, `chunks.py`, base head/tail, `ppm2png.py`, `check_figs.sh`,
+  `check_demos.js`, `gen_fullsrc.py`, `bundle_web.py`, `check_web.js` — renamed to rts/`__rts`),
+  `Makefile`, and the 28-section skeleton. Deck builds: **56 slides, 89 KB, 0 errors**, verify clean.
+  Ledger corrections folded into SPEC: WC2 damage formula is officially documented
+  (max = basic − armour + pierce, actual = 50–100 % of max) so §15.2 now uses it instead of an
+  invented rule; Borland LCG modulus is disputed (2^32 vs 2^31) so §3.1 states the caveat;
+  PIT 1,193,182 Hz is a rounded value. **임진록 is a Windows game, not DOS** — part 2 must not
+  call it a DOS title; 충무공전 has only namu.wiki as a source. Bettner is the first author of
+  "1500 Archers", not Terrano. Dune II / Warcraft I tile pixel sizes could NOT be confirmed —
+  do not state them as fact in part 2.
+  Next: step 2 (golden generators + `golden/*` + python tests, RED).
