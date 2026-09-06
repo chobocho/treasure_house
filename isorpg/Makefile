@@ -8,6 +8,7 @@
 #   make parity   prim/trace/렌더 결과가 세 언어에서 바이트 단위로 같은지
 #   make bench    성능 비교
 #   make frames   덱에 실을 프레임 PPM/PNG
+#   make shots    pygame 헤드리스 스크린샷 (out/shots/*.png) + PPM 대조 검사
 #   make golden   골든 파일 재생성 (바뀌면 세 언어를 전부 다시 맞춰야 한다)
 
 SHELL   := /bin/bash
@@ -23,7 +24,7 @@ TSC     := $(ROOT)/ts/node_modules/.bin/tsc
 PYTESTS := test_fixed test_proj test_sort test_map test_path test_raster \
            test_los test_dice test_save test_prim test_trace test_engine
 
-.PHONY: all py lua love ts parity bench frames golden clean verify-log
+.PHONY: all py lua love ts parity bench frames shots golden clean verify-log
 
 all: py lua ts parity
 	@echo '── 전부 통과 ──'
@@ -89,6 +90,10 @@ frames:
 	  $(PY) -m isorpg.main render $(OUT)/frame_$$s.ppm $$s; done
 	cd $(ROOT) && for s in 1 25 45 83 97 146 194; do \
 	  $(PY) tools/ppm2png.py $(OUT)/frame_$$s.ppm $(OUT)/frame_$$s.png 2; done
+
+shots:
+	@mkdir -p $(OUT)/shots
+	@set -o pipefail; cd $(ROOT)/py && $(PY) -m isorpg_pygame.shots | tee $(OUT)/shots.txt
 
 golden:
 	cd $(ROOT) && $(PY) tools/gen_prim.py

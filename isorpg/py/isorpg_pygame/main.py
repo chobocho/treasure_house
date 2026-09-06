@@ -106,9 +106,9 @@ class Screen(object):
        인덱싱이 붙어 18.2 Hz 도 못 지킨다. 이 경로는 memcpy 한 번이다.
        (numpy 가 없는 환경이라 surfarray 는 쓸 수 없다 — 아래 upload 주석 참조.)
     """
-    __slots__ = ('surf', 'base_pal', '_phase')
+    __slots__ = ('surf', 'scaled', 'base_pal', '_phase')
 
-    def __init__(self):
+    def __init__(self, scale=1):
         # depth=8 로 만들면 SDL 이 팔레트 표면을 잡아 준다. 폭 320 은 4의 배수라
         # 줄 간격(pitch)이 정확히 320바이트가 되고, 그래서 프레임버퍼를
         # 한 번의 write 로 밀어 넣을 수 있다. 폭이 4의 배수가 아니면 이 최적화는 깨진다.
@@ -116,6 +116,13 @@ class Screen(object):
         if self.surf.get_pitch() != SCR_W:
             raise RuntimeError('8비트 표면의 pitch 가 %d — 통짜 write 를 쓸 수 없다'
                                % self.surf.get_pitch())
+        # 확대 결과를 받을 8비트 표면을 미리 잡아 둔다. transform.scale 은
+        # 대상 표면을 주면 그 자리에 쓰지만 원본과 형식이 같아야 한다 —
+        # 32비트인 창을 대상으로 바로 주면 "compatible formats" 오류가 난다.
+        # 매 프레임 새 표면을 만드는 대신 하나를 돌려 쓴다.
+        self.scaled = None
+        if scale > 1:
+            self.scaled = pygame.Surface((SCR_W * scale, SCR_H * scale), depth=8)
         self.base_pal = RA.load_palette()
         self._phase = None
 
@@ -124,11 +131,16 @@ class Screen(object):
 
            위상이 그대로면 아무것도 하지 않는다. pal_phase 는 4틱에 한 번만 바뀌므로
            대부분의 프레임에서 이 함수는 비교 한 번으로 끝난다.
+           확대본에도 같은 팔레트를 물린다. 확대는 인덱스만 복제하므로
+           팔레트가 어긋나면 색이 통째로 뒤집힌다.
         """
         if phase == self._phase:
             return
         self._phase = phase
-        self.surf.set_palette(palette_rgb(RA.cycle_palette(self.base_pal, phase)))
+        rgb = palette_rgb(RA.cycle_palette(self.base_pal, phase))
+        self.surf.set_palette(rgb)
+        if self.scaled is not None:
+            self.scaled.set_palette(rgb)
 
     def upload(self, fb):
         """엔진 프레임버퍼를 표면에 올린다.
@@ -141,6 +153,18 @@ class Screen(object):
         buf = self.surf.get_buffer()
         buf.write(bytes(fb), 0)
         del buf
+
+    def present_to(self, window):
+        """확대해서 창에 올린다. 8비트 -> 창의 32비트 변환은 blit 이 한 번에 한다.
+
+           부드럽게(smoothscale) 늘리면 픽셀이 뭉개져 모드 13h 의 계단이 사라진다 —
+           그건 이 문서가 보이려는 것과 정반대다. 그래서 정수배 최근접만 쓴다.
+        """
+        if self.scaled is None:
+            window.blit(self.surf, (0, 0))
+            return
+        pygame.transform.scale(self.surf, self.scaled.get_size(), self.scaled)
+        window.blit(self.scaled, (0, 0))
 
 
 def draw_hp_bar(fb, cur, mx):
@@ -175,7 +199,7 @@ class Frontend(object):
 
     def __init__(self, scale=DEFAULT_SCALE, hud=True, save_path=None):
         self.game = Game()
-        self.screen = Screen()
+        self.screen = Screen(scale)
         self.scale = scale
         self.hud = hud
         self.save_path = save_path or os.path.join(_PYROOT, 'quick.sav')
@@ -271,11 +295,7 @@ class Frontend(object):
             draw_hp_bar(fb, p.hp, p.maxhp)
         self.screen.set_phase(self.game.pal_phase)
         self.screen.upload(fb)
-        # 정수배 확대. 부드럽게(smoothscale) 늘리면 픽셀이 뭉개져
-        # 모드 13h 의 계단이 사라진다 — 그건 이 문서가 보이려는 것과 반대다.
-        pygame.transform.scale(self.screen.surf,
-                               (SCR_W * self.scale, SCR_H * self.scale),
-                               self.window)
+        self.screen.present_to(self.window)
         pygame.display.flip()
 
     # ------------------------------------------------------------ 루프
