@@ -267,6 +267,19 @@ English into a user-facing message; translate and condense.
 
 ## Progress log (newest first; Korean, ≤12 lines each, same shape as history.md)
 
+- 2026-09-06 17:40 — **6~8단계: 기록 변환기·재생기·덱 도구·본문 10부 전부**.
+  `tools/ansi2html`(ANSI→HTML, 클래스 표 + **줄 차이 저장**으로 1.49 MB → 0.49 MB) ·
+  `deck/player.js`(90줄, 의존성 0, 키는 `[` `]` — ←/→ 는 덱이 쓴다) ·
+  `deck/build_deck.py`(CODE/RUN/CAP/PLAYER/BOARD 지시자 + 커버리지) ·
+  `gen_appendix.py`(빠진 줄을 스스로 찾아 부록 생성) · `split_ranges.py`(45줄 초과 자동 분할) ·
+  `check_deck.js`(DOM 스텁으로 재생기 마운트·프레임 전수 재생·폭 검사).
+  본문 0~9부를 손으로 쓰고 10부는 생성 — **339장 · 1,388 KB · 커버리지 11,232/11,232 · 오류 0건**.
+  WebSearch 로 확인한 외부 주장 14건은 `deck/claims.md` 에 출처와 함께 표로 남겼고,
+  확인 못 한 것(Charm 설립 연도, Bubble Tea 최초 공개)은 **덱에서 뺐다**.
+  빌더가 실제로 잡아 준 것: 겹쳐 실린 구간 6곳, 45줄 초과 블록 39개.
+  검증: `go vet` 0건 · `go test -p 1 ./...` 16패키지 통과 · gofmt 0건 ·
+  `make deck` 오류 0건 · `make deck-check` 오류 0건.
+
 - 2026-09-06 16:25 — **5단계: battle/ 2인용·AI 대전·AI vs AI, menu/, 기록 4종**.
   `rules.go` 심판(락 이벤트 번호로 새 공격만 배달 · KO · 무승부 · 3판 2선승) ·
   `driver.go` AI 의 손(2편 표 그대로: think 520/380/260/150, move 110/80/55/32,

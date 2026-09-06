@@ -17,7 +17,7 @@ PY      ?= python3
 OUT     ?= out
 DECK    ?= ../Go_Bubble_Tea_테트리스_만들기.html
 
-.PHONY: all deps build vet test record tmux-smoke deck deck-check fmt clean
+.PHONY: all deps build vet test record html logs tmux-smoke deck deck-check fmt clean
 
 all: vet test
 
@@ -67,6 +67,20 @@ SCRIPT_aivai = 80x24 wait20 wait20 wait20 wait20 wait20 wait20 wait20 wait20 \
 $(OUT)/frames_%.json: $(SRCGO)
 	@mkdir -p $(OUT)
 	$(GO) run ./tools/record -mode $* -script "$(SCRIPT_$*)" -out $@
+
+# 기록과 캡처를 덱이 읽는 HTML 로 바꾼다.
+# 프레임은 재생기가 넘겨 보는 묶음으로, tmux 캡처는 한 장짜리 조각으로.
+HTMLFRAMES = $(addprefix $(OUT)/frames_,$(addsuffix .html.json,$(MODES)))
+TMUXNAMES = menu 1p 2p ai aivai 01_hello 02_counter 03_keys 04_tick 05_window 06_lipgloss 07_cmds
+HTMLTMUX = $(addprefix $(OUT)/tmux_,$(addsuffix .html,$(TMUXNAMES)))
+
+html: $(HTMLFRAMES) $(HTMLTMUX)
+
+$(OUT)/frames_%.html.json: $(OUT)/frames_%.json tools/ansi2html/main.go
+	$(GO) run ./tools/ansi2html -in $< -out $@
+
+$(OUT)/tmux_%.html: $(OUT)/tmux_%.txt tools/ansi2html/main.go
+	@$(GO) run ./tools/ansi2html -in $< -out $@
 
 # 진짜 PTY 에서 진짜로 도는지 확인하는 유일한 방법.
 # 에이전트 세션에는 터미널이 없으므로 tmux 를 하나 띄워서 그 화면을 긁어 온다.
@@ -135,12 +149,24 @@ tmux-smoke:
 	@echo "  $(OUT)/tmux_aivai.txt"
 	@$(PY) deck/untab.py $(OUT)/tmux_*.txt
 
+# 덱에 "실제 출력"으로 실을 로그들. 지어낸 숫자를 슬라이드에 적지 않기 위한 장치다.
+logs:
+	@mkdir -p $(OUT)
+	@$(GO) version > $(OUT)/go_version.txt
+	@$(GO) vet ./... > $(OUT)/go_vet.txt 2>&1 || true
+	@$(GO) test -p 1 -count=1 ./... > $(OUT)/go_test.txt 2>&1 || true
+	@$(GO) test -p 1 -count=1 -v ./core/ -run 'Parity|Exercise' > $(OUT)/core_parity.txt 2>&1 || true
+	@$(GO) test -p 1 -count=1 -v ./ai/ -run 'Parity|Interesting' > $(OUT)/ai_parity.txt 2>&1 || true
+	@wc -l $$(find . -name '*.go' | sort) go.mod Makefile ai/weights.json | tail -3 > $(OUT)/loc.txt
+	@echo "  $(OUT)/go_test.txt · go_vet.txt · core_parity.txt · ai_parity.txt"
+
 deck:
+	$(PY) deck/gen_appendix.py
 	$(PY) deck/build_deck.py
 
 deck-check:
-	@node deck/check_deck.js $(DECK)
+	node deck/check_deck.js $(DECK)
 
 clean:
 	$(GO) clean -cache -testcache
-	rm -f $(OUT)/frames_*.json
+	rm -f $(OUT)/frames_*.json $(OUT)/*.html $(OUT)/*.html.json
