@@ -26,7 +26,7 @@ PYTESTS := test_fixed test_proj test_sort test_map test_path test_raster \
 
 .PHONY: all py lua love ts parity bench frames shots golden clean verify-log
 
-all: py lua ts parity
+all: py lua ts web parity
 	@echo '── 전부 통과 ──'
 
 py:
@@ -47,7 +47,7 @@ lua:
 
 love:
 	@mkdir -p $(OUT)
-	cd $(ROOT)/lua && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
+	@set -o pipefail; cd $(ROOT)/lua && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
 	  $(LOVE) tools/love_headless | tee $(OUT)/love_tests.txt
 
 ts:
@@ -56,6 +56,13 @@ ts:
 	cd $(ROOT)/ts && $(NODE) dist/tests/run.js | tee $(OUT)/ts_tests.txt
 	cd $(ROOT)/ts && $(NODE) dist/src/main.js prim  > $(OUT)/ts_prim.txt
 	cd $(ROOT)/ts && $(NODE) dist/src/main.js trace > $(OUT)/ts_trace.jsonl
+
+web:
+	@mkdir -p $(OUT)
+	cd $(ROOT)/ts && $(TSC) -p tsconfig.web.json
+	cd $(ROOT) && $(PY) tools/gen_webdata.py
+	cd $(ROOT) && $(PY) tools/bundle_web.py
+	cd $(ROOT) && $(NODE) tools/check_web.js | tee $(OUT)/check_web.txt
 
 parity:
 	@mkdir -p $(OUT)
@@ -71,7 +78,9 @@ parity:
 	  cmp $(GOLDEN)/trace.jsonl $(OUT)/py_trace.jsonl  && echo '  python == golden OK'; \
 	  cmp $(GOLDEN)/trace.jsonl $(OUT)/lua_trace.jsonl && echo '  lua    == golden OK'; \
 	  cmp $(GOLDEN)/trace.jsonl $(OUT)/ts_trace.jsonl  && echo '  ts     == golden OK'; \
-	  echo '== 3. 렌더 결과 바이트 비교 (320x200 8비트 인덱스 · PPM 192,015바이트) =='; \
+	  echo '== 3. 브라우저 번들 =='; \
+	  cd $(ROOT) && $(NODE) tools/check_web.js; \
+	  echo '== 4. 렌더 결과 바이트 비교 (320x200 8비트 인덱스 · PPM 192,015바이트) =='; \
 	  cmp $(OUT)/frame_final.ppm $(OUT)/frame_final_lua.ppm && echo '  python == lua  OK'; \
 	  cmp $(OUT)/frame_final.ppm $(OUT)/frame_final_ts.ppm  && echo '  python == ts   OK'; \
 	} | tee $(OUT)/parity.txt

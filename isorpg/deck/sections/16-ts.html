@@ -132,3 +132,108 @@
 </article>
 
 <!--FULLSRC lang=ts file=ts/src/main.ts prefix=ts-main title=main.ts-->
+
+<article class="card" id="s16-web">
+<h3>브라우저에서 같은 엔진 돌리기</h3>
+<p class="lead">이 문서 안에서 도는 미니 RPG 는 <b>다시 만든 것이 아닙니다.</b> 위에 실린 그 타입스크립트 엔진을 <code class="nb">tsc</code> 로 옮긴 결과를 그대로 묶어 넣은 것입니다.</p>
+<p>엔진이 파일을 읽는 곳은 세 군데뿐입니다 — 팔레트, 스프라이트, 시나리오. 브라우저에는 파일이 없으니 그 셋을 문자열로 박아 넣고, 읽기 함수와 파싱 함수를 나눴습니다.</p>
+<!--CODE file=ts/src/raster.ts lang=ts sym=parsePalette note=파싱과 파일 읽기를 나눈다-->
+<!--CODE file=ts/src/raster.ts lang=ts sym=loadPalette note=노드 쪽은 읽어서 넘기기만 한다-->
+<div class="key">이 분리는 <b>노드 쪽 동작을 하나도 바꾸지 않습니다.</b> 파리티 검사가 그대로 통과하는 것이 그 증거입니다 — 리팩터링 뒤에도 208줄·233줄·192,015바이트가 전부 같습니다.</div>
+</article>
+
+<article class="card" id="s16-bundle">
+<h3>번들러 없이 묶기</h3>
+<p>덱은 자기완결형 파일 하나여야 하므로 번들러를 쓸 수 없습니다(그리고 쓰고 싶지도 않습니다). <code class="nb">tsc</code> 가 낸 CommonJS 모듈들을 <b>스무 줄짜리 로더</b>로 감싸 이어 붙입니다.</p>
+<!--CODE file=deck/base/loader_head.js lang=ts note=로더 전문 — require 하나가 전부다-->
+<div class="warn"><b>여기서 이름 충돌에 걸렸습니다.</b> 엔진에도 <code class="nb">path</code> 라는 모듈이 있습니다(경로 탐색). 노드 내장 <code class="nb">path</code> 와 이름이 같죠. 상대 경로인지 아닌지를 구분하지 않으면 <code class="nb">game.ts</code> 가 경로 스텁을 경로탐색 모듈로 착각해 <code class="nb">P.astar is not a function</code> 으로 터집니다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>항목</th><th>값</th></tr>
+<tr><td>묶은 모듈</td><td class="num">15개 (엔진 12 + 웹 3)</td></tr>
+<tr><td>번들 크기</td><td class="num">약 152 KB</td></tr>
+<tr><td>그중 골든 데이터</td><td class="num">약 53 KB (팔레트·스프라이트·시나리오)</td></tr>
+<tr><td>외부 의존</td><td class="num">없음</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s16-proof">
+<h3>번들이 정말 같은 엔진인가</h3>
+<p>묶는 과정에서 무언가 어긋났을 수 있습니다. 확인 방법은 하나입니다 — <b>번들로 골든 트레이스를 다시 만들어 보는 것.</b></p>
+<!--OUT file=check_web.txt note=node tools/check_web.js 의 출력-->
+<div class="key">이 검사가 통과하면 <b>이 문서 안에서 걸어 다니는 캐릭터의 좌표는 골든 트레이스를 만든 것과 같은 코드가 계산한 값</b>입니다. 데모가 본문과 다른 이야기를 할 수 없습니다.</div>
+</article>
+
+<article class="card" id="s16-canvas">
+<h3>캔버스 프런트엔드</h3>
+<p>하는 일은 모드 13h 시절 VGA DAC 와 정확히 같습니다 — 인덱스를 RGB 로 바꾸는 것.</p>
+<!--CODE file=ts/src/web/canvas.ts lang=ts sym=CanvasView.draw note=인덱스 -> RGBA-->
+<div class="steps">
+<ol>
+<li>팔레트를 <b>RGBA 룩업으로 미리 펴 둡니다.</b> 픽셀마다 세 번 조회하는 것보다 쌉니다.</li>
+<li>캔버스는 <b>320×200 그대로</b> 두고 확대는 CSS 로 합니다. 캔버스를 크게 잡고 그리면 픽셀마다 비용이 배로 듭니다.</li>
+<li><code class="nb">image-rendering: pixelated</code> 로 보간을 끕니다. 켜 두면 도스 픽셀이 뭉갭니다.</li>
+<li>배율은 <b>정수만</b> 씁니다. 1.5배로 늘리면 픽셀이 들쭉날쭉해집니다.</li>
+</ol>
+</div>
+<div class="note">팔레트 사이클링은 위상이 바뀔 때만 룩업을 다시 만듭니다. 매 프레임 만들면 256×4 바이트를 초당 예순 번 쓰게 됩니다.</div>
+</article>
+
+<article class="card" id="s16-minirpg">
+<h3>직접 해 보기 — 미니 RPG</h3>
+<div class="demo" data-demo="mini-rpg">
+<h5>방향키로 걷고, 스페이스로 공격, 엔터로 상호작용</h5>
+<div class="row">
+<button data-stop>멈춤</button>
+<button data-auto class="sec">골든 시나리오 재생</button>
+</div>
+<div class="out"></div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>키</th><th>동작</th></tr>
+<tr><td>← ↑ → ↓ (또는 WASD)</td><td>여덟 방향 이동 — 화면 방향 기준</td></tr>
+<tr><td>Q E Z C</td><td>대각선 네 방향</td></tr>
+<tr><td>스페이스</td><td>인접한 몬스터 공격</td></tr>
+<tr><td>엔터 / F</td><td>인접한 상자 열기</td></tr>
+<tr><td>화면 터치</td><td>누른 방향으로 이동, 가운데는 공격+상호작용</td></tr>
+</table>
+</div>
+<div class="warn"><b>캔버스를 한 번 눌러 포커스를 주어야 방향키가 갑니다.</b> 그리고 방향키는 <code class="nb">preventDefault()</code> 로 먹습니다 — 안 그러면 이 문서가 슬라이드를 넘겨 버립니다.</div>
+<div class="key">"골든 시나리오 재생"은 <code class="nb">golden/script.txt</code> 222틱을 그대로 돌려 보여 줍니다. 11부와 12부의 화면 캡처가 바로 이 재생의 특정 틱입니다.</div>
+</article>
+
+<article class="card" id="s16-native">
+<h3>네이티브 그리기 경로 세 가지</h3>
+<p class="lead">이 문서의 엔진은 세 언어 모두 <b>같은 8비트 버퍼</b>에 그립니다. 그것이 파리티를 가능하게 하지만, 각 플랫폼의 진짜 그리기 경로를 쓰지는 않는다는 뜻이기도 합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>pygame</th><th>LÖVE</th><th>Canvas</th></tr>
+<tr><td>네이티브 스프라이트</td><td class="num">Surface.blit</td><td class="num">love.graphics.draw + Quad</td><td class="num">ctx.drawImage</td></tr>
+<tr><td>배치 그리기</td><td class="num">blits()</td><td class="num">SpriteBatch</td><td>없음 (호출 반복)</td></tr>
+<tr><td>색 조작</td><td class="num">set_palette (8비트 서피스)</td><td class="num">setColor 곱셈</td><td class="num">globalCompositeOperation</td></tr>
+<tr><td>확대</td><td class="num">transform.scale</td><td class="num">draw 의 sx, sy</td><td>CSS 또는 drawImage</td></tr>
+<tr><td>이 문서가 쓰는 것</td><td>8비트 서피스 + 팔레트</td><td>ImageData 업로드</td><td>putImageData</td></tr>
+</table>
+</div>
+<div class="g2">
+<div>
+<h4>소프트웨어 래스터의 값</h4>
+<ul>
+<li>세 언어의 결과를 바이트로 비교할 수 있다</li>
+<li>명암·팔레트 사이클링이 공짜</li>
+<li>도스의 실제 구조를 그대로 보여 준다</li>
+</ul>
+</div>
+<div>
+<h4>치르는 값</h4>
+<ul>
+<li>GPU 를 전혀 쓰지 않는다</li>
+<li>회전·확대·알파가 없다</li>
+<li>파이썬에서 프레임당 67 ms</li>
+</ul>
+</div>
+</div>
+<div class="key"><b>실전이라면 반대로 골랐을 겁니다.</b> 스프라이트를 텍스처 아틀라스에 올리고 배치로 그리면 파이썬에서도 60 fps 가 나옵니다. 이 문서가 소프트웨어 래스터를 고른 이유는 성능이 아니라 <b>증명 가능성</b>입니다.</div>
+</article>

@@ -327,8 +327,19 @@ export class Game {
     emit?: ((line: string) => void) | null,
     limit?: number | null,
   ): Game {
+    return this.runScriptText(
+      fs.readFileSync(scriptPath ?? path.join(GOLDEN, 'script.txt'), 'utf8'),
+      emit, limit,
+    );
+  }
+
+  /** 시나리오 문자열을 그대로 돌린다. 파일 읽기와 나눠 둔 것은 브라우저 때문이다. */
+  runScriptText(
+    text: string,
+    emit?: ((line: string) => void) | null,
+    limit?: number | null,
+  ): Game {
     let done = 0;
-    const text = fs.readFileSync(scriptPath ?? path.join(GOLDEN, 'script.txt'), 'utf8');
     for (const raw of text.split('\n')) {
       const line = raw.trim();
       if (!line || line.startsWith('#')) continue;
@@ -390,6 +401,11 @@ export class Game {
   }
 
   // ------------------------------------------------------------ 렌더
+  /** 스프라이트를 밖에서 넣는다. 브라우저에는 파일이 없기 때문이다. */
+  setSprites(list: RA.Sprite[]): void {
+    this.spr = list;
+  }
+
   sprites(): RA.Sprite[] {
     if (this.spr === null) this.spr = RA.loadSprites();
     return this.spr;

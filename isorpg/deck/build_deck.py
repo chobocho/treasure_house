@@ -419,9 +419,12 @@ def main():
 
     head = read(os.path.join(DECK, 'base', 'head.html')).replace('<!--NAV-->', build_nav(body))
     tail = read(os.path.join(DECK, 'base', 'tail.html'))
-    demos = os.path.join(DECK, 'demos.js')
-    if os.path.exists(demos):
-        tail = tail.replace('</body>', '<script>\n%s\n</script>\n</body>' % read(demos).rstrip())
+    # 엔진 번들이 먼저다 — 데모가 window.__isorpg 를 쓴다.
+    for name in ('engine.js', 'demos.js'):
+        p = os.path.join(DECK, name)
+        if os.path.exists(p):
+            tail = tail.replace(
+                '</body>', '<script>\n%s\n</script>\n</body>' % read(p).rstrip())
 
     doc = head.rstrip('\n') + '\n\n<main class="prose">\n\n' + body + '\n\n' + tail
     io.open(TARGET, 'w', encoding='utf-8').write(doc)
