@@ -2384,26 +2384,434 @@ def atan8(dx, dy):
 <article class="card section" id="s10">
 <p class="chnum">10부</p>
 <h2>엔티티와 공간 분할</h2>
-<p class="chsub">256기를 배열의 구조체로 담고,<br>핸들에 세대를 붙여 죽은 유닛을 가려낸다</p>
+<p class="chsub">유닛 256기를 담는 그릇의 모양이<br>상태 해시의 안정성을 결정한다</p>
 </article>
 
-<article class="card" id="s10-todo">
-<h3>엔티티와 공간 분할 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>26장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s10-soa">
+<h3>구조체의 배열이 아니라 배열의 구조체</h3>
+<p class="lead">유닛 하나를 객체로 만들고 그것을 배열에 담는 것이 자연스러워 보입니다. 이 엔진은 반대로 합니다.</p>
+<pre class="term">AoS   units = [ {tx, ty, hp, ...}, {tx, ty, hp, ...}, ... ]
+SoA   tx = [...]  ty = [...]  hp = [...]        길이는 전부 MAX_ENT</pre>
+<div class="src"><b>py/rts/spatial.py</b><span class="ln">27–51</span><span>평행 배열 열여덟 개</span></div>
+<pre><code data-lang="py" data-src="py/rts/spatial.py" data-lines="27-51">    def __init__(self, w, h):
+        self.w = w
+        self.h = h
+        self.bw = (w + BUCKET - 1) // BUCKET
+        self.bh = (h + BUCKET - 1) // BUCKET
+        n = MAX_ENT
+        self.alive = [0] * n
+        self.gen = [0] * n
+        self.owner = [0] * n
+        self.kind = [0] * n
+        self.tx = [0] * n
+        self.ty = [0] * n
+        self.px = [0] * n
+        self.py = [0] * n
+        self.hp = [0] * n
+        self.dir = [0] * n
+        self.state = [0] * n
+        self.target = [0] * n
+        self.load = [0] * n
+        self.prog = [0] * n
+        self.from_t = [0] * n
+        self.to_t = [0] * n
+        self.cool = [0] * n
+        self.timer = [0] * n
+        self.buckets = [[] for _ in range(self.bw * self.bh)]</code></pre>
+<p>성능도 이유입니다. 루아에서 테이블마다 필드를 담으면 가비지가 늘고, 타입스크립트에서 객체 배열을 쓰면 히든 클래스가 갈립니다.</p>
+<div class="key">그런데 더 큰 이유가 있습니다. <b>직렬화 순서가 배열 순서로 자동으로 고정됩니다.</b> 상태 해시(19부)가 언어별 필드 순서나 키 순서에 영향을 받지 않습니다 — 객체를 쓰면 "필드를 어떤 순서로 해시할 것인가"를 세 언어에 따로 못박아야 합니다.</div>
+</article>
+
+<article class="card" id="s10-handle">
+<h3>핸들 = 인덱스 + 세대</h3>
+<pre class="term">handle(i) = i · 256 + gen[i]
+index(h)  = ⌊h / 256⌋
+valid(h)  = h ≠ 0 and alive[index(h)] == 1 and (h mod 256) == gen[index(h)]</pre>
+<div class="src"><b>py/rts/spatial.py</b><span class="ln">57–62</span><span>세 조건이 모두 필요하다</span></div>
+<pre><code data-lang="py" data-src="py/rts/spatial.py" data-lines="57-62">    def valid(self, h):
+        if h == 0:
+            return False
+        i = index(h)
+        return (0 &lt; i &lt; MAX_ENT and self.alive[i] == 1
+                and generation(h) == self.gen[i])</code></pre>
+<p>엔티티가 죽으면 <code class="nb">gen[i]</code> 를 1 올립니다. 슬롯이 재사용되어도 <b>옛 핸들은 valid 를 통과하지 못합니다.</b></p>
+<div class="src"><b>py/rts/spatial.py</b><span class="ln">92–99</span><span>세대를 올리는 한 줄이 핵심</span></div>
+<pre><code data-lang="py" data-src="py/rts/spatial.py" data-lines="92-99">    def kill(self, h):
+        if not self.valid(h):
+            return False
+        i = index(h)
+        self._bucket_del(i)
+        self.alive[i] = 0
+        self.gen[i] = (self.gen[i] + 1) % GEN_MOD
+        return True</code></pre>
+<div class="warn">이것이 없으면 <b>"죽은 유닛을 계속 쫓는 미사일"</b> 류의 버그가 생깁니다. 전차가 표적으로 12번 슬롯을 들고 있는데 그 유닛이 죽고 다른 유닛이 12번에 들어오면, 전차는 아무 이유 없이 새 유닛을 쏩니다. 그리고 그 버그는 락스텝에서 <b>디싱크</b>로 나타납니다 — 두 기계의 슬롯 재사용 시점이 같더라도, 그 표적이 무엇이냐는 우연에 달리니까요.</div>
+</article>
+
+<article class="card" id="s10-slot0">
+<h3>슬롯 0 을 버린다</h3>
+<p><code class="nb">handle(0) = 0 · 256 + gen[0] = 0</code> 이 되면 "없음"과 구별되지 않습니다. 그래서 슬롯 0 을 <b>절대 쓰지 않습니다.</b></p>
+<div class="src"><b>py/rts/spatial.py</b><span class="ln">67–90</span><span>i 는 1부터</span></div>
+<pre><code data-lang="py" data-src="py/rts/spatial.py" data-lines="67-90">    # ── 생성·소멸 ──────────────────────────────────────────────────────────
+    def spawn(self, owner, kind, tx, ty):
+        """슬롯 0 은 절대 쓰지 않는다 — 핸들 0 이 "없음"을 뜻해야 하기 때문이다."""
+        for i in range(1, MAX_ENT):
+            if self.alive[i] == 0:
+                self.alive[i] = 1
+                self.owner[i] = owner
+                self.kind[i] = kind
+                self.tx[i] = tx
+                self.ty[i] = ty
+                self.px[i] = F.fp(tx * 16)
+                self.py[i] = F.fp(ty * 16)
+                self.dir[i] = 4
+                self.state[i] = 0
+                self.target[i] = 0
+                self.load[i] = 0
+                self.prog[i] = 0
+                self.from_t[i] = ty * self.w + tx
+                self.to_t[i] = ty * self.w + tx
+                self.cool[i] = 0
+                self.timer[i] = 0
+                self._bucket_add(i)
+                return self.handle(i)
+        return 0                      # 상한 초과 — 조용히 실패한다</code></pre>
+<p>엔티티 하나를 버리는 대가로 "없음"을 <code class="nb">0</code> 하나로 표현합니다. 널 값을 위한 별도의 상수나 <code class="nb">None</code> 검사가 사라집니다.</p>
+<div class="note">세대는 256 주기로 순환합니다. 슬롯 하나가 256번 재사용되면 옛 핸들이 되살아납니다. 1,200틱 시나리오에서 한 슬롯이 256번 재사용될 일은 없지만, <b>영원히 안전한 것은 아니라고</b> 적어 둡니다. 32비트 핸들을 쓰면 사라지는 문제이고, 그때는 1바이트가 아니라 2바이트를 해시에 넣게 됩니다.</p>
+</article>
+
+<article class="card" id="s10-bucket">
+<h3>균일 격자 버킷</h3>
+<pre class="term">BUCKET = 8                      버킷 한 변 (타일)
+bucket_of(tx, ty) = ⌊ty/8⌋ · 8 + ⌊tx/8⌋
+64×64 맵  →  버킷 64개</pre>
+<div class="src"><b>py/rts/spatial.py</b><span class="ln">125–138</span><span>걸치는 버킷만 훑는다</span></div>
+<pre><code data-lang="py" data-src="py/rts/spatial.py" data-lines="125-138">    def query(self, tx, ty, r):
+        """반경 r(체비셰프) 안의 엔티티 인덱스. 오름차순으로 돌려준다."""
+        out = []
+        x0 = max(0, tx - r) // BUCKET
+        x1 = min(self.w - 1, tx + r) // BUCKET
+        y0 = max(0, ty - r) // BUCKET
+        y1 = min(self.h - 1, ty + r) // BUCKET
+        for by in range(y0, y1 + 1):
+            for bx in range(x0, x1 + 1):
+                for i in self.buckets[by * self.bw + bx]:
+                    if (F.dinf(self.tx[i] - tx, self.ty[i] - ty) &lt;= r):
+                        out.append(i)
+        out.sort()
+        return out</code></pre>
+<p>"반경 r 안의 엔티티"를 물을 때 맵 전체를 훑지 않고 <b>걸치는 버킷만</b> 봅니다. <code class="nb">r ≤ 8</code> 이면 최대 네 개입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>전수 검사</th><th>버킷</th></tr>
+<tr><td>후보 수 (256기 고르게)</td><td class="num">256</td><td class="num">16</td></tr>
+<tr><td>비율</td><td class="num">1</td><td class="num"><b>1/16</b></td></tr>
+</table>
+</div>
+<p>유닛이 타일을 넘을 때만 버킷을 갱신합니다. <b>픽셀 이동마다가 아닙니다</b> — 그것이 타일 단위 상태를 두는 이득입니다.</p>
+</article>
+
+<article class="card" id="s10-order">
+<h3>버킷 안은 오름차순</h3>
+<div class="src"><b>py/rts/spatial.py</b><span class="ln">101–107</span><span>삽입은 선형 탐색이지만 목록이 짧다</span></div>
+<pre><code data-lang="py" data-src="py/rts/spatial.py" data-lines="101-107">    # ── SPEC §7.3 버킷 ─────────────────────────────────────────────────────
+    def _bucket_add(self, i):
+        b = self.buckets[self.bucket_of(self.tx[i], self.ty[i])]
+        k = 0
+        while k &lt; len(b) and b[k] &lt; i:      # 오름차순 유지 — 결정론을 위해서다
+            k += 1
+        b.insert(k, i)</code></pre>
+<p>삽입할 때 선형 탐색으로 자리를 찾아 <b>인덱스 오름차순</b>을 유지합니다. 목록이 짧으므로(버킷당 평균 4개) 비용은 무시할 만합니다.</p>
+<div class="key">순서가 흔들리면 <b>"가장 가까운 적" 타이브레이크가 갈립니다.</b> 16부의 표적 선택은 <code class="nb">d83</code> 동점에서 핸들 오름차순을 쓰는데, 후보 목록이 이미 정렬되어 있으면 그 규칙이 <b>공짜로</b> 지켜집니다. 정렬을 나중에 하는 대신 넣을 때 유지하는 쪽을 골랐습니다.</div>
+</article>
+
+<article class="card" id="s10-foot">
+<h3>발자국 — 1×1, 2×2, 3×3</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>발자국</th><th>종류</th><th>기준점</th></tr>
+<tr><td class="num">1×1</td><td>유닛 다섯 · 방어탑</td><td>그 칸</td></tr>
+<tr><td class="num">2×2</td><td>정제소 · 병영 · 발전소</td><td><b>좌상단</b></td></tr>
+<tr><td class="num">3×3</td><td>사령부 · 공장</td><td><b>좌상단</b></td></tr>
+</table>
+</div>
+<p>건물의 <code class="nb">tx</code>·<code class="nb">ty</code> 는 <b>좌상단</b>입니다. 중심이 아닙니다. 짝수 크기(2×2)에는 중심 칸이 없기 때문입니다.</p>
+<p>그래서 건물까지의 거리를 잴 때 주의가 필요합니다. 원점만 보면 3×3 건물의 오른쪽 아래 모서리가 실제보다 2타일 멀어 보입니다 — 17부의 도크 계산이 발자국 전체를 보는 이유입니다.</p>
+<div class="note">시야 중심도 좌상단입니다. 사령부의 시야 6 이 좌상단 기준이므로 오른쪽 아래가 조금 덜 보입니다. 눈에 띄지 않는 비대칭이고, 고치려면 중심 계산이 한 겹 더 들어갑니다 — 그대로 두고 <b>여기에 적어 둡니다.</b></p>
+</article>
+
+<article class="card" id="s10-demo">
+<h3>직접 해 보기 — 공간 격자</h3>
+<div class="demo" data-demo="spatial-grid">
+<h5>버킷이 후보를 얼마나 줄이는가</h5>
+<div class="row">
+<label>유닛 수 <input type="number" data-n value="120" min="10" max="256"></label>
+<label>반경 <input type="number" data-r value="4" min="1" max="16"></label>
+<button data-run>질의</button>
+</div>
+<div class="out"></div>
+</div>
+<p>훑은 버킷 수, 후보 수, 실제로 반경 안에 든 수를 함께 보여 줍니다. 반경을 키우면 버킷 이득이 줄어드는 것을 확인해 보세요 — 반경 16 이면 맵 절반을 훑습니다.</p>
+</article>
+
+<article class="card" id="s10-sum">
+<h3>10부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>배치</td><td>SoA — 평행 배열</td><td>직렬화 순서가 자동으로 고정된다</td></tr>
+<tr><td>핸들</td><td>인덱스 × 256 + 세대</td><td>죽은 유닛을 쫓는 버그를 없앤다</td></tr>
+<tr><td>슬롯 0</td><td>쓰지 않는다</td><td>핸들 0 = "없음"</td></tr>
+<tr><td>세대</td><td>256 주기 — 영원하지 않다</td><td>적어 두고 넘어간다</td></tr>
+<tr><td>버킷</td><td>8타일 · 후보 1/16</td><td>타일을 넘을 때만 갱신</td></tr>
+<tr><td>버킷 순서</td><td>인덱스 오름차순 유지</td><td>타이브레이크가 공짜로 지켜진다</td></tr>
+<tr><td>발자국</td><td>기준점은 좌상단</td><td>짝수 크기에는 중심이 없다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s10-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">세대(generation)를 없애고 핸들을 그냥 인덱스로 쓰면, <b>어떤 상황에서</b> 버그가 드러나는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>슬롯이 <b>재사용될 때</b>입니다. 12번 유닛이 죽고, 같은 틱이나 몇 틱 뒤에 새 유닛이 생기면 <code class="nb">spawn</code> 이 빈 슬롯 중 가장 작은 번호를 고르므로 12번이 다시 쓰입니다.</p>
+<p>그 사이 12번을 표적으로 들고 있던 유닛, 12번을 목표로 하는 투사체, 12번이 든 컨트롤 그룹이 모두 <b>새 유닛을 가리킵니다.</b> 투사체가 방금 태어난 아군 채집기에 꽂히는 장면이 나옵니다.</p>
+<p>드러나기 어려운 이유는 <b>죽음과 생산이 겹쳐야</b> 하기 때문입니다. 시험에서 재현하려면 그 타이밍을 일부러 만들어야 하고, 실제 게임에서는 전투 중에만 일어납니다. 그래서 자료구조 단계에서 막는 편이 낫습니다 — 세대 1바이트가 그 값입니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s10-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">버킷 크기를 8 에서 <b>4</b> 로 줄이면 질의가 빨라지는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>버킷이 256개가 되고 버킷당 평균 1기가 됩니다. 후보 수는 줄지만 <b>훑는 버킷 수가 늘어납니다.</b></p>
+<p>반경 4 질의를 보면, 버킷 8 에서는 최대 4개 버킷(평균 16 후보)이고 버킷 4 에서는 최대 9개 버킷(평균 9 후보)입니다. 후보는 줄었지만 버킷 순회 자체의 오버헤드가 늡니다.</p>
+<p>일반적으로 <b>버킷 한 변 ≈ 질의 반경</b>이 최적 근처입니다. 이 엔진의 질의 반경은 대부분 시야(3–6)와 사거리(1–6)이므로 8 이 무난합니다. 그리고 8 은 HPA* 클러스터(§9.1)와 같은 값이라 <b>기억할 상수가 하나 줄어듭니다</b> — 그것도 이유입니다.</p>
+</div>
+</div>
 </article>
 
 <!-- ===== 11-select.html ===== -->
 <article class="card section" id="s11">
 <p class="chnum">11부</p>
 <h2>선택과 명령</h2>
-<p class="chsub">픽킹·드래그 선택·컨트롤 그룹·명령 큐.<br>UI 는 시뮬레이션을 건드리지 않는다</p>
+<p class="chsub">마우스 한 번이 시뮬레이션에 닿기까지<br>거쳐야 하는 문들</p>
 </article>
 
-<article class="card" id="s11-todo">
-<h3>선택과 명령 — 준비 중</h3>
-<p class="lead">이 부는 아직 채워지지 않았습니다. 목표 분량 <b>22장</b>.</p>
-<div class="warn">뼈대만 있는 상태입니다. <code class="nb">rts/SPEC.md</code> 와 <code class="nb">out/</code> 의 실행 결과가 준비되는 대로 본문이 들어갑니다.</div>
+<article class="card" id="s11-pick">
+<h3>픽킹 — 사각형 다음에 마스크</h3>
+<p class="lead">화면의 한 점이 어느 유닛을 가리킵니까?</p>
+<pre class="term">1) 뷰포트 안인가                    아니면 패널·미니맵 처리로
+2) 화면 → 월드 (카메라 오프셋 더하기)
+3) 후보: 공간 버킷 질의 반경 2타일
+4) y 내림차순, 동점이면 핸들 내림차순으로 정렬
+5) AABB 안이면 스프라이트 알파 마스크 확인</pre>
+<div class="src"><b>py/rts/select.py</b><span class="ln">41–62</span><span>앞에 그려진 것이 먼저 잡힌다</span></div>
+<pre><code data-lang="py" data-src="py/rts/select.py" data-lines="41-62"># ── SPEC §12.1 픽킹 ─────────────────────────────────────────────────────────
+def pick(w, cam, sx, sy, mask=None):
+    """한 점이 가리키는 엔티티 핸들. 없으면 0.
+
+       앞에 그려진 것이 먼저 잡혀야 하므로 y 내림차순, 동점이면 핸들
+       내림차순으로 훑는다 — §23.3 의 그리기 순서를 거꾸로 도는 것이다.
+       `mask(kind, dir, lx, ly)` 는 스프라이트 알파 마스크다. AABB 만으로
+       끝내지 않는 이유는 유닛이 사각형이 아니기 때문이다.
+    """
+    if not in_view(sx, sy):
+        return 0
+    wx, wy = screen_to_world(cam, sx, sy)
+    cands = w.query(wx // C.TILE, wy // C.TILE, PICK_R)
+    order = sorted(cands, key=lambda i: (-w.py[i], -w.handle(i)))
+    for i in order:
+        x0, y0, x1, y1 = _box(w, i)
+        if not (x0 &lt;= wx &lt; x1 and y0 &lt;= wy &lt; y1):
+            continue
+        if mask is not None and not mask(w.kind[i], w.dir[i], wx - x0, wy - y0):
+            continue
+        return w.handle(i)
+    return 0</code></pre>
+<p>4번의 정렬은 <b>23부의 그리기 순서를 거꾸로</b> 도는 것입니다. y 정렬로 그리면 아래쪽 유닛이 나중에(위에) 그려지므로, 픽킹은 아래쪽부터 봐야 눈에 보이는 것이 잡힙니다.</p>
+<div class="key">AABB 만으로 끝내지 않는 이유는 <b>유닛이 사각형이 아니기</b> 때문입니다. 16×16 상자 안에서 실제 몸통은 반지름 5 원이고, 모서리를 클릭하면 아무것도 잡히지 않아야 합니다. 마스크는 스프라이트의 컬러키 여부 비트를 그대로 씁니다 — 별도의 히트박스를 만들지 않습니다.</div>
+</article>
+
+<article class="card" id="s11-box">
+<h3>상자 선택과 우선순위</h3>
+<div class="src"><b>py/rts/select.py</b><span class="ln">65–91</span><span>유닛이 하나라도 있으면 건물은 뺀다</span></div>
+<pre><code data-lang="py" data-src="py/rts/select.py" data-lines="65-91"># ── SPEC §12.2 상자 선택 ────────────────────────────────────────────────────
+def box_select(w, p, cam, x0, y0, x1, y1):
+    """드래그 상자와 겹치는 **내** 엔티티. 유닛이 하나라도 있으면 건물은 뺀다.
+
+       정렬이 핸들 오름차순인 것은 눈에 보이지 않지만 중요하다 —
+       선택 목록의 순서가 대형 슬롯 배정(§13.5)을 그대로 결정한다.
+    """
+    if x1 &lt; x0:
+        x0, x1 = x1, x0
+    if y1 &lt; y0:
+        y0, y1 = y1, y0
+    ax0, ay0 = screen_to_world(cam, x0, y0)
+    ax1, ay1 = screen_to_world(cam, x1, y1)
+    units, builds = [], []
+    for i in range(1, C.MAX_ENT):
+        if w.alive[i] == 0 or w.owner[i] != p:
+            continue
+        bx0, by0, bx1, by1 = _box(w, i)
+        if bx1 - 1 &lt; ax0 or ax1 &lt; bx0 or by1 - 1 &lt; ay0 or ay1 &lt; by0:
+            continue
+        if C.IS_BUILDING[w.kind[i]]:
+            builds.append(w.handle(i))
+        else:
+            units.append(w.handle(i))
+    out = units if units else builds
+    out.sort()
+    return out[:SELECT_MAX]</code></pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>규칙</th><th>내용</th></tr>
+<tr><td>겹침 판정</td><td>AABB 교차</td></tr>
+<tr><td>소유</td><td><b>내 것만</b></td></tr>
+<tr><td>우선순위</td><td>내 유닛이 하나라도 있으면 건물은 제외</td></tr>
+<tr><td>정렬</td><td>핸들 오름차순</td></tr>
+<tr><td>상한</td><td>32기</td></tr>
+</table>
+</div>
+<p>우선순위 규칙이 없으면 기지 위를 드래그했을 때 <b>건물과 유닛이 함께</b> 잡히고, 그다음 우클릭이 무엇을 뜻하는지 모호해집니다.</p>
+<div class="note">32기 상한은 도스 시절 제한을 흉내낸 것이고, <b>이 덱의 규칙</b>이라고 적습니다. 당시 게임들의 상한(9기·12기·다양)은 UI 공간과 메모리에서 왔고, 우리에게는 그런 제약이 없습니다. 상한을 두는 진짜 이유는 <b>대형 배정(14부)의 비용</b>입니다.</p>
+</article>
+
+<article class="card" id="s11-order-matters">
+<h3>선택 순서가 대형을 정한다</h3>
+<p>정렬이 <b>핸들 오름차순</b>인 것은 눈에 보이지 않지만 중요합니다.</p>
+<pre class="term">선택 목록의 순서  →  14부 대형의 슬롯 배정 순서</pre>
+<p>같은 여덟 기를 다른 순서로 선택하면 <b>다른 대형</b>이 나옵니다. 드래그 방향에 따라 대형이 달라지면 플레이어는 그것을 버그로 읽습니다.</p>
+<div class="key">그래서 정렬 키가 화면 위치가 아니라 <b>핸들</b>입니다. 화면 위치로 정렬하면 카메라가 움직였을 때 같은 유닛들이 다른 순서를 받습니다. 핸들은 게임 내내 변하지 않습니다.</div>
+</article>
+
+<article class="card" id="s11-group">
+<h3>컨트롤 그룹은 핸들을 저장한다</h3>
+<div class="src"><b>py/rts/select.py</b><span class="ln">104–105</span><span>죽은 유닛은 valid 가 거른다</span></div>
+<pre><code data-lang="py" data-src="py/rts/select.py" data-lines="104-105">    def recall(self, w, k):
+        return [h for h in self.g[k] if w.valid(h)]</code></pre>
+<p>0–9 번 그룹에 저장되는 것은 <b>핸들</b>입니다. 인덱스가 아닙니다.</p>
+<p>그래서 그룹에 든 유닛이 죽어도 아무 처리가 필요 없습니다. <code class="nb">valid</code>(10부)가 자동으로 거릅니다 — 세대가 올라갔으니까요.</p>
+<pre class="term">인덱스를 저장했다면:  죽은 슬롯에 새 유닛이 들어오면 그룹에 몰래 들어온다
+핸들을 저장하면:      valid 가 false — 조용히 사라진다</pre>
+<div class="note">그룹은 상태 해시에 넣지 않습니다. UI 상태이고 플레이어마다 다르며 시뮬레이션에 영향을 주지 않기 때문입니다. 그룹을 바꾸는 것만으로는 게임이 변하지 않습니다 — 명령을 내려야 변합니다.</p>
+</article>
+
+<article class="card" id="s11-queue">
+<h3>명령 큐</h3>
+<pre class="term">Order = (kind, tx, ty, target_handle)      유닛당 큐 상한 8
+kind ∈ { MOVE, ATTACK, ATTACK_MOVE, HARVEST, BUILD, STOP, HOLD, TRAIN }</pre>
+<div class="src"><b>py/rts/select.py</b><span class="ln">115–122</span><span>시프트 클릭은 뒤에 붙인다</span></div>
+<pre><code data-lang="py" data-src="py/rts/select.py" data-lines="115-122">    def push(self, i, order, shift):
+        if order[0] == STOP:
+            self.q[i] = []                     # STOP 은 큐를 비우고 끝이다
+            return
+        if not shift:
+            self.q[i] = []
+        if len(self.q[i]) &lt; ORDER_MAX:
+            self.q[i].append(order)</code></pre>
+<p>기본 클릭은 큐를 비우고 하나를 넣습니다. 시프트 클릭은 뒤에 붙입니다. <code class="nb">STOP</code> 은 큐를 비우고 <b>자신도 들어가지 않습니다.</b></p>
+<p><code class="nb">TRAIN</code> 만 유닛이 아니라 <b>건물</b>에게 내리는 명령입니다. 같은 자료형에 넣은 이유는 하나입니다 — UI·AI·스크립트가 모두 <code class="nb">sim.step</code> 의 <b>같은 인자</b>로 들어와야 락스텝이 성립합니다.</p>
+</article>
+
+<article class="card" id="s11-context">
+<h3>우클릭이 무엇을 뜻하는가</h3>
+<div class="src"><b>py/rts/select.py</b><span class="ln">135–146</span><span>판정 순서도 명세다</span></div>
+<pre><code data-lang="py" data-src="py/rts/select.py" data-lines="135-146">def context_order(w, ec, m, p, tx, ty, h):
+    """우클릭의 문맥 규칙. 판정 순서가 명세다 — 적 정제소는 반납이 아니라 공격이다."""
+    if w.valid(h):
+        j = S.index(h)
+        if w.owner[j] != p:
+            return ATTACK
+        if w.kind[j] in E.DEPOT:
+            return HARVEST
+        return MOVE
+    if m.in_map(tx, ty) and ec.ore[ty * m.w + tx] &gt; 0:
+        return HARVEST
+    return MOVE</code></pre>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>순서</th><th>대상</th><th>명령</th></tr>
+<tr><td class="num">1</td><td>적 (유닛이든 건물이든)</td><td>ATTACK</td></tr>
+<tr><td class="num">2</td><td>광맥 타일</td><td>HARVEST</td></tr>
+<tr><td class="num">3</td><td>내 반납처 (사령부·정제소)</td><td>HARVEST — 반납</td></tr>
+<tr><td class="num">4</td><td>그 밖</td><td>MOVE</td></tr>
+</table>
+</div>
+<p><b>판정 순서도 명세입니다.</b> 적의 정제소를 우클릭하면 반납이 아니라 공격이어야 합니다 — 1번이 3번보다 먼저 오는 이유입니다.</p>
+<div class="warn">이 규칙은 명세 초안에서 "내 건물이고 그것이 <b>정제소</b>면"이라고 적혀 있었습니다. 그런데 §25.2 는 <b>사령부도 반납처</b>라고 말합니다. 두 문장이 어긋난 채로 구현했으면 채집기가 사령부에 반납하지 못했을 것입니다. 명세를 고쳐 "반납처(사령부·정제소)"로 맞췄습니다.</div>
+</article>
+
+<article class="card" id="s11-gate">
+<h3>명령은 틱 경계에서만 들어간다</h3>
+<pre class="term">UI 가 명령을 만든다
+  → net 의 지연 큐 (§19)
+  → ORDER_DELAY = 2 틱 뒤
+  → sim.step(orders) 의 인자</pre>
+<p><b>UI 코드가 <code class="nb">sim</code> 의 상태를 직접 건드리는 경로는 존재하지 않습니다.</b> 이 규율 하나가 락스텝을 가능하게 합니다.</p>
+<div class="key">"이것 하나만 예외로" 가 이 설계를 죽입니다. UI 가 <code class="nb">w.tx[i] = ...</code> 를 한 줄 쓰면 그 줄은 <b>내 기계에서만</b> 실행됩니다. 상대의 시뮬에는 그 일이 일어나지 않았고, 다음 해시 비교에서 갈립니다.</div>
+<p>그래서 이 저장소의 프런트엔드 세 개(24·25·26부)는 전부 <b>얇은 껍데기</b>입니다. 그리는 것과 명령을 만드는 것 말고는 아무것도 하지 않습니다.</p>
+</article>
+
+<article class="card" id="s11-demo">
+<h3>직접 해 보기 — 상자 선택</h3>
+<div class="demo" data-demo="box-select">
+<h5>드래그하면 무엇이 잡히는가</h5>
+<div class="row">
+<label><input type="checkbox" data-mixed checked> 건물 섞기</label>
+<label><input type="checkbox" data-foe> 적 유닛 섞기</label>
+<button data-reset>다시 배치</button>
+</div>
+<div class="out"></div>
+</div>
+<p>건물과 유닛이 함께 걸치도록 드래그해 보세요. 유닛이 하나라도 있으면 건물이 빠지는 것과, 선택 목록이 핸들 순으로 정렬되는 것을 확인할 수 있습니다.</p>
+</article>
+
+<article class="card" id="s11-sum">
+<h3>11부 요약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>결론</th><th>근거</th></tr>
+<tr><td>픽킹</td><td>AABB → 알파 마스크</td><td>유닛은 사각형이 아니다</td></tr>
+<tr><td>픽킹 순서</td><td>y 내림차순 · 핸들 내림차순</td><td>그리기 순서의 역순</td></tr>
+<tr><td>상자 선택</td><td>내 유닛 우선 · 핸들 오름차순 · 32기</td><td>선택 순서가 대형을 정한다</td></tr>
+<tr><td>컨트롤 그룹</td><td>핸들을 저장</td><td>valid 가 죽은 것을 거른다</td></tr>
+<tr><td>명령 큐</td><td>상한 8 · 시프트는 append</td><td>TRAIN 만 건물에게</td></tr>
+<tr><td>우클릭</td><td>적 → 자원 → 반납처 → 이동</td><td>판정 순서도 명세</td></tr>
+<tr><td>경로</td><td>UI → net → sim.step 뿐</td><td>예외 하나가 락스텝을 죽인다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="s11-quiz1">
+<h3>확인 문제 1</h3>
+<div class="quiz" data-quiz>
+<p class="q">픽킹의 정렬을 y <b>오름차순</b>으로 바꾸면 무엇이 잘못되는가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>두 유닛이 겹쳐 있을 때 <b>뒤에 있는 유닛</b>이 잡힙니다. 화면에서는 앞의 유닛이 뒤의 유닛을 가리고 있는데, 클릭하면 가려진 쪽이 선택됩니다.</p>
+<p>플레이어는 이것을 "클릭이 빗나갔다"고 느낍니다. 그리고 다시 클릭해도 같은 결과가 나오므로 <b>고칠 방법이 없다</b>고 느낍니다.</p>
+<p>일반화하면 이렇습니다 — <b>입력 판정은 출력 순서의 역순이어야 합니다.</b> 그리기가 뒤에서 앞으로 간다면 픽킹은 앞에서 뒤로 가야 합니다. 두 순서가 같은 방향이면 반드시 어긋납니다.</p>
+</div>
+</div>
+</article>
+
+<article class="card" id="s11-quiz2">
+<h3>확인 문제 2</h3>
+<div class="quiz" data-quiz>
+<p class="q">명령 큐 상한을 8 에서 <b>무제한</b>으로 바꾸면 무슨 문제가 생기는가? 시프트 클릭을 많이 하는 것이 나쁜가?</p>
+<button>답 보기</button>
+<div class="a">
+<p>세 가지가 생깁니다.</p>
+<p>첫째, <b>상태 해시</b>가 커집니다. 큐는 상태이므로 해시에 들어가고, 길이가 무제한이면 해시 계산 시간도 무제한입니다. 매 틱 도는 계산에 상한이 없는 것은 위험합니다.</p>
+<p>둘째, <b>리플레이</b>가 커집니다. 명령이 늘면 로그가 늘고, 20부의 1,153바이트가 무너집니다.</p>
+<p>셋째, 플레이어가 <b>실수를 되돌리기 어려워집니다.</b> 40개를 큐에 넣고 나면 그중 30번째만 고치는 방법이 없습니다 — 전부 지우고 다시 넣어야 합니다. 상한은 성능 제약인 동시에 <b>UI 설계</b>이기도 합니다.</p>
+</div>
+</div>
 </article>
 
 <!-- ===== 12-path1.html ===== -->
