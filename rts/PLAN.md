@@ -349,3 +349,15 @@ prime 16777619.
   infantryman ~500 ticks. Tests are NOT written yet: an ImportError is not RED, so per-module
   tests are written in step 3 immediately before each module.
   Next: step 3 (py/rts in dependency order, RED→GREEN per module, commit per 3–4 modules).
+- 2026-09-06 07:10 — step 3 in progress. Python engine modules done, each written test-first with a
+  confirmed RED: `fixed` (43 checks), `rng` (15), `circle` (12), `tmap` (48), `mapgen` (22),
+  `spatial` (23), `path` (16), `jps` (6), `hpa` (17) — 202 checks, 0 failures, all cross-checked
+  against `golden/prim.txt`. Commits: 5beef90 (fixed/rng/circle), e70cef1 (tmap/mapgen/spatial).
+  Notes for the remaining ports: `crc16` lives in `fixed`, not `replay` (both `tmap` and `replay`
+  need it and `fixed` has no deps — SPEC §20.1 updated). Vehicles cannot enter HILL, so `labels()`
+  keeps two union-find passes (SPEC §4.3 updated). `path.Heap` is hand-written because heapq /
+  table.sort / Array.sort do not agree on order; the comparator (f, h, idx) is a total order so all
+  three languages pop the same sequence. JPS == A* verified on 720 random pairs, not just the 24
+  golden ones. HPA* measures 1.000–1.321× optimal (mean 1.082).
+  Next: `flow` → `move` → `fog` → `combat` → `econ` → `ai` → `select` → `sim` → `net` → `replay`
+  → `speaker` → `raster` → `render` → `main`.
