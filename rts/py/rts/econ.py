@@ -19,8 +19,9 @@ SUPPLY_MAX = 100
 BASE_R = 4                       # §16.5 기지 반경 (체비셰프, 건물 원점 기준)
 TOUCH_R = 1                      # 채집기가 "닿았다"고 보는 거리
 
-# §16.2 채집기 FSM 상태
-H_SEEK, H_TO_ORE, H_MINE, H_TO_BASE, H_UNLOAD, H_IDLE = 0, 1, 2, 3, 4, 5
+# §16.2 채집기 FSM 상태 — 번호는 const 가 소유한다(§17.1 의 표).
+H_SEEK, H_TO_ORE, H_MINE = C.ST_SEEK, C.ST_TO_ORE, C.ST_MINE
+H_TO_BASE, H_UNLOAD, H_IDLE = C.ST_TO_BASE, C.ST_UNLOAD, C.ST_IDLE
 
 DEPOT = (C.HQ, C.REF)            # 자원 반납처 (§25.2)
 
