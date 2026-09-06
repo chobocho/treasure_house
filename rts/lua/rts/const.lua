@@ -99,7 +99,7 @@ M.ARMOUR = tab({{INF, 1}, {ARCHER, 0}, {TANK, 4}, {MORTAR, 0}, {HARV, 3},
                 {HQ, 3}, {REF, 5}, {BARR, 4}, {FACT, 5}, {POW, 3}, {TOWER, 5}})
 M.RANGE = tab({{INF, 1}, {ARCHER, 4}, {TANK, 3}, {MORTAR, 6}, {TOWER, 5}})
 M.RELOAD = tab({{INF, 12}, {ARCHER, 16}, {TANK, 24}, {MORTAR, 40}, {TOWER, 20}})
--- 16.16 px/틱. 1.5 px/틱 = 0.094 타일/틱 — 47타일 대각선에 500틱이 든다.
+-- 16.16 px/틱. 1.5 px/틱 = 0.094 타일/틱 — 47타일 대각선에 752틱이 든다(대각 보정 포함, §25.4).
 M.SPEED = tab({{INF, 98304}, {ARCHER, 91750}, {TANK, 131072},
                {MORTAR, 65536}, {HARV, 78643}})
 M.SIGHT = tab({{INF, 4}, {ARCHER, 5}, {TANK, 5}, {MORTAR, 4}, {HARV, 3},
