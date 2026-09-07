@@ -19,10 +19,16 @@ import (
 	"os"
 	"sort"
 
+	"time"
+
 	"treasure/boricha/apps/bugs"
+	"treasure/boricha/apps/monitor"
+	"treasure/boricha/apps/showcase"
+	"treasure/boricha/apps/todo"
 	"treasure/boricha/style"
 	"treasure/boricha/tea"
 	"treasure/boricha/testkit"
+	"treasure/boricha/widgets"
 )
 
 // Frame 하나 = 어떤 조작 직후의 화면 전체.
@@ -66,6 +72,27 @@ var registry = map[string]entry{
 		model:  func() tea.Model { return bugs.NewTick(false) },
 		script: `48x10 .8`,
 		desc:   "함정 2 — Tick 을 다시 걸지 않으면 한 번 울리고 멎는다",
+	},
+	"todo": {
+		model: func() tea.Model { return todo.New("") },
+		script: `70x20 a "보리차 사기" <enter> a "찻잔 씻기" <enter> a "덱 마무리" <enter> ` +
+			`<down> <space> <up> / "차" <enter> <esc> ?`,
+		desc: "할 일 목록 — 추가·완료·거르기·도움말",
+	},
+	"monitor": {
+		// 간격을 줄인다. testkit 의 기다리기는 진짜 잠이라, 기본 0.7초로 두면
+		// 프레임 열 장을 뽑는 데 7초가 걸린다.
+		model:  func() tea.Model { return monitor.New().SetInterval(30 * time.Millisecond) },
+		script: `76x22 .8 <space> .2 <space> .4`,
+		desc:   "시스템 모니터 — 표본 수집·멈춤·다시",
+	},
+	"showcase": {
+		model: func() tea.Model {
+			return showcase.New().SetSpinner(widgets.SpinnerSet{
+				Frames: []string{"🫖", "🍵"}, FPS: 5 * time.Millisecond})
+		},
+		script: `76x22 <tab> <tab> <tab> "보리차" <tab>`,
+		desc:   "전시장 — 꾸미기·색·글자 폭·입력 탭",
 	},
 	"tick_ok": {
 		model:  func() tea.Model { return bugs.NewTick(true) },

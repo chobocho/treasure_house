@@ -336,6 +336,25 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 08:0x — **commit 9 done: the three capstones.** `apps/todo` (JSON file via
+  Cmd, atomic tmp+rename, filter-aware delete), `apps/monitor` (/proc/stat, meminfo,
+  loadavg, uptime; CPU% from the *difference* of two cumulative samples; sparkline from
+  the 8 block runes, all EA=N so 1 cell), `apps/showcase` (four tabs: styles, colours,
+  width, input) plus thin `cmd/todo`, `cmd/monitor`, `cmd/showcase`.
+  **DEVIATION from §4 layout (deliberate):** capstone *models* live in `apps/<name>`
+  library packages and `cmd/<name>/main.go` is a thin wrapper. Reason: `tools/record` must
+  import the model, and a `package main` cannot be imported. Examples stay single-file
+  `package main` on purpose (each must be a complete program the deck can print whole),
+  which is exactly why their evidence is tmux captures rather than player recordings.
+  Recordings now: todo, monitor, showcase, width_bad/ok, tick_bad/ok (7). tmux captures:
+  11 examples + wrap_bad/ok + app_todo/monitor/showcase (16). `make record` twice → same
+  md5s. 12,074 lines.
+  함정 log: (a) selecting from a *filtered* list and then deleting by value deletes the
+  wrong row when two entries share text — `taskItem` carries the original index and a
+  named test pins it; (b) a Cmd must snapshot the slice it saves, or the main goroutine
+  can mutate it mid-write; (c) testkit's waits are REAL sleeps, so any app with a timer
+  needs a knob (`SetInterval`, `SetSpinner`) or its tests take 20 s — this is worth a
+  slide about why timing belongs behind an injection point.
 - 2026-09-07 07:0x — **commit 8 done: `testkit/` + `tools/` + `apps/bugs`.**
   testkit: script.go (tiny language `80x24 j <up> "보리차" .3`, steps carry the real
   terminal bytes so recordings go through the real decoder) and testkit.go (a
