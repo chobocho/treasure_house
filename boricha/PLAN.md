@@ -336,6 +336,27 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 03:0x — **commit 3 done: `width/`.** widthdata.txt (678 ranges, Unicode
+  16.0.0), tools/gen_width/main.go (txt → table.go, deterministic, rejects overlapping or
+  unordered ranges), table.go (245 lines, 3 ranges per line), width.go (RuneWidth binary
+  search O(log 678), ANSI-aware StringWidth, ansiSeqLen handling CSI and OSC),
+  truncate.go (Truncate / splitAt / Pad / Wrap). All green; `make gen-width` twice leaves
+  the md5 unchanged.
+  **DEVIATION from §5.5 (deliberate):** the vendored file is `width/widthdata.txt`, not
+  upstream `EastAsianWidth.txt` — this machine has no network. It is generated from
+  python3's `unicodedata` (same properties, Unicode 16.0.0) in a documented format
+  (`START..END;CLASS`, classes W/F/A/Z, `# @version` line the generator reads). The file's
+  own header says all of this in Korean; the slide must say it too — do not claim it is
+  the Unicode file. Classes: Z = Mn/Me/Cf plus Hangul jamo U+1160..U+11FF (they stack on
+  the leading jamo); A → 1 cell (box-drawing chars are A, and 2 would double every box —
+  go-runewidth defaults to 1 too).
+  함정 log: (a) U+0301 is EA=Ambiguous *and* category Mn — the zero-width rule must win,
+  so Z is decided before the EA class; (b) `Truncate` must stop taking visible runes at
+  the first overflow, not skip-and-continue, or "a한b" at width 2 yields "ab" instead of
+  "a" — a silently different sentence; (c) escapes must always be copied through Truncate
+  or the trailing `\e[0m` is lost and colour bleeds down the screen; (d) Wrap at width 1
+  with a wide rune cannot be satisfied — it overflows by one cell on purpose, and there is
+  a named test that pins that choice.
 - 2026-09-07 02:2x — **commit 2 done: `input/`.** keys.go (Key/KeyMod/KeyMsg, special keys
   as runes past unicode.MaxRune, Bubble Tea-identical names), decoder.go (CSI/SS3 state
   machine, ESC-prefix = alt, UTF-8 assembly, bracketed paste, focus, UnknownMsg),
