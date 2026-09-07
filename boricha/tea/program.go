@@ -153,8 +153,8 @@ func (p *Program) Run() (Model, error) {
 	return p.loop(model)
 }
 
-// loop 이 이 패키지의 심장이다. 열 줄이 안 된다 —
-// 나머지 코드 전부가 이 열 줄을 단순하게 유지하기 위해 존재한다.
+// loop 이 이 패키지의 심장이다. 마흔 줄이 안 된다 —
+// 나머지 코드 전부가 이 마흔 줄을 단순하게 유지하기 위해 존재한다.
 func (p *Program) loop(model Model) (Model, error) {
 	for {
 		select {

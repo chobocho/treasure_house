@@ -30,7 +30,7 @@ func UnicodeVersion() string { return unicodeVersion }
 // 서양 글꼴에서는 한 칸으로 그려진다. 유니코드는 "문맥에 따라 다르다" 고만 말하고
 // 결정을 프로그램에 미룬다. 우리는 1을 고른다 — 박스 그리기 문자(─│┌)가 여기 속하는데,
 // 그것들을 2로 보면 우리가 그리는 모든 상자가 두 배로 벌어지기 때문이다.
-// Bubble Tea/Lip Gloss 가 쓰는 go-runewidth 도 기본값은 1이다.
+// Bubble Tea/Lip Gloss 가 쓰는 go-runewidth 도 서양 로케일에서는 1이다(LANG 이 ko·ja·zh 면 2).
 //
 // 이분 탐색이라 O(log n), n = 678. 표는 읽기만 하므로 여러 고루틴이 동시에 불러도 안전하다.
 func RuneWidth(r rune) int {
