@@ -1,3 +1,236 @@
-<!--SLIDE sec=7 t="5단계 — width: 글자 폭 (준비 중)"-->
-<h2>5단계 — width: 글자 폭</h2>
-<p>이 부는 아직 쓰는 중이다.</p>
+<!--SLIDE sec=7 t="이 부에서 만들 것"-->
+<h1>7부 · width — 글자 폭</h1>
+<p class="lead">한국어 TUI 에서 상자가 어긋나고 표가 밀리는 버그는 <b>거의 전부 여기서 온다.</b>
+<code>rune</code> 은 코드포인트일 뿐 "칸" 을 모르고, Go 표준 라이브러리에는 그 답이 없다.</p>
+<div class="cols">
+  <div class="card"><h4>만드는 것</h4><ul>
+    <li>유니코드 속성 표를 코드로 굽는 생성기</li>
+    <li><code>RuneWidth</code> — 이분 탐색 O(log 678)</li>
+    <li><code>StringWidth</code> — 꾸밈 시퀀스를 세지 않는다</li>
+    <li><code>Truncate</code>·<code>Pad</code>·<code>Wrap</code></li>
+  </ul></div>
+  <div class="card"><h4>이 부에서 정하는 것</h4><ul>
+    <li>모호(Ambiguous) 글자를 몇 칸으로 볼 것인가</li>
+    <li>결합 문자와 한글 자모는 0칸</li>
+    <li>폭 1에 두 칸짜리가 오면 어떻게 하나</li>
+  </ul></div>
+</div>
+
+<!--SLIDE sec=7 t="문제 — 눈으로"-->
+<h2>len 으로 세면 이렇게 된다</h2>
+<!--PLAYER name=width_bad cap="apps/bugs 의 고장 난 판 — len 으로 바이트를 센다"-->
+<p>표의 오른쪽 경계가 한글 줄에서만 왼쪽으로 밀려 있다.
+"보리차" 는 3글자·6칸인데 <code>len()</code> 은 <b>9</b> 를 준다 — UTF-8 바이트 수다.</p>
+
+<!--SLIDE sec=7 t="고친 판"-->
+<h2>칸으로 세면 이렇게 된다</h2>
+<!--PLAYER name=width_ok cap="같은 코드, width.Pad 만 갈아 끼웠다"-->
+<div class="big center" style="font-size:1.1em">
+"보리차" → 바이트 9 · 룬 3 · <b>칸 6</b></div>
+<p class="center">세 숫자가 다 다르다. 화면 정렬에 필요한 것은 <b>맨 오른쪽 하나뿐</b>이다.</p>
+
+<!--SLIDE sec=7 t="왜 두 칸인가"-->
+<h2>왜 한글은 두 칸인가</h2>
+<p>터미널은 글자를 <b>고정폭 격자</b>에 찍는다. 그런데 한글·한자·가나는
+서양 글자와 같은 폭으로 그리면 알아보기 어렵다. 그래서 옛날부터 두 칸을 쓴다.</p>
+<p>유니코드는 이 관례를 <b>UAX #11 East Asian Width</b> 로 정리했다.
+각 글자에 여섯 값 중 하나를 준다.</p>
+<table>
+<tr><th>값</th><th>뜻</th><th>보기</th><th>우리 표에서</th></tr>
+<tr><td>W (Wide)</td><td>넓음</td><td>한글 음절, 한자, 가나, 대부분의 이모지</td><td><b>2칸</b></td></tr>
+<tr><td>F (Fullwidth)</td><td>전각</td><td>전각 영문·기호(Ａ, ？)</td><td><b>2칸</b></td></tr>
+<tr><td>A (Ambiguous)</td><td>모호</td><td>①, é, ─ — 글꼴에 따라 다르다</td><td>1칸 <b>(우리가 정한다)</b></td></tr>
+<tr><td>H (Halfwidth)</td><td>반각</td><td>반각 가타카나</td><td>1칸</td></tr>
+<tr><td>Na (Narrow)</td><td>좁음</td><td>ASCII</td><td>1칸</td></tr>
+<tr><td>N (Neutral)</td><td>동아시아와 무관</td><td>키릴, 박스 그리기 일부</td><td>1칸</td></tr>
+</table>
+
+<!--SLIDE sec=7 t="모호를 1칸으로 정한 이유"-->
+<h2>모호(A)를 1칸으로 정한 이유</h2>
+<p>유니코드는 모호 글자에 대해 <b>"문맥에 따라 다르다"</b> 고만 말하고 결정을 프로그램에 미룬다.
+그러니 이건 <b>우리가 정하는 것</b>이다.</p>
+<div class="cols">
+  <div class="card"><h4>1칸으로 정하면</h4><ul>
+    <li>박스 그리기 문자(─│┌)가 여기 속한다</li>
+    <li>2칸으로 보면 우리가 그리는 <b>모든 상자가 두 배</b>로 벌어진다</li>
+    <li>go-runewidth 의 기본값도 1이다</li>
+  </ul></div>
+  <div class="card"><h4>2칸이 맞는 경우도 있다</h4><ul>
+    <li>동아시아 글꼴을 쓰는 터미널에서는 실제로 두 칸으로 그려진다</li>
+    <li>그래서 <b>같은 화면이 기계마다 다르게 보일 수 있다</b></li>
+    <li>모호 글자를 정렬이 중요한 자리에 안 쓰는 것이 답이다</li>
+  </ul></div>
+</div>
+<div class="warn"><b>이 덱 자체가 그 증거다</b>
+덱에 싣는 고정폭 글꼴(D2Coding)은 동그라미 숫자(<code>U+2460</code>~)를 <b>두 칸</b>으로 그린다.
+우리 표는 1칸으로 센다. 그래서 덱 빌더가 매번 이렇게 경고한다:
+<code>모호(A) 폭이라 글꼴과 우리 표가 갈리는 글자 3개: ①②③</code>
+글꼴의 잘못이 아니라 그 글자의 성질이다.</div>
+
+<!--SLIDE sec=7 t="자료 파일"-->
+<h2>표는 어디서 오나</h2>
+<!--RUN file=width/widthdata.txt lines=1-30 cap="width/widthdata.txt — 파일 머리에 출처를 적어 둔다"-->
+<p class="small mut">유니코드가 배포하는 <code>EastAsianWidth.txt</code> 를 그대로 받아 온 것이 <b>아니다.</b>
+이 저장소를 만든 기계에는 네트워크가 없어서, 같은 속성을 들고 있는 파이썬 <code>unicodedata</code>
+모듈에서 뽑아 같은 뜻의 표로 적었다. 그 사실을 파일 머리에 그대로 써 두었다.</p>
+
+<!--SLIDE sec=7 t="자료의 모습"-->
+<h2>구간 678개</h2>
+<!--RUN file=width/widthdata.txt lines=31-52 cap="width/widthdata.txt — 실제 자료"-->
+<p>한 줄이 한 구간이다. 여기 적히지 않은 코드포인트는 전부 폭 1이다.</p>
+
+<!--SLIDE sec=7 t="생성기 ①"-->
+<h2>왜 표를 코드로 굽나</h2>
+<!--CODE file=tools/gen_width/main.go lines=1-20 cap="tools/gen_width/main.go"-->
+<p>프로그램이 돌 때마다 12 KB 짜리 텍스트를 읽고 파싱하는 것은 낭비이고,
+무엇보다 <b>그 파일을 배포에 딸려 보내야 한다.</b> 우리 목표는 단일 실행 파일이다.</p>
+
+<!--SLIDE sec=7 t="생성기 ②"-->
+<h2>읽기</h2>
+<!--CODE file=tools/gen_width/main.go lines=21-54 cap="tools/gen_width/main.go"-->
+
+<!--SLIDE sec=7 t="생성기 ③"-->
+<h2>이분 탐색의 전제를 여기서 확인한다</h2>
+<!--CODE file=tools/gen_width/main.go lines=55-87 cap="tools/gen_width/main.go"-->
+<div class="warn"><b>표가 조용히 어긋나면 증상이 "가끔 한 칸 밀림" 이다</b>
+구간이 겹치거나 순서가 틀리면 이분 탐색이 엉뚱한 답을 준다. 그런데 대부분의 글자는 여전히 맞아서,
+버그가 특정 글자에서만 나타난다. 원인을 찾기 대단히 어렵다.
+그래서 <b>생성할 때</b> 확인한다 — 잘못된 표는 아예 만들어지지 않는다.</div>
+
+<!--SLIDE sec=7 t="생성기 ④"-->
+<h2>쓰기 — 결정론이 계약이다</h2>
+<!--CODE file=tools/gen_width/main.go lines=88-118 cap="tools/gen_width/main.go"-->
+<!--CODE file=tools/gen_width/main.go lines=119-122 cap="tools/gen_width/main.go"-->
+<p>다시 돌려도 같은 파일이 나온다. 그래야 <code>git diff</code> 로 "표가 바뀌었나" 를 볼 수 있다.</p>
+
+<!--SLIDE sec=7 t="구워진 표"-->
+<h2>구워진 표 — 245줄</h2>
+<!--CODE file=width/table.go lines=1-20 cap="width/table.go — 머리"-->
+<p class="small mut">나머지 225줄은 숫자 구간이 세 개씩 늘어선 것이라 부록에 있다.
+사람이 읽을 것이 아니라 이분 탐색이 읽을 것이다.</p>
+
+<!--SLIDE sec=7 t="RuneWidth"-->
+<h2>RuneWidth — 규칙 넷</h2>
+<!--CODE file=width/width.go lines=1-18 cap="width/width.go — 패키지 주석"-->
+<!--CODE file=width/width.go lines=19-50 cap="width/width.go — RuneWidth"-->
+
+<!--SLIDE sec=7 t="이분 탐색"-->
+<h2>이분 탐색 O(log 678) ≈ 열 번</h2>
+<!--CODE file=width/width.go lines=51-77 cap="width/width.go — class·StringWidth"-->
+<p><code>sort.Search</code> 는 "조건이 처음 참이 되는 자리" 를 준다.
+<code>hi >= r</code> 인 첫 구간을 찾은 뒤, 그 구간이 정말 <code>r</code> 을 담는지 한 번 더 본다 —
+표에 없는 코드포인트는 그 확인에서 걸린다.</p>
+<p class="small mut">표는 읽기만 하므로 여러 고루틴이 동시에 불러도 안전하다.
+잠금장치가 없는 것이 실수가 아니라 설계다.</p>
+
+<!--SLIDE sec=7 t="꾸밈은 칸을 안 먹는다"-->
+<h2>ANSI 시퀀스를 세면 정렬이 무너진다</h2>
+<!--CODE file=width/width.go lines=78-111 cap="width/width.go — ansiSeqLen"-->
+<div class="big center" style="font-size:1.05em">
+<code>"\e[31m한\e[0m"</code> 은 <b>2칸</b>이다 — 11바이트지만.</div>
+<p class="center small mut">이 처리를 빼먹으면 색을 입힌 줄이 실제보다 훨씬 넓다고 계산되어,
+정렬이 전부 무너진다. 그런데 색을 안 쓰면 멀쩡하다 — 그래서 늦게 발견된다.</p>
+
+<!--SLIDE sec=7 t="Truncate"-->
+<h2>Truncate — 반 칸으로 자를 수는 없다</h2>
+<!--CODE file=width/truncate.go lines=1-34 cap="width/truncate.go"-->
+<div class="warn"><b>한 번 넘치면 그 뒤는 다 버린다</b>
+들어가는 글자만 골라 담으면 <b>잘린 것이 아니라 글자가 빠진 다른 문장</b>이 된다.
+<code>"a한b"</code> 를 2칸으로 자를 때 <code>"ab"</code> 가 나오면 그건 자르기가 아니다.</div>
+
+<!--SLIDE sec=7 t="Truncate — 색 지키기"-->
+<h2>끝의 초기화를 잃으면 색이 샌다</h2>
+<pre class="code txt"><code>Truncate("\e[31mabcdef\e[0m", 3)
+  →  "\e[31mabc\e[0m"        ← 끝의 \e[0m 이 살아 있다
+  ✗  "\e[31mabc"             ← 이러면 다음 줄부터 전부 빨개진다</code></pre>
+<p>그래서 꾸밈 시퀀스는 <b>넘친 뒤에도 계속 복사한다.</b> 칸을 안 먹으므로 자를 이유가 없다.</p>
+<!--CODE file=width/truncate.go lines=35-65 cap="width/truncate.go — splitAt"-->
+
+<!--SLIDE sec=7 t="Pad 와 Wrap"-->
+<h2>Pad 는 늘리기만 한다</h2>
+<!--CODE file=width/truncate.go lines=66-97 cap="width/truncate.go — Pad·Wrap"-->
+<p class="small mut">한 함수가 늘리기도 하고 줄이기도 하면, 부르는 쪽이 결과의 폭을 예측하지 못한다.
+"이 함수를 지나면 정확히 w칸" 이라고 말할 수 있어야 상자가 맞는다.</p>
+
+<!--SLIDE sec=7 t="Wrap"-->
+<h2>Wrap — 낱말 단위로 접되, 긴 낱말은 쪼갠다</h2>
+<!--CODE file=width/truncate.go lines=98-131 cap="width/truncate.go — wrapLine"-->
+<!--CODE file=width/truncate.go lines=132-139 cap="width/truncate.go — 끝"-->
+<div class="note"><b>폭 1에 한글이 오면</b>
+담을 방법이 없다. 그럴 때는 그 글자가 홀로 한 줄을 차지하며 <b>한 칸을 넘친다.</b>
+글자를 조용히 버리는 쪽보다 넘치는 쪽을 택했다 — 버리면 읽는 사람이 글이 사라진 것을 모른다.
+이 선택을 못박는 시험에 <code>TestWrapWidthOneWithWideRune</code> 이라는 이름을 붙여 두었다.</div>
+
+<!--SLIDE sec=7 t="시험 — 폭"-->
+<h2>시험 ① 스물세 가지 글자</h2>
+<!--CODE file=width/width_test.go lines=1-34 cap="width/width_test.go"-->
+<p class="small mut">각 줄에 "왜" 를 적어 두었다. 나중에 이 시험이 깨졌을 때
+"이 줄이 왜 있었지" 를 다시 알아내지 않아도 되게 하려는 것이다.</p>
+
+<!--SLIDE sec=7 t="시험 — 문자열"-->
+<h2>시험 ② 섞인 문자열과 ANSI</h2>
+<!--CODE file=width/width_test.go lines=35-68 cap="width/width_test.go"-->
+
+<!--SLIDE sec=7 t="시험 — 자르기"-->
+<h2>시험 ③ 자르기의 경계</h2>
+<!--CODE file=width/width_test.go lines=69-102 cap="width/width_test.go"-->
+
+<!--SLIDE sec=7 t="시험 — 채우기와 접기"-->
+<h2>시험 ④ 채우기와 접기</h2>
+<!--CODE file=width/width_test.go lines=103-127 cap="width/width_test.go"-->
+<!--CODE file=width/width_test.go lines=128-159 cap="width/width_test.go"-->
+
+<!--SLIDE sec=7 t="시험 — 불변식"-->
+<h2>시험 ⑤ 어느 줄도 폭을 넘지 않는다</h2>
+<!--CODE file=width/width_test.go lines=160-186 cap="width/width_test.go"-->
+<p class="lead">폭 2부터 20까지, 네 가지 글을 전부 접어 보고 <b>모든 줄의 폭</b>을 잰다.
+이런 시험을 하나 두면 손으로 적은 표가 놓치는 경우가 걸린다.</p>
+
+<!--SLIDE sec=7 t="덱과 글꼴"-->
+<h2>이 덱이 글꼴을 싣는 이유</h2>
+<p class="lead">터미널 캡처는 "한글 2칸·나머지 1칸" 이라는 <b>규칙 위에 그려진 그림</b>이다.
+보는 쪽 기기에 그 규칙을 지키는 글꼴이 없으면 상자가 깨진다.</p>
+<div class="cols">
+  <div class="card"><h4>없는 경우가 흔하다</h4><ul>
+    <li>안드로이드·iOS 에는 한글 고정폭 글꼴이 없다</li>
+    <li>윈도우도 D2Coding 을 따로 깔아야 있다</li>
+    <li>그러면 한글은 비례폭에서, 박스 문자는 또 다른 글꼴에서 온다</li>
+  </ul></div>
+  <div class="card"><h4>그래서</h4><ul>
+    <li>D2Coding(SIL OFL 1.1)에서 <b>이 덱이 쓰는 글자만</b> 잘라 woff2 로 싣는다</li>
+    <li>라틴·박스·블록이 반각(500), 한글이 정확히 그 두 배(1000)</li>
+    <li>빌더가 <b>모든 글자의 폭을 검사</b>한다 — 규칙을 어기면 빌드가 멈춘다</li>
+  </ul></div>
+</div>
+<p class="small mut">Noto Sans Mono CJK 는 이 용도에 안 맞는다 — 박스 문자를 전각으로 그려서
+오히려 상자가 깨진다. 글꼴 고르기가 곧 이 부의 응용 문제인 셈이다.</p>
+
+<!--SLIDE sec=7 t="나란히 보기"-->
+<h2>나란히 보기 — 글자 폭</h2>
+<table>
+<tr><th></th><th>go-runewidth + uniseg</th><th>보리차 width</th></tr>
+<tr><td>표 출처</td><td>유니코드 배포 파일</td><td>파이썬 unicodedata 에서 뽑음(같은 속성)</td></tr>
+<tr><td>모호(A)</td><td>기본 1칸, 옵션으로 2칸</td><td>1칸 고정</td></tr>
+<tr><td>결합 문자</td><td>0칸</td><td>0칸</td></tr>
+<tr><td>자소 묶음(👨‍👩‍👦)</td><td>uniseg 가 하나로 묶는다</td><td><b>안 한다</b> — 각 코드포인트를 따로 센다</td></tr>
+<tr><td>ANSI 무시</td><td>따로 처리해야 한다</td><td><code>StringWidth</code> 가 기본으로</td></tr>
+<tr><td>조회</td><td>이분 탐색</td><td>이분 탐색</td></tr>
+</table>
+<div class="warn"><b>자소 묶음은 우리가 틀린다</b>
+가족 이모지(👨‍👩‍👦)는 코드포인트 다섯 개가 ZWJ 로 묶인 것이다. 터미널은 대개 2칸으로 그리는데
+우리 표는 6칸으로 센다(2+0+2+0+2). 이모지를 쓰는 앱이라면 uniseg 같은 자소 분할이 필요하다.
+이 덱의 앱들은 이모지를 한 글자씩만 쓰므로 문제가 없지만, <b>없는 문제인 척하지 않는다.</b></div>
+
+<!--SLIDE sec=7 t="7부 연습문제"-->
+<h2>7부 연습문제</h2>
+<ol class="steps">
+<li><code>go run ./cmd/showcase</code> 를 띄우고 <kbd>Tab</kbd> 을 두 번 눌러 글자 폭 탭을 보라.
+눈금이 모두 같은 자리에서 시작하는가?</li>
+<li><code>RuneWidth</code> 에서 제어 문자 검사(<code>r &lt; 0x20</code>)를 빼면
+어떤 화면이 깨지나? <span class="mut">힌트: 색이 든 줄</span></li>
+<li>모호(A)를 2칸으로 바꾸면(<code>class(r) == 'A'</code> 일 때 2)
+<code>cmd/todo</code> 의 상자가 어떻게 되나?</li>
+<li><code>widthdata.txt</code> 에 없는 코드포인트가 오면 몇 칸인가? 그 규칙은 어디에 적혀 있나?</li>
+<li>가족 이모지(👨‍👩‍👦)를 <code>examples/09_paste</code> 에 붙여넣어 보라.
+<code>StringWidth</code> 가 몇을 주는가? 터미널은 몇 칸으로 그리는가?</li>
+</ol>

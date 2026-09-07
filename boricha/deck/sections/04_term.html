@@ -1,3 +1,256 @@
-<!--SLIDE sec=4 t="2단계 — term: 터미널 드라이버 (준비 중)"-->
-<h2>2단계 — term: 터미널 드라이버</h2>
-<p>이 부는 아직 쓰는 중이다.</p>
+<!--SLIDE sec=4 t="이 부에서 만들 것"-->
+<h1>4부 · term — 터미널 드라이버</h1>
+<p class="lead">1부에서 무엇을 끄고 무엇을 켜야 하는지 배웠다.
+이 부에서는 그것을 <b>쓸 만한 타입 하나</b>로 감싼다. 그리고 되돌리는 일을 확실하게 만든다.</p>
+<div class="cols">
+  <div class="card"><h4>만드는 것</h4><ul>
+    <li><code>Term</code> — 입출력 한 쌍을 감싼 값</li>
+    <li>원시 모드 들어가기·되돌리기</li>
+    <li>크기 묻기와 <code>SIGWINCH</code> 감시</li>
+    <li>대체 화면·커서·마우스·붙여넣기 켜고 끄기</li>
+    <li>리눅스·macOS·윈도우 갈래</li>
+  </ul></div>
+  <div class="card"><h4>이 부의 규칙</h4><ul>
+    <li><b>진짜 터미널 없이 전부 시험한다</b></li>
+    <li>켠 것만, 켠 순서의 역순으로 되돌린다</li>
+    <li>macOS 는 컴파일만 확인 — 그렇게 적는다</li>
+  </ul></div>
+</div>
+
+<!--SLIDE sec=4 t="io.Reader 를 받는 이유"-->
+<h2>왜 <code>*os.File</code> 이 아니라 <code>io.Reader</code> 인가</h2>
+<!--CODE file=term/term.go lines=1-25 cap="term/term.go — 오류 둘과 Term 의 앞부분"-->
+<p>터미널에 시키는 일의 <b>대부분</b>은 "정해진 바이트를 내보내는 것" 이다.
+상대가 진짜 터미널일 필요가 없다. 버퍼를 주면 그대로 시험이 되고,
+10부의 <code>testkit</code> 이 가짜 터미널을 만들 때도 이 문이 그대로 쓰인다.</p>
+<div class="note"><b>오류를 둘로 나눈 이유</b>
+<code>ErrUnsupported</code> 는 "이 운영체제에 길이 없다" — 프로그램이 포기해야 한다.
+<code>ErrNotTerminal</code> 은 "지금 이 입출력이 터미널이 아니다" — 80×24 로 물러서면 된다.
+하나로 뭉치면 부르는 쪽이 어느 쪽인지 몰라 늘 최악을 가정하게 된다.</div>
+
+<!--SLIDE sec=4 t="Term 의 필드"-->
+<h2>Term 이 기억하는 것</h2>
+<!--CODE file=term/term.go lines=26-56 cap="term/term.go — 필드와 New"-->
+<p>켜 놓은 모드들을 <code>bool</code> 로 기억한다. <code>Cleanup</code> 이
+"<b>켠 것만</b>, 켠 순서의 <b>역순으로</b>" 되돌리기 위해서다.</p>
+
+<!--SLIDE sec=4 t="IsTTY"-->
+<h2>터미널인지 어떻게 아나</h2>
+<!--CODE file=term/term.go lines=57-83 cap="term/term.go — 쓰기와 판별"-->
+<p class="lead">판별법은 <b>"termios 를 읽어 보고 되는지"</b> 다.
+터미널만이 그 질문에 답한다 — 파일도 파이프도 <code>ENOTTY</code> 로 거절한다.</p>
+<p class="small mut"><code>isatty</code> 라는 이름의 C 함수가 하는 일도 정확히 이것이다.
+파일 이름이나 환경 변수를 보는 것이 아니라, 물어보고 되는지 보는 것.</p>
+
+<!--SLIDE sec=4 t="MakeRaw 와 Restore"-->
+<h2>들어가고 되돌아오기</h2>
+<!--CODE file=term/term.go lines=84-105 cap="term/term.go — MakeRaw·Restore"-->
+<div class="tip"><b>Restore 는 defer 로 걸라고 만든 것이다</b>
+그래서 원시 모드로 들어간 적이 없으면 <b>조용히 아무 일도 하지 않는다.</b>
+"들어갔는지" 를 부르는 쪽이 추적하게 만들면, 어느 경로 하나에서 반드시 빠뜨린다.</div>
+
+<!--SLIDE sec=4 t="켜고 끄기"-->
+<h2>모드를 켜고 끄는 여덟 개</h2>
+<!--CODE file=term/term.go lines=106-129 cap="term/term.go — 한 줄짜리 메서드들"-->
+<p class="small mut">여덟 줄이 거의 같은 모양이다. 이럴 때 표로 만들고 반복문을 돌리고 싶어지지만,
+그러면 "무엇이 있는지" 를 알려면 표를 읽어야 한다. 여덟 줄쯤은 그냥 여덟 줄로 두는 편이
+읽는 사람에게 친절하다.</p>
+
+<!--SLIDE sec=4 t="마우스는 짝이 맞아야 한다"-->
+<h2>마우스만 특별한 이유</h2>
+<!--CODE file=term/term.go lines=130-148 cap="term/term.go — EnableMouse·DisableMouse"-->
+<div class="warn"><b>켤 때 쓴 것과 짝이 안 맞으면</b>
+1003(모든 움직임)으로 켜 놓고 1002(버튼만)로 끄면 터미널에 추적이 켜진 채 남는다.
+프로그램이 끝난 뒤 셸에서 마우스를 움직일 때마다 <code>&lt;35;40;12M</code> 같은
+쓰레기가 쏟아진다. 사용자는 셸이 고장 났다고 생각한다.</div>
+
+<!--SLIDE sec=4 t="정리의 역순"-->
+<h2>정리는 켠 순서의 역순으로</h2>
+<!--CODE file=term/term.go lines=149-180 cap="term/term.go — Cleanup"-->
+<p>대체 화면을 <b>먼저</b> 빠져나가면, 그 뒤에 내보내는 "커서 보이기" 가 원래 화면에 적용된다.
+대체 화면 쪽 커서는 숨은 채로 남는다 — 다음에 그 프로그램을 켜면 커서가 없다.</p>
+<!--CODE file=term/term.go lines=181-183 cap="term/term.go — 끝"-->
+
+<!--SLIDE sec=4 t="ioctl 을 직접 부르기"-->
+<h2>표준 라이브러리에 없는 것을 부르기</h2>
+<!--CODE file=term/term_unix.go lines=1-27 cap="term/term_unix.go — ioctl"-->
+<p>Go 표준 라이브러리에는 터미널 전용 함수가 없다. 그래서 시스템 호출을 직접 부른다.
+<code>arg</code> 는 커널이 읽거나 채워 줄 구조체의 주소다 — 요청 번호마다 무엇을 가리켜야 하는지가
+정해져 있고, 틀리면 메모리가 <b>조용히</b> 망가진다.</p>
+<p class="small mut">그래서 이 함수는 패키지 밖으로 내보내지 않는다.
+위험한 문은 하나만 두고, 그 문을 쓰는 곳을 세 군데로 묶어 둔다.</p>
+
+<!--SLIDE sec=4 t="termios 읽고 쓰기"-->
+<h2>termios 를 읽고 쓰는 두 함수</h2>
+<!--CODE file=term/term_unix.go lines=28-47 cap="term/term_unix.go"-->
+<div class="cols">
+  <div class="card"><h4>리눅스</h4><pre class="code go"><code>ioctlGetTermios = syscall.TCGETS
+ioctlSetTermios = syscall.TCSETS</code></pre></div>
+  <div class="card"><h4>macOS</h4><pre class="code go"><code>ioctlGetTermios = syscall.TIOCGETA
+ioctlSetTermios = syscall.TIOCSETA</code></pre></div>
+</div>
+<p>이름과 숫자만 다르고 하는 일은 같다. 그래서 이 둘만 파일을 갈라 두고, 나머지 코드는 공유한다.</p>
+
+<!--SLIDE sec=4 t="플랫폼 갈래"-->
+<h2>플랫폼을 가르는 파일 다섯</h2>
+<!--CODE file=term/termios_linux.go cap="term/termios_linux.go 전체"-->
+<!--CODE file=term/termios_darwin.go cap="term/termios_darwin.go 전체"-->
+<div class="warn"><b>정직하게 적어 둔다</b>
+<code>termios_darwin.go</code> 는 이 저장소를 만든 기계(android/arm64)에서
+<b>돌려 본 적이 없다.</b> <code>GOOS=darwin GOARCH=arm64 go build</code> 로
+컴파일이 되는 것까지만 확인했다. 주석에도, 이 슬라이드에도 그렇게 적는다.</div>
+
+<!--SLIDE sec=4 t="원시 모드로 들어가기"-->
+<h2>MakeRaw — 값 복사 하나가 되돌리기를 만든다</h2>
+<!--CODE file=term/term_unix.go lines=48-75 cap="term/term_unix.go — makeRaw·restore"-->
+<p><code>raw := old</code> 한 줄이 핵심이다. Go 에서 구조체 대입은 값 복사이므로,
+<code>old</code> 는 손대지 않은 원본으로 남는다. 되돌릴 때는 그것을 그대로 다시 써 넣으면 된다 —
+<b>어느 비트를 우리가 껐는지 기억할 필요가 없다.</b></p>
+<p class="small mut">되돌리기에 실패해도 저장본은 버린다. 실패한 상태를 계속 붙들고 있으면
+두 번째 <code>Restore</code> 가 같은 실패를 되풀이할 뿐이다.</p>
+
+<!--SLIDE sec=4 t="크기 묻기"-->
+<h2>크기는 쓰는 쪽에 묻는다</h2>
+<!--CODE file=term/term_unix.go lines=76-97 cap="term/term_unix.go — size·NotifyResize 머리"-->
+<p>출력이 파일이 아니면(리다이렉트) 읽는 쪽으로 물러선다. 둘 다 아니면 오류다.</p>
+
+<!--SLIDE sec=4 t="SIGWINCH"-->
+<h2>창이 바뀐 것은 신호로 온다</h2>
+<!--CODE file=term/term_unix.go lines=98-119 cap="term/term_unix.go — NotifyResize"-->
+<p class="lead">터미널은 크기가 바뀌었다고 <b>바이트를 보내 주지 않는다.</b>
+대신 커널이 <code>SIGWINCH</code> 신호를 보낸다 — 입력 흐름 밖에서 오는 유일한 사건이라,
+파서가 아니라 여기서 받는다.</p>
+<div class="note"><b>채널이 꽉 차면 버린다</b>
+크기 변경은 "마지막 값만 맞으면 되는" 사건이다. 창을 드래그하는 동안 수십 번 오는 신호를
+다 큐에 쌓을 이유가 없다. 신호를 놓치는 것이 아니라, <b>겹치는 신호를 합치는</b> 것이다.</div>
+
+<!--SLIDE sec=4 t="윈도우"-->
+<h2>윈도우는 어떻게 되나</h2>
+<!--CODE file=term/term_windows.go cap="term/term_windows.go 전체 — 정직한 스텁"-->
+<p>윈도우의 콘솔은 termios 도 ioctl 도 쓰지 않는다. 같은 일을 하려면:</p>
+<table>
+<tr><th>우리가 한 일</th><th>윈도우에서 필요한 것</th></tr>
+<tr><td>원시 모드</td><td><code>SetConsoleMode</code> 로 <code>ENABLE_VIRTUAL_TERMINAL_INPUT</code> 켜고 줄 입력 끄기</td></tr>
+<tr><td>시퀀스 내보내기</td><td><code>ENABLE_VIRTUAL_TERMINAL_PROCESSING</code> 를 켜야 해석해 준다</td></tr>
+<tr><td>크기 묻기</td><td><code>GetConsoleScreenBufferInfo</code></td></tr>
+<tr><td>크기 변경</td><td>신호가 아니라 입력 큐의 <code>WINDOW_BUFFER_SIZE_EVENT</code></td></tr>
+</table>
+<p class="small mut">즉 이 패키지를 통째로 한 벌 더 써야 한다. 이 덱에서는 거기까지 가지 않고,
+"된다고 거짓말하지 않는" 스텁을 둔다. 컴파일은 되고, 터미널을 만지려는 순간 정직하게 거절한다.</p>
+
+<!--SLIDE sec=4 t="시험 — 시퀀스"-->
+<h2>시험 ① 바이트가 정확히 이것</h2>
+<!--CODE file=term/seq_test.go lines=1-32 cap="term/seq_test.go"-->
+<p class="small mut">시퀀스는 "바이트가 정확히 이것" 이 전부인 코드다.
+그래서 시험도 바이트 비교다. 한 글자만 틀려도 터미널은 그것을 명령이 아니라 글자로 찍어 버린다.</p>
+
+<!--SLIDE sec=4 t="시험 — 커서"-->
+<h2>시험 ② 경계값</h2>
+<!--CODE file=term/seq_test.go lines=33-58 cap="term/seq_test.go — CursorTo"-->
+<!--CODE file=term/seq_test.go lines=59-75 cap="term/seq_test.go — 상대 이동"-->
+
+<!--SLIDE sec=4 t="시험 — 가짜 터미널"-->
+<h2>시험 ③ 진짜 터미널 없이</h2>
+<!--CODE file=term/term_test.go lines=1-32 cap="term/term_test.go"-->
+<p><code>bytes.Buffer</code> 를 출력으로 주면 "무엇을 써 보냈는지" 를 그대로 읽을 수 있다.
+터미널을 켜고 눈으로 확인하는 시험은 자동으로 돌지 않는다 — 그리고 돌지 않는 시험은 없는 것과 같다.</p>
+
+<!--SLIDE sec=4 t="시험 — 마우스 짝"-->
+<h2>시험 ④ 마우스는 짝이 맞아야 한다</h2>
+<!--CODE file=term/term_test.go lines=33-61 cap="term/term_test.go"-->
+
+<!--SLIDE sec=4 t="시험 — 정리"-->
+<h2>시험 ⑤ 역순·멱등·켠 것만</h2>
+<!--CODE file=term/term_test.go lines=62-91 cap="term/term_test.go — Cleanup"-->
+<p>세 가지를 못박는다. <b>역순</b>으로 되돌리고, 켜지 않은 것은 <b>안 끄고</b>,
+두 번 불러도 <b>같다</b>(멱등).</p>
+
+<!--SLIDE sec=4 t="시험 — 비터미널"-->
+<h2>시험 ⑥ 터미널이 아닌 곳에서는 거짓말하지 않는다</h2>
+<!--CODE file=term/term_test.go lines=92-117 cap="term/term_test.go"-->
+<!--CODE file=term/term_test.go lines=118-129 cap="term/term_test.go"-->
+
+<!--SLIDE sec=4 t="시험 — 비트 산술 ①"-->
+<h2>시험 ⑦ 원시 모드를 비트로 확인하기</h2>
+<!--CODE file=term/termios_unix_test.go lines=1-21 cap="term/termios_unix_test.go"-->
+<div class="tip"><b>플랫폼 차이를 넘는 한 줄</b>
+플래그 필드의 폭이 리눅스는 <code>uint32</code>, macOS 는 <code>uint64</code> 다.
+<code>raw.Iflag = ^raw.Iflag</code> — 0을 뒤집어 "전부 1" 을 만들면 어느 쪽에서도 그대로 컴파일된다.
+타입 이름을 적지 않는 것이 이 한 줄의 요령이다.</div>
+
+<!--SLIDE sec=4 t="시험 — 비트 산술 ②"-->
+<h2>시험 ⑧ 무엇이 꺼졌는지 하나씩</h2>
+<!--CODE file=term/termios_unix_test.go lines=22-53 cap="term/termios_unix_test.go"-->
+
+<!--SLIDE sec=4 t="시험 — 비트 산술 ③"-->
+<h2>시험 ⑨ 건드리지 않기로 한 것은 그대로</h2>
+<!--CODE file=term/termios_unix_test.go lines=54-72 cap="term/termios_unix_test.go"-->
+<!--CODE file=term/termios_unix_test.go lines=73-104 cap="term/termios_unix_test.go"-->
+<p class="small mut">termios 를 통째로 새로 만들어 넣으면 사용자의 터미널 설정(전송 속도 등)이 날아간다.
+"우리가 끄기로 한 것만 끈다" 를 시험이 지켜본다.</p>
+
+<!--SLIDE sec=4 t="시험 — winsize"-->
+<h2>시험 ⑩ 0×0 은 크기가 아니다</h2>
+<!--CODE file=term/termios_unix_test.go lines=105-110 cap="term/termios_unix_test.go"-->
+<p class="small mut">이 시험이 없으면 "왜 파이프로 돌리면 화면이 안 나오지?" 를
+몇 시간 뒤에 만난다. 증상이 화면 쪽에서 나타나기 때문에 원인을 렌더러에서 찾게 된다.</p>
+
+<!--SLIDE sec=4 t="05_window ①"-->
+<h2>창 크기를 다루는 예제</h2>
+<!--CODE file=examples/05_window/main.go lines=1-25 cap="examples/05_window/main.go"-->
+
+<!--SLIDE sec=4 t="05_window ②"-->
+<h2>지금 크기에 꼭 맞는 상자</h2>
+<!--CODE file=examples/05_window/main.go lines=26-57 cap="examples/05_window/main.go"-->
+<p>폭을 셀 때 <code>width.StringWidth</code> 를 쓰는 것이 핵심이다.
+안쪽 글에 한글이 섞이면 <code>len()</code> 으로는 상자가 어긋난다 — 7부에서 그 이유를 판다.</p>
+
+<!--SLIDE sec=4 t="05_window ③"-->
+<h2>05_window — 실제 화면</h2>
+<!--CODE file=examples/05_window/main.go lines=58-76 cap="examples/05_window/main.go"-->
+<!--CAP file=out/tmux_05_window.html cap="go run ./examples/05_window"-->
+<p class="small mut">직접 돌려서 창을 마우스로 끌어 보라. 크기 알림 횟수가 올라가는 것이 보인다.
+1부의 <code>00_raw</code> 는 이걸 끝내 못 했다.</p>
+
+<!--SLIDE sec=4 t="stty sane 이 필요 없는 이유"-->
+<h2>이제 <code>stty sane</code> 을 칠 일이 없다</h2>
+<p>3부의 <code>Program.shutdown</code> 과 이 부의 <code>Term.Cleanup</code>·<code>Restore</code> 가
+합쳐져 다음을 보장한다.</p>
+<ol class="steps">
+<li><b>정상 종료</b> — <code>QuitMsg</code> 를 받으면 정리하고 나간다</li>
+<li><b>입력 끊김</b> — 파이프가 닫히면 <code>ClosedMsg</code> 로 같은 길을 간다</li>
+<li><b>Kill</b> — 밖에서 강제로 멈춰도 <code>defer</code> 가 돈다</li>
+<li><b>패닉</b> — 되돌린 뒤 다시 던진다. 스택 트레이스는 깨끗한 화면에 찍힌다</li>
+</ol>
+<div class="warn"><b>막을 수 없는 경우도 있다</b>
+<code>SIGKILL</code>(<code>kill -9</code>)은 <code>defer</code> 를 돌게 해 주지 않는다.
+프로세스가 그 자리에서 사라진다. 그때는 <code>stty sane</code> 뿐이다 —
+어떤 프레임워크도 이건 못 막는다.</div>
+
+<!--SLIDE sec=4 t="나란히 보기"-->
+<h2>나란히 보기 — 터미널 드라이버</h2>
+<table>
+<tr><th></th><th>Bubble Tea 쪽</th><th>보리차</th></tr>
+<tr><td>원시 모드</td><td><code>x/term</code> + <code>x/termios</code></td><td><code>term</code> 한 패키지</td></tr>
+<tr><td>플랫폼</td><td>리눅스·macOS·BSD·윈도우·Solaris</td><td>리눅스(검증) · macOS(컴파일만) · 윈도우(스텁)</td></tr>
+<tr><td>크기 변경</td><td>SIGWINCH + 윈도우 콘솔 이벤트</td><td>SIGWINCH 만</td></tr>
+<tr><td>막힌 읽기 끊기</td><td><code>cancelreader</code> 로 진짜 끊는다</td><td>못 끊는다 — 프로세스 종료에 맡긴다</td></tr>
+<tr><td>터미널 능력 질의</td><td>terminfo + DECRQM 질의</td><td>안 한다 — 다 켜 보고 무시되길 기대한다</td></tr>
+</table>
+<p class="small mut">아래 둘은 저쪽이 확실히 낫다. 특히 <code>cancelreader</code> 는
+라이브러리로 쓸 때 중요하다 — 프로그램이 끝나도 프로세스가 안 끝나는 경우가 있기 때문이다.
+우리는 "이 프레임워크로 만든 것은 프로그램이지 라이브러리가 아니다" 를 전제로 그 비용을 아꼈다.</p>
+
+<!--SLIDE sec=4 t="4부 연습문제"-->
+<h2>4부 연습문제</h2>
+<ol class="steps">
+<li><code>Cleanup</code> 에서 <code>ExitAltScreen</code> 을 <b>맨 앞으로</b> 옮기고
+<code>examples/06_style</code> 를 돌린 뒤 끝내 보라. 커서가 어떻게 되나?</li>
+<li><code>Term.New</code> 에 <code>os.Stdin</code> 대신 <code>strings.NewReader("")</code> 를 주면
+<code>IsTTY()</code> 는 무엇을 돌려주나? 왜인가?</li>
+<li><code>NotifyResize</code> 의 채널 버퍼를 0으로 바꾸면 무엇이 나빠지나?
+<span class="mut">답: 창을 드래그하는 동안 신호 처리 고루틴이 막힌다</span></li>
+<li><code>GOOS=darwin go vet ./...</code> 를 돌려 보라. 무엇이 확인되고 무엇이 확인되지 않나?</li>
+<li>윈도우 스텁의 <code>NotifyResize</code> 는 아무 일도 안 한다.
+그 위에서 도는 프로그램은 어떤 점에서 불편해지나?</li>
+</ol>
