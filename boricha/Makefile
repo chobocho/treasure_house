@@ -62,7 +62,8 @@ html:
 #
 # go run 대신 미리 빌드해 둔 실행 파일을 띄운다. go run 은 처음 한 번 컴파일하느라
 # 8초쯤 걸려서, 그 사이에 보낸 키가 통째로 사라진다.
-EXAMPLES = 00_raw 01_hello 02_counter 03_keys 04_tick 05_window 06_style 07_cmds 08_mouse 09_paste
+EXAMPLES = 00_raw 01_hello 02_counter 03_keys 04_tick 05_window 06_style 07_cmds 08_mouse 09_paste \
+           10_widgets
 
 # 예제마다 눌러 볼 키. tmux 의 이름을 쓴다(Up, C-a, M-x, BTab …).
 KEYS_00_raw     = Left
@@ -75,6 +76,7 @@ KEYS_06_style   = Down Down Down Down
 KEYS_07_cmds    = b
 KEYS_08_mouse   =
 KEYS_09_paste   =
+KEYS_10_widgets = Tab / 차 Enter j j Tab k k k
 
 # 키 이름으로는 못 보내는 것들은 바이트로 직접 밀어 넣는다(-H 는 16진수).
 #   08_mouse : ESC[<0;20;14M  왼쪽 버튼 누름 → 화면 (19,13)에 표시가 찍힌다
