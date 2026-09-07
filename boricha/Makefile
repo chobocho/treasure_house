@@ -1,0 +1,89 @@
+# 보리차 — 빌드·검증·기록·덱 조립
+#
+# 규칙 하나: 덱에 실리는 것은 전부 이 Makefile 이 만들어 낸 것이어야 한다.
+# 코드는 덱 빌더가 소스에서 잘라 오고, 화면은 record 와 tmux-smoke 가 찍어 온다.
+# 손으로 타이핑해 슬라이드에 넣은 것은 이 덱에 하나도 없다.
+
+GO      ?= go
+# 이 모듈에는 의존성이 없다. 그래도 GOPROXY 를 꺼 두는 이유는,
+# 네트워크가 끊긴 상태에서 go 가 프록시를 기다리며 멈추는 일을 원천 차단하기 위해서다.
+export GOPROXY = off
+export GOTOOLCHAIN = local
+
+# 램이 빠듯한 기계(갤럭시 폴드)에서 돌린다. 병렬도를 1로 낮추면 시간은 늘지만
+# OOM 킬러에게 세션째로 잡혀 죽는 일이 없어진다.
+P       ?= 1
+PY      ?= python3
+OUT     ?= out
+DECK    ?= ../나만의_Bubble_Tea_만들기.html
+
+.PHONY: all build vet test fmt cross record html logs tmux-smoke deck deck-check clean
+
+all: vet test
+
+build:
+	$(GO) build -p $(P) ./...
+
+vet:
+	$(GO) vet ./...
+
+fmt:
+	gofmt -l -w .
+
+test:
+	$(GO) test -p $(P) ./...
+
+# 리눅스 말고 다른 곳에서도 컴파일은 되는지 본다.
+# macOS 는 여기서 **돌려 볼 수 없다** — 컴파일이 되는 것까지가 우리가 말할 수 있는 전부다.
+# 윈도우는 ErrUnsupported 를 돌려주는 스텁이라 컴파일만 확인하면 된다.
+cross:
+	GOOS=darwin  GOARCH=arm64 $(GO) build -p $(P) ./...
+	GOOS=windows GOARCH=amd64 $(GO) build -p $(P) ./...
+
+# ── 화면 기록 ────────────────────────────────────────────────────────
+# 모델을 진짜 터미널 없이 돌려 프레임을 JSON 으로 남긴다(8단계에서 채운다).
+# 결정론이 계약이다: 다시 돌린 뒤 git diff 가 비어 있어야 한다.
+MODES =
+FRAMES = $(addprefix $(OUT)/frames_,$(addsuffix .json,$(MODES)))
+
+record: $(FRAMES)
+
+html:
+
+# ── 진짜 PTY 증거 ────────────────────────────────────────────────────
+# 에이전트 세션에는 터미널이 없다. tmux 로 창을 하나 띄워 그 화면을 긁어 오는 것이
+# "정말 도는가" 를 증명하는 유일한 방법이다. -e 는 ANSI 색을 남긴다 —
+# 색이 빠지면 그 화면이 정말 그 프로그램의 것인지 증명할 수 없다.
+tmux-smoke:
+	@mkdir -p $(OUT)
+	@tmux kill-session -t bo_00_raw 2>/dev/null || true
+	@tmux new-session -d -s bo_00_raw -x 80 -y 24 "$(GO) run ./examples/00_raw"
+	@sleep 8
+	@tmux send-keys -t bo_00_raw Left
+	@sleep 1
+	@tmux capture-pane -e -p -t bo_00_raw > $(OUT)/tmux_00_raw.txt
+	@tmux send-keys -t bo_00_raw q 2>/dev/null || true
+	@sleep 1
+	@tmux kill-session -t bo_00_raw 2>/dev/null || true
+	@echo "  $(OUT)/tmux_00_raw.txt"
+
+# ── 덱에 "실제 출력" 으로 실을 로그 ─────────────────────────────────
+# 지어낸 숫자를 슬라이드에 적지 않기 위한 장치다.
+logs:
+	@mkdir -p $(OUT)
+	@$(GO) version > $(OUT)/go_version.txt
+	@$(GO) vet ./... > $(OUT)/go_vet.txt 2>&1 || true
+	@$(GO) test -p $(P) -count=1 ./... > $(OUT)/go_test.txt 2>&1 || true
+	@wc -l $$(find . -name '*.go' | sort) go.mod Makefile | tail -1 > $(OUT)/loc.txt
+	@echo "  $(OUT)/go_test.txt · go_vet.txt · loc.txt"
+
+deck:
+	$(PY) deck/gen_appendix.py
+	$(PY) deck/build_deck.py
+
+deck-check:
+	node deck/check_deck.js $(DECK)
+
+clean:
+	$(GO) clean -cache -testcache
+	rm -f $(OUT)/frames_*.json $(OUT)/*.html $(OUT)/*.html.json
