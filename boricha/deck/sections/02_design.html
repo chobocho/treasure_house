@@ -1,3 +1,320 @@
-<!--SLIDE sec=2 t="설계 — Elm 아키텍처와 Bubble Tea 해부 (준비 중)"-->
-<h2>설계 — Elm 아키텍처와 Bubble Tea 해부</h2>
-<p>이 부는 아직 쓰는 중이다.</p>
+<!--SLIDE sec=2 t="이 부에서 답할 것"-->
+<h1>2부 · 설계</h1>
+<p class="lead">1부에서 본 것은 <b>재료</b>였다. 바이트, 이스케이프 시퀀스, 원시 모드.
+이 부에서는 그 재료로 <b>무엇을 지을지</b> 정한다.</p>
+<div class="cols">
+  <div class="card"><h4>이 부에서 정하는 것</h4><ul>
+    <li>프로그램의 모양 — Elm 아키텍처</li>
+    <li>사건과 명령을 가르는 선</li>
+    <li>고루틴을 몇 개 둘 것인가</li>
+    <li>패키지를 어떻게 나눌 것인가</li>
+    <li><b>무엇을 안 만들 것인가</b></li>
+  </ul></div>
+  <div class="card"><h4>이 부의 결과물</h4><ul>
+    <li><code>tea/model.go</code> — 스물다섯 줄짜리 인터페이스 하나</li>
+    <li>3고루틴 도해 — 3·5·6부에서 계속 다시 나온다</li>
+    <li>Bubble Tea 와의 대조표 (<code>go doc</code> 으로 확인한 것만)</li>
+  </ul></div>
+</div>
+
+<!--SLIDE sec=2 t="터미널 프로그램의 어려움"-->
+<h2>터미널 프로그램이 어려운 진짜 이유</h2>
+<p>1부의 60줄이 왜 그렇게 불편했나? 코드가 길어서가 아니다.
+<b>세 가지 일이 한 함수 안에 뒤엉켜 있어서</b>다.</p>
+<div class="cols">
+  <div class="card"><h4>① 읽기</h4><p>바이트가 언제 올지 모른다. 읽으려면 막혀야 한다.</p></div>
+  <div class="card"><h4>② 판단</h4><p>이 바이트가 무슨 뜻이고, 상태가 어떻게 바뀌나.</p></div>
+  <div class="card"><h4>③ 그리기</h4><p>바뀐 상태를 화면으로. 언제 그릴지도 정해야 한다.</p></div>
+</div>
+<p>셋이 섞이면 시험할 수가 없다. "위 화살표를 누르면 셈이 1 늘어난다" 를 확인하려고
+진짜 터미널을 열고 진짜 키를 눌러야 한다면, 그 시험은 자동으로 돌지 않는다.</p>
+<p class="lead">그래서 필요한 것은 <b>세 가지를 갈라놓는 모양</b>이다.</p>
+
+<!--SLIDE sec=2 t="Elm 아키텍처"-->
+<h2>Elm 아키텍처 — 갈라놓는 한 가지 방법</h2>
+<p>웹 언어 Elm 에서 나온 모양이다. 만든 사람은 Evan Czaplicki.
+Bubble Tea 도 이 모양을 그대로 가져왔다고 스스로 밝힌다.</p>
+<svg class="diag" viewBox="0 0 660 258" role="img" aria-label="Elm 아키텍처의 순환">
+  <defs><style>
+    .bx{fill:#131a2a;stroke:#2c3a55}.bx2{fill:#1a2540;stroke:#3d5580}
+    .tx{fill:#d8dee9;font-size:14px}.tm{fill:#8ea2c0;font-size:11px}
+    .ar{stroke:#5b7fbd;stroke-width:1.6;fill:none;marker-end:url(#a2)}
+  </style>
+  <marker id="a2" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+    <path d="M0,0 L8,3 L0,6 z" fill="#5b7fbd"/></marker></defs>
+  <rect class="bx2" x="250" y="20" width="160" height="52" rx="10"/>
+  <text class="tx" x="300" y="44">Model</text>
+  <text class="tm" x="266" y="61">지금 상태 전부 · 값이다</text>
+
+  <rect class="bx" x="470" y="100" width="170" height="60" rx="10"/>
+  <text class="tx" x="524" y="124">View</text>
+  <text class="tm" x="484" y="142">상태 → 화면 문자열</text>
+
+  <rect class="bx" x="250" y="180" width="160" height="52" rx="10"/>
+  <text class="tx" x="292" y="204">터미널</text>
+  <text class="tm" x="266" y="221">그리고 사람이 본다</text>
+
+  <rect class="bx" x="20" y="100" width="170" height="60" rx="10"/>
+  <text class="tx" x="66" y="124">Update</text>
+  <text class="tm" x="34" y="142">(Model, Msg) → Model</text>
+
+  <path class="ar" d="M412,52 C460,60 470,80 490,96"/>
+  <path class="ar" d="M540,164 C520,180 470,196 414,204"/>
+  <path class="ar" d="M248,204 C190,196 140,180 118,164"/>
+  <path class="ar" d="M110,96 C130,80 190,58 248,50"/>
+  <text class="tm" x="428" y="86">그린다</text>
+  <text class="tm" x="446" y="250">바이트로 나간다</text>
+  <text class="tm" x="130" y="250">사건(Msg)이 온다</text>
+  <text class="tm" x="120" y="80">새 Model</text>
+</svg>
+<p>고리가 하나뿐이다. 상태는 <b>Update 를 통해서만</b> 바뀌고,
+화면은 <b>상태에서만</b> 나온다. 지름길이 없다는 것이 이 모양의 전부다.</p>
+
+<!--SLIDE sec=2 t="세 메서드"-->
+<h2>인터페이스 하나, 메서드 셋</h2>
+<!--CODE file=tea/model.go cap="tea/model.go 전체"-->
+<p class="small mut">이 스물다섯 줄이 프레임워크가 사용자에게 요구하는 것의 <b>전부</b>다.
+나머지 만이천 줄은 이 셋을 편하게 쓰게 하려고 있다.</p>
+
+<!--SLIDE sec=2 t="값으로서의 모델"-->
+<h2>왜 포인터가 아니라 값인가</h2>
+<div class="cols">
+  <div class="card"><h4>값이면</h4><ul>
+    <li>"이 사건이 오면 상태가 이렇게 된다" 를 그대로 시험할 수 있다</li>
+    <li>그리는 도중에 다른 고루틴이 상태를 바꿔 놓는 일이 <b>구조적으로</b> 없다</li>
+    <li>이전 상태를 그냥 들고 있으면 되돌리기가 공짜다</li>
+  </ul></div>
+  <div class="card"><h4>대가</h4><ul>
+    <li>복사 비용 — 모델이 크면 프레임마다 복사한다</li>
+    <li><b>돌려주는 것을 잊으면 변경이 조용히 사라진다</b></li>
+    <li>슬라이스·맵은 값이 아니다. 따로 복사해야 한다</li>
+  </ul></div>
+</div>
+<div class="warn"><b>초보자가 반드시 한 번 겪는 버그</b>
+<pre class="code go"><code>func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    m.n++              // 복사본을 고쳤는데
+    return model{}, nil // 엉뚱한 것을 돌려준다 → 변경이 사라진다
+}</code></pre>
+컴파일도 되고 경고도 없다. 3부에서 이 버그를 <b>시험으로 못박아</b> 둔다.</div>
+
+<!--SLIDE sec=2 t="Msg 와 Cmd"-->
+<h2>사건(Msg)과 명령(Cmd)</h2>
+<p class="lead">Update 는 순수해야 한다. 같은 사건에 늘 같은 결과를 내야 시험할 수 있다.
+그런데 파일을 읽고, 시계를 보고, 그물 너머에 묻는 일은 순수하지 않다.</p>
+<table>
+<tr><th></th><th>Msg</th><th>Cmd</th></tr>
+<tr><td>무엇</td><td>일어난 일</td><td>할 일</td></tr>
+<tr><td>방향</td><td>바깥 → Update</td><td>Update → 바깥</td></tr>
+<tr><td>타입</td><td><code>any</code></td><td><code>func() Msg</code></td></tr>
+<tr><td>누가 만드나</td><td>파서·시계·명령의 결과</td><td>Update 가 돌려준다</td></tr>
+<tr><td>누가 실행하나</td><td>—</td><td>Program 이 다른 고루틴에서</td></tr>
+</table>
+<p>그래서 Update 는 파일을 <b>직접 읽지 않고</b> "이 파일을 읽어 달라" 는 함수를 돌려준다.
+읽은 결과는 다시 사건이 되어 Update 로 돌아온다. 고리가 닫힌다.</p>
+
+<!--SLIDE sec=2 t="Cmd 의 모양"-->
+<h2>명령은 그냥 함수다</h2>
+<pre class="code go"><code>type Cmd func() Msg</code></pre>
+<p>이보다 단순할 수 없다. 인자도 없고, 컨텍스트도 없고, 오류 반환도 없다.
+필요한 것은 <b>클로저로 담는다.</b></p>
+<pre class="code go"><code>func saveCmd(path string, tasks []Task) tea.Cmd {
+    snapshot := append([]Task(nil), tasks...)   // 담을 때 복사한다
+    return func() tea.Msg {
+        ...
+        return savedMsg{err: err}               // 오류도 사건이다
+    }
+}</code></pre>
+<div class="note"><b>오류를 반환하지 않는 이유</b>
+오류도 "일어난 일" 이므로 사건이다. 오류를 따로 다루면 Update 밖에 또 하나의 흐름이 생기고,
+그 흐름은 시험하기 어려운 곳으로 숨는다. 전부 사건으로 돌려보내면 갈래가 하나뿐이다.</div>
+
+<!--SLIDE sec=2 t="세 고루틴"-->
+<h2>고루틴 셋과 채널 하나</h2>
+<svg class="diag" viewBox="0 0 700 260" role="img" aria-label="Program 의 고루틴 구조">
+  <defs><style>
+    .bx{fill:#131a2a;stroke:#2c3a55}.bx2{fill:#1a2540;stroke:#3d5580}
+    .tx{fill:#d8dee9;font-size:13px}.tm{fill:#8ea2c0;font-size:11px}
+    .ar{stroke:#5b7fbd;stroke-width:1.5;fill:none;marker-end:url(#a3)}
+    .ch{fill:#0e1524;stroke:#5b7fbd;stroke-dasharray:4 3}
+  </style>
+  <marker id="a3" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+    <path d="M0,0 L8,3 L0,6 z" fill="#5b7fbd"/></marker></defs>
+
+  <rect class="bx" x="20" y="20" width="200" height="56" rx="10"/>
+  <text class="tx" x="34" y="42">① 입력 고루틴</text>
+  <text class="tm" x="34" y="60">stdin 을 읽어 사건으로</text>
+
+  <rect class="bx" x="20" y="100" width="200" height="70" rx="10"/>
+  <text class="tx" x="34" y="122">② 명령 고루틴들</text>
+  <text class="tm" x="34" y="140">Cmd 하나가 곧 고루틴 하나</text>
+  <text class="tm" x="34" y="156">끝나면 사건을 보낸다</text>
+
+  <rect class="ch" x="270" y="60" width="120" height="80" rx="10"/>
+  <text class="tx" x="296" y="94">msgs</text>
+  <text class="tm" x="284" y="112">chan Msg</text>
+  <text class="tm" x="290" y="128">(버퍼 128)</text>
+
+  <rect class="bx2" x="440" y="40" width="240" height="120" rx="10"/>
+  <text class="tx" x="454" y="64">③ 주 고루틴</text>
+  <text class="tm" x="454" y="84">for msg := range msgs {</text>
+  <text class="tm" x="466" y="100">model, cmd = model.Update(msg)</text>
+  <text class="tm" x="466" y="116">renderer.Write(model.View())</text>
+  <text class="tm" x="466" y="132">go run(cmd)</text>
+  <text class="tm" x="454" y="148">}</text>
+
+  <path class="ar" d="M224,48 C246,48 250,70 266,78"/>
+  <path class="ar" d="M224,130 C246,130 250,112 266,104"/>
+  <path class="ar" d="M394,100 L435,100"/>
+  <path class="ar" d="M560,164 C560,200 300,210 120,178"/>
+  <text class="tm" x="300" y="212">새 명령은 다시 고루틴으로</text>
+
+  <rect class="bx" x="440" y="190" width="240" height="46" rx="10"/>
+  <text class="tx" x="454" y="212">렌더러 (시계 하나 더)</text>
+  <text class="tm" x="454" y="228">초당 60번 달라진 줄만 쓴다</text>
+</svg>
+<p class="lead">모델을 만지는 것은 <b>③뿐</b>이다. 그래서 모델에 잠금장치가 필요 없고,
+"Update 가 도는 동안 상태가 바뀌어 있었다" 는 종류의 버그가 아예 생기지 않는다.</p>
+
+<!--SLIDE sec=2 t="왜 이 구조인가"-->
+<h2>이 구조가 사는 이유</h2>
+<div class="cols">
+  <div class="card"><h4>읽기는 막힌다 — 그래서 따로</h4>
+  <p><code>os.Stdin.Read</code> 는 다음 바이트까지 돌아오지 않는다.
+  이걸 주 고루틴에서 하면 그동안 시계도 못 보고 화면도 못 그린다.</p></div>
+  <div class="card"><h4>명령은 오래 걸린다 — 그래서 따로</h4>
+  <p>HTTP 한 번이 3초면, 그동안 키를 못 받는 프로그램은 멈춘 것으로 보인다.
+  Cmd 하나에 고루틴 하나면 그런 일이 없다.</p></div>
+  <div class="card"><h4>그리기는 자주 안 해도 된다 — 그래서 시계</h4>
+  <p>키를 꾹 누르면 사건이 초당 수백 번 온다. 화면은 60번만 바뀌면 된다.
+  그 사이의 프레임은 자연히 버려진다.</p></div>
+</div>
+<p class="small mut">이 세 문장이 <code>tea/program.go</code> {{LINES:tea/program.go}}줄의 이유 전부다.
+3부에서 그 줄들을 하나씩 본다.</p>
+
+<!--SLIDE sec=2 t="Bubble Tea 의 패키지 지도"-->
+<h2>Bubble Tea 는 어떻게 나뉘어 있나</h2>
+<table>
+<tr><th>패키지</th><th>맡은 일</th></tr>
+<tr><td><code>charm.land/bubbletea/v2</code></td><td>루프·Program·Cmd·Msg·키 파싱까지 <b>한 덩어리</b></td></tr>
+<tr><td><code>charm.land/lipgloss/v2</code></td><td>스타일·색·테두리·레이아웃</td></tr>
+<tr><td><code>charm.land/bubbles/v2</code></td><td>부품 모음</td></tr>
+<tr><td><code>charmbracelet/x/term</code>, <code>x/termios</code></td><td>원시 모드·창 크기</td></tr>
+<tr><td><code>charmbracelet/ultraviolet</code></td><td>키·마우스 타입과 파싱 (v2 에서 분리됨)</td></tr>
+<tr><td><code>muesli/cancelreader</code></td><td>막힌 <code>Read</code> 를 밖에서 끊기</td></tr>
+<tr><td><code>mattn/go-runewidth</code>, <code>rivo/uniseg</code></td><td>글자 폭</td></tr>
+</table>
+<p class="small mut">이 목록은 <code>tetris_tui/go.sum</code> 에 실제로 받아져 있는 것들이다.
+Bubble Tea 하나를 쓰면 열 개 남짓이 따라온다 — 나쁘다는 뜻이 아니라, 그만큼의 일이 있다는 뜻이다.</p>
+
+<!--SLIDE sec=2 t="우리 패키지 지도"-->
+<h2>우리는 이렇게 나눈다</h2>
+<table>
+<tr><th>패키지</th><th>줄 수</th><th>맡은 일</th><th>누구를 아나</th></tr>
+<tr><td><code>width</code></td><td>{{LINES:width/width.go}} + {{LINES:width/truncate.go}}</td><td>글자가 몇 칸인가</td><td>아무도</td></tr>
+<tr><td><code>term</code></td><td>{{LINES:term/term.go}}</td><td>원시 모드·시퀀스·크기</td><td>아무도</td></tr>
+<tr><td><code>input</code></td><td>{{LINES:input/decoder.go}}</td><td>바이트 → 사건</td><td>아무도</td></tr>
+<tr><td><code>style</code></td><td>{{LINES:style/render.go}}</td><td>색·테두리·정렬</td><td><code>width</code></td></tr>
+<tr><td><code>render</code></td><td>{{LINES:render/renderer.go}}</td><td>줄 단위 diff</td><td><code>term</code>, <code>width</code></td></tr>
+<tr><td><code>tea</code></td><td>{{LINES:tea/program.go}}</td><td>루프</td><td>위의 전부</td></tr>
+<tr><td><code>widgets</code></td><td>{{LINES:widgets/list.go}}</td><td>부품</td><td><code>tea</code>, <code>style</code>, <code>width</code></td></tr>
+</table>
+<div class="note"><b>층을 나눈 대가</b>
+<code>input</code> 이 <code>tea</code> 를 import 할 수 없다 — 순환이 되기 때문이다.
+그래서 키·마우스 타입이 <code>input</code> 에 살고, <code>tea</code> 는 별칭으로 다시 내놓는다.
+Bubble Tea 는 전부 한 패키지에 넣어 이 문제를 피했다. 그것이 저쪽의 선택이고, 이것이 이쪽의 대가다.</div>
+
+<!--SLIDE sec=2 t="별칭 한 줄"-->
+<h2>순환을 피하는 한 줄</h2>
+<!--CODE file=tea/msg.go lines=1-26 cap="tea/msg.go — 패키지 주석과 Msg"-->
+<p><code>type Msg = input.Msg</code> 는 <b>별칭</b>이다(<code>=</code> 가 있다).
+새 타입을 만드는 것이 아니라 같은 타입에 이름을 하나 더 붙이는 것이라,
+경계에서 변환이 필요 없다 — <code>[]input.Msg</code> 를 <code>[]tea.Msg</code> 자리에 그대로 쓸 수 있다.</p>
+
+<!--SLIDE sec=2 t="우리가 안 만드는 것"-->
+<h2>일부러 안 만드는 것</h2>
+<p class="lead">무엇을 만들지보다 <b>무엇을 안 만들지</b>를 정하는 것이 더 중요하다.
+아래는 전부 "할 수 있지만 이 덱의 범위 밖" 이다.</p>
+<table>
+<tr><th>안 만드는 것</th><th>왜</th><th>대신</th></tr>
+<tr><td>윈도우 콘솔 드라이버</td><td>termios 가 아니라 콘솔 API 를 한 벌 더 써야 한다</td><td><code>ErrUnsupported</code> 스텁 + 4부의 슬라이드 한 장</td></tr>
+<tr><td>막힌 읽기를 끊기</td><td>표준 라이브러리에 방법이 없다</td><td>프로세스가 끝날 때 그 고루틴을 버린다</td></tr>
+<tr><td>kitty 키보드 프로토콜</td><td>옛 인코딩만으로도 이 덱의 목표는 닿는다</td><td>5부의 슬라이드 한 장</td></tr>
+<tr><td>셀 단위 렌더링·레이어</td><td>줄 단위로도 60 fps 가 나온다</td><td>6부에서 비용을 계산해 보인다</td></tr>
+<tr><td>표·파일 고르기 부품</td><td>부품 만드는 법은 다섯 개로 충분히 보인다</td><td>9부의 연습문제</td></tr>
+<tr><td>애니메이션(용수철)</td><td>물리 흉내에 별도 라이브러리가 필요하다</td><td>9부에서 그렇다고 적는다</td></tr>
+</table>
+
+<!--SLIDE sec=2 t="약속하는 API"-->
+<h2>우리가 약속하는 것</h2>
+<p>이 덱이 끝났을 때 아래 코드가 <b>실제로 돈다.</b> 지금 정해 두고, 나머지 부에서 지킨다.</p>
+<pre class="code go"><code>p := tea.NewProgram(model{},
+    tea.WithAltScreen(),
+    tea.WithMouse(),
+    tea.WithBracketedPaste(),
+)
+final, err := p.Run()</code></pre>
+<div class="cols">
+  <div class="card"><h4>Program 이 지키는 것</h4><ul>
+    <li>시작할 때 <b>반드시</b> 크기와 색 수준을 알려 준다</li>
+    <li>어떤 경로로 끝나든 터미널을 되돌린다</li>
+    <li>패닉을 삼키지 않는다 — 되돌린 뒤 다시 던진다</li>
+    <li>끝났을 때의 모델을 돌려준다</li>
+  </ul></div>
+  <div class="card"><h4>모델이 지킬 것</h4><ul>
+    <li><code>Update</code> 는 순수하게 (파일·시계·그물 금지)</li>
+    <li>고친 <b>복사본</b>을 돌려줄 것</li>
+    <li><code>View</code> 는 그리기만 할 것</li>
+    <li>슬라이스·맵은 손수 복사할 것</li>
+  </ul></div>
+</div>
+
+<!--SLIDE sec=2 t="나란히 보기 — Model"-->
+<h2>나란히 보기 ① Model 인터페이스</h2>
+<div class="cols">
+  <div class="card"><h4>Bubble Tea v2</h4>
+  <pre class="code go"><code>type Model interface {
+    Init() Cmd
+    Update(Msg) (Model, Cmd)
+    View() View          // ← 구조체
+}</code></pre></div>
+  <div class="card"><h4>보리차</h4>
+  <pre class="code go"><code>type Model interface {
+    Init() Cmd
+    Update(Msg) (Model, Cmd)
+    View() string        // ← 문자열
+}</code></pre></div>
+</div>
+<p>두 메서드는 글자까지 같다. 다른 것은 <code>View</code> 뿐이다.
+v2 의 <code>View</code> 는 구조체라서 커서 위치나 배경색 같은 것을 함께 실어 보낼 수 있다.</p>
+<p class="small mut">우리가 문자열로 둔 이유: diff 도 시험도 훨씬 단순해진다.
+"화면은 문자열 하나" 라는 가정이 6부 렌더러 전체를 지탱한다.
+대신 커서 위치를 앱이 정할 수 없다 — 그것이 이 선택의 대가다.</p>
+
+<!--SLIDE sec=2 t="Bubble Tea 의 역사"-->
+<h2>Bubble Tea 는 어디서 왔나</h2>
+<ul>
+<li><b>Elm 아키텍처</b> — Evan Czaplicki 가 만든 Elm 언어에서 자라난 패턴</li>
+<li><b>go-tea</b> — TJ Holowaychuk 이 Go 로 옮긴 실험</li>
+<li><b>Bubble Tea</b> — Charm 이 그 위에 터미널 드라이버·렌더러·부품을 붙인 것.
+Go 모듈로 처음 공개된 판은 <b>v0.7.0, 2020년 5월 26일</b></li>
+</ul>
+<div class="note"><b>이 덱이 Bubble Tea 를 다루는 방식</b>
+따라 만드는 것이 아니라 <b>참고하는 설계도</b>로 쓴다. 각 부의 끝에
+"Bubble Tea 는 이렇게 한다" 한 장을 두고, 우리 결정과 저쪽 결정을 나란히 놓는다.
+저쪽이 더 나은 곳에서는 <b>더 낫다고 적는다.</b> 그것이 이 덱을 읽고 저쪽으로 옮겨 가는 데 도움이 된다.</div>
+<p class="small mut">이 슬라이드의 날짜와 출처는 <code>deck/claims.md</code> 에 적혀 있다.</p>
+
+<!--SLIDE sec=2 t="2부 연습문제"-->
+<h2>2부 연습문제</h2>
+<ol class="steps">
+<li>Update 안에서 <code>os.ReadFile</code> 을 부르면 무엇이 나빠지나? 두 가지를 들어 보라.
+<span class="mut">답: 시험이 파일 시스템에 매이고, 읽는 동안 화면과 키가 멈춘다</span></li>
+<li>모델에 <code>[]string</code> 필드가 있고 Update 에서 <code>append</code> 만 했다.
+무엇이 잘못될 수 있나?
+<span class="mut">답: 복사본들이 같은 배열을 나눠 갖는다 — 3부와 9부에서 실물로 본다</span></li>
+<li>고루틴을 하나로 줄이면(읽기·명령·루프를 다 한 곳에서) 무엇이 안 되나?
+<span class="mut">답: 읽기가 막혀 있는 동안 시계도 명령 결과도 처리하지 못한다</span></li>
+<li><code>tea.Msg</code> 를 <code>type Msg interface{}</code> 로 새로 정의하면
+<code>input</code> 과의 경계에서 무엇이 필요해지나?
+<span class="mut">답: <code>[]input.Msg</code> → <code>[]tea.Msg</code> 변환. 별칭이면 필요 없다</span></li>
+</ol>
