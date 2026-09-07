@@ -17,7 +17,7 @@ PY      ?= python3
 OUT     ?= out
 DECK    ?= ../나만의_Bubble_Tea_만들기.html
 
-.PHONY: all build vet test fmt cross gen-width record html logs tmux-smoke deck deck-check clean
+.PHONY: all build vet test bench fmt cross gen-width record html logs tmux-smoke deck deck-check clean
 
 all: vet test
 
@@ -178,6 +178,7 @@ logs:
 	@$(GO) vet ./... > $(OUT)/go_vet.txt 2>&1 || true
 	@$(GO) test -p $(P) -count=1 ./... > $(OUT)/go_test.txt 2>&1 || true
 	@$(GO) run ./tools/record -list > $(OUT)/record_list.txt
+	@$(MAKE) --no-print-directory bench > /dev/null
 	@wc -l $$(find . -name '*.go' | sort) go.mod Makefile > $(OUT)/loc.txt
 	@echo "  $(OUT)/go_test.txt · go_vet.txt · loc.txt · record_list.txt"
 
@@ -187,6 +188,14 @@ deck:
 
 deck-check:
 	node deck/check_deck.js $(DECK)
+
+# 성능은 느낌이 아니라 숫자로 말한다. 결과는 덱의 12부가 그대로 싣는다.
+# 기계마다 다른 숫자가 나오는 것이 정상이다 — 그래서 첫 줄에 기계 이름이 찍힌다.
+bench:
+	@mkdir -p $(OUT)
+	$(GO) test -p $(P) -run XXX -bench . -benchmem ./width/ ./render/ ./input/ ./style/ \
+		| grep -v '^\(PASS\|ok\|pkg:\)' > $(OUT)/bench.txt
+	@cat $(OUT)/bench.txt
 
 clean:
 	$(GO) clean -cache -testcache

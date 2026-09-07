@@ -1,3 +1,333 @@
-<!--SLIDE sec=8 t="6단계 — style: 꾸미기 (준비 중)"-->
-<h2>6단계 — style: 꾸미기</h2>
-<p>이 부는 아직 쓰는 중이다.</p>
+<!--SLIDE sec=8 t="이 부에서 만들 것"-->
+<h1>8부 · style — 꾸미기</h1>
+<p class="lead">Lip Gloss 가 하는 일 중 우리에게 필요한 만큼을 만든다.
+핵심은 두 가지 — <b>스타일이 값이라는 것</b>, 그리고 <b>그리는 순서를 못박았다는 것</b>.</p>
+<div class="cols">
+  <div class="card"><h4>만드는 것</h4><ul>
+    <li>색 수준 판별과 내려 맞추기</li>
+    <li>값 의미론 <code>Style</code></li>
+    <li>패딩·여백·정렬·높이</li>
+    <li>테두리 여섯 벌</li>
+    <li><code>JoinHorizontal</code>·<code>JoinVertical</code>·<code>Place</code></li>
+  </ul></div>
+  <div class="card"><h4>이 부에서 배우는 것</h4><ul>
+    <li>왜 배경색이 패딩까지만 덮는가</li>
+    <li>왜 줄마다 SGR 을 열고 닫는가</li>
+    <li>RGB 거리가 왜 분홍을 은색으로 고르는가</li>
+  </ul></div>
+</div>
+
+<!--SLIDE sec=8 t="색 수준"-->
+<h2>터미널마다 낼 수 있는 색이 다르다</h2>
+<!--CODE file=style/color.go lines=1-21 cap="style/color.go — Profile"-->
+<p>24비트 색 시퀀스를 16색 터미널에 보내면 무시되거나 엉뚱한 색이 나온다.
+그렇다고 늘 16색만 쓰면 요즘 터미널이 아깝다. 그래서 <b>한 번 판별해 두고</b>,
+낼 수 없는 색은 가장 가까운 색으로 내려 맞춘다.</p>
+
+<!--SLIDE sec=8 t="Color 는 문자열"-->
+<h2>왜 색이 문자열인가</h2>
+<!--CODE file=style/color.go lines=22-46 cap="style/color.go — Profile.String·Color"-->
+<p>색을 구조체로 만들면 <code>style.New().Foreground(...)</code> 한 줄을 쓸 때마다 생성자를 불러야 한다.
+문자열 상수면 그냥 적으면 된다 — <b>스타일을 선언하듯 쓰게 하는 것</b>이 이 패키지의 목적이다.</p>
+
+<!--SLIDE sec=8 t="색 풀기"-->
+<h2>#abc 도 205 도 같은 문으로</h2>
+<!--CODE file=style/color.go lines=47-78 cap="style/color.go — rgb"-->
+<!--CODE file=style/color.go lines=79-109 cap="style/color.go — index·SGR"-->
+
+<!--SLIDE sec=8 t="매개변수만 돌려주기"-->
+<h2>시퀀스가 아니라 매개변수를 돌려주는 이유</h2>
+<!--CODE file=style/color.go lines=110-141 cap="style/color.go — params"-->
+<p><code>Style</code> 은 굵게·밑줄·글자색·배경색을 <b>한 시퀀스에 모아</b> 보낸다
+(<code>\e[1;4;32;44m</code>). 완성된 시퀀스만 만들 줄 알면 그걸 다시 뜯어야 한다.</p>
+
+<!--SLIDE sec=8 t="16색의 번호"-->
+<h2>16색 SGR 번호의 사정</h2>
+<!--CODE file=style/color.go lines=142-173 cap="style/color.go — ansi16·nearest256"-->
+<table>
+<tr><th>색 번호</th><th>글자</th><th>배경</th></tr>
+<tr><td>0–7</td><td>30–37</td><td>40–47</td></tr>
+<tr><td>8–15 (밝은 색)</td><td>90–97</td><td>100–107</td></tr>
+</table>
+<p class="small mut">90번대는 원래 표준에 없던 확장인데, 지금은 사실상 어디서나 통한다.
+"표준에 없지만 다 되는 것" 이 이 바닥에는 아주 많다.</p>
+
+<!--SLIDE sec=8 t="256색 팔레트"-->
+<h2>256색은 세 덩어리다</h2>
+<!--CODE file=style/color.go lines=174-198 cap="style/color.go — cubeLevels·nearest16"-->
+<table>
+<tr><th>번호</th><th>무엇</th><th>메모</th></tr>
+<tr><td>0–15</td><td>표준 16색</td><td>사용자 테마가 바꿔 쓰는 자리 — 내림 후보에서 뺀다</td></tr>
+<tr><td>16–231</td><td>6×6×6 정육면체</td><td>눈금은 0, 95, 135, 175, 215, 255</td></tr>
+<tr><td>232–255</td><td>회색 24단계</td><td>8에서 시작해 10씩</td></tr>
+</table>
+<p class="small mut">0 다음이 95로 확 뛰는 것은 어두운 쪽에서 사람 눈이 차이를 더 잘 느끼기 때문에 생긴 배치다.
+정육면체를 쓰면 각 축을 따로 가장 가까운 눈금에 붙이면 되므로 O(1) 이다.</p>
+
+<!--SLIDE sec=8 t="RGB 거리의 함정"-->
+<h2>RGB 거리는 분홍을 은색으로 고른다</h2>
+<div class="cols">
+  <div class="card"><h4>실제로 겪은 일</h4>
+  <p>256색 205번(<code>#FF5FAF</code>, 분홍)을 16색으로 내려 맞출 때
+  단순 RGB 거리는 <b>은색(#C0C0C0)</b> 을 고른다.</p>
+  <pre class="code txt"><code>은색 : 63² + 97² + 25² = 14003
+자홍 :  0² + 95² + 80² = 15425   ← 더 멀다고 나온다</code></pre>
+  </div>
+  <div class="card"><h4>왜 그런가</h4>
+  <p>사람 눈은 <b>초록의 차이</b>를 가장 민감하게 느낀다. RGB 거리는 세 축을 똑같이 취급한다.
+  그래서 초록이 많이 다른 두 색을 "가깝다" 고 판단한다.</p>
+  </div>
+</div>
+<div class="tip"><b>redmean — 정수 곱셈 몇 번으로</b>
+두 색의 빨강 평균에 따라 빨강·파랑 축의 무게를 옮기고, 초록에는 항상 큰 무게를 준다.
+같은 계산을 다시 하면 은색 <b>49645</b>, 자홍 <b>48900</b> — 자홍이 이긴다.</div>
+
+<!--SLIDE sec=8 t="redmean"-->
+<h2>거리 함수 하나가 색을 고른다</h2>
+<!--CODE file=style/color.go lines=199-224 cap="style/color.go — dist"-->
+<p class="small mut">CIE Lab 같은 제대로 된 색 공간을 쓰면 더 정확하지만 변환에 부동소수와 표가 필요하다.
+표준 라이브러리만 쓰기로 한 약속도 지키면서 실용적인 답이 나오는 식이 이것이다.</p>
+
+<!--SLIDE sec=8 t="프로필 판별"-->
+<h2>색을 쓸지 말지 — 환경 변수 다섯</h2>
+<!--CODE file=style/color.go lines=225-256 cap="style/color.go — DetectProfile"-->
+<!--CODE file=style/color.go lines=257-277 cap="style/color.go — 끝"-->
+<div class="note"><b><code>env</code> 를 인자로 받는 이유</b>
+<code>os.Getenv</code> 를 직접 부르면 이 함수의 모든 갈래를 확인하려고 <b>진짜 환경 변수</b>를
+건드려야 하고, 그러면 시험끼리 서로 간섭한다. 함수 하나를 인자로 받는 것만으로
+열두 갈래를 전부 시험할 수 있게 된다.</div>
+
+<!--SLIDE sec=8 t="팔레트 표"-->
+<h2>팔레트는 설정이 아니라 표다</h2>
+<!--CODE file=style/palette.go lines=1-14 cap="style/palette.go — 머리"-->
+<p class="small mut">터미널이 정한 것을 우리가 적어 둔 것뿐이다. 실제로 화면에 나오는 색은
+사용자의 테마가 정한다 — 이 표는 "어느 쪽이 가까운가" 를 재는 자에 불과하다.
+나머지 44줄은 숫자라 부록에 있다.</p>
+
+<!--SLIDE sec=8 t="시험 — 색"-->
+<h2>시험 ① 같은 색, 다른 바이트</h2>
+<!--CODE file=style/color_test.go lines=1-30 cap="style/color_test.go"-->
+
+<!--SLIDE sec=8 t="시험 — 내려 맞추기"-->
+<h2>시험 ② 내려 맞춘 결과를 못박는다</h2>
+<!--CODE file=style/color_test.go lines=31-53 cap="style/color_test.go"-->
+<p class="small mut"><code>{ANSI, "205", "\x1b[95m"}</code> 이 redmean 을 지켜보는 줄이다.
+단순 RGB 거리로 되돌리면 이 줄이 <code>\x1b[37m</code>(은색)이 되어 시험이 깨진다.</p>
+
+<!--SLIDE sec=8 t="시험 — 프로필"-->
+<h2>시험 ③ 환경 변수 열두 갈래</h2>
+<!--CODE file=style/color_test.go lines=54-74 cap="style/color_test.go"-->
+<!--CODE file=style/color_test.go lines=75-105 cap="style/color_test.go"-->
+<!--CODE file=style/color_test.go lines=106-113 cap="style/color_test.go"-->
+
+<!--SLIDE sec=8 t="Position"-->
+<h2>Style — 값이라는 것이 전부다</h2>
+<!--CODE file=style/style.go lines=1-24 cap="style/style.go — Position"-->
+<p><code>Position</code> 이 실수인 이유: 0.25 처럼 중간값을 쓸 수 있게 하려는 것이다.
+상수 세 개짜리 열거형이었다면 "3분의 1 지점" 같은 요구가 올 때마다 상수를 늘려야 한다.</p>
+
+<!--SLIDE sec=8 t="Style 구조체"-->
+<h2>백 바이트를 프레임마다 복사한다</h2>
+<!--CODE file=style/style.go lines=25-57 cap="style/style.go — Style·New"-->
+<p>모든 메서드가 값 수신자를 쓰고 고쳐진 <b>복사본</b>을 돌려준다.
+그래서 스타일을 전역 변수에 두고 여기저기서 조금씩 바꿔 써도 서로 간섭하지 않는다.</p>
+<p class="small mut">대가는 복사 비용이다. 이 구조체는 100바이트쯤 되고 한 프레임에 수십 번 복사된다 —
+터미널 한 화면이 2,000칸도 안 되는 것에 비하면 없는 비용이다.</p>
+
+<!--SLIDE sec=8 t="꾸밈 메서드"-->
+<h2>한 줄짜리 메서드 여덟</h2>
+<!--CODE file=style/style.go lines=58-82 cap="style/style.go — 꾸밈과 색"-->
+<p class="small mut">기본 프로필이 <code>NoColor</code> 인 것에 주목하라.
+"환경을 알아서 보고 정해 주는" 기본값을 두면 같은 코드가 터미널에 따라 다른 문자열을 내놓아
+시험이 흔들린다. 프로필을 정하는 것은 프로그램을 띄우는 쪽의 일이다.</p>
+
+<!--SLIDE sec=8 t="패딩과 여백"-->
+<h2>CSS 처럼 읽히는 규칙</h2>
+<!--CODE file=style/style.go lines=83-110 cap="style/style.go — Padding·Margin·sides"-->
+<table>
+<tr><th>인자</th><th>뜻</th></tr>
+<tr><td><code>Padding(1)</code></td><td>네 방향 모두 1</td></tr>
+<tr><td><code>Padding(1, 2)</code></td><td>위아래 1, 좌우 2</td></tr>
+<tr><td><code>Padding(1, 2, 0)</code></td><td>위 1, 좌우 2, 아래 0</td></tr>
+<tr><td><code>Padding(1, 2, 0, 3)</code></td><td>위·오른쪽·아래·왼쪽 (시계 방향)</td></tr>
+</table>
+
+<!--SLIDE sec=8 t="테두리 고르기"-->
+<h2>테두리와 변 고르기</h2>
+<!--CODE file=style/style.go lines=111-133 cap="style/style.go — Border"-->
+<!--CODE file=style/border.go cap="style/border.go 전체"-->
+
+<!--SLIDE sec=8 t="테두리와 모호 폭"-->
+<h2>테두리가 7부와 만나는 곳</h2>
+<div class="big center" style="font-size:1.15em">─ │ ┌ ┐ └ ┘ ╭ ╮ ━ ┃ ═ ║</div>
+<p class="center">이 박스 그리기 문자들은 전부 East_Asian_Width 가 <b>모호(A)</b> 다.</p>
+<p>우리는 그것을 1칸으로 센다(7부). 2칸으로 세는 순간 <b>이 모든 상자가 두 배로 벌어진다.</b>
+한글 TUI 에서 상자가 깨지는 가장 흔한 원인이 바로 이 판단이다.</p>
+<div class="note"><b>ASCII 테두리를 남겨 둔 이유</b>
+로그 파일로 리다이렉트하거나, 박스 문자가 없는 옛 터미널에서 돌릴 때를 위한 대비책이다.
+<code>HiddenBorder</code> 는 자리는 차지하되 보이지 않는다 — 여러 상자의 높이를 맞출 때 쓴다.</div>
+
+<!--SLIDE sec=8 t="그리는 순서"-->
+<h2>여덟 단계 — 이 순서가 전부다</h2>
+<ol class="steps">
+<li>조각들을 공백으로 잇는다</li>
+<li>폭이 정해져 있으면 그 폭에 맞춰 접는다</li>
+<li>줄마다 남는 자리를 정렬 방향으로 채워 <b>직사각형</b>으로 만든다</li>
+<li>패딩을 두른다</li>
+<li>높이가 정해져 있으면 빈 줄로 채운다</li>
+<li>줄마다 꾸밈 시퀀스를 씌운다 <b>← 배경색이 패딩까지 덮는 지점</b></li>
+<li>테두리를 두른다</li>
+<li>여백을 두른다 <b>← 배경색이 여기는 안 닿는다</b></li>
+</ol>
+<p class="lead">이 순서를 한 번 정해 두면 "패딩이 테두리 안인가 밖인가" 같은 질문에 매번 답할 필요가 없다.
+그리고 <b>패딩과 여백을 나누는 유일한 이유</b>가 6번과 8번 사이에 있다는 것도 드러난다.</p>
+
+<!--SLIDE sec=8 t="Render ①"-->
+<h2>Render — 접기와 직사각형 만들기</h2>
+<!--CODE file=style/render.go lines=1-23 cap="style/render.go — 순서 주석"-->
+<!--CODE file=style/render.go lines=24-51 cap="style/render.go"-->
+
+<!--SLIDE sec=8 t="Render ②"-->
+<h2>패딩과 높이</h2>
+<!--CODE file=style/render.go lines=52-81 cap="style/render.go"-->
+
+<!--SLIDE sec=8 t="줄마다 열고 닫기"-->
+<h2>왜 줄마다 SGR 을 여닫나</h2>
+<!--CODE file=style/render.go lines=82-112 cap="style/render.go — 꾸밈·테두리·여백"-->
+<div class="warn"><b>한 번 열고 마지막에 닫으면</b>
+바이트는 줄지만, 6부의 줄 단위 diff 렌더러가 <b>가운데 줄 하나만</b> 다시 그릴 때
+그 줄에 여는 시퀀스가 없어 색이 사라진다.
+"줄 하나는 그 자체로 완결" 이 우리 렌더러의 전제이고, 이 층이 그 전제를 지켜 준다.</div>
+
+<!--SLIDE sec=8 t="SGR 모으기"-->
+<h2>한 시퀀스에 모으기</h2>
+<!--CODE file=style/render.go lines=113-144 cap="style/render.go — sgr"-->
+<p class="small mut">나눠 보내도 결과는 같다. 한 번에 보내면 바이트가 줄고,
+무엇보다 캡처를 눈으로 읽기 쉽다 — <code>\e[1;4;32m</code> 하나가
+<code>\e[1m\e[4m\e[32m</code> 셋보다 알아보기 좋다.</p>
+
+<!--SLIDE sec=8 t="테두리 그리기"-->
+<h2>모서리는 두 변이 다 있을 때만</h2>
+<!--CODE file=style/render.go lines=145-178 cap="style/render.go — drawBorder"-->
+<p>위쪽만 그리라고 했는데 모서리가 나오면 그것은 "ㄱ" 자 조각이지 테두리가 아니다.</p>
+
+<!--SLIDE sec=8 t="정렬"-->
+<h2>남는 자리를 어느 쪽으로</h2>
+<!--CODE file=style/render.go lines=179-203 cap="style/render.go — alignH·alignV"-->
+<!--CODE file=style/render.go lines=204-226 cap="style/render.go — 끝"-->
+<p class="small mut"><code>int(float64(gap) * float64(pos))</code> 한 줄이
+왼쪽·가운데·오른쪽을 전부 처리한다. <code>pos</code> 가 0이면 전부 오른쪽에,
+1이면 전부 왼쪽에, 0.5면 반씩 간다.</p>
+
+<!--SLIDE sec=8 t="붙이기"-->
+<h2>Join — 7부가 값을 하는 곳</h2>
+<!--CODE file=style/join.go lines=1-20 cap="style/join.go"-->
+<!--CODE file=style/join.go lines=21-46 cap="style/join.go — JoinHorizontal"-->
+<p class="lead">폭을 세는 데 <code>width.StringWidth</code> 를 쓴다는 것이 핵심이다.
+한글이 든 덩어리를 <code>len()</code> 으로 세면 <b>옆 덩어리가 통째로 밀린다.</b></p>
+
+<!--SLIDE sec=8 t="쌓기와 놓기"-->
+<h2>JoinVertical 과 Place</h2>
+<!--CODE file=style/join.go lines=47-79 cap="style/join.go"-->
+<!--CODE file=style/join.go lines=80-96 cap="style/join.go — 끝"-->
+
+<!--SLIDE sec=8 t="시험 — 값"-->
+<h2>시험 ① 스타일은 값이다</h2>
+<!--CODE file=style/style_test.go lines=1-25 cap="style/style_test.go"-->
+
+<!--SLIDE sec=8 t="시험 — 직사각형"-->
+<h2>시험 ② 여러 줄이면 오른쪽을 채운다</h2>
+<!--CODE file=style/style_test.go lines=26-49 cap="style/style_test.go"-->
+<p class="small mut">그래야 이 덩어리를 옆 덩어리와 나란히 붙일 수 있다.
+"결과는 언제나 직사각형" 이 이 패키지가 <code>Join</code> 에게 하는 약속이다.</p>
+
+<!--SLIDE sec=8 t="시험 — SGR"-->
+<h2>시험 ③ 꾸밈이 한 시퀀스로 모인다</h2>
+<!--CODE file=style/style_test.go lines=50-79 cap="style/style_test.go"-->
+
+<!--SLIDE sec=8 t="시험 — 패딩"-->
+<h2>시험 ④ 패딩과 폭·정렬</h2>
+<!--CODE file=style/style_test.go lines=80-107 cap="style/style_test.go"-->
+<!--CODE file=style/style_test.go lines=108-126 cap="style/style_test.go"-->
+
+<!--SLIDE sec=8 t="시험 — 테두리"-->
+<h2>시험 ⑤ 테두리 다섯 벌과 변 고르기</h2>
+<!--CODE file=style/style_test.go lines=127-160 cap="style/style_test.go"-->
+
+<!--SLIDE sec=8 t="시험 — 순서"-->
+<h2>시험 ⑥ 파이프라인 순서를 못박는다</h2>
+<!--CODE file=style/style_test.go lines=161-187 cap="style/style_test.go"-->
+<div class="big center" style="font-size:1em"><code>" \e[44m x \e[0m "</code></div>
+<p class="center">바깥의 공백은 여백 — <b>색이 안 닿는다.</b> 안쪽의 공백은 패딩 — 파랗다.</p>
+
+<!--SLIDE sec=8 t="시험 — 직사각형 불변식"-->
+<h2>시험 ⑦ 모든 줄의 폭이 같다</h2>
+<!--CODE file=style/style_test.go lines=188-215 cap="style/style_test.go"-->
+<p class="small mut">스타일 셋 × 입력 셋을 돌려 전부 확인한다.
+이 불변식이 깨지면 <code>JoinHorizontal</code> 로 붙인 화면이 계단처럼 어긋난다.</p>
+
+<!--SLIDE sec=8 t="시험 — 붙이기"-->
+<h2>시험 ⑧ 붙이기와 놓기</h2>
+<!--CODE file=style/join_test.go lines=1-26 cap="style/join_test.go"-->
+<!--CODE file=style/join_test.go lines=27-45 cap="style/join_test.go"-->
+<!--CODE file=style/join_test.go lines=46-63 cap="style/join_test.go"-->
+
+<!--SLIDE sec=8 t="06_style ①"-->
+<h2>스타일 예제</h2>
+<!--CODE file=examples/06_style/main.go lines=1-22 cap="examples/06_style/main.go"-->
+
+<!--SLIDE sec=8 t="06_style ②"-->
+<h2>프로필을 받아 스타일에 심는다</h2>
+<!--CODE file=examples/06_style/main.go lines=23-56 cap="examples/06_style/main.go"-->
+
+<!--SLIDE sec=8 t="06_style ③"-->
+<h2>06_style — 실제 화면</h2>
+<!--CODE file=examples/06_style/main.go lines=57-84 cap="examples/06_style/main.go"-->
+<!--CAP file=out/tmux_06_style.html cap="go run ./examples/06_style — 아래 화살표 네 번"-->
+
+<!--SLIDE sec=8 t="07_cmds ①"-->
+<h2>명령 예제 — Batch 와 Sequence 를 눈으로</h2>
+<!--CODE file=examples/07_cmds/main.go lines=1-34 cap="examples/07_cmds/main.go"-->
+
+<!--SLIDE sec=8 t="07_cmds ②"-->
+<h2>도착 시각을 찍어 보기</h2>
+<!--CODE file=examples/07_cmds/main.go lines=35-68 cap="examples/07_cmds/main.go"-->
+
+<!--SLIDE sec=8 t="07_cmds ③"-->
+<h2>07_cmds — 실제 화면</h2>
+<!--CODE file=examples/07_cmds/main.go lines=69-93 cap="examples/07_cmds/main.go"-->
+<!--CAP file=out/tmux_07_cmds.html cap="go run ./examples/07_cmds — b 를 눌렀다"-->
+<p class="lead">300ms 짜리를 <b>먼저</b> 넣었는데 100ms 짜리가 <b>먼저</b> 도착했다.
+Batch 가 정말 동시에 돈다는 증거다 — 3부의 시험이 확인하는 것과 같은 사실을 눈으로 본 것이다.</p>
+
+<!--SLIDE sec=8 t="나란히 보기"-->
+<h2>나란히 보기 — 스타일</h2>
+<table>
+<tr><th></th><th>Lip Gloss v2</th><th>보리차 style</th></tr>
+<tr><td>값 의미론</td><td>같음</td><td>같음</td></tr>
+<tr><td>색 표기</td><td><code>lipgloss.Color("205")</code>, <code>AdaptiveColor</code></td><td><code>style.Color("205")</code> 만</td></tr>
+<tr><td>밝은/어두운 테마 대응</td><td><code>AdaptiveColor</code>, <code>CompleteColor</code></td><td>없음</td></tr>
+<tr><td>내려 맞추기</td><td>colorprofile 패키지</td><td>redmean 한 함수</td></tr>
+<tr><td>테두리</td><td>여덟 벌 + 사용자 정의</td><td>여섯 벌 + 사용자 정의</td></tr>
+<tr><td>정렬·붙이기</td><td>같음</td><td>같음</td></tr>
+<tr><td>표·목록·트리</td><td><code>lipgloss/table</code>, <code>list</code>, <code>tree</code></td><td>없음</td></tr>
+<tr><td>하이퍼링크(OSC 8)</td><td>지원</td><td>없음</td></tr>
+</table>
+<p class="small mut"><code>AdaptiveColor</code> 는 실제로 아쉽다. 터미널 배경이 밝은지 어두운지 물어봐
+(OSC 11 질의) 색을 달리 고르는 기능인데, 그러려면 터미널에 <b>물어보고 답을 기다리는</b>
+경로가 필요하다 — 우리 파서는 그런 왕복을 지원하지 않는다.</p>
+
+<!--SLIDE sec=8 t="8부 연습문제"-->
+<h2>8부 연습문제</h2>
+<ol class="steps">
+<li><code>dist</code> 를 단순 RGB 거리로 되돌리고 <code>go test ./style/</code> 를 돌려 보라.
+어느 시험이 깨지나?</li>
+<li>여덟 단계에서 6번(줄마다 SGR)을 7번(테두리) <b>뒤로</b> 옮기면 무엇이 달라지나?
+<span class="mut">답: 테두리에도 배경색이 칠해진다</span></li>
+<li><code>Border(NormalBorder, true, false, false, false)</code> 가 모서리를 그리게 하려면
+<code>drawBorder</code> 의 어디를 고쳐야 하나? 왜 그렇게 안 했나?</li>
+<li><code>NO_COLOR=1 go run ./examples/06_style</code> 로 돌려 보라.
+화면이 어떻게 되나? 그것이 왜 옳은 동작인가?</li>
+<li><code>JoinHorizontal</code> 에서 <code>width.StringWidth</code> 를 <code>len</code> 으로
+바꾸고 <code>cmd/showcase</code> 를 돌려 보라. 7부의 함정이 여기서 어떻게 나타나는가?</li>
+</ol>
