@@ -102,7 +102,7 @@ func (d *Decoder) one(final bool) (Msg, int) {
 		// 백스페이스는 0x08(BS)이 아니라 0x7f(DEL)로 온다. 유닉스 터미널의 오랜 관례다.
 		return KeyMsg{Code: KeyBackspace}, 1
 	case c == 0x08:
-		// 진짜 0x08 이 오면 ctrl+백스페이스다(xterm 의 기본 설정).
+		// 진짜 0x08 이 오면 ctrl+백스페이스로 본다. 터미널마다 다르니 절대적이지는 않다.
 		return KeyMsg{Code: KeyBackspace, Mod: ModCtrl}, 1
 	case c == '\t':
 		return KeyMsg{Code: KeyTab}, 1

@@ -336,6 +336,26 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 11:xx — **commit 14 done: review pass.** 502 slides, coverage 12350/12350,
+  오류 0건, check_deck ✓, font --check 통과. Defects found and fixed, by kind:
+  · **사실오류 5** — F-key CSI numbers listed as "11·12·13·15·17" (14 IS F4; 16 is the empty
+    one); indirect deps counted 14, actually 15 (`x/sync` missing); D2Coding copyright is
+    NHN Corporation / FONTRIX, not "네이버"; "Ctrl+Backspace = 0x08 is xterm's default" is
+    terminal-dependent, softened; "시험이 절반" — actually 3993/12075 ≈ 1/3.
+  · **표기·숫자 4** — SVG diagrams 다섯 → 일곱; runnable programs 열다섯 → 열여덟
+    (11 examples + 4 cmd + 3 tools); "60줄" for a 113-line file → `{{LINES:}}`; the package
+    table's "줄 수" column relabelled "핵심 파일 줄 수" (it lists one or two files, not the package).
+  · **상호참조 5** — source comments pointing at the wrong deck part: `style/join.go` said
+    5부 for the width table (it is 7부); `apps/monitor` said 4단계 for the re-arm pattern (3부);
+    `apps/bugs` and two examples used "0단계/6단계" where the deck says 1부/6부.
+  · **중복 제목 10** — eight "나란히 보기" and two "시험 — 자르기" made the TOC ambiguous;
+    all disambiguated.
+  · **약속 정정 3 + 코드 실물화 1** — the cover claimed "손으로 타이핑한 코드는 하나도 없다",
+    which stopped being true once illustrative snippets (shell commands, sketches) were added.
+    The rule is now stated exactly: a code block with a file-name header is cut from the repo,
+    one without is an illustration. And the two example unit tests that part 3 showed as
+    hand-written are now a real committed file (`tea/example_test.go`, 3 passing tests).
+  Import graph verified with `go list -deps` against the part-2 table — matches exactly.
 - 2026-09-07 10:xx — **commits 11-13 done: the whole deck body, 501 slides.**
   Parts 0-14 written. `make deck` → **501 slides, 1344 KB, coverage 12280/12280, 오류 0건**;
   `make deck-check` all ✓ (7 recordings, 19 terminal captures, DeckMono embedded);

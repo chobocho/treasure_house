@@ -24,8 +24,11 @@
 | 16 | Bubble Tea 의 `Tick`·`Every` 는 한 번만 울린다. 되풀이하려면 다시 걸어야 한다 | `go doc charm.land/bubbletea/v2.Tick`, `.Every` (문서에 "Beginners' note" 로 명시) | 3부, 12부 |
 | 17 | 리눅스 `syscall` 패키지에는 `Winsize` 타입이 없다. `TIOCGWINSZ` 로 채울 구조체를 직접 정의해야 한다 | 이 기계에서 `go doc syscall` 확인 (linux/arm64, go 1.27) | 4부 |
 | 18 | macOS 는 termios 를 `TIOCGETA`/`TIOCSETA` 로 읽고 쓰고, 구조체 필드가 uint64 다(리눅스는 `TCGETS`/`TCSETS`, uint32) | Go 소스의 `zerrors_darwin_arm64.go`, `go doc syscall.Termios` 를 GOOS 별로 | 4부 |
-| 19 | D2Coding 은 SIL OFL 1.1 이고, 라틴·박스·블록이 반각(500), 한글이 전각(1000)이다 | 글꼴 파일의 `name` 표와 `hmtx` 를 fontTools 로 직접 확인 | 7부, 13부 |
+| 19 | D2Coding 은 SIL OFL 1.1(저작권 NHN Corporation, 디자인 FONTRIX)이고, 라틴·박스·블록이 반각(500), 한글이 전각(1000)이다 | 글꼴 파일의 `name` 표(nameID 0·13)와 `hmtx` 를 fontTools 로 직접 확인 | 7부, 13부 |
 | 20 | D2Coding 은 동그라미 숫자(U+2460~)를 전각(1000)으로 그린다 — 우리 표는 모호(A)를 1칸으로 센다 | 같은 방법으로 확인 (`deck/gen_fonts.py` 가 빌드마다 경고로 남긴다) | 7부 |
+
+| 21 | Bubble Tea + Lip Gloss 만 직접 쓰는 모듈에도 간접 의존이 열다섯 개 붙는다 | `tetris_tui/go.mod` 의 `// indirect` 줄을 셈 (15개) | 12부 |
+| 22 | xterm 계열에서 Backspace 는 DEL(0x7F), Ctrl+Backspace 는 BS(0x08) 로 오는 것이 흔하지만 터미널마다 다르다 | xterm ctlseqs 의 `backarrowKey` 자원 설명 · 실제 tmux 캡처 | 5부 |
 
 ## 돌려 보지 못한 것
 
