@@ -336,6 +336,31 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 02:2x — **commit 2 done: `input/`.** keys.go (Key/KeyMod/KeyMsg, special keys
+  as runes past unicode.MaxRune, Bubble Tea-identical names), decoder.go (CSI/SS3 state
+  machine, ESC-prefix = alt, UTF-8 assembly, bracketed paste, focus, UnknownMsg),
+  mouse.go (SGR 1006), paste.go, reader.go (two goroutines + 50 ms ESC timer).
+  1,244 new lines, all green.
+  **DEVIATION from §8 work order (deliberate, keep it):** build order is now
+  term → input → width → style → render → tea → widgets → testkit → cmd, i.e. `input`
+  moved ahead of `tea`. Reason: `tea` must import `input` for the default input source,
+  and Go forbids import cycles, so `input` cannot import `tea`. Building `tea` first
+  would have meant a throwaway decoder inside `tea` — code that then cannot appear in the
+  deck. Deck part order (§7) is unchanged; the deck is assembled from finished sources.
+  Consequence to teach on a slide: `input.Msg` is `type Msg = any` (an *alias*), and
+  `tea.Msg` aliases it, so no conversion is needed at the boundary. Bubble Tea avoids the
+  whole problem by putting everything in one package — that is the trade-off to name.
+  Verified against the warm cache (record in claims.md): ultraviolet `Keystroke()` orders
+  modifiers ctrl → alt → shift; names are `enter tab backspace esc space up down left
+  right home end pgup pgdown insert delete f1..f12`; `KeyExtended = unicode.MaxRune + 1`;
+  `ModShift=1 ModAlt=2 ModCtrl=4`. Our `Key.String()` returns "space" where Bubble Tea v2's
+  `String()` returns " " (it prefers Key.Text) — that is a real difference, put it on the
+  comparison slide, do not paper over it.
+  함정 log: (a) `Text` must be cleared when Ctrl/Alt is set, else a textinput would insert
+  a character on alt+a; (b) bracketed paste must NOT be ended by the ESC timeout — hold
+  back the last 5 bytes when scanning for `ESC[201~`, or a paste split across reads loses
+  its tail; (c) `-race` is unavailable on android/arm64 (`-race is not supported`), so
+  concurrency is argued by design + timing tests, and the deck must say so.
 - 2026-09-07 01:47 — **commit 1 done.** go.mod (no require), Makefile (build/vet/test/cross/
   tmux-smoke/logs/deck), `term/` (seq, Term wrapper over io.Reader/io.Writer, unix ioctl +
   SIGWINCH, linux/darwin termios request consts, windows stub), `examples/00_raw`.
