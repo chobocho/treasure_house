@@ -29,6 +29,10 @@
 
 | 21 | Bubble Tea + Lip Gloss 만 직접 쓰는 모듈에도 간접 의존이 열다섯 개 붙는다 | `tetris_tui/go.mod` 의 `// indirect` 줄을 셈 (15개) | 12부 |
 | 22 | xterm 계열에서 Backspace 는 DEL(0x7F), Ctrl+Backspace 는 BS(0x08) 로 오는 것이 흔하지만 터미널마다 다르다 | xterm ctlseqs 의 `backarrowKey` 자원 설명 · 실제 tmux 캡처 | 5부 |
+| 23 | go-runewidth 의 모호(A) 폭 기본값은 로케일을 따른다 — `LANG`/`LC_ALL`/`LC_CTYPE` 이 ko·ja·zh 면 2, 아니면 1. `RUNEWIDTH_EASTASIAN=0/1` 로 고정할 수 있다 | 모듈 캐시 `github.com/mattn/go-runewidth@v0.0.27` 의 `runewidth.go` `handleEnv()` 와 `runewidth_posix.go` `IsEastAsian()` | 7부, `width/width.go` 주석 |
+| 24 | Lip Gloss v2 의 테두리 프리셋은 열 벌(Normal·Rounded·Block·OuterHalfBlock·InnerHalfBlock·Thick·Double·Hidden·Markdown·ASCII)이고, `AdaptiveColor`·`CompleteColor` 는 `lipgloss/compat` 로 옮겨졌으며 v2 는 `LightDark` 를 쓴다 | 모듈 캐시 `charm.land/lipgloss/v2@v2.0.6` 의 `borders.go`, `compat/color.go`, `color.go` `LightDark` | 8부, 12부 |
+| 25 | Bubbles v2 의 부품 패키지는 열다섯(cursor filepicker help key list paginator progress spinner stopwatch table textarea textinput timer tree viewport) | 모듈 캐시 `charm.land/bubbles/v2@v2.2.1` 의 디렉터리(internal 제외) | 9부 |
+| 26 | teatest 는 `NewTestModel`·`WaitFor(tb, r, 조건, 옵션…)`·`FinalModel`·`FinalOutput`·`RequireEqualOutput` 을 준다 | <https://pkg.go.dev/github.com/charmbracelet/x/exp/teatest> — 문서로만 확인, 이 기계의 모듈 캐시에 없어 돌려 보지 못했다 | 10부 |
 
 ## 돌려 보지 못한 것
 

@@ -37,7 +37,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View 는 지금 크기에 꼭 맞는 상자를 그린다.
-// 폭을 셀 때 width.StringWidth 를 쓰는 것이 핵심이다 — 안쪽 글에 한글이 섞이면
+// 안쪽 줄을 width.Truncate·width.Pad 로 칸 수에 맞추는 것이 핵심이다 — 안쪽 글에 한글이 섞이면
 // len() 으로는 상자가 어긋난다.
 func (m model) View() string {
 	if m.w < 4 || m.h < 4 {
