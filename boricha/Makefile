@@ -17,7 +17,7 @@ PY      ?= python3
 OUT     ?= out
 DECK    ?= ../나만의_Bubble_Tea_만들기.html
 
-.PHONY: all build vet test fmt cross record html logs tmux-smoke deck deck-check clean
+.PHONY: all build vet test fmt cross gen-width record html logs tmux-smoke deck deck-check clean
 
 all: vet test
 
@@ -39,6 +39,11 @@ test:
 cross:
 	GOOS=darwin  GOARCH=arm64 $(GO) build -p $(P) ./...
 	GOOS=windows GOARCH=amd64 $(GO) build -p $(P) ./...
+
+# 글자 폭 표를 유니코드 자료에서 굽는다.
+# 결정론이 계약이다 — 다시 돌린 뒤 width/table.go 가 그대로여야 한다.
+gen-width:
+	$(GO) run ./tools/gen_width
 
 # ── 화면 기록 ────────────────────────────────────────────────────────
 # 모델을 진짜 터미널 없이 돌려 프레임을 JSON 으로 남긴다(8단계에서 채운다).
