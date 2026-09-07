@@ -336,6 +336,24 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 06:0x — **commit 7 done: `widgets/` + examples/10_widgets.** keymap.go
+  (Binding: keys + help text in ONE value), help.go (short one-line / full aligned table),
+  spinner.go (6 sets; tag counter kills duplicate tickers), progress.go (stateless — it
+  takes the percentage, has no Update), textinput.go (runes for the value, cells for the
+  screen, stateless horizontal scroll recomputed in View), list.go (Item interface,
+  filtering, scroll-to-cursor), viewport.go (pre-wrapped content, wheel = 3 lines).
+  All green. Real capture in out/tmux_10_widgets.txt shows six widgets side by side with
+  Korean columns aligned and the filter live ("3/6 (거르는 중: 차)").
+  Invariants pinned by tests and worth a slide each: every widget's View is exactly
+  Height lines × Width cells, and every widget is a value whose Update returns its own
+  type (not tea.Model) so the parent can assign it straight back.
+  함정 log: (a) while the list is filtering, EVERY key must go to the filter input —
+  otherwise "java" cannot be typed because j navigates; the parent must also stop
+  intercepting tab; (b) `TextInput.insert` must build a new rune slice, since appending
+  into the shared backing array makes two "value" copies alias; (c) a spinner ticked twice
+  breeds timers exponentially — the tag check is the fix; (d) laying boxes out with
+  JoinVertical needs their widths to match exactly, or the join pads and the seam shows
+  (10_widgets sets ti.Width = 34 - promptWidth).
 - 2026-09-07 05:0x — **commit 6 done: `tea/` + examples 01..09.** msg.go, key.go,
   model.go, cmd.go, options.go, program.go. The loop is ~30 lines; everything else exists
   to keep it that short. Model: `Init() Cmd` / `Update(Msg) (Model, Cmd)` / `View() string`
