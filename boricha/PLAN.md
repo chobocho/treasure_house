@@ -336,6 +336,24 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 05:0x — **commit 6 done: `tea/` + examples 01..09.** msg.go, key.go,
+  model.go, cmd.go, options.go, program.go. The loop is ~30 lines; everything else exists
+  to keep it that short. Model: `Init() Cmd` / `Update(Msg) (Model, Cmd)` / `View() string`
+  — verified against `go doc`: v2 has exactly this except `View() View` (a struct).
+  Program: three goroutines (input reader, one per Cmd, main loop) over one buffered
+  msgs channel (128). Options are functional; `WithQuitAfter` was added beyond the plan
+  because headless tests and `tools/record` both need a program that stops on its own.
+  Real-PTY proof for all ten examples in `out/tmux_*.txt`, driven from the Makefile with
+  per-example key lists and, for mouse/paste, raw bytes via `tmux send-keys -H`.
+  Captures confirm: SGR-1006 mouse decode ("left press (19,13)", "wheelup press (29,15)"),
+  bracketed paste as ONE PasteMsg ("잘 되었다\n", 6 glyphs / 2 lines), key names
+  (ctrl+a / alt+x / shift+tab / f5 / home), and Batch really finishing fast-first
+  (100ms → 200ms → 300ms though queued slow-first).
+  함정 log: (a) a model holding a slice must copy it in Update, or two "value" models
+  share one backing array — same for maps (08_mouse copies its mark map); (b) tests that
+  drive a program with `WithInput(strings.NewReader(""))` quit instantly on EOF, so any
+  test about timers must use `WithInput(nil)` plus `WithQuitAfter`; (c) `go run` in tmux
+  costs ~8 s of compile during which every sent key is lost — build to `out/bin` first.
 - 2026-09-07 04:1x — **commit 5 done: `render/`.** buffer.go (Frame = clipped lines,
   out-of-range Line() returns ""), diff.go (line diff, O(lines·width)), renderer.go
   (Write/Flush split, Resize/Repaint/Clear, DEC 2026 sync, Start(fps)/Stop ticker,
