@@ -46,14 +46,31 @@ gen-width:
 	$(GO) run ./tools/gen_width
 
 # ── 화면 기록 ────────────────────────────────────────────────────────
-# 모델을 진짜 터미널 없이 돌려 프레임을 JSON 으로 남긴다(8단계에서 채운다).
+# 모델을 진짜 터미널 없이 돌려 프레임을 JSON 으로 남긴다.
 # 결정론이 계약이다: 다시 돌린 뒤 git diff 가 비어 있어야 한다.
-MODES =
+# 등록부는 tools/record 안에 있다 — `go run ./tools/record -list` 로 볼 수 있다.
+MODES  = width_bad width_ok tick_bad tick_ok
+SRCGO  = $(shell find tea term input render width style widgets testkit apps tools -name '*.go' 2>/dev/null)
 FRAMES = $(addprefix $(OUT)/frames_,$(addsuffix .json,$(MODES)))
 
 record: $(FRAMES)
 
-html:
+$(OUT)/frames_%.json: $(SRCGO)
+	@mkdir -p $(OUT)
+	@$(GO) run ./tools/record -name $* -out $@
+
+# 기록과 캡처를 덱이 읽는 HTML 로 바꾼다.
+# 프레임은 재생기가 넘겨 보는 묶음으로, tmux 캡처는 한 장짜리 조각으로.
+HTMLFRAMES = $(addprefix $(OUT)/frames_,$(addsuffix .html.json,$(MODES)))
+HTMLTMUX   = $(patsubst $(OUT)/tmux_%.txt,$(OUT)/tmux_%.html,$(wildcard $(OUT)/tmux_*.txt))
+
+html: $(HTMLFRAMES) $(HTMLTMUX)
+
+$(OUT)/frames_%.html.json: $(OUT)/frames_%.json tools/ansi2html/main.go
+	@$(GO) run ./tools/ansi2html -in $< -out $@
+
+$(OUT)/tmux_%.html: $(OUT)/tmux_%.txt tools/ansi2html/main.go
+	@$(GO) run ./tools/ansi2html -in $< -out $@
 
 # ── 진짜 PTY 증거 ────────────────────────────────────────────────────
 # 에이전트 세션에는 터미널이 없다. tmux 로 창을 하나 띄워 그 화면을 긁어 오는 것이
@@ -85,9 +102,29 @@ HEX_08_mouse = 1b 5b 3c 30 3b 32 30 3b 31 34 4d 1b 5b 3c 30 3b 32 30 3b 31 34 6d
                1b 5b 3c 36 34 3b 33 30 3b 31 36 4d
 HEX_09_paste = 1b 5b 32 30 30 7e ec 9e 98 20 eb 90 98 ec 97 88 eb 8b a4 0a 1b 5b 32 30 31 7e
 
-TMUXTXT = $(addprefix $(OUT)/tmux_,$(addsuffix .txt,$(EXAMPLES)))
+# 함정 시연 중 "줄 넘침" 은 진짜 터미널에서만 보인다.
+# 우리 렌더러가 프레임을 만들 때 이미 자르기 때문에 기록에는 안 잡힌다.
+BUGCAPS = wrap_bad wrap_ok
+
+TMUXTXT = $(addprefix $(OUT)/tmux_,$(addsuffix .txt,$(EXAMPLES))) \
+          $(addprefix $(OUT)/tmux_,$(addsuffix .txt,$(BUGCAPS)))
 
 tmux-smoke: $(TMUXTXT)
+
+$(OUT)/bin/bugs: cmd/bugs/main.go apps/bugs/bugs.go $(SRCGO)
+	@mkdir -p $(OUT)/bin
+	@$(GO) build -p $(P) -o $@ ./cmd/bugs
+
+BUGARGS_wrap_bad = -kind wrap
+BUGARGS_wrap_ok  = -kind wrap -fixed
+
+$(OUT)/tmux_wrap_%.txt: $(OUT)/bin/bugs
+	@tmux kill-session -t bo_wrap_$* 2>/dev/null || true
+	@tmux new-session -d -s bo_wrap_$* -x 60 -y 20 "$(OUT)/bin/bugs $(BUGARGS_wrap_$*)"
+	@sleep 3
+	@tmux capture-pane -e -p -t bo_wrap_$* > $@
+	@tmux kill-session -t bo_wrap_$* 2>/dev/null || true
+	@echo "  $@"
 
 $(OUT)/bin/%: examples/%/main.go $(shell find tea term input render width style -name '*.go' 2>/dev/null)
 	@mkdir -p $(OUT)/bin
@@ -111,8 +148,9 @@ logs:
 	@$(GO) version > $(OUT)/go_version.txt
 	@$(GO) vet ./... > $(OUT)/go_vet.txt 2>&1 || true
 	@$(GO) test -p $(P) -count=1 ./... > $(OUT)/go_test.txt 2>&1 || true
-	@wc -l $$(find . -name '*.go' | sort) go.mod Makefile | tail -1 > $(OUT)/loc.txt
-	@echo "  $(OUT)/go_test.txt · go_vet.txt · loc.txt"
+	@$(GO) run ./tools/record -list > $(OUT)/record_list.txt
+	@wc -l $$(find . -name '*.go' | sort) go.mod Makefile > $(OUT)/loc.txt
+	@echo "  $(OUT)/go_test.txt · go_vet.txt · loc.txt · record_list.txt"
 
 deck:
 	$(PY) deck/gen_appendix.py

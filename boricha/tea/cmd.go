@@ -115,3 +115,22 @@ func LogToFile(path, prefix string) (io.Closer, error) {
 	log.SetFlags(log.Ltime | log.Lshortfile)
 	return f, nil
 }
+
+// Expand 는 Batch/Sequence 가 만든 내부 신호를 풀어 그 안의 명령들을 돌려준다.
+// 내부 신호가 아니면 두 번째 값이 거짓이다.
+//
+// 왜 이런 문을 열어 두는가. Program 밖에서 루프를 직접 도는 도구(testkit, tools/record)가
+// 있기 때문이다. 그 도구들은 시계와 고루틴 없이 결정론적으로 돌아야 해서 Program 을 쓸 수
+// 없는데, batchMsg 를 못 알아보면 Batch 를 쓴 모델을 아예 돌릴 수 없다.
+//
+// 내부 타입 자체를 내보내지 않고 이 함수만 여는 이유: 앱이 batchMsg 를 직접 만들거나
+// Update 에서 그것을 받아 처리하는 일이 없어야 하기 때문이다. 그건 Program 의 몫이다.
+func Expand(msg Msg) ([]Cmd, bool) {
+	switch m := msg.(type) {
+	case batchMsg:
+		return m, true
+	case sequenceMsg:
+		return m, true
+	}
+	return nil, false
+}
