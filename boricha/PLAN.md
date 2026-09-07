@@ -336,6 +336,20 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 04:1x — **commit 5 done: `render/`.** buffer.go (Frame = clipped lines,
+  out-of-range Line() returns ""), diff.go (line diff, O(lines·width)), renderer.go
+  (Write/Flush split, Resize/Repaint/Clear, DEC 2026 sync, Start(fps)/Stop ticker,
+  DefaultFPS 60), cursor.go (trailing-space trim). All green.
+  Byte-level goldens pin the wire format: per changed line `ESC[row;1H` + `ESC[K` +
+  content, then park the cursor at `ESC[height;1H`. Nothing at all is written when the
+  frame is unchanged — that is the slide about why a 60 fps TUI is idle most of the time.
+  함정 log: (a) trailing spaces can be trimmed because `ESC[K` already blanked the line —
+  but NOT on a line carrying SGR, where trailing spaces are painted background; the diff
+  must still compare the *untrimmed* line or the two would collapse; (b) `Resize` must set
+  a full-repaint flag: after a resize nobody knows what is on screen, so the diff baseline
+  is worthless; (c) `Stop()` must Flush once more or the farewell frame never appears.
+  NOTE for the deck: `render` imports `term` (for the sequence constants) and `width`.
+  Dependency graph so far: width ← style, width ← render → term. No cycles.
 - 2026-09-07 03:4x — **commit 4 done: `style/`.** color.go (Profile, Color as a string,
   fgParams/bgParams so Style can merge everything into one SGR, DetectProfile as a pure
   function taking `env func(string) string` + isTTY), palette.go (generated 256-colour
