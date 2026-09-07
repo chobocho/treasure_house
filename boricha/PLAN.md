@@ -336,6 +336,22 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 03:4x — **commit 4 done: `style/`.** color.go (Profile, Color as a string,
+  fgParams/bgParams so Style can merge everything into one SGR, DetectProfile as a pure
+  function taking `env func(string) string` + isTTY), palette.go (generated 256-colour
+  table, first 16 = VGA/xterm values), border.go (Normal/Rounded/Thick/Double/ASCII/Hidden),
+  style.go (value semantics, CSS-style Padding/Margin/Border side rules), render.go
+  (the 8-step pipeline), join.go (JoinHorizontal/JoinVertical/Place). All green.
+  Render pipeline order, pinned by tests — join parts → wrap to Width → align to a
+  rectangle → padding → height fill → **SGR per line** → border → margin. Two facts the
+  slides must state: background covers padding but not margin (that is the only reason the
+  two exist separately), and SGR is opened and closed on **every line** because the line
+  renderer redraws single lines and a line must be self-contained.
+  함정 log: (a) plain RGB distance picks *silver* when downsampling 256-colour 205
+  (#FF5FAF) to 16 colours — visibly wrong; switched to the integer "redmean" weighting,
+  which picks magenta. That is a real, reproducible before/after for a slide, with the
+  numbers 49645 vs 48900. (b) `Width(1)` must wrap, not truncate. (c) `Border` corners are
+  drawn only when both adjoining sides are on, else "top only" renders an "ㄱ" shape.
 - 2026-09-07 03:0x — **commit 3 done: `width/`.** widthdata.txt (678 ranges, Unicode
   16.0.0), tools/gen_width/main.go (txt → table.go, deterministic, rejects overlapping or
   unordered ranges), table.go (245 lines, 3 ranges per line), width.go (RuneWidth binary
