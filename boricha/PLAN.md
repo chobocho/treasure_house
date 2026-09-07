@@ -336,6 +336,25 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 09:0x — **commit 10 done: deck build system + skeleton.** Copied
+  build_deck.py, gen_appendix.py, gen_fonts.py, hl.py, chunks.py, split_ranges.py,
+  test_fonts.py, untab.py, player.js, check_deck.js, extra.css, base/ from tetris_tui and
+  changed only title/brand/OUT/FRAME_FILES/SKIP_DIRS/BLURB. sections.json has parts 0..14;
+  stubs for 00..13 plus a generated 14_appendix.
+  First full build is GREEN end to end: **181 slides, 1006 KB, coverage 12078/12078,
+  오류 0건**, `check_deck.js` all ✓ (7 recordings mount and play, DeckMono embedded,
+  every monospace stack starts with it).
+  **Tooling change worth keeping (and worth a slide):** gen_fonts' hard contract
+  "advance == cells x 500" now *warns* instead of dying when the glyph is
+  East_Asian_Width = Ambiguous. Concrete case: D2Coding draws ①②③ at 1000 units while
+  our table calls Ambiguous 1 cell. That is not a font bug — it is exactly what
+  "ambiguous" means. The build now prints: `모호(A) 폭이라 글꼴과 우리 표가 갈리는 글자
+  3개: ①②③`. Rule to follow: never put an Ambiguous glyph anywhere columns must line up
+  (the showcase width tab now samples "é±─", not "①é─"). Braille spinner frames and emoji
+  are simply absent from D2Coding — they fall back, which is fine in prose and code but
+  must not appear in an aligned capture.
+  Next: fill sections. Appendix shrinks as body coverage grows; target body ~470 slides,
+  appendix whatever is left, total 500-520.
 - 2026-09-07 08:0x — **commit 9 done: the three capstones.** `apps/todo` (JSON file via
   Cmd, atomic tmp+rename, filter-aware delete), `apps/monitor` (/proc/stat, meminfo,
   loadavg, uptime; CPU% from the *difference* of two cumulative samples; sparkline from

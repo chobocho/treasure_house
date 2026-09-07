@@ -106,7 +106,7 @@ func TestWidthTabRulerLinesUp(t *testing.T) {
 		}
 	}
 	// 눈금 길이는 그 줄이 밝힌 칸 수와 같아야 한다.
-	wants := []int{6, 9, 6, 4, 3, 6} // 보리차·green tea·한a글b·🍵🫖·①é─·　전각
+	wants := []int{6, 9, 6, 4, 3, 6} // 보리차·green tea·한a글b·🍵🫖·é±─·　전각
 	for i, r := range rows {
 		if i < len(wants) && r.ruler != wants[i] {
 			t.Errorf("줄 %d 의 눈금이 %d칸, 원하는 값 %d칸", i, r.ruler, wants[i])

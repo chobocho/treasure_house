@@ -212,7 +212,11 @@ func (m Model) colorTab(base style.Style) string {
 }
 
 func (m Model) widthTab(base style.Style) string {
-	samples := []string{"보리차", "green tea", "한a글b", "🍵🫖", "①é─", "　전각"}
+	// "é±─" 는 셋 다 East_Asian_Width 가 모호(A)다 — 우리는 1칸으로 센다.
+	// 동그라미 숫자(U+2460 부터)도 모호지만 여기 넣지 않았다. D2Coding 은 그것을
+	// 두 칸짜리로 그려서, 표와 글꼴이 어긋나는 실물 사례가 되기 때문이다.
+	// 그 이야기는 덱의 글자 폭 편에서 따로 다룬다.
+	samples := []string{"보리차", "green tea", "한a글b", "🍵🫖", "é±─", "　전각"}
 	var lines []string
 	lines = append(lines, base.Faint(true).Render(
 		fmt.Sprintf("유니코드 %s 의 East_Asian_Width 표에서 잰다", width.UnicodeVersion())))
