@@ -336,6 +336,25 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 07:0x — **commit 8 done: `testkit/` + `tools/` + `apps/bugs`.**
+  testkit: script.go (tiny language `80x24 j <up> "보리차" .3`, steps carry the real
+  terminal bytes so recordings go through the real decoder) and testkit.go (a
+  deterministic re-implementation of the Program loop: commands run in order, in place,
+  and only during the rounds a `.N` step grants — so a self-rearming Tick still
+  terminates). `tea.Expand` was added as the one documented seam that lets an outside
+  loop unwrap Batch/Sequence. tools/ansi2html copied verbatim from tetris_tui (no project
+  imports). tools/record drives testkit from a registry.
+  `make record` twice → identical md5s. Logs in out/ (go_test, go_vet, loc, record_list).
+  **Finding worth a slide (do not soften it):** the "long line wraps and breaks the line
+  numbering" trap CANNOT be reproduced through our own `tea` — `render.NewFrame` clips
+  first, so the bug is structurally impossible. The honest demo therefore bypasses the
+  framework: `bugs.RunRawWrap` draws straight to the terminal like `examples/00_raw`.
+  The tmux capture of the broken version is dramatic (header scrolled off, each line
+  eating 3 rows, "화면의 10번째 줄" nowhere near row 10) and the fixed one is clean.
+  That pairing IS the argument for the renderer.
+  함정 log: recordings must pin the colour profile (`Options.Profile`), otherwise the same
+  command produces different bytes on a machine with a different TERM — the most common
+  way determinism dies.
 - 2026-09-07 06:0x — **commit 7 done: `widgets/` + examples/10_widgets.** keymap.go
   (Binding: keys + help text in ONE value), help.go (short one-line / full aligned table),
   spinner.go (6 sets; tag counter kills duplicate tickers), progress.go (stateless — it

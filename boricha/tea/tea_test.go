@@ -368,3 +368,23 @@ func TestForgettingToReturnTheCopyLosesChanges(t *testing.T) {
 		t.Errorf("n = %d — 이 시험은 '변경이 사라진다' 는 것을 못박는다", got)
 	}
 }
+
+// Expand 는 Program 밖에서 루프를 도는 도구를 위한 문이다.
+func TestExpand(t *testing.T) {
+	a, b := msgCmd("a"), msgCmd("b")
+	for _, c := range []Cmd{Batch(a, b), Sequence(a, b)} {
+		cmds, ok := Expand(c())
+		if !ok {
+			t.Fatal("내부 신호를 못 알아봤다")
+		}
+		if len(cmds) != 2 {
+			t.Errorf("명령이 %d개", len(cmds))
+		}
+	}
+	if _, ok := Expand(customMsg("x")); ok {
+		t.Error("보통 사건을 내부 신호라고 한다")
+	}
+	if _, ok := Expand(nil); ok {
+		t.Error("nil 을 내부 신호라고 한다")
+	}
+}
