@@ -63,7 +63,7 @@ func (m Model) SetInterval(d time.Duration) Model { m.interval = d; return m }
 //
 // 시계와 읽기를 한 명령에 묶은 이유: 둘을 따로 두면 "읽는 데 걸린 시간" 만큼
 // 간격이 점점 늘어난다. 기다린 뒤에 읽고, 읽은 결과를 사건으로 돌려주면
-// 다음 예약은 Update 가 한다 — 4단계에서 배운 재예약 패턴 그대로다.
+// 다음 예약은 Update 가 한다 — 3부에서 배운 재예약 패턴 그대로다.
 func sampleCmd(interval time.Duration) tea.Cmd {
 	return tea.Tick(interval, func(time.Time) tea.Msg { return sampleMsg(Read()) })
 }

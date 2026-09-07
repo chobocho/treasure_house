@@ -10,7 +10,7 @@ import (
 //
 // 높이가 다르면 짧은 쪽에 빈 줄을 채우는데, pos 가 그 빈 줄을 위에 둘지 아래에 둘지 정한다.
 // 폭을 세는 데 width.StringWidth 를 쓴다는 것이 핵심이다 — 한글이 든 덩어리를
-// len() 으로 세면 옆 덩어리가 통째로 밀린다. 5부의 폭 표가 여기서 값을 한다.
+// len() 으로 세면 옆 덩어리가 통째로 밀린다. 7부의 폭 표가 여기서 값을 한다.
 func JoinHorizontal(pos Position, blocks ...string) string {
 	if len(blocks) == 0 {
 		return ""
