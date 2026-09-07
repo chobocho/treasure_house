@@ -336,6 +336,22 @@ file; never read the whole file — `head -c 4000` only).
 
 ## Progress log (newest first)
 
+- 2026-09-07 10:xx — **commits 11-13 done: the whole deck body, 501 slides.**
+  Parts 0-14 written. `make deck` → **501 slides, 1344 KB, coverage 12280/12280, 오류 0건**;
+  `make deck-check` all ✓ (7 recordings, 19 terminal captures, DeckMono embedded);
+  `tools/embed_mono_font.py --check` 통과. index.html card + README row added.
+  Benchmarks were added (width/render/input/style `bench_test.go` + `make bench`) so part 12
+  quotes real numbers instead of adjectives: one changed frame costs **76 µs of the
+  16,666 µs 60-fps budget (0.5 %)**, a style value copy is **130 ns / 0 allocs**, a 4 KB
+  paste decodes at ~500 MB/s. `out/binsize.txt` gives cross-platform binary sizes (4.0-4.3 MB,
+  3.0 MB stripped).
+  Slide budget per part (final): 0=14, 1=28, 2=18, 3=48, 4=28, 5=44, 6=25, 7=23, 8=34,
+  9=44, 10=27, 11=26, 12=16, 13=21, appendix=13 + 5 hand-written appendix slides.
+  함정 log: (a) a code chunk reused across parts is a *duplicate* in the coverage report —
+  `Makefile 1-12` was in part 0 and part 10; the fix is to shift one range, and the build
+  catches it; (b) `{{LINES:...}}` in prose gets substituted (the regex is unicode-aware) —
+  escape it as `&#123;&#123;` when writing *about* the syntax; (c) a `<pre>` over 45 lines
+  is a build error, so `cmd/bugs/main.go` (48 lines) had to be split into two chunks.
 - 2026-09-07 09:0x — **commit 10 done: deck build system + skeleton.** Copied
   build_deck.py, gen_appendix.py, gen_fonts.py, hl.py, chunks.py, split_ranges.py,
   test_fonts.py, untab.py, player.js, check_deck.js, extra.css, base/ from tetris_tui and

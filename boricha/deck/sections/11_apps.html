@@ -1,3 +1,327 @@
-<!--SLIDE sec=11 t="9단계 — 응용: 할 일·모니터·전시장 (준비 중)"-->
-<h2>9단계 — 응용: 할 일·모니터·전시장</h2>
-<p>이 부는 아직 쓰는 중이다.</p>
+<!--SLIDE sec=11 t="이 부에서 만들 것"-->
+<h1>11부 · 응용 — 할 일·모니터·전시장</h1>
+<p class="lead">지금까지 쌓은 층을 <b>전부 쓰는</b> 프로그램 셋. 각자 새로운 것을 하나씩 맡는다.</p>
+<table>
+<tr><th>앱</th><th>새로 배우는 것</th><th>줄 수</th></tr>
+<tr><td><code>cmd/todo</code></td><td>파일 입출력을 명령으로 밀어내기</td><td>{{LINES:apps/todo/todo.go}}</td></tr>
+<tr><td><code>cmd/monitor</code></td><td>바깥에서 오는 값을 주기적으로 읽기</td><td>{{LINES:apps/monitor/monitor.go}} + {{LINES:apps/monitor/proc.go}}</td></tr>
+<tr><td><code>cmd/showcase</code></td><td>화면 나누기 — 탭은 필드 하나다</td><td>{{LINES:apps/showcase/showcase.go}}</td></tr>
+</table>
+<div class="note"><b>모델은 <code>apps/</code>, main 은 <code>cmd/</code></b>
+<code>tools/record</code> 가 모델을 import 해야 하는데 <code>package main</code> 은 import 할 수 없다.
+그래서 캡스톤은 라이브러리 패키지에 모델을 두고 <code>cmd/</code> 를 얇게 남겼다.
+예제들은 반대로 한 파일로 완결된 프로그램이어야 해서 그대로 두었다 — 목적이 다르면 구조도 다르다.</div>
+
+<!--SLIDE sec=11 t="세 앱의 공통 뼈대"-->
+<h2>세 앱이 똑같이 생긴 부분</h2>
+<pre class="code go"><code>func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    switch msg := msg.(type) {
+    case tea.WindowSizeMsg:            // ① 크기가 오면 부품 크기를 다시 잡는다
+        m.w, m.h = msg.Width, msg.Height
+        return m.resize(), nil
+
+    case tea.ColorProfileMsg:          // ② 색 수준이 오면 스타일에 심는다
+        m.prof = msg.Profile
+        m.help = m.help.Profile(msg.Profile)
+        return m, nil
+
+    case 앱마다_다른_사건:               // ③ 명령이 돌려준 결과
+        ...
+
+    case tea.KeyMsg:                   // ④ 키
+        ...
+    }
+
+    var cmd tea.Cmd                    // ⑤ 나머지는 초점이 있는 부품에게
+    m.부품, cmd = m.부품.Update(msg)
+    return m, cmd
+}</code></pre>
+<p class="lead">세 앱이 다른 것은 ③과 ④뿐이다. 나머지 넷은 <b>어떤 보리차 앱이든 같다.</b>
+이 뼈대를 외워 두면 새 앱을 시작할 때 빈 화면 앞에서 멈추지 않는다.</p>
+
+<!--SLIDE sec=11 t="할 일 — 완성품"-->
+<h2>① 할 일 목록</h2>
+<!--PLAYER name=todo cap="각본으로 돌린 기록 — 셋을 넣고, 하나를 끝내고, '차' 로 거르고, 도움말을 펼쳤다"-->
+<p class="small mut">넘겨 보면서 각 걸음이 화면을 어떻게 바꾸는지 보라.
+왼쪽 위의 <code>1/3 끝냄</code> 과 아래의 상태줄이 상태에서 곧바로 나온 것들이다.</p>
+
+<!--SLIDE sec=11 t="할 일 — 항목"-->
+<h2>Task — Item 을 만족시키는 세 메서드</h2>
+<!--CODE file=apps/todo/todo.go lines=1-31 cap="apps/todo/todo.go — 패키지 주석과 Task"-->
+
+<!--SLIDE sec=11 t="할 일 — 보이는 글과 검색되는 글"-->
+<h2>보이는 글과 검색되는 글은 다르다</h2>
+<!--CODE file=apps/todo/todo.go lines=32-60 cap="apps/todo/todo.go"-->
+<div class="note"><b>체크 상자를 <code>FilterValue</code> 에서 뺀 이유</b>
+안 빼면 <code>☐</code> 를 쳐서 "안 끝난 일만" 볼 수 있게 되는데, 그건 <b>거르기가 아니라 우연</b>이다.
+그런 우연에 기대는 기능은 다음 판에서 조용히 깨진다.</div>
+
+<!--SLIDE sec=11 t="할 일 — 모델"-->
+<h2>모델과 만들기</h2>
+<!--CODE file=apps/todo/todo.go lines=61-92 cap="apps/todo/todo.go — Model"-->
+<!--CODE file=apps/todo/todo.go lines=93-118 cap="apps/todo/todo.go — New·Init"-->
+
+<!--SLIDE sec=11 t="할 일 — 파일 읽기"-->
+<h2>순수하지 않은 일을 명령으로</h2>
+<!--CODE file=apps/todo/todo.go lines=119-140 cap="apps/todo/todo.go — loadCmd"-->
+<p><b>파일이 없는 것은 오류가 아니다 — 첫 실행이다.</b>
+이 구별을 안 하면 처음 켜는 사용자가 빨간 오류 메시지를 본다.</p>
+
+<!--SLIDE sec=11 t="할 일 — 저장"-->
+<h2>저장할 때 복사하는 이유</h2>
+<!--CODE file=apps/todo/todo.go lines=141-169 cap="apps/todo/todo.go — saveCmd"-->
+<div class="warn"><b>넘겨받은 슬라이스를 그대로 들고 가면</b>
+이 명령이 도는 동안 주 고루틴이 <code>tasks</code> 를 고칠 수 있고,
+그러면 <b>무엇이 저장될지 아무도 모른다.</b> 클로저에 담는 순간 복사한다.</div>
+<p class="small mut">임시 파일에 쓰고 이름을 바꾸는 것도 같은 종류의 조심이다.
+쓰는 도중에 전원이 나가도 원래 파일이 반쯤 지워진 채로 남지 않는다.</p>
+
+<!--SLIDE sec=11 t="할 일 — Update"-->
+<h2>사건마다 갈래 하나</h2>
+<!--CODE file=apps/todo/todo.go lines=170-203 cap="apps/todo/todo.go — Update"-->
+
+<!--SLIDE sec=11 t="할 일 — 두 모드"-->
+<h2>적는 중과 고르는 중</h2>
+<!--CODE file=apps/todo/todo.go lines=204-237 cap="apps/todo/todo.go — updateAdd"-->
+<p class="small mut">빈 글은 안 넣는다. 실수로 <kbd>Enter</kbd> 를 두 번 쳤을 때
+빈 줄이 쌓이는 것을 막는다 — 작지만 실제로 겪는 일이다.</p>
+
+<!--SLIDE sec=11 t="할 일 — 목록 조작"-->
+<h2>거르는 중에는 모든 키가 목록으로</h2>
+<!--CODE file=apps/todo/todo.go lines=238-266 cap="apps/todo/todo.go — updateList"-->
+<p>9부에서 본 규칙이 앱 층에서도 한 번 더 나온다.
+안 그러면 <code>"차"</code> 를 칠 때 <kbd>a</kbd> 가 "추가" 로 먹힌다.</p>
+
+<!--SLIDE sec=11 t="할 일 — 자리 번호"-->
+<h2>거른 목록에서 지우면 무엇이 지워지나</h2>
+<!--CODE file=apps/todo/todo.go lines=267-291 cap="apps/todo/todo.go — taskItem"-->
+<div class="warn"><b>값으로 뒤지면 엉뚱한 것이 사라진다</b>
+글이 똑같은 할 일이 둘일 때, 값으로 <code>tasks</code> 를 뒤지면 <b>언제나 앞의 것</b>을 찾는다.
+두 번째 "우유 사기" 를 지웠는데 첫 번째가 사라진다.
+자리 번호를 항목에 붙여 두면 그 문제가 아예 없어진다.</div>
+
+<!--SLIDE sec=11 t="할 일 — 크기와 배치"-->
+<h2>크기가 바뀌면 부품도 바뀐다</h2>
+<!--CODE file=apps/todo/todo.go lines=292-321 cap="apps/todo/todo.go — save·resize·bindings"-->
+<p class="small mut">할 일이 없으면 "완료 표시"·"지우기"·"거르기" 배치를 꺼 둔다.
+도움말에서 사라지고 눌러도 안 먹는다 — 한 값으로 두 가지를 처리하는 것이 9부의 <code>Binding</code> 이다.</p>
+
+<!--SLIDE sec=11 t="할 일 — View"-->
+<h2>화면은 상태에서만 나온다</h2>
+<!--CODE file=apps/todo/todo.go lines=322-344 cap="apps/todo/todo.go — View"-->
+<!--CODE file=cmd/todo/main.go cap="cmd/todo/main.go 전체 — main 은 얇게"-->
+
+<!--SLIDE sec=11 t="할 일 — 시험 ①"-->
+<h2>시험 ① 각본으로 앱을 돌린다</h2>
+<!--CODE file=apps/todo/todo_test.go lines=1-24 cap="apps/todo/todo_test.go"-->
+<p>진짜 파서와 진짜 <code>Update</code> 를 지나므로, 키 하나가 잘못 해석되면 여기서 걸린다.</p>
+
+<!--SLIDE sec=11 t="할 일 — 시험 ②"-->
+<h2>시험 ② 추가·취소·완료</h2>
+<!--CODE file=apps/todo/todo_test.go lines=25-53 cap="apps/todo/todo_test.go"-->
+<!--CODE file=apps/todo/todo_test.go lines=54-83 cap="apps/todo/todo_test.go"-->
+
+<!--SLIDE sec=11 t="할 일 — 시험 ③"-->
+<h2>시험 ③ 같은 글 둘, 걸러 놓고 지우기</h2>
+<!--CODE file=apps/todo/todo_test.go lines=84-115 cap="apps/todo/todo_test.go"-->
+<p class="lead">이 두 시험이 이 앱에서 가장 값진 것들이다.
+둘 다 <b>실제로 겪은 버그</b>를 그대로 옮겨 놓은 것이다.</p>
+
+<!--SLIDE sec=11 t="할 일 — 시험 ④"-->
+<h2>시험 ④ 저장하고 다시 불러오기</h2>
+<!--CODE file=apps/todo/todo_test.go lines=116-144 cap="apps/todo/todo_test.go"-->
+<!--CODE file=apps/todo/todo_test.go lines=145-168 cap="apps/todo/todo_test.go"-->
+<!--CODE file=apps/todo/todo_test.go lines=169-181 cap="apps/todo/todo_test.go"-->
+
+<!--SLIDE sec=11 t="할 일 — 진짜 터미널"-->
+<h2>진짜 터미널에서</h2>
+<!--CAP file=out/tmux_app_todo.html cap="tmux 76×22 — boricha 와 tea 를 넣고 tea 를 끝냈다"-->
+
+<!--SLIDE sec=11 t="모니터 — 완성품"-->
+<h2>② 시스템 모니터</h2>
+<!--PLAYER name=monitor cap="표본을 모으다가 space 로 멈추고, 다시 시작한다"-->
+<p class="small mut">멈춘 구간에서 <code>읽은 횟수</code> 가 늘지 않는 것을 보라.
+시계를 끄는 장치가 따로 있는 것이 아니라, <b>다시 걸지 않는 것</b>이 곧 멈춤이다.</p>
+
+<!--SLIDE sec=11 t="모니터 — /proc"-->
+<h2>/proc — 리눅스가 커널 상태를 파일로 보여 주는 곳</h2>
+<!--CODE file=apps/monitor/proc.go lines=1-32 cap="apps/monitor/proc.go — 패키지 주석과 Sample"-->
+<p class="small mut">macOS·윈도우에는 이런 파일이 없다. 있는 척하지 않고,
+읽기가 실패하면 화면에 그렇게 적는다.</p>
+
+<!--SLIDE sec=11 t="모니터 — 누적값의 차이"-->
+<h2>CPU 사용률은 한 번 읽어서는 알 수 없다</h2>
+<!--CODE file=apps/monitor/proc.go lines=33-55 cap="apps/monitor/proc.go — CPUPercent·MemPercent"-->
+<div class="warn"><b>이 앱에서 가장 자주 틀리는 곳</b>
+<code>/proc/stat</code> 는 "부팅 이후 각 상태에 머문 시간" 의 <b>누적값</b>이다.
+한 번 읽은 값으로 비율을 내면 켠 지 오래된 기계에서 언제나 비슷한 숫자가 나와
+"왜 안 움직이지?" 하게 된다. 두 시점의 <b>차이</b>라야 그 사이의 사용률이 된다.</div>
+<p class="small mut">메모리도 함정이 있다. <code>MemFree</code> 가 아니라 <code>MemAvailable</code> 을 쓴다 —
+리눅스는 남는 메모리를 캐시로 다 쓰므로 <code>MemFree</code> 로 재면 언제나 "부족" 처럼 보인다.</p>
+
+<!--SLIDE sec=11 t="모니터 — 읽기"-->
+<h2>읽기 — 실패해도 죽지 않는다</h2>
+<!--CODE file=apps/monitor/proc.go lines=56-89 cap="apps/monitor/proc.go — Read·readStat"-->
+<!--CODE file=apps/monitor/proc.go lines=90-116 cap="apps/monitor/proc.go — readMeminfo"-->
+
+<!--SLIDE sec=11 t="모니터 — 나머지 파일"-->
+<h2>부하와 가동 시간</h2>
+<!--CODE file=apps/monitor/proc.go lines=117-147 cap="apps/monitor/proc.go — 끝"-->
+
+<!--SLIDE sec=11 t="모니터 — 모델"-->
+<h2>모델과 간격</h2>
+<!--CODE file=apps/monitor/monitor.go lines=1-22 cap="apps/monitor/monitor.go"-->
+<!--CODE file=apps/monitor/monitor.go lines=23-53 cap="apps/monitor/monitor.go — Model"-->
+
+<!--SLIDE sec=11 t="모니터 — 시험을 위한 문"-->
+<h2>시간을 바꿀 수 있게 열어 두기</h2>
+<!--CODE file=apps/monitor/monitor.go lines=54-78 cap="apps/monitor/monitor.go — New·SetInterval"-->
+<div class="tip"><b>시험이 느려지면 사람이 안 돌린다</b>
+<code>testkit</code> 은 시계를 흉내 내지 않고 <b>진짜로</b> 기다린다.
+0.7초 간격으로 열 프레임을 뽑으면 7초가 걸리고, 그런 시험 파일이 몇 개만 있으면
+<code>go test</code> 가 1분을 넘는다. 그리고 <b>안 돌리는 시험은 없는 것과 같다.</b></div>
+
+<!--SLIDE sec=11 t="모니터 — 시계와 읽기"-->
+<h2>시계와 읽기를 한 명령에 묶는 이유</h2>
+<!--CODE file=apps/monitor/monitor.go lines=79-105 cap="apps/monitor/monitor.go — sampleCmd·Init"-->
+<p>둘을 따로 두면 <b>읽는 데 걸린 시간</b>만큼 간격이 점점 늘어난다.
+기다린 뒤에 읽고, 읽은 결과를 사건으로 돌려주면 다음 예약은 <code>Update</code> 가 한다 —
+3부에서 배운 재예약 패턴 그대로다.</p>
+<p class="small mut">첫 표본은 기다리지 않고 바로 읽는다. 안 그러면 첫 화면이 0.7초 동안 비어 있다.</p>
+
+<!--SLIDE sec=11 t="모니터 — Update"-->
+<h2>멈춤 = 다시 걸지 않기</h2>
+<!--CODE file=apps/monitor/monitor.go lines=106-133 cap="apps/monitor/monitor.go — Update"-->
+<!--CODE file=apps/monitor/monitor.go lines=134-162 cap="apps/monitor/monitor.go — push·resize"-->
+
+<!--SLIDE sec=11 t="모니터 — 설명글"-->
+<h2>화면에 적는 글도 상태에서 나온다</h2>
+<!--CODE file=apps/monitor/monitor.go lines=163-196 cap="apps/monitor/monitor.go — logText"-->
+<p class="small mut"><code>/proc</code> 를 못 읽었을 때 화면에 적는 글에 주목하라.
+"오류" 한 줄로 끝내지 않고 <b>왜 없는지, 대신 무엇이 필요한지</b>를 적는다.
+그 글을 읽는 사람은 대개 macOS 사용자이고, 그에게 필요한 것은 오류 코드가 아니다.</p>
+
+<!--SLIDE sec=11 t="모니터 — 스파크라인"-->
+<h2>한 줄짜리 그래프</h2>
+<!--CODE file=apps/monitor/monitor.go lines=197-222 cap="apps/monitor/monitor.go — sparkline"-->
+<div class="big center" style="font-size:1.3em">▁▂▃▄▅▆▇█</div>
+<p class="center">여덟 단계 블록 문자. East_Asian_Width 가 N 이라 <b>전부 한 칸</b>이다 —
+한글과 달리 폭 계산이 어긋날 걱정이 없다.</p>
+
+<!--SLIDE sec=11 t="모니터 — View"-->
+<h2>막대와 그래프를 나란히</h2>
+<!--CODE file=apps/monitor/monitor.go lines=223-250 cap="apps/monitor/monitor.go — bindings·View"-->
+<!--CODE file=apps/monitor/monitor.go lines=251-266 cap="apps/monitor/monitor.go — 끝"-->
+<!--CODE file=cmd/monitor/main.go cap="cmd/monitor/main.go 전체"-->
+
+<!--SLIDE sec=11 t="모니터 — 시험"-->
+<h2>시험 ① 차분 계산의 여섯 경우</h2>
+<!--CODE file=apps/monitor/monitor_test.go lines=1-34 cap="apps/monitor/monitor_test.go"-->
+<p class="small mut">"되감김" 줄이 중요하다. 기계가 잠들었다 깨어나면 실제로 누적값이 되감긴다.
+그때 음수 사용률을 내면 진행 막대가 그 자리에서 죽는다.</p>
+
+<!--SLIDE sec=11 t="모니터 — 시험 ②"-->
+<h2>시험 ② 진짜 /proc 와 스파크라인</h2>
+<!--CODE file=apps/monitor/monitor_test.go lines=35-60 cap="apps/monitor/monitor_test.go"-->
+<!--CODE file=apps/monitor/monitor_test.go lines=61-79 cap="apps/monitor/monitor_test.go"-->
+
+<!--SLIDE sec=11 t="모니터 — 시험 ③"-->
+<h2>시험 ③ 폭 불변식과 멈춤</h2>
+<!--CODE file=apps/monitor/monitor_test.go lines=80-106 cap="apps/monitor/monitor_test.go"-->
+<!--CODE file=apps/monitor/monitor_test.go lines=107-133 cap="apps/monitor/monitor_test.go"-->
+<!--CODE file=apps/monitor/monitor_test.go lines=134-148 cap="apps/monitor/monitor_test.go"-->
+
+<!--SLIDE sec=11 t="모니터 — 진짜 터미널"-->
+<h2>진짜 터미널에서</h2>
+<!--CAP file=out/tmux_app_monitor.html cap="tmux 76×22 — go run ./cmd/monitor -interval 200ms"-->
+<p class="small mut">CPU 가 0% 인 것은 이 기계가 그 순간 놀고 있었기 때문이다.
+숫자를 예쁘게 만들려고 다른 것을 돌리지 않았다 — 그러면 그건 캡처가 아니라 연출이다.</p>
+
+<!--SLIDE sec=11 t="전시장 — 완성품"-->
+<h2>③ 전시장</h2>
+<!--PLAYER name=showcase cap="탭 넷을 차례로 넘기고 글자를 쳐 본다"-->
+
+<!--SLIDE sec=11 t="전시장 — 탭은 필드 하나"-->
+<h2>화면 전환에 필요한 것은 필드 하나다</h2>
+<!--CODE file=apps/showcase/showcase.go lines=1-30 cap="apps/showcase/showcase.go"-->
+<p class="lead">화면을 바꾸려고 새 프로그램을 띄우거나 상태를 어딘가에 저장할 필요가 없다.
+<code>Update</code> 가 필드 하나를 바꾸면 그것이 전환이다.</p>
+
+<!--SLIDE sec=11 t="전시장 — 모델"-->
+<h2>모델과 Update</h2>
+<!--CODE file=apps/showcase/showcase.go lines=31-55 cap="apps/showcase/showcase.go"-->
+<!--CODE file=apps/showcase/showcase.go lines=56-88 cap="apps/showcase/showcase.go — Update"-->
+
+<!--SLIDE sec=11 t="전시장 — 탭 줄"-->
+<h2>고른 탭만 뒤집어 그린다</h2>
+<!--CODE file=apps/showcase/showcase.go lines=89-118 cap="apps/showcase/showcase.go — View"-->
+
+<!--SLIDE sec=11 t="전시장 — 꾸미기 탭"-->
+<h2>탭 ① 꾸미기</h2>
+<!--CODE file=apps/showcase/showcase.go lines=119-145 cap="apps/showcase/showcase.go — styleTab"-->
+<!--CODE file=apps/showcase/showcase.go lines=146-174 cap="apps/showcase/showcase.go"-->
+
+<!--SLIDE sec=11 t="전시장 — 색 탭"-->
+<h2>탭 ② 색 — 256칸을 한 화면에</h2>
+<!--CODE file=apps/showcase/showcase.go lines=175-202 cap="apps/showcase/showcase.go — colorTab"-->
+<p class="small mut">6×6×6 정육면체를 여섯 줄로 펼친다. 한 줄이 36칸(6×6)이라
+여섯 줄이면 216칸 — 8부에서 본 그 배치가 눈에 보인다.</p>
+
+<!--SLIDE sec=11 t="전시장 — 글자 폭 탭"-->
+<h2>탭 ③ 글자 폭 — 살아 있는 시험</h2>
+<!--CODE file=apps/showcase/showcase.go lines=203-236 cap="apps/showcase/showcase.go — widthTab"-->
+<div class="tip"><b>이 탭 자체가 width 패키지에 대한 시험이다</b>
+눈금이 모두 같은 자리에서 시작하면 폭 계산이 맞은 것이다.
+그리고 그 사실을 <code>TestWidthTabRulerLinesUp</code> 이 자동으로도 확인한다 —
+사람이 보는 것과 시험이 보는 것이 <b>같은 그림</b>이다.</div>
+
+<!--SLIDE sec=11 t="전시장 — 입력 탭"-->
+<h2>탭 ④ 입력</h2>
+<!--CODE file=apps/showcase/showcase.go lines=237-255 cap="apps/showcase/showcase.go — keysTab"-->
+<!--CODE file=cmd/showcase/main.go cap="cmd/showcase/main.go 전체"-->
+
+<!--SLIDE sec=11 t="전시장 — 시험"-->
+<h2>시험 — 탭 순환과 모양</h2>
+<!--CODE file=apps/showcase/showcase_test.go lines=1-29 cap="apps/showcase/showcase_test.go"-->
+<!--CODE file=apps/showcase/showcase_test.go lines=30-62 cap="apps/showcase/showcase_test.go"-->
+
+<!--SLIDE sec=11 t="전시장 — 시험 ②"-->
+<h2>시험 — 모든 탭이 화면에 들어간다</h2>
+<!--CODE file=apps/showcase/showcase_test.go lines=63-84 cap="apps/showcase/showcase_test.go"-->
+<!--CODE file=apps/showcase/showcase_test.go lines=85-117 cap="apps/showcase/showcase_test.go — 눈금 대조"-->
+<!--CODE file=apps/showcase/showcase_test.go lines=118-130 cap="apps/showcase/showcase_test.go"-->
+
+<!--SLIDE sec=11 t="전시장 — 진짜 터미널"-->
+<h2>진짜 터미널에서</h2>
+<!--CAP file=out/tmux_app_showcase.html cap="tmux 76×22 — 글자 폭 탭"-->
+<div class="big center" style="font-size:1.05em">
+🍵🫖 → 바이트 8 · 룬 2 · <b>칸 4</b></div>
+<p class="center small mut">이모지 두 개가 네 칸. 눈금이 그것을 그대로 보여 준다.</p>
+
+<!--SLIDE sec=11 t="세 앱이 공통으로 보이는 것"-->
+<h2>세 앱이 공통으로 보이는 것</h2>
+<ol class="steps">
+<li><b>순수하지 않은 일은 전부 명령으로.</b> 파일 쓰기도, <code>/proc</code> 읽기도,
+시계도 <code>Update</code> 밖에 있다.</li>
+<li><b>상태의 출처는 하나.</b> 할 일은 <code>tasks</code>, 모니터는 <code>cur</code>,
+전시장은 <code>tab</code>. 부품에 담긴 것은 그 하나에서 나온 <b>사본</b>이다.</li>
+<li><b>슬라이스·맵은 손수 복사.</b> 세 앱 모두 <code>append(append([]T{}, old...), new)</code>
+꼴이 나온다. 값 의미론의 대가다.</li>
+<li><b>시간을 바꿀 수 있게.</b> <code>SetInterval</code>·<code>SetSpinner</code> 는
+시험과 기록을 위한 문이고, 그것이 없으면 이 앱들의 시험이 20초를 먹는다.</li>
+</ol>
+
+<!--SLIDE sec=11 t="11부 연습문제"-->
+<h2>11부 연습문제</h2>
+<ol class="steps">
+<li>할 일 목록에 <b>마감일</b>을 더해 보라. <code>Task</code> 에 필드를 하나 더하면
+JSON·<code>Title</code>·<code>FilterValue</code> 중 어디를 고쳐야 하나?</li>
+<li><code>saveCmd</code> 의 <code>snapshot := append(...)</code> 를 지우고
+빠르게 여러 개를 더해 보라. 언제 이상해지나?</li>
+<li>모니터에 <b>디스크 사용량</b>을 더해 보라. <code>/proc/diskstats</code> 를 읽어야 한다 —
+그 값도 누적값인가?</li>
+<li>전시장에 탭을 하나 더해 보라(예: 테두리 전시). <code>tabCount</code> 말고
+또 무엇을 고쳐야 하나?</li>
+<li>세 앱 중 하나를 골라 <code>tea.LogToFile</code> 로 디버그 로그를 남겨 보라.
+다른 터미널에서 <code>tail -f</code> 로 보면서 조작해 보라.</li>
+</ol>
