@@ -1,3 +1,10 @@
+### [2026-09-07 03:18] 보리차 10단계 — 덱 빌드 체계 이식과 뼈대
+- **기획:** tetris_tui/deck 도구 일습을 boricha/deck 으로 복사하고 제목·브랜드·출력 경로·기록 목록·커버리지 대상만 교체. 15개 부의 sections.json 과 스텁을 만들어 파이프라인 전체를 먼저 통과시킴.
+- **TC:** 첫 조립에서 커버리지 12078/12078·오류 0건, check_deck.js 전 항목 통과(기록 7종 마운트·재생, DeckMono woff2 내장, 고정폭 목록 7곳 전부 우선).
+- **개발:** deck/{build_deck,gen_appendix,gen_fonts,hl,chunks,split_ranges,test_fonts,untab}.py, player.js, check_deck.js, extra.css, base/, sections/ 스텁 15개
+- **검증:** make deck → 181장 1006KB, make deck-check 오류 0건
+- **비고:** 글꼴 폭 계약을 모호(A) 글자에 한해 경고로 완화. D2Coding 이 ①②③ 을 두 칸으로 그리는 것은 글꼴 잘못이 아니라 그 글자의 성질이다 — 칸이 맞아야 하는 캡처에는 쓰지 않는다.
+
 ### [2026-09-07 03:11] 보리차 9단계 — 캡스톤 셋: 할 일·시스템 모니터·전시장
 - **기획:** 지금까지 쌓은 층을 전부 쓰는 응용 셋. 파일 입출력·주기적 표본 수집·화면 나누기를 각각 맡는다. 모델은 apps/ 라이브러리에 두고 cmd/ 는 얇게 — tools/record 가 import 해야 하기 때문(package main 은 import 불가).
 - **TC:** todo 12종(추가·빈 값 거부·취소·완료·삭제·같은 글 중복·거른 상태 삭제·거르는 중 타이핑·저장/불러오기·없는 파일·배치 비활성·화면 크기), monitor 6종(CPU 차분 6경우·메모리·실제 /proc·스파크라인 6종과 폭 불변·멈춤/재개·화면 크기), showcase 5종(탭 순환·키 기록·모든 탭 크기·눈금 정렬과 길이·마우스).
