@@ -49,7 +49,7 @@ gen-width:
 # 모델을 진짜 터미널 없이 돌려 프레임을 JSON 으로 남긴다.
 # 결정론이 계약이다: 다시 돌린 뒤 git diff 가 비어 있어야 한다.
 # 등록부는 tools/record 안에 있다 — `go run ./tools/record -list` 로 볼 수 있다.
-MODES  = width_bad width_ok tick_bad tick_ok
+MODES  = todo monitor showcase width_bad width_ok tick_bad tick_ok
 SRCGO  = $(shell find tea term input render width style widgets testkit apps tools -name '*.go' 2>/dev/null)
 FRAMES = $(addprefix $(OUT)/frames_,$(addsuffix .json,$(MODES)))
 
@@ -106,10 +106,39 @@ HEX_09_paste = 1b 5b 32 30 30 7e ec 9e 98 20 eb 90 98 ec 97 88 eb 8b a4 0a 1b 5b
 # 우리 렌더러가 프레임을 만들 때 이미 자르기 때문에 기록에는 안 잡힌다.
 BUGCAPS = wrap_bad wrap_ok
 
+# 캡스톤 셋은 cmd/ 아래에 있다. 예제와 빌드 경로가 달라 규칙을 따로 둔다.
+APPS = todo monitor showcase
+
 TMUXTXT = $(addprefix $(OUT)/tmux_,$(addsuffix .txt,$(EXAMPLES))) \
-          $(addprefix $(OUT)/tmux_,$(addsuffix .txt,$(BUGCAPS)))
+          $(addprefix $(OUT)/tmux_,$(addsuffix .txt,$(BUGCAPS))) \
+          $(addprefix $(OUT)/tmux_app_,$(addsuffix .txt,$(APPS)))
 
 tmux-smoke: $(TMUXTXT)
+
+# 캡스톤. todo 는 진짜 파일을 건드리지 않게 임시 경로를 준다.
+APPARGS_todo     = -file $(OUT)/tmux_todo.json
+APPARGS_monitor  = -interval 200ms
+APPARGS_showcase =
+
+APPKEYS_todo     = a b o r i c h a Enter a t e a Enter Down Space
+APPKEYS_monitor  =
+APPKEYS_showcase = Tab Tab
+
+$(OUT)/bin/app_%: cmd/%/main.go $(SRCGO)
+	@mkdir -p $(OUT)/bin
+	@$(GO) build -p $(P) -o $@ ./cmd/$*
+
+$(OUT)/tmux_app_%.txt: $(OUT)/bin/app_%
+	@rm -f $(OUT)/tmux_todo.json
+	@tmux kill-session -t bo_app_$* 2>/dev/null || true
+	@tmux new-session -d -s bo_app_$* -x 76 -y 22 "$(OUT)/bin/app_$* $(APPARGS_$*)"
+	@sleep 2
+	@for k in $(APPKEYS_$*); do tmux send-keys -t bo_app_$* $$k; sleep 0.3; done
+	@sleep 1
+	@tmux capture-pane -e -p -t bo_app_$* > $@
+	@tmux kill-session -t bo_app_$* 2>/dev/null || true
+	@rm -f $(OUT)/tmux_todo.json
+	@echo "  $@"
 
 $(OUT)/bin/bugs: cmd/bugs/main.go apps/bugs/bugs.go $(SRCGO)
 	@mkdir -p $(OUT)/bin
