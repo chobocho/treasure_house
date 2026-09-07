@@ -1,3 +1,421 @@
-<!--SLIDE sec=3 t="1단계 — tea: 핵심 루프 (준비 중)"-->
-<h2>1단계 — tea: 핵심 루프</h2>
-<p>이 부는 아직 쓰는 중이다.</p>
+<!--SLIDE sec=3 t="이 부에서 만들 것"-->
+<h1>3부 · tea — 핵심 루프</h1>
+<p class="lead">이 덱의 심장이다. 2부에서 그린 그림을 코드로 옮긴다.
+<b>루프 자체는 서른 줄이 안 된다.</b> 나머지 코드 전부가 그 서른 줄을 짧게 유지하려고 존재한다.</p>
+<div class="cols">
+  <div class="card"><h4>만드는 것</h4><ul>
+    <li><code>Msg</code> — 사건의 타입들</li>
+    <li><code>Cmd</code> — Batch · Sequence · Tick · Every</li>
+    <li><code>Option</code> — 켜고 끄는 것들</li>
+    <li><code>Program</code> — 고루틴 셋을 엮는 곳</li>
+    <li>예제 <code>01_hello</code> … <code>04_tick</code></li>
+  </ul></div>
+  <div class="card"><h4>이 부의 함정 셋</h4><ul>
+    <li>복사본을 안 돌려주면 변경이 사라진다</li>
+    <li><code>Tick</code> 은 한 번만 울린다</li>
+    <li>슬라이스는 값이 아니다</li>
+  </ul></div>
+</div>
+<p class="small mut">아직 <code>input</code> 도 <code>render</code> 도 안 만들었지만,
+이 부에서는 그것들을 <b>이미 있는 것으로 치고</b> 쓴다. 만든 순서와 설명하는 순서가 다른 이유다 —
+무엇을 만드는지 모른 채 바이트 파서를 보는 것은 고문이다.</p>
+
+<!--SLIDE sec=3 t="사건의 종류"-->
+<h2>사건에는 무엇이 있나</h2>
+<!--CODE file=tea/msg.go lines=27-61 cap="tea/msg.go — 사건 타입들"-->
+<p class="small mut"><code>Key</code>·<code>MouseMsg</code> 같은 것들은 별칭이다.
+쓰는 사람이 <code>input</code> 패키지를 알 필요가 없어야 하기 때문이다 —
+<code>tea.KeyMsg</code> 하나만 알면 된다.</p>
+
+<!--SLIDE sec=3 t="시작 사건 둘"-->
+<h2>시작할 때 반드시 보내는 두 가지</h2>
+<div class="cols">
+  <div class="card"><h4>WindowSizeMsg</h4>
+  <p>시작할 때 한 번, 그 뒤로는 창이 바뀔 때마다.</p>
+  <p><b>시작할 때 반드시 보낸다</b>는 것이 중요하다. 그래야 모델이 첫 <code>View</code> 를
+  그릴 때 이미 크기를 안다 — "처음 한 프레임만 크기가 0" 이라는 성가신 예외가 사라진다.</p>
+  </div>
+  <div class="card"><h4>ColorProfileMsg</h4>
+  <p>이 터미널이 낼 수 있는 색 수준(없음·16색·256색·24비트).</p>
+  <p>모델은 이걸 받아 자기 스타일들의 프로필을 정한다. 8부에서 그 값이 어떻게
+  가장 가까운 색으로 내려 맞춰지는지 본다.</p>
+  </div>
+</div>
+<div class="note"><b>왜 사건으로 주나 — 함수로 물어보게 하면 안 되나</b>
+<code>p.Size()</code> 같은 함수를 두면 모델이 Program 을 알아야 한다. 그러면 모델을 시험할 때
+Program 을 만들어야 하고, 그건 터미널을 만들어야 한다는 뜻이다.
+사건으로 주면 모델은 <b>그저 사건 하나를 받는 함수</b>로 남는다.</div>
+
+<!--SLIDE sec=3 t="내부 신호"-->
+<h2>모델에게 주지 않는 사건</h2>
+<p><code>batchMsg</code> 와 <code>sequenceMsg</code> 는 밖으로 내보내지 않는다.
+<code>Batch</code>/<code>Sequence</code> 가 만들어 내는 내부 신호이고, 루프가 가로채 처리한다.</p>
+<pre class="code go"><code>type (
+    batchMsg    []Cmd
+    sequenceMsg []Cmd
+)</code></pre>
+<p>모델의 <code>Update</code> 는 이것들을 <b>영영 보지 못한다.</b> 소문자로 시작하니
+앱이 직접 만들 수도 없다. 명령을 흩뿌리고 줄 세우는 일은 Program 의 몫이라는 뜻이다.</p>
+<p class="small mut">단 하나의 예외가 10부에 있다. <code>testkit</code> 은 Program 밖에서 루프를 도는데,
+<code>batchMsg</code> 를 못 알아보면 <code>Batch</code> 를 쓴 모델을 아예 돌릴 수 없다.
+그래서 <code>tea.Expand</code> 라는 문을 정확히 하나만 열어 두었다.</p>
+
+<!--SLIDE sec=3 t="키 이름 열기"-->
+<h2>키 상수를 다시 내놓기</h2>
+<!--CODE file=tea/key.go lines=1-32 cap="tea/key.go — 조합키와 특수키"-->
+<p class="small mut">특수키가 왜 <code>rune</code> 인지, 왜 유니코드 최대값 너머의 번호인지는
+5부에서 파서를 만들 때 자세히 본다. 여기서는 "<code>tea.</code> 만 붙이면 다 있다" 만 알면 된다.</p>
+
+<!--SLIDE sec=3 t="마우스 상수"-->
+<h2>마우스 상수도 마찬가지</h2>
+<!--CODE file=tea/key.go lines=33-60 cap="tea/key.go — 마우스"-->
+<p>대부분의 경우 <code>msg.String()</code> 으로 비교하는 편이 읽기 좋다
+(<code>"ctrl+c"</code>, <code>"left press (3,4)"</code>). 코드로 직접 견주고 싶을 때를 위해 열어 둔다.</p>
+
+<!--SLIDE sec=3 t="Cmd 는 그냥 함수"-->
+<h2>명령 — 순수하지 않은 일을 밖으로</h2>
+<!--CODE file=tea/cmd.go lines=1-29 cap="tea/cmd.go — Cmd 와 Quit"-->
+<p><code>tea.Quit</code> 이 <code>func() Msg</code> 꼴이라 그대로 <code>Cmd</code> 로 넘어간다.
+그래서 <code>return m, tea.Quit</code> 라고 쓸 수 있다 — 괄호가 없는 것에 주의하라.
+괄호를 붙이면(<code>tea.Quit()</code>) 그 자리에서 <code>QuitMsg</code> 가 되어 버린다.</p>
+
+<!--SLIDE sec=3 t="Batch"-->
+<h2>Batch — 한꺼번에, 순서 없이</h2>
+<!--CODE file=tea/cmd.go lines=30-49 cap="tea/cmd.go — Batch"-->
+<p><code>nil</code> 을 걸러 내는 것이 실용적으로 중요하다.
+조건에 따라 명령을 넣거나 빼는 코드를 쓸 때 <code>tea.Batch(cmdA, maybeNil, cmdC)</code> 를
+그냥 쓸 수 있게 하려는 것이다.</p>
+<p class="small mut">하나만 남으면 감싸지 않고 그대로 돌려준다. 감싸면 사건이 한 번 더 오가는데,
+그 왕복은 아무것도 하지 않는다.</p>
+
+<!--SLIDE sec=3 t="Sequence"-->
+<h2>Sequence — 차례로</h2>
+<!--CODE file=tea/cmd.go lines=50-75 cap="tea/cmd.go — Sequence"-->
+<div class="cols">
+  <div class="card"><h4>Batch 를 쓸 때</h4><p>서로 상관없는 일들. 파일 읽기와 시계 걸기를 동시에.</p></div>
+  <div class="card"><h4>Sequence 를 쓸 때</h4><p>앞의 것이 끝나야 뜻이 있는 일들. "저장하고 → 알림 띄우고 → 3초 뒤 지우기".</p></div>
+</div>
+
+<!--SLIDE sec=3 t="정말 동시에 도는가"-->
+<h2>Batch 가 정말 동시에 도는지 어떻게 아나</h2>
+<p>느린 것을 <b>먼저</b> 넣고, 늦게 넣은 빠른 것이 <b>먼저</b> 도착하는지 본다.</p>
+<!--CODE file=tea/tea_test.go lines=114-142 cap="tea/tea_test.go — Batch·Sequence 시험"-->
+<p class="small mut">순서를 보장하지 않는다는 것이 계약이므로, "순서가 이렇다" 를 시험할 수는 없다.
+대신 "동시에 돌지 않으면 절대 나올 수 없는 순서" 를 확인한다.</p>
+
+<!--SLIDE sec=3 t="Sequence 시험"-->
+<h2>Sequence 는 순서를 지킨다</h2>
+<!--CODE file=tea/tea_test.go lines=143-164 cap="tea/tea_test.go — 순서와 nil"-->
+
+<!--SLIDE sec=3 t="Tick"-->
+<h2>Tick — 한 번만 울린다</h2>
+<!--CODE file=tea/cmd.go lines=76-105 cap="tea/cmd.go — Tick 과 Every"-->
+<div class="warn"><b>이 덱에서 가장 자주 걸려 넘어지는 자리</b>
+"왜 시계가 한 번만 가지?" 는 Bubble Tea 를 처음 쓰는 사람이 거의 예외 없이 겪는다.
+그리고 화면이 "멈춘" 것처럼 보여서, 원인을 렌더러에서 찾게 된다.</div>
+
+<!--SLIDE sec=3 t="왜 되풀이가 기본이 아닌가"-->
+<h2>왜 되풀이를 기본으로 두지 않았나</h2>
+<div class="cols">
+  <div class="card"><h4>되풀이가 기본이면</h4><ul>
+    <li>멈추는 방법을 따로 만들어야 한다</li>
+    <li>모델이 죽은 뒤에도 도는 시계가 남는다</li>
+    <li>실수로 두 번 걸면 시계가 <b>불어난다</b></li>
+  </ul></div>
+  <div class="card"><h4>다시 거는 것이 기본이면</h4><ul>
+    <li>안 걸면 그것이 곧 멈춤이다</li>
+    <li>조건을 붙일 수 있다 — "멈춤 상태면 안 건다"</li>
+    <li>시계가 몇 개인지 코드에서 셀 수 있다</li>
+  </ul></div>
+</div>
+<p class="lead">멈추는 장치를 따로 만들 필요가 없다는 것이 이 설계의 값이다.
+11부의 시스템 모니터가 <code>space</code> 로 멈추는 방법이 정확히 이것이다 — 다시 걸지 않는다.</p>
+<p class="small mut">Bubble Tea 의 문서도 같은 선택을 하고, 문서에 "Beginners' note" 로 이 함정을 적어 두었다.</p>
+
+<!--SLIDE sec=3 t="재예약 시험"-->
+<h2>한 번만 울린다는 것을 시험으로</h2>
+<!--CODE file=tea/tea_test.go lines=165-188 cap="tea/tea_test.go — Tick·Every 는 한 번"-->
+<!--CODE file=tea/tea_test.go lines=189-214 cap="tea/tea_test.go — 재예약 패턴"-->
+
+<!--SLIDE sec=3 t="디버그 로그"-->
+<h2>화면을 쓰는 프로그램은 println 으로 디버그할 수 없다</h2>
+<!--CODE file=tea/cmd.go lines=106-136 cap="tea/cmd.go — LogToFile"-->
+<p><code>fmt.Println</code> 을 부르면 그 글이 화면 한복판에 찍혀 우리가 그린 것을 망가뜨린다.
+그래서 로그는 파일로 뺀다. 다른 터미널에서 <code>tail -f debug.log</code> 로 본다.</p>
+<div class="note"><b>Bubble Tea 에는 하나 더 있다</b>
+<code>tea.Println</code> 은 앱 화면 <b>위쪽</b>에 글을 밀어 넣는다(대체 화면이 아닐 때).
+스크롤 영역을 조작해야 해서 우리는 안 만들었다 — 12부의 대조표에 그렇게 적어 둔다.</div>
+
+<!--SLIDE sec=3 t="옵션 — 왜 함수인가"-->
+<h2>옵션은 왜 함수인가</h2>
+<!--CODE file=tea/options.go lines=1-28 cap="tea/options.go — Option 과 내부 설정"-->
+<p>설정 구조체를 받으면 필드가 늘 때마다 부르는 쪽이 다 깨지거나, 안 쓰는 필드를 0으로 채워야 한다.
+함수로 두면 <b>필요한 것만</b> 적으면 되고, 기본값이 "아무것도 안 적었을 때" 로 자연히 정해진다.</p>
+
+<!--SLIDE sec=3 t="옵션 목록 ①"-->
+<h2>옵션 ① 입출력과 화면</h2>
+<!--CODE file=tea/options.go lines=29-58 cap="tea/options.go"-->
+<p class="small mut"><code>WithInput(nil)</code> 이 "입력을 아예 안 받는다" 인 것에 주목하라.
+밖에서 <code>Send</code> 로만 움직이는 프로그램과, 시계만으로 도는 기록에 쓴다.</p>
+
+<!--SLIDE sec=3 t="옵션 목록 ②"-->
+<h2>옵션 ② 시험과 기록을 위한 것들</h2>
+<!--CODE file=tea/options.go lines=59-88 cap="tea/options.go"-->
+<div class="tip"><b>시험을 위해 문을 여는 것은 부끄러운 일이 아니다</b>
+<code>WithWindowSize</code>·<code>WithColorProfile</code>·<code>WithQuitAfter</code> 는
+사람이 쓸 일이 거의 없다. 그러나 이 셋이 없으면 이 프레임워크는 자동으로 시험할 수 없고,
+자동으로 시험하지 못하는 프레임워크는 고칠 때마다 손으로 확인해야 한다.</div>
+
+<!--SLIDE sec=3 t="Program 구조체"-->
+<h2>Program — 고루틴 셋을 엮는 곳</h2>
+<!--CODE file=tea/program.go lines=1-24 cap="tea/program.go — 패키지 주석이 곧 설계도"-->
+
+<!--SLIDE sec=3 t="Program 의 필드"-->
+<h2>Program 이 들고 있는 것</h2>
+<!--CODE file=tea/program.go lines=25-42 cap="tea/program.go — 필드"-->
+<p>채널이 넷인데 하는 일이 다 다르다.</p>
+<div class="keys">
+<div class="keyrow"><b>msgs</b><span>사건이 모이는 곳. 버퍼 128</span></div>
+<div class="keyrow"><b>killed</b><span>Kill 이 닫는다 — 즉시 멈춤</span></div>
+<div class="keyrow"><b>done</b><span>정리가 끝나면 닫힌다 — Send 가 매달리지 않게</span></div>
+<div class="keyrow"><b>finished</b><span>Run 이 완전히 돌아오면 닫힌다 — Wait 가 기다린다</span></div>
+</div>
+
+<!--SLIDE sec=3 t="버퍼가 128인 이유"-->
+<h2>왜 버퍼를 두나</h2>
+<!--CODE file=tea/program.go lines=43-69 cap="tea/program.go — NewProgram"-->
+<p>버퍼가 없으면 명령 고루틴이 사건을 보내려는데 주 고루틴이 <code>Update</code> 중일 때
+그 자리에서 막힌다. 잠깐 막히는 것은 괜찮지만, 사건이 몰릴 때(키 반복, 마우스 움직임)
+매번 막히면 눈에 띄게 굼떠진다.</p>
+
+<!--SLIDE sec=3 t="Run — defer 의 순서"-->
+<h2>Run ① defer 를 거는 순서가 전부다</h2>
+<!--CODE file=tea/program.go lines=70-101 cap="tea/program.go — Run 의 머리"-->
+<div class="warn"><b>defer 는 나중에 건 것이 먼저 돈다</b>
+그래서 패닉을 가로채는 <code>defer</code> 를 <b>마지막에</b> 걸어야 한다.
+그래야 패닉이 났을 때 그 안에서 터미널을 먼저 되돌리고 다시 던질 수 있다.
+순서를 바꾸면 되돌리기가 패닉 뒤에 돌게 되고, 그사이에 찍히는 패닉 메시지가
+원시 모드 화면 위에 계단처럼 찍힌다.</div>
+
+<!--SLIDE sec=3 t="Run — 터미널 준비"-->
+<h2>Run ② 터미널 준비</h2>
+<!--CODE file=tea/program.go lines=102-125 cap="tea/program.go"-->
+<p class="small mut">터미널이 아니면(파이프·버퍼) 원시 모드는 건너뛰지만
+대체 화면 같은 <b>시퀀스는 그대로 내보낸다.</b> 그래야 출력을 버퍼로 받아
+"정말 켜고 껐는가" 를 시험할 수 있다.</p>
+
+<!--SLIDE sec=3 t="Run — 크기·색·렌더러"-->
+<h2>Run ③ 크기와 색을 정하고 부품을 켠다</h2>
+<!--CODE file=tea/program.go lines=126-157 cap="tea/program.go"-->
+<p>여기서 렌더러의 시계가 돌기 시작하고, 입력 고루틴이 <code>msgs</code> 로 사건을 보내기 시작한다.
+2부의 그림이 이 서른 줄에서 완성된다.</p>
+
+<!--SLIDE sec=3 t="Run — 첫 화면"-->
+<h2>Run ④ 시작 사건과 첫 그림</h2>
+<!--CODE file=tea/program.go lines=158-181 cap="tea/program.go"-->
+<p>사건 둘을 <b>루프가 시작되기 전에</b> 채널에 넣는다. 버퍼가 있으므로 막히지 않는다.
+그래서 모델이 받는 첫 사건은 언제나 <code>WindowSizeMsg</code> 다.</p>
+
+<!--SLIDE sec=3 t="루프 — 심장"-->
+<h2>루프 — 이 덱의 심장 서른 줄</h2>
+<!--CODE file=tea/program.go lines=182-213 cap="tea/program.go — loop"-->
+<p class="lead">이게 전부다. 나머지 만이천 줄은 이 서른 줄을 짧게 유지하려고 존재한다.</p>
+
+<!--SLIDE sec=3 t="루프를 읽는 법"-->
+<h2>루프를 한 줄씩</h2>
+<ol class="steps">
+<li><code>QuitMsg</code> 면 끝낸다. 남은 정리는 <code>defer</code> 가 한다.</li>
+<li><code>ClosedMsg</code> — 입력이 끊겼다. 파이프로 돌릴 때 여기서 끝난다.</li>
+<li><code>batchMsg</code> — 내부 신호. 모델에게 주지 않고 각자 고루틴으로 흩뿌린다.</li>
+<li><code>sequenceMsg</code> — 고루틴 하나에서 차례로 돌린다.</li>
+<li><code>WindowSizeMsg</code> — 렌더러에게도 알린다. <b>그리고 모델에게도 준다</b>(<code>continue</code> 가 없다).</li>
+<li>나머지는 전부 <code>Update</code> 로. 돌려받은 모델을 다음 사건의 입력으로 쓴다.</li>
+<li>화면을 적어 두고, 새 명령이 있으면 고루틴으로 띄운다.</li>
+</ol>
+
+<!--SLIDE sec=3 t="밖에서 밀어 넣기"-->
+<h2>Send · Quit · Kill · Wait</h2>
+<!--CODE file=tea/program.go lines=214-245 cap="tea/program.go"-->
+<div class="warn"><b>Update 안에서 Send 를 부르면 안 된다</b>
+주 고루틴이 자기 자신을 기다리게 되어, 버퍼가 차는 순간 굳는다.
+Update 에서 사건을 만들고 싶으면 <b>명령을 돌려주면 된다</b> — 그것이 이 프레임워크의 방식이다.</div>
+
+<!--SLIDE sec=3 t="명령 실행"-->
+<h2>명령을 실제로 돌리는 곳</h2>
+<!--CODE file=tea/program.go lines=246-277 cap="tea/program.go — exec·execSeq·size"-->
+<p>여덟 줄이다. <code>Cmd</code> 가 그냥 함수인 덕분이다.
+문맥도, 취소도, 오류 처리도 없다 — 전부 사건으로 돌려보내면 되기 때문이다.</p>
+<p class="small mut">80×24 는 VT100 이래의 기본값이고 지금도 대부분의 터미널이 그 크기로 열린다.
+거짓말을 하는 것이 아니라 "모를 때의 약속" 을 지키는 것이다.</p>
+
+<!--SLIDE sec=3 t="크기 감시와 정리"-->
+<h2>크기 감시와 마지막 정리</h2>
+<!--CODE file=tea/program.go lines=278-309 cap="tea/program.go — watchResize·shutdown"-->
+<div class="note"><b>정리 순서에 이유가 있다</b>
+① 렌더러를 멈춘다 — 마지막 화면을 한 번 더 그린다("안녕히" 같은 마지막 프레임).
+② 켜 둔 모드를 켠 순서의 역순으로 끈다.
+③ 원시 모드를 되돌린다 — <b>이것이 마지막이어야 한다.</b>
+③을 먼저 하면 그 뒤에 내보내는 정리 시퀀스가 줄 편집을 거쳐 나가면서 화면에 쓰레기를 남긴다.</div>
+
+<!--SLIDE sec=3 t="시험 — 모델 하나로"-->
+<h2>시험 ① 세는 모델 하나로 대부분을 친다</h2>
+<!--CODE file=tea/tea_test.go lines=1-30 cap="tea/tea_test.go — 시험용 모델"-->
+
+<!--SLIDE sec=3 t="시험 — 도우미"-->
+<h2>시험 ② 3초 안에 안 끝나면 실패</h2>
+<!--CODE file=tea/tea_test.go lines=31-55 cap="tea/tea_test.go"-->
+<p class="small mut">고루틴을 쓰는 코드의 시험에서 가장 나쁜 실패는 <b>매달림</b>이다.
+시간 제한을 두면 실패가 "3초 안에 안 끝났다" 라는 읽히는 문장이 된다.</p>
+
+<!--SLIDE sec=3 t="시험 — 루프"-->
+<h2>시험 ③ 사건이 오면 모델이 바뀐다</h2>
+<!--CODE file=tea/tea_test.go lines=56-87 cap="tea/tea_test.go"-->
+<p>입력으로 <code>"\x1b[A\x1b[A\x1b[Bq"</code> 라는 <b>진짜 바이트</b>를 준다.
+파서를 건너뛰고 <code>KeyMsg</code> 를 바로 만들어 넣으면, 파서의 버그를 이 시험으로는 못 찾는다.</p>
+
+<!--SLIDE sec=3 t="시험 — 시작 사건"-->
+<h2>시험 ④ 시작 사건과 초기 명령</h2>
+<!--CODE file=tea/tea_test.go lines=88-113 cap="tea/tea_test.go"-->
+
+<!--SLIDE sec=3 t="시험 — 밖에서 Send"-->
+<h2>시험 ⑤ 바깥에서 사건 밀어 넣기</h2>
+<!--CODE file=tea/tea_test.go lines=215-244 cap="tea/tea_test.go"-->
+<p class="small mut">웹소켓·파일 감시·다른 프로그램에서 오는 사건이 전부 이 문으로 들어온다.
+11부의 앱들은 안 쓰지만, 프레임워크로서는 없으면 안 되는 문이다.</p>
+
+<!--SLIDE sec=3 t="시험 — 화면과 정리"-->
+<h2>시험 ⑥ 화면과 종료 정리</h2>
+<!--CODE file=tea/tea_test.go lines=245-274 cap="tea/tea_test.go"-->
+<p>출력이 <code>bytes.Buffer</code> 라서 "무엇을 써 보냈는지" 를 바이트로 확인할 수 있다.
+대체 화면을 빠져나오는 시퀀스로 <b>끝나야</b> 한다는 것이 계약이다.</p>
+
+<!--SLIDE sec=3 t="시험 — 패닉"-->
+<h2>시험 ⑦ 패닉이 나도 터미널은 되돌린다</h2>
+<!--CODE file=tea/tea_test.go lines=275-302 cap="tea/tea_test.go"-->
+<div class="tip"><b>패닉을 삼키지 않는다</b>
+가로채서 <code>error</code> 로 바꿔 돌려주면 편해 보이지만, 그러면 버그가 조용히 숨는다.
+우리는 터미널을 되돌린 뒤 <b>다시 던진다</b>. 스택 트레이스는 그대로 보인다.</div>
+
+<!--SLIDE sec=3 t="시험 — 값 의미론"-->
+<h2>시험 ⑧ 복사본을 안 돌려주면 변경이 사라진다</h2>
+<!--CODE file=tea/tea_test.go lines=303-320 cap="tea/tea_test.go"-->
+<!--CODE file=tea/tea_test.go lines=321-352 cap="tea/tea_test.go — 일부러 잘못 쓴 모델"-->
+<p class="lead">이 시험은 <b>버그가 없다는 것</b>이 아니라 <b>버그가 이렇게 생겼다는 것</b>을 못박는다.
+읽는 사람이 같은 실수를 했을 때 "아, 그 시험에서 본 거" 가 되게 하려는 것이다.</p>
+
+<!--SLIDE sec=3 t="시험 — Expand"-->
+<h2>시험 ⑨ 바깥 루프를 위한 문</h2>
+<!--CODE file=tea/tea_test.go lines=353-372 cap="tea/tea_test.go"-->
+<!--CODE file=tea/tea_test.go lines=373-390 cap="tea/tea_test.go — Expand"-->
+<p class="small mut">10부에서 <code>testkit</code> 이 이 문으로 들어온다.
+문을 하나만, 그것도 함수 하나로 열어 두면 "누가 이 문을 쓰는가" 를 코드에서 셀 수 있다.</p>
+
+<!--SLIDE sec=3 t="01_hello ①"-->
+<h2>가장 작은 프로그램</h2>
+<!--CODE file=examples/01_hello/main.go lines=1-21 cap="examples/01_hello/main.go"-->
+<p>1부의 <code>00_raw</code> 와 견줘 보라. 원시 모드도, 이스케이프 시퀀스도, 화면 지우기도 없다.
+전부 <code>tea</code> 가 가져갔다.</p>
+
+<!--SLIDE sec=3 t="01_hello ②"-->
+<h2>세 메서드와 main</h2>
+<!--CODE file=examples/01_hello/main.go lines=22-44 cap="examples/01_hello/main.go"-->
+<!--CAP file=out/tmux_01_hello.html cap="go run ./examples/01_hello"-->
+
+<!--SLIDE sec=3 t="02_counter"-->
+<h2>상태를 가진 모델</h2>
+<!--CODE file=examples/02_counter/main.go lines=1-18 cap="examples/02_counter/main.go"-->
+<!--CODE file=examples/02_counter/main.go lines=19-46 cap="examples/02_counter/main.go"-->
+
+<!--SLIDE sec=3 t="02_counter 화면"-->
+<h2>02_counter — 실제 화면</h2>
+<p>위 화살표 세 번, <kbd>k</kbd>, <kbd>+</kbd>, <kbd>j</kbd> 를 눌렀다.</p>
+<!--CAP file=out/tmux_02_counter.html cap="go run ./examples/02_counter"-->
+<p class="small mut">한 글자 <code>return m, nil</code> 의 <code>m</code> 을 <code>model{}</code> 으로
+바꾸면 이 화면의 숫자가 영영 0에 머문다. 방금 본 시험이 그것을 못박는다.</p>
+
+<!--SLIDE sec=3 t="03_keys ①"-->
+<h2>키가 어떻게 오는지 눈으로</h2>
+<!--CODE file=examples/03_keys/main.go lines=1-24 cap="examples/03_keys/main.go"-->
+
+<!--SLIDE sec=3 t="03_keys ②"-->
+<h2>슬라이스는 값이 아니다</h2>
+<!--CODE file=examples/03_keys/main.go lines=25-47 cap="examples/03_keys/main.go"-->
+<div class="warn"><b>이 부의 함정 셋 중 마지막</b>
+모델은 값이지만 <b>슬라이스 필드는 값이 아니다.</b> 배열을 가리키는 머리(포인터·길이·용량)일 뿐이다.
+<code>append</code> 를 그냥 쓰면 두 "복사본" 이 같은 배열을 나눠 갖게 되어,
+한쪽을 고치면 다른 쪽도 바뀐다. 새 슬라이스를 만들어야 한다.</div>
+
+<!--SLIDE sec=3 t="03_keys ③"-->
+<h2>키 하나를 풀어 쓰기</h2>
+<!--CODE file=examples/03_keys/main.go lines=48-74 cap="examples/03_keys/main.go"-->
+<!--CODE file=examples/03_keys/main.go lines=75-80 cap="examples/03_keys/main.go"-->
+
+<!--SLIDE sec=3 t="03_keys 화면"-->
+<h2>03_keys — 실제 화면</h2>
+<p>왼쪽 화살표, <kbd>Ctrl</kbd>+<kbd>A</kbd>, <kbd>Alt</kbd>+<kbd>X</kbd>,
+<kbd>Shift</kbd>+<kbd>Tab</kbd>, <kbd>F5</kbd>, <kbd>Home</kbd> 을 차례로 눌렀다.</p>
+<!--CAP file=out/tmux_03_keys.html cap="go run ./examples/03_keys"-->
+<p>특수키의 코드가 <code>U+110003</code> 처럼 유니코드 범위 <b>바깥</b>인 것에 주목하라.
+왜 그렇게 했는지는 5부에서 본다.</p>
+
+<!--SLIDE sec=3 t="04_tick ①"-->
+<h2>시간 다루기</h2>
+<!--CODE file=examples/04_tick/main.go lines=1-27 cap="examples/04_tick/main.go"-->
+
+<!--SLIDE sec=3 t="04_tick ②"-->
+<h2>재예약, 그리고 멈춤</h2>
+<!--CODE file=examples/04_tick/main.go lines=28-57 cap="examples/04_tick/main.go"-->
+<p><code>m.paused</code> 일 때 <b>다시 걸지 않는 것</b>이 곧 멈춤이다.
+시계를 끄는 장치를 따로 만들 필요가 없다.</p>
+
+<!--SLIDE sec=3 t="04_tick ③"-->
+<h2>04_tick — 화면과 코드</h2>
+<!--CODE file=examples/04_tick/main.go lines=58-73 cap="examples/04_tick/main.go"-->
+<!--CAP file=out/tmux_04_tick.html cap="go run ./examples/04_tick"-->
+
+<!--SLIDE sec=3 t="함정 되짚기"-->
+<h2>3부의 함정 셋</h2>
+<div class="cols">
+  <div class="card"><h4>① 복사본을 안 돌려준다</h4>
+  <p><code>m.n++</code> 하고 <code>return model{}, nil</code>.
+  컴파일도 되고 경고도 없다. 증상은 "아무 일도 안 일어난다".</p></div>
+  <div class="card"><h4>② Tick 을 다시 안 건다</h4>
+  <p>시계가 한 번 가고 멎는다. 증상이 "화면이 멈췄다" 라서 렌더러를 의심하게 된다.</p></div>
+  <div class="card"><h4>③ 슬라이스를 그냥 append</h4>
+  <p>두 복사본이 같은 배열을 나눠 갖는다. 증상이 <b>가끔</b> 나타나서 가장 찾기 어렵다.</p></div>
+</div>
+<p class="lead">셋 다 <b>값 의미론</b>에서 나온다. 값으로 다루기로 한 대가이고,
+그 대가를 알고 쓰면 나머지 이득이 훨씬 크다.</p>
+
+<!--SLIDE sec=3 t="나란히 보기"-->
+<h2>나란히 보기 — 루프</h2>
+<table>
+<tr><th></th><th>Bubble Tea v2</th><th>보리차</th></tr>
+<tr><td>사건 큐</td><td>무제한 큐(넘치지 않는다)</td><td>버퍼 128 채널</td></tr>
+<tr><td>Batch</td><td>동시, 순서 없음</td><td>같음</td></tr>
+<tr><td>Sequence</td><td>차례로</td><td>같음</td></tr>
+<tr><td>Tick/Every</td><td>한 번만 울림</td><td>같음</td></tr>
+<tr><td>패닉</td><td>되돌린 뒤 다시 던짐</td><td>같음</td></tr>
+<tr><td>밖에서 넣기</td><td><code>p.Send</code></td><td>같음</td></tr>
+<tr><td>화면 밖 출력</td><td><code>tea.Println</code> 있음</td><td>없음 — <code>LogToFile</code> 로</td></tr>
+<tr><td>외부 프로그램 실행</td><td><code>tea.ExecProcess</code> 있음</td><td>없음</td></tr>
+<tr><td>클립보드</td><td><code>tea.SetClipboard</code> 있음</td><td>없음</td></tr>
+</table>
+<p class="small mut">사건 큐가 다른 것이 유일하게 <b>저쪽이 더 나은</b> 자리다.
+버퍼가 차면 우리 명령 고루틴은 잠깐 막힌다. 128이면 실제로 문제가 된 적은 없지만,
+초당 수천 개의 사건을 밀어 넣는 프로그램이라면 저쪽 방식이 옳다.</p>
+
+<!--SLIDE sec=3 t="3부 연습문제"-->
+<h2>3부 연습문제</h2>
+<ol class="steps">
+<li><code>02_counter</code> 의 <code>return m, nil</code> 을 <code>return model{}, nil</code> 로
+바꾸고 돌려 보라. 무엇이 보이나? 왜 컴파일러가 잡아 주지 못하나?</li>
+<li><code>04_tick</code> 에서 <code>return m, tick()</code> 을 <code>return m, nil</code> 로
+바꾸면? 그 증상만 보고 원인을 어디서 찾겠는가?</li>
+<li><code>tea.Batch(a, b)</code> 대신 <code>tea.Sequence(a, b)</code> 를 쓰면
+<code>07_cmds</code> 의 화면이 어떻게 달라지나?</li>
+<li><code>Program.Send</code> 를 <code>Update</code> 안에서 부르면 어떤 일이 생기나?
+버퍼가 128이라는 사실이 이 답에 어떻게 걸리나?</li>
+<li>루프에서 <code>WindowSizeMsg</code> 뒤에 <code>continue</code> 를 넣으면
+무엇이 깨지나? <span class="mut">답: 모델이 크기를 영영 모른다</span></li>
+</ol>
