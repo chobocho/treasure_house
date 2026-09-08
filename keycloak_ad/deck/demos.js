@@ -467,4 +467,93 @@
     on(el, 'input', run);
     run();
   });
+  /* ── 10. PKCE 계산기 ────────────────────────────────────────────
+   * verifier 를 넣으면 challenge 를 만들어 준다.
+   * 한 글자만 바꿔도 전부 달라진다는 것을 손으로 확인하는 자리다. */
+  __demo('pkce', function (host, api) {
+    var el = q(host, '[data-verifier]');
+    function run() {
+      var v = val(el, 'lunch-demo-verifier-0123456789-abcdefghijklmnop');
+      // RFC 7636 §4.1 — verifier 는 43~128글자여야 한다.
+      var lenNote = v.length < 43
+        ? '\n\n<span class="bad">짧다 — 규격은 43글자 이상을 요구한다 ' +
+          '(RFC 7636 §4.1). 지금 ' + v.length + '글자.</span>'
+        : '\n\n<span class="dim">verifier ' + v.length + '글자 · ' +
+          '규격은 43~128글자 (RFC 7636 §4.1)</span>';
+      var subtle = (window.crypto && window.crypto.subtle) || null;
+      if (!subtle) {
+        api.w(host, '이 브라우저에서는 계산할 수 없습니다 ' +
+          '(https 로 열어야 Web Crypto 가 켜집니다).', 'dim');
+        return;
+      }
+      subtle.digest('SHA-256', new TextEncoder().encode(v))
+        .then(function (buf) {
+          var b = new Uint8Array(buf), bin = '';
+          for (var i = 0; i < b.length; i++) {
+            bin += String.fromCharCode(b[i]);
+          }
+          // base64url — 1부 8장에서 본 그 변환이다.
+          var chal = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_')
+            .replace(/=+$/, '');
+          api.w(host,
+            'verifier  ' + api.esc(v) + '\n' +
+            '  ↓ SHA-256 → base64url\n' +
+            'challenge ' + api.esc(chal) + lenNote, 'ok');
+        }).catch(function (e) {
+          api.w(host, '계산 실패: ' + api.esc(e.message), 'bad');
+        });
+    }
+    on(el, 'input', run);
+    run();
+  });
+
+  /* ── 11. JWT 해독기 ─────────────────────────────────────────────
+   * 열쇠 없이 토큰을 읽는다. 그게 이 데모의 전부이자 요점이다 —
+   * 읽을 수 있다는 것과 믿어도 된다는 것은 다른 일이다. */
+  __demo('jwt', function (host, api) {
+    var el = q(host, '[data-jwt]');
+
+    // base64url 되돌리기. 패딩이 없으므로 채워서 푼다.
+    function unb64(s) {
+      var t = s.replace(/-/g, '+').replace(/_/g, '/');
+      while (t.length % 4) t += '=';
+      var bin = atob(t), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder().decode(bytes);
+    }
+
+    function pretty(json) {
+      try {
+        return JSON.stringify(JSON.parse(json), null, 2);
+      } catch (e) {
+        return json;
+      }
+    }
+
+    function run() {
+      var raw = val(el, '').replace(/\s+/g, '');
+      var parts = raw.split('.');
+      if (parts.length !== 3) {
+        api.w(host, '조각이 ' + parts.length + '개다 — ' +
+          '토큰은 점으로 나뉜 세 조각이다.', 'bad');
+        return;
+      }
+      var head, body;
+      try {
+        head = pretty(unb64(parts[0]));
+        body = pretty(unb64(parts[1]));
+      } catch (e) {
+        api.w(host, 'base64url 을 되돌릴 수 없다 — 토큰이 깨졌다.', 'bad');
+        return;
+      }
+      api.w(host,
+        '<span class="dim">머리 (header)</span>\n' + api.esc(head) +
+        '\n\n<span class="dim">내용 (payload)</span>\n' + api.esc(body) +
+        '\n\n<span class="dim">서명 ' + parts[2].length +
+        '글자 — 여기서는 확인하지 않았다.\n' +
+        '열쇠가 없어도 위의 두 조각은 이렇게 읽힌다.</span>', 'ok');
+    }
+    on(el, 'input', run);
+    run();
+  });
 })();

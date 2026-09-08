@@ -82,7 +82,8 @@ def _fake_id(n, length):
 # 값이다 — 그걸 가짜로 바꾸면 덱이 "sha256('minji') 는 이것이다" 라고
 # 거짓말을 하게 된다. 실제로 한 번 그런 캡처가 나왔다.
 # 그래서 값의 모양이 아니라 **자리**로 고른다.
-RANDOM_KEYS = ['lunch_session', 'state', 'nonce', 'session_state',
+RANDOM_KEYS = ['lunch_session', 'lunch_app_session', 'MINIIDP_SESSION',
+               'state', 'nonce', 'session_state',
                'sid', 'jti', 'kid', 'code_verifier', 'code_challenge']
 _HEX = re.compile(r'(?<![\w-])(%s)(["\s]*[=:]["\s]*)([0-9a-zA-Z_-]{16,})'
                   % '|'.join(RANDOM_KEYS))

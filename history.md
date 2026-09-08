@@ -1,3 +1,10 @@
+### [2026-09-08 15:40] Keycloak×AD 덱 4부 본문 — 116장, 커버리지 100%
+- **기획:** PLAN §8 5단계의 마지막. 9개 장(위임의 이유·인가 코드 흐름·state/nonce/PKCE·토큰 세 장·JWT 해부·JWKS와 안내문·앱 쪽·세 세션과 로그아웃·직접 돌려 보기), 퀴즈 8, 데모 2.
+- **TC:** 본문 커밋이라 새 시험은 없다. 조립기의 검사(폭·장수·근거 배지·커버리지)와 역검증·deck-check·글꼴검사가 관문이다.
+- **개발:** deck/sections/04_sso.html(신규), 13_appendix.html(FULLSRC 11개), deck/demos.js(+2), deck/claims.md(4부 28행), deck/pending.txt(비움), tools/showurl.py(신규), tools/record.sh, tools/scrub.py 외 1개 파일
+- **검증:** 504장 · 커버리지 6465/6465줄 100% · 조립 0건 · 역검증 통과(코드 274·출력 99) · deck-check 0건(퀴즈 24·데모 11) · 글꼴 통과 · make record 3회 md5 동일(94개) · test 14패키지
+- **비고:** 200칸 넘는 주소를 실을 수 없어 tools/showurl.py 로 칸마다 한 줄씩 펼쳤다. alg=none 사고의 연도를 적었다가 근거를 못 대 빼고 RFC 8725 로 대신했다. 0부와 4부의 세 세션 표가 어긋나 0부에 맞췄다.
+
 ### [2026-09-08 13:55] OIDC 전 과정 실물 — miniapp·jwtool, 캡처 32개
 - **기획:** PLAN.md §8 5단계의 가운데. 앱(RP) 쪽과 토큰을 눈으로 보는 도구. miniapp 시험이 진짜 IdP를 상대하도록 miniidp를 라이브러리+cmd로 갈랐다(fakead와 같은 방식).
 - **TC:** 뼈대→RED→GREEN. miniapp은 진짜 miniidp를 띄워 브라우저처럼 따라가는 통합 시험(로그인·403·state 재사용·nonce 바꿔치기·남의 열쇠·로그아웃). jwtool은 alg=none·변조·기한·대상·발급자. 새 시험 4종은 변이를 넣어 실제로 무는지 확인했다.

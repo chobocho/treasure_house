@@ -401,12 +401,40 @@ $CURL "$IDP/.well-known/openid-configuration" \
   >"$OUT/oidc_discovery.txt" 2>&1
 $CURL "$OC/certs" >"$OUT/oidc_certs.txt" 2>&1
 
+# 공개키의 n 은 342글자라 한 줄에 안 들어간다. 가운데를 줄여 한 벌 더 뜬다.
+python3 - "$OUT/oidc_certs.txt" >"$OUT/oidc_certs_short.txt" <<'PYEOF'
+import json
+import sys
+
+k = json.load(open(sys.argv[1]))['keys'][0]
+print('$ curl .../certs | python3 -m json.tool')
+print('  (n 은 342글자라 가운데를 줄였다)')
+print('{')
+print('  "keys": [')
+print('    {')
+fields = ['kty', 'use', 'alg', 'kid', 'n', 'e']
+for n, f in enumerate(fields):
+    v = k[f]
+    if len(v) > 40:
+        v = '%s…(%d자 줄임)…%s' % (v[:16], len(v) - 32, v[-16:])
+    print('      "%s": "%s"%s' % (f, v, ',' if n < len(fields) - 1 else ''))
+print('    }')
+print('  ]')
+print('}')
+PYEOF
+
 # ── 로그인 화면 ──
 AQ="response_type=code&client_id=lunch-web"
 AQ="$AQ&redirect_uri=http%3A%2F%2Flocalhost%3A$PA%2Fcallback"
 AQ="$AQ&scope=openid+profile+email&state=st-demo-123&nonce=no-demo-456"
 AQ="$AQ&code_challenge=$CHALLENGE&code_challenge_method=S256"
 
+{
+  echo '$ showurl "$AUTH_URL"'
+  python3 tools/showurl.py "$OC/auth?$AQ"
+  echo
+  echo '앱이 브라우저를 이 주소로 보낸다. 칸 하나하나가 4부 2·3장의 주제다.'
+} >"$OUT/oidc_authorize_url.txt" 2>&1
 $CURL -v "$OC/auth?$AQ" >"$OUT/oidc_authorize.txt" 2>&1
 $CURL -v "$OC/auth?$(echo "$AQ" | sed 's/client_id=lunch-web/client_id=남의앱/')" \
   >"$OUT/oidc_authorize_badclient.txt" 2>&1
@@ -427,6 +455,24 @@ $CURL -v $FORM -d user=minji -d "pass=$PW" "$OC/auth" \
 CODE=$(sed -n 's/^< [Ll]ocation:.*[?&]code=\([^&]*\).*/\1/p' \
   "$OUT/oidc_login.txt" | tr -d '\r')
 [ -n "$CODE" ] || { echo '인가 코드를 못 받았다' >&2; exit 1; }
+
+# 돌아온 주소를 펼쳐 본다. 코드가 **주소에** 실려 온다는 것이 요점이다.
+loc() {
+  sed -n 's/^< [Ll]ocation: //p' "$1" | tr -d '\r' | head -1
+}
+{
+  echo '$ showurl "$(돌아온 Location)"'
+  python3 tools/showurl.py "$(loc "$OUT/oidc_login.txt")"
+  echo
+  echo '코드는 브라우저의 주소창을 지나간다. 그래서 짧고, 한 번만 쓴다.'
+} >"$OUT/oidc_code_url.txt" 2>&1
+{
+  echo '$ showurl "$(PKCE 없이 보냈을 때 돌아온 Location)"'
+  python3 tools/showurl.py "$(loc "$OUT/oidc_authorize_nopkce.txt")"
+  echo
+  echo '오류도 앱으로 돌려보낸다. state 를 함께 돌려주는 것이 중요하다 —'
+  echo '앱이 "내가 시작한 그 로그인" 임을 알아볼 수 있어야 하기 때문이다.'
+} >"$OUT/oidc_err_url.txt" 2>&1
 
 # ── 코드를 토큰으로 ──
 TF="-d grant_type=authorization_code -d code=$CODE"
@@ -570,6 +616,12 @@ APPQ=$(sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)">.*/-d
 # shellcheck disable=SC2086
 $CURL -v -L -c "$AJAR" -b "$AJAR" $APPQ -d user=minji -d "pass=$PW" \
   "$OC/auth" >"$OUT/oidc_app_callback.txt" 2>&1
+{
+  echo '$ showurl "$(앱의 /login 이 보낸 곳)"'
+  python3 tools/showurl.py "$(loc "$OUT/oidc_app_login.txt")"
+  echo
+  echo '2장에서 손으로 만든 그 주소다. 이번에는 앱이 만들었다.'
+} >"$OUT/oidc_app_url.txt" 2>&1
 $CURL -v -b "$AJAR" "http://localhost:$PA/me" >"$OUT/oidc_app_me.txt" 2>&1
 $CURL -v -b "$AJAR" "http://localhost:$PA/admin" \
   >"$OUT/oidc_app_admin_denied.txt" 2>&1
@@ -578,6 +630,13 @@ $CURL -v -L -b "$AJAR" -c "$AJAR" \
   >"$OUT/oidc_app_logout.txt" 2>&1
 $CURL -v -b "$AJAR" "http://localhost:$PA/me" \
   >"$OUT/oidc_app_me_after.txt" 2>&1
+{
+  echo '$ showurl "$(로그아웃 단추가 보낸 곳)"'
+  python3 tools/showurl.py "$(loc "$OUT/oidc_app_logout.txt")"
+  echo
+  echo 'id_token_hint 는 "누구의 세션을 끊는지" 를 알려 준다.'
+  echo '이게 없으면 IdP 가 사용자에게 "정말 로그아웃할까요" 를 물어야 한다.'
+} >"$OUT/oidc_logout_url.txt" 2>&1
 
 # 관리자는 같은 화면을 볼 수 있다. 갈리는 것은 groups 클레임 하나다.
 BJAR=$OUT/.adminjar.txt

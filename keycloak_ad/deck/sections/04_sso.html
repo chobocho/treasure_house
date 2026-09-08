@@ -13,7 +13,1225 @@
 <li>JWT 구조 · 서명 · JWKS · 클레임</li>
 <li>세 세션과 로그아웃</li>
 </ul>
-<div class="tip"><b>끝나면</b> — 표준 라이브러리로 만든 미니 IdP 와 앱으로 전 과정을 직접 돌려 보고 토큰을 해독한다</div>
-<div class="warn"><b>이 부는 아직 준비 중입니다</b> — 뼈대만 세워 둔 상태다.
-본문이 들어오면 이 알림은 사라진다.</div>
+<div class="tip"><b>끝나면</b> — 표준 라이브러리로 만든 미니 IdP 와 앱으로
+전 과정을 직접 돌려 보고 토큰을 해독한다</div>
+<div class="key"><b>여기서 만드는 것</b> — <b>400줄짜리 Keycloak</b> 이다.
+5부에서 만날 진짜 Keycloak 과 <b>주소까지 똑같이</b> 맞춰 뒀다.
+그래서 4부에서 손으로 눌러 본 것이 5부에서 그대로 나온다.
+그리고 그 IdP 는 뒤에서 <b>3부의 가짜 AD</b> 에게 LDAP 으로 묻는다 —
+0부에서 그린 그림이 여기서 처음으로 한 줄로 이어진다.</div>
+</article>
+
+<article class="card" id="so-why">
+<p class="chnum">1장</p>
+<h2>앱마다 비밀번호를 주면</h2>
+<p class="chsub">위임이라는 발상이 나온 자리</p>
+</article>
+
+<article class="card" id="so-why-1">
+<h3>민지의 다음 질문</h3>
+<blockquote>"학적부가 어디 있는지는 알았다. 그러면 학식 예약 앱이
+<b>직접</b> AD 에 물어보면 되는 것 아닌가?"</blockquote>
+<p class="lead">할 수는 있다. 3부의 코드를 앱에 넣으면 된다.
+그런데 그 순간 앱이 <b>비밀번호를 받게</b> 된다. 그게 문제의 전부다.</p>
+<div class="key">사용자가 앱의 화면에 학교 비밀번호를 친다는 것은,
+그 앱을 만든 사람을 <b>학교만큼 믿는다</b>는 뜻이다.
+앱이 열 개면 열 곳을 그렇게 믿어야 한다.</div>
+</article>
+
+<article class="card" id="so-why-2">
+<h3>비밀번호 복사본이 늘어난다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>앱이 직접 받으면</th><th>무슨 일이 생기나</th></tr>
+<tr><td>앱 서버가 비밀번호를 <b>한 번은 본다</b></td>
+<td>로그에 실수로 찍히면 그대로 유출이다</td></tr>
+<tr><td>앱마다 로그인 화면이 다르다</td>
+<td>사용자가 가짜 화면을 구별할 수 없다</td></tr>
+<tr><td>비밀번호를 바꾸면</td><td>앱마다 따로 겪는다</td></tr>
+<tr><td>2단계 인증을 넣으려면</td><td>앱을 <b>전부</b> 고쳐야 한다</td></tr>
+<tr><td>퇴사자를 막으려면</td><td>앱을 <b>전부</b> 뒤져야 한다</td></tr>
+</table>
+</div>
+<p>앱이 하나일 때는 안 보이는 문제다. 셋만 돼도 보인다.</p>
+</article>
+
+<article class="card" id="so-why-3">
+<h3>실수 박물관 — 로그에 찍힌 비밀번호</h3>
+<div class="warn"><b>흔한 사고</b> — 디버깅하려고 폼 전체를 로그로 남겼다.
+<code>user=minji&amp;pass=…</code> 가 그대로 파일에 쌓였고,
+그 로그는 개발자 전원이 볼 수 있는 곳으로 모이고 있었다.</div>
+<p>비밀번호를 <b>받지 않는 앱</b>은 이 사고를 낼 수 없다.
+"조심해서 다루자" 가 아니라 <b>아예 손에 쥐지 않는 것</b>이
+이 부에서 배울 방식이다.</p>
+<div class="tip">1부 5장에서 "어느 쪽이 틀렸는지 말하지 않는다" 를 배웠다.
+그건 <b>받은 뒤</b>의 조심이다. 여기서는 그 앞 단계를 없앤다.</div>
+</article>
+
+<article class="card" id="so-why-4">
+<h3>호텔 카드키</h3>
+<p class="lead">호텔에 묵을 때 주인의 <b>마스터키</b>를 받지 않는다.
+프런트에서 신분증을 보이고, <b>내 방만 · 사흘만</b> 열리는 카드를 받는다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>호텔</th><th>여기</th></tr>
+<tr><td>신분증</td><td>학교 비밀번호</td></tr>
+<tr><td>프런트</td><td><b>IdP</b> — 신분을 확인하는 곳</td></tr>
+<tr><td>카드키</td><td><b>토큰</b></td></tr>
+<tr><td>내 방만 · 사흘만</td><td>범위(scope)와 기한(exp)</td></tr>
+<tr><td>객실 문</td><td>앱</td></tr>
+</table>
+</div>
+<div class="key">객실 문은 신분증을 본 적이 없다. <b>카드만 본다.</b>
+앱이 비밀번호를 안 보는 것이 이와 같다.</div>
+</article>
+
+<article class="card" id="so-why-5">
+<h3>SSO — 한 번 확인하고 여러 곳에서 쓴다</h3>
+<p class="lead"><b>Single Sign-On</b>. 프런트에서 한 번 신분증을 보이면
+그 호텔 안의 여러 문이 열리는 것.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>SSO 인 것</th><th>SSO 가 아닌 것</th></tr>
+<tr><td>확인은 <b>IdP 한 곳</b>에서만 한다</td>
+<td>앱마다 같은 비밀번호를 친다 (그건 그냥 같은 비밀번호다)</td></tr>
+<tr><td>둘째 앱은 비밀번호를 <b>안 묻는다</b></td>
+<td>비밀번호 관리자가 대신 쳐 주는 것</td></tr>
+<tr><td>계정을 끄면 <b>모든 앱</b>이 막힌다</td>
+<td>앱마다 계정이 따로 살아 있는 것</td></tr>
+</table>
+</div>
+<div class="tip">"둘째 앱에서 비밀번호를 안 묻는" 이유는 뒤에 나온다 —
+<b>브라우저와 IdP 사이의 세션</b>이 살아 있기 때문이다(8장).</div>
+</article>
+
+<article class="card" id="so-why-6">
+<h3>등장인물 넷</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>부르는 이름</th><th>여기서는</th><th>하는 일</th></tr>
+<tr><td>자원 소유자<br><span class="dim">Resource Owner</span></td>
+<td><b>민지</b></td><td>브라우저 앞에 앉은 사람</td></tr>
+<tr><td>클라이언트 · RP<br><span class="dim">Relying Party</span></td>
+<td><b>학식 예약 앱</b></td><td>확인을 <b>맡기는</b> 쪽</td></tr>
+<tr><td>인가 서버 · IdP<br><span class="dim">Authorization Server</span></td>
+<td><b>Keycloak</b></td><td>확인하고 토큰을 <b>내주는</b> 곳</td></tr>
+<tr><td>자원 서버<br><span class="dim">Resource Server</span></td>
+<td>예약 API</td><td>토큰을 <b>보고</b> 일해 주는 곳</td></tr>
+</table>
+</div>
+<div class="key"><b>RP</b> 라는 이름이 정확하다 — "믿고 맡기는 쪽".
+앱은 스스로 확인하지 않고, IdP 의 말을 <b>믿기로</b> 한 것이다.
+그래서 앱이 할 일은 "그 말이 정말 IdP 의 말인가" 를 확인하는 것뿐이다(5장).</div>
+</article>
+
+<article class="card" id="so-why-7">
+<h3>OAuth 2.0 과 OpenID Connect</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>OAuth 2.0</th><th>OpenID Connect</th></tr>
+<tr><td>답하는 질문</td><td>"이 앱이 <b>무엇을 해도</b> 되나"</td>
+<td>"이 사람이 <b>누구</b>인가"</td></tr>
+<tr><td>낱말로</td><td>인가 (authorization)</td><td>인증 (authentication)</td></tr>
+<tr><td>주는 것</td><td>액세스 토큰</td><td>+ <b>ID 토큰</b></td></tr>
+<tr><td>규격</td><td>RFC 6749</td><td>OIDC Core 1.0 — OAuth2 <b>위에</b> 얹은 것</td></tr>
+</table>
+</div>
+<div class="key">OIDC 는 OAuth2 를 <b>대체하지 않는다</b>. 그 위에 한 겹을 더 얹어
+"누구인가" 를 답하게 만든 것이다. 그래서 이 부의 흐름은 OAuth2 의 것이고,
+거기서 ID 토큰 한 장이 더 나온다.</div>
+<div class="tip"><b>흔한 오해</b> — "액세스 토큰으로 로그인하면 되지 않나".
+액세스 토큰은 <b>앱에게 하는 말이 아니다</b>. 자원 서버에 보이라고 준 것이라,
+앱이 그 안을 들여다볼 권리가 없다. 로그인에 쓰라고 만든 것이 ID 토큰이다.</div>
+</article>
+
+<article class="card quiz" id="so-why-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 어떤 팀이 "우리는 SSO 를 쓴다" 고 말한다.
+들어 보니 앱 다섯 개가 <b>같은 AD 계정과 비밀번호</b>로 각각 로그인한단다.
+이것은 SSO 인가? 아니라면 무엇이 빠졌나?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> SSO 가 아니다. 같은 <b>비밀번호</b>를 쓰는 것일 뿐,
+<b>확인하는 곳</b>은 여전히 앱 다섯 곳이다.<br>
+증거는 두 가지로 확인할 수 있다. ① 둘째 앱에서 비밀번호를 <b>다시 묻는가</b> —
+물으면 SSO 가 아니다. ② 앱 다섯 곳이 여전히 비밀번호를 <b>손에 쥐는가</b> —
+쥐면 1장에서 센 문제가 그대로 다섯 배다.<br>
+빠진 것은 <b>확인을 한 곳으로 모으는 일</b>이다. 그게 IdP 이고, 그 다음 장부터 만든다.</div>
+</article>
+
+<article class="card" id="so-flow">
+<p class="chnum">2장</p>
+<h2>인가 코드 흐름</h2>
+<p class="chsub">리다이렉트를 한 걸음씩 따라간다</p>
+</article>
+
+<article class="card" id="so-flow-1">
+<h3>일곱 걸음</h3>
+<ol>
+<li>민지가 앱에서 <b>로그인</b>을 누른다</li>
+<li>앱이 브라우저를 <b>IdP 로 보낸다</b> (리다이렉트)</li>
+<li>IdP 가 <b>자기 화면</b>에서 비밀번호를 받는다</li>
+<li>IdP 가 뒤에서 <b>AD 에 묻는다</b> (3부의 LDAP)</li>
+<li>IdP 가 브라우저를 앱으로 <b>돌려보낸다</b> — 주소에 <b>인가 코드</b>를 실어</li>
+<li>앱이 <b>브라우저를 거치지 않고</b> IdP 에 코드를 내밀어 <b>토큰</b>을 받는다</li>
+<li>앱이 토큰을 확인하고 <b>자기 세션 쿠키</b>를 심는다 — 그 뒤로는 1부 6장 그대로</li>
+</ol>
+<div class="key">2·5 는 <b>브라우저를 통한 이동</b>이고(1부 4장의 302),
+6 은 <b>앱과 IdP 가 직접</b> 주고받는 것이다. 이 둘이 다르다는 것이
+이 흐름의 뼈대다 — 비밀은 6 에서만 오간다.</div>
+</article>
+
+<article class="card" id="so-flow-2">
+<h3>1단계 — 앱이 보내는 주소</h3>
+<!--OUT file=oidc_authorize_url.txt lines=1-10 note=주소 하나에 칸이 여덟-->
+<span class="tier a">실행 검증</span>
+<div class="tip">한 줄로 붙이면 240칸이 넘는다. 여기서는 <code>tools/showurl.py</code> 로
+칸마다 한 줄씩 펼쳐 실었다 — 값은 전부 진짜다.</div>
+</article>
+
+<article class="card" id="so-flow-3">
+<h3>칸 여덟 개가 하는 일</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>뜻</th><th>어디서</th></tr>
+<tr><td><code>response_type=code</code></td><td>"인가 코드를 달라"</td><td>이 장</td></tr>
+<tr><td><code>client_id</code></td><td>어느 앱인가 — 미리 등록된 이름</td><td>이 장</td></tr>
+<tr><td><code>redirect_uri</code></td><td>돌아올 주소 — <b>미리 등록</b>된 것만</td><td>이 장</td></tr>
+<tr><td><code>scope=openid …</code></td><td><code>openid</code> 가 있어야 ID 토큰이 나온다</td><td>4장</td></tr>
+<tr><td><code>state</code></td><td>내가 시작한 로그인인지 알아보려고</td><td>3장</td></tr>
+<tr><td><code>nonce</code></td><td>이 토큰이 그 로그인의 것인지 알아보려고</td><td>3장</td></tr>
+<tr><td><code>code_challenge</code></td><td>코드를 훔쳐도 못 쓰게</td><td>3장</td></tr>
+<tr><td><code>code_challenge_method</code></td><td><code>S256</code> — 해시 방식</td><td>3장</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="so-flow-4">
+<h3>IdP 는 이걸 먼저 거른다</h3>
+<!--CODE file=oidc/miniidp/authorize.go sym=checkAuthzRequest note=순서에 뜻이 있다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>순서가 곧 규칙이다.</b>
+<code>client_id</code> 와 <code>redirect_uri</code> 가 멀쩡할 <b>때만</b>
+오류를 그 주소로 돌려보낸다. 아니면 IdP 자기 화면에서 끝낸다.</div>
+</article>
+
+<article class="card" id="so-flow-5">
+<h3>모르는 주소로는 오류도 안 보낸다</h3>
+<!--OUT file=oidc_authorize_badclient.txt lines=13-22 note=모르는 client_id-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>왜 그렇게까지 하나</b> — 공격자가
+<code>redirect_uri=https://공격자.example/</code> 로 요청을 보내 놓고
+IdP 가 친절하게 오류를 그리로 돌려주면, 그 자체가 <b>정보를 흘리는 통로</b>가 된다.
+RFC 6749 §4.1.2.1 이 "그 경우 리다이렉트하지 말라" 고 적어 둔 이유다.</div>
+</article>
+
+<article class="card" id="so-flow-6">
+<h3>2단계 — 로그인 화면은 <b>IdP 의</b> 것이다</h3>
+<!--OUT file=oidc_authorize.txt lines=21-30 note=IdP 가 내려 준 폼-->
+<span class="tier a">실행 검증</span>
+<div class="key">주소창에 <b>IdP 의 도메인</b>이 떠 있다.
+사용자가 "여기가 학교 로그인 화면" 임을 확인할 수 있는 유일한 근거다.
+앱이 흉내 낸 화면이라면 그 확인이 불가능하다.</div>
+</article>
+
+<article class="card" id="so-flow-7">
+<h3>숨은 칸은 왜 있나</h3>
+<!--CODE file=oidc/miniidp/authorize.go sym=loginForm note=폼이 값을 도로 실어 나른다-->
+<span class="tier a">실행 검증</span>
+<div class="tip">HTTP 는 <b>기억하지 않는다</b>(1부 6장).
+그래서 주소로 받은 값들을 폼의 숨은 칸에 실어 두고,
+사용자가 단추를 누를 때 <b>다시 돌려받는다</b>.</div>
+</article>
+
+<article class="card" id="so-flow-8">
+<h3>비밀번호가 틀리면</h3>
+<!--OUT file=oidc_login_bad.txt lines=16-27 note=앱으로 안 보낸다-->
+<span class="tier a">실행 검증</span>
+<div class="key">실패는 <b>앱으로 돌려보내지 않는다</b>. 200 으로 로그인 화면을 다시 준다.
+사용자가 그 자리에서 다시 칠 수 있어야 하기 때문이다.<br>
+그리고 어느 쪽이 틀렸는지 말하지 않는다 — 1부 5장에서 배운 그대로다.</div>
+</article>
+
+<article class="card" id="so-flow-9">
+<h3>3단계 — 코드가 <b>주소에</b> 실려 온다</h3>
+<!--OUT file=oidc_code_url.txt lines=1-6 note=돌아온 Location-->
+<span class="tier a">실행 검증</span>
+<div class="warn">코드는 브라우저의 주소창·기록·리퍼러를 지나간다.
+그래서 <b>짧고</b>(1분), <b>한 번만</b> 쓰이고, 그것만으로는 아무것도 못 한다.
+토큰이 여기 실리지 않는 이유가 정확히 이것이다.</div>
+</article>
+
+<article class="card" id="so-flow-10">
+<h3>코드를 만드는 자리</h3>
+<!--CODE file=oidc/miniidp/authorize.go lines=173-201 note=코드 발급과 SSO 세션-->
+<span class="tier a">실행 검증</span>
+<div class="key">여기서 <b>쿠키를 하나 심는다</b>. 브라우저와 IdP 사이의 세션이다.
+이것이 살아 있으면 <b>다음 앱</b>은 비밀번호를 다시 묻지 않는다 — 그게 SSO 다(8장).</div>
+</article>
+
+<article class="card" id="so-flow-11">
+<h3>4단계 — 앱과 IdP 가 <b>직접</b> 이야기한다</h3>
+<!--OUT file=oidc_token.txt lines=7-16 note=브라우저를 거치지 않는다-->
+<span class="tier a">실행 검증</span>
+<div class="key">이 요청은 <b>앱 서버에서</b> 나간다. 브라우저는 이 통신을 보지 못한다.
+그래서 <code>client_secret</code> 과 <code>code_verifier</code> 를 여기 실을 수 있고,
+토큰이 주소에 실리지 않아 기록에도 안 남는다.</div>
+</article>
+
+<article class="card" id="so-flow-12">
+<h3>돌아온 것 — 토큰 세 장</h3>
+<!--OUT file=oidc_token_short.txt note=가운데를 줄여 실었다-->
+<span class="tier a">실행 검증</span>
+<div class="tip"><code>Cache-Control: no-store</code> 가 붙어 있다(앞 장의 헤더).
+토큰이 프록시나 브라우저 캐시에 남으면 안 되기 때문이다 — RFC 6749 §5.1.</div>
+</article>
+
+<article class="card" id="so-flow-13">
+<h3>왜 코드를 한 번 거치나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>토큰을 바로 주면<br><span class="dim">(옛 implicit 흐름)</span></th>
+<th>코드를 거치면<br><span class="dim">(인가 코드 흐름)</span></th></tr>
+<tr><td>주소창에 실리는 것</td><td><b>토큰</b></td><td>코드</td></tr>
+<tr><td>기록·리퍼러에 남으면</td><td>바로 쓸 수 있다</td><td>한 번 쓰였으면 죽은 값</td></tr>
+<tr><td>앱을 확인하는가</td><td>못 한다</td><td><b>한다</b> (client_secret · PKCE)</td></tr>
+<tr><td>리프레시 토큰</td><td>안 준다</td><td>준다</td></tr>
+<tr><td>지금 권고</td><td><b>쓰지 말 것</b></td><td>이것 하나 (OAuth 2.1 도 같다)</td></tr>
+</table>
+</div>
+<div class="key">인가 코드는 <b>한 번만 쓸 수 있는 교환권</b>이다.
+훔쳐 가도 이미 쓰였으면 종잇조각이고, 안 쓰였어도 <code>code_verifier</code> 를
+모르면 못 바꾼다(3장).</div>
+</article>
+
+<article class="card" id="so-flow-14">
+<h3>같은 코드를 두 번 내밀면</h3>
+<!--OUT file=oidc_token_replay.txt lines=13-28 note=두 번째는 거절-->
+<span class="tier a">실행 검증</span>
+<!--CODE file=oidc/miniidp/token.go lines=71-84 note=찾자마자 지운다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="so-flow-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 어떤 앱이 로그인 뒤 브라우저 주소창에
+<code>?code=Uv38ByGC…&amp;state=st-demo-123</code> 이 잠깐 떴다가 사라지는 것을 보고
+"코드가 노출됐다, 위험하다" 고 보고했다. 정말 위험한가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 그 자체로는 <b>설계대로</b>다. 코드는 원래 주소창을 지나가라고 만든 값이다.<br>
+코드 하나로는 토큰을 못 받는다 — <code>client_secret</code> 과
+<code>code_verifier</code> 가 더 있어야 하고(3장), 게다가 1분 안에,
+<b>한 번만</b> 쓸 수 있다.<br>
+정말 위험한 것은 <b>토큰</b>이 주소창에 뜨는 경우다. 그건 옛 implicit 흐름이고,
+지금은 쓰지 않는다.</div>
+</article>
+
+<article class="card" id="so-guard">
+<p class="chnum">3장</p>
+<h2>가로채기를 막는 세 장치</h2>
+<p class="chsub">state · nonce · PKCE — 셋이 막는 것이 서로 다르다</p>
+</article>
+
+<article class="card" id="so-guard-1">
+<h3>셋을 한 줄로</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장치</th><th>누가 만드나</th><th>막는 것</th></tr>
+<tr><td><code>state</code></td><td><b>앱</b></td>
+<td>남의 코드를 내 콜백에 밀어 넣는 것 (로그인 CSRF)</td></tr>
+<tr><td><code>nonce</code></td><td><b>앱</b></td>
+<td>옛 ID 토큰을 다시 밀어 넣는 것 (재생)</td></tr>
+<tr><td><code>code_verifier</code></td><td><b>앱</b></td>
+<td>가로챈 <b>코드</b>를 남이 토큰으로 바꾸는 것</td></tr>
+</table>
+</div>
+<div class="key">셋 다 <b>앱이 만들고 앱이 기억한다</b>. IdP 는 받아 두었다가
+그대로 돌려주거나(state·nonce) 견줘 줄(PKCE) 뿐이다.
+그래서 앱이 기억하지 않으면 세 장치가 <b>전부 무용지물</b>이 된다.</div>
+</article>
+
+<article class="card" id="so-guard-2">
+<h3>state — "내가 시작한 로그인인가"</h3>
+<p class="lead">공격자가 <b>자기 계정으로</b> 로그인해 코드를 하나 얻은 다음,
+그 코드가 실린 콜백 주소를 남에게 클릭하게 만든다.
+막지 않으면 피해자가 <b>공격자의 계정으로</b> 로그인된 채 앱을 쓰게 된다.</p>
+<div class="warn"><b>왜 그게 피해인가</b> — 피해자가 올린 사진·적은 메모·등록한 카드가
+전부 공격자의 계정에 쌓인다. 공격자는 나중에 자기 계정으로 들어가 그걸 본다.</div>
+<div class="key">막는 법은 간단하다. 앱이 <b>찍어 맞힐 수 없는 값</b>을 하나 만들어
+보내 두고, 돌아온 값이 그것과 같은지 본다. 그 값이 <code>state</code> 다.</div>
+</article>
+
+<article class="card" id="so-guard-3">
+<h3>앱이 기억해 두는 자리</h3>
+<!--CODE file=oidc/miniapp/rp.go sym=pending note=지금 나가 있는 로그인 한 건-->
+<span class="tier a">실행 검증</span>
+<!--CODE file=oidc/miniapp/rp.go lines=214-225 note=돌아왔을 때 견준다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>찾자마자 지운다.</b> 그래서 같은 콜백 주소를 두 번 열면
+두 번째는 거절된다 — 코드가 한 번만 쓰이는 것과는 <b>별개의</b> 방어선이다.</div>
+</article>
+
+<article class="card" id="so-guard-4">
+<h3>nonce — "이 토큰이 그 로그인의 것인가"</h3>
+<p class="lead">앱이 보낸 <code>nonce</code> 를 IdP 가 <b>ID 토큰 안에</b> 넣어 돌려준다.
+앱은 자기가 보낸 값과 같은지 본다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>state</th><th>nonce</th></tr>
+<tr><td>실려 가는 곳</td><td>주소(리다이렉트)</td><td><b>토큰 안</b></td></tr>
+<tr><td>확인하는 시점</td><td>콜백에 도착했을 때</td><td>토큰을 열어 본 뒤</td></tr>
+<tr><td>막는 것</td><td>남의 <b>코드</b></td><td>옛 <b>토큰</b></td></tr>
+</table>
+</div>
+<div class="tip">둘 다 있어야 한다. 하나가 다른 하나를 대신하지 못한다 —
+확인하는 <b>대상</b>이 다르기 때문이다.</div>
+</article>
+
+<article class="card" id="so-guard-5">
+<h3>PKCE — 코드를 훔쳐도 못 쓰게</h3>
+<p class="lead">코드는 브라우저의 주소창을 지나간다. 그 순간을 누가 볼 수 있다면?
+그러라고 만든 것이 <b>PKCE</b> (Proof Key for Code Exchange, RFC 7636)다.</p>
+<ol>
+<li>앱이 아무도 모르는 값 <b>verifier</b> 를 만든다</li>
+<li>그 값의 <b>해시</b>(challenge)만 IdP 에 미리 보낸다</li>
+<li>코드를 바꿀 때 <b>verifier 원본</b>을 낸다</li>
+<li>IdP 가 해시를 다시 계산해 견준다</li>
+</ol>
+<div class="key">코드를 훔친 쪽은 challenge 만 봤을 뿐이다.
+해시는 되돌릴 수 없으므로(1부 8장) verifier 를 만들어 낼 수 없다.</div>
+</article>
+
+<article class="card" id="so-guard-6">
+<h3>PKCE 는 이 두 줄이 전부다</h3>
+<!--OUT file=oidc_pkce.txt note=verifier 와 그 해시-->
+<span class="tier a">실행 검증</span>
+<span class="tier demo">예제용</span>
+<div class="tip">1부 8장에서 만져 본 <b>sha256</b> 과 <b>base64url</b> 이
+여기서 그대로 쓰인다. 새로 배울 것이 없다.</div>
+</article>
+
+<article class="card" id="so-guard-7">
+<h3>직접 만들어 보기</h3>
+<div class="demo" data-demo="pkce">
+<h5>PKCE 계산기</h5>
+<div class="row">
+<input type="text" data-verifier size="34"
+ value="lunch-demo-verifier-0123456789-abcdefghijklmnop">
+</div>
+<div class="out"></div>
+</div>
+<div class="tip">글자 하나만 바꿔 보라. challenge 가 <b>전부</b> 달라진다 —
+그래서 "비슷한 verifier" 로는 통과할 수 없다.</div>
+</article>
+
+<article class="card" id="so-guard-8">
+<h3>코드로 보면</h3>
+<!--CODE file=oidc/pkce/pkce.go sym=NewVerifier..Verify note=만들고·해시하고·견준다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><code>ConstantTimeCompare</code> 를 쓴 이유는 1부 6장과 같다 —
+글자를 앞에서부터 견주면 <b>몇 글자가 맞았는지</b>가 걸린 시간으로 샌다.</div>
+</article>
+
+<article class="card" id="so-guard-9">
+<h3>verifier 가 틀리면</h3>
+<!--OUT file=oidc_token_badverifier.txt lines=15-30 note=코드가 멀쩡해도 막힌다-->
+<span class="tier a">실행 검증</span>
+<div class="key">이 코드는 <b>방금 발급된 멀쩡한 코드</b>다.
+그런데도 못 바꿨다. 코드를 훔친 쪽이 겪는 것이 정확히 이 화면이다.</div>
+</article>
+
+<article class="card" id="so-guard-10">
+<h3>PKCE 를 아예 빼면</h3>
+<!--OUT file=oidc_err_url.txt lines=1-6 note=요청 자체를 거절한다-->
+<span class="tier a">실행 검증</span>
+<div class="key">우리 IdP 는 PKCE 를 <b>필수</b>로 뒀다.
+예전에는 비밀을 못 숨기는 앱(모바일·SPA)만 쓰라고 했지만,
+지금은 <b>모든 앱</b>에 권고한다 — OAuth 2.1 초안이 그렇게 정리했다.</div>
+<div class="tip">오류를 앱으로 돌려보낼 때 <code>state</code> 를 함께 준다.
+앱이 "내가 시작한 그 로그인이 실패했구나" 를 알아볼 수 있어야 하기 때문이다.</div>
+</article>
+
+<article class="card" id="so-guard-11">
+<h3><code>client_secret</code> 은 무엇을 막나</h3>
+<!--CODE file=oidc/miniidp/token.go sym=checkClient note=PKCE 가 있는데 왜 또-->
+<span class="tier a">실행 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장치</th><th>막는 것</th></tr>
+<tr><td>PKCE</td><td>코드를 <b>훔친</b> 쪽</td></tr>
+<tr><td><code>client_secret</code></td><td>앱을 <b>사칭하는</b> 쪽</td></tr>
+</table>
+</div>
+<div class="warn">비밀을 숨길 수 없는 앱(브라우저 안 SPA·모바일)은
+<code>client_secret</code> 을 <b>쓰지 않는다</b>. 소스에 박아 넣으면 비밀이 아니다.
+그런 앱은 PKCE 만 쓴다 — 8부에서 다시 다룬다.</div>
+</article>
+
+<article class="card quiz" id="so-guard-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 어떤 앱이 <code>state</code> 를 <b>사용자 아이디</b>로 두었다
+(<code>state=minji</code>). 무엇이 잘못됐나?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>찍어 맞힐 수 있다.</b>
+state 의 유일한 일은 "이 콜백이 <b>내가 방금 시작한</b> 그 로그인의 것인가" 를 묻는 것이고,
+그러려면 공격자가 <b>모르는</b> 값이어야 한다. 아이디는 공격자도 안다.<br>
+게다가 사용자 아이디가 주소창·서버 로그·리퍼러에 그대로 남는다.<br>
+바르게는 <code>crypto/rand</code> 로 만든 32바이트짜리 값을 쓰고,
+쓰고 나면 <b>지운다</b>(1부 6장의 세션 번호와 같은 규칙이다).</div>
+</article>
+
+<article class="card" id="so-token">
+<p class="chnum">4장</p>
+<h2>토큰 세 장</h2>
+<p class="chsub">셋의 쓰임이 다르다는 것이 이 장의 전부다</p>
+</article>
+
+<article class="card" id="so-token-1">
+<h3>누구에게 보이는 것인가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>토큰</th><th>누구에게</th><th>무엇을 말하나</th><th>수명</th></tr>
+<tr><td><b>ID 토큰</b></td><td><b>앱</b></td><td>"이 사람이 누구다"</td><td>짧다 (5분)</td></tr>
+<tr><td><b>액세스 토큰</b></td><td><b>자원 서버</b></td><td>"무엇을 해도 된다"</td><td>짧다 (5분)</td></tr>
+<tr><td><b>리프레시 토큰</b></td><td><b>IdP</b> 에게만</td><td>"새로 발급해 달라"</td><td>길다 (30분~)</td></tr>
+</table>
+</div>
+<div class="key"><b>ID 토큰은 남에게 보내는 것이 아니다.</b>
+앱이 열어 보고 버리는 것이지, 다른 서버에 내미는 값이 아니다.
+그걸 헷갈리면 뒤의 실수 하나가 그대로 사고가 된다(5장).</div>
+</article>
+
+<article class="card" id="so-token-2">
+<h3>세 장을 만드는 자리</h3>
+<!--CODE file=oidc/miniidp/token.go lines=120-145 note=공통 클레임과 ID 토큰-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-token-3">
+<h3>액세스 토큰은 <code>typ</code> 이 다르다</h3>
+<!--CODE file=oidc/miniidp/token.go lines=147-177 note=at+jwt 와 리프레시-->
+<span class="tier a">실행 검증</span>
+<div class="key"><code>typ: "at+jwt"</code> — RFC 9068 이 정한 이름이다.
+<b>ID 토큰을 액세스 토큰 자리에 못 쓰게</b> 하려고 일부러 달리 뒀다.
+둘은 모양이 같아서, 표시가 없으면 서로 바꿔 쓸 수 있게 된다.</div>
+</article>
+
+<article class="card" id="so-token-4">
+<h3>액세스 토큰을 내밀면</h3>
+<!--OUT file=oidc_userinfo.txt lines=14-31 note=userinfo 가 답한다-->
+<span class="tier a">실행 검증</span>
+<div class="tip"><code>Authorization: Bearer &lt;토큰&gt;</code> —
+"이 종이를 들고 있는 사람" 이라는 뜻이다(RFC 6750). 그래서 훔치면 그만이라,
+짧게 두고 HTTPS 위에서만 보낸다.</div>
+</article>
+
+<article class="card" id="so-token-5">
+<h3>ID 토큰을 그 자리에 내밀면</h3>
+<!--OUT file=oidc_userinfo_idtoken.txt lines=14-27 note=거절-->
+<span class="tier a">실행 검증</span>
+<!--CODE file=oidc/miniidp/token.go lines=203-210 note=typ 을 본다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-token-6">
+<h3>아무것도 안 내밀면</h3>
+<!--OUT file=oidc_userinfo_notoken.txt lines=12-25 note=무엇이 필요한지 헤더로 알린다-->
+<span class="tier a">실행 검증</span>
+<div class="tip"><code>WWW-Authenticate</code> 헤더는 1부 3장의 401 에서 봤다.
+"무엇을 들고 다시 오라" 를 기계가 읽을 수 있게 적어 주는 자리다.</div>
+</article>
+
+<article class="card" id="so-token-7">
+<h3>기한이 지나면 — 리프레시</h3>
+<!--OUT file=oidc_refresh.txt lines=7-16 note=코드 없이 새 토큰-->
+<span class="tier a">실행 검증</span>
+<div class="key">사용자를 다시 부르지 않고 새 토큰을 받는다.
+그래서 액세스 토큰을 <b>짧게</b> 둘 수 있다 —
+짧게 두면 훔쳐 가도 곧 죽고, 자주 갱신하면 사용자는 그걸 모른다.</div>
+</article>
+
+<article class="card" id="so-token-8">
+<h3>같은 리프레시 토큰을 두 번 쓰면</h3>
+<!--OUT file=oidc_refresh_replay.txt lines=14-29 note=회전-->
+<span class="tier a">실행 검증</span>
+<!--CODE file=oidc/miniidp/token.go sym=grantByRefresh note=쓰는 즉시 지운다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-token-9">
+<h3>회전이 알려 주는 것</h3>
+<p class="lead">리프레시 토큰을 <b>쓸 때마다 새 것으로 바꾸는</b> 것을
+<b>회전</b>(rotation)이라고 한다.</p>
+<div class="key">같은 토큰이 <b>두 번</b> 오면, 그건 누군가 복사본을 들고 있다는 <b>신호</b>다.
+운영에서는 그때 그 사용자의 세션을 통째로 끊는다 — 10부에서 다시 본다.</div>
+<div class="tip">우리 IdP 는 신호를 알아채는 데까지만 한다(거절).
+세션을 끊는 것은 저장소가 있어야 하는 일이라, 진짜 Keycloak 의 몫이다.</div>
+</article>
+
+<article class="card quiz" id="so-token-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 어떤 앱이 예약 API 를 부를 때 <b>ID 토큰</b>을
+<code>Authorization: Bearer</code> 에 실어 보냈다. API 는 서명이 맞으니 통과시켰다.
+무엇이 문제인가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 서명이 맞는 것과 <b>그 자리에 쓸 토큰인지</b>는 다른 문제다.<br>
+ID 토큰은 <b>앱에게</b> "이 사람이 누구다" 를 알리려고 발급된 것이고,
+<code>aud</code> 가 그 앱을 가리킨다. API 는 자기에게 발급된 토큰만 받아야 한다 —
+아니면 <b>다른 앱에 발급된 멀쩡한 토큰</b>이 우리 API 에서 통한다.<br>
+그래서 확인할 것이 셋이다. ① 서명 ② <code>aud</code> 가 나인가
+③ <code>typ</code> 이 <code>at+jwt</code> 인가. 우리 IdP 는 셋을 다 본다.</div>
+</article>
+
+<article class="card" id="so-jwt">
+<p class="chnum">5장</p>
+<h2>토큰 한 장을 뜯어본다</h2>
+<p class="chsub">JWT — 머리 · 내용 · 서명</p>
+</article>
+
+<article class="card" id="so-jwt-1">
+<h3>점 두 개로 나뉜 세 조각</h3>
+<!--OUT file=oidc_token_shape.txt note=진짜 ID 토큰을 60칸씩 접어서-->
+<span class="tier a">실행 검증</span>
+<div class="tip">이 모양의 이름이 <b>JWS Compact Serialization</b> 이고(RFC 7515),
+그 안에 담긴 내용이 <b>JWT</b> 다(RFC 7519). 보통은 둘을 묶어 "JWT" 라고 부른다.</div>
+</article>
+
+<article class="card" id="so-jwt-2">
+<h3>세 조각이 하는 일</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>조각</th><th>담긴 것</th><th>누가 읽을 수 있나</th></tr>
+<tr><td>머리 (header)</td><td>어떤 방법으로 서명했나 · 어느 열쇠로</td><td><b>누구나</b></td></tr>
+<tr><td>내용 (payload)</td><td>누구인지 · 언제까지인지</td><td><b>누구나</b></td></tr>
+<tr><td>서명 (signature)</td><td>앞의 두 조각을 개인키로 서명한 것</td><td>누구나 <b>확인</b>은 한다</td></tr>
+</table>
+</div>
+<div class="warn"><b>내용은 암호가 아니다.</b> base64url 은 누구나 되돌린다(1부 8장).
+서명이 지키는 것은 "아무도 못 읽는다" 가 아니라 <b>"아무도 못 고친다"</b> 다.
+그래서 토큰에 비밀을 담으면 안 된다.</div>
+</article>
+
+<article class="card" id="so-jwt-3">
+<h3>직접 뜯어보기</h3>
+<div class="demo" data-demo="jwt">
+<h5>JWT 해독기</h5>
+<div class="row">
+<textarea data-jwt rows="3" cols="30">eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjkwMDAvcmVhbG1zL2NhbXB1cyIsInN1YiI6Im1pbmppIiwiYXVkIjoibHVuY2gtd2ViIiwiZXhwIjoxNzg4ODY5MTAwfQ.c2lnbmF0dXJl</textarea>
+</div>
+<div class="out"></div>
+</div>
+<div class="tip">열쇠를 하나도 안 넣었는데 내용이 다 보인다.
+이 데모가 하는 일은 base64url 을 되돌리는 것뿐이다.</div>
+</article>
+
+<article class="card" id="so-jwt-4">
+<h3>도구로 보면</h3>
+<!--OUT file=oidc_decode_id.txt note=진짜 ID 토큰-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-jwt-5">
+<h3>클레임 — 발급자가 <b>주장</b>하는 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이름</th><th>뜻</th><th>정한 곳</th></tr>
+<tr><td><code>iss</code></td><td>누가 발급했나</td><td rowspan="7">RFC 7519 §4.1</td></tr>
+<tr><td><code>sub</code></td><td>누구에 대한 것인가</td></tr>
+<tr><td><code>aud</code></td><td><b>누구에게</b> 주는 것인가</td></tr>
+<tr><td><code>exp</code></td><td>언제까지</td></tr>
+<tr><td><code>nbf</code></td><td>언제부터</td></tr>
+<tr><td><code>iat</code></td><td>언제 발급했나</td></tr>
+<tr><td><code>jti</code></td><td>이 토큰 한 장의 일련번호</td></tr>
+<tr><td><code>nonce</code></td><td>앱이 보낸 그 값</td><td rowspan="2">OIDC Core 1.0</td></tr>
+<tr><td><code>preferred_username</code></td><td>화면에 보일 아이디</td></tr>
+<tr><td><code>groups</code></td><td>어느 그룹에 드는가</td><td>표준 아님 — 우리가 실은 것</td></tr>
+</table>
+</div>
+<div class="tip">시각은 전부 <b>1970년부터 센 초</b>다(NumericDate, RFC 7519 §2).
+사람이 못 읽으므로 <code>jwtool</code> 이 옆에 풀어 적어 준다.</div>
+</article>
+
+<article class="card" id="so-jwt-6">
+<h3>코드로는 구조체 하나</h3>
+<!--CODE file=oidc/jwt/jwt.go sym=Claims note=앞의 일곱이 등록된 클레임-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-jwt-7">
+<h3>서명 — 무엇에 서명하나</h3>
+<!--CODE file=oidc/jwt/jwt.go sym=signingInput note=받은 글자를 그대로-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>다시 JSON 으로 만들지 않는다.</b>
+JSON 은 같은 뜻을 여러 모양으로 적을 수 있어서(빈칸·키 순서),
+다시 만들면 서명이 안 맞는다. 그래서 <b>받은 글자 그대로</b> 서명한다.</div>
+</article>
+
+<article class="card" id="so-jwt-8">
+<h3>만드는 쪽</h3>
+<!--CODE file=oidc/jwt/jwt.go sym=Sign note=RS256 만 만든다-->
+<span class="tier a">실행 검증</span>
+<div class="tip">1부 8장에서 <code>openssl dgst -sign</code> 으로 해 본 그것이다.
+개인키를 가진 쪽만 만들 수 있고, 공개키를 가진 누구나 확인할 수 있다.</div>
+</article>
+
+<article class="card" id="so-jwt-9">
+<h3>확인하는 쪽 — <b>머리를 믿지 않는다</b></h3>
+<!--CODE file=oidc/jwt/jwt.go sym=Verify note=alg 를 믿지 않는 것이 핵심-->
+<span class="tier a">실행 검증</span>
+<div class="key">초창기 라이브러리들은 <b>"헤더에 적힌 방법대로"</b> 확인했다.
+그래서 <code>alg</code> 를 바꾼 토큰에 무더기로 뚫렸다.
+우리는 기대하는 방법(RS256)이 아니면 <b>그 자리에서</b> 거절한다.</div>
+</article>
+
+<article class="card" id="so-jwt-10">
+<h3>멀쩡한 토큰</h3>
+<!--OUT file=oidc_verify_ok.txt note=서명·기한·대상을 차례로-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-jwt-11">
+<h3>내용을 한 글자 고치면</h3>
+<!--OUT file=oidc_verify_tampered.txt lines=1-8 note=서명이 곧바로 어긋난다-->
+<span class="tier a">실행 검증</span>
+<div class="key">고친 것은 <code>preferred_username</code> 을 <code>admin.lee</code> 로,
+<code>groups</code> 에 <code>lunch-admins</code> 를 넣은 것뿐이다.
+그런데 서명이 통째로 안 맞는다 — 서명은 <b>앞의 두 조각 전부</b>에 걸려 있기 때문이다.</div>
+</article>
+
+<article class="card" id="so-jwt-12">
+<h3>그래도 <b>읽히기는</b> 읽힌다</h3>
+<!--OUT file=oidc_verify_tampered.txt lines=9-22 note=decode 는 막지 않는다-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>이것이 4부에서 가장 위험한 오해다.</b>
+"토큰을 읽었다" 와 "토큰을 믿는다" 는 다른 일이다.
+<code>decode</code> 는 아무나 할 수 있고, 아무 값이나 나올 수 있다.
+<b>결정을 내릴 때는 반드시 verify 를 쓴다.</b></div>
+</article>
+
+<article class="card" id="so-jwt-13">
+<h3>서명을 아예 떼면 — <code>alg=none</code></h3>
+<!--OUT file=oidc_verify_algnone.txt note=우리는 RS256 만 받는다-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>실수 박물관</b> — 여러 JWT 라이브러리가 한때
+<code>alg=none</code> 을 "서명 없음" 으로 받아들였다.
+누구든 아무 내용이나 적고 서명 자리를 비워 두면 관리자가 될 수 있었다.<br>
+같은 뿌리의 사고가 하나 더 있다. RS256 을 <b>HS256</b> 으로 바꿔 놓고
+<b>공개키를 비밀키 삼아</b> 서명하는 것이다. 공개키는 누구나 아니까 누구나 서명할 수 있다.</div>
+</article>
+
+<article class="card" id="so-jwt-14">
+<h3>서명이 맞아도 부족하다</h3>
+<!--CODE file=oidc/jwt/jwt.go sym=Options note=무엇과 견줄 것인가-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>서명이 맞는 남의 토큰</b>은 세상에 얼마든지 있다.
+그래서 <code>iss</code>(저 발급자가 준 것인가)와
+<code>aud</code>(나에게 준 것인가)를 반드시 본다. OIDC 사고의 단골이다.</div>
+</article>
+
+<article class="card" id="so-jwt-14b">
+<h3>빠뜨리면 안 되는 것들</h3>
+<!--CODE file=oidc/jwt/jwt.go sym=Validate note=하나씩 견준다-->
+<span class="tier a">실행 검증</span>
+<div class="tip"><code>Leeway</code> 는 시계 오차를 봐주는 폭이다.
+서버 둘의 시계가 몇 초 어긋나는 일은 흔하고, 그때마다 로그인이 실패하면
+원인을 찾기가 아주 어렵다 — 10부에서 다시 나온다.</div>
+</article>
+
+<article class="card" id="so-jwt-15">
+<h3>기한이 지난 토큰</h3>
+<!--OUT file=oidc_verify_expired.txt note=서명은 맞는데 기한이 지났다-->
+<span class="tier a">실행 검증</span>
+<div class="tip">서명 한 줄은 통과하고 그 다음에서 막힌 것을 보라.
+서명은 <b>영원히</b> 맞는다 — 토큰이 죽는 것은 <code>exp</code> 때문이지
+서명이 상해서가 아니다.</div>
+</article>
+
+<article class="card quiz" id="so-jwt-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 어떤 팀이 "토큰 안에 주민등록번호를 넣으면 DB 조회를 줄일 수 있다"
+고 제안했다. 서명이 있으니 안전하지 않나?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 안전하지 않다. 서명은 <b>고치지 못하게</b> 할 뿐,
+<b>못 읽게</b> 하지 않는다. 토큰을 받은 사람은 누구나 base64url 을 되돌려 읽는다 —
+이 장의 데모가 열쇠 없이 한 그 일이다.<br>
+토큰은 브라우저의 저장소·프록시 로그·오류 보고 도구를 지나간다.
+민감한 값은 넣지 않고, <b>필요할 때 userinfo 로 물어본다</b>(4장).<br>
+정말 담아야 한다면 서명이 아니라 <b>암호화</b>가 필요하다(JWE, RFC 7516).
+이 덱은 거기까지 가지 않는다 — Keycloak 의 기본값도 서명뿐이다.</div>
+</article>
+
+<article class="card" id="so-jwks">
+<p class="chnum">6장</p>
+<h2>공개키와 안내문</h2>
+<p class="chsub">앱이 IdP 에 대해 알아야 할 것은 주소 하나뿐이다</p>
+</article>
+
+<article class="card" id="so-jwks-1">
+<h3>확인하는 쪽은 공개키만 있으면 된다</h3>
+<p class="lead">서명은 <b>개인키</b>로 만들고 <b>공개키</b>로 확인한다(1부 8장).
+그래서 IdP 는 공개키를 <b>대놓고 걸어 둔다</b>.</p>
+<div class="key">이것이 SSO 가 여러 앱으로 퍼질 수 있는 이유다.
+앱이 백 개여도 IdP 는 비밀을 백 번 나눠 줄 필요가 없다.
+공개키 하나를 걸어 두면 백 개가 각자 가져가 확인한다.</div>
+</article>
+
+<article class="card" id="so-jwks-2">
+<h3>JWKS — 공개키를 JSON 으로</h3>
+<!--OUT file=oidc_certs_short.txt note=n 과 e 뿐이다-->
+<span class="tier a">실행 검증</span>
+<div class="tip">RSA 공개키는 숫자 둘로 이뤄진다 —
+<code>n</code>(아주 큰 수)과 <code>e</code>(보통 65537).
+<code>AQAB</code> 는 65537 을 base64url 로 적은 것이다.</div>
+</article>
+
+<article class="card" id="so-jwks-3">
+<h3>내거는 코드</h3>
+<!--CODE file=oidc/jwt/jwt.go sym=JWK..PublicJWK note=개인키는 절대 안 나간다-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>여기 개인키가 섞이면 끝이다.</b>
+JWK 에는 개인키 자리(<code>d</code>·<code>p</code>·<code>q</code>)도 있어서,
+라이브러리를 잘못 쓰면 통째로 내걸 수 있다. 우리 코드는 <code>n</code>·<code>e</code> 만 담는다.</div>
+</article>
+
+<article class="card" id="so-jwks-4">
+<h3><code>kid</code> — 열쇠가 여럿일 때</h3>
+<!--CODE file=oidc/jwt/jwt.go sym=Find note=이름으로 고른다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>열쇠를 바꾸는 날</b>을 위해 있는 칸이다.
+새 열쇠를 JWKS 에 <b>먼저 얹어 두고</b>, 그 다음부터 새 열쇠로 서명하면
+이미 나간 옛 토큰도 만료될 때까지 확인된다. 10부의 키 회전이 이 이야기다.</div>
+</article>
+
+<article class="card" id="so-jwks-5">
+<h3>안내문 — 주소를 손으로 안 적는 이유</h3>
+<!--OUT file=oidc_discovery.txt lines=26-44 note=주소가 전부 여기 있다-->
+<span class="tier a">실행 검증</span>
+<div class="tip">주소는 <code>/.well-known/openid-configuration</code>.
+<code>.well-known</code> 은 "약속된 자리" 라는 뜻의 표준 경로다(RFC 8615).<br>
+JSON 의 칸 순서는 알파벳순이라 주소와 목록이 섞여 있다.
+여기서는 뒷부분을, 다음 장에서 앞부분을 본다.</div>
+</article>
+
+<article class="card" id="so-jwks-6">
+<h3>무엇을 할 줄 아는지도 함께</h3>
+<!--OUT file=oidc_discovery.txt lines=15-25 note=지원 목록-->
+<span class="tier a">실행 검증</span>
+<div class="key"><code>code_challenge_methods_supported</code> 에
+<code>S256</code> 만 있다. 앱은 이 목록을 보고 <b>무엇을 쓸지 정할 수 있다</b>.
+주소를 손으로 적어 두면 이런 것을 알 길이 없다.</div>
+</article>
+
+<article class="card" id="so-jwks-7">
+<h3>앱이 아는 것은 issuer 하나</h3>
+<!--CODE file=oidc/miniapp/rp.go sym=fetchDiscovery note=안내문의 issuer 를 견준다-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>안내문의 <code>issuer</code> 가 우리가 부른 주소와 같아야 한다.</b>
+아니면 남의 안내문을 읽은 것이다. 이 한 줄이 없으면
+"안내문 주소만 바꿔치기하면 토큰 검증이 통째로 넘어가는" 길이 열린다
+(OIDC Discovery §4.3).</div>
+</article>
+
+<article class="card" id="so-jwks-8">
+<h3>8부에서 바꾸는 것은 이 한 줄뿐이다</h3>
+<!--CODE file=oidc/miniapp/main.go lines=17-27 note=깃발 하나-->
+<span class="tier a">실행 검증</span>
+<span class="tier demo">예제용</span>
+<div class="key">4부의 미니 IdP 를 5부의 진짜 Keycloak 으로 바꿀 때,
+앱에서 고치는 것은 <code>-issuer</code> 하나다.
+나머지 주소는 안내문에서 따라온다 — <b>그게 표준을 쓰는 이유다.</b></div>
+</article>
+
+<article class="card quiz" id="so-jwks-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. 어떤 앱이 성능을 위해 JWKS 를 <b>한 번 받아 영원히</b> 캐시했다.
+반년 뒤 갑자기 모든 로그인이 "서명이 맞지 않습니다" 로 실패했다. 무슨 일이 있었나?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> IdP 가 <b>열쇠를 바꿨다</b>(키 회전).
+새 토큰의 <code>kid</code> 가 앱이 들고 있는 옛 JWKS 에 없어서 전부 막힌 것이다.<br>
+바르게는 <code>kid</code> 를 못 찾았을 때 <b>JWKS 를 다시 받아 본다</b>
+(그리고 그때도 없으면 거절한다). 다시 받는 것에도 상한을 둬야 한다 —
+아니면 아무 토큰이나 던져 IdP 를 두드리게 만드는 통로가 된다.<br>
+우리 코드는 뜰 때 한 번만 받는다. 모형이라 그렇게 뒀고,
+진짜 라이브러리는 이 재시도를 갖고 있다.</div>
+</article>
+
+<article class="card" id="so-app">
+<p class="chnum">7장</p>
+<h2>앱 쪽에서 본 같은 흐름</h2>
+<p class="chsub">앱이 하는 일은 다섯 줄로 끝난다</p>
+</article>
+
+<article class="card" id="so-app-1">
+<h3>앱이 하는 일 전부</h3>
+<!--CODE file=oidc/miniapp/rp.go lines=1-19 note=RP 라는 이름이 정확하다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-app-2">
+<h3>1. 로그인 단추</h3>
+<!--CODE file=oidc/miniapp/rp.go sym=handleLogin note=세 값을 만들어 기억해 둔다-->
+<span class="tier a">실행 검증</span>
+<div class="key">앞의 세 장치를 여기서 <b>한꺼번에</b> 만든다.
+그리고 <b>기억해 둔다</b> — 기억하지 않으면 돌아왔을 때 견줄 것이 없다.</div>
+</article>
+
+<article class="card" id="so-app-3">
+<h3>2. 코드를 토큰으로</h3>
+<!--CODE file=oidc/miniapp/rp.go sym=exchange note=브라우저를 거치지 않는다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-app-4">
+<h3>3. ID 토큰 확인</h3>
+<!--CODE file=oidc/miniapp/rp.go lines=227-248 note=서명과 내용을 따로-->
+<span class="tier a">실행 검증</span>
+<div class="key">두 번 확인한다. <code>Verify</code> 는 <b>서명</b>을,
+<code>Validate</code> 는 <b>내용</b>(발급자·대상·기한·nonce)을 본다.
+어느 하나만으로는 부족하다는 것이 5장의 결론이었다.</div>
+</article>
+
+<article class="card" id="so-app-5">
+<h3>4. 여기서부터는 1부의 그 세션이다</h3>
+<!--CODE file=oidc/miniapp/rp.go lines=249-263 note=앱 자신의 쿠키-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>토큰을 브라우저에 주지 않는다.</b>
+앱은 자기 세션 쿠키를 심고, 토큰은 서버 안에 둔다.
+1부 6장에서 만든 그 쿠키와 <b>똑같은 것</b>이다 — 새로 배울 것이 없다.</div>
+</article>
+
+<article class="card" id="so-app-6">
+<h3>브라우저가 겪은 것</h3>
+<!--OUT file=oidc_app_login.txt lines=8-15 note=302 하나를 주고 끝-->
+<span class="tier a">실행 검증</span>
+<div class="tip">앱의 <code>/login</code> 은 화면을 그리지 않는다.
+302 하나를 주고 끝이다 — 1부 4장에서 본 그 리다이렉트다.</div>
+</article>
+
+<article class="card" id="so-app-6b">
+<h3>앱이 만든 주소</h3>
+<!--OUT file=oidc_app_url.txt lines=1-11 note=2장의 그 주소-->
+<span class="tier a">실행 검증</span>
+<div class="key">칸이 여덟 개다. 2장에서 손으로 만든 것과 <b>같다</b> —
+다만 <code>state</code>·<code>nonce</code>·<code>code_challenge</code> 는
+앱이 매번 새로 만든 값이다.</div>
+</article>
+
+<article class="card" id="so-app-7">
+<h3>로그인이 끝나면</h3>
+<!--OUT file=oidc_app_me.txt lines=13-25 note=앱의 화면-->
+<span class="tier a">실행 검증</span>
+<div class="key">이름·아이디·그룹이 <b>토큰에서</b> 나왔다.
+앱은 AD 를 부른 적이 없고, 비밀번호를 본 적도 없다.</div>
+</article>
+
+<article class="card" id="so-app-8">
+<h3>관리자 화면은 그룹으로 갈린다</h3>
+<!--CODE file=oidc/miniapp/rp.go sym=handleAdmin note=groups 클레임 하나-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-app-9">
+<h3>민지는 못 들어간다 — 401 이 아니라 403</h3>
+<!--OUT file=oidc_app_admin_denied.txt lines=12-22 note=누구인지는 안다-->
+<span class="tier a">실행 검증</span>
+<div class="key">1부 3장에서 배운 그 차이다.
+<b>401</b> 은 "누구인지 모르겠다", <b>403</b> 은 "누구인지는 아는데 안 된다".
+로그인은 됐으므로 403 이 맞다.</div>
+</article>
+
+<article class="card" id="so-app-10">
+<h3>소희는 들어간다</h3>
+<!--OUT file=oidc_app_admin_ok.txt lines=12-20 note=lunch-admins 그룹-->
+<span class="tier a">실행 검증</span>
+<div class="tip">앱 코드는 하나도 안 바뀌었다.
+갈린 것은 <b>AD 의 그룹 하나</b>다(3부의 <code>CN=lunch-admins</code>).
+9부에서 이 이야기를 제대로 한다 — 권한을 코드가 아니라 <b>디렉터리</b>에 두는 것.</div>
+</article>
+
+<article class="card" id="so-app-11">
+<h3>IdP 뒤에서 무슨 일이 있었나</h3>
+<!--OUT file=oidc_fakead.log lines=8-15 note=3부의 가짜 AD 가 받은 것-->
+<span class="tier a">실행 검증</span>
+<div class="key">3부에서 만든 그 서버다. 로그인 한 번에 <b>두 번</b> 붙는다 —
+서비스 계정으로 붙어 <b>찾고</b>(연결 2), 찾은 DN 으로 다시 붙어
+<b>확인한다</b>(연결 3).</div>
+<div class="tip">여기 실린 것은 <b>비밀번호를 틀리게</b> 넣어 본 쪽이다.
+마지막 줄의 <code>invalidCredentials</code> 가 3부 5장에서 본 그 응답이고,
+진짜 AD 라면 진단 문구에 <code>data 52e</code> 가 붙어 온다.</div>
+</article>
+
+<article class="card" id="so-app-12">
+<h3>왜 두 번 붙나</h3>
+<!--CODE file=oidc/miniidp/directory.go lines=1-15 note=Keycloak 의 User Federation-->
+<span class="tier a">실행 검증</span>
+<div class="key">사용자는 <code>minji</code> 라고 치지만 LDAP 의 바인드는 <b>DN</b> 을 요구한다.
+그 DN 을 알아내려면 먼저 검색해야 하고, 검색부터 신분이 필요하다(3부 5·7장).<br>
+그리고 LDAP 은 <b>연결마다</b> 신분이 붙으므로, 사용자 확인은 반드시 <b>다른 연결</b>에서 한다.</div>
+</article>
+
+<article class="card" id="so-app-13">
+<h3>필터를 <b>나무로 지어</b> 쓴다</h3>
+<!--CODE file=oidc/miniidp/directory.go lines=79-103 note=문자열로 끼워 넣지 않는다-->
+<span class="tier a">실행 검증</span>
+<div class="warn">사용자가 친 값을 필터 문자열에 그대로 끼워 넣으면
+<code>*)(objectClass=*</code> 한 줄로 필터의 뜻이 바뀐다(3부 6장 퀴즈).
+나무로 지어 <code>String()</code> 이 감싸게 하면 그 사고가 안 생긴다.</div>
+</article>
+
+<article class="card" id="so-app-14">
+<h3>LDAP 을 부르는 층</h3>
+<!--CODE file=ldap/client/client.go sym=Options..Conn note=3부의 도구를 라이브러리로-->
+<span class="tier a">실행 검증</span>
+<div class="tip">3부의 <code>ldapcli</code> 에서 떼어 낸 것이다.
+바이트를 짜고 푸는 일은 이미 3부에서 다 했고, 여기서는 그것을 <b>부르기만</b> 한다.</div>
+</article>
+
+<article class="card quiz" id="so-app-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. 어떤 앱이 로그인 뒤 <b>액세스 토큰을 브라우저 쿠키에</b> 담아 두고,
+화면을 그릴 때마다 그 쿠키에서 꺼내 썼다. 무엇이 나빠지나?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 두 가지가 나빠진다.<br>
+① <b>토큰이 브라우저로 나간다.</b> 브라우저 안에서 도는 스크립트, 확장 프로그램,
+공유 컴퓨터의 다음 사람이 모두 후보가 된다. 서버 안에 두면 그 후보가 없다.<br>
+② <b>토큰이 짧다.</b> 5분마다 만료되므로 화면이 5분마다 깨진다.
+그때마다 리프레시를 하려면 그 토큰도 브라우저에 둬야 하고, 문제가 커진다.<br>
+우리 앱처럼 <b>세션 쿠키 하나</b>를 심고 토큰은 서버에 두면 둘 다 안 생긴다.
+쿠키에는 아무 뜻도 없는 번호만 들어 있다(1부 6장).</div>
+</article>
+
+<article class="card" id="so-out">
+<p class="chnum">8장</p>
+<h2>세 세션과 로그아웃</h2>
+<p class="chsub">"로그아웃했는데 왜 그냥 들어가지나" 의 정체</p>
+</article>
+
+<article class="card" id="so-out-1">
+<h3>세션이 셋이다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>누구와 누구</th><th>실제 물건</th><th>끊는 사람</th></tr>
+<tr><td><b>A</b></td><td>브라우저 ↔ IdP</td>
+<td>IdP 가 심은 쿠키 (<code>MINIIDP_SESSION</code>)</td><td>IdP</td></tr>
+<tr><td><b>B</b></td><td>브라우저 ↔ 앱</td>
+<td>앱이 심은 쿠키 (<code>lunch_app_session</code>)</td><td>앱</td></tr>
+<tr><td><b>C</b></td><td>앱 ↔ IdP</td>
+<td>토큰 (ID·액세스·리프레시)</td><td>아무도 — <b>시간</b>이 끊는다</td></tr>
+</table>
+</div>
+<div class="key">0부에서 이름을 정해 둔 그 셋이다. 이제 <b>실제 물건</b>이 손에 잡힌다 —
+A 와 B 는 쿠키 두 개, C 는 토큰이다.<br>
+5부에서 진짜 Keycloak 을 켜면 A 의 쿠키 이름이
+<code>KEYCLOAK_IDENTITY</code> 로 바뀔 뿐, 하는 일은 같다.</div>
+</article>
+
+<article class="card" id="so-out-2">
+<h3>앱만 끊으면 생기는 일</h3>
+<ol>
+<li>사용자가 앱에서 <b>로그아웃</b>을 누른다</li>
+<li>앱이 자기 세션 <b>B</b> 를 지운다</li>
+<li>사용자가 다시 <b>로그인</b>을 누른다</li>
+<li>IdP 로 갔는데 세션 <b>A</b> 가 살아 있다</li>
+<li>비밀번호를 <b>안 묻고</b> 그냥 통과 — 다시 로그인된다</li>
+</ol>
+<div class="warn">사용자 눈에는 "로그아웃이 안 됐다" 로 보인다.
+공용 컴퓨터에서 이러면 사고다.<br>
+그런데 4단계의 그 동작은 <b>고장이 아니다</b> — SSO 가 바로 그것이다.
+둘째 앱에서 비밀번호를 안 묻는 것과 <b>완전히 같은 일</b>이다.</div>
+</article>
+
+<article class="card" id="so-out-3">
+<h3>그래서 둘 다 끊는다</h3>
+<!--CODE file=oidc/miniapp/rp.go sym=handleLogout note=앱이 자기 것을 끊고 IdP 로 보낸다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-out-4">
+<h3>IdP 쪽</h3>
+<!--CODE file=oidc/miniidp/token.go sym=handleLogout note=A 를 끊는다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-out-5">
+<h3>로그아웃 주소</h3>
+<!--OUT file=oidc_logout_url.txt lines=1-6 note=id_token_hint 가 붙는다-->
+<span class="tier a">실행 검증</span>
+<div class="tip"><code>id_token_hint</code> 는 "누구의 세션을 끊는지" 를 알려 준다.
+없으면 IdP 가 사용자에게 "정말 로그아웃할까요" 를 되물어야 한다 —
+아무나 남의 로그아웃을 시킬 수 있으면 안 되기 때문이다.</div>
+</article>
+
+<article class="card" id="so-out-6">
+<h3>돌아온 곳</h3>
+<!--OUT file=oidc_app_logout.txt lines=35-43 note=A 를 끊고 첫 화면으로-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-out-7">
+<h3>실수 박물관 — 로그아웃이 400 으로 끝났다</h3>
+<div class="warn"><b>이 덱을 만들다 실제로 겪은 일이다.</b>
+앱이 <code>post_logout_redirect_uri</code> 를 <b>자기 콜백 주소</b>로 뒀다.
+등록된 주소가 콜백 하나뿐이었으니 그게 자연스러워 보였다.<br>
+그런데 로그아웃 뒤 콜백에 도착하면 <code>code</code> 도 <code>state</code> 도 없다.
+앱은 "내가 시작한 로그인이 아닙니다" 로 <b>400</b> 을 냈다.</div>
+<div class="key">고침은 목록을 <b>따로</b> 두는 것이다.
+로그인은 콜백으로 돌아오고, 로그아웃은 <b>첫 화면</b>으로 돌아간다.
+Keycloak 의 클라이언트 설정에도 칸이 따로 있다 —
+"Valid redirect URIs" 와 <b>"Valid post logout redirect URIs"</b>(5·7부).</div>
+</article>
+
+<article class="card" id="so-out-8">
+<h3>돌아갈 주소는 왜 등록제인가</h3>
+<!--CODE file=oidc/miniidp/idp.go sym=knownPostLogout..listed note=글자 그대로 견준다-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>"앞부분이 같으면 통과" 는 안 된다.</b>
+<code>https://lunch.campus.example</code> 를 등록해 두면
+공격자가 <code>https://lunch.campus.example.공격자.kr</code> 을 만들어 통과시킨다.
+글자 그대로 같은지 봐야 한다.</div>
+</article>
+
+<article class="card" id="so-out-9">
+<h3>C 는 못 끊는다</h3>
+<p class="lead">이미 나간 <b>토큰</b>은 회수할 수 없다.
+JWT 는 그 자체로 완결돼 있어서, IdP 가 "그건 취소" 라고 말할 자리가 없다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방법</th><th>대가</th></tr>
+<tr><td>수명을 <b>짧게</b> 둔다 (5분)</td><td>가장 흔한 답. 최대 5분은 남는다</td></tr>
+<tr><td>부를 때마다 IdP 에 <b>물어본다</b><br><span class="dim">(introspection)</span></td>
+<td>JWT 의 장점(혼자 확인)이 사라진다</td></tr>
+<tr><td>취소 목록을 둔다</td><td>모든 자원 서버가 그 목록을 봐야 한다</td></tr>
+</table>
+</div>
+<div class="tip">그래서 액세스 토큰이 짧고 리프레시 토큰이 긴 것이다(4장).
+취소는 <b>리프레시</b> 쪽에서 한다 — 그건 IdP 가 들고 있으니 지울 수 있다.</div>
+</article>
+
+<article class="card quiz" id="so-out-quiz" data-quiz>
+<h3>8장 퀴즈</h3>
+<p class="q">Q. 도서관 공용 컴퓨터에서 학식 예약 앱을 쓰고 로그아웃했다.
+다음 사람이 앱에 들어갔더니 <b>내 이름</b>이 떠 있었다.
+세 세션 중 무엇이 안 끊긴 것인가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>A</b>(브라우저 ↔ IdP)다.
+앱의 세션 B 는 끊겼지만, 로그인 단추를 누르는 순간 IdP 가 A 를 보고
+비밀번호 없이 통과시킨 것이다.<br>
+앱이 <b>IdP 로도</b> 로그아웃을 보냈어야 한다 — 이 장의 <code>handleLogout</code> 이 하는 일이다.<br>
+그리고 브라우저를 아예 닫는 것이 확실하다. 세션 쿠키는 브라우저가 살아 있는 동안만
+유효하게 둘 수 있고(1부 6장), 공용 컴퓨터에서는 그 편이 낫다.</div>
+</article>
+
+<article class="card" id="so-run">
+<p class="chnum">9장</p>
+<h2>직접 돌려 보기</h2>
+<p class="chsub">400줄짜리 Keycloak 을 띄운다</p>
+</article>
+
+<article class="card" id="so-run-1">
+<h3>직접 띄우는 법</h3>
+<pre class="term">$ go build -o bin/fakead  ./ldap/fakead/cmd/fakead
+$ go build -o bin/miniidp ./oidc/miniidp/cmd/miniidp
+$ go build -o bin/miniapp ./oidc/miniapp
+
+$ bin/fakead  -addr :10389 &amp;
+$ bin/miniidp -addr :9000 -key certs/idp-signing.key &amp;
+$ bin/miniapp -addr :9001 &amp;
+$ 브라우저로 http://localhost:9001/ 을 연다</pre>
+<span class="tier ill">설명용</span>
+<div class="tip">이 저장소에서는 <code>make record</code> 한 줄이
+이 셋을 띄우고 4부의 캡처를 전부 다시 뜬다.</div>
+</article>
+
+<article class="card" id="so-run-2">
+<h3>뜰 때 찍히는 것</h3>
+<!--OUT file=oidc_idp.log note=IdP-->
+<span class="tier a">실행 검증</span>
+<!--OUT file=oidc_app.log note=앱-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="so-run-3">
+<h3>깃발로 받는 설정</h3>
+<!--CODE file=oidc/miniidp/cmd/miniidp/main.go lines=26-51 note=7부의 관리 화면이 될 칸들-->
+<span class="tier a">실행 검증</span>
+<span class="tier demo">예제용</span>
+<div class="key">여기 있는 칸들이 7부에서 Keycloak 관리 화면의
+<b>User Federation</b> 설정 칸으로 그대로 나타난다.
+이름까지 같게 뒀다 — <code>base</code>·<code>binddn</code>·<code>userattr</code>.</div>
+</article>
+
+<article class="card" id="so-run-4">
+<h3>서명 열쇠를 파일에서 읽는 이유</h3>
+<!--CODE file=oidc/miniidp/cmd/miniidp/main.go lines=1-9 note=재시작해도 토큰이 살아 있게-->
+<span class="tier a">실행 검증</span>
+<div class="tip">뜰 때마다 새로 만들면 재시작하는 순간 <b>이미 나간 토큰이 전부 죽는다</b>.
+진짜 Keycloak 도 열쇠를 데이터베이스에 두고 재시작해도 유지한다(10부).</div>
+</article>
+
+<article class="card" id="so-run-5">
+<h3>토큰을 눈으로 보는 도구</h3>
+<!--CODE file=oidc/jwtool/main.go sym=usage note=두 갈래뿐이다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><code>decode</code> 와 <code>verify</code> 를 <b>다른 명령</b>으로 둔 것이
+이 도구의 설계다. 한 명령에 깃발로 두면 반드시 누가 깃발을 빼먹는다.</div>
+</article>
+
+<article class="card" id="so-run-6">
+<h3>캡처를 재현하는 깃발</h3>
+<!--CODE file=oidc/miniidp/idp.go sym=FixForCapture note=캡처 전용-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>이 깃발을 운영에서 켜면 그 순간 끝이다.</b>
+인가 코드도 세션 번호도 남이 순서대로 찍어 맞힐 수 있다.
+<code>math/rand</code> 는 암호용이 아니다 — 이름을 길고 불편하게 지은 이유가 그것이다.</div>
+<div class="tip">이 덱의 검은 화면은 <b>두 번 떠서 md5 가 같아야</b> 실린다.
+토큰에는 발급 시각과 일련번호가 들어가므로, 그것을 묶어 두지 않으면
+같은 명령이 매번 다른 글자를 낸다.</div>
+</article>
+
+<article class="card" id="so-run-7">
+<h3>이 IdP 가 <b>안 하는</b> 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>안 하는 것</th><th>진짜 Keycloak 은</th></tr>
+<tr><td>저장소가 메모리뿐</td><td>데이터베이스에 둔다(6부)</td></tr>
+<tr><td>클라이언트가 하나뿐</td><td>수십 개, 각자 설정</td></tr>
+<tr><td>사용자 등록·비밀번호 변경 없음</td><td>계정 콘솔이 따로 있다</td></tr>
+<tr><td>2단계 인증 없음</td><td>OTP·WebAuthn</td></tr>
+<tr><td>감사 로그 없음</td><td>이벤트로 남긴다(10부)</td></tr>
+<tr><td>역할·매퍼 없음</td><td>9부의 주제</td></tr>
+<tr><td>토큰 취소·백채널 로그아웃 없음</td><td>둘 다 한다</td></tr>
+</table>
+</div>
+<div class="key">그래도 <b>흐름은 같다</b>. 5부에서 진짜 Keycloak 을 켜면
+지금 눌러 본 주소가 그대로 나온다 — 그게 이 장을 만든 이유다.</div>
+</article>
+
+<article class="card" id="so-run-8">
+<h3>4부에서 배운 것</h3>
+<ul>
+<li>앱은 비밀번호를 <b>보지 않는다</b> — 확인은 IdP 한 곳에서</li>
+<li>인가 코드 흐름: 브라우저로 두 번 이동하고, <b>토큰은 뒤로만</b> 오간다</li>
+<li><code>state</code>·<code>nonce</code>·PKCE 는 각각 <b>다른 것</b>을 막는다</li>
+<li>토큰 세 장의 쓰임이 다르다 — <code>typ</code> 과 <code>aud</code> 로 갈린다</li>
+<li>JWT 는 <b>읽히지만 못 고친다</b>. 읽는 것과 믿는 것은 다른 일이다</li>
+<li>서명만으로 부족하다 — <code>iss</code>·<code>aud</code>·<code>exp</code> 를 함께 본다</li>
+<li>앱이 아는 것은 <b>issuer 하나</b>, 나머지는 안내문에서 온다</li>
+<li>세션이 셋이고, 로그아웃은 <b>둘을 끊고 하나는 기다린다</b></li>
+</ul>
+</article>
+
+<article class="card" id="so-run-9">
+<h3>다음은</h3>
+<p class="lead">4부에서 만든 400줄짜리를 <b>진짜</b>로 바꾼다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>부</th><th>무엇을</th></tr>
+<tr><td><b>5부</b></td><td>Keycloak 이란 — realm·client·mapper·관리 콘솔</td></tr>
+<tr><td>6부</td><td>그것을 쿠버네티스에 띄운다</td></tr>
+<tr><td>7부</td><td>AD 를 붙인다 — 3부의 LDAP 설정 칸이 화면에 나온다</td></tr>
+<tr><td>8부</td><td>학식 예약 앱을 붙인다 — 7장의 코드가 그대로 간다</td></tr>
+</table>
+</div>
+<div class="key">4부를 이해했다면 5부는 <b>같은 것을 화면에서 찾는 일</b>이다.
+새로 배울 개념이 거의 없다 — 이름표만 붙이면 된다.</div>
 </article>
