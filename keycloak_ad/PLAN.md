@@ -25,7 +25,7 @@ already knows `yaml`/`http`). `player.js`/`gen_appendix.py` are not needed.
 | "k8s에서 돌아가는 서비스에 Keycloak으로 AD 연동" | End-to-end: a web service running in Kubernetes lets people log in with their **company/school Active Directory account**, through **Keycloak** (OIDC provider + LDAP user federation). Cover *why* each piece exists, *how* the pieces talk, *how to set it up*, and *how to debug it*. Not a Keycloak feature tour. |
 | "쉽게 설명" / "웹 개념이 거의 없어" | The reader is a 4th-year CS-adjacent student who has written programs but never built a web app. **Parts 1–4 build the prerequisites from zero** (HTTP, cookie, redirect, TLS, container, Pod, directory, LDAP, SSO, token). One new idea per slide, analogy first, then the real thing, then the real bytes. See §5.9. |
 | "template.html 이용해서" | Deck assembled on `template.html` via the boricha builder. ←/→ pages, ↑/↓ scroll, gamepad, Fold 374/768, `DeckMono` embedded, single file, no CDN. |
-| "1000장 이하" | Hard cap **1000**. Target **760–840**, hard minimum **650**. Count with the builder, never estimate. Depth beats padding: if a part comes in short, do not inflate it. |
+| "1000장 이하" → **2000 (2026-09-08 사용자가 올림)** | Hard cap **2000**. The §7 per-part targets stand as reference points; overrunning them is allowed when one-idea-per-slide requires it (Part 1 came in at 104 vs 80). Count with the builder, never estimate. Depth beats padding: if a part comes in short, do not inflate it. |
 
 ## 1. Goal
 
@@ -382,9 +382,27 @@ analogies in §5.9) and hands it in the prompt.
 4. AD flavour: **on-prem AD over LDAPS with a service account**; Entra ID is a one-slide comparison.
 5. Primary integration road: **oauth2-proxy first, then app-side OIDC in Go**; Spring/Django/Express one slide each (tier C).
 6. Running real Keycloak here is memory-gated (§3). If it fails: **ship tier C for those slides and say so** (`out/kc_unavailable.txt` records the attempt).
-7. Target length: **≈ 800** (760–840), hard cap 1000, hard minimum 650.
+7. Target length: ~~≈ 800 (760–840), hard cap 1000~~ → **hard cap 2000, no fixed target**
+   (changed by the user on 2026-09-08, after Part 1 landed at 104 slides against a target of 80).
+   Hard minimum 650 stands. Per-part §7 targets remain as reference points, and the builder
+   prints actual vs target plus the projected total on every build.
 
 ## Progress log (newest first)
+
+### [2026-09-08 09:20] 3단계(앞) LDAP 코어 — 소스만, 본문은 다음 커밋
+- **기획:** §8 3단계. `ldap/ber`(BER 부호화) · `ldap/proto`(메시지·필터·컨트롤) ·
+  `ldap/fakead`(디렉터리+서버) · `ldap/ldapcli`(바이트 풀이). 전부 표준 라이브러리.
+- **TC:** 넷 다 뼈대→RED→GREEN. 골든 바이트는 익명 바인드 14바이트와
+  정수·길이 표, 필터는 글↔나무↔바이트 3방향 왕복 15종.
+  서버는 진짜 소켓 종단 시험 — 쪼개 보내기·쓰레기 바이트·LDAPS 악수·잠금.
+- **개발:** `ldap/**` 8파일 2,300줄, `data/campus.ldif`(15항목), `tools/record.sh` 3부 절
+- **검증:** test 8패키지 · vet · `make record` 2회 md5 동일(52개) · 조립 0건 ·
+  역검증 통과 · deck-check 0건 · 글꼴 통과
+- **AD 재현 정도(§5.4):** 진단 코드 52e·533·775·525, 잠금(창 10분·5회·30분),
+  memberOf 계산(저장 아님), objectGUID 16바이트 이진값, UPN 바인드,
+  페이지 컨트롤(한 쪽·빈 쿠키), 익명 검색 거절, LDAPS.
+  **안 하는 것:** StartTLS · SASL/GSSAPI · modify/add/delete · referral · GC 3268.
+- **다음:** 3부 본문 `03_ad.html`. `deck/pending.txt` 에 8파일이 대기 중이다.
 
 ### [2026-09-08 08:40] 2단계 1부 — 웹이 돌아가는 법 (104장, 누적 127장)
 - **기획:** §7 의 1부. 9개 장(주소·요청응답·상태번호·리다이렉트·폼·쿠키·TLS·도구상자·마무리),

@@ -22,6 +22,7 @@ export GOTOOLCHAIN GOFLAGS
 
 # 포트는 프로그램 번호와 맞춰 둔다. 겹치면 바꿔서 다시 돌리면 된다.
 P1=8081; P2=8082; P3=8083; P4=8443; P4H=8084
+PL=10389; PLS=10636
 
 PIDS=''
 stop_all() {
@@ -64,7 +65,8 @@ require_free() {
 BIN=bin
 build_all() {
   mkdir -p "$BIN"
-  for d in web/01_hello web/02_form_cookie web/03_redirect web/04_tls; do
+  for d in web/01_hello web/02_form_cookie web/03_redirect web/04_tls \
+           ldap/fakead ldap/ldapcli; do
     $GO build -o "$BIN/$(basename "$d")" "./$d"
   done
 }
@@ -90,6 +92,24 @@ wait_up() {
 
 say() { printf '  %s\n' "$1"; }
 
+# wait_ldap <포트> — 가짜 AD 가 바인드에 답할 때까지 기다린다.
+# curl 로는 두드릴 수 없다 — LDAP 은 HTTP 가 아니다.
+SVC='CN=svc-keycloak,OU=Service Accounts,DC=ad,DC=campus,DC=example'
+PW='Passw0rd!-demo'
+wait_ldap() {
+  i=0
+  while [ $i -lt 100 ]; do
+    if bin/ldapcli -h "localhost:$1" -q -D "$SVC" -w "$PW" bind \
+         >/dev/null 2>&1; then
+      return 0
+    fi
+    i=$((i + 1))
+    sleep 0.1
+  done
+  echo "가짜 AD 가 안 뜬다: $1" >&2
+  return 1
+}
+
 # 모든 curl 은 이걸 쓴다.
 #   -sS  진행률 막대는 끄고 오류는 보여 준다
 #   -4   IPv4 로 못 박는다. localhost 는 ::1 과 127.0.0.1 둘 다로 풀리고,
@@ -98,7 +118,7 @@ CURL="curl -sS -4"
 
 # ── 0. 시험과 정적 검사 ───────────────────────────────────────────
 say '0. 포트 확인 · 빌드 · go test · go vet'
-require_free $P1 $P2 $P3 $P4 $P4H
+require_free $P1 $P2 $P3 $P4 $P4H $PL $PLS
 build_all
 $GO test ./... >"$OUT/web_test.txt" 2>&1 || true
 $GO vet ./... >"$OUT/web_vet.txt" 2>&1 || true
@@ -191,8 +211,80 @@ openssl x509 -in certs/sso.crt -noout -subject -issuer -dates \
   >"$OUT/web04_cert_text.txt" 2>&1
 stop_all
 
+# ── 5. 가짜 AD (3부) ──────────────────────────────────────────────
+say '5. ldap/fakead + ldapcli'
+MINJI='CN=Kim Minji,OU=Students,DC=ad,DC=campus,DC=example'
+JISOO='CN=Oh Jisoo,OU=Staff,DC=ad,DC=campus,DC=example'
+HANA='CN=Park Hana,OU=Students,DC=ad,DC=campus,DC=example'
+BASE='DC=ad,DC=campus,DC=example'
+
+start ldap/fakead "$OUT/ad_server_start.txt" \
+  -addr ":$PL" -ldaps ":$PLS" -log "$OUT/ad_fakead.log" \
+  -cert certs/ldap.crt -key certs/ldap.key
+wait_ldap "$PL"
+
+CLI="bin/ldapcli -h localhost:$PL"
+
+# 바인드 한 번을 바이트까지 통째로. 3부에서 가장 여러 번 인용할 화면이다.
+$CLI -D "$SVC" -w "$PW" bind >"$OUT/ad_bind_ok.txt" 2>&1
+
+# 실패 셋 — AD 의 data 코드를 눈으로 보는 자리
+$CLI -q -D "$MINJI" -w '틀린비밀번호' bind \
+  >"$OUT/ad_bind_52e.txt" 2>&1 || true
+$CLI -q -D "$JISOO" -w "$PW" bind >"$OUT/ad_bind_533.txt" 2>&1 || true
+$CLI -q -D '' -w '' bind >"$OUT/ad_bind_anon.txt" 2>&1 || true
+
+# 다섯 번 틀려 잠그고, 그다음 맞는 비밀번호로 눌러 본다
+for i in 1 2 3 4 5; do
+  $CLI -q -D "$HANA" -w '틀린비밀번호' bind >/dev/null 2>&1 || true
+done
+$CLI -q -D "$HANA" -w "$PW" bind >"$OUT/ad_bind_775.txt" 2>&1 || true
+
+# 검색 한 번을 바이트까지
+$CLI -D "$SVC" -w "$PW" search '(sAMAccountName=minji)' \
+  cn mail objectGUID memberOf >"$OUT/ad_search_bytes.txt" 2>&1
+
+# 결과만 — 필터를 바꿔 가며
+{
+  for f in '(sAMAccountName=minji)' '(objectClass=group)' \
+           '(&(objectClass=user)(mail=*))' '(cn=Kim*)' \
+           '(!(mail=*))' '(userAccountControl=514)'; do
+    printf '$ ldapcli search %s cn\n' "'$f'"
+    $CLI -q -D "$SVC" -w "$PW" search "$f" cn 2>&1
+    echo
+  done
+} >"$OUT/ad_search_filters.txt" 2>&1
+
+# 범위 셋을 나란히
+{
+  for sc in base one sub; do
+    printf '$ ldapcli -s %s search "(objectClass=*)"\n' "$sc"
+    $CLI -q -s "$sc" -b "$BASE" -D "$SVC" -w "$PW" \
+      search '(objectClass=*)' 2>&1 | tail -2
+    echo
+  done
+} >"$OUT/ad_search_scopes.txt" 2>&1
+
+# 그룹으로 사람 찾기 — 9부 인가 이야기의 씨앗
+$CLI -q -D "$SVC" -w "$PW" \
+  search "(memberOf=CN=lunch-admins,OU=Groups,$BASE)" \
+  cn sAMAccountName >"$OUT/ad_search_memberof.txt" 2>&1
+
+# 바인드 없이 검색하면 거절당한다
+$CLI -q -D '' -w '' search '(objectClass=*)' \
+  >"$OUT/ad_search_nobind.txt" 2>&1 || true
+
+# LDAPS — 우리 CA 를 알려 줄 때와 아닐 때
+bin/ldapcli -h "localhost:$PLS" -ldaps -name ldap.ad.campus.example \
+  -cacert certs/demo-ca.crt -q -D "$SVC" -w "$PW" \
+  search '(sAMAccountName=minji)' cn >"$OUT/ad_ldaps_ok.txt" 2>&1
+bin/ldapcli -h "localhost:$PLS" -ldaps -name ldap.ad.campus.example \
+  -q -D "$SVC" -w "$PW" bind >"$OUT/ad_ldaps_notrust.txt" 2>&1 || true
+
+stop_all
+
 # ── 5. 도구 상자 ──────────────────────────────────────────────────
-say '5. 도구 상자 (base64 · 해시 · 서명 · JSON)'
+say '6. 도구 상자 (base64 · 해시 · 서명 · JSON)'
 {
   echo '$ printf %s "minji:Passw0rd!-demo" | base64'
   printf %s 'minji:Passw0rd!-demo' | base64
@@ -251,8 +343,9 @@ say '5. 도구 상자 (base64 · 해시 · 서명 · JSON)'
 } >"$OUT/tool_json.txt" 2>&1
 
 # ── 6. 정리 ───────────────────────────────────────────────────────
-say '6. 매번 달라지는 값 고정 (tools/scrub.py)'
-python3 tools/scrub.py "$OUT"/web*.txt "$OUT"/tool_*.txt
+say '7. 매번 달라지는 값 고정 (tools/scrub.py)'
+python3 tools/scrub.py "$OUT"/web*.txt "$OUT"/tool_*.txt \
+  "$OUT"/ad_*.txt "$OUT"/ad_fakead.log
 
 echo '캡처 완료 — out/ 아래'
 ls -1 "$OUT" | sed 's/^/  /'
