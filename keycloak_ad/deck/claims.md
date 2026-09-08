@@ -302,6 +302,14 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 | `f7-msad-1` | `userAccountControl: 514` 가 `enabled=false` 로 온다 | A | `out/kc_admin_users.txt` · `data/campus.ldif` | 2026-09-08 |
 | `f7-msad-3` | AD 기본 full name 매퍼가 `cn` 을 "이름 성" 으로 갈라 한국식 cn 에서 이름이 뒤집힌다 | A | 이 덱을 만들며 실제로 겪었다 — `keycloak/admin_api.sh` 의 손질과 그 앞뒤 토큰 | 2026-09-08 |
 
+| `f7-tab-1` | 시간 제한을 비워 두면 무한정 기다린다 | C | Keycloak LDAP 문서 — Connection/Read timeout | 2026-09-08 |
+| `f7-map-1` | vendor=ad 로 고르면 매퍼 일곱 개가 저절로 붙는다 (우리가 더한 것은 둘) | A | `out/kc_ad_mappers.txt` | 2026-09-08 |
+| `f7-map-2` | LDAP 매퍼는 여섯 종류다 | C | Keycloak LDAP 문서 — Mappers | 2026-09-08 |
+| `f7-map-3` | `is.mandatory.in.ldap` 을 켜면 값이 빈 계정이 거절된다 | C | 같은 문서 | 2026-09-08 |
+| `f7-sync-3` | 변경분 동기화는 `whenCreated>=`·`whenChanged>=` 로 시각을 잘라 묻는다 | A | `out/kc_ad_sync.txt` | 2026-09-08 |
+| `f7-sync-4` | 변경분 동기화는 AD 에서 지워진 사람을 못 본다 | A·C | `out/kc_ad_sync.txt` (필터에 삭제를 볼 수단이 없다) · Keycloak 동기화 문서 | 2026-09-08 |
+| `f7-sync-5` | 여러 벌이어도 주기 동기화는 한 벌만 돈다 | C | Keycloak LDAP 문서 — Sync는 클러스터에서 한 노드가 수행 | 2026-09-08 |
+
 - Keycloak LDAP/Active Directory 문서 — https://www.keycloak.org/docs/latest/server_admin/#_ldap · 확인 2026-09-08
 - Microsoft Learn — Active Directory LDAP 정책 · 포트 — https://learn.microsoft.com/windows-server/identity/ad-ds/ · 확인 2026-09-08
 

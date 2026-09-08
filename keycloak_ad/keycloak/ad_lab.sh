@@ -237,5 +237,52 @@ reset
   echo '  (되돌렸다)'
 } >"$OUT/kc_ad_upn.txt" 2>&1
 
+# ── 실험 5. 매퍼 목록 ───────────────────────────────────────────────
+#
+# vendor 를 AD 로 골랐을 때 Keycloak 이 **알아서 만든** 것들.
+{
+  echo "\$ curl '.../components?parent=<AD 연동 id>'"
+  api GET "/$REALM/components?parent=$LDAP_ID" \
+    | python3 -c 'import json,sys
+rows = json.load(sys.stdin)
+print("  %-30s %s" % ("이름", "종류 · 무엇을 옮기나"))
+for r in sorted(rows, key=lambda r: r["name"]):
+    cfg = {k: (v[0] if v else "") for k, v in r["config"].items()}
+    what = cfg.get("ldap.attribute", "")
+    if what:
+        what += " → " + cfg.get("user.model.attribute", "")
+    print("  %-30s %s" % (r["name"], r["providerId"]))
+    if what:
+        print("  %-30s   %s" % ("", what))
+print()
+print("  모두 %d개" % len(rows))'
+} >"$OUT/kc_ad_mappers.txt" 2>&1
+
+# ── 실험 6. 변경분만 가져오기 ───────────────────────────────────────
+#
+# 전체 동기화는 사람이 많으면 오래 걸린다. 그래서 "지난번 뒤에
+# 바뀐 것만" 가져오는 방법이 따로 있다. 그때 필터가 어떻게 달라지는가.
+reset
+{
+  echo '$ 전체 동기화 (triggerFullSync)'
+  mark
+  api POST "/$REALM/user-storage/$LDAP_ID/sync?action=triggerFullSync" \
+    | python3 -m json.tool | sed 's/^/  /'
+  echo
+  echo '  가짜 AD 가 받은 필터:'
+  since | grep filter= | head -3 | sed 's/^/    /'
+  echo
+  echo '$ 변경분 동기화 (triggerChangedUsersSync)'
+  mark
+  CH=triggerChangedUsersSync
+  api POST "/$REALM/user-storage/$LDAP_ID/sync?action=$CH" \
+    | python3 -m json.tool | sed 's/^/  /'
+  echo
+  echo '  가짜 AD 가 받은 필터:'
+  since | grep filter= | head -3 | sed 's/^/    /'
+  echo
+  echo '  whenChanged 로 시각을 잘라 묻는다 — 그래서 변경분만 온다.'
+} >"$OUT/kc_ad_sync.txt" 2>&1
+
 rm -f "$OUT/.lab_cfg.json"
 echo 'AD 실험 완료 — out/kc_ad_*.txt'
