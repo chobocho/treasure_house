@@ -1,3 +1,10 @@
+### [2026-09-09 00:10] Keycloak×AD 덱 7부 후반 — 설정 표·매퍼·동기화·진단 26장
+- **기획:** PLAN §8 8단계. 4개 장(설정 칸 전수 표·매퍼 여섯 종·동기화 전체와 변경분·진단 15가지), 퀴즈 3. 7부가 75장으로 완료됐다.
+- **TC:** ad_lab.sh 에 실험 둘을 더해(매퍼 목록·동기화 두 종) 캡처로 검증했다.
+- **개발:** keycloak/ad_lab.sh · deck/sections/07_ad_federation.html · deck/claims.md
+- **검증:** 829장 · 커버리지 8344/8344줄 100% · 조립 0건 · 역검증 통과 · deck-check 0건(퀴즈 48·데모 12) · 글꼴 통과 · test 14패키지
+- **비고:** 변경분 동기화가 whenChanged 로 시각을 잘라 묻는 것을 캡처로 확인했고, 그 필터에 삭제를 볼 수단이 없다는 것이 "퇴사자가 남는" 이유임을 보였다.
+
 ### [2026-09-08 23:30] Keycloak×AD 덱 6부 — 쿠버네티스에 Keycloak 47장
 - **기획:** PLAN §8 7단계. 6개 장(PostgreSQL StatefulSet·Keycloak 얹기·인그레스·여러 벌과 캐시·인증서와 NetworkPolicy·오퍼레이터/Helm), 퀴즈 4. 2부에서 배운 것을 그대로 쓰고 새 개념은 StatefulSet 하나다.
 - **TC:** 매니페스트는 tier B — kubeconform -strict 가 관문이다. base·dev·prod 각 16개 오브젝트 통과.
