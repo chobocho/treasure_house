@@ -1,3 +1,10 @@
+### [2026-09-08 13:55] OIDC 전 과정 실물 — miniapp·jwtool, 캡처 32개
+- **기획:** PLAN.md §8 5단계의 가운데. 앱(RP) 쪽과 토큰을 눈으로 보는 도구. miniapp 시험이 진짜 IdP를 상대하도록 miniidp를 라이브러리+cmd로 갈랐다(fakead와 같은 방식).
+- **TC:** 뼈대→RED→GREEN. miniapp은 진짜 miniidp를 띄워 브라우저처럼 따라가는 통합 시험(로그인·403·state 재사용·nonce 바꿔치기·남의 열쇠·로그아웃). jwtool은 alg=none·변조·기한·대상·발급자. 새 시험 4종은 변이를 넣어 실제로 무는지 확인했다.
+- **개발:** oidc/miniapp, oidc/jwtool, oidc/miniidp(분리), tools/tamper_jwt.py, tools/record.sh 7절, tools/scrub.py, ldap/fakead/server.go, deck/sections/01_web.html 외 3개 파일
+- **검증:** test 14패키지 · vet·gofmt·72칸 폭 통과 · make record 3회 md5 동일(88개) · 조립 오류 0건 · 역검증 307장 통과 · deck-check 0건 · 글꼴 통과
+- **비고:** 캡처하다 결함 4건을 찾아 고쳤다 — 로그아웃이 콜백으로 돌아가 400(PostLogoutURIs 분리), 가짜 AD의 SEARCH 로그 143칸(접어 적기), go test 캐시로 캡처가 두 판(-count=1), 토큰의 iat·jti로 재현 불가(FixForCapture). 4부 본문은 다음 커밋.
+
 ### [2026-09-08 11:25] OIDC 기초 — JWT·PKCE, LDAP 클라이언트 분리
 - **기획:** PLAN.md §8 5단계의 앞부분. 토큰을 만들고 확인하는 층(jwt)과 가로챈 코드를 못 쓰게 만드는 층(pkce). miniidp 가 AD 에 물어보려면 LDAP 클라이언트가 라이브러리여야 해서 ldapcli 에서 뽑아냈다.
 - **TC:** 셋 다 뼈대→RED→GREEN. jwt 는 RFC 7515 A.1·RFC 7519 §3.1 골든 벡터와 공격 넷(alg=none·alg 혼동·내용 변조·남의 열쇠), pkce 는 RFC 7636 부록 B 벡터. client 는 진짜 가짜 AD 를 띄워 놓고 시험한다.

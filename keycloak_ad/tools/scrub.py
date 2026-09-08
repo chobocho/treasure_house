@@ -113,6 +113,18 @@ def scrub(text):
 
     text = re.sub(r'(\tlunch_session\t)([0-9a-f]{16,})', jarsub, text)
 
+    # 로그인 폼의 숨은 칸은 name="…" value="…" 꼴이라
+    # 위 규칙에 안 걸린다. 여기서도 고르는 기준은 '모양' 이 아니라
+    # '자리' 다 — 어떤 이름의 칸인지를 보고 고친다.
+    def formsub(m):
+        raw = m.group(2)
+        if raw not in seen:
+            seen[raw] = _fake_id(len(seen), len(raw))
+        return m.group(1) + seen[raw] + m.group(3)
+
+    text = re.sub(r'(name="(?:%s)" value=")([0-9a-zA-Z_-]{16,})(")'
+                  % '|'.join(RANDOM_KEYS), formsub, text)
+
     # 이 기계에서만 뜻이 있는 경로
     text = text.replace(REPO, '/…/keycloak_ad')
     text = text.replace(os.path.expanduser('~'), '~')

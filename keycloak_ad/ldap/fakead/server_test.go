@@ -461,6 +461,50 @@ func TestServerLogLinesAreNotTooWide(t *testing.T) {
 	}
 }
 
+// Keycloak 의 User Federation 은 한 번에 여덟 개의 속성을 물어 온다.
+// 그 목록을 한 줄에 몰면 140칸이 넘는다 — 4부의 캡처에서 실제로 그랬다.
+func TestSearchLogFoldsLongAttrList(t *testing.T) {
+	d, err := LoadLDIFFile("../../data/campus.ldif")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf strings.Builder
+	srv := NewServer(d, &buf)
+	if err := srv.ListenPlain("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	k := dial(t, srv)
+	k.send(bindOp("CN=svc-keycloak,OU=Service Accounts,"+base,
+		"Passw0rd!-demo"))
+	k.recv()
+	// oidc/miniidp/directory.go 의 wantAttrs 와 같은 목록이다.
+	k.send(searchOp(base, proto.ScopeWholeSubtree,
+		"(&(objectClass=user)(sAMAccountName=minji))", []string{
+			"distinguishedName", "sAMAccountName", "userPrincipalName",
+			"cn", "displayName", "mail", "memberOf", "userAccountControl",
+		}, nil))
+	k.recv()
+	k.recv()
+	k.c.Close()
+	srv.Close()
+
+	log := buf.String()
+	for _, line := range strings.Split(log, "\n") {
+		if n := logCells(line); n > 108 {
+			t.Errorf("%d칸짜리 로그 줄: %s", n, line)
+		}
+	}
+	// 접혔어도 속목록은 다 남아 있어야 한다 — 접는다고 잘라 버리면
+	// 로그를 읽는 사람이 무엇을 물었는지 알 수 없다.
+	for _, a := range []string{"distinguishedName", "userAccountControl",
+		"memberOf"} {
+		if !strings.Contains(log, a) {
+			t.Errorf("%q 가 로그에서 사라졌다", a)
+		}
+	}
+}
+
 func logCells(s string) int {
 	n := 0
 	for _, r := range s {

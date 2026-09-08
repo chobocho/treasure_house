@@ -53,6 +53,7 @@
 |---|---|---|---|---|
 | (뼈대) | 자체 CA 로 서명한 서버 인증서 두 장이 `openssl verify` 를 통과한다 | A | `certs/check_certs.sh` 출력 | 2026-09-08 |
 | (뼈대) | 요즘 TLS 클라이언트는 CN 이 아니라 SAN 으로 호스트 이름을 확인한다 | C | RFC 6125 §6.4.4, CA/Browser Forum BR 7.1.4.2 | 2026-09-08 |
+| `w-tls-5b` | `idp-signing.key` 는 RSA 2048비트 개인키 하나뿐이고 인증서가 없다 (4부 토큰 서명용) | A | `certs/check_certs.sh` 출력 | 2026-09-08 |
 
 - RFC 6125 (Representation and Verification of Domain-Based Application Service Identity) — https://www.rfc-editor.org/rfc/rfc6125#section-6.4.4
 

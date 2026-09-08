@@ -157,6 +157,33 @@ func (s *Server) accept(ln net.Listener, kind string) {
 	}
 }
 
+// logWidth 는 앞머리(시각·연결 번호)를 뺀 나머지에 허용하는 폭이다.
+//
+// 시각 9칸 + "[1] #2        " 14칸 = 23칸을 앞에 두고도 108칸 안에
+// 들어오도록 잡았다. 108 은 이 덱의 캡처가 넘으면 안 되는 폭이다.
+const logWidth = 80
+
+// logWrapped 는 긴 줄을 접어 여러 줄로 적는다. 이어지는 줄에도 같은
+// 앞머리를 붙여, 어느 연결의 어느 요청인지 눈으로 따라갈 수 있게 한다.
+//
+// 접을 자리가 필요한 것은 속성 목록 때문이다. Keycloak 은 한 번에
+// 여덟 개를 물어 오고, 그러면 한 줄이 143칸이 된다 — 4부의 캡처에서
+// 실제로 그랬다. 속목록은 잘라 내지 않는다. 무엇을 물었는지가
+// User Federation 을 고칠 때 가장 먼저 보는 값이기 때문이다.
+func (s *Server) logWrapped(head, body string) {
+	pad := head
+	for len(body) > logWidth {
+		cut := strings.LastIndex(body[:logWidth], " ")
+		if cut <= 0 {
+			cut = logWidth
+		}
+		s.logf("%s%s", pad, body[:cut])
+		body = strings.TrimPrefix(body[cut:], " ")
+		pad = strings.Repeat(" ", len(head))
+	}
+	s.logf("%s%s", pad, body)
+}
+
 // logf 는 오간 것을 사람이 읽는 한 줄로 남긴다.
 //
 // 이 로그가 이 프로그램에서 가장 값진 산출물이다. 7부에서 "Keycloak 이
@@ -365,8 +392,9 @@ func (s *Server) handleSearch(sess *session, msg proto.Message) []byte {
 		sess.id, msg.ID, sr.BaseDN, proto.ScopeName(sr.Scope))
 	s.logf("[%d] #%d        filter=%s", sess.id, msg.ID,
 		sr.Filter.String())
-	s.logf("[%d] #%d        attrs=%s → %d건 %s", sess.id, msg.ID,
-		attrList(sr.Attrs), sent, proto.ResultName(code))
+	head := fmt.Sprintf("[%d] #%d        ", sess.id, msg.ID)
+	s.logWrapped(head, fmt.Sprintf("attrs=%s → %d건 %s",
+		attrList(sr.Attrs), sent, proto.ResultName(code)))
 
 	return append(out, proto.SearchResultDone(msg.ID, code, "", "",
 		controls...)...)
