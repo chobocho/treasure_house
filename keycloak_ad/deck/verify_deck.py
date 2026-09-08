@@ -50,11 +50,15 @@ def main():
 
     arts = re.findall(r'<article[^>]*\sid="([^"]+)"[^>]*>(.*?)</article>', doc, re.S)
     for sid, body in arts:
+        # '설명용' 배지가 붙은 화면의 코드 조각은 파일에서 잘라 온 것이 아니라
+        # 설명하려고 그린 것이다. 그 사실이 화면에 배지로 적혀 있으므로
+        # data-src 가 없다고 문제 삼지 않는다. 배지 없이 그린 조각은 문제다 —
+        # 독자가 "이건 진짜 파일" 이라고 오해하기 때문이다.
+        illus = 'class="tier ill"' in body
         for m in re.finditer(r'<pre><code([^>]*)>(.*?)</code></pre>', body, re.S):
             attrs, inner = m.group(1), m.group(2)
-            if 'data-illus' in attrs:
-                # 남의 문서에서 옮긴 발췌 — 이 저장소에서 실행되지 않는다.
-                # 반드시 화면에 근거 등급 C 배지가 함께 나와야 한다(빌더가 센다).
+            if illus and 'data-src' not in attrs:
+                st['illus'] = st.get('illus', 0) + 1
                 continue
             src = re.search(r'data-src="([^"]+)"', attrs)
             if not src:
@@ -111,7 +115,10 @@ def main():
     print('슬라이드 %d장' % len(arts))
     print('코드 블록 %d개 — 일치 %d · 불일치 %d · data-src 없는 긴 코드 %d'
           % (st['code'], st['code_ok'], st['code_bad'], st['untagged']))
-    print('출력 블록 %d개 — 일치 %d · 불일치 %d' % (st['out'], st['out_ok'], st['out_bad']))
+    print('출력 블록 %d개 — 일치 %d · 불일치 %d'
+          % (st['out'], st['out_ok'], st['out_bad']))
+    print("설명용으로 그린 조각 %d개 (화면에 '설명용' 배지가 붙어 있다)"
+          % st.get('illus', 0))
     if problems:
         print('\n문제 %d건' % len(problems))
         for p in problems[:25]:

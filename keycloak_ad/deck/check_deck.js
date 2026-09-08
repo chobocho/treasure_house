@@ -68,18 +68,21 @@ else ok(`데모 자리 ${hosts.length}개 · 등록 함수 ${regs.size}개 — �
 
 // ── 4) 퀴즈 ──────────────────────────────────────────────────────────
 // 퀴즈 한 장에는 반드시 답이 붙어 있어야 한다. <details> 든 .quiz-a 든 하나는 있어야.
-// 템플릿의 퀴즈는 <div class="quiz" data-quiz> 안에 질문(.q)·답 보기 단추·답(.a) 셋이 있다.
-// 셋 중 하나라도 빠지면 독자에게는 눌러도 아무 일 없는 상자로 보인다.
-let quiz = 0, quizNoAns = 0;
-for (const m of struct.matchAll(/<div class="quiz"[^>]*\bdata-quiz\b[^>]*>([\s\S]*?)<\/article>/g)) {
+// 템플릿의 퀴즈는 슬라이드 자체다: <article class="card quiz" data-quiz> 안에
+// 질문(.q) · 답 보기 단추 · 답(.a) 셋이 있어야 한다. 하나라도 빠지면
+// 독자에게는 눌러도 아무 일 없는 상자로 보인다.
+let quiz = 0, quizNoAns = 0, quizNoWire = 0;
+for (const m of struct.matchAll(/<article[^>]*\bclass="[^"]*\bquiz\b[^"]*"[^>]*>([\s\S]*?)<\/article>/g)) {
   quiz++;
-  const seg = m[1].split('<div class="quiz"')[0];
-  if (!/class="a"/.test(seg) || !/<button/.test(seg)) quizNoAns++;
+  if (!/\bdata-quiz\b/.test(m[0].slice(0, m[0].indexOf('>')))) quizNoWire++;
+  if (!/class="a"/.test(m[1]) || !/<button/.test(m[1]) || !/class="q"/.test(m[1])) {
+    quizNoAns++;
+  }
 }
-const quizHosts = (struct.match(/<div class="quiz"/g) || []).length;
-if (quizHosts !== quiz) fail(`퀴즈 상자 ${quizHosts}개 중 ${quizHosts - quiz}개에 data-quiz 가 없다 — 단추가 배선되지 않는다`);
-if (quizNoAns) fail(`답이 없는 퀴즈 ${quizNoAns}개`);
-else ok(`퀴즈 ${quiz}개 — 전부 답이 있다`);
+if (quizNoWire) fail(`data-quiz 가 없는 퀴즈 ${quizNoWire}개 — 단추가 배선되지 않는다`);
+if (quizNoAns) fail(`질문(.q)·단추·답(.a) 이 다 갖춰지지 않은 퀴즈 ${quizNoAns}개`);
+if (!quizNoWire && !quizNoAns) ok(`퀴즈 ${quiz}개 — 질문·단추·답이 모두 있다`);
+
 
 // ── 5) 다른 덱으로 가는 상호참조 ─────────────────────────────────────
 // 링크는 늘어나기만 하고 아무도 다시 눌러 보지 않는다. 기계가 눌러 본다.
@@ -117,10 +120,13 @@ const demoScripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
 if (!demoScripts.length) {
   ok('등록된 데모 없음 (뼈대 단계)');
 } else {
+  // 데모가 만지는 화면 조각의 최소 흉내. 값은 전부 비어 있다 —
+  // 사용자가 아무것도 입력하지 않은 첫 순간이 데모가 가장 잘 깨지는 때다.
   const el = () => {
     const e = {
-      style: {}, dataset: {}, classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-      children: [], innerHTML: '', textContent: '', value: '', checked: false,
+      style: {}, dataset: {}, value: '', checked: false,
+      classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+      children: [], innerHTML: '', textContent: '',
       appendChild(n) { e.children.push(n); return n; },
       setAttribute() {}, getAttribute: () => null, removeAttribute() {},
       addEventListener() {}, removeEventListener() {}, focus() {}, blur() {},
@@ -139,7 +145,14 @@ if (!demoScripts.length) {
   global.window = {
     addEventListener() {}, matchMedia: () => ({ matches: false, addListener() {} }),
     requestAnimationFrame: () => 0, location: { hash: '' }, localStorage: null,
+    // Web Crypto 는 node 에도 있다. 없으면 데모가 스스로 비켜 가야 한다.
+    crypto: global.crypto,
+    TextEncoder, btoa,
   };
+  global.TextEncoder = TextEncoder;
+  if (typeof global.btoa !== 'function') {
+    global.btoa = (s) => Buffer.from(s, 'binary').toString('base64');
+  }
   const REG = {};
   global.window.__demo = (id, fn) => { REG[id] = fn; };
   try {
@@ -149,7 +162,23 @@ if (!demoScripts.length) {
     }
     const missing = [...new Set(hosts)].filter((h) => !REG[h]);
     if (missing.length) fail(`돌려 보니 등록되지 않은 데모: ${missing.slice(0, 8).join(', ')}`);
-    else ok(`데모 등록 함수 ${Object.keys(REG).length}개 — 스텁 위에서 문법·이름 정상`);
+
+    // 등록만 확인하면 문법 오류밖에 못 잡는다. 실제로 한 번씩 돌려 봐야
+    // "빈 입력에서 죽는" 데모를 잡을 수 있다 — 사용자가 처음 보는 그 상태다.
+    const api = {
+      w() {}, add() {}, out: () => null,
+      esc: (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'),
+      show: (v) => String(v), num: (n) => String(n),
+    };
+    let ran = 0;
+    for (const [id, fn] of Object.entries(REG)) {
+      try { fn(el(), api); ran++; } catch (e) {
+        fail(`데모 '${id}' 가 빈 입력에서 죽는다: ${e.message}`);
+      }
+    }
+    if (ran === Object.keys(REG).length) {
+      ok(`데모 ${ran}개 — 스텁 위에서 전부 예외 없이 돈다`);
+    }
   } catch (e) {
     fail('데모 스크립트 실행 실패: ' + e.message);
   }
