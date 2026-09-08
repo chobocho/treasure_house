@@ -386,4 +386,16 @@ analogies in §5.9) and hands it in the prompt.
 
 ## Progress log (newest first)
 
-_(empty — the Opus session appends here after every commit: 기획/TC/개발/검증/비고, Korean, ≤ 12 lines)_
+### [2026-09-08 07:10] 1단계 뼈대 — 조립기·0부 12장·부 표지 12장 (24장)
+- **기획:** §8 1단계 그대로. 덱이 첫 커밋부터 열리도록 부 표지 12장을 먼저 세웠다.
+- **TC:** `deck/check_deck.js` RED(덱 없음) → GREEN. `certs/check_certs.sh` RED(인증서 없음) → GREEN.
+- **개발:** go.mod · Makefile · .gitignore · deck/{build_deck,verify_deck,chunks,gen_system}.py ·
+  deck/check_deck.js · deck/base/{head,tail}.html · sections 13 · figs 13 · certs · claims.md
+- **검증:** `make all SKEL=1` — 조립 0건 · 역검증 통과 · deck-check 0건 · 글꼴 --check 통과. 24장 171 KB.
+- **비고(§5 이탈):** §5 는 `boricha/deck/` 도구 복사를 지시했으나, 그 계보는 `<section class="slide">`
+  구조라 이 덱이 요구하는 template 의 `__demo`·`.quiz`·`#ch` 상호참조와 맞지 않는다.
+  저장소의 template 계열 조립기(= `rts/deck/build_deck.py` 계보)로 바꾸고, `base/` 는
+  `template.html` 을 직접 갈라 만들었다. 지시자는 `<!--CODE/OUT/FIG/FULLSRC-->` 형식이다.
+  `hl.py`·`gen_fonts.py` 는 불필요 — 강조는 템플릿 런타임 하이라이터가, 글꼴은
+  `tools/embed_mono_font.py` 가 맡는다. `player.js`·`gen_appendix.py` 도 §5 대로 쓰지 않는다.
+- **다음:** §8 2단계(1부 웹 사다리 `web/01~04`) 와 3단계(LDAP) 는 서로 겹치지 않아 병렬 가능.
