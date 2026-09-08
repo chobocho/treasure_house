@@ -1,3 +1,10 @@
+### [2026-09-08 07:10] Keycloak×AD 덱 뼈대 — 빌더·표지 12장·부 표지 12장
+- **기획:** PLAN.md §8 1단계. 덱 조립 도구 일습과 0부(표지·전체 그림·세 세션·근거 등급·등장인물)를 세우고, 1~12부는 표지만 두어 처음부터 열리는 상태를 만든다.
+- **TC:** `deck/check_deck.js` 를 먼저 써서 RED(덱 없음) 확인 → 구조·상호참조·자기완결성 8종 검사. `certs/check_certs.sh` 도 RED(인증서 없음) → 체인·SAN·EKU·키 짝 검사.
+- **개발:** keycloak_ad/{go.mod,Makefile,.gitignore}, deck/{build_deck,verify_deck,chunks,gen_system}.py, deck/check_deck.js, deck/base/{head,tail}.html, deck/sections/ 13개, deck/figs/ 13개, certs/{make,check}_certs.sh, deck/claims.md
+- **검증:** make all SKEL=1 — 조립 오류 0건 · 역검증 통과 · deck-check 오류 0건 · 글꼴 --check 통과. 24장 171 KB. 인증서 검사 오류 0건.
+- **비고:** PLAN.md §5 는 boricha 도구 재사용을 지시했으나, boricha 계열은 `<section class="slide">` 구조라 template.html 의 `__demo`·`.quiz`·`#ch` 상호참조와 맞지 않는다. 저장소 다수(덱 20여 개)가 쓰는 template 계열 = rts/deck 조립기 계보로 바꿨다. index·README 카드는 PLAN §8 13단계(공개)에서 함께 넣는다.
+
 ### [2026-09-08 06:49] Keycloak×AD 연동 덱 — Opus 빌드 세션용 작업 계획 작성
 - **기획:** k8s 서비스에 Keycloak으로 AD 로그인을 붙이는 과정을 웹 개념이 없는 대학 4학년 눈높이로 설명하는 덱(≈800장, 상한 1000)의 에이전트용 플랜. 12부 구성·증거 등급(실행/구문/문서)·fakead·miniidp 미니어처 설계·커밋 14단계.
 - **TC:** 해당 없음(계획 문서). 이 기기 도구 현황(docker·kubectl 없음, Java21·Go1.27 있음, RAM 여유 2.2GB)을 확인해 §3에 고정.
