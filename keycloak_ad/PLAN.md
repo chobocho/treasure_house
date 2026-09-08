@@ -389,6 +389,22 @@ analogies in §5.9) and hands it in the prompt.
 
 ## Progress log (newest first)
 
+### [2026-09-08 17:20] 6단계(2/3) 5부 본문 — 74장 (누적 687장)
+
+- **기획:** 11개 장 — 400줄과 제품 사이 · 띄우기(dev/prod) · 설정 세 경로 ·
+  realm · client · user/group/role · client scope 와 mapper ·
+  federation 대 broker · 관리 REST API · 내보내기/가져오기 · 마무리.
+  퀴즈 7. 데모는 새로 만들지 않았다 — 이 부는 실물 화면이 데모다.
+- **개발:** `deck/sections/05_keycloak.html`(신규) ·
+  `13_appendix.html`(FULLSRC 12개 — keycloak/ 스크립트와 설정 조각) ·
+  `deck/claims.md`(5부 절 24행 + Keycloak sha256) · `deck/pending.txt`(비움)
+- **검증:** 687장 · **커버리지 7588/7588줄 100퍼센트** · 조립 0건 ·
+  역검증 통과 · deck-check 0건(퀴즈 37 · 데모 12) · 글꼴 통과 · test 14패키지.
+- **엮은 자리:** 4부의 miniidp 와 나란히 두는 장을 여럿 뒀다 —
+  안내문 칸 수(11 대 56), 토큰 클레임 표, "코드에 박은 것 대 매퍼로 고른 것".
+  8장의 가짜 AD 로그가 7부의 예고편 노릇을 한다.
+- **다음:** 6단계 3/3 = 7부 전반(`07_ad_federation.html`).
+
 ### [2026-09-08 16:40] 6단계(1/3) 진짜 Keycloak — 받고·띄우고·realm 을 세우고
 
 - **판:** Keycloak **26.7.3** (2026-08-31 GA). `keycloak/VERSION` 한 줄에만 적혀 있다.
