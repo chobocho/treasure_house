@@ -6,9 +6,19 @@
 대본 모델을 쓰므로 네트워크도 API 키도 필요 없다 — 그런데도
 "모델 -> 도구 -> 결과 -> 모델" 루프는 실물 그대로 돈다.
 """
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+# 파이프나 파일로 받으면 한국어 Windows 는 cp949 라 ⚙·▶ 가 든 줄이 통째로 사라진다
+# (console_sink 의 UnicodeEncodeError 를 버스가 삼킨다). 부모·자식 모두 UTF-8 로 고정한다.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+ENV = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
 
 HERE = Path(__file__).resolve().parent
 WORK = HERE / "work"
@@ -28,7 +38,7 @@ def run(title, *argv):
     sys.stdout.flush()
     subprocess.run([sys.executable, "-m", "mini_puppy",
                     "--config-dir", str(CFG), "-C", str(WORK), "--quiet"]
-                   + list(argv), cwd=str(HERE.parent), check=False)
+                   + list(argv), cwd=str(HERE.parent), check=False, env=ENV)
     sys.stdout.flush()
 
 
