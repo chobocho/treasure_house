@@ -276,13 +276,41 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 - Keycloak 서버 가이드 26.7 — https://www.keycloak.org/documentation · 확인 2026-09-08
 - Keycloak 관리 REST API — https://www.keycloak.org/docs-api/latest/rest-api/ · 확인 2026-09-08
 
+## 7부 전반 — AD 연동 (`f7-*` 슬라이드)
+
+이 부의 tier A 화면은 Keycloak 26.7.3 을 3부의 가짜 AD 에 붙여 놓고
+`keycloak/ad_lab.sh` 로 설정을 바꿔 가며 뜬 것이다.
+
+| 슬라이드 | 주장 | 등급 | 출처 | 확인일 |
+|---|---|---|---|---|
+| `f7-fed-2` | vendor 를 AD 로 고르면 uuid 속성이 `objectGUID` 가 되고 MSAD 매퍼가 붙는다 | A | `out/kc_admin_ldap.txt` · 매퍼 목록 실측 | 2026-09-08 |
+| `f7-fed-7` | editMode 는 READ_ONLY · WRITABLE · UNSYNCED 셋 | C | Keycloak 문서 "LDAP" — Edit mode | 2026-09-08 |
+| `f7-fed-7` | UNSYNCED 는 가져온 뒤 AD 를 다시 보지 않는다 | C | 같은 문서 | 2026-09-08 |
+| `f7-log-1` | 로그인 한 번에 연결이 둘 난다 (검색용·확인용) | A | `out/kc_ad_login_ok.txt` | 2026-09-08 |
+| `f7-log-2` | Keycloak 이 요구하는 속성 11개와 그것을 시킨 설정 | A | `out/kc_ad_login_ok.txt` | 2026-09-08 |
+| `f7-log-3` | 사본이 있으면 `objectGUID` 로 되찾는다 | A | `out/kc_ad_login_badpw.txt` | 2026-09-08 |
+| `f7-log-4` | 꺼진 계정과 틀린 비밀번호가 사용자에게 똑같이 보인다 | A | `out/kc_ad_login_disabled.txt` · `out/kc_ad_login_badpw.txt` | 2026-09-08 |
+| `f7-log-5` | 없는 사람이면 두 번째 연결이 아예 없다 | A | `out/kc_ad_login_nouser.txt` | 2026-09-08 |
+| `f7-id-3` | `usernameLDAPAttribute` 를 바꾸면 LDAP 필터의 속성 이름이 바뀐다 | A | `out/kc_ad_upn.txt` | 2026-09-08 |
+| `f7-id-3` | `loginWithEmailAllowed` 가 켜져 있으면 `mail=` 로도 찾아본다 | A | `out/kc_ad_upn.txt` | 2026-09-08 |
+| `f7-sa-4` | `customUserSearchFilter` 는 모든 사용자 검색에 덧붙고 곧바로 먹는다 | A | `out/kc_ad_filter.txt` (7명 → 6명) | 2026-09-08 |
+| `f7-sa-5` | AD 의 기본 MaxPageSize 는 1,000 이라 pagination 이 필요하다 | C | Microsoft Learn "LDAP policies" (MaxPageSize) | 2026-09-08 |
+| `f7-tls-2` | LDAPS 는 636, 글로벌 카탈로그는 3268/3269 | C | Microsoft Learn "Active Directory 포트" | 2026-09-08 |
+| `f7-tls-4` | 자체 CA 를 안 믿으면 bind 전에 연결에서 끊긴다 | A | `out/ad_ldaps_notrust.txt` | 2026-09-08 |
+| `f7-grp-4` | AD 의 member 한 줄이 Keycloak 그룹으로 건너온다 | A | `out/kc_ad_groups.txt` · `data/campus.ldif` | 2026-09-08 |
+| `f7-grp-5` | 그 그룹이 진짜 토큰의 `groups` 로 실린다 | A | `out/kc_e2e_07_decode.txt` | 2026-09-08 |
+| `f7-msad-1` | `userAccountControl: 514` 가 `enabled=false` 로 온다 | A | `out/kc_admin_users.txt` · `data/campus.ldif` | 2026-09-08 |
+| `f7-msad-3` | AD 기본 full name 매퍼가 `cn` 을 "이름 성" 으로 갈라 한국식 cn 에서 이름이 뒤집힌다 | A | 이 덱을 만들며 실제로 겪었다 — `keycloak/admin_api.sh` 의 손질과 그 앞뒤 토큰 | 2026-09-08 |
+
+- Keycloak LDAP/Active Directory 문서 — https://www.keycloak.org/docs/latest/server_admin/#_ldap · 확인 2026-09-08
+- Microsoft Learn — Active Directory LDAP 정책 · 포트 — https://learn.microsoft.com/windows-server/identity/ad-ds/ · 확인 2026-09-08
+
 ## 앞으로 채울 곳
 
 부가 하나씩 들어올 때마다 그 부의 절을 여기에 연다.
 지금은 비어 있는 것이 정상이다 — 뼈대 커밋에는 주장이 거의 없다.
 
 - [ ] 6부 k8s 배포 — Keycloak 서버 가이드 `all-config`
-- [ ] 7부 AD 연동 — LDAP user federation 문서 + Microsoft Learn
 - [ ] 8부 앱 연동 — oauth2-proxy · ingress-nginx `auth_request`
 - [ ] 9부 권한 — 그룹·역할 매퍼
 - [ ] 10부 운영 — 수명 기본값 · 이벤트 · 메트릭

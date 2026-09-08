@@ -11,9 +11,599 @@
 <li><code>objectGUID</code> 와 로그인 아이디 고르기</li>
 <li>자체 CA 신뢰(truststore) · 서비스 계정 권한</li>
 <li>매퍼 여섯 종 · 계정 비활성/잠금 처리</li>
-<li>Keycloak 이 실제로 보낸 LDAP 검색 읽기 · 문제 15가지 진단 순서</li>
+<li>Keycloak 이 실제로 보낸 LDAP 검색 읽기 · 문제 진단 순서</li>
 </ul>
-<div class="tip"><b>끝나면</b> — 진짜 AD 를 앞에 두고 칸을 채우고, 안 될 때 로그를 보고 원인을 찾는다</div>
-<div class="warn"><b>이 부는 아직 준비 중입니다</b> — 뼈대만 세워 둔 상태다.
-본문이 들어오면 이 알림은 사라진다.</div>
+<div class="tip"><b>끝나면</b> — 진짜 AD 를 앞에 두고 칸을 채우고,
+안 될 때 로그를 보고 원인을 찾는다</div>
+<div class="key"><b>이 부는 3부와 5부가 만나는 자리다.</b>
+3부에서 만든 가짜 AD 에 5부의 Keycloak 이 실제로 붙어 있고,
+설정을 바꿀 때마다 <b>AD 가 받은 질의가 어떻게 달라지는지</b> 그대로 볼 수 있다.
+그림이 아니라 로그다.</div>
+</article>
+
+<article class="card" id="f7-fed">
+<p class="chnum">1장</p>
+<h2>붙이기 전에 정할 것</h2>
+<p class="chsub">칸을 채우기 전에 답해야 하는 네 가지</p>
+</article>
+
+<article class="card" id="f7-fed-1">
+<h3>민지의 다음 질문</h3>
+<blockquote>"Keycloak 관리 화면에 <b>User Federation</b> 이 있다.
+LDAP 을 고르니 칸이 서른 개쯤 나온다. 어디서부터 채우지?"</blockquote>
+<p class="lead">칸을 위에서부터 채우면 반드시 막힌다.
+먼저 <b>네 가지</b>를 정해 두면 나머지는 따라온다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>정하는 칸</th><th>이 덱의 답</th></tr>
+<tr><td>어디에 붙나</td><td><code>connectionUrl</code>·<code>usersDn</code></td>
+<td><code>ldap://localhost:10389</code></td></tr>
+<tr><td>누가 붙나</td><td><code>bindDn</code>·<code>bindCredential</code></td>
+<td>읽기 전용 서비스 계정</td></tr>
+<tr><td>무엇으로 로그인하나</td><td><code>usernameLDAPAttribute</code></td>
+<td><code>sAMAccountName</code></td></tr>
+<tr><td>고칠 것인가</td><td><code>editMode</code></td>
+<td><b>READ_ONLY</b></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="f7-fed-2">
+<h3>맨 처음 고르는 칸 — vendor</h3>
+<p class="lead"><code>vendor</code> 를 <b>Active Directory</b> 로 고르면
+Keycloak 이 나머지 칸의 기본값을 통째로 바꿔 준다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>Other (일반 LDAP)</th><th>Active Directory</th></tr>
+<tr><td>사용자 식별자</td><td><code>entryUUID</code></td><td><b><code>objectGUID</code></b></td></tr>
+<tr><td>사용자 객체 클래스</td><td><code>inetOrgPerson</code> 따위</td>
+<td><code>person, organizationalPerson, user</code></td></tr>
+<tr><td>계정 상태 매퍼</td><td>없다</td><td><b>MSAD account controls</b></td></tr>
+<tr><td>이름 매퍼</td><td>각각</td><td><b>full name</b>(cn 을 가른다)</td></tr>
+</table>
+</div>
+<div class="key">이 한 칸이 뒤의 여러 칸을 정한다.
+그래서 AD 인데 vendor 를 Other 로 두면 "왜 되다 말지" 가 여기저기서 터진다 —
+사람을 못 찾거나, 꺼진 계정이 통과하거나, 이름이 안 온다.</div>
+</article>
+
+<article class="card" id="f7-fed-3">
+<h3>우리가 채운 칸</h3>
+<!--CODE file=keycloak/json/ldap.json lines=1-16 note=연결과 인증-->
+<span class="tier b">구문 검증</span>
+<span class="tier demo">예제용</span>
+</article>
+
+<article class="card" id="f7-fed-4">
+<h3>나머지 칸</h3>
+<!--CODE file=keycloak/json/ldap.json lines=17-30 note=식별자와 동기화-->
+<span class="tier b">구문 검증</span>
+</article>
+
+<article class="card" id="f7-fed-5">
+<h3>실제로 들어간 값</h3>
+<!--OUT file=kc_admin_ldap.txt lines=1-14 note=관리 API 로 되읽었다-->
+<span class="tier a">실행 검증</span>
+<div class="tip">우리가 적지 않은 칸도 보인다 —
+<code>krbPrincipalAttribute</code> 같은 것은 vendor 를 AD 로 고른 순간
+Keycloak 이 채워 넣은 기본값이다.</div>
+</article>
+
+<article class="card" id="f7-fed-6">
+<h3>남은 칸</h3>
+<!--OUT file=kc_admin_ldap.txt lines=15-26 note=우리가 안 적은 것들-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="f7-fed-7">
+<h3>editMode 셋</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>READ_ONLY</th><th>WRITABLE</th><th>UNSYNCED</th></tr>
+<tr><td>AD 를 고치나</td><td><b>안 고친다</b></td><td>고친다</td><td>안 고친다</td></tr>
+<tr><td>사람 정보의 원본</td><td>AD</td><td>AD</td><td><b>Keycloak</b></td></tr>
+<tr><td>비밀번호 바꾸기</td><td>안 된다</td><td>AD 에 쓴다</td><td>Keycloak 에만 쓴다</td></tr>
+<tr><td>언제 쓰나</td><td><b>대부분</b></td><td>Keycloak 이 계정 관리까지 할 때</td>
+<td>AD 를 읽기만 하고 그 뒤로 따로 갈 때</td></tr>
+</table>
+</div>
+<div class="warn"><b>UNSYNCED 는 겉보기와 다르다.</b>
+한 번 가져온 뒤로는 AD 를 안 본다는 뜻이라,
+AD 에서 계정을 꺼도 <b>Keycloak 에서는 계속 로그인된다</b>.
+"퇴사자가 아직 들어와요" 의 흔한 원인이다.</div>
+<div class="key">이 덱은 <b>READ_ONLY</b> 다. 학교의 계정은 학교가 관리하고,
+Keycloak 은 물어보기만 한다 — 5부 1장에서 "계정을 만들지 않는다" 고 한 그것이다.</div>
+</article>
+
+<article class="card quiz" id="f7-fed-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. AD 연동을 붙였는데 로그인은 되고 <b>이름이 안 나온다</b>.
+사용자 목록에는 아이디만 있고 이름 칸이 비어 있다. 어디를 볼까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>매퍼</b>다. 로그인은 bind 로 되고, 이름은 <b>속성을
+옮겨 오는 매퍼</b>가 해 주는 별개의 일이다.<br>
+확인 순서: ① User Federation 의 <b>Mappers</b> 탭에 first name·last name 이
+있는가 ② 그 매퍼가 가리키는 LDAP 속성(<code>givenName</code>·<code>sn</code>)이
+그 AD 에 <b>실제로 채워져 있는가</b>.<br>
+②가 의외로 흔하다. AD 를 오래 쓴 곳은 <code>displayName</code> 만 채우고
+<code>givenName</code> 은 비어 있는 계정이 많다. 그때는 매퍼가 가리키는
+속성을 바꿔야 한다 — 3장에서 그 실험을 한다.</div>
+</article>
+
+<article class="card" id="f7-log">
+<p class="chnum">2장</p>
+<h2>로그인 한 번에 무슨 일이</h2>
+<p class="chsub">Keycloak 이 AD 에 보낸 것을 그대로 읽는다</p>
+</article>
+
+<article class="card" id="f7-log-1">
+<h3>맞는 비밀번호</h3>
+<!--OUT file=kc_ad_login_ok.txt lines=1-13 note=진짜 Keycloak 이 보낸 질의-->
+<span class="tier a">실행 검증</span>
+<div class="key">4부 7장에서 우리 miniidp 가 하던 것과 <b>똑같다</b> —
+서비스 계정으로 붙어 찾고(연결 1), 찾은 DN 으로 다시 붙어 확인한다(연결 2).
+연결이 둘인 이유는 3부 5장에 있다.</div>
+</article>
+
+<article class="card" id="f7-log-2">
+<h3>Keycloak 이 달라고 한 것들</h3>
+<pre class="term">filter=(&amp;(sAMAccountName=minji)
+        (objectclass=person)
+        (objectclass=organizationalPerson)
+        (objectclass=user))
+
+attrs=[whenChanged whenCreated mail sAMAccountName givenName
+       objectGUID sn objectclass userPrincipalName
+       userAccountControl pwdLastSet]</pre>
+<span class="tier ill">설명용</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>왜 이 속성을</th><th>어느 설정이 시켰나</th></tr>
+<tr><td><code>sAMAccountName</code></td><td><code>usernameLDAPAttribute</code></td></tr>
+<tr><td><code>objectGUID</code></td><td><code>uuidLDAPAttribute</code> — 사람을 알아보는 열쇠</td></tr>
+<tr><td><code>givenName</code>·<code>sn</code>·<code>mail</code></td><td>이름·메일 <b>매퍼</b></td></tr>
+<tr><td><code>userAccountControl</code></td><td><b>MSAD account controls</b> 매퍼</td></tr>
+<tr><td><code>whenChanged</code>·<code>whenCreated</code></td><td>동기화용 — 언제 바뀌었나</td></tr>
+<tr><td><code>pwdLastSet</code></td><td>"비밀번호를 바꿔야 함" 을 알아내는 데</td></tr>
+</table>
+</div>
+<div class="key"><b>속성 목록이 곧 설정의 거울이다.</b>
+매퍼를 하나 지우면 여기서 그 속성이 사라진다 —
+7부의 설정을 확인하는 가장 빠른 방법이 이 한 줄을 보는 것이다.</div>
+</article>
+
+<article class="card" id="f7-log-3">
+<h3>틀린 비밀번호</h3>
+<!--OUT file=kc_ad_login_badpw.txt lines=1-11 note=찾기는 찾는다-->
+<span class="tier a">실행 검증</span>
+<div class="key">사람은 <b>찾았다</b>. 막힌 것은 두 번째 연결의 bind 다 —
+<code>invalidCredentials</code>. 3부 5장에서 만든 그 응답이고,
+진짜 AD 라면 진단 문구에 <code>data 52e</code> 가 붙어 온다.</div>
+<div class="tip">이번에는 찾을 때 <code>objectGUID</code> 로 물었다.
+이미 한 번 가져와 사본이 있으면 Keycloak 은 아이디가 아니라
+<b>GUID 로 되찾는다</b> — 그래서 AD 에서 아이디를 바꿔도 같은 사람으로 남는다.</div>
+</article>
+
+<article class="card" id="f7-log-4">
+<h3>꺼진 계정</h3>
+<!--OUT file=kc_ad_login_disabled.txt lines=1-12 note=AD 가 거절한다-->
+<span class="tier a">실행 검증</span>
+<div class="key">사용자에게는 <b>틀린 비밀번호와 똑같이</b> 보인다 —
+"잘못된 사용자 이름 또는 비밀번호입니다."
+계정이 꺼져 있다고 알려 주지 않는 것이 맞다(1부 5장).</div>
+<div class="warn"><b>그래서 진단이 어렵다.</b> 사용자는 "비밀번호가 맞는데요"
+라고 하고, 화면은 아무것도 알려 주지 않는다.
+답은 <b>AD 쪽 로그</b>에 있다 — 진짜 AD 라면 <code>data 533</code>(꺼진 계정)과
+<code>data 52e</code>(틀린 비밀번호)가 갈린다(3부 5장).</div>
+</article>
+
+<article class="card" id="f7-log-5">
+<h3>없는 사람</h3>
+<!--OUT file=kc_ad_login_nouser.txt lines=1-11 note=검색에서 끝난다-->
+<span class="tier a">실행 검증</span>
+<div class="key">이번에는 <b>두 번째 연결이 아예 없다</b>.
+찾지 못했으니 bind 를 해 볼 대상이 없다.<br>
+로그에서 <b>연결이 몇 개 났는지</b>만 봐도 어디서 막혔는지 알 수 있다 —
+하나면 "못 찾음", 둘이면 "찾았는데 비밀번호가 틀림".</div>
+</article>
+
+<article class="card" id="f7-log-6">
+<h3>세 실패를 가르는 법</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>증상</th><th>AD 로그</th><th>원인</th></tr>
+<tr><td rowspan="3">사용자에게는 셋 다<br>"아이디나 비밀번호가 틀렸습니다"</td>
+<td>SEARCH → 0건</td><td>없는 사람 · 검색 범위 밖 · 필터가 뺐다</td></tr>
+<tr><td>SEARCH 1건 → BIND invalidCredentials</td>
+<td>틀린 비밀번호 <b>또는</b> 꺼진 계정 · 잠긴 계정</td></tr>
+<tr><td>서비스 계정 BIND 부터 실패</td>
+<td><b>모든 사람</b>이 못 들어온다 — 5장</td></tr>
+</table>
+</div>
+<div class="key">첫 줄이 이 부에서 가장 자주 쓸 표다.
+민원은 늘 "로그인이 안 돼요" 하나로 오지만, 로그에서는 셋이 <b>다르게 보인다</b>.</div>
+</article>
+
+<article class="card quiz" id="f7-log-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 어떤 사용자만 로그인이 안 된다.
+AD 로그를 보니 SEARCH 가 <b>0건</b>으로 끝난다. 무엇부터 볼까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 로그에 찍힌 <b>필터와 base DN 을 그대로 복사해</b>
+직접 검색해 본다 — 3부의 <code>ldapcli</code> 나 <code>ldapsearch</code> 로.<br>
+거기서 나오면 Keycloak 쪽 문제(캐시·검색 필터), 안 나오면 AD 쪽이다.<br>
+AD 쪽이라면 셋 중 하나다. ① 그 사람이 <code>usersDn</code> <b>아래에 없다</b>
+— 다른 OU 에 있는 경우가 흔하다. ② <code>customUserSearchFilter</code> 가
+그 사람을 빼고 있다(4장). ③ 로그인 아이디로 쓰는 속성이 그 사람만
+비어 있다 — 오래된 계정에서 <code>userPrincipalName</code> 이 빈 경우가 있다.</div>
+</article>
+
+<article class="card" id="f7-id">
+<p class="chnum">3장</p>
+<h2>무엇으로 로그인하는가</h2>
+<p class="chsub">칸 하나가 바꾸는 것</p>
+</article>
+
+<article class="card" id="f7-id-1">
+<h3>세 가지 후보</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>속성</th><th>생김새</th><th>언제 고르나</th></tr>
+<tr><td><code>sAMAccountName</code></td><td><code>minji</code></td>
+<td>예전부터 쓰던 짧은 아이디. <b>20자 제한</b>이 있다</td></tr>
+<tr><td><code>userPrincipalName</code></td><td><code>minji@ad.campus.example</code></td>
+<td>메일 주소처럼 생긴 것. 요즘 권장</td></tr>
+<tr><td><code>mail</code></td><td><code>minji@campus.example</code></td>
+<td>UPN 과 메일이 다른 조직에서</td></tr>
+</table>
+</div>
+<div class="key">3부 2장에서 본 그 셋이다.
+<b>사람들이 이미 무엇으로 로그인하고 있는지</b>가 답이다 —
+바꾸면 전 직원이 헷갈린다.</div>
+</article>
+
+<article class="card" id="f7-id-2">
+<h3>바꿔 보면</h3>
+<!--OUT file=kc_ad_upn.txt lines=1-9 note=칸 하나를 바꿨다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="f7-id-3">
+<h3>AD 가 받은 필터</h3>
+<!--OUT file=kc_ad_upn.txt lines=10-17 note=속성 이름이 바뀌었다-->
+<span class="tier a">실행 검증</span>
+<div class="key">필터의 속성 이름이 <code>sAMAccountName</code> 에서
+<code>userPrincipalName</code> 으로 바뀌었다.
+<b>설정 칸 하나가 LDAP 질의 한 줄을 바꾼다</b> — 이 부의 모든 칸이 이런 식이다.</div>
+<div class="tip"><code>mail=</code> 로도 한 번 물어본 것이 보인다.
+realm 설정의 <code>loginWithEmailAllowed</code> 가 켜져 있어서
+메일 주소로도 찾아보는 것이다(5부 4장).</div>
+</article>
+
+<article class="card" id="f7-id-4">
+<h3>바꾸면 생기는 일</h3>
+<div class="warn"><b>사본의 아이디가 통째로 바뀐다.</b>
+Keycloak 안의 <code>username</code> 이 <code>minji</code> 에서
+<code>minji@ad.campus.example</code> 로 바뀐다.<br>
+그 아이디를 어딘가에 적어 둔 앱이 있다면 전부 어긋난다 —
+그래서 <b>앱은 사람을 <code>sub</code> 로 기억해야 한다</b>(5부 7장).</div>
+<div class="key">그리고 이미 들어온 사본은 옛 아이디로 남는다.
+그래서 이 실험 스크립트는 바꾸기 전에 <b>사본을 지운다</b> —
+안 지우면 옛 아이디와 새 아이디가 섞여 무엇이 답인지 알 수 없게 된다.</div>
+</article>
+
+<article class="card" id="f7-id-5">
+<h3>사람을 알아보는 열쇠는 따로 있다</h3>
+<!--OUT file=kc_admin_user_minji.txt lines=1-12 note=LDAP_ID 가 objectGUID-->
+<span class="tier a">실행 검증</span>
+<div class="key">아이디는 바뀌어도 <b><code>objectGUID</code> 는 안 바뀐다</b>.
+3부 1장 퀴즈의 답이 여기서 실제 값으로 나타난다 —
+Keycloak 은 이 값으로 "같은 사람" 을 판단한다.</div>
+</article>
+
+<article class="card" id="f7-sa">
+<p class="chnum">4장</p>
+<h2>서비스 계정과 검색 범위</h2>
+<p class="chsub">누가 붙고, 무엇을 가져오나</p>
+</article>
+
+<article class="card" id="f7-sa-1">
+<h3>서비스 계정에 필요한 권한</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필요한 것</th><th>왜</th></tr>
+<tr><td><code>usersDn</code> 아래를 <b>읽기</b></td><td>사람을 찾으려고</td></tr>
+<tr><td>그룹 DN 아래를 <b>읽기</b></td><td>그룹 매퍼가 쓰려고</td></tr>
+<tr><td>비밀번호가 <b>안 만료</b></td><td>만료되면 <b>전원</b>이 못 들어온다</td></tr>
+</table>
+</div>
+<div class="warn"><b>쓰기 권한을 주지 않는다.</b>
+<code>editMode: READ_ONLY</code> 로 두었으면 Keycloak 은 쓸 일이 없고,
+그런데도 권한이 있으면 사고 하나가 AD 를 망가뜨릴 수 있다.<br>
+그리고 <b>도메인 관리자 계정을 쓰지 않는다</b> — 급하다고 그렇게 해 두면
+그대로 굳는다.</div>
+</article>
+
+<article class="card" id="f7-sa-2">
+<h3>서비스 계정이 막히면</h3>
+<pre class="term">AD 로그에서 이렇게 보인다:
+
+  [1] #1 BIND dn="CN=svc-keycloak,OU=Service Accounts,…"
+         → invalidCredentials
+
+  그 뒤로 SEARCH 가 아예 없다.
+
+증상: **모든 사람**이 로그인 못 한다.
+      한 사람이 아니라 전원이면 여기부터 본다.</pre>
+<span class="tier ill">설명용</span>
+<div class="key">3부 5장에서 만든 서비스 계정 이야기가 여기서 실전이 된다.
+비밀번호를 바꾸거나 계정이 잠기면 <b>학교 전체가 로그인을 못 한다</b> —
+그래서 이 계정에는 만료 없는 비밀번호를 두고, 바꾸는 날을 따로 관리한다.</div>
+</article>
+
+<article class="card" id="f7-sa-3">
+<h3>가져올 범위를 좁히기</h3>
+<!--OUT file=kc_ad_filter.txt lines=1-9 note=서비스 계정이 사람 목록에 섞여 있다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="f7-sa-4">
+<h3>필터를 걸면</h3>
+<!--OUT file=kc_ad_filter.txt lines=10-19 note=바로 줄어든다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><code>customUserSearchFilter</code> 는
+Keycloak 이 보내는 <b>모든 사용자 검색에 덧붙는다</b>.
+2장의 로그를 다시 보면 <code>(&amp;(!(sAMAccountName=svc-*)))</code> 가
+사람 찾는 필터 앞에 붙어 있는 것을 볼 수 있다.</div>
+<div class="tip">범위를 좁히는 방법은 둘이다 —
+<b>base DN 을 깊게</b>(<code>OU=Users,DC=…</code>) 잡거나, 이 필터를 쓰거나.
+사람이 여러 OU 에 흩어져 있으면 필터 쪽이 낫다.</div>
+</article>
+
+<article class="card" id="f7-sa-5">
+<h3>가져오는 양을 조절하는 칸들</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>우리 값</th><th>뜻</th></tr>
+<tr><td><code>pagination</code></td><td>true</td>
+<td>3부 7장의 <b>페이지 나누기</b>. AD 는 한 번에 1,000건만 준다</td></tr>
+<tr><td><code>batchSizeForSync</code></td><td>100</td>
+<td>동기화할 때 한 번에 몇 건씩</td></tr>
+<tr><td><code>searchScope</code></td><td>2 (subtree)</td>
+<td>base DN <b>아래 전부</b>. 1이면 바로 아래 한 층만</td></tr>
+<tr><td><code>importEnabled</code></td><td>true</td>
+<td>사본을 만든다. 끄면 매번 AD 에 물어본다</td></tr>
+</table>
+</div>
+<div class="warn"><b><code>pagination</code> 을 끄면 사람이 1,000명에서 잘린다.</b>
+AD 의 기본 <code>MaxPageSize</code> 가 1,000 이라서다(3부 7장).
+"1,000명 넘는 조직에서만 나는 버그" 의 정체가 이것이다.</div>
+</article>
+
+<article class="card quiz" id="f7-sa-quiz" data-quiz>
+<h3>3·4장 퀴즈</h3>
+<p class="q">Q. 어제까지 잘 되던 로그인이 오늘 <b>전원</b> 실패한다.
+AD 도 멀쩡하고 네트워크도 된다. 무엇부터 볼까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>서비스 계정</b>이다. 전원이 동시에 막히는 원인은
+사실상 그것뿐이다.<br>
+확인: AD 로그에서 첫 BIND 가 <code>invalidCredentials</code> 인지 본다.
+맞다면 ① 비밀번호가 만료됐거나 ② 정책에 걸려 바뀌었거나
+③ 계정이 잠겼다(3부 5장의 잠금 정책).<br>
+같은 증상을 내는 것이 하나 더 있다 — <b>인증서 만료</b>다.
+LDAPS 로 붙는데 AD 쪽 인증서가 어제 만료됐다면 연결 자체가 안 된다.
+그때는 BIND 도 못 가고 <b>연결됨</b> 줄조차 안 찍힌다 — 5장에서 다룬다.</div>
+</article>
+
+<article class="card" id="f7-tls">
+<p class="chnum">5장</p>
+<h2>LDAPS 와 자체 CA</h2>
+<p class="chsub">1부 7장의 인증서가 여기서 쓰인다</p>
+</article>
+
+<article class="card" id="f7-tls-1">
+<h3>왜 평문으로 두면 안 되나</h3>
+<p class="lead">우리 실험은 <code>ldap://</code> 평문이다.
+로그에 <b>bind DN 이 그대로</b> 찍히는 것을 봤다 —
+선을 타고 가는 것도 마찬가지다. 비밀번호도 함께 간다.</p>
+<!--OUT file=ad_bind_ok.txt lines=1-14 note=3부에서 본 그 바이트-->
+<span class="tier a">실행 검증</span>
+<div class="warn">3부 4장에서 본 그 바이트다. 비밀번호가
+<b>base64 도 아니고 그냥 글자</b>로 실려 간다.
+사내망이라고 안전한 것이 아니다 — 운영에서는 반드시 <code>ldaps://</code> 다.</div>
+</article>
+
+<article class="card" id="f7-tls-2">
+<h3>포트 셋</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>포트</th><th>무엇</th><th>이 덱에서</th></tr>
+<tr><td>389</td><td>평문 LDAP (StartTLS 로 올릴 수 있다)</td><td>실험용</td></tr>
+<tr><td><b>636</b></td><td><b>LDAPS</b> — 처음부터 TLS</td><td><b>운영은 이것</b></td></tr>
+<tr><td>3268 / 3269</td><td>글로벌 카탈로그 — 숲 전체를 한 번에</td><td>안 쓴다</td></tr>
+</table>
+</div>
+<div class="tip">글로벌 카탈로그는 여러 도메인을 한 번에 뒤질 때 쓴다.
+대신 <b>속성이 일부만</b> 실려 온다 — 필요한 속성이 없어서
+"이름이 안 와요" 가 되는 흔한 함정이다.</div>
+</article>
+
+<article class="card" id="f7-tls-3">
+<h3>사내 CA 를 믿게 하기</h3>
+<p class="lead">AD 의 인증서는 대개 <b>사내 CA</b> 가 발급한 것이다.
+그 CA 는 어디에도 미리 들어 있지 않으니, Keycloak 에게 알려 줘야 한다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>값</th><th>뜻</th></tr>
+<tr><td><code>useTruststoreSpi</code></td><td><code>always</code></td>
+<td>Keycloak 의 truststore 를 쓴다</td></tr>
+<tr><td><code>KC_TRUSTSTORE_PATHS</code></td><td>디렉터리 경로</td>
+<td>거기 있는 CA 인증서를 전부 믿는다</td></tr>
+</table>
+</div>
+<div class="key">1부 7장에서 <code>--cacert</code> 로 CA 를 알려 준 것과 같은 일이다.
+6부에서 이 CA 를 <b>Secret 에 담아</b> 컨테이너에 마운트한다.</div>
+</article>
+
+<article class="card" id="f7-tls-4">
+<h3>안 믿을 때 어떻게 보이나</h3>
+<!--OUT file=ad_ldaps_notrust.txt lines=1-10 note=3부에서 본 그 실패-->
+<span class="tier a">실행 검증</span>
+<div class="key">3부 7장에서 만든 그 화면이다.
+<b>bind 도 못 가고 연결에서 끝난다</b> — 그래서 AD 로그에
+"연결됨" 조차 안 찍힌다. 4장 퀴즈의 그 구별법이다.</div>
+</article>
+
+<article class="card" id="f7-grp">
+<p class="chnum">6장</p>
+<h2>그룹이 건너오는 길</h2>
+<p class="chsub">AD 의 member 에서 토큰의 groups 까지</p>
+</article>
+
+<article class="card" id="f7-grp-1">
+<h3>네 걸음</h3>
+<ol>
+<li>AD 의 그룹에 <code>member</code> 로 사람이 적혀 있다 (3부 3장)</li>
+<li><b>group-ldap-mapper</b> 가 그것을 읽어 Keycloak 의 그룹으로 만든다</li>
+<li>사람이 그 그룹에 든다</li>
+<li><b>protocol mapper</b> 가 그것을 토큰의 <code>groups</code> 로 싣는다 (5부 7장)</li>
+</ol>
+<div class="key">매퍼가 <b>두 종류</b>라는 것이 헷갈리는 자리다.
+하나는 <b>AD → Keycloak</b>(LDAP 매퍼), 다른 하나는
+<b>Keycloak → 토큰</b>(프로토콜 매퍼)이다. 이름이 비슷할 뿐 다른 일이다.</div>
+</article>
+
+<article class="card" id="f7-grp-2">
+<h3>LDAP 그룹 매퍼</h3>
+<!--CODE file=keycloak/json/ldapmap-groups.json lines=1-14 note=어디서 무엇을 읽나-->
+<span class="tier b">구문 검증</span>
+</article>
+
+<article class="card" id="f7-grp-3">
+<h3>나머지 칸</h3>
+<!--CODE file=keycloak/json/ldapmap-groups.json lines=15-20 note=읽기 전용-->
+<span class="tier b">구문 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>뜻</th></tr>
+<tr><td><code>membership.attribute.type: DN</code></td>
+<td>AD 는 <code>member</code> 에 <b>DN 전체</b>를 적는다(3부 3장)</td></tr>
+<tr><td><code>user.roles.retrieve.strategy</code></td>
+<td>사람의 그룹을 <b>어느 쪽에서</b> 알아낼까 —
+그룹의 member 를 뒤질까, 사람의 memberOf 를 볼까</td></tr>
+<tr><td><code>preserve.group.inheritance: false</code></td>
+<td>그룹 안의 그룹을 평평하게 편다</td></tr>
+</table>
+</div>
+<div class="warn"><b>중첩 그룹을 조심할 것.</b> AD 에서는 그룹이 그룹을
+품을 수 있다. 평평하게 펴면 간단하지만, "상위 그룹에 넣었는데 권한이 안 와요"
+가 생긴다. AD 의 <code>memberOf</code> 는 <b>직접 속한 것만</b> 알려 준다(3부 3장).</div>
+</article>
+
+<article class="card" id="f7-grp-4">
+<h3>건너온 결과</h3>
+<!--OUT file=kc_ad_groups.txt note=두 사람의 그룹-->
+<span class="tier a">실행 검증</span>
+<div class="key"><code>admin.lee</code> 에게만 <code>lunch-admins</code> 가 있다.
+3부의 <code>campus.ldif</code> 에서 그 그룹의 <code>member</code> 에
+소희만 적어 둔 결과가 여기까지 온 것이다.</div>
+</article>
+
+<article class="card" id="f7-grp-5">
+<h3>그리고 토큰까지</h3>
+<!--OUT file=kc_e2e_07_decode.txt lines=16-22 note=진짜 토큰의 groups-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>0부에서 그린 선이 여기서 끝까지 이어졌다.</b>
+AD 의 <code>member</code> 한 줄이 → LDAP 매퍼 → Keycloak 그룹 →
+프로토콜 매퍼 → 토큰의 <code>groups</code> → 8부에서 앱의 관리자 화면이 된다.</div>
+</article>
+
+<article class="card" id="f7-msad">
+<p class="chnum">7장</p>
+<h2>계정 상태 — MSAD account controls</h2>
+<p class="chsub">꺼진 계정·잠긴 계정·비밀번호 만료</p>
+</article>
+
+<article class="card" id="f7-msad-1">
+<h3>이 매퍼가 하는 일</h3>
+<p class="lead">AD 의 <code>userAccountControl</code> 한 숫자에
+계정의 상태가 비트로 들어 있다(3부 2장). 그것을 읽어
+Keycloak 의 <code>enabled</code> 와 필수 동작으로 옮긴다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>AD 쪽</th><th>Keycloak 쪽</th></tr>
+<tr><td><code>userAccountControl</code> 의 <b>ACCOUNTDISABLE</b>(2)</td>
+<td><code>enabled: false</code></td></tr>
+<tr><td><code>pwdLastSet = 0</code></td>
+<td>"다음 로그인에 비밀번호 변경" 필수 동작</td></tr>
+<tr><td>잠긴 계정</td><td>로그인 실패로 나타난다</td></tr>
+</table>
+</div>
+<div class="tip">우리 <code>campus.ldif</code> 의 <code>jisoo.oh</code> 가
+<code>userAccountControl: 514</code> = 512(정상) + 2(꺼짐)다.
+5부 6장의 사용자 목록에서 <b>enabled=False</b> 로 보인 것이 이 매퍼의 작품이다.</div>
+</article>
+
+<article class="card" id="f7-msad-2">
+<h3>매퍼는 설정이 없다</h3>
+<!--CODE file=keycloak/json/ldapmap-firstname.json note=속성 매퍼는 이렇게 생겼다-->
+<span class="tier b">구문 검증</span>
+<div class="key">앞에서 본 속성 매퍼와 달리 MSAD 매퍼는 <code>config</code> 가 비어 있다.
+할 일이 정해져 있어서 고를 것이 없기 때문이다 —
+vendor 를 AD 로 고르면 <b>자동으로 붙는</b> 이유이기도 하다.</div>
+</article>
+
+<article class="card" id="f7-msad-3">
+<h3>이름이 뒤집혔던 이야기</h3>
+<div class="warn"><b>이 덱을 만들다 실제로 겪었다.</b>
+AD 를 고르면 Keycloak 이 <b>full name</b> 매퍼를 붙인다.
+그 매퍼는 <code>cn</code> 을 <b>"이름 성"</b> 으로 보고 빈칸에서 가른다.<br>
+그런데 우리 AD 의 <code>cn</code> 은 <code>Kim Minji</code> — 성이 앞이다.
+그래서 이름이 <b>"Kim Kim"</b> 이 됐다.</div>
+<div class="key">고침은 <code>full name</code> 매퍼를 빼고
+<code>givenName</code> 을 이름으로 옮기는 매퍼를 두는 것이다.
+위 화면의 그 매퍼가 그것이다.<br>
+<b>한국·일본·중국 조직에서 거의 반드시 만나는 손질</b>이다 —
+cn 이 "성 이름" 순이거나 한글이면 더 그렇다.</div>
+</article>
+
+<article class="card" id="f7-msad-4">
+<h3>고친 결과</h3>
+<!--OUT file=kc_e2e_07_decode.txt lines=8-15 note=Minji Kim-->
+<span class="tier a">실행 검증</span>
+<div class="tip">토큰의 <code>name</code>·<code>given_name</code>·<code>family_name</code> 이
+제대로 나온다. 8부에서 앱이 "안녕하세요, ○○ 님" 을 찍을 때 쓰는 값이다.</div>
+</article>
+
+<article class="card quiz" id="f7-msad-quiz" data-quiz>
+<h3>5·6·7장 퀴즈</h3>
+<p class="q">Q. 어떤 사람을 AD 에서 <code>lunch-admins</code> 그룹에 넣었는데
+토큰의 <code>groups</code> 에 안 나온다. 어디를 볼까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 네 걸음(6장) 중 <b>어디서 끊겼는지</b>를 차례로 본다.<br>
+① AD 에 정말 들어갔나 — <code>ldapcli</code> 로
+<code>(member=CN=…)</code> 를 직접 검색해 본다.<br>
+② LDAP 그룹 매퍼가 그것을 읽었나 — Keycloak 의 <b>Groups</b> 화면에서
+그 사람을 본다. 여기까지 안 왔으면 매퍼의 <code>groups.dn</code> 이
+그 그룹이 사는 OU 를 안 가리키는 것이다.<br>
+③ 프로토콜 매퍼가 실었나 — <code>jwtool decode</code> 로 토큰을 연다.<br>
+④ <b>이미 발급된 토큰</b>을 보고 있는 것은 아닌가 — 토큰은 발급 순간의
+사진이다(4부 8장). 다시 로그인해야 새 그룹이 실린다.<br>
+④가 의외로 흔하다. 무엇을 고쳐도 안 바뀌면 <b>로그아웃부터</b> 해 본다.</div>
+</article>
+
+<article class="card" id="f7-half">
+<h3>7부 전반 마무리</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>여기까지</th><th>남은 것 (7부 후반)</th></tr>
+<tr><td>연결·인증·식별자 칸</td><td>설정 칸 전수 표</td></tr>
+<tr><td>로그인 실패 세 가지 가르기</td><td>진단 순서 15가지</td></tr>
+<tr><td>검색 범위와 서비스 계정</td><td>주기적 동기화 · 변경분만 가져오기</td></tr>
+<tr><td>그룹이 건너오는 길</td><td>매퍼 여섯 종을 하나씩</td></tr>
+<tr><td>계정 상태 매퍼</td><td>운영 중 설정 바꾸기</td></tr>
+</table>
+</div>
+<div class="key">여기까지가 <b>붙이는 데</b> 필요한 전부다.
+남은 것은 <b>붙인 뒤에</b> 필요한 것들이다.</div>
 </article>
