@@ -1,3 +1,10 @@
+### [2026-09-08 17:20] Keycloak×AD 덱 5부 본문 — Keycloak 이란 74장
+- **기획:** PLAN §8 6단계의 가운데. 11개 장(제품과의 차이·dev/prod·설정 세 경로·realm·client·user/group/role·scope와 mapper·federation·관리 API·내보내기·마무리), 퀴즈 7. 4부의 miniidp 와 나란히 두는 장을 여럿 뒀다.
+- **TC:** 본문 커밋이라 새 시험은 없다. 조립기 검사와 역검증·deck-check·글꼴검사가 관문이다.
+- **개발:** deck/sections/05_keycloak.html(신규) · 13_appendix.html(FULLSRC 12개) · deck/claims.md(5부 24행) · deck/pending.txt(비움)
+- **검증:** 687장 · 커버리지 7588/7588줄 100% · 조립 0건 · 역검증 통과 · deck-check 0건(퀴즈 37·데모 12) · 글꼴 통과 · test 14패키지
+- **비고:** 안내문 칸 수(11 대 56)·토큰 클레임 표로 "제품이란 무엇인가" 를 숫자로 보였다. 8장의 가짜 AD 로그가 7부 예고편 노릇을 한다.
+
 ### [2026-09-08 16:40] Keycloak×AD 덱 6단계(1/3) — 진짜 Keycloak 26.7.3 연동
 - **기획:** PLAN §8 6단계의 앞부분. 배포판을 받아 띄우고, 관리 REST API 로 realm·클라이언트·AD 연동을 세우고, 로그인 전 과정을 curl 로 훑어 캡처한다. 본문은 다음 두 커밋.
 - **TC:** 새 Go 코드 2건 RED→GREEN — 이진 필터를 RFC 4515 `\XX` 로 감싸기(proto), 긴 필터를 `)(` 에서 접기(fakead). 나머지는 실물 실행이 관문이다.

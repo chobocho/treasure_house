@@ -35,7 +35,7 @@
 | Java | OpenJDK 21.0.12 | 2026-09-08 | Keycloak 배포판 실행용 |
 | kubectl | v1.37.0 (kustomize v5.8.1) | 2026-09-08 | `kubectl kustomize` 만 오프라인으로 된다 |
 | kubeconform | v0.8.0 | 2026-09-08 | 스키마는 kubernetes-json-schema `master-standalone-strict` |
-| Keycloak | (`keycloak/VERSION` 에 고정) | — | 26.x GA |
+| Keycloak | 26.7.3 (2026-08-31 GA) | 2026-09-08 | `keycloak/VERSION` · sha256 아래 |
 
 ## 이름 규칙 (전부 지어낸 것)
 
@@ -234,12 +234,53 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 - Kustomize 문서 — https://kubectl.docs.kubernetes.io/references/kustomize/ · 확인 2026-09-08
 - RFC 6902 (JSON Patch) — https://www.rfc-editor.org/rfc/rfc6902 · 확인 2026-09-08
 
+## 5부 — Keycloak (`kc-*` 슬라이드)
+
+| 것 | 판 | sha256 | 받은 곳 |
+|---|---|---|---|
+| Keycloak | 26.7.3 | `27a6535553c3cdcd083872ba40629efafb3475e3b758e0c6f691395561dd0f1f` | https://github.com/keycloak/keycloak/releases/tag/26.7.3 |
+
+**이 부의 tier A 화면은 전부 이 판을 이 기계에서 실제로 띄워 뜬 것이다.**
+다만 `kc_*` 캡처 12개는 두 번 떠도 같지 않다 — Keycloak 이 realm 마다
+서명 열쇠를 새로 만들기 때문이고, 그 사실을 `out/kc_reproducible.txt` 에
+캡처로 남겼다.
+
+| 슬라이드 | 주장 | 등급 | 출처 | 확인일 |
+|---|---|---|---|---|
+| `kc-what-2` | Keycloak 의 안내문은 칸이 56개, 우리 miniidp 는 11개 | A | `out/kc_e2e_01_discovery.txt` · `out/oidc_discovery.txt` | 2026-09-08 |
+| `kc-run-3` | 개발 모드가 스스로 "DO NOT use this configuration in production" 을 찍는다 | A | `out/kc_boot.txt` | 2026-09-08 |
+| `kc-run-4` | 운영 모드는 `kc.sh build` 로 실행 이미지를 미리 굽는다 | C | Keycloak 서버 가이드 "Configuring Keycloak" | 2026-09-08 |
+| `kc-run-5` | 건강 확인은 관리 포트(9000)에 있다 | A | `keycloak/run_dev.sh` 실행 · `/health/ready` 응답 | 2026-09-08 |
+| `kc-run-quiz` | 운영 모드는 `hostname` 을 요구한다 | C | Keycloak 서버 가이드 "Configuring the hostname" | 2026-09-08 |
+| `kc-cfg-1` | 설정은 명령줄 → 환경 변수 → conf 파일 순으로 이긴다 | C | Keycloak 서버 가이드 "Configuring Keycloak" — 우선순위 | 2026-09-08 |
+| `kc-cfg-2` | `KC_BOOTSTRAP_ADMIN_*` 는 첫 관리자를 만들 때만 쓰인다 | C | Keycloak 서버 가이드 "Bootstrapping the admin user" | 2026-09-08 |
+| `kc-realm-3` | realm 설정 칸은 107개다 | A | `out/kc_admin_realm.txt` | 2026-09-08 |
+| `kc-realm-4` | 우리 realm 의 기본값 넷(sslRequired external 등) | A | `out/kc_admin_realm.txt` | 2026-09-08 |
+| `kc-client-2` | `pkce.code.challenge.method=S256` 으로 PKCE 를 강제한다 | B·C | `keycloak/json/client.json` · Keycloak 클라이언트 문서 | 2026-09-08 |
+| `kc-client-5` | 로그인 폼의 action 에 한 번만 쓰는 `session_code` 가 박힌다 | A | `out/kc_e2e_03_loginform.txt` | 2026-09-08 |
+| `kc-user-2` | AD 의 `userAccountControl: 514` 가 Keycloak 의 `enabled=false` 로 온다 | A | `out/kc_admin_users.txt` · `data/campus.ldif` | 2026-09-08 |
+| `kc-user-3` | Keycloak 은 사용자를 `LDAP_ID`(objectGUID)로 알아본다 | A | `out/kc_admin_user_minji.txt` | 2026-09-08 |
+| `kc-user-5` | "Sync all users" 는 `user-storage/<id>/sync?action=triggerFullSync` 다 | A | `out/kc_admin_sync.txt` | 2026-09-08 |
+| `kc-user-6` | 서비스 계정도 사용자로 딸려 온다 | A | `out/kc_admin_users.txt` (svc-keycloak) | 2026-09-08 |
+| `kc-map-3` | 매퍼 하나로 `groups` 클레임이 실린다 | A | `out/kc_e2e_07_decode.txt` | 2026-09-08 |
+| `kc-map-4` | Keycloak 의 ID 토큰은 `azp`·`at_hash`·`sid` 를 더 싣고 `sub` 가 UUID 다 | A | `out/kc_e2e_07_decode.txt` | 2026-09-08 |
+| `kc-map-5` | `profile`·`email`·`roles`·`acr` 은 기본 client scope 다 | C | Keycloak 문서 "Client scopes" | 2026-09-08 |
+| `kc-fed-1` | federation 은 저장소를 읽고, broker 는 남의 로그인 화면으로 보낸다 | C | Keycloak 문서 "User federation" · "Identity brokering" | 2026-09-08 |
+| `kc-fed-3` | `vendor: ad` · `editMode: READ_ONLY` 로 붙였다 | A | `out/kc_admin_ldap.txt` | 2026-09-08 |
+| `kc-fed-4` | 진짜 Keycloak 이 우리 가짜 AD 에 LDAP 으로 붙었다 | A | `out/kc_fakead.log` | 2026-09-08 |
+| `kc-api-3` | 관리자 토큰의 `iss` 는 master realm 이고 수명이 60초다 | A | `out/kc_admin_token.txt` | 2026-09-08 |
+| `kc-api-5` | 컴포넌트는 이름이 같아도 409 를 안 준다 (실제로 겹쳐 봤다) | A | `keycloak/admin_api.sh` 의 postComp 주석 · 실행 기록 | 2026-09-08 |
+| `kc-exp-4` | 내보낸 realm 파일 하나로 빈 DB 에 realm 이 다시 선다 | A | `out/kc_server.log` 의 `Realm 'campus' imported` · 이후 e2e 통과 | 2026-09-08 |
+| `kc-exp-5` | 내보낸 파일은 3,019줄 · 클라이언트 7 · 그룹 3 · 사용자 0 | A | `keycloak/realm-campus.json` | 2026-09-08 |
+
+- Keycloak 서버 가이드 26.7 — https://www.keycloak.org/documentation · 확인 2026-09-08
+- Keycloak 관리 REST API — https://www.keycloak.org/docs-api/latest/rest-api/ · 확인 2026-09-08
+
 ## 앞으로 채울 곳
 
 부가 하나씩 들어올 때마다 그 부의 절을 여기에 연다.
 지금은 비어 있는 것이 정상이다 — 뼈대 커밋에는 주장이 거의 없다.
 
-- [ ] 5부 Keycloak — 관리자 가이드 (버전 박힌 URL)
 - [ ] 6부 k8s 배포 — Keycloak 서버 가이드 `all-config`
 - [ ] 7부 AD 연동 — LDAP user federation 문서 + Microsoft Learn
 - [ ] 8부 앱 연동 — oauth2-proxy · ingress-nginx `auth_request`
