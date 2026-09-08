@@ -89,5 +89,11 @@ if [ ! -f idp-signing.key ]; then
   echo "  만듦: idp-signing.key (miniidp 의 토큰 서명 열쇠)"
 fi
 
+# ── 4. 쿠버네티스 쪽으로 한 벌 ──────────────────────────────────
+# kustomize 는 **자기 폴더 밖의 파일을 못 읽는다**. 일부러 그렇게 돼
+# 있다 — 매니페스트 묶음이 저장소 아무 데나 손을 뻗으면 무엇이 들어가
+# 있는지 알 수 없기 때문이다. 그래서 여기서 한 벌 복사해 둔다.
+cp demo-ca.crt ../k8s/base/ad-ca.crt
+
 echo "완료 — 시연용 인증서 3벌 + IdP 서명 열쇠."
 echo "검사: sh certs/check_certs.sh"

@@ -12,6 +12,11 @@ resources:
 replicas:
   - name: lunch-web
     count: 3
+  # Keycloak 은 두 벌. 하나가 죽어도 로그인이 끊기지 않는다.
+  # 두 벌 이상이면 캐시를 나눠 갖는 설정이 **반드시** 필요하다 —
+  # 안 그러면 한쪽에서 로그인한 세션을 다른 쪽이 모른다.
+  - name: keycloak
+    count: 2
 
 images:
   - name: registry.campus.example/lunch/lunch-web
@@ -41,3 +46,36 @@ patches:
             labelSelector:
               matchLabels:
                 app.kubernetes.io/name: lunch-web
+  - target:
+      kind: Deployment
+      name: keycloak
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: "1"
+            memory: 1536Mi
+          limits:
+            memory: 2Gi
+      # 갈아 끼울 때 한 벌은 늘 떠 있게 한다.
+      - op: add
+        path: /spec/strategy
+        value:
+          type: RollingUpdate
+          rollingUpdate:
+            maxUnavailable: 0
+            maxSurge: 1
+  # 한 벌이 죽어도 나머지가 남도록 최소 대수를 지킨다.
+  - target:
+      kind: StatefulSet
+      name: postgres
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            memory: 1Gi

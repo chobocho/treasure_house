@@ -1,0 +1,112 @@
+# PostgreSQL — Keycloak 의 창고.
+#
+# **StatefulSet 이다.** 2부 2장에서 Deployment 와 갈라 둔 그것이다.
+# 차이는 하나로 줄여 말할 수 있다 — Deployment 의 Pod 는 서로 같아서
+# 아무거나 죽여도 되지만, 데이터베이스는 **자기 디스크가 있는**
+# 그 한 대다.
+#
+# ⚠ 배우려고 여기 둔다. 진짜 운영에서는 관리형 데이터베이스를 쓰는 편이
+# 거의 언제나 낫다 — 백업·복구·판올림·이중화를 남이 해 준다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: lunch
+  labels:
+    app.kubernetes.io/name: postgres
+spec:
+  # clusterIP: None = **헤드리스**. 가상 IP 를 안 만들고
+  # DNS 가 Pod 의 주소를 바로 알려 준다. StatefulSet 이
+  # postgres-0.postgres 같은 이름을 갖게 되는 근거다.
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: lunch
+  labels:
+    app.kubernetes.io/name: postgres
+spec:
+  # 어느 Service 가 이 이름들을 내걸 것인가. 헤드리스여야 한다.
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:17.6-alpine
+          env:
+            - name: POSTGRES_DB
+              value: keycloak
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: password
+            # 이 이미지는 데이터 디렉터리 밑에 하위 폴더를 요구한다.
+            # 볼륨 뿌리에 바로 쓰면 lost+found 때문에 초기화가 막힌다.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, keycloak, -d, keycloak]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: [pg_isready, -U, keycloak, -d, keycloak]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  # 여기가 StatefulSet 의 핵심이다. Pod 마다 **자기 디스크**를 하나씩
+  # 만들어 붙이고, Pod 가 죽었다 살아나도 같은 디스크를 다시 붙인다.
+  #
+  # 그리고 StatefulSet 을 지워도 이 디스크는 **안 지워진다** —
+  # 실수로 지웠을 때 데이터가 남아 있게 하려는 것이다.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi

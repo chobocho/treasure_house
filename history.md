@@ -1,3 +1,10 @@
+### [2026-09-08 23:30] Keycloak×AD 덱 6부 — 쿠버네티스에 Keycloak 47장
+- **기획:** PLAN §8 7단계. 6개 장(PostgreSQL StatefulSet·Keycloak 얹기·인그레스·여러 벌과 캐시·인증서와 NetworkPolicy·오퍼레이터/Helm), 퀴즈 4. 2부에서 배운 것을 그대로 쓰고 새 개념은 StatefulSet 하나다.
+- **TC:** 매니페스트는 tier B — kubeconform -strict 가 관문이다. base·dev·prod 각 16개 오브젝트 통과.
+- **개발:** k8s/base 4개 신규 · kustomization · overlays 둘 · certs/make_certs.sh · tools/pickobj.py(신규) · deck/sections/06_k8s_keycloak.html(신규) 외 3개 파일
+- **검증:** 802장 · 커버리지 8297/8297줄 100% · 조립 0건 · 역검증 통과 · deck-check 0건(퀴즈 45·데모 12) · 글꼴 통과 · test 14패키지
+- **비고:** YAML 접기(>-)로 나눈 DNS 이름에 공백이 끼어 깨지는 것을 직접 넣어 보고 확인했다. kustomize 가 루트 밖 파일을 못 읽어 make certs 가 CA 를 k8s/base 로 복사하게 했다.
+
 ### [2026-09-08 18:10] Keycloak×AD 덱 7부 전반 — AD 연동 49장
 - **기획:** PLAN §8 6단계의 마지막. 7개 장(정할 것·로그인 한 번의 LDAP 질의·로그인 아이디·서비스 계정과 범위·LDAPS·그룹이 건너오는 길·계정 상태), 퀴즈 4. 후반(전수 표·진단 15·동기화·매퍼 6종)은 8단계로 남긴다.
 - **TC:** 새 Go 코드는 없다. keycloak/ad_lab.sh 로 설정을 바꿔 가며 가짜 AD 로그가 어떻게 달라지는지를 캡처로 남기는 것이 이 부의 검증이다.

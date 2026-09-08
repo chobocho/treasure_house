@@ -389,6 +389,30 @@ analogies in §5.9) and hands it in the prompt.
 
 ## Progress log (newest first)
 
+### [2026-09-08 23:30] 7단계 6부 — 쿠버네티스에 Keycloak, 47장 (누적 802장)
+
+- **기획:** 6개 장 — 창고(PostgreSQL StatefulSet) · Keycloak 얹기 ·
+  바깥으로 내놓기 · 여러 벌 · 인증서와 담장 · 다른 포장과 마무리. 퀴즈 4.
+- **개발:** `k8s/base/{postgres,keycloak,keycloak-ingress,networkpolicy}.yaml` ·
+  `k8s/base/kustomization.yaml`(오브젝트 5 → 16) · overlays 둘 ·
+  `certs/make_certs.sh`(CA 를 k8s/base 로 복사) · `tools/pickobj.py`(신규) ·
+  `tools/record.sh` · `deck/sections/06_k8s_keycloak.html`(신규) ·
+  `13_appendix.html`(FULLSRC +4) · `deck/claims.md`(6부 16행)
+- **설정:** 운영 모드(`start --optimized`) · `KC_PROXY_HEADERS=xforwarded` ·
+  `KC_HTTP_ENABLED=true` · 관리 포트 9000 에 프로브 셋(startup 포함) ·
+  `KC_CACHE=ispn`+`kubernetes` 스택과 헤드리스 Service ·
+  읽기 전용 루트 · truststore Secret · NetworkPolicy 둘.
+- **부딪힌 것 둘:**
+  1. YAML 의 접기(`>-`)로 나눈 DNS 이름에 **공백이 끼어** 깨졌다.
+     직접 넣어 보고 확인한 뒤 ConfigMap 한 줄로 옮겼다.
+  2. **kustomize 는 kustomization 루트 밖의 파일을 못 읽는다**
+     (`security; file … is not in or below …`). 일부러 그런 것이라,
+     `make certs` 가 CA 를 `k8s/base/ad-ca.crt` 로 한 벌 복사하게 했다.
+- **검증:** 802장 · **커버리지 8297/8297줄 100퍼센트** · 조립 0건 ·
+  역검증 통과 · deck-check 0건(퀴즈 45 · 데모 12) · 글꼴 통과 ·
+  `sh k8s/validate.sh` 세 벌 각 16개 오브젝트 통과 · test 14패키지.
+- **다음:** §8 8단계(7부 후반 — 설정 칸 전수 표 · 진단 15 · 동기화 · 매퍼 6종).
+
 ### [2026-09-08 18:10] 6단계(3/3) 7부 전반 — 49장 (누적 742장)
 
 - **기획:** 7개 장 — 붙이기 전에 정할 것 · 로그인 한 번에 무슨 일이 ·

@@ -770,6 +770,16 @@ done
   sh k8s/validate.sh
 } >"$OUT/k8s_validate.txt" 2>&1
 
+# 6부에서 읽을 조각들 — 합친 결과가 길어 한 번에 못 싣는다.
+for kind in StatefulSet Deployment NetworkPolicy; do
+  {
+    echo "\$ bin/kubectl kustomize k8s/overlays/prod \\"
+    echo "    | awk '/^kind: $kind/,/^---/'"
+    bin/kubectl kustomize k8s/overlays/prod \
+      | python3 tools/pickobj.py "$kind"
+  } >"$OUT/k8s_kc_$(echo "$kind" | tr 'A-Z' 'a-z').txt" 2>&1
+done
+
 # 일부러 틀린 매니페스트 — 검사기가 무엇을 잡고 무엇을 못 잡는가.
 {
   echo '$ kubeconform -strict -output json k8s/examples/typo.yaml'
