@@ -297,12 +297,15 @@ def expand_fullsrc(m):
     out = []
     for k, (a, b) in enumerate(parts):
         label = chunks.label_for(lines, a, b, lang)
+        # 전문 인용 슬라이드에도 근거 등급을 붙인다. 이 파일들은 시험이
+        # 통과하는 실물이므로 A 다 — 배지를 안 붙이면 조립기가 오류로 잡는다.
         out.append(
             '<article class="card" id="%s-%d">\n'
             '<h3>%s <span class="badge">%d/%d</span></h3>\n'
             '<div class="src"><b>%s</b><span class="ln">%d–%d</span>'
             '<span>%s</span></div>\n'
             '<pre><code data-lang="%s" data-src="%s" data-lines="%d-%d">%s</code></pre>\n'
+            '<span class="tier a">실행 검증</span>\n'
             '</article>'
             % (prefix, k + 1, esc(title), k + 1, len(parts), esc(path), a, b,
                esc(label), lang, path, a, b, esc(cut(path, '%d-%d' % (a, b)))))

@@ -1,3 +1,10 @@
+### [2026-09-08 10:42] 3부 본문 — 회사 계정의 세계 83장, 전체 소스 부록 100장
+- **기획:** PLAN.md §8 3단계 뒷부분. 디렉터리·DN·AD 속성·그룹/memberOf·BER 바이트·바인드·검색·LDAPS·서비스 계정·안 하는 것·마무리 9개 장. 소스 전문은 새 부록 절이 싣는다.
+- **TC:** 로그 폭 시험을 새로 써서 RED 확인 → Server.Close 가 유휴 연결 때문에 안 꺼지던 결함을 잡아 연결 추적을 넣었다. 진단 문구 접기(wrapCells)도 RED→GREEN.
+- **개발:** deck/sections/{03_ad,13_appendix}.html, deck/figs/ad_tree.svg, deck/demos.js(ldap-filter·ldap-dn), ldap/fakead/server.go, ldap/ldapcli/dump.go, deck/{order,budget,pending}.txt, Makefile
+- **검증:** 덱 309장 572 KB · 소스 커버리지 3833/3833줄 100퍼센트 · 조립 오류 0건 · 역검증 통과(코드 159·출력 62) · deck-check 0건 · 글꼴 통과 · make record 2회 md5 동일(52개) · test 8패키지 · vet 통과
+- **비고:** 3부 83장(목표 75). 부록은 §7 에 없던 절이라 13번으로 새로 뒀다 — 커버리지 약속(§2.1)을 지키면서 교육 장을 안 부풀리는 자리. 예상 합계 989장(상한 2000).
+
 ### [2026-09-08 09:20] LDAP 코어 — BER·프로토콜·가짜 AD·ldapcli, 캡처 14개
 - **기획:** PLAN.md §8 3단계 앞부분. Keycloak 이 AD 에게 실제로 묻는 것만 골라 흉내 내는 LDAP 서버와, 오간 바이트를 풀어 보여 주는 클라이언트. 표준 라이브러리만 씀.
 - **TC:** 네 묶음 모두 뼈대→RED→GREEN. BER 는 골든 바이트(익명 바인드 14바이트·정수/길이 표), 필터는 글↔나무↔바이트 3방향 왕복, 서버는 진짜 소켓으로 종단 시험(쪼개 보내기·LDAPS 악수·잠금).

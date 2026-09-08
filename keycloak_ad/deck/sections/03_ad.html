@@ -2,17 +2,1143 @@
 <p class="chnum">3부</p>
 <h2>회사 계정의 세계 — Active Directory 와 LDAP</h2>
 <p class="chsub">학적부는 어떻게 생겼고, 어떤 말로 물어보는가</p>
-<!--FIG file=system_p3.svg cap=3부까지 켜진 그림-->
+<!--FIG file=system_p3.svg cap=3부에서 오른쪽 아래 상자가 켜진다-->
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>디렉터리와 도메인 — 왜 데이터베이스가 아니라 트리인가</li>
+<li>디렉터리와 도메인 — 왜 데이터베이스가 아니라 나무인가</li>
 <li>DN · OU · CN — 주소 읽는 법</li>
 <li>사용자 속성: <code>sAMAccountName</code> · UPN · <code>objectGUID</code></li>
 <li>그룹과 <code>memberOf</code></li>
 <li>LDAP bind 와 search 를 바이트로 보기</li>
 <li>검색 필터 · LDAPS · 서비스 계정 · 잠금 정책 · 포트 389/636/3268</li>
 </ul>
-<div class="tip"><b>끝나면</b> — 우리가 만든 가짜 AD 에 직접 질의를 보내고, 오간 바이트를 해석한다</div>
-<div class="warn"><b>이 부는 아직 준비 중입니다</b> — 뼈대만 세워 둔 상태다.
-본문이 들어오면 이 알림은 사라진다.</div>
+<div class="tip"><b>끝나면</b> — 우리가 만든 가짜 AD 에 직접 질의를 보내고,
+오간 바이트를 해석하고, 필터를 스스로 쓴다.</div>
+<div class="key"><b>여기서 만드는 것</b> — <b>가짜 AD</b> 다.
+독자에게 진짜 Active Directory 가 있을 리 없는데, AD 없이 이 덱을 배울 수는 없다.
+그래서 Keycloak 이 AD 에게 <b>실제로 묻는 것만</b> 골라 흉내 내는 LDAP 서버를
+Go 표준 라이브러리만으로 짰다. Keycloak 은 이것을 진짜 AD 로 알고 붙는다.</div>
+</article>
+
+<article class="card" id="ad-dir">
+<p class="chnum">1장</p>
+<h2>디렉터리 — 학교 학적부</h2>
+<p class="chsub">왜 표(表)가 아니라 나무인가</p>
+</article>
+
+<article class="card" id="ad-dir-1">
+<h3>민지의 다음 질문</h3>
+<blockquote>"학교 계정으로 로그인하게 하라는데 — 그 계정은 <b>어디</b>에 있지?"</blockquote>
+<p class="lead">답은 <b>도메인 컨트롤러</b>라는 서버 안의 <b>디렉터리</b>다.
+학교의 모든 사람·컴퓨터·그룹이 거기 한 그루의 나무로 들어 있다.</p>
+<div class="key"><b>디렉터리</b>(directory) — 전화번호부 · 학적부 · 조직도를 합친 것.
+데이터베이스와 다른 점은 <b>읽기가 압도적으로 많다</b>는 가정 위에 만들어졌다는 것이다.
+사람의 이름은 하루에 한 번도 안 바뀌지만, "이 사람 누구지" 는 하루에 수천 번 물어본다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>관계형 데이터베이스</th><th>디렉터리 (LDAP)</th></tr>
+<tr><td>모양</td><td>표와 행</td><td><b>나무</b></td></tr>
+<tr><td>주소</td><td>기본 키 (숫자)</td><td><b>경로</b> (DN)</td></tr>
+<tr><td>잘하는 것</td><td>쓰기 · 조인 · 트랜잭션</td><td>읽기 · 이름으로 찾기 · 복제</td></tr>
+<tr><td>이 덱에서</td><td>6부 Keycloak 의 창고</td><td><b>3부·7부 — 계정이 사는 곳</b></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="ad-dir-2">
+<h3>Active Directory 는 무엇의 이름인가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>낱말</th><th>뜻</th></tr>
+<tr><td><b>LDAP</b></td><td>디렉터리에 물어보는 <b>말</b>(프로토콜).
+Lightweight Directory Access Protocol. 이 부의 주제다</td></tr>
+<tr><td><b>Active Directory</b></td><td>마이크로소프트가 만든 <b>제품</b>.
+LDAP 으로 물어볼 수 있고, 그 밖에 Kerberos·그룹 정책 따위도 함께 한다</td></tr>
+<tr><td><b>도메인 컨트롤러</b>(DC)</td><td>그 제품이 도는 <b>서버</b>.
+보통 여러 대가 같은 내용을 들고 서로 복제한다</td></tr>
+<tr><td><b>도메인</b></td><td>그 나무 하나의 <b>이름</b>. 우리는 <code>ad.campus.example</code></td></tr>
+<tr><td><b>OpenLDAP</b></td><td>같은 말을 쓰는 다른 제품. 이 덱은 AD 를 다루지만
+LDAP 부분은 그대로 통한다</td></tr>
+</table>
+</div>
+<div class="key"><b>우리에게 필요한 것은 LDAP 뿐이다</b> —
+Keycloak 은 AD 에게 LDAP 으로만 말을 건다. 그래서 이 부에서 만들 가짜 AD 도
+LDAP 만 할 줄 알면 된다. AD 의 나머지 기능(그룹 정책·Kerberos)은
+이 덱이 다루지 않는다(0부 참고).</div>
+</article>
+
+<article class="card" id="ad-dir-3">
+<h3>DN — 나무에서의 주소</h3>
+<p class="lead">디렉터리의 모든 항목에는 <b>DN</b>(Distinguished Name)이라는 주소가 있다.
+읽는 법이 하나 있는데, <b>거꾸로</b>다.</p>
+<pre><code data-lang="text">CN=Kim Minji, OU=Students, DC=ad, DC=campus, DC=example
+└────┬────┘  └─────┬────┘  └──────────┬──────────────┘
+  그 사람      어느 서랍            어느 도메인
+   (아래)                              (위)</code></pre>
+<span class="tier ill">설명용</span>
+<ul>
+<li>가장 <b>왼쪽</b>이 그 항목 자신, 오른쪽으로 갈수록 <b>위쪽</b>이다.</li>
+<li>주소를 뒤에서부터 읽으면 우편 주소와 같은 순서가 된다:
+<code>example</code> → <code>campus</code> → <code>ad</code> → <code>Students</code> → <code>Kim Minji</code>.</li>
+<li>조각 하나를 <b>RDN</b>(Relative DN)이라고 한다.</li>
+</ul>
+<div class="key"><b>DC 를 이으면 도메인 이름이 된다</b> —
+<code>DC=ad,DC=campus,DC=example</code> → <code>ad.campus.example</code>.
+7부에서 연동 설정에 base DN 을 적을 때 이 변환을 손으로 하게 된다.</div>
+</article>
+
+<article class="card" id="ad-dir-4">
+<h3>DN 을 뜯어보기</h3>
+<div class="demo" data-demo="ldap-dn">
+<h5>DN 해석기</h5>
+<div class="row">
+<input type="text" data-dn size="34"
+ value="CN=Kim Minji,OU=Students,DC=ad,DC=campus,DC=example">
+</div>
+<div class="out"></div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>RDN 종류</th><th>뜻</th><th>이 덱에서</th></tr>
+<tr><td><code>CN</code></td><td>Common Name — 사람·그룹의 이름</td><td>사람과 그룹</td></tr>
+<tr><td><code>OU</code></td><td>Organizational Unit — 서랍</td><td>Students · Staff · Groups · Service Accounts</td></tr>
+<tr><td><code>DC</code></td><td>Domain Component — 도메인 조각</td><td>ad · campus · example</td></tr>
+</table>
+</div>
+<p class="cap">서비스 계정의 DN 을 넣어 보라 —
+<code>OU=Service Accounts</code> 처럼 <b>빈칸이 든 이름</b>도 그대로 쓴다.</p>
+</article>
+
+<article class="card" id="ad-dir-5">
+<h3>우리 학교의 나무</h3>
+<p>이 덱이 끝까지 쓸 자료다. 사람 여섯 · 그룹 셋 · 서비스 계정 하나,
+그리고 그것들을 담은 서랍 넷.</p>
+<!--FIG file=ad_tree.svg cap=DC=ad,DC=campus,DC=example 아래의 15개 항목-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>색</th><th>무엇</th></tr>
+<tr><td><span style="color:var(--ad)"><b>호박색</b></span></td><td>도메인의 꼭대기</td></tr>
+<tr><td><span style="color:var(--app)"><b>초록</b></span></td><td>그룹 — 9부의 권한이 여기서 나온다</td></tr>
+<tr><td><span style="color:var(--kc)"><b>보라</b></span></td><td>Keycloak 이 쓸 서비스 계정</td></tr>
+</table>
+</div>
+<p class="cap">진짜 학교라면 사람이 수만 명이고 OU 가 수백 개다.
+개수만 다르지 <b>모양은 똑같다</b>.</p>
+</article>
+
+<article class="card" id="ad-dir-6">
+<h3>LDIF — 나무를 글로 적기</h3>
+<p>디렉터리의 내용을 주고받는 표준 형식이다.
+진짜 AD 에서도 <code>ldifde -f out.ldif</code> 로 이 모양으로 뽑아낼 수 있다.</p>
+<!--CODE file=data/campus.ldif lines=1-25 note=읽는 법과 꼭대기 항목-->
+<span class="tier a">실행 검증</span> <span class="tier demo">예제용</span>
+<div class="warn"><b><code>demoPassword</code> 는 진짜 AD 에 없는 칸이다</b> —
+AD 는 비밀번호를 LDAP 으로 <b>내보내지 않는다</b>. 맞는지 물어볼 수만 있다(bind).
+우리 가짜 서버가 그 확인을 흉내 내려고 만든 칸이고,
+검색 결과에는 절대 실리지 않는다. 그걸 검사하는 시험도 따로 있다.</div>
+</article>
+
+<article class="card" id="ad-dir-7">
+<h3>서랍 넷</h3>
+<!--CODE file=data/campus.ldif lines=26-50 note=OU 넷 — 사람을 나누는 칸막이-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>OU 는 폴더이자 권한의 경계다</b> —
+"이 OU 아래만 읽을 수 있는 계정" 을 만들 수 있고, 실무에서 서비스 계정에
+그렇게 권한을 준다. 7부의 base DN 설정도 "어느 서랍부터 뒤질 것인가" 를 정하는 일이다.</div>
+<div class="note"><b>OU 와 그룹은 다르다</b> — OU 는 <b>어디에 있는가</b>(한 곳에만 있을 수 있다),
+그룹은 <b>어디에 속하는가</b>(여러 곳에 속할 수 있다). 권한은 대개 그룹으로 준다.
+3장에서 다시 본다.</div>
+</article>
+
+<article class="card quiz" id="ad-dir-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 민지가 학생에서 조교가 되어 <code>OU=Students</code> 에서
+<code>OU=Staff</code> 로 옮겨졌다. 민지의 DN 은 어떻게 될까?
+그리고 Keycloak 이 민지를 계속 같은 사람으로 알아보려면 무엇을 기준으로 삼아야 할까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> DN 이 <code>CN=Kim Minji,OU=Staff,DC=ad,…</code> 로 <b>바뀐다</b>.
+DN 은 "지금 어디에 있는가" 라서 옮기면 달라진다.<br>
+그래서 사람을 알아보는 기준으로 DN 을 쓰면 안 된다. 이름이 바뀌어도, 서랍을 옮겨도
+변하지 않는 값이 따로 있다 — 다음 장의 <b><code>objectGUID</code></b> 다.
+7부에서 Keycloak 에 "UUID LDAP attribute" 를 무엇으로 둘지 정할 때 이 이야기가 다시 나온다.</div>
+</article>
+
+<article class="card" id="ad-attr">
+<p class="chnum">2장</p>
+<h2>사람 하나에 이름이 넷</h2>
+<p class="chsub">sAMAccountName · UPN · CN · DN — 그리고 변하지 않는 objectGUID</p>
+</article>
+
+<article class="card" id="ad-attr-1">
+<h3>민지를 부르는 네 가지 방법</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이름</th><th>값</th><th>성격</th></tr>
+<tr><td><code>sAMAccountName</code></td><td><code>minji</code></td>
+    <td>옛날부터 쓰던 로그인 아이디. 도메인 안에서 유일. <b>20자 제한</b></td></tr>
+<tr><td><code>userPrincipalName</code> (UPN)</td><td><code>minji@ad.campus.example</code></td>
+    <td>메일 주소처럼 생긴 로그인 아이디. 숲 전체에서 유일</td></tr>
+<tr><td><code>cn</code></td><td><code>Kim Minji</code></td>
+    <td>표시용 이름. 같은 이름이 여럿일 수 있다</td></tr>
+<tr><td><code>distinguishedName</code></td><td><code>CN=Kim Minji,OU=Students,…</code></td>
+    <td>나무에서의 주소. <b>옮기면 바뀐다</b></td></tr>
+<tr><td><code>objectGUID</code></td><td>16바이트 이진값</td>
+    <td><b>절대 변하지 않는다.</b> 다음 장</td></tr>
+</table>
+</div>
+<div class="warn"><b>7부에서 반드시 고르게 되는 것</b> —
+"사용자가 로그인 화면에 무엇을 치게 할 것인가?"
+<code>sAMAccountName</code> 이면 <code>minji</code>, UPN 이면 <code>minji@ad.campus.example</code>.
+둘 다 받게 하려면 설정이 하나 더 필요하다. 지금은 <b>둘 다 있다</b>는 것만 기억할 것.</div>
+</article>
+
+<article class="card" id="ad-attr-2">
+<h3>실물</h3>
+<!--CODE file=data/campus.ldif lines=51-74 note=민지 한 사람의 모든 칸-->
+<span class="tier a">실행 검증</span> <span class="tier demo">예제용</span>
+<div class="key"><b><code>objectClass</code> 가 넷인 것이 AD 의 특징이다</b> —
+<code>top</code> → <code>person</code> → <code>organizationalPerson</code> → <code>user</code>
+로 갈수록 좁아지는 상속 사슬이다. Keycloak 이 사용자를 찾을 때
+<code>(&amp;(objectClass=person)(objectClass=organizationalPerson)(objectClass=user)…)</code>
+로 묻는 이유가 이것이다 — 7부에서 그 필터를 로그로 직접 본다.</div>
+</article>
+
+<article class="card" id="ad-attr-3">
+<h3><code>objectGUID</code> — 변하지 않는 유일한 것</h3>
+<p class="lead">이름도 바뀌고, 아이디도 바뀌고, 서랍도 옮겨진다.
+바뀌지 않는 것은 이 <b>16바이트</b>뿐이다.</p>
+<!--OUT file=ad_search_bytes.txt lines=64-68 note=선을 타고 온 objectGUID — 따옴표가 없다-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>글자가 아니라 바이트다</b> —
+<code>98 D3 08 98 6D 8B …</code> 안에는 <code>0x00</code> 이 들어 있을 수 있고,
+UTF-8 로 읽을 수 없는 값도 있다. 이걸 글자로 다루면 <b>0x00 에서 잘리거나</b>
+알아볼 수 없는 글자로 바뀐다.<br>
+7부에서 Keycloak 의 "UUID LDAP attribute" 를 <code>objectGUID</code> 로 두면
+Keycloak 이 알아서 이진값으로 다룬다. 다른 값으로 바꾸면 그때부터 사고가 난다.</div>
+<p class="cap">우리 도구가 이 값을 따옴표 없이 16진수로 보여 주는 것은 일부러다 —
+"저건 글자구나" 라고 잘못 배우면 그 오해가 7부에서 진짜 사고가 된다.</p>
+</article>
+
+<article class="card" id="ad-attr-4">
+<h3><code>userAccountControl</code> — 계정의 스위치 묶음</h3>
+<p>숫자 하나에 스위치 여럿이 <b>비트</b>로 들어 있다.
+7부에서 "휴직자가 아직 로그인된다" 를 다룰 때 이 값을 읽게 된다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>값</th><th>비트</th><th>뜻</th><th>우리 자료에서</th></tr>
+<tr><td><code>512</code></td><td><code>0x0200</code></td><td>보통 계정 (켜짐)</td><td>민지 · 소희 · 하나 · 유나</td></tr>
+<tr><td><code>514</code></td><td>512 + <code>0x0002</code></td><td>보통 계정 + <b>꺼짐</b></td><td>지수 (휴직)</td></tr>
+<tr><td><code>66048</code></td><td>512 + <code>0x10000</code></td><td>보통 계정 + 비밀번호 만료 없음</td><td>준호 교수 · 서비스 계정</td></tr>
+</table>
+</div>
+<pre><code data-lang="text">514 = 512 + 2
+    = 0000 0010 0000 0010
+                       ↑ ACCOUNTDISABLE (0x0002)
+             ↑ NORMAL_ACCOUNT (0x0200)</code></pre>
+<span class="tier ill">설명용</span>
+<div class="key"><b>꺼진 계정은 비밀번호가 맞아도 못 들어온다</b> —
+잠시 뒤 실제로 확인한다. Keycloak 의 "MSAD user account control" 매퍼가
+이 값을 읽어 Keycloak 쪽 계정도 함께 꺼 준다(7부).</div>
+</article>
+
+<article class="card" id="ad-attr-5">
+<h3>꺼진 계정과 졸업생</h3>
+<!--CODE file=data/campus.ldif lines=127-168 note=지수(꺼짐)와 유나(그룹 없음)-->
+<span class="tier a">실행 검증</span>
+<div class="g2">
+<div>
+<h4>오지수 — 꺼진 계정</h4>
+<p><code>userAccountControl: 514</code><br>
+비밀번호가 맞아도 <b>못 들어온다</b>.<br>
+<b>인증</b>이 막힌 경우다.</p>
+</div>
+<div>
+<h4>최유나 — 졸업생</h4>
+<p>계정은 살아 있고 로그인도 된다.<br>
+그런데 <code>lunch-users</code> 에 없다.<br>
+<b>인가</b>가 없는 경우다.</p>
+</div>
+</div>
+<div class="key">0부의 <b>인증과 인가</b>가 여기서 처음으로 두 사람의 모습으로 갈린다.
+지수는 문이 안 열리고, 유나는 문은 열리는데 예약 단추가 없다.
+9부에서 유나의 화면을 실제로 만든다.</div>
+</article>
+
+<article class="card quiz" id="ad-attr-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 어떤 회사가 Keycloak 의 사용자 식별 기준을 <code>sAMAccountName</code> 으로
+두었다. 결혼해서 아이디가 <code>lee.sohee</code> 에서 <code>kim.sohee</code> 로 바뀐 직원이 생겼다.
+무슨 일이 일어날까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> Keycloak 은 그 사람을 <b>새로운 사람</b>으로 본다.
+예전 계정에 붙어 있던 역할·설정·기록은 옛 아이디 쪽에 남고,
+새 아이디로는 아무것도 없는 상태로 시작한다.<br>
+그래서 식별 기준은 <b>바뀌지 않는 값</b>이어야 한다 — AD 에서는
+<code>objectGUID</code> 다. 7부에서 이 칸을 실제로 채운다.</div>
+</article>
+
+<article class="card" id="ad-grp">
+<p class="chnum">3장</p>
+<h2>그룹과 memberOf</h2>
+<p class="chsub">화살표가 한 방향뿐이라는 사실이 7부·9부를 통째로 좌우한다</p>
+</article>
+
+<article class="card" id="ad-grp-1">
+<h3>그룹은 사람을 가리킨다</h3>
+<!--CODE file=data/campus.ldif lines=188-226 note=그룹 셋 — member 로 사람을 가리킨다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>저장된 것은 <code>member</code> 하나뿐이다</b> —
+그룹 쪽에서 사람을 가리킨다. 사람 쪽에는 "내가 어느 그룹인지" 가 <b>적혀 있지 않다</b>.</div>
+</article>
+
+<article class="card" id="ad-grp-2">
+<h3><code>memberOf</code> 는 계산된 값이다</h3>
+<pre><code data-lang="text">저장된 것          물어보면 나오는 것
+CN=lunch-users     CN=Kim Minji
+  member: 민지  →    memberOf: CN=lunch-users
+  member: 준호         memberOf: CN=campus-all
+  member: 소희
+  member: 하나       (사람 항목에는 저장돼 있지 않다)</code></pre>
+<span class="tier ill">설명용</span>
+<!--CODE file=ldap/fakead/dir.go sym=indexGroups note=우리 가짜 AD 도 같은 방식으로 뒤집는다-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>왜 이게 중요한가</b> — 7부의 group-ldap-mapper 에는
+"어느 쪽을 읽을 것인가" 라는 설정 칸이 있다.
+<b>그룹 쪽의 <code>member</code> 를 읽을지</b>, <b>사람 쪽의 <code>memberOf</code> 를 읽을지</b>.
+AD 에서는 앞의 것(<code>LOAD_ROLES_BY_MEMBER_ATTRIBUTE</code>)이 맞고,
+잘못 고르면 그룹이 하나도 안 딸려 온다.</div>
+</article>
+
+<article class="card" id="ad-grp-3">
+<h3>그룹으로 사람 찾기</h3>
+<!--OUT file=ad_search_memberof.txt note=lunch-admins 에 속한 사람을 찾는다-->
+<span class="tier a">실행 검증</span>
+<p>저장돼 있지 않은 값인데도 <b>검색에 쓸 수 있다</b>.
+AD 가 그렇게 해 주고, 우리 가짜 AD 도 그렇게 한다.</p>
+<div class="key"><b>9부의 씨앗</b> — 이 한 줄이
+"관리자 화면을 <code>lunch-admins</code> 에게만 열어 준다" 의 출발점이다.
+AD 그룹 → Keycloak 그룹 → 역할 → 토큰 클레임 → 앱의 <code>if</code> 한 줄로 이어진다.</div>
+</article>
+
+<article class="card" id="ad-grp-4">
+<h3>큰 그룹을 조심할 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>그룹</th><th>사람</th><th>토큰에 실어도 되나</th></tr>
+<tr><td><code>lunch-users</code></td><td>4명</td><td>좋다 — 이 앱에 필요한 그룹</td></tr>
+<tr><td><code>lunch-admins</code></td><td>1명</td><td>좋다</td></tr>
+<tr><td><code>campus-all</code></td><td>전원</td><td><b>안 된다</b> — 뜻이 없고 크기만 키운다</td></tr>
+</table>
+</div>
+<div class="warn"><b>진짜 학교에서는 그룹이 수백 개다</b> —
+사람 하나가 30개 그룹에 속하는 일이 흔하다. 그걸 전부 토큰에 실으면
+토큰이 몇 KB 가 되고, 헤더 크기 제한에 걸려 <b>로그인이 통째로 실패</b>한다.
+9부에서 "필요한 그룹만 고르는 법" 을 다룬다.</div>
+</article>
+
+<article class="card quiz" id="ad-grp-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. IT팀이 <code>lunch-users</code> 그룹에 새 학생을 넣었다.
+그런데 그 학생이 학식 예약 앱에서 여전히 "권한이 없습니다" 를 본다.
+AD 쪽은 분명히 들어가 있다. 어디를 볼까? (지금까지 배운 것만으로 답할 수 있다)</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> AD 의 <code>member</code> 는 바뀌었지만,
+그 사실이 <b>앱까지 전달되는 길</b>이 여러 칸이라는 것이 답의 실마리다.
+① AD 에서 <code>memberOf</code> 로 나오는가(이 장) →
+② Keycloak 이 그걸 읽어 왔는가(7부 매퍼) →
+③ 그 그룹이 역할에 이어져 있는가(9부) →
+④ 그 역할이 <b>지금 들고 있는 토큰</b>에 실렸는가(4부·9부).<br>
+가장 흔한 답은 ④ 다 — <b>이미 발급된 토큰은 바뀌지 않는다.</b>
+로그아웃했다 다시 로그인하면 된다. 이 "토큰은 찍어 낸 순간의 사진" 이라는 성질을
+4부에서 배운다.</div>
+</article>
+
+<article class="card" id="ad-ber">
+<p class="chnum">4장</p>
+<h2>LDAP 은 바이트다</h2>
+<p class="chsub">글자가 아니라 바이트로 말한다. 그런데 규칙은 세 가지뿐이다</p>
+</article>
+
+<article class="card" id="ad-ber-1">
+<h3>HTTP 와 다른 점</h3>
+<div class="g2">
+<div>
+<h4>HTTP (1부)</h4>
+<pre><code data-lang="http">GET /me HTTP/1.1
+Host: lunch.campus.example
+
+</code></pre>
+<p class="cap">사람이 읽을 수 있다.</p>
+</div>
+<div>
+<h4>LDAP</h4>
+<pre><code data-lang="text">30 0C 02 01 01 60 07
+02 01 03 04 00 80 00</code></pre>
+<p class="cap">바이트다. 그런데 규칙은 더 단순하다.</p>
+</div>
+</div>
+<span class="tier ill">설명용</span>
+<div class="key"><b>규칙은 딱 하나다</b> —
+<b>[태그 1바이트][길이][내용]</b>. 이것을 <b>TLV</b>(Tag-Length-Value)라고 한다.
+내용 안에 또 TLV 가 들어가면 그게 묶음이다. 그것뿐이다.
+이 규칙의 이름은 <b>BER</b>(Basic Encoding Rules)이고, 우리가 짤 부호기는 300줄이 안 된다.</div>
+<div class="note"><b>왜 바이트인가</b> — LDAP 이 만들어진 1990년대에는
+글자로 주고받는 것이 사치였다. 그리고 지금도 이점이 하나 있다 —
+길이가 앞에 적혀 있어서 <b>어디서 끝나는지 세지 않아도 안다</b>.
+HTTP 는 그걸 <code>Content-Length</code> 로 따로 알려 줘야 했다(1부 2장).</div>
+</article>
+
+<article class="card" id="ad-ber-2">
+<h3>태그 한 바이트 뜯어보기</h3>
+<!--CODE file=ldap/ber/ber.go lines=24-55 note=태그의 비트 구성-->
+<span class="tier a">실행 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>비트</th><th>무엇</th><th>값</th></tr>
+<tr><td>8·7</td><td>종류(class)</td><td>00 모두가 아는 것 · 01 LDAP 이 정한 것 · 10 그 자리에서만</td></tr>
+<tr><td>6</td><td>안에 또 TLV 가 있나</td><td>1 이면 묶음</td></tr>
+<tr><td>5~1</td><td>번호</td><td>0~30</td></tr>
+</table>
+</div>
+<pre><code data-lang="text">0x30 = 0011 0000  →  보편(00) · 묶음(1) · 16번  = SEQUENCE
+0x60 = 0110 0000  →  LDAP(01) · 묶음(1) ·  0번  = BindRequest
+0x87 = 1000 0111  →  문맥(10) · 값 (0) ·  7번  = present 필터</code></pre>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="ad-ber-3">
+<h3>길이 — 127 을 넘으면 모양이 바뀐다</h3>
+<!--CODE file=ldap/ber/ber.go lines=56-99 note=Tag 와 EncodeLength-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>128 은 <code>81 80</code> 이다</b>, <code>80</code> 하나가 아니다.
+첫 바이트의 맨 위 비트를 켜서 "길이를 적는 데 쓴 바이트 수" 를 담고,
+그다음에 진짜 길이가 온다. <code>80</code> 하나는 <b>다른 뜻</b>(부정 길이)이라 쓸 수 없다.</div>
+</article>
+
+<article class="card" id="ad-ber-4">
+<h3>정수는 가장 짧게</h3>
+<!--CODE file=ldap/ber/ber.go lines=100-130 note=intBytes — 가장 짧게 적는 규칙-->
+<span class="tier a">실행 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>값</th><th>바이트</th><th>왜</th></tr>
+<tr><td>127</td><td><code>02 01 7F</code></td><td>한 바이트로 충분</td></tr>
+<tr><td><b>128</b></td><td><code>02 02 <b>00</b> 80</code></td><td><code>80</code> 하나면 맨 위 비트가 켜져 <b>-128</b> 로 읽힌다</td></tr>
+<tr><td>-1</td><td><code>02 01 FF</code></td><td>음수는 짧게 적힌다</td></tr>
+<tr><td>-129</td><td><code>02 02 FF 7F</code></td><td>2의 보수</td></tr>
+</table>
+</div>
+<div class="note"><b>이 표가 곧 시험이다</b> —
+<code>ldap/ber/ber_test.go</code> 에 같은 값들이 골든 벡터로 들어 있고,
+숫자 하나만 어긋나도 시험이 깨진다.</div>
+</article>
+
+<article class="card" id="ad-ber-4b">
+<h3>값을 만드는 함수 다섯</h3>
+<!--CODE file=ldap/ber/ber.go lines=131-155 note=Int · Enum · Str · Bytes · Bool-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b><code>Str</code> 과 <code>Bytes</code> 는 같은 태그를 쓴다</b> —
+둘 다 OCTET STRING(0x04)이다. 이름이 "문자열" 이지만 실제로는 <b>바이트 묶음</b>이라,
+글자든 이진값이든 같은 자리에 실린다. 그래서 받는 쪽이
+"이 칸은 글자다 / 이 칸은 이진값이다" 를 <b>미리 알고 있어야</b> 한다.
+<code>objectGUID</code> 사고가 여기서 나온다.</div>
+</article>
+
+<article class="card" id="ad-ber-5">
+<h3>묶음 만들기</h3>
+<!--CODE file=ldap/ber/ber.go lines=156-177 note=Seq 와 Set-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>SEQUENCE 와 SET 의 차이는 "순서가 뜻이 있는가"</b> 뿐이다.
+LDAP 메시지의 뼈대는 SEQUENCE 이고, 속성의 <b>값들</b>은 SET 으로 온다 —
+민지가 두 그룹에 속했을 때 어느 쪽이 먼저 오든 상관없기 때문이다.</div>
+</article>
+
+<article class="card" id="ad-ber-6">
+<h3>읽기 — TLV 하나 떼어 내기</h3>
+<!--CODE file=ldap/ber/ber.go lines=178-219 note=TLV 와 값 읽기-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ad-ber-7">
+<h3>길이를 읽을 때 조심할 것</h3>
+<!--CODE file=ldap/ber/ber.go lines=220-246 note=parseLength — 길이를 읽는다-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>부정 길이는 거절한다</b> — BER 에는
+"끝 표시가 나올 때까지" 라는 형식(<code>80</code>)이 있지만,
+RFC 4511 §5.1 이 LDAP 에서는 쓰지 말라고 못 박았다.
+받아 주면 그 순간 프로토콜이 아니라 <b>추측</b>이 된다.</div>
+<div class="key"><b><code>ErrShort</code> 는 오류가 아니라 상태다</b> —
+"아직 덜 왔다" 는 뜻이고, 서버의 읽기 고리가 이걸 보고 더 읽는다.
+다음 장에서 그 고리를 본다.</div>
+</article>
+
+<article class="card" id="ad-ber-7b">
+<h3>TLV 하나 떼어 내기</h3>
+<!--CODE file=ldap/ber/ber.go lines=247-268 note=Next — 하나 떼고 나머지를 돌려준다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>여러 바이트 태그도 거절한다</b> —
+번호가 31 이상이면 태그를 여러 바이트로 적는 규칙이 따로 있는데,
+LDAP 은 24(ExtendedResponse)까지만 쓴다. 만들지도 읽지도 않고,
+받으면 오류를 낸다. "우리가 모르는 것을 아는 척하지 않는다" 는 뜻이다.</div>
+</article>
+
+<article class="card" id="ad-ber-8">
+<h3>한 통이 몇 바이트인지 먼저 알기</h3>
+<!--CODE file=ldap/ber/ber.go lines=269-299 note=Children 과 MessageLength-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>TCP 는 메시지 단위를 모른다</b> —
+한 통이 세 번에 나눠 올 수도, 두 통이 한 번에 붙어 올 수도 있다.
+<code>MessageLength</code> 는 앞의 몇 바이트만 보고 "이 통은 모두 몇 바이트인가" 를 알려 준다.
+HTTP 가 <code>Content-Length</code> 로 하던 일을, LDAP 은 <b>길이가 맨 앞에 있어서</b> 공짜로 얻는다.</div>
+<p class="cap">이 함수 하나가 서버와 클라이언트 양쪽의 읽기 고리를 떠받친다.
+쪼개 보내도 되는지는 시험으로 확인한다.</p>
+</article>
+
+<article class="card" id="ad-ber-9">
+<h3>익명 바인드 14바이트 — 전부 조립해 보기</h3>
+<pre><code data-lang="text">30 0C                    SEQUENCE 12바이트     LDAPMessage
+  02 01 01               INTEGER 1            messageID
+  60 07                  BindRequest 7바이트
+    02 01 03             INTEGER 3            version (LDAP v3)
+    04 00                OCTET STRING ""      name (익명)
+    80 00                [0] 0바이트           simple 비밀번호 (없음)</code></pre>
+<span class="tier ill">설명용</span>
+<div class="key"><b>이 14바이트는 널리 알려진 값이다</b> —
+LDAP 을 다루는 어느 도구에서도 같은 바이트가 나온다. 그래서
+<code>ber_test.go</code> 의 골든 벡터로 못 박아 뒀다.
+우리 부호기가 이 값을 못 내면, 그 순간 Keycloak 이 우리를 이해하지 못한다.</div>
+<p class="cap">다음 장부터는 이걸 도구가 대신 풀어 준다.</p>
+</article>
+
+<article class="card" id="ad-bind">
+<p class="chnum">5장</p>
+<h2>바인드 — "이 사람 맞습니까"</h2>
+<p class="chsub">LDAP 에서 비밀번호를 확인하는 유일한 방법</p>
+</article>
+
+<article class="card" id="ad-bind-1">
+<h3>바인드는 질문이 아니라 신분 선언이다</h3>
+<p class="lead">HTTP 는 요청마다 손목밴드를 다시 보여 준다(1부 6장).
+LDAP 은 다르다 — <b>연결 하나에 신분이 하나</b> 붙고, 그 뒤의 모든 요청이 그 신분으로 처리된다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>HTTP</th><th>LDAP</th></tr>
+<tr><td>신분이 붙는 곳</td><td>요청마다 (쿠키)</td><td><b>연결마다</b> (bind)</td></tr>
+<tr><td>바꾸려면</td><td>다른 쿠키를 보낸다</td><td>같은 연결에서 <b>다시 bind</b></td></tr>
+<tr><td>안 하면</td><td>모르는 사람</td><td>익명 — 대개 아무것도 못 한다</td></tr>
+</table>
+</div>
+<div class="key"><b>그래서 Keycloak 은 연결을 두 번 쓴다</b>(7부) —
+서비스 계정으로 바인드해서 사람을 <b>찾고</b>,
+그 사람의 DN 으로 다시 바인드해서 비밀번호를 <b>확인</b>한다.
+"찾기" 와 "확인" 이 다른 신분으로 이뤄지는 이유가 이것이다.</div>
+</article>
+
+<article class="card" id="ad-bind-2">
+<h3>진짜로 보내 보기</h3>
+<!--OUT file=ad_bind_ok.txt lines=1-7 note=서비스 계정으로 바인드 — 나간 바이트-->
+<span class="tier a">실행 검증</span> <span class="tier demo">예제용</span>
+<ul>
+<li><code>60 53</code> — BindRequest, 내용 83바이트.</li>
+<li><code>02 01 03</code> — LDAP v3. v2 는 이제 안 쓴다.</li>
+<li><code>04 3E …</code> — 바인드 DN 62바이트.</li>
+<li><code>80 0E …</code> — <b>비밀번호가 평문으로</b> 실려 간다.</li>
+</ul>
+<div class="warn"><b>비밀번호가 그대로 간다</b> — LDAP 의 simple bind 는
+비밀번호를 <b>암호화하지 않는다</b>. 그래서 389번 평문 포트로 바인드하면
+같은 망에 있는 누구나 읽을 수 있다. 7장의 LDAPS 가 필요한 이유가 이것이고,
+이 덱이 실습에서만 평문을 쓰는 이유이기도 하다.</div>
+</article>
+
+<article class="card" id="ad-bind-3">
+<h3>답</h3>
+<!--OUT file=ad_bind_ok.txt lines=8-18 note=BindResponse — 세 칸-->
+<span class="tier a">실행 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>바이트</th><th>뜻</th></tr>
+<tr><td><code>resultCode</code></td><td><code>0A 01 00</code></td><td>ENUMERATED 0 = success</td></tr>
+<tr><td><code>matchedDN</code></td><td><code>04 00</code></td><td>실패했을 때 "여기까지는 찾았다" 를 알려 주는 칸</td></tr>
+<tr><td><code>diagnosticMessage</code></td><td><code>04 00</code></td><td>사람이 읽을 설명. <b>AD 는 여기에 힌트를 숨긴다</b></td></tr>
+</table>
+</div>
+<p class="cap">성공했으니 뒤의 두 칸이 비었다. 실패하면 셋째 칸에 무엇이 오는지가 다음 장이다.</p>
+</article>
+
+<article class="card" id="ad-bind-4">
+<h3>실패 — AD 는 이유를 숨겨서 알려 준다</h3>
+<!--OUT file=ad_bind_52e.txt note=비밀번호가 틀렸을 때-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>결과 코드는 언제나 <code>49</code>(invalidCredentials)다</b> —
+비밀번호가 틀려도, 계정이 없어도, 꺼져 있어도, 잠겨 있어도 전부 49 다.
+이유를 코드로 구별해 주면 남이 <b>계정 목록을 만들 수 있기</b> 때문이다
+(1부 5장에서 본 그 원칙이다).<br>
+진짜 이유는 진단 문구 끝의 <b><code>data 52e</code></b> 에 숨어 있다.</div>
+</article>
+
+<article class="card" id="ad-bind-5">
+<h3><code>data</code> 코드 사전</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>뜻</th><th>무엇을 해야 하나</th></tr>
+<tr><td><code>525</code></td><td>그런 계정이 없다</td><td>아이디를 다시 볼 것. base DN 도 의심할 것</td></tr>
+<tr><td><code>52e</code></td><td>비밀번호가 틀렸다 (<b>계정은 있다</b>)</td><td>비밀번호. 서비스 계정이면 만료됐는지 확인</td></tr>
+<tr><td><code>530</code></td><td>지금 시간에는 로그인 불가</td><td>계정의 로그온 시간 정책</td></tr>
+<tr><td><code>531</code></td><td>이 컴퓨터에서는 로그인 불가</td><td>로그온 워크스테이션 제한</td></tr>
+<tr><td><code>532</code></td><td>비밀번호 기간이 지났다</td><td>비밀번호 변경</td></tr>
+<tr><td><code>533</code></td><td>계정이 꺼져 있다</td><td>비밀번호는 맞다. 계정을 켜야 한다</td></tr>
+<tr><td><code>701</code></td><td>계정 기간이 지났다</td><td>계정 만료일</td></tr>
+<tr><td><code>773</code></td><td>비밀번호를 반드시 바꿔야 한다</td><td>최초 로그인 상태</td></tr>
+<tr><td><code>775</code></td><td>계정이 잠겼다</td><td>기다리거나 관리자가 풀어 준다</td></tr>
+</table>
+</div>
+<span class="tier c">문서 근거</span>
+<div class="tip"><b>이 표가 7부 진단의 절반이다</b> —
+"로그인이 안 됩니다" 라는 민원을 받으면 가장 먼저 할 일이
+Keycloak 로그에서 이 세 글자를 찾는 것이다.</div>
+</article>
+
+<article class="card" id="ad-bind-6">
+<h3>꺼진 계정 — 비밀번호가 맞아도</h3>
+<!--OUT file=ad_bind_533.txt note=오지수는 비밀번호가 맞다. 그래도 못 들어온다-->
+<span class="tier a">실행 검증</span> <span class="tier demo">예제용</span>
+<div class="key"><b><code>533</code> 은 "비밀번호는 맞았다" 는 뜻이기도 하다</b> —
+꺼진 계정인지 확인하려면 먼저 비밀번호를 맞혀야 하기 때문이다.
+그래서 이 코드가 나오면 사용자에게 "비밀번호를 다시 확인하세요" 라고 하면 안 된다.
+IT팀에 문의하라고 안내해야 한다.</div>
+</article>
+
+<article class="card" id="ad-bind-7">
+<h3>다섯 번 틀리면 잠긴다</h3>
+<!--OUT file=ad_bind_775.txt note=하나가 다섯 번 틀린 뒤, 맞는 비밀번호로 눌러 본 결과-->
+<span class="tier a">실행 검증</span>
+<!--CODE file=ldap/fakead/dir.go sym=noteFailure note=창 안에서 세고, 넘으면 잠근다-->
+<div class="warn"><b>이것이 연동에서 가장 위험한 사고다</b> —
+Keycloak 설정에 서비스 계정의 <b>비밀번호를 잘못 적어 두면</b>,
+Keycloak 이 그 계정으로 자동 재시도를 계속하다가
+<b>서비스 계정을 잠가 버린다</b>. 그러면 그 순간부터
+<b>전 직원의 로그인이 멈춘다</b>. 10부 장애 목록의 첫 줄이다.</div>
+<p class="cap">우리 흉내: 창 10분 · 5회 · 잠금 30분. 진짜 AD 의 기본 정책과 비슷하게 뒀다.</p>
+</article>
+
+<article class="card" id="ad-bind-8">
+<h3>익명 바인드는 막는다</h3>
+<!--OUT file=ad_bind_anon.txt note=이름도 비밀번호도 비었을 때-->
+<span class="tier a">실행 검증</span>
+<!--CODE file=ldap/fakead/dir.go lines=249-277 note=Bind 앞머리 — 익명과 빈 비밀번호-->
+<div class="key"><b>비밀번호만 빈 것도 막아야 한다</b> —
+이름은 있는데 비밀번호가 빈 바인드를 "unauthenticated bind" 라고 한다.
+규약상 <b>성공</b>으로 처리하는 서버가 있었고, 그걸 그대로 믿은 앱들이
+인증을 통째로 건너뛴 사고가 실제로 있었다. AD 도 요즘은 막아 둔다.</div>
+</article>
+
+<article class="card" id="ad-bind-8b">
+<h3>막는 순서가 곧 정책이다</h3>
+<!--CODE file=ldap/fakead/dir.go lines=278-300 note=Bind 뒷부분 — 잠김·꺼짐·비밀번호 순서-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>순서에 뜻이 있다</b> —
+① 잠김을 <b>가장 먼저</b> 본다. 잠긴 계정에는 비밀번호를 맞춰 볼 기회조차 주지 않는다
+(그래야 잠금이 무차별 대입을 실제로 막는다).<br>
+② 그다음 꺼짐. ③ 마지막에 비밀번호.<br>
+그리고 <b>성공했을 때만</b> 세어 둔 실패를 지운다.</div>
+</article>
+
+<article class="card" id="ad-bind-9">
+<h3>진단 코드를 만들어 내는 쪽</h3>
+<!--CODE file=ldap/fakead/dir.go sym=adDiag note=AD 가 내는 문구의 모양을 흉내 낸다-->
+<span class="tier a">실행 검증</span>
+<pre><code data-lang="text">80090308: LdapErr: DSID-0C09042F, comment:
+AcceptSecurityContext error, data 52e, v4563</code></pre>
+<span class="tier c">문서 근거</span>
+<p>진짜 AD 가 내는 문구가 이 모양이다. <code>DSID</code> 는 AD 내부의 코드 위치이고,
+<code>v4563</code> 은 판번호다. 우리가 볼 것은 <b><code>data 52e</code></b> 하나뿐이다.</p>
+</article>
+
+<article class="card quiz" id="ad-bind-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. Keycloak 로그에 <code>data 52e</code> 가 찍혔다.
+사용자는 "비밀번호 맞게 쳤는데요" 라고 한다. 무엇을 의심해야 할까? 둘 이상.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>52e</code> 는 "계정은 있는데 비밀번호가 틀렸다" 다.
+그런데 <b>누구의</b> 비밀번호인지가 두 가지다.<br>
+① <b>사용자의</b> 비밀번호 — 정말 틀렸거나, 최근에 바꿨는데 옛것을 치고 있다.<br>
+② <b>서비스 계정의</b> 비밀번호 — Keycloak 이 AD 를 들여다보려고 먼저 바인드하는 그 계정이다.
+이쪽이 틀렸으면 <b>모든 사용자</b>가 같은 오류를 본다. 한 사람만 그런지
+전원이 그런지를 먼저 확인하면 ①·② 가 바로 갈린다.<br>
+③ 그리고 이 상태를 방치하면 다음 화면의 <code>775</code> 로 넘어간다.</div>
+</article>
+
+<article class="card" id="ad-srch">
+<p class="chnum">6장</p>
+<h2>검색 — 조건을 나무로 적는다</h2>
+<p class="chsub">Keycloak 이 AD 에게 던지는 질문의 거의 전부</p>
+</article>
+
+<article class="card" id="ad-srch-1">
+<h3>검색 요청의 여덟 칸</h3>
+<!--OUT file=ad_search_bytes.txt lines=21-38 note=칸마다 이름이 붙어 있다-->
+<span class="tier a">실행 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>뜻</th><th>우리가 보낸 값</th></tr>
+<tr><td><code>baseObject</code></td><td>어디서부터 뒤질까</td><td><code>DC=ad,DC=campus,DC=example</code></td></tr>
+<tr><td><code>scope</code></td><td>얼마나 깊이</td><td>2 = sub (전부)</td></tr>
+<tr><td><code>derefAliases</code></td><td>별칭을 따라갈까</td><td>0 — 이 덱에서는 늘 0</td></tr>
+<tr><td><code>sizeLimit</code></td><td>몇 건까지</td><td>0 = 제한 없음</td></tr>
+<tr><td><code>timeLimit</code></td><td>몇 초까지</td><td>0 = 제한 없음</td></tr>
+<tr><td><code>typesOnly</code></td><td>값 없이 이름만?</td><td>false</td></tr>
+<tr><td><code>filter</code></td><td><b>조건</b></td><td><code>(sAMAccountName=minji)</code></td></tr>
+<tr><td><code>attributes</code></td><td>어느 칸을 달라</td><td>cn · mail · objectGUID · memberOf</td></tr>
+</table>
+</div>
+<div class="key"><b>칸 이름은 실려 가지 않는다</b> —
+LDAP 은 <b>몇 번째 칸이냐</b>로만 구별한다. 그래서 하나를 빠뜨리면
+그 뒤가 전부 밀려서 엉뚱하게 읽힌다. 우리 도구가 이름을 붙여 주는 것은
+그 순서를 알기 때문이지, 바이트에 이름이 있어서가 아니다.</div>
+</article>
+
+<article class="card" id="ad-srch-2">
+<h3>범위 셋</h3>
+<!--OUT file=ad_search_scopes.txt note=같은 base, 같은 필터, 범위만 바꿨다-->
+<span class="tier a">실행 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>범위</th><th>뜻</th><th>결과</th><th>언제 쓰나</th></tr>
+<tr><td><code>base</code></td><td>그 항목 하나만</td><td>1건</td><td>DN 을 이미 알 때</td></tr>
+<tr><td><code>one</code></td><td>바로 아래 한 층</td><td>4건 (OU 넷)</td><td>목록을 훑을 때</td></tr>
+<tr><td><code>sub</code></td><td>그 아래 전부</td><td>15건</td><td><b>Keycloak 이 쓰는 것</b></td></tr>
+</table>
+</div>
+<div class="warn"><b><code>sub</code> 는 비싸다</b> — 사람이 5만 명인 도메인에서
+base 를 꼭대기로 두고 <code>sub</code> 로 뒤지면 5만 건을 훑는다.
+7부에서 base DN 을 <code>OU=Students</code> 처럼 좁게 잡는 이유가 이것이다.</div>
+</article>
+
+<article class="card" id="ad-srch-3">
+<h3>필터는 나무다</h3>
+<pre><code data-lang="text">(&amp;(objectClass=user)(sAMAccountName=minji))
+
+        그리고
+        ├── objectClass = user
+        └── sAMAccountName = minji</code></pre>
+<span class="tier ill">설명용</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>모양</th><th>뜻</th><th>예</th></tr>
+<tr><td><code>(&amp;…)</code></td><td>전부 맞아야</td><td><code>(&amp;(a=1)(b=2))</code></td></tr>
+<tr><td><code>(|…)</code></td><td>하나라도 맞으면</td><td><code>(|(a=1)(a=2))</code></td></tr>
+<tr><td><code>(!…)</code></td><td>아니어야 (<b>하나만</b>)</td><td><code>(!(mail=*))</code></td></tr>
+<tr><td><code>(a=v)</code></td><td>같다</td><td><code>(cn=minji)</code></td></tr>
+<tr><td><code>(a=*)</code></td><td>그 칸이 <b>있기만 하면</b></td><td><code>(mail=*)</code></td></tr>
+<tr><td><code>(a=v*)</code></td><td>부분 일치</td><td><code>(cn=Kim*)</code></td></tr>
+<tr><td><code>(a&gt;=v)</code> <code>(a&lt;=v)</code></td><td>크거나 작거나</td><td><code>(whenCreated&gt;=2026…)</code></td></tr>
+</table>
+</div>
+<p class="cap">괄호가 <b>모든</b> 조건을 감싼다는 것이 처음엔 어색하다.
+<code>(&amp;(a=1)(b=2))</code> 의 바깥 괄호는 "그리고" 의 것이다.</p>
+</article>
+
+<article class="card" id="ad-srch-4">
+<h3>필터를 만져 보기</h3>
+<div class="demo" data-demo="ldap-filter">
+<h5>LDAP 필터 해석기</h5>
+<div class="row">
+<input type="text" data-filter size="36"
+ value="(&amp;(objectClass=user)(sAMAccountName=minji))">
+</div>
+<div class="out"></div>
+</div>
+<p class="cap">이 데모가 들고 있는 자료는 우리 가짜 AD 와 같은 사람·그룹 열 명이다
+(서랍 OU 넷과 꼭대기는 뺐다 — 그래서 전체 건수가 15가 아니라 10이다).
+<code>(!(mail=*))</code> · <code>(cn=*ee*)</code> · <code>(&amp;(objectClass=group)(cn=lunch*))</code> 를 넣어 보라.</p>
+</article>
+
+<article class="card" id="ad-srch-5">
+<h3>글 → 나무 → 바이트</h3>
+<!--CODE file=ldap/proto/proto.go lines=396-436 note=필터 나무의 마디들-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>같은 조건을 세 가지 모습으로 다룬다</b> —
+사람이 읽는 글(RFC 4515) · 프로그램 안의 나무 · 선을 타고 가는 바이트.
+셋 사이를 오갈 수 있어야 <b>로그에 찍힌 필터</b>와 <b>내가 보낸 필터</b>를 견줄 수 있다.
+7부에서 Keycloak 의 필터를 읽을 때 그 능력이 필요해진다.</div>
+</article>
+
+<article class="card" id="ad-srch-6">
+<h3>나무를 글로 되돌리기</h3>
+<!--CODE file=ldap/proto/proto.go lines=437-475 note=String() — RFC 4515 의 글로-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>값 안의 <code>( ) * \</code> 는 반드시 감싼다</b> —
+사용자가 친 아이디를 필터에 그대로 넣으면,
+<code>*)(objectClass=*</code> 같은 값 하나로 <b>필터의 뜻이 통째로 바뀐다</b>.
+SQL 주입과 똑같은 사고가 LDAP 에도 있다.
+RFC 4515 §3 이 정한 대로 <code>\2a</code> · <code>\28</code> · <code>\29</code> · <code>\5c</code> 로 바꾼다.</div>
+</article>
+
+<article class="card" id="ad-srch-7">
+<h3>필터를 바이트로</h3>
+<!--CODE file=ldap/proto/proto.go lines=476-505 note=필터의 [n] 번호와 EncodeFilter 앞부분-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b><code>present</code> 만 원시형이다</b> —
+다른 필터는 안에 TLV 가 들어가는 묶음인데, <code>(mail=*)</code> 은
+안에 속성 <b>이름만</b> 바로 들어간다. 그래서 태그가
+<code>A7</code> 이 아니라 <code>87</code> 이다. 4장의 비트 그림으로 확인해 볼 것.</div>
+</article>
+
+<article class="card" id="ad-srch-7b">
+<h3>필터 종류마다 다른 부호화</h3>
+<!--CODE file=ldap/proto/proto.go lines=506-535 note=EncodeFilter 나머지-->
+<!--CODE file=ldap/proto/proto.go lines=536-557 note=부분 문자열의 조각들-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>부분 문자열은 조각마다 번호가 또 붙는다</b> —
+<code>(cn=m*n*i)</code> 는 <code>[0]</code> 처음 · <code>[1]</code> 가운데(여럿 가능) ·
+<code>[2]</code> 끝 으로 쪼개져 실린다. 별표가 몇 개든 이 셋으로 표현된다.</div>
+</article>
+
+<article class="card" id="ad-srch-8">
+<h3>바이트를 나무로</h3>
+<!--CODE file=ldap/proto/proto.go lines=558-590 note=ParseFilter — &·|·! 를 되읽는다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>받는 쪽은 태그 번호만 보고 종류를 안다</b> —
+<code>A0</code> 이면 "그리고", <code>A3</code> 이면 "같다", <code>87</code> 이면 "있기만 하면".
+글자로 된 이름은 어디에도 실려 오지 않는다.</div>
+</article>
+
+<article class="card" id="ad-srch-8b">
+<h3>비교와 부분 문자열 되읽기</h3>
+<!--CODE file=ldap/proto/proto.go lines=591-620 note=비교 필터를 되읽는다-->
+<!--CODE file=ldap/proto/proto.go lines=621-651 note=부분 문자열을 되읽는다-->
+<span class="tier a">실행 검증</span>
+<p class="cap">시험은 <b>글 → 나무 → 바이트 → 나무 → 글</b> 을 한 바퀴 돌려
+제자리에 오는지 본다. 필터 15종이 그 왕복을 통과한다.</p>
+</article>
+
+<article class="card" id="ad-srch-9">
+<h3>필터를 바꿔 가며</h3>
+<!--OUT file=ad_search_filters.txt lines=1-19 note=아이디로, 그리고 그룹만-->
+<span class="tier a">실행 검증</span>
+<p>같은 서버·같은 자료에 필터만 바꿔 물었다. 나머지는 다음 화면에.</p>
+</article>
+
+<article class="card" id="ad-srch-10">
+<h3>있음·없음·부분 일치</h3>
+<!--OUT file=ad_search_filters.txt lines=41-72 note=(cn=Kim*) 과 (!(mail=*))-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b><code>(!(mail=*))</code> 가 OU 까지 골라낸다</b> —
+"메일 칸이 없는 항목" 이니 사람이 아닌 것들(서랍·그룹)도 함께 걸린다.
+필터를 좁힐 때 <code>objectClass</code> 를 함께 거는 습관이 그래서 생겼다:
+<code>(&amp;(objectClass=user)(!(mail=*)))</code>.</div>
+</article>
+
+<article class="card" id="ad-srch-11">
+<h3>속성 고르기 — 물어본 것만 온다</h3>
+<!--CODE file=ldap/fakead/dir.go sym=Attributes note=want 가 비면 전부, 아니면 고른 것만-->
+<span class="tier a">실행 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물어본 것</th><th>오는 것</th></tr>
+<tr><td>(비어 있음) 또는 <code>*</code></td><td>저장된 칸 전부 + 계산된 <code>memberOf</code></td></tr>
+<tr><td><code>cn mail</code></td><td>그 둘만. <b>이름은 물어본 대로</b> 돌려준다</td></tr>
+<tr><td>없는 칸</td><td>그 칸은 <b>아예 빠진다</b>. 빈 값으로 채우지 않는다</td></tr>
+<tr><td><code>demoPassword</code></td><td><b>절대 안 준다</b></td></tr>
+</table>
+</div>
+<div class="warn"><b>필요한 칸만 물을 것</b> — 사람이 5만 명인데 전부 달라고 하면
+사진·인증서 같은 큰 칸까지 딸려 온다. 7부의 연동 설정에도
+"가져올 속성" 을 적는 자리가 있다.</div>
+</article>
+
+<article class="card" id="ad-srch-12">
+<h3>답은 두 종류다</h3>
+<pre><code data-lang="text">SearchResultEntry   찾은 항목 하나   ← 0개일 수도 100개일 수도
+SearchResultEntry   찾은 항목 하나
+SearchResultDone    결과 코드        ← 반드시 마지막에 하나</code></pre>
+<span class="tier ill">설명용</span>
+<!--CODE file=ldap/proto/proto.go lines=302-345 note=응답 세 가지를 만드는 곳-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>찾은 것이 없어도 성공이다</b> —
+0건 + <code>Done(success)</code> 가 정상이다. "없다" 는 오류가 아니다.
+오류인 경우는 base 가 없거나(32), 권한이 없거나(50), 서버가 못 하겠다고 할 때(53)다.</div>
+</article>
+
+<article class="card" id="ad-srch-13">
+<h3>1000건에서 잘리는 문제</h3>
+<!--CODE file=ldap/proto/proto.go lines=355-379 note=Simple Paged Results 컨트롤-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>AD 는 한 번에 1000건만 준다</b> —
+그 위는 <b>그냥 버린다</b>. 사용자가 1000명을 넘는 순간,
+페이지를 안 쓰면 뒤쪽 사람들이 <b>조용히 사라진다</b>.
+"동기화했는데 일부만 왔다" 는 7부 민원의 정체가 이것이다.</div>
+<div class="key"><b>쿠키가 비면 마지막 쪽</b> — 서버가 "다음 쪽 표"(cookie)를 함께 준다.
+비어 있으면 더 없다는 뜻이고, 클라이언트는 그때 멈춘다.
+우리 자료는 열댓 건이라 한 쪽에 다 담기고, 빈 쿠키를 돌려준다.</div>
+</article>
+
+<article class="card quiz" id="ad-srch-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. 로그인 화면에서 사용자가 아이디 칸에
+<code>*)(objectClass=*</code> 를 쳤다. 서버가 그 값을
+<code>(&amp;(objectClass=user)(sAMAccountName=<b>여기</b>))</code> 에 그대로 끼워 넣는다면
+어떤 필터가 될까? 그리고 무엇이 문제인가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>(&amp;(objectClass=user)(sAMAccountName=*)(objectClass=*))</code> 가 된다.
+"아이디가 뭐든 상관없이 <b>모든 사용자</b>" 라는 뜻이다.<br>
+결과가 여럿이면 서버가 "여러 명이 걸렸다" 며 거절할 수도 있지만,
+어떤 구현은 <b>첫 번째 사람으로 로그인시킨다</b>. 그리고 그 첫 번째가
+관리자일 수도 있다.<br>
+막는 법은 하나 — 값을 <b>이스케이프</b>하는 것이다(RFC 4515 §3).
+우리 <code>escapeValue</code> 가 하는 일이 그것이고, 7부에서 Keycloak 이
+같은 처리를 한다는 것도 확인한다.</div>
+</article>
+
+<article class="card" id="ad-tls">
+<p class="chnum">7장</p>
+<h2>포트 · LDAPS · 서비스 계정</h2>
+<p class="chsub">실무에서 실제로 막히는 세 가지</p>
+</article>
+
+<article class="card" id="ad-tls-1">
+<h3>포트 넷</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>포트</th><th>무엇</th><th>범위</th><th>쓸까</th></tr>
+<tr><td><b>389</b></td><td>LDAP (평문)</td><td>이 도메인</td><td>실습에서만</td></tr>
+<tr><td><b>636</b></td><td><b>LDAPS</b> (처음부터 TLS)</td><td>이 도메인</td><td><b>이것을 쓴다</b></td></tr>
+<tr><td>3268</td><td>글로벌 카탈로그 (평문)</td><td><b>숲 전체</b>, 속성 일부만</td><td>여러 도메인일 때</td></tr>
+<tr><td>3269</td><td>글로벌 카탈로그 (TLS)</td><td>위와 같음</td><td>여러 도메인일 때</td></tr>
+</table>
+</div>
+<span class="tier c">문서 근거</span>
+<div class="key"><b>글로벌 카탈로그가 필요한 때</b> —
+회사에 도메인이 여럿이면(<code>ad.campus.example</code> 과 <code>ad.hospital.example</code>),
+389 는 자기 도메인만 안다. 3268 은 숲 전체를 한 번에 뒤지는 대신
+<b>속성의 일부만</b> 들고 있다. 이 덱은 도메인 하나만 다루므로 636 을 쓴다.</div>
+<div class="warn"><b>389 를 쓰면 비밀번호가 평문으로 흐른다</b> —
+5장에서 본 그 바이트다. 요즘 AD 는 "LDAP 서명·채널 바인딩" 설정으로
+평문 바인드를 아예 거절하도록 바뀌는 추세다.</div>
+</article>
+
+<article class="card" id="ad-tls-2">
+<h3>LDAPS — 우리 CA 를 알려 줄 때</h3>
+<!--OUT file=ad_ldaps_ok.txt note=--cacert 로 우리 CA 를 믿게 하고 붙었다-->
+<span class="tier a">실행 검증</span>
+<p>1부 7장에서 만든 그 인증서다. <code>ldap.ad.campus.example</code> 이름으로 발급했고,
+같은 CA 를 믿게 해 주니 그대로 통한다.</p>
+</article>
+
+<article class="card" id="ad-tls-3">
+<h3>안 알려 주면</h3>
+<!--OUT file=ad_ldaps_notrust.txt note=같은 서버, 같은 인증서 — CA 만 안 알려 줬다-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>이 오류가 7부의 절반이다</b> —
+회사·학교의 도메인 컨트롤러는 거의 예외 없이 <b>사내 CA</b> 가 발급한 인증서를 쓰고,
+그 CA 는 어느 기기에도 미리 들어 있지 않다. 그래서 Keycloak 에게
+"이 CA 를 믿어라" 라고 따로 알려 줘야 한다 — 그것이 <b>truststore</b> 다.<br>
+자바 쪽에서는 같은 상황이 <code>PKIX path building failed</code> 로 나온다.</div>
+<div class="tip"><b>검증을 끄면 안 되는 이유</b>(1부 7장) —
+붙기는 하지만, 그때부터 Keycloak 은 <b>가짜 AD 에게도 비밀번호를 보낸다</b>.
+사내망 안에서 누가 가로채도 알 수 없다.</div>
+</article>
+
+<article class="card" id="ad-tls-4">
+<h3>서비스 계정이 왜 필요한가</h3>
+<!--OUT file=ad_search_nobind.txt note=바인드 없이 검색하면-->
+<span class="tier a">실행 검증</span>
+<!--CODE file=ldap/fakead/server.go lines=292-302 note=익명 검색을 막는 세 줄-->
+<div class="key"><b>Keycloak 은 사람을 찾기 위해 먼저 누군가여야 한다</b> —
+사용자가 <code>minji</code> 라고 쳤을 때, Keycloak 은 그 아이디에 해당하는 <b>DN 을 먼저 찾아야</b>
+비밀번호를 확인하는 바인드를 할 수 있다. 그런데 그 검색부터 신분이 필요하다.
+그래서 <b>읽기 전용 서비스 계정</b>을 하나 만들어 Keycloak 에게 준다.</div>
+</article>
+
+<article class="card" id="ad-tls-5">
+<h3>서비스 계정에 줄 권한</h3>
+<!--CODE file=data/campus.ldif lines=169-187 note=svc-keycloak — 사람이 아닌 계정-->
+<span class="tier a">실행 검증</span> <span class="tier demo">예제용</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>줘야 하는 것</th><th>주면 안 되는 것</th></tr>
+<tr><td>필요한 OU 아래 <b>읽기</b></td><td>쓰기 · 삭제</td></tr>
+<tr><td>사용자·그룹의 속성 읽기</td><td>도메인 관리자 권한</td></tr>
+<tr><td>비밀번호 만료 없음<br>(<code>66048</code>)</td><td>대화형 로그온</td></tr>
+</table>
+</div>
+<div class="warn"><b>비밀번호 만료를 꺼 두는 이유</b> —
+서비스 계정의 비밀번호가 만료되면 <b>전 직원의 로그인이 한꺼번에 멈춘다</b>.
+그리고 아무도 그 계정에 로그인해 보지 않으므로, 만료 경고를 볼 사람이 없다.
+대신 그 계정은 <b>대화형 로그온을 막아</b> 두는 것이 짝이다.</div>
+</article>
+
+<article class="card quiz" id="ad-tls-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. 보안팀이 "서비스 계정에 도메인 관리자 권한을 주면
+설정이 간단해진다" 고 한다. 왜 안 되는지 <b>연동이 망가지는 시나리오</b>로 설명해 보라.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> Keycloak 설정 파일이나 Secret 에는 그 계정의
+<b>비밀번호가 그대로 들어 있다</b>(6부에서 실제로 넣는다).
+Keycloak Pod 하나가 뚫리거나, Secret 을 읽을 수 있는 사람이 늘어나면,
+그 순간 <b>도메인 전체의 관리자 비밀번호</b>가 새는 것이다.<br>
+읽기 전용이면 최악의 경우에도 "명부를 읽혔다" 로 끝난다.
+게다가 우리 연동은 <b>쓰기를 아예 하지 않는다</b>(7부의 READ_ONLY) —
+줄 이유가 없는 권한이다.</div>
+</article>
+
+<article class="card" id="ad-not">
+<p class="chnum">8장</p>
+<h2>우리가 안 하는 것</h2>
+<p class="chsub">흉내 내지 않은 것을 분명히 적어 두는 일</p>
+</article>
+
+<article class="card" id="ad-not-1">
+<h3>가짜 AD 가 하는 것과 안 하는 것</h3>
+<!--CODE file=ldap/fakead/server.go lines=1-36 note=머리말에 적어 둔 경계-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>안 하는 것을 "조용히 무시" 하지 않는다</b> —
+수정·추가·삭제 요청이 오면 <code>unwillingToPerform</code>(53)으로 <b>분명히 거절</b>한다.
+무시하면 상대는 우리가 한 줄로 알고, 그 오해는 훨씬 나중에 이상한 모습으로 터진다.</div>
+</article>
+
+<article class="card" id="ad-not-2">
+<h3>StartTLS 와 Kerberos</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>것</th><th>무엇</th><th>왜 안 하나</th></tr>
+<tr><td><b>StartTLS</b></td><td>389 로 붙은 뒤 <b>도중에</b> 암호화로 바꾸는 방식</td>
+    <td>636(처음부터 TLS)이면 충분하고, 둘을 다 하면 설정이 두 배가 된다</td></tr>
+<tr><td><b>SASL / GSSAPI</b></td><td>비밀번호 대신 <b>티켓</b>으로 바인드</td>
+    <td>Kerberos 인프라가 있어야 하고, 이 기계에서 한 줄도 못 돌린다</td></tr>
+<tr><td><b>referral</b></td><td>"그건 저쪽 서버가 안다" 며 넘기기</td>
+    <td>도메인이 하나뿐인 이 덱에서는 나올 일이 없다</td></tr>
+<tr><td><b>글로벌 카탈로그</b></td><td>숲 전체 검색 (3268)</td>
+    <td>7장에서 설명만 한다</td></tr>
+</table>
+</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ad-not-3">
+<h3>Kerberos 는 무엇인가 — 개념만</h3>
+<p class="lead">회사 노트북에서 브라우저를 열면 <b>로그인 화면 없이</b> 그냥 들어가지는 일이 있다.
+그게 Kerberos(윈도에서는 SPNEGO)다.</p>
+<pre><code data-lang="text">1. 아침에 윈도에 로그인   → 도메인 컨트롤러가 "티켓" 을 준다
+2. 브라우저가 앱에 접속   → 앱이 "너 누구냐"
+3. 브라우저가 티켓을 제시 → 비밀번호를 다시 안 묻는다</code></pre>
+<span class="tier ill">설명용</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>LDAP bind (이 덱)</th><th>Kerberos</th></tr>
+<tr><td>보내는 것</td><td>비밀번호</td><td><b>티켓</b> (비밀번호가 안 간다)</td></tr>
+<tr><td>필요한 것</td><td>계정과 비밀번호</td><td>도메인 가입 PC · SPN · keytab</td></tr>
+<tr><td>되는 곳</td><td>어디서나</td><td>사내망의 가입된 PC</td></tr>
+</table>
+</div>
+<div class="note"><b>Keycloak 은 둘 다 할 수 있다</b> —
+User Federation 설정에 "Kerberos integration" 칸이 따로 있다.
+다만 이 덱에서는 <b>다루지 않는다</b>(0부에서 밝혔다).
+비밀번호로 하는 쪽을 먼저 완전히 이해하는 편이 순서상 맞고,
+Kerberos 를 켜도 그 아래의 LDAP 연동은 <b>그대로 필요하다</b>.</div>
+</article>
+
+<article class="card" id="ad-not-4">
+<h3>진짜 AD 와 다른 점</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>진짜 AD</th><th>우리 가짜 AD</th></tr>
+<tr><td>사람 수만 명, 복제 서버 여러 대</td><td>15항목, 한 프로세스</td></tr>
+<tr><td>비밀번호를 해시로 저장</td><td><code>demoPassword</code> 평문 (시연용)</td></tr>
+<tr><td>1000건에서 끊고 페이지를 요구</td><td>한 쪽에 다 담아 빈 쿠키를 준다</td></tr>
+<tr><td>스키마 검사·접근 제어 목록</td><td>없다</td></tr>
+<tr><td><code>~=</code> 는 발음이 비슷한 것도 찾는다</td><td><code>=</code> 과 같게 뒀다</td></tr>
+<tr><td>whenCreated · lastLogon 등 수십 개 칸</td><td>필요한 열 몇 개만</td></tr>
+</table>
+</div>
+<div class="key"><b>그래도 Keycloak 은 구별하지 못한다</b> —
+Keycloak 이 쓰는 부분만 정확히 흉내 냈기 때문이다.
+6부에서 진짜 Keycloak 을 이 서버에 붙이고, 7부에서
+<b>그때 오간 LDAP 검색을 이 서버의 로그로 직접 읽는다</b>.</div>
+</article>
+
+<article class="card" id="ad-end">
+<p class="chnum">9장</p>
+<h2>3부 마무리</h2>
+<p class="chsub">실수 박물관 · 서버 로그 읽기 · 민지의 회고</p>
+</article>
+
+<article class="card" id="ad-end-1">
+<h3>서버 쪽 기록 — 7부에서 쓸 도구</h3>
+<!--OUT file=ad_fakead.log lines=1-4 note=바인드 한 건이 남긴 자국-->
+<!--OUT file=ad_fakead.log lines=36-40 note=검색 한 건 — 필터가 글로 적혀 있다-->
+<span class="tier a">실행 검증</span>
+<!--CODE file=ldap/fakead/server.go lines=141-155 note=logf — 필터를 글로 되돌려 적는다-->
+<div class="key"><b>이 로그가 이 부의 진짜 산출물이다</b> —
+7부에서 "Keycloak 이 AD 에게 대체 무엇을 물었나" 를 알아내는 방법이
+<b>이 파일을 읽는 것</b>이다. 그래서 필터를 바이트가 아니라
+사람이 읽는 글로 되돌려 적어 둔다.</div>
+</article>
+
+<article class="card" id="ad-end-2">
+<h3>실수 박물관</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>증상</th><th>진짜 원인</th><th>볼 곳</th></tr>
+<tr><td>모든 사용자의 로그인이 한꺼번에 멈췄다</td><td>서비스 계정 비밀번호가 틀렸거나 만료·잠김</td><td>5장 <code>52e</code>·<code>775</code></td></tr>
+<tr><td>한 사람만 못 들어온다. <code>533</code></td><td>계정이 꺼져 있다. 비밀번호는 맞다</td><td>2·5장</td></tr>
+<tr><td>사용자를 못 찾는다</td><td>base DN 이 그 사람의 OU 를 안 덮는다</td><td>1·6장</td></tr>
+<tr><td>1000명까지만 동기화된다</td><td>페이지 컨트롤을 안 썼다</td><td>6장</td></tr>
+<tr><td>그룹이 하나도 안 딸려 온다</td><td><code>member</code>/<code>memberOf</code> 중 잘못된 쪽을 읽는다</td><td>3장</td></tr>
+<tr><td>이름을 바꾼 사람이 새 계정이 됐다</td><td>식별 기준을 <code>sAMAccountName</code> 으로 뒀다</td><td>2장</td></tr>
+<tr><td>PKIX path building failed</td><td>사내 CA 를 truststore 에 안 넣었다</td><td>7장</td></tr>
+<tr><td>한글 이름이 깨져 보인다</td><td>이진값(<code>objectGUID</code>)을 글자로 다뤘다</td><td>2·4장</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="ad-end-3">
+<h3>이 부의 코드도 실제로 돌아간다</h3>
+<!--OUT file=web_test.txt lines=1-8 note=go test ./... — LDAP 네 묶음이 함께 있다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>골든 바이트로 못 박아 둔 것</b> —
+익명 바인드 14바이트, 정수·길이 표, 필터 세 종의 바이트.
+그리고 필터 15종이 <b>글 → 나무 → 바이트 → 나무 → 글</b> 왕복을 통과한다.
+여기가 어긋나면 Keycloak 이 우리를 이해하지 못하므로, 시험이 먼저 알려 준다.</div>
+</article>
+
+<article class="card quiz" id="ad-end-quiz1" data-quiz>
+<h3>3부 퀴즈 ①</h3>
+<p class="q">Q. 학교에 사람이 8,000명이다. Keycloak 이 "모든 사용자 동기화" 를 돌렸는데
+1,000명만 들어왔다. 그리고 오류는 하나도 안 났다. 무엇이 문제일까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>페이지 컨트롤</b>(Simple Paged Results)을 안 썼다.
+AD 는 한 번의 검색에서 기본 1,000건까지만 돌려주고 나머지를 <b>그냥 버린다</b> —
+오류를 내지 않는다는 것이 이 문제의 무서운 점이다.<br>
+Keycloak 의 LDAP 연동 설정에 "Pagination" 스위치가 있고, 그걸 켜면 된다(7부).
+켜져 있는데도 그렇다면 AD 쪽이 그 컨트롤을 거절하는지 로그로 확인한다.</div>
+</article>
+
+<article class="card quiz" id="ad-end-quiz2" data-quiz>
+<h3>3부 퀴즈 ②</h3>
+<p class="q">Q. 이 부에서 만든 가짜 AD 를 진짜 AD 대신 <b>계속 써도</b> 되는 이유와,
+절대 그러면 안 되는 이유를 하나씩 들어 보라.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>배우는 동안에는 써도 된다</b> — Keycloak 이 쓰는 부분(bind·search·
+필터·페이지·LDAPS·AD 오류 코드)을 정확히 흉내 냈기 때문에, 연동 설정을 익히고
+문제를 재현하는 데는 진짜와 구별되지 않는다.<br>
+<b>운영에는 절대 안 된다</b> — 비밀번호를 평문으로 들고 있고, 접근 제어도 스키마 검사도
+없으며, 쓰기·복제·감사가 전혀 없다. 무엇보다 <b>학교의 진짜 계정은 여기 없다</b>.
+이건 학습용 모형이지 디렉터리가 아니다.</div>
+</article>
+
+<article class="card" id="ad-end-4">
+<h3>민지의 회고</h3>
+<!--FIG file=system_p3.svg cap=3부까지 — 학적부가 켜졌다-->
+<blockquote>"학교 계정이 어디 있는지 알았다. <b>나무</b>처럼 생긴 학적부에 있고,
+<b>LDAP</b> 이라는 말로 물어볼 수 있다. 비밀번호를 확인하는 방법은 하나뿐이었다 —
+그 계정으로 <b>직접 붙어 보는 것</b>(bind).<br><br>
+그런데 아직 이상하다. 그러면 학식 예약 앱이 사용자의 비밀번호를 받아서
+AD 에 대신 물어봐야 한다는 뜻인데 — <b>그건 1부에서 하면 안 된다고 배운 것</b> 아닌가?"</blockquote>
+<div class="key"><b>정확한 질문이다</b> — 그리고 그것이 4부의 주제다.
+앱이 비밀번호를 아예 <b>보지 않고도</b> "이 사람이 맞다" 를 알 수 있는 방법이 있다.
+그 방법의 이름이 <b>인증 위임</b>이고, 그 일을 해 주는 것이 <b>Keycloak</b> 이다.
+Keycloak 은 AD 에게 LDAP 으로 묻고(3부에서 배운 것),
+앱에게는 다른 말로 답한다 — 그 다른 말이 <b>OIDC</b> 다.</div>
+<p class="cap">3부 끝. 다음은 4부 — 인증 위임의 원리.</p>
 </article>

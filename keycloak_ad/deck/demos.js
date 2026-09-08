@@ -243,6 +243,193 @@
     run();
   });
 
+  /* ── 8. LDAP 필터 해석기 ────────────────────────────────────────
+   * 3부에서 만든 가짜 AD 와 **같은 자료**를 담아 두고, 친 필터가 누구를
+   * 고르는지 바로 보여 준다. 필터는 외워지지 않는다 — 틀려 봐야 는다. */
+  var DIR = [
+    { dn: 'CN=Kim Minji,OU=Students', cn: 'Kim Minji', sn: 'Kim',
+      samaccountname: 'minji', mail: 'minji@campus.example',
+      objectclass: 'top person organizationalPerson user',
+      useraccountcontrol: '512',
+      memberof: 'CN=lunch-users,OU=Groups CN=campus-all,OU=Groups' },
+    { dn: 'CN=Kim Junho,OU=Staff', cn: 'Kim Junho', sn: 'Kim',
+      samaccountname: 'prof.kim', mail: 'prof.kim@campus.example',
+      objectclass: 'top person organizationalPerson user',
+      useraccountcontrol: '66048',
+      memberof: 'CN=lunch-users,OU=Groups CN=campus-all,OU=Groups' },
+    { dn: 'CN=Lee Sohee,OU=Staff', cn: 'Lee Sohee', sn: 'Lee',
+      samaccountname: 'admin.lee', mail: 'admin.lee@campus.example',
+      objectclass: 'top person organizationalPerson user',
+      useraccountcontrol: '512',
+      memberof: 'CN=lunch-users,OU=Groups CN=lunch-admins,OU=Groups ' +
+        'CN=campus-all,OU=Groups' },
+    { dn: 'CN=Park Hana,OU=Students', cn: 'Park Hana', sn: 'Park',
+      samaccountname: 'hana.park', mail: 'hana.park@campus.example',
+      objectclass: 'top person organizationalPerson user',
+      useraccountcontrol: '512',
+      memberof: 'CN=lunch-users,OU=Groups CN=campus-all,OU=Groups' },
+    { dn: 'CN=Oh Jisoo,OU=Staff', cn: 'Oh Jisoo', sn: 'Oh',
+      samaccountname: 'jisoo.oh', mail: 'jisoo.oh@campus.example',
+      objectclass: 'top person organizationalPerson user',
+      useraccountcontrol: '514',
+      memberof: 'CN=campus-all,OU=Groups' },
+    { dn: 'CN=Choi Yuna,OU=Students', cn: 'Choi Yuna', sn: 'Choi',
+      samaccountname: 'yuna.choi', mail: 'yuna.choi@campus.example',
+      objectclass: 'top person organizationalPerson user',
+      useraccountcontrol: '512',
+      memberof: 'CN=campus-all,OU=Groups' },
+    { dn: 'CN=svc-keycloak,OU=Service Accounts', cn: 'svc-keycloak',
+      sn: 'svc-keycloak', samaccountname: 'svc-keycloak',
+      objectclass: 'top person organizationalPerson user',
+      useraccountcontrol: '66048' },
+    { dn: 'CN=lunch-users,OU=Groups', cn: 'lunch-users',
+      samaccountname: 'lunch-users', objectclass: 'top group' },
+    { dn: 'CN=lunch-admins,OU=Groups', cn: 'lunch-admins',
+      samaccountname: 'lunch-admins', objectclass: 'top group' },
+    { dn: 'CN=campus-all,OU=Groups', cn: 'campus-all',
+      samaccountname: 'campus-all', objectclass: 'top group' }
+  ];
+
+  // 아주 작은 필터 해석기. ldap/proto/proto.go 의 규칙과 같은 것만 한다.
+  function parseFilter(s, at) {
+    at = at || { i: 0 };
+    if (s[at.i] !== '(') throw new Error('( 로 시작해야 합니다');
+    at.i++;
+    var node;
+    var c = s[at.i];
+    if (c === '&' || c === '|') {
+      at.i++;
+      var subs = [];
+      while (s[at.i] === '(') subs.push(parseFilter(s, at));
+      if (!subs.length) throw new Error('&/| 안이 비었습니다');
+      node = { op: c, subs: subs };
+    } else if (c === '!') {
+      at.i++;
+      node = { op: '!', subs: [parseFilter(s, at)] };
+    } else {
+      var start = at.i;
+      while (at.i < s.length && '=<>~)'.indexOf(s[at.i]) < 0) at.i++;
+      var attr = s.slice(start, at.i);
+      if (!attr) throw new Error('속성 이름이 없습니다');
+      var op = '=';
+      if ('><~'.indexOf(s[at.i]) >= 0) { op = s.slice(at.i, at.i + 2); at.i += 2; }
+      else if (s[at.i] === '=') at.i++;
+      else throw new Error('연산자가 없습니다');
+      var vs = at.i;
+      while (at.i < s.length && s[at.i] !== ')') at.i++;
+      node = { op: op, attr: attr.toLowerCase(), val: s.slice(vs, at.i) };
+    }
+    if (s[at.i] !== ')') throw new Error(') 가 없습니다');
+    at.i++;
+    return node;
+  }
+
+  function matches(e, f) {
+    if (f.op === '&') return f.subs.every(function (x) { return matches(e, x); });
+    if (f.op === '|') return f.subs.some(function (x) { return matches(e, x); });
+    if (f.op === '!') return !matches(e, f.subs[0]);
+    var raw = e[f.attr];
+    if (raw === undefined) return false;
+    var vals = String(raw).toLowerCase().split(' ');
+    var want = f.val.toLowerCase();
+    if (f.op === '=' && want === '*') return true;
+    if (f.op === '=' && want.indexOf('*') >= 0) {
+      var re = new RegExp('^' + want.split('*').map(function (p) {
+        return p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }).join('.*') + '$');
+      return vals.some(function (v) { return re.test(v); });
+    }
+    if (f.op === '>=') return vals.some(function (v) { return v >= want; });
+    if (f.op === '<=') return vals.some(function (v) { return v <= want; });
+    // memberOf 처럼 값이 여럿인 칸은 하나라도 맞으면 된다
+    return vals.some(function (v) { return v === want; }) ||
+      String(raw).toLowerCase() === want;
+  }
+
+  function showTree(f, depth) {
+    var pad = new Array(depth + 1).join('  ');
+    if (f.subs) {
+      var head = { '&': '그리고', '|': '또는', '!': '아님' }[f.op];
+      return pad + head + '\n' + f.subs.map(function (s) {
+        return showTree(s, depth + 1);
+      }).join('\n');
+    }
+    return pad + f.attr + ' ' + f.op + ' ' + (f.val || '*');
+  }
+
+  __demo('ldap-filter', function (host, api) {
+    var el = q(host, '[data-filter]');
+    function run() {
+      var s = val(el, '(&(objectClass=user)(sAMAccountName=minji))');
+      var f;
+      try {
+        var at = { i: 0 };
+        f = parseFilter(s, at);
+        if (at.i !== s.length) throw new Error('뒤에 남은 글자가 있습니다');
+      } catch (e) {
+        api.w(host, '필터를 못 읽습니다 — ' + api.esc(e.message), 'bad');
+        return;
+      }
+      var hit = DIR.filter(function (e) { return matches(e, f); });
+      var out = '<span class="dim">' + api.esc(showTree(f, 0)) +
+        '</span>\n\n';
+      if (!hit.length) {
+        out += '맞는 항목이 없습니다.';
+        api.w(host, out, 'dim');
+        return;
+      }
+      out += hit.map(function (e) { return '  ' + api.esc(e.dn); }).join('\n');
+      out += '\n\n<span class="dim">' + hit.length + '건 / 전체 ' +
+        DIR.length + '건</span>';
+      api.w(host, out, 'ok');
+    }
+    on(el, 'input', run);
+    run();
+  });
+
+  /* ── 9. DN 뜯어보기 ─────────────────────────────────────────────
+   * DN 은 아래에서 위로 적힌 주소다. 그 순서가 거꾸로라는 것을
+   * 한 번 눈으로 보면 다시는 헷갈리지 않는다. */
+  var RDN_MEANING = {
+    cn: '이름 (Common Name) — 사람·그룹의 이름',
+    ou: '서랍 (Organizational Unit) — 조직 단위',
+    dc: '도메인 조각 (Domain Component)',
+    o: '조직 (Organization)',
+    uid: '아이디 (주로 OpenLDAP 쪽)'
+  };
+  __demo('ldap-dn', function (host, api) {
+    var el = q(host, '[data-dn]');
+    function run() {
+      var s = val(el, 'CN=Kim Minji,OU=Students,DC=ad,DC=campus,DC=example');
+      var parts = s.split(',').map(function (p) { return p.trim(); })
+        .filter(function (p) { return p.length; });
+      if (!parts.length) {
+        api.w(host, 'DN 을 써 보세요.', 'dim');
+        return;
+      }
+      var lines = [], bad = 0;
+      for (var i = 0; i < parts.length; i++) {
+        var k = parts[i].indexOf('=');
+        if (k < 0) { bad++; lines.push('  ' + parts[i] + '   ← = 가 없다'); continue; }
+        var type = parts[i].slice(0, k).trim().toLowerCase();
+        var v = parts[i].slice(k + 1).trim();
+        var why = RDN_MEANING[type] || '(이 덱에서 다루지 않는 종류)';
+        lines.push('  ' + (i === 0 ? '가장 아래 ' : '        ↑ ') +
+          type.toUpperCase() + '=' + v);
+        lines.push('             ' + why);
+      }
+      var tail = '\n<span class="dim">조각 ' + parts.length +
+        '개 · 맨 앞이 그 항목 자신, 뒤로 갈수록 위쪽 서랍이다.\n' +
+        '도메인은 DC 조각을 이어 붙이면 나온다 — ' +
+        parts.filter(function (p) { return /^dc=/i.test(p.trim()); })
+          .map(function (p) { return p.split('=')[1]; }).join('.') +
+        '</span>';
+      api.w(host, api.esc(lines.join('\n')) + tail, bad ? 'bad' : 'ok');
+    }
+    on(el, 'input', run);
+    run();
+  });
+
   /* ── 7. YAML 들여쓰기 검사기 ────────────────────────────────────
    * 2부부터 매니페스트를 읽는다. 그 전에 탭 하나로 죽는 경험을 여기서. */
   __demo('yaml', function (host, api) {

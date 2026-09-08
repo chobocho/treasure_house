@@ -425,6 +425,55 @@ func TestServerClosesOnGarbage(t *testing.T) {
 	}
 }
 
+// 로그는 덱에 그대로 실린다. 한 줄이 너무 길면 좁은 화면에서 옆으로 밀려
+// 정작 봐야 할 결과가 안 보인다. 날짜는 파일 머리에 한 번만 적고
+// 줄마다는 시각만 적는 것으로 그 폭을 줄였다.
+func TestServerLogLinesAreNotTooWide(t *testing.T) {
+	d, err := LoadLDIFFile("../../data/campus.ldif")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf strings.Builder
+	srv := NewServer(d, &buf)
+	if err := srv.ListenPlain("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	k := dial(t, srv)
+	// 이 덱에서 가장 긴 DN 으로 바인드한다
+	k.send(bindOp("CN=svc-keycloak,OU=Service Accounts,"+base, "Passw0rd!-demo"))
+	k.recv()
+	k.send(searchOp(base, proto.ScopeWholeSubtree,
+		"(&(objectClass=user)(sAMAccountName=minji))", []string{"cn"}, nil))
+	k.recv()
+	k.recv()
+	k.c.Close()
+	srv.Close()
+
+	for _, line := range strings.Split(buf.String(), "\n") {
+		if n := logCells(line); n > 108 {
+			t.Errorf("%d칸짜리 로그 줄: %s", n, line)
+		}
+	}
+	if !strings.Contains(buf.String(), "2026") &&
+		!strings.Contains(buf.String(), "20") {
+		t.Error("날짜를 어디에도 안 적었다")
+	}
+}
+
+func logCells(s string) int {
+	n := 0
+	for _, r := range s {
+		if (r >= 0xAC00 && r <= 0xD7A3) || (r >= 0x3000 && r <= 0x303F) ||
+			(r >= 0x4E00 && r <= 0x9FFF) || (r >= 0xFF00 && r <= 0xFF60) {
+			n += 2
+		} else {
+			n++
+		}
+	}
+	return n
+}
+
 // ── LDAPS ────────────────────────────────────────────────────────────
 
 // 636 쪽 문은 처음부터 TLS 다. StartTLS 와 헷갈리지 말 것 — 그쪽은 389

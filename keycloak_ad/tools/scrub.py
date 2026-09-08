@@ -44,6 +44,10 @@ _RULES = [
     # Go 표준 로그의 시각 접두사
     (re.compile(r'\b\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\b'),
      lambda m: FIXED_LOG_TIME),
+    # 가짜 AD 의 로그는 줄머리에 시각만 적는다 (날짜는 파일 머리에 한 번)
+    (re.compile(r'^\d{2}:\d{2}:\d{2}(?= )', re.M), lambda m: '09:00:00'),
+    (re.compile(r'(가짜 AD 시작 — )\d{4}-\d{2}-\d{2}'),
+     lambda m: m.group(1) + '2026-09-08'),
     # 걸린 시간
     (re.compile(r'\b\d+\.\d{2,3}s\b'), lambda m: '0.00s'),
     (re.compile(r'\(\d+(\.\d+)? ?ms\)'), lambda m: '(0 ms)'),

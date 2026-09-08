@@ -49,13 +49,21 @@ type Server struct {
 	tlsLn   net.Listener
 	closed  bool
 	connSeq int64
-	logMu   sync.Mutex
-	nowFn   func() time.Time
-	wg      sync.WaitGroup
+	// 살아 있는 연결들. 끌 때 이것들을 함께 닫아야 한다 — 손님이 조용히
+	// 붙어만 있으면 읽기에서 5분을 기다리느라 서버가 안 꺼진다.
+	live  map[net.Conn]bool
+	logMu sync.Mutex
+	nowFn func() time.Time
+	wg    sync.WaitGroup
 }
 
 func NewServer(d *Dir, logw io.Writer) *Server {
-	return &Server{dir: d, log: logw, nowFn: time.Now}
+	s := &Server{dir: d, log: logw, nowFn: time.Now,
+		live: map[net.Conn]bool{}}
+	// 날짜는 파일 머리에 한 번만 적는다. 줄마다 적으면 20칸을 늘
+	// 쓰는데, 긴 DN 이 들어오는 줄이 화면 밖으로 밀린다.
+	s.logf("가짜 AD 시작 — %s", s.nowFn().Format("2006-01-02"))
+	return s
 }
 
 func (s *Server) Addr() string {
@@ -111,6 +119,13 @@ func (s *Server) Close() {
 	if s.tlsLn != nil {
 		s.tlsLn.Close()
 	}
+	// 붙어 있는 손님도 끊는다. 안 그러면 읽기 기한(5분)이 지날 때까지
+	// 여기서 기다린다.
+	s.mu.Lock()
+	for c := range s.live {
+		c.Close()
+	}
+	s.mu.Unlock()
 	s.wg.Wait()
 }
 
@@ -155,7 +170,7 @@ func (s *Server) logf(format string, args ...any) {
 	s.logMu.Lock()
 	defer s.logMu.Unlock()
 	fmt.Fprintf(s.log, "%s %s\n",
-		s.nowFn().Format("2006/01/02 15:04:05"),
+		s.nowFn().Format("15:04:05"),
 		fmt.Sprintf(format, args...))
 }
 
@@ -167,7 +182,15 @@ type session struct {
 }
 
 func (s *Server) serve(c net.Conn, id int64, kind string) {
-	defer c.Close()
+	s.mu.Lock()
+	s.live[c] = true
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.live, c)
+		s.mu.Unlock()
+		c.Close()
+	}()
 	sess := &session{id: id}
 	s.logf("[%d] %s 연결됨 (%s)", id, c.RemoteAddr(), kind)
 	defer s.logf("[%d] 끊김", id)
@@ -336,11 +359,14 @@ func (s *Server) handleSearch(sess *session, msg proto.Message) []byte {
 			proto.OIDPagedResults, false, done.Encode()))
 	}
 
-	s.logf("[%d] #%d SEARCH base=%q scope=%s filter=%s "+
-		"attrs=%s → %d건 %s",
-		sess.id, msg.ID, sr.BaseDN, proto.ScopeName(sr.Scope),
-		sr.Filter.String(), attrList(sr.Attrs), sent,
-		proto.ResultName(code))
+	// 검색 한 건을 세 줄로 나눠 적는다. 한 줄에 몰면 140칸이 넘어
+	// 좁은 화면에서 정작 봐야 할 필터가 오른쪽으로 밀려 안 보인다.
+	s.logf("[%d] #%d SEARCH base=%q scope=%s",
+		sess.id, msg.ID, sr.BaseDN, proto.ScopeName(sr.Scope))
+	s.logf("[%d] #%d        filter=%s", sess.id, msg.ID,
+		sr.Filter.String())
+	s.logf("[%d] #%d        attrs=%s → %d건 %s", sess.id, msg.ID,
+		attrList(sr.Attrs), sent, proto.ResultName(code))
 
 	return append(out, proto.SearchResultDone(msg.ID, code, "", "",
 		controls...)...)

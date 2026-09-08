@@ -116,6 +116,44 @@ func TestDescribeResult(t *testing.T) {
 	}
 }
 
+// AD 의 진단 문구는 한 줄이 120칸을 넘는다. 그대로 찍으면 좁은 화면에서
+// 옆으로 밀려 읽을 수 없다. 값을 고치는 것이 아니라 **우리 도구가 어떻게
+// 보여 줄지**를 정하는 일이므로, 접어서 낸다.
+func TestDescribeWrapsLongDiagnostic(t *testing.T) {
+	long := "80090308: LdapErr: DSID-0C09042F, comment: " +
+		"AcceptSecurityContext error, data 52e, v4563 (비밀번호가 틀렸다)"
+	raw := proto.BindResponse(1, proto.ResultInvalidCredentials, "", long)
+	msg, _ := proto.ParseMessage(raw)
+	got := Describe(msg)
+	for _, line := range strings.Split(got, "\n") {
+		if cells(line) > 72 {
+			t.Errorf("%d칸짜리 줄이 있다: %q", cells(line), line)
+		}
+	}
+	// 접었어도 내용은 한 글자도 잃지 않아야 한다.
+	flat := strings.Join(strings.Fields(got), " ")
+	for _, want := range strings.Fields(long) {
+		if !strings.Contains(flat, want) {
+			t.Errorf("접는 과정에서 %q 를 잃었다", want)
+		}
+	}
+}
+
+func TestWrapCellsKeepsWords(t *testing.T) {
+	got := wrapCells("가나다 라마바 사아자 차카타 파하가 나다라 마바사", "  ", 20)
+	for _, line := range got {
+		if cells(line) > 20 {
+			t.Errorf("%d칸: %q", cells(line), line)
+		}
+		if !strings.HasPrefix(line, "  ") {
+			t.Errorf("들여쓰기가 없다: %q", line)
+		}
+	}
+	if len(got) < 3 {
+		t.Errorf("줄이 %d개뿐이다: %v", len(got), got)
+	}
+}
+
 func TestDescribeSearchEntry(t *testing.T) {
 	raw := proto.SearchResultEntry(3, "CN=Kim Minji,OU=Students,DC=ad",
 		[]proto.Attribute{
