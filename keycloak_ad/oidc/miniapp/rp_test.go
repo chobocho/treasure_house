@@ -429,3 +429,37 @@ func TestLogoutReturnsHome(t *testing.T) {
 		t.Errorf("로그아웃 뒤 /me 상태 = %d", after.StatusCode)
 	}
 }
+
+// ── 클라이언트 비밀은 명령줄이 아니라 환경 변수로 받는다 ──────────────
+//
+// 2부에서 이 앱을 쿠버네티스에 올릴 때, 비밀은 Secret 에 담아
+// 환경 변수로 넣어 준다. 명령줄에 적으면 `ps` 에도 뜨고
+// `kubectl describe pod` 에도 그대로 뜬다 — 아무나 볼 수 있다.
+
+func TestSecretPrefersEnv(t *testing.T) {
+	got, err := pickSecret("깃발로-준-값", "환경변수로-준-값")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "환경변수로-준-값" {
+		t.Errorf("고른 값 = %q — 환경 변수가 이겨야 한다", got)
+	}
+}
+
+func TestSecretFallsBackToFlag(t *testing.T) {
+	got, err := pickSecret("깃발로-준-값", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "깃발로-준-값" {
+		t.Errorf("고른 값 = %q", got)
+	}
+}
+
+// 둘 다 비어 있으면 뜨지 않는다. 조용히 빈 비밀로 돌면
+// 토큰 교환이 401 로 실패하고, 그 이유를 찾는 데 한나절이 걸린다.
+func TestSecretRefusesEmpty(t *testing.T) {
+	if _, err := pickSecret("", ""); err == nil {
+		t.Fatal("비밀 없이 뜨려 했다")
+	}
+}

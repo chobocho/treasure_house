@@ -1,18 +1,832 @@
 <article class="card section" id="part2">
 <p class="chnum">2부</p>
-<h2>컨테이너와 쿠버네티스 최소한</h2>
-<p class="chsub">이 덱에 필요한 만큼만 — 프로세스에서 Ingress 까지 한 층씩</p>
+<h2>컨테이너와 쿠버네티스, 딱 필요한 만큼</h2>
+<p class="chsub">매니페스트를 읽고 "이게 무엇을 만드는가" 를 말할 수 있게</p>
 <!--FIG file=system_p2.svg cap=2부까지 켜진 그림-->
 <h4>이 부에서 다루는 것</h4>
 <ul>
 <li>프로세스 → 이미지 → 컨테이너 → Pod</li>
-<li>Deployment 가 Pod 를 몇 개 유지한다는 뜻</li>
-<li>Service 와 라벨 셀렉터 — 이름으로 찾아가기</li>
-<li>Ingress — 바깥에서 들어오는 유일한 문</li>
-<li>ConfigMap 과 Secret — 설정과 비밀을 코드에서 떼기</li>
-<li>헬스체크 · 리소스 · <code>kubectl</code> 출력 읽는 법</li>
+<li>Deployment · Service · Ingress</li>
+<li>ConfigMap 과 Secret</li>
+<li>네임스페이스 · 라벨 · 셀렉터</li>
+<li>헬스체크와 자원 요청</li>
+<li>매니페스트를 합치고(Kustomize) 검사하기</li>
 </ul>
-<div class="tip"><b>끝나면</b> — 매니페스트를 보고 무엇이 생기는지 말하고, 문법이 맞는지 스스로 검사한다</div>
-<div class="warn"><b>이 부는 아직 준비 중입니다</b> — 뼈대만 세워 둔 상태다.
-본문이 들어오면 이 알림은 사라진다.</div>
+<div class="tip"><b>끝나면</b> — 남이 쓴 매니페스트를 읽고 무엇이 생기는지 말할 수 있고,
+자기가 쓴 것이 규격에 맞는지 클러스터 없이 검사할 수 있다</div>
+<div class="warn"><b>이 부는 클러스터 없이 배운다.</b>
+이 저장소가 도는 곳에는 도커도 클러스터도 없다.
+그래서 <b>띄워 보는 대신 읽고 검증한다</b> — 그리고 그 검증은 진짜다.
+쿠버네티스가 공개한 JSON 스키마와 실제로 맞춰 본 결과가 이 부의 검은 화면들이다.</div>
+</article>
+
+<article class="card" id="k8-box">
+<p class="chnum">1장</p>
+<h2>프로세스에서 컨테이너까지</h2>
+<p class="chsub">"제 컴퓨터에서는 되는데요" 를 없애려고</p>
+</article>
+
+<article class="card" id="k8-box-1">
+<h3>민지의 다음 질문</h3>
+<blockquote>"앱은 다 만들었다. 그런데 <b>어디에</b> 올리지?"</blockquote>
+<p class="lead">1부에서 만든 서버는 노트북에서 돌았다.
+그것을 학교 서버에 올리려면 Go 를 깔고, 판번호를 맞추고,
+인증서를 두고, 포트를 열고, 죽으면 다시 띄워야 한다.</p>
+<div class="key">이 목록이 길어지는 것이 문제의 시작이다.
+<b>컨테이너</b>는 그 목록을 <b>파일 하나에 담는</b> 방법이고,
+<b>쿠버네티스</b>는 그 파일을 <b>여러 대에 걸쳐 계속 돌게</b> 하는 방법이다.</div>
+</article>
+
+<article class="card" id="k8-box-2">
+<h3>낱말 넷을 먼저 갈라 둔다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>낱말</th><th>무엇인가</th><th>비유</th></tr>
+<tr><td><b>프로세스</b></td><td>지금 돌고 있는 프로그램 하나</td><td>일하는 사람</td></tr>
+<tr><td><b>이미지</b></td><td>파일 시스템 통째로 얼려 둔 것.
+<b>안 움직인다</b></td><td>가구까지 갖춘 집의 설계도</td></tr>
+<tr><td><b>컨테이너</b></td><td>그 이미지를 <b>돌리고 있는</b> 프로세스</td>
+<td>그 설계도로 지어 사람이 사는 집</td></tr>
+<tr><td><b>Pod</b></td><td>쿠버네티스가 다루는 <b>가장 작은 단위</b>.
+컨테이너 하나 이상이 한 집에 산다</td><td>한 세대(집)</td></tr>
+</table>
+</div>
+<div class="warn"><b>이미지와 컨테이너를 섞어 쓰면</b> 뒤가 전부 헷갈린다.
+이미지는 명사이고 컨테이너는 동사에 가깝다.
+같은 이미지로 컨테이너를 <b>백 개</b> 띄울 수 있다.</div>
+</article>
+
+<article class="card" id="k8-box-3">
+<h3>컨테이너는 가상 머신이 아니다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>가상 머신</th><th>컨테이너</th></tr>
+<tr><td>가진 것</td><td>커널까지 통째로</td><td>파일 시스템과 프로세스만</td></tr>
+<tr><td>커널</td><td>자기 것</td><td><b>호스트 것을 같이 쓴다</b></td></tr>
+<tr><td>뜨는 시간</td><td>수십 초</td><td>1초 안쪽</td></tr>
+<tr><td>격리 수준</td><td>강하다</td><td>커널이 갈라 준 만큼</td></tr>
+</table>
+</div>
+<div class="key">컨테이너의 격리는 리눅스 커널의 두 기능이 만든다 —
+<b>네임스페이스</b>(뭘 볼 수 있나)와 <b>c그룹</b>(얼마나 쓸 수 있나).
+새 운영체제를 띄우는 것이 아니라, <b>보이는 것을 가려 주는</b> 것이다.</div>
+<div class="tip">그래서 리눅스 컨테이너는 리눅스 커널 위에서만 돈다.
+맥이나 윈도우의 도커가 안에서 작은 리눅스 VM 을 돌리는 이유가 이것이다.</div>
+</article>
+
+<article class="card" id="k8-box-4">
+<h3>이미지에는 무엇이 들어 있나</h3>
+<pre class="term">registry.campus.example/lunch/lunch-web:1.4.2
+└────────┬────────────┘ └───┬────┘ └───┬───┘
+    어느 창고에서        무슨 이름     어느 판
+
+  층 1  베이스 (예: distroless — 셸조차 없다)
+  층 2  우리 실행 파일 하나  (Go 라 이것뿐이다)
+  설정  들어올 때 실행할 명령 · 열 포트 · 사용자</pre>
+<span class="tier ill">설명용</span>
+<div class="key"><b>판번호(태그)를 반드시 박는다.</b>
+<code>latest</code> 를 쓰면 "지금 무엇이 도는가" 를 아무도 모르고,
+어제 것으로 되돌릴 수도 없다. 4부의 <code>kid</code> 와 같은 이야기다 —
+이름이 있어야 바꿔 끼울 수 있다.</div>
+</article>
+
+<article class="card" id="k8-box-5">
+<h3>쿠버네티스가 하는 일 한 줄</h3>
+<p class="lead">"<b>이런 상태였으면 좋겠다</b>" 를 적어 두면,
+현실을 계속 그쪽으로 밀어붙인다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>내가 적은 것</th><th>쿠버네티스가 하는 일</th></tr>
+<tr><td>"두 벌 떠 있어라"</td><td>하나가 죽으면 <b>새로 만든다</b></td></tr>
+<tr><td>"이 이미지로 바꿔라"</td><td>한 벌씩 갈아 끼운다(rolling update)</td></tr>
+<tr><td>"메모리 128Mi 까지"</td><td>넘으면 <b>죽인다</b></td></tr>
+<tr><td>"준비되면 손님을 넣어라"</td><td>준비 전에는 트래픽을 안 보낸다</td></tr>
+</table>
+</div>
+<div class="key">이 방식의 이름이 <b>선언형</b>(declarative)이다.
+"어떻게 하라" 가 아니라 "어떤 상태" 를 적는다.
+그래서 같은 파일을 <b>몇 번을 적용해도</b> 결과가 같다.</div>
+</article>
+
+<article class="card" id="k8-box-6">
+<h3>단지 하나를 그려 보면</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>쿠버네티스</th><th>아파트 단지</th></tr>
+<tr><td><b>클러스터</b></td><td>단지 전체</td></tr>
+<tr><td><b>노드</b></td><td>동(棟) — 실제 서버 한 대</td></tr>
+<tr><td><b>네임스페이스</b></td><td>층 — 이름표와 권한이 층마다 따로</td></tr>
+<tr><td><b>Pod</b></td><td>세대(집) 하나</td></tr>
+<tr><td><b>컨테이너</b></td><td>그 집에 사는 사람</td></tr>
+<tr><td><b>Service</b></td><td>호수(號數) — 사람이 바뀌어도 그대로인 주소</td></tr>
+<tr><td><b>Ingress</b></td><td>단지 정문 — 바깥에서 들어오는 문</td></tr>
+</table>
+</div>
+<div class="tip">이 비유를 끝까지 쓴다. 6부에서 Keycloak 을 올릴 때
+"몇 동 몇 호" 로 이야기하면 대부분이 그대로 통한다.</div>
+</article>
+
+<article class="card quiz" id="k8-box-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 어떤 팀이 이미지를 <code>lunch-web:latest</code> 로 올리고 있었다.
+장애가 나서 "어제 것으로 되돌리자" 고 했는데 되돌릴 수가 없었다. 왜일까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>latest</code> 는 <b>이름일 뿐</b> 판번호가 아니다.
+같은 이름이 매번 다른 내용을 가리키고, 어제의 그 내용은 이름을 잃었다.<br>
+게다가 클러스터의 노드마다 <b>다른 latest</b> 를 캐시해 두고 있을 수 있다 —
+"두 벌 중 하나만 이상하다" 는 민원이 여기서 나온다.<br>
+고치는 법은 판번호를 박는 것이다. 더 확실하게는 다이제스트
+(<code>lunch-web@sha256:…</code>)까지 박는다. 그러면 이름이 아니라
+<b>내용</b>을 가리키게 된다.</div>
+</article>
+
+<article class="card" id="k8-pod">
+<p class="chnum">2장</p>
+<h2>Pod — 가장 작은 단위</h2>
+<p class="chsub">왜 컨테이너가 아니라 Pod 인가</p>
+</article>
+
+<article class="card" id="k8-pod-1">
+<h3>Pod 안을 들여다보면</h3>
+<!--OUT file=k8s_explain_pod_spec_containers.txt lines=1-14 note=규격에서 직접 읽었다-->
+<span class="tier c">문서 근거</span>
+<div class="tip">이 설명은 지어낸 것이 아니라 <b>쿠버네티스가 공개한 JSON 스키마</b>에서
+그대로 읽어 온 것이다. 어떻게 읽었는지는 8장에서 다룬다.</div>
+</article>
+
+<article class="card" id="k8-pod-2">
+<h3>한 집에 여러 명이 살 때</h3>
+<p class="lead">Pod 안의 컨테이너들은 <b>같은 IP 와 같은 포트 공간</b>을 쓴다.
+서로를 <code>localhost</code> 로 부르고, 디스크도 나눠 쓸 수 있다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>쓰임</th><th>예</th></tr>
+<tr><td><b>사이드카</b></td><td>로그를 모아 보내는 것 · 프록시(8부의 oauth2-proxy)</td></tr>
+<tr><td><b>초기화 컨테이너</b></td><td>본 컨테이너보다 <b>먼저</b> 한 번 돌고 끝난다.
+설정을 내려받거나 DB 가 뜰 때까지 기다린다(6부)</td></tr>
+</table>
+</div>
+<div class="warn">그렇다고 아무거나 한 Pod 에 넣으면 안 된다.
+같은 Pod 는 <b>같이 뜨고 같이 죽고 같이 늘어난다</b>.
+따로 늘리고 싶은 것은 따로 있어야 한다 — 앱과 데이터베이스를
+한 Pod 에 넣는 것이 대표적인 실수다.</div>
+</article>
+
+<article class="card" id="k8-pod-3">
+<h3>Pod 를 직접 만들지는 않는다</h3>
+<div class="key">Pod 를 그대로 만들면 <b>죽었을 때 아무도 살리지 않는다</b>.
+노드가 꺼지면 그 Pod 는 사라지고 그것으로 끝이다.<br>
+그래서 실제로는 Pod 를 <b>돌봐 주는 것</b>을 만들고, 그것이 Pod 를 만든다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>돌보는 것</th><th>언제 쓰나</th><th>이 덱에서</th></tr>
+<tr><td><b>Deployment</b></td><td>서로 같은 벌이 여럿. 순서가 없다</td>
+<td>학식 앱 · Keycloak</td></tr>
+<tr><td><b>StatefulSet</b></td><td>이름과 디스크를 각자 계속 갖는다</td>
+<td>PostgreSQL (6부)</td></tr>
+<tr><td><b>DaemonSet</b></td><td>노드마다 하나씩</td><td>안 씀</td></tr>
+<tr><td><b>Job · CronJob</b></td><td>한 번 하고 끝 · 정해진 때마다</td>
+<td>7부의 사용자 동기화 이야기에서 잠깐</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="k8-dep">
+<p class="chnum">3장</p>
+<h2>Deployment — 두 벌을 계속 떠 있게</h2>
+<p class="chsub">우리 앱의 매니페스트를 처음부터 읽는다</p>
+</article>
+
+<article class="card" id="k8-dep-1">
+<h3>맨 위 네 줄</h3>
+<!--CODE file=k8s/base/lunch-app.yaml lines=1-14 note=무엇을·어느 규격으로-->
+<span class="tier b">구문 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>뜻</th></tr>
+<tr><td><code>apiVersion</code></td><td>어느 규격의 몇 판으로 읽을 것인가</td></tr>
+<tr><td><code>kind</code></td><td>무엇을 만들 것인가</td></tr>
+<tr><td><code>metadata.name</code></td><td>이름. 네임스페이스 안에서 유일해야 한다</td></tr>
+<tr><td><code>metadata.labels</code></td><td>나중에 <b>골라 잡기</b> 위한 꼬리표</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="k8-dep-2">
+<h3>몇 벌 · 어느 Pod 가 내 것인가</h3>
+<!--CODE file=k8s/base/lunch-app.yaml lines=15-24 note=replicas 와 selector-->
+<span class="tier b">구문 검증</span>
+<div class="warn"><b>selector 와 template 의 라벨이 다르면 거절당한다.</b>
+Deployment 는 "이 조건에 맞는 Pod 가 내 것" 이라고 해 놓고
+자기가 만드는 Pod 에 그 라벨을 안 붙이는 셈이 되기 때문이다.
+처음 쓸 때 가장 자주 보는 오류다.</div>
+</article>
+
+<article class="card" id="k8-dep-3">
+<h3>규격은 뭐라고 하나</h3>
+<!--OUT file=k8s_explain_deployment_spec_replicas.txt note=기본값은 1-->
+<span class="tier c">문서 근거</span>
+<!--OUT file=k8s_explain_deployment_spec_selector.txt lines=1-8 note=바꿀 수 없다-->
+<span class="tier c">문서 근거</span>
+<div class="key">스키마는 "라벨로 고르는 조건" 이라고만 말한다.
+그런데 <b>한 번 정하면 못 바꾼다</b>는 규칙이 따로 있다(apps/v1 문서).
+라벨 체계를 바꾸려면 Deployment 를 지우고 다시 만들어야 하고,
+운영 중에 하면 잠깐 서비스가 끊긴다.<br>
+<b>규격 파일에 안 적힌 규칙이 있다</b>는 것 자체가 알아 둘 만하다 —
+스키마 검사가 만능이 아닌 이유이기도 하다(8장).</div>
+</article>
+
+<article class="card" id="k8-dep-4">
+<h3>거푸집 — 여기서부터가 Pod 다</h3>
+<!--CODE file=k8s/base/lunch-app.yaml lines=25-48 note=template.spec 이 Pod 의 spec-->
+<span class="tier b">구문 검증</span>
+<div class="tip"><code>spec.template.spec</code> 이 곧 <b>Pod 의 spec</b> 이다.
+2장에서 본 <code>containers</code> 가 여기 있다.
+매니페스트가 깊어 보이는 이유의 절반이 이 겹침이다.</div>
+</article>
+
+<article class="card" id="k8-dep-5">
+<h3>비밀은 명령줄에 적지 않는다</h3>
+<!--CODE file=k8s/base/lunch-app.yaml lines=49-59 note=Secret 에서 환경 변수로-->
+<span class="tier b">구문 검증</span>
+<div class="warn"><code>args</code> 에 비밀을 적으면
+<code>kubectl describe pod</code> 한 줄로 아무나 본다.
+노드에 들어가 <code>ps</code> 만 쳐도 보인다.<br>
+그래서 4부의 앱은 <b>환경 변수를 먼저 본다</b> — 그 코드가 다음 장에 있다.</div>
+</article>
+
+<article class="card" id="k8-dep-6">
+<h3>앱 쪽 코드</h3>
+<!--CODE file=oidc/miniapp/main.go sym=pickSecret note=환경 변수가 이긴다-->
+<span class="tier a">실행 검증</span>
+<div class="key">둘 다 비면 <b>뜨지 않는다</b>. 빈 비밀로 조용히 돌면
+토큰 교환이 401 로 실패하는데, 그 401 만 보고 원인을 찾기가 아주 어렵다.
+"틀리면 일찍, 시끄럽게" 가 운영에서 늘 이긴다.</div>
+</article>
+
+<article class="card" id="k8-dep-7">
+<h3>살아 있나 · 손님을 받아도 되나</h3>
+<!--CODE file=k8s/base/lunch-app.yaml lines=60-72 note=readiness 와 liveness-->
+<span class="tier b">구문 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>readiness</th><th>liveness</th></tr>
+<tr><td>묻는 것</td><td>"지금 손님을 받아도 되나"</td><td>"살아는 있나"</td></tr>
+<tr><td>실패하면</td><td>Service 에서 <b>빼 준다</b></td><td>컨테이너를 <b>죽이고 다시</b></td></tr>
+<tr><td>뜰 때</td><td>준비될 때까지 트래픽을 안 준다</td><td>너무 이르면 <b>계속 죽는다</b></td></tr>
+</table>
+</div>
+<div class="warn"><b>liveness 를 잘못 잡으면 멀쩡한 앱이 계속 재시작한다.</b>
+DB 가 느릴 때 liveness 가 실패하도록 만들어 두면,
+느려진 순간 모든 벌이 동시에 죽는다 — 장애가 두 배가 된다.
+느린 것은 readiness 로 빼고, liveness 는 <b>정말 굳었을 때만</b> 실패해야 한다.</div>
+</article>
+
+<article class="card" id="k8-dep-8">
+<h3>자원 — 요청과 상한</h3>
+<!--CODE file=k8s/base/lunch-app.yaml lines=73-85 note=requests 와 limits-->
+<span class="tier b">구문 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>requests</th><th>limits</th></tr>
+<tr><td>쓰임</td><td>어느 노드에 <b>앉힐지</b> 정할 때</td><td>넘으면 제재</td></tr>
+<tr><td>CPU 를 넘으면</td><td>—</td><td><b>느려진다</b>(throttle)</td></tr>
+<tr><td>메모리를 넘으면</td><td>—</td><td><b>죽는다</b>(OOMKilled)</td></tr>
+</table>
+</div>
+<div class="key">CPU 에는 <b>limits 를 안 두는</b> 편이 나은 경우가 많다.
+넘어도 죽지 않고 느려지기만 하는데, 상한을 두면 여유가 있어도 못 쓴다.
+메모리는 반대다 — 상한이 없으면 한 Pod 가 노드를 통째로 잡아먹는다.</div>
+</article>
+
+<article class="card quiz" id="k8-dep-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 어떤 앱이 배포한 지 몇 분마다 재시작을 반복한다.
+<code>kubectl get pod</code> 의 RESTARTS 가 계속 올라간다.
+로그에는 아무 오류도 없다. 어디를 먼저 볼까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>liveness 프로브</b>와 <b>메모리 limits</b> 둘이다.<br>
+로그에 오류가 없는데 죽는다는 것은 <b>앱이 스스로 죽은 게 아니라는</b> 뜻이다.
+누가 밖에서 죽인 것이고, 그럴 수 있는 것은 이 둘뿐이다.<br>
+구별하는 법: <code>kubectl describe pod</code> 의 Last State 를 본다.
+<code>OOMKilled</code> 면 메모리, <code>Error</code> 에 Liveness 실패 이벤트가
+붙어 있으면 프로브다.<br>
+프로브라면 <code>initialDelaySeconds</code> 를 늘리거나,
+liveness 를 아예 빼고 readiness 만 두는 것으로 시작하는 편이 안전하다.</div>
+</article>
+
+<article class="card" id="k8-svc">
+<p class="chnum">4장</p>
+<h2>Service — 이름 하나로 부른다</h2>
+<p class="chsub">Pod 의 주소는 믿을 수 없다</p>
+</article>
+
+<article class="card" id="k8-svc-1">
+<h3>왜 필요한가</h3>
+<!--CODE file=k8s/base/lunch-app.yaml lines=86-100 note=바뀌지 않는 이름-->
+<span class="tier b">구문 검증</span>
+</article>
+
+<article class="card" id="k8-svc-2">
+<h3>포트가 둘인 이유</h3>
+<!--CODE file=k8s/base/lunch-app.yaml lines=101-108 note=port 와 targetPort-->
+<span class="tier b">구문 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>누구의 번호</th></tr>
+<tr><td><code>port</code></td><td>남들이 <b>Service 를 부를 때</b> 쓰는 번호 (80)</td></tr>
+<tr><td><code>targetPort</code></td><td><b>컨테이너</b> 쪽 번호 (9001)</td></tr>
+</table>
+</div>
+<div class="key"><code>targetPort</code> 를 <b>이름</b>으로 가리켰다.
+컨테이너에서 포트에 <code>name: http</code> 를 붙여 뒀기 때문이다.
+번호가 바뀌어도 이름이 그대로면 Service 는 안 고쳐도 된다.</div>
+</article>
+
+<article class="card" id="k8-svc-3">
+<h3>규격이 말하는 ports</h3>
+<!--OUT file=k8s_explain_service_spec_ports.txt lines=1-15 note=필수는 port 하나-->
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="k8-svc-4">
+<h3>Service 의 종류</h3>
+<!--OUT file=k8s_explain_service_spec_type.txt lines=1-20 note=기본은 ClusterIP-->
+<span class="tier c">문서 근거</span>
+<div class="key">이 덱은 <b>ClusterIP</b> 만 쓴다.
+바깥으로 내보내는 일은 Ingress 가 하고(5장),
+클라우드의 LoadBalancer 는 그 Ingress 컨트롤러 앞에 한 번만 있으면 된다.</div>
+</article>
+
+<article class="card" id="k8-svc-5">
+<h3>이름으로 부른다는 것</h3>
+<pre class="term">클러스터 안에서 학식 앱을 부르는 이름:
+
+  lunch-web                        같은 네임스페이스라면 이것만으로
+  lunch-web.lunch                  다른 네임스페이스에서는 이렇게
+  lunch-web.lunch.svc.cluster.local   전체 이름
+
+  6부에서 Keycloak 은 이렇게 불린다:
+  keycloak.lunch.svc.cluster.local:8080</pre>
+<span class="tier ill">설명용</span>
+<div class="tip">클러스터 안에 DNS 가 하나 돌고 있고(CoreDNS),
+Service 를 만들면 그 이름이 거기 등록된다.
+7부에서 Keycloak 이 AD 를 부를 때 쓰는 이름은 <b>바깥</b> DNS 의 것이라
+이 규칙을 따르지 않는다 — 그 차이가 장애의 단골이다.</div>
+</article>
+
+<article class="card" id="k8-ing">
+<p class="chnum">5장</p>
+<h2>Ingress — 바깥에서 들어오는 문</h2>
+<p class="chsub">문패를 붙이는 것과 문을 여는 것은 다른 일이다</p>
+</article>
+
+<article class="card" id="k8-ing-1">
+<h3>Service 만으로는 못 들어온다</h3>
+<!--CODE file=k8s/base/lunch-ingress.yaml lines=1-12 note=문패와 문지기-->
+<span class="tier b">구문 검증</span>
+<div class="warn"><b>Ingress 만 만들고 컨트롤러가 없으면 아무 일도 안 일어난다.</b>
+오류도 안 난다. <code>kubectl get ingress</code> 에 ADDRESS 가 비어 있는 것으로만 안다.
+처음 하는 사람이 가장 오래 막히는 자리다.</div>
+</article>
+
+<article class="card" id="k8-ing-2">
+<h3>어느 컨트롤러가 맡을 것인가</h3>
+<!--CODE file=k8s/base/lunch-ingress.yaml lines=13-24 note=ingressClassName 과 TLS-->
+<span class="tier b">구문 검증</span>
+<div class="key">TLS 인증서는 <b>Secret</b> 에 들어 있다.
+1부 7장에서 만든 그 인증서다 — <code>tls.crt</code> 와 <code>tls.key</code> 두 칸.
+브라우저와의 TLS 는 <b>여기서 끝난다</b>. 안쪽은 평문 HTTP 로 간다.</div>
+</article>
+
+<article class="card" id="k8-ing-3">
+<h3>어디로 보낼 것인가</h3>
+<!--CODE file=k8s/base/lunch-ingress.yaml lines=25-38 note=host 와 path-->
+<span class="tier b">구문 검증</span>
+<!--OUT file=k8s_explain_ingress_spec_rules.txt lines=1-8 note=규칙의 뜻-->
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="k8-ing-4">
+<h3>TLS 가 여기서 끝난다는 것의 뜻</h3>
+<pre class="term">브라우저 ──HTTPS──▶ Ingress 컨트롤러 ──HTTP──▶ Pod
+                        ↑
+                  여기서 인증서를 푼다
+
+앱이 보는 것:
+  X-Forwarded-Proto: https      원래 https 였다
+  X-Forwarded-For:   203.0.113.7  원래 누구였나
+  X-Forwarded-Host:  lunch.campus.example</pre>
+<span class="tier ill">설명용</span>
+<div class="warn"><b>6부에서 이것 때문에 한 번 막힌다.</b>
+Keycloak 은 자기가 만든 주소를 토큰과 리다이렉트에 싣는데,
+앞에 뭐가 있는지 모르면 <code>http://…:8080</code> 을 싣는다.
+그러면 브라우저가 https 페이지에서 http 로 튕겨 나간다.
+<code>KC_PROXY_HEADERS=xforwarded</code> 가 그 답이다.</div>
+</article>
+
+<article class="card quiz" id="k8-ing-quiz" data-quiz>
+<h3>4·5장 퀴즈</h3>
+<p class="q">Q. <code>kubectl get svc</code> 에 Service 가 잘 보이는데
+브라우저로는 안 열린다. <code>kubectl get endpoints lunch-web</code> 를 쳤더니
+ENDPOINTS 칸이 <code>&lt;none&gt;</code> 이다. 무엇이 문제인가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> Service 의 <b>selector 에 맞는 Pod 가 하나도 없다</b>.
+endpoints 는 "이 Service 뒤에 실제로 붙은 Pod 목록" 인데, 그게 비었다는 뜻이다.<br>
+원인은 대개 셋이다. ① 라벨 오타 — Service 의 selector 와 Pod 의 라벨이 다르다.
+② Pod 가 아직 <b>준비되지 않았다</b>(readiness 실패) — 준비 안 된 Pod 는 endpoints 에서 빠진다.
+③ 네임스페이스가 다르다.<br>
+<code>kubectl get pod --show-labels</code> 로 실제 라벨을 보고 견주는 것이 가장 빠르다.</div>
+</article>
+
+<article class="card" id="k8-cfg">
+<p class="chnum">6장</p>
+<h2>설정과 비밀</h2>
+<p class="chsub">ConfigMap · Secret · 네임스페이스</p>
+</article>
+
+<article class="card" id="k8-cfg-1">
+<h3>왜 이미지 밖에 두나</h3>
+<p class="lead">같은 이미지를 개발과 운영에 <b>그대로</b> 쓰려면,
+달라지는 값은 이미지 밖에 있어야 한다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>ConfigMap</th><th>Secret</th></tr>
+<tr><td>담는 것</td><td>주소 · 켜고 끄는 값</td><td>비밀번호 · 열쇠 · 인증서</td></tr>
+<tr><td>저장 방식</td><td>평문</td><td><b>base64</b> — 암호가 아니다</td></tr>
+<tr><td>기본 권한</td><td>읽기 흔함</td><td>따로 막는 것이 보통</td></tr>
+<tr><td>주는 법</td><td colspan="2">환경 변수 · 파일로 마운트</td></tr>
+</table>
+</div>
+<div class="warn"><b>Secret 은 암호화가 아니다.</b> base64 는 1부 8장에서 봤듯
+누구나 되돌린다. 진짜로 지키려면 저장소 암호화(etcd)나
+바깥 금고(External Secrets)를 따로 켜야 한다.
+"Secret 에 넣었으니 안전하다" 는 가장 흔한 오해다.</div>
+</article>
+
+<article class="card" id="k8-cfg-2">
+<h3>비밀을 만드는 자리</h3>
+<!--CODE file=k8s/base/kustomization.yaml lines=22-32 note=secretGenerator-->
+<span class="tier b">구문 검증</span>
+<div class="key"><b>해시 접미사</b>가 이 도구의 좋은 점이다.
+켜 두면 이름이 <code>lunch-web-7d9f2c</code> 처럼 되고,
+내용이 바뀌면 이름이 바뀐다 → Deployment 가 <b>저절로 다시 뜬다</b>.
+껐을 때는 비밀을 바꿔도 Pod 가 옛 값을 계속 들고 있다.</div>
+<div class="tip">여기서는 덱의 설명을 쉽게 하려고 껐다.
+진짜 클러스터에서는 켜 두는 편이 낫다.</div>
+</article>
+
+<article class="card" id="k8-cfg-3">
+<h3>네임스페이스 — 층 나누기</h3>
+<!--CODE file=k8s/base/namespace.yaml note=한 클러스터 안의 칸막이-->
+<span class="tier b">구문 검증</span>
+<div class="key">네임스페이스는 <b>이름이 겹쳐도 되는 단위</b>이자
+권한(RBAC)·할당량(ResourceQuota)·네트워크 정책의 단위다.
+6부에서 Keycloak 과 PostgreSQL 이 이 <code>lunch</code> 층에 함께 들어온다.</div>
+<div class="warn">네임스페이스는 <b>보안 경계가 아니다</b>.
+같은 클러스터의 다른 층에서 오는 통신은 기본적으로 <b>다 뚫려 있다</b>.
+막으려면 NetworkPolicy 를 따로 써야 한다(6부).</div>
+</article>
+
+<article class="card" id="k8-cfg-4">
+<h3>라벨과 셀렉터</h3>
+<pre class="term">라벨은 그냥 꼬리표다. 붙이는 데 규칙이 없다.
+그런데 이 덱은 이름을 맞춰 붙였다:
+
+  app.kubernetes.io/name: lunch-web     이 부품의 이름
+  app.kubernetes.io/part-of: lunch      어느 앱의 일부인가
+
+고르는 쪽(selector)은 이렇게 읽는다:
+
+  app.kubernetes.io/name = lunch-web    이 라벨이 이 값인 것 전부</pre>
+<span class="tier ill">설명용</span>
+<div class="key">쿠버네티스에서 <b>거의 모든 연결이 라벨로 이뤄진다</b>.
+Service 가 Pod 를 고르는 것도, Deployment 가 자기 Pod 를 알아보는 것도,
+NetworkPolicy 가 대상을 정하는 것도 전부 라벨이다.
+이름이 아니라 라벨이므로, <b>나중에 생긴 것도 자동으로 낀다</b>.</div>
+</article>
+
+<article class="card" id="k8-cfg-5">
+<h3>라벨 셀렉터를 만져 보기</h3>
+<div class="demo" data-demo="k8s-label">
+<h5>셀렉터 매칭기</h5>
+<div class="row">
+<input type="text" data-selector size="34"
+ value="app.kubernetes.io/name=lunch-web">
+</div>
+<div class="out"></div>
+</div>
+<div class="tip">조건을 쉼표로 여러 개 이으면 <b>전부 맞아야</b> 고른다(AND).
+"둘 중 하나" 는 없다 — 그럴 때는 <code>in (a,b)</code> 를 쓴다.</div>
+</article>
+
+<article class="card quiz" id="k8-cfg-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. 비밀번호를 바꾸려고 Secret 의 값을 고쳤다.
+<code>kubectl get secret</code> 에는 새 값이 보이는데,
+앱은 여전히 옛 비밀번호를 쓴다. 왜일까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 환경 변수로 넣은 값은 <b>Pod 가 뜰 때 한 번</b> 읽힌다.
+Secret 을 고쳐도 이미 도는 Pod 의 환경 변수는 바뀌지 않는다.<br>
+답은 셋 중 하나다. ① Pod 를 다시 띄운다
+(<code>kubectl rollout restart deployment/lunch-web</code>).
+② 이름에 해시 접미사를 붙여 두면(앞 장) 저절로 다시 뜬다.
+③ 환경 변수 대신 <b>파일로 마운트</b>하면 kubelet 이 값을 갱신해 주는데,
+그때도 앱이 파일을 <b>다시 읽어야</b> 한다.<br>
+"고쳤는데 왜 안 바뀌지" 의 절반이 이 이야기다.</div>
+</article>
+
+<article class="card" id="k8-kz">
+<p class="chnum">7장</p>
+<h2>조각을 합친다 — Kustomize</h2>
+<p class="chsub">개발과 운영을 복사해서 나누지 않는 법</p>
+</article>
+
+<article class="card" id="k8-kz-1">
+<h3>복사본은 반드시 어긋난다</h3>
+<p class="lead">개발용과 운영용 매니페스트를 <b>복사해서</b> 만들면,
+한쪽만 고치는 날이 반드시 온다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방법</th><th>어떻게</th><th>이 덱</th></tr>
+<tr><td><b>Kustomize</b></td><td>다 갖춰진 YAML 을 <b>겹쳐 덮어쓴다</b>.
+kubectl 에 들어 있다</td><td><b>이것</b></td></tr>
+<tr><td>Helm</td><td>템플릿에 값을 끼워 넣는다. 차트 생태계가 크다</td>
+<td>6부에서 한 장</td></tr>
+<tr><td>오퍼레이터</td><td>전용 CRD 를 두고 컨트롤러가 돌본다</td>
+<td>6부에서 한 장</td></tr>
+</table>
+</div>
+<div class="key">Kustomize 를 고른 이유는 하나다 —
+<b>base/ 의 파일이 그 자체로 완결된 YAML</b> 이라,
+따로 떼어 그냥 읽어도 뜻이 통한다. 템플릿은 그렇지 않다.</div>
+</article>
+
+<article class="card" id="k8-kz-2">
+<h3>base 의 목록</h3>
+<!--CODE file=k8s/base/kustomization.yaml lines=1-21 note=여기 적힌 것만 합쳐진다-->
+<span class="tier b">구문 검증</span>
+<div class="warn">폴더에 파일을 두는 것만으로는 <b>안 낀다</b>.
+<code>resources:</code> 에 적어야 한다 —
+"왜 내 매니페스트가 안 나오지" 의 첫 번째 원인이다.</div>
+</article>
+
+<article class="card" id="k8-kz-3">
+<h3>개발용 겹칠 것</h3>
+<!--CODE file=k8s/overlays/dev/kustomization.yaml lines=1-19 note=무엇이 다른가만 적는다-->
+<span class="tier b">구문 검증</span>
+</article>
+
+<article class="card" id="k8-kz-4">
+<h3>주소를 갈아 끼운다</h3>
+<!--CODE file=k8s/overlays/dev/kustomization.yaml lines=20-41 note=JSON 패치-->
+<span class="tier b">구문 검증</span>
+<div class="tip">이 패치 문법은 <b>JSON Patch</b>(RFC 6902)다.
+<code>op</code> 는 <code>replace</code>·<code>add</code>·<code>remove</code>,
+<code>path</code> 는 슬래시로 이은 자리, 배열은 <b>번호</b>로 가리킨다.<br>
+그래서 <code>args</code> 의 순서가 바뀌면 패치도 같이 고쳐야 한다 —
+이 방식의 약점이다.</div>
+</article>
+
+<article class="card" id="k8-kz-5">
+<h3>운영용 겹칠 것</h3>
+<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=1-19 note=벌 수와 판번호-->
+<span class="tier b">구문 검증</span>
+</article>
+
+<article class="card" id="k8-kz-6">
+<h3>자원과 흩뿌리기</h3>
+<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=20-42 note=한 대에 몰리지 않게-->
+<span class="tier b">구문 검증</span>
+<div class="key"><code>topologySpreadConstraints</code> —
+세 벌을 <b>서로 다른 노드</b>에 흩어 놓으라는 뜻이다.
+한 대에 세 벌이 몰려 있으면 그 한 대가 죽을 때 서비스도 죽는다.
+<code>ScheduleAnyway</code> 라 자리가 없으면 그래도 앉힌다 — 못 뜨는 것보다는 낫다.</div>
+</article>
+
+<article class="card" id="k8-kz-7">
+<h3>합친 결과</h3>
+<!--OUT file=k8s_kustomize_dev.txt lines=1-24 note=진짜로 나온 YAML-->
+<span class="tier a">실행 검증</span>
+<span class="tier demo">예제용</span>
+<div class="warn">Secret 의 값이 <code>bHVuY2gtc2VjcmV0LWRlbW8=</code> 로 보인다.
+되돌리면 <code>lunch-secret-demo</code> — 6장에서 말한 그대로다.
+<b>base64 는 암호가 아니다.</b> (이 비밀번호는 이 덱 전용의 가짜다)</div>
+<div class="tip">Secret 이 맨 앞에 나온다. Kustomize 가 종류별로 정렬해 주기 때문이다 —
+네임스페이스와 설정이 먼저, 그것을 쓰는 것이 나중에 오도록.</div>
+</article>
+
+<article class="card" id="k8-kz-8">
+<h3>dev 와 prod 는 무엇이 다른가</h3>
+<!--OUT file=k8s_diff.txt lines=1-24 note=합친 결과끼리 견줬다-->
+<span class="tier a">실행 검증</span>
+<div class="key">차이가 <b>이것뿐</b>이라는 것이 요점이다.
+base 를 복사했다면 이 목록이 몇 배로 길어졌을 것이고,
+그중 어느 것이 의도한 차이인지 아무도 몰랐을 것이다.</div>
+</article>
+
+<article class="card quiz" id="k8-kz-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. overlay 에서 <code>replicas</code> 를 3으로 바꿨는데
+<code>kubectl kustomize</code> 결과에는 여전히 2가 나온다.
+어디를 볼까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>이름이 안 맞는 것</b>이 가장 흔하다.
+<code>replicas:</code> 항목의 <code>name</code> 은 <b>base 에 있는 그 이름</b>이어야 한다.
+오타가 있어도 Kustomize 는 <b>조용히 넘어간다</b> — 없는 대상에 대한 지시는 무시된다.<br>
+그다음으로 흔한 것은 overlay 의 <code>resources:</code> 에
+<code>../../base</code> 를 안 적어 base 가 아예 안 들어온 경우다.
+그때는 결과가 통째로 비어 있으니 금방 안다.<br>
+확인하는 법은 하나다 — <code>kubectl kustomize</code> 결과를 <b>직접 읽는다</b>.
+적용하기 전에 눈으로 보는 습관이 이 도구를 쓰는 이유의 절반이다.</div>
+</article>
+
+<article class="card" id="k8-val">
+<p class="chnum">8장</p>
+<h2>클러스터 없이 검사하기</h2>
+<p class="chsub">할 수 있는 것과 못 하는 것을 정확히</p>
+</article>
+
+<article class="card" id="k8-val-1">
+<h3>도구 두 개</h3>
+<!--OUT file=k8s_tools.txt note=판번호는 claims.md 에-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="k8-val-2">
+<h3>클러스터가 있어야 되는 것</h3>
+<!--OUT file=k8s_needs_server.txt lines=1-12 note=직접 해 봤다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><code>kubectl explain</code> 도, <code>--dry-run=client</code> 도
+<b>서버에 물어본다</b>. 이름에 client 가 들어 있어도 그렇다 —
+어떤 종류가 있는지(REST 매핑)를 서버에서 받아 오기 때문이다.<br>
+그래서 이 덱은 다른 두 가지로 배운다.</div>
+</article>
+
+<article class="card" id="k8-val-3">
+<h3>필드 설명은 스키마에서 읽는다</h3>
+<!--CODE file=tools/kexplain.py lines=1-16 note=서버 없이 explain-->
+<span class="tier a">실행 검증</span>
+<div class="tip">쿠버네티스는 자기 API 의 <b>JSON 스키마</b>를 공개한다.
+그 파일에 필드마다 설명이 들어 있다 — <code>kubectl explain</code> 이
+보여 주는 것과 <b>같은 글</b>이다. 이 부의 "문서 근거" 화면들이 거기서 나왔다.</div>
+</article>
+
+<article class="card" id="k8-val-4">
+<h3>검사하는 자리</h3>
+<!--CODE file=k8s/validate.sh lines=1-26 note=못 잡는 것을 먼저 적어 둔다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="k8-val-5">
+<h3>-strict 가 하는 일</h3>
+<!--CODE file=k8s/validate.sh lines=27-44 note=스키마에 없는 이름은 오류-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="k8-val-6">
+<h3>돌려 보면</h3>
+<!--OUT file=k8s_validate.txt note=세 벌 전부 통과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="k8-val-7">
+<h3>일부러 틀리게 적어 본다</h3>
+<!--CODE file=k8s/examples/typo.yaml lines=1-14 note=틀린 곳이 셋-->
+<span class="tier b">구문 검증</span>
+</article>
+
+<article class="card" id="k8-val-8">
+<h3>나머지 둘</h3>
+<!--CODE file=k8s/examples/typo.yaml lines=15-39 note=번호를 글자로·이름 오타-->
+<span class="tier b">구문 검증</span>
+</article>
+
+<article class="card" id="k8-val-9">
+<h3>검사기의 답</h3>
+<!--OUT file=k8s_invalid.txt lines=11-21 note=둘을 잡았다-->
+<span class="tier a">실행 검증</span>
+<div class="key">셋 중 <b>둘</b>이다. <code>memroy</code> 는 못 잡았다 —
+<code>requests</code> 는 이름이 정해진 목록이 아니라 아무 이름이나 받는 자리라서다
+(<code>nvidia.com/gpu</code> 같은 확장 자원을 거기 적어야 한다).</div>
+<div class="warn"><b>검사를 통과했다고 도는 것이 아니다.</b>
+이미지가 진짜 있는지, 셀렉터가 실제로 어떤 Pod 를 고르는지,
+자원이 클러스터에 남아 있는지는 이 검사가 못 본다.
+그래서 이 부의 매니페스트 화면은 <b>tier B(구문 검증)</b> 이지 tier A 가 아니다.</div>
+</article>
+
+<article class="card" id="k8-val-10">
+<h3>-strict 를 빼면 — 같은 파일, 다른 답</h3>
+<!--OUT file=k8s_invalid_nostrict.txt note=오타 하나만 있는 파일로-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>같은 파일인데 답이 갈린다.</b>
+<code>-strict</code> 없이는 <code>Valid: 1</code> — 통과다.
+<code>replica: 3</code> 이 아무 말 없이 지나가고, 벌 수는 안 늘고,
+아무도 눈치채지 못한다.<br>
+CI 에 검사를 넣을 때 <code>-strict</code> 를 반드시 켜야 하는 이유가 이 한 줄이다.</div>
+</article>
+
+<article class="card" id="k8-val-11">
+<h3>YAML 자체의 함정 — 직접 넣어 봤다</h3>
+<!--OUT file=k8s_yaml_traps.txt note=따옴표 없이 넣었다 도로 꺼낸 것-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="k8-val-11b">
+<h3>짐작과 달랐던 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>적은 것</th><th>나온 것</th><th>안전한가</th></tr>
+<tr><td><code>enabled: yes</code></td><td><code>"yes"</code></td><td>글자 그대로 — <b>괜찮다</b></td></tr>
+<tr><td><code>country: NO</code></td><td><code>"NO"</code></td><td>글자 그대로 — <b>괜찮다</b></td></tr>
+<tr><td><code>time: 12:30</code></td><td><code>"12:30"</code></td><td>글자 그대로 — <b>괜찮다</b></td></tr>
+<tr><td><code>version: 1.20</code></td><td><code>1.2</code></td><td><b>끝의 0 이 사라졌다</b></td></tr>
+<tr><td><code>build: 010</code></td><td><code>8</code></td><td><b>8진수로 읽혔다</b></td></tr>
+</table>
+</div>
+<div class="key">유명한 "노르웨이 문제"(<code>NO</code> 가 거짓이 되는 것)는
+<b>여기서는 안 일어난다</b>. 쿠버네티스가 쓰는 파서는 YAML 1.2 기준이라
+참·거짓은 <code>true</code>·<code>false</code> 뿐이기 때문이다.
+그 사고는 <code>yes</code> 를 거짓으로 읽던 <b>YAML 1.1</b> 시절 이야기다.</div>
+<div class="warn"><b>그래도 따옴표를 씌우는 편이 낫다.</b>
+파서가 하나가 아니기 때문이다 — CI 의 린터, 편집기 플러그인,
+파이썬 스크립트는 아직 1.1 로 읽는 것이 많다.
+그리고 <b>숫자로 보이는 값</b>은 이 파서에서도 여전히 바뀐다.
+판번호와 자릿수를 맞춘 값에는 반드시 따옴표를 씌울 것.</div>
+</article>
+
+<article class="card" id="k8-val-12">
+<h3>들여쓰기를 검사해 보기</h3>
+<div class="demo" data-demo="yaml">
+<h5>YAML 들여쓰기 검사기</h5>
+<div class="row">
+<textarea data-yaml rows="6" cols="30">spec:
+  containers:
+    - name: web
+	  image: lunch-web:1.4.2
+      ports:
+       - containerPort: 9001</textarea>
+</div>
+<div class="out"></div>
+</div>
+<div class="tip">YAML 은 <b>탭을 금지한다</b>. 편집기가 탭을 넣어 두면
+"뭐가 틀렸는지 안 보이는데 안 된다" 가 된다.</div>
+</article>
+
+<article class="card quiz" id="k8-val-quiz" data-quiz>
+<h3>8장 퀴즈</h3>
+<p class="q">Q. CI 에서 <code>kubeconform</code> 이 통과했는데
+클러스터에 올리니 Pod 가 <code>ImagePullBackOff</code> 로 안 뜬다.
+검사기가 왜 못 잡았을까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 스키마 검사는 <b>글의 모양</b>만 본다.
+<code>image:</code> 자리에 글자가 들어 있으면 그것으로 맞다 —
+그 이름의 이미지가 <b>세상에 있는지</b>는 볼 방법이 없다.<br>
+못 잡는 것들: 이미지 존재 여부, 레지스트리 로그인, 셀렉터가 실제로 고르는 Pod,
+남은 자원, 다른 오브젝트와의 이름 충돌, 클러스터에 그 API 판이 있는지.<br>
+그래서 검사는 <b>1차 그물</b>이다. 오타와 타입 오류를 CI 에서 걸러 주는 것만으로도
+충분히 값어치를 하지만, "통과 = 뜬다" 로 읽으면 안 된다.</div>
+</article>
+
+<article class="card" id="k8-end">
+<p class="chnum">9장</p>
+<h2>2부 마무리</h2>
+<p class="chsub">여기까지가 6부에 필요한 전부다</p>
+</article>
+
+<article class="card" id="k8-end-1">
+<h3>매니페스트 한 벌을 다시 보면</h3>
+<!--OUT file=k8s_kustomize_prod.txt lines=25-56 note=운영용으로 합친 결과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="k8-end-2">
+<h3>2부에서 배운 것</h3>
+<ul>
+<li>이미지는 <b>안 움직이는 것</b>, 컨테이너는 <b>돌고 있는 것</b></li>
+<li>매니페스트는 명령이 아니라 <b>바라는 상태</b>다</li>
+<li>Pod 를 직접 만들지 않는다 — <b>Deployment</b> 가 돌본다</li>
+<li>Pod 의 주소는 바뀐다 — <b>Service</b> 가 바뀌지 않는 이름을 준다</li>
+<li>바깥에서 들어오는 문은 <b>Ingress</b>, 문지기는 컨트롤러</li>
+<li>거의 모든 연결이 <b>라벨</b>로 이뤄진다</li>
+<li>readiness 는 <b>빼 주고</b>, liveness 는 <b>죽인다</b></li>
+<li>복사하지 말고 <b>겹친다</b>(Kustomize)</li>
+<li>클러스터 없이도 <b>스키마 검사</b>는 된다 — 다만 모양만 본다</li>
+</ul>
+</article>
+
+<article class="card" id="k8-end-3">
+<h3>다음은</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>부</th><th>여기서 배운 것이 어디에 쓰이나</th></tr>
+<tr><td><b>6부</b></td><td>Keycloak 과 PostgreSQL 을 같은 방식으로 올린다.
+StatefulSet · NetworkPolicy · truststore Secret 이 더 나온다</td></tr>
+<tr><td>7부</td><td>AD 인증서를 Secret 에 담아 Keycloak 에 물린다</td></tr>
+<tr><td>8부</td><td>Ingress 에 인증을 붙이는 세 가지 길</td></tr>
+</table>
+</div>
+<div class="key">2부는 여기서 멈춘다. 쿠버네티스는 훨씬 넓지만,
+이 덱이 하려는 일에 필요한 것은 딱 여기까지다.
+더 필요해지는 순간마다 그 부에서 한 가지씩 더한다.</div>
 </article>
