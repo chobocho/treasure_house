@@ -119,6 +119,7 @@
 - ☎️ **[red-phone.html](./red-phone.html)** — 🔴 레드폰 이야기 📞
 
 ### 📐 소프트웨어 설계 📚
+- 🐶 **[월마트_AX와_Code_Puppy.html](./월마트_AX와_Code_Puppy.html)** — 🛒 월마트의 AX 전략과 사내 코딩 에이전트 Code Puppy — 조직 이야기(1~3부), 배포판 0.0.829 소스 8만 7천 줄 해부(4~5부), 같은 구조를 Python 2,151줄·Go 2,811줄로 다시 만들기(6~7부, `minipuppy/`, 표준 라이브러리만, 시험 96 + 60건), 도입 플레이북과 부록(8~9부). 슬라이드 326장 🐾
 - 🧼 **[Clean_Code_vs_APoSD.html](./Clean_Code_vs_APoSD.html)** — 📖 Clean Code vs A Philosophy of Software Design 비교 ⚖️
 
 ### 📝 자격증 & 시험 대비 🎯
