@@ -1,4 +1,4 @@
-"""에이전트 등록기와 서브에이전트 — 8건."""
+"""에이전트 등록기와 서브에이전트 — 11건."""
 import json
 
 from mini_puppy.agent import Agent

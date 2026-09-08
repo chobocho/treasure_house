@@ -1,4 +1,4 @@
-"""대화 기록과 컴팩션 — 10건. 이 파일이 mini-puppy 에서 가장 중요하다."""
+"""대화 기록과 컴팩션 — 13건. 이 파일이 mini-puppy 에서 가장 중요하다."""
 import unittest
 
 from mini_puppy.history import (History, Message, default_summarizer,

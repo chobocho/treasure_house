@@ -1,4 +1,4 @@
-"""실행 루프 — 9건. 루프가 어떤 상황에서도 안 죽는지 본다."""
+"""실행 루프 — 10건. 루프가 어떤 상황에서도 안 죽는지 본다."""
 from mini_puppy.agent import Agent, CancelToken, to_wire
 from mini_puppy.model import ModelError, ModelReply
 

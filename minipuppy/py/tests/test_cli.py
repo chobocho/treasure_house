@@ -1,4 +1,4 @@
-"""명령줄 껍데기 — 6건."""
+"""명령줄 껍데기 — 7건."""
 import json
 
 from mini_puppy.bus import CollectingSink, MessageBus

@@ -1,4 +1,4 @@
-"""모델 층과 라운드로빈 — 8건."""
+"""모델 층과 라운드로빈 — 11건."""
 import unittest
 
 from mini_puppy.factory import ModelConfigError, build_model, load_models
