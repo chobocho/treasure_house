@@ -1,3 +1,10 @@
+### [2026-09-08 11:25] OIDC 기초 — JWT·PKCE, LDAP 클라이언트 분리
+- **기획:** PLAN.md §8 5단계의 앞부분. 토큰을 만들고 확인하는 층(jwt)과 가로챈 코드를 못 쓰게 만드는 층(pkce). miniidp 가 AD 에 물어보려면 LDAP 클라이언트가 라이브러리여야 해서 ldapcli 에서 뽑아냈다.
+- **TC:** 셋 다 뼈대→RED→GREEN. jwt 는 RFC 7515 A.1·RFC 7519 §3.1 골든 벡터와 공격 넷(alg=none·alg 혼동·내용 변조·남의 열쇠), pkce 는 RFC 7636 부록 B 벡터. client 는 진짜 가짜 AD 를 띄워 놓고 시험한다.
+- **개발:** oidc/jwt oidc/pkce, ldap/client(신규), ldap/fakead 를 라이브러리+cmd 로 분리, ldapcli 를 client 위로, tools/record.sh(본문 전용 캡처)
+- **검증:** test 12패키지 · vet 통과 · make record 3회 md5 동일(54개) · 조립 오류 0건 · 역검증 통과 · deck-check 0건 · 글꼴 통과 · width 18파일 통과
+- **비고:** TLS 1.3 세션 티켓이 악수 뒤에 비동기로 와서 -v 캡처의 줄 번호가 가끔 밀렸다. 본문만 따로 뜨는 캡처를 더해 인용을 그쪽으로 옮겼다. miniidp·miniapp·jwtool 과 4부 본문은 다음 커밋.
+
 ### [2026-09-08 10:42] 3부 본문 — 회사 계정의 세계 83장, 전체 소스 부록 100장
 - **기획:** PLAN.md §8 3단계 뒷부분. 디렉터리·DN·AD 속성·그룹/memberOf·BER 바이트·바인드·검색·LDAPS·서비스 계정·안 하는 것·마무리 9개 장. 소스 전문은 새 부록 절이 싣는다.
 - **TC:** 로그 폭 시험을 새로 써서 RED 확인 → Server.Close 가 유휴 연결 때문에 안 꺼지던 결함을 잡아 연결 추적을 넣었다. 진단 문구 접기(wrapCells)도 RED→GREEN.

@@ -5,32 +5,30 @@
 // 자리이자, 7부에서 Keycloak 이 보낸 것과 우리가 보낸 것을 견주는
 // 자리다.
 //
+// 말을 거는 일은 ldap/client 가 한다. 이 파일은 그 위에 갈고리를 걸어
+// 오간 바이트를 풀어 보여 주는 껍데기다 — 같은 클라이언트를 4부의
+// miniidp 도 쓰는데, 그쪽은 이런 출력을 원하지 않기 때문이다.
+//
 //	go run ./ldap/ldapcli -h localhost:10389 \
 //	    -D 'CN=svc-keycloak,OU=Service Accounts,\
 //	        DC=ad,DC=campus,DC=example' \
 //	    -w 'Passw0rd!-demo' \
 //	    search '(sAMAccountName=minji)' cn mail
 //
-//		go run ./ldap/ldapcli -h localhost:10389 \
-//		    -D 'CN=Kim Minji,OU=Students,DC=ad,DC=campus,DC=example' \
-//		    -w 'Passw0rd!-demo' bind
-//
-//		go run ./ldap/ldapcli -h localhost:10636 -ldaps \
-//
-// -cacert certs/demo-ca.crt -name ldap.ad.campus.example ... search ...
+//	go run ./ldap/ldapcli -h localhost:10636 -ldaps \
+//	    -cacert certs/demo-ca.crt -name ldap.ad.campus.example \
+//	    search ...
 package main
 
 import (
-	"crypto/tls"
-	"crypto/x509"
+	"errors"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"strings"
 	"time"
 
-	"treasure/keycloak_ad/ldap/ber"
+	"treasure/keycloak_ad/ldap/client"
 	"treasure/keycloak_ad/ldap/proto"
 )
 
@@ -65,18 +63,34 @@ func main() {
 		os.Exit(2)
 	}
 
-	c, err := dial(*host, *useTLS, *caFile, *srvName, *insecure)
+	c, err := client.Dial(*host, client.Options{
+		TLS: *useTLS, CAFile: *caFile, ServerName: *srvName,
+		Insecure: *insecure, Timeout: 10 * time.Second,
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "붙지 못했다: %v\n", err)
 		os.Exit(1)
 	}
 	defer c.Close()
-	cl := &client{conn: c, quiet: *quiet}
 
-	if err := cl.bind(*bindDN, *pass); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+	// 여기가 이 도구의 전부다 — 오간 바이트를 받아 나무로 풀어 찍는다.
+	if !*quiet {
+		c.Trace = func(dir string, raw []byte) {
+			what := "받음"
+			if dir == "→" {
+				what = "보냄"
+			}
+			fmt.Printf("%s %s (%d바이트)\n", dir, what, len(raw))
+			fmt.Print(Dump(raw))
+			fmt.Println()
+		}
+	}
+
+	if err := c.Bind(*bindDN, *pass); err != nil {
+		fmt.Println(explainBind(err))
 		os.Exit(1)
 	}
+	fmt.Println("바인드 성공")
 	if args[0] == "bind" {
 		return
 	}
@@ -84,135 +98,54 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
-	if err := cl.search(*base, *scope, args[1], args[2:]); err != nil {
+
+	got, err := c.Search(*base, scopeNum(*scope), args[1], args[2:])
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
-}
-
-func dial(host string, useTLS bool, caFile, srvName string,
-	insecure bool) (net.Conn, error) {
-	if !useTLS {
-		return net.DialTimeout("tcp", host, 5*time.Second)
-	}
-	cfg := &tls.Config{InsecureSkipVerify: insecure}
-	if srvName != "" {
-		cfg.ServerName = srvName
-	}
-	if caFile != "" {
-		pem, err := os.ReadFile(caFile)
-		if err != nil {
-			return nil, err
+	for _, e := range got {
+		fmt.Printf("  dn: %s\n", e.DN)
+		for _, name := range sortedNames(e) {
+			for _, v := range e.Attrs[name] {
+				fmt.Printf("  %s: %s\n", name, plainValue(v))
+			}
 		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("%s 를 CA 로 못 읽겠다", caFile)
-		}
-		cfg.RootCAs = pool
-	}
-	return tls.Dial("tcp", host, cfg)
-}
-
-type client struct {
-	conn  net.Conn
-	buf   []byte
-	seq   int64
-	quiet bool
-}
-
-// send 는 한 통을 보내면서, 보내기 전에 그 바이트를 풀어 보여 준다.
-func (c *client) send(raw []byte, what string) {
-	if !c.quiet {
-		fmt.Printf("→ 보냄 %s (%d바이트)\n", what, len(raw))
-		fmt.Print(Dump(raw))
 		fmt.Println()
 	}
-	c.conn.Write(raw)
+	fmt.Printf("찾은 항목 %d개\n", len(got))
 }
 
-func (c *client) recv() (proto.Message, error) {
-	c.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	tmp := make([]byte, 4096)
-	for {
-		n, err := ber.MessageLength(c.buf)
-		if err == nil && len(c.buf) >= n {
-			msg, perr := proto.ParseMessage(c.buf[:n])
-			if !c.quiet {
-				fmt.Printf("← 받음 (%d바이트)\n", n)
-				fmt.Print(Dump(c.buf[:n]))
-				fmt.Println()
-			}
-			c.buf = c.buf[n:]
-			return msg, perr
-		}
-		r, rerr := c.conn.Read(tmp)
-		if r > 0 {
-			c.buf = append(c.buf, tmp[:r]...)
-			continue
-		}
-		return proto.Message{}, fmt.Errorf("더 읽을 수 없다: %v", rerr)
+// explainBind 는 실패를 사람 말로 옮긴다.
+// AD 의 진단 문구는 접어서 싣고, data 코드는 뜻까지 풀어 준다.
+func explainBind(err error) string {
+	var be *client.BindError
+	if !errors.As(err, &be) {
+		return fmt.Sprintf("%v", err)
 	}
+	lines := []string{"바인드 실패: " + proto.ResultName(be.Code)}
+	if be.Diag != "" {
+		lines = append(lines, wrapCells("진단: "+be.Diag, "  ", 72)...)
+		if why := ExplainADCode(be.Diag); why != "" {
+			lines = append(lines, wrapCells("→ "+why, "  ", 72)...)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
-func (c *client) next() int64 { c.seq++; return c.seq }
-
-func (c *client) bind(dn, pass string) error {
-	id := c.next()
-	raw := ber.Seq(ber.Int(id),
-		ber.Encode(ber.Tag(ber.Application, true, proto.OpBindRequest),
-			cat(ber.Int(3), ber.Str(dn),
-				ber.Encode(ber.Tag(ber.Context, false, 0),
-					[]byte(pass)))))
-	c.send(raw, "BindRequest")
-	msg, err := c.recv()
-	if err != nil {
-		return err
+// sortedNames 는 속성 이름을 가나다순으로 돌려준다.
+// 지도를 그냥 훑으면 돌릴 때마다 순서가 달라져 캡처가 매번 바뀐다.
+func sortedNames(e client.Entry) []string {
+	names := make([]string, 0, len(e.Attrs))
+	for n := range e.Attrs {
+		names = append(names, n)
 	}
-	fmt.Print(Describe(msg))
-	kids, err := ber.Children(msg.Op.Value)
-	if err != nil || len(kids) < 1 {
-		return fmt.Errorf("바인드 응답을 못 읽는다")
-	}
-	code, _ := kids[0].Int()
-	if code != proto.ResultSuccess {
-		return fmt.Errorf("바인드 실패: %s",
-			proto.ResultName(int(code)))
-	}
-	return nil
-}
-
-func (c *client) search(base, scope, filter string,
-	attrs []string) error {
-	f, err := proto.ParseFilterString(filter)
-	if err != nil {
-		return fmt.Errorf("필터: %w", err)
-	}
-	var al [][]byte
-	for _, a := range attrs {
-		al = append(al, ber.Str(a))
-	}
-	id := c.next()
-	raw := ber.Seq(ber.Int(id),
-		ber.Encode(
-			ber.Tag(ber.Application, true, proto.OpSearchRequest),
-			cat(ber.Str(base), ber.Enum(int64(scopeNum(scope))),
-				ber.Enum(0), ber.Int(0), ber.Int(0), ber.Bool(false),
-				proto.EncodeFilter(f), ber.Seq(al...))))
-	c.send(raw, "SearchRequest")
-
-	found := 0
-	for {
-		msg, err := c.recv()
-		if err != nil {
-			return err
+	for i := 1; i < len(names); i++ {
+		for j := i; j > 0 && names[j] < names[j-1]; j-- {
+			names[j], names[j-1] = names[j-1], names[j]
 		}
-		fmt.Print(Describe(msg))
-		if msg.OpNum() == proto.OpSearchResultDone {
-			fmt.Printf("\n찾은 항목 %d개\n", found)
-			return nil
-		}
-		found++
 	}
+	return names
 }
 
 func scopeNum(s string) int {
@@ -223,12 +156,4 @@ func scopeNum(s string) int {
 		return proto.ScopeSingleLevel
 	}
 	return proto.ScopeWholeSubtree
-}
-
-func cat(parts ...[]byte) []byte {
-	var out []byte
-	for _, p := range parts {
-		out = append(out, p...)
-	}
-	return out
 }

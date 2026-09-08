@@ -66,7 +66,7 @@ BIN=bin
 build_all() {
   mkdir -p "$BIN"
   for d in web/01_hello web/02_form_cookie web/03_redirect web/04_tls \
-           ldap/fakead ldap/ldapcli; do
+           ldap/fakead/cmd/fakead ldap/ldapcli; do
     $GO build -o "$BIN/$(basename "$d")" "./$d"
   done
 }
@@ -203,6 +203,15 @@ $CURL -v --resolve "lunch.campus.example:$P4:127.0.0.1" \
   >"$OUT/web04_wrongname.txt" 2>&1 || true
 # 검증을 끄면(-k) 붙기는 한다. 무엇을 포기한 것인지 화면에 남긴다.
 $CURL -v -k "https://localhost:$P4/tls" >"$OUT/web04_insecure.txt" 2>&1
+# 본문만 따로 남긴다.
+#
+# TLS 1.3 의 세션 티켓은 악수가 끝난 **뒤에** 따로 온다. 몇 장이 오는지,
+# curl 이 끊기 전에 몇 장을 받아 적는지가 그때그때 다르다 — 그래서 -v
+# 출력의 줄 번호가 밀린다. 덱이 줄 번호로 인용하므로, 흔들리지 않는
+# 조각은 따로 떠 둔다.
+$CURL -s -k "https://localhost:$P4/tls" >"$OUT/web04_insecure_body.txt" 2>&1
+$CURL -s $RES --cacert certs/demo-ca.crt \
+  "https://sso.campus.example:$P4/tls" >"$OUT/web04_trust_body.txt" 2>&1
 $CURL -v "http://localhost:$P4H/tls" >"$OUT/web04_redirect.txt" 2>&1
 
 # 인증서 자체를 사람이 읽는 글로. SAN·EKU·유효기간이 여기 다 있다.
@@ -218,7 +227,7 @@ JISOO='CN=Oh Jisoo,OU=Staff,DC=ad,DC=campus,DC=example'
 HANA='CN=Park Hana,OU=Students,DC=ad,DC=campus,DC=example'
 BASE='DC=ad,DC=campus,DC=example'
 
-start ldap/fakead "$OUT/ad_server_start.txt" \
+start ldap/fakead/cmd/fakead "$OUT/ad_server_start.txt" \
   -addr ":$PL" -ldaps ":$PLS" -log "$OUT/ad_fakead.log" \
   -cert certs/ldap.crt -key certs/ldap.key
 wait_ldap "$PL"

@@ -21,7 +21,7 @@
 //
 // 안 하는 것을 "조용히 무시" 하지 않고 unwillingToPerform(53)으로
 // 분명히 거절하는 것이 중요하다. 무시하면 상대는 우리가 한 줄로 안다.
-package main
+package fakead
 
 import (
 	"crypto/tls"

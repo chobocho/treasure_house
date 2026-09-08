@@ -389,6 +389,26 @@ analogies in §5.9) and hands it in the prompt.
 
 ## Progress log (newest first)
 
+### [2026-09-08 11:25] 5단계(1/3) OIDC 기초 — jwt · pkce · LDAP 클라이언트 분리
+- **기획:** 토큰 층(`oidc/jwt`)과 PKCE(`oidc/pkce`). `miniidp` 가 AD 에 물어보려면
+  LDAP 클라이언트가 **라이브러리**여야 해서 `ldapcli` 안에 있던 것을 `ldap/client` 로 뽑았다.
+  그러려면 `fakead` 를 시험에서 import 할 수 있어야 해서 `ldap/fakead`(라이브러리) +
+  `ldap/fakead/cmd/fakead`(main) 로 나눴다. 덱 인용 범위는 그대로다.
+- **TC:** 셋 다 뼈대→RED→GREEN.
+  jwt — RFC 7515 A.1 · RFC 7519 §3.1 base64url 골든, 공격 넷(alg=none · alg 혼동 ·
+  내용 변조 · 남의 열쇠), 클레임 검사 7종, JWKS 왕복, kid 로 열쇠 고르기.
+  pkce — RFC 7636 부록 B 벡터. client — **진짜 fakead 를 띄워 놓고** 시험한다.
+- **개발:** `oidc/jwt` · `oidc/pkce` · `ldap/client`(신규) · `ldap/fakead` 분리 ·
+  `ldapcli` 를 client 위로 · `tools/record.sh`
+- **검증:** test 12패키지 · vet · `make record` 3회 md5 동일(54개) · 조립 0건 ·
+  역검증 통과 · deck-check 0건 · 글꼴 통과 · width 18파일.
+- **잡은 결함:** TLS 1.3 세션 티켓은 악수가 끝난 뒤 비동기로 온다. 몇 장이 잡히느냐가
+  그때그때 달라 `-v` 캡처의 줄 번호가 밀렸고, 덱이 줄 번호로 인용하므로 흔들렸다.
+  본문만 따로 뜨는 캡처(`web04_*_body.txt`)를 더해 인용을 그쪽으로 옮겼다.
+- **설계 판단 하나:** `BindError.Error()` 를 짧게 줄였다가 되돌렸다. 오류를 그냥 로그로
+  흘리는 쪽에서 진짜 이유(AD 의 data 코드)를 잃기 때문이다. 폭 문제는 표시 층에서 접는다.
+- **다음:** 5단계(2/3) `miniidp`·`miniapp`·`jwtool`, 그다음 (3/3) 4부 본문.
+
 ### [2026-09-08 10:42] 3단계(뒤) 3부 본문 — 83장 + 전체 소스 부록 100장 (누적 309장)
 - **기획:** 9개 장 — 디렉터리/DN · AD 속성 · 그룹과 memberOf · BER 바이트 ·
   바인드 · 검색과 필터 · 포트/LDAPS/서비스 계정 · 안 하는 것과 Kerberos · 마무리.

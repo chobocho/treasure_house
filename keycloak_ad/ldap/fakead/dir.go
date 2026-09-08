@@ -8,7 +8,7 @@
 //
 // 진짜 AD 를 흉내 내되, Keycloak 이 실제로 쓰는 만큼만 한다. 안 하는
 // 것은 server.go 머리말에 적어 두었다.
-package main
+package fakead
 
 import (
 	"bufio"
@@ -242,6 +242,9 @@ func (e *Entry) hasObjectClass(want string) bool {
 }
 
 // ── 찾기 ─────────────────────────────────────────────────────────────
+
+// Count 는 읽어 들인 항목 수다. 띄울 때 한 줄 찍는 용도.
+func (d *Dir) Count() int { return len(d.entries) }
 
 func (d *Dir) Get(dn string) *Entry { return d.byDN[normDN(dn)] }
 
