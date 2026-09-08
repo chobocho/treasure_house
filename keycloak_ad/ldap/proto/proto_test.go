@@ -357,3 +357,39 @@ func cat(parts ...[]byte) []byte {
 	}
 	return out
 }
+
+// objectGUID 는 16바이트 이진값이다(3부 2장). Keycloak 은 사용자를
+// 다시 찾을 때 그 값을 **필터에 그대로** 싣는다 — 진짜로 그렇게 한다.
+//
+// 그 바이트를 날것으로 적으면 로그도 화면도 깨진다. RFC 4515 §3 은
+// 꼭 escape 해야 할 것을 다섯 개만 정했지만, 더 escape 해도 된다고
+// 적어 두었다(§3 의 valueencoding). 실제 도구들도 그렇게 한다.
+func TestFilterEscapesBinaryValue(t *testing.T) {
+	guid := string([]byte{0x98, 0x08, 0xd3, 0x98, 0x8b, 0x6d, 0x12, 0xdc,
+		0x27, 0x95, 0xb5, 0x5f, 0x90, 0xa0, 0xaa, 0x29})
+	f := &Equal{Attr: "objectGUID", Value: guid}
+	got := f.String()
+
+	for _, b := range []byte(got) {
+		if b < 0x20 || b > 0x7e {
+			t.Fatalf("화면에 못 쓰는 바이트 %#x 가 남아 있다: %q", b, got)
+		}
+	}
+	// 볼 수 있는 글자는 그대로 둔다. 0x6d 는 'm', 0x27 은 작은따옴표라
+	// 감싸지 않는다 — ldapsearch 와 Keycloak 의 로그도 이렇게 적는다.
+	// 이진값이 반쯤 글자로 보이는 것이 오히려 진짜 모습이다.
+	// (0x29 는 ')' 라 §3 이 반드시 감싸라고 정한 다섯에 든다)
+	want := "(objectGUID=\\98\\08\\d3\\98\\8bm\\12\\dc" +
+		"'\\95\\b5_\\90\\a0\\aa\\29)"
+	if got != want {
+		t.Errorf("\n받은 것: %s\n원하는 것: %s", got, want)
+	}
+}
+
+// 글자로 된 값은 그대로 남아야 한다 — 다 escape 해 버리면 못 읽는다.
+func TestFilterKeepsPrintableValue(t *testing.T) {
+	f := &Equal{Attr: "sAMAccountName", Value: "minji"}
+	if got := f.String(); got != "(sAMAccountName=minji)" {
+		t.Errorf("%s", got)
+	}
+}
