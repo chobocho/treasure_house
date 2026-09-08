@@ -1,0 +1,172 @@
+$ bin/kubectl kustomize k8s/overlays/prod \
+    | awk '/^kind: Deployment/,/^---/'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/part-of: lunch
+  name: keycloak
+  namespace: lunch
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+    spec:
+      containers:
+      - args:
+        - start
+        - --optimized
+        env:
+        - name: KC_DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: user
+              name: postgres
+        - name: KC_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: postgres
+        - name: KC_TRUSTSTORE_PATHS
+          value: /opt/keycloak/conf/truststores
+        envFrom:
+        - configMapRef:
+            name: keycloak
+        image: quay.io/keycloak/keycloak:26.7.3
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: management
+          periodSeconds: 20
+        name: keycloak
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 9000
+          name: management
+        - containerPort: 7800
+          name: jgroups
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: management
+          periodSeconds: 10
+        resources:
+          limits:
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 1536Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        startupProbe:
+          failureThreshold: 30
+          httpGet:
+            path: /health/started
+            port: management
+          periodSeconds: 5
+        volumeMounts:
+        - mountPath: /opt/keycloak/conf/truststores
+          name: truststore
+          readOnly: true
+        - mountPath: /tmp
+          name: tmp
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: truststore
+        secret:
+          secretName: ad-truststore
+      - emptyDir: {}
+        name: tmp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: lunch-web
+    app.kubernetes.io/part-of: lunch
+  name: lunch-web
+  namespace: lunch
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lunch-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lunch-web
+    spec:
+      containers:
+      - args:
+        - -addr=:9001
+        - -self=https://lunch.campus.example
+        - -issuer=https://sso.campus.example/realms/campus
+        - -client=lunch-web
+        - -admin-group=lunch-admins
+        env:
+        - name: LUNCH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: client-secret
+              name: lunch-web
+        image: registry.campus.example/lunch/lunch-web:1.4.2
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        name: web
+        ports:
+        - containerPort: 9001
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: 256Mi
+          requests:
+            cpu: 200m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: lunch-web
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway

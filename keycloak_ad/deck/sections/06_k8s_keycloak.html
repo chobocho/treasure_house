@@ -1,18 +1,517 @@
 <article class="card section" id="part6">
 <p class="chnum">6부</p>
-<h2>Keycloak 을 쿠버네티스에 올리기</h2>
-<p class="chsub">매니페스트 · Operator · Helm — 같은 손잡이, 다른 포장</p>
+<h2>쿠버네티스에 Keycloak 올리기</h2>
+<p class="chsub">5부에서 손으로 띄운 것을 파일로 적는다</p>
 <!--FIG file=system_p6.svg cap=6부까지 켜진 그림-->
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>배포 세 가지 방법과 이 덱의 선택</li>
-<li>PostgreSQL · Secret · 이미지 빌드(<code>kc.sh build</code>)</li>
-<li>hostname 과 프록시 헤더 — 가장 많이 틀리는 곳</li>
-<li>Ingress 와 TLS 종료</li>
-<li>health · metrics · 리소스 요청/제한</li>
-<li>replica 두 개 이상 · 롤링 업데이트 · 백업 · 업그레이드</li>
+<li>PostgreSQL 을 StatefulSet 으로 — 상태가 있는 것은 다르다</li>
+<li>운영 모드로 굽기 · <code>--optimized</code></li>
+<li>인그레스 뒤에 두기 · <code>KC_PROXY_HEADERS</code></li>
+<li>건강 확인 세 가지 · 관리 포트 9000</li>
+<li>여러 벌 띄우기 · 캐시를 나눠 갖기</li>
+<li>사내 CA 를 Secret 으로 · NetworkPolicy</li>
+<li>오퍼레이터와 Helm — 같은 손잡이, 다른 포장</li>
 </ul>
-<div class="tip"><b>끝나면</b> — 오버레이 하나를 실제 클러스터에 적용하고, 환경변수마다 왜 있는지 설명한다</div>
-<div class="warn"><b>이 부는 아직 준비 중입니다</b> — 뼈대만 세워 둔 상태다.
-본문이 들어오면 이 알림은 사라진다.</div>
+<div class="tip"><b>끝나면</b> — 매니페스트 한 벌을 읽고
+"뜨면 무엇이 생기고 어디가 막힐 수 있는지" 를 말할 수 있다</div>
+<div class="key"><b>2부에서 배운 것을 그대로 쓴다.</b>
+새 개념은 StatefulSet 하나뿐이고, 나머지는 이미 아는 것들의 조합이다.
+값은 5부에서 손으로 준 그 값이다 — <b>어디에 적느냐</b>만 달라진다.</div>
+</article>
+
+<article class="card" id="k6-db">
+<p class="chnum">1장</p>
+<h2>창고부터 — PostgreSQL</h2>
+<p class="chsub">상태가 있는 것은 왜 다른가</p>
+</article>
+
+<article class="card" id="k6-db-1">
+<h3>민지의 다음 질문</h3>
+<blockquote>"5부에서는 데이터가 파일 하나(H2)에 들어 있었다.
+컨테이너를 다시 띄우면 그건 어떻게 되지?"</blockquote>
+<p class="lead">사라진다. 컨테이너의 파일 시스템은 <b>컨테이너와 함께 죽는다</b>.
+realm 도, 사용자도, 서명 열쇠도 함께 없어진다.</p>
+<div class="key">그래서 운영에서는 데이터를 <b>바깥</b>에 둔다.
+Keycloak 은 그 바깥을 데이터베이스로 삼는다 —
+PostgreSQL·MariaDB·MSSQL·Oracle 중 아무거나.</div>
+</article>
+
+<article class="card" id="k6-db-2">
+<h3>Deployment 가 아니라 StatefulSet</h3>
+<!--CODE file=k8s/base/postgres.yaml lines=1-11 note=왜 다른 것으로 만드나-->
+<span class="tier b">구문 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>Deployment</th><th>StatefulSet</th></tr>
+<tr><td>Pod 이름</td><td><code>lunch-web-7d9f2c-abcde</code> (무작위)</td>
+<td><code>postgres-0</code> (<b>차례로</b>)</td></tr>
+<tr><td>디스크</td><td>없거나 공유</td><td>Pod 마다 <b>자기 것</b></td></tr>
+<tr><td>다시 뜰 때</td><td>아무 데나</td><td><b>같은 디스크</b>를 다시 붙인다</td></tr>
+<tr><td>늘리고 줄이기</td><td>아무 순서로</td><td>번호 순서대로</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="k6-db-3">
+<h3>헤드리스 Service</h3>
+<!--CODE file=k8s/base/postgres.yaml lines=12-28 note=clusterIP None-->
+<span class="tier b">구문 검증</span>
+<div class="key"><code>clusterIP: None</code> 이면 가상 IP 를 안 만든다.
+대신 DNS 가 <b>Pod 의 주소를 바로</b> 알려 준다.
+그래서 <code>postgres-0.postgres</code> 처럼 <b>한 대를 콕 집어</b> 부를 수 있다.<br>
+2부 4장의 보통 Service 는 "뒤에 있는 것 중 아무나" 였다.
+데이터베이스에는 그 "아무나" 가 맞지 않는다.</div>
+</article>
+
+<article class="card" id="k6-db-4">
+<h3>디스크를 요구하는 자리</h3>
+<!--CODE file=k8s/base/postgres.yaml lines=98-112 note=volumeClaimTemplates-->
+<span class="tier b">구문 검증</span>
+<div class="warn"><b>StatefulSet 을 지워도 이 디스크는 안 지워진다.</b>
+일부러 그렇게 돼 있다 — 실수로 지웠을 때 데이터가 남아 있게 하려는 것이다.<br>
+뒤집어 말하면, 정말 지우려면 <code>PersistentVolumeClaim</code> 을
+<b>따로</b> 지워야 한다. "지웠는데 옛 데이터가 살아나요" 의 정체다.</div>
+</article>
+
+<article class="card" id="k6-db-5">
+<h3>준비됐는지 묻는 법이 다르다</h3>
+<!--CODE file=k8s/base/postgres.yaml lines=73-86 note=HTTP 가 아니라 명령-->
+<span class="tier b">구문 검증</span>
+<div class="key">데이터베이스에는 두드릴 HTTP 주소가 없다.
+그래서 <code>exec</code> 로 <b>명령을 하나 돌려</b> 그 종료 코드를 본다.
+<code>pg_isready</code> 가 그런 용도로 있는 명령이다.</div>
+<div class="tip">프로브에는 셋이 있다 — <code>httpGet</code>·<code>exec</code>·<code>tcpSocket</code>.
+2부 3장에서는 첫째만 봤는데, 여기서 둘째가 나왔다.</div>
+</article>
+
+<article class="card" id="k6-db-6">
+<h3>실제로 나오는 것</h3>
+<!--OUT file=k8s_kc_statefulset.txt lines=1-24 note=합친 결과-->
+<span class="tier a">실행 검증</span>
+<div class="tip">주석이 사라졌다. <code>kustomize</code> 가 YAML 을 다시 써 내면서
+버리기 때문이다 — 그래서 이 덱은 설명할 때 <b>원본 파일</b>을 인용하고,
+결과는 이렇게 따로 보인다.</div>
+</article>
+
+<article class="card" id="k6-db-7">
+<h3>운영에서는 관리형을 쓴다</h3>
+<div class="warn"><b>여기 둔 PostgreSQL 은 배우려고 만든 것이다.</b>
+진짜 운영에서 데이터베이스를 직접 돌리려면 백업·복구 연습·판올림·
+이중화·모니터링을 전부 스스로 해야 한다. 그 일은 Keycloak 을 올리는 일보다
+훨씬 크다.</div>
+<div class="key">클라우드의 관리형 데이터베이스를 쓰면
+<code>KC_DB_URL</code> 한 줄만 그쪽을 가리키게 하면 된다.
+이 부의 나머지는 하나도 안 바뀐다.</div>
+</article>
+
+<article class="card quiz" id="k6-db-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. PostgreSQL StatefulSet 을 지우고 다시 만들었더니
+<b>옛 데이터가 그대로</b> 있다. 왜일까? 그리고 정말 지우려면?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>volumeClaimTemplates</code> 가 만든
+<b>PersistentVolumeClaim 은 StatefulSet 과 함께 안 지워진다</b>.
+같은 이름으로 다시 만들면 그 디스크를 그대로 다시 붙인다.<br>
+일부러 그런 설계다 — 데이터가 실수 한 번에 날아가면 안 되기 때문이다.<br>
+정말 지우려면 <code>kubectl delete pvc data-postgres-0</code> 처럼
+PVC 를 따로 지운다. 그 전에 <b>백업을 뜬다</b> —
+이 명령에는 되돌리기가 없다.</div>
+</article>
+
+<article class="card" id="k6-kc">
+<p class="chnum">2장</p>
+<h2>Keycloak 을 얹는다</h2>
+<p class="chsub">5부의 설정이 ConfigMap 이 된다</p>
+</article>
+
+<article class="card" id="k6-kc-1">
+<h3>주소와 프록시</h3>
+<!--CODE file=k8s/base/keycloak.yaml lines=1-24 note=KC_HOSTNAME 과 프록시-->
+<span class="tier b">구문 검증</span>
+<div class="warn"><b><code>KC_PROXY_HEADERS</code> 를 빼면 반드시 막힌다.</b>
+Keycloak 은 자기 주소를 토큰의 <code>iss</code> 와 리다이렉트에 싣는데,
+앞에 인그레스가 있는 줄 모르면 <code>http://…:8080</code> 을 싣는다.
+그러면 https 페이지에서 http 로 튕겨 나가고, 브라우저가 막는다.</div>
+</article>
+
+<article class="card" id="k6-kc-2">
+<h3>나머지 설정</h3>
+<!--CODE file=k8s/base/keycloak.yaml lines=25-40 note=DB 와 캐시-->
+<span class="tier b">구문 검증</span>
+<div class="key"><code>KC_HTTP_ENABLED: "true"</code> 가 켜져 있다.
+클러스터 <b>안에서는</b> 평문으로 받는다는 뜻이고,
+TLS 는 인그레스에서 끝난다(2부 5장).<br>
+따옴표를 씌운 것에 주의할 것 — 2부 8장에서 본 그 함정이다.
+ConfigMap 의 값은 <b>반드시 글자</b>여야 한다.</div>
+</article>
+
+<article class="card" id="k6-kc-3">
+<h3>서로를 찾는 헤드리스 Service</h3>
+<!--CODE file=k8s/base/keycloak.yaml lines=41-59 note=jgroups-->
+<span class="tier b">구문 검증</span>
+<div class="key"><code>publishNotReadyAddresses: true</code> 가 중요하다.
+Keycloak 은 <b>뜨는 중에</b> 서로를 찾아야 하는데,
+그때는 아직 readiness 가 통과하지 않았다.
+이 칸이 없으면 두 벌이 영영 서로를 못 찾는다.</div>
+</article>
+
+<article class="card" id="k6-kc-3b">
+<h3>보통 Service 하나 더</h3>
+<!--CODE file=k8s/base/keycloak.yaml lines=60-78 note=8080 과 9000-->
+<span class="tier b">구문 검증</span>
+<div class="key">Service 가 <b>둘</b>이다. 헤드리스는 서로를 찾는 데,
+이쪽은 남들이 부르는 데 쓴다.<br>
+포트도 둘이다 — 8080 은 사람이 쓰는 문, <b>9000 은 관리용</b>이다.
+인그레스는 8080 만 내건다. 건강 확인과 지표를 바깥에 내걸지 않으려고
+포트를 갈라 둔 것이다(5부 2장).</div>
+</article>
+
+<article class="card" id="k6-kc-4">
+<h3>운영 모드로 뜬다</h3>
+<!--CODE file=k8s/base/keycloak.yaml lines=76-104 note=start --optimized-->
+<span class="tier b">구문 검증</span>
+<div class="key"><code>--optimized</code> 는 "이미지를 만들 때
+<code>kc.sh build</code> 를 해 뒀다" 는 약속이다.
+공식 이미지가 그렇게 만들어져 있어서 그냥 쓸 수 있다.<br>
+직접 이미지를 굽는 경우(공급자 jar 를 넣거나 기능을 켤 때)에는
+<code>Dockerfile</code> 에서 <code>kc.sh build</code> 를 돌린다 — 5부 2장의 그 이야기다.</div>
+</article>
+
+<article class="card" id="k6-kc-5">
+<h3>비밀은 Secret 에서 온다</h3>
+<!--CODE file=k8s/base/keycloak.yaml lines=105-124 note=envFrom 과 secretKeyRef-->
+<span class="tier b">구문 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방법</th><th>쓰임</th></tr>
+<tr><td><code>envFrom.configMapRef</code></td><td>ConfigMap 의 <b>모든 칸</b>을 환경 변수로</td></tr>
+<tr><td><code>env.valueFrom.secretKeyRef</code></td><td>Secret 에서 <b>한 칸만</b> 골라</td></tr>
+</table>
+</div>
+<div class="tip">비밀은 골라 넣는 편이 낫다. <code>envFrom</code> 으로 통째로 넣으면
+나중에 그 Secret 에 칸이 하나 늘 때 <b>모르는 환경 변수</b>가 따라 들어온다.</div>
+</article>
+
+<article class="card" id="k6-kc-6">
+<h3>건강 확인 셋</h3>
+<!--CODE file=k8s/base/keycloak.yaml lines=125-148 note=startup·readiness·liveness-->
+<span class="tier b">구문 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>프로브</th><th>주소</th><th>하는 일</th></tr>
+<tr><td><b>startup</b></td><td><code>/health/started</code></td>
+<td>뜨는 동안 다른 둘을 <b>멈춰 둔다</b></td></tr>
+<tr><td><b>readiness</b></td><td><code>/health/ready</code></td>
+<td>손님을 넣을지 정한다</td></tr>
+<tr><td><b>liveness</b></td><td><code>/health/live</code></td>
+<td>굳었으면 죽인다</td></tr>
+</table>
+</div>
+<div class="key"><b>startup 프로브가 Keycloak 에는 거의 필수다.</b>
+JVM 이 뜨고 데이터베이스 스키마를 확인하는 데 수십 초가 걸리는데,
+그동안 liveness 가 실패하면 <b>뜨는 중에 계속 죽는다</b> —
+2부 3장 퀴즈의 그 증상이다.</div>
+</article>
+
+<article class="card" id="k6-kc-7">
+<h3>읽기 전용 루트</h3>
+<!--CODE file=k8s/base/keycloak.yaml lines=149-173 note=쓸 수 있는 자리를 따로-->
+<span class="tier b">구문 검증</span>
+<div class="key"><code>readOnlyRootFilesystem: true</code> 를 켜면
+컨테이너가 자기 파일 시스템에 못 쓴다. 뚫려도 할 수 있는 일이 준다.<br>
+대신 <b>진짜로 써야 하는 자리</b>는 따로 열어 줘야 한다 —
+여기서는 <code>/tmp</code> 다. 이걸 빼먹으면 뜨다가 죽는다.</div>
+</article>
+
+<article class="card" id="k6-kc-8">
+<h3>합친 결과</h3>
+<!--OUT file=k8s_kc_deployment.txt lines=1-24 note=Keycloak Deployment-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="k6-kc-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. Keycloak 을 올렸더니 로그인 화면까지는 뜨는데,
+로그인 단추를 누르면 <code>https://sso.campus.example</code> 가 아니라
+<code>http://10.42.0.7:8080</code> 으로 튕긴다. 어디를 볼까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>KC_PROXY_HEADERS</code> 와 <code>KC_HOSTNAME</code> 둘이다.<br>
+Keycloak 은 리다이렉트 주소와 토큰의 <code>iss</code> 를 <b>자기가 만든다</b>.
+앞에 인그레스가 있다는 것을 모르면 요청의 겉모습(파드 IP, 8080)으로 만든다.<br>
+<code>KC_PROXY_HEADERS=xforwarded</code> 는 "앞에서 보내 주는
+<code>X-Forwarded-*</code> 를 믿어라", <code>KC_HOSTNAME</code> 은
+"그래도 내 주소는 이것이다" 다. 둘 다 있어야 한다.<br>
+그리고 <b>인그레스가 그 헤더를 실제로 보내는지</b>도 확인한다 —
+ingress-nginx 는 기본으로 보내지만, 컨트롤러마다 다르다.</div>
+</article>
+
+<article class="card" id="k6-ing">
+<p class="chnum">3장</p>
+<h2>바깥으로 내놓기</h2>
+<p class="chsub">인그레스와 헤더 크기</p>
+</article>
+
+<article class="card" id="k6-ing-1">
+<h3>문패 하나 더</h3>
+<!--CODE file=k8s/base/keycloak-ingress.yaml lines=1-21 note=학식 앱의 것과 같은 모양-->
+<span class="tier b">구문 검증</span>
+</article>
+
+<article class="card" id="k6-ing-2">
+<h3>어디로 보낼 것인가</h3>
+<!--CODE file=k8s/base/keycloak-ingress.yaml lines=22-35 note=sso 도메인-->
+<span class="tier b">구문 검증</span>
+<div class="key">2부 5장의 그 모양이다. 다른 것은 도메인과
+뒤에 붙는 Service 뿐이다 — 배운 것이 그대로 한 번 더 쓰인다.</div>
+</article>
+
+<article class="card" id="k6-ing-3">
+<h3>헤더가 크다는 문제</h3>
+<div class="warn"><b>그룹이 많은 사람이 502 나 431 을 만난다.</b>
+Keycloak 의 세션 쿠키와 토큰이 커지면 인그레스의 기본 버퍼를 넘는다.
+<code>proxy-buffer-size</code> 를 키우는 주석이 그래서 붙어 있다.</div>
+<div class="key">근본 해법은 <b>토큰을 작게</b> 두는 것이다 —
+그룹을 통째로 싣지 말고 필요한 것만 고르거나,
+전체 경로 대신 이름만 싣는다(5부 7장의 <code>full.path: false</code>).
+9부에서 이 이야기를 제대로 한다.</div>
+</article>
+
+<article class="card" id="k6-ing-4">
+<h3>TLS 는 어디서 끝나나</h3>
+<pre class="term">브라우저 ──HTTPS──▶ 인그레스 ──HTTP──▶ Keycloak Pod
+                       ↑                    ↑
+                 sso-tls Secret       KC_HTTP_ENABLED=true
+                 (인증서)              KC_PROXY_HEADERS=xforwarded
+
+클러스터 안까지 TLS 를 가져가려면(mTLS 따위)
+서비스 메시를 쓰거나 Keycloak 에 인증서를 직접 준다.
+이 덱은 거기까지 가지 않는다.</pre>
+<span class="tier ill">설명용</span>
+<div class="tip">2부 5장에서 그린 그림과 같다.
+달라진 것은 뒤에 있는 것이 학식 앱에서 Keycloak 으로 바뀐 것뿐이다.</div>
+</article>
+
+<article class="card" id="k6-ha">
+<p class="chnum">4장</p>
+<h2>여러 벌 띄우기</h2>
+<p class="chsub">한 벌이 죽어도 로그인이 끊기지 않게</p>
+</article>
+
+<article class="card" id="k6-ha-1">
+<h3>두 벌이면 무엇이 달라지나</h3>
+<p class="lead">사용자가 로그인하면 그 세션은 <b>어느 한 벌</b>에 생긴다.
+다음 요청이 다른 벌로 가면, 그 벌은 이 사람을 모른다 —
+아무것도 안 하면 그렇게 된다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>해결책</th><th>어떻게</th><th>이 덱</th></tr>
+<tr><td>붙여 두기<br><span class="dim">sticky session</span></td>
+<td>같은 사람은 늘 같은 벌로</td><td>안 쓴다</td></tr>
+<tr><td><b>캐시 나눠 갖기</b></td><td>벌끼리 세션을 복제한다</td>
+<td><b>이것</b> — <code>KC_CACHE=ispn</code></td></tr>
+</table>
+</div>
+<div class="key">OIDC 를 쓰면 <b>붙여 두기가 필요 없다</b>.
+앱은 토큰을 들고 다니고, 그 토큰은 어느 벌이 봐도 확인된다(4부 5장).<br>
+캐시가 필요한 것은 <b>브라우저↔Keycloak 세션</b>(0부의 A) 때문이다 —
+로그인 화면 한 번에 여러 요청이 오가기 때문이다.</div>
+</article>
+
+<article class="card" id="k6-ha-2">
+<h3>서로를 찾는 법</h3>
+<!--CODE file=k8s/base/keycloak.yaml lines=34-45 note=DNS 로 찾는다-->
+<span class="tier b">구문 검증</span>
+<div class="key"><code>kubernetes</code> 스택은 DNS 로 찾는다.
+헤드리스 Service 이름을 물어보면 <b>모든 Pod 의 주소</b>가 돌아오고,
+그것이 곧 "동료 목록" 이 된다.<br>
+그래서 헤드리스가 아니면 안 된다 — 보통 Service 는 가상 IP 하나만 준다.</div>
+</article>
+
+<article class="card" id="k6-ha-3">
+<h3>운영 overlay</h3>
+<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=12-22 note=Keycloak 두 벌-->
+<span class="tier b">구문 검증</span>
+</article>
+
+<article class="card" id="k6-ha-4">
+<h3>갈아 끼울 때</h3>
+<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=42-56 note=한 벌은 늘 떠 있게-->
+<span class="tier b">구문 검증</span>
+<div class="key"><code>maxUnavailable: 0</code> = "내리기 전에 먼저 띄운다".
+<code>maxSurge: 1</code> = "한 벌 더 띄울 자리는 있다".<br>
+둘을 함께 두면 <b>서비스가 끊기지 않는다</b>. 대신 잠깐 세 벌이 뜨므로
+자원이 그만큼 필요하다.</div>
+<div class="warn">Keycloak 은 판을 올릴 때 <b>데이터베이스 스키마를 고친다</b>.
+새 판과 옛 판이 잠깐 함께 도는 이 방식이 늘 안전하지는 않다 —
+판올림 문서를 먼저 읽고, 큰 판올림은 잠깐 멈추는 편이 낫다.</div>
+</article>
+
+<article class="card" id="k6-ha-5">
+<h3>PostgreSQL 은 왜 한 벌인가</h3>
+<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=57-69 note=자원만 키운다-->
+<span class="tier b">구문 검증</span>
+<div class="warn"><b>StatefulSet 의 replicas 를 2로 올려도 이중화가 안 된다.</b>
+PostgreSQL 두 벌이 서로 복제하려면 그 설정을 따로 해야 하고,
+그냥 늘리면 <b>같은 데이터베이스를 두 벌이 각자</b> 들고 있게 된다.<br>
+그래서 이 덱은 한 벌로 두고, 진짜 이중화는 관리형에 맡기라고 말한다(1장).</div>
+</article>
+
+<article class="card" id="k6-sec">
+<p class="chnum">5장</p>
+<h2>인증서와 담장</h2>
+<p class="chsub">사내 CA 를 나르고, 통신을 좁힌다</p>
+</article>
+
+<article class="card" id="k6-sec-1">
+<h3>CA 를 파일에서 읽는다</h3>
+<!--CODE file=k8s/base/kustomization.yaml lines=33-46 note=secretGenerator-->
+<span class="tier b">구문 검증</span>
+<div class="key">값을 적지 않고 <b>파일에서 읽는다</b>.
+인증서가 바뀌어도 이 파일은 안 고친다 — 파일만 바꾸면 된다.</div>
+<div class="warn"><b>kustomize 는 자기 폴더 밖으로 손을 못 뻗는다.</b>
+일부러 그렇게 돼 있다 — 매니페스트 묶음이 저장소 아무 데나 읽으면
+무엇이 들어가 있는지 알 수 없기 때문이다.
+그래서 <code>make certs</code> 가 CA 를 이 폴더에 한 벌 복사해 둔다.</div>
+</article>
+
+<article class="card" id="k6-sec-2">
+<h3>복사해 두는 자리</h3>
+<!--CODE file=certs/make_certs.sh lines=94-99 note=kustomize 가 읽을 수 있게-->
+<span class="tier a">실행 검증</span>
+<div class="tip">7부 5장에서 <code>KC_TRUSTSTORE_PATHS</code> 를 본 그 자리다.
+Keycloak 은 그 폴더에 있는 인증서를 전부 믿는다.</div>
+</article>
+
+<article class="card" id="k6-sec-3">
+<h3>담장 — NetworkPolicy</h3>
+<!--CODE file=k8s/base/networkpolicy.yaml lines=1-13 note=기본은 전부 허용-->
+<span class="tier b">구문 검증</span>
+<div class="warn"><b>CNI 플러그인이 이해해야 동작한다.</b>
+없으면 이 파일은 <b>아무 일도 안 한다</b> — 오류도 안 난다.
+2부 5장의 인그레스 컨트롤러 이야기와 같은 함정이다.
+<code>kubectl get networkpolicy</code> 에 보인다고 막히고 있는 것이 아니다.</div>
+</article>
+
+<article class="card" id="k6-sec-4">
+<h3>데이터베이스에 붙을 수 있는 것</h3>
+<!--CODE file=k8s/base/networkpolicy.yaml lines=14-33 note=Keycloak 에서 5432 만-->
+<span class="tier b">구문 검증</span>
+<div class="key">이 규칙 하나가 붙는 순간 <b>나머지는 전부 막힌다</b>.
+NetworkPolicy 는 "허용 목록" 이라, 대상으로 지목된 Pod 는
+적어 준 것 말고는 아무것도 못 받는다.</div>
+</article>
+
+<article class="card" id="k6-sec-5">
+<h3>Keycloak 에 붙을 수 있는 것</h3>
+<!--CODE file=k8s/base/networkpolicy.yaml lines=34-60 note=인그레스·앱·자기들끼리-->
+<span class="tier b">구문 검증</span>
+<div class="warn"><b>7800 을 빼먹으면 캐시가 안 붙는다.</b>
+Keycloak 두 벌이 서로 이야기하는 그 포트다.
+막아 두면 로그인은 되는데 <b>가끔 세션을 잃는</b> 이상한 증상이 난다 —
+가장 찾기 어려운 종류다.</div>
+</article>
+
+<article class="card" id="k6-sec-6">
+<h3>합친 결과</h3>
+<!--OUT file=k8s_kc_networkpolicy.txt lines=1-22 note=두 규칙-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="k6-sec-quiz" data-quiz>
+<h3>4·5장 퀴즈</h3>
+<p class="q">Q. Keycloak 을 두 벌로 늘렸더니 로그인이 <b>가끔</b> 실패한다.
+"세션이 만료됐습니다" 가 뜬다. 무엇을 볼까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 두 벌이 <b>캐시를 못 나누고 있다</b>.
+로그인 화면을 준 벌과 폼을 받은 벌이 달라서, 받은 쪽이 그 세션을 모른다.<br>
+확인 순서: ① <code>KC_CACHE_STACK</code> 이 <code>kubernetes</code> 인가
+② <code>jgroups.dns.query</code> 가 <b>헤드리스</b> Service 를 가리키는가
+③ 그 Service 에 <code>publishNotReadyAddresses: true</code> 가 있는가
+④ NetworkPolicy 가 <b>7800</b> 을 막고 있지 않은가.<br>
+Keycloak 로그에 "view" 나 members 수가 찍힌다 — 거기 두 벌이 다 보이는지가 답이다.
+한 벌만 보이면 서로를 못 찾은 것이다.<br>
+급하면 붙여 두기(sticky)로 막을 수 있지만, 그건 증상만 가린다.</div>
+</article>
+
+<article class="card" id="k6-wrap">
+<p class="chnum">6장</p>
+<h2>다른 포장들 · 마무리</h2>
+<p class="chsub">오퍼레이터와 Helm — 같은 손잡이</p>
+</article>
+
+<article class="card" id="k6-wrap-1">
+<h3>세 가지 길</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>이 덱 (평범한 매니페스트)</th><th>오퍼레이터</th><th>Helm</th></tr>
+<tr><td>적는 것</td><td>Deployment·Service·…</td><td><code>Keycloak</code> 한 종류</td>
+<td>values.yaml</td></tr>
+<tr><td>누가 만드나</td><td>내가</td><td>컨트롤러가</td><td>템플릿이</td></tr>
+<tr><td>배우기</td><td><b>속이 보인다</b></td><td>가려진다</td><td>가려진다</td></tr>
+<tr><td>고르기</td><td>어디서나</td><td>CRD 를 깔 수 있어야</td><td>차트가 있어야</td></tr>
+</table>
+</div>
+<div class="key">셋 다 <b>같은 손잡이</b>를 다르게 포장한 것이다.
+오퍼레이터의 <code>Keycloak</code> 자원에도 hostname·db·proxy 칸이 그대로 있다.
+이 부에서 그 칸들이 무엇인지 알았으니, 어느 포장을 골라도 읽을 수 있다.</div>
+</article>
+
+<article class="card" id="k6-wrap-2">
+<h3>오퍼레이터가 더 해 주는 것</h3>
+<pre class="term">Keycloak 오퍼레이터를 쓰면 자원이 둘로 준다:
+
+  Keycloak              서버 한 벌
+  KeycloakRealmImport   realm 파일 가져오기
+
+대신 컨트롤러가 뒤에서 Deployment·Service·Ingress 를 만든다.
+5부에서 뽑은 realm-campus.json 을 KeycloakRealmImport 에
+넣어 두면 뜰 때 알아서 가져온다.
+
+우리는 그 일을 run_dev.sh 의 --import-realm 이 했다.</pre>
+<span class="tier ill">설명용</span>
+<div class="tip">오퍼레이터는 판올림 순서나 스키마 변경 같은 것도 챙겨 준다.
+운영에서 Keycloak 을 여러 벌 굴린다면 진지하게 고려할 만하다.</div>
+</article>
+
+<article class="card" id="k6-wrap-3">
+<h3>전부 합쳐 검사한다</h3>
+<!--OUT file=k8s_validate.txt note=16개 오브젝트-->
+<span class="tier a">실행 검증</span>
+<div class="key">2부 8장에서 만든 그 스크립트다. 오브젝트가 5개에서
+<b>16개</b>로 늘었는데 검사 방법은 하나도 안 바뀌었다.</div>
+</article>
+
+<article class="card" id="k6-wrap-4">
+<h3>dev 와 prod 의 차이</h3>
+<!--OUT file=k8s_diff.txt lines=1-26 note=합친 결과끼리 견줬다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="k6-wrap-5">
+<h3>6부에서 배운 것</h3>
+<ul>
+<li>상태가 있는 것은 <b>StatefulSet</b> — 자기 디스크를 갖고, 지워도 안 지워진다</li>
+<li>5부의 설정이 그대로 <b>ConfigMap</b> 이 된다 — 값은 안 바뀐다</li>
+<li>인그레스 뒤에 두면 <b><code>KC_PROXY_HEADERS</code></b> 가 반드시 필요하다</li>
+<li>건강 확인은 <b>관리 포트 9000</b>, 그리고 <b>startup 프로브</b>가 있어야 한다</li>
+<li>여러 벌은 <b>캐시를 나눠</b> 갖는다 — 헤드리스 Service 로 서로를 찾는다</li>
+<li>NetworkPolicy 는 CNI 가 이해해야 동작한다 — <b>조용히 아무 일도 안 할 수 있다</b></li>
+<li>오퍼레이터·Helm 은 <b>같은 손잡이의 다른 포장</b>이다</li>
+</ul>
+</article>
+
+<article class="card" id="k6-wrap-6">
+<h3>다음은</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>부</th><th>무엇을</th></tr>
+<tr><td><b>7부</b></td><td>이 Keycloak 에 AD 를 붙인다 — 앞에서 전반을 이미 봤다</td></tr>
+<tr><td>8부</td><td>학식 예약 앱을 붙인다 — 4부 7장의 코드가 그대로 간다</td></tr>
+<tr><td>9부</td><td>권한 — 그룹을 역할로 옮기고 토큰 크기를 다스린다</td></tr>
+<tr><td>10부</td><td>운영 — 세션·이벤트·지표·키 회전</td></tr>
+</table>
+</div>
+<div class="key">0부의 그림에서 이제 <b>Keycloak 상자와 그 아래 창고</b>가 켜졌다.
+남은 것은 그 상자를 AD 와 앱에 잇는 선 두 개다.</div>
 </article>

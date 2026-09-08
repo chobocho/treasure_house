@@ -305,12 +305,39 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 - Keycloak LDAP/Active Directory 문서 — https://www.keycloak.org/docs/latest/server_admin/#_ldap · 확인 2026-09-08
 - Microsoft Learn — Active Directory LDAP 정책 · 포트 — https://learn.microsoft.com/windows-server/identity/ad-ds/ · 확인 2026-09-08
 
+## 6부 — 쿠버네티스에 Keycloak (`k6-*` 슬라이드)
+
+매니페스트는 전부 tier B 다 — 클러스터가 없으므로 스키마 검사까지만 한다
+(2부 8장이 그 한계를 다룬다). 이미지 판번호는 5부에서 실제로 돌린 것과 맞췄다.
+
+| 슬라이드 | 주장 | 등급 | 출처 | 확인일 |
+|---|---|---|---|---|
+| `k6-db-2` | StatefulSet 은 Pod 이름이 차례로 붙고 Pod 마다 자기 디스크를 갖는다 | C | Kubernetes 문서 "StatefulSets" | 2026-09-08 |
+| `k6-db-3` | `clusterIP: None` 이면 DNS 가 Pod 주소를 바로 준다 | C | Kubernetes 문서 "Headless Services" | 2026-09-08 |
+| `k6-db-4` | StatefulSet 을 지워도 PVC 는 안 지워진다 | C | Kubernetes 문서 "StatefulSets" — Limitations | 2026-09-08 |
+| `k6-db-5` | 프로브는 `httpGet`·`exec`·`tcpSocket` 셋 | C | Kubernetes 문서 "Configure Probes" | 2026-09-08 |
+| `k6-kc-1` | 인그레스 뒤에서는 `KC_PROXY_HEADERS=xforwarded` 가 필요하다 | C | Keycloak 서버 가이드 "Using a reverse proxy" | 2026-09-08 |
+| `k6-kc-3` | 캐시가 뜨는 중에 서로를 찾으므로 `publishNotReadyAddresses` 가 필요하다 | C | Keycloak "Configuring distributed caches" · Kubernetes Service 문서 | 2026-09-08 |
+| `k6-kc-4` | 공식 이미지는 build 가 끝나 있어 `start --optimized` 로 뜬다 | C | Keycloak "Running Keycloak in a container" | 2026-09-08 |
+| `k6-kc-6` | 건강 확인 주소는 `/health/started`·`/health/ready`·`/health/live` (관리 포트) | A·C | `keycloak/run_dev.sh` 실행 응답 · Keycloak "Configuring health checks" | 2026-09-08 |
+| `k6-kc-7` | 읽기 전용 루트에서는 쓸 수 있는 자리를 따로 줘야 한다 | C | Kubernetes "Pod Security Standards" | 2026-09-08 |
+| `k6-ha-1` | OIDC 는 붙여 두기(sticky)가 필요 없다 | C | Keycloak "Configuring distributed caches" | 2026-09-08 |
+| `k6-ha-2` | `KC_CACHE_STACK=kubernetes` 는 DNS 로 동료를 찾는다 | C | 같은 문서 (`jgroups.dns.query`) | 2026-09-08 |
+| `k6-ha-5` | StatefulSet replicas 를 늘려도 PostgreSQL 은 이중화되지 않는다 | C | PostgreSQL 문서 — 복제는 따로 설정한다 | 2026-09-08 |
+| `k6-sec-1` | kustomize 는 kustomization 루트 밖의 파일을 못 읽는다 | A | 실제 오류 — `security; file … is not in or below …` | 2026-09-08 |
+| `k6-sec-3` | NetworkPolicy 는 CNI 가 이해해야 동작하고, 아니면 조용히 무시된다 | C | Kubernetes 문서 "Network Policies" — Prerequisites | 2026-09-08 |
+| `k6-wrap-3` | base·dev·prod 각 16개 오브젝트가 스키마 검사를 통과한다 | A | `out/k8s_validate.txt` | 2026-09-08 |
+| `k6-kc-2` | ConfigMap 의 값은 글자여야 한다 (`"true"`) | A·C | 2부 8장의 YAML 실험 · Kubernetes ConfigMap 문서 | 2026-09-08 |
+
+- Kubernetes 문서 — https://kubernetes.io/docs/concepts/ · 확인 2026-09-08
+- Keycloak 서버 가이드 26.7 — https://www.keycloak.org/documentation · 확인 2026-09-08
+- PostgreSQL 이미지 `postgres:17.6-alpine` · Keycloak 이미지 `quay.io/keycloak/keycloak:26.7.3`
+
 ## 앞으로 채울 곳
 
 부가 하나씩 들어올 때마다 그 부의 절을 여기에 연다.
 지금은 비어 있는 것이 정상이다 — 뼈대 커밋에는 주장이 거의 없다.
 
-- [ ] 6부 k8s 배포 — Keycloak 서버 가이드 `all-config`
 - [ ] 8부 앱 연동 — oauth2-proxy · ingress-nginx `auth_request`
 - [ ] 9부 권한 — 그룹·역할 매퍼
 - [ ] 10부 운영 — 수명 기본값 · 이벤트 · 메트릭
