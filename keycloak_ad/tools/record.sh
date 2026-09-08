@@ -865,6 +865,8 @@ wait_ldap $PL
 if sh keycloak/run_dev.sh >"$OUT/.kc_run.txt" 2>&1; then
   sh keycloak/admin_api.sh >"$OUT/.kc_admin.txt" 2>&1
   sh keycloak/e2e_login.sh >"$OUT/.kc_e2e.txt" 2>&1
+  # 7부의 실험들 — 설정을 바꿔 가며 AD 로그가 어떻게 달라지는지.
+  sh keycloak/ad_lab.sh >"$OUT/.kc_lab.txt" 2>&1
   {
     echo '$ sh keycloak/run_dev.sh'
     cat "$OUT/.kc_run.txt"
@@ -883,6 +885,7 @@ if sh keycloak/run_dev.sh >"$OUT/.kc_run.txt" 2>&1; then
     echo
     echo '  kc_e2e_03 ~ kc_e2e_10   토큰이 실린 것들'
     echo '  kc_admin_token.txt      관리자 토큰'
+    echo '  kc_ad_*.txt             7부의 실험들 (시각과 연결 번호)'
     echo '  kc_boot.txt             뜨는 데 걸린 시간'
     echo
     echo '까닭: Keycloak 은 realm 을 새로 세울 때마다 **서명 열쇠를'
@@ -902,7 +905,8 @@ if sh keycloak/run_dev.sh >"$OUT/.kc_run.txt" 2>&1; then
     echo '  kc_e2e_01_discovery.txt 안내문'
     echo '  kc_e2e_02_authorize_url.txt  인가 요청 주소'
   } >"$OUT/kc_reproducible.txt"
-  rm -f "$OUT/.kc_run.txt" "$OUT/.kc_admin.txt" "$OUT/.kc_e2e.txt"
+  rm -f "$OUT/.kc_run.txt" "$OUT/.kc_admin.txt" "$OUT/.kc_e2e.txt" \
+    "$OUT/.kc_lab.txt"
 else
   echo '  Keycloak 을 못 띄웠다 — out/kc_unavailable.txt 를 볼 것' >&2
 fi

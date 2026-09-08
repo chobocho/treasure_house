@@ -1,3 +1,10 @@
+### [2026-09-08 18:10] Keycloak×AD 덱 7부 전반 — AD 연동 49장
+- **기획:** PLAN §8 6단계의 마지막. 7개 장(정할 것·로그인 한 번의 LDAP 질의·로그인 아이디·서비스 계정과 범위·LDAPS·그룹이 건너오는 길·계정 상태), 퀴즈 4. 후반(전수 표·진단 15·동기화·매퍼 6종)은 8단계로 남긴다.
+- **TC:** 새 Go 코드는 없다. keycloak/ad_lab.sh 로 설정을 바꿔 가며 가짜 AD 로그가 어떻게 달라지는지를 캡처로 남기는 것이 이 부의 검증이다.
+- **개발:** keycloak/ad_lab.sh(신규) · deck/sections/07_ad_federation.html(신규) · 13_appendix.html · deck/claims.md(18행) · tools/record.sh
+- **검증:** 742장 · 커버리지 7829/7829줄 100% · 조립 0건 · 역검증 통과 · deck-check 0건(퀴즈 41·데모 12) · 글꼴 통과 · test 14패키지
+- **비고:** 실험들이 서로 상태를 남겨 답이 어긋난 것을 고쳤다(사본 삭제·설정 되돌리기). 관리 API 의 PUT 이 합치기라 키를 빼는 것만으로는 설정이 안 지워진다. 7부 id 가 3부와 겹쳐 f7- 로 바꿨다.
+
 ### [2026-09-08 17:20] Keycloak×AD 덱 5부 본문 — Keycloak 이란 74장
 - **기획:** PLAN §8 6단계의 가운데. 11개 장(제품과의 차이·dev/prod·설정 세 경로·realm·client·user/group/role·scope와 mapper·federation·관리 API·내보내기·마무리), 퀴즈 7. 4부의 miniidp 와 나란히 두는 장을 여럿 뒀다.
 - **TC:** 본문 커밋이라 새 시험은 없다. 조립기 검사와 역검증·deck-check·글꼴검사가 관문이다.
