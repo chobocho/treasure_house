@@ -20,7 +20,8 @@ say()  { printf '  %s %s\n' "$1" "$2"; }
 ok()   { say '✓' "$1"; }
 bad()  { say '✗' "$1"; fail=$((fail + 1)); }
 
-for f in demo-ca.crt demo-ca.key ldap.crt ldap.key sso.crt sso.key; do
+for f in demo-ca.crt demo-ca.key ldap.crt ldap.key sso.crt sso.key \
+         idp-signing.key; do
   [ -f "$f" ] || { bad "$f 가 없다 — sh certs/make_certs.sh 를 먼저"; }
 done
 [ "$fail" -eq 0 ] || { printf '\n오류 %d건\n' "$fail"; exit 1; }
@@ -70,6 +71,18 @@ fi
 
 check_one ldap.crt ldap.key ldap.ad.campus.example
 check_one sso.crt  sso.key  sso.campus.example
+
+# IdP 서명 열쇠는 인증서가 없다. 읽히는지와 길이만 본다 —
+# 2048비트 아래는 요즘 기준으로 쓰면 안 된다.
+# 첫 줄이 "Private-Key: (2048 bit, 2 primes)" 다. 숫자를 다 긁으면
+# 뒤의 2 까지 붙어 20482 가 되므로, 첫 덩어리만 떼어 낸다.
+bits=$(openssl rsa -in idp-signing.key -noout -text 2>/dev/null \
+       | sed -n '1s/.*(\([0-9]*\) bit.*/\1/p')
+if [ "${bits:-0}" -ge 2048 ]; then
+  ok "idp-signing.key — RSA ${bits}비트"
+else
+  bad "idp-signing.key — ${bits:-?}비트 (2048 이상이어야 한다)"
+fi
 
 if [ "$fail" -eq 0 ]; then
   printf '\n오류 0건\n'

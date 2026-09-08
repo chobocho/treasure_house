@@ -76,4 +76,18 @@ server_cert sso  sso.campus.example      ",DNS:localhost,IP:127.0.0.1"
 chmod 600 demo-ca.key ldap.key sso.key
 chmod 644 demo-ca.crt ldap.crt sso.crt
 
-echo "완료 — 시연용 인증서 3벌. 검사: sh certs/check_certs.sh"
+# ── 3. IdP 서명 열쇠 ────────────────────────────────────────────
+# 4부의 miniidp 가 토큰에 서명할 때 쓰는 열쇠다. 인증서가 아니라
+# 열쇠 하나뿐이다 — 서명을 확인하는 쪽은 JWKS 로 공개키만 받아 가므로
+# "누가 보증했는가"(인증서)가 필요 없다.
+#
+# 파일로 고정해 두는 이유: 프로그램이 뜰 때마다 새로 만들면 토큰이
+# 매번 달라져, 덱의 캡처를 두 번 떠 견주는 검사를 통과할 수 없다.
+if [ ! -f idp-signing.key ]; then
+  openssl genrsa -out idp-signing.key 2048 2>/dev/null
+  chmod 600 idp-signing.key
+  echo "  만듦: idp-signing.key (miniidp 의 토큰 서명 열쇠)"
+fi
+
+echo "완료 — 시연용 인증서 3벌 + IdP 서명 열쇠."
+echo "검사: sh certs/check_certs.sh"

@@ -23,6 +23,14 @@ export GOTOOLCHAIN GOFLAGS
 # 포트는 프로그램 번호와 맞춰 둔다. 겹치면 바꿔서 다시 돌리면 된다.
 P1=8081; P2=8082; P3=8083; P4=8443; P4H=8084
 PL=10389; PLS=10636
+PI=9000; PA=9001
+
+# 4부의 캡처는 시계와 난수를 못 박고 뜬다. 토큰에는 발급 시각과 일련번호가
+# 들어가서, 고정하지 않으면 같은 명령이 매번 다른 글자를 내기 때문이다.
+# (왜 위험한 깃발인지는 oidc/miniidp/idp.go 의 FixForCapture 에 적었다)
+FIXED=2026-09-08T12:00:00Z
+LOOK=2026-09-08T12:01:00Z   # 토큰이 살아 있는 시각
+LATER=2026-09-08T13:00:00Z  # 기한이 지난 뒤
 
 PIDS=''
 stop_all() {
@@ -66,7 +74,8 @@ BIN=bin
 build_all() {
   mkdir -p "$BIN"
   for d in web/01_hello web/02_form_cookie web/03_redirect web/04_tls \
-           ldap/fakead/cmd/fakead ldap/ldapcli; do
+           ldap/fakead/cmd/fakead ldap/ldapcli \
+           oidc/miniidp/cmd/miniidp oidc/miniapp oidc/jwtool; do
     $GO build -o "$BIN/$(basename "$d")" "./$d"
   done
 }
@@ -118,9 +127,13 @@ CURL="curl -sS -4"
 
 # ── 0. 시험과 정적 검사 ───────────────────────────────────────────
 say '0. 포트 확인 · 빌드 · go test · go vet'
-require_free $P1 $P2 $P3 $P4 $P4H $PL $PLS
+require_free $P1 $P2 $P3 $P4 $P4H $PL $PLS $PI $PA
 build_all
-$GO test ./... >"$OUT/web_test.txt" 2>&1 || true
+# -count=1 로 캐시를 끈다. 캐시가 걸리면 "(cached)" 가 찍히고, 안 걸리면
+# 걸린 시간이 찍혀서 같은 명령이 두 판을 낸다. 그보다 중요한 이유는
+# 따로 있다 — 이 덱은 "실제로 돌려 봤다" 고 말한다. 그러면 캡처도
+# 실제로 돌린 결과여야 한다.
+$GO test -count=1 ./... >"$OUT/web_test.txt" 2>&1 || true
 $GO vet ./... >"$OUT/web_vet.txt" 2>&1 || true
 
 # ── 1. 가장 작은 서버 ─────────────────────────────────────────────
@@ -184,6 +197,11 @@ $CURL -v -L --max-redirs 3 "http://localhost:$P3/loop?n=0" \
 stop_all
 
 # ── 4. TLS ────────────────────────────────────────────────────────
+#
+# 알아 둘 것: web04_insecure.txt 의 맨 끝 한 줄(`{ [5 bytes data]` 과
+# `} [5 bytes data]`)은 두 번 돌리면 가끔 바뀐다. TLS 1.3 의 세션 티켓이
+# 오는 것과 curl 이 연결을 닫는 것이 경주를 하기 때문이다. 둘 다 맞는
+# 출력이라 손대지 않았다 — 덱은 이 파일의 9번째 줄만 인용한다.
 say '4. web/04_tls'
 sh certs/make_certs.sh >/dev/null
 start web/04_tls "$OUT/web04_server.txt" \
@@ -351,10 +369,251 @@ say '6. 도구 상자 (base64 · 해시 · 서명 · JSON)'
   printf '%s' '{"sub":"minji",}' | python3 -m json.tool 2>&1 || true
 } >"$OUT/tool_json.txt" 2>&1
 
-# ── 6. 정리 ───────────────────────────────────────────────────────
-say '7. 매번 달라지는 값 고정 (tools/scrub.py)'
+# ── 7. OIDC — miniidp · miniapp · jwtool (4부) ────────────────────
+say '7. oidc/miniidp + miniapp + jwtool'
+IDP="http://localhost:$PI/realms/campus"
+OC="$IDP/protocol/openid-connect"
+BACK="http://localhost:$PA/callback"
+
+start ldap/fakead/cmd/fakead "$OUT/.fakead.raw" -addr ":$PL"
+wait_ldap $PL
+start oidc/miniidp/cmd/miniidp "$OUT/oidc_idp.log" -addr ":$PI" \
+  -issuer "$IDP" -key certs/idp-signing.key -ldap "localhost:$PL" \
+  -redirect "$BACK" -fixed-now "$FIXED"
+wait_up "$OC/certs"
+
+# PKCE 는 이 두 줄이 전부다. verifier 를 만들고, 그 해시를 challenge 로.
+VERIFIER='lunch-demo-verifier-0123456789-abcdefghijklmnop'
+CHALLENGE=$(printf %s "$VERIFIER" | openssl dgst -sha256 -binary \
+  | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+{
+  echo '$ VERIFIER=lunch-demo-verifier-0123456789-abcdefghijklmnop'
+  echo '$ printf %s "$VERIFIER" | openssl dgst -sha256 -binary \'
+  echo '    | openssl base64 -A | tr "+/" "-_" | tr -d "="'
+  echo "$CHALLENGE"
+  echo
+  echo 'challenge 는 verifier 의 해시다. 해시는 되돌릴 수 없으므로,'
+  echo '앞의 요청을 훔쳐본 쪽은 challenge 만 보고 verifier 를 못 만든다.'
+} >"$OUT/oidc_pkce.txt" 2>&1
+
+# ── 안내문과 공개키 ──
+$CURL "$IDP/.well-known/openid-configuration" \
+  >"$OUT/oidc_discovery.txt" 2>&1
+$CURL "$OC/certs" >"$OUT/oidc_certs.txt" 2>&1
+
+# ── 로그인 화면 ──
+AQ="response_type=code&client_id=lunch-web"
+AQ="$AQ&redirect_uri=http%3A%2F%2Flocalhost%3A$PA%2Fcallback"
+AQ="$AQ&scope=openid+profile+email&state=st-demo-123&nonce=no-demo-456"
+AQ="$AQ&code_challenge=$CHALLENGE&code_challenge_method=S256"
+
+$CURL -v "$OC/auth?$AQ" >"$OUT/oidc_authorize.txt" 2>&1
+$CURL -v "$OC/auth?$(echo "$AQ" | sed 's/client_id=lunch-web/client_id=남의앱/')" \
+  >"$OUT/oidc_authorize_badclient.txt" 2>&1
+$CURL -v "$OC/auth?$(echo "$AQ" | sed "s/&code_challenge=$CHALLENGE//")" \
+  >"$OUT/oidc_authorize_nopkce.txt" 2>&1
+
+# ── 비밀번호를 IdP 에 낸다. 앱은 이 화면을 못 본다 ──
+FORM="-d client_id=lunch-web -d redirect_uri=$BACK"
+FORM="$FORM -d scope=openid+profile+email -d state=st-demo-123"
+FORM="$FORM -d nonce=no-demo-456 -d code_challenge=$CHALLENGE"
+
+$CURL -v $FORM -d user=minji -d 'pass=틀린비밀번호' "$OC/auth" \
+  >"$OUT/oidc_login_bad.txt" 2>&1
+$CURL -v $FORM -d user=minji -d "pass=$PW" "$OC/auth" \
+  >"$OUT/oidc_login.txt" 2>&1
+
+# 인가 코드는 Location 헤더의 주소에 실려 온다.
+CODE=$(sed -n 's/^< [Ll]ocation:.*[?&]code=\([^&]*\).*/\1/p' \
+  "$OUT/oidc_login.txt" | tr -d '\r')
+[ -n "$CODE" ] || { echo '인가 코드를 못 받았다' >&2; exit 1; }
+
+# ── 코드를 토큰으로 ──
+TF="-d grant_type=authorization_code -d code=$CODE"
+TF="$TF -d redirect_uri=$BACK -d client_id=lunch-web"
+TF="$TF -d client_secret=lunch-secret-demo"
+$CURL -v $TF -d "code_verifier=$VERIFIER" "$OC/token" \
+  -o "$OUT/.tok.json" 2>"$OUT/.tok.hdr"
+{ cat "$OUT/.tok.hdr"; echo; cat "$OUT/.tok.json"; } \
+  >"$OUT/oidc_token.txt"
+
+# 토큰 세 장이 한 줄에 다 안 들어간다. 가운데를 줄여 응답의 모양만 보인다.
+python3 - "$OUT/.tok.json" >"$OUT/oidc_token_short.txt" <<'PYEOF'
+import json
+import sys
+
+d = json.load(open(sys.argv[1]))
+print('$ curl ... /token | python3 -m json.tool')
+print('  (토큰은 너무 길어 가운데를 줄였다)')
+print('{')
+keys = ['access_token', 'id_token', 'refresh_token',
+        'token_type', 'expires_in', 'scope']
+for n, k in enumerate(keys):
+    v = d[k]
+    if isinstance(v, str) and len(v) > 64:
+        v = '%s…(%d자 줄임)…%s' % (v[:28], len(v) - 56, v[-28:])
+    if isinstance(v, str):
+        v = '"%s"' % v
+    else:
+        v = str(v)
+    print('  "%s": %s%s' % (k, v, ',' if n < len(keys) - 1 else ''))
+print('}')
+PYEOF
+
+# 같은 코드를 한 번 더. 코드는 한 번만 쓴다.
+$CURL -v $TF -d "code_verifier=$VERIFIER" "$OC/token" \
+  >"$OUT/oidc_token_replay.txt" 2>&1
+
+jget() { python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2"; }
+IDTOK=$(jget "$OUT/.tok.json" id_token)
+ACCTOK=$(jget "$OUT/.tok.json" access_token)
+REFTOK=$(jget "$OUT/.tok.json" refresh_token)
+
+# ── verifier 가 틀리면? 새 코드를 하나 더 받아 시험한다 ──
+$CURL -v $FORM -d user=minji -d "pass=$PW" "$OC/auth" \
+  >"$OUT/.login2.txt" 2>&1
+CODE2=$(sed -n 's/^< [Ll]ocation:.*[?&]code=\([^&]*\).*/\1/p' \
+  "$OUT/.login2.txt" | tr -d '\r')
+$CURL -v -d grant_type=authorization_code -d "code=$CODE2" \
+  -d "redirect_uri=$BACK" -d client_id=lunch-web \
+  -d client_secret=lunch-secret-demo -d 'code_verifier=엉뚱한-값' \
+  "$OC/token" >"$OUT/oidc_token_badverifier.txt" 2>&1
+
+# ── 토큰을 눈으로 본다 ──
+echo "$IDTOK" >"$OUT/.idtok.txt"
+{
+  echo '$ jwtool decode "$ID_TOKEN"'
+  bin/jwtool decode -now "$LOOK" "$IDTOK"
+} >"$OUT/oidc_decode_id.txt" 2>&1
+{
+  echo '$ jwtool decode "$ACCESS_TOKEN"'
+  bin/jwtool decode -now "$LOOK" "$ACCTOK"
+} >"$OUT/oidc_decode_at.txt" 2>&1
+
+# 토큰의 생김새 — 점 두 개로 나뉜 세 조각. 60칸씩 접어서 보인다.
+{
+  printf '%s\n' '$ echo "$ID_TOKEN" | tr "." "\n" | fold -w 60'
+  echo
+  printf '%s\n' "$IDTOK" | tr '.' '\n' | (
+    n=1
+    while IFS= read -r part; do
+      case $n in
+        1) echo '── 1. 머리 (header) ──' ;;
+        2) echo '── 2. 내용 (payload) ──' ;;
+        3) echo '── 3. 서명 (signature) ──' ;;
+      esac
+      printf '%s\n' "$part" | fold -w 60
+      echo
+      n=$((n + 1))
+    done
+  )
+  echo '앞의 두 조각은 누구나 되돌려 읽는다. 셋째 조각만이 열쇠를 요구한다.'
+} >"$OUT/oidc_token_shape.txt" 2>&1
+{
+  echo '$ jwtool verify -jwks .../certs -iss ... -aud lunch-web "$ID_TOKEN"'
+  bin/jwtool verify -jwks "$OC/certs" -iss "$IDP" -aud lunch-web \
+    -now "$LOOK" "$IDTOK"
+} >"$OUT/oidc_verify_ok.txt" 2>&1
+{
+  echo '$ jwtool verify ... -now (한 시간 뒤) "$ID_TOKEN"'
+  bin/jwtool verify -jwks "$OC/certs" -iss "$IDP" -aud lunch-web \
+    -now "$LATER" "$IDTOK" || echo "(끝난 값: $?)"
+} >"$OUT/oidc_verify_expired.txt" 2>&1
+
+# 내용을 한 글자 고친 토큰. 서명이 곧바로 어긋난다.
+TAMPERED=$(python3 tools/tamper_jwt.py "$IDTOK")
+{
+  echo '$ # 내용의 preferred_username 을 admin.lee 로 고쳐 봤다'
+  echo '$ jwtool verify ... "$TAMPERED"'
+  bin/jwtool verify -jwks "$OC/certs" -iss "$IDP" -aud lunch-web \
+    -now "$LOOK" "$TAMPERED" || echo "(끝난 값: $?)"
+  echo
+  echo '$ jwtool decode "$TAMPERED"   # 읽히기는 읽힌다'
+  bin/jwtool decode -now "$LOOK" "$TAMPERED" | sed -n '/^내용/,/^$/p'
+} >"$OUT/oidc_verify_tampered.txt" 2>&1
+
+# alg=none — 서명을 아예 뗀 토큰.
+NONE=$(python3 tools/tamper_jwt.py --alg-none "$IDTOK")
+{
+  echo '$ jwtool verify ... "$ALG_NONE_TOKEN"'
+  bin/jwtool verify -jwks "$OC/certs" -iss "$IDP" -aud lunch-web \
+    -now "$LOOK" "$NONE" || echo "(끝난 값: $?)"
+} >"$OUT/oidc_verify_algnone.txt" 2>&1
+
+# ── userinfo ──
+$CURL -v -H "Authorization: Bearer $ACCTOK" "$OC/userinfo" \
+  >"$OUT/oidc_userinfo.txt" 2>&1
+$CURL -v -H "Authorization: Bearer $IDTOK" "$OC/userinfo" \
+  >"$OUT/oidc_userinfo_idtoken.txt" 2>&1
+$CURL -v "$OC/userinfo" >"$OUT/oidc_userinfo_notoken.txt" 2>&1
+
+# ── 갱신과 회전 ──
+$CURL -v -d grant_type=refresh_token -d "refresh_token=$REFTOK" \
+  -d client_id=lunch-web -d client_secret=lunch-secret-demo \
+  "$OC/token" >"$OUT/oidc_refresh.txt" 2>&1
+$CURL -v -d grant_type=refresh_token -d "refresh_token=$REFTOK" \
+  -d client_id=lunch-web -d client_secret=lunch-secret-demo \
+  "$OC/token" >"$OUT/oidc_refresh_replay.txt" 2>&1
+
+# ── 앱 쪽에서 본 같은 흐름 ──
+start oidc/miniapp "$OUT/oidc_app.log" -addr ":$PA" \
+  -self "http://localhost:$PA" -issuer "$IDP" -fixed-now "$FIXED"
+wait_up "http://localhost:$PA/"
+
+AJAR=$OUT/.appjar.txt
+rm -f "$AJAR"
+$CURL -v -L -c "$AJAR" -b "$AJAR" "http://localhost:$PA/login" \
+  >"$OUT/oidc_app_login.txt" 2>&1
+# 로그인 화면의 숨은 칸을 그대로 되돌려 보낸다 — 브라우저가 하는 일이다.
+APPQ=$(sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)">.*/-d \1=\2/p' \
+  "$OUT/oidc_app_login.txt" | tr '\n' ' ')
+# shellcheck disable=SC2086
+$CURL -v -L -c "$AJAR" -b "$AJAR" $APPQ -d user=minji -d "pass=$PW" \
+  "$OC/auth" >"$OUT/oidc_app_callback.txt" 2>&1
+$CURL -v -b "$AJAR" "http://localhost:$PA/me" >"$OUT/oidc_app_me.txt" 2>&1
+$CURL -v -b "$AJAR" "http://localhost:$PA/admin" \
+  >"$OUT/oidc_app_admin_denied.txt" 2>&1
+$CURL -v -L -b "$AJAR" -c "$AJAR" \
+  -X POST "http://localhost:$PA/logout" \
+  >"$OUT/oidc_app_logout.txt" 2>&1
+$CURL -v -b "$AJAR" "http://localhost:$PA/me" \
+  >"$OUT/oidc_app_me_after.txt" 2>&1
+
+# 관리자는 같은 화면을 볼 수 있다. 갈리는 것은 groups 클레임 하나다.
+BJAR=$OUT/.adminjar.txt
+rm -f "$BJAR"
+$CURL -sS -4 -L -c "$BJAR" -b "$BJAR" "http://localhost:$PA/login" \
+  >"$OUT/.adminlogin.txt" 2>&1
+ADMINQ=$(sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)">.*/-d \1=\2/p' \
+  "$OUT/.adminlogin.txt" | tr '\n' ' ')
+# shellcheck disable=SC2086
+$CURL -sS -4 -L -c "$BJAR" -b "$BJAR" $ADMINQ -d user=admin.lee \
+  -d "pass=$PW" "$OC/auth" >/dev/null 2>&1
+$CURL -v -b "$BJAR" "http://localhost:$PA/admin" \
+  >"$OUT/oidc_app_admin_ok.txt" 2>&1
+
+stop_all
+
+# 가짜 AD 의 로그에서 '끊김' 줄은 뺀다.
+#
+# 연결이 닫히는 것은 서버의 다른 고루틴이 알아채는 일이라, 두 연결이
+# 거의 동시에 닫히면 두 줄의 앞뒤가 그때그때 바뀐다. 두 판 다 맞는
+# 출력이지만 md5 가 달라져 재현 검사를 통과할 수 없다. 뺀 사실을
+# 파일 안에 적어 둔다 — 원래 모양은 3부의 ad_fakead.log 에 그대로 있다.
+{
+  echo '# (연결이 끊긴 줄은 두 연결이 동시에 닫힐 때 순서가 바뀌어 뺐다.'
+  echo '#  원래 모양은 3부의 로그에 그대로 있다.)'
+  grep -v '끊김' "$OUT/.fakead.raw"
+} >"$OUT/oidc_fakead.log"
+
+rm -f "$OUT/.tok.json" "$OUT/.tok.hdr" "$OUT/.login2.txt" \
+  "$OUT/.idtok.txt" "$OUT/.adminlogin.txt" "$OUT/.fakead.raw" \
+  "$AJAR" "$BJAR"
+
+# ── 8. 정리 ───────────────────────────────────────────────────────
+say '8. 매번 달라지는 값 고정 (tools/scrub.py)'
 python3 tools/scrub.py "$OUT"/web*.txt "$OUT"/tool_*.txt \
-  "$OUT"/ad_*.txt "$OUT"/ad_fakead.log
+  "$OUT"/ad_*.txt "$OUT"/ad_fakead.log "$OUT"/oidc_*.txt "$OUT"/oidc_*.log
 
 echo '캡처 완료 — out/ 아래'
 ls -1 "$OUT" | sed 's/^/  /'
