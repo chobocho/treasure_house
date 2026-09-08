@@ -389,6 +389,30 @@ analogies in §5.9) and hands it in the prompt.
 
 ## Progress log (newest first)
 
+### [2026-09-08 15:40] 5단계(3/3) 4부 본문 — 116장 + 부록 확장 (누적 504장)
+
+- **기획:** 9개 장 — 왜 위임하나 · 인가 코드 흐름 · state/nonce/PKCE ·
+  토큰 세 장 · JWT 해부 · JWKS 와 안내문 · 앱 쪽 · 세 세션과 로그아웃 ·
+  직접 돌려 보기. 퀴즈 8, 데모 2(PKCE 계산기 · JWT 해독기).
+- **캡처:** 4부 절에서 38개. `tools/showurl.py` 를 새로 만들어
+  200칸 넘는 주소를 칸마다 한 줄로 펼쳐 실었다 — 그대로는 108칸 규칙에 걸린다.
+  토큰·JWKS 도 가운데를 줄인 판을 따로 떴다(`*_short.txt`).
+- **개발:** `deck/sections/04_sso.html`(신규) · `13_appendix.html`(FULLSRC 11개 추가) ·
+  `deck/demos.js`(+2) · `deck/claims.md`(4부 절 28행) · `deck/pending.txt`(비움) ·
+  `tools/showurl.py`(신규) · `tools/record.sh` · `tools/scrub.py` ·
+  `deck/sections/01_web.html`
+- **검증:** 504장 · **커버리지 6465/6465줄 100퍼센트** · 조립 0건 · 역검증 통과
+  (코드 274 · 출력 99) · deck-check 0건(퀴즈 24 · 데모 11) · 글꼴 통과 ·
+  `make record` 3회 md5 동일 · test 14패키지.
+- **장수:** 4부 116/95(목표 초과 21). 예상 합계 1089 (상한 2000).
+- **근거:** 4부의 규격 주장 28건을 `claims.md` 에 URL 과 함께 적었다 —
+  RFC 6749/6750/7515-7519/7636/7662/8615/8725/9068/9700, OAuth 2.1 초안,
+  OIDC Core·Discovery·RP-Initiated Logout.
+- **바로잡은 것:** 4부 본문을 쓰다 `alg=none` 사고의 **연도**를 적었다가
+  근거를 댈 수 없어 뺐다. 대신 공격의 종류를 RFC 8725 로 댔다.
+  0부의 세 세션 표와 4부 8장의 표가 C 의 정의에서 어긋나 있어 0부에 맞췄다.
+- **다음:** §8 4단계(2부 쿠버네티스) 또는 6단계(5부 Keycloak).
+
 ### [2026-09-08 11:25] 5단계(1/3) OIDC 기초 — jwt · pkce · LDAP 클라이언트 분리
 - **기획:** 토큰 층(`oidc/jwt`)과 PKCE(`oidc/pkce`). `miniidp` 가 AD 에 물어보려면
   LDAP 클라이언트가 **라이브러리**여야 해서 `ldapcli` 안에 있던 것을 `ldap/client` 로 뽑았다.

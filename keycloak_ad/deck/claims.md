@@ -136,13 +136,64 @@
 적어 두었고, 3부 8장이 그 목록을 그대로 슬라이드로 보여 준다.
 안 하는 것을 조용히 무시하지 않고 `unwillingToPerform(53)` 으로 거절한다.
 
+## 4부 — OAuth 2.0 · OIDC (`so-*` 슬라이드)
+
+| 슬라이드 | 주장 | 등급 | 출처 | 확인일 |
+|---|---|---|---|---|
+| `so-why-7` | OIDC 는 OAuth 2.0 **위에** 얹은 층이고, ID 토큰을 더한다 | C | OIDC Core 1.0 §1 (Overview) | 2026-09-08 |
+| `so-flow-5` | client_id·redirect_uri 가 확인되기 전에는 그 주소로 오류를 보내면 안 된다 | C | RFC 6749 §4.1.2.1 | 2026-09-08 |
+| `so-flow-9` | 인가 코드는 짧고(권고 10분 이하) **한 번만** 쓴다 | C | RFC 6749 §4.1.2 | 2026-09-08 |
+| `so-flow-12` | 토큰 응답에 `Cache-Control: no-store` 를 붙인다 | C | RFC 6749 §5.1 | 2026-09-08 |
+| `so-flow-13` | implicit 흐름은 더 쓰지 않기를 권고한다 | C | OAuth 2.0 Security BCP(RFC 9700) §2.1.2 · OAuth 2.1 초안 | 2026-09-08 |
+| `so-flow-14` | 같은 코드를 두 번 내밀면 `invalid_grant` 로 거절된다 | A | `out/oidc_token_replay.txt` | 2026-09-08 |
+| `so-guard-6` | challenge = base64url(SHA-256(verifier)), method `S256` | C | RFC 7636 §4.2 | 2026-09-08 |
+| `so-guard-8` | verifier 는 43~128글자의 unreserved 문자 | C | RFC 7636 §4.1 | 2026-09-08 |
+| `so-guard-9` | verifier 가 틀리면 코드가 멀쩡해도 `invalid_grant` | A | `out/oidc_token_badverifier.txt` | 2026-09-08 |
+| `so-guard-10` | PKCE 를 모든 클라이언트에 권고한다 | C | OAuth 2.1 초안 §4.1.1 · RFC 9700 §2.1.1 | 2026-09-08 |
+| `so-token-3` | 액세스 토큰의 `typ` 은 `at+jwt` | C | RFC 9068 §2.1 | 2026-09-08 |
+| `so-token-4` | `Authorization: Bearer <토큰>` 으로 보낸다 | C | RFC 6750 §2.1 | 2026-09-08 |
+| `so-token-6` | 401 에는 `WWW-Authenticate: Bearer` 를 붙인다 | C | RFC 6750 §3 | 2026-09-08 |
+| `so-token-8` | 리프레시 토큰 회전 — 재사용은 탈취 신호로 다룬다 | C | RFC 9700 §4.14 | 2026-09-08 |
+| `so-jwt-1` | `머리.내용.서명` 은 JWS Compact Serialization | C | RFC 7515 §3.1 | 2026-09-08 |
+| `so-jwt-5` | `iss·sub·aud·exp·nbf·iat·jti` 는 등록된 클레임 | C | RFC 7519 §4.1 | 2026-09-08 |
+| `so-jwt-5` | 시각 클레임은 1970년부터 센 초(NumericDate) | C | RFC 7519 §2 | 2026-09-08 |
+| `so-jwt-8` | RS256 = RSASSA-PKCS1-v1_5 + SHA-256 | C | RFC 7518 §3.3 | 2026-09-08 |
+| `so-jwt-11` | 내용을 고치면 서명이 어긋난다 (실제 출력) | A | `out/oidc_verify_tampered.txt` | 2026-09-08 |
+| `so-jwt-13` | `alg=none` 과 알고리즘 혼동(RS256→HS256)은 알려진 공격이다 | C | RFC 8725 §2.1·§2.2·§3.1 | 2026-09-08 |
+| `so-jwt-14` | 서명 확인만으로 부족하고 `iss`·`aud`·`exp` 를 함께 본다 | C | RFC 8725 §3.8·§3.9 · OIDC Core §3.1.3.7 | 2026-09-08 |
+| `so-jwks-2` | JWKS 의 RSA 공개키는 `n`·`e` 로 이뤄진다 (`AQAB` = 65537) | A·C | `out/oidc_certs_short.txt` · RFC 7518 §6.3.1 | 2026-09-08 |
+| `so-jwks-4` | `kid` 로 열쇠를 고른다 (키 회전) | C | RFC 7517 §4.5 | 2026-09-08 |
+| `so-jwks-5` | 안내문 경로는 `/.well-known/openid-configuration` | C | OIDC Discovery 1.0 §4 · RFC 8615 | 2026-09-08 |
+| `so-jwks-7` | 안내문의 `issuer` 가 부른 주소와 같아야 한다 | C | OIDC Discovery 1.0 §4.3 | 2026-09-08 |
+| `so-out-5` | 로그아웃에 `id_token_hint` 를 보낸다 | C | OIDC RP-Initiated Logout 1.0 §2 | 2026-09-08 |
+| `so-out-7` | 로그아웃 귀환 주소는 별도 목록으로 등록한다 | A·C | `out/oidc_app_logout.txt` · OIDC RP-Initiated Logout §2 | 2026-09-08 |
+| `so-jwt-quiz` | 토큰 내용을 감추려면 서명이 아니라 암호화(JWE)가 필요하다 | C | RFC 7516 §1 | 2026-09-08 |
+| `so-out-9` | 이미 나간 JWT 는 회수할 수 없다 — 짧은 수명 · introspection · 취소 목록 | C | RFC 7662 §1 · RFC 9700 §2.2.2 | 2026-09-08 |
+
+- RFC 6749 (OAuth 2.0) — https://www.rfc-editor.org/rfc/rfc6749 · 확인 2026-09-08
+- RFC 6750 (Bearer Token Usage) — https://www.rfc-editor.org/rfc/rfc6750 · 확인 2026-09-08
+- RFC 7515 (JWS) — https://www.rfc-editor.org/rfc/rfc7515 · 확인 2026-09-08
+- RFC 7516 (JWE) — https://www.rfc-editor.org/rfc/rfc7516 · 확인 2026-09-08
+- RFC 7517 (JWK) — https://www.rfc-editor.org/rfc/rfc7517 · 확인 2026-09-08
+- RFC 7518 (JWA) — https://www.rfc-editor.org/rfc/rfc7518 · 확인 2026-09-08
+- RFC 7519 (JWT) — https://www.rfc-editor.org/rfc/rfc7519 · 확인 2026-09-08
+- RFC 7662 (Token Introspection) — https://www.rfc-editor.org/rfc/rfc7662 · 확인 2026-09-08
+- RFC 7636 (PKCE) — https://www.rfc-editor.org/rfc/rfc7636 · 확인 2026-09-08
+- RFC 8615 (Well-Known URIs) — https://www.rfc-editor.org/rfc/rfc8615 · 확인 2026-09-08
+- RFC 8725 (JWT Best Current Practices) — https://www.rfc-editor.org/rfc/rfc8725 · 확인 2026-09-08
+- RFC 9068 (JWT Profile for OAuth 2.0 Access Tokens) — https://www.rfc-editor.org/rfc/rfc9068 · 확인 2026-09-08
+- RFC 9700 (OAuth 2.0 Security Best Current Practice) — https://www.rfc-editor.org/rfc/rfc9700 · 확인 2026-09-08
+- OAuth 2.1 초안 — https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1 · 확인 2026-09-08
+- OpenID Connect Core 1.0 — https://openid.net/specs/openid-connect-core-1_0.html · 확인 2026-09-08
+- OpenID Connect Discovery 1.0 — https://openid.net/specs/openid-connect-discovery-1_0.html · 확인 2026-09-08
+- OpenID Connect RP-Initiated Logout 1.0 — https://openid.net/specs/openid-connect-rpinitiated-1_0.html · 확인 2026-09-08
+
 ## 앞으로 채울 곳
 
 부가 하나씩 들어올 때마다 그 부의 절을 여기에 연다.
 지금은 비어 있는 것이 정상이다 — 뼈대 커밋에는 주장이 거의 없다.
 
 - [ ] 2부 쿠버네티스 — 오브젝트 필드 기본값
-- [ ] 4부 OAuth2·OIDC — RFC 6749/6750/7636/7519/7517/8414, OIDC Core·Discovery·Logout
 - [ ] 5부 Keycloak — 관리자 가이드 (버전 박힌 URL)
 - [ ] 6부 k8s 배포 — Keycloak 서버 가이드 `all-config`
 - [ ] 7부 AD 연동 — LDAP user federation 문서 + Microsoft Learn
