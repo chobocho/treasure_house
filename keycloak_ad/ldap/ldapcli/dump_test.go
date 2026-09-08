@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"treasure/keycloak_ad/ldap/ber"
+	"treasure/keycloak_ad/ldap/client"
 	"treasure/keycloak_ad/ldap/proto"
 )
 
@@ -117,8 +118,8 @@ func TestDescribeResult(t *testing.T) {
 }
 
 // AD 의 진단 문구는 한 줄이 120칸을 넘는다. 그대로 찍으면 좁은 화면에서
-// 옆으로 밀려 읽을 수 없다. 값을 고치는 것이 아니라 **우리 도구가 어떻게
-// 보여 줄지**를 정하는 일이므로, 접어서 낸다.
+// 옆으로 밀려 읽을 수 없다. 값을 고치는 것이 아니라 **우리 도구가
+// 어떻게 보여 줄지**를 정하는 일이므로, 접어서 낸다.
 func TestDescribeWrapsLongDiagnostic(t *testing.T) {
 	long := "80090308: LdapErr: DSID-0C09042F, comment: " +
 		"AcceptSecurityContext error, data 52e, v4563 (비밀번호가 틀렸다)"
@@ -135,6 +136,27 @@ func TestDescribeWrapsLongDiagnostic(t *testing.T) {
 	for _, want := range strings.Fields(long) {
 		if !strings.Contains(flat, want) {
 			t.Errorf("접는 과정에서 %q 를 잃었다", want)
+		}
+	}
+}
+
+// 바인드 실패를 사람에게 보여 줄 때도 한 줄이 화면을 넘으면 안 된다.
+// AD 의 진단 문구가 통째로 들어오기 때문이다.
+func TestExplainBindWraps(t *testing.T) {
+	diag := "80090308: LdapErr: DSID-0C09042F, comment: " +
+		"AcceptSecurityContext error, data 52e, v4563 (비밀번호가 틀렸다)"
+	err := &client.BindError{
+		Code: proto.ResultInvalidCredentials, Diag: diag}
+	got := explainBind(err)
+	for _, line := range strings.Split(got, "\n") {
+		if cells(line) > 72 {
+			t.Errorf("%d칸짜리 줄: %q", cells(line), line)
+		}
+	}
+	for _, want := range []string{"invalidCredentials", "data 52e",
+		"계정은 있다"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%q 가 없다:\n%s", want, got)
 		}
 	}
 }

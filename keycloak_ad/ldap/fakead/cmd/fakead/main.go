@@ -7,7 +7,7 @@
 // Keycloak 은 이것을 진짜 AD 로 알고 붙는다. 덕분에 이 덱의 거의 모든
 // 화면이 문서 인용이 아니라 실행 기록이 될 수 있었다.
 //
-//	go run ./ldap/fakead -addr :10389 -ldaps :10636
+//	go run ./ldap/fakead/cmd/fakead -addr :10389 -ldaps :10636
 //	go run ./ldap/ldapcli -h localhost:10389 \
 //	    search '(sAMAccountName=minji)'
 //
@@ -20,6 +20,8 @@ import (
 	"io"
 	"log"
 	"os"
+
+	"treasure/keycloak_ad/ldap/fakead"
 )
 
 func main() {
@@ -32,7 +34,7 @@ func main() {
 	logPath := flag.String("log", "", "로그 파일 (빈 값이면 표준 출력)")
 	flag.Parse()
 
-	d, err := LoadLDIFFile(*dir)
+	d, err := fakead.LoadLDIFFile(*dir)
 	if err != nil {
 		log.Fatalf("LDIF: %v", err)
 	}
@@ -47,7 +49,7 @@ func main() {
 		out = f
 	}
 
-	srv := NewServer(d, out)
+	srv := fakead.NewServer(d, out)
 	if *addr != "" {
 		if err := srv.ListenPlain(*addr); err != nil {
 			log.Fatalf("평문 %s: %v", *addr, err)
@@ -63,7 +65,7 @@ func main() {
 	if *addr == "" && *ldaps == "" {
 		log.Fatal("-addr 나 -ldaps 중 하나는 있어야 한다")
 	}
-	log.Printf("항목 %d개 · %s", len(d.entries), *dir)
+	log.Printf("항목 %d개 · %s", d.Count(), *dir)
 
 	// 끝나지 않는다. Ctrl+C 로 끊는다.
 	select {}
