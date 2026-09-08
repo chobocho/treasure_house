@@ -24,6 +24,7 @@ import io
 import os
 import re
 import sys
+import unicodedata
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))    # keycloak_ad
 DECK = os.path.join(BASE, 'deck')
@@ -41,11 +42,19 @@ LANG_OF = {'.go': 'go', '.yaml': 'yaml', '.yml': 'yaml', '.json': 'json',
 # 칸 수는 가로 스크롤이 생기지 않는 폭이다. 둘 다 실제로 재서 정한 값이다.
 MAX_PRE_LINES = 45
 MAX_PRE_COLS = 72
+# 진짜로 돌려서 받은 출력(<pre class="term">)은 우리가 다시 접을 수 없다.
+# curl 의 Set-Cookie 한 줄이 106칸인 것은 curl 사정이지 우리 사정이 아니고,
+# 그 줄을 잘라 내거나 고쳐 실으면 "출력은 진짜다" 라는 약속이 깨진다.
+# 그래서 캡처만 상한을 늘리고(블록 안에서 가로로 스크롤된다), 그보다 긴 줄은
+# 인용 범위에서 빼도록 여전히 오류로 잡는다.
+MAX_TERM_COLS = 108
 MAX_LI = 14
 
-# 박스 그리기 문자는 쓰지 않는다 — 폰·태블릿에서 글꼴이 갈리면 표가 무너진다.
-# (DeckMono 를 실어도 <pre> 밖의 산문에는 적용되지 않는 자리가 있다.)
-BOXDRAW = re.compile(r'[─-╿▀-▟]')
+# 박스 그리기 문자는 <pre> 밖에서 쓰지 않는다. 내장 글꼴(DeckMono)은 고정폭
+# 요소에만 걸리므로, 산문에 그린 표는 보는 기기의 글꼴에 따라 무너진다.
+# <pre> 안(코드 주석의 ── 구분선 같은 것)은 DeckMono 가 반각으로 그려 안전하다.
+BOXDRAW = re.compile(r'[\u2500-\u257f\u2580-\u259f]')
+PRE_RE = re.compile(r'<pre[^>]*>.*?</pre>', re.S)
 
 covered = {}
 errors = []
@@ -140,7 +149,9 @@ def cut(path, spec):
     if b > len(lines):
         errors.append('%s: %s 는 파일 끝(%d줄)을 넘는다' % (path, spec, len(lines)))
         b = len(lines)
-    covered.setdefault(path, set()).update(range(a, b + 1))
+    cov = covered.setdefault(path, {})
+    for i in range(a, b + 1):
+        cov[i] = cov.get(i, 0) + 1
     return '\n'.join(lines[a - 1:b])
 
 
@@ -344,6 +355,53 @@ COVER_FILES = ['Makefile', 'go.mod']
 PARTIAL = re.compile(r'_test\.go$|/check_\w+\.sh$|^tools/|^deck/|^bin/|^kc/|^out/')
 
 
+def budget():
+    """부마다 목표한 장수 (PLAN.md §7). 없으면 빈 표."""
+    p = os.path.join(DECK, 'budget.txt')
+    if not os.path.exists(p):
+        return {}
+    out = {}
+    for line in read(p).split('\n'):
+        line = line.split('#')[0].strip()
+        if not line:
+            continue
+        part, n = line.split()
+        out[int(part)] = int(n)
+    return out
+
+
+HARD_CAP = 1000       # 사용자가 못 박은 상한. 넘기면 조립을 실패시킨다.
+
+
+def budget_report(body):
+    """조각 파일 이름의 앞 두 자리를 부 번호로 보고 장수를 센다.
+
+    왜 세는가: 한 부를 쓰는 동안에는 그 부만 보이고 전체가 안 보인다.
+    1부가 목표보다 24장 많다는 사실을 12부에서 알면 이미 늦다.
+    """
+    counts = {}
+    for chunk in body.split('<!-- ===== '):
+        name = chunk.split(' =====')[0]
+        if not name[:2].isdigit():
+            continue
+        counts[int(name[:2])] = chunk.count('<article')
+    return counts
+
+
+def pending_files():
+    """아직 그 부(部)를 안 써서 인용되지 않은 파일들.
+
+    비어 있는 것이 목표다. 부가 하나씩 들어올 때마다 여기서 한 줄씩 지운다.
+    이 명단이 없으면 아직 안 쓴 부의 소스가 통째로 '빠진 줄' 오류가 되어
+    빌드가 늘 빨간불이고, 그러면 진짜 오류를 아무도 안 보게 된다.
+    """
+    p = os.path.join(DECK, 'pending.txt')
+    if not os.path.exists(p):
+        return set()
+    return set(l.split('#')[0].strip() for l in read(p).split('\n')
+               if l.split('#')[0].strip())
+
+
 def cover_files():
     out = list(COVER_FILES)
     for d, exts in COVER_DIRS:
@@ -358,55 +416,92 @@ def cover_files():
 
 
 def coverage_report():
+    """파일마다 (빠진 줄, 두 번 이상 실린 줄) 을 센다.
+
+    빠진 줄은 오류다 — "이 저장소의 모든 줄이 덱에 있다" 는 약속이 깨진다.
+    두 번 실린 줄은 오류가 아니라 알림이다. 가르치는 글에서는 같은 함수를
+    맥락에서 한 번, 전문에서 한 번 보여 주는 편이 낫다. 다만 의도한 것인지
+    사람이 볼 수 있어야 하므로 개수를 남긴다.
+    """
     files = sorted(set(covered) | set(cover_files()))
     rows, have_t, all_t = [], 0, 0
     for f in files:
         if not os.path.exists(os.path.join(BASE, f)):
             continue
         n = len(src_lines(f))
-        got = covered.get(f, set()) & set(range(1, n + 1))
+        cov = covered.get(f, {})
+        got = [i for i in range(1, n + 1) if cov.get(i)]
+        dup = [i for i in range(1, n + 1) if cov.get(i, 0) > 1]
         partial = bool(PARTIAL.search(f))
         if not partial:
             have_t += len(got)
             all_t += n
-        rows.append((f, len(got), n, sorted(set(range(1, n + 1)) - got), partial))
+        missing = [i for i in range(1, n + 1) if not cov.get(i)]
+        rows.append((f, len(got), n, missing, partial, dup))
     return rows, have_t, all_t
+
+
+def cells(s):
+    """화면 칸 수. 한글·CJK 는 두 칸이다.
+
+    글자 수로 세면 안 된다 — 한글 주석 40글자는 80칸이라 폴더블 접힘에서
+    가로 스크롤이 생긴다. 고정폭 글꼴의 '한글 = 반각 두 배' 계약이 곧 이 계산이다.
+    """
+    n = 0
+    for ch in s:
+        n += 2 if unicodedata.east_asian_width(ch) in ('W', 'F') else 1
+    return n
 
 
 def overflow_check(doc):
     """폴더블에서 잘리는 화면을 조립 때 잡는다. 사람 눈보다 자가 정확하다."""
     for m in ART_RE.finditer(doc):
         aid, inner = m.group(2), m.group(4)
-        for pm in re.finditer(r'<pre[^>]*>(.*?)</pre>', inner, re.S):
-            body = html.unescape(re.sub(r'<[^>]+>', '', pm.group(1)))
+        for pm in re.finditer(r'<pre([^>]*)>(.*?)</pre>', inner, re.S):
+            term = 'class="term"' in pm.group(1)
+            body = html.unescape(re.sub(r'<[^>]+>', '', pm.group(2)))
             rows = body.split('\n')
             if len(rows) > MAX_PRE_LINES:
-                errors.append('%s: <pre> 가 %d줄 (최대 %d)' % (aid, len(rows), MAX_PRE_LINES))
-            wide = max((len(r) for r in rows), default=0)
-            if wide > MAX_PRE_COLS:
-                errors.append('%s: <pre> 가 %d칸 (최대 %d)' % (aid, wide, MAX_PRE_COLS))
+                errors.append('%s: <pre> 가 %d줄 (최대 %d)'
+                              % (aid, len(rows), MAX_PRE_LINES))
+            limit = MAX_TERM_COLS if term else MAX_PRE_COLS
+            wide = max((cells(r.expandtabs(4)) for r in rows), default=0)
+            if wide > limit:
+                errors.append('%s: %s 가 %d칸 (최대 %d)'
+                              % (aid, '캡처' if term else '<pre>', wide, limit))
         li = inner.count('<li>')
         if li > MAX_LI:
             errors.append('%s: <li> 가 %d개 (최대 %d)' % (aid, li, MAX_LI))
-        box = BOXDRAW.search(re.sub(r'<[^>]+>', '', inner))
+        # 박스 그리기는 <pre> 밖에서만 잡는다 (위 BOXDRAW 주석 참고)
+        prose = re.sub(r'<[^>]+>', '', PRE_RE.sub('', inner))
+        box = BOXDRAW.search(prose)
         if box:
-            errors.append('%s: 박스 그리기 문자 %r — 표는 <table> 로' % (aid, box.group()))
+            errors.append('%s: 산문에 박스 그리기 문자 %r — 표는 <table> 로'
+                          % (aid, box.group()))
 
 
 def tier_report(doc):
-    """근거 등급이 빠진 화면과 C 등급 비율을 센다 (§2.2 계약)."""
-    total = c = none = 0
+    """근거 등급이 빠진 화면과 C 등급 비율을 센다 (§2.2 계약).
+
+    등급은 넷이다. a 돌려 봤다 · b 도구로 문법만 봤다 · c 문서에서 읽었다 ·
+    ill 설명하려고 그린 조각(돌아가는 코드가 아니다). 배지가 아예 없는 화면은
+    "확인했는지 안 했는지 모르겠다" 는 뜻이라, 그 자체가 결함이다.
+    """
+    total = c = none = ill = 0
     for m in ART_RE.finditer(doc):
-        inner = m.group(4)
+        aid, inner = m.group(2), m.group(4)
         if '<pre' not in inner:
             continue
         total += 1
-        t = re.search(r'<span class="tier (a|b|c)\b', inner)
+        t = re.search(r'<span class="tier (a|b|c|ill)\b', inner)
         if not t:
             none += 1
+            errors.append('%s: 코드·출력이 있는데 근거 등급 배지가 없다' % aid)
         elif t.group(1) == 'c':
             c += 1
-    return total, c, none
+        elif t.group(1) == 'ill':
+            ill += 1
+    return total, c, none, ill
 
 
 def main():
@@ -447,18 +542,60 @@ def main():
     print('슬라이드 %d장 · 고유 id %d개 · %.0f KB → %s'
           % (n_slides, len(seen), os.path.getsize(TARGET) / 1024,
              os.path.basename(TARGET)))
-    tot, tc, tnone = tier_report(doc)
+
+    want = budget()
+    got = budget_report(body)
+    if want:
+        done = sorted(got)
+        line = ' · '.join('%d부 %d/%d' % (k, got[k], want.get(k, 0))
+                          for k in done if got[k] > 1)
+        left = sum(v for k, v in want.items() if k not in got or got[k] <= 1)
+        print('장수 예산: %s' % (line or '(아직 없음)'))
+        print('  쓴 것 %d장 · 남은 부 목표 합 %d장 · 예상 합계 %d장 (상한 %d)'
+              % (n_slides, left, n_slides + left, HARD_CAP))
+        for k in done:
+            if got[k] > 1 and got[k] > want.get(k, 0):
+                warns.append('%d부가 목표보다 %d장 많다 (%d/%d)'
+                             % (k, got[k] - want.get(k, 0), got[k], want.get(k, 0)))
+    if n_slides > HARD_CAP:
+        errors.append('슬라이드 %d장 — 상한 %d장을 넘었다' % (n_slides, HARD_CAP))
+    tot, tc, tnone, till = tier_report(doc)
     if tot:
-        print('근거 등급: 코드·출력이 있는 %d장 중 C등급 %d장 (%.0f%%) · 배지 없음 %d장'
-              % (tot, tc, 100.0 * tc / tot, tnone))
+        # C 등급 비율은 '검증할 수 있었던 것' 중에서 센다 — 설명용 그림은
+        # 애초에 검증 대상이 아니므로 분모에서 뺀다.
+        base = max(1, tot - till)
+        print('근거 등급: 코드·출력 %d장 (설명용 %d장 제외 %d장 중 '
+              'C등급 %d장 = %.0f%%) · 배지 없음 %d장'
+              % (tot, till, base, tc, 100.0 * tc / base, tnone))
+        if 100.0 * tc / base > 10.0:
+            warns.append('C등급이 %.0f%% — §2.2 는 10%% 아래로 두라고 했다'
+                         % (100.0 * tc / base))
 
     rows, have, all_ = coverage_report()
     print('소스 커버리지 %d/%d줄 (%.1f%%)' % (have, all_, 100.0 * have / max(1, all_)))
-    for f, h, n, missing, partial in rows:
+    dups = 0
+    pending = pending_files()
+    for f, h, n, missing, partial, dup in rows:
+        dups += len(dup)
+        if f in pending:
+            if h == n:
+                warns.append('%s 는 이제 다 실렸다 — deck/pending.txt 에서 뺄 것'
+                             % f)
+            continue
         if h != n and not partial:
+            errors.append('%s: 덱에 안 실린 줄 %d개 (%s%s)'
+                          % (f, len(missing),
+                             ','.join(str(x) for x in missing[:10]),
+                             ' …' if len(missing) > 10 else ''))
             print('  %-34s %5d/%-5d  빠진 줄: %s'
                   % (f, h, n, ','.join(str(x) for x in missing[:14])
                      + (' …' if len(missing) > 14 else '')))
+    if dups:
+        print('  (두 번 이상 실린 줄 %d개 — 맥락과 전문에 겹쳐 실은 것)' % dups)
+    if pending:
+        print('  (아직 그 부를 안 써서 인용 대기 중인 파일 %d개: %s)'
+              % (len(pending), ', '.join(sorted(pending)[:4])
+                 + (' …' if len(pending) > 4 else '')))
     for w in warns:
         print('  (경고) %s' % w)
     if errors:
