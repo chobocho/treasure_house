@@ -505,6 +505,49 @@ func TestSearchLogFoldsLongAttrList(t *testing.T) {
 	}
 }
 
+// 진짜 Keycloak 이 보내는 필터는 길다. 사용자를 찾을 때만 해도
+// objectClass 를 셋이나 겹쳐 묻고, 그룹을 뒤질 때는 DN 을 통째로 싣는다.
+// 실제로 128칸짜리 줄이 나왔다 — 접지 않으면 좁은 화면에서 잘린다.
+func TestSearchLogFoldsLongFilter(t *testing.T) {
+	d, err := LoadLDIFFile("../../data/campus.ldif")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf strings.Builder
+	srv := NewServer(d, &buf)
+	if err := srv.ListenPlain("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	k := dial(t, srv)
+	k.send(bindOp("CN=svc-keycloak,OU=Service Accounts,"+base,
+		"Passw0rd!-demo"))
+	k.recv()
+	// Keycloak 이 실제로 보낸 필터다 (out/kc_fakead.log 에서 옮겼다).
+	k.send(searchOp(base, proto.ScopeWholeSubtree,
+		"(&(sAMAccountName=minji)(objectclass=person)"+
+			"(objectclass=organizationalPerson)(objectclass=user))",
+		[]string{"cn"}, nil))
+	k.recv()
+	k.recv()
+	k.c.Close()
+	srv.Close()
+
+	log := buf.String()
+	for _, line := range strings.Split(log, "\n") {
+		if n := logCells(line); n > 108 {
+			t.Errorf("%d칸짜리 로그 줄: %s", n, line)
+		}
+	}
+	// 접혔어도 필터는 다 남아 있어야 한다.
+	for _, want := range []string{"sAMAccountName=minji",
+		"organizationalPerson"} {
+		if !strings.Contains(log, want) {
+			t.Errorf("%q 가 로그에서 사라졌다", want)
+		}
+	}
+}
+
 func logCells(s string) int {
 	n := 0
 	for _, r := range s {

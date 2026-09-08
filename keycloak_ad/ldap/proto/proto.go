@@ -472,8 +472,17 @@ func (f *Substrings) String() string {
 func escapeValue(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
-		switch c := s[i]; c {
-		case '*', '(', ')', '\\', 0x00:
+		c := s[i]
+		switch {
+		case c == '*' || c == '(' || c == ')' || c == '\\' || c == 0x00:
+			// §3 이 반드시 감싸라고 정한 다섯
+			fmt.Fprintf(&b, "\\%02x", c)
+		case c < 0x20 || c > 0x7e:
+			// 화면에 못 쓰는 바이트. 규격이 요구하지는 않지만
+			// 감싸도 된다(§3 의 valueencoding 은 어떤 바이트든
+			// \XX 로 적는 것을 허용한다). objectGUID 처럼 이진값을
+			// 필터에 싣는 일이 실제로 있기 때문에 감싼다 —
+			// 날것으로 적으면 로그도 화면도 깨진다.
 			fmt.Fprintf(&b, "\\%02x", c)
 		default:
 			b.WriteByte(c)

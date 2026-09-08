@@ -184,6 +184,34 @@ func (s *Server) logWrapped(head, body string) {
 	s.logf("%s%s", pad, body)
 }
 
+// logFilter 는 검색 필터를 접어 적는다.
+//
+// 그냥 폭에서 자르면 낱말이 두 동강 난다 — objectclass 하나가
+// 두 줄에 걸쳐 "organizational" 과 "Person" 이 되면 읽을 수 없다.
+// 필터는 조건이 )( 로 이어 붙는 나무이므로, 그 이음매에서 접는다.
+//
+// 진짜 Keycloak 이 보내는 필터가 이만큼 길다:
+//
+//	(&(sAMAccountName=minji)(objectclass=person)
+//	  (objectclass=organizationalPerson)(objectclass=user))
+func (s *Server) logFilter(head, filter string) {
+	parts := strings.Split(strings.ReplaceAll(filter, ")(", ")\x00("),
+		"\x00")
+	pad := head
+	line := "filter="
+	for _, p := range parts {
+		if line != "filter=" && len(line)+len(p) > logWidth {
+			s.logf("%s%s", pad, line)
+			pad = strings.Repeat(" ", len(head))
+			line = ""
+		}
+		line += p
+	}
+	if line != "" {
+		s.logf("%s%s", pad, line)
+	}
+}
+
 // logf 는 오간 것을 사람이 읽는 한 줄로 남긴다.
 //
 // 이 로그가 이 프로그램에서 가장 값진 산출물이다. 7부에서 "Keycloak 이
@@ -390,9 +418,8 @@ func (s *Server) handleSearch(sess *session, msg proto.Message) []byte {
 	// 좁은 화면에서 정작 봐야 할 필터가 오른쪽으로 밀려 안 보인다.
 	s.logf("[%d] #%d SEARCH base=%q scope=%s",
 		sess.id, msg.ID, sr.BaseDN, proto.ScopeName(sr.Scope))
-	s.logf("[%d] #%d        filter=%s", sess.id, msg.ID,
-		sr.Filter.String())
 	head := fmt.Sprintf("[%d] #%d        ", sess.id, msg.ID)
+	s.logFilter(head, sr.Filter.String())
 	s.logWrapped(head, fmt.Sprintf("attrs=%s → %d건 %s",
 		attrList(sr.Attrs), sent, proto.ResultName(code)))
 

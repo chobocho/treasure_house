@@ -48,10 +48,17 @@ trap stop_all EXIT INT TERM
 # 왜 굳이 확인하나: 지난번 캡처가 남긴 유령이 포트를 물고 있으면, 새 서버는
 # 조용히 죽고 curl 은 유령에게서 답을 받아 온다. 그러면 캡처는 '옛날 코드의
 # 출력' 인데 아무도 눈치채지 못한다. 실제로 한 번 그렇게 당했다.
+# HTTP 로 두드리면 안 된다. LDAP 서버는 HTTP 에 답하지 않으므로
+# "비어 있다" 로 보이고, 그러면 유령이 포트를 물고 있어도 지나간다.
+# 실제로 그렇게 당했다 — 이전 실행이 남긴 fakead 가 10389 를 잡고 있어서
+# 캡처가 조용히 **옛 프로세스의 출력**이 됐다.
+# 그래서 그냥 TCP 로 붙어 본다. 누가 듣고 있으면 붙는다.
 port_busy() {
-  curl -s -o /dev/null -k --max-time 1 "http://127.0.0.1:$1/" && return 0
-  curl -s -o /dev/null -k --max-time 1 "https://127.0.0.1:$1/" && return 0
-  return 1
+  python3 -c 'import socket,sys
+try:
+    socket.create_connection(("127.0.0.1", int(sys.argv[1])), 0.5).close()
+except OSError:
+    sys.exit(1)' "$1"
 }
 
 require_free() {
@@ -839,11 +846,73 @@ YEOF
 } >"$OUT/k8s_yaml_traps.txt" 2>&1
 rm -rf "$TRAP"
 
-# ── 9. 정리 ───────────────────────────────────────────────────────
-say '9. 매번 달라지는 값 고정 (tools/scrub.py)'
+# ── 9. 진짜 Keycloak (5·7부) ──────────────────────────────────────
+#
+# 여기서만 JVM 을 띄운다. 메모리가 모자라면 **띄우지 않고 그 사실을
+# 남긴다**(out/kc_unavailable.txt) — 억지로 띄우면 세션이 통째로 죽는다.
+# 그 경우 5·7부의 해당 화면은 문서 근거(tier C)로 내려간다. 지어내지 않는다.
+say '9. Keycloak 26.x (JVM — 메모리 게이트가 걸려 있다)'
+VER=$(cat keycloak/VERSION)
+if [ ! -x "kc/keycloak-$VER/bin/kc.sh" ]; then
+  echo "  Keycloak 이 없다 — sh keycloak/fetch.sh 를 먼저 돌릴 것" >&2
+  exit 1
+fi
+
+# 가짜 AD 를 먼저 띄운다. Keycloak 이 이것을 진짜 AD 로 알고 붙는다.
+start ldap/fakead/cmd/fakead "$OUT/kc_fakead.log" -addr ":$PL"
+wait_ldap $PL
+
+if sh keycloak/run_dev.sh >"$OUT/.kc_run.txt" 2>&1; then
+  sh keycloak/admin_api.sh >"$OUT/.kc_admin.txt" 2>&1
+  sh keycloak/e2e_login.sh >"$OUT/.kc_e2e.txt" 2>&1
+  {
+    echo '$ sh keycloak/run_dev.sh'
+    cat "$OUT/.kc_run.txt"
+    echo
+    echo '$ sh keycloak/admin_api.sh'
+    cat "$OUT/.kc_admin.txt"
+  } >"$OUT/kc_setup.txt"
+  # 서버가 뜰 때 찍은 것 중 앞부분만. 뒤는 요청 로그라 매번 다르다.
+  head -12 "$OUT/kc_server.log" >"$OUT/kc_boot.txt"
+  sh keycloak/stop.sh >/dev/null 2>&1
+
+  # 여기 캡처 중 일부는 두 번 떠도 같지 않다. 그 사실을 적어 둔다.
+  {
+    echo '이 덱의 캡처는 두 번 떠서 md5 가 같아야 실린다.'
+    echo '진짜 Keycloak 을 상대한 것 중 아래는 그럴 수 없다:'
+    echo
+    echo '  kc_e2e_03 ~ kc_e2e_10   토큰이 실린 것들'
+    echo '  kc_admin_token.txt      관리자 토큰'
+    echo '  kc_boot.txt             뜨는 데 걸린 시간'
+    echo
+    echo '까닭: Keycloak 은 realm 을 새로 세울 때마다 **서명 열쇠를'
+    echo '새로 만든다**. 그러면 kid 가 바뀌고, 서명이 바뀌고,'
+    echo '토큰 전체가 달라진다. 우리 miniidp 는 열쇠를 파일에 두고'
+    echo '시계를 못 박을 수 있었지만(4부 9장), 남의 제품에는 그럴'
+    echo '자리가 없다. 억지로 고정하려 들면 그때부터 캡처가 거짓이 된다.'
+    echo
+    echo '반대로 아래는 두 번 떠도 같다 — 이 부의 요점이 거기 있다:'
+    echo
+    echo '  kc_fakead.log           Keycloak 이 AD 에 보낸 질의'
+    echo '  kc_admin_realm.txt      realm 설정'
+    echo '  kc_admin_ldap.txt       AD 연동 설정'
+    echo '  kc_admin_sync.txt       사용자 동기화 결과'
+    echo '  kc_admin_users.txt      AD 에서 온 사람들'
+    echo '  kc_admin_user_minji.txt 한 사람의 상세'
+    echo '  kc_e2e_01_discovery.txt 안내문'
+    echo '  kc_e2e_02_authorize_url.txt  인가 요청 주소'
+  } >"$OUT/kc_reproducible.txt"
+  rm -f "$OUT/.kc_run.txt" "$OUT/.kc_admin.txt" "$OUT/.kc_e2e.txt"
+else
+  echo '  Keycloak 을 못 띄웠다 — out/kc_unavailable.txt 를 볼 것' >&2
+fi
+stop_all
+
+# ── 10. 정리 ──────────────────────────────────────────────────────
+say '10. 매번 달라지는 값 고정 (tools/scrub.py)'
 python3 tools/scrub.py "$OUT"/web*.txt "$OUT"/tool_*.txt \
   "$OUT"/ad_*.txt "$OUT"/ad_fakead.log "$OUT"/oidc_*.txt "$OUT"/oidc_*.log \
-  "$OUT"/k8s_*.txt
+  "$OUT"/k8s_*.txt "$OUT"/kc_*.txt "$OUT"/kc_fakead.log
 
 echo '캡처 완료 — out/ 아래'
 ls -1 "$OUT" | sed 's/^/  /'

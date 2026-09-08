@@ -389,6 +389,40 @@ analogies in §5.9) and hands it in the prompt.
 
 ## Progress log (newest first)
 
+### [2026-09-08 16:40] 6단계(1/3) 진짜 Keycloak — 받고·띄우고·realm 을 세우고
+
+- **판:** Keycloak **26.7.3** (2026-08-31 GA). `keycloak/VERSION` 한 줄에만 적혀 있다.
+  sha256 `27a6535553c3cdcd083872ba40629efafb3475e3b758e0c6f691395561dd0f1f`.
+- **개발:** `keycloak/{VERSION,fetch.sh,run_dev.sh,stop.sh,export_realm.sh,`
+  `admin_api.sh,e2e_login.sh}` · `keycloak/json/*.json` 6개 ·
+  `keycloak/realm-campus.json`(내보낸 것, 3,019줄) · `tools/record.sh` 9절
+- **이 단계가 증명한 것:** 진짜 Keycloak 이 **3부의 가짜 AD 에 LDAP 으로 붙어**
+  사용자 7명과 그룹 3개를 가져오고, **4부의 jwtool 이 그 토큰을 손 하나 안 대고
+  검증한다**. 내보낸 realm 파일 하나로 빈 데이터베이스에 realm 이 다시 서고
+  로그인이 통과한다(`Realm 'campus' imported`).
+- **찾아 고친 것 넷:**
+  1. `require_free` 가 HTTP 로만 두드려 **LDAP 유령을 못 잡았다**. 이전 실행이
+     남긴 fakead 가 10389 를 물고 있어 캡처가 옛 프로세스의 출력이 됐다.
+     TCP 로 붙어 보도록 바꿨다.
+  2. Keycloak 은 `objectGUID` 를 **16바이트 이진값 그대로** 필터에 싣는다.
+     우리 로그가 날바이트를 찍어 덱에 실을 수 없었다 — RFC 4515 §3 대로
+     `\XX` 로 감싸게 했다(RED→GREEN).
+  3. 그 필터가 128칸이 됐다. `)(` 이음매에서 접도록 `logFilter` 를 더했다
+     (하드 컷은 `organizationalPerson` 을 두 동강 냈다 — 시험이 잡았다).
+  4. AD 를 고르면 Keycloak 이 매퍼를 **알아서** 만든다. 내가 만든 것들은
+     중복이었다. 그룹 매퍼 하나만 남기고, 대신 **이름이 뒤집히는 문제**를
+     고쳤다 — 기본 `full name` 매퍼가 `cn`("Kim Minji")을 "이름 성" 으로
+     갈라 "Kim Kim" 이 됐다. 그 매퍼를 빼고 `givenName` 매퍼를 뒀다.
+- **재현성(중요):** `kc_*` 캡처 12개는 **두 번 떠도 같지 않다**. Keycloak 이
+  realm 을 새로 세울 때마다 서명 열쇠를 새로 만들기 때문이다. 그 사실과
+  까닭을 `out/kc_reproducible.txt` 에 캡처로 남겼다. 나머지 121개는 3회 동일.
+  가장 값진 캡처(가짜 AD 로그·realm 설정·동기화 결과)는 안정적이다.
+- **§2.1 이탈(기록):** `keycloak/realm-campus.json` 을 커버리지에서 뺐다(PARTIAL).
+  사람이 쓴 소스가 아니라 뽑아낸 3,000줄이라 전문을 실으면 덱이 JSON 낭독이 된다.
+  우리가 정한 칸은 `keycloak/json/*.json` 에 있고 그쪽은 전문이 실린다.
+- **다음:** 6단계 2/3 = 5부 본문(`05_keycloak.html`, 목표 65장),
+  3/3 = 7부 전반(`07_ad_federation.html`).
+
 ### [2026-09-08 17:10] 4단계 2부 본문 — 71장 + 매니페스트 (누적 587장)
 
 - **기획:** 9개 장 — 프로세스에서 컨테이너까지 · Pod · Deployment · Service ·

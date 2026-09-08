@@ -1,3 +1,10 @@
+### [2026-09-08 16:40] Keycloak×AD 덱 6단계(1/3) — 진짜 Keycloak 26.7.3 연동
+- **기획:** PLAN §8 6단계의 앞부분. 배포판을 받아 띄우고, 관리 REST API 로 realm·클라이언트·AD 연동을 세우고, 로그인 전 과정을 curl 로 훑어 캡처한다. 본문은 다음 두 커밋.
+- **TC:** 새 Go 코드 2건 RED→GREEN — 이진 필터를 RFC 4515 `\XX` 로 감싸기(proto), 긴 필터를 `)(` 에서 접기(fakead). 나머지는 실물 실행이 관문이다.
+- **개발:** keycloak/ 스크립트 7개 · keycloak/json 6개 · realm-campus.json(내보낸 것) · tools/record.sh 9절 · ldap/proto/proto.go · ldap/fakead/server.go 외 2개 파일
+- **검증:** 진짜 Keycloak 이 가짜 AD 에서 사용자 7명·그룹 3개를 가져오고, 4부의 jwtool 이 그 토큰을 그대로 검증했다. 빈 DB 에 realm 재수립 후 로그인 통과. test 14패키지 · 캡처 121개 3회 md5 동일
+- **비고:** kc_* 캡처 12개는 재현 불가 — Keycloak 이 realm 마다 서명 열쇠를 새로 만든다. 그 사실을 캡처로 남겼다. require_free 가 HTTP 로만 두드려 LDAP 유령을 못 잡던 것을 TCP 검사로 고쳤다.
+
 ### [2026-09-08 17:10] Keycloak×AD 덱 2부 본문 — 쿠버네티스 71장
 - **기획:** PLAN §8 4단계. 9개 장(컨테이너·Pod·Deployment·Service·Ingress·설정과 비밀·Kustomize·검사·마무리), 퀴즈 6, 데모 2. 클러스터가 없으므로 "띄우는" 대신 "읽고 검증하는" 것으로 배운다.
 - **TC:** miniapp 의 pickSecret 만 새 코드라 RED→GREEN 3건(환경 변수 우선·깃발 대체·둘 다 없으면 거절). 매니페스트는 kubeconform -strict 가 관문이다.

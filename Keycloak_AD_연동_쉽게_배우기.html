@@ -6401,7 +6401,7 @@ func (f *Substrings) String() string {
 func escapeValue(s string) string {
 	var b strings.Builder
 	for i := 0; i &lt; len(s); i++ {
-		switch c := s[i]; c {</code></pre>
+		c := s[i]</code></pre>
 <span class="tier a">실행 검증</span>
 <div class="warn"><b>값 안의 <code>( ) * \</code> 는 반드시 감싼다</b> —
 사용자가 친 아이디를 필터에 그대로 넣으면,
@@ -6413,7 +6413,16 @@ RFC 4515 §3 이 정한 대로 <code>\2a</code> · <code>\28</code> · <code>\29
 <article class="card" id="ad-srch-7">
 <h3>필터를 바이트로</h3>
 <div class="src"><b>ldap/proto/proto.go</b><span class="ln">476–505</span><span>필터의 [n] 번호와 EncodeFilter 앞부분</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="476-505">		case '*', '(', ')', '\\', 0x00:
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="476-505">		switch {
+		case c == '*' || c == '(' || c == ')' || c == '\\' || c == 0x00:
+			// §3 이 반드시 감싸라고 정한 다섯
+			fmt.Fprintf(&amp;b, "\\%02x", c)
+		case c &lt; 0x20 || c &gt; 0x7e:
+			// 화면에 못 쓰는 바이트. 규격이 요구하지는 않지만
+			// 감싸도 된다(§3 의 valueencoding 은 어떤 바이트든
+			// \XX 로 적는 것을 허용한다). objectGUID 처럼 이진값을
+			// 필터에 싣는 일이 실제로 있기 때문에 감싼다 —
+			// 날것으로 적으면 로그도 화면도 깨진다.
 			fmt.Fprintf(&amp;b, "\\%02x", c)
 		default:
 			b.WriteByte(c)
@@ -6433,16 +6442,7 @@ const (
 	filterSubstrings      = 4
 	filterGreaterOrEqual  = 5
 	filterLessOrEqual     = 6
-	filterPresent         = 7
-	filterApproxMatch     = 8
-	filterExtensibleMatch = 9
-)
-
-func attrValue(attr, value string) []byte {
-	return concat([][]byte{ber.Str(attr), ber.Str(value)})
-}
-
-func EncodeFilter(f Filter) []byte {</code></pre>
+	filterPresent         = 7</code></pre>
 <span class="tier a">실행 검증</span>
 <div class="key"><b><code>present</code> 만 원시형이다</b> —
 다른 필터는 안에 TLV 가 들어가는 묶음인데, <code>(mail=*)</code> 은
@@ -6453,7 +6453,16 @@ func EncodeFilter(f Filter) []byte {</code></pre>
 <article class="card" id="ad-srch-7b">
 <h3>필터 종류마다 다른 부호화</h3>
 <div class="src"><b>ldap/proto/proto.go</b><span class="ln">506–535</span><span>EncodeFilter 나머지</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="506-535">	switch v := f.(type) {
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="506-535">	filterApproxMatch     = 8
+	filterExtensibleMatch = 9
+)
+
+func attrValue(attr, value string) []byte {
+	return concat([][]byte{ber.Str(attr), ber.Str(value)})
+}
+
+func EncodeFilter(f Filter) []byte {
+	switch v := f.(type) {
 	case *And:
 		return ber.Encode(ber.Tag(ber.Context, true, filterAnd),
 			encodeSubs(v.Subs))
@@ -6473,8 +6482,9 @@ func EncodeFilter(f Filter) []byte {</code></pre>
 			attrValue(v.Attr, v.Value))
 	case *LessOrEqual:
 		return ber.Encode(ber.Tag(ber.Context, true, filterLessOrEqual),
-			attrValue(v.Attr, v.Value))
-	case *Approx:
+			attrValue(v.Attr, v.Value))</code></pre>
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">536–557</span><span>부분 문자열의 조각들</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="536-557">	case *Approx:
 		return ber.Encode(ber.Tag(ber.Context, true, filterApproxMatch),
 			attrValue(v.Attr, v.Value))
 	case *Present:
@@ -6482,9 +6492,8 @@ func EncodeFilter(f Filter) []byte {</code></pre>
 		return ber.Encode(ber.Tag(ber.Context, false, filterPresent),
 			[]byte(v.Attr))
 	case *Substrings:
-		return ber.Encode(ber.Tag(ber.Context, true, filterSubstrings),</code></pre>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">536–557</span><span>부분 문자열의 조각들</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="536-557">			concat([][]byte{ber.Str(v.Attr), encodeSubstrings(v)}))
+		return ber.Encode(ber.Tag(ber.Context, true, filterSubstrings),
+			concat([][]byte{ber.Str(v.Attr), encodeSubstrings(v)}))
 	}
 	panic(fmt.Sprintf("모르는 필터 %T", f))
 }
@@ -6496,16 +6505,7 @@ func encodeSubs(subs []Filter) []byte {
 	}
 	return out
 }
-
-// 부분 문자열의 조각도 [0] initial · [1] any · [2] final 로 번호가
-// 붙는다.
-func encodeSubstrings(v *Substrings) []byte {
-	var parts [][]byte
-	if v.Initial != "" {
-		parts = append(parts,
-			ber.Encode(ber.Tag(ber.Context, false, 0),
-				[]byte(v.Initial)))
-	}</code></pre>
+</code></pre>
 <span class="tier a">실행 검증</span>
 <div class="key"><b>부분 문자열은 조각마다 번호가 또 붙는다</b> —
 <code>(cn=m*n*i)</code> 는 <code>[0]</code> 처음 · <code>[1]</code> 가운데(여럿 가능) ·
@@ -6515,7 +6515,16 @@ func encodeSubstrings(v *Substrings) []byte {
 <article class="card" id="ad-srch-8">
 <h3>바이트를 나무로</h3>
 <div class="src"><b>ldap/proto/proto.go</b><span class="ln">558–590</span><span>ParseFilter — &amp;·|·! 를 되읽는다</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="558-590">	for _, a := range v.Any {
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="558-590">// 부분 문자열의 조각도 [0] initial · [1] any · [2] final 로 번호가
+// 붙는다.
+func encodeSubstrings(v *Substrings) []byte {
+	var parts [][]byte
+	if v.Initial != "" {
+		parts = append(parts,
+			ber.Encode(ber.Tag(ber.Context, false, 0),
+				[]byte(v.Initial)))
+	}
+	for _, a := range v.Any {
 		parts = append(parts,
 			ber.Encode(ber.Tag(ber.Context, false, 1), []byte(a)))
 	}
@@ -6538,16 +6547,7 @@ func ParseFilter(t ber.TLV) (Filter, error) {
 		if len(kids) == 0 {
 			return nil, errors.New("&amp;/| 안이 비어 있다")
 		}
-		subs := make([]Filter, 0, len(kids))
-		for _, k := range kids {
-			s, err := ParseFilter(k)
-			if err != nil {
-				return nil, err
-			}
-			subs = append(subs, s)
-		}
-		if t.Num() == filterAnd {
-			return &amp;And{Subs: subs}, nil</code></pre>
+		subs := make([]Filter, 0, len(kids))</code></pre>
 <span class="tier a">실행 검증</span>
 <div class="key"><b>받는 쪽은 태그 번호만 보고 종류를 안다</b> —
 <code>A0</code> 이면 "그리고", <code>A3</code> 이면 "같다", <code>87</code> 이면 "있기만 하면".
@@ -6557,7 +6557,16 @@ func ParseFilter(t ber.TLV) (Filter, error) {
 <article class="card" id="ad-srch-8b">
 <h3>비교와 부분 문자열 되읽기</h3>
 <div class="src"><b>ldap/proto/proto.go</b><span class="ln">591–620</span><span>비교 필터를 되읽는다</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="591-620">		}
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="591-620">		for _, k := range kids {
+			s, err := ParseFilter(k)
+			if err != nil {
+				return nil, err
+			}
+			subs = append(subs, s)
+		}
+		if t.Num() == filterAnd {
+			return &amp;And{Subs: subs}, nil
+		}
 		return &amp;Or{Subs: subs}, nil
 
 	case filterNot:
@@ -6577,8 +6586,9 @@ func ParseFilter(t ber.TLV) (Filter, error) {
 		if err != nil || len(kids) != 2 {
 			return nil, errors.New("비교 필터는 이름과 값 둘이다")
 		}
-		attr, val := kids[0].Str(), kids[1].Str()
-		switch t.Num() {
+		attr, val := kids[0].Str(), kids[1].Str()</code></pre>
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">621–651</span><span>부분 문자열을 되읽는다</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="621-651">		switch t.Num() {
 		case filterEqualityMatch:
 			return &amp;Equal{Attr: attr, Value: val}, nil
 		case filterGreaterOrEqual:
@@ -6586,9 +6596,8 @@ func ParseFilter(t ber.TLV) (Filter, error) {
 		case filterLessOrEqual:
 			return &amp;LessOrEqual{Attr: attr, Value: val}, nil
 		}
-		return &amp;Approx{Attr: attr, Value: val}, nil</code></pre>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">621–651</span><span>부분 문자열을 되읽는다</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="621-651">
+		return &amp;Approx{Attr: attr, Value: val}, nil
+
 	case filterPresent:
 		return &amp;Present{Attr: string(t.Value)}, nil
 
@@ -6609,16 +6618,7 @@ func parseSubstrings(t ber.TLV) (Filter, error) {
 		return nil, err
 	}
 	if len(pieces) == 0 {
-		return nil, errors.New("부분 문자열에 조각이 없다")
-	}
-	for _, p := range pieces {
-		switch p.Num() {
-		case 0:
-			out.Initial = string(p.Value)
-		case 1:
-			out.Any = append(out.Any, string(p.Value))
-		case 2:
-			out.Final = string(p.Value)</code></pre>
+		return nil, errors.New("부분 문자열에 조각이 없다")</code></pre>
 <span class="tier a">실행 검증</span>
 <p class="cap">시험은 <b>글 → 나무 → 바이트 → 나무 → 글</b> 을 한 바퀴 돌려
 제자리에 오는지 본다. 필터 15종이 그 왕복을 통과한다.</p>
@@ -6915,17 +6915,17 @@ type PagedResults struct {
   → data 525 — 그런 계정이 없다 (아이디를 다시 볼 것)</pre>
 <span class="tier a">실행 검증</span>
 <div class="src"><b>ldap/fakead/server.go</b><span class="ln">292–302</span><span>익명 검색을 막는 세 줄</span></div>
-<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="292-302">	br, err := proto.ParseBindRequest(msg.Op)
+<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="292-302">
+// handle 은 한 통을 처리하고 (답, 연결을 이어 갈지) 를 돌려준다.
+func (s *Server) handle(sess *session, raw []byte) ([]byte, bool) {
+	msg, err := proto.ParseMessage(raw)
 	if err != nil {
-		// SASL 로 온 것이다. 못 한다고 분명히 말한다.
-		sess.bound = ""
-		s.logf("[%d] #%d BIND — %v", sess.id, msg.ID, err)
-		return proto.BindResponse(msg.ID,
-			proto.ResultAuthMethodNotSupported, "",
-			"simple 인증만 지원한다 (SASL·GSSAPI 없음)")
+		s.logf("[%d] 메시지를 못 읽는다 — 끊는다: %v", sess.id, err)
+		return nil, false
 	}
-	if br.Version != 3 {
-		sess.bound = ""</code></pre>
+
+	switch msg.OpNum() {
+	case proto.OpBindRequest:</code></pre>
 <div class="key"><b>Keycloak 은 사람을 찾기 위해 먼저 누군가여야 한다</b> —
 사용자가 <code>minji</code> 라고 쳤을 때, Keycloak 은 그 아이디에 해당하는 <b>DN 을 먼저 찾아야</b>
 비밀번호를 확인하는 바인드를 할 수 있다. 그런데 그 검색부터 신분이 필요하다.
@@ -11235,8 +11235,8 @@ func (f *LessOrEqual) String() string {
 
 <article class="card" id="src-proto-12">
 <h3>proto.go <span class="badge">12/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">451–487</span><span>String · String</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="451-487">func (f *Approx) String() string {
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">451–471</span><span>String · String</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="451-471">func (f *Approx) String() string {
 	return "(" + f.Attr + "~=" + escapeValue(f.Value) + ")"
 }
 
@@ -11256,12 +11256,27 @@ func (f *Substrings) String() string {
 //
 // 이걸 빼먹으면 값에 괄호 하나만 넣어도 필터의 뜻이 통째로 바뀐다 — SQL
 // 주입과 똑같은 사고가 LDAP 에도 있다. 7부에서 "사용자가 친 아이디를
-// 필터에 그대로 넣지 말 것" 으로 다시 나온다.
-func escapeValue(s string) string {
+// 필터에 그대로 넣지 말 것" 으로 다시 나온다.</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="src-proto-13">
+<h3>proto.go <span class="badge">13/24</span></h3>
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">472–513</span><span>escapeValue · attrValue</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="472-513">func escapeValue(s string) string {
 	var b strings.Builder
 	for i := 0; i &lt; len(s); i++ {
-		switch c := s[i]; c {
-		case '*', '(', ')', '\\', 0x00:
+		c := s[i]
+		switch {
+		case c == '*' || c == '(' || c == ')' || c == '\\' || c == 0x00:
+			// §3 이 반드시 감싸라고 정한 다섯
+			fmt.Fprintf(&amp;b, "\\%02x", c)
+		case c &lt; 0x20 || c &gt; 0x7e:
+			// 화면에 못 쓰는 바이트. 규격이 요구하지는 않지만
+			// 감싸도 된다(§3 의 valueencoding 은 어떤 바이트든
+			// \XX 로 적는 것을 허용한다). objectGUID 처럼 이진값을
+			// 필터에 싣는 일이 실제로 있기 때문에 감싼다 —
+			// 날것으로 적으면 로그도 화면도 깨진다.
 			fmt.Fprintf(&amp;b, "\\%02x", c)
 		default:
 			b.WriteByte(c)
@@ -11272,14 +11287,8 @@ func escapeValue(s string) string {
 
 // ── 필터: 나무 → 바이트 ──────────────────────────────────────────────
 
-// 필터의 [n] 번호. RFC 4511 §4.5.1.7.</code></pre>
-<span class="tier a">실행 검증</span>
-</article>
-
-<article class="card" id="src-proto-13">
-<h3>proto.go <span class="badge">13/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">488–504</span><span>attrValue</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="488-504">const (
+// 필터의 [n] 번호. RFC 4511 §4.5.1.7.
+const (
 	filterAnd             = 0
 	filterOr              = 1
 	filterNot             = 2
@@ -11301,8 +11310,8 @@ func attrValue(attr, value string) []byte {
 
 <article class="card" id="src-proto-14">
 <h3>proto.go <span class="badge">14/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">505–540</span><span>EncodeFilter</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="505-540">func EncodeFilter(f Filter) []byte {
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">514–549</span><span>EncodeFilter</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="514-549">func EncodeFilter(f Filter) []byte {
 	switch v := f.(type) {
 	case *And:
 		return ber.Encode(ber.Tag(ber.Context, true, filterAnd),
@@ -11343,8 +11352,8 @@ func attrValue(attr, value string) []byte {
 
 <article class="card" id="src-proto-15">
 <h3>proto.go <span class="badge">15/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">541–570</span><span>encodeSubs · encodeSubstrings</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="541-570">func encodeSubs(subs []Filter) []byte {
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">550–579</span><span>encodeSubs · encodeSubstrings</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="550-579">func encodeSubs(subs []Filter) []byte {
 	var out []byte
 	for _, s := range subs {
 		out = append(out, EncodeFilter(s)...)
@@ -11379,8 +11388,8 @@ func encodeSubstrings(v *Substrings) []byte {
 
 <article class="card" id="src-proto-16">
 <h3>proto.go <span class="badge">16/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">571–612</span><span>ParseFilter</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="571-612">func ParseFilter(t ber.TLV) (Filter, error) {
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">580–621</span><span>ParseFilter</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="580-621">func ParseFilter(t ber.TLV) (Filter, error) {
 	switch t.Num() {
 	case filterAnd, filterOr:
 		kids, err := ber.Children(t.Value)
@@ -11427,8 +11436,8 @@ func encodeSubstrings(v *Substrings) []byte {
 
 <article class="card" id="src-proto-17">
 <h3>proto.go <span class="badge">17/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">613–630</span><span>이어서</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="613-630">		case filterEqualityMatch:
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">622–639</span><span>이어서</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="622-639">		case filterEqualityMatch:
 			return &amp;Equal{Attr: attr, Value: val}, nil
 		case filterGreaterOrEqual:
 			return &amp;GreaterOrEqual{Attr: attr, Value: val}, nil
@@ -11451,8 +11460,8 @@ func encodeSubstrings(v *Substrings) []byte {
 
 <article class="card" id="src-proto-18">
 <h3>proto.go <span class="badge">18/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">631–664</span><span>parseSubstrings</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="631-664">func parseSubstrings(t ber.TLV) (Filter, error) {
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">640–673</span><span>parseSubstrings</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="640-673">func parseSubstrings(t ber.TLV) (Filter, error) {
 	kids, err := ber.Children(t.Value)
 	if err != nil || len(kids) != 2 {
 		return nil, errors.New("부분 문자열 필터의 칸이 모자란다")
@@ -11491,8 +11500,8 @@ func encodeSubstrings(v *Substrings) []byte {
 
 <article class="card" id="src-proto-19">
 <h3>proto.go <span class="badge">19/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">665–681</span><span>ParseFilterString · fparser</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="665-681">func ParseFilterString(s string) (Filter, error) {
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">674–690</span><span>ParseFilterString · fparser</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="674-690">func ParseFilterString(s string) (Filter, error) {
 	p := &amp;fparser{s: s}
 	f, err := p.filter()
 	if err != nil {
@@ -11514,8 +11523,8 @@ type fparser struct {
 
 <article class="card" id="src-proto-20">
 <h3>proto.go <span class="badge">20/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">682–723</span><span>filter</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="682-723">func (p *fparser) filter() (Filter, error) {
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">691–732</span><span>filter</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="691-732">func (p *fparser) filter() (Filter, error) {
 	if p.i &gt;= len(p.s) || p.s[p.i] != '(' {
 		return nil, errors.New("필터는 ( 로 시작해야 한다")
 	}
@@ -11562,8 +11571,8 @@ type fparser struct {
 
 <article class="card" id="src-proto-21">
 <h3>proto.go <span class="badge">21/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">724–765</span><span>simple</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="724-765">		if err != nil {
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">733–774</span><span>simple</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="733-774">		if err != nil {
 			return nil, err
 		}
 	}
@@ -11610,8 +11619,8 @@ func (p *fparser) simple() (Filter, error) {
 
 <article class="card" id="src-proto-22">
 <h3>proto.go <span class="badge">22/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">766–789</span><span>이어서</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="766-789">	raw := p.s[vs:p.i]
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">775–798</span><span>이어서</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="775-798">	raw := p.s[vs:p.i]
 
 	switch op {
 	case "&gt;=":
@@ -11640,8 +11649,8 @@ func (p *fparser) simple() (Filter, error) {
 
 <article class="card" id="src-proto-23">
 <h3>proto.go <span class="badge">23/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">790–810</span><span>parseSubstringValue</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="790-810">func parseSubstringValue(attr, raw string) (Filter, error) {
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">799–819</span><span>parseSubstringValue</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="799-819">func parseSubstringValue(attr, raw string) (Filter, error) {
 	parts := strings.Split(raw, "*")
 	out := &amp;Substrings{Attr: attr}
 	for i, part := range parts {
@@ -11667,8 +11676,8 @@ func (p *fparser) simple() (Filter, error) {
 
 <article class="card" id="src-proto-24">
 <h3>proto.go <span class="badge">24/24</span></h3>
-<div class="src"><b>ldap/proto/proto.go</b><span class="ln">811–841</span><span>unescapeValue</span></div>
-<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="811-841">func unescapeValue(s string) (string, error) {
+<div class="src"><b>ldap/proto/proto.go</b><span class="ln">820–850</span><span>unescapeValue</span></div>
+<pre><code data-lang="go" data-src="ldap/proto/proto.go" data-lines="820-850">func unescapeValue(s string) (string, error) {
 	if !strings.Contains(s, "\\") {
 		return s, nil
 	}
@@ -12355,7 +12364,7 @@ func sortStrings(s []string) {
 </article>
 
 <article class="card" id="src-srv-1">
-<h3>server.go <span class="badge">1/12</span></h3>
+<h3>server.go <span class="badge">1/13</span></h3>
 <div class="src"><b>ldap/fakead/server.go</b><span class="ln">1–42</span><span>maxMessage</span></div>
 <pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="1-42">// server.go — 가짜 AD 의 문지기.
 //
@@ -12403,7 +12412,7 @@ const maxMessage = 1 &lt;&lt; 20
 </article>
 
 <article class="card" id="src-srv-2">
-<h3>server.go <span class="badge">2/12</span></h3>
+<h3>server.go <span class="badge">2/13</span></h3>
 <div class="src"><b>ldap/fakead/server.go</b><span class="ln">43–82</span><span>Server · NewServer</span></div>
 <pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="43-82">type Server struct {
 	dir *Dir
@@ -12449,7 +12458,7 @@ func (s *Server) TLSAddr() string {
 </article>
 
 <article class="card" id="src-srv-3">
-<h3>server.go <span class="badge">3/12</span></h3>
+<h3>server.go <span class="badge">3/13</span></h3>
 <div class="src"><b>ldap/fakead/server.go</b><span class="ln">83–111</span><span>ListenPlain · ListenTLS</span></div>
 <pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="83-111">func (s *Server) ListenPlain(addr string) error {
 	ln, err := net.Listen("tcp", addr)
@@ -12484,7 +12493,7 @@ func (s *Server) ListenTLS(addr, certFile, keyFile string) error {
 </article>
 
 <article class="card" id="src-srv-4">
-<h3>server.go <span class="badge">4/12</span></h3>
+<h3>server.go <span class="badge">4/13</span></h3>
 <div class="src"><b>ldap/fakead/server.go</b><span class="ln">112–137</span><span>Close · isClosed</span></div>
 <pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="112-137">func (s *Server) Close() {
 	s.mu.Lock()
@@ -12516,7 +12525,7 @@ func (s *Server) isClosed() bool {
 </article>
 
 <article class="card" id="src-srv-5">
-<h3>server.go <span class="badge">5/12</span></h3>
+<h3>server.go <span class="badge">5/13</span></h3>
 <div class="src"><b>ldap/fakead/server.go</b><span class="ln">138–172</span><span>accept · logWidth</span></div>
 <pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="138-172">func (s *Server) accept(ln net.Listener, kind string) {
 	defer s.wg.Done()
@@ -12557,9 +12566,9 @@ const logWidth = 80
 </article>
 
 <article class="card" id="src-srv-6">
-<h3>server.go <span class="badge">6/12</span></h3>
-<div class="src"><b>ldap/fakead/server.go</b><span class="ln">173–210</span><span>logWrapped · logf</span></div>
-<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="173-210">func (s *Server) logWrapped(head, body string) {
+<h3>server.go <span class="badge">6/13</span></h3>
+<div class="src"><b>ldap/fakead/server.go</b><span class="ln">173–214</span><span>logWrapped · logFilter</span></div>
+<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="173-214">func (s *Server) logWrapped(head, body string) {
 	pad := head
 	for len(body) &gt; logWidth {
 		cut := strings.LastIndex(body[:logWidth], " ")
@@ -12573,7 +12582,41 @@ const logWidth = 80
 	s.logf("%s%s", pad, body)
 }
 
-// logf 는 오간 것을 사람이 읽는 한 줄로 남긴다.
+// logFilter 는 검색 필터를 접어 적는다.
+//
+// 그냥 폭에서 자르면 낱말이 두 동강 난다 — objectclass 하나가
+// 두 줄에 걸쳐 "organizational" 과 "Person" 이 되면 읽을 수 없다.
+// 필터는 조건이 )( 로 이어 붙는 나무이므로, 그 이음매에서 접는다.
+//
+// 진짜 Keycloak 이 보내는 필터가 이만큼 길다:
+//
+//	(&amp;(sAMAccountName=minji)(objectclass=person)
+//	  (objectclass=organizationalPerson)(objectclass=user))
+func (s *Server) logFilter(head, filter string) {
+	parts := strings.Split(strings.ReplaceAll(filter, ")(", ")\x00("),
+		"\x00")
+	pad := head
+	line := "filter="
+	for _, p := range parts {
+		if line != "filter=" &amp;&amp; len(line)+len(p) &gt; logWidth {
+			s.logf("%s%s", pad, line)
+			pad = strings.Repeat(" ", len(head))
+			line = ""
+		}
+		line += p
+	}
+	if line != "" {
+		s.logf("%s%s", pad, line)
+	}
+}
+</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="src-srv-7">
+<h3>server.go <span class="badge">7/13</span></h3>
+<div class="src"><b>ldap/fakead/server.go</b><span class="ln">215–238</span><span>logf · session</span></div>
+<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="215-238">// logf 는 오간 것을 사람이 읽는 한 줄로 남긴다.
 //
 // 이 로그가 이 프로그램에서 가장 값진 산출물이다. 7부에서 "Keycloak 이
 // AD 에게 대체 무엇을 물었나" 를 알아내는 방법이 바로 이 파일을 읽는
@@ -12600,10 +12643,10 @@ type session struct {
 <span class="tier a">실행 검증</span>
 </article>
 
-<article class="card" id="src-srv-7">
-<h3>server.go <span class="badge">7/12</span></h3>
-<div class="src"><b>ldap/fakead/server.go</b><span class="ln">211–252</span><span>serve</span></div>
-<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="211-252">func (s *Server) serve(c net.Conn, id int64, kind string) {
+<article class="card" id="src-srv-8">
+<h3>server.go <span class="badge">8/13</span></h3>
+<div class="src"><b>ldap/fakead/server.go</b><span class="ln">239–280</span><span>serve</span></div>
+<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="239-280">func (s *Server) serve(c net.Conn, id int64, kind string) {
 	s.mu.Lock()
 	s.live[c] = true
 	s.mu.Unlock()
@@ -12648,10 +12691,10 @@ type session struct {
 <span class="tier a">실행 검증</span>
 </article>
 
-<article class="card" id="src-srv-8">
-<h3>server.go <span class="badge">8/12</span></h3>
-<div class="src"><b>ldap/fakead/server.go</b><span class="ln">253–290</span><span>handle</span></div>
-<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="253-290">		reply, keep := s.handle(sess, raw)
+<article class="card" id="src-srv-9">
+<h3>server.go <span class="badge">9/13</span></h3>
+<div class="src"><b>ldap/fakead/server.go</b><span class="ln">281–318</span><span>handle</span></div>
+<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="281-318">		reply, keep := s.handle(sess, raw)
 		if len(reply) &gt; 0 {
 			if _, werr := c.Write(reply); werr != nil {
 				return
@@ -12692,10 +12735,10 @@ func (s *Server) handle(sess *session, raw []byte) ([]byte, bool) {
 <span class="tier a">실행 검증</span>
 </article>
 
-<article class="card" id="src-srv-9">
-<h3>server.go <span class="badge">9/12</span></h3>
-<div class="src"><b>ldap/fakead/server.go</b><span class="ln">291–319</span><span>handleBind</span></div>
-<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="291-319">func (s *Server) handleBind(sess *session, msg proto.Message) []byte {
+<article class="card" id="src-srv-10">
+<h3>server.go <span class="badge">10/13</span></h3>
+<div class="src"><b>ldap/fakead/server.go</b><span class="ln">319–347</span><span>handleBind</span></div>
+<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="319-347">func (s *Server) handleBind(sess *session, msg proto.Message) []byte {
 	br, err := proto.ParseBindRequest(msg.Op)
 	if err != nil {
 		// SASL 로 온 것이다. 못 한다고 분명히 말한다.
@@ -12727,10 +12770,10 @@ func (s *Server) handle(sess *session, raw []byte) ([]byte, bool) {
 <span class="tier a">실행 검증</span>
 </article>
 
-<article class="card" id="src-srv-10">
-<h3>server.go <span class="badge">10/12</span></h3>
-<div class="src"><b>ldap/fakead/server.go</b><span class="ln">320–361</span><span>handleSearch</span></div>
-<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="320-361">func (s *Server) handleSearch(sess *session, msg proto.Message) []byte {
+<article class="card" id="src-srv-11">
+<h3>server.go <span class="badge">11/13</span></h3>
+<div class="src"><b>ldap/fakead/server.go</b><span class="ln">348–389</span><span>handleSearch</span></div>
+<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="348-389">func (s *Server) handleSearch(sess *session, msg proto.Message) []byte {
 	sr, err := proto.ParseSearchRequest(msg.Op)
 	if err != nil {
 		s.logf("[%d] #%d SEARCH — 읽을 수 없다: %v",
@@ -12775,10 +12818,10 @@ func (s *Server) handle(sess *session, raw []byte) ([]byte, bool) {
 <span class="tier a">실행 검증</span>
 </article>
 
-<article class="card" id="src-srv-11">
-<h3>server.go <span class="badge">11/12</span></h3>
-<div class="src"><b>ldap/fakead/server.go</b><span class="ln">362–402</span><span>이어서</span></div>
-<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="362-402">		return proto.SearchResultDone(msg.ID,
+<article class="card" id="src-srv-12">
+<h3>server.go <span class="badge">12/13</span></h3>
+<div class="src"><b>ldap/fakead/server.go</b><span class="ln">390–429</span><span>이어서</span></div>
+<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="390-429">		return proto.SearchResultDone(msg.ID,
 			proto.ResultNoSuchObject, "", "그런 base 가 없다")
 	}
 
@@ -12809,9 +12852,8 @@ func (s *Server) handle(sess *session, raw []byte) ([]byte, bool) {
 	// 좁은 화면에서 정작 봐야 할 필터가 오른쪽으로 밀려 안 보인다.
 	s.logf("[%d] #%d SEARCH base=%q scope=%s",
 		sess.id, msg.ID, sr.BaseDN, proto.ScopeName(sr.Scope))
-	s.logf("[%d] #%d        filter=%s", sess.id, msg.ID,
-		sr.Filter.String())
 	head := fmt.Sprintf("[%d] #%d        ", sess.id, msg.ID)
+	s.logFilter(head, sr.Filter.String())
 	s.logWrapped(head, fmt.Sprintf("attrs=%s → %d건 %s",
 		attrList(sr.Attrs), sent, proto.ResultName(code)))
 
@@ -12822,10 +12864,10 @@ func (s *Server) handle(sess *session, raw []byte) ([]byte, bool) {
 <span class="tier a">실행 검증</span>
 </article>
 
-<article class="card" id="src-srv-12">
-<h3>server.go <span class="badge">12/12</span></h3>
-<div class="src"><b>ldap/fakead/server.go</b><span class="ln">403–408</span><span>attrList</span></div>
-<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="403-408">func attrList(a []string) string {
+<article class="card" id="src-srv-13">
+<h3>server.go <span class="badge">13/13</span></h3>
+<div class="src"><b>ldap/fakead/server.go</b><span class="ln">430–435</span><span>attrList</span></div>
+<pre><code data-lang="go" data-src="ldap/fakead/server.go" data-lines="430-435">func attrList(a []string) string {
 	if len(a) == 0 {
 		return "[전부]"
 	}

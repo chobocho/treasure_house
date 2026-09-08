@@ -354,8 +354,14 @@ COVER_DIRS = [('web', ('.go',)), ('ldap', ('.go',)), ('oidc', ('.go',)),
               ('certs', ('.sh',)), ('data', ('.ldif',))]
 COVER_FILES = ['Makefile', 'go.mod']
 # 부분 인용만 하는 것들 — 빠진 줄이 있어도 오류가 아니다
-# 시험 코드는 부분 인용만 한다 — 전문을 실으면 덱이 시험 코드로 가득 찬다
-PARTIAL = re.compile(r'_test\.go$|/check_\w+\.sh$|^tools/|^deck/|^bin/|^kc/|^out/')
+#
+# 시험 코드는 부분 인용만 한다 — 전문을 실으면 덱이 시험 코드로 가득 찬다.
+# realm-campus.json 도 여기 든다. 그 파일은 **사람이 쓴 소스가 아니라
+# Keycloak 이 뽑아 준 3,200줄짜리 내보내기**라, 전문을 실으면 덱이 80장쯤
+# JSON 낭독이 된다. 우리가 정한 칸들은 keycloak/json/*.json 에 따로 있고
+# 그쪽은 전문이 실린다 — 배울 것은 거기 다 있다.
+PARTIAL = re.compile(r'_test\.go$|/check_\w+\.sh$|^tools/|^deck/|^bin/|^kc/'
+                     r'|^out/|^keycloak/realm-campus\.json$')
 
 
 def budget():
