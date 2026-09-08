@@ -602,6 +602,9 @@ $CURL -v -d grant_type=refresh_token -d "refresh_token=$REFTOK" \
   "$OC/token" >"$OUT/oidc_refresh_replay.txt" 2>&1
 
 # ── 앱 쪽에서 본 같은 흐름 ──
+# 비밀은 환경 변수로 준다. 명령줄에 적으면 ps 에 그대로 뜬다(2부).
+LUNCH_CLIENT_SECRET=lunch-secret-demo
+export LUNCH_CLIENT_SECRET
 start oidc/miniapp "$OUT/oidc_app.log" -addr ":$PA" \
   -self "http://localhost:$PA" -issuer "$IDP" -fixed-now "$FIXED"
 wait_up "http://localhost:$PA/"
@@ -669,10 +672,178 @@ rm -f "$OUT/.tok.json" "$OUT/.tok.hdr" "$OUT/.login2.txt" \
   "$OUT/.idtok.txt" "$OUT/.adminlogin.txt" "$OUT/.fakead.raw" \
   "$AJAR" "$BJAR"
 
-# ── 8. 정리 ───────────────────────────────────────────────────────
-say '8. 매번 달라지는 값 고정 (tools/scrub.py)'
+# ── 8. 쿠버네티스 (2부) ───────────────────────────────────────────
+#
+# 클러스터는 없다. 그래서 여기서 뜨는 것은 전부 **읽고 검증한** 결과다.
+#   kubectl kustomize   조각을 합친 최종 YAML (오프라인)
+#   kubeconform         쿠버네티스 JSON 스키마와 맞춰 보기
+#   tools/kexplain.py   필드 설명을 스키마에서 직접 읽기
+#
+# kubectl explain 과 kubectl create --dry-run=client 는 **서버를 부른다**.
+# 클러스터 없이는 못 쓴다 — 실제로 해 보고 확인했다(아래 캡처).
+say '8. k8s 매니페스트 (kustomize · kubeconform)'
+K8S_OK=1
+for t in bin/kubectl bin/kubeconform; do
+  [ -x "$t" ] || K8S_OK=0
+done
+[ -f bin/schemas/deployment-apps-v1.json ] || K8S_OK=0
+
+if [ "$K8S_OK" = 0 ]; then
+  echo '  k8s 도구가 없다 — sh tools/fetch_k8s_tools.sh 를 먼저 돌릴 것' >&2
+  exit 1
+fi
+
+KC=bin/kubeconform
+KVER=1.37.0
+conform() {
+  $KC -strict -summary -kubernetes-version "$KVER" -cache bin/.kccache -
+}
+
+{
+  echo '$ bin/kubectl version --client'
+  bin/kubectl version --client
+  echo
+  echo '$ bin/kubeconform -v'
+  bin/kubeconform -v
+  echo
+  echo '스키마: kubernetes-json-schema 의 master-standalone-strict'
+  ls bin/schemas | sed 's/^/  /'
+} >"$OUT/k8s_tools.txt" 2>&1
+
+# 클러스터가 없으면 안 되는 것 둘. 말로 하지 않고 직접 해 본다.
+{
+  echo '$ bin/kubectl explain deployment.spec.replicas'
+  bin/kubectl explain deployment.spec.replicas 2>&1 | tail -1
+  echo
+  echo '$ bin/kubectl create --dry-run=client -f k8s/base/namespace.yaml'
+  echo '    2>&1 | fold -s -w 96      # 한 줄이 길어서 접었다'
+  bin/kubectl create --dry-run=client -f k8s/base/namespace.yaml 2>&1 \
+    | tail -1 | fold -s -w 96
+  echo
+  echo '둘 다 클러스터에 물어본다. 그래서 이 덱에서는 못 쓴다 —'
+  echo 'kubectl kustomize 와 kubeconform 은 오프라인으로 된다.'
+} >"$OUT/k8s_needs_server.txt" 2>&1
+
+# 필드 설명 — 스키마에서 직접 읽는다.
+for spec in "deployment " "deployment spec.replicas" \
+            "deployment spec.selector" "deployment spec.strategy" \
+            "service spec.type" "service spec.ports" \
+            "ingress spec.rules" "pod spec.containers"; do
+  set -- $spec
+  kind=$1
+  field=${2:-}
+  name=$(echo "k8s_explain_${kind}_${field}" | tr '.' '_' | sed 's/_$//')
+  {
+    echo "\$ kexplain.py $kind $field"
+    python3 tools/kexplain.py "$kind" "$field"
+  } >"$OUT/$name.txt" 2>&1
+done
+
+# 조각을 합친 최종 YAML.
+for o in dev prod; do
+  {
+    echo "\$ bin/kubectl kustomize k8s/overlays/$o"
+    bin/kubectl kustomize "k8s/overlays/$o"
+  } >"$OUT/k8s_kustomize_$o.txt" 2>&1
+done
+
+# dev 와 prod 는 무엇이 다른가 — 합친 결과끼리 견준다.
+{
+  echo '$ diff <(kubectl kustomize overlays/dev) \'
+  echo '       <(kubectl kustomize overlays/prod)'
+  bin/kubectl kustomize k8s/overlays/dev >"$OUT/.dev.yaml"
+  bin/kubectl kustomize k8s/overlays/prod >"$OUT/.prod.yaml"
+  diff "$OUT/.dev.yaml" "$OUT/.prod.yaml" || true
+  rm -f "$OUT/.dev.yaml" "$OUT/.prod.yaml"
+} >"$OUT/k8s_diff.txt" 2>&1
+
+# 검증.
+{
+  echo '$ sh k8s/validate.sh'
+  sh k8s/validate.sh
+} >"$OUT/k8s_validate.txt" 2>&1
+
+# 일부러 틀린 매니페스트 — 검사기가 무엇을 잡고 무엇을 못 잡는가.
+{
+  echo '$ kubeconform -strict -output json k8s/examples/typo.yaml'
+  $KC -strict -output json -kubernetes-version "$KVER" \
+    -cache bin/.kccache k8s/examples/typo.yaml || true
+} >"$OUT/k8s_invalid.txt" 2>&1
+# -strict 가 있고 없고의 차이를 또렷하게 보이려고, **오타 하나만** 있는
+# 매니페스트를 따로 만들어 두 번 검사한다. typo.yaml 은 타입 오류도 함께
+# 들어 있어서, 그것만으로는 "그냥 넘어간다" 가 눈에 안 보인다.
+ONLYTYPO=$OUT/.onlytypo.yaml
+cat >"$ONLYTYPO" <<'YEOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunch-web
+spec:
+  replica: 3          # replicas 를 replica 로 적었다. 이것 하나뿐이다.
+  selector:
+    matchLabels: {app: lunch-web}
+  template:
+    metadata:
+      labels: {app: lunch-web}
+    spec:
+      containers:
+        - name: web
+          image: registry.campus.example/lunch/lunch-web:1.4.2
+YEOF
+{
+  echo '$ cat 오타-하나만.yaml'
+  sed -n '5,7p' "$ONLYTYPO"
+  echo
+  echo '$ kubeconform 오타-하나만.yaml            # -strict 없이'
+  $KC -summary -kubernetes-version "$KVER" \
+    -cache bin/.kccache "$ONLYTYPO" 2>&1 | sed "s|$ONLYTYPO|오타-하나만.yaml|"
+  echo
+  echo '$ kubeconform -strict 오타-하나만.yaml'
+  $KC -strict -summary -kubernetes-version "$KVER" \
+    -cache bin/.kccache "$ONLYTYPO" 2>&1 \
+    | sed "s|$ONLYTYPO|오타-하나만.yaml|" | fold -s -w 96
+} >"$OUT/k8s_invalid_nostrict.txt" 2>&1
+rm -f "$ONLYTYPO"
+
+# YAML 자체의 함정 — 따옴표 없는 값이 무엇이 되는가.
+#
+# 짐작으로 적지 않는다. 진짜 파서(kubectl 안의 것)에 넣었다가
+# 도로 꺼내 **무엇으로 바뀌어 나오는지** 본다.
+TRAP=$OUT/.trap
+mkdir -p "$TRAP"
+cat >"$TRAP/cm.yaml" <<'YEOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traps
+data:
+  enabled: yes
+  country: NO
+  version: 1.20
+  build: 010
+  time: 12:30
+YEOF
+cat >"$TRAP/kustomization.yaml" <<'YEOF'
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - cm.yaml
+YEOF
+{
+  echo '$ cat cm.yaml        # 따옴표를 하나도 안 씌우고 적었다'
+  sed -n '5,11p' "$TRAP/cm.yaml"
+  echo
+  echo '$ bin/kubectl kustomize .    # 파서에 넣었다가 도로 꺼낸다'
+  bin/kubectl kustomize "$TRAP" | sed -n '/^data:/,/^kind:/p' \
+    | sed '$d'
+} >"$OUT/k8s_yaml_traps.txt" 2>&1
+rm -rf "$TRAP"
+
+# ── 9. 정리 ───────────────────────────────────────────────────────
+say '9. 매번 달라지는 값 고정 (tools/scrub.py)'
 python3 tools/scrub.py "$OUT"/web*.txt "$OUT"/tool_*.txt \
-  "$OUT"/ad_*.txt "$OUT"/ad_fakead.log "$OUT"/oidc_*.txt "$OUT"/oidc_*.log
+  "$OUT"/ad_*.txt "$OUT"/ad_fakead.log "$OUT"/oidc_*.txt "$OUT"/oidc_*.log \
+  "$OUT"/k8s_*.txt
 
 echo '캡처 완료 — out/ 아래'
 ls -1 "$OUT" | sed 's/^/  /'

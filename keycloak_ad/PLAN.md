@@ -389,6 +389,35 @@ analogies in §5.9) and hands it in the prompt.
 
 ## Progress log (newest first)
 
+### [2026-09-08 17:10] 4단계 2부 본문 — 71장 + 매니페스트 (누적 587장)
+
+- **기획:** 9개 장 — 프로세스에서 컨테이너까지 · Pod · Deployment · Service ·
+  Ingress · 설정과 비밀 · Kustomize · 클러스터 없이 검사하기 · 마무리.
+  퀴즈 6, 데모 2(라벨 셀렉터 매칭기 신규 · YAML 검사기 재사용).
+- **개발:** `k8s/base/{namespace,lunch-app,lunch-ingress,kustomization}.yaml` ·
+  `k8s/overlays/{dev,prod}/kustomization.yaml` · `k8s/examples/typo.yaml` ·
+  `k8s/validate.sh` · `tools/fetch_k8s_tools.sh` · `tools/kexplain.py` ·
+  `deck/sections/02_k8s.html` · `13_appendix.html`(FULLSRC 8개) ·
+  `deck/demos.js`(+1) · `claims.md`(2부 절) · `Makefile`(k8s-tools · YAML 폭 검사)
+- **TC:** `oidc/miniapp` 의 `pickSecret` 만 새 코드라 RED→GREEN(3건).
+  매니페스트는 tier B — kubeconform `-strict` 가 관문이다.
+- **검증:** 587장 · **커버리지 6853/6853줄 100퍼센트** · 조립 0건 · 역검증 통과 ·
+  deck-check 0건(퀴즈 30 · 데모 12) · 글꼴 통과 · `make record` 3회 md5 동일 ·
+  test 14패키지 · `sh k8s/validate.sh` 세 벌 전부 통과.
+- **§8.4 이탈(기록):** PLAN 은 `kubectl explain` 과 `kubectl create --dry-run=client`
+  가 오프라인으로 된다고 적었는데 **둘 다 서버를 부른다**(v1.37 에서 확인).
+  그 사실 자체를 캡처로 남기고(`out/k8s_needs_server.txt`),
+  필드 설명은 쿠버네티스 공개 JSON 스키마를 읽는 `tools/kexplain.py` 로 대신했다.
+  오프라인으로 되는 것은 `kubectl kustomize` 와 `kubeconform` 둘뿐이다.
+- **잡은 것 (둘):** ① `-strict` 없는 판의 캡처가 요점을 못 보였다 —
+  typo.yaml 에는 타입 오류가 함께 있어 어느 쪽으로 돌려도 Invalid 였다.
+  **오타 하나만** 있는 파일을 따로 만들어 `Valid: 1` ↔ `Invalid: 1` 로 갈리게 했다.
+  ② YAML 함정 캡처를 처음에 **손으로 적은 값**으로 만들었다가
+  진짜 파서에 넣어 보니 절반이 틀렸다 — 쿠버네티스의 YAML 1.2 에서
+  `yes`·`NO`·`12:30` 은 글자로 남고(노르웨이 문제 없음),
+  `1.20`→1.2 와 `010`→8 만 실제로 바뀐다. 캡처와 본문을 사실에 맞췄다.
+- **다음:** §8 6단계(5부 Keycloak — 배포판 내려받아 실제로 띄우기, JVM 1개).
+
 ### [2026-09-08 15:40] 5단계(3/3) 4부 본문 — 116장 + 부록 확장 (누적 504장)
 
 - **기획:** 9개 장 — 왜 위임하나 · 인가 코드 흐름 · state/nonce/PKCE ·

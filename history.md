@@ -1,3 +1,10 @@
+### [2026-09-08 17:10] Keycloak×AD 덱 2부 본문 — 쿠버네티스 71장
+- **기획:** PLAN §8 4단계. 9개 장(컨테이너·Pod·Deployment·Service·Ingress·설정과 비밀·Kustomize·검사·마무리), 퀴즈 6, 데모 2. 클러스터가 없으므로 "띄우는" 대신 "읽고 검증하는" 것으로 배운다.
+- **TC:** miniapp 의 pickSecret 만 새 코드라 RED→GREEN 3건(환경 변수 우선·깃발 대체·둘 다 없으면 거절). 매니페스트는 kubeconform -strict 가 관문이다.
+- **개발:** k8s/base 4개 · k8s/overlays 2개 · k8s/examples/typo.yaml · k8s/validate.sh · tools/fetch_k8s_tools.sh · tools/kexplain.py · deck/sections/02_k8s.html 외 5개 파일
+- **검증:** 587장 · 커버리지 6853/6853줄 100% · 조립 0건 · 역검증 통과 · deck-check 0건(퀴즈 30·데모 12) · 글꼴 통과 · make record 3회 md5 동일 · test 14패키지 · validate.sh 3벌 통과
+- **비고:** kubectl explain 과 --dry-run=client 가 서버를 부른다는 것을 확인해 그 사실을 캡처로 남기고, 필드 설명은 공개 JSON 스키마를 읽는 kexplain.py 로 대신했다. YAML 함정 캡처를 손으로 적었다가 진짜 파서에 넣어 보니 절반이 틀려 사실에 맞췄다.
+
 ### [2026-09-08 15:40] Keycloak×AD 덱 4부 본문 — 116장, 커버리지 100%
 - **기획:** PLAN §8 5단계의 마지막. 9개 장(위임의 이유·인가 코드 흐름·state/nonce/PKCE·토큰 세 장·JWT 해부·JWKS와 안내문·앱 쪽·세 세션과 로그아웃·직접 돌려 보기), 퀴즈 8, 데모 2.
 - **TC:** 본문 커밋이라 새 시험은 없다. 조립기의 검사(폭·장수·근거 배지·커버리지)와 역검증·deck-check·글꼴검사가 관문이다.

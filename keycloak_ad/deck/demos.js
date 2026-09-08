@@ -556,4 +556,96 @@
     on(el, 'input', run);
     run();
   });
+  /* ── 12. 라벨 셀렉터 매칭기 ─────────────────────────────────────
+   * 셀렉터를 치면 이 덱의 오브젝트 중 무엇이 걸리는지 보여 준다.
+   * "이름이 아니라 라벨로 고른다" 를 손으로 확인하는 자리다. */
+  __demo('k8s-label', function (host, api) {
+    var el = q(host, '[data-selector]');
+
+    // 2부의 매니페스트에 실제로 붙어 있는 라벨들이다.
+    var objects = [
+      {kind: 'Pod', name: 'lunch-web-7d9f2c-abcde', labels: {
+        'app.kubernetes.io/name': 'lunch-web',
+        'app.kubernetes.io/part-of': 'lunch'}},
+      {kind: 'Pod', name: 'lunch-web-7d9f2c-fghij', labels: {
+        'app.kubernetes.io/name': 'lunch-web',
+        'app.kubernetes.io/part-of': 'lunch'}},
+      {kind: 'Pod', name: 'keycloak-0', labels: {
+        'app.kubernetes.io/name': 'keycloak',
+        'app.kubernetes.io/part-of': 'lunch'}},
+      {kind: 'Pod', name: 'postgres-0', labels: {
+        'app.kubernetes.io/name': 'postgres',
+        'app.kubernetes.io/part-of': 'lunch'}},
+      {kind: 'Service', name: 'lunch-web', labels: {
+        'app.kubernetes.io/name': 'lunch-web'}}
+    ];
+
+    // 쉼표로 이은 조건은 **전부** 맞아야 한다 (AND). 그게 규칙이다.
+    function parse(text) {
+      var out = [];
+      var parts = text.split(',');
+      for (var i = 0; i < parts.length; i++) {
+        var t = parts[i].trim();
+        if (!t) continue;
+        var neq = t.indexOf('!=');
+        if (neq > 0) {
+          out.push({k: t.slice(0, neq).trim(),
+            v: t.slice(neq + 2).trim(), no: true});
+          continue;
+        }
+        var eq = t.indexOf('=');
+        if (eq > 0) {
+          out.push({k: t.slice(0, eq).trim(),
+            v: t.slice(eq + 1).trim(), no: false});
+          continue;
+        }
+        // 값 없이 이름만 = "이 라벨이 있기만 하면"
+        out.push({k: t, v: null, no: false});
+      }
+      return out;
+    }
+
+    function hit(obj, conds) {
+      for (var i = 0; i < conds.length; i++) {
+        var c = conds[i];
+        var got = obj.labels[c.k];
+        if (c.v === null) {
+          if (got === undefined) return false;
+        } else if (c.no) {
+          if (got === c.v) return false;
+        } else if (got !== c.v) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function run() {
+      var text = val(el, 'app.kubernetes.io/name=lunch-web');
+      var conds = parse(text);
+      if (!conds.length) {
+        api.w(host, '조건이 없다 — 이러면 전부 걸린다.', 'dim');
+        return;
+      }
+      var lines = [], n = 0;
+      for (var i = 0; i < objects.length; i++) {
+        var o = objects[i], ok = hit(o, conds);
+        if (ok) n++;
+        lines.push((ok ? '  ● ' : '  · ') +
+          pad(o.kind, 8) + ' ' + o.name);
+      }
+      api.w(host, api.esc(lines.join('\n')) +
+        '\n\n<span class="dim">' + n + '개가 걸렸다 · 조건 ' +
+        conds.length + '개는 전부 맞아야 한다(AND)</span>',
+        n ? 'ok' : 'bad');
+    }
+
+    function pad(s, n) {
+      while (s.length < n) s += ' ';
+      return s;
+    }
+
+    on(el, 'input', run);
+    run();
+  });
 })();

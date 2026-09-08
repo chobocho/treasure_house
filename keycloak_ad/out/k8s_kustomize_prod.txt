@@ -1,0 +1,132 @@
+$ bin/kubectl kustomize k8s/overlays/prod
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/part-of: lunch
+  name: lunch
+---
+apiVersion: v1
+data:
+  client-secret: bHVuY2gtc2VjcmV0LWRlbW8=
+kind: Secret
+metadata:
+  labels:
+    app.kubernetes.io/part-of: lunch
+  name: lunch-web
+type: Opaque
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: lunch-web
+    app.kubernetes.io/part-of: lunch
+  name: lunch-web
+  namespace: lunch
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  selector:
+    app.kubernetes.io/name: lunch-web
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: lunch-web
+    app.kubernetes.io/part-of: lunch
+  name: lunch-web
+  namespace: lunch
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lunch-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lunch-web
+    spec:
+      containers:
+      - args:
+        - -addr=:9001
+        - -self=https://lunch.campus.example
+        - -issuer=https://sso.campus.example/realms/campus
+        - -client=lunch-web
+        - -admin-group=lunch-admins
+        env:
+        - name: LUNCH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: client-secret
+              name: lunch-web
+        image: registry.campus.example/lunch/lunch-web:1.4.2
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        name: web
+        ports:
+        - containerPort: 9001
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: 256Mi
+          requests:
+            cpu: 200m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: lunch-web
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  labels:
+    app.kubernetes.io/name: lunch-web
+    app.kubernetes.io/part-of: lunch
+  name: lunch-web
+  namespace: lunch
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: lunch.campus.example
+    http:
+      paths:
+      - backend:
+          service:
+            name: lunch-web
+            port:
+              name: http
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - lunch.campus.example
+    secretName: lunch-web-tls

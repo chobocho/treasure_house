@@ -21,9 +21,11 @@ TOOLS       := ../tools
 SRC         := $(shell find web ldap oidc -name '*.go' \
                  ! -name '*_test.go' 2>/dev/null)
 SRCTEST     := $(shell find web ldap oidc -name '*_test.go' 2>/dev/null)
+# 매니페스트도 전문이 실린다. 폭 규칙은 코드와 같다.
+YAML        := $(shell find k8s -name '*.yaml' 2>/dev/null | sort)
 
 .DEFAULT_GOAL := help
-.PHONY: help test vet fmt width certs record validate-k8s \
+.PHONY: help test vet fmt width certs record validate-k8s k8s-tools \
         kc-fetch kc-run kc-stop kc-e2e \
         figs deck deck-check deck-verify font font-check all clean
 
@@ -44,7 +46,7 @@ fmt:                    ## gofmt 로 정렬
 
 width:                  ## 덱에 실릴 줄이 폴더블 폭(72칸)을 넘는지
 	$(PY) tools/width.py $(SRC) certs/make_certs.sh data/campus.ldif \
-	  Makefile go.mod
+	  $(YAML) k8s/validate.sh Makefile go.mod
 
 certs:                  ## 시연용 CA·서버 인증서 만들고 검사
 	sh certs/make_certs.sh
@@ -53,6 +55,9 @@ certs:                  ## 시연용 CA·서버 인증서 만들고 검사
 # ── 증거 ───────────────────────────────────────────────────────────
 record:                 ## tier A 캡처를 out/ 에 다시 남긴다
 	sh tools/record.sh
+
+k8s-tools:              ## kubectl · kubeconform · JSON 스키마 내려받기
+	sh tools/fetch_k8s_tools.sh
 
 validate-k8s:           ## 매니페스트 tier B 검증
 	sh k8s/validate.sh

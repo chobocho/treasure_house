@@ -1,0 +1,108 @@
+# 학식 예약 앱 — 4부에서 만든 miniapp 그대로다.
+#
+# 여기 적는 것은 "어떻게 띄우라" 가 아니다.
+# **"어떤 상태였으면 좋겠다"** 를 적는다.
+# 쿠버네티스는 이 글을 읽고 현실을 여기에 맞추려고 계속 애쓴다.
+# 그 차이가 2부의 전부다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunch-web
+  namespace: lunch
+  labels:
+    app.kubernetes.io/name: lunch-web
+    app.kubernetes.io/part-of: lunch
+spec:
+  # 몇 벌 띄울 것인가. 하나가 죽으면 쿠버네티스가 다시 만든다.
+  replicas: 2
+
+  # 이 Deployment 가 **자기 것으로 여길** Pod 를 고르는 조건.
+  # 아래 template 의 라벨과 반드시 맞아야 한다 — 안 맞으면 거절당한다.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lunch-web
+
+  # 여기서부터가 "Pod 를 만들 때 쓸 거푸집" 이다.
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lunch-web
+    spec:
+      securityContext:
+        # 뿌리 권한으로 돌지 않는다.
+        # 컨테이너가 뚫려도 할 수 있는 일이 준다.
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          # 판번호를 박는다. latest 를 쓰면 "지금 무엇이 도는가" 를
+          # 아무도 알 수 없고, 되돌릴 수도 없다.
+          image: registry.campus.example/lunch/lunch-web:1.4.2
+          args:
+            - -addr=:9001
+            - -self=https://lunch.campus.example
+            - -issuer=https://sso.campus.example/realms/campus
+            - -client=lunch-web
+            - -admin-group=lunch-admins
+          env:
+            # 비밀은 **명령줄에 적지 않는다**. 여기 적으면
+            # kubectl describe pod 한 줄로 아무나 본다.
+            - name: LUNCH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunch-web
+                  key: client-secret
+          ports:
+            - name: http
+              containerPort: 9001
+          # 살아 있나 / 손님을 받아도 되나 — 둘은 다른 질문이다.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            # requests 는 자리를 잡는 데 쓰이고,
+            # limits 는 넘으면 잘리는 선이다.
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+---
+# 서비스 — **이름 하나로 부르게** 해 준다.
+#
+# Pod 는 죽고 다시 생기며 그때마다 주소(IP)가 바뀐다.
+# 그 주소를 적어 두면 다음 날 아무 데도 없다.
+# Service 는 바뀌지 않는 이름을 하나 주고, 뒤에 붙은
+# Pod 들에게 알아서 나눠 준다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunch-web
+  namespace: lunch
+  labels:
+    app.kubernetes.io/name: lunch-web
+spec:
+  # 라벨로 고른다. 이름이 아니라 라벨이라는 것이 중요하다 —
+  # 이 조건에 맞는 Pod 는 나중에 생겨도 자동으로 낀다.
+  selector:
+    app.kubernetes.io/name: lunch-web
+  ports:
+    - name: http
+      port: 80          # 남들이 부를 때 쓰는 번호
+      targetPort: http  # 컨테이너 쪽 번호(이름으로 가리켰다)

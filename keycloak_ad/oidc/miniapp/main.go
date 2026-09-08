@@ -9,8 +9,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -21,8 +23,8 @@ func main() {
 	issuer := flag.String("issuer",
 		"http://localhost:9000/realms/campus", "IdP 의 issuer")
 	clientID := flag.String("client", "lunch-web", "클라이언트 이름")
-	secret := flag.String("secret", "lunch-secret-demo",
-		"클라이언트 비밀")
+	secret := flag.String("secret", "",
+		"클라이언트 비밀 (되도록 LUNCH_CLIENT_SECRET 로 줄 것)")
 	admin := flag.String("admin-group", "lunch-admins",
 		"관리자 화면을 볼 수 있는 그룹")
 	wait := flag.Duration("wait", 10*time.Second, "IdP 를 기다릴 시간")
@@ -35,9 +37,14 @@ func main() {
 	if base == "" {
 		base = "http://localhost" + *addr
 	}
+	clientSecret, err := pickSecret(*secret,
+		os.Getenv("LUNCH_CLIENT_SECRET"))
+	if err != nil {
+		log.Fatal(err)
+	}
 	cfg := AppConfig{
 		SelfURL: base, IssuerURL: *issuer, ClientID: *clientID,
-		ClientSecret: *secret, AdminGroup: *admin,
+		ClientSecret: clientSecret, AdminGroup: *admin,
 	}
 
 	app, err := waitForIDP(cfg, *wait)
@@ -60,6 +67,25 @@ func main() {
 	if err := http.ListenAndServe(*addr, app.Handler()); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// pickSecret 은 클라이언트 비밀을 어디서 받을지 정한다.
+//
+// **환경 변수가 이긴다.** 명령줄에 적은 비밀은 `ps` 에 그대로 뜨고,
+// 쿠버네티스에서는 `kubectl describe pod` 한 줄로 아무나 본다(2부).
+// 깃발은 손으로 띄워 볼 때를 위해 남겨 두었다.
+//
+// 둘 다 비면 뜨지 않는다. 빈 비밀로 조용히 돌면 토큰 교환이 401 로
+// 실패하는데, 그 401 을 보고 원인을 찾기가 아주 어렵다.
+func pickSecret(fromFlag, fromEnv string) (string, error) {
+	if fromEnv != "" {
+		return fromEnv, nil
+	}
+	if fromFlag != "" {
+		return fromFlag, nil
+	}
+	return "", fmt.Errorf("클라이언트 비밀이 없다 — " +
+		"LUNCH_CLIENT_SECRET 환경 변수나 -secret 깃발로 줄 것")
 }
 
 // waitForIDP 는 IdP 가 뜰 때까지 기다렸다가 준비한다.

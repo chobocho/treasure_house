@@ -33,8 +33,8 @@
 | Node.js | 24.18.0 | 2026-09-08 | `deck/check_deck.js` (DOM 스텁) |
 | OpenSSL | (아래 §인증서) | 2026-09-08 | 시연용 CA·서버 인증서 |
 | Java | OpenJDK 21.0.12 | 2026-09-08 | Keycloak 배포판 실행용 |
-| kubectl | (내려받은 뒤 기록) | — | tier B 검증 |
-| kubeconform | (내려받은 뒤 기록) | — | tier B 검증 |
+| kubectl | v1.37.0 (kustomize v5.8.1) | 2026-09-08 | `kubectl kustomize` 만 오프라인으로 된다 |
+| kubeconform | v0.8.0 | 2026-09-08 | 스키마는 kubernetes-json-schema `master-standalone-strict` |
 | Keycloak | (`keycloak/VERSION` 에 고정) | — | 26.x GA |
 
 ## 이름 규칙 (전부 지어낸 것)
@@ -188,12 +188,57 @@
 - OpenID Connect Discovery 1.0 — https://openid.net/specs/openid-connect-discovery-1_0.html · 확인 2026-09-08
 - OpenID Connect RP-Initiated Logout 1.0 — https://openid.net/specs/openid-connect-rpinitiated-1_0.html · 확인 2026-09-08
 
+## 2부 — 쿠버네티스 (`k8-*` 슬라이드)
+
+내려받은 도구의 sha256 (linux/arm64):
+
+| 것 | 판 | sha256 | 받은 곳 |
+|---|---|---|---|
+| kubectl | v1.37.0 | `922df28df248cc00a9e025f947704f1d1482de64ece54cfe57e61f19eaf1eef3` | https://dl.k8s.io/release/v1.37.0/bin/linux/arm64/kubectl |
+| kubeconform | v0.8.0 | `7e77b104b3ae696389f91971c60fd58c72f1f3dc218f139df67a1b070959c012` | https://github.com/yannh/kubeconform/releases/tag/v0.8.0 |
+
+JSON 스키마 7개는 `master-standalone-strict` 판이다
+(https://github.com/yannh/kubernetes-json-schema). 파일별 sha256 은
+`sha256sum bin/schemas/*.json` 으로 언제든 다시 뜬다 —
+`tools/fetch_k8s_tools.sh` 가 같은 주소에서 받는다.
+
+| 슬라이드 | 주장 | 등급 | 출처 | 확인일 |
+|---|---|---|---|---|
+| `k8-box-3` | 컨테이너는 호스트 커널을 함께 쓰고, 네임스페이스와 c그룹으로 갈린다 | C | Kubernetes 문서 "Containers" 개요 | 2026-09-08 |
+| `k8-box-5` | 쿠버네티스는 선언한 상태로 현실을 맞춘다 | C | Kubernetes 문서 "Kubernetes Objects" | 2026-09-08 |
+| `k8-pod-1` | Pod 의 컨테이너는 더하거나 뺄 수 없고 최소 하나여야 한다 | C | `out/k8s_explain_pod_spec_containers.txt` (공식 JSON 스키마) | 2026-09-08 |
+| `k8-dep-2` | selector 와 template 의 라벨이 어긋나면 거절된다 | C | Kubernetes 문서 "Deployment" — Selector | 2026-09-08 |
+| `k8-dep-3` | `spec.replicas` 의 기본값은 1 | C | `out/k8s_explain_deployment_spec_replicas.txt` | 2026-09-08 |
+| `k8-dep-3` | `spec.selector` 는 apps/v1 에서 만든 뒤 바꿀 수 없다 | C | Kubernetes 문서 "Deployment" — Selector updates (스키마에는 이 말이 없다) | 2026-09-08 |
+| `k8-dep-7` | readiness 실패는 endpoints 에서 빼고, liveness 실패는 컨테이너를 다시 띄운다 | C | Kubernetes 문서 "Configure Liveness, Readiness and Startup Probes" | 2026-09-08 |
+| `k8-dep-8` | 메모리 limits 초과는 OOMKilled, CPU 초과는 throttle | C | Kubernetes 문서 "Resource Management for Pods and Containers" | 2026-09-08 |
+| `k8-svc-4` | Service 의 기본 종류는 ClusterIP | C | `out/k8s_explain_service_spec_type.txt` | 2026-09-08 |
+| `k8-svc-5` | 클러스터 안 DNS 이름은 `<svc>.<ns>.svc.cluster.local` | C | Kubernetes 문서 "DNS for Services and Pods" | 2026-09-08 |
+| `k8-ing-1` | Ingress 는 컨트롤러가 있어야 동작한다 | C | Kubernetes 문서 "Ingress Controllers" | 2026-09-08 |
+| `k8-ing-3` | `pathType` 은 Exact · Prefix · ImplementationSpecific | C | `out/k8s_explain_ingress_spec_rules.txt` · Ingress 문서 | 2026-09-08 |
+| `k8-cfg-1` | Secret 은 base64 로 담길 뿐 암호화가 아니다 | C | Kubernetes 문서 "Secrets" — Risks | 2026-09-08 |
+| `k8-cfg-3` | 네임스페이스는 보안 경계가 아니다 (통신은 기본 허용) | C | Kubernetes 문서 "Network Policies" | 2026-09-08 |
+| `k8-cfg-quiz` | 환경 변수로 넣은 Secret 값은 Pod 재시작 전까지 안 바뀐다 | C | Kubernetes 문서 "Secrets" — Mounted Secrets are updated automatically | 2026-09-08 |
+| `k8-kz-4` | overlay 의 patch 문법은 JSON Patch | C | RFC 6902 · Kustomize 문서 | 2026-09-08 |
+| `k8-val-1` | kubectl v1.37.0 · kubeconform v0.8.0 을 썼다 | A | `out/k8s_tools.txt` | 2026-09-08 |
+| `k8-val-2` | `kubectl explain` 과 `--dry-run=client` 는 클러스터가 있어야 한다 | A | `out/k8s_needs_server.txt` | 2026-09-08 |
+| `k8-val-6` | base·dev·prod 세 벌이 스키마 검사를 통과한다 | A | `out/k8s_validate.txt` | 2026-09-08 |
+| `k8-val-9` | `-strict` 는 스키마에 없는 필드를 잡지만 `requests` 안의 오타는 못 잡는다 | A | `out/k8s_invalid.txt` | 2026-09-08 |
+| `k8-val-10` | `-strict` 없이는 모르는 필드가 조용히 지나간다 | A | `out/k8s_invalid_nostrict.txt` | 2026-09-08 |
+| `k8-val-11` | 쿠버네티스의 파서에서 따옴표 없는 `yes`·`NO`·`12:30` 은 **글자로 남는다** | A | `out/k8s_yaml_traps.txt` | 2026-09-08 |
+| `k8-val-11b` | 같은 파서에서 `1.20` 은 1.2 로, `010` 은 8로 바뀐다 | A | `out/k8s_yaml_traps.txt` | 2026-09-08 |
+| `k8-val-11b` | "노르웨이 문제" 는 `yes`/`no` 를 참·거짓으로 읽던 YAML 1.1 의 것이다 | C | YAML 1.1 §10.1 (bool) 대 YAML 1.2 core schema | 2026-09-08 |
+
+- Kubernetes 문서 — https://kubernetes.io/docs/concepts/ · 확인 2026-09-08
+- YAML 1.2 규격 — https://yaml.org/spec/1.2.2/ · 확인 2026-09-08
+- Kustomize 문서 — https://kubectl.docs.kubernetes.io/references/kustomize/ · 확인 2026-09-08
+- RFC 6902 (JSON Patch) — https://www.rfc-editor.org/rfc/rfc6902 · 확인 2026-09-08
+
 ## 앞으로 채울 곳
 
 부가 하나씩 들어올 때마다 그 부의 절을 여기에 연다.
 지금은 비어 있는 것이 정상이다 — 뼈대 커밋에는 주장이 거의 없다.
 
-- [ ] 2부 쿠버네티스 — 오브젝트 필드 기본값
 - [ ] 5부 Keycloak — 관리자 가이드 (버전 박힌 URL)
 - [ ] 6부 k8s 배포 — Keycloak 서버 가이드 `all-config`
 - [ ] 7부 AD 연동 — LDAP user federation 문서 + Microsoft Learn
