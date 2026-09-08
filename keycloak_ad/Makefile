@@ -16,7 +16,11 @@ export GOFLAGS
 DECK        := ../Keycloak_AD_연동_쉽게_배우기.html
 PY          := python3
 TOOLS       := ../tools
-SRC         := $(shell find web ldap oidc -name '*.go' 2>/dev/null)
+# 덱에 전문이 실리는 파일들. 시험 파일은 발췌만 인용하므로 뺀다 —
+# 발췌한 줄이 넓으면 조립기가 잡는다(deck/build_deck.py 의 폭 검사).
+SRC         := $(shell find web ldap oidc -name '*.go' \
+                 ! -name '*_test.go' 2>/dev/null)
+SRCTEST     := $(shell find web ldap oidc -name '*_test.go' 2>/dev/null)
 
 .DEFAULT_GOAL := help
 .PHONY: help test vet fmt width certs record validate-k8s \
@@ -36,10 +40,11 @@ vet:                    ## go vet
 	$(GO) vet ./...
 
 fmt:                    ## gofmt 로 정렬
-	gofmt -w $(SRC)
+	gofmt -w $(SRC) $(SRCTEST)
 
 width:                  ## 덱에 실릴 줄이 폴더블 폭(72칸)을 넘는지
-	$(PY) tools/width.py $(SRC) certs/*.sh Makefile go.mod
+	$(PY) tools/width.py $(SRC) certs/make_certs.sh data/campus.ldif \
+	  Makefile go.mod
 
 certs:                  ## 시연용 CA·서버 인증서 만들고 검사
 	sh certs/make_certs.sh

@@ -233,6 +233,57 @@ func hexOf(b []byte) string {
 
 func indent(n int) string { return strings.Repeat("  ", n) }
 
+// cells 는 화면 칸 수다. 한글·CJK 는 두 칸이라 글자 수로 세면
+// 안 맞는다. tools/width.py · tools/embed_mono_font.py 와 같은 규칙.
+func cells(s string) int {
+	n := 0
+	for _, r := range s {
+		if isWide(r) {
+			n += 2
+		} else {
+			n++
+		}
+	}
+	return n
+}
+
+func isWide(r rune) bool {
+	switch {
+	case r >= 0x1100 && r <= 0x115F, // 한글 자모
+		r >= 0x2E80 && r <= 0x303E, // CJK 부수·구두점
+		r >= 0x3041 && r <= 0x33FF, // 가나·한글 호환·기호
+		r >= 0x3400 && r <= 0x4DBF, // CJK 확장 A
+		r >= 0x4E00 && r <= 0x9FFF, // CJK 기본
+		r >= 0xAC00 && r <= 0xD7A3, // 한글 음절
+		r >= 0xF900 && r <= 0xFAFF, // CJK 호환
+		r >= 0xFF00 && r <= 0xFF60: // 전각 라틴
+		return true
+	}
+	return false
+}
+
+// wrapCells 는 긴 글을 limit 칸 안으로 접는다. 어절 사이에서만 끊는다.
+func wrapCells(s, pad string, limit int) []string {
+	var out []string
+	cur := ""
+	for _, w := range strings.Fields(s) {
+		cand := w
+		if cur != "" {
+			cand = cur + " " + w
+		}
+		if cells(pad+cand) > limit && cur != "" {
+			out = append(out, pad+cur)
+			cur = w
+			continue
+		}
+		cur = cand
+	}
+	if cur != "" {
+		out = append(out, pad+cur)
+	}
+	return out
+}
+
 // ── 답을 사람 말로 ───────────────────────────────────────────────────
 
 // Describe 는 받은 응답을 한눈에 읽히게 적는다.
@@ -261,9 +312,20 @@ func Describe(m proto.Message) string {
 		fmt.Fprintf(&sb, "  결과: %s (%d)\n",
 			proto.ResultName(int(code)), code)
 		if d := kids[2].Str(); d != "" {
-			fmt.Fprintf(&sb, "  진단: %s\n", d)
+			// AD 의 진단 문구는 한 줄이 120칸을 넘는다. 값은 그대로
+			// 두고 보여 줄 때만 접는다 — 옆으로 밀리면 정작 봐야 할
+			// "data XXX" 가 안 보인다.
+			lines := wrapCells("진단: "+d, "  ", 72)
+			for i, l := range lines {
+				if i > 0 {
+					l = "        " + strings.TrimSpace(l)
+				}
+				fmt.Fprintln(&sb, l)
+			}
 			if why := ExplainADCode(d); why != "" {
-				fmt.Fprintf(&sb, "        → %s\n", why)
+				for _, l := range wrapCells("→ "+why, "        ", 72) {
+					fmt.Fprintln(&sb, l)
+				}
 			}
 		}
 	}
