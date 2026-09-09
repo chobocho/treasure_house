@@ -385,9 +385,25 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 
 - RFC 6265 (HTTP State Management) — https://www.rfc-editor.org/rfc/rfc6265 · 확인 2026-09-09
 
+## 10·11부 — 운영과 전체 훑기 (`op-*` · `wt-*` 슬라이드)
+
+| 슬라이드 | 주장 | 등급 | 출처 | 확인일 |
+|---|---|---|---|---|
+| `op-life-2` | 우리 realm 의 수명 값 (액세스 300초 · SSO 유휴 1800초) | A | `out/kc_admin_realm.txt` | 2026-09-09 |
+| `op-key-1` | realm 에는 서명용(sig)과 암호화용(enc) 열쇠가 따로 걸린다 | A | `out/kc_ops_keys.txt` | 2026-09-09 |
+| `op-key-2` | 새 열쇠를 얹으면 JWKS 에 **둘 다** 걸린다 | A | `out/kc_ops_keys.txt` | 2026-09-09 |
+| `op-key-3` | 회전은 새것을 먼저 얹고 옛것을 나중에 뺀다 | C | Keycloak 문서 "Configuring realm keys" — Rotating keys | 2026-09-09 |
+| `op-sec-1` | 서명 개인키는 데이터베이스에 있다 → DB 백업이 곧 열쇠 백업 | C | Keycloak 문서 "Realm keys" | 2026-09-09 |
+| `op-see-1` | 이벤트는 기본으로 꺼져 있고 켜야 남는다 | A | `out/kc_ops_events.txt` (켠 뒤에야 3건이 남았다) | 2026-09-09 |
+| `op-see-2` | `LOGIN_ERROR` 의 `error` 가 실패 이유를 알려 준다 | A | 같은 캡처 (`invalid_user_credentials`) | 2026-09-09 |
+| `op-see-3` | 클라이언트별 활성 세션을 관리 API 로 볼 수 있다 | A | `out/kc_ops_sessions.txt` | 2026-09-09 |
+| `op-see-5` | 지표는 관리 포트(9000)에 있고 **`--metrics-enabled` 를 따로 켜야 한다** | A | `out/kc_ops_metrics.txt` — 안 켰을 때 404 를 실제로 받았다 | 2026-09-09 |
+| `op-see-6` | 커넥션 풀(`agroal_*`)과 요청(`http_server_*`) 지표가 나온다 | A | `out/kc_ops_metrics.txt` (이름 164가지) | 2026-09-09 |
+| `op-up-2` | Keycloak 은 뜰 때 DB 스키마를 고치므로 판올림 전에 백업한다 | C | Keycloak 업그레이드 가이드 | 2026-09-09 |
+| `wt-*` | 40단계 체크리스트의 각 항목 | — | 앞의 각 부에 근거가 있다 (해당 장을 표에 적어 뒀다) | 2026-09-09 |
+
 ## 앞으로 채울 곳
 
 부가 하나씩 들어올 때마다 그 부의 절을 여기에 연다.
 지금은 비어 있는 것이 정상이다 — 뼈대 커밋에는 주장이 거의 없다.
 
-- [ ] 10부 운영 — 수명 기본값 · 이벤트 · 메트릭

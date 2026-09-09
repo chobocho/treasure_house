@@ -58,7 +58,11 @@ fi
 echo "Keycloak $VER 을 띄운다 (남은 메모리 ${AVAIL} MB)"
 # --health-enabled 를 켜면 관리 포트(9000)가 열린다.
 # 6부에서 쿠버네티스의 readiness/liveness 가 두드릴 그 주소다.
-"$KC/bin/kc.sh" start-dev --http-port "$PORT" --health-enabled=true \
+#
+# --metrics-enabled 는 따로 켜야 한다. 안 켜면 /metrics 가 404 다 —
+# 켠 줄 알고 긁으러 갔다가 404 를 받는 일이 흔하다(10부 4장).
+"$KC/bin/kc.sh" start-dev --http-port "$PORT" \
+  --health-enabled=true --metrics-enabled=true \
   $IMPORT >"$OUT/kc_server.log" 2>&1 &
 echo $! >"$OUT/.kc.pid"
 
