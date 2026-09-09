@@ -1,19 +1,401 @@
 <article class="card section" id="part10">
 <p class="chnum">10부</p>
 <h2>운영과 보안</h2>
-<p class="chsub">켜 두고 한 학기를 버티는 법</p>
+<p class="chsub">한 학기를 교수님 안 부르고 넘기는 법</p>
 <!--FIG file=system_p10.svg cap=10부까지 켜진 그림-->
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>토큰·세션 수명 표와 그 상호작용</li>
-<li>서명 키 회전</li>
-<li>시크릿 관리</li>
-<li>감사 이벤트 · <code>/metrics</code> · 로그 읽기</li>
-<li>백채널 로그아웃</li>
-<li>업그레이드 순서</li>
-<li>장애 시나리오 열 개 — 증상에서 명령까지</li>
+<li>토큰·세션 수명 표 — 무엇을 얼마로 둘까</li>
+<li>서명 열쇠 회전</li>
+<li>비밀 관리 — Secret 과 그 바깥</li>
+<li>감사 이벤트 · 지표 · 로그 읽는 법</li>
+<li>백채널 로그아웃 · 판올림 순서</li>
+<li>장애 열 가지 — 증상에서 명령까지</li>
 </ul>
-<div class="tip"><b>끝나면</b> — 무엇이 언제 만료되는지 알고, 새벽에 전화가 와도 순서대로 짚는다</div>
-<div class="warn"><b>이 부는 아직 준비 중입니다</b> — 뼈대만 세워 둔 상태다.
-본문이 들어오면 이 알림은 사라진다.</div>
+<div class="tip"><b>끝나면</b> — 무슨 일이 일어나고 있는지 볼 줄 알고,
+안 될 때 무엇부터 칠지 안다</div>
+<div class="key">여기까지는 <b>만드는 이야기</b>였다.
+이 부는 <b>돌아가는 것을 들여다보는</b> 이야기다 —
+그리고 대부분의 시간은 그쪽에 쓰인다.</div>
+</article>
+
+<article class="card" id="op-life">
+<p class="chnum">1장</p>
+<h2>수명 — 무엇을 얼마로</h2>
+<p class="chsub">짧으면 안전하고 길면 편하다</p>
+</article>
+
+<article class="card" id="op-life-1">
+<h3>다섯 개의 시계</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>무엇</th><th>기본</th><th>짧게 하면</th><th>길게 하면</th></tr>
+<tr><td>액세스 토큰</td><td>5분</td><td>훔쳐도 곧 죽는다</td><td>갱신이 줄어 가볍다</td></tr>
+<tr><td>인가 코드</td><td>1분</td><td colspan="2">짧아야 한다. 바꾸는 데 몇 초면 충분하다</td></tr>
+<tr><td>리프레시 토큰<br><span class="dim">= SSO 세션 유휴</span></td><td>30분</td>
+<td>자주 다시 로그인</td><td>회수가 늦어진다</td></tr>
+<tr><td>SSO 세션 최대</td><td>10시간</td><td colspan="2">하루 업무 시간에 맞춘다</td></tr>
+<tr><td>앱 세션 (B)</td><td>앱이 정한다</td><td colspan="2">토큰보다 짧을 이유는 없다</td></tr>
+</table>
+</div>
+<div class="key">토큰이 짧아도 <b>세션이 길면</b> 사용자는 다시 안 묻는다 —
+리프레시가 조용히 갱신하기 때문이다(4부 4장).
+그래서 "짧게" 는 불편이 아니라 <b>회수까지 걸리는 시간</b>의 문제다.</div>
+</article>
+
+<article class="card" id="op-life-2">
+<h3>우리가 정한 값</h3>
+<!--OUT file=kc_admin_realm.txt lines=1-12 note=5부에서 본 그 값들-->
+<span class="tier a">실행 검증</span>
+<div class="tip">5부 4장에서 본 그 표다. 이번에는 <b>왜 그 값인가</b>로 읽는다.
+<code>accessTokenLifespan 300</code>·<code>ssoSessionIdleTimeout 1800</code>.</div>
+</article>
+
+<article class="card" id="op-life-3">
+<h3>권한을 회수하는 데 걸리는 시간</h3>
+<pre class="term">AD 에서 그룹을 뺀 순간부터, 그 사람이 관리 화면을
+못 보게 되기까지 걸리는 시간:
+
+  최악:  동기화 주기(5분)
+       + 남은 액세스 토큰 수명(최대 5분)
+       + 앱 세션이 토큰을 다시 안 보면 그만큼 더
+
+  즉시 끊으려면:
+    1. AD 에서 **계정을 끈다**(그룹만 빼지 말고)
+    2. Keycloak 에서 그 사람의 세션을 지운다
+    3. 백채널 로그아웃이 있으면 앱들도 함께 끊긴다</pre>
+<span class="tier ill">설명용</span>
+<div class="warn">9부 2장에서 본 그 이야기다 —
+<b>이미 나간 토큰은 회수되지 않는다</b>.
+"즉시" 가 필요하면 세션까지 지워야 한다.</div>
+</article>
+
+<article class="card" id="op-key">
+<p class="chnum">2장</p>
+<h2>서명 열쇠 회전</h2>
+<p class="chsub">kid 가 왜 있는지가 여기서 드러난다</p>
+</article>
+
+<article class="card" id="op-key-1">
+<h3>지금 걸려 있는 열쇠</h3>
+<!--OUT file=kc_ops_keys.txt lines=1-6 note=JWKS 에 하나-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="op-key-2">
+<h3>하나를 더 얹으면</h3>
+<!--OUT file=kc_ops_keys.txt lines=7-20 note=둘 다 걸린다-->
+<span class="tier a">실행 검증</span>
+<div class="key"><b>둘 다 걸려 있다.</b> 새 토큰은 우선순위가 높은 쪽으로
+서명되고, 옛 열쇠로 서명된 토큰도 <b>만료될 때까지 확인된다</b>.
+4부 6장에서 "열쇠를 바꾸는 날을 위해 있는 칸" 이라고 한 <code>kid</code> 가
+바로 이 일을 한다.</div>
+</article>
+
+<article class="card" id="op-key-3">
+<h3>회전 순서</h3>
+<pre class="term">1. 새 열쇠를 **먼저 얹는다** (우선순위 높게)
+     → JWKS 에 둘이 걸린다
+     → 새 토큰은 새 열쇠로 서명된다
+
+2. 옛 토큰이 다 만료될 때까지 기다린다
+     → 액세스 토큰 5분 + 리프레시 30분이면 넉넉히 한 시간
+
+3. 옛 열쇠를 **뺀다**
+     → JWKS 에 하나만 남는다
+
+거꾸로 하면(빼고 얹으면) 그 사이의 토큰이 전부 죽는다.
+6부 6장 퀴즈의 "JWKS 를 영원히 캐시한 앱" 이 이 순간 터진다.</pre>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="op-key-4">
+<h3>언제 돌리나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>때</th><th>급한가</th></tr>
+<tr><td>정기적으로 (반년~1년)</td><td>아니다 — 계획해서</td></tr>
+<tr><td>열쇠가 샜을 것 같을 때</td><td><b>즉시</b> — 옛 열쇠를 바로 뺀다</td></tr>
+<tr><td>사람이 그만뒀을 때</td><td>열쇠를 만졌던 사람이라면</td></tr>
+</table>
+</div>
+<div class="warn">급할 때는 순서를 지킬 수 없다.
+옛 열쇠를 바로 빼면 <b>모든 토큰이 죽고</b> 전원이 다시 로그인한다 —
+그것이 맞는 선택인 상황이 있다.</div>
+</article>
+
+<article class="card" id="op-sec">
+<p class="chnum">3장</p>
+<h2>비밀은 어디에 두나</h2>
+<p class="chsub">Secret 은 시작일 뿐이다</p>
+</article>
+
+<article class="card" id="op-sec-1">
+<h3>이 덱에 나온 비밀 넷</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>비밀</th><th>어디서 쓰나</th><th>새면</th></tr>
+<tr><td>AD 서비스 계정 비밀번호</td><td>Keycloak → AD</td>
+<td>AD 를 읽을 수 있다 — <b>전 직원 명부</b></td></tr>
+<tr><td>클라이언트 secret</td><td>앱 → Keycloak</td>
+<td>앱을 사칭할 수 있다(4부 3장)</td></tr>
+<tr><td>데이터베이스 비밀번호</td><td>Keycloak → PostgreSQL</td>
+<td>세션과 설정이 통째로</td></tr>
+<tr><td>서명 개인키</td><td>Keycloak 안</td>
+<td><b>아무 토큰이나 만들 수 있다</b> — 최악</td></tr>
+</table>
+</div>
+<div class="key">서명 개인키는 우리가 파일로 두지 않았다 —
+Keycloak 이 데이터베이스에 두고 관리한다.
+그래서 <b>데이터베이스 백업이 곧 열쇠 백업</b>이다(5장).</div>
+</article>
+
+<article class="card" id="op-sec-2">
+<h3>Secret 만으로는 부족하다</h3>
+<div class="warn">2부 6장에서 본 그대로다 —
+<b>Secret 은 base64 일 뿐 암호화가 아니다</b>.
+클러스터를 읽을 수 있는 사람은 다 읽는다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>한 겹 더</th><th>무엇을 막나</th></tr>
+<tr><td>etcd 저장소 암호화</td><td>디스크를 통째로 가져가는 것</td></tr>
+<tr><td>RBAC 로 Secret 읽기 제한</td><td>클러스터 안의 다른 사람</td></tr>
+<tr><td>External Secrets · Vault</td><td>저장소에 비밀이 안 들어간다</td></tr>
+<tr><td>Sealed Secrets</td><td>암호화된 채로 커밋 — 클러스터만 푼다</td></tr>
+</table>
+</div>
+<div class="tip">이 덱의 매니페스트는 <code>secretGenerator</code> 로
+값을 적어 뒀다. <b>배우려고</b> 그렇게 한 것이고,
+그 파일에 "진짜로는 이렇게 안 한다" 를 적어 두었다.</div>
+</article>
+
+<article class="card" id="op-sec-3">
+<h3>커밋된 비밀은 이미 샌 것이다</h3>
+<div class="warn">git 에 한 번 들어간 비밀은 <b>지워도 남는다</b>.
+과거 커밋에, 남의 클론에, 포크에.
+"급해서 잠깐" 넣은 것이 몇 년 뒤에 발견된다.</div>
+<div class="key">이미 들어갔다면 <b>바꾸는 것</b>이 유일한 답이다.
+지우는 것이 아니라 바꾼다 — 그리고 그 비밀로 무엇을 할 수 있었는지
+되짚는다(위의 표).</div>
+</article>
+
+<article class="card" id="op-see">
+<p class="chnum">4장</p>
+<h2>들여다보기</h2>
+<p class="chsub">이벤트 · 세션 · 지표</p>
+</article>
+
+<article class="card" id="op-see-1">
+<h3>이벤트는 꺼져 있다</h3>
+<!--OUT file=kc_ops_events.txt lines=1-11 note=켜고 세 번 로그인해 봤다-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>Keycloak 은 기본으로 이벤트를 저장하지 않는다.</b>
+켜지 않으면 "누가 언제 로그인 실패했나" 를 나중에 물을 수 없다.
+사고가 난 뒤에 켜면 이미 늦다.</div>
+</article>
+
+<article class="card" id="op-see-2">
+<h3>실패의 이유가 남는다</h3>
+<div class="key"><code>LOGIN_ERROR</code> 에 <code>invalid_user_credentials</code> 가
+적혀 있다. 7부 2장에서 <b>사용자에게는 똑같이 보이던</b> 세 가지 실패가
+여기서는 종류로 갈린다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>켤 만한 이벤트</th><th>왜</th></tr>
+<tr><td><code>LOGIN</code>·<code>LOGOUT</code></td><td>누가 언제 들어왔나</td></tr>
+<tr><td><code>LOGIN_ERROR</code></td><td><b>가장 중요</b> — 공격과 장애가 둘 다 여기 남는다</td></tr>
+<tr><td><code>CODE_TO_TOKEN</code></td><td>토큰 교환. 앱 쪽 문제를 잡는다</td></tr>
+<tr><td><code>REFRESH_TOKEN</code></td><td>회전이 도는지</td></tr>
+<tr><td>관리 이벤트</td><td>누가 설정을 바꿨나</td></tr>
+</table>
+</div>
+<div class="tip">보관 기간(<code>eventsExpiration</code>)을 정해야 한다.
+안 정하면 데이터베이스가 계속 큰다 — 우리는 7일로 뒀다.</div>
+</article>
+
+<article class="card" id="op-see-3">
+<h3>지금 누가 로그인해 있나</h3>
+<!--OUT file=kc_ops_sessions.txt lines=1-9 note=클라이언트별 세션-->
+<span class="tier a">실행 검증</span>
+<div class="key">0부의 <b>세션 A</b> 가 여기 보인다.
+"로그아웃이 안 돼요" 를 받으면 이 화면에서 그 사람의 세션을 찾아
+직접 지울 수 있다 — 그것이 A 를 끊는 확실한 방법이다.</div>
+</article>
+
+<article class="card" id="op-see-4">
+<h3>세션 통계</h3>
+<!--OUT file=kc_ops_sessions.txt lines=10-19 note=앱별로 몇 명-->
+<span class="tier a">실행 검증</span>
+<div class="tip"><code>offline</code> 은 오프라인 토큰을 받아 간 세션 수다.
+사람이 브라우저를 닫아도 남는 종류라, 배치 작업 같은 데 쓴다.
+안 쓸 거면 <code>offline_access</code> 역할을 기본에서 빼 둔다(9부 3장).</div>
+</article>
+
+<article class="card" id="op-see-5">
+<h3>지표</h3>
+<!--OUT file=kc_ops_metrics.txt note=관리 포트에서-->
+<span class="tier a">실행 검증</span>
+<div class="key">프로메테우스가 긁어 가는 모양이다.
+<b>관리 포트(9000)</b> 에 있고 바깥에 안 내건다 — 6부 2장에서
+포트를 갈라 둔 이유가 이것이다.</div>
+</article>
+
+<article class="card" id="op-see-6">
+<h3>무엇을 지켜볼까</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>지표</th><th>이상하면</th></tr>
+<tr><td>로그인 성공/실패 비율</td><td>갑자기 실패가 늘면 AD 나 서비스 계정</td></tr>
+<tr><td>응답 시간 (특히 로그인)</td><td>AD 가 느려졌을 수 있다(7부 8장)</td></tr>
+<tr><td>JVM 힙 사용량</td><td>계속 늘면 세션이 안 지워지고 있다</td></tr>
+<tr><td>데이터베이스 연결 수</td><td>바닥나면 전부 멈춘다</td></tr>
+<tr><td>캐시 멤버 수</td><td>2여야 하는데 1이면 서로 못 찾은 것(6부 4장)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="op-fail">
+<p class="chnum">5장</p>
+<h2>장애 열 가지</h2>
+<p class="chsub">증상 → 원인 → 칠 명령</p>
+</article>
+
+<article class="card" id="op-fail-1">
+<h3>1~4 — 아무도 못 들어온다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>#</th><th>증상</th><th>먼저 볼 것</th></tr>
+<tr><td>1</td><td>로그인 화면조차 안 뜬다</td>
+<td><code>kubectl get pod -n lunch</code> · 인그레스 · 인증서 만료</td></tr>
+<tr><td>2</td><td>화면은 뜨는데 전원 로그인 실패</td>
+<td><b>서비스 계정</b>(7부 4장) — AD 로그의 첫 BIND</td></tr>
+<tr><td>3</td><td>Pod 가 계속 재시작</td>
+<td>startup 프로브 부족(6부 2장) · 메모리 limits · DB 연결</td></tr>
+<tr><td>4</td><td>DB 가 안 붙는다</td>
+<td>NetworkPolicy(6부 5장) · 비밀번호 · PVC 가 안 붙었나</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="op-fail-2">
+<h3>5~7 — 일부만 이상하다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>#</th><th>증상</th><th>먼저 볼 것</th></tr>
+<tr><td>5</td><td>어떤 사람만 못 들어온다</td>
+<td>7부 11장의 6~10번 — AD 로그의 SEARCH</td></tr>
+<tr><td>6</td><td>어떤 사람만 502·431</td>
+<td><b>토큰이 크다</b>(9부 5장) — 그룹 수를 센다</td></tr>
+<tr><td>7</td><td>가끔 "세션이 만료됐습니다"</td>
+<td>여러 벌이 캐시를 못 나눈다(6부 4장 퀴즈)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="op-fail-3">
+<h3>8~10 — 되는데 이상하다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>#</th><th>증상</th><th>먼저 볼 것</th></tr>
+<tr><td>8</td><td>https 인데 http 로 튕긴다</td>
+<td><code>KC_PROXY_HEADERS</code>·<code>KC_HOSTNAME</code>(6부 2장)</td></tr>
+<tr><td>9</td><td>권한을 바꿨는데 그대로다</td>
+<td><b>다시 로그인</b>(9부 2장) — 토큰은 사진이다</td></tr>
+<tr><td>10</td><td>어제 되던 것이 오늘 안 된다</td>
+<td>인증서·비밀번호 만료 · 열쇠 회전 · 판올림</td></tr>
+</table>
+</div>
+<div class="key">열 중 여섯이 앞의 부에 이미 나왔다.
+<b>이 표는 새 지식이 아니라 색인</b>이다 —
+증상에서 그 장으로 가는 길.</div>
+</article>
+
+<article class="card" id="op-fail-4">
+<h3>가장 먼저 칠 다섯 줄</h3>
+<pre class="term">kubectl get pod -n lunch                 # 떠 있나
+kubectl logs -n lunch deploy/keycloak --tail=50
+kubectl describe pod -n lunch <pod>      # 죽은 이유(Last State)
+curl -s http://<keycloak>:9000/health/ready
+tail -f <AD 로그>                         # 7부의 그 로그
+
+그리고 토큰이 의심되면:
+  jwtool decode "$TOKEN"</pre>
+<span class="tier ill">설명용</span>
+<div class="key"><b>추측하지 않는다.</b> 이 덱이 처음부터 끝까지
+로그와 캡처로 이야기한 이유가 그것이다.</div>
+</article>
+
+<article class="card" id="op-up">
+<p class="chnum">6장</p>
+<h2>판올림과 백업</h2>
+<p class="chsub">되돌릴 수 있게 해 두기</p>
+</article>
+
+<article class="card" id="op-up-1">
+<h3>무엇을 백업하나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>것</th><th>어떻게</th><th>없으면</th></tr>
+<tr><td><b>데이터베이스</b></td><td><code>pg_dump</code> 정기적으로</td>
+<td>세션·설정·<b>서명 열쇠</b>가 통째로 사라진다</td></tr>
+<tr><td>realm 설정</td><td><code>kc.sh export</code>(5부 10장)</td>
+<td>다시 눌러 만들어야 한다</td></tr>
+<tr><td>매니페스트</td><td>git</td><td>—</td></tr>
+<tr><td>비밀</td><td>금고(3장)</td><td>DB 를 복원해도 못 뜬다</td></tr>
+</table>
+</div>
+<div class="warn"><b>사람은 백업하지 않는다.</b> AD 에 있으니까 —
+5부 10장에서 내보내기에 사용자를 안 담은 이유다.</div>
+</article>
+
+<article class="card" id="op-up-2">
+<h3>판올림 순서</h3>
+<pre class="term">1. 판올림 문서를 읽는다 (건너뛰면 안 되는 판이 있다)
+2. **데이터베이스를 백업한다**
+3. 개발 환경에서 먼저 올린다
+4. 운영은 한 벌씩 갈아 끼운다 (6부 4장의 maxUnavailable: 0)
+5. /health/ready 를 보고 다음 벌로
+
+주의: Keycloak 은 뜰 때 **DB 스키마를 고친다**.
+      옛 판과 새 판이 잠깐 함께 도는 것이 늘 안전하지는 않다.
+      큰 판올림은 잠깐 멈추는 편이 낫다.</pre>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="op-up-3">
+<h3>되돌릴 수 있나</h3>
+<div class="warn"><b>스키마를 고친 뒤에는 되돌리기 어렵다.</b>
+컨테이너 이미지를 옛 판으로 바꿔도 데이터베이스가 새 판 모양이면
+안 뜬다. 그래서 <b>백업이 유일한 되돌리기</b>다.</div>
+<div class="key">그리고 백업은 <b>복원해 본 적이 있어야</b> 백업이다.
+한 학기에 한 번은 빈 데이터베이스에 복원해 보는 편이 낫다 —
+5부 10장에서 realm 파일을 빈 서버에 넣어 본 것과 같은 이유다.</div>
+</article>
+
+<article class="card quiz" id="op-quiz" data-quiz>
+<h3>10부 퀴즈</h3>
+<p class="q">Q. 보안 담당자가 "서명 열쇠가 샜을 수 있으니 지금 바꾸라" 고 한다.
+2장의 순서(새 열쇠를 먼저 얹고 기다린다)를 따라도 될까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 안 된다. 그 순서는 <b>계획된 회전</b>을 위한 것이다.<br>
+열쇠가 샜다면 <b>옛 열쇠로 서명된 토큰을 계속 받아 주는 것</b>이
+바로 위험이다. 공격자가 그 열쇠로 아무 토큰이나 만들 수 있으니까.<br>
+급할 때는 순서를 뒤집는다 — 새 열쇠를 얹고 <b>옛 열쇠를 즉시 뺀다</b>.
+그 순간 모든 토큰이 죽고 전원이 다시 로그인한다.
+불편하지만 그것이 맞는 선택이다.<br>
+그리고 그 뒤에 물어야 할 것이 하나 더 있다 — <b>어떻게 샜는가</b>.
+데이터베이스 백업이 샜다면 열쇠만 바꿔서 될 일이 아니다(6장).</div>
+</article>
+
+<article class="card" id="op-end">
+<h3>10부에서 배운 것</h3>
+<ul>
+<li>수명은 <b>회수까지 걸리는 시간</b>을 정한다 — 불편의 문제가 아니다</li>
+<li>열쇠는 <b>먼저 얹고 나중에 뺀다</b>. 급할 때만 거꾸로</li>
+<li>Secret 은 시작일 뿐 — 커밋된 비밀은 <b>바꾸는 것</b>이 답이다</li>
+<li>이벤트는 <b>켜야 남는다</b>. 사고 난 뒤에 켜면 늦다</li>
+<li>지표는 관리 포트에, 바깥에 내걸지 않는다</li>
+<li>장애 열 가지 중 여섯은 <b>앞의 부에 답이 있다</b></li>
+<li>백업은 <b>복원해 본 적이 있어야</b> 백업이다</li>
+</ul>
 </article>
