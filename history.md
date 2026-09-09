@@ -1,3 +1,10 @@
+### [2026-09-09 03:20] Keycloak×AD 덱 전수 리뷰 — 사실오류 2건·모순 1건·상호참조 5건·표기 8건·레이아웃 1건 정정
+- **기획:** PLAN §8 14단계. 1005장을 기계 검사 + 눈으로 훑어 결함을 종류별로 세었다.
+- **TC:** deck/check_xref.py(신규)로 "N부 M장" 화살표를 전수 대조 — 상호참조 5건이 전부 여기서 나왔다. make all 에 넣었다.
+- **개발:** deck/check_xref.py(신규) · Makefile · deck/base/head.html · deck/glossary.txt · deck/claims.md · sections 03·06·07·08·10·12 외 3개 파일
+- **검증:** 1005장 · 커버리지 8998/8998줄 100% · 조립 0건 · 역검증 통과 · 상호참조 0건 · deck-check 0건 · 글꼴 통과 · test 14패키지
+- **비고:** AD 는 1000건을 넘겨도 sizeLimitExceeded(4)를 준다 — "조용히 버린다" 가 아니라 받는 쪽이 흘려보내는 것이다. miniidp 를 "400줄" 이라 부른 곳 6개와 "약 1,100줄" 이라는 표가 서로 어긋나 있었다(실제 1,050줄). 12부의 세션 A/B 는 0부와 반대였다.
+
 ### [2026-09-09 02:40] Keycloak×AD 덱 공개 — 1005장, index·README 카드 함께
 - **기획:** PLAN §8 13단계. 12부까지 다 들어와 '준비 중' 표지가 0개라 Makefile 에서 SKEL=1 을 뗐다.
 - **TC:** make all 을 --skeleton 없이 돌려 deck-check 가 그대로 통과하는지 확인. rsvg-convert 로 system_p4·p12 를 PNG 로 떠서 눈으로 봤다.

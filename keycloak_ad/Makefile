@@ -27,7 +27,8 @@ YAML        := $(shell find k8s -name '*.yaml' 2>/dev/null | sort)
 .DEFAULT_GOAL := help
 .PHONY: help test vet fmt width certs record validate-k8s k8s-tools \
         kc-fetch kc-run kc-stop kc-e2e \
-        figs deck deck-check deck-verify font font-check all clean
+        figs deck deck-check deck-verify deck-xref \
+        font font-check all clean
 
 help:                   ## 이 목록
 	@grep -hE '^[a-z][a-zA-Z0-9_-]*:.*?## ' $(MAKEFILE_LIST) \
@@ -90,13 +91,19 @@ deck-check:             ## 완성된 덱 점검 (node DOM 스텁)
 deck-verify:            ## 덱의 코드·출력이 원본과 같은지 역검증
 	$(PY) deck/verify_deck.py
 
+# "1부 6장에서 본 그 쿠키다" 류의 화살표. 장을 하나 끼우면 소리 없이
+# 한 칸씩 밀린다 — 14단계 리뷰에서 다섯 건 나와 도구로 옮겼다.
+deck-xref:              ## "N부 M장" 이 진짜 그 자리를 가리키는지
+	$(PY) deck/check_xref.py
+
 font:                   ## 고정폭 글꼴(DeckMono) 서브셋 내장
 	$(PY) $(TOOLS)/embed_mono_font.py $(DECK)
 
 font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
-all: deck font deck-verify deck-check font-check  ## 조립부터 검증까지
+## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
+all: deck font deck-verify deck-xref deck-check font-check
 
 clean:                  ## 덱 지우기 (인증서·캡처는 남긴다)
 	rm -f $(DECK)

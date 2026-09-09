@@ -122,6 +122,7 @@
 | `ad-srch-6` | 필터 값의 `( ) * \` 와 NUL 은 `\XX` 로 이스케이프 | A + C | `ldap/proto/proto_test.go` · RFC 4515 §3 | 2026-09-08 |
 | `ad-srch-7` | present 필터만 원시형이라 태그가 `87` | A + C | `proto_test.go` 골든 · RFC 4511 §4.5.1.7 | 2026-09-08 |
 | `ad-srch-13` | AD 는 한 검색에서 기본 1000건만 돌려준다 | C | Microsoft Learn "MaxPageSize" (LDAP 정책 기본값 1000) | 2026-09-08 |
+| `ad-srch-13` `ad-end-quiz1` | 그때 앞의 1000건과 함께 `sizeLimitExceeded`(결과 코드 4)를 돌려준다 — **조용히 버리는 것이 아니다** | C | RFC 4511 §4.5.2 (resultCode sizeLimitExceeded) · Microsoft Learn "LDAP policies" | 2026-09-09 (14단계 리뷰에서 정정) |
 | `ad-srch-13` | Simple Paged Results 컨트롤 OID 는 1.2.840.113556.1.4.319 | A + C | `ldap/proto/proto.go` · RFC 2696 | 2026-09-08 |
 | `ad-tls-1` | 포트 389 LDAP · 636 LDAPS · 3268/3269 글로벌 카탈로그 | C | Microsoft Learn "AD DS 포트 요구 사항" | 2026-09-08 |
 | `ad-tls-3` | 사내 CA 를 안 믿으면 악수가 깨진다 (자바 쪽 PKIX path building failed) | A + C | `out/ad_ldaps_notrust.txt` · 1부 7장 | 2026-09-08 |
@@ -426,6 +427,24 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 - OIDC Discovery 1.0 — https://openid.net/specs/openid-connect-discovery-1_0.html · 확인 2026-09-09
 - OIDC RP-Initiated Logout 1.0 — https://openid.net/specs/openid-connect-rpinitiated-1_0.html · 확인 2026-09-09
 - OIDC Back-Channel Logout 1.0 — https://openid.net/specs/openid-connect-backchannel-1_0.html · 확인 2026-09-09
+
+## 14단계 전수 리뷰에서 고친 것 (2026-09-09)
+
+| 종류 | 무엇 | 어디 |
+|---|---|---|
+| 사실오류 | AD 가 1000건 초과분을 "그냥 버린다" → 앞의 1000건과 함께 `sizeLimitExceeded`(4)를 돌려준다 | `ad-srch-13` · `ad-end-quiz1` |
+| 사실오류 | miniidp 를 "400줄" 이라 불렀다 → 실제 1,050줄(주석 빼면 760). 같은 덱의 표는 "약 1,100줄" 이라 서로 어긋나 있었다 | 4·5·13부 6곳 · index · README |
+| 모순 | 12부의 세션 A/B 가 0부·4부와 반대로 적혀 있었다 (A=IdP, B=앱이 맞다) | `wr-sum-4` · `wr-faq-5` |
+| 상호참조 | realm 은 5부 **4**장 | `wr-faq-4` |
+| 상호참조 | 길 3(게이트웨이)은 8부 **7**장 | `ap-road-2` |
+| 상호참조 | 페이지 나누기는 3부 **6**장 (2곳) | `f7-sa-5` |
+| 상호참조 | "JWKS 를 영원히 캐시한 앱" 퀴즈는 **4부** 6장 | `op-key-3` |
+| 표기 | 한 부 안에서 같은 제목 4건 | `k6-kc-8` `k6-sec-6` `f7-fed-4` `f7-grp-3` |
+| 표기 | 용어집 낱말이 본문에 없는 말이었다 3건 | `deck/glossary.txt` |
+| 표기 | 퀴즈에 물음표가 빠졌다 | `f7-sync-quiz` |
+| 레이아웃 | 소스 라벨의 긴 경로(최대 52칸)가 폴더블 접힘에서 카드를 넘겼다 — flex 항목의 `min-width:0` 누락 | `deck/base/head.html` (29곳에 영향) |
+
+상호참조는 이 리뷰 뒤로 `deck/check_xref.py` 가 매번 검사한다 (`make deck-xref`).
 
 ## 앞으로 채울 곳
 
