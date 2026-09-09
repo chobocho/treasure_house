@@ -71,7 +71,7 @@
 | `w-rd-1` | 3xx 의 다음 주소는 `Location` 헤더에 온다 | A | `out/web03_nofollow.txt` 13–21행 | 2026-09-08 |
 | `w-rd-5` | `Location` 은 상대 주소여도 된다 | C | RFC 7231 §7.1.2 (현행 RFC 9110 §10.2.2) | 2026-09-08 |
 | `w-rd-8` | 303 은 방법을 GET 으로 바꾸고 307 은 그대로 둔다 | A | `out/web03_post_303.txt` · `out/web03_post_307.txt` | 2026-09-08 |
-| `w-rd-8` | 301/302 에 대해 브라우저가 POST 를 GET 으로 바꾸는 것은 규약 위반이나 관행 | C | RFC 9110 §15.4.2 註 · §15.4.3 註 | 2026-09-08 |
+| `w-rd-8` | 301/302 에 대해 브라우저가 POST 를 GET 으로 바꾸는 것을 지금 규약은 MAY 로 허용한다 (옛 RFC 2616 은 금지) | C | RFC 9110 §15.4.2 註 · §15.4.3 註 | 2026-09-08 |
 | `w-fm-2` | 폼 전송의 기본 형식은 `application/x-www-form-urlencoded` | A | `out/web02_login_ok.txt` 7–15행 | 2026-09-08 |
 | `w-ck-2` | `Set-Cookie` 의 값·속성 구조 | A | `out/web02_login_ok.txt` 19행 | 2026-09-08 |
 | `w-ck-3` | 쿠키 속성 `Path`·`HttpOnly`·`SameSite`·`Max-Age`·`Secure` 의 뜻 | C | RFC 6265 §4.1.2, RFC 6265bis §5.4 (SameSite) | 2026-09-08 |
@@ -103,7 +103,7 @@
 | `ad-attr-1` | `sAMAccountName` 은 도메인 안에서 유일하고 20자 제한 | C | Microsoft Learn "sAMAccountName attribute" | 2026-09-08 |
 | `ad-attr-1` | UPN 은 숲 전체에서 유일 | C | Microsoft Learn "userPrincipalName attribute" | 2026-09-08 |
 | `ad-attr-2` | AD 사용자의 objectClass 는 top·person·organizationalPerson·user | A | `data/campus.ldif` · `out/ad_search_filters.txt` | 2026-09-08 |
-| `ad-attr-3` | `objectGUID` 는 16바이트 이진값이고 변하지 않는다 | A + C | `out/ad_search_bytes.txt` 64–68행 · Microsoft Learn "objectGUID attribute" | 2026-09-08 |
+| `ad-attr-3` | `objectGUID` 는 16바이트 이진값이고 변하지 않는다 | A + C | `out/ad_search_bytes.txt` 49–52행 · Microsoft Learn "objectGUID attribute" | 2026-09-08 |
 | `ad-attr-4` | uAC 512 보통 · 514 비활성 · 66048 만료 없음 (0x0002 / 0x0200 / 0x10000) | A + C | `data/campus.ldif` · Microsoft Learn "How to use the UserAccountControl flags" | 2026-09-08 |
 | `ad-grp-2` | `memberOf` 는 저장된 값이 아니라 역참조로 계산된다 | A + C | `ldap/fakead/dir.go` `indexGroups` · Microsoft Learn "memberOf attribute" | 2026-09-08 |
 | `ad-ber-1` | BER 은 TLV(태그·길이·내용) 구조 | C | ITU-T X.690 §8.1 | 2026-09-08 |
@@ -115,6 +115,14 @@
 | `ad-bind-4` | AD 는 실패 이유를 전부 49 로 답하고 `data XXX` 로만 알린다 | A + C | `out/ad_bind_52e.txt` 등 · Microsoft Learn "LDAP error codes" | 2026-09-08 |
 | `ad-bind-5` | data 525·52e·530·531·532·533·701·773·775 의 뜻 | C | Microsoft Learn "Active Directory LDAP 바인드 오류" | 2026-09-08 |
 | `ad-bind-7` | 실패가 잦으면 잠긴다 (우리 흉내: 창 10분·5회·잠금 30분) | A | `out/ad_bind_775.txt` · `ldap/fakead/dir.go` | 2026-09-08 |
+| `ad-bind-7` | AD 기본 도메인 정책은 잠금 임계값 0(꺼짐). 켜면 잠금 시간·관찰 창 기본 30분 | C | Microsoft Learn "Account lockout threshold" · "Account lockout duration" | 2026-09-09 |
+| `ad-bind-6` `ad-bind-8b` `ad-not-4` | 진짜 AD 는 비밀번호가 맞아야 533 을 주고, 우리 흉내는 꺼짐을 먼저 봐 틀려도 533 이다 | A + C | `ldap/fakead/dir.go` Bind 순서 · Microsoft Learn "LDAP error 49 sub-codes" | 2026-09-09 |
+| `ad-ber-7b` | LDAP 의 application 태그는 25(IntermediateResponse)까지 | C | RFC 4511 §4.13 | 2026-09-09 |
+| `ad-not-4` | AD 는 approxMatch(`~=`)를 equalityMatch 로 평가한다 | C | MS-ADTS §3.1.1.3.1.3.1 | 2026-09-09 |
+| `ad-grp-2` | 그룹 매퍼의 두 전략은 `LOAD_GROUPS_BY_MEMBER_ATTRIBUTE` 와 `GET_GROUPS_FROM_USER_MEMBEROF_ATTRIBUTE`. AD 는 둘 다 된다 | A + C | `keycloak/json/ldapmap-groups.json` · Keycloak Server Admin "LDAP group mapper" | 2026-09-09 |
+| `w-tls-5` | Go·브라우저는 CN 을 안 보고, 자바(`HostnameChecker`)는 dNSName SAN 이 없을 때만 CN 으로 물러선다 | C | RFC 6125 §6.4.4 · JDK `sun.security.util.HostnameChecker.matchDNS` · Go `crypto/x509` (1.15+) | 2026-09-09 |
+| `k8-ing-2` | `lunch.campus.example` 이름의 인증서는 이 저장소에 없다 — `certs/make_certs.sh` 는 sso·ldap 둘만 만든다 | A | `certs/make_certs.sh` 72–73행 · `out/web04_wrongname.txt` | 2026-09-09 |
+| `k8-kz-quiz` | `replicas:` 의 이름 오타는 `resource with name … does not match a config` 로 멈추고, `patches:` 의 target 이 안 맞으면 조용히 무시된다 | A | Kustomize v5.8.1 (`bin/kubectl kustomize`) 로 직접 확인 2026-09-09 | 2026-09-09 |
 | `ad-bind-8` | 비밀번호가 빈 바인드(unauthenticated bind)는 성공으로 처리하면 안 된다 | C | RFC 4511 §4.2 · RFC 4513 §5.1.2 | 2026-09-08 |
 | `ad-srch-1` | SearchRequest 는 여덟 칸이고 순서로만 구별된다 | A + C | `out/ad_search_bytes.txt` · RFC 4511 §4.5.1 | 2026-09-08 |
 | `ad-srch-2` | scope 는 base(0)·one(1)·sub(2) | A + C | `out/ad_search_scopes.txt` · RFC 4511 §4.5.1.2 | 2026-09-08 |
@@ -228,7 +236,7 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 | `k8-val-10` | `-strict` 없이는 모르는 필드가 조용히 지나간다 | A | `out/k8s_invalid_nostrict.txt` | 2026-09-08 |
 | `k8-val-11` | 쿠버네티스의 파서에서 따옴표 없는 `yes`·`NO`·`12:30` 은 **글자로 남는다** | A | `out/k8s_yaml_traps.txt` | 2026-09-08 |
 | `k8-val-11b` | 같은 파서에서 `1.20` 은 1.2 로, `010` 은 8로 바뀐다 | A | `out/k8s_yaml_traps.txt` | 2026-09-08 |
-| `k8-val-11b` | "노르웨이 문제" 는 `yes`/`no` 를 참·거짓으로 읽던 YAML 1.1 의 것이다 | C | YAML 1.1 §10.1 (bool) 대 YAML 1.2 core schema | 2026-09-08 |
+| `k8-val-11b` | kubectl·API 서버의 YAML 파서(sigs.k8s.io/yaml = go-yaml v2, YAML 1.1)는 `yes`/`no`/`on`/`off` 를 참·거짓으로, `010` 을 8진수로 읽는다 | A + C | `out/k8s_yaml_traps.txt` (010→8, kustomize 가 붙인 따옴표) · sigs.k8s.io/yaml README · YAML 1.1 §10.1 (bool) | 2026-09-09 |
 
 - Kubernetes 문서 — https://kubernetes.io/docs/concepts/ · 확인 2026-09-08
 - YAML 1.2 규격 — https://yaml.org/spec/1.2.2/ · 확인 2026-09-08
@@ -248,7 +256,7 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 
 | 슬라이드 | 주장 | 등급 | 출처 | 확인일 |
 |---|---|---|---|---|
-| `kc-what-2` | Keycloak 의 안내문은 칸이 56개, 우리 miniidp 는 11개 | A | `out/kc_e2e_01_discovery.txt` · `out/oidc_discovery.txt` | 2026-09-08 |
+| `kc-what-2` | Keycloak 의 안내문은 칸이 56개, 우리 miniidp 는 14개 | A | `out/kc_e2e_01_discovery.txt` · `out/oidc_discovery.txt` | 2026-09-08 |
 | `kc-run-3` | 개발 모드가 스스로 "DO NOT use this configuration in production" 을 찍는다 | A | `out/kc_boot.txt` | 2026-09-08 |
 | `kc-run-4` | 운영 모드는 `kc.sh build` 로 실행 이미지를 미리 굽는다 | C | Keycloak 서버 가이드 "Configuring Keycloak" | 2026-09-08 |
 | `kc-run-5` | 건강 확인은 관리 포트(9000)에 있다 | A | `keycloak/run_dev.sh` 실행 · `/health/ready` 응답 | 2026-09-08 |
@@ -256,7 +264,11 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 | `kc-cfg-1` | 설정은 명령줄 → 환경 변수 → conf 파일 순으로 이긴다 | C | Keycloak 서버 가이드 "Configuring Keycloak" — 우선순위 | 2026-09-08 |
 | `kc-cfg-2` | `KC_BOOTSTRAP_ADMIN_*` 는 첫 관리자를 만들 때만 쓰인다 | C | Keycloak 서버 가이드 "Bootstrapping the admin user" | 2026-09-08 |
 | `kc-realm-3` | realm 설정 칸은 107개다 | A | `out/kc_admin_realm.txt` | 2026-09-08 |
-| `kc-realm-4` | 우리 realm 의 기본값 넷(sslRequired external 등) | A | `out/kc_admin_realm.txt` | 2026-09-08 |
+| `kc-realm-4` | 우리 realm 의 칸 넷 — sslRequired external · accessTokenLifespan 300 · ssoSessionIdleTimeout 1800 은 기본값, bruteForceProtected 는 기본이 꺼짐이라 realm.json 에서 켰다 | A + C | `out/kc_admin_realm.txt` · `keycloak/json/realm.json` · Keycloak Server Admin "Brute force detection"(기본 disabled) | 2026-09-09 |
+| `kc-realm-quiz` | `hostname*` 은 실행 시 옵션, `db`·`cache*`·`health-enabled`·`metrics-enabled`·`features` 는 build 옵션 | C | Keycloak "All configuration" (build 옵션 표시) · 6부 ConfigMap 이 `KC_HOSTNAME` 을 재굽기 없이 바꾼다 | 2026-09-09 |
+| `kc-fed-2` | 관리 API 는 `secret` 로 선언된 컴포넌트 설정(`bindCredential`)을 `**********` 로 가려 돌려주고, 같은 값을 보내면 옛 값이 유지된다 | C | Keycloak `StripSecretsUtils` · `ComponentRepresentation.SECRET_VALUE` · `kc.sh export` 결과에는 평문(`keycloak/realm-campus.json`) | 2026-09-09 |
+| `kc-user-4` `kc-user-quiz` `f7-sync-quiz` `wr-faq-1` | AD 에서 사라진 가져온 사용자는 다음에 그 사용자를 찾는 순간(로그인·검색·토큰 갱신의 getUserById) 검증에 실패해 사본이 지워진다 | C | Keycloak `UserStorageManager.importValidation` → `LDAPStorageProvider.validate` → `deleteInvalidUser` ("Removing invalid user") | 2026-09-09 |
+| `f7-sync-4` `op-life-3` | 그룹 소속 변경은 그룹 객체의 `whenChanged` 만 바꾸고 사람의 `whenChanged` 는 안 움직여 변경분 동기화가 못 본다. READ_ONLY 그룹 매퍼는 로그인·갱신 때 LDAP 을 다시 읽는다 | C | Microsoft Learn "memberOf"(back link) · Keycloak `GroupLDAPStorageMapper` READ_ONLY 프록시 · `out/kc_ad_sync.txt` 의 whenChanged 필터 | 2026-09-09 |
 | `kc-client-2` | `pkce.code.challenge.method=S256` 으로 PKCE 를 강제한다 | B·C | `keycloak/json/client.json` · Keycloak 클라이언트 문서 | 2026-09-08 |
 | `kc-client-5` | 로그인 폼의 action 에 한 번만 쓰는 `session_code` 가 박힌다 | A | `out/kc_e2e_03_loginform.txt` | 2026-09-08 |
 | `kc-user-2` | AD 의 `userAccountControl: 514` 가 Keycloak 의 `enabled=false` 로 온다 | A | `out/kc_admin_users.txt` · `data/campus.ldif` | 2026-09-08 |
@@ -327,7 +339,7 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 | `k6-db-5` | 프로브는 `httpGet`·`exec`·`tcpSocket` 셋 | C | Kubernetes 문서 "Configure Probes" | 2026-09-08 |
 | `k6-kc-1` | 인그레스 뒤에서는 `KC_PROXY_HEADERS=xforwarded` 가 필요하다 | C | Keycloak 서버 가이드 "Using a reverse proxy" | 2026-09-08 |
 | `k6-kc-3` | 캐시가 뜨는 중에 서로를 찾으므로 `publishNotReadyAddresses` 가 필요하다 | C | Keycloak "Configuring distributed caches" · Kubernetes Service 문서 | 2026-09-08 |
-| `k6-kc-4` | 공식 이미지는 build 가 끝나 있어 `start --optimized` 로 뜬다 | C | Keycloak "Running Keycloak in a container" | 2026-09-08 |
+| `k6-kc-4` | `db`·`cache`·`health-enabled`·`metrics-enabled` 는 build 옵션이라 `start --optimized` 에서는 무시된다. 공식 이미지는 기본값으로 구워져 있어 `start`(뜰 때 굽기) 로 띄우거나 직접 구운 이미지에만 `--optimized` 를 쓴다 | C | Keycloak "Running Keycloak in a container" (custom image + `--optimized`) · "All configuration" (build 옵션 표시) · 배포판의 `META-INF/keycloak-persisted.properties` | 2026-09-09 |
 | `k6-kc-6` | 건강 확인 주소는 `/health/started`·`/health/ready`·`/health/live` (관리 포트) | A·C | `keycloak/run_dev.sh` 실행 응답 · Keycloak "Configuring health checks" | 2026-09-08 |
 | `k6-kc-7` | 읽기 전용 루트에서는 쓸 수 있는 자리를 따로 줘야 한다 | C | Kubernetes "Pod Security Standards" | 2026-09-08 |
 | `k6-ha-1` | OIDC 는 붙여 두기(sticky)가 필요 없다 | C | Keycloak "Configuring distributed caches" | 2026-09-08 |
@@ -335,7 +347,7 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 | `k6-ha-5` | StatefulSet replicas 를 늘려도 PostgreSQL 은 이중화되지 않는다 | C | PostgreSQL 문서 — 복제는 따로 설정한다 | 2026-09-08 |
 | `k6-sec-1` | kustomize 는 kustomization 루트 밖의 파일을 못 읽는다 | A | 실제 오류 — `security; file … is not in or below …` | 2026-09-08 |
 | `k6-sec-3` | NetworkPolicy 는 CNI 가 이해해야 동작하고, 아니면 조용히 무시된다 | C | Kubernetes 문서 "Network Policies" — Prerequisites | 2026-09-08 |
-| `k6-wrap-3` | base·dev·prod 각 16개 오브젝트가 스키마 검사를 통과한다 | A | `out/k8s_validate.txt` | 2026-09-08 |
+| `k6-wrap-3` | base·dev·prod 각 20개 오브젝트가 스키마 검사를 통과한다 | A | `out/k8s_validate.txt` | 2026-09-08 |
 | `k6-kc-2` | ConfigMap 의 값은 글자여야 한다 (`"true"`) | A·C | 2부 8장의 YAML 실험 · Kubernetes ConfigMap 문서 | 2026-09-08 |
 
 - Kubernetes 문서 — https://kubernetes.io/docs/concepts/ · 확인 2026-09-08
@@ -349,7 +361,8 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 | `ap-px-1` | oauth2-proxy 가 state·nonce·PKCE·토큰 교환·세션까지 대신한다 | C | oauth2-proxy 문서 — OIDC provider | 2026-09-08 |
 | `ap-px-3` | `--allowed-group` 으로 그룹을 걸러 통과시킨다 | C | oauth2-proxy 문서 — Authorization | 2026-09-08 |
 | `ap-px-4` | 쿠키 열쇠는 32바이트여야 하고 여러 벌이 같은 값을 써야 한다 | C | oauth2-proxy 문서 — Cookie secret | 2026-09-08 |
-| `ap-hdr-1` | 통과한 요청에 `X-Auth-Request-User/-Email/-Groups` 가 붙는다 | C | oauth2-proxy 문서 — `--set-xauthrequest` | 2026-09-08 |
+| `ap-hdr-1` | auth_request 방식에서는 인그레스가 `X-Auth-Request-User/-Email/-Groups` 응답 헤더를 앱 요청에 옮기고, 프록시를 앞에 세우면 upstream 은 `X-Forwarded-User/-Email/-Groups` 를 받는다 | C | oauth2-proxy 문서 — `--set-xauthrequest`(응답 헤더) · `--pass-user-headers`(upstream) · `k8s/base/lunch-ingress-authreq.yaml` auth-response-headers | 2026-09-09 |
+| `az-admin-2` | `--allowed-group` 은 여러 번 줄 수 있다(any-of). 한 인스턴스에 조건이 한 벌이라 경로별로 다르게 못 건다 | C | oauth2-proxy 문서 — `--allowed-group` | 2026-09-09 |
 | `ap-hdr-2` | 헤더는 누구나 적을 수 있어 담장이 없으면 아무것도 안 지킨다 | C | oauth2-proxy 문서 — Security(프록시 뒤에 두라) | 2026-09-08 |
 | `ap-hdr-4` | ingress-nginx 의 `auth-url`·`auth-signin`·`auth-response-headers` | C | ingress-nginx 문서 — External Authentication | 2026-09-08 |
 | `ap-rp-4` | `SameSite=Strict` 면 IdP 에서 돌아오는 요청에 쿠키가 안 붙어 로그인이 안 된다 | C | MDN — SameSite cookies | 2026-09-08 |

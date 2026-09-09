@@ -6,7 +6,7 @@
 <h4>이 부에서 다루는 것</h4>
 <ul>
 <li>PostgreSQL 을 StatefulSet 으로 — 상태가 있는 것은 다르다</li>
-<li>운영 모드로 굽기 · <code>--optimized</code></li>
+<li>운영 모드로 뜨기 · build 옵션과 실행 옵션</li>
 <li>인그레스 뒤에 두기 · <code>KC_PROXY_HEADERS</code></li>
 <li>건강 확인 세 가지 · 관리 포트 9000</li>
 <li>여러 벌 띄우기 · 캐시를 나눠 갖기</li>
@@ -169,18 +169,29 @@ Keycloak 은 <b>뜨는 중에</b> 서로를 찾아야 하는데,
 
 <article class="card" id="k6-kc-4">
 <h3>운영 모드로 뜬다</h3>
-<!--CODE file=k8s/base/keycloak.yaml lines=76-104 note=start --optimized-->
+<!--CODE file=k8s/base/keycloak.yaml lines=80-111 note=start — 뜰 때 한 번 굽는다-->
 <span class="tier b">구문 검증</span>
-<div class="key"><code>--optimized</code> 는 "이미지를 만들 때
-<code>kc.sh build</code> 를 해 뒀다" 는 약속이다.
-공식 이미지가 그렇게 만들어져 있어서 그냥 쓸 수 있다.<br>
-직접 이미지를 굽는 경우(공급자 jar 를 넣거나 기능을 켤 때)에는
-<code>Dockerfile</code> 에서 <code>kc.sh build</code> 를 돌린다 — 5부 2장의 그 이야기다.</div>
+<div class="key"><code>start</code> 만 적었다. <code>--optimized</code> 는 "이미지를 만들 때
+<code>kc.sh build</code> 를 해 뒀다" 는 약속인데, 공식 이미지는 <b>기본값</b>(dev-file DB ·
+건강 확인 꺼짐)으로 구워져 있다. 그 깃발을 붙이면 아래 build 옵션이 <b>무시되고</b>
+9000 포트가 안 열려 프로브가 전부 실패한다.</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>build 옵션 (굽는 때 정해진다)</th><th>실행 옵션 (뜰 때 읽는다)</th></tr>
+<tr><td><code>KC_DB</code> · <code>KC_CACHE</code> · <code>KC_CACHE_STACK</code> ·
+<code>KC_HEALTH_ENABLED</code> · <code>KC_METRICS_ENABLED</code></td>
+<td><code>KC_HOSTNAME</code> · <code>KC_PROXY_HEADERS</code> · <code>KC_HTTP_ENABLED</code> ·
+<code>KC_DB_URL</code> · <code>KC_DB_USERNAME</code>/<code>PASSWORD</code></td></tr>
+</table>
+</div>
+<div class="tip">몇십 초를 아끼려면 <code>Dockerfile</code> 에서
+<code>kc.sh build --db=postgres --health-enabled=true --metrics-enabled=true --cache-stack=kubernetes</code>
+를 미리 돌린 이미지를 만들고 그때 <code>--optimized</code> 를 붙인다 — 5부 2장의 그 이야기다.</div>
 </article>
 
 <article class="card" id="k6-kc-5">
 <h3>비밀은 Secret 에서 온다</h3>
-<!--CODE file=k8s/base/keycloak.yaml lines=105-124 note=envFrom 과 secretKeyRef-->
+<!--CODE file=k8s/base/keycloak.yaml lines=112-127 note=envFrom 과 secretKeyRef-->
 <span class="tier b">구문 검증</span>
 <div class="tblwrap">
 <table class="kv">
@@ -195,7 +206,7 @@ Keycloak 은 <b>뜨는 중에</b> 서로를 찾아야 하는데,
 
 <article class="card" id="k6-kc-6">
 <h3>건강 확인 셋</h3>
-<!--CODE file=k8s/base/keycloak.yaml lines=125-148 note=startup·readiness·liveness-->
+<!--CODE file=k8s/base/keycloak.yaml lines=128-151 note=startup·readiness·liveness-->
 <span class="tier b">구문 검증</span>
 <div class="tblwrap">
 <table class="kv">
@@ -216,7 +227,7 @@ JVM 이 뜨고 데이터베이스 스키마를 확인하는 데 수십 초가 �
 
 <article class="card" id="k6-kc-7">
 <h3>읽기 전용 루트</h3>
-<!--CODE file=k8s/base/keycloak.yaml lines=149-173 note=쓸 수 있는 자리를 따로-->
+<!--CODE file=k8s/base/keycloak.yaml lines=152-176 note=쓸 수 있는 자리를 따로-->
 <span class="tier b">구문 검증</span>
 <div class="key"><code>readOnlyRootFilesystem: true</code> 를 켜면
 컨테이너가 자기 파일 시스템에 못 쓴다. 뚫려도 할 수 있는 일이 준다.<br>
@@ -320,7 +331,7 @@ Keycloak 의 세션 쿠키와 토큰이 커지면 인그레스의 기본 버퍼�
 
 <article class="card" id="k6-ha-2">
 <h3>서로를 찾는 법</h3>
-<!--CODE file=k8s/base/keycloak.yaml lines=34-45 note=DNS 로 찾는다-->
+<!--CODE file=k8s/base/keycloak.yaml lines=35-45 note=DNS 로 찾는다-->
 <span class="tier b">구문 검증</span>
 <div class="key"><code>kubernetes</code> 스택은 DNS 로 찾는다.
 헤드리스 Service 이름을 물어보면 <b>모든 Pod 의 주소</b>가 돌아오고,
@@ -330,13 +341,13 @@ Keycloak 의 세션 쿠키와 토큰이 커지면 인그레스의 기본 버퍼�
 
 <article class="card" id="k6-ha-3">
 <h3>운영 overlay</h3>
-<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=12-22 note=Keycloak 두 벌-->
+<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=12-23 note=Keycloak 두 벌-->
 <span class="tier b">구문 검증</span>
 </article>
 
 <article class="card" id="k6-ha-4">
 <h3>갈아 끼울 때</h3>
-<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=42-56 note=한 벌은 늘 떠 있게-->
+<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=49-68 note=한 벌은 늘 떠 있게-->
 <span class="tier b">구문 검증</span>
 <div class="key"><code>maxUnavailable: 0</code> = "내리기 전에 먼저 띄운다".
 <code>maxSurge: 1</code> = "한 벌 더 띄울 자리는 있다".<br>
@@ -349,7 +360,7 @@ Keycloak 의 세션 쿠키와 토큰이 커지면 인그레스의 기본 버퍼�
 
 <article class="card" id="k6-ha-5">
 <h3>PostgreSQL 은 왜 한 벌인가</h3>
-<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=57-69 note=자원만 키운다-->
+<!--CODE file=k8s/overlays/prod/kustomization.yaml lines=69-82 note=자원만 키운다-->
 <span class="tier b">구문 검증</span>
 <div class="warn"><b>StatefulSet 의 replicas 를 2로 올려도 이중화가 안 된다.</b>
 PostgreSQL 두 벌이 서로 복제하려면 그 설정을 따로 해야 하고,
@@ -365,7 +376,7 @@ PostgreSQL 두 벌이 서로 복제하려면 그 설정을 따로 해야 하고,
 
 <article class="card" id="k6-sec-1">
 <h3>CA 를 파일에서 읽는다</h3>
-<!--CODE file=k8s/base/kustomization.yaml lines=33-46 note=secretGenerator-->
+<!--CODE file=k8s/base/kustomization.yaml lines=45-54 note=파일에서 읽는 secretGenerator-->
 <span class="tier b">구문 검증</span>
 <div class="key">값을 적지 않고 <b>파일에서 읽는다</b>.
 인증서가 바뀌어도 이 파일은 안 고친다 — 파일만 바꾸면 된다.</div>
@@ -377,9 +388,9 @@ PostgreSQL 두 벌이 서로 복제하려면 그 설정을 따로 해야 하고,
 
 <article class="card" id="k6-sec-2">
 <h3>복사해 두는 자리</h3>
-<!--CODE file=certs/make_certs.sh lines=94-99 note=kustomize 가 읽을 수 있게-->
+<!--CODE file=certs/make_certs.sh lines=92-99 note=kustomize 가 읽을 수 있게-->
 <span class="tier a">실행 검증</span>
-<div class="tip">7부 5장에서 <code>KC_TRUSTSTORE_PATHS</code> 를 본 그 자리다.
+<div class="tip">7부 5장에서 보게 될 <code>KC_TRUSTSTORE_PATHS</code> 가 가리키는 자리다.
 Keycloak 은 그 폴더에 있는 인증서를 전부 믿는다.</div>
 </article>
 
@@ -476,10 +487,10 @@ Keycloak 로그에 "view" 나 members 수가 찍힌다 — 거기 두 벌이 다
 
 <article class="card" id="k6-wrap-3">
 <h3>전부 합쳐 검사한다</h3>
-<!--OUT file=k8s_validate.txt note=16개 오브젝트-->
+<!--OUT file=k8s_validate.txt note=20개 오브젝트-->
 <span class="tier a">실행 검증</span>
 <div class="key">2부 8장에서 만든 그 스크립트다. 오브젝트가 5개에서
-<b>16개</b>로 늘었는데 검사 방법은 하나도 안 바뀌었다.</div>
+<b>20개</b>로 늘었는데 검사 방법은 하나도 안 바뀌었다.</div>
 </article>
 
 <article class="card" id="k6-wrap-4">

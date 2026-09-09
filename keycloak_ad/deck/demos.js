@@ -26,6 +26,9 @@
   /* ── 1. HTTP 요청 조립기 ────────────────────────────────────────
    * 방법·주소·헤더를 고르면 진짜로 나갈 바이트를 그대로 보여 준다.
    * 줄 끝이 CRLF 라는 것과, 헤더가 끝나면 빈 줄이 온다는 것이 요점이다. */
+  // 바이트 수. 한글 한 글자는 UTF-8 로 3바이트라 length 로 세면 틀린다 —
+  // Content-Length 가 실제보다 작으면 서버는 본문을 잘라 읽는다(1부 5장).
+  function nbytes(s) { return new TextEncoder().encode(s).length; }
   __demo('http-builder', function (host, api) {
     var mEl = q(host, '[data-method]');
     var pEl = q(host, '[data-path]');
@@ -41,7 +44,7 @@
         'User-Agent: deck-demo/1.0', 'Accept: */*'];
       if (m === 'POST') {
         lines.push('Content-Type: application/x-www-form-urlencoded');
-        lines.push('Content-Length: ' + b.length);
+        lines.push('Content-Length: ' + nbytes(b));
       }
       var raw = lines.join('\r\n') + '\r\n\r\n' + (m === 'POST' ? b : '');
       // 눈에 안 보이는 것을 보이게 만든다 — 이게 이 데모의 전부다.
@@ -49,7 +52,7 @@
       // 그 글꼴에 없어서 다른 글꼴로 떨어지고, 그러면 칸이 어긋난다.
       var shown = raw.replace(/\r\n/g, '↵\n');
       api.w(host, api.esc(shown) +
-        '\n\n<span class="dim">모두 ' + raw.length + '바이트' +
+        '\n\n<span class="dim">모두 ' + nbytes(raw) + '바이트' +
         (m === 'POST' ? '' : ' · 빈 줄까지가 요청의 끝') + '</span>');
     }
     on(mEl, 'change', run); on(pEl, 'input', run);
@@ -324,6 +327,12 @@
     return node;
   }
 
+  function cmp(a, b) {
+    var x = Number(a), y = Number(b);
+    if (a !== '' && b !== '' && !isNaN(x) && !isNaN(y)) return x - y;
+    return a < b ? -1 : (a > b ? 1 : 0);
+  }
+
   function matches(e, f) {
     if (f.op === '&') return f.subs.every(function (x) { return matches(e, x); });
     if (f.op === '|') return f.subs.some(function (x) { return matches(e, x); });
@@ -339,8 +348,10 @@
       }).join('.*') + '$');
       return vals.some(function (v) { return re.test(v); });
     }
-    if (f.op === '>=') return vals.some(function (v) { return v >= want; });
-    if (f.op === '<=') return vals.some(function (v) { return v <= want; });
+    // 둘 다 숫자면 숫자로 비교한다. 글자로 비교하면 '512' >= '1000' 이
+    // 참이 된다 — AD 의 정수 속성(userAccountControl 등)은 정수 순서다.
+    if (f.op === '>=') return vals.some(function (v) { return cmp(v, want) >= 0; });
+    if (f.op === '<=') return vals.some(function (v) { return cmp(v, want) <= 0; });
     // memberOf 처럼 값이 여럿인 칸은 하나라도 맞으면 된다
     return vals.some(function (v) { return v === want; }) ||
       String(raw).toLowerCase() === want;
@@ -454,7 +465,13 @@
             '칸 — 이 파일은 2칸 단위다');
         }
         seen.push(ind);
-        if (/:\S/.test(ln) && !/:\/\//.test(ln)) {
+        // 콜론 검사는 **키 뒤의 첫 콜론**만 본다. 값 안의 콜론
+        // (image: lunch-web:1.4.2 · url: http://…) 은 YAML 이 허용한다 —
+        // 줄 전체를 /:\S/ 로 보면 매니페스트마다 있는 image: 줄이 오탐이 된다.
+        var body = ln.replace(/^\s*(- )?/, '');
+        var kc = body.indexOf(':');
+        if (kc > 0 && kc < body.length - 1 && body[kc + 1] !== ' ' &&
+            !/^["']/.test(body)) {
           problems.push((i + 1) + '행: 콜론 뒤에 빈칸이 없다');
         }
       }
@@ -562,7 +579,10 @@
   __demo('k8s-label', function (host, api) {
     var el = q(host, '[data-selector]');
 
-    // 2부의 매니페스트에 실제로 붙어 있는 라벨들이다.
+    // 2부의 매니페스트에 실제로 붙어 있는 라벨들이다. part-of 는 kustomization
+    // 의 labels: 가 **모든** 오브젝트에 붙이므로 Service 에도 있다. Keycloak 은
+    // Deployment 라 Pod 이름이 keycloak-<해시>-<난수> 꼴이고, postgres 만
+    // StatefulSet 이라 postgres-0 이다.
     var objects = [
       {kind: 'Pod', name: 'lunch-web-7d9f2c-abcde', labels: {
         'app.kubernetes.io/name': 'lunch-web',
@@ -570,14 +590,15 @@
       {kind: 'Pod', name: 'lunch-web-7d9f2c-fghij', labels: {
         'app.kubernetes.io/name': 'lunch-web',
         'app.kubernetes.io/part-of': 'lunch'}},
-      {kind: 'Pod', name: 'keycloak-0', labels: {
+      {kind: 'Pod', name: 'keycloak-6b8c4d-k2m9x', labels: {
         'app.kubernetes.io/name': 'keycloak',
         'app.kubernetes.io/part-of': 'lunch'}},
       {kind: 'Pod', name: 'postgres-0', labels: {
         'app.kubernetes.io/name': 'postgres',
         'app.kubernetes.io/part-of': 'lunch'}},
       {kind: 'Service', name: 'lunch-web', labels: {
-        'app.kubernetes.io/name': 'lunch-web'}}
+        'app.kubernetes.io/name': 'lunch-web',
+        'app.kubernetes.io/part-of': 'lunch'}}
     ];
 
     // 쉼표로 이은 조건은 **전부** 맞아야 한다 (AND). 그게 규칙이다.
