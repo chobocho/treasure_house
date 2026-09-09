@@ -20,6 +20,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"treasure/keycloak_ad/ldap/fakead"
 )
@@ -66,6 +68,21 @@ func main() {
 		log.Fatal("-addr 나 -ldaps 중 하나는 있어야 한다")
 	}
 	log.Printf("항목 %d개 · %s", d.Count(), *dir)
+
+	// SIGHUP 을 받으면 LDIF 를 다시 읽는다. "AD 관리자가 계정을
+	// 지웠다" 를 흉내 내는 길이다 — 7부 10장의 실험이 이것을 쓴다.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for range hup {
+			if err := d.ReloadFrom(*dir); err != nil {
+				log.Printf("LDIF 다시 읽기 실패: %v", err)
+				continue
+			}
+			log.Printf("LDIF 다시 읽음 — 항목 %d개 · %s",
+				d.Count(), *dir)
+		}
+	}()
 
 	// 끝나지 않는다. Ctrl+C 로 끊는다.
 	select {}

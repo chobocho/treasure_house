@@ -389,6 +389,26 @@ analogies in §5.9) and hands it in the prompt.
 
 ## Progress log (newest first)
 
+### [2026-09-09 07:50] 16단계 2차 리뷰의 남은 둘 — 가짜 AD 순서 · 지운 사람 실험 (1009장)
+
+- **기획:** 2차 리뷰가 글로만 적어 둔 두 자리를 코드와 캡처로 바꿨다. ① 가짜 AD 의 Bind 가
+  꺼짐을 비밀번호보다 먼저 봐서 진짜 AD 와 반대였다. ② "AD 에서 지운 사람은 찾는 순간
+  사본이 지워진다" 가 문서 근거(C)뿐이었다.
+- **TC:** `TestDisabledAccountWithWrongPasswordIs52e`(꺼짐+틀린 비밀번호 → 52e) ·
+  `TestReloadDropsDeletedEntry`(LDIF 다시 읽기 뒤 항목·memberOf 사라짐). 둘 다 같은 커밋에
+  넣어 첫 실행은 빌드 실패였다 — 52e 시험만 따로 RED 를 보지 못했다(기록).
+- **개발:** `dir.go` Bind 순서(잠김→비밀번호→꺼짐) · `Dir.ReloadFrom`·`DropEntryLDIF` ·
+  fakead `SIGHUP` 으로 LDIF 다시 읽기 · `ad_lab.sh` 실험 7(전체 동기화 → 자료에서 유나를 빼고
+  HUP → 로그인 → 목록) · `record.sh` 가 자료 사본(`out/.kc_campus.ldif`)으로 fakead 를 띄움 ·
+  7부 10장에 `f7-sync-4b` 한 장 · 3부 5·8장 본문 되돌림 · claims A 등급.
+- **캡처:** `record.sh` 전체 1회(Keycloak 포함). kc_ 아닌 파일은 커밋된 것과 바이트 단위로
+  같았다(= 두 번째 판과 같다). kc_* 29개는 알려진 대로 매번 다르다. 실험 7 의 결과:
+  objectGUID 검색 0건 → 사본 삭제 → 이름으로 재검색 → 실패, 목록 7명 → 6명.
+- **검증:** make all 0건(1009장 · 커버리지 9140/9140 · 인용 범위 285개 · 데모 동작 17건) ·
+  test 14패키지 · vet. 카드·README 를 1009장 · 9,140줄 · 캡처 159개로.
+- **비고:** 부록 전문이 늘어 장수가 1006 이 아니라 1009 가 됐다(dir.go·ad_lab.sh·main.go).
+  ad_lab 의 안내 echo 문구 세 줄은 폭 때문에 스크립트와 캡처를 같은 글자로 고쳤다.
+
 ### [2026-09-09 05:55] 15단계 2차 전수 리뷰 — 결함 175건 정정 (1005장)
 
 - **방법:** 0~4부 / 5~13부를 서브에이전트 둘이 소스·캡처와 대조해 읽고, 데모 12개와

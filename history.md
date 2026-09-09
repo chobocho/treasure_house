@@ -1,3 +1,10 @@
+### [2026-09-09 07:50] Keycloak×AD 덱 — 가짜 AD 바인드 순서를 진짜 AD 와 맞추고 "지운 사람" 실험 캡처 추가
+- **기획:** 2차 리뷰가 글로만 적었던 둘을 코드·캡처로. Bind 순서(잠김→비밀번호→꺼짐), AD 에서 지운 사용자가 다음 조회 때 사본이 지워지는 실험.
+- **TC:** 꺼짐+틀린 비밀번호 → 52e · LDIF 다시 읽기 뒤 항목·memberOf 사라짐(fakead 2건). 첫 실행은 같은 파일의 다른 시험 때문에 빌드 실패라 52e 만의 RED 는 못 봤다.
+- **개발:** ldap/fakead/dir.go · ldap/fakead/cmd/fakead/main.go(SIGHUP 재읽기) · keycloak/ad_lab.sh(실험 7) · tools/record.sh · deck/sections 03·05·07 · deck/claims.md · index.html · README.md 외 30개 캡처
+- **검증:** make all 0건(1009장 · 커버리지 9140/9140 · 인용 범위 285개 · 데모 17건) · go test 14패키지 · vet · record.sh 전체 1회(kc_ 아닌 캡처는 커밋본과 동일)
+- **비고:** 실험 결과 objectGUID 검색 0건 → 사본 삭제 → 목록 7명→6명. 부록 전문이 늘어 1009장이 됐다.
+
 ### [2026-09-09 05:55] Keycloak×AD 덱 2차 리뷰 — 사실오류 17건·모순 34건·인용범위 84건·퀴즈 7건·표기 14건·레이아웃 3건·데모 4건 정정
 - **기획:** PLAN §8 15단계. 0~4부·5~13부를 서브에이전트 둘이 소스·캡처·RFC 와 대조, 데모·숫자 정합은 직접 검토.
 - **TC:** deck/check_slices.py(인용 범위 경계) 59건 RED · check_deck.js 8·9단계(데모 동작) 5건 RED → 전부 GREEN.

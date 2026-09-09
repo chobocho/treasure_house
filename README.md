@@ -80,7 +80,7 @@
 - 🌊 **[React_완전_가이드.html](./React_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — ⚛️ TypeScript와 테트리스로 배우는 훅·성능·내부구조 300장 🎮
 - 🍪 **[쿠키_쉽게_배우기.html](./%EC%BF%A0%ED%82%A4_%EC%89%BD%EA%B2%8C_%EB%B0%B0%EC%9A%B0%EA%B8%B0.html)** — 🧪 만료·Path·Secure·SameSite·HttpOnly를 예제로 🔒
 - 🔐 **[웹_인증_완전_가이드.html](./%EC%9B%B9_%EC%9D%B8%EC%A6%9D_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 🗝️ 1961년 최초의 비밀번호부터 OAuth2·OIDC·패스키까지, React/TS·Python·Go·Java 동작 코드 500장 🔑
-- 🏰 **[Keycloak_AD_연동_쉽게_배우기.html](./Keycloak_AD_%EC%97%B0%EB%8F%99_%EC%89%BD%EA%B2%8C_%EB%B0%B0%EC%9A%B0%EA%B8%B0.html)** — 🏰 쿠버네티스에 올린 서비스에 **회사 AD 계정 로그인**을 붙입니다. 웹 초심자 눈높이로 주소·쿠키·TLS부터 쌓아 올려, LDAP 을 바이트로 뜯어 가짜 AD 를 만들고, OAuth2·OIDC 를 1,000줄 IdP 로 구현한 뒤 **진짜 Keycloak 26.7.3** 으로 AD 연동·그룹 권한·운영까지. 슬라이드 1005장 — `keycloak_ad/` 전체 소스 9,015줄이 한 줄도 빠짐없이 실려 있고, 모든 코드·출력은 실제 실행 캡처 158개와 매번 대조합니다. Go 표준 라이브러리만, 외부 의존성 0 🔑
+- 🏰 **[Keycloak_AD_연동_쉽게_배우기.html](./Keycloak_AD_%EC%97%B0%EB%8F%99_%EC%89%BD%EA%B2%8C_%EB%B0%B0%EC%9A%B0%EA%B8%B0.html)** — 🏰 쿠버네티스에 올린 서비스에 **회사 AD 계정 로그인**을 붙입니다. 웹 초심자 눈높이로 주소·쿠키·TLS부터 쌓아 올려, LDAP 을 바이트로 뜯어 가짜 AD 를 만들고, OAuth2·OIDC 를 1,000줄 IdP 로 구현한 뒤 **진짜 Keycloak 26.7.3** 으로 AD 연동·그룹 권한·운영까지. 슬라이드 1009장 — `keycloak_ad/` 전체 소스 9,140줄이 한 줄도 빠짐없이 실려 있고, 모든 코드·출력은 실제 실행 캡처 159개와 매번 대조합니다. Go 표준 라이브러리만, 외부 의존성 0 🔑
 
 ### 📡 네트워크 & 무선 📶
 - 📶 **[Wi-Fi_완전_가이드.html](./Wi-Fi_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 📡 맥스웰부터 Wi-Fi 8까지 300장 — 802.11 개정판 36종, 백오프·OFDM·비터비·MIMO 알고리즘, WEP→WPA3 보안사, 데모 9종 🔐

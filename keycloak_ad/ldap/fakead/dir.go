@@ -201,6 +201,54 @@ func parseLDIFLine(line string) (name string, val []byte, err error) {
 	return name, []byte(strings.TrimSpace(rest)), nil
 }
 
+// ReloadFrom 은 파일을 다시 읽어 항목을 통째로 바꿔 끼운다.
+//
+// "AD 관리자가 계정을 지웠다" 를 흉내 내는 자리다. LDAP 의 delete 를
+// 구현하지 않는 대신(이 서버는 읽기만 한다 — 3부 8장), 자료 파일을
+// 고치고 SIGHUP 을 보내면 이 함수가 불린다. 잠금 기록은 그대로 둔다 —
+// 계정을 지웠다고 남의 잠금이 풀리면 안 된다.
+func (d *Dir) ReloadFrom(path string) error {
+	fresh, err := LoadLDIFFile(path)
+	if err != nil {
+		return err
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.entries, d.byDN, d.byUPN, d.groups =
+		fresh.entries, fresh.byDN, fresh.byUPN, fresh.groups
+	return nil
+}
+
+// DropEntryLDIF 는 LDIF 글에서 항목 하나를 지운 글을 돌려준다.
+//
+// 항목 블록(dn: 줄부터 다음 빈 줄까지)과, 그 DN 을 가리키는 그룹의
+// member: 줄을 함께 뺀다. AD 도 사람을 지우면 그룹의 member 에서
+// 같이 사라진다 — 그래야 memberOf 가 남지 않는다. O(줄 수).
+func DropEntryLDIF(src, dn string) string {
+	want := normDN(dn)
+	var out []string
+	skipping := false
+	for _, line := range strings.Split(src, "\n") {
+		switch {
+		case skipping:
+			if strings.TrimSpace(line) == "" {
+				skipping = false
+				out = append(out, line)
+			}
+			continue
+		case strings.HasPrefix(line, "dn: ") &&
+			normDN(strings.TrimPrefix(line, "dn: ")) == want:
+			skipping = true
+			continue
+		case strings.HasPrefix(line, "member: ") &&
+			normDN(strings.TrimPrefix(line, "member: ")) == want:
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
+
 func (d *Dir) add(e *Entry) {
 	// distinguishedName 은 AD 가 늘 함께 주는 값이라 없으면 채워 둔다.
 	if _, ok := e.Attrs["distinguishedname"]; !ok {
@@ -289,15 +337,18 @@ func (d *Dir) Bind(dn, password string) (int, string) {
 			adDiag("계정이 잠겼다", adLocked)
 	}
 
-	if e.disabled() {
-		return proto.ResultInvalidCredentials,
-			adDiag("계정이 꺼져 있다", adDisabled)
-	}
-
 	if e.First("demoPassword") != password {
 		d.noteFailure(key, now)
 		return proto.ResultInvalidCredentials,
 			adDiag("비밀번호가 틀렸다", adBadPassword)
+	}
+
+	// 꺼짐은 비밀번호가 맞은 뒤에야 알려 준다. AD 가 그렇다 — 안 그러면
+	// 비밀번호 없이도 "이 계정이 살아 있나" 를 알아낼 수 있다.
+	// 그래서 533 은 "비밀번호는 맞았다" 는 뜻이기도 하다(3부 5장).
+	if e.disabled() {
+		return proto.ResultInvalidCredentials,
+			adDiag("계정이 꺼져 있다", adDisabled)
 	}
 
 	delete(d.fails, key) // 성공하면 세어 둔 실패를 지운다
