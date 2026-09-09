@@ -27,7 +27,7 @@ YAML        := $(shell find k8s -name '*.yaml' 2>/dev/null | sort)
 .DEFAULT_GOAL := help
 .PHONY: help test vet fmt width certs record validate-k8s k8s-tools \
         kc-fetch kc-run kc-stop kc-e2e \
-        figs deck deck-check deck-verify deck-xref \
+        figs deck deck-check deck-verify deck-xref deck-slices \
         font font-check all clean
 
 help:                   ## 이 목록
@@ -96,6 +96,11 @@ deck-verify:            ## 덱의 코드·출력이 원본과 같은지 역검�
 deck-xref:              ## "N부 M장" 이 진짜 그 자리를 가리키는지
 	$(PY) deck/check_xref.py
 
+# lines=A-B 가 함수·주석 경계에 맞는가. 소스를 고쳐 줄이 밀리면 번호는
+# 그대로인데 내용이 밀린다 — 2차 리뷰에서 40곳 넘게 나와 도구로 옮겼다.
+deck-slices:            ## 인용 범위가 소스 경계에 맞는지
+	$(PY) deck/check_slices.py
+
 font:                   ## 고정폭 글꼴(DeckMono) 서브셋 내장
 	$(PY) $(TOOLS)/embed_mono_font.py $(DECK)
 
@@ -103,7 +108,7 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
-all: deck font deck-verify deck-xref deck-check font-check
+all: deck font deck-verify deck-xref deck-slices deck-check font-check
 
 clean:                  ## 덱 지우기 (인증서·캡처는 남긴다)
 	rm -f $(DECK)

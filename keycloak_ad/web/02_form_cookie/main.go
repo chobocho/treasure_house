@@ -35,7 +35,7 @@ import (
 // 붙인다.
 const cookieName = "lunch_session"
 
-// 시연용 계정 넷. 아이디는 대소문자를 가린다(AD 는 안 가리는데, 그
+// 시연용 계정 셋. 아이디는 대소문자를 가린다(AD 는 안 가리는데, 그
 // 차이가 7부에서 사고가 된다 — 여기서는 먼저 엄격한 쪽을 보여 준다).
 var demoUsers = map[string]string{
 	"minji":     "Passw0rd!-demo",
@@ -211,7 +211,7 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// 남의 사이트에서 시작된 요청에는 쿠키를 붙이지 않는다.
 		SameSite: http.SameSiteLaxMode,
 		// 진짜 서비스에서는 Secure: true 도 켠다. 여기는 http 로도
-		// 실습해야 해서 껐다 — 4부에서 다시 이야기한다.
+		// 실습해야 해서 껐다 — 6부에서 다시 이야기한다.
 		MaxAge: int(a.sessions.life.Seconds()),
 	})
 	// 303 See Other: "다 됐으니 저 주소를 GET 으로 가 보라".

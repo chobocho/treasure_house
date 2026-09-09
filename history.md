@@ -1,3 +1,10 @@
+### [2026-09-09 05:55] Keycloak×AD 덱 2차 리뷰 — 사실오류 17건·모순 34건·인용범위 84건·퀴즈 7건·표기 14건·레이아웃 3건·데모 4건 정정
+- **기획:** PLAN §8 15단계. 0~4부·5~13부를 서브에이전트 둘이 소스·캡처·RFC 와 대조, 데모·숫자 정합은 직접 검토.
+- **TC:** deck/check_slices.py(인용 범위 경계) 59건 RED · check_deck.js 8·9단계(데모 동작) 5건 RED → 전부 GREEN.
+- **개발:** k8s/base/keycloak.yaml · deck/sections 00~13 · deck/demos.js · deck/check_slices.py · Makefile · deck/claims.md · index.html · README.md 외 12개 파일
+- **검증:** make all 0건(1005장 · 커버리지 9015/9015 · 인용 범위 285개) · go test 14패키지 · vet
+- **비고:** 공식 이미지에 --optimized 를 붙이면 build 옵션이 무시돼 프로브가 죽는다. k8s 캡처 넷은 오프라인 재기록.
+
 ### [2026-09-09 04:46] index·README 목록 정합 — 카드 1건·항목 43건 보강
 - **기획:** 디스크 문서 ↔ index 카드 ↔ README 항목을 3방향 대조해 누락만 채운다. 기존 항목의 순서·문구는 건드리지 않는다.
 - **TC:** verify_index.py — 누락·역누락·링크 실체·앵커 대상을 한 번에 검사. 첫 실행 45건 실패(RED).

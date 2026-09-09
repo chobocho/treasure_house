@@ -56,7 +56,7 @@ var ErrShort = errors.New("바이트가 아직 모자란다")
 // Tag 는 태그 한 바이트를 만든다.
 //
 // 번호가 30 을 넘으면 여러 바이트로 적는 규칙이 따로 있는데, LDAP 은
-// 24(ExtendedResponse)까지만 쓰므로 만들지 않는다. 조용히 틀린 바이트를
+// 25(IntermediateResponse)까지라 만들지 않는다. 조용히 틀린 바이트를
 // 내느니 죽는 편이 낫다 — 그 바이트는 상대가 해석할 수 없다.
 func Tag(c Class, constructed bool, n int) byte {
 	if n < 0 || n > 30 {

@@ -15,6 +15,8 @@
 //      실재하는 자리를 가리키는가
 //   6) 외부 자원(CDN 스크립트·폰트·이미지) 참조가 없는가 — 자기완결형 계약
 //   7) 데모 프레임워크를 DOM 스텁 위에서 실제로 돌려 본다 (throw 하지 않는가)
+//   8) 데모에 값을 넣어 돌려 보고, 그린 화면이 맞는 답인가
+//   9) <input type="text"> 에 여러 줄 값을 넣지 않았는가 (줄바꿈이 지워진다)
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -192,10 +194,78 @@ if (!demoScripts.length) {
     if (ran === Object.keys(REG).length) {
       ok(`데모 ${ran}개 — 스텁 위에서 전부 예외 없이 돈다`);
     }
+
+    // ── 8) 데모가 주어진 입력에 맞는 답을 내는가 ──────────────────────
+    // 7) 은 "죽지 않는다" 만 본다. 죽지 않고 틀린 답을 내는 데모는 사람이
+    // 만져 보기 전에는 아무도 모른다 — 2차 리뷰에서 그런 것이 셋 나왔다
+    // (YAML 검사기가 image: a:b 를 오류라 하고, 필터 해석기가 숫자를 글자로
+    // 비교하고, 요청 조립기가 한글 본문의 바이트를 글자 수로 셌다).
+    // 값을 넣어 돌리고, 마지막으로 그린 화면(api.w 의 두 번째 인자)을 본다.
+    // 비동기 데모(hash·pkce)는 Web Crypto 를 기다려야 해서 여기서 안 본다.
+    function drive(id, values) {
+      const host = el();
+      host.querySelector = (sel) => {
+        const m = /\[data-([a-z-]+)\]/.exec(sel);
+        const e = el();
+        if (m && values[m[1]] !== undefined) {
+          if (typeof values[m[1]] === 'boolean') e.checked = values[m[1]];
+          else e.value = values[m[1]];
+        }
+        return e;
+      };
+      let drawn = '';
+      REG[id](host, { ...api, w: (h, html) => { drawn = String(html); } });
+      return drawn;
+    }
+    const CASES = [
+      // [데모, 입력, 화면에 있어야 하는 것, 없어야 하는 것]
+      ['yaml', { yaml: 'spec:\n  containers:\n    - name: web\n      image: lunch-web:1.4.2' },
+        '문제 없음', '콜론'],
+      ['yaml', { yaml: 'spec:\n\tports: []' }, '탭', ''],
+      ['yaml', { yaml: 'spec:\n  ports:\n   - port: 80' }, '2칸', ''],
+      ['yaml', { yaml: 'a:b' }, '콜론', ''],
+      ['http-builder', { method: 'POST', body: '이름=민지' }, 'Content-Length: 13', ''],
+      ['cookie', { cpath: '/api', url: 'https://lunch.campus.example/apix' }, '붙지 않는다', ''],
+      ['cookie', { cpath: '/api', url: 'https://lunch.campus.example/api/me' }, '붙는다', ''],
+      ['cookie', { cpath: '/', secure: true, url: 'http://lunch.campus.example/me' }, 'Secure', ''],
+      ['ldap-filter', { filter: '(userAccountControl>=1000)' }, '2건 / 전체', ''],
+      ['ldap-filter', { filter: '(&(objectClass=user)(sAMAccountName=minji))' }, '1건 / 전체', ''],
+      ['ldap-filter', { filter: '(memberOf=CN=lunch-admins,OU=Groups)' }, '1건 / 전체', ''],
+      ['k8s-label', { selector: 'app.kubernetes.io/part-of=lunch' }, '5개가 걸렸다', ''],
+      ['k8s-label', { selector: 'app.kubernetes.io/name!=lunch-web' }, '2개가 걸렸다', ''],
+      ['status', { code: '404' }, 'Not Found', ''],
+      ['base64', { text: 'a' }, 'base64url YQ', ''],
+      ['jwt', { jwt: 'a.b' }, '조각이 2개', ''],
+      ['ldap-dn', {}, 'ad.campus.example', ''],
+    ];
+    let good = 0;
+    for (const [id, values, want, wantNot] of CASES) {
+      if (!REG[id]) { fail(`데모 '${id}' 가 없어 동작을 볼 수 없다`); continue; }
+      let drawn;
+      try { drawn = drive(id, values); } catch (e) {
+        fail(`데모 '${id}' 가 입력 ${JSON.stringify(values)} 에서 죽는다: ${e.message}`);
+        continue;
+      }
+      const miss = want && !drawn.includes(want);
+      const extra = wantNot && drawn.includes(wantNot);
+      if (miss || extra) {
+        fail(`데모 '${id}' 입력 ${JSON.stringify(values)} → ` +
+          (miss ? `'${want}' 이 없다` : `'${wantNot}' 이 있다`) +
+          ` — 화면: ${drawn.replace(/\s+/g, ' ').slice(0, 90)}`);
+      } else good++;
+    }
+    if (good === CASES.length) ok(`데모 동작 ${good}건 — 넣은 값에 맞는 답을 낸다`);
   } catch (e) {
     fail('데모 스크립트 실행 실패: ' + e.message);
   }
 }
+
+// ── 9) 한 줄 입력칸에 여러 줄 값 ────────────────────────────────────
+// <input type="text"> 는 value 의 줄바꿈을 지운다(HTML 표준 value sanitization).
+// 여러 줄을 보여 주려던 데모가 한 줄로 뭉개져 "문제 없음" 만 내게 된다.
+const oneLine = [...struct.matchAll(/<input[^>]*type="text"[^>]*value="[^"]*&#10;[^"]*"/g)];
+if (oneLine.length) fail(`한 줄 입력칸(<input type="text">)에 여러 줄 값 ${oneLine.length}개 — textarea 로 바꿀 것`);
+else ok('한 줄 입력칸에 여러 줄 값 없음');
 
 console.log(bad ? `\n오류 ${bad}건` : '\n오류 0건');
 process.exit(bad ? 1 : 0);

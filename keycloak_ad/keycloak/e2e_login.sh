@@ -53,7 +53,7 @@ for k in keys:
         continue
     print("  %-24s %s" % (k, v))
 print()
-print("  (칸이 모두 %d개다 — 우리 miniidp 는 11개였다)" % len(d))'
+print("  (칸이 모두 %d개다 — 우리 miniidp 는 14개였다)" % len(d))'
 } >"$OUT/kc_e2e_01_discovery.txt" 2>&1
 
 # ── 2. PKCE ──
