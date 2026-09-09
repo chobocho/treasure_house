@@ -389,6 +389,26 @@ analogies in §5.9) and hands it in the prompt.
 
 ## Progress log (newest first)
 
+### [2026-09-09 01:10] 9단계 8부 — 서비스에 로그인 붙이기, 41장 (누적 878장)
+
+- **기획:** 7개 장 — 세 갈래 길 · 길 1(oauth2-proxy) · 헤더를 믿는다는 것 ·
+  길 2(앱이 직접) · **약속을 갚는다** · 로그아웃 세 종류 · 다른 스택. 퀴즈 4.
+- **이 부의 증거:** `keycloak/app_e2e.sh` 가 4부의 실행 파일(`bin/miniapp`)을
+  **다시 빌드하지 않고** `-issuer` 만 진짜 Keycloak 으로 바꿔 띄운다.
+  로그인이 통과하고, AD 에서 온 이름과 그룹이 화면에 찍히고,
+  minji 는 403 · admin.lee 는 200 을 받는다. 4부 6장에서 한 약속이 그대로 갚아졌다.
+- **개발:** `keycloak/app_e2e.sh`(신규) · `k8s/base/oauth2-proxy.yaml`(신규) ·
+  `k8s/base/lunch-ingress-authreq.yaml`(신규) · `kustomization`(16 → 20 오브젝트) ·
+  `tools/record.sh` · `deck/sections/08_app.html`(신규) ·
+  `13_appendix.html`(FULLSRC +3) · `deck/claims.md`(8부 15행)
+- **경계선 하나를 크게 다뤘다:** 헤더를 믿는 구조는 **담장이 없으면 아무것도
+  안 지킨다**. 클러스터 안 아무 Pod 나 `X-Auth-Request-User` 를 적어 보낼 수 있다.
+  그 퀴즈를 3장 끝에 뒀고, 길 2가 더 안전한 이유로 이었다.
+- **검증:** 878장 · **커버리지 8612/8612줄 100퍼센트** · 조립 0건 ·
+  역검증 통과 · deck-check 0건(퀴즈 52 · 데모 12) · 글꼴 통과 ·
+  `sh k8s/validate.sh` 세 벌 각 20개 오브젝트 통과 · test 14패키지.
+- **다음:** §8 10단계(9부 권한 — 그룹에서 역할로, 토큰 크기).
+
 ### [2026-09-09 00:10] 8단계 7부 후반 — 26장 (7부 75장, 누적 829장)
 
 - **기획:** 4개 장 — 설정 칸 전수 표(연결·인증·사람 찾기·동기화) ·
