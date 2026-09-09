@@ -5,15 +5,519 @@
 <!--FIG file=system_p8.svg cap=8부까지 켜진 그림-->
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>길 ① oauth2-proxy — 코드 한 줄 안 고치고 막기</li>
+<li>길 1 oauth2-proxy — 코드 한 줄 안 고치고 막기</li>
 <li>ingress-nginx <code>auth_request</code> 로 붙이기</li>
 <li>헤더를 믿어도 되는 경계선</li>
-<li>길 ② 앱이 직접 OIDC 를 말하기</li>
+<li>길 2 앱이 직접 OIDC 를 말하기</li>
 <li>리다이렉트 URI 규칙 · 세션 쿠키 설정</li>
 <li>로그아웃 세 종류</li>
 <li>다른 스택 한 줄 설정 (Spring · Django · Express)</li>
 </ul>
-<div class="tip"><b>끝나면</b> — 클러스터 안 아무 서비스 앞에 로그인을 두 가지 방법으로 세운다</div>
-<div class="warn"><b>이 부는 아직 준비 중입니다</b> — 뼈대만 세워 둔 상태다.
-본문이 들어오면 이 알림은 사라진다.</div>
+<div class="tip"><b>끝나면</b> — 클러스터 안 아무 서비스 앞에
+로그인을 두 가지 방법으로 세운다</div>
+<div class="key"><b>여기서 선이 이어진다.</b>
+0부에서 그린 그림의 마지막 화살표가 이 부의 것이고,
+4부에서 만든 앱이 <b>-issuer 한 줄만 바꿔</b> 진짜 Keycloak 에 붙는다.
+그 약속을 4부 6장에서 했고, 이 부 5장에서 갚는다.</div>
+</article>
+
+<article class="card" id="ap-road">
+<p class="chnum">1장</p>
+<h2>세 갈래 길</h2>
+<p class="chsub">무엇을 고칠 수 있느냐가 길을 정한다</p>
+</article>
+
+<article class="card" id="ap-road-1">
+<h3>민지의 마지막 질문</h3>
+<blockquote>"Keycloak 도 떴고 AD 도 붙었다. 그런데 <b>내 앱</b>에는
+로그인을 어떻게 붙이지?"</blockquote>
+<p class="lead">답이 하나가 아니다. <b>앱을 고칠 수 있는가</b>와
+<b>얼마나 세밀하게 나눌 것인가</b> 두 가지가 길을 정한다.</p>
+</article>
+
+<article class="card" id="ap-road-2">
+<h3>셋을 한 표로</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>길 1<br>프록시가 앞에</th><th>길 2<br>앱이 직접</th>
+<th>길 3<br>게이트웨이·메시</th></tr>
+<tr><td>앱 코드</td><td><b>안 고친다</b></td><td>고친다</td><td>안 고친다</td></tr>
+<tr><td>앱이 아는 것</td><td>헤더 몇 개</td><td>토큰 전부</td><td>헤더 · 클레임</td></tr>
+<tr><td>세밀함</td><td>"들어와도 되나" 까지</td>
+<td><b>사람마다·기능마다</b></td><td>경로·메서드 단위</td></tr>
+<tr><td>필요한 것</td><td>프록시 한 벌</td><td>OIDC 라이브러리</td>
+<td>메시 설치(무겁다)</td></tr>
+<tr><td>이 덱</td><td><b>2·3장</b></td><td><b>4·5장</b></td><td>8장 (개념만)</td></tr>
+</table>
+</div>
+<div class="key"><b>처음 붙이는 서비스라면 길 1</b> 을 권한다.
+코드를 안 고치고 하루면 되고, 나중에 길 2로 옮기기도 쉽다.<br>
+반대로 "이 사람은 자기 예약만 볼 수 있다" 같은 것이 필요하면
+처음부터 길 2 다 — 프록시는 그 판단을 대신해 줄 수 없다.</div>
+</article>
+
+<article class="card" id="ap-road-3">
+<h3>고르는 기준 세 가지</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>그렇다면</th></tr>
+<tr><td>앱 코드를 못 고친다 (남의 것·오래된 것)</td><td><b>길 1</b></td></tr>
+<tr><td>"누가 들어왔는지" 만 알면 된다</td><td><b>길 1</b></td></tr>
+<tr><td>사람마다 볼 수 있는 것이 다르다</td><td><b>길 2</b></td></tr>
+<tr><td>앱이 남의 API 를 대신 부른다</td><td><b>길 2</b> — 토큰이 필요하다</td></tr>
+<tr><td>이미 서비스 메시가 있다</td><td>길 3 을 고려</td></tr>
+</table>
+</div>
+<div class="tip">섞어 써도 된다. 관리자 화면만 프록시로 막고,
+앱 안의 세밀한 권한은 앱이 토큰으로 판단하는 식이다.</div>
+</article>
+
+<article class="card" id="ap-px">
+<p class="chnum">2장</p>
+<h2>길 1 — 앞에 세우기</h2>
+<p class="chsub">oauth2-proxy 가 4부의 일을 대신한다</p>
+</article>
+
+<article class="card" id="ap-px-1">
+<h3>무엇을 대신해 주나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>4부에서 우리가 손으로 한 것</th><th>프록시가 한다</th></tr>
+<tr><td>state · nonce · PKCE 만들기</td><td>한다</td></tr>
+<tr><td>IdP 로 보내고 코드 받기</td><td>한다</td></tr>
+<tr><td>코드를 토큰으로 바꾸기</td><td>한다</td></tr>
+<tr><td>서명·발급자·대상 확인</td><td>한다</td></tr>
+<tr><td>세션 쿠키 심기</td><td>한다</td></tr>
+<tr><td>앱에게 "누구인지" 알리기</td><td><b>헤더로</b> 넘긴다</td></tr>
+</table>
+</div>
+<div class="key">4부를 안 배웠으면 이 표가 그냥 마법이다.
+배웠으니 <b>무엇을 대신해 주는지</b> 알 수 있고,
+그래서 안 될 때 어디를 볼지도 안다.</div>
+</article>
+
+<article class="card" id="ap-px-2">
+<h3>어느 IdP 인가</h3>
+<!--CODE file=k8s/base/oauth2-proxy.yaml lines=1-22 note=issuer 하나면 된다-->
+<span class="tier b">구문 검증</span>
+<div class="key">여기도 <b>issuer 하나</b>다. 4부 6장에서 본 그 이야기 —
+나머지 주소는 안내문에서 따라온다.</div>
+</article>
+
+<article class="card" id="ap-px-3">
+<h3>누구를 통과시킬까</h3>
+<!--CODE file=k8s/base/oauth2-proxy.yaml lines=23-42 note=그룹으로 거른다-->
+<span class="tier b">구문 검증</span>
+<div class="key"><code>ALLOWED_GROUPS: lunch-users</code> —
+AD 의 그룹 하나가 <b>여기까지</b> 왔다.
+3부의 <code>member</code> → 7부의 매퍼 → 5부의 토큰 → 이 한 줄이다.</div>
+<div class="tip">쿠키 칸들이 낯익을 것이다.
+<code>Secure</code>·<code>SameSite</code>·만료 — 1부 6장에서 배운 그것들이다.</div>
+</article>
+
+<article class="card" id="ap-px-4">
+<h3>띄우는 자리</h3>
+<!--CODE file=k8s/base/oauth2-proxy.yaml lines=63-101 note=비밀 셋-->
+<span class="tier b">구문 검증</span>
+<div class="warn"><b>쿠키 열쇠는 정확히 32바이트여야 한다.</b>
+아니면 뜨다가 죽는다. 이 값으로 세션 쿠키를 <b>암호화</b>하므로,
+프록시 여러 벌이 <b>같은 값</b>을 써야 한다 — 아니면 서로의 쿠키를 못 읽는다.</div>
+</article>
+
+<article class="card" id="ap-px-5">
+<h3>Keycloak 쪽에서 할 일</h3>
+<pre class="term">클라이언트 lunch-web 의 Valid redirect URIs 에 한 줄 더:
+
+  https://lunch.campus.example/oauth2/callback
+
+프록시가 자기 콜백 주소를 그렇게 만들기 때문이다.
+등록 안 하면 5부 5장 퀴즈의 그 오류가 뜬다:
+
+  Invalid parameter: redirect_uri</pre>
+<span class="tier ill">설명용</span>
+<div class="key">길을 바꿔도 <b>Keycloak 쪽 작업은 이 한 줄</b>이다.
+클라이언트를 새로 만들 필요도 없다 — 앱 하나에 클라이언트 하나면 된다.</div>
+</article>
+
+<article class="card" id="ap-hdr">
+<p class="chnum">3장</p>
+<h2>헤더를 믿는다는 것</h2>
+<p class="chsub">이 부에서 가장 위험한 자리</p>
+</article>
+
+<article class="card" id="ap-hdr-1">
+<h3>프록시가 넘겨 주는 것</h3>
+<pre class="term">통과한 요청에 이런 헤더가 붙어 앱으로 간다:
+
+  X-Auth-Request-User:   minji
+  X-Auth-Request-Email:  minji@campus.example
+  X-Auth-Request-Groups: lunch-users,campus-all
+
+앱은 이걸 읽어 "누가 왔는지" 를 안다.
+토큰도, 서명도, 열쇠도 앱에게는 없다.</pre>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="ap-hdr-2">
+<h3>그래서 무엇이 위험한가</h3>
+<div class="warn"><b>헤더는 누구나 적을 수 있다.</b>
+클러스터 안의 아무 Pod 나 앱에게 직접 요청을 보내면서
+<code>X-Auth-Request-User: admin.lee</code> 를 붙일 수 있다.
+앱은 그것을 구별할 방법이 없다 — 서명이 없기 때문이다.</div>
+<div class="key">그래서 이 길에는 <b>반드시</b> 두 가지가 따라온다.
+① 앱이 <b>프록시에서 온 요청만</b> 받게 막는다(NetworkPolicy).
+② 프록시가 <b>들어온 헤더를 지우고</b> 자기 것으로 덮어쓴다.<br>
+둘 중 하나라도 빠지면 이 구조는 <b>아무것도 안 지킨다</b>.</div>
+</article>
+
+<article class="card" id="ap-hdr-3">
+<h3>담장을 세운다</h3>
+<!--CODE file=k8s/base/networkpolicy.yaml lines=34-60 note=6부의 그 규칙-->
+<span class="tier b">구문 검증</span>
+<div class="tip">6부 5장에서 만든 그 파일이다.
+길 1을 쓴다면 <b>학식 앱에도</b> 같은 규칙이 필요하다 —
+oauth2-proxy 와 인그레스에서만 받도록.</div>
+</article>
+
+<article class="card" id="ap-hdr-4">
+<h3>인그레스에게 물어보게 하기</h3>
+<!--CODE file=k8s/base/lunch-ingress-authreq.yaml lines=1-28 note=auth_request-->
+<span class="tier b">구문 검증</span>
+<div class="key">프록시를 <b>앞에 세우는</b> 대신, 인그레스가 요청마다
+프록시에게 "통과시켜도 되나" 를 묻는 방식이다.
+200 이면 통과, 401 이면 로그인으로 보낸다.</div>
+</article>
+
+<article class="card" id="ap-hdr-5">
+<h3>두 경로</h3>
+<!--CODE file=k8s/base/lunch-ingress-authreq.yaml lines=29-49 note=oauth2 는 프록시로-->
+<span class="tier b">구문 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>앞에 세우기</th><th>auth_request</th></tr>
+<tr><td>트래픽</td><td>모두 프록시를 지난다</td><td>인증만 물어본다</td></tr>
+<tr><td>본문</td><td>프록시를 거친다</td><td><b>안 거친다</b> — 큰 파일에 유리</td></tr>
+<tr><td>설정</td><td>간단</td><td>주석 세 줄 + 경로 둘</td></tr>
+<tr><td>컨트롤러</td><td>아무거나</td><td>ingress-nginx 등 지원하는 것</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="ap-hdr-quiz" data-quiz>
+<h3>1·2·3장 퀴즈</h3>
+<p class="q">Q. oauth2-proxy 로 앱을 막아 뒀다. 그런데 클러스터 안의
+다른 팀 Pod 에서 <code>curl -H 'X-Auth-Request-User: admin.lee'</code> 로
+앱을 직접 부르니 <b>관리자로 통과</b>했다. 무엇이 빠졌나?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>NetworkPolicy</b> 다. 앱이 프록시 말고
+아무한테나 요청을 받고 있다.<br>
+이 구조에서 헤더가 뜻을 갖는 것은 <b>"프록시만 나에게 말을 걸 수 있다"</b>
+는 전제 위에서다. 그 전제가 없으면 헤더는 그냥 아무나 적는 글자다.<br>
+고침은 둘이다. ① 앱의 NetworkPolicy 를 oauth2-proxy(와 인그레스)로 좁힌다.
+② 프록시가 <b>들어온 X-Auth-* 헤더를 지우고</b> 자기 것으로 덮어쓰게 한다.<br>
+그리고 이것이 <b>길 2가 더 안전한 이유</b>이기도 하다 —
+토큰은 서명이 있어서 어디서 왔든 확인할 수 있다.</div>
+</article>
+
+<article class="card" id="ap-rp">
+<p class="chnum">4장</p>
+<h2>길 2 — 앱이 직접</h2>
+<p class="chsub">4부에서 이미 만들었다</p>
+</article>
+
+<article class="card" id="ap-rp-1">
+<h3>앱이 하는 일 다섯 줄</h3>
+<!--CODE file=oidc/miniapp/rp.go lines=1-19 note=4부 7장의 그 파일-->
+<span class="tier a">실행 검증</span>
+<div class="key">4부 7장에서 읽은 그 코드다. 한 글자도 안 고쳤다.
+"8부에서 이 코드가 그대로 학식 예약 앱이 된다" 고 적어 둔 그 주석이
+이 장에서 사실이 된다.</div>
+</article>
+
+<article class="card" id="ap-rp-2">
+<h3>Service 와 Deployment</h3>
+<!--CODE file=k8s/base/lunch-app.yaml lines=36-59 note=이미지와 깃발-->
+<span class="tier b">구문 검증</span>
+<div class="key"><code>-issuer</code> 가 <b>운영 Keycloak</b> 을 가리킨다.
+2부에서 이 매니페스트를 쓸 때는 그 주소가 아직 없었는데,
+6부에서 Keycloak 을 올리면서 생겼다.</div>
+</article>
+
+<article class="card" id="ap-rp-3">
+<h3>리다이렉트 URI 규칙</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>규칙</th><th>왜</th></tr>
+<tr><td>글자 그대로 등록한다</td><td>느슨히 비교하면 남의 주소가 통과한다(4부 2장)</td></tr>
+<tr><td><code>*</code> 는 <b>경로에만</b></td>
+<td>호스트에 쓰면 남의 서브도메인이 통과한다</td></tr>
+<tr><td>환경마다 다르게</td><td>운영 것을 개발에 넣지 않는다(5부 10장 퀴즈)</td></tr>
+<tr><td>로그아웃 귀환지는 <b>칸이 따로</b></td><td>4부 8장의 그 400</td></tr>
+<tr><td>포트를 빼먹지 않는다</td>
+<td><code>:9001</code> 이 있고 없고가 다른 주소다</td></tr>
+</table>
+</div>
+<div class="warn">개발이 급하다고 <code>http://localhost:*</code> 같은 것을
+운영 클라이언트에 남겨 두지 말 것. 그 한 줄이면
+공격자가 자기 컴퓨터에서 토큰을 받아 갈 수 있다.</div>
+</article>
+
+<article class="card" id="ap-rp-4">
+<h3>세션 쿠키 설정</h3>
+<!--CODE file=oidc/miniapp/rp.go lines=249-263 note=1부 6장의 그 쿠키-->
+<span class="tier a">실행 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>칸</th><th>운영에서는</th></tr>
+<tr><td><code>HttpOnly</code></td><td><b>반드시</b> — 스크립트가 못 읽게</td></tr>
+<tr><td><code>Secure</code></td><td><b>반드시</b> — HTTPS 에서만 (우리 코드는 개발용이라 뺐다)</td></tr>
+<tr><td><code>SameSite</code></td><td><code>Lax</code> — 콜백이 돌아올 수 있어야 한다</td></tr>
+<tr><td><code>Path</code></td><td><code>/</code></td></tr>
+</table>
+</div>
+<div class="warn"><code>SameSite=Strict</code> 로 두면 <b>로그인이 안 된다</b>.
+IdP 에서 돌아오는 요청이 "다른 사이트에서 온 것" 이라 쿠키가 안 붙는다.
+<code>Lax</code> 여야 한다 — 1부 6장에서 배운 그 차이다.</div>
+</article>
+
+<article class="card" id="ap-swap">
+<p class="chnum">5장</p>
+<h2>약속을 갚는다</h2>
+<p class="chsub">-issuer 한 줄만 바꿔 본다</p>
+</article>
+
+<article class="card" id="ap-swap-1">
+<h3>바꾼 것</h3>
+<!--OUT file=kc_app_start.txt lines=1-11 note=다시 빌드하지도 않았다-->
+<span class="tier a">실행 검증</span>
+<div class="key">4부에서 만든 <b>그 실행 파일</b>이다.
+다시 컴파일하지도 않았고, 설정 파일도 없다.
+바꾼 것은 명령줄의 <code>-issuer</code> 한 줄뿐이다.</div>
+</article>
+
+<article class="card" id="ap-swap-2">
+<h3>앱이 뜨면서 한 일</h3>
+<!--OUT file=kc_app_start.txt lines=12-18 note=안내문을 읽어 왔다-->
+<span class="tier a">실행 검증</span>
+<div class="tip">앱이 뜨자마자 <b>안내문을 읽고 공개키를 받아 왔다</b>.
+4부 6장에서 만든 그 코드가 이번에는 진짜 Keycloak 을 상대한 것이다.</div>
+</article>
+
+<article class="card" id="ap-swap-3">
+<h3>로그인하면</h3>
+<!--OUT file=kc_app_me.txt lines=13-25 note=진짜 Keycloak 을 거쳐 온 사람-->
+<span class="tier a">실행 검증</span>
+<div class="key">이름과 그룹이 <b>AD 에서</b> 왔다.
+3부의 <code>campus.ldif</code> → 7부의 매퍼 → 5부의 토큰 →
+4부의 앱 코드. <b>여섯 부에 걸친 선이 여기서 한 화면이 됐다.</b></div>
+</article>
+
+<article class="card" id="ap-swap-4">
+<h3>관리자 화면은 갈린다</h3>
+<!--OUT file=kc_app_admin_denied.txt lines=12-22 note=민지는 403-->
+<span class="tier a">실행 검증</span>
+<!--OUT file=kc_app_admin_ok.txt lines=12-20 note=소희는 200-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ap-swap-5">
+<h3>앱 코드는 이 여덟 줄뿐이다</h3>
+<!--CODE file=oidc/miniapp/rp.go sym=handleAdmin note=groups 클레임 하나-->
+<span class="tier a">실행 검증</span>
+<div class="key">권한 판단이 <b>앱 안의 여덟 줄</b>이다.
+그 여덟 줄이 보는 값은 AD 의 그룹이고,
+그것을 바꾸는 곳은 <b>학교의 계정 관리</b>다 — 앱 배포가 아니라.<br>
+9부에서 이 방식의 한계와 대안(역할)을 다룬다.</div>
+</article>
+
+<article class="card quiz" id="ap-swap-quiz" data-quiz>
+<h3>4·5장 퀴즈</h3>
+<p class="q">Q. 개발에서 잘 되던 앱을 운영에 올렸더니
+로그인 뒤 <code>ID 토큰 내용이 맞지 않습니다: 발급자가 다르다</code> 가 뜬다.
+무엇이 어긋났나?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 앱이 기대하는 <code>issuer</code> 와
+토큰에 실려 온 <code>iss</code> 가 다르다.<br>
+흔한 원인 둘. ① 앱의 <code>-issuer</code> 는 운영 주소인데
+Keycloak 의 <code>KC_HOSTNAME</code> 이 안 맞아 토큰에 딴 주소가 실렸다
+(6부 2장 퀴즈).<br>
+② 끝의 슬래시 하나 차이 — <code>…/campus</code> 와 <code>…/campus/</code> 는
+<b>다른 글자</b>다. 발급자 비교는 글자 그대로 한다.<br>
+확인은 언제나 같다 — <code>jwtool decode</code> 로 토큰의 <code>iss</code> 를
+직접 본다. 짐작하지 않는다.</div>
+</article>
+
+<article class="card" id="ap-out">
+<p class="chnum">6장</p>
+<h2>로그아웃 세 종류</h2>
+<p class="chsub">무엇을 끊을 것인가</p>
+</article>
+
+<article class="card" id="ap-out-1">
+<h3>0부의 세 세션이 여기서 끝난다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>종류</th><th>무엇을 끊나</th><th>누가 시작하나</th></tr>
+<tr><td><b>앱만</b></td><td>B (앱 세션)</td><td>앱</td></tr>
+<tr><td><b>RP 시작</b><br><span class="dim">RP-Initiated Logout</span></td>
+<td>B 와 A</td><td>앱이 IdP 로 보낸다 — <b>이 덱의 방식</b></td></tr>
+<tr><td><b>백채널</b><br><span class="dim">Back-Channel Logout</span></td>
+<td>여러 앱의 B 를 한꺼번에</td><td>IdP 가 앱들을 부른다</td></tr>
+</table>
+</div>
+<div class="key">4부 8장에서 만든 것이 가운데다.
+앱이 자기 세션을 끊고, 브라우저를 IdP 로 보내 거기서도 끊게 한다.</div>
+</article>
+
+<article class="card" id="ap-out-2">
+<h3>백채널 로그아웃은 왜 있나</h3>
+<p class="lead">앱이 <b>열 개</b>면, 한 곳에서 로그아웃해도
+나머지 아홉의 세션 B 는 살아 있다. 사용자는 로그아웃했다고 믿는데.</p>
+<pre class="term">백채널 로그아웃:
+
+  1. 어디서든 로그아웃이 일어난다
+  2. Keycloak 이 **등록된 앱들에게 직접** 알린다
+       POST https://lunch.campus.example/logout/backchannel
+       body: logout_token=eyJ…   (JWT 다)
+  3. 앱은 그 토큰의 sid 로 자기 세션을 찾아 끊는다
+
+앱에 설정할 칸: Backchannel logout URL
+                Backchannel logout session required</pre>
+<span class="tier ill">설명용</span>
+<div class="warn">우리 앱은 이것을 <b>안 한다</b>. 하려면 앱이
+로그아웃 토큰을 받는 주소를 하나 더 열고, 세션을 <code>sid</code> 로
+찾을 수 있게 저장해 둬야 한다 — 그 정도는 이 덱의 범위 밖이다.
+필요해지는 시점은 "앱이 여럿이 되었을 때" 다.</div>
+</article>
+
+<article class="card" id="ap-out-3">
+<h3>oauth2-proxy 의 로그아웃</h3>
+<pre class="term">프록시를 쓰면 로그아웃 주소도 프록시의 것이다:
+
+  https://lunch.campus.example/oauth2/sign_out
+
+그런데 이것만으로는 **프록시의 쿠키만** 지워진다(세션 B).
+Keycloak 의 세션 A 는 살아 있어서, 다시 들어가면
+비밀번호를 안 묻고 통과한다 — 4부 8장의 그 증상이다.
+
+둘 다 끊으려면 뒤에 붙인다:
+
+  /oauth2/sign_out?rd=<Keycloak 의 로그아웃 주소></pre>
+<span class="tier ill">설명용</span>
+<div class="key">길이 달라져도 <b>세 세션 이야기는 그대로</b>다.
+어느 길을 골라도 "무엇을 끊었는가" 를 스스로 물어야 한다.</div>
+</article>
+
+<article class="card" id="ap-stack">
+<p class="chnum">7장</p>
+<h2>다른 스택에서는</h2>
+<p class="chsub">칸 이름만 다르고 하는 일은 같다</p>
+</article>
+
+<article class="card" id="ap-stack-1">
+<h3>Spring Boot</h3>
+<pre class="term">spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+            issuer-uri: https://sso.campus.example/realms/campus
+        registration:
+          keycloak:
+            client-id: lunch-web
+            client-secret: ${LUNCH_CLIENT_SECRET}
+            scope: openid,profile,email
+
+issuer-uri 한 줄이면 나머지 주소는 안내문에서 따라온다 —
+4부 6장에서 우리 앱이 한 그 일이다.</pre>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ap-stack-2">
+<h3>Django · Express</h3>
+<pre class="term">Django (mozilla-django-oidc):
+
+  OIDC_OP_JWKS_ENDPOINT   = ".../protocol/openid-connect/certs"
+  OIDC_OP_AUTHORIZATION_ENDPOINT = ".../auth"
+  OIDC_OP_TOKEN_ENDPOINT  = ".../token"
+  OIDC_RP_CLIENT_ID       = "lunch-web"
+  OIDC_RP_SIGN_ALGO       = "RS256"
+
+Express (openid-client):
+
+  const config = await discovery(
+      new URL("https://sso.campus.example/realms/campus"),
+      "lunch-web", process.env.LUNCH_CLIENT_SECRET)</pre>
+<span class="tier c">문서 근거</span>
+<div class="key">Django 는 주소를 하나씩 적고, Express 는 안내문 하나로 끝낸다.
+<b>어느 쪽이든 값은 5부에서 본 그 주소들</b>이다 —
+칸 이름을 몰라도 무엇을 넣어야 하는지는 안다.</div>
+</article>
+
+<article class="card" id="ap-stack-3">
+<h3>길 3 — 게이트웨이와 서비스 메시</h3>
+<pre class="term">Istio 를 쓴다면 두 자원으로 끝난다:
+
+  RequestAuthentication   "이 토큰이 진짜인가"
+    jwtRules:
+      - issuer:  "https://sso.campus.example/realms/campus"
+        jwksUri: ".../protocol/openid-connect/certs"
+
+  AuthorizationPolicy     "그래서 통과시킬까"
+    rules:
+      - when:
+          - key: request.auth.claims[groups]
+            values: ["lunch-users"]
+
+앱은 아무것도 모른다. 사이드카가 토큰을 확인하고
+클레임으로 판단한다 — 4부 5장의 그 확인이다.</pre>
+<span class="tier c">문서 근거</span>
+<div class="warn">메시는 무겁다. 이것 하나 때문에 도입할 것은 아니고,
+<b>이미 있다면</b> 길 1 대신 쓸 만하다.</div>
+</article>
+
+<article class="card quiz" id="ap-stack-quiz" data-quiz>
+<h3>6·7장 퀴즈</h3>
+<p class="q">Q. 앱 세 개가 같은 Keycloak 을 쓴다.
+한 곳에서 로그아웃했더니 <b>나머지 둘은 그대로</b> 로그인 상태다.
+사용자가 "로그아웃이 안 된다" 고 한다. 어떻게 답할까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 설계대로 도는 것이지만, 사용자 기대와는 다르다.
+로그아웃한 앱은 자기 세션 B 를 끊었고, IdP 의 A 도 끊었을 수 있다.
+그래도 <b>나머지 두 앱의 B 는 각자 살아 있다</b>.<br>
+답은 셋 중 하나다.<br>
+① <b>백채널 로그아웃</b>을 켠다 — Keycloak 이 세 앱에게 직접 알린다.
+제대로 된 답이지만 앱마다 주소를 하나 열어야 한다.<br>
+② 앱 세션을 <b>짧게</b> 둔다 — 그러면 곧 저절로 끊긴다.<br>
+③ 사용자에게 <b>브라우저를 닫으라</b>고 안내한다 — 공용 컴퓨터에서는
+그 편이 가장 확실하다(4부 8장 퀴즈).</div>
+</article>
+
+<article class="card" id="ap-end">
+<h3>8부에서 배운 것</h3>
+<ul>
+<li>길은 셋 — 앞에 세우기 · 앱이 직접 · 게이트웨이</li>
+<li><b>처음이라면 길 1</b>. 세밀한 권한이 필요하면 길 2</li>
+<li>프록시가 4부의 그 일을 <b>대신</b> 해 준다 — 배웠으니 안 될 때 볼 곳을 안다</li>
+<li>헤더를 믿으려면 <b>담장이 반드시</b> 있어야 한다</li>
+<li>4부의 앱이 <b><code>-issuer</code> 한 줄</b>로 진짜 Keycloak 에 붙었다</li>
+<li>로그아웃은 셋 — 앱만 · RP 시작 · 백채널</li>
+<li>다른 스택도 <b>issuer 한 줄</b>이면 시작된다</li>
+</ul>
+</article>
+
+<article class="card" id="ap-next">
+<h3>다음은</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>부</th><th>무엇을</th></tr>
+<tr><td><b>9부</b></td><td>권한 — 그룹을 역할로 옮기고, 토큰이 커지는 문제를 다스린다</td></tr>
+<tr><td>10부</td><td>운영 — 세션·이벤트·지표·키 회전</td></tr>
+<tr><td>11부</td><td>처음부터 끝까지 한 번에 훑기</td></tr>
+</table>
+</div>
+<div class="key"><b>0부의 그림이 이제 전부 켜졌다.</b>
+AD 에서 앱까지 선이 닿았고, 그 선 위로 진짜 사람이 지나갔다.
+남은 부들은 그 선을 <b>다듬는</b> 일이다.</div>
 </article>

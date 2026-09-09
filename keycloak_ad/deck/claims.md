@@ -341,11 +341,37 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 - Keycloak 서버 가이드 26.7 — https://www.keycloak.org/documentation · 확인 2026-09-08
 - PostgreSQL 이미지 `postgres:17.6-alpine` · Keycloak 이미지 `quay.io/keycloak/keycloak:26.7.3`
 
+## 8부 — 앱에 로그인 붙이기 (`ap-*` 슬라이드)
+
+| 슬라이드 | 주장 | 등급 | 출처 | 확인일 |
+|---|---|---|---|---|
+| `ap-px-1` | oauth2-proxy 가 state·nonce·PKCE·토큰 교환·세션까지 대신한다 | C | oauth2-proxy 문서 — OIDC provider | 2026-09-08 |
+| `ap-px-3` | `--allowed-group` 으로 그룹을 걸러 통과시킨다 | C | oauth2-proxy 문서 — Authorization | 2026-09-08 |
+| `ap-px-4` | 쿠키 열쇠는 32바이트여야 하고 여러 벌이 같은 값을 써야 한다 | C | oauth2-proxy 문서 — Cookie secret | 2026-09-08 |
+| `ap-hdr-1` | 통과한 요청에 `X-Auth-Request-User/-Email/-Groups` 가 붙는다 | C | oauth2-proxy 문서 — `--set-xauthrequest` | 2026-09-08 |
+| `ap-hdr-2` | 헤더는 누구나 적을 수 있어 담장이 없으면 아무것도 안 지킨다 | C | oauth2-proxy 문서 — Security(프록시 뒤에 두라) | 2026-09-08 |
+| `ap-hdr-4` | ingress-nginx 의 `auth-url`·`auth-signin`·`auth-response-headers` | C | ingress-nginx 문서 — External Authentication | 2026-09-08 |
+| `ap-rp-4` | `SameSite=Strict` 면 IdP 에서 돌아오는 요청에 쿠키가 안 붙어 로그인이 안 된다 | C | MDN — SameSite cookies | 2026-09-08 |
+| `ap-swap-1` | 4부의 실행 파일이 `-issuer` 한 줄만 바꿔 진짜 Keycloak 에 붙는다 | A | `out/kc_app_start.txt` — 다시 빌드하지 않았다 | 2026-09-08 |
+| `ap-swap-3` | 그 앱이 AD 에서 온 이름과 그룹을 화면에 찍는다 | A | `out/kc_app_me.txt` | 2026-09-08 |
+| `ap-swap-4` | 같은 코드가 minji 에게 403, admin.lee 에게 200 을 준다 | A | `out/kc_app_admin_denied.txt` · `out/kc_app_admin_ok.txt` | 2026-09-08 |
+| `ap-out-1` | 로그아웃은 앱만 · RP 시작 · 백채널 셋 | C | OIDC RP-Initiated Logout 1.0 · Back-Channel Logout 1.0 | 2026-09-08 |
+| `ap-out-3` | oauth2-proxy 의 `/oauth2/sign_out` 은 프록시 쿠키만 지운다 | C | oauth2-proxy 문서 — Sign out | 2026-09-08 |
+| `ap-stack-1` | Spring Security 는 `issuer-uri` 한 줄로 시작한다 | C | Spring Security 문서 — OAuth2 Client | 2026-09-08 |
+| `ap-stack-2` | Django(mozilla-django-oidc)·Express(openid-client)의 칸 이름 | C | 각 라이브러리 문서 | 2026-09-08 |
+| `ap-stack-3` | Istio 는 RequestAuthentication + AuthorizationPolicy 둘로 한다 | C | Istio 문서 — JWT 인증 | 2026-09-08 |
+
+- oauth2-proxy 문서 — https://oauth2-proxy.github.io/oauth2-proxy/ · 확인 2026-09-08
+- ingress-nginx External Authentication — https://kubernetes.github.io/ingress-nginx/examples/auth/oauth-external-auth/ · 확인 2026-09-08
+- OpenID Connect Back-Channel Logout 1.0 — https://openid.net/specs/openid-connect-backchannel-1_0.html · 확인 2026-09-08
+- Spring Security OAuth2 Client — https://docs.spring.io/spring-security/reference/servlet/oauth2/client/ · 확인 2026-09-08
+- Istio 인증 — https://istio.io/latest/docs/tasks/security/authentication/ · 확인 2026-09-08
+- 이미지 `quay.io/oauth2-proxy/oauth2-proxy:v7.13.0`
+
 ## 앞으로 채울 곳
 
 부가 하나씩 들어올 때마다 그 부의 절을 여기에 연다.
 지금은 비어 있는 것이 정상이다 — 뼈대 커밋에는 주장이 거의 없다.
 
-- [ ] 8부 앱 연동 — oauth2-proxy · ingress-nginx `auth_request`
 - [ ] 9부 권한 — 그룹·역할 매퍼
 - [ ] 10부 운영 — 수명 기본값 · 이벤트 · 메트릭

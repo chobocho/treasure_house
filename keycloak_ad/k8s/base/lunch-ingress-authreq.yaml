@@ -1,0 +1,49 @@
+# 길 1의 다른 모양 — 인그레스에게 물어보게 한다.
+#
+# 앞의 oauth2-proxy 를 앱 **앞에 세우는** 대신,
+# 인그레스가 요청마다 프록시에게 "이 사람 통과시켜도 되나" 를 묻는다.
+# 그래서 이름이 auth_request 다.
+#
+# ⚠ 이 파일은 lunch-ingress.yaml 을 **대신하는** 것이다.
+#    둘을 같이 쓰면 같은 도메인에 문패가 둘이라 컨트롤러가 헷갈린다.
+#    그래서 base 에 넣지 않았다 — 쓰려면 overlay 에서 갈아 끼운다.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lunch-web-authreq
+  namespace: lunch
+  labels:
+    app.kubernetes.io/name: lunch-web
+  annotations:
+    # 요청마다 여기에 물어본다. 200 이면 통과, 401 이면 아래로 보낸다.
+    nginx.ingress.kubernetes.io/auth-url:
+      https://lunch.campus.example/oauth2/auth
+    nginx.ingress.kubernetes.io/auth-signin:
+      https://lunch.campus.example/oauth2/start?rd=$escaped_request_uri
+    # 통과했을 때 프록시가 준 헤더를 앱에게 넘긴다.
+    nginx.ingress.kubernetes.io/auth-response-headers:
+      X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Groups
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [lunch.campus.example]
+      secretName: lunch-web-tls
+  rules:
+    - host: lunch.campus.example
+      http:
+        paths:
+          # 프록시 자신의 주소들. 로그인·콜백·확인이 여기로 간다.
+          - path: /oauth2
+            pathType: Prefix
+            backend:
+              service:
+                name: oauth2-proxy
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lunch-web
+                port:
+                  name: http

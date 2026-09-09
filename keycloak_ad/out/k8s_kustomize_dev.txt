@@ -27,6 +27,28 @@ metadata:
 ---
 apiVersion: v1
 data:
+  OAUTH2_PROXY_ALLOWED_GROUPS: lunch-users
+  OAUTH2_PROXY_COOKIE_EXPIRE: 8h
+  OAUTH2_PROXY_COOKIE_SAMESITE: lax
+  OAUTH2_PROXY_COOKIE_SECURE: "true"
+  OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+  OAUTH2_PROXY_OIDC_EMAIL_CLAIM: email
+  OAUTH2_PROXY_OIDC_ISSUER_URL: https://sso.campus.example/realms/campus
+  OAUTH2_PROXY_PROVIDER: oidc
+  OAUTH2_PROXY_REDIRECT_URL: https://lunch.campus.example/oauth2/callback
+  OAUTH2_PROXY_REVERSE_PROXY: "true"
+  OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
+  OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+  OAUTH2_PROXY_USER_ID_CLAIM: preferred_username
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/part-of: lunch
+  name: oauth2-proxy
+  namespace: lunch
+---
+apiVersion: v1
+data:
   ad-ca.crt: |
     LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUR1akNDQXFLZ0F3SUJBZ0lVYlROV2
     VyRHpOYnhHdjlFYzFvcHd0RUovSHowd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1l6RUxNQWtH
@@ -69,6 +91,16 @@ metadata:
   labels:
     app.kubernetes.io/part-of: lunch
   name: lunch-web
+type: Opaque
+---
+apiVersion: v1
+data:
+  cookie-secret: bHVuY2gtZGVtby1jb29raWUtc2VjcmV0LTAxMjM0NTY=
+kind: Secret
+metadata:
+  labels:
+    app.kubernetes.io/part-of: lunch
+  name: oauth2-proxy
 type: Opaque
 ---
 apiVersion: v1
@@ -133,6 +165,22 @@ spec:
     targetPort: http
   selector:
     app.kubernetes.io/name: lunch-web
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/part-of: lunch
+  name: oauth2-proxy
+  namespace: lunch
+spec:
+  ports:
+  - name: http
+    port: 4180
+    targetPort: http
+  selector:
+    app.kubernetes.io/name: oauth2-proxy
 ---
 apiVersion: v1
 kind: Service
@@ -307,6 +355,74 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/part-of: lunch
+  name: oauth2-proxy
+  namespace: lunch
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oauth2-proxy
+    spec:
+      containers:
+      - env:
+        - name: OAUTH2_PROXY_CLIENT_ID
+          value: lunch-web
+        - name: OAUTH2_PROXY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: client-secret
+              name: lunch-web
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: cookie-secret
+              name: oauth2-proxy
+        envFrom:
+        - configMapRef:
+            name: oauth2-proxy
+        image: quay.io/oauth2-proxy/oauth2-proxy:v7.13.0
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: http
+          periodSeconds: 20
+        name: proxy
+        ports:
+        - containerPort: 4180
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: http
+          periodSeconds: 10
+        resources:
+          limits:
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 2000
         seccompProfile:
           type: RuntimeDefault
 ---
