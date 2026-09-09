@@ -17,6 +17,9 @@
 
 ## 📚 보물 목록 🗺️
 
+### ⚙️ C 언어 시리즈 🔩
+- 🧰 **[C_기초.html](./C_%EA%B8%B0%EC%B4%88.html)** — 🌱 《C로 만드는 GW-BASIC 인터프리터》 선행 학습 — 포인터·소유권·태그된 공용체·VEC(T) 매크로만 골라 담은 PPT형 8부 22장 171슬라이드. 책 부록 소스 2,381줄을 gcc 15로 빌드해 돌려 가며 썼고, 파이프라인 데모는 PRINT의 존 정렬까지 재현합니다 🔩
+
 ### ➕ C++ 시리즈 🚀
 - 📈 **[모던 C++의 진화](./%EB%AA%A8%EB%8D%98_C%2B%2B%EC%9D%98_%EC%A7%84%ED%99%94.html)** — C++11부터 C++23까지 다섯 표준의 변화를 동작하는 예제로 배우는 PPT형 6부 42장 300슬라이드. 최신 C++23(print·expected·deducing this·레인지 확장·mdspan)에 최대 분량 할애, 마이그레이션 사다리와 C++26 전망 포함 🚀
 
@@ -30,18 +33,29 @@
 - 📈 **[파이썬의 진화](./%ED%8C%8C%EC%9D%B4%EC%8D%AC%EC%9D%98_%EC%A7%84%ED%99%94.html)** — Python 3.7부터 3.14까지 여덟 릴리스의 변화를 동작하는 예제로 배우는 PPT형 12부 35장 300슬라이드. 최신 3.14(t-string·지연 애너테이션·프리스레딩 공식화·다중 인터프리터)에 2배 분량 할애, 코드 현대화 갤러리·PEP 색인·연습문제 14선 부록 포함 🚀
 
 ### 🐹 Go 언어 시리즈 🚀
+- 🐿️ **[Go_기초.html](./Go_%EA%B8%B0%EC%B4%88.html)** — 🌱 《Go로 만드는 GW-BASIC 인터프리터》 선행 학습 — 슬라이스·인터페이스·타입 스위치·error 관용구만 골라 담은 PPT형 252장. 예제·구조체 크기·컴파일러 에러 문구를 Go 1.26으로 전부 실측, 미니 인터프리터 데모 15종 🐹
 - 📘 **[Go 심화.md](./Go%20심화.md)** — 🎓 한 단계 더 깊이! Go의 고급 기법 🏔️
+- 🎞️ **[Go_심화_슬라이드.html](./Go_%EC%8B%AC%ED%99%94_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Go 심화》 슬라이드판 PPT형 67장 📱
 - 📗 **[Go 패턴.md](./Go%20패턴.md)** — 🧩 실전 디자인 패턴 모음 ✨
+- 🎞️ **[Go_패턴_슬라이드.html](./Go_%ED%8C%A8%ED%84%B4_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Go 패턴》 슬라이드판 PPT형 90장 📱
 - 🌐 **[go_design_patterns.html](./go_design_patterns.html)** — 🎨 Go 디자인 패턴 웹 가이드 📑
+- 🎞️ **[Go_디자인패턴_슬라이드.html](./Go_%EB%94%94%EC%9E%90%EC%9D%B8%ED%8C%A8%ED%84%B4_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Go 디자인 패턴》 슬라이드판 PPT형 172장 📱
 
 ### 🌙 Lua 언어 시리즈 🎭
+- 🌘 **[Lua_기초.html](./Lua_%EA%B8%B0%EC%B4%88.html)** — 🌱 《Lua로 만드는 GW-BASIC 인터프리터》 선행 학습 — 테이블·다중 반환값·패턴·메타테이블·5.1↔5.4 차이만 골라 담은 PPT형 10부 42장 271슬라이드. 코드 블록 232개를 Lua 5.1.5·5.4.8 두 인터프리터로 대조, 브라우저 데모 14종 🌙
 - 📕 **[Lua 심화.md](./Lua%20심화.md)** — 🔬 Lua의 내부를 파헤치다 🕵️
+- 🎞️ **[Lua_심화_슬라이드.html](./Lua_%EC%8B%AC%ED%99%94_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Lua 심화》 슬라이드판 PPT형 299장 📱
 - 📓 **[Lua 알고리즘.md](./Lua%20알고리즘.md)** — 🧮 알고리즘의 세계로! 🎯
+- 🎞️ **[Lua_알고리즘_슬라이드.html](./Lua_%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Lua 알고리즘》 슬라이드판 PPT형 204장 📱
 - 📔 **[Lua 자료구조.md](./Lua%20자료구조.md)** — 🏗️ 견고한 자료구조 설계 💪
+- 🎞️ **[Lua_자료구조_슬라이드.html](./Lua_%EC%9E%90%EB%A3%8C%EA%B5%AC%EC%A1%B0_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Lua 자료구조》 슬라이드판 PPT형 189장 📱
 
 ### 🔷 TypeScript 시리즈 💙
+- 🧭 **[TypeScript_기초.html](./TypeScript_%EA%B8%B0%EC%B4%88.html)** — 🌱 《TypeScript로 만드는 GW-BASIC 인터프리터》 선행 학습 — 판별 유니언·좁히기·클래스·모듈·async만 골라 담은 PPT형 9부 39장 275슬라이드. 인용한 컴파일러 에러 11종을 tsc 6.0으로 재확인, 데모 10종 🔷
 - 📘 **[TypeScript 알고리즘 가이드북.md](./TypeScript%20알고리즘%20가이드북.md)** — 🎲 알고리즘 완전정복 🏆
+- 🎞️ **[TypeScript_알고리즘_가이드북_슬라이드.html](./TypeScript_%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98_%EA%B0%80%EC%9D%B4%EB%93%9C%EB%B6%81_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《TypeScript 알고리즘 가이드북》 슬라이드판 PPT형 253장 📱
 - 📗 **[TypeScript 자료구조 가이드북.md](./TypeScript%20자료구조%20가이드북.md)** — 🧱 타입 안전한 자료구조 🛡️
+- 🎞️ **[TypeScript_자료구조_가이드북_슬라이드.html](./TypeScript_%EC%9E%90%EB%A3%8C%EA%B5%AC%EC%A1%B0_%EA%B0%80%EC%9D%B4%EB%93%9C%EB%B6%81_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《TypeScript 자료구조 가이드북》 슬라이드판 PPT형 175장 📱
 
 ### 🟩 Node.js 시리즈 🟢
 - 🟩 **[Node.js_완전_가이드.html](./Node.js_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 🌱 왜 Node였는가부터 V8 내부·N-API·SEA까지 13부 65장 419슬라이드. 코드 블록 213개 전부 실행 검증, v0.x→v26 버전사는 공식 문서 근거, 데모 12종·퀴즈 13문 🟢
@@ -49,14 +63,18 @@
 ### 🖥️ 시스템 & 셸 도구 ⚙️
 - 🐧 **[Linux_명령어_핸드북.md](./Linux_명령어_핸드북.md)** — 🔧 리눅스 마스터의 길 🛤️
 - 🔐 **[SSH 고급 가이드북.md](./SSH%20고급%20가이드북.md)** — 🌐 안전한 원격 접속의 모든 것 🔒
+- 🖥️ **[TELNET_대백과.html](./TELNET_%EB%8C%80%EB%B0%B1%EA%B3%BC.html)** — 📟 NVT·옵션 협상·raw 실전 예제까지 다루는 파워유저 가이드 🔌
 - 📜 **[ex_완전_가이드.html](./ex_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — ⌨️ QED에서 vim까지의 역사, 주소·정규식·`:g` 완전정복, ex를 LLM처럼 부리는 법 111장 🤖
 - 🔍 **[ripgrep 가이드.md](./ripgrep%20가이드.md)** — ⚡ 초고속 검색의 마법사 🪄
 - 🧰 **[jq 가이드.md](./jq%20가이드.md)** — 📋 JSON을 자유자재로! 🎨
 - 📜 **[YAML 가이드.md](./YAML%20가이드.md)** — ✏️ 설정 파일의 정석 📐
+- 🌊 **[Langflow 가이드.html](./Langflow%20가이드.html)** — 🤖 비주얼 LLM 플로우를 REST API로! 🔌
 
 ### 🎬 자동화 & CI/CD 🔄
 - 🔗 **[n8n_완전_가이드.html](./n8n_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 🤖 워크플로 자동화 기초부터 라이선스, LLM으로 워크플로 자동 생성·구성도 그리기까지 300장 🧩
 - 🐙 **[github-actions-book.md](./github-actions-book.md)** — 🚀 GitHub Actions 완벽 가이드 🎢
+- 🎨 **[Penpot_ArgoCD_배포_가이드.html](./Penpot_ArgoCD_%EB%B0%B0%ED%8F%AC_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 🚀 k8s를 몰라도 따라 하는 GitOps 사내 배포 슬라이드 70장 🐙
+- 🚀 **[CICD_GitOps_실전_교재.html](./CICD_GitOps_%EC%8B%A4%EC%A0%84_%EA%B5%90%EC%9E%AC.html)** — 🐹 Go 웹서버를 Docker로 말아 k8s에 올리고 Argo CD로 관리하기 — 310장 대학 교재 ☸️
 
 ### 🌐 웹 & 인증 🔐
 - 🌊 **[React_완전_가이드.html](./React_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — ⚛️ TypeScript와 테트리스로 배우는 훅·성능·내부구조 300장 🎮
@@ -78,11 +96,18 @@
 - 🔷 **[GWBASIC_in_TypeScript.md](./GWBASIC_in_TypeScript.md)** — 💎 TypeScript 구현 🎯
 - 🎓 **[scheme-gwbasic-full.md](./scheme-gwbasic-full.md)** — λ Scheme 풀버전 🧙‍♂️
 
+### 🔥 언어 만들기 ⚒️
+- ⚒️ **[대장간에서_벼려낸_리스프.html](./%EB%8C%80%EC%9E%A5%EA%B0%84%EC%97%90%EC%84%9C_%EB%B2%BC%EB%A0%A4%EB%82%B8_%EB%A6%AC%EC%8A%A4%ED%94%84.html)** — 🔥 리더 → 컴파일러 → VM을 Go와 Lua로 두 자루 벼리는 PPT형 25장 500슬라이드 — NaN 박싱·SWAR·매직 넘버 나눗셈·마크 비트맵 GC·copy-and-patch JIT. 두 구현이 적합성 테스트에서 바이트 단위로 같은 출력을 내고, 특화 VM이 오히려 느려진 실패도 원인까지 싣습니다. 데모 24종 ⚔️
+
 ### 🔢 수학 & 알고리즘 🧮
 - 📉 **[수학적_최적화_완전_가이드.html](./%EC%88%98%ED%95%99%EC%A0%81_%EC%B5%9C%EC%A0%81%ED%99%94_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 🎯 “최적해가 존재하는가”에서 출발해 볼록성·KKT·쌍대성을 증명과 함께 세우고, 경사하강·뉴턴·BFGS·신뢰영역·심플렉스·분지한정·SGD·근접경사·베이지안 최적화를 하나씩 구현합니다. 뒤이어 **프로세스 마이닝** 3개 부에서 이벤트 로그 발견(알파·인덕티브·휴리스틱)과 적합성 검사를 다루며, **정렬이 곧 최단경로이고 마킹 방정식 LP 가 A\* 의 허용 휴리스틱**임을 실측으로 보입니다(탐색 상태 76~80% 감소). 슬라이드 505장 · 정리·정의 216건 · `optim/py` 순수 stdlib 구현 5,800줄(numpy 없음, 테스트 309개 통과). 덱의 모든 코드는 소스와 바이트 단위로 대조되고 모든 출력은 실제 실행 결과입니다 🔬
+- 📐 **[에르하르트_부피_추측.html](./%EC%97%90%EB%A5%B4%ED%95%98%EB%A5%B4%ED%8A%B8_%EB%B6%80%ED%94%BC_%EC%B6%94%EC%B8%A1.html)** — 🤖 OpenAI Astra가 증명한 격자점 기하 난제 — 정수계획법·격자암호·컴파일러 응용까지 207장 슬라이드 + 데모 4종 🧊
 - 🌊 **[유량알고리즘_강줄기로_배우기.html](./유량알고리즘_강줄기로_배우기.html)** — 💧 강물 흘려보내기로 배우는 최대 유량 / Edmonds-Karp (C·C++·Go·JS·Java·C#·Python) 🏞️
 - 🁢 **[이분매칭_도미노로_배우기.html](./이분매칭_도미노로_배우기.html)** — 🧩 도미노 타일링으로 배우는 이분 매칭 (C·C++·Go·JS·Java·C#·Python) 🎯
 - 🌤️ **[펜윅트리_쉽게_배우기.html](./펜윅트리_쉽게_배우기.html)** — ⚡ 인터랙티브 슬라이드로 배우는 Fenwick Tree (C·C++·Go·JS·Java·C#·Python) 🧮
+- 🌳 **[B트리_쉽게_배우기.html](./B트리_쉽게_배우기.html)** — ☁️ 삽입·삭제·검색·수정이 실제로 동작하는 B-Tree 놀이터 (C/C++/Python/Go) 🗂️
+- 🍃 **[B플러스트리_쉽게_배우기.html](./B플러스트리_쉽게_배우기.html)** — 🔗 잎끼리 연결된 B+Tree — 삽입·삭제·검색·수정에 범위검색까지 동작 (C/C++/Python/Go) 🗄️
+- 🕰️ **[MVCC_쉽게_배우기.html](./MVCC_%EC%89%BD%EA%B2%8C_%EB%B0%B0%EC%9A%B0%EA%B8%B0.html)** — 🗂️ 다중 버전 동시성 제어 완전 정복 — 격리 수준·스냅샷·VACUUM·InnoDB·SSI·분산까지 239장 슬라이드 + 인터랙티브 데모 4종 🐘
 - 📊 **[FFT_큰수곱셈_설명.html](./FFT_큰수곱셈_설명.html)** — 🔬 FFT를 이용한 큰 수 곱셈 설명 📐
 - 🐍 **[fft_bignum.py](./fft_bignum.py)** — 💡 FFT 큰 수 곱셈 Python 구현 🧪
 - 🔀 **[galois_to_lfsr.html](./galois_to_lfsr.html)** — ⚙️ Galois에서 LFSR로의 변환 🔧
@@ -103,6 +128,18 @@
 - 🟦 **[TypeScript_테트리스_AI_8인_대전.html](./TypeScript_%ED%85%8C%ED%8A%B8%EB%A6%AC%EC%8A%A4_AI_8%EC%9D%B8_%EB%8C%80%EC%A0%84.html)** — 🟦 C++ WASM 테트리스 3부작을 **타입스크립트 한 언어**로 다시 만듭니다. 코어 엔진은 C++ wasm 의 골든 트레이스를 **비트 단위로 재현**하고, 8특징 AI 를 유전 알고리즘으로 실제로 학습시키고(50세대·5분 29초·적합도 127.3), **RFC 6455 를 직접 구현한 서버**로 8인 온라인 대전까지 갑니다. 슬라이드 343장 — `tetris_ts/` 전체 소스 10,168줄이 한 줄도 빠짐없이 실려 있고, 문서 안에서 플레이·AI 대국·유전 알고리즘 학습·8인 대전까지 9종의 데모가 직접 돌아갑니다 ⚔️
 - 🍵 **[나만의_Bubble_Tea_만들기.html](./%EB%82%98%EB%A7%8C%EC%9D%98_Bubble_Tea_%EB%A7%8C%EB%93%A4%EA%B8%B0.html)** — 🫖 Bubble Tea 같은 터미널 UI 프레임워크를 **Go 표준 라이브러리만으로** 직접 만듭니다. termios 원시 모드 → 이스케이프 시퀀스 파서 → **줄 단위 diff 렌더러** → **한글 폭 표** → Lip Gloss 식 스타일 → 부품(스피너·입력창·목록·뷰포트)까지 한 층씩 쌓아 올리고, 할 일 관리·시스템 모니터·전시장 앱으로 마무리합니다. **외부 의존성 0**. 슬라이드 503장 — `boricha/` 전체 소스 12,350줄이 한 줄도 빠짐없이 실려 있고, 모든 화면은 진짜 터미널 캡처 16장과 넘겨 보는 실행 기록 7종입니다 🍵
 - 🍵 **[Go_Bubble_Tea_테트리스_만들기.html](./Go_Bubble_Tea_%ED%85%8C%ED%8A%B8%EB%A6%AC%EC%8A%A4_%EB%A7%8C%EB%93%A4%EA%B8%B0.html)** — 🍵 Bubble Tea 를 처음 쓰는 사람을 위해 **예제 7개**로 Elm 아키텍처를 익힌 뒤, 터미널 테트리스를 1인용 → 같은 키보드 2인용 → **8특징 AI 와의 1:1 대전**까지 만듭니다. 터미널에는 "키를 뗐다"가 없다는 제약을 정면으로 다루고, 코어와 AI 는 기존 C++ wasm 덱의 골든 트레이스로 **9,000스텝·1,421경우**를 전수 대조했습니다. 슬라이드 337장 — `tetris_tui/` 전체 소스 11,261줄이 한 줄도 빠짐없이 실려 있고, 네 모드의 터미널 화면을 문서 안에서 넘겨 볼 수 있습니다 🎮
+- 🪩 **[pinball/pinball.html](./pinball/pinball.html)** — 🎯 외부 라이브러리 없이 Canvas + 순수 JS로 만든 핀볼 — Vec2 벡터 수학·반사 공식·오일러 적분·캡슐 충돌 플리퍼, 브라우저에서 바로 플레이 🕹️
+- 📖 **[pinball/pinball-tutorial.html](./pinball/pinball-tutorial.html)** — 🧲 핀볼 제작 전 과정을 다루는 305페이지 한국어 강의 — Canvas 기초부터 벡터·삼각함수 유도, 충돌 감지, 플리퍼 역학, 전체 코드 워크스루까지 15개 챕터 🎓
+- 🧊 **[복셀_엔진_만들기.html](./%EB%B3%B5%EC%85%80_%EC%97%94%EC%A7%84_%EB%A7%8C%EB%93%A4%EA%B8%B0.html)** — ⛏️ 마인크래프트식 큐브 래스터라이저를 처음부터 — 벡터·투영·컬링·화가 알고리즘·피킹, 라이브 데모 13종 + 동작하는 JS·Pygame 코드, 슬라이드 300장 🟩
+- 🟩 **[voxel_canvas.html](./voxel_canvas.html)** — 🧊 복셀 엔진 가이드의 JS 엔진 단독 실행 데모 ⛏️
+- 🐍 **[voxel.py](./voxel.py)** — ⛏️ 복셀 엔진 Pygame 구현 소스 🧊
+- 🐍 **[voxel_tetris.py](./voxel_tetris.py)** — 🧱 복셀 엔진으로 만든 3D 테트리스 Pygame 소스 🕹️
+- 🏎️ **[러브2D_아웃런_레이싱_게임.html](./%EB%9F%AC%EB%B8%8C2D_%EC%95%84%EC%9B%83%EB%9F%B0_%EB%A0%88%EC%9D%B4%EC%8B%B1_%EA%B2%8C%EC%9E%84.html)** — 🌇 유사 3D로 만드는 아웃런 스타일 레이싱 — 원근 투영·곡선·언덕·원심력 수학 모델 + 동작하는 Love2D(Lua) 소스, 라이브 데모 10종, 슬라이드 267장 🏁
+- 🌙 **[outrun.lua](./outrun.lua)** — 🏎️ 아웃런 레이싱 Love2D(Lua) 전체 소스 🏁
+- 👹 **[레이캐스팅_Doom_클론_만들기.html](./%EB%A0%88%EC%9D%B4%EC%BA%90%EC%8A%A4%ED%8C%85_Doom_%ED%81%B4%EB%A1%A0_%EB%A7%8C%EB%93%A4%EA%B8%B0.html)** — 🔦 DDA 레이캐스팅으로 처음부터 만드는 Doom — 라이브 데모 13종 + 동작하는 JS·Pygame 코드, 슬라이드 306장 🩸
+- 🔦 **[jsdoom.html](./jsdoom.html)** — 👹 레이캐스팅 Doom 클론 가이드의 JS 버전 단독 플레이 데모 🩸
+- 🐍 **[doom.py](./doom.py)** — 🔦 레이캐스팅 Doom 클론 Pygame 구현 소스 👹
+- 🕹️ **[슈퍼패미콤_비디오모드.html](./%EC%8A%88%ED%8D%BC%ED%8C%A8%EB%AF%B8%EC%BD%A4_%EB%B9%84%EB%94%94%EC%98%A4%EB%AA%A8%EB%93%9C.html)** — 🌀 Mode 7·HDMA로 배우는 2.5D/유사 3D — 동작하는 Canvas 데모 19종, 슬라이드 100장 🏁
 
 ### ♟️ 보드게임 & 전술 🎲
 - ♛ **[체스_전술집.html](./체스_전술집.html)** — ♚ 체스 전술의 정수 🏆
@@ -115,19 +152,29 @@
 - 🧮 **[주판_암산_교재.html](./주판_암산_교재.html)** — 🔢 주판으로 익히는 암산의 기술 ✨
 
 ### 📜 컴퓨팅 역사 & 문화 🏛️
+- 📊 **[스프레드시트_대백과.html](./%EC%8A%A4%ED%94%84%EB%A0%88%EB%93%9C%EC%8B%9C%ED%8A%B8_%EB%8C%80%EB%B0%B1%EA%B3%BC.html)** — 🧮 비지칼크(1979)가 개인용 컴퓨터를 판 킬러앱이 된 이야기부터 로터스 1-2-3·엑셀·구글 시트까지, 그 격자가 기업의 재무·경영·운영을 재편한 방식 — 미니 스프레드시트·What-if 모델 데모와 SVG 다이어그램, 슬라이드 204장 📈
+- 🖱️ **[초기_GUI_수학_트릭.html](./%EC%B4%88%EA%B8%B0_GUI_%EC%88%98%ED%95%99_%ED%8A%B8%EB%A6%AD.html)** — 🧠 맥킨토시·아미가·윈도우 1.0이 8MHz CPU와 128KB 메모리에서 GUI를 굴린 방법 — 고정소수점·브레젠험·리전 대수·BitBlt·더티 렉트·블리터/코퍼·디더링, 인터랙티브 데모 10종, 슬라이드 300장 🖥️
+- 🖼️ **[BitBlt_대백과.html](./BitBlt_%EB%8C%80%EB%B0%B1%EA%B3%BC.html)** — ⚡ Xerox Alto에서 GPU까지 비트 블록 전송 50년사 — 256가지 ROP의 부울 대수 유도·전체 카탈로그, C/ASM/SIMD/GPU 구현, 라이브 캔버스 데모 4종, 슬라이드 337장 🧮
+- 🖥️ **[도스박스_해부.html](./%EB%8F%84%EC%8A%A4%EB%B0%95%EC%8A%A4_%ED%95%B4%EB%B6%80.html)** — 🕹️ DOSBox는 사라진 16비트 PC를 어떻게 되살리는가 — 게으른 플래그·콜백 옵코드·동적 재컴파일러·VGA 평면 메모리·OPL 로그사인 테이블, 바닐라·Staging·DOSBox-X 빌드법까지. 인터랙티브 데모 28종, 슬라이드 500장 💾
 - 🍎 **[apple2_software_history.html](./apple2_software_history.html)** — 💾 Apple II 소프트웨어의 역사 🕰️
 - 🖥️ **[mac_software_history.html](./mac_software_history.html)** — 📀 매킨토시 소프트웨어 연대기 📚
 - ☎️ **[red-phone.html](./red-phone.html)** — 🔴 레드폰 이야기 📞
+- 🏹 **[칭기스칸_대제국의_비밀.html](./%EC%B9%AD%EA%B8%B0%EC%8A%A4%EC%B9%B8_%EB%8C%80%EC%A0%9C%EA%B5%AD%EC%9D%98_%EB%B9%84%EB%B0%80.html)** — 👑 문맹의 정복자는 어떻게 세계를 조직했나 · 300장 슬라이드 🐎
+- ⚔️ **[수부타이_무쇠의_전략가.html](./%EC%88%98%EB%B6%80%ED%83%80%EC%9D%B4_%EB%AC%B4%EC%87%A0%EC%9D%98_%EC%A0%84%EB%9E%B5%EA%B0%80.html)** — 🐺 대장장이의 아들은 어떻게 제국의 전략을 총괄했나 · 300장 슬라이드 🏔️
 
 ### 📐 소프트웨어 설계 📚
 - 🐶 **[월마트_AX와_Code_Puppy.html](./월마트_AX와_Code_Puppy.html)** — 🛒 월마트의 AX 전략과 사내 코딩 에이전트 Code Puppy — 조직 이야기(1~3부), 배포판 0.0.829 소스 8만 7천 줄 해부(4~5부), 같은 구조를 Python 2,151줄·Go 2,811줄로 다시 만들기(6~7부, `minipuppy/`, 표준 라이브러리만, 시험 96 + 60건), 도입 플레이북과 부록(8~9부). 슬라이드 326장 🐾
+- 🔍 **[코드리뷰_완전_정복.html](./%EC%BD%94%EB%93%9C%EB%A6%AC%EB%B7%B0_%EC%99%84%EC%A0%84_%EC%A0%95%EB%B3%B5.html)** — 🧑‍💻 사람 코드·🤖 AI 코드·AI 없이 맨눈으로 리뷰하는 법 — 페이건 인스펙션부터 환각 API 검증까지, 체크리스트·코멘트 톤 변환기·버그 사냥 게임 같은 인터랙티브 코너와 아리안 5·Therac-25·goto fail 사례, 슬라이드 300장 📋
+- 🐞 **[AI처럼_디버깅하기.html](./AI%EC%B2%98%EB%9F%BC_%EB%94%94%EB%B2%84%EA%B9%85%ED%95%98%EA%B8%B0.html)** — 🔬 고급 AI 모델이 버그를 푸는 사고 루프를 분해한 실전 교재 — 가설·실험·반증, 델타 디버깅·git bisect, Linux(gdb·sanitizer·perf·rr)와 Windows(WinDbg·TTD·ETW) 도구 체인, 8개 언어별 실전, 사례 41편·플레이북 40개·문제집 50문항, 슬라이드 503장 🧪
 - 🧼 **[Clean_Code_vs_APoSD.html](./Clean_Code_vs_APoSD.html)** — 📖 Clean Code vs A Philosophy of Software Design 비교 ⚖️
+- 🧭 **[Visitor_패턴_쉽게_배우기.html](./Visitor_%ED%8C%A8%ED%84%B4_%EC%89%BD%EA%B2%8C_%EB%B0%B0%EC%9A%B0%EA%B8%B0.html)** — 🧪 Python·Go·TypeScript·C++·Java 5개 언어 + 바로 동작하는 AST 놀이터로 배우는 더블 디스패치 — 컴파일러 예제 포함 🖥️
 
 ### 📝 자격증 & 시험 대비 🎯
 - 📝 **[정보처리기사_실기_예상문제집.html](./정보처리기사_실기_예상문제집.html)** — ✍️ 실기(2차) 출제기준 12과목을 문제로 관통하는 551장 문제집 (373문항 + 실전 모의고사 6회 120문항, 문항마다 정답 토글·해설) 📚
 
 ### 🎨 제너러티브 아트 🌌
 - 🌠 **[art.html](./art.html)** — ✨ 캔버스로 그리는 제너러티브 아트 (32,000개 파티클 애니메이션) 🪐
+- ❄️ **[눈과_벚꽃_파티클_효과.html](./%EB%88%88%EA%B3%BC_%EB%B2%9A%EA%BD%83_%ED%8C%8C%ED%8B%B0%ED%81%B4_%ED%9A%A8%EA%B3%BC.html)** — 🌸 바닐라 JS로 눈이 내리고·바람에 날리고·쌓이고·녹는 효과부터 벚꽃잎이 돌풍에 흩날리는 효과까지 — 라이브 데모 7종 + 완전한 전체 코드 2벌, 슬라이드 101장 🍃
 
 ### 🧱 기타 흥미로운 프로젝트 🎁
 - 📱 **[qr_project_spec.html](./qr_project_spec.html)** — 🔲 QR 코드 프로젝트 명세서 📄
