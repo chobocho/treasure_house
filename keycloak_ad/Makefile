@@ -82,7 +82,8 @@ figs:                   ## 전체 그림 SVG 13장 다시 만들기
 deck: figs              ## 조각 + 소스 + 출력 → 덱 HTML 한 장
 	$(PY) deck/build_deck.py
 
-# SKEL=1 이면 '준비 중' 표지를 오류로 안 센다. 부가 다 오면 뗀다.
+# 12부까지 다 들어와 '준비 중' 표지가 없다 — SKEL=1 을 이제 안 쓴다.
+# (뼈대만 세워 볼 일이 다시 생기면 SKEL=1 로 되살릴 수 있게 남겨 뒀다.)
 deck-check:             ## 완성된 덱 점검 (node DOM 스텁)
 	node deck/check_deck.js $(DECK) $(if $(SKEL),--skeleton,)
 

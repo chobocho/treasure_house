@@ -1,3 +1,10 @@
+### [2026-09-09 02:40] Keycloak×AD 덱 공개 — 1005장, index·README 카드 함께
+- **기획:** PLAN §8 13단계. 12부까지 다 들어와 '준비 중' 표지가 0개라 Makefile 에서 SKEL=1 을 뗐다.
+- **TC:** make all 을 --skeleton 없이 돌려 deck-check 가 그대로 통과하는지 확인. rsvg-convert 로 system_p4·p12 를 PNG 로 떠서 눈으로 봤다.
+- **개발:** index.html(웹&브라우저 절에 카드) · README.md(웹&인증 절에 행) · keycloak_ad/Makefile · keycloak_ad/PLAN.md
+- **검증:** 1005장 · 커버리지 8998/8998줄 100% · 조립 0건 · 역검증 통과 · deck-check 0건(SKEL 없이) · 글꼴 통과 · test 14패키지
+- **비고:** Makefile 도 부록에 전문이 실려 주석 한 줄(76칸)이 폭 검사에 걸렸다 — 접어서 해결. librsvg 는 fill:var(--…) 를 안 풀어 그냥 렌더하면 상자가 새까맣다. 색을 넣어 떠야 확인된다.
+
 ### [2026-09-09 02:17] Keycloak×AD 덱 12부 — 마무리 42장 (용어집·치트시트·FAQ·출처)
 - **기획:** PLAN §8 12단계. 5개 장(요약 그림·용어집 83·치트시트·자주 묻는 것 15·출처), 퀴즈 1. 앞의 열두 부를 가리키는 부라 새 주장이 거의 없다.
 - **TC:** deck/gen_glossary.py 가 용어의 "처음 나온 자리" 를 전수 대조한다(없는 id 면 조립 실패). check_deck.js 에 덱 안 #링크 검사(164개)를 새로 넣었다.
