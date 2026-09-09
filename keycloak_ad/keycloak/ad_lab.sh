@@ -284,5 +284,64 @@ reset
   echo '  whenChanged 로 시각을 잘라 묻는다 — 그래서 변경분만 온다.'
 } >"$OUT/kc_ad_sync.txt" 2>&1
 
+# ── 실험 7. AD 에서 지운 사람 ──────────────────────────────────────
+#
+# 동기화는 없어진 것을 못 본다(실험 6의 필터가 그렇다). 그러면 사본은
+# 언제 사라지나 — Keycloak 은 그 사람을 **다음에 찾을 때** AD 에 되묻고,
+# 없으면 사본을 지운다. 그것을 눈으로 본다.
+# 가짜 AD 는 delete 를 안 받는다(3부 8장). 그래서 자료 파일에서 빼고
+# SIGHUP 으로 다시 읽힌다 — AD 관리자가 계정을 지운 것과 같다.
+LDIF=$OUT/.kc_campus.ldif
+YUNA='CN=Choi Yuna,OU=Students,DC=ad,DC=campus,DC=example'
+reload_ad() { pkill -HUP -f 'bin/fakead'; sleep 1; }
+reset
+api POST "/$REALM/user-storage/$LDAP_ID/sync?action=triggerFullSync" \
+  >/dev/null
+{
+  echo '$ 전체 동기화 뒤의 사람 목록 — yuna.choi 가 있다'
+  users
+  echo
+  echo '$ AD 관리자가 yuna.choi 를 지웠다'
+  echo '  (가짜 AD 의 자료에서 항목과 member 를 빼고 다시 읽힌다)'
+  cp "$LDIF" "$LDIF.bak"
+  python3 - "$LDIF" "$YUNA" <<'PY'
+import sys
+
+path, dn = sys.argv[1], sys.argv[2]
+out, skip = [], False
+for line in open(path, encoding='utf-8').read().split('\n'):
+    if skip:                      # 항목 블록은 빈 줄까지 지운다
+        if not line.strip():
+            skip = False
+            out.append(line)
+        continue
+    if line == 'dn: ' + dn:
+        skip = True
+        continue
+    if line == 'member: ' + dn:   # 그룹의 member 도 — AD 가 그렇다
+        continue
+    out.append(line)
+open(path, 'w', encoding='utf-8').write('\n'.join(out))
+PY
+  reload_ad
+  echo
+  echo '$ 로그인: yuna.choi / 맞는 비밀번호'
+  mark
+  login yuna.choi 'Passw0rd!-demo'
+  echo
+  echo '  가짜 AD 가 받은 것:'
+  since | sed 's/^/    /'
+  echo
+  echo '$ 사람 목록을 다시 보면'
+  users
+  echo
+  echo '  동기화가 돈 것이 아니다. 찾는 순간 Keycloak 이 사본의'
+  echo '  objectGUID 로 AD 에 되물었고(위 로그의 첫 검색),'
+  echo '  없어서 사본을 지웠다.'
+  mv "$LDIF.bak" "$LDIF"
+  reload_ad
+  echo '  (자료를 되돌렸다)'
+} >"$OUT/kc_ad_deleted.txt" 2>&1
+
 rm -f "$OUT/.lab_cfg.json"
 echo 'AD 실험 완료 — out/kc_ad_*.txt'

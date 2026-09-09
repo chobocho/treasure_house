@@ -2,6 +2,8 @@ package fakead
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -445,4 +447,53 @@ func dns(es []*Entry) []string {
 		out = append(out, e.DN)
 	}
 	return out
+}
+
+// 진짜 AD 는 비밀번호를 먼저 맞혀 보고, 맞았을 때만 "꺼져 있다(533)" 를
+// 알려 준다. 틀리면 꺼진 계정이라도 52e 다 — 계정 상태를 비밀번호 없이
+// 알아낼 수 없게 하려는 것이다. 3부 5장이 그렇게 가르치므로 흉내도
+// 같아야 한다.
+func TestDisabledAccountWithWrongPasswordIs52e(t *testing.T) {
+	d := load(t)
+	_, diag := d.Bind("CN=Oh Jisoo,OU=Staff,"+base, "틀린것")
+	if !strings.Contains(diag, "data 52e") {
+		t.Errorf("꺼진 계정 + 틀린 비밀번호 = %q, 원하는 것 52e", diag)
+	}
+}
+
+// ReloadFrom 은 "AD 관리자가 계정을 지웠다" 를 흉내 내는 데 쓴다 —
+// 7부에서 Keycloak 이 사라진 사람을 어떻게 알아채는지 보는 실험이다.
+// 그룹의 member 에서도 빠져야 memberOf 가 같이 사라진다.
+func TestReloadDropsDeletedEntry(t *testing.T) {
+	d := load(t)
+	yuna := "CN=Choi Yuna,OU=Students," + base
+	if d.Get(yuna) == nil || len(d.MemberOf(yuna)) == 0 {
+		t.Fatal("시작 자료에 유나가 없다")
+	}
+	src, err := os.ReadFile("../../data/campus.ldif")
+	if err != nil {
+		t.Fatal(err)
+	}
+	trimmed := DropEntryLDIF(string(src), yuna)
+	p := filepath.Join(t.TempDir(), "campus.ldif")
+	if err := os.WriteFile(p, []byte(trimmed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.ReloadFrom(p); err != nil {
+		t.Fatalf("다시 읽기: %v", err)
+	}
+	if d.Count() != 14 {
+		t.Errorf("항목 %d개, 원하는 것 14", d.Count())
+	}
+	if d.Get(yuna) != nil {
+		t.Error("지운 항목이 아직 있다")
+	}
+	if len(d.MemberOf(yuna)) != 0 {
+		t.Errorf("지운 사람의 memberOf 가 남았다: %v", d.MemberOf(yuna))
+	}
+	minji := "CN=Kim Minji,OU=Students," + base
+	code, _ := d.Bind(minji, "Passw0rd!-demo")
+	if code != proto.ResultSuccess {
+		t.Error("다시 읽은 뒤 민지가 못 들어온다")
+	}
 }

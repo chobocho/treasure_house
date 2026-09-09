@@ -869,7 +869,11 @@ if [ ! -x "kc/keycloak-$VER/bin/kc.sh" ]; then
 fi
 
 # 가짜 AD 를 먼저 띄운다. Keycloak 이 이것을 진짜 AD 로 알고 붙는다.
-start ldap/fakead/cmd/fakead "$OUT/kc_fakead.log" -addr ":$PL"
+# 자료는 사본으로 준다 — ad_lab.sh 의 "지운 사람" 실험이 그 파일을
+# 고치고 SIGHUP 으로 다시 읽히기 때문이다. 원본은 건드리지 않는다.
+cp data/campus.ldif "$OUT/.kc_campus.ldif"
+start ldap/fakead/cmd/fakead "$OUT/kc_fakead.log" -addr ":$PL" \
+  -dir "$OUT/.kc_campus.ldif"
 wait_ldap $PL
 
 if sh keycloak/run_dev.sh >"$OUT/.kc_run.txt" 2>&1; then
@@ -926,7 +930,7 @@ if sh keycloak/run_dev.sh >"$OUT/.kc_run.txt" 2>&1; then
   } >"$OUT/kc_reproducible.txt"
   rm -f "$OUT/.kc_run.txt" "$OUT/.kc_admin.txt" "$OUT/.kc_e2e.txt" \
     "$OUT/.kc_lab.txt" "$OUT/.kc_app.txt" "$OUT/.kc_az.txt" \
-    "$OUT/.kc_ops.txt"
+    "$OUT/.kc_ops.txt" "$OUT/.kc_campus.ldif"
 else
   echo '  Keycloak 을 못 띄웠다 — out/kc_unavailable.txt 를 볼 것' >&2
 fi

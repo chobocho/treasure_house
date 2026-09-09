@@ -116,7 +116,7 @@
 | `ad-bind-5` | data 525·52e·530·531·532·533·701·773·775 의 뜻 | C | Microsoft Learn "Active Directory LDAP 바인드 오류" | 2026-09-08 |
 | `ad-bind-7` | 실패가 잦으면 잠긴다 (우리 흉내: 창 10분·5회·잠금 30분) | A | `out/ad_bind_775.txt` · `ldap/fakead/dir.go` | 2026-09-08 |
 | `ad-bind-7` | AD 기본 도메인 정책은 잠금 임계값 0(꺼짐). 켜면 잠금 시간·관찰 창 기본 30분 | C | Microsoft Learn "Account lockout threshold" · "Account lockout duration" | 2026-09-09 |
-| `ad-bind-6` `ad-bind-8b` `ad-not-4` | 진짜 AD 는 비밀번호가 맞아야 533 을 주고, 우리 흉내는 꺼짐을 먼저 봐 틀려도 533 이다 | A + C | `ldap/fakead/dir.go` Bind 순서 · Microsoft Learn "LDAP error 49 sub-codes" | 2026-09-09 |
+| `ad-bind-6` `ad-bind-8b` | AD 는 비밀번호가 맞아야 533 을 주고 틀리면 꺼진 계정도 52e 다. 우리 흉내도 같은 순서다 | A + C | `ldap/fakead/dir.go` Bind 순서 · `dir_test.go` TestDisabledAccountWithWrongPasswordIs52e · Microsoft Learn "LDAP error 49 sub-codes" | 2026-09-09 |
 | `ad-ber-7b` | LDAP 의 application 태그는 25(IntermediateResponse)까지 | C | RFC 4511 §4.13 | 2026-09-09 |
 | `ad-not-4` | AD 는 approxMatch(`~=`)를 equalityMatch 로 평가한다 | C | MS-ADTS §3.1.1.3.1.3.1 | 2026-09-09 |
 | `ad-grp-2` | 그룹 매퍼의 두 전략은 `LOAD_GROUPS_BY_MEMBER_ATTRIBUTE` 와 `GET_GROUPS_FROM_USER_MEMBEROF_ATTRIBUTE`. AD 는 둘 다 된다 | A + C | `keycloak/json/ldapmap-groups.json` · Keycloak Server Admin "LDAP group mapper" | 2026-09-09 |
@@ -267,7 +267,7 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 | `kc-realm-4` | 우리 realm 의 칸 넷 — sslRequired external · accessTokenLifespan 300 · ssoSessionIdleTimeout 1800 은 기본값, bruteForceProtected 는 기본이 꺼짐이라 realm.json 에서 켰다 | A + C | `out/kc_admin_realm.txt` · `keycloak/json/realm.json` · Keycloak Server Admin "Brute force detection"(기본 disabled) | 2026-09-09 |
 | `kc-realm-quiz` | `hostname*` 은 실행 시 옵션, `db`·`cache*`·`health-enabled`·`metrics-enabled`·`features` 는 build 옵션 | C | Keycloak "All configuration" (build 옵션 표시) · 6부 ConfigMap 이 `KC_HOSTNAME` 을 재굽기 없이 바꾼다 | 2026-09-09 |
 | `kc-fed-2` | 관리 API 는 `secret` 로 선언된 컴포넌트 설정(`bindCredential`)을 `**********` 로 가려 돌려주고, 같은 값을 보내면 옛 값이 유지된다 | C | Keycloak `StripSecretsUtils` · `ComponentRepresentation.SECRET_VALUE` · `kc.sh export` 결과에는 평문(`keycloak/realm-campus.json`) | 2026-09-09 |
-| `kc-user-4` `kc-user-quiz` `f7-sync-quiz` `wr-faq-1` | AD 에서 사라진 가져온 사용자는 다음에 그 사용자를 찾는 순간(로그인·검색·토큰 갱신의 getUserById) 검증에 실패해 사본이 지워진다 | C | Keycloak `UserStorageManager.importValidation` → `LDAPStorageProvider.validate` → `deleteInvalidUser` ("Removing invalid user") | 2026-09-09 |
+| `kc-user-4` `kc-user-quiz` `f7-sync-4b` `f7-sync-quiz` `wr-faq-1` | AD 에서 사라진 가져온 사용자는 다음에 그 사용자를 찾는 순간(로그인·검색·토큰 갱신의 getUserById) 검증에 실패해 사본이 지워진다 | A + C | `out/kc_ad_deleted.txt`(objectGUID 검색 0건 → 사본 삭제, 7명→6명) · Keycloak `UserStorageManager.importValidation` → `LDAPStorageProvider.validate` → `deleteInvalidUser` | 2026-09-09 |
 | `f7-sync-4` `op-life-3` | 그룹 소속 변경은 그룹 객체의 `whenChanged` 만 바꾸고 사람의 `whenChanged` 는 안 움직여 변경분 동기화가 못 본다. READ_ONLY 그룹 매퍼는 로그인·갱신 때 LDAP 을 다시 읽는다 | C | Microsoft Learn "memberOf"(back link) · Keycloak `GroupLDAPStorageMapper` READ_ONLY 프록시 · `out/kc_ad_sync.txt` 의 whenChanged 필터 | 2026-09-09 |
 | `kc-client-2` | `pkce.code.challenge.method=S256` 으로 PKCE 를 강제한다 | B·C | `keycloak/json/client.json` · Keycloak 클라이언트 문서 | 2026-09-08 |
 | `kc-client-5` | 로그인 폼의 action 에 한 번만 쓰는 `session_code` 가 박힌다 | A | `out/kc_e2e_03_loginform.txt` | 2026-09-08 |
