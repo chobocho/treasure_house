@@ -879,6 +879,8 @@ if sh keycloak/run_dev.sh >"$OUT/.kc_run.txt" 2>&1; then
   sh keycloak/ad_lab.sh >"$OUT/.kc_lab.txt" 2>&1
   # 8부 — 4부의 앱을 진짜 Keycloak 에 붙여 본다.
   sh keycloak/app_e2e.sh >"$OUT/.kc_app.txt" 2>&1
+  # 9부 — 그룹에서 권한까지. 전·후 토큰과 역할 매핑.
+  sh keycloak/authz_lab.sh >"$OUT/.kc_az.txt" 2>&1
   {
     echo '$ sh keycloak/run_dev.sh'
     cat "$OUT/.kc_run.txt"
@@ -899,6 +901,7 @@ if sh keycloak/run_dev.sh >"$OUT/.kc_run.txt" 2>&1; then
     echo '  kc_admin_token.txt      관리자 토큰'
     echo '  kc_ad_*.txt             7부의 실험들 (시각과 연결 번호)'
     echo '  kc_app_*.txt            8부 — 앱이 받은 토큰'
+    echo '  kc_az_*.txt             9부 — 권한 실험의 토큰들'
     echo '  kc_boot.txt             뜨는 데 걸린 시간'
     echo
     echo '까닭: Keycloak 은 realm 을 새로 세울 때마다 **서명 열쇠를'
@@ -919,7 +922,7 @@ if sh keycloak/run_dev.sh >"$OUT/.kc_run.txt" 2>&1; then
     echo '  kc_e2e_02_authorize_url.txt  인가 요청 주소'
   } >"$OUT/kc_reproducible.txt"
   rm -f "$OUT/.kc_run.txt" "$OUT/.kc_admin.txt" "$OUT/.kc_e2e.txt" \
-    "$OUT/.kc_lab.txt" "$OUT/.kc_app.txt"
+    "$OUT/.kc_lab.txt" "$OUT/.kc_app.txt" "$OUT/.kc_az.txt"
 else
   echo '  Keycloak 을 못 띄웠다 — out/kc_unavailable.txt 를 볼 것' >&2
 fi

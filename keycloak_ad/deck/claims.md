@@ -368,10 +368,26 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 - Istio 인증 — https://istio.io/latest/docs/tasks/security/authentication/ · 확인 2026-09-08
 - 이미지 `quay.io/oauth2-proxy/oauth2-proxy:v7.13.0`
 
+## 9부 — 권한 (`az-*` 슬라이드)
+
+| 슬라이드 | 주장 | 등급 | 출처 | 확인일 |
+|---|---|---|---|---|
+| `az-ba-1` | 그룹에 넣으면 다음 토큰의 `groups` 에 나타난다 | A | `out/kc_az_before_after.txt` | 2026-09-09 |
+| `az-ba-2` | 이미 나간 토큰은 안 바뀐다 — 다시 로그인해야 한다 | A | 같은 캡처 (전·후 두 토큰) | 2026-09-09 |
+| `az-role-2` | 그룹에 역할을 매면 그 그룹의 사람이 자동으로 갖는다 | A | `out/kc_az_roles.txt` | 2026-09-09 |
+| `az-role-3` | **역할은 기본으로 액세스 토큰에만 실린다** (ID 토큰에는 없다) | A | `out/kc_az_roles.txt` — 같은 사람의 두 토큰 | 2026-09-09 |
+| `az-role-4` | `default-roles-*`·`offline_access`·`uma_authorization` 은 realm 기본 역할 | A·C | `out/kc_az_roles.txt` · Keycloak 문서 | 2026-09-09 |
+| `az-scope-2` | 매퍼의 세 스위치가 어느 토큰에 실을지 정한다 | B·C | `keycloak/json/mapper-groups.json` · Keycloak 매퍼 문서 | 2026-09-09 |
+| `az-least-1` | 그룹 하나가 토큰을 열몇 바이트 늘린다 | A | `out/kc_az_before_after.txt` (505 → 519바이트) | 2026-09-09 |
+| `az-least-2` | 토큰이 커지면 인그레스 헤더 버퍼와 쿠키 4KB 한계에 걸린다 | C | ingress-nginx 문서 · RFC 6265 §6.1 (쿠키 크기 권고) | 2026-09-09 |
+| `az-least-3` | `full.path: false` 로 전체 경로 대신 이름만 싣는다 | B | `keycloak/json/mapper-groups.json` | 2026-09-09 |
+| `az-admin-2` | oauth2-proxy 한 벌은 그룹 조건을 하나만 건다 | C | oauth2-proxy 문서 — `--allowed-group` | 2026-09-09 |
+
+- RFC 6265 (HTTP State Management) — https://www.rfc-editor.org/rfc/rfc6265 · 확인 2026-09-09
+
 ## 앞으로 채울 곳
 
 부가 하나씩 들어올 때마다 그 부의 절을 여기에 연다.
 지금은 비어 있는 것이 정상이다 — 뼈대 커밋에는 주장이 거의 없다.
 
-- [ ] 9부 권한 — 그룹·역할 매퍼
 - [ ] 10부 운영 — 수명 기본값 · 이벤트 · 메트릭

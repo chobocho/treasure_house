@@ -1,18 +1,402 @@
 <article class="card section" id="part9">
 <p class="chnum">9부</p>
-<h2>권한 — AD 그룹에서 앱의 화면까지 한 줄로</h2>
-<p class="chsub">그룹 → Keycloak 그룹 → 역할 → 토큰 클레임 → 앱의 <code>if</code> 한 줄</p>
+<h2>권한 — AD 그룹에서 앱의 화면까지</h2>
+<p class="chsub">한 줄로 이어지는 길, 그리고 그 길에서 조심할 것</p>
 <!--FIG file=system_p9.svg cap=9부까지 켜진 그림-->
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>AD 그룹을 Keycloak 그룹으로 가져오기</li>
-<li>그룹을 역할에 잇기</li>
-<li>client scope 매퍼로 토큰에 싣기</li>
-<li>앱에서 클레임 검사하기</li>
-<li>같은 사람의 그룹 가입 전/후 토큰 비교</li>
-<li>최소권한 — 300개 그룹을 다 싣지 않기</li>
+<li>AD 그룹 → Keycloak 그룹 → 역할 → 토큰 클레임 → 앱 검사</li>
+<li>같은 사람의 <b>전·후 토큰</b>을 나란히</li>
+<li>그룹으로 볼 것인가, 역할로 볼 것인가</li>
+<li>client scope 로 앱마다 다르게 싣기</li>
+<li>최소 권한 — 300개 그룹을 토큰에 싣지 않기</li>
+<li>관리자 화면을 지키는 두 겹</li>
 </ul>
-<div class="tip"><b>끝나면</b> — <code>lunch-admins</code> 에게만 관리자 화면을 연다</div>
-<div class="warn"><b>이 부는 아직 준비 중입니다</b> — 뼈대만 세워 둔 상태다.
-본문이 들어오면 이 알림은 사라진다.</div>
+<div class="tip"><b>끝나면</b> — <code>lunch-admins</code> 인 사람만
+관리 화면을 보게 하고, 그 판단이 어디서 오는지 설명한다</div>
+<div class="key">8부에서 앱이 <code>groups</code> 클레임 하나로 화면을 갈랐다.
+이 부는 <b>그 값이 어디서 왔는지</b>를 끝까지 되짚고,
+그 방식의 한계와 대안을 다룬다.</div>
+</article>
+
+<article class="card" id="az-line">
+<p class="chnum">1장</p>
+<h2>한 줄로 이어지는 길</h2>
+<p class="chsub">다섯 걸음을 한 번에 본다</p>
+</article>
+
+<article class="card" id="az-line-1">
+<h3>다섯 걸음</h3>
+<pre class="term">1. AD          CN=lunch-admins 의 member 에 소희가 적혀 있다
+                                    ↓  (3부 3장)
+2. LDAP 매퍼   group-ldap-mapper 가 읽어 Keycloak 그룹을 만든다
+                                    ↓  (7부 6장)
+3. 그룹        소희가 Keycloak 의 lunch-admins 그룹에 든다
+                                    ↓  (5부 6장)
+4. 프로토콜 매퍼  groups 클레임으로 토큰에 싣는다
+                                    ↓  (5부 7장)
+5. 앱          if g == "lunch-admins" { 관리 화면 }
+                                       (8부 5장)</pre>
+<span class="tier ill">설명용</span>
+<div class="key">각 걸음이 앞의 부에서 하나씩 나왔다.
+<b>이 부는 그 다섯을 한 줄로 세워 놓고</b> 끊어지는 자리를 찾는 법을 배운다.</div>
+</article>
+
+<article class="card" id="az-line-2">
+<h3>어디가 끊겨도 증상은 같다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>끊긴 자리</th><th>확인하는 법</th></tr>
+<tr><td>1. AD 에 안 들어 있다</td>
+<td><code>ldapcli</code> 로 <code>(member=CN=…)</code> 직접 검색</td></tr>
+<tr><td>2. LDAP 매퍼가 못 읽는다</td>
+<td>Keycloak 의 <b>Groups</b> 화면에 그룹이 보이나</td></tr>
+<tr><td>3. 사람이 그룹에 안 든다</td>
+<td>그 사용자의 <b>Groups</b> 탭</td></tr>
+<tr><td>4. 매퍼가 안 싣는다</td>
+<td><code>jwtool decode</code> 로 토큰을 연다</td></tr>
+<tr><td>5. 앱이 잘못 본다</td>
+<td>앱 로그 · 이름 오타 · 전체 경로 여부</td></tr>
+<tr><td>0. <b>옛 토큰을 보고 있다</b></td>
+<td><b>다시 로그인</b>해 본다 — 가장 흔하다</td></tr>
+</table>
+</div>
+<div class="key">7부 11장의 진단 15번과 같은 이야기다.
+무엇을 고쳐도 안 바뀌면 <b>로그아웃부터</b>.</div>
+</article>
+
+<article class="card" id="az-ba">
+<p class="chnum">2장</p>
+<h2>같은 사람, 전과 후</h2>
+<p class="chsub">그룹 하나가 토큰을 어떻게 바꾸나</p>
+</article>
+
+<article class="card" id="az-ba-1">
+<h3>유나를 그룹에 넣어 본다</h3>
+<!--OUT file=kc_az_before_after.txt lines=1-12 note=넣기 전과 후-->
+<span class="tier a">실행 검증</span>
+<div class="key"><code>groups</code> 에 <code>lunch-users</code> 가 <b>생겼다</b>.
+사람도 앱도 코드도 그대로고, 바뀐 것은 <b>그룹 하나</b>다.</div>
+</article>
+
+<article class="card" id="az-ba-2">
+<h3>다시 로그인해야 바뀐다</h3>
+<!--OUT file=kc_az_before_after.txt lines=13-18 note=토큰은 발급 순간의 사진-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>이미 나간 토큰은 안 바뀐다.</b>
+그룹에서 <b>빼도</b> 마찬가지다 — 권한을 회수했는데
+그 사람의 토큰은 만료될 때까지 살아 있다.<br>
+그래서 액세스 토큰을 짧게 두는 것이다(4부 4장).
+정말 즉시 끊어야 하면 세션을 지우고 백채널 로그아웃까지 가야 한다(10부).</div>
+</article>
+
+<article class="card" id="az-ba-3">
+<h3>AD 에서 넣었다면</h3>
+<pre class="term">이 실험은 Keycloak 쪽 그룹에 직접 넣었다.
+READ_ONLY 라 AD 를 고칠 수 없어서다(7부 1장).
+
+진짜 운영에서는 순서가 이렇다:
+
+  1. AD 에서 그 사람을 그룹에 넣는다
+  2. 다음 동기화, 또는 그 사람의 다음 로그인 때 건너온다
+  3. 그 뒤 로그인부터 토큰에 실린다
+
+즉 **최대 두 번** 기다린다 — 동기화 한 번, 로그인 한 번.
+급하면 관리 화면에서 그 사용자를 한 번 열어 본다
+(그때 Keycloak 이 AD 를 다시 읽는다).</pre>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="az-role">
+<p class="chnum">3장</p>
+<h2>그룹인가 역할인가</h2>
+<p class="chsub">앱은 무엇을 물어야 하나</p>
+</article>
+
+<article class="card" id="az-role-1">
+<h3>둘의 차이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>그룹 (group)</th><th>역할 (role)</th></tr>
+<tr><td>뜻</td><td><b>누구인가</b> — 소속</td><td><b>무엇을 해도 되나</b> — 권한</td></tr>
+<tr><td>주인</td><td>AD (학교)</td><td>Keycloak (우리)</td></tr>
+<tr><td>바뀌는 이유</td><td>사람이 옮겨서</td><td>앱의 기능이 바뀌어서</td></tr>
+<tr><td>토큰 칸</td><td><code>groups</code> (매퍼 필요)</td>
+<td><code>realm_access.roles</code> (기본으로 실린다)</td></tr>
+</table>
+</div>
+<div class="key">앱이 <b>그룹을 직접 보면</b> 학교의 조직 개편이 앱 배포로 이어진다.
+"lunch-admins 를 sso-admins 로 바꿉니다" 한 줄에 앱을 고쳐야 한다.<br>
+<b>역할을 보면</b> 그 사이에 한 겹이 생긴다 —
+그룹이 바뀌어도 매핑만 고치면 앱은 그대로다.</div>
+</article>
+
+<article class="card" id="az-role-2">
+<h3>역할을 만들고 그룹에 붙인다</h3>
+<!--OUT file=kc_az_roles.txt lines=1-14 note=역할 하나와 매핑 하나-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="az-role-3">
+<h3>ID 토큰에는 없다</h3>
+<!--OUT file=kc_az_roles.txt lines=10-21 note=ID 토큰과 액세스 토큰-->
+<span class="tier a">실행 검증</span>
+<div class="warn"><b>역할이 ID 토큰에는 안 실린다.</b>
+기본 client scope 인 <code>roles</code> 가 <b>액세스 토큰에만</b> 싣기 때문이다.<br>
+ID 토큰만 보다가 "역할이 안 온다" 며 매퍼를 뒤지는 일이 흔하다 —
+<b>이 덱을 만들다 실제로 한 번 그랬다</b>. ID 토큰에도 넣으려면
+그 매퍼의 "Add to ID token" 을 켠다.</div>
+</article>
+
+<article class="card" id="az-role-3b">
+<h3>액세스 토큰에서 갈린다</h3>
+<!--OUT file=kc_az_roles.txt lines=17-31 note=소희와 민지-->
+<span class="tier a">실행 검증</span>
+<div class="key">소희에게만 <code>lunch-admin</code> 이 붙었다.
+그룹에 역할을 매어 두었으니, 그 그룹의 사람은 <b>자동으로</b> 그 역할을 갖는다.
+사람 하나하나에 붙이지 않는다.</div>
+</article>
+
+<article class="card" id="az-role-4">
+<h3>기본으로 붙는 역할들</h3>
+<pre class="term">realm_access.roles 에 낯선 이름이 섞여 있다:
+
+  default-roles-campus   새 사용자에게 기본으로 주는 묶음
+  offline_access         오프라인 토큰을 받을 수 있다
+  uma_authorization      Keycloak 의 권한 서비스용
+
+이것들은 realm 을 만들 때 Keycloak 이 넣어 둔 것이다.
+쓰지 않는다면 default-roles-campus 에서 빼도 된다 —
+토큰이 조금 작아진다(5장).</pre>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="az-role-5">
+<h3>앱은 어느 쪽을 볼까</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>상황</th><th>보는 것</th></tr>
+<tr><td>앱이 하나, 조직이 안 바뀐다</td><td>그룹으로 충분하다 (8부의 우리 앱)</td></tr>
+<tr><td>앱이 여럿, 권한 이름이 앱마다 다르다</td><td><b>역할</b></td></tr>
+<tr><td>조직 개편이 잦다</td><td><b>역할</b> — 매핑만 고친다</td></tr>
+<tr><td>권한이 아주 세밀하다</td><td>역할 + 앱 안의 자체 규칙</td></tr>
+</table>
+</div>
+<div class="tip">우리 학식 앱은 그룹을 본다 — 앱이 하나뿐이라 그래도 된다.
+앱이 둘째가 되는 날 역할로 옮기면 되고,
+그때 고치는 것은 <b>앱의 여덟 줄</b>이다(8부 5장).</div>
+</article>
+
+<article class="card quiz" id="az-role-quiz" data-quiz>
+<h3>1·2·3장 퀴즈</h3>
+<p class="q">Q. 학교가 그룹 이름을 <code>lunch-admins</code> 에서
+<code>svc-lunch-admin</code> 으로 바꾸겠다고 한다.
+그룹을 직접 보는 앱과 역할을 보는 앱은 각각 무엇을 해야 하나?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>그룹을 보는 앱</b>은 코드를 고치고 다시 배포해야 한다.
+그리고 배포 순간을 AD 변경과 맞춰야 한다 — 어긋나면 그 사이에
+관리자가 아무도 없거나 모두가 관리자가 된다.<br>
+<b>역할을 보는 앱</b>은 아무것도 안 한다. Keycloak 에서
+새 그룹에 <code>lunch-admin</code> 역할을 붙이기만 하면 된다.
+앱은 여전히 "이 역할이 있나" 를 물을 뿐이다.<br>
+그래서 앱이 둘 이상이 되는 순간 역할이 값어치를 한다.
+앱이 하나면 그 한 겹이 오히려 군더더기다 — <b>둘 다 맞는 답이 있다</b>.</div>
+</article>
+
+<article class="card" id="az-scope">
+<p class="chnum">4장</p>
+<h2>앱마다 다르게 싣기</h2>
+<p class="chsub">client scope 가 하는 일</p>
+</article>
+
+<article class="card" id="az-scope-1">
+<h3>앱이 여럿이면</h3>
+<p class="lead">학식 앱에는 <code>groups</code> 가 필요하지만,
+도서관 앱에는 필요 없을 수 있다. 그런데 매퍼를 realm 에 하나 두면
+<b>모든 앱의 토큰</b>에 실린다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>매퍼를 어디에 붙이나</th><th>누가 받나</th></tr>
+<tr><td>클라이언트에 직접</td><td><b>그 앱만</b></td></tr>
+<tr><td>client scope 에</td><td>그 scope 를 받는 앱 전부</td></tr>
+<tr><td>기본(Default) scope 에</td><td><b>전부</b> — 늘</td></tr>
+</table>
+</div>
+<div class="key">우리는 <b>클라이언트에 직접</b> 붙였다(5부 7장).
+앱이 하나뿐이라 그 편이 간단하고, 나중에 앱이 늘면
+그때 scope 로 옮기면 된다.</div>
+</article>
+
+<article class="card" id="az-scope-2">
+<h3>우리가 붙인 매퍼</h3>
+<!--CODE file=keycloak/json/mapper-groups.json note=클라이언트에 직접-->
+<span class="tier b">구문 검증</span>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>스위치</th><th>켜면</th></tr>
+<tr><td><code>id.token.claim</code></td><td>ID 토큰에 — <b>앱이 볼 것</b></td></tr>
+<tr><td><code>access.token.claim</code></td><td>액세스 토큰에 — <b>API 가 볼 것</b></td></tr>
+<tr><td><code>userinfo.token.claim</code></td><td>userinfo 응답에</td></tr>
+</table>
+</div>
+<div class="tip">셋을 다 켤 필요는 없다. 앱이 ID 토큰만 본다면
+액세스 토큰에는 안 실어도 된다 — 토큰이 그만큼 작아진다.</div>
+</article>
+
+<article class="card" id="az-scope-3">
+<h3>선택 scope 로 미루기</h3>
+<pre class="term">Optional client scope 로 두면 앱이 달라고 할 때만 실린다:
+
+  앱이 보내는 요청:
+    scope=openid profile email            groups 안 실림
+    scope=openid profile email groups     실림
+
+앱마다 필요한 것이 다를 때 쓴다.
+"이 앱은 그룹까지 필요하다" 를 **앱이 말하게** 하는 것이다.
+
+다만 앱이 아무거나 달라고 할 수는 없다 —
+그 클라이언트에 허락된 scope 만 붙는다.</pre>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="az-least">
+<p class="chnum">5장</p>
+<h2>최소 권한 — 토큰을 작게</h2>
+<p class="chsub">300개 그룹을 싣지 않는 법</p>
+</article>
+
+<article class="card" id="az-least-1">
+<h3>토큰은 얼마나 커지나</h3>
+<!--OUT file=kc_az_before_after.txt lines=1-6 note=그룹 하나에 몇 바이트-->
+<span class="tier a">실행 검증</span>
+<div class="key">그룹 하나에 <b>열몇 바이트</b>다. 하나면 아무것도 아니지만
+학교의 AD 에 그 사람이 든 그룹이 <b>300개</b>라면 4KB 가 넘는다.</div>
+</article>
+
+<article class="card" id="az-least-2">
+<h3>커지면 무엇이 깨지나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>어디서</th><th>무엇이</th></tr>
+<tr><td>인그레스</td><td>헤더 버퍼 초과 → <b>502</b> 나 <b>431</b> (6부 3장)</td></tr>
+<tr><td>브라우저 쿠키</td><td>쿠키 하나 4KB 한계 — 잘려서 세션이 깨진다</td></tr>
+<tr><td>oauth2-proxy</td><td>쿠키를 쪼개 여러 개로 — 그러다 헤더가 또 커진다</td></tr>
+<tr><td>로그·추적</td><td>토큰이 통째로 로그에 남으면 저장 비용이 는다</td></tr>
+</table>
+</div>
+<div class="warn">이 증상은 <b>그룹이 많은 사람에게만</b> 난다.
+"저는 되는데요" 와 "저는 안 되는데요" 가 갈리는 전형적인 자리다 —
+그리고 대개 <b>가장 오래 근무한 사람</b>이 그룹이 제일 많다.</div>
+</article>
+
+<article class="card" id="az-least-3">
+<h3>줄이는 네 가지</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방법</th><th>어디서</th></tr>
+<tr><td><b>전체 경로를 끄기</b></td>
+<td>매퍼의 <code>full.path: false</code> — <code>/a/b/c</code> 대신 <code>c</code></td></tr>
+<tr><td><b>그룹 대신 역할</b></td>
+<td>300개 그룹이 역할 두엇으로 준다 (3장)</td></tr>
+<tr><td><b>가져올 그룹을 좁히기</b></td>
+<td>LDAP 그룹 매퍼의 <code>groups.dn</code> 을 깊게</td></tr>
+<tr><td><b>userinfo 로 미루기</b></td>
+<td>큰 값은 토큰에 안 싣고 필요할 때 물어본다(4부 4장)</td></tr>
+</table>
+</div>
+<div class="key">우리는 첫째를 이미 켜 뒀다 —
+<code>full.path: false</code>. 그래서 <code>lunch-users</code> 지
+<code>/lunch-users</code> 가 아니다.</div>
+</article>
+
+<article class="card" id="az-least-4">
+<h3>그리고 담지 말아야 할 것</h3>
+<div class="warn"><b>토큰은 누구나 읽는다</b>(4부 5장).
+주민등록번호·전화번호·집 주소를 클레임에 넣지 않는다.
+"서명이 있으니 안전하다" 는 오해다 — 서명은 <b>못 고치게</b> 할 뿐이다.</div>
+<div class="key">앱이 정말 필요한 값만 싣고, 나머지는
+<b>앱이 자기 데이터베이스에</b> 두거나 userinfo 로 물어본다.
+토큰은 "누구인가" 와 "무엇을 해도 되나" 만 담는 자리다.</div>
+</article>
+
+<article class="card" id="az-admin">
+<p class="chnum">6장</p>
+<h2>관리자 화면을 지키는 두 겹</h2>
+<p class="chsub">앱과 그 앞, 어느 쪽에서 막을까</p>
+</article>
+
+<article class="card" id="az-admin-1">
+<h3>앱 안에서 막기</h3>
+<!--CODE file=oidc/miniapp/rp.go sym=handleAdmin note=8부의 그 여덟 줄-->
+<span class="tier a">실행 검증</span>
+<div class="key">앱이 <b>토큰을 직접 보고</b> 판단한다.
+그래서 어디서 온 요청이든 상관없다 — 서명이 있으니까.
+길 2(8부)를 고르면 이 방식이다.</div>
+</article>
+
+<article class="card" id="az-admin-2">
+<h3>앞에서 막기</h3>
+<pre class="term">oauth2-proxy 로 경로마다 다르게 막으려면
+프록시를 **둘** 두거나, 인그레스를 둘로 나눈다:
+
+  /admin  → 프록시 A (--allowed-group=lunch-admins)
+  /       → 프록시 B (--allowed-group=lunch-users)
+
+한 벌로는 그룹을 하나만 걸 수 있어서다.
+경로마다 다른 조건이 필요하면 길 3(메시)이 편해진다.</pre>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="az-admin-3">
+<h3>두 겹으로 두면</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>겹</th><th>막는 것</th><th>못 막는 것</th></tr>
+<tr><td>앞(프록시)</td><td>로그인 안 한 사람</td><td>클러스터 안에서 직접 오는 요청</td></tr>
+<tr><td>앱 안</td><td><b>전부</b> — 토큰을 보니까</td><td>앱이 고장 나면 같이 뚫린다</td></tr>
+</table>
+</div>
+<div class="key">둘 다 두는 것이 좋다. 앞에서 대부분을 걸러 주니
+앱은 조용하고, 앱 안의 검사가 <b>마지막 방어선</b>이 된다.<br>
+하나만 고른다면 <b>앱 안</b>이다 — 8부 3장에서 본 이유 때문이다.</div>
+</article>
+
+<article class="card quiz" id="az-quiz" data-quiz>
+<h3>4·5·6장 퀴즈</h3>
+<p class="q">Q. 대부분은 잘 되는데 <b>몇 사람만</b> 로그인 뒤 502 가 뜬다.
+그 사람들의 공통점을 찾아보니 <b>근속이 길다</b>. 무엇이 문제인가?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>토큰이 크다.</b> 오래 근무한 사람은 AD 에서 든 그룹이
+많고, 그것이 전부 <code>groups</code> 클레임에 실려 헤더 버퍼를 넘긴다.<br>
+확인: 그 사람의 토큰을 <code>jwtool decode</code> 로 열어
+<code>groups</code> 개수와 토큰 길이를 본다. 인그레스 로그에
+<code>upstream sent too big header</code> 같은 줄이 있으면 확실하다.<br>
+급한 조치는 버퍼를 키우는 것(6부 3장), 제대로 된 답은
+<b>토큰을 작게</b> 하는 것이다 — 전체 경로 끄기 · 역할로 옮기기 ·
+가져올 그룹 좁히기(5장).</div>
+</article>
+
+<article class="card" id="az-end">
+<h3>9부에서 배운 것</h3>
+<ul>
+<li>AD 그룹에서 앱 화면까지 <b>다섯 걸음</b>이고, 끊긴 자리를 찾는 법이 있다</li>
+<li>토큰은 <b>발급 순간의 사진</b> — 그룹을 바꿔도 다시 로그인해야 한다</li>
+<li>그룹은 "누구인가", 역할은 "무엇을 해도 되나"</li>
+<li>역할은 기본으로 <b>액세스 토큰에만</b> 실린다</li>
+<li>매퍼를 어디에 붙이느냐가 <b>누가 받느냐</b>를 정한다</li>
+<li>그룹이 많은 사람에게서 토큰이 터진다 — <b>작게 유지한다</b></li>
+<li>관리자 화면은 두 겹으로, 하나만이라면 <b>앱 안</b>에서</li>
+</ul>
+</article>
+
+<article class="card" id="az-next">
+<h3>다음은</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>부</th><th>무엇을</th></tr>
+<tr><td><b>10부</b></td><td>운영 — 세션 들여다보기 · 이벤트 · 지표 · 키 회전 · 백업</td></tr>
+<tr><td>11부</td><td>처음부터 끝까지 한 번에 훑기</td></tr>
+<tr><td>12부</td><td>용어집 · 치트시트 · FAQ</td></tr>
+</table>
+</div>
 </article>
