@@ -402,6 +402,31 @@ JSON 스키마 7개는 `master-standalone-strict` 판이다
 | `op-up-2` | Keycloak 은 뜰 때 DB 스키마를 고치므로 판올림 전에 백업한다 | C | Keycloak 업그레이드 가이드 | 2026-09-09 |
 | `wt-*` | 40단계 체크리스트의 각 항목 | — | 앞의 각 부에 근거가 있다 (해당 장을 표에 적어 뒀다) | 2026-09-09 |
 
+## 12부 — 마무리 (`wr-*` 슬라이드)
+
+12부는 앞의 열두 부를 다시 가리키는 부라, 새 주장이 거의 없다.
+표의 낱말·명령·FAQ 는 **전부 앞의 부에 근거가 있고**, 슬라이드마다
+그 자리를 링크로 달아 뒀다. 그 링크가 실재하는지는 기계가 본다 —
+용어집은 `deck/gen_glossary.py`, 나머지는 `deck/check_deck.js` 5번.
+
+| 슬라이드 | 주장 | 등급 | 출처 | 확인일 |
+|---|---|---|---|---|
+| `wr-gl-*` | 용어 83개의 "처음 나온 자리" | A | 조립 때 `gen_glossary.check()` 가 전부 대조한다 — 하나라도 없으면 덱이 안 나온다 | 2026-09-09 |
+| `wr-cs-1` | 쿠버네티스 명령 여섯 | A | `out/k8s_kustomize_*.txt` · `out/k8s_validate.txt` · `out/k8s_explain_*.txt` | 2026-09-09 |
+| `wr-cs-0` | 이 덱은 `kcadm.sh` 를 안 썼다 | A | `keycloak/*.sh` 전수 — `kcadm` 이 한 번도 안 나온다 | 2026-09-09 |
+| `wr-cs-3` | Keycloak 명령 여섯 | A | `out/kc_boot.txt` · `out/kc_setup.txt` · `out/kc_export.log` · `out/kc_ops_metrics.txt` | 2026-09-09 |
+| `wr-cs-5` | OIDC 를 손으로 밟는 curl 여섯 | A | `out/oidc_discovery.txt` · `out/oidc_certs.txt` · `out/oidc_token.txt` · `out/oidc_userinfo.txt` | 2026-09-09 |
+| `wr-cs-7` | ldapcli 사용 꼴 다섯 | A | `out/ad_search_filters.txt` · `out/ad_search_scopes.txt` · `out/ad_ldaps_ok.txt` | 2026-09-09 |
+| `wr-cs-8` | 도구 상자 여섯 줄 | A | `out/tool_base64.txt` · `out/tool_hash.txt` · `out/tool_sign.txt` · `out/oidc_pkce.txt` | 2026-09-09 |
+| `wr-faq-*` | 자주 묻는 것 15 | — | 답마다 근거가 있는 슬라이드를 링크로 달았다 | 2026-09-09 |
+| `wr-src-1` `wr-src-2` | RFC 번호와 그 내용 | C | 각 RFC 원문 — 아래 목록 | 2026-09-09 |
+| `wr-src-3` | 제품 문서 주소 여덟 | C | 아래 목록 · 2026-09-09 열어 확인 | 2026-09-09 |
+
+- OpenID Connect Core 1.0 — https://openid.net/specs/openid-connect-core-1_0.html · 확인 2026-09-09
+- OIDC Discovery 1.0 — https://openid.net/specs/openid-connect-discovery-1_0.html · 확인 2026-09-09
+- OIDC RP-Initiated Logout 1.0 — https://openid.net/specs/openid-connect-rpinitiated-1_0.html · 확인 2026-09-09
+- OIDC Back-Channel Logout 1.0 — https://openid.net/specs/openid-connect-backchannel-1_0.html · 확인 2026-09-09
+
 ## 앞으로 채울 곳
 
 부가 하나씩 들어올 때마다 그 부의 절을 여기에 연다.

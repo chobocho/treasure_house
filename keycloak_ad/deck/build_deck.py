@@ -13,6 +13,7 @@
      <!--OUT  file=kc_e2e_03.txt lines=1-20 note=토큰 응답-->
      <!--FIG  file=system_part4.svg cap=4부까지 켜진 그림-->
      <!--FULLSRC lang=go file=ldap/ber/ber.go prefix=src-ber title=ber.go-->
+     <!--GLOSSARY-->   (deck/glossary.txt 를 용어집 슬라이드로 펼친다)
 
    rts/deck/build_deck.py 에서 물려받았다. 다른 점 셋:
      · 화면 캡처(PNG)가 없다 — 이 덱의 증거는 텍스트 출력과 SVG 도해다
@@ -33,6 +34,7 @@ TARGET = os.path.join(os.path.dirname(BASE), 'Keycloak_AD_연동_쉽게_배우�
 
 sys.path.insert(0, DECK)
 import chunks                                                  # noqa: E402
+import gen_glossary                                            # noqa: E402
 
 LANG_OF = {'.go': 'go', '.yaml': 'yaml', '.yml': 'yaml', '.json': 'json',
            '.sh': 'sh', '.py': 'py', '.ldif': 'ldif', '.mod': 'go',
@@ -160,6 +162,7 @@ CODEDIR_RE = re.compile(r'^<!--CODE (?P<args>.+?)-->$', re.M)
 OUTDIR_RE = re.compile(r'^<!--OUT (?P<args>.+?)-->$', re.M)
 FIG_RE = re.compile(r'^<!--FIG (?P<args>.+?)-->$', re.M)
 FULL_RE = re.compile(r'^<!--FULLSRC (?P<args>[^>]+)-->$', re.M)
+GLOSS_RE = re.compile(r'^<!--GLOSSARY-->$', re.M)
 # 조각 안에 직접 쓴 <pre><code data-lang data-src> 도 채워 준다 (3단 비교처럼 라벨이 이미 있는 자리용)
 CODE_RE = re.compile(
     r'<pre><code data-lang="(?P<lang>[a-z]+)" data-src="(?P<src>[^"]+)"'
@@ -312,7 +315,21 @@ def expand_fullsrc(m):
     return '\n\n'.join(out)
 
 
+def expand_glossary(m):
+    """용어집을 펼친다 — 그리고 낱말이 가리키는 자리가 실재하는지 검사한다.
+
+    용어집은 손으로 적은 목록이라 본문이 바뀌면 조용히 어긋난다. 뜻까지
+    기계가 맞출 수는 없지만, "어디를 보라" 는 화살표만은 맞출 수 있다.
+    없는 id 를 가리키면 여기서 오류로 잡혀 덱이 안 나온다.
+    """
+    rows = gen_glossary.entries()
+    for line in gen_glossary.check(rows, gen_glossary.slide_ids()):
+        errors.append('용어집: %s' % line)
+    return gen_glossary.render(rows)
+
+
 def expand(text):
+    text = GLOSS_RE.sub(expand_glossary, text)
     text = FULL_RE.sub(expand_fullsrc, text)
     text = CODEDIR_RE.sub(expand_codedir, text)
     text = OUTDIR_RE.sub(expand_outdir, text)
