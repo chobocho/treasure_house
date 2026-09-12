@@ -1112,7 +1112,7 @@ ts             OK     OK     OK     OK     OK</pre>
         build-java \
         test test-py test-go test-cpp test-java test-ts \
         golden golden-check corpus-check parity decoders \
-        interop bench \
+        interop bench explain \
         record width \
         demos figs deck deck-verify deck-slices deck-xref deck-check \
         tables-check font font-check all clean</code></pre>
@@ -2460,6 +2460,25 @@ bwt            1367107    1367246  100.0%    100.0%</pre>
 <span class="tier a">실행 검증</span>
 </article>
 
+<article class="card" id="bit-bytes">
+<h3>진짜 출력을 바이트마다</h3>
+<div class="src"><b>out/explain_bitio.txt</b><span class="ln">전체 11줄</span><span>'AB' 두 글자를 bitio 로</span></div>
+<pre class="term" data-out="explain_bitio.txt">== bitio — 'AB' (2바이트) ==
+결과 4바이트 — 앞에 0비트 셋이 들어간다
+
+0000  02 08 28 40                                      ..(@
+
+  0000  02                      원본 길이 2
+  비트열 000010000010100001000000
+  000 = 채움 3비트 (SPEC §1.4)
+  01000001 = 'A' (0x41)
+  01000010 = 'B' (0x42)
+  00000 = 마지막 바이트의 남은 자리 (0)</pre>
+<div class="key">앞의 <b>0비트 셋</b> 때문에 'A'(0x41) 가 0x08 과 0x28 에 걸쳐 있다.
+바이트 경계를 밟지 않는다는 것이 이렇게 보인다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
 <article class="card quiz" id="bit-quiz-1" data-quiz>
 <h3>1·2장 퀴즈</h3>
 <p class="q">Q. 어떤 사람이 비트 writer 의 <code>flush</code> 에서
@@ -3700,6 +3719,24 @@ zeros_64k.bin            OK     OK     OK     OK     OK
 <span class="tier a">실행 검증</span>
 </article>
 
+<article class="card" id="rle-bytes">
+<h3>진짜 출력을 바이트마다</h3>
+<div class="src"><b>out/explain_rle.txt</b><span class="ln">전체 10줄</span><span>aaaaabcdeffffff 를 PackBits 로</span></div>
+<pre class="term" data-out="explain_rle.txt">== rle — 'aaaaabcdeffffff' (15바이트) ==
+결과 10바이트
+
+0000  0F FC 61 03 62 63 64 65 FB 66                    ..a.bcde.f
+
+바이트마다:
+  0000  0F                      원본 길이 15 (varint)
+  0001  FC 61                   런 — 'a' 를 5번 (257-252)
+  0003  03 62 63 64 65          리터럴 4개 — 'bcde'
+  0008  FB 66                   런 — 'f' 를 6번 (257-251)</pre>
+<p>0xFC 가 런(257−252 = 5번), 0x03 이 리터럴 4개다.
+제어 바이트 하나가 두 가지를 가르는 것이 실물로 보인다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
 <article class="card quiz" id="simple-quiz-1" data-quiz>
 <h3>3부 퀴즈</h3>
 <p class="q">Q. MTF 는 크기를 1바이트도 안 줄이고, 영어 산문에서는 엔트로피를
@@ -4743,6 +4780,39 @@ java           OK     OK     OK     OK     OK
 ts             OK     OK     OK     OK     OK</pre>
 <p>package–merge 의 정렬 키를 명세에 적어 둔 덕에, 다섯 언어가 <b>첫 실행에서</b> 맞았다.
 트리를 만들었다면 여기서 갈렸을 것이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="huf-bytes">
+<h3>진짜 출력을 바이트마다</h3>
+<div class="src"><b>out/explain_huffman.txt</b><span class="ln">1–14</span><span>abracadabra 를 허프만으로</span></div>
+<pre class="term" data-out="explain_huffman.txt" data-lines="1-14">== huffman — 'abracadabra' (11바이트) ==
+결과 132바이트 — 표 128바이트가 대부분이다
+
+부호표:
+  'a'  5회  길이 1  부호 0
+  'b'  2회  길이 3  부호 100
+  'c'  1회  길이 3  부호 101
+  'd'  1회  길이 3  부호 110
+  'r'  2회  길이 3  부호 111
+
+  0000  0B                      원본 길이 11
+  0001  00 00 00 00             부호 길이 표의 앞 4바이트
+        …
+  0081  4E AC 9C                본문 비트</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="huf-bytes-2">
+<h3>본문은 3바이트, 표는 128바이트</h3>
+<div class="src"><b>out/explain_huffman.txt</b><span class="ln">16–18</span><span>본문 비트열을 기호마다 갈라 보면</span></div>
+<pre class="term" data-out="explain_huffman.txt" data-lines="16-18">본문 비트열: 010011101010110010011100
+  a=0 b=100 r=111 a=0 c=101 a=0 d=110 a=0 b=100 r=111 a=0
+  남은 1비트는 채움(0)</pre>
+<div class="key">11글자가 <b>23비트</b>에 들어갔다. 1부에서 센 엔트로피 22.4비트에
+아주 가깝다 — 정수 비트의 손해가 0.6비트뿐이다.</div>
+<p>그런데 전체는 132바이트다. <b>표가 128바이트</b>이기 때문이다.
+작은 파일에서 고정 표가 얼마나 비싼지가 이 한 줄에 들어 있다.</p>
 <span class="tier a">실행 검증</span>
 </article>
 
@@ -6913,6 +6983,27 @@ class TestTokens(unittest.TestCase):
 <span class="tier a">실행 검증</span>
 </article>
 
+<article class="card" id="lz-bytes">
+<h3>진짜 출력을 바이트마다</h3>
+<div class="src"><b>out/explain_lzss.txt</b><span class="ln">전체 12줄</span><span>abcabcabcabd 를 LZSS 로</span></div>
+<pre class="term" data-out="explain_lzss.txt">== lzss — 'abcabcabcabd' (12바이트) ==
+결과 9바이트
+
+0000  0C 10 61 62 63 05 02 00 64                       ..abc...d
+
+  0000  0C                      원본 길이 12
+  0001  10                      플래그 00010000 — 1이면 일치
+  0002  61                      리터럴 'a'
+  0003  62                      리터럴 'b'
+  0004  63                      리터럴 'c'
+  0005  05 02 00                일치 — 길이 8 거리 3
+  0008  64                      리터럴 'd'</pre>
+<div class="key">플래그 <code>00010000</code> 의 네 번째 비트가 1 이다 —
+네 번째 토큰이 일치라는 뜻이다. 그 일치가 <b>길이 8 거리 3</b>,
+즉 길이가 거리보다 긴 겹치는 일치다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
 <article class="card quiz" id="lz-quiz-1" data-quiz>
 <h3>7부 퀴즈</h3>
 <p class="q">Q. 어떤 LZ 부호기가 일치를 찾을 때 <code>if ln &gt;= best_len</code> 로 썼다.
@@ -8505,6 +8596,29 @@ tar.gz 는 통째로 압축해 파일 사이의 되풀이까지 먹는다. <b>�
 </table></div>
 <p>부호기 하나, 모델 하나로는 닿지 못하는 자리에 <b>둘을 붙여</b> 닿았다.
 그리고 아직 2차 벽까지는 10%p 가 남아 있다 — 11부가 그 자리를 노린다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-bytes">
+<h3>진짜 출력을 바이트마다</h3>
+<div class="src"><b>out/explain_deflate.txt</b><span class="ln">전체 14줄</span><span>ab 를 여덟 번 되풀이한 16바이트</span></div>
+<pre class="term" data-out="explain_deflate.txt">== deflate — 'abababababababab' (16바이트) ==
+결과 5바이트
+
+0000  4B 4C 42 85 00                                   KLB..
+
+LSB 먼저로 편 비트열 (앞 24비트):
+  110100100011001001000010
+  1 = BFINAL
+  01 = BTYPE (고정)
+
+토큰 (LZ77 파서의 출력):
+  리터럴 'a'
+  리터럴 'b'
+  일치 길이 14 거리 2</pre>
+<div class="key">16바이트가 <b>5바이트</b>가 되었고, 블록 종류는 <b>고정</b>이다.
+토큰이 셋뿐이라 동적 블록의 표 값이 아까운 크기다 —
+부호기가 세 종류를 다 세어 보고 고른 결과다.</div>
 <span class="tier a">실행 검증</span>
 </article>
 
@@ -11216,6 +11330,43 @@ func lzmaBitTree(dec *rcDecoder, probs []uint16,
 </table></div>
 <div class="key">우리끼리의 검사(골든·교차)가 <b>다섯이 함께 틀린 것</b>을 못 잡는다.
 바깥 세계와 맞춰 보는 것이 그 빈틈을 메운다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-bytes">
+<h3>진짜 출력을 바이트마다</h3>
+<div class="src"><b>out/explain_lz4block.txt</b><span class="ln">1–9</span><span>36바이트를 LZ4 블록으로</span></div>
+<pre class="term" data-out="explain_lz4block.txt" data-lines="1-9">== lz4block — 'abcabcabcabdabcabcabcabd…' (36바이트) ==
+결과 23바이트
+
+짧은 입력(12바이트)에서는 일치가 아예 안 나온다 —
+마지막 5바이트는 리터럴, 일치는 끝에서 12바이트 안쪽
+금지라는 규칙 때문이다 (§14.2). 그래서 36바이트로 잰다.
+
+0000  24 34 61 62 63 03 00 14 64 09 00 34 63 61 62 0C  $4abc...d..4cab.
+0010  00 50 62 63 61 62 64                             .Pbcabd</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-bytes-2">
+<h3>토큰 한 바이트씩 읽어 보면</h3>
+<div class="src"><b>out/explain_lz4block.txt</b><span class="ln">11–22</span><span>토큰·리터럴·오프셋이 번갈아 나온다</span></div>
+<pre class="term" data-out="explain_lz4block.txt" data-lines="11-22">  0000  24                      원본 길이 36
+  0001  34                      토큰 34 — 리터럴 3 · 일치 8
+  0002  61 62 63                리터럴 'abc'
+  0005  03 00                   오프셋 3 (리틀엔디언)
+  0007  14                      토큰 14 — 리터럴 1 · 일치 8
+  0008  64                      리터럴 'd'
+  0009  09 00                   오프셋 9 (리틀엔디언)
+  000B  34                      토큰 34 — 리터럴 3 · 일치 8
+  000C  63 61 62                리터럴 'cab'
+  000F  0C 00                   오프셋 12 (리틀엔디언)
+  0011  50                      토큰 50 — 리터럴 5 · 일치 없음
+  0012  62 63 61 62 64          리터럴 'bcabd'</pre>
+<div class="key">마지막 토큰 <code>0x50</code> 은 <b>리터럴 5개에 일치 없음</b>이다.
+"마지막 5바이트는 반드시 리터럴" 이라는 규칙이 실물로 보이는 자리다.</div>
+<p>짧은 입력(12바이트)에서는 일치가 <b>아예 안 나온다</b> —
+일치가 끝에서 12바이트 안쪽에서 시작할 수 없기 때문이다.</p>
 <span class="tier a">실행 검증</span>
 </article>
 
@@ -40395,7 +40546,7 @@ SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
         build-java \
         test test-py test-go test-cpp test-java test-ts \
         golden golden-check corpus-check parity decoders \
-        interop bench \
+        interop bench explain \
         record width \
         demos figs deck deck-verify deck-slices deck-xref deck-check \
         tables-check font font-check all clean
@@ -40480,8 +40631,8 @@ test: test-py test-go test-cpp test-java test-ts  ## 다섯 언어 시험
 
 <article class="card" id="bt-1-4">
 <h3>Makefile <span class="badge">4/6</span></h3>
-<div class="src"><b>Makefile</b><span class="ln">122–159</span><span>이어서</span></div>
-<pre><code data-lang="text" data-src="Makefile" data-lines="122-159"># ── 증거 ───────────────────────────────────────────────────────────
+<div class="src"><b>Makefile</b><span class="ln">122–163</span><span>이어서</span></div>
+<pre><code data-lang="text" data-src="Makefile" data-lines="122-163"># ── 증거 ───────────────────────────────────────────────────────────
 # 골든을 다시 만드는 것은 "지금까지의 출력이 틀렸다" 는 선언이다.
 # 이유를 커밋 메시지에 적지 않고 돌리지 말 것.
 golden:                 ## 골든 벡터 다시 만들기 (이유를 커밋에 적을 것)
@@ -40500,6 +40651,10 @@ parity:                 ## 다섯 언어가 같은 바이트를 내는가 (5×5 
 # 언어가 같게 푸는지가 그 자리를 대신한다 (PLAN.md §0.4).
 decoders:               ## 진짜 도구의 파일을 다섯 언어가 같게 푸는가
 	$(PY) bench/run_decoders.py
+
+# 형식 설명의 마지막 한 칸 — 진짜 출력의 바이트마다 주석을 붙인다.
+explain:                ## 바이트를 하나씩 설명한 캡처 (out/explain_*)
+	$(PY) bench/explain.py
 
 interop:                ## 진짜 gzip·bzip2·xz·lz4 와 주고받아 보기
 	$(PY) interop/run_interop.py
@@ -40524,8 +40679,8 @@ width:                  ## 덱에 실릴 줄이 폴더블 폭(72칸)을 넘는�
 
 <article class="card" id="bt-1-5">
 <h3>Makefile <span class="badge">5/6</span></h3>
-<div class="src"><b>Makefile</b><span class="ln">160–199</span><span>이어서</span></div>
-<pre><code data-lang="text" data-src="Makefile" data-lines="160-199"># ── 덱 ─────────────────────────────────────────────────────────────
+<div class="src"><b>Makefile</b><span class="ln">164–203</span><span>이어서</span></div>
+<pre><code data-lang="text" data-src="Makefile" data-lines="164-203"># ── 덱 ─────────────────────────────────────────────────────────────
 # 데모는 TypeScript 로 쓰고 여기서 한 파일로 옮긴다. 덱은 파일 하나로
 # 열려야 하므로 import 도 번들러도 쓰지 않는다 — 자기완결형 한 덩어리다.
 demos:                  ## 덱 데모 옮기기 (TypeScript → demos.js)
@@ -40570,8 +40725,8 @@ font:                   ## 고정폭 글꼴(DeckMono) 서브셋 내장
 
 <article class="card" id="bt-1-6">
 <h3>Makefile <span class="badge">6/6</span></h3>
-<div class="src"><b>Makefile</b><span class="ln">200–208</span><span>이어서</span></div>
-<pre><code data-lang="text" data-src="Makefile" data-lines="200-208">font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
+<div class="src"><b>Makefile</b><span class="ln">204–212</span><span>이어서</span></div>
+<pre><code data-lang="text" data-src="Makefile" data-lines="204-212">font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
@@ -40815,8 +40970,8 @@ if __name__ == '__main__':
 
 <article class="card" id="bt-6-1">
 <h3>record.sh <span class="badge">1/3</span></h3>
-<div class="src"><b>tools/record.sh</b><span class="ln">1–42</span><span>record_all</span></div>
-<pre><code data-lang="sh" data-src="tools/record.sh" data-lines="1-42">#!/bin/sh
+<div class="src"><b>tools/record.sh</b><span class="ln">1–32</span><span>머리말</span></div>
+<pre><code data-lang="sh" data-src="tools/record.sh" data-lines="1-32">#!/bin/sh
 # record.sh — 덱에 실릴 '진짜 출력' 을 전부 다시 남긴다.
 #
 # 이 덱의 검은 바탕 화면은 하나도 손으로 쓰지 않았다. 전부 여기서
@@ -40846,25 +41001,28 @@ export GOTOOLCHAIN GOFLAGS
 
 # 두 번 떠서 같아야 하는 것들. 여기 없는 것은 시간이 들어간 캡처다.
 REPRO="parity_*.txt decoders_*.txt interop_*.txt bench_ratio.txt"
-
-record_all() {
-  # 1. 다섯 언어가 같은 바이트를 내는가 (골든 + 5×5 교차 복호).
-  $PY bench/run_parity.py
-  # 2. 복호기만 있는 모듈 — 진짜 bzip2·xz 가 만든 파일을 푼다.
-  $PY bench/run_decoders.py
-  # 3. 진짜 gzip·zlib·lz4 와 양방향으로 주고받는다.
-  $PY interop/run_interop.py
-  # 4. 비율(골든에서)·속도(실제 측정)·manifest.
-  $PY bench/run_bench.py
-}
+REPRO="$REPRO explain_*.txt"
 </code></pre>
 <span class="tier a">실행 검증</span>
 </article>
 
 <article class="card" id="bt-6-2">
 <h3>record.sh <span class="badge">2/3</span></h3>
-<div class="src"><b>tools/record.sh</b><span class="ln">43–73</span><span>repro_md5</span></div>
-<pre><code data-lang="sh" data-src="tools/record.sh" data-lines="43-73"># md5sum &lt;- 재현 가능한 캡처만 한 줄로.
+<div class="src"><b>tools/record.sh</b><span class="ln">33–74</span><span>record_all · repro_md5</span></div>
+<pre><code data-lang="sh" data-src="tools/record.sh" data-lines="33-74">record_all() {
+  # 1. 다섯 언어가 같은 바이트를 내는가 (골든 + 5×5 교차 복호).
+  $PY bench/run_parity.py
+  # 2. 복호기만 있는 모듈 — 진짜 bzip2·xz 가 만든 파일을 푼다.
+  $PY bench/run_decoders.py
+  # 3. 진짜 gzip·zlib·lz4 와 양방향으로 주고받는다.
+  $PY interop/run_interop.py
+  # 4. 바이트마다 주석을 붙인 캡처 (덱의 형식 설명이 쓴다).
+  $PY bench/explain.py
+  # 5. 비율(골든에서)·속도(실제 측정)·manifest.
+  $PY bench/run_bench.py
+}
+
+# md5sum &lt;- 재현 가능한 캡처만 한 줄로.
 repro_md5() {
   # shellcheck disable=SC2086
   (cd "$OUT" &amp;&amp; ls $REPRO 2&gt;/dev/null | sort | while read -r f; do
@@ -40892,16 +41050,16 @@ if [ "${1:-}" = '--check' ]; then
   echo "  ✓ 재현 가능한 캡처 $(repro_md5 | wc -l)개가 3회차까지 같다"
   exit 0
 fi
-
-record_all
 </code></pre>
 <span class="tier a">실행 검증</span>
 </article>
 
 <article class="card" id="bt-6-3">
 <h3>record.sh <span class="badge">3/3</span></h3>
-<div class="src"><b>tools/record.sh</b><span class="ln">74–95</span><span>이어서</span></div>
-<pre><code data-lang="sh" data-src="tools/record.sh" data-lines="74-95"># 무엇이 두 번 떠도 같고 무엇이 아닌지, 그리고 왜인지.
+<div class="src"><b>tools/record.sh</b><span class="ln">75–98</span><span>이어서</span></div>
+<pre><code data-lang="sh" data-src="tools/record.sh" data-lines="75-98">record_all
+
+# 무엇이 두 번 떠도 같고 무엇이 아닌지, 그리고 왜인지.
 {
   echo '이 덱의 캡처는 두 번 떠서 md5 가 같아야 실린다.'
   echo '아래는 그럴 수 있다 — 다섯 언어가 같은 바이트를 내는 것이'
