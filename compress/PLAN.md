@@ -349,3 +349,51 @@ Sanity numbers (Python stdlib, informational only — the deck cites `out/` capt
 gzip and 140 B under xz, because LZMA's fixed structure outweighs 64 KiB of nothing.
 
 Next: step 4 — the Python reference, module by module, tests first.
+
+### 4. Python reference + golden vectors (2026-09-12)
+
+All ten Tier-1 modules, tests first, one commit each. 153 tests green.
+`golden/<algo>/<file>.{sha256,size}` for 10 algorithms × 13 corpus files = 130 pairs,
+each regenerated only after the encoder's own output round-trips.
+
+**The tests found four real defects, three of them in SPEC.md rather than in code:**
+
+1. §0.3 claimed every codec's empty output is `00`. `bitio`'s three pad bits still
+   need a byte. Fixed the spec (two exceptions: `bitio` `00 00`, `deflate` `03 00`)
+   and later made the rule uniform — `huffman`, `lzw`, `rangecoder` and `bwt` all
+   return after the header, so an empty input never gets framing it has no body for.
+2. §2.5 capped Rice's unary run at 64. `Rice(k=0)` is plain unary, which is how the
+   deck introduces unary coding, and 64 cannot express 100. Raised to 4096 — still
+   bounded (a corrupt stream spins 4 Ki times per symbol at worst).
+3. §10.6 said blocks are 65536 bytes. A stored block's `LEN` is 16 bits, so 65536
+   can never be stored as one block and the type choice would stop being free at
+   exactly that size. Now 65535.
+4. A genuine code bug: BWT's suffix doubling packs its key as
+   `rank[i] * (m + 1) + rank[i + k]`, and on the first round `rank` held **raw byte
+   values** (up to 255), so the multiplier was far too small. `banana` produced
+   `nanbaa`. Byte values are now rank-compressed to `0..distinct-1` first. The
+   round trip still worked — only the textbook expectation caught it.
+
+Two spec additions that the implementation forced:
+
+- §6.1: the hash chain is indexed by **absolute position**, not `pos & 32767`.
+  zlib's wrapped array is exactly why zlib's effective maximum distance is 32506.
+  `corpus/boundary_32768.bin` now demonstrably finds a match at distance 32768 and
+  `boundary_32769.bin` does not.
+- §5.1/§5.3: a single-symbol Huffman table is necessarily incomplete (Kraft 1/2).
+  `check_complete` accepts exactly that case; RFC 1951 has the same exception for a
+  one-code distance table, which our inflate needs anyway.
+
+Deviation from §1: `tools/gen_tables.py` is not written yet. Every Tier-1 table is
+**derived** at import from a short authoritative array (`deflate_tables.py` builds
+the length/distance code tables from the RFC's 29+30 `(extra, base)` pairs; the
+CRC-32 table comes from the polynomial). A generator is needed only for Tier-2's
+CM stretch/squash, DCT and ADPCM tables, which cannot be derived that cheaply.
+
+Ratios on the whole corpus (1,367,107 bytes in): deflate 36.8 %, lzss 55.9 %,
+rangecoder 60.4 %, lzw 75.6 %, rle 76.9 %, huffman 80.4 %, bwt/mtf/bitio ~100 %,
+intcode 131.3 %. Our DEFLATE is within 1 % of `zlib -9` on every corpus file and
+0.5 % *better* on `mixed_1m.bin`, and interoperates with real zlib and gzip in both
+directions at every level.
+
+Next: step 5 — interop captures into `out/`.

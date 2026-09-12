@@ -38,7 +38,8 @@ SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
 .DEFAULT_GOAL := help
 .PHONY: help deps corpus \
         test test-py test-go test-cpp test-java test-ts \
-        golden parity interop bench record width \
+        golden golden-check corpus-check parity interop bench \
+        record width \
         figs deck deck-verify deck-slices deck-xref deck-check \
         font font-check all clean
 
@@ -56,14 +57,15 @@ deps:                   ## TypeScript 컴파일러 내려받기 (src/ts 안에�
 	cd src/ts && npm install --no-save typescript @types/node
 
 corpus:                 ## 시험 자료 만들기 (씨앗 고정 — 늘 같은 파일)
-	@test -f corpus/gen_corpus.py \
-	  && $(PY) corpus/gen_corpus.py \
-	  || echo '  corpus/gen_corpus.py 아직 없다 (PLAN.md §5 3단계)'
+	$(PY) corpus/gen_corpus.py
+
+corpus-check:           ## 코퍼스와 그 원본이 그대로인지 대조만
+	$(PY) corpus/gen_corpus.py --check
 
 # ── 시험 ───────────────────────────────────────────────────────────
 test-py:                ## 파이썬 시험
 	@test -d src/py/compresslib/tests \
-	  && $(PY) -m unittest discover -s src/py -v \
+	  && $(PY) -m unittest discover -s src/py \
 	  || echo '  파이썬 시험 아직 없다'
 
 test-go:                ## Go 시험 (직렬 — 메모리가 빠듯하다)
@@ -94,9 +96,12 @@ test: test-py test-go test-cpp test-java test-ts  ## 다섯 언어 시험
 # 이유를 커밋 메시지에 적지 않고 돌리지 말 것.
 golden:                 ## 골든 벡터 다시 만들기 (이유를 커밋에 적을 것)
 	@echo '  ⚠ 골든을 새로 만든다 — 왜 바뀌어야 하는지 커밋에 적을 것'
-	@test -f bench/make_golden.py \
-	  && $(PY) bench/make_golden.py \
-	  || echo '  bench/make_golden.py 아직 없다 (PLAN.md §5 4단계)'
+	$(PY) bench/make_golden.py
+
+# 골든이 바뀌지 않았는지만 본다. 5×5 파서티(6단계)가 붙기 전까지는
+# 파이썬 참조가 스스로 달라지지 않았다는 확인이 이것뿐이다.
+golden-check:           ## 골든이 그대로인지 대조만
+	$(PY) bench/make_golden.py --check
 
 parity:                 ## 다섯 언어가 같은 바이트를 내는가 (5×5 교차)
 	@test -f bench/run_parity.py \
