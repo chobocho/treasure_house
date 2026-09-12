@@ -222,9 +222,69 @@ def explain_bitio():
     return lines
 
 
+def explain_bzip2():
+    """진짜 bzip2 가 만든 파일의 머리를 읽는다 — 우리 것이 아니다."""
+    import subprocess
+    src = b'banana bandana ' * 8
+    try:
+        raw = subprocess.run(['bzip2', '-9', '-c'], input=src,
+                             stdout=subprocess.PIPE).stdout
+    except OSError:
+        return ['bzip2 명령이 없다 — 이 캡처는 건너뛴다']
+    lines = ['== bzip2 — 진짜 bzip2 -9 가 만든 파일 ==',
+             '입력 %d바이트 → %d바이트' % (len(src), len(raw)), '',
+             '입력을 우리가 만들지 않았다는 것이 요점이다.', '']
+    lines += hexdump(raw[:32])
+    lines.append('')
+    lines.append(note(0, raw, 3, "파일 머리 'BZh'"))
+    lines.append(note(3, raw, 1, '블록 크기 %s → %d00 KiB'
+                      % (chr(raw[3]), raw[3] - 0x30)))
+    lines.append(note(4, raw, 6, '블록 마법수 314159265359 (48비트)'))
+    lines.append(note(10, raw, 4, '블록 CRC-32'))
+    lines.append('')
+    lines.append('그 뒤는 비트 단위라 바이트로 안 갈린다 —')
+    lines.append('기호 지도 · 표 개수 · 선택자 · 표 · 본문 순서다.')
+    return lines
+
+
+def explain_lzma():
+    """진짜 xz --format=lzma 가 만든 파일의 13바이트 머리말."""
+    import subprocess
+    src = b'banana bandana ' * 8
+    try:
+        raw = subprocess.run(['xz', '--format=lzma', '-9', '-c'],
+                             input=src, stdout=subprocess.PIPE).stdout
+    except OSError:
+        return ['xz 명령이 없다 — 이 캡처는 건너뛴다']
+    prop = raw[0]
+    lc = prop % 9
+    rest = prop // 9
+    lp = rest % 5
+    pb = rest // 5
+    dic = int.from_bytes(raw[1:5], 'little')
+    size = int.from_bytes(raw[5:13], 'little')
+    lines = ['== lzma — 진짜 xz --format=lzma -9 가 만든 파일 ==',
+             '입력 %d바이트 → %d바이트' % (len(src), len(raw)), '']
+    lines += hexdump(raw[:32])
+    lines.append('')
+    lines.append(note(0, raw, 1, '속성 0x%02X → lc=%d lp=%d pb=%d'
+                      % (prop, lc, lp, pb)))
+    lines.append(note(1, raw, 4, '사전 크기 %d 바이트' % dic))
+    if size == 0xFFFFFFFFFFFFFFFF:
+        lines.append(note(5, raw, 8, '원본 길이 모름 — 끝 표시자로'))
+    else:
+        lines.append(note(5, raw, 8, '원본 길이 %d' % size))
+    lines.append(note(13, raw, 1, '레인지 코더의 첫 바이트 — 늘 0'))
+    lines.append('')
+    lines.append('5부에서 우리 코더의 첫 바이트를 0 으로 맞춰 둔 덕에')
+    lines.append('같은 복호기가 이 스트림을 그대로 읽는다.')
+    return lines
+
+
 MAKERS = [('bitio', explain_bitio), ('rle', explain_rle),
           ('huffman', explain_huffman), ('lzss', explain_lzss),
-          ('lz4block', explain_lz4), ('deflate', explain_deflate)]
+          ('lz4block', explain_lz4), ('deflate', explain_deflate),
+          ('bzip2', explain_bzip2), ('lzma', explain_lzma)]
 
 
 def main(argv):
