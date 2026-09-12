@@ -9227,6 +9227,343 @@ def adpcm_encode(samples):
 <span class="tier a">실행 검증</span>
 </article>
 
+<article class="card" id="ly-dct-4">
+<h3>1차원 DCT 를 두 번 — 왜 그래도 되나</h3>
+<div class="key">2차원 DCT 는 <b>분리 가능</b>하다. 행마다 1차원 변환을 하고,
+그 결과에 열마다 1차원 변환을 하면 2차원 변환과 같다.</div>
+<div class="tblwrap"><table class="kv">
+<tr><th>방식</th><th>곱셈 횟수</th></tr>
+<tr><td>2차원을 직접</td><td>64 × 64 = 4,096</td></tr>
+<tr><td>1차원 두 번</td><td>8 × 64 × 2 = <b>1,024</b></td></tr>
+<tr><td>빠른 DCT (AAN 등)</td><td>약 100</td></tr>
+</table></div>
+<p>이 책은 가운데 방식이다. 빠른 DCT 는 곱셈을 덧셈과 시프트로 바꾸는 요령인데,
+<b>중간 반올림이 달라져</b> 다섯 언어를 맞추기가 까다로워진다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-dct-5">
+<h3>반올림을 어디서 하나</h3>
+<div class="src"><b>src/py/compresslib/lossy.py</b><span class="ln">119–134</span><span>1차원마다 한 번씩 내린다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lossy.py" data-lines="119-134">def idct8(coef):
+    tmp = [0] * 64
+    for x in range(8):
+        for v in range(8):
+            s = 0
+            for u in range(8):
+                s += DCT[u * 8 + x] * coef[u * 8 + v]
+            tmp[x * 8 + v] = (s + DCT_ROUND) &gt;&gt; DCT_SCALE
+    out = [0] * 64
+    for x in range(8):
+        for y in range(8):
+            s = 0
+            for v in range(8):
+                s += DCT[v * 8 + y] * tmp[x * 8 + v]
+            out[x * 8 + y] = (s + DCT_ROUND) &gt;&gt; DCT_SCALE
+    return out</code></pre>
+<div class="warn">1차원 변환 두 번 사이에 <b>반올림을 한 번만</b> 하면 정밀도가 더 좋지만,
+중간값이 2<sup>26</sup> 을 넘어 32비트에서 넘친다.
+두 번 내리는 쪽이 다섯 언어에서 안전하다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-dct-6">
+<h3>DCT 는 정말 되돌아가나</h3>
+<p>정수 반올림 때문에 완전히 되돌아가지는 않는다. 얼마나 어긋나는지 재 보면 이렇다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>입력</th><th>fdct8 → idct8 뒤 최대 오차</th></tr>
+<tr><td>상수 블록</td><td>0</td></tr>
+<tr><td>계단 무늬(행마다 16씩)</td><td>0</td></tr>
+<tr><td>난수 블록</td><td>1</td></tr>
+</table></div>
+<p>실제로 재 보면 최대 <b>1</b> 이다. 화소 값 0~255 에서 1 이면 눈에 안 보인다.
+그리고 이 오차는 양자화가 버리는 것에 견주면 무시할 크기다.</p>
+<div class="key">"DCT 가 손실" 이라는 말은 이 반올림을 가리키는 것이지,
+변환 자체가 정보를 버린다는 뜻이 아니다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-dct-7">
+<h3>계수가 뜻하는 것</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>자리</th><th>이름</th><th>뜻</th></tr>
+<tr><td>(0,0)</td><td>DC</td><td>블록 전체의 평균 밝기</td></tr>
+<tr><td>(0,1)·(1,0)</td><td>낮은 AC</td><td>왼→오른쪽, 위→아래의 완만한 변화</td></tr>
+<tr><td>(7,7)</td><td>가장 높은 AC</td><td>한 화소씩 번갈아 바뀌는 무늬</td></tr>
+</table></div>
+<p>사진에서 (7,7) 이 큰 값을 갖는 일은 거의 없다.
+있다면 잡음이거나 화소 단위 격자무늬인데, 둘 다 버려도 눈에 안 띈다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-quant-3">
+<h3>양자화 표를 눈으로</h3>
+<p>품질 50 의 휘도 표다. 왼쪽 위가 작고 오른쪽 아래가 크다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><td>16</td><td>11</td><td>10</td><td>16</td><td>24</td><td>40</td><td>51</td><td>61</td></tr>
+<tr><td>12</td><td>12</td><td>14</td><td>19</td><td>26</td><td>58</td><td>60</td><td>55</td></tr>
+<tr><td>14</td><td>13</td><td>16</td><td>24</td><td>40</td><td>57</td><td>69</td><td>56</td></tr>
+<tr><td>14</td><td>17</td><td>22</td><td>29</td><td>51</td><td>87</td><td>80</td><td>62</td></tr>
+<tr><td>18</td><td>22</td><td>37</td><td>56</td><td>68</td><td>109</td><td>103</td><td>77</td></tr>
+<tr><td>24</td><td>35</td><td>55</td><td>64</td><td>81</td><td>104</td><td>113</td><td>92</td></tr>
+<tr><td>49</td><td>64</td><td>78</td><td>87</td><td>103</td><td>121</td><td>120</td><td>101</td></tr>
+<tr><td>72</td><td>92</td><td>95</td><td>98</td><td>112</td><td>100</td><td>103</td><td>99</td></tr>
+</table></div>
+<p>이 64개 숫자는 <b>사람 실험에서 나온 값</b>이다. 규칙에서 유도되지 않으므로
+<code>tools/gen_tables.py</code> 가 다섯 언어에 뿌리고 대조한다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-quant-4">
+<h3>품질 100 이 무손실이 아닌 이유</h3>
+<p>품질 100 이면 배율이 0 이 되어 표가 전부 1 이다. 나누기 1 은 버리지 않는다.
+그런데도 원본과 다르다.</p>
+<ul>
+<li>정수 DCT 의 <b>반올림 오차</b>가 남는다</li>
+<li>화소를 128 빼서 −128~127 로 옮기는 것은 무손실이지만,
+되돌릴 때 <b>0~255 로 자르는</b> 클램프가 있다</li>
+</ul>
+<div class="key">"품질 100 = 무손실" 은 흔한 오해다. JPEG 에는 진짜 무손실 모드가
+따로 있고(예측 부호 기반), 거의 안 쓰인다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-runlevel">
+<h3>런–레벨 부호</h3>
+<p>지그재그로 훑으면 0 이 이어진다. 그 0 들을 하나씩 적는 대신
+<b>"0 을 몇 개 건너뛰고, 다음 값은 이것"</b> 으로 적는다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>계수 열</th><th>적는 것</th></tr>
+<tr><td>15, 0, 0, −3, 0, 0, 0, 0, …0</td><td>(0, 15) (2, −3) EOB</td></tr>
+</table></div>
+<p>이 책은 런을 <b>바이트 하나</b>, 값을 지그재그 varint 로 적는다.
+진짜 JPEG 은 런과 값의 비트 길이를 <b>한 허프만 기호</b>로 묶는다 — 더 촘촘하다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-runlevel-2">
+<h3>런이 255 를 넘으면</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>0 이 몇 개</th><th>적는 것</th></tr>
+<tr><td>3</td><td>(3, 값)</td></tr>
+<tr><td>254</td><td>(254, 0) 하나로 254칸을 건너뛰고 다시</td></tr>
+<tr><td>300</td><td>(254, 0) 다음에 (46, 값)</td></tr>
+</table></div>
+<div class="warn">EOB 를 255 로 정했으니 런은 254 까지만 쓸 수 있다.
+그보다 긴 0 구간은 <b>(254, 0)</b> 을 끼워 쪼갠다.
+이 자리를 빠뜨리면 64개 계수 안에서는 안 걸리고, 큰 블록에서만 터진다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-jpeglite-5">
+<h3>복호기</h3>
+<div class="src"><b>src/py/compresslib/lossy.py</b><span class="ln">195–238</span><span>EOB 를 반드시 먹는다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lossy.py" data-lines="195-238">def jpeglite_decode(src):
+    """(픽셀, 너비, 높이). 원본과 같지 않다 — 그게 약속이다."""
+    if len(src) &lt; 8 or src[:3] != JPEG_MAGIC:
+        raise ValueError('jpeglite 매직이 아니다')
+    width = int.from_bytes(src[3:5], 'little')
+    height = int.from_bytes(src[5:7], 'little')
+    quality = src[7]
+    qt = quant_table(quality)
+    stream = huffman.decode(src[8:])
+    pos = 0
+    pixels = bytearray(width * height)
+    for by in range(0, height, BLOCK):
+        for bx in range(0, width, BLOCK):
+            coef = [0] * 64
+            k = 0
+            # **끝 표시는 반드시 읽어 치운다.** k &lt; 64 를 고리 조건
+            # 으로 두면 64개가 다 실린 블록(품질 100)에서 EOB 를 안
+            # 먹고 나가고, 다음 블록이 그 255 를 자기 EOB 로 읽는다.
+            while True:
+                if pos &gt;= len(stream):
+                    raise ValueError('계수 스트림이 잘렸다')
+                run = stream[pos]
+                pos += 1
+                if run == EOB:
+                    break
+                k += run
+                if k &gt;= 64:
+                    raise ValueError('0 런이 블록을 넘는다')
+                u, pos = varint.get(stream, pos)
+                v = -((u + 1) &gt;&gt; 1) if (u &amp; 1) else (u &gt;&gt; 1)
+                coef[ZIGZAG[k]] = dequantise(v, qt[ZIGZAG[k]])
+                k += 1
+            block = idct8(coef)
+            for y in range(BLOCK):
+                sy = by + y
+                if sy &gt;= height:
+                    break
+                for x in range(BLOCK):
+                    sx = bx + x
+                    if sx &gt;= width:
+                        break
+                    p = block[x * 8 + y] + 128
+                    pixels[sy * width + sx] = max(0, min(255, p))
+    return bytes(pixels), width, height</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-jpeglite-6">
+<h3>PSNR — 얼마나 비슷한가를 재는 자</h3>
+<div class="key">PSNR = 10 · log<sub>10</sub>(255² / MSE) &nbsp;[dB]</div>
+<div class="tblwrap"><table class="kv">
+<tr><th>PSNR</th><th>느낌</th></tr>
+<tr><td>20 dB 아래</td><td>눈에 띄게 뭉개진다</td></tr>
+<tr><td>30 dB</td><td>자세히 보면 보인다</td></tr>
+<tr><td>40 dB 위</td><td>거의 구별 못 한다</td></tr>
+</table></div>
+<p>고친 뒤 우리 jpeglite 는 품질 10 에서 21.6 dB, 100 에서 55.1 dB 다.
+<b>품질에 따라 단조롭게</b> 오르는 것이 핵심이다.</p>
+<div class="note">PSNR 은 사람 눈과 완전히 맞지는 않는다. SSIM·VMAF 같은 지표가
+그 간격을 메우려 하지만, 어느 것도 "사람이 보기에" 를 완전히 대신하지 못한다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-png-5">
+<h3>PNG 필터를 다섯 언어로</h3>
+<div class="src"><b>src/cpp/lossy.h</b><span class="ln">262–270</span><span>C++ — 같은 동점 규칙</span></div>
+<pre><code data-lang="cpp" data-src="src/cpp/lossy.h" data-lines="262-270">// ---------------------------------------------------------- PNG 필터
+// 왼쪽·위·왼쪽위 가운데 a+b-c 에 가장 가까운 것. 동점은 a, 그다음 b.
+inline int paeth(int a, int b, int c) {
+  int p = a + b - c;
+  int pa = std::abs(p - a), pb = std::abs(p - b), pc = std::abs(p - c);
+  if (pa &lt;= pb &amp;&amp; pa &lt;= pc) return a;
+  if (pb &lt;= pc) return b;
+  return c;
+}</code></pre>
+<div class="src"><b>src/ts/lossy.ts</b><span class="ln">244–253</span><span>TypeScript</span></div>
+<pre><code data-lang="ts" data-src="src/ts/lossy.ts" data-lines="244-253">// 왼쪽·위·왼쪽위 가운데 a+b-c 에 가장 가까운 것. 동점은 a, 그다음 b.
+export function paeth(a: number, b: number, c: number): number {
+  const p = a + b - c;
+  const pa = Math.abs(p - a);
+  const pb = Math.abs(p - b);
+  const pc = Math.abs(p - c);
+  if (pa &lt;= pb &amp;&amp; pa &lt;= pc) return a;
+  if (pb &lt;= pc) return b;
+  return c;
+}</code></pre>
+<p>열 줄짜리 함수인데 동점 규칙 하나가 다르면 파일이 갈린다.
+그래서 다섯 언어의 시험에 <code>paeth(10,20,15)=15</code> 가 기댓값으로 박혀 있다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-png-6">
+<h3>왜 필터가 다섯 개나 되나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>그림의 성질</th><th>이기는 필터</th></tr>
+<tr><td>가로 줄무늬</td><td>Up — 위와 같다</td></tr>
+<tr><td>세로 줄무늬</td><td>Sub — 왼쪽과 같다</td></tr>
+<tr><td>완만한 그러데이션</td><td>Paeth 또는 Average</td></tr>
+<tr><td>이미 압축된 잡음</td><td>None — 예측이 손해다</td></tr>
+</table></div>
+<p>줄마다 고를 수 있다는 것이 요점이다. 한 그림 안에서도 위쪽은 하늘(Up),
+아래쪽은 풀밭(Paeth)처럼 성질이 달라진다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-png-7">
+<h3>필터가 없으면 얼마나 손해인가</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>mixed_1m.bin</th><th>크기</th><th>비율</th></tr>
+<tr><td>원본</td><td>1,048,576</td><td>100%</td></tr>
+<tr><td>deflate 만</td><td>348,041</td><td>33.2%</td></tr>
+<tr><td>PNG 필터 + deflate</td><td>361,988</td><td>34.5%</td></tr>
+</table></div>
+<div class="warn">이 자료에서는 필터가 <b>손해</b>다. 행 폭 256 이라는 가정이
+이 파일의 구조와 안 맞기 때문이다.</div>
+<p>진짜 PNG 는 행 폭을 그림에서 알지만, 우리 골든 코덱은 아무 바이트열이나 받는다.
+<b>가정이 틀리면 예측이 손해</b>라는 것을 그대로 보여 주는 자리다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-adpcm-4">
+<h3>ADPCM 한 걸음 손으로</h3>
+<p>예측값 0, 걸음 7 에서 표본 100 이 들어왔다.</p>
+<ol class="steps">
+<li>차이 = 100 − 0 = 100, 부호는 +</li>
+<li>크기 = min(7, 100×4 / 7) = min(7, 57) = <b>7</b></li>
+<li>delta = 7/8 + 7 + 3 + 1 = 11 (7&gt;&gt;3 = 0 이므로 0+7+3+1)</li>
+<li>예측값 = 0 + 11 = 11 — 실제 100 과 한참 멀다</li>
+<li>index += 8 → 걸음이 16 으로 커진다</li>
+</ol>
+<div class="key">한 걸음에 못 따라간다. 대신 <b>걸음이 커지며</b> 다음에 더 크게 움직인다.
+급격한 소리의 시작에서 몇 표본 동안 뭉개지는 것이 ADPCM 의 전형적인 소리다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-adpcm-5">
+<h3>복호기</h3>
+<div class="src"><b>src/py/compresslib/lossy.py</b><span class="ln">388–408</span><span>부호기와 똑같은 갱신</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lossy.py" data-lines="388-408">def adpcm_decode(data, count):
+    out = []
+    predictor = 0
+    index = 0
+    for i in range(count):
+        byte = data[i &gt;&gt; 1]
+        code = (byte &gt;&gt; 4) if (i &amp; 1) == 0 else (byte &amp; 0x0F)
+        step = ADPCM_STEP[index]
+        mag = code &amp; 7
+        delta = step &gt;&gt; 3
+        if mag &amp; 4:
+            delta += step
+        if mag &amp; 2:
+            delta += step &gt;&gt; 1
+        if mag &amp; 1:
+            delta += step &gt;&gt; 2
+        predictor += -delta if (code &amp; 8) else delta
+        predictor = max(-32768, min(32767, predictor))
+        index = max(0, min(88, index + ADPCM_INDEX[code &amp; 7]))
+        out.append(predictor)
+    return out</code></pre>
+<div class="warn">부호기의 갱신 코드와 <b>글자 하나까지 같아야</b> 한다.
+한 자리라도 다르면 예측기가 갈라지고, 그 뒤로는 영원히 어긋난다(표류).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-adpcm-6">
+<h3>압축비는 고정이다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>비트/표본</th><th>비율</th></tr>
+<tr><td>16비트 PCM</td><td>16</td><td>100%</td></tr>
+<tr><td>IMA ADPCM</td><td>4</td><td><b>25%</b></td></tr>
+<tr><td>MP3 128kbps</td><td>약 3</td><td>약 18%</td></tr>
+</table></div>
+<p>ADPCM 은 자료가 무엇이든 <b>정확히 1/4</b> 이다. 압축비가 고정이라는 것은
+장점이기도 하다 — 버퍼 크기를 미리 알 수 있고, 임의 지점 재생이 쉽다.</p>
+<div class="note">전화망(G.726)·게임 효과음·간단한 음성 녹음에서 아직 쓰인다.
+계산이 거의 없어 아주 작은 칩에서도 돈다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-audio">
+<h3>진짜 오디오 코덱은 무엇을 더 하나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>기법</th><th>무엇을 버리나</th></tr>
+<tr><td>MDCT</td><td>시간을 주파수로 — DCT 의 오디오판</td></tr>
+<tr><td>심리음향 모델</td><td>큰 소리에 <b>가려진</b> 작은 소리</td></tr>
+<tr><td>대역 분할</td><td>대역마다 다른 정밀도</td></tr>
+<tr><td>스테레오 결합</td><td>좌우의 <b>차이</b>만 정밀하게</td></tr>
+</table></div>
+<p>전부 "사람이 못 듣는 것" 을 찾아 버리는 장치다.
+13부가 다루는 것은 그 앞의 원리 — <b>변환하고 양자화한다</b> — 까지다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-video">
+<h3>영상은 한 축이 더 있다</h3>
+<ul>
+<li><b>화면 안</b>(intra) — JPEG 과 같은 일. 블록·변환·양자화</li>
+<li><b>화면 사이</b>(inter) — <b>움직임 보상</b>. "이 블록은 앞 화면의 저기서 왔다"</li>
+</ul>
+<div class="key">움직임 보상은 LZ77 과 같은 생각이다 —
+"몇 칸 앞의 몇 바이트" 가 "몇 화면 앞의 어느 자리" 가 된 것뿐이다.</div>
+<p>그래서 영상 코덱의 압축비는 <b>움직임이 적을수록</b> 좋다.
+고정 카메라 화면이 손짓 하나보다 훨씬 잘 줄어든다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
 <article class="card" id="ly-wrap">
 <h3>13부 정리</h3>
 <div class="tblwrap"><table class="kv">
