@@ -40,6 +40,7 @@ SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
 
 .DEFAULT_GOAL := help
 .PHONY: help deps corpus build build-cpp build-go build-ts \
+        build-java \
         test test-py test-go test-cpp test-java test-ts \
         golden golden-check corpus-check parity interop bench \
         record width \
@@ -85,7 +86,14 @@ build-ts:               ## TypeScript 옮기기 (tsc → build/ts)
 	@test -x $(TSC) || (echo '  tsc 가 없다 — make deps 먼저'; exit 1)
 	$(TSC) -p tsconfig.json
 
-build: build-cpp build-go build-ts   ## 있는 언어 전부 짓기
+# JVM 은 한 번에 하나다. javac 도 JVM 이므로 여기도 flock 을 통한다.
+build-java:             ## 자바 컴파일 (build/java)
+	@mkdir -p build/java
+	sh $(JAVA_LOCK) javac -Xlint:all -d build/java \
+	  $$(find src/java cli/java -name '*.java')
+
+## 있는 언어 전부 짓기
+build: build-cpp build-go build-ts build-java
 
 # ── 시험 ───────────────────────────────────────────────────────────
 test-py:                ## 파이썬 시험
@@ -101,9 +109,7 @@ test-cpp: build-cpp     ## C++ 시험 (gtest 없이 assert 로)
 
 # JVM 은 한 번에 하나다. 둘이 겹치면 이 기계는 OOM 으로 세션째 죽는다.
 test-java:              ## 자바 시험 (JVM 하나만 — flock 으로 막는다)
-	@test -f src/java/run_tests.sh \
-	  && sh $(JAVA_LOCK) sh src/java/run_tests.sh \
-	  || echo '  자바 시험 아직 없다'
+	sh $(JAVA_LOCK) sh src/java/run_tests.sh
 
 test-ts: build-ts       ## TypeScript 시험 (node --test)
 	$(NODE) --test 'build/ts/src/ts/*.test.js'

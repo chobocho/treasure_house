@@ -24,9 +24,14 @@ import unicodedata
 MAX = 72
 TABSTOP = 4          # 덱 CSS 의 tab-size 와 같아야 한다
 
-_PREFIX = re.compile(r'^([ \t]*)(//|#)( ?)(.*)$')
+# 자바독(  * …)도 다룬다. 자바는 이 덱에서 주석이 가장 긴 언어인데,
+# javadoc 은 한 줄이 ' * ' 로 시작해 //·# 규칙에 안 걸렸다.
+_PREFIX = re.compile(r'^([ \t]*)(//|#|\*)( ?)(.*)$')
 # 이 문단은 접지 않는다는 신호들
-_KEEP = re.compile(r'──|^\s*[-·*]\s|^\s*\d+[.)]\s|^\s{2,}\S|\t|  +\S')
+# 자바독 문단 첫 줄(<p>)과 태그(@param 따위)는 접지 않는다 — 접으면
+# 문단 구분이 사라진다. 목록 기호로 쓰인 '*' 도 여전히 건너뛴다.
+_KEEP = re.compile(r'──|^\s*[-·]\s|^\s*\d+[.)]\s|^\s{2,}\S|\t|  +\S'
+                   r'|^@\w|^<pre>|^</pre>')
 
 
 def cells(s):
@@ -64,12 +69,20 @@ def blocks(lines):
         if not m:
             i += 1
             continue
-        indent, mark, _sp, _body = m.groups()
+        indent, mark, _sp, body = m.groups()
+        # ' */' 는 주석을 **닫는** 줄이다. 문단으로 보면 '/' 라는 낱말로
+        # 빨려 들어가 닫는 표시가 사라진다 — 자바 파일 스물한 개를
+        # 한꺼번에 깨뜨리고 나서 알았다.
+        if mark == '*' and body.startswith('/'):
+            i += 1
+            continue
         pre = indent + mark + ' '
         j = i
         while j < n:
             mj = _PREFIX.match(lines[j])
             if not mj or mj.group(1) != indent or mj.group(2) != mark:
+                break
+            if mark == '*' and mj.group(4).startswith('/'):
                 break
             j += 1
         out.append((i, j, pre))
