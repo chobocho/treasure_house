@@ -10,7 +10,9 @@ SHELL       := /bin/sh
 PY          ?= python3
 GO          ?= go
 NODE        ?= node
-CXX         ?= g++
+# g++ 로 못 박는다. 이 환경에는 CXX 가 clang++ 로 잡혀 있는데,
+# PLAN §2 가 확인한 것은 g++ 15.2 이고 골든도 그 위에서 만들었다.
+CXX         := g++
 CXXFLAGS    := -std=c++20 -O2 -Wall -Wextra -Werror
 GOFLAGS     := -p=1
 export GOTOOLCHAIN := local
@@ -36,7 +38,7 @@ SRC_TS      := $(shell $(FIND) src/ts cli \
 SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
 
 .DEFAULT_GOAL := help
-.PHONY: help deps corpus \
+.PHONY: help deps corpus build build-cpp \
         test test-py test-go test-cpp test-java test-ts \
         golden golden-check corpus-check parity interop bench \
         record width \
@@ -62,6 +64,14 @@ corpus:                 ## 시험 자료 만들기 (씨앗 고정 — 늘 같은
 corpus-check:           ## 코퍼스와 그 원본이 그대로인지 대조만
 	$(PY) corpus/gen_corpus.py --check
 
+# ── 짓기 ───────────────────────────────────────────────────────────
+# 다섯 언어의 결과물이 모두 build/ 로 간다. 파서티 검사가 여기를 본다.
+build-cpp:              ## C++ 명령줄 도구 짓기
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -o build/cppcli cli/cpp/main.cpp
+
+build: build-cpp        ## 있는 언어 전부 짓기
+
 # ── 시험 ───────────────────────────────────────────────────────────
 test-py:                ## 파이썬 시험
 	@test -d src/py/compresslib/tests \
@@ -73,10 +83,8 @@ test-go:                ## Go 시험 (직렬 — 메모리가 빠듯하다)
 	  && (cd src/go && $(GO) test -count=1 ./...) \
 	  || echo '  Go 모듈 아직 없다'
 
-test-cpp:               ## C++ 시험 (gtest 없이 assert 로)
-	@test -f src/cpp/run_tests.sh \
-	  && sh src/cpp/run_tests.sh \
-	  || echo '  C++ 시험 아직 없다'
+test-cpp: build-cpp     ## C++ 시험 (gtest 없이 assert 로)
+	sh src/cpp/run_tests.sh
 
 # JVM 은 한 번에 하나다. 둘이 겹치면 이 기계는 OOM 으로 세션째 죽는다.
 test-java:              ## 자바 시험 (JVM 하나만 — flock 으로 막는다)
@@ -104,9 +112,7 @@ golden-check:           ## 골든이 그대로인지 대조만
 	$(PY) bench/make_golden.py --check
 
 parity:                 ## 다섯 언어가 같은 바이트를 내는가 (5×5 교차)
-	@test -f bench/run_parity.py \
-	  && $(PY) bench/run_parity.py \
-	  || echo '  bench/run_parity.py 아직 없다 (PLAN.md §4)'
+	$(PY) bench/run_parity.py
 
 interop:                ## 진짜 gzip·bzip2·xz·lz4 와 주고받아 보기
 	$(PY) interop/run_interop.py
