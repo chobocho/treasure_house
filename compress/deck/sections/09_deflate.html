@@ -208,7 +208,7 @@
 </article>
 
 <article class="card" id="df-choose">
-<p class="chnum">6장</p>
+<p class="chnum">9장</p>
 <h2>블록 종류 고르기</h2>
 <p class="chsub">세 가지를 다 세어 보고 가장 작은 것</p>
 </article>
@@ -252,7 +252,7 @@
 </article>
 
 <article class="card" id="df-interop">
-<p class="chnum">7장</p>
+<p class="chnum">10장</p>
 <h2>진짜 도구와 주고받기</h2>
 <p class="chsub">이 부의 진짜 시험</p>
 </article>
@@ -278,8 +278,214 @@
 <span class="tier a">실행 검증</span>
 </article>
 
-<article class="card" id="df-container">
+<article class="card" id="df-parse">
+<p class="chnum">6장</p>
+<h2>토큰 만들기</h2>
+<p class="chsub">7부의 LZ77 을 DEFLATE 의 알파벳에 맞춘다</p>
+</article>
+
+<article class="card" id="df-parse-1">
+<h3>일치 찾기는 7부와 같다</h3>
+<!--CODE file=src/py/compresslib/deflate.py lines=39-50 note=해시 사슬은 7부와 같은 구조-->
+<p>다른 것은 <b>사슬 한계 128</b>(7부는 32)과, 여기에 <b>게으른 매칭</b>이 붙는다는 점이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-parse-2">
+<h3>게으른 매칭 — 이제 값을 셀 수 있다</h3>
+<p>7부에서는 "리터럴 하나와 일치 하나 중 무엇이 싼가" 를 셀 수 없었다.
+DEFLATE 에서는 <b>허프만 길이</b>가 그 값을 정해 준다.</p>
+<div class="key">지금 자리의 일치 길이가 <code>cur</code> 이고 한 칸 뒤가 <code>next</code> 일 때,
+<code>next &gt; cur</code> 이면 지금 것을 리터럴로 내보내고 한 칸 민다.</div>
+<p>zlib 은 여기에 문턱을 더 둔다(<code>good_match</code>·<code>nice_match</code>).
+이 책은 가장 단순한 형태만 쓴다 — 규칙이 단순해야 다섯 언어가 갈리지 않는다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-parse-3">
+<h3>블록으로 자르기</h3>
+<!--CODE file=src/py/compresslib/deflate.py sym=split_blocks note=입력 65535바이트마다-->
+<p>토큰이 아니라 <b>입력 바이트</b>로 센다. 저장 블록으로 떨어질 때
+LEN 필드(16비트)에 들어가야 하기 때문이다.</p>
+<div class="note">진짜 zlib 은 더 영리하게 자른다 — 자료의 성질이 바뀌는 자리를 찾아
+블록을 끊으면 표가 더 잘 맞는다. 그 차이가 <code>boundary_32768.bin</code> 에서
+0.78% 로 나타났다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-freq">
+<h3>비용을 세는 코드</h3>
+<!--CODE file=src/py/compresslib/deflate.py sym=_freqs note=토큰을 알파벳 빈도로-->
+<p><code>lit[END_OF_BLOCK] += 1</code> 을 잊으면 안 된다 —
+블록 끝 기호도 부호를 받아야 하는 <b>기호</b>다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-freq-2">
+<h3>추가 비트는 부호와 무관하게 더한다</h3>
+<!--CODE file=src/py/compresslib/deflate.py sym=_body_bits note=추가 비트는 허프만이 못 줄인다-->
+<div class="key">길이 200 을 적으면 부호(277)에 4비트가 더 붙는다.
+그 4비트는 <b>어떤 부호표를 써도 줄지 않는다</b>. 그래서 세 블록 종류의 값을
+견줄 때 상수로 더해 둔다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-plan">
+<h3>동적 블록의 계획을 세운다</h3>
+<!--CODE file=src/py/compresslib/deflate.py lines=179-208 note=표까지 다 만들어 보고 비용을 센다-->
+<p>동적 블록의 값은 <b>표를 실제로 만들어 봐야</b> 안다.
+부호 길이를 구하고, 그것을 다시 압축하고, 그 결과의 비트를 센다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-cl">
+<h3>부호 길이의 부호 — 손으로 따라가기</h3>
+<p>길이 목록이 <code>3 3 3 0 0 0 0 0 0 0 0 0 4 4</code> 라고 하자.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>적는 것</th><th>뜻</th></tr>
+<tr><td><code>3</code></td><td>길이 3</td></tr>
+<tr><td><code>16</code> + 2비트(0)</td><td>앞 것을 3번 더 → 3 3 3</td></tr>
+<tr><td><code>17</code> + 3비트(6)</td><td>0 을 9번</td></tr>
+<tr><td><code>4</code>, <code>4</code></td><td>길이 4 둘</td></tr>
+</table></div>
+<p>14개 값이 <b>기호 다섯 개</b>가 되었다. 그 다섯 개를 다시 허프만으로 적는다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-cl-2">
+<h3>왜 16 이 "3~6번" 인가</h3>
+<ul>
+<li>2번 되풀이는 그냥 두 번 적는 것이 싸다 (기호 둘 vs 기호+추가비트)</li>
+<li>7번 넘게 되풀이되면 16 을 두 번 쓴다</li>
+<li>0 만 따로 17·18 을 둔 것은 <b>안 쓰는 기호가 압도적으로 많기</b> 때문이다</li>
+</ul>
+<div class="key">256가지 바이트 중 실제로 나오는 것은 보통 100개 안쪽,
+거리 30개 중 쓰는 것은 열댓 개다. 나머지는 전부 0 이라
+18(11~138번)이 한 방에 먹는다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-hclen">
+<h3>머리말의 세 숫자</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>필드</th><th>비트</th><th>뜻</th></tr>
+<tr><td>HLIT</td><td>5</td><td>리터럴/길이 부호 개수 − 257</td></tr>
+<tr><td>HDIST</td><td>5</td><td>거리 부호 개수 − 1</td></tr>
+<tr><td>HCLEN</td><td>4</td><td>부호 길이 부호 개수 − 4</td></tr>
+</table></div>
+<p>셋 다 "쓰는 만큼만" 보내려는 장치다. 뒤쪽의 안 쓰는 기호를 잘라 낸다.</p>
+<!--CODE file=src/py/compresslib/deflate.py sym=_last_used note=마지막으로 쓰인 기호까지만-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-body">
+<h3>본문을 쓰는 코드</h3>
+<!--CODE file=src/py/compresslib/deflate.py sym=_write_body note=부호는 write_code, 추가 비트는 write_bits-->
+<div class="warn">부호는 <code>write_code</code>(MSB 먼저), 추가 비트는
+<code>write_bits</code>(LSB 먼저)다. 한 줄 안에서 두 규칙이 갈린다 —
+2부에서 두 함수를 따로 둔 이유가 여기서 값을 한다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-inflate">
+<p class="chnum">7장</p>
+<h2>푸는 쪽</h2>
+<p class="chsub">inflate — 남이 만든 파일도 읽어야 한다</p>
+</article>
+
+<article class="card" id="df-inflate-1">
+<h3>바깥 고리</h3>
+<!--CODE file=src/py/compresslib/inflate.py sym=inflate_raw note=BFINAL 이 1 인 블록까지-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-inflate-2">
+<h3>동적 머리말 읽기</h3>
+<!--CODE file=src/py/compresslib/inflate.py sym=_read_dynamic_header note=부호 길이의 부호를 먼저-->
+<p>순서가 중요하다 — 부호 길이 부호표를 먼저 만들고, 그것으로 두 표의 길이를 읽고,
+그 길이로 두 표를 만든다. <b>표 세 개가 사슬로 이어져</b> 있다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-inflate-3">
+<h3>본문 읽기</h3>
+<!--CODE file=src/py/compresslib/inflate.py sym=_read_block_body note=256 이 나오면 블록 끝-->
+<div class="key">거리 일치를 <b>한 바이트씩</b> 복사하는 것이 여기서도 규칙이다
+(7부의 겹치는 일치). <code>out[-dist]</code> 가 방금 쓴 바이트일 수 있다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-inflate-4">
+<h3>거리표가 하나뿐인 경우</h3>
+<div class="warn">일치가 하나도 없는 블록에서는 거리 부호가 <b>0개 또는 1개</b>다.
+0개면 거리표 자체가 없고, 1개면 크래프트 합이 1/2 인 불완전한 표다.</div>
+<p>RFC 1951 이 이 경우를 명시적으로 허용한다. 4부에서 "기호 하나뿐인 표" 를
+봐준 것과 같은 예외이고, 실제 zlib 파일에 <b>나온다</b> —
+그래서 이 예외가 없으면 진짜 파일을 못 푼다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-fixed">
+<h3>고정 블록의 표</h3>
+<!--CODE file=src/py/compresslib/deflate_tables.py sym=FIXED_LITLEN note=규격이 정한 길이들-->
+<div class="tblwrap"><table class="kv">
+<tr><th>기호</th><th>길이</th></tr>
+<tr><td>0~143</td><td>8비트</td></tr>
+<tr><td>144~255</td><td>9비트</td></tr>
+<tr><td>256~279</td><td>7비트</td></tr>
+<tr><td>280~287</td><td>8비트</td></tr>
+</table></div>
+<p>ASCII 문자(0~143)에 8비트, 블록 끝과 짧은 길이(256~279)에 7비트를 준 배치다.
+<b>영문 텍스트를 염두에 둔</b> 표라는 것이 보인다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-tables-2">
+<h3>길이·거리 표를 손으로 안 적는 이유</h3>
+<!--CODE file=src/py/compresslib/deflate_tables.py sym=dist_code note=거리에서 부호 번호를 구한다-->
+<p>RFC 의 표를 그대로 베끼면 오타가 난다. 규칙에서 나오는 값이라
+<b>코드가 만든다</b> — 그러면 다섯 언어가 같은 표를 갖는지가 저절로 확인된다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-example">
 <p class="chnum">8장</p>
+<h2>한 파일을 끝까지 따라가기</h2>
+<p class="chsub">abab_4k.txt 가 22바이트가 되는 과정</p>
+</article>
+
+<article class="card" id="df-example-1">
+<h3>입력</h3>
+<p><code>abab_4k.txt</code> 는 <code>ab</code> 를 2,048번 되풀이한 4,096바이트다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>단계</th><th>결과</th></tr>
+<tr><td>LZ77 파싱</td><td>리터럴 <code>a</code> <code>b</code> + 일치 16개 — 거리는 전부 2, 길이는 258 × 15 와 224 하나</td></tr>
+<tr><td>알파벳 빈도</td><td>리터럴 2가지 · 길이 부호 2가지(285·283) · 거리 1가지</td></tr>
+<tr><td>부호표</td><td>쓰는 기호가 여섯뿐이라 아주 작다</td></tr>
+<tr><td>최종</td><td><b>22바이트</b> (0.5%)</td></tr>
+</table></div>
+<p>길이 258(최대)이 열다섯 번이므로 <b>부호 285</b> 가 거의 전부다.
+9부 앞에서 "285 가 258 하나만 맡는다" 고 한 설계가 여기서 값을 한다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-example-2">
+<h3>gzip 으로 싸면</h3>
+<!--OUT  file=interop_deflate.txt lines=88-103 note=진짜 gzip -n 이 만든 것을 우리가 푼다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-example-3">
+<h3>레벨을 올려도 22바이트다</h3>
+<p><code>zlib</code> 레벨 1 은 37바이트, 6·9 는 22바이트다.
+레벨 1 은 사슬을 4번만 따라가서 길이 258 일치를 놓친다.</p>
+<div class="key">압축 수준은 <b>형식이 아니라 부호기의 노력</b>이다.
+같은 복호기가 전부 푼다 — 우리 inflate 도 레벨 0~9 를 다 푼다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-container">
+<p class="chnum">11장</p>
 <h2>컨테이너</h2>
 <p class="chsub">zlib 과 gzip — 같은 DEFLATE 를 다르게 싼다</p>
 </article>
