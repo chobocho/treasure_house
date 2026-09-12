@@ -38,7 +38,7 @@ SRC_TS      := $(shell $(FIND) src/ts cli \
 SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
 
 .DEFAULT_GOAL := help
-.PHONY: help deps corpus build build-cpp \
+.PHONY: help deps corpus build build-cpp build-go \
         test test-py test-go test-cpp test-java test-ts \
         golden golden-check corpus-check parity interop bench \
         record width \
@@ -70,7 +70,11 @@ build-cpp:              ## C++ 명령줄 도구 짓기
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -o build/cppcli cli/cpp/main.cpp
 
-build: build-cpp        ## 있는 언어 전부 짓기
+build-go:               ## Go 명령줄 도구 짓기
+	@mkdir -p build
+	$(GO) build -o build/gocli ./cli/go
+
+build: build-cpp build-go   ## 있는 언어 전부 짓기
 
 # ── 시험 ───────────────────────────────────────────────────────────
 test-py:                ## 파이썬 시험
@@ -79,9 +83,7 @@ test-py:                ## 파이썬 시험
 	  || echo '  파이썬 시험 아직 없다'
 
 test-go:                ## Go 시험 (직렬 — 메모리가 빠듯하다)
-	@test -f src/go/go.mod \
-	  && (cd src/go && $(GO) test -count=1 ./...) \
-	  || echo '  Go 모듈 아직 없다'
+	$(GO) test -count=1 ./src/go/
 
 test-cpp: build-cpp     ## C++ 시험 (gtest 없이 assert 로)
 	sh src/cpp/run_tests.sh
