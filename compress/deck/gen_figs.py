@@ -926,7 +926,7 @@ def fig_pipeline_all():
             s.rect(x, y, w, 24, 'box')
             s.mono(x + w / 2, y + 16, m, anchor='middle', size=9)
             x += w + 6
-    s.text(10, 226, '섞어 쓰면 DEFLATE·bzip2·LZMA 가 된다 — 9·15·16부',
+    s.text(10, 226, '섞어 쓰면 DEFLATE·bzip2·LZMA 가 된다 — 9·10·12부',
            cls='lbl')
     return s
 
