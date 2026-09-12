@@ -63,6 +63,9 @@ exceptions, both of which fall out of the format rather than being special cases
 - **`bitio`** is `00 00`. Its body begins with three pad bits (§1.4), and three
   bits still have to be flushed into a byte. Suppressing them when `n == 0` would
   put a conditional into the format itself, which is worse than a two-byte file.
+- **`lzw`** is `00 80 80`. Its stream always ends with the `EOF` code (257), and a
+  9-bit `EOF` alone flushes to two bytes. Suppressing it for the empty input would
+  mean the decoder had two different framings to handle.
 - **`deflate`** is `03 00` (§10.6). It is a real format and has its own empty form.
 
 This is the kind of thing a spec gets wrong the first time: the sentence
@@ -1048,14 +1051,15 @@ Two different contracts, and the deck must not blur them:
 | `mtf` | `varint(n)` + n bytes | `00` | never — it is a permutation |
 | `huffman` | `varint(n)` + 128-byte table + codes | `00` | yes, to order-0 entropy |
 | `lzss` | `varint(n)` + flag groups | `00` | yes |
-| `lzw` | `varint(n)` + 9..12-bit codes | `00` | yes |
+| `lzw` | `varint(n)` + 9..12-bit codes | `00 80 80` | yes |
 | `rangecoder` | `varint(n)` + rc stream | `00` | yes, below Huffman |
 | `bwt` | `varint(n)` + (u32le primary + block)* | `00` | never — it is a permutation |
 | `deflate` | raw RFC 1951 stream | `03 00` | yes |
 
-`bitio` and `deflate` are the two whose empty output is not `00`: `bitio` because
-its three pad bits still need a byte, `deflate` because it is the one module whose
-container we did not choose.
+Three modules have an empty output that is not `00`, and in every case it is the
+body's own framing rather than a special case: `bitio`'s three pad bits still need a
+byte, `lzw` always ends with `EOF`, and `deflate` is the one module whose container
+we did not choose.
 
 ## 12. Error handling contract
 
