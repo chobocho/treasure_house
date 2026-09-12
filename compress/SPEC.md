@@ -1217,3 +1217,104 @@ for s in 0..255:
 walk visits every slot exactly once. That single fact is the whole reason the
 constant looks arbitrary, and the test asserts it: every slot is filled exactly once
 and each symbol appears exactly `f[s]` times.
+
+---
+
+## 14. `lz4block` — LZ4, and what you give up for speed
+
+### 14.1 The point of the format
+
+LZ4 is LZ77 with **no entropy coder at all**. No Huffman, no range coder, no ANS —
+just literals and matches written as bytes. It compresses worse than DEFLATE and
+decompresses several times faster, because the decoder's inner loop is two memcpys
+and no bit manipulation. Part 12 of the deck puts that trade next to zstd's.
+
+### 14.2 Block format (the real one)
+
+A block is a sequence of *sequences*. Each sequence is:
+
+```
+token     1 byte: (literal length << 4) | (match length code)
+[LSIC]    if the literal nibble is 15, extra bytes (§14.3) add to the length
+literals  that many bytes, copied verbatim
+offset    u16le, 1..65535 — how far back the match starts (0 is invalid)
+[LSIC]    if the match nibble is 15, extra bytes add to the length
+```
+
+The match length stored is `real length - 4`, because a match is never shorter than
+4. The **last sequence of a block carries literals only** — no offset, no match —
+and is recognised by the stream ending right after its literals.
+
+Two rules the format demands of an encoder, both about the tail:
+
+- the last 5 bytes of a block are always literals;
+- a match may not start within the last 12 bytes.
+
+They exist so a decoder can copy 8 bytes at a time without checking the end on every
+step. We obey them because real `lz4` refuses a stream that breaks them.
+
+### 14.3 LSIC — linear small-integer code
+
+`while v >= 255: emit 255; v -= 255` then `emit v`. So 255 is "keep reading" and any
+smaller byte ends it, which means a value of exactly 255 is written as `255, 0`.
+
+A decoder must bound the run or a corrupt stream is an infinite loop, and the bound
+that is always right is **the input itself**: an LSIC cannot have more continuation
+bytes than there are bytes left in the block. A fixed cap is tempting and wrong — the
+first draft here said 1000 bytes, and `corpus/mixed_1m.bin` has a legitimate 256 KiB
+match whose length needs 1028 of them. The accumulated value is capped at 2^32 - 1,
+the same limit as a length field (§12.1).
+
+### 14.4 Our encoder (pinned; not byte-identical to real `lz4`)
+
+Same contract as DEFLATE (§10.9): real `lz4 -d` must decompress our output and our
+decoder must handle real `lz4`'s, but the bytes are not expected to match.
+
+| Name | Value |
+|---|---|
+| min match | 4 |
+| hash | `(u32le at i * 2654435761) >> (32 - 12)`, wrapped to 32 bits |
+| | (TypeScript must use `Math.imul` here — the product reaches 1.1·10^19 and a double loses precision above 2^53. It shows up only on inputs with many high-bit bytes; `korean_utf8.txt` caught it and nothing else did.) |
+| hash table | 4096 entries, **one slot per hash** — no chain at all |
+| last literals | 5 |
+| match limit | no match may start at `i > n - 12` |
+| inside a match | positions are **not** inserted into the hash table |
+
+One slot per hash and nothing inserted inside a match: that is what "fast mode"
+means, and it is why the ratio is what it is. The deck shows the same corpus under
+this encoder and under DEFLATE side by side.
+
+```
+if n < 13: everything is one final literal sequence
+ip = anchor = 0
+while ip <= n - 12:
+    h = hash4(ip);  ref = table[h];  table[h] = ip
+    if ref is set and ip - ref <= 65535 and u32le(ref) == u32le(ip):
+        ml = 4
+        while ip + ml < n - 5 and src[ref + ml] == src[ip + ml]: ml += 1
+        emit sequence(literals = src[anchor:ip], offset = ip - ref, length = ml)
+        ip += ml;  anchor = ip
+    else:
+        ip += 1
+emit final literals src[anchor:n]
+```
+
+### 14.5 Container
+
+`varint(n)` + the block. `n` is redundant — the block ends when the input does — and
+both are checked, which is the same deliberate redundancy as `lzw` (§7.4).
+`encode(b"")` is `00`.
+
+### 14.6 Frame format (decode only)
+
+`lz4` the command-line tool does not write bare blocks; it writes the **frame**
+format: magic `04 22 4D 18`, a FLG/BD pair, an optional 8-byte content size, a
+header checksum byte, then blocks each prefixed by a `u32le` size (top bit set means
+the block is stored uncompressed), a zero size as the end mark, and optionally a
+4-byte xxHash-32 of the content.
+
+We decode frames; we do not write them. **We do not verify the content checksum** —
+xxHash is a different algorithm from anything else in this deck and implementing it
+five times would teach nothing about compression. The frame reader skips those 4
+bytes and says so. The interop capture runs `lz4` both with and without
+`--no-frame-crc` so the deck can show the difference.

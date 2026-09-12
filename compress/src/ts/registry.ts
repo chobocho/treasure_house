@@ -7,6 +7,7 @@ import * as bwt from './bwt';
 import * as deflate from './deflate';
 import * as huffman from './huffman';
 import * as intcode from './intcode';
+import * as lz4block from './lz4block';
 import * as lzss from './lzss';
 import * as lzw from './lzw';
 import * as mtf from './mtf';
@@ -35,6 +36,8 @@ export const ENTRIES: Entry[] = [
   { name: 'bwt', encode: bwt.encode, decode: bwt.decode },
   { name: 'deflate', encode: deflate.encode, decode: deflate.decode },
   { name: 'ans', encode: ans.encode, decode: ans.decode },
+  { name: 'lz4block',
+    encode: lz4block.encode, decode: lz4block.decode },
 ];
 
 export function find(name: string): Entry | undefined {

@@ -29,6 +29,7 @@ BASE = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(BASE, 'src', 'py'))
 
 from compresslib import containers, deflate        # noqa: E402
+from compresslib import lz4block                   # noqa: E402
 
 CORPUS = os.path.join(BASE, 'corpus')
 OUT = os.path.join(BASE, 'out')
@@ -74,6 +75,92 @@ def gzip_cli(data, level):
 def gunzip_cli(data):
     return subprocess.run(['gzip', '-d', '-c'], input=data,
                           stdout=subprocess.PIPE, check=True).stdout
+
+
+# ------------------------------------------------------- xxHash-32
+# lz4 프레임의 **머리 검사 바이트** 하나 때문에 필요하다. 우리는
+# 프레임을 읽기만 하므로(§14.6) 라이브러리에는 xxHash 가 없다. 그런데 진짜
+# lz4 -d 가 우리 블록을 풀게 하려면 프레임으로 감싸야 하고, 감싸려면
+# 머리 검사 바이트를 맞춰야 한다. 그래서 **상호운용 스크립트에만** 둔다.
+XXH_P1 = 2654435761
+XXH_P2 = 2246822519
+XXH_P3 = 3266489917
+XXH_P4 = 668265263
+XXH_P5 = 374761393
+M32 = 0xFFFFFFFF
+
+
+def rotl32(x, r):
+    return ((x << r) | (x >> (32 - r))) & M32
+
+
+def _u32le(data, i):
+    return int.from_bytes(data[i:i + 4], 'little')
+
+
+def _xxh_round(acc, lane):
+    acc = (acc + lane * XXH_P2) & M32
+    return (rotl32(acc, 13) * XXH_P1) & M32
+
+
+def xxh32(data, seed=0):
+    n = len(data)
+    i = 0
+    if n >= 16:
+        v1 = (seed + XXH_P1 + XXH_P2) & M32
+        v2 = (seed + XXH_P2) & M32
+        v3 = seed & M32
+        v4 = (seed - XXH_P1) & M32
+        while n - i >= 16:
+            v1 = _xxh_round(v1, _u32le(data, i))
+            v2 = _xxh_round(v2, _u32le(data, i + 4))
+            v3 = _xxh_round(v3, _u32le(data, i + 8))
+            v4 = _xxh_round(v4, _u32le(data, i + 12))
+            i += 16
+        h = (rotl32(v1, 1) + rotl32(v2, 7) + rotl32(v3, 12)
+             + rotl32(v4, 18)) & M32
+    else:
+        h = (seed + XXH_P5) & M32
+    h = (h + n) & M32
+    while n - i >= 4:
+        h = (h + _u32le(data, i) * XXH_P3) & M32
+        h = (rotl32(h, 17) * XXH_P4) & M32
+        i += 4
+    while i < n:
+        h = (h + data[i] * XXH_P5) & M32
+        h = (rotl32(h, 11) * XXH_P1) & M32
+        i += 1
+    h ^= h >> 15
+    h = (h * XXH_P2) & M32
+    h ^= h >> 13
+    h = (h * XXH_P3) & M32
+    h ^= h >> 16
+    return h
+
+
+def lz4_frame_wrap(block):
+    """우리 블록 하나를 lz4 프레임으로 감싼다. 검사합은 안 붙인다.
+
+    FLG 0x60 = 판 01 · 블록 독립 · 검사합 없음, BD 0x70 = 최대 4 MiB.
+    코퍼스에서 가장 큰 파일이 1 MiB 라 한 블록에 들어간다.
+    """
+    desc = bytes([0x60, 0x70])
+    hc = (xxh32(desc) >> 8) & 0xFF
+    head = b'\x04\x22\x4d\x18' + desc + bytes([hc])
+    return (head + len(block).to_bytes(4, 'little') + block
+            + b'\x00\x00\x00\x00')
+
+
+def lz4_cli(data, *args):
+    return subprocess.run(['lz4', '-c'] + list(args), input=data,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, check=True).stdout
+
+
+def unlz4_cli(data):
+    return subprocess.run(['lz4', '-d', '-c'], input=data,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, check=True).stdout
 
 
 class Report:
@@ -183,8 +270,62 @@ def main():
     io.open(os.path.join(OUT, 'interop_deflate.txt'), 'w',
             encoding='utf-8', newline='\n').write(text)
     print(text)
-    print('실패 %d건' % r.fails)
-    return 1 if r.fails else 0
+
+    lz = lz4_report()
+    io.open(os.path.join(OUT, 'interop_lz4.txt'), 'w',
+            encoding='utf-8', newline='\n').write(lz.text())
+    print(lz.text())
+    print('실패 %d건' % (r.fails + lz.fails))
+    return 1 if (r.fails + lz.fails) else 0
+
+
+def lz4_report():
+    """LZ4 상호운용. 프레임을 쓰는 코드는 여기에만 있다 (SPEC §14.6)."""
+    r = Report()
+
+    r.section('우리 블록을 프레임으로 감싸 → 진짜 lz4 -d 가 푼다')
+    r.row(pad('파일', 20) + ' ' + pad('우리 블록', 11, True)
+          + ' ' + pad('프레임', 10, True) + '  결과')
+    for name in FILES:
+        src = read(name)
+        block = lz4block.compress_block(src)
+        frame = lz4_frame_wrap(block)
+        ok = unlz4_cli(frame) == src
+        r.row('%-20s %11d %10d  %s'
+              % (name, len(block), len(frame), r.check(ok, name)))
+    r.blank()
+
+    r.section('진짜 lz4 (-1 · -9 · --no-frame-crc) → 우리가 푼다')
+    r.row('기본 프레임에는 내용 xxHash 가 붙는다. 우리 독해기는 그')
+    r.row('4바이트를 건너뛴다 — 검사는 안 하고 읽기는 한다 (§14.6).')
+    r.row(pad('파일', 20) + ' ' + pad('설정', 16) + ' '
+          + pad('프레임', 10, True) + '  결과')
+    for name in FILES:
+        src = read(name)
+        settings = (('-1', ('-1',)), ('-9', ('-9',)),
+                    ('--no-frame-crc', ('-9', '--no-frame-crc')))
+        for label, args in settings:
+            frame = lz4_cli(src, *args)
+            ok = lz4block.frame_decode(frame) == src
+            r.row('%-20s %-16s %10d  %s'
+                  % (name, label, len(frame), r.check(ok, name)))
+    r.blank()
+
+    r.section('우리 프레임과 lz4 -9 프레임의 크기')
+    r.row('우리 부호기는 해시 한 칸짜리 "빠른 모드" 다. lz4 -9 는')
+    r.row('사슬을 끝까지 뒤진다 — 같은 형식이지만 하는 일이 다르다.')
+    r.row('둘 다 프레임으로 재서 머릿값까지 같은 조건으로 견준다.')
+    r.row(pad('파일', 20) + ' ' + pad('원본', 10, True) + ' '
+          + pad('우리', 10, True) + ' ' + pad('lz4 -9', 10, True)
+          + ' ' + pad('차이', 9, True))
+    for name in FILES:
+        src = read(name)
+        ours = len(lz4_frame_wrap(lz4block.compress_block(src)))
+        theirs = len(lz4_cli(src, '-9', '--no-frame-crc'))
+        diff = 100.0 * (ours - theirs) / max(1, theirs)
+        r.row('%-20s %10d %10d %10d %+8.1f%%'
+              % (name, len(src), ours, theirs, diff))
+    return r
 
 
 if __name__ == '__main__':

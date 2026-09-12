@@ -13,6 +13,7 @@
 #include "deflate.h"
 #include "huffman.h"
 #include "intcode.h"
+#include "lz4block.h"
 #include "lzss.h"
 #include "lzw.h"
 #include "mtf.h"
@@ -44,6 +45,7 @@ inline const std::vector<Entry>& entries() {
       {"bwt", bwt::encode, bwt::decode},
       {"deflate", deflate::encode, deflate::decode},
       {"ans", ans::encode, ans::decode},
+      {"lz4block", lz4block::encode, lz4block::decode},
   };
   return v;
 }
