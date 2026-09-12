@@ -27,6 +27,9 @@ DICT_CAP = 1 << MAX_WIDTH
 
 
 def encode(src):
+    # 빈 입력은 헤더만 (SPEC §0.3). 틀 지을 몸통이 없다.
+    if not src:
+        return varint.put(0)
     w = bitio.MsbWriter()
     table = {}
     next_free = FIRST_FREE
@@ -66,6 +69,10 @@ def encode(src):
 
 def decode(src):
     n, pos = varint.get_length(src)
+    if n == 0:
+        if pos != len(src):
+            raise ValueError('빈 입력인데 뒤에 바이트가 있다')
+        return b''
     r = bitio.MsbReader(src, pos)
     out = bytearray()
     table = {}
