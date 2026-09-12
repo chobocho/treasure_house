@@ -530,3 +530,38 @@ the purpose rather than by reading:
 The lesson from the counts: the checks that paid were the ones comparing **the deck
 against the repository** (numbers vs `golden/`, tags vs balance, quotes vs source
 boundaries). Reading found the model-list error and little else.
+
+## Final state
+
+All fourteen steps of §5 are done.
+
+| | |
+|---|---|
+| Slides | 1,478 (body 708, appendix 770) |
+| Source coverage | 23,369 / 23,369 lines — 100 %, `pending.txt` empty |
+| Golden vectors | 15 modules × 13 files = 195 pairs, 0 mismatches |
+| Cross-decode | 5 × 5 per module, 0 failures |
+| Decoder-only | real `bzip2 -1/-9` and `xz -1/-9`, 130 checks each, 0 failures |
+| Interop | zlib levels 0–9, gzip, lz4 — both directions |
+| Tests | Python 249, C++ 141 checks, Java 134 checks, Go and TS suites |
+| Reproducibility | `record.sh --check`: 20 captures identical across 3 runs |
+| Figures / demos / quizzes / glossary | 28 / 9 / 20 / 137 |
+
+The per-part slide targets in `budget.txt` were written before any body text
+existed, and the finished parts came in under them — the deck says what it has to
+say in 708 body slides rather than the 1,610 estimated. The cap (3,000) was the
+binding constraint the user set; the targets were an estimate, and estimates made
+before writing are worth exactly what they cost.
+
+**What this project actually taught, in one line each:**
+
+- A round trip is the weakest test a compressor can pass. Three of the bugs found
+  here passed it for their entire lives: the mixer learning rate, the APM
+  multiplier, and the BWT sort key. Size and textbook expectations caught them.
+- The places where five implementations diverge are exactly the places a spec has
+  to name — tie-breaks, fill bits, sort keys, bounds, initial values. Everything
+  that felt "obvious enough not to write down" was a place someone else would have
+  been obviously different.
+- Evidence beats prose. Every number in the deck comes from `golden/` or `out/`,
+  and the checks that compare the deck against the repository found far more
+  defects than reading did.
