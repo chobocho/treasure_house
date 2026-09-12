@@ -1,14 +1,244 @@
 <article class="card section" id="p6">
 <p class="chnum">6부</p>
-<h2>ANS</h2>
-<p class="chsub">rANS·tANS·FSE 가 zstd 를 빠르게 만든 방법</p>
+<h2>ANS — 비대칭 수 체계</h2>
+<p class="chsub">rANS · tANS · zstd 를 빠르게 만든 것</p>
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>비대칭 수 체계 — 상태 하나에 정보를 쌓는다</li>
-<li>rANS 부호화와 복호화가 왜 거꾸로 도는가</li>
-<li>바이트 단위 재정규화 — 32비트 상태 유지하기</li>
-<li>tANS 표 만들기 — 곱셈 없는 산술 부호화</li>
-<li>FSE 와 zstd 의 관계</li>
+<li>산술 부호화와 같은 한계, 그런데 상태는 정수 하나</li>
+<li>rANS — 나누고 곱해 상태를 키운다</li>
+<li>왜 스택인가 — 넣은 순서의 반대로 읽는다</li>
+<li>빈도 정규화 — 합이 정확히 4096 이어야 하는 이유</li>
+<li>tANS(FSE) — 표 한 번 만들고 덧셈만</li>
+<li>2013년에 나온 것이 왜 이렇게 빨리 퍼졌나</li>
 </ul>
-<p class="cap">준비 중입니다 — PLAN.md §5 10단계에서 이 부를 채운다.</p>
+</article>
+
+<article class="card" id="ans-why">
+<p class="chnum">1장</p>
+<h2>왜 또 다른 부호기인가</h2>
+<p class="chsub">산술 부호화는 이미 최적인데</p>
+</article>
+
+<article class="card" id="ans-why-1">
+<h3>최적인데 느리다</h3>
+<p>레인지 코더의 안쪽 고리에는 곱셈, 나눗셈(또는 시프트), 캐리 전파,
+그리고 <b>바이트 단위 정규화 루프</b>가 들어 있다. 기호 하나에 그만큼이다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>레인지 코더</th><th>rANS</th></tr>
+<tr><td>상태</td><td>low(33비트) + range(32비트) + 캐시</td><td><b>정수 하나</b></td></tr>
+<tr><td>캐리</td><td>전파해야 한다</td><td><b>없다</b></td></tr>
+<tr><td>안쪽 고리</td><td>곱·나눗셈·비교·정규화</td><td>나눗셈·곱셈·덧셈</td></tr>
+<tr><td>표 변형(tANS)</td><td>없다</td><td>표 보고 <b>덧셈만</b></td></tr>
+</table></div>
+<p>야렉 두다(Jarosław Duda)가 2013년에 정리해 내놓았고, 몇 해 만에
+zstd·LZFSE·JPEG XL·AV1 이 전부 채택했다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ans-idea">
+<p class="chnum">2장</p>
+<h2>rANS 의 생각</h2>
+<p class="chsub">상태 하나에 정보를 쌓아 올린다</p>
+</article>
+
+<article class="card" id="ans-idea-1">
+<h3>자릿수 올리기의 일반화</h3>
+<p>10진수에 숫자 하나를 붙이는 일을 생각해 보자. <code>x = x*10 + d</code> 다.
+확률이 모두 1/10 인 기호 열 개를 적는 셈이다.</p>
+<div class="key">확률이 제각각이면? <b>기호마다 곱하는 수가 달라야 한다.</b>
+확률 p 인 기호를 붙이면 상태가 1/p 배가 되어야 한다 — 그래야 −log₂p 비트가 든다.</div>
+<p>rANS 의 식이 바로 그것이다. 빈도 f, 누적 c, 합 M 일 때:</p>
+<div class="key">x' = ⌊x / f⌋ · M + (x mod f) + c</div>
+<p>x 가 대략 M/f = 1/p 배가 된다. 나머지(x mod f)와 누적(c)이
+"어느 기호였는지" 를 그 안에 숨긴다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ans-idea-2">
+<h3>실제로 상태가 자라는 모습</h3>
+<!--FIG  file=rans.svg cap=빈도 A:3 B:1 일 때 x 가 자라는 모습-->
+<p>드문 기호(B)를 넣을 때 상태가 크게 뛴다. 그 뜀이 곧 "비트를 더 썼다" 는 뜻이다.</p>
+<div class="note">상태가 무한정 커질 수는 없으니, 어느 한계를 넘으면
+<b>아래 바이트를 내보내고</b> 상태를 줄인다 — 레인지 코더의 정규화와 같은 일이다.
+다만 방향이 반대다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="ans-idea-3">
+<h3>복호는 정확히 거꾸로</h3>
+<div class="key">s = 슬롯[x mod M] &nbsp;&nbsp;→ &nbsp;&nbsp; x' = f·⌊x/M⌋ + (x mod M) − c</div>
+<p>상태의 <b>아래 12비트</b>가 곧 "어느 기호" 인지를 말해 준다.
+슬롯 표 한 번 찾고 곱셈 한 번이면 끝이다.</p>
+<div class="warn"><b>그래서 rANS 는 스택이다.</b> 마지막에 넣은 기호가 먼저 나온다.
+부호기는 입력을 <b>뒤에서부터</b> 밀어 넣어야 복호기가 앞에서부터 읽는다.
+이 방향을 헷갈리면 왕복은 되는데 바이트가 달라진다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ans-norm">
+<p class="chnum">3장</p>
+<h2>빈도 정규화</h2>
+<p class="chsub">합이 정확히 4096 이어야 한다</p>
+</article>
+
+<article class="card" id="ans-norm-1">
+<h3>왜 정확히 2의 거듭제곱인가</h3>
+<p>복호기가 <code>x mod M</code> 을 매번 구해야 한다. M 이 2<sup>12</sup> 이면
+<b>아래 12비트를 떼는 것</b>과 같다. 나눗셈이 사라진다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>값</th><th>이 책</th><th>zstd</th></tr>
+<tr><td>빈도 합 M</td><td>4096 (2<sup>12</sup>)</td><td>블록마다 고름 (최대 2<sup>11</sup>)</td></tr>
+<tr><td>상태 하한 L</td><td>2<sup>23</sup></td><td>표 크기에 맞춰</td></tr>
+<tr><td>내보내는 단위</td><td>1바이트</td><td>비트 단위</td></tr>
+</table></div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ans-norm-2">
+<h3>세어 온 빈도를 4096 으로 맞추기</h3>
+<!--CODE file=src/py/compresslib/ans.py sym=normalise note=반올림하고, 남는 것을 큰 쪽에 준다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ans-norm-3">
+<h3>여기서 갈릴 수 있는 자리 셋</h3>
+<ol class="steps">
+<li><b>0 이 되면 안 된다</b> — 한 번이라도 나온 기호의 빈도가 0 이면 그 기호를 적을 수 없다.
+반올림 결과가 0 이면 1 로 올린다</li>
+<li><b>모자란 만큼을 누구에게 주나</b> — 이 책은 가장 빈도가 큰 기호에 몰아준다.
+"가장 큰 것" 이 여럿이면 <b>기호 번호가 작은 쪽</b>이다</li>
+<li><b>남는 만큼을 누구에게서 빼나</b> — 같은 규칙, 단 1 아래로는 못 내린다</li>
+</ol>
+<div class="key">셋 다 출력 바이트를 바꾼다. 그래서 SPEC §13.3 에 적혀 있고,
+다섯 언어가 <b>같은 순서로 같은 선택</b>을 한다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ans-code">
+<p class="chnum">4장</p>
+<h2>부호기와 복호기</h2>
+<p class="chsub">뒤에서부터 밀어 넣고 앞에서부터 꺼낸다</p>
+</article>
+
+<article class="card" id="ans-code-1">
+<h3>부호기</h3>
+<!--CODE file=src/py/compresslib/ans.py sym=encode note=reversed(src) 가 요점이다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ans-code-2">
+<h3>정규화 — 상태를 범위 안에 두기</h3>
+<p>상태 x 는 늘 [L, L·256) 안에 있어야 한다. 기호를 넣기 <b>전에</b>
+x 가 너무 커질 것 같으면 아래 바이트를 먼저 내보낸다.</p>
+<div class="key">while x &gt;= ((L &gt;&gt; 12) &lt;&lt; 8) · f: &nbsp; 바이트 내보내고 x &gt;&gt;= 8</div>
+<p>문턱이 f 에 비례하는 것이 요점이다. 빈도가 큰 기호는 상태를 조금만 키우므로
+더 오래 버틸 수 있다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ans-code-3">
+<h3>복호기</h3>
+<!--CODE file=src/py/compresslib/ans.py sym=decode note=아래 12비트로 기호를 찾는다-->
+<p>부호기가 내보낸 바이트를 <b>거꾸로</b> 읽어 상태를 채운다.
+슬롯 표는 4096칸이라 기호 찾기가 배열 접근 한 번이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ans-code-4">
+<h3>슬롯 표</h3>
+<!--CODE file=src/py/compresslib/ans.py sym=slot_symbols note=4096칸을 빈도대로 나눠 준다-->
+<p>기호 s 가 빈도 f<sub>s</sub> 라면 4096칸 중 f<sub>s</sub> 칸이 s 를 가리킨다.
+<code>x mod 4096</code> 이 어느 칸인지가 곧 어느 기호인지다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ans-tans">
+<p class="chnum">5장</p>
+<h2>tANS — 표를 만들어 두면 덧셈만 남는다</h2>
+<p class="chsub">FSE 라는 이름으로 zstd 안에 들어 있는 것</p>
+</article>
+
+<article class="card" id="ans-tans-1">
+<h3>생각</h3>
+<p>rANS 의 상태가 [L, L·256) 이라 값이 크다. 그런데 상태를
+<b>작은 범위</b>(예: 4096) 로 묶고, 그 안에서 일어나는 모든 전이를
+<b>미리 표로 만들어 두면</b> 어떨까?</p>
+<div class="key">부호화가 "표 보고 다음 상태 읽기 + 비트 몇 개 내보내기" 로 줄어든다.
+곱셈도 나눗셈도 없다.</div>
+<p>대가는 표를 만드는 값이다. 블록마다 빈도가 바뀌면 표도 다시 만들어야 한다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ans-tans-2">
+<h3>퍼뜨리기 — 상수 하나가 이상해 보이는 이유</h3>
+<!--CODE file=src/py/compresslib/ans.py sym=tans_table note=걸음 5/8·M + 3 으로 칸을 돈다-->
+<div class="key">SPREAD_STEP = (M&gt;&gt;1) + (M&gt;&gt;3) + 3 = 2048 + 512 + 3 = <b>2563</b></div>
+<p>홀수라서 2의 거듭제곱 칸을 <b>빠짐없이 한 번씩</b> 돈다.
+같은 기호의 칸들이 표 전체에 고루 흩어지게 하는 것이 목적이다 —
+뭉쳐 있으면 상태가 한쪽으로 쏠려 압축비가 떨어진다.</p>
+<div class="note">zstd 가 쓰는 값 그대로다. 이론적으로 최적인 배치는 따로 있지만,
+이 걸음이 <b>충분히 좋으면서 계산이 없다</b>.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ans-result">
+<h3>성적 — 그런데 왜 허프만보다 조금 나을 뿐인가</h3>
+<!--OUT  file=bench_ratio.txt lines=25-25 note=파일별 비율 표의 머리-->
+<!--OUT  file=bench_ratio.txt lines=35-35 note=ans 한 줄-->
+<div class="tblwrap"><table class="kv">
+<tr><th>파일</th><th>huffman</th><th>ans</th><th>rangecoder</th></tr>
+<tr><td>english.txt</td><td>65.4%</td><td><b>65.2%</b></td><td>63.0%</td></tr>
+<tr><td>zeros_64k.bin</td><td>12.7%</td><td><b>0.4%</b></td><td>2.3%</td></tr>
+<tr><td>abab_4k.txt</td><td>15.7%</td><td>18.9%</td><td>15.5%</td></tr>
+</table></div>
+<p>이 책의 rANS 는 <b>정적 0차</b> 모델이다 — 빈도를 한 번 세서 표를 싣는다.
+레인지 코더는 <b>적응</b> 모델이라 산문에서 조금 앞선다.
+부호기의 값어치가 아니라 <b>모델의 값어치</b>가 또 드러나는 자리다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ans-result-2">
+<h3>abab_4k 에서 진 이유</h3>
+<p><code>abab_4k.txt</code> 는 기호가 둘뿐이고 확률이 정확히 반반이다.
+그런데 ANS 는 <b>빈도 표 512바이트</b>를 실어야 한다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>바이트</th></tr>
+<tr><td>본문 (4096기호 × 1비트)</td><td>512</td></tr>
+<tr><td>빈도 표와 머리말</td><td>264</td></tr>
+<tr><td>합</td><td><b>776</b> (18.9%)</td></tr>
+</table></div>
+<p>작은 파일에서는 <b>표 값이 본문 값을 넘는다</b>.
+zstd 가 작은 블록에서 "표 없이 고정 부호" 를 고를 수 있게 해 둔 이유다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ans-speed">
+<h3>속도</h3>
+<!--OUT  file=bench_speed.txt lines=30-31 note=ans 의 처리량 (KB/s)-->
+<p>이 책의 구현은 교재용이라 zstd 만큼 빠르지 않지만,
+같은 기계에서 <code>rangecoder</code> 보다 빠른 것은 보인다 —
+캐리 전파와 정규화 루프가 없기 때문이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ans-parity">
+<h3>파서티</h3>
+<!--OUT  file=parity_ans.txt lines=17-26 note=5×5 교차 복호-->
+<p>스택 방향(뒤에서부터 밀어 넣기)을 명세에 적어 둔 덕에 다섯 언어가 첫 실행에서 맞았다.
+이 방향을 안 적으면 <b>각자 왕복은 되는데</b> 서로의 파일을 못 푼다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="ans-quiz-1" data-quiz>
+<h3>6부 퀴즈</h3>
+<p class="q">Q. rANS 부호기를 앞에서부터(정방향) 돌리도록 고쳤다.
+자기 복호기도 같이 고쳤더니 왕복이 통과한다. 무엇이 잘못됐나?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 잘못된 것은 없다 — <b>다른 형식</b>이 되었을 뿐이다.
+rANS 는 스택이라 정방향으로 밀어 넣으면 복호기도 뒤에서부터 읽어야 하고,
+그러면 스트림 전체를 메모리에 들고 있어야 한다.<br>
+진짜 문제는 <b>남의 파일을 못 푼다</b>는 것이다. zstd 가 만든 블록도,
+이 책의 다른 언어 구현이 만든 파일도 못 읽는다. 왕복 시험은 이것을
+절대 잡아 주지 않는다 — 골든 벡터와 교차 복호가 있어야 잡힌다.</div>
+<span class="tier a">실행 검증</span>
 </article>
