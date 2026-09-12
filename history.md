@@ -1,3 +1,10 @@
+### [2026-09-12 10:18] 압축 대백과사전 — 1단계 뼈대 (덱 20장, make all 통과)
+- **기획:** PLAN.md §5 1단계. 조립기·검사기를 keycloak_ad 에서 물려받아 이 덱에 맞췄다. 덱은 산출물, 소스가 원본이라는 규율을 처음부터 기계로 건다.
+- **TC:** 검사기 자체가 시험이다 — deck-verify(역검증)·deck-slices(인용 경계)·deck-xref(상호참조)·deck-check(DOM 스텁)·font-check·width 를 전부 돌려 통과 확인.
+- **개발:** compress/Makefile · deck/build_deck.py · deck/chunks.py(C++·Java·TS 경계 추가) · deck/check_slices.py · deck/base/head.html(제목·다섯 언어 배색) · deck/sections/*.html 16개 · tools/flock_java.sh 외 6개 파일
+- **검증:** SKEL=1 make all 오류 0건 · 슬라이드 20장 · 예상 합계 2,260장(상한 3000) · 글꼴 433자 27 KB 내장
+- **비고:** 소스·코퍼스는 아직 0줄이라 커버리지 0%. index/README 등록은 PLAN §5 13단계까지 하지 않는다. 다음은 2단계 SPEC.md.
+
 ### [2026-09-09 07:50] Keycloak×AD 덱 — 가짜 AD 바인드 순서를 진짜 AD 와 맞추고 "지운 사람" 실험 캡처 추가
 - **기획:** 2차 리뷰가 글로만 적었던 둘을 코드·캡처로. Bind 순서(잠김→비밀번호→꺼짐), AD 에서 지운 사용자가 다음 조회 때 사본이 지워지는 실험.
 - **TC:** 꺼짐+틀린 비밀번호 → 52e · LDIF 다시 읽기 뒤 항목·memberOf 사라짐(fakead 2건). 첫 실행은 같은 파일의 다른 시험 때문에 빌드 실패라 52e 만의 RED 는 못 봤다.
