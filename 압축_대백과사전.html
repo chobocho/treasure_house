@@ -557,6 +557,13 @@ table.kv td.num, table.kv th.num { text-align: right; font-variant-numeric: tabu
     <option value="it-measure">· 재 보기 — 한계와 실제 사이</option>
     <option value="it-cross">· 틀린 모델의 값</option>
     <option value="p2">2부 · 비트 I/O 와 정수 부호화</option>
+    <option value="bit-why">· 비트 단위로 써야 하는 이유</option>
+    <option value="bit-writer">· 비트 writer</option>
+    <option value="int-varint">· varint — 작은 수를 작게</option>
+    <option value="int-zigzag">· 지그재그</option>
+    <option value="int-elias">· Elias γ·δ</option>
+    <option value="int-rice">· 골롬–라이스</option>
+    <option value="int-five">· 다섯 언어를 맞추며 배운 것</option>
     <option value="p3">3부 · 단순 변환</option>
     <option value="p4">4부 · 허프만 부호화</option>
     <option value="p5">5부 · 산술 부호화와 레인지 코더</option>
@@ -1016,11 +1023,11 @@ intcode        1367107    1795104  131.3%    154.1%
 한 프로세스가 부호화를 모두 한 처리량. 재현 불가.
 
 언어            KB/s 파이썬 대비
-py               136       1.0배
-cpp             3769      27.7배
-go              1355       9.9배
-java             950       7.0배
-ts               740       5.4배</pre>
+py               191       1.0배
+cpp             4886      25.5배
+go              1645       8.6배
+java            1061       5.5배
+ts               862       4.5배</pre>
 <p>파이썬이 느린 것은 파이썬 탓이 아니라 <b>한 바이트씩 도는 고리</b> 탓이다.
 같은 알고리즘을 C++ 로 옮기면 28배가 된다 — 알고리즘은 한 줄도 안 바꾸고.</p>
 <span class="tier a">실행 검증</span>
@@ -1029,10 +1036,10 @@ ts               740       5.4배</pre>
 <article class="card" id="speed-preview-2">
 <h3>비율과 속도는 맞바꾸는 것이다</h3>
 <div class="src"><b>out/bench_speed.txt</b><span class="ln">36–39</span><span>cm 과 lossy 의 처리량 (KB/s)</span></div>
-<pre class="term" data-out="bench_speed.txt" data-lines="36-39">cm          부호       16      915      432      410      171
-            복호       12      838      428      415      180
-lossy       부호      138     6221     3409     2897     1816
-            복호      404    18248    10548    13798    10121</pre>
+<pre class="term" data-out="bench_speed.txt" data-lines="36-39">cm          부호       12     1168      530      558      386
+            복호       11      932      476      576      419
+lossy       부호      220     9128     4749     7891     2921
+            복호      624    30664    15743    27237    13701</pre>
 <p><code>cm</code> 은 가장 잘 줄이지만 C++ 로도 1 MB/s 를 못 넘는다.
 <code>deflate</code> 는 2.4%p 더 크지만 <b>여섯 배</b> 빠르다.
 "어느 것이 더 좋은가" 라는 질문에 답이 없는 이유가 이것이다.</p>
@@ -1912,16 +1919,774 @@ deflate 는 LZ77 로 되풀이를 먼저 지워 <b>다른 모델</b>이 되었�
 <article class="card section" id="p2">
 <p class="chnum">2부</p>
 <h2>비트 I/O 와 정수 부호화</h2>
-<p class="chsub">varint·zigzag·Elias·Golomb/Rice</p>
+<p class="chsub">varint · 지그재그 · Elias · 골롬–라이스</p>
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>MSB 먼저와 LSB 먼저 — 왜 두 가지가 다 필요한가</li>
-<li>비트 writer/reader 와 flush 패딩 규약</li>
-<li>LEB128 varint 와 zigzag — 음수를 짧게</li>
+<li>왜 바이트가 아니라 비트 단위로 써야 하나</li>
+<li>MSB 먼저와 LSB 먼저 — 바꿔 쓸 수 없는 두 가지</li>
+<li>LEB128 varint 와 지그재그 — 작은 수를 작게</li>
 <li>Elias γ·δ — 길이를 먼저 적는 부호</li>
-<li>Golomb/Rice(k) — 기하분포에 맞춘 부호</li>
+<li>골롬–라이스 — 한쪽으로 치우친 값에 딱 맞는 부호</li>
+<li>다섯 언어로 같은 바이트 내기 — 첫 파서티</li>
 </ul>
-<p class="cap">준비 중입니다 — PLAN.md §5 10단계에서 이 부를 채운다.</p>
+</article>
+
+<article class="card" id="bit-why">
+<p class="chnum">1장</p>
+<h2>비트 단위로 써야 하는 이유</h2>
+<p class="chsub">바이트는 너무 굵다</p>
+</article>
+
+<article class="card" id="bit-why-1">
+<h3>3비트짜리 부호를 바이트에 담으면</h3>
+<p>1부에서 본 것처럼, 좋은 부호는 기호마다 길이가 다르다.
+a 에 1비트, b 에 3비트를 주었는데 바이트 단위로만 쓸 수 있다면 어떻게 될까.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>비트 단위</th><th>바이트 단위</th></tr>
+<tr><td><code>abracadabra</code> 부호화</td><td>23비트 = 3바이트</td><td>11바이트</td></tr>
+<tr><td>손해</td><td>—</td><td><b>3.7배</b></td></tr>
+</table></div>
+<p>부호 길이를 아무리 잘 골라도 바이트 경계에 맞추는 순간 전부 사라진다.
+그래서 압축기의 가장 밑바닥에는 <b>비트를 한 개씩 쌓는 도구</b>가 있어야 한다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="bit-why-2">
+<h3>쌓는 방향을 정해야 한다</h3>
+<p>비트를 바이트에 채우는 방향은 두 가지다. 둘 다 맞는 방법이고, <b>섞어 쓰면 틀린다</b>.</p>
+<div class="g2">
+<div class="cmp good"><h5>MSB 먼저</h5>
+<p>첫 비트가 바이트의 7번(가장 높은) 자리에 앉는다.
+사람이 읽는 순서와 같아 손으로 따라가기 쉽다.</p>
+<p><b>이 책이 만드는 형식은 전부 이쪽</b></p></div>
+<div class="cmp"><h5>LSB 먼저</h5>
+<p>첫 비트가 0번(가장 낮은) 자리에 앉는다.
+값을 그대로 <code>|=</code> 하고 시프트하면 되어 구현이 조금 싸다.</p>
+<p><b>DEFLATE 가 이쪽</b> — 9부에서 다시 만난다</p></div>
+</div>
+<svg class="diag" viewBox="0 0 340 160" role="img" aria-label="비트가 바이트에 채워지는 순서">
+<text x="10" y="16" style="font-size:11px;">쓴 값:  3(2비트)  1(1비트)  5(3비트)  0(4비트)</text>
+<rect x="14" y="30" width="17" height="22" class="box"/>
+<text x="22.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">1</text>
+<rect x="33" y="30" width="17" height="22" class="box"/>
+<text x="41.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">1</text>
+<rect x="52" y="30" width="17" height="22" class="box"/>
+<text x="60.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">1</text>
+<rect x="71" y="30" width="17" height="22" class="box"/>
+<text x="79.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">1</text>
+<rect x="90" y="30" width="17" height="22" class="box"/>
+<text x="98.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<rect x="109" y="30" width="17" height="22" class="box"/>
+<text x="117.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">1</text>
+<rect x="128" y="30" width="17" height="22" class="box"/>
+<text x="136.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<rect x="147" y="30" width="17" height="22" class="box"/>
+<text x="155.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<rect x="166" y="30" width="17" height="22" class="box"/>
+<text x="174.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<rect x="185" y="30" width="17" height="22" class="box"/>
+<text x="193.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<rect x="204" y="30" width="17" height="22" class="box off"/>
+<text x="212.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<rect x="223" y="30" width="17" height="22" class="box off"/>
+<text x="231.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<rect x="242" y="30" width="17" height="22" class="box off"/>
+<text x="250.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<rect x="261" y="30" width="17" height="22" class="box off"/>
+<text x="269.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<rect x="280" y="30" width="17" height="22" class="box off"/>
+<text x="288.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<rect x="299" y="30" width="17" height="22" class="box off"/>
+<text x="307.5" y="45" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<line x1="14" y1="56" x2="50" y2="56" stroke="var(--accent)" stroke-width="1.6"/>
+<text x="32" y="68" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">3</text>
+<line x1="52" y1="56" x2="69" y2="56" stroke="var(--accent)" stroke-width="1.6"/>
+<text x="60.5" y="68" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">1</text>
+<line x1="71" y1="56" x2="126" y2="56" stroke="var(--accent)" stroke-width="1.6"/>
+<text x="98.5" y="68" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">5</text>
+<line x1="128" y1="56" x2="202" y2="56" stroke="var(--accent)" stroke-width="1.6"/>
+<text x="165" y="68" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">0</text>
+<line x1="165" y1="26" x2="165" y2="56" stroke="var(--special)" stroke-width="1.6"/>
+<text x="90" y="104" class="lbl" text-anchor="middle">첫 바이트</text>
+<text x="242" y="104" class="lbl" text-anchor="middle">둘째 바이트</text>
+<text x="10" y="130" style="font-size:11px;">채우고 남은 자리는 0 — 그래서 빈 입력도</text>
+<text x="10" y="146" style="font-size:11px;">바이트 하나가 나온다 (SPEC §0.3 의 예외).</text>
+</svg>
+<p class="cap">MSB 먼저로 2·1·3·4 비트를 채운 모습</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="bit-why-3">
+<h3>명세에 못 박아야 하는 것 셋</h3>
+<p>비트 writer 는 코드가 스무 줄인데, 다섯 언어가 갈릴 자리는 셋이다.</p>
+<ol class="steps">
+<li><b>비트 순서</b> — MSB 먼저인가 LSB 먼저인가</li>
+<li><b>채움 비트</b> — 마지막 바이트의 남은 자리를 0 으로 채우나 1 로 채우나</li>
+<li><b>빈 상태의 flush</b> — 쌓인 비트가 없을 때 바이트를 내보내나 마나</li>
+</ol>
+<div class="warn">셋 다 <b>자기들끼리는 왕복이 된다</b>. 1 로 채우는 구현도 자기가 쓴 것은 잘 읽는다.
+그래서 골든 벡터를 맞춰 보기 전에는 아무도 틀린 줄 모른다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="bit-writer">
+<p class="chnum">2장</p>
+<h2>비트 writer</h2>
+<p class="chsub">스무 줄짜리 코드가 형식을 정한다</p>
+</article>
+
+<article class="card" id="bit-writer-1">
+<h3>파이썬 참조 구현</h3>
+<div class="src"><b>src/py/compresslib/bitio.py</b><span class="ln">16–36</span><span>첫 비트가 7번 자리에 앉는다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/bitio.py" data-lines="16-36">class MsbWriter:
+    """첫 비트가 첫 바이트의 7번 비트에 앉는 writer."""
+
+    def __init__(self):
+        self._out = bytearray()
+        self._buf = 0
+        self._n = 0
+
+    def write_bit(self, bit):
+        self._buf |= (bit &amp; 1) &lt;&lt; (7 - self._n)
+        self._n += 1
+        if self._n == 8:
+            self._out.append(self._buf)
+            self._buf = 0
+            self._n = 0
+
+    def write_bits(self, value, count):
+        """값의 낮은 count 비트를 높은 쪽부터 쓴다."""
+        for i in range(count - 1, -1, -1):
+            self.write_bit((value &gt;&gt; i) &amp; 1)
+</code></pre>
+<p><code>7 - self._n</code> 이 MSB 먼저의 전부다. 이 한 줄을 <code>self._n</code> 으로
+바꾸면 LSB 먼저가 된다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bit-writer-2">
+<h3>flush — 가장 많이 갈리는 자리</h3>
+<div class="src"><b>src/py/compresslib/bitio.py</b><span class="ln">46–50</span><span>쌓인 비트가 없으면 아무것도 안 낸다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/bitio.py" data-lines="46-50">    def flush(self):
+        if self._n:
+            self._out.append(self._buf)
+            self._buf = 0
+            self._n = 0</code></pre>
+<p><code>if self._n:</code> 이 요점이다. 이 검사가 없으면 빈 입력에서 0 바이트 하나가
+더 나오고, 그 파일은 다른 구현이 못 푼다.</p>
+<div class="note"><b>채움은 0 비트다.</b> <code>self._buf</code> 를 0 으로 시작해 쓴 비트만
+얹으므로, 남은 자리는 저절로 0 이 된다 — 규칙을 코드가 저절로 지키게 만든 것이다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bit-writer-3">
+<h3>같은 열 줄을 다섯 번 — C++ 와 Go</h3>
+<div class="g2">
+<div>
+<div class="src"><b>src/cpp/bitio.h</b><span class="ln">18–25</span><span>C++</span></div>
+<pre><code data-lang="cpp" data-src="src/cpp/bitio.h" data-lines="18-25">  void write_bit(int bit) {
+    buf_ = u8(buf_ | ((bit &amp; 1) &lt;&lt; (7 - n_)));
+    if (++n_ == 8) {
+      out_.push_back(buf_);
+      buf_ = 0;
+      n_ = 0;
+    }
+  }</code></pre>
+</div>
+<div>
+<div class="src"><b>src/go/bitio.go</b><span class="ln">15–23</span><span>Go</span></div>
+<pre><code data-lang="go" data-src="src/go/bitio.go" data-lines="15-23">func (w *msbWriter) writeBit(bit int) {
+	w.buf |= byte(bit&amp;1) &lt;&lt; (7 - w.n)
+	w.n++
+	if w.n == 8 {
+		w.out = append(w.out, w.buf)
+		w.buf = 0
+		w.n = 0
+	}
+}</code></pre>
+</div>
+</div>
+<p>둘 다 파이썬과 같은 <code>7 - n</code> 이다. 형(type)만 다르다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bit-writer-4">
+<h3>자바 — <code>byte</code> 가 부호 있는 수다</h3>
+<div class="src"><b>src/java/compresslib/BitIO.java</b><span class="ln">23–30</span><span>쌓는 통은 int 다</span></div>
+<pre><code data-lang="java" data-src="src/java/compresslib/BitIO.java" data-lines="23-30">    public void writeBit(int bit) {
+      buf |= (bit &amp; 1) &lt;&lt; (7 - n);
+      if (++n == 8) {
+        out.push(buf);
+        buf = 0;
+        n = 0;
+      }
+    }</code></pre>
+<div class="warn">자바의 <code>byte</code> 는 −128~127 이다. <code>0x80</code> 을 담으면
+<code>-128</code> 로 읽힌다. 그래서 쌓는 통을 <code>int</code> 로 두고,
+내보낼 때만 <code>(byte)</code> 로 자른다. 되읽을 때는 <code>&amp; 0xFF</code> 를 붙인다 —
+한 군데만 빠뜨려도 파일이 갈린다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bit-writer-5">
+<h3>TypeScript — 비트 연산이 부호를 만든다</h3>
+<div class="src"><b>src/ts/bitio.ts</b><span class="ln">18–25</span><span>8비트 안이라 여기서는 무사하다</span></div>
+<pre><code data-lang="ts" data-src="src/ts/bitio.ts" data-lines="18-25">  writeBit(bit: number): void {
+    this.buf |= (bit &amp; 1) &lt;&lt; (7 - this.n);
+    if (++this.n === 8) {
+      this.out.push(this.buf);
+      this.buf = 0;
+      this.n = 0;
+    }
+  }</code></pre>
+<div class="warn">TypeScript(자바스크립트)의 <code>&lt;&lt;</code>·<code>|</code>·<code>&amp;</code> 는
+피연산자를 <b>32비트 부호 있는 정수</b>로 바꾼다. 비트 writer 는 8비트 안에서만 놀아서
+무사하지만, 5부의 레인지 코더는 이 규칙 때문에 비트 연산을 아예 쓰지 못한다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bit-reader">
+<h3>reader 는 writer 의 거울이다</h3>
+<div class="src"><b>src/py/compresslib/bitio.py</b><span class="ln">56–85</span><span>같은 순서로 되읽는다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/bitio.py" data-lines="56-85">class MsbReader:
+    """MsbWriter 가 쓴 것을 그대로 되읽는다."""
+
+    def __init__(self, src, pos=0):
+        self.src = src
+        self.pos = pos
+        self._buf = 0
+        self._n = 0
+
+    def read_bit(self):
+        if self._n == 0:
+            if self.pos &gt;= len(self.src):
+                raise ValueError('비트 스트림이 바닥났다')
+            self._buf = self.src[self.pos]
+            self.pos += 1
+            self._n = 8
+        self._n -= 1
+        return (self._buf &gt;&gt; self._n) &amp; 1
+
+    def read_bits(self, count):
+        value = 0
+        for _ in range(count):
+            value = (value &lt;&lt; 1) | self.read_bit()
+        return value
+
+    def align(self):
+        """바이트 경계까지 버린다 (DEFLATE 의 stored 블록에서 쓴다)."""
+        self._n = 0
+
+</code></pre>
+<p>읽기가 끝을 넘어가면 예외를 던진다. 0 으로 채워 주는 구현도 있지만,
+그러면 <b>잘린 파일을 조용히 푸는</b> 복호기가 된다 — 6부의 ANS 에서 그 위험을 다시 본다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bit-codec">
+<h3>골든 코덱 — 압축기가 아니다</h3>
+<p>비트 writer 자체는 아무것도 줄이지 않는다. 그런데 <b>골든 벡터로 묶어 두고 싶다</b>.
+그래서 껍데기 코덱을 하나 둔다.</p>
+<div class="src"><b>src/py/compresslib/bitio.py</b><span class="ln">165–186</span><span>앞에 0비트 셋을 넣는 것이 요점</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/bitio.py" data-lines="165-186"># ------------------------------------------------------------ 골든 코덱
+# SPEC §1.4. 압축기가 아니라 "비트 writer 가 진짜로 비트 단위로 도는가"
+# 를 골든 벡터로 묶어 두기 위한 껍데기다. 앞의 0비트 셋이 요점 — 모든
+# 바이트를 바이트 경계 밖으로 밀어내므로, 몰래 memcpy 하는 구현은 다른
+# 파일을 낸다.
+PAD_BITS = 3
+
+
+def encode(src):
+    w = MsbWriter()
+    w.write_bits(0, PAD_BITS)
+    for b in src:
+        w.write_bits(b, 8)
+    w.flush()
+    return varint.put(len(src)) + w.bytes()
+
+
+def decode(src):
+    n, pos = varint.get_length(src)
+    r = MsbReader(src, pos)
+    r.read_bits(PAD_BITS)
+    return bytes(r.read_bits(8) for _ in range(n))</code></pre>
+<div class="key"><b>앞의 0비트 셋</b>이 모든 바이트를 바이트 경계 밖으로 민다.
+몰래 <code>memcpy</code> 로 베끼는 구현은 여기서 다른 파일을 낸다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bit-codec-2">
+<h3>그래서 비율이 100.0% 다</h3>
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">16–19</span><span>bitio·mtf·bwt 는 줄이지 않는다</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="16-19">huffman        1367107    1099542   80.4%     65.4%
+mtf            1367107    1367138  100.0%    100.0%
+bitio          1367107    1367151  100.0%    100.0%
+bwt            1367107    1367246  100.0%    100.0%</pre>
+<p>줄이지 않는 모듈을 골든에 넣는 이유는 하나다 — <b>다섯 언어가 비트를 같은 순서로
+쌓는지</b>를 여기서 한 번 확인해 두면, 뒤의 모든 모듈이 그 위에 설 수 있다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="bit-quiz-1" data-quiz>
+<h3>1·2장 퀴즈</h3>
+<p class="q">Q. 어떤 사람이 비트 writer 의 <code>flush</code> 에서
+<code>if self._n:</code> 검사를 빼먹었다. 왕복 시험은 전부 통과한다.
+무엇이 언제 드러날까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>빈 입력</b>에서만 드러난다. 쌓인 비트가 0 인데도 바이트를
+하나 내보내므로 출력이 1바이트 길어진다. 자기 복호기는 그 여분을 그냥 안 읽으니
+왕복은 통과한다.<br>
+골든 벡터(<code>empty.bin</code>)를 맞춰 보거나, 다른 언어가 만든 파일을 풀어 볼 때
+비로소 드러난다. 코퍼스에 빈 파일이 들어 있는 이유가 정확히 이것이다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-varint">
+<p class="chnum">3장</p>
+<h2>varint — 작은 수를 작게</h2>
+<p class="chsub">LEB128, 이어짐 비트 하나로</p>
+</article>
+
+<article class="card" id="int-varint-1">
+<h3>길이를 어떻게 적을 것인가</h3>
+<p>압축 형식은 길이·개수·거리 같은 수를 끝없이 적는다. 그런데 이런 수는
+대개 작고, 가끔 아주 크다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>방법</th><th>3 을 적으면</th><th>1,000,000 을 적으면</th></tr>
+<tr><td>4바이트 고정</td><td>4바이트</td><td>4바이트</td></tr>
+<tr><td>8바이트 고정</td><td>8바이트</td><td>8바이트</td></tr>
+<tr><td><b>varint</b></td><td><b>1바이트</b></td><td>3바이트</td></tr>
+</table></div>
+<p>고정 폭은 최악을 기준으로 자리를 잡는다. varint 는 값의 크기에 따라 자리를 늘린다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="int-varint-2">
+<h3>LEB128 — 7비트씩, 맨 앞 비트가 이어짐</h3>
+<svg class="diag" viewBox="0 0 340 150" role="img" aria-label="LEB128 로 300 을 싣는 그림">
+<text x="10" y="16" style="font-size:11px;">값 300 = 0b100101100</text>
+<rect x="14" y="30" width="150" height="34" class="box"/>
+<line x1="36" y1="30" x2="36" y2="64" stroke="var(--border)" stroke-width="1"/>
+<text x="25" y="50" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--special);" text-anchor="middle">1</text>
+<text x="100" y="50" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0101100</text>
+<text x="89" y="78" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--muted);" text-anchor="middle">0xAC</text>
+<rect x="176" y="30" width="150" height="34" class="box"/>
+<line x1="198" y1="30" x2="198" y2="64" stroke="var(--border)" stroke-width="1"/>
+<text x="187" y="50" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--muted);" text-anchor="middle">0</text>
+<text x="262" y="50" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0000010</text>
+<text x="251" y="78" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--muted);" text-anchor="middle">0x02</text>
+<text x="10" y="104" style="font-size:11px;">앞 비트 1 = 뒤에 더 있다, 0 = 여기까지.</text>
+<text x="10" y="120" style="font-size:11px;">낮은 자리를 먼저 싣는다 — 그래야 읽는 쪽이</text>
+<text x="10" y="136" style="font-size:11px;">자리올림을 하며 한 번에 훑을 수 있다.</text>
+</svg>
+<p class="cap">300 을 두 바이트로 싣는 모습</p>
+<ul>
+<li>한 바이트에 값 <b>7비트</b> + 이어짐 <b>1비트</b></li>
+<li>이어짐 비트가 1 이면 "뒤에 더 있다", 0 이면 여기까지</li>
+<li><b>낮은 자리부터</b> 싣는다 — 읽는 쪽이 한 번에 훑으며 자리올림만 하면 된다</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="int-varint-3">
+<h3>쓰기</h3>
+<div class="src"><b>src/py/compresslib/varint.py</b><span class="ln">19–31</span><span>낮은 7비트씩 잘라 내보낸다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/varint.py" data-lines="19-31">def put(value):
+    """정수 하나를 바이트로. value 는 0 이상."""
+    if value &lt; 0:
+        raise ValueError('varint 는 음수를 못 싣는다: %d' % value)
+    out = bytearray()
+    while True:
+        b = value &amp; 0x7F
+        value &gt;&gt;= 7
+        if value:
+            out.append(b | 0x80)
+        else:
+            out.append(b)
+            return bytes(out)</code></pre>
+<p>고리 하나가 전부다. <code>value &gt;&gt;= 7</code> 뒤에 남은 것이 있으면
+앞 비트에 <code>0x80</code> 을 세운다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-varint-4">
+<h3>읽기 — 여기서 형식이 깨질 수 있다</h3>
+<div class="src"><b>src/py/compresslib/varint.py</b><span class="ln">34–49</span><span>상한 검사가 붙는 이유</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/varint.py" data-lines="34-49">def get(src, pos=0):
+    """(값, 다음 위치). 10바이트를 넘거나 64비트를 넘으면 오류."""
+    value = 0
+    shift = 0
+    for i in range(MAX_BYTES):
+        if pos &gt;= len(src):
+            raise ValueError('varint 가 잘렸다')
+        b = src[pos]
+        pos += 1
+        value |= (b &amp; 0x7F) &lt;&lt; shift
+        if not (b &amp; 0x80):
+            if value &gt; (1 &lt;&lt; 64) - 1:
+                raise ValueError('varint 가 64비트를 넘는다')
+            return value, pos
+        shift += 7
+    raise ValueError('varint 가 %d바이트를 넘는다' % MAX_BYTES)</code></pre>
+<div class="warn"><b>상한 검사가 없으면 무한 루프</b>가 된다. 손상된 파일이
+<code>0x80</code> 만 늘어놓으면 읽는 쪽이 영원히 돈다. 10바이트에서 자르는 것은
+64비트 값을 다 담고도 남는 길이라서다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-varint-5">
+<h3>길이 전용 읽기를 따로 둔 이유</h3>
+<div class="src"><b>src/py/compresslib/varint.py</b><span class="ln">52–57</span><span>4 GiB 를 넘는 길이는 거절</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/varint.py" data-lines="52-57">def get_length(src, pos=0):
+    """길이 칸을 읽는다 — 상한 검사가 붙은 get()."""
+    value, pos = get(src, pos)
+    if value &gt; MAX_LENGTH:
+        raise ValueError('길이 칸이 너무 크다: %d' % value)
+    return value, pos</code></pre>
+<p>길이는 <b>메모리를 미리 잡는 데</b> 쓰인다. 손상된 파일이 "길이 2<sup>63</sup>" 이라고
+말하면, 검사 없는 구현은 그 자리에서 죽는다. 형식이 허용하는 상한(4 GiB−1)에서 자른다.</p>
+<div class="note"><b>같은 함수를 두 번 쓰지 않는 이유</b> — "그냥 정수" 와 "길이" 는
+<b>믿을 수 있는 범위가 다르다</b>. 한 함수로 합치면 둘 중 하나에서 검사가 느슨해진다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-zigzag">
+<p class="chnum">4장</p>
+<h2>지그재그</h2>
+<p class="chsub">음수를 작은 자연수로 접는다</p>
+</article>
+
+<article class="card" id="int-zigzag-1">
+<h3>−1 을 varint 에 그냥 넣으면</h3>
+<p>−1 을 64비트 2의 보수로 쓰면 <code>0xFFFFFFFFFFFFFFFF</code> 다.
+7비트씩 자르면 <b>10바이트</b>가 나온다. 가장 작은 음수가 가장 비싸진다.</p>
+<svg class="diag" viewBox="0 0 340 130" role="img" aria-label="지그재그 사상 표">
+<text x="8" y="30" class="lbl">값</text>
+<text x="8" y="60" class="lbl">zig</text>
+<text x="60" y="30" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0</text>
+<text x="60" y="60" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">0</text>
+<line x1="60" y1="36" x2="60" y2="48" stroke="var(--border)" stroke-width="1"/>
+<text x="100" y="30" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">-1</text>
+<text x="100" y="60" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">1</text>
+<line x1="100" y1="36" x2="100" y2="48" stroke="var(--border)" stroke-width="1"/>
+<text x="140" y="30" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">1</text>
+<text x="140" y="60" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">2</text>
+<line x1="140" y1="36" x2="140" y2="48" stroke="var(--border)" stroke-width="1"/>
+<text x="180" y="30" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">-2</text>
+<text x="180" y="60" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">3</text>
+<line x1="180" y1="36" x2="180" y2="48" stroke="var(--border)" stroke-width="1"/>
+<text x="220" y="30" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">2</text>
+<text x="220" y="60" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">4</text>
+<line x1="220" y1="36" x2="220" y2="48" stroke="var(--border)" stroke-width="1"/>
+<text x="260" y="30" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">-3</text>
+<text x="260" y="60" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">5</text>
+<line x1="260" y1="36" x2="260" y2="48" stroke="var(--border)" stroke-width="1"/>
+<text x="300" y="30" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">3</text>
+<text x="300" y="60" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">6</text>
+<line x1="300" y1="36" x2="300" y2="48" stroke="var(--border)" stroke-width="1"/>
+<text x="10" y="88" style="font-size:11px;">음수는 홀수, 양수는 짝수로 간다. 0 근처의 수가</text>
+<text x="10" y="104" style="font-size:11px;">0 근처에 남으므로 varint 한 바이트로 끝난다.</text>
+<text x="10" y="120" style="font-size:11px;fill:var(--bad);">-1 을 그냥 실으면 10바이트다 (SPEC §2.2).</text>
+</svg>
+<p class="cap">음수는 홀수, 양수는 짝수로</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="int-zigzag-2">
+<h3>코드</h3>
+<div class="src"><b>src/py/compresslib/intcode.py</b><span class="ln">39–43</span><span>절댓값이 작으면 결과도 작다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/intcode.py" data-lines="39-43">def zigzag(n):
+    """음수를 작은 양수로. -1→1, 1→2, -2→3 …"""
+    if not -(1 &lt;&lt; 63) &lt;= n &lt;= (1 &lt;&lt; 63) - 1:
+        raise ValueError('zigzag 는 64비트 부호 있는 정수만: %d' % n)
+    return ((n &lt;&lt; 1) ^ (n &gt;&gt; 63)) &amp; MASK64</code></pre>
+<div class="src"><b>src/py/compresslib/intcode.py</b><span class="ln">46–48</span><span>되돌리기</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/intcode.py" data-lines="46-48">def unzigzag(u):
+    """zigzag 의 역. &gt;&gt; 는 여기서 논리 시프트다."""
+    return (u &gt;&gt; 1) ^ -(u &amp; 1)</code></pre>
+<p>0 → 0, −1 → 1, 1 → 2, −2 → 3 … <b>0 근처의 수가 0 근처에 남는다</b>는 것이 전부다.
+델타 부호화(앞 값과의 차)를 쓰는 자리마다 이 짝이 따라다닌다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-zigzag-3">
+<h3>언어마다 다르게 써야 하는 곳</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>언어</th><th>지그재그 식</th><th>왜</th></tr>
+<tr><td>Go · Java</td><td><code>(n &lt;&lt; 1) ^ (n &gt;&gt; 63)</code></td><td>산술 시프트가 부호를 늘려 준다</td></tr>
+<tr><td>C++</td><td>같은 식, 단 <code>uint64_t</code> 로 캐스팅</td><td>부호 있는 시프트는 미정의 동작</td></tr>
+<tr><td>Python · TS</td><td><code>n &lt; 0 ? -n*2-1 : n*2</code></td><td>정수가 무한/실수라 비트 요령이 안 통한다</td></tr>
+</table></div>
+<div class="key">같은 값을 내기만 하면 <b>식은 달라도 된다</b>. 이 책이 맞추는 것은
+"출력 바이트" 이지 "소스 모양" 이 아니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-elias">
+<p class="chnum">5장</p>
+<h2>Elias γ·δ</h2>
+<p class="chsub">비트 스트림 안에서 쓰는 정수 부호</p>
+</article>
+
+<article class="card" id="int-elias-1">
+<h3>varint 를 못 쓰는 자리가 있다</h3>
+<p>varint 는 <b>바이트 단위</b>다. 비트 스트림 한가운데서 정수를 적어야 할 때는
+바이트 경계로 돌아갈 수 없다. 그래서 비트 단위 정수 부호가 따로 필요하다.</p>
+<div class="key">Elias γ — 값의 <b>비트 길이</b>를 단항으로 먼저 적고, 그 다음 값의 나머지 비트를 적는다.</div>
+<div class="tblwrap"><table class="kv">
+<tr><th>값</th><th>비트 길이</th><th>γ 부호</th><th>길이</th></tr>
+<tr><td>1</td><td>1</td><td><code>1</code></td><td>1비트</td></tr>
+<tr><td>2</td><td>2</td><td><code>010</code></td><td>3비트</td></tr>
+<tr><td>5</td><td>3</td><td><code>00101</code></td><td>5비트</td></tr>
+<tr><td>100</td><td>7</td><td><code>0000001100100</code></td><td>13비트</td></tr>
+</table></div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="int-elias-2">
+<h3>코드</h3>
+<div class="src"><b>src/py/compresslib/intcode.py</b><span class="ln">56–62</span><span>길이를 단항으로, 나머지를 그대로</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/intcode.py" data-lines="56-62">def put_gamma(w, v):
+    """엘리아스 감마. 0 은 못 싣는다 — 0 이 필요하면 v+1 을 실어라."""
+    if v &lt; 1:
+        raise ValueError('gamma 는 1 이상만: %d' % v)
+    n = bit_length(v)
+    w.write_bits(0, n - 1)
+    w.write_bits(v, n)</code></pre>
+<p>값 v 는 1 부터 시작한다(0 은 못 적는다). 그래서 부르는 쪽이 <code>v+1</code> 로 넘긴다 —
+이런 약속은 명세에 적지 않으면 반드시 갈린다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-elias-3">
+<h3>δ 는 γ 의 길이를 다시 γ 로 적는다</h3>
+<div class="src"><b>src/py/compresslib/intcode.py</b><span class="ln">75–81</span><span>길이 부분을 다시 감마로</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/intcode.py" data-lines="75-81">def put_delta(w, v):
+    """엘리아스 델타. 길이를 감마로, 값은 맨 위 1 을 빼고 적는다."""
+    if v &lt; 1:
+        raise ValueError('delta 는 1 이상만: %d' % v)
+    n = bit_length(v)
+    put_gamma(w, n)
+    w.write_bits(v, n - 1)</code></pre>
+<p>값이 커질수록 γ 의 단항 머리가 길어지는데, δ 는 그 머리를 다시 γ 로 접는다.
+<b>값이 클 때만 이득</b>이라 자리마다 골라 써야 한다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>값</th><th>γ</th><th>δ</th></tr>
+<tr><td>1</td><td>1비트</td><td>1비트</td></tr>
+<tr><td>100</td><td>13비트</td><td>11비트</td></tr>
+<tr><td>1,000,000</td><td>39비트</td><td>28비트</td></tr>
+</table></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-rice">
+<p class="chnum">6장</p>
+<h2>골롬–라이스</h2>
+<p class="chsub">치우친 값에 딱 맞는 부호 — 손실 오디오가 쓰는 것</p>
+</article>
+
+<article class="card" id="int-rice-1">
+<h3>값을 둘로 쪼갠다</h3>
+<p>값 v 와 매개변수 k 를 정하면, <b>몫</b> v&gt;&gt;k 는 단항으로, <b>나머지</b> k비트는 그대로 적는다.</p>
+<ul>
+<li>k 가 크면 나머지가 길어지고 몫이 짧아진다</li>
+<li>k 가 작으면 몫의 단항이 길어진다</li>
+<li>가장 좋은 k 는 <b>값의 평균</b>에 달려 있다 — 평균이 2<sup>k</sup> 근처일 때 최적</li>
+</ul>
+<svg class="diag" viewBox="0 0 340 170" role="img" aria-label="k 에 따른 Rice 부호 길이">
+<text x="10" y="16" style="font-size:11px;">값 100 을 Rice(k) 로 적을 때의 비트 수</text>
+<rect x="30" y="35" width="28" height="101" rx="2" fill="var(--accent)" fill-opacity="0.7"/>
+<text x="44" y="148" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">k=0</text>
+<text x="44" y="31" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);" text-anchor="middle">101</text>
+<rect x="64" y="84" width="28" height="52" rx="2" fill="var(--accent)" fill-opacity="0.7"/>
+<text x="78" y="148" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">k=1</text>
+<text x="78" y="80" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);" text-anchor="middle">52</text>
+<rect x="98" y="108" width="28" height="28" rx="2" fill="var(--accent)" fill-opacity="0.7"/>
+<text x="112" y="148" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">k=2</text>
+<text x="112" y="104" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);" text-anchor="middle">28</text>
+<rect x="132" y="120" width="28" height="16" rx="2" fill="var(--accent)" fill-opacity="0.7"/>
+<text x="146" y="148" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">k=3</text>
+<text x="146" y="116" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);" text-anchor="middle">16</text>
+<rect x="166" y="125" width="28" height="11" rx="2" fill="var(--accent)" fill-opacity="0.7"/>
+<text x="180" y="148" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">k=4</text>
+<text x="180" y="121" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);" text-anchor="middle">11</text>
+<rect x="200" y="127" width="28" height="9" rx="2" fill="var(--accent)" fill-opacity="0.7"/>
+<text x="214" y="148" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">k=5</text>
+<text x="214" y="123" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);" text-anchor="middle">9</text>
+<rect x="234" y="128" width="28" height="8" rx="2" fill="var(--accent)" fill-opacity="0.7"/>
+<text x="248" y="148" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">k=6</text>
+<text x="248" y="124" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);" text-anchor="middle">8</text>
+<rect x="268" y="128" width="28" height="8" rx="2" fill="var(--accent)" fill-opacity="0.7"/>
+<text x="282" y="148" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">k=7</text>
+<text x="282" y="124" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);" text-anchor="middle">8</text>
+<text x="10" y="166" style="font-size:11px;">k=6 에서 8비트로 가장 짧다.</text>
+</svg>
+<p class="cap">값 100 을 k 마다 몇 비트로 적나</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="int-rice-2">
+<h3>코드</h3>
+<div class="src"><b>src/py/compresslib/intcode.py</b><span class="ln">91–105</span><span>몫은 단항, 나머지는 k비트</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/intcode.py" data-lines="91-105">def put_rice(w, v, k):
+    """골룸–라이스. 단항은 **1 을 q개 쓰고 0 으로 닫는다.**
+
+    반대 약속(0 을 q개 쓰고 1 로 닫기)도 문헌에 흔하다. 섞어 쓰면
+    작은 값은 그래도 왕복이 되어, 골든 벡터를 맞출 때까지 안 보인다.
+    """
+    if v &lt; 0:
+        raise ValueError('rice 는 0 이상만: %d' % v)
+    q = v &gt;&gt; k
+    if q &gt; MAX_UNARY:
+        raise ValueError('rice 의 몫이 %d — k 를 잘못 골랐다' % q)
+    w.write_bits((1 &lt;&lt; q) - 1, q)
+    w.write_bit(0)
+    if k:
+        w.write_bits(v &amp; ((1 &lt;&lt; k) - 1), k)</code></pre>
+<div class="warn"><b>단항 상한 4096</b> 이 있는 이유 — k=0 일 때 값 100 은 101비트다.
+손상된 파일이 큰 값을 말하면 단항이 끝없이 길어진다. 상한을 안 두면 그 자리에서
+메모리가 터진다. 상한을 <b>얼마로</b> 두느냐가 형식의 일부라 명세에 적혀 있다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-rice-3">
+<h3>어디에 쓰나</h3>
+<ul>
+<li><b>FLAC·Shorten</b> — 오디오 표본의 예측 오차. 0 근처에 몰려 있어 딱 맞는다</li>
+<li><b>JPEG-LS·CALIC</b> — 무손실 사진의 화소 오차</li>
+<li><b>역색인</b> — 검색 엔진의 문서 번호 차이</li>
+</ul>
+<div class="tip">공통점은 <b>값이 0 근처에 지수적으로 몰려 있다</b>는 것이다.
+그런 분포에서는 라이스 부호가 허프만만큼 좋으면서 표가 필요 없다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="int-codec">
+<h3>골든 코덱 — 네 부호를 한 파일에</h3>
+<div class="src"><b>src/py/compresslib/intcode.py</b><span class="ln">124–129</span><span>바이트마다 네 부호를 다 쓴다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/intcode.py" data-lines="124-129">def encode(src):
+    w = bitio.MsbWriter()
+    for b in src:
+        put_gamma(w, b + 1)
+    w.flush()
+    return varint.put(len(src)) + w.bytes()</code></pre>
+<p>압축이 목적이 아니다. <b>네 부호가 다섯 언어에서 같은 비트를 내는지</b>를 묶어 두는 것이
+목적이라, 일부러 전부 쓴다. 그래서 비율이 131.3% 다 — 이 책에서 가장 크게 부푸는 모듈이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-parity">
+<h3>첫 파서티 — 다섯 언어가 같은 바이트를 낸다</h3>
+<div class="src"><b>out/parity_intcode.txt</b><span class="ln">1–16</span><span>골든 대조</span></div>
+<pre class="term" data-out="parity_intcode.txt" data-lines="1-16">== 1. 부호기 출력이 골든과 같은가 (intcode) ==
+파일                     py    cpp     go   java     ts
+abab_4k.txt              OK     OK     OK     OK     OK
+alphabet.bin             OK     OK     OK     OK     OK
+boundary_32768.bin       OK     OK     OK     OK     OK
+boundary_32769.bin       OK     OK     OK     OK     OK
+empty.bin                OK     OK     OK     OK     OK
+english.txt              OK     OK     OK     OK     OK
+korean_utf8.txt          OK     OK     OK     OK     OK
+mixed_1m.bin             OK     OK     OK     OK     OK
+one.bin                  OK     OK     OK     OK     OK
+random_64k.bin           OK     OK     OK     OK     OK
+runs.bin                 OK     OK     OK     OK     OK
+source.go                OK     OK     OK     OK     OK
+zeros_64k.bin            OK     OK     OK     OK     OK
+</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="int-quiz-2" data-quiz>
+<h3>3~6장 퀴즈</h3>
+<p class="q">Q. 어떤 형식이 "거리" 를 varint 로 적는다. 거리는 대부분 1~수백이고,
+아주 가끔 30,000 근처다. 누군가 "고정 2바이트가 더 낫다" 고 한다. 맞을까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 대개 varint 가 이긴다. 거리가 127 이하면 <b>1바이트</b>,
+16,383 이하면 2바이트다. 30,000 짜리만 3바이트로 손해를 본다.<br>
+값의 90%가 127 이하라면 평균 1.1바이트 대 2바이트로 varint 가 낫다.
+반대로 값이 고르게 0~65535 에 퍼져 있다면 고정 2바이트가 낫다 —
+<b>분포를 모르면 어느 쪽도 고를 수 없다</b>는 것이 요점이다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="int-five">
+<p class="chnum">7장</p>
+<h2>다섯 언어를 맞추며 배운 것</h2>
+<p class="chsub">이 부에서 실제로 갈라졌던 자리</p>
+</article>
+
+<article class="card" id="int-five-1">
+<h3>Go — 시프트 값에 부호가 있으면 안 된다</h3>
+<div class="src"><b>src/go/intcode.go</b><span class="ln">57–69</span><span>uint(i) 캐스팅이 필요한 이유</span></div>
+<pre><code data-lang="go" data-src="src/go/intcode.go" data-lines="57-69">func putRice(w *msbWriter, v uint64, k int) {
+	q := v &gt;&gt; uint(k)
+	if q &gt; maxUnary {
+		fail("rice 의 몫이 %d — k 를 잘못 골랐다", q)
+	}
+	for i := uint64(0); i &lt; q; i++ {
+		w.writeBit(1)
+	}
+	w.writeBit(0)
+	if k &gt; 0 {
+		w.writeBits(v&amp;(uint64(1)&lt;&lt;uint(k)-1), k)
+	}
+}</code></pre>
+<p>Go 는 시프트 폭이 음수면 실행 중에 죽는다(패닉). C 계열은 미정의 동작이라
+조용히 이상한 값이 나온다. <b>죽는 쪽이 낫다</b> — 조용한 쪽은 골든 대조 전까지 안 보인다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-five-2">
+<h3>TypeScript — 39비트를 어떻게 적나</h3>
+<p>자바스크립트의 비트 연산은 32비트에서 잘린다. Elias γ 로 큰 값을 적으려면
+<code>&lt;&lt;</code> 를 쓸 수가 없다.</p>
+<div class="src"><b>src/ts/intcode.ts</b><span class="ln">36–41</span><span>시프트 대신 나눗셈과 곱셈</span></div>
+<pre><code data-lang="ts" data-src="src/ts/intcode.ts" data-lines="36-41">export function putGamma(w: MsbWriter, v: number): void {
+  if (v &lt; 1) fail(`gamma 는 1 이상만: ${v}`);
+  const n = bitLength(v);
+  w.writeBits(0, n - 1);
+  w.writeBits(v, n);
+}</code></pre>
+<div class="key"><code>Math.floor(v / 2 ** i) &amp; 1</code> — 시프트를 나눗셈으로 바꾸면
+53비트까지 안전하다. 이 덱의 TypeScript 코드에서 <code>&gt;&gt;</code> 가 드문 이유다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-five-3">
+<h3>C++ — 부호 있는 시프트는 피한다</h3>
+<div class="src"><b>src/cpp/intcode.h</b><span class="ln">22–24</span><span>uint64_t 로 올린 뒤 시프트</span></div>
+<pre><code data-lang="cpp" data-src="src/cpp/intcode.h" data-lines="22-24">inline uint64_t zigzag(int64_t n) {
+  return (u64(n) &lt;&lt; 1) ^ u64(n &gt;&gt; 63);
+}</code></pre>
+<p>C++20 부터 부호 있는 왼쪽 시프트가 정의되긴 했지만, 이 책은 <b>부호 없는 형으로 올려서</b>
+푼다. 표준 판이 바뀌어도 같은 바이트가 나오는 쪽을 고른다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="int-five-4">
+<h3>파이썬 — 넘침이 없어서 생기는 문제</h3>
+<p>파이썬 정수는 무한히 커진다. 편해 보이지만 <b>참조 구현으로는 위험하다</b> —
+다른 언어에서 넘칠 연산이 여기서는 조용히 맞는 답을 낸다.</p>
+<div class="warn">그래서 참조 구현은 <b>마스크를 일부러 명시</b>한다.
+5부 레인지 코더의 <code>&amp; 0xFFFFFFFF</code> 가 그것이다.
+파이썬에는 필요 없지만, <b>명세를 코드로 적어 두는</b> 자리다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="bit-wrap">
+<h3>2부 정리</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>도구</th><th>언제 쓰나</th><th>이 책의 쓰임</th></tr>
+<tr><td>MSB 비트 I/O</td><td>길이가 제각각인 부호를 이어 붙일 때</td><td>허프만·BWT·bzip2</td></tr>
+<tr><td>LSB 비트 I/O</td><td>DEFLATE 호환이 필요할 때</td><td>9부 전체</td></tr>
+<tr><td>varint</td><td>바이트 경계에서 길이·개수</td><td>거의 모든 모듈의 머리말</td></tr>
+<tr><td>지그재그</td><td>부호 있는 차이값</td><td>델타·DCT 계수</td></tr>
+<tr><td>Elias γ·δ</td><td>비트 스트림 안의 정수</td><td>10부 bzip2 의 길이</td></tr>
+<tr><td>골롬–라이스</td><td>0 근처에 몰린 값</td><td>13부 오디오 오차</td></tr>
+</table></div>
+<p class="cap">다음 부에서 처음으로 <b>줄어드는</b> 코덱을 만든다.</p>
+<span class="tier c">문서 근거</span>
 </article>
 
 <!-- ===== 03_simple.html ===== -->
