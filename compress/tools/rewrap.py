@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 """rewrap.py — 소스의 한국어 주석 문단을 폴더블 폭에 맞춰 다시 접는다.
 
-덱에 실릴 코드는 <pre> 안에서 72칸을 넘으면 안 된다(tools/width.py 참고).
+덱에 실릴 코드는 <pre> 안에서 72칸을 넘으면 안 된다 (tools/width.py).
 한국어 주석은 한 글자가 두 칸이라 눈으로는 짧아 보여도 쉽게 넘는다.
 손으로 접으면 반드시 어딘가에서 한 글자씩 밀리므로 기계에 맡긴다.
 
-**건드리는 것만 건드린다.** 다음 조건을 모두 만족하는 '순수 주석 문단' 만:
+**건드리는 것만 건드린다.** 아래를 모두 만족하는 주석 문단만:
   · 줄 전체가 주석이다 (코드 뒤에 붙은 꼬리 주석은 손대지 않는다)
   · 같은 들여쓰기 · 같은 접두사(// 또는 #)가 이어진다
   · 문단 안에 구분선(──), 목록 기호, 예제 명령(탭·4칸 들여쓴 줄),
     표 모양(여러 칸 띄어쓰기)이 없다
 그 외에는 손대지 않고 width.py 가 잡아 사람이 고치게 둔다.
 
-    python3 tools/rewrap.py web/01_hello/main.go        # 제자리에서 고친다
-    python3 tools/rewrap.py --dry web/**/*.go           # 바꿀 것만 보여 준다
+    python3 tools/rewrap.py src/py/x.py      # 제자리에서 고침
+    python3 tools/rewrap.py --dry src/**/*.py  # 바꿀 것만 보기
 """
 import io
 import os
@@ -143,7 +143,8 @@ def main(argv):
             total += n
             print('  %s — 문단 %d개 다시 접음' % (p, n))
             if not dry:
-                io.open(p, 'w', encoding='utf-8', newline='\n').write(new)
+                io.open(p, 'w', encoding='utf-8',
+                        newline='\n').write(new)
     print('총 %d개 문단%s' % (total, ' (미적용)' if dry else ''))
     return 0
 
