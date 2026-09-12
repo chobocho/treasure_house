@@ -12,9 +12,9 @@ from compresslib import lzw
 
 class TestStream(unittest.TestCase):
 
-    def test_empty_is_header_plus_eof(self):
-        # EOF(257) 하나만 9비트로 나가고 채워진다
-        self.assertEqual(lzw.encode(b''), b'\x00\x80\x80')
+    def test_empty_is_header_only(self):
+        # 빈 입력에는 틀 지을 몸통이 없다 — EOF 도 안 붙인다 (SPEC §0.3)
+        self.assertEqual(lzw.encode(b''), b'\x00')
 
     def test_single_byte(self):
         # 65 = 001000001, EOF = 100000001, 6비트 채움
