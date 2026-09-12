@@ -91,6 +91,28 @@ public final class RangeCoder {
       }
     }
 
+    /**
+     * 확률 모델 없이 비트를 그대로 읽는다 (SPEC §16.5). LZMA 의 먼
+     * 거리는 가운데 비트를 모델링하지 않는다 — 어차피 반반이라 얻는
+     * 것이 없다. t 는 "code 가 음수가 됐으면 되돌리고 0 비트를 낸다" 를
+     * 분기 없이 쓴 것이고, code 를 부호 없는 32비트로 본다.
+     */
+    public int decodeDirectBits(int count) {
+      int result = 0;
+      for (int i = 0; i < count; i++) {
+        range >>>= 1;
+        code = (code - range) & U32;
+        long t = 0 - ((code >>> 31) & 1);
+        code = (code + (range & t)) & U32;
+        if (range < TOP) {
+          range = (range << 8) & U32;
+          code = ((code << 8) | nextByte()) & U32;
+        }
+        result = (result << 1) + (int) ((t + 1) & 1);
+      }
+      return result;
+    }
+
     private int nextByte() {
       // 잘 만들어진 스트림도 마지막 판정에서 한 바이트쯤 더 읽는다.
       if (pos < src.length) {

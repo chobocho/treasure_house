@@ -9,6 +9,7 @@ import * as deflate from './deflate';
 import * as huffman from './huffman';
 import * as intcode from './intcode';
 import * as lz4block from './lz4block';
+import * as lzmadec from './lzmadec';
 import * as lzss from './lzss';
 import * as lzw from './lzw';
 import * as mtf from './mtf';
@@ -42,6 +43,7 @@ export const ENTRIES: Entry[] = [
     encode: lz4block.encode, decode: lz4block.decode },
   // 복호기만 있는 모듈 (PLAN.md §0.4)
   { name: 'bzip2dec', encode: null, decode: bzip2dec.decode },
+  { name: 'lzmadec', encode: null, decode: lzmadec.decode },
 ];
 
 export function find(name: string): Entry | undefined {

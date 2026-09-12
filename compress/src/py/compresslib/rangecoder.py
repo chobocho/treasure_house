@@ -117,6 +117,27 @@ class Decoder:
         return bit
 
 
+    def decode_direct_bits(self, count):
+        """확률 모델 없이 비트를 그대로 읽는다 (SPEC §16.5).
+
+        LZMA 의 먼 거리는 가운데 비트를 모델링하지 않는다 — 어차피
+        반반이라 얻는 것이 없다. t 는 "code 가 음수가 됐으면 되돌리고
+        0 비트를 낸다" 를 분기 없이 쓴 것이고, code 가 **부호 없는
+        32비트** 라는 데 기댄다.
+        """
+        result = 0
+        for _ in range(count):
+            self.range >>= 1
+            self.code = (self.code - self.range) & U32
+            t = 0 - (self.code >> 31)
+            self.code = (self.code + (self.range & t)) & U32
+            if self.range < TOP:
+                self.range = (self.range << 8) & U32
+                self.code = ((self.code << 8) | self._byte()) & U32
+            result = (result << 1) + ((t + 1) & 1)
+        return result
+
+
 class ByteModel:
     """0차 적응 바이트 모델 — 확률 256칸을 이진 트리처럼 쓴다.
 

@@ -15,6 +15,7 @@
 #include "huffman.h"
 #include "intcode.h"
 #include "lz4block.h"
+#include "lzmadec.h"
 #include "lzss.h"
 #include "lzw.h"
 #include "mtf.h"
@@ -49,6 +50,7 @@ inline const std::vector<Entry>& entries() {
       {"lz4block", lz4block::encode, lz4block::decode},
       // 복호기만 있는 모듈 (PLAN.md §0.4)
       {"bzip2dec", nullptr, bzip2dec::decode},
+      {"lzmadec", nullptr, lzmadec::decode},
   };
   return v;
 }

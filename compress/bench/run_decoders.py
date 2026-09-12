@@ -34,6 +34,9 @@ OUT = os.path.join(BASE, 'out')
 # 모듈 → (진짜 도구를 부르는 방법, 설정 이름들)
 TOOLS = {
     'bzip2dec': ('bzip2', [('-1', ['-1']), ('-9', ['-9'])]),
+    # xz 의 --format=lzma 가 LZMA1 "alone" 형식이다 (SPEC §16.1)
+    'lzmadec': ('xz', [('-1', ['--format=lzma', '-1']),
+                       ('-9', ['--format=lzma', '-9'])]),
 }
 
 

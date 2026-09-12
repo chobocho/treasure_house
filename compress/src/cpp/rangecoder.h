@@ -94,6 +94,26 @@ class Decoder {
     return bit;
   }
 
+  // 확률 모델 없이 비트를 그대로 읽는다 (SPEC §16.5). LZMA 의 먼 거리는
+  // 가운데 비트를 모델링하지 않는다 — 어차피 반반이라 얻는 것이 없다.
+  // t 는 "code 가 음수가 됐으면 되돌리고 0 비트를 낸다" 를 분기 없이 쓴
+  // 것이고, code 가 부호 없는 32비트라는 데 기댄다.
+  uint32_t decode_direct_bits(int count) {
+    uint32_t result = 0;
+    for (int i = 0; i < count; ++i) {
+      range_ >>= 1;
+      code_ -= range_;
+      uint32_t t = 0u - (code_ >> 31);
+      code_ += range_ & t;
+      if (range_ < kTop) {
+        range_ <<= 8;
+        code_ = (code_ << 8) | next_byte();
+      }
+      result = (result << 1) + (t + 1);
+    }
+    return result;
+  }
+
  private:
   uint32_t next_byte() {
     // 잘 만들어진 스트림도 마지막 판정에서 한 바이트쯤 더 읽는다.

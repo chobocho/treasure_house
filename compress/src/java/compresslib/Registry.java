@@ -40,7 +40,8 @@ public final class Registry {
       new Entry("ans", Ans::encode, Ans::decode),
       new Entry("lz4block", Lz4Block::encode, Lz4Block::decode),
       // 복호기만 있는 모듈 (PLAN.md §0.4)
-      new Entry("bzip2dec", null, Bzip2Dec::decode));
+      new Entry("bzip2dec", null, Bzip2Dec::decode),
+      new Entry("lzmadec", null, LzmaDec::decode));
 
   public static Entry find(String name) {
     for (Entry e : ENTRIES) {

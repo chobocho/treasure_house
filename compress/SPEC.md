@@ -1397,3 +1397,104 @@ The combined CRC after each block is `rotate_left(combined, 1) ^ block_crc`.
 We verify both the per-block CRC and the combined one. A decoder that skips them
 still "works" on good input, and the deck's point in part 10 is that the check is
 what tells you the BWT inverse was right.
+
+---
+
+## 16. `lzmadec` — decoding LZMA1
+
+### 16.1 What this proves
+
+The range coder of §8 was written as LZMA's from the start, precisely so this
+chapter could exist: the same coder, now driven by LZMA's context model, decoding
+**files made by real `xz`**. Like §15 this is decoder-only and has no golden vector;
+its gate is `out/decoders_lzmadec.txt`.
+
+Target format is **LZMA1 "alone"** — what `xz --format=lzma` and Python's
+`lzma.FORMAT_ALONE` write. The `.xz` container (a different framing with its own
+checks and filters) is a Tier-3 topic in part 12; we do not decode it.
+
+### 16.2 Header
+
+```
+byte 0     properties = (pb * 5 + lp) * 9 + lc
+bytes 1-4  u32le dictionary size
+bytes 5-12 u64le uncompressed size, or 0xFFFF_FFFF_FFFF_FFFF for "unknown"
+```
+
+`lc` (literal context bits, 0..8), `lp` (literal position bits, 0..4) and `pb`
+(position bits, 0..4) are the only tunables in LZMA and they are all in one byte.
+Defaults are `lc=3, lp=0, pb=2`, so the properties byte is usually 0x5D.
+
+When the size is unknown the stream ends with an **end marker**: a match whose
+distance decodes to 0xFFFFFFFF. We accept both forms.
+
+### 16.3 Probability model
+
+Every array is 11-bit probabilities initialised to 1024 (§8.1).
+
+| Array | Size | Indexed by |
+|---|---|---|
+| `IsMatch` | 12 × 16 | state, position state |
+| `IsRep` | 12 | state |
+| `IsRepG0` `IsRepG1` `IsRepG2` | 12 each | state |
+| `IsRep0Long` | 12 × 16 | state, position state |
+| `PosSlot` | 4 × 64 | length-to-position state, bit tree |
+| `SpecPos` | 115 | reverse bit tree |
+| `Align` | 16 | reverse bit tree, 4 bits |
+| `LenCoder` `RepLenCoder` | choice, choice2, 16×8 low, 16×8 mid, 256 high | |
+| `Literal` | `0x300 << (lc + lp)` | literal context |
+
+`state` is 0..11 and records what the last few symbols were; it is the whole of
+LZMA's "context" above the literal level. The transitions are fixed:
+
+```
+after a literal:     state < 4 -> 0;  state < 10 -> state - 3;  else state - 6
+after a match:       state < 7 -> 7;  else 10
+after a rep match:   state < 7 -> 8;  else 11
+after a short rep:   state < 7 -> 9;  else 11
+```
+
+### 16.4 The four last distances
+
+LZMA keeps the last four match distances (`rep0..rep3`) and can re-use them without
+spending distance bits. That is where a large part of its advantage over DEFLATE
+comes from — a repeated structure (a table, an indented block) re-uses the same
+distance over and over, and LZMA pays a handful of bits for it instead of a full
+distance code. Part 12 shows the count of rep-matches on `source.go`.
+
+### 16.5 Direct bits
+
+Distances above 2^7 spend their middle bits *unmodelled* — read straight off the
+range coder with probability 1/2:
+
+```
+decode_direct_bits(n):
+    result = 0
+    repeat n times:
+        range >>= 1
+        code -= range
+        t = 0 - (code >> 31)          # 0 or 0xFFFFFFFF, as a u32
+        code += range & t
+        normalise
+        result = (result << 1) + (t + 1)
+    return result
+```
+
+The `t` trick is a branch-free way of writing "if code went negative, put it back and
+emit a 0 bit". It relies on `code` being **unsigned 32-bit**: `code >> 31` must be a
+logical shift. In Java `code` is a `long` masked to 32 bits; in TypeScript it is a
+plain number and `t` is computed with a comparison instead, because `>>> 31` on a
+value held as a double is not the same thing.
+
+### 16.6 Matched literals
+
+When the previous symbol was a match, a literal is coded against the byte at the same
+offset in the previous match (`matchByte`), bit by bit, until the first bit that
+disagrees; after that it falls back to the plain tree. This is the single largest
+source of LZMA's win on text, and it is four lines of code.
+
+### 16.7 What we do not implement
+
+No encoder. No `.xz` container, no filters (BCJ/delta), no multi-threaded frames.
+The deck says so where it shows the capture, because "we decode LZMA" and "we decode
+.xz files" are different claims and only the first is true here.
