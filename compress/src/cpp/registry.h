@@ -7,6 +7,7 @@
 #include <functional>
 #include <string>
 
+#include "ans.h"
 #include "bwt.h"
 #include "common.h"
 #include "deflate.h"
@@ -42,6 +43,7 @@ inline const std::vector<Entry>& entries() {
       {"rangecoder", rangecoder::encode, rangecoder::decode},
       {"bwt", bwt::encode, bwt::decode},
       {"deflate", deflate::encode, deflate::decode},
+      {"ans", ans::encode, ans::decode},
   };
   return v;
 }
