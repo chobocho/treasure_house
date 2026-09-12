@@ -8013,6 +8013,533 @@ korean_utf8.txt -1             OK     OK     OK     OK     OK</pre>
 <span class="tier c">문서 근거</span>
 </article>
 
+<article class="card" id="lz4-token">
+<h3>토큰 한 바이트를 뜯어 보기</h3>
+<p>리터럴 5개 뒤에 길이 7 짜리 일치가 온다면 토큰은 이렇다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>비트</th><th>값</th><th>뜻</th></tr>
+<tr><td>7~4</td><td>0101 (5)</td><td>리터럴 5바이트</td></tr>
+<tr><td>3~0</td><td>0011 (3)</td><td>일치 길이 3 + 4 = 7</td></tr>
+</table></div>
+<p>한 바이트로 두 길이를 다 적었다. 리터럴이 15개를 넘거나 일치가 19를 넘으면
+그때만 LSIC 가 붙는다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lz4-lsic-2">
+<h3>LSIC — 0xFF 를 이어 더한다</h3>
+<div class="src"><b>src/py/compresslib/lz4block.py</b><span class="ln">33–44</span><span>255 를 계속 내보내다 마지막에 나머지</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lz4block.py" data-lines="33-44">def put_lsic(v):
+    """선형 소정수 부호 — 255 는 "계속", 그보다 작으면 끝.
+
+    그래서 정확히 255 는 두 바이트(255, 0)로 적힌다. 이 한 줄이 LZ4
+    복호기가 분기 없이 도는 이유이자, 255 가 한 바이트로 안 되는 이유다.
+    """
+    out = bytearray()
+    while v &gt;= 255:
+        out.append(255)
+        v -= 255
+    out.append(v)
+    return bytes(out)</code></pre>
+<p>값 300 이면 <code>FF 2D</code> 다(255 + 45). 큰 길이에 바이트를 더 쓰지만,
+<b>흔한 짧은 길이가 토큰 안에서 끝난다</b>는 것이 요점이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-lsic-3">
+<h3>읽는 쪽 — 상한이 형식에서 나와야 한다</h3>
+<div class="src"><b>src/py/compresslib/lz4block.py</b><span class="ln">47–63</span><span>남은 입력이 곧 상한</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lz4block.py" data-lines="47-63">def get_lsic(src, pos):
+    """(값, 다음 위치).
+
+    고리를 묶는 것은 입력 자신이다 — 이어짐 바이트가 블록에 남은 것보다
+    많을 수는 없다. 고정 상한은 솔깃하고 틀린다: 처음에 1000 으로 뒀다가
+    mixed_1m.bin 의 정당한 256 KiB 일치(이어짐 1028바이트)에서 걸렸다.
+    """
+    total = 0
+    while pos &lt; len(src):
+        b = src[pos]
+        pos += 1
+        total += b
+        if b != 255:
+            if total &gt; varint.MAX_LENGTH:
+                raise ValueError('LSIC 값이 너무 크다')
+            return total, pos
+    raise ValueError('LSIC 가 잘렸다')</code></pre>
+<div class="warn">처음에는 상한을 1000 으로 고정했다가 <code>mixed_1m.bin</code> 의
+정당한 256 KiB 일치를 거절했다. 임의의 상수는 언젠가 진짜 자료를 막는다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-emit">
+<h3>토큰을 내보내는 코드</h3>
+<div class="src"><b>src/py/compresslib/lz4block.py</b><span class="ln">76–95</span><span>토큰·LSIC·리터럴·오프셋·길이 순서</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lz4block.py" data-lines="76-95">def _emit(out, literals, offset, length):
+    """시퀀스 하나. offset 이 None 이면 마지막(리터럴만) 시퀀스다."""
+    lit_len = len(literals)
+    token_lit = min(lit_len, 15)
+    if offset is None:
+        out.append(token_lit &lt;&lt; 4)
+        if lit_len &gt;= 15:
+            out += put_lsic(lit_len - 15)
+        out += literals
+        return
+    ml_code = length - MIN_MATCH
+    token_ml = min(ml_code, 15)
+    out.append((token_lit &lt;&lt; 4) | token_ml)
+    if lit_len &gt;= 15:
+        out += put_lsic(lit_len - 15)
+    out += literals
+    out.append(offset &amp; 0xFF)
+    out.append(offset &gt;&gt; 8)
+    if ml_code &gt;= 15:
+        out += put_lsic(ml_code - 15)</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-compress">
+<h3>부호기 전체</h3>
+<div class="src"><b>src/py/compresslib/lz4block.py</b><span class="ln">98–121</span><span>해시 표 하나, 사슬 없음</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lz4block.py" data-lines="98-121">def compress_block(src):
+    n = len(src)
+    out = bytearray()
+    if n &lt; MF_LIMIT + 1:
+        _emit(out, src, None, 0)
+        return bytes(out)
+    table = [-1] * HASH_SIZE
+    ip = anchor = 0
+    while ip &lt;= n - MF_LIMIT:
+        h = _hash4(src, ip)
+        ref = table[h]
+        table[h] = ip
+        if ref &gt;= 0 and ip - ref &lt;= MAX_OFFSET and _same4(src, ref, ip):
+            ml = MIN_MATCH
+            limit = n - LAST_LITERALS
+            while ip + ml &lt; limit and src[ref + ml] == src[ip + ml]:
+                ml += 1
+            _emit(out, src[anchor:ip], ip - ref, ml)
+            ip += ml
+            anchor = ip
+        else:
+            ip += 1
+    _emit(out, src[anchor:n], None, 0)
+    return bytes(out)</code></pre>
+<p>사슬이 없으니 <b>해시가 충돌하면 그 일치를 놓친다</b>. 대신 위치마다 하는 일이
+해시 한 번과 비교 몇 번뿐이다 — 그것이 LZ4 의 속도다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-decomp">
+<h3>복호기 — 왜 빠른가</h3>
+<div class="src"><b>src/py/compresslib/lz4block.py</b><span class="ln">161–198</span><span>바이트 읽고 복사하는 것이 전부</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lz4block.py" data-lines="161-198">def decompress_block(block, want=None):
+    out = bytearray()
+    pos = 0
+    n = len(block)
+    while pos &lt; n:
+        token = block[pos]
+        pos += 1
+        lit_len = token &gt;&gt; 4
+        if lit_len == 15:
+            extra, pos = get_lsic(block, pos)
+            lit_len += extra
+        if pos + lit_len &gt; n:
+            raise ValueError('리터럴이 잘렸다')
+        out += block[pos:pos + lit_len]
+        pos += lit_len
+        if pos == n:
+            break                       # 마지막 시퀀스는 리터럴뿐이다
+        if pos + 2 &gt; n:
+            raise ValueError('거리가 잘렸다')
+        offset = block[pos] | (block[pos + 1] &lt;&lt; 8)
+        pos += 2
+        length = token &amp; 15
+        if length == 15:
+            extra, pos = get_lsic(block, pos)
+            length += extra
+        length += MIN_MATCH
+        if offset == 0:
+            raise ValueError('거리 0 은 없다')
+        if offset &gt; len(out):
+            raise ValueError('거리 %d 가 낸 것보다 멀다' % offset)
+        start = len(out) - offset
+        # 한 바이트씩 앞으로. 거리 1 짜리 긴 일치가 여기 기댄다.
+        for j in range(length):
+            out.append(out[start + j])
+    if want is not None and len(out) != want:
+        raise ValueError('푼 길이가 헤더와 다르다: %d != %d'
+                         % (len(out), want))
+    return bytes(out)</code></pre>
+<div class="key">비트 연산도, 부호표도, 확률도 없다. 읽고 복사한다.
+진짜 lz4 는 여기에 16바이트 단위 복사를 얹어 초당 수 GB 를 낸다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-parse">
+<h3>스트림을 사람이 읽을 수 있게</h3>
+<div class="src"><b>src/py/compresslib/lz4block.py</b><span class="ln">124–158</span><span>토큰을 목록으로</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lz4block.py" data-lines="124-158">def parse_sequences(block):
+    """(리터럴, (거리, 길이) 또는 None) 목록.
+
+    푸는 데는 안 쓴다 — decompress_block 은 같은 일을 고리 안에서 바로
+    한다. 이 함수는 **시퀀스를 눈으로 보려고** 있다: 시험이 꼬리 규칙을
+    확인하는 데 쓰고, 12부의 데모가 이 목록을 그대로 그린다.
+    다른 네 언어에는 없다.
+    """
+    out = []
+    pos = 0
+    n = len(block)
+    while pos &lt; n:
+        token = block[pos]
+        pos += 1
+        lit_len = token &gt;&gt; 4
+        if lit_len == 15:
+            extra, pos = get_lsic(block, pos)
+            lit_len += extra
+        if pos + lit_len &gt; n:
+            raise ValueError('리터럴이 잘렸다')
+        literals = block[pos:pos + lit_len]
+        pos += lit_len
+        if pos == n:
+            out.append((literals, None))
+            break
+        if pos + 2 &gt; n:
+            raise ValueError('거리가 잘렸다')
+        offset = block[pos] | (block[pos + 1] &lt;&lt; 8)
+        pos += 2
+        ml = token &amp; 15
+        if ml == 15:
+            extra, pos = get_lsic(block, pos)
+            ml += extra
+        out.append((literals, (offset, ml + MIN_MATCH)))
+    return out</code></pre>
+<p>복호와 따로 두었다. 형식을 <b>설명하는 데</b> 쓰려면 값을 꺼내 보여 줄 수 있어야 한다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-frame-2">
+<h3>프레임 — 블록을 감싸는 층</h3>
+<div class="src"><b>src/py/compresslib/lz4block.py</b><span class="ln">216–255</span><span>마법수·기술자·블록들·끝 표시</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lz4block.py" data-lines="216-255"># --------------------------------------------------------------- 프레임
+def frame_decode(src):
+    """진짜 lz4 명령이 쓰는 프레임을 푼다 (§14.6). 쓰지는 않는다."""
+    if len(src) &lt; 7 or src[:4] != FRAME_MAGIC:
+        raise ValueError('lz4 프레임 매직이 아니다')
+    flg = src[4]
+    version = flg &gt;&gt; 6
+    if version != 1:
+        raise ValueError('모르는 프레임 판: %d' % version)
+    block_checksum = bool(flg &amp; 0x10)
+    content_size = bool(flg &amp; 0x08)
+    content_checksum = bool(flg &amp; 0x04)
+    dict_id = bool(flg &amp; 0x01)
+    pos = 6                                   # 매직 4 + FLG + BD
+    if content_size:
+        pos += 8
+    if dict_id:
+        pos += 4
+    pos += 1                                  # 머리 검사 바이트(HC)
+    out = bytearray()
+    while True:
+        if pos + 4 &gt; len(src):
+            raise ValueError('블록 크기가 잘렸다')
+        size = int.from_bytes(src[pos:pos + 4], 'little')
+        pos += 4
+        if size == 0:
+            break
+        stored = bool(size &amp; 0x80000000)
+        size &amp;= 0x7FFFFFFF
+        if pos + size &gt; len(src):
+            raise ValueError('블록이 잘렸다')
+        chunk = src[pos:pos + size]
+        pos += size
+        if block_checksum:
+            pos += 4                          # 블록 xxHash — 건너뛴다
+        out += chunk if stored else decompress_block(chunk)
+    if content_checksum:
+        # 내용 xxHash 4바이트. 건너뛴다 — §14.6 에 이유를 적어 뒀다.
+        pos += 4
+    return bytes(out)</code></pre>
+<p>이 책의 모듈은 <b>블록</b>만 다룬다. 프레임을 만드는 코드는
+상호운용 스크립트에만 있다 — 배울 것이 블록 쪽에 있기 때문이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-xxhash">
+<h3>xxHash-32 — 프레임의 검사합</h3>
+<p>LZ4 프레임은 CRC 대신 xxHash 를 쓴다. 압축만큼 빨라야 하기 때문이다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>CRC-32</th><th>xxHash-32</th></tr>
+<tr><td>목적</td><td>오류 검출</td><td>오류 검출 + 해시 테이블</td></tr>
+<tr><td>속도</td><td>표 기반, 바이트마다</td><td>4바이트씩, 곱셈과 회전</td></tr>
+<tr><td>수학적 보장</td><td><b>있다</b> — 버스트 오류 검출 폭이 증명됨</td><td>없다 — 실측으로만</td></tr>
+</table></div>
+<div class="note">우리 interop 스크립트에 xxHash-32 구현이 들어 있다.
+진짜 <code>lz4</code> 명령이 우리 프레임을 받아 주려면 이 값이 맞아야 하므로,
+그 자체가 구현의 시험이 된다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-interop-2">
+<h3>반대 방향 — 진짜 lz4 가 만든 것을 우리가</h3>
+<div class="src"><b>out/interop_lz4.txt</b><span class="ln">17–33</span><span>lz4 -1 · -9 · --no-frame-crc 가 만든 프레임</span></div>
+<pre class="term" data-out="interop_lz4.txt" data-lines="17-33">== 2. 진짜 lz4 (-1 · -9 · --no-frame-crc) → 우리가 푼다 ==
+기본 프레임에는 내용 xxHash 가 붙는다. 우리 독해기는 그
+4바이트를 건너뛴다 — 검사는 안 하고 읽기는 한다 (§14.6).
+파일                 설정                 프레임  결과
+empty.bin            -1                       15  OK 
+empty.bin            -9                       15  OK 
+empty.bin            --no-frame-crc           11  OK 
+one.bin              -1                       20  OK 
+one.bin              -9                       20  OK 
+one.bin              --no-frame-crc           16  OK 
+abab_4k.txt          -1                       46  OK 
+abab_4k.txt          -9                       46  OK 
+abab_4k.txt          --no-frame-crc           42  OK 
+alphabet.bin         -1                     4627  OK 
+alphabet.bin         -9                     4627  OK 
+alphabet.bin         --no-frame-crc         4623  OK 
+runs.bin             -1                      579  OK </pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-rc">
+<h3>LZMA 의 비트 트리</h3>
+<div class="src"><b>src/py/compresslib/lzmadec.py</b><span class="ln">36–41</span><span>확률 슬롯을 트리로 쓰는 방법</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lzmadec.py" data-lines="36-41">def _bit_tree(dec, probs, offset, num_bits):
+    """위에서부터 내려가는 이진 트리. 결과는 num_bits 짜리 값."""
+    m = 1
+    for _ in range(num_bits):
+        m = (m &lt;&lt; 1) + dec.decode_bit(probs, offset + m)
+    return m - (1 &lt;&lt; num_bits)</code></pre>
+<p>5부의 <code>ByteModel</code> 과 같은 구조다 — 지금까지 읽은 비트가 곧 슬롯 번호다.
+LZMA 는 이 패턴을 길이·거리·리터럴에 <b>전부</b> 쓴다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-rc-2">
+<h3>거꾸로 읽는 비트 트리</h3>
+<div class="src"><b>src/py/compresslib/lzmadec.py</b><span class="ln">44–52</span><span>거리의 하위 비트는 역순</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lzmadec.py" data-lines="44-52">def _bit_tree_reverse(dec, probs, offset, num_bits):
+    """같은 트리인데 비트를 **거꾸로** 모은다 — 거리의 아래쪽이다."""
+    m = 1
+    sym = 0
+    for i in range(num_bits):
+        bit = dec.decode_bit(probs, offset + m)
+        m = (m &lt;&lt; 1) + bit
+        sym |= bit &lt;&lt; i
+    return sym</code></pre>
+<div class="warn">거리의 하위 4비트만 <b>역순</b>으로 적힌다.
+규격에 그렇게 적혀 있고, 이유는 부호기 구현의 편의다.
+읽는 쪽은 그냥 따라야 한다 — 남의 형식을 푼다는 것이 이런 일이다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-len">
+<h3>길이 부호기 — 세 층</h3>
+<div class="src"><b>src/py/compresslib/lzmadec.py</b><span class="ln">55–69</span><span>2~9 · 10~17 · 18~273</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lzmadec.py" data-lines="55-69">class LengthCoder:
+    """길이 복호기. 2..273 을 세 구간(8+8+256)으로 나눠 적는다."""
+
+    def __init__(self, pos_states):
+        self.choice = [PROB_INIT, PROB_INIT]
+        self.low = [PROB_INIT] * (pos_states * 8)
+        self.mid = [PROB_INIT] * (pos_states * 8)
+        self.high = [PROB_INIT] * 256
+
+    def decode(self, dec, pos_state):
+        if dec.decode_bit(self.choice, 0) == 0:
+            return _bit_tree(dec, self.low, pos_state * 8, 3)
+        if dec.decode_bit(self.choice, 1) == 0:
+            return 8 + _bit_tree(dec, self.mid, pos_state * 8, 3)
+        return 16 + _bit_tree(dec, self.high, 0, 8)</code></pre>
+<div class="tblwrap"><table class="kv">
+<tr><th>선택 비트</th><th>범위</th><th>비트 트리</th></tr>
+<tr><td>0</td><td>2~9</td><td>3비트</td></tr>
+<tr><td>10</td><td>10~17</td><td>3비트</td></tr>
+<tr><td>11</td><td>18~273</td><td>8비트</td></tr>
+</table></div>
+<p>짧은 일치가 압도적으로 흔하므로 <b>짧은 쪽에 짧은 부호</b>를 준다.
+게다가 선택 비트의 확률 자체가 적응한다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-dist">
+<h3>거리 — 세 부분으로 나눈다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>부분</th><th>비트</th><th>어떻게</th></tr>
+<tr><td>슬롯</td><td>6</td><td>비트 트리 (길이에 따라 문맥이 다르다)</td></tr>
+<tr><td>가운데</td><td>가변</td><td>슬롯 14 미만은 확률 모델, 이상은 <b>직접 비트</b></td></tr>
+<tr><td>정렬 비트</td><td>4</td><td>역순 비트 트리</td></tr>
+</table></div>
+<div class="key">거리가 클수록 <b>모델 없이 그냥 적는다</b>.
+큰 거리는 드물고 고르게 퍼져 있어 모델이 배울 것이 없기 때문이다.
+모델을 붙이는 자리와 안 붙이는 자리를 나눈 설계다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lzma-direct">
+<h3>직접 비트</h3>
+<div class="src"><b>src/py/compresslib/rangecoder.py</b><span class="ln">184–202</span><span>확률 1/2 고정</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/rangecoder.py" data-lines="184-202">    def decode_direct_bits(self, count):
+        """확률 모델 없이 비트를 그대로 읽는다 (SPEC §16.5).
+
+        LZMA 의 먼 거리는 가운데 비트를 모델링하지 않는다 — 어차피
+        반반이라 얻는 것이 없다. t 는 "code 가 음수가 됐으면 되돌리고
+        0 비트를 낸다" 를 분기 없이 쓴 것이고, code 가 **부호 없는
+        32비트** 라는 데 기댄다.
+        """
+        result = 0
+        for _ in range(count):
+            self.range &gt;&gt;= 1
+            self.code = (self.code - self.range) &amp; U32
+            t = 0 - (self.code &gt;&gt; 31)
+            self.code = (self.code + (self.range &amp; t)) &amp; U32
+            if self.range &lt; TOP:
+                self.range = (self.range &lt;&lt; 8) &amp; U32
+                self.code = ((self.code &lt;&lt; 8) | self._byte()) &amp; U32
+            result = (result &lt;&lt; 1) + ((t + 1) &amp; 1)
+        return result</code></pre>
+<p>확률을 반반으로 두고 구간을 정확히 반씩 자른다. 모델도 갱신도 없다.
+<b>레인지 코더 안에서 "그냥 비트" 를 적는 방법</b>이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-state">
+<h3>상태 12가지</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>상태</th><th>직전에 무엇을 했나</th></tr>
+<tr><td>0~3</td><td>리터럴이 이어지는 중</td></tr>
+<tr><td>4~6</td><td>일치 뒤의 리터럴</td></tr>
+<tr><td>7~9</td><td>되풀이 거리 뒤의 리터럴</td></tr>
+<tr><td>10</td><td>일치 직후</td></tr>
+<tr><td>11</td><td>되풀이 거리 직후</td></tr>
+</table></div>
+<p>이 상태가 "다음이 리터럴인가 일치인가" 의 확률을 나눈다.
+일치 직후에 또 일치가 올 확률과, 리터럴이 이어지던 중에 일치가 올 확률은 다르다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lzma-lit">
+<h3>리터럴 문맥 — lc 와 lp</h3>
+<div class="key">리터럴 확률표를 <b>앞 바이트의 상위 lc 비트</b>와
+<b>자리의 하위 lp 비트</b>로 나눈다.</div>
+<div class="tblwrap"><table class="kv">
+<tr><th>설정</th><th>맞는 자료</th></tr>
+<tr><td>lc=3 lp=0 (기본)</td><td>텍스트·일반 파일</td></tr>
+<tr><td>lc=0 lp=2</td><td>32비트 정렬 자료 — 자리의 성격이 강하다</td></tr>
+<tr><td>lc=4</td><td>바이트 값의 상관이 강한 자료</td></tr>
+</table></div>
+<p><code>xz --lzma1=lc=0,lp=2,pb=2</code> 같은 설정이 이것이다.
+<b>자료를 알면 형식 안에서 모델을 고를 수 있다</b>는 예다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lzma-header">
+<h3>.lzma 파일의 13바이트 머리말</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>바이트</th><th>뜻</th></tr>
+<tr><td>0</td><td>(pb×5 + lp)×9 + lc</td></tr>
+<tr><td>1~4</td><td>사전 크기 (리틀엔디언)</td></tr>
+<tr><td>5~12</td><td>원본 길이. 모르면 전부 FF</td></tr>
+</table></div>
+<p>원본 길이를 모르는 스트림은 <b>끝 표시자</b>(거리 0xFFFFFFFF)로 끝난다.
+둘 다 다뤄야 진짜 파일을 푼다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-dec-5">
+<h3>본문 고리</h3>
+<div class="src"><b>src/py/compresslib/lzmadec.py</b><span class="ln">90–120</span><span>상태에 따라 리터럴·일치·되풀이</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lzmadec.py" data-lines="90-120">def decode(src):
+    lc, lp, pb, _dict_size, want, pos = parse_header(src)
+    dec = rangecoder.Decoder(src, pos)
+    pos_states = 1 &lt;&lt; pb
+    pos_mask = pos_states - 1
+    lp_mask = (1 &lt;&lt; lp) - 1
+
+    is_match = [PROB_INIT] * (NUM_STATES &lt;&lt; NUM_POS_BITS_MAX)
+    is_rep = [PROB_INIT] * NUM_STATES
+    is_rep_g0 = [PROB_INIT] * NUM_STATES
+    is_rep_g1 = [PROB_INIT] * NUM_STATES
+    is_rep_g2 = [PROB_INIT] * NUM_STATES
+    is_rep0_long = [PROB_INIT] * (NUM_STATES &lt;&lt; NUM_POS_BITS_MAX)
+    pos_slot = [PROB_INIT] * (NUM_LEN_TO_POS_STATES * 64)
+    spec_pos = [PROB_INIT] * (NUM_FULL_DISTANCES
+                              - END_POS_MODEL_INDEX + 1)
+    align_probs = [PROB_INIT] * (1 &lt;&lt; NUM_ALIGN_BITS)
+    literal = [PROB_INIT] * (0x300 &lt;&lt; (lc + lp))
+    len_coder = LengthCoder(pos_states)
+    rep_len_coder = LengthCoder(pos_states)
+
+    out = bytearray()
+    state = 0
+    rep0 = rep1 = rep2 = rep3 = 0
+
+    while want == UNKNOWN_SIZE or len(out) &lt; want:
+        pos_state = len(out) &amp; pos_mask
+        midx = (state &lt;&lt; NUM_POS_BITS_MAX) + pos_state
+        if dec.decode_bit(is_match, midx) == 0:
+            prev = out[-1] if out else 0
+            lit_state = (((len(out) &amp; lp_mask) &lt;&lt; lc)</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="zstd-3">
+<h3>zstd 의 블록 구조</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>부분</th><th>부호기</th></tr>
+<tr><td>리터럴</td><td>허프만 (또는 그대로)</td></tr>
+<tr><td>리터럴 길이</td><td>FSE</td></tr>
+<tr><td>일치 길이</td><td>FSE</td></tr>
+<tr><td>오프셋</td><td>FSE</td></tr>
+</table></div>
+<div class="key">흐름을 <b>넷으로 갈라</b> 각각에 맞는 부호기를 붙인다.
+DEFLATE 가 리터럴과 길이를 한 표에 섞은 것과 정반대의 선택이다 —
+갈라 놓으면 표가 늘지만, 각 흐름의 분포에 딱 맞출 수 있다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="zstd-4">
+<h3>왜 리터럴만 허프만인가</h3>
+<ul>
+<li>리터럴은 <b>256가지</b>라 알파벳이 크다 — FSE 표가 커진다</li>
+<li>길이·오프셋은 <b>수십 가지</b>라 FSE 표가 작고, 확률 차이가 극단적이다</li>
+<li>허프만은 표가 작고 복호가 단순하다. FSE 는 치우침을 더 잘 먹는다</li>
+</ul>
+<div class="note">"어느 부호기가 더 좋은가" 가 아니라 <b>"이 흐름에는 어느 쪽이 맞나"</b> 다.
+같은 파일 안에서 두 부호기를 함께 쓰는 것이 자연스러운 답이 된다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="zstd-5">
+<h3>사전을 만들어 보면</h3>
+<p><code>zstd --train</code> 은 표본 파일들에서 자주 나오는 토막을 찾아
+사전 파일을 만든다. 그 사전이 곧 <b>미리 채운 창</b>이다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>200바이트 JSON 로그</th><th>크기</th></tr>
+<tr><td>원본</td><td>200</td></tr>
+<tr><td>zstd (사전 없이)</td><td>190 안팎 — 거의 못 줄인다</td></tr>
+<tr><td>zstd (사전 있음)</td><td>40~60 — 키 이름이 전부 사전에 있다</td></tr>
+</table></div>
+<p>작은 파일이 많은 곳(로그·메시지 큐·행 단위 저장)에서 이 차이가 결정적이다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="modern-choose">
+<h3>고르는 순서</h3>
+<ol class="steps">
+<li><b>해제가 읽기 경로에 있나?</b> — 있으면 LZ4 나 zstd 낮은 레벨</li>
+<li><b>한 번 압축해 여러 번 배포하나?</b> — LZMA 나 zstd -19</li>
+<li><b>작은 파일이 아주 많나?</b> — zstd + 사전</li>
+<li><b>웹 응답인가?</b> — Brotli (내장 사전)</li>
+<li><b>이미 gzip 이 깔려 있고 바꿀 이유가 없나?</b> — 그대로 두라</li>
+</ol>
+<div class="key">마지막 항목이 실제로 가장 흔한 답이다.
+DEFLATE 가 30년을 버틴 이유는 <b>이미 어디에나 있기 때문</b>이다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
 <article class="card" id="modern-table">
 <p class="chnum">4장</p>
 <h2>넷을 한 표에</h2>

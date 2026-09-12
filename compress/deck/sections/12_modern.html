@@ -218,6 +218,250 @@ LZMA 부호기의 최적 파싱은 이 책의 분량을 넘는다.</p>
 <span class="tier c">문서 근거</span>
 </article>
 
+<article class="card" id="lz4-token">
+<h3>토큰 한 바이트를 뜯어 보기</h3>
+<p>리터럴 5개 뒤에 길이 7 짜리 일치가 온다면 토큰은 이렇다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>비트</th><th>값</th><th>뜻</th></tr>
+<tr><td>7~4</td><td>0101 (5)</td><td>리터럴 5바이트</td></tr>
+<tr><td>3~0</td><td>0011 (3)</td><td>일치 길이 3 + 4 = 7</td></tr>
+</table></div>
+<p>한 바이트로 두 길이를 다 적었다. 리터럴이 15개를 넘거나 일치가 19를 넘으면
+그때만 LSIC 가 붙는다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lz4-lsic-2">
+<h3>LSIC — 0xFF 를 이어 더한다</h3>
+<!--CODE file=src/py/compresslib/lz4block.py sym=put_lsic note=255 를 계속 내보내다 마지막에 나머지-->
+<p>값 300 이면 <code>FF 2D</code> 다(255 + 45). 큰 길이에 바이트를 더 쓰지만,
+<b>흔한 짧은 길이가 토큰 안에서 끝난다</b>는 것이 요점이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-lsic-3">
+<h3>읽는 쪽 — 상한이 형식에서 나와야 한다</h3>
+<!--CODE file=src/py/compresslib/lz4block.py sym=get_lsic note=남은 입력이 곧 상한-->
+<div class="warn">처음에는 상한을 1000 으로 고정했다가 <code>mixed_1m.bin</code> 의
+정당한 256 KiB 일치를 거절했다. 임의의 상수는 언젠가 진짜 자료를 막는다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-emit">
+<h3>토큰을 내보내는 코드</h3>
+<!--CODE file=src/py/compresslib/lz4block.py sym=_emit note=토큰·LSIC·리터럴·오프셋·길이 순서-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-compress">
+<h3>부호기 전체</h3>
+<!--CODE file=src/py/compresslib/lz4block.py sym=compress_block note=해시 표 하나, 사슬 없음-->
+<p>사슬이 없으니 <b>해시가 충돌하면 그 일치를 놓친다</b>. 대신 위치마다 하는 일이
+해시 한 번과 비교 몇 번뿐이다 — 그것이 LZ4 의 속도다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-decomp">
+<h3>복호기 — 왜 빠른가</h3>
+<!--CODE file=src/py/compresslib/lz4block.py sym=decompress_block note=바이트 읽고 복사하는 것이 전부-->
+<div class="key">비트 연산도, 부호표도, 확률도 없다. 읽고 복사한다.
+진짜 lz4 는 여기에 16바이트 단위 복사를 얹어 초당 수 GB 를 낸다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-parse">
+<h3>스트림을 사람이 읽을 수 있게</h3>
+<!--CODE file=src/py/compresslib/lz4block.py sym=parse_sequences note=토큰을 목록으로-->
+<p>복호와 따로 두었다. 형식을 <b>설명하는 데</b> 쓰려면 값을 꺼내 보여 줄 수 있어야 한다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-frame-2">
+<h3>프레임 — 블록을 감싸는 층</h3>
+<!--CODE file=src/py/compresslib/lz4block.py sym=frame_decode note=마법수·기술자·블록들·끝 표시-->
+<p>이 책의 모듈은 <b>블록</b>만 다룬다. 프레임을 만드는 코드는
+상호운용 스크립트에만 있다 — 배울 것이 블록 쪽에 있기 때문이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-xxhash">
+<h3>xxHash-32 — 프레임의 검사합</h3>
+<p>LZ4 프레임은 CRC 대신 xxHash 를 쓴다. 압축만큼 빨라야 하기 때문이다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>CRC-32</th><th>xxHash-32</th></tr>
+<tr><td>목적</td><td>오류 검출</td><td>오류 검출 + 해시 테이블</td></tr>
+<tr><td>속도</td><td>표 기반, 바이트마다</td><td>4바이트씩, 곱셈과 회전</td></tr>
+<tr><td>수학적 보장</td><td><b>있다</b> — 버스트 오류 검출 폭이 증명됨</td><td>없다 — 실측으로만</td></tr>
+</table></div>
+<div class="note">우리 interop 스크립트에 xxHash-32 구현이 들어 있다.
+진짜 <code>lz4</code> 명령이 우리 프레임을 받아 주려면 이 값이 맞아야 하므로,
+그 자체가 구현의 시험이 된다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-interop-2">
+<h3>반대 방향 — 진짜 lz4 가 만든 것을 우리가</h3>
+<!--OUT  file=interop_lz4.txt lines=17-33 note=lz4 -1 · -9 · --no-frame-crc 가 만든 프레임-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-rc">
+<h3>LZMA 의 비트 트리</h3>
+<!--CODE file=src/py/compresslib/lzmadec.py sym=_bit_tree note=확률 슬롯을 트리로 쓰는 방법-->
+<p>5부의 <code>ByteModel</code> 과 같은 구조다 — 지금까지 읽은 비트가 곧 슬롯 번호다.
+LZMA 는 이 패턴을 길이·거리·리터럴에 <b>전부</b> 쓴다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-rc-2">
+<h3>거꾸로 읽는 비트 트리</h3>
+<!--CODE file=src/py/compresslib/lzmadec.py sym=_bit_tree_reverse note=거리의 하위 비트는 역순-->
+<div class="warn">거리의 하위 4비트만 <b>역순</b>으로 적힌다.
+규격에 그렇게 적혀 있고, 이유는 부호기 구현의 편의다.
+읽는 쪽은 그냥 따라야 한다 — 남의 형식을 푼다는 것이 이런 일이다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-len">
+<h3>길이 부호기 — 세 층</h3>
+<!--CODE file=src/py/compresslib/lzmadec.py sym=LengthCoder note=2~9 · 10~17 · 18~273-->
+<div class="tblwrap"><table class="kv">
+<tr><th>선택 비트</th><th>범위</th><th>비트 트리</th></tr>
+<tr><td>0</td><td>2~9</td><td>3비트</td></tr>
+<tr><td>10</td><td>10~17</td><td>3비트</td></tr>
+<tr><td>11</td><td>18~273</td><td>8비트</td></tr>
+</table></div>
+<p>짧은 일치가 압도적으로 흔하므로 <b>짧은 쪽에 짧은 부호</b>를 준다.
+게다가 선택 비트의 확률 자체가 적응한다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-dist">
+<h3>거리 — 세 부분으로 나눈다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>부분</th><th>비트</th><th>어떻게</th></tr>
+<tr><td>슬롯</td><td>6</td><td>비트 트리 (길이에 따라 문맥이 다르다)</td></tr>
+<tr><td>가운데</td><td>가변</td><td>슬롯 14 미만은 확률 모델, 이상은 <b>직접 비트</b></td></tr>
+<tr><td>정렬 비트</td><td>4</td><td>역순 비트 트리</td></tr>
+</table></div>
+<div class="key">거리가 클수록 <b>모델 없이 그냥 적는다</b>.
+큰 거리는 드물고 고르게 퍼져 있어 모델이 배울 것이 없기 때문이다.
+모델을 붙이는 자리와 안 붙이는 자리를 나눈 설계다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lzma-direct">
+<h3>직접 비트</h3>
+<!--CODE file=src/py/compresslib/rangecoder.py sym=decode_direct_bits note=확률 1/2 고정-->
+<p>확률을 반반으로 두고 구간을 정확히 반씩 자른다. 모델도 갱신도 없다.
+<b>레인지 코더 안에서 "그냥 비트" 를 적는 방법</b>이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-state">
+<h3>상태 12가지</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>상태</th><th>직전에 무엇을 했나</th></tr>
+<tr><td>0~3</td><td>리터럴이 이어지는 중</td></tr>
+<tr><td>4~6</td><td>일치 뒤의 리터럴</td></tr>
+<tr><td>7~9</td><td>되풀이 거리 뒤의 리터럴</td></tr>
+<tr><td>10</td><td>일치 직후</td></tr>
+<tr><td>11</td><td>되풀이 거리 직후</td></tr>
+</table></div>
+<p>이 상태가 "다음이 리터럴인가 일치인가" 의 확률을 나눈다.
+일치 직후에 또 일치가 올 확률과, 리터럴이 이어지던 중에 일치가 올 확률은 다르다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lzma-lit">
+<h3>리터럴 문맥 — lc 와 lp</h3>
+<div class="key">리터럴 확률표를 <b>앞 바이트의 상위 lc 비트</b>와
+<b>자리의 하위 lp 비트</b>로 나눈다.</div>
+<div class="tblwrap"><table class="kv">
+<tr><th>설정</th><th>맞는 자료</th></tr>
+<tr><td>lc=3 lp=0 (기본)</td><td>텍스트·일반 파일</td></tr>
+<tr><td>lc=0 lp=2</td><td>32비트 정렬 자료 — 자리의 성격이 강하다</td></tr>
+<tr><td>lc=4</td><td>바이트 값의 상관이 강한 자료</td></tr>
+</table></div>
+<p><code>xz --lzma1=lc=0,lp=2,pb=2</code> 같은 설정이 이것이다.
+<b>자료를 알면 형식 안에서 모델을 고를 수 있다</b>는 예다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lzma-header">
+<h3>.lzma 파일의 13바이트 머리말</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>바이트</th><th>뜻</th></tr>
+<tr><td>0</td><td>(pb×5 + lp)×9 + lc</td></tr>
+<tr><td>1~4</td><td>사전 크기 (리틀엔디언)</td></tr>
+<tr><td>5~12</td><td>원본 길이. 모르면 전부 FF</td></tr>
+</table></div>
+<p>원본 길이를 모르는 스트림은 <b>끝 표시자</b>(거리 0xFFFFFFFF)로 끝난다.
+둘 다 다뤄야 진짜 파일을 푼다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-dec-5">
+<h3>본문 고리</h3>
+<!--CODE file=src/py/compresslib/lzmadec.py lines=90-120 note=상태에 따라 리터럴·일치·되풀이-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="zstd-3">
+<h3>zstd 의 블록 구조</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>부분</th><th>부호기</th></tr>
+<tr><td>리터럴</td><td>허프만 (또는 그대로)</td></tr>
+<tr><td>리터럴 길이</td><td>FSE</td></tr>
+<tr><td>일치 길이</td><td>FSE</td></tr>
+<tr><td>오프셋</td><td>FSE</td></tr>
+</table></div>
+<div class="key">흐름을 <b>넷으로 갈라</b> 각각에 맞는 부호기를 붙인다.
+DEFLATE 가 리터럴과 길이를 한 표에 섞은 것과 정반대의 선택이다 —
+갈라 놓으면 표가 늘지만, 각 흐름의 분포에 딱 맞출 수 있다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="zstd-4">
+<h3>왜 리터럴만 허프만인가</h3>
+<ul>
+<li>리터럴은 <b>256가지</b>라 알파벳이 크다 — FSE 표가 커진다</li>
+<li>길이·오프셋은 <b>수십 가지</b>라 FSE 표가 작고, 확률 차이가 극단적이다</li>
+<li>허프만은 표가 작고 복호가 단순하다. FSE 는 치우침을 더 잘 먹는다</li>
+</ul>
+<div class="note">"어느 부호기가 더 좋은가" 가 아니라 <b>"이 흐름에는 어느 쪽이 맞나"</b> 다.
+같은 파일 안에서 두 부호기를 함께 쓰는 것이 자연스러운 답이 된다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="zstd-5">
+<h3>사전을 만들어 보면</h3>
+<p><code>zstd --train</code> 은 표본 파일들에서 자주 나오는 토막을 찾아
+사전 파일을 만든다. 그 사전이 곧 <b>미리 채운 창</b>이다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>200바이트 JSON 로그</th><th>크기</th></tr>
+<tr><td>원본</td><td>200</td></tr>
+<tr><td>zstd (사전 없이)</td><td>190 안팎 — 거의 못 줄인다</td></tr>
+<tr><td>zstd (사전 있음)</td><td>40~60 — 키 이름이 전부 사전에 있다</td></tr>
+</table></div>
+<p>작은 파일이 많은 곳(로그·메시지 큐·행 단위 저장)에서 이 차이가 결정적이다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="modern-choose">
+<h3>고르는 순서</h3>
+<ol class="steps">
+<li><b>해제가 읽기 경로에 있나?</b> — 있으면 LZ4 나 zstd 낮은 레벨</li>
+<li><b>한 번 압축해 여러 번 배포하나?</b> — LZMA 나 zstd -19</li>
+<li><b>작은 파일이 아주 많나?</b> — zstd + 사전</li>
+<li><b>웹 응답인가?</b> — Brotli (내장 사전)</li>
+<li><b>이미 gzip 이 깔려 있고 바꿀 이유가 없나?</b> — 그대로 두라</li>
+</ol>
+<div class="key">마지막 항목이 실제로 가장 흔한 답이다.
+DEFLATE 가 30년을 버틴 이유는 <b>이미 어디에나 있기 때문</b>이다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
 <article class="card" id="modern-table">
 <p class="chnum">4장</p>
 <h2>넷을 한 표에</h2>
