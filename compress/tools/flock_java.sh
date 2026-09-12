@@ -1,5 +1,5 @@
 #!/bin/sh
-# JVM 은 한 번에 하나만 — 이 기계에서 둘이 겹치면 세션째 OOM 으로 죽는다.
+# JVM 은 한 번에 하나만 — 둘이 겹치면 이 기계는 OOM 으로 죽는다.
 #
 #     sh tools/flock_java.sh javac -d build @sources.txt
 #     sh tools/flock_java.sh java -cp build compresslib.RunTests
