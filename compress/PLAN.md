@@ -314,3 +314,38 @@ Deviation from §1: `tools/rewrap.py` copied but unused so far; `deck/demos.js`,
 (`.gitkeep`). `scratch/` and `src/ts/node_modules` are gitignored.
 
 Next: step 2 — `SPEC.md` for Tier-1 modules 1–10.
+
+### 3. Corpus (2026-09-12)
+
+`corpus/gen_corpus.py` + 13 committed files + `corpus/MANIFEST.txt` + `corpus/README.md`.
+
+Two deviations from §4.1, both deliberate:
+
+- **13 files, not 11.** Added `runs.bin` (run lengths 127/128/129 and 257/258/259 — the
+  PackBits control-byte cap and the LZSS max-match cap, plus 2-run/3-run threshold) and
+  `alphabet.bin` (all 256 symbols, so the 128-byte Huffman header is fully populated).
+  §4.1 asked for those edge cases in prose; they need their own files to be reachable.
+- **`boundary_32768.bin` / `boundary_32769.bin` name the tested distance, not the file
+  size.** Each is `mark(64) + filler + mark(64)` sized so the trailing mark sits at
+  distance exactly 32768 / 32769. Files are 32832 / 32833 bytes. The filler is
+  16-symbol low-entropy bytes, **not** random: random filler makes DEFLATE emit stored
+  blocks, and a stored block has no matches at all, so the window boundary would never
+  be exercised.
+
+`korean_utf8.txt` (40 KB) and `english.txt` (61 KB) are extracted from real documents,
+not synthesised — invented prose has a narrow vocabulary and compresses far better than
+real text, which would put a false number in the deck. Korean comes from four finished
+repo documents (prose only, code fences and tables stripped); English is this deck's own
+`SPEC.md` plus `PLAN.md` up to the progress-log marker, which is why the marker is a
+hard cut: everything after it changes every commit. `source.go` is
+`keycloak_ad/ldap/ber/ber.go` verbatim.
+
+`MANIFEST.txt` records the SHA-256 of every generated file **and of every external
+source**, so a source document changing is a loud failure (`gen_corpus.py --check`)
+rather than a silent corpus drift that invalidates every golden vector.
+
+Sanity numbers (Python stdlib, informational only — the deck cites `out/` captures):
+`random_64k.bin` grows under gzip, bzip2 and xz alike; `zeros_64k.bin` is 84 B under
+gzip and 140 B under xz, because LZMA's fixed structure outweighs 64 KiB of nothing.
+
+Next: step 4 — the Python reference, module by module, tests first.
