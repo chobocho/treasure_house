@@ -43,6 +43,8 @@ static std::string run_one(const std::string& algo,
   if (!e) return "모르는 알고리즘: " + algo;
   if (mode != "enc" && mode != "dec")
     return "enc 또는 dec 이어야 한다: " + mode;
+  if (mode == "enc" && e->encode == nullptr)
+    return algo + " 는 복호기만 있다";
   Bytes data;
   if (!read_file(in, data)) return "입력을 못 읽는다: " + in;
   Bytes result;

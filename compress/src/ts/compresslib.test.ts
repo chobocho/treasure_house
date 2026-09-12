@@ -154,8 +154,10 @@ test('모든 모듈이 왕복한다', () => {
   const cases = [new Uint8Array(0), S('A'), repeat(0, 5000),
                  pseudo(20000, 37, 11), pseudo(70000, 131, 3)];
   for (const e of ENTRIES) {
+    if (e.encode === null) continue;   // 복호기만 있는 모듈은 건너뛴다
     for (const src of cases) {
-      assert.deepEqual(e.decode(e.encode(src)), src, `${e.name} ${src.length}`);
+      assert.deepEqual(e.decode(e.encode(src)), src,
+                       `${e.name} ${src.length}`);
     }
   }
 });

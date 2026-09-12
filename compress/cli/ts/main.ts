@@ -7,7 +7,7 @@
 // batch 가 있는 이유는 파서티 검사다. (알고리즘 × 파일 × 언어) 조합이
 // 수천 건이라 건마다 프로세스를 띄우면 JVM 하나로 몇 분이 간다.
 import * as fs from 'fs';
-import { ENTRIES, find } from '../../src/ts/registry';
+import { Codec, ENTRIES, find } from '../../src/ts/registry';
 
 // 실패하면 사람이 읽을 문장을, 성공하면 빈 문자열을 돌려준다.
 function runOne(algo: string, mode: string, inPath: string,
@@ -17,6 +17,9 @@ function runOne(algo: string, mode: string, inPath: string,
   if (mode !== 'enc' && mode !== 'dec') {
     return `enc 또는 dec 이어야 한다: ${mode}`;
   }
+  if (mode === 'enc' && e.encode === null) {
+    return `${algo} 는 복호기만 있다`;
+  }
   let data: Uint8Array;
   try {
     data = new Uint8Array(fs.readFileSync(inPath));
@@ -25,7 +28,8 @@ function runOne(algo: string, mode: string, inPath: string,
   }
   let result: Uint8Array;
   try {
-    result = mode === 'enc' ? e.encode(data) : e.decode(data);
+    result = mode === 'enc' ? (e.encode as Codec)(data)
+                            : e.decode(data);
   } catch (err) {
     return `${algo} ${mode} 실패: ${(err as Error).message}`;
   }

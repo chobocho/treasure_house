@@ -1318,3 +1318,82 @@ xxHash is a different algorithm from anything else in this deck and implementing
 five times would teach nothing about compression. The frame reader skips those 4
 bytes and says so. The interop capture runs `lz4` both with and without
 `--no-frame-crc` so the deck can show the difference.
+
+---
+
+## 15. `bzip2dec` — decoding the real thing
+
+### 15.1 Why decoder-only
+
+We already have every piece bzip2 uses: BWT (§9), MTF (§4), zero-run coding (§3.2),
+canonical Huffman (§5). What bzip2 adds is the *assembly* — and a compressor would
+just be our own choices again. Decoding **files made by real `bzip2`** is the
+stronger claim, and it is the one the deck makes: five languages, the same SHA-256,
+on files none of them produced.
+
+There is therefore no golden encoder vector for this module. Its gate is
+`out/interop_bzip2.txt`.
+
+### 15.2 Stream layout (MSB-first bit stream throughout)
+
+```
+'B' 'Z' 'h' level          4 bytes; level is '1'..'9' = 100k..900k block size
+then, bit-packed:
+  repeat per block:
+    48 bits  0x314159265359   (pi)
+    32 bits  block CRC
+     1 bit   randomised — must be 0; the 0.9.0 randomisation scheme is dead
+    24 bits  origPtr, the BWT primary index
+    symbol map:
+        16 bits: which of the sixteen 16-value groups occur at all
+        for each group that occurs, 16 bits: which values in it occur
+        -> nUsed byte values; alphaSize = nUsed + 2
+     3 bits  nGroups, 2..6
+    15 bits  nSelectors
+    nSelectors × unary: a run of 1s then a 0, MTF-coded over group numbers
+    per group: 5 bits starting length, then per symbol a delta loop:
+        read 1 bit; 0 = this symbol's length is settled
+                    1 = read 1 more bit; 0 = length += 1, 1 = length -= 1
+    the symbol stream, in runs of 50, each run using the next selector's table
+  48 bits  0x177245385090   (sqrt(pi))
+  32 bits  combined CRC
+```
+
+### 15.3 The symbol alphabet
+
+`0` = RUNA, `1` = RUNB, `2 .. alphaSize-2` = MTF index 1.., `alphaSize-1` = EOB.
+So a *zero* MTF index is never sent directly: runs of it are coded with RUNA/RUNB in
+the bijective base 2 of §3.2, and every non-zero MTF index is shifted up by one.
+That is exactly the `rle0` we already wrote, and the deck says so out loud.
+
+### 15.4 Code lengths up to 20
+
+bzip2 allows Huffman codes up to 20 bits (its own limit is 23). Our canonical
+decoder was written with a 15-bit ceiling for §5, so it takes a maximum-length
+parameter; `check_complete` takes the same. The default stays 15 and no Tier-1
+golden vector moves.
+
+### 15.5 After the Huffman layer
+
+1. RUNA/RUNB expand to runs of MTF index 0; other symbols are `sym - 1`.
+2. Inverse MTF over the *used* byte values only (the symbol map's list), not over
+   all 256 — this is where the symbol map earns its place.
+3. Inverse BWT with `origPtr`. bzip2's block is up to 900,000 bytes, so the
+   64 KiB block constant of §9 does not apply here; the transform is the same.
+4. **RLE1**: four equal bytes are followed by a count byte 0..255 meaning *that many
+   more* copies. So `AAAA\x00` is four A's and `AAAA\xff` is 259 of them. This is
+   the layer that makes bzip2 tolerate long runs before the BWT ever sees them.
+
+### 15.6 CRC
+
+bzip2 uses a **different CRC-32 from gzip's**: polynomial 0x04C11DB7 applied
+MSB-first, initial value 0xFFFFFFFF, final complement, and **no bit reflection** of
+input or output. Feeding gzip's CRC table into a bzip2 decoder produces a checksum
+that is wrong for every non-empty input, which is exactly the kind of near-miss that
+survives a round-trip test and dies on a real file.
+
+The combined CRC after each block is `rotate_left(combined, 1) ^ block_crc`.
+
+We verify both the per-block CRC and the combined one. A decoder that skips them
+still "works" on good input, and the deck's point in part 10 is that the check is
+what tells you the BWT inverse was right.

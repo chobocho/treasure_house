@@ -4,6 +4,7 @@ import { Bytes } from './common';
 import * as ans from './ans';
 import * as bitio from './bitio';
 import * as bwt from './bwt';
+import * as bzip2dec from './bzip2dec';
 import * as deflate from './deflate';
 import * as huffman from './huffman';
 import * as intcode from './intcode';
@@ -18,7 +19,8 @@ export type Codec = (src: Bytes) => Bytes;
 
 export interface Entry {
   name: string;
-  encode: Codec;
+  // 복호기만 있는 모듈에서는 null 이다 (PLAN.md §0.4)
+  encode: Codec | null;
   decode: Codec;
 }
 
@@ -38,6 +40,8 @@ export const ENTRIES: Entry[] = [
   { name: 'ans', encode: ans.encode, decode: ans.decode },
   { name: 'lz4block',
     encode: lz4block.encode, decode: lz4block.decode },
+  // 복호기만 있는 모듈 (PLAN.md §0.4)
+  { name: 'bzip2dec', encode: null, decode: bzip2dec.decode },
 ];
 
 export function find(name: string): Entry | undefined {

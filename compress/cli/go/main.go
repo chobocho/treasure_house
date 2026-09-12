@@ -26,6 +26,9 @@ func runOne(algo, mode, in, out string) string {
 	if mode != "enc" && mode != "dec" {
 		return "enc 또는 dec 이어야 한다: " + mode
 	}
+	if mode == "enc" && e.Encode == nil {
+		return algo + " 는 복호기만 있다"
+	}
 	data, err := os.ReadFile(in)
 	if err != nil {
 		return "입력을 못 읽는다: " + in

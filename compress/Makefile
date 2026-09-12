@@ -42,7 +42,8 @@ SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
 .PHONY: help deps corpus build build-cpp build-go build-ts \
         build-java \
         test test-py test-go test-cpp test-java test-ts \
-        golden golden-check corpus-check parity interop bench \
+        golden golden-check corpus-check parity decoders \
+        interop bench \
         record width \
         figs deck deck-verify deck-slices deck-xref deck-check \
         font font-check all clean
@@ -130,6 +131,11 @@ golden-check:           ## 골든이 그대로인지 대조만
 
 parity:                 ## 다섯 언어가 같은 바이트를 내는가 (5×5 교차)
 	$(PY) bench/run_parity.py
+
+# 복호기만 있는 모듈은 골든 벡터가 없다. 진짜 도구가 만든 파일을 다섯
+# 언어가 같게 푸는지가 그 자리를 대신한다 (PLAN.md §0.4).
+decoders:               ## 진짜 도구의 파일을 다섯 언어가 같게 푸는가
+	$(PY) bench/run_decoders.py
 
 interop:                ## 진짜 gzip·bzip2·xz·lz4 와 주고받아 보기
 	$(PY) interop/run_interop.py

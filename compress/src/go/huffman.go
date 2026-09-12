@@ -128,16 +128,20 @@ func canonicalCodes(lengths []int) []int {
 // 합이 1/2 이고, zeros_64k 처럼 한 바이트만 있는 파일에서 반드시
 // 나온다.
 func checkComplete(lengths []int) {
+	checkCompleteMax(lengths, huffMaxLength)
+}
+
+func checkCompleteMax(lengths []int, maxLength int) {
 	var total uint64
 	used, only := 0, 0
 	for _, l := range lengths {
 		if l > 0 {
-			total += uint64(1) << uint(huffMaxLength-l)
+			total += uint64(1) << uint(maxLength-l)
 			used++
 			only = l
 		}
 	}
-	full := uint64(1) << huffMaxLength
+	full := uint64(1) << uint(maxLength)
 	if total > full {
 		fail("부호표가 넘친다 (크래프트 합 > 1)")
 	}
@@ -155,9 +159,15 @@ type huffDecoder struct {
 	count      []int
 	firstCode  []int
 	firstIndex []int
+	maxLength  int
 }
 
 func newHuffDecoder(lengths []int) *huffDecoder {
+	return newHuffDecoderMax(lengths, huffMaxLength)
+}
+
+// bzip2 는 부호 길이가 20까지 간다 (SPEC §15.4). 기본값은 15 그대로다.
+func newHuffDecoderMax(lengths []int, maxLength int) *huffDecoder {
 	type pair struct{ length, sym int }
 	var pairs []pair
 	for s, l := range lengths {
@@ -172,16 +182,17 @@ func newHuffDecoder(lengths []int) *huffDecoder {
 		return pairs[i].sym < pairs[j].sym
 	})
 	d := &huffDecoder{
-		count:      make([]int, huffMaxLength+1),
-		firstCode:  make([]int, huffMaxLength+2),
-		firstIndex: make([]int, huffMaxLength+2),
+		count:      make([]int, maxLength+1),
+		firstCode:  make([]int, maxLength+2),
+		firstIndex: make([]int, maxLength+2),
+		maxLength:  maxLength,
 	}
 	for _, p := range pairs {
 		d.symbols = append(d.symbols, p.sym)
 		d.count[p.length]++
 	}
 	code, index := 0, 0
-	for l := 1; l <= huffMaxLength; l++ {
+	for l := 1; l <= maxLength; l++ {
 		code = (code + d.count[l-1]) << 1
 		d.firstCode[l] = code
 		d.firstIndex[l] = index
@@ -192,7 +203,7 @@ func newHuffDecoder(lengths []int) *huffDecoder {
 
 func (d *huffDecoder) read(r bitReader) int {
 	code := 0
-	for l := 1; l <= huffMaxLength; l++ {
+	for l := 1; l <= d.maxLength; l++ {
 		code = code<<1 | r.readBit()
 		off := code - d.firstCode[l]
 		if d.count[l] > 0 && off < d.count[l] {

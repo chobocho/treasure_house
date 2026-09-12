@@ -33,6 +33,9 @@ public final class Main {
     if (!mode.equals("enc") && !mode.equals("dec")) {
       return "enc 또는 dec 이어야 한다: " + mode;
     }
+    if (mode.equals("enc") && e.encode == null) {
+      return algo + " 는 복호기만 있다";
+    }
     byte[] data;
     try {
       data = Files.readAllBytes(Path.of(in));

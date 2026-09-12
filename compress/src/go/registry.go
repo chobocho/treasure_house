@@ -6,7 +6,8 @@ package compresslib
 type Codec func([]byte) ([]byte, error)
 
 type Entry struct {
-	Name   string
+	Name string
+	// 복호기만 있는 모듈에서는 nil 이다 (PLAN.md §0.4)
 	Encode Codec
 	Decode Codec
 }
@@ -25,6 +26,8 @@ var Entries = []Entry{
 	{"deflate", DeflateEncode, DeflateDecode},
 	{"ans", AnsEncode, AnsDecode},
 	{"lz4block", Lz4blockEncode, Lz4blockDecode},
+	// 복호기만 있는 모듈 (PLAN.md §0.4)
+	{"bzip2dec", nil, Bzip2decDecode},
 }
 
 func Find(name string) *Entry {

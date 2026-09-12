@@ -13,6 +13,7 @@ public final class Registry {
   /** 한 알고리즘. encode·decode 는 byte[] → byte[] 하나짜리 함수다. */
   public static final class Entry {
     public final String name;
+    /** 복호기만 있는 모듈에서는 null 이다 (PLAN.md §0.4). */
     public final UnaryOperator<byte[]> encode;
     public final UnaryOperator<byte[]> decode;
 
@@ -37,7 +38,9 @@ public final class Registry {
       new Entry("bwt", Bwt::encode, Bwt::decode),
       new Entry("deflate", Deflate::encode, Deflate::decode),
       new Entry("ans", Ans::encode, Ans::decode),
-      new Entry("lz4block", Lz4Block::encode, Lz4Block::decode));
+      new Entry("lz4block", Lz4Block::encode, Lz4Block::decode),
+      // 복호기만 있는 모듈 (PLAN.md §0.4)
+      new Entry("bzip2dec", null, Bzip2Dec::decode));
 
   public static Entry find(String name) {
     for (Entry e : ENTRIES) {
