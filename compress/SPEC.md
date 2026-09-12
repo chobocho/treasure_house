@@ -259,11 +259,16 @@ writeBits(r, k)             # k bits, MSB-first; nothing at all when k == 0
 the literature; mixing them is a silent parity break because short values still
 happen to round-trip within one implementation.
 
-A decoder must cap the unary run: if more than 64 one-bits arrive, the stream is
-malformed and it raises. Without that cap a corrupt file is an infinite loop.
-The **encoder** raises on `q > 64` for the same reason: a caller who picks `k = 0`
-for a value of 2^40 is asking for a 128 GiB unary run, and silently producing it is
-worse than refusing.
+Both sides cap the unary run at **4096** one-bits. Without a cap a corrupt file is
+an infinite loop; with a cap that is too small the code becomes useless. 64 was the
+first number written here and it was wrong: `Rice(k = 0)` *is* plain unary, which is
+how the deck introduces unary coding, and a cap of 64 makes it unable to express
+100. 4096 bounds a corrupt stream to 4 Ki iterations per symbol and still covers
+every value the deck actually codes.
+
+The **encoder** raises on `q > 4096` too: a caller who picks `k = 0` for a value of
+2^40 is asking for a 128 GiB unary run, and silently producing it is worse than
+refusing.
 
 ### 2.6 Golden codec `intcode`
 
