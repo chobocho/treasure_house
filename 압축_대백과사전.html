@@ -578,6 +578,12 @@ table.kv td.num, table.kv th.num { text-align: right; font-variant-numeric: tabu
     <option value="huf-decode">· 읽는 쪽</option>
     <option value="huf-adaptive">· 적응형 허프만은 왜 안 쓰이나</option>
     <option value="p5">5부 · 산술 부호화와 레인지 코더</option>
+    <option value="ar-why">· 정수 비트의 굴레</option>
+    <option value="ar-interval">· 구간을 쪼개 들어간다</option>
+    <option value="ar-norm">· 정규화</option>
+    <option value="ar-bit">· 이진 레인지 코더</option>
+    <option value="ar-byte">· 바이트를 비트 여덟 개로</option>
+    <option value="ar-lang">· 다섯 언어에서 가장 어려웠던 모듈</option>
     <option value="p6">6부 · ANS</option>
     <option value="p7">7부 · LZ77 계열</option>
     <option value="p8">8부 · LZ78 계열</option>
@@ -3584,16 +3590,489 @@ ts             OK     OK     OK     OK     OK</pre>
 <article class="card section" id="p5">
 <p class="chnum">5부</p>
 <h2>산술 부호화와 레인지 코더</h2>
-<p class="chsub">구간 축소·캐리·적응 모델</p>
+<p class="chsub">구간 축소 · 캐리 · 적응 모델</p>
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>구간을 쪼개 한 실수로 — 기호마다 정수 비트를 안 쓴다</li>
-<li>무한 정밀도를 32비트로 — 정규화와 캐리 전파</li>
-<li>LZMA 식 레인지 코더 — 11비트 확률, 시프트 5</li>
-<li>적응 이진 모델 — 볼 때마다 고치는 확률</li>
-<li>허프만과의 비율 차이를 코퍼스에서 재 보기</li>
+<li>정수 비트의 굴레를 벗는 법 — 기호 하나에 0.15비트</li>
+<li>구간을 쪼개 들어가기, 그리고 정밀도가 바닥나는 문제</li>
+<li>정규화 — 확정된 위 바이트를 먼저 내보내기</li>
+<li>캐리 전파 — 이미 내보낸 바이트를 고쳐야 할 때</li>
+<li>LZMA 식 이진 레인지 코더와 11비트 확률</li>
+<li>적응 모델 — 빈도를 세지 않고 확률을 끌어당기기</li>
 </ul>
-<p class="cap">준비 중입니다 — PLAN.md §5 10단계에서 이 부를 채운다.</p>
+</article>
+
+<article class="card" id="ar-why">
+<p class="chnum">1장</p>
+<h2>정수 비트의 굴레</h2>
+<p class="chsub">허프만이 못 하는 일</p>
+</article>
+
+<article class="card" id="ar-why-1">
+<h3>확률 0.99 인 기호</h3>
+<p>1부에서 본 표를 다시 보자.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>확률</th><th>이상적 비트</th><th>허프만이 주는 비트</th><th>손해</th></tr>
+<tr><td>0.5</td><td>1.00</td><td>1</td><td>0%</td></tr>
+<tr><td>0.9</td><td>0.152</td><td>1</td><td>558%</td></tr>
+<tr><td>0.99</td><td>0.0145</td><td>1</td><td>6,800%</td></tr>
+</table></div>
+<p>비트를 <b>쪼갤 수 없다</b>는 것이 문제다. 기호마다 하나씩 배정하는 한
+0.0145비트를 줄 방법이 없다.</p>
+<div class="key">산술 부호화는 기호에 부호를 배정하지 않는다.
+<b>메시지 전체를 하나의 수</b>로 적는다. 그러면 기호마다 비트가 정수일 이유가 없다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ar-why-2">
+<h3>어디서 이 차이가 드러나나</h3>
+<ul>
+<li><b>이진 결정</b> — "일치인가 리터럴인가", "이 비트가 1인가".
+확률이 0.9 를 넘는 일이 흔하다. LZMA·CM 이 전부 이진 코더를 쓰는 이유</li>
+<li><b>치우친 알파벳</b> — 이미지의 0 계수, BWT 뒤의 0 무더기</li>
+<li><b>문맥 모델</b> — 문맥마다 확률이 크게 달라진다. 허프만은 문맥마다 표를 새로 보내야 한다</li>
+</ul>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ar-interval">
+<p class="chnum">2장</p>
+<h2>구간을 쪼개 들어간다</h2>
+<p class="chsub">산술 부호화의 전부</p>
+</article>
+
+<article class="card" id="ar-interval-1">
+<h3>규칙</h3>
+<ol class="steps">
+<li>구간 [0, 1) 에서 시작한다</li>
+<li>기호의 확률만큼 구간을 나눠, 그 기호의 몫으로 <b>들어간다</b></li>
+<li>기호마다 되풀이한다 — 구간이 점점 좁아진다</li>
+<li>마지막 구간 안의 아무 수나 하나 적으면 그것이 부호다</li>
+</ol>
+<svg class="diag" viewBox="0 0 340 272" role="img" aria-label="구간이 좁아지는 그림">
+<rect x="14" y="30" width="186.2" height="24" rx="2" fill="var(--special)" fill-opacity="0.3"/>
+<text x="107.6" y="46" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">A</text>
+<rect x="201.2" y="30" width="92.6" height="24" rx="2" fill="var(--accent)" fill-opacity="0.1"/>
+<text x="248" y="46" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">B</text>
+<rect x="294.8" y="30" width="30.2" height="24" rx="2" fill="var(--accent)" fill-opacity="0.1"/>
+<text x="310.4" y="46" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">C</text>
+<line x1="14" y1="54" x2="326" y2="54" stroke="var(--border)" stroke-width="1"/>
+<text x="14" y="68" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);">[0.0000, 1.0000)</text>
+<rect x="14" y="84" width="111.32" height="24" rx="2" fill="var(--accent)" fill-opacity="0.1"/>
+<text x="70.16" y="100" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">A</text>
+<rect x="126.32" y="84" width="55.16" height="24" rx="2" fill="var(--special)" fill-opacity="0.3"/>
+<text x="154.4" y="100" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">B</text>
+<rect x="182.48" y="84" width="17.72" height="24" rx="2" fill="var(--accent)" fill-opacity="0.1"/>
+<text x="191.84" y="100" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">C</text>
+<line x1="14" y1="108" x2="326" y2="108" stroke="var(--border)" stroke-width="1"/>
+<text x="14" y="122" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);">[0.0000, 0.6000)</text>
+<rect x="126.32" y="138" width="32.696" height="24" rx="2" fill="var(--special)" fill-opacity="0.3"/>
+<text x="143.168" y="154" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">A</text>
+<rect x="160.016" y="138" width="15.848" height="24" rx="2" fill="var(--accent)" fill-opacity="0.1"/>
+<text x="168.44" y="154" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">B</text>
+<rect x="176.864" y="138" width="4.616" height="24" rx="2" fill="var(--accent)" fill-opacity="0.1"/>
+<line x1="14" y1="162" x2="326" y2="162" stroke="var(--border)" stroke-width="1"/>
+<text x="14" y="176" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);">[0.3600, 0.5400)</text>
+<rect x="126.32" y="192" width="19.2176" height="24" rx="2" fill="var(--accent)" fill-opacity="0.1"/>
+<text x="136.429" y="208" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">A</text>
+<rect x="146.538" y="192" width="9.1088" height="24" rx="2" fill="var(--accent)" fill-opacity="0.1"/>
+<rect x="156.646" y="192" width="2.3696" height="24" rx="2" fill="var(--accent)" fill-opacity="0.1"/>
+<line x1="14" y1="216" x2="326" y2="216" stroke="var(--border)" stroke-width="1"/>
+<text x="14" y="230" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;fill:var(--muted);">[0.3600, 0.4680)</text>
+<text x="10" y="16" style="font-size:11px;">'ABA' 를 넣을 때 구간 — 폭이 곧 확률이다</text>
+</svg>
+<p class="cap">A .6 / B .3 / C .1 로 'ABA' 를 넣을 때</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="ar-interval-2">
+<h3>왜 이것이 최적인가</h3>
+<p>마지막 구간의 폭은 <b>기호 확률들의 곱</b>이다. 폭 w 인 구간 안의 수를
+콕 집으려면 −log₂w 비트가 든다.</p>
+<div class="key">−log₂(p₁·p₂·…·p<sub>n</sub>) = −log₂p₁ − log₂p₂ − … = <b>정보량의 합</b></div>
+<p>즉 이 방법은 <b>정의상</b> 엔트로피만큼의 비트를 쓴다.
+1~2비트의 마무리 손해만 있고, 그것도 메시지 전체에 한 번뿐이다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ar-interval-3">
+<h3>그런데 실수로는 못 만든다</h3>
+<div class="warn">1,000개 기호를 넣으면 구간 폭이 10<sup>−300</sup> 근처가 된다.
+64비트 부동소수점의 바닥은 10<sup>−308</sup> 이라 곧 0 이 된다.
+게다가 부동소수점 반올림은 <b>기계마다 다를 수 있다</b> — 다섯 언어가 같은 바이트를
+내야 하는 이 책에서는 처음부터 탈락이다.</div>
+<p>해결은 둘이다.</p>
+<ul>
+<li><b>정수로 한다</b> — 구간을 [low, low+range) 인 32비트 정수 쌍으로</li>
+<li><b>확정된 자리는 내보낸다</b> — 위 바이트가 더 안 바뀌면 먼저 내보내고 구간을 넓힌다</li>
+</ul>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ar-norm">
+<p class="chnum">3장</p>
+<h2>정규화</h2>
+<p class="chsub">정밀도가 바닥나기 전에 위 바이트를 내보낸다</p>
+</article>
+
+<article class="card" id="ar-norm-1">
+<h3>규칙</h3>
+<p>구간 폭 <code>range</code> 가 2<sup>24</sup> 아래로 내려가면,
+<code>low</code> 의 위 8비트를 내보내고 둘 다 8비트씩 왼쪽으로 민다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>값</th></tr>
+<tr><td>구간 시작 <code>range</code></td><td>0xFFFFFFFF</td></tr>
+<tr><td>정규화 문턱 <code>TOP</code></td><td>2<sup>24</sup> = 0x1000000</td></tr>
+<tr><td>확률 해상도</td><td>11비트 (2048단계)</td></tr>
+</table></div>
+<p>이렇게 하면 <code>range</code> 가 늘 2<sup>24</sup> 이상이라,
+2048단계 확률로 나눠도 몫이 0 이 되지 않는다. <b>11 + 24 &lt; 32</b> 가 이 설계의 셈이다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ar-carry">
+<h3>캐리 — 이미 내보낸 바이트를 고쳐야 할 때</h3>
+<p><code>low</code> 에 더하다 보면 <b>올림</b>이 난다. 그런데 위 바이트는 이미 나갔다.</p>
+<svg class="diag" viewBox="0 0 340 170" role="img" aria-label="캐리가 앞 바이트로 번지는 그림">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<text x="10" y="28" class="lbl">올림 전</text>
+<rect x="24" y="34" width="50" height="26" class="box"/>
+<text x="49" y="51" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0x2A</text>
+<rect x="80" y="34" width="50" height="26" class="box"/>
+<text x="105" y="51" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0xFF</text>
+<rect x="136" y="34" width="50" height="26" class="box"/>
+<text x="161" y="51" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0xFF</text>
+<rect x="192" y="34" width="50" height="26" class="box"/>
+<text x="217" y="51" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0x13</text>
+<text x="10" y="82" class="lbl">올림 후</text>
+<rect x="24" y="90" width="50" height="26" class="box"/>
+<text x="49" y="107" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--ok);" text-anchor="middle">0x2B</text>
+<rect x="80" y="90" width="50" height="26" class="box"/>
+<text x="105" y="107" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--ok);" text-anchor="middle">0x00</text>
+<rect x="136" y="90" width="50" height="26" class="box"/>
+<text x="161" y="107" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--ok);" text-anchor="middle">0x00</text>
+<rect x="192" y="90" width="50" height="26" class="box"/>
+<text x="217" y="107" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">0x13</text>
+<path d="M192,80 L54,80" class="arw"/>
+<text x="198" y="86" style="font-size:11px;fill:var(--bad);">+1</text>
+<text x="10" y="152" style="font-size:11px;">0xFF 은 아직 못 내보낸 바이트다 — 개수만 센다</text>
+</svg>
+<p class="cap">0xFF 이 이어진 자리에 올림이 오면 앞으로 번진다</p>
+<div class="key">해법: <b>아직 확정 안 된 0xFF 가 몇 개인지만 센다.</b>
+올림이 오면 그 개수만큼 0x00 을 내보내고 앞의 한 바이트를 +1 한다.
+버퍼를 통째로 들고 있을 필요가 없다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="ar-carry-2">
+<h3>코드 — shift_low</h3>
+<div class="src"><b>src/py/compresslib/rangecoder.py</b><span class="ln">39–52</span><span>캐시 한 바이트 + 0xFF 개수</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/rangecoder.py" data-lines="39-52">    def shift_low(self):
+        """위 바이트 하나를 확정해 내보낸다. 캐리는 앞으로 전파한다."""
+        if (self.low &gt;&gt; 32) or self.low &lt; 0xFF000000:
+            carry = self.low &gt;&gt; 32
+            temp = self.cache
+            while True:
+                self._out.append((temp + carry) &amp; 0xFF)
+                temp = 0xFF
+                self.cache_size -= 1
+                if self.cache_size == 0:
+                    break
+            self.cache = (self.low &gt;&gt; 24) &amp; 0xFF
+        self.cache_size += 1
+        self.low = (self.low &lt;&lt; 8) &amp; U32</code></pre>
+<p><code>cache</code> 가 "앞의 한 바이트", <code>cache_size</code> 가 "그 뒤의 0xFF 개수+1" 이다.
+LZMA 가 쓰는 방식 그대로다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-carry-3">
+<h3>그래서 첫 바이트가 늘 0 이다</h3>
+<p><code>cache_size</code> 가 1 로 시작하므로, 첫 <code>shift_low</code> 에서
+<code>cache</code>(초기값 0)가 먼저 나간다. <b>실제 자료가 아니라 캐리의 자리</b>다.</p>
+<div class="src"><b>src/py/compresslib/rangecoder.py</b><span class="ln">231–241</span><span>골든 코덱의 부호기</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/rangecoder.py" data-lines="231-241">def encode(src):
+    if not src:
+        return varint.put(0)
+    enc = Encoder()
+    m = ByteModel()
+    for b in src:
+        m.encode(enc, b)
+    enc.flush()
+    return varint.put(len(src)) + enc.bytes()
+
+</code></pre>
+<div class="note">진짜 <code>.lzma</code> 파일도 첫 바이트가 0 이다.
+12부에서 LZMA 복호기를 만들 때 이 성질을 그대로 쓴다 — 코더를 둘 두지 않기 위해서다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-bit">
+<p class="chnum">4장</p>
+<h2>이진 레인지 코더</h2>
+<p class="chsub">기호가 둘뿐이면 훨씬 단순해진다</p>
+</article>
+
+<article class="card" id="ar-bit-1">
+<h3>비트 하나를 적는 코드</h3>
+<div class="src"><b>src/py/compresslib/rangecoder.py</b><span class="ln">54–65</span><span>구간을 p0 : (1-p0) 로 쪼갠다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/rangecoder.py" data-lines="54-65">    def encode_bit(self, probs, i, bit):
+        bound = (self.range &gt;&gt; PROB_BITS) * probs[i]
+        if bit == 0:
+            self.range = bound
+            probs[i] += (PROB_TOTAL - probs[i]) &gt;&gt; MOVE_BITS
+        else:
+            self.low += bound
+            self.range -= bound
+            probs[i] -= probs[i] &gt;&gt; MOVE_BITS
+        while self.range &lt; TOP:
+            self.range = (self.range &lt;&lt; 8) &amp; U32
+            self.shift_low()</code></pre>
+<ul>
+<li><code>bound = (range &gt;&gt; 11) * p0</code> — 0 쪽 몫</li>
+<li>비트가 0 이면 <code>range = bound</code>, 1 이면 <code>low += bound</code> 하고 나머지</li>
+<li>그리고 확률을 <b>그 자리에서 고친다</b> — 적응 모델이 여기 들어 있다</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-bit-2">
+<h3>확률 갱신 — 빈도를 세지 않는다</h3>
+<div class="key">p += (2048 − p) &gt;&gt; 5 &nbsp;(0 이 나왔을 때)<br>
+p −= p &gt;&gt; 5 &nbsp;(1 이 나왔을 때)</div>
+<p>빈도 표도, 나눗셈도 없다. <b>확률을 목표 쪽으로 1/32 만큼 끌어당기는</b> 것이 전부다.</p>
+<ul>
+<li>최근 것에 더 큰 가중치가 붙는다 — 지수 이동 평균이다</li>
+<li>2<sup>−5</sup> 라는 속도가 곧 <b>기억의 길이</b>다. 크면 빨리 적응하고 시끄럽다</li>
+<li>정수 연산만 쓴다 — 다섯 언어가 같은 답을 낸다</li>
+</ul>
+<div class="note">MOVE_BITS 5 는 LZMA 의 값이다. 11부의 문맥 혼합은 문맥마다
+<b>다른 속도</b>를 쓴다 — 처음엔 빠르게, 표본이 쌓이면 느리게.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-bit-3">
+<h3>왜 11비트인가</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>제약</th><th>셈</th></tr>
+<tr><td>range 는 늘 2<sup>24</sup> 이상</td><td>정규화가 보장</td></tr>
+<tr><td><code>range &gt;&gt; PROB_BITS</code> 가 0 이면 안 된다</td><td>PROB_BITS ≤ 24</td></tr>
+<tr><td>확률 해상도는 클수록 좋다</td><td>클수록 정밀</td></tr>
+<tr><td>32비트 곱셈이 안 넘쳐야 한다</td><td>(range&gt;&gt;11) × 2048 ≤ range</td></tr>
+</table></div>
+<p>11 은 LZMA 가 고른 값이고, 확률 1/2048 = 0.00049 까지 표현한다.
+그 아래로 치우친 비트는 <b>0.0007비트</b>에 적힌다 — 허프만의 1비트와 견줘 보라.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ar-dec">
+<h3>읽는 쪽은 거울이다</h3>
+<div class="src"><b>src/py/compresslib/rangecoder.py</b><span class="ln">167–181</span><span>같은 bound 를 구해 어느 쪽인지 본다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/rangecoder.py" data-lines="167-181">    def decode_bit(self, probs, i):
+        bound = (self.range &gt;&gt; PROB_BITS) * probs[i]
+        if self.code &lt; bound:
+            self.range = bound
+            probs[i] += (PROB_TOTAL - probs[i]) &gt;&gt; MOVE_BITS
+            bit = 0
+        else:
+            self.code -= bound
+            self.range -= bound
+            probs[i] -= probs[i] &gt;&gt; MOVE_BITS
+            bit = 1
+        while self.range &lt; TOP:
+            self.range = (self.range &lt;&lt; 8) &amp; U32
+            self.code = ((self.code &lt;&lt; 8) | self._byte()) &amp; U32
+        return bit</code></pre>
+<div class="key">부호기와 복호기가 <b>똑같은 순서로 똑같이 확률을 고친다</b>.
+그래서 확률 표를 파일에 실을 필요가 없다. 적응 모델의 값어치가 여기 있다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-byte">
+<p class="chnum">5장</p>
+<h2>바이트를 비트 여덟 개로</h2>
+<p class="chsub">이진 코더로 256가지 기호를 적는 법</p>
+</article>
+
+<article class="card" id="ar-byte-1">
+<h3>이진 트리 문맥</h3>
+<div class="src"><b>src/py/compresslib/rangecoder.py</b><span class="ln">205–227</span><span>지금까지 읽은 비트가 곧 문맥</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/rangecoder.py" data-lines="205-227">class ByteModel:
+    """0차 적응 바이트 모델 — 확률 256칸을 이진 트리처럼 쓴다.
+
+    문맥은 1 에서 시작해 비트 하나마다 (ctx&lt;&lt;1)|bit 로 내려간다. 여덟 번
+    지나면 256..511 이 되므로 실제로 쓰이는 자리는 1..255 뿐이고,
+    0번 칸은 한 번도 안 쓴다. 그래서 배열이 257 이 아니라 256 이다.
+    """
+
+    def __init__(self):
+        self.probs = [PROB_INIT] * 256
+
+    def encode(self, enc, b):
+        ctx = 1
+        for i in range(7, -1, -1):
+            bit = (b &gt;&gt; i) &amp; 1
+            enc.encode_bit(self.probs, ctx, bit)
+            ctx = (ctx &lt;&lt; 1) | bit
+
+    def decode(self, dec):
+        ctx = 1
+        for _ in range(8):
+            ctx = (ctx &lt;&lt; 1) | dec.decode_bit(self.probs, ctx)
+        return ctx - 256</code></pre>
+<p>확률 슬롯 256개를 두고, <b>지금까지 읽은 비트로 만든 수</b>를 색인으로 쓴다.
+첫 비트는 슬롯 1, 그 다음은 2~3, 그 다음은 4~7 … 마지막 8번째 비트는 128~255.</p>
+<div class="tip">이 구조는 <b>부분 문맥</b>을 공짜로 준다. 상위 비트가 같은 바이트끼리
+확률을 나눠 쓰므로, 알파벳이 뭉쳐 있는 자료(ASCII 텍스트)에서 잘 맞는다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-byte-2">
+<h3>성적</h3>
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">25–25</span><span>파일별 비율 표의 머리</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="25-25">모듈           abab4k alphabet   b32768   b32769  english koreanut  mixed1m random64   source zeros64k</pre>
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">32–32</span><span>rangecoder 한 줄</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="32-32">rangecoder       15.5     99.9     52.0     52.0     63.0     71.3     61.4    101.1     72.1      2.3</pre>
+<div class="tblwrap"><table class="kv">
+<tr><th>파일</th><th>huffman</th><th>rangecoder</th></tr>
+<tr><td>abab_4k.txt</td><td>15.7%</td><td><b>15.5%</b></td></tr>
+<tr><td>zeros_64k.bin</td><td>12.7%</td><td><b>2.3%</b></td></tr>
+<tr><td>english.txt</td><td>65.4%</td><td>63.0%</td></tr>
+<tr><td>korean_utf8.txt</td><td>72.8%</td><td>71.3%</td></tr>
+</table></div>
+<p><code>zeros_64k.bin</code> 의 12.7% → 2.3% 가 이 부의 요점이다.
+기호가 하나뿐인 자료에서 허프만은 <b>바이트마다 1비트</b>를 써야 하지만,
+레인지 코더는 확률이 1 에 붙으면서 <b>비트를 거의 안 쓴다</b>.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-byte-3">
+<h3>그런데 영어 산문에서는 2.4%p 밖에 못 이겼다</h3>
+<p>0차 모델이라는 한계는 그대로이기 때문이다.
+레인지 코더가 고친 것은 <b>부호기의 손해</b>(정수 비트)이지 <b>모델의 한계</b>가 아니다.</p>
+<div class="key">부호기를 바꿔 얻는 것은 몇 %다. 모델을 바꿔 얻는 것은 몇 십 %다.
+7부부터 모델 이야기로 넘어가는 이유다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-lang">
+<p class="chnum">6장</p>
+<h2>다섯 언어에서 가장 어려웠던 모듈</h2>
+<p class="chsub">32비트 산술을 다섯 가지 방식으로</p>
+</article>
+
+<article class="card" id="ar-lang-1">
+<h3>TypeScript — 비트 연산을 아예 못 쓴다</h3>
+<div class="src"><b>src/ts/rangecoder.ts</b><span class="ln">43–57</span><span>시프트도 마스크도 산술로</span></div>
+<pre><code data-lang="ts" data-src="src/ts/rangecoder.ts" data-lines="43-57">  encodeBit(probs: Uint16Array, i: number, bit: number): void {
+    const bound = Math.floor(this.range / PROB_TOTAL) * probs[i];
+    if (bit === 0) {
+      this.range = bound;
+      probs[i] += (PROB_TOTAL - probs[i]) &gt;&gt; MOVE_BITS;
+    } else {
+      this.low += bound;
+      this.range -= bound;
+      probs[i] -= probs[i] &gt;&gt; MOVE_BITS;
+    }
+    while (this.range &lt; TOP) {
+      this.range = (this.range * 256) % U32;
+      this.shiftLow();
+    }
+  }</code></pre>
+<div class="warn"><code>range &gt;&gt;&gt; 11</code> 을 쓰면 될 것 같지만, <code>low</code> 는
+33비트까지 커진다. 자바스크립트의 비트 연산은 32비트에서 자르므로 여기서 값이 날아간다.
+그래서 <code>* 256 % 2**32</code> 와 <code>Math.floor(x / 2048)</code> 로 적었다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-lang-2">
+<h3>자바 — 부호 없는 비교가 없다</h3>
+<div class="src"><b>src/java/compresslib/RangeCoder.java</b><span class="ln">200–218</span><span>Integer.compareUnsigned 대신 long</span></div>
+<pre><code data-lang="java" data-src="src/java/compresslib/RangeCoder.java" data-lines="200-218">    public int decodeBit(int[] probs, int i) {
+      long bound = (range &gt;&gt;&gt; PROB_BITS) * probs[i];
+      int bit;
+      if (code &lt; bound) {
+        range = bound;
+        probs[i] += (PROB_TOTAL - probs[i]) &gt;&gt;&gt; MOVE_BITS;
+        bit = 0;
+      } else {
+        code -= bound;
+        range -= bound;
+        probs[i] -= probs[i] &gt;&gt;&gt; MOVE_BITS;
+        bit = 1;
+      }
+      while (range &lt; TOP) {
+        range = (range &lt;&lt; 8) &amp; U32;
+        code = ((code &lt;&lt; 8) | nextByte()) &amp; U32;
+      }
+      return bit;
+    }</code></pre>
+<p>자바의 <code>int</code> 는 부호가 있어 <code>0xFFFFFFFF &lt; 0x10000000</code> 이 참이 된다.
+이 책은 <code>long</code> 으로 올려서 푼다 — <code>compareUnsigned</code> 를 쓰는 방법도 있지만,
+읽는 사람이 한 번 더 생각해야 하는 코드가 된다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-lang-3">
+<h3>파이썬 — 넘치지 않아서 위험하다</h3>
+<div class="src"><b>src/py/compresslib/rangecoder.py</b><span class="ln">39–53</span><span>U32 마스크가 명세를 대신 적는다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/rangecoder.py" data-lines="39-53">    def shift_low(self):
+        """위 바이트 하나를 확정해 내보낸다. 캐리는 앞으로 전파한다."""
+        if (self.low &gt;&gt; 32) or self.low &lt; 0xFF000000:
+            carry = self.low &gt;&gt; 32
+            temp = self.cache
+            while True:
+                self._out.append((temp + carry) &amp; 0xFF)
+                temp = 0xFF
+                self.cache_size -= 1
+                if self.cache_size == 0:
+                    break
+            self.cache = (self.low &gt;&gt; 24) &amp; 0xFF
+        self.cache_size += 1
+        self.low = (self.low &lt;&lt; 8) &amp; U32
+</code></pre>
+<div class="warn">파이썬은 <code>low</code> 가 2<sup>33</sup> 을 넘어도 아무 일이 없다.
+마스크를 빠뜨리면 <b>조용히 다른 답</b>이 나오고, 참조 구현이 틀린 채로 골든이 만들어진다.
+다섯 언어 중 여기서 틀리기 가장 쉬운 것이 파이썬이다.</div>
+<p>그래서 참조 구현은 필요 없는 <code>&amp; U32</code> 를 일부러 적는다.
+코드가 곧 명세가 되는 자리다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-parity">
+<h3>파서티</h3>
+<div class="src"><b>out/parity_rangecoder.txt</b><span class="ln">1–16</span><span>골든 대조</span></div>
+<pre class="term" data-out="parity_rangecoder.txt" data-lines="1-16">== 1. 부호기 출력이 골든과 같은가 (rangecoder) ==
+파일                     py    cpp     go   java     ts
+abab_4k.txt              OK     OK     OK     OK     OK
+alphabet.bin             OK     OK     OK     OK     OK
+boundary_32768.bin       OK     OK     OK     OK     OK
+boundary_32769.bin       OK     OK     OK     OK     OK
+empty.bin                OK     OK     OK     OK     OK
+english.txt              OK     OK     OK     OK     OK
+korean_utf8.txt          OK     OK     OK     OK     OK
+mixed_1m.bin             OK     OK     OK     OK     OK
+one.bin                  OK     OK     OK     OK     OK
+random_64k.bin           OK     OK     OK     OK     OK
+runs.bin                 OK     OK     OK     OK     OK
+source.go                OK     OK     OK     OK     OK
+zeros_64k.bin            OK     OK     OK     OK     OK
+</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="ar-quiz-1" data-quiz>
+<h3>5부 퀴즈</h3>
+<p class="q">Q. 레인지 코더의 확률 갱신을 <code>&gt;&gt; 5</code> 에서 <code>&gt;&gt; 4</code> 로 바꾸면
+(적응이 두 배 빨라지면) 압축비는 어떻게 될까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 자료에 따라 다르다 — 그리고 그게 요점이다.
+성질이 자주 바뀌는 자료에서는 빨리 따라가서 이득이고,
+고른 자료에서는 확률이 잡음에 흔들려 손해다.<br>
+중요한 것은 <b>양쪽이 똑같이 바꿔야 한다</b>는 것이다. 부호기만 고치면
+복호기가 다른 확률을 쓰게 되어 파일이 전부 깨진다.
+그리고 골든 벡터가 전부 달라지므로, 이 값은 <b>형식의 일부</b>다 (SPEC §8.2).</div>
+<span class="tier a">실행 검증</span>
 </article>
 
 <!-- ===== 06_ans.html ===== -->
