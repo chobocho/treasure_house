@@ -46,7 +46,7 @@ SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
         interop bench \
         record width \
         figs deck deck-verify deck-slices deck-xref deck-check \
-        font font-check all clean
+        tables-check font font-check all clean
 
 help:                   ## 이 목록
 	@grep -hE '^[a-z][a-zA-Z0-9_-]*:.*?## ' $(MAKEFILE_LIST) \
@@ -172,6 +172,11 @@ deck-verify:            ## 덱의 코드·출력이 원본과 같은지 역검�
 deck-slices:            ## 인용 범위가 소스 경계에 맞는지
 	$(PY) deck/check_slices.py
 
+# 이 덱의 상수는 거의 전부 식에서 나온다. 딱 하나 예외인 squash 의
+# 서른세 수가 다섯 언어에 같게 적혀 있는지 본다 (SPEC §18.6).
+tables-check:           ## 손으로 적은 표가 다섯 언어에 같은지
+	$(PY) tools/gen_tables.py --check
+
 deck-xref:              ## "N부 M장" 이 진짜 그 자리를 가리키는지
 	$(PY) deck/check_xref.py
 
@@ -187,7 +192,7 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
-all: deck deck-verify deck-slices deck-xref deck-check \
+all: deck deck-verify deck-slices deck-xref deck-check tables-check \
      font font-check  ## 전부
 
 clean:                  ## 덱 지우기 (코퍼스·캡처·골든은 남긴다)

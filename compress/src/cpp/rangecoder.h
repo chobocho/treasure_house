@@ -37,6 +37,23 @@ class Encoder {
       shift_low();
     }
   }
+  // 확률을 밖에서 주는 비트 부호화 (§18.2). encode_bit 은 확률 칸을
+  // 가리켜 주면 자기가 고치지만, 문맥 혼합은 스스로 확률을 만들어
+  // 오므로 코더는 받아 쓰기만 한다. p0 은 12비트 P(비트=0).
+  void encode_bit_p0(uint32_t p0, int bit) {
+    uint32_t bound = (range_ >> 12) * p0;
+    if (bit == 0) {
+      range_ = bound;
+    } else {
+      low_ += bound;
+      range_ -= bound;
+    }
+    while (range_ < kTop) {
+      range_ <<= 8;
+      shift_low();
+    }
+  }
+
   // 빈도 표에서 기호 하나를 적는다 (SPEC §17.2). §8 의 비트 부호기와
   // 스트림도 정규화도 같이 쓴다 — 모델이 둘을 섞어 써도 된다.
   void encode_freq(uint32_t cum, uint32_t freq, uint32_t tot) {
@@ -85,6 +102,25 @@ class Decoder {
     ++pos_;
     for (int i = 0; i < 4; ++i) code_ = (code_ << 8) | next_byte();
   }
+  // encode_bit_p0 의 짝. 코더는 확률을 고치지 않는다.
+  int decode_bit_p0(uint32_t p0) {
+    uint32_t bound = (range_ >> 12) * p0;
+    int bit;
+    if (code_ < bound) {
+      range_ = bound;
+      bit = 0;
+    } else {
+      code_ -= bound;
+      range_ -= bound;
+      bit = 1;
+    }
+    while (range_ < kTop) {
+      range_ <<= 8;
+      code_ = (code_ << 8) | next_byte();
+    }
+    return bit;
+  }
+
   // 지금 자리가 [0, tot) 가운데 어디인지 (SPEC §17.2). 이 값으로 기호를
   // 찾고, 찾은 기호의 (cum, freq) 로 decode_update 를 불러야 한다.
   uint32_t decode_freq(uint32_t tot) {

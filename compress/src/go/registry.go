@@ -27,6 +27,8 @@ var Entries = []Entry{
 	{"ans", AnsEncode, AnsDecode},
 	{"lz4block", Lz4blockEncode, Lz4blockDecode},
 	{"ppm", PpmEncode, PpmDecode},
+	{"cm", CmEncode, CmDecode},
+	{"lossy", LossyEncode, LossyDecode},
 	// 복호기만 있는 모듈 (PLAN.md §0.4)
 	{"bzip2dec", nil, Bzip2decDecode},
 	{"lzmadec", nil, LzmadecDecode},

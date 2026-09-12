@@ -1578,3 +1578,253 @@ range coder stream: n symbols through the model above, then flush()
 
 Everything is integer. The models hold counts, not probabilities, and the coder
 divides — no floating point anywhere (§0.1).
+
+---
+
+## 18. `cm` — context mixing
+
+### 18.1 What changes
+
+Everything before this picked *one* model and coded with it. PPM picks the longest
+context that knows the symbol and escapes down. Context mixing does not choose: it
+asks several models at once and **blends their opinions**, learning as it goes which
+opinion to trust. That is the whole idea behind paq/lpaq and every entry at the top
+of the large-text benchmarks.
+
+We implement an lpaq-shaped model small enough to read in one sitting: five context
+models, a logistic mixer, one APM. It is not competitive with real paq and does not
+try to be; it is competitive with *itself* — the deck shows the ratio with 1, 2, 3,
+4 and 5 models so the reader sees what each one buys.
+
+### 18.2 Bitwise, not bytewise
+
+Every model predicts **one bit at a time**, MSB first inside each byte. The partial
+byte so far is `c0`, which starts at 1 and becomes `(c0 << 1) | bit`; when it reaches
+256 the byte is complete and `c0` resets to 1. Coding a bit with a probability is
+exactly §8's `encode_bit`, so the range coder is unchanged.
+
+### 18.3 The five models
+
+| Model | Context |
+|---|---|
+| 0 | `c0` alone — order 0, a direct 256-entry table |
+| 1 | last 1 byte + `c0` |
+| 2 | last 2 bytes + `c0` |
+| 3 | last 3 bytes + `c0` |
+| 4 | last 4 bytes + `c0` |
+
+Models 1..4 are hashed into tables of 2^20 12-bit probabilities:
+
+```
+hash(ctx, c0) = (ctx * 0x9E3779B1) ^ (c0 * 0x85EBCA6B)      # 32-bit wrap
+index         = hash >>> (32 - 20)
+```
+
+Both multiplications wrap to 32 bits. **TypeScript must use `Math.imul`**, for the
+same reason as §14.4: the products exceed 2^53.
+
+Each slot holds a probability in 0..4095, initialised to 2048, updated after the bit:
+
+```
+p += ((bit << 12) - p) >> 4
+```
+
+A fixed rate of 4 is not what lpaq does — lpaq keeps a bit-history state per slot and
+adapts fast when a context is new and slowly when it is established. We use the fixed
+rate because it is one line, and the deck says what is being given up.
+
+### 18.4 The mixer
+
+Probabilities are averaged in the **logistic** domain, not the linear one: averaging
+0.01 and 0.99 linearly gives 0.5, which throws away both models' confidence.
+
+```
+stretch(p) = ln(p / (1 - p)) scaled so that p=4095 -> +2047, p=0 -> -2047
+squash(x)  = the inverse
+```
+
+Both are integer tables (§18.6). The mixer keeps one weight vector per value of `c0`
+— 256 sets of 5 weights, each a signed 32-bit fixed-point number starting at 1 << 14:
+
+```
+st[i] = stretch(p[i])
+dot   = (sum of w[c0][i] * st[i]) >> 16, clamped to [-2047, 2047]
+p_mix = squash(dot)
+
+after the bit:
+err = ((bit << 12) - p_mix) * 6
+w[c0][i] += (st[i] * err) >> 10        # clamped to +-(1 << 20)
+```
+
+### 18.5 The APM chain
+
+Two adaptive probability maps refine the mixer's output. The first is keyed on `c0`
+alone (256 contexts); the second on `c0` together with the **previous byte**
+(65536 contexts). The second one is what rescues small inputs, where the hashed
+tables are still cold and the mixer weights are still learning.
+
+```
+pp(pr, cx):
+    s  = (stretch(pr) + 2048) * 32      # 0 .. 131040
+    wt = s & 0xFFF
+    j  = cx * 33 + (s >> 12)
+    remember index = j + (wt >> 11)
+    return (t[j] * (4096 - wt) + t[j + 1] * wt) >> 16
+
+update(bit, rate = 7):
+    g = (bit << 16) + (bit << rate) - bit - bit
+    t[index] += (g - t[index]) >> rate
+
+initial t[i] = squash(((i % 33) - 16) * 128) * 16
+```
+
+**The multiplier is 32, not 23.** The table has 33 slots per context and the input
+probability must stretch across all of them. lpaq1 uses 23, which leaves the top
+nine slots unreachable and silently caps any probability above about 3200/4096 —
+we copied that first and the ratio on `english.txt` was 39.5 % instead of 35.6 %.
+The round trip was perfect the whole time; only the size said anything was wrong.
+
+```
+p = (p_mix + 3 * apm1(p_mix, c0)) / 4
+p = (p     + 3 * apm2(p, (c0 << 8) | previous_byte)) / 4
+```
+
+clamped to 1..4094 so the range coder never sees 0 or 4096.
+
+### 18.6 The tables that cannot be derived
+
+`squash` is built from 33 pinned integers; `stretch` is built by inverting `squash`.
+The 33 numbers are the only magic constants in this deck that are not derivable from
+a formula, so they are generated once by `tools/gen_tables.py` and that tool
+**verifies** they appear identically in all five languages (`make tables-check`,
+part of `make all`). See §0.1: everything else is arithmetic.
+
+```
+SQUASH = 1, 2, 3, 6, 10, 16, 27, 45, 73, 120, 194, 310, 488, 747, 1101,
+         1546, 2047, 2549, 2994, 3348, 3607, 3785, 3901, 3975, 4024, 4050,
+         4068, 4079, 4085, 4089, 4092, 4093, 4094
+```
+
+### 18.7 Container
+
+```
+varint(n)
+if n == 0: stop
+range coder stream: 8 bits per byte through the model above, then flush()
+```
+
+---
+
+## 19. `lossy` — throwing information away on purpose
+
+### 19.1 What is in this module
+
+Five things, and only one of them is lossless:
+
+| Piece | Lossy? | What it is |
+|---|---|---|
+| quantiser | yes | uniform and dead-zone, the one place information is actually lost |
+| `dct8` | no (rounding only) | the 8×8 integer DCT and its inverse |
+| `jpeglite` | yes | DCT → quantise → zigzag → zero-run → Huffman, on grayscale PGM |
+| PNG filters | **no** | Sub/Up/Avg/Paeth + `deflate` — PNG is not a lossy format |
+| `adpcm` | yes | IMA ADPCM, 4 bits per sample |
+
+The module's **registered codec** — the one with a golden vector and a place in the
+5×5 parity matrix — is the PNG pipeline, because it is the only one that round-trips.
+The lossy pieces are gated by their own tests and by the PSNR/SNR tables in
+`out/bench_lossy.txt`; a golden vector for a lossy codec would only pin the encoder,
+and `decode(encode(x)) == x` is false by construction.
+
+### 19.2 The integer DCT
+
+Floating point is banned (§0.1), so the cosine matrix is 64 integers scaled by 2^13,
+generated once by `tools/gen_tables.py` and verified in all five languages:
+
+```
+C[u][x] = round( a(u) * cos((2x+1)*u*pi/16) * 2^13 ),  a(0)=sqrt(1/8), else sqrt(2/8)
+```
+
+Both transforms are two 1-D passes with rounding after each:
+
+```
+forward:  tmp[u][y] = (sum_x C[u][x]*f[x][y] + 2^12) >> 13
+          F[u][v]   = (sum_y C[v][y]*tmp[u][y] + 2^12) >> 13
+inverse:  tmp[x][v] = (sum_u C[u][x]*F[u][v] + 2^12) >> 13
+          f[x][y]   = (sum_v C[v][y]*tmp[x][v] + 2^12) >> 13
+```
+
+Round-tripping the transform alone is not exact — the worst error on random blocks is
+**2 out of 255**, and that is entirely the rounding, not the quantiser. The deck shows
+that number because it is the honest answer to "is the DCT itself lossy?": no, but our
+integer approximation of it is, a little.
+
+### 19.3 Quantisation
+
+```
+uniform(v, q)   = (v + sign(v) * q/2) / q        # round half away from zero
+dead_zone(v, q) = v / q truncated toward zero
+```
+
+The dead-zone version sends everything in `(-q, q)` to zero, which is a wider bin
+around zero than anywhere else — exactly what an image wants, because "no detail
+here" is the most common answer. JPEG and every video codec do this.
+Dequantisation is `v * q` in both cases.
+
+### 19.4 `jpeglite`
+
+Our format, not JPEG's:
+
+```
+'J' 'L' '1'
+u16le width, u16le height, u8 quality (1..100)
+huffman(§5) of the byte stream produced by:
+  for each 8x8 block, raster order, edges padded by replication:
+    level shift by -128, forward DCT, quantise by the scaled table,
+    zigzag, then zero-run code: (run of zeros 0..254, value as zigzag varint),
+    terminated by run = 255 meaning end-of-block
+```
+
+The quantisation table is JPEG's standard luminance table scaled by quality:
+`q[i] = clamp((base[i] * s + 50) / 100, 1, 255)` where `s = 5000/quality` for
+quality < 50 and `s = 200 - 2*quality` otherwise. Those 64 base numbers are the
+second table in `tools/gen_tables.py`.
+
+### 19.5 PNG filters
+
+Per row, five candidates; pick the one with the smallest sum of absolute values of
+the filtered bytes (libpng's heuristic), write the filter byte, then the row.
+
+```
+None: r[i]                        Sub:  r[i] - r[i-bpp]
+Up:   r[i] - prev[i]              Avg:  r[i] - (r[i-bpp] + prev[i]) / 2
+Paeth: r[i] - paeth(left, up, upleft)
+```
+
+`paeth(a,b,c)`: `p = a+b-c`; return whichever of `a`, `b`, `c` is nearest `p`,
+ties going to `a` then `b`. All arithmetic mod 256.
+
+The registered codec is `varint(n)` + `deflate(filtered rows)` with the row width
+fixed at 256 and `bpp = 1`, so that any byte string is a valid "image" and the last
+short row is filtered against the previous row exactly as PNG would.
+**This round-trips exactly** — it is the chapter's point that PNG is lossless.
+
+### 19.6 IMA ADPCM
+
+4 bits per sample, 16-bit PCM in and out. Two tables (`tools/gen_tables.py`): the
+89-entry step table and the 16-entry index table. Encoder and decoder share the same
+predictor, so the decoder's drift is the encoder's drift — that is what makes ADPCM
+work without sending the predictor.
+
+```
+diff = sample - predictor
+code = sign bit | min(7, (|diff| * 4) / step)
+delta = step/8; if code&4: delta += step; if code&2: delta += step/2;
+        if code&1: delta += step/4
+predictor += (code & 8) ? -delta : +delta,  clamped to int16
+index = clamp(index + INDEX_TABLE[code & 7], 0, 88)
+step  = STEP_TABLE[index]
+```
+
+The deck reports SNR, not "lossless or not": ADPCM at 4 bits per sample is a 4:1
+reduction whose signal-to-noise ratio the bench script measures on a generated tone
+and on `corpus/mixed_1m.bin` read as 16-bit samples.

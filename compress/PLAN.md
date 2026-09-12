@@ -443,3 +443,43 @@ it swallow the closing ` */` of twenty-one files in one run (it read the line as
 paragraph word `/`). Fixed in the tool, and the files were repaired mechanically.
 
 Next: step 7 — Tier-2 modules in all five languages.
+
+## Step 7 done — Tier 2 in five languages
+
+Seven modules: `ans`, `lz4block`, `bzip2dec`, `lzmadec`, `ppm`, `cm`, `lossy`.
+Fifteen encoding modules now have goldens (15 × 13 = 195 pairs, 0 mismatches) and
+a 5×5 cross-decode matrix with zero failures; the two decoder-only modules are
+gated by `bench/run_decoders.py` against real `bzip2 -1/-9` and `xz -1/-9` output
+(52 files, 0 failures).
+
+Whole-corpus ratios (1,367,107 bytes): cm 34.4 %, deflate 36.8 %, lossy 41.5 %,
+ppm 42.9 %, lz4block 54.1 %, lzss 55.9 %, rangecoder 60.4 %, lzw 75.6 %,
+rle 76.9 %, ans 79.6 %, huffman 80.4 %, bwt/mtf/bitio ~100 %, intcode 131.3 %.
+
+Three findings worth keeping:
+
+- **`cm` — the mixer's learning rate is the whole algorithm.** An update shift of
+  10 (instead of lpaq's 16) swings a weight by 50,000 per step and the mix
+  thrashes. Separately, lpaq1's APM multiplier of 23 leaves the top nine of 33
+  interpolation slots unreachable, capping the output probability near 3200/4096;
+  at 32 `english.txt` went 39.5 % → 35.6 %. **Round-trips were perfect the whole
+  time** — only the compressed size showed either bug. A codec that round-trips is
+  not a codec that works.
+- **`lossy` — the only place anything is discarded is quantisation.** The DCT and
+  the PNG filters are exactly invertible. The registered codec is the PNG one,
+  because it is the only one that round-trips; putting a golden vector on a lossy
+  encoder would pin the encoder, not the picture. jpeglite's decoder must *eat*
+  the EOB byte even when all 64 coefficients were present (quality 100), or the
+  next block reads that 255 as its own EOB — PSNR 8.4 dB instead of 55.1 dB.
+- **Non-derivable tables are now generated, not typed.** `tools/gen_tables.py`
+  emits SQUASH (33), DCT (64), JPEGQ (64), ADPCMSTEP (89), ADPCMINDEX (16) and
+  `--check` finds each as a contiguous subsequence between `NAME-TABLE-BEGIN` /
+  `NAME-TABLE-END` markers in all five languages. 25 places, 0 mismatches.
+
+A process note: the cm/lossy sources landed in commit `cfb479c` rather than in
+their own commits — a concurrent session working elsewhere in this repository ran
+`git add -A` across the whole tree while these files were still unstaged. Nothing
+was lost and the history was not rewritten, but per-algorithm commit granularity
+broke for these two modules.
+
+Next: step 8 — `bench/run_bench.py` and the `out/` captures.

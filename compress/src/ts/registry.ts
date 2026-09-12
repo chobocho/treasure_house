@@ -5,9 +5,11 @@ import * as ans from './ans';
 import * as bitio from './bitio';
 import * as bwt from './bwt';
 import * as bzip2dec from './bzip2dec';
+import * as cm from './cm';
 import * as deflate from './deflate';
 import * as huffman from './huffman';
 import * as intcode from './intcode';
+import * as lossy from './lossy';
 import * as lz4block from './lz4block';
 import * as lzmadec from './lzmadec';
 import * as lzss from './lzss';
@@ -43,6 +45,8 @@ export const ENTRIES: Entry[] = [
   { name: 'lz4block',
     encode: lz4block.encode, decode: lz4block.decode },
   { name: 'ppm', encode: ppm.encode, decode: ppm.decode },
+  { name: 'cm', encode: cm.encode, decode: cm.decode },
+  { name: 'lossy', encode: lossy.encode, decode: lossy.decode },
   // 복호기만 있는 모듈 (PLAN.md §0.4)
   { name: 'bzip2dec', encode: null, decode: bzip2dec.decode },
   { name: 'lzmadec', encode: null, decode: lzmadec.decode },

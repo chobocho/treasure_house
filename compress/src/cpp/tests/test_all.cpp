@@ -10,6 +10,7 @@
 #include <string>
 
 #include "../containers.h"
+#include "../lossy.h"
 #include "../registry.h"
 
 using namespace compresslib;
@@ -202,6 +203,56 @@ static int test_deflate() {
   return 0;
 }
 
+// 그림판 하나로 다섯 언어를 맞춘다. 숫자는 파이썬 기준 (§19.4·§19.6).
+static Bytes test_image() {
+  Bytes px(37 * 40);
+  for (int y = 0; y < 40; ++y) {
+    for (int x = 0; x < 37; ++x) {
+      px[sz(y * 37 + x)] = u8(x * 7 + y * 13 + ((x * y) >> 3));
+    }
+  }
+  return px;
+}
+
+static int test_lossy() {
+  CHECK(lossy::paeth(10, 20, 15) == 15);
+  CHECK(lossy::paeth(200, 100, 150) == 150);
+  const std::array<int, 64>& zz = lossy::zigzag();
+  CHECK(zz[1] == 1 && zz[2] == 8 && zz[3] == 16);
+  // 데드존이 있는 쪽이 0 에 더 가깝게 깎인다.
+  CHECK(lossy::quantise(7, 4, false) == 2);
+  CHECK(lossy::quantise(7, 4, true) == 1);
+
+  Bytes px = test_image();
+  const int want_len[3] = {272, 537, 1086};
+  const int want_err[3] = {28002, 16409, 5151};
+  const int quals[3] = {10, 50, 90};
+  for (int i = 0; i < 3; ++i) {
+    Bytes enc = lossy::jpeglite_encode(px, 37, 40, quals[i]);
+    CHECK(i32(enc.size()) == want_len[i]);
+    size_t w = 0, h = 0;
+    Bytes dec = lossy::jpeglite_decode(enc, w, h);
+    CHECK(w == 37 && h == 40);
+    int sum = 0;
+    for (size_t j = 0; j < px.size(); ++j) {
+      sum += std::abs(int(dec[j]) - int(px[j]));
+    }
+    // 품질이 오르면 오차는 줄어야 한다 — 손실의 유일한 약속이다.
+    CHECK(sum == want_err[i]);
+  }
+
+  std::vector<int> samples(200);
+  for (int i = 0; i < 200; ++i) {
+    samples[sz(i)] = 3000 * ((i * 37) % 101 - 50) / 50;
+  }
+  Bytes a = lossy::adpcm_encode(samples);
+  CHECK(a.size() == 100 && a[0] == 255);
+  int sum = 0;
+  for (int v : lossy::adpcm_decode(a, 200)) sum += v;
+  CHECK(sum == -1515);
+  return 0;
+}
+
 static int test_round_trips() {
   std::vector<Bytes> cases = {Bytes(), B({'A'}), repeat(0, 5000),
                               pseudo(20000, 37, 11),
@@ -231,6 +282,7 @@ int main() {
       {"huffman", test_huffman},       {"lzss", test_lzss},
       {"lzw", test_lzw},               {"rangecoder", test_rangecoder},
       {"bwt", test_bwt},               {"deflate", test_deflate},
+      {"lossy", test_lossy},
       {"round-trips", test_round_trips},
   };
   for (const auto& t : tests) {

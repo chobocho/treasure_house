@@ -10,10 +10,12 @@
 #include "ans.h"
 #include "bwt.h"
 #include "bzip2dec.h"
+#include "cm.h"
 #include "common.h"
 #include "deflate.h"
 #include "huffman.h"
 #include "intcode.h"
+#include "lossy.h"
 #include "lz4block.h"
 #include "lzmadec.h"
 #include "lzss.h"
@@ -50,6 +52,8 @@ inline const std::vector<Entry>& entries() {
       {"ans", ans::encode, ans::decode},
       {"lz4block", lz4block::encode, lz4block::decode},
       {"ppm", ppm::encode, ppm::decode},
+      {"cm", cm::encode, cm::decode},
+      {"lossy", lossy::encode, lossy::decode},
       // 복호기만 있는 모듈 (PLAN.md §0.4)
       {"bzip2dec", nullptr, bzip2dec::decode},
       {"lzmadec", nullptr, lzmadec::decode},

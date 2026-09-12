@@ -195,6 +195,69 @@ func TestDeflate(t *testing.T) {
 	}
 }
 
+// 그림판 하나로 다섯 언어를 맞춘다. 숫자는 파이썬 기준 (§19.4·§19.6).
+func testImage() []byte {
+	px := make([]byte, 37*40)
+	for y := 0; y < 40; y++ {
+		for x := 0; x < 37; x++ {
+			px[y*37+x] = byte(x*7 + y*13 + ((x * y) >> 3))
+		}
+	}
+	return px
+}
+
+func TestLossy(t *testing.T) {
+	if paeth(10, 20, 15) != 15 || paeth(200, 100, 150) != 150 {
+		t.Fatal("paeth 동점 규칙")
+	}
+	if zigzagOrder[1] != 1 || zigzagOrder[2] != 8 || zigzagOrder[3] != 16 {
+		t.Fatal("지그재그 시작이 0,1,8,16 이 아니다")
+	}
+	if quantise(7, 4, false) != 2 || quantise(7, 4, true) != 1 {
+		t.Fatal("데드존이 없는 쪽이 더 커야 한다")
+	}
+	px := testImage()
+	wantLen := []int{272, 537, 1086}
+	wantErr := []int{28002, 16409, 5151}
+	for i, q := range []int{10, 50, 90} {
+		enc := JpegliteEncode(px, 37, 40, q)
+		if len(enc) != wantLen[i] {
+			t.Fatalf("품질 %d 길이 %d != %d", q, len(enc), wantLen[i])
+		}
+		dec, w, h := JpegliteDecode(enc)
+		if w != 37 || h != 40 {
+			t.Fatalf("크기가 안 돌아왔다: %dx%d", w, h)
+		}
+		sum := 0
+		for j := range dec {
+			d := int(dec[j]) - int(px[j])
+			if d < 0 {
+				d = -d
+			}
+			sum += d
+		}
+		// 품질이 오르면 오차는 줄어야 한다 — 이게 손실의 유일한 약속이다.
+		if sum != wantErr[i] {
+			t.Fatalf("품질 %d 오차 %d != %d", q, sum, wantErr[i])
+		}
+	}
+	samples := make([]int, 200)
+	for i := range samples {
+		samples[i] = 3000 * ((i*37)%101 - 50) / 50
+	}
+	a := AdpcmEncode(samples)
+	if len(a) != 100 || a[0] != 255 {
+		t.Fatalf("ADPCM 길이/첫 바이트: %d %d", len(a), a[0])
+	}
+	sum := 0
+	for _, v := range AdpcmDecode(a, 200) {
+		sum += v
+	}
+	if sum != -1515 {
+		t.Fatalf("ADPCM 복호 합 %d != -1515", sum)
+	}
+}
+
 func TestRoundTrips(t *testing.T) {
 	cases := [][]byte{nil, []byte("A"), repeat(0, 5000),
 		pseudo(20000, 37, 11), pseudo(70000, 131, 3)}
