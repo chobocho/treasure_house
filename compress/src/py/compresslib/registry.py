@@ -6,12 +6,12 @@
 조용히 검증 밖으로 나간다. 다섯 언어 모두 같은 이름·같은 순서로 둔다.
 """
 from compresslib import (ans, bitio, bwt, deflate, huffman, intcode,
-                         lzss, lzw, mtf, rangecoder, rle)
+                         lz4block, lzss, lzw, mtf, rangecoder, rle)
 
 # 순서가 곧 배우는 순서다 (PLAN.md §3). Tier 1 뒤에 Tier 2 가 온다.
 ORDER = ['bitio', 'intcode', 'rle', 'mtf', 'huffman',
          'lzss', 'lzw', 'rangecoder', 'bwt', 'deflate',
-         'ans']
+         'ans', 'lz4block']
 
 MODULES = {
     'bitio': bitio,
@@ -25,6 +25,7 @@ MODULES = {
     'bwt': bwt,
     'deflate': deflate,
     'ans': ans,
+    'lz4block': lz4block,
 }
 
 
