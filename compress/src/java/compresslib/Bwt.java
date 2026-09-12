@@ -3,7 +3,7 @@ package compresslib;
 import java.util.Arrays;
 
 /**
- * 버로스–휠러 변환 — SPEC §9.
+ * 버로우즈–휠러 변환 — SPEC §9.
  *
  * <p>배가 늘리기 정렬. 키를 rank[i]*(m+1) + rank[i+k] 로 눌러 담는데,
  * <b>첫 회의 rank 를 바이트 값 그대로 쓰면 안 된다</b> — 곱수 m+1 이
