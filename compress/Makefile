@@ -33,12 +33,13 @@ SRC_CPP     := $(shell $(FIND) src/cpp cli \
                  \( -name '*.cpp' -o -name '*.h' \) 2>/dev/null | sort)
 SRC_JAVA    := $(shell $(FIND) src/java cli \
                  -name '*.java' ! -name '*Test.java' 2>/dev/null | sort)
-SRC_TS      := $(shell $(FIND) src/ts cli \
-                 -name '*.ts' ! -name '*.test.ts' 2>/dev/null | sort)
+SRC_TS      := $(shell $(FIND) src/ts cli -name node_modules -prune \
+                 -o -name '*.ts' ! -name '*.test.ts' -print \
+                 2>/dev/null | sort)
 SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
 
 .DEFAULT_GOAL := help
-.PHONY: help deps corpus build build-cpp build-go \
+.PHONY: help deps corpus build build-cpp build-go build-ts \
         test test-py test-go test-cpp test-java test-ts \
         golden golden-check corpus-check parity interop bench \
         record width \
@@ -55,8 +56,11 @@ help:                   ## 이 목록
 # (tetris_ts 기록).
 # 여기서 받은 것이 없으면 TS 층은 막힌 것이다 —
 # 없는 채로 지어내지 말 것.
+# typescript@5 로 못 박는다. 6.x 는 플랫폼별 네이티브 실행 파일을 쓰는데
+# 이 기계용(android-arm64) 꾸러미가 없어서 tsc 가 아예 안 뜬다.
+# 5.x 는 순수 자바스크립트라 어디서든 돈다.
 deps:                   ## TypeScript 컴파일러 내려받기 (src/ts 안에만)
-	cd src/ts && npm install --no-save typescript @types/node
+	cd src/ts && npm install --no-save typescript@5 @types/node
 
 corpus:                 ## 시험 자료 만들기 (씨앗 고정 — 늘 같은 파일)
 	$(PY) corpus/gen_corpus.py
@@ -74,7 +78,14 @@ build-go:               ## Go 명령줄 도구 짓기
 	@mkdir -p build
 	$(GO) build -o build/gocli ./cli/go
 
-build: build-cpp build-go   ## 있는 언어 전부 짓기
+# tsc 가 없으면 여기서 멈춘다. 없는 채로 지어내지 말 것 (make deps).
+TSC := src/ts/node_modules/.bin/tsc
+
+build-ts:               ## TypeScript 옮기기 (tsc → build/ts)
+	@test -x $(TSC) || (echo '  tsc 가 없다 — make deps 먼저'; exit 1)
+	$(TSC) -p tsconfig.json
+
+build: build-cpp build-go build-ts   ## 있는 언어 전부 짓기
 
 # ── 시험 ───────────────────────────────────────────────────────────
 test-py:                ## 파이썬 시험
@@ -94,10 +105,8 @@ test-java:              ## 자바 시험 (JVM 하나만 — flock 으로 막는�
 	  && sh $(JAVA_LOCK) sh src/java/run_tests.sh \
 	  || echo '  자바 시험 아직 없다'
 
-test-ts:                ## TypeScript 시험 (node --test)
-	@test -f src/ts/package.json \
-	  && (cd src/ts && npx tsc -p . && $(NODE) --test build/) \
-	  || echo '  TS 시험 아직 없다'
+test-ts: build-ts       ## TypeScript 시험 (node --test)
+	$(NODE) --test 'build/ts/src/ts/*.test.js'
 
 test: test-py test-go test-cpp test-java test-ts  ## 다섯 언어 시험
 

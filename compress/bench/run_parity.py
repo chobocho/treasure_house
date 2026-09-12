@@ -40,6 +40,7 @@ BUILD = os.path.join(BASE, 'build')
 SKIP = {'gen_corpus.py', 'MANIFEST.txt', 'README.md', '.gitkeep'}
 
 PYCLI = os.path.join(BASE, 'cli', 'py', 'main.py')
+TSCLI = os.path.join(BUILD, 'ts', 'cli', 'ts', 'main.js')
 
 # 언어 → (그 언어가 준비됐는지 보는 경로, batch 를 부르는 명령)
 LANGS = [
@@ -51,8 +52,7 @@ LANGS = [
     ('java', os.path.join(BUILD, 'java', 'compresslib', 'Main.class'),
      ['sh', os.path.join(BASE, 'tools', 'flock_java.sh'), 'java', '-cp',
       os.path.join(BUILD, 'java'), 'compresslib.Main', 'batch']),
-    ('ts', os.path.join(BUILD, 'ts', 'cli', 'main.js'),
-     ['node', os.path.join(BUILD, 'ts', 'cli', 'main.js'), 'batch']),
+    ('ts', TSCLI, ['node', TSCLI, 'batch']),
 ]
 
 # 교차 복호에 쓰는 파일. 경계를 밟는 것만 고른다.
