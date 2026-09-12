@@ -88,6 +88,40 @@ class Subset(unittest.TestCase):
         self.assertIn(ord('가'), _font(css).getBestCmap())
 
 
+class Ambiguous(unittest.TestCase):
+    """East_Asian_Width 가 A(모호)인 글자 — 동그라미 숫자 따위.
+
+    유니코드가 "문맥에 따라 1칸도 2칸도 된다" 고 못박은 글자라, 글꼴이 우리 칸 규칙과
+    다르게 그리는 것은 글꼴의 잘못이 아니라 그 글자의 성질이다. 빌드를 죽이는 대신
+    경고로 남겨야 한다 — boricha/deck/gen_fonts.py 가 먼저 내린 결론과 같은 계약이다.
+    """
+
+    def test_is_ambiguous(self):
+        self.assertTrue(em._is_ambiguous(0x2460))     # ①
+        self.assertFalse(em._is_ambiguous(ord('가')))  # W(넓음)
+        self.assertFalse(em._is_ambiguous(ord('A')))  # Na(좁음)
+
+    def test_embeds_and_warns_instead_of_aborting(self):
+        from fontTools.ttLib import TTFont
+        data = em.subset_woff2('①②')                  # 죽지 않아야 한다
+        f = TTFont(io.BytesIO(data))
+        cmap, hmtx, upm = f.getBestCmap(), f['hmtx'], f['head'].unitsPerEm
+        self.assertIn(0x2460, cmap, '모호 글자도 싣는다 — 빼면 시스템 글꼴로 갈려 더 어긋난다')
+        self.assertEqual(hmtx[cmap[0x2460]][0], upm)  # D2Coding 은 ① 을 전각으로 그린다
+        self.assertIn(0x2460, [cp for cp, _ in em.ambiguous_warnings])
+
+    def test_warnings_reset_each_call(self):
+        em.subset_woff2('①')
+        self.assertTrue(em.ambiguous_warnings)
+        em.subset_woff2('가')
+        self.assertEqual(em.ambiguous_warnings, [], '호출마다 새로 모아야 누적되지 않는다')
+
+    def test_non_ambiguous_violation_still_aborts(self):
+        # 모호가 아닌 글자가 규칙을 어기면 여전히 죽어야 한다 — 완화가 전체로 번지면 안 된다.
+        with mock.patch.object(em, '_cells', lambda cp: 1):
+            with self.assertRaises(SystemExit):
+                em.subset_woff2('가')
+
 class Embed(unittest.TestCase):
     def test_inserts_after_style_when_missing(self):
         out = em.embed(DOC)
