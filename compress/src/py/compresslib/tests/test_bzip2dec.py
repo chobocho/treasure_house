@@ -93,8 +93,9 @@ class TestDecode(unittest.TestCase):
         from compresslib import deflate
         here = os.path.dirname(os.path.abspath(__file__))
         base = os.path.abspath(os.path.join(here, '..', '..', '..', '..'))
-        src = _io.open(os.path.join(base, 'corpus', 'english.txt'),
-                       'rb').read()
+        with _io.open(os.path.join(base, 'corpus', 'english.txt'),
+                      'rb') as f:
+            src = f.read()
         self.assertLess(len(bz2.compress(src, 9)),
                         len(deflate.encode(src)))
         self.assertEqual(bzip2dec.decode(bz2.compress(src, 9)), src)

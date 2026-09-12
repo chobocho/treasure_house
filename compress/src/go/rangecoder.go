@@ -122,6 +122,26 @@ func (d *rcDecoder) decodeBit(probs []uint16, i int) int {
 	return bit
 }
 
+// 확률 모델 없이 비트를 그대로 읽는다 (SPEC §16.5). LZMA 의 먼 거리는
+// 가운데 비트를 모델링하지 않는다 — 어차피 반반이라 얻는 것이 없다.
+// t 는 "code 가 음수가 됐으면 되돌리고 0 비트를 낸다" 를 분기 없이 쓴
+// 것이고, code 가 부호 없는 32비트라는 데 기댄다.
+func (d *rcDecoder) decodeDirectBits(count int) uint32 {
+	var result uint32
+	for i := 0; i < count; i++ {
+		d.rng >>= 1
+		d.cod -= d.rng
+		t := 0 - (d.cod >> 31)
+		d.cod += d.rng & t
+		if d.rng < rcTop {
+			d.rng <<= 8
+			d.cod = d.cod<<8 | uint32(d.nextByte())
+		}
+		result = result<<1 + (t + 1)
+	}
+	return result
+}
+
 // 0차 적응 바이트 모델. 문맥은 1 에서 시작해 여덟 번 만에 256..511 이
 // 되므로 실제로 쓰이는 자리는 1..255 뿐 — 배열이 257 이 아니라 256
 // 이다.

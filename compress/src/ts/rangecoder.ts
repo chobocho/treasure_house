@@ -109,6 +109,34 @@ export class Decoder {
     }
     return bit;
   }
+  // 확률 모델 없이 비트를 그대로 읽는다 (SPEC §16.5). LZMA 의 먼 거리는
+  // 가운데 비트를 모델링하지 않는다 — 어차피 반반이라 얻는 것이 없다.
+  //
+  // 여기서는 C 의 t = 0 - (code >>> 31) 수법을 못 쓴다. code 를
+  // 배정도에 담고 있어 >>> 가 같은 뜻이 아니다 — 비교로 쓴다 (§16.5).
+  decodeDirectBits(count: number): number {
+    let result = 0;
+    for (let i = 0; i < count; i++) {
+      this.range = Math.floor(this.range / 2);
+      this.code -= this.range;
+      let bit: number;
+      if (this.code < 0) {
+        // 음수로 넘어갔다 — 되돌리고 0 비트. TS 의 수는 감기지 않으므로
+        // 진짜 음수가 되고, C 의 t = 0 - (code >>> 31) 수법보다 오히려
+        // 읽기 쉽다.
+        this.code += this.range;
+        bit = 0;
+      } else {
+        bit = 1;
+      }
+      if (this.range < TOP) {
+        this.range = (this.range * 256) % U32;
+        this.code = (this.code * 256 + this.nextByte()) % U32;
+      }
+      result = result * 2 + bit;
+    }
+    return result;
+  }
 }
 
 // 0차 적응 바이트 모델. 문맥은 1 에서 시작해 여덟 번 만에 256..511 이
