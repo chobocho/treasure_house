@@ -622,7 +622,11 @@ table.kv td.num, table.kv th.num { text-align: right; font-variant-numeric: tabu
     <option value="ppm-idea">· PPM — 차수를 내려간다</option>
     <option value="cm-idea">· 문맥 혼합</option>
     <option value="cm-bugs">· 왕복은 멀쩡한데 크기만 틀린 버그 둘</option>
-    <option value="p12">12부 · 현대 포맷</option>
+    <option value="p12">12부 · 현대 압축기</option>
+    <option value="lz4-idea">· LZ4 — 빠름이 목적인 설계</option>
+    <option value="lzma-idea">· LZMA — 반대쪽 끝</option>
+    <option value="zstd">· zstd</option>
+    <option value="modern-table">· 넷을 한 표에</option>
     <option value="p13">13부 · 손실 압축 입문</option>
     <option value="p14">14부 · 실전</option>
     <option value="p15">15부 · 부록</option>
@@ -6760,17 +6764,343 @@ APM 을 두 번 거친다. <b>바이트가 아니라 비트마다</b>다.
 <!-- ===== 12_modern.html ===== -->
 <article class="card section" id="p12">
 <p class="chnum">12부</p>
-<h2>현대 포맷</h2>
-<p class="chsub">LZ4·LZMA/xz·zstd·brotli 의 설계 결정</p>
+<h2>현대 압축기</h2>
+<p class="chsub">LZ4 · LZMA · zstd · Brotli</p>
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>LZ4 — 엔트로피 부호를 아예 안 쓰는 선택</li>
-<li>LZMA — 레인지 코더 + 문맥 있는 리터럴 + rep 거리</li>
-<li>zstd — FSE 와 반복 오프셋과 사전</li>
-<li>brotli — 정적 사전이라는 반칙 같은 수</li>
-<li>같은 파일을 여섯 도구로 — 비율과 속도의 지도</li>
+<li>LZ4 — 엔트로피 부호기를 아예 빼면 얼마나 빨라지나</li>
+<li>LZ4 프레임과 xxHash — 진짜 lz4 와 주고받기</li>
+<li>LZMA — 상태 기계와 문맥으로 무장한 LZ77</li>
+<li>진짜 .lzma 파일 풀기</li>
+<li>zstd — 사전 · FSE · 블록 구조</li>
+<li>Brotli — 내장 사전이라는 승부수</li>
+<li>넷을 한 표에 놓고 고르기</li>
 </ul>
-<p class="cap">준비 중입니다 — PLAN.md §5 10단계에서 이 부를 채운다.</p>
+</article>
+
+<article class="card" id="lz4-idea">
+<p class="chnum">1장</p>
+<h2>LZ4 — 빠름이 목적인 설계</h2>
+<p class="chsub">2011년, 얀 콜레</p>
+</article>
+
+<article class="card" id="lz4-idea-1">
+<h3>설계 결정 셋</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>결정</th><th>얻는 것</th><th>잃는 것</th></tr>
+<tr><td><b>엔트로피 부호기를 안 쓴다</b></td><td>복호가 memcpy 에 가까워진다</td><td>비율</td></tr>
+<tr><td><b>오프셋 2바이트 고정</b></td><td>읽기가 한 줄</td><td>창이 64 KiB 로 묶인다</td></tr>
+<tr><td><b>해시 표 하나, 사슬 없음</b></td><td>부호화가 O(n) 에 상수가 작다</td><td>일치를 놓친다</td></tr>
+</table></div>
+<div class="key">LZ4 의 복호기는 <b>비트 단위 작업이 하나도 없다</b>.
+바이트를 읽고 memcpy 하는 것이 전부다. 그래서 초당 수 GB 가 나온다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lz4-format">
+<h3>블록 형식</h3>
+<svg class="diag" viewBox="0 0 340 160" role="img" aria-label="LZ4 프레임과 블록">
+<text x="10" y="16" class="lbl">프레임</text>
+<rect x="10" y="26" width="83" height="28" class="box"/>
+<text x="51.5" y="44" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">04 22 4D 18</text>
+<text x="51.5" y="68" style="font-family:ui-monospace,DeckMono,monospace;font-size:8px;fill:var(--muted);" text-anchor="middle">magic</text>
+<rect x="96" y="26" width="47" height="28" class="box"/>
+<text x="119.5" y="44" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">FLG BD</text>
+<text x="119.5" y="68" style="font-family:ui-monospace,DeckMono,monospace;font-size:8px;fill:var(--muted);" text-anchor="middle">기술자</text>
+<rect x="146" y="26" width="21" height="28" class="box"/>
+<text x="156.5" y="44" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">HC</text>
+<text x="156.5" y="68" style="font-family:ui-monospace,DeckMono,monospace;font-size:8px;fill:var(--muted);" text-anchor="middle">검사</text>
+<rect x="170" y="26" width="77" height="28" class="box"/>
+<text x="208.5" y="44" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">블록…</text>
+<rect x="250" y="26" width="59" height="28" class="box"/>
+<text x="279.5" y="44" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">00000000</text>
+<text x="279.5" y="68" style="font-family:ui-monospace,DeckMono,monospace;font-size:8px;fill:var(--muted);" text-anchor="middle">끝</text>
+<text x="10" y="96" class="lbl">블록</text>
+<rect x="10" y="106" width="93" height="28" class="box"/>
+<text x="56.5" y="124" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">블록 크기 4B</text>
+<rect x="106" y="106" width="37" height="28" class="box"/>
+<text x="124.5" y="124" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">토큰</text>
+<rect x="146" y="106" width="57" height="28" class="box"/>
+<text x="174.5" y="124" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">리터럴</text>
+<rect x="206" y="106" width="69" height="28" class="box"/>
+<text x="240.5" y="124" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">오프셋 2B</text>
+<rect x="278" y="106" width="59" height="28" class="box"/>
+<text x="307.5" y="124" style="font-family:ui-monospace,DeckMono,monospace;font-size:9px;" text-anchor="middle">일치 길이</text>
+<text x="10" y="154" class="lbl">토큰 한 바이트가 두 길이를 함께 든다</text>
+</svg>
+<p class="cap">프레임과 블록</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>부분</th><th>내용</th></tr>
+<tr><td>토큰 1바이트</td><td>상위 4비트 = 리터럴 길이, 하위 4비트 = 일치 길이−4</td></tr>
+<tr><td>LSIC</td><td>길이가 15 면 0xFF 를 이어 붙여 더한다</td></tr>
+<tr><td>리터럴</td><td>그대로</td></tr>
+<tr><td>오프셋</td><td>2바이트 리틀엔디언</td></tr>
+</table></div>
+<p>토큰 한 바이트가 두 길이를 함께 드는 것이 요점이다.
+짧은 리터럴·짧은 일치가 흔하므로, 대부분의 토큰이 <b>한 바이트로 끝난다</b>.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="lz4-code">
+<h3>부호기</h3>
+<div class="src"><b>src/py/compresslib/lz4block.py</b><span class="ln">201–204</span><span>해시 표 하나, 사슬 없음</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lz4block.py" data-lines="201-204">def encode(src):
+    if not src:
+        return varint.put(0)
+    return varint.put(len(src)) + compress_block(src)</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-rules">
+<h3>규칙 셋을 어기면 진짜 lz4 가 거절한다</h3>
+<ul>
+<li><b>마지막 5바이트는 반드시 리터럴</b> — 복호기가 넉넉히 읽어도 안전하도록</li>
+<li><b>마지막 일치는 끝에서 12바이트 안쪽에 없다</b> — 같은 이유</li>
+<li><b>오프셋은 1 이상</b> — 0 은 금지</li>
+</ul>
+<div class="key">전부 <b>복호기를 빠르게 만들기 위한</b> 규칙이다.
+복호기가 경계 검사 없이 16바이트씩 옮길 수 있게 하려고, 부호기 쪽에 제약을 건다.
+"형식이 구현을 위해 양보한" 대표적인 예다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lz4-ts-bug">
+<h3>여기서 TypeScript 만 틀렸다</h3>
+<div class="warn">해시가 <code>(u32 * 2654435761) &gt;&gt;&gt; (32 - 12)</code> 다.
+자바스크립트에서 이 곱은 <b>1.1 × 10<sup>19</sup></b> 까지 간다 —
+2<sup>53</sup> 을 넘어 정밀도가 날아간다.</div>
+<p><code>Math.imul(u32, 2654435761)</code> 로 고쳤다. 32비트 곱을 정확히 한다.</p>
+<div class="key">코퍼스 13개 중 <b><code>korean_utf8.txt</code> 하나에서만</b> 드러났다.
+다른 파일들은 해시가 틀려도 우연히 같은 일치를 찾았다.
+<b>코퍼스가 하나만 적었어도 못 잡았을 버그</b>다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-lsic">
+<h3>그리고 상한 하나를 잘못 잡았다</h3>
+<div class="warn">LSIC(길이 이어 적기)의 상한을 1000 으로 뒀다.
+<code>mixed_1m.bin</code> 에 <b>256 KiB 짜리 정당한 일치</b>가 있어 1028 이 필요했다.</div>
+<p>고친 방법은 상한을 키우는 것이 아니라 <b>남은 입력 길이로 묶는</b> 것이다.
+형식이 허용하는 것보다 길 수는 없으니, 그것이 자연스러운 상한이다.</p>
+<div class="note">임의의 상수를 고르면 언젠가 정당한 입력을 거절한다.
+<b>상한은 형식에서 끌어내야 한다</b>는 교훈이다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-interop">
+<h3>진짜 lz4 와 주고받기</h3>
+<div class="src"><b>out/interop_lz4.txt</b><span class="ln">1–15</span><span>우리 블록을 프레임으로 감싸 lz4 -d 가 푼다</span></div>
+<pre class="term" data-out="interop_lz4.txt" data-lines="1-15">== 1. 우리 블록을 프레임으로 감싸 → 진짜 lz4 -d 가 푼다 ==
+파일                   우리 블록     프레임  결과
+empty.bin                      1         16  OK 
+one.bin                        2         17  OK 
+abab_4k.txt                   27         42  OK 
+alphabet.bin                4628       4643  OK 
+runs.bin                     558        573  OK 
+zeros_64k.bin                267        282  OK 
+random_64k.bin             65794      65809  OK 
+boundary_32768.bin         31901      31916  OK 
+boundary_32769.bin         31945      31960  OK 
+korean_utf8.txt            23675      23690  OK 
+english.txt                40320      40335  OK 
+source.go                   6178       6193  OK 
+mixed_1m.bin              534037     534052  OK </pre>
+<p>프레임 머리말(마법수·기술자·xxHash-32)은 <b>interop 스크립트에만</b> 있다.
+본문 모듈은 블록 형식만 다룬다 — 이 부의 주제가 블록이기 때문이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-result">
+<h3>성적 — 빠른 대신 크다</h3>
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">25–25</span><span>파일별 비율 표의 머리</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="25-25">모듈           abab4k alphabet   b32768   b32769  english koreanut  mixed1m random64   source zeros64k</pre>
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">30–30</span><span>lz4block 한 줄</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="30-30">lz4block          0.7    100.5     97.2     97.3     66.1     59.2     50.9    100.4     61.1      0.4</pre>
+<div class="tblwrap"><table class="kv">
+<tr><th>english.txt</th><th>비율</th><th>부호화 KB/s (C++)</th></tr>
+<tr><td>lz4block</td><td>66.1%</td><td>매우 빠름</td></tr>
+<tr><td>deflate</td><td>41.9%</td><td>느림</td></tr>
+<tr><td>cm</td><td>35.6%</td><td>가장 느림</td></tr>
+</table></div>
+<div class="src"><b>out/bench_speed.txt</b><span class="ln">32–33</span><span>lz4block 의 처리량</span></div>
+<pre class="term" data-out="bench_speed.txt" data-lines="32-33">lz4block    부호     3758    89134    41836    53689    36237
+            복호    11039   101842    51155    83374    52616</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-idea">
+<p class="chnum">2장</p>
+<h2>LZMA — 반대쪽 끝</h2>
+<p class="chsub">1998년, 이고르 파블로프</p>
+</article>
+
+<article class="card" id="lzma-idea-1">
+<h3>LZ77 에 무엇을 더했나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>더한 것</th><th>효과</th></tr>
+<tr><td><b>레인지 코더</b></td><td>정수 비트의 굴레가 없다</td></tr>
+<tr><td><b>상태 기계 12가지</b></td><td>"직전에 무엇을 했나" 가 확률을 바꾼다</td></tr>
+<tr><td><b>리터럴 문맥</b></td><td>앞 바이트의 상위 몇 비트로 확률을 나눈다</td></tr>
+<tr><td><b>되풀이 거리 4개</b></td><td>최근 쓴 거리를 짧은 부호로 다시 쓴다</td></tr>
+<tr><td><b>최적 파싱</b></td><td>탐욕이 아니라 비용을 세어 고른다</td></tr>
+</table></div>
+<div class="key">"거리 4개를 기억한다" 가 특히 강하다.
+구조화된 자료(표·배열)에서는 같은 거리가 되풀이되는데, 그때마다 2비트로 적는다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lzma-dec">
+<h3>복호기만 만든다</h3>
+<p>bzip2 와 같은 이유다. 부호기까지 만들면 우리끼리의 시험만 되고,
+LZMA 부호기의 최적 파싱은 이 책의 분량을 넘는다.</p>
+<div class="src"><b>src/py/compresslib/lzmadec.py</b><span class="ln">72–87</span><span>lc·lp·pb 와 사전 크기</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/lzmadec.py" data-lines="72-87">def parse_header(src):
+    """(lc, lp, pb, 사전 크기, 원본 길이, 다음 위치)."""
+    if len(src) &lt; 13:
+        raise ValueError('LZMA 머리가 너무 짧다')
+    prop = src[0]
+    if prop &gt;= 9 * 5 * 5:
+        raise ValueError('속성 바이트가 범위를 넘는다: %d' % prop)
+    lc = prop % 9
+    rest = prop // 9
+    lp = rest % 5
+    pb = rest // 5
+    dict_size = int.from_bytes(src[1:5], 'little')
+    size = int.from_bytes(src[5:13], 'little')
+    if size != UNKNOWN_SIZE and size &gt; MAX_OUTPUT:
+        raise ValueError('원본 길이가 너무 크다')
+    return lc, lp, pb, dict_size, size, 13</code></pre>
+<div class="tblwrap"><table class="kv">
+<tr><th>속성</th><th>뜻</th><th>기본값</th></tr>
+<tr><td>lc</td><td>리터럴 문맥 비트 — 앞 바이트의 상위 몇 비트</td><td>3</td></tr>
+<tr><td>lp</td><td>리터럴 위치 비트 — 자리의 하위 몇 비트</td><td>0</td></tr>
+<tr><td>pb</td><td>위치 비트 — 일치 확률을 자리로 나눈다</td><td>2</td></tr>
+</table></div>
+<p>세 값이 <code>(pb*5 + lp)*9 + lc</code> 로 <b>한 바이트</b>에 들어 있다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-dec-2">
+<h3>상태 기계</h3>
+<p>상태는 0~11 이고, "직전 세 토큰이 무엇이었나" 를 요약한다.
+리터럴 뒤인가, 일치 뒤인가, 되풀이 거리 뒤인가에 따라 다음 토큰의 확률이 달라진다.</p>
+<div class="key">문맥 모델링을 <b>토큰 수준</b>에서 하는 것이다.
+11부의 CM 이 비트 수준에서 하는 일을, LZMA 는 훨씬 싸게 토큰 수준에서 한다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lzma-dec-3">
+<h3>진짜 .lzma 파일을 푼다</h3>
+<div class="src"><b>out/decoders_lzmadec.txt</b><span class="ln">1–16</span><span>xz --format=lzma -1/-9 가 만든 파일</span></div>
+<pre class="term" data-out="decoders_lzmadec.txt" data-lines="1-16">== 1. 진짜 도구가 만든 파일을 다섯이 같게 푸는가 (lzmadec) ==
+입력은 우리가 만들지 않았다. 골든 벡터보다 센 시험이다.
+파일 · 설정                    py    cpp     go   java     ts
+abab_4k.txt -1                 OK     OK     OK     OK     OK
+abab_4k.txt -9                 OK     OK     OK     OK     OK
+alphabet.bin -1                OK     OK     OK     OK     OK
+alphabet.bin -9                OK     OK     OK     OK     OK
+boundary_32768.bin -1          OK     OK     OK     OK     OK
+boundary_32768.bin -9          OK     OK     OK     OK     OK
+boundary_32769.bin -1          OK     OK     OK     OK     OK
+boundary_32769.bin -9          OK     OK     OK     OK     OK
+empty.bin -1                   OK     OK     OK     OK     OK
+empty.bin -9                   OK     OK     OK     OK     OK
+english.txt -1                 OK     OK     OK     OK     OK
+english.txt -9                 OK     OK     OK     OK     OK
+korean_utf8.txt -1             OK     OK     OK     OK     OK</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-dec-4">
+<h3>첫 바이트가 0 인 것이 여기서 값을 한다</h3>
+<div class="key">5부에서 우리 레인지 코더를 <b>LZMA 의 것과 똑같이</b> 만들어 두었다.
+그래서 이 복호기는 <b>같은 코더를 그대로 쓴다</b> — 새로 만든 것은 모델 쪽뿐이다.</div>
+<p>코더를 둘 두었다면 맞출 것이 두 배였다. 5부에서 "남의 것을 그대로 쓴다" 고
+결정한 것이 여기서 값을 한다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="zstd">
+<p class="chnum">3장</p>
+<h2>zstd</h2>
+<p class="chsub">2016년 — 오늘날의 기본값</p>
+</article>
+
+<article class="card" id="zstd-1">
+<h3>무엇을 섞었나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>부분</th><th>이 책의 어느 부</th></tr>
+<tr><td>LZ77 (큰 창, 최적 파싱)</td><td>7부</td></tr>
+<tr><td>FSE = tANS</td><td>6부</td></tr>
+<tr><td>허프만 (리터럴 전용)</td><td>4부</td></tr>
+<tr><td>되풀이 오프셋 3개</td><td>12부 LZMA 와 같은 생각</td></tr>
+<tr><td>사전(dictionary) 학습</td><td>—</td></tr>
+</table></div>
+<div class="key">새 알고리즘을 발명한 것이 아니라 <b>있는 것을 가장 잘 조합</b>했다.
+리터럴은 허프만으로, 길이·거리·리터럴길이 세 흐름은 FSE 로 따로 부호화한다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="zstd-2">
+<h3>사전 — 작은 파일을 위한 승부수</h3>
+<p>JSON 로그 한 줄(200바이트)을 압축하면 아무 압축기도 못 줄인다.
+되풀이를 배울 자료가 없기 때문이다.</p>
+<div class="key">zstd 의 사전은 <b>미리 배운 창</b>이다.
+비슷한 자료 여러 개로 사전을 만들어 두면, 각 파일이 그 사전을 창처럼 쓴다.
+200바이트 JSON 이 <b>1/5</b> 로 줄기도 한다.</div>
+<p>HTTP 의 <code>Accept-Encoding: zstd</code> 와 공유 사전, 데이터베이스의
+행 단위 압축이 전부 이 성질을 쓴다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="brotli">
+<h3>Brotli — 내장 사전</h3>
+<p>구글이 2015년에 내놓았고, HTTP 압축에서 gzip 을 밀어냈다.</p>
+<ul>
+<li><b>13만 단어의 내장 사전</b> — HTML·CSS·JS 에서 흔한 토막들</li>
+<li>사전 항목에 <b>변환</b>(대문자화·접미사 붙이기)을 적용할 수 있다</li>
+<li>2차 문맥 모델링 — 앞 두 바이트로 리터럴 확률을 나눈다</li>
+</ul>
+<div class="note">내장 사전은 <b>웹에 특화</b>되어 있다. 웹 자료에서는 크게 이기고,
+그렇지 않은 자료에서는 zstd 와 비슷하다. "범용" 과 "특화" 의 맞바꿈이다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="modern-table">
+<p class="chnum">4장</p>
+<h2>넷을 한 표에</h2>
+</article>
+
+<article class="card" id="modern-table-1">
+<h3>성격</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>LZ4</th><th>DEFLATE</th><th>zstd</th><th>LZMA</th></tr>
+<tr><td>부호기</td><td>없음</td><td>허프만</td><td>FSE+허프만</td><td>레인지</td></tr>
+<tr><td>창</td><td>64 KiB</td><td>32 KiB</td><td>8 MiB+</td><td>최대 1.5 GiB</td></tr>
+<tr><td>비율</td><td>낮다</td><td>가운데</td><td>높다</td><td>가장 높다</td></tr>
+<tr><td>압축 속도</td><td>매우 빠름</td><td>가운데</td><td>빠름</td><td>느림</td></tr>
+<tr><td>해제 속도</td><td>매우 빠름</td><td>빠름</td><td>매우 빠름</td><td>가운데</td></tr>
+<tr><td>메모리(해제)</td><td>64 KiB</td><td>32 KiB</td><td>창 크기</td><td>사전 크기</td></tr>
+</table></div>
+<div class="key">해제가 빠른 쪽(LZ4·zstd)은 <b>한 번 압축해 여러 번 읽는</b> 자리에 맞고,
+비율이 높은 쪽(LZMA)은 <b>배포·보관</b>에 맞는다.
+14부에서 이 고르기를 더 구체적으로 다룬다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card quiz" id="modern-quiz-1" data-quiz>
+<h3>12부 퀴즈</h3>
+<p class="q">Q. LZ4 명세는 "마지막 5바이트는 반드시 리터럴" 이라고 못 박는다.
+압축에 손해인데 왜 이런 규칙을 두었을까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>복호기가 경계 검사를 건너뛸 수 있게</b> 하려고다.
+빠른 복호기는 리터럴을 16바이트씩 통째로 옮기고 일치도 8바이트 단위로 옮긴다.
+버퍼 끝에서 그렇게 하면 넘어가므로, 보통은 매번 "남은 길이" 를 확인해야 한다.<br>
+끝의 5바이트(그리고 마지막 일치가 12바이트 안쪽에 없다는 규칙)를 보장하면,
+복호기는 <b>본문 고리 안에서 검사를 아예 안 해도</b> 안전하다.
+그 검사 한 줄을 없애려고 형식이 부호기 쪽에 제약을 건 것이다.<br>
+<b>형식 설계가 구현 성능을 위해 양보한</b> 대표적인 예다.</div>
+<span class="tier c">문서 근거</span>
 </article>
 
 <!-- ===== 13_lossy.html ===== -->
