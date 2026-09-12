@@ -89,7 +89,7 @@ def short(name):
     stem = name.split('.')[0]
     if stem.startswith('boundary_'):
         return 'b' + stem[9:]
-    return stem.replace('_', '')[:9]
+    return stem.replace('_', '')[:8]
 
 
 def golden_size(algo, name):
@@ -141,12 +141,12 @@ def ratio_report():
     lines.append('== 파일별 비율 (%) ==')
     cols = [n for n in names if raw[n] >= 4096]
     lines.append(pad('모듈', 12)
-                 + ''.join(pad(short(n), 10, True) for n in cols))
+                 + ''.join(pad(short(n), 9, True) for n in cols))
     for _r, algo, _t, _e in sorted(rows):
         row = pad(algo, 12)
         for n in cols:
             s = golden_size(algo, n)
-            row += pad('%.1f' % (100.0 * s / raw[n]), 10, True)
+            row += pad('%.1f' % (100.0 * s / raw[n]), 9, True)
         lines.append(row)
     return lines
 
