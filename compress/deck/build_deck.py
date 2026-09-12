@@ -96,13 +96,23 @@ def find_symbol(path, sym):
     if ext == '.go':
         pat = re.compile(r'^func\s+(?:\([^)]*\)\s*)?%s\b|^(?:type|var|const)\s+%s\b' % (e, e))
     elif ext == '.py':
-        pat = re.compile(r'^(?:def|class)\s+%s\b|^%s\s*(?:[,:]|=)' % (e, e))
+        # 메서드는 들여쓰기 안에 있다 — 열 0 만 보면 못 찾는다.
+        pat = re.compile(r'^\s*(?:def|class)\s+%s\b|^%s\s*(?:[,:]|=)'
+                         % (e, e))
     elif ext == '.sh':
         pat = re.compile(r'^%s\s*\(\)|^%s=' % (e, e))
     elif ext in ('.yaml', '.yml'):
         pat = re.compile(r'^\s*(?:name|kind):\s*%s\s*$' % e)
     elif ext == '.ldif':
         pat = re.compile(r'^dn:\s*.*\b%s\b' % e)
+    elif ext in ('.h', '.hpp', '.cpp', '.cc', '.java', '.ts', '.mts'):
+        # 클래스·구조체·함수·메서드를 한 판에 잡는다. 이름 뒤에 여는
+        # 괄호가 오거나(함수), 선언 낱말이 앞에 오거나(형) 둘 중 하나다.
+        pat = re.compile(
+            r'^\s*(?:(?:export|public|private|protected|static|final|'
+            r'inline|template|abstract|constexpr)\s+)*'
+            r'(?:class|struct|interface|enum|namespace|function)\s+%s\b'
+            r'|^\s*(?:[\w:<>,&*\[\]\s]+\s)?%s\s*\(' % (e, e))
     else:
         pat = re.compile(r'^\s*"%s"\s*:' % e)
 
