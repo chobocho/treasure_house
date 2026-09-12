@@ -60,6 +60,18 @@ func (e *rcEncoder) encodeBit(probs []uint16, i int, bit int) {
 	}
 }
 
+// 빈도 표에서 기호 하나를 적는다 (SPEC §17.2). §8 의 비트 부호기와
+// 스트림도 정규화도 같이 쓴다 — 모델이 둘을 섞어 써도 된다.
+func (e *rcEncoder) encodeFreq(cum, freq, tot uint32) {
+	r := e.rng / tot
+	e.low += uint64(r) * uint64(cum)
+	e.rng = r * freq
+	for e.rng < rcTop {
+		e.rng <<= 8
+		e.shiftLow()
+	}
+}
+
 func (e *rcEncoder) flush() {
 	for i := 0; i < 5; i++ {
 		e.shiftLow()
@@ -100,6 +112,27 @@ func (d *rcDecoder) nextByte() byte {
 		fail("스트림 끝을 너무 많이 넘었다")
 	}
 	return 0
+}
+
+// 지금 자리가 [0, tot) 가운데 어디인지 (SPEC §17.2). 이 값으로 기호를
+// 찾고, 찾은 기호의 (cum, freq) 로 decodeUpdate 를 불러야 한다.
+func (d *rcDecoder) decodeFreq(tot uint32) uint32 {
+	r := d.rng / tot
+	v := d.cod / r
+	if v >= tot {
+		return tot - 1
+	}
+	return v
+}
+
+func (d *rcDecoder) decodeUpdate(cum, freq, tot uint32) {
+	r := d.rng / tot
+	d.cod -= r * cum
+	d.rng = r * freq
+	for d.rng < rcTop {
+		d.rng <<= 8
+		d.cod = d.cod<<8 | uint32(d.nextByte())
+	}
 }
 
 func (d *rcDecoder) decodeBit(probs []uint16, i int) int {

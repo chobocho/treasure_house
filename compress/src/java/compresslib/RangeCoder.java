@@ -58,6 +58,20 @@ public final class RangeCoder {
       }
     }
 
+    /**
+     * 빈도 표에서 기호 하나를 적는다 (SPEC §17.2). §8 의 비트 부호기와
+     * 스트림도 정규화도 같이 쓴다 — 모델이 둘을 섞어 써도 된다.
+     */
+    public void encodeFreq(long cum, long freq, long tot) {
+      long r = range / tot;
+      low += r * cum;
+      range = r * freq;
+      while (range < TOP) {
+        range = (range << 8) & U32;
+        shiftLow();
+      }
+    }
+
     public void flush() {
       for (int i = 0; i < 5; i++) {
         shiftLow();
@@ -123,6 +137,26 @@ public final class RangeCoder {
         throw new CodecException("스트림 끝을 너무 많이 넘었다");
       }
       return 0;
+    }
+
+    /**
+     * 지금 자리가 [0, tot) 가운데 어디인지 (SPEC §17.2). 이 값으로
+     * 기호를 찾고, 그 기호의 (cum, freq) 로 decodeUpdate 를 부른다.
+     */
+    public long decodeFreq(long tot) {
+      long r = range / tot;
+      long v = code / r;
+      return v >= tot ? tot - 1 : v;
+    }
+
+    public void decodeUpdate(long cum, long freq, long tot) {
+      long r = range / tot;
+      code = (code - r * cum) & U32;
+      range = r * freq;
+      while (range < TOP) {
+        range = (range << 8) & U32;
+        code = ((code << 8) | nextByte()) & U32;
+      }
     }
 
     public int decodeBit(int[] probs, int i) {

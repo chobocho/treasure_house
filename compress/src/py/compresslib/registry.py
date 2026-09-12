@@ -7,14 +7,14 @@
 """
 from compresslib import (ans, bitio, bwt, bzip2dec, deflate, huffman,
                          intcode, lz4block, lzmadec, lzss, lzw, mtf,
-                         rangecoder, rle)
+                         ppm, rangecoder, rle)
 
 # 순서가 곧 배우는 순서다 (PLAN.md §3). Tier 1 뒤에 Tier 2 가 온다.
 # ORDER 는 **부호기가 있는** 모듈만이다 — 골든 벡터와 파서티가 이 목록을
 # 돈다.
 ORDER = ['bitio', 'intcode', 'rle', 'mtf', 'huffman',
          'lzss', 'lzw', 'rangecoder', 'bwt', 'deflate',
-         'ans', 'lz4block']
+         'ans', 'lz4block', 'ppm']
 
 # 복호기만 있는 모듈 (PLAN.md §0.4). 골든 벡터가 없다 — 우리가 만들지
 # 않은 파일, 즉 **진짜 도구가 만든 파일** 을 다섯 언어가 같게 푸는 것이
@@ -36,6 +36,7 @@ MODULES = {
     'deflate': deflate,
     'ans': ans,
     'lz4block': lz4block,
+    'ppm': ppm,
     'bzip2dec': bzip2dec,
     'lzmadec': lzmadec,
 }

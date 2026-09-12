@@ -37,6 +37,18 @@ class Encoder {
       shift_low();
     }
   }
+  // 빈도 표에서 기호 하나를 적는다 (SPEC §17.2). §8 의 비트 부호기와
+  // 스트림도 정규화도 같이 쓴다 — 모델이 둘을 섞어 써도 된다.
+  void encode_freq(uint32_t cum, uint32_t freq, uint32_t tot) {
+    uint32_t r = range_ / tot;
+    low_ += u64(r) * cum;
+    range_ = r * freq;
+    while (range_ < kTop) {
+      range_ <<= 8;
+      shift_low();
+    }
+  }
+
   void flush() {
     for (int i = 0; i < 5; ++i) shift_low();
   }
@@ -73,6 +85,24 @@ class Decoder {
     ++pos_;
     for (int i = 0; i < 4; ++i) code_ = (code_ << 8) | next_byte();
   }
+  // 지금 자리가 [0, tot) 가운데 어디인지 (SPEC §17.2). 이 값으로 기호를
+  // 찾고, 찾은 기호의 (cum, freq) 로 decode_update 를 불러야 한다.
+  uint32_t decode_freq(uint32_t tot) {
+    uint32_t r = range_ / tot;
+    uint32_t v = code_ / r;
+    return v >= tot ? tot - 1 : v;
+  }
+
+  void decode_update(uint32_t cum, uint32_t freq, uint32_t tot) {
+    uint32_t r = range_ / tot;
+    code_ -= r * cum;
+    range_ = r * freq;
+    while (range_ < kTop) {
+      range_ <<= 8;
+      code_ = (code_ << 8) | next_byte();
+    }
+  }
+
   int decode_bit(std::vector<uint16_t>& probs, size_t i) {
     uint32_t bound = (range_ >> kProbBits) * u32(probs[i]);
     int bit;

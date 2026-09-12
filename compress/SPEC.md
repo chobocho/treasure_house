@@ -1498,3 +1498,83 @@ source of LZMA's win on text, and it is four lines of code.
 No encoder. No `.xz` container, no filters (BCJ/delta), no multi-threaded frames.
 The deck says so where it shows the capture, because "we decode LZMA" and "we decode
 .xz files" are different claims and only the first is true here.
+
+---
+
+## 17. `ppm` — prediction by partial matching
+
+### 17.1 The idea in one line
+
+Guess the next byte from the last two bytes; if the guess fails, say so and guess
+from the last one; if that fails, from nothing at all. Every "say so" is an **escape**,
+and how you price an escape is the whole art of PPM.
+
+### 17.2 A range coder that takes frequencies
+
+Everything so far coded one bit at a time. PPM codes a symbol out of a table, so the
+range coder gets two more entry points — the classic Subbotin form:
+
+```
+encode(cum, freq, tot):
+    r = range / tot            # integer division
+    low += r * cum
+    range = r * freq
+    normalise            (while range < TOP: range <<= 8; shift_low())
+
+decode_freq(tot) -> v:
+    r = range / tot
+    return min(tot - 1, code / r)
+
+decode_update(cum, freq, tot):
+    r = range / tot
+    code -= r * cum
+    range = r * freq
+    normalise
+```
+
+The binary coder of §8 and this share one stream and one normalisation, so a model
+may mix them freely. `tot` must stay below 2^16 so that `r` never reaches zero:
+`range` is at least 2^24 after normalisation, so `r >= 2^8`.
+
+### 17.3 Model
+
+| Name | Value |
+|---|---|
+| maximum order | 2 |
+| escape method | C (Moffat) — escape count = number of distinct symbols seen |
+| exclusion | on |
+| update | every order 0..2, increment by 1, **no update exclusion** |
+| rescale | when a context's total reaches 8192, halve every count (minimum 1) |
+| symbol order | ascending byte value, everywhere cumulative counts are formed |
+
+Method C prices the escape as `d / (n + d)` where `d` is the number of distinct
+symbols in the context and `n` the sum of their counts. It is the method that needs
+no tuning constant, which is why it is the one to write down.
+
+**Exclusion** is the other half. When order 2 escapes, every symbol it knew is
+*impossible* at order 1 — it would have been coded already — so those symbols are
+removed from order 1's table before the probabilities are formed. This is worth
+several percent and costs four lines.
+
+A context all of whose symbols are excluded carries no information: the escape is
+certain, and a certain event costs no bits. We **skip such a context without coding
+anything**. Forgetting this is the classic PPM bug: the decoder skips it (there is
+nothing to read) while the encoder writes an escape, and the two desynchronise on
+the first input where it happens.
+
+### 17.4 Order −1
+
+After order 0 escapes, the symbol is coded uniformly over the byte values that are
+still possible: `tot = 256 - |excluded|`, every remaining symbol frequency 1, in
+ascending order. This is the floor that guarantees termination.
+
+### 17.5 Container
+
+```
+varint(n)
+if n == 0: stop
+range coder stream: n symbols through the model above, then flush()
+```
+
+Everything is integer. The models hold counts, not probabilities, and the coder
+divides — no floating point anywhere (§0.1).
