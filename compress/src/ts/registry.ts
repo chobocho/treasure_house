@@ -1,6 +1,7 @@
 // 알고리즘 이름 → 부호기·복호기. 이름이 곧 golden/ 의 디렉터리다.
 // 다섯 언어가 같은 이름·같은 순서를 갖는다.
 import { Bytes } from './common';
+import * as ans from './ans';
 import * as bitio from './bitio';
 import * as bwt from './bwt';
 import * as deflate from './deflate';
@@ -33,6 +34,7 @@ export const ENTRIES: Entry[] = [
     encode: rangecoder.encode, decode: rangecoder.decode },
   { name: 'bwt', encode: bwt.encode, decode: bwt.decode },
   { name: 'deflate', encode: deflate.encode, decode: deflate.decode },
+  { name: 'ans', encode: ans.encode, decode: ans.decode },
 ];
 
 export function find(name: string): Entry | undefined {

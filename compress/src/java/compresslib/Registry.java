@@ -35,7 +35,8 @@ public final class Registry {
       new Entry("lzw", Lzw::encode, Lzw::decode),
       new Entry("rangecoder", RangeCoder::encode, RangeCoder::decode),
       new Entry("bwt", Bwt::encode, Bwt::decode),
-      new Entry("deflate", Deflate::encode, Deflate::decode));
+      new Entry("deflate", Deflate::encode, Deflate::decode),
+      new Entry("ans", Ans::encode, Ans::decode));
 
   public static Entry find(String name) {
     for (Entry e : ENTRIES) {

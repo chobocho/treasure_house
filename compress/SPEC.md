@@ -1083,3 +1083,137 @@ Every decoder validates before it allocates and before it indexes:
 header, truncated body, length field too large, distance too large, code from the
 future, PackBits control 128, over-subscribed Huffman table, `NLEN` mismatch) and
 asserts that each one raises rather than crashes or hangs.
+
+---
+
+# Tier 2 — the advanced codecs
+
+Same contract as Tier 1: five languages, byte-identical encoder output, every
+decoder round-trips every other language's output. Everything below is integer-only
+(§0.1); where a chapter needs real numbers, `bench/` computes them in Python and the
+deck cites the capture.
+
+Two of these modules (§15 `bzip2dec`, §16 `lzmadec`) are **decoders only**. They have
+no golden encoder vector; they are gated by decoding files made by the real tool to
+the same SHA-256 in all five languages, which is a stronger test than a golden vector
+because the input was not written by us.
+
+---
+
+## 13. `ans` — asymmetric numeral systems
+
+### 13.1 Why this exists
+
+Arithmetic coding (§8) reaches the entropy bound but its inner loop has a
+multiplication, a division and a carry to worry about. ANS reaches the same bound
+with a state that is a single integer and a loop with no carry at all. That is why
+zstd, LZFSE and modern JPEG-XL all use it and nobody writes a new arithmetic coder.
+
+We implement **rANS** (the range variant) for the golden codec, and build a **tANS**
+table (the table variant, which is what FSE actually is) as a separate function the
+deck uses to explain zstd.
+
+### 13.2 Constants
+
+| Name | Value |
+|---|---|
+| `TOTAL_BITS` | 12 |
+| `TOTAL` | 4096 (`1 << TOTAL_BITS`) — frequencies sum to exactly this |
+| `L` | 2^23 — the lower bound of the state |
+| state range | `[L, L·256)` = `[2^23, 2^31)` |
+| renormalisation | one byte at a time |
+
+### 13.3 Frequency normalisation — pinned exactly
+
+Counts must be scaled so they sum to exactly `TOTAL`, and every used symbol must get
+at least 1. The rounding leaves a remainder, and **how that remainder is distributed
+is what would differ between languages**, so it is pinned:
+
+```
+used  = symbols with count > 0        (at most 256, and TOTAL >= 256, so it fits)
+f[s]  = max(1, (count[s] * TOTAL) / total_count)     # integer division
+d     = TOTAL - sum(f)
+while d != 0:
+    s = the used symbol with the largest f; on a tie, the smallest symbol index
+    if d > 0:
+        f[s] += d;  d = 0
+    else:
+        take = min(-d, f[s] - 1)      # never take a symbol below 1
+        f[s] -= take;  d += take
+```
+
+The surplus goes entirely to the largest symbol in one step; the deficit is taken
+from the largest repeatedly. Both terminate: `TOTAL >= |used|` guarantees the deficit
+loop can always find room.
+
+`cum[s]` is the exclusive prefix sum of `f` over symbols 0..255 in ascending order.
+The decoder also needs the inverse: `slot_symbol[0..TOTAL-1]`, where slot `i` maps to
+the symbol whose `[cum, cum+f)` interval contains `i`.
+
+### 13.4 rANS encode and decode
+
+The encoder runs **backwards** over the input and the decoder runs forwards. That is
+not a style choice: rANS is a stack, and the last symbol pushed is the first popped.
+
+```
+encode:
+    x = L
+    out = []                                  # appended in reverse time order
+    for s in reversed(src):
+        x_max = ((L >> TOTAL_BITS) << 8) * f[s]
+        while x >= x_max:
+            out.append(x & 0xFF);  x >>= 8    # renormalise, one byte
+        x = (x / f[s]) * TOTAL + (x % f[s]) + cum[s]
+    for i in 0..3:                            # the final state, low byte first
+        out.append((x >> (8 * i)) & 0xFF)
+    body = reverse(out)
+
+decode:
+    x = 0
+    for i in 0..3: x = (x << 8) | body[i]     # the state comes back high byte first
+    pos = 4
+    repeat n times:
+        slot = x & (TOTAL - 1)
+        s = slot_symbol[slot]
+        emit s
+        x = f[s] * (x >> TOTAL_BITS) + slot - cum[s]
+        while x < L:
+            if pos == len(body): error "rANS 스트림이 모자란다"
+            x = (x << 8) | body[pos];  pos += 1
+```
+
+`x` never exceeds 2^31, so 32-bit unsigned arithmetic is enough everywhere — but
+`(x / f) * TOTAL` reaches 2^31 too, so a signed 32-bit type is **not** enough. Java
+uses `long` for `x`; TypeScript uses a plain number with `Math.floor` division.
+
+### 13.5 Container
+
+```
+varint(n)
+if n == 0: stop
+256 varints: the normalised frequency of each symbol (0 for unused)
+body (§13.4)
+```
+
+256 varints rather than 512 fixed bytes: a file using three symbols pays 256 bytes,
+not 512, and the deck gets to point at the header cost as the reason ANS is used with
+*shared* or *adaptive* tables in real formats rather than a per-block table.
+
+### 13.6 tANS table construction (no golden vector)
+
+Built and tested but not used by the golden codec; the deck shows it to explain FSE.
+The spread step is zstd's:
+
+```
+step = (TOTAL >> 1) + (TOTAL >> 3) + 3
+pos  = 0
+for s in 0..255:
+    repeat f[s] times:
+        table[pos] = s
+        pos = (pos + step) & (TOTAL - 1)
+```
+
+`step` is coprime with `TOTAL` (which is a power of two) because it is odd, so the
+walk visits every slot exactly once. That single fact is the whole reason the
+constant looks arbitrary, and the test asserts it: every slot is filled exactly once
+and each symbol appears exactly `f[s]` times.

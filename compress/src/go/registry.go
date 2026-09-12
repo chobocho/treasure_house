@@ -23,6 +23,7 @@ var Entries = []Entry{
 	{"rangecoder", RangecoderEncode, RangecoderDecode},
 	{"bwt", BwtEncode, BwtDecode},
 	{"deflate", DeflateEncode, DeflateDecode},
+	{"ans", AnsEncode, AnsDecode},
 }
 
 func Find(name string) *Entry {
