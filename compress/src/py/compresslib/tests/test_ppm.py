@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """ppm 시험 — SPEC §17.
 
-PPM 의 고전 버그는 **모두 배제된 문맥** 이다. 탈출이 확실하니 비트가 0인데,
+PPM 의 고전 버그는 모두 배제된 문맥이다. 탈출이 확실해 비트가 0인데,
 부호기가 탈출을 적고 복호기는 안 읽으면 그 자리에서 어긋난다. 작은 입력
 으로는 그 상황이 안 생기므로, 그 상황을 일부러 만드는 입력을 넣어 둔다.
 """
@@ -101,7 +101,8 @@ class TestCodec(unittest.TestCase):
         import io as _io
         import os
         here = os.path.dirname(os.path.abspath(__file__))
-        base = os.path.abspath(os.path.join(here, '..', '..', '..', '..'))
+        base = os.path.abspath(
+            os.path.join(here, '..', '..', '..', '..'))
         with _io.open(os.path.join(base, 'corpus', 'random_64k.bin'),
                       'rb') as f:
             src = f.read()

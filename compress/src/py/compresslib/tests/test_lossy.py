@@ -2,7 +2,7 @@
 """lossy 시험 — SPEC §19.
 
 이 모듈에서 왕복하는 것은 PNG 쪽 하나뿐이다. 나머지는 일부러 버리므로
-"같은가" 를 물을 수 없고 **얼마나 다른가** 를 물어야 한다. 그래서 PSNR·SNR
+"같은가" 가 아니라 "얼마나 다른가" 를 물어야 한다. 그래서 PSNR·SNR
 이 시험에 들어간다 — 품질을 올렸는데 PSNR 이 안 오르면 그건 버그다.
 실제로 그렇게 잡았다(품질 100 에서 EOB 바이트를 안 먹던 버그).
 """
@@ -53,7 +53,8 @@ class TestDct(unittest.TestCase):
         # DCT 자체는 손실이 아니다. 정수 근사의 반올림만 남는다 (§19.2).
         worst = 0
         for seed in range(50):
-            block = [((i * 37 + seed * 11) % 256) - 128 for i in range(64)]
+            block = [((i * 37 + seed * 11) % 256) - 128
+                     for i in range(64)]
             back = lossy.idct8(lossy.fdct8(block))
             worst = max(worst, max(abs(back[i] - block[i])
                                    for i in range(64)))
@@ -115,16 +116,17 @@ class TestPngFilters(unittest.TestCase):
 
     def test_paeth(self):
         # p = a + b - c 에 가장 가까운 것을 고른다. 동점은 a, 그다음 b.
-        self.assertEqual(lossy.paeth(10, 20, 15), 15)   # p=15, c 가 정확
-        self.assertEqual(lossy.paeth(10, 20, 30), 10)   # p=0, a 가 가깝다
-        self.assertEqual(lossy.paeth(1, 2, 0), 2)       # p=3, b 가 가깝다
+        self.assertEqual(lossy.paeth(10, 20, 15), 15)   # c 가 맞다
+        self.assertEqual(lossy.paeth(10, 20, 30), 10)   # a 가 가깝다
+        self.assertEqual(lossy.paeth(1, 2, 0), 2)       # b 가 가깝다
         self.assertEqual(lossy.paeth(5, 5, 5), 5)
         self.assertEqual(lossy.paeth(0, 0, 0), 0)
 
     def test_filter_round_trip(self):
         for width in (1, 3, 16, 256):
             data = bytes((i * 37 + 11) & 0xFF for i in range(1000))
-            got = lossy.png_unfilter(lossy.png_filter(data, width), width)
+            enc = lossy.png_filter(data, width)
+            got = lossy.png_unfilter(enc, width)
             self.assertEqual(got, data, width)
 
     def test_up_filter_flattens_repeated_rows(self):
@@ -169,7 +171,8 @@ class TestAdpcm(unittest.TestCase):
     def test_snr_on_a_tone(self):
         samples = [int(12000 * math.sin(2 * math.pi * 440 * t / 8000))
                    for t in range(8000)]
-        dec = lossy.adpcm_decode(lossy.adpcm_encode(samples), len(samples))
+        enc = lossy.adpcm_encode(samples)
+        dec = lossy.adpcm_decode(enc, len(samples))
         sig = sum(v * v for v in samples)
         noise = sum((a - b) ** 2 for a, b in zip(samples, dec))
         self.assertGreater(10 * math.log10(sig / noise), 20.0)

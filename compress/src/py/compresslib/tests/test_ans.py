@@ -3,7 +3,7 @@
 
 rANS 는 스택이다. 부호기가 뒤에서부터 밀어 넣고 복호기가 앞에서부터
 꺼낸다. 그래서 "왕복이 된다" 만 보면 부호기와 복호기가 같은 방향으로
-틀려 있어도 통과한다 — 빈도 정규화의 나머지 배분 같은 자리가 특히 그렇다.
+틀려도 통과한다 — 빈도 정규화의 나머지 배분이 특히 그렇다.
 그래서 정규화와 표 만들기를 따로 떼어 눈으로 볼 수 있는 값으로 시험한다.
 """
 import unittest
@@ -114,7 +114,8 @@ class TestCodec(unittest.TestCase):
             ans.decode(out[:len(out) // 2])
 
     def test_bad_frequency_table_raises(self):
-        # 빈도 합이 TOTAL 이 아니면 거절한다. 합이 안 맞는 표로는 칸 배치가
+        # 빈도 합이 TOTAL 이 아니면 거절한다. 합이 안 맞는 표로는 칸
+        # 배치가
         # 성립하지 않아서, 검사 없이 풀면 엉뚱한 기호가 줄줄이 나온다.
         from compresslib import varint
         head = bytearray(varint.put(1))

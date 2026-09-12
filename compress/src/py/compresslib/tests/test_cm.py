@@ -39,7 +39,8 @@ class TestSquashStretch(unittest.TestCase):
 class TestApm(unittest.TestCase):
 
     def test_cold_apm_is_almost_identity(self):
-        # 아직 아무것도 안 배운 APM 은 받은 확률을 거의 그대로 돌려줘야 한다.
+        # 아직 아무것도 안 배운 APM 은 받은 확률을 거의 그대로
+        # 돌려줘야 한다.
         # 곱수를 23 으로 두면 3200 위가 잘려서 이 시험이 잡는다 (§18.5).
         apm = cm.Apm(4)
         for pr in (100, 1000, 2048, 3000, 3800, 4000):
@@ -60,14 +61,17 @@ class TestCodec(unittest.TestCase):
             self.assertEqual(cm.decode(cm.encode(src)), src, src[:8])
 
     def test_beats_deflate_on_text(self):
-        # 이 덱에서 텍스트를 가장 잘 줄이는 코덱이어야 한다. 왕복은 되는데
+        # 이 덱에서 텍스트를 가장 잘 줄이는 코덱이어야 한다. 왕복은
+        # 되는데
         # 이 시험이 깨지면 모델이 틀린 것이다.
         import io as _io
         import os
         from compresslib import deflate
         here = os.path.dirname(os.path.abspath(__file__))
-        base = os.path.abspath(os.path.join(here, '..', '..', '..', '..'))
-        with _io.open(os.path.join(base, 'corpus', 'source.go'), 'rb') as f:
+        base = os.path.abspath(
+            os.path.join(here, '..', '..', '..', '..'))
+        path = os.path.join(base, 'corpus', 'source.go')
+        with _io.open(path, 'rb') as f:
             src = f.read()
         ours = len(cm.encode(src))
         self.assertLess(ours, len(deflate.encode(src)))

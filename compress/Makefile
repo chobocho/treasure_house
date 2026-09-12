@@ -25,9 +25,10 @@ JAVA_LOCK   := tools/flock_java.sh
 # 덱에 전문이 실리는 소스.
 # 시험 파일은 발췌만 인용한다(PLAN.md §5 12단계).
 FIND        := find
-# tools/ 도 덱에 실린다(부록 전문). 그러니 폭 검사도 같이 받아야 한다.
+# tools/ 도, 시험 코드도 덱에 실린다(부록·본문 인용). 그러니 폭 검사도
+# 같이 받아야 한다 — 덱에 실릴 줄은 예외 없이 72칸이다.
 SRC_PY      := $(shell $(FIND) src/py cli corpus bench interop tools \
-                 -name '*.py' ! -path '*/tests/*' 2>/dev/null | sort)
+                 -name '*.py' 2>/dev/null | sort)
 SRC_GO      := $(shell $(FIND) src/go cli \
                  -name '*.go' ! -name '*_test.go' 2>/dev/null | sort)
 SRC_CPP     := $(shell $(FIND) src/cpp cli \

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """lz4block 시험 — SPEC §14.
 
-이 모듈의 진짜 시험은 진짜 lz4 명령과 주고받는 것이다(interop/). 여기서는
-그 검사가 못 보는 것 — 형식이 요구하는 꼬리 규칙과 LSIC 의 경계 — 을 본다.
+이 모듈의 진짜 시험은 진짜 lz4 와 주고받는 것이다(interop/).
+여기서는 그 검사가 못 보는 것 — 꼬리 규칙과 LSIC 의 경계 — 을 본다.
 """
 import unittest
 
@@ -48,13 +48,13 @@ class TestBlock(unittest.TestCase):
         self.assertEqual(out, b'\x05' + bytes([5 << 4]) + src)
 
     def test_tail_rules(self):
-        # 마지막 5바이트는 반드시 리터럴이고, 일치는 끝에서 12바이트 안쪽에서
-        # 시작할 수 없다. 그래서 되풀이가 심한 입력도 꼬리는 늘 리터럴이다.
+        # 마지막 5바이트는 반드시 리터럴이고, 일치는 끝에서 12바이트
+        # 안쪽에서 시작할 수 없다. 꼬리는 늘 리터럴이 된다.
         src = b'abcd' * 100
         block = lz4.encode(src)[len(lz4.varint.put(len(src))):]
         seqs = lz4.parse_sequences(block)
         last_lit = seqs[-1]
-        self.assertIsNone(last_lit[1])          # 마지막 시퀀스에 일치가 없다
+        self.assertIsNone(last_lit[1])     # 마지막에 일치 없음
         self.assertGreaterEqual(len(last_lit[0]), 5)
 
     def test_round_trip(self):
@@ -74,7 +74,8 @@ class TestBlock(unittest.TestCase):
         # 엔트로피 부호가 없으니 당연히 진다. 그게 이 형식의 거래다.
         from compresslib import deflate
         src = b'the quick brown fox jumps over the lazy dog ' * 200
-        self.assertGreater(len(lz4.encode(src)), len(deflate.encode(src)))
+        self.assertGreater(len(lz4.encode(src)),
+                           len(deflate.encode(src)))
 
 
 class TestErrors(unittest.TestCase):
