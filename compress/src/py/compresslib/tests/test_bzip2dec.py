@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """bzip2dec 시험 — SPEC §15.
 
-이 모듈에는 골든 벡터가 없다. 부호기가 없기 때문이다. 대신 **진짜 bzip2 가
+이 모듈에는 골든 벡터가 없다. 부호기가 없어서다. 대신 진짜 bzip2
 만든 파일** 을 푼다 — 우리가 만들지 않은 입력이라 왕복 시험보다 훨씬 센
 증거다. 여기서는 파이썬 표준 bz2 로 만든 파일을 쓰고, 진짜 명령줄
 bzip2 와의 대조는 interop/ 가 맡는다.
@@ -92,7 +92,8 @@ class TestDecode(unittest.TestCase):
         import os
         from compresslib import deflate
         here = os.path.dirname(os.path.abspath(__file__))
-        base = os.path.abspath(os.path.join(here, '..', '..', '..', '..'))
+        base = os.path.abspath(
+            os.path.join(here, '..', '..', '..', '..'))
         with _io.open(os.path.join(base, 'corpus', 'english.txt'),
                       'rb') as f:
             src = f.read()

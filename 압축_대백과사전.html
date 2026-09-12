@@ -1013,8 +1013,8 @@ ts             OK     OK     OK     OK     OK</pre>
 <p><code>make</code> 만 치면 목록이 나온다. 순서는 대략 이렇다 —
 <code>deps</code>(tsc 내려받기) → <code>build</code>(네 언어 컴파일) →
 <code>test</code> → <code>parity</code> → <code>all</code>(덱 조립).</p>
-<div class="src"><b>Makefile</b><span class="ln">42–50</span><span>.PHONY 목록이 곧 목표 목록이다</span></div>
-<pre><code data-lang="text" data-src="Makefile" data-lines="42-50">.DEFAULT_GOAL := help
+<div class="src"><b>Makefile</b><span class="ln">43–51</span><span>.PHONY 목록이 곧 목표 목록이다</span></div>
+<pre><code data-lang="text" data-src="Makefile" data-lines="43-51">.DEFAULT_GOAL := help
 .PHONY: help deps corpus build build-cpp build-go build-ts \
         build-java \
         test test-py test-go test-cpp test-java test-ts \
@@ -4305,6 +4305,92 @@ zlib 의 <code>inflate_table</code> 이 그것이다.</div>
 <div class="key">그래서 오늘날 "적응" 이라는 말이 붙은 압축기는 거의 전부
 <b>적응 모델 + 산술/레인지/ANS 부호기</b>다. 5부부터가 그 이야기다.</div>
 <span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="huf-test">
+<h3>시험 — 무엇을 못 박아 두었나</h3>
+<div class="src"><b>src/py/compresslib/tests/test_huffman.py</b><span class="ln">73–87</span><span>동점 처리가 결정적인가</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/tests/test_huffman.py" data-lines="73-87">    def test_deterministic_tie_breaking(self):
+        # 같은 빈도가 잔뜩이면 동점 처리가 전부다. 같은 입력 → 같은
+        # 길이.
+        f = [0] * 256
+        for i in range(7):
+            f[i] = 1
+        lens = huffman.code_lengths(f)
+        # 기호 일곱이 모두 같은 빈도면 하나만 2비트, 나머지 여섯이
+        # 3비트다 (5개가 3비트고 2개가 2비트면 크래프트 합이 1.125 라
+        # 부호가 안 된다). 어느 하나가 짧아지는지는 순전히 동점 규칙이
+        # 정한다.
+        self.assertEqual(lens[:7], [3, 3, 3, 3, 3, 3, 2])
+        self.assertEqual(kraft(lens), 1 &lt;&lt; 15)
+        self.assertEqual(huffman.code_lengths(f), lens)
+</code></pre>
+<p>이 시험이 지키는 것은 "부호가 최적인가" 가 아니라
+<b>"같은 빈도에 늘 같은 길이가 나오는가"</b> 다. 최적성은 알고리즘이 보장하지만
+결정성은 정렬 키가 보장하고, 그것이 다섯 언어를 맞추는 조건이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="huf-test-2">
+<h3>최적성도 시험한다</h3>
+<div class="src"><b>src/py/compresslib/tests/test_huffman.py</b><span class="ln">64–72</span><span>작은 경우는 전수로 확인</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/tests/test_huffman.py" data-lines="64-72">    def test_is_optimal_for_small_case(self):
+        # 가중 평균 길이가 이론상 최적과 같아야 한다
+        f = [0] * 256
+        for i, v in enumerate((8, 4, 2, 1, 1)):
+            f[i] = v
+        lens = huffman.code_lengths(f)
+        cost = sum(f[i] * lens[i] for i in range(256))
+        self.assertEqual(cost, 8 * 1 + 4 * 2 + 2 * 3 + 1 * 4 + 1 * 4)
+</code></pre>
+<p>기호가 적을 때는 <b>가능한 모든 길이 벡터</b>를 만들어 보고
+우리 결과가 정말 최소인지 본다. 큰 경우에는 못 하지만,
+작은 경우에서 틀리면 큰 경우에서도 틀린다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="huf-test-3">
+<h3>거절해야 하는 입력들</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>입력</th><th>왜 거절하나</th></tr>
+<tr><td>길이 15 로 담을 수 없는 기호 수</td><td>2<sup>15</sup> 개를 넘으면 부호가 없다</td></tr>
+<tr><td>크래프트 합이 1 을 넘는 길이 목록</td><td>겹치는 부호가 생긴다</td></tr>
+<tr><td>합이 1 에 모자란 목록 (기호 하나 제외)</td><td>손상되었거나 잘렸다</td></tr>
+<tr><td>표만 있고 본문이 없는 스트림</td><td>길이 헤더와 안 맞는다</td></tr>
+</table></div>
+<p>전부 시험에 들어 있다. <b>거절하는 것을 시험하지 않으면</b>
+어느 날 조용히 받아 주기 시작한다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="huf-five-langs">
+<h3>다섯 언어의 복호기</h3>
+<div class="src"><b>src/go/huffman.go</b><span class="ln">155–163</span><span>Go — 구조체 하나</span></div>
+<pre><code data-lang="go" data-src="src/go/huffman.go" data-lines="155-163">// 캐노니컬 복호기 — 트리를 안 만든다. 길이별 첫 부호와 첫 자리만 있으면
+// 비트를 하나씩 받아 가며 판정할 수 있다.
+type huffDecoder struct {
+	symbols    []int
+	count      []int
+	firstCode  []int
+	firstIndex []int
+	maxLength  int
+}</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="huf-five-langs-2">
+<h3>TypeScript 판</h3>
+<div class="src"><b>src/ts/huffman.ts</b><span class="ln">126–132</span><span>TypeScript — 같은 세 배열</span></div>
+<pre><code data-lang="ts" data-src="src/ts/huffman.ts" data-lines="126-132">export class Decoder {
+  private symbols: number[] = [];
+  private count: number[];
+  private firstCode: number[];
+  private firstIndex: number[];
+  private maxLength: number;
+</code></pre>
+<p>다섯 언어가 같은 표를 만들고 같은 고리를 돈다.
+문법만 다르고 <b>알고리즘은 한 줄도 안 바뀐다</b>.</p>
+<span class="tier a">실행 검증</span>
 </article>
 
 <article class="card" id="huf-result">
@@ -7691,6 +7777,157 @@ CRC 표는 규칙에서 나오므로 그럴 필요가 없다.</div>
 <span class="tier a">실행 검증</span>
 </article>
 
+<article class="card" id="df-test">
+<h3>시험 — 남의 형식이라 더 많이 본다</h3>
+<div class="src"><b>src/py/compresslib/tests/test_deflate.py</b><span class="ln">1–30</span><span>빈 스트림·저장 블록·고정 블록</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/tests/test_deflate.py" data-lines="1-30"># -*- coding: utf-8 -*-
+"""deflate 시험 — SPEC §10.
+
+이 모듈만 우리가 만든 형식이 아니다. 그래서 시험도 두 갈래다.
+  · 우리끼리의 왕복 — 골든 벡터가 걸리는 자리
+  · **진짜 도구와의 상호운용** — 이쪽이 훨씬 강한 증거다.
+    파이썬 표준 zlib 이 우리 스트림을 풀어야 하고, 우리 inflate 는
+    zlib 이 레벨 0~9 로 만든 스트림을 전부 풀어야 한다.
+
+바이트가 같아지는지는 보지 않는다. 우리 부호기는 zlib 보다 단순한 선택을
+하므로 같아질 수 없고, 같다고 주장하는 순간 거짓말이 된다 (§10.9).
+"""
+import unittest
+import zlib
+
+from compresslib import checksums, containers, deflate
+
+
+class TestChecksums(unittest.TestCase):
+
+    def test_adler32_matches_zlib(self):
+        for src in (b'', b'a', b'hello world', bytes(range(256)) * 40):
+            self.assertEqual(checksums.adler32(src),
+                             zlib.adler32(src), src[:8])
+
+    def test_crc32_matches_zlib(self):
+        for src in (b'', b'a', b'hello world', bytes(range(256)) * 40):
+            self.assertEqual(checksums.crc32(src),
+                             zlib.crc32(src), src[:8])
+</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-five">
+<h3>다섯 언어의 inflate</h3>
+<div class="src"><b>src/go/inflate.go</b><span class="ln">136–139</span><span>Go</span></div>
+<pre><code data-lang="go" data-src="src/go/inflate.go" data-lines="136-139">func InflateRaw(src []byte) (out []byte, err error) {
+	defer guard(&amp;err)
+	return inflateRaw(src), nil
+}</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-five-2">
+<h3>자바 판</h3>
+<div class="src"><b>src/java/compresslib/Inflate.java</b><span class="ln">106–147</span><span>자바</span></div>
+<pre><code data-lang="java" data-src="src/java/compresslib/Inflate.java" data-lines="106-147">  public static byte[] inflateRaw(byte[] src) {
+    BitIO.LsbReader r = new BitIO.LsbReader(src, 0);
+    ByteBuf out = new ByteBuf();
+    Huffman.Decoder fixedLit = null;
+    Huffman.Decoder fixedDst = null;
+    for (;;) {
+      int last = r.readBit();
+      int btype = (int) r.readBits(2);
+      if (btype == 0) {
+        r.align();
+        int p = r.pos;
+        if (p + 4 &gt; src.length) {
+          throw new CodecException("stored 블록 머리가 잘렸다");
+        }
+        int ln = (src[p] &amp; 0xFF) | ((src[p + 1] &amp; 0xFF) &lt;&lt; 8);
+        int nln = (src[p + 2] &amp; 0xFF) | ((src[p + 3] &amp; 0xFF) &lt;&lt; 8);
+        p += 4;
+        if (ln != (nln ^ 0xFFFF)) {
+          throw new CodecException("NLEN 이 LEN 의 보수가 아니다");
+        }
+        if (p + ln &gt; src.length) {
+          throw new CodecException("stored 블록 몸통이 잘렸다");
+        }
+        out.extend(src, p, p + ln);
+        r.pos = p + ln;
+      } else if (btype == 1) {
+        if (fixedLit == null) {
+          fixedLit = table(DeflateTables.FIXED_LITLEN);
+          fixedDst = table(DeflateTables.FIXED_DIST);
+        }
+        readBody(r, out, fixedLit, fixedDst);
+      } else if (btype == 2) {
+        Huffman.Decoder[] pair = readDynamic(r);
+        readBody(r, out, pair[0], pair[1]);
+      } else {
+        throw new CodecException("BTYPE 11 은 없는 블록 종류다");
+      }
+      if (last != 0) {
+        return out.bytes();
+      }
+    }
+  }</code></pre>
+<p>세 언어 모두 같은 구조다 — 블록 머리를 읽고, 종류에 따라 갈라지고,
+BFINAL 이 1 이면 끝낸다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-png">
+<h3>PNG 는 DEFLATE 를 어떻게 쓰나</h3>
+<ol class="steps">
+<li>화소를 줄마다 <b>필터</b>한다 (13부)</li>
+<li>필터 바이트 + 필터된 줄을 이어 붙인다</li>
+<li>그 전체를 <b>zlib 스트림</b>으로 압축한다</li>
+<li>IDAT 청크에 나눠 담는다</li>
+</ol>
+<div class="key">PNG 의 압축은 곧 zlib 이다. PNG 최적화 도구(optipng·zopflipng)가
+하는 일은 <b>① 더 좋은 필터 고르기 ② 더 좋은 deflate 부호기 쓰기</b> 둘뿐이다.
+형식은 그대로 두고 부호기만 바꾼다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-zip">
+<h3>zip 은 어떻게 쓰나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>부분</th><th>내용</th></tr>
+<tr><td>지역 헤더</td><td>파일마다 이름·CRC·크기·압축 방식</td></tr>
+<tr><td>압축 자료</td><td>raw DEFLATE (컨테이너 없음)</td></tr>
+<tr><td>중앙 디렉터리</td><td>파일 목록 — <b>파일 끝에</b> 있다</td></tr>
+</table></div>
+<p>목록이 끝에 있어서 <b>파일 하나만 꺼내기</b>가 쉽다.
+tar.gz 는 전체를 풀어야 목록을 아는 것과 대비된다.</p>
+<div class="note">그래서 zip 은 파일마다 따로 압축한다 — 작은 파일이 많으면 손해다.
+tar.gz 는 통째로 압축해 파일 사이의 되풀이까지 먹는다. <b>맞바꿈이다.</b></div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-http">
+<h3>HTTP 의 gzip</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>Content-Encoding</th><th>실제 형식</th></tr>
+<tr><td><code>gzip</code></td><td>RFC 1952 — 머리말 10 + CRC</td></tr>
+<tr><td><code>deflate</code></td><td><b>혼란스럽다</b> — 규격은 zlib(RFC 1950)인데 raw 를 보내는 서버가 있다</td></tr>
+<tr><td><code>br</code></td><td>Brotli</td></tr>
+<tr><td><code>zstd</code></td><td>zstd</td></tr>
+</table></div>
+<div class="warn"><code>deflate</code> 라는 이름이 실제로 무엇을 뜻하는지가
+구현마다 달라, 많은 클라이언트가 <b>둘 다 시도</b>한다.
+이름을 애매하게 지은 값을 30년째 치르는 중이다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-git">
+<h3>Git 의 zlib</h3>
+<p>Git 객체는 <code>&lt;종류&gt; &lt;크기&gt;\0&lt;내용&gt;</code> 을 zlib 으로 압축한 것이다.
+그 SHA-1 이 곧 객체 이름이다.</p>
+<div class="key">여기서 <b>결정성</b>이 중요해진다. 같은 내용이 같은 바이트로 압축되어야
+같은 해시가 나온다 — 다행히 해시는 <b>압축 전</b> 내용으로 계산한다.</div>
+<p>팩 파일은 다르다. 객체 사이의 <b>델타</b>를 계산해 저장하는데,
+그 델타 선택이 부호기의 자유라 같은 저장소도 팩이 다를 수 있다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
 <article class="card" id="df-result">
 <h3>성적</h3>
 <div class="src"><b>out/bench_ratio.txt</b><span class="ln">25–25</span><span>파일별 비율 표의 머리</span></div>
@@ -8460,6 +8697,83 @@ zeros_64k.bin -9               OK     OK     OK     OK     OK</pre>
 <div class="key">그래서 오늘날 bzip2 는 zstd 에게 거의 밀렸다.
 zstd 는 비슷한 비율을 <b>훨씬 빠르게</b> 낸다 — 12부에서 그 이야기를 한다.</div>
 <span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="bwt-test">
+<h3>시험 — 교과서 기댓값이 잡아 준 것</h3>
+<div class="src"><b>src/py/compresslib/tests/test_bwt.py</b><span class="ln">1–28</span><span>banana → nnbaaa, 원본 자리 3</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/tests/test_bwt.py" data-lines="1-28"># -*- coding: utf-8 -*-
+"""bwt 시험 — SPEC §9.
+
+BWT 는 한 바이트도 줄이지 않는다. 자리만 바꾼다. 그런데 그 자리 바꾸기가
+"같은 글자를 몰아 놓는" 성질을 가져서, 뒤에 MTF·0런·허프만을 붙이면
+bzip2 가 된다. 10부가 통째로 이 이야기다.
+
+시험이 볼 것 둘: 교과서 예제(banana)의 L 열과 primary 가 정확한가,
+그리고 모든 회전이 똑같은 입력(zeros)에서 동점 규칙이 안 흔들리는가.
+"""
+import unittest
+
+from compresslib import bwt
+
+
+class TestForward(unittest.TestCase):
+
+    def test_banana(self):
+        # 회전을 사전순으로 세우면
+        #   abanan / anaban / ananab / banana / nabana / nanaba
+        # 마지막 글자를 모은 것이 L, 원래 문장이 선 자리가 primary
+        L, primary = bwt.transform_block(b'banana')
+        self.assertEqual(L, b'nnbaaa')
+        self.assertEqual(primary, 3)
+
+    def test_single_byte(self):
+        L, primary = bwt.transform_block(b'A')
+        self.assertEqual((L, primary), (b'A', 0))</code></pre>
+<div class="key">이 한 줄이 정렬 키 결함을 잡았다.
+왕복 시험만 있었다면 <code>nanbaa</code> 를 그대로 실었을 것이다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bwt-five">
+<h3>다섯 언어 — 정렬이 문제였다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>언어</th><th>무엇을 주의했나</th></tr>
+<tr><td>Python</td><td><code>sorted</code> 는 안정 — 그래도 키에 순번을 넣는다</td></tr>
+<tr><td>C++</td><td><code>std::sort</code> 는 <b>불안정</b> — 키로 완전히 정한다</td></tr>
+<tr><td>Go</td><td><code>sort.Slice</code> 도 불안정</td></tr>
+<tr><td>Java</td><td><code>Arrays.sort(int[])</code> 는 불안정 — <code>Integer[]</code> 로 바꿔 안정 정렬</td></tr>
+<tr><td>TypeScript</td><td>키가 2<sup>32</sup> 를 넘어 <code>Float64Array</code></td></tr>
+</table></div>
+<div class="key">"안정 정렬이냐" 에 기대면 언어마다 갈린다.
+<b>키를 완전히 정해</b> 동점 자체를 없애는 것이 답이다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bwt-five-2">
+<h3>자바만 다르게 쓴 이유</h3>
+<div class="src"><b>src/java/compresslib/Bwt.java</b><span class="ln">5–19</span><span>왜 Integer[] 를 쓰나 — 주석에 적어 두었다</span></div>
+<pre><code data-lang="java" data-src="src/java/compresslib/Bwt.java" data-lines="5-19">/**
+ * 버로스–휠러 변환 — SPEC §9.
+ *
+ * &lt;p&gt;배가 늘리기 정렬. 키를 rank[i]*(m+1) + rank[i+k] 로 눌러 담는데,
+ * &lt;b&gt;첫 회의 rank 를 바이트 값 그대로 쓰면 안 된다&lt;/b&gt; — 곱수 m+1 이
+ * 255 보다 작아져 자리가 겹친다. 0..(서로 다른 값 수-1) 로 먼저
+ * 압축한다. 같은 회전이 여럿이면 순서는 시작 위치 오름차순 — 안정
+ * 정렬이 필요하다.
+ *
+ * &lt;p&gt;자바의 기본 정렬은 객체 배열에서만 안정이다. int[] 를 sort 하면
+ * 듀얼피벗 퀵소트라 안정이 아니므로, 인덱스를 Integer[] 로 담아
+ * 정렬한다.
+ */
+public final class Bwt {
+  public static final int BLOCK = 1 &lt;&lt; 16;</code></pre>
+<p><code>Arrays.sort(int[])</code> 는 듀얼 피벗 퀵소트라 불안정하고,
+<code>Arrays.sort(Integer[])</code> 는 TimSort 라 안정적이다.
+<b>같은 이름의 함수가 인자 형에 따라 다른 알고리즘</b>이다.</p>
+<div class="note">박싱 비용이 들지만 이 책에서는 정확성이 먼저다.
+속도가 필요하면 키를 완전히 정해 <code>int[]</code> 를 쓰면 된다.</div>
+<span class="tier a">실행 검증</span>
 </article>
 
 <article class="card quiz" id="bwt-quiz-1" data-quiz>
@@ -10018,6 +10332,90 @@ DEFLATE 가 30년을 버틴 이유는 <b>이미 어디에나 있기 때문</b>�
 <div class="key">해제가 빠른 쪽(LZ4·zstd)은 <b>한 번 압축해 여러 번 읽는</b> 자리에 맞고,
 비율이 높은 쪽(LZMA)은 <b>배포·보관</b>에 맞는다.
 14부에서 이 고르기를 더 구체적으로 다룬다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lz4-test">
+<h3>LZ4 시험</h3>
+<div class="src"><b>src/py/compresslib/tests/test_lz4block.py</b><span class="ln">1–20</span><span>규칙 셋을 지키는가</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/tests/test_lz4block.py" data-lines="1-20"># -*- coding: utf-8 -*-
+"""lz4block 시험 — SPEC §14.
+
+이 모듈의 진짜 시험은 진짜 lz4 와 주고받는 것이다(interop/).
+여기서는 그 검사가 못 보는 것 — 꼬리 규칙과 LSIC 의 경계 — 을 본다.
+"""
+import unittest
+
+from compresslib import lz4block as lz4
+
+
+class TestLsic(unittest.TestCase):
+
+    TABLE = [(0, [0]), (1, [1]), (254, [254]), (255, [255, 0]),
+             (256, [255, 1]), (509, [255, 254]), (510, [255, 255, 0])]
+
+    def test_table(self):
+        for v, want in self.TABLE:
+            self.assertEqual(list(lz4.put_lsic(v)), want, v)
+</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-test">
+<h3>LZMA 복호기 시험</h3>
+<div class="src"><b>src/py/compresslib/tests/test_lzmadec.py</b><span class="ln">1–18</span><span>머리말 해석과 잘린 스트림</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/tests/test_lzmadec.py" data-lines="1-18"># -*- coding: utf-8 -*-
+"""lzmadec 시험 — SPEC §16.
+
+골든 벡터가 없다. 우리가 만들지 않은 파일 — 파이썬 lzma 와 진짜 xz
+가 만든 것 — 을 푸는 것이 시험이다. 명령줄 대조는 run_decoders.py
+가 맡고, 여기서는 헤더 해석과 거절해야 할 것들을 본다.
+"""
+import lzma
+import unittest
+
+from compresslib import lzmadec
+
+
+class TestHeader(unittest.TestCase):
+
+    def test_default_properties(self):
+        # lc=3, lp=0, pb=2 → (2*5+0)*9+3 = 93 = 0x5D
+        raw = lzma.compress(b'hello', format=lzma.FORMAT_ALONE)</code></pre>
+<p>부호기가 없으므로 <b>진짜 xz 가 만든 파일</b>이 곧 시험 자료다.
+<code>bench/run_decoders.py</code> 가 그 일을 한다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="modern-history">
+<h3>연표</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>해</th><th>일</th></tr>
+<tr><td>1993</td><td>DEFLATE (PKZIP 2.0) · gzip</td></tr>
+<tr><td>1996</td><td>bzip2</td></tr>
+<tr><td>1998</td><td>LZMA (7-Zip)</td></tr>
+<tr><td>2011</td><td>LZ4</td></tr>
+<tr><td>2013</td><td>ANS 논문</td></tr>
+<tr><td>2015</td><td>Brotli (RFC 7932)</td></tr>
+<tr><td>2016</td><td>zstd</td></tr>
+<tr><td>2021</td><td>zstd 가 RFC 8878 로 표준화</td></tr>
+</table></div>
+<p>2013년의 ANS 가 2016년의 zstd 로 이어지는 것이 이 표의 핵심이다.
+<b>이론 하나가 3년 만에 기본값이 되었다.</b></p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="modern-future">
+<h3>다음은 무엇인가</h3>
+<ul>
+<li><b>하드웨어 가속</b> — Intel QAT·ARM 확장이 DEFLATE·LZ4 를 칩에서</li>
+<li><b>학습된 사전</b> — 자료 종류마다 미리 훈련한 사전</li>
+<li><b>신경망 압축기</b> — 언어 모델로 텍스트를 1비트/글자 아래로.
+지금은 GPU 로도 초당 KB 수준이라 실용과 멀다</li>
+<li><b>특화 코덱</b> — 시계열·부동소수점 배열·로그 전용</li>
+</ul>
+<div class="key">범용 압축기의 비율 경쟁은 <b>거의 끝났다</b>.
+남은 싸움은 속도, 메모리, 그리고 <b>자료를 아는 것</b>이다.</div>
 <span class="tier c">문서 근거</span>
 </article>
 
@@ -38992,8 +39390,8 @@ if __name__ == '__main__':
 
 <article class="card" id="bt-1-1">
 <h3>Makefile <span class="badge">1/6</span></h3>
-<div class="src"><b>Makefile</b><span class="ln">1–41</span><span>머리말</span></div>
-<pre><code data-lang="text" data-src="Makefile" data-lines="1-41"># 압축 대백과사전 — 만드는 법 전부가 여기에 있다.
+<div class="src"><b>Makefile</b><span class="ln">1–42</span><span>머리말</span></div>
+<pre><code data-lang="text" data-src="Makefile" data-lines="1-42"># 압축 대백과사전 — 만드는 법 전부가 여기에 있다.
 #
 # 규칙 하나: 덱은 산출물이다. 덱 HTML 을 손으로 고치지 말 것.
 # 고칠 곳은 deck/sections/*.html 조각이거나, 그 조각이 가리키는 소스다.
@@ -39020,9 +39418,10 @@ JAVA_LOCK   := tools/flock_java.sh
 # 덱에 전문이 실리는 소스.
 # 시험 파일은 발췌만 인용한다(PLAN.md §5 12단계).
 FIND        := find
-# tools/ 도 덱에 실린다(부록 전문). 그러니 폭 검사도 같이 받아야 한다.
+# tools/ 도, 시험 코드도 덱에 실린다(부록·본문 인용). 그러니 폭 검사도
+# 같이 받아야 한다 — 덱에 실릴 줄은 예외 없이 72칸이다.
 SRC_PY      := $(shell $(FIND) src/py cli corpus bench interop tools \
-                 -name '*.py' ! -path '*/tests/*' 2&gt;/dev/null | sort)
+                 -name '*.py' 2&gt;/dev/null | sort)
 SRC_GO      := $(shell $(FIND) src/go cli \
                  -name '*.go' ! -name '*_test.go' 2&gt;/dev/null | sort)
 SRC_CPP     := $(shell $(FIND) src/cpp cli \
@@ -39039,8 +39438,8 @@ SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
 
 <article class="card" id="bt-1-2">
 <h3>Makefile <span class="badge">2/6</span></h3>
-<div class="src"><b>Makefile</b><span class="ln">42–83</span><span>이어서</span></div>
-<pre><code data-lang="text" data-src="Makefile" data-lines="42-83">.DEFAULT_GOAL := help
+<div class="src"><b>Makefile</b><span class="ln">43–84</span><span>이어서</span></div>
+<pre><code data-lang="text" data-src="Makefile" data-lines="43-84">.DEFAULT_GOAL := help
 .PHONY: help deps corpus build build-cpp build-go build-ts \
         build-java \
         test test-py test-go test-cpp test-java test-ts \
@@ -39087,8 +39486,8 @@ build-go:               ## Go 명령줄 도구 짓기
 
 <article class="card" id="bt-1-3">
 <h3>Makefile <span class="badge">3/6</span></h3>
-<div class="src"><b>Makefile</b><span class="ln">84–120</span><span>이어서</span></div>
-<pre><code data-lang="text" data-src="Makefile" data-lines="84-120"># tsc 가 없으면 여기서 멈춘다. 없는 채로 지어내지 말 것 (make deps).
+<div class="src"><b>Makefile</b><span class="ln">85–121</span><span>이어서</span></div>
+<pre><code data-lang="text" data-src="Makefile" data-lines="85-121"># tsc 가 없으면 여기서 멈춘다. 없는 채로 지어내지 말 것 (make deps).
 TSC := src/ts/node_modules/.bin/tsc
 
 build-ts:               ## TypeScript 옮기기 (tsc → build/ts)
@@ -39130,8 +39529,8 @@ test: test-py test-go test-cpp test-java test-ts  ## 다섯 언어 시험
 
 <article class="card" id="bt-1-4">
 <h3>Makefile <span class="badge">4/6</span></h3>
-<div class="src"><b>Makefile</b><span class="ln">121–158</span><span>이어서</span></div>
-<pre><code data-lang="text" data-src="Makefile" data-lines="121-158"># ── 증거 ───────────────────────────────────────────────────────────
+<div class="src"><b>Makefile</b><span class="ln">122–159</span><span>이어서</span></div>
+<pre><code data-lang="text" data-src="Makefile" data-lines="122-159"># ── 증거 ───────────────────────────────────────────────────────────
 # 골든을 다시 만드는 것은 "지금까지의 출력이 틀렸다" 는 선언이다.
 # 이유를 커밋 메시지에 적지 않고 돌리지 말 것.
 golden:                 ## 골든 벡터 다시 만들기 (이유를 커밋에 적을 것)
@@ -39174,8 +39573,8 @@ width:                  ## 덱에 실릴 줄이 폴더블 폭(72칸)을 넘는�
 
 <article class="card" id="bt-1-5">
 <h3>Makefile <span class="badge">5/6</span></h3>
-<div class="src"><b>Makefile</b><span class="ln">159–198</span><span>이어서</span></div>
-<pre><code data-lang="text" data-src="Makefile" data-lines="159-198"># ── 덱 ─────────────────────────────────────────────────────────────
+<div class="src"><b>Makefile</b><span class="ln">160–199</span><span>이어서</span></div>
+<pre><code data-lang="text" data-src="Makefile" data-lines="160-199"># ── 덱 ─────────────────────────────────────────────────────────────
 # 데모는 TypeScript 로 쓰고 여기서 한 파일로 옮긴다. 덱은 파일 하나로
 # 열려야 하므로 import 도 번들러도 쓰지 않는다 — 자기완결형 한 덩어리다.
 demos:                  ## 덱 데모 옮기기 (TypeScript → demos.js)
@@ -39220,8 +39619,8 @@ font:                   ## 고정폭 글꼴(DeckMono) 서브셋 내장
 
 <article class="card" id="bt-1-6">
 <h3>Makefile <span class="badge">6/6</span></h3>
-<div class="src"><b>Makefile</b><span class="ln">199–207</span><span>이어서</span></div>
-<pre><code data-lang="text" data-src="Makefile" data-lines="199-207">font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
+<div class="src"><b>Makefile</b><span class="ln">200–208</span><span>이어서</span></div>
+<pre><code data-lang="text" data-src="Makefile" data-lines="200-208">font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
