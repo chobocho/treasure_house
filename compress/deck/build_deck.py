@@ -123,7 +123,18 @@ def find_symbol(path, sym):
 
     b = a
     head = lines[a].rstrip()
-    if head.endswith('{') or head.endswith('('):
+    if ext == '.py':
+        # 파이썬은 들여쓰기가 몸통이다. 중괄호 규칙을 쓰면 def 줄
+        # 하나만 잘려 나온다 — 실제로 그렇게 한 장이 나왔다가 잡혔다.
+        indent = len(lines[a]) - len(lines[a].lstrip())
+        b = len(lines) - 1
+        for i in range(a + 1, len(lines)):
+            ln = lines[i]
+            if ln.strip() and (len(ln) - len(ln.lstrip())) <= indent:
+                b = i - 1
+                break
+            b = i
+    elif head.endswith('{') or head.endswith('('):
         opener, closer = ('{', '}') if head.endswith('{') else ('(', ')')
         depth = 0
         for i in range(a, len(lines)):
@@ -131,6 +142,23 @@ def find_symbol(path, sym):
             b = i
             if depth <= 0:
                 break
+    elif ext in ('.h', '.hpp', '.cpp', '.cc', '.java', '.ts', '.go'):
+        # 여러 줄로 접힌 서명 — 72칸 규칙 때문에 이 덱에는 흔하다.
+        # 몸통을 여는 { 를 먼저 찾고 거기서부터 짝을 맞춘다.
+        opened = None
+        for i in range(a, min(a + 8, len(lines))):
+            if '{' in lines[i]:
+                opened = i
+                break
+        if opened is None:
+            b = a
+        else:
+            depth = 0
+            for i in range(opened, len(lines)):
+                depth += lines[i].count('{') - lines[i].count('}')
+                b = i
+                if depth <= 0:
+                    break
     elif ext in ('.yaml', '.yml', '.json', '.ldif'):
         # 들여쓰기가 구조다 — 같은 깊이 이상으로 돌아오는 줄 직전까지
         indent = len(lines[a]) - len(lines[a].lstrip())
