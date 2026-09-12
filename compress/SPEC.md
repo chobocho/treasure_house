@@ -56,9 +56,18 @@ out of bounds, or allocate based on an unvalidated length field.
 ### 0.3 Empty input
 
 `encode(b"")` is **not** the empty output: it is the header for length 0 and
-nothing else. Concretely every Tier-1 codec starts with `varint(n)` where `n` is
-the original byte count, so `encode(b"")` is the single byte `0x00`, except
-`deflate` (§10), which is a real format and has its own empty-stream form.
+nothing else. Every Tier-1 codec except `deflate` starts with `varint(n)` where `n`
+is the original byte count, so `encode(b"")` is the single byte `0x00` — with two
+exceptions, both of which fall out of the format rather than being special cases:
+
+- **`bitio`** is `00 00`. Its body begins with three pad bits (§1.4), and three
+  bits still have to be flushed into a byte. Suppressing them when `n == 0` would
+  put a conditional into the format itself, which is worse than a two-byte file.
+- **`deflate`** is `03 00` (§10.6). It is a real format and has its own empty form.
+
+This is the kind of thing a spec gets wrong the first time: the sentence
+"`encode(b"")` is one byte" was written before §1.4 existed, and the `bitio` test
+for the empty input is what caught the contradiction.
 
 ### 0.4 Bit order
 
@@ -177,7 +186,8 @@ then, MSB-first:
 The three leading zero bits exist on purpose: they push every byte across a byte
 boundary, so an implementation that secretly does `memcpy` instead of going through
 the bit writer produces a different file. Decoding reads 3 bits, then `n` times 8
-bits. Output size is `len(varint(n)) + ceil((3 + 8n) / 8)`.
+bits. Output size is `len(varint(n)) + ceil((3 + 8n) / 8)` — for `n = 0` that is
+1 + 1 = **2 bytes**, which is the exception noted in §0.3.
 
 ---
 
@@ -1020,7 +1030,7 @@ Two different contracts, and the deck must not blur them:
 
 | Module | Container | `encode(b"")` | Compresses? |
 |---|---|---|---|
-| `bitio` | `varint(n)` + 3 pad bits + 8n bits | `00` | no — grows by 1 byte per 21 |
+| `bitio` | `varint(n)` + 3 pad bits + 8n bits | `00 00` | no — grows by 1 byte per 21 |
 | `intcode` | `varint(n)` + gamma(b+1) stream | `00` | only on low-entropy bytes |
 | `rle` | `varint(n)` + PackBits packets | `00` | on runs only |
 | `mtf` | `varint(n)` + n bytes | `00` | never — it is a permutation |
@@ -1031,8 +1041,9 @@ Two different contracts, and the deck must not blur them:
 | `bwt` | `varint(n)` + (u32le primary + block)* | `00` | never — it is a permutation |
 | `deflate` | raw RFC 1951 stream | `03 00` | yes |
 
-`deflate` is the one module whose empty output is not `00`, because it is the one
-module whose container we did not choose.
+`bitio` and `deflate` are the two whose empty output is not `00`: `bitio` because
+its three pad bits still need a byte, `deflate` because it is the one module whose
+container we did not choose.
 
 ## 12. Error handling contract
 
