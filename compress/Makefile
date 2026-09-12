@@ -48,6 +48,7 @@ SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
         interop bench explain \
         record width \
         demos figs deck deck-verify deck-slices deck-xref deck-check \
+        deck-appendix \
         tables-check font font-check all clean
 
 help:                   ## 이 목록
@@ -193,6 +194,12 @@ tables-check:           ## 손으로 적은 표가 다섯 언어에 같은지
 deck-xref:              ## "N부 M장" 이 진짜 그 자리를 가리키는지
 	$(PY) deck/check_xref.py
 
+# 커버리지는 '덱 어딘가에 실렸는가' 만 본다 — 본문 인용이 메워 주면
+# 부록에 구멍이 나도 100% 다. 부록의 약속은 파일마다 1..N 이 끊김 없이
+# 이어지는 것이라, 그것은 따로 본다 (3차 리뷰에서 쓰던 검사).
+deck-appendix:          ## 부록 소스 전문이 파일마다 1..N 을 잇는지
+	$(PY) deck/check_appendix.py
+
 # SKEL=1 이면 '준비 중입니다' 플레이스홀더를 오류로 세지 않는다.
 # 본문을 다 채우면(PLAN.md §5 10단계) 이 변수를 뗀다.
 deck-check:             ## 완성된 덱 점검 (node DOM 스텁)
@@ -205,8 +212,8 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
-all: deck deck-verify deck-slices deck-xref deck-check tables-check \
-     font font-check  ## 전부
+all: deck deck-verify deck-slices deck-xref deck-appendix deck-check \
+     tables-check font font-check  ## 전부
 
 clean:                  ## 덱 지우기 (코퍼스·캡처·골든은 남긴다)
 	rm -f $(DECK)
