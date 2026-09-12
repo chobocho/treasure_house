@@ -7221,6 +7221,300 @@ korean_utf8.txt -1             OK     OK     OK     OK     OK</pre>
 <span class="tier c">문서 근거</span>
 </article>
 
+<article class="card" id="bwt-sort-3">
+<h3>회전을 실제로 만들지는 않는다</h3>
+<div class="warn">길이 n 인 입력의 회전을 전부 만들면 <b>n² 바이트</b>다.
+64 KiB 블록이면 4 GiB — 만들 수 없다.</div>
+<p>대신 <b>순위 배열</b>만 들고 다닌다. 회전 i 와 j 를 견주는 일은
+"길이 k 순위가 같으면 k칸 뒤의 순위를 본다" 로 끝난다.</p>
+<div class="key">이 책의 구현은 회전 대신 <b>(순위, k칸 뒤 순위)</b> 쌍을
+하나의 정수 키로 묶어 정렬한다. 메모리는 O(n), 시간은 O(n log² n).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bwt-sort-4">
+<h3>키를 하나의 정수로 묶는 요령</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>값</th></tr>
+<tr><td>키</td><td>rank[i] × m + rank[i+k]</td></tr>
+<tr><td>m</td><td>서로 다른 순위의 개수 + 1</td></tr>
+<tr><td>왜</td><td>정수 하나면 언어의 기본 정렬을 그대로 쓴다</td></tr>
+</table></div>
+<div class="warn">첫 판은 m 을 <b>바이트 값의 최대치</b>로 잡았다.
+순위가 255까지 가는데 곱수가 모자라 서로 다른 쌍이 같은 키가 됐고,
+<code>banana</code> 가 <code>nanbaa</code> 로 나왔다.</div>
+<p>고친 방법은 <b>바이트를 0..서로 다른 개수−1 로 먼저 압축</b>하는 것이다.
+그러면 m 이 언제나 충분하다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bwt-sort-5">
+<h3>더 빠른 방법들</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>알고리즘</th><th>시간</th><th>쓰는 곳</th></tr>
+<tr><td>배 늘리기</td><td>O(n log² n)</td><td>이 책 — 읽어서 이해된다</td></tr>
+<tr><td>SA-IS</td><td><b>O(n)</b></td><td>진짜 bzip2 대체 구현·bwa 같은 정렬 도구</td></tr>
+<tr><td>bzip2 원본</td><td>최악 O(n²)</td><td>2·3바이트 버킷 뒤 삽입 정렬 + 폴백</td></tr>
+</table></div>
+<div class="note">bzip2 원본이 최악에 느린 것은 유명한 성질이다.
+같은 바이트가 아주 길게 이어지면 정렬이 터지는데,
+<b>BWT 앞의 RLE1</b> 이 바로 그 경우를 미리 없앤다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="bwt-code-2">
+<h3>블록 나누기와 머리말</h3>
+<div class="src"><b>src/py/compresslib/bwt.py</b><span class="ln">93–99</span><span>블록마다 마지막 열과 원본 자리</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/bwt.py" data-lines="93-99">def encode(src):
+    out = bytearray(varint.put(len(src)))
+    for off in range(0, len(src), BLOCK):
+        L, primary = transform_block(src[off:off + BLOCK])
+        out += primary.to_bytes(4, 'little')
+        out += L
+    return bytes(out)</code></pre>
+<p>블록마다 <b>원본 자리</b>(4바이트)를 적어야 한다.
+64 KiB 블록이면 파일이 0.006% 늘어나는 값이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bwt-code-3">
+<h3>되돌리기 코드를 한 줄씩</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>줄</th><th>하는 일</th></tr>
+<tr><td>바이트마다 개수 세기</td><td>첫 열 F 를 만들 재료</td></tr>
+<tr><td>누적합</td><td>F 에서 각 바이트가 시작하는 자리</td></tr>
+<tr><td><code>lf[i] = start[L[i]]++</code></td><td>L 의 i번째가 F 의 어디인지</td></tr>
+<tr><td>primary 에서 n번 따라가기</td><td>원본을 거꾸로 얻는다</td></tr>
+</table></div>
+<p>배열 두 개와 고리 두 개다. <b>변환보다 역변환이 훨씬 싸다</b>는 말의 근거다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bwt-why-works">
+<h3>왜 영어에서 특히 잘 되나</h3>
+<p><code>english.txt</code> 의 BWT 결과에서 가장 긴 같은 글자 구간을 세어 보면
+수백 자가 이어지는 자리가 나온다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>문맥</th><th>앞에 오던 글자</th></tr>
+<tr><td><code>he&nbsp;</code></td><td>t 가 압도적 (the)</td></tr>
+<tr><td><code>ing&nbsp;</code></td><td>다양하지만 자음이 많다</td></tr>
+<tr><td><code>&nbsp;the</code></td><td>공백·마침표</td></tr>
+</table></div>
+<div class="key">BWT 는 <b>오른쪽 문맥</b>으로 줄 세우고 <b>왼쪽 글자</b>를 모은다.
+자연어에서 "이 문맥 앞에 오는 글자" 는 강하게 치우쳐 있다 —
+그 치우침을 위치로 바꿔 놓는 것이 이 변환의 전부다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="bwt-fmindex">
+<h3>덤 — BWT 는 검색 색인이기도 하다</h3>
+<p>LF 사상을 거꾸로 쓰면 <b>패턴을 뒤에서부터</b> 찾을 수 있다.
+문자열 전체를 저장한 채로 "이 패턴이 몇 번 나오나" 를 O(패턴 길이)에 답한다.</p>
+<div class="key">FM-색인이라고 부르고, 유전체 정렬 도구(bowtie·BWA)의 핵심이다.
+사람 유전체 30억 자를 4 GB 안에 넣고 초당 수만 번 질의한다.</div>
+<p>압축을 위해 만든 변환이 <b>검색 자료구조</b>가 된 사례다.
+이 책은 다루지 않지만, BWT 를 배우면 그 문이 함께 열린다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="bz-dec-8">
+<h3>기호 지도 — 쓰는 바이트만 적는다</h3>
+<div class="src"><b>src/py/compresslib/bzip2dec.py</b><span class="ln">98–110</span><span>16 + 16×16 비트</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/bzip2dec.py" data-lines="98-110">def _read_symbol_map(r):
+    """쓰인 바이트 값 목록. 16개 묶음의 있음/없음을 먼저 읽는다."""
+    used = []
+    groups = r.read_bits(16)
+    for g in range(16):
+        if groups &amp; (1 &lt;&lt; (15 - g)):
+            bits = r.read_bits(16)
+            for k in range(16):
+                if bits &amp; (1 &lt;&lt; (15 - k)):
+                    used.append(g * 16 + k)
+    if not used:
+        raise ValueError('기호 지도가 비었다')
+    return used</code></pre>
+<p>먼저 16비트로 "어느 16칸 묶음을 쓰나" 를 적고, 쓰는 묶음마다 16비트를 더 적는다.
+256비트를 늘 적는 대신, 쓰는 바이트가 적으면 <b>32비트로 끝난다</b>.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bz-dec-9">
+<h3>선택자 — 50기호마다 표를 고른다</h3>
+<div class="src"><b>src/py/compresslib/bzip2dec.py</b><span class="ln">113–126</span><span>MTF 로 적힌 표 번호</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/bzip2dec.py" data-lines="113-126">def _read_selectors(r, n_groups, n_selectors):
+    """단항으로 적힌 MTF 선택자. 값이 곧 "몇 번째 표" 다."""
+    mtf = list(range(n_groups))
+    out = []
+    for _ in range(n_selectors):
+        j = 0
+        while r.read_bit():
+            j += 1
+            if j &gt;= n_groups:
+                raise ValueError('선택자가 표 개수를 넘는다')
+        v = mtf.pop(j)
+        mtf.insert(0, v)
+        out.append(v)
+    return out</code></pre>
+<div class="key">선택자 자체도 <b>MTF</b> 로 적혀 있다.
+같은 표가 이어지면 0 이 되어 단항 부호 한 비트로 끝난다.
+3부에서 본 MTF 가 여기서 또 나온다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bz-dec-10">
+<h3>본문 읽기 — 두 부호가 섞여 있다</h3>
+<div class="src"><b>src/py/compresslib/bzip2dec.py</b><span class="ln">148–180</span><span>RUNA/RUNB 와 보통 기호</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/bzip2dec.py" data-lines="148-180">def _read_block_symbols(r, tables, selectors, alpha_size, limit):
+    """허프만 → MTF 지표 열. RUNA/RUNB 는 여기서 0 의 런으로 편다."""
+    eob = alpha_size - 1
+    out = []
+    group = 0
+    left = 0
+    dec = None
+    run = 0
+    weight = 1
+    while True:
+        if left == 0:
+            if group &gt;= len(selectors):
+                raise ValueError('선택자가 모자란다')
+            dec = tables[selectors[group]]
+            group += 1
+            left = GROUP_SIZE
+        left -= 1
+        sym = dec.read(r)
+        if sym &lt;= RUNB:
+            run += (sym + 1) * weight
+            weight &lt;&lt;= 1
+            if run &gt; limit:
+                raise ValueError('0 런이 블록 크기를 넘는다')
+            continue
+        if run:
+            out += [0] * run
+            run = 0
+            weight = 1
+        if sym == eob:
+            return out
+        out.append(sym - 1)
+        if len(out) &gt; limit:
+            raise ValueError('블록이 상한을 넘는다')</code></pre>
+<p>RUNA(0)·RUNB(1) 는 0 런의 자릿수이고, 2 이상은 MTF 값 + 1 이다.
+마지막 기호는 블록 끝이다. <b>한 알파벳에 세 가지 뜻</b>이 섞여 있다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bz-dec-11">
+<h3>역 MTF</h3>
+<div class="src"><b>src/py/compresslib/bzip2dec.py</b><span class="ln">183–195</span><span>쓰는 바이트만 든 표</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/bzip2dec.py" data-lines="183-195">def _inverse_mtf(indices, used):
+    """쓰인 값만 놓고 MTF 를 되돌린다 — 기호 지도가 여기서 값을 한다."""
+    table = list(used)
+    out = bytearray()
+    for i in indices:
+        if i &gt;= len(table):
+            raise ValueError('MTF 지표가 알파벳을 넘는다')
+        v = table[i]
+        out.append(v)
+        if i:
+            del table[i]
+            table.insert(0, v)
+    return bytes(out)</code></pre>
+<p>표에 256개를 다 두지 않고 <b>기호 지도에 있는 것만</b> 둔다.
+그래서 표가 짧고, MTF 의 값도 작아진다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bz-dec-12">
+<h3>CRC 두 개</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>자리</th><th>무엇의 CRC</th></tr>
+<tr><td>블록 머리</td><td>그 블록의 <b>푼 뒤</b> 자료</td></tr>
+<tr><td>스트림 끝</td><td>모든 블록 CRC 를 합친 값</td></tr>
+</table></div>
+<div class="src"><b>src/py/compresslib/bzip2dec.py</b><span class="ln">45–49</span><span>gzip 과 비트 순서가 다르다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/bzip2dec.py" data-lines="45-49">def crc32_bzip2(data):
+    c = 0xFFFFFFFF
+    for b in data:
+        c = CRC_TABLE[((c &gt;&gt; 24) ^ b) &amp; 0xFF] ^ ((c &lt;&lt; 8) &amp; 0xFFFFFFFF)
+    return c ^ 0xFFFFFFFF</code></pre>
+<div class="warn">bzip2 의 CRC-32 는 gzip 의 것과 <b>비트 순서가 반대</b>다.
+같은 이름의 검사합이 형식마다 다르다 — 베껴 쓰면 안 되는 자리다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bz-dec-13">
+<h3>RLE1 을 되돌리기</h3>
+<p>bzip2 는 BWT <b>앞에</b> RLE 를 한 번 더 한다.
+같은 바이트가 4개 이어지면 그 뒤에 <b>개수 바이트</b>(0~251)를 붙인다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>원본</th><th>RLE1 뒤</th></tr>
+<tr><td><code>aaaa</code></td><td><code>aaaa</code> + <code>00</code></td></tr>
+<tr><td><code>aaaaaaa</code> (7개)</td><td><code>aaaa</code> + <code>03</code></td></tr>
+<tr><td><code>aaa</code></td><td><code>aaa</code> (그대로)</td></tr>
+</table></div>
+<p>4개를 무조건 적고 나서 개수를 붙이는 것이 요점이다 —
+복호기가 "넷이 이어지면 다음은 개수" 라고 <b>확정</b>할 수 있다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bz-dec-14">
+<h3>진짜 파일을 푸는 시험을 어떻게 만드나</h3>
+<div class="src"><b>bench/run_decoders.py</b><span class="ln">43–57</span><span>진짜 bzip2·xz 를 불러 입력을 만든다</span></div>
+<pre><code data-lang="py" data-src="bench/run_decoders.py" data-lines="43-57">def make_inputs(algo, workdir):
+    """진짜 도구로 시험 파일을 만든다. (이름, 경로, 원본 경로) 목록."""
+    cmd, settings = TOOLS[algo]
+    made = []
+    for name in corpus_files():
+        src_path = os.path.join(CORPUS, name)
+        data = io.open(src_path, 'rb').read()
+        for label, args in settings:
+            raw = subprocess.run([cmd] + args + ['-c'], input=data,
+                                 stdout=subprocess.PIPE,
+                                 check=True).stdout
+            dst = os.path.join(workdir, '%s.%s.in' % (name, label))
+            io.open(dst, 'wb').write(raw)
+            made.append(('%s %s' % (name, label), dst, src_path))
+    return made</code></pre>
+<p>입력을 <b>우리가 만들지 않는 것</b>이 요점이다.
+코퍼스 파일을 진짜 <code>bzip2 -1</code>·<code>-9</code> 로 압축해 두고,
+다섯 언어가 그것을 풀어 원본 SHA-256 과 맞는지 본다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bz-dec-15">
+<h3>결과</h3>
+<div class="src"><b>out/decoders_bzip2dec.txt</b><span class="ln">17–30</span><span>나머지 파일들</span></div>
+<pre class="term" data-out="decoders_bzip2dec.txt" data-lines="17-30">korean_utf8.txt -9             OK     OK     OK     OK     OK
+mixed_1m.bin -1                OK     OK     OK     OK     OK
+mixed_1m.bin -9                OK     OK     OK     OK     OK
+one.bin -1                     OK     OK     OK     OK     OK
+one.bin -9                     OK     OK     OK     OK     OK
+random_64k.bin -1              OK     OK     OK     OK     OK
+random_64k.bin -9              OK     OK     OK     OK     OK
+runs.bin -1                    OK     OK     OK     OK     OK
+runs.bin -9                    OK     OK     OK     OK     OK
+source.go -1                   OK     OK     OK     OK     OK
+source.go -9                   OK     OK     OK     OK     OK
+zeros_64k.bin -1               OK     OK     OK     OK     OK
+zeros_64k.bin -9               OK     OK     OK     OK     OK</pre>
+<p>파일 26개(13 × 두 설정) × 다섯 언어 = <b>130건</b>, 실패 0건.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bwt-compare">
+<h3>bzip2 와 우리 사슬을 견주면</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>이 책</th><th>bzip2</th></tr>
+<tr><td>블록</td><td>64 KiB</td><td>100~900 KiB</td></tr>
+<tr><td>BWT 앞 RLE</td><td>없다</td><td>있다 (RLE1)</td></tr>
+<tr><td>MTF 뒤</td><td>골든 코덱은 여기서 끝</td><td>RUNA/RUNB + 허프만 6표</td></tr>
+<tr><td>부호표</td><td>—</td><td>50기호마다 선택</td></tr>
+</table></div>
+<p>이 책의 <code>bwt</code> 모듈은 <b>변환만</b> 한다.
+전체 사슬을 만들면 bzip2 부호기를 쓰는 셈인데, 배울 것은 변환과 역변환에 있다.
+그래서 <b>푸는 쪽</b>으로 진짜 bzip2 를 상대한다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
 <article class="card" id="bz-why">
 <p class="chnum">6장</p>
 <h2>bzip2 는 왜 gzip 보다 작고 느린가</h2>
