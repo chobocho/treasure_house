@@ -397,3 +397,49 @@ intcode 131.3 %. Our DEFLATE is within 1 % of `zlib -9` on every corpus file and
 directions at every level.
 
 Next: step 5 — interop captures into `out/`.
+
+### 6. Ports — C++, Go, TypeScript, Java (2026-09-12)
+
+**All five languages now produce byte-identical output for all ten Tier-1 modules
+on all thirteen corpus files, and the full 5×5 cross-decode matrix passes.**
+That is §8's first bullet, done for Tier 1.
+
+Every port matched the golden vectors **on the first run**. That is the return on
+step 2: the spec pinned every choice that could differ (package–merge's sort key,
+the `>` in the LZSS chain, LZW's one-step decoder lag, the stable sort in BWT,
+DEFLATE's exact cost accounting), so there was nothing left to guess.
+
+Deviations from §1, all deliberate:
+
+- **Go is one package**, not one per algorithm. The modules call each other
+  constantly (deflate needs huffman and bitio; everything needs varint), and one
+  package per algorithm would scatter the appendix's full listing over ten
+  directories for no benefit.
+- **Java's CLI lives at `cli/java/Main.java` with `package compresslib;`.** javac
+  does not require the directory to match when every file is named explicitly.
+- **`build/` holds every language's output** (gitignored). The parity harness
+  probes it to decide which languages are available.
+
+Per-language notes worth keeping:
+
+- **C++:** cast helpers (`u8` `u32` `sz` `i32` `ix`) instead of `static_cast<…>`.
+  This is a readability decision forced by the deck: at 72 columns a line with two
+  `static_cast<uint8_t>(…)` wraps three times. `CXX` is pinned to g++ — the
+  environment has `CXX=clang++` and §2 verified g++ 15.2.
+- **Go:** internal code panics via `fail()`; the exported `Encode`/`Decode` recover
+  into an `error`. Threading `error` through every "cannot continue here" inside a
+  decoder buries the algorithm, which is the opposite of what a teaching deck needs.
+- **TypeScript:** `typescript@5`, not 6.x — TS 6 ships a per-platform native binary
+  and there is no android-arm64 package, so `tsc` will not start at all. The range
+  coder avoids bitwise operators entirely (`* 256 % 2**32`, `Math.floor(x / 2048)`);
+  BWT's doubling key needs `Float64Array` because it reaches 2^32.
+- **Java:** `Console.useUtf8()` is called from both mains. Java 18+ defaults
+  `file.encoding` to UTF-8 but **not** the console encoding, which here is ASCII —
+  every Korean message printed as `?`, including the test results.
+  `Arrays.sort` on `int[]` is not stable, so BWT sorts `Integer[]`.
+
+One tooling casualty worth recording: teaching `tools/rewrap.py` about javadoc made
+it swallow the closing ` */` of twenty-one files in one run (it read the line as a
+paragraph word `/`). Fixed in the tool, and the files were repaired mechanically.
+
+Next: step 7 — Tier-2 modules in all five languages.

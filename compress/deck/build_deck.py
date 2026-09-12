@@ -386,7 +386,7 @@ COVER_FILES = ['Makefile']
 # 시험 코드는 발췌만 싣는다. 다섯 언어 × 17모듈의 시험을 전문으로 실으면
 # 덱의 절반이 시험 코드가 된다. 도구(tools/·deck/)와 캡처(out/)도 같다 —
 # 덱이 가르치는 대상은 압축 알고리즘이지 이 저장소의 빌드 장치가 아니다.
-PARTIAL = re.compile(r'_test\.go$|_test\.py$|Test\.java$|\.test\.ts$'
+PARTIAL = re.compile(r'_test\.go$|_test\.py$|Tests?\.java$|\.test\.ts$'
                      r'|/tests/|^tools/|^deck/|^out/|^golden/|^scratch/'
                      r'|/node_modules/')
 
