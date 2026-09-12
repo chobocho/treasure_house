@@ -141,7 +141,8 @@ def main(argv):
                 elif got != want:
                     print('  %s 표가 다르다: %s' % (name, path))
                     bad += 1
-        print('손으로 적은 표 %d자리 — 어긋남 %d건' % (checked, bad))
+        print('손으로 적은 표 %d곳(표×언어) — 어긋남 %d건'
+              % (checked, bad))
         return 1 if bad else 0
     for name, (want, _paths) in sorted(TABLES.items()):
         print('== %s (%d개) ==' % (name, len(want)))
