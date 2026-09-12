@@ -162,7 +162,8 @@ stretch(p) = ln(p / (1−p)) 이고, 그 영역에서 가중 합을 한 뒤 squa
 
 <article class="card" id="cm-code-2">
 <h3>모델 다섯</h3>
-<!--CODE file=src/py/compresslib/cm.py sym=predict note=문맥 해시로 표를 찾고 stretch 해서 섞는다-->
+<p>슬롯 다섯을 고르고, 다섯 확률을 읽고, 그것을 섞는다.
+문맥이 길수록 해시를 거쳐 20비트 표에 들어간다.</p>
 <div class="tblwrap"><table class="kv">
 <tr><th>모델</th><th>문맥</th></tr>
 <tr><td>0</td><td>차수 0 — 지금까지 읽은 비트만 (앞 바이트를 안 본다)</td></tr>
@@ -219,6 +220,177 @@ stretch(p) = ln(p / (1−p)) 이고, 그 영역에서 가중 합을 한 뒤 squa
 <li>모델 상수는 <b>출처를 적어 두고</b>, 가져온 식이 이 환경에서도 맞는지 확인해야 한다</li>
 <li>남의 코드에서 상수를 베낄 때는 <b>그 코드의 다른 전제</b>까지 같이 오는지 봐야 한다</li>
 </ul>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ppm-model-2">
+<h3>문맥 표를 어떻게 두나</h3>
+<!--CODE file=src/py/compresslib/ppm.py sym=_context_keys note=차수마다 키 하나-->
+<p>키를 <b>바이트열 그대로</b> 쓴다. 해시를 쓰면 충돌이 생기고,
+충돌이 생기면 다섯 언어가 같은 확률을 쓰기 위해 해시 함수까지 못 박아야 한다.</p>
+<div class="note">진짜 PPM 구현은 트라이(trie)나 해시를 쓴다.
+차수가 높아지면 키가 길어져 사전이 커지기 때문이다.
+이 책은 차수 2 까지라 키가 2바이트면 끝난다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ppm-update">
+<h3>갱신 — 본 뒤에만 센다</h3>
+<!--CODE file=src/py/compresslib/ppm.py sym=update note=합이 상한을 넘으면 절반으로-->
+<div class="key">부호기는 <b>기호를 보낸 뒤에</b> 표를 고친다.
+복호기도 <b>기호를 푼 뒤에</b> 고친다. 순서가 같아야 같은 확률을 쓴다.</div>
+<p>합이 8192 를 넘으면 모든 빈도를 절반으로 줄인다.
+<b>최근 자료에 더 큰 무게</b>를 주는 효과가 덤으로 따라온다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ppm-freq">
+<h3>레인지 코더에 빈도표를 태우기</h3>
+<!--CODE file=src/py/compresslib/rangecoder.py sym=encode_freq note=누적·빈도·합-->
+<p>5부의 이진 코더는 확률 하나만 받았다. PPM 은 기호가 여럿이라
+<b>누적 빈도</b>로 구간을 나눈다 — 원래 산술 부호화의 모습이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ppm-freq-2">
+<h3>푸는 쪽은 두 걸음이다</h3>
+<!--CODE file=src/py/compresslib/rangecoder.py sym=decode_freq note=먼저 값을 얻고-->
+<!--CODE file=src/py/compresslib/rangecoder.py sym=decode_update note=어느 기호인지 정한 뒤 구간을 좁힌다-->
+<div class="key">복호기는 <b>구간 안의 값</b>을 먼저 얻고, 그것으로 기호를 찾은 다음,
+그 기호의 구간으로 좁힌다. 두 걸음으로 나뉘는 것이 이진 코더와 다른 점이다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ppm-order">
+<h3>차수를 올리면 얼마나 좋아지나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>english.txt</th><th>2차 엔트로피</th><th>실제 ppm(차수 2)</th></tr>
+<tr><td>비트/바이트</td><td>2.56</td><td>3.37</td></tr>
+</table></div>
+<p>0.8비트가 비는데, 그중 대부분이 <b>탈출에 치르는 값</b>과
+<b>표를 배우는 동안의 손해</b>다.</p>
+<div class="note">진짜 PPMd 는 차수 6~16 을 쓰고 english.txt 급 자료에서 2비트 아래로 간다.
+그러려면 문맥 표를 트라이로 관리하고, 탈출 확률을 더 정교하게(PPMII) 잡아야 한다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ppm-vs">
+<h3>PPM 과 문맥 혼합을 나란히</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>PPM</th><th>CM</th></tr>
+<tr><td>단위</td><td>기호(바이트)</td><td><b>비트</b></td></tr>
+<tr><td>모델 고르기</td><td>가장 높은 차수부터, 탈출</td><td>전부 쓰고 가중치로 섞는다</td></tr>
+<tr><td>부호기</td><td>빈도 기반 산술</td><td>이진 레인지</td></tr>
+<tr><td>메모리</td><td>문맥 표</td><td>해시 표 (충돌을 그냥 둔다)</td></tr>
+<tr><td>english.txt</td><td>42.1%</td><td><b>35.6%</b></td></tr>
+<tr><td>속도</td><td>느리다</td><td>더 느리다</td></tr>
+</table></div>
+<div class="key">CM 이 이기는 이유는 <b>모델을 버리지 않기 때문</b>이다.
+PPM 은 차수 2 에서 찾으면 차수 1 의 의견을 아예 안 듣는다.
+CM 은 모든 차수의 의견을 항상 듣고, 누구를 믿을지 배운다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-counter">
+<h3>확률 카운터 — 적응 속도가 변한다</h3>
+<div class="key">COUNTER_RATES = [1,1,2,2,3,3,4,4,4,5,5,5,5,5,5,5]</div>
+<p>슬롯을 처음 보면 자리올림 1 로 <b>크게</b> 움직이고,
+많이 본 슬롯은 자리올림 5 로 <b>조금씩</b> 움직인다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>본 횟수</th><th>자리올림</th><th>한 걸음의 크기</th></tr>
+<tr><td>0~1</td><td>1</td><td>남은 거리의 1/2</td></tr>
+<tr><td>4~6</td><td>3</td><td>1/8</td></tr>
+<tr><td>9 이상</td><td>5</td><td>1/32</td></tr>
+</table></div>
+<p>5부의 레인지 코더는 자리올림이 늘 5 였다. 처음 보는 문맥에서 1024(반반)에서
+출발해 조금씩 움직이면 <b>배우는 데 오래 걸린다</b>.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-hash">
+<h3>문맥 해시 — 충돌을 그냥 둔다</h3>
+<!--CODE file=src/py/compresslib/cm.py sym=_hash note=두 상수로 섞고 20비트로 자른다-->
+<div class="warn">표가 2<sup>20</sup> 칸이고 차수 4 문맥은 2<sup>32</sup> 가지다.
+충돌은 <b>반드시</b> 생긴다. 그런데 그냥 둔다.</div>
+<p>충돌한 두 문맥이 확률을 나눠 쓰면 예측이 조금 나빠질 뿐이고,
+그 손해는 <b>혼합기가 다른 모델로 메운다</b>.
+확인 비트를 두어 충돌을 감지하는 구현도 있지만 이 책은 안 쓴다 — 단순함을 골랐다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-stretch">
+<h3>stretch 는 표를 뒤집어 만든다</h3>
+<!--CODE file=src/py/compresslib/cm.py sym=_make_stretch note=squash 의 역을 미리 만든다-->
+<p>로그를 못 쓰니(부동소수점 금지) <b>squash 표를 훑어</b> 역표를 만든다.
+4096칸짜리 배열 하나이고, 프로그램이 시작할 때 한 번 만든다.</p>
+<div class="key">다섯 언어가 <b>같은 방법으로</b> 만들어야 같은 값이 나온다.
+그래서 squash 표는 <code>gen_tables.py</code> 가 뿌리고,
+stretch 는 그 표에서 <b>코드가 유도</b>한다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-apm">
+<h3>APM — 예측을 한 번 더 손본다</h3>
+<!--CODE file=src/py/compresslib/cm.py sym=pp note=stretch 자리에서 보간-->
+<p>혼합기가 낸 확률을 문맥별로 <b>다시 교정</b>한다.
+"이 문맥에서 혼합기가 0.7 이라고 하면 실제로는 0.8 이더라" 를 배우는 표다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>APM</th><th>문맥</th></tr>
+<tr><td>1</td><td>지금까지 읽은 비트 (256가지)</td></tr>
+<tr><td>2</td><td>읽은 비트 + 앞 바이트 (65536가지)</td></tr>
+</table></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-apm-2">
+<h3>여기서 4%p 를 잃고 있었다</h3>
+<div class="warn">lpaq1 의 <code>(stretch(pr) + 2048) * 23</code> 을 그대로 가져왔는데,
+그 식은 33칸 표에서 <b>위 아홉 칸에 못 닿는다</b>.
+(2047+2048)×23 = 94,185 을 4096 으로 나누면 칸이 최대 <b>22</b> 다 — 32칸 중 위 열 칸을 못 쓴다.</div>
+<p>32 로 고치면 (2047+2048)×32 / 4096 = <b>31</b> 이 되어 표 전체를 쓴다.
+<code>english.txt</code> 가
+<b>39.5% → 35.6%</b> 로 내려갔다.</p>
+<div class="key">남의 코드에서 상수를 가져올 때는 <b>그 코드의 다른 전제</b>까지
+같이 오는지 봐야 한다. lpaq1 의 표는 칸 수가 달랐다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-mix-code">
+<h3>혼합 코드</h3>
+<!--CODE file=src/py/compresslib/cm.py sym=predict note=stretch 해서 가중합, squash 로 되돌린다-->
+<p>가중치는 <b>문맥마다 다른 벌</b>을 쓴다 — 지금까지 읽은 비트로 고른다.
+같은 모델이라도 바이트의 어느 자리냐에 따라 믿을 만함이 다르기 때문이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-memory">
+<h3>메모리</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>표</th><th>칸</th><th>바이트</th></tr>
+<tr><td>차수 1~4 확률표</td><td>4 × 2<sup>20</sup></td><td>약 8 MB (16비트)</td></tr>
+<tr><td>카운터 횟수</td><td>같은 수</td><td>약 4 MB</td></tr>
+<tr><td>차수 0</td><td>256</td><td>—</td></tr>
+<tr><td>가중치</td><td>256 × 5</td><td>—</td></tr>
+</table></div>
+<div class="warn">파이썬 구현은 처음에 리스트를 써서 500 MB 를 먹었다.
+<code>array</code>·<code>bytearray</code> 로 바꿔 141 MB 로 내렸다 —
+이 기계에서는 그 차이가 "도느냐 마느냐" 였다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-paq">
+<h3>이 계열의 끝 — PAQ</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>이 책의 cm</th><th>PAQ8</th></tr>
+<tr><td>모델</td><td>5</td><td>수백 개</td></tr>
+<tr><td>특수 모델</td><td>없다</td><td>JPEG·WAV·BMP·x86 전용 모델</td></tr>
+<tr><td>혼합</td><td>가중치 한 벌</td><td>신경망 여러 층</td></tr>
+<tr><td>속도</td><td>초당 수백 KB</td><td>초당 수 KB</td></tr>
+</table></div>
+<p>PAQ 계열은 압축 경진대회(Hutter Prize·Large Text Benchmark)의 상위권을 차지한다.
+실용은 거의 포기한 대신 <b>얼마나 줄일 수 있나</b>의 상한을 보여 준다.</p>
+<div class="key">그 방향의 끝에 무엇이 있는지는 1부에서 이미 말했다 —
+<b>압축은 예측이고, 예측을 잘하는 것은 곧 자료를 이해하는 것</b>이다.</div>
 <span class="tier c">문서 근거</span>
 </article>
 
