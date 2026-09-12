@@ -56,8 +56,13 @@ else ok(`챕터 이동 항목 ${navOpts.length}개 — 전부 실재하는 슬�
 // ── 2) 플레이스홀더 ──────────────────────────────────────────────────
 // 뼈대 단계에서는 부 표지에 '준비 중' 이 남아 있는 것이 정상이다.
 // --skeleton 을 주면 개수만 보고하고 오류로 세지 않는다.
+//
+// <pre> 안은 빼고 센다. 이 덱은 부록에 자기 Makefile 을 싣는데, 거기
+// '준비 중입니다 플레이스홀더를 오류로 세지 않는다' 는 주석이 있어서
+// 본문이 다 채워진 뒤에도 이 검사가 걸렸다 — 인용한 코드는 본문이 아니다.
 const skeleton = process.argv.includes('--skeleton');
-const holes = (struct.match(/아직 없습니다|TODO|준비 중입니다/g) || []).length;
+const prose = struct.replace(/<pre[\s\S]*?<\/pre>/g, '');
+const holes = (prose.match(/아직 없습니다|TODO|준비 중입니다/g) || []).length;
 if (!holes) ok('플레이스홀더 없음');
 else if (skeleton) ok(`플레이스홀더 ${holes}개 (뼈대 단계라 넘어간다)`);
 else fail(`아직 안 채운 자리 ${holes}개가 남아 있다`);
