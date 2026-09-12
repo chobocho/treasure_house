@@ -64,6 +64,23 @@ class Encoder:
             self.range = (self.range << 8) & U32
             self.shift_low()
 
+    def encode_bit_p0(self, p0, bit):
+        """확률을 밖에서 주는 비트 부호화 (SPEC §18.2).
+
+        encode_bit 은 확률 칸을 가리켜 주면 자기가 고친다. 문맥 혼합은
+        여러 모델을 섞어 **스스로 확률을 만들어** 오므로, 코더는 받아
+        쓰기만 하고 아무것도 고치지 않는다. p0 은 12비트 P(비트=0) 이다.
+        """
+        bound = (self.range >> 12) * p0
+        if bit == 0:
+            self.range = bound
+        else:
+            self.low += bound
+            self.range -= bound
+        while self.range < TOP:
+            self.range = (self.range << 8) & U32
+            self.shift_low()
+
     def encode_freq(self, cum, freq, tot):
         """빈도 표에서 기호 하나를 적는다 (SPEC §17.2).
 
@@ -112,6 +129,21 @@ class Decoder:
         if self.pos > len(self.src) + 5:
             raise ValueError('스트림 끝을 너무 많이 넘었다')
         return 0
+
+    def decode_bit_p0(self, p0):
+        """encode_bit_p0 의 짝. 코더는 확률을 고치지 않는다."""
+        bound = (self.range >> 12) * p0
+        if self.code < bound:
+            self.range = bound
+            bit = 0
+        else:
+            self.code -= bound
+            self.range -= bound
+            bit = 1
+        while self.range < TOP:
+            self.range = (self.range << 8) & U32
+            self.code = ((self.code << 8) | self._byte()) & U32
+        return bit
 
     def decode_freq(self, tot):
         """지금 자리가 [0, tot) 가운데 어디인지 (SPEC §17.2).

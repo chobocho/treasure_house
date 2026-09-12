@@ -12,6 +12,7 @@ import * as bwt from './bwt';
 import * as deflate from './deflate';
 import * as huffman from './huffman';
 import * as intcode from './intcode';
+import * as lossy from './lossy';
 import * as lzss from './lzss';
 import * as lzw from './lzw';
 import * as mtf from './mtf';
@@ -160,4 +161,54 @@ test('모든 모듈이 왕복한다', () => {
                        `${e.name} ${src.length}`);
     }
   }
+});
+
+// 그림판 하나로 다섯 언어를 맞춘다. 숫자는 파이썬 기준 (§19.4·§19.6).
+function testImage(): Uint8Array {
+  const px = new Uint8Array(37 * 40);
+  for (let y = 0; y < 40; y++) {
+    for (let x = 0; x < 37; x++) {
+      px[y * 37 + x] = (x * 7 + y * 13 + ((x * y) >> 3)) & 0xff;
+    }
+  }
+  return px;
+}
+
+test('lossy — paeth·지그재그·양자화', () => {
+  assert.equal(lossy.paeth(10, 20, 15), 15);
+  assert.equal(lossy.paeth(200, 100, 150), 150);
+  assert.deepEqual(lossy.ZIGZAG.slice(0, 4), [0, 1, 8, 16]);
+  // 데드존이 있는 쪽이 0 에 더 가깝게 깎인다.
+  assert.equal(lossy.quantise(7, 4), 2);
+  assert.equal(lossy.quantise(7, 4, true), 1);
+});
+
+test('lossy — jpeglite 는 품질을 올리면 오차가 준다', () => {
+  const px = testImage();
+  const wantLen = [272, 537, 1086];
+  const wantErr = [28002, 16409, 5151];
+  [10, 50, 90].forEach((q, i) => {
+    const enc = lossy.jpegliteEncode(px, 37, 40, q);
+    assert.equal(enc.length, wantLen[i]);
+    const img = lossy.jpegliteDecode(enc);
+    assert.equal(img.width, 37);
+    assert.equal(img.height, 40);
+    let sum = 0;
+    for (let j = 0; j < px.length; j++) {
+      sum += Math.abs(img.pixels[j] - px[j]);
+    }
+    assert.equal(sum, wantErr[i]);
+  });
+});
+
+test('lossy — IMA ADPCM 은 예측기를 안 보낸다', () => {
+  const samples: number[] = [];
+  for (let i = 0; i < 200; i++) {
+    samples.push(Math.trunc((3000 * (((i * 37) % 101) - 50)) / 50));
+  }
+  const a = lossy.adpcmEncode(samples);
+  assert.equal(a.length, 100);
+  assert.equal(a[0], 255);
+  const sum = lossy.adpcmDecode(a, 200).reduce((x, y) => x + y, 0);
+  assert.equal(sum, -1515);
 });

@@ -217,6 +217,57 @@ public final class RunTests {
         "CRC 검사");
   }
 
+  // 그림판 하나로 다섯 언어를 맞춘다. 숫자는 파이썬 기준 (§19.4·§19.6).
+  private static byte[] testImage() {
+    byte[] px = new byte[37 * 40];
+    for (int y = 0; y < 40; y++) {
+      for (int x = 0; x < 37; x++) {
+        px[y * 37 + x] = (byte) (x * 7 + y * 13 + ((x * y) >> 3));
+      }
+    }
+    return px;
+  }
+
+  private static void testLossy() {
+    check(Lossy.paeth(10, 20, 15) == 15, "paeth 동점은 a 다음 b");
+    check(Lossy.paeth(200, 100, 150) == 150, "paeth 가 c 를 고른다");
+    check(Lossy.ZIGZAG[1] == 1 && Lossy.ZIGZAG[2] == 8
+        && Lossy.ZIGZAG[3] == 16, "지그재그 시작 0,1,8,16");
+    // 데드존이 있는 쪽이 0 에 더 가깝게 깎인다.
+    check(Lossy.quantise(7, 4, false) == 2, "반올림 양자화");
+    check(Lossy.quantise(7, 4, true) == 1, "데드존 양자화");
+
+    byte[] px = testImage();
+    int[] wantLen = {272, 537, 1086};
+    int[] wantErr = {28002, 16409, 5151};
+    int[] quals = {10, 50, 90};
+    for (int i = 0; i < 3; i++) {
+      byte[] enc = Lossy.jpegliteEncode(px, 37, 40, quals[i]);
+      check(enc.length == wantLen[i], "jpeglite 길이 " + quals[i]);
+      Lossy.Image img = Lossy.jpegliteDecode(enc);
+      check(img.width == 37 && img.height == 40, "크기가 돌아온다");
+      int sum = 0;
+      for (int j = 0; j < px.length; j++) {
+        sum += Math.abs((img.pixels[j] & 0xFF) - (px[j] & 0xFF));
+      }
+      // 품질이 오르면 오차는 줄어야 한다 — 손실의 유일한 약속이다.
+      check(sum == wantErr[i], "jpeglite 오차 " + quals[i] + "=" + sum);
+    }
+
+    int[] samples = new int[200];
+    for (int i = 0; i < 200; i++) {
+      samples[i] = 3000 * ((i * 37) % 101 - 50) / 50;
+    }
+    byte[] a = Lossy.adpcmEncode(samples);
+    check(a.length == 100 && (a[0] & 0xFF) == 255,
+        "ADPCM 반 바이트 묶기");
+    int sum = 0;
+    for (int v : Lossy.adpcmDecode(a, 200)) {
+      sum += v;
+    }
+    check(sum == -1515, "ADPCM 복호 합 " + sum);
+  }
+
   private static void testRoundTrips() {
     byte[][] cases = {new byte[0], s("A"), repeat(0, 5000),
         pseudo(20000, 37, 11), pseudo(70000, 131, 3)};
@@ -243,6 +294,7 @@ public final class RunTests {
     testRangecoder();
     testBwt();
     testDeflate();
+    testLossy();
     testRoundTrips();
     System.out.printf("자바 시험 — 검사 %d건 · 실패 %d건%n",
         checks, failures);

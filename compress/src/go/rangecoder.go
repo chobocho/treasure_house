@@ -60,6 +60,23 @@ func (e *rcEncoder) encodeBit(probs []uint16, i int, bit int) {
 	}
 }
 
+// 확률을 밖에서 주는 비트 부호화 (SPEC §18.2). encodeBit 은 확률 칸을
+// 가리켜 주면 자기가 고치지만, 문맥 혼합은 스스로 확률을 만들어
+// 오므로 코더는 받아 쓰기만 한다. p0 은 12비트 P(비트=0).
+func (e *rcEncoder) encodeBitP0(p0 uint32, bit int) {
+	bound := (e.rng >> 12) * p0
+	if bit == 0 {
+		e.rng = bound
+	} else {
+		e.low += uint64(bound)
+		e.rng -= bound
+	}
+	for e.rng < rcTop {
+		e.rng <<= 8
+		e.shiftLow()
+	}
+}
+
 // 빈도 표에서 기호 하나를 적는다 (SPEC §17.2). §8 의 비트 부호기와
 // 스트림도 정규화도 같이 쓴다 — 모델이 둘을 섞어 써도 된다.
 func (e *rcEncoder) encodeFreq(cum, freq, tot uint32) {
@@ -112,6 +129,25 @@ func (d *rcDecoder) nextByte() byte {
 		fail("스트림 끝을 너무 많이 넘었다")
 	}
 	return 0
+}
+
+// encodeBitP0 의 짝. 코더는 확률을 고치지 않는다.
+func (d *rcDecoder) decodeBitP0(p0 uint32) int {
+	bound := (d.rng >> 12) * p0
+	var bit int
+	if d.cod < bound {
+		d.rng = bound
+		bit = 0
+	} else {
+		d.cod -= bound
+		d.rng -= bound
+		bit = 1
+	}
+	for d.rng < rcTop {
+		d.rng <<= 8
+		d.cod = d.cod<<8 | uint32(d.nextByte())
+	}
+	return bit
 }
 
 // 지금 자리가 [0, tot) 가운데 어디인지 (SPEC §17.2). 이 값으로 기호를

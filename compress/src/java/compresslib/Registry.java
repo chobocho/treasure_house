@@ -40,6 +40,8 @@ public final class Registry {
       new Entry("ans", Ans::encode, Ans::decode),
       new Entry("lz4block", Lz4Block::encode, Lz4Block::decode),
       new Entry("ppm", Ppm::encode, Ppm::decode),
+      new Entry("cm", Cm::encode, Cm::decode),
+      new Entry("lossy", Lossy::encode, Lossy::decode),
       // 복호기만 있는 모듈 (PLAN.md §0.4)
       new Entry("bzip2dec", null, Bzip2Dec::decode),
       new Entry("lzmadec", null, LzmaDec::decode));
