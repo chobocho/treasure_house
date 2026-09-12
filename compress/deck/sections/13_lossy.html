@@ -1,14 +1,309 @@
 <article class="card section" id="p13">
 <p class="chnum">13부</p>
-<h2>손실 압축 입문</h2>
-<p class="chsub">양자화·DCT·JPEG-lite·PNG 필터·ADPCM</p>
+<h2>손실 압축</h2>
+<p class="chsub">정수 DCT · jpeglite · PNG 필터 · IMA ADPCM</p>
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>버려도 되는 것을 정하는 일 — 양자화와 데드존</li>
-<li>8×8 DCT 를 정수만으로</li>
-<li>JPEG-lite — 지그재그·런길이·허프만까지</li>
-<li>PNG 는 손실이 아니다 — 필터 다섯 가지와 zlib</li>
-<li>IMA ADPCM — 소리를 4비트로</li>
+<li>무엇을 버려도 되나 — 사람의 눈과 귀가 정하는 것</li>
+<li>변환은 아무것도 안 버린다 — 버리는 자리는 양자화 하나뿐</li>
+<li>정수 DCT — 부동소수점 없이 8×8 변환하기</li>
+<li>jpeglite — 우리 형식으로 만들어 보는 JPEG 의 뼈대</li>
+<li>품질을 올리면 오차가 줄어드는 것을 숫자로</li>
+<li>PNG 필터 — 무손실 쪽의 예측</li>
+<li>IMA ADPCM — 예측기를 안 보내는 오디오 부호</li>
 </ul>
-<p class="cap">준비 중입니다 — PLAN.md §5 10단계에서 이 부를 채운다.</p>
+</article>
+
+<article class="card" id="ly-why">
+<p class="chnum">1장</p>
+<h2>버려도 되는 것</h2>
+<p class="chsub">사람이 못 보는 것, 못 듣는 것</p>
+</article>
+
+<article class="card" id="ly-why-1">
+<h3>무손실의 벽을 넘는 유일한 길</h3>
+<p>1부에서 본 대로, 무손실 압축에는 엔트로피라는 벽이 있다.
+사진 한 장의 엔트로피가 7비트/화소라면 그 아래로는 못 간다.</p>
+<div class="key">손실 압축은 <b>다른 파일을 만든다</b>. 원본과 다르지만
+사람이 보기에 <b>충분히 비슷한</b> 파일이다. 그러면 그 파일의 엔트로피만큼만 쓰면 된다.</div>
+<div class="tblwrap"><table class="kv">
+<tr><th>버릴 수 있는 것</th><th>왜</th></tr>
+<tr><td>높은 공간 주파수</td><td>눈이 잘 못 본다 — 미세한 무늬</td></tr>
+<tr><td>색 해상도</td><td>눈은 밝기에 훨씬 민감하다 (4:2:0 서브샘플링)</td></tr>
+<tr><td>큰 소리에 묻힌 작은 소리</td><td>귀의 마스킹</td></tr>
+<tr><td>20 kHz 위의 소리</td><td>안 들린다</td></tr>
+</table></div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-why-2">
+<h3>버리는 자리는 딱 하나다</h3>
+<!--FIG  file=jpeg_pipeline.svg cap=DCT 도 지그재그도 허프만도 무손실이다-->
+<div class="key">DCT 는 <b>되돌아간다</b>. PNG 필터도 되돌아간다. 허프만도 되돌아간다.
+되돌릴 수 없는 것은 <b>양자화 — 나눗셈 한 번</b>뿐이다.</div>
+<p>손실 압축을 배울 때 가장 헷갈리는 자리가 여기다.
+"DCT 를 하면 손실이 난다" 는 흔한 오해인데, 정수 DCT 의 반올림을 빼면 DCT 자체는 무손실이다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="ly-dct">
+<p class="chnum">2장</p>
+<h2>정수 DCT</h2>
+<p class="chsub">부동소수점 없이 8×8 변환하기</p>
+</article>
+
+<article class="card" id="ly-dct-1">
+<h3>DCT 가 하는 일</h3>
+<p>8×8 화소 블록을 <b>64개 주파수 성분</b>으로 바꾼다.
+왼쪽 위가 평균(DC), 오른쪽 아래로 갈수록 잔무늬(고주파)다.</p>
+<div class="key">사진에서는 <b>왼쪽 위에 값이 몰린다</b>.
+부드러운 영역은 고주파 성분이 거의 0 이기 때문이다.
+그 0 들을 잘 적는 것이 JPEG 의 전부다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-dct-2">
+<h3>부동소수점을 못 쓴다</h3>
+<div class="warn">다섯 언어가 같은 바이트를 내야 한다.
+<code>cos()</code> 의 마지막 비트는 라이브러리마다 다를 수 있고,
+<code>double</code> 연산 순서가 바뀌면 결과가 달라진다.</div>
+<p>그래서 계수를 <b>2<sup>13</sup> 배 한 정수</b>로 못 박고, 곱한 뒤 반올림해 내린다.</p>
+<!--CODE file=src/py/compresslib/lossy.py sym=fdct8 note=1차원 변환 두 번, 각각 반올림-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-dct-3">
+<h3>표는 손으로 안 적는다</h3>
+<p>DCT 계수 64개는 <code>cos((2x+1)uπ/16)</code> 에서 나오는 값이라
+<b>규칙에서 나오지만 정수로 반올림한 뒤에는 규칙이 아니다</b>.</p>
+<!--CODE file=tools/gen_tables.py lines=1-24 note=다섯 언어에 뿌리고 --check 로 대조-->
+<div class="key">SQUASH(33) · DCT(64) · JPEGQ(64) · ADPCMSTEP(89) · ADPCMINDEX(16) —
+다섯 표 25자리를 <code>gen_tables.py</code> 가 만들고,
+<code>--check</code> 가 다섯 언어에서 <b>연속 부분열</b>로 찾아 대조한다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-quant">
+<p class="chnum">3장</p>
+<h2>양자화 — 여기서 버린다</h2>
+</article>
+
+<article class="card" id="ly-quant-1">
+<h3>나눗셈 한 번</h3>
+<!--CODE file=src/py/compresslib/lossy.py sym=quantise note=반올림과 데드존 두 가지-->
+<div class="tblwrap"><table class="kv">
+<tr><th>방식</th><th>식</th><th>어디에</th></tr>
+<tr><td>반올림</td><td>(v·2 + q) / (2q)</td><td>DC 성분</td></tr>
+<tr><td>데드존</td><td>v / q (버림)</td><td>AC 성분</td></tr>
+</table></div>
+<p>데드존은 0 근처를 더 넓게 잡아 <b>0 을 더 많이 만든다</b>.
+AC 성분에서는 작은 값이 대부분 잡음이라, 0 으로 밀어 버리는 편이 낫다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-quant-2">
+<h3>양자화 표 — 무엇을 얼마나 버릴지</h3>
+<p>주파수마다 나누는 수가 다르다. 고주파일수록 큰 수로 나눈다 — 더 많이 버린다.</p>
+<!--CODE file=src/py/compresslib/lossy.py sym=quant_table note=품질 1~100 으로 표를 늘리고 줄인다-->
+<div class="tblwrap"><table class="kv">
+<tr><th>품질</th><th>왼쪽 위(DC) 나누는 수</th><th>오른쪽 아래 나누는 수</th></tr>
+<tr><td>10</td><td>80</td><td>255</td></tr>
+<tr><td>50</td><td>16</td><td>99</td></tr>
+<tr><td>90</td><td>3</td><td>20</td></tr>
+</table></div>
+<p>JPEG 표준의 휘도 표를 품질로 늘리고 줄이는 방식이다.
+"품질 85" 같은 말의 정체가 이 한 줄의 배율이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-zigzag">
+<h3>지그재그 — 0 을 뒤로 몰아 놓기</h3>
+<!--FIG  file=zigzag_order.svg cap=왼쪽 위부터 대각선으로-->
+<p>양자화 뒤에는 오른쪽 아래가 거의 0 이다. 대각선으로 훑으면
+<b>0 들이 뒤에 모인다</b> — 그러면 "여기부터 끝까지 0" 이라는 한 기호로 끝낼 수 있다.</p>
+<div class="note">이 순서는 <b>표가 아니라 규칙</b>이라 코드가 만든다.
+<code>s % 2 == 1</code> 이면 방향을 뒤집는 열 줄이다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="ly-jpeglite">
+<p class="chnum">4장</p>
+<h2>jpeglite</h2>
+<p class="chsub">우리 형식이다 — JPEG 이 아니다</p>
+</article>
+
+<article class="card" id="ly-jpeglite-1">
+<h3>무엇을 뺐나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>진짜 JPEG</th><th>jpeglite</th></tr>
+<tr><td>YCbCr 색공간 · 서브샘플링</td><td>회색조만</td></tr>
+<tr><td>DC 차분 부호화</td><td>없다</td></tr>
+<tr><td>런–레벨 + 허프만 표 4개</td><td>런 바이트 + 지그재그 varint + 허프만 한 표</td></tr>
+<tr><td>재시작 표시자 · 프로그레시브</td><td>없다</td></tr>
+</table></div>
+<div class="key">JPEG 의 <b>뼈대</b>(블록 → DCT → 양자화 → 지그재그 → 엔트로피)만 남겼다.
+형식 호환을 노리면 이 부가 JPEG 규격 해설이 되어 버린다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-jpeglite-2">
+<h3>부호기</h3>
+<!--CODE file=src/py/compresslib/lossy.py sym=jpeglite_encode note=블록마다 DCT → 양자화 → 런-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-jpeglite-3">
+<h3>여기서 실제로 두 번 틀렸다</h3>
+<div class="warn"><b>첫째</b> — 양자화표를 <b>지그재그 자리 k</b> 로 찾았다.
+표는 <b>래스터 순서</b>라 <code>qt[ZIGZAG[k]]</code> 여야 한다.
+왼쪽 위에 써야 할 나누는 수를 엉뚱한 자리에 썼다.</div>
+<div class="warn"><b>둘째</b> — 복호기의 고리 조건을 <code>while k &lt; 64</code> 로 뒀다.
+계수 64개가 다 실린 블록(품질 100)에서 <b>EOB 바이트를 안 먹고</b> 나가고,
+다음 블록이 그 255 를 자기 EOB 로 읽어 통째로 빈 블록이 된다.</div>
+<p>둘째 결함의 증상이 PSNR <b>8.4 dB</b> 였다 — 그림이 거의 알아볼 수 없었다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-jpeglite-4">
+<h3>고친 뒤 — 품질을 올리면 오차가 준다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>품질</th><th>크기</th><th>절대 오차 합</th></tr>
+<tr><td>10</td><td>272바이트</td><td>28,002</td></tr>
+<tr><td>50</td><td>537바이트</td><td>16,409</td></tr>
+<tr><td>90</td><td>1,086바이트</td><td>5,151</td></tr>
+</table></div>
+<p>37×40 그림 하나(1,480바이트)를 재 본 것이다.
+<b>단조롭게</b> 줄어드는 것이 손실 코덱의 유일한 약속이다.</p>
+<div class="key">이 세 숫자가 다섯 언어의 시험에 <b>기댓값으로 박혀 있다</b>.
+jpeglite 는 레지스트리에 없어서 골든 벡터가 닿지 않는 자리라, 시험이 그 역할을 한다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-golden">
+<h3>왜 손실 코덱에 골든 벡터를 안 붙이나</h3>
+<div class="key">골든 벡터는 <b>부호기의 출력 바이트</b>를 못 박는다.
+손실 코덱에 그것을 붙이면 "같은 그림" 이 아니라 <b>"같은 부호기"</b> 를 못 박는 꼴이다.</div>
+<p>그래서 레지스트리에 올린 코덱은 <b>PNG 쪽</b>이다 — 왕복하는 것이 그것뿐이다.
+jpeglite 와 ADPCM 은 다섯 언어의 시험에서 기댓값으로 대조한다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-png">
+<p class="chnum">5장</p>
+<h2>PNG 필터 — 무손실 쪽의 예측</h2>
+</article>
+
+<article class="card" id="ly-png-1">
+<h3>줄마다 다섯 후보 중 하나</h3>
+<!--FIG  file=png_paeth.svg cap=세 이웃 a·b·c 로 x 를 예측한다-->
+<div class="tblwrap"><table class="kv">
+<tr><th>필터</th><th>예측값</th></tr>
+<tr><td>0 None</td><td>0 (그대로)</td></tr>
+<tr><td>1 Sub</td><td>a (왼쪽)</td></tr>
+<tr><td>2 Up</td><td>b (위)</td></tr>
+<tr><td>3 Average</td><td>(a+b)/2</td></tr>
+<tr><td>4 Paeth</td><td>a+b−c 에 가장 가까운 것</td></tr>
+</table></div>
+<p>실제 화소에서 예측값을 빼고, 그 <b>차이</b>를 deflate 에 넘긴다.
+부드러운 그림에서는 차이가 0 근처에 몰린다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="ly-png-2">
+<h3>어느 필터를 고르나</h3>
+<!--CODE file=src/py/compresslib/lossy.py sym=png_filter note=다섯 후보의 절댓값 합이 가장 작은 것-->
+<p>PNG 규격이 권하는 휴리스틱이다. 줄마다 다섯 개를 다 만들어 보고
+<b>부호 있는 값의 절댓값 합</b>이 가장 작은 것을 고른다.</p>
+<div class="note">최적은 아니다. 진짜 최적은 "deflate 에 넣었을 때 가장 작은 것" 인데,
+그것을 재려면 줄마다 다섯 번 압축해야 한다. <b>대리 지표로 근사</b>하는 전형적인 예다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-png-3">
+<h3>Paeth 의 동점 규칙</h3>
+<!--CODE file=src/py/compresslib/lossy.py sym=paeth note=동점은 a, 그 다음 b-->
+<div class="warn"><code>paeth(10, 20, 15)</code> 는 <b>15</b> 다(c 가 이긴다).
+처음엔 10 이라고 적었다가 시험이 잡았다.
+동점 규칙을 안 맞추면 다섯 언어가 갈린다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-png-4">
+<h3>골든 코덱 — 이 모듈에서 유일하게 왕복한다</h3>
+<!--CODE file=src/py/compresslib/lossy.py sym=encode note=필터 뒤 deflate-->
+<!--OUT  file=bench_ratio.txt lines=28-28 note=lossy 한 줄-->
+<p><code>mixed_1m.bin</code> 에서 34.5% 로 deflate(33.2%)와 비슷하다.
+행 폭 256 으로 자른 필터가 이 자료의 구조와 잘 맞는다.
+반대로 영어 산문에서는 73.8% 로 크게 진다 — <b>텍스트에 그림 필터를 쓴 셈</b>이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-adpcm">
+<p class="chnum">6장</p>
+<h2>IMA ADPCM</h2>
+<p class="chsub">예측기를 안 보내는 것이 요점이다</p>
+</article>
+
+<article class="card" id="ly-adpcm-1">
+<h3>4비트로 16비트 소리를</h3>
+<ol class="steps">
+<li>예측값과 실제 표본의 <b>차이</b>를 구한다</li>
+<li>그 차이를 <b>현재 걸음 크기</b>로 나눠 3비트 크기 + 1비트 부호로 적는다</li>
+<li>같은 4비트로 예측값을 갱신한다</li>
+<li>걸음 크기도 갱신한다 — 차이가 크면 키우고 작으면 줄인다</li>
+</ol>
+<div class="key">부호기와 복호기가 <b>똑같은 갱신</b>을 하므로, 예측기도 걸음 크기도
+파일에 실을 필요가 없다. 5부의 적응 모델과 같은 생각이다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ly-adpcm-2">
+<h3>걸음 표</h3>
+<!--FIG  file=adpcm.svg cap=89칸이 약 1.1배씩 자란다-->
+<p>7 에서 32,767 까지 로그로 자란다. 작은 소리는 잘게, 큰 소리는 거칠게 —
+<b>귀가 로그로 듣는다</b>는 사실에 맞춘 것이다.</p>
+<!--CODE file=src/py/compresslib/lossy.py sym=adpcm_encode note=차이를 걸음으로 나눈다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-adpcm-3">
+<h3>표류 — 이 방식의 위험</h3>
+<div class="warn">부호기와 복호기가 <b>한 번이라도</b> 다른 값을 계산하면,
+그 뒤로 예측기가 영원히 어긋난다. 한 표본의 오차가 파일 끝까지 간다.</div>
+<p>그래서 ADPCM 구현은 <b>모든 정수 연산이 비트 단위로 같아야</b> 한다 —
+시프트 방향, 반올림, 클램프 범위까지.</p>
+<div class="key">이 책의 다섯 언어 시험이 200표본을 넣어 <b>복호 결과의 합</b>을 대조한다.
+한 자리만 어긋나도 합이 달라진다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-wrap">
+<h3>13부 정리</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>단계</th><th>손실인가</th></tr>
+<tr><td>블록 자르기</td><td>무손실</td></tr>
+<tr><td>정수 DCT</td><td>무손실 (반올림 오차만)</td></tr>
+<tr><td><b>양자화</b></td><td><b>여기서 버린다</b></td></tr>
+<tr><td>지그재그 · 런 부호</td><td>무손실</td></tr>
+<tr><td>허프만</td><td>무손실</td></tr>
+<tr><td>PNG 필터</td><td>무손실</td></tr>
+<tr><td>ADPCM</td><td>손실 — 차이를 4비트로 줄일 때</td></tr>
+</table></div>
+<p class="cap">다음 부는 "그래서 무엇을 쓸 것인가" 다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card quiz" id="ly-quiz-1" data-quiz>
+<h3>13부 퀴즈</h3>
+<p class="q">Q. jpeglite 복호기의 고리를 <code>while k &lt; 64</code> 로 두면
+품질 90 까지는 멀쩡하고 품질 100 에서만 그림이 무너진다. 왜 그럴까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 품질이 낮으면 양자화 뒤 계수 대부분이 0 이라
+블록이 <b>EOB 로 끝난다</b>. 고리가 EOB 를 만나 정상적으로 빠져나온다.<br>
+품질 100 이면 64개 계수가 모두 0 이 아닐 수 있다. 그러면 <code>k</code> 가 64 에 닿아
+고리가 <b>EOB 바이트를 안 먹고</b> 나간다. 다음 블록이 그 255 를 자기 EOB 로 읽고
+통째로 빈 블록이 되어, 그 뒤로 모든 블록이 한 칸씩 밀린다.<br>
+증상은 PSNR 8.4 dB 였다. <b>품질을 올렸는데 그림이 나빠지면</b> 이런 종류의
+버그를 의심해야 한다 — 품질과 결과가 단조롭지 않다는 것 자체가 신호다.</div>
+<span class="tier a">실행 검증</span>
 </article>

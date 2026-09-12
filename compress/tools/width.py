@@ -57,7 +57,8 @@ def main(argv):
         bad = check(p, limit)
         total += len(bad)
         for i, w, line in bad:
-            print('  %s:%d  %d칸  %s' % (p, i, w, line.expandtabs(TABSTOP)[:60]))
+            print('  %s:%d  %d칸  %s'
+                  % (p, i, w, line.expandtabs(TABSTOP)[:60]))
     if total:
         print('%d칸을 넘는 줄 %d개' % (limit, total))
         return 1
