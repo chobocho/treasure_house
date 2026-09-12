@@ -387,7 +387,8 @@ COVER_FILES = ['Makefile']
 # 덱의 절반이 시험 코드가 된다. 도구(tools/·deck/)와 캡처(out/)도 같다 —
 # 덱이 가르치는 대상은 압축 알고리즘이지 이 저장소의 빌드 장치가 아니다.
 PARTIAL = re.compile(r'_test\.go$|_test\.py$|Test\.java$|\.test\.ts$'
-                     r'|/tests/|^tools/|^deck/|^out/|^golden/|^scratch/')
+                     r'|/tests/|^tools/|^deck/|^out/|^golden/|^scratch/'
+                     r'|/node_modules/')
 
 
 def budget():
@@ -445,7 +446,11 @@ def cover_files():
     for d, exts in COVER_DIRS:
         full = os.path.join(BASE, d)
         for root, dirs, names in os.walk(full):
-            dirs[:] = [x for x in dirs if not x.startswith(('.', '__'))]
+            # node_modules 는 남의 코드다. make deps 로 받는 것이라
+            # 커버리지에 세면 덱이 영원히 빨간불이 된다.
+            dirs[:] = [x for x in dirs
+                       if not x.startswith(('.', '__'))
+                       and x != 'node_modules']
             for name in sorted(names):
                 if name.endswith(exts):
                     rel = os.path.relpath(os.path.join(root, name), BASE)
