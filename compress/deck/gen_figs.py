@@ -785,7 +785,7 @@ def fig_ppm_escape():
 def fig_cm_mixer():
     """확률을 그냥 평균 내면 확신이 사라진다 (SPEC §18.3)."""
     s = Svg(210, '문맥 혼합의 구조', marker=True)
-    models = ['차수 1', '차수 2', '차수 3', '차수 4', '일치 모델']
+    models = ['차수 0', '차수 1', '차수 2', '차수 3', '차수 4']
     for i, name in enumerate(models):
         y = 24 + 30 * i
         s.rect(10, y, 86, 24, 'box')
@@ -796,7 +796,7 @@ def fig_cm_mixer():
     s.text(190, 112, 'stretch', anchor='middle', cls='lbl')
     s.path('M230,100 L254,100', cls='arw')
     s.rect(258, 76, 70, 48, 'box')
-    s.text(293, 96, 'APM', anchor='middle')
+    s.text(293, 96, 'APM ×2', anchor='middle')
     s.text(293, 112, '되짚기', anchor='middle', cls='lbl')
     s.text(10, 180, '평균을 내면 0.01 과 0.99 가 0.5 가 된다.', size=11)
     s.text(10, 196, 'stretch 영역에서 더해야 확신이 산다.', size=11,

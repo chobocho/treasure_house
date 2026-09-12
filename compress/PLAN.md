@@ -483,3 +483,50 @@ was lost and the history was not rewritten, but per-algorithm commit granularity
 broke for these two modules.
 
 Next: step 8 — `bench/run_bench.py` and the `out/` captures.
+
+## Steps 8–14 done — the deck
+
+**Step 8 (bench).** `bench/run_bench.py` splits what is reproducible from what is
+not, and puts them in different files. Ratios are **read from the golden vectors**
+rather than measured again — parity already proved the five languages agree, so
+re-encoding here would only create a way for the two numbers to disagree. Speed is
+measured for real, and the first attempt was wrong in an instructive way: every
+language printed the same throughput, because a 61 KB encode in C++ takes under a
+millisecond and subtracting process startup left nothing but the clock's
+resolution. The fix repeats the job until it exceeds 0.25 s.
+
+**Step 9 (figures).** 28 SVGs, all drawn by `deck/gen_figs.py` calling
+`compresslib`. The payoff showed up immediately: the PackBits control byte was
+hand-written as `0x82` and came out of `rle.pack` as `0xFE` (it is 257−n). Eight
+figures were fixed after rendering them with `rsvg-convert` and looking.
+
+**Step 10 (body).** Parts 0–14, 401 slides. Every percentage and byte count was
+cross-checked against `golden/` and `out/` by script before the part was committed;
+the first drafts of parts 1 and 4 had seven wrong numbers between them.
+
+**Step 11 (demos).** Nine demos in TypeScript, bundled into one `deck/demos.js`.
+They cannot import the real modules, so `check_deck.js` pins 16 expected outputs,
+every one of them taken from the Python reference.
+
+**Step 12 (appendix).** 142 files, 23,058 lines, coverage 100 %, `pending.txt`
+empty. The listing is generated, not typed. Glossary: 137 words, each with a
+machine-checked arrow to the slide where it first appears.
+
+**Step 13 (publish).** `index.html` card and `README.md` row with counted numbers.
+
+**Step 14 (review pass 1).** Thirteen defects, found mostly by scripts written for
+the purpose rather than by reading:
+
+- **structure 3** — three `<div class="key">` blocks closed with `</p>`; the tag
+  balance check found them, the browser would have silently swallowed them.
+- **facts 2** — the context-mixing part listed a "match model" among the five
+  predictors; the code has orders 0–4 and no match model. And PNG 1.0 was a W3C
+  recommendation in 1996 while RFC 2083 is 1997.
+- **quote range 1** — one `<!--OUT-->` started on a blank line.
+- **wording 7** — six speed ratios ("28배", "여섯 배") were pinned in prose while
+  the capture beside them is regenerated every run; they would drift apart on the
+  next `make record`. Rewritten to point at the table instead.
+
+The lesson from the counts: the checks that paid were the ones comparing **the deck
+against the repository** (numbers vs `golden/`, tags vs balance, quotes vs source
+boundaries). Reading found the model-list error and little else.
