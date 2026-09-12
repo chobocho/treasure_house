@@ -109,9 +109,7 @@ parity:                 ## 다섯 언어가 같은 바이트를 내는가 (5×5 
 	  || echo '  bench/run_parity.py 아직 없다 (PLAN.md §4)'
 
 interop:                ## 진짜 gzip·bzip2·xz·lz4 와 주고받아 보기
-	@test -f interop/run_interop.py \
-	  && $(PY) interop/run_interop.py \
-	  || echo '  interop/run_interop.py 아직 없다 (PLAN.md §5 5단계)'
+	$(PY) interop/run_interop.py
 
 bench:                  ## 속도·비율 재기 (직렬 — 병렬로 돌리지 말 것)
 	@test -f bench/run_bench.py \
