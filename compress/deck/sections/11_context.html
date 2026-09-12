@@ -1,14 +1,265 @@
 <article class="card section" id="p11">
 <p class="chnum">11부</p>
-<h2>문맥 모델링</h2>
-<p class="chsub">PPM·CM·로지스틱 믹싱·APM (paq 계보)</p>
+<h2>문맥 모델</h2>
+<p class="chsub">PPM · 문맥 혼합 — 압축비의 꼭대기</p>
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>차수(order)란 무엇인가 — 앞 몇 글자를 보는가</li>
-<li>PPM 의 escape 문제와 method C</li>
-<li>배제(exclusion) — 이미 아니라고 한 기호는 빼기</li>
-<li>문맥 혼합 — 예측기 여럿을 로지스틱으로 섞기</li>
-<li>APM/SSE 와 paq 계보가 남긴 것</li>
+<li>문맥이란 무엇이고 왜 그렇게 강한가</li>
+<li>PPM — 차수를 내려가며 탈출하기</li>
+<li>탈출 확률을 어떻게 정하나 (방법 A·B·C·D)</li>
+<li>제외(exclusion) — 위 차수에서 본 기호는 다시 안 센다</li>
+<li>문맥 혼합 — 여러 모델의 의견을 로지스틱 영역에서 섞기</li>
+<li>왕복이 멀쩡한데 크기만 틀리는 버그 두 개</li>
 </ul>
-<p class="cap">준비 중입니다 — PLAN.md §5 10단계에서 이 부를 채운다.</p>
+</article>
+
+<article class="card" id="ctx-why">
+<p class="chnum">1장</p>
+<h2>문맥이 왜 그렇게 강한가</h2>
+<p class="chsub">1부의 표를 다시 본다</p>
+</article>
+
+<article class="card" id="ctx-why-1">
+<h3>차수를 올리면</h3>
+<!--OUT  file=entropy.txt lines=5-17 note=코퍼스의 차수별 엔트로피-->
+<p><code>english.txt</code> 가 5.17 → 3.83 → 2.56 이다.
+앞 두 바이트를 보는 것만으로 <b>절반</b>이 된다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ctx-why-2">
+<h3>그런데 표를 실어 보내야 한다</h3>
+<div class="warn">차수 2 모델은 문맥이 65,536가지다. 문맥마다 256개 빈도를 적으면
+<b>1,600만 칸</b>이다. 그것을 파일에 실으면 본문보다 훨씬 크다.</div>
+<div class="key">해법은 <b>적응</b>이다. 표를 안 보내고, 부호기와 복호기가
+<b>지금까지 푼 것만 보고</b> 똑같이 표를 키운다. 5부의 레인지 코더가 그 위에 선다.</div>
+<p>그러면 남는 문제는 하나다 — <b>아직 안 본 문맥에서 무엇을 할 것인가.</b></p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ppm-idea">
+<p class="chnum">2장</p>
+<h2>PPM — 차수를 내려간다</h2>
+<p class="chsub">Prediction by Partial Matching (1984)</p>
+</article>
+
+<article class="card" id="ppm-idea-1">
+<h3>사다리</h3>
+<!--FIG  file=ppm_escape.svg cap=차수 2 에서 못 찾으면 1 로, 그다음 0 으로-->
+<ol class="steps">
+<li>가장 높은 차수의 문맥에서 이 기호를 본 적이 있나?</li>
+<li>있으면 그 빈도로 부호화하고 끝</li>
+<li>없으면 <b>탈출 기호</b>를 보내고 한 차수 내려간다</li>
+<li>차수 −1 (256가지 균등) 에서는 반드시 찾는다</li>
+</ol>
+<div class="key">탈출도 <b>기호다</b>. 그 확률만큼 비트를 치른다.
+공짜로 내려가는 것이 아니다 — 탈출 확률을 어떻게 정하느냐가 PPM 의 전부다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="ppm-idea-2">
+<h3>탈출 확률 — 방법 A·B·C·D</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>방법</th><th>탈출에 주는 무게</th><th>생각</th></tr>
+<tr><td>A</td><td>1</td><td>가장 단순 — 새 기호 하나 몫</td></tr>
+<tr><td>B</td><td>서로 다른 기호 수</td><td>처음 본 기호는 안 센다</td></tr>
+<tr><td><b>C</b></td><td><b>서로 다른 기호 수</b></td><td>A 와 B 의 절충 — <b>이 책</b></td></tr>
+<tr><td>D</td><td>서로 다른 기호 수 / 2</td><td>실측으로 조금 낫다</td></tr>
+</table></div>
+<p>방법 C 의 뜻은 이렇다 — <b>이 문맥에서 서로 다른 기호를 많이 봤다면,
+또 새것이 나올 가능성도 높다.</b> 그래서 탈출 확률이 높아진다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ppm-code">
+<h3>모델</h3>
+<!--CODE file=src/py/compresslib/ppm.py sym=Model note=문맥 키 → 기호별 빈도-->
+<p>차수 2 까지만 둔다. 차수를 올리면 표가 커지고 이 책의 기계에서 메모리가 모자란다 —
+그리고 차수 2 만으로도 요점은 전부 보인다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ppm-code-2">
+<h3>부호화</h3>
+<!--CODE file=src/py/compresslib/ppm.py sym=encode note=차수 2 → 1 → 0 → -1-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ppm-excl">
+<h3>제외 — 위에서 본 기호는 다시 안 센다</h3>
+<!--CODE file=src/py/compresslib/ppm.py sym=_visible note=이미 탈출한 기호를 뺀다-->
+<div class="key">차수 2 에서 <code>a</code>·<code>b</code> 를 보고 탈출했다면,
+그 기호들은 차수 1 에서 <b>나올 수 없다</b>. 나올 수 있었으면 위에서 부호화됐을 테니까.</div>
+<p>그래서 차수 1 의 확률 계산에서 그 기호들을 빼면, 남은 기호들의 확률이 올라간다.
+<b>공짜로 얻는 이득</b>이다 — 정보를 더 안 보내고 확률만 정확해진다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ppm-result">
+<h3>성적</h3>
+<!--OUT  file=bench_ratio.txt lines=25-25 note=파일별 비율 표의 머리-->
+<!--OUT  file=bench_ratio.txt lines=29-29 note=ppm 한 줄-->
+<div class="tblwrap"><table class="kv">
+<tr><th>english.txt</th><th>비율</th><th>비트/바이트</th></tr>
+<tr><td>deflate</td><td>41.9%</td><td>3.35</td></tr>
+<tr><td><b>ppm (차수 2)</b></td><td><b>42.1%</b></td><td>3.37</td></tr>
+<tr><td>2차 엔트로피의 벽</td><td>32.0%</td><td>2.56</td></tr>
+</table></div>
+<p>차수 2 PPM 이 2차 엔트로피 벽(2.56)에 못 닿고 3.37 에 머문다.
+차이는 <b>탈출에 치르는 값</b>과 <b>적응하는 동안의 손해</b>다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ppm-result-2">
+<h3>난수 파일에서 108% 로 부푼다</h3>
+<p>1부에서 본 "2차 엔트로피 0.82" 의 착시가 여기서 값을 치른다.
+PPM 은 문맥마다 표를 <b>진짜로</b> 만들고, 새 기호마다 탈출을 보낸다.</p>
+<div class="key">엔트로피 계산이 공짜로 가정한 "표" 를, PPM 은 실제로 <b>스트림에 실어</b> 보낸다.
+1부의 착시와 11부의 108% 가 같은 이야기의 양면이다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-idea">
+<p class="chnum">3장</p>
+<h2>문맥 혼합</h2>
+<p class="chsub">고르지 않는다 — 섞는다</p>
+</article>
+
+<article class="card" id="cm-idea-1">
+<h3>PPM 과 다른 점</h3>
+<div class="g2">
+<div class="cmp"><h5>PPM</h5>
+<p>차수 2 에 있으면 <b>그것만</b> 쓴다. 없으면 내려간다.</p>
+<p>모델을 <b>고른다</b></p></div>
+<div class="cmp good"><h5>문맥 혼합</h5>
+<p>차수 1·2·3·4·일치 모델에게 <b>모두 묻고</b>, 의견을 섞는다.</p>
+<p>누구를 믿을지 <b>배운다</b></p></div>
+</div>
+<!--FIG  file=cm_mixer.svg cap=모델 다섯의 의견을 하나로-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="cm-idea-2">
+<h3>평균을 내면 안 되는 이유</h3>
+<div class="warn">모델 A 가 0.01, 모델 B 가 0.99 라고 말했다. 평균은 0.5 다.
+그런데 이것은 "둘 다 확신했는데 반대였다" 가 아니라
+"아무것도 모르겠다" 가 되어 버린다. <b>확신이 사라진다.</b></div>
+<div class="key">로지스틱 영역(stretch)에서 더한다.
+stretch(p) = ln(p / (1−p)) 이고, 그 영역에서 가중 합을 한 뒤 squash 로 되돌린다.</div>
+<p>0.01 은 −4.6, 0.99 는 +4.6 이다. 가중치가 같으면 합이 0 → 0.5 로 같지만,
+<b>가중치를 학습하면</b> 잘 맞히는 쪽이 커진다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="cm-code">
+<h3>squash 와 stretch</h3>
+<!--CODE file=src/py/compresslib/cm.py sym=squash note=33칸 표를 직선으로 이어 쓴다-->
+<p>부동소수점을 못 쓰므로 <b>33칸 표</b>를 두고 사이를 직선으로 잇는다.
+이 표는 규칙에서 안 나오는 값이라 <code>tools/gen_tables.py</code> 가 만들어
+다섯 언어에 뿌리고 <code>--check</code> 로 대조한다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-code-2">
+<h3>모델 다섯</h3>
+<!--CODE file=src/py/compresslib/cm.py sym=predict note=문맥 해시로 표를 찾고 stretch 해서 섞는다-->
+<div class="tblwrap"><table class="kv">
+<tr><th>모델</th><th>문맥</th></tr>
+<tr><td>0</td><td>차수 1 — 앞 1바이트 + 지금까지 읽은 비트</td></tr>
+<tr><td>1</td><td>차수 2</td></tr>
+<tr><td>2</td><td>차수 3</td></tr>
+<tr><td>3</td><td>차수 4</td></tr>
+<tr><td>4</td><td>일치 모델 — 앞에서 같은 문맥이 나온 자리의 다음 바이트</td></tr>
+</table></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-code-3">
+<h3>가중치 학습</h3>
+<!--CODE file=src/py/compresslib/cm.py sym=update note=오차 × 입력 으로 가중치를 민다-->
+<div class="key">w<sub>i</sub> += learn × 오차 × stretch(p<sub>i</sub>)</div>
+<p>오차는 (실제 비트 − 예측 확률) 이다. 잘 맞힌 모델의 가중치가 오르고
+틀린 모델의 가중치가 내린다 — 로지스틱 회귀의 온라인 학습이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-bugs">
+<p class="chnum">4장</p>
+<h2>왕복은 멀쩡한데 크기만 틀린 버그 둘</h2>
+<p class="chsub">이 책에서 가장 잡기 어려웠던 자리</p>
+</article>
+
+<article class="card" id="cm-bugs-1">
+<h3>첫째 — 학습 속도</h3>
+<div class="warn">가중치 갱신의 자리올림을 <b>10</b> 으로 뒀다. 가중치가 한 걸음에
+<b>5만씩</b> 흔들렸다. 혼합기가 수렴하지 못하고 진동한다.</div>
+<p>lpaq 의 값인 <b>16</b> 으로 고쳤다. 한 걸음에 수백 단위로 움직인다.</p>
+<div class="key">왕복 시험은 <b>내내 통과했다</b>. 부호기와 복호기가 똑같이 진동했으니
+당연하다. 드러난 것은 <b>압축비</b>뿐이었다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-bugs-2">
+<h3>둘째 — APM 의 곱수</h3>
+<div class="warn">lpaq1 에서 <code>(stretch(pr) + 2048) * 23</code> 을 그대로 가져왔다.
+그런데 그 식은 33칸 표의 <b>위 아홉 칸에 닿지 못한다</b> —
+결과 확률이 3200/4096 위로 못 올라간다.</div>
+<p>32 로 고치니 <code>english.txt</code> 가 <b>39.5% → 35.6%</b> 로 내려갔다.
+4%p 다.</p>
+<!--CODE file=src/py/compresslib/cm.py sym=pp note=32 가 아니면 위 칸에 못 닿는다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-bugs-3">
+<h3>이 두 버그가 말해 주는 것</h3>
+<div class="key">압축기에서 <b>왕복 시험은 최소한의 시험</b>이다.
+"풀린다" 는 "맞다" 가 아니다. 크기를 재지 않으면 절반은 못 본다.</div>
+<ul>
+<li>골든 벡터는 <b>크기와 해시</b>를 함께 적는다 — 그래서 크기가 달라지면 바로 보인다</li>
+<li>모델 상수는 <b>출처를 적어 두고</b>, 가져온 식이 이 환경에서도 맞는지 확인해야 한다</li>
+<li>남의 코드에서 상수를 베낄 때는 <b>그 코드의 다른 전제</b>까지 같이 오는지 봐야 한다</li>
+</ul>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="cm-result">
+<h3>성적 — 이 책에서 가장 잘 줄인다</h3>
+<!--OUT  file=bench_ratio.txt lines=25-25 note=파일별 비율 표의 머리-->
+<!--OUT  file=bench_ratio.txt lines=26-26 note=cm 한 줄-->
+<div class="tblwrap"><table class="kv">
+<tr><th>english.txt</th><th>비율</th><th>비트/바이트</th></tr>
+<tr><td>deflate</td><td>41.9%</td><td>3.35</td></tr>
+<tr><td>ppm</td><td>42.1%</td><td>3.37</td></tr>
+<tr><td><b>cm</b></td><td><b>35.6%</b></td><td><b>2.85</b></td></tr>
+<tr><td>2차 엔트로피의 벽</td><td>32.0%</td><td>2.56</td></tr>
+<tr><td>섀넌이 추정한 사람 수준</td><td>약 12%</td><td>약 1.0</td></tr>
+</table></div>
+<p>차수 4 까지 보는 모델이라 2차 벽 아래로 내려갈 수 있다.
+그런데 사람과는 아직 멀다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-speed">
+<h3>값은 속도로 치른다</h3>
+<!--OUT  file=bench_speed.txt lines=36-37 note=cm 의 처리량 (KB/s)-->
+<p>C++ 로도 1 MB/s 를 못 넘는다. deflate 보다 <b>여섯 배</b> 느리고,
+파이썬으로는 초당 16 KB 다.</p>
+<div class="key">비트 하나마다 모델 다섯을 찾고, 섞고, 가중치 다섯을 갱신하고,
+APM 을 두 번 거친다. <b>바이트가 아니라 비트마다</b>다.
+비율의 마지막 몇 %는 언제나 이 값을 치르고 얻는다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="ctx-quiz-1" data-quiz>
+<h3>11부 퀴즈</h3>
+<p class="q">Q. 문맥 혼합기의 가중치 학습률을 0 으로 두면 (가중치가 안 변하면)
+어떤 일이 일어날까? 압축은 여전히 될까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 압축은 <b>된다</b>. 가중치가 고정이라도 모델들의 예측을
+고정 비율로 섞는 것이므로 유효한 확률이 나오고, 부호기·복호기가 같은 값을 쓰니 왕복도 된다.<br>
+다만 <b>비율이 나빠진다</b>. 어느 모델이 지금 자료에서 잘 맞는지 배우지 못하므로,
+잘 맞는 모델과 헛짚는 모델의 의견을 늘 같은 무게로 섞게 된다.<br>
+이 덱의 학습률 버그(자리올림 10)가 정확히 그 반대 극단이었다 —
+너무 빨리 배워서 수렴하지 못했다. 둘 다 왕복은 통과한다.</div>
+<span class="tier a">실행 검증</span>
 </article>
