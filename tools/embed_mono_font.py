@@ -84,6 +84,26 @@ def _source_cmap():
     return _SOURCE_CMAP
 
 
+# 칸 규칙을 어겼지만 죽이지 않고 넘긴 글자들. main() 이 경고로 보여 준다.
+ambiguous_warnings = []
+
+
+def _is_ambiguous(cp):
+    """East_Asian_Width 가 A(모호)인가.
+
+    모호 글자는 유니코드가 "문맥에 따라 1칸도 2칸도 된다" 고 못박아 둔 것들이다
+    (동그라미 숫자, é, 박스 그리기 일부). 그러니 글꼴이 우리 표와 다르게 그리는 것은
+    글꼴의 잘못이 아니라 그 글자의 성질이다. 여기서 빌드를 죽이면 안 된다 —
+    대신 경고로 남겨서, 정말 칸이 맞아야 하는 자리(터미널 캡처)에 그런 글자를
+    쓰지 않았는지 사람이 확인하게 한다. boricha/deck/gen_fonts.py 와 같은 계약이다.
+    """
+    import unicodedata
+    try:
+        return unicodedata.east_asian_width(chr(cp)) == 'A'
+    except ValueError:
+        return False
+
+
 def unsupported(text):
     """원본 글꼴에 아예 없는 글자들 — 이모지·변형 선택자 따위. 실을 수 없으니 경고로만 남긴다."""
     cmap = _source_cmap()
@@ -109,10 +129,15 @@ def subset_woff2(text):
     sub.subset(font)
     # 계약 검사: 반각 500 · 전각 1000 (upm 1000). 하나라도 어긋나면 표가 깨진다.
     hmtx, upm = font['hmtx'], font['head'].unitsPerEm
+    del ambiguous_warnings[:]
     for cp, g in font.getBestCmap().items():
         adv = hmtx[g][0]
-        if adv * 2 != upm * _cells(cp):
-            raise SystemExit('U+%04X 의 폭 %d 이 칸 규칙(%d칸)과 다르다' % (cp, adv, _cells(cp)))
+        if adv * 2 == upm * _cells(cp):
+            continue
+        if _is_ambiguous(cp):
+            ambiguous_warnings.append((cp, adv))   # 모호 글자. 갈리는 것이 정상이다
+            continue
+        raise SystemExit('U+%04X 의 폭 %d 이 칸 규칙(%d칸)과 다르다' % (cp, adv, _cells(cp)))
     font.flavor = 'woff2'          # opt.flavor 는 save_font 전용이라 여기서 다시 지정해야 woff2 로 압축된다
     font.recalcTimestamp = False   # 저장 시각을 안 찍어야 언제 돌려도 같은 바이트 — 덱 diff 가 조용하다
     buf = io.BytesIO()
@@ -213,6 +238,10 @@ def main(argv):
         print('%s: 고정폭 글자 %d종 → DeckMono %d KB' % (path, len(set(text)), len(m.group(1)) * 3 // 4 // 1024))
         if bad:
             print('  경고: D2Coding 에 없는 글자 %d개는 못 실었다 — %s' % (len(bad), ''.join(bad)[:40]))
+        if ambiguous_warnings:
+            chars = ''.join(chr(cp) for cp, _ in ambiguous_warnings)
+            print('  경고: 모호(A) 폭이라 글꼴과 칸 규칙이 갈리는 글자 %d개 — %s'
+                  ' · 칸이 맞아야 하는 캡처에는 쓰지 말 것' % (len(ambiguous_warnings), chars))
         left = check(out)
         for p in left:
             print('  ' + p)
