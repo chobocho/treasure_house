@@ -5451,6 +5451,68 @@ zeros_64k.bin            OK     OK     OK     OK     OK
 <span class="tier a">실행 검증</span>
 </article>
 
+<article class="card" id="ar-test">
+<h3>레인지 코더 시험</h3>
+<div class="src"><b>src/py/compresslib/tests/test_rangecoder.py</b><span class="ln">1–22</span><span>첫 바이트 0 과 캐리</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/tests/test_rangecoder.py" data-lines="1-22"># -*- coding: utf-8 -*-
+"""rangecoder 시험 — SPEC §8.
+
+허프만은 기호 하나에 정수 비트를 쓴다. 확률 0.9 인 기호도 1비트다.
+레인지 코더는 그 제약이 없다 — 구간을 확률대로 쪼개 쌓기만 한다. 대신
+캐리 전파와 정규화가 붙고, 그 둘이 언어마다 갈라지는 자리다.
+"""
+import unittest
+
+from compresslib import rangecoder as rc
+
+
+class TestStreamShape(unittest.TestCase):
+
+    def test_first_byte_is_zero(self):
+        # cache 가 0, cacheSize 가 1 로 시작하므로 첫 바이트는 늘 0
+        # 이다. 진짜 .lzma 파일도 이렇게 시작한다 — 14번 모듈이 여기
+        # 기댄다.
+        out = rc.encode(b'hello world')
+        self.assertEqual(out[1], 0)
+
+    def test_empty_is_header_only(self):</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-carry-4">
+<h3>캐리를 일부러 일으키는 시험</h3>
+<div class="key">캐리 전파는 <b>드물게</b> 일어난다. 무작위 입력으로는 몇 만 바이트를
+넣어야 한 번 나올까 말까다. 그래서 <b>일부러 일으키는 입력</b>을 만든다.</div>
+<p>확률을 극단으로 몰아 low 가 0xFF 근처에 오래 머물게 하면
+캐리가 여러 바이트를 거슬러 올라간다. 그 경우를 시험이 직접 만든다.</p>
+<div class="note">"드물게 일어나는 것" 은 시험이 없으면 <b>사용자가 먼저 만난다</b>.
+압축기에서 그런 자리는 대개 복구 불가능한 손상으로 나타난다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="ar-golden-2">
+<h3>골든 코덱이 하는 일</h3>
+<div class="src"><b>src/py/compresslib/rangecoder.py</b><span class="ln">223–227</span><span>길이만큼 바이트를 푼다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/rangecoder.py" data-lines="223-227">    def decode(self, dec):
+        ctx = 1
+        for _ in range(8):
+            ctx = (ctx &lt;&lt; 1) | dec.decode_bit(self.probs, ctx)
+        return ctx - 256</code></pre>
+<p>모델은 <code>ByteModel</code> 하나다. 압축비가 목적이 아니라
+<b>코더가 다섯 언어에서 같은 바이트를 내는지</b>를 묶는 것이 목적이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ar-speed-2">
+<h3>속도</h3>
+<div class="src"><b>out/bench_speed.txt</b><span class="ln">24–25</span><span>rangecoder 의 처리량</span></div>
+<pre class="term" data-out="bench_speed.txt" data-lines="24-25">rangecoder  부호      149     8350     7144     7293     2938
+            복호      192    11598     6129     6620     3663</pre>
+<p>비트마다 곱셈·비교·정규화가 돈다. 바이트 하나에 여덟 번이다.
+6부의 ANS 와 견주면 그 값이 보인다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
 <article class="card quiz" id="ar-quiz-1" data-quiz>
 <h3>5부 퀴즈</h3>
 <p class="q">Q. 레인지 코더의 확률 갱신을 <code>&gt;&gt; 5</code> 에서 <code>&gt;&gt; 4</code> 로 바꾸면
@@ -6781,6 +6843,73 @@ zeros_64k.bin            OK     OK     OK     OK     OK
 <p>둘을 곱한 것(39.4%)보다는 크지만 각각보다 훨씬 작다.
 <b>되풀이를 지운 뒤 남은 치우침</b>을 허프만이 먹기 때문이다.
 9부가 이 조합을 제대로 만든다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz-test">
+<h3>LZSS 시험</h3>
+<div class="src"><b>src/py/compresslib/tests/test_lzss.py</b><span class="ln">1–22</span><span>겹치는 일치와 창 경계</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/tests/test_lzss.py" data-lines="1-22"># -*- coding: utf-8 -*-
+"""lzss 시험 — SPEC §6.
+
+일치를 어떻게 고르는가가 전부다. 같은 길이면 가까운 쪽, 사슬은 32번까지,
+거리는 32768 까지. 셋 다 정상적으로 복호되는 파일을 만들면서 바이트만
+달라지는 종류의 결정이라, 시험이 없으면 다섯 언어가 갈라진 줄도 모른다.
+"""
+import unittest
+
+from compresslib import lzss, varint
+
+MIN = lzss.MIN_MATCH
+
+
+class TestTokens(unittest.TestCase):
+
+    def test_empty(self):
+        self.assertEqual(lzss.encode(b''), b'\x00')
+
+    def test_single_literal(self):
+        # 길이 1, 플래그 바이트 0x00, 리터럴 'A'
+        self.assertEqual(lzss.encode(b'A'), b'\x01\x00A')</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz-test-2">
+<h3>창 경계를 시험하는 법</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>시험</th><th>기대</th></tr>
+<tr><td>거리 32768 짜리 일치</td><td>반드시 <b>찾는다</b></td></tr>
+<tr><td>거리 32769 짜리 일치</td><td>반드시 <b>못 찾는다</b></td></tr>
+<tr><td>길이 258 (최대)</td><td>그대로 적힌다</td></tr>
+<tr><td>길이 259</td><td>258 + 나머지로 쪼개진다</td></tr>
+</table></div>
+<p>"못 찾아야 한다" 를 시험하는 것이 요점이다. 창을 실수로 키우면
+압축비가 <b>좋아지므로</b> 아무도 이상하게 여기지 않는다 — 형식이 깨질 뿐이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz-five-2">
+<h3>Go 판 파서</h3>
+<div class="src"><b>src/go/lzss.go</b><span class="ln">27–31</span><span>Go — 해시도 같은 식이다</span></div>
+<pre><code data-lang="go" data-src="src/go/lzss.go" data-lines="27-31">func lzHash3(s []byte, i int) int {
+	h := int(s[i])&lt;&lt;10 ^ int(s[i+1])&lt;&lt;5 ^ int(s[i+2])
+	return h &amp; (lzHashSize - 1)
+}
+</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz-five-3">
+<h3>C++ 판</h3>
+<div class="src"><b>src/cpp/lzss.h</b><span class="ln">34–39</span><span>C++ — u32 로 올려서 시프트</span></div>
+<pre><code data-lang="cpp" data-src="src/cpp/lzss.h" data-lines="34-39">inline size_t hash3(const Bytes&amp; s, size_t i) {
+  uint32_t h = (u32(s[i]) &lt;&lt; 10) ^
+               (u32(s[i + 1]) &lt;&lt; 5) ^
+               u32(s[i + 2]);
+  return h &amp; (kHashSize - 1);
+}</code></pre>
+<div class="warn"><code>size_t</code> 는 부호가 없다. <code>i - dist</code> 가 음수가 되면
+아주 큰 수로 감긴다. 이 책은 그 자리를 <code>int64_t</code> 로 올려서 푼다.</div>
 <span class="tier a">실행 검증</span>
 </article>
 
@@ -9980,6 +10109,93 @@ zeros_64k.bin            OK     OK     OK     OK     OK
 <span class="tier a">실행 검증</span>
 </article>
 
+<article class="card" id="cm-five">
+<h3>다섯 언어의 혼합기</h3>
+<div class="src"><b>src/go/cm.go</b><span class="ln">153–194</span><span>Go</span></div>
+<pre><code data-lang="go" data-src="src/go/cm.go" data-lines="153-194">func (m *cmModel) predict() int {
+	c0 := m.c0
+	h := m.history
+	m.slots[0] = int(c0 &amp; 0xFF)
+	for k := 0; k &lt; 4; k++ {
+		var mask uint32 = 0xFFFFFFFF
+		if k &lt; 3 {
+			mask = 1&lt;&lt;uint(8*(k+1)) - 1
+		}
+		ctx := h &amp; mask
+		m.slots[k+1] = cmHash(ctx+uint32(k+1)*0x01000193, c0)
+	}
+	var probs [cmNumModels]int
+	probs[0] = int(m.order0[m.slots[0]])
+	for k := 0; k &lt; 4; k++ {
+		probs[k+1] = int(m.tables[k][m.slots[k+1]])
+	}
+	wbase := int(c0&amp;0xFF) * cmNumModels
+	var dot int64
+	for i := 0; i &lt; cmNumModels; i++ {
+		m.st[i] = cmStretch(probs[i])
+		dot += int64(m.weights[wbase+i]) * int64(m.st[i])
+	}
+	dot &gt;&gt;= cmMixerShift
+	if dot &gt; 2047 {
+		dot = 2047
+	}
+	if dot &lt; -2047 {
+		dot = -2047
+	}
+	m.pMix = cmSquash(int(dot))
+	p := (m.pMix + 3*m.apm1.pp(m.pMix, int(c0&amp;0xFF))) &gt;&gt; 2
+	cx2 := int((c0&amp;0xFF)&lt;&lt;8 | h&amp;0xFF)
+	p = (p + 3*m.apm2.pp(p, cx2)) &gt;&gt; 2
+	if p &lt; 1 {
+		p = 1
+	}
+	if p &gt; 4094 {
+		p = 4094
+	}
+	return p
+}</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-five-2">
+<h3>TypeScript 판 — 가중치가 클 수 있다</h3>
+<div class="src"><b>src/ts/cm.ts</b><span class="ln">97–100</span><span>가중치 범위를 직접 묶는다</span></div>
+<pre><code data-lang="ts" data-src="src/ts/cm.ts" data-lines="97-100">  update(bit: number): void {
+    const g = (bit &lt;&lt; 16) + (bit &lt;&lt; APM_RATE) - bit - bit;
+    this.t[this.index] += (g - this.t[this.index]) &gt;&gt; APM_RATE;
+  }</code></pre>
+<div class="warn">가중치가 ±2<sup>20</sup> 까지 가고, 거기에 stretch 값(±2047)을 곱한다.
+32비트를 넘으므로 TypeScript 에서는 <b>비트 연산을 못 쓴다</b>.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="cm-java">
+<h3>자바 — 메모리가 문제였다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>자료 구조</th><th>메모리</th></tr>
+<tr><td><code>int[]</code> 4 × 2<sup>20</sup></td><td>16 MB</td></tr>
+<tr><td><code>short[]</code> 로 바꾸면</td><td>8 MB</td></tr>
+<tr><td><code>Integer[]</code> 였다면</td><td>60 MB 넘음 (박싱)</td></tr>
+</table></div>
+<p>이 기계에서는 JVM 힙이 빠듯해 원시 배열이 필수였다.
+<b>같은 알고리즘도 언어마다 메모리가 다르다</b>는 것이 파서티를 맞추는 과정에서 드러났다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="cm-tune">
+<h3>상수를 고치면 무슨 일이 나나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>상수</th><th>키우면</th><th>줄이면</th></tr>
+<tr><td>표 크기 2<sup>20</sup></td><td>충돌이 줄어 조금 좋아진다</td><td>메모리가 준다</td></tr>
+<tr><td>모델 수 5</td><td>차수를 더 본다 — 느려진다</td><td>빨라지고 나빠진다</td></tr>
+<tr><td>학습률 16</td><td>천천히 배운다</td><td>진동한다</td></tr>
+<tr><td>APM 비율 3/4</td><td>교정을 더 믿는다</td><td>혼합기를 더 믿는다</td></tr>
+</table></div>
+<div class="key">전부 <b>출력 바이트를 바꾼다</b>. 그래서 하나라도 고치면
+골든 벡터를 다시 만들어야 하고, 그 이유를 커밋에 적어야 한다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
 <article class="card quiz" id="ctx-quiz-1" data-quiz>
 <h3>11부 퀴즈</h3>
 <p class="q">Q. 문맥 혼합기의 가중치 학습률을 0 으로 두면 (가중치가 안 변하면)
@@ -10930,6 +11146,77 @@ class TestHeader(unittest.TestCase):
 <div class="key">범용 압축기의 비율 경쟁은 <b>거의 끝났다</b>.
 남은 싸움은 속도, 메모리, 그리고 <b>자료를 아는 것</b>이다.</div>
 <span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lz4-five">
+<h3>LZ4 다섯 언어</h3>
+<div class="src"><b>src/go/lz4block.go</b><span class="ln">48–52</span><span>Go — 곱셈 그대로</span></div>
+<pre><code data-lang="go" data-src="src/go/lz4block.go" data-lines="48-52">func lz4Hash4(s []byte, i int) int {
+	v := uint32(s[i]) | uint32(s[i+1])&lt;&lt;8 | uint32(s[i+2])&lt;&lt;16 |
+		uint32(s[i+3])&lt;&lt;24
+	return int((v * lz4HashMul) &gt;&gt; (32 - lz4HashLog))
+}</code></pre>
+<div class="src"><b>src/ts/lz4block.ts</b><span class="ln">44–52</span><span>TypeScript — Math.imul 이 필요하다</span></div>
+<pre><code data-lang="ts" data-src="src/ts/lz4block.ts" data-lines="44-52">function hash4(s: Bytes, i: number): number {
+  const v = (s[i] | (s[i + 1] &lt;&lt; 8) | (s[i + 2] &lt;&lt; 16) |
+             (s[i + 3] &lt;&lt; 24)) &gt;&gt;&gt; 0;
+  // **Math.imul 이어야 한다.** v * HASH_MUL 은 최대 1.1e19 로 2^53 을
+  // 훌쩍 넘어 배정도가 정밀도를 잃는다. 한국어 UTF-8 처럼 맨 위 비트가
+  // 켜진 바이트가 많은 입력에서만 해시가 어긋나 파서티가 깨졌다.
+  // imul 은 32비트 곱의 아래 32비트를 정확히 준다 (SPEC §0.5).
+  return Math.imul(v, HASH_MUL) &gt;&gt;&gt; (32 - HASH_LOG);
+}</code></pre>
+<div class="warn">같은 한 줄이 언어에 따라 다르게 적힌다.
+TypeScript 의 <code>*</code> 는 배정밀도 곱이라 2<sup>53</sup> 을 넘으면 정밀도가 날아간다.
+<code>Math.imul</code> 은 32비트 곱을 정확히 한다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lz4-korean">
+<h3>왜 korean_utf8 에서만 드러났나</h3>
+<p>해시가 틀리면 <b>후보 자리를 잘못 고를</b> 뿐이다. 그래도 그 자리가
+우연히 맞으면 같은 일치를 찾는다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>파일</th><th>왜 안 드러났나</th></tr>
+<tr><td>english.txt</td><td>후보가 적어 틀린 해시도 같은 자리를 가리켰다</td></tr>
+<tr><td>abab_4k.txt</td><td>되풀이가 단순해 어느 자리든 일치한다</td></tr>
+<tr><td>korean_utf8.txt</td><td>3바이트 묶음이 해시 상위 비트에 몰려 <b>차이가 드러났다</b></td></tr>
+</table></div>
+<div class="key">코퍼스가 하나만 적었어도 못 잡았다.
+<b>자료의 성질이 다른 파일을 여러 개 두는</b> 이유가 이것이다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzma-five">
+<h3>LZMA 복호기 다섯 언어</h3>
+<div class="src"><b>src/go/lzmadec.go</b><span class="ln">32–40</span><span>Go — 5부의 코더를 그대로 쓴다</span></div>
+<pre><code data-lang="go" data-src="src/go/lzmadec.go" data-lines="32-40">// 위에서부터 내려가는 이진 트리. 결과는 numBits 짜리 값.
+func lzmaBitTree(dec *rcDecoder, probs []uint16,
+	offset, numBits int) int {
+	m := 1
+	for i := 0; i &lt; numBits; i++ {
+		m = m&lt;&lt;1 + dec.decodeBit(probs, offset+m)
+	}
+	return m - 1&lt;&lt;uint(numBits)
+}</code></pre>
+<p>모델만 새로 만들고 코더는 5부의 것을 그대로 쓴다.
+<b>코더를 둘 두지 않기로 한 결정</b>이 포팅 분량을 절반으로 줄였다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="modern-real">
+<h3>진짜 도구로 확인한 것들 — 모아 보기</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>도구</th><th>방향</th><th>건수</th></tr>
+<tr><td>파이썬 zlib</td><td>양방향</td><td>13 + 52</td></tr>
+<tr><td>gzip 명령</td><td>양방향</td><td>13 + 39</td></tr>
+<tr><td>lz4 명령</td><td>양방향</td><td>13 + 39</td></tr>
+<tr><td>bzip2 명령</td><td>푸는 쪽만</td><td>26 × 5 = 130</td></tr>
+<tr><td>xz 명령</td><td>푸는 쪽만</td><td>26 × 5 = 130</td></tr>
+</table></div>
+<div class="key">우리끼리의 검사(골든·교차)가 <b>다섯이 함께 틀린 것</b>을 못 잡는다.
+바깥 세계와 맞춰 보는 것이 그 빈틈을 메운다.</div>
+<span class="tier a">실행 검증</span>
 </article>
 
 <article class="card quiz" id="modern-quiz-1" data-quiz>
@@ -12454,6 +12741,93 @@ JVM 의 시작 값이 100 밀리초를 넘으므로 이것을 안 빼면 자바�
 </ul>
 <div class="key">부록에 이 저장소의 소스 23,058줄이 한 줄도 빠짐없이 실려 있다.
 읽다가 "정말 그런가" 싶은 자리가 있으면, 그 코드가 거기 있다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="pr-num">
+<h3>이 책의 숫자를 다시 보기</h3>
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">5–20</span><span>전체 비율</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="5-20">모듈              원본       결과    비율 영어 산문
+cm             1367107     469750   34.4%     35.6%
+deflate        1367107     502457   36.8%     41.9%
+lossy          1367107     566837   41.5%     73.8%
+ppm            1367107     586905   42.9%     42.1%
+lz4block       1367107     739363   54.1%     66.1%
+lzss           1367107     764694   55.9%     60.2%
+rangecoder     1367107     825379   60.4%     63.0%
+lzw            1367107    1033372   75.6%     59.3%
+rle            1367107    1050899   76.9%     98.8%
+ans            1367107    1088706   79.6%     65.2%
+huffman        1367107    1099542   80.4%     65.4%
+mtf            1367107    1367138  100.0%    100.0%
+bitio          1367107    1367151  100.0%    100.0%
+bwt            1367107    1367246  100.0%    100.0%
+intcode        1367107    1795104  131.3%    154.1%</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="pr-num-2">
+<h3>영어 산문만 뽑으면</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>모듈</th><th>english.txt</th><th>무엇이 다른가</th></tr>
+<tr><td>cm</td><td>35.6%</td><td>차수 0~4 를 섞는다</td></tr>
+<tr><td>deflate</td><td>41.9%</td><td>LZ77 + 허프만</td></tr>
+<tr><td>ppm</td><td>42.1%</td><td>차수 2 + 탈출</td></tr>
+<tr><td>lzw</td><td>59.3%</td><td>사전만</td></tr>
+<tr><td>lzss</td><td>60.2%</td><td>LZ77 만</td></tr>
+<tr><td>rangecoder</td><td>63.0%</td><td>적응 0차</td></tr>
+<tr><td>ans</td><td>65.2%</td><td>정적 0차</td></tr>
+<tr><td>huffman</td><td>65.4%</td><td>정적 0차 + 정수 비트</td></tr>
+</table></div>
+<div class="key">0차 모델 셋(rangecoder·ans·huffman)이 63~65% 로 뭉쳐 있다.
+<b>부호기를 바꿔 얻는 것은 2%p</b>, 모델을 바꿔 얻는 것은 <b>30%p</b> 다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="pr-num-3">
+<h3>파일 성질에 따라 순위가 바뀐다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>파일</th><th>1등</th><th>비율</th></tr>
+<tr><td>abab_4k.txt</td><td>cm · ppm</td><td>0.3%</td></tr>
+<tr><td>zeros_64k.bin</td><td>ppm</td><td>0.0%</td></tr>
+<tr><td>english.txt</td><td>cm</td><td>35.6%</td></tr>
+<tr><td>korean_utf8.txt</td><td>cm</td><td>30.0%</td></tr>
+<tr><td>random_64k.bin</td><td><b>deflate</b></td><td>100.0%</td></tr>
+<tr><td>alphabet.bin</td><td><b>lossy</b></td><td>90.4%</td></tr>
+</table></div>
+<p>못 줄이는 자료에서는 <b>가장 적게 부푸는</b> 것이 이긴다.
+그 자리에서 cm 은 100.5%, ppm 은 108% 다 — 모델이 정교할수록 손해가 크다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="pr-mem">
+<h3>메모리도 재야 한다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>모듈</th><th>대략</th></tr>
+<tr><td>rle · mtf · bitio</td><td>수백 바이트</td></tr>
+<tr><td>huffman</td><td>표 몇 KB</td></tr>
+<tr><td>lzss · deflate</td><td>창 32 KB + 해시 128 KB</td></tr>
+<tr><td>bwt</td><td>블록 64 KB × 배열 몇 개</td></tr>
+<tr><td>ppm</td><td>문맥 표 — 자료에 따라 수 MB</td></tr>
+<tr><td>cm</td><td><b>12 MB 고정</b></td></tr>
+</table></div>
+<div class="warn">파이썬 cm 은 처음에 500 MB 를 먹어 이 기계에서 못 돌았다.
+<code>array</code>·<code>bytearray</code> 로 141 MB 로 내렸다.
+<b>메모리가 알고리즘을 고르는 자리</b>가 실제로 있다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="pr-when">
+<h3>압축을 하지 말아야 할 때</h3>
+<ul>
+<li><b>이미 압축된 것</b> — JPEG·MP4·zip. 손해만 난다</li>
+<li><b>아주 작은 것</b> — 머리말이 본문보다 크다 (사전이 없다면)</li>
+<li><b>임의 접근이 필요한 것</b> — 블록 단위로 나누지 않는 한</li>
+<li><b>CPU 가 병목인 곳</b> — 네트워크가 빠르면 압축이 오히려 느리다</li>
+<li><b>비밀과 입력이 섞이는 곳</b> — CRIME·BREACH</li>
+</ul>
+<div class="key">마지막 두 항목이 특히 자주 잊힌다.
+10 Gbps 링크에서 gzip 은 <b>병목</b>이 된다 — 그래서 LZ4 가 태어났다.</div>
 <span class="tier c">문서 근거</span>
 </article>
 
