@@ -25,11 +25,15 @@ TABLE_BYTES = ALPHABET // 2          # 니블 하나씩 = 128바이트
 
 
 def code_lengths(freqs, limit=MAX_LENGTH):
-    """빈도 벡터(256칸) → 길이 벡터(256칸). 안 쓰는 기호는 0."""
+    """빈도 벡터 → 같은 길이의 길이 벡터. 안 쓰는 기호는 0.
+
+    알파벳 크기는 freqs 의 길이가 정한다. 골든 코덱은 256 이지만
+    DEFLATE 동적 블록은 286·30·19 세 가지를 쓴다.
+    """
     used = [(f, s) for s, f in enumerate(freqs) if f]
     used.sort()
     m = len(used)
-    lengths = [0] * ALPHABET
+    lengths = [0] * len(freqs)
     if m == 0:
         return lengths
     if m == 1:
@@ -49,12 +53,9 @@ def code_lengths(freqs, limit=MAX_LENGTH):
                   for i in range(len(level) // 2)]
         level = sorted(packed + coins)
 
-    counts = [0] * ALPHABET
     for _w, _k, _r, syms in level[:2 * m - 2]:
         for s in syms:
-            counts[s] += 1
-    for s in range(ALPHABET):
-        lengths[s] = counts[s]
+            lengths[s] += 1
     return lengths
 
 
@@ -72,8 +73,8 @@ def canonical_codes(lengths):
     for bits in range(1, MAX_LENGTH + 1):
         code = (code + bl_count[bits - 1]) << 1
         next_code[bits] = code
-    codes = [0] * ALPHABET
-    for s in range(ALPHABET):
+    codes = [0] * len(lengths)
+    for s in range(len(lengths)):
         l = lengths[s]
         if l:
             if next_code[l] >= (1 << l):
