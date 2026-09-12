@@ -565,6 +565,10 @@ table.kv td.num, table.kv th.num { text-align: right; font-variant-numeric: tabu
     <option value="int-rice">· 골롬–라이스</option>
     <option value="int-five">· 다섯 언어를 맞추며 배운 것</option>
     <option value="p3">3부 · 단순 변환</option>
+    <option value="rle-intro">· 런 길이 부호</option>
+    <option value="rle-zero">· RUNA/RUNB — 0 무더기 전용 부호</option>
+    <option value="delta">· 델타 부호화</option>
+    <option value="mtf-intro">· MTF — 앞으로 옮기기</option>
     <option value="p4">4부 · 허프만 부호화</option>
     <option value="p5">5부 · 산술 부호화와 레인지 코더</option>
     <option value="p6">6부 · ANS</option>
@@ -980,8 +984,8 @@ SHA-256 을 담는다. 숫자가 안 맞으면 여기부터 본다.</div>
 <h2>결과 미리 보기 — 비율</h2>
 <p>코퍼스 전체 1,367,107 바이트를 모듈마다 부호화한 크기다.
 이 표의 숫자는 전부 골든 벡터에서 그대로 읽은 것이다.</p>
-<div class="src"><b>out/bench_ratio.txt</b><span class="ln">5–21</span><span>작은 쪽이 잘 줄인 것</span></div>
-<pre class="term" data-out="bench_ratio.txt" data-lines="5-21">모듈              원본       결과    비율 영어 산문
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">5–20</span><span>작은 쪽이 잘 줄인 것</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="5-20">모듈              원본       결과    비율 영어 산문
 cm             1367107     469750   34.4%     35.6%
 deflate        1367107     502457   36.8%     41.9%
 lossy          1367107     566837   41.5%     73.8%
@@ -996,8 +1000,7 @@ huffman        1367107    1099542   80.4%     65.4%
 mtf            1367107    1367138  100.0%    100.0%
 bitio          1367107    1367151  100.0%    100.0%
 bwt            1367107    1367246  100.0%    100.0%
-intcode        1367107    1795104  131.3%    154.1%
-</pre>
+intcode        1367107    1795104  131.3%    154.1%</pre>
 <span class="tier a">실행 검증</span>
 </article>
 
@@ -2217,9 +2220,8 @@ def decode(src):
 
 <article class="card" id="bit-codec-2">
 <h3>그래서 비율이 100.0% 다</h3>
-<div class="src"><b>out/bench_ratio.txt</b><span class="ln">16–19</span><span>bitio·mtf·bwt 는 줄이지 않는다</span></div>
-<pre class="term" data-out="bench_ratio.txt" data-lines="16-19">huffman        1367107    1099542   80.4%     65.4%
-mtf            1367107    1367138  100.0%    100.0%
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">17–19</span><span>bitio·mtf·bwt 는 줄이지 않는다</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="17-19">mtf            1367107    1367138  100.0%    100.0%
 bitio          1367107    1367151  100.0%    100.0%
 bwt            1367107    1367246  100.0%    100.0%</pre>
 <p>줄이지 않는 모듈을 골든에 넣는 이유는 하나다 — <b>다섯 언어가 비트를 같은 순서로
@@ -2693,16 +2695,338 @@ zeros_64k.bin            OK     OK     OK     OK     OK
 <article class="card section" id="p3">
 <p class="chnum">3부</p>
 <h2>단순 변환</h2>
-<p class="chsub">RLE·델타·MTF — 압축이 아니라 준비 작업</p>
+<p class="chsub">런 길이 부호 · 델타 · MTF</p>
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>PackBits 식 바이트 RLE 와 run 상한</li>
-<li>0 런 전용 RLE — 왜 따로 두는가</li>
+<li>PackBits — 제어 바이트 하나로 런과 리터럴을 가르기</li>
+<li>문턱값 3 을 고른 이유, 그리고 그것이 형식의 일부인 이유</li>
+<li>RUNA/RUNB — 0 무더기를 위한 이진 런 부호</li>
 <li>델타 부호화 — 값이 아니라 차이를 적기</li>
-<li>MTF(move-to-front) — 최근에 본 것을 앞으로</li>
-<li>변환은 왜 그 자체로는 파일을 못 줄이는가</li>
+<li>MTF — 바꿔치기가 아니라 옮기기</li>
+<li>이 변환들이 <b>혼자서는</b> 쓸모없는 이유</li>
 </ul>
-<p class="cap">준비 중입니다 — PLAN.md §5 10단계에서 이 부를 채운다.</p>
+</article>
+
+<article class="card" id="rle-intro">
+<p class="chnum">1장</p>
+<h2>런 길이 부호</h2>
+<p class="chsub">가장 단순한 압축, 그래서 한계도 가장 먼저 보인다</p>
+</article>
+
+<article class="card" id="rle-intro-1">
+<h3>생각은 한 줄이다</h3>
+<p>같은 바이트가 이어지면 "그 바이트와 개수" 로 적는다.
+<code>AAAAAAA</code> (7바이트) 를 <code>7 A</code> (2바이트) 로.</p>
+<div class="warn"><b>그런데 곧바로 문제가 생긴다.</b> <code>abcdefg</code> 처럼 런이 없으면?
+"1 a 1 b 1 c …" 로 적으면 <b>두 배</b>가 된다.</div>
+<p>그래서 실제로 쓰이는 RLE 는 전부 <b>런이 아닌 구간을 그대로 싣는 길</b>을 갖고 있다.
+그 두 가지를 어떻게 가르느냐가 형식을 정한다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="rle-packbits">
+<h3>PackBits — 제어 바이트의 부호로 가른다</h3>
+<svg class="diag" viewBox="0 0 340 170" role="img" aria-label="PackBits 토큰 두 종류">
+<rect x="14" y="24" width="150" height="30" class="box"/>
+<line x1="60" y1="24" x2="60" y2="54" stroke="var(--border)" stroke-width="1"/>
+<text x="37" y="43" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--special);" text-anchor="middle">0xFE</text>
+<text x="112" y="43" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">'A'</text>
+<text x="14" y="70" style="font-size:11px;">런: 257 - 3 = 254</text>
+<text x="14" y="86" class="lbl">128 보다 크면 런 (되풀이는 최소 3)</text>
+<rect x="190" y="24" width="150" height="30" class="box"/>
+<line x1="226" y1="24" x2="226" y2="54" stroke="var(--border)" stroke-width="1"/>
+<text x="208" y="43" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);" text-anchor="middle">0x02</text>
+<text x="283" y="43" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;" text-anchor="middle">'a' 'b' 'c'</text>
+<text x="190" y="70" style="font-size:11px;">리터럴: 3 - 1 = 2</text>
+<text x="190" y="86" class="lbl">128 보다 작으면 그대로 싣기</text>
+<text x="14" y="116" style="font-size:11px;">머리 하나로 두 가지를 가르는 것이 요점이다.</text>
+<text x="14" y="132" style="font-size:11px;">따로 깃발 비트를 두면 리터럴마다 붙어</text>
+<text x="14" y="148" style="font-size:11px;">늘어나는 입력에서 손해를 본다.</text>
+<text x="14" y="166" class="lbl">제어 128 은 안 쓴다 — 한 입력에 답이 둘이 된다</text>
+</svg>
+<p class="cap">제어 바이트 하나가 두 가지를 가른다</p>
+<ul>
+<li>제어 &lt; 128 이면 <b>리터럴</b> — 뒤 (제어+1) 바이트를 그대로</li>
+<li>제어 &gt; 128 이면 <b>런</b> — 뒤 1바이트를 (257−제어) 번</li>
+<li>제어 = 128 은 <b>안 쓴다</b></li>
+</ul>
+<p>애플이 1984년 매킨토시 그림 형식에 쓴 것이고, TIFF·PDF 가 아직도 쓴다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="rle-packbits-2">
+<h3>128 을 버리는 이유</h3>
+<p>애플 원본은 제어 128 을 "아무 일도 안 함" 으로 정하고 넘어간다.
+우리는 그것을 <b>거절</b>한다.</p>
+<div class="key">같은 입력을 두 가지 바이트열로 적을 수 있는 부호기는
+<b>골든 벡터를 가질 수 없다</b>. 어느 쪽도 틀리지 않았으니, 다섯 언어가 갈려도
+"누가 틀렸나" 를 말할 수 없다.</div>
+<p>형식을 설계할 때 "해도 되고 안 해도 되는 것" 을 남기면, 그 자리가 정확히
+구현들이 갈리는 자리가 된다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="rle-code">
+<h3>부호기</h3>
+<div class="src"><b>src/py/compresslib/rle.py</b><span class="ln">36–59</span><span>런을 먼저 보고, 아니면 리터럴을 모은다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/rle.py" data-lines="36-59">def pack(src):
+    """PackBits 묶음들. 헤더는 붙이지 않는다."""
+    out = bytearray()
+    i, n = 0, len(src)
+    while i &lt; n:
+        run = _run_at(src, i)
+        if run &gt;= RUN_MIN:
+            out.append(257 - run)
+            out.append(src[i])
+            i += run
+            continue
+        # 리터럴 — 런이 시작되는 자리까지, 또는 상한까지
+        j = i
+        while j &lt; n and (j - i) &lt; LIT_MAX:
+            r = _run_at(src, j)
+            if r &gt;= RUN_MIN:
+                break
+            # 상한을 넘겨 잡으면 129바이트 묶음이 나온다. 제어 바이트에
+            # 안 들어가는 길이라, 아무도 못 푸는 파일이 된다.
+            j = min(j + r, i + LIT_MAX)
+        out.append(j - i - 1)
+        out += src[i:j]
+        i = j
+    return bytes(out)</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="rle-code-2">
+<h3>리터럴을 어디서 끊나 — 한 줄이 형식을 정한다</h3>
+<p>리터럴을 모으다가 런을 만나면 끊어야 한다. 그런데 <b>상한(128)도 지켜야 한다.</b></p>
+<div class="warn">상한을 넘겨 잡으면 129바이트짜리 묶음이 나온다.
+제어 바이트에 들어가지 않는 길이라, <b>아무도 못 푸는 파일</b>이 된다.
+코드의 <code>min(j + r, i + LIT_MAX)</code> 가 그것을 막는다.</div>
+<p>이런 자리가 명세(SPEC §3.1)에 "문턱 3 · 런 상한 128 · 리터럴 상한 128" 로
+적혀 있는 이유다. 셋 다 출력 바이트를 바꾼다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="rle-threshold">
+<h3>문턱값 3 은 어디서 나왔나</h3>
+<p>런이 몇 개부터 이득인지 세어 보면 된다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>같은 바이트 n개</th><th>런으로</th><th>리터럴로</th><th>이득</th></tr>
+<tr><td>2</td><td>2바이트</td><td>3바이트(제어 포함)</td><td>+1, 그러나 앞뒤 리터럴이 끊긴다</td></tr>
+<tr><td>3</td><td>2바이트</td><td>4바이트</td><td><b>+2</b></td></tr>
+<tr><td>10</td><td>2바이트</td><td>11바이트</td><td>+9</td></tr>
+</table></div>
+<p>2 에서 끊으면 이득이 1바이트인데, 리터럴 묶음이 쪼개지면서 제어 바이트가
+하나 더 생겨 오히려 손해인 경우가 많다. <b>3 이 안전한 경계</b>다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="rle-result">
+<h3>실제로 얼마나 줄이나</h3>
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">25–25</span><span>파일별 비율 표의 머리</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="25-25">모듈           abab4k alphabet   b32768   b32769  english koreanut  mixed1m random64   source zeros64k</pre>
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">34–34</span><span>rle 한 줄</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="34-34">rle             100.8    100.8    100.6    100.6     98.8    100.8     76.1    100.8    100.3      1.6</pre>
+<ul>
+<li><code>zeros_64k.bin</code> <b>1.6%</b> — 런밖에 없는 파일</li>
+<li><code>runs.bin</code> <b>28.3%</b> — 일부러 런을 섞어 만든 파일 (1,977 → 559)</li>
+<li>나머지는 거의 <b>100.8%</b> — 128바이트마다 제어 1바이트가 붙는 값이다</li>
+</ul>
+<div class="key">RLE 는 <b>런이 있는 자료에만</b> 쓴다. 그래서 요즘은 단독으로 쓰이지 않고,
+<b>다른 변환 뒤</b>에 붙는다 — BWT 뒤(10부), 양자화 뒤(13부)처럼.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="rle-zero">
+<p class="chnum">2장</p>
+<h2>RUNA/RUNB — 0 무더기 전용 부호</h2>
+<p class="chsub">bzip2 가 쓰는, 조금 이상하게 생긴 이진 부호</p>
+</article>
+
+<article class="card" id="rle-zero-1">
+<h3>MTF 뒤에는 0 이 쏟아진다</h3>
+<p>다음 장에서 볼 MTF 는 되풀이되는 글자를 0 으로 바꾼다.
+그 결과 <b>0 이 수백 개씩 이어지는</b> 구간이 생긴다.</p>
+<p>이것을 PackBits 로 적으면 런 하나에 2바이트, 128개마다 끊긴다.
+길이를 varint 로 적으면 바이트 경계로 돌아가야 한다. 둘 다 아깝다.</p>
+<div class="key">RUNA/RUNB — 0 런의 길이를 <b>이진수로</b> 적되,
+자릿수 하나를 기호 하나로 만든다. 기호 두 개로 길이 전체를 표현한다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="rle-zero-2">
+<h3>부호</h3>
+<div class="src"><b>src/py/compresslib/rle.py</b><span class="ln">112–129</span><span>길이+1 을 2진수로, LSB 부터</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/rle.py" data-lines="112-129">def zero_run_encode(symbols):
+    """MTF 기호 열 → 0런이 접힌 열. 0 아닌 기호는 한 칸씩 밀린다."""
+    out = []
+    i, n = 0, len(symbols)
+    while i &lt; n:
+        if symbols[i] != 0:
+            out.append(symbols[i] + 1)
+            i += 1
+            continue
+        j = i
+        while j &lt; n and symbols[j] == 0:
+            j += 1
+        length = (j - i) + 1
+        while length &gt; 1:
+            out.append(RUNB if (length &amp; 1) else RUNA)
+            length &gt;&gt;= 1
+        i = j
+    return out</code></pre>
+<div class="tblwrap"><table class="kv">
+<tr><th>0 이 몇 개</th><th>기호</th></tr>
+<tr><td>1</td><td>RUNA</td></tr>
+<tr><td>2</td><td>RUNB</td></tr>
+<tr><td>3</td><td>RUNA RUNA</td></tr>
+<tr><td>4</td><td>RUNB RUNA</td></tr>
+<tr><td>10</td><td>RUNB RUNA RUNA</td></tr>
+</table></div>
+<p>길이 n 은 기호 <b>⌊log₂(n+1)⌋</b> 개로 적힌다. 1,000개면 9개다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="rle-zero-3">
+<h3>왜 이렇게까지 하나</h3>
+<p>RUNA·RUNB 는 <b>다른 기호들과 같은 허프만 표</b>에 들어간다.
+길이를 따로 적는 것이 아니라, 알파벳의 일원이 되는 것이다.</p>
+<div class="tip">그래서 0 런이 많은 파일에서는 RUNA 의 빈도가 치솟고,
+허프만이 RUNA 에 1~2비트를 준다. <b>길이 1,000짜리 런이 10비트</b>에 적히는 일이 생긴다.</div>
+<p>10부에서 bzip2 스트림을 실제로 풀어 보며 이 부호를 다시 만난다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="delta">
+<p class="chnum">3장</p>
+<h2>델타 부호화</h2>
+<p class="chsub">값이 아니라 차이를 적는다</p>
+</article>
+
+<article class="card" id="delta-1">
+<h3>올라가는 수열을 적을 때</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>값</th><th>varint 바이트</th></tr>
+<tr><td>그대로</td><td>1000, 1003, 1007, 1010</td><td>2+2+2+2 = 8</td></tr>
+<tr><td>차이로</td><td>1000, 3, 4, 3</td><td>2+1+1+1 = <b>5</b></td></tr>
+</table></div>
+<p>값의 <b>범위</b>가 아니라 <b>변화량</b>이 작으면 델타가 이긴다.
+소리 표본, 사진 화소, 시간 도장, 검색 색인의 문서 번호가 전부 그렇다.</p>
+<div class="warn">차이는 <b>음수가 된다</b>. 그래서 델타는 거의 언제나 지그재그와 짝이다 —
+2부에서 둘을 나란히 만든 이유다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="delta-2">
+<h3>이 책에서 델타가 나오는 자리</h3>
+<ul>
+<li><b>13부 PNG 필터</b> — 왼쪽 화소와의 차 (Sub 필터가 곧 델타다)</li>
+<li><b>13부 ADPCM</b> — 예측값과의 차를 4비트로</li>
+<li><b>9부 DEFLATE</b> — 부호 길이 목록의 되풀이를 다루는 방식이 델타와 사촌이다</li>
+</ul>
+<div class="key">델타는 <b>모델</b>이다. "다음 값은 이전 값과 비슷할 것" 이라는 예측을
+빼기 한 번으로 표현한 것이다. 예측이 틀리면 차이가 커지고 결과도 커진다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="mtf-intro">
+<p class="chnum">4장</p>
+<h2>MTF — 앞으로 옮기기</h2>
+<p class="chsub">값을 바꾸는 것이 아니라 분포를 바꾼다</p>
+</article>
+
+<article class="card" id="mtf-intro-1">
+<h3>규칙</h3>
+<ol class="steps">
+<li>0~255 를 늘어놓은 표를 하나 둔다</li>
+<li>입력 바이트가 표의 몇 번째인지 <b>그 번호를 내보낸다</b></li>
+<li>그 바이트를 표의 <b>맨 앞으로 옮긴다</b></li>
+</ol>
+<svg class="diag" viewBox="0 0 340 150" role="img" aria-label="MTF 표가 움직이는 모습">
+<text x="10" y="16" style="font-size:11px;">입력 bbaac · 표 시작 abcd</text>
+<text x="14" y="42" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);">b</text>
+<text x="34" y="42" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;">abcd</text>
+<text x="110" y="42" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--text);">→ 1</text>
+<text x="14" y="64" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);">b</text>
+<text x="34" y="64" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;">bacd</text>
+<text x="110" y="64" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--ok);">→ 0</text>
+<text x="14" y="86" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);">a</text>
+<text x="34" y="86" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;">bacd</text>
+<text x="110" y="86" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--text);">→ 1</text>
+<text x="14" y="108" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);">a</text>
+<text x="34" y="108" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;">abcd</text>
+<text x="110" y="108" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--ok);">→ 0</text>
+<text x="14" y="130" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--accent);">c</text>
+<text x="34" y="130" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;">abcd</text>
+<text x="110" y="130" style="font-family:ui-monospace,DeckMono,monospace;font-size:11px;fill:var(--text);">→ 2</text>
+<text x="160" y="46" style="font-size:11px;">두 번째 b 는 0 이 된다 —</text>
+<text x="160" y="62" style="font-size:11px;">방금 앞으로 옮겨졌기 때문이다.</text>
+<text x="160" y="86" style="font-size:11px;">값 자체는 안 줄어든다. 줄어드는</text>
+<text x="160" y="102" style="font-size:11px;">것은 분포다 — 0 이 몰리면</text>
+<text x="160" y="118" style="font-size:11px;">뒤의 엔트로피 부호기가 먹는다.</text>
+</svg>
+<p class="cap">bbaac 를 넣었을 때 표가 움직이는 모습</p>
+<p>방금 본 바이트가 다시 나오면 번호가 <b>0</b> 이다. 최근에 본 것일수록 작은 번호가 된다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="mtf-code">
+<h3>코드</h3>
+<div class="src"><b>src/py/compresslib/mtf.py</b><span class="ln">23–32</span><span>찾고, 내보내고, 앞으로 옮긴다</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/mtf.py" data-lines="23-32">def transform(src):
+    table = list(range(ALPHABET))
+    out = bytearray()
+    for b in src:
+        i = table.index(b)
+        out.append(i)
+        if i:
+            del table[i]
+            table.insert(0, b)
+    return bytes(out)</code></pre>
+<p>표를 <b>리스트로</b> 두고 <code>pop</code>/<code>insert</code> 하면 최악 O(256) 이다.
+자료가 1 MB 면 2억 6천만 번이라, 실제로 이 책에서 가장 느린 단순 변환이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="mtf-code-2">
+<h3>MTF 는 아무것도 줄이지 않는다</h3>
+<div class="src"><b>out/bench_ratio.txt</b><span class="ln">17–19</span><span>mtf·bitio·bwt 는 100.0%</span></div>
+<pre class="term" data-out="bench_ratio.txt" data-lines="17-19">mtf            1367107    1367138  100.0%    100.0%
+bitio          1367107    1367151  100.0%    100.0%
+bwt            1367107    1367246  100.0%    100.0%</pre>
+<p>입력 1바이트에 출력 1바이트다. 크기가 같은 것이 당연하다.</p>
+<div class="key">MTF 가 바꾸는 것은 <b>크기가 아니라 분포</b>다.
+치우친 자료를 넣으면 0 이 몰린 출력이 나오고, 그 다음에 오는 엔트로피 부호기가
+그 치우침을 먹는다. <b>혼자 쓰면 값이 0 이다.</b></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="mtf-measure">
+<h3>분포가 정말 바뀌는지 재 보면</h3>
+<p><code>english.txt</code> 를 MTF 에 넣기 전과 후의 0차 엔트로피다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>0차 엔트로피</th><th>huffman 으로 적으면</th></tr>
+<tr><td>원본</td><td>5.17비트</td><td>39,895바이트</td></tr>
+<tr><td>MTF 뒤</td><td>5.49비트</td><td>41,877바이트</td></tr>
+</table></div>
+<div class="warn"><b>오히려 나빠졌다.</b> 영어 산문은 "방금 본 글자가 또 나오는" 자료가
+아니기 때문이다. MTF 는 <b>아무 데나 쓰면 손해</b>다.</div>
+<p>MTF 가 빛나는 자리는 따로 있다 — <b>BWT 를 거친 뒤</b>다. 10부에서 그 짝을 본다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="simple-quiz-1" data-quiz>
+<h3>3부 퀴즈</h3>
+<p class="q">Q. MTF 는 크기를 1바이트도 안 줄이고, 영어 산문에서는 엔트로피를
+오히려 <b>올린다</b>. 그런데도 bzip2 가 MTF 를 쓰는 이유는?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> bzip2 는 MTF 를 <b>BWT 뒤에</b> 쓴다.
+BWT 를 거친 자료는 같은 글자가 뭉쳐 있어서, MTF 를 먹이면 0 이 무더기로 쏟아진다.
+그 0 무더기를 RUNA/RUNB 가 몇 기호로 줄이고, 허프만이 마무리한다.<br>
+즉 MTF 의 값어치는 <b>혼자</b>가 아니라 <b>사슬 안의 자리</b>에서 나온다.
+이 책이 MTF 를 따로 모듈로 두고 비율 100% 를 그대로 보여 주는 이유이기도 하다 —
+"줄이는 것" 과 "줄이기 좋게 만드는 것" 은 다른 일이다.</div>
+<span class="tier a">실행 검증</span>
 </article>
 
 <!-- ===== 04_huffman.html ===== -->
