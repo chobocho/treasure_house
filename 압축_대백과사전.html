@@ -7405,6 +7405,96 @@ LZ77 의 창은 미끄러지며 최근 것을 늘 갖고 있다</li>
 <span class="tier c">문서 근거</span>
 </article>
 
+<article class="card" id="lzw-test">
+<h3>LZW 시험 — 폭 확장을 노린다</h3>
+<div class="src"><b>src/py/compresslib/tests/test_lzw.py</b><span class="ln">1–22</span><span>사전이 512 를 넘는 입력으로</span></div>
+<pre><code data-lang="py" data-src="src/py/compresslib/tests/test_lzw.py" data-lines="1-22"># -*- coding: utf-8 -*-
+"""lzw 시험 — SPEC §7.
+
+가장 잘 틀리는 자리가 딱 하나 있다. **복호기는 부호기보다 항목 하나
+뒤처진다.** 그래서 폭을 늘리는 조건이 한 칸 어긋나고, 그 어긋남은 사전에
+항목이 254개쯤 쌓일 때까지 드러나지 않는다. 작은 시험만 있으면 통과한다.
+"""
+import unittest
+
+from compresslib import lzw
+
+
+class TestStream(unittest.TestCase):
+
+    def test_empty_is_header_only(self):
+        # 빈 입력에는 틀 지을 몸통이 없다 — EOF 도 안 붙인다 (SPEC §0.3)
+        self.assertEqual(lzw.encode(b''), b'\x00')
+
+    def test_single_byte(self):
+        # 65 = 001000001, EOF = 100000001, 6비트 채움
+        self.assertEqual(lzw.encode(b'A'), b'\x01\x20\xc0\x40')
+</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzw-five">
+<h3>다섯 언어 — 사전 자료 구조가 다르다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>언어</th><th>부호기의 사전</th></tr>
+<tr><td>Python</td><td><code>dict[(부호, 바이트)] = 부호</code></td></tr>
+<tr><td>C++</td><td><code>unordered_map&lt;uint32_t, int&gt;</code> — 키를 합쳐 32비트로</td></tr>
+<tr><td>Go</td><td><code>map[uint32]int</code></td></tr>
+<tr><td>Java</td><td><code>HashMap&lt;Integer, Integer&gt;</code></td></tr>
+<tr><td>TypeScript</td><td><code>Map&lt;number, number&gt;</code></td></tr>
+</table></div>
+<div class="key">자료 구조는 달라도 <b>결과가 같다</b>. 사전 항목이 <b>번호 순서대로</b>
+만들어지기 때문에, 표를 훑는 순서가 결과에 안 들어간다.</div>
+<p>4부의 허프만과 대비된다 — 거기서는 훑는 순서가 결과를 바꿨다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lzw-parity-2">
+<h3>파서티 — 골든 대조</h3>
+<div class="src"><b>out/parity_lzw.txt</b><span class="ln">1–16</span><span>13개 파일 × 다섯 언어</span></div>
+<pre class="term" data-out="parity_lzw.txt" data-lines="1-16">== 1. 부호기 출력이 골든과 같은가 (lzw) ==
+파일                     py    cpp     go   java     ts
+abab_4k.txt              OK     OK     OK     OK     OK
+alphabet.bin             OK     OK     OK     OK     OK
+boundary_32768.bin       OK     OK     OK     OK     OK
+boundary_32769.bin       OK     OK     OK     OK     OK
+empty.bin                OK     OK     OK     OK     OK
+english.txt              OK     OK     OK     OK     OK
+korean_utf8.txt          OK     OK     OK     OK     OK
+mixed_1m.bin             OK     OK     OK     OK     OK
+one.bin                  OK     OK     OK     OK     OK
+random_64k.bin           OK     OK     OK     OK     OK
+runs.bin                 OK     OK     OK     OK     OK
+source.go                OK     OK     OK     OK     OK
+zeros_64k.bin            OK     OK     OK     OK     OK
+</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="lzw-gif">
+<h3>GIF 의 LZW 는 조금 다르다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>이 책</th><th>GIF</th></tr>
+<tr><td>비트 순서</td><td>MSB 먼저</td><td><b>LSB 먼저</b></td></tr>
+<tr><td>최소 부호 크기</td><td>9 고정</td><td>그림의 색 수에 따라 2~8</td></tr>
+<tr><td>블록</td><td>없다</td><td>255바이트 서브블록으로 나눈다</td></tr>
+<tr><td>사전 상한</td><td>4096</td><td>4096 — 같다</td></tr>
+</table></div>
+<p>알고리즘은 같고 <b>포장이 다르다</b>. 남의 형식을 읽으려면
+알고리즘보다 포장을 더 오래 들여다보게 된다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="lzw-speed">
+<h3>속도</h3>
+<div class="src"><b>out/bench_speed.txt</b><span class="ln">22–23</span><span>lzw 의 처리량</span></div>
+<pre class="term" data-out="bench_speed.txt" data-lines="22-23">lzw         부호      426     3303     4337     6024     2669
+            복호      515     9640     9281    14100     1489</pre>
+<p>부호기가 해시 조회를 바이트마다 한다. LZ77 처럼 사슬을 따라가지는 않지만
+<b>해시 한 번은 반드시</b> 든다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
 <article class="card quiz" id="lzw-quiz-1" data-quiz>
 <h3>8부 퀴즈</h3>
 <p class="q">Q. 어떤 LZW 구현이 작은 파일로는 모두 통과하는데
@@ -8622,6 +8712,76 @@ LSB 먼저로 편 비트열 (앞 24비트):
 <span class="tier a">실행 검증</span>
 </article>
 
+<article class="card" id="df-parity">
+<h3>파서티</h3>
+<div class="src"><b>out/parity_deflate.txt</b><span class="ln">1–16</span><span>골든 대조</span></div>
+<pre class="term" data-out="parity_deflate.txt" data-lines="1-16">== 1. 부호기 출력이 골든과 같은가 (deflate) ==
+파일                     py    cpp     go   java     ts
+abab_4k.txt              OK     OK     OK     OK     OK
+alphabet.bin             OK     OK     OK     OK     OK
+boundary_32768.bin       OK     OK     OK     OK     OK
+boundary_32769.bin       OK     OK     OK     OK     OK
+empty.bin                OK     OK     OK     OK     OK
+english.txt              OK     OK     OK     OK     OK
+korean_utf8.txt          OK     OK     OK     OK     OK
+mixed_1m.bin             OK     OK     OK     OK     OK
+one.bin                  OK     OK     OK     OK     OK
+random_64k.bin           OK     OK     OK     OK     OK
+runs.bin                 OK     OK     OK     OK     OK
+source.go                OK     OK     OK     OK     OK
+zeros_64k.bin            OK     OK     OK     OK     OK
+</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-zlib-interop">
+<h3>우리 zlib 컨테이너와 파이썬 zlib</h3>
+<div class="src"><b>out/interop_deflate.txt</b><span class="ln">148–162</span><span>양방향</span></div>
+<pre class="term" data-out="interop_deflate.txt" data-lines="148-162">== 6. 우리 zlib 컨테이너 ↔ 파이썬 zlib ==
+파일                       우리   그쪽→   ←우리
+empty.bin                     8     OK      OK 
+one.bin                       9     OK      OK 
+abab_4k.txt                  28     OK      OK 
+alphabet.bin               4619     OK      OK 
+runs.bin                    576     OK      OK 
+zeros_64k.bin                85     OK      OK 
+random_64k.bin            65549     OK      OK 
+boundary_32768.bin        19435     OK      OK 
+boundary_32769.bin        19538     OK      OK 
+korean_utf8.txt           14950     OK      OK 
+english.txt               25561     OK      OK 
+source.go                  4130     OK      OK 
+mixed_1m.bin             348047     OK      OK </pre>
+<p>컨테이너까지 맞는지 보는 시험이다. Adler-32 가 한 비트라도 틀리면
+파이썬 <code>zlib.decompress</code> 가 거절한다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-level0">
+<h3>레벨 0 — 저장 블록만 쓰는 스트림</h3>
+<p><code>zlib.compress(data, 0)</code> 은 압축을 아예 안 한다.
+그래도 <b>DEFLATE 스트림</b>이다 — 저장 블록이 이어질 뿐이다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>파일</th><th>레벨 0 크기</th><th>원본 대비</th></tr>
+<tr><td>empty.bin</td><td>5</td><td>+5</td></tr>
+<tr><td>abab_4k.txt</td><td>4,101</td><td>+5</td></tr>
+<tr><td>random_64k.bin</td><td>65,551</td><td>+15</td></tr>
+</table></div>
+<p>65,535 바이트마다 머리말 5바이트가 붙는다.
+<b>압축 없이 담는 값</b>이 정확히 그만큼이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-speed">
+<h3>속도</h3>
+<div class="src"><b>out/bench_speed.txt</b><span class="ln">28–29</span><span>deflate 의 처리량</span></div>
+<pre class="term" data-out="bench_speed.txt" data-lines="28-29">deflate     부호       76     4398     2848     2445     1482
+            복호      544    26785    11209    13350     7370</pre>
+<p>부호화가 복호보다 훨씬 느리다. 사슬 128 을 따라가며 일치를 찾기 때문이다.
+LZ 계열의 비대칭이 여기서도 그대로다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
 <article class="card quiz" id="df-quiz-1" data-quiz>
 <h3>9부 퀴즈</h3>
 <p class="q">Q. 우리 deflate 가 만든 파일과 <code>gzip -9</code> 가 만든 파일은
@@ -9448,6 +9608,54 @@ public final class Bwt {
 <b>같은 이름의 함수가 인자 형에 따라 다른 알고리즘</b>이다.</p>
 <div class="note">박싱 비용이 들지만 이 책에서는 정확성이 먼저다.
 속도가 필요하면 키를 완전히 정해 <code>int[]</code> 를 쓰면 된다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bwt-parity">
+<h3>파서티</h3>
+<div class="src"><b>out/parity_bwt.txt</b><span class="ln">1–16</span><span>골든 대조</span></div>
+<pre class="term" data-out="parity_bwt.txt" data-lines="1-16">== 1. 부호기 출력이 골든과 같은가 (bwt) ==
+파일                     py    cpp     go   java     ts
+abab_4k.txt              OK     OK     OK     OK     OK
+alphabet.bin             OK     OK     OK     OK     OK
+boundary_32768.bin       OK     OK     OK     OK     OK
+boundary_32769.bin       OK     OK     OK     OK     OK
+empty.bin                OK     OK     OK     OK     OK
+english.txt              OK     OK     OK     OK     OK
+korean_utf8.txt          OK     OK     OK     OK     OK
+mixed_1m.bin             OK     OK     OK     OK     OK
+one.bin                  OK     OK     OK     OK     OK
+random_64k.bin           OK     OK     OK     OK     OK
+runs.bin                 OK     OK     OK     OK     OK
+source.go                OK     OK     OK     OK     OK
+zeros_64k.bin            OK     OK     OK     OK     OK
+</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bwt-speed">
+<h3>속도 — 변환과 역변환의 차이</h3>
+<div class="src"><b>out/bench_speed.txt</b><span class="ln">26–27</span><span>bwt 의 처리량</span></div>
+<pre class="term" data-out="bench_speed.txt" data-lines="26-27">bwt         부호      152     2694      819      407      443
+            복호     1545    26307    16095    20723    14291</pre>
+<p>역변환이 변환보다 훨씬 빠르다. 정렬 O(n log² n) 과 배열 훑기 O(n) 의 차이다.
+<b>bzip2 가 압축은 느린데 해제는 빠른</b> 이유가 이 두 줄에 있다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="bz-real">
+<h3>진짜 bzip2 파일의 크기</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>파일</th><th>bzip2 -9</th><th>우리 deflate</th></tr>
+<tr><td>english.txt</td><td>23,037</td><td>25,555</td></tr>
+<tr><td>korean_utf8.txt</td><td>12,766</td><td>14,944</td></tr>
+<tr><td>source.go</td><td>3,843</td><td>4,124</td></tr>
+</table></div>
+<p>bzip2 가 8~14% 작다. 블록 전체의 문맥을 쓰고, 표를 여섯 개 두고,
+MTF+RUNA/RUNB 로 뭉친 자료를 잘 먹기 때문이다.
+(이 숫자는 <code>bzip2 -9 -c</code> 를 직접 돌려 센 것이다.)</p>
+<div class="note">대신 느리다. 그리고 zstd -19 는 비슷한 크기를 훨씬 빠르게 낸다 —
+그래서 오늘날 bzip2 를 새로 고르는 일은 드물다.</div>
 <span class="tier a">실행 검증</span>
 </article>
 
@@ -12449,6 +12657,91 @@ runs.bin                 OK     OK     OK     OK     OK
 source.go                OK     OK     OK     OK     OK
 zeros_64k.bin            OK     OK     OK     OK     OK
 </pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-five-2">
+<h3>다섯 언어의 DCT</h3>
+<div class="src"><b>src/go/lossy.go</b><span class="ln">107–129</span><span>Go — 배열 그대로</span></div>
+<pre><code data-lang="go" data-src="src/go/lossy.go" data-lines="107-129">// 8×8 정수 DCT. 1차원 변환 두 번, 각각 반올림 (§19.2).
+func fdct8(block [64]int) [64]int {
+	var tmp, out [64]int
+	for u := 0; u &lt; 8; u++ {
+		for y := 0; y &lt; 8; y++ {
+			s := 0
+			for x := 0; x &lt; 8; x++ {
+				s += dctTable[u*8+x] * block[x*8+y]
+			}
+			tmp[u*8+y] = (s + dctRound) &gt;&gt; dctScale
+		}
+	}
+	for u := 0; u &lt; 8; u++ {
+		for v := 0; v &lt; 8; v++ {
+			s := 0
+			for y := 0; y &lt; 8; y++ {
+				s += dctTable[v*8+y] * tmp[u*8+y]
+			}
+			out[u*8+v] = (s + dctRound) &gt;&gt; dctScale
+		}
+	}
+	return out
+}</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-five-3">
+<h3>표를 뿌리는 도구</h3>
+<div class="src"><b>tools/gen_tables.py</b><span class="ln">108–125</span><span>연속 부분열로 찾는다</span></div>
+<pre><code data-lang="py" data-src="tools/gen_tables.py" data-lines="108-125">def found_in(path, name, want):
+    """표식 사이에서 want 가 **이어진 조각으로** 들어 있는지 본다.
+
+    구간의 숫자를 다 긁어 비교하면 안 된다 — 표식의 절 번호(§18.6)도,
+    C++·Go 의 배열 크기 선언(33)도 숫자이기 때문이다. 언어마다 그 잡음이
+    달라서, "어딘가에 이 서른셋이 이 순서로 있다" 를 묻는 편이 맞다.
+    """
+    text = io.open(os.path.join(BASE, path), encoding='utf-8').read()
+    m = re.search(r'%s-TABLE-BEGIN(.*?)%s-TABLE-END' % (name, name),
+                  text, re.S)
+    if not m:
+        return None
+    nums = [int(x) for x in NUMBERS.findall(m.group(1))]
+    k = len(want)
+    for i in range(len(nums) - k + 1):
+        if nums[i:i + k] == want:
+            return want
+    return nums</code></pre>
+<div class="warn">처음에는 구간의 숫자를 <b>전부 긁어</b> 비교했다.
+그런데 표식 줄의 절 번호(§18.6)와 배열 크기까지 딸려 와서 늘 어긋났다.
+<b>연속 부분열</b>로 찾도록 고쳤다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="ly-five-4">
+<h3>다섯 언어에 같은 표가 있는가</h3>
+<div class="src"><b>tools/gen_tables.py</b><span class="ln">1–20</span><span>25자리를 대조한다</span></div>
+<pre><code data-lang="py" data-src="tools/gen_tables.py" data-lines="1-20"># -*- coding: utf-8 -*-
+"""손으로 적을 수밖에 없는 표를 만들고, 다섯 언어를 대조한다.
+
+    python3 tools/gen_tables.py          # 언어별로 넣을 모양을 찍는다
+    python3 tools/gen_tables.py --check  # 다섯 소스에 그대로 있나
+
+이 덱의 상수는 거의 전부 식에서 나온다 — DEFLATE 의 길이표도, CRC 표도,
+tANS 의 걸음도. 유도할 식이 없는 표는 다섯 가지뿐이다.
+
+  SQUASH      로지스틱 함수를 정수로 옮긴 33개 (SPEC §18.6)
+  DCT         8x8 코사인 행렬 64개, 2^13 배 (§19.2)
+  JPEGQ       JPEG 표준 휘도 양자화표 64개 (§19.4)
+  ADPCMSTEP   IMA ADPCM 걸음표 89개 (§19.6)
+  ADPCMINDEX  IMA ADPCM 지표표 16개 (§19.6)
+
+숫자를 다섯 언어에 손으로 옮기면 어딘가는 틀리고, 틀린 자리는 그 값이
+실제로 쓰이는 입력을 만나기 전까지 안 보인다. DCT 와 코사인은 실수
+계산이라 프로그램이 직접 구하면 반올림이 기계마다 달라지기까지 한다.
+그래서 여기서 한 번 만들고, --check 로 다섯 곳이 같은지 기계가 본다.
+"""</code></pre>
+<p>SQUASH(33) · DCT(64) · JPEGQ(64) · ADPCMSTEP(89) · ADPCMINDEX(16).
+합쳐서 266개 숫자이고, 다섯 언어에 흩어져 있으니 <b>1,330자리</b>다.
+손으로 맞출 수 있는 양이 아니다.</p>
 <span class="tier a">실행 검증</span>
 </article>
 
