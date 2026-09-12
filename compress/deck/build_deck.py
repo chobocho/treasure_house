@@ -204,7 +204,11 @@ CODEDIR_RE = re.compile(r'^<!--CODE (?P<args>.+?)-->$', re.M)
 OUTDIR_RE = re.compile(r'^<!--OUT (?P<args>.+?)-->$', re.M)
 FIG_RE = re.compile(r'^<!--FIG (?P<args>.+?)-->$', re.M)
 FULL_RE = re.compile(r'^<!--FULLSRC (?P<args>[^>]+)-->$', re.M)
+_FULLSRC_CACHE = []
 GLOSS_RE = re.compile(r'^<!--GLOSSARY-->$', re.M)
+# 부록 표지의 파일 수·줄 수. 손으로 적으면 소스가 한 줄만 늘어도 어긋난다 —
+# 3차 리뷰에서 실제로 그랬다. 세는 일은 조립기가 한다.
+SRCSTAT_RE = re.compile(r'<!--SRCSTAT (total-files|total-lines|files)-->')
 # 조각 안에 직접 쓴 <pre><code data-lang data-src> 도 채워 준다 (3단 비교처럼 라벨이 이미 있는 자리용)
 CODE_RE = re.compile(
     r'<pre><code data-lang="(?P<lang>[a-z]+)" data-src="(?P<src>[^"]+)"'
@@ -370,7 +374,48 @@ def expand_glossary(m):
     return gen_glossary.render(rows)
 
 
+def all_fullsrc():
+    """부록에 전문이 실리는 파일 전부. 조각 파일을 한 번만 훑어 외워 둔다."""
+    if not _FULLSRC_CACHE:
+        paths = []
+        for name in sorted(os.listdir(os.path.join(DECK, 'sections'))):
+            if not name.endswith('.html'):
+                continue
+            text = read(os.path.join(DECK, 'sections', name))
+            paths += re.findall(r'^<!--FULLSRC file=(\S+)', text, re.M)
+        _FULLSRC_CACHE.extend(paths)
+    return _FULLSRC_CACHE
+
+
+def expand_srcstat(text):
+    """<!--SRCSTAT ...--> 를 실제로 센 수로 바꾼다.
+
+    total-files · total-lines 는 부록 전체, files 는 다음 files 표식까지의
+    절(節) 하나다. 절 표지 바로 아래에 그 절의 <!--FULLSRC--> 들이 오는
+    구조라 이렇게 세면 맞는다. O(조각 파일 크기).
+    """
+    here = [(m.start(), m.group(1))
+            for m in re.finditer(r'^<!--FULLSRC file=(\S+)', text, re.M)]
+
+    def repl(m):
+        kind = m.group(1)
+        if kind == 'total-files':
+            return '%d' % len(all_fullsrc())
+        if kind == 'total-lines':
+            n = sum(len(src_lines(p)) for p in all_fullsrc())
+            return '{:,}'.format(n)
+        nxt = text.find('<!--SRCSTAT files-->', m.end())
+        end = nxt if nxt >= 0 else len(text)
+        n = sum(1 for pos, _p in here if m.end() < pos < end)
+        if not n:
+            errors.append('SRCSTAT files: 뒤따르는 <!--FULLSRC--> 가 없다')
+        return '%d' % n
+
+    return SRCSTAT_RE.sub(repl, text)
+
+
 def expand(text):
+    text = expand_srcstat(text)
     text = GLOSS_RE.sub(expand_glossary, text)
     text = FULL_RE.sub(expand_fullsrc, text)
     text = CODEDIR_RE.sub(expand_codedir, text)

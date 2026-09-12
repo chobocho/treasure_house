@@ -71,9 +71,10 @@ def main():
         parts.append(
             '<article class="card" id="ap-%s">\n'
             '<p class="chnum">부록</p>\n<h2>%s</h2>\n'
-            '<p class="chsub">파일 %d개 — 한 줄도 빠짐없이</p>\n'
+            '<p class="chsub">파일 <!--SRCSTAT files-->개'
+            ' — 한 줄도 빠짐없이</p>\n'
             '</article>'
-            % (prefix, title, len(paths)))
+            % (prefix, title))
         for i, p in enumerate(paths):
             name = os.path.basename(p)
             lines = io.open(os.path.join(BASE, p),
