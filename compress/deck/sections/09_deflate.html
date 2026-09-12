@@ -1,14 +1,362 @@
 <article class="card section" id="p9">
 <p class="chnum">9부</p>
-<h2>DEFLATE 완전 해부</h2>
-<p class="chsub">블록 3종·동적 허프만·zlib·gzip·CRC-32</p>
+<h2>DEFLATE 완전 분해</h2>
+<p class="chsub">RFC 1951 · 1950 · 1952 — gzip 과 zip 과 png 의 속</p>
 <h4>이 부에서 다루는 것</h4>
 <ul>
-<li>저장·고정·동적 블록 — 셋 중 무엇을 고를 것인가</li>
-<li>길이/거리 부호표와 여분 비트</li>
-<li>동적 블록의 부호 길이를 또 허프만으로 — 3중 구조</li>
-<li>zlib 컨테이너와 Adler-32 · gzip 컨테이너와 CRC-32</li>
-<li>진짜 gzip 이 우리 파일을 푼다 · 우리가 진짜 gzip 파일을 푼다</li>
+<li>LZ77 과 허프만을 붙이는 법 — 두 단이 어떻게 맞물리나</li>
+<li>블록 세 종류와 그 중 하나를 고르는 셈</li>
+<li>길이·거리 부호와 추가 비트</li>
+<li>부호 길이를 또 압축하기 — 부호 길이의 부호</li>
+<li>LSB 먼저 — 여태 쓰던 비트 순서가 뒤집힌다</li>
+<li>zlib · gzip 컨테이너와 Adler-32 · CRC-32</li>
+<li>진짜 zlib · gzip 과 양방향으로 주고받기</li>
 </ul>
-<p class="cap">준비 중입니다 — PLAN.md §5 10단계에서 이 부를 채운다.</p>
+</article>
+
+<article class="card" id="df-why">
+<p class="chnum">1장</p>
+<h2>왜 DEFLATE 인가</h2>
+<p class="chsub">1993년에 나와 아직도 어디에나 있다</p>
+</article>
+
+<article class="card" id="df-why-1">
+<h3>이 형식이 들어 있는 곳</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>형식</th><th>DEFLATE 를 어떻게 쓰나</th></tr>
+<tr><td>gzip (.gz)</td><td>머리말 10바이트 + DEFLATE + CRC-32 + 길이</td></tr>
+<tr><td>zlib (.zz)</td><td>머리말 2바이트 + DEFLATE + Adler-32</td></tr>
+<tr><td>zip (.zip)</td><td>항목마다 DEFLATE</td></tr>
+<tr><td>PNG</td><td>화소를 필터한 뒤 zlib 스트림으로</td></tr>
+<tr><td>HTTP <code>Content-Encoding</code></td><td>gzip · deflate</td></tr>
+<tr><td>PDF</td><td><code>FlateDecode</code> 필터</td></tr>
+<tr><td>Git</td><td>객체 저장이 zlib</td></tr>
+</table></div>
+<div class="key">30년이 지났는데도 대체되지 않은 이유는 <b>충분히 좋고 충분히 빠르며
+어디에나 이미 있기 때문</b>이다. 새 형식(zstd·brotli)이 이기려면 그 셋을 모두 넘어야 한다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-why-2">
+<h3>두 단이 맞물린다</h3>
+<!--FIG  file=deflate_pipeline.svg cap=LZ77 이 되풀이를, 허프만이 치우침을-->
+<p>7부에서 본 것처럼 LZ77 만으로 60.2%, 4부에서 본 것처럼 허프만만으로 65.4% 다.
+둘을 붙이면 41.9% 가 된다.</p>
+<div class="note">그런데 <b>그냥 붙이는 것이 아니다.</b> LZ77 의 출력(리터럴·길이·거리)을
+허프만이 잘 먹을 수 있는 <b>알파벳</b>으로 재설계해야 한다. 그 설계가 이 부의 대부분이다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="df-lsb">
+<p class="chnum">2장</p>
+<h2>비트 순서가 뒤집힌다</h2>
+<p class="chsub">여태 MSB 먼저였는데 DEFLATE 만 LSB 먼저다</p>
+</article>
+
+<article class="card" id="df-lsb-1">
+<h3>규칙 둘</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>순서</th></tr>
+<tr><td>보통의 값(블록 종류, 추가 비트, 길이 …)</td><td><b>LSB 먼저</b> — 낮은 비트부터</td></tr>
+<tr><td>허프만 부호</td><td><b>MSB 먼저</b> — 부호의 높은 비트부터</td></tr>
+</table></div>
+<div class="warn">한 스트림 안에서 두 규칙이 섞인다. RFC 1951 §3.1.1 에 그렇게 적혀 있다.
+"허프만 부호는 거꾸로 쓴다" 를 빠뜨리면 <b>모든 부호가 뒤집혀</b> 풀리지 않는다.</div>
+<!--CODE file=src/py/compresslib/bitio.py lines=94-105 note=값은 낮은 비트부터-->
+<!--CODE file=src/py/compresslib/bitio.py sym=write_code note=부호만 거꾸로 — 높은 비트부터-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-lsb-2">
+<h3>왜 이렇게 만들었을까</h3>
+<ul>
+<li><b>값은 LSB 먼저</b> — 읽는 쪽이 비트를 아래로 쌓으면서 마스크만 하면 된다.
+<code>buf &amp; ((1&lt;&lt;n)-1)</code> 한 줄</li>
+<li><b>부호는 MSB 먼저</b> — 접두 부호를 읽으려면 위 비트부터 봐야 한다.
+비트를 하나씩 붙이며 "이게 부호인가" 를 물어야 하기 때문</li>
+</ul>
+<p>둘 다 <b>읽는 쪽을 싸게 만드는</b> 선택이다. 1993년에는 그 차이가 컸다.</p>
+<div class="tip">우리가 만든 형식이 전부 MSB 먼저인 것은 <b>사람이 따라 읽기 쉽기</b> 때문이다.
+교재에서는 그쪽이 낫고, 호환이 필요한 자리에서는 규격을 따른다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-block">
+<p class="chnum">3장</p>
+<h2>블록 세 종류</h2>
+<p class="chsub">머리 3비트가 전부를 정한다</p>
+</article>
+
+<article class="card" id="df-block-1">
+<h3>머리</h3>
+<!--FIG  file=deflate_block.svg cap=BFINAL 1비트 + BTYPE 2비트-->
+<div class="tblwrap"><table class="kv">
+<tr><th>BTYPE</th><th>이름</th><th>언제 쓰나</th></tr>
+<tr><td>00</td><td>저장(stored)</td><td>줄지 않을 때 — <b>탈출구</b></td></tr>
+<tr><td>01</td><td>고정(fixed)</td><td>작은 블록 — 표를 안 보낸다</td></tr>
+<tr><td>10</td><td>동적(dynamic)</td><td>대부분 — 표를 보내고 그만큼 아낀다</td></tr>
+<tr><td>11</td><td>—</td><td>쓰지 않는다(오류)</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="df-block-2">
+<h3>저장 블록 — 왜 이것이 중요한가</h3>
+<p>저장 블록은 바이트 경계로 정렬한 뒤 길이 2바이트, 그 보수 2바이트, 그리고 원본 그대로다.
+머리말이 <b>5바이트</b>다.</p>
+<!--CODE file=src/py/compresslib/deflate.py sym=_write_stored note=길이와 그 보수를 함께 적는다-->
+<div class="key">1부에서 본 "난수 파일에서 deflate 는 +7바이트만 손해" 가 이것 덕이다.
+<b>최악의 경우를 위한 탈출구</b>가 형식 안에 있는가 — 이것이 잘 설계된 형식의 표시다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-block-3">
+<h3>블록 크기 65535 — 왜 65536 이 아닌가</h3>
+<div class="warn">저장 블록의 LEN 필드가 <b>16비트</b>다. 65536 은 담을 수 없다.
+블록을 65536 으로 잡으면, 그 블록이 저장으로 떨어지는 순간 형식이 깨진다.</div>
+<p>이런 자리가 명세 초안에 65536 으로 적혀 있다가 구현 중에 잡혔다.
+<b>"블록 크기" 라는 자유로워 보이는 값이 사실 다른 필드에 묶여 있는</b> 예다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-alpha">
+<p class="chnum">4장</p>
+<h2>알파벳 설계</h2>
+<p class="chsub">리터럴과 길이를 한 표에 섞는다</p>
+</article>
+
+<article class="card" id="df-alpha-1">
+<h3>리터럴/길이 알파벳 — 288개</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>번호</th><th>뜻</th></tr>
+<tr><td>0~255</td><td>리터럴 바이트</td></tr>
+<tr><td><b>256</b></td><td><b>블록 끝</b></td></tr>
+<tr><td>257~285</td><td>일치 길이 3~258 (추가 비트와 함께)</td></tr>
+<tr><td>286~287</td><td>쓰지 않는다 — 부호표를 2의 거듭제곱으로 맞추려고 남긴 자리</td></tr>
+</table></div>
+<div class="key">리터럴과 길이를 <b>한 표에 섞은 것</b>이 DEFLATE 설계의 핵심이다.
+그래서 "다음이 리터럴인가 일치인가" 를 알리는 플래그 비트가 <b>따로 필요 없다</b> —
+7부의 LZSS 가 여덟 개마다 한 바이트씩 쓰던 그 비트가 사라진다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-alpha-2">
+<h3>추가 비트 — 표를 작게 유지하는 요령</h3>
+<p>길이는 3~258 까지 256가지다. 이것을 전부 부호로 두면 표가 커진다.
+그래서 <b>구간으로 묶고 그 안의 자리는 추가 비트</b>로 적는다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>부호</th><th>추가 비트</th><th>길이</th></tr>
+<tr><td>257</td><td>0</td><td>3</td></tr>
+<tr><td>265</td><td>1</td><td>11~12</td></tr>
+<tr><td>277</td><td>4</td><td>67~82</td></tr>
+<tr><td>284</td><td>5</td><td>227~257</td></tr>
+<tr><td>285</td><td><b>0</b></td><td><b>258</b> — 특별 취급</td></tr>
+</table></div>
+<div class="note">285 가 258 하나만 맡는 것이 이상해 보이지만, 최대 길이는 자주 나오므로
+추가 비트 없이 쓰는 편이 이득이다. <b>실측에서 나온 설계</b>다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-alpha-3">
+<h3>거리 알파벳 — 30개</h3>
+<!--CODE file=src/py/compresslib/deflate_tables.py lines=1-30 note=길이·거리 표는 규격의 값 그대로-->
+<p>거리는 1~32768 이라 범위가 훨씬 넓다. 같은 방식으로 30개 부호 + 최대 13비트 추가로 적는다.</p>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-dyn">
+<p class="chnum">5장</p>
+<h2>부호 길이의 부호</h2>
+<p class="chsub">표를 또 압축한다</p>
+</article>
+
+<article class="card" id="df-dyn-1">
+<h3>문제</h3>
+<p>동적 블록은 리터럴/길이 표(최대 286개)와 거리 표(최대 30개)를 보내야 한다.
+길이 하나에 4비트씩 잡아도 <b>158바이트</b>다. 작은 블록에서는 본문보다 클 수 있다.</p>
+<div class="key">DEFLATE 의 답: <b>길이 목록 자체를 허프만으로 압축한다.</b>
+게다가 되풀이를 위한 특별 기호를 둔다.</div>
+<div class="tblwrap"><table class="kv">
+<tr><th>기호</th><th>뜻</th></tr>
+<tr><td>0~15</td><td>그 길이</td></tr>
+<tr><td>16</td><td>앞 길이를 3~6번 되풀이 (추가 2비트)</td></tr>
+<tr><td>17</td><td>0 을 3~10번 (추가 3비트)</td></tr>
+<tr><td>18</td><td>0 을 11~138번 (추가 7비트)</td></tr>
+</table></div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-dyn-2">
+<h3>코드</h3>
+<!--CODE file=src/py/compresslib/deflate.py sym=cl_encode note=17·18 이 0 무더기를 먹는다-->
+<p>안 쓰는 기호가 많을수록(대부분의 블록이 그렇다) 17·18 이 크게 이긴다.
+256가지 바이트 중 실제로 나오는 것은 보통 100개 안쪽이다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-dyn-3">
+<h3>그리고 그 부호의 길이를 또 보낸다</h3>
+<p>부호 길이의 부호도 허프만이므로 <b>그 표</b>도 보내야 한다. 여기서 재귀를 끊는다.</p>
+<ul>
+<li>부호 길이 알파벳은 19개(0~18)뿐이다</li>
+<li>길이를 <b>3비트 고정</b>으로 적는다 — 19 × 3 = 57비트</li>
+<li>게다가 <b>중요한 순서</b>로 늘어놓아, 뒤쪽의 0 들을 아예 안 보낸다</li>
+</ul>
+<div class="key">순서가 <code>16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15</code> 다.
+흔한 길이를 앞에 두어, 안 쓰는 뒤쪽을 잘라 낼 수 있게 한 것이다.</div>
+<span class="tier c">문서 근거</span>
+</article>
+
+<article class="card" id="df-choose">
+<p class="chnum">6장</p>
+<h2>블록 종류 고르기</h2>
+<p class="chsub">세 가지를 다 세어 보고 가장 작은 것</p>
+</article>
+
+<article class="card" id="df-choose-1">
+<h3>세어 보는 것이 정답이다</h3>
+<!--CODE file=src/py/compresslib/deflate.py lines=247-256 note=빈 입력은 고정 블록 하나 — 03 00-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-choose-2">
+<h3>저장 블록의 정렬 비용</h3>
+<div class="warn">저장 블록은 <b>바이트 경계</b>에서 시작해야 한다.
+그래서 앞 블록이 비트 중간에서 끝났다면 최대 7비트를 버린다.
+즉 <b>저장 블록의 비용은 앞 블록이 어디서 끝났는지에 달려 있다</b>.</div>
+<!--CODE file=src/py/compresslib/bitio.py sym=bit_pos note=정렬 비용을 재려고 둔 것-->
+<p>이런 상호작용 때문에 "블록마다 독립적으로 최적" 이 전체 최적이 아니다.
+진짜 zlib 은 더 나아가 <b>블록을 어디서 끊을지</b>도 고른다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-choose-3">
+<h3>우리 부호기와 zlib 의 차이</h3>
+<!--OUT  file=interop_deflate.txt lines=130-146 note=우리 것과 gzip -9 의 크기-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-choose-4">
+<h3>이 표를 어떻게 읽나</h3>
+<ul>
+<li><b>대부분 ±1% 안쪽</b> — 우리 부호기가 규격을 제대로 쓰고 있다는 뜻</li>
+<li><b>boundary_32768 에서 +0.78%</b> — zlib 은 블록을 더 잘 끊는다</li>
+<li><b>english.txt 에서 −0.02%</b> — 우리가 조금 이겼다. 사슬 한계 128 이
+<code>gzip -9</code> 의 4096 보다 작은데도 이긴 것은 <b>블록 나누기</b>가 달라서다</li>
+<li><b>zeros_64k 에서 +1.04%</b> — 1바이트 차이다(97 대 96)</li>
+</ul>
+<div class="key">바이트가 같아지지는 않는다. 같아질 필요도 없다 —
+<b>DEFLATE 는 복호기만 규정하고 부호기의 선택은 열어 둔 형식</b>이기 때문이다.
+견줄 것은 크기이고, 확인할 것은 <b>서로 풀 수 있는가</b>다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-interop">
+<p class="chnum">7장</p>
+<h2>진짜 도구와 주고받기</h2>
+<p class="chsub">이 부의 진짜 시험</p>
+</article>
+
+<article class="card" id="df-interop-1">
+<h3>우리가 만든 것을 zlib 이 푼다</h3>
+<!--OUT  file=interop_deflate.txt lines=1-15 note=파이썬 zlib.decompress 로 확인-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-interop-2">
+<h3>zlib 이 만든 것을 우리가 푼다 — 레벨 0~9 전부</h3>
+<!--OUT  file=interop_deflate.txt lines=17-32 note=레벨 0 은 저장 블록만 쓴다-->
+<div class="key">레벨 0 을 꼭 넣어야 한다. 우리 부호기는 저장 블록을 거의 안 만들지만,
+<b>복호기는 그것을 읽을 줄 알아야</b> 하기 때문이다.
+골든 대조만으로는 절대 안 잡히는 자리다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-interop-3">
+<h3>gzip 명령과도</h3>
+<!--OUT  file=interop_deflate.txt lines=72-87 note=우리 gzip → 진짜 gzip -d-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-container">
+<p class="chnum">8장</p>
+<h2>컨테이너</h2>
+<p class="chsub">zlib 과 gzip — 같은 DEFLATE 를 다르게 싼다</p>
+</article>
+
+<article class="card" id="df-container-1">
+<h3>zlib (RFC 1950) — 6바이트</h3>
+<!--CODE file=src/py/compresslib/containers.py sym=zlib_compress note=머리 2바이트 + 꼬리 4바이트-->
+<div class="tblwrap"><table class="kv">
+<tr><th>바이트</th><th>뜻</th></tr>
+<tr><td>0x78</td><td>CM=8(deflate), CINFO=7(창 32K)</td></tr>
+<tr><td>0x9C</td><td>FCHECK — 두 바이트를 31 로 나눠떨어지게 맞추는 값</td></tr>
+<tr><td>꼬리 4바이트</td><td>Adler-32 (빅엔디언)</td></tr>
+</table></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-container-2">
+<h3>gzip (RFC 1952) — 18바이트</h3>
+<!--FIG  file=gzip_layout.svg cap=MTIME 을 0 으로 못 박은 이유-->
+<div class="key">MTIME 을 넣으면 <b>같은 입력이 매번 다른 파일</b>이 된다.
+그러면 골든 벡터를 만들 수 없다. 그래서 이 책의 gzip 은 시각을 0 으로 못 박는다 —
+<code>gzip -n</code> 과 같은 뜻이다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="df-checksum">
+<h3>검사합 둘</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>Adler-32</th><th>CRC-32</th></tr>
+<tr><td>쓰는 곳</td><td>zlib</td><td>gzip · zip · png</td></tr>
+<tr><td>셈</td><td>덧셈 두 개 (mod 65521)</td><td>표 보고 xor·시프트</td></tr>
+<tr><td>속도</td><td>빠르다</td><td>표가 있으면 비슷하다</td></tr>
+<tr><td>짧은 자료</td><td><b>약하다</b> — 몇 바이트면 충돌이 쉽다</td><td>고르게 강하다</td></tr>
+</table></div>
+<!--CODE file=src/py/compresslib/checksums.py sym=adler32 note=NMAX 마다 나머지를 취하는 이유-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-checksum-2">
+<h3>CRC-32 — 표를 만드는 코드</h3>
+<!--CODE file=src/py/compresslib/checksums.py sym=_make_crc_table note=다항식 0xEDB88320-->
+<p>표는 <b>손으로 적지 않는다</b>. 다항식 하나에서 나오는 값이라 코드가 만든다.
+다섯 언어가 같은 표를 갖는지는 저절로 확인된다.</p>
+<div class="note">13부의 DCT·양자화 표처럼 <b>규칙에서 안 나오는 표</b>는
+<code>tools/gen_tables.py</code> 가 만들어 다섯 언어에 뿌리고 <code>--check</code> 로 대조한다.
+CRC 표는 규칙에서 나오므로 그럴 필요가 없다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="df-result">
+<h3>성적</h3>
+<!--OUT  file=bench_ratio.txt lines=25-25 note=파일별 비율 표의 머리-->
+<!--OUT  file=bench_ratio.txt lines=27-27 note=deflate 한 줄-->
+<div class="tblwrap"><table class="kv">
+<tr><th>english.txt</th><th>비율</th></tr>
+<tr><td>huffman 만</td><td>65.4%</td></tr>
+<tr><td>lzss 만</td><td>60.2%</td></tr>
+<tr><td>rangecoder (적응 0차)</td><td>63.0%</td></tr>
+<tr><td><b>deflate</b></td><td><b>41.9%</b></td></tr>
+<tr><td>2차 엔트로피가 말하는 벽</td><td>32.0%</td></tr>
+</table></div>
+<p>부호기 하나, 모델 하나로는 닿지 못하는 자리에 <b>둘을 붙여</b> 닿았다.
+그리고 아직 2차 벽까지는 10%p 가 남아 있다 — 11부가 그 자리를 노린다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="df-quiz-1" data-quiz>
+<h3>9부 퀴즈</h3>
+<p class="q">Q. 우리 deflate 가 만든 파일과 <code>gzip -9</code> 가 만든 파일은
+바이트가 다르다. 그런데 이 책은 그것을 결함으로 보지 않는다. 왜?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> DEFLATE 는 <b>복호기만 규정하는</b> 형식이기 때문이다.
+블록을 어디서 끊을지, 어떤 종류를 쓸지, 일치를 얼마나 열심히 찾을지는
+전부 부호기의 자유다. 그래서 <code>gzip -1</code> 과 <code>gzip -9</code> 도
+서로 다른 파일을 내지만 같은 복호기로 풀린다.<br>
+이 책이 <b>다섯 언어의 바이트를 맞추는</b> 것은 우리 형식 안에서의 약속이고,
+<b>진짜 도구와는 크기를 견주고 서로 풀 수 있는지를 본다</b>.
+두 가지 시험이 서로 다른 것을 확인한다.</div>
+<span class="tier a">실행 검증</span>
 </article>
