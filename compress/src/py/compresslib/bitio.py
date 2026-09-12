@@ -38,6 +38,11 @@ class MsbWriter:
     # 것은 LsbWriter 와 쓰는 쪽 코드를 똑같이 만들기 위해서다.
     write_code = write_bits
 
+    def bit_pos(self):
+        """지금까지 쓴 비트 수. DEFLATE 가 stored 블록의 정렬 비용을
+        재는 데 쓴다 — 블록 종류가 앞 블록의 끝 자리에 달려 있다."""
+        return len(self._out) * 8 + self._n
+
     def flush(self):
         if self._n:
             self._out.append(self._buf)
@@ -107,6 +112,11 @@ class LsbWriter:
         """
         for i in range(count - 1, -1, -1):
             self.write_bit((code >> i) & 1)
+
+    def bit_pos(self):
+        """지금까지 쓴 비트 수. DEFLATE 가 stored 블록의 정렬 비용을
+        재는 데 쓴다 — 블록 종류가 앞 블록의 끝 자리에 달려 있다."""
+        return len(self._out) * 8 + self._n
 
     def flush(self):
         if self._n:

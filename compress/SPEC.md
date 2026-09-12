@@ -968,7 +968,11 @@ Pinned encoder choices inside the header:
 
 ### 10.6 Block splitting and type choice
 
-- The encoder consumes the input in blocks of at most **65536 bytes**.
+- The encoder consumes the input in blocks of at most **65535 bytes**. 65535, not
+  65536: a stored block's `LEN` is 16 bits, so a 65536-byte block could never be
+  stored as one block and the type choice below would stop being free for exactly
+  one block size. (The parse itself runs over the whole input, so matches do cross
+  block boundaries — only the token stream is split.)
 - For each block it computes the exact bit cost of all three forms and picks the
   smallest. **On a tie the order of preference is stored, then fixed, then
   dynamic.** Both the tie rule and the exactness matter: an estimate that is off by
