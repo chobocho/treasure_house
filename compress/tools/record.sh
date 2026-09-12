@@ -28,6 +28,7 @@ export GOTOOLCHAIN GOFLAGS
 
 # 두 번 떠서 같아야 하는 것들. 여기 없는 것은 시간이 들어간 캡처다.
 REPRO="parity_*.txt decoders_*.txt interop_*.txt bench_ratio.txt"
+REPRO="$REPRO explain_*.txt"
 
 record_all() {
   # 1. 다섯 언어가 같은 바이트를 내는가 (골든 + 5×5 교차 복호).
@@ -36,7 +37,9 @@ record_all() {
   $PY bench/run_decoders.py
   # 3. 진짜 gzip·zlib·lz4 와 양방향으로 주고받는다.
   $PY interop/run_interop.py
-  # 4. 비율(골든에서)·속도(실제 측정)·manifest.
+  # 4. 바이트마다 주석을 붙인 캡처 (덱의 형식 설명이 쓴다).
+  $PY bench/explain.py
+  # 5. 비율(골든에서)·속도(실제 측정)·manifest.
   $PY bench/run_bench.py
 }
 

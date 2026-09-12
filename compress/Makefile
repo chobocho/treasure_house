@@ -45,7 +45,7 @@ SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
         build-java \
         test test-py test-go test-cpp test-java test-ts \
         golden golden-check corpus-check parity decoders \
-        interop bench \
+        interop bench explain \
         record width \
         demos figs deck deck-verify deck-slices deck-xref deck-check \
         tables-check font font-check all clean
@@ -138,6 +138,10 @@ parity:                 ## 다섯 언어가 같은 바이트를 내는가 (5×5 
 # 언어가 같게 푸는지가 그 자리를 대신한다 (PLAN.md §0.4).
 decoders:               ## 진짜 도구의 파일을 다섯 언어가 같게 푸는가
 	$(PY) bench/run_decoders.py
+
+# 형식 설명의 마지막 한 칸 — 진짜 출력의 바이트마다 주석을 붙인다.
+explain:                ## 바이트를 하나씩 설명한 캡처 (out/explain_*)
+	$(PY) bench/explain.py
 
 interop:                ## 진짜 gzip·bzip2·xz·lz4 와 주고받아 보기
 	$(PY) interop/run_interop.py
