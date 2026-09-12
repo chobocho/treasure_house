@@ -46,7 +46,7 @@ SRC_ALL     := $(SRC_PY) $(SRC_GO) $(SRC_CPP) $(SRC_JAVA) $(SRC_TS)
         golden golden-check corpus-check parity decoders \
         interop bench \
         record width \
-        figs deck deck-verify deck-slices deck-xref deck-check \
+        demos figs deck deck-verify deck-slices deck-xref deck-check \
         tables-check font font-check all clean
 
 help:                   ## 이 목록
@@ -157,6 +157,13 @@ width:                  ## 덱에 실릴 줄이 폴더블 폭(72칸)을 넘는�
 	  || $(PY) tools/width.py Makefile
 
 # ── 덱 ─────────────────────────────────────────────────────────────
+# 데모는 TypeScript 로 쓰고 여기서 한 파일로 옮긴다. 덱은 파일 하나로
+# 열려야 하므로 import 도 번들러도 쓰지 않는다 — 자기완결형 한 덩어리다.
+demos:                  ## 덱 데모 옮기기 (TypeScript → demos.js)
+	@test -x $(TSC) || (echo '  tsc 가 없다 — make deps 먼저'; exit 1)
+	$(TSC) --target es2017 --lib es2017,dom --strict \
+	  --noEmitOnError --outFile deck/demos.js deck/demos/demos.ts
+
 figs:                   ## 도해 SVG 다시 만들기
 	@test -f deck/gen_figs.py \
 	  && $(PY) deck/gen_figs.py \

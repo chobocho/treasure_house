@@ -221,6 +221,31 @@ if (!demoScripts.length) {
     // PLAN.md §5 11단계에서 데모를 붙일 때마다 여기 한 줄씩 늘린다.
     // 비어 있는 동안에는 7) 의 "빈 입력에서 안 죽는다" 까지만 본다.
     const CASES = [
+      // 1부 — abracadabra 의 0차 엔트로피는 2.0404 비트다(손으로도 셀 수 있다)
+      ['entropy', { text: 'abracadabra' }, '2.0404'],
+      ['entropy', { text: 'aaaa' }, '0.0000'],
+      // 2부 — 300 은 두 바이트, 127 은 한 바이트
+      ['varint', { n: '300' }, '2 바이트'],
+      ['varint', { n: '127' }, '1 바이트'],
+      ['varint', { n: '128' }, '2 바이트'],
+      // 3부 — 런 5개는 257-5 = 252 = 0xFC
+      ['packbits', { text: 'aaaaabcdeffffff' }, '0xFC'],
+      ['packbits', { text: 'abc' }, '리터럴'],
+      // 3부 — bbaac 의 MTF 는 [1,0,1,0,2]
+      ['mtf', { text: 'bbaac' }, '[1, 0, 1, 0, 2]'],
+      // 4부 — abracadabra 의 허프만 평균은 2.091 비트
+      ['huffman', { text: 'abracadabra' }, '2.091'],
+      // 5부 — p=0.8 로 0 을 넷 넣으면 폭이 0.4096, 곧 1.288 비트
+      ['interval', { p: '0.8', bits: '0000' }, '1.288'],
+      // 7부 — abcabcabcabd 는 리터럴 3 · 일치 1 (거리 3 길이 8)
+      ['lz77', { text: 'abcabcabcabd' }, '거리 3 길이 8'],
+      ['lz77', { text: 'aaaaaaaa' }, '거리 1 길이 7'],
+      // 10부 — banana → nnbaaa, 원본 자리 3
+      ['bwt', { text: 'banana' }, 'nnbaaa'],
+      ['bwt', { text: 'banana' }, '원본 자리 3'],
+      // 13부 — q=16 이면 0 이 되는 계수가 5개
+      ['quantise', { q: '16' }, '0 이 된 계수'],
+      ['quantise', { q: '1' }, '오차 합  <span class="ok">0</span>'],
     ];
     let good = 0;
     for (const [id, values, want, wantNot] of CASES) {
