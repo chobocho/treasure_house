@@ -207,6 +207,8 @@ static int test_round_trips() {
                               pseudo(20000, 37, 11),
                               pseudo(70000, 131, 3)};
   for (const auto& e : registry::entries()) {
+    // 복호기만 있는 모듈은 건너뛴다
+    if (e.encode == nullptr) continue;
     for (const Bytes& src : cases) {
       Bytes out = e.encode(src);
       if (e.decode(out) != src) {

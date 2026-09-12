@@ -84,7 +84,7 @@ def canonical_codes(lengths):
     return codes
 
 
-def check_complete(lengths):
+def check_complete(lengths, max_length=MAX_LENGTH):
     """크래프트 합이 1 인지. 넘치면 못 푸는 표, 모자라면 손상된 표다.
 
     예외가 하나 있다. **기호가 하나뿐인 표** 는 길이 1 짜리 부호 하나라
@@ -94,8 +94,8 @@ def check_complete(lengths):
     (RFC 1951 도 거리표 하나짜리에 같은 예외를 둔다 — 9부에서 본다.)
     """
     used = [l for l in lengths if l]
-    total = sum(1 << (MAX_LENGTH - l) for l in used)
-    full = 1 << MAX_LENGTH
+    total = sum(1 << (max_length - l) for l in used)
+    full = 1 << max_length
     if total > full:
         raise ValueError('부호표가 넘친다 (크래프트 합 > 1)')
     if total < full:
@@ -111,16 +111,17 @@ class Decoder:
     있다. 메모리 O(길이 상한), 기호 하나당 O(부호 길이).
     """
 
-    def __init__(self, lengths):
+    def __init__(self, lengths, max_length=MAX_LENGTH):
+        self.max_length = max_length
         self.symbols = sorted((l, s)
                               for s, l in enumerate(lengths) if l)
-        self.count = [0] * (MAX_LENGTH + 1)
+        self.count = [0] * (max_length + 1)
         for l, _s in self.symbols:
             self.count[l] += 1
-        self.first_code = [0] * (MAX_LENGTH + 2)
-        self.first_index = [0] * (MAX_LENGTH + 2)
+        self.first_code = [0] * (max_length + 2)
+        self.first_index = [0] * (max_length + 2)
         code = index = 0
-        for l in range(1, MAX_LENGTH + 1):
+        for l in range(1, max_length + 1):
             code = (code + self.count[l - 1]) << 1
             self.first_code[l] = code
             self.first_index[l] = index
@@ -128,7 +129,7 @@ class Decoder:
 
     def read(self, r):
         code = 0
-        for l in range(1, MAX_LENGTH + 1):
+        for l in range(1, self.max_length + 1):
             code = (code << 1) | r.read_bit()
             off = code - self.first_code[l]
             if self.count[l] and off < self.count[l]:

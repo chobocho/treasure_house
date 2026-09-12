@@ -98,18 +98,19 @@ export function canonicalCodes(lengths: number[]): number[] {
 // 크래프트 합이 1 인지. 예외는 **기호 하나짜리 표** — 길이 1 하나라 늘
 // 합이 1/2 이고, zeros_64k 처럼 한 바이트만 있는 파일에서 반드시
 // 나온다.
-export function checkComplete(lengths: number[]): void {
+export function checkComplete(lengths: number[],
+                              maxLength = MAX_LENGTH): void {
   let total = 0;
   let used = 0;
   let only = 0;
   for (const l of lengths) {
     if (l > 0) {
-      total += 2 ** (MAX_LENGTH - l);
+      total += 2 ** (maxLength - l);
       used++;
       only = l;
     }
   }
-  const full = 2 ** MAX_LENGTH;
+  const full = 2 ** maxLength;
   if (total > full) fail('부호표가 넘친다 (크래프트 합 > 1)');
   if (total < full && !(used === 1 && only === 1)) {
     fail('부호표가 모자란다 (크래프트 합 < 1)');
@@ -124,11 +125,17 @@ export interface BitSource {
 // 비트를 하나씩 받아 가며 판정할 수 있다.
 export class Decoder {
   private symbols: number[] = [];
-  private count = new Array<number>(MAX_LENGTH + 1).fill(0);
-  private firstCode = new Array<number>(MAX_LENGTH + 2).fill(0);
-  private firstIndex = new Array<number>(MAX_LENGTH + 2).fill(0);
+  private count: number[];
+  private firstCode: number[];
+  private firstIndex: number[];
+  private maxLength: number;
 
-  constructor(lengths: number[]) {
+  // bzip2 는 부호 길이가 20까지 간다 (§15.4). 기본은 15 그대로다.
+  constructor(lengths: number[], maxLength = MAX_LENGTH) {
+    this.maxLength = maxLength;
+    this.count = new Array<number>(maxLength + 1).fill(0);
+    this.firstCode = new Array<number>(maxLength + 2).fill(0);
+    this.firstIndex = new Array<number>(maxLength + 2).fill(0);
     const pairs: Array<[number, number]> = [];
     for (let s = 0; s < lengths.length; s++) {
       if (lengths[s] > 0) pairs.push([lengths[s], s]);
@@ -140,7 +147,7 @@ export class Decoder {
     }
     let code = 0;
     let index = 0;
-    for (let l = 1; l <= MAX_LENGTH; l++) {
+    for (let l = 1; l <= maxLength; l++) {
       code = (code + this.count[l - 1]) * 2;
       this.firstCode[l] = code;
       this.firstIndex[l] = index;
@@ -150,7 +157,7 @@ export class Decoder {
 
   read(r: BitSource): number {
     let code = 0;
-    for (let l = 1; l <= MAX_LENGTH; l++) {
+    for (let l = 1; l <= this.maxLength; l++) {
       code = code * 2 + r.readBit();
       const off = code - this.firstCode[l];
       if (this.count[l] > 0 && off < this.count[l]) {

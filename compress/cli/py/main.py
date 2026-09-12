@@ -64,7 +64,7 @@ def batch(job_path):
 
 def main(argv):
     if len(argv) == 1 and argv[0] == 'list':
-        print('\n'.join(registry.ORDER))
+        print('\n'.join(registry.ALL))
         return 0
     if len(argv) == 2 and argv[0] == 'batch':
         return batch(argv[1])

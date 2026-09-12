@@ -135,17 +135,22 @@ public final class Huffman {
    * 반드시 나온다.
    */
   public static void checkComplete(int[] lengths) {
+    checkComplete(lengths, MAX_LENGTH);
+  }
+
+  /** bzip2 는 부호 길이가 20까지 간다 (§15.4). 기본은 15 그대로다. */
+  public static void checkComplete(int[] lengths, int maxLength) {
     long total = 0;
     int used = 0;
     int only = 0;
     for (int l : lengths) {
       if (l > 0) {
-        total += 1L << (MAX_LENGTH - l);
+        total += 1L << (maxLength - l);
         used++;
         only = l;
       }
     }
-    long full = 1L << MAX_LENGTH;
+    long full = 1L << maxLength;
     if (total > full) {
       throw new CodecException("부호표가 넘친다 (크래프트 합 > 1)");
     }
@@ -160,11 +165,20 @@ public final class Huffman {
    */
   public static final class Decoder {
     private final int[] symbols;
-    private final int[] count = new int[MAX_LENGTH + 1];
-    private final int[] firstCode = new int[MAX_LENGTH + 2];
-    private final int[] firstIndex = new int[MAX_LENGTH + 2];
+    private final int[] count;
+    private final int[] firstCode;
+    private final int[] firstIndex;
+    private final int maxLength;
 
     public Decoder(int[] lengths) {
+      this(lengths, MAX_LENGTH);
+    }
+
+    public Decoder(int[] lengths, int maxLength) {
+      this.maxLength = maxLength;
+      count = new int[maxLength + 1];
+      firstCode = new int[maxLength + 2];
+      firstIndex = new int[maxLength + 2];
       List<int[]> pairs = new ArrayList<>();
       for (int s = 0; s < lengths.length; s++) {
         if (lengths[s] > 0) {
@@ -179,7 +193,7 @@ public final class Huffman {
       }
       int code = 0;
       int index = 0;
-      for (int l = 1; l <= MAX_LENGTH; l++) {
+      for (int l = 1; l <= maxLength; l++) {
         code = (code + count[l - 1]) << 1;
         firstCode[l] = code;
         firstIndex[l] = index;
@@ -189,7 +203,7 @@ public final class Huffman {
 
     public int read(BitIO.BitSource r) {
       int code = 0;
-      for (int l = 1; l <= MAX_LENGTH; l++) {
+      for (int l = 1; l <= maxLength; l++) {
         code = (code << 1) | r.readBit();
         int off = code - firstCode[l];
         if (count[l] > 0 && off < count[l]) {

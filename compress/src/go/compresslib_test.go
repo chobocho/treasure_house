@@ -199,6 +199,9 @@ func TestRoundTrips(t *testing.T) {
 	cases := [][]byte{nil, []byte("A"), repeat(0, 5000),
 		pseudo(20000, 37, 11), pseudo(70000, 131, 3)}
 	for _, e := range Entries {
+		if e.Encode == nil {
+			continue // 복호기만 있는 모듈은 건너뛴다
+		}
 		for _, src := range cases {
 			enc, err := e.Encode(src)
 			if err != nil {

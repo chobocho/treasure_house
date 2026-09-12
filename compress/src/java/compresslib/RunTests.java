@@ -221,6 +221,9 @@ public final class RunTests {
     byte[][] cases = {new byte[0], s("A"), repeat(0, 5000),
         pseudo(20000, 37, 11), pseudo(70000, 131, 3)};
     for (Registry.Entry e : Registry.ENTRIES) {
+      if (e.encode == null) {
+        continue;             // 복호기만 있는 모듈은 건너뛴다
+      }
       for (byte[] src : cases) {
         byte[] enc = e.encode.apply(src);
         eq(e.decode.apply(enc), src, e.name + " 왕복 " + src.length);

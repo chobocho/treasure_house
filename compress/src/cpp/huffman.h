@@ -107,17 +107,18 @@ inline std::vector<int> canonical_codes(
 // 크래프트 합이 1 인지. 예외는 **기호 하나짜리 표** — 길이 1 하나라 늘
 // 합이 1/2 이고, zeros_64k 처럼 한 바이트만 있는 파일에서 반드시
 // 나온다.
-inline void check_complete(const std::vector<int>& lengths) {
+inline void check_complete(const std::vector<int>& lengths,
+                           int max_length = kMaxLength) {
   uint64_t total = 0;
   int used = 0, only = 0;
   for (int l : lengths) {
     if (l) {
-      total += uint64_t{1} << (kMaxLength - l);
+      total += uint64_t{1} << (max_length - l);
       ++used;
       only = l;
     }
   }
-  uint64_t full = uint64_t{1} << kMaxLength;
+  uint64_t full = uint64_t{1} << max_length;
   if (total > full) fail("부호표가 넘친다 (크래프트 합 > 1)");
   if (total < full && !(used == 1 && only == 1))
     fail("부호표가 모자란다 (크래프트 합 < 1)");
@@ -127,21 +128,23 @@ inline void check_complete(const std::vector<int>& lengths) {
 // 비트를 하나씩 받아 가며 판정할 수 있다.
 class Decoder {
  public:
-  explicit Decoder(const std::vector<int>& lengths) {
+  explicit Decoder(const std::vector<int>& lengths,
+                   int max_length = kMaxLength)
+      : max_length_(max_length) {
     std::vector<std::pair<int, int>> pairs;
     for (size_t s = 0; s < lengths.size(); ++s)
       if (lengths[s]) pairs.emplace_back(lengths[s], i32(s));
     std::sort(pairs.begin(), pairs.end());
     symbols_.reserve(pairs.size());
-    count_.assign(kMaxLength + 1, 0);
+    count_.assign(sz(max_length) + 1, 0);
     for (auto& p : pairs) {
       symbols_.push_back(p.second);
       count_[sz(p.first)] += 1;
     }
-    first_code_.assign(kMaxLength + 2, 0);
-    first_index_.assign(kMaxLength + 2, 0);
+    first_code_.assign(sz(max_length) + 2, 0);
+    first_index_.assign(sz(max_length) + 2, 0);
     int code = 0, index = 0;
-    for (int l = 1; l <= kMaxLength; ++l) {
+    for (int l = 1; l <= max_length; ++l) {
       code = (code + count_[sz(l - 1)]) << 1;
       first_code_[sz(l)] = code;
       first_index_[sz(l)] = index;
@@ -151,7 +154,7 @@ class Decoder {
   template <class Reader>
   int read(Reader& r) const {
     int code = 0;
-    for (int l = 1; l <= kMaxLength; ++l) {
+    for (int l = 1; l <= max_length_; ++l) {
       code = (code << 1) | r.read_bit();
       int off = code - first_code_[sz(l)];
       if (count_[sz(l)] && off < count_[sz(l)])
@@ -162,6 +165,7 @@ class Decoder {
   }
 
  private:
+  int max_length_ = kMaxLength;
   std::vector<int> symbols_, count_, first_code_, first_index_;
 };
 
