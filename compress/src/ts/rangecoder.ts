@@ -56,6 +56,18 @@ export class Encoder {
     }
   }
 
+  // 빈도 표에서 기호 하나를 적는다 (SPEC §17.2). §8 의 비트 부호기와
+  // 스트림도 정규화도 같이 쓴다 — 모델이 둘을 섞어 써도 된다.
+  encodeFreq(cum: number, freq: number, tot: number): void {
+    const r = Math.floor(this.range / tot);
+    this.low += r * cum;
+    this.range = r * freq;
+    while (this.range < TOP) {
+      this.range = (this.range * 256) % U32;
+      this.shiftLow();
+    }
+  }
+
   flush(): void {
     for (let i = 0; i < 5; i++) this.shiftLow();
   }
@@ -88,6 +100,24 @@ export class Decoder {
       fail('스트림 끝을 너무 많이 넘었다');
     }
     return 0;
+  }
+
+  // 지금 자리가 [0, tot) 가운데 어디인지 (SPEC §17.2). 이 값으로 기호를
+  // 찾고, 찾은 기호의 (cum, freq) 로 decodeUpdate 를 불러야 한다.
+  decodeFreq(tot: number): number {
+    const r = Math.floor(this.range / tot);
+    const v = Math.floor(this.code / r);
+    return v >= tot ? tot - 1 : v;
+  }
+
+  decodeUpdate(cum: number, freq: number, tot: number): void {
+    const r = Math.floor(this.range / tot);
+    this.code -= r * cum;
+    this.range = r * freq;
+    while (this.range < TOP) {
+      this.range = (this.range * 256) % U32;
+      this.code = (this.code * 256 + this.nextByte()) % U32;
+    }
   }
 
   decodeBit(probs: Uint16Array, i: number): number {

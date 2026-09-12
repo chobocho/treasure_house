@@ -64,6 +64,19 @@ class Encoder:
             self.range = (self.range << 8) & U32
             self.shift_low()
 
+    def encode_freq(self, cum, freq, tot):
+        """빈도 표에서 기호 하나를 적는다 (SPEC §17.2).
+
+        §8 의 비트 부호기와 스트림도 정규화도 같이 쓴다 — 모델이 둘을
+        섞어 써도 된다. tot 는 2^16 아래여야 r 이 0 이 되지 않는다.
+        """
+        r = self.range // tot
+        self.low += r * cum
+        self.range = r * freq
+        while self.range < TOP:
+            self.range = (self.range << 8) & U32
+            self.shift_low()
+
     def flush(self):
         for _ in range(5):
             self.shift_low()
@@ -99,6 +112,25 @@ class Decoder:
         if self.pos > len(self.src) + 5:
             raise ValueError('스트림 끝을 너무 많이 넘었다')
         return 0
+
+    def decode_freq(self, tot):
+        """지금 자리가 [0, tot) 가운데 어디인지 (SPEC §17.2).
+
+        이 값으로 기호를 찾고, 그 기호의 (cum, freq) 로 decode_update 를
+        불러야 한다. 둘로 나뉜 것은 "무엇인지 알아야 얼마나 좁힐지 안다"
+        는 순서 때문이다.
+        """
+        r = self.range // tot
+        v = self.code // r
+        return tot - 1 if v >= tot else v
+
+    def decode_update(self, cum, freq, tot):
+        r = self.range // tot
+        self.code = (self.code - r * cum) & U32
+        self.range = r * freq
+        while self.range < TOP:
+            self.range = (self.range << 8) & U32
+            self.code = ((self.code << 8) | self._byte()) & U32
 
     def decode_bit(self, probs, i):
         bound = (self.range >> PROB_BITS) * probs[i]

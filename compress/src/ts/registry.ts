@@ -13,6 +13,7 @@ import * as lzmadec from './lzmadec';
 import * as lzss from './lzss';
 import * as lzw from './lzw';
 import * as mtf from './mtf';
+import * as ppm from './ppm';
 import * as rangecoder from './rangecoder';
 import * as rle from './rle';
 
@@ -41,6 +42,7 @@ export const ENTRIES: Entry[] = [
   { name: 'ans', encode: ans.encode, decode: ans.decode },
   { name: 'lz4block',
     encode: lz4block.encode, decode: lz4block.decode },
+  { name: 'ppm', encode: ppm.encode, decode: ppm.decode },
   // 복호기만 있는 모듈 (PLAN.md §0.4)
   { name: 'bzip2dec', encode: null, decode: bzip2dec.decode },
   { name: 'lzmadec', encode: null, decode: lzmadec.decode },
