@@ -176,10 +176,12 @@ def jpeglite_encode(pixels, width, height, quality=50):
                 if v == 0 and k > 0:
                     run += 1
                     continue
+                # (254, 0) 은 복호기가 254 를 건너뛰고 0 을 하나 놓으니
+                # 0 이 255 개다. 254 를 빼면 한 칸 어긋난다.
                 while run >= EOB:
                     stream.append(EOB - 1)
                     stream.append(0)
-                    run -= EOB - 1
+                    run -= EOB
                 stream.append(run)
                 stream += varint.put((v << 1) ^ (v >> 63) if v >= 0
                                      else ((-v) << 1) - 1)

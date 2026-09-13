@@ -80,7 +80,7 @@ export function decode(src: Bytes): Bytes {
   return out;
 }
 
-// 0런 부호 (SPEC §3.2) — bzip2 의 RUNA/RUNB. 13번 모듈이 쓴다.
+// 0런 부호 (SPEC §3.2) — bzip2 의 RUNA/RUNB. bzip2dec(§15)이 쓴다.
 export const RUN_A = 0;
 export const RUN_B = 1;
 

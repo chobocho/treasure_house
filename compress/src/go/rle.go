@@ -106,7 +106,7 @@ func RleDecode(src []byte) (out []byte, err error) {
 	return result, nil
 }
 
-// 0런 부호 (SPEC §3.2) — bzip2 의 RUNA/RUNB. 13번 모듈이 쓴다.
+// 0런 부호 (SPEC §3.2) — bzip2 의 RUNA/RUNB. bzip2dec(§15)이 쓴다.
 const (
 	runA = 0
 	runB = 1

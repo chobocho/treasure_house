@@ -175,7 +175,7 @@ export function jpegliteEncode(pixels: Bytes, width: number,
         while (run >= EOB) {
           stream.push(EOB - 1);
           stream.push(0);
-          run -= EOB - 1;
+          run -= EOB;
         }
         stream.push(run);
         stream.extend(varint.put(v >= 0 ? v * 2 : -v * 2 - 1));

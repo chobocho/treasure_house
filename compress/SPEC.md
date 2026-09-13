@@ -506,9 +506,9 @@ five implementations cannot disagree about tree shape.
 | tie-break | longest wins; on equal length the **nearest** (smallest distance) wins |
 
 **The chain array is indexed by absolute position, not by `pos & 32767`.** zlib
-wraps it into a window-sized array, and that is exactly why zlib's effective maximum
-distance is `32768 - 262 = 32506`: the slot for `pos - 32768` has already been
-overwritten by `pos`. Ours costs O(n) memory instead of O(window) and can actually
+wraps it into a window-sized array and keeps `MIN_LOOKAHEAD = 258+3+1 = 262` bytes
+free at the end of the window, so its `MAX_DIST` is `32768 - 262 = 32506` — that is
+where zlib's effective maximum distance comes from. Ours costs O(n) memory instead of O(window) and can actually
 reach distance 32768 — which is what `corpus/boundary_32768.bin` checks, and what
 part 7 of the deck compares against real gzip.
 

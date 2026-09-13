@@ -103,6 +103,21 @@ class TestJpegLite(unittest.TestCase):
         self.assertEqual((w, h, len(got)), (37, 21, 37 * 21))
         self.assertGreater(psnr(src, got), 25.0)
 
+    def test_pinned_numbers_match_other_languages(self):
+        # 다른 네 언어의 시험이 못 박은 37×40 그림판과 같은 숫자다.
+        # 13부가 "다섯 언어의 시험에 기댓값으로 박혀 있다" 고 말하려면
+        # 파이썬에도 있어야 한다. PSNR 만으로는 크기의 회귀를 못 잡는다.
+        px = bytes((x * 7 + y * 13 + ((x * y) >> 3)) & 255
+                   for y in range(40) for x in range(37))
+        want_len = [272, 537, 1086]
+        want_err = [28002, 16409, 5151]
+        for q, wl, we in zip((10, 50, 90), want_len, want_err):
+            enc = lossy.jpeglite_encode(px, 37, 40, q)
+            got, w, h = lossy.jpeglite_decode(enc)
+            self.assertEqual((len(enc), w, h), (wl, 37, 40), q)
+            err = sum(abs(a - b) for a, b in zip(got, px))
+            self.assertEqual(err, we, q)
+
     def test_bad_magic_raises(self):
         with self.assertRaises(ValueError):
             lossy.jpeglite_decode(b'XXX' + b'\x00' * 10)
