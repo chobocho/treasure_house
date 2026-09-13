@@ -207,7 +207,7 @@ func JpegliteEncode(pixels []byte, width, height, quality int) []byte {
 				}
 				for run >= jpegEob {
 					stream = append(stream, byte(jpegEob-1), 0)
-					run -= jpegEob - 1
+					run -= jpegEob
 				}
 				stream = append(stream, byte(run))
 				var z uint64

@@ -189,7 +189,7 @@ inline Bytes jpeglite_encode(const Bytes& pixels, size_t width,
         while (run >= kEob) {
           stream.push_back(u8(kEob - 1));
           stream.push_back(0);
-          run -= kEob - 1;
+          run -= kEob;
         }
         stream.push_back(u8(run));
         uint64_t z = (v >= 0) ? (u64(v) << 1) : ((u64(-v) << 1) - 1);

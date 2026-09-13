@@ -343,8 +343,10 @@ def fig_rice():
                size=9)
         s.mono(x + (bw - 6) / 2, y0 + 106 - hh, str(bits),
                anchor='middle', size=9, fill='var(--muted)')
-    s.text(10, 166, 'k=%d 에서 %d비트로 가장 짧다.'
-           % (best[0], best[1]), size=11)
+    # k=6 과 k=7 이 8비트로 같다 — 하나만 적으면 그림과 글이 어긋난다.
+    ties = [k for k in range(0, 8) if (100 >> k) + 1 + k == best[1]]
+    s.text(10, 166, 'k=%s 에서 %d비트로 가장 짧다.'
+           % ('·'.join(str(k) for k in ties), best[1]), size=11)
     return s
 
 

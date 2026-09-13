@@ -106,7 +106,7 @@ public final class Rle {
     return out;
   }
 
-  // 0런 부호 (SPEC §3.2) — bzip2 의 RUNA/RUNB. 13번 모듈이 쓴다.
+  // 0런 부호 (SPEC §3.2) — bzip2 의 RUNA/RUNB. bzip2dec(§15)이 쓴다.
   public static final int RUN_A = 0;
   public static final int RUN_B = 1;
 

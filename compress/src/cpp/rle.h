@@ -91,7 +91,7 @@ inline Bytes decode(const Bytes& src) {
   return out;
 }
 
-// 0런 부호 (SPEC §3.2) — bzip2 의 RUNA/RUNB. 13번 모듈이 쓴다.
+// 0런 부호 (SPEC §3.2) — bzip2 의 RUNA/RUNB. bzip2dec(§15)이 쓴다.
 constexpr int kRunA = 0;
 constexpr int kRunB = 1;
 

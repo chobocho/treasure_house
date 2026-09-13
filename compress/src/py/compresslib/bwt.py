@@ -20,7 +20,7 @@
 """
 from compresslib import varint
 
-BLOCK = 1 << 16          # 64 KiB. bzip2 의 900 KiB 는 13번 모듈에서.
+BLOCK = 1 << 16        # 64 KiB. bzip2 의 900 KiB 는 bzip2dec(§15)에서.
 ALPHABET = 256
 
 

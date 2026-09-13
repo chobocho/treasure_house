@@ -14,7 +14,7 @@ class TestStreamShape(unittest.TestCase):
 
     def test_first_byte_is_zero(self):
         # cache 가 0, cacheSize 가 1 로 시작하므로 첫 바이트는 늘 0
-        # 이다. 진짜 .lzma 파일도 이렇게 시작한다 — 14번 모듈이 여기
+        # 이다. 진짜 .lzma 파일도 이렇게 시작한다 — lzmadec(§16)이 여기
         # 기댄다.
         out = rc.encode(b'hello world')
         self.assertEqual(out[1], 0)

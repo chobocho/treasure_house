@@ -198,7 +198,7 @@ public final class Lossy {
           while (run >= EOB) {
             stream.push(EOB - 1);
             stream.push(0);
-            run -= EOB - 1;
+            run -= EOB;
           }
           stream.push(run);
           long z = v >= 0 ? (long) v * 2 : (long) (-v) * 2 - 1;
