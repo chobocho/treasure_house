@@ -136,7 +136,8 @@ if (!ext) ok('외부 자원 참조 없음 — 파일 하나로 열린다');
 // 등록 스크립트가 문법 오류거나 이름을 잘못 쓰면 여기서 throw 한다.
 const demoScripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
   .map((m) => m[1])
-  .filter((s) => s.includes("__demo('") || s.includes('window.__demo ='));
+  .filter((s) => s.includes("__demo('") || s.includes('window.__demo =')
+    || s.includes('window.__TFM_'));          // 추론 데모의 가중치
 if (!demoScripts.length) {
   ok('등록된 데모 없음 (뼈대 단계)');
 } else {
@@ -230,6 +231,49 @@ if (!demoScripts.length) {
     // out/ 과 글자까지 같아야 한다 — 어긋나면 사례를 넓히지 말고 까닭을 찾는다.
     // 비어 있는 동안에는 7) 의 "빈 입력에서 안 죽는다" 까지만 본다.
     const CASES = [
+      // 값은 전부 py/transformerlib 가 낸 것이다.
+      // ops.softmax([2, 1, 0, -1]) = 0.6439 0.2369 0.0871 0.0321
+      ['d-softmax', { logits: '2 1 0 -1', tau: '1' }, '칸 1 0.2369'],
+      // ops.softmax([4, 2, 0, -2]) — 온도 0.5 = 0.8650 0.1171 …
+      ['d-softmax', { logits: '2 1 0 -1', tau: '0.5' }, '칸 0 0.8650'],
+      ['d-softmax', { logits: '2 1 0 -1', tau: '0' }, 'argmax: 칸 0'],
+      // attention.scaled_dot_product(Q, Q, V, causal=False) 첫 행
+      ['d-attn', { q: '1 0; 0 1; 1 1', k: '1 0; 0 1; 1 1', v: '10 0; 0 10; 5 5' },
+        '질의 0 가중치 [0.401 0.198 0.401] → 출력 [6.017 3.983]'],
+      // 같은 것 causal=True 둘째 행
+      ['d-attn', { q: '1 0; 0 1; 1 1', k: '1 0; 0 1; 1 1', v: '10 0; 0 10; 5 5',
+        causal: true }, '질의 1 가중치 [0.330 0.670 0.000] → 출력 [3.302 6.698]'],
+      // posenc.sinusoidal(10, 16) 의 3행 앞 네 칸 · PE(3)·PE(4)
+      ['d-sinpe', { dim: '16', pos: '3', shift: '1' }, '[0.1411 -0.9900 0.8126 0.5828'],
+      ['d-sinpe', { dim: '16', pos: '7', shift: '1' }, '= 7.4852'],
+      // posenc.sinusoidal(60, 64): PE(50)·PE(55)
+      ['d-sinpe', { dim: '64', pos: '50', shift: '5' }, '= 23.5040'],
+      // model.count_params(Config(50257, 1024, 768, 12, 12, 3072))
+      ['d-params', { vocab: '50257', ctx: '1024', dim: '768', layers: '12', ff: '3072' },
+        '124,439,808'],
+      // model.count_params(Config(13, 13, 64, 2, 4, 256)) — 8부 덧셈 모델
+      ['d-params', { vocab: '13', ctx: '13', dim: '64', layers: '2', ff: '256' }, '101,760'],
+      // optim.lr_schedule(1000, 6e-3, 6e-4, 150, 3000) = 4.899e-03
+      ['d-lr', { hi: '6e-3', lo: '6e-4', warm: '150', total: '3000', step: '1000' },
+        '학습률 4.899e-3'],
+      // optim.lr_schedule(100, …) = 4.000e-03 (워밍업 중)
+      ['d-lr', { hi: '6e-3', lo: '6e-4', warm: '150', total: '3000', step: '100' },
+        '학습률 4.000e-3'],
+      // sample.filtered([3, 2.5, 2, 1, 0, -1], 1.0, 3, None)
+      ['d-topk', { logits: '3 2.5 2 1 0 -1', tau: '1', k: '3', p: '0' }, '칸  2  0.1863'],
+      // sample.filtered(…, 1.0, 0, 0.8) — 누적 0.906 에서 멈춘다
+      ['d-topk', { logits: '3 2.5 2 1 0 -1', tau: '1', k: '0', p: '0.8' },
+        '남은 후보 3개'],
+      // sample.filtered(…, 2.0, 4, 0.9) — 넷이 남는다
+      ['d-topk', { logits: '3 2.5 2 1 0 -1', tau: '2', k: '4', p: '0.9' }, '칸  3  0.1336'],
+      // tokenizer.pretokenize — 공백 둘이면 앞 하나가 따로 남는다
+      ['d-pretok', { text: '김 첨지는  오늘 2원을 벌었다!' },
+        '|김| 첨지는| | 오늘| 2|원을| 벌었다|!|'],
+      ['d-pretok', { text: "ROMEO: I'll  go 123abc" }, "|ROMEO|:| I|'|ll| | go| 123|abc|"],
+      // 문서 안 추론 — 기댓값은 out/c_add.txt 2절에 C 가 적은 답 그대로
+      ['d-add', { a: '763', b: '164' }, '모델이 쓴 것 7290'],
+      ['d-add', { a: '683', b: '858' }, '모델이 쓴 것 1451'],
+      ['d-add', { a: '936', b: '949' }, '모델이 쓴 것 5881'],
     ];
     let good = 0;
     for (const [id, values, want, wantNot] of CASES) {

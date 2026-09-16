@@ -810,6 +810,10 @@ def main():
     # 이 덱의 데모 함수들. 아직 없으면 자리만 비운다 — 뼈대 단계에서도 덱은 열려야 한다.
     demos = os.path.join(DECK, 'demos.js')
     glue = '<script>\n%s\n</script>' % read(demos).rstrip() if os.path.exists(demos) else ''
+    # 추론 데모의 가중치(tools/export_js.py 가 만든다)는 데모보다 먼저 싣는다
+    weights = os.path.join(DECK, 'demos_model.js')
+    if glue and os.path.exists(weights):
+        glue = '<script>\n%s\n</script>\n' % read(weights).rstrip() + glue
     tail = tail.replace('<!--DEMOS-->', glue)
 
     doc = head.rstrip('\n') + '\n\n<main class="prose">\n\n' + body + '\n\n' + tail

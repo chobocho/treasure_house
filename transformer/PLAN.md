@@ -549,3 +549,44 @@ The user approved every recommendation below as-is. Each row is now a decision.
   read/write lives in `model.c` (the model test loads checkpoints before train.c exists).
 - Probe for step 7: `tfs train` on add (V 13, T 16, d 48, L 2, h 4, B 32, 8 threads) runs 50 steps in
   about 3 s on this machine (not a deck number; recorded here only to size runs).
+
+### Step 7 — run_all.py + tools/record.sh (2026-09-16)
+
+- 22 demos in `py/demo/`, `run_all.py` runs them serially (`--only` substring, `--check` width ≤ 108
+  except `curve_*`/`attnmaps`, `out/manifest.json`). Shared helpers: `report.py`, `crun.py`
+  (`tfs` wrapper, log parser), `tasks.py` (five synthetic tasks), `lm.py` (ko/en LM + samples).
+- Name clash: the Python↔C comparison demo was first `demo_c_parity.py`, which is also the parity
+  *task*; renamed to `demo_c_vs_py.py` → `out/c_vs_py.txt`.
+- **Addition was fragile.** d 48: the loss plateau (≈ 1.59) broke anywhere from step ~1,000 to past
+  3,000, so the same config gave 100 % at 3,500 steps and 6.9 % at 3,000. sin/RoPE did not help.
+  d 64: a first recording at 2,200 steps gave reversed-answer add 11 % while plain add got 99.9 %.
+  Final: d 64, 3,000 steps for both → reversed 99.8 %, plain 98.8 % (out/c_add*.txt). The deck
+  (part 8 ch 7) therefore does **not** claim that reversing helps; `gen_tasks.py` calls it a hypothesis.
+- **Parity did not learn** (48.1 % test, loss flat at 17·ln2/19 ≈ 0.620 = "answer bit not learned").
+  A running-parity scratchpad variant (T 34, 1,600 steps) was probed and also failed (0 % exact);
+  not recorded, not in the deck. Kept as an honest failure; the loss-floor slide explains the curve.
+- Loss floors match captures to 3 digits: add 6·ln10/13, sort/reverse 6·ln26/14 (aligned windows, the
+  last target is the next line's random first char).
+- Per-run time exceeds §0.7's 3 min for add/addplain/sort on this machine (≈ 4–6 min each); accepted
+  rather than shrinking the models back into the fragile regime. Shapes are in `deck/budget.txt`.
+- Never rebuild `c/tfs` while a recording runs (a `make cc` mid-run killed the ko trial with SIGBUS);
+  probes use a copy `.build/tfs_trial`.
+
+### Step 8 — figures (2026-09-16)
+
+- 23 figures in `deck/gen_figs.py`; all rendered with `make figs-png` and looked at. Fixes after
+  viewing the C-dependent five: attention maps were clipped on the right (4 panels centred now);
+  Korean token labels were `�` (byte-BPE tokens holding part of a syllable) → the ko map prints the
+  source sentence instead; LM validation dots were one colour for both languages → per-language.
+
+### Step 10 — demos (2026-09-16)
+
+- `deck/demos.js`: 8 demos (softmax temperature, attention calculator, sinusoidal PE, parameter
+  calculator, LR schedule, top-k/top-p, pre-tokenizer, in-deck addition model). 20 `check_deck.js`
+  CASES, expected values printed by `py/transformerlib` (and, for `d-add`, copied from out/c_add.txt).
+- In-deck inference: `tools/export_js.py` writes `deck/demos_model.js` (float16, 266 KB; float32
+  would be 543 KB). `--check` (`make demo-infer`, part of `make all`) runs all 1,000 test prompts
+  through the JS function in node and compares with `tfs accuracy --show 1000`. On the half-trained
+  2,200-step checkpoint float16 changed 4 answers (float32 weights gave 0 → quantisation, not op
+  order); on the final checkpoint 0 of 1,000 differ. If a future checkpoint differs, ship float32
+  rather than widening the check.

@@ -37,7 +37,7 @@ C_LIB       := $(filter-out c/main.c c/tests/%,$(SRC_C))
 .PHONY: help test test-py test-c cc corpus papers run run-check \
         record parity figs figs-check figs-png tables claims-check \
         width deck deck-verify deck-slices deck-xref deck-check \
-        font font-check all clean
+        demo-model demo-infer font font-check all clean
 
 help:                   ## 이 목록
 	@grep -hE '^[a-z][a-zA-Z0-9_-]*:.*?## ' $(MAKEFILE_LIST) \
@@ -148,6 +148,14 @@ deck-xref:              ## "N부 M장" 이 진짜 그 자리를 가리키는지
 deck-check:             ## 완성된 덱 점검 (node DOM 스텁 + 데모 기댓값)
 	$(NODE) deck/check_deck.js $(DECK) $(if $(SKEL),--skeleton,)
 
+# 문서 안 덧셈 모델은 float16 으로 줄여 실었다. 줄인 만큼 로짓이
+# 달라지니 greedy 답이 C 와 같은지를 시험 줄 전부로 잰다.
+demo-model:             ## ckpt/c_add.ckpt → deck/demos_model.js
+	$(PY) tools/export_js.py
+
+demo-infer:             ## 문서 안 추론 1000줄이 C 의 답과 같은지
+	$(PY) tools/export_js.py --check
+
 # 폰·태블릿에는 한글 고정폭 글꼴이 없다. 안 실으면 표와 코드가 어긋난다.
 font:                   ## 고정폭 글꼴(DeckMono) 서브셋 내장
 	$(PY) $(TOOLS)/embed_mono_font.py $(DECK)
@@ -157,7 +165,8 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
 all: tables run-check figs-check deck deck-verify deck-slices \
-     deck-xref deck-check claims-check width font font-check  ## 전부
+     deck-xref deck-check demo-infer claims-check width font \
+     font-check  ## 전부
 
 clean:                  ## 덱·빌드 찌꺼기 지우기 (캡처·자료는 남긴다)
 	rm -rf $(DECK) .build .svgrender c/tfs
