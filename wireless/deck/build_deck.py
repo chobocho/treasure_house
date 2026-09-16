@@ -347,7 +347,11 @@ def expand_fig(m):
 
 
 # 자유 라이선스만 싣는다 (PLAN.md §0.9). 여기 없는 표기는 조립 실패다.
-FREE_LICENSES = ('PD', 'Public Domain', 'CC0', 'CC BY', 'CC BY-SA')
+# 공용이 돌려주는 이름은 대소문자가 들쭉날쭉하다('Public domain'·
+# 'CC BY-SA 3.0 fr'). 소문자로 낮춰 견준다 — 자유 라이선스를
+# 대문자 하나 때문에 거절하는 일이 실제로 있었다.
+FREE_LICENSES = ('pd', 'public domain', 'cc0', 'cc by', 'cc-by',
+                 'cc by-sa', 'cc-by-sa')
 _PHOTOS = {}
 _SPECS = {}
 _SPEC_USED = []
@@ -449,7 +453,7 @@ def expand_photo(m):
                       % name)
         return ''
     title, lic, author, _slide, _w = meta
-    if not lic.startswith(FREE_LICENSES):
+    if not lic.lower().startswith(FREE_LICENSES):
         errors.append('%s 의 라이선스가 자유롭지 않다: %r' % (name, lic))
         return ''
     raw = io.open(p, 'rb').read()
