@@ -555,3 +555,26 @@ the property that *is* true, and the reason is in the test's own docstring.
 - Ten slides carried `실행 검증` with no CODE/OUT/FIG on them. Badges are now earned, not assumed.
 - Nine glossary arrows pointed at a later occurrence than the first. The checker cannot tell "first"
   from "exists", so the file header now says exactly what is guaranteed instead of implying more.
+
+### Step 12b — review pass 2 (2026-09-16)
+
+- A different pair of angles from pass 1, deliberately: one subagent re-derived **every prose number
+  from first principles** (~200 of them), the other audited **narrative and structural coherence**
+  (back-references, cover promises, duplication, glossary vs body, quiz logic). 47 findings, all
+  re-verified here before fixing.
+- Counts: 사실오류 9 · 수식 6 · 되짚기 6 · 표기 19 · 용어집 9 · 구조 3 (categories overlap).
+- Before running the subagents, the defect class pass 1 found by hand was **promoted to a machine
+  check**: `build_deck.py` now refuses an `a` (실행 검증) badge on a slide that carries no `<pre>`,
+  demo, figure or generated table. It caught 16 slides immediately.
+- Two findings are worth remembering because of where they came from:
+  1. **Pass 1's own fix introduced a defect.** Rewriting the GEO link-budget sentence, I added the
+     38 dBi transmit gain on top of the 91 dBm EIRP — but the EIRP already contains it (53 + 38).
+     A correction is a change like any other and needs the same arithmetic check.
+  2. **The badge checker mis-read the badge legend slide**, because it took the *first* `tier` tag in
+     a card and `howto-tier` draws all four badges as examples. It now takes the last one. A checker
+     that reads the document also has to survive the document that describes it.
+- Also: nine `out/*.txt` sections were computed, tested and reproducible — and never shown anywhere.
+  They are now slides (AWGN/Rayleigh capacity and outage, water-filling, MIMO capacity slope,
+  required Eb/N0 and receiver sensitivity, the LTE turbo encoder, the NR grid, the LDPC base matrix).
+  A check for "evidence produced but never cited" is worth having; for now it is a one-off script.
+- Final: **870 slides · 269 glossary entries**, `make all` green end to end.
