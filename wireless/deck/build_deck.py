@@ -795,7 +795,11 @@ def tier_report(doc):
     total = c = none = ill = 0
     for m in ART_RE.finditer(doc):
         attrs, aid, inner = m.group(1) + m.group(3), m.group(2), m.group(4)
-        t = re.search(r'<span class="tier (a|b|c|ill)\b', inner)
+        # 배지는 장의 **마지막** tier 태그다. 앞쪽에 나오는 것은 등급표를
+        # 설명하는 장(howto-tier)처럼 본문이 배지를 예시로 그린 것이라,
+        # 첫 번째를 집으면 그 장의 등급을 잘못 읽는다.
+        found = re.findall(r'<span class="tier (a|b|c|ill)\b', inner)
+        t = found[-1] if found else None
 
         # **거꾸로도 본다** — a(실행 검증)는 "이 화면의 숫자가 돌려서
         # 나왔다" 는 뜻이다. 그런데 1차 전수 리뷰에서 코드도 출력도 그림도
@@ -803,7 +807,7 @@ def tier_report(doc):
         # 아니므로, 근거가 화면에 없으면 여기서 막는다.
         # 퀴즈는 뺀다 — 답이 앞 장의 표를 인용하는 꼴이라 화면에 증거가
         # 없는 것이 정상이다. 대신 퀴즈의 등급은 사람이 정독으로 본다.
-        if t and t.group(1) == 'a' and 'quiz' not in attrs:
+        if t == 'a' and 'quiz' not in attrs:
             proof = ('<pre' in inner or 'data-demo=' in inner
                      or 'data-table=' in inner
                      or '<svg class="diag"' in inner)
@@ -817,9 +821,9 @@ def tier_report(doc):
         if not t:
             none += 1
             errors.append('%s: 코드·출력이 있는데 근거 등급 배지가 없다' % aid)
-        elif t.group(1) == 'c':
+        elif t == 'c':
             c += 1
-        elif t.group(1) == 'ill':
+        elif t == 'ill':
             ill += 1
     return total, c, none, ill
 
