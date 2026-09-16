@@ -427,3 +427,24 @@ RED → GREEN per module, one commit each. **331 tests**, `make width` clean thr
 Rule kept throughout: **never loosen a tolerance to pass.** Where the plan's stated witness was
 not actually true (turbo monotonicity, RRC tail ISI, RV0 ordering), the test was rewritten to state
 the property that *is* true, and the reason is in the test's own docstring.
+
+### Step 5 — demos and captures (2026-09-16)
+
+- **17 demos** under `py/demo/` (one per module that produces numbers), `run_all.py` at the root,
+  `tools/record.sh --check`. Every capture in `out/` is produced here; nothing is hand-written.
+- `out/*.txt` — 17 files, each split into `== N. 제목 ==` sections so `<!--OUT sec=N-->` can cite
+  one section without the citation sliding when the file grows.
+- `run_all.py` also enforces the **108-column capture limit** (Korean counted as 2 cells) and writes
+  `out/manifest.json` with a SHA-256 per file. The GSM burst table was the only thing that broke it
+  (113 columns) and was reformatted into per-burst blocks.
+- **`sh tools/record.sh --check` — all 17 captures identical across three runs.** No timing anywhere,
+  every RNG seeded, so there is no "not reproducible" exception list at all (the compression deck
+  needed one for its benchmarks).
+- Things the captures show that are worth a slide of their own:
+  - the LDPC base graph is cycle-free **only at the lifting size it was designed for** (z=16: 0
+    four-cycles; z=4: 84, z=8: 40)
+  - turbo BER at 1 dB / K=40 goes 0.0731 → 0.0456 → 0.0431 → 0.0344 → 0.0275 → **0.0338** — the
+    non-monotone step is right there in the table
+  - IR beats Chase visibly once the SNR is low enough (−2 dB, 2 transmissions: 0.525 vs 0.250)
+  - GEO Doppler is 0.0 kHz only with Earth rotation subtracted; LEO is 3.11× the 15 kHz subcarrier
+- `make run`, `make run-check`, `make record` wired; `run-check` is part of `make all`.

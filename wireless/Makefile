@@ -19,11 +19,13 @@ FIND        := find
 # 덱에 전문이 실리는 소스. 시험 파일은 발췌만 인용한다(PLAN.md §6 15부).
 # 그래도 폭 검사는 같이 받는다 — 덱에 실릴 줄은 예외 없이 72칸이다.
 SRC_PY      := $(shell $(FIND) py tools -name '*.py' 2>/dev/null | sort)
-SRC_ALL     := $(SRC_PY) $(wildcard run_all.py)
+SRC_TOP     := run_all.py
+SRC_ALL     := $(SRC_PY) $(SRC_TOP)
 
 .DEFAULT_GOAL := help
 .PHONY: help test run record figs figs-png photos tables specs \
-        bands bands-check claims-check width deck deck-verify \
+        bands bands-check claims-check width run-check \
+        deck deck-verify \
         deck-slices deck-xref deck-check font font-check all clean
 
 help:                   ## 이 목록
@@ -41,18 +43,17 @@ test:                   ## wirelesslib 시험 (RED → GREEN)
 
 # ── 증거 ───────────────────────────────────────────────────────────
 run:                    ## demo_*.py 를 전부 돌려 out/ 를 채운다
-	@test -f run_all.py \
-	  && $(PY) run_all.py \
-	  || echo '  run_all.py 아직 없다 (PLAN.md §5 5단계)'
+	$(PY) run_all.py
+
+run-check:              ## 캡처의 폭과 manifest 가 맞는지만 본다
+	$(PY) run_all.py --check
 
 # 세 번 떠서 md5 가 같아야 한다. 캡처가 그 실행의 우연(난수 씨앗·
 # 해시 순서·딕셔너리 차례)에 기대면 여기서 걸린다. 걸린 것을 그대로
 # 실으면 독자가 같은 코드를 돌렸을 때 다른 숫자가 나온다 —
 # 그러면 그것은 증거가 아니라 그림이다.
-record:                 ## 캡처를 세 번 떠서 같은지 본다
-	@test -f tools/record.sh \
-	  && sh tools/record.sh --check \
-	  || echo '  tools/record.sh 아직 없다'
+record:                 ## 캡처를 세 번 돌려 같은지 본다
+	sh tools/record.sh --check
 
 figs:                   ## 도해 SVG 다시 만들기 (viewBox 폭 340)
 	@test -f deck/gen_figs.py \
@@ -129,8 +130,8 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
-all: tables deck deck-verify deck-slices deck-xref deck-check \
-     claims-check width font font-check  ## 전부
+all: tables run-check deck deck-verify deck-slices deck-xref \
+     deck-check claims-check width font font-check  ## 전부
 
 clean:                  ## 덱 지우기 (캡처·자료·규격 캐시는 남긴다)
 	rm -f $(DECK)
