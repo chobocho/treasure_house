@@ -16,9 +16,9 @@ SHAPE = dict(d=64, L=2, h=4, B=32, lr=6e-3, warmup=150, seed=1, log=50,
              aligned=True)
 
 TASKS = {
-    'add': dict(vocab='ckpt/tok/add', T=13, steps=2200, sep='=',
+    'add': dict(vocab='ckpt/tok/add', T=13, steps=3000, sep='=',
                 title='세 자리 덧셈 — 답을 뒤집어 적는다'),
-    'addplain': dict(vocab='ckpt/tok/add', T=13, steps=2200, sep='=',
+    'addplain': dict(vocab='ckpt/tok/add', T=13, steps=3000, sep='=',
                      title='세 자리 덧셈 — 답을 그대로 적는다'),
     'sort': dict(vocab='ckpt/tok/sort', T=14, steps=2000, sep='>',
                  title='글자 여섯 개 정렬'),
