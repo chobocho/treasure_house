@@ -126,6 +126,7 @@ def forward(params, cfg, ids, targets=None, attn_out=None, causal=True):
     if n > cfg.T:
         raise ValueError('길이 %d 가 문맥 %d 보다 길다' % (n, cfg.T))
     P = params
+    # 토큰 임베딩에 위치 정보를 넣는 세 갈래 (7부 4장)
     x = ops.embedding(P['wte'], ids)
     if cfg.pos == 'learned':
         x = T.add(x, ops.embedding(P['wpe'], [list(range(n))]))
@@ -134,6 +135,7 @@ def forward(params, cfg, ids, targets=None, attn_out=None, causal=True):
     rotate = None
     if cfg.pos == 'rope':
         rotate = lambda t, which: posenc.rope(t)
+    # 블록 L 개 — 곁가지의 결과를 잔차 스트림 x 에 더하기만 한다
     for l in range(cfg.L):
         p = 'h%d.' % l
         a = ops.layernorm(x, P[p + 'ln1_g'], P[p + 'ln1_b'])

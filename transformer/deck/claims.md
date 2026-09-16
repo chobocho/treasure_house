@@ -83,3 +83,16 @@
 | LLaMA 6.7B·13.0B 은 1.0T 토큰, 32.5B·65.2B 는 1.4T 토큰으로 학습했다 | touvron2023 §2.2 표 2 · 그림 1 설명문 | papers/touvron2023.txt 40~43행 인용 | 2026-09-16 |
 | BPE 는 Gage(1994)의 압축 알고리즘을 Sennrich 외가 단어 분할에 가져온 것이다 | sennrich2015 (arXiv 1508.07909) §3.2 | papers/sennrich2015.txt 3.2절 인용 | 2026-09-16 |
 | GPT-1 은 12층 디코더 전용, 768차원·12헤드, FFN 3072, 512 토큰 문맥, BPE 40,000 병합, GELU 를 썼다 | radford2018 §4.1 Model specifications (https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) | PDF 를 pypdf 로 뽑아 인용. 논문에 파라미터 수는 없다 | 2026-09-16 |
+| GPT-2 는 레이어 정규화를 각 하위 블록의 **입력** 쪽으로 옮기고(사전 활성 잔차망처럼), 마지막 셀프 어텐션 블록 뒤에 레이어 정규화를 하나 더 두었다 | radford2019 §2.3 "Layer normalization (Ba et al., 2016) was moved to the input of each sub-block, similar to a pre-activation residual network (He et al., 2016) and an additional layer normalization was added after the final self-attention block." | cdn.openai.com PDF 를 받아 pypdf 로 글을 뽑아 문장을 대조 | 2026-09-16 |
+| GPT-2 는 잔차 층의 가중치를 초기화 때 1/√N 배(N 은 잔차 층의 수)로 줄였다 | radford2019 §2.3 "We scale the weights of residual layers at initialization by a factor of 1/√N where N is the number of residual layers." | 같은 PDF 대조. 이 덱의 SPEC §3.5 는 0.02/√(2L) — 블록마다 잔차 층이 둘이라 N = 2L | 2026-09-16 |
+| 트랜스포머 논문은 두 임베딩 층과 소프트맥스 앞 선형 변환이 같은 가중치 행렬을 나눠 쓴다(Press·Wolf 와 비슷하게) | vaswani2017 §3.4 "In our model, we share the same weight matrix between the two embedding layers and the pre-softmax linear transformation, similar to [30]." | papers/vaswani2017.txt 3.4절 인용 | 2026-09-16 |
+| 입력 임베딩과 출력 임베딩을 묶자고 제안한 논문 | press2016 초록·§3 Weight Tying | papers/press2016.txt 인용 | 2026-09-16 |
+| 학습된 위치 임베딩과 사인 인코딩은 거의 같은 결과를 냈고(표 3 (E)), 사인을 고른 까닭은 학습 때보다 긴 길이로 외삽할 수 있으리라는 가설이었다 | vaswani2017 §3.5 · 표 3 행 (E) | papers/vaswani2017.txt 3.5절·표 3 인용 | 2026-09-16 |
+| post-LN 트랜스포머는 학습률 워밍업이 필수에 가깝고, pre-LN 은 초기화에서 기울기가 잘 행동해 워밍업을 뺄 수 있음을 보였다 | xiong2020 §1 기여 목록 · §3.3 | papers/xiong2020.txt 1절 인용 | 2026-09-16 |
+| Kaplan 외는 학습 계산량을 C ≈ 6NBS(임베딩 제외 N)로 어림하고, d_model > n_ctx/12 이면 문맥에 달린 비용이 작다고 적는다 | kaplan2020 §2.1 · §1.3 | papers/kaplan2020.txt 인용 | 2026-09-16 |
+| 잔차 학습 F(x) + x 는 한 층 이상을 건너뛰는 "shortcut connection" 으로 구현된다 | he2015 §1 | papers/he2015.txt 인용 | 2026-09-16 |
+| √d_k 로 나누는 까닭 — d_k 가 크면 내적의 크기가 커져 소프트맥스가 기울기가 아주 작은 영역으로 밀린다고 추측했고, 각주에서 성분이 독립·평균 0·분산 1 이면 q·k 의 분산이 d_k 라고 설명한다 | vaswani2017 §3.2.1 과 각주 1 | papers/vaswani2017.txt 3.2.1절 인용 | 2026-09-16 |
+| 스케일링이 없는 내적 어텐션은 d_k 가 크면 덧셈 어텐션보다 못하다 | vaswani2017 §3.2.1 "additive attention outperforms dot product attention without scaling for larger values of d_k" | papers/vaswani2017.txt 인용 | 2026-09-16 |
+| 멀티헤드 어텐션은 서로 다른 표현 부분공간의 정보를 서로 다른 위치에서 함께 볼 수 있게 하고, 헤드마다 차원이 줄어 전체 계산량은 전체 차원의 헤드 하나와 비슷하다 | vaswani2017 §3.2.2 | papers/vaswani2017.txt 인용 | 2026-09-16 |
+| 트랜스포머 이전의 어텐션(Bahdanau 외)은 정렬 모델을 순전파 신경망으로 두고 RNN 번역기와 함께 학습했다 | bahdanau2014 §3.1 | papers/bahdanau2014.txt 인용 | 2026-09-16 |
+| FlashAttention 은 N×N 어텐션 행렬을 느린 메모리에 만들지 않으려고 이미 알려진 두 기법 — 타일링(블록마다 소프트맥스를 크기 조정으로 분해)과 재계산(역전파 때 다시 계산) — 을 쓴다 | dao2022 §3.1 "We apply two established techniques (tiling, recomputation) …" | papers/dao2022.txt 3.1절 인용 | 2026-09-16 |
