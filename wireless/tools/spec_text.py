@@ -4,13 +4,14 @@
 
     python3 tools/spec_text.py 38211-i60.zip            # 표준 출력으로
     python3 tools/spec_text.py 38211-i60.zip -o 38.211.txt
-    python3 tools/spec_text.py --fetch 38.211           # 최신판을 받아 specs/ 에
+    python3 tools/spec_text.py --fetch 38.211      # 최신판을 specs/ 로
     python3 tools/spec_text.py --fetch-list data/specs_fetch.txt
 
 왜 이것이 필요한가: 이 덱은 규격을 인용한다. 인용을 기억으로 적으면
 조항 번호가 반드시 어긋나고, 어긋나도 아무 시험이 빨개지지 않는다.
 그래서 규격 원문을 실제로 받아 조항 제목만 뽑아 두고,
-`deck/check_claims.py` 가 덱의 `<!--SPEC ts=… clause=…-->` 을 그것과 맞댄다.
+`deck/check_claims.py` 가 덱의 `<!--SPEC ts=… clause=…-->` 을
+그것과 맞댄다.
 
 내보내는 꼴은 한 줄에 하나다. 조항 제목 줄은
 
@@ -19,9 +20,10 @@
 처럼 번호와 제목이 탭으로 갈리고, 본문은 그냥 한 줄씩 나온다.
 검사기는 "줄머리가 그 조항 번호이고 곧바로 공백·탭이 온다" 만 본다.
 
-3gpp.org 는 중간 인증서를 안 보내므로 내려받기는 반드시 tools/fetch.sh 를
-거친다([[3gpp-tls-fetch]] 와 PLAN.md §2). LibreOffice 는 이 기계에 없다 —
-.docx 는 그냥 zip 이고 본문은 word/document.xml 하나라 직접 읽으면 된다.
+3gpp.org 는 중간 인증서를 안 보내므로 내려받기는 반드시
+tools/fetch.sh 를 거친다(PLAN.md §2). LibreOffice 는 이 기계에
+없지만 .docx 는 그냥 zip 이고 본문은 word/document.xml 하나라
+직접 읽으면 된다.
 
 시간 O(문서 크기), 공간은 문서 하나 분량.
 """
@@ -66,7 +68,11 @@ def unescape(b):
 
 
 def docx_paragraphs(raw):
-    """(스타일, 글) 목록. w:tab 은 공백으로 편다 — 제목의 번호와 이름을 가른다."""
+    """(스타일, 글) 목록.
+
+    w:tab 은 공백으로 편다 — 조항 제목의 번호와 이름을 가르는 것이
+    그 탭이기 때문이다.
+    """
     out = []
     for m in P_RE.finditer(raw):
         p = m.group(0)
@@ -104,7 +110,8 @@ def render(paras):
         if not text:
             continue
         m = CLAUSE_RE.match(text)
-        heading = style.lower().startswith('heading') or style in ('TT', 'TAH')
+        heading = (style.lower().startswith('heading')
+                   or style in ('TT', 'TAH'))
         if m and (heading or len(text) < 90):
             out.append('%s\t%s' % (m.group(1), m.group(2)))
         else:
@@ -120,8 +127,10 @@ def extract(path):
     if not inner and 'word/document.xml' in z.namelist():
         return render(from_docx(path))
     if not inner:
-        raise ValueError('%s 안에 문서가 없다: %s' % (path, z.namelist()[:5]))
-    # 여러 개면 가장 큰 것이 본문이다 (부록·표지가 따로 든 꾸러미가 있다)
+        raise ValueError('%s 안에 문서가 없다: %s'
+                         % (path, z.namelist()[:5]))
+    # 여러 개면 가장 큰 것이 본문이다
+    # (부록·표지가 따로 든 꾸러미가 있다)
     inner.sort(key=lambda n: z.getinfo(n).file_size, reverse=True)
     raw = z.read(inner[0])
     if inner[0].lower().endswith('.docx'):
@@ -137,14 +146,18 @@ def latest_zip(num):
     """
     folder = '%s/%s_series/%s/' % (ARCHIVE, num.split('.')[0], num)
     html = fetch(folder).decode('utf-8', 'replace')
-    names = sorted(set(re.findall(r'([0-9]{4,5}-[0-9a-z]{2,3}\.zip)', html)))
+    pat = r'([0-9]{4,5}(?:-[0-9]+)?-[0-9a-z]{2,3}\.zip)'
+    names = sorted(set(re.findall(pat, html)))
     if not names:
         raise IOError('%s 에 zip 이 없다' % folder)
     return folder + names[-1], names[-1]
 
 
 def fetch_spec(num, force=False):
-    """규격 하나를 받아 specs/<번호>.txt 로 뽑는다. 이미 있으면 건너뛴다."""
+    """규격 하나를 받아 specs/<번호>.txt 로 뽑는다.
+
+    이미 있으면 건너뛴다 — 몇 번 돌려도 같다.
+    """
     out = os.path.join(SPECS, '%s.txt' % num)
     if os.path.exists(out) and not force:
         return out, False
@@ -176,12 +189,14 @@ def main(argv):
                 new += 1 if fresh else 0
             except Exception as e:                       # noqa: BLE001
                 print('  ✗ %s — %s' % (n, e))
-        print('규격 %d/%d개 준비됨 (새로 받은 것 %d개)' % (got, len(nums), new))
+        print('규격 %d/%d개 준비됨 (새로 받은 것 %d개)'
+              % (got, len(nums), new))
         return 0
     if '--fetch' in argv:
         n = argv[argv.index('--fetch') + 1]
         out, fresh = fetch_spec(n)
-        print('%s %s' % (out, '(새로 받음)' if fresh else '(이미 있음)'))
+        print('%s %s'
+              % (out, '(새로 받음)' if fresh else '(이미 있음)'))
         return 0
     paths = [a for a in argv if not a.startswith('-')]
     if not paths:
