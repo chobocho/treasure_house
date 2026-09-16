@@ -43,6 +43,10 @@ ARCHIVE = 'https://www.3gpp.org/ftp/Specs/archive'
 # <w:p> 안의 <w:t> 를 이어 붙이면 문단 하나가 된다. 스타일이 Heading*
 # 이면 그 문단은 조항 제목이다.
 P_RE = re.compile(br'<w:p[ >].*?</w:p>|<w:p/>', re.S)
+RUN_RE = re.compile(br'<w:r[ >].*?</w:r>', re.S)
+# 위첨자 run 은 각주 번호다. 본문으로 읽으면 '대역 24, 각주 17' 이
+# '2417' 이 된다 — tools/extract_bands.py 에서 실제로 물린 자리다.
+SUP_RE = re.compile(br'<w:vertAlign w:val="superscript"/>')
 T_RE = re.compile(br'<w:t(?:\s[^>]*)?>(.*?)</w:t>', re.S)
 STYLE_RE = re.compile(br'<w:pStyle w:val="([^"]+)"')
 TAB_RE = re.compile(br'<w:tab/>')
@@ -79,7 +83,10 @@ def docx_paragraphs(raw):
         st = STYLE_RE.search(p)
         style = st.group(1).decode('ascii', 'replace') if st else ''
         p = TAB_RE.sub(b'<w:t> </w:t>', p)
-        text = ''.join(unescape(t) for t in T_RE.findall(p))
+        keep = [r.group(0) for r in RUN_RE.finditer(p)
+                if not SUP_RE.search(r.group(0))]
+        body = b''.join(keep) if keep else p
+        text = ''.join(unescape(t) for t in T_RE.findall(body))
         out.append((style, re.sub(r'\s+', ' ', text).strip()))
     return out
 

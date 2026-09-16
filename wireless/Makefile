@@ -23,8 +23,8 @@ SRC_ALL     := $(SRC_PY) $(wildcard run_all.py)
 
 .DEFAULT_GOAL := help
 .PHONY: help test run record figs figs-png photos tables specs \
-        claims-check width deck deck-verify deck-slices deck-xref \
-        deck-check font font-check all clean
+        bands bands-check claims-check width deck deck-verify \
+        deck-slices deck-xref deck-check font font-check all clean
 
 help:                   ## 이 목록
 	@grep -hE '^[a-z][a-zA-Z0-9_-]*:.*?## ' $(MAKEFILE_LIST) \
@@ -77,6 +77,16 @@ photos:                 ## Commons 에서 사진 받기 (manifest.tsv 기준)
 tables:                 ## data/*.tsv → out/tbl_*.html
 	$(PY) deck/gen_tables.py
 
+# 대역 표는 규격 원문에서 뽑는다.
+# 손으로 적으면 한 자리 틀려도 티가 안 난다.
+bands:                  ## 규격 zip → data/bands.tsv
+	$(PY) tools/extract_bands.py
+
+bands-check:            ## data/bands.tsv 가 규격 원문과 같은지
+	@test -d specs/zips \
+	  && $(PY) tools/extract_bands.py --check \
+	  || echo '  규격 zip 이 없다 — make specs 먼저 (검사 건너뜀)'
+
 # 규격 zip 을 3gpp.org 에서 받는다. 이 서버는 중간 인증서를 안 보내므로
 # 반드시 tools/fetch.sh 를 통한다 (PLAN.md §2).
 specs:                  ## specs_fetch.txt 의 TS 를 specs/ 로 받는다
@@ -120,7 +130,7 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
 all: tables deck deck-verify deck-slices deck-xref deck-check \
-     claims-check font font-check  ## 전부
+     claims-check width font font-check  ## 전부
 
 clean:                  ## 덱 지우기 (캡처·자료·규격 캐시는 남긴다)
 	rm -f $(DECK)

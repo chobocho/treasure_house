@@ -373,3 +373,28 @@ The user approved every recommendation below as-is. Each row is now a decision.
   "세대 한눈에 보기" placeholder is now a real `<!--TABLE-->`, so the directive is proven end to end
   (verify_deck compares the embedded table byte-for-byte with `out/`).
 - `make all SKEL=1` green — 29 slides, 112 KB before font, 157 KB after.
+
+### Step 3 — Spec index and bands (2026-09-16)
+
+- `data/specs_3gpp.tsv` **151 rows**. Numbers and titles scraped from `dynareport?code=NN-series.htm`
+  for series 21–29, 31–38 and 41–55 (3,438 specs indexed into `specs/spec_index.json`); the
+  `release` column is the earliest release listed on each spec's own dynareport page, fetched one
+  by one (151 pages). Nothing here is from memory.
+- `data/specs_gsma.tsv` 34 rows, `data/specs_itu.tsv` 18 rows. **gsma.com's PRD list is rendered by
+  JavaScript and could not be scraped** — IR.33/34/65, FS.11/19/20 and NG.113/114/116 were confirmed
+  by WebSearch and the published PDFs; the rest use the widely-published titles. The file header
+  says so.
+- **`tools/extract_bands.py` (new)** — reads the operating-band tables straight out of TS 36.101
+  (table 5.5-1), TS 38.101-1 and TS 38.101-2 (table 5.2-1) and writes `data/bands.tsv`:
+  70 LTE + 71 NR FR1 + 7 NR FR2 = 148 bands, with `--check` wired into `make bands-check`.
+  Two traps, both hit and both fixed: (1) **footnote markers are superscript runs**, so naive text
+  extraction turns "band 24, note 17" into band 2417 — the tool now drops superscript runs, and
+  `tools/spec_text.py` does too; (2) "the longest table containing 'E-UTRA' and 'operating band'"
+  picks a carrier-aggregation table, so the header must have all four columns.
+- `tools/fetch.sh` gained a 600 s timeout and resume-then-restart behaviour (dynareport does not
+  support byte ranges and answers 33).
+- `data/specs_fetch.txt` lists the 41 specs `make specs` will download for clause checking.
+- Deviation from the plan's schema, recorded: `bands.tsv` has `duplex` and `note` instead of
+  `region` — the spec has no region column and I would have had to invent it. `releases.tsv` has an
+  extra `protocols` column.
+- `make all SKEL=1` green; `width` is now part of `all`.
