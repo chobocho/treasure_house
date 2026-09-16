@@ -591,6 +591,16 @@ The user approved every recommendation below as-is. Each row is now a decision.
   order); on the final checkpoint 0 of 1,000 differ. If a future checkpoint differs, ship float32
   rather than widening the check.
 
+### Steps 9, 11, 12 — body, glossary, publish (2026-09-16)
+
+- Body finished: part 6 ch 7 (learned attention maps), part 8 ch 7–8 (five synthetic tasks with the
+  loss-floor derivation; ko/en LMs), part 10 ch 4–5 (samples as recorded, including `�` endings from
+  byte-BPE cuts; in-deck addition model). 952 slides total — about 60 % of the §6 estimate; not padded.
+- Glossary 182 entries (≥ 180). Appendix unchanged from its earlier commit.
+- Publish: new "🧠 AI & 머신러닝" section (+ nav link `#ai`) in index.html before 수학, README row,
+  history.md/html entries. `make all` exit 0 with DeckMono embedded; `record --check` 36 captures
+  identical three times; C tests 561 checks, Python 188 tests.
+
 ### Step 13 — review pass 1 (2026-09-16)
 
 - Two report-only subagents (parts 0–7; parts 8–14 + demos.js), every finding verified against
