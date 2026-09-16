@@ -115,11 +115,12 @@ def linear(x, W, b):
     return T.add(T.matmul(x, W), b)
 
 
-def forward(params, cfg, ids, targets=None, attn_out=None):
+def forward(params, cfg, ids, targets=None, attn_out=None, causal=True):
     """ids: B×n 정수. (로짓 (B, n, V), 손실 또는 None).
 
     attn_out 에 리스트를 주면 블록마다 어텐션 가중치 (B, h, n, n) 를
-    담아 준다 — 6부의 어텐션 지도가 이것이다.
+    담아 준다 — 6부의 어텐션 지도가 이것이다. causal=False 는 BERT 식
+    인코더(11부 extras.mlm_loss)가 미래까지 보게 할 때만 쓴다.
     """
     B, n = len(ids), len(ids[0])
     if n > cfg.T:
@@ -138,7 +139,7 @@ def forward(params, cfg, ids, targets=None, attn_out=None):
         a = ops.layernorm(x, P[p + 'ln1_g'], P[p + 'ln1_b'])
         o, w = attention.multi_head_attention(
             a, P[p + 'Wqkv'], P[p + 'bqkv'], P[p + 'Wo'], P[p + 'bo'],
-            cfg.h, rotate=rotate)
+            cfg.h, causal=causal, rotate=rotate)
         if attn_out is not None:
             attn_out.append(w)
         x = T.add(x, o)
