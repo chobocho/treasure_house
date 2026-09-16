@@ -10,11 +10,449 @@
 <li>SGD 와 모멘텀</li>
 <li>Adam 유도 — 편향 보정이 필요한 까닭</li>
 <li>AdamW — 가중치 감쇠를 떼어 내다</li>
-<li>워밍업과 코사인 스케줄 · 기울기 클리핑</li>
-<li>초기화</li>
-<li>과적합과 검증 손실</li>
-<li>덧셈 과제 학습 — 정확도 표</li>
-<li>한국어 언어 모델 학습 곡선</li>
+<li>워밍업과 코사인 일정 · 기울기 자르기</li>
+<li>작은 모델을 파이썬으로 학습</li>
+<li>합성 과제 학습 — 정확도 표</li>
+<li>한국어·영어 언어 모델의 학습 곡선</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<div class="key"><b>이 부의 한 줄 요약</b> — 기울기를 얻는 법은 3·4부에서 끝났습니다. 남은 것은 그 기울기로
+<b>얼마나, 어느 쪽으로</b> 움직이느냐입니다. 그리고 실제로 C 로 학습해 결과를 봅니다.</div>
+</article>
+
+<article class="card" id="p8-ch1">
+<p class="chnum">1장</p>
+<h2>손실과 배치</h2>
+<p class="chsub">줄 여러 개를 한 번에</p>
+</article>
+
+<article class="card" id="p8-batch">
+<h3>배치 — 무작위 창 B 개</h3>
+<p>토큰을 한 줄로 이어 놓고, 길이 T+1 의 창을 B 개 뽑습니다. 창의 앞 T 개가 입력, 한 칸 뒤의 T 개가
+정답입니다. 시작 위치는 배치 생성기에서 <code>randint</code> 로 뽑습니다(SPEC §6.1).</p>
+<!--CODE file=py/transformerlib/train.py sym=batch_starts..get_batch note=시작 위치 목록과 뽑기-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-aligned">
+<h3>줄 맞춤 — 과제 문제가 창 안에 온전히</h3>
+<p>합성 과제는 한 줄이 한 문제입니다. 아무 곳에서나 자르면 창이 문제의 한가운데서 시작합니다.
+<code>newline</code> 을 주면 줄 머리에서만 창이 시작합니다. 창의 길이를 줄 길이와 같게 두면 창 하나에
+문제가 정확히 하나 듭니다.</p>
+<!--CODE file=py/transformerlib/tests/test_train.py sym=test_aligned_starts_follow_newlines..test_batch_uses_spec_rng_order note=줄 머리와 뽑는 차례-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-loss-mean">
+<h3>손실은 모든 위치의 평균</h3>
+<p>B×T 개 위치마다 다음 토큰의 음의 로그 가능도를 내고 평균합니다. 합이 아니라 평균이라
+배치 크기를 바꿔도 기울기의 크기가 비슷하게 유지됩니다. 로짓 기울기의 1/N 이 그 평균입니다(4부).</p>
+<div class="note"><b>과제 줄의 손실은 0 으로 가지 않습니다.</b> 덧셈 줄의 앞 여섯 자리는 무작위라 어떤
+모델도 맞힐 수 없습니다. 모델이 다 배워도 손실에는 그 자리의 몫(ln 10)이 남습니다 — 5장의 곡선이
+바닥에서 멈추는 까닭입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-overfit-one">
+<h3>가장 싼 확인 — 배치 하나를 외우게</h3>
+<p>새 모델을 짜면 먼저 배치 하나를 되풀이해 먹여 봅니다. 순전파·역전파·옵티마이저가 한 줄로 이어져
+있다면 손실이 0 가까이 떨어져야 합니다. 떨어지지 않으면 긴 학습을 돌릴 까닭이 없습니다.</p>
+<!--CODE file=py/transformerlib/tests/test_train.py sym=test_overfits_one_batch note=300 스텝 안에 0.05 아래로-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-ch2">
+<p class="chnum">2장</p>
+<h2>SGD 와 모멘텀</h2>
+<p class="chsub">기울기 반대쪽으로, 그리고 속도를 모아서</p>
+</article>
+
+<article class="card" id="p8-sgd">
+<h3>SGD</h3>
+<div class="eq">θ ← θ − η<span class="vec">g</span></div>
+<!--CODE file=py/transformerlib/optim.py sym=sgd_step note=원소마다 한 줄-->
+<p>문제는 골짜기입니다. 한 방향은 가파르고 다른 방향은 완만하면, 가파른 쪽에 맞춰 η 를 작게 잡아야
+튀지 않고, 그러면 완만한 쪽으로는 거의 움직이지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-momentum">
+<h3>모멘텀 — 같은 방향이면 빨라진다</h3>
+<div class="eq"><span class="vec">v</span> ← β<span class="vec">v</span> + <span class="vec">g</span>, &nbsp; θ ← θ − η<span class="vec">v</span></div>
+<p>기울기가 늘 같은 쪽을 가리키면 v 는 g/(1−β) 로 커져 실효 학습률이 1/(1−β) 배가 됩니다. 방향이
+번갈아 바뀌는 성분은 서로 지워집니다.</p>
+<!--CODE file=py/transformerlib/optim.py sym=Momentum note=속도 v 를 원소마다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-momentum-test">
+<h3>골짜기에서 견주기</h3>
+<!--CODE file=py/transformerlib/tests/test_optim.py sym=test_sgd_descends..test_momentum_beats_sgd_in_the_valley note=f = ½(10x² + y²)-->
+<p>학습률이 작으면 완만한 y 방향이 SGD 로는 스텝마다 1% 씩만 줄어듭니다. 모멘텀은 두 방향 모두
+√β 의 비율로 줄어듭니다 — 시험의 docstring 이 그 계산입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-ch3">
+<p class="chnum">3장</p>
+<h2>Adam</h2>
+<p class="chsub">파라미터마다 보폭을 따로</p>
+</article>
+
+<article class="card" id="p8-adam-idea">
+<h3>기울기의 크기로 나눈다</h3>
+<p>파라미터마다 기울기의 크기가 수십 배씩 다릅니다. 임베딩의 드문 토큰 행은 가끔만 기울기를 받고,
+출력 사영은 늘 받습니다. Adam 은 기울기 제곱의 이동평균으로 나눠 <b>보폭을 파라미터마다 맞춥니다</b>
+<!--CITE key=kingma2014-->.</p>
+<div class="eq left"><span class="vec">m</span> ← β<sub>1</sub><span class="vec">m</span> + (1−β<sub>1</sub>)<span class="vec">g</span><br>
+<span class="vec">v</span> ← β<sub>2</sub><span class="vec">v</span> + (1−β<sub>2</sub>)<span class="vec">g</span>²<br>
+θ ← θ − η · <span class="vec">m̂</span> / (√<span class="vec">v̂</span> + ε)</div>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p8-bias">
+<h3>편향 보정 — 0 에서 출발한 평균은 작게 치우친다</h3>
+<div class="proof"><span class="h">유도 — 기울기가 늘 같은 g 라면</span>
+<ol class="pf">
+<li>m<sub>t</sub> = (1−β<sub>1</sub>)(g + β<sub>1</sub>g + … + β<sub>1</sub><sup>t−1</sup>g) = (1 − β<sub>1</sub><sup>t</sup>) g
+<span class="why">등비급수</span></li>
+<li>그러니 m<sub>t</sub> 는 g 보다 1 − β<sub>1</sub><sup>t</sup> 배 작다. 첫 스텝이면 0.1 배.
+<span class="why">β<sub>1</sub> = 0.9</span></li>
+<li>m̂ = m<sub>t</sub>/(1 − β<sub>1</sub><sup>t</sup>) 로 나누면 g 가 된다. v 도 같은 논리로 g².
+<span class="why">보정</span></li>
+</ol>
+<p>그래서 첫 스텝의 갱신은 η · g/√(g²) = η·sign(g) — 기울기의 크기와 무관하게 η 다.</p></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-bias-numbers">
+<h3>보정이 있을 때와 없을 때</h3>
+<!--OUT file=optim.txt sec=1 note=첫 스텝의 갱신 크기-->
+<!--CODE file=py/transformerlib/tests/test_optim.py sym=test_first_step_is_lr_times_sign..test_without_bias_correction_first_step_is_smaller note=증인 둘-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-adam-code">
+<h3>코드 — m·v 를 원소마다</h3>
+<!--CODE file=py/transformerlib/optim.py sym=AdamW note=wd = 0 이면 그냥 Adam-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-betas">
+<h3>β2 는 모델마다 다릅니다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>누가</th><th>β<sub>1</sub></th><th>β<sub>2</sub></th><th>ε</th></tr>
+<tr><td>Adam 논문의 권장 기본값</td><td>0.9</td><td>0.999</td><td>10⁻⁸</td></tr>
+<tr><td>원래 트랜스포머</td><td>0.9</td><td>0.98</td><td>10⁻⁹</td></tr>
+<tr><td>이 덱(SPEC §6.2)</td><td>0.9</td><td>0.95</td><td>10⁻⁸</td></tr>
+</table></div>
+<p>앞 두 줄은 <code>deck/claims.md</code> 에 원문과 함께 있습니다 <!--CITE key=vaswani2017 sec=5.3-->.
+β<sub>2</sub> 가 작을수록 v 가 최근 기울기를 빨리 따라갑니다. 이 덱의 0.95 는 계획 단계에서 정한 값이고,
+여기서 여러 값을 견주어 고른 것이 아닙니다.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card quiz" id="p8-quiz-1" data-quiz>
+<h3>1~3장 퀴즈</h3>
+<p class="q">Q. Adam 에서 ε 를 0 으로 두면 어떤 파라미터에서 문제가 생깁니까? 이 덱의 모델에서 그런 파라미터를
+하나 꼽으십시오.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 기울기가 <b>늘 정확히 0</b> 인 파라미터에서 m̂ = 0, v̂ = 0 이라 0/0 이 됩니다. 이 덱에서는
+키 편향 b<sub>k</sub> 가 그렇습니다 — 참 기울기가 0 입니다(7부 5장). 파이썬은 반올림 잡음 정도의 아주 작은
+수가 나와 나눗셈은 되지만, 그 잡음을 √v̂ 로 나누면 크기가 1 에 가까운 엉뚱한 갱신이 됩니다. 입력에 한 번도
+나오지 않는 토큰의 임베딩 행도 입력 쪽 기울기는 0 이지만 출력 사영에서는 늘 기울기를 받으므로 문제가
+없습니다. ε 는 이런 자리를 지키는 바닥입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-ch4">
+<p class="chnum">4장</p>
+<h2>AdamW</h2>
+<p class="chsub">가중치 감쇠를 떼어 내다</p>
+</article>
+
+<article class="card" id="p8-l2-vs-decay">
+<h3>L2 와 감쇠는 Adam 에서 같지 않다</h3>
+<p>SGD 에서는 손실에 λ‖θ‖²/2 를 더하는 것(L2)과 θ 를 스텝마다 (1 − ηλ) 배 줄이는 것(감쇠)이 같은 갱신입니다.
+Adam 에서는 L2 의 기울기 λθ 도 √v̂ 로 나뉘므로, 기울기가 큰 파라미터는 덜 감쇠되고 작은 파라미터는 더
+감쇠됩니다. Loshchilov·Hutter 는 감쇠를 기울기 갱신에서 떼어 내자고 했습니다
+<!--CITE key=loshchilov2017 sec=2-->.</p>
+<div class="eq">θ ← θ − η · ( <span class="vec">m̂</span>/(√<span class="vec">v̂</span> + ε) + λθ )</div>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p8-decay-numbers">
+<h3>숫자로 — 기울기가 0 일 때</h3>
+<!--OUT file=optim.txt sec=2 note=AdamW 는 정확히 (1 − ηλ)^t, L2 를 섞은 Adam 은 다르게 움직인다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-decay-which">
+<h3>무엇을 감쇠하나</h3>
+<p>행렬(wte, wpe, Wqkv, Wo, W1, W2)만 감쇠하고, 편향과 LN 의 g·b 는 감쇠하지 않습니다(SPEC §6.2). LN 의 g 를
+0 쪽으로 당기면 정규화한 출력 자체가 줄어들고, 편향은 표현력을 아끼는 데 도움이 되지 않습니다.</p>
+<!--CODE file=py/transformerlib/tests/test_optim.py sym=test_decay_independent_of_gradient..test_only_matrices_decay note=증인 둘-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-ch5">
+<p class="chnum">5장</p>
+<h2>학습률 일정과 자르기</h2>
+<p class="chsub">천천히 시작해서 천천히 내린다</p>
+</article>
+
+<article class="card" id="p8-schedule">
+<h3>워밍업 뒤 코사인</h3>
+<div class="eq left"><i>t</i> ≤ <i>w</i>: η<sub>t</sub> = η<sub>max</sub>·<i>t</i>/<i>w</i><br>
+그 뒤: η<sub>t</sub> = η<sub>min</sub> + ½(η<sub>max</sub> − η<sub>min</sub>)(1 + <b class="fn">cos</b> π<i>p</i>), &nbsp; <i>p</i> = (<i>t</i>−<i>w</i>)/(<i>T</i>−<i>w</i>)</div>
+<!--FIG file=lr_schedule.svg cap=덧셈 과제의 일정 모양-->
+<ul>
+<li>워밍업 — 처음 몇 스텝은 v̂ 가 아직 기울기 크기를 모르고, 초기화 근처의 기울기가 거칩니다.</li>
+<li>코사인 — 끝으로 갈수록 작게 움직여 바닥 근처에서 흔들리지 않게 합니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-schedule-code">
+<h3>일정 코드와 박아 둔 값</h3>
+<!--CODE file=py/transformerlib/optim.py sym=lr_schedule note=SPEC §6.4-->
+<!--OUT file=optim.txt sec=3 note=이 덱의 일정과 원래 논문의 식 (3)-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-clip">
+<h3>기울기 자르기</h3>
+<p>드물게 한 배치가 아주 큰 기울기를 내면 한 스텝이 학습 전체를 흔듭니다. 전체 노름이 1 을 넘으면 방향은 두고
+길이만 줄입니다.</p>
+<!--CODE file=py/transformerlib/optim.py sym=clip_grad_norm note=노름은 모든 파라미터에 걸쳐 하나-->
+<!--OUT file=optim.txt sec=4 note=노름 0.5 · 5 · 50-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-step">
+<h3>한 스텝을 모으면</h3>
+<!--CODE file=py/transformerlib/train.py sym=make_optimizer..train note=배치 → 순전파 → 역전파 → 자르기 → 일정 → AdamW-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-quiz-2" data-quiz>
+<h3>4~5장 퀴즈</h3>
+<p class="q">Q. 기울기 자르기를 AdamW 갱신 <b>뒤</b>에 두면(갱신량 Δθ 의 노름을 자르면) 앞에 두는 것과 무엇이
+달라집니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 기울기를 자르면 <b>m·v 에 들어가는 값</b>이 작아집니다. 큰 기울기 하나가 v 를 크게 부풀려
+뒤따르는 여러 스텝의 보폭을 줄이는 일을 막습니다. 갱신량을 자르면 이번 스텝의 이동만 막고, 이미 부풀려진 v 는
+그대로 남아 뒤 스텝들이 작게 움직입니다. 게다가 Adam 의 갱신량은 이미 대략 η 크기로 정규화되어 있어 갱신량을
+자르는 일은 거의 효과가 없습니다. 그래서 기울기 쪽에서 자릅니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-demo-lr">
+<h3>직접 해 보기 — 학습률 일정</h3>
+<p>워밍업 동안은 직선으로 오르고, 그 뒤 코사인으로 최솟값까지 내려갑니다. 기본값은 8부 과제 학습의 설정입니다.</p>
+<div class="demo" data-demo="d-lr"><h5>워밍업 + 코사인</h5><div class="row"><label>최대 <input type="number" data-hi value="0.006" step="0.001"></label><label>최소 <input type="number" data-lo value="0.0006" step="0.0001"></label><label>워밍업 <input type="number" data-warm value="150"></label><label>전체 <input type="number" data-total value="3000"></label><label>스텝 <input type="number" data-step value="1000"></label></div><div class="out"></div></div>
+<div class="note">식은 <code>optim.lr_schedule</code> 과 같습니다(SPEC §6.4). 워밍업 안과 밖의 한 스텝씩을 파이썬 값과 대조합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+
+<article class="card" id="p8-ch6">
+<p class="chnum">6장</p>
+<h2>파이썬으로 작은 모델을 학습</h2>
+<p class="chsub">느리지만 모든 곱셈이 보인다</p>
+</article>
+
+<article class="card" id="p8-py-tiny">
+<h3>순수 파이썬 학습의 곡선</h3>
+<!--OUT file=py_tiny.txt sec=1 note=덧셈 과제 앞 2000줄, 폭 16 · 블록 하나-->
+<p>같은 <code>train.step</code> 이 C 에서는 <code>tfs_train_step</code> 입니다. 파이썬은 설명을 맡고 이 크기가
+한계입니다 — 모든 곱셈이 파이썬 루프라서요. 실제 학습은 C 가 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-deterministic">
+<h3>씨앗이 같으면 같은 학습</h3>
+<p>초기화 생성기 seed, 배치 생성기 seed + 1(SPEC §1.5). 둘이 정해지면 학습 전체가 정해집니다.
+그래서 기록 실행을 세 번 돌려 같은 캡처가 나오는지 볼 수 있습니다.</p>
+<!--CODE file=py/transformerlib/tests/test_train.py sym=test_train_is_deterministic note=기록과 가중치가 같다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+
+<article class="card" id="p8-ch7">
+<p class="chnum">7장</p>
+<h2>합성 과제 다섯 가지</h2>
+<p class="chsub">정답이 분명한 문제로 C 학습기가 제대로 배우는지 본다</p>
+</article>
+
+<article class="card" id="p8-tasks-what">
+<h3>과제 다섯 가지</h3>
+<!--CODE file=corpus/gen_tasks.py sym=problems note=씨앗으로 만든 문제. 앞 1000줄은 시험, 나머지는 학습-->
+<ul>
+<li><b>add · addplain</b> — 세 자리 덧셈. 문제는 같고 답을 적는 차례만 다릅니다(뒤집음 / 그대로).</li>
+<li><b>sort · reverse</b> — 소문자 여섯 개를 정렬하거나 뒤집습니다.</li>
+<li><b>parity</b> — 16비트에서 1 의 개수가 홀수인지.</li>
+</ul>
+<p>시험 줄과 학습 줄은 한 번 만든 목록을 잘라 나누므로 겹치지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-tasks-shape">
+<h3>모델과 학습 설정</h3>
+<!--CODE file=py/demo/tasks.py lines=11-29 note=과제마다 모양은 같고 T 와 스텝 수만 다르다-->
+<p>T 는 줄 하나의 길이입니다. 줄 머리에서 창을 자르므로(<a href="#p8-ch1">1장</a>) 창 하나에 문제가 정확히 하나 들어갑니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-tasks-run">
+<h3>학습하고, 두 번 잰다</h3>
+<!--CODE file=py/demo/tasks.py sym=run note=C 로 학습 → 시험 줄 정답률 → 학습 줄 앞 1000개 정답률-->
+<p>답의 글자가 <b>전부</b> 맞아야 정답입니다. 생성은 greedy 입니다(<a href="#p10-ch1">10부 1장</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-add-result">
+<h3>덧셈 — 답을 뒤집어 적는다</h3>
+<!--OUT file=c_add.txt sec=1 note=학습 기록 (500 스텝마다)-->
+<!--OUT file=c_add.txt sec=2 note=처음 보는 문제 1000개-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-addplain-result">
+<h3>덧셈 — 답을 그대로 적는다</h3>
+<!--OUT file=c_addplain.txt sec=1 note=학습 기록-->
+<!--OUT file=c_addplain.txt sec=2 note=같은 시험 문제 1000개-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-add-compare">
+<h3>뒤집는 것이 정말 도움이 되었나</h3>
+<p>일의 자리부터 쓰면 받아올림이 방금 쓴 자리에서만 오므로 배우기 쉬울 것이라는 <b>가설</b>로 두 판을 만들었습니다(<a href="#p6-quiz-4">6부 7장 퀴즈</a>).
+위 두 캡처에서 둘 다 높은 정답률에 닿았고, 차이는 1000문제 중 몇 개입니다.</p>
+<ul>
+<li>씨앗 하나, 설정 하나의 결과입니다. 이 정도 차이로 가설이 맞았다고 말할 수 없습니다.</li>
+<li>설정을 고르는 동안(PLAN.md 7단계 기록) 스텝 수만 바꿔도 뒤집은 판이 손실 고원을 벗어나는 시점이 크게 흔들렸고, 어떤 스텝 수에서는 오히려 그대로 적은 판이 앞섰습니다.</li>
+<li>그래서 이 책은 "뒤집으면 낫다" 를 주장하지 않습니다. 확인하려면 씨앗을 여럿 두고 분포를 견줘야 합니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-sort-result">
+<h3>정렬과 뒤집기</h3>
+<!--OUT file=c_sort.txt sec=2 note=정렬 — 처음 보는 문제-->
+<!--OUT file=c_reverse.txt sec=2 note=뒤집기 — 처음 보는 문제-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-parity-result">
+<h3>홀짝 — 배우지 못했다</h3>
+<!--OUT file=c_parity.txt sec=2 note=처음 보는 문제 1000개-->
+<p>답이 0 과 1 둘뿐이므로 동전을 던져도 절반은 맞습니다. 위 정답률은 그 수준입니다 — 이 모델은 이 스텝 수 안에 홀짝을 배우지 못했습니다.</p>
+<ul>
+<li>비트 하나만 바뀌어도 답이 뒤집힙니다. 몇 자리만 골라 보아서는 아무것도 알 수 없고, 16자리를 <b>모두</b> 정확히 합쳐야 합니다.</li>
+<li>어텐션은 가중 <b>평균</b>이라 "1 이 몇 개인가" 의 짝홀을 한 블록에서 곧바로 만들기 어렵습니다.</li>
+</ul>
+<p>실패도 결과이므로 그대로 싣습니다. 다음 장의 손실 곡선이 "배우지 못했다" 를 정답률과 따로 보여 줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-loss-tasks">
+<h3>다섯 과제의 학습 곡선</h3>
+<!--FIG file=loss_tasks.svg cap=배치 손실. 곡선마다 멈춘 높이가 다르다-->
+<p>손실이 0 으로 가지 않는 까닭은 다음 슬라이드에서 셈으로 보입니다. 뒤집은 덧셈이 한동안 평평하다가
+떨어지는 모습 — 손실 고원 — 이 앞 슬라이드의 흔들림이 생기는 자리입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-loss-floor">
+<h3>손실의 바닥을 셈으로</h3>
+<p>창은 줄 머리에서 시작하고 정답은 한 칸 뒤입니다. 그러면 T 개 정답 중 몇 개는 <b>무작위</b>입니다 —
+입력 글자와, 창 끝에 걸친 다음 줄의 첫 글자. 무작위 글자는 아무리 잘해도 균등 분포로 맞힐 수밖에 없습니다.</p>
+<div class="eq"><b class="fn">바닥</b> = <span class="frac"><span class="num">무작위 정답 수 × ln(글자 종류)</span><span class="den">T</span></span></div>
+<ul>
+<li>덧셈: 무작위 정답 6개(첫 수 뒤 두 자리, 둘째 수 세 자리, 다음 줄 첫 자리), T = 13 → 6·ln 10 / 13 ≈ 1.063</li>
+<li>정렬·뒤집기: 6개, 26글자, T = 14 → 6·ln 26 / 14 ≈ 1.396</li>
+<li>홀짝: 입력 비트 15개 + 다음 줄 첫 비트 = 16개, T = 19 → 16·ln 2 / 19 ≈ 0.584. 답 비트까지 못 배우면 17·ln 2 / 19 ≈ 0.620</li>
+</ul>
+<p>그림의 곡선은 덧셈·정렬·뒤집기에서 앞의 바닥에, 홀짝에서는 <b>뒤의 값</b>에 멈췄습니다. 손실만 보고도 홀짝의 답을 배우지 못했음을 알 수 있습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-seen-unseen">
+<h3>본 문제와 처음 보는 문제</h3>
+<!--OUT file=c_sort.txt sec=3 note=정렬 — 학습 줄 앞 1000개-->
+<!--OUT file=c_add.txt sec=3 note=덧셈 — 학습 줄 앞 1000개-->
+<p>학습 줄의 정답률과 시험 줄의 정답률(앞 슬라이드들)이 거의 같습니다. 외워서 맞힌 것이 아니라는 뜻입니다.
+학습 줄에서만 높고 시험 줄에서 낮다면 과적합입니다(<a href="#p8-ch1">1장</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-quiz-3" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. 홀짝 과제에서 답 비트를 완벽하게 배우면 배치 손실은 어디까지 내려갈 수 있습니까? 창 끝에 걸친 다음 줄 첫 비트를 정답에서 빼면 어떻게 달라집니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 입력 비트 15개와 다음 줄 첫 비트가 무작위라 16·ln 2 / 19 ≈ 0.584 가 바닥입니다. 다음 줄 첫 비트를 빼면
+정답이 18개 중 15개가 무작위라 15·ln 2 / 18 ≈ 0.578 로 조금 낮아집니다. 어느 쪽이든 0 이 아니므로, 과제를 배웠는지는
+손실의 절댓값이 아니라 <b>바닥과의 차이</b>로 읽어야 합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+
+<article class="card" id="p8-ch8">
+<p class="chnum">8장</p>
+<h2>한국어·영어 언어 모델</h2>
+<p class="chsub">모양은 같고 말뭉치만 다르다</p>
+</article>
+
+<article class="card" id="p8-lm-shape">
+<h3>설정</h3>
+<!--CODE file=py/demo/lm.py lines=14-24 note=두 언어가 같은 모양·같은 스텝-->
+<ul>
+<li>어휘는 둘 다 바이트 BPE 512개입니다(<a href="#p5-ch3">5부 3장</a>).</li>
+<li>말뭉치 파일을 이름 차례로 이어 붙여 앞 95 % 를 학습, 뒤를 검증에 씁니다. 한국어는 이름 차례상 검증 글이 한 작가의 작품에서 나옵니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-lm-ko">
+<h3>한국어</h3>
+<!--OUT file=c_ko.txt sec=1 note=학습 기록 (100 스텝마다)-->
+<!--OUT file=c_ko.txt sec=2 note=검증 글에서 잰 손실-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-lm-en">
+<h3>영어</h3>
+<!--OUT file=c_en.txt sec=1 note=학습 기록-->
+<!--OUT file=c_en.txt sec=2 note=검증 글에서 잰 손실-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-lm-curve">
+<h3>두 곡선</h3>
+<!--FIG file=loss_lm.svg cap=선은 배치 손실, 점은 검증 손실-->
+<ul>
+<li>검증 손실이 네 번 모두 줄었습니다. 아직 과적합이 아니라 <b>덜 배운</b> 상태입니다 — 더 학습할 여지가 있습니다.</li>
+<li>본 토큰 수는 B·T·스텝 = 16·48·640 입니다. 위 캡처 첫 줄의 학습 토큰 수보다 많으므로 같은 글을 여러 번 보았습니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-lm-compare">
+<h3>두 언어의 손실을 견줄 수 없는 까닭</h3>
+<p>손실은 <b>토큰 하나</b>당 평균입니다. 어휘가 같은 512개여도 토큰 하나가 담는 글의 양이 언어마다 다릅니다.</p>
+<ul>
+<li>한글 음절은 3바이트, 영어 글자는 1바이트입니다(<a href="#p5-ch1">5부 1장</a>). 병합 512개로는 한국어에서 음절 하나를 온전히 담기도 벅찹니다.</li>
+<li>같은 뜻을 적는 데 드는 토큰 수가 다르면, 토큰당 손실이 낮다고 글 전체를 더 잘 맞힌 것이 아닙니다.</li>
+<li>견주려면 바이트나 글자 하나당 손실(비트 수)로 바꿔야 합니다: 전체 손실 ÷ 전체 바이트.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p8-quiz-4" data-quiz>
+<h3>8장 퀴즈</h3>
+<p class="q">Q. 검증 퍼플렉시티가 40 이라는 것은 무슨 뜻입니까? 어휘가 512개인데 40 이면 좋은 편입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 퍼플렉시티는 exp(평균 손실)이고, 모델이 매 토큰을 "평균적으로 40개 후보 가운데 고르는 것만큼" 헷갈린다는 뜻입니다(<a href="#p2-ch5">2부 5장</a>).
+아무것도 배우지 않은 모델은 512 이므로 크게 줄었지만, 이 수는 토큰의 크기(어휘·언어)에 달려 있어 다른 설정의 모델과 곧바로 견줄 수는 없습니다.</div>
+<span class="tier ill">설명용</span>
 </article>

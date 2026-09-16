@@ -14,5 +14,492 @@
 <li>비용 O(n²d) — 문맥이 길면 무엇이 비싸지나</li>
 <li>학습된 어텐션 지도 읽기 — 정렬·덧셈·한국어</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<div class="key"><b>이 부의 한 줄 요약</b> —
+<span class="mi"><b class="fn">softmax</b>(<span class="vec">Q</span><span class="vec">K</span><sup>⊤</sup>/√<i>d</i><sub>k</sub>)<span class="vec">V</span></span>
+한 줄을 부품마다 뜯어 보고, 식의 각 조각이 왜 거기 있는지를 숫자로 확인합니다.</div>
+</article>
+
+<article class="card" id="p6-ch1">
+<p class="chnum">1장</p>
+<h2>질의·키·값</h2>
+<p class="chsub">부드러운 사전 찾기</p>
+</article>
+
+<article class="card" id="p6-dict">
+<h3>사전 찾기를 부드럽게 만들면</h3>
+<p class="lead">보통의 사전은 키가 <b>정확히</b> 맞는 값 하나를 돌려줍니다.
+어텐션은 모든 값을 조금씩 섞어 돌려주되, 질의와 <b>닮은</b> 키의 값을 더 많이 섞습니다.</p>
+<ol>
+<li>질의 <span class="mi"><span class="vec">q</span></span> 와 키 <span class="mi"><span class="vec">k</span><sub><i>j</i></sub></span> 의 닮음을 점수로 — 내적.</li>
+<li>점수를 합이 1 인 가중치로 — 소프트맥스.</li>
+<li>가중치로 값 <span class="mi"><span class="vec">v</span><sub><i>j</i></sub></span> 들을 섞는다 — 가중합.</li>
+</ol>
+<p>2부에서 본 "내적 = 닮음의 크기" 와 "소프트맥스 = 점수를 확률로" 를 이어 붙인 것뿐입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-history">
+<h3>어텐션은 번역기에서 먼저 나왔습니다</h3>
+<p>Bahdanau 외는 RNN 번역기가 원문 전체를 벡터 하나로 누르는 병목을 풀려고,
+번역문의 i 번째 낱말을 만들 때 원문의 어느 자리를 볼지 점수를 매기는 <b>정렬 모델</b>을
+두고 번역기와 함께 학습했습니다 <!--CITE key=bahdanau2014 sec=3.1-->.</p>
+<p>그 점수는 작은 순전파 신경망이 냈습니다(덧셈 어텐션). 트랜스포머는 점수를 내적으로
+바꾸고, 순환을 아예 버렸습니다 <!--CITE key=vaswani2017 sec=3.2.1-->.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p6-formula">
+<h3>수식으로</h3>
+<div class="defn"><span class="h">정의 — 스케일드 닷 프로덕트 어텐션</span>
+<div class="eq"><b class="fn">Attention</b>(<span class="vec">Q</span>, <span class="vec">K</span>, <span class="vec">V</span>)
+= <b class="fn">softmax</b><span class="frac"><span class="num"><span class="vec">Q</span><span class="vec">K</span><sup>⊤</sup></span><span class="den"><span class="sqrt">√<span class="rad"><i>d</i><sub>k</sub></span></span></span></span><span class="vec">V</span></div>
+<span class="vec">Q</span> ∈ ℝ<sup><i>n</i>×<i>d</i><sub>k</sub></sup> 의 i 행이 i 번째 토큰의 질의,
+<span class="vec">K</span>·<span class="vec">V</span> 의 j 행이 j 번째 토큰의 키·값입니다.
+소프트맥스는 <b>행마다</b> 적용합니다.</div>
+<p><span class="vec">Q</span><span class="vec">K</span><sup>⊤</sup> 의 (i, j) 칸이 곧 q<sub>i</sub>·k<sub>j</sub> 입니다 —
+2부에서 본 "행렬곱은 내적의 표" 입니다.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p6-sdpa-code">
+<h3>코드는 식과 한 줄씩 대응합니다</h3>
+<!--CODE file=py/transformerlib/attention.py sym=scaled_dot_product note=행렬곱 · √d 로 나눔 · 소프트맥스 · 가중합-->
+<p>역전파는 따로 짜지 않았습니다. 행렬곱·곱셈·(인과)소프트맥스가 각자 역전파를
+알고 있고(4부), 3부의 그래프가 그것들을 이어 붙입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-by-hand">
+<h3>손으로 한 번 풀어 봅니다</h3>
+<p>질의 (1, 0), 키 (1, 0)·(0, 1), 값 (10, 0)·(0, 10), d<sub>k</sub> = 2 라면 점수는
+1/√2 와 0, 가중치는</p>
+<div class="eq"><i>w</i><sub>0</sub> = <span class="frac"><span class="num"><i>e</i><sup>1/√2</sup></span><span class="den"><i>e</i><sup>1/√2</sup> + 1</span></span>,
+&nbsp; <i>w</i><sub>1</sub> = 1 − <i>w</i><sub>0</sub></div>
+<p>출력은 (10<i>w</i><sub>0</sub>, 10<i>w</i><sub>1</sub>) 입니다. 시험이 이 값을 소수 13자리까지
+식과 견줍니다.</p>
+<!--CODE file=py/transformerlib/tests/test_attention.py sym=test_matches_formula_by_hand note=식 그대로의 기댓값-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-where-qkv">
+<h3>q·k·v 는 어디서 오나</h3>
+<p>토큰 벡터 x 한 줄에서 세 번의 사영으로 만듭니다. 이 덱은 세 사영을 행렬 하나
+<code>Wqkv</code> [d, 3d] 로 한 번에 하고 열을 셋으로 자릅니다(SPEC §3).</p>
+<div class="eq"><span class="vec">q</span>, <span class="vec">k</span>, <span class="vec">v</span>
+= <b class="fn">split</b>(<span class="vec">x</span><span class="vec">W</span><sub>qkv</sub> + <span class="vec">b</span><sub>qkv</sub>)</div>
+<ul>
+<li>같은 x 에서 나오지만 서로 다른 행렬을 지나 서로 다른 역할을 배웁니다.</li>
+<li>q 는 "나는 무엇을 찾나", k 는 "나는 무엇으로 찾아지나", v 는 "찾아지면 무엇을 건네나".</li>
+<li>세 역할이 같은 행렬이면 q·k 가 늘 대칭이 되어 "A 가 B 를 보는 정도 = B 가 A 를 보는
+정도" 로 묶입니다. 나누면 그 제약이 사라집니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-rows-sum">
+<h3>행의 합은 1, 가중합은 볼록 결합</h3>
+<p>가중치가 모두 0 이상이고 합이 1 이므로, 출력은 값 벡터들의 <b>볼록 결합</b>입니다 —
+값들이 만드는 볼록 껍질 바깥으로 나가지 못합니다. 크기를 바꾸고 방향을 새로 만드는 일은
+뒤의 <code>Wo</code> 와 FFN 이 합니다.</p>
+<!--CODE file=py/transformerlib/tests/test_attention.py sym=test_weights_rows_sum_to_one_and_future_is_zero note=합 1, 미래 칸 0-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-ch2">
+<p class="chnum">2장</p>
+<h2>√d 로 나누는 까닭</h2>
+<p class="chsub">내적의 분산은 차원을 따라 자란다</p>
+</article>
+
+<article class="card" id="p6-sqrt-quote">
+<h3>논문의 설명</h3>
+<p>원래 논문은 d<sub>k</sub> 가 크면 내적의 크기가 커져 소프트맥스를 기울기가 아주 작은
+영역으로 밀어 넣는다고 추측하고, 각주에서 분산을 짧게 계산해 보입니다
+<!--CITE key=vaswani2017 sec=3.2.1-->. 이 장은 그 각주를 증명으로 펼치고 숫자로 확인합니다.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p6-var-proof">
+<h3>정리와 증명</h3>
+<div class="thm"><span class="h">정리</span>
+q<sub>i</sub>, k<sub>i</sub> (i = 1…d) 가 모두 서로 독립이고 평균 0, 분산 1 이면
+<div class="eq"><b class="fn">E</b>[<span class="vec">q</span>·<span class="vec">k</span>] = 0, &nbsp;
+<b class="fn">Var</b>[<span class="vec">q</span>·<span class="vec">k</span>] = <i>d</i></div></div>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li>E[q<sub>i</sub>k<sub>i</sub>] = E[q<sub>i</sub>]E[k<sub>i</sub>] = 0
+<span class="why">독립이면 곱의 기댓값은 기댓값의 곱</span></li>
+<li>Var[q<sub>i</sub>k<sub>i</sub>] = E[q<sub>i</sub>²k<sub>i</sub>²] − 0 = E[q<sub>i</sub>²]E[k<sub>i</sub>²] = 1·1
+<span class="why">평균 0 이면 E[x²] 가 분산</span></li>
+<li>Var[Σ q<sub>i</sub>k<sub>i</sub>] = Σ Var[q<sub>i</sub>k<sub>i</sub>] = d
+<span class="why">항끼리 독립이면 분산이 더해진다(2부)</span></li>
+</ol>
+<p>따라서 표준편차는 √d 이고, √d 로 나누면 분산이 1 로 돌아온다.</p></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-var-numbers">
+<h3>뽑아서 확인합니다</h3>
+<!--OUT file=attention.txt sec=1 note=d 마다 1만 쌍-->
+<!--CODE file=py/transformerlib/attention.py sym=dot_variance note=표본 분산을 잰다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-var-fig">
+<h3>로그 눈금으로 그리면 기울기 1 인 직선</h3>
+<!--FIG file=dot_variance.svg cap=나누지 않은 분산은 d 를 따라, 나눈 분산은 1 근처에-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-saturation">
+<h3>나누지 않으면 무엇이 문제인가</h3>
+<p>점수의 표준편차가 √d 로 커지면 가장 큰 점수와 둘째 점수의 차이도 커지고,
+소프트맥스는 가장 큰 칸 하나로 쏠립니다.</p>
+<!--OUT file=attention.txt sec=2 note=키 8개 중 최대 가중치의 평균-->
+<p>쏠린 소프트맥스의 야코비안 diag(p) − ppᵀ 은 p 가 원-핫에 가까울수록 0 행렬에
+가까워집니다(4부). 기울기가 흐르지 않으니 학습이 멈춥니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-saturation-test">
+<h3>쏠림도 시험으로</h3>
+<!--CODE file=py/transformerlib/tests/test_attention.py sym=test_dot_product_variance_grows_with_d..test_unscaled_softmax_saturates note=분산과 쏠림-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-sqrt-caveat">
+<h3>가정이 늘 맞지는 않습니다</h3>
+<ul>
+<li>학습이 진행되면 q·k 의 성분은 독립도 아니고 분산 1 도 아닙니다. 이 증명은
+<b>초기화 무렵</b>의 크기를 맞추는 논리입니다.</li>
+<li>그래도 나누는 것이 해롭지 않은 까닭 — 학습이 필요한 크기는 W<sub>q</sub>·W<sub>k</sub>
+가 스스로 키울 수 있습니다. 나눗셈은 출발점만 정합니다.</li>
+<li>논문은 스케일링이 없는 내적 어텐션이 d<sub>k</sub> 가 클 때 덧셈 어텐션보다 못했다고
+적습니다 <!--CITE key=vaswani2017 sec=3.2.1-->.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card quiz" id="p6-quiz-1" data-quiz>
+<h3>1~2장 퀴즈</h3>
+<p class="q">Q. q·k 를 √d 대신 d 로 나누면 초기화 무렵 점수의 분산은 얼마가 되고,
+그때 소프트맥스는 어떤 모양이 됩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> Var[q·k/d] = d/d² = <b>1/d</b> 입니다. d 가 크면 점수가 모두 0 근처에
+몰려 소프트맥스가 <b>거의 고르게</b> 퍼집니다(모든 키에 1/n). 쏠림의 반대 극단입니다.
+고른 소프트맥스도 기울기는 흐르지만, 처음에는 모든 토큰이 모든 토큰을 똑같이 보므로
+W<sub>q</sub>·W<sub>k</sub> 가 점수를 키울 때까지 시간이 걸립니다. √d 는 분산을 1 로 맞추는
+딱 중간입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-ch3">
+<p class="chnum">3장</p>
+<h2>인과 마스크</h2>
+<p class="chsub">다음 토큰을 맞히는 모델은 다음 토큰을 보면 안 된다</p>
+</article>
+
+<article class="card" id="p6-mask-why">
+<h3>왜 가려야 하나</h3>
+<p>디코더는 위치 i 에서 i+1 번째 토큰을 맞힙니다(7부 8장). 학습 때는 줄 전체가 한꺼번에
+들어오므로, 가리지 않으면 위치 i 가 i+1 의 토큰을 그대로 보고 베낄 수 있습니다.
+손실은 0 으로 떨어지지만 생성할 때는 그 토큰이 아직 없으니 아무것도 못 합니다.</p>
+<!--FIG file=causal_mask.svg cap=질의 i 는 키 j ≤ i 만 본다-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-mask-inf">
+<h3>−∞ 를 더한다</h3>
+<div class="eq"><i>s</i>′<sub><i>ij</i></sub> = <span class="cases"><span class="brk"></span><table>
+<tr><td><i>s</i><sub><i>ij</i></sub></td><td><i>j</i> ≤ <i>i</i></td></tr>
+<tr><td>−∞</td><td><i>j</i> &gt; <i>i</i></td></tr></table></span>
+&nbsp; ⇒ &nbsp; <i>e</i><sup>−∞</sup> = 0</div>
+<p>소프트맥스 뒤에 가려진 칸은 정확히 0 이고, 남은 칸끼리 합이 1 이 되게 다시 정규화됩니다.
+구현은 −∞ 를 실제로 더하지 않고 그 칸을 건너뜁니다 — 같은 값이고, 더 쌉니다.</p>
+<!--CODE file=py/transformerlib/ops.py sym=causal_softmax note=i 행은 0‥i 칸에서만-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mask-equal">
+<h3>건너뛰기 = −∞ 를 더하기</h3>
+<!--CODE file=py/transformerlib/tests/test_ops.py sym=test_causal_softmax_equals_minus_infinity_mask note=두 방법이 1e-15 안-->
+<!--OUT file=attention.txt sec=3 note=네 토큰짜리 예의 가중치-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mask-future">
+<h3>미래를 바꿔도 과거는 비트까지 같다</h3>
+<p>가장 강한 확인은 "결과가 같다" 가 아니라 "영향이 없다" 입니다. 마지막 토큰만 바꿔
+멀티헤드 어텐션을 다시 돌리면 앞 다섯 위치의 출력이 <b>한 비트도</b> 바뀌지 않아야 합니다.</p>
+<!--CODE file=py/transformerlib/tests/test_attention.py sym=test_future_tokens_cannot_change_the_past note=assertEqual — 허용 오차 0-->
+<p>허용 오차가 0 인 까닭: 가려진 칸의 가중치는 정확히 0.0 이고, 0.0·v 를 더해도 부동소수는
+변하지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mask-train-all">
+<h3>마스크 덕분에 한 줄이 예측 n 개</h3>
+<p>가림이 있으니 길이 n 인 줄 하나에서 위치마다 "여기까지 보고 다음을 맞히기" 가 동시에
+일어납니다. 학습 신호가 n 배로 늘고, 그 계산이 행렬곱 몇 번에 묶입니다.
+RNN 이 한 위치씩 차례로 계산해야 했던 것과 대조적입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-demo-attn">
+<h3>직접 해 보기 — 어텐션 계산기</h3>
+<p>질의·키·값 행렬을 넣으면 질의마다 가중치와 출력이 나옵니다. 행은 <code>;</code> 로 나눕니다. 인과 마스크를 켜면 질의 <span class="mi"><i>i</i></span> 는 키 0‥<span class="mi"><i>i</i></span> 만 봅니다.</p>
+<div class="demo" data-demo="d-attn"><h5>softmax(QKᵀ/√d_k)·V</h5><div class="row"><label>Q <input type="text" data-q value="1 0; 0 1; 1 1" size="14"></label><label>K <input type="text" data-k value="1 0; 0 1; 1 1" size="14"></label><label>V <input type="text" data-v value="10 0; 0 10; 5 5" size="14"></label><label><input type="checkbox" data-causal> 인과 마스크</label></div><div class="out"></div></div>
+<div class="note">식은 <code>attention.scaled_dot_product</code> 와 같습니다. 마스크를 켜고 끈 두 경우의 가중치와 출력을 파이썬 값과 대조합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+
+<article class="card" id="p6-ch4">
+<p class="chnum">4장</p>
+<h2>멀티헤드</h2>
+<p class="chsub">폭을 나눠 여러 관계를 동시에 본다</p>
+</article>
+
+<article class="card" id="p6-mh-why">
+<h3>헤드 하나로는 한 가지 섞임만</h3>
+<p>소프트맥스 한 행은 확률분포 하나입니다. "주어를 볼 것" 과 "바로 앞 토큰을 볼 것" 을
+동시에 원하면 한 분포로는 둘을 반씩 섞을 수밖에 없습니다.</p>
+<p>그래서 폭 d 를 h 조각으로 나눠 조각마다 따로 어텐션합니다. 논문은 멀티헤드가 서로 다른
+표현 부분공간의 정보를 서로 다른 위치에서 함께 보게 한다고 적습니다
+<!--CITE key=vaswani2017 sec=3.2.2-->.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p6-mh-fig">
+<h3>나누고, 따로 보고, 잇는다</h3>
+<!--FIG file=multihead_split.svg cap=d = 8, h = 4 — 헤드 j 는 열 2j‥2j+1-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-mh-split">
+<h3>나누기는 reshape 와 축 옮기기</h3>
+<p>(B, n, d) → (B, n, h, d<sub>k</sub>) → (B, h, n, d<sub>k</sub>). 복사하는 계산은 없고, 칸을
+읽는 차례만 바뀝니다. 합치기는 그 역입니다.</p>
+<!--CODE file=py/transformerlib/attention.py sym=split_heads..merge_heads note=SPEC §3.1-->
+<!--CODE file=py/transformerlib/tests/test_attention.py sym=test_split_merge_round_trip note=헤드 j 가 열 j·d_k‥ 인지까지-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mh-code">
+<h3>멀티헤드 어텐션 전체</h3>
+<!--CODE file=py/transformerlib/attention.py sym=multi_head_attention note=사영 한 번 · 나누기 · 어텐션 · 합치기 · 출력 사영-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mh-blockdiag">
+<h3>헤드 나누기 = 블록 대각 사영</h3>
+<p>헤드 j 의 질의는 q 의 열 j·d<sub>k</sub>‥ 이므로, "q 를 만드는 사영 뒤에 좌표 투영
+P<sub>j</sub> 를 곱한 것" 입니다. 헤드마다 점수를 따로 내므로 전체 점수 행렬은</p>
+<div class="eq"><span class="vec">Q</span><span class="vec">K</span><sup>⊤</sup> =
+<span class="oplim"><span class="up"><i>h</i>−1</span><span class="op">Σ</span><span class="dn"><i>j</i>=0</span></span>
+<span class="vec">Q</span><i>P</i><sub><i>j</i></sub><i>P</i><sub><i>j</i></sub><sup>⊤</sup><span class="vec">K</span><sup>⊤</sup></div>
+<p>로 쪼개지고, 각 조각이 따로 소프트맥스를 지납니다. 파라미터는 늘지 않습니다 —
+W<sub>qkv</sub> 는 헤드 수와 무관하게 [d, 3d] 입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-mh-cost">
+<h3>헤드를 늘려도 계산량은 비슷합니다</h3>
+<p>헤드마다 점수가 n²·d<sub>k</sub> 곱셈이고 헤드가 h 개이니 합은 n²·d 입니다. 헤드 하나로
+d 전체를 쓸 때와 같습니다. 논문도 헤드마다 차원이 줄어 전체 계산량이 비슷하다고
+적습니다 <!--CITE key=vaswani2017 sec=3.2.2-->.</p>
+<!--CODE file=py/transformerlib/tests/test_attention.py sym=test_weights_shape note=가중치 모양 (B, h, n, n)-->
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card quiz" id="p6-quiz-2" data-quiz>
+<h3>3~4장 퀴즈</h3>
+<p class="q">Q. 인과 마스크를 두고 학습한 모델에, 생성 때는 실수로 마스크를 떼고 줄 전체를
+넣었습니다. 마지막 위치의 로짓은 달라집니까? 첫 위치의 로짓은요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>마지막 위치는 같습니다.</b> 마지막 질의는 원래도 모든 키(j ≤ n−1)를
+보았으니 마스크가 가리는 칸이 없습니다. 다만 그것은 <b>첫 블록</b>에서의 이야기이고, 앞
+위치들의 표현이 바뀌면 둘째 블록부터는 마지막 위치가 받는 k·v 도 바뀝니다 — 그러니 층이
+둘 이상이면 마지막 로짓도 달라집니다.<br>
+<b>첫 위치는 첫 블록에서부터 달라집니다.</b> 원래는 자기 자신만 보았는데 이제 뒤 토큰을
+모두 봅니다. 학습 때 한 번도 겪지 않은 분포라 로짓이 엉뚱해집니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-ch5">
+<p class="chnum">5장</p>
+<h2>어텐션 역전파</h2>
+<p class="chsub">부품의 역전파를 거꾸로 이어 붙인다</p>
+</article>
+
+<article class="card" id="p6-bwd-chain">
+<h3>순전파를 네 단계로 적으면</h3>
+<div class="eq left">
+<span class="vec">S</span> = <span class="vec">Q</span><span class="vec">K</span><sup>⊤</sup>/√<i>d</i><sub>k</sub>
+&nbsp;→&nbsp; <span class="vec">W</span> = <b class="fn">causal_softmax</b>(<span class="vec">S</span>)
+&nbsp;→&nbsp; <span class="vec">O</span> = <span class="vec">W</span><span class="vec">V</span></div>
+<p>역전파는 이 화살표를 거꾸로, 4부에서 유도한 규칙 셋으로 지나갑니다.</p>
+<ul>
+<li>행렬곱 Y = AB: dA = dY Bᵀ, dB = Aᵀ dY</li>
+<li>소프트맥스(행마다): ds = w ⊙ (dw − ⟨dw, w⟩)</li>
+<li>상수배 Y = cX: dX = c·dY</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-bwd-derive">
+<h3>유도</h3>
+<div class="proof cont"><span class="h">유도 — 뒤에서부터</span>
+<ol class="pf">
+<li>d<span class="vec">V</span> = <span class="vec">W</span><sup>⊤</sup> d<span class="vec">O</span>,
+&nbsp; d<span class="vec">W</span> = d<span class="vec">O</span> <span class="vec">V</span><sup>⊤</sup>
+<span class="why">O = WV 에 행렬곱 규칙</span></li>
+<li>d<span class="vec">S</span><sub><i>i</i></sub> = <span class="vec">w</span><sub><i>i</i></sub> ⊙ (d<span class="vec">W</span><sub><i>i</i></sub> − ⟨d<span class="vec">W</span><sub><i>i</i></sub>, <span class="vec">w</span><sub><i>i</i></sub>⟩)
+<span class="why">행 i 마다 소프트맥스 규칙. 가려진 칸은 w = 0 이라 저절로 0</span></li>
+<li>d<span class="vec">Q</span> = d<span class="vec">S</span> <span class="vec">K</span> / √<i>d</i><sub>k</sub>,
+&nbsp; d<span class="vec">K</span> = d<span class="vec">S</span><sup>⊤</sup> <span class="vec">Q</span> / √<i>d</i><sub>k</sub>
+<span class="why">S = (1/√d)·QKᵀ 에 상수배와 행렬곱 규칙</span></li>
+</ol></div>
+<p>q·k·v 의 기울기는 다시 합쳐져 W<sub>qkv</sub> 의 선형층 역전파로 들어갑니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-bwd-check">
+<h3>이어 붙인 역전파가 맞는지</h3>
+<p>파이썬은 이 유도를 코드로 적지 않았습니다 — 부품들이 이미 역전파를 알고 3부의 그래프가
+이어 줍니다. 그러니 확인할 것은 "이어 붙인 결과" 입니다.</p>
+<!--CODE file=py/transformerlib/tests/test_attention.py sym=test_backward_through_everything note=멀티헤드 어텐션의 모든 입력·가중치를 차분과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-bwd-c1">
+<h3>C 는 유도를 그대로 손으로 짭니다 (1)</h3>
+<p>C 에는 자동미분이 없습니다. 위 세 줄의 식을 (배치, 헤드) 한 쌍마다 루프로 옮겼습니다.</p>
+<!--CODE file=c/model.c lines=417-447 note=dW 와 dV — 값 쪽-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-bwd-c2">
+<h3>C 는 유도를 그대로 손으로 짭니다 (2)</h3>
+<!--CODE file=c/model.c lines=448-467 note=소프트맥스 역전파 · 1/√d · dQ 와 dK-->
+<p>dK 를 i 가 작은 것부터 쌓는 까닭은 파이썬 행렬곱 역전파의 차례와 맞추려는 것입니다.
+그래야 float32 반올림까지 파이썬과 비슷하게 갑니다(9부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-bwd-parallel">
+<h3>(배치, 헤드) 한 쌍이 한 일감</h3>
+<p>헤드 j 의 dq·dk·dv 는 열 j·d<sub>k</sub>‥ 에만 씁니다. 배치 b 의 헤드 j 일감과 다른 일감이
+쓰는 칸이 겹치지 않으므로, 일감을 스레드에 나눠 줘도 결과가 스레드 수와 무관합니다.
+9부가 이 성질을 1 스레드·3 스레드의 기울기가 비트까지 같다는 시험으로 확인합니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-ch6">
+<p class="chnum">6장</p>
+<h2>비용 O(n²d)</h2>
+<p class="chsub">문맥이 길면 무엇이 비싸지나</p>
+</article>
+
+<article class="card" id="p6-cost-table">
+<h3>점수 대 사영</h3>
+<!--OUT file=attention.txt sec=4 note=블록 하나에서 곱셈 수의 비-->
+<p>점수 행렬은 n×n 이라 문맥 길이의 제곱으로 자랍니다. 사영은 토큰마다 한 번이라 n 에
+비례합니다. 비가 n/d 이므로 문맥이 폭보다 길어지면 어텐션이 주된 비용이 됩니다.
+7부 7장의 그림이 같은 이야기를 곡선으로 보여 줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-cost-memory">
+<h3>메모리는 더 빨리 문제가 됩니다</h3>
+<p>역전파는 소프트맥스를 지난 가중치 W 를 기억해야 합니다(ds 계산에 w 가 들어갑니다).
+모양이 (B, h, n, n) 이므로</p>
+<div class="eq"><b class="fn">메모리</b> ∝ <i>B</i>·<i>h</i>·<i>n</i>²·<i>L</i></div>
+<p>n 이 두 배면 네 배입니다. 11부의 온라인 소프트맥스(플래시 어텐션의 핵심)는 이 n×n 을
+메모리에 들지 않고 같은 출력을 내는 방법입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p6-quiz-3" data-quiz>
+<h3>5~6장 퀴즈</h3>
+<p class="q">Q. 어텐션 가중치 W 를 저장하지 않고 역전파할 수는 없을까요? 순전파에서 무엇을
+대신 저장하면 W 를 다시 만들 수 있고, 그 대가는 무엇입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>Q 와 K 만 있으면 W 를 다시 계산할 수 있습니다</b> —
+W = causal_softmax(QKᵀ/√d). Q·K 는 (B, h, n, d<sub>k</sub>) 라 n 에 비례하는 메모리입니다.
+대가는 <b>계산</b>입니다. 역전파 때 점수 행렬을 한 번 더 만들므로 순전파의 어텐션 계산이
+두 번 듭니다. 메모리를 계산으로 바꾸는 이 거래(재계산)는 온라인 소프트맥스와 함께
+플래시 어텐션이 쓰는 두 번째 요령입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+
+<article class="card" id="p6-ch7">
+<p class="chnum">7장</p>
+<h2>학습된 어텐션 지도</h2>
+<p class="chsub">C 가 학습한 모델이 실제로 어디를 보는가</p>
+</article>
+
+<article class="card" id="p6-map-how">
+<h3>지도를 꺼내는 법</h3>
+<p>8부에서 C 로 학습한 체크포인트를 <b>파이썬</b>이 읽어 같은 순전파를 돌리고, 블록마다 소프트맥스를
+지난 가중치 (B, h, n, n) 을 받아 둡니다. 두 구현이 같은 체크포인트 형식을 읽는다는 약속(SPEC §4)이
+여기서 쓰입니다.</p>
+<!--CODE file=py/demo/demo_attnmaps.py sym=maps note=가중치 행렬 전부와, 질의마다 가장 큰 키-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-map-add">
+<h3>덧셈 — 그림</h3>
+<!--FIG file=attn_add.svg cap=042+915=7590 을 넣었을 때 마지막 블록의 네 헤드. 답은 일의 자리부터 적는다-->
+<p>행은 질의 토큰, 열은 키 토큰입니다. 인과 마스크 때문에 대각선 위는 늘 비어 있습니다(3장).
+눈여겨볼 곳은 <b>= 의 행</b>입니다 — 그 자리의 출력이 답의 첫 글자, 곧 일의 자리 합을 내야 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-map-add-top">
+<h3>덧셈 — 질의마다 가장 많이 본 키</h3>
+<!--OUT file=attnmaps.txt sec=1 note=왼쪽이 질의, 오른쪽이 가장 큰 가중치를 받은 키-->
+<ul>
+<li>= 의 행: 헤드 0·1 은 첫 수의 일의 자리 <b>2</b>, 헤드 2·3 은 둘째 수의 일의 자리 <b>5</b> 를 가장 많이 봅니다. 2 + 5 = 7 을 쓰는 데 필요한 두 글자를 헤드가 나눠 맡은 모양입니다.</li>
+<li>그 뒤 행들은 이렇게 깔끔하지 않습니다. 가장 큰 칸 하나만으로는 받아올림을 어떻게 나르는지 읽을 수 없습니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-map-sort">
+<h3>정렬 — 그림과 표</h3>
+<!--FIG file=attn_sort.svg cap=qwerty>eqrtwy 를 넣었을 때 마지막 블록의 네 헤드-->
+<!--OUT file=attnmaps.txt sec=3 note=질의마다 가장 많이 본 키-->
+<p>정렬은 다음 글자를 정하려면 남은 글자를 <b>모두 견줘야</b> 합니다. 그래서 한 칸에 몰리기보다 여러 칸에
+퍼진 행이 많고, 가장 큰 칸 하나만 적은 표는 덧셈보다 읽기 어렵습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-map-ko">
+<h3>한국어 — 그림</h3>
+<!--FIG file=attn_ko.svg cap=김 첨지는 오래간만에 돈을 벌었다. 를 넣었을 때 셋째(마지막) 블록의 네 헤드-->
+<p>합성 과제보다 무게가 훨씬 넓게 퍼집니다. 어휘가 바이트 BPE 라 음절의 앞 바이트만 담은 토큰이 섞여 있어,
+토큰마다 이름을 붙이면 글자가 깨집니다(<a href="#p10-ch4">10부 4장</a>). 그래서 그림 아래에는 원문을 적었습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-map-caution">
+<h3>지도를 읽을 때 조심할 것</h3>
+<ul>
+<li>가중치는 "어디에서 값을 가져왔나" 입니다. 가져온 값이 답에 얼마나 쓰였는지는 그 뒤의 사영·FFN·다음 블록이 정합니다.</li>
+<li>잔차 스트림(<a href="#p7-ch1">7부 1장</a>) 때문에 한 위치의 벡터에는 이미 앞 블록이 모은 정보가 섞여 있습니다. 마지막 블록이 "2" 를 본다는 것은 "2 자리에 모인 벡터" 를 본다는 뜻입니다.</li>
+<li>입력 하나에서 뽑은 지도입니다. 다른 문제에서 같은 헤드가 같은 일을 하는지는 따로 재야 합니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p6-quiz-4" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. 덧셈 모델에게 답을 일의 자리부터 쓰게 했습니다. 큰 자리부터 쓰게 했다면 = 의 행은 무엇을 봐야 했을까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 천의 자리(받아올림 하나)를 먼저 써야 하므로 두 수의 백의 자리만으로는 부족합니다. 십의 자리, 경우에 따라
+일의 자리 합까지 받아올림이 이어지는지를 한 자리에서 알아야 합니다. 일의 자리부터 쓰면 받아올림이 방금 쓴
+자리에서만 오므로 필요한 정보가 한 번에 두세 글자로 줄어듭니다. 실제 정답률 비교는 <a href="#p8-ch7">8부 7장</a>에 있습니다.</div>
+<span class="tier ill">설명용</span>
 </article>

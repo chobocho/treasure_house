@@ -13,5 +13,441 @@
 <li>파이썬과 대조 — 로짓·기울기·손실</li>
 <li>스레드 정적 분할과 결정론</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<div class="key"><b>이 부의 한 줄 요약</b> — 파이썬 참조는 설명을 맡았고, C 는 같은 식을
+손으로 다시 짜서 실제로 학습합니다. 둘이 같은 체크포인트를 읽고 같은 난수를 뽑으므로,
+"같은 식을 옮겼다" 는 말을 숫자로 확인할 수 있습니다.</div>
+</article>
+
+<article class="card" id="p9-ch1">
+<p class="chnum">1장</p>
+<h2>메모리 배치와 float32</h2>
+<p class="chsub">파라미터 전부가 배열 하나</p>
+</article>
+
+<article class="card" id="p9-one-array">
+<h3>파라미터는 float 배열 하나</h3>
+<p>파이썬은 텐서마다 리스트를 따로 들었습니다. C 는 모든 파라미터를 SPEC §4 체크포인트
+차례대로 <b>한 배열</b>에 붙이고, 이름마다 시작 위치(offset)와 크기만 기억합니다.</p>
+<ul>
+<li>체크포인트 읽기는 머리말 뒤에서 <code>fread</code> 한 번입니다.</li>
+<li>기울기도 같은 모양의 배열 하나라, 0 으로 비우기는 <code>memset</code> 한 번입니다.</li>
+<li>AdamW 는 배열 하나를 도는 루프 하나입니다(3장).</li>
+</ul>
+<!--CODE file=c/model.c sym=layout note=이름표 — wte, wpe, h0.ln1_g … lnf_b-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-lookup">
+<h3>이름으로 텐서 찾기</h3>
+<p>커널은 <code>P(l, "Wqkv")</code> 처럼 이름으로 가중치를 집어 옵니다. 같은 함수가 파라미터
+배열과 기울기 배열 모두에서 쓰입니다 — 배치가 같기 때문입니다.</p>
+<!--CODE file=c/model.c sym=tfs_tensor note=offset 을 더해 준다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-float32">
+<h3>왜 float32 인가</h3>
+<p>값 하나가 4바이트라 double 의 절반입니다. 메모리 대역폭이 곧 속도인 행렬곱에서는
+그만큼 캐시에 더 많이 들어갑니다. 대가는 정밀도입니다.</p>
+<div class="eq">float32 의 상대 간격 ≈ 2<sup>−23</sup>, &nbsp; double 의 상대 간격 ≈ 2<sup>−52</sup></div>
+<p>유효 숫자가 7자리 남짓이라, O(1) 크기의 항을 수천 개 더하면 끝자리가 흔들립니다.
+그래서 C 는 원칙을 하나 둡니다.</p>
+<div class="key"><b>값은 float32 로 들고, 행 하나의 합은 double 로 쌓는다.</b></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-double-sums">
+<h3>합만 double 로</h3>
+<!--CODE file=c/ops.c sym=tfs_softmax_row note=최댓값과 분모를 double 로-->
+<p>소프트맥스의 분모, 레이어놈의 평균·분산, 역전파의 내적이 그런 합입니다. 원소 하나하나의
+곱은 float32 로 충분합니다. 파이썬 참조가 <code>math.fsum</code> 으로 정확히 더하는 자리와
+같은 자리입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-acts">
+<h3>순전파가 남기는 것</h3>
+<p>C 에는 계산 그래프가 없습니다. 역전파가 다시 읽을 값을 순전파가 직접 배열에 남깁니다.</p>
+<!--CODE file=c/model.h lines=13-29 note=블록마다의 활성값과 임시 버퍼-->
+<p>무엇을 남길지는 4·6부의 역전파 식이 정합니다 — 레이어놈은 x̂ 와 1/σ, 소프트맥스는 p,
+GELU 는 입력 x, 어텐션은 q·k·v 와 가중치.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-acts-size">
+<h3>활성값의 크기</h3>
+<p>배치 B, 문맥 T 에서 블록 하나가 남기는 float 수는 대략</p>
+<div class="eq">(16<i>d</i> + 2<i>d</i><sub>ff</sub>)·<i>B</i><i>T</i> + <i>h</i>·<i>B</i>·<i>T</i>²</div>
+<p>마지막 항이 어텐션 가중치입니다. 로짓과 확률은 모델 끝에서 V·BT 씩 두 벌입니다. 어휘가 크면
+여기가 가장 큽니다 — 6부 6장에서 본 T² 와 함께 메모리의 두 봉우리입니다.</p>
+<!--CODE file=c/model.c sym=tfs_model_alloc note=할당하는 곳-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-ch2">
+<p class="chnum">2장</p>
+<h2>행렬곱의 루프 순서와 블로킹</h2>
+<p class="chsub">같은 답, 다른 메모리 읽기</p>
+</article>
+
+<article class="card" id="p9-three-orders">
+<h3>세 번 짭니다</h3>
+<!--CODE file=c/tensor.c lines=1-17 note=세 차례를 두는 까닭-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-ijk">
+<h3>ijk — 교과서 차례</h3>
+<!--CODE file=c/tensor.c sym=tfs_matmul_ijk note=b 를 열 방향으로 훑는다-->
+<p>가장 안쪽 루프가 <code>b[k * p + j]</code> 를 k 를 바꿔 가며 읽습니다. 행 우선 배열에서
+k 가 1 늘면 p 칸을 건너뜁니다. 행렬이 캐시보다 크면 거의 매번 캐시를 놓칩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-ikj">
+<h3>ikj — 한 행을 앞에서부터</h3>
+<!--CODE file=c/tensor.c sym=tfs_matmul_ikj note=b 의 k 행을 이어서 읽는다-->
+<p>a[i][k] 하나를 잡고 b 의 k 행을 <code>bk[0], bk[1], …</code> 차례로 읽습니다. 메모리를
+이어서 읽으니 캐시 적중이 높고, 안쪽 루프가 단순한 덧셈의 줄이라 컴파일러가 다루기도
+쉽습니다. 파이썬 참조의 <code>tensor.matmul</code> 도 이 차례입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-blocked">
+<h3>blocked — 조각이 캐시에 들게</h3>
+<!--CODE file=c/tensor.c sym=tfs_matmul_blocked note=ikj 를 block×block 조각으로-->
+<p>세 행렬을 조각으로 나눠, 조각 셋이 한꺼번에 캐시에 들게 합니다. 행렬이 작으면 이득이 없고
+루프 머리의 비용만 늡니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-same-bits">
+<h3>세 차례의 답은 비트까지 같습니다</h3>
+<p>(i, j) 칸 하나에 대해 세 판 모두 k 를 작은 것부터 더합니다. 더하는 차례가 같으니
+부동소수 결과도 같습니다. 그래서 벤치 표는 "같은 답에 드는 시간" 만 견줍니다.</p>
+<!--CODE file=c/tests/test_tensor.c lines=35-62 note=67×45·45×53 에서 memcmp-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-bench">
+<h3>이 기계에서 잰 한 번</h3>
+<!--OUT file=bench.txt sec=1 note=384×384, 한 스레드 · 시간을 재는 유일한 캡처-->
+<div class="note"><b>이 표만 세 번 돌리면 숫자가 달라집니다.</b> 그래서
+<code>tools/record.sh</code> 의 재현 대조에서 빠지고, 이 덱의 산문은 속도 숫자를 옮겨 적지
+않습니다. 비교해 볼 것은 세 줄의 <b>순서와 대략의 배수</b>입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-bench-read">
+<h3>표를 읽는 법</h3>
+<ul>
+<li>GFLOP/s 는 초당 10억 FLOP — 곱셈 n³ 번과 덧셈 n³ 번을 2n³ FLOP 로 셉니다(7부 7장).</li>
+<li>ijk 와 ikj 의 차이는 계산이 아니라 <b>메모리 접근</b>의 차이입니다. 곱셈 수는 셋이 같습니다.</li>
+<li>blocked 가 ikj 보다 늘 빠른 것은 아닙니다. 384×384 float32 행렬 하나는 약 590 KB 이고,
+그것이 캐시의 어느 층에 드느냐는 기계마다 다릅니다.</li>
+<li>이 덱의 모델은 행렬이 작아(d = 64) 학습 커널에는 ikj 만 씁니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p9-quiz-1" data-quiz>
+<h3>1~2장 퀴즈</h3>
+<p class="q">Q. ikj 행렬곱의 안쪽 루프 <code>o[j] += aik * bk[j]</code> 를 컴파일러가 FMA
+(곱셈과 덧셈을 한 명령으로) 로 바꾸면 무엇이 달라집니까? 이 저장소가
+<code>-ffp-contract=off</code> 로 막는 까닭은?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> FMA 는 <code>aik*bk[j]</code> 를 반올림하지 않은 채로 o[j] 에 더하고 한 번만
+반올림합니다. 두 번 반올림하던 결과와 <b>끝자리가 달라집니다</b>. 더 정확할 수도 있지만,
+파이썬 참조·다른 기계·다른 컴파일러 설정과 비트까지 맞춰 보는 대조가 무너집니다.
+SPEC §8 이 "컴파일러가 식을 몰래 바꾸지 못하게" 막는 이유입니다. 세 루프 차례가 비트까지
+같다는 시험도 FMA 가 한 판에만 적용되면 깨집니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-ch3">
+<p class="chnum">3장</p>
+<h2>순전파·역전파·AdamW 커널</h2>
+<p class="chsub">자동미분 없이 손으로</p>
+</article>
+
+<article class="card" id="p9-linear-fwd">
+<h3>선형층 순전파 — 행마다 일감</h3>
+<!--CODE file=c/model.c sym=lin_fwd_rows..linear_fwd note=곱의 합 뒤에 편향-->
+<p>편향을 곱의 합 <b>뒤에</b> 더하는 것까지 파이썬의 <code>T.add(T.matmul(x, W), b)</code> 차례와
+같게 했습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-linear-bwd">
+<h3>선형층 역전파 — dX 는 행마다, dW 는 가중치 행마다</h3>
+<!--CODE file=c/model.c sym=lin_dx_rows..lin_dw_rows note=dX = dY Wᵀ (행마다) · dW = Xᵀ dY (가중치 행마다)-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-linear-bwd-2">
+<h3>선형층 역전파 — 두 일감을 부르고 편향은 한 줄기로</h3>
+<!--CODE file=c/model.c sym=linear_bwd note=db = Σ dY 는 행 차례로-->
+<p>dW 를 <b>가중치 행 k 마다</b> 나누는 까닭 — dW[k][j] 는 모든 행 r 의 합입니다. 행으로 나누면
+한 칸의 합을 여러 스레드가 나눠 쌓게 되어 더하는 차례가 스레드 수에 따라 달라집니다.
+가중치 행으로 나누면 한 칸의 합은 한 스레드가 r = 0 부터 차례로 쌓습니다(6장).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-forward-1">
+<h3>순전파 전체 (1) — 임베딩과 위치</h3>
+<!--CODE file=c/model.c lines=523-550 note=토큰 조회 + wpe 또는 사인 표-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-forward-2">
+<h3>순전파 전체 (2) — 블록</h3>
+<!--CODE file=c/model.c lines=552-589 note=LN → qkv 사영 → (RoPE) → 어텐션 → Wo → 더하기 → LN → FFN → 더하기-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-forward-3">
+<h3>순전파 전체 (3) — 로짓과 손실</h3>
+<!--CODE file=c/model.c lines=591-604 note=LNf · 묶인 출력 사영 · 행 차례로 손실을 더한다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-backward-1">
+<h3>역전파 (1) — 로짓에서 LNf 까지</h3>
+<!--CODE file=c/model.c lines=606-633 note=(p − y)/N 과 출력 사영의 역전파-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-backward-2">
+<h3>역전파 (2) — 블록을 거꾸로</h3>
+<!--CODE file=c/model.c lines=635-679 note=잔차 기울기 gd 에 곁가지의 몫을 더해 간다-->
+<p>잔차의 규칙(7부 1장)이 코드에서는 이렇게 보입니다 — <code>gd</code> 는 비우지 않고,
+레이어놈 역전파가 곁가지의 몫을 <code>gd</code> 에 <b>더합니다</b>.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-backward-3">
+<h3>역전파 (3) — 임베딩으로 돌려준다</h3>
+<!--CODE file=c/model.c lines=681-693 note=wte 와 wpe 에 scatter-add-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-adamw">
+<h3>AdamW — 배열 하나를 도는 루프</h3>
+<!--CODE file=c/train.c sym=decays..tfs_adamw_step note=SPEC §6.2, 원소 하나의 계산은 double-->
+<p>m·v 는 float32 로 저장하지만 원소 하나의 갱신은 double 로 계산해 결과만 담습니다.
+원소끼리 서로 기대지 않으므로 합을 쌓는 곳이 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-clip-schedule">
+<h3>자르기와 학습률 일정</h3>
+<!--CODE file=c/train.c sym=tfs_clip_grad_norm..tfs_lr_schedule note=SPEC §6.3·§6.4-->
+<p>학습률 일정은 식의 <b>계산 차례까지</b> 파이썬 <code>optim.lr_schedule</code> 과 같게
+적었습니다. 시험이 두 언어의 학습률을 <code>==</code> 로 견줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-train-step">
+<h3>한 스텝</h3>
+<!--CODE file=c/train.c sym=tfs_get_batch..tfs_train_step note=배치 → 순전파 → 역전파 → 자르기 → AdamW-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p9-quiz-2" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 순전파가 GELU 의 <b>출력</b>만 남기고 입력을 버렸다면, 역전파에서 GELU 의
+미분을 계산할 수 있습니까? ReLU 였다면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>GELU 는 어렵습니다.</b> 미분이 x 의 함수(½(1+t) + ½x(1−t²)·A(1+3Bx²))인데,
+GELU 는 음수 쪽에서 단조가 아니라 출력 하나에 입력이 둘일 수 있어 출력에서 x 를 되찾을 수
+없습니다. 그래서 C 는 <code>fc1</code>(GELU 앞의 값)을 남깁니다.<br>
+<b>ReLU 는 됩니다.</b> 미분이 "x &gt; 0 이면 1" 이고, 출력이 0 보다 크다는 것과 같은 말이라
+출력만으로 충분합니다. 활성함수에 따라 남길 값이 달라지는 한 예입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-ch4">
+<p class="chnum">4장</p>
+<h2>체크포인트 형식</h2>
+<p class="chsub">두 구현이 함께 읽는 바이트</p>
+</article>
+
+<article class="card" id="p9-ckpt-layout">
+<h3>머리말 32바이트, 그다음은 float32 배열</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>바이트</th><th>내용</th></tr>
+<tr><td>0‥3</td><td>마법수 "TFS1"</td></tr>
+<tr><td>4‥31</td><td>int32 일곱: V, T, d, L, h, d_ff, flags</td></tr>
+<tr><td>32‥</td><td>파라미터 전부, 7부의 <code>shapes</code> 차례</td></tr>
+</table></div>
+<p>flags 의 비트 0 은 임베딩 묶음(늘 1), 비트 1‥2 는 위치 방식입니다(SPEC §4). 모든 수는 리틀
+엔디언입니다. 풀어 본 예는 SPEC §4.1 에 있습니다 — 파라미터 66개, 정확히 296바이트.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-ckpt-c">
+<h3>C 는 fread 한 번</h3>
+<!--CODE file=c/model.c sym=tfs_model_from_ckpt note=머리말을 읽고 배열을 통째로-->
+<p>마지막에 <code>fgetc(fp) != EOF</code> 를 봅니다. 설정이 말하는 크기보다 파일이 길면 다른
+모델의 체크포인트라는 뜻이라 거절합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-ckpt-py">
+<h3>파이썬도 같은 바이트를 씁니다</h3>
+<!--CODE file=py/transformerlib/train.py sym=save_ckpt..load_ckpt note=struct 로 같은 배치-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-ckpt-test">
+<h3>풀어 본 예와 왕복</h3>
+<!--CODE file=py/transformerlib/tests/test_train.py sym=test_spec_worked_example_bytes..test_round_trip_is_byte_identical note=296바이트 · 쓰고 읽고 다시 쓰면 같은 바이트-->
+<p>파이썬의 float64 는 쓸 때 float32 로 반올림됩니다. 그 float32 를 float64 로 읽는 것은 정확하고,
+다시 쓰면 원래 float32 가 나옵니다. 그래서 왕복이 바이트까지 같습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-ckpt-why">
+<h3>C 가 학습하고 파이썬이 읽는다</h3>
+<ul>
+<li>6부 7장의 어텐션 지도는 C 가 학습한 체크포인트를 <b>파이썬</b>이 읽어 같은 순전파로
+가중치를 꺼낸 것입니다.</li>
+<li>대조 자료는 반대 방향입니다 — 파이썬이 체크포인트를 쓰고, 그 파일을 다시 읽은 float32
+값에서 로짓과 기울기를 계산해 C 시험에 넘깁니다.</li>
+<li>옵티마이저 상태(m·v·스텝)는 따로 <code>.opt</code> 파일에 둡니다(SPEC §4.2). 체크포인트만으로는
+학습을 똑같이 이어 갈 수 없습니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-ch5">
+<p class="chnum">5장</p>
+<h2>파이썬과 대조</h2>
+<p class="chsub">float64 와 float32 가 얼마나 가까운가</p>
+</article>
+
+<article class="card" id="p9-parity-plan">
+<h3>무엇을 무엇과 견주나</h3>
+<ol>
+<li>같은 체크포인트·같은 입력에서 <b>로짓과 손실</b> — 위치 방식 셋.</li>
+<li>같은 곳에서 <b>모든 파라미터의 기울기</b>.</li>
+<li>같은 씨앗으로 초기화·배치를 뽑아 <b>20 스텝 학습한 손실</b>.</li>
+<li>같은 체크포인트에서 <b>greedy 이어 쓰기</b>의 토큰.</li>
+</ol>
+<p>허용 오차는 SPEC §9 한 곳에만 있습니다. 대조 자료는 C 코드보다 먼저 만들어 커밋했습니다 —
+C 시험이 "구현이 없어서" 가 아니라 "값이 달라서" 실패하도록.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-parity-logits">
+<h3>로짓과 손실</h3>
+<!--OUT file=c_vs_py.txt sec=1 note=tfs parity — 기준은 로짓 상대 1e-4-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-parity-grads">
+<h3>기울기 — 텐서마다</h3>
+<!--OUT file=c_vs_py.txt sec=2 note=칸마다 |a−b| ≤ 1e-3·|b| + 1e-5·max|b| 에 견준 비-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-criterion-story">
+<h3>기준을 한 번 고쳤습니다</h3>
+<p>처음 SPEC 은 기울기도 칸마다 상대 1e-3 이라 적었습니다. C 모델 시험을 처음 돌리자 기울기
+여덟 곳이 걸렸는데, 역전파의 결함이 아니었습니다.</p>
+<ul>
+<li>키 편향의 참 기울기는 <b>정확히 0</b> 입니다(7부 5장). 파이썬은 반올림 잡음 수준의 0 에 가까운
+값, C 는 float32 잡음 수준의 값을 냅니다 — 0 에 견준 상대 오차는 뜻이 없습니다.</li>
+<li>O(1) 크기의 항 수십 개가 상쇄되어 작아진 칸은 float32 반올림만으로 절대 오차가 생깁니다.</li>
+</ul>
+<p>그래서 "상대 1e-3 + 텐서 크기의 1e-5" 로 고쳤습니다. 텐서 크기에만 견주는 기준은 버렸습니다 —
+작은 칸이 통째로 틀려도 통과하기 때문입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-criterion-code">
+<h3>기준을 코드로</h3>
+<!--CODE file=c/tests/test_model.c sym=grad_misses note=기준을 넘는 칸의 수 — 0 이어야 한다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-parity-train">
+<h3>20 스텝을 함께 걸으면</h3>
+<!--OUT file=c_vs_py.txt sec=3 note=같은 씨앗 · 같은 배치 · 같은 AdamW-->
+<p>손실이 스텝마다 거의 같게 내려갑니다. 초기화는 파이썬이 float64, C 가 float32 라 출발부터
+조금 다르고, 그 차이가 스텝을 따라 쌓입니다. 더 길게 걸으면 두 궤적은 갈라집니다 —
+SPEC §9 가 긴 학습은 "추세만" 견주는 까닭입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-parity-sample">
+<h3>greedy 이어 쓰기</h3>
+<!--OUT file=c_vs_py.txt sec=4 note=문맥이 차서 뒤쪽 절반으로 다시 채우는 규칙까지 지난다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-ch6">
+<p class="chnum">6장</p>
+<h2>스레드 정적 분할과 결정론</h2>
+<p class="chsub">스레드 수가 달라도 비트까지 같게</p>
+</article>
+
+<article class="card" id="p9-threads-problem">
+<h3>그냥 나누면 결과가 흔들립니다</h3>
+<p>합 Σ<sub>r</sub> x<sub>r</sub> 을 스레드 둘이 반씩 더한 뒤 합치면 ((x₀+x₁)+x₂)+x₃ 이 아니라
+(x₀+x₁)+(x₂+x₃) 가 됩니다. 부동소수 덧셈은 결합법칙이 성립하지 않으므로 끝자리가 달라집니다.
+스레드 수를 바꾸면 체크포인트가 달라지고, 재현이 무너집니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-static-partition">
+<h3>규칙 둘</h3>
+<ol>
+<li><b>조각 경계는 n 과 스레드 수로만</b> 정한다: t 번 조각은 [n·t/P, n·(t+1)/P).</li>
+<li><b>출력 칸 하나는 한 조각에서만</b>, 정해진 차례로 계산한다.</li>
+</ol>
+<p>둘째 규칙이 요점입니다. 선형층의 dW 를 가중치 행으로 나누고(3장), 어텐션을 (배치, 헤드) 로
+나누는(6부 5장) 까닭이 이것입니다. 칸마다 더하는 차례가 스레드 수와 무관하니 결과가 같습니다.</p>
+<!--CODE file=c/pool.c lines=1-16 note=스레드 묶음이 지키는 것-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-pool">
+<h3>스레드는 한 번만 띄웁니다</h3>
+<!--CODE file=c/pool.c sym=tfs_parallel_for note=조각 0 은 부른 스레드가 직접-->
+<p>연산마다 스레드를 새로 만들면 한 스텝에 수백 번 만들고 부숩니다. 일꾼을 한 번 띄워 두고
+일감이 오면 깨웁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-threads-test">
+<h3>1 스레드와 여러 스레드가 비트까지 같다</h3>
+<!--CODE file=c/tests/test_model.c lines=91-103 note=기울기 — 스레드 1·3-->
+<p>학습 쪽도 같은 확인을 합니다 — 스레드 1개와 4개로 같은 스텝을 학습한 가중치가 바이트까지
+같은지(<code>c/tests/test_train.c</code>). 이 성질 덕에 기록 실행은 스레드 수를 바꿔도 같은
+캡처를 냅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-bench-threads">
+<h3>스레드를 늘리면 얼마나 빨라지나</h3>
+<!--OUT file=bench.txt sec=2 note=ikj 를 행으로 나눠 — 시간을 재는 캡처-->
+<p>배수가 스레드 수를 따라가지 않는 까닭은 여럿입니다 — 이 기계의 코어가 모두 같지 않고,
+메모리 대역폭은 스레드가 나눠 쓰며, 일감을 나누고 기다리는 비용도 있습니다.
+9부의 기록 실행은 스레드 4개로 돕니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p9-quiz-3" data-quiz>
+<h3>4~6장 퀴즈</h3>
+<p class="q">Q. 기울기 자르기 <code>tfs_clip_grad_norm</code> 은 모든 파라미터의 제곱합을 한 줄기로 더합니다.
+이 합을 스레드로 나누고 싶다면, 결정론을 지키면서 어떻게 나눌 수 있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 조각마다 부분합을 따로 쌓은 뒤 <b>조각 차례로</b> 합치면 스레드 수가 같을 때는
+결정론적이지만, 스레드 수가 바뀌면 조각 경계가 바뀌어 합의 괄호가 달라집니다 — "1 스레드와 N
+스레드가 같다" 는 약속이 깨집니다. 약속을 지키려면 경계를 <b>스레드 수와 무관한 고정 크기
+블록</b>(예: 텐서마다, 또는 원소 4096 개마다)으로 정하고, 블록 합을 블록 차례로 더해야 합니다.
+그러면 1 스레드일 때도 같은 블록 합을 같은 차례로 더하게 됩니다. 이 저장소는 그 복잡함을
+피해 한 줄기로 더합니다.</div>
+<span class="tier ill">설명용</span>
 </article>

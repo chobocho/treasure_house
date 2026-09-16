@@ -13,5 +13,337 @@
 <li>실제 샘플 읽기</li>
 <li>문서 안에서 돌아가는 추론 데모</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<div class="key"><b>이 부의 한 줄 요약</b> — 모델이 주는 것은 다음 토큰의 확률 분포 하나뿐입니다.
+글은 그 분포에서 토큰을 하나 골라 뒤에 붙이고 되풀이해서 만듭니다. "어떻게 고르느냐" 와
+"되풀이를 얼마나 싸게 하느냐" 가 이 부의 두 이야기입니다.</div>
+</article>
+
+<article class="card" id="p10-ch1">
+<p class="chnum">1장</p>
+<h2>greedy 와 온도</h2>
+<p class="chsub">가장 큰 것을 고르거나, 분포를 데우거나</p>
+</article>
+
+<article class="card" id="p10-loop">
+<h3>생성은 되풀이 하나</h3>
+<ol>
+<li>지금까지의 토큰을 넣어 마지막 위치의 로짓(길이 V)을 얻는다.</li>
+<li>로짓을 확률로 바꾸고, 거기서 토큰 하나를 고른다.</li>
+<li>고른 토큰을 뒤에 붙이고 1 로.</li>
+</ol>
+<!--CODE file=py/transformerlib/sample.py sym=generate note=캐시로 먹이거나 전부 다시 계산하거나-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-greedy">
+<h3>greedy — 늘 가장 큰 것</h3>
+<p>온도 0 은 argmax 입니다. 같은 입력에서 늘 같은 글이 나옵니다. 동률이면 id 가 작은 토큰을
+고릅니다(SPEC §7) — 파이썬과 C 가 같은 토큰을 고르게 하려는 약속입니다.</p>
+<!--CODE file=py/transformerlib/sample.py sym=sample_next note=온도 0 이면 argmax, 아니면 거르고 뽑기-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-temperature">
+<h3>온도 — 로짓을 τ 로 나눈다</h3>
+<div class="eq"><i>p</i><sub><i>i</i></sub> = <span class="frac"><span class="num"><i>e</i><sup><i>z</i><sub><i>i</i></sub>/τ</sup></span><span class="den">Σ<sub><i>j</i></sub> <i>e</i><sup><i>z</i><sub><i>j</i></sub>/τ</sup></span></span></div>
+<!--OUT file=ops.txt sec=2 note=같은 로짓, 온도 다섯-->
+<ul>
+<li>τ → 0 이면 가장 큰 칸이 1 로 — greedy 와 같습니다.</li>
+<li>τ = 1 이면 모델의 분포 그대로.</li>
+<li>τ 가 크면 고르게 퍼져 드문 토큰이 자주 나옵니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-temp-zero-test">
+<h3>τ → 0 은 greedy 와 같다</h3>
+<!--CODE file=py/transformerlib/tests/test_sample.py sym=test_temperature_zero_and_near_zero_are_greedy note=난수 로짓 200 벌-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-ch2">
+<p class="chnum">2장</p>
+<h2>top-k 와 top-p</h2>
+<p class="chsub">믿기 어려운 꼬리를 잘라 낸다</p>
+</article>
+
+<article class="card" id="p10-tail">
+<h3>왜 꼬리를 자르나</h3>
+<p>어휘가 크면 확률이 아주 작은 토큰이 수만 개입니다. 하나하나는 드물어도 <b>모두 합치면</b>
+무시할 수 없는 확률이 되고, 순수하게 뽑으면 그중 하나가 자주 끼어들어 글이 엇나갑니다.
+반대로 가장 그럴듯한 것만 고르면 같은 말을 되풀이하기 쉽습니다
+<!--CITE key=holtzman2019-->.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p10-topk">
+<h3>top-k — 위에서 k 개만</h3>
+<p>확률 차례로 늘어놓고 앞의 k 개만 남겨 다시 정규화합니다. 이야기 생성에서 이렇게 뽑은
+예가 있습니다 <!--CITE key=fan2018 sec=5.4-->.</p>
+<p>약점은 k 가 분포의 모양을 모른다는 것입니다. 모델이 확신할 때(한 토큰이 0.99)도 k 개를
+남기고, 헷갈릴 때(수백 개가 비슷)도 k 개만 남깁니다.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p10-topp">
+<h3>top-p — 누적합이 p 를 넘는 가장 짧은 앞부분</h3>
+<div class="defn"><span class="h">정의 (핵 샘플링)</span>
+확률 차례로 늘어놓은 어휘에서 누적합이 처음 <i>p</i> 이상이 되는 가장 작은 집합
+<i>V</i><sup>(<i>p</i>)</sup> 만 남기고, 그 합으로 나눠 다시 정규화합니다
+<!--CITE key=holtzman2019 sec=3.1-->.</div>
+<p>분포가 뾰족하면 몇 개만, 평평하면 많이 남습니다. 남기는 수가 분포를 따라 바뀝니다.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p10-filter-code">
+<h3>거르개 한 함수</h3>
+<!--CODE file=py/transformerlib/sample.py sym=filtered note=온도 → 차례 → top-k → top-p → 재정규화-->
+<p>둘 다 주면 top-k 를 먼저 하고, top-p 의 누적합은 top-k 가 남긴 확률을 <b>다시 정규화한 값</b>으로
+셉니다. 이 차례는 SPEC §7 에 못 박았습니다 — 파이썬과 C 가 같은 토큰을 남기게.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-filter-tests">
+<h3>작은 예로 확인</h3>
+<!--CODE file=py/transformerlib/tests/test_sample.py sym=test_top_p_smallest_prefix..test_ties_break_by_smaller_id note=0.1·0.4·0.3·0.2 에서-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-draw">
+<h3>남은 분포에서 하나 뽑기</h3>
+<p>균등 난수 u 하나를 뽑고, 확률 차례로 누적해 처음으로 u 보다 커지는 토큰을 고릅니다.
+반올림으로 누적합이 1 에 못 미쳐 끝까지 못 고르면 마지막 토큰을 고릅니다(SPEC §7).</p>
+<!--CODE file=py/transformerlib/tests/test_sample.py sym=test_frequencies_follow_probabilities note=2만 번 뽑아 4σ 안-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p10-quiz-1" data-quiz>
+<h3>1~2장 퀴즈</h3>
+<p class="q">Q. 온도 τ = 0.5 와 top-p = 0.9 를 함께 쓸 때, 적용 차례를 바꾸면(top-p 로 먼저 자르고
+나중에 온도로 나누면) 남는 토큰의 수가 달라질 수 있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>달라집니다.</b> 온도를 먼저 적용하면 분포가 뾰족해져 누적합이 더 빨리 0.9 를
+넘으므로 적은 수만 남습니다. top-p 로 먼저 자르면 τ = 1 의 평평한 분포에서 자르므로 더 많이
+남고, 그 뒤 온도는 남은 것들 사이의 비율만 바꿉니다. 그래서 차례를 문서(SPEC §7)에 적어 두지
+않으면 두 구현이 같은 모델·같은 난수로도 다른 글을 냅니다. 이 저장소는 "온도 → top-k → top-p" 입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-demo-topk">
+<h3>직접 해 보기 — top-k 와 top-p</h3>
+<p>온도 → 상위 k → 재정규화 → 누적 p 의 차례로 후보를 거릅니다. k 나 p 를 0 으로 두면 그 단계를 끕니다.</p>
+<div class="demo" data-demo="d-topk"><h5>남는 후보</h5><div class="row"><label>로짓 <input type="text" data-logits value="3 2.5 2 1 0 -1" size="16"></label><label>온도 <input type="number" data-tau value="1" step="0.1"></label><label>k <input type="number" data-k value="0" min="0"></label><label>p <input type="number" data-p value="0.9" step="0.05" min="0" max="1"></label></div><div class="out"></div></div>
+<div class="note">차례는 SPEC §7, 식은 <code>sample.filtered</code> 와 같습니다. 세 가지 설정에서 남는 후보와 확률을 파이썬 값과 대조합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+
+<article class="card" id="p10-ch3">
+<p class="chnum">3장</p>
+<h2>KV 캐시</h2>
+<p class="chsub">과거의 키·값은 변하지 않는다</p>
+</article>
+
+<article class="card" id="p10-recompute-cost">
+<h3>다시 계산하면 무엇이 낭비인가</h3>
+<p>n 개 토큰 뒤에 하나를 더 만들려면 길이 n+1 줄 전체를 순전파해야 할까요? 인과 마스크 덕에
+위치 i &lt; n 의 모든 중간값은 뒤에 붙은 토큰에 영향을 받지 않습니다(6부 3장). 그러니 앞 위치의
+<b>키와 값</b>을 저장해 두면, 새 위치의 질의·키·값만 계산해도 됩니다.</p>
+<!--FIG file=kv_cache.svg cap=다시 계산 대 캐시-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-kv-derive">
+<h3>왜 같은 로짓인가 — 유도</h3>
+<div class="proof"><span class="h">유도 — 블록 하나에 대한 귀납</span>
+<ol class="pf">
+<li>임베딩과 위치 인코딩은 위치 i 의 토큰과 i 에만 기댄다.
+<span class="why">뒤 토큰과 무관</span></li>
+<li>LN·선형층·GELU·FFN 은 행마다 따로 돈다.
+<span class="why">7부 3장</span></li>
+<li>어텐션의 i 행은 k<sub>j</sub>·v<sub>j</sub> (j ≤ i) 에만 기댄다.
+<span class="why">인과 마스크</span></li>
+<li>그러므로 블록 출력의 i 행은 토큰 0…i 에만 기대고, 다음 블록의 k·v 도 그렇다.
+<span class="why">위를 블록마다 되풀이</span></li>
+</ol>
+<p>따라서 위치 i 의 k·v 는 뒤에 무엇이 붙어도 같고, 저장한 k·v 로 계산한 새 위치의 로짓은
+전체를 다시 계산한 로짓과 같다.</p></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-kv-code-1">
+<h3>캐시로 한 토큰 (1) — 임베딩과 k·v 저장</h3>
+<!--CODE file=py/transformerlib/sample.py lines=93-121 note=Tensor 없이 float 리스트로-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-kv-code-2">
+<h3>캐시로 한 토큰 (2) — 질의 하나의 어텐션과 나머지</h3>
+<!--CODE file=py/transformerlib/sample.py lines=122-150 note=점수 n 개 · 가중합 · FFN · 로짓-->
+<p>더하는 차례를 <code>tensor.matmul</code> 과 같게 두어, 전체를 다시 계산한 로짓과 1e-9 안에서
+맞게 했습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-kv-equal">
+<h3>같은지 숫자로</h3>
+<!--OUT file=kvcache.txt sec=1 note=위치 방식 셋, 위치 1·3·6-->
+<!--CODE file=py/transformerlib/tests/test_sample.py sym=test_cached_logits_equal_full_recompute note=모든 위치를 1e-9 로-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-kv-cost">
+<h3>얼마나 싸지나</h3>
+<!--OUT file=kvcache.txt sec=2 note=GPT-2 small 모양, 토큰 하나를 더 만드는 곱셈 수-->
+<p>캐시 없이 다시 계산하면 토큰 하나에 길이 n 줄 전체의 곱셈이 듭니다. 캐시로는 새 토큰의
+사영과 그 질의 하나의 점수(n·d)만 듭니다. 대가는 메모리 — 블록마다 키·값 2·n·d 개를 들고
+있어야 합니다. 11부의 GQA 가 그 메모리를 줄입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-kv-c">
+<h3>C 판도 같은 모양</h3>
+<!--CODE file=c/sample.c sym=tfs_kv_init note=[L · T · d] 두 벌-->
+<p>C 는 배치 순전파(<code>model.c</code>)와 같은 float32 연산을 같은 차례로 합니다. 그래서 캐시
+로짓은 배치 로짓과 상대 1e-5 안입니다(<code>c/tests/test_sample.c</code>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-window">
+<h3>문맥이 차면</h3>
+<p>학습한 위치 임베딩은 T 행뿐이라(7부 4장) T 보다 긴 위치를 계산할 수 없습니다. 이 저장소는
+문맥이 T 에 닿으면 <b>뒤쪽 ⌊T/2⌋ 토큰만 남기고</b> 위치를 0 부터 다시 세어 캐시를 채웁니다(SPEC §7).</p>
+<!--CODE file=py/transformerlib/sample.py sym=window note=한 줄 규칙-->
+<ul>
+<li>한 토큰씩 밀어내면 모든 위치가 한 칸씩 바뀌어 캐시를 매번 전부 다시 계산해야 합니다.</li>
+<li>절반씩 밀어내면 T/2 토큰마다 한 번만 다시 채웁니다. 대신 그 순간 문맥이 절반으로 줄어듭니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-window-test">
+<h3>캐시로 만든 글 = 다시 계산해 만든 글</h3>
+<!--CODE file=py/transformerlib/tests/test_sample.py sym=test_cache_and_recompute_generate_the_same..test_context_refill_rule note=문맥이 차는 경계를 넘도록 길게-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p10-quiz-2" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. RoPE 모델에서 문맥이 차서 뒤쪽 절반만 남기고 위치를 0 부터 다시 세었습니다.
+캐시를 비우지 않고 저장된 키를 그대로 쓰면 무엇이 틀립니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 저장된 키는 <b>옛 위치</b>만큼 돌려져 있습니다. 새 질의는 새 위치(0 부터)만큼 돌려지므로,
+점수 ⟨R<sub>m</sub>q, R<sub>n</sub>k⟩ 가 거리 m − n 이 아니라 "새 위치 − 옛 위치" 를 보게 되어
+대부분 음수 거리 — 곧 학습 때 한 번도 본 적 없는 관계 — 로 계산됩니다. learned 위치라면 키 안에
+옛 wpe 가 섞여 있어 같은 문제가 생깁니다. 그래서 다시 세면 캐시를 비우고 채웁니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+
+<article class="card" id="p10-ch4"><p class="chnum">4장</p><h2>실제 샘플 읽기</h2><p class="chsub">8부에서 C 로 학습한 한국어·영어 모델이 쓴 글을 그대로 싣습니다</p></article>
+
+
+<article class="card" id="p10-sample-how">
+<h3>샘플을 뽑은 방법</h3>
+<p>두 모델은 모양이 같고 말뭉치만 다릅니다(<a href="#p8-ch8">8부 8장</a>). 같은 프롬프트에서 <b>거르개만 바꿔</b>
+다섯 번 뽑고, 다른 프롬프트로 한 번 더 뽑았습니다. 씨앗을 고정했으므로 몇 번을 돌려도 같은 글이 나옵니다.</p>
+<!--CODE file=py/demo/lm.py sym=sample_text note=tfs sample 을 부르고 첫 줄(id 목록)은 뺀다-->
+<ul>
+<li>토큰 60개를 뽑고 멈춥니다. 글자 수가 아니라 토큰 수입니다.</li>
+<li>사람이 읽기 좋은 글인지는 이 책이 판정하지 않습니다. 글을 그대로 싣고 판단은 독자에게 맡깁니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-sample-ko-greedy">
+<h3>한국어 — 온도 0</h3>
+<!--OUT file=c_ko.txt lines=20-42 note=greedy. 같은 조각이 되풀이된다-->
+<p>늘 가장 큰 확률을 고르면 "는 것이" 같은 흔한 조각과 줄바꿈·따옴표로 빠르게 빨려 들어가 같은 줄을
+되풀이합니다. 한 번 되풀이가 시작되면 그 문맥이 다시 같은 토큰을 가장 그럴듯하게 만듭니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-sample-ko-temp">
+<h3>한국어 — 온도를 올리면</h3>
+<!--OUT file=c_ko.txt lines=44-68 note=온도 0.5·0.8·1.0 과 top-p-->
+<p>되풀이는 사라지지만 온도가 오를수록 뜻이 이어지지 않는 낱말이 늘어납니다. 확률을 최대로 하는 복호는
+되풀이로 무너지기 쉽고 순수한 샘플링은 앞뒤가 맞지 않는 글을 낳는다는 관찰<!--CITE key=holtzman2019 sec=1-->을
+작은 모델에서 그대로 볼 수 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-sample-ko-bytes">
+<h3>처음 보는 음절과 �</h3>
+<p>위 샘플에는 말뭉치에 한 번도 나오지 않는 음절이 섞여 있습니다. 한글 음절 하나는 UTF-8 로 3바이트이고
+(<a href="#p5-ch1">5부 1장</a>), 이 모델의 어휘는 <b>바이트</b>에서 출발한 BPE 입니다.</p>
+<ul>
+<li>음절 하나를 통째로 담은 토큰도 있지만, 앞 바이트 한두 개만 담은 토큰도 있습니다.</li>
+<li>모델이 한 음절의 앞 바이트와 다른 음절의 뒷 바이트를 이어 붙이면, UTF-8 로는 맞지만 한국어에는 없는 음절이 됩니다.</li>
+<li>60토큰에서 끊을 때 음절의 앞 바이트만 나왔으면 글자를 이루지 못해 끝에 <b>�</b> 가 찍힙니다.</li>
+</ul>
+<p>영어 샘플에는 이런 일이 없습니다. 영어 글자는 1바이트라 어떤 바이트 조합도 글자를 깨뜨리지 않기 때문입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-sample-en">
+<h3>영어 — 같은 실험</h3>
+<!--OUT file=c_en.txt sec=3 note=ROMEO 프롬프트, 거르개만 바꿔서-->
+<p>온도 0 에서 "and the people" 이 되풀이되는 모습이 한국어와 같습니다. 온도를 올리면 등장인물 이름과
+콜론·줄바꿈 같은 <b>대본의 꼴</b>은 지키면서 낱말은 자주 틀립니다 — 모양이 뜻보다 먼저 학습됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-sample-other">
+<h3>다른 프롬프트</h3>
+<!--OUT file=c_ko.txt sec=4 note=나는 · 온도 0.8 · top-k 40-->
+<!--OUT file=c_en.txt sec=4 note=The · 온도 0.8 · top-k 40-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-repeat">
+<h3>되풀이와 길이</h3>
+<p>greedy 의 되풀이는 모델이 작아서만 생기는 일이 아닙니다. 큰 모델에서도 확률을 최대로 하는 복호가
+되풀이로 무너지는 글을 낳는다고 보고되었습니다<!--CITE key=holtzman2019 sec=1-->.</p>
+<ul>
+<li><b>온도·top-k·top-p</b> — 가장 큰 후보만 고르지 않게 해 고리를 끊습니다(2장).</li>
+<li><b>길이</b> — 이 책의 생성은 정한 토큰 수에서 멈춥니다. 끝 토큰을 따로 두지 않았으므로 모델이 스스로 멈출 방법이 없습니다.</li>
+<li><b>문맥 길이</b> — T = 48 토큰이 넘으면 3장의 규칙대로 절반을 버립니다. 그 앞의 내용은 모델에게 없던 일이 됩니다.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card quiz" id="p10-quiz-3" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 한국어 샘플의 끝에만 � 가 찍히고 중간에는 찍히지 않았습니다. 까닭은 무엇입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 중간에서는 모델이 뒷바이트를 이어 뽑아 어떻게든 3바이트 음절을 완성합니다(엉뚱한 음절일 수는 있어도
+UTF-8 로는 올바릅니다). 끝에서는 토큰 60개를 채운 순간 멈추므로, 마지막 토큰이 음절의 앞 바이트만 담고 있으면
+나머지 바이트가 끝내 오지 않아 디코드가 그 조각을 �로 바꿉니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+
+<article class="card" id="p10-ch5"><p class="chnum">5장</p><h2>문서 안에서 돌리는 덧셈 모델</h2><p class="chsub">8부에서 C 로 학습한 체크포인트를 이 HTML 파일 안에서 돌립니다</p></article>
+
+
+<article class="card" id="p10-demo-add">
+<h3>직접 해 보기 — 세 자리 덧셈</h3>
+<p>두 수를 넣으면 <code>abc+def=</code> 를 프롬프트로 넣고 greedy 로 네 글자를 뽑습니다. 이 모델은 답을
+<b>일의 자리부터</b> 쓰도록 학습했습니다(<a href="#p8-ch7">8부 7장</a>).</p>
+<div class="demo" data-demo="d-add"><h5>c_add 모델 · 파라미터 101,760개</h5><div class="row"><label>a <input type="number" data-a value="763" min="0" max="999"></label><label>b <input type="number" data-b value="164" min="0" max="999"></label></div><div class="out"></div></div>
+<div class="note">순전파는 <code>sample.forward_cached</code> 를 자바스크립트로 옮긴 것이고 KV 캐시를 씁니다. 세 문제의 답이
+<code>out/c_add.txt</code> 에 C 가 적은 답과 글자까지 같은지를 <code>deck/check_deck.js</code> 가 봅니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-demo-add-f16">
+<h3>float16 으로 줄이고, 답이 같은지 잰다</h3>
+<p>float32 그대로 실으면 base64 로 덱이 너무 커져 가중치를 float16 으로 줄였습니다. 반올림한 만큼 로짓이
+C 와 달라지므로 "greedy 답은 같을 것" 이라고 믿지 않고, 시험 줄 1000개 전부를 C 와 맞춰 봅니다.</p>
+<!--CODE file=tools/export_js.py sym=check note=C 의 답과 node 로 돌린 데모 함수의 답을 한 줄씩-->
+<ul>
+<li><code>make demo-infer</code> 가 이것을 돌리고 <code>make all</code> 에 들어 있습니다. 한 줄이라도 다르면 멈춥니다.</li>
+<li>로짓 차이가 작아도 1등과 2등이 거의 같은 자리에서는 답이 뒤집힐 수 있습니다. 그래서 몇 줄 표본이 아니라 전부를 봅니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
 </article>
