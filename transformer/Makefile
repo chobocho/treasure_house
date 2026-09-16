@@ -34,9 +34,9 @@ SRC_ALL     := $(SRC_PY) $(SRC_C) $(SRC_TOP)
 C_LIB       := $(filter-out c/main.c c/tests/%,$(SRC_C))
 
 .DEFAULT_GOAL := help
-.PHONY: help test cc corpus papers run run-check record parity \
-        figs figs-check figs-png tables claims-check width \
-        deck deck-verify deck-slices deck-xref deck-check \
+.PHONY: help test test-py test-c cc corpus papers run run-check \
+        record parity figs figs-check figs-png tables claims-check \
+        width deck deck-verify deck-slices deck-xref deck-check \
         font font-check all clean
 
 help:                   ## 이 목록
@@ -47,16 +47,22 @@ help:                   ## 이 목록
 # ── 시험 ───────────────────────────────────────────────────────────
 # PLAN.md §0.3: 숫자나 기울기를 내는 식에는 반드시 그 식을 확인하는
 # 시험이 있다. 허용 오차를 낮춰 통과시키지 말 것.
-test:                   ## 파이썬 unittest + C 시험 (RED → GREEN)
+test: test-py test-c    ## 파이썬 unittest + C 시험 (RED → GREEN)
+
+test-py:                ## 파이썬 시험만
 	@if test -d py/transformerlib/tests; then \
-	  $(PY) -m unittest discover -s py -t py -v; \
+	  $(PY) -m unittest discover -s py -t py; \
 	else echo '  파이썬 시험 아직 없다 (PLAN.md §5 5단계)'; fi
+
+# C 시험은 파일마다 따로 만들어 돌린다. 하나가 실패해도 나머지를 본다.
+test-c:                 ## C 시험만 (c/tests/test_*.c)
 	@if test -d c/tests; then \
+	  mkdir -p .build; bad=0; \
 	  for t in c/tests/test_*.c; do \
-	    b=".build/$$(basename $$t .c)"; mkdir -p .build; \
+	    b=".build/$$(basename $$t .c)"; \
 	    $(CC) $(CFLAGS) -Ic $$t $(C_LIB) -o $$b $(LDLIBS) \
-	      && ./$$b || exit 1; \
-	  done; \
+	      && ./$$b || bad=1; \
+	  done; exit $$bad; \
 	else echo '  C 시험 아직 없다 (PLAN.md §5 6단계)'; fi
 
 cc:                     ## c/tfs 만들기
