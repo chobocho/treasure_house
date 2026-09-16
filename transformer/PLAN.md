@@ -611,3 +611,18 @@ The user approved every recommendation below as-is. Each row is now a decision.
   block (not n = d); activation memory per block is (10d + 2d_ff + 2)·BT; `d-topk` at τ = 0 kept
   tied candidates instead of argmax (fixed + 2 CASES); two tables were badged "실행 검증" but come
   from papers (→ 논문 근거 with CITE); GQA mean-pooling comparison is ainslie2023 §3.3, not §2.1.
+
+### Review pass 2 (2026-09-16)
+
+- Different angles from pass 1: recompute every worked number and quiz answer; cross-part symbol
+  consistency; forward promises delivered; all 23 figures rendered and viewed; glossary ids/definitions.
+  Two report-only subagents (0–7, 8–14 + figures + glossary); every finding verified before applying.
+- Demos checked directly against Python on random grids (scratchpad review2/grid.py + drive.js):
+  softmax 300, attention 200, sinusoidal 200, params 200, lr 200, top-k/p 300, pre-tokenizer 400
+  inputs → 0 mismatches; in-deck addition model vs `tfs accuracy` on 308 edge/random problems → 0.
+- 33 fixes: 사실오류 3 · 수식 4 · 인용범위 4 · 표기 22. Notable: KV-cached token costs 2·n·d per block
+  (scores + weighted sum), not n·d (prose + out/kvcache.txt caption); Kaplan's N excludes embeddings
+  while this deck's 6N counts wte; GPT-3 XL (2048 ÷ 24) also fails divisibility, so it is not by itself
+  evidence of the 5140 typo; bench prose no longer claims a direction that varies run to run; glossary
+  first-appearance ids moved from part 9 to part 8, three duplicate pairs merged (181 entries); four
+  figure fixes (dot colours, y-range clipping sort/reverse at step 1, wpe colour, dashed legend).

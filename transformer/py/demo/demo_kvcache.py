@@ -38,7 +38,7 @@ def sec_cost():
     return (fmt.table(rows, align='rrrr')
             + '\n\nGPT-2 small 모양. 캐시는 새 토큰의 사영과 그 질의'
             + ' 하나의'
-            + '\n점수(n·d)만 계산한다. 그 대신 키·값 2·L·n·d 개를 들고'
+            + '\n점수·가중합(2·n·d)만 계산한다. 키·값 2·L·n·d 개를 들고'
             + ' 있다.')
 
 

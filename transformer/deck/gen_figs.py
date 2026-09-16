@@ -155,7 +155,7 @@ def activations():
     ax.curve([(x, x / (1 + math.exp(-x))) for x in xs], 'cv3')
     ax.xticks((-4, -2, 0, 2), '%d')
     ax.yticks((0, 1, 2, 3), '%d')
-    sk.legend(f, 50, 30, [('ReLU', 'cvd'), ('GELU (erf)', 'cv2'),
+    sk.legend(f, 50, 30, [('ReLU', 'cvd'), ('GELU (erf, 파선)', 'cv2'),
                           ('GELU tanh 근사', 'cv5'),
                           ('SiLU x·σ(x)', 'cv3')])
     f.text(176, 190, 'GELU 는 0 근처 음수를 조금 통과시킨다', 'cap')
@@ -180,9 +180,9 @@ def dot_variance():
     ax.grid(xs=(4, 16, 64, 256), ys=(1, 10, 100))
     ax.curve([(d, d) for d in (3, 300)], 'cvd')
     ax.curve([(d, v) for d, v, _, _ in rows], 'cv2')
-    ax.dots([(d, v) for d, v, _, _ in rows], 2.2, 'dot')
+    ax.dots([(d, v) for d, v, _, _ in rows], 2.2, 'dot2')
     ax.curve([(d, s) for d, _, _, s in rows], 'cv5')
-    ax.dots([(d, s) for d, _, _, s in rows], 2.2, 'dot2')
+    ax.dots([(d, s) for d, _, _, s in rows], 2.2, 'dot5')
     ax.xticks((4, 16, 64, 256), '%d', 'd')
     ax.yticks((1, 10, 100), '%g')
     sk.legend(f, 52, 30, [('Var(q·k)', 'cv2'), ('Var(q·k/√d)', 'cv5'),
@@ -310,7 +310,7 @@ def pre_ln_block():
 def param_breakdown():
     c = M.Config(V=50257, T=1024, d=768, L=12, h=12, d_ff=3072)
     d = c.d
-    parts = [('wte V·d', c.V * d, 'g1'), ('wpe T·d', c.T * d, 'g1'),
+    parts = [('wte V·d', c.V * d, 'g1'), ('wpe T·d', c.T * d, 'g6'),
              ('어텐션 12×(4d²+4d)', 12 * (4 * d * d + 4 * d), 'g2'),
              ('FFN 12×(8d²+5d)', 12 * (8 * d * d + 5 * d), 'g3'),
              ('LN 12×4d + 2d', 12 * 4 * d + 2 * d, 'g4')]
@@ -548,9 +548,9 @@ def curve(name, part='학습 곡선'):
 @fig('loss_tasks')
 def loss_tasks():
     f = Fig(210, title='합성 과제의 학습 곡선 (C)')
-    ax = Axes(f, 38, 12, 270, 150, (0, 3000), (0, 3.0))
+    ax = Axes(f, 38, 12, 270, 150, (0, 3000), (0, 3.5))
     ax.frame()
-    ax.grid(xs=(1000, 2000), ys=(1, 2))
+    ax.grid(xs=(1000, 2000), ys=(1, 2, 3))
     items = [('덧셈(뒤집음)', 'curve_c_add.txt', 'cv2'),
              ('덧셈(그대로)', 'curve_c_addplain.txt', 'cvd'),
              ('정렬', 'curve_c_sort.txt', 'cv3'),
