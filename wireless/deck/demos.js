@@ -361,11 +361,12 @@
       var lines = [];
       lines.push('μ=' + mu + ' → SCS ' + scs + ' kHz');
       lines.push('유용 심볼 ' + f(sym, 2) + ' μs  (SCS × 심볼 = 1)');
-      lines.push('슬롯 ' + f(slot, 5) + ' ms · 심볼 14개');
+      lines.push('슬롯 ' + f(slot, 5) + ' ms · 심볼 14개'
+        + (mu === 2 ? ' (확장 CP 는 12개)' : ''));
       lines.push('서브프레임당 슬롯 ' + Math.pow(2, mu) + '개');
       lines.push('PRB 폭 ' + (scs * 12) + ' kHz');
       lines.push('');
-      for (var m = 0; m <= 4; m++) {
+      for (var m = 0; m <= 6; m++) {
         lines.push('μ=' + m + '  SCS ' + ('    ' + (15 * Math.pow(2, m))
           ).slice(-4) + ' kHz  슬롯 '
           + f(1.0 / Math.pow(2, m), 5) + ' ms');
@@ -377,6 +378,8 @@
   /* ---- 11. 저궤도 지연과 도플러 -------------------------------- */
   // 파이썬 orbit 모듈과 같은 상수·같은 식.
   var R_KM = 6371.0, MU_E = 3.986004418e14, C_KM_MS = 299.792458;
+  // 지구 자전 각속도(항성일 86164.0905 s). 파이썬 orbit.EARTH_RATE 와 같다.
+  var EARTH_RATE = 2.0 * Math.PI / 86164.0905;
   function slantKm(altKm, elDeg) {
     var e = elDeg * Math.PI / 180.0, r = R_KM;
     var ratio = (r + altKm) / r;
@@ -386,10 +389,14 @@
   function speedMs(altKm) {
     return Math.sqrt(MU_E / ((R_KM + altKm) * 1000.0));
   }
-  function maxDopplerHz(altKm, fcHz) {
+  // 파이썬 orbit.doppler_hz 와 같다 — earthRotation 을 켜면 적도 궤도로
+  // 보고 지구 자전을 뺀다. 정지궤도에서 그 차가 0 이 되어 도플러가
+  // 사라지는데, 끄고 두면 3.1 kHz 라는 거짓말이 나온다(12부 2장).
+  function maxDopplerHz(altKm, fcHz, earthRotation) {
     var th = Math.acos(R_KM / (R_KM + altKm));
     var r = R_KM * 1000.0, a = (R_KM + altKm) * 1000.0;
     var w = speedMs(altKm) / a;
+    if (earthRotation) w -= EARTH_RATE;
     var d = Math.sqrt(r * r + a * a - 2.0 * r * a * Math.cos(th));
     var rate = r * a * w * Math.sin(th) / d;
     return Math.abs(rate * fcHz / (C_KM_MS * 1e6));
@@ -404,7 +411,10 @@
       if (fGhz <= 0) fGhz = 2;
       var d = slantKm(alt, el);
       var oneWay = d / C_KM_MS;
-      var dop = maxDopplerHz(alt, fGhz * 1e9);
+      // 정지궤도 높이에서는 적도 궤도로 보고 자전을 뺀다. 저궤도는
+      // 대개 극궤도에 가까워 자전의 몫이 작으므로 그대로 둔다.
+      var geo = alt > 30000;
+      var dop = maxDopplerHz(alt, fGhz * 1e9, geo);
       var lines = [];
       lines.push('고도 ' + f(alt, 0) + ' km · 앙각 ' + f(el, 0) + '°');
       lines.push('거리 ' + f(d, 1) + ' km');
@@ -413,7 +423,8 @@
       lines.push('궤도 속도 ' + f(speedMs(alt) / 1000.0, 3) + ' km/s');
       lines.push('');
       lines.push('최대 도플러(' + f(fGhz, 1) + ' GHz) = '
-        + f(dop / 1000.0, 1) + ' kHz');
+        + f(dop / 1000.0, 1) + ' kHz'
+        + (geo ? '  (지구와 함께 도니 0 이다)' : ''));
       lines.push('15 kHz 부반송파의 ' + f(dop / 15000.0, 2) + '배');
       api.w(host, api.esc(lines.join('\n')));
     });

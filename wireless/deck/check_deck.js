@@ -289,6 +289,13 @@ if (!demoScripts.length) {
       ['d-viterbi', { msg: '10110', flip: '-1' }, '11100001011100'],
       // 한 비트를 뒤집어도 viterbi_hard 가 10110 을 되찾는다
       ['d-viterbi', { msg: '10110', flip: '3' }, '원래 메시지를 되찾았다'],
+      // orbit.max_doppler_hz(35786, 2e9, earth_rotation=True) ≈ 0
+      // (out/orbit.txt 4절의 정지궤도 줄이 0.0 kHz 다)
+      ['d-orbit', { alt: '35786', elev: '90', freq: '2' }, '= 0.0 kHz'],
+      // orbit.one_way_delay_ms(35786, 90) = 119.37 → 왕복 238.74
+      ['d-orbit', { alt: '35786', elev: '90', freq: '2' }, '238.74 ms'],
+      // ofdm.scs_khz(6) = 960 (out/ofdm.txt 5절은 μ=0~6 을 전부 싣는다)
+      ['d-numerology', { mu: '6' }, 'SCS 960 kHz'],
     ];
     let good = 0;
     for (const [id, values, want, wantNot] of CASES) {

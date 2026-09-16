@@ -494,7 +494,12 @@ def expand_spec(m):
         errors.append('data/specs_%s.tsv 에 없는 규격 번호: %s (표에 먼저 넣을 것)'
                       % (org, num))
     _SPEC_USED.append((org, num, clause))
+    # 3GPP 문서는 TS(규격)와 TR(연구 보고서)이 다르다. 표의 제목 칸이
+    # 'TR ...' 로 시작하면 TR 로 적는다 — 산문은 TR 이라 쓰는데 배지가
+    # TS 라고 말하는 일이 실제로 있었다(38.901·38.821).
     label = {'3gpp': 'TS', 'gsma': 'PRD', 'itu': 'ITU-R'}[org]
+    if org == '3gpp' and specs().get((org, num), '').startswith('TR '):
+        label = 'TR'
     cls = '' if org == '3gpp' else ' ' + org
     tail = '<span class="cl">§%s</span>' % esc(clause) if clause else ''
     return ('<span class="spec%s" data-spec="%s:%s" data-clause="%s">%s %s %s</span>'
