@@ -96,3 +96,30 @@
 | 멀티헤드 어텐션은 서로 다른 표현 부분공간의 정보를 서로 다른 위치에서 함께 볼 수 있게 하고, 헤드마다 차원이 줄어 전체 계산량은 전체 차원의 헤드 하나와 비슷하다 | vaswani2017 §3.2.2 | papers/vaswani2017.txt 인용 | 2026-09-16 |
 | 트랜스포머 이전의 어텐션(Bahdanau 외)은 정렬 모델을 순전파 신경망으로 두고 RNN 번역기와 함께 학습했다 | bahdanau2014 §3.1 | papers/bahdanau2014.txt 인용 | 2026-09-16 |
 | FlashAttention 은 N×N 어텐션 행렬을 느린 메모리에 만들지 않으려고 이미 알려진 두 기법 — 타일링(블록마다 소프트맥스를 크기 조정으로 분해)과 재계산(역전파 때 다시 계산) — 을 쓴다 | dao2022 §3.1 "We apply two established techniques (tiling, recomputation) …" | papers/dao2022.txt 3.1절 인용 | 2026-09-16 |
+| 핵 샘플링(top-p)은 누적 확률이 p 를 넘는 가장 작은 어휘 집합에서만 뽑아, 확률 분포의 믿기 어려운 꼬리를 잘라 낸다 | holtzman2019 §3.1 · 초록 | papers/holtzman2019.txt 3.1절 인용 | 2026-09-16 |
+| 확률을 최대로 하는 복호(빔 서치 등)는 되풀이로 무너지는 글을 낳기 쉽고, 순수한 샘플링은 앞뒤가 맞지 않는 글을 낳는다 | holtzman2019 그림 1 설명문 · 초록 | papers/holtzman2019.txt 인용 | 2026-09-16 |
+| top-k 샘플링 — 확률이 가장 높은 k 개 안에서만 뽑는 방식을 이야기 생성에 썼다 | fan2018 §5.4 | papers/fan2018.txt 5.4절 인용 | 2026-09-16 |
+| Sutskever 외는 다층 LSTM 으로 입력 순서열을 고정 차원 벡터 하나로 옮기고, 다른 LSTM 으로 그 벡터에서 목표 순서열을 풀어냈다 | sutskever2014 초록 | papers/sutskever2014.txt 인용 | 2026-09-16 |
+| Bahdanau 외는 고정 길이 벡터가 인코더-디코더의 병목이라 추측하고, 목표 낱말을 맞히는 데 관련된 원문 부분을 모델이 (부드럽게) 찾게 했다 | bahdanau2014 초록 | papers/bahdanau2014.txt 인용 | 2026-09-16 |
+| 순환 모델은 위치를 따라 차례로 계산하므로 한 예제 안에서 병렬화할 수 없다; 트랜스포머는 순환과 합성곱을 버리고 어텐션만으로 만들었다 | vaswani2017 초록 · §1 | papers/vaswani2017.txt 인용 | 2026-09-16 |
+| word2vec 논문은 큰 자료에서 낱말의 연속 벡터 표현을 계산하는 두 구조를 제안했다 | mikolov2013 초록 | papers/mikolov2013.txt 인용 | 2026-09-16 |
+| Milakov·Gimelshein 의 "Online Softmax"(알고리즘 3)는 최댓값 m 과 정규화 항 d 를 한 번 훑으며 함께 갱신하고, 원소당 메모리 접근을 4번에서 3번으로 줄인다 | milakov2018 §3 | python3 tools/paper_text.py --grep milakov2018 'from 4 down to 3' 및 3절 알고리즘 3 인용 | 2026-09-16 |
+| 멀티쿼리 어텐션은 멀티헤드와 같되 헤드들이 키·값 한 벌을 함께 쓴다; 증분 디코딩에서 메모리 접근 대 연산 비는 MHA Θ(n/d + 1/b), MQA 는 n/d 항을 h 배 줄인다 | shazeer2019 §3 · §2.4.1 · §3.1 | paper_text.py --grep shazeer2019 'share a single set' + 2.4.1·3.1절 본문 대조 | 2026-09-16 |
+| GQA 는 질의 헤드를 G 그룹으로 나눠 그룹마다 키·값 헤드 하나를 둔다; GQA-1 = MQA, GQA-H = MHA; MHA→MQA 는 KV 캐시를 H 배 줄인다; MHA 체크포인트는 그룹 안 키·값 사영을 평균해 바꾸고 원래 스텝의 작은 비율 α 만큼 더 학습한다 | ainslie2023 §2.2 · §2.1 | paper_text.py --grep ainslie2023 'GQA-h|factor of' + 2.1절 인용 | 2026-09-16 |
+| RoPE 는 θ_i = 10000^(−2i/d) 에서 장거리 감쇠 성질(상대 거리가 커지면 내적의 상한 항 평균이 줄어듦)을 갖는다고 하며, 한계 절에서 긴 글 성능에 대한 믿을 만한 설명은 아직 없다고 적는다 | su2021 §3.3 · §3.4.3 · §4.5.5 | paper_text.py --grep su2021 'long-term decay property' + 3.4.3·4.5.5절 본문 대조 | 2026-09-16 |
+| LoRA: W0 + ΔW = W0 + BA, B ∈ R^{d×r}, A ∈ R^{r×k}, r ≪ min(d,k); A 는 무작위 가우스, B 는 0 으로 초기화; ΔWx 를 α/r 배; 배포 때 W = W0 + BA 로 합쳐 추론 지연이 없다 | hu2021 §4.1 | paper_text.py --grep hu2021 'random Gaussian' + 4.1절 인용 | 2026-09-16 |
+| LoRA 는 어텐션 가중치에만 적용하고 MLP 는 얼렸다; Adam 학습 VRAM 을 최대 2/3 줄이고, GPT-3 175B 에서 r=4·질의와 값 사영만이면 체크포인트가 350GB → 35MB(약 10,000배); 합친 뒤에는 다른 과제의 A·B 를 한 배치에 섞기 어렵다 | hu2021 §4.2 | paper_text.py --grep hu2021 '2/3|35MB' + 4.2절 인용 | 2026-09-16 |
+| BERT MLM: 토큰 위치의 15% 를 골라, 80% [MASK]·10% 무작위 토큰·10% 그대로; 가린 토큰만 예측; [MASK] 가 미세조정에 없어 생기는 어긋남을 줄이려는 것 | devlin2018 §3.1 | paper_text.py --grep devlin2018 '15%|80%' + 3.1절 인용 | 2026-09-16 |
+| 무작위 치환은 전체 토큰의 1.5%(15% 의 10%); 그대로 두는 것은 표현을 실제 관찰한 단어 쪽으로 치우치게 하려는 것; MLM 은 배치마다 15% 만 예측해 스텝이 더 필요할 수 있다 | devlin2018 부록 A.1 | paper_text.py --grep devlin2018 '1.5%' + A.1절 인용 | 2026-09-16 |
+| MLM 은 왼쪽→오른쪽 모델보다 조금 늦게 수렴하지만 절대 정확도(MNLI)는 거의 곧바로 앞선다 | devlin2018 부록 C.1 | papers/devlin2018.txt C.1절 질문 2 인용 | 2026-09-16 |
+| 혼합 정밀도의 세 기법: FP32 주 사본, 손실 스케일링, FP16 곱을 FP32 로 쌓기; FP16 에서는 크기가 2^−24 보다 작은 값이 0 이 된다 | micikevicius2017 §3 · §3.1 | paper_text.py --grep micikevicius2017 '2\^\{-24\}' + 3절 인용 | 2026-09-16 |
+| 손실 스케일링: 역전파 전에 손실에 곱하면 연쇄법칙으로 모든 기울기가 같은 배수; 기울기 자르기 등보다 먼저 되돌려 나눈다; 배수 × 최대 기울기가 FP16 최댓값 65,504 를 넘지 않게; 실험한 망들은 8 부터 32K; 넘치면 그 갱신을 건너뛴다 | micikevicius2017 §3.2 | paper_text.py --grep micikevicius2017 '65,504|8 to 32K|prior to starting back-propagation' | 2026-09-16 |
+| 트랜스포머 FFN 은 두 선형 변환 사이에 ReLU: FFN(x) = max(0, xW1 + b1)W2 + b2 | vaswani2017 §3.3 식 (2) | paper_text.py --grep vaswani2017 'ReLU' | 2026-09-16 |
+| 임베딩 층에서는 (출력 사영과 나눠 쓰는) 가중치에 √d_model 을 곱한다 | vaswani2017 §3.4 | papers/vaswani2017.txt 3.4절 인용 | 2026-09-16 |
+| 사인 위치 인코딩의 파장은 2π 에서 10000·2π 까지 등비수열이다 | vaswani2017 §3.5 | paper_text.py --grep vaswani2017 'wavelengths' | 2026-09-16 |
+| 표 1: 셀프 어텐션 O(n²·d)·순차 O(1)·경로 O(1), 순환 O(n·d²)·O(n)·O(n), 합성곱 O(k·n·d²)·O(1)·O(log_k n); n < d 이면 셀프 어텐션이 순환 층보다 빠르다 | vaswani2017 §4 표 1 | papers/vaswani2017.txt 4절 표와 본문 인용 | 2026-09-16 |
+| 문장 쌍을 대략의 길이로 묶어 배치마다 원문 약 25000·번역문 약 25000 토큰 | vaswani2017 §5.1 | paper_text.py --grep vaswani2017 로 5.1절 인용 | 2026-09-16 |
+| 드롭아웃은 하위 층 출력을 더하고 정규화하기 전, 그리고 임베딩+위치 인코딩 합에 건다; 라벨 스무딩은 퍼플렉시티를 해치지만 정확도·BLEU 를 올린다 | vaswani2017 §5.4 | paper_text.py --grep vaswani2017 'output of each sub-layer' + 5.4절 인용 | 2026-09-16 |
+| base 는 마지막 체크포인트 5개, big 은 20개를 평균; 빔 크기 4, 길이 벌점 α = 0.6 | vaswani2017 §6.1 | paper_text.py --grep vaswani2017 'last 5|beam size' | 2026-09-16 |
+| 표 3 행 (A): 계산량을 고정하고 헤드 수를 바꾸면 헤드 하나는 최선보다 BLEU 0.9 낮고 헤드가 너무 많아도 나빠진다; 행 (B): d_k 를 줄이면 품질이 떨어진다; 표 3 지표는 개발 세트 newstest2013 | vaswani2017 §6.2 | paper_text.py --grep vaswani2017 '0.9 BLEU|reducing the attention key' | 2026-09-16 |
+| SGD 에서는 L2 정규화와 가중치 감쇠가 (학습률로 다시 맞추면) 같지만, Adam 같은 적응적 방법에서는 같지 않다 — 감쇠를 기울기 갱신에서 떼어 내자고 제안했다 | loshchilov2017 초록 · §2 | papers/loshchilov2017.txt 인용 | 2026-09-16 |

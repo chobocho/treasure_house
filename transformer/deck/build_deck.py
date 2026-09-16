@@ -111,13 +111,14 @@ def find_symbol(path, sym):
     elif ext == '.ldif':
         pat = re.compile(r'^dn:\s*.*\b%s\b' % e)
     elif ext in ('.c', '.h', '.hpp', '.cpp', '.cc', '.java', '.ts', '.mts'):
-        # 클래스·구조체·함수·메서드를 한 판에 잡는다. 이름 뒤에 여는
+        # 클래스·구조체·함수·메서드를 한 판에 잡는다. 이름 앞에는 공백이나
+        # * 가 온다(C 의 `float *tfs_tensor(`). 이름 뒤에 여는
         # 괄호가 오거나(함수), 선언 낱말이 앞에 오거나(형) 둘 중 하나다.
         pat = re.compile(
             r'^\s*(?:(?:export|public|private|protected|static|final|'
             r'inline|template|abstract|constexpr)\s+)*'
             r'(?:class|struct|interface|enum|namespace|function)\s+%s\b'
-            r'|^\s*(?:[\w:<>,&*\[\]\s]+\s)?%s\s*\(' % (e, e))
+            r'|^\s*(?:[\w:<>,&*\[\]\s]+[\s*])?%s\s*\(' % (e, e))
     else:
         pat = re.compile(r'^\s*"%s"\s*:' % e)
 
@@ -213,6 +214,8 @@ CITE_RE = re.compile(r'<!--CITE (?P<args>.+?)-->')
 FULL_RE = re.compile(r'^<!--FULLSRC (?P<args>[^>]+)-->$', re.M)
 _FULLSRC_CACHE = []
 GLOSS_RE = re.compile(r'^<!--GLOSSARY-->$', re.M)
+# 퀴즈 찾아보기 — 조각 파일의 퀴즈를 훑어 부마다 링크를 만든다.
+QUIZ_RE = re.compile(r'^<!--QUIZINDEX-->$', re.M)
 # 부록 표지의 파일 수·줄 수. 손으로 적으면 소스가 한 줄만 늘어도 어긋난다 —
 # 3차 리뷰에서 실제로 그랬다. 세는 일은 조립기가 한다.
 SRCSTAT_RE = re.compile(r'<!--SRCSTAT (total-files|total-lines|files)-->')
@@ -475,6 +478,38 @@ def expand_glossary(m):
     return gen_glossary.render(rows)
 
 
+def expand_quizindex(m):
+    """<!--QUIZINDEX--> — 모든 퀴즈로 가는 링크를 부마다 한 줄씩.
+
+    손으로 적으면 퀴즈를 하나 더할 때마다 잊는다. 조각 파일에서 id 와
+    제목을 읽어 만든다. 한 장에 부 여덟까지 — 접힌 화면에 들게.
+    """
+    parts = {}
+    for name in sorted(os.listdir(os.path.join(DECK, 'sections'))):
+        if not name.endswith('.html') or not name[:2].isdigit():
+            continue
+        text = read(os.path.join(DECK, 'sections', name))
+        for qm in re.finditer(r'<article class="card quiz" id="([^"]+)"'
+                              r'[^>]*>\s*<h3>(.*?)</h3>', text, re.S):
+            parts.setdefault(int(name[:2]), []).append(
+                (qm.group(1), re.sub('<[^>]+>', '', qm.group(2))))
+    keys = sorted(parts)
+    slides = []
+    for k in range(0, len(keys), 8):
+        rows = []
+        for part in keys[k:k + 8]:
+            links = ' · '.join('<a href="#%s">%s</a>' % (qid, esc(t))
+                               for qid, t in parts[part])
+            rows.append('<tr><td>%d부</td><td>%s</td></tr>' % (part, links))
+        slides.append('<article class="card" id="p14-quiz-index-%d">\n'
+                      '<h3>퀴즈 찾아보기 %d</h3>\n<div class="tblwrap">'
+                      '<table class="kv">\n<tr><th>부</th><th>퀴즈</th></tr>\n'
+                      '%s\n</table></div>\n<span class="tier ill">설명용</span>'
+                      '\n</article>' % (k // 8 + 1, k // 8 + 1,
+                                         '\n'.join(rows)))
+    return '\n\n'.join(slides)
+
+
 def all_fullsrc():
     """부록에 전문이 실리는 파일 전부. 조각 파일을 한 번만 훑어 외워 둔다."""
     if not _FULLSRC_CACHE:
@@ -518,6 +553,7 @@ def expand_srcstat(text):
 def expand(text):
     text = expand_srcstat(text)
     text = GLOSS_RE.sub(expand_glossary, text)
+    text = QUIZ_RE.sub(expand_quizindex, text)
     text = FULL_RE.sub(expand_fullsrc, text)
     text = CODEDIR_RE.sub(expand_codedir, text)
     text = OUTDIR_RE.sub(expand_outdir, text)
