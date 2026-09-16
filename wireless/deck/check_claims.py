@@ -119,9 +119,10 @@ def check_years():
                 continue
             n += 1
             if y not in ev:
-                bad.append('%s: %s — claims.md·data/ 에 근거가 없다 (앞뒤: …%s…)'
-                           % (name, y,
-                              prose[max(0, m.start() - 18):m.end() + 12].strip()))
+                a = max(0, m.start() - 18)
+                near = prose[a:m.end() + 12].strip()
+                bad.append('%s: %s — 근거가 없다 (앞뒤: …%s…)'
+                           % (name, y, near))
     return bad, n
 
 

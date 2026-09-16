@@ -794,11 +794,26 @@ def tier_report(doc):
     """
     total = c = none = ill = 0
     for m in ART_RE.finditer(doc):
-        aid, inner = m.group(2), m.group(4)
+        attrs, aid, inner = m.group(1) + m.group(3), m.group(2), m.group(4)
+        t = re.search(r'<span class="tier (a|b|c|ill)\b', inner)
+
+        # **거꾸로도 본다** — a(실행 검증)는 "이 화면의 숫자가 돌려서
+        # 나왔다" 는 뜻이다. 그런데 1차 전수 리뷰에서 코드도 출력도 그림도
+        # 없는 장 열 개가 a 를 달고 있었다. 배지는 얻는 것이지 붙이는 것이
+        # 아니므로, 근거가 화면에 없으면 여기서 막는다.
+        # 퀴즈는 뺀다 — 답이 앞 장의 표를 인용하는 꼴이라 화면에 증거가
+        # 없는 것이 정상이다. 대신 퀴즈의 등급은 사람이 정독으로 본다.
+        if t and t.group(1) == 'a' and 'quiz' not in attrs:
+            proof = ('<pre' in inner or 'data-demo=' in inner
+                     or 'data-table=' in inner
+                     or '<svg class="diag"' in inner)
+            if not proof:
+                errors.append('%s: 실행 검증 배지인데 화면에 코드·출력·'
+                              '그림·자동 생성 표가 없다' % aid)
+
         if '<pre' not in inner:
             continue
         total += 1
-        t = re.search(r'<span class="tier (a|b|c|ill)\b', inner)
         if not t:
             none += 1
             errors.append('%s: 코드·출력이 있는데 근거 등급 배지가 없다' % aid)
