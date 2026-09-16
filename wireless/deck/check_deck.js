@@ -231,6 +231,64 @@ if (!demoScripts.length) {
     // 않는 셈이 된다. PLAN.md §5 9단계에서 데모를 붙일 때마다 한 줄씩 는다.
     // 비어 있는 동안에는 7) 의 "빈 입력에서 안 죽는다" 까지만 본다.
     const CASES = [
+      // 값은 전부 py/wirelesslib 가 낸 것이다.
+      // modem.ber_theory('bpsk', 10) = 3.87211e-06
+      ['d-ber', { mod: 'bpsk', ebn0: '10' }, '3.87e-6'],
+      // modem.ber_theory('16qam', 10) = 0.00175415
+      ['d-ber', { mod: '16qam', ebn0: '10' }, '1.75e-3'],
+      // modem.ber_theory('64qam', 15) = 0.000772472
+      ['d-const', { mod: '64qam', ebn0: '15' }, '7.72e-4'],
+      ['d-const', { mod: '64qam', ebn0: '15' }, '8×8 격자'],
+      // channel.fspl_db(1000, 2e9) = 98.4684
+      ['d-pathloss', { dist: '1', freq: '2000', expo: '3.5' }, '98.47 dB'],
+      // channel.log_distance_db(1000, 1, 2e9, 3.5) = 143.468
+      ['d-pathloss', { dist: '1', freq: '2000', expo: '3.5' }, '143.47 dB'],
+      // channel.hata_db(900, 30, 1.5, 1) = 126.42
+      ['d-pathloss', { dist: '1', freq: '900', expo: '3.5' }, '126.42 dB'],
+      // 하타는 150~1500 MHz 밖에서 값을 내면 안 된다
+      ['d-pathloss', { dist: '1', freq: '2000', expo: '3.5' },
+        '적용 범위 밖'],
+      // link.budget(23, 0, 18, 98.47, 10e6, 3, 10) 의 margin_db = 33.5052
+      ['d-link', { ptx: '23', grx: '18', pl: '98.47', bw: '10', nf: '3',
+        req: '10' }, '33.51 dB'],
+      // 같은 판의 noise_dbm = -100.975
+      ['d-link', { ptx: '23', grx: '18', pl: '98.47', bw: '10', nf: '3',
+        req: '10' }, '-100.98 dBm'],
+      // cellular.sir_db(7, 4) = 18.6629
+      ['d-reuse', { cluster: '7', gamma: '4', sectors: '1' }, '18.66 dB'],
+      // cellular.sir_db(4, 4) = 13.8021
+      ['d-reuse', { cluster: '4', gamma: '4', sectors: '1' }, '13.80 dB'],
+      // cellular.sir_db(7, 4, 2) = 23.4341 — 3섹터
+      ['d-reuse', { cluster: '7', gamma: '4', sectors: '3' }, '23.43 dB'],
+      // cellular.erlang_b(10, 15) = 0.0364969
+      ['d-erlang', { load: '10', lines: '15' }, '3.650 %'],
+      // cellular.erlang_b(5, 5) = 0.284868
+      ['d-erlang', { load: '5', lines: '5' }, '28.487 %'],
+      // spread.walsh(8, 3) = [1,-1,-1,1,1,-1,-1,1]
+      ['d-walsh', { sf: '8', code: '3', other: '5' }, '+--++--+'],
+      // 서로 다른 왈시의 내적은 0 (spread 1절)
+      ['d-walsh', { sf: '8', code: '3', other: '5' }, '내적 = 0'],
+      // cdma.near_far_sinr_db(False) = -40.0
+      ['d-nearfar', { far: '-40', pc: false }, '= -40.0 dB'],
+      // cdma.near_far_sinr_db(True) = 0.0
+      ['d-nearfar', { far: '-40', pc: true }, '= 0.0 dB'],
+      // ofdm.ici_power 의 근사 (πε)²/3 = 3.290e-02 (out/ofdm.txt 2절)
+      ['d-ofdm', { nfft: '16', k1: '1', k2: '3', eps: '0.1' }, '3.29e-2'],
+      ['d-ofdm', { nfft: '16', k1: '1', k2: '3', eps: '0' },
+        '정확히 0 — 직교한다'],
+      // ofdm.scs_khz(3) = 120 · useful_symbol_us(3) = 8.33333
+      ['d-numerology', { mu: '3' }, 'SCS 120 kHz'],
+      ['d-numerology', { mu: '3' }, '8.33 μs'],
+      // orbit.one_way_delay_ms(550, 90) = 1.8346
+      ['d-orbit', { alt: '550', elev: '90', freq: '2' }, '1.83 ms'],
+      // orbit.one_way_delay_ms(550, 10) = 6.05445 → 왕복 12.11
+      ['d-orbit', { alt: '550', elev: '10', freq: '2' }, '12.11 ms'],
+      // orbit.max_doppler_hz(550, 2e9) = 46605.0
+      ['d-orbit', { alt: '550', elev: '90', freq: '2' }, '46.6 kHz'],
+      // codes.ConvCode(3, [0o7, 0o5]).encode([1,0,1,1,0])
+      ['d-viterbi', { msg: '10110', flip: '-1' }, '11100001011100'],
+      // 한 비트를 뒤집어도 viterbi_hard 가 10110 을 되찾는다
+      ['d-viterbi', { msg: '10110', flip: '3' }, '원래 메시지를 되찾았다'],
     ];
     let good = 0;
     for (const [id, values, want, wantNot] of CASES) {
