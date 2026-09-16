@@ -572,15 +572,16 @@ def loss_lm():
     ax = Axes(f, 38, 12, 270, 150, (0, 640), (2.0, 6.5))
     ax.frame()
     ax.grid(xs=(200, 400, 600), ys=(3, 4, 5, 6))
-    for lang, cls in (('ko', 'cv5'), ('en', 'cv2')):
+    for lang, cls, dot in (('ko', 'cv5', 'dot5'), ('en', 'cv2', 'dot2')):
         name = 'curve_c_%s.txt' % lang
         ax.curve(curve(name), cls)
-        ax.dots(curve(name, '검증 손실'), 2.4, 'dot2')
+        ax.dots(curve(name, '검증 손실'), 2.4, dot)
     ax.xticks((0, 200, 400, 600), '%d', '스텝')
     ax.yticks((2, 3, 4, 5, 6), '%d', '손실')
     sk.legend(f, 200, 30, [('한국어 학습', 'cv5'), ('영어 학습', 'cv2')])
-    f.circle(206, 58, 2.4, 'dot2')
-    f.text(216, 61, '검증 손실', 'tick', 'start')
+    f.circle(206, 58, 2.4, 'dot5')
+    f.circle(213, 58, 2.4, 'dot2')
+    f.text(222, 61, '검증 손실(색은 언어)', 'tick', 'start')
     f.text(176, 206, '토큰 하나가 담는 바이트가 달라 두 언어의 손실은 직접 견줄 수'
            ' 없다', 'cap')
     return f
@@ -595,16 +596,22 @@ def attn_matrix(name, block, head):
     return labels, mat
 
 
-def attn_fig(name, title, heads, block=None):
+def attn_fig(name, title, heads, block=None, text=None):
+    """text 를 주면 토큰 대신 원문을 적는다 — 한국어 바이트 BPE 에는
+    음절의 앞 바이트만 담은 토큰이 있어 토큰마다 적으면 � 가 된다."""
     f = Fig(190, title=title)
-    size = 72
+    size, gap = 72, 12
+    left = (340 - len(heads) * size - (len(heads) - 1) * gap) / 2.0
     for k, h in enumerate(heads):
         labels, mat = attn_matrix(name, block, h)
-        x0 = 30 + k * (size + 12)
+        x0 = left + k * (size + gap)
         heat(f, x0, 30, size, mat)
         f.text(x0 + size / 2, 24, '헤드 %d' % h, 'tick')
     labels, _ = attn_matrix(name, block, heads[0])
-    f.text(170, 128, ' '.join(labels), 'tick')
+    if text:
+        f.text(170, 128, '%s (토큰 %d개)' % (text, len(labels)), 'tick')
+    else:
+        f.text(170, 128, ' '.join(labels), 'tick')
     f.text(170, 146, '행 = 질의 토큰, 열 = 키 토큰, 진할수록 큰 가중치', 'cap')
     f.text(170, 160, '블록 %d · C 가 학습한 체크포인트를 파이썬이 읽어 계산' % block,
            'cap')
@@ -623,7 +630,8 @@ def attn_add():
 
 @fig('attn_ko')
 def attn_ko():
-    return attn_fig('ko', '한국어 모델의 어텐션 지도', (0, 1, 2, 3), 2)
+    return attn_fig('ko', '한국어 모델의 어텐션 지도', (0, 1, 2, 3), 2,
+                    text='김 첨지는 오래간만에 돈을 벌었다.')
 
 
 def render_all():
