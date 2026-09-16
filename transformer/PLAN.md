@@ -522,3 +522,30 @@ The user approved every recommendation below as-is. Each row is now a decision.
     is exactly 0 when B = 0. The test now states the true property (B gets gradient first; after B
     moves, A does). `model.forward` gained `causal=True` for the MLM encoder.
   - MLM 80/10/10 is in devlin2018 §3.1/A.1 (checked with `paper_text.py --grep`).
+
+### Step 6 — c/ files 1–8 (2026-09-16)
+
+- Parity fixtures first (`py/demo/parity_fixtures.py` → `ckpt/parity/*.tfx|*.ckpt`, `ckpt/tok/*`,
+  `out/parity_tokens.txt`), committed before any C kernel beyond rng, so each C test was RED on
+  values. TFX1 = named float64 arrays (binary; C reads with fread). Model fixtures are computed from
+  the float32 values re-read from the checkpoint C will load. The greedy fixture first used a seed
+  whose continuation was all zeros — a witness that checks nothing; switched to seed 9.
+- C tests use `c/tests/check.h` (counts failures, never aborts). `make test` = `test-py` + `test-c`;
+  `test-c` builds `c/tfs` first. **8 C test files, 561 checks.**
+- Results: rng bit-identical to Python (incl. `normal()` via glibc); matmul ijk/ikj/blocked agree to
+  the bit (each (i, j) adds k in increasing order) — the bench table compares only time; tokenizer
+  `.bin` byte-identical for all 45 corpus files on the first run; model logits/loss ≤ 1e-4 and
+  1-thread vs 3-thread gradients bit-identical for learned/sin/rope; train: 20-step loss within
+  1e-3 of Python, `lr_schedule` equal with `==`, 1 vs 4 threads bit-identical weights; sample: KV
+  logits ≤ 1e-5 of batch forward, greedy continuation equal to Python token-for-token.
+- **SPEC §9 corrected** after the first C model run failed 8 gradient checks. Not a backward bug:
+  (a) the key-bias gradient is exactly 0 in theory (a common shift of every key moves a whole score
+  row; softmax is invariant; RoPE breaks it) — Python 1e-16 vs C 1e-7 float32 noise; (b) cells built
+  from cancelling O(1) terms carry ~3e-6 absolute float32 roundoff. New per-cell criterion:
+  `|a−b| ≤ 1e-3·|b| + 1e-5·max|b|`. A pure tensor-scale metric was rejected because it would let a
+  small cell be entirely wrong. New Python witness: key-bias gradient ≈ 0 for learned/sin, not rope.
+- Deviations from §3.2's file list: `c/pool.c` (persistent pthread pool, static partition
+  `[n·t/P, n·(t+1)/P)`, chunk 0 on the caller) so every kernel shares one partition rule; checkpoint
+  read/write lives in `model.c` (the model test loads checkpoints before train.c exists).
+- Probe for step 7: `tfs train` on add (V 13, T 16, d 48, L 2, h 4, B 32, 8 threads) runs 50 steps in
+  about 3 s on this machine (not a deck number; recorded here only to size runs).
