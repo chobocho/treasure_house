@@ -495,3 +495,30 @@ The user approved every recommendation below as-is. Each row is now a decision.
 - `corpus/stats.py` → `out/corpus_stats.txt`: ko 559,957 B / 232,326 chars / 161,003 syllables,
   en 299,963 B, tasks 629,000 B; total 1,488,920 B. `tests/test_corpus.py` 11 tests (seed rebuild,
   disjoint splits, answers, fixed line lengths, died < 1956, PD template, no wiki markup, strip rules).
+
+### Step 5 — py/transformerlib modules 1–13 (2026-09-16)
+
+- One commit per module, tests first; each module was stubbed so the tests failed on behaviour
+  (not on import) before the implementation went in. **187 tests, ~26 s** for the whole suite.
+  Order: fmt (13) · rng (1) — both pulled ahead of step 4 — then scalar · tensor · ops · tokenizer ·
+  attention · posenc · model · optim · train · sample · extras.
+- Witness notes worth keeping:
+  - tensor: broadcasting forward and backward share one "output cell → input cell" index table;
+    `rel_error` is `max|a−b| / max(max|a|, max|b|)` (vector scale, not per cell). First run failed 6
+    tests because the *test helper* reused leaves without clearing `.grad`; the helper was fixed.
+  - model: all-parameter FD check first failed for `wte` at 1.8e-5 with weights scaled ×20; the error
+    fell as h² (1e-4→1.3e-1, 1e-5→1.8e-3, 1e-6→1.8e-5), i.e. truncation from extreme curvature, not a
+    backward bug. Scale ×5 gives 5.6e-10. Tolerance unchanged. `tensor.MULTS` counts forward matmul
+    multiplies; `model.matmul_mults` equals it exactly; `train_flops_per_token / 6N` = 1.144 for GPT-2
+    small at n = 1024 (tested inside (1.0, 1.2)). `bert_params` = 109,482,240.
+  - tokenizer: a hand-computed expectation was wrong (tie among count-2 pairs goes to (32, 237),
+    space + first byte of '한', not (97, 98)); corrected in the test. Korean BPE-512 trains in seconds.
+  - attention: variance witness trimmed to d ∈ {4, 16, 64} (10k samples each); d = 256 alone drew
+    5.1 M normals (~30 s). The d = 256 saturation test stays (100 trials).
+  - sample: SPEC §7 gained two pinned rules — top-p counts on probabilities renormalised after top-k;
+    when the context reaches T, keep the last ⌊T/2⌋ tokens and refill the cache. KV decode equals full
+    recompute ≤ 1e-9 for learned/sin/rope.
+  - extras: **plan witness was false** — "LoRA with B = 0 … its gradient reaches A". ∂ℓ/∂A = xᵀ g Bᵀ
+    is exactly 0 when B = 0. The test now states the true property (B gets gradient first; after B
+    moves, A does). `model.forward` gained `causal=True` for the MLM encoder.
+  - MLM 80/10/10 is in devlin2018 §3.1/A.1 (checked with `paper_text.py --grep`).
