@@ -197,6 +197,41 @@ def bler(ebn0_db, transmissions, frames, k, elen, seed=1, mode='ir'):
     return 1.0 - good / float(frames)
 
 
+def utilization(nproc, rtt):
+    """HARQ 프로세스 N 개가 왕복 RTT 슬롯짜리 링크를 채우는 비율.
+
+        U = min(1, N / RTT)
+
+    정지 대기(N=1)는 응답을 기다리는 동안 논다 — RTT 가 8 이면 1/8 만
+    쓴다. 프로세스가 RTT 개에 이르면 기다리는 동안 다른 것을 보내
+    링크가 꽉 찬다. LTE FDD 가 8 프로세스를 두는 셈법이 이 한 줄이다
+    (n+4 응답, 다시 4 ms 뒤 재전송 → 왕복 8 ms).
+    """
+    if nproc < 1 or rtt < 1:
+        raise ValueError('프로세스 수와 왕복 슬롯 수는 1 이상이다')
+    return min(1.0, nproc / float(rtt))
+
+
+def simulate_utilization(nproc, rtt, slots):
+    """슬롯 하나하나를 흉내 내어 위 닫힌 식을 확인한다.
+
+    프로세스마다 '다시 보낼 수 있는 슬롯' 을 들고, 매 슬롯 비어 있는
+    프로세스가 있으면 하나 보내고 RTT 뒤에 풀어 준다. 보낸 슬롯 수를
+    전체 슬롯 수로 나눈다. 시간 O(slots · N).
+    """
+    if nproc < 1 or rtt < 1 or slots < 1:
+        raise ValueError('프로세스·왕복·슬롯 수는 1 이상이다')
+    free_at = [0] * nproc
+    sent = 0
+    for t in range(slots):
+        for i in range(nproc):
+            if free_at[i] <= t:
+                free_at[i] = t + rtt
+                sent += 1
+                break
+    return sent / float(slots)
+
+
 def throughput(ebn0_db, transmissions, frames, k, elen, seed=1,
                mode='ir'):
     """채널 사용 한 번당 실어 나른 정보 비트 수.

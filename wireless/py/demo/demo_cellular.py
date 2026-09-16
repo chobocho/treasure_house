@@ -13,7 +13,7 @@ def sec_reuse():
                      '%.1f dB' % cellular.sir_db(n, 4.0),
                      str(cellular.channels_per_cell(395, n))])
     return (fmt.table(rows, align='rrrrr')
-            + '\n\nAMPS 가 요구한 18 dB 를 γ=4 에서 막 넘기는'
+            + '\n\nAMPS 가 요구한 18 dB 를 γ=4 에서 막 넘기는 '
             + '것이 N=7 이다.')
 
 
@@ -46,7 +46,7 @@ def sec_trunking():
         rows.append([str(n), fmt.num(a, 3),
                      '%.1f %%' % (100.0 * a / n)])
     return (fmt.table(rows, align='rrr')
-            + '\n\n회선을 한 통에 모을수록 회선당 실어 나르는'
+            + '\n\n회선을 한 통에 모을수록 회선당 실어 나르는 '
             + '양이 는다.'
             + '\n이것이 트렁킹 이득이고, 셀을 크게 쓰고 싶은 이유다.')
 
@@ -66,7 +66,7 @@ def sec_handoff():
         rows.append([fmt.num(h, 1),
                      str(cellular.ping_pong_count(h, seed=3))])
     return (fmt.table(rows, align='rr')
-            + '\n\n문턱을 두면 핑퐁이 준다. 대신 넘기는 시점이'
+            + '\n\n문턱을 두면 핑퐁이 준다. 대신 넘기는 시점이 '
             + '늦어진다.')
 
 

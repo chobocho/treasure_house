@@ -42,7 +42,7 @@ def sec_rake():
                      fmt.num(cdma.rake_ber(f, 60, 4.0, seed=9,
                                            paths=3), 4)])
     return (fmt.table(rows, align='rrr')
-            + '\n\n갈래를 늘리면 좋아진다. 경로보다 많이 두면'
+            + '\n\n갈래를 늘리면 좋아진다. 경로보다 많이 두면 '
             + '더는 안 좋아진다.')
 
 
@@ -84,7 +84,7 @@ def sec_softcap():
         rows.append([str(n),
                      '%.2f dB' % cdma.multiuser_sinr_db(n, seed=5)])
     return (fmt.table(rows, align='rr')
-            + '\n\n한 명 더 받으면 모두가 조금씩 나빠질 뿐,'
+            + '\n\n한 명 더 받으면 모두가 조금씩 나빠질 뿐, '
             + '거절당하지 않는다.'
             + '\n이것이 CDMA 의 부드러운 용량이다.')
 

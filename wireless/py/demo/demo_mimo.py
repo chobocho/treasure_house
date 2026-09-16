@@ -81,7 +81,7 @@ def sec_hardening():
         rows.append([str(n), fmt.num(m, 4), fmt.num(v, 5),
                      fmt.num(v * n, 4)])
     return (fmt.table(rows, align='rrrr')
-            + '\n\n분산이 1/N 로 준다 — 채널이 굳는다(channel'
+            + '\n\n분산이 1/N 로 준다 — 채널이 굳는다(channel '
             + 'hardening).')
 
 

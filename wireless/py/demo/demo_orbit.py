@@ -29,7 +29,7 @@ def sec_kepler():
                          orbit.EARTH_R_KM
                          / (orbit.EARTH_R_KM + a))), 2)])
     return (fmt.table(rows, align='lrrrr')
-            + '\n\n정지궤도의 주기는 24시간이 아니라'
+            + '\n\n정지궤도의 주기는 24시간이 아니라 '
             + '항성일(23시간 56분)이다.')
 
 
@@ -73,9 +73,9 @@ def sec_doppler():
                                                         rot) / 1e3),
                      fmt.num(d2 / 15000.0, 2)])
     return (fmt.table(rows, align='lrrrr')
-            + '\n\n정지궤도는 지구와 함께 도니 상대 각속도가 0 —'
+            + '\n\n정지궤도는 지구와 함께 도니 상대 각속도가 0 — '
             + '도플러가 없다.'
-            + '\n저궤도는 부반송파 간격의 몇 배를 오간다. 그래서'
+            + '\n저궤도는 부반송파 간격의 몇 배를 오간다. 그래서 '
             + '미리 보정한다.')
 
 
@@ -100,7 +100,7 @@ def sec_ntn():
                      '%.2f ms' % (hi - lo),
                      '%.1f 분' % (vis / 60.0)])
     return (fmt.table(rows, align='lrrr')
-            + '\n\n지상 셀에서는 이 폭이 수십 μs 다. 위성에서는'
+            + '\n\n지상 셀에서는 이 폭이 수십 μs 다. 위성에서는 '
             + 'ms 단위라'
             + '\nRel-17 NTN 이 공통 TA 를 따로 두었다.')
 

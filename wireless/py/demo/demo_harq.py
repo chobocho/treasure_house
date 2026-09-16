@@ -36,7 +36,8 @@ def sec_rv():
                         froms.count(2))])
     return (fmt.table(rows, align='rl')
             + '\n\nRV0 은 계통 비트가 많아 혼자서도 복호된다.'
-            + '\nRV2·RV3 은 패리티가 많아 증분 잉여로 쓰인다.')
+            + '\nRV1·RV2 는 패리티가 많아 증분 잉여로 쓰인다.'
+            + '\nRV3 은 버퍼 끝에서 앞으로 되감겨 다시 계통이 많다.')
 
 
 def sec_combine():
@@ -51,11 +52,11 @@ def sec_combine():
                               mode=mode), 3))
             rows.append(row)
     return (fmt.table(rows, align='rlrrr')
-            + '\n\n같은 횟수라면 증분 잉여가 체이스 결합보다'
+            + '\n\n같은 횟수라면 증분 잉여가 체이스 결합보다 '
             + '낫거나 같다.'
-            + '\n체이스는 같은 자리를 다시 받아 연판정 값을 더할'
+            + '\n체이스는 같은 자리를 다시 받아 연판정 값을 더할 '
             + '뿐이고,'
-            + '\n증분 잉여는 처음에 안 보냈던 패리티를 더 보내'
+            + '\n증분 잉여는 처음에 안 보냈던 패리티를 더 보내 '
             + '부호율을 낮춘다.')
 
 
@@ -72,12 +73,26 @@ def sec_throughput():
     return fmt.table(rows, align='rrrr')
 
 
+def sec_processes():
+    rtt = 8
+    rows = [['프로세스 수 N', '닫힌 식 min(1, N/8)', '슬롯 800개 모사']]
+    for n in (1, 2, 4, 6, 8, 16):
+        u = 100 * harq.utilization(n, rtt)
+        sim = 100 * harq.simulate_utilization(n, rtt, 800)
+        rows.append([str(n), '%.1f %%' % u, '%.1f %%' % sim])
+    return (fmt.table(rows, align='rrr')
+            + '\n\n정지 대기(N=1)는 왕복 8 ms 중 1 ms 만 쓴다. '
+            + 'N 이 왕복 길이에 이르면 링크가 찬다 —'
+            + '\nLTE FDD 가 8 프로세스를 두는 셈법이 이것이다.')
+
+
 def main():
     return report.write('harq.txt', [
         ('순환 버퍼의 구조', sec_buffer()),
         ('RV 마다 어디를 읽는가', sec_rv()),
         ('체이스 결합과 증분 잉여', sec_combine()),
         ('처리율은 용량을 넘지 않는다', sec_throughput()),
+        ('정지 대기와 N-프로세스', sec_processes()),
     ])
 
 

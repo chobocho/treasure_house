@@ -125,6 +125,29 @@ class TestCombining(unittest.TestCase):
         with self.assertRaises(ValueError):
             harq.bler(1.0, 2, 5, 40, 72, seed=1, mode='magic')
 
+    def test_utilization_stop_and_wait(self):
+        # 정지 대기(프로세스 1개)는 왕복 8 슬롯 중 1 슬롯만 쓴다
+        self.assertAlmostEqual(harq.utilization(1, 8), 0.125)
+
+    def test_utilization_fills_the_round_trip(self):
+        # 프로세스 수가 왕복 길이에 이르면 링크가 찬다. 그 뒤는 1 이다
+        self.assertAlmostEqual(harq.utilization(8, 8), 1.0)
+        self.assertAlmostEqual(harq.utilization(16, 8), 1.0)
+        self.assertAlmostEqual(harq.utilization(4, 8), 0.5)
+
+    def test_utilization_matches_slot_simulation(self):
+        # 닫힌 식 min(1, N/RTT) 이 슬롯 단위 모사와 같은가
+        for n in (1, 2, 3, 5, 8, 11):
+            self.assertAlmostEqual(harq.utilization(n, 8),
+                                   harq.simulate_utilization(n, 8, 800),
+                                   places=9)
+
+    def test_utilization_rejects_nonsense(self):
+        with self.assertRaises(ValueError):
+            harq.utilization(0, 8)
+        with self.assertRaises(ValueError):
+            harq.utilization(4, 0)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -69,6 +69,8 @@
 | GSM 음성 프레임 260비트는 Ia 50 · Ib 132 · II 78 로 나뉘고 부호화 뒤 456비트(22.8 kbit/s)가 된다 | 3GPP TS 45.003 §3.1 | 규격 조항 원문을 specs/45.003.txt 에서 확인했다 | 2026-09-16 |
 | A5/1 은 2009년 노일의 무지개표 공개로, COMP128 은 1998년 골드버그·워그너·브라이스니의 충돌 공격으로 무너졌다 | Nohl, Chaos Communication Congress (2009) · Briceno·Goldberg·Wagner (1998) | 발표 연도와 저자를 확인했다. A5/2 제거는 2006년 이후 규격 변경 | 2026-09-16 |
 | 삼성전자는 2020년에 6G 백서 「The Next Hyper-Connected Experience for All」을 냈다 | Samsung Research 6G 백서(2020-07) | 공개 PDF 의 제목과 발행 시점을 확인했다. 이 덱은 제조사 백서를 합의가 아닌 '제안'으로 분류해 읽는다 | 2026-09-16 |
+| 3GPP 는 1998-12-04 코펜하겐에서 ARIB·ETSI·T1·TTA·TTC 다섯 기구가 협약에 서명해 시작됐고, CWTS(중국)는 1999-06 에 합류했다 | 3GPP 뉴스 '20 Years – a promising start'(3gpp.org) · devopedia.org/3gpp | WebSearch 2건 교차 — 3차 리뷰에서 '여섯 기구' 를 바로잡음 | 2026-09-16 |
+| LTE-M 과 NB-IoT 의 Rel-12/13 연구 목표는 둘 다 커버리지 20 dB 확장이다(NB-IoT 는 GPRS MCL 144 dB 대비 164 dB) | TR 36.888 §5.1 · TR 45.820 §4.1.1 | specs/36.888.txt·45.820.txt 원문 인용(tools/fetch.sh) | 2026-09-16 |
 
 <!-- 날짜 하나하나는 data/timeline.tsv 의 source 칸에 있다. 이 표에는
      (1) 자료 파일 전체의 출처 근거, (2) 2025년 이후라 재확인이 필요한 것,

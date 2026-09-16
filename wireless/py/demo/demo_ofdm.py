@@ -21,7 +21,7 @@ def sec_cp():
                      '%.2e' % err,
                      '%.1f %%' % (100 * ofdm.cp_overhead(nfft, ncp))])
     return (fmt.table(rows, align='rrrrr')
-            + '\n\nCP 가 지연보다 길면 오차가 0 이다 — 채널이 한'
+            + '\n\nCP 가 지연보다 길면 오차가 0 이다 — 채널이 한 '
             + '탭 곱셈이 된다.')
 
 
@@ -70,7 +70,7 @@ def sec_numerology():
                      fmt.num(ofdm.prb_khz(mu), 0),
                      '가능' if ofdm.extended_cp_allowed(mu) else '—'])
     return (fmt.table(rows, align='rrrrrrl')
-            + '\n\n유용 심볼 길이 × 부반송파 간격 = 1 — 이것이'
+            + '\n\n유용 심볼 길이 × 부반송파 간격 = 1 — 이것이 '
             + '직교 조건이다.')
 
 

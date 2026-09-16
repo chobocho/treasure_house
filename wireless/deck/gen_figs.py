@@ -101,19 +101,21 @@ def constellations():
 @fig('mi_vs_capacity')
 def mi_vs_capacity():
     f = Fig(220, title='성상도의 상호정보와 섀넌 용량')
-    ax = Axes(f, 34, 14, 200, 160, (-5, 30), (0, 9))
+    # 섀넌 선은 파선으로 — QPSK 의 청록과 실선끼리는 구별이 안 됐다.
+    # y 상한은 30 dB 의 용량(9.97)이 들어오게 10 으로.
+    ax = Axes(f, 34, 14, 200, 160, (-5, 30), (0, 10))
     ax.frame()
     ax.grid(xs=(0, 10, 20, 30), ys=(2, 4, 6, 8))
     ax.curve([(s, info.capacity_awgn(s))
-              for s in range(-5, 31)], 'cv')
+              for s in range(-5, 31)], 'cvd')
     for name, cls in (('qpsk', 'cv2'), ('16qam', 'cv4'),
                       ('64qam', 'cv5'), ('256qam', 'cv6')):
         ax.curve([(s, info.constellation_mi(name, float(s), 900,
                                             seed=7))
                   for s in range(-5, 31, 1)], cls)
     ax.xticks((-5, 0, 10, 20, 30), '%d', 'SNR [dB]')
-    ax.yticks((0, 2, 4, 6, 8), '%d', 'bit/s/Hz')
-    sk.legend(f, 244, 26, [('섀넌', 'cv'), ('QPSK', 'cv2'),
+    ax.yticks((0, 2, 4, 6, 8, 10), '%d', 'bit/s/Hz')
+    sk.legend(f, 244, 26, [('섀넌', 'cvd'), ('QPSK', 'cv2'),
                            ('16QAM', 'cv4'), ('64QAM', 'cv5'),
                            ('256QAM', 'cv6')])
     f.text(170, 208, '유한 성상도는 k 비트에서 포화한다', 'cap')
@@ -122,13 +124,15 @@ def mi_vs_capacity():
 
 @fig('shannon_limit')
 def shannon_limit():
-    f = Fig(210, title='스펙트럼 효율과 Eb/N0 한계')
+    # 축 제목(y0+h+25=189)과 그림 설명이 같은 줄에 겹쳤다 — 설명은
+    # 그 아래(210)로, 곡선은 틀 아래로 새지 않게 y 하한(0.1)부터.
+    f = Fig(224, title='스펙트럼 효율과 Eb/N0 한계')
     ax = Axes(f, 40, 14, 262, 150, (-2, 20), (0.1, 10),
               ylog=True)
     ax.frame()
     ax.grid(xs=(0, 5, 10, 15), ys=(0.1, 1, 10))
     pts = []
-    e = 0.05
+    e = 0.1
     while e <= 10.0:
         pts.append((info.ebn0_min_db(e), e))
         e *= 1.08
@@ -138,7 +142,7 @@ def shannon_limit():
     f.text(x + 3, 26, '−1.59 dB', 'key', 'start')
     ax.xticks((0, 5, 10, 15, 20), '%d', 'Eb/N0 [dB]')
     ax.yticks((0.1, 1, 10), '%g', '효율 [bit/s/Hz]')
-    f.text(170, 196, '왼쪽은 어떤 부호로도 닿을 수 없는 영역이다',
+    f.text(170, 210, '왼쪽은 어떤 부호로도 닿을 수 없는 영역이다',
            'cap')
     return f
 
@@ -169,17 +173,19 @@ def rayleigh_cdf():
 
 @fig('doppler_spectrum')
 def doppler_spectrum():
-    f = Fig(210, title='클라크 도플러 스펙트럼')
+    f = Fig(224, title='클라크 도플러 스펙트럼')
     ax = Axes(f, 38, 14, 262, 150, (-1.05, 1.05), (0, 4))
     ax.frame()
     pts = []
     for i in range(1, 400):
         x = -1.0 + 2.0 * i / 400.0
-        pts.append((x, 1.0 / math.sqrt(max(1e-6, 1 - x * x))))
+        # 가장자리에서 발산한다 — y 상한(4)에서 자른다. 틀 위로 새면
+        # 제목을 덮는다.
+        pts.append((x, min(4.0, 1.0 / math.sqrt(max(1e-6, 1 - x * x)))))
     ax.curve(pts, 'cv')
     ax.xticks((-1, -0.5, 0, 0.5, 1), '%.1f', 'f / f_D')
     ax.yticks((0, 1, 2, 3, 4), '%d', 'S(f)')
-    f.text(170, 196,
+    f.text(170, 210,
            '가장자리(±f_D)에서 솟는다 — 옆에서 오는 파가 가장 많다',
            'cap')
     return f
@@ -326,7 +332,7 @@ def polar_butterfly():
                 f.circle(xs, y0 + i * dy, 2.4, 'dot2')
                 f.circle(xs, y0 + j * dy, 2.4, 'dot2')
         step *= 2
-    f.text(170, 200, '같은 나비를 log₂N 단계 되풀이하면 F^{⊗n} 이 된다',
+    f.text(170, 200, '같은 나비를 log₂N 단계 되풀이하면 F⊗ⁿ 이 된다',
            'cap')
     return f
 
@@ -373,7 +379,7 @@ def sir_vs_cluster():
     ax = Axes(f, 38, 14, 202, 150, (0, 22), (0, 30))
     ax.frame()
     ax.grid(ys=(6, 12, 18, 24))
-    ns = cellular.cluster_sizes(4)[:9]
+    ns = cellular.cluster_sizes(4)[:10]          # 1 … 21, 축 끝까지
     for gamma, cls in ((2.5, 'cv1'), (3.0, 'cv2'), (3.5, 'cv3'),
                        (4.0, 'cv4')):
         ax.curve([(n, cellular.sir_db(n, gamma)) for n in ns], cls)
@@ -381,9 +387,10 @@ def sir_vs_cluster():
     x1, y1 = ax.at(0, 18)
     x2, _y = ax.at(22, 18)
     f.line(x1, y1, x2, y1, 'cvd')
-    f.text(x2 - 2, y1 - 4, 'AMPS 요구 18 dB', 'key', 'end')
-    ax.xticks((1, 3, 4, 7, 9, 12, 13, 16, 19, 21), '%d',
-              '클러스터 크기 N')
+    # 왼쪽 위에 둔다 — 오른쪽은 γ=3 곡선이 지나가 글자와 겹친다
+    f.text(x1 + 4, y1 - 4, 'AMPS 18 dB', 'key', 'start')
+    # 3·4 와 12·13 은 눈금이 겹쳐 읽히지 않았다 — 자주 쓰는 값만 적는다
+    ax.xticks((1, 4, 7, 12, 19, 21), '%d', '클러스터 크기 N')
     ax.yticks((0, 10, 20, 30), '%d', 'SIR [dB]')
     sk.legend(f, 250, 30, [('γ=2.5', 'cv1'), ('γ=3', 'cv2'),
                            ('γ=3.5', 'cv3'), ('γ=4', 'cv4')])
@@ -461,7 +468,7 @@ def gsm_frame():
 
 @fig('gmsk_spectrum')
 def gmsk_spectrum():
-    f = Fig(215, title='GMSK 와 MSK 의 스펙트럼')
+    f = Fig(228, title='GMSK 와 MSK 의 스펙트럼')
     ax = Axes(f, 40, 14, 200, 150, (0, 2.0), (-70, 5))
     ax.frame()
     ax.grid(xs=(0.5, 1.0, 1.5), ys=(-60, -40, -20, 0))
@@ -475,17 +482,19 @@ def gmsk_spectrum():
         p = dsp.periodogram(x, n)
         peak = max(p)
         pts = []
-        for k in range(1, n // 8):
+        # 축 끝(2.0)까지 그린다(k < n/4). 바닥은 y 하한 −70 dB 에
+        # 붙인다 — 더 내려가면 곡선이 틀 밖으로 새어 눈금을 덮는다.
+        for k in range(1, n // 4):
             fr = k * 8.0 / n
             if fr > 2.0:
                 break
-            pts.append((fr, 10 * math.log10(max(p[k] / peak, 1e-8))))
+            pts.append((fr, 10 * math.log10(max(p[k] / peak, 1e-7))))
         ax.curve(pts, cls)
     ax.xticks((0, 0.5, 1.0, 1.5, 2.0), '%.1f', '주파수 / 비트율')
     ax.yticks((-70, -50, -30, -10, 5), '%d', '[dB]')
     sk.legend(f, 250, 34, [('MSK', 'cvd'), ('BT=0.5', 'cv3'),
                            ('BT=0.3', 'cv5')])
-    f.text(170, 200,
+    f.text(170, 214,
            'BT 를 낮추면 이웃 채널이 조용해진다 — 대신 ISI 가 는다',
            'cap')
     return f
@@ -628,8 +637,8 @@ def ofdm_cp():
     f.line(271, 74, 71, 74, 'tie hot')
     f.line(71, 74, 71, 92, 'tie hot')
     f.text(16, 140, '③ 다중경로가 CP 안에서 끝나면', 'key', 'start')
-    f.text(16, 156, '   채널과의 컨볼루션이 **순환** 이 되어,', 'cap',
-           'start')
+    f.text(16, 156, '   채널과의 컨볼루션이 순환 컨볼루션이 되어,',
+           'cap', 'start')
     f.text(16, 170, '   주파수 영역에서 곱셈 하나로 바뀐다', 'cap',
            'start')
     f.text(16, 184, '   → 부반송파마다 복소수 하나로 등화 끝', 'cap',
@@ -663,8 +672,10 @@ def papr_ccdf():
 
 @fig('resource_grid')
 def resource_grid():
-    f = Fig(230, title='LTE·NR 자원 그리드')
-    f.text(16, 22, '한 슬롯 × 한 PRB = 12 부반송파 × 14 심볼',
+    # 10부(LTE)에서만 쓴다. LTE 의 슬롯은 7 심볼·0.5 ms 이고 14 심볼은
+    # 서브프레임이다 — NR 식 '슬롯 14 심볼' 로 적으면 옆 표와 어긋난다.
+    f = Fig(230, title='LTE 자원 그리드')
+    f.text(16, 22, '서브프레임 1 ms × PRB 쌍 = 12 부반송파 × 14 심볼',
            'key', 'start')
     x0, y0 = 40, 32
     cw, ch = 19.0, 11.0
@@ -681,8 +692,8 @@ def resource_grid():
     f.text(x0 + 7 * cw, y0 + 12 * ch + 14, 'OFDM 심볼 →', 'axname')
     f.text(16, 206, '주황: 제어 영역 · 분홍: 기준신호 · 흰: 데이터',
            'cap', 'start')
-    f.text(16, 220, 'μ=0 이면 이 한 칸이 180 kHz × 1 ms 다', 'cap',
-           'start')
+    f.text(16, 220, '슬롯은 7 심볼(0.5 ms). 이 한 칸이 180 kHz × 1 ms',
+           'cap', 'start')
     return f
 
 
@@ -691,7 +702,7 @@ def nr_numerology():
     f = Fig(215, title='NR 뉴머롤로지 — 같은 1 ms 를 어떻게 쪼개나')
     f.text(16, 22, '서브프레임 1 ms 는 μ 와 무관하게 고정이다',
            'key', 'start')
-    x0, w = 40, 280
+    x0, w = 40, 240          # 오른쪽 '120 kHz' 가 viewBox 340 안에 들게
     for i, mu in enumerate((0, 1, 2, 3)):
         y = 34 + i * 38
         n = ofdm.slots_per_subframe(mu)
@@ -715,7 +726,9 @@ def nr_numerology():
 @fig('orbit_shells')
 def orbit_shells():
     f = Fig(240, title='궤도 고도와 편도 지연')
-    cx, cy, r = 80, 130, 34
+    # 고리 넷이 viewBox 왼쪽·아래로 새고 범례를 가로질렀다 — 가장 큰
+    # 고리(r+9+3·11=64)가 x 26~154, y 54~182 안에 들도록 잡는다.
+    cx, cy, r = 90, 118, 22
     f.circle(cx, cy, r, 'cell a')
     f.text(cx, cy + 4, '지구', 'tick')
     shells = [(550.0, '저궤도 550 km', 'cv2'),
@@ -723,7 +736,7 @@ def orbit_shells():
               (20200.0, 'MEO 20,200 km', 'cv4'),
               (35786.0, 'GEO 35,786 km', 'cv5')]
     for i, (h, name, cls) in enumerate(shells):
-        rr = r + 12 + i * 16
+        rr = r + 9 + i * 11
         f.circle(cx, cy, rr, cls)
         d = orbit.one_way_delay_ms(h, 90.0)
         f.text(160, 44 + i * 22, '%s — 천정 편도 %.2f ms'
@@ -775,37 +788,55 @@ def ntn_geometry():
 
 @fig('generation_ribbon')
 def generation_ribbon():
-    f = Fig(210, title='세대 연표')
+    """세대가 겹쳐 사는 모습 — 띠를 세대마다 한 줄씩 겹쳐 그린다.
+
+    첫 상용 연도만 잇대어 그리면 '다음 세대가 오면 앞 세대가 꺼진다'
+    는 그림이 된다 — 옆 문장이 부정하는 바로 그것이다. 여기서는 띠가
+    겹치게 그리고, 끝난 해가 출처로 확인된 1G(AMPS 2008-02, 5부)만
+    닫는다. 나머지는 2026 까지 열어 둔다. 행 수는 timeline.tsv 에서
+    센다.
+    """
+    f = Fig(226, title='세대 연표 — 겹쳐 사는 띠')
     x0, x1 = 24, 316
-    y = 40
-    f.line(x0, y, x1, y, 'ax')
-    spans = [(1979, 1991, '1G', 'cell', 'g1'),
-             (1991, 2001, '2G', 'cell', 'g2'),
-             (2001, 2009, '3G', 'cell', 'g3'),
-             (2009, 2019, '4G', 'cell', 'g4'),
-             (2019, 2029, '5G', 'cell', 'g5')]
     lo, hi = 1975, 2032
+    now = 2026
 
     def fx(v):
         return x0 + (v - lo) / float(hi - lo) * (x1 - x0)
 
-    for i, (a, b, name, _c, cls) in enumerate(spans):
-        f.rect(fx(a), y + 6, fx(b) - fx(a) - 1, 22,
-               'cell ' + 'abcde'[i])
-        f.text((fx(a) + fx(b)) / 2.0, y + 21, name, 'key')
+    ytop = 30
+    f.line(x0, ytop, x1, ytop, 'ax')
     for yr in (1980, 1990, 2000, 2010, 2020, 2030):
-        f.line(fx(yr), y - 4, fx(yr), y, 'ax')
-        f.text(fx(yr), y - 8, str(yr), 'tick')
+        f.line(fx(yr), ytop - 4, fx(yr), ytop, 'ax')
+        f.text(fx(yr), ytop - 8, str(yr), 'tick')
+    # (첫 상용, 끝난 해 또는 None, 이름)
+    spans = [(1979, 2008, '1G'), (1991, None, '2G'), (2001, None, '3G'),
+             (2009, None, '4G'), (2019, None, '5G')]
+    for i, (a, b, name) in enumerate(spans):
+        y = ytop + 6 + i * 15
+        end = b if b else now
+        f.rect(fx(a), y, fx(end) - fx(a) - 1, 11, 'cell ' + 'abcde'[i])
+        f.text(fx(a) + 4, y + 9, name, 'key', 'start')
+        if b:
+            f.text(fx(b) + 3, y + 9, '%d 종료' % b, 'tick', 'start')
+        else:
+            f.text(fx(end) + 3, y + 9, '→', 'tick', 'start')
     marks = [(1979, 'NTT 자동차전화'), (1991, 'GSM 상용'),
              (1996, '한국 CDMA'), (2001, 'FOMA'),
              (2009, 'LTE 상용'), (2019, '한국 5G')]
+    ybase = ytop + 6 + 5 * 15 + 4
     for i, (yr, what) in enumerate(marks):
-        yy = 84 + i * 18
-        f.line(fx(yr), y + 28, fx(yr), yy - 4, 'tie')
+        yy = ybase + 12 + i * 13
         f.circle(fx(yr), yy - 4, 2.2, 'dot2')
         f.text(fx(yr) + 5, yy, '%d %s' % (yr, what), 'tick', 'start')
-    f.text(170, 200, '연도는 data/timeline.tsv 에서 온다 — 152행,'
-                     ' 행마다 출처가 있다', 'cap')
+    rows = 0
+    with io.open(os.path.join(BASE, 'data', 'timeline.tsv'),
+                 encoding='utf-8') as fh:
+        for k, line in enumerate(fh):
+            if k and line.strip() and not line.startswith('#'):
+                rows += 1
+    f.text(170, 218, '연도는 data/timeline.tsv 에서 온다 — %d행,'
+                     ' 행마다 출처가 있다' % rows, 'cap')
     return f
 
 
@@ -845,7 +876,9 @@ def mimo_array_pattern():
         for i in range(721):
             deg = -90 + 180.0 * i / 720.0
             v = abs(mimo.array_factor(n, 0.5, math.radians(deg), 0.0))
-            pts.append((deg, 20 * math.log10(max(v / n, 1e-3))))
+            # 바닥은 y 하한 −30 dB — 널이 그 아래로 내려가면 곡선이
+            # 틀 밖으로 새어 눈금과 설명 글자를 덮는다
+            pts.append((deg, 20 * math.log10(max(v / n, 10 ** -1.5))))
         ax.curve(pts, cls)
     ax.xticks((-90, -45, 0, 45, 90), '%d', '각도 [도]')
     ax.yticks((-30, -20, -10, 0), '%d', '정규화 [dB]')
@@ -873,8 +906,14 @@ def alamouti_slope():
     ax.yticks((1e-4, 1e-3, 1e-2, 1e-1), '%.0e', 'BER')
     sk.legend(f, 250, 34, [('1×1 레일리', 'cv1'),
                            ('알라무티 2×1', 'cv5')])
+    # 기울기는 그린 점에서 잰다(log10 BER / (dB/10)). 이론값 −1·−2 로
+    # 반올림해 적으면 옆 슬라이드의 '반올림하지 않는다' 와 어긋난다.
+    def slope(pts):
+        return ((math.log10(pts[-1][1]) - math.log10(pts[0][1]))
+                / ((pts[-1][0] - pts[0][0]) / 10.0))
     f.text(170, 200,
-           '기울기가 −1 에서 −2 로 가팔라진다 — 그것이 차수 2',
+           '점에서 잰 기울기 %.2f → %.2f (이론 −1 → −2) — 차수 2'
+           % (slope(a), slope(b)),
            'cap')
     return f
 

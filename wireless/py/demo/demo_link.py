@@ -18,7 +18,7 @@ def sec_noise():
                      '%.2f dBm' % link.noise_floor_dbm(bw, 7.0),
                      '%.2f dBm' % link.noise_floor_dbm(bw, 1.5)])
     return (fmt.table(rows, align='lrrrr')
-            + '\n\n1 Hz·290 K 에서 −173.98 dBm — 이 책에서 가장'
+            + '\n\n1 Hz·290 K 에서 −173.98 dBm — 이 책에서 가장 '
             + '자주 쓰는 상수.')
 
 
@@ -71,7 +71,7 @@ def sec_range():
                              required_snr_db=10.0, n=n)
         rows.append([fmt.num(n, 1), '%.0f' % d])
     return (fmt.table(rows, align='rr')
-            + '\n\n지수가 2 에서 4 로 바뀌면 같은 여유로 갈 수'
+            + '\n\n지수가 2 에서 4 로 바뀌면 같은 여유로 갈 수 '
             + '있는 거리가'
             + '\n자릿수로 줄어든다. 셀 설계에서 n 을 잘못 잡는 것이'
             + '\n가장 비싼 실수인 이유다.')

@@ -66,7 +66,7 @@ def sec_ta():
                      '%.2f' % (ta * float(tdma.BIT_US))])
     return (fmt.table(rows, align='rrr')
             + '\n\nTA 는 6비트(0~63)다. 그래서 GSM 셀 반지름의 한계가'
-            + '\n35 km 인데, 그것을 정한 것은 전력이 아니라'
+            + '\n35 km 인데, 그것을 정한 것은 전력이 아니라 '
             + '시간축이다.')
 
 

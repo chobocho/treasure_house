@@ -62,7 +62,7 @@ def sec_mi():
         row = ['%.0f' % snr, fmt.num(info.capacity_awgn(snr), 3)]
         for name in NAMES[:5]:
             row.append(fmt.num(
-                info.constellation_mi(name, snr, 1500, seed=7), 3))
+                info.constellation_mi(name, snr, 20000, seed=7), 3))
         rows.append(row)
     return fmt.table(rows, align='r' * (len(NAMES[:5]) + 2))
 

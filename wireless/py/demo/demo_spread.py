@@ -42,7 +42,7 @@ def sec_primitive():
                      '예' if prim else '아니오',
                      '2^%d−1 = %d' % (m, (1 << m) - 1)])
     return (fmt.table(rows, align='lrlll')
-            + '\n\n2⁴²−1 은 돌려서 못 센다. x 의 곱셈 차수를'
+            + '\n\n2⁴²−1 은 돌려서 못 센다. x 의 곱셈 차수를 '
             + '대수로 확인했다.')
 
 
