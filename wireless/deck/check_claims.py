@@ -82,17 +82,18 @@ def check_specs():
             continue
         org, num, clause = cols[0], cols[1], cols[2]
         if not clause:
-            continue                      # 조항 없이 번호만 인용한 것 — 볼 것이 없다
+            # 번호만 인용한 것 — 볼 조항이 없다
+            continue
         n += 1
         f = os.path.join(SPECS, '%s.txt' % num)
         if not os.path.exists(f):
-            bad.append('%s %s — specs/%s.txt 가 없다 (make specs 먼저)'
+            bad.append('%s %s — specs/%s.txt 가 없다'
                        % (org.upper(), num, num))
             continue
-        # 조항 제목은 "4.2\t제목" 또는 "4.2 제목" 꼴로 한 줄을 연다.
+        # 조항 제목은 "4.2\t제목" 꼴로 한 줄을 연다.
         pat = re.compile(r'^\s*%s[\s\t]' % re.escape(clause), re.M)
         if not pat.search(read(f)):
-            bad.append('%s %s §%s — 그런 조항 제목이 규격 본문에 없다'
+            bad.append('%s %s §%s — 그런 조항이 본문에 없다'
                        % (org.upper(), num, clause))
     return bad, n
 
