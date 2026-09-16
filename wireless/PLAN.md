@@ -536,3 +536,22 @@ the property that *is* true, and the reason is in the test's own docstring.
   with no missing evidence, 63 files within 72 cells, DeckMono embedded and `--check` passing.
 - `index.html` card added beside the Wi-Fi deck and a `README.md` row, both with counts taken from
   the build output rather than from memory.
+
+### Step 12 — review pass 1 (2026-09-16)
+
+- Two subagents, parts 0–7 and 8–15, each with `claims.md`, `data/*.tsv`, `out/*.txt`, `specs/*.txt`
+  and the Python modules open. **36 findings, every one re-verified here before being fixed.**
+- Counts: 사실오류 12 · 수식 3 · 인용범위 9 · 표기 12 · 모순 3 · 용어집 1 (categories overlap; the
+  commit title reports the four the plan asks for).
+- The three that mattered most, and what they say about the process:
+  1. **A shipped demo reproduced the exact bug the neighbouring slide claims was fixed** — `d-orbit`
+     printed 3.1 kHz of GEO Doppler because the JavaScript port left out the Earth-rotation term that
+     `py/wirelesslib/orbit.py` had already grown. Porting a formula copies its history too.
+  2. **The workshop slide that teaches how to read TS 38.211 described the wrong chapter layout.**
+     The spec text was already on disk; nobody had run `grep -P '^[4-8]\t' specs/38.211.txt`.
+  3. **`build_deck.py` printed "TS" for every 3GPP document**, so seven TR citations (38.901, 38.821 …)
+     contradicted their own prose. The fix reads the TS/TR marker that `data/specs_3gpp.tsv` already
+     carried — the data was right and only the renderer was wrong.
+- Ten slides carried `실행 검증` with no CODE/OUT/FIG on them. Badges are now earned, not assumed.
+- Nine glossary arrows pointed at a later occurrence than the first. The checker cannot tell "first"
+  from "exists", so the file header now says exactly what is guaranteed instead of implying more.
