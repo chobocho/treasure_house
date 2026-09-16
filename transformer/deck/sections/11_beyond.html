@@ -13,5 +13,645 @@
 <li>인코더 변형 — 가린 토큰 맞히기(MLM)</li>
 <li>혼합 정밀도와 스케일링 법칙 — 논문을 인용해 읽기</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+</article>
+
+<article class="card" id="p11-ch1"><p class="chnum">1장</p><h2>온라인 소프트맥스</h2><p class="chsub">가중치 n 개를 한꺼번에 들지 않고 조각씩 읽는다</p></article>
+
+<article class="card" id="p11-os-why">
+<h3>무엇이 문제였나</h3>
+<p class="lead">6부에서 어텐션 가중치는 (B, h, n, n) 모양이라 문맥 길이의 제곱으로
+메모리를 먹는다고 했습니다 (<a href="#p6-cost-memory">6부 6장</a>).</p>
+<p>그런데 한 질의 i 의 출력은 가중합 하나뿐입니다.</p>
+<div class="eq"><span class="vec">o</span><sub><i>i</i></sub> =
+<span class="oplim"><span class="up"></span><span class="op">Σ</span><span class="dn"><i>j</i></span></span>
+<b class="fn">softmax</b>(<span class="vec">x</span>)<sub><i>j</i></sub> <span class="vec">v</span><sub><i>j</i></sub>,
+&nbsp; <i>x</i><sub><i>j</i></sub> = <span class="vec">q</span><sub><i>i</i></sub>·<span class="vec">k</span><sub><i>j</i></sub>/√<i>d</i><sub>k</sub></div>
+<p>가중치 n 개를 전부 적어 두지 않고, 키를 몇 개씩(조각, 타일) 읽으며 <b>몇 개의 수만</b>
+고쳐 나가도 같은 가중합에 닿을 수 있을까요? 이 장의 답은 "수 셋이면 된다" 입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-os-state">
+<h3>들고 다니는 수 셋</h3>
+<p>소프트맥스는 모든 점수에서 같은 수를 빼도 바뀌지 않습니다
+(<a href="#p2-softmax-shift">2부 3장</a>). 그래서 지금까지 본 점수의 최댓값을 빼 두면
+지수가 늘 0 이하라 넘치지 않습니다.</p>
+<div class="defn"><span class="h">정의 — 앞부분 P 를 읽은 뒤의 상태</span>
+<div class="eq"><i>m</i> = <span class="oplim"><span class="up"></span><span class="op">max</span><span class="dn"><i>j</i>∈<i>P</i></span></span> <i>x</i><sub><i>j</i></sub></div>
+<div class="eq"><i>s</i> = <span class="oplim"><span class="up"></span><span class="op">Σ</span><span class="dn"><i>j</i>∈<i>P</i></span></span> <i>e</i><sup><i>x</i><sub><i>j</i></sub>−<i>m</i></sup></div>
+<div class="eq"><span class="vec">o</span> = <span class="frac"><span class="num">1</span><span class="den"><i>s</i></span></span>
+<span class="oplim"><span class="up"></span><span class="op">Σ</span><span class="dn"><i>j</i>∈<i>P</i></span></span> <i>e</i><sup><i>x</i><sub><i>j</i></sub>−<i>m</i></sup> <span class="vec">v</span><sub><i>j</i></sub></div>
+<span class="vec">o</span> 는 "P 만 있었다면 나왔을 어텐션 출력" 입니다. 처음에는
+<i>m</i> = −∞, <i>s</i> = 0, <span class="vec">o</span> = 0 으로 둡니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-os-update">
+<h3>조각 하나를 읽을 때의 갱신</h3>
+<div class="thm"><span class="h">정리 — 조각 C 를 더 읽으면</span>
+<div class="eq"><i>m</i>′ = <b class="fn">max</b>(<i>m</i>, <span class="oplim"><span class="up"></span><span class="op">max</span><span class="dn"><i>j</i>∈<i>C</i></span></span> <i>x</i><sub><i>j</i></sub>)</div>
+<div class="eq"><i>s</i><sub>옛</sub> = <i>s</i> · <i>e</i><sup><i>m</i>−<i>m</i>′</sup>, &nbsp;
+<i>e</i><sub><i>j</i></sub> = <i>e</i><sup><i>x</i><sub><i>j</i></sub>−<i>m</i>′</sup> (<i>j</i> ∈ <i>C</i>)</div>
+<div class="eq"><i>s</i>′ = <i>s</i><sub>옛</sub> + <span class="oplim"><span class="up"></span><span class="op">Σ</span><span class="dn"><i>j</i>∈<i>C</i></span></span> <i>e</i><sub><i>j</i></sub></div>
+<div class="eq"><span class="vec">o</span>′ = <span class="frac"><span class="num"><span class="vec">o</span> · <i>s</i><sub>옛</sub> + Σ<sub><i>j</i>∈<i>C</i></sub> <i>e</i><sub><i>j</i></sub> <span class="vec">v</span><sub><i>j</i></sub></span><span class="den"><i>s</i>′</span></span></div>
+그러면 (<i>m</i>′, <i>s</i>′, <span class="vec">o</span>′) 은 P∪C 의 상태입니다.</div>
+<p>새 최댓값이 오면 옛 합을 <i>e</i><sup><i>m</i>−<i>m</i>′</sup> ≤ 1 로 <b>줄여서</b> 새 기준에
+맞춥니다. 곱하는 수가 1 이하라 여기서도 넘침이 없습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-os-proof">
+<h3>왜 맞는가</h3>
+<div class="proof"><span class="h">증명</span>
+<i>s</i> 의 정의에 <i>e</i><sup><i>m</i>−<i>m</i>′</sup> 을 곱하면 지수의 기준만 바뀝니다.
+<div class="eq"><i>s</i><sub>옛</sub> = Σ<sub><i>j</i>∈<i>P</i></sub> <i>e</i><sup><i>x</i><sub><i>j</i></sub>−<i>m</i>′</sup></div>
+그러므로 <i>s</i>′ = Σ<sub><i>j</i>∈<i>P</i>∪<i>C</i></sub> <i>e</i><sup><i>x</i><sub><i>j</i></sub>−<i>m</i>′</sup> 입니다.
+같은 방법으로 <span class="vec">o</span>·<i>s</i> = Σ<sub><i>P</i></sub> <i>e</i><sup><i>x</i><sub><i>j</i></sub>−<i>m</i></sup><span class="vec">v</span><sub><i>j</i></sub> 에
+<i>e</i><sup><i>m</i>−<i>m</i>′</sup> 을 곱하면
+<div class="eq"><span class="vec">o</span> · <i>s</i><sub>옛</sub> = Σ<sub><i>j</i>∈<i>P</i></sub> <i>e</i><sup><i>x</i><sub><i>j</i></sub>−<i>m</i>′</sup> <span class="vec">v</span><sub><i>j</i></sub></div>
+이므로 <span class="vec">o</span>′ 의 분자는 P∪C 전체의 가중합, 분모는 P∪C 전체의 정규화 합입니다.
+분자·분모에 같은 <i>e</i><sup><i>m</i>′</sup> 이 빠져 있으니 소프트맥스 가중합과 같습니다.
+조각 수에 대한 귀납법으로 마지막 상태의 <span class="vec">o</span> 가 전체 출력이고,
+덤으로 <b class="fn">logsumexp</b>(<span class="vec">x</span>) = <i>m</i> + ln <i>s</i> 입니다. ∎</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-os-fig">
+<h3>그림으로 — 조각 셋, 상태 셋</h3>
+<!--FIG file=online_tiles.svg cap=키 열두 개를 네 개씩 읽는다. 조각이 바뀔 때마다 m·s·o 만 고친다.-->
+<p>한 번에 손에 드는 것은 조각 하나 분량의 <i>e</i><sub><i>j</i></sub> 와 수 셋뿐입니다.
+조각 크기를 1 로 하면 원소 하나씩, n 으로 하면 보통의 소프트맥스가 됩니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-os-code">
+<h3>식을 그대로 옮긴 코드</h3>
+<p><code>m2</code>·<code>old</code>·<code>s2</code> 가 앞 장의 <i>m</i>′·<i>s</i><sub>옛</sub>·<i>s</i>′ 입니다.
+<code>s &gt; 0</code> 검사는 첫 조각에서 −∞ − <i>m</i>′ 을 지수에 넣지 않으려는 것입니다.</p>
+<!--CODE file=py/transformerlib/extras.py lines=25-42 note=_online — (m, s, o) 갱신-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-os-witness">
+<h3>증인 시험 — 조각 크기가 무엇이든</h3>
+<p>점수 37개와 값 벡터를 뽑아 보통의 소프트맥스로 가중합을 구하고, 조각 크기 여섯 가지로
+다시 구해 칸마다 1e-12 안에서 같은지 봅니다. 조각 크기 100 은 n 보다 큰 경우입니다.</p>
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_equals_direct_for_any_tile note=직접 계산과 견준다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-os-lse">
+<h3>큰 점수에서도 — logsumexp</h3>
+<!--CODE file=py/transformerlib/extras.py sym=online_logsumexp..online_attention_row note=상태에서 꺼내 쓰기-->
+<p>시험은 점수 1000 이 섞인 줄을 씁니다. 그대로 <i>e</i><sup>1000</sup> 을 계산하면 double 이
+넘칩니다. 기준을 빼 두는 갱신은 그 줄에서도 닫힌 식과 소수 열두 자리까지 맞습니다.</p>
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_logsumexp note=넘침 없는 로그 합-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-os-capture">
+<h3>실행 결과 — 오차는 반올림 크기</h3>
+<!--OUT file=extras.txt sec=1 note=시험과 같은 37개 점수, 조각 크기 넷-->
+<p>위 표의 오차는 모두 double 의 반올림 수준입니다. 더하는 차례가 달라 비트까지 같지는
+않지만, 식이 틀렸다면 이 크기에 머물 수 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-os-tiled">
+<h3>어텐션 한 층에 끼우기</h3>
+<!--CODE file=py/transformerlib/extras.py lines=55-72 note=tiled_attention — 행마다 조각씩-->
+<p>인과 마스크는 j ≤ i 까지만 점수를 만드는 것으로 대신합니다. 시험은 6부의
+<code>scaled_dot_product</code> 와 조각 크기 1·2·4 에서 견줍니다
+(<code>test_tiled_attention_matches_sdpa</code>).</p>
+<div class="note"><b>정직하게 적으면</b> — 이 함수는 한 행의 점수 <code>xs</code> 를 먼저 다 만든 뒤
+조각으로 읽습니다. 그래서 동시에 드는 것은 n×n 이 아니라 <b>한 행의 n 개</b>입니다.
+점수도 조각 안에서만 만들면 조각 크기까지 줄지만, 여기서는 갱신 식을 보이는 데 집중했습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-os-milakov">
+<h3>원조 — 한 번 훑어 정규화 합 구하기</h3>
+<p>Milakov·Gimelshein 은 최댓값 <i>m</i> 과 정규화 항 <i>d</i> 를 원소 하나씩 읽으며 함께
+갱신하는 알고리즘을 "Online Softmax" 라 불렀습니다. 새 최댓값이 오면 옛 항을 새 기준에
+맞춘 뒤 새 값을 더한다는 설명이 앞 장의 갱신과 같습니다
+<!--CITE key=milakov2018 sec=3-->.</p>
+<ul>
+<li>우리 코드에서 조각 크기를 1 로 두고 <span class="vec">o</span> 를 빼면 그 알고리즘입니다.</li>
+<li>논문의 동기는 메모리 접근 횟수였습니다 — 원소마다 메모리 접근이 네 번에서 세 번으로 줄어듭니다.</li>
+<li>우리가 덧붙인 <span class="vec">o</span> 의 갱신이 "소프트맥스 값" 대신 "어텐션 출력" 을
+바로 쌓게 해 줍니다.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-os-flash">
+<h3>플래시 어텐션과의 관계</h3>
+<p>FlashAttention 은 N×N 어텐션 행렬을 느린 메모리에 만들지 않으려고 두 기법을 씁니다.
+하나는 <b>타일링</b> — 블록마다 소프트맥스를 계산하고, <i>m</i>(<i>x</i>) 와 합
+ℓ(<i>x</i>) 를 들고 다니며 이어 붙인 벡터의 소프트맥스를 크기 조정으로 분해합니다.
+다른 하나는 <b>재계산</b> — 역전파 때 가중치를 다시 만듭니다
+<!--CITE key=dao2022 sec=3.1-->.</p>
+<ul>
+<li>타일링의 식은 이 장의 (<i>m</i>, <i>s</i>) 갱신과 같은 생각입니다.</li>
+<li>재계산은 6부 마지막 퀴즈에서 본 거래입니다 (<a href="#p6-quiz-3">6부 6장</a>).</li>
+<li>빠르기의 원천인 GPU 메모리 계층(칩 위 작은 메모리와 큰 메모리 사이의 읽기·쓰기)과
+커널 합치기는 이 덱이 다루지 않습니다. 순수 파이썬 구현은 오히려 느립니다.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card quiz" id="p11-quiz-1" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 갱신에서 <i>s</i><sub>옛</sub> = <i>s</i>·<i>e</i><sup><i>m</i>−<i>m</i>′</sup> 대신 기준을
+바꾸지 않고 <i>s</i>′ = <i>s</i> + Σ <i>e</i><sup><i>x</i><sub><i>j</i></sub>−<i>m</i></sup> 로 쌓으면
+(첫 조각의 <i>m</i> 을 끝까지 쓰면) 무엇이 문제입니까? 수학적으로 틀립니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <b>수학적으로는 맞습니다</b> — 기준은 아무 상수나 빼도 소프트맥스가
+같기 때문입니다. 문제는 <b>수치</b>입니다. 뒤 조각에 첫 기준보다 훨씬 큰 점수가 오면
+<i>e</i><sup><i>x</i>−<i>m</i></sup> 의 지수가 양수로 커져 double 이 넘칠 수 있습니다.
+최댓값을 따라 기준을 옮기면 모든 지수가 0 이하, 곱하는 <i>e</i><sup><i>m</i>−<i>m</i>′</sup> 도
+1 이하라 넘침이 원천적으로 없습니다. 대신 아주 작은 값이 0 으로 떨어지는(언더플로) 일은
+생길 수 있지만, 그런 항은 가중치로도 무시해도 될 만큼 작습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-ch2"><p class="chnum">2장</p><h2>MQA 와 GQA</h2><p class="chsub">질의 헤드는 그대로, 키·값 헤드만 나눠 쓴다</p></article>
+
+<article class="card" id="p11-gqa-why">
+<h3>생성할 때의 병목은 계산이 아니라 메모리</h3>
+<p>10부의 KV 캐시는 토큰마다 키·값을 쌓아 두고 새 질의 하나만 계산합니다(<a href="#p10">10부</a>).
+곱셈은 크게 줄지만, 한 토큰을 낼 때마다 쌓인 키·값을 전부 다시 <b>읽어야</b> 합니다.</p>
+<p>Shazeer 는 한 토큰씩 늘려 가는 멀티헤드 어텐션을 분석해, 메모리 접근 대 산술 연산의 비가
+<span class="mi"><i>n</i>/<i>d</i> + 1/<i>b</i></span> 꼴이라고 적습니다(<i>b</i> 는 배치).
+1/<i>b</i> 는 배치를 키워 줄일 수 있지만, <i>n</i>/<i>d</i> 는 쌓인 K·V 를 매 스텝 다시 불러오는
+비용이라 줄이기 어렵다고 봅니다 <!--CITE key=shazeer2019 sec=2.4.1-->.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-mqa-def">
+<h3>MQA — 키·값 한 벌을 모든 헤드가</h3>
+<p>멀티쿼리 어텐션은 멀티헤드와 같되 <b>헤드들이 키와 값 한 벌을 함께 쓰는</b> 변형입니다.
+질의 쪽의 헤드 차원은 남기고, K·V 의 헤드 차원만 없앱니다 <!--CITE key=shazeer2019 sec=3-->.</p>
+<ul>
+<li>질의 헤드는 여전히 h 개라, 헤드마다 다른 곳을 보는 능력은 질의 사영이 맡습니다.</li>
+<li>같은 분석에서 앞 장의 <i>n</i>/<i>d</i> 항이 h 배 줄어듭니다 <!--CITE key=shazeer2019 sec=3.1-->.</li>
+<li>대가는 표현력입니다 — 키·값 부분공간이 하나뿐입니다.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-gqa-def">
+<h3>GQA — MHA 와 MQA 사이</h3>
+<p>Ainslie 외의 그룹쿼리 어텐션은 질의 헤드를 G 개 그룹으로 나누고, 그룹마다 키·값 헤드를
+하나씩 둡니다. GQA-1 은 MQA 와 같고, 그룹 수가 헤드 수와 같은 GQA-H 는 MHA 와 같습니다
+<!--CITE key=ainslie2023 sec=2.2-->.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>이름</th><th>키·값 헤드 수 g</th><th>질의 헤드 j 가 쓰는 키 헤드</th></tr>
+<tr><td>MHA</td><td>h</td><td>j</td></tr>
+<tr><td>GQA</td><td>h 의 약수</td><td>⌊j / (h/g)⌋</td></tr>
+<tr><td>MQA</td><td>1</td><td>0</td></tr>
+</table></div>
+<p>논문은 MHA 에서 MQA 로 가면 키·값 캐시가 헤드 수 배 준다고 적고, 중간 그룹 수가 품질과
+속도 사이의 좋은 절충이라고 봅니다.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-gqa-split">
+<h3>모양 — 사영을 둘로 나눈다</h3>
+<p>우리 모델은 q·k·v 를 <code>Wqkv [d, 3d]</code> 한 행렬로 사영합니다(SPEC §3). GQA 에서는
+키·값 폭이 <span class="mi">2·<i>g</i>·<i>d</i><sub>k</sub></span> 로 줄어 질의와 모양이 달라지므로
+<code>Wq [d, d]</code> 와 <code>Wkv [d, 2g·d<sub>k</sub>]</code> 로 나눕니다.</p>
+<!--CODE file=py/transformerlib/extras.py sym=split_qkv..repeat_heads note=열 나누기와 헤드 되풀이-->
+<p><code>repeat_heads</code> 는 새로 곱하는 것이 없는 모음(gather)입니다. 질의 헤드 <code>hh</code> 가
+키 헤드 <code>hh // rep</code> 의 칸을 그대로 가리킵니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-gqa-code">
+<h3>GQA 한 층</h3>
+<!--CODE file=py/transformerlib/extras.py sym=grouped_query_attention note=키·값은 g 헤드로 나눈 뒤 되풀이-->
+<p>되풀이한 뒤에는 6부의 <code>scaled_dot_product</code> 를 그대로 부릅니다. 어텐션 자체는
+한 글자도 바뀌지 않았고, 달라진 것은 <b>k·v 를 몇 벌 만드느냐</b>뿐입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-gqa-mha-witness">
+<h3>증인 — 그룹 수 = 헤드 수면 MHA 와 비트까지 같다</h3>
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_groups_equal_heads_is_mha note=assertEqual — 허용 오차 없음-->
+<p>오차 허용이 아니라 <code>assertEqual</code> 입니다. 그래도 되는 까닭:</p>
+<ul>
+<li><code>split_qkv</code> 는 열을 옮겨 담을 뿐이라, <span class="mi"><span class="vec">x</span><span class="vec">W</span><sub>q</sub></span> 의 칸마다
+더하는 항과 차례가 <span class="mi"><span class="vec">x</span><span class="vec">W</span><sub>qkv</sub></span> 의 앞 d 열과 똑같습니다.</li>
+<li>rep = 1 이면 <code>repeat_heads</code> 는 제자리 모음이라 값이 바뀌지 않습니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-gqa-backward">
+<h3>나눠 쓴 헤드의 기울기는 더해진다</h3>
+<p>키 헤드 하나를 질의 헤드 여러 개가 쓰면, 역전파에서 그 키 헤드는 <b>쓴 곳의 기울기를
+모두 더해</b> 받습니다. 브로드캐스팅의 역전파와 같은 규칙입니다(<a href="#p3-ch7">3부 7장</a>).
+모음 연산의 역전파가 같은 칸에 <code>+=</code> 로 쌓는 까닭입니다.</p>
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_mqa_shape_and_backward note=g = 1 에서 모든 입력의 기울기를 차분과 견준다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-kv-formula">
+<h3>KV 캐시가 얼마나 주나</h3>
+<p>블록마다 위치마다 키와 값을 g 헤드 × d<sub>k</sub> 칸씩 쌓습니다.</p>
+<div class="eq"><b class="fn">KV 캐시 float 수</b> = 2 · <i>L</i> · <i>n</i> · <i>g</i> · <i>d</i><sub>k</sub></div>
+<p>MHA 는 g = h 라 2·L·n·d, MQA 는 그 1/h 입니다. 질의 헤드 수와 폭 d 는 식에 없습니다.</p>
+<!--CODE file=py/transformerlib/extras.py sym=kv_cache_floats note=식 한 줄-->
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_kv_cache_size note=GPT-2 small 모양에서 MHA 와 MQA-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-kv-capture">
+<h3>GPT-2 small 모양에서 세어 보면</h3>
+<!--OUT file=extras.txt sec=2 note=문맥 1024, 블록 12, d_k 64-->
+<p>위 표의 마지막 열이 g/h 입니다. float32 로 저장하면 바이트는 float 수의 네 배입니다.
+배치를 키우면 이 수에 배치 크기가 곱해지므로, 긴 문맥·큰 배치에서 차이가 곧 메모리
+한계가 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-gqa-uptrain">
+<h3>이미 학습한 MHA 를 GQA 로 바꾸기</h3>
+<p>Ainslie 외는 MHA 체크포인트의 키·값 사영을 그룹 안에서 <b>평균 내어</b> 한 헤드로 만들고,
+원래 학습 스텝의 작은 비율만큼 더 사전학습하는 방법(uptraining)을 제안했습니다. 헤드 하나를
+고르거나 새로 초기화하는 것보다 평균이 낫다고 적습니다 <!--CITE key=ainslie2023 sec=2.1-->.</p>
+<div class="note"><b>이 덱의 범위</b> — <code>grouped_query_attention</code> 은 독립된 층입니다.
+<code>model.forward</code>·체크포인트 형식·C 구현에는 들어가 있지 않고, RoPE 를 끼울
+<code>rotate</code> 훅도 없습니다. 변환과 추가 학습도 구현하지 않았습니다.</div>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card quiz" id="p11-quiz-2" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. h = 12, g = 4 인 GQA 층의 파라미터 수를 d = 768 인 MHA 층(Wqkv·bqkv·Wo·bo)과
+견주면 얼마나 줄어듭니까? 질의 헤드 7 은 어느 키 헤드를 씁니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> d<sub>k</sub> = 64 라 키·값 폭은 2·4·64 = 512 입니다.
+MHA 의 사영은 Wqkv [768, 2304] 와 bqkv 2304 개인데, GQA 는 Wq [768, 768]·bq 768 과
+Wkv [768, 512]·bkv 512 입니다. 합치면 2304 열이 768 + 512 = 1280 열이 되어
+가중치 768 × 1024 = 786,432 개와 편향 1024 개, 모두 787,456 개가 줄어듭니다. Wo·bo 는 같습니다.<br>
+rep = 12/4 = 3 이므로 질의 헤드 7 은 키 헤드 ⌊7/3⌋ = 2 를 씁니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-ch3"><p class="chnum">3장</p><h2>RoPE 다시 보기</h2><p class="chsub">생성과 긴 문맥의 눈으로</p></article>
+
+<article class="card" id="p11-rope-cache">
+<h3>RoPE 는 KV 캐시와 잘 맞습니다</h3>
+<p>RoPE 의 식과 "점수는 거리에만 달린다" 는 성질은 7부에서 유도하고 시험했습니다
+(<a href="#p7-rope-idea">7부 4장</a>). 여기서는 생성할 때의 쓸모만 봅니다.</p>
+<ul>
+<li>회전 각은 그 토큰의 <b>절대 위치</b>로 정해지므로, 캐시에 넣는 k 는 한 번 돌린 뒤 다시
+손댈 일이 없습니다.</li>
+<li>새 토큰만 돌리려면 그 토큰이 몇 번째인지만 알면 됩니다 — <code>offset</code> 인자입니다.</li>
+</ul>
+<!--CODE file=py/transformerlib/tests/test_posenc.py sym=test_offset_argument_matches_longer_sequence note=마지막 토큰만 offset 5 로 돌려도 전체를 돌린 것과 같다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-rope-decay">
+<h3>거리가 멀면 점수의 상한이 줄어든다</h3>
+<p>RoFormer 논문은 θ<sub><i>i</i></sub> = 10000<sup>−2<i>i</i>/<i>d</i></sup> 로 두면 "장거리 감쇠"
+성질이 생긴다고 적습니다 — 상대 거리가 커질수록 내적이 줄어들어, 멀리 떨어진 토큰끼리
+연결이 약해야 한다는 직관과 맞는다는 것입니다 <!--CITE key=su2021 sec=3.3-->.</p>
+<div class="note"><b>무엇을 증명했나 읽어 보면</b> — 논문의 유도는 내적 자체가 아니라 그
+<b>상한</b>을 아벨 변환으로 묶고, 그 상한에 들어가는 항의 평균이 거리에 따라 줄어드는 것을
+그림으로 보입니다 <!--CITE key=su2021 sec=3.4.3-->. 특정한 q·k 쌍의 점수가 늘 줄어든다는 말은
+아닙니다.</div>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-rope-limits">
+<h3>이 덱이 말하지 않는 것 — 길이 외삽</h3>
+<p>RoPE 는 식으로는 아무 위치나 계산할 수 있습니다. 그러나 "학습 때보다 긴 문맥에서 잘 된다"
+는 것은 별개의 주장입니다.</p>
+<ul>
+<li>원래 트랜스포머 논문도 사인 인코딩을 고른 까닭을 외삽할 수 있으리라는 <b>가설</b>로
+적었습니다 <!--CITE key=vaswani2017 sec=3.5-->.</li>
+<li>RoFormer 저자들은 한계 절에서, 긴 글에서 더 나은 성능을 보였지만 그에 대한 믿을 만한
+설명은 아직 없다고 적습니다 <!--CITE key=su2021 sec=4.5.5-->.</li>
+<li>이 덱의 모델은 짧은 문맥만 배웠고 외삽을 실험하지 않았습니다. 그래서 문맥이 차면
+SPEC §7 의 규칙대로 뒤쪽 절반만 남기고 다시 채웁니다.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-ch4"><p class="chnum">4장</p><h2>LoRA</h2><p class="chsub">얼린 가중치 옆에 낮은 계수의 갱신을 붙인다</p></article>
+
+<article class="card" id="p11-lora-idea">
+<h3>미세조정의 갱신은 계수가 낮다는 가설</h3>
+<p>Hu 외는 사전학습한 가중치 <span class="mi"><i>W</i><sub>0</sub> ∈ ℝ<sup><i>d</i>×<i>k</i></sup></span> 를
+얼리고, 갱신을 두 작은 행렬의 곱으로 제한합니다 <!--CITE key=hu2021 sec=4.1-->.</p>
+<div class="eq"><i>h</i> = <i>W</i><sub>0</sub><i>x</i> + <span class="frac"><span class="num">α</span><span class="den"><i>r</i></span></span> <i>B</i><i>A</i><i>x</i>,
+&nbsp; <i>B</i> ∈ ℝ<sup><i>d</i>×<i>r</i></sup>, <i>A</i> ∈ ℝ<sup><i>r</i>×<i>k</i></sup>, <i>r</i> ≪ min(<i>d</i>, <i>k</i>)</div>
+<ul>
+<li>근거는 가설입니다 — 적응할 때의 가중치 변화가 낮은 "내재 계수" 를 가지리라는 것.</li>
+<li>A 는 무작위 가우스, B 는 0 으로 시작해 처음에는 ΔW = BA = 0 입니다.</li>
+<li>α/r 배는 r 을 바꿀 때 하이퍼파라미터를 다시 맞출 일을 줄이려는 것이라고 적습니다.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-lora-notation">
+<h3>논문의 열 벡터를 우리의 행 벡터로</h3>
+<p>논문은 입력을 열 벡터로 씁니다(<i>W</i><sub>0</sub><i>x</i>). 이 덱은 행 벡터입니다(SPEC §2).</p>
+<div class="eq"><span class="vec">y</span> = <span class="vec">x</span><span class="vec">W</span> + <span class="vec">b</span>
++ <span class="frac"><span class="num">α</span><span class="den"><i>r</i></span></span> (<span class="vec">x</span><span class="vec">A</span>)<span class="vec">B</span>,
+&nbsp; <span class="vec">A</span> [<i>d</i><sub>in</sub>, <i>r</i>], <span class="vec">B</span> [<i>r</i>, <i>d</i><sub>out</sub>]</div>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>입력 쪽(먼저 곱함)</th><th>출력 쪽</th></tr>
+<tr><td>논문</td><td>A — 무작위</td><td>B — 0 에서 시작</td></tr>
+<tr><td>이 덱</td><td>A — 무작위</td><td>B — 0 에서 시작</td></tr>
+</table></div>
+<p>곱하는 순서가 뒤집혀 보여도 <b>역할</b>은 같게 이름을 맞췄습니다. 입력을 먼저 r 차원으로
+누르는 것이 A, 다시 넓히는 것이 B 입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-lora-fig">
+<h3>그림으로</h3>
+<!--FIG file=lora_block.svg cap=얼린 W 곁에 A·B 두 층. 합치는 자리는 덧셈 하나다.-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-lora-code">
+<h3>코드 — 곱 세 번과 덧셈 한 번</h3>
+<!--CODE file=py/transformerlib/extras.py sym=lora_linear note=y = xW + b + (α/r)·(xA)B-->
+<p><span class="vec">x</span><span class="vec">A</span> 가 [n, r] 로 좁으므로, r 이 작으면 곁가지의 곱셈은
+<span class="mi"><i>n</i>·<i>r</i>·(<i>d</i><sub>in</sub> + <i>d</i><sub>out</sub>)</span> 번으로
+원래 층의 <span class="mi"><i>n</i>·<i>d</i><sub>in</sub>·<i>d</i><sub>out</sub></span> 보다 훨씬 적습니다.</p>
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_zero_B_leaves_output_unchanged note=B = 0 이면 원래 층과 비트까지 같다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-lora-grad">
+<h3>기울기를 유도하면</h3>
+<p><span class="mi"><span class="vec">z</span> = <span class="vec">x</span><span class="vec">A</span></span>,
+<span class="mi"><i>c</i> = α/<i>r</i></span>, 출력 쪽 기울기를 <span class="mi"><span class="vec">g</span> = ∂ℓ/∂<span class="vec">y</span></span> 라 하면
+행렬곱의 역전파(<a href="#p3-ch6">3부 6장</a>)를 두 번 쓰면 됩니다.</p>
+<div class="eq">∂ℓ/∂<span class="vec">B</span> = <i>c</i> · <span class="vec">z</span><sup>⊤</sup><span class="vec">g</span> = <i>c</i> · (<span class="vec">x</span><span class="vec">A</span>)<sup>⊤</sup><span class="vec">g</span></div>
+<div class="eq">∂ℓ/∂<span class="vec">A</span> = <i>c</i> · <span class="vec">x</span><sup>⊤</sup>(<span class="vec">g</span><span class="vec">B</span><sup>⊤</sup>)</div>
+<div class="key"><b>B = 0 이면</b> ∂ℓ/∂A 는 <b>정확히 0</b> 이고, ∂ℓ/∂B 는 A 가 무작위라 보통 0 이
+아닙니다. 첫 스텝에서 배우는 것은 B 뿐입니다.</div>
+<p>A 까지 0 으로 두면 두 기울기가 모두 0 이라 영영 움직이지 않습니다. 논문이 한쪽만 0 으로
+두는 까닭이 이 식에 보입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-lora-plan-wrong">
+<h3>계획서의 증인은 틀렸습니다</h3>
+<p>이 덱의 작업 계획서(PLAN.md §3.1)는 LoRA 의 증인을 "B = 0 이면 출력이 그대로이고,
+<b>그 기울기가 A 에 닿는다</b>" 로 적었습니다. 앞 장의 식이 보이듯 뒷부분은 거짓입니다.</p>
+<p>계획서의 규칙은 "증인이 거짓으로 드러나면 참인 성질로 시험을 고쳐 쓰고 까닭을 docstring 에
+적는다" 입니다. 그래서 시험은 참인 성질 — <b>B 가 먼저 기울기를 받고 A 는 받지 않는다</b> — 을 봅니다.</p>
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_zero_B_gets_gradient_but_A_does_not note=A.grad 가 정확히 0-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-lora-after-b">
+<h3>B 가 한 번 움직이면 A 도 배운다</h3>
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_after_B_moves_A_gets_gradient note=B 를 0 이 아닌 값으로 두고 차분 검사-->
+<p>B 에 작은 값을 넣으면 A 의 기울기가 0 이 아니게 되고, 그 값은 유한차분과 맞습니다
+(<code>check</code> 가 두 입력 모두를 봅니다). 실제 학습에서는 첫 갱신 뒤부터 둘 다 움직입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-lora-capture">
+<h3>실행 결과 — 숫자로 본 두 성질과 파라미터 수</h3>
+<!--OUT file=extras.txt sec=3 note=위 표는 B = 0 에서의 차이·기울기, 아래 표는 r(d_in + d_out)-->
+<p>첫 표의 A 기울기 줄이 앞 장의 식 그대로 0 입니다. 둘째 표는 정사각 층 하나에 붙인 LoRA 의
+파라미터 <span class="mi"><i>r</i>(<i>d</i><sub>in</sub> + <i>d</i><sub>out</sub>)</span> 을 원래
+<span class="mi"><i>d</i><sub>in</sub>·<i>d</i><sub>out</sub></span> 과 견줍니다 — 폭이 클수록 비율이 작아집니다.</p>
+<!--CODE file=py/transformerlib/extras.py sym=lora_params note=세는 식-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-lora-merge">
+<h3>학습이 끝나면 합친다</h3>
+<div class="eq"><span class="vec">W</span>′ = <span class="vec">W</span> + <span class="frac"><span class="num">α</span><span class="den"><i>r</i></span></span> <span class="vec">A</span><span class="vec">B</span></div>
+<!--CODE file=py/transformerlib/extras.py sym=lora_merge note=추론 때는 곁가지가 사라진다-->
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_merge_equals_adapter note=합친 층 = 곁가지 층 (1e-12)-->
+<p>논문은 합친 가중치로 추론하면 지연이 전혀 늘지 않는다고 적고 <!--CITE key=hu2021 sec=4.1-->,
+대신 합쳐 두면 서로 다른 과제의 A·B 를 한 배치에 섞기 어렵다는 한계도 적습니다
+<!--CITE key=hu2021 sec=4.2-->.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-lora-where">
+<h3>어느 행렬에 붙이나</h3>
+<p>논문은 어텐션의 가중치 행렬에만 LoRA 를 붙이고 MLP 는 얼린 채로 연구했습니다. GPT-3 175B
+에서 r = 4 로 질의·값 사영에만 붙이면 체크포인트가 350GB 에서 35MB 로 약 10,000배 줄고, Adam 으로
+학습할 때 VRAM 을 최대 2/3 줄인다고 적습니다 <!--CITE key=hu2021 sec=4.2-->.</p>
+<div class="note"><b>이 덱의 범위</b> — <code>lora_linear</code> 는 선형층 하나입니다. 우리 모델은 q·k·v 를
+<code>Wqkv</code> 한 행렬로 사영하므로, "질의에만" 붙이려면 앞 d 열에만 갱신을 더해야 합니다.
+그 배선과 미세조정 실험은 하지 않았습니다.</div>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card quiz" id="p11-quiz-3" data-quiz>
+<h3>3~4장 퀴즈</h3>
+<p class="q">Q. B 를 무작위로, A 를 0 으로 시작하면 어떻게 됩니까? 처음 출력은 여전히 원래
+모델과 같습니까? 첫 스텝에서 누가 기울기를 받습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> xA = 0 이라 곁가지 출력 (xA)B 도 0 — <b>처음 출력은 같습니다</b>.
+기울기는 역할이 뒤바뀝니다. ∂ℓ/∂B = c·(xA)ᵀg 는 xA = 0 이라 <b>0</b> 이고,
+∂ℓ/∂A = c·xᵀ(gBᵀ) 는 B 가 무작위라 0 이 아닙니다. 그러니 첫 스텝에는 A 만 배우고,
+A 가 움직인 다음부터 B 도 배웁니다. 수학적으로는 대칭입니다 — "한쪽은 0, 다른 쪽은 무작위" 이면
+어느 쪽이든 출발점이 원래 모델과 같고 학습이 막히지 않습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-ch5"><p class="chnum">5장</p><h2>인코더 변형 — MLM</h2><p class="chsub">마스크를 떼고, 가린 토큰을 맞힌다</p></article>
+
+<article class="card" id="p11-mlm-why">
+<h3>양방향이면 왜 "다음 토큰" 을 못 쓰나</h3>
+<p>인과 마스크를 떼면 모든 토큰이 앞뒤를 다 봅니다(<a href="#p7-encoder-only">7부 8장</a>).
+그러면 여러 층을 거치는 동안 각 단어가 간접적으로 "자기 자신을 보게" 되어, 맞힐 단어를 너무
+쉽게 맞힐 수 있습니다. BERT 는 그래서 입력 토큰의 일부를 무작위로 가리고
+<b>가린 토큰만</b> 맞히게 했습니다 <!--CITE key=devlin2018 sec=3.1-->.</p>
+<ul>
+<li>우리 코드에서 달라지는 것은 <code>model.forward(…, causal=False)</code> 와 손실을 세는 자리뿐입니다.</li>
+<li>블록·어텐션·FFN 은 디코더와 같은 코드를 씁니다.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-mlm-rule">
+<h3>15% 를 고르고, 80·10·10 으로 바꾼다</h3>
+<p>BERT 는 토큰 위치의 15% 를 무작위로 골라 예측 대상으로 삼고, 고른 토큰을 80% 는
+[MASK] 로, 10% 는 무작위 토큰으로, 10% 는 그대로 둡니다 <!--CITE key=devlin2018 sec=3.1-->.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>바꾸는 방법</th><th>논문이 든 까닭</th></tr>
+<tr><td>[MASK] 로</td><td>무엇을 맞힐지 가린다</td></tr>
+<tr><td>무작위 토큰으로</td><td>[MASK] 는 미세조정 때 나오지 않아 사전학습과 어긋난다 — 늘 [MASK] 만 쓰지 않는다</td></tr>
+<tr><td>그대로</td><td>표현을 실제로 관찰한 단어 쪽으로 치우치게 한다</td></tr>
+</table></div>
+<p>부록은 무작위 치환이 전체 토큰의 1.5%(15% 의 10%)에만 일어나 언어 이해를 해치지 않는 것으로
+보인다고 덧붙입니다 <!--CITE key=devlin2018 sec=A.1-->.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-mlm-mask">
+<h3>가리기 — 코드와 통계 시험</h3>
+<!--CODE file=py/transformerlib/extras.py sym=mlm_mask note=자리마다 확률 p, 고른 자리는 80/10/10-->
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_mask_statistics note=20000 자리에서 비율을 본다-->
+<div class="note"><b>읽을 때 주의</b> — 이 구현은 자리마다 따로 동전을 던지므로 고른 수가 줄마다
+흔들립니다. 논문 문장만으로는 정확히 15% 개를 뽑는지 자리마다 뽑는지 정해지지 않습니다.
+또 "아무 토큰" 은 원래 토큰이나 <code>mask_id</code> 자체가 뽑힐 수도 있어, 시험의 "그대로" 비율에는
+작은 몫이 섞입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-mlm-loss">
+<h3>손실 — 가린 자리의 행만 모은다</h3>
+<!--CODE file=py/transformerlib/extras.py sym=mlm_loss note=causal=False, 고른 자리의 로짓 행만 교차엔트로피로-->
+<!--CODE file=py/transformerlib/tests/test_extras.py sym=test_loss_only_on_masked_positions note=손으로 행을 골라 계산한 값과 소수 14자리-->
+<p>정답은 바꾼 입력 <code>inp</code> 가 아니라 원래 <code>ids</code> 입니다. "그대로" 둔 자리도 정답을
+맞혀야 하므로 손실에 들어갑니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-mlm-cost">
+<h3>대가 — 줄 하나에서 얻는 신호가 적다</h3>
+<p>디코더는 길이 n 인 줄 하나에서 예측 n 개를 얻습니다(<a href="#p7-decoder-only">7부 8장</a>).
+MLM 은 배치마다 토큰의 15% 만 예측하므로 수렴에 사전학습 스텝이 더 필요할 수 있다고 논문이
+적습니다 <!--CITE key=devlin2018 sec=A.1-->. 부록 실험(미세조정한 MNLI 정확도)은 왼쪽→오른쪽 모델보다 조금 늦게
+수렴하지만, 절대 정확도로는 거의 곧바로 앞선다고 답합니다 <!--CITE key=devlin2018 sec=C.1-->.</p>
+<div class="note"><b>이 덱의 범위</b> — BERT 의 두 번째 사전학습 과제인 다음 문장 예측(NSP)과
+문장 종류 임베딩은 구현하지 않았습니다. 파라미터 수만 7부에서 셌습니다.</div>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-ch6"><p class="chnum">6장</p><h2>혼합 정밀도와 스케일링 법칙</h2><p class="chsub">이 기계에서 못 돌리는 것은 인용해 읽는다</p></article>
+
+<article class="card" id="p11-mp-three">
+<h3>혼합 정밀도 — 기법 셋</h3>
+<p>Micikevicius 외는 가중치·활성값·기울기를 반정밀도(FP16)로 두면서 FP32 학습의 정확도를
+지키는 세 기법을 제안합니다 <!--CITE key=micikevicius2017 sec=3-->.</p>
+<ul>
+<li><b>FP32 주 사본</b> — 옵티마이저는 단정밀도 가중치를 고치고, 순전파·역전파에는 그 반정밀도
+사본을 씁니다. 학습률을 곱한 갱신이 너무 작으면 FP16 에서 0 이 되기 때문입니다 — 논문은 크기가
+2<sup>−24</sup> 보다 작은 값이 FP16 에서 0 이 된다고 적습니다 <!--CITE key=micikevicius2017 sec=3.1-->.</li>
+<li><b>손실 스케일링</b> — 다음 장.</li>
+<li><b>FP16 곱을 FP32 로 쌓기</b> — 합을 모으는 자리만 단정밀도로 둡니다
+<!--CITE key=micikevicius2017 sec=3.3-->.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-mp-scaling">
+<h3>손실 스케일링 — 연쇄법칙을 빌린다</h3>
+<p>기울기 값은 대개 아주 작아 FP16 이 표현하는 범위 아래로 떨어집니다. 역전파 <b>전에 손실에
+상수를 곱하면</b> 연쇄법칙 때문에 모든 기울기가 같은 배수로 커집니다. 가중치를 고치기 전에
+다시 나누되, 기울기 자르기 같은 다른 처리보다 먼저 나누라고 권합니다
+<!--CITE key=micikevicius2017 sec=3.2-->.</p>
+<ul>
+<li>배수는 곱한 최대 기울기가 FP16 의 최댓값 65,504 를 넘지 않게 고릅니다.</li>
+<li>논문이 학습한 여러 망에서는 8 부터 32K 까지의 배수를 썼습니다.</li>
+<li>넘침이 생기면 그 스텝의 갱신을 건너뛰면 됩니다.</li>
+</ul>
+<p>이 덱의 기울기 자르기(SPEC §6.3)도 "나눈 뒤에 자른다" 는 차례를 따라야 문턱값 1.0 을 바꾸지
+않아도 됩니다.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-mp-ours">
+<h3>이 덱의 정밀도</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>자리</th><th>형식</th><th>까닭</th></tr>
+<tr><td>파이썬 참조 구현</td><td>float64</td><td>유한차분 검사가 반올림에 묻히지 않게</td></tr>
+<tr><td>C 학습·체크포인트</td><td>float32</td><td>메모리와 속도 — 9부의 주제</td></tr>
+<tr><td>반정밀도</td><td>쓰지 않음</td><td>표준 C99 에 16비트 부동소수 형식이 없다</td></tr>
+</table></div>
+<p>두 정밀도가 얼마나 어긋나도 되는지는 SPEC §9 의 표가 정합니다(<a href="#p9">9부</a>).
+float32 로 한 번 내린 것만으로도 기울기 기준을 고쳐 써야 했던 이야기가 거기 있습니다 —
+FP16 에서 주 사본과 스케일링이 필요한 까닭과 같은 뿌리입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-scaling-kaplan">
+<h3>스케일링 법칙 (1) — Kaplan 외</h3>
+<p>Kaplan 외는 손실이 임베딩을 뺀 파라미터 수 N, 데이터 D, 계산량 C 각각에 대해
+거듭제곱 법칙을 따른다고 적합했습니다 <!--CITE key=kaplan2020 sec=1.2-->.</p>
+<div class="eq"><i>L</i>(<i>N</i>) = (<i>N</i><sub>c</sub>/<i>N</i>)<sup>α<sub><i>N</i></sub></sup>, &nbsp; α<sub><i>N</i></sub> ≈ 0.076, &nbsp; <i>N</i><sub>c</sub> ≈ 8.8×10<sup>13</sup></div>
+<ul>
+<li>데이터에 대해서는 α<sub><i>D</i></sub> ≈ 0.095, <i>D</i><sub>c</sub> ≈ 5.4×10<sup>13</sup> 토큰,
+최소 계산량에 대해서는 지수 약 0.050 입니다.</li>
+<li>계산 예산이 늘면 주로 모델을 키우라는 결론 — <span class="mi"><i>N</i> ∝ <i>C</i><sub>min</sub><sup>0.73</sup></span>.</li>
+<li>계산량 어림 <span class="mi"><i>C</i> ≈ 6<i>NBS</i></span> 는 7부에서 곱셈을 세어 확인한 6N 입니다
+(<a href="#p7-six-n">7부 7장</a>).</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-scaling-chinchilla">
+<h3>스케일링 법칙 (2) — Chinchilla</h3>
+<p>Hoffmann 외는 세 가지 방법으로 다시 추정해, 계산 예산이 늘 때 모델 크기와 학습 토큰 수를
+<b>대략 같은 비율로</b> 늘려야 한다고 결론 냈습니다. N 의 지수가 방법마다 약 0.50·0.49·0.46 으로,
+Kaplan 의 0.73 과 다릅니다 <!--CITE key=hoffmann2022 sec=3.4-->.</p>
+<ul>
+<li>그 결론으로 만든 Chinchilla 는 70B 파라미터를 1.4T 토큰으로 학습했고, 같은 계산량의
+Gopher 는 280B 파라미터·300B 토큰이었습니다 <!--CITE key=hoffmann2022 sec=4.1-->.</li>
+<li>흔히 인용되는 "파라미터당 20 토큰" 이라는 문구는 논문에 없습니다. 표 3 은 1B 에 20.2B 토큰,
+10B 에 205.1B 토큰, 67B 에 1.5T 토큰을 적습니다 <!--CITE key=hoffmann2022 sec=3.4-->.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-scaling-fit">
+<h3>Chinchilla 의 손실 적합식 읽기</h3>
+<div class="eq"><i>L</i>(<i>N</i>, <i>D</i>) = <i>E</i> + <span class="frac"><span class="num"><i>A</i></span><span class="den"><i>N</i><sup>0.34</sup></span></span> + <span class="frac"><span class="num"><i>B</i></span><span class="den"><i>D</i><sup>0.28</sup></span></span></div>
+<p>적합값은 <i>E</i> = 1.69, <i>A</i> = 406.4, <i>B</i> = 410.7 입니다 <!--CITE key=hoffmann2022 sec=D.2-->.</p>
+<ul>
+<li><i>E</i> 는 N 과 D 를 끝없이 키워도 남는 손실입니다.</li>
+<li>둘째 항은 모델이 유한해서, 셋째 항은 데이터가 유한해서 생기는 몫입니다.</li>
+<li>계산량 C ≈ 6ND (7부의 6N 어림에 학습 토큰 수 D 를 곱한 것)를 고정하고 이 식을 최소화하면 N 과 D 를 함께 늘리는 답이 나옵니다 —
+두 지수가 비슷하기 때문입니다.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p11-scaling-ours">
+<h3>이 덱은 왜 법칙을 실험하지 않나</h3>
+<p>거듭제곱 법칙은 여러 자릿수에 걸친 N·D·C 에서 점을 찍어야 보입니다. 이 덱의 모델은 접는 폰
+한 대에서 몇 분 안에 끝나는 크기라, 한두 자릿수 안에서 찍은 점으로 지수를 말하면 오해를 부릅니다.</p>
+<ul>
+<li>그래서 이 장의 수는 전부 논문에서 옮긴 것이고, 출처는 <code>deck/claims.md</code> 에 있습니다.</li>
+<li>이 덱이 직접 확인한 것은 그 법칙의 <b>재료</b>입니다 — 파라미터 수와 6N 어림(7부).</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p11-quiz-4" data-quiz>
+<h3>5~6장 퀴즈</h3>
+<p class="q">Q. 손실 스케일링에서 배수 S 를 곱한 채로 기울기 자르기(문턱 1.0)를 먼저 하고, 그다음
+S 로 나누면 무엇이 달라집니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 자르기는 기울기 노름 n 이 문턱을 넘는지를 봅니다. S 배 된 기울기의 노름은
+S·n 이라, 원래는 잘리지 않았을 기울기(n ≤ 1)도 S·n &gt; 1 이면 잘립니다. 자른 뒤 S 로 나누면
+노름이 1/S 가 되어 갱신이 거의 사라집니다. 결국 문턱을 S 배로 고쳐야 하는데, S 를 동적으로 바꾸면
+문턱도 따라 바꿔야 합니다. 그래서 논문은 역전파 직후, 자르기 같은 다른 처리보다 <b>먼저</b>
+나누라고 권합니다 — 그러면 다른 하이퍼파라미터를 건드릴 필요가 없습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-summary">
+<h3>11부 정리</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>기법</th><th>바꾸는 것</th><th>이 덱의 증인</th></tr>
+<tr><td>온라인 소프트맥스</td><td>메모리 — 가중치를 조각씩</td><td>모든 조각 크기에서 1e-12</td></tr>
+<tr><td>GQA·MQA</td><td>KV 캐시 — 키·값 헤드 g 개</td><td>g = h 면 MHA 와 비트까지 같음</td></tr>
+<tr><td>RoPE</td><td>위치 — 회전으로</td><td>offset 으로 한 토큰만 돌려도 같음</td></tr>
+<tr><td>LoRA</td><td>미세조정 — 계수 r 갱신</td><td>B = 0 에서 출력 불변, A 기울기 0, 합치기 동치</td></tr>
+<tr><td>MLM</td><td>학습 목표 — 가린 토큰</td><td>80/10/10 비율, 가린 자리만 손실</td></tr>
+<tr><td>혼합 정밀도·스케일링</td><td>—</td><td>인용만</td></tr>
+</table></div>
+<p>모두 6·7부의 블록을 거의 그대로 두고 한 부분만 바꿉니다. 다음 12부에서는 원래 논문을 펴 놓고
+이 덱의 코드와 한 절씩 맞대어 봅니다.</p>
+<span class="tier ill">설명용</span>
 </article>
