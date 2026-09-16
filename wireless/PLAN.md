@@ -487,3 +487,52 @@ the property that *is* true, and the reason is in the test's own docstring.
   them as base64).
 - **Two wishes went unfilled and stay unfilled**: an Iridium spacecraft and a massive-MIMO panel.
   Per §0.9 those slides get an SVG or text instead of a padded-out substitute.
+
+### Step 8 — deck body, parts 0→2→3→4→1→5→6→7→8→9→10→11→12→13→14→15 (2026-09-16)
+
+- Written in the order §5 fixes: the math core first (0·2·3·4), then history and generations.
+  Final counts per part: 0:14 · 1:43 · 2:71 · 3:57 · 4:51 · 5:32 · 6:59 · 7:52 · 8:34 · 9:35 ·
+  10:45 · 11:42 · 12:31 · 13:23 · 14:29 · 15:247. **No padding** — the plan says the compression
+  deck came in at 44 % of estimate and that is fine.
+- Every part gets its numbers from `out/*.txt`, its dates from `data/*.tsv`, and its clause badges
+  from `specs/*.txt`. `make claims-check` verifies both directions: the clause exists in the real
+  spec text, and every four-digit year in prose has a row in `claims.md` or a `data/*.tsv`.
+- Three defects fixed along the way, each in the tooling rather than in the prose:
+  1. `build_deck.py` rejected `'Public domain'` because `FREE_LICENSES` was case-sensitive. Commons
+     returns mixed case (`'CC BY-SA 3.0 fr'`), so the comparison now lowercases first.
+  2. `tools/fetch.sh` and `deck/check_claims.py` had lines wider than 72 cells, so they could not be
+     quoted in the deck at all. Rewrapped (behaviour unchanged; `tools/fetch.sh https://www.3gpp.org/`
+     still returns the page).
+  3. `2048` (the superframe count in GSM's hyperframe) reads as a year. Added to `deck/years_ok.txt`
+     **with the reason**, which is the rule for that file.
+- One claim needed a new source row rather than a reword: the 1902 Heaviside–Kennelly reflecting
+  layer. Added to `data/timeline.tsv` with both original citations.
+
+### Step 9 — demos (2026-09-16)
+
+- `deck/demos.js`: 12 demos — BER calculator, constellation, path-loss comparator, link budget,
+  Viterbi stepper, hex reuse/SIR, Erlang B, Walsh spreading, near-far, subcarrier orthogonality,
+  NR numerology, LEO delay/Doppler.
+- **The pinned expectations in `check_deck.js` CASES (28) are Python's values, not JavaScript's.**
+  Pinning what the JS itself prints would check nothing. `erfc` is the Chebyshev fit from Numerical
+  Recipes, which agrees with `math.erfc` to ~1e-15 relative — good enough that the same digits come
+  out of both implementations.
+- Two things the checker taught us: a demo must render **on wiring**, not only on click (the
+  stub never clicks, and neither does a reader who just flips past); and `<select>` must not appear
+  inside a demo, because the deck's chapter-nav check reads every `<option value=…>` as a slide id.
+
+### Step 10 — glossary and appendix (2026-09-16)
+
+- `deck/glossary.txt`: **267 entries**. The third column is checked by the build — a term pointing at
+  a slide id that does not exist stops the build. Meaning cannot be machine-checked; the arrow can.
+- Appendix part 15 quotes **all 40 source files (6,442 lines)** in full, so `deck/pending.txt` is now
+  empty and source coverage reads 100 %.
+- Also in the appendix: quiz index, bibliography (specs / original papers / historical sources), and
+  photo credits. The two unfilled photo wishes are stated as unfilled, not substituted.
+
+### Step 11 — publish (2026-09-16)
+
+- `make all` green end to end: **864 slides · 2,224 KB**, 0 errors, 53 clause citations and 200 years
+  with no missing evidence, 63 files within 72 cells, DeckMono embedded and `--check` passing.
+- `index.html` card added beside the Wi-Fi deck and a `README.md` row, both with counts taken from
+  the build output rather than from memory.
