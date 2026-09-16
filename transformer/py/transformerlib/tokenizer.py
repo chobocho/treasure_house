@@ -196,7 +196,7 @@ def load(prefix):
     for line in io.open(prefix + '.vocab', encoding='utf-8'):
         i, h = line.rstrip('\n').split('\t')
         if int(i) != len(vocab):
-            raise ValueError('.vocab id 가 빈틈 없이 이어지지 않는다')
+            raise ValueError('.vocab id 가 빈틈없이 이어지지 않는다')
         vocab.append(bytes.fromhex(h))
     for line in io.open(prefix + '.merges', encoding='utf-8'):
         l, r = line.rstrip('\n').split('\t')

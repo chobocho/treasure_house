@@ -17,7 +17,7 @@ import math
 
 from transformerlib import tensor as T
 
-# SPEC.md §3.3 — √(2/π) 를 17자리로, 3차항은 Hendrycks·Gimpel §2.
+# SPEC.md §3.3 — √(2/π) 를 16자리로, 3차항은 Hendrycks·Gimpel §2.
 GELU_A = 0.7978845608028654
 GELU_B = 0.044715
 LN_EPS = 1e-5
@@ -64,7 +64,7 @@ def softmax(x):
 
 
 def softmax_jacobian(p):
-    """∂pᵢ/∂xⱼ = pᵢ(δᵢⱼ − pⱼ). 시험과 2부의 표를 위한 것이다."""
+    """∂pᵢ/∂xⱼ = pᵢ(δᵢⱼ − pⱼ). 시험과 2부·4부 슬라이드를 위한 것이다."""
     n = len(p)
     return [[p[i] * ((1.0 if i == j else 0.0) - p[j]) for j in range(n)]
             for i in range(n)]

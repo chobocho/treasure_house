@@ -95,7 +95,7 @@ def rope(x, offset=0):
 
 
 def rope_dot(q, m, k, n):
-    """⟨R_m q, R_n k⟩ — 시험과 11부의 표를 위한 것."""
+    """⟨R_m q, R_n k⟩ — 시험과 7부 4장의 표를 위한 것."""
     dk = len(q)
     rq = rope(T.Tensor(q, (1, dk)), offset=m).data
     rk = rope(T.Tensor(k, (1, dk)), offset=n).data

@@ -462,7 +462,7 @@ int main(int argc, char **argv)
 {
     if (argc < 2)
         return die("명령: count · tokenize · train · sample · "
-                   "accuracy · bench");
+                   "accuracy · bench · parity");
     if (!strcmp(argv[1], "count"))
         return count_main(argc - 1, argv + 1);
     if (!strcmp(argv[1], "tokenize"))

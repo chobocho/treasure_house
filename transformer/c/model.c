@@ -6,7 +6,7 @@
  *
  * 순전파는 역전파가 다시 쓸 값(정규화의 x̂·1/σ, 어텐션 가중치, GELU
  * 앞의 값…)을 tfs_acts 에 남긴다. 메모리는 대략
- *   O(L·B·T·(d·16 + d_ff·2 + h·T)) + O(B·T·V)
+ *   O(L·B·T·(d·10 + d_ff·2 + h·T)) + O(B·T·V)
  * 이고, h·T² 의 어텐션 가중치가 문맥이 길어질 때 가장 먼저 커진다.
  *
  * 더하는 차례는 파이썬 참조와 같게 두었다(행렬곱 i-k-j, 편향은 곱의
@@ -23,7 +23,7 @@
 #include "rng.h"
 
 /* 블록 안의 텐서 — 이름·모양·초기화. 'w' 0.02 · 'r' 0.02/√(2L) ·
- * '1' 하나 · '0' 영. 모양은 (행, 열), 1차원이면 열이 1. */
+ * '1' 하나 · '0' 영. 모양은 block_size() 가 정한다. */
 typedef struct {
     const char *name;
     char init;
@@ -400,7 +400,7 @@ static void att_fwd_tasks(void *p, int lo, int hi)
                     acc += qi[e] * kt[e];
                 z[t] = (float)(acc * inv);
             }
-            tfs_softmax_row(arow, z, i + 1);   /* j > i 는 −∞ 와 같다 */
+            tfs_softmax_row(arow, z, i + 1);   /* t > i 는 −∞ 와 같다 */
             for (t = i + 1; t < T; t++)
                 arow[t] = 0.0f;
             memset(o, 0, sizeof(float) * (size_t)dk);

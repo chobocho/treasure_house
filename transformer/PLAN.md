@@ -626,3 +626,23 @@ The user approved every recommendation below as-is. Each row is now a decision.
   evidence of the 5140 typo; bench prose no longer claims a direction that varies run to run; glossary
   first-appearance ids moved from part 9 to part 8, three duplicate pairs merged (181 entries); four
   figure fixes (dot colours, y-range clipping sort/reverse at step 1, wpe colour, dashed legend).
+
+### Review pass 3 (2026-09-16)
+
+- New angles: beginner reading flow (terms used before definition, "앞에서 본" claims checked against the
+  referenced part, chapter-list order vs. actual order), prose ↔ code-slice/capture agreement for every
+  CODE/OUT directive, Korean comment accuracy in py/transformerlib and c/, Korean particles/spelling/
+  style. Two report-only subagents (0–6 + py comments, 7–14 + C comments); every finding verified.
+- 43 fixes: 흐름 14 · 코드불일치 5 · 주석 7 · 표기 17. Notable: 6NBS had S undefined; Adam motivation
+  ("rare embedding rows get gradients rarely") contradicted the tied-embedding quiz two slides later;
+  KV-cache slice 1 ended three lines inside the per-head loop (now 93-118 / 119-150); split_qkv only
+  produces the g = h shape (bridge sentence added); causal-softmax test prose said the row max is the
+  diagonal cell (it is the max over j ≤ i); attention-vs-projection crossover needs scores + WV (2n²d)
+  to give n = 6d; p4-quiz-4/5 asked the previous chapter's material and were moved to those chapters'
+  ends; c/model.c header said d·16 activation buffers per block (10); tfs usage omitted parity.
+  Card text "논문 53편 절 단위 인용" → 색인 53편(49편 절 단위 인용). check_slices rejects a slice that
+  starts one line after a leading comment (E8), so scalar.py stays 33-43 and the prose says "def 바로
+  아래 줄".
+- Not fixed (pre-existing, out of scope): check_deck.js counts 45 quizzes while the deck has 46
+  `card quiz` articles — its regex runs on `struct`; worth a look in a later pass.
+
