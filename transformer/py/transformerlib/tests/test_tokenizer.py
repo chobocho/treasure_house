@@ -130,7 +130,7 @@ class TestFiles(unittest.TestCase):
             tk.save(prefix, vocab, merges)
             v2, m2 = tk.load(prefix)
             self.assertEqual((v2, m2), (vocab, merges))
-            # 모든 짝이 2번씩으로 동률이라 가장 작은 짝 (32, 237) =
+            # 가장 많은 짝들이 2번씩 동률이라 가장 작은 짝 (32, 237) =
             # 공백 + '한' 의 첫 바이트 0xED 가 먼저 합쳐진다
             line = read(prefix + '.vocab').split('\n')[256]
             self.assertEqual(line, '256\t20ed')

@@ -229,9 +229,16 @@
       var z = nums(sv(host, 'logits', '3 2.5 2 1 0 -1'));
       if (!z.length) z = [0];
       var tau = nv(host, 'tau', 1);
-      if (tau <= 0) tau = 1e-6;
       var k = Math.round(nv(host, 'k', 0)), p = nv(host, 'p', 0);
-      var kept = filtered(z, tau, k, p);
+      var kept;
+      if (tau <= 0) {
+        // 온도 0 은 거르개를 거치지 않고 argmax (같으면 작은 id, SPEC §7)
+        var best = 0;
+        for (var b = 1; b < z.length; b++) if (z[b] > z[best]) best = b;
+        kept = [[best, 1]];
+      } else {
+        kept = filtered(z, tau, k, p);
+      }
       var lines = ['남은 후보 ' + kept.length + '개 (온도 ' + tau
         + ' · k ' + (k > 0 ? k : '끔') + ' · p ' + (p > 0 && p < 1 ? p : '끔') + ')'];
       for (var i = 0; i < kept.length; i++) {
@@ -339,7 +346,7 @@
       * (v + 0.044715 * v * v * v)));
   }
   // 토큰 하나를 캐시에 더하고 그 자리의 로짓을 돌려준다. 캐시 없이
-  // 매번 처음부터 돌려도 답은 같다 — 10부 1장이 보인 성질이다.
+  // 매번 처음부터 돌려도 답은 같다 — 10부 3장이 보인 성질이다.
   function step(M, tok, cache) {
     var c = M.cfg, P = M.P, d = c.d, h = c.h, dk = d / h, pos = cache.n;
     var x = new Float64Array(d), i, j, t, l;

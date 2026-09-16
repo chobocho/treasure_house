@@ -121,7 +121,7 @@ class TestLayerNorm(unittest.TestCase):
 
 class TestGelu(unittest.TestCase):
     def test_constants_pinned(self):
-        """SPEC §3.3 — √(2/π) 를 17자리, 3차항 0.044715."""
+        """SPEC §3.3 — √(2/π) 를 16자리, 3차항 0.044715."""
         self.assertEqual(ops.GELU_A, 0.7978845608028654)
         self.assertEqual(ops.GELU_A, math.sqrt(2 / math.pi))
         self.assertEqual(ops.GELU_B, 0.044715)

@@ -44,7 +44,7 @@ def _softmax_row(z, off, n, out):
 def softmax(x):
     """pᵢ = e^{xᵢ} / Σⱼ e^{xⱼ}.
 
-    역전파: J = diag(p) − p pᵀ 이므로 dx = p ⊙ (g − ⟨g, p⟩).
+    역전파: J = diag(p) − pᵀp 이므로 dx = p ⊙ (g − ⟨g, p⟩).
     야코비안 n×n 을 만들지 않고 내적 한 번으로 끝낸다 — O(n).
     """
     rows, n = _rows(x)

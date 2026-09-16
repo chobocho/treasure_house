@@ -590,3 +590,14 @@ The user approved every recommendation below as-is. Each row is now a decision.
   2,200-step checkpoint float16 changed 4 answers (float32 weights gave 0 → quantisation, not op
   order); on the final checkpoint 0 of 1,000 differ. If a future checkpoint differs, ship float32
   rather than widening the check.
+
+### Step 13 — review pass 1 (2026-09-16)
+
+- Two report-only subagents (parts 0–7; parts 8–14 + demos.js), every finding verified against
+  code/captures/papers before applying. 40 fixes: 사실오류 19 · 수식 3 · 인용범위 10 · 표기 8.
+- Notable: leftover "목표 장수는 N장" scaffolding captions on every part cover (deleted); GELU
+  constant has 16 significant digits, not 17 (SPEC §3.3 + test docstring); softmax Jacobian written
+  ppᵀ in a row-vector deck (→ pᵀp); attention-vs-projection crossover is n = 6d against a whole
+  block (not n = d); activation memory per block is (10d + 2d_ff + 2)·BT; `d-topk` at τ = 0 kept
+  tied candidates instead of argmax (fixed + 2 CASES); two tables were badged "실행 검증" but come
+  from papers (→ 논문 근거 with CITE); GQA mean-pooling comparison is ainslie2023 §3.3, not §2.1.

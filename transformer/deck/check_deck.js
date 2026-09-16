@@ -266,6 +266,9 @@ if (!demoScripts.length) {
         '남은 후보 3개'],
       // sample.filtered(…, 2.0, 4, 0.9) — 넷이 남는다
       ['d-topk', { logits: '3 2.5 2 1 0 -1', tau: '2', k: '4', p: '0.9' }, '칸  3  0.1336'],
+      // sample.sample_next(logits, 0.0, …) — 동률이면 작은 id
+      ['d-topk', { logits: '3 3 1', tau: '0', k: '0', p: '0' }, '남은 후보 1개'],
+      ['d-topk', { logits: '1 3 3', tau: '0', k: '0', p: '0' }, '칸  1  1.0000'],
       // tokenizer.pretokenize — 공백 둘이면 앞 하나가 따로 남는다
       ['d-pretok', { text: '김 첨지는  오늘 2원을 벌었다!' },
         '|김| 첨지는| | 오늘| 2|원을| 벌었다|!|'],
