@@ -47,6 +47,33 @@ def dft(x):
     return out
 
 
+def idft(X):
+    """정의 그대로의 역 DFT. O(N²).
+
+    길이가 2의 거듭제곱이 아닐 때 쓴다 — LTE 의 SC-FDMA 는 DFT 크기가
+    2^a·3^b·5^c 라 72·180 같은 값이 나온다. 이 책에서 그런 크기를
+    다루는 곳은 SC-FDMA 하나뿐이라 느린 쪽으로 충분하다.
+    """
+    n = len(X)
+    out = []
+    for i in range(n):
+        s = 0j
+        for k, v in enumerate(X):
+            s += v * cmath.exp(2j * math.pi * k * i / n)
+        out.append(s / n)
+    return out
+
+
+def any_dft(x):
+    """길이에 상관없이 DFT. 2의 거듭제곱이면 FFT 로 간다."""
+    return fft(x) if is_pow2(len(x)) else dft(x)
+
+
+def any_idft(X):
+    """any_dft 의 역."""
+    return ifft(X) if is_pow2(len(X)) else idft(X)
+
+
 def fft(x):
     """radix-2 쿨리-튜키 FFT (제자리 반복형).
 

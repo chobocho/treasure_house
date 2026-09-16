@@ -37,6 +37,16 @@ class TestFFT(unittest.TestCase):
         for a, b in zip(x, y):
             self.assertLess(abs(a - b), 1e-9)
 
+    def test_idft_handles_non_power_of_two(self):
+        """SC-FDMA 의 DFT 크기는 2의 거듭제곱이 아니다 (12의 배수)."""
+        rnd = __import__('random').Random(72)
+        for n in (12, 36, 72, 180):
+            x = [complex(rnd.gauss(0, 1), rnd.gauss(0, 1))
+                 for _ in range(n)]
+            y = dsp.any_idft(dsp.any_dft(x))
+            for a, b in zip(x, y):
+                self.assertLess(abs(a - b), 1e-9)
+
     def test_fft_of_single_tone(self):
         """정확히 k번째 빈에 놓인 정현파는 그 빈에만 에너지가 있다."""
         n, k = 64, 5
