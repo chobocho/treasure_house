@@ -6,6 +6,7 @@
  *   tfs sample 체크포인트 어휘|- --prompt 글    생성(SPEC §7)
  *   tfs accuracy 체크포인트 어휘 시험.txt --sep =   과제 정답률
  *   tfs bench                                  행렬곱 세 차례·스레드
+ *   tfs parity [스레드]                        파이썬과 나란히 놓은 표
  *
  * 기록 실행(run_all.py)이 전부 이 명령을 부른다. 출력은 사람이 읽는
  * 한국어 표이고, 시간을 재는 bench 말고는 몇 번을 돌려도 같다.
@@ -18,6 +19,7 @@
 #include <time.h>
 
 #include "model.h"
+#include "parity.h"
 #include "pool.h"
 #include "sample.h"
 #include "tensor.h"
@@ -473,5 +475,7 @@ int main(int argc, char **argv)
         return accuracy_main(argc - 1, argv + 1);
     if (!strcmp(argv[1], "bench"))
         return bench_main();
+    if (!strcmp(argv[1], "parity"))
+        return tfs_parity_main(argc > 2 ? atoi(argv[2]) : 1);
     return die("모르는 명령");
 }
