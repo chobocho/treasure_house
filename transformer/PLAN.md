@@ -459,3 +459,39 @@ The user approved every recommendation below as-is. Each row is now a decision.
   `.opt` layout, tokenizer files, the pre-tokenizer as a class table (S/W/D/P/L) + decision table,
   BPE training tie-break (lexicographically smallest id pair), encode rule, `.bin` format, and the
   tolerance table (§9) with the relative-error definition.
+
+### Step 3 — research (2026-09-16, commit 141199b)
+
+- One subagent fetched and read sources; the orchestrator reviewed the rows and wrote the commit.
+  `data/papers.tsv` 53 rows (44 arXiv ids verified against the arXiv API, all ar5iv fetches OK
+  except kingma2014, whose ar5iv page is a PDF stub → cite it without `sec`), `hyper_vaswani.tsv`
+  base+big from Table 3, `models.tsv` 27 rows (cells the source does not state are left empty),
+  `timeline.tsv` 60 rows (9 rows 2024+, each stamped "2026-09 기준" with a URL), claims.md +30 rows.
+- **Corrections found against primary sources:** (1) SPEC.md's GELU tanh constant was 0.044158; the
+  paper §2 and openai/gpt-2 `src/model.py` both use **0.044715** — fixed before any code used it.
+  (2) GPT-2 "117M" is the paper; the gpt-2 README says the original counts were wrong (124M…).
+  (3) Vaswani EN-FR big BLEU is 41.8 in Table 2/abstract but 41.0 in §6.1 prose. (4) Chinchilla
+  never says "20 tokens per parameter"; Table 3 gives the pairs. (5) GPT-3 Table 2.1 prints d_model
+  5140 for 13B (40×128 = 5120) — copied as printed. (6) LLaMA sizes are 6.7B/13.0B/32.5B/65.2B.
+- `tools/paper_text.py`: title and v1 date now both from the arXiv API (ar5iv's first heading was a
+  footnote or "Abstract" for 9 papers); `--grep` no longer resets the section on unnumbered paragraph
+  headings (dropout/label smoothing showed as `-` instead of 5.4).
+
+### Step 4 — corpus (2026-09-16)
+
+- `corpus/gen_tasks.py`: add (reversed 4-digit answer) · addplain (same problems, normal order, for
+  the part-8 comparison) · sort · reverse · parity(16 bits). Train/test split by construction
+  (shuffle the whole problem space or draw unique, test = first 1000). Train sizes 12000/12000/6000/
+  6000/4000 so the committed corpus stays under 1.5 MB. Needs `transformerlib.rng`, so **rng (step 5
+  module 1) and fmt (module 13) were committed before this step** — recorded deviation from §5 order.
+- `corpus/fetch_ko.py`: 34 works — 현진건 7 · 이상 8 · 김유정 7 · 한용운 6 · 김소월 6.
+  `SOURCES.tsv` records revid, the death year read from each `저자:` page template, and the PD
+  template read from each work page (PD-old-50/70). Refetches use `oldid=revid`. **윤동주 is absent:**
+  every one of his works on ko.wikisource transcludes page-namespace scans (`<pages …>`), which a
+  revid cannot pin; the script refuses such pages. ko.wikisource rate-limits (HTTP 429) at ~2 req/s;
+  the fetcher sleeps 4 s per request and backs off 60 s × n on 429.
+- `corpus/fetch_en.py`: tinyshakespeare, SHA-256 of the full 1,115,394-byte file pinned, first
+  299,963 bytes (last newline before 300,000) committed.
+- `corpus/stats.py` → `out/corpus_stats.txt`: ko 559,957 B / 232,326 chars / 161,003 syllables,
+  en 299,963 B, tasks 629,000 B; total 1,488,920 B. `tests/test_corpus.py` 11 tests (seed rebuild,
+  disjoint splits, answers, fixed line lengths, died < 1956, PD template, no wiki markup, strip rules).
