@@ -22,6 +22,10 @@ import math
 
 _bsum = builtins.sum
 
+# 순전파 행렬곱이 실제로 한 곱셈 수. model.matmul_mults 의 식이 맞는지
+# 시험이 이 계수기로 확인한다(7부의 FLOPs 계산).
+MULTS = [0]
+
 
 def numel(shape):
     n = 1
@@ -281,6 +285,7 @@ def matmul(a, b):
     mb = _index_map(b.shape[:-2], batch)
     A, B = a.data, b.data
     O = [0.0] * (numel(batch) * n * p)
+    MULTS[0] += numel(batch) * n * m * p
     for t in range(numel(batch)):
         oa, ob, oo = ma[t] * n * m, mb[t] * m * p, t * n * p
         for i in range(n):
