@@ -55,7 +55,7 @@ test-py:                ## 파이썬 시험만
 	else echo '  파이썬 시험 아직 없다 (PLAN.md §5 5단계)'; fi
 
 # C 시험은 파일마다 따로 만들어 돌린다. 하나가 실패해도 나머지를 본다.
-test-c:                 ## C 시험만 (c/tests/test_*.c)
+test-c: cc              ## C 시험만 (c/tests/test_*.c)
 	@if test -d c/tests; then \
 	  mkdir -p .build; bad=0; \
 	  for t in c/tests/test_*.c; do \
