@@ -99,7 +99,7 @@ record:                 ## 캡처를 세 번 돌려 같은지 본다
 	sh tools/record.sh --check
 
 parity:                 ## 파이썬↔C 대조표만 다시 뜬다
-	$(PY) run_all.py --only parity
+	$(PY) run_all.py --only c_vs_py
 
 figs:                   ## 도해 SVG 다시 만들기 (viewBox 폭 340)
 	$(PY) deck/gen_figs.py
