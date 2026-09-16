@@ -111,6 +111,27 @@ class TestForward(unittest.TestCase):
         with self.assertRaises(ValueError):
             M.forward(M.init_params(TINY, 1), TINY, [[1, 2, 3, 4, 5]])
 
+    def test_key_bias_gradient_is_zero_without_rope(self):
+        """모든 키에 같은 b 를 더하면 한 행의 점수가 모두 q·b 만큼
+        옮겨 갈 뿐이라 소프트맥스가 못 느낀다 — ∂ℓ/∂b_k = 0.
+        RoPE 는 위치마다 b 를 다르게 돌려 이 대칭을 깬다."""
+        for pos, zero in (('learned', True), ('sin', True),
+                          ('rope', False)):
+            cfg = M.Config(V=7, T=5, d=8, L=1, h=2, d_ff=16, pos=pos)
+            p = M.init_params(cfg, 5)
+            for t in p.values():
+                t.data[:] = [v * 10 + 0.05 for v in t.data]
+            _, loss = M.forward(p, cfg, [[1, 2, 3, 4, 5]],
+                                [[2, 3, 4, 5, 6]])
+            loss.backward()
+            g = p['h0.bqkv'].grad
+            key = max(abs(v) for v in g[8:16])
+            query = max(abs(v) for v in g[0:8])
+            if zero:
+                self.assertLess(key, 1e-12 * max(query, 1.0), pos)
+            else:
+                self.assertGreater(key, 1e-6, pos)
+
     def test_future_cannot_change_past_logits(self):
         p = M.init_params(TINY, 2)
         a, _ = M.forward(p, TINY, [[1, 2, 3, 4]])
