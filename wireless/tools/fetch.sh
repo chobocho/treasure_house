@@ -17,7 +17,10 @@ if [ ! -s "$BUNDLE" ] || [ "$HERE/sectigo_ov_r36.pem" -nt "$BUNDLE" ]; then
 fi
 UA="Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 Chrome/128 Safari/537.36 treasure_house-deck-builder"
 if [ -n "$2" ]; then
-  exec curl -sS -L -m 600 --retry 2 --cacert "$BUNDLE" -A "$UA" -o "$2" "$1"
+  # -C - 는 이어받기다. 규격 zip 이 10 MB 를 넘는데 이 회선이 느려서
+  # 한 번에 못 받는 일이 있다. 끊긴 자리부터 다시 받으면 결국 끝난다.
+  exec curl -sS -L -m 600 --retry 5 --retry-delay 2 -C - \
+    --cacert "$BUNDLE" -A "$UA" -o "$2" "$1"
 else
   exec curl -sS -L -m 600 --retry 2 --cacert "$BUNDLE" -A "$UA" "$1"
 fi
