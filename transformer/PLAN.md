@@ -440,3 +440,22 @@ The user approved every recommendation below as-is. Each row is now a decision.
   "퍼셉트론부터…" without 1958) — claims.md has no sourced rows yet and claims-check would fail.
 - Not done here (later steps): SPEC.md, run_all.py, tools/{fetch_paper.sh,paper_text.py,export_js.py},
   corpus scripts, deck/gen_figs.py, deck/demos.js. No index.html/README card, per step 1.
+
+### Step 2 — SPEC.md (2026-09-16)
+
+- `transformer/SPEC.md` written in Korean (the deck may quote it): RNG (§1) with the splitmix64
+  expansion, xoshiro256** step, derived `uniform/normal/randint/permutation`, and pinned values for
+  seed 42 — expanded state, first 8 `next()`, first 4 `uniform()`, first 4 `normal()`. The values
+  were computed by a throwaway Python script and an independent throwaway C program (glibc libm);
+  all 16 agree to the last bit, so `normal()` parity rests on glibc `log/cos` being the same in both.
+- Decisions pinned there (not in the plan): `normal()` returns only the cosine half and never caches;
+  `randint(n) = ⌊uniform·n⌋`; separate generators `seed` (init) · `seed+1` (batches) · `seed+2`
+  (dropout); linear weights `[in, out]` with row vectors `Y = XW + b`; init 0.02 and 0.02/√(2L) for
+  `Wo`/`W2`; LayerNorm ε 1e-5; GELU tanh constants as 17-digit decimals; AdamW `wd` on
+  `wte wpe Wqkv Wo W1 W2` only; clip scale `1/(n+1e-6)`; `aligned` batch starts at line starts
+  (for the synthetic tasks); sampling order (temperature → sort by prob desc, id asc → top-k → top-p
+  → one `uniform()`); τ = 0 means argmax.
+- `.ckpt` layout with a worked V2/T2/d2/L1/h1/d_ff4 example (66 params, 296 bytes, every byte range),
+  `.opt` layout, tokenizer files, the pre-tokenizer as a class table (S/W/D/P/L) + decision table,
+  BPE training tie-break (lexicographically smallest id pair), encode rule, `.bin` format, and the
+  tolerance table (§9) with the relative-error definition.
