@@ -578,3 +578,35 @@ the property that *is* true, and the reason is in the test's own docstring.
   required Eb/N0 and receiver sensitivity, the LTE turbo encoder, the NR grid, the LDPC base matrix).
   A check for "evidence produced but never cited" is worth having; for now it is a one-off script.
 - Final: **870 slides · 269 glossary entries**, `make all` green end to end.
+
+### Step 12c — review pass 3 (2026-09-16)
+
+- Third angle, again deliberately different from passes 1–2: **does the evidence on the slide say what
+  the prose next to it says?** Two subagents (parts 0–7, 8–15) checked every CODE directive against
+  the quoted symbol, every OUT against the printed numbers, every FIG by rendering and looking, every
+  quiz answer, every SPEC clause against the clause text, every TABLE against the TSV. The orchestrator
+  drove all 12 demos over a 1,420-point input grid against the Python reference (0 mismatches) and read
+  the glossary. 42 findings, all re-verified here before fixing.
+- Counts: 그림 13 · 캡처-산문 7 · 인용조항 7 · 표기 6 · 사실오류 3 · 퀴즈 3 · 코드-산문 2 · 표 1 · 용어집 1.
+- What this pass says about the previous ones:
+  1. **A capture can be reproducible, tested, and still wrong on the slide.** `harq.txt` sec 1 was cited
+     under "정지 대기와 N-프로세스" — the capture is the circular-buffer table. No section ever showed
+     N-process utilisation; the `실행 검증` badge was true of the file and false of the slide. There is
+     now `harq.utilization` (+ slot simulation, 4 tests) and sec 5.
+  2. **Prose written from the code's intent, not its output.** "RV2·RV3 은 패리티가 많아" — the table
+     above it says RV3 = 42/15/15 (it wraps around into systematic bits). "GEO 고도가 35779 km 가 나왔다,
+     7 km 작다" — the module's constants give 35793, 7 km *larger*. The numbers were re-derived in
+     pass 2; the *direction words* around them were not.
+  3. **Monte-Carlo with n=1500 printed constellation MI above Shannon capacity** (1.033 vs 1.000) on
+     the slide whose point is that it cannot. n=20000 now; the docstring no longer says "반드시".
+  4. Figures: only rendering catches a caption drawn over the axis title, a curve running off the frame
+     over the tick labels, a viewBox that clips "120 kHz" to "120", an LTE grid captioned in NR
+     terms, and a generation ribbon drawn back-to-back under a sentence saying generations overlap.
+     `make figs-png` exists for exactly this; it has to be *looked at* after every gen_figs change.
+  5. 19 capture footers had words glued together at a `'…x' + 'y…'` line break. Only reading the
+     rendered `out/*.txt` as prose finds that; the width check and md5 check are both happy with it.
+- Two spec citations were added rather than corrected: TR 36.888 §5.1 and TR 45.820 §4.1.1 confirm
+  that *both* LTE-M and NB-IoT had a 20 dB study target (the reviewer expected 15 dB for LTE-M; the
+  fetched TR says 20). The 3GPP founding row was wrong: five partners on 1998-12-04, CWTS joined
+  1999-06 (3gpp.org "20 Years" news, cross-checked).
+- Final: **871 slides · 335 tests · 43 specs fetched**, `make all` and `record --check` green.
