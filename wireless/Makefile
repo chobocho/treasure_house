@@ -25,6 +25,7 @@ SRC_ALL     := $(SRC_PY) $(SRC_TOP)
 .DEFAULT_GOAL := help
 .PHONY: help test run record figs figs-png photos tables specs \
         bands bands-check claims-check width run-check \
+        figs-check \
         deck deck-verify \
         deck-slices deck-xref deck-check font font-check all clean
 
@@ -56,9 +57,10 @@ record:                 ## 캡처를 세 번 돌려 같은지 본다
 	sh tools/record.sh --check
 
 figs:                   ## 도해 SVG 다시 만들기 (viewBox 폭 340)
-	@test -f deck/gen_figs.py \
-	  && $(PY) deck/gen_figs.py \
-	  || echo '  deck/gen_figs.py 아직 없다 (PLAN.md §5 6단계)'
+	$(PY) deck/gen_figs.py
+
+figs-check:             ## 그림이 소스와 어긋나지 않았는지
+	$(PY) deck/gen_figs.py --check
 
 # 그린 것을 **눈으로 본다.** 압축 덱은 이 단계에서 28장 중 8장을 고쳤다.
 figs-png: figs          ## SVG 를 PNG 로 렌더해 본다 (.svgrender/)
@@ -130,7 +132,8 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
-all: tables run-check deck deck-verify deck-slices deck-xref \
+all: tables run-check figs-check deck deck-verify deck-slices \
+     deck-xref \
      deck-check claims-check width font font-check  ## 전부
 
 clean:                  ## 덱 지우기 (캡처·자료·규격 캐시는 남긴다)

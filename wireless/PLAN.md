@@ -448,3 +448,26 @@ the property that *is* true, and the reason is in the test's own docstring.
   - IR beats Chase visibly once the SNR is low enough (−2 dB, 2 transmissions: 0.525 vs 0.250)
   - GEO Doppler is 0.0 kHz only with Earth rotation subtracted; LEO is 3.11× the 15 kHz subcarrier
 - `make run`, `make run-check`, `make record` wired; `run-check` is part of `make all`.
+
+### Step 6 — figures (2026-09-16)
+
+- `deck/svgkit.py` (SVG primitives + log/linear `Axes`) and `deck/gen_figs.py` — **30 figures**,
+  all `viewBox` width 340, `--check` wired into `make figs-check` and `make all`.
+- Every curve comes from calling `wirelesslib` for real: BER curves from `modem.ber_theory`,
+  the constellation clouds from `modem.awgn`, the Rayleigh CDF from 20,000 samples, the pathloss
+  comparison from four real models, the array patterns from `mimo.array_factor`, the orbit shells
+  and NTN geometry from `orbit`. Nothing is drawn by hand.
+- **Rendered every one with `rsvg-convert` and looked at it.** Four real defects that no checker
+  would have caught:
+  1. Standalone SVGs came out **solid black** — the deck's CSS lives in `head.html`, so a detached
+     render had no styles at all. Fixed by putting a small `<style>` inside every figure using
+     `var(--x, fallback)`: the deck's palette still wins when embedded, and the file renders
+     correctly on its own.
+  2. Legends sat **on top of the plot area**. Plot widths reduced and legends moved to the margin.
+  3. **BPSK's BER curve was completely hidden under QPSK** — they are identical. BPSK is now dashed
+     and the figure says so.
+  4. The turbo-encoder box diagram and the NTN geometry both ran off the right edge / overlapped
+     their own captions. Redrawn with a 14–326 margin; NTN angles are exaggerated and the caption
+     says so.
+- Also added a small machine scan for "axis name and caption on the same baseline" after fixing the
+  OFDM subcarrier figure by hand.
