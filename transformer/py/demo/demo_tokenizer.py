@@ -80,13 +80,20 @@ def sec_syllables(ko_text, ko):
 
 
 def sec_round_trip(ko):
+    """접힌 화면(108칸)에 맞게 id 는 10개, 토큰은 6개씩 줄을 나눈다."""
     t = tk.Tokenizer(*ko)
     text = '밑바닥부터 만드는 트랜스포머'
     ids = t.encode(text)
-    return ('입력: %s\nid: %s\n토큰: %s\n되돌리기: %s'
-            % (text, ' '.join(map(str, ids)),
-               ' | '.join(shown(t.vocab[i]) for i in ids),
-               t.decode(ids)))
+    lines = ['입력: %s (%d바이트)' % (text, len(text.encode('utf-8')))]
+    for k in range(0, len(ids), 10):
+        lines.append(('id: ' if k == 0 else '    ')
+                     + ' '.join('%3d' % i for i in ids[k:k + 10]))
+    toks = [shown(t.vocab[i]) for i in ids]
+    for k in range(0, len(toks), 6):
+        lines.append(('토큰: ' if k == 0 else '      ')
+                     + ' | '.join(toks[k:k + 6]))
+    lines.append('토큰 %d개 · 되돌리기: %s' % (len(ids), t.decode(ids)))
+    return '\n'.join(lines)
 
 
 def main():

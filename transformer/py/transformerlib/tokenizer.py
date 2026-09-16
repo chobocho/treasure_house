@@ -14,9 +14,9 @@
   · 인코드: 조각마다 순위가 가장 낮은(먼저 배운) 병합부터 적용.
 
 학습은 짝 → 그 짝이 든 조각 목록을 들고 다녀, 병합 한 번에 그 짝이
-든 조각만 다시 센다. 한 번에 O(조각 종류 수)가 아니라 O(영향받은
-조각의 길이 합) 이다. 인코드는 조각 결과를 기억해 같은 조각을 다시
-계산하지 않는다.
+든 조각만 다시 센다(다시 세기는 영향받은 조각의 길이 합). 다만 가장
+많은 짝을 고르는 max 는 매번 짝 전체를 훑는다. 인코드는 조각 결과를
+기억해 같은 조각을 다시 계산하지 않는다.
 """
 import io
 import struct
@@ -144,7 +144,7 @@ class Tokenizer(object):
         self.cache = {}
 
     def encode_chunk(self, chunk):
-        """SPEC §5.4 — 순위가 낮은 병합부터. O(len² · 병합 수)."""
+        """SPEC §5.4 — 낮은 순위부터. 한 바퀴 O(len), 최대 len 바퀴."""
         if chunk in self.cache:
             return self.cache[chunk]
         ids = []

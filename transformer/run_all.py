@@ -31,10 +31,10 @@ import unicodedata
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'out')
 MAX_COLS = 108
-ORDER = ['scalar', 'gradcheck', 'ops', 'attention', 'posenc', 'params',
-         'optim', 'tokenizer', 'kvcache', 'extras', 'py_tiny',
-         'c_vs_py', 'c_bench', 'c_add', 'c_addplain', 'c_sort',
-         'c_reverse', 'c_parity', 'c_ko', 'c_en', 'attnmaps']
+ORDER = ['corpus', 'scalar', 'gradcheck', 'ops', 'attention',
+         'posenc', 'params', 'optim', 'tokenizer', 'kvcache', 'extras',
+         'py_tiny', 'c_vs_py', 'c_bench', 'c_add', 'c_addplain',
+         'c_sort', 'c_reverse', 'c_parity', 'c_ko', 'c_en', 'attnmaps']
 
 sys.path.insert(0, os.path.join(HERE, 'py'))
 

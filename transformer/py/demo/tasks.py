@@ -8,19 +8,23 @@ import os
 
 from demo import crun, report
 
-SHAPE = dict(d=48, L=2, h=4, B=32, lr=6e-3, warmup=150, seed=1, log=50,
+# d = 48 로는 덧셈이 손실 고원(≈1.59)에서 벗어나는 스텝이 1,000 에서
+# 3,000 넘게까지 들쭉날쭉해, 같은 설정도 스텝 수에 따라 정답률이
+# 100 % 와 7 % 로 갈렸다. d = 64 는 1,000 스텝 안에 벗어났다
+# (PLAN.md 7단계 기록).
+SHAPE = dict(d=64, L=2, h=4, B=32, lr=6e-3, warmup=150, seed=1, log=50,
              aligned=True)
 
 TASKS = {
-    'add': dict(vocab='ckpt/tok/add', T=13, steps=3000, sep='=',
+    'add': dict(vocab='ckpt/tok/add', T=13, steps=2200, sep='=',
                 title='세 자리 덧셈 — 답을 뒤집어 적는다'),
-    'addplain': dict(vocab='ckpt/tok/add', T=13, steps=3000, sep='=',
+    'addplain': dict(vocab='ckpt/tok/add', T=13, steps=2200, sep='=',
                      title='세 자리 덧셈 — 답을 그대로 적는다'),
-    'sort': dict(vocab='ckpt/tok/sort', T=14, steps=2500, sep='>',
+    'sort': dict(vocab='ckpt/tok/sort', T=14, steps=2000, sep='>',
                  title='글자 여섯 개 정렬'),
-    'reverse': dict(vocab='ckpt/tok/reverse', T=14, steps=2500, sep='<',
+    'reverse': dict(vocab='ckpt/tok/reverse', T=14, steps=2000, sep='<',
                     title='글자 여섯 개 뒤집기'),
-    'parity': dict(vocab='ckpt/tok/parity', T=19, steps=2500, sep='=',
+    'parity': dict(vocab='ckpt/tok/parity', T=19, steps=1600, sep='=',
                    title='열여섯 비트의 홀짝'),
 }
 

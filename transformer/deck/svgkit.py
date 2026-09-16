@@ -108,6 +108,19 @@ STYLE = """<style>
 .cell.d{fill:rgba(217,119,6,.16)}
 .cell.e{fill:rgba(37,80,127,.14)}
 .cell.f{fill:rgba(122,100,80,.12)}
+.box{fill:var(--panel,#fffcf4);stroke:var(--border,#dcc7a6);
+ stroke-width:1.2}
+.box.g1{stroke:var(--g1,#9a6a2f);fill:rgba(154,106,47,.12)}
+.box.g2{stroke:var(--g2,#25507f);fill:rgba(37,80,127,.12)}
+.box.g3{stroke:var(--g3,#2f7a52);fill:rgba(47,122,82,.12)}
+.box.g4{stroke:var(--g4,#7a4a8c);fill:rgba(122,74,140,.12)}
+.box.g5{stroke:var(--g5,#b8322a);fill:rgba(184,50,42,.12)}
+.box.g6{stroke:var(--g6,#5c6b73);fill:rgba(92,107,115,.12)}
+.box.off{fill:none;stroke-dasharray:3 2}
+.arw{stroke:var(--net,#8a7d70);stroke-width:1.4;fill:none}
+.arw.hot{stroke:var(--special,#25507f);stroke-width:2.2}
+.lbl{font-size:11px;fill:var(--muted,#7a6450)}
+.diag text{fill:var(--text,#2a1f16)}
 .tie{stroke:var(--net,#8a7d70);stroke-width:1;fill:none}
 .tie.hot{stroke:var(--special,#25507f);stroke-width:1.6}
 </style>"""
