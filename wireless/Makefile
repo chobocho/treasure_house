@@ -25,7 +25,7 @@ SRC_ALL     := $(SRC_PY) $(SRC_TOP)
 .DEFAULT_GOAL := help
 .PHONY: help test run record figs figs-png photos tables specs \
         bands bands-check claims-check width run-check \
-        figs-check \
+        figs-check photos-check \
         deck deck-verify \
         deck-slices deck-xref deck-check font font-check all clean
 
@@ -72,10 +72,11 @@ figs-png: figs          ## SVG 를 PNG 로 렌더해 본다 (.svgrender/)
 	done; echo '  .svgrender/ 에 PNG 를 냈다 — 열어서 볼 것'
 
 # 자유 라이선스가 아닌 사진은 여기서 멈춘다 (PLAN.md §0.9).
-photos:                 ## Commons 에서 사진 받기 (manifest.tsv 기준)
-	@test -f tools/fetch_photos.py \
-	  && $(PY) tools/fetch_photos.py \
-	  || echo '  tools/fetch_photos.py 아직 없다 (PLAN.md §5 7단계)'
+photos:                 ## Commons 에서 사진 받기 (wishlist.tsv 기준)
+	$(PY) tools/fetch_photos.py
+
+photos-check:           ## 실린 사진이 모두 자유 라이선스인지
+	$(PY) tools/fetch_photos.py --check
 
 tables:                 ## data/*.tsv → out/tbl_*.html
 	$(PY) deck/gen_tables.py
@@ -132,7 +133,8 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
-all: tables run-check figs-check deck deck-verify deck-slices \
+all: tables run-check figs-check photos-check deck deck-verify \
+     deck-slices \
      deck-xref \
      deck-check claims-check width font font-check  ## 전부
 
