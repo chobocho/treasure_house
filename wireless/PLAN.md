@@ -308,4 +308,39 @@ The user approved every recommendation below as-is. Each row is now a decision.
 
 ## Progress log (append only; newest at the bottom; one entry per commit)
 
-(empty — step 1 not started)
+### Step 1 — Skeleton (2026-09-16)
+
+- Copied `build_deck.py · verify_deck.py · check_slices.py · check_xref.py · check_deck.js ·
+  chunks.py · gen_glossary.py · base/{head,tail}.html` from `compress/`, and `width.py · rewrap.py`
+  from `compress/tools/`. Adapted: TARGET, `LANG_OF` (py/js/tsv/txt only), COVER_DIRS
+  (py/ tools/ data/), PARTIAL, budget from §6, HARD_CAP note.
+- **Three new directives implemented** in `build_deck.py`: `<!--TABLE file=out/x.html cap=…-->`,
+  `<!--PHOTO file=x.jpg cap=…-->` (base64 inline + credit line built from `photos/manifest.tsv`;
+  non-free licence = build error; >45 KB = build error), `<!--SPEC ts=… clause=… [org=gsma|itu]-->`
+  (badge; a number absent from `data/specs_*.tsv` is a build error; every use is logged to
+  `deck/spec_used.txt` for `make claims-check`).
+- Also added: SVG `viewBox` width > 360 is now a build error (§0.8); `verify_deck.py` re-checks
+  generated tables byte-for-byte against `out/` and refuses a photo with no credit line; its
+  name-leak wordlist no longer trips on the word "samsung" (this deck discusses SCH-100 and the
+  Samsung 6G white paper) — it now looks for the account/host forms only.
+- New tools: `deck/gen_tables.py` (data/*.tsv → out/tbl_*.html, `--check` for `make all`),
+  `deck/check_claims.py` (spec clause exists in `specs/*.txt`; every 4-digit year in section prose
+  is backed by `claims.md` or `data/`, with a unit-aware filter and `deck/years_ok.txt` escape).
+- `deck/base/head.html`: re-titled, teal "signal" palette, generation colours `--g1..--g6`
+  replacing the compression deck's five language colours, optim's CSS math kit copied verbatim,
+  plus new CSS for `.spec .unv figure.photo .gtbl .gen`.
+- `data/` seeded with header-only TSVs: timeline · specs_3gpp · specs_gsma · specs_itu · releases ·
+  generations · bands, plus `specs_fetch.txt`.
+- 29-slide skeleton: cover, part-0 cover, 왜 무선인가, 다른 교재와 다른 점, 읽는 법, 증거 등급,
+  기호와 단위 ×2, 데시벨, 수식 조판 보기, 한국이라는 실, 세대 한눈에 보기(placeholder),
+  지도, 접힌 화면에서 읽기 + 15 part covers.
+- `make all SKEL=1` green: 0 assembler errors, verify passes, slices 0, xref 15 links OK,
+  check_deck 11/11, claims-check 0, font embedded (DeckMono 30 KB) and font-check passes.
+  `make width` clean. No years used in the body yet, so `claims.md` is still the format template.
+- **Deviation from the plan, recorded:** step 1 asked for "30 slides"; there are 29. The part
+  covers are one slide each on purpose — the assembler treats a part with ≤ 1 slide as unwritten,
+  which is what makes the budget line ("남은 부 목표 합 2580장 · 예상 합계 2609장") meaningful.
+- Not done here (later steps): `run_all.py`, `tools/record.sh`, `tools/spec_text.py`,
+  `tools/fetch_photos.py`, `deck/gen_figs.py`, `deck/demos.js`. The Makefile targets exist and
+  print "아직 없다" until then. No index.html/README card yet, per step 1.
+
