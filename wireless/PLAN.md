@@ -344,3 +344,32 @@ The user approved every recommendation below as-is. Each row is now a decision.
   `tools/fetch_photos.py`, `deck/gen_figs.py`, `deck/demos.js`. The Makefile targets exist and
   print "아직 없다" until then. No index.html/README card yet, per step 1.
 
+
+### Step 2 — Research: claims.md + timeline/releases/generations (2026-09-16)
+
+- `data/timeline.tsv` **152 rows** (1865 Maxwell → 2026-09 Rel-21 schedule), every row with a
+  source column. `data/releases.tsv` 19 rows, `data/generations.tsv` 22 rows (one row per radio
+  standard, not per generation — 1G AMPS/NMT/TACS, 2G GSM/GPRS/EDGE/IS-95/D-AMPS/PDC, 3G
+  WCDMA/HSDPA/HSPA+/1x/EV-DO/TD-SCDMA, 4G LTE/LTE-A/LTE-A Pro/WiMAX, 5G FR1/FR2, 6G targets).
+- **Freeze dates taken from 3GPP itself, not from memory.** `tools/fetch.sh` pulled
+  `/specifications-technologies/releases` (the Releases table gives Rel-15..20 to the day) and the
+  `Description_Releases/Rel-08..14_description*.zip` docs, whose "Freeze Dates" tables gave
+  Rel-8 (S2 2008-06 / S3 2008-12), Rel-9, Rel-10 ("frozen March 2011, protocols stable three
+  months later"), Rel-11, Rel-12. Rel-99..Rel-7 are asserted at month precision only and
+  claims.md says so.
+- **Written this step (not in the plan's step list, but needed here):** `tools/spec_text.py` —
+  TS/TR zip → plain text with `clause<TAB>title` lines, stdlib only (docx = zip + word/document.xml;
+  a crude fallback for the pre-2005 binary .doc). It already earned its keep reading the release
+  descriptions. `make specs` now works.
+- 2025+ facts re-verified with WebSearch on 2026-09-16 and stamped "2026-09 기준": Rel-19 frozen
+  2025-12-12 (Baltimore), Rel-20 6G study started 2025-09 with Stage-1 frozen 2025-06, Rel-21
+  runs 2027-03→2028-12, T-Satellite commercial 2025-07-23, WRC-27 AI 1.7 candidate bands.
+- `deck/claims.md` has 15 rows: the data files' own provenance, the 2025+ stamped items, and the
+  places this subject is usually got wrong (first SMS is 1992-12-03 not 1991; DynaTAC FCC approval
+  is 1983-09 not 1983-03; NMT started in Saudi Arabia a month before the Nordics; the 1901
+  transatlantic reception and the 1906 Brant Rock broadcast both rest on thin evidence — the deck
+  records the weakness instead of dropping the event).
+- `deck/gen_tables.py` gained two views (`gen_glance.html`, `releases_short.html`); part 0's
+  "세대 한눈에 보기" placeholder is now a real `<!--TABLE-->`, so the directive is proven end to end
+  (verify_deck compares the embedded table byte-for-byte with `out/`).
+- `make all SKEL=1` green — 29 slides, 112 KB before font, 157 KB after.

@@ -30,6 +30,11 @@ OUT = os.path.join(BASE, 'out')
 # 거르개는 (칸 이름, 값) — 그 칸이 그 값인 행만 싣는다. 없으면 전부.
 VIEWS = [
     # PLAN.md §5 8단계에서 부를 쓸 때마다 한 줄씩 는다.
+    ('gen_glance.html', 'generations.tsv',
+     ['generation', 'standard', 'access', 'bandwidth', 'peak_rate',
+      'first_launch'], None),
+    ('releases_short.html', 'releases.tsv',
+     ['release', 'freeze', 'features'], None),
 ]
 
 # 이 칸은 표에 글자로 싣지 않고 '출처' 링크로 바꾼다.
