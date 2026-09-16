@@ -14,5 +14,806 @@
 <li>임베딩 조회와 드롭아웃</li>
 <li>순수 파이썬의 속도 — 느림이 알려 주는 비용</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+</article>
+
+<article class="card" id="p4-ch1"><p class="chnum">1장</p><h2>행렬곱과 그 역전파</h2><p class="chsub">모든 층의 뼈대 — 세 겹 루프와 두 개의 전치</p></article>
+
+<article class="card" id="p4-matmul-shape">
+<h3>행렬곱 — 모양부터 맞춥니다</h3>
+<p>이 덱은 입력을 <b>행 벡터</b>로 둡니다(SPEC §2). 토큰 <span class="mi"><i>n</i></span> 개의
+폭 <span class="mi"><i>m</i></span> 표현은 <span class="mi"><span class="vec">X</span> ∈ ℝ<sup><i>n</i>×<i>m</i></sup></span>
+이고, 선형층은 오른쪽에 가중치를 곱합니다.</p>
+<div class="defn"><span class="h">정의 — 행렬곱</span>
+<div class="eq"><span class="vec">Y</span> = <span class="vec">X</span><span class="vec">W</span>,
+&nbsp; <i>Y</i><sub><i>ij</i></sub> = <span class="oplim"><span class="up"><i>m</i></span><span class="op">∑</span><span class="dn"><i>k</i>=1</span></span><i>X</i><sub><i>ik</i></sub><i>W</i><sub><i>kj</i></sub></div>
+<span class="mi"><span class="vec">X</span></span> 가 <i>n</i>×<i>m</i>, <span class="mi"><span class="vec">W</span></span> 가
+<i>m</i>×<i>p</i> 이면 <span class="mi"><span class="vec">Y</span></span> 는 <i>n</i>×<i>p</i> 입니다.
+안쪽 두 수가 같아야 곱할 수 있습니다.</div>
+<ul>
+<li>행 하나가 토큰 하나이므로, 층을 지나도 "행 = 토큰" 이 유지됩니다.</li>
+<li>저장은 행 우선입니다. <span class="mi">(<i>r</i>, <i>c</i>)</span> 칸은 1차원 리스트의
+<span class="mi"><i>r</i>·열수 + <i>c</i></span> 번째입니다.</li>
+<li>앞에 배치 축이 더 붙어도(<i>B</i>×<i>n</i>×<i>m</i>) 마지막 두 축끼리만 곱합니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-matmul-hand">
+<h3>손으로 셀 수 있는 크기에서 먼저 확인</h3>
+<p>3×2 와 2×3 을 곱하면 3×3 입니다. 첫 행은 <code>[1, 2]</code> 와 둘째 행렬의 두 행을
+각각 1배·2배 해서 더한 것 — 행렬곱의 "행 읽기" 입니다.</p>
+<!--CODE file=py/transformerlib/tests/test_tensor.py sym=test_matmul_by_hand note=손으로 계산한 답과 견준다-->
+<p>행 읽기로 보면 <span class="mi"><i>Y</i></span> 의 <i>i</i> 행은
+<span class="mi"><i>W</i></span> 의 행들을 <span class="mi"><i>X</i></span> 의 <i>i</i> 행 값으로
+가중해 더한 것입니다. 곧 볼 i-k-j 루프가 정확히 이 읽기를 따릅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-matmul-forward">
+<h3>tensor.matmul — 순전파</h3>
+<!--CODE file=py/transformerlib/tensor.py lines=269-297 note=배치 축은 퍼지고, 루프는 i-k-j 차례-->
+<ul>
+<li><code>ma</code>·<code>mb</code> 는 배치 번호 <code>t</code> 가 두 입력의 몇 번째 행렬을 읽을지 적은 표입니다.
+한쪽이 2차원이면 모든 <code>t</code> 가 같은 행렬을 가리킵니다.</li>
+<li><code>MULTS</code> 는 실제로 한 곱셈 수를 셉니다. 7부의 FLOPs 식이 이 계수기와 맞는지 시험합니다.</li>
+<li>가장 안쪽 줄 <code>O[ro + j] += aik * B[rb + j]</code> 가 행렬곱의 전부입니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-loop-order">
+<h3>루프 차례가 왜 중요한가 — i-j-k 와 i-k-j</h3>
+<p>세 겹 루프의 차례를 바꿔도 <span class="mi"><i>Y</i><sub><i>ij</i></sub></span> 에 더해지는 항은 같습니다.
+다른 것은 <b>메모리를 읽는 순서</b>입니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>차례</th><th>가장 안쪽 루프가 도는 것</th><th>B 를 읽는 모양</th></tr>
+<tr><td>i-j-k (교과서)</td><td>k — A 의 행 하나와 B 의 <b>열</b> 하나</td>
+<td>행 우선 배열에서 열을 읽으면 한 번에 <i>p</i> 칸씩 건너뜁니다</td></tr>
+<tr><td>i-k-j (이 덱)</td><td>j — B 의 <b>행</b> 하나와 출력의 행 하나</td>
+<td>B 와 출력을 둘 다 앞에서부터 한 칸씩 읽고 씁니다</td></tr>
+</table></div>
+<p>CPU 캐시는 방금 읽은 주소의 이웃을 함께 올려 둡니다. 그래서 한 칸씩 나란히 읽는
+i-k-j 가 캐시를 덜 놓칩니다. 답은 같고 걸리는 시간만 다릅니다.</p>
+<div class="note"><b>얼마나 빨라지나</b> — 기계마다 다릅니다. 이 덱은 그 숫자를
+<a href="#p9">9부</a>의 벤치 표 한 곳에만 둡니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-matmul-c-loops">
+<h3>C 에서 두 차례를 나란히</h3>
+<!--CODE file=c/tensor.c sym=tfs_matmul_ijk..tfs_matmul_ikj note=같은 곱, 다른 읽기 순서-->
+<p>i-k-j 판은 출력에 <b>더해 쌓기</b> 때문에 먼저 <code>memset</code> 으로 0 을 채웁니다.
+i-j-k 판은 지역 변수 <code>s</code> 에 쌓아 한 번에 씁니다.
+<code>bk</code> 는 B 의 k 행 첫 칸을 가리키는 포인터라, 안쪽 루프가 곱셈 한 번과 덧셈 한 번만 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-matmul-bitwise">
+<h3>세 차례의 답은 비트까지 같다</h3>
+<p>부동소수 덧셈은 결합법칙이 성립하지 않습니다. 그래도 세 판은 <b>한 칸</b>
+<span class="mi">(<i>i</i>, <i>j</i>)</span> 에 <span class="mi"><i>k</i></span> 를 작은 것부터 더한다는 점이 같습니다.
+그래서 반올림까지 똑같이 일어납니다.</p>
+<!--CODE file=c/tests/test_tensor.c lines=35-62 note=상대오차가 아니라 memcmp 로 본다-->
+<p class="cap">모양을 일부러 어긋나게(67×45 · 45×53) 잡아 행과 열을 헷갈린 구현이 통과하지 못하게 했습니다.
+블록 크기도 1 부터 넷씩 곱해 가며 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-matmul-grad-derive">
+<h3>행렬곱의 역전파 — 첨자로 유도</h3>
+<p>손실 <span class="mi">ℓ</span> 이 스칼라이고 윗기울기
+<span class="mi"><span class="vec">G</span> = ∂ℓ/∂<span class="vec">Y</span></span> (<i>n</i>×<i>p</i>) 를 받았다고 합시다.</p>
+<div class="thm"><span class="h">정리 — 행렬곱의 기울기</span>
+<div class="eq">∂ℓ/∂<span class="vec">A</span> = <span class="vec">G</span><span class="vec">B</span><sup>⊤</sup>,
+&nbsp; ∂ℓ/∂<span class="vec">B</span> = <span class="vec">A</span><sup>⊤</sup><span class="vec">G</span></div></div>
+<div class="proof"><span class="h">증명</span>
+<p><i>Y</i><sub><i>ij</i></sub> = ∑<sub><i>k</i></sub> <i>A</i><sub><i>ik</i></sub><i>B</i><sub><i>kj</i></sub> 에서
+<i>A</i><sub><i>ik</i></sub> 는 <i>i</i> 행의 모든 <i>j</i> 칸에 <i>B</i><sub><i>kj</i></sub> 배로 들어갑니다.
+연쇄법칙으로 모으면 ∂ℓ/∂<i>A</i><sub><i>ik</i></sub> = ∑<sub><i>j</i></sub> <i>G</i><sub><i>ij</i></sub><i>B</i><sub><i>kj</i></sub>
+= (<span class="vec">G</span><span class="vec">B</span><sup>⊤</sup>)<sub><i>ik</i></sub>.
+같은 방법으로 ∂ℓ/∂<i>B</i><sub><i>kj</i></sub> = ∑<sub><i>i</i></sub> <i>A</i><sub><i>ik</i></sub><i>G</i><sub><i>ij</i></sub>
+= (<span class="vec">A</span><sup>⊤</sup><span class="vec">G</span>)<sub><i>kj</i></sub>.</p></div>
+<p class="cap">모양으로 검산합니다: <i>n</i>×<i>p</i> 곱하기 <i>p</i>×<i>m</i> 은 <i>n</i>×<i>m</i> — <span class="vec">A</span> 의 모양입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-matmul-backward">
+<h3>tensor.matmul — 역전파</h3>
+<!--CODE file=py/transformerlib/tensor.py lines=299-317 note=전치 행렬을 만들지 않고 같은 루프로-->
+<ul>
+<li><code>s</code> 는 <span class="mi">∑<sub><i>j</i></sub> <i>G</i><sub><i>ij</i></sub><i>B</i><sub><i>kj</i></sub></span> — 앞 장의 첫 식을 한 칸씩 계산한 것입니다.</li>
+<li><code>gb[rb + j] += aik * g[ro + j]</code> 는 둘째 식입니다. 전치 행렬을 따로 만들지 않습니다.</li>
+<li>모두 <code>+=</code> 입니다. 같은 텐서가 그래프의 두 곳에 쓰이면 두 몫이 더해져야 하기 때문입니다(<a href="#p3">3부</a>).</li>
+<li>입력이 기울기를 원하지 않으면(<code>None</code>) 그 쪽 루프를 건너뜁니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-matmul-batch">
+<h3>배치 행렬곱 — 퍼진 축의 기울기는 더한다</h3>
+<p>(2, 3, 4) 와 (4, 5) 를 곱하면 뒤의 행렬 하나를 배치 두 개가 함께 씁니다.
+그러면 그 행렬의 기울기는 두 배치에서 온 몫의 <b>합</b>이어야 합니다.</p>
+<!--CODE file=py/transformerlib/tests/test_tensor.py sym=test_batched_matmul note=기울기를 중심 차분과 견준다-->
+<p>순전파 코드에서 <code>mb[t]</code> 가 모든 <code>t</code> 에 대해 같은 자리를 가리키므로,
+역전파의 <code>gb[...] +=</code> 가 따로 손대지 않아도 배치를 따라 더해 줍니다.
+브로드캐스팅의 역전파가 "늘어난 축으로 더하기" 인 까닭은 <a href="#p3">3부</a>에서 보았습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-matmul-cost">
+<h3>곱셈 수로 세는 비용</h3>
+<p>행렬곱 한 번은 곱셈을 정확히 <span class="mi"><i>n</i>·<i>m</i>·<i>p</i></span> 번(배치가 있으면 그 곱) 합니다.
+역전파는 두 입력의 기울기를 각각 같은 수만큼 계산하므로 순전파의 두 배입니다.</p>
+<!--CODE file=py/transformerlib/tensor.py lines=25-27 note=순전파 곱셈 계수기-->
+<div class="key"><b>왜 세는가</b> — 모델 크기에서 학습 비용을 어림하는 "토큰당 약 6<i>N</i>" 규칙은
+순전파 2<i>N</i> + 역전파 4<i>N</i> 에서 나옵니다. 역전파가 순전파의 두 배라는 비율이 바로 위에서 센 "기울기 둘" 입니다.
+<a href="#p7">7부</a>가 이 계수기로 식을 확인합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-ch2"><p class="chnum">2장</p><h2>안정한 소프트맥스</h2><p class="chsub">로짓을 확률로 — 넘치지 않게, 야코비안은 만들지 않고</p></article>
+
+<article class="card" id="p4-softmax-def">
+<h3>소프트맥스 — 정의와 성질</h3>
+<div class="defn"><span class="h">정의 — 소프트맥스</span>
+<div class="eq"><i>p</i><sub><i>i</i></sub> = <span class="frac"><span class="num"><i>e</i><sup><i>z</i><sub><i>i</i></sub></sup></span><span class="den">∑<sub><i>j</i></sub> <i>e</i><sup><i>z</i><sub><i>j</i></sub></sup></span></span></div>
+</div>
+<ul>
+<li>모든 <span class="mi"><i>p</i><sub><i>i</i></sub></span> 가 양수이고 합이 1 — 확률 분포입니다.</li>
+<li>순서를 지킵니다. 로짓이 큰 칸이 확률도 큽니다.</li>
+<li><b>모든 로짓에 같은 수를 더해도 결과가 같습니다.</b> 안정한 계산이 이 성질 하나에 기댑니다.</li>
+<li>행마다 따로 계산합니다. 텐서의 마지막 축이 한 행입니다.</li>
+</ul>
+<p class="cap">소프트맥스와 로그합지수의 수학은 <a href="#p2">2부</a>에서 준비했습니다. 여기서는 코드와 기울기입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-softmax-overflow">
+<h3>그냥 exp 하면 넘친다</h3>
+<!--OUT file=ops.txt sec=1 note=같은 간격의 로짓 세 벌-->
+<p>세 행의 로짓은 간격이 같으므로 확률도 같아야 합니다. 위 표의 셋째 행에서
+"그냥 exp" 는 double 의 범위를 넘어 계산을 못 했고, 최댓값을 뺀 판은 첫 행과 같은 답을 냈습니다.</p>
+<p>학습 중의 로짓은 대개 크지 않지만, 한 번이라도 넘치면 <code>inf/inf = nan</code> 이 되어
+그 뒤의 모든 가중치를 망칩니다. 그래서 늘 빼고 계산합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-softmax-shift">
+<h3>최댓값을 빼도 되는 까닭</h3>
+<div class="proof"><span class="h">증명 — 이동 불변</span>
+<p>아무 상수 <i>c</i> 에 대해</p>
+<div class="eq"><span class="frac"><span class="num"><i>e</i><sup><i>z</i><sub><i>i</i></sub> − <i>c</i></sup></span><span class="den">∑<sub><i>j</i></sub> <i>e</i><sup><i>z</i><sub><i>j</i></sub> − <i>c</i></sup></span></span>
+= <span class="frac"><span class="num"><i>e</i><sup>−<i>c</i></sup> <i>e</i><sup><i>z</i><sub><i>i</i></sub></sup></span><span class="den"><i>e</i><sup>−<i>c</i></sup> ∑<sub><i>j</i></sub> <i>e</i><sup><i>z</i><sub><i>j</i></sub></sup></span></span>
+= <i>p</i><sub><i>i</i></sub></div>
+<p>분자·분모의 <i>e</i><sup>−<i>c</i></sup> 가 약분됩니다.</p></div>
+<p><span class="mi"><i>c</i> = max <i>z</i></span> 로 잡으면 모든 지수가 0 이하가 되어 각 항이
+(0, 1] 안에 들고, 가장 큰 항은 정확히 1 입니다. 분모는 1 이상 <i>n</i> 이하 — 넘칠 수가 없습니다.
+아주 작은 항이 0 으로 내려앉는 것은 괜찮습니다. 그 칸의 참 확률도 그만큼 작기 때문입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-softmax-row">
+<h3>_softmax_row — 한 행의 소프트맥스</h3>
+<!--CODE file=py/transformerlib/ops.py sym=_softmax_row note=최댓값을 빼고 fsum 으로 정규화-->
+<ul>
+<li><code>math.fsum</code> 은 반올림 오차 없이 더하는 합입니다. 참조 구현은 가능한 한 정확해야
+C 와의 차이가 C 쪽 오차로만 읽힙니다.</li>
+<li>행 전체가 −∞ 이면 확률을 정의할 수 없으므로 조용히 nan 을 내지 않고 멈춥니다.</li>
+<li><code>off</code> 와 <code>n</code> 을 받는 모양이라, 인과 마스크(6장)가 같은 함수를 행의 앞부분에만 쓸 수 있습니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-softmax-jacobian">
+<h3>소프트맥스의 야코비안</h3>
+<div class="thm"><span class="h">정리</span>
+<div class="eq"><span class="frac"><span class="num">∂<i>p</i><sub><i>i</i></sub></span><span class="den">∂<i>z</i><sub><i>j</i></sub></span></span>
+= <i>p</i><sub><i>i</i></sub>(<i>δ</i><sub><i>ij</i></sub> − <i>p</i><sub><i>j</i></sub>),
+&nbsp; 곧 &nbsp; <span class="vec">J</span> = <b class="fn">diag</b>(<span class="vec">p</span>) − <span class="vec">p</span><span class="vec">p</span><sup>⊤</sup></div></div>
+<div class="proof"><span class="h">증명</span>
+<p><i>S</i> = ∑<sub><i>k</i></sub> <i>e</i><sup><i>z</i><sub><i>k</i></sub></sup> 라 두면 <i>p</i><sub><i>i</i></sub> = <i>e</i><sup><i>z</i><sub><i>i</i></sub></sup>/<i>S</i> 이고
+∂<i>S</i>/∂<i>z</i><sub><i>j</i></sub> = <i>e</i><sup><i>z</i><sub><i>j</i></sub></sup> 입니다. 몫의 미분법으로</p>
+<div class="eq"><span class="frac"><span class="num">∂<i>p</i><sub><i>i</i></sub></span><span class="den">∂<i>z</i><sub><i>j</i></sub></span></span>
+= <span class="frac"><span class="num"><i>δ</i><sub><i>ij</i></sub><i>e</i><sup><i>z</i><sub><i>i</i></sub></sup><i>S</i> − <i>e</i><sup><i>z</i><sub><i>i</i></sub></sup><i>e</i><sup><i>z</i><sub><i>j</i></sub></sup></span><span class="den"><i>S</i><sup>2</sup></span></span>
+= <i>p</i><sub><i>i</i></sub><i>δ</i><sub><i>ij</i></sub> − <i>p</i><sub><i>i</i></sub><i>p</i><sub><i>j</i></sub></div></div>
+<p class="cap">야코비안은 대칭입니다. 대각은 <i>p</i><sub><i>i</i></sub>(1 − <i>p</i><sub><i>i</i></sub>) 로 양수, 나머지는 음수 —
+한 칸이 오르면 다른 칸들이 내려가야 합이 1 로 남습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-softmax-vjp">
+<h3>야코비안을 만들지 않는 역전파</h3>
+<p>역전파는 야코비안 전체가 아니라 <b>윗기울기와의 곱</b>만 필요합니다.
+<span class="mi"><span class="vec">g</span> = ∂ℓ/∂<span class="vec">p</span></span> 를 받으면</p>
+<div class="eq"><span class="frac"><span class="num">∂ℓ</span><span class="den">∂<i>z</i><sub><i>j</i></sub></span></span>
+= ∑<sub><i>i</i></sub> <i>g</i><sub><i>i</i></sub><i>p</i><sub><i>i</i></sub>(<i>δ</i><sub><i>ij</i></sub> − <i>p</i><sub><i>j</i></sub>)
+= <i>p</i><sub><i>j</i></sub>(<i>g</i><sub><i>j</i></sub> − ⟨<span class="vec">g</span>, <span class="vec">p</span>⟩)</div>
+<ul>
+<li>내적 ⟨<span class="mi"><span class="vec">g</span>, <span class="vec">p</span></span>⟩ 한 번과 칸마다 곱셈 한 번 — 시간 <span class="mi"><i>O</i>(<i>n</i>)</span>, 추가 공간 <span class="mi"><i>O</i>(1)</span>.</li>
+<li><i>n</i>×<i>n</i> 야코비안을 만들면 <span class="mi"><i>O</i>(<i>n</i><sup>2</sup>)</span> 입니다. 어휘 크기의 로짓에서는 감당할 수 없습니다.</li>
+<li>결과를 모두 더하면 <span class="mi">∑<i>p</i><sub><i>j</i></sub><i>g</i><sub><i>j</i></sub> − ⟨<span class="vec">g</span>,<span class="vec">p</span>⟩·∑<i>p</i><sub><i>j</i></sub> = 0</span>
+입니다. 모든 로짓을 같이 올리는 방향으로는 기울기가 없다 — 이동 불변과 같은 이야기입니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-softmax-code">
+<h3>ops.softmax — 순전파와 역전파</h3>
+<!--CODE file=py/transformerlib/ops.py sym=softmax note=역전파는 내적 한 번-->
+<p>역전파가 쓰는 것은 순전파에서 계산해 둔 <code>P</code> 뿐입니다. 입력 로짓은 다시 보지 않습니다.
+<code>back</code> 안의 두 줄이 앞 장의 식 <span class="mi"><i>p</i><sub><i>j</i></sub>(<i>g</i><sub><i>j</i></sub> − ⟨<span class="vec">g</span>, <span class="vec">p</span>⟩)</span> 그대로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-softmax-jacobian-test">
+<h3>증인 — 야코비안을 차분과 견준다</h3>
+<!--CODE file=py/transformerlib/ops.py sym=softmax_jacobian note=닫힌 식을 그대로 옮긴 것-->
+<!--CODE file=py/transformerlib/tests/test_ops.py sym=test_jacobian_is_diag_minus_outer note=열마다 중심 차분-->
+<p>입력 한 칸을 <span class="mi">±<i>h</i></span> 로 흔들어 출력 전체가 얼마나 움직이는지 재면 야코비안의 한 열이 나옵니다.
+네 열을 모두 재서 닫힌 식과 소수 여덟째 자리까지 맞는지 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-log-softmax">
+<h3>로그소프트맥스 — 로그를 나중에 씌우지 않는다</h3>
+<p><span class="mi">log <i>p</i><sub><i>i</i></sub> = <i>z</i><sub><i>i</i></sub> − <b class="fn">lse</b>(<span class="vec">z</span>)</span> 로 바로 계산합니다.
+확률이 아주 작아 0 으로 내려앉으면 <code>log 0 = −∞</code> 가 되지만, 이 식은 유한한 값을 줍니다.</p>
+<!--CODE file=py/transformerlib/ops.py sym=log_softmax note=로그합지수 + 역전파 g − p·Σg-->
+<p class="cap">역전파: ∂ log <i>p</i><sub><i>i</i></sub>/∂<i>z</i><sub><i>j</i></sub> = <i>δ</i><sub><i>ij</i></sub> − <i>p</i><sub><i>j</i></sub> 이므로
+∂ℓ/∂<i>z</i><sub><i>j</i></sub> = <i>g</i><sub><i>j</i></sub> − <i>p</i><sub><i>j</i></sub>∑<sub><i>i</i></sub><i>g</i><sub><i>i</i></sub>.
+<code>test_log_softmax_matches_log_of_softmax</code> 가 두 계산이 1e-14 안에서 같음을,
+<code>test_backward</code> 가 기울기를 차분과 견줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p4-quiz-2" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 소프트맥스 역전파의 결과 벡터 <span class="mi">∂ℓ/∂<span class="vec">z</span></span> 는 원소의 합이 늘 0 입니다. 이것이 "로짓 전체에 같은 수를 더해도 확률이 같다" 는 성질과 어떻게 이어지나요? 그리고 i-k-j 행렬곱이 i-j-k 와 비트까지 같은 답을 내는 까닭은?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 모든 로짓을 같은 양만큼 움직이는 방향은 벡터 (1, 1, …, 1) 입니다. 그 방향으로 가도 손실이 안 변하므로,
+기울기와 그 방향의 내적 — 곧 기울기 원소의 합 — 은 0 이어야 합니다.
+행렬곱은 두 차례 모두 한 칸 (i, j) 에 k 를 작은 것부터 더합니다. 덧셈의 순서가 같으니 반올림도 같이 일어나 비트까지 같습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ch3"><p class="chnum">3장</p><h2>교차엔트로피를 한 몸으로</h2><p class="chsub">로그소프트맥스와 합치면 로짓 기울기가 (p − y)/N 한 줄이 된다</p></article>
+
+<article class="card" id="p4-ce-def">
+<h3>교차엔트로피 손실</h3>
+<div class="defn"><span class="h">정의 — 평균 음의 로그 가능도</span>
+<div class="eq">ℓ = −<span class="frac"><span class="num">1</span><span class="den"><i>N</i></span></span>
+<span class="oplim"><span class="up"><i>N</i></span><span class="op">∑</span><span class="dn"><i>r</i>=1</span></span>
+log <i>p</i><sub><i>r</i>, <i>t</i><sub><i>r</i></sub></sub></div>
+<i>r</i> 행의 정답이 <i>t</i><sub><i>r</i></sub> 이고, <i>p</i><sub><i>r</i>,·</sub> 는 그 행의 로짓에 소프트맥스를 한 것입니다.</div>
+<ul>
+<li>언어 모델에서 한 "행" 은 (배치, 위치) 하나입니다. SPEC §3.3 은 모든 (배치, 위치) 의 평균으로 정합니다.</li>
+<li>정답 확률이 1 이면 0, 작아질수록 끝없이 커집니다.</li>
+<li>정답을 원-핫 벡터 <span class="mi"><span class="vec">y</span></span> 로 쓰면 한 행의 손실은
+<span class="mi">−∑<sub><i>j</i></sub> <i>y</i><sub><i>j</i></sub> log <i>p</i><sub><i>j</i></sub></span> — 교차엔트로피라는 이름의 뿌리입니다(<a href="#p2">2부</a>).</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ce-derive">
+<h3>유도 — 로짓 기울기는 p − y</h3>
+<div class="thm"><span class="h">정리 — 교차엔트로피의 로짓 기울기</span>
+<div class="eq"><span class="frac"><span class="num">∂ℓ</span><span class="den">∂<i>z</i><sub><i>rj</i></sub></span></span>
+= <span class="frac"><span class="num"><i>p</i><sub><i>rj</i></sub> − <i>y</i><sub><i>rj</i></sub></span><span class="den"><i>N</i></span></span></div></div>
+<div class="proof"><span class="h">증명</span>
+<p>한 행만 봅니다. −log <i>p</i><sub><i>t</i></sub> = −<i>z</i><sub><i>t</i></sub> + <b class="fn">lse</b>(<span class="vec">z</span>) 이고,
+<b class="fn">lse</b>(<span class="vec">z</span>) = log ∑<sub><i>k</i></sub> <i>e</i><sup><i>z</i><sub><i>k</i></sub></sup> 의 미분은</p>
+<div class="eq"><span class="frac"><span class="num">∂ <b class="fn">lse</b></span><span class="den">∂<i>z</i><sub><i>j</i></sub></span></span>
+= <span class="frac"><span class="num"><i>e</i><sup><i>z</i><sub><i>j</i></sub></sup></span><span class="den">∑<sub><i>k</i></sub> <i>e</i><sup><i>z</i><sub><i>k</i></sub></sup></span></span> = <i>p</i><sub><i>j</i></sub></div>
+<p>입니다. −<i>z</i><sub><i>t</i></sub> 의 미분은 <i>j</i> = <i>t</i> 일 때만 −1, 곧 −<i>y</i><sub><i>j</i></sub> 입니다.
+더하면 <i>p</i><sub><i>j</i></sub> − <i>y</i><sub><i>j</i></sub>, 행 <i>N</i> 개의 평균이므로 1/<i>N</i> 이 붙습니다.</p></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ce-why-fuse">
+<h3>왜 두 연산을 합치나</h3>
+<p>소프트맥스 → log → 정답 칸 고르기를 따로 짜도 기울기는 같습니다. 하지만 길을 돌아갑니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>따로 짠 사슬</th><th>합친 연산</th></tr>
+<tr><td>log 의 역전파</td><td>정답 칸에 −1/(<i>N</i>·<i>p</i><sub><i>t</i></sub>) — <i>p</i><sub><i>t</i></sub> 가 작으면 거대한 수</td><td>없음</td></tr>
+<tr><td>소프트맥스 역전파</td><td>그 거대한 수에 다시 <i>p</i> 를 곱해 상쇄</td><td>없음</td></tr>
+<tr><td>로짓 기울기</td><td>상쇄 뒤에 (<i>p</i> − <i>y</i>)/<i>N</i></td><td>처음부터 (<i>p</i> − <i>y</i>)/<i>N</i></td></tr>
+<tr><td>순전파 값</td><td>log(<i>p</i><sub><i>t</i></sub>) — <i>p</i><sub><i>t</i></sub> 가 0 으로 내려앉으면 −∞</td><td><b class="fn">lse</b> − <i>z</i><sub><i>t</i></sub> — 늘 유한</td></tr>
+</table></div>
+<p>큰 수로 나눴다가 다시 곱하는 길은 반올림 오차가 커지고, <i>p</i><sub><i>t</i></sub> = 0 이면 0 으로 나누게 됩니다.
+합친 연산에는 나눗셈이 없습니다. C 커널도 같은 모양이라 두 구현을 한 줄씩 맞대어 볼 수 있습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ce-code">
+<h3>ops.cross_entropy</h3>
+<!--CODE file=py/transformerlib/ops.py sym=cross_entropy note=손실은 lse − z[정답], 기울기는 (p − y)·scale-->
+<ul>
+<li>손실은 스칼라(모양 <code>()</code>)이므로 윗기울기도 <code>out.grad[0]</code> 하나입니다.
+보통 1 이지만, 손실에 무엇을 곱해 더하면 그 배율이 여기로 들어옵니다.</li>
+<li>정답이 어휘 밖이면 조용히 틀린 칸을 읽지 않고 멈춥니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-ce-capture">
+<h3>눈으로 보는 p − y</h3>
+<!--OUT file=ops.txt sec=3 note=로짓 네 칸, 정답은 칸 1-->
+<p>위 표의 "p − y" 열과 "역전파한 기울기" 열이 여섯 자리까지 같습니다.
+음수는 정답 칸 하나뿐입니다 — 경사를 내려가면 정답 로짓은 오르고 나머지는 내려갑니다.
+오답 칸의 기울기는 그 칸의 확률 그대로라, 가장 그럴듯한 오답이 가장 세게 눌립니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-ce-test">
+<h3>증인 — 칸마다 (p − y)/N</h3>
+<!--CODE file=py/transformerlib/tests/test_ops.py sym=test_gradient_is_p_minus_y note=역전파와 닫힌 식을 15자리까지-->
+<p>차분이 아니라 <b>닫힌 식</b>과 견줍니다. 합친 연산이 실제로 그 한 줄을 계산하므로
+소수 열다섯째 자리까지 같아야 합니다. 차분과의 비교는 <code>test_backward_by_difference</code> 가 따로 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-ce-initial-loss">
+<h3>처음 손실은 ln V</h3>
+<!--OUT file=ops.txt sec=4 note=로짓이 모두 0 인 행 하나-->
+<p>로짓이 모두 같으면 <span class="mi"><i>p</i><sub><i>j</i></sub> = 1/<i>V</i></span> 이고 손실은
+<span class="mi">−log(1/<i>V</i>) = ln <i>V</i></span> 입니다. 위 표의 두 열이 그 식과 일치합니다.</p>
+<div class="key"><b>쓸모</b> — 초기화가 작으면 로짓이 0 근처에 모이므로 학습 첫 스텝의 손실은 ln <i>V</i> 가까이 나와야 합니다.
+훨씬 크면 초기화가 너무 크거나 무언가 틀렸습니다. <a href="#p8">8부</a>의 학습 곡선을 이 값에서 읽기 시작합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-ce-grad-shape">
+<h3>p − y 가 학습에 좋은 까닭</h3>
+<ul>
+<li><b>크기가 스스로 조절됩니다.</b> 정답 칸의 기울기는 <span class="mi"><i>p</i><sub><i>t</i></sub> − 1</span> —
+틀렸을수록(<i>p</i><sub><i>t</i></sub> → 0) −1 에 가깝고, 맞힐수록 0 에 가깝습니다.</li>
+<li><b>유계입니다.</b> 모든 칸이 −1 과 1 사이라, 한 토큰이 기울기를 폭주시키지 못합니다.</li>
+<li><b>합이 0 입니다.</b> 확률은 늘 합이 1 이므로 한쪽을 올리면 다른 쪽을 내리는 몫만 전달됩니다.</li>
+<li><b>1/<i>N</i> 이 붙습니다.</b> 손실이 평균이므로 배치나 문맥을 늘려도 기울기의 크기는 비슷하게 남습니다.</li>
+</ul>
+<p class="cap">반면 소프트맥스 뒤에 제곱오차를 쓰면 기울기에 <i>p</i>(1 − <i>p</i>) 꼴이 곱해져, 확신하며 틀린 칸에서 기울기가 거의 0 이 됩니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ch4"><p class="chnum">4장</p><h2>레이어놈</h2><p class="chsub">순전파 세 줄, 역전파 유도 한 쪽</p></article>
+
+<article class="card" id="p4-ln-def">
+<h3>레이어놈 — 토큰 하나의 폭 방향으로 정규화</h3>
+<div class="defn"><span class="h">정의 — LayerNorm (SPEC §3.3)</span>
+<div class="eq"><i>μ</i> = <span class="frac"><span class="num">1</span><span class="den"><i>n</i></span></span>∑<sub><i>j</i></sub> <i>x</i><sub><i>j</i></sub>,
+&nbsp; <i>σ</i> = <span class="sqrt">√<span class="rad"><span class="frac"><span class="num">1</span><span class="den"><i>n</i></span></span>∑<sub><i>j</i></sub>(<i>x</i><sub><i>j</i></sub> − <i>μ</i>)<sup>2</sup> + <i>ε</i></span></span></div>
+<div class="eq"><i>x̂</i><sub><i>j</i></sub> = (<i>x</i><sub><i>j</i></sub> − <i>μ</i>)/<i>σ</i>,
+&nbsp; <i>y</i><sub><i>j</i></sub> = <i>g</i><sub><i>j</i></sub><i>x̂</i><sub><i>j</i></sub> + <i>b</i><sub><i>j</i></sub></div>
+<i>ε</i> = 1e-5 이고, <i>g</i>·<i>b</i> 는 폭 <i>n</i> 짜리 학습 파라미터입니다.</div>
+<p>한 층의 모든 단위가 같은 <span class="mi"><i>μ</i></span>·<span class="mi"><i>σ</i></span> 를 나눠 쓰고,
+훈련 사례(여기서는 토큰)마다 그 값이 따로 계산됩니다 <!--CITE key=ba2016 sec=3-->.
+배치 안의 다른 토큰을 보지 않으므로 배치 크기와 상관없이, 학습과 생성에서 똑같이 동작합니다.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p4-ln-forward">
+<h3>ops.layernorm — 순전파</h3>
+<!--CODE file=py/transformerlib/ops.py lines=138-160 note=x̂ 와 σ 를 역전파용으로 남긴다-->
+<ul>
+<li><code>XH</code>(정규화된 값)와 <code>SIG</code>(행마다의 σ)를 저장합니다. 역전파가 이 둘만으로 끝나도록 유도할 것입니다.</li>
+<li>평균과 분산도 <code>fsum</code> 으로 쌓습니다 — 참조 구현은 반올림을 아낍니다.</li>
+<li>시간 <span class="mi"><i>O</i>(행 수 · <i>n</i>)</span>, 저장은 입력과 같은 크기 하나 더.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-ln-output">
+<h3>출력은 평균 0, 분산 거의 1</h3>
+<!--OUT file=ops.txt sec=5 note=g = 1, b = 0 으로 두 행-->
+<p>첫 행은 한 칸만 크게 튀었는데도 출력이 평균 0 근처로 모였습니다.
+분산이 1 보다 아주 조금 작은 것은 정의가 <span class="mi"><i>σ</i><sup>2</sup> = 분산 + <i>ε</i></span> 으로
+나누기 때문입니다. 출력 분산은 정확히 <span class="mi">분산/(분산 + <i>ε</i>)</span> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-ln-eps">
+<h3>ε 가 막는 것 — 모든 칸이 같은 행</h3>
+<p>위 캡처의 둘째 행처럼 모든 값이 같으면 분산이 0 입니다. <i>ε</i> 가 없으면
+<span class="mi">0/0</span> 이 되어 nan 이 나옵니다. <i>ε</i> 가 있으면
+<span class="mi"><i>x̂</i> = 0/<span class="sqrt">√<span class="rad"><i>ε</i></span></span> = 0</span> 이고, 출력은 편향 <i>b</i> 그대로입니다.</p>
+<!--CODE file=py/transformerlib/tests/test_ops.py sym=test_constant_row_does_not_blow_up note=값도 기울기도 유한해야 한다-->
+<p class="cap">트랜스포머의 입력에서 이런 행이 나올 일은 드뭅니다. 그래도 한 번 나오면 그 스텝의 모든 기울기가 nan 이 되므로
+분모를 보호합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p4-quiz-4" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 어휘 512 인 모델을 막 초기화해 첫 스텝을 돌렸더니 손실이 12 근처로 나왔습니다. 무엇을 의심해야 하나요? 그리고 교차엔트로피를 소프트맥스·log 로 나눠 짰을 때 정답 확률이 0 으로 내려앉으면 무슨 일이 생기나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 로짓이 고르면 손실은 ln 512, 3장의 표에서 본 대로 6 남짓이어야 합니다. 그 두 배 가까이 나왔다면
+로짓이 이미 크게 벌어져 확신하며 틀리고 있다는 뜻 — 초기화 크기나 출력층 연결을 의심합니다.
+나눠 짠 경우 log 0 = −∞ 로 손실이 무한대가 되고, log 의 역전파 −1/p 가 0 으로 나누기가 되어 nan 이 퍼집니다.
+합친 연산은 lse − z[정답] 을 계산하므로 유한합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ln-back-gb">
+<h3>역전파 (1) — g 와 b 는 쉽다</h3>
+<p><span class="mi"><i>y</i><sub><i>j</i></sub> = <i>g</i><sub><i>j</i></sub><i>x̂</i><sub><i>j</i></sub> + <i>b</i><sub><i>j</i></sub></span> 에서
+윗기울기 <span class="mi"><i>dy</i><sub><i>j</i></sub> = ∂ℓ/∂<i>y</i><sub><i>j</i></sub></span> 를 받으면:</p>
+<div class="eq">∂ℓ/∂<i>g</i><sub><i>j</i></sub> = ∑<sub>행</sub> <i>dy</i><sub><i>j</i></sub><i>x̂</i><sub><i>j</i></sub>,
+&nbsp; ∂ℓ/∂<i>b</i><sub><i>j</i></sub> = ∑<sub>행</sub> <i>dy</i><sub><i>j</i></sub></div>
+<p><i>g</i>·<i>b</i> 는 모든 행(토큰)이 함께 쓰므로 행을 따라 더합니다 — 배치 행렬곱에서 본 "퍼진 축은 더한다" 와 같습니다.</p>
+<div class="key"><b>이름 하나 정하기</b> — <span class="mi"><i>d</i><sub><i>j</i></sub> = <i>dy</i><sub><i>j</i></sub><i>g</i><sub><i>j</i></sub> = ∂ℓ/∂<i>x̂</i><sub><i>j</i></sub></span>.
+어려운 부분은 이 <i>d</i> 를 <i>x</i> 까지 내리는 것입니다. <i>μ</i> 와 <i>σ</i> 가 행의 <b>모든</b> 칸에 기대기 때문입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ln-back-mu-sigma">
+<h3>역전파 (2) — μ 와 σ 의 미분</h3>
+<div class="lem"><span class="h">보조정리</span>
+<div class="eq">∂<i>μ</i>/∂<i>x</i><sub><i>i</i></sub> = <span class="frac"><span class="num">1</span><span class="den"><i>n</i></span></span>,
+&nbsp; ∂<i>σ</i>/∂<i>x</i><sub><i>i</i></sub> = <span class="frac"><span class="num"><i>x̂</i><sub><i>i</i></sub></span><span class="den"><i>n</i></span></span></div></div>
+<div class="proof"><span class="h">증명</span>
+<p>첫 식은 평균의 정의에서 바로 나옵니다. 분산 <i>v</i> = (1/<i>n</i>)∑<sub><i>j</i></sub>(<i>x</i><sub><i>j</i></sub> − <i>μ</i>)<sup>2</sup> 을 미분하면</p>
+<div class="eq">∂<i>v</i>/∂<i>x</i><sub><i>i</i></sub> = <span class="frac"><span class="num">2</span><span class="den"><i>n</i></span></span>∑<sub><i>j</i></sub>(<i>x</i><sub><i>j</i></sub> − <i>μ</i>)(<i>δ</i><sub><i>ij</i></sub> − <span class="frac sm"><span class="num">1</span><span class="den"><i>n</i></span></span>)
+= <span class="frac"><span class="num">2</span><span class="den"><i>n</i></span></span>(<i>x</i><sub><i>i</i></sub> − <i>μ</i>)</div>
+<p>편차의 합 ∑(<i>x</i><sub><i>j</i></sub> − <i>μ</i>) 이 0 이라 1/<i>n</i> 항이 사라집니다.
+<i>σ</i> = √(<i>v</i> + <i>ε</i>) 이므로 ∂<i>σ</i>/∂<i>x</i><sub><i>i</i></sub> = (1/2<i>σ</i>)·(2/<i>n</i>)(<i>x</i><sub><i>i</i></sub> − <i>μ</i>) = <i>x̂</i><sub><i>i</i></sub>/<i>n</i>.</p></div>
+<p class="cap"><i>ε</i> 는 상수라 미분에서 사라지지만 <i>σ</i> 안에는 남습니다. 그래서 아래 결과는 근사가 아니라 정확한 식입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ln-back-xhat">
+<h3>역전파 (3) — x̂ 한 칸이 x 한 칸에 얼마나 기대나</h3>
+<p><span class="mi"><i>x̂</i><sub><i>j</i></sub> = (<i>x</i><sub><i>j</i></sub> − <i>μ</i>)/<i>σ</i></span> 를 몫의 미분법으로 풀고 보조정리를 넣습니다.</p>
+<div class="eq"><span class="frac"><span class="num">∂<i>x̂</i><sub><i>j</i></sub></span><span class="den">∂<i>x</i><sub><i>i</i></sub></span></span>
+= <span class="frac"><span class="num"><i>δ</i><sub><i>ij</i></sub> − 1/<i>n</i></span><span class="den"><i>σ</i></span></span>
+− <span class="frac"><span class="num"><i>x</i><sub><i>j</i></sub> − <i>μ</i></span><span class="den"><i>σ</i><sup>2</sup></span></span>·<span class="frac"><span class="num"><i>x̂</i><sub><i>i</i></sub></span><span class="den"><i>n</i></span></span></div>
+<div class="eq">= <span class="frac"><span class="num">1</span><span class="den"><i>σ</i></span></span>
+(<i>δ</i><sub><i>ij</i></sub> − <span class="frac sm"><span class="num">1</span><span class="den"><i>n</i></span></span> − <span class="frac sm"><span class="num"><i>x̂</i><sub><i>i</i></sub><i>x̂</i><sub><i>j</i></sub></span><span class="den"><i>n</i></span></span>)</div>
+<ul>
+<li><i>δ</i><sub><i>ij</i></sub> — 자기 자신을 직접 통과하는 길</li>
+<li>−1/<i>n</i> — 평균 <i>μ</i> 를 거쳐 모든 칸으로 새는 길</li>
+<li>−<i>x̂</i><sub><i>i</i></sub><i>x̂</i><sub><i>j</i></sub>/<i>n</i> — 표준편차 <i>σ</i> 를 거쳐 새는 길</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ln-back-thm">
+<h3>역전파 (4) — 한 줄로 모으기</h3>
+<div class="thm"><span class="h">정리 — 레이어놈의 입력 기울기</span>
+<div class="eq"><i>dx</i><sub><i>i</i></sub> = <span class="frac"><span class="num">1</span><span class="den"><i>σ</i></span></span>
+( <i>d</i><sub><i>i</i></sub> − <b class="fn">mean</b>(<span class="vec">d</span>) − <i>x̂</i><sub><i>i</i></sub> · <b class="fn">mean</b>(<span class="vec">d</span> ⊙ <span class="vec">x̂</span>) )</div></div>
+<div class="proof"><span class="h">증명</span>
+<p>연쇄법칙 <i>dx</i><sub><i>i</i></sub> = ∑<sub><i>j</i></sub> <i>d</i><sub><i>j</i></sub> ∂<i>x̂</i><sub><i>j</i></sub>/∂<i>x</i><sub><i>i</i></sub> 에 앞 장의 식을 넣고 항별로 더합니다.
+<i>δ</i><sub><i>ij</i></sub> 항은 <i>d</i><sub><i>i</i></sub>, −1/<i>n</i> 항은 −(1/<i>n</i>)∑<i>d</i><sub><i>j</i></sub> = −<b class="fn">mean</b>(<span class="vec">d</span>),
+마지막 항은 −<i>x̂</i><sub><i>i</i></sub>(1/<i>n</i>)∑<i>d</i><sub><i>j</i></sub><i>x̂</i><sub><i>j</i></sub> 입니다. 모두 1/<i>σ</i> 로 나눕니다.</p></div>
+<p>필요한 것은 행마다 평균 두 개(<span class="mi"><b class="fn">mean</b> <span class="vec">d</span></span>, <span class="mi"><b class="fn">mean</b>(<span class="vec">d</span>⊙<span class="vec">x̂</span>)</span>)와
+저장해 둔 <span class="mi"><span class="vec">x̂</span></span>·<span class="mi"><i>σ</i></span> 뿐입니다. <i>n</i>×<i>n</i> 야코비안은 여기서도 만들지 않습니다 — <span class="mi"><i>O</i>(<i>n</i>)</span>.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ln-back-meaning">
+<h3>식이 말해 주는 것 — 무엇에 둔감한가</h3>
+<ul>
+<li><b>∑<sub><i>i</i></sub> <i>dx</i><sub><i>i</i></sub> = 0 은 언제나 성립합니다.</b> ∑<i>x̂</i><sub><i>i</i></sub> = 0 이기 때문입니다.
+입력 전체에 같은 수를 더해도 <i>μ</i> 가 흡수해 출력이 그대로이니, 그 방향의 기울기가 없어야 맞습니다.</li>
+<li><b>∑<sub><i>i</i></sub> <i>dx</i><sub><i>i</i></sub><i>x̂</i><sub><i>i</i></sub> 는 <i>ε</i> 만큼만 0 이 아닙니다.</b>
+계산하면 <span class="mi"><i>n</i>·<b class="fn">mean</b>(<span class="vec">d</span>⊙<span class="vec">x̂</span>)·<i>ε</i> / ((<i>v</i> + <i>ε</i>)<i>σ</i>)</span> 입니다.
+<i>ε</i> 가 0 이면 입력을 몇 배로 키워도 출력이 같다는 "크기 불변" 이 정확히 성립하고, <i>ε</i> 가 그것을 아주 조금 깹니다.</li>
+</ul>
+<p class="cap">둘째 식의 유도: ∑<i>x̂</i><sub><i>i</i></sub><sup>2</sup> = <i>n</i>·<i>v</i>/(<i>v</i> + <i>ε</i>) 을 넣으면 됩니다(<i>v</i> 는 분산).</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ln-backward-code">
+<h3>ops.layernorm — 역전파 코드</h3>
+<!--CODE file=py/transformerlib/ops.py lines=162-177 note=md·mdx 두 평균과 저장한 XH·SIG-->
+<p><code>md</code> 가 <span class="mi"><b class="fn">mean</b>(<span class="vec">d</span>)</span>, <code>mdx</code> 가
+<span class="mi"><b class="fn">mean</b>(<span class="vec">d</span>⊙<span class="vec">x̂</span>)</span> 이고,
+<code>gx</code> 줄이 정리의 식을 그대로 옮긴 것입니다. <code>gg</code>·<code>gb</code> 는 (1)에서 본 행 합입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-ln-test">
+<h3>증인 — 세 입력 모두 차분과 견준다</h3>
+<!--CODE file=py/transformerlib/tests/test_ops.py lines=106-110 note=x·g·b 모두 무작위-->
+<p><code>g</code> 를 1 이 아닌 값(0.5‥1.5)으로 둔 것이 요점입니다. <i>g</i> = 1 이면 <i>d</i> = <i>dy</i> 가 되어,
+<code>d = dy * G</code> 에서 <code>G</code> 를 빼먹은 구현도 통과해 버립니다.</p>
+<p class="cap"><code>check</code> 가 무엇을 어떻게 재는지는 <a href="#p4-gradcheck-how">4부 7장</a>에서 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-ch5"><p class="chnum">5장</p><h2>GELU</h2><p class="chsub">정의는 오차함수, 실제로 쓰는 식은 tanh 근사</p></article>
+
+<article class="card" id="p4-gelu-def">
+<h3>GELU 의 정의 — 입력을 확률로 거른다</h3>
+<div class="defn"><span class="h">정의 — GELU</span>
+<div class="eq"><b class="fn">GELU</b>(<i>x</i>) = <i>x</i> Φ(<i>x</i>) = <i>x</i> · <span class="frac"><span class="num">1</span><span class="den">2</span></span>[1 + <b class="fn">erf</b>(<i>x</i>/<span class="sqrt">√<span class="rad">2</span></span>)]</div>
+Φ 는 표준정규분포의 누적분포함수입니다 <!--CITE key=hendrycks2016 sec=2-->.</div>
+<p>ReLU 는 <span class="mi"><i>x</i> · 1[<i>x</i> &gt; 0]</span> — 부호를 보고 통과 여부를 <b>딱 잘라</b> 정합니다.
+GELU 는 그 계단 함수를 매끄러운 Φ 로 바꿨습니다. 입력이 클수록 거의 그대로, 작을수록 거의 0,
+그 사이에서는 "표준정규 변수가 <i>x</i> 이하일 확률" 만큼 곱해 통과시킵니다.</p>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p4-gelu-approx">
+<h3>tanh 근사 — 이 덱이 실제로 쓰는 식</h3>
+<p>같은 논문은 두 근사를 함께 제시합니다 <!--CITE key=hendrycks2016 sec=2-->.</p>
+<div class="eq">0.5<i>x</i>(1 + <b class="fn">tanh</b>[<span class="sqrt">√<span class="rad">2/π</span></span>(<i>x</i> + 0.044715<i>x</i><sup>3</sup>)]) &nbsp; 또는 &nbsp; <i>x</i> <i>σ</i>(1.702<i>x</i>)</div>
+<ul>
+<li>GPT-2 공개 코드의 gelu 가 앞의 tanh 근사를 같은 상수로 씁니다. 이 덱도 이것을 따릅니다.</li>
+<li>SPEC §3.3 은 <span class="mi">√(2/π)</span> 를 <code>0.7978845608028654</code> 라는 17자리 10진 문자열로 박아 둡니다.
+파이썬과 C 가 같은 문자열에서 같은 double 을 얻어야 두 구현이 맞기 때문입니다.</li>
+<li>3차항 상수는 한때 SPEC 에 잘못 옮겨 적었다가 논문과 GPT-2 코드를 대조해 바로잡았습니다(SPEC §3.3 의 기록).
+기억으로 적은 상수가 틀리는 전형입니다.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p4-gelu-fig">
+<h3>ReLU · GELU · SiLU 를 한 그림에</h3>
+<!--FIG file=activations.svg cap=ops.gelu·ops.gelu_exact 로 계산한 곡선. 두 GELU 는 그림 폭에서 겹친다-->
+<p>GELU 는 양수 쪽에서 ReLU 를 닮았지만, 음수 쪽에서 0 아래로 조금 내려갔다가 0 으로 돌아옵니다.
+원점에서도 꺾이지 않고 매끄러워, 미분이 어디서나 연속입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-gelu-capture">
+<h3>근사가 얼마나 가까운가</h3>
+<!--OUT file=ops.txt sec=6 note=일곱 점과 구간 전체의 최대 차이-->
+<p>차이는 원점에서 0 이고 멀어질수록 커지지만, 위 표 마지막 줄의 구간 최대 차이도 값 자체에 비하면 아주 작습니다.
+<code>test_tanh_approximation_is_close_to_erf</code> 가 같은 구간을 훑어 그 차이가 1e-3 보다 작고
+<b>0 보다 크다</b>는 것 — 근사이지 같은 식이 아니라는 것 — 을 함께 확인합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-gelu-code">
+<h3>ops.gelu 와 gelu_exact</h3>
+<!--CODE file=py/transformerlib/ops.py sym=gelu..gelu_exact note=근사는 학습용, 정의는 견주기용-->
+<p>순전파에서 계산한 <code>TT</code>(tanh 값)를 역전파가 다시 씁니다.
+tanh 의 미분이 <span class="mi">1 − tanh<sup>2</sup></span> 이라, 저장한 값 하나로 끝납니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-gelu-deriv">
+<h3>GELU 의 미분과 증인 gelu′(0) = 1/2</h3>
+<p><span class="mi"><i>t</i> = <b class="fn">tanh</b>(<i>A</i>(<i>x</i> + <i>Bx</i><sup>3</sup>))</span> 라 두면 곱의 미분과 연쇄법칙으로</p>
+<div class="eq"><span class="frac"><span class="num"><i>d</i></span><span class="den"><i>dx</i></span></span>
+½<i>x</i>(1 + <i>t</i>) = ½(1 + <i>t</i>) + ½<i>x</i>(1 − <i>t</i><sup>2</sup>)·<i>A</i>(1 + 3<i>Bx</i><sup>2</sup>)</div>
+<p><i>x</i> = 0 이면 <i>t</i> = 0 이고 둘째 항에 <i>x</i> 가 곱해져 있으니 값은 정확히 ½ 입니다.
+정의 쪽도 Φ(0) + 0·φ(0) = ½ 로 같습니다.</p>
+<!--CODE file=py/transformerlib/tests/test_ops.py sym=test_constants_pinned..test_derivative_at_zero_is_half note=상수와 원점의 기울기-->
+<p class="cap">0.5 는 이진수로 정확히 표현되므로 근삿값 비교가 아니라 <code>assertEqual</code> 입니다. C 시험도 같은 값을 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p4-quiz-5" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 레이어놈 역전파 식에서 mean(d) 항과 x̂·mean(d⊙x̂) 항을 빼먹고 dx = d/σ 로만 구현하면, 어떤 성질이 깨지나요? 그 버그를 g = 1 인 시험 하나로 잡을 수 있나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 두 항은 μ 와 σ 를 거쳐 행의 다른 칸으로 새는 기울기입니다. 빼먹으면 ∑dx = 0 이 깨집니다 —
+입력 전체에 같은 수를 더해도 출력이 안 변하는데, 기울기는 그 방향으로 움직이라고 말하게 됩니다.
+g = 1 인 시험으로도 잡힙니다. 중심 차분은 μ·σ 의 변화까지 포함해 재므로 d/σ 와 어긋나기 때문입니다.
+다만 g = 1 은 "d = dy·g 에서 g 를 빼먹은" 다른 버그를 못 잡습니다. 그래서 증인 시험은 g 를 무작위로 둡니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ch6"><p class="chnum">6장</p><h2>임베딩 · 드롭아웃 · 인과 마스크</h2><p class="chsub">곱셈이 거의 없는 세 부품 — 기울기는 어디로 가나</p></article>
+
+<article class="card" id="p4-emb-def">
+<h3>임베딩 조회 = 원-핫 행렬곱</h3>
+<p>토큰 id <span class="mi"><i>t</i></span> 를 벡터로 바꾸는 가장 곧은 방법은 가중치 <span class="mi"><span class="vec">W</span> ∈ ℝ<sup><i>V</i>×<i>d</i></sup></span>
+의 <i>t</i> 행을 꺼내는 것입니다. 이것은 원-핫 행 벡터를 곱한 것과 같습니다.</p>
+<div class="eq"><span class="vec">e</span><sub><i>t</i></sub><span class="vec">W</span> = <span class="vec">W</span><sub><i>t</i>,·</sub></div>
+<p>그러면 1장의 행렬곱 역전파를 그대로 쓸 수 있습니다.
+<span class="mi">∂ℓ/∂<span class="vec">W</span> = <span class="vec">X</span><sup>⊤</sup><span class="vec">G</span></span> 에서
+<span class="mi"><span class="vec">X</span></span> 의 행이 원-핫이므로, <b><i>t</i> 행에만 그 위치의 윗기울기가 더해집니다.</b></p>
+<ul>
+<li>곱셈은 한 번도 하지 않습니다 — 행 복사와 행 더하기뿐입니다.</li>
+<li>같은 토큰이 두 번 나오면 그 행은 두 몫을 받습니다(scatter-add).</li>
+<li>한 배치에 안 나온 토큰의 행은 기울기가 0 입니다. 드문 토큰이 천천히 배우는 까닭입니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-emb-code">
+<h3>ops.embedding</h3>
+<!--CODE file=py/transformerlib/ops.py sym=embedding note=꺼내기와 되돌려 더하기-->
+<p><code>ids</code> 는 (배치, 위치) 처럼 중첩된 정수 리스트입니다. 모양을 먼저 읽고 평평하게 편 뒤,
+출력 모양은 그 뒤에 <code>d</code> 를 붙인 것입니다. 어휘 밖 id 는 조용히 다른 행을 읽지 않고 멈춥니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-emb-test">
+<h3>증인 — 두 번 쓰인 행은 기울기 2</h3>
+<!--CODE file=py/transformerlib/tests/test_ops.py sym=test_embedding_rows_and_scatter_add note=합을 역전파하면 쓰인 횟수가 나온다-->
+<p>출력을 모두 더한 것을 역전파하면 각 칸의 윗기울기가 1 이므로, 가중치 기울기는 "그 행이 몇 번 뽑혔나" 가 됩니다.
+2 번 행 두 번, 0 번·3 번 행 한 번, 1 번 행은 안 뽑혔습니다. 출력층과 가중치를 묶으면(<a href="#p7">7부</a>)
+같은 행렬에 이 기울기와 행렬곱 기울기가 함께 더해집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-dropout-def">
+<h3>드롭아웃 — 뒤집힌 배율</h3>
+<div class="defn"><span class="h">정의 — 뒤집힌(inverted) 드롭아웃</span>
+<div class="eq"><i>m</i><sub><i>k</i></sub> ∼ <b class="fn">Bernoulli</b>(1 − <i>p</i>),
+&nbsp; <i>y</i><sub><i>k</i></sub> = <span class="frac"><span class="num"><i>m</i><sub><i>k</i></sub></span><span class="den">1 − <i>p</i></span></span><i>x</i><sub><i>k</i></sub></div></div>
+<ul>
+<li>기댓값: <span class="mi">E[<i>y</i><sub><i>k</i></sub>] = (1 − <i>p</i>)·<i>x</i><sub><i>k</i></sub>/(1 − <i>p</i>) = <i>x</i><sub><i>k</i></sub></span>.
+학습 때 미리 키워 두므로 생성할 때는 아무것도 곱하지 않고 끄기만 하면 됩니다. "뒤집힌" 이라는 이름이 여기서 옵니다.</li>
+<li>역전파: <span class="mi"><i>dx</i><sub><i>k</i></sub> = <i>m</i><sub><i>k</i></sub><i>dy</i><sub><i>k</i></sub>/(1 − <i>p</i>)</span> — 순전파와 <b>같은 마스크</b>를 써야 합니다.</li>
+<li>원 트랜스포머는 각 부층의 출력과 임베딩 합에 드롭아웃을 걸었습니다 <!--CITE key=vaswani2017 sec=5.4-->.</li>
+</ul>
+<span class="tier b">논문 근거</span>
+</article>
+
+<article class="card" id="p4-dropout-code">
+<h3>ops.dropout</h3>
+<!--CODE file=py/transformerlib/ops.py sym=dropout note=p = 0 이면 입력을 그대로-->
+<p>마스크 <code>M</code> 에 0 또는 <code>1/(1−p)</code> 를 담아 두고 역전파가 그대로 다시 씁니다.
+칸마다 <code>uniform()</code> 을 정확히 한 번씩, 앞에서부터 뽑습니다.</p>
+<!--CODE file=py/transformerlib/tests/test_ops.py sym=test_dropout_keeps_expectation..test_dropout_backward_uses_same_mask note=통계 시험 하나, 정확한 시험 하나-->
+<p class="cap">첫 시험은 0 의 비율과 평균을 통계 허용치로 보되, 모든 값이 0 아니면 1/(1 − p) 인지는 정확히 봅니다.
+둘째 시험은 출력이 0 인 칸에서만 기울기가 0 인지 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-dropout-p0">
+<h3>p = 0 이면 난수를 하나도 뽑지 않는다</h3>
+<p>SPEC §1.5 는 드롭아웃에 씨앗 <code>seed + 2</code> 의 생성기를 주고, "기록 실행은 p = 0 이라 한 번도 안 뽑는다" 고 적습니다.
+C 구현에는 드롭아웃이 아예 없습니다. p = 0 인 파이썬이 <b>연산 자체를 건너뛰어야</b> 두 구현이 같은 계산을 합니다.</p>
+<!--CODE file=py/transformerlib/tests/test_ops.py sym=test_dropout_p0_is_identity_and_draws_nothing note=같은 객체이고, 생성기가 그대로-->
+<ul>
+<li><code>assertIs</code> — 1 을 곱한 새 텐서가 아니라 <b>같은 객체</b>입니다. 계산 그래프에 마디도 생기지 않습니다.</li>
+<li>생성기의 다음 값이 새 생성기의 첫 값과 같다 — 난수를 소비하지 않았다는 증거입니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-causal-fig">
+<h3>인과 마스크 — 미래 칸을 지운다</h3>
+<!--FIG file=causal_mask.svg cap=i 행(질의)은 j ≤ i 칸(키)만 본다-->
+<p>언어 모델은 한 줄의 모든 위치를 한 번에 학습합니다. 위치 <i>i</i> 가 다음 토큰을 맞히는데
+<i>i</i> 뒤의 토큰을 볼 수 있으면 답을 베끼게 됩니다. 그래서 점수 행렬의 <span class="mi"><i>j</i> &gt; <i>i</i></span> 칸을
+소프트맥스 전에 −∞ 로 만듭니다. <span class="mi"><i>e</i><sup>−∞</sup> = 0</span> 이므로 그 칸의 확률은 정확히 0 입니다.
+어텐션 안에서의 쓰임은 <a href="#p6">6부</a>에서 다룹니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-causal-code">
+<h3>ops.causal_softmax — −∞ 를 더하지 않고 건너뛴다</h3>
+<!--CODE file=py/transformerlib/ops.py sym=causal_softmax note=i 행은 앞 i+1 칸만 소프트맥스-->
+<ul>
+<li>평평한 배열의 <code>r</code> 번째 행이 몇 번째 질의인지는 <code>r % n</code> 입니다. 앞의 배치·헤드 축은 신경 쓰지 않아도 됩니다.</li>
+<li>행의 앞 <code>i + 1</code> 칸만 <code>_softmax_row</code> 에 넘기고 나머지는 처음 채운 0 으로 둡니다.</li>
+<li>무한대를 실제로 더하지 않으니 inf 산술이 없고, C 에서는 계산할 칸 수도 줄어듭니다.</li>
+<li>역전파는 소프트맥스와 같은 식을 같은 <code>i + 1</code> 칸에서만 — 지운 칸의 기울기는 0 입니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-causal-test">
+<h3>증인 — 건너뛰기는 −∞ 마스크와 같다</h3>
+<!--CODE file=py/transformerlib/tests/test_ops.py sym=test_causal_softmax_equals_minus_infinity_mask note=진짜 −∞ 를 넣은 소프트맥스와 견준다-->
+<p>비교 대상은 <code>-math.inf</code> 를 실제로 채워 넣고 보통 소프트맥스를 부른 결과입니다.
+최댓값은 늘 대각 칸이라 유한하고, <code>exp(−∞ − m)</code> 은 파이썬에서 정확히 0.0 입니다.
+두 결과가 1e-15 안에서 같고, 지운 칸은 근삿값이 아니라 <b>정확히</b> 0 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p4-quiz-6" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. (1) 임베딩 행렬의 어떤 행이 한 배치 내내 기울기 0 을 받는다면 그 까닭은? (2) 인과 소프트맥스의 첫 행(i = 0)은 무엇이 되고, 그 행의 입력 기울기는?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> (1) 그 배치에 그 토큰이 한 번도 안 나왔기 때문입니다. 조회의 역전파는 뽑힌 행에만 더합니다(가중치를 출력층과 묶으면 출력층 쪽 기울기는 따로 들어옵니다).
+(2) 첫 행은 자기 자신 한 칸만 소프트맥스하므로 [1, 0, 0, …] 입니다(<code>test_causal_row0_attends_only_to_itself</code>).
+p = [1] 이면 p(g − ⟨g, p⟩) = g − g = 0 이라, 그 행의 입력 기울기는 0 입니다 — 확률이 이미 1 로 고정돼 점수를 바꿔도 달라질 것이 없습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ch7"><p class="chnum">7장</p><h2>검증, 그리고 C 로</h2><p class="chsub">모든 역전파를 차분과 견주고, 같은 식을 float32 로 다시 짠다</p></article>
+
+<article class="card" id="p4-gradcheck-how">
+<h3>역전파를 무엇과 견주나 — 중심 차분</h3>
+<!--CODE file=py/transformerlib/tensor.py sym=finite_difference..rel_error note=입력 한 칸씩 ±h 로 흔든다-->
+<ul>
+<li>중심 차분 <span class="mi">(<i>f</i>(<i>x</i>+<i>h</i>) − <i>f</i>(<i>x</i>−<i>h</i>))/2<i>h</i></span> 의 오차는 <span class="mi"><i>O</i>(<i>h</i><sup>2</sup>)</span> — 한쪽 차분의 <span class="mi"><i>O</i>(<i>h</i>)</span> 보다 훨씬 작습니다.</li>
+<li>출력이 텐서인 연산은 고정된 무작위 가중치 <i>w</i> 를 곱해 더한 스칼라 <span class="mi">∑ <i>w</i>·<i>f</i>(<i>x</i>)</span> 로 만들어 잽니다.
+그러면 야코비안의 모든 칸이 한 번에 섞여 시험됩니다(<code>test_tensor.check</code>).</li>
+<li>오차는 칸마다가 아니라 벡터 전체의 크기에 견줍니다. 0 근처 칸의 차분 잡음이 부풀지 않게 하려는 것입니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-gradcheck-table">
+<h3>연산마다 역전파 대 차분 — 한 표로</h3>
+<!--OUT file=py_gradcheck.txt sec=1 note=3부·4부·6부의 연산 전부-->
+<p>행렬곱·소프트맥스·교차엔트로피·레이어놈·GELU·인과 소프트맥스가 이 부에서 다룬 연산입니다.
+위 표의 오차는 모두 차분 간격 <i>h</i> 가 만드는 반올림 수준에 머뭅니다. 유도에서 항 하나만 빠져도
+오차는 이 크기가 아니라 기울기 자체의 크기가 됩니다 — 그래서 이 표는 "맞다" 와 "틀리다" 를 가르기에 충분합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-c-float-double">
+<h3>C 의 원칙 — 값은 float32, 합은 double</h3>
+<!--CODE file=c/ops.c sym=tfs_softmax_row..tfs_softmax_row_backward note=최댓값 m·분모 s·내적 dot 이 double-->
+<ul>
+<li><b>값을 float32 로 드는 까닭</b> — 메모리가 절반이라 캐시에 두 배가 들고, 체크포인트도 float32 입니다(SPEC §2·§4).</li>
+<li><b>합을 double 로 쌓는 까닭</b> — 한 행의 분모·평균·내적은 수백 항을 더합니다. float32 로 쌓으면 덧셈마다의 반올림이 쌓여
+<code>fsum</code> 을 쓰는 파이썬과 멀어집니다. 원소 하나를 담기에는 float32 로 충분합니다.</li>
+<li>허용 오차는 이 차이를 전제로 SPEC §9 가 정합니다 — 순전파는 상대 1e-4, 기울기는 칸 크기에 견준 기준.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-c-ce">
+<h3>C 의 교차엔트로피 — 손실은 double 로 돌려준다</h3>
+<!--CODE file=c/ops.c sym=tfs_cross_entropy_row..tfs_cross_entropy_backward_row note=파이썬과 같은 lse − z[정답], (p − y)·scale-->
+<p>한 행의 손실은 로그합지수까지 double 로 계산해 돌려줍니다. 모델(<code>c/model.c</code>)은 그것을 행마다 담아 두었다가
+행 차례로 더해 평균을 냅니다. 역전파의 <code>scale</code> 은 모델에서 1/<i>N</i> — 파이썬의 <code>g0 / rows</code> 에서
+윗기울기 <code>g0</code> 가 1 인 경우입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-c-layernorm">
+<h3>C 의 레이어놈 역전파 — 식은 파이썬과 한 줄씩 같다</h3>
+<!--CODE file=c/ops.c sym=tfs_layernorm_backward note=md·mdx 는 double, σ 대신 1/σ 를 곱한다-->
+<ul>
+<li>순전파가 <code>sinv</code> = 1/<i>σ</i> 를 저장해 두므로 역전파는 나눗셈 대신 곱셈을 합니다.</li>
+<li>행 안의 평균 <code>md</code>·<code>mdx</code> 는 double 로 쌓습니다.</li>
+<li><code>dg</code>·<code>db</code> 는 여러 행을 거쳐 float32 로 더해 갑니다. 머리말의 "합은 double" 원칙에서 벗어난 자리지만,
+C 시험이 파이썬과의 차이를 허용 오차 안에서 확인합니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-c-test">
+<h3>C 시험 — 파이썬이 남긴 입력과 답으로</h3>
+<!--CODE file=c/tests/test_ops.c lines=36-61 note=같은 입력에서 같은 출력·기울기인가-->
+<p>파이썬이 무작위 입력과 그 출력·기울기를 파일(<code>ckpt/parity/ops.tfx</code>)에 적고, C 가 같은 입력으로 계산해 견줍니다.
+로짓을 일부러 크게 잡아 최댓값 빼기를 잊은 구현이 넘치게 했습니다. 같은 파일의 뒷부분이 레이어놈·GELU(원점의 기울기 ½ 포함)·인과 소프트맥스를 봅니다.
+C 쪽을 모아 보는 일은 <a href="#p9">9부</a>의 몫입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-python-speed">
+<h3>순수 파이썬의 속도 — 느림이 알려 주는 비용</h3>
+<p>파이썬의 <code>O[ro + j] += aik * B[rb + j]</code> 한 줄은 기계어 곱셈 한 번이 아닙니다.</p>
+<ul>
+<li>리스트 두 번 조회(범위 검사 포함), 덧셈으로 색인 계산, float 객체 꺼내기</li>
+<li>곱셈 결과로 새 float 객체 만들기, 덧셈 결과로 또 하나, 리스트 칸에 다시 넣기</li>
+<li>그 사이사이 바이트코드 해석기의 분기</li>
+</ul>
+<p>C 의 같은 줄은 나란히 놓인 float32 두 개를 곱해 더하는 명령 몇 개입니다.
+그래서 두 구현의 <b>곱셈 수는 같고</b>(1장의 계수기), 곱셈 하나의 값만 몇 자릿수 다릅니다.
+비용 모형은 "곱셈 수 × 곱셈 하나의 값" 이고, 앞의 인수는 모델이 정하고 뒤의 인수는 구현이 정합니다.</p>
+<p class="cap">그래서 파이썬 참조는 설명과 정답지를 맡고 작은 모델만 학습시킵니다. 실제 학습은 C 가 합니다.
+숫자로 된 비교는 <a href="#p9">9부</a>의 벤치 표에만 있습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-summary">
+<h3>4부 정리 — 부품과 그 기울기</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>부품</th><th>입력 기울기</th><th>증인</th></tr>
+<tr><td>행렬곱 <span class="mi"><span class="vec">A</span><span class="vec">B</span></span></td><td><span class="mi"><span class="vec">G</span><span class="vec">B</span><sup>⊤</sup></span>, <span class="mi"><span class="vec">A</span><sup>⊤</sup><span class="vec">G</span></span></td><td>차분 · C 세 차례 비트 동일</td></tr>
+<tr><td>소프트맥스</td><td><span class="mi"><i>p</i> ⊙ (<i>g</i> − ⟨<i>g</i>, <i>p</i>⟩)</span></td><td>야코비안 대 차분</td></tr>
+<tr><td>교차엔트로피</td><td><span class="mi">(<i>p</i> − <i>y</i>)/<i>N</i></span></td><td>닫힌 식과 15자리</td></tr>
+<tr><td>레이어놈</td><td><span class="mi">(<i>d</i> − mean <i>d</i> − <i>x̂</i>·mean(<i>d</i>⊙<i>x̂</i>))/<i>σ</i></span></td><td>x·g·b 모두 차분</td></tr>
+<tr><td>GELU(tanh)</td><td>½(1+<i>t</i>) + ½<i>x</i>(1−<i>t</i>²)<i>A</i>(1+3<i>Bx</i>²)</td><td>gelu′(0) = ½</td></tr>
+<tr><td>임베딩</td><td>뽑힌 행에 더하기</td><td>두 번 쓰인 행은 2</td></tr>
+<tr><td>드롭아웃</td><td>같은 마스크 × 배율</td><td>p = 0 은 난수 0개</td></tr>
+<tr><td>인과 소프트맥스</td><td>소프트맥스 식을 앞 <i>i</i>+1 칸에서만</td><td>−∞ 마스크와 같음</td></tr>
+</table></div>
+<p class="cap">다음은 이 부품들이 받을 입력 — 글자를 토큰 id 로 바꾸는 <a href="#p5">5부</a>입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p4-quiz-7" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. C 의 소프트맥스 분모를 float32 변수로 쌓도록 바꾸면 무엇이 달라지나요? 그리고 역전파를 한쪽 차분 (f(x+h) − f(x))/h 과 견주면 왜 판정이 흐려지나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 덧셈마다 float32 의 유효 자릿수에서 반올림이 일어나고 그것이 행 길이만큼 쌓여, fsum 으로 정확히 더한 파이썬과의 차이가 커집니다.
+결과가 조금 흐려질 뿐 틀리지는 않지만, 파이썬과의 대조가 허용 오차 가장자리로 밀려 진짜 버그와 반올림을 구별하기 어려워집니다.
+한쪽 차분은 오차가 O(h) 라 참 기울기와 이미 눈에 띄게 다릅니다. 그러면 "역전파가 틀렸다" 와 "차분이 거칠다" 를 같은 크기로 보게 되어 판정 기준을 느슨하게 잡아야 합니다.
+중심 차분의 O(h²) 가 기준을 조일 수 있게 해 줍니다.</div>
+<span class="tier ill">설명용</span>
 </article>
