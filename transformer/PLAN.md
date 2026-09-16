@@ -393,4 +393,50 @@ The user approved every recommendation below as-is. Each row is now a decision.
 
 ## Progress log (append only; newest at the bottom; one entry per commit)
 
-(empty — the log starts with step 1)
+### Step 1 — Skeleton (2026-09-16)
+
+- Copied verbatim from `wireless/`: `deck/{build_deck,verify_deck,check_slices,check_xref,check_claims,
+  chunks,gen_glossary,gen_tables,svgkit}.py`, `deck/check_deck.js`, `deck/base/{head,tail}.html`,
+  `tools/{width,rewrap}.py`, `tools/record.sh`. Then adapted only what §1 lists.
+- `build_deck.py`: TARGET → `밑바닥부터_만드는_트랜스포머.html`; `LANG_OF` adds `.c/.h → c`
+  (chunks.py maps `c` onto its existing `cpp` rules; `find_symbol` treats `.c` like `.h`);
+  `COVER_DIRS` = py/ c/ corpus/*.py tools/ (+ Makefile, run_all.py); `PARTIAL` adds papers/ ckpt/;
+  `HARD_CAP` 2000. **`SPEC` directive replaced by `<!--CITE key=… sec=…-->`**: key must be a
+  `data/papers.tsv` row (build error otherwise), badge text = first-author + year from that row,
+  every use logged to `deck/cite_used.txt`. `PHOTO` and its manifest code removed (decision 6).
+- `check_claims.py`: clause check → section check — each `(key, sec)` in `cite_used.txt` must appear
+  as a `sec<TAB>title` line in `papers/<key>.txt` (the format `tools/paper_text.py` will emit in
+  step 3). Non-year unit filter rewritten for this subject (토큰·차원·스텝·바이트… MB/K/M/B).
+- `verify_deck.py`: photo check replaced by a check that every `<span class="cite">` carries
+  `data-cite` — i.e. was made by the assembler. **It fired on the first build**: the "읽는 법"
+  slide had a hand-written example badge. Fixed by describing the badge in words, not by
+  exempting examples.
+- `check_deck.js`: CASES emptied (the comment now says expected values come from
+  `py/transformerlib` and the inference demo must match `out/` exactly). `gen_tables.py`: wireless
+  VIEWS removed. `gen_glossary.py`: slide ids `p14-gl-N`. `check_slices.py`: `.c` comment prefix.
+- **Palette decided (once): "ink and paper"** — cream paper background (#f8f2e4 → #e2d3b3),
+  ink text #2a1f16, burnt-sienna accent #8a3b12, dark-brown titles #3d2413, and indigo ink
+  `--special` #25507f for "the formula matched the number". The six `--g1..--g6` names are kept
+  (svgkit reads them) but now mean **block components**: g1 embedding (ochre #9a6a2f),
+  g2 attention (indigo #25507f), g3 FFN (green #2f7a52), g4 LayerNorm (plum #7a4a8c),
+  g5 loss/logits (vermilion #b8322a), g6 residual stream (slate #5c6b73). svgkit fallbacks match.
+  CSS: `.spec`/`figure.photo`/`.gen` removed; `.cite` and `.blk` (component badge) added.
+- `Makefile`: every §7 target exists; targets whose inputs arrive later (test, cc, corpus, papers,
+  run-check, figs-check) print "아직 없다 (PLAN.md §5 N단계)" instead of failing. CFLAGS carry
+  `-ffp-contract=off -fno-fast-math` per §0.9. `.gitignore`: papers/ .build/ .svgrender/ c/tfs.
+- `data/` header-only TSVs: timeline · papers (key, arxiv-id, title, first-author, year, venue,
+  what-it-pins, url) · models · hyper_vaswani. `deck/claims.md` template lists the five §5.3 traps
+  without numbers (numbers only after sources). `budget.txt` = §6 table. `pending.txt` = Makefile.
+- 28-slide skeleton: cover, part-0 cover, 왜 밑바닥부터인가, 다른 점, numpy 를 쓰지 않는 까닭,
+  두 구현의 관계, 읽는 법, 증거 등급, 기호와 표기 ×2, 수식 조판(attention formula as the
+  sample), 지도, 이 덱을 만든 기계, 접힌 화면에서 읽기 + 14 part covers (1–14).
+- `make all SKEL=1` green: 0 assembler errors, verify passes, slices 0, xref 14 links OK,
+  check_deck 11/11, claims-check 0, width clean, DeckMono 29 KB embedded, font-check passes.
+  Budget line: "쓴 것 28장 · 남은 부 목표 합 1550장 · 예상 합계 1578장 (상한 2000)".
+- **Deviations, recorded:** (1) "~30 slides" → 28; part covers stay one slide each so the budget
+  line counts them as unwritten (same reason as wireless step 1). (2) The plan says prose is
+  합니다체 "as in the wireless deck", but the wireless deck is actually 한다체; the explicit
+  instruction (합니다체) was followed. (3) Part-cover text carries no years (e.g. part 1 reads
+  "퍼셉트론부터…" without 1958) — claims.md has no sourced rows yet and claims-check would fail.
+- Not done here (later steps): SPEC.md, run_all.py, tools/{fetch_paper.sh,paper_text.py,export_js.py},
+  corpus scripts, deck/gen_figs.py, deck/demos.js. No index.html/README card, per step 1.
