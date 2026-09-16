@@ -398,3 +398,32 @@ The user approved every recommendation below as-is. Each row is now a decision.
   `region` — the spec has no region column and I would have had to invent it. `releases.tsv` has an
   extra `protocols` column.
 - `make all SKEL=1` green; `width` is now part of `all`.
+
+### Step 4 — py/wirelesslib, all 18 modules (2026-09-16)
+
+RED → GREEN per module, one commit each. **331 tests**, `make width` clean throughout.
+
+| # | module | the witness that actually caught something |
+|---|---|---|
+| 1 | dsp | FFT vs naive DFT; RRC matched-filter ISI **is not monotone at the tails** — split into "central ISI < 2e-3" and "ISI shrinks as the span grows" instead of loosening the tolerance |
+| 2 | modem | **Gray bug**: `gray()` is its own inverse only for 2 bits, so 16QAM looked fine while 64QAM's BER ran 14 % high. Added `_ungray` + a regression test |
+| 3 | channel | Rayleigh CDF, Jakes autocorrelation = J₀, level-crossing rate, FSPL 98.5 dB, Hata 126.4 dB |
+| 4 | info | E₁ by series/continued fraction; ergodic Rayleigh capacity closed form vs Monte Carlo; MIMO logdet |
+| 5 | codes | CRC two ways (shift register vs long division) + CRC-16 "123456789" = 0x31C3; conv. free distance counted exhaustively (GSM 7, LTE 15) and every guaranteed error pattern corrected |
+| 6 | turbo | **the plan's witness was wrong**: turbo BER is *not* monotone in iterations near the error floor. Split into "falls sharply at 1 dB" and "monotone to zero at 2 dB, K=128" |
+| 7 | ldpc | H·c = 0, no 4-cycles, min-sum ≤ sum-product, layered converges in fewer iterations |
+| 8 | polar | capacity conservation Σ I = N·I(W) to 9 places; butterfly vs explicit F^⊗n; SCL ≤ SC |
+| 9 | harq | Chase doubles the LLR exactly; IR ≤ CC; throughput ≤ capacity. RV0 is "mostly systematic", not "systematic in order" — the buffer is interleaved |
+| 10 | spread | **`is_primitive` over GF(2)** validates the IS-95 short PN (2¹⁵−1), the 42-bit long code and the WCDMA Gold generators algebraically — 2⁴²−1 cannot be counted by stepping |
+| 11 | cdma | despreading gain = processing gain; RAKE; near-far; Gilhousen 40.9 users. Fixed a missing 1/√SF chip amplitude and a Walsh-shift interference model that did not degrade with load |
+| 12 | ofdm | CP ≥ delay ⇒ ISI 0 / CP < delay ⇒ broken; ICI = (πε)²/3; SC-FDMA PAPR lower; NR numerology arithmetic. Added `any_dft` for LTE's 2^a3^b5^c DFT sizes |
+| 13 | cellular | N = i²+ij+j²; SIR(7,4) = 18.66 dB; Erlang B(10,15) = 0.0365; trunking gain; cell breathing |
+| 14 | tdma | **Fractions, not floats** — 26 × 60/13 ms = 120 ms exactly; hyperframe 3 h 28 m 53.76 s; all five bursts sum to 156.25; TA step 553 m, TA 63 = 34.87 km |
+| 15 | mimo | Alamouti slope −2 vs SISO −1; capacity from singular values equals info's logdet (two modules checking each other); array gain 10log₁₀N; hardening ∝ 1/N |
+| 16 | orbit | **two real physics traps**: GEO altitude is measured over the *equatorial* radius (7 km), and GEO Doppler is zero only once Earth's rotation is subtracted (3 kHz otherwise) |
+| 17 | link | 290 K = −173.98 dBm/Hz; a hand-computed budget to 0.05 dB; max range solved and checked back |
+| 18 | fmt | copied from `optim/py/fmt.py`, comments re-wrapped to 72 columns |
+
+Rule kept throughout: **never loosen a tolerance to pass.** Where the plan's stated witness was
+not actually true (turbo monotonicity, RRC tail ISI, RV0 ordering), the test was rewritten to state
+the property that *is* true, and the reason is in the test's own docstring.
