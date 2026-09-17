@@ -643,6 +643,8 @@ The user approved every recommendation below as-is. Each row is now a decision.
   Card text "논문 53편 절 단위 인용" → 색인 53편(49편 절 단위 인용). check_slices rejects a slice that
   starts one line after a leading comment (E8), so scalar.py stays 33-43 and the prose says "def 바로
   아래 줄".
-- Not fixed (pre-existing, out of scope): check_deck.js counts 45 quizzes while the deck has 46
-  `card quiz` articles — its regex runs on `struct`; worth a look in a later pass.
+- Quiz count (2026-09-17): check_deck.js was right — the deck has 45 quiz slides. The 46th
+  `<article class="card quiz"` match is a JS comment inside demos.js (`querySelector` note), which
+  `grep -c` on the built HTML counts and the checker's `struct` (scripts stripped) does not.
+  index.html/README said "퀴즈 46" → 45.
 
