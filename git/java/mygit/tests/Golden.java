@@ -61,6 +61,20 @@ final class Golden {
     return rows;
   }
 
+  // 시험마다 새 임시 디렉터리. 지우는 쪽은 rmTree.
+  static String tempdir() throws IOException {
+    return Files.createTempDirectory("mygit-").toString();
+  }
+
+  static void rmTree(String dir) throws IOException {
+    try (var s = Files.walk(Path.of(dir))) {
+      for (Path p : s.sorted(java.util.Comparator.reverseOrder())
+          .toList()) {
+        Files.delete(p);
+      }
+    }
+  }
+
   // 유니코드 문자열 → 바이트 문자열(UTF-8 바이트를 latin1 로). mygit
   // 안의 문자열은 전부 이 꼴이다(Main.byteNames).
   static String b(String s) {
