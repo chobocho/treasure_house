@@ -971,3 +971,14 @@ The user approved every recommendation below as-is. Each row is now a decision.
   30 non-API commands; …), 초보자 3 (PLAN § numbers removed from prose; FCM, ABI glossed),
   한국어 3, 모순 1 ("installed nothing" vs the hand-made .deb). Glossary wording now says the
   arrow points to the slide that explains the word, which is what it does.
+
+### Step 13c — 리뷰 4차 (2026-09-18)
+
+- Second independent reading of parts 9–16 (they had only pass 2). 20 findings, re-verified:
+  사실오류 7 (port_switch rewrites connect/sendto only toward localhost; security policy allows a
+  token reward for severe bugs; README 1.5 vs 1.4.1; manual subtitle; wiki §3 for PULSE_SERVER;
+  "16 commands that read" → "touch" (send/call are among them); sysdata does not cover
+  /proc/net), 퀴즈 4, 근거없음 3 (native "fast/works" cells now say pending; services-not-
+  installed reworded to what procs_now shows), 캡처불일치 2, 교차참조 2, 한국어 2.
+- Pass-to-pass counts: 26 → 23 → 37 (0–8 second look) → 20 (9–16 second look). Both halves have
+  now had two independent readings.

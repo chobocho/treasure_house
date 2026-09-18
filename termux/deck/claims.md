@@ -315,3 +315,7 @@
 | root 의 apt 를 막은 까닭: /data 파티션의 소유권과 SELinux 라벨이 어긋나는 것을 막기 위해 | wiki-package-management 1 | 위키 | 2026-09-18 |
 | RUN_COMMAND 는 dangerous 보호 수준이라 사용자가 설정에서 그 앱에 따로 허락해야 한다 | out/src_security.txt 1 · gh-packages-termux-file-system-layout 1.3.1 | 소스·위키 | 2026-09-18 |
 | Termux:Tasker README: RUN_COMMAND 권한은 필수(1.6.2), allow-external-apps 는 선택(1.6.4) | readme-termux-tasker 1.6.2·1.6.4 | README | 2026-09-18 |
+| -p(port_switch): bind 는 언제나, connect·sendto 는 localhost 로 갈 때만 1024 미만 포트에 2000 을 더한다 | proot@7266fb3 src/extension/port_switch/port_switch.c 50–54 주석 | 소스 | 2026-09-18 |
+| 보안 정책: 보상 프로그램은 없지만 심각한 취약점엔 Open Collective 에서 소액 보상을 예외로 줄 수 있다 | termux-security-policy 2 | 공식 문서 | 2026-09-18 |
+| 0.118.0 수정: 프로바이더 읽기 권한을 RUN_COMMAND 로, openFile 모드를 읽기 전용에서 읽기·쓰기로 | post-2022-02-15-vuln 4.2 | 공식 글 | 2026-09-18 |
+| pkg 는 스크립트 첫머리에서 id -u 가 0 이면 "Cannot run 'pkg' command as root" 로 끝난다 | termux-tools@a62f7b2 scripts/pkg.in 3–7 | 소스 | 2026-09-18 |
