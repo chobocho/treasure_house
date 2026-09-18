@@ -11,6 +11,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as commit from './commit';
+import * as diff from './diff';
 import { GitError } from './errors';
 import * as index from './index';
 import * as objects from './objects';
@@ -591,6 +592,81 @@ function cmdMergeBase(ctx: Ctx, args: string[]): number {
   return 0;
 }
 
+// ── 8단계: diff ───────────────────────────────────────────────────
+
+// [모드, 이름, 바이트] — 디스크의 파일에서. 없으면 null.
+function diskSide(full: Buffer | string): diff.Side | null {
+  const st = fs.statSync(full, { throwIfNoEntry: false });
+  if (!st?.isFile()) return null;
+  const data = fs.readFileSync(full);
+  const mode = st.mode & 0o100 ? 0o100755 : 0o100644;
+  return [mode, objects.hashObject('blob', data), data];
+}
+
+// <rev> 의 트리를 펼쳐 {경로: [모드, 이름]}.
+function revTree(ctx: Ctx, rev: string): Map<string, worktree.Stat> {
+  const g = ctx.gitdir();
+  const oid = resolve(ctx, rev);
+  const t = oid && refs.peel(g, oid, 'tree');
+  if (!t) throw new GitError(AMBIGUOUS(rev));
+  return worktree.treeMap(g, t);
+}
+
+type Stat = worktree.Stat | undefined;
+
+// SPEC.md §11.5 의 네 꼴. --no-index 만 다르면 1 로 끝난다.
+function cmdDiff(ctx: Ctx, args: string[]): number {
+  const [on, , rest] = parseFlags(args, ['--cached', '--no-index']);
+  if (on.has('--no-index')) {
+    if (rest.length !== 2) {
+      throw new GitError('usage: mygit diff --no-index <a> <b>', 129);
+    }
+    const [a, b] = rest.map((p) => Buffer.from(p).toString('latin1'));
+    const text = diff.fileDiff(a, b, diskSide(ctx.path(rest[0])),
+      diskSide(ctx.path(rest[1])));
+    ctx.say(Buffer.from(text, 'latin1'));
+    return text ? 1 : 0;
+  }
+  const g = ctx.gitdir();
+  const root = ctx.root();
+  const worktreeSide = !rest.length && !on.has('--cached');
+  const pairs: [string, Stat, Stat][] = [];  // 바이트는 나중에
+  const both = (a: Map<string, worktree.Stat>,
+    b: Map<string, worktree.Stat>) => {
+    for (const p of worktree.sortedKeys(a, b)) {
+      pairs.push([p, a.get(p), b.get(p)]);
+    }
+  };
+  if (rest.length === 2) {
+    both(revTree(ctx, rest[0]), revTree(ctx, rest[1]));
+  } else if (on.has('--cached')) {
+    const [, head] = refs.readHead(g);
+    both(head ? revTree(ctx, head) : new Map(),
+      new Map(index.readIndex(g).filter((e) => e.stage === 0)
+        .map((e) => [e.path, [e.mode, e.oid]])));
+  } else if (worktreeSide) {
+    const ents = index.readIndex(g);
+    const unmerged = new Set(ents.filter((e) => e.stage)
+      .map((e) => e.path));
+    for (const e of ents) {
+      if (unmerged.has(e.path)) continue;   // 충돌 경로는 줄임
+      const now = diskSide(worktree.fsPath(root, e.path));
+      pairs.push([e.path, [e.mode, e.oid], now ? [now[0], now[1]]
+        : undefined]);
+    }
+  } else {
+    throw new GitError(AMBIGUOUS(rest[0]));
+  }
+  for (const [p, old, nu] of pairs) {
+    if (worktree.same(old, nu)) continue;
+    const o = old ? diff.blobSide(g, ...old) : null;
+    const n = !nu ? null : worktreeSide
+      ? diskSide(worktree.fsPath(root, p)) : diff.blobSide(g, ...nu);
+    ctx.say(Buffer.from(diff.fileDiff(p, p, o, n), 'latin1'));
+  }
+  return 0;
+}
+
 // ── 틀 ────────────────────────────────────────────────────────────
 const COMMANDS = new Map<string, Command>([
   ['hash-object', cmdHashObject],
@@ -607,6 +683,7 @@ const COMMANDS = new Map<string, Command>([
   ['commit', cmdCommit],
   ['log', cmdLog],
   ['merge-base', cmdMergeBase],
+  ['diff', cmdDiff],
 ]);
 
 // 명령 하나를 돌린다 → [종료 코드, 표준 출력, 표준 오류]. stdin 이
