@@ -186,9 +186,17 @@ public final class Cli {
     }
   }
 
-  // cat-file -p 의 몸. blob·commit·tag 는 그대로.
+  // cat-file -p 의 몸. blob·commit·tag 는 그대로, 트리는 항목마다
+  // "%06o 형식 이름\t경로" (SPEC.md §9, 경로 따옴표는 §8.2).
   static byte[] pretty(String type, byte[] body) {
-    return body;
+    if (!type.equals("tree")) return body;
+    StringBuilder sb = new StringBuilder();
+    for (Tree.Entry e : Tree.parseTree(body)) {
+      sb.append(String.format("%06o %s %s\t%s\n",
+          Integer.parseInt(e.mode(), 8), Tree.typeOfMode(e.mode()),
+          e.oid(), Worktree.quotePath(e.name())));
+    }
+    return sb.toString().getBytes(ISO_8859_1);
   }
 
   static int catFile(Ctx ctx, List<String> args) {
