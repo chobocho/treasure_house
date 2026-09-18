@@ -1,3 +1,10 @@
+### [2026-09-18 01:44] Termux 대백과사전 덱 3단계 — upstream 26개 핀·문서 127건·자료표·주장 49건
+- **기획:** 기억 대신 출처로: 저장소는 커밋, 위키는 revid, HTML 은 원문 해시로 핀 고정하고 연표·안드로이드 동작·릴리스를 표로 만든다.
+- **TC:** 정상: fetch_src 8·doc_text 21·gh_api 7·native_facts 5. 가장자리: 위키 절 번호 중복·SHA 속 숫자의 IMEI 오탐을 시험으로 먼저 박음.
+- **개발:** `termux/tools/{fetch_src.sh,doc_text.py,gh_api.py,native_facts.sh}`, `termux/data/*.tsv`(10), `termux/deck/claims.md`, `termux/PLAN.md`
+- **검증:** 104 passed, 0 failed · make all SKEL=1 오류 0건 · 연표 81행·안드로이드 19행
+- **비고:** targetSdk 는 v0.66(2019-01)부터 28, minSdk 는 v0.76 에서 24 인데 README 는 v0.83(태그 없음)이라 적는다. device.txt 는 사용자 실행 대기.
+
 ### [2026-09-18 01:43] Git 대백과사전 덱 3단계 — golden/(진짜 git 이 만든 기준 바이트 305개)
 - **기획:** 입력·명령만 적은 golden_cases.py 를 git 2.55.0 에 돌려 기대값을 받는 make_golden.py, 다섯 언어가 같이 읽을 장면 파일(.scn) 형식을 SPEC §16.4 에 추가.
 - **TC:** SHA-1 100·트리 12·diff 33쌍(agree 30/tie 3)·장면 19·팩 2·pkt 대화 3·오류 18. 저장 블록 객체가 git fsck --strict 통과.
