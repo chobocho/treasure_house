@@ -35,6 +35,15 @@ VIEWS = [
     ('tbl_api_native.html', 'api_cmds.tsv',
      ['command', 'owner-package', 'needs-app'],
      ('run-in-deck', 'native')),
+] + [
+    # 2부 — 시대별 연표(data/timeline.tsv). 출처 칸은 부록의 전체 표에
+    ('tbl_timeline_%s.html' % name, 'timeline.tsv',
+     ['year', 'month', 'day', 'event', 'evidence-kind'], ('year', years))
+    for name, years in (('2015', ('2015',)), ('2016_17', ('2016', '2017')),
+                        ('2019_20', ('2019', '2020')),
+                        ('2021_22', ('2021', '2022')),
+                        ('2023_24', ('2023', '2024')),
+                        ('2025_26', ('2025', '2026')))
 ]
 
 # 이 칸은 표에 글자로 싣지 않고 '출처' 링크로 바꾼다.
@@ -109,8 +118,10 @@ def build():
     for out_name, tsv, cols, filt in VIEWS:
         head, body = rows_of(tsv)
         if filt:
+            # 값 하나면 같음, 튜플이면 그중 하나(2부의 시대별 연표)
             col, want = filt
-            body = [r for r in body if r[head.index(col)] == want]
+            ok = want if isinstance(want, tuple) else (want,)
+            body = [r for r in body if r[head.index(col)] in ok]
         made[out_name] = render(head, body, cols)
     return made
 

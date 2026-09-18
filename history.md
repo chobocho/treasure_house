@@ -1,3 +1,9 @@
+### [2026-09-18 05:24] Termux 대백과사전 덱 2부 — 역사(13장)
+- **기획:** 2015 시작부터 2026-09 까지를 시대별 연표로. 날짜는 모두 기계로 모은 timeline.tsv 에서 표로 생성.
+- **TC:** gen_tables 거르개가 값 여러 개를 받게 시험 5건 먼저(RED 확인) — 값 하나·튜플·빈 튜플·거르개 없음·전체 표.
+- **개발:** `termux/deck/gen_tables.py`, `termux/deck/tests/test_gen_tables.py`, `termux/out/tbl_timeline_*.html`, `termux/deck/sections/02_history.html`, `termux/PLAN.md`, `Termux_대백과사전.html`
+- **검증:** deck 시험 통과 · make all SKEL=1 오류 0건 · 연도 인용 27건 근거 있음
+
 ### [2026-09-18 05:21] Termux 대백과사전 덱 1부 — 첫 10분(14장)
 - **기획:** 처음 여는 사람을 위한 입구: 무엇인가, 어디서 받나, 부트스트랩, pkg, 저장소, 키보드, 비상 세션, 도움 받는 곳.
 - **TC:** 조립 검사 오류 0건, 출처 없는 권고 2건 삭제, 원리는 3~9부로 넘기는 링크만.

@@ -883,3 +883,12 @@ The user approved every recommendation below as-is. Each row is now a decision.
   Android versions, pkg commands and limits, keyboard, failsafe, community) plus four captures
   already recorded (app dir, $PREFIX top level, 170 packages, ~/storage links). Every "why" is a
   forward pointer to Parts 3–9 rather than repeated here.
+
+### Step 8 · Part 2 — 역사 (2026-09-18)
+
+- `deck/gen_tables.py` filters accept a tuple of values (+5 tests in the new
+  `deck/tests/test_gen_tables.py`); six era views of `data/timeline.tsv`
+  (`tbl_timeline_2015` … `tbl_timeline_2025_26`).
+- Part 2 written: 13 slides (budget 140). Every date comes from the machine-collected timeline
+  (first commits, GitHub releases, wiki first revisions, notices); 2025+ carries "2026-09 기준".
+  The release-per-year figure and SDK steps figure are reused; people only as named in files.
