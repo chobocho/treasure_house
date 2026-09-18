@@ -14,6 +14,7 @@ import * as commit from './commit';
 import * as diff from './diff';
 import { GitError } from './errors';
 import * as index from './index';
+import * as merge from './merge';
 import * as objects from './objects';
 import * as refs from './refs';
 import * as tree from './tree';
@@ -781,6 +782,131 @@ function cmdCheckout(ctx: Ctx, args: string[]): number {
   return moveHead(ctx, null, oid, name);
 }
 
+// ── 10단계: merge ─────────────────────────────────────────────────
+const MYGIT_MERGE = 'Merge made by mygit (3-way, no renames).';
+
+function writeGitFile(ctx: Ctx, name: string, text: string): void {
+  fs.writeFileSync(path.join(ctx.gitdir(), name), text);
+}
+
+// 인덱스가 HEAD 트리와 같고 추적 파일이 그대로인가(SPEC §12.1).
+function isClean(ctx: Ctx, head: string): boolean {
+  const g = ctx.gitdir();
+  const want = worktree.treeMap(g, refs.peel(g, head, 'tree'));
+  const ents = index.readIndex(g);
+  const have = new Map(ents.map((e) => [e.path, [e.mode, e.oid]] as
+    [string, worktree.Stat]));
+  if (ents.some((e) => e.stage) || have.size !== want.size ||
+    [...have].some(([p, v]) => !worktree.same(v, want.get(p)))) {
+    return false;
+  }
+  return [...have].every(([p, v]) =>
+    worktree.same(worktree.fileState(ctx.root(), p), v));
+}
+
+// SPEC.md §12.1 — 이미 최신 · fast-forward · 3-way(충돌 포함).
+function cmdMerge(ctx: Ctx, args: string[]): number {
+  const [, , rest] = parseFlags(args, []);
+  if (rest.length !== 1) {
+    throw new GitError('usage: mygit merge <branch>', 129);
+  }
+  const [g, name] = [ctx.gitdir(), rest[0]];
+  let theirs = resolve(ctx, name);
+  theirs = theirs && refs.peel(g, theirs, 'commit');
+  if (!theirs) {
+    throw new GitError(`merge: ${name} - not something we can ` +
+      'merge', 1);
+  }
+  const [branch, head] = refs.readHead(g);
+  if (head === null) {
+    throw new GitError('fatal: mygit: nothing to merge into yet');
+  }
+  if (!isClean(ctx, head)) {
+    throw new GitError('error: mygit: commit your local changes ' +
+      'before merging');
+  }
+  // git 은 이미 최신이어도 ORIG_HEAD 를 지금 HEAD 로 다시 쓴다
+  // (golden/scen/merge-ff.scn 의 두 번째 merge 뒤)
+  writeGitFile(ctx, 'ORIG_HEAD', head + '\n');
+  if (walk.isAncestor(g, theirs, head)) {
+    ctx.say('Already up to date.\n');
+    return 0;
+  }
+  const treeOf = (c: string) => refs.peel(g, c, 'tree');
+  if (walk.isAncestor(g, head, theirs)) {
+    ctx.say(`Updating ${head.slice(0, 7)}..${theirs.slice(0, 7)}\n` +
+      'Fast-forward\n');
+    worktree.checkoutTree(ctx.root(), g, treeOf(head), treeOf(theirs));
+    refs.updateRef(g, branch ?? 'HEAD', theirs, head,
+      `merge ${name}: Fast-forward`, ident(ctx));
+    return 0;
+  }
+  const bases = walk.mergeBases(g, head, theirs);
+  if (bases.length !== 1) {
+    throw new GitError(`fatal: mygit: ${bases.length} merge bases ` +
+      '(criss-cross) are not supported');
+  }
+  const tmap = (c: string) => worktree.treeMap(g, treeOf(c));
+  const [result, notes, conflicts] = merge.mergeTrees(g,
+    tmap(bases[0]), tmap(head), tmap(theirs), name);
+  applyMerge(ctx, head, result);
+  for (const line of notes) ctx.say(line + '\n');
+  const cur = branch?.slice(HEADS.length);
+  const isBranch = refs.resolveRef(g, HEADS + name) !== null;
+  let msg = `Merge ${isBranch ? 'branch' : 'commit'} '${name}'`;
+  if (cur !== undefined && cur !== 'main' && cur !== 'master') {
+    msg += ` into ${cur}`;
+  }
+  if (conflicts.length) {
+    writeGitFile(ctx, 'MERGE_HEAD', theirs + '\n');
+    const utf8 = (p: string) => Buffer.from(p, 'latin1').toString();
+    writeGitFile(ctx, 'MERGE_MSG', `${msg}\n\n# Conflicts:\n` +
+      conflicts.map((p) => `#\t${utf8(p)}\n`).join(''));
+    ctx.say('Automatic merge failed; fix conflicts and then commit ' +
+      'the result.\n');
+    return 1;
+  }
+  const body = commit.serializeCommit(indexTree(ctx), [head, theirs],
+    ident(ctx, 'AUTHOR'), ident(ctx), msg + '\n');
+  const oid = objects.writeObject(g, 'commit', body);
+  refs.updateRef(g, branch ?? 'HEAD', oid, head,
+    `merge ${name}: ${MYGIT_MERGE}`, ident(ctx));
+  ctx.say(MYGIT_MERGE + '\n');
+  return 0;
+}
+
+// 합친 결과를 작업 트리와 인덱스에 쓴다. 충돌 경로는 단계 1‥3.
+function applyMerge(ctx: Ctx, head: string,
+  result: Map<string, merge.Outcome>): void {
+  const [g, root] = [ctx.gitdir(), ctx.root()];
+  const ours = worktree.treeMap(g, refs.peel(g, head, 'tree'));
+  const ents = new Map(index.readIndex(g).map((e) => [e.path, e]));
+  const staged: index.IndexEntry[] = [];
+  for (const [p, r] of result) {
+    if (r[0] === 'gone') {
+      if (ours.has(p)) worktree.removeFile(root, p);
+      ents.delete(p);
+    } else if (r[0] === 'clean') {
+      const [, mode, oid] = r;
+      if (!worktree.same(ours.get(p), [mode, oid])) {
+        worktree.writeFile(root, p, mode,
+          objects.readObject(g, oid)[1]);
+        ents.set(p, index.entryFromStat(p, worktree.fsPath(root, p),
+          oid));
+      }
+    } else {
+      const [, text, stages, mode] = r;
+      worktree.writeFile(root, p, mode, text);
+      ents.delete(p);
+      for (const k of [...stages.keys()].sort()) {
+        const [m, o] = stages.get(k)!;
+        staged.push(new index.IndexEntry(p, o, m, k));
+      }
+    }
+  }
+  index.writeIndex(g, [...ents.values(), ...staged]);
+}
+
 // ── 틀 ────────────────────────────────────────────────────────────
 const COMMANDS = new Map<string, Command>([
   ['hash-object', cmdHashObject],
@@ -800,6 +926,7 @@ const COMMANDS = new Map<string, Command>([
   ['diff', cmdDiff],
   ['switch', cmdSwitch],
   ['checkout', cmdCheckout],
+  ['merge', cmdMerge],
 ]);
 
 // 명령 하나를 돌린다 → [종료 코드, 표준 출력, 표준 오류]. stdin 이
