@@ -792,7 +792,12 @@ def overflow_check(doc):
     for m in ART_RE.finditer(doc):
         aid, inner = m.group(2), m.group(4)
         for pm in re.finditer(r'<pre([^>]*)>(.*?)</pre>', inner, re.S):
-            term = 'class="term"' in pm.group(1)
+            # upstream 소스(sources/)의 발췌도 캡처와 같은 처지다 — 남의
+            # 코드를 72칸으로 다시 접으면 "진짜 코드" 가 아니게 된다.
+            # 108칸까지 두고(블록 안에서 가로로 민다) 더 긴 줄은 인용
+            # 범위에서 빼도록 여전히 오류로 잡는다(PLAN.md 진행 기록 5부).
+            upstream = 'data-src="sources/' in pm.group(2)[:300]
+            term = 'class="term"' in pm.group(1) or upstream
             body = html.unescape(re.sub(r'<[^>]+>', '', pm.group(2)))
             rows = body.split('\n')
             if len(rows) > MAX_PRE_LINES:

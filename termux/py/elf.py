@@ -64,6 +64,7 @@ def read(path):
         (etype, mach, _v, _entry, phoff, _sh, _fl, _eh, phentsize,
          phnum) = _unpack(e + 'HHIIIIIHHH', data, 16)
         phfmt = e + 'IIIIIIII'
+
     loads, interp, dyn = [], None, None
     for i in range(phnum):
         p = _unpack(phfmt, data, phoff + i * phentsize)

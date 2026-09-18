@@ -178,6 +178,10 @@ def check(outdir):
         if man[n].get('kind') == 'snapshot' and not SNAP_RE.match(text):
             bad.append('out/%s: snapshot 인데 첫 줄 날짜가 없다' % n)
         for no, line in enumerate(text.split('\n'), 1):
+            ctl = [c for c in line if ord(c) < 32 and c != '\t']
+            if ctl:
+                bad.append('out/%s:%d 제어 문자 %r — HTML 에 못 싣는다'
+                           % (n, no, ctl[0]))
             w = cells(line.expandtabs(4))
             if w > MAX_COLS:
                 bad.append('out/%s:%d %d칸 (최대 %d)'
@@ -227,6 +231,8 @@ CAPTURES = [
         S('추적자가 있는가',
           "awk '/^TracerPid/{print $1, ($2>0?\"(0 아님)\":0)}' "
           '/proc/self/status'),
+        S('SELinux 문맥 — proot 도 못 꾸민다',
+          "tr -d '\\0' < /proc/self/attr/current; echo"),
     ]),
     Capture('env_proot', 'proot', 'stable', [
         S('환경 변수', 'env | sort'),
@@ -248,7 +254,13 @@ CAPTURES = [
         S('termux-* 명령 수', 'ls $PREFIX/bin | grep -c ^termux-'),
     ]),
     Capture('prefix_du', 'termux', 'snapshot', [
-        S('크기', 'du -sh $PREFIX $HOME 2>/dev/null', timeout=300),
+        # proot-distro 컨테이너 안의 바인드 경로에서 du 가 넘어진다 —
+        # 컨테이너는 빼고 잰다(9부에서 따로)
+        S('$PREFIX 의 크기 — proot-distro 컨테이너 뺌',
+          'du -sh --exclude=proot-distro $PREFIX', timeout=300),
+        S('큰 하위 디렉터리',
+          'du -sh $PREFIX/lib $PREFIX/share $PREFIX/bin '
+          '$PREFIX/include', timeout=300),
     ]),
     Capture('linker_termux', 'termux', 'stable', [
         S('bash · ls · termux-api 가 부르는 것',
@@ -296,6 +308,9 @@ CAPTURES = [
         S('pkg 는 셸 스크립트다', 'head -n 12 $PREFIX/bin/pkg'),
         S('설치된 termux-tools',
           "dpkg -s termux-tools | grep '^Version'"),
+        S('설치된 termux-exec·termux-core',
+          'dpkg -s termux-exec termux-core | '
+          "grep -E '^(Package|Version)'"),
         S('핀 고정 소스(pkg.in @v1.45.0)와 설치본',
           'sh exp/pkg_diff.sh sources/termux-tools/scripts/pkg.in '
           '$PREFIX/bin/pkg 1.45.0'),

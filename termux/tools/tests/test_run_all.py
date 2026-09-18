@@ -188,6 +188,12 @@ class CheckTest(unittest.TestCase):
                             'date': '2026-09-18'}})
         self.assertIn('snapshot', run_all.check(self.d)[0])
 
+    def test_control_character(self):
+        # /proc/self/attr/current 는 끝에 NUL 을 준다(실제로 샜다)
+        self.put('a.txt', 'u:r:x\x00\n')
+        self.man({'a.txt': {'kind': 'stable', 'side': 'termux'}})
+        self.assertIn('제어 문자', run_all.check(self.d)[0])
+
     def test_privacy_hit(self):
         self.put('a.txt', 'call 010-1234-5678\n')
         self.man({'a.txt': {'kind': 'stable', 'side': 'termux'}})

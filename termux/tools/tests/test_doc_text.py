@@ -102,6 +102,12 @@ class MarkdownTest(unittest.TestCase):
     def test_comment_dropped(self):
         self.assertNotIn('<!-- hidden -->', self.lines)
 
+    def test_double_underscore_inside_identifiers_kept(self):
+        # termux-exec 문서의 변수 이름에서 실제로 먹혔던 밑줄 (5부)
+        name = 'TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE'
+        got = doc_text.markdown('Set %s and __bold__ here.' % name)
+        self.assertEqual(got, 'Set %s and bold here.' % name)
+
     def test_skipped_level_still_numbers(self):
         got = doc_text.markdown('## A\n#### B\n').split('\n')
         self.assertEqual(got[:2], ['1\tA', '1.1\tB'])

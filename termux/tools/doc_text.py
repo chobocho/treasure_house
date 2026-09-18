@@ -118,7 +118,9 @@ def wikitext(text):
 def _inline_md(s):
     s = re.sub(r'!\[([^\]]*)\]\([^)]*\)', r'\1', s)
     s = re.sub(r'\[([^\]]+)\]\(([^)\s]+)\)', r'\1 (\2)', s)
-    s = re.sub(r'\*\*(.*?)\*\*|__(.*?)__',
+    # __굵게__ 는 낱말 밖에서만 — 식별자 안의 __ (TERMUX_EXEC__MODE)는
+    # 굵게가 아니다(termux-exec 문서에서 실제로 먹혔다)
+    s = re.sub(r'\*\*(.*?)\*\*|(?<!\w)__(?=\S)(.+?)(?<=\S)__(?!\w)',
                lambda m: m.group(1) or m.group(2), s)
     s = re.sub(r'`([^`]*)`', r'\1', s)
     return s
