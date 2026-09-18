@@ -11,7 +11,7 @@ main() 은 그것을 진짜 표준 스트림에 잇는다.
 import os
 import sys
 
-from mygit import (GitError, commit, index, objects, refs, tree,
+from mygit import (GitError, commit, index, objects, refs, tree, walk,
                    worktree)
 
 COMMANDS = {}
@@ -284,9 +284,23 @@ def cmd_branch(ctx, args):
 
 
 def delete_branch(ctx, rest):
-    """branch -d — 7단계에서 "HEAD 에서 닿는가" 를 보고 지운다."""
-    from mygit import not_implemented
-    not_implemented()
+    """branch -d — HEAD 에서 닿는 브랜치만 지운다(SPEC.md §9.2)."""
+    g = ctx.gitdir()
+    cur, head = refs.read_head(g)
+    for name in rest:
+        ref = 'refs/heads/' + name
+        oid = refs.resolve_ref(g, ref)
+        if ref == cur:
+            raise GitError("error: cannot delete branch '%s' used by "
+                           "worktree at '%s'" % (name, ctx.root()), 1)
+        if oid is None:
+            raise GitError("error: branch '%s' not found." % name, 1)
+        if head is None or not walk.is_ancestor(g, oid, head):
+            raise GitError("error: the branch '%s' is not fully merged"
+                           % name, 1)
+        refs.update_ref(g, ref, None, oid, '', '')
+        ctx.say('Deleted branch %s (was %s).\n' % (name, oid[:7]))
+    return 0
 
 
 @command('tag')
@@ -481,6 +495,70 @@ def cmd_commit(ctx, args):
     where = branch[len('refs/heads/'):] if branch else 'detached HEAD'
     ctx.say('[%s%s %s] %s\n' % (where, '' if head else ' (root-commit)',
                                  oid[:7], subj))
+    return 0
+
+
+# ── 7단계: log · merge-base ─────────────────────────────────────────
+def log_entry(ctx, oid, oneline):
+    """커밋 하나를 git log 의 꼴로(SPEC.md §9.1)."""
+    _t, body = objects.read_object(ctx.gitdir(), oid)
+    c = commit.parse_commit(body)
+    if oneline:
+        return '%s %s\n' % (oid[:7], commit.subject_of(c['message']))
+    name, mail, secs, tz = commit.parse_ident(c['author'])
+    rows = ['commit ' + oid]
+    if len(c['parents']) > 1:
+        rows.append('Merge: ' + ' '.join(p[:7] for p in c['parents']))
+    rows += ['Author: %s <%s>' % (name, mail),
+             'Date:   ' + commit.format_date(secs, tz), '']
+    msg = c['message'][:-1] if c['message'].endswith('\n') \
+        else c['message']
+    rows += ['    ' + line for line in msg.split('\n')]
+    return '\n'.join(rows) + '\n'
+
+
+@command('log')
+def cmd_log(ctx, args):
+    on, vals, rest = parse_flags(args, ('--oneline',), ('-n',))
+    g = ctx.gitdir()
+    if rest:
+        start = resolve(ctx, rest[0])
+        start = refs.peel(g, start, 'commit') if start else None
+        if start is None:
+            raise GitError(AMBIGUOUS % rest[0])
+    else:
+        branch, start = refs.read_head(g)
+        if start is None:
+            raise GitError("fatal: your current branch '%s' does not "
+                           "have any commits yet"
+                           % branch[len('refs/heads/'):])
+    order = walk.walk_log(g, [start])
+    if '-n' in vals:
+        order = order[:int(vals['-n'])]
+    oneline = '--oneline' in on
+    ctx.say(('' if oneline else '\n').join(
+        log_entry(ctx, oid, oneline) for oid in order))
+    return 0
+
+
+@command('merge-base')
+def cmd_merge_base(ctx, args):
+    on, _v, rest = parse_flags(args, ('--all',))
+    if len(rest) != 2:
+        raise GitError('usage: mygit merge-base [--all] <a> <b>', 129)
+    g = ctx.gitdir()
+    ids = []
+    for name in rest:
+        oid = resolve(ctx, name)
+        oid = refs.peel(g, oid, 'commit') if oid else None
+        if oid is None:
+            raise GitError('fatal: Not a valid object name %s' % name)
+        ids.append(oid)
+    best = walk.merge_bases(g, ids[0], ids[1])
+    if not best:
+        return 1
+    for oid in (best if '--all' in on else best[:1]):
+        ctx.say(oid + '\n')
     return 0
 
 
