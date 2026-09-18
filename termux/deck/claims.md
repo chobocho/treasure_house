@@ -187,3 +187,21 @@
 | termux.properties 키는 TermuxPropertyConstants 에 정의돼 있다(extra-keys·bell-character·terminal-transcript-rows 등) | termux-app@084d709 termux-shared/…/TermuxPropertyConstants.java · out/src_app.txt | 소스 | 2026-09-18 |
 | 이 기기의 ~/.termux 에는 termux.properties 하나만 있다 | out/dot_termux.txt | 캡처 | 2026-09-18 |
 | 셸을 못 찾거나 안전(failsafe) 세션이면 /system/bin/sh 를 쓴다 | termux-app@084d709 TermuxSession.java 105–114 | 소스 | 2026-09-18 |
+| pkg 는 root 로 실행하면 "Error: Cannot run 'pkg' command as root" 로 멈춘다 | termux-tools@a62f7b2 scripts/pkg.in 4–8 | 소스 | 2026-09-18 |
+| pkg 는 apt 와 pacman 두 관리자를 다루며, 하위 명령을 접두어로 받아(i*·up|upg*·un*|rem*…) apt 명령으로 바꾼다 | termux-tools@a62f7b2 scripts/pkg.in 409–442 | 소스 | 2026-09-18 |
+| pkg install·search 는 미러를 고르고, 캐시가 없거나 sources.list 가 캐시보다 새롭거나 캐시가 1200초보다 오래되면 apt update 를 한다 | termux-tools@a62f7b2 scripts/pkg.in 362–393·102–109·414·420 | 소스 | 2026-09-18 |
+| pkg upgrade 는 apt update 뒤 apt full-upgrade 다 | termux-tools@a62f7b2 scripts/pkg.in 423 | 소스 | 2026-09-18 |
+| termux-tools 패키지의 판은 1.46.0+really1.45.0 이고 소스는 v1.45.0 태그다(Essential) | termux-packages@7d5b4d3 packages/termux-tools/build.sh | 소스 | 2026-09-18 |
+| build-package.sh 는 설정·의존성·소스 받기·툴체인·패치·configure·make·make install·massage·패키지 만들기(debian·pacman) 순으로 termux_step_* 를 부른다 | termux-packages@7d5b4d3 build-package.sh 737–813 | 소스 | 2026-09-18 |
+| massage 단계가 첫 줄의 #!…/bin/X 를 #!$TERMUX_PREFIX/bin/X 로 고친다(이미 /system/ 이나 접두사면 건너뜀) | termux-packages@7d5b4d3 scripts/build/termux_step_massage.sh 79–116 | 소스 | 2026-09-18 |
+| 부트스트랩은 기본으로 aarch64·arm·i686·x86_64 네 아키텍처, apt(기본)·pacman 두 관리자로 만들 수 있다 | termux-packages@7d5b4d3 scripts/generate-bootstraps.sh 13–37 | 소스 | 2026-09-18 |
+| repo.json 은 저장소 채널 셋(packages→termux-main, root-packages→termux-root, x11-packages→termux-x11)을 정한다 | termux-packages@7d5b4d3 repo.json | 소스 | 2026-09-18 |
+| 패키지 빌드 요건: root 권한이 필요한 일 금지, 빌드 디렉터리·$TERMUX__PREFIX 밖의 파일 수정 금지, 코딩 지침 준수 | gh-packages-creating-new-package 1.2 | 위키 | 2026-09-18 |
+| 기본 저장소 호스팅은 Bintray 가 2021-05-01 에 문을 닫아 Fosshost 로 옮겼다(이슈 #6348) | gh-packages-package-management 1.1 | 위키 | 2026-09-18 |
+| Termux 저장소에는 패키지가 1000개가 넘는다 | wiki-getting-started 2 | 위키 | 2026-09-18 |
+| 빌드는 공식 Docker 이미지(scripts/run-docker.sh)가 권장이며, 메인테이너와 같은 환경이라 빌드가 재현된다 | gh-packages-build-environment 1.3.1 | 위키 | 2026-09-18 |
+| 빌드 시스템은 Termux 앱 안에서도 쓸 수 있지만 모든 패키지가 되지는 않는다(TERMUX_PKG_ON_DEVICE_BUILD_NOT_SUPPORTED). termux-exec 가 안 되는 기기는 지원하지 않고, 기기 빌드 결과는 패키지 관리자가 추적하지 않는다 | gh-packages-build-environment 1.6.1 | 위키 | 2026-09-18 |
+| 기본 부트스트랩은 Android 7.0 이상·10 미만과 호환되게 만든다(BOOTSTRAP_ANDROID10_COMPATIBLE=false) | termux-packages@7d5b4d3 scripts/generate-bootstraps.sh 13–15 | 소스 | 2026-09-18 |
+| NDK 헤더 패치의 경로가 android-ndk-r28b/toolchains/llvm/prebuilt/linux-x86_64 이다 — 공식 빌드의 호스트가 x86-64 리눅스 | termux-packages@7d5b4d3 ndk-patches/29/pwd.h.patch 1–2 | 소스 | 2026-09-18 |
+| massage 단계는 termux_step_strip_elf_symbols 와 termux_step_elf_cleaner 를 부른다 | termux-packages@7d5b4d3 scripts/build/termux_step_massage.sh 58·62 | 소스 | 2026-09-18 |
+| 손으로 만든 treasure-hello .deb 는 proot(uid 0) 에서도 dpkg -i 로 설치·dpkg -r 로 제거된다(apt 와 달리 dpkg 에는 root 검사 패치가 없다) | out/deb_by_hand.txt | 캡처 | 2026-09-18 |

@@ -1,3 +1,10 @@
+### [2026-09-18 03:13] Termux 대백과사전 덱 6부 — 패키지 시스템(37장)
+- **기획:** 폰의 pkg·apt·dpkg 에서 저장소·미러·키를 거쳐 termux-packages 공장과 부트스트랩까지, 그리고 .deb 손으로 만들기.
+- **TC:** 조립 검사: 인용 범위 36개 경계 통과, 소스 줄 인용 40건 핀 확인, 출처 없는 문장 1건 삭제·1건 미확인 표시.
+- **개발:** `termux/deck/sections/06_packages.html`, `termux/deck/claims.md`, `termux/deck/pending.txt`, `termux/PLAN.md`
+- **검증:** make all SKEL=1 오류 0건 · 역검증 통과 · check_slices 어긋남 0건
+- **비고:** 설치본 pkg 가 소스와 첫 줄만 다른 까닭을 massage 단계의 셔뱅 고치기로 확인. proot 에서는 pkg·apt 모두 root 거부.
+
 ### [2026-09-18 03:05] Termux 대백과사전 덱 4부 — 앱(32장)
 - **기획:** termux-app 의 구조·터미널 에뮬레이터·PTY·TermuxService·부트스트랩·sharedUserId·RUN_COMMAND·properties·targetSdk 를 소스로.
 - **TC:** 조립 검사: 인용 범위 26개 경계 통과, 소스 줄 인용 30건 핀 커밋 확인, 긴 줄은 캡처로 돌림.

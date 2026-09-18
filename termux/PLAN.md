@@ -754,3 +754,17 @@ The user approved every recommendation below as-is. Each row is now a decision.
   TermuxService foreground + wake locks, bootstrap `.incbin` per ABI, SYMLINKS.txt, staging
   rename, sharedUserId, RUN_COMMAND (two locks), property keys, targetSdk trade-offs. Lineage from
   README/LICENSE (Android Terminal Emulator, Apache-2.0).
+
+### Step 8 · Part 6 — 패키지 시스템 (2026-09-18)
+
+- Captures: `dpkg_stats` step 4 (owner counts: termux-api 57 · termux-tools 13 · termux-core 9 ·
+  termux-exec 2 · termux-am-socket 2 · proot 1 = the plan's 84); `src_pkgs` (massage shebang lines;
+  the three `getuid() == 0` insertions in the apt patch).
+- Part 6 written: 37 slides (budget 210). Findings made explicit on slides: `pkg` itself refuses
+  uid 0 (pkg.in 4–8) as well as apt; the installed `pkg` differs from the pinned `pkg.in` only on
+  line 1 because `termux_step_massage` rewrites shebangs (sourced); `pkg` also drives **pacman**;
+  `update_apt_cache` refreshes when the cache is older than 1200 s; bootstraps default to
+  "Android >= 7.0 and < 10" compatibility; the NDK patch headers reveal a linux-x86_64 build host.
+  One unsourced claim was cut ("+really" semantics) and one motive is marked 미확인 (why apt
+  refuses root — the patch has no comment).
+- The three `exp/mkdeb/*` data files are now fully cited and left `pending.txt`.

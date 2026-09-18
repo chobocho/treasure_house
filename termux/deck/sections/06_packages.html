@@ -1,19 +1,368 @@
 <article class="card section" id="p6">
 <p class="chnum">6부</p>
 <h2>원리 III: 패키지 시스템</h2>
-<p class="chsub">apt 와 dpkg 가 안드로이드에서 도는 법</p>
-<p class="cap">이 부의 목표 장수는 210장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>6부에서 다룰 것</h3>
+<p class="chsub">데비안의 apt·dpkg 가 안드로이드의 앱 데이터 안에서 도는 법</p>
+<p>Termux 의 패키지는 데비안과 같은 <code>.deb</code> 이고, 관리자도 데비안의 <code>apt</code>·<code>dpkg</code> 입니다. 다만 모든
+패키지가 <code>/data/data/com.termux/files/usr</code> 에 깔리도록 지어졌고, 그것을 짓는 공장(termux-packages)이
+따로 있습니다. 이 부는 폰의 <code>pkg</code> 명령에서 시작해 공장까지 거슬러 올라갑니다.</p>
+<!--FIG file=package_flow.svg cap=소스에서 $PREFIX 까지 — 기본 저장소 주소는 data/repos_apt.tsv-->
+</article>
+
+<article class="card" id="p6-c1">
+<p class="chnum">1장</p>
+<h2>dpkg — 이 기기에 무엇이 깔려 있나</h2>
+<p>dpkg 는 설치한 모든 패키지를 <code>$PREFIX/var/lib/dpkg/status</code> 한 파일에 적습니다. 그 파일을 4부의 도구
+<code>py/pkgstat.py</code> 로 셉니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-count">
+<h3>설치된 패키지</h3>
+<!--OUT file=dpkg_stats.txt sec=1 note=dpkg -l 의 ii 줄 수-->
+<!--OUT file=dpkg_stats.txt sec=2 note=status 파일을 센 결과-->
+<p>이 기기는 개발 도구를 많이 깔아 큰 편입니다. Maintainer 가 <code>@termux</code> 인 것이 대부분이고, 나머지는
+TUR 같은 다른 저장소에서 왔습니다(3장). <code>Essential: yes</code> 는 지우면 Termux 가 망가지는 필수 패키지입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-sizes">
+<h3>크기로 나눠 보면</h3>
+<!--FIG file=pkg_sizes.svg cap=설치 크기(Installed-Size, KiB) 구간마다의 패키지 수-->
+<p>절반 넘게가 1 MiB 아래입니다. 크기는 몇 안 되는 큰 도구(code-server·rust·golang·clang)가 차지합니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-pkgstat-src">
+<h3>status 파일을 세는 코드</h3>
+<!--CODE file=py/pkgstat.py sym=parse_status note=빈 줄로 가른 문단 하나가 패키지 하나-->
+<!--CODE file=py/pkgstat.py sym=installed note=지금 설치된 것만-->
+<p>지웠어도 설정 파일이 남으면 <code>deinstall ok config-files</code> 로 문단이 남습니다. 그래서 <code>install ok
+installed</code> 인 것만 셉니다.</p>
+<!--OUT file=dpkg_stats.txt sec=1 note=같은 수를 dpkg 로도-->
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-owners">
+<h3>termux-* 명령은 누구 것인가</h3>
+<!--OUT file=dpkg_stats.txt sec=4 note=dpkg -S 로 본 주인 패키지-->
+<p>84개 중 57개가 <code>termux-api</code> 패키지 것입니다(7부). 나머지는 기본 도구(<code>termux-tools</code>), 실행 환경
+(<code>termux-core</code>·<code>termux-exec</code>), 앱과 이야기하는 <code>termux-am</code>, 그리고 <code>proot</code> 의
+<code>termux-chroot</code> 입니다. 전체 목록은 17부 부록의 명령 색인에 있습니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-c2">
+<p class="chnum">2장</p>
+<h2>pkg — apt 를 감싼 셸 스크립트</h2>
+<p>Termux 에서는 <code>apt</code> 대신 <code>pkg</code> 를 쓰라고 합니다. <code>pkg</code> 는 따로 짠 관리자가 아니라, apt 를 부르기
+전에 몇 가지를 챙기는 bash 스크립트입니다.</p>
+<!--OUT file=pkg_script.txt sec=1 note=$PREFIX/bin/pkg 의 머리-->
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-pkg-same">
+<h3>인용하는 소스가 곧 돌고 있는 것</h3>
+<!--OUT file=pkg_script.txt sec=2 note=설치된 termux-tools 의 판-->
+<!--OUT file=pkg_script.txt sec=4 note=핀 고정한 pkg.in 과 설치본의 차이-->
+<p>이 덱은 termux-tools 를 설치본과 같은 태그(v1.45.0)에 핀 고정했습니다. 자리표시 넷을 채우고 비교하면
+<b>첫 줄 하나</b>만 다릅니다 — <code>#!/bin/bash</code> 가 <code>#!$PREFIX/bin/bash</code> 로. 누가 고쳤는지는 4장에서 봅니다.
+그래서 아래 발췌들은 이 폰에서 실제로 도는 <code>pkg</code> 의 줄입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-pkg-really">
+<h3>1.46.0+really1.45.0 이라는 판</h3>
+<!--CODE file=sources/termux-packages/packages/termux-tools/build.sh sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=1-9 note=termux-tools 패키지의 레시피 머리-->
+<!--SRC repo=termux-packages path=packages/termux-tools/build.sh sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=1-9-->
+<p>패키지 판 문자열에는 1.46.0 과 1.45.0 이 함께 들어 있고, 실제로 받는 소스는 v1.45.0 태그입니다 — 레시피의
+<code>TERMUX_PKG_VERSION</code> 과 <code>TERMUX_PKG_SRCURL</code> 두 줄이 그것을 말합니다. 레시피 하나가 판·소스 주소·
+해시·의존을 전부 적는 것이 termux-packages 의 방식입니다(4장). <code>TERMUX_PKG_ESSENTIAL=true</code> 도 보입니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p6-pkg-root">
+<h3>pkg 는 root 를 거부한다</h3>
+<!--CODE file=sources/termux-tools/scripts/pkg.in sha=a62f7b21bc6cdfb343c319d920097ad69b814134 lines=1-8 note=스크립트의 첫 검사-->
+<!--SRC repo=termux-tools path=scripts/pkg.in sha=a62f7b21bc6cdfb343c319d920097ad69b814134 lines=1-8-->
+<p><code>id -u</code> 가 0 이면 멈춥니다. proot 는 uid 를 0 으로 보여 주므로, <b>이 덱을 만든 proot 세션에서는
+pkg 가 돌지 않습니다</b>. apt 도 마찬가지입니다(3장). 그래서 이 덱은 패키지를 하나도 설치하지 않았습니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p6-pkg-map">
+<h3>pkg 의 하위 명령 → apt</h3>
+<!--CODE file=sources/termux-tools/scripts/pkg.in sha=a62f7b21bc6cdfb343c319d920097ad69b814134 lines=409-425 note=접두어로 받아 apt 명령으로-->
+<!--SRC repo=termux-tools path=scripts/pkg.in sha=a62f7b21bc6cdfb343c319d920097ad69b814134 lines=409-425-->
+<p>하위 명령을 앞 글자로 받습니다 — <code>pkg in</code>·<code>pkg i</code>·<code>pkg install</code> 이 모두 <code>i*</code> 입니다.
+<code>up</code> 은 <code>apt update</code> 후 <code>apt full-upgrade</code> 입니다. 아래쪽의 같은 모양 블록은 <b>pacman</b>
+용입니다 — Termux 는 apt 대신 pacman 을 쓰는 부트스트랩도 만들 수 있습니다(5장).</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p6-pkg-cache">
+<h3>install 앞에서 목록을 새로 받을지 정한다</h3>
+<!--CODE file=sources/termux-tools/scripts/pkg.in sha=a62f7b21bc6cdfb343c319d920097ad69b814134 lines=379-393 note=apt update 가 필요한가-->
+<!--SRC repo=termux-tools path=scripts/pkg.in sha=a62f7b21bc6cdfb343c319d920097ad69b814134 lines=379-393-->
+<p>캐시나 목록 파일이 없거나, <code>sources.list</code> 가 캐시보다 새롭거나, 캐시가 1200초(20분)보다 오래되면
+<code>apt update</code> 를 먼저 합니다(<code>last_modified</code> 는 초 단위 나이를 돌려줍니다, 102–109행). 그래서
+<code>pkg install</code> 은 <code>apt install</code> 보다 "목록이 낡았다" 오류를 덜 냅니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card quiz" id="p6-quiz-1" data-quiz>
+<h3>1~2장 퀴즈</h3>
+<p class="q">Q. <code>pkg rem vim</code> 과 <code>pkg un vim</code> 은 각각 무엇을 할까요? 그리고 <code>pkg up</code> 을 치면
+apt 에게는 어떤 명령이 몇 번 갑니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 둘 다 <code>un*|rem*|rm|del*</code> 에 걸려 <code>apt remove vim</code> 입니다. <code>pkg up</code> 은 <code>up|upg*</code>
+에 걸려 미러를 고른 뒤 <code>apt update</code> 와 <code>apt full-upgrade</code>, 두 번 갑니다(pkg.in 409–425).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-c3">
+<p class="chnum">3장</p>
+<h2>저장소 · 미러 · 서명 키</h2>
+<p>apt 가 패키지를 받는 곳은 <code>$PREFIX/etc/apt/sources.list</code> 에 적혀 있습니다. 공식 저장소는 셋이고,
+Termux 밖의 사용자 저장소(TUR)와 glibc 저장소가 더해집니다.</p>
+<!--FIG file=repo_tiers.svg cap=저장소 다섯 층과 그것을 켜는 패키지 (data/repos_apt.tsv)-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-repo-json">
+<h3>공식 채널 셋</h3>
+<!--CODE file=sources/termux-packages/repo.json sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=1-21 note=termux-packages 의 저장소 채널-->
+<!--SRC repo=termux-packages path=repo.json sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=1-21-->
+<p>소스 저장소의 디렉터리(<code>packages/</code>·<code>root-packages/</code>·<code>x11-packages/</code>)가 곧 apt 저장소의
+채널입니다. root·x11 채널은 <code>root-repo</code>·<code>x11-repo</code> 패키지를 설치하면 켜집니다 — 그 패키지가 하는
+일은 <code>sources.list.d</code> 에 한 줄을 넣는 것뿐입니다(data/repos_apt.tsv 의 출처 칸).</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p6-sources-list">
+<h3>이 기기의 sources.list</h3>
+<!--OUT file=apt_sources.txt sec=1 note=기본 저장소 한 줄-->
+<!--OUT file=apt_sources.txt sec=3 note=sources.list.d 의 TUR-->
+<p>기본 저장소가 <code>packages.termux.dev</code> 가 아니라 미러로 바뀌어 있습니다 —
+<code>termux-change-repo</code> 로 고른 결과입니다. TUR 은 <code>tur-repo</code> 패키지가 넣은 줄입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-mirrors">
+<h3>미러는 어디에 있나</h3>
+<p>termux-packages 위키의 미러 목록은 대륙별로 나뉩니다 — 아시아, 중국 본토, 유럽, 북아메리카, 오세아니아,
+러시아. 대학·재단·개인이 운영합니다. 주 호스트(<code>packages.termux.dev</code>)와 CDN 주소
+(<code>packages-cf.termux.dev</code>)도 같은 문서에 있고, 문서는 포크가 이 호스트를 쓰지 말고 저장소를 따로
+세우라고 부탁합니다.</p>
+<p><code>pkg</code> 는 <code>$PREFIX/etc/termux/mirrors</code> 의 미러 파일과 그 무게(WEIGHT)로 미러를 고릅니다(pkg.in
+<code>select_mirror</code>). 1부에서 고르는 법을 봅니다.</p>
+<p class="cap">출처: 위키 Mirrors 2.2·2.3 · termux-tools@a62f7b2 scripts/pkg.in 13·173–200</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-policy">
+<h3>apt 가 보는 우선순위 (스냅샷)</h3>
+<!--OUT file=apt_policy.txt note=apt-cache policy 의 앞부분 — 100칸에서 자름-->
+<p>설치된 것(<code>dpkg/status</code>)은 100, 저장소는 500 입니다. 같은 이름의 패키지가 여러 저장소에 있으면
+우선순위와 판으로 고릅니다. 이 캡처는 날짜가 박힌 스냅샷입니다 — 저장소 목록은 받을 때마다 바뀝니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-keys">
+<h3>서명 키 — 누구를 믿나</h3>
+<!--OUT file=apt_sources.txt sec=4 note=$PREFIX/etc/apt/trusted.gpg.d-->
+<p>apt 는 저장소의 목록 파일에 붙은 서명을 이 키들로 확인합니다. 키는 <code>termux-keyring</code> 패키지가
+넣고(메인테이너 개인 키와 자동 빌드 키), TUR 의 키는 <code>tur-repo</code> 가 넣습니다. 이 덱의 proot 쪽에는
+<code>gpg</code> 가 없어 지문은 찍지 않았습니다(data/repos_apt.tsv 의 빈 칸).</p>
+<p class="cap">출처: termux-packages@7d5b4d3 packages/termux-keyring·tur-repo 디렉터리의 파일</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-apt-root">
+<h3>apt 는 root 를 거부한다 — 패치 한 벌</h3>
+<!--CODE file=sources/termux-packages/packages/apt/0010-prevent-usage-as-root.patch sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=1-6 note=apt.cc 의 main() 을 고치는 패치의 머리-->
+<!--OUT file=src_pkgs.txt sec=2 note=root 검사가 들어가는 세 곳(apt·apt-get·apt-mark)-->
+<!--SRC repo=termux-packages path=packages/apt/0010-prevent-usage-as-root.patch sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=1-8-->
+<!--OUT file=apt_sources.txt sec=5 note=proot(uid 0) 에서 apt 를 부르면-->
+<p>Termux 는 apt·apt-get·apt-mark 의 <code>main()</code> 첫머리에 <code>getuid() == 0</code> 검사를 넣어 짓습니다.
+Termux 의 apt 가 root 로 돌면 파일 소유가 어긋나 환경이 망가지기 쉽기 때문일 것입니다 — 패치 파일에는
+그 까닭이 적혀 있지 않아 이 덱은 추측으로 남깁니다(<span class="unv">미확인</span>).</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p6-c4">
+<p class="chnum">4장</p>
+<h2>termux-packages — 패키지를 짓는 공장</h2>
+<p>저장소의 모든 <code>.deb</code> 는 termux-packages 저장소에서 지어집니다. 패키지마다 디렉터리 하나, 그 안의
+<code>build.sh</code>(레시피) 하나와 필요하면 <code>*.patch</code> 들이 있고, <code>build-package.sh</code> 가 레시피를 읽어 짓습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-steps-1">
+<h3>build-package.sh 의 단계 ① — 준비에서 configure 전까지</h3>
+<!--CODE file=sources/termux-packages/build-package.sh sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=747-773 note=의존성·소스·툴체인·패치-->
+<!--SRC repo=termux-packages path=build-package.sh sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=747-773-->
+<p>단계마다 함수 하나(<code>termux_step_*</code>)이고, 각 함수는 <code>scripts/build/</code> 의 같은 이름 파일에 있습니다.
+레시피가 같은 이름의 함수를 정의하면 그 단계를 바꿔 끼웁니다(<code>termux_step_pre_configure</code> 따위).
+<code>termux_step_patch_package</code> 가 레시피 디렉터리의 패치를 겁니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p6-steps-2">
+<h3>build-package.sh 의 단계 ② — configure 에서 massage 까지</h3>
+<!--CODE file=sources/termux-packages/build-package.sh sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=775-797 note=configure·make·install·massage-->
+<!--SRC repo=termux-packages path=build-package.sh sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=775-797-->
+<p>설치는 진짜 <code>$PREFIX</code> 가 아니라 빌드용 디렉터리에 하고, 그것을 "massage(주무르기)" 디렉터리로
+옮겨 손질한 뒤 <code>.deb</code>(또는 pacman 패키지)로 묶습니다(804–806행).</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p6-massage">
+<h3>massage 단계가 셔뱅을 고친다</h3>
+<!--OUT file=src_pkgs.txt sec=1 note=termux_step_massage.sh 에서 뽑은 두 줄-->
+<!--SRC repo=termux-packages path=scripts/build/termux_step_massage.sh sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=86-113-->
+<p>패키지의 모든 파일에서 첫 줄이 <code>#!…/bin/…</code> 이면 <code>#!$TERMUX_PREFIX/bin/…</code> 로 바꿉니다(이미
+<code>/system/</code> 이나 접두사로 시작하면 건너뜁니다). 2장에서 <code>pkg</code> 의 첫 줄만 소스와 달랐던 까닭이 이것입니다.
+5부의 <code>termux-fix-shebang</code> 과 같은 sed 식이 공장 안에서도 돌고 있는 셈입니다. massage 는 그 밖에도 ELF 의
+심벌을 떼고(strip) 안드로이드 링커가 싫어하는 항목을 지웁니다(<code>termux_step_elf_cleaner</code>).</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p6-cross">
+<h3>교차 컴파일 — 폰이 아니라 PC 에서 짓는다</h3>
+<p>공식 빌드는 PC 에서 NDK 로 교차 컴파일합니다 — 3부에서 본 NDK 헤더 패치의 머리에 적힌 경로
+(<code>android-ndk-r28b/toolchains/llvm/prebuilt/linux-x86_64</code>)가 x86-64 리눅스 호스트의 흔적입니다.
+위키는 공식 Docker 이미지를 권합니다 —
+메인테이너와 같은 환경이라 빌드가 재현되기 때문입니다. 5부에서 본 툴체인 설정이 이때 <code>-Wl,-rpath</code>
+를 넣습니다.</p>
+<p>이 덱은 이 공장을 돌리지 않았습니다(Docker 도, 큰 빌드도 이 폰에서는 불가 — §9 결정 11). 소스를 읽고,
+손으로 <code>.deb</code> 하나를 만드는 것(7장)으로 대신합니다.</p>
+<p class="cap">출처: 위키 Build-environment 1.3.1 · 5부 8장의 발췌</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-c5">
+<p class="chnum">5장</p>
+<h2>부트스트랩 zip 이 만들어지는 곳</h2>
+<p>4부에서 APK 에 <code>.incbin</code> 으로 실려 오던 zip 은 termux-packages 의 스크립트가 만듭니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-generate-bootstraps">
+<h3>generate-bootstraps.sh</h3>
+<!--CODE file=sources/termux-packages/scripts/generate-bootstraps.sh sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=13-37 note=아키텍처·패키지 관리자·저장소-->
+<!--SRC repo=termux-packages path=scripts/generate-bootstraps.sh sha=7d5b4d3ec4d743aeae7908651146d4e187789be8 lines=13-37-->
+<p>이미 저장소에 올라간 패키지를 받아 아키텍처 넷(aarch64·arm·i686·x86_64)마다 zip 을 묶습니다. 관리자는
+apt 가 기본이고 pacman 으로도 만들 수 있습니다. 주석대로 기본 부트스트랩은 Android 7.0 이상, 10 미만과
+호환되게 만듭니다(<code>BOOTSTRAP_ANDROID10_COMPATIBLE=false</code>) — 5부의 W^X 이야기와 이어집니다.
+README 는 부트스트랩 zip 이 termux-packages 의 릴리스로 나온다고 적습니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p6-c6">
+<p class="chnum">6장</p>
+<h2>새 패키지를 올리려면</h2>
+<p>termux-packages 위키 "Creating new package" 가 레시피를 쓰는 법을 정리합니다. 첫머리의 요건 셋이
+Termux 라는 환경을 잘 보여 줍니다.</p>
 <ul>
-<li>apt·dpkg 가 안드로이드에서 도는 법</li>
-<li><code>pkg</code> 래퍼 해부</li>
-<li>미러·서명 키·저장소 계층(main · x11 · root · TUR · glibc)</li>
-<li>부트스트랩 zip 이 만들어지는 곳</li>
-<li>termux-packages 빌드 시스템 — <code>build.sh</code> · 단계 스크립트 · 패치 정책 · NDK 교차 컴파일</li>
-<li>새 패키지 만들기 절차</li>
-<li><code>.deb</code> 손으로 만들기(실험)</li>
-<li>기기 안에서 빌드하기</li>
+<li>root 권한이 필요한 일을 하지 않는다.</li>
+<li>빌드 디렉터리와 <code>$TERMUX__PREFIX</code> 밖의 파일을 고치지 않는다.</li>
+<li>스크립트는 코딩 지침대로 쓴다.</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<p>레시피(<code>build.sh</code>)는 bash 스크립트이고 변수(판·소스 주소·해시·의존…)와 필요하면 단계 덮어쓰기
+함수를 담습니다 — 2장의 termux-tools 레시피가 그 예입니다.</p>
+<p class="cap">출처: 위키 Creating-new-package 1.2·1.3</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-c7">
+<p class="chnum">7장</p>
+<h2>.deb 를 손으로 만든다 (실험 6)</h2>
+<p>공장을 못 돌리는 대신, 파일 세 개로 가장 작은 Termux 패키지를 만들어 이 폰에 설치했다가 지웁니다.
+설치될 경로가 <code>/data/data/com.termux/files/usr/…</code> 라는 것만 빼면 데비안과 같습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-deb-files">
+<h3>재료 — control 과 스크립트 둘</h3>
+<!--CODE file=exp/mkdeb/control note=패키지의 신원-->
+<!--CODE file=exp/mkdeb/treasure-hello note=설치될 프로그램 — 셔뱅이 이미 $PREFIX-->
+<!--CODE file=exp/mkdeb/postinst note=설치 뒤 dpkg 가 부른다-->
+<!--OUT file=deb_by_hand.txt sec=1 note=짓기-->
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-deb-build">
+<h3>짓는 스크립트</h3>
+<!--CODE file=exp/mkdeb/build.sh lines=11-25 note=경로를 통째로 세우고 dpkg-deb 로 묶는다-->
+<p>준비 디렉터리 안에 <code>data/data/com.termux/files/usr/bin</code> 을 통째로 만드는 것이 요점입니다. 소유자를
+root 로 적어(<code>--root-owner-group</code>) 만든 사람의 uid 가 패키지에 새지 않게 합니다.</p>
+<!--OUT file=deb_by_hand.txt sec=3 note=안에 든 파일(권한·소유자·경로)-->
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-deb-inspect">
+<h3>dpkg-deb 로 들여다보기</h3>
+<!--OUT file=deb_by_hand.txt sec=2 note=control 필드-->
+<p>4부에서 만든 <code>py/deb.py</code> 로도 같은 것을 읽습니다 — .deb 는 ar 묶음 안의 tar 두 개이기 때문입니다.</p>
+<!--CODE file=py/deb.py sym=ar_members note=ar 머리는 60바이트, 몸통은 짝수로-->
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-deb-install">
+<h3>설치하고, 돌리고, 지운다</h3>
+<!--OUT file=deb_by_hand.txt sec=4 note=dpkg -i — postinst 가 찍은 줄까지-->
+<!--OUT file=deb_by_hand.txt sec=5 note=설치된 명령-->
+<!--OUT file=deb_by_hand.txt sec=7 note=dpkg -r-->
+<!--OUT file=deb_by_hand.txt sec=8 note=지운 뒤에는 없다-->
+<p>proot 의 가짜 root 에서도 <b>dpkg 는</b> 돌았습니다 — apt 와 달리 root 검사 패치가 없습니다. 이 덱이 호스트에
+설치한 것은 이 패키지 하나뿐이고, 캡처 안에서 곧바로 지웠습니다(PLAN §8).</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-deb-files-list">
+<h3>dpkg 가 기억하는 것</h3>
+<!--OUT file=deb_by_hand.txt sec=6 note=dpkg -L — 이 패키지가 가진 경로-->
+<p>dpkg 는 패키지가 깐 파일과 디렉터리를 모두 기억해 두었다가 지울 때 씁니다. 디렉터리
+<code>/data/data/com.termux/files/usr/bin</code> 은 다른 패키지도 쓰므로 지우지 않고, 파일만 지웁니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p6-c8">
+<p class="chnum">8장</p>
+<h2>기기 안에서 짓기</h2>
+<p>termux-packages 의 빌드 시스템은 Termux 앱 안에서도 돕니다(<code>scripts/setup-termux.sh</code>). 위키의 단서:</p>
+<ul>
+<li>모든 패키지가 되지는 않습니다 — 되지 않는 것은 레시피에 <code>TERMUX_PKG_ON_DEVICE_BUILD_NOT_SUPPORTED</code>.</li>
+<li>termux-exec 가 동작하지 않는 기기는 지원하지 않습니다(5부).</li>
+<li>빌드 중에 생긴 파일은 <code>$TERMUX__PREFIX</code> 에 깔리지만 <b>패키지 관리자가 추적하지 않습니다</b>.
+그래서 짓기 전에 <code>$HOME</code> 과 <code>$PREFIX</code> 를 백업하라고 권합니다(10부).</li>
+</ul>
+<p class="cap">출처: 위키 Build-environment 1.6.1 "Termux App"</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-summary">
+<h3>6부를 한 표로</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>층</th><th>무엇</th><th>이 덱의 증거</th></tr>
+<tr><td>폰</td><td><code>pkg</code> → apt → dpkg, status 파일</td><td>캡처 · pkg.in 발췌</td></tr>
+<tr><td>저장소</td><td>main·root·x11 + TUR·glibc, 미러, 서명 키</td><td>sources.list 캡처 · repo.json</td></tr>
+<tr><td>공장</td><td>build.sh 레시피 · <code>termux_step_*</code> · massage</td><td>build-package.sh 발췌</td></tr>
+<tr><td>부트스트랩</td><td>generate-bootstraps.sh → zip → APK</td><td>발췌 · 4부의 <code>.incbin</code></td></tr>
+<tr><td>손으로</td><td>control + 파일 → dpkg-deb → dpkg -i/-r</td><td>실험 6 캡처</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p6-quiz-2" data-quiz>
+<h3>3~8장 퀴즈</h3>
+<p class="q">Q. 어떤 사람이 PC 에서 파이썬 스크립트를 <code>#!/usr/bin/python3</code> 로 써서 Termux 패키지로 만들었습니다.
+공식 저장소를 거쳐 설치됐다면 설치된 파일의 첫 줄은 무엇이고, 누가 바꿨습니까? 7장처럼 손으로 만든
+<code>.deb</code> 로 설치했다면?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 공식 경로로 지었다면 massage 단계의 sed 가 <code>#!/data/data/com.termux/files/usr/bin/python3</code> 로
+바꿔 둡니다. 손으로 만든 <code>.deb</code> 에는 그 단계가 없으니 <code>#!/usr/bin/python3</code> 가 그대로 깔리고, 실행될지는
+termux-exec 가 걸려 있는지에 달려 있습니다(5부). 그래서 실험 6 의 스크립트는 처음부터 <code>$PREFIX</code> 셔뱅으로
+썼습니다.</div>
+<span class="tier ill">설명용</span>
 </article>
