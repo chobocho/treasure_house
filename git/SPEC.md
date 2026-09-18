@@ -759,11 +759,13 @@ Date:   <작성 날짜>
 | `switch -c <b>` | `Switched to a new branch '<b>'` (첫 커밋 전이면 HEAD 가 가리키는 이름만 바꾼다) |
 | 이미 그 브랜치 | `Already on '<b>'` |
 | `checkout <커밋>` (분리) | `HEAD is now at <7글자> <제목>` |
-| 분리 상태에서 떠날 때 | 위 줄 앞에 `Previous HEAD position was <7글자> <제목>` |
+| 분리 상태에서 떠날 때 | 위 줄 앞에 `Previous HEAD position was <7글자> <제목>` — **새 커밋이 옛 커밋과 다를 때만**(같으면 git 도 찍지 않는다, `golden/scen/checkout.scn`) |
 | `switch <커밋>` | `fatal: a branch is expected, got commit '<x>'` (128) |
 
 **남은 변경 알림** — 바꾸기에 성공하면(`Already on` 포함) 새 HEAD 트리와 견주어
-작업 트리나 인덱스가 다른 추적 경로를 경로 차례로 표준 출력에 찍는다:
+작업 트리나 인덱스가 다른 추적 경로를 경로 차례로 표준 출력에 찍는다
+(단 `switch -c` 가 **지금 커밋에서** 새 브랜치를 만들 때는 찍지 않는다 — git 이
+그때는 작업 트리를 아예 건드리지 않는다):
 `<글자> TAB <경로(§8.2)>`. 글자는 `M`(내용·모드가 다름) · `D`(작업 트리에 없음) ·
 `A`(인덱스에만 있고 새 HEAD 에 없음). 규칙 1 로 따라온 손댄 파일이 여기 나온다
 (진짜 git 으로 확인, `golden/scen/checkout.scn`).

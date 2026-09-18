@@ -7,7 +7,7 @@ status 는 세 가지를 견준다: HEAD 트리, 인덱스, 디스크의 파일.
 """
 import os
 
-from mygit import index, objects, refs, tree
+from mygit import GitError, index, objects, refs, tree
 
 # \a \b \t \n \v \f \r 와 따옴표·역슬래시는 두 글자로 쓴다
 _SHORT = {7: 'a', 8: 'b', 9: 't', 10: 'n', 11: 'v', 12: 'f', 13: 'r',
@@ -150,4 +150,116 @@ def status(root, gitdir):
     tracked = set(stage0) | set(stages)
     for p in untracked(walk_worktree(root), tracked):
         rows.append('?? %s' % quote_path(p, space=True))
+    return rows
+
+
+
+def tree_map(gitdir, tree_oid):
+    """트리 → {경로: (모드, 이름)}. 트리가 없으면(첫 커밋 전) {}."""
+    if not tree_oid:
+        return {}
+    return {p: (int(m, 8), o) for m, o, p in
+            tree.flatten_tree(gitdir, tree_oid)}
+
+
+OVERWRITE = ('error: Your local changes to the following files would '
+             'be overwritten by checkout:')
+UNTRACKED = ('error: The following untracked working tree files would '
+             'be overwritten by checkout:')
+
+
+def _write_file(root, path, mode, data):
+    full = os.path.join(os.fsencode(root), path)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    if os.path.exists(full):
+        os.remove(full)
+    # 0666/0777 로 열고 umask 를 따른다 — git 과 같다(SPEC.md §9.3)
+    perm = 0o777 if mode & 0o100 else 0o666
+    fd = os.open(full, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, perm)
+    with os.fdopen(fd, 'wb') as f:
+        f.write(data)
+
+
+def _remove_file(root, path):
+    """파일을 지우고, 그래서 비게 된 디렉터리들도 지운다."""
+    base = os.fsencode(root)
+    full = os.path.join(base, path)
+    if os.path.lexists(full):
+        os.remove(full)
+    d = os.path.dirname(full)
+    while d != base and os.path.isdir(d) and not os.listdir(d):
+        os.rmdir(d)
+        d = os.path.dirname(d)
+
+
+def checkout_tree(root, gitdir, old_tree, new_tree):
+    """두 갈래 합치기로 작업 트리·인덱스를 old → new 로(SPEC.md §9.3).
+
+    경로마다: 옛 트리와 새 트리에서 같으면 손대지 않는다(손댄 내용이
+    따라온다). 다르면 인덱스가 옛 트리와 같고 작업 트리가 인덱스와
+    같아야 한다. 옛 트리에 없던 경로에 추적 안 하는 파일이 있으면
+    그것도 막는다. 하나라도 걸리면 아무것도 바꾸지 않고 멈춘다.
+    O(경로 수 × 해시).
+    """
+    old, new = tree_map(gitdir, old_tree), tree_map(gitdir, new_tree)
+    ents = index.read_index(gitdir)
+    idx = {e.path: e for e in ents if e.stage == 0}
+    unmerged = set(e.path for e in ents if e.stage)
+    local, stray = [], []
+    for p in sorted(set(old) | set(new) | set(idx) | unmerged):
+        if old.get(p) == new.get(p):
+            continue
+        cur = idx.get(p)
+        cur = (cur.mode, cur.oid) if cur else None
+        disk = file_state(root, p)
+        if p in unmerged:
+            local.append(p)
+        elif cur is None and old.get(p) is None:
+            if disk is not None and new.get(p) is not None:
+                stray.append(p)
+        elif cur != old.get(p) or disk != cur:
+            local.append(p)
+    if local or stray:
+        rows = []
+        for head, paths in ((OVERWRITE, local), (UNTRACKED, stray)):
+            if paths:
+                rows.append(head)
+                rows += ['\t' + quote_path(q) for q in paths]
+                rows.append('')
+        raise GitError('\n'.join(rows + ['Aborting']), 1)
+    for p in sorted(set(old) | set(new)):
+        if old.get(p) == new.get(p):
+            continue
+        if new.get(p) is None:
+            _remove_file(root, p)
+            idx.pop(p, None)
+            continue
+        mode, oid = new[p]
+        _write_file(root, p, mode, objects.read_object(gitdir, oid)[1])
+        full = os.path.join(os.fsencode(root), p)
+        idx[p] = index.entry_from_stat(p, full, oid)
+    index.write_index(gitdir, list(idx.values()))
+
+
+def local_changes(root, gitdir, head_tree):
+    """바꾼 뒤 남은 변경 — "M\t경로" 줄들(SPEC.md §9.3 끝).
+
+    새 HEAD 트리와 견주어 인덱스나 작업 트리가 다른 추적 경로. M 은
+    내용·모드, D 는 작업 트리에 없음, A 는 인덱스에만 있음.
+    """
+    head = tree_map(gitdir, head_tree)
+    rows = []
+    for e in index.read_index(gitdir):
+        if e.stage:
+            continue
+        disk = file_state(root, e.path)
+        if disk is None:
+            letter = 'D'
+        elif e.path not in head:
+            letter = 'A'
+        elif head[e.path] != (e.mode, e.oid) or disk != (e.mode, e.oid):
+            letter = 'M'
+        else:
+            continue
+        rows.append('%s\t%s' % (letter, quote_path(e.path)))
     return rows

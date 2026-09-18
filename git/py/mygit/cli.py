@@ -631,6 +631,115 @@ def cmd_diff(ctx, args):
     return 0
 
 
+# ── 9단계: switch · checkout ─────────────────────────────────────────
+def summary_line(ctx, oid):
+    """'<7글자> <제목>' — HEAD is now at … 의 꼬리."""
+    _t, body = objects.read_object(ctx.gitdir(), oid)
+    msg = commit.parse_commit(body)['message']
+    return '%s %s' % (oid[:7], commit.subject_of(msg))
+
+
+def move_head(ctx, branch, oid, arg, report=True):
+    """작업 트리를 oid 로 옮기고 HEAD 를 branch(또는 분리)로(SPEC §9.3).
+
+    안내는 표준 오류에, 남은 변경 알림은 표준 출력에. reflog 는
+    "checkout: moving from <옛> to <arg 그대로>" — 옛 쪽이 분리 상태면
+    40글자다(§6.3).
+    """
+    g = ctx.gitdir()
+    old_branch, old = refs.read_head(g)
+    old_tree = refs.peel(g, old, 'tree') if old else None
+    new_tree = refs.peel(g, oid, 'tree')
+    worktree.checkout_tree(ctx.root(), g, old_tree, new_tree)
+    same = branch is not None and branch == old_branch
+    # 분리 상태를 떠나되 커밋이 바뀔 때만 — 같은 커밋이면 git 도
+    # 찍지 않는다
+    if old_branch is None and old and oid != old:
+        ctx.warn('Previous HEAD position was %s\n'
+                 % summary_line(ctx, old))
+    refs.set_head(g, branch or oid)
+    frm = old_branch[len('refs/heads/'):] if old_branch else old
+    refs.append_reflog(g, 'HEAD', old, oid, ident(ctx),
+                       'checkout: moving from %s to %s' % (frm, arg))
+    for row in (worktree.local_changes(ctx.root(), g, new_tree)
+                if report else ()):
+        ctx.say(row + '\n')
+    if branch is None:
+        ctx.warn('HEAD is now at %s\n' % summary_line(ctx, oid))
+    elif same:
+        ctx.warn("Already on '%s'\n" % arg)
+    else:
+        ctx.warn("Switched to branch '%s'\n" % arg)
+    return 0
+
+
+def create_and_switch(ctx, name, start):
+    g = ctx.gitdir()
+    if not refs.valid_branch_name(name):
+        raise GitError("fatal: '%s' is not a valid branch name" % name)
+    if refs.resolve_ref(g, 'refs/heads/' + name):
+        raise GitError("fatal: a branch named '%s' already exists"
+                       % name)
+    old_branch, old = refs.read_head(g)
+    if old is None and start is None:
+        # 첫 커밋 전 — HEAD 가 가리키는 이름만 바꾼다
+        refs.set_head(g, 'refs/heads/' + name)
+        ctx.warn("Switched to a new branch '%s'\n" % name)
+        return 0
+    arg = start or 'HEAD'
+    oid = resolve(ctx, arg)
+    oid = refs.peel(g, oid, 'commit') if oid else None
+    if oid is None:
+        raise GitError("fatal: invalid reference: %s" % arg)
+    refs.update_ref(g, 'refs/heads/' + name, oid, None,
+                    'branch: Created from %s' % arg, ident(ctx))
+    # 지금 커밋에서 새 브랜치를 만들 때는 git 이 작업 트리를 건드리지
+    # 않고 남은 변경도 알리지 않는다(golden/scen/checkout.scn)
+    move_head(ctx, 'refs/heads/' + name, oid, name, report=oid != old)
+    ctx.err = ctx.err.replace(b"Switched to branch '%s'"
+                              % name.encode(),
+                              b"Switched to a new branch '%s'"
+                              % name.encode())
+    return 0
+
+
+@command('switch')
+def cmd_switch(ctx, args):
+    on, vals, rest = parse_flags(args, (), ('-c',))
+    g = ctx.gitdir()
+    if '-c' in vals:
+        return create_and_switch(ctx, vals['-c'],
+                                 rest[0] if rest else None)
+    if len(rest) != 1:
+        raise GitError('usage: mygit switch [-c] <branch>', 129)
+    name = rest[0]
+    oid = refs.resolve_ref(g, 'refs/heads/' + name)
+    if oid:
+        return move_head(ctx, 'refs/heads/' + name, oid, name)
+    if resolve(ctx, name):
+        raise GitError("fatal: a branch is expected, got commit '%s'"
+                       % name)
+    raise GitError('fatal: invalid reference: %s' % name)
+
+
+@command('checkout')
+def cmd_checkout(ctx, args):
+    _on, _v, rest = parse_flags(args, ())
+    if len(rest) != 1:
+        raise GitError('usage: mygit checkout <branch|commit>', 129)
+    g = ctx.gitdir()
+    name = rest[0]
+    oid = refs.resolve_ref(g, 'refs/heads/' + name)
+    if oid:
+        return move_head(ctx, 'refs/heads/' + name, oid, name)
+    oid = resolve(ctx, name)
+    oid = refs.peel(g, oid, 'commit') if oid else None
+    if oid is None:
+        raise GitError("error: pathspec '%s' did not match any file(s) "
+                       "known to git" % name, 1)
+    return move_head(ctx, None, oid, name)
+
+
 # ── 틀 ─────────────────────────────────────────────────────────────
 def run(args, cwd=None, env=None, stdin=b''):
     """명령 하나를 돌린다 → (종료 코드, 표준 출력, 표준 오류)."""
