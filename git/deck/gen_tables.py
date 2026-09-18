@@ -15,6 +15,7 @@
 
 시간·공간 모두 O(행 수).
 """
+import hashlib
 import html
 import io
 import json
@@ -137,9 +138,28 @@ def main(argv):
     for name, text in sorted(made.items()):
         io.open(os.path.join(OUT, name), 'w',
                 encoding='utf-8', newline='\n').write(text)
+    sync_manifest(made)
     print('생성 표 %d개 → out/' % len(made))
     print(manifest_note())
     return 0
+
+
+def sync_manifest(made):
+    """다시 쓴 표의 SHA-256 을 out/manifest.json 에도 적는다.
+
+    표는 data/ 에서 결정적으로 나오므로 여기서 적어도 재현성 약속이
+    깨지지 않는다. 안 적으면 data/*.tsv 를 한 줄 고칠 때마다
+    run_all.py --check 가 "manifest 와 어긋난다" 로 멈추고, 실험을
+    하나 다시 돌려야 풀렸다(run_all.py 와 같은 JSON 꼴로 쓴다).
+    """
+    p = os.path.join(OUT, 'manifest.json')
+    if not os.path.exists(p):
+        return
+    man = json.loads(read(p))
+    for name, text in made.items():
+        man[name] = hashlib.sha256(text.encode('utf-8')).hexdigest()
+    io.open(p, 'w', encoding='utf-8', newline='\n').write(
+        json.dumps(man, indent=1, sort_keys=True) + '\n')
 
 
 if __name__ == '__main__':
