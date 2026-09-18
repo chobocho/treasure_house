@@ -2,6 +2,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
 #include <stdexcept>
@@ -12,7 +13,7 @@
 
 namespace mygit {
 
-inline constexpr int STEP = 10;
+inline constexpr int STEP = 11;
 
 // 명령이 멈추는 까닭. code 는 종료 코드(SPEC.md §1.4).
 struct GitError : std::runtime_error {
@@ -250,6 +251,42 @@ std::pair<std::string, int> merge3(const std::string& base,
 TreeMerge merge_trees(const std::string& gitdir, const TreeMap& base,
                       const TreeMap& ours, const TreeMap& theirs,
                       const std::string& label);
+
+// ── pack.cpp (SPEC.md §13) ─────────────────────────────────────────
+// PackEntry 는 팩 항목 하나를 되살린 것. packed_type 은 팩에 적힌
+// 형식(6·7 은 델타), type·body 는 되살린 객체, depth·base 는 델타 사슬.
+struct PackEntry {
+    size_t offset = 0, end = 0;
+    long base_offset = -1;
+    int packed_type = 0, depth = 0;
+    uint32_t crc = 0;
+    std::optional<std::string> delta;
+    std::string body, base, type, oid;
+};
+struct IdxEntry {
+    std::string oid;
+    size_t offset;
+    uint32_t crc;
+};
+// PackItem 은 write_pack 이 넣을 객체 하나. base 는 델타 바탕의 목록
+// 번호(없으면 -1) — 바탕은 목록에서 앞에 있어야 한다(OFS_DELTA).
+struct PackItem {
+    std::string type, body;
+    long base;
+};
+using External = std::function<Object(const std::string&)>;
+std::vector<PackEntry> read_pack(std::string_view data,
+                                 const External& external = nullptr);
+std::pair<std::vector<IdxEntry>, std::string> read_idx(
+    std::string_view d);
+std::string write_idx(std::vector<PackEntry> entries,
+                      const std::string& pack_sum);
+std::string apply_delta(std::string_view base, std::string_view delta);
+std::string make_delta(std::string_view base, std::string_view target);
+std::pair<std::string, std::vector<PackEntry>> write_pack(
+    const std::vector<PackItem>& items);
+std::vector<std::string> verify_lines(std::vector<PackEntry> entries,
+                                      const std::string& pack_path);
 
 // ── cli.cpp (SPEC.md §1 · §9) ─────────────────────────────────────
 struct Result {

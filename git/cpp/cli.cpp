@@ -896,6 +896,125 @@ int cmd_merge(Ctx& ctx, std::vector<std::string> args) {
     return 0;
 }
 
+// ── 11단계: unpack-pack · verify-pack · pack-objects ────────────────
+
+// cmd_unpack_pack 은 팩의 객체를 전부 느슨한 객체로 푼다(§13.3).
+int cmd_unpack_pack(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {});
+    auto g = ctx.gitdir();
+    for (auto& name : f.rest) {
+        auto data = try_read(ctx.path(name));
+        if (!data) throw GitError("fatal: mygit: cannot read " + name);
+        for (auto& e : read_pack(
+                 *data, [&](auto& o) { return read_object(g, o); }))
+            write_object(g, e.type, e.body);
+    }
+    return 0;
+}
+
+// cmd_verify_pack 은 git verify-pack -v 와 같은 출력. 색인이 팩과 맞지
+// 않으면 오류.
+int cmd_verify_pack(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {"-v"});
+    if (!f.on.count("-v") || f.rest.size() != 1 ||
+        !f.rest[0].ends_with(".idx"))
+        throw GitError("usage: mygit verify-pack -v <pack>.idx", 129);
+    auto pack_path =
+        f.rest[0].substr(0, f.rest[0].size() - 4) + ".pack";
+    auto raw = try_read(ctx.path(f.rest[0]));
+    auto data = try_read(ctx.path(pack_path));
+    if (!raw || !data) throw GitError("fatal: mygit: cannot read pack");
+    auto [idx, sum] = read_idx(*raw);
+    auto ents = read_pack(*data);
+    std::set<std::string> got, want;
+    for (auto& e : ents)
+        got.insert(e.oid + std::to_string(e.offset) + ":" +
+                   std::to_string(e.crc));
+    for (auto& e : idx)
+        want.insert(e.oid + std::to_string(e.offset) + ":" +
+                    std::to_string(e.crc));
+    if (got != want || sum != data->substr(data->size() - 20))
+        throw GitError("fatal: mygit: " + f.rest[0] +
+                       " does not match " + pack_path);
+    for (auto& row : verify_lines(ents, pack_path))
+        ctx.out += row + "\n";
+    return 0;
+}
+
+// pack_items 는 pack-objects 가 넣을 객체들 — SPEC.md §13.3 의
+// 차례(커밋 → 트리·blob 전위 순회 → 주석 태그)와 델타 고르기.
+// 바탕은 같은 경로에서 바로 앞에 넣은 blob, 델타가 몸의 절반보다
+// 짧을 때만. 사슬은 50 까지.
+std::vector<PackItem> pack_items(Ctx& ctx, bool use_delta) {
+    auto g = ctx.gitdir();
+    std::vector<std::string> starts;
+    auto cands = std::vector<std::string>{read_head(g).second};
+    for (auto& r : list_refs(g)) cands.push_back(r.oid);
+    for (auto& oid : cands)
+        if (!oid.empty())
+            if (auto c = peel(g, oid, "commit"); !c.empty())
+                starts.push_back(c);
+    std::vector<PackItem> items;
+    std::vector<int> depth;
+    std::set<std::string> seen;
+    std::map<std::string, size_t> last;
+    auto add = [&](const std::string& type, const std::string& body,
+                   const std::string& oid, const std::string& path) {
+        seen.insert(oid);
+        long base = -1;
+        if (use_delta && !path.empty() && last.count(path)) {
+            auto k = last[path];
+            if (depth[k] < 50 &&
+                2 * make_delta(items[k].body, body).size() <
+                    body.size())
+                base = long(k);
+        }
+        items.push_back({type, body, base});
+        depth.push_back(base < 0 ? 0 : depth[size_t(base)] + 1);
+        if (!path.empty()) last[path] = items.size() - 1;
+    };
+    auto order = starts.empty() ? std::vector<std::string>{}
+                                : walk_log(g, starts);
+    for (auto& c : order) add("commit", read_object(g, c).body, c, "");
+    std::function<void(const std::string&, const std::string&)> visit =
+        [&](const std::string& t, const std::string& prefix) {
+            if (seen.count(t)) return;
+            auto body = read_object(g, t).body;
+            add("tree", body, t, "");
+            for (auto& e : parse_tree(body)) {
+                if (e.mode == DIR)
+                    visit(e.oid, prefix + e.name + "/");
+                else if (e.mode != "160000" && !seen.count(e.oid))
+                    add("blob", read_object(g, e.oid).body, e.oid,
+                        prefix + e.name);
+            }
+        };
+    for (auto& c : order) visit(peel(g, c, "tree"), "");
+    for (auto& r : list_refs(g, "refs/tags/")) {
+        auto o = read_object(g, r.oid);
+        if (o.type == "tag" && !seen.count(r.oid))
+            add("tag", o.body, r.oid, "");
+    }
+    return items;
+}
+
+int cmd_pack_objects(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {"--delta"});
+    if (f.rest.size() != 1)
+        throw GitError("usage: mygit pack-objects [--delta] <base>",
+                       129);
+    auto [data, ents] =
+        write_pack(pack_items(ctx, f.on.count("--delta")));
+    auto sum = data.substr(data.size() - 20);
+    auto base = ctx.path(f.rest[0] + "-" + to_hex(sum));
+    fs::create_directories(fs::path(base).parent_path());
+    std::ofstream(base + ".pack", std::ios::binary) << data;
+    std::ofstream(base + ".idx", std::ios::binary)
+        << write_idx(ents, sum);
+    ctx.out += to_hex(sum) + "\n";
+    return 0;
+}
+
 const std::map<std::string, Command>& commands() {
     static const std::map<std::string, Command> table = {
         {"hash-object", cmd_hash_object},
@@ -916,6 +1035,9 @@ const std::map<std::string, Command>& commands() {
         {"switch", cmd_switch},
         {"checkout", cmd_checkout},
         {"merge", cmd_merge},
+        {"unpack-pack", cmd_unpack_pack},
+        {"verify-pack", cmd_verify_pack},
+        {"pack-objects", cmd_pack_objects},
     };
     return table;
 }

@@ -87,10 +87,6 @@ std::string write_object(const std::string& gitdir,
     return oid;
 }
 
-std::map<std::string, Object> packed_objects(const std::string&) {
-    return {};
-}
-
 Object read_object(const std::string& gitdir, const std::string& oid) {
     if (auto data = try_read(object_path(gitdir, oid)))
         return parse_raw(decompress(*data), oid);
