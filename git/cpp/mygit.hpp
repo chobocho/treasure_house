@@ -12,7 +12,7 @@
 
 namespace mygit {
 
-inline constexpr int STEP = 7;
+inline constexpr int STEP = 8;
 
 // 명령이 멈추는 까닭. code 는 종료 코드(SPEC.md §1.4).
 struct GitError : std::runtime_error {
@@ -196,6 +196,30 @@ bool is_ancestor(const std::string& gitdir, const std::string& a,
 std::vector<std::string> merge_bases(const std::string& gitdir,
                                      const std::string& a,
                                      const std::string& b);
+
+// ── diff.cpp (SPEC.md §11) ─────────────────────────────────────────
+using Lines = std::vector<std::string>;
+using Flags = std::vector<bool>;
+// Change 는 바뀐 곳 하나 — a·b 의 자리와 줄 수.
+struct Change {
+    size_t a, b, na, nb;
+};
+// Side 는 diff 의 한 쪽 — (모드, 이름, 바이트).
+struct Side {
+    uint32_t mode;
+    std::string oid, data;
+};
+Lines split_lines(std::string_view data);
+std::pair<Flags, Flags> myers(const Lines& a, const Lines& b);
+std::pair<Flags, Flags> edit_flags(const Lines& a, const Lines& b);
+std::vector<Change> build_changes(const Flags& ra, const Flags& rb);
+std::string unified_diff(const Lines& a, const Lines& b);
+std::string file_diff(const std::string& path_a,
+                      const std::string& path_b,
+                      const std::optional<Side>& old,
+                      const std::optional<Side>& now);
+Side blob_side(const std::string& gitdir, const Blob& b);
+std::optional<Side> disk_side(const std::string& path);
 
 // ── cli.cpp (SPEC.md §1 · §9) ─────────────────────────────────────
 struct Result {

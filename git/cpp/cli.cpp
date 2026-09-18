@@ -599,6 +599,71 @@ int cmd_merge_base(Ctx& ctx, std::vector<std::string> args) {
     return 0;
 }
 
+// ── 8단계: diff ─────────────────────────────────────────────────────
+
+// rev_tree_map 은 <rev> 의 트리를 펼쳐 {경로: Blob}.
+TreeMap rev_tree_map(Ctx& ctx, const std::string& rev) {
+    auto oid = resolve(ctx, rev);
+    auto t = oid.empty() ? "" : peel(ctx.gitdir(), oid, "tree");
+    if (t.empty()) throw GitError(ambiguous(rev));
+    return tree_map(ctx.gitdir(), t);
+}
+
+// cmd_diff 는 SPEC.md §11.5 의 네 꼴. --no-index 만 다르면 1 로 끝난다.
+int cmd_diff(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {"--cached", "--no-index"});
+    if (f.on.count("--no-index")) {
+        if (f.rest.size() != 2)
+            throw GitError("usage: mygit diff --no-index <a> <b>", 129);
+        auto text = file_diff(f.rest[0], f.rest[1],
+                              disk_side(ctx.path(f.rest[0])),
+                              disk_side(ctx.path(f.rest[1])));
+        ctx.out += text;
+        return text.empty() ? 0 : 1;
+    }
+    auto g = ctx.gitdir(), root = ctx.root();
+    TreeMap a, b;
+    bool disk = false;  // 새 쪽이 작업 트리인가
+    if (f.rest.size() == 2) {
+        a = rev_tree_map(ctx, f.rest[0]),
+        b = rev_tree_map(ctx, f.rest[1]);
+    } else if (!f.rest.empty()) {
+        throw GitError(ambiguous(f.rest[0]));
+    } else {
+        std::set<std::string> conflicted;
+        for (auto& e : read_index(g))
+            if (e.stage)
+                conflicted.insert(e.path);
+            else
+                b[e.path] = {e.mode, e.oid};
+        if (f.on.count("--cached")) {
+            a = tree_map(g, head_tree(g));
+        } else {
+            // 작업 트리 ↔ 인덱스: 충돌 경로는 건너뛴다(줄임)
+            a.swap(b), disk = true;
+            for (auto& p : conflicted) a.erase(p);
+            for (auto& [p, _] : a)
+                if (auto s = disk_side(root + "/" + p))
+                    b[p] = {s->mode, s->oid};
+        }
+    }
+    std::set<std::string> all;
+    for (auto& [p, _] : a) all.insert(p);
+    for (auto& [p, _] : b) all.insert(p);
+    for (auto& p : all) {
+        auto oa = a.find(p), ob = b.find(p);
+        bool ina = oa != a.end(), inb = ob != b.end();
+        if (ina == inb && (!ina || oa->second == ob->second)) continue;
+        std::optional<Side> old, now;
+        if (ina) old = blob_side(g, oa->second);
+        if (inb)
+            now = disk ? disk_side(root + "/" + p)
+                       : blob_side(g, ob->second);
+        ctx.out += file_diff(p, p, old, now);
+    }
+    return 0;
+}
+
 const std::map<std::string, Command>& commands() {
     static const std::map<std::string, Command> table = {
         {"hash-object", cmd_hash_object},
@@ -615,6 +680,7 @@ const std::map<std::string, Command>& commands() {
         {"commit", cmd_commit},
         {"log", cmd_log},
         {"merge-base", cmd_merge_base},
+        {"diff", cmd_diff},
     };
     return table;
 }
