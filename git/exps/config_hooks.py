@@ -67,6 +67,8 @@ def run(ctx):
     commit(a, 0, 'base', {'a.txt': 'one\ntwo\n', 'b.bin': 'a\x00b',
                           'c.dat': 'AB', 'keep.cfg': 'mine\n',
                           'secret-notes.md': 'x\n'})
+    a.cap('cat .gitattributes')
+    a.cap('git config --get-regexp "^(diff|merge)\\."')
     a.cap('git ls-files --eol')
     # 작업 트리의 a.txt 는 속성보다 먼저 썼다 — 다시 꺼내야 CRLF
     a.cap('rm a.txt && git checkout a.txt && git ls-files --eol a.txt')
@@ -90,6 +92,7 @@ def run(ctx):
     for p in ('a.log', 'logs/keep.log', 'logs/other.log', 'build/x.o',
               'src/main.c'):
         g.write(p, 'x\n')
+    g.cap('cat .gitignore logs/.gitignore')
     g.cap('git status --short --untracked-files=all')
     g.cap('git check-ignore -v a.log logs/other.log build/x.o')
     g.cap('git check-ignore -v --non-matching logs/keep.log src/main.c',
@@ -100,6 +103,7 @@ def run(ctx):
     h.write('.git/hooks/pre-commit', HOOK_PRE, 0o755)
     h.write('.git/hooks/commit-msg', HOOK_MSG, 0o755)
     h.write('.git/hooks/pre-push', HOOK_PUSH, 0o755)
+    h.cap('cat .git/hooks/pre-commit .git/hooks/commit-msg')
     h.write('a.txt', 'TODO: later\n')
     h.sh('git add a.txt')
     h.cap('git commit -m "feat: add a"', ok=(1,))
