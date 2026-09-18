@@ -12,7 +12,7 @@
 
 namespace mygit {
 
-inline constexpr int STEP = 9;
+inline constexpr int STEP = 10;
 
 // 명령이 멈추는 까닭. code 는 종료 코드(SPEC.md §1.4).
 struct GitError : std::runtime_error {
@@ -229,6 +229,27 @@ std::string file_diff(const std::string& path_a,
                       const std::optional<Side>& now);
 Side blob_side(const std::string& gitdir, const Blob& b);
 std::optional<Side> disk_side(const std::string& path);
+
+// ── merge.cpp (SPEC.md §12) ────────────────────────────────────────
+// MergeResult 는 경로 하나의 트리 합치기 결과. gone 이면 지움,
+// conflict 면 text 가 표지 든 내용이고 stages 가 단계 1‥3.
+struct MergeResult {
+    bool gone = false, conflict = false;
+    Blob blob{};
+    std::string text;
+    std::map<int, Blob> stages;
+};
+struct TreeMerge {
+    std::map<std::string, MergeResult> result;
+    std::vector<std::string> notes, conflicts;
+};
+std::pair<std::string, int> merge3(const std::string& base,
+                                   const std::string& ours,
+                                   const std::string& theirs,
+                                   const std::string& label);
+TreeMerge merge_trees(const std::string& gitdir, const TreeMap& base,
+                      const TreeMap& ours, const TreeMap& theirs,
+                      const std::string& label);
 
 // ── cli.cpp (SPEC.md §1 · §9) ─────────────────────────────────────
 struct Result {

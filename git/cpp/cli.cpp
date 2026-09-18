@@ -769,6 +769,131 @@ int cmd_checkout(Ctx& ctx, std::vector<std::string> args) {
     return move_head(ctx, "", oid, name);
 }
 
+// ── 10단계: merge ────────────────────────────────────────────────────
+const std::string mygit_merge =
+    "Merge made by mygit (3-way, no renames).";
+
+void write_git_file(Ctx& ctx, const std::string& name,
+                    const std::string& text) {
+    std::ofstream(ctx.gitdir() + "/" + name, std::ios::binary) << text;
+}
+
+// is_clean 은 인덱스가 HEAD 트리와 같고 추적 파일이 그대로인가
+// (SPEC.md §12.1).
+bool is_clean(Ctx& ctx, const std::string& head) {
+    auto g = ctx.gitdir();
+    auto want = tree_map(g, peel(g, head, "tree"));
+    TreeMap have;
+    for (auto& e : read_index(g)) {
+        if (e.stage) return false;
+        have[e.path] = {e.mode, e.oid};
+    }
+    if (have != want) return false;
+    for (auto& [p, v] : have)
+        if (file_state(ctx.root(), p) != v) return false;
+    return true;
+}
+
+// apply_merge 는 합친 결과를 작업 트리와 인덱스에 쓴다. 충돌 경로는
+// 단계 1‥3.
+void apply_merge(Ctx& ctx, const TreeMap& ours, const TreeMerge& tm) {
+    auto g = ctx.gitdir(), root = ctx.root();
+    std::map<std::string, IndexEntry> ents;
+    for (auto& e : read_index(g)) ents[e.path] = e;
+    std::vector<IndexEntry> staged;
+    for (auto& [p, r] : tm.result) {
+        auto old = ours.find(p);
+        if (r.gone) {
+            if (old != ours.end()) remove_file(root, p);
+            ents.erase(p);
+        } else if (r.conflict) {
+            write_file(root, p, r.blob.mode, r.text);
+            ents.erase(p);
+            for (auto& [k, b] : r.stages)
+                staged.push_back(index_entry(p, b.oid, b.mode, k));
+        } else if (old == ours.end() || old->second != r.blob) {
+            write_file(root, p, r.blob.mode,
+                       read_object(g, r.blob.oid).body);
+            ents[p] = entry_from_stat(p, root + "/" + p, r.blob.oid);
+        }
+    }
+    for (auto& [_, e] : ents) staged.push_back(e);
+    write_index(g, staged);
+}
+
+// cmd_merge 는 SPEC.md §12.1 — 이미 최신 · fast-forward · 3-way.
+int cmd_merge(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {});
+    if (f.rest.size() != 1)
+        throw GitError("usage: mygit merge <branch>", 129);
+    auto g = ctx.gitdir();
+    const auto& name = f.rest[0];
+    auto theirs = resolve(ctx, name);
+    if (!theirs.empty()) theirs = peel(g, theirs, "commit");
+    if (theirs.empty())
+        throw GitError(
+            "merge: " + name + " - not something we can merge", 1);
+    auto [branch, head] = read_head(g);
+    if (head.empty() || !is_clean(ctx, head))
+        throw GitError(
+            "error: mygit: commit your local changes before merging");
+    auto target = branch.empty() ? "HEAD" : branch;
+    // git 은 이미 최신이어도 ORIG_HEAD 를 지금 HEAD 로 다시 쓴다
+    // (golden/scen/merge-ff.scn 의 두 번째 merge 뒤)
+    write_git_file(ctx, "ORIG_HEAD", head + "\n");
+    if (is_ancestor(g, theirs, head)) {
+        ctx.out += "Already up to date.\n";
+        return 0;
+    }
+    if (is_ancestor(g, head, theirs)) {
+        ctx.out += "Updating " + head.substr(0, 7) + ".." +
+                   theirs.substr(0, 7) + "\nFast-forward\n";
+        checkout_tree(ctx.root(), g, peel(g, head, "tree"),
+                      peel(g, theirs, "tree"));
+        update_ref(g, target, theirs, head,
+                   "merge " + name + ": Fast-forward", ident(ctx));
+        return 0;
+    }
+    auto bases = merge_bases(g, head, theirs);
+    if (bases.size() != 1)
+        throw GitError("fatal: mygit: " + std::to_string(bases.size()) +
+                       " merge bases (criss-cross) are not supported");
+    auto tmap = [&](const std::string& c) {
+        return tree_map(g, peel(g, c, "tree"));
+    };
+    auto ours = tmap(head);
+    auto tm = merge_trees(g, tmap(bases[0]), ours, tmap(theirs), name);
+    apply_merge(ctx, ours, tm);
+    for (auto& line : tm.notes) ctx.out += line + "\n";
+    bool is_branch = !resolve_ref(g, "refs/heads/" + name).empty();
+    auto msg =
+        std::string(is_branch ? "Merge branch '" : "Merge commit '") +
+        name + "'";
+    auto cur = branch.empty() ? "" : branch.substr(11);
+    if (!cur.empty() && cur != "main" && cur != "master")
+        msg += " into " + cur;
+    if (!tm.conflicts.empty()) {
+        write_git_file(ctx, "MERGE_HEAD", theirs + "\n");
+        auto text = msg + "\n\n# Conflicts:\n";
+        for (auto& p : tm.conflicts) text += "#\t" + p + "\n";
+        write_git_file(ctx, "MERGE_MSG", text);
+        ctx.out +=
+            "Automatic merge failed; fix conflicts and then commit "
+            "the result.\n";
+        return 1;
+    }
+    Commit c{index_tree(ctx),
+             {head, theirs},
+             ident(ctx, "AUTHOR"),
+             ident(ctx),
+             msg + "\n"};
+    auto oid = write_object(g, "commit", serialize_commit(c));
+    update_ref(g, target, oid, head,
+               "merge " + name + ": " + mygit_merge, c.committer);
+    ctx.out += mygit_merge + "\n";
+    return 0;
+}
+
 const std::map<std::string, Command>& commands() {
     static const std::map<std::string, Command> table = {
         {"hash-object", cmd_hash_object},
@@ -788,6 +913,7 @@ const std::map<std::string, Command>& commands() {
         {"diff", cmd_diff},
         {"switch", cmd_switch},
         {"checkout", cmd_checkout},
+        {"merge", cmd_merge},
     };
     return table;
 }
