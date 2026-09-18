@@ -452,4 +452,38 @@ The user approved every proposal below as-is. Each row is now a decision.
 
 ## Progress log (append only; newest at the bottom; one entry per commit)
 
-(empty — the building agent appends here starting with "Step 1 — Skeleton")
+### Step 1 — Skeleton (2026-09-18)
+
+- Copied transformer/deck/{build_deck,verify_deck,check_slices,check_xref,check_claims,chunks,
+  gen_glossary,gen_tables,svgkit}.py + check_deck.js + base/{head,tail}.html and
+  transformer/tools/{width,rewrap}.py + record.sh; adapted only TARGET, LANG_OF (py ts go java cpp
+  + h/hpp/c/sh/tsv/txt/adoc), COVER_DIRS (py ts/src go java cpp tools + run_all.py/Makefile),
+  PARTIAL (tests, golden/ docs/ mirror/ node_modules/), HARD_CAP 3000, quiz-index/glossary ids
+  p14 → p20, check_deck.js CASES emptied (demo expectations must come from real git/golden).
+- CITE resolver: keys come from `data/formats.tsv` doc-key and `data/releases.tsv` relnotes-file
+  (`RelNotes/2.55.0.adoc` → key `relnotes-2.55.0`); claims-check looks for a `§<TAB>heading` line in
+  `docs/<key>.txt` (tools/adoc_text.py must emit that shape in step 4). `field()` now accepts
+  `k="value with spaces"` so section headings and git command lines can be quoted.
+- New `<!--GIT repo=… cmd="…" [lines=|sec=] note=…-->`: alias for OUT on
+  `out/<repo>__<gitslug(cmd)>.txt`; the assembler errors if the capture is missing or its first line
+  is not exactly `$ <cmd>`. gitslug: strip leading `git `, lowercase, `[^a-z0-9._]+` → `-`, cut 60.
+  run_all.py (step 7) must import/copy the same rule and refuse slug collisions.
+  Smoke-tested against a scratch out/ (hit, missing, unknown CITE key all behave).
+- Palette (decision 5, fixed now): dark slate page background #1f2a35→#34495b, light cards
+  (panel rgba(250,251,252,.97)), accent #c4411f (git orange #f05133 pressed darker for contrast on
+  white; the bar/gradient still uses #f05133), --special #25507f = "matched real git". Object
+  colours: g1 blob #2f7a52 · g2 tree #25507f · g3 commit #c4411f · g4 tag #7a4a8c · g5 ref #a86b00
+  · g6 index/worktree #5c6b73; svgkit fallbacks updated to match.
+- tools/gitenv.sh takes `GITENV_SCRATCH=<dir>` (POSIX `.` does not pass arguments under dash).
+  Verified: commit made under it has author/committer dates 1700000000 +0900, `git config
+  --list --show-origin` shows only `.git/config` (global safe.directory/credential.helper do not
+  leak), GIT_ADVICE=0 silences the detached-HEAD hint. tools/flock_java.sh shares one lock file
+  across decks.
+- Skeleton: part 0 (14 slides: cover, why, promise, oracle, five languages, how to read, evidence
+  tiers, notation ×2, map, env with a CODE slice of gitenv.sh, machine, foldable) + 20 part covers
+  = 34 slides. budget.txt = §6 table (sum 2,905). data/*.tsv headers only; claims.md has 2 rows.
+- `make all SKEL=1`: 0 errors, 34 slides, 1 code block verified, DeckMono 28 KB embedded.
+  `make deps`: typescript 5.9.3 in ts/node_modules. `make mirror`: mirror/git.git 118 MB,
+  `e83c5163` = 2005-04-07 15:13:13 -0700 "Initial revision of "git"…", tag v2.55.0 present.
+- Not in index.html/README yet (per step 1). history.html was rotated in a separate commit
+  (dc89bc3) because it hit the 40 KB cap.

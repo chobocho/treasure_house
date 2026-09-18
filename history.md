@@ -1,3 +1,10 @@
+### [2026-09-18 00:50] Git 대백과사전 덱 1단계 — 뼈대(조립기·검사·34장)
+- **기획:** transformer 조립기·검사를 복사해 대상·5개 언어·상한 3000·CITE(형식 문서 표)만 바꾸고, 캡처 별칭 지시자 GIT 추가.
+- **TC:** GIT 지시자(캡처 있음/없음/첫 줄 불일치)·CITE(표에 없는 키) 오류 경로를 scratch 에서 확인, gitenv.sh 로 커밋해 날짜 고정·전역 설정 차단 확인.
+- **개발:** `git/Makefile`, `git/deck/build_deck.py`, `git/deck/base/head.html`, `git/deck/sections/*.html`(21), `git/tools/gitenv.sh`, `git/data/*.tsv`, `git/PLAN.md` 외 33개 파일
+- **검증:** make all SKEL=1 오류 0건 · 34장 · 코드 블록 1개 일치 · DeckMono 28 KB
+- **비고:** 배색 slate+git 주황 확정. typescript 5.9.3 설치·git/git 부분 복제 118 MB 완료. history.html 은 별도 커밋으로 회전.
+
 ### [2026-09-18 00:35] Termux 대백과사전 덱 계획서 — 상한 3000장·결정 12건 확정
 - **기획:** 역사·원리·한계·활용을 18부 2,480장 예산으로 설계, Opus 빌더용 `termux/PLAN.md` 작성.
 - **TC:** 계획 단계라 코드 없음. proot 에서 Termux bionic 바이너리(pkg·dpkg·termux-api) 실행 가능함을 실측으로 확인.
