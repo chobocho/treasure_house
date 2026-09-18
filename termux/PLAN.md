@@ -740,3 +740,17 @@ The user approved every recommendation below as-is. Each row is now a decision.
 - Part 5 written: 47 slides (budget 160). a 12 · s 13 · b 12 · ill 10, 2 quizzes, 18 cited ranges
   all passing check_slices (two moved to blank-line boundaries; `py/elf.py` got one blank line so
   its excerpt starts on a block boundary — code unchanged, tests green).
+
+### Step 8 · Part 4 — 앱 (2026-09-18)
+
+- `srcpin.py grep` accepts a `*` glob in the path, resolved against the pin's file list and required
+  to match exactly one file (+2 tests) — keeps `src_*` capture commands under 108 cells.
+- New captures: `src_app` (property keys, `allow-external-apps`, RUN_COMMAND permission, the
+  failsafe `/system/bin/sh` lines, the installer's numbered steps cut at 100 cells with the `cut`
+  visible in the command, `renameTo`, wake-lock kinds) and `dot_termux` (**names only** of
+  `~/.termux` — contents are the user's).
+- Part 4 written: 32 slides (budget 170). Mostly `s`: termux.c `create_subprocess` in three
+  excerpts (PTY/termios incl. the Ctrl+S comment; fork/setsid/dup2; clearenv/execvp),
+  TermuxService foreground + wake locks, bootstrap `.incbin` per ABI, SYMLINKS.txt, staging
+  rename, sharedUserId, RUN_COMMAND (two locks), property keys, targetSdk trade-offs. Lineage from
+  README/LICENSE (Android Terminal Emulator, Apache-2.0).

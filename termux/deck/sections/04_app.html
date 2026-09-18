@@ -2,19 +2,334 @@
 <p class="chnum">4부</p>
 <h2>원리 I: 앱</h2>
 <p class="chsub">termux-app 의 소스를 따라 터미널 한 장이 뜨기까지</p>
-<p class="cap">이 부의 목표 장수는 170장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>4부에서 다룰 것</h3>
+<p>Termux 앱이 하는 일은 생각보다 적습니다. 화면에 글자를 그리고, 가상 터미널(PTY) 하나를 열어
+셸을 붙이고, 앱이 죽지 않게 붙들고, 처음 켤 때 리눅스 유저랜드를 풀어 놓습니다. 나머지는 전부
+패키지의 일입니다. 이 부는 그 적은 일을 핀 고정한 termux-app 소스로 봅니다.</p>
+</article>
+
+<article class="card" id="p4-c1">
+<p class="chnum">1장</p>
+<h2>termux-app 의 모양</h2>
+<!--FIG file=app_arch.svg cap=화면에서 셸까지 — 클래스 이름은 termux-app 소스의 것-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-modules">
+<h3>모듈 넷</h3>
+<!--CODE file=sources/termux-app/settings.gradle sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=1-1 note=gradle 이 짓는 모듈-->
+<!--SRC repo=termux-app path=settings.gradle sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=1-1-->
+<div class="tblwrap"><table class="kv">
+<tr><th>모듈</th><th>하는 일</th></tr>
+<tr><td><code>app</code></td><td>화면(TermuxActivity)·서비스(TermuxService)·설치(TermuxInstaller)</td></tr>
+<tr><td><code>terminal-emulator</code></td><td>이스케이프 시퀀스를 해석해 화면 버퍼를 만든다 · PTY 를 연다(JNI)</td></tr>
+<tr><td><code>terminal-view</code></td><td>화면 버퍼를 안드로이드 뷰에 그린다 · 터치와 키</td></tr>
+<tr><td><code>termux-shared</code></td><td>상수·설정·셸 실행을 플러그인과 나눠 쓰는 라이브러리</td></tr>
+</table></div>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-lineage">
+<h3>터미널 처리의 계보</h3>
+<p>termux-app 의 README 는 참고 목록에서 <b>Android Terminal Emulator</b> 를 "Termux 의 터미널 처리가 기반한
+안드로이드 터미널 앱" 이라고 소개하고(지금은 활동이 멈췄다고 덧붙입니다), LICENSE.md 는 그 앱의 코드를
+Apache 2.0 라이선스 아래 가져다 쓴다고 밝힙니다.</p>
+<p><code>TerminalRow.java</code> 의 주석에는 그 계보의 한 포크 커밋을 가리키는 링크도 남아 있습니다.</p>
+<p class="cap">출처: termux-app@084d709 README.md 199행 · LICENSE.md 5행 · TerminalRow.java 154행</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-c2">
+<p class="chnum">2장</p>
+<h2>터미널 에뮬레이터 — 글자를 해석하는 곳</h2>
+<p>셸이 내보내는 것은 글자만이 아닙니다. "커서를 3행으로", "빨간색으로", "화면 지우기" 같은 명령이
+<b>이스케이프 시퀀스</b>로 섞여 옵니다. 그것을 해석하는 것이 에뮬레이터입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-xterm">
+<h3>무엇을 흉내 내나</h3>
+<p><code>TerminalEmulator.java</code> 의 머리 주석은 이 클래스가 "X 윈도 시스템의 xterm 의 일부를 흉내 내고,
+xterm 은 DEC 의 VT100 의 일부를 흉내 낸다" 고 적습니다. 참고 문서로 xterm 의 제어 시퀀스 목록,
+ANSI 이스케이프 코드, VT220·VT510 참고서 등을 꼽습니다.</p>
+<p>그래서 Termux 의 <code>TERM</code> 은 <code>xterm-256color</code> 입니다(환경 변수 캡처, 3부). 256색 표는 머리말의
+배색이 가져온 <code>TerminalColorScheme.java</code> 에 있습니다.</p>
+<p class="cap">출처: termux-app@084d709 terminal-emulator/…/TerminalEmulator.java 머리 주석</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-c3">
+<p class="chnum">3장</p>
+<h2>PTY — 셸과 화면을 잇는 가짜 터미널</h2>
+<p>셸은 자기가 진짜 터미널에 붙어 있다고 믿어야 줄 편집과 작업 제어를 합니다. 리눅스는 그 믿음을
+위해 <b>의사 터미널(PTY)</b>을 줍니다. 한쪽 끝(master)은 앱이, 다른 끝(slave)은 셸이 잡습니다.
+Termux 는 이 일을 C 코드 한 함수로 합니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-ptmx">
+<h3>create_subprocess ① — PTY 를 연다</h3>
+<!--CODE file=sources/termux-app/terminal-emulator/src/main/jni/termux.c sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=25-59 note=/dev/ptmx 를 열고 설정한다-->
+<!--SRC repo=termux-app path=terminal-emulator/src/main/jni/termux.c sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=25-59-->
+<p><code>/dev/ptmx</code> 를 열면 master 가 생기고, <code>grantpt</code>·<code>unlockpt</code>·<code>ptsname_r</code> 로 짝이 되는
+slave 의 이름을 얻습니다. 그리고 두 가지를 켜고 끕니다: UTF-8 모드(<code>IUTF8</code>)를 켜고, 흐름 제어
+(<code>IXON</code>·<code>IXOFF</code>)를 끕니다 — 주석대로 <b>Ctrl+S 가 화면을 멈추지 않게</b> 하려는 것입니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-fork">
+<h3>create_subprocess ② — 자식이 slave 를 잡는다</h3>
+<!--CODE file=sources/termux-app/terminal-emulator/src/main/jni/termux.c sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=65-86 note=fork · setsid · dup2-->
+<!--SRC repo=termux-app path=terminal-emulator/src/main/jni/termux.c sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=65-86-->
 <ul>
-<li>termux-app 의 구조</li>
-<li>터미널 에뮬레이터 라이브러리</li>
-<li>PTY 와 <code>TermuxService</code></li>
-<li>부트스트랩 설치 순서</li>
-<li><code>sharedUserId</code> 와 플러그인</li>
-<li>RUN_COMMAND 인텐트</li>
-<li><code>termux.properties</code></li>
-<li>알림과 웨이크락</li>
-<li>targetSdk 가 정하는 것</li>
+<li>부모(앱)는 자식의 pid 와 master 를 들고 돌아갑니다.</li>
+<li>자식은 안드로이드의 자바 프로세스가 막아 둔 시그널을 전부 풀고, <code>setsid()</code> 로 새 세션의 우두머리가
+된 뒤 slave 를 열어 표준 입력·출력·오류(0·1·2)에 붙입니다.</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-exec">
+<h3>create_subprocess ③ — 환경을 갈고 셸이 된다</h3>
+<!--CODE file=sources/termux-app/terminal-emulator/src/main/jni/termux.c sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=98-113 note=환경·작업 디렉터리·execvp-->
+<!--SRC repo=termux-app path=terminal-emulator/src/main/jni/termux.c sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=98-113-->
+<p>앱의 환경을 통째로 지우고(<code>clearenv</code>) Termux 의 환경으로 채운 뒤, 작업 디렉터리로 옮기고
+<code>execvp</code> 로 셸이 됩니다. 실패하면 그 오류를 터미널에 찍고 끝납니다. 3부 7장에서 말한 "세션은
+<code>execvp()</code> 로 자식을 만든다" 가 바로 이 줄입니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-shell-choice">
+<h3>무엇을 execvp 하나</h3>
+<p>세션을 열 때 앱은 <code>$PREFIX/bin</code> 에서 셸을 고릅니다(5부 4장의 발췌: <code>login</code>·<code>bash</code>·
+<code>zsh</code>·<code>fish</code> 순). 하나도 없거나 <b>안전(failsafe) 세션</b>을 열면 마지막 수단으로 안드로이드의
+<code>/system/bin/sh</code> 를 씁니다 — 로그인 셸로 띄우지 않는 까닭도 주석에 있습니다: 망가진
+<code>~/.profile</code> 이 시작을 막을 수 있기 때문입니다.</p>
+<!--OUT file=src_app.txt sec=4 note=TermuxSession.java 에서 뽑은 줄-->
+<!--SRC repo=termux-app path=termux-shared/src/main/java/com/termux/shared/termux/shell/command/runner/terminal/TermuxSession.java sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=105-114-->
+<p class="cap">망가진 환경을 고칠 때 안전 세션을 쓰는 법은 15부에서 다룹니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card quiz" id="p4-quiz-1" data-quiz>
+<h3>1~3장 퀴즈</h3>
+<p class="q">Q. Termux 에서 긴 출력을 보다가 무심코 Ctrl+S 를 눌렀습니다. 일반 리눅스 터미널이라면
+화면이 멈췄을 텐데 Termux 에서는 어떻습니까? 그 까닭은 어느 코드에 있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 멈추지 않습니다. <code>create_subprocess()</code> 가 PTY 를 만들 때 termios 의 흐름 제어
+(<code>IXON</code>·<code>IXOFF</code>)를 꺼 둡니다 — 주석에 "Ctrl+S 가 화면을 멈추지 않게" 라고 적혀 있습니다
+(<code>terminal-emulator/src/main/jni/termux.c</code>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-c4">
+<p class="chnum">4장</p>
+<h2>TermuxService — 앱이 죽지 않게 붙드는 것</h2>
+<p>화면(액티비티)은 사용자가 다른 앱으로 가면 언제든 사라질 수 있습니다. 그래서 세션은 액티비티가
+아니라 <b>서비스</b>가 들고 있습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-foreground">
+<h3>포그라운드 서비스와 알림</h3>
+<!--CODE file=sources/termux-app/app/src/main/java/com/termux/app/TermuxService.java sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=203-207 note=포그라운드로 뜨는 한 줄-->
+<!--SRC repo=termux-app path=app/src/main/java/com/termux/app/TermuxService.java sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=203-207-->
+<p>포그라운드 서비스는 알림을 하나 띄워야 합니다. Termux 를 켜면 알림 줄에 늘 떠 있는 그 알림이 이것입니다.
+매니페스트의 <code>FOREGROUND_SERVICE</code> 권한(3부)도 이것 때문입니다. 알림이 있는 동안 안드로이드는
+이 프로세스를 함부로 치우지 않지만, 팬텀 프로세스 킬러는 다른 이야기입니다(8부).</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-wakelock">
+<h3>웨이크락 — CPU 가 잠들지 않게</h3>
+<!--CODE file=sources/termux-app/app/src/main/java/com/termux/app/TermuxService.java sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=303-313 note=웨이크락을 잡는 함수의 앞부분-->
+<!--OUT file=src_app.txt sec=7 note=어떤 종류를 잡나(314·319행)-->
+<!--SRC repo=termux-app path=app/src/main/java/com/termux/app/TermuxService.java sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=303-330-->
+<p>알림의 "Acquire wakelock" 을 누르거나 <code>termux-wake-lock</code> 을 치면 이 함수가 돕니다. CPU 를 깨워 두는
+<b>부분 웨이크락</b>과 와이파이를 계속 쓰게 하는 와이파이 락을 함께 잡고, 배터리 최적화가 켜져 있으면
+해제를 요청합니다. 배터리를 쓰는 만큼 필요할 때만 잡습니다(11부).</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-c5">
+<p class="chnum">5장</p>
+<h2>부트스트랩 — 처음 켤 때 풀려 나오는 리눅스</h2>
+<p>Termux 를 설치하고 처음 켜면 "Installing…" 이 잠깐 뜹니다. 그 몇 초 동안 <code>$PREFIX</code> 전체가 생깁니다.</p>
+<!--FIG file=bootstrap_seq.svg cap=TermuxInstaller.java 머리 주석의 다섯 걸음-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-bootstrap-comment">
+<h3>설치기의 머리 주석</h3>
+<!--OUT file=src_app.txt sec=5 note=주석의 번호 붙은 줄만 — 100칸에서 자름-->
+<!--SRC repo=termux-app path=app/src/main/java/com/termux/app/TermuxInstaller.java sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=41-59-->
+<p>(1)이 중요합니다. <code>$PREFIX</code> 가 이미 있으면 <b>맞다고 믿고</b> 아무것도 하지 않습니다. 그래서
+설치기는 망가진 <code>$PREFIX</code> 를 남기지 않으려고 스테이징 디렉터리에 먼저 풀고 마지막에 옮깁니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-incbin">
+<h3>zip 은 APK 의 네이티브 라이브러리 안에 있다</h3>
+<!--CODE file=sources/termux-app/app/src/main/cpp/termux-bootstrap-zip.S sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=1-18 note=아키텍처마다 다른 zip 을 통째로 싣는다-->
+<!--SRC repo=termux-app path=app/src/main/cpp/termux-bootstrap-zip.S sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=1-18-->
+<p>어셈블리의 <code>.incbin</code> 은 파일을 그대로 바이트로 박아 넣는 지시입니다. 컴파일러가 아키텍처를 보고
+그 아키텍처의 부트스트랩 zip 하나를 공유 라이브러리에 싣고, 자바 쪽은 JNI 로 그 바이트를 받아(<code>getZip</code>)
+풉니다. README 가 말하는 "앱과 함께 실려 오는 최소 패키지" 가 이렇게 실려 옵니다. zip 자체는
+termux-packages 의 릴리스로 만들어집니다(6부).</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-symlinks">
+<h3>링크는 목록으로 오고, 마지막에 옮긴다</h3>
+<!--CODE file=sources/termux-app/app/src/main/java/com/termux/app/TermuxInstaller.java sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=207-211 note=목록대로 링크를 세운다-->
+<!--OUT file=src_app.txt sec=6 note=그리고 이름만 바꿔 옮긴다(215행)-->
+<!--SRC repo=termux-app path=app/src/main/java/com/termux/app/TermuxInstaller.java sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=207-215-->
+<p>zip 은 심볼릭 링크를 담지 못합니다. 그래서 링크는 <code>SYMLINKS.txt</code> 라는 목록으로 오고, 설치기가
+<code>Os.symlink</code> 로 하나씩 세웁니다. 목록이 없으면 실패로 봅니다. 다 되면 스테이징 디렉터리를 이름만
+바꿔(<code>renameTo</code>) 접두사로 만듭니다 — 이름 바꾸기는 한 번에 일어나므로 반쯤 된 <code>$PREFIX</code> 가
+남지 않습니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-c6">
+<p class="chnum">6장</p>
+<h2>sharedUserId — 플러그인이 같은 uid 로 도는 법</h2>
+<p>Termux:API·Boot·Widget 같은 플러그인은 별개의 앱입니다. 그런데 Termux 의 파일을 읽고 Termux 의 셸을
+부릅니다. 3부의 샌드박스 규칙대로라면 불가능한 일입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-shared-uid">
+<h3>같은 uid 를 나눠 쓴다</h3>
+<!--OUT file=src_manifest.txt sec=2 note=매니페스트의 sharedUserId-->
+<!--SRC repo=termux-app path=app/src/main/AndroidManifest.xml sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=5-5-->
+<ul>
+<li>안드로이드 문서: 둘 이상의 앱이 같은 <code>sharedUserId</code> 를 쓰고 <b>인증서가 같으면</b> 같은 uid 를 받고,
+서로의 데이터에 접근할 수 있다.</li>
+<li>Termux 와 모든 플러그인은 <code>com.termux</code> 를 씁니다(<code>${TERMUX_PACKAGE_NAME}</code> 가 빌드 때 채워짐).</li>
+<li>그래서 README 는 설치처(F-Droid·GitHub·Play)를 <b>섞지 말라</b>고 합니다 — 설치처마다 서명 키가 달라,
+섞으면 같은 uid 를 못 받습니다.</li>
+</ul>
+<p class="cap">출처: 캡처 · developer.android.com manifest-element(sharedUserId) · termux-app README 1.3</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-shared-uid-deprecated">
+<h3>그런데 sharedUserId 는 폐지 예정이다</h3>
+<p>개발자 문서는 <code>sharedUserId</code> 를 API 29 부터 <b>폐지 예정(deprecated)</b> 으로 표시하고, 쓰지 말라고
+강하게 권합니다. 다만 이미 쓰는 앱은 이 값을 지울 수 없다고도 적습니다 — 옮겨 갈 길이 없기 때문입니다.
+API 33 에는 새로 설치할 때부터 무시하게 하는 <code>sharedUserMaxSdkVersion</code> 이 생겼습니다.</p>
+<p>README 에 따르면 Google Play 판은 <code>sharedUserId</code> 를 <b>뺐고</b>, 그래서 F-Droid 판 위에 Play 판을
+덮어 설치하면 실패합니다(1·2부).</p>
+<p class="cap">출처: developer.android.com manifest-element · termux-app README 1.3.3</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-c7">
+<p class="chnum">7장</p>
+<h2>RUN_COMMAND — 다른 앱이 Termux 에 일을 시킨다</h2>
+<p>플러그인이 아닌 앱(예: Tasker)도 Termux 의 셸로 명령을 돌릴 수 있습니다. 그 문이 RUN_COMMAND 인텐트입니다.
+문이 넓은 만큼 자물쇠가 둘입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-run-command">
+<h3>문과 두 자물쇠</h3>
+<ul>
+<li>termux-app 위키: 0.95 부터 Termux 세계에 속하지 않은 서드파티 앱이 <code>RunCommandService</code> 로 인텐트를
+보내 Termux 앱의 문맥에서 명령을 돌릴 수 있다.</li>
+<li>자물쇠 ① — 부르는 앱이 <code>com.termux.permission.RUN_COMMAND</code> 권한을 받아야 한다(필수).</li>
+<li>자물쇠 ② — 사용자가 <code>~/.termux/termux.properties</code> 에 <code>allow-external-apps = true</code> 를 적어야
+한다(필수).</li>
+</ul>
+<!--OUT file=src_app.txt sec=3 note=매니페스트에서 이 권한이 나오는 세 곳-->
+<!--OUT file=src_app.txt sec=2 note=속성 이름의 정의-->
+<!--SRC repo=termux-app path=app/src/main/AndroidManifest.xml sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=16-16-->
+<p class="cap">출처: termux-app 위키 RUN_COMMAND-Intent 1·1.2.1·1.2.2 · 캡처</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-run-command-risk">
+<h3>왜 둘 다인가</h3>
+<p>권한은 설치할 때 한 번 허락하면 끝이지만, <code>allow-external-apps</code> 는 사용자가 Termux 안에서 직접 적어야
+합니다. 권한을 가진 앱이 있더라도 사용자의 명시적 선택 없이는 Termux 의 셸을 쓸 수 없게 한 것입니다.
+3부에서 본 앱 데이터의 "틈 세 개" 중 하나가 이 API 이고, 위키는 이런 API 가 넓은 접근을 줄 때 이중으로
+보호한다고 적습니다(5부 1장의 표). 보안은 14부에서 다시 봅니다.</p>
+<p class="cap">출처: 위키 Termux-file-system-layout 1.3.1</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-c8">
+<p class="chnum">8장</p>
+<h2>termux.properties — 앱의 설정 파일</h2>
+<p>Termux 앱의 설정 화면은 작습니다. 대부분의 설정은 텍스트 파일 하나에 적습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-properties">
+<h3>키는 소스에 정의돼 있다</h3>
+<!--OUT file=src_app.txt sec=1 note=TermuxPropertyConstants.java 의 KEY_ 정의-->
+<!--SRC repo=termux-app path=termux-shared/src/main/java/com/termux/shared/termux/settings/properties/TermuxPropertyConstants.java sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=103-375-->
+<p>추가 키 줄(<code>extra-keys</code>), 종 소리(<code>bell-character</code>), 스크롤백 줄 수(<code>terminal-transcript-rows</code>),
+뒤로 가기 키의 동작(<code>back-key</code>) 등이 있습니다. 쓰는 법은 1부와 10부에서 봅니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p4-dot-termux">
+<h3>이 기기의 ~/.termux</h3>
+<!--OUT file=dot_termux.txt note=이름만 — 내용은 사용자의 설정이라 읽지 않았다-->
+<p>이 기기에는 <code>termux.properties</code> 하나만 있습니다. 글꼴(<code>font.ttf</code>)이나 배색(<code>colors.properties</code>)을
+바꾸면 이 디렉터리에 파일이 늡니다(7부 Termux:Styling). 설정을 고친 뒤에는 <code>termux-reload-settings</code> 로
+다시 읽힙니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p4-c9">
+<p class="chnum">9장</p>
+<h2>targetSdk 가 정하는 것</h2>
+<p>앱의 <code>build.gradle</code> 에 적는 숫자 하나(targetSdk)가 이 앱이 받는 안드로이드의 규칙을 정합니다.
+Termux 는 그 숫자를 일부러 오래 묶어 두었습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p4-target-rules">
+<h3>28 에 묶어 두어 얻는 것과 잃는 것</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>얻는 것</th><th>잃는 것</th></tr>
+<tr><td><code>untrusted_app_27</code> 문맥 → 앱 데이터의 파일을 바로 exec 할 수 있다(5부 5장)</td>
+<td>Google Play 의 targetSdk 요구를 못 맞춰 옛 Play 판이 멈췄다(2부)</td></tr>
+<tr><td><code>requestLegacyExternalStorage</code> 같은 옛 동작을 계속 쓸 수 있다(3부 9장)</td>
+<td>새 판의 동작 변경을 늦게 받는다 — 언젠가는 올려야 한다</td></tr>
+</table></div>
+<p>Play 판이 별도 저장소(termux-play-store)에서, 규칙에 맞게 크게 손본 채로 다시 나온 까닭이 여기에
+있습니다(2부). 2026-08-31 부터 Play 의 새 앱·업데이트는 API 36 이상을 target 해야 한다고 개발자 문서가
+적습니다(2026-09 기준).</p>
+<p class="cap">출처: 5부·3부의 캡처와 문서 · developer.android.com target-sdk 요구</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-summary">
+<h3>4부를 한 표로</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>일</th><th>맡은 코드</th></tr>
+<tr><td>글자 해석·화면 버퍼</td><td><code>terminal-emulator</code> 의 TerminalEmulator (xterm 흉내)</td></tr>
+<tr><td>그리기·입력</td><td><code>terminal-view</code> 의 TerminalView</td></tr>
+<tr><td>PTY 와 셸</td><td><code>termux.c</code> 의 <code>create_subprocess()</code></td></tr>
+<tr><td>세션 붙들기·알림·웨이크락</td><td>TermuxService (포그라운드 서비스)</td></tr>
+<tr><td>첫 실행의 유저랜드</td><td>TermuxInstaller + <code>.incbin</code> 으로 실린 zip</td></tr>
+<tr><td>플러그인과 uid 나누기</td><td>매니페스트의 <code>sharedUserId</code></td></tr>
+<tr><td>다른 앱의 명령</td><td>RunCommandService + 권한 + <code>allow-external-apps</code></td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p4-quiz-2" data-quiz>
+<h3>4~9장 퀴즈</h3>
+<p class="q">Q. 설치 중에 전원이 꺼져 <code>$PREFIX</code> 가 반쯤 만들어졌다면, 다음에 켤 때 설치기는 어떻게
+합니까? 설치기가 그런 일을 피하려고 쓰는 두 장치는?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 설치기는 <code>$PREFIX</code> 가 있으면 맞다고 믿고 설치를 건너뜁니다(머리 주석 (1)). 그래서 반쯤
+된 <code>$PREFIX</code> 가 생기지 않게 ① 먼저 <b>스테이징 디렉터리</b>에 풀고(남은 것이 있으면 지우고 시작, (3)),
+② 다 끝난 뒤 <code>renameTo</code> 로 <b>이름만 한 번에</b> 바꿔 접두사로 만듭니다. 전원이 나가도 남는 것은
+스테이징뿐입니다.</div>
+<span class="tier ill">설명용</span>
 </article>

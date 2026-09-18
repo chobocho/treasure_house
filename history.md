@@ -1,3 +1,10 @@
+### [2026-09-18 03:05] Termux 대백과사전 덱 4부 — 앱(32장)
+- **기획:** termux-app 의 구조·터미널 에뮬레이터·PTY·TermuxService·부트스트랩·sharedUserId·RUN_COMMAND·properties·targetSdk 를 소스로.
+- **TC:** 조립 검사: 인용 범위 26개 경계 통과, 소스 줄 인용 30건 핀 커밋 확인, 긴 줄은 캡처로 돌림.
+- **개발:** `termux/deck/sections/04_app.html`, `termux/deck/claims.md`, `termux/PLAN.md`
+- **검증:** make all SKEL=1 오류 0건 · 역검증 통과 · check_slices 어긋남 0건
+- **비고:** ~/.termux 는 이름만 캡처(내용은 사용자의 것). 목표 170장 대비 32장 — 늘리지 않음.
+
 ### [2026-09-18 02:55] Termux 대백과사전 덱 5부 — 파일시스템과 실행(47장)
 - **기획:** $PREFIX·셔뱅·termux-exec·W^X·시스템 링커 실행·paths.h·RUNPATH 를 핀 고정 소스와 캡처로.
 - **TC:** 조립 검사: 근거 등급 a12·s13·b12, 인용 범위 18개 경계 통과, 연도 4건 근거 확인.

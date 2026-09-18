@@ -177,3 +177,13 @@
 | TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE: disable·enable(기본, 필요할 때만)·force; enable 은 Android 10 이상·root/shell 아님·untrusted_app_25/27 아님·앱 데이터 아래 파일일 때만 쓴다 | termux-exec-usage 1.8.1 | 문서 | 2026-09-18 |
 | 새 세션의 셸은 $PREFIX/bin 의 login·bash·zsh·fish 중 실행 가능한 첫 파일이다(없거나 안전 모드면 /system/bin/sh) | termux-app@084d709 termux-shared/src/main/java/com/termux/shared/termux/shell/command/runner/terminal/TermuxSession.java 93–114 · UnixShellEnvironment.java 56 | 소스 | 2026-09-18 |
 | login 은 $PREFIX/lib/libtermux-exec-ld-preload.so 가 있으면 LD_PRELOAD 로 내보내고, coreutils true 가 실패하면 푼다 | termux-tools@a62f7b2 scripts/login.in 42–54 | 소스 | 2026-09-18 |
+| termux-app 은 app·termux-shared·terminal-emulator·terminal-view 네 모듈이다 | termux-app@084d709 settings.gradle | 소스 | 2026-09-18 |
+| Termux 의 터미널 처리는 Android Terminal Emulator(jackpal) 에 기반하며 그 Apache-2.0 코드를 쓴다 | termux-app@084d709 README.md 199행 · LICENSE.md 5행 | 소스 | 2026-09-18 |
+| TerminalEmulator 는 xterm 의 일부를 흉내 낸다(xterm 은 VT100 의 일부를 흉내) | termux-app@084d709 terminal-emulator/…/TerminalEmulator.java 머리 주석 | 소스 | 2026-09-18 |
+| create_subprocess 는 /dev/ptmx 를 열고 grantpt·unlockpt·ptsname_r, IUTF8 켜고 IXON·IXOFF 끄고(Ctrl+S 멈춤 방지), fork·setsid·dup2 로 PTY 를 표준 입출력에 붙인 뒤 execvp 한다 | termux-app@084d709 terminal-emulator/src/main/jni/termux.c 36–113 | 소스 | 2026-09-18 |
+| TermuxService 는 포그라운드 서비스이고, 웨이크락으로 PARTIAL_WAKE_LOCK 과 WIFI_MODE_FULL_HIGH_PERF 를 잡고 배터리 최적화 해제를 요청한다 | termux-app@084d709 app/…/TermuxService.java 203–206·303–330 · out/src_app.txt | 소스 | 2026-09-18 |
+| 부트스트랩 zip 은 아키텍처별로 .incbin 으로 앱의 네이티브 라이브러리에 박히고, 설치는 SYMLINKS.txt 로 링크를 세운 뒤 스테이징을 접두사로 옮긴다 | termux-app@084d709 app/src/main/cpp/termux-bootstrap-zip.S · TermuxInstaller.java 40–58·207–215 | 소스 | 2026-09-18 |
+| RUN_COMMAND 인텐트로 0.95 부터 서드파티 앱이 Termux 문맥에서 명령을 돌릴 수 있고, com.termux.permission.RUN_COMMAND 권한과 allow-external-apps=true 가 둘 다 필요하다 | gh-app-run_command-intent 1·1.2.1·1.2.2 | 위키 | 2026-09-18 |
+| termux.properties 키는 TermuxPropertyConstants 에 정의돼 있다(extra-keys·bell-character·terminal-transcript-rows 등) | termux-app@084d709 termux-shared/…/TermuxPropertyConstants.java · out/src_app.txt | 소스 | 2026-09-18 |
+| 이 기기의 ~/.termux 에는 termux.properties 하나만 있다 | out/dot_termux.txt | 캡처 | 2026-09-18 |
+| 셸을 못 찾거나 안전(failsafe) 세션이면 /system/bin/sh 를 쓴다 | termux-app@084d709 TermuxSession.java 105–114 | 소스 | 2026-09-18 |
