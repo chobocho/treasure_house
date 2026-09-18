@@ -77,8 +77,11 @@ def run(ctx):
         rows.append([algo, sum(l[:1] == '-' for l in body),
                      sum(l[:1] == '+' for l in body),
                      sum(l[:2] == '@@' for l in body), body])
+    # 먼저 myers 의 줄들을 잡아 둔다 — 루프 안에서 rows[0][4] 를 바꾸면
+    # 그 뒤 비교가 전부 '다르다' 가 된다(처음 판이 그랬다)
+    first = rows[0][4]
     for row in rows:
-        row[4] = '같다' if row[4] == rows[0][4] else '다르다'
+        row[4] = '같다' if row[4] == first else '다르다'
     ctx.table('diff_algos', ['알고리즘', '지운 줄', '더한 줄', '덩어리',
                              'myers 와 출력'],
               rows, '같은 old.c → new.c 를 네 알고리즘으로')
@@ -97,22 +100,27 @@ def run(ctx):
     r.cap('git diff -w q.py')
     r.cap('git diff --stat')
     r.cap('git diff --numstat')
-    # blame — -M 은 파일 안에서 옮긴 줄, -C 는 다른 파일에서 온 줄
+    # blame — -M 은 파일 안에서 옮긴 줄, -C 는 다른 파일에서 온 줄.
+    # 줄이 짧으면 감지 문턱(영숫자 -M 20자·-C 40자)에 못 미쳐 아무 일도
+    # 없다(처음 판이 그랬다). 줄마다 영숫자를 넉넉히 넣는다.
     r = ctx.repo('blame')
-    body = ''.join('line %d\n' % i for i in range(1, 7))
+    body = ''.join('line %d: the quick brown fox jumps over the lazy dog\n'
+                   % i for i in range(1, 7))
     commit(r, 0, 'base', {'a.txt': body})
     commit(r, 1, 'append', {'a.txt': body + 'line 7\n'})
     moved = body.split('\n')
     moved = '\n'.join(moved[3:6] + moved[0:3]) + '\nline 7\n'
     commit(r, 2, 'move block', {'a.txt': moved})
-    commit(r, 3, 'copy to b', {'b.txt': 'line 1\nline 2\nline 3\n'})
+    commit(r, 3, 'copy to b', {'b.txt': ''.join(body.split('\n')[i] + '\n'
+                                              for i in range(3))})
     commit(r, 4, 'indent',
            {'a.txt': moved.replace('line 7', '  line 7')})
     r.cap('git blame -s a.txt')
     r.cap('git blame -s -w a.txt')
     r.cap('git blame -s -M a.txt')
-    r.cap('git blame -s -C -C b.txt')
     r.cap('git blame -s b.txt')
+    r.cap('git blame -s -C b.txt')
+    r.cap('git blame -s -C -C b.txt')
     # 곡괭이 — 문자열의 수가 바뀐 커밋(-S)과 줄이 맞는 커밋(-G)
     r.cap('git log --oneline -S "line 7"')
     r.cap('git log --oneline -G "line 7"')
