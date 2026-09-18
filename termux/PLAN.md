@@ -541,3 +541,36 @@ The user approved every recommendation below as-is. Each row is now a decision.
   transformer's (md5 over out/*.txt + ckpt); it is rewritten with tests at step 6 to compare only
   manifest `stable` files. (5) The upstream pin used for the palette (termux-app 084d709,
   2026-09-16) is provisional; step 3 pins repos.tsv and re-checks the colour source lines.
+
+### Step 2 — tmx.sh + scrub.py + first capture (2026-09-18)
+
+- `tools/tmx.sh` (+ `tools/tests/test_tmx.py`, 12 tests incl. 52 denied sub-cases; RED 71 → GREEN).
+  Denylist runs **before** execution for both sides; each denied case is proven not to run by a
+  trailing `touch` that must not create its marker. Covers every §0.7 item plus all §0.8 privacy
+  commands, `termux-open*`/`termux-am`/`am start…`, `termux-setup-storage`, `termux-dialog`;
+  installs need `--allow-install` (decision 5); `treasure-hello` removal is exempt; `rm` of
+  anything under `$PREFIX`/`$HOME`/`/root` outside `termux/scratch` (and any recursive rm outside
+  scratch or `/tmp/`) is refused. `--dry-run` prints the verdict only. Deviation: tests are Python
+  (`tools/tests/test_tmx.py`) instead of `exp/tests/test_tmx.sh`, so `make test` runs one runner.
+- **Finding that changes the deck's framing:** Termux binaries launched from here are still
+  **ptrace'd by proot** (`TracerPid` non-zero, captured). Files, dpkg db and ELF headers are real,
+  but `id` (uid=0), `uname` (`6.17.0-PRoot-Distro`) and `getcwd` (returns the guest path `/root/…`
+  even after `cd /data/data/…/home/…`) are proot's view. So `side=termux` means "Termux's binaries
+  and environment", never "native Termux". Native identity/kernel values must come from the
+  user-run file (decision 8, extended at step 3). An attempt to probe for a native launch path was
+  refused by the session's permission classifier as a containment escape; not pursued.
+- Also true, and a Part 5 slide: `bash -c 'readlink /proc/$$/exe'` prints `…/bin/coreutils`,
+  because bash execs the last simple command in place (the test was corrected to measure bash
+  while it is still alive — the assertion itself was unchanged).
+- `tools/scrub.py` (+ 34 tests; RED 32 → GREEN): `fix()` replaces SSID/BSSID/public IPv4+IPv6/
+  paths under `$HOME` or `/root` outside the repo/shared-storage file names; `problems()` fails on
+  phone, 15-digit IMEI/IMSI, serial, MAC (Android's 02:00:… placeholder allowed), GPS, e-mail
+  (public noreply allowlist), leftovers of the above, and the user's names — **known only as
+  SHA-256 prefixes**, never in plain text. Reports mask values. One real false positive
+  (`main/x11/root/TUR` read as `/root`) was turned into a test before fixing.
+- `run_all.py` skeleton (+ 17 tests with a fake runner): `Capture`/`Step`, sections `== N. 제목 ==`,
+  prompt `$`/`#` by side (decision 12), scrub before write, snapshots frozen with
+  `# snapshot DATE` and never re-recorded without `--resnap`, stable entries carry **no date** (so
+  the manifest is stable too), `--check` = manifest ↔ files, ≤ 108 cells, scrub problems.
+  First capture `env_termux` (stable): md5 identical over three runs.
+- `make test` 80 passed; `make all SKEL=1` 0 errors.

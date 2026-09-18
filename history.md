@@ -1,3 +1,10 @@
+### [2026-09-18 01:14] Termux 대백과사전 덱 2단계 — tmx.sh 거부 목록·scrub.py·첫 캡처
+- **기획:** 호스트 Termux 로 가는 유일한 문(tmx.sh)과 개인정보 필터(scrub.py), 캡처 틀(run_all.py)을 시험 먼저 만든다.
+- **TC:** 정상: 허용 명령·끝줄·종료 코드·시간 초과. 가장자리: 거부 52종 미실행 증명·쓰기 우회·rm 경로·오탐(/root/TUR)·가린 보고.
+- **개발:** `termux/tools/tmx.sh`, `termux/tools/scrub.py`, `termux/run_all.py`, `termux/tools/tests/*.py`(3), `termux/out/env_termux.txt`, `termux/PLAN.md`
+- **검증:** 80 passed, 0 failed · make all SKEL=1 오류 0건 · env_termux md5 3회 동일
+- **비고:** proot 에서 부른 Termux 바이너리도 ptrace 아래라 id·uname·getcwd 는 proot 값 — 네이티브 값은 device.txt 로 받는다.
+
 ### [2026-09-18 00:53] Termux 대백과사전 덱 1단계 — 뼈대(조립기·검사·34장)
 - **기획:** transformer 조립기·검사를 복사해 대상·언어·상한 3000·근거 등급 5종만 바꾸고, CITE 를 핀 고정 upstream 소스 배지 SRC 로 교체.
 - **TC:** 정상: srcpin 17건(핀 커밋 읽기·짧은 SHA). 가장자리: SHA 불일치·미등록 저장소·체크아웃 없음·파일 없음·빈 표 + scratch 연기 시험 오류 경로 8종.
