@@ -343,6 +343,9 @@ CAPTURES = [
           "stat -c '%A %s %n' $PREFIX/libexec/termux-api"),
         S('명령 스크립트 중 termux-api 를 부르는 것',
           'grep -l libexec/termux-api $PREFIX/bin/termux-* | wc -l'),
+        S('그 이름들',
+          'grep -l libexec/termux-api $PREFIX/bin/termux-* | '
+          'xargs -n1 basename'),
     ]),
     Capture('api_proot', 'termux', 'snapshot', [
         S('proot 안에서 부르면',
@@ -443,6 +446,29 @@ CAPTURES = [
           "python3 deck/srcpin.py grep "
           "'termux-packages:packages/apt/0010-*.patch' "
           "'^.   if .getuid.. == 0. .'"),
+    ]),
+    # 개인정보 명령은 실행하지 않는다(§0.8) — 무엇이 나오는지는 앱
+    # 소스의 JSON 칸 이름으로 보인다
+    Capture('src_api', 'termux', 'stable', [
+        S('앱이 받는 메서드 수', "python3 deck/srcpin.py grep "
+          "'termux-api:*/TermuxApiReceiver.java' "
+          "'case \"[A-Za-z]+\"' | wc -l"),
+        S('termux-sms-list 가 내는 칸', "python3 deck/srcpin.py grep "
+          "'termux-api:*/SmsInboxAPI.java' 'name[(]\"[a-z_]+\"[)]'"),
+        S('termux-location 이 내는 칸', "python3 deck/srcpin.py grep "
+          "'termux-api:*/LocationAPI.java' 'name[(]\"[a-z_]+\"[)]'"),
+        S('termux-battery-status 가 내는 칸',
+          "python3 deck/srcpin.py grep "
+          "'termux-api:*/BatteryStatusAPI.java' "
+          "'put[A-Za-z]*[(]out, \"[a-z_]+\"'"),
+    ]),
+    # 거부 목록이 실행 **전에** 막는지 — 안쪽 tmx.sh 는 명령을 받자마자
+    # 거부하고 99 로 끝난다. 개인정보 명령은 한 번도 돌지 않는다(§0.8)
+    Capture('tmx_deny', 'proot', 'stable', [
+        S('개인정보 명령을 건네 보면',
+          'sh tools/tmx.sh termux-sms-list; echo "exit=$?"'),
+        S('카메라도',
+          'sh tools/tmx.sh termux-camera-photo a.jpg; echo "exit=$?"'),
     ]),
     # 사용자 설정 디렉터리는 이름만 본다 — 내용은 사용자의 것이다(§3.3)
     Capture('dot_termux', 'termux', 'stable', [

@@ -29,7 +29,12 @@ OUT = os.path.join(BASE, 'out')
 # 잘라 보는 표. (내보낼 이름, 원본 tsv, 실을 칸 이름들, 거르개)
 # 거르개는 (칸 이름, 값) — 그 칸이 그 값인 행만 싣는다. 없으면 전부.
 VIEWS = [
-    # PLAN.md §5 9단계에서 부를 쓸 때마다 한 줄씩 는다.
+    # 7부 — 명령 색인(data/api_cmds.tsv, tools/api_table.py 가 만든다)
+    ('tbl_api_sensitive.html', 'api_cmds.tsv',
+     ['command', 'owner-package', 'needs-app'], ('privacy', 'sensitive')),
+    ('tbl_api_native.html', 'api_cmds.tsv',
+     ['command', 'owner-package', 'needs-app'],
+     ('run-in-deck', 'native')),
 ]
 
 # 이 칸은 표에 글자로 싣지 않고 '출처' 링크로 바꾼다.

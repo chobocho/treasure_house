@@ -1,3 +1,10 @@
+### [2026-09-18 03:28] Termux 덱 — termux-* 명령 색인 도구·API 소스 캡처·거부 캡처
+- **기획:** 7부 표를 손으로 적지 않도록 캡처 두 개(주인 패키지·termux-api 호출)에서 84줄 색인을 만든다.
+- **TC:** 정상: 행 수·주인·needs-app·privacy 분류. 경계: 빈 캡처·모르는 명령·주석 줄·정렬 고정(7건).
+- **개발:** `termux/tools/api_table.py`, `termux/tools/tests/test_api_table.py`, `termux/run_all.py`, `termux/deck/gen_tables.py`, `termux/data/api_cmds.tsv`, `termux/out/` 캡처 6개
+- **검증:** make test 192 passed, 0 failed · stable 캡처 재현
+- **비고:** 개인정보 명령은 실행하지 않고 소스에서 칸 이름만 읽는다. tmx_deny 는 실행 전 거부(99)를 캡처.
+
 ### [2026-09-18 03:13] Termux 대백과사전 덱 6부 — 패키지 시스템(37장)
 - **기획:** 폰의 pkg·apt·dpkg 에서 저장소·미러·키를 거쳐 termux-packages 공장과 부트스트랩까지, 그리고 .deb 손으로 만들기.
 - **TC:** 조립 검사: 인용 범위 36개 경계 통과, 소스 줄 인용 40건 핀 확인, 출처 없는 문장 1건 삭제·1건 미확인 표시.
