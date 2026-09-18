@@ -48,7 +48,8 @@ ORDER = ['hello', 'concepts', 'objects', 'anatomy', 'tree_sort',
          'refs', 'refs2', 'index', 'index2', 'cmds', 'dag', 'merge',
          'merge2', 'rebase', 'rebase2', 'diff', 'diff2', 'pack',
          'pack2', 'proto', 'proto2', 'collab', 'config_hooks',
-         'tools2', 'limits', 'daily', 'recovery', 'mygit', 'cmdref']
+         'tools2', 'limits', 'daily', 'recovery', 'mygit', 'cmdref',
+         'history']
 
 
 def cells(s):
