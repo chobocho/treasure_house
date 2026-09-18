@@ -44,9 +44,9 @@ import gitenv                   # noqa: E402
 from build_deck import gitslug  # noqa: E402  같은 규칙이어야 한다
 
 # 실험 모듈의 차례 — 덱의 부 차례를 따른다(가벼운 것부터)
-ORDER = ['hello', 'objects', 'tree_sort', 'refs', 'index', 'dag',
-         'merge', 'rebase', 'diff', 'pack', 'proto', 'config_hooks',
-         'limits', 'recovery', 'mygit', 'cmdref']
+ORDER = ['hello', 'concepts', 'objects', 'tree_sort', 'refs', 'index',
+         'dag', 'merge', 'rebase', 'diff', 'pack', 'proto',
+         'config_hooks', 'limits', 'recovery', 'mygit', 'cmdref']
 
 
 def cells(s):
