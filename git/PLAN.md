@@ -626,3 +626,25 @@ The user approved every proposal below as-is. Each row is now a decision.
 - Java note: filenames go through `sun.jnu.encoding=ISO-8859-1` set at the top of main (POSIX
   locale here is ASCII, so 한글.txt could not be created). Mention it in part 19 as a JDK-specific
   trick, not a portable API.
+
+
+### Step 7 — run_all.py + record.sh --check (2026-09-18, 8abd98e … this commit)
+
+- 16 experiment modules in `exps/` (hello … recovery, then mygit and cmdref), one `run_all.py`;
+  **695 captures + 8 tables**, 0 lines over 108 cells. One full run ≈ 7.5–8.7 min (cap 25);
+  `tools/record.sh --check` ran it three times: **all 695 files byte-identical** (md5).
+- `mygit`: the same 23-line script under all five implementations; each command's stdout/stderr/
+  exit code compared with Python's (pack name excluded — compressed bytes may differ, SPEC §3.1),
+  then real git opens each repo: `fsck --strict` clean, object list and packed object list equal.
+  `out/tbl_parity.html` = step × language, **all 60 cells ok**. Python's run is kept as
+  `mygit__*.txt` captures for part 19.
+- `cmdref`: 160 rows (the `git-*` commands of commands.tsv + gitk, gitweb) → `-h` (first 6 lines)
+  captured for 151; 7 not installed here (citool, cvsserver, gui, p4, svn, gitk, gitweb — the
+  table says "이 기계에 없음"), 2 shell libraries; 74 real invocations on a 4-commit sample repo.
+  Examples that need a dirty tree show their setup on the command line (`echo more >> notes.txt
+  && …`) — a clean sample made 12 of them print nothing.
+- Fixes this step: captures written outside `Repo` (mygit) now go through `save()` so the
+  duplicate-name check and the per-experiment count apply; a full run clears old `*__*.txt` first
+  (renamed commands left stale files); `run_all.py` added to `deck/pending.txt` (`make all SKEL=1`
+  had been failing on it since the frame commit). Record sizes written under `deck/budget.txt`
+  (files test stops at 20k, not the planned 100k).
