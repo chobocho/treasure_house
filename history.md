@@ -1,3 +1,10 @@
+### [2026-09-18 02:38] Termux 대백과사전 덱 3부 — 안드로이드 위의 리눅스(54장)
+- **기획:** 앱 샌드박스·uid·앱 데이터·bionic·SELinux·seccomp·Zygote·권한·스코프드 스토리지를 캡처·소스·공식 문서로.
+- **TC:** 조립 검사: 근거 등급 a13·s5·b17, 코드·캡처 역검증 일치, 인용 범위 3개·연도 3건 근거 확인.
+- **개발:** `termux/deck/sections/03_android.html`, `termux/deck/claims.md`, `termux/data/docs.tsv`, `termux/PLAN.md`
+- **검증:** make all SKEL=1 오류 0건 · 역검증 통과 · claims-check 근거 없음 0건
+- **비고:** proot 는 uid 를 0 으로 꾸미지만 보조 그룹(u0_a123_cache)이 앱 번호 123 을 드러낸다. 목표 160장 대비 54장 — 늘리지 않음.
+
 ### [2026-09-18 02:28] Termux 대백과사전 덱 6·7단계 — 캡처 26종(stable 20개 3회 동일)·그림 18장
 - **기획:** 실기기 캡처를 stable/snapshot 으로 나눠 run_all 에 모으고, 구조도·자료 그림을 data/·out/ 에서 그린다.
 - **TC:** 정상: record.sh 가 stable 만 대조·네이티브 파일 들여오기. 가장자리: snapshot 은 흔들려도 통과·흔들리는 stable 은 파일 이름과 함께 실패.

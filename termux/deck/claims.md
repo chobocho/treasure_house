@@ -118,3 +118,40 @@
 | Android 판 ↔ API 수준: 5.0=21 · 6.0=23 · 7.0=24 · 9=28 · 10=29 · 11=30 · 12=31 · 12L=32 · 13=33 · 14=34 · 15=35 · 16=36 | dev-android-platforms | 개발자 문서 목록 | 2026-09-18 |
 | 앱 아이콘은 검정 화면·회색(#BFCBCD) 테두리·흰 블록 커서다(초록 없음) | termux-app@084d709 art/ic_launcher.svg | 파일 내용 | 2026-09-18 |
 | 터미널 기본 16색은 TerminalColorScheme.java 의 DEFAULT_COLORSCHEME 에 있다 | termux-app@084d709 terminal-emulator/…/TerminalColorScheme.java | 파일 내용 | 2026-09-18 |
+| 안드로이드는 앱마다 고유한 uid 를 주고 제 프로세스에서 돌려, 커널 수준의 앱 샌드박스를 만든다 | aosp-app-sandbox 1 | 문서 문장 | 2026-09-18 |
+| 샌드박스를 깨려면 대개 리눅스 커널을 뚫어야 한다(심층 방어가 필요) | aosp-app-sandbox 1.1 | 문서 문장 | 2026-09-18 |
+| 안드로이드는 SELinux 를 enforcing 모드로 쓰며, root 권한 프로세스도 MAC 의 대상이다 | aosp-selinux 1 | 문서 문장 | 2026-09-18 |
+| Android O(8.0) 부터 zygote 에 seccomp 필터 하나를 걸어 모든 앱에 적용한다 | aosp-seccomp 2 | 블로그 문장 | 2026-09-18 |
+| Zygote 는 같은 ABI 의 모든 시스템·앱 프로세스의 뿌리이며 init 이 띄운다 | aosp-zygote 1 | 문서 문장 | 2026-09-18 |
+| 앱 전용 내부 저장소는 다른 앱이 못 읽고, 앱을 지우면 함께 지워진다 | dev-android-app-data 1 | 문서 문장 | 2026-09-18 |
+| AID_ROOT 0 · AID_SYSTEM 1000 · AID_EXTERNAL_STORAGE 1077 · AID_SHELL 2000 · AID_INET 3003(AF_INET 소켓을 만들 수 있다) · AID_EVERYBODY 9997 · AID_APP_START 10000 · AID_CACHE_GID_START 20000 · AID_SHARED_GID_START 50000 · AID_USER_OFFSET 100000 | aosp-fs-config | 헤더의 #define 줄 | 2026-09-18 |
+| bionic 은 앱 uid 를 u0_a1234 꼴로 이름 짓는다(AID_APP_START + 1234), 캐시 gid 는 u0_a1234_cache, 공유 gid 는 all_a1234 | aosp-bionic-grp-pwd | 소스 주석 240–246 행(문서 변환본) | 2026-09-18 |
+| Termux 는 FHS 를 따르지 않아 /bin·/etc·/usr·/tmp 가 제자리에 없고, 그래서 데비안·우분투 패키지를 그대로 쓰지 않는다 | wiki-differences-from-linux 1 | 위키 문장 | 2026-09-18 |
+| Android 7 이상에서는 LD_LIBRARY_PATH 대신 ELF 의 DT_RUNPATH 를 쓴다 | wiki-differences-from-linux 1 | 위키 문장 | 2026-09-18 |
+| 모든 패키지는 NDK 로 컴파일되어 시스템의 bionic(/system/lib64 의 libc.so·libm.so·libdl.so)에 링크된다 | wiki-differences-from-linux 2 | 위키 문장 | 2026-09-18 |
+| 리눅스 배포판의 동적 링크 프로그램은 링커 경로(/lib)가 없고 libc ABI 가 달라 돌지 않는다 | wiki-differences-from-linux 2 | 위키 문장 | 2026-09-18 |
+| 루트 파일시스템과 홈은 /data 파티션의 앱 데이터에 있고, 앱을 지우거나 데이터를 지우면 함께 사라진다 | wiki-differences-from-linux 3 | 위키 문장 | 2026-09-18 |
+| Termux 는 단일 사용자다. 모든 것이 앱의 uid 로 돌고 사용자 이름은 uid 에서 나온다 | wiki-differences-from-linux 4 | 위키 문장 | 2026-09-18 |
+| 서버 패키지의 기본 포트를 바꿨다: ftpd 8021 · httpd 8080 · sshd 8022 | wiki-differences-from-linux 4 | 위키 문장 | 2026-09-18 |
+| Termux 앱은 com.termux 라는 이름의 주 프로세스 하나로 뜨고, 세션·작업은 그 프로세스에서 fork 한 자식이다 | gh-packages-termux-execution-environment 1.2 | 위키 문장 | 2026-09-18 |
+| /system/bin 의 파일은 DAC·SELinux 문맥·호출자 검사 때문에 앱이 다 실행할 수는 없다 | gh-packages-termux-execution-environment 1.4.1 | 위키 문장 | 2026-09-18 |
+| Termux 의 NDK 헤더 패치(ndk-patches/29/pwd.h.patch)는 getpwuid 를 인라인 함수로 덮어써 집을 $HOME, 셸을 $PREFIX/bin/login 으로 바꾼다 | termux-packages@7d5b4d3 ndk-patches/29/pwd.h.patch 15–58행 | git show | 2026-09-18 |
+| 이 기기의 proot 안에서 id 는 uid=0(root) 이지만 보조 그룹에는 1077·3003·9997·20123(u0_a123_cache)·50123(all_a123) 이 남는다 | out/env_termux.txt 2절 | 캡처 | 2026-09-18 |
+| libandroid-support: "Library extending the Android C library (Bionic) for additional multibyte, locale and math support" | termux-packages@7d5b4d3 packages/libandroid-support/build.sh TERMUX_PKG_DESCRIPTION | git show | 2026-09-18 |
+| libandroid-selinux: "Android fork of libselinux, an SELinux userland library" | termux-packages@7d5b4d3 packages/libandroid-selinux/build.sh | git show | 2026-09-18 |
+| 이 기기의 Termux clang 은 __ANDROID_API__ 24 로 짓는다 | out/exp_bionic.txt 2절 | 캡처 | 2026-09-18 |
+| Termux 의 bash·ls·termux-api 는 interp /system/bin/linker64, RUNPATH $PREFIX/lib; 우분투 bash 는 /lib/ld-linux-aarch64.so.1 | out/linker_termux.txt · out/linker_proot.txt | 캡처(py/elf.py) | 2026-09-18 |
+| 안드로이드의 / 는 요즘 판에서 마운트된 system 파티션이며, /bin → /system/bin, /etc → /system/etc 링크다 | gh-packages-termux-file-system-layout 1.2.1 | 위키 표 | 2026-09-18 |
+| /proc 는 보통 hidepid=2 로 마운트되고, /proc/net 은 Android 10 부터 개인정보 때문에 막혔다 | gh-packages-termux-file-system-layout 1.2.1 | 위키 표 | 2026-09-18 |
+| /system/bin 을 PATH 에 넣지 말라(Termux 도구와 충돌) — 대체 경로로만 예외 | gh-packages-termux-file-system-layout 1.2.1 | 위키 표 | 2026-09-18 |
+| /system/bin 의 핵심 유틸리티는 주로 toybox 가 준다 | gh-packages-termux-file-system-layout 1.2.1.1 | 위키 문장 | 2026-09-18 |
+| Android 14 에는 SELinux 파일 문맥 형식이 92개쯤 있다 | gh-packages-termux-execution-environment 1.4.1 | 위키 문장 | 2026-09-18 |
+| 루트가 아닌 Android 8 이상에서는 seccomp 필터 때문에 정적 링크 프로그램이 돌지 않을 수 있다 | wiki-differences-from-linux 2 | 위키 문장 | 2026-09-18 |
+| android.permission.INTERNET 은 gid inet 에 대응한다 | aosp-platform-xml 52–54행 | 문서 변환본 | 2026-09-18 |
+| termux-app 매니페스트는 INTERNET·저장소·WAKE_LOCK·FOREGROUND_SERVICE·RECEIVE_BOOT_COMPLETED 등 17개 권한을 적고, sharedUserId 와 requestLegacyExternalStorage="true" 를 둔다 | termux-app@084d709 app/src/main/AndroidManifest.xml 5·22–38·46행 | out/src_manifest.txt | 2026-09-18 |
+| Termux 는 세션(TermuxSession)에 execvp, 백그라운드 작업(TermuxTask)에 Runtime.exec() 를 쓴다 | gh-packages-termux-execution-environment 1.2 | 위키 문장 | 2026-09-18 |
+| sshd·crond 처럼 스스로 데몬이 되는 프로그램은 부모가 init(pid 1)이 되어 앱 프로세스에서 떨어지고, 더 쉽게 죽는다 | gh-packages-termux-execution-environment 1.2.3 | 위키 문장 | 2026-09-18 |
+| 안드로이드 권한은 설치 때 주는 것(일반·서명), 실행 중 묻는 것(런타임), 특별 권한으로 나뉜다 | dev-android-permissions 1.2 | 문서 절 제목·문장 | 2026-09-18 |
+| Android 11 에서 모든 파일 접근(MANAGE_EXTERNAL_STORAGE)을 선언하면 Google Play 출시에 영향이 있을 수 있다 | dev-android-11-storage 1.8 | 문서 문장 | 2026-09-18 |
+| 이 기기의 /storage/emulated 는 fuse 로, noexec·nosuid·nodev 로 마운트돼 있다 | out/storage.txt 2절 | 캡처(/proc/mounts) | 2026-09-18 |
+| termux-setup-storage 가 만든 ~/storage 링크는 shared·dcim·downloads·documents·movies·music·pictures·podcasts·audiobooks·external-0·media-0 이다(이 기기) | out/storage.txt 1절 | 캡처 | 2026-09-18 |

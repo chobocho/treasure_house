@@ -703,3 +703,19 @@ The user approved every recommendation below as-is. Each row is now a decision.
   path in sandbox, phantom text cut mid-word and an unrelated `am` row, SDK legend over the line,
   release bars silently skipping 2023 (a year with no release), identical subtitles in plugin_dirs;
   proot_loop's title narrowed to path syscalls after the proot_cost snapshot contradicted it.
+
+### Step 8 · Part 3 — 안드로이드 위의 리눅스 (2026-09-18)
+
+- Tooling first (own commit): `srcpin.py grep repo:path PATTERN` (+3 tests) prints `line:match` from
+  the **pinned** blob — used by new `src_*` captures for files whose lines exceed 72 cells (XML
+  manifests). Such captures run on the Termux side because this session's `git` is Termux's
+  (`$PREFIX/bin/git`, bionic under proot) and the proot-side tmx PATH has none. `scrub.py` keeps
+  Android's standard shared-storage directory names (DCIM, Download, …, Termux's own
+  `Android/{media,data}/com.termux…`) and hides only what is below them (+1 test).
+- Part 3 written: 54 slides (budget 160; not padded). Evidence: a 13 · s 5 · b 17 · ill 16 + 3
+  quizzes. Key captured facts: proot shows uid 0 but supplementary groups keep
+  `20123(u0_a123_cache)`/`50123(all_a123)` → app id 123 (AID arithmetic from
+  android_filesystem_config.h); `/storage/emulated` is `fuse … noexec` in `/proc/mounts`; Termux clang
+  targets `__ANDROID_API__ 24`; bionic `getpwuid` home/shell come from the `pwd.h` NDK patch (SRC).
+  `/apex`/`/vendor` were dropped from the chapter — no source fetched for them; the wiki's rootfs
+  table (which does not list them) is what the slide shows.
