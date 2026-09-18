@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as commit from './commit';
 import { GitError } from './errors';
+import * as index from './index';
 import * as objects from './objects';
 import * as refs from './refs';
 import * as tree from './tree';
@@ -361,6 +362,143 @@ function cmdReflog(ctx: Ctx, args: string[]): number {
   return 0;
 }
 
+// ── 6단계: add · rm --cached · status · write-tree · commit ───────
+
+// 명령줄 경로 → 작업 트리 뿌리에서의 경로 바이트 문자열('' 은 뿌리).
+function relPath(ctx: Ctx, spec: string): string {
+  return Buffer.from(path.relative(ctx.root(), ctx.path(spec)))
+    .toString('latin1');
+}
+
+const under = (p: string, rel: string) =>
+  !rel || p === rel || p.startsWith(rel + '/');
+
+const noMatch = (spec: string) =>
+  new GitError(`fatal: pathspec '${spec}' did not match any files`);
+
+// pathspec 아래의 파일을 올리고, 사라진 파일은 뺀다(SPEC.md §9).
+//
+// 모든 pathspec 을 먼저 검사한다 — 하나라도 맞는 것이 없으면 아무것도
+// 바꾸지 않고 멈춘다(git 과 같다).
+function cmdAdd(ctx: Ctx, args: string[]): number {
+  const [, , rest] = parseFlags(args, []);
+  const [root, g] = [ctx.root(), ctx.gitdir()];
+  const ents = index.readIndex(g);
+  const files = worktree.walkWorktree(root);
+  const plan = rest.map((spec): [string[], Set<string>] => {
+    const rel = relPath(ctx, spec);
+    const hitF = files.filter((f) => under(f, rel));
+    const hitI = new Set(ents.map((e) => e.path)
+      .filter((p) => under(p, rel)));
+    if (!hitF.length && !hitI.size) throw noMatch(spec);
+    return [hitF, hitI];
+  });
+  const byPath = new Map<string, index.IndexEntry[]>();
+  for (const e of ents) {
+    byPath.set(e.path, [...byPath.get(e.path) ?? [], e]);
+  }
+  for (const [hitF, hitI] of plan) {
+    for (const f of hitF) {
+      const full = worktree.fsPath(root, f);
+      const oid = objects.writeObject(g, 'blob', fs.readFileSync(full));
+      byPath.set(f, [index.entryFromStat(f, full, oid)]);
+    }
+    for (const p of hitI) if (!hitF.includes(p)) byPath.delete(p);
+  }
+  index.writeIndex(g, [...byPath.values()].flat());
+  return 0;
+}
+
+// 찍는 경로는 따옴표 없이 그대로다 — git 의 rm 이 그렇게 찍는다.
+function cmdRm(ctx: Ctx, args: string[]): number {
+  const [on, , rest] = parseFlags(args, ['--cached']);
+  if (!on.has('--cached')) {
+    throw new GitError('fatal: mygit: only rm --cached is supported');
+  }
+  const g = ctx.gitdir();
+  const ents = index.readIndex(g);
+  const have = new Set(ents.map((e) => e.path));
+  const gone = new Set(rest.map((spec) => {
+    const rel = relPath(ctx, spec);
+    if (!have.has(rel)) throw noMatch(spec);
+    return rel;
+  }));
+  for (const p of [...gone].sort()) {
+    ctx.say(`rm '${Buffer.from(p, 'latin1').toString('utf8')}'\n`);
+  }
+  index.writeIndex(g, ents.filter((e) => !gone.has(e.path)));
+  return 0;
+}
+
+function cmdStatus(ctx: Ctx, args: string[]): number {
+  parseFlags(args, ['--porcelain', '-s', '--short']);
+  for (const row of worktree.status(ctx.root(), ctx.gitdir())) {
+    ctx.say(row + '\n');
+  }
+  return 0;
+}
+
+// 인덱스(단계 0) → 트리 이름. 충돌 경로가 있으면 쓸 수 없다.
+function indexTree(ctx: Ctx): string {
+  const ents = index.readIndex(ctx.gitdir());
+  if (ents.some((e) => e.stage)) {
+    throw new GitError('error: Committing is not possible because ' +
+      'you have unmerged files.\nfatal: Exiting because of an ' +
+      'unresolved conflict.');
+  }
+  return tree.writeTree(ctx.gitdir(),
+    ents.map((e) => [e.mode.toString(8), e.oid, e.path]));
+}
+
+function cmdWriteTree(ctx: Ctx, args: string[]): number {
+  parseFlags(args, []);
+  ctx.say(indexTree(ctx) + '\n');
+  return 0;
+}
+
+// 트리를 쓰고, 커밋하고, 브랜치를 옮긴다(SPEC.md §9 · §6.3).
+//
+// 부모는 HEAD 와, 머지를 마무리하는 중이면 MERGE_HEAD. 출력은 git 의
+// 요약 첫 줄만 — Author 줄과 변경 통계는 줄임이다.
+function cmdCommit(ctx: Ctx, args: string[]): number {
+  const msgs: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] !== '-m') {
+      throw new GitError(`fatal: mygit: unknown option '${args[i]}'`);
+    }
+    msgs.push(args[++i] ?? '');
+  }
+  const g = ctx.gitdir();
+  const [branch, head] = refs.readHead(g);
+  const mergeHead = refs.resolveRef(g, 'MERGE_HEAD');
+  const t = indexTree(ctx);
+  if (head && !mergeHead && refs.peel(g, head, 'tree') === t) {
+    ctx.say('nothing to commit\n');
+    return 1;
+  }
+  const msg = commit.cleanupMessage(msgs.join('\n\n'));
+  if (!msg) {
+    throw new GitError('Aborting commit due to empty commit message.',
+      1);
+  }
+  const parents = [head, mergeHead].filter((p): p is string => !!p);
+  const body = commit.serializeCommit(t, parents, ident(ctx, 'AUTHOR'),
+    ident(ctx), msg);
+  const oid = objects.writeObject(g, 'commit', body);
+  const subj = commit.subjectOf(msg);
+  const kind = !head ? 'commit (initial)'
+    : mergeHead ? 'commit (merge)' : 'commit';
+  refs.updateRef(g, branch ?? 'HEAD', oid, head, `${kind}: ${subj}`,
+    ident(ctx));
+  for (const f of ['MERGE_HEAD', 'MERGE_MSG']) {
+    fs.rmSync(path.join(g, f), { force: true });
+  }
+  const where = branch ? branch.slice(HEADS.length) : 'detached HEAD';
+  const root = head ? '' : ' (root-commit)';
+  ctx.say(`[${where}${root} ${oid.slice(0, 7)}] ${subj}\n`);
+  return 0;
+}
+
 // ── 틀 ────────────────────────────────────────────────────────────
 const COMMANDS = new Map<string, Command>([
   ['hash-object', cmdHashObject],
@@ -370,6 +508,11 @@ const COMMANDS = new Map<string, Command>([
   ['branch', cmdBranch],
   ['tag', cmdTag],
   ['reflog', cmdReflog],
+  ['add', cmdAdd],
+  ['rm', cmdRm],
+  ['status', cmdStatus],
+  ['write-tree', cmdWriteTree],
+  ['commit', cmdCommit],
 ]);
 
 // 명령 하나를 돌린다 → [종료 코드, 표준 출력, 표준 오류]. stdin 이
