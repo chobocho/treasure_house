@@ -673,3 +673,26 @@ The user approved every proposal below as-is. Each row is now a decision.
   dag parents, full verify-pack chain histogram (702 captures; hello·dag·pack re-run twice, md5 equal).
 - release_cadence counts x.y.0 tags only; its caption says 1.x feature releases were third-digit
   (mirror: v1.7.1 2010-04-23 feature, v1.7.1.1 maintenance), so 2007–2013 is not "quiet".
+
+
+### Step 9 — Deck body, parts 0 and 1–18 (2026-09-18, 7371668 … 8870be7)
+
+- One commit per part, in the §5 order (0 → 2 … 14 → 15 → 16 → 17 → 18 → 1). Deck now **1,005
+  slides**; `make all SKEL=1` green after every part; every date in prose (59 in part 1 alone) is in
+  claims.md or data/.
+- New experiment modules while writing: concepts, anatomy, refs2, index2, cmds, merge2, rebase2,
+  diff2, pack2, proto2, collab, tools2, daily, history (mirror, read-only, `GIT_NO_LAZY_FETCH=1`,
+  skipped when mirror/ is absent). **1,212 captures**; `record.sh --check` passed at 695, 956, 1047,
+  1142, 1191 and 1193 captures (history checked separately: two runs, md5 equal).
+- Part 16's 40 recovery scenes: 4 scripts did not support their claim and were fixed (31 prune had
+  nothing to prune because our own push deleted origin/gone; 19 used /dev/zero which zlib shrank to
+  4 KiB; 17/18 now show the secret surviving in reflog and refs/original; 03 needed --decorate).
+- Part 17: `scalar` was missing from cmdref's list and `git p4` was classified absent because it
+  rejects `-h` — both fixed (p4 uses `sync --help`). data/commands_ko.tsv filled (193 rows) and
+  `make data` re-run.
+- Lessons: a script-run `git shortlog` without a revision reads stdin (empty output); this git ships
+  git-prompt.sh/git-completion.bash under `$(git --exec-path)/../../etc/bash_completion.d`; after
+  `run_all.py --only`, renamed captures leave stale files that must be deleted by hand.
+- **Decision (user, 2026-09-18): part 19 carries FULLSRC of all five implementations** (≈470
+  slides, coverage 100 %, pending.txt empty) — the §5 step-10 plan as written, not the
+  Python-only fallback. Expected total ≈ 1,750 slides, under the 3,000 cap.
