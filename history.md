@@ -1,3 +1,10 @@
+### [2026-09-18 02:28] Termux 대백과사전 덱 6·7단계 — 캡처 26종(stable 20개 3회 동일)·그림 18장
+- **기획:** 실기기 캡처를 stable/snapshot 으로 나눠 run_all 에 모으고, 구조도·자료 그림을 data/·out/ 에서 그린다.
+- **TC:** 정상: record.sh 가 stable 만 대조·네이티브 파일 들여오기. 가장자리: snapshot 은 흔들려도 통과·흔들리는 stable 은 파일 이름과 함께 실패.
+- **개발:** `termux/run_all.py`, `termux/tools/record.sh`, `termux/exp/{build,pkg_diff}.sh`, `termux/out/*.txt`(26), `termux/deck/gen_figs.py`, `termux/deck/figs/*.svg`(18)
+- **검증:** 177 passed, 0 failed · make record stable 20개 3회 동일 · make all SKEL=1 오류 0건
+- **비고:** Termux apt 가 uid 0 을 거부해 결정 5 의 설치는 불가 — 호스트 무변경. API·getprop 은 네이티브 스크립트로.
+
 ### [2026-09-18 02:24] Git 대백과사전 덱 4단계 — 조사(공식 문서·연표 126·CVE 40·출처 대장)
 - **기획:** v2.55.0 태그의 공식 문서 943개와 메일 3통을 docs/ 로, 릴리스·CVE·연표·기여자·명령·자람 표를 mirror 에서 뽑는 make_data.py.
 - **TC:** make data-check 로 생성 표 재현 확인, check_claims 에 formats.tsv 절 제목 존재 검사(32행) 추가. 외부 사실 13건은 원문을 curl 로 받아 문장 대조.
