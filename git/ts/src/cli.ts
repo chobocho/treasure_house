@@ -10,8 +10,10 @@
 // 대화는 기다림이다(12단계). 나머지 명령은 모두 동기로 돈다.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as commit from './commit';
 import { GitError } from './errors';
 import * as objects from './objects';
+import * as refs from './refs';
 import * as tree from './tree';
 import * as worktree from './worktree';
 
@@ -89,11 +91,17 @@ function isDir(p: string): boolean {
 }
 
 // <rev> → 객체 이름. 없으면 null (SPEC.md §6.2).
-//
-// 3단계에서는 16진 이름과 앞부분만 푼다. 참조와 뒤붙이(~ ^)는 5단계의
-// refs.revParse 가 맡는다.
 function resolve(ctx: Ctx, name: string): string | null {
-  return objects.findObject(ctx.gitdir(), name);
+  return refs.revParse(ctx.gitdir(), name);
+}
+
+const AMBIGUOUS = (name: string) => `fatal: ambiguous argument ` +
+  `'${name}': unknown revision or path not in the working tree.\n` +
+  "Use '--' to separate paths from revisions, like this:\n" +
+  "'git <command> [<revision>...] -- [<file>...]'";
+
+function ident(ctx: Ctx, who = 'COMMITTER'): string {
+  return commit.identFromEnv(ctx.env, who);
 }
 
 // [켜진 짧은 옵션 집합, 값 옵션 표, 나머지 인자].
@@ -189,10 +197,179 @@ function cmdCatFile(ctx: Ctx, args: string[]): number {
   return 0;
 }
 
+// ── 5단계: init · commit-tree · branch · tag · reflog ────────────
+const CONFIG = '[core]\n\trepositoryformatversion = 0\n' +
+  '\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n';
+
+// top/.git 을 SPEC.md §5.1 의 꼴로. → [.git 경로, 이미 있었나].
+function makeRepo(top: string): [string, boolean] {
+  const g = path.join(path.resolve(top), '.git');
+  const again = isDir(g);
+  for (const d of ['objects/pack', 'refs/heads', 'refs/tags']) {
+    fs.mkdirSync(path.join(g, d), { recursive: true });
+  }
+  for (const [name, text] of [['HEAD', 'ref: refs/heads/main\n'],
+    ['config', CONFIG]]) {
+    const p = path.join(g, name);
+    if (!fs.existsSync(p)) fs.writeFileSync(p, text);
+  }
+  return [g, again];
+}
+
+// SPEC.md §5.1 — 이미 있으면 아무것도 덮어쓰지 않는다.
+function cmdInit(ctx: Ctx, args: string[]): number {
+  const [, , rest] = parseFlags(args, []);
+  const top = rest.length ? ctx.path(rest[0]) : ctx.cwd;
+  const [g, again] = makeRepo(top);
+  ctx.say(`${again ? 'Reinitialized existing' : 'Initialized empty'}` +
+    ` Git repository in ${g}/\n`);
+  return 0;
+}
+
+// -p 와 -m 은 몇 번이든, 준 차례대로. 메시지는 원문 그대로 + 줄바꿈
+// — 공백 정리는 commit 명령만 한다(SPEC.md §4.4).
+function cmdCommitTree(ctx: Ctx, args: string[]): number {
+  let treeArg: string | null = null;
+  const parents: string[] = [];
+  const msgs: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '-p' || a === '-m') {
+      const val = args[++i];
+      if (val === undefined) {
+        throw new GitError(`fatal: mygit: option '${a}' needs a value`);
+      }
+      if (a === '-m') {
+        msgs.push(val);
+        continue;
+      }
+      const oid = resolve(ctx, val);
+      if (oid === null) {
+        throw new GitError(`fatal: not a valid object name ${val}`);
+      }
+      parents.push(oid);
+    } else if (a.startsWith('-')) {
+      throw new GitError(`fatal: mygit: unknown option '${a}'`);
+    } else {
+      treeArg = a;
+    }
+  }
+  if (treeArg === null || !msgs.length) {
+    throw new GitError('usage: mygit commit-tree <tree> ' +
+      '[-p <parent>]... -m <message>...', 129);
+  }
+  const oid = resolve(ctx, treeArg);
+  const t = oid ? refs.peel(ctx.gitdir(), oid, 'tree') : null;
+  if (t === null) {
+    throw new GitError(`fatal: not a valid object name ${treeArg}`);
+  }
+  const body = commit.serializeCommit(t, parents, ident(ctx, 'AUTHOR'),
+    ident(ctx), msgs.join('\n\n') + '\n');
+  ctx.say(objects.writeObject(ctx.gitdir(), 'commit', body) + '\n');
+  return 0;
+}
+
+const HEADS = 'refs/heads/';
+
+function listBranches(ctx: Ctx): number {
+  const g = ctx.gitdir();
+  const [cur, head] = refs.readHead(g);
+  if (cur === null && head) {
+    ctx.say(`* (HEAD detached at ${head.slice(0, 7)})\n`);
+  }
+  for (const [name] of refs.listRefs(g, HEADS)) {
+    ctx.say((name === cur ? '* ' : '  ') + name.slice(HEADS.length) +
+      '\n');
+  }
+  return 0;
+}
+
+function cmdBranch(ctx: Ctx, args: string[]): number {
+  const [, , rest] = parseFlags(args, []);
+  if (!rest.length) return listBranches(ctx);
+  const name = rest[0];
+  const g = ctx.gitdir();
+  if (!refs.validBranchName(name)) {
+    throw new GitError(`fatal: '${name}' is not a valid branch name`);
+  }
+  if (refs.resolveRef(g, HEADS + name)) {
+    throw new GitError(`fatal: a branch named '${name}' already ` +
+      'exists');
+  }
+  const start = rest[1] ?? 'HEAD';
+  let oid = resolve(ctx, start);
+  oid = oid ? refs.peel(g, oid, 'commit') : null;
+  if (oid === null) {
+    throw new GitError(`fatal: not a valid object name: '${start}'`);
+  }
+  refs.updateRef(g, HEADS + name, oid, null,
+    `branch: Created from ${start}`, ident(ctx));
+  return 0;
+}
+
+function cmdTag(ctx: Ctx, args: string[]): number {
+  const [on, vals, rest] = parseFlags(args, ['-a'], ['-m']);
+  const g = ctx.gitdir();
+  if (!rest.length) {
+    for (const [name] of refs.listRefs(g, 'refs/tags/')) {
+      ctx.say(name.slice('refs/tags/'.length) + '\n');
+    }
+    return 0;
+  }
+  const name = rest[0];
+  const target = rest[1] ?? 'HEAD';
+  if (refs.readRef(g, 'refs/tags/' + name)) {
+    throw new GitError(`fatal: tag '${name}' already exists`);
+  }
+  let oid = resolve(ctx, target);
+  if (oid === null) {
+    throw new GitError(`fatal: Failed to resolve '${target}' as a ` +
+      'valid ref.');
+  }
+  if (on.has('-a') || vals.has('-m')) {
+    const [type] = objects.readObject(g, oid);
+    const msg = commit.cleanupMessage(vals.get('-m') ?? '');
+    const body = commit.serializeTag(oid, type, name, ident(ctx), msg);
+    oid = objects.writeObject(g, 'tag', body);
+  }
+  // 태그는 reflog 를 남기지 않는다 — logallrefupdates 는 브랜치와
+  // HEAD 만 기록한다(git 과 같다)
+  const file = path.join(g, 'refs', 'tags', name);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, oid + '\n');
+  return 0;
+}
+
+// reflog 가 읽을 파일의 참조 이름. HEAD · 브랜치 · refs/…
+function reflogName(ctx: Ctx, name: string): string | null {
+  return [name, HEADS + name].find((cand) =>
+    fs.existsSync(path.join(ctx.gitdir(), 'logs', cand))) ?? null;
+}
+
+// 새것부터 '<7글자> <ref>@{n}: <메시지>' (SPEC.md §6.3).
+function cmdReflog(ctx: Ctx, args: string[]): number {
+  const rest = parseFlags(args, [])[2].filter((a) => a !== 'show');
+  const name = rest[0] ?? 'HEAD';
+  const log = reflogName(ctx, name);
+  if (log === null) {
+    if (name === 'HEAD') return 0;
+    throw new GitError(AMBIGUOUS(name));
+  }
+  refs.readReflog(ctx.gitdir(), log).reverse()
+    .forEach(([, next, , msg], k) =>
+      ctx.say(`${next.slice(0, 7)} ${name}@{${k}}: ${msg}\n`));
+  return 0;
+}
+
 // ── 틀 ────────────────────────────────────────────────────────────
 const COMMANDS = new Map<string, Command>([
   ['hash-object', cmdHashObject],
   ['cat-file', cmdCatFile],
+  ['init', cmdInit],
+  ['commit-tree', cmdCommitTree],
+  ['branch', cmdBranch],
+  ['tag', cmdTag],
+  ['reflog', cmdReflog],
 ]);
 
 // 명령 하나를 돌린다 → [종료 코드, 표준 출력, 표준 오류]. stdin 이
