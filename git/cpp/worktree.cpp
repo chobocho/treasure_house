@@ -3,7 +3,9 @@
 // status 는 세 가지를 견준다: HEAD 트리, 인덱스, 디스크의 파일. 두 칸
 // 글자(XY)가 곧 "어느 두 곳이 다른가" 다 — X 는 HEAD 와 인덱스, Y 는
 // 인덱스와 작업 트리.
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -158,6 +160,131 @@ std::vector<std::string> status(const std::string& root,
     }
     for (auto& p : untracked(walk_worktree(root), tracked))
         rows.push_back("?? " + quote_path(p, true));
+    return rows;
+}
+
+// write_file 은 0666/0777 로 열고 umask 를 따른다 — git 과 같다(§9.3).
+void write_file(const std::string& root, const std::string& path,
+                uint32_t mode, const std::string& data) {
+    auto full = root + "/" + path;
+    std::filesystem::create_directories(
+        std::filesystem::path(full).parent_path());
+    ::unlink(full.c_str());
+    int fd = ::open(full.c_str(), O_WRONLY | O_CREAT | O_TRUNC,
+                    mode & 0100 ? 0777 : 0666);
+    bool ok = fd >= 0 && ::write(fd, data.data(), data.size()) ==
+                             ssize_t(data.size());
+    if (fd < 0 || ::close(fd) != 0 || !ok)
+        throw GitError("fatal: mygit: cannot write " + full);
+}
+
+// remove_file 은 파일을 지우고, 그래서 비게 된 디렉터리들도 지운다.
+void remove_file(const std::string& root, const std::string& path) {
+    auto full = root + "/" + path;
+    ::unlink(full.c_str());
+    for (auto d = std::filesystem::path(full).parent_path();
+         d.string() != root && ::rmdir(d.c_str()) == 0;
+         d = d.parent_path()) {
+    }
+}
+
+// checkout_tree 는 두 갈래 합치기로 작업 트리·인덱스를 old → new 로
+// (SPEC.md §9.3). 경로마다: 옛 트리와 새 트리에서 같으면 손대지
+// 않는다(손댄 내용이 따라온다). 다르면 인덱스가 옛 트리와 같고 작업
+// 트리가 인덱스와 같아야 한다. 옛 트리에 없던 경로에 추적 안 하는
+// 파일이 있으면 그것도 막는다. 하나라도 걸리면 아무것도 바꾸지 않고
+// 멈춘다. O(경로 수 × 해시).
+void checkout_tree(const std::string& root, const std::string& gitdir,
+                   const std::string& old_tree,
+                   const std::string& new_tree) {
+    auto old = tree_map(gitdir, old_tree),
+         now = tree_map(gitdir, new_tree);
+    std::map<std::string, IndexEntry> idx;
+    std::set<std::string> all, conflicted;
+    for (auto& e : read_index(gitdir)) {
+        all.insert(e.path);
+        if (e.stage)
+            conflicted.insert(e.path);
+        else
+            idx[e.path] = e;
+    }
+    for (auto& [p, _] : old) all.insert(p);
+    for (auto& [p, _] : now) all.insert(p);
+    auto get = [](const TreeMap& m, const std::string& p) {
+        auto it = m.find(p);
+        return it == m.end() ? std::nullopt
+                             : std::optional<Blob>(it->second);
+    };
+    std::vector<std::string> local, stray;
+    for (auto& p : all) {
+        auto o = get(old, p), n = get(now, p);
+        if (o == n) continue;
+        std::optional<Blob> cur;
+        if (idx.count(p)) cur = Blob{idx[p].mode, idx[p].oid};
+        auto disk = file_state(root, p);
+        if (conflicted.count(p))
+            local.push_back(p);
+        else if (!cur && !o) {
+            if (disk && n) stray.push_back(p);
+        } else if (cur != o || disk != cur) {
+            local.push_back(p);
+        }
+    }
+    if (!local.empty() || !stray.empty()) {
+        std::string msg;
+        for (auto [head, paths] :
+             {std::pair{
+                  "error: Your local changes to the following files "
+                  "would be overwritten by checkout:",
+                  &local},
+              {"error: The following untracked working tree files "
+               "would "
+               "be overwritten by checkout:",
+               &stray}}) {
+            if (paths->empty()) continue;
+            msg += std::string(head) + "\n";
+            for (auto& q : *paths) msg += "\t" + quote_path(q) + "\n";
+            msg += "\n";
+        }
+        throw GitError(msg + "Aborting", 1);
+    }
+    for (auto& p : all) {
+        auto o = get(old, p), n = get(now, p);
+        if (o == n) continue;
+        if (!n) {
+            remove_file(root, p);
+            idx.erase(p);
+            continue;
+        }
+        write_file(root, p, n->mode, read_object(gitdir, n->oid).body);
+        idx[p] = entry_from_stat(p, root + "/" + p, n->oid);
+    }
+    std::vector<IndexEntry> out;
+    for (auto& [_, e] : idx) out.push_back(e);
+    write_index(gitdir, out);
+}
+
+// local_changes 는 바꾼 뒤 남은 변경 — "M\t경로" 줄들(§9.3 끝). 새
+// HEAD 트리와 견주어 인덱스나 작업 트리가 다른 추적 경로. M 은 내용·
+// 모드, D 는 작업 트리에 없음, A 는 인덱스에만 있음.
+std::vector<std::string> local_changes(const std::string& root,
+                                       const std::string& gitdir,
+                                       const std::string& head_tree) {
+    auto head = tree_map(gitdir, head_tree);
+    std::vector<std::string> rows;
+    for (auto& e : read_index(gitdir)) {
+        if (e.stage) continue;
+        Blob cur{e.mode, e.oid};
+        auto disk = file_state(root, e.path);
+        auto h = head.find(e.path);
+        char letter = !disk                              ? 'D'
+                      : h == head.end()                  ? 'A'
+                      : h->second != cur || *disk != cur ? 'M'
+                                                         : 0;
+        if (letter)
+            rows.push_back(std::string(1, letter) + "\t" +
+                           quote_path(e.path));
+    }
     return rows;
 }
 }  // namespace mygit

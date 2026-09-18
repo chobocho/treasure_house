@@ -664,6 +664,111 @@ int cmd_diff(Ctx& ctx, std::vector<std::string> args) {
     return 0;
 }
 
+// ── 9단계: switch · checkout ─────────────────────────────────────────
+
+// summary_line 은 '<7글자> <제목>' — HEAD is now at … 의 꼬리.
+std::string summary_line(Ctx& ctx, const std::string& oid) {
+    auto msg =
+        parse_commit(read_object(ctx.gitdir(), oid).body).message;
+    return oid.substr(0, 7) + " " + subject_of(msg);
+}
+
+// move_head 는 작업 트리를 oid 로 옮기고 HEAD 를 branch(또는 "" 이면
+// 분리)로(SPEC.md §9.3). 안내는 표준 오류에, 남은 변경 알림은 표준
+// 출력에. reflog 는 "checkout: moving from <옛> to <arg 그대로>" —
+// 옛 쪽이 분리 상태면 40글자다(§6.3). done 은 마지막 안내 줄.
+int move_head(Ctx& ctx, const std::string& branch,
+              const std::string& oid, const std::string& arg,
+              bool report = true, std::string done = "") {
+    auto g = ctx.gitdir();
+    auto [old_branch, old] = read_head(g);
+    auto old_tree = old.empty() ? "" : peel(g, old, "tree");
+    auto new_tree = peel(g, oid, "tree");
+    checkout_tree(ctx.root(), g, old_tree, new_tree);
+    // 분리 상태를 떠나되 커밋이 바뀔 때만 — 같은 커밋이면 git 도
+    // 찍지 않는다
+    if (old_branch.empty() && !old.empty() && oid != old)
+        ctx.err += "Previous HEAD position was " +
+                   summary_line(ctx, old) + "\n";
+    set_head(g, branch.empty() ? oid : branch);
+    auto from = old_branch.empty() ? old : old_branch.substr(11);
+    append_reflog(g, "HEAD", old, oid, ident(ctx),
+                  "checkout: moving from " + from + " to " + arg);
+    if (report)
+        for (auto& row : local_changes(ctx.root(), g, new_tree))
+            ctx.out += row + "\n";
+    if (done.empty())
+        done =
+            branch.empty() ? "HEAD is now at " + summary_line(ctx, oid)
+            : branch == old_branch ? "Already on '" + arg + "'"
+                                   : "Switched to branch '" + arg + "'";
+    ctx.err += done + "\n";
+    return 0;
+}
+
+int create_and_switch(Ctx& ctx, const std::string& name,
+                      const std::string& start) {
+    auto g = ctx.gitdir();
+    if (!valid_branch_name(name))
+        throw GitError("fatal: '" + name +
+                       "' is not a valid branch name");
+    if (!resolve_ref(g, "refs/heads/" + name).empty())
+        throw GitError("fatal: a branch named '" + name +
+                       "' already exists");
+    auto old = read_head(g).second;
+    auto fresh = "Switched to a new branch '" + name + "'";
+    if (old.empty() && start.empty()) {
+        // 첫 커밋 전 — HEAD 가 가리키는 이름만 바꾼다
+        set_head(g, "refs/heads/" + name);
+        ctx.err += fresh + "\n";
+        return 0;
+    }
+    auto arg = start.empty() ? "HEAD" : start;
+    auto oid = resolve(ctx, arg);
+    if (!oid.empty()) oid = peel(g, oid, "commit");
+    if (oid.empty()) throw GitError("fatal: invalid reference: " + arg);
+    update_ref(g, "refs/heads/" + name, oid, "",
+               "branch: Created from " + arg, ident(ctx));
+    // 지금 커밋에서 새 브랜치를 만들 때는 git 이 작업 트리를 건드리지
+    // 않고 남은 변경도 알리지 않는다(golden/scen/checkout.scn)
+    return move_head(ctx, "refs/heads/" + name, oid, name, oid != old,
+                     fresh);
+}
+
+int cmd_switch(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {}, {"-c"});
+    if (f.vals.count("-c"))
+        return create_and_switch(ctx, f.vals["-c"],
+                                 f.rest.empty() ? "" : f.rest[0]);
+    if (f.rest.size() != 1)
+        throw GitError("usage: mygit switch [-c] <branch>", 129);
+    const auto& name = f.rest[0];
+    auto oid = resolve_ref(ctx.gitdir(), "refs/heads/" + name);
+    if (!oid.empty())
+        return move_head(ctx, "refs/heads/" + name, oid, name);
+    if (!resolve(ctx, name).empty())
+        throw GitError("fatal: a branch is expected, got commit '" +
+                       name + "'");
+    throw GitError("fatal: invalid reference: " + name);
+}
+
+int cmd_checkout(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {});
+    if (f.rest.size() != 1)
+        throw GitError("usage: mygit checkout <branch|commit>", 129);
+    const auto& name = f.rest[0];
+    auto oid = resolve_ref(ctx.gitdir(), "refs/heads/" + name);
+    if (!oid.empty())
+        return move_head(ctx, "refs/heads/" + name, oid, name);
+    oid = resolve(ctx, name);
+    if (!oid.empty()) oid = peel(ctx.gitdir(), oid, "commit");
+    if (oid.empty())
+        throw GitError("error: pathspec '" + name +
+                           "' did not match any file(s) known to git",
+                       1);
+    return move_head(ctx, "", oid, name);
+}
+
 const std::map<std::string, Command>& commands() {
     static const std::map<std::string, Command> table = {
         {"hash-object", cmd_hash_object},
@@ -681,6 +786,8 @@ const std::map<std::string, Command>& commands() {
         {"log", cmd_log},
         {"merge-base", cmd_merge_base},
         {"diff", cmd_diff},
+        {"switch", cmd_switch},
+        {"checkout", cmd_checkout},
     };
     return table;
 }

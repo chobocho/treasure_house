@@ -12,7 +12,7 @@
 
 namespace mygit {
 
-inline constexpr int STEP = 8;
+inline constexpr int STEP = 9;
 
 // 명령이 멈추는 까닭. code 는 종료 코드(SPEC.md §1.4).
 struct GitError : std::runtime_error {
@@ -126,6 +126,15 @@ TreeMap tree_map(const std::string& gitdir, const std::string& tree);
 std::string head_tree(const std::string& gitdir);
 std::vector<std::string> status(const std::string& root,
                                 const std::string& gitdir);
+void write_file(const std::string& root, const std::string& path,
+                uint32_t mode, const std::string& data);
+void remove_file(const std::string& root, const std::string& path);
+void checkout_tree(const std::string& root, const std::string& gitdir,
+                   const std::string& old_tree,
+                   const std::string& new_tree);
+std::vector<std::string> local_changes(const std::string& root,
+                                       const std::string& gitdir,
+                                       const std::string& head_tree);
 
 // ── commit.cpp (SPEC.md §4.4 · §4.5 · §1.3 · §9.1) ────────────────
 struct Ident {
