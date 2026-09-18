@@ -11,7 +11,7 @@ main() 은 그것을 진짜 표준 스트림에 잇는다.
 import os
 import sys
 
-from mygit import GitError, objects
+from mygit import GitError, objects, tree, worktree
 
 COMMANDS = {}
 
@@ -147,8 +147,16 @@ def cmd_hash_object(ctx, args):
 
 
 def pretty(ctx, type_, body):
-    """cat-file -p 의 몸. 트리는 4단계에서 사람이 읽는 꼴이 된다."""
-    return body
+    """cat-file -p 의 몸. blob·commit·tag 는 그대로, 트리는 항목마다
+    "%06o 형식 이름\t경로" (SPEC.md §9, 경로 따옴표는 §8.2)."""
+    if type_ != 'tree':
+        return body
+    rows = []
+    for mode, name, oid in tree.parse_tree(body):
+        rows.append('%06o %s %s\t%s\n'
+                    % (int(mode, 8), tree.type_of_mode(mode), oid,
+                       worktree.quote_path(name)))
+    return ''.join(rows)
 
 
 @command('cat-file')

@@ -86,3 +86,26 @@ def assert_git_error(case, fn, *args):
         fn(*args)
     case.assertNotEqual(cm.exception.code, 99, 'not implemented')
     return cm.exception
+
+
+def unescape_c(s):
+    """git 이 C 식으로 이스케이프한 경로(따옴표 안쪽) → 바이트.
+
+    \\t \\n \\" \\\\ 와 세 자리 8진 \\ooo 만 나온다(SPEC.md §8.2).
+    시험에서 git 의 출력을 읽을 때만 쓴다.
+    """
+    esc = {'a': 7, 'b': 8, 't': 9, 'n': 10, 'v': 11, 'f': 12, 'r': 13,
+           '"': 34, '\\': 92}
+    out, i = bytearray(), 0
+    while i < len(s):
+        c = s[i]
+        if c != '\\':
+            out += c.encode('utf-8')
+            i += 1
+        elif s[i + 1] in esc:
+            out.append(esc[s[i + 1]])
+            i += 2
+        else:
+            out.append(int(s[i + 1:i + 4], 8))
+            i += 4
+    return bytes(out)
