@@ -578,3 +578,29 @@ The user approved every proposal below as-is. Each row is now a decision.
   Git 3.0 has no release date (SHA-256/reftable/main/Rust planned).
 - `make all SKEL=1` 0 errors; claims-check: formats 32 rows OK; width clean.
 
+### Step 5 — py/mygit steps 1–12 (2026-09-18, commits a2ac809 … 88f9350)
+
+- 12 commits, one per appendix step, each RED (stub modules raising `GitError('not implemented',
+  99)`) → GREEN. 16 modules, 3,462 lines (+ 2,017 lines of tests); 135 tests, all pass; the only skip
+  is the 0444 permission test (this proot filesystem cannot drop the write bit — git's own objects
+  show 0644 here too; the test probes the capability first).
+- Scenario runner (tests/test_scenes.py) replays all 20 golden/scen/*.scn with mygit; each scene
+  is enabled at its step and **all 20 pass** at step 12 (merge commit ids equal real git's, status/
+  diff/log/reflog/checkout/clone output byte-equal). New golden scenario `diff` added at step 8 (three
+  diff modes were not covered); golden-check showed no other file changed.
+- Strongest oracles hit: commit-tree/tag -a reproduce golden commit b23b7a5/tag 5702a43; index
+  written back byte-identical to git's; 12 trees = git write-tree; 30 diff pairs byte-equal, 3 ties
+  as classified, linear-space Myers = forward on all 30; idx rebuilt from git's packs byte-identical;
+  verify-pack -v verbatim; v2 fetch transcripts identical. Manual cross-check (formal one is step 7's
+  run_all.py): mygit repo passes `git fsck --strict`, `git status` clean on mygit's index, mygit's
+  delta pack accepted by `git index-pack --strict` with an identical .idx.
+- SPEC corrections found by the oracle (all logged in SPEC): subject keeps leading spaces; `switch`
+  from detached HEAD prints "Previous HEAD position" only if the commit changes; `switch -c` at the
+  current commit prints no local-change list; merge rewrites ORIG_HEAD even when already up to date;
+  verify-pack's size column is the packed size (delta size for deltas).
+- Plan deviation: `commit` moved from step 5 to step 6 (needs the index).
+- **Budget risk:** Python is 3,462 lines vs the §3.1 estimate of ~1,300 (Korean comments explain every
+  format decision). If the other four languages grow similarly, FULLSRC of five trees could be
+  ~500+ slides instead of ~200. To decide before part 19: full source for all five, or full source
+  for Python + excerpts for the four (4-up slides already show every symbol).
+

@@ -1,3 +1,10 @@
+### [2026-09-18 03:42] Git 대백과사전 덱 5단계 — Python mygit 1~12단계(시험 135 · 장면 20 통과)
+- **기획:** SPEC 대로 SHA-1·zlib·객체·트리·커밋/참조·인덱스·log·diff·checkout·merge·팩·전송을 한 단계 한 커밋으로, 장면 실행기로 golden/scen 20개 재생.
+- **TC:** 단계마다 "not implemented" 로 RED 확인 후 GREEN. git 커밋·태그·인덱스·색인 바이트 재현, diff 30쌍 바이트 일치, v2 대화 기록 일치.
+- **개발:** `git/py/mygit/*.py`(16), `git/py/mygit/tests/*.py`(13), `git/SPEC.md`, `git/tools/golden_cases.py`, `git/golden/scen/diff.scn`, `git/PLAN.md`
+- **검증:** 135 passed, 0 failed, 1 skipped(0444 를 못 지키는 파일 시스템) · 장면 20/20 · make all SKEL=1 오류 0건
+- **비고:** 구현 3,462줄로 계획의 2.7배 — 다섯 언어 전문 게재 시 장수 초과 위험, 19부 전에 결정 필요.
+
 ### [2026-09-18 03:29] Termux 대백과사전 덱 7부 — Termux:API · 플러그인(24장)
 - **기획:** termux-* 스크립트 → libexec/termux-api → 소켓 또는 am broadcast → 앱 수신기의 길, 개인정보 명령, 플러그인 여섯 개.
 - **TC:** 조립 검사: 인용 범위 40개 경계 통과, 소스 줄 인용 45건 핀 확인, 캡처 등급 오류 3건을 캡처 추가로 해소.
