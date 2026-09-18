@@ -28,6 +28,11 @@ func init() {
 	commands = map[string]cmdFunc{
 		"hash-object": cmdHashObject,
 		"cat-file":    cmdCatFile,
+		"init":        cmdInit,
+		"commit-tree": cmdCommitTree,
+		"branch":      cmdBranch,
+		"tag":         cmdTag,
+		"reflog":      cmdReflog,
 	}
 }
 
@@ -105,7 +110,16 @@ func resolve(ctx *Ctx, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return FindObject(g, name)
+	return RevParse(g, name)
+}
+
+const ambiguous = "fatal: ambiguous argument '%s': unknown revision " +
+	"or path not in the working tree.\n" +
+	"Use '--' to separate paths from revisions, like this:\n" +
+	"'git <command> [<revision>...] -- [<file>...]'"
+
+func ident(ctx *Ctx, who string) (string, error) {
+	return IdentFromEnv(ctx.Env, who)
 }
 
 // flags 는 parseFlags 의 결과 — 켜진 옵션, 값 옵션, 나머지 인자.
@@ -259,6 +273,288 @@ func cmdCatFile(ctx *Ctx, args []string) (int, error) {
 			return 0, err
 		}
 		ctx.Out.Write(text)
+	}
+	return 0, nil
+}
+
+// ── 5단계: init · commit-tree · branch · tag · reflog ─────────────
+const config = "[core]\n\trepositoryformatversion = 0\n" +
+	"\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n"
+
+// makeRepo 는 top/.git 을 SPEC.md §5.1 의 꼴로. → (.git, 이미 있었나).
+// 이미 있으면 아무것도 덮어쓰지 않는다.
+func makeRepo(top string) (string, bool, error) {
+	g := filepath.Join(top, ".git")
+	_, err := os.Stat(g)
+	again := err == nil
+	for _, d := range []string{"objects/pack", "refs/heads",
+		"refs/tags"} {
+		if err := os.MkdirAll(filepath.Join(g, d), 0o755); err != nil {
+			return "", false, err
+		}
+	}
+	for name, text := range map[string]string{
+		"HEAD": "ref: refs/heads/main\n", "config": config} {
+		p := filepath.Join(g, name)
+		if _, err := os.Stat(p); err != nil {
+			if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+				return "", false, err
+			}
+		}
+	}
+	return g, again, nil
+}
+
+func cmdInit(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, nil)
+	if err != nil {
+		return 0, err
+	}
+	top := ctx.Cwd
+	if len(f.rest) > 0 {
+		top = ctx.Path(f.rest[0])
+	}
+	g, again, err := makeRepo(top)
+	if err != nil {
+		return 0, err
+	}
+	word := "Initialized empty"
+	if again {
+		word = "Reinitialized existing"
+	}
+	ctx.say("%s Git repository in %s/\n", word, g)
+	return 0, nil
+}
+
+// cmdCommitTree — -p 와 -m 은 몇 번이든, 준 차례대로. 메시지는 원문
+// 그대로 + 줄바꿈 — 공백 정리는 commit 명령만 한다(SPEC.md §4.4).
+func cmdCommitTree(ctx *Ctx, args []string) (int, error) {
+	var tree string
+	var parents, msgs []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-p" || a == "-m":
+			if i+1 >= len(args) {
+				return 0, Fail("fatal: mygit: option '" + a +
+					"' needs a value")
+			}
+			i++
+			if a == "-m" {
+				msgs = append(msgs, args[i])
+				continue
+			}
+			oid, err := resolve(ctx, args[i])
+			if err != nil {
+				return 0, err
+			}
+			if oid == "" {
+				return 0, Fail("fatal: not a valid object name " +
+					args[i])
+			}
+			parents = append(parents, oid)
+		case strings.HasPrefix(a, "-"):
+			return 0, Fail("fatal: mygit: unknown option '" + a + "'")
+		default:
+			tree = a
+		}
+	}
+	if tree == "" || len(msgs) == 0 {
+		return 0, &GitError{"usage: mygit commit-tree <tree> " +
+			"[-p <parent>]... -m <message>...", 129}
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	oid, err := resolve(ctx, tree)
+	if err == nil && oid != "" {
+		oid, err = Peel(g, oid, "tree")
+	}
+	if err != nil {
+		return 0, err
+	}
+	if oid == "" {
+		return 0, Fail("fatal: not a valid object name " + tree)
+	}
+	c := &Commit{Tree: oid, Parents: parents,
+		Message: strings.Join(msgs, "\n\n") + "\n"}
+	if c.Author, err = ident(ctx, "AUTHOR"); err != nil {
+		return 0, err
+	}
+	if c.Committer, err = ident(ctx, "COMMITTER"); err != nil {
+		return 0, err
+	}
+	oid, err = WriteObject(g, "commit", SerializeCommit(c))
+	if err != nil {
+		return 0, err
+	}
+	ctx.say("%s\n", oid)
+	return 0, nil
+}
+
+func listBranches(ctx *Ctx, g string) (int, error) {
+	cur, head, err := ReadHead(g)
+	if err != nil {
+		return 0, err
+	}
+	if cur == "" && head != "" {
+		ctx.say("* (HEAD detached at %s)\n", head[:7])
+	}
+	for _, r := range ListRefs(g, "refs/heads/") {
+		mark := "  "
+		if r.Name == cur {
+			mark = "* "
+		}
+		ctx.say("%s%s\n", mark, strings.TrimPrefix(r.Name,
+			"refs/heads/"))
+	}
+	return 0, nil
+}
+
+// deleteBranch 는 7단계가 채운다 — HEAD 에서 닿는지 보려면 DAG 순회가
+// 있어야 한다.
+var deleteBranch = func(ctx *Ctx, g string, names []string) (int,
+	error) {
+	return 0, NotImplemented()
+}
+
+func cmdBranch(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, []string{"-d"})
+	if err != nil {
+		return 0, err
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	if f.on["-d"] {
+		return deleteBranch(ctx, g, f.rest)
+	}
+	if len(f.rest) == 0 {
+		return listBranches(ctx, g)
+	}
+	name := f.rest[0]
+	if !ValidBranchName(name) {
+		return 0, Fail("fatal: '" + name + "' is not a valid branch " +
+			"name")
+	}
+	if o, _ := ResolveRef(g, "refs/heads/"+name); o != "" {
+		return 0, Fail("fatal: a branch named '" + name +
+			"' already exists")
+	}
+	start := "HEAD"
+	if len(f.rest) > 1 {
+		start = f.rest[1]
+	}
+	oid, err := resolve(ctx, start)
+	if err == nil && oid != "" {
+		oid, err = Peel(g, oid, "commit")
+	}
+	if err != nil {
+		return 0, err
+	}
+	if oid == "" {
+		return 0, Fail("fatal: not a valid object name: '" + start +
+			"'")
+	}
+	who, err := ident(ctx, "COMMITTER")
+	if err != nil {
+		return 0, err
+	}
+	return 0, UpdateRef(g, "refs/heads/"+name, oid, "",
+		"branch: Created from "+start, who)
+}
+
+func cmdTag(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, []string{"-a"}, "-m")
+	if err != nil {
+		return 0, err
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	if len(f.rest) == 0 {
+		for _, r := range ListRefs(g, "refs/tags/") {
+			ctx.say("%s\n", strings.TrimPrefix(r.Name, "refs/tags/"))
+		}
+		return 0, nil
+	}
+	name, target := f.rest[0], "HEAD"
+	if len(f.rest) > 1 {
+		target = f.rest[1]
+	}
+	if ReadRef(g, "refs/tags/"+name) != nil {
+		return 0, Fail("fatal: tag '" + name + "' already exists")
+	}
+	oid, err := resolve(ctx, target)
+	if err != nil {
+		return 0, err
+	}
+	if oid == "" {
+		return 0, Fail("fatal: Failed to resolve '" + target +
+			"' as a valid ref.")
+	}
+	if msg, ok := f.vals["-m"]; ok || f.on["-a"] {
+		typ, _, err := ReadObject(g, oid)
+		if err != nil {
+			return 0, err
+		}
+		who, err := ident(ctx, "COMMITTER")
+		if err != nil {
+			return 0, err
+		}
+		body := SerializeTag(oid, typ, name, who, CleanupMessage(msg))
+		if oid, err = WriteObject(g, "tag", body); err != nil {
+			return 0, err
+		}
+	}
+	// 태그는 reflog 를 남기지 않는다 — logallrefupdates 는 브랜치와
+	// HEAD 만 기록한다(git 과 같다)
+	path := filepath.Join(g, "refs", "tags", name)
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	return 0, os.WriteFile(path, []byte(oid+"\n"), 0o644)
+}
+
+// cmdReflog 는 새것부터 '<7글자> <ref>@{n}: <메시지>' (SPEC.md §6.3).
+func cmdReflog(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, nil)
+	if err != nil {
+		return 0, err
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	var rest []string
+	for _, a := range f.rest {
+		if a != "show" {
+			rest = append(rest, a)
+		}
+	}
+	name := "HEAD"
+	if len(rest) > 0 {
+		name = rest[0]
+	}
+	log := ""
+	for _, cand := range []string{name, "refs/heads/" + name} {
+		if _, err := os.Stat(filepath.Join(g, "logs",
+			cand)); err == nil {
+			log = cand
+			break
+		}
+	}
+	if log == "" {
+		if name == "HEAD" {
+			return 0, nil
+		}
+		return 0, Fail(fmt.Sprintf(ambiguous, name))
+	}
+	ents := ReadReflog(g, log)
+	for k := range ents {
+		e := ents[len(ents)-1-k]
+		ctx.say("%s %s@{%d}: %s\n", e.New[:7], name, k, e.Msg)
 	}
 	return 0, nil
 }
