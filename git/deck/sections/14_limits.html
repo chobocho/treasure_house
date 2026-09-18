@@ -1,19 +1,287 @@
 <article class="card section" id="p14">
 <p class="chnum">14부</p>
 <h2>한계와 함정</h2>
-<p class="chsub">Git 이 잘 못하는 것</p>
-<p class="cap">이 부의 목표 장수는 160장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>14부에서 다룰 것</h3>
+<p class="chsub">Git 이 잘하지 못하는 것, 그리고 운영체제가 끼어드는 자리</p>
+</article>
+
+<article class="card" id="p14-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">2~13부의 설계가 강점이 되는 곳이 있으면 약점이 되는 곳도 있습니다. 이 부는 그 자리들을 실험으로 짚습니다.</p>
 <ul>
-<li>대용량 바이너리 — 팩이 커지는 실측</li>
-<li>모노레포 규모의 한계</li>
-<li>대소문자 · CRLF · NFC/NFD</li>
-<li>빈 디렉터리 · 권한 비트 · 시간대</li>
-<li>서브모듈의 함정</li>
-<li>SHA-1 충돌(SHAttered)과 sha1dc, SHA-256 전환의 현주소</li>
-<li>보안 — CVE 표와 safe.directory</li>
-<li>Git 이 아닌 것 — 코드 리뷰 · CI · 이슈</li>
+<li>큰 바이너리 — 델타가 먹지 않는 파일</li>
+<li>규모 — 파일 수와 역사의 크기</li>
+<li>파일 시스템 — 대소문자, 줄 끝, 유니코드 정규화, 빈 디렉터리, 권한 비트</li>
+<li>시간대 — 같은 순간의 여러 얼굴</li>
+<li>해시 함수와 보안 — SHA-1 의 현재, CVE 가 몰린 자리</li>
+<li>Git 이 아닌 것</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p14-ch1"><p class="chnum">1장</p><h2>큰 바이너리</h2><p class="chsub">판마다 1 % 만 바꿔도</p></article>
+
+<article class="card" id="p14-churn">
+<h3>1 MiB 파일의 판 넷</h3>
+<!--TABLE file=out/tbl_limits_churn.html cap=같은 1 % 고침, 내용의 성질에 따라 팩 크기가 11 % 에서 100 % 까지-->
+<!--FIG file=limits_churn.svg cap=팩 크기 ÷ 원래 크기의 합-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-churn-why">
+<h3>왜 압축된 파일은 100 % 인가</h3>
+<ul>
+<li><b>글</b> — 판 사이에 같은 조각이 많아 델타(10부)가 잘 먹고, zlib 도 잘 누릅니다.</li>
+<li><b>무작위 바이너리</b> — zlib 으로는 안 눌리지만 판 사이의 같은 부분은 델타가 찾아냅니다(31 %).</li>
+<li><b>압축된 파일</b>(zip·jpg·mp4·docx…) — 안쪽 1 % 가 바뀌면 압축된 바이트가 거의 전부 바뀝니다. 델타도 zlib 도 먹지 않아
+판마다 통째로 쌓입니다.</li>
+</ul>
+<p>그리고 스냅숏 모델(2부)이라 옛 판은 역사에 영원히 남습니다 — clone 하는 모든 사람이 모든 판을 받습니다. 대책은 필터로 밖에 두기(13부의 LFS 원리),
+부분 clone(11부), 그리고 압축하지 않은 원본을 커밋하기입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p14-binary-merge">
+<h3>그리고 머지할 수 없다</h3>
+<p>줄이 없으니 3-way 머지도 없습니다(7부의 바이너리 충돌). 두 사람이 같은 그림 파일을 고치면 한 사람의 작업은 버려집니다. 그래서 큰 바이너리를
+다루는 팀은 파일 잠금 같은 git 밖의 약속을 둡니다.</p>
+<!--OUT file=merge_binary__merge-topic-2-1.txt note=7부의 그 캡처-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-ch2"><p class="chnum">2장</p><h2>규모</h2><p class="chsub">파일 수, 역사의 길이</p></article>
+
+<article class="card" id="p14-files">
+<h3>파일 수가 늘면 인덱스가 는다</h3>
+<!--TABLE file=out/tbl_limits_files.html cap=같은 400개 디렉터리에 파일 1,000 · 5,000 · 20,000-->
+<p>인덱스는 파일마다 한 항목이라 파일 수에 비례합니다(20,000개에 1.6 MB). <code>status</code>·<code>add</code> 가 매번 이 파일을 읽고 씁니다.
+트리 객체 수는 디렉터리 수(20×20 + 20 + 최상위 1 = 421)라 그대로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-scale">
+<h3>실제로 큰 저장소들</h3>
+<!--TABLE file=out/tbl_scale.html cap=data/scale.tsv — 출처를 확인한 수치만-->
+<p>Windows 코드처럼 파일이 수백만인 저장소에서는 기본 git 만으로는 느려, 저장소를 가상 파일 시스템으로 필요한 만큼만 내려받는 방식이 쓰였습니다.</p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p14-scale-tools">
+<h3>git 안의 대책들 — 이 덱에서 본 것</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>느려지는 곳</th><th>대책</th><th>어디서</th></tr>
+<tr><td>인덱스 읽고 쓰기</td><td>분할 인덱스 · 희소 인덱스 · 판 4</td><td>5부</td></tr>
+<tr><td>작업 트리 훑기</td><td>untracked cache · sparse-checkout · fsmonitor</td><td>5부</td></tr>
+<tr><td>역사 걷기</td><td>commit-graph</td><td>10부</td></tr>
+<tr><td>팩이 많을 때</td><td>multi-pack-index · 비트맵 · maintenance</td><td>10·13부</td></tr>
+<tr><td>받기</td><td>부분 clone · 얕은 clone · bundle-uri</td><td>11부</td></tr>
+<tr><td>참조가 많을 때</td><td>packed-refs · reftable · v2 ls-refs</td><td>4·11부</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p14-ch3"><p class="chnum">3장</p><h2>파일 시스템의 차이</h2><p class="chsub">git 은 바이트, 운영체제는 제 규칙</p></article>
+
+<article class="card" id="p14-case">
+<h3>대소문자 — 이름만 바꿨는데</h3>
+<p>리눅스(대소문자 구분)에서 <code>core.ignorecase=true</code> 로 대소문자를 가리지 않는 파일 시스템을 흉내 냈습니다. 셸로 <code>README</code> 를
+<code>readme</code> 로 옮기고 status 를 봤습니다.</p>
+<!--OUT file=limits_case__status-short.txt note=README 가 지워졌다고만 나온다 — readme 는 보이지 않는다-->
+<!--OUT file=limits_case__ls-files.txt note=인덱스에는 여전히 README-->
+<!--OUT file=limits_case.mv__mv-f-readme-readme-2-1-git-ls-files.txt note=이제 git mv 로 고치려 해도 원본이 없다-->
+<p>ignorecase 에서 git 은 <code>readme</code> 를 "기억하던 <code>README</code> 와 같은 파일" 로 봅니다. 대소문자만 바꾸려면 처음부터 <code>git mv</code>
+로 해야 합니다. <!--CITE key=config-core--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-case-security">
+<h3>대소문자와 보안</h3>
+<p>대소문자를 가리지 않는 파일 시스템은 git 의 보안 문제가 여러 번 나온 자리이기도 합니다. 리눅스에서는 서로 다른 두 경로가 그런 파일 시스템에서는
+한 경로가 되어, 복제 중에 심볼릭 링크를 따라 엉뚱한 곳에 쓰게 되는 식입니다(6장의 CVE 표 — CVE-2021-21300 · CVE-2024-32002).</p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p14-crlf">
+<h3>줄 끝 — CRLF 파일을 add 하면</h3>
+<!--OUT file=limits_crlf__add-win.txt.txt note=경고 — 다음에 건드리면 LF 로 바뀐다-->
+<!--OUT file=limits_crlf__ls-files-eol-win.txt.txt note=인덱스 i/lf, 작업 트리 w/crlf-->
+<!--OUT file=limits_crlf__cat-file-p-win.txt-od-c.txt note=저장된 것은 LF-->
+<p>한 사람은 CRLF, 한 사람은 LF 로 저장하는 팀에서 설정이 없으면 파일 전체가 바뀐 것처럼 보이는 diff 가 생깁니다. <code>.gitattributes</code> 에
+<code>* text=auto</code>(와 필요한 파일에 <code>eol=</code>)를 두어 저장소 안의 줄 끝을 하나로 정합니다(13부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-nfd">
+<h3>유니코드 정규화 — 같은 "한글", 다른 바이트</h3>
+<!--OUT file=limits_nfd__c-core.quotepath-false-ls-files.txt note=화면에는 똑같은 이름 둘-->
+<!--OUT file=limits_nfd__ls-files-z-od-c-head-6.txt note=바이트로는 다르다 — 첫째는 자모를 푼 꼴(NFD), 둘째는 모은 꼴(NFC)-->
+<p>git 은 파일 이름을 바이트로 다룹니다. 이름을 자모로 풀어 저장하는 파일 시스템(macOS 의 기본 동작)에서 만든 이름과 다른 곳에서 만든 이름이 별개의
+파일이 됩니다. macOS 의 git 은 <code>core.precomposeUnicode</code> 로 이를 모아 줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-quotepath">
+<h3>한글 파일 이름이 이상하게 보일 때</h3>
+<!--OUT file=limits_nfd__ls-files.txt note=기본값 — 8진수 이스케이프-->
+<p><code>core.quotepath</code> 기본값은 ASCII 밖의 바이트를 따옴표와 8진수로 보여 줍니다. <code>git config --global core.quotepath false</code> 면
+한글이 그대로 보입니다(앞 장).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-empty">
+<h3>빈 디렉터리는 담기지 않는다</h3>
+<!--OUT file=limits_empty__status-short-untracked-files-all.txt note=빈 디렉터리 — status 에도 없다-->
+<!--OUT file=limits_empty.keep__status-short-untracked-files-all.txt note=빈 파일을 하나 두면-->
+<p>트리는 "이름 → blob 또는 트리" 이고, 인덱스에는 파일만 적힙니다(3·5부). 항목이 없는 디렉터리를 가리킬 방법이 없습니다. <code>.gitkeep</code>
+은 git 의 기능이 아니라 이를 피하는 관례입니다 — 이름은 아무래도 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-modes">
+<h3>권한 비트와 링크</h3>
+<!--OUT file=limits_mode__ls-tree-head.txt note=git 이 적는 모드는 세 가지뿐(+ 디렉터리·서브모듈)-->
+<!--OUT file=limits_mode__diff.txt note=실행 비트만 켠 diff-->
+<!--OUT file=limits_mode__c-core.filemode-false-diff.txt note=core.fileMode=false — 실행 비트를 보지 않는다-->
+<p>실행 비트를 믿을 수 없는 파일 시스템(윈도, 일부 네트워크 드라이브)에서는 git 이 저장소를 만들 때 <code>core.fileMode=false</code> 를 적어 둡니다.
+심볼릭 링크를 만들 수 없는 곳에서는 링크 blob 이 대상 경로를 적은 보통 파일로 꺼내집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p14-quiz-1" data-quiz>
+<h3>1~3장 퀴즈</h3>
+<p class="q">Q. 디자인 팀이 PSD 파일 수백 개를 매주 고쳐 커밋합니다. 1년 뒤 clone 이 수십 GB 가 되었습니다. 왜이고, 무엇을 할 수 있습니까?
+그리고 macOS 사용자와 리눅스 사용자가 같은 한글 파일을 두 번 커밋하게 되는 까닭은?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 압축된 바이너리라 델타가 먹지 않아 판마다 통째로 쌓이고, 스냅숏 역사라 모든 판을 누구나 받습니다. 필터로 저장소 밖에 두는
+LFS 류 도구, 부분 clone, 또는 그 파일들을 별도 저장소·저장소 밖 저장 공간으로 빼는 것이 대책입니다. 한글 파일은 이름의 유니코드 정규화(NFD/NFC)가
+달라 git 에게는 바이트가 다른 두 이름이기 때문입니다 — macOS 쪽에 <code>core.precomposeUnicode=true</code> 를 둡니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p14-ch4"><p class="chnum">4장</p><h2>시간대</h2><p class="chsub">초 하나, 얼굴 여럿</p></article>
+
+<article class="card" id="p14-dates">
+<h3>같은 순간을 여러 꼴로</h3>
+<!--OUT file=limits_date__log-1-format-ad-date-raw.txt note=raw — 커밋에 적힌 그대로-->
+<!--OUT file=limits_date__log-1-format-ad-date-iso.txt note=iso-->
+<!--OUT file=limits_date__log-1-format-ad-date-rfc.txt note=rfc-->
+<!--OUT file=limits_date__tz-asia-seoul-git-log-1-format-ad-date-local.txt note=local — 보는 사람의 시간대로-->
+<p>커밋에는 초와 <b>쓴 사람의</b> 시간대가 적힙니다(3부). 기본 표시는 쓴 사람의 시간대라, 서울에서 보는 미국 동료의 커밋이 "어제 오후" 로 보입니다.
+<code>--date=local</code> 이면 내 시간대로 바꿔 보여 줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-dates-2">
+<h3>나머지 꼴</h3>
+<!--OUT file=limits_date__log-1-format-ad-date-default.txt note=default-->
+<!--OUT file=limits_date__log-1-format-ad-date-iso-strict.txt note=iso-strict — 기계가 읽기 좋은-->
+<!--OUT file=limits_date__log-1-format-ad-date-short.txt note=short-->
+<!--OUT file=limits_date__log-1-format-ad-date-unix.txt note=unix-->
+<!--OUT file=limits_date__log-1-format-ad-date-format-y-m-d-h-m-z.txt note=format:… — strftime 꼴-->
+<p>커밋 시각은 커밋을 만든 기계의 시계를 믿은 값입니다. 시계가 틀린 기계의 커밋은 부모보다 이른 시각을 가질 수 있어, 날짜 차례와 역사 차례가 어긋납니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-ch5"><p class="chnum">5장</p><h2>해시 함수의 현재</h2><p class="chsub">SHA-1 에서 SHA-256 으로 (2026-09 기준)</p></article>
+
+<article class="card" id="p14-sha">
+<h3>어디까지 왔나</h3>
+<ul>
+<li>2017-02-23 SHAttered, 2.13.0 부터 충돌 탐지 SHA-1(3부)</li>
+<li>2.29.0 에서 SHA-256 저장소가 실험 기능으로 — 두 해시 저장소 사이의 상호 운용은 아직 없음</li>
+<li>2026-09 기준 Git 3.0 은 새 저장소의 기본 해시를 SHA-256 으로 바꿀 계획이며, 출시일은 정해지지 않았습니다</li>
+</ul>
+<!--OUT file=limits_sha256__fetch-q-..-limits_mode-main-2-1.txt note=SHA-256 저장소가 SHA-1 저장소에서 받으려 하면-->
+<p><!--CITE key=BreakingChanges sec="Git 3.0"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-git3">
+<h3>Git 3.0 에 계획된 변화 (2026-09 기준)</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>바뀔 기본값</th><th>이 덱에서</th></tr>
+<tr><td>새 저장소의 해시 — SHA-256</td><td>3부 8장</td></tr>
+<tr><td>참조 저장 — reftable</td><td>4부 5장</td></tr>
+<tr><td>첫 브랜치 이름 — main</td><td>이 덱의 실험은 모두 <code>-b main</code></td></tr>
+<tr><td>빌드에 Rust 필수</td><td>—</td></tr>
+</table></div>
+<p class="cap">출처는 git 2.55.0 의 <code>Documentation/BreakingChanges.adoc</code> 입니다. 문서는 "아직 정해진 출시일이 없다" 고 적습니다.</p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p14-ch6"><p class="chnum">6장</p><h2>보안</h2><p class="chsub">git 이 남의 저장소를 다룰 때</p></article>
+
+<article class="card" id="p14-cve">
+<h3>릴리스 노트에 적힌 CVE</h3>
+<!--TABLE file=out/tbl_cves_ko.html cap=v2.55.0 까지의 RelNotes 에 적힌 CVE(cURL 것 하나는 뺐다)-->
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p14-cve-pattern">
+<h3>CVE 가 몰린 자리</h3>
+<ul>
+<li><b>서브모듈과 재귀 복제</b> — 남의 저장소가 정한 이름·URL·명령을 내 기계에서 따른다(13부)</li>
+<li><b>대소문자·NTFS 규칙</b> — 리눅스에서는 서로 다른 이름이 윈도·macOS 에서는 같은 이름이 된다(3장)</li>
+<li><b>로컬 복제</b> — 심볼릭 링크를 따라 원본 밖의 파일을 가져오게 된다</li>
+<li><b>남이 만든 디렉터리의 .git</b> — 그 설정과 훅이 내 권한으로 돈다</li>
+</ul>
+<p>공통점은 "저장소는 데이터이자 설정이자 실행 파일(훅)" 이라는 것입니다. 모르는 저장소를 받는 것은 모르는 프로그램을 받는 것과 가깝습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p14-safe-directory">
+<h3>safe.directory</h3>
+<p>다른 사용자가 소유한 디렉터리의 저장소를 git 은 기본으로 믿지 않습니다 — 그 설정을 읽지도, 훅을 돌리지도 않습니다. 공유 저장소처럼 일부러 그렇게 쓸 때만
+<code>safe.directory</code> 에 경로를 적어 예외로 합니다. 셸 프롬프트가 부르는 <code>git status</code> 만으로 남의 설정이 실행되던 CVE-2022-24765 가
+시작이었습니다. <!--CITE key=config-safe--></p>
+<p class="cap">이 기계의 실험은 모두 한 사용자로 돌아 소유자가 다른 상황을 만들 수 없어 캡처는 싣지 않았습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p14-transfer-fsck">
+<h3>받는 객체 검사하기</h3>
+<p><code>transfer.fsckObjects=true</code> 면 fetch·push 로 받는 객체를 3부의 fsck 규칙으로 검사해, 형식이 틀린 트리나 수상한 경로 이름을 거절합니다.
+서버라면 켜 두는 것이 좋습니다.</p>
+<!--OUT file=fsckcheck.unsorted__fsck-strict-2-1-grep-6ee8a54.txt note=3부 — 이런 객체를 받는 순간에 거절한다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-ch7"><p class="chnum">7장</p><h2>Git 이 아닌 것</h2><p class="chsub">자주 git 에게 기대하지만 git 에는 없는 것</p></article>
+
+<article class="card" id="p14-not-git">
+<h3>git 에는 없다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>기대</th><th>실제</th></tr>
+<tr><td>코드 리뷰 · 풀 리퀘스트 화면</td><td>호스팅 서비스의 기능 — git 에는 request-pull 글과 메일 패치(12부)</td></tr>
+<tr><td>경로별 읽기 권한</td><td>clone 하면 전부 — 권한은 저장소 단위(서버가 정함)</td></tr>
+<tr><td>파일 잠금</td><td>없다 — 바이너리 충돌은 약속으로(1장)</td></tr>
+<tr><td>비밀 저장소</td><td>한 번 커밋한 비밀은 역사에 남는다(8·16부)</td></tr>
+<tr><td>CI · 이슈 · 배포</td><td>훅이 부를 수는 있지만 git 의 일은 아니다</td></tr>
+<tr><td>백업</td><td>복제본이 많을 뿐 — reflog·stash·서버 설정은 복제되지 않는다(2·4부)</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p14-summary">
+<h2>14부 정리</h2>
+<div class="tblwrap"><table class="kv">
+<tr><th>함정</th><th>확인한 캡처</th></tr>
+<tr><td>압축된 바이너리</td><td>판 넷이 100 % 그대로 쌓임</td></tr>
+<tr><td>파일 수</td><td>인덱스 20,000개에 1.6 MB</td></tr>
+<tr><td>대소문자</td><td>ignorecase 에서 이름만 바꾸면 " D README" 뿐</td></tr>
+<tr><td>줄 끝·정규화</td><td>i/lf w/crlf · 같은 "한글" 두 파일</td></tr>
+<tr><td>빈 디렉터리·모드</td><td>status 에 안 보임 · core.fileMode</td></tr>
+<tr><td>시간대</td><td>raw 1700000000 -0700 의 여러 꼴</td></tr>
+<tr><td>해시와 보안</td><td>SHA-256 ↔ SHA-1 불통 · CVE 표 · safe.directory</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p14-quiz-2" data-quiz>
+<h3>4~7장 퀴즈</h3>
+<p class="q">Q. 회사가 "git 으로 경로별 권한을 나눠 외주 개발자는 <code>src/secret/</code> 을 못 보게 하자" 고 합니다. 가능합니까? 그리고 SHA-256 으로 새
+저장소를 만들면 기존 SHA-1 저장소와 주고받을 수 있습니까(2026-09 기준)?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> git 만으로는 안 됩니다. clone 은 저장소 전체를 받고, sparse-checkout 은 작업 트리를 줄일 뿐 객체는 다 받습니다. 저장소를 나누는
+것이 답입니다. SHA-256 저장소와 SHA-1 저장소는 2.55.0 에서 서로 주고받지 못합니다 — 실험의 fetch 가 "mismatched algorithms" 로 멈췄습니다.</div>
+<span class="tier ill">설명용</span>
 </article>

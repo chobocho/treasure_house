@@ -32,7 +32,9 @@ def run(ctx):
     r.sh('git checkout -- a.txt')
     # assume-unchanged: "바뀌지 않았다고 믿어라"
     r.cap('git update-index --assume-unchanged a.txt')
-    r.sh("printf 'cccc\\n' > a.txt")
+    # 같은 크기로 같은 초에 고치면 racy(5부)라 status 가 흔들린다 —
+    # 고친 파일의 mtime 을 따로 못 박아 stat 이 늘 달라 보이게 한다
+    r.sh("printf 'cccc\\n' > a.txt && touch -d @1700000100 a.txt")
     r.cap('git status --short', label='index.assumed')
     r.cap('git ls-files -v')
     r.cap('git update-index --no-assume-unchanged a.txt')
