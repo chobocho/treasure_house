@@ -1,3 +1,9 @@
+### [2026-09-18 04:11] Termux 덱 — 패치 통계 도구·8부 캡처 4종·데비안 판 오탐 수정
+- **기획:** 8부 증거: 이 앱의 프로세스 수, termux-packages 의 패치 양, libandroid-* 메우개, 배터리 최적화 요청 소스를 캡처로.
+- **TC:** 정상: 판별 패키지·패치·패치 있는 패키지 수와 상위 목록. 경계: .patch32 제외·작업 트리 변경 무시·없는 판·인자 없음. 판 문자열은 IP 아님.
+- **개발:** `termux/tools/patch_stats.sh`, `termux/tools/tests/test_patch_stats.py`, `termux/tools/scrub.py`, `termux/tools/tests/test_scrub.py`, `termux/run_all.py`, `termux/out/` 외 5개 파일
+- **검증:** make test 전부 통과 · 캡처 검사 0건 · 개인정보 검사 0건
+
 ### [2026-09-18 03:58] Termux 대백과사전 덱 9부 — proot 와 리눅스 배포판(45장)
 - **기획:** ptrace·seccomp 로 호출을 가로채는 원리, proot-distro 가 조립하는 명령줄, 가짜 /proc·하드 링크 흉내, 못 속이는 벽.
 - **TC:** 조립 검사: 인용 범위 52개 경계 통과, 소스 줄 인용 56건 핀 확인, 연도로 읽힌 숫자 1건 삭제.

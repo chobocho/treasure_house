@@ -475,6 +475,31 @@ CAPTURES = [
         S('카메라도',
           'sh tools/tmx.sh termux-camera-photo a.jpg; echo "exit=$?"'),
     ]),
+    # 8부 — 지금 이 앱의 프로세스들(팬텀 프로세스 한도 32 와 견준다).
+    # ps 는 같은 uid 의 것만 보인다. 수는 그때그때라 스냅샷이다
+    Capture('procs_now', 'proot', 'snapshot', [
+        S('이름별 개수', 'ps -e -o comm= | sort | uniq -c | sort -rn'),
+        S('모두 몇 개', 'ps -e -o pid= | wc -l'),
+        S('부모가 init 인 것', "ps -e -o ppid=,comm= | awk '$1 == 1'"),
+    ]),
+    # 8부 — bionic 에 맞추느라 붙은 패치의 양. 고정 커밋의 트리만 본다
+    Capture('porting', 'termux', 'stable', [
+        S('고정 커밋의 packages/', 'sh tools/patch_stats.sh '
+          'sources/termux-packages 7d5b4d3'),
+    ]),
+    Capture('libandroid', 'termux', 'stable', [
+        S('bionic 에 없는 것을 채우는 패키지',
+          "dpkg -l | awk '/^ii/ && $2 ~ /^libandroid-/ "
+          "{print $2, $3}'"),
+    ]),
+    Capture('src_limits', 'termux', 'stable', [
+        S('wake lock 을 잡을 때', "python3 deck/srcpin.py grep "
+          "'termux-app:*/TermuxService.java' "
+          "'.*BatteryOptimizations.*'"),
+        S('매니페스트의 권한', "python3 deck/srcpin.py grep "
+          "'termux-app:app/src/main/AndroidManifest.xml' "
+          "'.*IGNORE_BATTERY.*'"),
+    ]),
     # 9부 — 이 세션을 띄운 proot 명령줄. 추적자(TracerPid)의
     # cmdline 을 읽는다. 세션을 다시 띄우면 바뀔 수 있어 스냅샷이다
     Capture('proot_session', 'proot', 'snapshot', [

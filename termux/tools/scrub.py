@@ -48,7 +48,8 @@ def name_hash(word):
 SSID_RE = re.compile(r'("ssid"\s*:\s*")(?!<ssid>")[^"]*(")', re.I)
 SSID_TXT = re.compile(r'(\bSSID\s*[:=]\s*)(?!<ssid>)(\S[^\n]*)')
 BSSID_RE = re.compile(r'("bssid"\s*:\s*")(?!<bssid>")[^"]*(")', re.I)
-IP4_RE = re.compile(r'(?<![\w.])(\d{1,3}(?:\.\d{1,3}){3})(?![\w.])')
+# 뒤에 '-숫자' 가 오면 데비안 패키지 판(14.0.0.11-1)이라 주소가 아니다
+IP4_RE = re.compile(r'(?<![\w.])(\d{1,3}(?:\.\d{1,3}){3})(?![\w.]|-\d)')
 # IPv6 후보. 12:34:56 같은 시각도 걸리지만 ipaddress 가 걸러 낸다.
 IP6_RE = re.compile(r'(?<![\w:])([0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4})'
                     r'{2,7})(?![\w:])')
