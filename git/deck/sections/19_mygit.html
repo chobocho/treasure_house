@@ -2,18 +2,178 @@
 <p class="chnum">19부</p>
 <h2>부록 A · 만들면서 배우는 Git</h2>
 <p class="chsub">같은 규격서, 다섯 언어, 진짜 git 이 채점한다</p>
-<p class="cap">이 부의 목표 장수는 420장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>19부에서 다룰 것</h3>
-<ul>
-<li>SHA-1 을 손으로 · zlib 과 느슨한 객체</li>
-<li>blob · tree · commit 과 참조</li>
-<li>인덱스 · log 와 merge-base</li>
-<li>diff(Myers) · checkout · merge</li>
-<li>팩파일 읽기와 쓰기</li>
-<li>pkt-line 으로 진짜 git 과 대화하기</li>
-<li>단계마다 Python → TS · Go · Java · C++ 대조 → 진짜 git 으로 검증</li>
-<li>다섯 구현의 소스 전문</li>
-</ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
 </article>
+
+<article class="card" id="p19-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">2~11부에서 들여다본 형식을 직접 만들어 봅니다. 이름은 mygit — git 의 작은 부분집합입니다.</p>
+<ul>
+<li>규격서 하나(SPEC.md)를 Python·TypeScript·Go·Java·C++ 다섯 언어로 구현했습니다.</li>
+<li>열두 단계: SHA-1 → zlib·느슨한 객체 → blob → tree → commit·참조 → 인덱스 → log·merge-base → diff → switch → merge → 팩 → 전송.</li>
+<li>채점은 진짜 git 이 합니다 — 기대 출력(golden/)은 git 2.55.0 이 만든 바이트이고, mygit 이 만든 저장소는 <code>git fsck --strict</code> 를 통과해야 합니다.</li>
+<li>끝에 다섯 구현의 소스 전문을 싣습니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-howto">
+<h3>한 단계를 만드는 순서</h3>
+<ol>
+<li><b>규격</b> — SPEC.md 의 그 절을 읽습니다. 모르는 동작은 진짜 git 으로 확인하고 규격에 적습니다.</li>
+<li><b>빨강</b> — 모든 함수를 "아직 없음"(종료 코드 99)으로 두고 시험을 돌려, 시험이 <b>그 이유로</b> 실패하는지 봅니다.</li>
+<li><b>초록</b> — 시험이 통과할 만큼만 구현합니다.</li>
+<li><b>대조</b> — 같은 대본을 다섯 구현으로 돌려 출력이 같은지, 진짜 git 이 그 저장소를 받아들이는지 봅니다.</li>
+</ol>
+<p>빨강을 거치지 않은 시험은 아무것도 시험하지 않을 수 있습니다 — 늘 초록인 시험은 아무 말도 하지 않습니다(SPEC.md §16.3).</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-scope">
+<h3>mygit 이 하는 것과 안 하는 것</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>한다</th><th>안 한다(덱에서는 진짜 git 캡처로만)</th></tr>
+<tr><td>init · hash-object · cat-file · add · rm · commit · status · log · branch · tag · switch · diff · merge · merge-base · reflog</td><td>rebase · stash · 설정 파일 · 훅 · 속성</td></tr>
+<tr><td>팩 읽기·쓰기(델타 포함) · verify-pack · index-pack</td><td>비트맵 · 다중 팩 색인 · 커밋 그래프</td></tr>
+<tr><td>로컬 clone · 진짜 git 과의 fetch(프로토콜 v0, pkt-line)</td><td>HTTP · SSH · 프로토콜 v2 · push</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- 1~12장(단계별 해설)은 여기에 들어온다 -->
+
+<article class="card" id="p19-ch13"><p class="chnum">13장</p><h2>다섯 구현 대조</h2><p class="chsub">같은 대본, 같은 출력, 진짜 git 이 받아들이는가</p></article>
+
+<article class="card" id="p19-parity">
+<h3>대조표</h3>
+<!--TABLE file=out/tbl_parity.html cap=단계 × 언어 — 같은 대본 23줄을 다섯 구현으로 돌려 Python 과 견줌-->
+<p>칸마다 세 가지를 봤습니다: 명령마다의 표준 출력·표준 오류·종료 코드가 Python 과 같은가(팩 이름은 뺌 — 압축 바이트는 구현마다 달라도 된다), 진짜 git 이
+그 저장소에 <code>fsck --strict</code> 를 통과시키는가, 객체 목록이 같은가.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-script">
+<h3>대본의 한 장면 — Python 의 실행</h3>
+<!--OUT file=mygit__mygit-init.txt note=빈 저장소-->
+<!--OUT file=mygit__mygit-commit-m-first.txt note=첫 커밋-->
+<!--OUT file=mygit__mygit-log-oneline.txt note=역사-->
+<!--OUT file=mygit__mygit-merge-topic.txt note=3-way 머지-->
+<p>다섯 구현이 이 출력을 글자까지 똑같이 냅니다. 캡처는 run_all.py 의 mygit 실험이 남긴 Python 쪽입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-ch-src"><p class="chnum">14장</p><h2>다섯 구현의 소스 전문</h2><p class="chsub">파일 <!--SRCSTAT total-files-->개 · <!--SRCSTAT total-lines-->줄</p></article>
+
+<article class="card" id="p19-src-howto">
+<h3>전문을 읽는 법</h3>
+<ul>
+<li>언어마다 같은 차례 — sha1 · zlib · objects · tree · commit · refs · index · worktree · walk · diff · merge · pack · transport · cli, 그리고 오류 형과 진입점.</li>
+<li>한 장의 코드는 최상위 정의가 시작되는 줄에서 끊었습니다(함수 한가운데서 자르지 않음). 오른쪽 위의 <code>n/m</code> 은 그 파일의 몇째 장인지입니다.</li>
+<li>모든 줄은 저장소의 실물 그대로이고, 조립기가 한 줄도 빠지지 않았는지 셉니다. 시험 코드는 발췌만 싣습니다.</li>
+<li>앞의 단계별 장에서 이미 본 함수도 여기서 한 번 더 나옵니다 — 맥락 없이 처음부터 끝까지 읽을 수 있게.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-src-py"><h2>Python 구현</h2><p class="chsub">파일 <!--SRCSTAT files-->개</p><span class="tier ill">설명용</span></article>
+
+<!--FULLSRC file=py/mygit/sha1.py prefix=src-py-sha1 title=py/mygit/sha1.py-->
+<!--FULLSRC file=py/mygit/zlib.py prefix=src-py-zlib title=py/mygit/zlib.py-->
+<!--FULLSRC file=py/mygit/objects.py prefix=src-py-objects title=py/mygit/objects.py-->
+<!--FULLSRC file=py/mygit/tree.py prefix=src-py-tree title=py/mygit/tree.py-->
+<!--FULLSRC file=py/mygit/commit.py prefix=src-py-commit title=py/mygit/commit.py-->
+<!--FULLSRC file=py/mygit/refs.py prefix=src-py-refs title=py/mygit/refs.py-->
+<!--FULLSRC file=py/mygit/index.py prefix=src-py-index title=py/mygit/index.py-->
+<!--FULLSRC file=py/mygit/worktree.py prefix=src-py-worktree title=py/mygit/worktree.py-->
+<!--FULLSRC file=py/mygit/walk.py prefix=src-py-walk title=py/mygit/walk.py-->
+<!--FULLSRC file=py/mygit/diff.py prefix=src-py-diff title=py/mygit/diff.py-->
+<!--FULLSRC file=py/mygit/merge.py prefix=src-py-merge title=py/mygit/merge.py-->
+<!--FULLSRC file=py/mygit/pack.py prefix=src-py-pack title=py/mygit/pack.py-->
+<!--FULLSRC file=py/mygit/transport.py prefix=src-py-transport title=py/mygit/transport.py-->
+<!--FULLSRC file=py/mygit/cli.py prefix=src-py-cli title=py/mygit/cli.py-->
+<!--FULLSRC file=py/mygit/__init__.py prefix=src-py-init title=py/mygit/__init__.py-->
+<!--FULLSRC file=py/mygit/__main__.py prefix=src-py-main title=py/mygit/__main__.py-->
+
+<article class="card" id="p19-src-ts"><h2>TypeScript 구현</h2><p class="chsub">파일 <!--SRCSTAT files-->개</p><span class="tier ill">설명용</span></article>
+
+<!--FULLSRC file=ts/src/sha1.ts prefix=src-ts-sha1 title=ts/src/sha1.ts-->
+<!--FULLSRC file=ts/src/zlib.ts prefix=src-ts-zlib title=ts/src/zlib.ts-->
+<!--FULLSRC file=ts/src/objects.ts prefix=src-ts-objects title=ts/src/objects.ts-->
+<!--FULLSRC file=ts/src/tree.ts prefix=src-ts-tree title=ts/src/tree.ts-->
+<!--FULLSRC file=ts/src/commit.ts prefix=src-ts-commit title=ts/src/commit.ts-->
+<!--FULLSRC file=ts/src/refs.ts prefix=src-ts-refs title=ts/src/refs.ts-->
+<!--FULLSRC file=ts/src/index.ts prefix=src-ts-index title=ts/src/index.ts-->
+<!--FULLSRC file=ts/src/worktree.ts prefix=src-ts-worktree title=ts/src/worktree.ts-->
+<!--FULLSRC file=ts/src/walk.ts prefix=src-ts-walk title=ts/src/walk.ts-->
+<!--FULLSRC file=ts/src/diff.ts prefix=src-ts-diff title=ts/src/diff.ts-->
+<!--FULLSRC file=ts/src/merge.ts prefix=src-ts-merge title=ts/src/merge.ts-->
+<!--FULLSRC file=ts/src/pack.ts prefix=src-ts-pack title=ts/src/pack.ts-->
+<!--FULLSRC file=ts/src/transport.ts prefix=src-ts-transport title=ts/src/transport.ts-->
+<!--FULLSRC file=ts/src/cli.ts prefix=src-ts-cli title=ts/src/cli.ts-->
+<!--FULLSRC file=ts/src/errors.ts prefix=src-ts-errors title=ts/src/errors.ts-->
+<!--FULLSRC file=ts/src/main.ts prefix=src-ts-main title=ts/src/main.ts-->
+
+<article class="card" id="p19-src-go"><h2>Go 구현</h2><p class="chsub">파일 <!--SRCSTAT files-->개</p><span class="tier ill">설명용</span></article>
+
+<!--FULLSRC file=go/sha1.go prefix=src-go-sha1 title=go/sha1.go-->
+<!--FULLSRC file=go/zlib.go prefix=src-go-zlib title=go/zlib.go-->
+<!--FULLSRC file=go/objects.go prefix=src-go-objects title=go/objects.go-->
+<!--FULLSRC file=go/tree.go prefix=src-go-tree title=go/tree.go-->
+<!--FULLSRC file=go/commit.go prefix=src-go-commit title=go/commit.go-->
+<!--FULLSRC file=go/refs.go prefix=src-go-refs title=go/refs.go-->
+<!--FULLSRC file=go/index.go prefix=src-go-index title=go/index.go-->
+<!--FULLSRC file=go/worktree.go prefix=src-go-worktree title=go/worktree.go-->
+<!--FULLSRC file=go/walk.go prefix=src-go-walk title=go/walk.go-->
+<!--FULLSRC file=go/diff.go prefix=src-go-diff title=go/diff.go-->
+<!--FULLSRC file=go/merge.go prefix=src-go-merge title=go/merge.go-->
+<!--FULLSRC file=go/pack.go prefix=src-go-pack title=go/pack.go-->
+<!--FULLSRC file=go/transport.go prefix=src-go-transport title=go/transport.go-->
+<!--FULLSRC file=go/cli.go prefix=src-go-cli title=go/cli.go-->
+<!--FULLSRC file=go/errors.go prefix=src-go-errors title=go/errors.go-->
+<!--FULLSRC file=go/cmd/mygit/main.go prefix=src-go-cmdmain title=go/cmd/mygit/main.go-->
+<!--FULLSRC file=go/go.mod prefix=src-go-go title=go/go.mod-->
+
+<article class="card" id="p19-src-java"><h2>Java 구현</h2><p class="chsub">파일 <!--SRCSTAT files-->개</p><span class="tier ill">설명용</span></article>
+
+<!--FULLSRC file=java/mygit/Sha1.java prefix=src-java-sha1 title=java/mygit/Sha1.java-->
+<!--FULLSRC file=java/mygit/Zlib.java prefix=src-java-zlib title=java/mygit/Zlib.java-->
+<!--FULLSRC file=java/mygit/Objects.java prefix=src-java-objects title=java/mygit/Objects.java-->
+<!--FULLSRC file=java/mygit/Tree.java prefix=src-java-tree title=java/mygit/Tree.java-->
+<!--FULLSRC file=java/mygit/Commit.java prefix=src-java-commit title=java/mygit/Commit.java-->
+<!--FULLSRC file=java/mygit/Refs.java prefix=src-java-refs title=java/mygit/Refs.java-->
+<!--FULLSRC file=java/mygit/Index.java prefix=src-java-index title=java/mygit/Index.java-->
+<!--FULLSRC file=java/mygit/Worktree.java prefix=src-java-worktree title=java/mygit/Worktree.java-->
+<!--FULLSRC file=java/mygit/Walk.java prefix=src-java-walk title=java/mygit/Walk.java-->
+<!--FULLSRC file=java/mygit/Diff.java prefix=src-java-diff title=java/mygit/Diff.java-->
+<!--FULLSRC file=java/mygit/Merge.java prefix=src-java-merge title=java/mygit/Merge.java-->
+<!--FULLSRC file=java/mygit/Pack.java prefix=src-java-pack title=java/mygit/Pack.java-->
+<!--FULLSRC file=java/mygit/Transport.java prefix=src-java-transport title=java/mygit/Transport.java-->
+<!--FULLSRC file=java/mygit/Cli.java prefix=src-java-cli title=java/mygit/Cli.java-->
+<!--FULLSRC file=java/mygit/GitError.java prefix=src-java-giterror title=java/mygit/GitError.java-->
+<!--FULLSRC file=java/mygit/Fs.java prefix=src-java-fs title=java/mygit/Fs.java-->
+<!--FULLSRC file=java/mygit/Main.java prefix=src-java-main title=java/mygit/Main.java-->
+
+<article class="card" id="p19-src-cpp"><h2>C++ 구현</h2><p class="chsub">파일 <!--SRCSTAT files-->개</p><span class="tier ill">설명용</span></article>
+
+<!--FULLSRC file=cpp/sha1.cpp prefix=src-cpp-sha1 title=cpp/sha1.cpp-->
+<!--FULLSRC file=cpp/inflate.cpp prefix=src-cpp-inflate title=cpp/inflate.cpp-->
+<!--FULLSRC file=cpp/deflate.cpp prefix=src-cpp-deflate title=cpp/deflate.cpp-->
+<!--FULLSRC file=cpp/objects.cpp prefix=src-cpp-objects title=cpp/objects.cpp-->
+<!--FULLSRC file=cpp/tree.cpp prefix=src-cpp-tree title=cpp/tree.cpp-->
+<!--FULLSRC file=cpp/commit.cpp prefix=src-cpp-commit title=cpp/commit.cpp-->
+<!--FULLSRC file=cpp/refs.cpp prefix=src-cpp-refs title=cpp/refs.cpp-->
+<!--FULLSRC file=cpp/index.cpp prefix=src-cpp-index title=cpp/index.cpp-->
+<!--FULLSRC file=cpp/worktree.cpp prefix=src-cpp-worktree title=cpp/worktree.cpp-->
+<!--FULLSRC file=cpp/walk.cpp prefix=src-cpp-walk title=cpp/walk.cpp-->
+<!--FULLSRC file=cpp/diff.cpp prefix=src-cpp-diff title=cpp/diff.cpp-->
+<!--FULLSRC file=cpp/merge.cpp prefix=src-cpp-merge title=cpp/merge.cpp-->
+<!--FULLSRC file=cpp/pack.cpp prefix=src-cpp-pack title=cpp/pack.cpp-->
+<!--FULLSRC file=cpp/transport.cpp prefix=src-cpp-transport title=cpp/transport.cpp-->
+<!--FULLSRC file=cpp/cli.cpp prefix=src-cpp-cli title=cpp/cli.cpp-->
+<!--FULLSRC file=cpp/mygit.hpp prefix=src-cpp-mygit title=cpp/mygit.hpp-->
+<!--FULLSRC file=cpp/main.cpp prefix=src-cpp-main title=cpp/main.cpp-->
+
+<article class="card" id="p19-src-rig"><h2>이 덱을 만든 장치</h2><p class="chsub">파일 <!--SRCSTAT files-->개 — 모든 캡처를 뜨는 것과 모든 것을 묶는 것</p><span class="tier ill">설명용</span></article>
+
+<!--FULLSRC file=run_all.py prefix=src-runall title=run_all.py-->
+<!--FULLSRC file=Makefile prefix=src-makefile title=Makefile-->
+
