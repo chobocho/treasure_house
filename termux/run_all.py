@@ -292,6 +292,9 @@ CAPTURES = [
           'python3 py/pkgstat.py $PREFIX/var/lib/dpkg/status'),
         S('termux-* 명령은 어느 패키지 것인가',
           'dpkg -S $PREFIX/bin/termux-* | sort'),
+        S('패키지마다 몇 개',
+          'dpkg -S $PREFIX/bin/termux-* | cut -d: -f1 | sort | '
+          'uniq -c | sort -rn'),
     ]),
     Capture('apt_sources', 'termux', 'stable', [
         S('sources.list', 'cat $PREFIX/etc/apt/sources.list'),
@@ -430,6 +433,16 @@ CAPTURES = [
         S('웨이크락의 종류', "python3 deck/srcpin.py grep "
           "'termux-app:*/TermuxService.java' "
           "'[a-zA-Z]+Manager\\.[A-Z_]+_(LOCK|PERF)'"),
+    ]),
+    Capture('src_pkgs', 'termux', 'stable', [
+        S('massage 단계가 셔뱅을 고치는 줄',
+          "python3 deck/srcpin.py grep "
+          "'termux-packages:*/termux_step_massage.sh' "
+          "'# Fix shebang.*|sed --follow.*'"),
+        S('apt 패치가 root 검사를 넣는 곳',
+          "python3 deck/srcpin.py grep "
+          "'termux-packages:packages/apt/0010-*.patch' "
+          "'^.   if .getuid.. == 0. .'"),
     ]),
     # 사용자 설정 디렉터리는 이름만 본다 — 내용은 사용자의 것이다(§3.3)
     Capture('dot_termux', 'termux', 'stable', [
