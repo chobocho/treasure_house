@@ -911,6 +911,10 @@ svg.diag .key { font-size: 9px; fill: var(--accent2);
     <option value="p19-ch6">· 인덱스 · add · status · commit</option>
     <option value="p19-ch7">· log 와 merge-base</option>
     <option value="p19-ch8">· diff — Myers 와 밀어 붙이기</option>
+    <option value="p19-ch9">· switch — 작업 트리 쓰기</option>
+    <option value="p19-ch10">· merge — 3-way 와 충돌</option>
+    <option value="p19-ch11">· 팩 — 읽기, 그다음 쓰기</option>
+    <option value="p19-ch12">· 전송 — pkt-line 으로 진짜 git 과</option>
     <option value="p19-ch13">· 다섯 구현 대조</option>
     <option value="p19-ch-src">· 다섯 구현의 소스 전문</option>
     <option value="p20">20부 · 부록 B</option>
@@ -18040,11 +18044,13 @@ MM a</pre>
 <article class="card" id="p19-scope">
 <h3>mygit 이 하는 것과 안 하는 것</h3>
 <div class="tblwrap"><table class="kv">
-<tr><th>한다</th><th>안 한다(덱에서는 진짜 git 캡처로만)</th></tr>
-<tr><td>init · hash-object · cat-file · add · rm · commit · status · log · branch · tag · switch · diff · merge · merge-base · reflog</td><td>rebase · stash · 설정 파일 · 훅 · 속성</td></tr>
-<tr><td>팩 읽기·쓰기(델타 포함) · verify-pack · index-pack</td><td>비트맵 · 다중 팩 색인 · 커밋 그래프</td></tr>
-<tr><td>로컬 clone · 진짜 git 과의 fetch(프로토콜 v0, pkt-line)</td><td>HTTP · SSH · 프로토콜 v2 · push</td></tr>
+<tr><th>한다(명령 23개)</th><th>안 한다(덱에서는 진짜 git 캡처로만)</th></tr>
+<tr><td>init · hash-object · cat-file · add · rm --cached · status · write-tree · commit-tree · commit</td><td>rebase · cherry-pick · stash · reset · 이름 변경 감지</td></tr>
+<tr><td>log · merge-base · branch · tag · reflog · diff · switch · checkout · merge</td><td>.gitignore · .gitattributes · 설정 파일 · 훅 · 서명</td></tr>
+<tr><td>unpack-pack · verify-pack · pack-objects(델타 포함)</td><td>index v4 · 확장 쓰기 · SHA-256 저장소</td></tr>
+<tr><td>로컬 clone(파일 복사) · fetch-pack(진짜 git upload-pack 과 프로토콜 v2)</td><td>서버 쪽(upload-pack·receive-pack) · HTTP·SSH 소켓</td></tr>
 </table></div>
+<p class="cap">SPEC.md §0.1·§0.2 의 표를 옮긴 것입니다.</p>
 <span class="tier ill">설명용</span>
 </article>
 
@@ -19958,7 +19964,994 @@ index 0000000..92ff4b8
 <span class="tier ill">설명용</span>
 </article>
 
-<!-- 1~12장(단계별 해설)은 여기에 들어온다 -->
+<article class="card" id="p19-ch9"><p class="chnum">9장</p><h2>switch — 작업 트리 쓰기</h2><p class="chsub">9단계 · SPEC §9.3 · 두 갈래 합치기</p></article>
+
+<article class="card" id="p19-s9-idea">
+<h3>무엇을 만드나</h3>
+<p>옛 커밋의 트리에서 새 커밋의 트리로 작업 트리와 인덱스를 옮깁니다. 규칙은 경로마다 하나입니다:</p>
+<ul>
+<li>옛 트리와 새 트리에서 <b>같은</b> 경로는 손대지 않는다 — 그래서 고친 파일이 새 브랜치로 따라온다(6부).</li>
+<li><b>다른</b> 경로는 인덱스가 옛 트리와 같고 작업 트리가 인덱스와 같아야 바꾼다. 아니면 고친 것을 잃으니 멈춘다.</li>
+<li>옛 트리에 없던 경로에 추적 안 하는 파일이 있으면 그것도 멈춘다.</li>
+</ul>
+<p>하나라도 걸리면 <b>아무것도 바꾸지 않고</b> 멈춥니다 — 반쯤 옮긴 작업 트리가 가장 나쁜 결과이기 때문입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-s9-check-first">
+<h3>먼저 전부 검사한다</h3>
+<div class="src"><b>py/mygit/worktree.py</b><span class="ln">195–229</span><span>checkout_tree 의 앞 절반 — 걸리는 경로를 모은다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/worktree.py" data-lines="195-229">def checkout_tree(root, gitdir, old_tree, new_tree):
+    """두 갈래 합치기로 작업 트리·인덱스를 old → new 로(SPEC.md §9.3).
+
+    경로마다: 옛 트리와 새 트리에서 같으면 손대지 않는다(손댄 내용이
+    따라온다). 다르면 인덱스가 옛 트리와 같고 작업 트리가 인덱스와
+    같아야 한다. 옛 트리에 없던 경로에 추적 안 하는 파일이 있으면
+    그것도 막는다. 하나라도 걸리면 아무것도 바꾸지 않고 멈춘다.
+    O(경로 수 × 해시).
+    """
+    old, new = tree_map(gitdir, old_tree), tree_map(gitdir, new_tree)
+    ents = index.read_index(gitdir)
+    idx = {e.path: e for e in ents if e.stage == 0}
+    unmerged = set(e.path for e in ents if e.stage)
+    local, stray = [], []
+    for p in sorted(set(old) | set(new) | set(idx) | unmerged):
+        if old.get(p) == new.get(p):
+            continue
+        cur = idx.get(p)
+        cur = (cur.mode, cur.oid) if cur else None
+        disk = file_state(root, p)
+        if p in unmerged:
+            local.append(p)
+        elif cur is None and old.get(p) is None:
+            if disk is not None and new.get(p) is not None:
+                stray.append(p)
+        elif cur != old.get(p) or disk != cur:
+            local.append(p)
+    if local or stray:
+        rows = []
+        for head, paths in ((OVERWRITE, local), (UNTRACKED, stray)):
+            if paths:
+                rows.append(head)
+                rows += ['\t' + quote_path(q) for q in paths]
+                rows.append('')
+        raise GitError('\n'.join(rows + ['Aborting']), 1)</code></pre>
+<p>오류 문장은 git 의 것과 같습니다("would be overwritten by checkout", 그리고 "Aborting").</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s9-apply">
+<h3>그다음 한꺼번에 바꾼다</h3>
+<div class="src"><b>py/mygit/worktree.py</b><span class="ln">230–241</span><span>checkout_tree 의 뒤 절반 — 쓰고, 지우고, 인덱스를 새로</span></div>
+<pre><code data-lang="py" data-src="py/mygit/worktree.py" data-lines="230-241">    for p in sorted(set(old) | set(new)):
+        if old.get(p) == new.get(p):
+            continue
+        if new.get(p) is None:
+            _remove_file(root, p)
+            idx.pop(p, None)
+            continue
+        mode, oid = new[p]
+        _write_file(root, p, mode, objects.read_object(gitdir, oid)[1])
+        full = os.path.join(os.fsencode(root), p)
+        idx[p] = index.entry_from_stat(p, full, oid)
+    index.write_index(gitdir, list(idx.values()))</code></pre>
+<div class="src"><b>py/mygit/worktree.py</b><span class="ln">171–180</span><span>0666·0777 로 열고 umask 를 따른다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/worktree.py" data-lines="171-180">def _write_file(root, path, mode, data):
+    full = os.path.join(os.fsencode(root), path)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    if os.path.exists(full):
+        os.remove(full)
+    # 0666/0777 로 열고 umask 를 따른다 — git 과 같다(SPEC.md §9.3)
+    perm = 0o777 if mode &amp; 0o100 else 0o666
+    fd = os.open(full, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, perm)
+    with os.fdopen(fd, 'wb') as f:
+        f.write(data)</code></pre>
+<div class="src"><b>py/mygit/worktree.py</b><span class="ln">183–192</span><span>비게 된 디렉터리도 지운다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/worktree.py" data-lines="183-192">def _remove_file(root, path):
+    """파일을 지우고, 그래서 비게 된 디렉터리들도 지운다."""
+    base = os.fsencode(root)
+    full = os.path.join(base, path)
+    if os.path.lexists(full):
+        os.remove(full)
+    d = os.path.dirname(full)
+    while d != base and os.path.isdir(d) and not os.listdir(d):
+        os.rmdir(d)
+        d = os.path.dirname(d)</code></pre>
+<p>git 은 빈 디렉터리를 모르므로(14부), 파일을 지워 비게 된 디렉터리도 같이 지웁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s9-head">
+<h3>HEAD 옮기기와 reflog</h3>
+<div class="src"><b>py/mygit/cli.py</b><span class="ln">647–678</span><span>브랜치로·분리로, 그리고 checkout: moving from … to …</span></div>
+<pre><code data-lang="py" data-src="py/mygit/cli.py" data-lines="647-678">def move_head(ctx, branch, oid, arg, report=True):
+    """작업 트리를 oid 로 옮기고 HEAD 를 branch(또는 분리)로(SPEC §9.3).
+
+    안내는 표준 오류에, 남은 변경 알림은 표준 출력에. reflog 는
+    "checkout: moving from &lt;옛&gt; to &lt;arg 그대로&gt;" — 옛 쪽이 분리 상태면
+    40글자다(§6.3).
+    """
+    g = ctx.gitdir()
+    old_branch, old = refs.read_head(g)
+    old_tree = refs.peel(g, old, 'tree') if old else None
+    new_tree = refs.peel(g, oid, 'tree')
+    worktree.checkout_tree(ctx.root(), g, old_tree, new_tree)
+    same = branch is not None and branch == old_branch
+    # 분리 상태를 떠나되 커밋이 바뀔 때만 — 같은 커밋이면 git 도
+    # 찍지 않는다
+    if old_branch is None and old and oid != old:
+        ctx.warn('Previous HEAD position was %s\n'
+                 % summary_line(ctx, old))
+    refs.set_head(g, branch or oid)
+    frm = old_branch[len('refs/heads/'):] if old_branch else old
+    refs.append_reflog(g, 'HEAD', old, oid, ident(ctx),
+                       'checkout: moving from %s to %s' % (frm, arg))
+    for row in (worktree.local_changes(ctx.root(), g, new_tree)
+                if report else ()):
+        ctx.say(row + '\n')
+    if branch is None:
+        ctx.warn('HEAD is now at %s\n' % summary_line(ctx, oid))
+    elif same:
+        ctx.warn("Already on '%s'\n" % arg)
+    else:
+        ctx.warn("Switched to branch '%s'\n" % arg)
+    return 0</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s9-check">
+<h3>채점</h3>
+<div class="src"><b>out/mygit__mygit-switch-topic.txt</b><span class="ln">전체 2줄</span><span>안내는 표준 오류로 — git 과 같다</span></div>
+<pre class="term" data-out="mygit__mygit-switch-topic.txt">$ mygit switch topic
+Switched to branch 'topic'</pre>
+<div class="src"><b>out/mygit__mygit-switch-main.txt</b><span class="ln">전체 2줄</span><span>되돌아오기</span></div>
+<pre class="term" data-out="mygit__mygit-switch-main.txt">$ mygit switch main
+Switched to branch 'main'</pre>
+<div class="src"><b>out/appendix__.-t.sh-checkout.txt</b><span class="ln">전체 9줄</span><span>9단계의 시험 — 빈 디렉터리 지우기, 실행 비트, 옮긴 뒤 status 가 깨끗한가</span></div>
+<pre class="term" data-out="appendix__.-t.sh-checkout.txt">$ ./t.sh checkout
+test_s9_3_emptied_directories_are_removed ... ok
+test_s9_3_exec_bit_is_written ... ok
+test_s9_3_status_is_clean_after_switch ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests
+
+OK</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-ch10"><p class="chnum">10장</p><h2>merge — 3-way 와 충돌</h2><p class="chsub">10단계 · SPEC §12</p></article>
+
+<article class="card" id="p19-s10-idea">
+<h3>두 층의 합치기</h3>
+<ul>
+<li><b>트리 층</b> — 경로마다 세 판(기준 B·우리 O·그들 T)을 "세 줄 규칙" 으로: O = T 거나 B = T 면 O, B = O 면 T, 아니면 내용을 합친다(7부).</li>
+<li><b>파일 층</b> — git 의 <code>xdl_merge</code>(ZEALOUS 수준)를 따른다. B→O, B→T 의 바뀐 곳을 B 좌표로 짝지어, 겹치거나 <b>맞닿으면</b> 충돌 후보.</li>
+</ul>
+<p>파일 층의 경계 규칙 — 맞닿으면 충돌, 한 줄 떨어지면 깨끗, 사이가 3줄 이하면 두 충돌을 하나로 붙임 — 은 모두 진짜 git merge 로 확인한 것입니다(golden/scen/merge-*.scn).</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-s10-tree">
+<h3>트리 층 — 세 줄 규칙</h3>
+<div class="src"><b>py/mygit/merge.py</b><span class="ln">143–174</span><span>merge_trees 의 앞부분 — pick 과 깨끗한 경로, 다루지 않는 경우</span></div>
+<pre><code data-lang="py" data-src="py/mygit/merge.py" data-lines="143-174">def merge_trees(gitdir, base, ours, theirs, label):
+    """트리 단위 합치기(SPEC.md §12.2). base·ours·theirs 는
+    {경로: (모드, 이름)}. → (결과 {경로: 항목}, 안내 줄들, 충돌 경로).
+
+    항목은 ('clean', 모드, 이름) · ('gone',) · ('conflict', 합친 바이트,
+    {단계: (모드, 이름)}, 모드). 모드는 내용과 따로 같은 세 줄 규칙.
+    """
+    def pick(bv, ov, tv):
+        """세 줄 규칙. 없음(None)도 값이다 — 한쪽만 지웠으면 지움이
+        이긴다. 규칙이 못 고르면 UNDECIDED."""
+        if ov == tv or bv == tv:
+            return ov
+        if bv == ov:
+            return tv
+        return UNDECIDED
+
+    result, notes, conflicts = {}, [], []
+    for p in sorted(set(base) | set(ours) | set(theirs)):
+        bv, ov, tv = base.get(p), ours.get(p), theirs.get(p)
+        whole = pick(bv, ov, tv)
+        if whole is not UNDECIDED:
+            result[p] = ('clean',) + whole if whole else ('gone',)
+            continue
+        if ov is None or tv is None:
+            raise GitError('fatal: mygit: unsupported merge case '
+                           '(modify/delete) in %s'
+                           % p.decode('utf-8', 'replace'))
+        mode = pick(bv[0] if bv else None, ov[0], tv[0])
+        if mode is UNDECIDED:
+            name = p.decode('utf-8', 'replace')
+            raise GitError('fatal: mygit: unsupported merge case '
+                           '(mode) in %s' % name)</code></pre>
+<p>"없음" 도 값입니다. 한쪽만 지웠고 다른 쪽이 그대로면 지움이 이깁니다. 한쪽은 고치고 한쪽은 지운 경우(modify/delete)와 모드가 엇갈린 경우는 mygit 이
+다루지 않는 범위라 분명한 오류로 멈춥니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s10-pair">
+<h3>파일 층 1 — 짝짓기</h3>
+<div class="src"><b>py/mygit/merge.py</b><span class="ln">35–74</span><span>엄격히 앞선 쪽은 받고, 겹치거나 맞닿으면 충돌 후보</span></div>
+<pre><code data-lang="py" data-src="py/mygit/merge.py" data-lines="35-74">def _pair(base, ours, theirs):
+    """1 단계 — [(종류, B 시작, B 끝, O 줄들, T 줄들)]. 종류는 'o'
+    (O 쪽 변경 받기), 't', 'c'(충돌 후보). 바뀌지 않은 곳은 빠진다."""
+    c1, c2 = _changes(base, ours), _changes(base, theirs)
+    out, i, j = [], 0, 0
+    while i &lt; len(c1) or j &lt; len(c2):
+        x = c1[i] if i &lt; len(c1) else None
+        y = c2[j] if j &lt; len(c2) else None
+        if y is None or (x is not None and x[0] + x[2] &lt; y[0]):
+            out.append(('o', x[0], x[0] + x[2], ours[x[1]:x[1] + x[3]],
+                        None))
+            i += 1
+            continue
+        if x is None or y[0] + y[2] &lt; x[0]:
+            out.append(('t', y[0], y[0] + y[2], None,
+                        theirs[y[1]:y[1] + y[3]]))
+            j += 1
+            continue
+        if x[0] == y[0] and x[2] == y[2] and \
+                ours[x[1]:x[1] + x[3]] == theirs[y[1]:y[1] + y[3]]:
+            out.append(('o', x[0], x[0] + x[2], ours[x[1]:x[1] + x[3]],
+                        None))            # 양쪽이 같은 수정 — 한 번만
+            i, j = i + 1, j + 1
+            continue
+        start = min(x[0], y[0])
+        end = max(x[0] + x[2], y[0] + y[2])
+        i, j = i + 1, j + 1
+        while True:                       # 맞닿는 것까지 넓힌다
+            if i &lt; len(c1) and c1[i][0] &lt;= end:
+                end = max(end, c1[i][0] + c1[i][2])
+                i += 1
+            elif j &lt; len(c2) and c2[j][0] &lt;= end:
+                end = max(end, c2[j][0] + c2[j][2])
+                j += 1
+            else:
+                break
+        os_, oe = _side_range(c1, start, end)
+        ts, te = _side_range(c2, start, end)
+        out.append(('c', start, end, ours[os_:oe], theirs[ts:te]))
+    return out</code></pre>
+<p>조건이 <code>x[0] + x[2] &lt; y[0]</code>(엄격히 앞섬)이라, O 의 바뀐 곳이 끝나는 바로 그 줄에서 T 의 바뀐 곳이 시작하면 — 맞닿으면 — 충돌 후보가 됩니다.
+7부에서 "붙어 있는 두 줄을 따로 고쳐도 충돌" 이던 까닭이 이 부등호입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s10-merge3">
+<h3>파일 층 2·3 — 다듬고 붙이기, 표지 쓰기</h3>
+<div class="src"><b>py/mygit/merge.py</b><span class="ln">96–140</span><span>충돌마다 O·T 를 다시 diff, 3줄 이하로 떨어진 충돌은 하나로</span></div>
+<pre><code data-lang="py" data-src="py/mygit/merge.py" data-lines="96-140">def merge3(base, ours, theirs, label):
+    """세 판의 바이트 → (합친 바이트, 충돌 수). SPEC.md §12.3.
+
+    O(줄 수 × 편집 거리) — diff 두 번과 충돌마다 diff 한 번.
+    """
+    if ours == theirs or base == theirs:
+        return ours, 0
+    if base == ours:
+        return theirs, 0
+    b = split_lines(base)
+    o, t = split_lines(ours), split_lines(theirs)
+    pieces, pos = [], 0
+    for kind, s, e, olines, tlines in _pair(b, o, t):
+        if s &gt; pos:
+            pieces.append(('same', b[pos:s]))
+        if kind == 'o':
+            pieces.append(('clean', olines))
+        elif kind == 't':
+            pieces.append(('clean', tlines))
+        else:
+            pieces += _refine(olines, tlines)
+        pos = e
+    if pos &lt; len(b):
+        pieces.append(('same', b[pos:]))
+    # 3 단계 — 바뀌지 않은 줄 JOIN 개 이하로 떨어진 충돌을 붙인다
+    joined = []
+    for p in pieces:
+        near = len(joined) &gt;= 2 and joined[-1][0] == 'same' and \
+            joined[-2][0] == 'conf' and len(joined[-1][1]) &lt;= JOIN
+        if p[0] == 'conf' and near:
+            mid = joined.pop()[1]
+            prev = joined.pop()
+            p = ('conf', prev[1] + mid + p[1], prev[2] + mid + p[2])
+        elif p[0] == 'same' and joined and joined[-1][0] == 'same':
+            p = ('same', joined.pop()[1] + p[1])
+        joined.append(p)
+    out, n = [], 0
+    for p in joined:
+        if p[0] == 'conf':
+            n += 1
+            out += [b'&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD\n'] + p[1] + [b'=======\n']
+            out += p[2] + [b'&gt;&gt;&gt;&gt;&gt;&gt;&gt; %s\n' % label.encode()]
+        else:
+            out += p[1]
+    return b''.join(out), n</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s10-4up">
+<h3>네 언어의 refine</h3>
+<div class="g2">
+<div>
+<div class="src"><b>ts/src/merge.ts</b><span class="ln">93–106</span><span>TypeScript</span></div>
+<pre><code data-lang="ts" data-src="ts/src/merge.ts" data-lines="93-106">// 2 단계 — 충돌 하나를 O·T 의 diff 로 쪼갠다. 같은 줄은 표지 밖으로
+// 나온다. O == T 면 충돌이 아니다.
+function refine(o: string[], t: string[]): Piece[] {
+  if (eqLines(o, t)) return [['same', o]];
+  const out: Piece[] = [];
+  let p1 = 0;
+  for (const [i1, i2, n1, n2] of changes(o, t)) {
+    if (i1 &gt; p1) out.push(['same', o.slice(p1, i1)]);
+    out.push(['conf', o.slice(i1, i1 + n1), t.slice(i2, i2 + n2)]);
+    p1 = i1 + n1;
+  }
+  if (p1 &lt; o.length) out.push(['same', o.slice(p1)]);
+  return out;
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>go/merge.go</b><span class="ln">118–138</span><span>Go</span></div>
+<pre><code data-lang="go" data-src="go/merge.go" data-lines="118-138">// refine 은 2 단계 — 충돌 하나를 O·T 의 diff 로 쪼갠다. 같은 줄은
+// 표지 밖으로 나온다. O == T 면 충돌이 아니다.
+func refine(o, t []string) []piece {
+	if eqLines(o, t) {
+		return []piece{{'s', o, nil}}
+	}
+	var out []piece
+	p1 := 0
+	for _, c := range changesOf(o, t) {
+		if c.A &gt; p1 {
+			out = append(out, piece{'s', o[p1:c.A], nil})
+		}
+		out = append(out, piece{'x', o[c.A : c.A+c.NA],
+			t[c.B : c.B+c.NB]})
+		p1 = c.A + c.NA
+	}
+	if p1 &lt; len(o) {
+		out = append(out, piece{'s', o[p1:], nil})
+	}
+	return out
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>java/mygit/Merge.java</b><span class="ln">114–134</span><span>Java</span></div>
+<pre><code data-lang="java" data-src="java/mygit/Merge.java" data-lines="114-134">  // 2 단계 — 충돌 하나를 O·T 의 diff 로 쪼갠다. 같은 줄은 표지
+  // 밖으로 나온다. O == T 면 충돌이 아니다.
+  private static List&lt;Piece&gt; refine(List&lt;String&gt; o, List&lt;String&gt; t) {
+    List&lt;Piece&gt; out = new ArrayList&lt;&gt;();
+    if (o.equals(t)) {
+      out.add(new Piece('s', o, null));
+      return out;
+    }
+    int p1 = 0;
+    for (Change c : changes(o, t)) {
+      if (c.i1() &gt; p1) {
+        out.add(new Piece('s', o.subList(p1, c.i1()), null));
+      }
+      out.add(new Piece('x', o.subList(c.i1(), c.i1() + c.n1()),
+          lines(t, c)));
+      p1 = c.i1() + c.n1();
+    }
+    if (p1 &lt; o.size()) out.add(new Piece('s', o.subList(p1, o.size()),
+        null));
+    return out;
+  }</code></pre>
+</div>
+<div>
+<div class="src"><b>cpp/merge.cpp</b><span class="ln">48–62</span><span>C++</span></div>
+<pre><code data-lang="cpp" data-src="cpp/merge.cpp" data-lines="48-62">// refine 은 2 단계 — 충돌 하나를 O·T 의 diff 로 쪼갠다. 같은 줄은 표지
+// 밖으로 나온다. O == T 면 충돌이 아니다.
+std::vector&lt;Piece&gt; refine(const Lines&amp; o, const Lines&amp; t) {
+    if (o == t) return {{'s', o, {}}};
+    std::vector&lt;Piece&gt; out;
+    size_t p1 = 0;
+    for (auto&amp; c : changes_of(o, t)) {
+        if (c.a &gt; p1) out.push_back({'s', slice(o, p1, c.a), {}});
+        out.push_back({'x', slice(o, c.a, c.a + c.na),
+                       slice(t, c.b, c.b + c.nb)});
+        p1 = c.a + c.na;
+    }
+    if (p1 &lt; o.size()) out.push_back({'s', slice(o, p1, o.size()), {}});
+    return out;
+}</code></pre>
+</div>
+</div>
+<p>충돌 안에서 양쪽이 같은 줄은 표지 밖으로 꺼냅니다 — Python 판은 <code>_refine</code>. 8단계의 diff 를 머지가 다시 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s10-scene">
+<h3>채점 — 장면 파일 하나</h3>
+<div class="src"><b>golden/scen/merge-conflict.scn</b><span class="ln">4–45</span><span>진짜 git 이 채운 기대 출력(&gt; 표준 출력, ! 표준 오류, = 종료 코드)</span></div>
+<pre><code data-lang="text" data-src="golden/scen/merge-conflict.scn" data-lines="4-45">mygit init
+&gt; Initialized empty Git repository in &lt;ROOT&gt;/.git/
+write f text:a\nb\nc\n
+mygit add f
+mygit commit -m base
+&gt; [main (root-commit) 9933975] base
+mygit branch t
+mygit switch t
+! Switched to branch 't'
+@date 1700000060
+write f text:a\nB\nc\n
+
+mygit add .
+mygit commit -m theirs
+&gt; [t 497b597] theirs
+mygit switch main
+! Switched to branch 'main'
+@date 1700000120
+write f text:a\nb2\nc\n
+mygit add .
+mygit commit -m ours
+&gt; [main d3d100a] ours
+@date 1700000180
+mygit merge t
+&gt; Auto-merging f
+&gt; CONFLICT (content): Merge conflict in f
+&gt; Automatic merge failed; fix conflicts and then commit the result.
+= 1
+cat f
+&gt; a
+&gt; &lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
+&gt; b2
+&gt; =======
+&gt; B
+&gt; &gt;&gt;&gt;&gt;&gt;&gt;&gt; t
+&gt; c
+stage
+&gt; 100644 de980441c3ab03a8c07dda1ad27b8a11f39deb1e 1	f
+&gt; 100644 59362d46b7561aabadf32af73adf0ab712221968 2	f
+&gt; 100644 7be73ce3c1b1cdaea86e8168dfee8575175953bf 3	f
+mygit status
+&gt; UU f</code></pre>
+<p>다섯 언어의 장면 실행기가 이 파일 하나를 똑같이 읽어, 명령마다 출력을 한 줄씩 견줍니다. 기대 출력은 진짜 git 2.55.0 이 채웠습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s10-check">
+<h3>10단계의 시험</h3>
+<div class="src"><b>out/mygit__mygit-merge-topic.txt</b><span class="ln">전체 2줄</span><span>대본의 3-way 머지 — 문장은 mygit 의 것</span></div>
+<pre class="term" data-out="mygit__mygit-merge-topic.txt">$ mygit merge topic
+Merge made by mygit (3-way, no renames).</pre>
+<div class="src"><b>out/appendix__.-t.sh-merge.txt</b><span class="ln">전체 12줄</span><span>맞닿으면 충돌·한 줄 떨어지면 깨끗·세 줄은 붙고 네 줄은 갈린다</span></div>
+<pre class="term" data-out="appendix__.-t.sh-merge.txt">$ ./t.sh merge
+test_s12_3_adjacent_lines_conflict ... ok
+test_s12_3_identical_change_taken_once ... ok
+test_s12_3_one_line_apart_is_clean ... ok
+test_s12_3_refine_keeps_common_lines_outside ... ok
+test_s12_3_three_lines_apart_join_four_split ... ok
+test_s12_1_unborn_head_is_refused ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests
+
+OK</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p19-quiz-10" data-quiz>
+<h3>9~10장 퀴즈</h3>
+<p class="q">Q. 기준 판이 <code>a b c</code> 일 때 우리는 b 를 B1 로, 그들은 c 를 C1 로 고쳤습니다. 깨끗하게 합쳐집니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 아닙니다 — 충돌입니다. 두 바뀐 곳이 사이에 바뀌지 않은 줄 없이 맞닿아 있어, 짝짓기의 "엄격히 앞섬" 조건을 넘지 못합니다. 두 고침
+사이에 바뀌지 않은 줄이 하나라도 있으면 깨끗하게 합쳐집니다(merge-adjacent · merge-one-apart 장면).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-ch11"><p class="chnum">11장</p><h2>팩 — 읽기, 그다음 쓰기</h2><p class="chsub">11단계 · SPEC §13</p></article>
+
+<article class="card" id="p19-s11-idea">
+<h3>무엇을 만드나</h3>
+<ul>
+<li><b>읽기</b> — git 이 쓴 팩을 풀고 OFS_DELTA·REF_DELTA 를 되살린다. 색인(.idx)을 git 과 바이트까지 같게 다시 만든다.</li>
+<li><b>쓰기</b> — 객체를 이어 붙이고, <code>--delta</code> 면 비슷한 blob 을 OFS_DELTA 로. 진짜 git 이 <code>index-pack --strict</code> 로 받아들여야 한다.</li>
+</ul>
+<p>10부에서 뜯어 본 형식 그대로입니다 — 항목 머리의 형식·크기 가변 길이 수, 델타의 복사·끼움 명령, 끝 20바이트의 팩 SHA-1.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-s11-apply">
+<h3>델타 되살리기</h3>
+<div class="src"><b>py/mygit/pack.py</b><span class="ln">70–101</span><span>머리의 두 크기, 그다음 복사(0x80 비트)와 끼움</span></div>
+<pre><code data-lang="py" data-src="py/mygit/pack.py" data-lines="70-101">def apply_delta(base, delta):
+    """델타를 바탕에 적용한다(SPEC.md §13.1). O(결과 길이)."""
+    size, pos = _varint_le(delta, 0)
+    if size != len(base):
+        raise GitError('fatal: mygit: delta base size mismatch')
+    want, pos = _varint_le(delta, pos)
+    out = bytearray()
+    while pos &lt; len(delta):
+        op = delta[pos]
+        pos += 1
+        if op &amp; 0x80:                           # 복사
+            off = n = 0
+            for k in range(4):
+                if op &amp; (1 &lt;&lt; k):
+                    off |= delta[pos] &lt;&lt; (8 * k)
+                    pos += 1
+            for k in range(3):
+                if op &amp; (0x10 &lt;&lt; k):
+                    n |= delta[pos] &lt;&lt; (8 * k)
+                    pos += 1
+            n = n or 0x10000
+            if off + n &gt; len(base):
+                raise GitError('fatal: mygit: delta copy out of range')
+            out += base[off:off + n]
+        elif op:                                # 끼움
+            out += delta[pos:pos + op]
+            pos += op
+        else:
+            raise GitError('fatal: mygit: delta opcode 0 is reserved')
+    if len(out) != want:
+        raise GitError('fatal: mygit: delta result size mismatch')
+    return bytes(out)</code></pre>
+<p>복사 명령은 첫 바이트의 아래 네 비트가 "자리의 몇째 바이트가 있나", 다음 세 비트가 "길이의 몇째 바이트가 있나" 입니다. 길이 0 은 0x10000 을 뜻합니다(10부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s11-make">
+<h3>델타 만들기 — git 보다 단순하게</h3>
+<div class="src"><b>py/mygit/pack.py</b><span class="ln">272–316</span><span>16바이트 칸의 표, 앞으로만 늘이기</span></div>
+<pre><code data-lang="py" data-src="py/mygit/pack.py" data-lines="272-316">def make_delta(base, target):
+    """바탕 → 결과의 델타(SPEC.md §13.3). 다섯 언어가 같은 바이트를
+    낸다.
+
+    바탕을 16바이트 칸으로 잘라 "칸 내용 → 처음 나온 자리" 표를 만들고,
+    결과를 앞에서부터 훑으며 표에 있는 칸이면 앞으로 늘일 수 있는 만큼
+    복사, 없으면 한 바이트씩 끼울 것에 모은다. git 의 델타 찾기(rolling
+    hash 와 바탕 뒤로 늘이기)보다 단순하고, 그래서 보통 더 길다.
+    O(결과 길이 × 복사 길이) 최악.
+    """
+    table = {}
+    for off in range(0, len(base) - BLOCK + 1, BLOCK):
+        table.setdefault(base[off:off + BLOCK], off)
+    out = bytearray(_varint_out(len(base)) + _varint_out(len(target)))
+    pend = bytearray()
+
+    def flush():
+        for k in range(0, len(pend), 127):
+            chunk = pend[k:k + 127]
+            out.append(len(chunk))
+            out.extend(chunk)
+        del pend[:]
+    i = 0
+    while i &lt; len(target):
+        o = table.get(target[i:i + BLOCK]) \
+            if i + BLOCK &lt;= len(target) else None
+        if o is None:
+            pend.append(target[i])
+            i += 1
+            if len(pend) == 127:
+                flush()
+            continue
+        n = BLOCK
+        while o + n &lt; len(base) and i + n &lt; len(target) and \
+                base[o + n] == target[i + n]:
+            n += 1
+        flush()
+        k = 0
+        while k &lt; n:
+            step = min(0x10000, n - k)
+            out += _copy_op(o + k, step)
+            k += step
+        i += n
+    flush()
+    return bytes(out)</code></pre>
+<p>git 의 델타 찾기(롤링 해시, 바탕 뒤로 늘이기)보다 단순해서 보통 더 깁니다. 그래도 형식은 같으니 git 이 읽습니다. 다섯 언어가 같은 바이트를 내도록
+규격에 알고리즘까지 못 박았고, 시험이 그 바이트를 고정합니다(<code>make_delta_bytes_are_pinned</code>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s11-4up">
+<h3>네 언어의 copyOp</h3>
+<div class="g2">
+<div>
+<div class="src"><b>ts/src/pack.ts</b><span class="ln">293–315</span><span>TypeScript</span></div>
+<pre><code data-lang="ts" data-src="ts/src/pack.ts" data-lines="293-315">// 복사 명령 — 0 이 아닌 바이트만 쓴다. 길이 0x10000 은 길이 바이트
+// 없이.
+function copyOp(off: number, n: number): number[] {
+  let op = 0x80;
+  const tail: number[] = [];
+  for (let k = 0; k &lt; 4; k++) {
+    const byte = Math.floor(off / 256 ** k) % 256;
+    if (byte) {
+      op |= 1 &lt;&lt; k;
+      tail.push(byte);
+    }
+  }
+  if (n !== 0x10000) {
+    for (let k = 0; k &lt; 3; k++) {
+      const byte = (n &gt;&gt; (8 * k)) &amp; 0xff;
+      if (byte) {
+        op |= 0x10 &lt;&lt; k;
+        tail.push(byte);
+      }
+    }
+  }
+  return [op, ...tail];
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>go/pack.go</b><span class="ln">346–365</span><span>Go</span></div>
+<pre><code data-lang="go" data-src="go/pack.go" data-lines="346-365">// copyOp 은 복사 명령 — 0 이 아닌 바이트만 쓴다. 길이 0x10000 은 길이
+// 바이트 없이.
+func copyOp(off, n int) []byte {
+	op, tail := byte(0x80), []byte{}
+	for k := 0; k &lt; 4; k++ {
+		if b := byte(off &gt;&gt; (8 * k)); b != 0 {
+			op |= 1 &lt;&lt; k
+			tail = append(tail, b)
+		}
+	}
+	if n != 0x10000 {
+		for k := 0; k &lt; 3; k++ {
+			if b := byte(n &gt;&gt; (8 * k)); b != 0 {
+				op |= 0x10 &lt;&lt; k
+				tail = append(tail, b)
+			}
+		}
+	}
+	return append([]byte{op}, tail...)
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>java/mygit/Pack.java</b><span class="ln">328–350</span><span>Java</span></div>
+<pre><code data-lang="java" data-src="java/mygit/Pack.java" data-lines="328-350">  // 복사 명령 — 0 이 아닌 바이트만 쓴다. 길이 0x10000 은 길이 바이트
+  // 없이.
+  private static void copyOp(ByteArrayOutputStream out, int off,
+      int n) {
+    int op = 0x80;
+    ByteArrayOutputStream tail = new ByteArrayOutputStream();
+    for (int k = 0; k &lt; 4; k++) {
+      int b = (off &gt;&gt;&gt; (8 * k)) &amp; 0xff;
+      if (b != 0) {
+        op |= 1 &lt;&lt; k;
+        tail.write(b);
+      }
+    }
+    for (int k = 0; k &lt; 3 &amp;&amp; n != 0x10000; k++) {
+      int b = (n &gt;&gt;&gt; (8 * k)) &amp; 0xff;
+      if (b != 0) {
+        op |= 0x10 &lt;&lt; k;
+        tail.write(b);
+      }
+    }
+    out.write(op);
+    out.writeBytes(tail.toByteArray());
+  }</code></pre>
+</div>
+<div>
+<div class="src"><b>cpp/pack.cpp</b><span class="ln">98–111</span><span>C++</span></div>
+<pre><code data-lang="cpp" data-src="cpp/pack.cpp" data-lines="98-111">// copy_op 은 복사 명령 — 0 이 아닌 바이트만 쓴다. 길이 0x10000 은
+// 길이 바이트 없이.
+std::string copy_op(size_t off, size_t n) {
+    uint8_t op = 0x80;
+    std::string tail;
+    for (int k = 0; k &lt; 4; ++k)
+        if (uint8_t b = uint8_t(off &gt;&gt; (8 * k)))
+            op |= 1 &lt;&lt; k, tail += char(b);
+    if (n != 0x10000)
+        for (int k = 0; k &lt; 3; ++k)
+            if (uint8_t b = uint8_t(n &gt;&gt; (8 * k)))
+                op |= 0x10 &lt;&lt; k, tail += char(b);
+    return char(op) + tail;
+}</code></pre>
+</div>
+</div>
+<p>0 이 아닌 바이트만 쓰는 이 인코딩이 델타를 작게 만듭니다 — 자리 0x0100 이면 자리 바이트는 하나(0x01)만 나갑니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s11-write">
+<h3>팩 쓰기</h3>
+<div class="src"><b>py/mygit/pack.py</b><span class="ln">342–367</span><span>PACK · 판 2 · 개수, 항목들, 끝의 SHA-1</span></div>
+<pre><code data-lang="py" data-src="py/mygit/pack.py" data-lines="342-367">def write_pack(items):
+    """[(형식, 몸, 델타 바탕의 목록 번호 또는 None)] → (팩 바이트,
+    [PackEntry]). 바탕은 목록에서 앞에 있어야 한다(OFS_DELTA)."""
+    out = bytearray(b'PACK' + struct.pack('&gt;II', 2, len(items)))
+    ents = []
+    for type_, body, base in items:
+        e = PackEntry(len(out))
+        e.type, e.body = type_, body
+        e.oid = objects.hash_object(type_, body)
+        if base is None:
+            e.packed_type = TYPE_CODES[type_]
+            raw = body
+            head = _entry_head(e.packed_type, len(raw))
+        else:
+            b = ents[base]
+            raw = e.delta = make_delta(b.body, body)
+            e.packed_type, e.base = OFS_DELTA, b.oid
+            e.depth = b.depth + 1
+            head = _entry_head(OFS_DELTA, len(raw)) + \
+                _ofs_out(e.offset - b.offset)
+        out += head + zlib.compress(raw)
+        e.end = len(out)
+        e.crc = _z.crc32(out[e.offset:e.end]) &amp; 0xffffffff
+        ents.append(e)
+    out += Sha1().update(bytes(out)).digest()
+    return bytes(out), ents</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s11-check">
+<h3>채점</h3>
+<div class="src"><b>out/mygit__mygit-pack-objects-delta-pk.txt</b><span class="ln">전체 2줄</span><span>팩 이름 = 팩 바이트의 SHA-1 — 언어마다 다를 수 있다</span></div>
+<pre class="term" data-out="mygit__mygit-pack-objects-delta-pk.txt">$ mygit pack-objects --delta pk
+4d46bb1bab25ec1761f874963481a3c43c90f416</pre>
+<div class="src"><b>out/appendix__.-t.sh-pack.txt</b><span class="ln">전체 19줄</span><span>git 의 델타 풀기, 색인을 바이트까지, 출력이 git 과 같은가</span></div>
+<pre class="term" data-out="appendix__.-t.sh-pack.txt">$ ./t.sh pack
+test_s13_1_apply_deltas_from_git ... ok
+test_s13_1_delta_errors ... ok
+test_s13_3_make_delta_bytes_are_pinned ... ok
+test_s13_3_round_trip ... ok
+test_s13_3_unpack_then_read_loose ... ok
+test_s5_2_read_object_finds_packed_objects ... ok
+test_s13_3_delta_pack_uses_ofs_deltas ... ok
+test_s13_3_plain_pack_holds_every_object ... ok
+test_s13_1_bad_trailer ... ok
+test_s13_1_every_object_and_its_delta_chain ... ok
+test_s13_2_idx_matches_show_index ... ok
+test_s13_3_output_is_git_verbatim ... ok
+test_s13_2_rebuilt_idx_is_byte_identical_to_git ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests
+
+OK</pre>
+<p>대조표(13장)는 팩 이름 대신 <code>git verify-pack</code> 으로 뽑은 객체 목록을 견줍니다. C++ 의 저장 블록처럼 압축 바이트는 달라도 되기 때문입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-ch12"><p class="chnum">12장</p><h2>전송 — pkt-line 으로 진짜 git 과</h2><p class="chsub">12단계 · SPEC §14</p></article>
+
+<article class="card" id="p19-s12-idea">
+<h3>무엇을 만드나</h3>
+<ul>
+<li><b>로컬 clone</b> — 협상 없이 객체 파일을 그대로 복사하고 참조를 세운다. 객체 이름이 곧 내용이라 복사한 파일은 어디서나 같은 객체다.</li>
+<li><b>fetch-pack</b> — 진짜 <code>git upload-pack</code> 을 자식으로 띄워 프로토콜 v2 로 말한다: ls-refs 로 참조를 묻고, fetch 로 want·have 를 보내 팩을 받는다(11부).</li>
+</ul>
+<p>서버는 짜지 않았습니다. 받는 쪽만 만들어 진짜 git 서버와 대화시키는 것이, 규격을 가장 엄하게 채점받는 방법이기 때문입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-s12-pkt">
+<h3>pkt-line</h3>
+<div class="src"><b>py/mygit/transport.py</b><span class="ln">20–24</span><span>길이 네 자리 16진은 자기 4바이트를 품는다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/transport.py" data-lines="20-24">def pkt_line(data):
+    """데이터 → pkt-line 한 개."""
+    if len(data) &gt; 65516:
+        raise GitError('fatal: mygit: pkt-line too long')
+    return b'%04x' % (len(data) + 4) + data</code></pre>
+<div class="g2">
+<div>
+<div class="src"><b>ts/src/transport.ts</b><span class="ln">26–33</span><span>TypeScript</span></div>
+<pre><code data-lang="ts" data-src="ts/src/transport.ts" data-lines="26-33">// 데이터 → pkt-line 한 개.
+export function pktLine(data: Buffer): Buffer {
+  if (data.length &gt; 65516) {
+    throw new GitError('fatal: mygit: pkt-line too long');
+  }
+  const len = (data.length + 4).toString(16).padStart(4, '0');
+  return Buffer.concat([Buffer.from(len), data]);
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>go/transport.go</b><span class="ln">28–35</span><span>Go</span></div>
+<pre><code data-lang="go" data-src="go/transport.go" data-lines="28-35">// PktLine 은 데이터 → pkt-line 한 개.
+func PktLine(data []byte) ([]byte, error) {
+	if len(data) &gt; 65516 {
+		return nil, Fail("fatal: mygit: pkt-line too long")
+	}
+	return append([]byte(fmt.Sprintf("%04x", len(data)+4)), data...),
+		nil
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>java/mygit/Transport.java</b><span class="ln">36–45</span><span>Java</span></div>
+<pre><code data-lang="java" data-src="java/mygit/Transport.java" data-lines="36-45">  // 데이터 → pkt-line 한 개.
+  public static byte[] pktLine(byte[] data) {
+    if (data.length &gt; 65516) {
+      throw new GitError("fatal: mygit: pkt-line too long");
+    }
+    byte[] out = Arrays.copyOf(String.format("%04x", data.length + 4)
+        .getBytes(ISO_8859_1), data.length + 4);
+    System.arraycopy(data, 0, out, 4, data.length);
+    return out;
+  }</code></pre>
+</div>
+<div>
+<div class="src"><b>cpp/transport.cpp</b><span class="ln">124–131</span><span>C++</span></div>
+<pre><code data-lang="cpp" data-src="cpp/transport.cpp" data-lines="124-131">// pkt_line 은 데이터 → pkt-line 한 개.
+std::string pkt_line(std::string_view data) {
+    if (data.size() &gt; 65516)
+        throw GitError("fatal: mygit: pkt-line too long");
+    char head[8];
+    std::snprintf(head, sizeof head, "%04zx", data.size() + 4);
+    return head + std::string(data);
+}</code></pre>
+</div>
+</div>
+<p>길이가 자기를 품으니 0000(flush)·0001(delim) 같은 1~3 은 데이터일 수 없고, 그래서 특별한 표지로 쓸 수 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s12-read">
+<h3>패킷 읽기와 사이드밴드</h3>
+<div class="src"><b>py/mygit/transport.py</b><span class="ln">118–140</span><span>packfile 절 뒤는 첫 바이트가 채널 — 1 팩, 2 진행, 3 오류</span></div>
+<pre><code data-lang="py" data-src="py/mygit/transport.py" data-lines="118-140">    def read(self, packbuf=None):
+        """flush 까지의 패킷들. packfile 절 뒤의 사이드밴드 1 은
+        packbuf 로 모은다(2 는 진행 안내, 3 은 원격의 오류)."""
+        lines, side = [], False
+        while True:
+            n = int(self._exact(4), 16)
+            if n &lt; 4:
+                self.log.append('&lt; %04x' % n)
+                if n == 0:
+                    return lines
+                continue
+            data = self._exact(n - 4)
+            if side and data[:1] == b'\x01':
+                packbuf += data[1:]
+                self.log.append('&lt; %04x [pack %d bytes]' % (n, n - 5))
+                continue
+            if side and data[:1] == b'\x03':
+                raise GitError('fatal: mygit: remote error: %s'
+                               % data[1:].decode('utf-8', 'replace'))
+            self.log.append('&lt; ' + render(data))
+            if data == b'packfile\n':
+                side = packbuf is not None
+            lines.append(data)</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s12-fetch">
+<h3>fetch-pack — ls-refs 와 fetch</h3>
+<div class="src"><b>py/mygit/transport.py</b><span class="ln">151–173</span><span>능력 확인, ls-refs, want 고르기</span></div>
+<pre><code data-lang="py" data-src="py/mygit/transport.py" data-lines="151-173">def fetch_pack(gitdir, src, want_refs, env, log_path=None):
+    """want_refs 를 받아 팩을 저장한다. → [(이름, 참조)]. 참조는 고치지
+    않는다 — 그것은 fetch 의 일이다(SPEC.md §14.3 의 5)."""
+    w = Wire(src, env, log_path)
+    caps = w.read()
+    if not caps or caps[0] != b'version 2\n' or \
+            not any(c.startswith(b'fetch') for c in caps):
+        raise GitError('fatal: mygit: server does not speak '
+                       'protocol v2')
+    w.send([b'command=ls-refs\n', b'object-format=sha1\n', DELIM,
+            b'peel\n', b'symrefs\n'] +
+           [b'ref-prefix %s\n' % r.encode() for r in want_refs] +
+           [FLUSH])
+    adv = {}
+    for line in w.read():
+        oid, name = line.decode().rstrip('\n').split(' ')[:2]
+        adv[name] = oid
+    wants = []
+    for r in want_refs:
+        if r not in adv:
+            raise GitError("fatal: mygit: no such remote ref %s" % r)
+        if adv[r] not in wants:
+            wants.append(adv[r])</code></pre>
+<div class="src"><b>py/mygit/transport.py</b><span class="ln">174–196</span><span>have 를 붙여 fetch, 받은 팩을 저장하고 색인을 만든다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/transport.py" data-lines="174-196">    haves = []
+    for _name, oid in refs.list_refs(gitdir, 'refs/'):
+        if oid not in haves:
+            haves.append(oid)
+    w.send([b'command=fetch\n', b'object-format=sha1\n', DELIM,
+            b'ofs-delta\n', b'no-progress\n'] +
+           [b'want %s\n' % o.encode() for o in wants] +
+           [b'have %s\n' % o.encode() for o in haves] +
+           [b'done\n', FLUSH])
+    buf = bytearray()
+    w.read(buf)
+    w.close()
+    data = bytes(buf)
+    ents = pack.read_pack(data,
+                          lambda o: objects.read_object(gitdir, o))
+    stem = os.path.join(gitdir, 'objects', 'pack',
+                        'pack-%s' % data[-20:].hex())
+    os.makedirs(os.path.dirname(stem), exist_ok=True)
+    with open(stem + '.pack', 'wb') as f:
+        f.write(data)
+    with open(stem + '.idx', 'wb') as f:
+        f.write(pack.write_idx(ents, data[-20:]))
+    return [(adv[r], r) for r in want_refs]</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s12-log">
+<h3>대화 기록 — golden 의 기대</h3>
+<div class="src"><b>golden/pkt/full.log</b><span class="ln">1–28</span><span>&amp;lt; 서버 · &amp;gt; mygit — 진짜 git fetch-pack 의 대화를 기록한 것과 같아야 한다</span></div>
+<pre><code data-lang="text" data-src="golden/pkt/full.log" data-lines="1-28">&lt; 000eversion 2\n
+&lt; 001bagent=git/2.55.0-Linux\n
+&lt; 0013ls-refs=unborn\n
+&lt; 0020fetch=shallow wait-for-done\n
+&lt; 0012server-option\n
+&lt; 0017object-format=sha1\n
+&lt; 0000
+&gt; 0014command=ls-refs\n
+&gt; 0017object-format=sha1\n
+&gt; 0001
+&gt; 0009peel\n
+&gt; 000csymrefs\n
+&gt; 001fref-prefix refs/heads/main\n
+&gt; 0000
+&lt; 003d836b4c3c108474904c5c4e7040627405e220aebb refs/heads/main\n
+&lt; 0000
+&gt; 0012command=fetch\n
+&gt; 0017object-format=sha1\n
+&gt; 0001
+&gt; 000eofs-delta\n
+&gt; 0010no-progress\n
+&gt; 0032want 836b4c3c108474904c5c4e7040627405e220aebb\n
+&gt; 0009done\n
+&gt; 0000
+&lt; 000dpackfile\n
+&lt; 028c [pack 647 bytes]
+&lt; 0006 [pack 1 bytes]
+&lt; 0000</code></pre>
+<p>시험은 mygit 의 대화가 이 기록과 한 줄씩 같은지 봅니다(<code>conversation_matches_git</code>). 받은 팩은 11단계의 코드로 풀고 색인을 만들어 둡니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s12-check">
+<h3>채점</h3>
+<div class="src"><b>out/mygit__mygit-clone-.-..-mygit-copy.txt</b><span class="ln">전체 3줄</span><span>로컬 clone</span></div>
+<pre class="term" data-out="mygit__mygit-clone-.-..-mygit-copy.txt">$ mygit clone . ../mygit-copy
+Cloning into '../mygit-copy'...
+done.</pre>
+<div class="src"><b>out/appendix__.-t.sh-transport.txt</b><span class="ln">전체 10줄</span><span>12단계의 시험</span></div>
+<pre class="term" data-out="appendix__.-t.sh-transport.txt">$ ./t.sh transport
+test_s14_3_conversation_matches_git ... ok
+test_s14_3_received_pack_is_stored_and_readable ... ok
+test_s14_1_length_counts_itself ... ok
+test_s14_3_render_like_the_golden_log ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests
+
+OK</pre>
+<div class="src"><b>out/appendix__.-t.sh-scenes.txt</b><span class="ln">전체 27줄</span><span>장면 21개 전부 — 1~12단계를 가로지르는 채점</span></div>
+<pre class="term" data-out="appendix__.-t.sh-scenes.txt">$ ./t.sh scenes
+test_s16_4_checkout ... ok
+test_s16_4_clone ... ok
+test_s16_4_diff ... ok
+test_s16_4_errors ... ok
+test_s16_4_hello ... ok
+test_s16_4_merge_add_add ... ok
+test_s16_4_merge_adjacent ... ok
+test_s16_4_merge_clean_far ... ok
+test_s16_4_merge_conflict ... ok
+test_s16_4_merge_delete ... ok
+test_s16_4_merge_ff ... ok
+test_s16_4_merge_identical ... ok
+test_s16_4_merge_into_dev ... ok
+test_s16_4_merge_join_3 ... ok
+test_s16_4_merge_one_apart ... ok
+test_s16_4_merge_other_file ... ok
+test_s16_4_merge_refine ... ok
+test_s16_4_merge_resolve ... ok
+test_s16_4_merge_split_4 ... ok
+test_s16_4_plumbing ... ok
+test_s16_4_status ... ok
+
+----------------------------------------------------------------------
+Ran 21 tests
+
+OK</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p19-quiz-12" data-quiz>
+<h3>11~12장 퀴즈</h3>
+<p class="q">Q. mygit 의 로컬 clone 은 받는 쪽이 이미 가진 객체도 다시 복사합니다. 그래도 결과 저장소가 올바른 까닭은? 그리고 fetch-pack 은 무엇으로 그 낭비를 피합니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 객체의 이름이 곧 내용의 해시라, 같은 이름의 파일을 덮어써도 같은 객체이기 때문입니다. fetch-pack 은 내가 가진 커밋을 <code>have</code> 로
+알려 서버가 그 뒤의 객체만 팩에 담게 합니다(11부의 협상).</div>
+<span class="tier ill">설명용</span>
+</article>
+
 
 <article class="card" id="p19-ch13"><p class="chnum">13장</p><h2>다섯 구현 대조</h2><p class="chsub">같은 대본, 같은 출력, 진짜 git 이 받아들이는가</p></article>
 
