@@ -30,6 +30,8 @@ def run(ctx):
     r.cap('git log --all --format="%h %p %s"')   # 도해 dag 의 원료
     r.cap('git merge-base main side')
     r.cap('git merge-base --all main side')
+    # 덱 데모(merge-base 고르기)의 둘째 정답 — B(2c14ef0) 와 D(2e14562)
+    r.cap('git merge-base 2c14ef0 2e14562 | xargs git log -1 --format="%h %s"')
     r.cap('git log --oneline $(git merge-base --all main side)',
           label='dag.bases')
     r.cap('git rev-list --count main')

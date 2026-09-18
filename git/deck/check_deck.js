@@ -229,7 +229,42 @@ if (!demoScripts.length) {
     // 데모는 git hash-object 와, 트리 정렬 데모는 git write-tree 가 낸
     // ls-tree 차례와 글자까지 같아야 한다. 데모 하나에 적어도 둘이다.
     // 비어 있는 동안에는 7) 의 "빈 입력에서 안 죽는다" 까지만 본다.
+    // golden/diff 의 agree 쌍은 파일에서 읽는다 — 옮겨 적다 틀리지 않게
+    const gd = (n) => require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'golden', 'diff', n), 'utf8');
     const CASES = [
+      // golden/sha1.tsv 의 abc · fox-dog 줄
+      ['sha1', { text: 'abc' }, 'a9993e364706816aba3e25717850c26c9cd0d89d'],
+      ['sha1', { text: 'The quick brown fox jumps over the lazy dog' },
+        '2fd4e1c67a2d28fced849ee1bb76e7391b93eb12'],
+      // golden/sha1.tsv 의 blob 칸(git hash-object) — hello-nl · abc
+      ['objhdr', { text: 'hello', nl: true }, 'ce013625030ba8dba906f756967f9e9ca394464a'],
+      ['objhdr', { text: 'abc', nl: false }, 'f2ba8f84ab5c1bce84a7b441cb1959cfc7093b7f'],
+      // out/tree_sort__ls-tree-git-write-tree.txt · out/demo_sort__ls-tree-name-only-git-write-tree.txt
+      ['treesort', { names: 'ab a=b a/ a.b a-b' }, 'a-b · a.b · a/ · a=b · ab'],
+      ['treesort', { names: 'foo0 foo=1 foo/ foo.c foo-bar' }, 'foo-bar · foo.c · foo/ · foo0 · foo=1'],
+      // out/dag__merge-base-all-main-side.txt(G=main, H=side) · out/dag__merge-base-2c14ef0-…
+      ['mergebase', { a: 'G', b: 'H' }, 'C(b4072b3) D(2e14562)'],
+      ['mergebase', { a: 'B', b: 'D' }, 'A(8d60d2f)', 'C('],
+      // golden/scen/merge-conflict.scn · merge-one-apart.scn 의 cat f
+      ['merge3', { base: 'a\nb\nc\n', ours: 'a\nb2\nc\n', theirs: 'a\nB\nc\n' },
+        '&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD\nb2\n=======\nB\n>>>>>>> theirs'],
+      ['merge3', { base: 'a\nb\nc\nd\ne\n', ours: 'a\nB\nc\nd\ne\n', theirs: 'a\nb\nc\nD\ne\n' },
+        'a\nB\nc\nD\ne', '======='],
+      // golden/diff/agree-01·02 의 덩어리 머리
+      ['myers', { a: gd('agree-01-c-modify.a'), b: gd('agree-01-c-modify.b') }, '@@ -8,7 +8,7 @@'],
+      ['myers', { a: gd('agree-02-c-insert.a'), b: gd('agree-02-c-insert.b') }, '@@ -10,5 +10,6 @@'],
+      // out/demo_delta__cat-file-s-… — 바탕 4607 · 결과 4574
+      ['delta', {}, '바탕 크기 <span class="ok">4607</span>'],
+      ['delta', {}, '결과 크기 <span class="ok">4574</span>'],
+      // golden/pkt/full.log 의 첫 줄과 ls-refs 줄
+      ['pktline', { text: 'version 2\\n' }, '000eversion 2\\n'],
+      ['pktline', { text: 'command=ls-refs\\n' }, '0014command=ls-refs\\n'],
+      // out/demo_ignore__check-ignore-v-n-no-index-stdin-..-paths.txt
+      ['ignore', {}, '(3행 build/)'],
+      ['ignore', { paths: 'keep.log' }, '무시 안 함  (2행 !keep.log)'],
+      ['ignore', { paths: 'sub/root.txt' }, '추적 대상', '/root.txt)'],
+      ['ignore', { paths: 'doc/c.tmp' }, '(5행 doc/**/*.tmp)'],
     ];
     let good = 0;
     for (const [id, values, want, wantNot] of CASES) {
