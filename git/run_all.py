@@ -85,10 +85,12 @@ class Repo(object):
         return self
 
     def _run(self, cmd, stdin):
+        """입력이 없으면 /dev/null — 무엇을 묻는 명령이 멈추지 않게."""
+        extra = {'input': stdin} if stdin is not None \
+            else {'stdin': subprocess.DEVNULL}
         return subprocess.run(['sh', '-c', cmd], cwd=self.cwd,
-                              env=self.env, input=stdin,
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT)
+                              env=self.env, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, **extra)
 
     def sh(self, cmd, stdin=None, ok=(0,)):
         """캡처 없이 돌린다. 기대한 종료 코드가 아니면 멈춘다 —
