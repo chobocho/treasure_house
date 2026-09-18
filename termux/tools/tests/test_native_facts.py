@@ -76,7 +76,8 @@ class NativeFactsTest(unittest.TestCase):
             self.assertNotIn(bad, body)
 
     def test_missing_argument(self):
-        r = subprocess.run(['sh', SCRIPT], capture_output=True, text=True)
+        r = subprocess.run(['sh', SCRIPT], capture_output=True,
+                           text=True)
         self.assertEqual(r.returncode, 2)
 
 

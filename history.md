@@ -1,3 +1,10 @@
+### [2026-09-18 01:43] Git 대백과사전 덱 3단계 — golden/(진짜 git 이 만든 기준 바이트 305개)
+- **기획:** 입력·명령만 적은 golden_cases.py 를 git 2.55.0 에 돌려 기대값을 받는 make_golden.py, 다섯 언어가 같이 읽을 장면 파일(.scn) 형식을 SPEC §16.4 에 추가.
+- **TC:** SHA-1 100·트리 12·diff 33쌍(agree 30/tie 3)·장면 19·팩 2·pkt 대화 3·오류 18. 저장 블록 객체가 git fsck --strict 통과.
+- **개발:** `git/tools/make_golden.py`, `git/tools/golden_cases.py`, `git/golden/`(305파일), `git/SPEC.md`, `git/PLAN.md`
+- **검증:** make golden-check 어긋남 0건(두 번 생성) · make all SKEL=1 오류 0건
+- **비고:** 재료에 공백이 있으면 조용히 잘리던 결함을 커밋 전에 잡아 생성기가 거부하게 함.
+
 ### [2026-09-18 01:17] Git 대백과사전 덱 2단계 — SPEC.md(다섯 mygit 의 약속)
 - **기획:** 16절 규격서 — 객체·참조·인덱스·status·명령 출력·걷기·diff·merge·팩·전송·이름표·시험 배치.
 - **TC:** 바이트 예시 9개를 진짜 git 으로 뜨는 spec_examples.py + make spec-check(9/9). diff 원형 1,500쌍 대조로 agree/tie 두 목록 결정.

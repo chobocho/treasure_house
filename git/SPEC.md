@@ -72,6 +72,11 @@
 | C++ | `make build-cpp` | `git/build/mygit-cpp <명령> …` |
 
 현재 디렉터리에서 위로 올라가며 `.git` 디렉터리를 찾는다(git 과 같다).
+환경 변수 `GIT_CEILING_DIRECTORIES`(콜론으로 가른 절대 경로들)가 있으면 **그
+디렉터리 안으로는 올라가지 않는다** — 현재 디렉터리 자신은 언제나 본다. 이
+덱의 실험과 시험은 모두 이 변수를 "장면 뿌리의 부모" 로 두고 돈다. 그러지 않으면
+저장소가 아닌 디렉터리에서 부른 mygit·git 이 위로 올라가 이 덱의 저장소
+(treasure_house)를 찾아 버린다.
 작업 트리의 뿌리는 그 `.git` 의 부모다. 경로 인자는 **뿌리에서 부른다고
 가정한다** — 하위 디렉터리에서 부른 경우의 경로 변환은 줄임이다.
 찾지 못하면 §1.4 의 첫 번째 오류로 끝난다. `init`·`hash-object`(`-w` 없이)·
@@ -329,7 +334,7 @@ committer <이름> <<메일>> <초> <±hhmm>
   건너뛴다.
 - 신원 줄의 꼴: `이름 SP < 메일 > SP 초 SP 시간대`. 시간대는 `+0900` 처럼
   부호와 네 자리. 이름과 메일은 환경 변수 그대로(§1.3).
-- 메시지 규칙은 명령마다 다르다(진짜 git 에서 확인, `golden/messages/`).
+- 메시지 규칙은 명령마다 다르다(진짜 git 에서 확인, `golden/scen/plumbing.scn`).
 
 | 어떻게 만들었나 | 몸의 메시지 |
 |---|---|
@@ -514,7 +519,7 @@ fetch 할 때 필요하다). 꼴:
 | 머지 커밋(§12) | `commit (merge): <제목>` | 같음 |
 | `branch <b> [<start>]` | — | `branch: Created from <start 를 준 그대로, 없으면 HEAD>` |
 | `switch -c <b>` | `checkout: moving from <옛> to <b>` | `branch: Created from HEAD` |
-| `switch <b>` · `checkout <x>` | `checkout: moving from <옛> to <x 를 준 그대로>` | — |
+| `switch <b>` · `checkout <x>` | `checkout: moving from <옛> to <x 를 준 그대로>` — 이미 그 브랜치여도(`Already on`) 한 줄 남긴다 | — |
 | fast-forward 머지 | `merge <b>: Fast-forward` | 같음 |
 | `clone` | `clone: from <원본 경로>` | 같음 |
 
@@ -627,7 +632,12 @@ $ git ls-files --stage
 
 사람에게 경로를 찍는 모든 자리(`status`·`cat-file -p` 의 트리·`rm --cached`·
 `diff` 머리)에서, 경로에 아래 바이트가 하나라도 있으면 경로 전체를 `"` 로
-감싸고 C 식으로 이스케이프한다. 없으면 그대로 찍는다(공백은 괜찮다).
+감싸고 C 식으로 이스케이프한다. 없으면 그대로 찍는다.
+
+**공백 하나의 예외** — `status` 만은 경로에 공백(0x20)이 있어도 따옴표로 감싼다
+(공백 자체는 이스케이프하지 않는다: `?? "sp ace"`). `cat-file -p`·`rm --cached`·
+`diff` 머리·`stage` 는 공백만으로는 감싸지 않는다(진짜 git 으로 확인 —
+`golden/scen/status.scn`). git 의 porcelain 출력이 기계가 읽기 쉽게 한 선택이다.
 
 | 바이트 | 찍는 꼴 |
 |---|---|
@@ -745,11 +755,17 @@ Date:   <작성 날짜>
 | 경우 | 표준 오류 |
 |---|---|
 | 다른 브랜치로 | `Switched to branch '<b>'` |
-| `switch -c <b>` | `Switched to a new branch '<b>'` |
+| `switch -c <b>` | `Switched to a new branch '<b>'` (첫 커밋 전이면 HEAD 가 가리키는 이름만 바꾼다) |
 | 이미 그 브랜치 | `Already on '<b>'` |
 | `checkout <커밋>` (분리) | `HEAD is now at <7글자> <제목>` |
 | 분리 상태에서 떠날 때 | 위 줄 앞에 `Previous HEAD position was <7글자> <제목>` |
 | `switch <커밋>` | `fatal: a branch is expected, got commit '<x>'` (128) |
+
+**남은 변경 알림** — 바꾸기에 성공하면(`Already on` 포함) 새 HEAD 트리와 견주어
+작업 트리나 인덱스가 다른 추적 경로를 경로 차례로 표준 출력에 찍는다:
+`<글자> TAB <경로(§8.2)>`. 글자는 `M`(내용·모드가 다름) · `D`(작업 트리에 없음) ·
+`A`(인덱스에만 있고 새 HEAD 에 없음). 규칙 1 로 따라온 손댄 파일이 여기 나온다
+(진짜 git 으로 확인, `golden/scen/checkout.scn`).
 
 git 은 분리할 때 안내 문단(advice)을 더 찍지만 `GIT_ADVICE=0`(tools/gitenv.sh)
 이면 찍지 않는다. mygit 은 안내를 찍지 않으므로 그 환경의 git 과 같다.
@@ -881,8 +897,12 @@ snake) 분할 정복**을 쓰고, 그 전에 한쪽에만 있는 줄을 미리 �
 
 | 목록 | 시험이 확인하는 것 |
 |---|---|
-| `agree.tsv` (26 쌍 이상) | mygit 의 출력 = `git -c diff.indentHeuristic=false diff --no-index` 의 출력, 바이트까지 |
-| `tie.tsv` (4 쌍) | 지운 줄·끼운 줄 수가 git 과 같고, 출력은 git 과 **다르다** — 9부가 이 차이를 보여 준다 |
+| `agree.tsv` (30 쌍) | mygit 의 출력 = `git -c diff.indentHeuristic=false diff --no-index` 의 출력, 바이트까지 |
+| `tie.tsv` (3 쌍) | 지운 줄·끼운 줄 수가 git 과 같고, 출력은 git 과 **다르다** — 9부가 이 차이를 보여 준다 |
+
+코드처럼 생긴 쌍에서 tie 는 드물다 — 그런 줄 모음으로 4,000 쌍을 만들어 견주었을
+때 한 쌍이 나왔다(2026-09-18). 그래서 tie 목록은 무작위 탐색에서 건진 것을
+그대로 쓰고, agree 목록은 사람이 고치는 꼴로 설계했다.
 
 들여쓰기 휴리스틱(`diff.indentHeuristic`, git 2.14 부터 기본값 켜짐)은
 mygit 에 없다. 9부는 켜짐·꺼짐 두 캡처로 그 효과를 진짜 git 에서 보인다.
@@ -975,7 +995,7 @@ index <옛 7글자>..<새 7글자>[ <모드>]
 | B = O (T 만 바뀜, 지운 것 포함) | T |
 | B = T (O 만 바뀜, 지운 것 포함) | O |
 | 셋 다 있고 O·T 가 다른 보통 파일 | **내용 합치기**(§12.3). 먼저 `Auto-merging <경로>` |
-| B 에 없고 O·T 에 다르게 새로 생김 | B 를 빈 파일로 두고 내용 합치기. 충돌이면 `CONFLICT (add/add): Merge conflict in <경로>` |
+| B 에 없고 O·T 에 다르게 새로 생김 | B 를 빈 파일로 두고 내용 합치기. 먼저 `Auto-merging <경로>`, 충돌이면 `CONFLICT (add/add): Merge conflict in <경로>`(단계 1 없이 2·3 만) |
 | 그 밖(지움 대 고침, 파일 대 디렉터리, 둘 다 모드를 다르게 바꿈) | 줄임 — `fatal: mygit: unsupported merge case (<경우>) in <경로>` (128), 아무것도 바꾸지 않는다 |
 
 모드는 내용과 따로 같은 세 줄 규칙(O = T → O, B = O → T, B = T → O)으로 고른다.
@@ -1042,11 +1062,12 @@ B·O·T 를 §11.1 의 줄로 나눈다.
    ```
 
    (`merge.conflictStyle=merge`, 표지는 7글자.) 충돌 안의 마지막 줄에 줄바꿈이
-   없는 입력은 범위 밖이다 — `golden/merge/` 의 모든 파일은 `\n` 으로 끝난다.
+   없는 입력은 범위 밖이다 — `golden/scen/merge-*.scn` 의 모든 파일은 `\n` 으로 끝난다.
 
-`golden/merge/` 의 10 경우(PLAN.md §3.1 10단계)는 진짜 `git merge` 가 만든
-작업 트리 파일·`git ls-files --stage`·`MERGE_MSG`·머지 커밋 이름을 기록한다.
-mygit 의 결과는 그 넷과 바이트까지 같아야 한다.
+`golden/scen/merge-*.scn` 의 13 장면(PLAN.md §3.1 10단계의 "10 경우" 에 fast-
+forward·충돌 풀기·dev 로 합치기를 더했다)은 진짜 `git merge` 가 만든 작업 트리
+파일·인덱스(`stage`)·`MERGE_MSG`·머지 커밋 이름(`log`)을 기록한다. mygit 의
+결과는 그 넷과 바이트까지 같아야 한다.
 
 ---
 
@@ -1343,22 +1364,18 @@ Java `GitError extends RuntimeException` · C++ `struct GitError`). `cli` 만 �
 
 | 파일 | 쓰는 단계 |
 |---|---|
-| `golden/sha1.tsv` (§2) | 1 |
-| `golden/objects/` — 느슨한 객체 파일 그대로 + `objects.tsv`(이름·형식·크기) | 2·3 |
-| `golden/stored_ok.txt` — C++ 저장 블록 객체를 git 이 읽은 기록 | 2 |
-| `golden/trees/` — 트리 12개(정렬 함정 포함)의 입력 목록과 `git write-tree` 이름 | 4 |
-| `golden/messages/` — §4.4 의 메시지 규칙 사례 | 5 |
-| `golden/repos/hello.tsv` — 커밋·트리 이름과 `log` 출력 | 5·7 |
-| `golden/index/` — git 이 쓴 인덱스(§7.3 으로 지운 것)와 `ls-files --stage` | 6 |
-| `golden/status/` — 작업 트리 상태 사례와 `status --porcelain` 출력 | 6 |
-| `golden/dag/` — §10 의 두 역사, `log`·`merge-base --all` 출력 | 7 |
-| `golden/diff/` — `agree.tsv`·`tie.tsv` 와 쌍마다 두 파일·git 출력 (§11.2) | 8 |
-| `golden/checkout/` — §9.3 의 사례와 git 의 결과 | 9 |
-| `golden/merge/` — 10 경우 (§12.3) | 10 |
-| `golden/pack/` — git 이 만든 팩·색인(델타 포함)과 `verify-pack -v` 출력 | 11 |
-| `golden/pkt/` — `fetch-pack` 의 대화 기록(§14.3) | 12 |
-| `golden/errors.tsv` — §1.4 와 §9 의 오류 문장·종료 코드 | 전부 |
-| `golden/golden.tsv` — 위 모든 파일의 `파일 · 기대값 · 만든 git 명령` | 전부 |
+| `golden/sha1.tsv` — 100 벡터 (§2, §2.1) | 1 |
+| `golden/objects/<이름>` + `objects.tsv`(이름·형식·크기·첫 블록 BTYPE) — git 이 쓴 느슨한 객체 파일 그대로 | 2·3 |
+| `golden/stored/<이름>` + `stored_ok.txt` — 저장 블록 zlib 객체와, 그것을 git 이 읽고 `fsck --strict` 한 기록 | 2 |
+| `golden/trees/<경우>.tsv`·`.ls` + `trees.tsv` — 트리 12개의 (모드·blob·경로)와 `write-tree` 이름 | 4 |
+| `golden/index/plain.bin`(§7.3 으로 지운 것)·`*.raw`(git 이 쓴 그대로: 확장 없음·TREE 확장·판 3)·`ls-stage.txt` | 6 |
+| `golden/dag/{equal,dated,criss}/git/` — `.git` 의 HEAD·refs·logs·느슨한 객체, `expect.txt` — `log`·`merge-base` 출력 | 7 |
+| `golden/diff/{agree,tie}-NN-<이름>.{a,b,diff}` + `agree.tsv`·`tie.tsv` (§11.2) | 8 |
+| `golden/pack/{ofs,ref}.{pack,idx,verify,show-index}` — OFS_DELTA·REF_DELTA 팩, `verify-pack -v`·`show-index` 출력 | 11 |
+| `golden/pkt/src/git/` — 원격 저장소, `pkt/<경우>.{log,pack,stdout,args}` — §14.3 의 대화 기록(`args` 는 요청한 참조 한 줄, 로컬이 가진 값 한 줄) | 12 |
+| `golden/scen/*.scn` — §16.4 의 장면: `hello`·`plumbing`(5) · `status`(6) · `checkout`(9) · `merge-*`(10) · `clone`(12) · `errors`(전부) | 여럿 |
+| `golden/errors.tsv` — `errors` 장면에서 뽑은 §1.4 의 문장·종료 코드 | 전부 |
+| `golden/golden.tsv` — 위 파일들의 `파일 · 기대값 · 만든 git 명령`, 첫 줄에 git 판 | 전부 |
 
 ### 16.3 먼저 빨갛게
 
@@ -1368,3 +1385,41 @@ implemented", 99)` 를 던지는)를 먼저 두고, 시험이 "기대한 바이�
 "not implemented" 로 실패하는 것을 확인한다. 통과시키려고 단언을 느슨하게 하지
 않는다(PLAN.md §0.6). git 의 동작이 이 문서와 다르다는 것이 드러나면, 이 문서를
 고치고 그 사실을 PLAN.md 의 진행 기록에 남긴다.
+
+### 16.4 장면 파일(`golden/scen/*.scn`) — 명령을 차례로 돌리고 출력을 맞춘다
+
+5·6·7·9·10·12 단계의 시험은 "이 명령들을 차례로 하면 이렇게 찍혀야 한다" 꼴이다.
+그것을 언어마다 따로 적지 않도록 장면 파일 하나를 다섯 언어가 같이 읽는다.
+장면은 `tools/golden_cases.py` 에 **명령만** 적혀 있고, `tools/make_golden.py`
+가 그 명령을 빈 디렉터리에서 진짜 git 으로 돌려 기대 출력을 채운다. 각 언어의
+장면 실행기(60줄 남짓)는 같은 명령을 mygit 으로 돌려 한 줄씩 견준다.
+
+| 줄 | 뜻 |
+|---|---|
+| `# …` · 빈 줄 | 무시 |
+| `@date <초>` | 이후 명령의 `GIT_AUTHOR_DATE`·`GIT_COMMITTER_DATE` 를 `<초> +0900` 로 (처음 값 1700000000) |
+| `@cd <경로>` | 이후 명령의 현재 디렉터리(장면 뿌리에서의 상대 경로, 처음은 뿌리) |
+| `write <경로> <재료>` · `append <경로> <재료>` | 파일 쓰기·덧붙이기. 재료는 §2.1 에 `seq:<a>:<b>`(줄마다 수 하나, a‥b)와 `golden:<golden/ 안 경로>` 를 더한 것. `text:` 안의 `\n \t \\ \xHH` 는 이스케이프 |
+| `chmod <경로> 755\|644` · `rm <경로>` · `mkdir <경로>` | 작업 트리 손질 |
+| `mygit <인자…>` | 명령 하나. 인자는 공백으로 가르고, `"…"` 로 묶으면 공백을 품는다(안에서 `\"`·`\\`·`\n` 은 이스케이프). 다른 줄(`write` 등)의 경로도 같은 규칙으로 가른다 |
+| `cat <경로>` | 파일 내용을 찍는다(실행기가 한다) |
+| `stage` | 인덱스를 `git ls-files --stage` 꼴로 찍는다: `%06o SP 40글자 SP 단계 TAB 경로(§8.2)` |
+| `ref <rev>` | `<rev>` 를 풀어 40글자를 찍는다(§6.2) |
+| `> 줄` · `! 줄` · `= 코드` | 바로 앞 명령의 표준 출력 한 줄 · 표준 오류 한 줄 · 종료 코드 |
+
+- 명령 뒤에 `>` 줄이 없으면 표준 출력은 **비어 있어야** 한다. `!` 도 같다.
+  `=` 가 없으면 0 이다.
+- 끝 줄바꿈이 없는 출력의 마지막 줄 뒤에는 `%noeol` 한 줄이 붙는다.
+- 출력과 인자의 `<ROOT>` 는 장면 뿌리의 절대 경로로 바꿔 읽는다(`init`·`clone`
+  의 안내 줄이 절대 경로를 품는다).
+- git 으로 돌릴 때 `make_golden.py` 가 바꾸는 것 — **SPEC 의 줄임을 기대 출력에
+  옮기는 일이고, 그 밖에는 git 의 출력을 한 글자도 고치지 않는다**:
+
+  | mygit 명령 | 실제로 부르는 git | 기대 출력에서 하는 일 |
+  |---|---|---|
+  | `init …` | `init -b main …` (§5.1 — mygit 의 기본 브랜치는 언제나 main) | — |
+  | `status` | `status --porcelain` | — |
+  | `diff …` | `-c diff.indentHeuristic=false diff …` (커밋 둘이면 `--no-renames` 도) | — |
+  | `commit …` | 그대로 | 표준 출력의 첫 줄만 남긴다(§9) |
+  | `merge <b>` | 그대로 | fast-forward 는 앞 두 줄만, 깨끗한 3-way 는 `Merge made by the 'ort' strategy.` 를 mygit 의 문장으로 바꾸고 변경 통계를 지운다(§12.2) |
+  | `stage` · `ref` | `ls-files --stage` · `rev-parse` | — |

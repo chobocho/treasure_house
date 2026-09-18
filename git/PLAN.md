@@ -522,3 +522,28 @@ The user approved every proposal below as-is. Each row is now a decision.
 - claims.md +3 rows (indent heuristic 2.14, Myers fig. 2/§4b, first commit e83c5163).
 - `make all SKEL=1` 0 errors; `make spec-check` 9/9; `make width` clean.
 
+### Step 3 — golden/ (2026-09-18)
+
+- `tools/golden_cases.py` holds inputs and commands only (100 SHA-1 vectors, 12 trees, 33 diff
+  pairs, 19 scenarios); `tools/make_golden.py` runs them through real git 2.55.0 and writes 305
+  files (1.8 MB) + `golden/golden.tsv`. `make golden-check` rebuilds into scratch and compares
+  (index `.raw` files compared after §7.3 normalization): 0 mismatches on a second build.
+- New shared test format: SPEC §16.4 scenario files (`golden/scen/*.scn`) — `write/append/chmod/
+  rm/mkdir/@date/@cd`, `mygit …` steps with `> stdout`, `! stderr`, `= code`, plus `cat`, `stage`,
+  `ref`. The generator applies only the SPEC reductions (commit first line, merge stat/ort line,
+  `init -b main` on fresh dirs, status → --porcelain, diff indentHeuristic=false/--no-renames).
+  Scenarios run with `GIT_CEILING_DIRECTORIES` = scenario parent (added to SPEC §1.1) so discovery
+  never reaches the treasure_house repo.
+- Facts learned while generating (SPEC updated): carried-over local changes are printed to stdout
+  after switch/checkout as `M<TAB>path` (also on "Already on"); `switch` to the current branch
+  still writes a reflog line; porcelain status quotes paths containing a space (other outputs do
+  not); add/add conflicts print `Auto-merging` first and have stages 2/3 only. Stored-block zlib
+  objects (the C++ writer's format) pass `git fsck --strict` (golden/stored_ok.txt).
+- Bugs caught in my own fixtures before commit: scenario recipes containing a space were silently
+  truncated by the tokenizer (merge-add-add merged cleanly!) — the generator now rejects such
+  lines; `git init` without -b made `master`.
+- Diff ties: a second search (4,000 code-like pairs) found only one tie; tie.tsv holds 3 code-like
+  ties found by random search, agree.tsv 30 designed pairs (all re-classified with a byte-correct
+  prototype). SPEC §11.2 counts updated (30 / 3).
+- `make all SKEL=1` 0 errors; spec-check 9/9; width clean.
+
