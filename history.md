@@ -1,17 +1,17 @@
-### [2026-09-18 16:25] Git 대백과사전 공개 — index·README 에 새 절 "🌿 Git & 버전 관리"
+### [2026-09-18 16:24] Git 대백과사전 공개 — index·README 에 새 절 "🌿 Git & 버전 관리"
 - **기획:** PLAN 결정 1 대로 "🎬 자동화 & CI/CD" 앞에 새 절, 카드의 수는 빌드 출력에서 센 실제 값.
 - **TC:** 폰트 검사 통과 · make all SKEL=1 오류 0건.
 - **개발:** `index.html`, `README.md`
 - **검증:** 1,819장 · 캡처 1,240개 · 데모 9 · 퀴즈 61 · 용어 255
 - **비고:** 다음은 14단계 전수 리뷰(서브에이전트 둘). push 는 하지 않았다.
 
-### [2026-09-18 16:10] Git 덱 11단계 — 데모 9개, 기댓값 20건은 진짜 git·golden 에서
+### [2026-09-18 16:23] Git 덱 11단계 — 데모 9개, 기댓값 20건은 진짜 git·golden 에서
 - **기획:** 데모 정답을 데모 스스로 내지 않게 golden 과 새 실험 demos 의 캡처에서 옮긴다.
 - **TC:** SHA-1 벡터 73·diff agree 29쌍·merge 장면 9개를 node 로 golden 과 대조, CASES 20건.
 - **개발:** `git/deck/demos.js`, `git/deck/check_deck.js`, `git/exps/demos.py`, `git/exps/dag.py`, 섹션 6개
 - **검증:** check_deck 데모 9개 배선·20건 통과 · make all SKEL=1 오류 0건
 
-### [2026-09-18 15:30] Git 덱 9단계 — 본문 0~20부 1,810장, 소스 커버리지 100%
+### [2026-09-18 16:16] Git 덱 9단계 — 본문 0~20부 1,810장, 소스 커버리지 100%
 - **기획:** 부마다 실험으로 주장을 받치고 한 부 한 커밋. 19부는 다섯 언어 소스 전문(사용자 결정).
 - **TC:** 새 실험 14종(history·appendix 포함), record.sh --check 여섯 번 통과(마지막 1,232개).
 - **개발:** `git/deck/sections/`(21개), `git/exps/`, `git/deck/glossary.txt`, `git/data/`, `git/PLAN.md` 외 다수
