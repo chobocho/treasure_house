@@ -4,10 +4,8 @@ import static java.nio.charset.StandardCharsets.ISO_8859_1;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
@@ -110,22 +108,6 @@ public final class Refs {
     return listRefs(gitdir, "refs/");
   }
 
-  // <경로>.lock 에 쓰고 이름을 바꿔 넣는다(SPEC.md §6.1).
-  private static void writeLocked(String path, String text) {
-    Path p = Path.of(path);
-    Path lock = Path.of(path + ".lock");
-    try {
-      Files.createDirectories(p.getParent());
-      Files.write(lock, text.getBytes(ISO_8859_1),
-          StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-      Files.move(lock, p, StandardCopyOption.REPLACE_EXISTING);
-    } catch (FileAlreadyExistsException e) {
-      throw new GitError("fatal: mygit: unable to lock " + path);
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
-  }
-
   // reflog 한 줄(SPEC.md §6.3) — "옛 새 신원<TAB>메시지".
   public static void appendReflog(String gitdir, String name,
       String old, String next, String ident, String message) {
@@ -176,7 +158,7 @@ public final class Refs {
       }
       return;
     }
-    writeLocked(path.toString(), next + "\n");
+    Fs.writeLocked(path.toString(), (next + "\n").getBytes(ISO_8859_1));
     appendReflog(gitdir, name, old, next, ident, message);
     Ref head = readRef(gitdir, "HEAD");
     if (!name.equals("HEAD") && new Ref(true, name).equals(head)) {
@@ -187,8 +169,9 @@ public final class Refs {
   // HEAD 를 브랜치(refs/heads/…)나 커밋(분리)으로. reflog 는 부르는
   // 쪽이 적는다 — 메시지가 명령마다 다르다(§6.3 의 표).
   public static void setHead(String gitdir, String target) {
-    writeLocked(Fs.join(gitdir, "HEAD"),
-        (target.startsWith("refs/") ? "ref: " : "") + target + "\n");
+    String text = (target.startsWith("refs/") ? "ref: " : "") + target;
+    Fs.writeLocked(Fs.join(gitdir, "HEAD"),
+        (text + "\n").getBytes(ISO_8859_1));
   }
 
   // ── 이름 풀기 (SPEC.md §6.2) ─────────────────────────────────────

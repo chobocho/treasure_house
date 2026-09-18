@@ -42,7 +42,7 @@ public final class Cli {
   }
 
   // 명령 하나가 도는 동안의 문맥 — 현재 디렉터리·환경·입출력.
-  static final class Ctx {
+  public static final class Ctx {
     final String cwd;
     final Map<String, String> env = new HashMap<>();
     final ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -50,7 +50,7 @@ public final class Cli {
     private byte[] stdin;
     private String top;
 
-    Ctx(String cwd, Map<String, String> env, byte[] stdin) {
+    public Ctx(String cwd, Map<String, String> env, byte[] stdin) {
       this.cwd = Path.of(cwd).toAbsolutePath().normalize().toString();
       env.forEach((k, v) -> this.env.put(k, bytes(v)));
       this.stdin = stdin;
@@ -101,7 +101,7 @@ public final class Cli {
       }
     }
 
-    String gitdir() {
+    public String gitdir() {
       return Fs.join(root(), ".git");
     }
 
@@ -398,15 +398,178 @@ public final class Cli {
     return 0;
   }
 
+  // ── 6단계: add · rm --cached · status · write-tree · commit ───────
+
+  // 명령줄 경로 → 작업 트리 뿌리에서의 경로 바이트 문자열("" 은 뿌리).
+  static String relPath(Ctx ctx, String spec) {
+    return Path.of(ctx.root()).relativize(Path.of(ctx.path(spec)))
+        .toString();
+  }
+
+  static boolean under(String p, String rel) {
+    return rel.isEmpty() || p.equals(rel) || p.startsWith(rel + "/");
+  }
+
+  static GitError noMatch(String spec) {
+    return new GitError("fatal: pathspec '" + spec
+        + "' did not match any files");
+  }
+
+  // pathspec 아래의 파일을 올리고, 사라진 파일은 뺀다(SPEC.md §9).
+  //
+  // 모든 pathspec 을 먼저 검사한다 — 하나라도 맞는 것이 없으면 아무것도
+  // 바꾸지 않고 멈춘다(git 과 같다).
+  static int add(Ctx ctx, List<String> args) {
+    String root = ctx.root();
+    String g = ctx.gitdir();
+    List<Index.IndexEntry> ents = Index.readIndex(g);
+    List<String> files = Worktree.walkWorktree(root);
+    List<List<String>> hitF = new ArrayList<>();
+    List<List<String>> hitI = new ArrayList<>();
+    for (String spec : parseFlags(args, List.of()).rest) {
+      String rel = relPath(ctx, spec);
+      hitF.add(files.stream().filter(f -> under(f, rel)).toList());
+      hitI.add(ents.stream().map(e -> e.path).filter(p -> under(p, rel))
+          .toList());
+      if (hitF.getLast().isEmpty() && hitI.getLast().isEmpty()) {
+        throw noMatch(spec);
+      }
+    }
+    Map<String, List<Index.IndexEntry>> byPath = new HashMap<>();
+    for (Index.IndexEntry e : ents) {
+      byPath.computeIfAbsent(e.path, k -> new ArrayList<>()).add(e);
+    }
+    for (int k = 0; k < hitF.size(); k++) {
+      for (String f : hitF.get(k)) {
+        String full = Fs.join(root, f);
+        String oid = Objects.writeObject(g, "blob", Fs.read(full));
+        byPath.put(f, List.of(Index.entryFromStat(f, full, oid)));
+      }
+      for (String p : hitI.get(k)) {
+        if (!hitF.get(k).contains(p)) byPath.remove(p);
+      }
+    }
+    Index.writeIndex(g, byPath.values().stream()
+        .flatMap(List::stream).toList());
+    return 0;
+  }
+
+  // 찍는 경로는 따옴표 없이 그대로다 — git 의 rm 이 그렇게 찍는다.
+  static int rm(Ctx ctx, List<String> args) {
+    Flags f = parseFlags(args, List.of("--cached"));
+    if (!f.on.contains("--cached")) {
+      throw new GitError("fatal: mygit: only rm --cached is supported");
+    }
+    String g = ctx.gitdir();
+    List<Index.IndexEntry> ents = Index.readIndex(g);
+    Set<String> have = new HashSet<>();
+    ents.forEach(e -> have.add(e.path));
+    java.util.TreeSet<String> gone = new java.util.TreeSet<>();
+    for (String spec : f.rest) {
+      String rel = relPath(ctx, spec);
+      if (!have.contains(rel)) throw noMatch(spec);
+      gone.add(rel);
+    }
+    gone.forEach(p -> ctx.say("rm '" + p + "'\n"));
+    Index.writeIndex(g, ents.stream()
+        .filter(e -> !gone.contains(e.path)).toList());
+    return 0;
+  }
+
+  static int status(Ctx ctx, List<String> args) {
+    parseFlags(args, List.of("--porcelain", "-s", "--short"));
+    Worktree.status(ctx.root(), ctx.gitdir())
+        .forEach(row -> ctx.say(row + "\n"));
+    return 0;
+  }
+
+  // 인덱스(단계 0) → 트리 이름. 충돌 경로가 있으면 쓸 수 없다.
+  static String indexTree(Ctx ctx) {
+    List<Index.IndexEntry> ents = Index.readIndex(ctx.gitdir());
+    if (ents.stream().anyMatch(e -> e.stage != 0)) {
+      throw new GitError("error: Committing is not possible because "
+          + "you have unmerged files.\nfatal: Exiting because of an "
+          + "unresolved conflict.");
+    }
+    return Tree.writeTree(ctx.gitdir(), ents.stream()
+        .map(e -> new Tree.PathEntry(Integer.toOctalString(e.mode),
+            e.oid, e.path)).toList());
+  }
+
+  static int writeTree(Ctx ctx, List<String> args) {
+    parseFlags(args, List.of());
+    ctx.say(indexTree(ctx) + "\n");
+    return 0;
+  }
+
+  // 트리를 쓰고, 커밋하고, 브랜치를 옮긴다(SPEC.md §9 · §6.3).
+  //
+  // 부모는 HEAD 와, 머지를 마무리하는 중이면 MERGE_HEAD. 출력은 git 의
+  // 요약 첫 줄만 — Author 줄과 변경 통계는 줄임이다.
+  static int commit(Ctx ctx, List<String> args) {
+    List<String> msgs = new ArrayList<>();
+    for (int i = 0; i < args.size(); i++) {
+      if (!args.get(i).equals("-m")) {
+        throw new GitError("fatal: mygit: unknown option '"
+            + args.get(i) + "'");
+      }
+      msgs.add(++i < args.size() ? args.get(i) : "");
+    }
+    String g = ctx.gitdir();
+    Refs.Head h = Refs.readHead(g);
+    String mergeHead = Refs.resolveRef(g, "MERGE_HEAD");
+    String t = indexTree(ctx);
+    if (h.oid() != null && mergeHead == null
+        && t.equals(Refs.peel(g, h.oid(), "tree"))) {
+      ctx.say("nothing to commit\n");
+      return 1;
+    }
+    String msg = Commit.cleanupMessage(String.join("\n\n", msgs));
+    if (msg.isEmpty()) {
+      throw new GitError("Aborting commit due to empty commit message.",
+          1);
+    }
+    List<String> parents = new ArrayList<>();
+    for (String p : new String[] {h.oid(), mergeHead}) {
+      if (p != null) parents.add(p);
+    }
+    String oid = Objects.writeObject(g, "commit",
+        Commit.serializeCommit(t, parents, ident(ctx, "AUTHOR"),
+            ident(ctx), msg));
+    String subj = Commit.subjectOf(msg);
+    String kind = h.oid() == null ? "commit (initial)"
+        : mergeHead != null ? "commit (merge)" : "commit";
+    Refs.updateRef(g, h.branch() == null ? "HEAD" : h.branch(), oid,
+        h.oid(), kind + ": " + subj, ident(ctx));
+    for (String f : List.of("MERGE_HEAD", "MERGE_MSG")) {
+      Fs.delete(Fs.join(g, f));
+    }
+    String where = h.branch() == null ? "detached HEAD"
+        : h.branch().substring(HEADS.length());
+    ctx.say("[" + where + (h.oid() == null ? " (root-commit)" : "")
+        + " " + oid.substring(0, 7) + "] " + subj + "\n");
+    return 0;
+  }
+
   // ── 틀 ────────────────────────────────────────────────────────────
-  private static final Map<String, Command> COMMANDS = Map.of(
-      "hash-object", Cli::hashObject,
-      "cat-file", Cli::catFile,
-      "init", Cli::init,
-      "commit-tree", Cli::commitTree,
-      "branch", Cli::branch,
-      "tag", Cli::tag,
-      "reflog", Cli::reflog);
+  // 명령 이름 → 함수. 단계가 늘 때마다 한 줄씩 는다.
+  private static Command command(String name) {
+    return switch (name) {
+      case "hash-object" -> Cli::hashObject;
+      case "cat-file" -> Cli::catFile;
+      case "init" -> Cli::init;
+      case "commit-tree" -> Cli::commitTree;
+      case "branch" -> Cli::branch;
+      case "tag" -> Cli::tag;
+      case "reflog" -> Cli::reflog;
+      case "add" -> Cli::add;
+      case "rm" -> Cli::rm;
+      case "status" -> Cli::status;
+      case "write-tree" -> Cli::writeTree;
+      case "commit" -> Cli::commit;
+      default -> null;
+    };
+  }
 
   // 명령 하나를 돌린다 → (종료 코드, 표준 출력, 표준 오류). stdin 이
   // null 이면 진짜 표준 입력을 (필요할 때만) 읽는다. 인자와 환경은
@@ -420,7 +583,7 @@ public final class Cli {
       if (a.isEmpty()) {
         throw new GitError("usage: mygit <command> [<args>]", 129);
       }
-      Command fn = COMMANDS.get(a.get(0));
+      Command fn = command(a.get(0));
       if (fn == null) {
         throw new GitError("mygit: '" + a.get(0)
             + "' is not a mygit command.", 1);

@@ -2,8 +2,11 @@ package mygit;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -50,6 +53,33 @@ public final class Fs {
   public static void mkdirs(String p) {
     try {
       Files.createDirectories(Path.of(p));
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
+
+  // 있으면 지운다(파일 하나)
+  public static void delete(String p) {
+    try {
+      Files.deleteIfExists(Path.of(p));
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
+
+  // <경로>.lock 에 쓰고 이름을 바꿔 넣는다(SPEC.md §6.1 · §7.4). 쓰는
+  // 도중에 죽어도 옛 파일이 멀쩡하고, .lock 이 이미 있으면 누군가
+  // 쓰는 중이라는 뜻이다.
+  public static void writeLocked(String path, byte[] data) {
+    Path p = Path.of(path);
+    Path lock = Path.of(path + ".lock");
+    try {
+      Files.createDirectories(p.getParent());
+      Files.write(lock, data, StandardOpenOption.CREATE_NEW,
+          StandardOpenOption.WRITE);
+      Files.move(lock, p, StandardCopyOption.REPLACE_EXISTING);
+    } catch (FileAlreadyExistsException e) {
+      throw new GitError("fatal: mygit: unable to lock " + path);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
