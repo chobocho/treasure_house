@@ -115,7 +115,9 @@ def run(ctx):
           label='hooks.ok')
     h.cap('git commit --no-verify --allow-empty -q -m "no hooks" && '
           'git log --oneline', label='hooks.noverify')
-    h.sh('git init -q --bare ../hooks-remote.git')
+    # 저장소 밖의 원격은 앞 실행이 남긴 것을 먼저 치운다 — 남아 있으면
+    # push 할 것이 없어 pre-push 훅이 아예 돌지 않는다(깨끗한 실행과 달라짐)
+    h.sh('rm -rf ../hooks-remote.git && git init -q --bare ../hooks-remote.git')
     h.cap('git push -q ../hooks-remote.git main')
     # worktree — 한 저장소, 작업 트리 둘
     w = ctx.repo('worktree')

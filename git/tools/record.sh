@@ -31,7 +31,12 @@ if [ "${1:-}" = '--check' ]; then
   echo "  1회차 — 지금 out/ 에 있는 것"
   n=2
   while [ "$n" -le 3 ]; do
-    echo "  ${n}회차 — 다시 돌린다"
+    echo "  ${n}회차 — 실험 디렉터리를 비우고 다시 돌린다"
+    # 앞 실행이 남긴 저장소(특히 실험 저장소 밖 ../ 에 만든 원격·작업
+    # 트리)가 있으면 "처음 돌리는 사람" 과 다른 결과가 나와도 세 번 모두
+    # 같아 보인다 — 2026-09-18 worktree·pre-push 캡처가 그렇게 숨었다.
+    # 그래서 재실행은 늘 빈 scratch/repos 에서 시작한다.
+    rm -rf scratch/repos
     $PY run_all.py >/dev/null
     later=$(md5_all)
     if [ "$first" != "$later" ]; then

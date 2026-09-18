@@ -696,3 +696,23 @@ The user approved every proposal below as-is. Each row is now a decision.
 - **Decision (user, 2026-09-18): part 19 carries FULLSRC of all five implementations** (≈470
   slides, coverage 100 %, pending.txt empty) — the §5 step-10 plan as written, not the
   Python-only fallback. Expected total ≈ 1,750 slides, under the 3,000 cap.
+
+
+### Steps 10–14 — Appendix A, demos, glossary, publish, review 1 (2026-09-18, a864654 … f8ee77d)
+
+- Part 19: FULLSRC of all five implementations (85 files; coverage 21,820/21,820 lines, pending.txt
+  empty) + 12 step chapters (concept → Python → 4-up of the same symbol in ts/go/java/cpp →
+  oracle captures → quiz). New experiment `appendix` captures each Python test module's -v run.
+- Part 20: glossary 255 terms, command index (161 links into part 17), quiz index, references.
+- Step 11: 9 demos in deck/demos.js; check_deck.js CASES = 20, every expected value copied from
+  golden/ or a real-git capture (new experiment `demos`); the ports were diffed against golden in
+  node (SHA-1 73 vectors, diff agree 29 pairs, merge scenes 9).
+- Step 13: index.html/README.md section "🌿 Git & 버전 관리" before "🎬 자동화 & CI/CD"; counts
+  from the build (1,819 slides). Not pushed.
+- Step 14 (review 1, two subagents): 51 findings, 49 fixed (d6027c4, f8ee77d). Worst: the worktree
+  experiment never cleaned `../wt_twice-*`, so from the second run on the first `worktree add`
+  failed and the slide showed the opposite of its title; a fresh-directory run then found the same
+  class of bug in `../hooks-remote.git` (pre-push hook silently skipped). **record.sh --check now
+  wipes scratch/repos before each rerun** so "first run differs" can no longer hide.
+  Glossary pointers were resolved too loosely (60+ pointed at intros) — now title-first + manual.
+- Deferred: part 17 "이 덱에서 돌린 곳" does not count commands run inside cat'd scripts.

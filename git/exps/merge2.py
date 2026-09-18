@@ -124,7 +124,8 @@ def branches(ctx):
     r.cap('git branch -d topic 2>&1', ok=None)
     r.cap('git branch -m topic feature && git branch --list')
     r.cap('git branch -v')
-    r.sh('git init -q --bare ../branch_ops_remote && '
+    r.sh('rm -rf ../branch_ops_remote && '
+         'git init -q --bare ../branch_ops_remote && '
          'git remote add origin ../branch_ops_remote && '
          'git push -q origin main feature')
     r.cap('git branch --set-upstream-to=origin/feature feature && '
