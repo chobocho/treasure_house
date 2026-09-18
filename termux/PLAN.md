@@ -475,3 +475,69 @@ The user approved every recommendation below as-is. Each row is now a decision.
 
 - Plan written; §9 decisions 1–12 confirmed by the user as recommended. No code yet.
   `data/device.txt` (decision 8) is still to be pasted by the user — ask for it at step 3, once.
+
+### Step 1 — Skeleton (2026-09-18)
+
+- Copied verbatim from `transformer/`: `deck/{build_deck,verify_deck,check_slices,check_xref,check_claims,
+  chunks,gen_glossary,gen_tables,svgkit}.py`, `deck/check_deck.js`, `deck/base/{head,tail}.html`,
+  `tools/{width,rewrap}.py`, `tools/record.sh`. Then adapted only what §1 lists.
+- **New `deck/srcpin.py`** (+ `deck/tests/test_srcpin.py`, 17 tests, RED on NotImplementedError
+  stubs → GREEN): reads `sources/<repo>/<path>` **at the pinned SHA via `git show`**, never the
+  worktree; `check(repo, sha)` accepts ≥ 7-char prefixes of the pin; `missing()` backs
+  `make sources-check`. build/verify/check_claims/check_slices all read upstream through it.
+- `build_deck.py`: TARGET → `Termux_대백과사전.html`; `LANG_OF` adds java/kt/kts/gradle (java
+  highlighter), xml, properties, diff/patch; `COVER_DIRS` = py/ exp/ tools/ (+ Makefile, run_all.py);
+  `PARTIAL` = tests, deck/, out/, data/, sources/, scratch/ (tools/ is **not** partial here — §1 says
+  100 % for our code); `HARD_CAP` 3000. `CITE` → **`SRC`** (`repo= path= sha= lines=`), badge text
+  `repo@sha7 · path:A–B`, logged to `deck/src_used.txt`; new post-pass "cite what you show": a slide
+  with a SRC badge must carry a CODE of that file or a capture. `CODE file=sources/…` requires `sha=`
+  equal to the pin and emits `data-sha`. `OUT` reads `out/manifest.json` (format fixed now:
+  `{file: {kind: stable|snapshot, side: termux|proot|both, date}}`) → side tag "Termux $"/"proot #"
+  and, for snapshots, a `<p class="stamp">이 기기 · YYYY-MM 캡처</p>`; a capture missing from an
+  existing manifest is an error. Evidence tiers are now **a·s·b·c·ill** (§6): every slide except
+  covers/part covers/quizzes must carry one; `a` needs a capture/table/figure/demo on screen, `s`
+  needs a SRC badge; per-part a+s+b+c < 60 % is a warning (part 0 exempt — it describes the deck).
+  The old "C ≤ 10 %" warning was dropped (c is legitimate history evidence here). Quiz index and
+  glossary ids moved to `p17-`.
+- `check_claims.py`: section check → SRC line check at the SHA; years are checked per `<article>`
+  and any year ≥ 2025 needs "2026-09 기준" on the same slide (§0.4). Unit filter rewritten.
+- `verify_deck.py`: upstream CODE compared with the pinned blob (and `data-sha` must equal the
+  current pin); SRC badges must carry `data-repo`/`data-sha` equal to the pin; snapshot stamps
+  must carry a date. `check_slices.py`: finds `lines=` anywhere in the directive (sha= sits
+  between). `check_deck.js`: CASES emptied (comment: expected values come from data/ or out/).
+- Smoke-tested in a scratch copy with a throwaway git repo: SRC+CODE at the pin, worktree drift
+  (verify still matched the pinned blob), stable + snapshot OUT; and eight failure paths (sha
+  mismatch, unknown repo, badge without excerpt, a/s without proof, missing tier, capture not in
+  manifest, SRC lines past EOF, 2025 without stamp) each produced its error.
+- **Palette decided (once): "AMOLED terminal", measured from termux-app@084d709.** The plan
+  assumed a "green-ish accent from the app icon"; **the icon has no green** — `art/ic_launcher.svg`
+  is a `#000` screen, `#BFCBCD` bezel, `#FFF` block cursor, and the adaptive icon is white on
+  `@android:color/black`. So: paper `#000`→`#0b0f14`, ink `#e5e5e5` (dim white), titles `#fff`,
+  accent `#00cd00` (dim green), special `#6495ed` (dim blue = "captured on this device"),
+  border = bezel `#BFCBCD` at 26 %, all taken from `TerminalColorScheme.java`'s
+  `DEFAULT_COLORSCHEME` first 16 colours; `--bad #ff5f5f` (256-cube) because `#cd0000` is
+  unreadable on black. `--g1..g6` now mean layers: Android/OS yellow, Termux green, packages cyan,
+  proot magenta, limits red, device/outside bezel grey. Every hard-coded light colour in head.html
+  (~90 sites) was remapped; svgkit fallbacks match; `make figs-png` renders with `-b '#000000'`.
+  New CSS: `.tier.s`, `.srcb`, `.stamp`, `.side.termux/.proot`; `.cite` removed.
+  **Not yet eyeballed in a browser** (no Playwright here) — first look is the user's.
+- `Makefile`: every §7 target; ones whose inputs arrive later print "아직 없다 (§5 N단계)".
+  `clean` touches only this dir; `distclean` adds `sources/`. `.gitignore`: sources/ scratch/
+  .build/ .svgrender/ __pycache__/.
+- `data/` header-only TSVs: repos (with a `license` column, §3.2), releases, timeline, android,
+  repos_apt, api_cmds, plugins, people. `deck/claims.md` lists the §3.1 traps as *things to
+  verify*, not claims. `budget.txt` = §6 table; `pending.txt` = Makefile, run_all.py, tools/*.
+- 34-slide skeleton: cover, part-0 cover, 15 part-0 slides (다른 점 · 약속 · 읽는 법 · 증거 등급 ·
+  소스 배지 · 캡처 두 종류 · $ 와 # · 개인정보 · 인용과 라이선스 · 이 기기(placeholder until
+  device.txt) · 층 색 · 지도 · 쓴 순서 · 함께 볼 덱 · 접힌 화면) + 17 part covers.
+  Part 12's cover says X11/VNC are **not launched** here (decision 7).
+- `make all SKEL=1` green: 0 assembler errors, verify passes, slices 0, xref 17 OK,
+  check_deck 11/11, claims-check 0, width clean, DeckMono 32 KB embedded, font-check passes.
+  Budget line: "쓴 것 34장 · 남은 부 목표 합 2450장 · 예상 합계 2484장 (상한 3000)".
+- **Deviations, recorded:** (1) accent colour — see palette above. (2) Evidence badges use the
+  inherited `<span class="tier X">` rather than a `data-ev` attribute; the assembler enforces them
+  on every content slide, which is what §6 asks. (3) Part covers carry no numbers or versions that
+  §6 lists (0.101, 32, 84, 8022) — no claims.md rows yet. (4) `tools/record.sh` is still the
+  transformer's (md5 over out/*.txt + ckpt); it is rewritten with tests at step 6 to compare only
+  manifest `stable` files. (5) The upstream pin used for the palette (termux-app 084d709,
+  2026-09-16) is provisional; step 3 pins repos.tsv and re-checks the colour source lines.

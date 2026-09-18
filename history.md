@@ -1,3 +1,10 @@
+### [2026-09-18 00:53] Termux 대백과사전 덱 1단계 — 뼈대(조립기·검사·34장)
+- **기획:** transformer 조립기·검사를 복사해 대상·언어·상한 3000·근거 등급 5종만 바꾸고, CITE 를 핀 고정 upstream 소스 배지 SRC 로 교체.
+- **TC:** 정상: srcpin 17건(핀 커밋 읽기·짧은 SHA). 가장자리: SHA 불일치·미등록 저장소·체크아웃 없음·파일 없음·빈 표 + scratch 연기 시험 오류 경로 8종.
+- **개발:** `termux/deck/srcpin.py`, `termux/deck/build_deck.py`, `termux/deck/base/head.html`, `termux/deck/sections/*.html`(18), `termux/Makefile`, `termux/data/*.tsv`, `termux/PLAN.md` 외 21개 파일
+- **검증:** 17 passed, 0 failed · make all SKEL=1 오류 0건 · 34장 · DeckMono 32 KB
+- **비고:** 아이콘에 초록이 없어 배색은 termux-app 기본 16색(dim green)에서 잼. 브라우저 육안 확인 전, record.sh 는 6단계에서 고침.
+
 ### [2026-09-18 00:50] Git 대백과사전 덱 1단계 — 뼈대(조립기·검사·34장)
 - **기획:** transformer 조립기·검사를 복사해 대상·5개 언어·상한 3000·CITE(형식 문서 표)만 바꾸고, 캡처 별칭 지시자 GIT 추가.
 - **TC:** GIT 지시자(캡처 있음/없음/첫 줄 불일치)·CITE(표에 없는 키) 오류 경로를 scratch 에서 확인, gitenv.sh 로 커밋해 날짜 고정·전역 설정 차단 확인.
