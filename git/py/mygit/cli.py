@@ -11,8 +11,8 @@ main() 은 그것을 진짜 표준 스트림에 잇는다.
 import os
 import sys
 
-from mygit import (GitError, commit, diff, index, merge, objects, refs,
-                   tree, walk, worktree)
+from mygit import (GitError, commit, diff, index, merge, objects, pack,
+                   refs, tree, walk, worktree)
 
 COMMANDS = {}
 
@@ -852,6 +852,113 @@ def apply_merge(ctx, head, result):
             for k, (m, o) in sorted(stages.items()):
                 staged.append(index.IndexEntry(p, o, m, stage=k))
     index.write_index(g, list(ents.values()) + staged)
+
+
+# ── 11단계: unpack-pack · verify-pack · pack-objects ────────────────
+@command('unpack-pack')
+def cmd_unpack_pack(ctx, args):
+    """팩의 객체를 전부 느슨한 객체로 푼다(SPEC.md §13.3)."""
+    _on, _v, rest = parse_flags(args, ())
+    g = ctx.gitdir()
+    for name in rest:
+        with open(ctx.path(name), 'rb') as f:
+            ents = pack.read_pack(f.read(),
+                                  lambda o: objects.read_object(g, o))
+        for e in ents:
+            objects.write_object(g, e.type, e.body)
+    return 0
+
+
+@command('verify-pack')
+def cmd_verify_pack(ctx, args):
+    """git verify-pack -v 와 같은 출력. 색인이 팩과 맞지 않으면 오류."""
+    on, _v, rest = parse_flags(args, ('-v',))
+    if '-v' not in on or len(rest) != 1 or not rest[0].endswith('.idx'):
+        raise GitError('usage: mygit verify-pack -v <pack>.idx', 129)
+    pack_path = rest[0][:-4] + '.pack'
+    with open(ctx.path(rest[0]), 'rb') as f:
+        idx = pack.read_idx(f.read())
+    with open(ctx.path(pack_path), 'rb') as f:
+        data = f.read()
+    ents = pack.read_pack(data)
+    got = sorted((e.oid, e.offset, e.crc) for e in ents)
+    if got != sorted(idx['entries']) or idx['pack_sum'] != data[-20:]:
+        raise GitError('fatal: mygit: %s does not match %s'
+                       % (rest[0], pack_path))
+    for row in pack.verify_lines(ents, pack_path):
+        ctx.say(row + '\n')
+    return 0
+
+
+MAX_DEPTH = 50
+
+
+def pack_items(ctx, use_delta):
+    """pack-objects 가 넣을 [(형식, 몸, 바탕 번호)] — SPEC.md §13.3 의
+    차례(커밋 → 트리·blob 전위 순회 → 주석 태그)와 델타 고르기."""
+    g = ctx.gitdir()
+    starts = []
+    _br, head = refs.read_head(g)
+    for oid in [head] + [o for _n, o in refs.list_refs(g)]:
+        c = refs.peel(g, oid, 'commit') if oid else None
+        if c:
+            starts.append(c)
+    items, depth, seen, last = [], [], set(), {}
+
+    def add(type_, body, oid, path=None):
+        seen.add(oid)
+        base = None
+        if use_delta and path is not None and path in last:
+            k = last[path]
+            if depth[k] < MAX_DEPTH:
+                d = pack.make_delta(items[k][1], body)
+                if 2 * len(d) < len(body):
+                    base = k
+        items.append((type_, body, base))
+        depth.append(depth[base] + 1 if base is not None else 0)
+        if path is not None:
+            last[path] = len(items) - 1
+
+    order = walk.walk_log(g, starts) if starts else []
+    for c in order:
+        add('commit', objects.read_object(g, c)[1], c)
+
+    def visit(t, prefix):
+        if t in seen:
+            return
+        body = objects.read_object(g, t)[1]
+        add('tree', body, t)
+        for mode, name, oid in tree.parse_tree(body):
+            if mode == tree.DIR:
+                visit(oid, prefix + name + b'/')
+            elif mode != '160000' and oid not in seen:
+                add('blob', objects.read_object(g, oid)[1], oid,
+                    prefix + name)
+    for c in order:
+        visit(refs.peel(g, c, 'tree'), b'')
+    for _n, oid in refs.list_refs(g, 'refs/tags/'):
+        t, body = objects.read_object(g, oid)
+        if t == 'tag' and oid not in seen:
+            add('tag', body, oid)
+    return items
+
+
+@command('pack-objects')
+def cmd_pack_objects(ctx, args):
+    on, _v, rest = parse_flags(args, ('--delta',))
+    if len(rest) != 1:
+        raise GitError('usage: mygit pack-objects [--delta] <base>',
+                       129)
+    data, ents = pack.write_pack(pack_items(ctx, '--delta' in on))
+    sha = data[-20:].hex()
+    base = ctx.path('%s-%s' % (rest[0], sha))
+    os.makedirs(os.path.dirname(base), exist_ok=True)
+    with open(base + '.pack', 'wb') as f:
+        f.write(data)
+    with open(base + '.idx', 'wb') as f:
+        f.write(pack.write_idx(ents, data[-20:]))
+    ctx.say(sha + '\n')
+    return 0
 
 
 # ── 틀 ─────────────────────────────────────────────────────────────

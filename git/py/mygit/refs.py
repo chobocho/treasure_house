@@ -161,8 +161,7 @@ def set_head(gitdir, target):
 def _base(gitdir, name):
     """뒤붙이 없는 이름 → 40글자 또는 None. §6.2 의 1‥5 차례."""
     if len(name) == 40 and set(name) <= HEX:
-        if os.path.exists(objects.object_path(gitdir, name)) or \
-                objects.find_object(gitdir, name):
+        if objects.find_object(gitdir, name):
             return name
     if name in ('HEAD', 'ORIG_HEAD', 'MERGE_HEAD'):
         return resolve_ref(gitdir, name)
