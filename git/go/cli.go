@@ -1443,6 +1443,9 @@ func cmdMerge(ctx *Ctx, args []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if head == "" { // git 은 <b> 를 그대로 가져온다 — 줄임
+		return 0, Fail("fatal: mygit: nothing to merge into yet")
+	}
 	if clean, err := isClean(root, g, head); err != nil {
 		return 0, err
 	} else if !clean {

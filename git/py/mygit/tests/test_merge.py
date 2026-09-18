@@ -6,9 +6,12 @@
 따로 부른다 — 장면의 세 판을 그대로 넣고, 장면에서 git 이 남긴 파일
 내용과 같은지 본다. 규칙마다 한 장면이 증거다.
 """
+import os
+import shutil
+import tempfile
 import unittest
 
-from mygit import merge
+from mygit import cli, merge
 from mygit.tests import golden
 
 
@@ -54,6 +57,29 @@ class TestMerge3(unittest.TestCase):
         text, n = case('seq:1:5', 'text:1\\nX\\n3\\n4\\n5\\n',
                        'text:1\\nX\\n3\\n4\\nY\\n')
         self.assertEqual((text, n), (b'1\nX\n3\n4\nY\n', 0))
+
+
+class TestMergeCommand(unittest.TestCase):
+    def test_s12_1_unborn_head_is_refused(self):
+        # 첫 커밋 전 — git 은 <b> 를 그대로 가져오지만 mygit 은 줄인다
+        tmp = tempfile.mkdtemp()
+        try:
+            env = dict(os.environ, GIT_CEILING_DIRECTORIES=tmp,
+                       GIT_AUTHOR_NAME='A', GIT_AUTHOR_EMAIL='a@x',
+                       GIT_AUTHOR_DATE='1700000000 +0900',
+                       GIT_COMMITTER_NAME='C',
+                       GIT_COMMITTER_EMAIL='c@x',
+                       GIT_COMMITTER_DATE='1700000000 +0900')
+            run = lambda *a: cli.run(list(a), cwd=tmp, env=env)[1]
+            run('init')
+            tree = run('write-tree').strip().decode()
+            other = run('commit-tree', tree, '-m', 'x').strip().decode()
+            code, _, err = cli.run(['merge', other], cwd=tmp, env=env)
+            self.assertEqual(
+                (code, err),
+                (128, b'fatal: mygit: nothing to merge into yet\n'))
+        finally:
+            shutil.rmtree(tmp)
 
 
 if __name__ == '__main__':

@@ -61,3 +61,16 @@ TEST(s12_3_identical_change_taken_once) {
     CHECK_EQ(n, 0);
     CHECK_EQ(text, "1\nX\n3\n4\nY\n");
 }
+
+TEST(s12_1_unborn_head_is_refused) {
+    // 첫 커밋 전 — git 은 <b> 를 그대로 가져오지만 mygit 은 줄인다
+    golden::Sandbox s(false);
+    for (auto& [k, v] : golden::ident_env()) s.env[k] = v;
+    s.mygit({"init"});
+    auto tree = s.mygit({"write-tree"}).out.substr(0, 40);
+    auto other = s.mygit({"commit-tree", tree, "-m", "x"}).out;
+    other.pop_back();
+    auto r = s.mygit({"merge", other});
+    CHECK_EQ(r.code, 128);
+    CHECK_EQ(r.err, "fatal: mygit: nothing to merge into yet\n");
+}

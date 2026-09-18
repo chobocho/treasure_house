@@ -834,7 +834,9 @@ int cmd_merge(Ctx& ctx, std::vector<std::string> args) {
         throw GitError(
             "merge: " + name + " - not something we can merge", 1);
     auto [branch, head] = read_head(g);
-    if (head.empty() || !is_clean(ctx, head))
+    if (head.empty())  // git 은 <b> 를 그대로 가져온다 — 줄임
+        throw GitError("fatal: mygit: nothing to merge into yet");
+    if (!is_clean(ctx, head))
         throw GitError(
             "error: mygit: commit your local changes before merging");
     auto target = branch.empty() ? "HEAD" : branch;

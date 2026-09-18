@@ -780,6 +780,8 @@ def cmd_merge(ctx, args):
         raise GitError('merge: %s - not something we can merge'
                        % name, 1)
     branch, head = refs.read_head(g)
+    if head is None:            # git 은 <b> 를 그대로 가져온다 — 줄임
+        raise GitError('fatal: mygit: nothing to merge into yet')
     if not _is_clean(ctx, head):
         raise GitError('error: mygit: commit your local changes before '
                        'merging')

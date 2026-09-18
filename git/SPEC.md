@@ -978,7 +978,9 @@ index <옛 7글자>..<새 7글자>[ <모드>]
 ### 12.1 명령의 흐름 — `merge <b>`
 
 1. `<b>` 를 푼다(§6.2). 풀 수 없으면 §1.4 의 `merge: <b> - not something we can merge`.
-2. 인덱스가 HEAD 트리와 다르거나 추적 중인 파일이 작업 트리에서 바뀌었으면
+2. HEAD 가 아직 태어나지 않았으면(첫 커밋 전) `fatal: mygit: nothing to merge into
+   yet` (128). git 은 그 자리로 `<b>` 를 그대로 가져온다 — 줄임.
+   인덱스가 HEAD 트리와 다르거나 추적 중인 파일이 작업 트리에서 바뀌었으면
    멈춘다 — `error: mygit: commit your local changes before merging` (128).
    git 은 합치기가 건드리지 않는 파일의 변경은 허락한다. 줄임.
 3. `ORIG_HEAD` ← 지금 HEAD(이미 최신이어도 쓴다 — 진짜 git 과 같다,

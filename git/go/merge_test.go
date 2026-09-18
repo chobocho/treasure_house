@@ -5,7 +5,10 @@ package mygit
 // 하나를 따로 부른다 — 장면의 세 판을 그대로 넣고, 장면에서 git 이
 // 남긴 파일 내용과 같은지 본다. 규칙마다 한 장면이 증거다.
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func merge3Case(t *testing.T, base, ours, theirs string) (string, int) {
 	text, n := Merge3(makeRecipe(t, base), makeRecipe(t, ours),
@@ -45,5 +48,17 @@ func TestS123Merge3(t *testing.T) {
 		`text:a\n1\nm1\nm2\nm3\nm4\n2\ne\n`,
 		`text:a\n3\nm1\nm2\nm3\nm4\n4\ne\n`); n != 2 {
 		t.Error("split-4", n)
+	}
+}
+
+func TestS121UnbornHeadIsRefused(t *testing.T) {
+	// 첫 커밋 전 — git 은 <b> 를 그대로 가져오지만 mygit 은 줄인다
+	r := newRepo(t)
+	tree := strings.TrimSpace(r.ok("write-tree"))
+	other := strings.TrimSpace(r.ok("commit-tree", tree, "-m", "x"))
+	code, _, err := r.mygit("merge", other)
+	want := "fatal: mygit: nothing to merge into yet\n"
+	if code != 128 || err != want {
+		t.Fatalf("%d %q", code, err)
 	}
 }
