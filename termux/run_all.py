@@ -500,6 +500,26 @@ CAPTURES = [
           "'termux-app:app/src/main/AndroidManifest.xml' "
           "'.*IGNORE_BATTERY.*'"),
     ]),
+    # 10부 — 도구마다 자기가 어디서 도는 줄 아는가. 판이 바뀌면
+    # 달라지는 줄이 있어 toolchains 와 같이 스냅샷이다
+    Capture('dev_termux', 'termux', 'snapshot', [
+        S('파이썬', 'python3 -c "import sys, sysconfig; '
+          'print(sys.platform, sysconfig.get_platform())"'),
+        S('Node.js',
+          "node -p 'process.platform + \" \" + process.arch'"),
+        S('clang 의 대상', 'clang -dumpmachine'),
+        S('rustc 의 호스트', 'rustc -vV | grep host'),
+        S('Go', 'go env GOOS GOARCH'),
+        S('없는 도구', 'for c in vim nano tmux git make ssh sshd rsync '
+          'emacs; do command -v $c >/dev/null || echo "$c 없음"; done'),
+    ]),
+    Capture('dev_proot', 'proot', 'stable', [
+        S('파이썬', 'python3 -c "import sys, sysconfig; '
+          'print(sys.platform, sysconfig.get_platform())"'),
+        S('gcc 의 대상', 'gcc -dumpmachine'),
+        S('node 는', "command -v node || echo '(우분투 쪽에는 없다)'"),
+        S('git 은', "command -v git || echo '(우분투 쪽에는 없다)'"),
+    ]),
     # 9부 — 이 세션을 띄운 proot 명령줄. 추적자(TracerPid)의
     # cmdline 을 읽는다. 세션을 다시 띄우면 바뀔 수 있어 스냅샷이다
     Capture('proot_session', 'proot', 'snapshot', [

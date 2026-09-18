@@ -1,3 +1,10 @@
+### [2026-09-18 04:15] Termux 대백과사전 덱 10부 — 활용 I: 개발 환경(18장)
+- **기획:** 이 폰의 작업대: 깔린 도구와 판, 도구마다 자기를 어디서 도는 줄 아는지, 파이썬·Node·ssh·git·셸 설정.
+- **TC:** 캡처 2종(dev_termux 스냅샷·dev_proot) 추가, 조립 검사 오류 0건, 출처 없는 문장 1건 삭제.
+- **개발:** `termux/deck/sections/10_dev.html`, `termux/run_all.py`, `termux/out/dev_*.txt`, `termux/deck/claims.md`, `termux/PLAN.md`, `Termux_대백과사전.html`
+- **검증:** test_run_all 통과 · make all SKEL=1 오류 0건 · 역검증 통과
+- **비고:** Go·Rust 는 짓지 않고 판만(결정 10). 우분투 쪽엔 node·git 이 없어 Termux 것이 쓰였다는 사실을 캡처로 확인.
+
 ### [2026-09-18 04:11] Termux 대백과사전 덱 8부 — 한계와 우회(35장)
 - **기획:** root·팬텀 프로세스·Doze·W^X·낮은 포트·저장소·서비스·이식·백업·키보드를 '무엇이 막나·이 기기·우회·대가' 순서로.
 - **TC:** 조립 검사: 인용 범위 경계 통과, 캡처 등급 오류는 빌드 출력 캡처로 해소, 출처 없는 문장 4건 삭제.

@@ -823,3 +823,15 @@ The user approved every recommendation below as-is. Each row is now a decision.
 - Nothing requiring adb/root was executed; commands are quoted from the docs.
 - `exp/wakelock.sh` (experiment 10) is still uncited — it needs the Termux app to answer, which
   it does not from proot; kept in `pending.txt`.
+
+### Step 8 · Part 10 — 활용 I: 개발 환경 (2026-09-18)
+
+- Captures: `dev_termux` (snapshot — every Termux toolchain reports Android: python `android` /
+  `android-24-arm64_v8a`, node `android`, clang `aarch64-unknown-linux-android24`, rustc
+  `aarch64-linux-android`, Go `GOOS=android`; rsync·emacs absent), `dev_proot` (Ubuntu python
+  `linux`, gcc `aarch64-linux-gnu`; **no node and no git on the Ubuntu side** — the deck's
+  `check_deck.js` and all commits used Termux's node/git via the `$PREFIX/bin` that proot-distro
+  appends to PATH, README 1.3.5.2).
+- Part 10 written: 18 slides (budget 190) — deliberately short: no Go/Rust builds (decision 10),
+  nothing installed. Python/Node/ssh sections are wiki-sourced; the sshd capture shows this
+  device's config.

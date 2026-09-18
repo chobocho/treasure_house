@@ -272,3 +272,13 @@
 | 위키 백업 예는 ./home ./usr 을 tar 로 /sdcard 에, Termux 전용 디렉터리에는 두지 말 것 | wiki-backing-up-termux 1 | 위키 | 2026-09-18 |
 | termux-backup 은 $PREFIX 만 싼다 — termux-restore 가 --recursive-unlink 로 지우고 파이프 입력을 지원해야 하므로 | termux-tools@a62f7b2 scripts/termux-backup.in 2–30 | 소스 | 2026-09-18 |
 | 볼륨 아래 = Ctrl, 볼륨 위 + E/T/1/WASD/L/Q = Esc/Tab/F1/화살표/파이프/추가 키 | wiki-touch-keyboard | 위키 | 2026-09-18 |
+| Termux 쪽 판: clang 21.1.8 · Python 3.14.6 · node v24.18.0 · go1.27.1 android/arm64 · rustc 1.98.1(2026-09-01) · git 2.55.0 | out/toolchains.txt 1 | 스냅샷 | 2026-09-18 |
+| Termux 쪽 python 은 android / android-24-arm64_v8a, node 는 android arm64, clang 은 aarch64-unknown-linux-android24, rustc 호스트 aarch64-linux-android, Go 는 android arm64. rsync·emacs 는 없다 | out/dev_termux.txt 1–6 | 스냅샷 | 2026-09-18 |
+| proot 우분투 쪽 python 은 linux / linux-aarch64, gcc 는 aarch64-linux-gnu, node·git 은 우분투 쪽에 없다 | out/dev_proot.txt 1–4 | 캡처 | 2026-09-18 |
+| proot-distro 는 로그인 환경을 새로 만들고 $PREFIX/bin 을 PATH 끝에 붙여 Termux 도구에 닿게 한다 | readme-proot-distro 1.3.5.2 | README | 2026-09-18 |
+| 위키 Development Environments 는 APK 와 30개 언어, 31개 항목을 둔다 | wiki-development-environments | 위키 | 2026-09-18 |
+| 위키 Python: pip 와 build-essential, numpy 등은 pkg 패키지로, 마이너 판 업그레이드는 모듈 재설치, 옛 판 없음 → $PREFIX 백업, termux-exec 필요 | wiki-python 서두·1·2 | 위키 | 2026-09-18 |
+| 위키 Node.js: nodejs·nodejs-lts 중 하나만, build-essential·python 필요, 일부는 binutils, code-server 예 | wiki-node-js 서두·1·2 | 위키 | 2026-09-18 |
+| 위키 Remote Access: 기본 SSH 포트 8022, sshd 로 띄우고 pkill 로 멈춤, 로그는 logcat, 비밀번호 인증 기본·passwd, ssh-copy-id -p 8022, RSA 2048 최소·4096 이하 | wiki-remote-access 2.2.1 | 위키 | 2026-09-18 |
+| 이 기기 sshd: OpenSSH_10.5p1, 호스트 키 있음, AuthorizedKeysFile .ssh/authorized_keys, sftp-server 는 $PREFIX/libexec | out/sshd.txt 1–3 | 캡처 | 2026-09-18 |
+| 위키 Shells: BASH·Beanshell·Busybox Ash·FISH·IPython·TCSH·Xonsh·ZSH | wiki-shells | 위키 | 2026-09-18 |
