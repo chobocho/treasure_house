@@ -1,3 +1,80 @@
+### [2026-09-18 03:28] Termux 덱 — termux-* 명령 색인 도구·API 소스 캡처·거부 캡처
+- **기획:** 7부 표를 손으로 적지 않도록 캡처 두 개(주인 패키지·termux-api 호출)에서 84줄 색인을 만든다.
+- **TC:** 정상: 행 수·주인·needs-app·privacy 분류. 경계: 빈 캡처·모르는 명령·주석 줄·정렬 고정(7건).
+- **개발:** `termux/tools/api_table.py`, `termux/tools/tests/test_api_table.py`, `termux/run_all.py`, `termux/deck/gen_tables.py`, `termux/data/api_cmds.tsv`, `termux/out/` 캡처 6개
+- **검증:** make test 192 passed, 0 failed · stable 캡처 재현
+- **비고:** 개인정보 명령은 실행하지 않고 소스에서 칸 이름만 읽는다. tmx_deny 는 실행 전 거부(99)를 캡처.
+
+### [2026-09-18 03:13] Termux 대백과사전 덱 6부 — 패키지 시스템(37장)
+- **기획:** 폰의 pkg·apt·dpkg 에서 저장소·미러·키를 거쳐 termux-packages 공장과 부트스트랩까지, 그리고 .deb 손으로 만들기.
+- **TC:** 조립 검사: 인용 범위 36개 경계 통과, 소스 줄 인용 40건 핀 확인, 출처 없는 문장 1건 삭제·1건 미확인 표시.
+- **개발:** `termux/deck/sections/06_packages.html`, `termux/deck/claims.md`, `termux/deck/pending.txt`, `termux/PLAN.md`
+- **검증:** make all SKEL=1 오류 0건 · 역검증 통과 · check_slices 어긋남 0건
+- **비고:** 설치본 pkg 가 소스와 첫 줄만 다른 까닭을 massage 단계의 셔뱅 고치기로 확인. proot 에서는 pkg·apt 모두 root 거부.
+
+### [2026-09-18 03:05] Termux 대백과사전 덱 4부 — 앱(32장)
+- **기획:** termux-app 의 구조·터미널 에뮬레이터·PTY·TermuxService·부트스트랩·sharedUserId·RUN_COMMAND·properties·targetSdk 를 소스로.
+- **TC:** 조립 검사: 인용 범위 26개 경계 통과, 소스 줄 인용 30건 핀 커밋 확인, 긴 줄은 캡처로 돌림.
+- **개발:** `termux/deck/sections/04_app.html`, `termux/deck/claims.md`, `termux/PLAN.md`
+- **검증:** make all SKEL=1 오류 0건 · 역검증 통과 · check_slices 어긋남 0건
+- **비고:** ~/.termux 는 이름만 캡처(내용은 사용자의 것). 목표 170장 대비 32장 — 늘리지 않음.
+
+### [2026-09-18 02:55] Termux 대백과사전 덱 5부 — 파일시스템과 실행(47장)
+- **기획:** $PREFIX·셔뱅·termux-exec·W^X·시스템 링커 실행·paths.h·RUNPATH 를 핀 고정 소스와 캡처로.
+- **TC:** 조립 검사: 근거 등급 a12·s13·b12, 인용 범위 18개 경계 통과, 연도 4건 근거 확인.
+- **개발:** `termux/deck/sections/05_filesystem.html`, `termux/deck/claims.md`, `termux/PLAN.md`
+- **검증:** make all SKEL=1 오류 0건 · 역검증 통과 · check_slices 어긋남 0건
+- **비고:** 이 셸의 SELinux 문맥 untrusted_app_27 이 targetSdk 28 이 W^X 를 피하는 까닭의 직접 증거. 네이티브 셔뱅 결과는 device.txt 대기.
+
+### [2026-09-18 02:38] Termux 대백과사전 덱 3부 — 안드로이드 위의 리눅스(54장)
+- **기획:** 앱 샌드박스·uid·앱 데이터·bionic·SELinux·seccomp·Zygote·권한·스코프드 스토리지를 캡처·소스·공식 문서로.
+- **TC:** 조립 검사: 근거 등급 a13·s5·b17, 코드·캡처 역검증 일치, 인용 범위 3개·연도 3건 근거 확인.
+- **개발:** `termux/deck/sections/03_android.html`, `termux/deck/claims.md`, `termux/data/docs.tsv`, `termux/PLAN.md`
+- **검증:** make all SKEL=1 오류 0건 · 역검증 통과 · claims-check 근거 없음 0건
+- **비고:** proot 는 uid 를 0 으로 꾸미지만 보조 그룹(u0_a123_cache)이 앱 번호 123 을 드러낸다. 목표 160장 대비 54장 — 늘리지 않음.
+
+### [2026-09-18 02:28] Termux 대백과사전 덱 6·7단계 — 캡처 26종(stable 20개 3회 동일)·그림 18장
+- **기획:** 실기기 캡처를 stable/snapshot 으로 나눠 run_all 에 모으고, 구조도·자료 그림을 data/·out/ 에서 그린다.
+- **TC:** 정상: record.sh 가 stable 만 대조·네이티브 파일 들여오기. 가장자리: snapshot 은 흔들려도 통과·흔들리는 stable 은 파일 이름과 함께 실패.
+- **개발:** `termux/run_all.py`, `termux/tools/record.sh`, `termux/exp/{build,pkg_diff}.sh`, `termux/out/*.txt`(26), `termux/deck/gen_figs.py`, `termux/deck/figs/*.svg`(18)
+- **검증:** 177 passed, 0 failed · make record stable 20개 3회 동일 · make all SKEL=1 오류 0건
+- **비고:** Termux apt 가 uid 0 을 거부해 결정 5 의 설치는 불가 — 호스트 무변경. API·getprop 은 네이티브 스크립트로.
+
+### [2026-09-18 02:24] Git 대백과사전 덱 4단계 — 조사(공식 문서·연표 126·CVE 40·출처 대장)
+- **기획:** v2.55.0 태그의 공식 문서 943개와 메일 3통을 docs/ 로, 릴리스·CVE·연표·기여자·명령·자람 표를 mirror 에서 뽑는 make_data.py.
+- **TC:** make data-check 로 생성 표 재현 확인, check_claims 에 formats.tsv 절 제목 존재 검사(32행) 추가. 외부 사실 13건은 원문을 curl 로 받아 문장 대조.
+- **개발:** `git/tools/fetch_docs.py`, `git/tools/adoc_text.py`, `git/tools/make_data.py`, `git/data/*.tsv`(14), `git/deck/claims.md`, `git/deck/check_claims.py`, `git/Makefile`, `git/PLAN.md` 외 12개 파일
+- **검증:** make all SKEL=1 오류 0건 · data-check 어긋남 0건 · 형식 표 32행 근거 확인
+- **비고:** 1차 출처가 없는 "GitHub 창업일"·"2005-04-03 개발 시작"은 싣지 않기로 함. 날짜가 둘인 사건(Hamano 7-26/27, Mercurial 4-19/20)은 시간대 차이로 원문에서 확인.
+
+### [2026-09-18 01:58] Termux 대백과사전 덱 5단계 — 실험 10종(bionic·glibc 두 번 짓기)
+- **기획:** 같은 C 소스를 Termux clang(bionic)과 proot gcc(glibc)로 지어 차이를 보이고, 스크립트 실험으로 셔뱅·.deb·시그널·웨이크락을 다룬다.
+- **TC:** 정상: 인사 줄 같음·interp 다름·u0_a123·빈 포트 한 줄·137. 가장자리: 사용 중 포트·잘못된 인자·실패해도 웨이크락 해제.
+- **개발:** `termux/exp/*.c`(5), `termux/exp/*.sh`(4), `termux/exp/shebang/`, `termux/exp/mkdeb/`, `termux/exp/timeit_exp.py`, `termux/exp/tests/test_exp.py`, `termux/tools/native_facts.sh`
+- **검증:** 166 passed, 0 failed · make all SKEL=1 오류 0건
+- **비고:** 이 기기에서 1024 미만 포트는 20–23·80·443·445·515·631 만 bind 된다(원인 미확인). proot 안에서는 /tmp·/bin/sh 가 보여 네이티브 캡처가 필요.
+
+### [2026-09-18 01:49] Termux 대백과사전 덱 4단계 — elf.py·deb.py·pkgstat.py
+- **기획:** 5·6부가 쓸 표준 라이브러리 도구 셋: ELF 링커 정보, .deb 해부, dpkg status 통계.
+- **TC:** 정상: 손으로 지은 ELF·.deb 와 readelf·dpkg-deb 대조. 가장자리: 32비트·빅 엔디언·정적·잘림·zst·크기 없는 패키지·빈 입력.
+- **개발:** `termux/py/elf.py`, `termux/py/deb.py`, `termux/py/pkgstat.py`, `termux/py/tests/*.py`(3)
+- **검증:** 146 passed, 0 failed · make all SKEL=1 오류 0건
+- **비고:** 기기의 설치 패키지는 170개(계획서의 326 은 줄 수였다). Termux bash 는 linker64·RUNPATH $PREFIX/lib.
+
+### [2026-09-18 01:44] Termux 대백과사전 덱 3단계 — upstream 26개 핀·문서 127건·자료표·주장 49건
+- **기획:** 기억 대신 출처로: 저장소는 커밋, 위키는 revid, HTML 은 원문 해시로 핀 고정하고 연표·안드로이드 동작·릴리스를 표로 만든다.
+- **TC:** 정상: fetch_src 8·doc_text 21·gh_api 7·native_facts 5. 가장자리: 위키 절 번호 중복·SHA 속 숫자의 IMEI 오탐을 시험으로 먼저 박음.
+- **개발:** `termux/tools/{fetch_src.sh,doc_text.py,gh_api.py,native_facts.sh}`, `termux/data/*.tsv`(10), `termux/deck/claims.md`, `termux/PLAN.md`
+- **검증:** 104 passed, 0 failed · make all SKEL=1 오류 0건 · 연표 81행·안드로이드 19행
+- **비고:** targetSdk 는 v0.66(2019-01)부터 28, minSdk 는 v0.76 에서 24 인데 README 는 v0.83(태그 없음)이라 적는다. device.txt 는 사용자 실행 대기.
+
+### [2026-09-18 01:43] Git 대백과사전 덱 3단계 — golden/(진짜 git 이 만든 기준 바이트 305개)
+- **기획:** 입력·명령만 적은 golden_cases.py 를 git 2.55.0 에 돌려 기대값을 받는 make_golden.py, 다섯 언어가 같이 읽을 장면 파일(.scn) 형식을 SPEC §16.4 에 추가.
+- **TC:** SHA-1 100·트리 12·diff 33쌍(agree 30/tie 3)·장면 19·팩 2·pkt 대화 3·오류 18. 저장 블록 객체가 git fsck --strict 통과.
+- **개발:** `git/tools/make_golden.py`, `git/tools/golden_cases.py`, `git/golden/`(305파일), `git/SPEC.md`, `git/PLAN.md`
+- **검증:** make golden-check 어긋남 0건(두 번 생성) · make all SKEL=1 오류 0건
+- **비고:** 재료에 공백이 있으면 조용히 잘리던 결함을 커밋 전에 잡아 생성기가 거부하게 함.
+
 ### [2026-09-18 01:17] Git 대백과사전 덱 2단계 — SPEC.md(다섯 mygit 의 약속)
 - **기획:** 16절 규격서 — 객체·참조·인덱스·status·명령 출력·걷기·diff·merge·팩·전송·이름표·시험 배치.
 - **TC:** 바이트 예시 9개를 진짜 git 으로 뜨는 spec_examples.py + make spec-check(9/9). diff 원형 1,500쌍 대조로 agree/tie 두 목록 결정.
