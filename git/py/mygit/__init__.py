@@ -10,7 +10,7 @@ STEP 은 지금까지 만든 부록 A 의 단계다. 장면 시험(tests/test_sc
 12단계를 마치면 건너뛰는 시험이 하나도 없어야 한다.
 """
 
-STEP = 2
+STEP = 3
 
 
 class GitError(Exception):
