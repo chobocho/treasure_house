@@ -1,18 +1,265 @@
 <article class="card section" id="p11">
 <p class="chnum">11부</p>
 <h2>전송 프로토콜</h2>
-<p class="chsub">pkt-line 으로 오가는 대화</p>
-<p class="cap">이 부의 목표 장수는 140장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>11부에서 다룰 것</h3>
+<p class="chsub">두 저장소가 객체를 주고받는 대화</p>
+</article>
+
+<article class="card" id="p11-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">clone · fetch · push 는 두 git 프로세스의 대화입니다. 받는 쪽이 "무엇을 원하고 무엇을 가졌나" 를 말하면, 주는 쪽이
+그 차이만 팩 하나로 보냅니다. 2부의 내용 주소 덕에 "가졌다" 를 이름 하나로 말할 수 있습니다.</p>
 <ul>
-<li>pkt-line 과 참조 광고</li>
-<li>want · have 협상</li>
-<li>프로토콜 v0 대 v2</li>
-<li>upload-pack · receive-pack</li>
-<li>dumb HTTP · SSH · 사이드밴드</li>
-<li>bundle · shallow · 부분 클론과 promisor</li>
-<li>push 의 원자성</li>
+<li>pkt-line — 대화의 글자 단위</li>
+<li>v0 과 v2 — 광고부터 할 것인가, 물어보면 답할 것인가</li>
+<li>fetch 의 협상 — want · have · ACK</li>
+<li>push — 명령 줄, 결과 보고, 되감기 거절, 원자적 push, 서버 훅</li>
+<li>전송로 — 로컬·file·스마트 HTTP·dumb HTTP·bundle</li>
+<li>덜 받기 — 얕은 clone 과 부분 clone</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-ch1"><p class="chnum">1장</p><h2>pkt-line</h2><p class="chsub">길이 네 자리 + 내용</p></article>
+
+<article class="card" id="p11-pktline">
+<h3>줄마다 앞에 16진 길이 네 글자</h3>
+<!--OUT file=pkt_raw__git_protocol-version-2-git-upload-pack-advertise-refs-.-cut.txt note=v2 서버가 처음 내는 말 — 날 바이트 그대로-->
+<ul>
+<li><code>000e</code> = 14 = 길이 네 글자 + <code>version 2</code> 와 줄바꿈 10바이트</li>
+<li><code>0000</code> — 길이 0 은 특별한 표시(flush): "여기서 한 덩이 끝"</li>
+<li>v2 에는 <code>0001</code>(delim, 덩이 안의 구획)도 있습니다(2장)</li>
+</ul>
+<p>내용에 이진 데이터도 실을 수 있고, 한 줄은 길이 칸까지 65,520바이트를 넘지 않습니다.
+<!--CITE key=gitprotocol-common sec="pkt-line Format"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v0-raw">
+<h3>v0 광고의 날 바이트</h3>
+<!--OUT file=pkt_raw__upload-pack-advertise-refs-.-head-c-200-od-a-d-c-head-6.txt note=0111 = 273바이트짜리 첫 줄-->
+<!--OUT file=pkt_raw__upload-pack-advertise-refs-.-tr-0-cut-c1-100.txt note=NUL 을 @ 로 — 첫 줄에만 기능 목록이 붙는다-->
+<p>v0 서버는 연결되자마자 <b>모든 참조</b>를 줄줄이 광고합니다. 첫 줄의 NUL 뒤에 서버가 할 줄 아는 기능(capability) 목록이 숨어 있습니다.
+<!--CITE key=gitprotocol-pack sec="Reference Discovery"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-trace">
+<h3>대화를 엿보기 — GIT_TRACE_PACKET</h3>
+<!--OUT file=proto_work.v0__git_trace_packet-1-git-ls-remote-..-proto_origin-2-1-grep-o.txt note=v0 ls-remote — 서버가 보낸 줄(긴 줄은 90칸에서 접음)-->
+<p>환경 변수 하나로 오간 pkt-line 이 표준 오류에 찍힙니다(<code>&lt;</code> 받음, <code>&gt;</code> 보냄). 줄 앞의 시각·파일 이름은
+<code>grep -o</code> 로 떼어 냈습니다 — 두 프로세스가 같은 곳에 적어 줄 차례가 섞이므로 클라이언트 쪽 줄만 남겼습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-ch2"><p class="chnum">2장</p><h2>v0 과 v2</h2><p class="chsub">광고 먼저 대 물어보면 답</p></article>
+
+<article class="card" id="p11-v0-v2-fig">
+<h3>ls-remote 한 번을 두 판으로</h3>
+<!--FIG file=proto_v0_v2.svg cap=v0 은 서버가 참조를 전부 먼저, v2 는 기능만 알리고 ls-refs 를 기다린다-->
+<p>참조가 수십만 개인 저장소(태그가 많은 큰 프로젝트)에서 v0 은 브랜치 하나만 받을 때도 전부를 광고받아야 했습니다. v2 는 클라이언트가
+<code>ref-prefix</code> 로 필요한 것만 묻습니다. v2 는 2.26.0 에서 기본이 되었고(2.27 에서 잠시 내렸다가 2.29.0 에서 다시) 지금의 기본입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v2-ls">
+<h3>v2 의 ls-refs</h3>
+<!--OUT file=proto_work.v2__git_trace_packet-1-git-ls-remote-..-proto_origin-2-1-grep-o.txt note=기능 광고 → command=ls-refs → 참조 → flush-->
+<p>명령 덩이는 <code>command=</code> 줄, 공통 인자, <code>0001</code>(delim), 명령별 인자, <code>0000</code> 차례입니다.
+<!--CITE key=gitprotocol-v2 sec="ls-refs"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v2-clone">
+<h3>v2 clone 의 다섯 덩이</h3>
+<!--FIG file=pkt_v2_clone.svg cap=clone 한 번 — 서버 기능, ls-refs, 참조, fetch 요청, packfile-->
+<p class="cap">가운데 되풀이되는 <code>agent</code> · <code>object-format</code> 줄은 그림에서 줄였습니다. 원본 캡처는 다음 장입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v2-clone-raw">
+<h3>clone 의 캡처</h3>
+<!--OUT file=proto_work__git_trace_packet-1-git-clone-q-file-pwd-..-proto_origin-v2-2.txt note=want 넷 · done · 그리고 packfile-->
+<p>처음 받는 clone 은 가진 것이 없으니 <code>have</code> 없이 <code>want</code> 와 <code>done</code> 만 보냅니다. 서버는 그 커밋들에서 닿는 객체
+전부를 팩 하나로 보냅니다. <!--CITE key=gitprotocol-v2 sec=fetch--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-ch3"><p class="chnum">3장</p><h2>fetch 의 협상</h2><p class="chsub">가진 것을 알리면 덜 받는다</p></article>
+
+<article class="card" id="p11-nego">
+<h3>have 와 ACK</h3>
+<p>복제본을 만든 뒤 원본에 커밋 둘이 더해졌습니다. 복제본이 fetch 하면:</p>
+<!--OUT file=pkt_nego_work__git_trace_packet-1-git-fetch-q-origin-2-1-grep-o-fetch-.-cut.txt lines=25-41 note=fetch 덩이 — want 하나, have 둘, 그리고 서버의 답-->
+<ul>
+<li><code>want</code> — 원하는 새 끝</li>
+<li><code>have</code> — 이미 가진 커밋들(내 참조의 끝부터 거슬러)</li>
+<li><code>ACK</code> — "그 커밋은 나도 안다" — 공통 조상을 찾았다</li>
+<li><code>ready</code> 뒤 <code>packfile</code> — 공통 조상 이후의 객체만</li>
+</ul>
+<!--CITE key=gitprotocol-pack sec="Packfile Negotiation"-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-nego-result">
+<h3>받은 결과</h3>
+<!--OUT file=pkt_nego_work__log-oneline-1-origin-main.txt note=origin/main 이 새 끝으로-->
+<p>fetch 는 원격 추적 참조만 옮깁니다. 내 <code>main</code> 은 그대로입니다 — 합치는 것은 merge·rebase 의 일(12부의 pull).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p11-quiz-1" data-quiz>
+<h3>1~3장 퀴즈</h3>
+<p class="q">Q. pkt-line <code>0009done\n</code> 은 올바릅니까? 그리고 fetch 에서 클라이언트가 <code>have</code> 를 보내지 않으면 무엇이 달라집니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 올바릅니다 — <code>done\n</code> 5바이트 + 길이 칸 4바이트 = 9. <code>have</code> 가 없으면 서버는 공통 조상을 모르니
+원하는 커밋에서 닿는 객체 <b>전부</b>를 보냅니다(clone 처럼). 이미 가진 것까지 다시 받게 됩니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-ch4"><p class="chnum">4장</p><h2>push</h2><p class="chsub">명령 줄 · 결과 보고 · 거절</p></article>
+
+<article class="card" id="p11-push-trace">
+<h3>push 가 보내는 것</h3>
+<!--OUT file=pkt_push_work__git_trace_packet-1-git-push-q-origin-main-2-1-grep-o-push-..txt note=광고 → "옛 새 참조" → 팩 → 결과 보고-->
+<ul>
+<li>서버(receive-pack)가 참조와 기능을 광고합니다(여기서는 v0 틀)</li>
+<li>클라이언트는 참조마다 <code>옛이름 새이름 참조</code> 한 줄 — "옛 값이 이것이면 새 값으로"(4부의 비교 후 교체)</li>
+<li>그 뒤에 팩, 서버는 <code>unpack ok</code> 와 참조별 <code>ok</code>/<code>ng</code> 로 답합니다</li>
+</ul>
+<!--CITE key=gitprotocol-pack sec="Reference Update Request and Packfile Transfer"-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-push-nonff">
+<h3>되감기 거절</h3>
+<!--OUT file=proto_work.nonff__c-v2-push-origin-main-2-1.txt note=원격 끝이 내 역사에 없다 — 클라이언트가 먼저 거절-->
+<!--OUT file=proto_work.force__c-v2-push-force-origin-main-2-1.txt note=--force 여도 서버 설정 receive.denyNonFastForwards 가 거절-->
+<p>되감기(non-fast-forward) push 는 원격에 있던 커밋을 참조에서 떼어 냅니다. 클라이언트가 한 번, 서버 설정이 또 한 번 막습니다.
+<code>--force-with-lease</code> 는 "원격이 내가 마지막으로 본 값일 때만" 덮어쓰는 절충입니다(12부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-atomic">
+<h3>--atomic — 전부 아니면 전무</h3>
+<p>main(되감기 아님)과 dev(되감기)를 한 번에 push 했습니다. 서버는 dev 의 되감기를 거절합니다.</p>
+<!--OUT file=pkt_push_work__push-atomic-origin-main-dev-force-2-1.txt note=--atomic — main 도 atomic push failure 로 거절-->
+<!--OUT file=pkt_push_work__c-..-pkt_push-log-oneline-1-main.txt note=서버의 main 은 그대로-->
+<!--OUT file=pkt_push.nonatomic__push-origin-main-dev-force-2-1.txt note=--atomic 없이 — main 만 들어갔다-->
+<p>4부의 <code>update-ref --stdin</code> 트랜잭션을 원격에 적용한 것입니다. 참조 여럿이 함께 움직여야 하는 릴리스(태그 + 브랜치)에 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-hook">
+<h3>서버 쪽 훅 — pre-receive</h3>
+<!--OUT file=pkt_hook_work__cat-..-pkt_hook-hooks-pre-receive.txt note=끝 커밋 제목에 WIP 가 있으면 거절-->
+<!--OUT file=pkt_hook_work__push-origin-main-2-1.txt note=훅의 표준 오류가 remote: 로 돌아온다-->
+<!--OUT file=pkt_hook.ok__push-q-origin-main-2-1-git-c-..-pkt_hook-log-oneline-1.txt note=제목을 고치면 들어간다-->
+<p>pre-receive 는 참조를 바꾸기 전에 "옛 새 참조" 줄들을 받아 전체를 거절할 수 있습니다. 호스팅 서비스의 브랜치 보호 규칙도 같은 자리에서
+동작합니다. <!--CITE key=githooks sec=pre-receive--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-ch5"><p class="chnum">5장</p><h2>전송로</h2><p class="chsub">같은 대화, 다른 통로</p></article>
+
+<article class="card" id="p11-transports">
+<h3>네 가지 통로</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>주소</th><th>통로</th><th>이 덱의 실험</th></tr>
+<tr><td><code>../repo</code></td><td>로컬 — 프로토콜 없이 객체 파일을 복사(가능하면 하드 링크)</td><td>2부 분산</td></tr>
+<tr><td><code>file://…</code></td><td>로컬이지만 upload-pack 과 pkt-line 대화</td><td>이 부의 trace 들</td></tr>
+<tr><td><code>ssh://…</code></td><td>ssh 로 원격의 upload-pack·receive-pack 을 실행해 표준 입출력으로 대화</td><td>이 기계에서는 뜨지 않음</td></tr>
+<tr><td><code>https://…</code></td><td>스마트 HTTP — 같은 pkt-line 을 HTTP 요청·응답에 실음</td><td>다음 장</td></tr>
+</table></div>
+<p class="cap">ssh 는 대화를 싣는 관일 뿐 내용은 file:// 과 같습니다. 그래서 file:// 캡처로 대신합니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-http">
+<h3>스마트 HTTP — http-backend 를 CGI 로</h3>
+<!--OUT file=pkt_http_client__cat-..-pkt-tools-cgi.sh.txt note=웹 서버가 할 일을 환경 변수로 흉내-->
+<!--OUT file=pkt_http_client__sh-..-pkt-tools-cgi.sh.txt note=응답 머리와 몸 — 몸은 pkt-line-->
+<p>웹 서버 없이 <code>git http-backend</code> 를 CGI 로 직접 불렀습니다. 몸은 <code># service=git-upload-pack</code> 줄 하나 뒤에 1장의 v0 광고와
+같은 pkt-line 입니다. 캐시하지 말라는 머리가 붙습니다. <!--CITE key=gitprotocol-http sec="Smart Server Response"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-dumb">
+<h3>dumb HTTP — 정적 파일만으로</h3>
+<!--OUT file=proto_work__c-..-proto_origin-update-server-info-cat-..-proto_origin-inf.txt note=update-server-info 가 만든 참조 목록-->
+<!--OUT file=proto_work__cat-..-proto_origin-objects-info-packs.txt note=팩 목록-->
+<p>서버에 git 이 없어도 파일만 올려 두면 클라이언트가 이 목록을 읽고 필요한 팩·객체 파일을 하나씩 받아 갑니다. 협상이 없어 비효율적이라 요즘은
+드뭅니다. <!--CITE key=gitprotocol-http sec="Dumb Server Response"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-bundle">
+<h3>bundle — 파일 하나에 담아 옮기기</h3>
+<!--OUT file=proto_work__c-..-proto_origin-bundle-create-..-proto.bundle-all-2-1.txt note=모든 참조를 파일 하나에-->
+<!--OUT file=proto_work__bundle-verify-..-proto.bundle.txt note=검사-->
+<!--OUT file=proto_work__clone-q-..-proto.bundle-from-bundle-git-c-from-bundle-log-on.txt note=bundle 에서 clone-->
+<p>bundle 은 참조 목록 + 팩입니다. 네트워크가 막힌 곳으로 저장소를 옮길 때, 또는 서버가 clone 첫머리에 미리 만든 bundle 을 먼저 주고
+나머지만 fetch 하게 할 때(bundle-uri) 씁니다. <!--CITE key=gitformat-bundle sec=FORMAT--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-bundle-heads">
+<h3>bundle 안의 참조</h3>
+<!--OUT file=proto_work__bundle-list-heads-..-proto.bundle.txt note=bundle 이 담은 참조들-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-ch6"><p class="chnum">6장</p><h2>덜 받기</h2><p class="chsub">얕은 clone 과 부분 clone</p></article>
+
+<article class="card" id="p11-shallow">
+<h3>얕은 clone — 역사의 끝만</h3>
+<!--OUT file=proto_work__clone-q-depth-1-file-pwd-..-proto_origin-shallow-git-c-shall.txt note=--depth 1 — 커밋 하나-->
+<!--OUT file=proto_work__cat-shallow-.git-shallow.txt note=여기서 역사가 끊긴다는 표시-->
+<!--OUT file=proto_work.deepen__c-shallow-fetch-q-deepen-2-git-c-shallow-log-oneline.txt note=--deepen 으로 더 받기-->
+<p><code>.git/shallow</code> 에 적힌 커밋은 부모가 있어도 없는 것처럼 다룹니다. CI 처럼 최신 스냅숏만 필요할 때 씁니다. blame·merge-base 처럼
+역사가 필요한 일은 틀린 답을 낼 수 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-partial">
+<h3>부분 clone — blob 은 필요할 때</h3>
+<!--OUT file=proto_work__clone-q-filter-blob-none-no-checkout-file-pwd-..-proto_origi.txt note=--filter=blob:none — 커밋과 트리만-->
+<!--OUT file=proto_work__c-partial-rev-list-objects-missing-print-all-grep-c.txt note=없는 객체(blob) 수-->
+<!--OUT file=proto_work__c-partial-config-get-remote.origin.promisor.txt note=원격이 "나중에 주겠다" 고 약속한 저장소-->
+<p>역사는 전부 있고 파일 내용만 빠졌습니다. 체크아웃·diff 가 blob 을 필요로 하면 그때 원격에서 받습니다.
+<!--CITE key=technical-partial-clone sec="Design Overview"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-partial-2">
+<h3>체크아웃하면</h3>
+<!--OUT file=proto_work__c-partial-config-get-remote.origin.partialclonefilter.txt note=걸러 낸 조건-->
+<!--OUT file=proto_work.checkout__c-partial-checkout-q-main-git-c-partial-rev-list-objects-mis.txt note=체크아웃한 판의 blob 을 받아 없는 수가 줄었다-->
+<p>이 덱을 만들 때 git/git 저장소도 이렇게 받았습니다(<code>--filter=blob:none</code>, 0부). 역사를 훑는 데는 blob 이 필요 없고, 문서를 읽을 때만
+그 파일의 blob 을 받았습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-summary">
+<h2>11부 정리</h2>
+<div class="tblwrap"><table class="kv">
+<tr><th>생각</th><th>확인한 캡처</th></tr>
+<tr><td>대화는 pkt-line</td><td><code>000eversion 2</code> · <code>0000</code> flush · <code>0001</code> delim</td></tr>
+<tr><td>v0 은 광고 먼저, v2 는 묻고 답하기</td><td>v0 첫 줄 273바이트에 기능 목록 · v2 는 ls-refs</td></tr>
+<tr><td>fetch 는 have 로 덜 받는다</td><td>want 1 · have 2 · ACK · packfile</td></tr>
+<tr><td>push 는 "옛 새 참조" 줄</td><td>report-status · 되감기 거절 · --atomic · pre-receive</td></tr>
+<tr><td>통로는 여럿, 대화는 같다</td><td>file:// · 스마트 HTTP CGI · dumb HTTP · bundle</td></tr>
+<tr><td>덜 받기</td><td>--depth 와 .git/shallow · --filter=blob:none 과 promisor</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p11-quiz-2" data-quiz>
+<h3>4~6장 퀴즈</h3>
+<p class="q">Q. 릴리스 스크립트가 태그 <code>v3.0</code> 과 브랜치 <code>release</code> 를 함께 push 합니다. 태그만 들어가고 브랜치가 거절되면
+곤란합니다. 무엇을 씁니까? 그리고 서버가 "WIP 커밋은 받지 않는다" 를 강제하려면 어디에 무엇을 둡니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>git push --atomic origin v3.0 release</code> — 하나라도 거절되면 둘 다 들어가지 않습니다(실험에서 main 이 "atomic
+push failure" 로 함께 거절). 서버의 <code>hooks/pre-receive</code> 에 새 끝 커밋을 검사하고 0 이 아닌 값으로 끝나는 스크립트를 둡니다. 그
+표준 오류가 push 한 사람에게 <code>remote:</code> 로 보입니다.</div>
+<span class="tier ill">설명용</span>
 </article>

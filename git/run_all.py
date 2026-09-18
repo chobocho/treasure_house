@@ -47,8 +47,8 @@ from build_deck import gitslug  # noqa: E402  같은 규칙이어야 한다
 ORDER = ['hello', 'concepts', 'objects', 'anatomy', 'tree_sort',
          'refs', 'refs2', 'index', 'index2', 'cmds', 'dag', 'merge',
          'merge2', 'rebase', 'rebase2', 'diff', 'diff2', 'pack',
-         'pack2', 'proto', 'config_hooks', 'limits', 'recovery',
-         'mygit', 'cmdref']
+         'pack2', 'proto', 'proto2', 'config_hooks', 'limits',
+         'recovery', 'mygit', 'cmdref']
 
 
 def cells(s):
@@ -220,6 +220,10 @@ def width_problems():
             if w > MAX_COLS:
                 bad.append('out/%s:%d %d칸 (최대 %d)'
                            % (name, i, w, MAX_COLS))
+            # NUL 은 화면에 안 보이고 덱의 글꼴 내장을 멈춘다 — 캡처
+            # 명령에서 tr '\0' '@' 로 바꿔 둘 것(11부의 광고 줄)
+            if '\0' in line:
+                bad.append('out/%s:%d NUL 바이트' % (name, i))
     return bad
 
 
