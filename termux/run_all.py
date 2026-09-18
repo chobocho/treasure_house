@@ -562,6 +562,15 @@ CAPTURES = [
         S('시험', 'python3 -m unittest tools.tests.test_scrub 2>&1'
           " | grep -E '^(Ran|OK)' | cut -d' ' -f1-3"),
     ]),
+    # 15부 — 실험 12: 라이브러리를 지운 실행 파일. 두 링커의 말
+    Capture('missing_termux', 'termux', 'stable', [
+        S('bionic — Termux 의 clang', 'sh exp/missing_lib.sh clang '
+          'scratch/missing_b'),
+    ]),
+    Capture('missing_proot', 'proot', 'stable', [
+        S('glibc — 우분투의 gcc', 'sh exp/missing_lib.sh gcc '
+          'scratch/missing_g | cut -c1-100'),
+    ]),
     # 9부 — 이 세션을 띄운 proot 명령줄. 추적자(TracerPid)의
     # cmdline 을 읽는다. 세션을 다시 띄우면 바뀔 수 있어 스냅샷이다
     Capture('proot_session', 'proot', 'snapshot', [

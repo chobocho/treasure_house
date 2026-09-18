@@ -1,3 +1,10 @@
+### [2026-09-18 05:18] Termux 대백과사전 덱 15부 — 문제 해결 사전(24장)
+- **기획:** 화면의 오류 한 줄에서 출발해 메시지·원인·해결과 근거를 적는 18항목. 링커 오류는 실험으로 재현.
+- **TC:** 실험 12 시험 3건(glibc 메시지·종료 코드·남은 파일, bionic 메시지, 사용법) 먼저 RED 확인 후 구현.
+- **개발:** `termux/exp/missing_lib.sh`, `termux/exp/tests/test_exp.py`, `termux/run_all.py`, `termux/deck/sections/15_troubleshoot.html`, `termux/deck/claims.md` 외 5개 파일
+- **검증:** test_exp·test_run_all 통과 · make all SKEL=1 오류 0건
+- **비고:** 시계 오차 항목은 출처가 없어 뺐다. getprop 거부 원인은 미확인.
+
 ### [2026-09-18 05:14] Termux 대백과사전 덱 14부 — 보안과 개인정보(15장)
 - **기획:** 위협 모델, 매니페스트의 문과 자물쇠, 2022년 공개된 앱 취약점 3건, 보안 정책, sshd 노출, 이 덱의 개인정보 규칙.
 - **TC:** 캡처 2종(src_security·scrub_demo — 명령 줄이 검사에 안 걸리게 printf 로 조립), 조립 검사 오류 0건, 과장 문장 4건 정정.

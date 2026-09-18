@@ -299,6 +299,53 @@ class ScriptTest(unittest.TestCase):
             self.assertRegex(l, r'^\S+: 종료 \d+ · ')
 
 
+class MissingLibTest(unittest.TestCase):
+    # 실험 12 — 공유 라이브러리를 지운 뒤 실행하면 링커가 무엇이라
+    # 하는가(15부). bionic 은 "CANNOT LINK EXECUTABLE", glibc 는
+    # "error while loading shared libraries".
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.d)
+
+    def run_it(self, cc, d):
+        script = os.path.join(EXP, 'missing_lib.sh')
+        return subprocess.run(['sh', script, cc, d],
+                              capture_output=True, text=True)
+
+    def test_glibc_message(self):
+        r = self.run_it('gcc', self.d)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        lines = r.stdout.splitlines()
+        self.assertEqual(lines[0], '있을 때: gone 이 불렸다')
+        self.assertIn('libgone.so', lines[1])
+        self.assertIn('error while loading shared libraries', lines[1])
+        self.assertRegex(lines[2], r'^종료 \d+$')
+        self.assertNotEqual(lines[2], '종료 0')
+        # 지운 뒤 디렉터리에는 실행 파일만 남는다
+        self.assertEqual(sorted(os.listdir(self.d)), ['use_gone'])
+
+    @unittest.skipUnless(HAVE_TERMUX, 'Termux clang 이 없다')
+    def test_bionic_message(self):
+        d = os.path.join(BASE, 'scratch', 'missing_t')
+        shutil.rmtree(d, ignore_errors=True)
+        rel = os.path.relpath(d, BASE)
+        r = subprocess.run(['sh', TMX, '--', 'sh exp/missing_lib.sh '
+                            'clang ' + rel], capture_output=True,
+                           text=True)
+        lines = r.stdout.splitlines()
+        self.assertEqual(lines[0], '있을 때: gone 이 불렸다')
+        self.assertIn('CANNOT LINK EXECUTABLE', lines[1])
+        self.assertIn('libgone.so', lines[1])
+        shutil.rmtree(d, ignore_errors=True)
+
+    def test_usage(self):
+        r = subprocess.run(['sh', os.path.join(EXP, 'missing_lib.sh')],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+
+
 @unittest.skipUnless(shutil.which('curl'), 'curl 이 없다')
 class ServeOnceTest(unittest.TestCase):
     # 실험 11 — 127.0.0.1 에 웹 서버를 띄워 한 번 묻고 끈다(11부)

@@ -867,3 +867,12 @@ The user approved every recommendation below as-is. Each row is now a decision.
   trip the checker; scrub tests 38 OK).
 - Part 14 written: 15 slides (budget 90). `termux-keystore` and backup encryption left out: no
   source in hand (keystore is on the privacy denylist and was never run).
+
+### Step 8 · Part 15 — 문제 해결 사전 (2026-09-18)
+
+- Experiment 12 `exp/missing_lib.sh` (+3 tests): builds `libgone.so` + `use_gone`, runs, deletes
+  the library, runs again — bionic says `CANNOT LINK EXECUTABLE … "libgone.so" not found` (exit
+  1), glibc `error while loading shared libraries` (exit 127). Captures `missing_termux`,
+  `missing_proot`. `out/tbl_docs.html` regenerated for the two docs added in Part 14.
+- Part 15 written: 24 slides (budget 110) — 18 entries in message → cause → fix form, each with a
+  capture from this device or a wiki/README source. Clock-skew entry dropped (no source).
