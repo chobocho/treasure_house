@@ -222,3 +222,29 @@
 | Termux:Float 은 터미널을 떠 있는 창으로 보이는 플러그인이다 | readme-termux-float 1 | README | 2026-09-18 |
 | Termux:Styling: 터미널을 길게 눌러 More… → Style → 색·글꼴 고르기 | readme-termux-styling 1.2 | README | 2026-09-18 |
 | Termux:X11 은 NDK 로 지은 완전한 X 서버이고 Android 8 이상, 앱과 termux 패키지 둘 다 필요하다 | readme-termux-x11 1.1·1.4 | README | 2026-09-18 |
+| proot 는 chroot·mount --bind·binfmt_misc 의 사용자 공간 구현이고 권한 없는 ptrace 에 기대며, 손님의 요청을 번역해 호스트 커널에 넘긴다 | proot@7266fb3 doc/proot/manual.txt Description | 매뉴얼 | 2026-09-18 |
+| proot 는 root 처럼 보이게 할 뿐 진짜 권한 상승은 주지 않는다. 위키 사용 예는 unset LD_PRELOAD 로 시작한다(termux-exec 와 충돌) | wiki-proot 서두·1 | 위키 | 2026-09-18 |
+| -0 은 신원을 꾸미고 소유자 바꾸기 등이 성공한 척하며 fakeroot 보다 꽤 제한적이다. -0 은 -i 0:0 과 같다 | proot manual.txt -0·-i | 매뉴얼 | 2026-09-18 |
+| proot 매뉴얼은 5.1.0(2014-12-12)이고 --kill-on-exit·--link2symlink·--sysvipc·-L·--ashmem-memfd·-H·-p 가 없다(proot.h 에만) | proot manual.txt 머리·Options · out/src_proot.txt 5 | 매뉴얼·소스 | 2026-09-18 |
+| proot 는 fork 한 자식에서 PTRACE_TRACEME·SIGSTOP 뒤, PROOT_NO_SECCOMP 가 없으면 seccomp 필터를 걸고 exec 한다 | proot@7266fb3 src/tracee/event.c 113–131 | 소스 | 2026-09-18 |
+| 추적은 sysenter·sysexit 두 단계이고, seccomp 가 켜지면 sysexit 뒤 PTRACE_CONT 로 다음 알림까지 간다 | proot@7266fb3 src/tracee/event.c 567–580 | 소스 | 2026-09-18 |
+| 이 세션의 TracerPid 프로세스 이름은 proot | out/proot_session.txt 1 | 캡처 | 2026-09-18 |
+| seccomp 필터는 목록의 호출이면 SECCOMP_RET_TRACE, 끝까지 없으면 SECCOMP_RET_ALLOW. 아키텍처 구역마다 목록을 펼친다 | proot@7266fb3 src/syscall/seccomp.c 97–121·282–303 | 소스 | 2026-09-18 |
+| proot_sysnums 목록은 98개이고 getpid 는 없다. 확장은 저마다 filtered_sysnums 를 더한다 | out/src_proot.txt 1·2 · seccomp.c 331–435 · port_switch.c 35–42 | 소스 캡처 | 2026-09-18 |
+| getcwd 는 들어갈 때 PR_void 로 바뀌고, 나올 때 proot 가 tracee->fs->cwd 를 손님 메모리에 써 넣는다 | proot@7266fb3 src/syscall/enter.c 1880–1884 · exit.c 95–128 | 소스 | 2026-09-18 |
+| proot 안에서 getpid 20만 번 113.742 ms, getcwd 20만 번 21,305.860 ms, env true 100번 12,731.661 ms (중앙값, 3회) | out/proot_cost.txt 1·2·3 | 스냅샷 | 2026-09-18 |
+| execve 가 EPERM 이면 커널 버그일 수 있다며 PROOT_NO_SECCOMP=1 을 안내한다 | proot@7266fb3 src/cli/cli.c 139–145 | 소스 | 2026-09-18 |
+| proot-distro 는 루트·커널 모듈·Docker 데몬 없이 Docker/OCI 이미지로 리눅스 사용자 공간을 띄운다 | readme-proot-distro 1.2 | README | 2026-09-18 |
+| 설치: OCI Distribution 을 urllib 로, 플랫폼 선택, 층마다 SHA-256 확인·캐시, 하드 링크는 복사, 장치·FIFO 건너뜀. 뒤이어 resolv.conf 구글 DNS·hosts·aid_ 사용자 등록 | readme-proot-distro 1.4.1 | README | 2026-09-18 |
+| 저장 구조: containers/<이름>/rootfs·manifest.json, rootfs/.l2s 는 link2symlink 뒷받침 저장소 | readme-proot-distro 1.5 | README | 2026-09-18 |
+| 이 컨테이너: image_ref ubuntu, arch aarch64, aid_u0_a123 등록, group 에 aid_ 5줄, resolv.conf 8.8.8.8·8.8.4.4 | out/proot_container.txt 1–4 | 캡처 | 2026-09-18 |
+| 위키(revid 6573)의 배포판 목록은 Ubuntu (22.04) 등 고정 목록이다 | wiki-proot 2 | 위키 | 2026-09-18 |
+| proot-distro 는 TracerPid 프로세스 이름에 proot 가 있으면 실행을 거절한다 | proot-distro@f832a56 proot_distro/cli.py 90–119 · out/proot_probe.txt 2 | 소스·캡처 | 2026-09-18 |
+| proot_cmd.py 는 "Development assisted by Claude Code" 머리 줄을 갖고, 명령줄을 7단계 순서로 조립하며 Termux 에서만 확장을 붙인다 | proot-distro@f832a56 proot_cmd.py 5·21–32·129–157 | 소스 | 2026-09-18 |
+| 이 세션의 proot 명령줄: 확장 5개·--change-id=0:0·--rootfs=.·/dev·/proc·/sys·안드로이드 경로·$PREFIX·사용자 바인드 1개, -p 없음 | out/proot_session.txt 2 | 스냅샷 | 2026-09-18 |
+| sysdata 가짜 파일 10개를 /proc·/sys 자리에 붙인다. 안드로이드가 막는 /proc 파일 대신이고, 손님이 쓸 수 있는 곳이라 fd·O_NOFOLLOW·링크 수 1 을 확인한다. proot 에는 읽기 전용 바인드가 없다 | out/proot_session.txt 3 · proot-distro@f832a56 sysdata.py 21–51 | 캡처·소스 | 2026-09-18 |
+| 가짜 커널 판 6.17.0-PRoot-Distro 는 constants.py 에서 오고 /proc/version 도 같은 값을 낸다. /sys/fs/selinux 는 빈 디렉터리 | out/src_proot.txt 4 · out/proot_session.txt 4·5 | 캡처 | 2026-09-18 |
+| link2symlink: ln 한 두 이름이 stat 에선 보통 파일·링크 2, /.l2s 에는 심볼릭 링크와 보통 파일. /.l2s 항목 11,128개, 지우면 사라진다 | out/proot_l2s.txt 1–4 | 스냅샷 | 2026-09-18 |
+| l2s 심볼릭 링크는 rootfs 절대 경로를 가리켜 rootfs 를 옮기면 깨지므로 l2s.py 가 고쳐 쓴다 | proot-distro@f832a56 proot_distro/l2s.py 21–32 | 소스 | 2026-09-18 |
+| -p 는 1024 미만 포트의 bind·connect 에 2000 을 더한다 | out/src_proot.txt 5·6 | 소스 캡처 | 2026-09-18 |
+| proot-distro 는 $PREFIX 를 같은 경로에 바인드해 termux-api·pkg 같은 Termux 도구를 안에서 부를 수 있게 한다 | readme-proot-distro 1.3.5.1 | README | 2026-09-18 |

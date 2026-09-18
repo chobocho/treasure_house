@@ -784,3 +784,24 @@ The user approved every recommendation below as-is. Each row is now a decision.
   (Boot/Widget/Tasker/Float/Styling/X11) from READMEs. Native API outputs wait for
   `data/device.txt` (p7-native-script says so on the slide); experiment 7 (`exp/api_call.sh`)
   stays in `pending.txt` until then.
+
+### Step 8 · Part 9 — proot 와 리눅스 배포판 (2026-09-18)
+
+- Finding (sourced): proot does **not** stop on every syscall — `enable_syscall_filtering` installs
+  a seccomp-BPF filter that returns `SECCOMP_RET_TRACE` only for the 98 entries of
+  `proot_sysnums[]` (+ extension lists) and `SECCOMP_RET_ALLOW` otherwise; `getpid` is not listed.
+  `exp/syscall_loop.c` gained a `getcwd` mode (tests first; its header comment claimed "all
+  syscalls" and was corrected). Snapshot: getpid 200k = 113.7 ms vs getcwd 200k = 21,305.9 ms in
+  this proot. The native baseline for both was added to `tools/native_facts.sh`.
+- New captures: `proot_session` (tracer name + this session's proot argv read from
+  `/proc/$TracerPid/cmdline`, sysdata binds, fake `/proc/version`, empty `/sys/fs/selinux`),
+  `proot_container` (manifest image_ref/arch, `aid_` users, resolv.conf), `proot_l2s`
+  (link2symlink demo in scratch/, `/.l2s` count), `src_proot` (sysnum count, no getpid,
+  proot-distro's appended flags, fake kernel release, proot.h option descriptions, port_switch
+  constants).
+- `tools/scrub.py` keeps well-known public resolvers (8.8.8.8 · 8.8.4.4 · 1.1.1.1 · 1.0.0.1 ·
+  9.9.9.9) — test first; neighbours stay masked.
+- Part 9 written: 45 slides (budget 130). proot-distro is now an OCI-image installer (README
+  1.4.1) and its `proot_cmd.py` carries "Development assisted by Claude Code" (for Part 13).
+  Marked 미확인: why hard links need emulation on Android, why getprop is EPERM, why the API
+  times out. The manual in the repo is 5.1.0 (2014) and lacks the Termux-era extensions.

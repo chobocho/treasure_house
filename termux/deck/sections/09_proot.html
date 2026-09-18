@@ -2,18 +2,460 @@
 <p class="chnum">9부</p>
 <h2>proot 와 리눅스 배포판</h2>
 <p class="chsub">루트 없이 다른 배포판을 띄우는 법 — 이 덱이 태어난 곳</p>
-<p class="cap">이 부의 목표 장수는 130장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>9부에서 다룰 것</h3>
+<p>이 덱은 폰 위의 Termux 안, 그 안에 띄운 우분투(proot) 안에서 만들어졌습니다. proot 는 루트 권한 없이
+"다른 배포판의 뿌리 디렉터리" 에 들어가 있는 것처럼 보이게 해 주는 프로그램입니다. 어떻게 속이는지, 무엇을 못
+속이는지, 그리고 그 값이 얼마인지를 이 세션 자신을 재료로 봅니다.</p>
+<div class="note">이 부의 캡처는 대부분 <b>proot 쪽(<code>#</code>)</b> 에서 떴습니다. "Termux 쪽(<code>$</code>)"
+캡처도 사실은 이 proot 의 추적을 받는 Termux 프로그램입니다(3부 "누가 이 셸을 지켜보고 있다").</div>
+</article>
+
+<article class="card" id="p9-c1">
+<p class="chnum">1장</p>
+<h2>proot 는 무엇을 흉내 내나</h2>
+<p>proot 매뉴얼의 첫 문장: "PRoot is a user-space implementation of <code>chroot</code>, <code>mount --bind</code>,
+and <code>binfmt_misc</code>." 셋 다 원래 루트가 있어야 하는 기능입니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>원래 기능</th><th>하는 일</th><th>proot 의 옵션</th></tr>
+<tr><td><code>chroot</code></td><td>어떤 디렉터리를 새 <code>/</code> 로</td><td><code>-r</code> / <code>--rootfs</code></td></tr>
+<tr><td><code>mount --bind</code></td><td>바깥 경로를 안쪽 자리에 붙이기</td><td><code>-b</code> / <code>--bind</code></td></tr>
+<tr><td><code>binfmt_misc</code></td><td>다른 CPU 용 프로그램을 에뮬레이터로</td><td><code>-q</code> (QEMU)</td></tr>
+</table></div>
+<p>매뉴얼은 이어서 말합니다 — 기술적으로는 <code>ptrace</code>, "모든 리눅스 커널에 있는 권한 없는 시스템 호출" 에
+기댄다고. 손님(guest) 프로그램이 커널에 하는 요청을 proot 가 <b>번역해서</b> 호스트 커널에 넘깁니다.</p>
+<p class="cap">출처: proot doc/proot/manual.txt Description·Options</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p9-not-root">
+<h3>root 처럼 보일 뿐이다</h3>
+<p>Termux 위키의 PRoot 문서가 굵게 적어 둔 경고입니다: proot 는 시스템 호출의 인자와 반환값을 꾸며 프로그램이
+root 로 도는 것처럼 보이게 할 수 있지만, <b>진짜 권한 상승은 전혀 주지 않는다</b>. 커널이나 하드웨어 상태를
+바꾸려는 프로그램은 동작하지 않는다.</p>
+<p>매뉴얼의 <code>-0</code>(<code>--root-id</code>) 설명도 같습니다: 패키지 관리자처럼 "기술적 이유 없이" root 를
+요구하는 프로그램을 위해 신원을 꾸미고, 소유자 바꾸기 같은 일이 <b>성공한 척</b> 합니다. 그리고 "fakeroot 에 비하면
+꽤 제한적" 이라고 덧붙입니다. 3부에서 본 대로 이 세션의 <code>id</code> 는 0 이지만, 보조 그룹과 SELinux 문맥은
+진짜 앱의 것이었습니다.</p>
+<p class="cap">출처: 위키 PRoot(revid 6573) · proot manual.txt -0·-i</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p9-traceme">
+<h3>시작 — 스스로 추적받겠다고 선언한다</h3>
+<!--CODE file=sources/proot/src/tracee/event.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=113-131 note=fork 한 자식이 exec 하기 전에 하는 일-->
+<!--SRC repo=proot path=src/tracee/event.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=113-131-->
+<p>proot 는 fork 한 자식에서 <code>PTRACE_TRACEME</code> 로 "부모가 나를 추적한다" 고 선언하고, 스스로 멈춘 뒤
+(<code>SIGSTOP</code>), seccomp 필터를 걸고 나서야 손님 프로그램을 exec 합니다. 그 뒤로 이 자식과 그 자손은 모두
+proot 의 추적을 받습니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p9-loop">
+<h3>가로채기 한 번의 모양</h3>
+<!--FIG file=proot_loop.svg cap=손님이 open("/etc/os-release") 를 부르면 proot 가 멈춰 세우고 경로를 rootfs 안으로 바꿔 커널에 넘긴다-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-tracer-name">
+<h3>이 셸의 추적자는 proot 다</h3>
+<!--OUT file=proot_session.txt sec=1 note=TracerPid 가 가리키는 프로세스의 이름-->
+<p>3부에서는 <code>TracerPid</code> 가 0 이 아니라는 것만 봤습니다. 그 번호의 프로세스 이름을 읽으면 답이
+나옵니다 — <code>proot</code>. 이 부의 나머지는 이 프로세스가 무엇을 하는지입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-c2">
+<p class="chnum">2장</p>
+<h2>전부 가로채지는 않는다</h2>
+<p>ptrace 만 쓰면 추적자는 <b>모든</b> 시스템 호출마다 두 번 — proot 소스의 말로 sysenter 와 sysexit — 깨어납니다. proot 는 앞 장의
+발췌에 있던 한 줄 — "seccomp mode 2 로 성능을 높인다" — 로 이 비용을 줄입니다. 커널 안에 작은 필터 프로그램(BPF)
+을 넣어, <b>목록에 있는 호출만</b> 추적자에게 넘기고 나머지는 커널이 바로 처리하게 합니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-seccomp-stmt">
+<h3>필터의 문장 두 개</h3>
+<!--CODE file=sources/proot/src/syscall/seccomp.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=97-121 note=호출 번호가 같으면 추적자에게 알린다(RET_TRACE)-->
+<!--SRC repo=proot path=src/syscall/seccomp.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=97-121-->
+<p>호출 번호를 비교해 같으면 <code>SECCOMP_RET_TRACE</code>, 아니면 다음 비교로 건너뜁니다. 목록 끝까지 맞는
+것이 없으면 마지막 문장이 <code>SECCOMP_RET_ALLOW</code> — 추적자를 깨우지 않고 통과입니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p9-seccomp-list">
+<h3>목록에는 98개가 있다 — getpid 는 없다</h3>
+<!--OUT file=src_proot.txt sec=1 note=proot_sysnums[] 의 항목 수-->
+<!--OUT file=src_proot.txt sec=2 note=getpid 는 목록에 없다-->
+<!--SRC repo=proot path=src/syscall/seccomp.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=331-435-->
+<p>목록은 대부분 <b>경로를 받는 호출</b>(<code>open</code>·<code>stat</code>·<code>execve</code>·<code>chdir</code>·
+<code>getcwd</code>…)과 소켓·<code>uname</code>·<code>wait4</code> 같은 것입니다. 경로를 rootfs 안으로 바꿔야 하는
+호출만 멈추면 되기 때문입니다. 확장(<code>--link2symlink</code>·<code>--sysvipc</code>·<code>-0</code> 등)이 켜지면
+각자의 목록이 여기에 더해집니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-seccomp-build">
+<h3>목록을 필터로 펼친다</h3>
+<!--CODE file=sources/proot/src/syscall/seccomp.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=282-303 note=아키텍처마다 목록의 호출 번호를 하나씩 비교문으로-->
+<!--SRC repo=proot path=src/syscall/seccomp.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=282-303-->
+<p>호출 번호는 아키텍처마다 다르므로(arm64 의 <code>openat</code> 과 x86-64 의 <code>openat</code> 은 번호가
+다르다) 아키텍처 구역마다 목록을 다시 펼칩니다. 필터는 <code>prctl(PR_SET_SECCOMP, …)</code> 한 번으로 걸리고,
+한 번 걸린 필터는 자손에게 그대로 물려집니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p9-getcwd-enter">
+<h3>getcwd 를 가로채면 — 들어갈 때</h3>
+<!--CODE file=sources/proot/src/syscall/enter.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=1880-1884 note=진짜 호출을 PR_void 로 바꿔 없앤다-->
+<!--SRC repo=proot path=src/syscall/enter.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=1880-1884-->
+<p>손님이 <code>getcwd</code> 를 부르면 proot 는 커널에 그 호출을 넘기지 <b>않습니다</b>. 호출 번호를
+"아무것도 안 하는 호출" 로 바꿔 버립니다. 진짜 커널의 현재 디렉터리는 호스트 경로(<code>…/rootfs/root</code>
+같은)라 손님에게 보여 줄 수 없기 때문입니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p9-getcwd-exit">
+<h3>getcwd 를 가로채면 — 나올 때</h3>
+<!--CODE file=sources/proot/src/syscall/exit.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=95-128 note=proot 가 기억한 손님 쪽 경로를 손님의 메모리에 써 넣는다-->
+<!--SRC repo=proot path=src/syscall/exit.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=95-128-->
+<p>나올 때 proot 는 자기가 기억해 둔 손님 쪽 경로(<code>tracee-&gt;fs-&gt;cwd</code>)를 손님 프로세스의 메모리에
+직접 써 넣고(<code>write_data</code>) 길이를 반환값으로 돌려줍니다. 손님은 진짜 커널이 답한 줄 압니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p9-cost">
+<h3>값을 재 보자 — 가로채는 호출과 아닌 호출</h3>
+<!--OUT file=proot_cost.txt sec=1 note=목록에 없는 getpid-->
+<p>같은 프로그램(<code>exp/syscall_loop.c</code>)이 같은 횟수를 부릅니다. 다른 것은 호출 하나뿐입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-cost-read">
+<h3>숫자 읽기</h3>
+<!--OUT file=proot_cost.txt sec=2 note=목록에 있는 getcwd — 같은 20만 번-->
+<div class="tblwrap"><table class="kv">
+<tr><th>호출</th><th>20만 번</th><th>한 번에</th></tr>
+<tr><td><code>getpid</code> (통과)</td><td>113.742 ms</td><td>113.742 ÷ 200,000 ≈ 0.57 µs</td></tr>
+<tr><td><code>getcwd</code> (가로챔)</td><td>21,305.860 ms</td><td>21,305.860 ÷ 200,000 ≈ 106.5 µs</td></tr>
+</table></div>
+<p>약 187배입니다. 다만 이것을 "proot 의 비용" 이라고 부르려면 <b>proot 밖에서</b> 같은 두 숫자가 필요합니다 —
+<code>getcwd</code> 는 원래도 <code>getpid</code> 보다 할 일이 많습니다. 그 비교값은 사용자가 네이티브에서 돌릴
+<code>tools/native_facts.sh</code> 에 같은 두 측정으로 넣어 두었습니다(0부 "이 기기").</p>
+<p class="cap">스냅샷 — 이 날 이 기기에서 잰 값입니다. 다시 재면 달라집니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-syscall-loop">
+<h3>실험 프로그램</h3>
+<!--CODE file=exp/syscall_loop.c lines=1-18 note=왜 두 호출을 나란히 재나-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-syscall-loop-main">
+<h3>실험 프로그램 — 몸통</h3>
+<!--CODE file=exp/syscall_loop.c lines=20-46 note=둘째 인자로 getpid 와 getcwd 를 고른다-->
+<!--OUT file=exp_glibc.txt sec=7 note=proot 쪽 gcc 로 지은 것을 1000번-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-fork-cost">
+<h3>새 프로세스 하나의 값</h3>
+<!--OUT file=proot_cost.txt sec=3 note=env true 를 100번-->
+<!--CODE file=exp/fork_loop.sh note=셸 내장이 아닌 true 를 env 로 부른다-->
+<p>100번에 12.7초, 한 번에 약 127 ms 입니다. 새 프로세스 하나에는 <code>clone</code>·<code>execve</code>
+(두 번 — <code>env</code> 와 <code>true</code>)·<code>wait4</code> 와 동적 링커가 여는 파일들이 따라오고, 그
+호출들은 모두 98개 목록에 있습니다. 셸 스크립트가 바깥 명령을 많이 부르는 일 — <code>configure</code> 스크립트,
+<code>make</code> — 이 proot 에서 유난히 느린 까닭이 여기 있습니다.</p>
+<p class="cap">스냅샷 · 네이티브 비교값은 대기 중</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-no-seccomp">
+<h3>필터를 끄는 스위치</h3>
+<p>1장의 발췌에서 필터는 환경 변수 <code>PROOT_NO_SECCOMP</code> 가 <b>없을 때만</b> 걸렸습니다. 이 변수를
+두면 모든 호출이 추적자를 거칩니다. 필터를 걸 수 없는 커널에서 proot 는 오류와 함께 이 변수를 1 로 두라고
+안내합니다.</p>
+<!--CODE file=sources/proot/src/cli/cli.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=139-145 note=execve 가 EPERM 으로 실패했을 때의 안내-->
+<!--SRC repo=proot path=src/cli/cli.c sha=7266fb3e8516535682f5a9c8f3a7e70f6506eddb lines=139-145-->
+<p class="cap">이 세션은 필터를 끈 상태를 재지 않았습니다 — 이 세션을 띄운 proot 자신의 설정을 바꿔야 하기
+때문입니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card quiz" id="p9-quiz-1" data-quiz>
+<h3>1~2장 퀴즈</h3>
+<p class="q">Q. proot 안에서 파이썬 프로그램이 느립니다. 한쪽은 숫자 계산만 하는 반복문, 다른 쪽은 작은 파일
+만 개를 <code>os.stat()</code> 하는 반복문입니다. 어느 쪽이 네이티브보다 크게 느려질까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>os.stat()</code> 쪽입니다. <code>stat</code> 계열은 경로를 받으니 98개 목록에 있고,
+부를 때마다 proot 가 깨어나 경로를 번역합니다. 계산만 하는 반복문은 시스템 호출을 거의 하지 않아 seccomp
+필터가 통과시키고, 추적자가 끼어들 일이 없습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-c3">
+<p class="chnum">3장</p>
+<h2>proot-distro 해부</h2>
+<p><code>proot</code> 를 직접 부르려면 옵션이 수십 개 필요합니다. <code>proot-distro</code> 는 배포판을 받아
+풀고, 그 긴 명령줄을 대신 조립해 주는 파이썬 프로그램입니다. README 의 소개: 루트도, 커널 모듈도, Docker
+데몬도 없이 Docker/OCI 이미지로 된 리눅스 사용자 공간을 띄운다.</p>
+<p class="cap">출처: proot-distro README 1.2</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p9-pd-oci">
+<h3>배포판은 OCI 이미지에서 온다</h3>
+<p>README 1.4.1 이 적는 설치 과정:</p>
 <ul>
-<li>ptrace 의 원리</li>
-<li><code>proot-distro</code> 해부</li>
-<li>설치 · 로그인 · 바인드</li>
-<li>이 세션 자체 — proot 안에서 Termux 를 부르는 문</li>
-<li><code>getprop</code> 거부 같은 실제 한계</li>
-<li>성능 비율(스냅샷)</li>
-<li>chroot — 루트가 있는 기기</li>
-<li>언제 proot 를 쓰고 언제 안 쓰나</li>
+<li>표준 OCI Distribution 프로토콜을 파이썬 <code>urllib</code> 로 직접 말한다. Docker Hub 의 공개 이미지는 옵션 없이.</li>
+<li>여러 아키텍처 목록(manifest list)에서 이 CPU 에 맞는 것을 고른다.</li>
+<li>층(layer)마다 SHA-256 을 확인한 뒤 캐시에 올린다. 같은 이미지를 다시 설치할 때는 오프라인.</li>
+<li>빈 rootfs 위에 층을 차례로 풀고, 하드 링크는 복사본으로, 블록·문자 장치와 FIFO 는 건너뛴다.</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<p>위키(revid 6573)는 아직 "Ubuntu (22.04)" 같은 고정 목록을 적고 있습니다 — 위키가 README 보다 오래됐습니다.</p>
+<p class="cap">출처: proot-distro README 1.4.1 · 위키 PRoot 2절</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p9-pd-container">
+<h3>이 세션의 컨테이너</h3>
+<!--OUT file=proot_container.txt sec=1 note=containers/ubuntu 안-->
+<!--OUT file=proot_container.txt sec=2 note=manifest.json 의 두 칸-->
+<p>README 1.5 의 저장 구조 그대로입니다: <code>rootfs/</code> 가 뿌리, <code>manifest.json</code> 에 이미지 이름·
+아키텍처·OCI 매니페스트 전체가 남아 <code>reset</code> 이 같은 이미지를 다시 받을 수 있습니다. <code>sysdata</code>
+와 <code>shm</code> 은 뒤에서 봅니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-pd-fixups">
+<h3>설치 뒤 세 가지 손질</h3>
+<!--OUT file=proot_container.txt sec=3 note=/etc/passwd 의 aid_ 줄과 /etc/group 의 aid_ 줄 수-->
+<!--OUT file=proot_container.txt sec=4 note=/etc/resolv.conf-->
+<p>README 1.4.1: <code>/etc</code> 가 있는 이미지에는 ① <code>resolv.conf</code> 를 구글 DNS 로, ② <code>/etc/hosts</code>
+를 최소한의 localhost 로, ③ 호스트의 Termux 사용자를 <code>aid_&lt;이름&gt;</code> 으로 passwd·group 에 등록합니다.
+③ 덕분에 안드로이드의 uid 기반 권한(3부의 보조 그룹 <code>inet</code> 등)이 컨테이너 안에서도 이름으로 보입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-pd-nested">
+<h3>proot 안에서 proot-distro 는 돌지 않는다</h3>
+<!--OUT file=proot_probe.txt sec=2 note=이 세션에서 부르면-->
+<!--CODE file=sources/proot-distro/proot_distro/cli.py sha=f832a56f2e8aab659a915600598b5321996aad78 lines=90-119 note=TracerPid 의 이름이 proot 이면 거절-->
+<!--SRC repo=proot-distro path=proot_distro/cli.py sha=f832a56f2e8aab659a915600598b5321996aad78 lines=90-119-->
+<p>이 장의 첫 캡처와 같은 방법입니다 — <code>/proc/self/status</code> 의 <code>TracerPid</code> 를 읽고, 그 프로세스
+이름에 <code>proot</code> 가 들어 있으면 끝냅니다. 그래서 이 덱은 <code>proot-distro list</code> 의 정상 출력을 한
+번도 뜨지 못했습니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-pd-order">
+<h3>명령줄을 조립하는 순서</h3>
+<!--CODE file=sources/proot-distro/proot_distro/commands/login/proot_cmd.py sha=f832a56f2e8aab659a915600598b5321996aad78 lines=21-32 note=파일 머리의 설계 주석-->
+<!--SRC repo=proot-distro path=proot_distro/commands/login/proot_cmd.py sha=f832a56f2e8aab659a915600598b5321996aad78 lines=21-32-->
+<p>파일 머리에 "Development assisted by Claude Code" 라는 줄이 있습니다(같은 파일 5행). 이 덱을 만든 도구가
+이 덱이 도는 컨테이너를 띄운 프로그램에도 손을 댔습니다 — 13부의 이야기입니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p9-pd-ext">
+<h3>Termux 에서만 붙이는 확장</h3>
+<!--CODE file=sources/proot-distro/proot_distro/commands/login/proot_cmd.py sha=f832a56f2e8aab659a915600598b5321996aad78 lines=129-157 note=IS_TERMUX 일 때만-->
+<!--SRC repo=proot-distro path=proot_distro/commands/login/proot_cmd.py sha=f832a56f2e8aab659a915600598b5321996aad78 lines=129-157-->
+<p>일반 리눅스 호스트에서는 아무것도 붙이지 않고 돌아갑니다(<code>if not IS_TERMUX: return</code>). 하드 링크
+흉내(<code>--link2symlink</code>)는 Termux 형 컨테이너가 아닐 때만, System V IPC 흉내(<code>--sysvipc</code>)와 가짜
+커널 판은 <code>--minimal</code> 이 아닐 때만 붙습니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p9-session-argv">
+<h3>이 세션을 띄운 명령줄</h3>
+<!--OUT file=proot_session.txt sec=2 note=추적자의 /proc/PID/cmdline — sysdata 바인드는 다음 장-->
+<p>앞의 조립 순서 그대로입니다 — 확장 다섯, <code>--change-id=0:0</code>, <code>--rootfs=.</code>, 기본 바인드 셋, 안드로이드 경로들, Termux 의 <code>$PREFIX</code>, 그리고 사용자가
+직접 붙인 바인드 하나(<code>&lt;home&gt;/…</code> — 개인정보 검사가 사용자 홈 아래 경로를 가렸습니다). 포트를
+옮기는 <code>-p</code> 는 없습니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-sysdata">
+<h3>가짜 /proc 파일들</h3>
+<!--OUT file=proot_session.txt sec=3 note=sysdata/ 의 파일을 /proc·/sys 자리에 붙인다-->
+<p>열 개의 파일이 <code>/proc</code>·<code>/sys</code> 의 자리에 붙어 있습니다. 그래서 proot 안의 <code>uptime</code> 이나
+<code>/proc/stat</code> 은 진짜 기기의 값이 아닙니다. 왜 이런 일을 하는지는 다음 장의 주석에 있습니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-sysdata-why">
+<h3>왜 가짜를, 그리고 왜 그렇게 조심스럽게</h3>
+<!--CODE file=sources/proot-distro/proot_distro/sysdata.py sha=f832a56f2e8aab659a915600598b5321996aad78 lines=21-51 note=sysdata.py 머리 주석-->
+<!--SRC repo=proot-distro path=proot_distro/sysdata.py sha=f832a56f2e8aab659a915600598b5321996aad78 lines=21-51-->
+<p>첫 단락: 안드로이드가 여러 <code>/proc</code> 파일을 막거나 제한하므로, <code>top</code>·<code>htop</code> 같은 도구가
+돌도록 고정된 대체물을 준다. 나머지 단락은 보안 이야기입니다 — 이 디렉터리는 <b>손님이 쓸 수 있는 곳</b>(<code>$PREFIX</code>
+가 읽기·쓰기로 붙어 있으므로)이라, 심볼릭 링크나 하드 링크로 바꿔치기해 호스트 파일을 <code>/proc/loadavg</code> 자리에
+끌어올 수 있었다. 그래서 이름이 아니라 디렉터리 fd 와 <code>O_NOFOLLOW</code>, 링크 수 1 을 확인한다. 곁들여 적힌 사실 하나 — proot 에는 <b>읽기 전용 바인드가 없다</b>.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p9-kernel">
+<h3>커널 판도 가짜다</h3>
+<!--OUT file=proot_session.txt sec=4 note=/proc/version — sysdata/version 이 붙은 자리-->
+<!--OUT file=src_proot.txt sec=4 note=그 이름의 출처-->
+<p>3부에서 본 <code>6.17.0-PRoot-Distro</code> 의 출처입니다. <code>uname</code> 은 <code>--kernel-release</code>
+확장이, <code>/proc/version</code> 은 가짜 파일이 같은 값으로 답합니다. 두 길을 모두 막아야 프로그램이 서로 다른
+답을 보지 않습니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-selinux-empty">
+<h3>/sys/fs/selinux 는 비어 있다</h3>
+<!--OUT file=proot_session.txt sec=5 note=빈 디렉터리가 붙어 있다-->
+<p>명령줄의 <code>sysdata/sys_empty:/sys/fs/selinux</code> 입니다. 배포판의 도구들은 이 디렉터리가 비어 있으면
+"SELinux 가 꺼진 시스템" 으로 여깁니다. 그러나 3부에서 본 대로 이 프로세스들의 진짜 SELinux 문맥은
+<code>untrusted_app</code> 이고, 커널은 그 규칙을 그대로 집행합니다. 보이지 않을 뿐 꺼진 것이 아닙니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-options">
+<h3>proot 의 옵션 한 줄씩</h3>
+<!--OUT file=src_proot.txt sec=5 note=proot.h 의 description 줄들-->
+<p>proot-distro 가 쓰는 것: <code>-r</code>·<code>-b</code>·<code>-w</code>(<code>--cwd</code>)·<code>--kill-on-exit</code>·
+<code>--kernel-release</code>·<code>-i</code>(<code>--change-id</code>)·<code>--link2symlink</code>·<code>--sysvipc</code>·
+<code>-L</code>. 이 중 <code>--kill-on-exit</code>·<code>--link2symlink</code>·<code>--sysvipc</code>·<code>-L</code> 과, 쓰지 않는
+<code>--ashmem-memfd</code>·<code>-H</code>·<code>-p</code> 는 저장소에 든 매뉴얼(5.1.0, 2014-12-12)에 없고 <code>proot.h</code>
+에만 있습니다 — 매뉴얼 뒤에 더해진 것들입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-c4">
+<p class="chnum">4장</p>
+<h2>하드 링크를 흉내 내기</h2>
+<p>proot-distro 는 Termux 형이 아닌 모든 컨테이너에 <code>--link2symlink</code> 를 붙였습니다. proot.h 의 설명은
+"하드 링크를 심볼릭 링크로 바꾸고, 진짜 하드 링크인 척한다". 이 세션에서 직접 해 봅니다.</p>
+<p class="cap">안드로이드의 앱 저장소에서 하드 링크가 왜 따로 흉내 내야 하는 대상인지는 이 덱이 출처를 찾지 못했습니다 —
+<span class="unv">미확인</span></p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-l2s">
+<h3>ln 은 성공하고, 링크 수는 2 다</h3>
+<!--OUT file=proot_l2s.txt sec=1 note=scratch/l2s 에서 x 와 y-->
+<!--OUT file=proot_l2s.txt sec=2 note=/.l2s 에 실제로 생긴 두 항목-->
+<p>손님이 보기에는 평범한 하드 링크입니다. 실제로는 <code>/.l2s/</code> 에 중간 심볼릭 링크(<code>.l2s.x0001</code>)와
+내용을 가진 파일(<code>.l2s.x0001.0002</code>)이 생기고, <code>x</code>·<code>y</code> 는 그것을
+가리키는 심볼릭 링크가 됩니다. proot 가 <code>stat</code> 결과를 고쳐 "보통 파일, 링크 2" 로 보여 줍니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-l2s-count">
+<h3>이 컨테이너가 쌓은 것</h3>
+<!--OUT file=proot_l2s.txt sec=3 note=/.l2s 의 항목 수-->
+<!--OUT file=proot_l2s.txt sec=4 note=x·y 를 지운 뒤 x 의 항목-->
+<p>만 개가 넘습니다 — 이 컨테이너에서 지금까지 만들어진 하드 링크의 흔적입니다. proot-distro README 는 이
+디렉터리를 "link2symlink 의 뒷받침 저장소" 로 적습니다. 심볼릭 링크들이 rootfs 의 <b>절대 경로</b>를 가리키므로
+컨테이너 이름을 바꾸거나 옮기면 모두 깨지고, 그래서 proot-distro 에는 이 링크들을 고쳐 쓰는 모듈(<code>l2s.py</code>)
+이 따로 있습니다. 두 이름을 모두 지우면 중간 항목도 함께 사라집니다.</p>
+<p class="cap">출처: proot-distro README 1.5 · l2s.py 머리 주석 · 스냅샷</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-c5">
+<p class="chnum">5장</p>
+<h2>proot 가 못 속이는 것</h2>
+<p>proot 는 경로와 신원을 번역할 뿐, 커널의 결정을 바꾸지는 못합니다. 이 세션에서 부딪친 벽들입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-getprop">
+<h3>getprop 이 거부된다</h3>
+<!--OUT file=proot_probe.txt sec=1 note=/system/bin/getprop 을 proot 안에서-->
+<p><code>/system</code> 은 바인드되어 있어 파일은 보입니다. 그런데 실행하면 "Operation not permitted" 로 126 이
+돌아옵니다. 그래서 이 덱은 안드로이드 판·SDK·기기 이름을 이 세션에서 읽을 수 없었고, 사용자가 네이티브 Termux
+에서 한 번 돌릴 스크립트(<code>tools/native_facts.sh</code>)를 따로 만들었습니다.</p>
+<p class="cap">왜 거부되는지 — <span class="unv">미확인</span>. 6부의 <code>termux-info</code> 도 같은 이유로 판 정보가 비었습니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-api-wall">
+<h3>Termux:API 가 답하지 않는다</h3>
+<!--OUT file=api_proot.txt sec=1 note=15초를 기다려도 답이 없다-->
+<p>7부에서 본 벽입니다. 스크립트와 <code>termux-api</code> 실행 파일은 돌지만 앱의 답이 오지 않아 <code>timeout</code>
+이 124 로 끊었습니다. 원인은 <span class="unv">미확인</span>.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-ports">
+<h3>1024 미만 포트 — <code>-p</code> 의 규칙</h3>
+<!--OUT file=src_proot.txt sec=6 note=port_switch.c 의 두 상수-->
+<p><code>-p</code> 를 켜면 1024 미만의 포트로 <code>bind</code>·<code>connect</code> 하는 호출을 가로채 2000 을 더합니다.
+이 세션의 명령줄에는 <code>-p</code> 가 없었습니다. 그런데 실험 4 는 이 세션에서 80·443 같은 몇 포트가
+<b>그냥 열렸음</b>을 보여 줍니다 — 그 까닭은 8부에서.</p>
+<!--OUT file=exp_glibc.txt sec=6 note=proot 쪽에서 1~1100 을 훑은 결과-->
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-root-fake">
+<h3>root 가 아니다 — 실험 1 다시 보기</h3>
+<!--OUT file=env_proot.txt sec=2 note=id — uid 0 이지만 보조 그룹은 앱의 것-->
+<p><code>uid=0(root)</code> 옆에 <code>aid_u0_a123</code>·<code>aid_inet</code> 같은 보조 그룹이 붙어 있습니다. 3장의
+<code>/etc/group</code> 손질이 이름을 붙였고, 그룹 자체는 안드로이드가 이 앱에 준 진짜 값입니다. 신원은 꾸며도
+커널이 보는 자격은 그대로입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p9-termux-exec">
+<h3>termux-exec 와 부딪친다</h3>
+<p>위키의 proot 사용 예는 첫 줄이 <code>unset LD_PRELOAD</code> 입니다. 5부의 termux-exec 가 execve 를 가로채 경로에
+<code>$PREFIX</code> 를 붙이는데(위키: "Termux-exec, execve() hook, conflicts with PRoot"), 그렇게 붙은 경로가
+rootfs 안에는 없을 수 있습니다. 3장의 명령줄이 <code>$PREFIX</code> 를 같은 경로에 바인드해 두는 것도 Termux 의
+도구를 안에서 부를 수 있게 하려는 것입니다(README 1.3.5.1).</p>
+<p class="cap">출처: 위키 PRoot 1절 · proot-distro README 1.3.5.1</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p9-c6">
+<p class="chnum">6장</p>
+<h2>언제 proot 를 쓰나</h2>
+<div class="tblwrap"><table class="kv">
+<tr><th>필요한 것</th><th>Termux 그대로</th><th>proot 배포판</th></tr>
+<tr><td>glibc 로만 나오는 바이너리</td><td>안 됨(5부)</td><td>됨</td></tr>
+<tr><td>배포판의 패키지 관리자·문서</td><td>Termux 저장소만</td><td>apt·pacman 그대로</td></tr>
+<tr><td>파일을 많이 여는 빌드</td><td>빠름</td><td>경로 호출마다 추적(2장)</td></tr>
+<tr><td>Termux:API · getprop</td><td>됨</td><td>이 세션에선 안 됨(5장)</td></tr>
+<tr><td>진짜 root</td><td>없음</td><td>없음 — 흉내뿐</td></tr>
+</table></div>
+<p>이 덱은 왜 proot 에서 만들었나: Claude Code·node·gcc 같은 도구를 우분투의 패키지로 한 번에 얻기 위해서였고,
+Termux 의 바이너리가 필요할 때는 <code>tools/tmx.sh</code> 로 넘어갔습니다(0부).</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-chroot">
+<h3>루트가 있다면 — chroot</h3>
+<p>위키가 proot 를 "chroot 의 사용자 공간 구현" 이라 부르는 것은 진짜 <code>chroot</code> 가 권한을 요구하기
+때문입니다. 루팅한 기기라면 진짜 <code>chroot</code> 로 같은 rootfs 에 들어갈 수 있고, 그때는 시스템 호출을 가로채는
+추적자가 없습니다. 이 덱의 기기는 루팅되지 않아 그 길을 재지 않았습니다.</p>
+<p class="cap">출처: 위키 PRoot · proot 매뉴얼 Description("without privilege")</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p9-summary">
+<h3>9부를 한 표로</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>장치</th><th>하는 일</th><th>이 덱의 증거</th></tr>
+<tr><td>ptrace</td><td>자식이 TRACEME → proot 가 호출을 멈춰 세움</td><td>event.c 발췌 · TracerPid 이름</td></tr>
+<tr><td>seccomp</td><td>98개 호출만 추적, 나머지 통과</td><td>seccomp.c · getpid/getcwd 측정</td></tr>
+<tr><td>proot-distro</td><td>OCI 이미지 설치 · 명령줄 조립</td><td>README · 이 세션의 cmdline</td></tr>
+<tr><td>가짜 파일</td><td>/proc 10개 · 커널 판 · 빈 selinux</td><td>캡처 · sysdata.py</td></tr>
+<tr><td>link2symlink</td><td>하드 링크 = 심볼릭 링크 둘</td><td>/.l2s 캡처</td></tr>
+<tr><td>못 속이는 것</td><td>getprop · API · SELinux · 권한</td><td>캡처(원인은 일부 미확인)</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p9-quiz-2" data-quiz>
+<h3>3~6장 퀴즈</h3>
+<p class="q">Q. proot 안에서 <code>cat /proc/uptime</code> 이 매번 같은 값을 낸다면, 무엇 때문일까요? 진짜 가동 시간은
+어떻게 알 수 있을까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> proot-distro 가 <code>sysdata/uptime</code> 이라는 고정 파일을 <code>/proc/uptime</code> 자리에 붙여
+두었기 때문입니다(3장 명령줄). 진짜 값은 그 바인드 밖, 곧 네이티브 Termux 에서 읽어야 합니다 — 이 덱이 기기 정보를
+<code>tools/native_facts.sh</code> 로 따로 모은 것과 같은 이유입니다.</div>
+<span class="tier ill">설명용</span>
 </article>

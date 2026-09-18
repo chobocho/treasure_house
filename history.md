@@ -1,3 +1,10 @@
+### [2026-09-18 03:58] Termux 대백과사전 덱 9부 — proot 와 리눅스 배포판(45장)
+- **기획:** ptrace·seccomp 로 호출을 가로채는 원리, proot-distro 가 조립하는 명령줄, 가짜 /proc·하드 링크 흉내, 못 속이는 벽.
+- **TC:** 조립 검사: 인용 범위 52개 경계 통과, 소스 줄 인용 56건 핀 확인, 연도로 읽힌 숫자 1건 삭제.
+- **개발:** `termux/deck/sections/09_proot.html`, `termux/deck/claims.md`, `termux/deck/src_used.txt`, `termux/PLAN.md`, `Termux_대백과사전.html`
+- **검증:** make all SKEL=1 오류 0건 · 역검증 통과 · 267장
+- **비고:** 하드 링크 흉내가 필요한 까닭·getprop 거부·API 무응답의 원인은 미확인 표시. 네이티브 비교값은 device.txt 대기.
+
 ### [2026-09-18 03:57] Termux 덱 — proot 캡처 4종·syscall_loop getcwd 모드·공용 DNS 허용
 - **기획:** 9부 증거: 이 세션의 proot 명령줄·컨테이너·link2symlink·소스 사실을 캡처로, 가로채는 호출과 아닌 호출의 비용을 실험으로.
 - **TC:** 정상: getcwd 모드 출력(양쪽 libc). 경계: N=0·모르는 모드·인자 초과 거부, 공용 DNS 유지·이웃 주소는 가림.
