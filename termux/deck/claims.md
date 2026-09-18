@@ -289,3 +289,10 @@
 | exp/serve_once.sh: 127.0.0.1:8080 의 http.server 에서 hello.c 를 받으면 200 1048 | out/serve_local.txt 1 | 캡처 | 2026-09-18 |
 | 위키 Bypassing NAT: NAT 뒤에서는 기본으로 닿을 수 없음. Tor(가장 안전·가상 포트·torrc HiddenServicePort 22 127.0.0.1:8022), Ngrok(OpenSSH 터널·무료는 무작위 포트), Tmate(끊기면 끝) | wiki-bypassing-nat 서두·1·2·3 | 위키 | 2026-09-18 |
 | termux-services 지원 표에 cronie 의 crond 가 있고, termux-job-scheduler 는 termux-api 패키지의 명령이다 | wiki-termux-services · out/tbl_api_cmds.html | 위키·캡처 | 2026-09-18 |
+| 이 기기에는 x11·xfce·vnc·xorg 패키지가 없고, 구독 저장소는 main(sources.list)과 TUR 뿐이다 | out/x11.txt 1 · out/apt_sources.txt 1·3 | 캡처 | 2026-09-18 |
+| x11-repo 패키지가 sources.list 와 PGP 키를 더하고, 지우면 빠진다. VNC: tigervnc, vncserver -localhost, 비밀번호 최대 8자, 포트 5900+N. 창 관리자 Fluxbox·Openbox, 데스크톱 XFCE·LXQt·MATE, PulseAudio 는 Termux 패키지라 PULSE_SERVER 불필요, 하드웨어 가속 기본 미지원 | wiki-graphical-environment 서두·1·2·4·5·6 | 위키 | 2026-09-18 |
+| termux-x11: NDK 로 지은 완전한 X 서버, 동작은 여느 X 서버와 같음, XFCE 권장, 실행 예·-legacy-drawing·-force-bgra·Exit 뒤에도 명령은 계속 | readme-termux-x11 1.1·1.3·1.4·1.5 | README | 2026-09-18 |
+| 화면 밖 앱은 CPU 를 덜 받으므로 sharedUid APK 가 있고, GitHub 판 Termux 에서만 된다(서명 키) | readme-termux-x11 1.4.1 | README | 2026-09-18 |
+| proot 에서 쓰려면 --shared-tmp(아니면 TMPDIR). proot-distro 는 shared_tmp 면 $PREFIX/tmp:/tmp, shared_x11 이면 .X11-unix 를 바인드 | readme-termux-x11 1.6 · proot-distro@f832a56 proot_cmd.py 212–215 | README·소스 | 2026-09-18 |
+| 이 세션의 /tmp 와 $PREFIX/tmp 는 inode 가 다르고 /tmp/.X11-unix 는 없다 | out/x11_proot.txt 1·2 | 캡처 | 2026-09-18 |
+| proot-distro 는 Termux 에서 PULSE_SERVER=127.0.0.1 을 손님 환경의 기본값으로 둔다 | readme-proot-distro 1.3.5.2 | README | 2026-09-18 |

@@ -846,3 +846,13 @@ The user approved every recommendation below as-is. Each row is now a decision.
 - Part 11 written: 13 slides (budget 150). termux-services/runit, Termux:Boot (README + source),
   local web server, NAT (wiki: Tor/Ngrok/Tmate), scheduling (crond vs termux-job-scheduler and
   the Doze/phantom walls). No service enabled, nothing exposed.
+
+### Step 8 · Part 12 — 활용 III: GUI 와 데스크톱 (2026-09-18)
+
+- No X11 package on this device and none installed (decision 5 / §0.7) — the part is written from
+  the termux-x11 README, the wiki and proot-distro source, plus "absence" captures: `x11`, the
+  subscribed repos (no x11-repo), and new `x11_proot` (this session's `/tmp` is not Termux's —
+  different inode, no `.X11-unix` — i.e. it was started without `--shared-tmp`, which README 1.6
+  requires; `proot_cmd.py` 212–215 shows the binds).
+- Part 12 written: 11 slides (budget 100). GPU acceleration left 미확인 (only the wiki's "not
+  supported by default" is sourced).

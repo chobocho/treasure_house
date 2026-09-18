@@ -398,6 +398,13 @@ CAPTURES = [
           "dpkg -l | awk '/^ii/{print $2}' | "
           "grep -E 'x11|xfce|vnc|xorg' || echo '(없음)'"),
     ]),
+    # 12부 — 이 proot 세션의 /tmp 는 Termux 의 /tmp 와 같은 곳인가.
+    # termux-x11 은 --shared-tmp 를 요구한다(README 1.6)
+    Capture('x11_proot', 'proot', 'stable', [
+        S('두 /tmp 의 inode', "stat -c '%i %n' /tmp "
+          '/data/data/com.termux/files/usr/tmp'),
+        S('X 소켓 디렉터리', 'ls -A /tmp/.X11-unix 2>&1 | head -n 3'),
+    ]),
     Capture('signals', 'termux', 'stable', [
         S('SIGKILL 의 137', 'sh exp/signals.sh | tail -n 1'),
     ]),
