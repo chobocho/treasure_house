@@ -907,6 +907,10 @@ svg.diag .key { font-size: 9px; fill: var(--accent2);
     <option value="p19-ch2">· zlib 과 느슨한 객체</option>
     <option value="p19-ch3">· blob — hash-object 와 cat-file</option>
     <option value="p19-ch4">· tree — 정렬 규칙이 전부다</option>
+    <option value="p19-ch5">· commit · 참조 · HEAD</option>
+    <option value="p19-ch6">· 인덱스 · add · status · commit</option>
+    <option value="p19-ch7">· log 와 merge-base</option>
+    <option value="p19-ch8">· diff — Myers 와 밀어 붙이기</option>
     <option value="p19-ch13">· 다섯 구현 대조</option>
     <option value="p19-ch-src">· 다섯 구현의 소스 전문</option>
     <option value="p20">20부 · 부록 B</option>
@@ -18781,6 +18785,1176 @@ OK</pre>
 <button>답 보기</button>
 <div class="a"><b>A.</b> <code>a.b</code>, <code>a</code>(디렉터리, "a/" 로 비교), <code>a0</code> 입니다('.' 0x2E &lt; '/' 0x2F &lt; '0' 0x30). 그냥 이름으로
 정렬하면 <code>a</code> 가 맨 앞에 와서 바이트가 달라지고, 내용이 같은데 이름이 다른 트리가 됩니다 — git 과 같은 커밋 이름을 얻지 못합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-ch5"><p class="chnum">5장</p><h2>commit · 참조 · HEAD</h2><p class="chsub">5단계 · SPEC §4.4·§4.5·§6</p></article>
+
+<article class="card" id="p19-s5-idea">
+<h3>무엇을 만드나</h3>
+<ul>
+<li>커밋 객체 = <code>tree</code> 한 줄, <code>parent</code> 0개 이상, <code>author</code>·<code>committer</code>, 빈 줄, 메시지(3부).</li>
+<li>참조 = <code>.git/refs/heads/이름</code> 에 40글자 한 줄, HEAD = <code>ref: refs/heads/main</code>(4부).</li>
+<li>참조를 바꿀 때마다 reflog 한 줄(16부의 복구가 기대는 그 줄).</li>
+</ul>
+<p>커밋 이름에는 시각과 시간대까지 들어갑니다. 그래서 mygit 은 시계를 읽지 않고 환경 변수(<code>GIT_AUTHOR_DATE</code> 등)만 믿습니다 — 없으면 멈춥니다.
+입력이 전부 드러나 있어야 같은 커밋 이름이 세 번 나옵니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-s5-ident">
+<h3>신원 줄 — 환경 변수에서만</h3>
+<div class="src"><b>py/mygit/commit.py</b><span class="ln">27–42</span><span>설정 파일도 시계도 보지 않는다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/commit.py" data-lines="27-42">def ident_from_env(env, who):
+    """GIT_&lt;who&gt;_NAME·EMAIL·DATE → 신원 줄 (SPEC.md §1.3).
+
+    설정 파일도 시계도 보지 않는다 — 없으면 멈춘다. 캡처가 세 번
+    같으려면 입력이 전부 드러나 있어야 하기 때문이다.
+    """
+    vals = []
+    for part in ('NAME', 'EMAIL', 'DATE'):
+        key = 'GIT_%s_%s' % (who, part)
+        if key not in env:
+            raise GitError('fatal: mygit: %s is not set' % key)
+        vals.append(env[key])
+    if not DATE_RE.match(vals[2]):
+        raise GitError("fatal: mygit: GIT_%s_DATE is not "
+                       "'&lt;seconds&gt; &lt;+hhmm&gt;'" % who)
+    return '%s &lt;%s&gt; %s' % tuple(vals)</code></pre>
+<div class="src"><b>py/mygit/commit.py</b><span class="ln">128–132</span><span>커밋 몸 — 3부의 그 꼴</span></div>
+<pre><code data-lang="py" data-src="py/mygit/commit.py" data-lines="128-132">def serialize_commit(tree, parents, author, committer, message):
+    lines = ['tree ' + tree] + ['parent ' + p for p in parents]
+    lines += ['author ' + author, 'committer ' + committer]
+    text = '\n'.join(lines) + '\n\n' + message
+    return text.encode('utf-8', 'surrogateescape')</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s5-date">
+<h3>날짜 찍기 — 달력 함수 없이</h3>
+<div class="src"><b>py/mygit/commit.py</b><span class="ln">45–57</span><span>날 수 → 해·달·일(Howard Hinnant 의 공식)</span></div>
+<pre><code data-lang="py" data-src="py/mygit/commit.py" data-lines="45-57">def civil_from_days(z):
+    """1970-01-01 부터의 날 수 → (해, 달, 일). Howard Hinnant 의
+    그레고리력 공식 — 로캘도 표준 달력 함수도 쓰지 않는다. O(1)."""
+    z += 719468
+    era = (z if z &gt;= 0 else z - 146096) // 146097
+    doe = z - era * 146097
+    yoe = (doe - doe // 1460 + doe // 36524 - doe // 146096) // 365
+    y = yoe + era * 400
+    doy = doe - (365 * yoe + yoe // 4 - yoe // 100)
+    mp = (5 * doy + 2) // 153
+    d = doy - (153 * mp + 2) // 5 + 1
+    m = mp + 3 if mp &lt; 10 else mp - 9
+    return (y + 1 if m &lt;= 2 else y), m, d</code></pre>
+<div class="src"><b>py/mygit/commit.py</b><span class="ln">60–71</span><span>git log 의 Date 꼴</span></div>
+<pre><code data-lang="py" data-src="py/mygit/commit.py" data-lines="60-71">def format_date(seconds, tz):
+    """git log 의 Date 꼴 — 'Wed Nov 15 07:13:20 2023 +0900'.
+
+    시각을 그 시간대로 옮겨 찍는다. 일은 앞에 0 을 붙이지 않는다.
+    """
+    sign = -1 if tz[0] == '-' else 1
+    local = seconds + sign * (int(tz[1:3]) * 3600 + int(tz[3:5]) * 60)
+    days, rest = divmod(local, 86400)
+    y, m, d = civil_from_days(days)
+    return '%s %s %d %02d:%02d:%02d %d %s' % (
+        DAYS[(days + 4) % 7], MONTHS[m - 1], d, rest // 3600,
+        rest // 60 % 60, rest % 60, y, tz)</code></pre>
+<p>로캘이나 언어마다 다른 날짜 라이브러리를 쓰면 다섯 구현의 출력이 어긋날 수 있어, 정수 산술만으로 해·달·일을 셉니다. 요일은 1970-01-01 이 목요일이라는
+것에서 <code>(days + 4) % 7</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s5-subject">
+<h3>제목 — 앞 공백은 남긴다</h3>
+<div class="src"><b>py/mygit/commit.py</b><span class="ln">90–102</span><span>첫 문단을 공백 하나로 잇는다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/commit.py" data-lines="90-102">def subject_of(message):
+    """제목 = 첫 문단의 줄들을 공백 하나로 이은 것(SPEC.md §4.4).
+
+    줄 끝의 공백은 떼지만 **앞의 공백은 남긴다** — "  lead" 라는
+    메시지의 제목은 "  lead" 다(진짜 git 의 commit 요약 줄로 확인,
+    golden/scen/plumbing.scn). 빈 줄을 만나면 거기서 끝난다.
+    """
+    lines = []
+    for line in message.split('\n'):
+        if not line.strip():
+            break
+        lines.append(line.rstrip())
+    return ' '.join(lines)</code></pre>
+<p>"제목의 앞 공백은 남는다" 는 진짜 git 의 commit 요약 줄로 확인해 규격에 고쳐 넣은 것입니다(golden/scen/plumbing.scn). 이렇게 오라클이 규격을 고친
+자리들이 PLAN.md 의 5단계 기록에 남아 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s5-ref">
+<h3>참조 바꾸기 — 잠금 파일과 reflog</h3>
+<div class="src"><b>py/mygit/refs.py</b><span class="ln">91–101</span><span>.lock 에 쓰고 이름 바꾸기 — O_EXCL 로 먼저 잡은 쪽만</span></div>
+<pre><code data-lang="py" data-src="py/mygit/refs.py" data-lines="91-101">def _write_locked(path, text):
+    """&lt;경로&gt;.lock 에 쓰고 이름을 바꿔 넣는다(SPEC.md §6.1)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    lock = path + '.lock'
+    try:
+        fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    except FileExistsError:
+        raise GitError('fatal: mygit: unable to lock %s' % path)
+    with os.fdopen(fd, 'w') as f:
+        f.write(text)
+    os.rename(lock, path)</code></pre>
+<div class="src"><b>py/mygit/refs.py</b><span class="ln">126–147</span><span>브랜치를 옮기면 HEAD 의 reflog 에도</span></div>
+<pre><code data-lang="py" data-src="py/mygit/refs.py" data-lines="126-147">def update_ref(gitdir, name, new, old, message, ident):
+    """참조 하나를 바꾸고 reflog 를 남긴다. new=None 이면 지운다.
+
+    HEAD 가 이 브랜치를 가리키고 있으면 HEAD 의 reflog 에도 같은 줄을
+    남긴다 — git 과 같다(커밋 하나가 두 로그에 모두 보이는 까닭).
+    packed-refs 에만 있는 참조를 지우는 일은 줄임이다(SPEC.md §6.1).
+    """
+    path = os.path.join(gitdir, name)
+    if new is None:
+        if not os.path.exists(path):
+            raise GitError('fatal: mygit: cannot delete packed ref %s'
+                           % name)
+        os.remove(path)
+        log = os.path.join(gitdir, 'logs', name)
+        if os.path.exists(log):
+            os.remove(log)
+        return
+    _write_locked(path, new + '\n')
+    append_reflog(gitdir, name, old, new, ident, message)
+    head = read_ref(gitdir, 'HEAD')
+    if name != 'HEAD' and head == ('sym', name):
+        append_reflog(gitdir, 'HEAD', old, new, ident, message)</code></pre>
+<p>HEAD 가 가리키는 브랜치를 옮기면 같은 줄이 HEAD 의 reflog 에도 남습니다 — 커밋 하나가 <code>git reflog</code> 와 <code>git reflog main</code> 양쪽에 보이는
+까닭입니다(4부). 잠금은 16부 장면 35 의 <code>index.lock</code> 과 같은 원리입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s5-4up">
+<h3>네 언어의 formatDate</h3>
+<div class="g2">
+<div>
+<div class="src"><b>ts/src/commit.ts</b><span class="ln">74–89</span><span>TypeScript</span></div>
+<pre><code data-lang="ts" data-src="ts/src/commit.ts" data-lines="74-89">// git log 의 Date 꼴 — 'Wed Nov 15 07:13:20 2023 +0900'.
+//
+// 시각을 그 시간대로 옮겨 찍는다. 일은 앞에 0 을 붙이지 않는다.
+export function formatDate(seconds: number, tz: string): string {
+  const sign = tz[0] === '-' ? -1 : 1;
+  const local = seconds + sign * (Number(tz.slice(1, 3)) * 3600 +
+    Number(tz.slice(3, 5)) * 60);
+  const days = Math.floor(local / 86400);
+  const rest = local - days * 86400;
+  const [y, m, d] = civilFromDays(days);
+  // 1970-01-01 은 목요일(4). JS 의 % 는 음수를 음수로 남긴다
+  const wd = DAYS[(((days + 4) % 7) + 7) % 7];
+  const hms = [Math.floor(rest / 3600), Math.floor(rest / 60) % 60,
+    rest % 60].map(two).join(':');
+  return `${wd} ${MONTHS[m - 1]} ${d} ${hms} ${y} ${tz}`;
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>go/commit.go</b><span class="ln">90–106</span><span>Go</span></div>
+<pre><code data-lang="go" data-src="go/commit.go" data-lines="90-106">// FormatDate 는 git log 의 Date 꼴 — 'Wed Nov 15 07:13:20 2023 +0900'.
+// 시각을 그 시간대로 옮겨 찍는다. 일은 앞에 0 을 붙이지 않는다.
+func FormatDate(sec int64, tz string) string {
+	h, _ := strconv.Atoi(tz[1:3])
+	m, _ := strconv.Atoi(tz[3:5])
+	off := int64(h*3600 + m*60)
+	if tz[0] == '-' {
+		off = -off
+	}
+	local := sec + off
+	dn := floorDiv(local, 86400)
+	rest := local - dn*86400
+	y, mo, d := civilFromDays(dn)
+	return fmt.Sprintf("%s %s %d %02d:%02d:%02d %d %s",
+		days[(dn%7+11)%7], months[mo-1], d, rest/3600, rest/60%60,
+		rest%60, y, tz)
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>java/mygit/Commit.java</b><span class="ln">66–89</span><span>Java</span></div>
+<pre><code data-lang="java" data-src="java/mygit/Commit.java" data-lines="66-89">  // git log 의 Date 꼴 — "Wed Nov 15 07:13:20 2023 +0900".
+  //
+  // 시각을 그 시간대로 옮겨 찍는다. 일은 앞에 0 을 붙이지 않는다.
+  // 달력은 Howard Hinnant 의 civil-from-days 공식 — 로캘도 표준 날짜
+  // 함수도 쓰지 않는다. O(1).
+  public static String formatDate(long seconds, String tz) {
+    int sign = tz.charAt(0) == '-' ? -1 : 1;
+    long local = seconds + sign * (Integer.parseInt(tz.substring(1, 3))
+        * 3600 + Integer.parseInt(tz.substring(3, 5)) * 60);
+    long days = Math.floorDiv(local, 86400);
+    long rest = Math.floorMod(local, 86400);
+    long z = days + 719468;
+    long era = Math.floorDiv(z, 146097);
+    long doe = z - era * 146097;
+    long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    long mp = (5 * doy + 2) / 153;
+    long d = doy - (153 * mp + 2) / 5 + 1;
+    long m = mp &lt; 10 ? mp + 3 : mp - 9;
+    long y = yoe + era * 400 + (m &lt;= 2 ? 1 : 0);
+    return String.format("%s %s %d %02d:%02d:%02d %d %s",
+        DAYS[Math.floorMod(days + 4, 7)], MONTHS[(int) m - 1], d,
+        rest / 3600, rest / 60 % 60, rest % 60, y, tz);
+  }</code></pre>
+</div>
+<div>
+<div class="src"><b>cpp/commit.cpp</b><span class="ln">80–96</span><span>C++</span></div>
+<pre><code data-lang="cpp" data-src="cpp/commit.cpp" data-lines="80-96">// format_date 는 git log 의 Date 꼴 — 'Wed Nov 15 07:13:20 2023
+// +0900'. 시각을 그 시간대로 옮겨 찍는다. 일은 앞에 0 을 붙이지 않는다.
+std::string format_date(long long secs, const std::string&amp; tz) {
+    int off = std::stoi(tz.substr(1, 2)) * 3600 +
+              std::stoi(tz.substr(3, 2)) * 60;
+    long long local = secs + (tz[0] == '-' ? -off : off);
+    long long dn = floor_div(local, 86400), rest = local - dn * 86400;
+    long long y;
+    int m, d;
+    civil_from_days(dn, y, m, d);
+    char buf[64];
+    std::snprintf(buf, sizeof buf,
+                  "%s %s %d %02lld:%02lld:%02lld %lld ",
+                  days[((dn % 7) + 11) % 7], months[m - 1], d,
+                  rest / 3600, rest / 60 % 60, rest % 60, y);
+    return buf + tz;
+}</code></pre>
+</div>
+</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s5-check">
+<h3>채점</h3>
+<div class="src"><b>out/mygit__mygit-init.txt</b><span class="ln">전체 2줄</span><span>init 의 안내 줄도 git 과 같다</span></div>
+<pre class="term" data-out="mygit__mygit-init.txt">$ mygit init
+Initialized empty Git repository in /work/mygit/.git/</pre>
+<div class="src"><b>out/mygit__mygit-commit-m-first.txt</b><span class="ln">전체 2줄</span><span>첫 커밋 — 이름 6ae7db3 은 다섯 구현이 같다</span></div>
+<pre class="term" data-out="mygit__mygit-commit-m-first.txt">$ mygit commit -m first
+[main (root-commit) 6ae7db3] first</pre>
+<div class="src"><b>out/mygit__mygit-reflog.txt</b><span class="ln">전체 7줄</span><span>대본 끝의 reflog — 메시지까지 git 의 꼴</span></div>
+<pre class="term" data-out="mygit__mygit-reflog.txt">$ mygit reflog
+7b111bf HEAD@{0}: merge topic: Merge made by mygit (3-way, no renames).
+78fd8d7 HEAD@{1}: commit: main
+6ae7db3 HEAD@{2}: checkout: moving from topic to main
+2f32363 HEAD@{3}: commit: topic
+6ae7db3 HEAD@{4}: checkout: moving from main to topic
+6ae7db3 HEAD@{5}: commit (initial): first</pre>
+<p>대본의 같은 자리에서 진짜 git 이 만든 커밋과 이름이 같은지는 시험이 봅니다(<code>commit_tree_reproduces_git_commit</code>). 머지 줄의 메시지만은
+mygit 의 문장입니다 — git 의 "ort" 전략을 흉내 내지 않았으니까요(10단계).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s5-green">
+<h3>5단계의 시험</h3>
+<div class="src"><b>out/appendix__.-t.sh-commit.txt</b><span class="ln">전체 26줄</span><span>커밋·태그 바이트, 날짜, 제목, init, 이름 풀기</span></div>
+<pre class="term" data-out="appendix__.-t.sh-commit.txt">$ ./t.sh commit
+test_s6_3_branch_reflog ... ok
+test_s6_3_reflog_line_bytes ... ok
+test_s9_2_list_and_create ... ok
+test_s1_4_errors ... ok
+test_s4_4_commit_tree_reproduces_git_commit ... ok
+test_s4_4_parents_and_messages ... ok
+test_s4_5_annotated_tag_reproduces_git_tag ... ok
+test_s1_3_missing_env_is_an_error ... ok
+test_s4_4_parse_ident ... ok
+test_s9_1_date_matches_git_log ... ok
+test_s9_1_date_other_zones_agree_with_datetime ... ok
+test_s5_1_init_into_a_new_directory ... ok
+test_s5_1_layout_and_message ... ok
+test_s5_1_reinit_touches_nothing ... ok
+test_s4_4_cleanup_matches_git ... ok
+test_s4_4_subject_joins_the_first_paragraph ... ok
+test_s4_4_parse_and_rebuild_git_commit ... ok
+test_s4_5_tag_bytes_match_git ... ok
+test_s6_2_names_and_suffixes ... ok
+test_s6_2_tree_suffix ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests
+
+OK</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p19-quiz-5" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. mygit 은 왜 시계 대신 <code>GIT_AUTHOR_DATE</code>·<code>GIT_COMMITTER_DATE</code> 만 믿고, 없으면 멈춥니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 커밋 이름은 시각까지 포함한 바이트의 해시라서, 시각이 1초만 달라도 다른 커밋이 됩니다. 시계를 읽으면 실행할 때마다 이름이 바뀌어
+다섯 구현의 대조도, 진짜 git 과의 대조도, 캡처 재현도 불가능해집니다. 입력을 전부 드러내야 결과가 결정됩니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-ch6"><p class="chnum">6장</p><h2>인덱스 · add · status · commit</h2><p class="chsub">6단계 · SPEC §7·§8</p></article>
+
+<article class="card" id="p19-s6-idea">
+<h3>무엇을 만드나</h3>
+<p><code>.git/index</code> 판 2 — 머리 12바이트(<code>DIRC</code>·판·항목 수), 항목마다 stat 10칸·blob 이름·flags·경로, 8바이트 경계까지 NUL, 끝에 전체의
+SHA-1(5부). mygit 은 stat 칸을 채워 두기만 하고 자신은 믿지 않습니다 — status 는 늘 파일을 해시합니다. 5부에서 본 racy 문제를 피하는 가장 단순한 길입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-s6-write">
+<h3>쓰기</h3>
+<div class="src"><b>py/mygit/index.py</b><span class="ln">88–106</span><span>항목 길이 = (62 + 이름 + 8) &amp;amp; ~7</span></div>
+<pre><code data-lang="py" data-src="py/mygit/index.py" data-lines="88-106">def serialize_index(entries):
+    """[IndexEntry] → 판 2 인덱스 바이트. 경로·단계 차례로 정렬한다.
+
+    항목 길이 = (62 + 이름 길이 + 8) &amp; ~7 — 이름 뒤 NUL 이 1‥8 개.
+    판 2 에는 확장 flags 가 없으므로 skip-worktree 는 여기서 사라진다
+    (mygit 은 그 비트를 쓰지 않는다 — 읽기만 한다).
+    """
+    ents = sorted(entries, key=IndexEntry.key)
+    out = [b'DIRC', struct.pack('&gt;II', 2, len(ents))]
+    for e in ents:
+        flags = (e.stage &lt;&lt; 12) | min(len(e.path), MAX_NAME)
+        if e.assume_valid:
+            flags |= 0x8000
+        rec = ENTRY.pack(e.ctime_s, e.ctime_ns, e.mtime_s, e.mtime_ns,
+                         e.dev, e.ino, e.mode, e.uid, e.gid, e.size,
+                         bytes.fromhex(e.oid), flags) + e.path
+        out.append(rec + b'\0' * (8 - len(rec) % 8))
+    body = b''.join(out)
+    return body + Sha1().update(body).digest()</code></pre>
+<p>이름 뒤의 NUL 은 1~8개입니다 — 이름 길이가 이미 8의 배수여도 NUL 하나는 반드시 붙습니다. 끝 체크섬은 1단계의 스트리밍 SHA-1 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s6-read">
+<h3>읽기 — 판 3 과 확장까지</h3>
+<div class="src"><b>py/mygit/index.py</b><span class="ln">52–85</span><span>체크섬부터 확인하고 항목을 편다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/index.py" data-lines="52-85">def parse_index(data):
+    """인덱스 바이트 → [IndexEntry]. 끝 SHA-1 이 틀리면 오류.
+
+    판 3 은 flags 의 비트 14 가 서 있는 항목 뒤에 2바이트 확장
+    flags 가 더 있다(skip-worktree 가 거기 산다). O(파일 크기).
+    """
+    if len(data) &lt; 32 or data[:4] != b'DIRC':
+        raise GitError('fatal: mygit: index file corrupt')
+    if sha1(data[:-20]) != data[-20:]:
+        raise GitError('fatal: mygit: index file corrupt')
+    ver, count = struct.unpack('&gt;II', data[4:12])
+    if ver == 4:
+        raise GitError('fatal: mygit: index v4 unsupported')
+    if ver not in (2, 3):
+        raise GitError('fatal: mygit: index version %d' % ver)
+    out, pos = [], 12
+    for _ in range(count):
+        f = ENTRY.unpack_from(data, pos)
+        flags = f[11]
+        e = IndexEntry(None, f[10].hex(), f[6], (flags &gt;&gt; 12) &amp; 3, f[9])
+        (e.ctime_s, e.ctime_ns, e.mtime_s, e.mtime_ns, e.dev,
+         e.ino) = f[:6]
+        e.uid, e.gid = f[7], f[8]
+        e.assume_valid = bool(flags &amp; 0x8000)
+        start = pos + 62
+        if flags &amp; 0x4000:                     # 판 3 의 확장 flags
+            ext = struct.unpack_from('&gt;H', data, start)[0]
+            e.skip_worktree = bool(ext &amp; 0x4000)
+            start += 2
+        end = data.index(b'\0', start)          # 이름 길이 0xfff 넘어도
+        e.path = data[start:end]
+        pos += (start - pos + len(e.path) + 8) // 8 * 8
+        out.append(e)
+    return out</code></pre>
+<p>판 3 의 확장 flags(skip-worktree)는 읽고, 쓸 때는 판 2 로 씁니다. TREE 같은 확장은 캐시라 건너뛰어도 읽는 데 문제가 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s6-stat">
+<h3>파일 → 항목</h3>
+<div class="src"><b>py/mygit/index.py</b><span class="ln">36–49</span><span>모드는 소유자 실행 비트만 본다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/index.py" data-lines="36-49">def entry_from_stat(path, abspath, oid):
+    """작업 트리 파일의 stat 으로 항목을 채운다(SPEC.md §7.2).
+
+    모드는 소유자 실행 비트만 본다 — git 과 같다(그룹·기타는 버린다).
+    dev·ino·size 는 32비트로 자른다.
+    """
+    st = os.stat(abspath)
+    mode = 0o100755 if st.st_mode &amp; 0o100 else 0o100644
+    e = IndexEntry(path, oid, mode, 0, st.st_size &amp; 0xffffffff)
+    e.ctime_s, e.ctime_ns = divmod(st.st_ctime_ns, 10 ** 9)
+    e.mtime_s, e.mtime_ns = divmod(st.st_mtime_ns, 10 ** 9)
+    e.dev, e.ino = st.st_dev &amp; 0xffffffff, st.st_ino &amp; 0xffffffff
+    e.uid, e.gid = st.st_uid &amp; 0xffffffff, st.st_gid &amp; 0xffffffff
+    return e</code></pre>
+<p>git 이 기억하는 모드는 <code>100644</code> 와 <code>100755</code> 둘뿐입니다(14부의 core.fileMode). 그룹·기타 권한은 버립니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s6-status">
+<h3>status — 세 자리를 둘씩</h3>
+<div class="src"><b>py/mygit/worktree.py</b><span class="ln">110–153</span><span>X = HEAD↔인덱스, Y = 인덱스↔작업 트리</span></div>
+<pre><code data-lang="py" data-src="py/mygit/worktree.py" data-lines="110-153">def status(root, gitdir):
+    """git status --porcelain 과 같은 줄들(SPEC.md §8.3).
+
+    X = HEAD 트리 ↔ 인덱스, Y = 인덱스 ↔ 작업 트리. 추적 중인 것을
+    경로 차례로 먼저, 그다음 '?? ' 줄들. O(파일 수 × 해시).
+    """
+    _br, head = refs.read_head(gitdir)
+    base = {}
+    if head:
+        t = refs.peel(gitdir, head, 'tree')
+        base = {p: (int(m, 8), o) for m, o, p in
+                tree.flatten_tree(gitdir, t)}
+    stage0, stages = {}, {}
+    for e in index.read_index(gitdir):
+        if e.stage:
+            stages.setdefault(e.path, set()).add(e.stage)
+        else:
+            stage0[e.path] = (e.mode, e.oid)
+    rows = []
+    for p in sorted(set(base) | set(stage0) | set(stages)):
+        if p in stages:
+            got = stages[p]
+            xy = UNMERGED[(1 in got, 2 in got, 3 in got)]
+        else:
+            if p not in stage0:
+                x = 'D'
+            elif p not in base:
+                x = 'A'
+            else:
+                x = 'M' if stage0[p] != base[p] else ' '
+            y = ' '
+            if p in stage0:
+                now = file_state(root, p)
+                if now is None:
+                    y = 'D'
+                elif now != stage0[p]:
+                    y = 'M'
+            xy = x + y
+        if xy != '  ':
+            rows.append('%s %s' % (xy, quote_path(p, space=True)))
+    tracked = set(stage0) | set(stages)
+    for p in untracked(walk_worktree(root), tracked):
+        rows.append('?? %s' % quote_path(p, space=True))
+    return rows</code></pre>
+<p>18부 지도의 "세 자리" 를 그대로 코드로 옮긴 것입니다. 출력은 <code>git status --porcelain</code> 과 바이트까지 같게 맞췄습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s6-commit">
+<h3>commit — 인덱스 → 트리 → 커밋 → 브랜치</h3>
+<div class="src"><b>py/mygit/cli.py</b><span class="ln">462–503</span><span>4단계의 write_tree 와 5단계의 update_ref 를 잇는다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/cli.py" data-lines="462-503">def cmd_commit(ctx, args):
+    """트리를 쓰고, 커밋하고, 브랜치를 옮긴다(SPEC.md §9 · §6.3).
+
+    부모는 HEAD 와, 머지를 마무리하는 중이면 MERGE_HEAD. 출력은
+    git 의 요약 첫 줄만 — Author 줄과 변경 통계는 줄임이다.
+    """
+    msgs = []
+    it = iter(args)
+    for a in it:
+        if a == '-m':
+            msgs.append(next(it, ''))
+        else:
+            raise GitError("fatal: mygit: unknown option '%s'" % a)
+    g = ctx.gitdir()
+    branch, head = refs.read_head(g)
+    merge_head = refs.resolve_ref(g, 'MERGE_HEAD')
+    t = index_tree(ctx)
+    if head and not merge_head and \
+            refs.peel(g, head, 'tree') == t:
+        ctx.say('nothing to commit\n')
+        return 1
+    msg = commit.cleanup_message('\n\n'.join(msgs))
+    if not msg:
+        raise GitError('Aborting commit due to empty commit message.',
+                       1)
+    parents = [p for p in (head, merge_head) if p]
+    body = commit.serialize_commit(t, parents, ident(ctx, 'AUTHOR'),
+                                   ident(ctx), msg)
+    oid = objects.write_object(g, 'commit', body)
+    subj = commit.subject_of(msg)
+    kind = 'commit (initial)' if not head else \
+        'commit (merge)' if merge_head else 'commit'
+    refs.update_ref(g, branch or 'HEAD', oid, head,
+                    '%s: %s' % (kind, subj), ident(ctx))
+    for f in ('MERGE_HEAD', 'MERGE_MSG'):
+        p = os.path.join(g, f)
+        if os.path.exists(p):
+            os.remove(p)
+    where = branch[len('refs/heads/'):] if branch else 'detached HEAD'
+    ctx.say('[%s%s %s] %s\n' % (where, '' if head else ' (root-commit)',
+                                 oid[:7], subj))
+    return 0</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s6-4up">
+<h3>네 언어의 serializeIndex</h3>
+<div class="g2">
+<div>
+<div class="src"><b>ts/src/index.ts</b><span class="ln">102–130</span><span>TypeScript — Buffer.writeUInt32BE</span></div>
+<pre><code data-lang="ts" data-src="ts/src/index.ts" data-lines="102-130">// IndexEntry 들 → 판 2 인덱스 바이트. 경로·단계 차례로 정렬한다.
+//
+// 항목 길이 = (62 + 이름 길이 + 8) &amp; ~7 — 이름 뒤 NUL 이 1‥8 개.
+// 판 2 에는 확장 flags 가 없으므로 skip-worktree 는 여기서 사라진다
+// (mygit 은 그 비트를 쓰지 않는다 — 읽기만 한다).
+export function serializeIndex(entries: IndexEntry[]): Buffer {
+  const ents = [...entries].sort((a, b) =&gt;
+    a.path &lt; b.path ? -1 : a.path &gt; b.path ? 1 : a.stage - b.stage);
+  const head = Buffer.alloc(12);
+  head.write('DIRC', 'latin1');
+  head.writeUInt32BE(2, 4);
+  head.writeUInt32BE(ents.length, 8);
+  const parts = [head];
+  for (const e of ents) {
+    const name = Buffer.from(e.path, 'latin1');
+    const rec = Buffer.alloc((ENTRY + name.length + 8) &amp; ~7);
+    [e.ctimeS, e.ctimeNs, e.mtimeS, e.mtimeNs, e.dev, e.ino, e.mode,
+      e.uid, e.gid, e.size]
+      .forEach((v, i) =&gt; rec.writeUInt32BE(v, 4 * i));
+    rec.write(e.oid, 40, 'hex');
+    const flags = (e.stage &lt;&lt; 12) | Math.min(name.length, MAX_NAME) |
+      (e.assumeValid ? 0x8000 : 0);
+    rec.writeUInt16BE(flags, 60);
+    name.copy(rec, ENTRY);                    // 남은 자리는 이미 NUL
+    parts.push(rec);
+  }
+  const body = Buffer.concat(parts);
+  return Buffer.concat([body, sha1(body)]);
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>go/index.go</b><span class="ln">109–143</span><span>Go — binary.BigEndian</span></div>
+<pre><code data-lang="go" data-src="go/index.go" data-lines="109-143">// SerializeIndex 는 항목들 → 판 2 인덱스 바이트. 경로·단계 차례로
+// 정렬한다. 항목 길이 = (62 + 이름 길이 + 8) &amp;^ 7 — NUL 이 1‥8 개.
+// 판 2 에는 확장 flags 가 없으므로 skip-worktree 는 여기서 사라진다.
+func SerializeIndex(ents []*IndexEntry) []byte {
+	s := append([]*IndexEntry(nil), ents...)
+	sort.Slice(s, func(i, j int) bool {
+		if s[i].Path != s[j].Path {
+			return s[i].Path &lt; s[j].Path
+		}
+		return s[i].Stage &lt; s[j].Stage
+	})
+	be := binary.BigEndian
+	buf := []byte("DIRC")
+	buf = be.AppendUint32(buf, 2)
+	buf = be.AppendUint32(buf, uint32(len(s)))
+	for _, e := range s {
+		start := len(buf)
+		for _, v := range []uint32{e.CtimeS, e.CtimeNs, e.MtimeS,
+			e.MtimeNs, e.Dev, e.Ino, e.Mode, e.Uid, e.Gid, e.Size} {
+			buf = be.AppendUint32(buf, v)
+		}
+		raw, _ := hex.DecodeString(e.Oid)
+		buf = append(buf, raw...)
+		flags := uint16(e.Stage&lt;&lt;12) | uint16(min(len(e.Path), maxName))
+		if e.AssumeValid {
+			flags |= 0x8000
+		}
+		buf = be.AppendUint16(buf, flags)
+		buf = append(buf, e.Path...)
+		n := len(buf) - start
+		buf = append(buf, make([]byte, 8-n%8)...)
+	}
+	sum := Sum1(buf)
+	return append(buf, sum[:]...)
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>java/mygit/Index.java</b><span class="ln">134–165</span><span>Java — ByteBuffer 는 빅 엔디언이 기본</span></div>
+<pre><code data-lang="java" data-src="java/mygit/Index.java" data-lines="134-165">  // 항목들 → 판 2 인덱스 바이트. 경로·단계 차례로 정렬한다.
+  //
+  // 항목 길이 = (62 + 이름 길이 + 8) &amp; ~7 — 이름 뒤 NUL 이 1‥8 개.
+  // 판 2 에는 확장 flags 가 없으므로 skip-worktree 는 여기서 사라진다
+  // (mygit 은 그 비트를 쓰지 않는다 — 읽기만 한다).
+  public static byte[] serializeIndex(List&lt;IndexEntry&gt; entries) {
+    List&lt;IndexEntry&gt; ents = entries.stream().sorted(Comparator
+        .comparing((IndexEntry e) -&gt; e.path)
+        .thenComparingInt(e -&gt; e.stage)).toList();
+    int total = 12 + 20;
+    for (IndexEntry e : ents) {
+      total += (ENTRY + e.path.length() + 8) &amp; ~7;
+    }
+    ByteBuffer b = ByteBuffer.allocate(total);
+    b.put("DIRC".getBytes(ISO_8859_1)).putInt(2).putInt(ents.size());
+    for (IndexEntry e : ents) {
+      int start = b.position();
+      for (int v : new int[] {e.ctimeS, e.ctimeNs, e.mtimeS, e.mtimeNs,
+          e.dev, e.ino, e.mode, e.uid, e.gid, e.size}) {
+        b.putInt(v);
+      }
+      b.put(HexFormat.of().parseHex(e.oid));
+      b.putShort((short) ((e.stage &lt;&lt; 12)
+          | Math.min(e.path.length(), MAX_NAME)
+          | (e.assumeValid ? 0x8000 : 0)));
+      b.put(e.path.getBytes(ISO_8859_1));
+      // 남은 자리는 allocate 가 이미 0 으로 채워 두었다
+      b.position(start + ((ENTRY + e.path.length() + 8) &amp; ~7));
+    }
+    b.put(new Sha1().update(b.array(), 0, total - 20).digest());
+    return b.array();
+  }</code></pre>
+</div>
+<div>
+<div class="src"><b>cpp/index.cpp</b><span class="ln">99–124</span><span>C++ — put32 로 한 바이트씩</span></div>
+<pre><code data-lang="cpp" data-src="cpp/index.cpp" data-lines="99-124">// serialize_index 는 항목들 → 판 2 인덱스 바이트. 경로·단계 차례로
+// 정렬한다. 항목 길이 = (62 + 이름 길이 + 8) &amp; ~7 — NUL 이 1‥8 개.
+// 판 2 에는 확장 flags 가 없으므로 skip-worktree 는 여기서 사라진다.
+std::string serialize_index(std::vector&lt;IndexEntry&gt; ents) {
+    std::sort(ents.begin(), ents.end(), [](auto&amp; a, auto&amp; b) {
+        return std::tie(a.path, a.stage) &lt; std::tie(b.path, b.stage);
+    });
+    std::string out = "DIRC";
+    put32(out, 2);
+    put32(out, uint32_t(ents.size()));
+    for (auto&amp; e : ents) {
+        size_t start = out.size();
+        for (auto v : {e.ctime_s, e.ctime_ns, e.mtime_s, e.mtime_ns,
+                       e.dev, e.ino, e.mode, e.uid, e.gid, e.size})
+            put32(out, v);
+        out += from_hex(e.oid);
+        unsigned flags =
+            unsigned(e.stage) &lt;&lt; 12 |
+            unsigned(std::min&lt;size_t&gt;(e.path.size(), 0xfff)) |
+            (e.assume_valid ? 0x8000 : 0);
+        out += char(flags &gt;&gt; 8), out += char(flags);
+        out += e.path;
+        out.append(8 - (out.size() - start) % 8, '\0');
+    }
+    return out + sha1_raw(out);
+}</code></pre>
+</div>
+</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s6-check">
+<h3>채점</h3>
+<div class="src"><b>out/mygit__mkdir-p-src-printf-int-x-n-src-x.c-mygit-add-..txt</b><span class="ln">전체 1줄</span><span>add 는 말이 없다</span></div>
+<pre class="term" data-out="mygit__mkdir-p-src-printf-int-x-n-src-x.c-mygit-add-..txt">$ mkdir -p src &amp;&amp; printf "int x;\n" &gt; src/x.c &amp;&amp; mygit add .</pre>
+<div class="src"><b>out/mygit__mygit-status.txt</b><span class="ln">전체 3줄</span><span>porcelain 꼴의 status</span></div>
+<pre class="term" data-out="mygit__mygit-status.txt">$ mygit status
+A  h.txt
+A  src/x.c</pre>
+<div class="src"><b>out/appendix__.-t.sh-index.txt</b><span class="ln">전체 17줄</span><span>6단계의 시험 — git 이 쓴 인덱스와 바이트 비교(stat 칸은 정규화)</span></div>
+<pre class="term" data-out="appendix__.-t.sh-index.txt">$ ./t.sh index
+test_s7_1_plain ... ok
+test_s7_1_version_3 ... ok
+test_s7_5_bad_checksum ... ok
+test_s7_5_tree_extension_is_skipped ... ok
+test_s7_2_exec_bit_and_size ... ok
+test_s7_4_write_and_read_back ... ok
+test_s7_1_sorted_by_path_bytes_then_stage ... ok
+test_s7_2_long_path_and_padding ... ok
+test_s7_2_round_trip_is_byte_identical ... ok
+test_s7_2_version_3_is_written_as_version_2 ... ok
+test_s7_3_normalized_equals_golden ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests
+
+OK</pre>
+<p>stat 칸(시각·inode 등)은 만드는 순간마다 달라 그대로 견줄 수 없습니다. 그래서 시험은 그 칸을 0 으로 지운 뒤 git 이 쓴 인덱스와 바이트로 견줍니다(SPEC §7.3).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p19-quiz-6" data-quiz>
+<h3>5~6장 퀴즈</h3>
+<p class="q">Q. 경로 이름이 16바이트인 인덱스 항목은 몇 바이트입니까? 20바이트면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> (62 + 16 + 8) &amp; ~7 = 86 &amp; ~7 = 80바이트(NUL 2개), (62 + 20 + 8) &amp; ~7 = 90 &amp; ~7 = 88바이트(NUL 6개)입니다. 62 + 이름 뒤에
+NUL 을 최소 하나 붙이고 8의 배수로 올린 것과 같습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-ch7"><p class="chnum">7장</p><h2>log 와 merge-base</h2><p class="chsub">7단계 · SPEC §10</p></article>
+
+<article class="card" id="p19-s7-walk">
+<h3>log 의 차례 — 같은 날짜의 규칙까지</h3>
+<div class="src"><b>py/mygit/walk.py</b><span class="ln">28–53</span><span>날짜 내림차순 큐, 같은 날짜들의 맨 뒤에 끼운다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/walk.py" data-lines="28-53">def walk_log(gitdir, starts):
+    """시작 커밋들에서 닿는 커밋 전부, git log 의 기본 차례로.
+
+    큐는 날짜 내림차순 목록이다. 끼울 자리는 "날짜가 같거나 늦은 것들
+    바로 뒤" — 그래서 같은 날짜라면 먼저 들어온 것이 먼저 나간다.
+    O(커밋 수 × log(큐 길이)) 비교, 끼우기는 목록이라 O(큐 길이).
+    """
+    queue, keys, seen, out = [], [], set(), []
+
+    def push(oid):
+        if oid in seen:
+            return
+        seen.add(oid)
+        k = -parents_and_date(gitdir, oid)[1]
+        at = bisect.bisect_right(keys, k)
+        keys.insert(at, k)
+        queue.insert(at, oid)
+    for s in starts:
+        push(s)
+    while queue:
+        keys.pop(0)
+        oid = queue.pop(0)
+        out.append(oid)
+        for p in parents_and_date(gitdir, oid)[0]:
+            push(p)
+    return out</code></pre>
+<p>git 의 기본 log 는 커미터 날짜가 늦은 것부터입니다. 날짜가 같을 때는 git 의 <code>commit_list_insert_by_date</code> 처럼 "같은 날짜들 가운데 맨 뒤" 에
+끼웁니다. 이 덱의 실험 저장소는 날짜가 모두 같게 만들어지는 경우가 많아, 이 한 줄이 차례를 정합니다(golden/dag/equal 이 확인).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s7-base">
+<h3>merge-base — 곧은 방법</h3>
+<div class="src"><b>py/mygit/walk.py</b><span class="ln">73–87</span><span>공통 조상 중 다른 공통 조상의 조상이 아닌 것</span></div>
+<pre><code data-lang="py" data-src="py/mygit/walk.py" data-lines="73-87">def merge_bases(gitdir, a, b):
+    """가장 좋은 공통 조상들(SPEC.md §10.2), 커미터 날짜 내림차순.
+
+    공통 조상 가운데 다른 공통 조상의 조상이 아닌 것만 남긴다.
+    작은 저장소를 위한 곧은 방법이다 — git 은 날짜로 칠하며 내려가는
+    더 빠른 길(paint_down_to_common)을 쓴다. O(커밋 수²) 최악.
+    """
+    common = ancestors(gitdir, a) &amp; ancestors(gitdir, b)
+    below = set()
+    for c in common:
+        for p in parents_and_date(gitdir, c)[0]:
+            below |= ancestors(gitdir, p)
+    best = [c for c in common if c not in below]
+    best.sort(key=lambda c: -parents_and_date(gitdir, c)[1])
+    return best</code></pre>
+<p>7부의 정의를 그대로 옮긴 O(커밋 수²) 방법입니다. git 은 날짜로 칠하며 내려가는 더 빠른 길(paint_down_to_common)을 쓰지만, 작은 저장소에서는 답이 같습니다.
+교차 머지처럼 답이 둘인 경우도 둘 다 돌려줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s7-4up">
+<h3>네 언어의 mergeBases</h3>
+<div class="g2">
+<div>
+<div class="src"><b>ts/src/walk.ts</b><span class="ln">86–104</span><span>TypeScript — Set</span></div>
+<pre><code data-lang="ts" data-src="ts/src/walk.ts" data-lines="86-104">// 가장 좋은 공통 조상들(SPEC.md §10.2), 커미터 날짜 내림차순.
+//
+// 공통 조상 가운데 다른 공통 조상의 조상이 아닌 것만 남긴다. 작은
+// 저장소를 위한 곧은 방법이다 — git 은 날짜로 칠하며 내려가는 더 빠른
+// 길(paint_down_to_common)을 쓴다. O(커밋 수²) 최악.
+export function mergeBases(gitdir: string, a: string, b: string):
+  string[] {
+  const inB = ancestors(gitdir, b);
+  const common = [...ancestors(gitdir, a)].filter((c) =&gt; inB.has(c));
+  const below = new Set&lt;string&gt;();
+  for (const c of common) {
+    for (const p of parentsAndDate(gitdir, c)[0]) {
+      ancestors(gitdir, p).forEach((x) =&gt; below.add(x));
+    }
+  }
+  const date = (c: string) =&gt; parentsAndDate(gitdir, c)[1];
+  return common.filter((c) =&gt; !below.has(c))
+    .sort((x, y) =&gt; date(y) - date(x));
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>go/walk.go</b><span class="ln">114–158</span><span>Go — 오류를 돌려주느라 길다</span></div>
+<pre><code data-lang="go" data-src="go/walk.go" data-lines="114-158">// MergeBases 는 가장 좋은 공통 조상들(SPEC.md §10.2), 커미터 날짜
+// 내림차순. 공통 조상 가운데 다른 공통 조상의 조상이 아닌 것만
+// 남긴다. 작은 저장소를 위한 곧은 방법이다 — git 은 날짜로 칠하며
+// 내려가는 더 빠른 길(paint_down_to_common)을 쓴다. O(커밋 수²) 최악.
+func MergeBases(gitdir, a, b string) ([]string, error) {
+	aa, err := ancestors(gitdir, a)
+	if err != nil {
+		return nil, err
+	}
+	bb, err := ancestors(gitdir, b)
+	if err != nil {
+		return nil, err
+	}
+	below := map[string]bool{}
+	var common []string
+	for c := range aa {
+		if !bb[c] {
+			continue
+		}
+		common = append(common, c)
+		ci, _ := parentsAndDate(gitdir, c)
+		for _, p := range ci.parents {
+			anc, _ := ancestors(gitdir, p)
+			for x := range anc {
+				below[x] = true
+			}
+		}
+	}
+	var best []string
+	for _, c := range common {
+		if !below[c] {
+			best = append(best, c)
+		}
+	}
+	// 날짜가 같으면 이름 차례 — 맵 차례가 결과에 새지 않게
+	sort.Slice(best, func(i, j int) bool {
+		x, _ := parentsAndDate(gitdir, best[i])
+		y, _ := parentsAndDate(gitdir, best[j])
+		if x.when != y.when {
+			return x.when &gt; y.when
+		}
+		return best[i] &lt; best[j]
+	})
+	return best, nil
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>java/mygit/Walk.java</b><span class="ln">88–106</span><span>Java</span></div>
+<pre><code data-lang="java" data-src="java/mygit/Walk.java" data-lines="88-106">  // 가장 좋은 공통 조상들(SPEC.md §10.2), 커미터 날짜 내림차순.
+  //
+  // 공통 조상 가운데 다른 공통 조상의 조상이 아닌 것만 남긴다. 작은
+  // 저장소를 위한 곧은 방법이다 — git 은 날짜로 칠하며 내려가는 더
+  // 빠른 길(paint_down_to_common)을 쓴다. O(커밋 수²) 최악.
+  public static List&lt;String&gt; mergeBases(String gitdir, String a,
+      String b) {
+    Set&lt;String&gt; common = ancestors(gitdir, a);
+    common.retainAll(ancestors(gitdir, b));
+    Set&lt;String&gt; below = new HashSet&lt;&gt;();
+    for (String c : common) {
+      for (String p : node(gitdir, c).parents()) {
+        below.addAll(ancestors(gitdir, p));
+      }
+    }
+    return common.stream().filter(c -&gt; !below.contains(c))
+        .sorted(Comparator.comparingLong(c -&gt; -node(gitdir, c).date()))
+        .toList();
+  }</code></pre>
+</div>
+<div>
+<div class="src"><b>cpp/walk.cpp</b><span class="ln">78–101</span><span>C++</span></div>
+<pre><code data-lang="cpp" data-src="cpp/walk.cpp" data-lines="78-101">// merge_bases 는 가장 좋은 공통 조상들(SPEC.md §10.2), 커미터 날짜
+// 내림차순. 공통 조상 가운데 다른 공통 조상의 조상이 아닌 것만
+// 남긴다. 작은 저장소를 위한 곧은 방법이다 — git 은 날짜로 칠하며
+// 내려가는 더 빠른 길(paint_down_to_common)을 쓴다. O(커밋 수²) 최악.
+std::vector&lt;std::string&gt; merge_bases(const std::string&amp; gitdir,
+                                     const std::string&amp; a,
+                                     const std::string&amp; b) {
+    auto aa = ancestors(gitdir, a), bb = ancestors(gitdir, b);
+    std::set&lt;std::string&gt; below;
+    std::vector&lt;std::string&gt; common, best;
+    for (auto&amp; c : aa) {
+        if (!bb.count(c)) continue;
+        common.push_back(c);
+        for (auto&amp; p : info(gitdir, c).parents)
+            for (auto&amp; x : ancestors(gitdir, p)) below.insert(x);
+    }
+    for (auto&amp; c : common)
+        if (!below.count(c)) best.push_back(c);
+    // 날짜가 같으면 이름 차례 — 집합의 차례가 결과에 새지 않게
+    std::stable_sort(best.begin(), best.end(), [&amp;](auto&amp; x, auto&amp; y) {
+        return info(gitdir, x).when &gt; info(gitdir, y).when;
+    });
+    return best;
+}</code></pre>
+</div>
+</div>
+<p>Go 판이 두 배 긴 것은 알고리즘 때문이 아니라 <code>if err != nil</code> 때문입니다 — 객체를 읽는 모든 자리가 오류를 돌려줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s7-check">
+<h3>채점</h3>
+<div class="src"><b>out/mygit__mygit-log-oneline.txt</b><span class="ln">전체 5줄</span><span>mygit 의 log — 머지 뒤</span></div>
+<pre class="term" data-out="mygit__mygit-log-oneline.txt">$ mygit log --oneline
+7b111bf Merge branch 'topic'
+78fd8d7 main
+2f32363 topic
+6ae7db3 first</pre>
+<div class="src"><b>out/mygit__mygit-merge-base-main-topic.txt</b><span class="ln">전체 2줄</span><span>mygit 의 merge-base</span></div>
+<pre class="term" data-out="mygit__mygit-merge-base-main-topic.txt">$ mygit merge-base main topic
+2f32363487e92bd24cfa6e42753a407bf378346a</pre>
+<div class="src"><b>out/appendix__.-t.sh-walk.txt</b><span class="ln">전체 14줄</span><span>7단계의 시험 — golden/dag 의 log·merge-base 를 git 과 견준다</span></div>
+<pre class="term" data-out="appendix__.-t.sh-walk.txt">$ ./t.sh walk
+test_s10_log_and_merge_base_match_git ... ok
+test_s9_2_delete_merged_branch ... ok
+test_s9_2_refuses_current_branch ... ok
+test_s9_2_refuses_unmerged_branch ... ok
+test_s1_4_unknown_revision ... ok
+test_s9_1_limit ... ok
+test_s10_1_equal_dates_first_in_first_out ... ok
+test_s10_2_is_ancestor ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests
+
+OK</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-ch8"><p class="chnum">8장</p><h2>diff — Myers 와 밀어 붙이기</h2><p class="chsub">8단계 · SPEC §11</p></article>
+
+<article class="card" id="p19-s8-idea">
+<h3>세 단계</h3>
+<ol>
+<li>앞뒤의 같은 줄을 떼어 둔다.</li>
+<li>남은 가운데서 Myers 의 탐욕 탐색으로 가장 짧은 편집 스크립트를 찾는다(9부).</li>
+<li>바뀐 줄 묶음을 git 처럼 위아래로 밀어 자리를 정한다 — 같은 줄이 되풀이되는 곳에서는 어디를 바뀐 줄로 칠지가 여럿이기 때문이다.</li>
+</ol>
+<p>줄은 줄바꿈까지 품습니다. 끝 줄바꿈이 없는 마지막 줄은 있는 줄과 <b>다른</b> 줄입니다(<code>\ No newline at end of file</code>).</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p19-s8-trim">
+<h3>앞뒤 떼기</h3>
+<div class="src"><b>py/mygit/diff.py</b><span class="ln">149–160</span><span>같은 앞·뒤는 탐색에 넣지 않는다</span></div>
+<pre><code data-lang="py" data-src="py/mygit/diff.py" data-lines="149-160">def myers(a, b):
+    """1·2 단계 — 앞뒤를 깎고 가운데를 앞방향 Myers 로."""
+    n, m = len(a), len(b)
+    s = 0
+    while s &lt; n and s &lt; m and a[s] == b[s]:
+        s += 1
+    e = 0
+    while e &lt; n - s and e &lt; m - s and a[n - 1 - e] == b[m - 1 - e]:
+        e += 1
+    ra, rb = _forward(a[s:n - e], b[s:m - e])
+    return ([False] * s + ra + [False] * e,
+            [False] * s + rb + [False] * e)</code></pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s8-forward">
+<h3>Myers 앞방향 탐색</h3>
+<div class="src"><b>py/mygit/diff.py</b><span class="ln">32–56</span><span>대각선 k 마다 가장 멀리 간 x</span></div>
+<pre><code data-lang="py" data-src="py/mygit/diff.py" data-lines="32-56"># ── 2 단계: Myers 앞방향 탐욕 탐색 (SPEC.md §11.2) ─────────────────
+def _forward(a, b):
+    """가운데 a·b 의 (ra, rb). 대각선 k 마다 가장 멀리 간 x 를 V[k] 에.
+
+    d 마다 V 의 사본을 남겨 두었다가 (N, M) 에서 거꾸로 같은 판정을
+    되밟아 편집을 표시한다. O((N+M)·D) 시간, O((N+M)·D) 공간 — 공간을
+    줄인 변형이 myers_linear 다.
+    """
+    n, m = len(a), len(b)
+    v = {1: 0}
+    trace = []
+    for d in range(n + m + 1):
+        trace.append(dict(v))
+        for k in range(-d, d + 1, 2):
+            if k == -d or (k != d and v[k - 1] &lt; v[k + 1]):
+                x = v[k + 1]                    # 아래로: b 의 줄을 끼움
+            else:
+                x = v[k - 1] + 1                # 오른쪽: a 의 줄을 지움
+            y = x - k
+            while x &lt; n and y &lt; m and a[x] == b[y]:
+                x, y = x + 1, y + 1
+            v[k] = x
+            if x &gt;= n and y &gt;= m:
+                return _backtrack(trace, n, m, d)
+    raise AssertionError('Myers 탐색이 끝나지 않았다')</code></pre>
+<p>편집 d 번으로 닿을 수 있는 가장 먼 자리를 대각선마다 기억하며 d 를 늘립니다. 끝에 닿는 첫 d 가 가장 짧은 스크립트의 길이입니다. d 마다 V 의 사본을
+남겨 두었다가 끝에서 거꾸로 되밟아 어느 줄을 지우고 끼웠는지 표시합니다 — O((N+M)·D) 시간과 공간.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s8-hunk">
+<h3>덩어리로 묶기</h3>
+<div class="src"><b>py/mygit/diff.py</b><span class="ln">287–320</span><span>문맥 3줄, 사이가 6줄 이하면 한 덩어리</span></div>
+<pre><code data-lang="py" data-src="py/mygit/diff.py" data-lines="287-320">def unified_diff(a, b):
+    """덩어리들(SPEC.md §11.3). 같으면 b''."""
+    ra, rb = edit_flags(a, b)
+    ch = build_changes(ra, rb)
+    out = []
+    i = 0
+    while i &lt; len(ch):
+        j = i
+        while j + 1 &lt; len(ch) and \
+                ch[j + 1][0] - (ch[j][0] + ch[j][2]) &lt;= 2 * CONTEXT:
+            j += 1
+        first, last = ch[i], ch[j]
+        s1, s2 = max(first[0] - CONTEXT, 0), max(first[1] - CONTEXT, 0)
+        e1 = min(last[0] + last[2] + CONTEXT, len(a))
+        e2 = min(last[1] + last[3] + CONTEXT, len(b))
+        func = b''
+        for q in range(s1 - 1, -1, -1):
+            if _is_func(a[q]):
+                func = b' ' + a[q].rstrip()[:80].rstrip()
+                break
+        out.append(b'@@ -%s +%s @@%s\n'
+                   % (_span(s1, e1 - s1), _span(s2, e2 - s2), func))
+        p1 = s1
+        for k in range(i, j + 1):
+            c = ch[k]
+            out += [b' ' + a[q] for q in range(p1, c[0])]
+            out += [b'-' + a[q] for q in range(c[0], c[0] + c[2])]
+            out += [b'+' + b[q] for q in range(c[1], c[1] + c[3])]
+            p1 = c[0] + c[2]
+        out += [b' ' + a[q] for q in range(p1, e1)]
+        i = j + 1
+    return b''.join(line if line.endswith(b'\n') else
+                    line + b'\n\\ No newline at end of file\n'
+                    for line in out)</code></pre>
+<p>두 바뀐 곳 사이가 문맥의 두 배(6줄) 이하면 한 덩어리로 합칩니다. 머리의 끝에 붙는 함수 줄은 git 기본 드라이버의 규칙 — 첫 글자가 영문자·<code>_</code>·<code>$</code>
+인 가장 가까운 윗줄 — 을 따릅니다(9부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s8-4up">
+<h3>네 언어의 forward</h3>
+<div class="g2">
+<div>
+<div class="src"><b>ts/src/diff.ts</b><span class="ln">35–58</span><span>TypeScript</span></div>
+<pre><code data-lang="ts" data-src="ts/src/diff.ts" data-lines="35-58">// 가운데 a·b 의 [ra, rb]. 대각선 k 마다 가장 멀리 간 x 를 V[k] 에.
+//
+// k 는 −d‥d 라 배열 첨자로 쓰려고 off 만큼 민다. d 마다 V 의 사본을
+// 남겨 두었다가 (N, M) 에서 거꾸로 같은 판정을 되밟아 편집을 표시한다.
+// O((N+M)·D) 시간, O((N+M)·D) 공간.
+function forward(a: string[], b: string[]): [boolean[], boolean[]] {
+  const [n, m] = [a.length, b.length];
+  const off = n + m + 1;
+  const v = new Int32Array(2 * off + 1);
+  const trace: Int32Array[] = [];
+  for (let d = 0; d &lt;= n + m; d++) {
+    trace.push(v.slice());
+    for (let k = -d; k &lt;= d; k += 2) {
+      let x = k === -d || (k !== d &amp;&amp; v[off + k - 1] &lt; v[off + k + 1])
+        ? v[off + k + 1]                   // 아래로: b 의 줄을 끼움
+        : v[off + k - 1] + 1;              // 오른쪽: a 의 줄을 지움
+      let y = x - k;
+      while (x &lt; n &amp;&amp; y &lt; m &amp;&amp; a[x] === b[y]) [x, y] = [x + 1, y + 1];
+      v[off + k] = x;
+      if (x &gt;= n &amp;&amp; y &gt;= m) return backtrack(trace, n, m, d, off);
+    }
+  }
+  throw new Error('Myers 탐색이 끝나지 않았다');
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>go/diff.go</b><span class="ln">44–73</span><span>Go</span></div>
+<pre><code data-lang="go" data-src="go/diff.go" data-lines="44-73">// forward 는 가운데 a·b 의 (ra, rb). 대각선 k 마다 가장 멀리 간 x 를
+// v[k] 에 둔다. d 마다 v 의 [-d, d] 조각을 남겨 두었다가 (N, M) 에서
+// 거꾸로 같은 판정을 되밟아 편집을 표시한다.
+// O((N+M)·D) 시간, O(D²) 공간.
+func forward(a, b []string) ([]bool, []bool) {
+	n, m := len(a), len(b)
+	off := n + m + 1
+	v := make([]int, 2*off+1)
+	var trace [][]int
+	for d := 0; d &lt;= n+m; d++ {
+		trace = append(trace, append([]int(nil), v[off-d:off+d+1]...))
+		for k := -d; k &lt;= d; k += 2 {
+			var x int
+			if k == -d || (k != d &amp;&amp; v[off+k-1] &lt; v[off+k+1]) {
+				x = v[off+k+1] // 아래로: b 의 줄을 끼움
+			} else {
+				x = v[off+k-1] + 1 // 오른쪽: a 의 줄을 지움
+			}
+			y := x - k
+			for x &lt; n &amp;&amp; y &lt; m &amp;&amp; a[x] == b[y] {
+				x, y = x+1, y+1
+			}
+			v[off+k] = x
+			if x &gt;= n &amp;&amp; y &gt;= m {
+				return backtrack(trace, n, m, d)
+			}
+		}
+	}
+	panic("Myers 탐색이 끝나지 않았다")
+}</code></pre>
+</div>
+<div>
+<div class="src"><b>java/mygit/Diff.java</b><span class="ln">47–74</span><span>Java</span></div>
+<pre><code data-lang="java" data-src="java/mygit/Diff.java" data-lines="47-74">  // 가운데 a·b 의 {ra, rb}. 대각선 k 마다 가장 멀리 간 x 를 V[k] 에.
+  //
+  // k 는 −d‥d 라 배열 첨자로 쓰려고 off 만큼 민다. d 마다 V 의 사본을
+  // 남겨 두었다가 (N, M) 에서 거꾸로 같은 판정을 되밟아 편집을
+  // 표시한다. O((N+M)·D) 시간, O((N+M)·D) 공간.
+  private static boolean[][] forward(List&lt;String&gt; a, List&lt;String&gt; b) {
+    int n = a.size();
+    int m = b.size();
+    int off = n + m + 1;
+    int[] v = new int[2 * off + 1];
+    List&lt;int[]&gt; trace = new ArrayList&lt;&gt;();
+    for (int d = 0; d &lt;= n + m; d++) {
+      trace.add(v.clone());
+      for (int k = -d; k &lt;= d; k += 2) {
+        int x = k == -d || (k != d &amp;&amp; v[off + k - 1] &lt; v[off + k + 1])
+            ? v[off + k + 1]                 // 아래로: b 의 줄을 끼움
+            : v[off + k - 1] + 1;            // 오른쪽: a 의 줄을 지움
+        int y = x - k;
+        while (x &lt; n &amp;&amp; y &lt; m &amp;&amp; a.get(x).equals(b.get(y))) {
+          x++;
+          y++;
+        }
+        v[off + k] = x;
+        if (x &gt;= n &amp;&amp; y &gt;= m) return backtrack(trace, n, m, d, off);
+      }
+    }
+    throw new IllegalStateException("Myers 탐색이 끝나지 않았다");
+  }</code></pre>
+</div>
+<div>
+<div class="src"><b>cpp/diff.cpp</b><span class="ln">42–63</span><span>C++</span></div>
+<pre><code data-lang="cpp" data-src="cpp/diff.cpp" data-lines="42-63">// forward 는 가운데 a·b 의 (ra, rb). 대각선 k 마다 가장 멀리 간 x 를
+// v[k] 에 둔다. O((N+M)·D) 시간, O(D²) 공간.
+std::pair&lt;Flags, Flags&gt; forward(const Lines&amp; a, const Lines&amp; b) {
+    long n = long(a.size()), m = long(b.size()), off = n + m + 1;
+    std::vector&lt;long&gt; v(2 * off + 1);
+    std::vector&lt;std::vector&lt;long&gt;&gt; trace;
+    for (long d = 0; d &lt;= n + m; ++d) {
+        trace.emplace_back(v.begin() + off - d,
+                           v.begin() + off + d + 1);
+        for (long k = -d; k &lt;= d; k += 2) {
+            long x =
+                k == -d || (k != d &amp;&amp; v[off + k - 1] &lt; v[off + k + 1])
+                    ? v[off + k + 1]       // 아래로: b 의 줄을 끼움
+                    : v[off + k - 1] + 1;  // 오른쪽: a 의 줄을 지움
+            long y = x - k;
+            while (x &lt; n &amp;&amp; y &lt; m &amp;&amp; a[x] == b[y]) ++x, ++y;
+            v[off + k] = x;
+            if (x &gt;= n &amp;&amp; y &gt;= m) return backtrack(trace, n, m, d);
+        }
+    }
+    throw std::logic_error("Myers 탐색이 끝나지 않았다");
+}</code></pre>
+</div>
+</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s8-tie">
+<h3>git 과 다른 답도 맞는 답이다</h3>
+<p>가장 짧은 편집 스크립트는 하나가 아닐 수 있습니다. git 은 앞방향이 아니라 양방향(middle snake) 분할 정복으로 찾고, 그 전에 한쪽에만 있는 줄을 걸러
+냅니다. 그래서 같은 길이의 스크립트가 여럿이면 mygit(앞방향 + 밀어 붙이기)과 다른 것을 고를 수 있습니다. 기대 출력은 들여쓰기 휴리스틱을 끈 git 으로
+만들었고, 시험은 쌍을 둘로 나눕니다.</p>
+<ul>
+<li><b>agree</b> — git 의 출력과 바이트까지 같아야 하는 쌍</li>
+<li><b>tie</b> — 지운·끼운 줄의 <b>수</b>는 같지만 고른 자리가 다른 쌍. 수가 같으면 합격</li>
+</ul>
+<div class="src"><b>out/appendix__.-t.sh-diff.txt</b><span class="ln">전체 13줄</span><span>8단계의 시험 — agree·tie, 그리고 선형 공간 판이 앞방향과 같은가</span></div>
+<pre class="term" data-out="appendix__.-t.sh-diff.txt">$ ./t.sh diff
+test_s11_2_tie_pairs_same_size_different_choice ... ok
+test_s11_agree_pairs_are_byte_identical ... ok
+test_decision7_linear_equals_forward_on_agree_pairs ... ok
+test_s11_1_lines_keep_their_newline ... ok
+test_s11_2_minimal_edit_count ... ok
+test_s11_3_hunk_header_counts ... ok
+test_s11_3_identical_inputs_have_no_hunks ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests
+
+OK</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p19-s8-check">
+<h3>채점 — mygit 의 diff</h3>
+<div class="src"><b>out/mygit__mygit-diff-topic-main.txt</b><span class="ln">전체 15줄</span><span>두 커밋 사이 — 머리 줄까지 git 의 꼴</span></div>
+<pre class="term" data-out="mygit__mygit-diff-topic-main.txt">$ mygit diff topic main
+diff --git a/h.txt b/h.txt
+index 1470cb6..ce01362 100644
+--- a/h.txt
++++ b/h.txt
+@@ -1,2 +1 @@
+ hello
+-topic
+diff --git a/src/y.c b/src/y.c
+new file mode 100644
+index 0000000..92ff4b8
+--- /dev/null
++++ b/src/y.c
+@@ -0,0 +1 @@
++int y;</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p19-quiz-8" data-quiz>
+<h3>7~8장 퀴즈</h3>
+<p class="q">Q. mygit 의 diff 가 어떤 입력에서 git 과 다른 덩어리를 냈는데, 지운 줄과 끼운 줄의 수는 같습니다. 버그입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 꼭 그렇지는 않습니다. 가장 짧은 편집 스크립트가 여럿일 때 git 의 양방향 탐색과 mygit 의 앞방향 탐색은 다른 것을 고를 수 있고,
+시험은 그런 쌍을 "tie" 로 분류해 편집 수만 봅니다. 반대로 mygit 의 편집 수가 git 보다 많다면 버그입니다 — 가장 짧은 스크립트를 찾지 못한 것이니까요.</div>
 <span class="tier ill">설명용</span>
 </article>
 
