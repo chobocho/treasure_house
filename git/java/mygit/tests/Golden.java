@@ -1,6 +1,5 @@
 package mygit.tests;
 
-import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.io.ByteArrayOutputStream;
@@ -73,12 +72,6 @@ final class Golden {
         Files.delete(p);
       }
     }
-  }
-
-  // 유니코드 문자열 → 바이트 문자열(UTF-8 바이트를 latin1 로). mygit
-  // 안의 문자열은 전부 이 꼴이다(Main.byteNames).
-  static String b(String s) {
-    return new String(s.getBytes(UTF_8), ISO_8859_1);
   }
 
   // text: 재료의 이스케이프 — \n \t \\ \" \xHH.

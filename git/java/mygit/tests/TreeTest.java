@@ -143,7 +143,7 @@ final class TreeTest {
     eq("\"q\\\"uote\"", Worktree.quotePath("q\"uote"));
     eq("\"back\\\\slash\"", Worktree.quotePath("back\\slash"));
     eq("\"\\355\\225\\234\\352\\270\\200.txt\"",
-        Worktree.quotePath(Golden.b("한글.txt")));
+        Worktree.quotePath(Cli.bytes("한글.txt")));
     eq("\"del\\177\"", Worktree.quotePath("del" + (char) 127));
   }
 

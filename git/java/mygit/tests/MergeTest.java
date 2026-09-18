@@ -49,6 +49,17 @@ final class MergeTest {
         "text:a\\n3\\nm1\\nm2\\nm3\\nm4\\n4\\ne\\n").endsWith("|2"));
   }
 
+  static void s12_1_unbornHeadIsRefused() throws Exception {
+    // 첫 커밋 전 — git 은 <b> 를 그대로 가져오지만 mygit 은 줄인다
+    try (var sb = new Sandbox(false)) {
+      sb.mygit("init");
+      String tree = sb.out("write-tree").strip();
+      String other = sb.out("commit-tree", tree, "-m", "x").strip();
+      eq("128 fatal: mygit: nothing to merge into yet",
+          Sandbox.firstLine(sb.mygit("merge", other)));
+    }
+  }
+
   static void s12_3_identicalChangeTakenOnce() throws Exception {
     eq("1\nX\n3\n4\nY\n|0", merge("seq:1:5",
         "text:1\\nX\\n3\\n4\\n5\\n", "text:1\\nX\\n3\\n4\\nY\\n"));

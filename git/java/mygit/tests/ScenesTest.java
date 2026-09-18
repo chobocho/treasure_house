@@ -133,7 +133,8 @@ final class ScenesTest {
     // 한 줄을 돌려 결과를. 손질 줄은 null.
     Cli.Result run(String line) throws Exception {
       List<String> a = splitArgs(line);
-      Path p = a.size() > 1 ? Path.of(cwd, Golden.b(a.get(1))) : null;
+      // 경로는 파일 시스템에 건네기 전에 바이트 문자열로
+      Path p = a.size() > 1 ? Path.of(cwd, Cli.bytes(a.get(1))) : null;
       switch (a.get(0)) {
         case "@date" -> date(a.get(1));
         case "@cd" -> cwd = Path.of(root, a.get(1)).normalize()
@@ -167,7 +168,7 @@ final class ScenesTest {
           return text(sb.toString());
         }
         case "ref" -> {
-          return text(Refs.revParse(gitdir(), Golden.b(a.get(1)))
+          return text(Refs.revParse(gitdir(), Cli.bytes(a.get(1)))
               + "\n");
         }
         default -> throw new IllegalArgumentException(

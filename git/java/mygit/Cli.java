@@ -891,6 +891,9 @@ public final class Cli {
     Refs.Head h = Refs.readHead(g);
     String head = h.oid();
     String ref = h.branch() == null ? "HEAD" : h.branch();
+    if (head == null) {          // git 은 <b> 를 그대로 가져온다 — 줄임
+      throw new GitError("fatal: mygit: nothing to merge into yet");
+    }
     if (!isClean(ctx, head)) {
       throw new GitError("error: mygit: commit your local changes "
           + "before merging");
