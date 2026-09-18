@@ -856,3 +856,14 @@ The user approved every recommendation below as-is. Each row is now a decision.
   requires; `proot_cmd.py` 212–215 shows the binds).
 - Part 12 written: 11 slides (budget 100). GPU acceleration left 미확인 (only the wiki's "not
   supported by default" is sourced).
+
+### Step 8 · Part 14 — 보안과 개인정보 (2026-09-18)
+
+- New docs: `termux-security-policy` and `post-2022-02-15-vuln` (termux.github.io pin f8d8791) —
+  the three disclosed app vulnerabilities (Tasker path traversal, Widget launcher token, world-
+  readable files via the undeclared `permRead`) and the 3/90/7/30-day policy.
+- Captures: `src_security` (manifest permission lines — RUN_COMMAND dangerous, files provider now
+  RUN_COMMAND), `scrub_demo` (fix/check demo built with printf so the command line itself does not
+  trip the checker; scrub tests 38 OK).
+- Part 14 written: 15 slides (budget 90). `termux-keystore` and backup encryption left out: no
+  source in hand (keystore is on the privacy denylist and was never run).

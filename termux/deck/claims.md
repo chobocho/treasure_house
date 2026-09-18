@@ -296,3 +296,7 @@
 | proot 에서 쓰려면 --shared-tmp(아니면 TMPDIR). proot-distro 는 shared_tmp 면 $PREFIX/tmp:/tmp, shared_x11 이면 .X11-unix 를 바인드 | readme-termux-x11 1.6 · proot-distro@f832a56 proot_cmd.py 212–215 | README·소스 | 2026-09-18 |
 | 이 세션의 /tmp 와 $PREFIX/tmp 는 inode 가 다르고 /tmp/.X11-unix 는 없다 | out/x11_proot.txt 1·2 | 캡처 | 2026-09-18 |
 | proot-distro 는 Termux 에서 PULSE_SERVER=127.0.0.1 을 손님 환경의 기본값으로 둔다 | readme-proot-distro 1.3.5.2 | README | 2026-09-18 |
+| 매니페스트: RUN_COMMAND 는 protectionLevel dangerous, …files 프로바이더와 명령 서비스가 RUN_COMMAND 를, …documents 는 MANAGE_DOCUMENTS 를 요구 | out/src_security.txt 1 | 소스 캡처 | 2026-09-18 |
+| 2022-02-15 공개: Tasker(v0.1 2016-12-26 ~ v0.4, v0.5 2020-12-07 수정, 정규 경로 미확인·아무 앱이나 인텐트, 수정은 RUN_COMMAND + 정규 경로 + allow-external-apps), Widget(v0.3 2015-12-20 ~ v0.12, v0.13.0 2021-09-23, 토큰 → 고정 바로가기·옛 토큰 무효·경로 제한), 파일 world-readable(v0.47 2017-02-28 ~ v0.117, 0.118.0 2022-01-08, 선언 안 된 permRead → RUN_COMMAND, 쓰기는 막혔었음). 0.118.0 뒤 30일에 공개 | post-2022-02-15-vuln 서두·1·2·3 | 공식 글 | 2026-09-18 |
+| 보안 정책: 유효 신고는 보통 영업일 3일 안 확인, 수정 90일(악용 중이면 7일), 배포 30일 뒤 공개, 보상 프로그램 없음 | termux-security-policy 1·2 | 공식 문서 | 2026-09-18 |
+| scrub_demo: 공인 IP 한 곳만 바뀌고 공용 DNS·판 문자열은 남음, 전화번호 모양은 phone 01…(13자) 로 보고, scrub 시험 38개 OK | out/scrub_demo.txt 1–5 | 캡처 | 2026-09-18 |

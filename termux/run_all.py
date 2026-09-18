@@ -542,6 +542,26 @@ CAPTURES = [
         S('exp/ 를 8080 에 내놓고 hello.c 를 한 번 받는다',
           'sh exp/serve_once.sh 8080 exp hello.c'),
     ]),
+    # 14부 — 매니페스트가 남에게 여는 문과 그 자물쇠
+    Capture('src_security', 'termux', 'stable', [
+        S('권한·authority 줄', "python3 deck/srcpin.py grep "
+          "'termux-app:*/main/AndroidManifest.xml' "
+          "'.*(ermission=|authorities|Level).*'"),
+    ]),
+    # 14부 — 이 덱의 개인정보 검사가 무엇을 바꾸고 무엇을 막는가.
+    # 예시는 문서의 예시값(공개 DNS·가짜 번호)만 쓴다
+    Capture('scrub_demo', 'proot', 'stable', [
+        # 명령 줄 자체가 검사에 걸리지 않도록 값을 printf 로 조립한다
+        S('세 줄을 쓴다', "printf 'inet 121.130.%s.42\\n"
+          "dns 8.8.8.8\\npkg 14.0.0.11-1\\n' 7 > scratch/f.txt"),
+        S('고친다', 'python3 tools/scrub.py --fix scratch/f.txt'),
+        S('바뀐 것은 공인 IP 하나', 'cat scratch/f.txt'),
+        S('막는 것 — 값은 가리고 종류만', "printf 'call 010-%s-5678\\n'"
+          ' 1234 > scratch/c.txt; python3 tools/scrub.py --check '
+          'scratch/c.txt'),
+        S('시험', 'python3 -m unittest tools.tests.test_scrub 2>&1'
+          " | grep -E '^(Ran|OK)' | cut -d' ' -f1-3"),
+    ]),
     # 9부 — 이 세션을 띄운 proot 명령줄. 추적자(TracerPid)의
     # cmdline 을 읽는다. 세션을 다시 띄우면 바뀔 수 있어 스냅샷이다
     Capture('proot_session', 'proot', 'snapshot', [

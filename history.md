@@ -1,3 +1,10 @@
+### [2026-09-18 05:14] Termux 대백과사전 덱 14부 — 보안과 개인정보(15장)
+- **기획:** 위협 모델, 매니페스트의 문과 자물쇠, 2022년 공개된 앱 취약점 3건, 보안 정책, sshd 노출, 이 덱의 개인정보 규칙.
+- **TC:** 캡처 2종(src_security·scrub_demo — 명령 줄이 검사에 안 걸리게 printf 로 조립), 조립 검사 오류 0건, 과장 문장 4건 정정.
+- **개발:** `termux/deck/sections/14_security.html`, `termux/data/docs.tsv`, `termux/run_all.py`, `termux/out/` 2개, `termux/deck/claims.md`, `termux/PLAN.md`, `Termux_대백과사전.html`
+- **검증:** test_run_all 통과 · make all SKEL=1 오류 0건 · 역검증 통과
+- **비고:** termux-keystore·백업 암호화는 출처가 없어 다루지 않음.
+
 ### [2026-09-18 04:23] Termux 대백과사전 덱 12부 — 활용 III: GUI 와 데스크톱(11장)
 - **기획:** Termux:X11·VNC·데스크톱을 문서와 소스로, 이 기기엔 X11 이 없다는 것과 이 세션이 /tmp 를 나누지 않았다는 것을 캡처로.
 - **TC:** 캡처 x11_proot 추가(두 /tmp 의 inode·X 소켓 디렉터리), 조립 검사 오류 0건, 근거 없음 0건.
