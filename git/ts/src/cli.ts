@@ -18,6 +18,7 @@ import * as merge from './merge';
 import * as objects from './objects';
 import * as pack from './pack';
 import * as refs from './refs';
+import * as transport from './transport';
 import * as tree from './tree';
 import * as walk from './walk';
 import * as worktree from './worktree';
@@ -1011,6 +1012,39 @@ function cmdPackObjects(ctx: Ctx, args: string[]): number {
   return 0;
 }
 
+// ── 12단계: clone · fetch-pack ────────────────────────────────────
+
+// 멍청한 로컬 clone(SPEC.md §14.2). 안내는 표준 오류에.
+function cmdClone(ctx: Ctx, args: string[]): number {
+  const [, , rest] = parseFlags(args, []);
+  if (rest.length !== 2) {
+    throw new GitError('usage: mygit clone <path> <dir>', 129);
+  }
+  const [src, dst] = rest.map((p) => ctx.path(p));
+  if (!isDir(src)) {
+    throw new GitError(`fatal: repository '${rest[0]}' does not exist`);
+  }
+  ctx.warn(`Cloning into '${rest[1]}'...\n`);
+  fs.mkdirSync(dst, { recursive: true });
+  makeRepo(dst);
+  transport.cloneLocal(src, dst, ident(ctx));
+  ctx.warn('done.\n');
+  return 0;
+}
+
+// 진짜 git upload-pack 과 v2 로 말해 팩을 받는다(SPEC.md §14.3).
+async function cmdFetchPack(ctx: Ctx, args: string[]):
+  Promise<number> {
+  const [, , rest] = parseFlags(args, []);
+  if (rest.length < 2) {
+    throw new GitError('usage: mygit fetch-pack <path> <ref>...', 129);
+  }
+  const got = await transport.fetchPack(ctx.gitdir(), ctx.path(rest[0]),
+    rest.slice(1), ctx.env, ctx.env.MYGIT_PKT_LOG);
+  for (const [oid, name] of got) ctx.say(`${oid} ${name}\n`);
+  return 0;
+}
+
 // ── 틀 ────────────────────────────────────────────────────────────
 const COMMANDS = new Map<string, Command>([
   ['hash-object', cmdHashObject],
@@ -1034,6 +1068,8 @@ const COMMANDS = new Map<string, Command>([
   ['unpack-pack', cmdUnpackPack],
   ['verify-pack', cmdVerifyPack],
   ['pack-objects', cmdPackObjects],
+  ['clone', cmdClone],
+  ['fetch-pack', cmdFetchPack],
 ]);
 
 // 명령 하나를 돌린다 → [종료 코드, 표준 출력, 표준 오류]. stdin 이
