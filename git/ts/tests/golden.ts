@@ -115,3 +115,25 @@ export function tempdir(): string {
 export function rmTree(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true });
 }
+
+// git 이 C 식으로 이스케이프한 경로(따옴표 안쪽) → 바이트.
+//
+// \t \n \" \\ 와 세 자리 8진 \ooo 만 나온다(SPEC.md §8.2). 시험에서
+// git 의 출력을 읽을 때만 쓴다.
+export function unescapeC(s: string): Buffer {
+  const esc: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11,
+    f: 12, r: 13, '"': 34, '\\': 92 };
+  const out: number[] = [];
+  for (let i = 0; i < s.length;) {
+    if (s[i] !== '\\') {
+      out.push(...Buffer.from(s[i++]));
+    } else if (s[i + 1] in esc) {
+      out.push(esc[s[i + 1]]);
+      i += 2;
+    } else {
+      out.push(parseInt(s.slice(i + 1, i + 4), 8));
+      i += 4;
+    }
+  }
+  return Buffer.from(out);
+}

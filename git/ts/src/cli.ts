@@ -12,6 +12,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { GitError } from './errors';
 import * as objects from './objects';
+import * as tree from './tree';
+import * as worktree from './worktree';
 
 type Env = Record<string, string | undefined>;
 export type Result = [code: number, out: Buffer, err: Buffer];
@@ -161,9 +163,13 @@ function cmdHashObject(ctx: Ctx, args: string[]): number {
   return 0;
 }
 
-// cat-file -p 의 몸. blob·commit·tag 는 그대로.
-function pretty(_type: string, body: Buffer): Buffer {
-  return body;
+// cat-file -p 의 몸. blob·commit·tag 는 그대로, 트리는 항목마다
+// "%06o 형식 이름\t경로" (SPEC.md §9, 경로 따옴표는 §8.2).
+function pretty(type: string, body: Buffer): Buffer | string {
+  if (type !== 'tree') return body;
+  return tree.parseTree(body).map(([mode, name, oid]) =>
+    `${mode.padStart(6, '0')} ${tree.typeOfMode(mode)} ${oid}\t` +
+    `${worktree.quotePath(name)}\n`).join('');
 }
 
 function cmdCatFile(ctx: Ctx, args: string[]): number {
