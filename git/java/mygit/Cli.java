@@ -111,12 +111,28 @@ public final class Cli {
     }
   }
 
-  // <rev> → 객체 이름. 없으면 null.
-  //
-  // 3단계에서는 16진 이름과 앞부분만 푼다. 참조와 뒤붙이(~ ^)는
-  // 5단계의 Refs.revParse 가 맡는다.
+  // <rev> → 객체 이름. 없으면 null (SPEC.md §6.2).
   static String resolve(Ctx ctx, String name) {
-    return Objects.findObject(ctx.gitdir(), name);
+    return Refs.revParse(ctx.gitdir(), name);
+  }
+
+  // <rev> → 태그를 벗긴 want("commit"·"tree"). 없으면 null.
+  static String resolve(Ctx ctx, String name, String want) {
+    String oid = resolve(ctx, name);
+    return oid == null ? null : Refs.peel(ctx.gitdir(), oid, want);
+  }
+
+  static final String AMBIGUOUS = "fatal: ambiguous argument '%s': "
+      + "unknown revision or path not in the working tree.\n"
+      + "Use '--' to separate paths from revisions, like this:\n"
+      + "'git <command> [<revision>...] -- [<file>...]'";
+
+  static String ident(Ctx ctx, String who) {
+    return Commit.identFromEnv(ctx.env, who);
+  }
+
+  static String ident(Ctx ctx) {
+    return ident(ctx, "COMMITTER");
   }
 
   // 옵션을 읽은 결과 — 켜진 짧은 옵션, 값 옵션, 나머지 인자.
@@ -217,10 +233,180 @@ public final class Cli {
     return 0;
   }
 
+  // ── 5단계: init · commit-tree · branch · tag · reflog ────────────
+  static final String CONFIG = "[core]\n"
+      + "\trepositoryformatversion = 0\n\tfilemode = true\n"
+      + "\tbare = false\n\tlogallrefupdates = true\n";
+  static final String HEADS = "refs/heads/";
+
+  // top/.git 을 SPEC.md §5.1 의 꼴로. 이미 있었으면 true.
+  static boolean makeRepo(String top) {
+    String g = Fs.join(top, ".git");
+    boolean again = Fs.isDir(g);
+    for (String d : List.of("objects/pack", HEADS, "refs/tags")) {
+      Fs.mkdirs(Fs.join(g, d));
+    }
+    Map.of("HEAD", "ref: refs/heads/main\n", "config", CONFIG)
+        .forEach((name, text) -> {
+          String p = Fs.join(g, name);
+          if (!Fs.exists(p)) Fs.write(p, text.getBytes(ISO_8859_1));
+        });
+    return again;
+  }
+
+  // SPEC.md §5.1 — 이미 있으면 아무것도 덮어쓰지 않는다.
+  static int init(Ctx ctx, List<String> args) {
+    List<String> rest = parseFlags(args, List.of()).rest;
+    String top = rest.isEmpty() ? ctx.cwd : ctx.path(rest.get(0));
+    boolean again = makeRepo(top);
+    ctx.say((again ? "Reinitialized existing" : "Initialized empty")
+        + " Git repository in " + Fs.join(top, ".git") + "/\n");
+    return 0;
+  }
+
+  // -p 와 -m 은 몇 번이든, 준 차례대로. 메시지는 원문 그대로 +
+  // 줄바꿈 — 공백 정리는 commit 명령만 한다(SPEC.md §4.4).
+  static int commitTree(Ctx ctx, List<String> args) {
+    String treeArg = null;
+    List<String> parents = new ArrayList<>();
+    List<String> msgs = new ArrayList<>();
+    for (int i = 0; i < args.size(); i++) {
+      String a = args.get(i);
+      if (a.equals("-p") || a.equals("-m")) {
+        if (++i == args.size()) {
+          throw new GitError("fatal: mygit: option '" + a
+              + "' needs a value");
+        }
+        String val = args.get(i);
+        if (a.equals("-m")) {
+          msgs.add(val);
+          continue;
+        }
+        String oid = resolve(ctx, val);
+        if (oid == null) {
+          throw new GitError("fatal: not a valid object name " + val);
+        }
+        parents.add(oid);
+      } else if (a.startsWith("-")) {
+        throw new GitError("fatal: mygit: unknown option '" + a + "'");
+      } else {
+        treeArg = a;
+      }
+    }
+    if (treeArg == null || msgs.isEmpty()) {
+      throw new GitError("usage: mygit commit-tree <tree> "
+          + "[-p <parent>]... -m <message>...", 129);
+    }
+    String t = resolve(ctx, treeArg, "tree");
+    if (t == null) {
+      throw new GitError("fatal: not a valid object name " + treeArg);
+    }
+    byte[] body = Commit.serializeCommit(t, parents,
+        ident(ctx, "AUTHOR"), ident(ctx),
+        String.join("\n\n", msgs) + "\n");
+    ctx.say(Objects.writeObject(ctx.gitdir(), "commit", body) + "\n");
+    return 0;
+  }
+
+  static int listBranches(Ctx ctx) {
+    Refs.Head h = Refs.readHead(ctx.gitdir());
+    if (h.branch() == null && h.oid() != null) {
+      ctx.say("* (HEAD detached at " + h.oid().substring(0, 7) + ")\n");
+    }
+    for (String name : Refs.listRefs(ctx.gitdir(), HEADS).keySet()) {
+      ctx.say((name.equals(h.branch()) ? "* " : "  ")
+          + name.substring(HEADS.length()) + "\n");
+    }
+    return 0;
+  }
+
+  static int branch(Ctx ctx, List<String> args) {
+    Flags f = parseFlags(args, List.of());
+    if (f.rest.isEmpty()) return listBranches(ctx);
+    String name = f.rest.get(0);
+    String g = ctx.gitdir();
+    if (!Refs.validBranchName(name)) {
+      throw new GitError("fatal: '" + name
+          + "' is not a valid branch name");
+    }
+    if (Refs.resolveRef(g, HEADS + name) != null) {
+      throw new GitError("fatal: a branch named '" + name
+          + "' already exists");
+    }
+    String start = f.rest.size() > 1 ? f.rest.get(1) : "HEAD";
+    String oid = resolve(ctx, start, "commit");
+    if (oid == null) {
+      throw new GitError("fatal: not a valid object name: '" + start
+          + "'");
+    }
+    Refs.updateRef(g, HEADS + name, oid, null,
+        "branch: Created from " + start, ident(ctx));
+    return 0;
+  }
+
+  static int tag(Ctx ctx, List<String> args) {
+    Flags f = parseFlags(args, List.of("-a"), "-m");
+    String g = ctx.gitdir();
+    if (f.rest.isEmpty()) {
+      for (String name : Refs.listRefs(g, "refs/tags/").keySet()) {
+        ctx.say(name.substring("refs/tags/".length()) + "\n");
+      }
+      return 0;
+    }
+    String name = f.rest.get(0);
+    String target = f.rest.size() > 1 ? f.rest.get(1) : "HEAD";
+    if (Refs.readRef(g, "refs/tags/" + name) != null) {
+      throw new GitError("fatal: tag '" + name + "' already exists");
+    }
+    String oid = resolve(ctx, target);
+    if (oid == null) {
+      throw new GitError("fatal: Failed to resolve '" + target
+          + "' as a valid ref.");
+    }
+    if (f.on.contains("-a") || f.vals.containsKey("-m")) {
+      String type = Objects.readObject(g, oid).type();
+      String msg = Commit.cleanupMessage(f.vals.getOrDefault("-m", ""));
+      oid = Objects.writeObject(g, "tag",
+          Commit.serializeTag(oid, type, name, ident(ctx), msg));
+    }
+    // 태그는 reflog 를 남기지 않는다 — logallrefupdates 는 브랜치와
+    // HEAD 만 기록한다(git 과 같다)
+    String file = Fs.join(g, "refs", "tags", name);
+    Fs.mkdirs(Path.of(file).getParent().toString());
+    Fs.write(file, (oid + "\n").getBytes(ISO_8859_1));
+    return 0;
+  }
+
+  // 새것부터 "<7글자> <ref>@{n}: <메시지>" (SPEC.md §6.3).
+  static int reflog(Ctx ctx, List<String> args) {
+    List<String> rest = parseFlags(args, List.of()).rest.stream()
+        .filter(a -> !a.equals("show")).toList();
+    String name = rest.isEmpty() ? "HEAD" : rest.get(0);
+    String log = Fs.exists(Fs.join(ctx.gitdir(), "logs", name)) ? name
+        : Fs.exists(Fs.join(ctx.gitdir(), "logs", HEADS + name))
+        ? HEADS + name : null;
+    if (log == null) {
+      if (name.equals("HEAD")) return 0;
+      throw new GitError(AMBIGUOUS.formatted(name));
+    }
+    List<Refs.Reflog> rows = Refs.readReflog(ctx.gitdir(), log);
+    for (int k = 0; k < rows.size(); k++) {
+      Refs.Reflog r = rows.get(rows.size() - 1 - k);
+      ctx.say(r.next().substring(0, 7) + " " + name + "@{" + k + "}: "
+          + r.message() + "\n");
+    }
+    return 0;
+  }
+
   // ── 틀 ────────────────────────────────────────────────────────────
   private static final Map<String, Command> COMMANDS = Map.of(
       "hash-object", Cli::hashObject,
-      "cat-file", Cli::catFile);
+      "cat-file", Cli::catFile,
+      "init", Cli::init,
+      "commit-tree", Cli::commitTree,
+      "branch", Cli::branch,
+      "tag", Cli::tag,
+      "reflog", Cli::reflog);
 
   // 명령 하나를 돌린다 → (종료 코드, 표준 출력, 표준 오류). stdin 이
   // null 이면 진짜 표준 입력을 (필요할 때만) 읽는다. 인자와 환경은

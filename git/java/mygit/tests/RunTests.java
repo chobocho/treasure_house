@@ -4,7 +4,7 @@ package mygit.tests;
 // 기계에서는 JVM 이 한 번에 하나여야 한다). 실패가 있으면 1 로 끝난다.
 public final class RunTests {
   static final Class<?>[] SUITES = {Sha1Test.class, ObjectsTest.class,
-      BlobTest.class, TreeTest.class};
+      BlobTest.class, TreeTest.class, CommitTest.class};
 
   private RunTests() {}
 

@@ -11,7 +11,7 @@ import java.util.List;
 public final class Main {
   // 지금까지 만든 부록 A 의 단계. 장면 시험은 자기 단계가 오기
   // 전에는 "N단계에서 켜진다" 는 이유로 건너뛴다.
-  public static final int STEP = 4;
+  public static final int STEP = 5;
 
   private Main() {}
 
