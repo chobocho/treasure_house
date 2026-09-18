@@ -251,11 +251,12 @@ func TestS63ReflogLineBytes(t *testing.T) {
 	}
 }
 
-// dagEqual 은 golden/dag/equal 의 사본과, 거기서 git log --oneline
-// 이 찍은 "<차례>:<제목>" → 7글자.
-func dagEqual(t *testing.T) (string, map[string]string) {
-	g := filepath.Join(t.TempDir(), ".git")
-	src := filepath.Join(goldenDir, "dag", "equal", "git")
+// copyDag 는 golden/dag/<역사>/git 을 임시 작업 트리의 .git 으로
+// 베낀다. → (샌드박스, .git).
+func copyDag(t *testing.T, name string) (*sandbox, string) {
+	s := newSandbox(t, false)
+	g := filepath.Join(s.root, ".git")
+	src := filepath.Join(goldenDir, "dag", name, "git")
 	filepath.Walk(src, func(p string, i os.FileInfo, e error) error {
 		rel, _ := filepath.Rel(src, p)
 		if i.IsDir() {
@@ -264,7 +265,19 @@ func dagEqual(t *testing.T) (string, map[string]string) {
 		b, _ := os.ReadFile(p)
 		return os.WriteFile(filepath.Join(g, rel), b, 0o644)
 	})
-	os.MkdirAll(filepath.Join(g, "objects", "pack"), 0o755)
+	for _, d := range []string{"objects/pack", "refs/tags"} {
+		os.MkdirAll(filepath.Join(g, d), 0o755)
+	}
+	s.env["GIT_COMMITTER_NAME"] = "C O Mitter"
+	s.env["GIT_COMMITTER_EMAIL"] = "committer@example.com"
+	s.env["GIT_COMMITTER_DATE"] = "1700000000 +0900"
+	return s, g
+}
+
+// dagEqual 은 golden/dag/equal 의 사본과, 거기서 git log --oneline
+// 이 찍은 "<차례>:<제목>" → 7글자.
+func dagEqual(t *testing.T) (string, map[string]string) {
+	_, g := copyDag(t, "equal")
 	text := string(gread(t, "dag", "equal", "expect.txt"))
 	block := strings.Split(strings.Split(text,
 		"$ git log --oneline\n")[1], "= 0")[0]

@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -38,7 +39,10 @@ func init() {
 		"status":      cmdStatus,
 		"write-tree":  cmdWriteTree,
 		"commit":      cmdCommit,
+		"log":         cmdLog,
+		"merge-base":  cmdMergeBase,
 	}
+	deleteBranch = deleteMerged
 }
 
 const notARepo = "fatal: not a git repository (or any of the parent " +
@@ -842,6 +846,180 @@ func cmdCommit(ctx *Ctx, args []string) (int, error) {
 		root = " (root-commit)"
 	}
 	ctx.say("[%s%s %s] %s\n", where, root, oid[:7], subj)
+	return 0, nil
+}
+
+// ── 7단계: log · merge-base · branch -d ─────────────────────────────
+
+// deleteMerged 는 branch -d — HEAD 에서 닿는 브랜치만 지운다(§9.2).
+func deleteMerged(ctx *Ctx, g string, names []string) (int, error) {
+	cur, head, err := ReadHead(g)
+	if err != nil {
+		return 0, err
+	}
+	for _, name := range names {
+		ref := "refs/heads/" + name
+		oid, err := ResolveRef(g, ref)
+		if err != nil {
+			return 0, err
+		}
+		if ref == cur {
+			root, _ := ctx.Root()
+			return 0, &GitError{"error: cannot delete branch '" + name +
+				"' used by worktree at '" + root + "'", 1}
+		}
+		if oid == "" {
+			return 0, &GitError{"error: branch '" + name +
+				"' not found.", 1}
+		}
+		merged := false
+		if head != "" {
+			if merged, err = IsAncestor(g, oid, head); err != nil {
+				return 0, err
+			}
+		}
+		if !merged {
+			return 0, &GitError{"error: the branch '" + name +
+				"' is not fully merged", 1}
+		}
+		if err := UpdateRef(g, ref, "", oid, "", ""); err != nil {
+			return 0, err
+		}
+		ctx.say("Deleted branch %s (was %s).\n", name, oid[:7])
+	}
+	return 0, nil
+}
+
+// logEntry 는 커밋 하나를 git log 의 꼴로(SPEC.md §9.1).
+func logEntry(g, oid string, oneline bool) (string, error) {
+	_, body, err := ReadObject(g, oid)
+	if err != nil {
+		return "", err
+	}
+	c, err := ParseCommit(body)
+	if err != nil {
+		return "", err
+	}
+	if oneline {
+		return oid[:7] + " " + SubjectOf(c.Message) + "\n", nil
+	}
+	name, mail, secs, tz, err := ParseIdent(c.Author)
+	if err != nil {
+		return "", err
+	}
+	rows := []string{"commit " + oid}
+	if len(c.Parents) > 1 {
+		var short []string
+		for _, p := range c.Parents {
+			short = append(short, p[:7])
+		}
+		rows = append(rows, "Merge: "+strings.Join(short, " "))
+	}
+	rows = append(rows, "Author: "+name+" <"+mail+">",
+		"Date:   "+FormatDate(secs, tz), "")
+	for _, line := range strings.Split(strings.TrimSuffix(c.Message,
+		"\n"), "\n") {
+		rows = append(rows, "    "+line)
+	}
+	return strings.Join(rows, "\n") + "\n", nil
+}
+
+func cmdLog(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, []string{"--oneline"}, "-n")
+	if err != nil {
+		return 0, err
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	var start string
+	if len(f.rest) > 0 {
+		start, err = resolve(ctx, f.rest[0])
+		if err == nil && start != "" {
+			start, err = Peel(g, start, "commit")
+		}
+		if err != nil {
+			return 0, err
+		}
+		if start == "" {
+			return 0, Fail(fmt.Sprintf(ambiguous, f.rest[0]))
+		}
+	} else {
+		var branch string
+		if branch, start, err = ReadHead(g); err != nil {
+			return 0, err
+		}
+		if start == "" {
+			return 0, Fail("fatal: your current branch '" +
+				strings.TrimPrefix(branch, "refs/heads/") +
+				"' does not have any commits yet")
+		}
+	}
+	order, err := WalkLog(g, []string{start})
+	if err != nil {
+		return 0, err
+	}
+	if n, ok := f.vals["-n"]; ok {
+		k, _ := strconv.Atoi(n)
+		order = order[:min(max(k, 0), len(order))]
+	}
+	sep := "\n"
+	if f.on["--oneline"] {
+		sep = ""
+	}
+	var parts []string
+	for _, oid := range order {
+		e, err := logEntry(g, oid, f.on["--oneline"])
+		if err != nil {
+			return 0, err
+		}
+		parts = append(parts, e)
+	}
+	ctx.say("%s", strings.Join(parts, sep))
+	return 0, nil
+}
+
+func cmdMergeBase(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, []string{"--all"})
+	if err != nil {
+		return 0, err
+	}
+	if len(f.rest) != 2 {
+		return 0, &GitError{"usage: mygit merge-base [--all] <a> <b>",
+			129}
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	var ids []string
+	for _, name := range f.rest {
+		oid, err := resolve(ctx, name)
+		if err == nil && oid != "" {
+			oid, err = Peel(g, oid, "commit")
+		}
+		if err != nil {
+			return 0, err
+		}
+		if oid == "" {
+			return 0, Fail("fatal: Not a valid object name " + name)
+		}
+		ids = append(ids, oid)
+	}
+	best, err := MergeBases(g, ids[0], ids[1])
+	if err != nil {
+		return 0, err
+	}
+	if len(best) == 0 {
+		return 1, nil
+	}
+	if !f.on["--all"] {
+		best = best[:1]
+	}
+	for _, oid := range best {
+		ctx.say("%s\n", oid)
+	}
 	return 0, nil
 }
 
