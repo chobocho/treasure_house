@@ -112,6 +112,10 @@ class ProblemTest(unittest.TestCase):
     def test_imei_like(self):
         self.assertEqual(kinds('imei 356938035643809'), ['imei'])
 
+    def test_digits_inside_a_hash_are_not_imei(self):
+        # 커밋 SHA 안의 숫자 15자리 (data/repos.tsv 에서 실제 오탐)
+        self.assertEqual(kinds('sha 9f123456789012345ab0'), [])
+
     def test_serial(self):
         self.assertEqual(kinds('ro.serialno=R5CT11AB2CD'), ['serial'])
         self.assertEqual(kinds('serial: <redacted>'), [])

@@ -574,3 +574,44 @@ The user approved every recommendation below as-is. Each row is now a decision.
   the manifest is stable too), `--check` = manifest ↔ files, ≤ 108 cells, scrub problems.
   First capture `env_termux` (stable): md5 identical over three runs.
 - `make test` 80 passed; `make all SKEL=1` 0 errors.
+
+### Step 3a — research tools (2026-09-18)
+
+- `tools/fetch_src.sh` (+ 8 tests on local `file://` remotes with filter/any-SHA enabled): clones each
+  `data/repos.tsv` row at its pin; `history=full` = all commits with `--filter=tree:0` (first-commit
+  and tag dates come from git, not the 60/h API), `shallow` = the pin only; `paths` = sparse cone.
+  `repos.tsv` gained two columns (`history`, `paths`) — srcpin reads by header, nothing else moved.
+- `tools/doc_text.py` (+ 21 tests): MediaWiki wikitext / Markdown / HTML → text whose headings are
+  `N.N<TAB>title`. **MediaWiki pages are pinned by revid** (`action=parse&oldid=`), Markdown is read
+  at the repo pin, HTML (developer.android.com) is cached raw and pinned by its SHA-256 prefix.
+  A real duplicate-number bug (`### A` then `## B` both "1.1", seen in Build-environment.md) became
+  a test before the fix; `page=` queries follow redirects.
+- `tools/gh_api.py` (+ 7 tests on cached fixtures): every response cached in `sources/gh/`;
+  releases paged oldest-first; 21 of 60 hourly calls used in total for step 3.
+- `tools/native_facts.sh` (+ 5 tests with fake getprop/settings/termux-info on PATH): decision 8,
+  **extended** with `id`, `uname -a` and `/proc/self/status` identity lines because step 2 showed
+  proot fakes them. Read-only by test. The user was asked once (terminal notification) to run it in
+  native Termux; until `data/device.txt` exists the "이 기기" slide stays a placeholder.
+- `scrub.py`: second real false positive (15 digits inside a 40-hex SHA read as IMEI) → test → fix
+  (alnum boundaries).
+
+### Step 3b — sources pinned, data tables, claims (2026-09-18)
+
+- `data/repos.tsv`: 26 repos pinned at the 2026-09-18 remote HEADs (ls-remote), pinned-date = commit
+  date, licence read from each pin's LICENSE/COPYING (README where no file); 208 MB in `sources/`
+  (termux-packages sparse: 20 package dirs + scripts + .github). Includes the three GitHub wikis and
+  `termux.github.io` (dated announcement posts).
+- `data/docs.tsv`: 127 documents — 69 wiki.termux.com pages (revid-pinned), 20 GitHub-wiki pages,
+  22 READMEs, 2 Android-Docs pages, 4 website posts, 10 developer.android.com pages.
+- `data/releases.tsv` 330 releases of 12 repos (GitHub API); `data/app_sdk.tsv` (new) minSdk/targetSdk
+  of all 95 termux-app tags from `git show <tag>:app/build.gradle`.
+- Findings worth slides: targetSdk has been 28 since v0.66 (2019-01-21); minSdk went 21→24 at v0.76
+  (2019-10-20) while the README dates the Android 5/6 drop to "2020-01-01 at v0.83" — and there is
+  no v0.83 tag; the 0.119 betas are back at minSdk 21. The last old Play build was v0.101 (2022-02-15
+  post). The app icon has no green (palette note, step 1).
+- `timeline.tsv` 81 rows (git first commits, GitHub releases, SDK changes, issue/PR dates via API,
+  wiki first revisions via MediaWiki API, website posts); `android.tsv` 19 rows (API mapping from
+  developer.android.com; `year` left empty — no source for release years was fetched, so the deck
+  does not state them); `repos_apt.tsv` 5 tiers (fingerprints to be filled from the step 6 capture —
+  gpg is not installed on the proot side); `plugins.tsv` 7; `people.tsv` 7 (names only as they
+  appear in commit metadata or upstream files); `claims.md` 49 sourced rows.

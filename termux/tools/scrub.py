@@ -119,7 +119,7 @@ CHECKS = [
                          r'(?![\d.])')),
     ('phone', re.compile(r'\+\d{1,3}[- ]?\d{1,4}[- ]?\d{3,4}[- ]?\d{4}'
                          r'(?!\d)')),
-    ('imei', re.compile(r'(?<![\d.])\d{15}(?![\d.])')),
+    ('imei', re.compile(r'(?<![\w.])\d{15}(?![\w.])')),
     ('serial', re.compile(r'serial(?:no|_?number)?\s*[:=]\s*(?!<)'
                           r'[A-Za-z0-9]{6,}', re.I)),
     ('mac', re.compile(r'(?<![\w:])(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}'
