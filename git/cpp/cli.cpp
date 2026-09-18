@@ -350,6 +350,164 @@ int cmd_reflog(Ctx& ctx, std::vector<std::string> args) {
     return 0;
 }
 
+// ── 6단계: add · rm --cached · status · write-tree · commit ────────
+
+// rel_path 는 명령줄 경로 → 작업 트리 뿌리에서의 경로('' 은 뿌리).
+std::string rel_path(Ctx& ctx, const std::string& spec) {
+    auto p = fs::path(ctx.path(spec))
+                 .lexically_normal()
+                 .lexically_relative(ctx.root())
+                 .generic_string();
+    if (p.ends_with("/")) p.pop_back();
+    return p == "." ? "" : p;
+}
+
+bool under(const std::string& path, const std::string& rel) {
+    return rel.empty() || path == rel || path.starts_with(rel + "/");
+}
+
+// cmd_add 는 pathspec 아래의 파일을 올리고, 사라진 파일은 뺀다(§9).
+// 모든 pathspec 을 먼저 검사한다 — 하나라도 맞는 것이 없으면 아무것도
+// 바꾸지 않고 멈춘다(git 과 같다).
+int cmd_add(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {});
+    auto root = ctx.root(), g = ctx.gitdir();
+    auto ents = read_index(g);
+    auto files = walk_worktree(root);
+    std::vector<
+        std::pair<std::vector<std::string>, std::set<std::string>>>
+        plan;
+    for (auto& spec : f.rest) {
+        auto rel = rel_path(ctx, spec);
+        std::vector<std::string> hit_f;
+        std::set<std::string> hit_i;
+        for (auto& p : files)
+            if (under(p, rel)) hit_f.push_back(p);
+        for (auto& e : ents)
+            if (under(e.path, rel)) hit_i.insert(e.path);
+        if (hit_f.empty() && hit_i.empty())
+            throw GitError("fatal: pathspec '" + spec +
+                           "' did not match any files");
+        plan.push_back({hit_f, hit_i});
+    }
+    std::map<std::string, std::vector<IndexEntry>> by_path;
+    for (auto& e : ents) by_path[e.path].push_back(e);
+    for (auto& [hit_f, hit_i] : plan) {
+        for (auto& p : hit_f) {
+            auto full = root + "/" + p;
+            auto oid = write_object(g, "blob", try_read(full).value());
+            by_path[p] = {entry_from_stat(p, full, oid)};
+            hit_i.erase(p);
+        }
+        for (auto& p : hit_i) by_path.erase(p);
+    }
+    std::vector<IndexEntry> out;
+    for (auto& [_, es] : by_path)
+        out.insert(out.end(), es.begin(), es.end());
+    write_index(g, out);
+    return 0;
+}
+
+int cmd_rm(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {"--cached"});
+    if (!f.on.count("--cached"))
+        throw GitError("fatal: mygit: only rm --cached is supported");
+    auto g = ctx.gitdir();
+    auto ents = read_index(g);
+    std::set<std::string> have, gone;
+    for (auto& e : ents) have.insert(e.path);
+    for (auto& spec : f.rest) {
+        auto rel = rel_path(ctx, spec);
+        if (!have.count(rel))
+            throw GitError("fatal: pathspec '" + spec +
+                           "' did not match any files");
+        gone.insert(rel);
+    }
+    for (auto& p : gone) ctx.out += "rm '" + p + "'\n";
+    std::erase_if(ents,
+                  [&](auto& e) { return gone.count(e.path) > 0; });
+    write_index(g, ents);
+    return 0;
+}
+
+int cmd_status(Ctx& ctx, std::vector<std::string> args) {
+    parse_flags(args, {"--porcelain", "-s", "--short"});
+    for (auto& row : status(ctx.root(), ctx.gitdir()))
+        ctx.out += row + "\n";
+    return 0;
+}
+
+// index_tree 는 인덱스(단계 0) → 트리 이름. 충돌 경로가 있으면 쓸 수
+// 없다.
+std::string index_tree(Ctx& ctx) {
+    std::vector<PathEntry> pes;
+    for (auto& e : read_index(ctx.gitdir())) {
+        if (e.stage)
+            throw GitError(
+                "error: Committing is not possible because you have "
+                "unmerged files.\nfatal: Exiting because of an "
+                "unresolved "
+                "conflict.");
+        char mode[8];
+        std::snprintf(mode, sizeof mode, "%o", e.mode);
+        pes.push_back({mode, e.oid, e.path});
+    }
+    return write_tree(ctx.gitdir(), pes);
+}
+
+int cmd_write_tree(Ctx& ctx, std::vector<std::string> args) {
+    parse_flags(args, {});
+    ctx.out += index_tree(ctx) + "\n";
+    return 0;
+}
+
+// cmd_commit 은 트리를 쓰고, 커밋하고, 브랜치를 옮긴다(SPEC.md §9 ·
+// §6.3). 부모는 HEAD 와, 머지를 마무리하는 중이면 MERGE_HEAD. 출력은
+// git 의 요약 첫 줄만 — Author 줄과 변경 통계는 줄임이다.
+int cmd_commit(Ctx& ctx, std::vector<std::string> args) {
+    std::vector<std::string> msgs;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (args[i] != "-m")
+            throw GitError("fatal: mygit: unknown option '" + args[i] +
+                           "'");
+        msgs.push_back(i + 1 < args.size() ? args[++i] : "");
+    }
+    auto g = ctx.gitdir();
+    auto [branch, head] = read_head(g);
+    auto merge_head = resolve_ref(g, "MERGE_HEAD");
+    auto t = index_tree(ctx);
+    if (!head.empty() && merge_head.empty() &&
+        peel(g, head, "tree") == t) {
+        ctx.out += "nothing to commit\n";
+        return 1;
+    }
+    std::string joined;
+    for (auto& m : msgs) joined += (joined.empty() ? "" : "\n\n") + m;
+    Commit c{t,
+             {},
+             ident(ctx, "AUTHOR"),
+             ident(ctx),
+             cleanup_message(joined)};
+    if (c.message.empty())
+        throw GitError("Aborting commit due to empty commit message.",
+                       1);
+    for (auto& p : {head, merge_head})
+        if (!p.empty()) c.parents.push_back(p);
+    auto oid = write_object(g, "commit", serialize_commit(c));
+    auto subj = subject_of(c.message);
+    auto kind = head.empty()         ? "commit (initial)"
+                : merge_head.empty() ? "commit"
+                                     : "commit (merge)";
+    update_ref(g, branch.empty() ? "HEAD" : branch, oid, head,
+               std::string(kind) + ": " + subj, c.committer);
+    fs::remove(g + "/MERGE_HEAD"), fs::remove(g + "/MERGE_MSG");
+    ctx.out += "[" +
+               (branch.empty() ? "detached HEAD" : branch.substr(11)) +
+               (head.empty() ? " (root-commit)" : "") + " " +
+               oid.substr(0, 7) + "] " + subj + "\n";
+    return 0;
+}
+
 const std::map<std::string, Command>& commands() {
     static const std::map<std::string, Command> table = {
         {"hash-object", cmd_hash_object},
@@ -359,6 +517,11 @@ const std::map<std::string, Command>& commands() {
         {"branch", cmd_branch},
         {"tag", cmd_tag},
         {"reflog", cmd_reflog},
+        {"add", cmd_add},
+        {"rm", cmd_rm},
+        {"status", cmd_status},
+        {"write-tree", cmd_write_tree},
+        {"commit", cmd_commit},
     };
     return table;
 }

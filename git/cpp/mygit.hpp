@@ -12,7 +12,7 @@
 
 namespace mygit {
 
-inline constexpr int STEP = 5;
+inline constexpr int STEP = 6;
 
 // 명령이 멈추는 까닭. code 는 종료 코드(SPEC.md §1.4).
 struct GitError : std::runtime_error {
@@ -90,8 +90,42 @@ std::vector<PathEntry> flatten_tree(const std::string& gitdir,
                                     const std::string& prefix = "");
 std::string type_of_mode(const std::string& mode);
 
+// ── index.cpp (SPEC.md §7) ─────────────────────────────────────────
+struct IndexEntry {
+    std::string path, oid;
+    uint32_t mode = 0, size = 0;
+    int stage = 0;
+    uint32_t ctime_s = 0, ctime_ns = 0, mtime_s = 0, mtime_ns = 0;
+    uint32_t dev = 0, ino = 0, uid = 0, gid = 0;
+    bool assume_valid = false, skip_worktree = false;
+};
+IndexEntry index_entry(const std::string& path, const std::string& oid,
+                       uint32_t mode, int stage = 0);
+IndexEntry entry_from_stat(const std::string& path,
+                           const std::string& abspath,
+                           const std::string& oid);
+std::vector<IndexEntry> parse_index(std::string_view data);
+std::string serialize_index(std::vector<IndexEntry> entries);
+std::vector<IndexEntry> read_index(const std::string& gitdir);
+void write_index(const std::string& gitdir,
+                 const std::vector<IndexEntry>& entries);
+
 // ── worktree.cpp (SPEC.md §8) ──────────────────────────────────────
 std::string quote_path(std::string_view path, bool space = false);
+// Blob 은 경로 하나의 (모드, 이름) — 트리·인덱스·디스크를 견줄 때의 값.
+struct Blob {
+    uint32_t mode;
+    std::string oid;
+    bool operator==(const Blob&) const = default;
+};
+using TreeMap = std::map<std::string, Blob>;
+std::vector<std::string> walk_worktree(const std::string& root);
+std::optional<Blob> file_state(const std::string& root,
+                               const std::string& path);
+TreeMap tree_map(const std::string& gitdir, const std::string& tree);
+std::string head_tree(const std::string& gitdir);
+std::vector<std::string> status(const std::string& root,
+                                const std::string& gitdir);
 
 // ── commit.cpp (SPEC.md §4.4 · §4.5 · §1.3 · §9.1) ────────────────
 struct Ident {
