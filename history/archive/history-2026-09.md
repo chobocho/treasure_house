@@ -1,3 +1,80 @@
+### [2026-09-18 01:17] Git 대백과사전 덱 2단계 — SPEC.md(다섯 mygit 의 약속)
+- **기획:** 16절 규격서 — 객체·참조·인덱스·status·명령 출력·걷기·diff·merge·팩·전송·이름표·시험 배치.
+- **TC:** 바이트 예시 9개를 진짜 git 으로 뜨는 spec_examples.py + make spec-check(9/9). diff 원형 1,500쌍 대조로 agree/tie 두 목록 결정.
+- **개발:** `git/SPEC.md`, `git/tools/spec_examples.py`, `git/tools/gitenv.py`, `git/Makefile`, `git/deck/claims.md`, `git/PLAN.md`
+- **검증:** make all SKEL=1 오류 0건 · spec-check 어긋남 0건 · width 0건
+- **비고:** diff 는 git 과 같은 길이의 다른 스크립트를 고르는 경우가 있어 tie 쌍으로 따로 보인다. merge 기준은 git merge(ZEALOUS).
+
+### [2026-09-18 01:14] Termux 대백과사전 덱 2단계 — tmx.sh 거부 목록·scrub.py·첫 캡처
+- **기획:** 호스트 Termux 로 가는 유일한 문(tmx.sh)과 개인정보 필터(scrub.py), 캡처 틀(run_all.py)을 시험 먼저 만든다.
+- **TC:** 정상: 허용 명령·끝줄·종료 코드·시간 초과. 가장자리: 거부 52종 미실행 증명·쓰기 우회·rm 경로·오탐(/root/TUR)·가린 보고.
+- **개발:** `termux/tools/tmx.sh`, `termux/tools/scrub.py`, `termux/run_all.py`, `termux/tools/tests/*.py`(3), `termux/out/env_termux.txt`, `termux/PLAN.md`
+- **검증:** 80 passed, 0 failed · make all SKEL=1 오류 0건 · env_termux md5 3회 동일
+- **비고:** proot 에서 부른 Termux 바이너리도 ptrace 아래라 id·uname·getcwd 는 proot 값 — 네이티브 값은 device.txt 로 받는다.
+
+### [2026-09-18 00:53] Termux 대백과사전 덱 1단계 — 뼈대(조립기·검사·34장)
+- **기획:** transformer 조립기·검사를 복사해 대상·언어·상한 3000·근거 등급 5종만 바꾸고, CITE 를 핀 고정 upstream 소스 배지 SRC 로 교체.
+- **TC:** 정상: srcpin 17건(핀 커밋 읽기·짧은 SHA). 가장자리: SHA 불일치·미등록 저장소·체크아웃 없음·파일 없음·빈 표 + scratch 연기 시험 오류 경로 8종.
+- **개발:** `termux/deck/srcpin.py`, `termux/deck/build_deck.py`, `termux/deck/base/head.html`, `termux/deck/sections/*.html`(18), `termux/Makefile`, `termux/data/*.tsv`, `termux/PLAN.md` 외 21개 파일
+- **검증:** 17 passed, 0 failed · make all SKEL=1 오류 0건 · 34장 · DeckMono 32 KB
+- **비고:** 아이콘에 초록이 없어 배색은 termux-app 기본 16색(dim green)에서 잼. 브라우저 육안 확인 전, record.sh 는 6단계에서 고침.
+
+### [2026-09-18 00:50] Git 대백과사전 덱 1단계 — 뼈대(조립기·검사·34장)
+- **기획:** transformer 조립기·검사를 복사해 대상·5개 언어·상한 3000·CITE(형식 문서 표)만 바꾸고, 캡처 별칭 지시자 GIT 추가.
+- **TC:** GIT 지시자(캡처 있음/없음/첫 줄 불일치)·CITE(표에 없는 키) 오류 경로를 scratch 에서 확인, gitenv.sh 로 커밋해 날짜 고정·전역 설정 차단 확인.
+- **개발:** `git/Makefile`, `git/deck/build_deck.py`, `git/deck/base/head.html`, `git/deck/sections/*.html`(21), `git/tools/gitenv.sh`, `git/data/*.tsv`, `git/PLAN.md` 외 33개 파일
+- **검증:** make all SKEL=1 오류 0건 · 34장 · 코드 블록 1개 일치 · DeckMono 28 KB
+- **비고:** 배색 slate+git 주황 확정. typescript 5.9.3 설치·git/git 부분 복제 118 MB 완료. history.html 은 별도 커밋으로 회전.
+
+### [2026-09-18 00:35] Termux 대백과사전 덱 계획서 — 상한 3000장·결정 12건 확정
+- **기획:** 역사·원리·한계·활용을 18부 2,480장 예산으로 설계, Opus 빌더용 `termux/PLAN.md` 작성.
+- **TC:** 계획 단계라 코드 없음. proot 에서 Termux bionic 바이너리(pkg·dpkg·termux-api) 실행 가능함을 실측으로 확인.
+- **개발:** `termux/PLAN.md`
+- **검증:** 부 예산 합 2,480 검산, 위키·GitHub·F-Droid 접속 200 확인, termux-app 최신 v0.118.3 API 대조
+- **비고:** 실기기 캡처는 tools/tmx.sh 거부 목록 경유·개인정보 API 미실행. 기기 정보 `data/device.txt` 는 사용자가 native Termux 에서 붙여 넣어야 한다.
+
+### [2026-09-17 00:08] 트랜스포머 카드 퀴즈 수 정정 — 46 → 45
+- **기획:** 3차 리뷰에서 "검사기 45개 vs 실제 46개" 로 남긴 건의 원인 조사.
+- **TC:** 조립된 덱에서 <script> 를 뺀 뒤 `card quiz` 를 세어 45개 확인, 46번째는 demos.js 안 주석 한 줄.
+- **개발:** `index.html`, `README.md`, `transformer/PLAN.md`
+- **검증:** 검사기 출력 "퀴즈 45개" 와 카드 설명 일치
+- **비고:** 검사기는 옳았고 카드 설명이 틀렸다. 덱을 grep 으로 셀 때는 스크립트를 빼야 한다.
+
+### [2026-09-16 23:37] 트랜스포머 덱 3차 리뷰 — 43건 정정
+- **기획:** 1·2차와 다른 각도 — 초심자 독해 흐름(정의 전 사용·"앞에서 본" 실재 여부·목차 순서), 산문↔코드 조각·캡처 일치, 파이썬·C 주석 정확성, 한국어 표기·문체.
+- **TC:** 보고 전용 서브에이전트 2개(0~6부+py 주석, 7~14부+C 주석)의 39건을 전부 소스·캡처와 대조해 확인, 기계 검사로 문체 3건·카드 1건 추가.
+- **개발:** `transformer/deck/sections/*.html`(11), `transformer/c/main.c`, `transformer/c/model.c`, `transformer/py/transformerlib/ops.py`, `py/transformerlib/posenc.py`, `py/transformerlib/tokenizer.py`, `index.html`, `README.md`
+- **검증:** make all 종료 0 · 파이썬 시험 188 통과 · C 확인 561건 통과 · 흐름 14·코드불일치 5·주석 7·표기 17
+- **비고:** 4부 퀴즈 두 장을 묻는 장 끝으로 옮김. 카드의 "논문 53편 절 단위 인용"은 색인 53편·절 인용 49편으로 정정.
+
+### [2026-09-16 22:41] 트랜스포머 덱 2차 리뷰 — 33건 정정
+- **기획:** 1차와 다른 각도 — 본문 계산·퀴즈 답 재계산, 부를 넘는 기호 일관성, "N부에서 다룬다" 약속, 그림 23장 렌더 확인, 용어집 id.
+- **TC:** 데모 7종을 무작위 입력 1,800개로 파이썬과 대조(불일치 0), 문서 안 덧셈 모델은 경계 포함 308문제를 C 와 대조(불일치 0).
+- **개발:** `transformer/deck/sections/*.html`(9), `deck/glossary.txt`, `deck/gen_figs.py`, `py/demo/demo_kvcache.py`, `py/demo/demo_optim.py`, `out/`, `PLAN.md`
+- **검증:** make all 종료 0 · 파이썬 시험 188 통과 · 사실오류 3·수식 4·인용범위 4·표기 22
+- **비고:** KV 캐시 한 토큰 비용 n·d → 2·n·d 정정, 용어집 중복 3쌍 병합으로 181개.
+
+### [2026-09-16 16:08] 트랜스포머 덱 완성·공개 — 952장(2~13단계)
+- **기획:** PLAN.md §5 2~13단계 — SPEC, 순수 파이썬 참조 13모듈, C99 재구현, 기록 실행, 그림·본문·데모, 공개, 리뷰 1차.
+- **TC:** 파이썬 시험 188개·C 확인 561건(로짓·기울기·20스텝 손실·토큰 바이트 대조), 데모 사례 22건, 문서 안 추론 1000문제 C 대조.
+- **개발:** `transformer/py/`, `transformer/c/`, `transformer/py/demo/`, `transformer/deck/sections/*.html`, `transformer/deck/demos.js`, `transformer/tools/export_js.py`, `index.html`, `README.md` 외 다수
+- **검증:** make all 종료 0 · record --check 캡처 36개 3회 md5 동일 · 리뷰 40건 정정(1a7927f)
+- **비고:** 홀짝 과제는 배우지 못해(48.1 %) 손실 바닥 셈과 함께 실패로 실었다. 과제 학습 일부가 3분 예산을 넘는다(PLAN 7단계).
+
+### [2026-09-16 12:10] 트랜스포머 덱 1단계 — 뼈대(조립기·검사·28장)
+- **기획:** 무선통신 덱 조립기·검사를 복사해 대상 파일·언어(py+C)·커버리지·상한 2000장만 바꾸고, SPEC 지시자를 논문 절 배지 CITE 로 교체. 배색은 "먹과 종이".
+- **TC:** 뼈대 단계라 단위 시험 없음. 역검증에 "조립기를 거치지 않은 논문 배지" 검사를 새로 넣었고 첫 빌드에서 손으로 쓴 예시 배지 1건을 잡았다.
+- **개발:** `transformer/deck/build_deck.py`, `deck/check_claims.py`, `deck/verify_deck.py`, `deck/base/head.html`, `Makefile`, `deck/sections/*.html`(15), `data/*.tsv`(4) 외 12개 파일
+- **검증:** make all SKEL=1 오류 0건 · 28장 · xref 14 · check_deck 11/11 · 글꼴 DeckMono 29 KB 통과
+- **비고:** 계획서의 "~30장" 은 28장(부 표지 한 장씩 유지). 본문은 지시대로 합니다체. index/README 카드는 공개 단계에서.
+
+### [2026-09-16 11:59] 트랜스포머 덱 — 작업 지시서 작성(transformer/PLAN.md)
+- **기획:** 밑바닥부터 만드는 트랜스포머 덱을 Opus 가 짓도록 영문 지시서를 썼다. 무선통신 덱 조립기·검사와 최적화 덱 수식 키트를 물려받고, 상한 2000장·목표 1,400~1,800장·15부 예산 약 1,575장.
+- **TC:** 지시서 단계라 시험 없음. 못 박은 유일한 숫자 GPT-2 small 파라미터 수 124,439,808 은 계산으로 검산.
+- **개발:** `transformer/PLAN.md` — 원칙 12·모듈 13(py)+8(c)·증인 시험·수식 정책·작업 순서 13단계·부별 예산·완료 기준·결정 9건.
+- **검증:** 인코딩 이상 0건, 결정 9건 사용자 확정(cb0ef08).
+- **비고:** numpy 없이 순수 파이썬 참조 + C99 재구현이 SPEC.md 의 난수·체크포인트·BPE 규칙을 공유해 서로 대조한다. 코퍼스는 합성 과제 + ko.wikisource 공유저작물. index/README 카드는 공개 단계에서.
+
 ### [2026-09-16 09:50] 무선통신 덱 3차 리뷰 — 42건 정정 (871장)
 - **기획:** 1·2차와 다른 각도 — 슬라이드 위의 증거(코드·캡처·그림·인용 조항·표)가 옆 산문과 같은 말을 하는지. 서브에이전트 둘이 0~7부·8~15부, 데모 12종은 격자 1,420점으로 파이썬과 직접 대조(불일치 0).
 - **TC:** `harq.utilization` 시험 4건 RED→GREEN(정지 대기 12.5 %·8프로세스 100 %·슬롯 모사 일치·범위 예외). `make all`·`record --check` 3회 md5 동일이 관문.
