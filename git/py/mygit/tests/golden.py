@@ -72,3 +72,17 @@ def make(recipe):
     if kind == 'golden':
         return read(arg)
     raise ValueError('모르는 재료: %s' % recipe)
+
+
+def assert_git_error(case, fn, *args):
+    """fn(*args) 가 **진짜** GitError 를 던지는가.
+
+    껍데기(not_implemented)도 GitError 를 던지므로 그냥 assertRaises 로
+    보면 구현 전에 이미 통과한다 — 거짓 초록이다. 코드 99 는 "아직 안
+    짰다" 라서 여기서 떨어뜨린다. 던져진 오류를 돌려준다.
+    """
+    from mygit import GitError
+    with case.assertRaises(GitError) as cm:
+        fn(*args)
+    case.assertNotEqual(cm.exception.code, 99, 'not implemented')
+    return cm.exception
