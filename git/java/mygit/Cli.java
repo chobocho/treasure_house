@@ -850,6 +850,132 @@ public final class Cli {
     return moveHead(ctx, null, oid, name, false);
   }
 
+  // ── 10단계: merge ─────────────────────────────────────────────────
+  static final String MYGIT_MERGE =
+      "Merge made by mygit (3-way, no renames).";
+
+  static void writeGitFile(Ctx ctx, String name, String text) {
+    Fs.write(Fs.join(ctx.gitdir(), name), text.getBytes(ISO_8859_1));
+  }
+
+  static Map<String, Worktree.Stat> treeOf(Ctx ctx, String commit) {
+    return Worktree.treeMap(ctx.gitdir(),
+        Refs.peel(ctx.gitdir(), commit, "tree"));
+  }
+
+  // 인덱스가 HEAD 트리와 같고 추적 파일이 그대로인가(SPEC.md §12.1).
+  static boolean isClean(Ctx ctx, String head) {
+    Map<String, Worktree.Stat> have = new TreeMap<>();
+    for (Index.IndexEntry e : Index.readIndex(ctx.gitdir())) {
+      if (e.stage != 0) return false;
+      have.put(e.path, new Worktree.Stat(e.mode, e.oid));
+    }
+    return have.equals(treeOf(ctx, head)) && have.entrySet().stream()
+        .allMatch(kv -> kv.getValue().equals(
+            Worktree.fileState(ctx.root(), kv.getKey())));
+  }
+
+  // SPEC.md §12.1 — 이미 최신 · fast-forward · 3-way(충돌 포함).
+  static int merge(Ctx ctx, List<String> args) {
+    List<String> rest = parseFlags(args, List.of()).rest;
+    if (rest.size() != 1) {
+      throw new GitError("usage: mygit merge <branch>", 129);
+    }
+    String g = ctx.gitdir();
+    String name = rest.get(0);
+    String theirs = resolve(ctx, name, "commit");
+    if (theirs == null) {
+      throw new GitError("merge: " + name
+          + " - not something we can merge", 1);
+    }
+    Refs.Head h = Refs.readHead(g);
+    String head = h.oid();
+    String ref = h.branch() == null ? "HEAD" : h.branch();
+    if (!isClean(ctx, head)) {
+      throw new GitError("error: mygit: commit your local changes "
+          + "before merging");
+    }
+    // git 은 이미 최신이어도 ORIG_HEAD 를 지금 HEAD 로 다시 쓴다
+    // (golden/scen/merge-ff.scn 의 두 번째 merge 뒤)
+    writeGitFile(ctx, "ORIG_HEAD", head + "\n");
+    if (Walk.isAncestor(g, theirs, head)) {
+      ctx.say("Already up to date.\n");
+      return 0;
+    }
+    if (Walk.isAncestor(g, head, theirs)) {
+      ctx.say("Updating " + head.substring(0, 7) + ".."
+          + theirs.substring(0, 7) + "\nFast-forward\n");
+      Worktree.checkoutTree(ctx.root(), g, Refs.peel(g, head, "tree"),
+          Refs.peel(g, theirs, "tree"));
+      Refs.updateRef(g, ref, theirs, head,
+          "merge " + name + ": Fast-forward", ident(ctx));
+      return 0;
+    }
+    List<String> bases = Walk.mergeBases(g, head, theirs);
+    if (bases.size() != 1) {
+      throw new GitError("fatal: mygit: " + bases.size()
+          + " merge bases (criss-cross) are not supported");
+    }
+    Merge.TreeMerge m = Merge.mergeTrees(g, treeOf(ctx, bases.get(0)),
+        treeOf(ctx, head), treeOf(ctx, theirs), name);
+    applyMerge(ctx, head, m.result());
+    m.notes().forEach(line -> ctx.say(line + "\n"));
+    String msg = (Refs.resolveRef(g, HEADS + name) != null
+        ? "Merge branch '" : "Merge commit '") + name + "'";
+    if (h.branch() != null && !List.of("refs/heads/main",
+        "refs/heads/master").contains(h.branch())) {
+      msg += " into " + h.branch().substring(HEADS.length());
+    }
+    if (!m.conflicts().isEmpty()) {
+      writeGitFile(ctx, "MERGE_HEAD", theirs + "\n");
+      StringBuilder sb = new StringBuilder(msg + "\n\n# Conflicts:\n");
+      m.conflicts().forEach(p ->
+          sb.append("#\t").append(p).append('\n'));
+      writeGitFile(ctx, "MERGE_MSG", sb.toString());
+      ctx.say("Automatic merge failed; fix conflicts and then commit "
+          + "the result.\n");
+      return 1;
+    }
+    String oid = Objects.writeObject(g, "commit",
+        Commit.serializeCommit(indexTree(ctx), List.of(head, theirs),
+            ident(ctx, "AUTHOR"), ident(ctx), msg + "\n"));
+    Refs.updateRef(g, ref, oid, head, "merge " + name + ": "
+        + MYGIT_MERGE, ident(ctx));
+    ctx.say(MYGIT_MERGE + "\n");
+    return 0;
+  }
+
+  // 합친 결과를 작업 트리와 인덱스에 쓴다. 충돌 경로는 단계 1‥3.
+  static void applyMerge(Ctx ctx, String head,
+      Map<String, Merge.Outcome> result) {
+    String g = ctx.gitdir();
+    String root = ctx.root();
+    Map<String, Worktree.Stat> ours = treeOf(ctx, head);
+    Map<String, Index.IndexEntry> ents = new TreeMap<>();
+    Index.readIndex(g).forEach(e -> ents.put(e.path, e));
+    List<Index.IndexEntry> staged = new ArrayList<>();
+    result.forEach((p, r) -> {
+      if (r.stat() == null) {
+        if (ours.containsKey(p)) Worktree.removeFile(root, p);
+        ents.remove(p);
+      } else if (r.stages() == null) {
+        if (!r.stat().equals(ours.get(p))) {
+          Worktree.writeFile(root, p, r.stat().mode(),
+              Objects.readObject(g, r.stat().oid()).body());
+          ents.put(p, Index.entryFromStat(p, Fs.join(root, p),
+              r.stat().oid()));
+        }
+      } else {
+        Worktree.writeFile(root, p, r.stat().mode(), r.text());
+        ents.remove(p);
+        r.stages().forEach((k, st) -> staged.add(
+            new Index.IndexEntry(p, st.oid(), st.mode(), k)));
+      }
+    });
+    staged.addAll(ents.values());
+    Index.writeIndex(g, staged);
+  }
+
   // ── 틀 ────────────────────────────────────────────────────────────
   // 명령 이름 → 함수. 단계가 늘 때마다 한 줄씩 는다.
   private static Command command(String name) {
@@ -871,6 +997,7 @@ public final class Cli {
       case "diff" -> Cli::diff;
       case "switch" -> Cli::switchTo;
       case "checkout" -> Cli::checkout;
+      case "merge" -> Cli::merge;
       default -> null;
     };
   }
