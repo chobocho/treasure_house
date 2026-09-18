@@ -43,7 +43,7 @@ for line in io.open('data/commands_ko.tsv', encoding='utf-8'):
 helpcap = {}
 for f in glob.glob('out/cmdref__*.txt'):
     first = io.open(f, encoding='utf-8').readline()
-    m = re.match(r'\$ (?:git )?(\S+) (?:-h|sync --help) ', first)
+    m = re.match(r'\$ (?:env \S+=\S+ )?(?:git )?(\S+) (?:-h|sync --help) ', first)
     assert m, f
     helpcap[m.group(1)] = os.path.basename(f)
 excap = {}
@@ -82,7 +82,12 @@ ABS = {'gitk': '설치되지 않음', 'git-gui': '설치되지 않음',
        'git-citool': 'git gui 의 일부라 같이 없음',
        'git-svn': '설치되지 않음',
        'git-cvsserver': '스크립트는 있지만 펄 DBI 모듈이 없어 시작하지 못함',
-       'gitweb': 'share/gitweb/gitweb.cgi 로 깔려 있지만 웹 서버가 부르는 CGI 라 명령줄 캡처가 없음'}
+       'gitweb': 'share/gitweb/gitweb.cgi 로 깔려 있지만 이 기계의 펄에 필요한 모듈(filetest·CGI)이 없어 시작하지 못함'}
+# -h 가 사용법이 아닌 것을 찍는 명령 — 무엇을 찍었는지 그대로 적는다
+HNOTE = {'p4': '사용법 — -h 를 몰라 sync --help 의 앞 여섯 줄',
+         'filter-branch': '사용법 — 경고문을 끄고(FILTER_BRANCH_SQUELCH_WARNING=1) -h',
+         'http-backend': '-h 가 없는 CGI — 요청 없이 부르면 이렇게 끝난다',
+         'shell': '-h 가 없다 — 인자 없이 또는 -c 명령으로만 돈다'}
 cmds = [r for r in rows if r[0].startswith('git-') or r[0] in ('gitk', 'gitweb', 'scalar')]
 docs = [r for r in rows if r not in cmds]
 o = []
@@ -132,7 +137,7 @@ for ci, (lo, hi) in enumerate(RANGES, 1):
         hc = helpcap.get(short) or helpcap.get(name)
         ex = excap.get(short)
         if hc:
-            w('<!--OUT file=%s note=%s-->' % (hc, '사용법 — -h 를 몰라 sync --help 의 앞 여섯 줄' if short == 'p4' else '사용법 — -h 의 앞 여섯 줄'))
+            w('<!--OUT file=%s note=%s-->' % (hc, HNOTE.get(short, '사용법 — -h 의 앞 여섯 줄')))
         if ex:
             w('<!--OUT file=%s note=표본 저장소에서 한 번-->' % ex)
         parts = sorted(used.get(short, ()))

@@ -569,6 +569,12 @@ def rebase_before_after():
          and [t for _, _, t in after] == ['F3', 'F2', 'F1', 'M1', 'base']
          and [t for _, t in orig] == ['F3', 'F2', 'F1', 'base'],
          'rebase_basic 의 모양')
+    # 옮겨진 브랜치 이름도 손으로 적지 않고 rebase 의 출력에서 읽는다
+    # (처음엔 'topic' 으로 적었는데 실험의 브랜치는 feature 였다)
+    done = [l for l in cap('rebase_basic__rebase-main.txt')
+            if 'updated refs/heads/' in l]
+    need(len(done) == 1, 'rebase 가 옮긴 브랜치 한 줄')
+    moved = done[0].rsplit('refs/heads/', 1)[1].rstrip('.')
     f = Fig(250, title='git rebase main — 전과 후')
     f.text(6, 12, '전', 'key', 'start')
     base = subj(before, 'base')
@@ -580,7 +586,7 @@ def rebase_before_after():
     for s, (x, y) in P0.items():
         commit_dot(f, x, y, s, subj(before, s), below=y > 40)
     f.text(104, 34, 'main', 'hot', 'start')
-    f.text(224, 84, 'topic', 'hot', 'start')
+    f.text(224, 84, moved, 'hot', 'start')
     f.line(4, 118, 336, 118, 'grid')
     f.text(6, 134, '후', 'key', 'start')
     P1 = {'base': (30, 160), 'M1': (90, 160), 'F1': (150, 160),
@@ -592,7 +598,7 @@ def rebase_before_after():
         commit_dot(f, x, y, s + ("'" if s[0] == 'F' else ''),
                    subj(after, s), below=False,
                    cls='box g1' if s[0] == 'F' else 'box')
-    f.text(284, 164, 'topic', 'hot', 'start')
+    f.text(284, 164, moved, 'hot', 'start')
     old = {'F1': (150, 212), 'F2': (210, 212), 'F3': (270, 212)}
     link(f, old['F1'], P1['base'], 10, dim=True)
     for a, b in (('F2', 'F1'), ('F3', 'F2')):

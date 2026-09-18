@@ -18,10 +18,13 @@ from exps.util import commit, tick
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ABSENT = ('is not a git command', "Can't locate", 'unknown command -h',
           'not found', 'No such file or directory')
-LIBS = ('sh-i18n', 'sh-setup')
+LIBS = ('sh-i18n', 'sh-setup')  # 셸 스크립트가 . 으로 읽는 것
 # -h 를 모르는 명령 — 설치는 돼 있으니 대신 이렇게 사용법을 찍는다
 # (git p4 는 파이썬 스크립트라 -h 에 "unknown command" 라고 답한다)
-HELP = {'p4': 'git p4 sync --help'}  # 셸 스크립트가 . 으로 읽는 것
+HELP = {'p4': 'git p4 sync --help',
+        # -h 앞에 경고문이 여섯 줄 넘게 나온다 — 경고를 끄면 사용법
+        'filter-branch': 'env FILTER_BRANCH_SQUELCH_WARNING=1 '
+                         'git filter-branch -h'}
 # 저장소를 바꾸지 않는 예 — 표본 하나를 같이 쓴다(나머지는 매번 새로).
 # 표본은 깨끗해서 작업 트리를 보는 명령은 빈 출력이 된다. 그런 예는
 # 준비(파일 고치기)를 명령줄 앞에 드러내 적고 여기서 뺀다.
@@ -44,7 +47,9 @@ EXAMPLES = {
     'apply': 'git diff HEAD~1 > ../p.diff && '
              'git apply --stat ../p.diff',
     'archive': 'git archive --format=tar HEAD | tar t',
-    'bisect': 'git bisect start HEAD HEAD~3 && git bisect reset',
+    # main 은 커밋 셋이라 HEAD~2 가 뿌리다 — HEAD~3 은 없는 커밋이라
+    # bisect 가 그것을 경로로 받아 이분 탐색을 시작하지 않았다(리뷰 2차)
+    'bisect': 'git bisect start HEAD HEAD~2 && git bisect reset',
     'blame': 'git blame -s app.py',
     'branch': 'git branch -v',
     'bundle': 'git bundle create -q ../all.bundle --all && '
@@ -95,7 +100,7 @@ EXAMPLES = {
     'read-tree': 'git read-tree --empty && git ls-files | wc -l',
     'reflog': 'git reflog -3',
     'remote': 'git remote add up ../cmdref-clone && git remote -v',
-    'repack': 'git repack -a -d -q && ls .git/objects/pack | wc -l',
+    'repack': 'git repack -a -d -q && ls .git/objects/pack | cut -c1-5,46-',
     'replace': 'git replace HEAD~1 topic && git replace --list',
     'reset': 'git reset --soft HEAD~1 && git status -s',
     'restore': 'echo more >> app.py && git add app.py && '

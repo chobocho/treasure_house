@@ -83,7 +83,8 @@ def run(ctx):
                      '%.0f%%' % (100.0 * pack / total)))
     ctx.table('limits_churn', ['내용', '판', '원래 크기 합', '팩 크기',
                                '비율'], rows,
-              '1 MiB 안팎 파일의 판 넷을 커밋하고 '
+              '1 MiB 안팎 파일(압축된 글은 그 글을 누른 것)의 판 넷을 '
+              '커밋하고 '
               'gc --aggressive 한 뒤')
     # 파일 수 — 인덱스와 트리 객체
     rows = []
