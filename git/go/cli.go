@@ -44,6 +44,7 @@ func init() {
 		"diff":        cmdDiff,
 		"switch":      cmdSwitch,
 		"checkout":    cmdCheckout,
+		"merge":       cmdMerge,
 	}
 	deleteBranch = deleteMerged
 }
@@ -1371,6 +1372,243 @@ func cmdCheckout(ctx *Ctx, args []string) (int, error) {
 			"' did not match any file(s) known to git", 1}
 	}
 	return moveHead(ctx, "", oid, name, true, false)
+}
+
+// ── 10단계: merge ────────────────────────────────────────────────────
+const mygitMerge = "Merge made by mygit (3-way, no renames)."
+
+func writeGitFile(g, name, text string) error {
+	return os.WriteFile(filepath.Join(g, name), []byte(text), 0o644)
+}
+
+// isClean 은 인덱스가 HEAD 트리와 같고 추적 파일이 그대로인가
+// (SPEC.md §12.1).
+func isClean(root, g, head string) (bool, error) {
+	t, err := Peel(g, head, "tree")
+	if err != nil {
+		return false, err
+	}
+	want, err := TreeMap(g, t)
+	if err != nil {
+		return false, err
+	}
+	ents, err := ReadIndex(g)
+	if err != nil || len(ents) != len(want) {
+		return false, err
+	}
+	for _, e := range ents {
+		cur := Blob{e.Mode, e.Oid}
+		if e.Stage > 0 || want[e.Path] != cur {
+			return false, nil
+		}
+		if disk, ok := FileState(root, e.Path); !ok || disk != cur {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// cmdMerge 는 SPEC.md §12.1 — 이미 최신 · fast-forward · 3-way.
+func cmdMerge(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, nil)
+	if err != nil {
+		return 0, err
+	}
+	if len(f.rest) != 1 {
+		return 0, &GitError{"usage: mygit merge <branch>", 129}
+	}
+	root, err := ctx.Root()
+	if err != nil {
+		return 0, err
+	}
+	g, name := filepath.Join(root, ".git"), f.rest[0]
+	theirs, err := resolve(ctx, name)
+	if err == nil && theirs != "" {
+		theirs, err = Peel(g, theirs, "commit")
+	}
+	if err != nil {
+		return 0, err
+	}
+	if theirs == "" {
+		return 0, &GitError{"merge: " + name +
+			" - not something we can merge", 1}
+	}
+	branch, head, err := ReadHead(g)
+	if err != nil {
+		return 0, err
+	}
+	if clean, err := isClean(root, g, head); err != nil {
+		return 0, err
+	} else if !clean {
+		return 0, Fail("error: mygit: commit your local changes " +
+			"before merging")
+	}
+	who, err := ident(ctx, "COMMITTER")
+	if err != nil {
+		return 0, err
+	}
+	target := branch
+	if target == "" {
+		target = "HEAD"
+	}
+	// git 은 이미 최신이어도 ORIG_HEAD 를 지금 HEAD 로 다시 쓴다
+	// (golden/scen/merge-ff.scn 의 두 번째 merge 뒤)
+	if err := writeGitFile(g, "ORIG_HEAD", head+"\n"); err != nil {
+		return 0, err
+	}
+	if up, err := IsAncestor(g, theirs, head); err != nil || up {
+		if up {
+			ctx.say("Already up to date.\n")
+		}
+		return 0, err
+	}
+	oldTree, err := Peel(g, head, "tree")
+	if err != nil {
+		return 0, err
+	}
+	if ff, err := IsAncestor(g, head, theirs); err != nil {
+		return 0, err
+	} else if ff {
+		ctx.say("Updating %s..%s\nFast-forward\n", head[:7],
+			theirs[:7])
+		newTree, err := Peel(g, theirs, "tree")
+		if err == nil {
+			err = CheckoutTree(root, g, oldTree, newTree)
+		}
+		if err == nil {
+			err = UpdateRef(g, target, theirs, head,
+				"merge "+name+": Fast-forward", who)
+		}
+		return 0, err
+	}
+	bases, err := MergeBases(g, head, theirs)
+	if err != nil {
+		return 0, err
+	}
+	if len(bases) != 1 {
+		return 0, Fail(fmt.Sprintf("fatal: mygit: %d merge bases "+
+			"(criss-cross) are not supported", len(bases)))
+	}
+	var maps [3]map[string]Blob
+	for k, c := range []string{bases[0], head, theirs} {
+		t, err := Peel(g, c, "tree")
+		if err == nil {
+			maps[k], err = TreeMap(g, t)
+		}
+		if err != nil {
+			return 0, err
+		}
+	}
+	result, notes, conflicts, err := MergeTrees(g, maps[0], maps[1],
+		maps[2], name)
+	if err != nil {
+		return 0, err
+	}
+	if err := applyMerge(root, g, maps[1], result); err != nil {
+		return 0, err
+	}
+	for _, line := range notes {
+		ctx.say("%s\n", line)
+	}
+	msg := "Merge commit '" + name + "'"
+	if o, _ := ResolveRef(g, "refs/heads/"+name); o != "" {
+		msg = "Merge branch '" + name + "'"
+	}
+	if cur := strings.TrimPrefix(branch, "refs/heads/"); branch != "" &&
+		cur != "main" && cur != "master" {
+		msg += " into " + cur
+	}
+	if len(conflicts) > 0 {
+		var b strings.Builder
+		b.WriteString(msg + "\n\n# Conflicts:\n")
+		for _, p := range conflicts {
+			b.WriteString("#\t" + p + "\n")
+		}
+		err := writeGitFile(g, "MERGE_HEAD", theirs+"\n")
+		if err == nil {
+			err = writeGitFile(g, "MERGE_MSG", b.String())
+		}
+		if err != nil {
+			return 0, err
+		}
+		ctx.say("Automatic merge failed; fix conflicts and then " +
+			"commit the result.\n")
+		return 1, nil
+	}
+	t, err := indexTree(g)
+	if err != nil {
+		return 0, err
+	}
+	c := &Commit{Tree: t, Parents: []string{head, theirs},
+		Message: msg + "\n", Committer: who}
+	if c.Author, err = ident(ctx, "AUTHOR"); err != nil {
+		return 0, err
+	}
+	oid, err := WriteObject(g, "commit", SerializeCommit(c))
+	if err != nil {
+		return 0, err
+	}
+	if err := UpdateRef(g, target, oid, head,
+		"merge "+name+": "+mygitMerge, who); err != nil {
+		return 0, err
+	}
+	ctx.say("%s\n", mygitMerge)
+	return 0, nil
+}
+
+// applyMerge 는 합친 결과를 작업 트리와 인덱스에 쓴다. 충돌 경로는
+// 단계 1‥3.
+func applyMerge(root, g string, ours map[string]Blob,
+	result map[string]MergeResult) error {
+	ents, err := ReadIndex(g)
+	if err != nil {
+		return err
+	}
+	byPath := map[string]*IndexEntry{}
+	for _, e := range ents {
+		byPath[e.Path] = e
+	}
+	var staged []*IndexEntry
+	for _, p := range sortedKeys(result) {
+		r := result[p]
+		switch {
+		case r.Gone:
+			if _, ok := ours[p]; ok {
+				removeFile(root, p)
+			}
+			delete(byPath, p)
+		case r.Conflict:
+			err := writeFile(root, p, r.Blob.Mode, r.Text)
+			if err != nil {
+				return err
+			}
+			delete(byPath, p)
+			for k := 1; k <= 3; k++ {
+				if b, ok := r.Stages[k]; ok {
+					staged = append(staged, &IndexEntry{Path: p,
+						Oid: b.Oid, Mode: b.Mode, Stage: k})
+				}
+			}
+		case ours[p] != r.Blob:
+			_, data, err := ReadObject(g, r.Blob.Oid)
+			if err == nil {
+				err = writeFile(root, p, r.Blob.Mode, data)
+			}
+			if err != nil {
+				return err
+			}
+			e, err := EntryFromStat(p, filepath.Join(root, p),
+				r.Blob.Oid)
+			if err != nil {
+				return err
+			}
+			byPath[p] = e
+		}
+	}
+	for _, e := range byPath {
+		staged = append(staged, e)
+	}
+	return WriteIndex(g, staged)
 }
 
 // ── 틀 ─────────────────────────────────────────────────────────────
