@@ -12,7 +12,7 @@
 
 namespace mygit {
 
-inline constexpr int STEP = 4;
+inline constexpr int STEP = 5;
 
 // 명령이 멈추는 까닭. code 는 종료 코드(SPEC.md §1.4).
 struct GitError : std::runtime_error {
@@ -23,6 +23,7 @@ struct GitError : std::runtime_error {
 [[noreturn]] inline void not_implemented() {
     throw GitError("not implemented", 99);
 }
+using Env = std::map<std::string, std::string>;
 
 // ── sha1.cpp (SPEC.md §2) ─────────────────────────────────────────
 class Sha1 {
@@ -92,8 +93,68 @@ std::string type_of_mode(const std::string& mode);
 // ── worktree.cpp (SPEC.md §8) ──────────────────────────────────────
 std::string quote_path(std::string_view path, bool space = false);
 
+// ── commit.cpp (SPEC.md §4.4 · §4.5 · §1.3 · §9.1) ────────────────
+struct Ident {
+    std::string name, mail;
+    long long secs;
+    std::string tz;
+};
+struct Commit {
+    std::string tree;
+    std::vector<std::string> parents;
+    std::string author, committer, message;
+};
+Ident parse_ident(const std::string& line);
+std::string ident_from_env(const Env& env, const std::string& who);
+std::string format_date(long long secs, const std::string& tz);
+std::string cleanup_message(const std::string& text);
+std::string subject_of(const std::string& message);
+Commit parse_commit(std::string_view body);
+std::string serialize_commit(const Commit& c);
+std::string serialize_tag(const std::string& obj,
+                          const std::string& type,
+                          const std::string& name,
+                          const std::string& tagger,
+                          const std::string& message);
+
+// ── refs.cpp (SPEC.md §6) ──────────────────────────────────────────
+inline const std::string ZERO(40, '0');
+struct Ref {
+    bool sym;
+    std::string val;
+};
+struct NamedRef {
+    std::string name, oid;
+};
+struct ReflogEntry {
+    std::string old, now, ident, msg;
+    bool operator==(const ReflogEntry&) const = default;
+};
+std::map<std::string, std::string> packed_refs(
+    const std::string& gitdir);
+std::optional<Ref> read_ref(const std::string& gitdir,
+                            const std::string& name);
+std::string resolve_ref(const std::string& gitdir, std::string name);
+std::pair<std::string, std::string> read_head(
+    const std::string& gitdir);
+std::vector<NamedRef> list_refs(const std::string& gitdir,
+                                const std::string& prefix = "refs/");
+void append_reflog(const std::string& gitdir, const std::string& name,
+                   const std::string& old, const std::string& now,
+                   const std::string& ident, const std::string& msg);
+std::vector<ReflogEntry> read_reflog(const std::string& gitdir,
+                                     const std::string& name);
+void update_ref(const std::string& gitdir, const std::string& name,
+                const std::string& now, const std::string& old,
+                const std::string& msg, const std::string& ident);
+void set_head(const std::string& gitdir, const std::string& target);
+std::string peel(const std::string& gitdir, std::string oid,
+                 const std::string& want);
+std::string rev_parse(const std::string& gitdir,
+                      const std::string& spec);
+bool valid_branch_name(const std::string& name);
+
 // ── cli.cpp (SPEC.md §1 · §9) ─────────────────────────────────────
-using Env = std::map<std::string, std::string>;
 struct Result {
     int code;
     std::string out, err;

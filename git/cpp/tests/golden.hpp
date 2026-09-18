@@ -197,4 +197,32 @@ struct Sandbox {
         write_file(root + "/" + name, data);
     }
 };
+
+inline mygit::Env ident_env() {
+    return {{"GIT_AUTHOR_NAME", "A U Thor"},
+            {"GIT_AUTHOR_EMAIL", "author@example.com"},
+            {"GIT_AUTHOR_DATE", "1700000000 +0900"},
+            {"GIT_COMMITTER_NAME", "C O Mitter"},
+            {"GIT_COMMITTER_EMAIL", "committer@example.com"},
+            {"GIT_COMMITTER_DATE", "1700000000 +0900"}};
+}
+
+// copy_tree 는 golden 의 .git 사본을 dst 로 베낀다(시험 준비 전용).
+inline void copy_tree(const std::string& src, const std::string& dst) {
+    fs::create_directories(dst);
+    fs::copy(src, dst, fs::copy_options::recursive);
+    for (auto& e : fs::recursive_directory_iterator(dst))
+        fs::permissions(e.path(), fs::perms::owner_write,
+                        fs::perm_options::add);
+}
+
+// dag 는 golden/dag/<역사>/git 을 작업 트리의 .git 으로 베낀 샌드박스.
+inline void dag(Sandbox& s, const std::string& name) {
+    copy_tree(dir + "/dag/" + name + "/git", s.root + "/.git");
+    for (auto d : {"objects/pack", "refs/tags"})
+        fs::create_directories(s.root + "/.git/" + d);
+    s.env["GIT_COMMITTER_NAME"] = "C O Mitter";
+    s.env["GIT_COMMITTER_EMAIL"] = "committer@example.com";
+    s.env["GIT_COMMITTER_DATE"] = "1700000000 +0900";
+}
 }  // namespace golden

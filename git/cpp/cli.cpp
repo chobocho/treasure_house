@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <iterator>
@@ -106,7 +107,18 @@ Flags parse_flags(const std::vector<std::string>& args,
 
 // resolve 는 <rev> → 객체 이름. 없으면 "" (SPEC.md §6.2).
 std::string resolve(Ctx& ctx, const std::string& name) {
-    return find_object(ctx.gitdir(), name);
+    return rev_parse(ctx.gitdir(), name);
+}
+
+std::string ambiguous(const std::string& name) {
+    return "fatal: ambiguous argument '" + name +
+           "': unknown revision or path not in the working tree.\n"
+           "Use '--' to separate paths from revisions, like this:\n"
+           "'git <command> [<revision>...] -- [<file>...]'";
+}
+
+std::string ident(Ctx& ctx, const std::string& who = "COMMITTER") {
+    return ident_from_env(ctx.env, who);
 }
 
 // ── 3단계: hash-object · cat-file ──────────────────────────────────
@@ -171,10 +183,182 @@ int cmd_cat_file(Ctx& ctx, std::vector<std::string> args) {
     return 0;
 }
 
+// ── 5단계: init · commit-tree · branch · tag · reflog ─────────────
+const std::string config =
+    "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n"
+    "\tbare = false\n\tlogallrefupdates = true\n";
+
+// make_repo 는 top/.git 을 SPEC.md §5.1 의 꼴로. → 이미 있었나.
+// 이미 있으면 아무것도 덮어쓰지 않는다.
+bool make_repo(const std::string& top) {
+    auto g = top + "/.git";
+    bool again = fs::is_directory(g);
+    for (auto d : {"objects/pack", "refs/heads", "refs/tags"})
+        fs::create_directories(g + "/" + d);
+    for (auto [name, text] :
+         {std::pair{"HEAD", std::string("ref: refs/heads/main\n")},
+          std::pair{"config", config}})
+        if (!fs::exists(g + "/" + name))
+            std::ofstream(g + "/" + name, std::ios::binary) << text;
+    return again;
+}
+
+int cmd_init(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {});
+    auto top = f.rest.empty() ? ctx.cwd : ctx.path(f.rest[0]);
+    bool again = make_repo(top);
+    ctx.out += std::string(again ? "Reinitialized existing"
+                                 : "Initialized empty") +
+               " Git repository in " + top + "/.git/\n";
+    return 0;
+}
+
+// cmd_commit_tree — -p 와 -m 은 몇 번이든, 준 차례대로. 메시지는 원문
+// 그대로 + 줄바꿈 — 공백 정리는 commit 명령만 한다(SPEC.md §4.4).
+int cmd_commit_tree(Ctx& ctx, std::vector<std::string> args) {
+    std::string tree;
+    Commit c;
+    std::vector<std::string> msgs;
+    for (size_t i = 0; i < args.size(); ++i) {
+        const auto& a = args[i];
+        if (a == "-p" || a == "-m") {
+            if (i + 1 == args.size())
+                throw GitError("fatal: mygit: option '" + a +
+                               "' needs a value");
+            const auto& v = args[++i];
+            if (a == "-m") {
+                msgs.push_back(v);
+                continue;
+            }
+            auto oid = resolve(ctx, v);
+            if (oid.empty())
+                throw GitError("fatal: not a valid object name " + v);
+            c.parents.push_back(oid);
+        } else if (a.starts_with("-")) {
+            throw GitError("fatal: mygit: unknown option '" + a + "'");
+        } else {
+            tree = a;
+        }
+    }
+    if (tree.empty() || msgs.empty())
+        throw GitError(
+            "usage: mygit commit-tree <tree> "
+            "[-p <parent>]... -m <message>...",
+            129);
+    auto oid = resolve(ctx, tree);
+    c.tree = oid.empty() ? "" : peel(ctx.gitdir(), oid, "tree");
+    if (c.tree.empty())
+        throw GitError("fatal: not a valid object name " + tree);
+    for (auto& m : msgs)
+        c.message += (c.message.empty() ? "" : "\n\n") + m;
+    c.message += "\n";
+    c.author = ident(ctx, "AUTHOR");
+    c.committer = ident(ctx);
+    ctx.out +=
+        write_object(ctx.gitdir(), "commit", serialize_commit(c)) +
+        "\n";
+    return 0;
+}
+
+int list_branches(Ctx& ctx) {
+    auto [cur, head] = read_head(ctx.gitdir());
+    if (cur.empty() && !head.empty())
+        ctx.out += "* (HEAD detached at " + head.substr(0, 7) + ")\n";
+    for (auto& r : list_refs(ctx.gitdir(), "refs/heads/"))
+        ctx.out +=
+            (r.name == cur ? "* " : "  ") + r.name.substr(11) + "\n";
+    return 0;
+}
+
+// delete_branch 는 7단계가 채운다 — HEAD 에서 닿는지 보려면 DAG
+// 순회가 있어야 한다.
+int delete_branch(Ctx&, const std::vector<std::string>&) {
+    not_implemented();
+}
+
+int cmd_branch(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {"-d"});
+    if (f.on.count("-d")) return delete_branch(ctx, f.rest);
+    if (f.rest.empty()) return list_branches(ctx);
+    auto g = ctx.gitdir();
+    const auto& name = f.rest[0];
+    if (!valid_branch_name(name))
+        throw GitError("fatal: '" + name +
+                       "' is not a valid branch name");
+    if (!resolve_ref(g, "refs/heads/" + name).empty())
+        throw GitError("fatal: a branch named '" + name +
+                       "' already exists");
+    auto start = f.rest.size() > 1 ? f.rest[1] : "HEAD";
+    auto oid = resolve(ctx, start);
+    if (!oid.empty()) oid = peel(g, oid, "commit");
+    if (oid.empty())
+        throw GitError("fatal: not a valid object name: '" + start +
+                       "'");
+    update_ref(g, "refs/heads/" + name, oid, "",
+               "branch: Created from " + start, ident(ctx));
+    return 0;
+}
+
+int cmd_tag(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {"-a"}, {"-m"});
+    auto g = ctx.gitdir();
+    if (f.rest.empty()) {
+        for (auto& r : list_refs(g, "refs/tags/"))
+            ctx.out += r.name.substr(10) + "\n";
+        return 0;
+    }
+    const auto& name = f.rest[0];
+    auto target = f.rest.size() > 1 ? f.rest[1] : "HEAD";
+    if (read_ref(g, "refs/tags/" + name))
+        throw GitError("fatal: tag '" + name + "' already exists");
+    auto oid = resolve(ctx, target);
+    if (oid.empty())
+        throw GitError("fatal: Failed to resolve '" + target +
+                       "' as a valid ref.");
+    if (f.on.count("-a") || f.vals.count("-m")) {
+        auto type = read_object(g, oid).type;
+        auto msg = cleanup_message(f.vals["-m"]);
+        oid = write_object(
+            g, "tag", serialize_tag(oid, type, name, ident(ctx), msg));
+    }
+    // 태그는 reflog 를 남기지 않는다 — logallrefupdates 는 브랜치와
+    // HEAD 만 기록한다(git 과 같다)
+    fs::create_directories(g + "/refs/tags");
+    std::ofstream(g + "/refs/tags/" + name, std::ios::binary)
+        << oid + "\n";
+    return 0;
+}
+
+// cmd_reflog 는 새것부터 '<7글자> <ref>@{n}: <메시지>' (SPEC.md §6.3).
+int cmd_reflog(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {});
+    std::erase(f.rest, "show");
+    auto name = f.rest.empty() ? "HEAD" : f.rest[0];
+    std::string log;
+    for (auto cand : {name, "refs/heads/" + name})
+        if (log.empty() && fs::exists(ctx.gitdir() + "/logs/" + cand))
+            log = cand;
+    if (log.empty()) {
+        if (name == "HEAD") return 0;
+        throw GitError(ambiguous(name));
+    }
+    auto ents = read_reflog(ctx.gitdir(), log);
+    for (size_t k = 0; k < ents.size(); ++k)
+        ctx.out += ents[ents.size() - 1 - k].now.substr(0, 7) + " " +
+                   name + "@{" + std::to_string(k) +
+                   "}: " + ents[ents.size() - 1 - k].msg + "\n";
+    return 0;
+}
+
 const std::map<std::string, Command>& commands() {
     static const std::map<std::string, Command> table = {
         {"hash-object", cmd_hash_object},
         {"cat-file", cmd_cat_file},
+        {"init", cmd_init},
+        {"commit-tree", cmd_commit_tree},
+        {"branch", cmd_branch},
+        {"tag", cmd_tag},
+        {"reflog", cmd_reflog},
     };
     return table;
 }
