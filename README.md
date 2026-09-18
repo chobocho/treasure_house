@@ -72,6 +72,10 @@
 - 📜 **[YAML 가이드.md](./YAML%20가이드.md)** — ✏️ 설정 파일의 정석 📐
 - 🌊 **[Langflow 가이드.html](./Langflow%20가이드.html)** — 🤖 비주얼 LLM 플로우를 REST API로! 🔌
 
+### 🌿 Git & 버전 관리 🧬
+- 🌿 **[Git_대백과사전.html](./Git_%EB%8C%80%EB%B0%B1%EA%B3%BC%EC%82%AC%EC%A0%84.html)** — 🔍 진짜 git 2.55 가 채점하는 1,819장 — 캡처 1,240개·실험 32개·그림 17·데모 9·퀴즈 61·용어 255, 부록에 git 을 다섯 언어(py·ts·go·java·C++, 약 21,000줄)로 직접 만든 소스 전문 🛠️
+- 🔗 GitHub Actions·GitOps 문서는 아래 🎬 자동화 & CI/CD 에 있다
+
 ### 🎬 자동화 & CI/CD 🔄
 - 🔗 **[n8n_완전_가이드.html](./n8n_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 🤖 워크플로 자동화 기초부터 라이선스, LLM으로 워크플로 자동 생성·구성도 그리기까지 300장 🧩
 - 🐙 **[github-actions-book.md](./github-actions-book.md)** — 🚀 GitHub Actions 완벽 가이드 🎢
