@@ -12,7 +12,7 @@
 
 namespace mygit {
 
-inline constexpr int STEP = 6;
+inline constexpr int STEP = 7;
 
 // 명령이 멈추는 까닭. code 는 종료 코드(SPEC.md §1.4).
 struct GitError : std::runtime_error {
@@ -187,6 +187,15 @@ std::string peel(const std::string& gitdir, std::string oid,
 std::string rev_parse(const std::string& gitdir,
                       const std::string& spec);
 bool valid_branch_name(const std::string& name);
+
+// ── walk.cpp (SPEC.md §10) ─────────────────────────────────────────
+std::vector<std::string> walk_log(
+    const std::string& gitdir, const std::vector<std::string>& starts);
+bool is_ancestor(const std::string& gitdir, const std::string& a,
+                 const std::string& b);
+std::vector<std::string> merge_bases(const std::string& gitdir,
+                                     const std::string& a,
+                                     const std::string& b);
 
 // ── cli.cpp (SPEC.md §1 · §9) ─────────────────────────────────────
 struct Result {

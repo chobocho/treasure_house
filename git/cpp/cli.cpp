@@ -6,6 +6,7 @@
 // 명령은 commands() 표에 이름으로 붙는다. 단계가 늘 때마다 한 줄씩.
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
@@ -270,10 +271,30 @@ int list_branches(Ctx& ctx) {
     return 0;
 }
 
-// delete_branch 는 7단계가 채운다 — HEAD 에서 닿는지 보려면 DAG
-// 순회가 있어야 한다.
-int delete_branch(Ctx&, const std::vector<std::string>&) {
-    not_implemented();
+// delete_branch 는 branch -d — HEAD 에서 닿는 브랜치만 지운다(§9.2).
+int delete_branch(Ctx& ctx, const std::vector<std::string>& names) {
+    auto g = ctx.gitdir();
+    auto [cur, head] = read_head(g);
+    for (auto& name : names) {
+        auto ref = "refs/heads/" + name;
+        auto oid = resolve_ref(g, ref);
+        if (ref == cur)
+            throw GitError("error: cannot delete branch '" + name +
+                               "' used by worktree at '" + ctx.root() +
+                               "'",
+                           1);
+        if (oid.empty())
+            throw GitError("error: branch '" + name + "' not found.",
+                           1);
+        if (head.empty() || !is_ancestor(g, oid, head))
+            throw GitError(
+                "error: the branch '" + name + "' is not fully merged",
+                1);
+        update_ref(g, ref, "", oid, "", "");
+        ctx.out += "Deleted branch " + name + " (was " +
+                   oid.substr(0, 7) + ").\n";
+    }
+    return 0;
 }
 
 int cmd_branch(Ctx& ctx, std::vector<std::string> args) {
@@ -508,6 +529,76 @@ int cmd_commit(Ctx& ctx, std::vector<std::string> args) {
     return 0;
 }
 
+// ── 7단계: log · merge-base ─────────────────────────────────────────
+
+// log_entry 는 커밋 하나를 git log 의 꼴로(SPEC.md §9.1).
+std::string log_entry(Ctx& ctx, const std::string& oid, bool oneline) {
+    auto c = parse_commit(read_object(ctx.gitdir(), oid).body);
+    if (oneline)
+        return oid.substr(0, 7) + " " + subject_of(c.message) + "\n";
+    auto who = parse_ident(c.author);
+    std::string s = "commit " + oid + "\n";
+    if (c.parents.size() > 1) {
+        s += "Merge:";
+        for (auto& p : c.parents) s += " " + p.substr(0, 7);
+        s += "\n";
+    }
+    s += "Author: " + who.name + " <" + who.mail +
+         ">\nDate:   " + format_date(who.secs, who.tz) + "\n\n";
+    auto msg = c.message;
+    if (msg.ends_with("\n")) msg.pop_back();
+    size_t a = 0;
+    for (size_t b; (b = msg.find('\n', a)) != msg.npos; a = b + 1)
+        s += "    " + msg.substr(a, b - a) + "\n";
+    return s + "    " + msg.substr(a) + "\n";
+}
+
+int cmd_log(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {"--oneline"}, {"-n"});
+    auto g = ctx.gitdir();
+    std::string start;
+    if (!f.rest.empty()) {
+        start = resolve(ctx, f.rest[0]);
+        if (!start.empty()) start = peel(g, start, "commit");
+        if (start.empty()) throw GitError(ambiguous(f.rest[0]));
+    } else {
+        auto [branch, head] = read_head(g);
+        if (head.empty())
+            throw GitError("fatal: your current branch '" +
+                           branch.substr(11) +
+                           "' does not have any commits yet");
+        start = head;
+    }
+    auto order = walk_log(g, {start});
+    if (f.vals.count("-n"))
+        order.resize(std::min(order.size(), std::stoul(f.vals["-n"])));
+    bool one = f.on.count("--oneline");
+    for (size_t k = 0; k < order.size(); ++k)
+        ctx.out +=
+            (k && !one ? "\n" : "") + log_entry(ctx, order[k], one);
+    return 0;
+}
+
+int cmd_merge_base(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {"--all"});
+    if (f.rest.size() != 2)
+        throw GitError("usage: mygit merge-base [--all] <a> <b>", 129);
+    auto g = ctx.gitdir();
+    std::vector<std::string> ids;
+    for (auto& name : f.rest) {
+        auto oid = resolve(ctx, name);
+        if (!oid.empty()) oid = peel(g, oid, "commit");
+        if (oid.empty())
+            throw GitError("fatal: Not a valid object name " + name);
+        ids.push_back(oid);
+    }
+    auto best = merge_bases(g, ids[0], ids[1]);
+    if (best.empty()) return 1;
+    if (!f.on.count("--all")) best.resize(1);
+    for (auto& oid : best) ctx.out += oid + "\n";
+    return 0;
+}
+
 const std::map<std::string, Command>& commands() {
     static const std::map<std::string, Command> table = {
         {"hash-object", cmd_hash_object},
@@ -522,6 +613,8 @@ const std::map<std::string, Command>& commands() {
         {"status", cmd_status},
         {"write-tree", cmd_write_tree},
         {"commit", cmd_commit},
+        {"log", cmd_log},
+        {"merge-base", cmd_merge_base},
     };
     return table;
 }
