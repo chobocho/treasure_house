@@ -25,6 +25,7 @@ import importlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -100,8 +101,11 @@ class Repo(object):
         return p.stdout.decode('utf-8', 'replace')
 
     def norm(self, text):
-        return text.replace(REPOS, WORK).replace('\r\n', '\n') \
-                   .replace(SCRATCH, '/scratch')
+        """절대 경로를 /work 로, 그리고 진행 표시처럼 \\r 로 덮어쓰는
+        조각은 터미널이 마지막에 보여 주는 것만 남긴다."""
+        text = text.replace(REPOS, WORK).replace(SCRATCH, '/scratch')
+        text = text.replace('\r\n', '\n')
+        return re.sub(r'[^\n]*\r(?!\n)', '', text)
 
     def cap(self, cmd, label=None, ok=(0,), stdin=None, edit=None):
         """돌리고 캡처한다. edit 은 정규화 함수(캡션에 적을 것)."""
