@@ -667,6 +667,120 @@ function cmdDiff(ctx: Ctx, args: string[]): number {
   return 0;
 }
 
+// ── 9단계: switch · checkout ──────────────────────────────────────
+
+// '<7글자> <제목>' — HEAD is now at … 의 꼬리.
+function summaryLine(ctx: Ctx, oid: string): string {
+  const [, body] = objects.readObject(ctx.gitdir(), oid);
+  const msg = commit.parseCommit(body).message;
+  return `${oid.slice(0, 7)} ${commit.subjectOf(msg)}`;
+}
+
+// 작업 트리를 oid 로 옮기고 HEAD 를 branch(또는 분리)로(SPEC §9.3).
+//
+// 안내는 표준 오류에, 남은 변경 알림은 표준 출력에. reflog 는
+// "checkout: moving from <옛> to <arg 그대로>" — 옛 쪽이 분리 상태면
+// 40글자다(§6.3). switched 는 다른 브랜치로 옮겼을 때의 안내 —
+// switch -c 는 "a new branch" 로 바꿔 넘긴다.
+function moveHead(ctx: Ctx, branch: string | null, oid: string,
+  arg: string, report = true,
+  switched = `Switched to branch '${arg}'`): number {
+  const g = ctx.gitdir();
+  const [oldBranch, old] = refs.readHead(g);
+  const oldTree = old && refs.peel(g, old, 'tree');
+  const newTree = refs.peel(g, oid, 'tree');
+  worktree.checkoutTree(ctx.root(), g, oldTree, newTree);
+  // 분리 상태를 떠나되 커밋이 바뀔 때만 — 같은 커밋이면 git 도
+  // 찍지 않는다
+  if (oldBranch === null && old && oid !== old) {
+    ctx.warn(`Previous HEAD position was ${summaryLine(ctx, old)}\n`);
+  }
+  refs.setHead(g, branch ?? oid);
+  const from = oldBranch ? oldBranch.slice(HEADS.length) : old;
+  refs.appendReflog(g, 'HEAD', old, oid, ident(ctx),
+    `checkout: moving from ${from} to ${arg}`);
+  if (report) {
+    for (const row of worktree.localChanges(ctx.root(), g, newTree)) {
+      ctx.say(row + '\n');
+    }
+  }
+  if (branch === null) {
+    ctx.warn(`HEAD is now at ${summaryLine(ctx, oid)}\n`);
+  } else if (branch === oldBranch) {
+    ctx.warn(`Already on '${arg}'\n`);
+  } else {
+    ctx.warn(switched + '\n');
+  }
+  return 0;
+}
+
+function createAndSwitch(ctx: Ctx, name: string, start: string | null):
+  number {
+  const g = ctx.gitdir();
+  if (!refs.validBranchName(name)) {
+    throw new GitError(`fatal: '${name}' is not a valid branch name`);
+  }
+  if (refs.resolveRef(g, HEADS + name)) {
+    throw new GitError(`fatal: a branch named '${name}' already ` +
+      'exists');
+  }
+  const [, old] = refs.readHead(g);
+  const switched = `Switched to a new branch '${name}'`;
+  if (old === null && start === null) {
+    // 첫 커밋 전 — HEAD 가 가리키는 이름만 바꾼다
+    refs.setHead(g, HEADS + name);
+    ctx.warn(switched + '\n');
+    return 0;
+  }
+  const arg = start ?? 'HEAD';
+  let oid = resolve(ctx, arg);
+  oid = oid && refs.peel(g, oid, 'commit');
+  if (!oid) throw new GitError(`fatal: invalid reference: ${arg}`);
+  refs.updateRef(g, HEADS + name, oid, null,
+    `branch: Created from ${arg}`, ident(ctx));
+  // 지금 커밋에서 새 브랜치를 만들 때는 git 이 작업 트리를 건드리지
+  // 않고 남은 변경도 알리지 않는다(golden/scen/checkout.scn)
+  return moveHead(ctx, HEADS + name, oid, name, oid !== old, switched);
+}
+
+function cmdSwitch(ctx: Ctx, args: string[]): number {
+  const [, vals, rest] = parseFlags(args, [], ['-c']);
+  const g = ctx.gitdir();
+  const create = vals.get('-c');
+  if (create !== undefined) {
+    return createAndSwitch(ctx, create, rest[0] ?? null);
+  }
+  if (rest.length !== 1) {
+    throw new GitError('usage: mygit switch [-c] <branch>', 129);
+  }
+  const name = rest[0];
+  const oid = refs.resolveRef(g, HEADS + name);
+  if (oid) return moveHead(ctx, HEADS + name, oid, name);
+  if (resolve(ctx, name)) {
+    throw new GitError('fatal: a branch is expected, got commit ' +
+      `'${name}'`);
+  }
+  throw new GitError(`fatal: invalid reference: ${name}`);
+}
+
+function cmdCheckout(ctx: Ctx, args: string[]): number {
+  const [, , rest] = parseFlags(args, []);
+  if (rest.length !== 1) {
+    throw new GitError('usage: mygit checkout <branch|commit>', 129);
+  }
+  const g = ctx.gitdir();
+  const name = rest[0];
+  let oid = refs.resolveRef(g, HEADS + name);
+  if (oid) return moveHead(ctx, HEADS + name, oid, name);
+  oid = resolve(ctx, name);
+  oid = oid && refs.peel(g, oid, 'commit');
+  if (!oid) {
+    throw new GitError(`error: pathspec '${name}' did not match any ` +
+      'file(s) known to git', 1);
+  }
+  return moveHead(ctx, null, oid, name);
+}
+
 // ── 틀 ────────────────────────────────────────────────────────────
 const COMMANDS = new Map<string, Command>([
   ['hash-object', cmdHashObject],
@@ -684,6 +798,8 @@ const COMMANDS = new Map<string, Command>([
   ['log', cmdLog],
   ['merge-base', cmdMergeBase],
   ['diff', cmdDiff],
+  ['switch', cmdSwitch],
+  ['checkout', cmdCheckout],
 ]);
 
 // 명령 하나를 돌린다 → [종료 코드, 표준 출력, 표준 오류]. stdin 이

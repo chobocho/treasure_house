@@ -1,4 +1,4 @@
-// 작업 트리 (SPEC.md §8) — 경로 따옴표, 훑기, status.
+// 작업 트리 (SPEC.md §8 · §9.3) — 경로 따옴표, 훑기, status, 바꾸기.
 //
 // status 는 세 가지를 견준다: HEAD 트리, 인덱스, 디스크의 파일. 두 칸
 // 글자(XY)가 곧 "어느 두 곳이 다른가" 다 — X 는 HEAD 와 인덱스, Y 는
@@ -8,6 +8,7 @@
 // 시스템에 건넬 때만 fsPath 로 진짜 바이트(Buffer)를 만든다 — node 의
 // fs 는 Buffer 경로를 받으면 UTF-8 로 되풀지 않고 그대로 쓴다.
 import * as fs from 'node:fs';
+import { GitError } from './errors';
 import * as index from './index';
 import * as objects from './objects';
 import * as refs from './refs';
@@ -171,6 +172,115 @@ export function status(root: string, gitdir: string): string[] {
   const tracked = new Set([...stage0.keys(), ...stages.keys()]);
   for (const p of untracked(walkWorktree(root), tracked)) {
     rows.push(`?? ${quotePath(p, true)}`);
+  }
+  return rows;
+}
+
+const OVERWRITE = 'error: Your local changes to the following files ' +
+  'would be overwritten by checkout:';
+const UNTRACKED = 'error: The following untracked working tree files ' +
+  'would be overwritten by checkout:';
+
+// 바이트 문자열 경로의 부모('' 은 뿌리)
+const parent = (p: string) =>
+  p.slice(0, Math.max(p.lastIndexOf('/'), 0));
+
+export function writeFile(root: string, p: string, mode: number,
+  data: Buffer): void {
+  fs.mkdirSync(fsPath(root, parent(p)), { recursive: true });
+  const full = fsPath(root, p);
+  fs.rmSync(full, { force: true });
+  // 0666/0777 로 열고 umask 를 따른다 — git 과 같다(SPEC.md §9.3)
+  fs.writeFileSync(full, data, { mode: mode & 0o100 ? 0o777 : 0o666 });
+}
+
+// 파일을 지우고, 그래서 비게 된 디렉터리들도 지운다.
+export function removeFile(root: string, p: string): void {
+  fs.rmSync(fsPath(root, p), { force: true });
+  for (let d = parent(p); d; d = parent(d)) {
+    const full = fsPath(root, d);
+    if (!fs.statSync(full, { throwIfNoEntry: false })?.isDirectory() ||
+      fs.readdirSync(full).length) {
+      break;
+    }
+    fs.rmdirSync(full);
+  }
+}
+
+// 두 갈래 합치기로 작업 트리·인덱스를 old → new 로(SPEC.md §9.3).
+//
+// 경로마다: 옛 트리와 새 트리에서 같으면 손대지 않는다(손댄 내용이
+// 따라온다). 다르면 인덱스가 옛 트리와 같고 작업 트리가 인덱스와
+// 같아야 한다. 옛 트리에 없던 경로에 추적 안 하는 파일이 있으면
+// 그것도 막는다. 하나라도 걸리면 아무것도 바꾸지 않고 멈춘다.
+// O(경로 수 × 해시).
+export function checkoutTree(root: string, gitdir: string,
+  oldTree: string | null, newTree: string | null): void {
+  const old = treeMap(gitdir, oldTree);
+  const nu = treeMap(gitdir, newTree);
+  const ents = index.readIndex(gitdir);
+  const idx = new Map(ents.filter((e) => e.stage === 0)
+    .map((e) => [e.path, e]));
+  const unmerged = new Set(ents.filter((e) => e.stage)
+    .map((e) => e.path));
+  const local: string[] = [];
+  const stray: string[] = [];
+  for (const p of sortedKeys(old, nu, idx, unmerged)) {
+    if (same(old.get(p), nu.get(p))) continue;
+    const e = idx.get(p);
+    const cur: Stat | null = e ? [e.mode, e.oid] : null;
+    const disk = fileState(root, p);
+    if (unmerged.has(p)) {
+      local.push(p);
+    } else if (cur === null && !old.has(p)) {
+      if (disk !== null && nu.has(p)) stray.push(p);
+    } else if (!same(cur, old.get(p)) || !same(disk, cur)) {
+      local.push(p);
+    }
+  }
+  if (local.length || stray.length) {
+    const rows: string[] = [];
+    for (const [head, paths] of [[OVERWRITE, local],
+      [UNTRACKED, stray]] as const) {
+      if (!paths.length) continue;
+      rows.push(head, ...paths.map((q) => '\t' + quotePath(q)), '');
+    }
+    throw new GitError([...rows, 'Aborting'].join('\n'), 1);
+  }
+  for (const p of sortedKeys(old, nu)) {
+    if (same(old.get(p), nu.get(p))) continue;
+    const want = nu.get(p);
+    if (want === undefined) {
+      removeFile(root, p);
+      idx.delete(p);
+      continue;
+    }
+    const [mode, oid] = want;
+    writeFile(root, p, mode, objects.readObject(gitdir, oid)[1]);
+    idx.set(p, index.entryFromStat(p, fsPath(root, p), oid));
+  }
+  index.writeIndex(gitdir, [...idx.values()]);
+}
+
+// 바꾼 뒤 남은 변경 — "M\t경로" 줄들(SPEC.md §9.3 끝).
+//
+// 새 HEAD 트리와 견주어 인덱스나 작업 트리가 다른 추적 경로. M 은
+// 내용·모드, D 는 작업 트리에 없음, A 는 인덱스에만 있음.
+export function localChanges(root: string, gitdir: string,
+  headTree: string | null): string[] {
+  const head = treeMap(gitdir, headTree);
+  const rows: string[] = [];
+  for (const e of index.readIndex(gitdir)) {
+    if (e.stage) continue;
+    const disk = fileState(root, e.path);
+    const mine: Stat = [e.mode, e.oid];
+    let letter: string;
+    if (disk === null) letter = 'D';
+    else if (!head.has(e.path)) letter = 'A';
+    else if (!same(head.get(e.path), mine) || !same(disk, mine)) {
+      letter = 'M';
+    } else continue;
+    rows.push(`${letter}\t${quotePath(e.path)}`);
   }
   return rows;
 }
