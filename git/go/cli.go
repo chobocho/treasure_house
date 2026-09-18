@@ -41,6 +41,7 @@ func init() {
 		"commit":      cmdCommit,
 		"log":         cmdLog,
 		"merge-base":  cmdMergeBase,
+		"diff":        cmdDiff,
 	}
 	deleteBranch = deleteMerged
 }
@@ -1019,6 +1020,132 @@ func cmdMergeBase(ctx *Ctx, args []string) (int, error) {
 	}
 	for _, oid := range best {
 		ctx.say("%s\n", oid)
+	}
+	return 0, nil
+}
+
+// ── 8단계: diff ─────────────────────────────────────────────────────
+
+// revTreeMap 은 <rev> 의 트리를 펼쳐 {경로: Blob}.
+func revTreeMap(ctx *Ctx, g, rev string) (map[string]Blob, error) {
+	oid, err := resolve(ctx, rev)
+	if err == nil && oid != "" {
+		oid, err = Peel(g, oid, "tree")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if oid == "" {
+		return nil, Fail(fmt.Sprintf(ambiguous, rev))
+	}
+	return TreeMap(g, oid)
+}
+
+// cmdDiff 는 SPEC.md §11.5 의 네 꼴. --no-index 만 다르면 1 로
+// 끝난다.
+func cmdDiff(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, []string{"--cached", "--no-index"})
+	if err != nil {
+		return 0, err
+	}
+	if f.on["--no-index"] {
+		if len(f.rest) != 2 {
+			return 0, &GitError{"usage: mygit diff --no-index <a> <b>",
+				129}
+		}
+		text := FileDiff(f.rest[0], f.rest[1],
+			DiskSide(ctx.Path(f.rest[0])),
+			DiskSide(ctx.Path(f.rest[1])))
+		ctx.Out.Write(text)
+		if len(text) > 0 {
+			return 1, nil
+		}
+		return 0, nil
+	}
+	root, err := ctx.Root()
+	if err != nil {
+		return 0, err
+	}
+	g := filepath.Join(root, ".git")
+	// 두 쪽의 {경로: Blob}. 작업 트리 쪽은 disk 가 참이다.
+	var a, b map[string]Blob
+	disk := false
+	switch {
+	case len(f.rest) == 2:
+		if a, err = revTreeMap(ctx, g, f.rest[0]); err != nil {
+			return 0, err
+		}
+		if b, err = revTreeMap(ctx, g, f.rest[1]); err != nil {
+			return 0, err
+		}
+	case len(f.rest) > 0:
+		return 0, Fail(fmt.Sprintf(ambiguous, f.rest[0]))
+	case f.on["--cached"]:
+		t, err := headTree(g)
+		if err == nil {
+			a, err = TreeMap(g, t)
+		}
+		if err != nil {
+			return 0, err
+		}
+		fallthrough
+	default:
+		ents, err := ReadIndex(g)
+		if err != nil {
+			return 0, err
+		}
+		idx, conflicted := map[string]Blob{}, map[string]bool{}
+		for _, e := range ents {
+			if e.Stage > 0 {
+				conflicted[e.Path] = true
+			} else {
+				idx[e.Path] = Blob{e.Mode, e.Oid}
+			}
+		}
+		if a != nil {
+			b = idx
+			break
+		}
+		// 작업 트리 ↔ 인덱스: 충돌 경로는 건너뛴다(줄임)
+		a, b, disk = map[string]Blob{}, map[string]Blob{}, true
+		for p, bl := range idx {
+			if conflicted[p] {
+				continue
+			}
+			a[p] = bl
+			if s := DiskSide(filepath.Join(root, p)); s != nil {
+				b[p] = Blob{s.Mode, s.Oid}
+			}
+		}
+	}
+	all := map[string]bool{}
+	for p := range a {
+		all[p] = true
+	}
+	for p := range b {
+		all[p] = true
+	}
+	for _, p := range sortedKeys(all) {
+		oa, ina := a[p]
+		ob, inb := b[p]
+		if ina == inb && oa == ob {
+			continue
+		}
+		var old, new *Side
+		if ina {
+			if old, err = BlobSide(g, oa); err != nil {
+				return 0, err
+			}
+		}
+		switch {
+		case inb && disk:
+			new = DiskSide(filepath.Join(root, p))
+		case inb:
+			if new, err = BlobSide(g, ob); err != nil {
+				return 0, err
+			}
+		}
+		ctx.Out.Write(FileDiff(p, p, old, new))
 	}
 	return 0, nil
 }
