@@ -604,3 +604,25 @@ The user approved every proposal below as-is. Each row is now a decision.
   ~500+ slides instead of ~200. To decide before part 19: full source for all five, or full source
   for Python + excerpts for the four (4-up slides already show every symbol).
 
+
+### Step 6 — go · ts · java · cpp steps 1–12 (2026-09-18, 5d53135 … e9020be)
+
+- Four ports, one commit per step per language (Go and C++ by the orchestrator, TS and Java by one
+  subagent each). Every step RED (stubs, code 99) → GREEN; all 21 scenes on in every language.
+  Tests: go 59 · ts 135 (1 skip) · java 135 (1 skip) · cpp 13 binaries — skips are the 0444 probe.
+- Source lines (non-test): py 3,462 · go 5,497 · ts 3,744 · java 4,342 · cpp 3,963 (hand zlib
+  included) ≈ 21,000. **FULLSRC of all five ≈ 470 slides** — over part 19's whole budget (420).
+  Decide at step 10: Python full source + four-language excerpts is the likely choice.
+- Cross-checks: Go and C++ binaries — same commit ids as Python, `git fsck --strict` clean, their
+  delta packs accepted by `git index-pack --strict` with byte-identical .idx (C++ writes stored
+  blocks; compressed bytes differ by design, SPEC §3.1). Java did the same via mygit.Main.
+- Bugs/contract fixes found while porting: Python merge_trees treated "one side deleted, other
+  unchanged" as modify/delete (new golden scene merge-delete, 0da1c37); merge on an unborn HEAD
+  crashed Python — now `fatal: mygit: nothing to merge into yet` in all five (742ba96, SPEC §12.1);
+  SPEC §8.2 wrongly listed `rm --cached` as quoting paths (real git prints raw); TS entry point
+  and sideband-2 wording fixed (4d87db4).
+- Tooling: test-ts uses a file pattern (node 24 treats a directory argument as a module);
+  test-cpp builds the library objects once (was >2 min per run at step 5).
+- Java note: filenames go through `sun.jnu.encoding=ISO-8859-1` set at the top of main (POSIX
+  locale here is ASCII, so 한글.txt could not be created). Mention it in part 19 as a JDK-specific
+  trick, not a portable API.
