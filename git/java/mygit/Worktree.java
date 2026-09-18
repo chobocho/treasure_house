@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -184,6 +185,127 @@ public final class Worktree {
     tracked.addAll(stages.keySet());
     for (String p : untracked(walkWorktree(root), tracked)) {
       rows.add("?? " + quotePath(p, true));
+    }
+    return rows;
+  }
+
+  static final String OVERWRITE = "error: Your local changes to the "
+      + "following files would be overwritten by checkout:";
+  static final String UNTRACKED = "error: The following untracked "
+      + "working tree files would be overwritten by checkout:";
+
+  // 파일 하나를 쓴다. 0666/0777 로 만들고 umask 를 따른다 — git 과
+  // 같다(SPEC.md §9.3). 있던 파일은 지우고 새로 만든다 — 그래야 실행
+  // 비트가 새 모드를 따른다.
+  static void writeFile(String root, String path, int mode,
+      byte[] data) {
+    Path p = Path.of(root, path);
+    try {
+      Files.createDirectories(p.getParent());
+      Files.deleteIfExists(p);
+      if ((mode & 0100) != 0) {
+        Files.createFile(p, PosixFilePermissions.asFileAttribute(
+            PosixFilePermissions.fromString("rwxrwxrwx")));
+      }
+      Files.write(p, data);
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
+
+  // 파일을 지우고, 그래서 비게 된 디렉터리들도 지운다.
+  static void removeFile(String root, String path) {
+    Path base = Path.of(root);
+    Path p = base.resolve(path);
+    try {
+      Files.deleteIfExists(p);
+      for (Path d = p.getParent(); !d.equals(base)
+          && Fs.list(d.toString()).isEmpty(); d = d.getParent()) {
+        Files.delete(d);
+      }
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
+
+  // 두 갈래 합치기로 작업 트리·인덱스를 old → new 로(SPEC.md §9.3).
+  //
+  // 경로마다: 옛 트리와 새 트리에서 같으면 손대지 않는다(손댄 내용이
+  // 따라온다). 다르면 인덱스가 옛 트리와 같고 작업 트리가 인덱스와
+  // 같아야 한다. 옛 트리에 없던 경로에 추적 안 하는 파일이 있으면
+  // 그것도 막는다. 하나라도 걸리면 아무것도 바꾸지 않고 멈춘다.
+  // O(경로 수 × 해시).
+  public static void checkoutTree(String root, String gitdir,
+      String oldTree, String newTree) {
+    Map<String, Stat> old = treeMap(gitdir, oldTree);
+    Map<String, Stat> nu = treeMap(gitdir, newTree);
+    List<Index.IndexEntry> ents = Index.readIndex(gitdir);
+    Map<String, Index.IndexEntry> idx = new HashMap<>();
+    Set<String> unmerged = new HashSet<>();
+    for (Index.IndexEntry e : ents) {
+      if (e.stage == 0) idx.put(e.path, e);
+      else unmerged.add(e.path);
+    }
+    TreeSet<String> changed = new TreeSet<>(old.keySet());
+    changed.addAll(nu.keySet());
+    changed.removeIf(p -> java.util.Objects.equals(old.get(p),
+        nu.get(p)));
+    List<String> local = new ArrayList<>();
+    List<String> stray = new ArrayList<>();
+    for (String p : changed) {
+      Index.IndexEntry e = idx.get(p);
+      Stat cur = e == null ? null : new Stat(e.mode, e.oid);
+      Stat disk = fileState(root, p);
+      if (unmerged.contains(p)) {
+        local.add(p);
+      } else if (cur == null && old.get(p) == null) {
+        if (disk != null && nu.get(p) != null) stray.add(p);
+      } else if (!java.util.Objects.equals(cur, old.get(p))
+          || !java.util.Objects.equals(disk, cur)) {
+        local.add(p);
+      }
+    }
+    if (!local.isEmpty() || !stray.isEmpty()) {
+      StringBuilder sb = new StringBuilder();
+      for (var group : List.of(Map.entry(OVERWRITE, local),
+          Map.entry(UNTRACKED, stray))) {
+        if (group.getValue().isEmpty()) continue;
+        sb.append(group.getKey()).append('\n');
+        group.getValue().forEach(q ->
+            sb.append('\t').append(quotePath(q)).append('\n'));
+        sb.append('\n');
+      }
+      throw new GitError(sb + "Aborting", 1);
+    }
+    for (String p : changed) {
+      Stat n = nu.get(p);
+      if (n == null) {
+        removeFile(root, p);
+        idx.remove(p);
+        continue;
+      }
+      writeFile(root, p, n.mode(),
+          Objects.readObject(gitdir, n.oid()).body());
+      idx.put(p, Index.entryFromStat(p, Fs.join(root, p), n.oid()));
+    }
+    Index.writeIndex(gitdir, new ArrayList<>(idx.values()));
+  }
+
+  // 바꾼 뒤 남은 변경 — "M\t경로" 줄들(SPEC.md §9.3 끝).
+  //
+  // 새 HEAD 트리와 견주어 인덱스나 작업 트리가 다른 추적 경로. M 은
+  // 내용·모드, D 는 작업 트리에 없음, A 는 인덱스에만 있음.
+  public static List<String> localChanges(String root, String gitdir,
+      String headTree) {
+    Map<String, Stat> head = treeMap(gitdir, headTree);
+    List<String> rows = new ArrayList<>();
+    for (Index.IndexEntry e : Index.readIndex(gitdir)) {
+      if (e.stage != 0) continue;
+      Stat st = new Stat(e.mode, e.oid);
+      Stat disk = fileState(root, e.path);
+      char letter = disk == null ? 'D' : !head.containsKey(e.path) ? 'A'
+          : !st.equals(head.get(e.path)) || !st.equals(disk) ? 'M' : 0;
+      if (letter != 0) rows.add(letter + "\t" + quotePath(e.path));
     }
     return rows;
   }

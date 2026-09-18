@@ -736,6 +736,120 @@ public final class Cli {
     return 0;
   }
 
+  // ── 9단계: switch · checkout ──────────────────────────────────────
+
+  // "<7글자> <제목>" — HEAD is now at … 의 꼬리.
+  static String summaryLine(Ctx ctx, String oid) {
+    return oid.substring(0, 7) + " " + Commit.subjectOf(Commit
+        .parseCommit(Objects.readObject(ctx.gitdir(), oid).body())
+        .message());
+  }
+
+  // 작업 트리를 oid 로 옮기고 HEAD 를 branch(null 이면 분리)로
+  // (SPEC.md §9.3).
+  //
+  // 안내는 표준 오류에, 남은 변경 알림은 표준 출력에. reflog 는
+  // "checkout: moving from <옛> to <arg 그대로>" — 옛 쪽이 분리
+  // 상태면 40글자다(§6.3). fresh 는 switch -c 로 막 만든 브랜치 —
+  // 지금 커밋에서 만들었으면 git 이 작업 트리를 건드리지 않고 남은
+  // 변경도 알리지 않는다(golden/scen/checkout.scn).
+  static int moveHead(Ctx ctx, String branch, String oid, String arg,
+      boolean fresh) {
+    String g = ctx.gitdir();
+    Refs.Head old = Refs.readHead(g);
+    String oldTree = old.oid() == null ? null
+        : Refs.peel(g, old.oid(), "tree");
+    String newTree = Refs.peel(g, oid, "tree");
+    Worktree.checkoutTree(ctx.root(), g, oldTree, newTree);
+    // 분리 상태를 떠나되 커밋이 바뀔 때만 — 같은 커밋이면 git 도
+    // 찍지 않는다
+    if (old.branch() == null && old.oid() != null
+        && !oid.equals(old.oid())) {
+      ctx.warn("Previous HEAD position was "
+          + summaryLine(ctx, old.oid()) + "\n");
+    }
+    Refs.setHead(g, branch == null ? oid : branch);
+    String from = old.branch() == null ? old.oid()
+        : old.branch().substring(HEADS.length());
+    Refs.appendReflog(g, "HEAD", old.oid(), oid, ident(ctx),
+        "checkout: moving from " + from + " to " + arg);
+    if (!fresh || !oid.equals(old.oid())) {
+      Worktree.localChanges(ctx.root(), g, newTree)
+          .forEach(row -> ctx.say(row + "\n"));
+    }
+    ctx.warn(branch == null
+        ? "HEAD is now at " + summaryLine(ctx, oid) + "\n"
+        : fresh ? "Switched to a new branch '" + arg + "'\n"
+        : branch.equals(old.branch()) ? "Already on '" + arg + "'\n"
+        : "Switched to branch '" + arg + "'\n");
+    return 0;
+  }
+
+  static int createAndSwitch(Ctx ctx, String name, String start) {
+    String g = ctx.gitdir();
+    if (!Refs.validBranchName(name)) {
+      throw new GitError("fatal: '" + name
+          + "' is not a valid branch name");
+    }
+    if (Refs.resolveRef(g, HEADS + name) != null) {
+      throw new GitError("fatal: a branch named '" + name
+          + "' already exists");
+    }
+    if (Refs.readHead(g).oid() == null && start == null) {
+      // 첫 커밋 전 — HEAD 가 가리키는 이름만 바꾼다
+      Refs.setHead(g, HEADS + name);
+      ctx.warn("Switched to a new branch '" + name + "'\n");
+      return 0;
+    }
+    String arg = start == null ? "HEAD" : start;
+    String oid = resolve(ctx, arg, "commit");
+    if (oid == null) {
+      throw new GitError("fatal: invalid reference: " + arg);
+    }
+    Refs.updateRef(g, HEADS + name, oid, null,
+        "branch: Created from " + arg, ident(ctx));
+    return moveHead(ctx, HEADS + name, oid, name, true);
+  }
+
+  static int switchTo(Ctx ctx, List<String> args) {
+    Flags f = parseFlags(args, List.of(), "-c");
+    if (f.vals.containsKey("-c")) {
+      return createAndSwitch(ctx, f.vals.get("-c"),
+          f.rest.isEmpty() ? null : f.rest.get(0));
+    }
+    if (f.rest.size() != 1) {
+      throw new GitError("usage: mygit switch [-c] <branch>", 129);
+    }
+    String name = f.rest.get(0);
+    String oid = Refs.resolveRef(ctx.gitdir(), HEADS + name);
+    if (oid != null) {
+      return moveHead(ctx, HEADS + name, oid, name, false);
+    }
+    if (resolve(ctx, name) != null) {
+      throw new GitError("fatal: a branch is expected, got commit '"
+          + name + "'");
+    }
+    throw new GitError("fatal: invalid reference: " + name);
+  }
+
+  static int checkout(Ctx ctx, List<String> args) {
+    List<String> rest = parseFlags(args, List.of()).rest;
+    if (rest.size() != 1) {
+      throw new GitError("usage: mygit checkout <branch|commit>", 129);
+    }
+    String name = rest.get(0);
+    String oid = Refs.resolveRef(ctx.gitdir(), HEADS + name);
+    if (oid != null) {
+      return moveHead(ctx, HEADS + name, oid, name, false);
+    }
+    oid = resolve(ctx, name, "commit");
+    if (oid == null) {
+      throw new GitError("error: pathspec '" + name
+          + "' did not match any file(s) known to git", 1);
+    }
+    return moveHead(ctx, null, oid, name, false);
+  }
+
   // ── 틀 ────────────────────────────────────────────────────────────
   // 명령 이름 → 함수. 단계가 늘 때마다 한 줄씩 는다.
   private static Command command(String name) {
@@ -755,6 +869,8 @@ public final class Cli {
       case "log" -> Cli::log;
       case "merge-base" -> Cli::mergeBase;
       case "diff" -> Cli::diff;
+      case "switch" -> Cli::switchTo;
+      case "checkout" -> Cli::checkout;
       default -> null;
     };
   }
