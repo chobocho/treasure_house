@@ -13,6 +13,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 // 명령줄 (SPEC.md §1 · §9) — 인자를 읽고, 모듈을 부르고, 찍는다.
 //
@@ -491,7 +493,7 @@ public final class Cli {
     List<Index.IndexEntry> ents = Index.readIndex(g);
     Set<String> have = new HashSet<>();
     ents.forEach(e -> have.add(e.path));
-    java.util.TreeSet<String> gone = new java.util.TreeSet<>();
+    TreeSet<String> gone = new TreeSet<>();
     for (String spec : f.rest) {
       String rel = relPath(ctx, spec);
       if (!have.contains(rel)) throw noMatch(spec);
@@ -659,6 +661,81 @@ public final class Cli {
     return 0;
   }
 
+  // ── 8단계: diff ───────────────────────────────────────────────────
+
+  // 디스크의 파일 한쪽. 없으면 null.
+  static Diff.Side diskSide(String path) {
+    Worktree.Stat st = Worktree.fileState(path, "");
+    return st == null ? null
+        : new Diff.Side(st.mode(), st.oid(), Fs.read(path));
+  }
+
+  // <rev> 의 트리를 펼쳐 {경로: (모드, 이름)}.
+  static Map<String, Worktree.Stat> revTree(Ctx ctx, String rev) {
+    String t = resolve(ctx, rev, "tree");
+    if (t == null) throw new GitError(AMBIGUOUS.formatted(rev));
+    return Worktree.treeMap(ctx.gitdir(), t);
+  }
+
+  // SPEC.md §11.5 의 네 꼴. --no-index 만 다르면 1 로 끝난다.
+  static int diff(Ctx ctx, List<String> args) {
+    Flags f = parseFlags(args, List.of("--cached", "--no-index"));
+    if (f.on.contains("--no-index")) {
+      if (f.rest.size() != 2) {
+        throw new GitError("usage: mygit diff --no-index <a> <b>", 129);
+      }
+      String text = Diff.fileDiff(f.rest.get(0), f.rest.get(1),
+          diskSide(ctx.path(f.rest.get(0))),
+          diskSide(ctx.path(f.rest.get(1))));
+      ctx.say(text);
+      return text.isEmpty() ? 0 : 1;
+    }
+    String g = ctx.gitdir();
+    boolean worktree = f.rest.isEmpty() && !f.on.contains("--cached");
+    Map<String, Worktree.Stat> a;
+    Map<String, Worktree.Stat> b = new TreeMap<>();
+    if (f.rest.size() == 2) {
+      a = revTree(ctx, f.rest.get(0));
+      b = revTree(ctx, f.rest.get(1));
+    } else if (f.rest.isEmpty()) {
+      // 인덱스(단계 0)가 한쪽 — --cached 면 새 쪽, 아니면 옛 쪽
+      List<Index.IndexEntry> ents = Index.readIndex(g);
+      Set<String> unmerged = new HashSet<>();
+      ents.stream().filter(e -> e.stage != 0)
+          .forEach(e -> unmerged.add(e.path));
+      for (Index.IndexEntry e : ents) {
+        if (!unmerged.contains(e.path)) {     // 충돌 경로는 건너뛴다
+          b.put(e.path, new Worktree.Stat(e.mode, e.oid));
+        }
+      }
+      if (worktree) {
+        a = b;
+        b = new TreeMap<>();
+        for (String p : a.keySet()) {
+          Worktree.Stat st = Worktree.fileState(ctx.root(), p);
+          if (st != null) b.put(p, st);
+        }
+      } else {
+        String head = Refs.readHead(g).oid();
+        a = head == null ? Map.of() : revTree(ctx, head);
+      }
+    } else {
+      throw new GitError(AMBIGUOUS.formatted(f.rest.get(0)));
+    }
+    TreeSet<String> paths = new TreeSet<>(a.keySet());
+    paths.addAll(b.keySet());
+    for (String p : paths) {
+      Worktree.Stat o = a.get(p);
+      Worktree.Stat n = b.get(p);
+      if (java.util.Objects.equals(o, n)) continue;
+      ctx.say(Diff.fileDiff(p, p,
+          o == null ? null : Diff.blobSide(g, o.mode(), o.oid()),
+          n == null ? null : worktree ? diskSide(Fs.join(ctx.root(), p))
+              : Diff.blobSide(g, n.mode(), n.oid())));
+    }
+    return 0;
+  }
+
   // ── 틀 ────────────────────────────────────────────────────────────
   // 명령 이름 → 함수. 단계가 늘 때마다 한 줄씩 는다.
   private static Command command(String name) {
@@ -677,6 +754,7 @@ public final class Cli {
       case "commit" -> Cli::commit;
       case "log" -> Cli::log;
       case "merge-base" -> Cli::mergeBase;
+      case "diff" -> Cli::diff;
       default -> null;
     };
   }
