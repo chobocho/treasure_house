@@ -161,6 +161,12 @@ def record(cap, outdir, date, runner, force=False):
     return entry
 
 
+# srcpin 의 경로 오류와 파이썬 예외. 의도한 실패(exit≠0)는 많아서
+# 종료 코드로는 못 가리고, 이 도구들의 실패 문구로 가린다
+TOOL_FAIL = ('에 맞는 파일이', '핀 커밋에 없다',
+             'Traceback (most recent')
+
+
 def check(outdir):
     """out/ 의 캡처가 매니페스트·폭·개인정보 규칙을 지키는가."""
     bad = []
@@ -182,6 +188,10 @@ def check(outdir):
             if ctl:
                 bad.append('out/%s:%d 제어 문자 %r — HTML 에 못 싣는다'
                            % (n, no, ctl[0]))
+            # 도구가 실패한 채 캡처된 줄 — 덱에 오류 문구가 실린다
+            if any(f in line for f in TOOL_FAIL):
+                bad.append('out/%s:%d 도구 실패가 캡처됐다: %s'
+                           % (n, no, line.strip()[:40]))
             w = cells(line.expandtabs(4))
             if w > MAX_COLS:
                 bad.append('out/%s:%d %d칸 (최대 %d)'
@@ -545,8 +555,7 @@ CAPTURES = [
     # 14부 — 매니페스트가 남에게 여는 문과 그 자물쇠
     Capture('src_security', 'termux', 'stable', [
         S('권한·authority 줄', "python3 deck/srcpin.py grep "
-          "'termux-app:*/main/AndroidManifest.xml' "
-          "'.*(ermission=|authorities|Level).*'"),
+          "'%s' '.*(ission=|ities=|Level).*'" % MANI),
     ]),
     # 14부 — 이 덱의 개인정보 검사가 무엇을 바꾸고 무엇을 막는가.
     # 예시는 문서의 예시값(공개 DNS·가짜 번호)만 쓴다

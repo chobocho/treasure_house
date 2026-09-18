@@ -199,6 +199,19 @@ class CheckTest(unittest.TestCase):
         self.man({'a.txt': {'kind': 'stable', 'side': 'termux'}})
         self.assertIn('phone', run_all.check(self.d)[0])
 
+    def test_tool_failure_in_capture(self):
+        # 소스 캡처의 도구가 실패한 채 실리면 안 된다 — 14부 리뷰에서
+        # srcpin 의 glob 이 파일 넷에 맞아 오류 문구가 덱에 실렸다
+        self.put('a.txt', '$ python3 deck/srcpin.py grep x y\n'
+                 'termux-app:*/x.xml 에 맞는 파일이 4개\n')
+        self.put('b.txt', 'Traceback (most recent call last):\n')
+        self.man({'a.txt': {'kind': 'stable', 'side': 'termux'},
+                  'b.txt': {'kind': 'stable', 'side': 'termux'}})
+        bad = run_all.check(self.d)
+        self.assertEqual(len(bad), 2)
+        self.assertIn('a.txt:2', bad[0])
+        self.assertIn('b.txt:1', bad[1])
+
     def test_generated_tables_are_not_captures(self):
         self.put('tbl_x.html', '<table></table>\n')
         self.man({})

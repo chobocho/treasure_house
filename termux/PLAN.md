@@ -943,3 +943,19 @@ The user approved every recommendation below as-is. Each row is now a decision.
   execution-environment doc's section numbers were one level off on 5 slides + claims; pwd.h
   lines; TERM source; pacman block; NDK path), 교차참조 11 (wrong part numbers), 표기 4.
   The apt-refuses-root motive is no longer 미확인 — the wiki states it.
+
+### Step 13 — 리뷰 2차 (2026-09-18)
+
+- Parts 9–16 + the three demo slides read by one subagent from a different angle (flow, prose ↔
+  capture, cross-references, Korean, demo wording); parts 0–8 given a mechanical Korean lint by me
+  (only false positives). 23 findings, all re-verified:
+  - **Capture failure shipped**: `src_security` (14부) was a failed srcpin grep (glob matched four
+    manifests) and the slide described lines that were not there. Fixed the capture (exact path)
+    and, test first, `run_all.check` now rejects captures containing tool-failure text
+    (`에 맞는 파일이` · `핀 커밋에 없다` · Python tracebacks) — exit codes cannot tell, many captures
+    fail on purpose.
+  - 사실오류 6 (`-p` is used when port redirection is on; /proc 9 + one empty /sys dir, not 10;
+    PROOT_NO_SECCOMP hint fires on execve EPERM; low-port wall has exceptions on this device;
+    30-day wording; Boot schedules rather than runs in order), 캡처불일치 5, 교차참조 10,
+    한국어 1 ("장" vs neighbouring slide), 데모문구 1.
+- Pass 2 found 23 (> 20) → by the plan's rule a third pass is warranted.
