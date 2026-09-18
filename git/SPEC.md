@@ -1069,8 +1069,8 @@ B·O·T 를 §11.1 의 줄로 나눈다.
    (`merge.conflictStyle=merge`, 표지는 7글자.) 충돌 안의 마지막 줄에 줄바꿈이
    없는 입력은 범위 밖이다 — `golden/scen/merge-*.scn` 의 모든 파일은 `\n` 으로 끝난다.
 
-`golden/scen/merge-*.scn` 의 13 장면(PLAN.md §3.1 10단계의 "10 경우" 에 fast-
-forward·충돌 풀기·dev 로 합치기를 더했다)은 진짜 `git merge` 가 만든 작업 트리
+`golden/scen/merge-*.scn` 의 14 장면(PLAN.md §3.1 10단계의 "10 경우" 에 fast-
+forward·충돌 풀기·dev 로 합치기·한쪽만 지운 경로를 더했다)은 진짜 `git merge` 가 만든 작업 트리
 파일·인덱스(`stage`)·`MERGE_MSG`·머지 커밋 이름(`log`)을 기록한다. mygit 의
 결과는 그 넷과 바이트까지 같아야 한다.
 

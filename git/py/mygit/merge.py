@@ -13,6 +13,7 @@ from mygit import GitError, objects
 from mygit.diff import build_changes, edit_flags, split_lines
 
 JOIN = 3                         # 이만큼 가까운 충돌은 하나로 붙인다
+UNDECIDED = object()             # 세 줄 규칙이 못 고름(None 은 "없음")
 
 
 def _changes(a, b):
@@ -147,17 +148,19 @@ def merge_trees(gitdir, base, ours, theirs, label):
     {단계: (모드, 이름)}, 모드). 모드는 내용과 따로 같은 세 줄 규칙.
     """
     def pick(bv, ov, tv):
+        """세 줄 규칙. 없음(None)도 값이다 — 한쪽만 지웠으면 지움이
+        이긴다. 규칙이 못 고르면 UNDECIDED."""
         if ov == tv or bv == tv:
             return ov
         if bv == ov:
             return tv
-        return None
+        return UNDECIDED
 
     result, notes, conflicts = {}, [], []
     for p in sorted(set(base) | set(ours) | set(theirs)):
         bv, ov, tv = base.get(p), ours.get(p), theirs.get(p)
         whole = pick(bv, ov, tv)
-        if whole is not None or (ov is None and tv is None):
+        if whole is not UNDECIDED:
             result[p] = ('clean',) + whole if whole else ('gone',)
             continue
         if ov is None or tv is None:
@@ -165,7 +168,7 @@ def merge_trees(gitdir, base, ours, theirs, label):
                            '(modify/delete) in %s'
                            % p.decode('utf-8', 'replace'))
         mode = pick(bv[0] if bv else None, ov[0], tv[0])
-        if mode is None:
+        if mode is UNDECIDED:
             name = p.decode('utf-8', 'replace')
             raise GitError('fatal: mygit: unsupported merge case '
                            '(mode) in %s' % name)

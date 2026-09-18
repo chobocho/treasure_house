@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """3-way 파일 합치기의 시험 — SPEC.md §12.3, 10단계.
 
-큰 오라클은 golden/scen/merge-*.scn 13장면(진짜 git merge 의 작업 트리
+큰 오라클은 golden/scen/merge-*.scn 14장면(진짜 git merge 의 작업 트리
 파일·인덱스·MERGE_MSG·머지 커밋 이름)이다. 여기서는 merge3 하나를
 따로 부른다 — 장면의 세 판을 그대로 넣고, 장면에서 git 이 남긴 파일
 내용과 같은지 본다. 규칙마다 한 장면이 증거다.

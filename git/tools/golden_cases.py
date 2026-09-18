@@ -338,6 +338,33 @@ mygit commit -m "merge t by hand"
 mygit log --oneline
 mygit reflog
 '''
+
+# 한쪽만 지운 경로 — B = O 면 T, B = T 면 O, 지운 것도 같다(§12.2)
+SCENARIOS['merge-delete'] = r'''
+mygit init
+write a text:a\n
+write b text:b\n
+write d text:d\n
+mygit add .
+mygit commit -m base
+mygit branch t
+mygit switch t
+@date 1700000060
+rm d
+write c text:c\n
+mygit add .
+mygit commit -m theirs
+mygit switch main
+@date 1700000120
+rm b
+mygit add .
+mygit commit -m ours
+@date 1700000180
+mygit merge t
+stage
+mygit status
+mygit log --oneline
+'''
 SCENARIOS['merge-into-dev'] = SCENARIOS['merge-other-file'].replace(
     'mygit init\n', 'mygit init\nmygit switch -c dev\n', 1).replace(
     'mygit switch main', 'mygit switch dev')
