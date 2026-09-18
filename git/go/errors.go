@@ -6,7 +6,7 @@ package mygit
 
 // Step 은 지금까지 만든 부록 A 의 단계다. 장면 시험은 자기 단계가
 // 오기 전에는 "N단계에서 켜진다" 는 이유로 건너뛴다.
-const Step = 5
+const Step = 6
 
 // GitError 는 SPEC.md §15 의 오류 한 가지 — 메시지와 종료 코드.
 // 출력은 cli 만 한다. 다른 코드는 이것을 돌려줄 뿐이다.

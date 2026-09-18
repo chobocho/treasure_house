@@ -33,6 +33,11 @@ func init() {
 		"branch":      cmdBranch,
 		"tag":         cmdTag,
 		"reflog":      cmdReflog,
+		"add":         cmdAdd,
+		"rm":          cmdRm,
+		"status":      cmdStatus,
+		"write-tree":  cmdWriteTree,
+		"commit":      cmdCommit,
 	}
 }
 
@@ -556,6 +561,287 @@ func cmdReflog(ctx *Ctx, args []string) (int, error) {
 		e := ents[len(ents)-1-k]
 		ctx.say("%s %s@{%d}: %s\n", e.New[:7], name, k, e.Msg)
 	}
+	return 0, nil
+}
+
+// ── 6단계: add · rm --cached · status · write-tree · commit ────────
+
+// relPath 는 명령줄 경로 → 작업 트리 뿌리에서의 경로(” 은 뿌리).
+func relPath(ctx *Ctx, spec string) (string, error) {
+	root, err := ctx.Root()
+	if err != nil {
+		return "", err
+	}
+	p, err := filepath.Rel(root, ctx.Path(spec))
+	if err != nil {
+		return "", err
+	}
+	if p == "." {
+		return "", nil
+	}
+	return filepath.ToSlash(p), nil
+}
+
+func under(path, rel string) bool {
+	return rel == "" || path == rel || strings.HasPrefix(path, rel+"/")
+}
+
+// cmdAdd 는 pathspec 아래의 파일을 올리고, 사라진 파일은 뺀다(§9).
+// 모든 pathspec 을 먼저 검사한다 — 하나라도 맞는 것이 없으면 아무것도
+// 바꾸지 않고 멈춘다(git 과 같다).
+func cmdAdd(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, nil)
+	if err != nil {
+		return 0, err
+	}
+	root, err := ctx.Root()
+	if err != nil {
+		return 0, err
+	}
+	g, _ := ctx.Gitdir()
+	ents, err := ReadIndex(g)
+	if err != nil {
+		return 0, err
+	}
+	files := WalkWorktree(root)
+	type hit struct {
+		files []string
+		idx   map[string]bool
+	}
+	var plan []hit
+	for _, spec := range f.rest {
+		rel, err := relPath(ctx, spec)
+		if err != nil {
+			return 0, err
+		}
+		h := hit{idx: map[string]bool{}}
+		for _, p := range files {
+			if under(p, rel) {
+				h.files = append(h.files, p)
+			}
+		}
+		for _, e := range ents {
+			if under(e.Path, rel) {
+				h.idx[e.Path] = true
+			}
+		}
+		if len(h.files) == 0 && len(h.idx) == 0 {
+			return 0, Fail("fatal: pathspec '" + spec +
+				"' did not match any files")
+		}
+		plan = append(plan, h)
+	}
+	byPath := map[string][]*IndexEntry{}
+	for _, e := range ents {
+		byPath[e.Path] = append(byPath[e.Path], e)
+	}
+	for _, h := range plan {
+		for _, p := range h.files {
+			full := filepath.Join(root, p)
+			data, err := os.ReadFile(full)
+			if err != nil {
+				return 0, err
+			}
+			oid, err := WriteObject(g, "blob", data)
+			if err != nil {
+				return 0, err
+			}
+			e, err := EntryFromStat(p, full, oid)
+			if err != nil {
+				return 0, err
+			}
+			byPath[p] = []*IndexEntry{e}
+			delete(h.idx, p)
+		}
+		for p := range h.idx {
+			delete(byPath, p)
+		}
+	}
+	var out []*IndexEntry
+	for _, es := range byPath {
+		out = append(out, es...)
+	}
+	return 0, WriteIndex(g, out)
+}
+
+func cmdRm(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, []string{"--cached"})
+	if err != nil {
+		return 0, err
+	}
+	if !f.on["--cached"] {
+		return 0, Fail("fatal: mygit: only rm --cached is supported")
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	ents, err := ReadIndex(g)
+	if err != nil {
+		return 0, err
+	}
+	have, gone := map[string]bool{}, map[string]bool{}
+	for _, e := range ents {
+		have[e.Path] = true
+	}
+	for _, spec := range f.rest {
+		rel, err := relPath(ctx, spec)
+		if err != nil {
+			return 0, err
+		}
+		if !have[rel] {
+			return 0, Fail("fatal: pathspec '" + spec +
+				"' did not match any files")
+		}
+		gone[rel] = true
+	}
+	for _, p := range sortedKeys(gone) {
+		ctx.say("rm '%s'\n", p)
+	}
+	var keep []*IndexEntry
+	for _, e := range ents {
+		if !gone[e.Path] {
+			keep = append(keep, e)
+		}
+	}
+	return 0, WriteIndex(g, keep)
+}
+
+func cmdStatus(ctx *Ctx, args []string) (int, error) {
+	if _, err := parseFlags(args, []string{"--porcelain", "-s",
+		"--short"}); err != nil {
+		return 0, err
+	}
+	root, err := ctx.Root()
+	if err != nil {
+		return 0, err
+	}
+	rows, err := Status(root, filepath.Join(root, ".git"))
+	for _, r := range rows {
+		ctx.say("%s\n", r)
+	}
+	return 0, err
+}
+
+// indexTree 는 인덱스(단계 0) → 트리 이름. 충돌 경로가 있으면 쓸 수
+// 없다.
+func indexTree(g string) (string, error) {
+	ents, err := ReadIndex(g)
+	if err != nil {
+		return "", err
+	}
+	var pes []PathEntry
+	for _, e := range ents {
+		if e.Stage > 0 {
+			return "", Fail("error: Committing is not possible " +
+				"because you have unmerged files.\n" +
+				"fatal: Exiting because of an unresolved conflict.")
+		}
+		pes = append(pes, PathEntry{fmt.Sprintf("%o", e.Mode), e.Oid,
+			e.Path})
+	}
+	return WriteTree(g, pes)
+}
+
+func cmdWriteTree(ctx *Ctx, args []string) (int, error) {
+	if _, err := parseFlags(args, nil); err != nil {
+		return 0, err
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	t, err := indexTree(g)
+	if err != nil {
+		return 0, err
+	}
+	ctx.say("%s\n", t)
+	return 0, nil
+}
+
+// cmdCommit 은 트리를 쓰고, 커밋하고, 브랜치를 옮긴다(SPEC.md §9 ·
+// §6.3). 부모는 HEAD 와, 머지를 마무리하는 중이면 MERGE_HEAD. 출력은
+// git 의 요약 첫 줄만 — Author 줄과 변경 통계는 줄임이다.
+func cmdCommit(ctx *Ctx, args []string) (int, error) {
+	var msgs []string
+	for i := 0; i < len(args); i++ {
+		if args[i] != "-m" {
+			return 0, Fail("fatal: mygit: unknown option '" +
+				args[i] + "'")
+		}
+		i++
+		if i < len(args) {
+			msgs = append(msgs, args[i])
+		} else {
+			msgs = append(msgs, "")
+		}
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	branch, head, err := ReadHead(g)
+	if err != nil {
+		return 0, err
+	}
+	mergeHead, _ := ResolveRef(g, "MERGE_HEAD")
+	t, err := indexTree(g)
+	if err != nil {
+		return 0, err
+	}
+	if head != "" && mergeHead == "" {
+		if ht, _ := Peel(g, head, "tree"); ht == t {
+			ctx.say("nothing to commit\n")
+			return 1, nil
+		}
+	}
+	msg := CleanupMessage(strings.Join(msgs, "\n\n"))
+	if msg == "" {
+		return 0, &GitError{"Aborting commit due to empty commit " +
+			"message.", 1}
+	}
+	c := &Commit{Tree: t, Message: msg}
+	for _, p := range []string{head, mergeHead} {
+		if p != "" {
+			c.Parents = append(c.Parents, p)
+		}
+	}
+	if c.Author, err = ident(ctx, "AUTHOR"); err != nil {
+		return 0, err
+	}
+	if c.Committer, err = ident(ctx, "COMMITTER"); err != nil {
+		return 0, err
+	}
+	oid, err := WriteObject(g, "commit", SerializeCommit(c))
+	if err != nil {
+		return 0, err
+	}
+	subj := SubjectOf(msg)
+	kind := "commit"
+	if head == "" {
+		kind = "commit (initial)"
+	} else if mergeHead != "" {
+		kind = "commit (merge)"
+	}
+	target := branch
+	if target == "" {
+		target = "HEAD"
+	}
+	if err := UpdateRef(g, target, oid, head, kind+": "+subj,
+		c.Committer); err != nil {
+		return 0, err
+	}
+	for _, f := range []string{"MERGE_HEAD", "MERGE_MSG"} {
+		os.Remove(filepath.Join(g, f))
+	}
+	where, root := "detached HEAD", ""
+	if branch != "" {
+		where = strings.TrimPrefix(branch, "refs/heads/")
+	}
+	if head == "" {
+		root = " (root-commit)"
+	}
+	ctx.say("[%s%s %s] %s\n", where, root, oid[:7], subj)
 	return 0, nil
 }
 

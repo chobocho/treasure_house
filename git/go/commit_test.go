@@ -152,8 +152,7 @@ func TestS51Init(t *testing.T) {
 		}
 	}
 	dev := []byte("ref: refs/heads/dev\n")
-	os.WriteFile(filepath.Join(g, "HEAD"), dev,
-		0o644)
+	os.WriteFile(filepath.Join(g, "HEAD"), dev, 0o644)
 	_, out, _ = s.mygit("init")
 	head, _ = os.ReadFile(filepath.Join(g, "HEAD"))
 	if out != "Reinitialized existing Git repository in "+g+"/\n" ||

@@ -38,15 +38,7 @@ func newSandbox(t *testing.T, repo bool) *sandbox {
 	// 위로 올라가다 이 덱의 저장소를 찾지 않게 (SPEC.md §1.1)
 	s.env = osEnv()
 	s.env["GIT_CEILING_DIRECTORIES"] = tmp
-	t.Cleanup(func() {
-		filepath.Walk(tmp, func(p string, i os.FileInfo,
-			e error) error {
-			if e == nil && !i.IsDir() {
-				os.Chmod(p, 0o644)
-			}
-			return nil
-		})
-	})
+	t.Cleanup(func() { chmodAll(tmp) })
 	return s
 }
 
@@ -193,4 +185,14 @@ func TestS14OutsideRepo(t *testing.T) {
 		err != "mygit: 'frobnicate' is not a mygit command.\n" {
 		t.Fatalf("%d %q", code, err)
 	}
+}
+
+// chmodAll 은 0444 객체를 지울 수 있게 되돌린다(정리 전에).
+func chmodAll(dir string) {
+	filepath.Walk(dir, func(p string, i os.FileInfo, e error) error {
+		if e == nil && !i.IsDir() {
+			os.Chmod(p, 0o644)
+		}
+		return nil
+	})
 }
