@@ -3,8 +3,11 @@
 // golden/ 은 진짜 git 이 만든 기준 바이트다(SPEC.md §16.2). 시험은 git
 // 을 부르지 않고 이 파일들만 읽는다. 재료 문법은 SPEC.md §2.1·§16.4
 // 이고, tools/make_golden.py 의 make() 와 같은 규칙이다.
+import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
+import { GitError } from '../src/errors';
 
 // 짓고 나면 이 파일은 build/ts/tests/ 에 있다 — git/ 은 셋 위다
 export const GOLDEN = path.resolve(__dirname, '../../../golden');
@@ -85,4 +88,30 @@ export function make(recipe: string): Buffer {
       return read(arg);
   }
   throw new Error(`모르는 재료: ${recipe}`);
+}
+
+// fn() 이 **진짜** GitError 를 던지는가.
+//
+// 껍데기(notImplemented)도 GitError 를 던지므로 그냥 assert.throws 로
+// 보면 구현 전에 이미 통과한다 — 거짓 초록이다. 코드 99 는 "아직 안
+// 짰다" 라서 여기서 떨어뜨린다. 던져진 오류를 돌려준다.
+export function assertGitError(fn: () => unknown): GitError {
+  let got: unknown = null;
+  try {
+    fn();
+  } catch (e) {
+    got = e;
+  }
+  assert.ok(got instanceof GitError, `GitError 가 아니다: ${got}`);
+  assert.notEqual(got.code, 99, 'not implemented');
+  return got;
+}
+
+// 시험마다 새 임시 디렉터리. 지우는 쪽은 rmTree.
+export function tempdir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'mygit-'));
+}
+
+export function rmTree(dir: string): void {
+  fs.rmSync(dir, { recursive: true, force: true });
 }
