@@ -912,3 +912,13 @@ The user approved every recommendation below as-is. Each row is now a decision.
   100 %; `deck/pending.txt` is now empty), quiz index, licence note.
 - Part 16: map, 12 misconceptions each linked to the slide that refutes it, 8 synthesis quizzes.
 - Total 584 slides — well under the 1,800 band; per the budget note nothing was padded.
+
+### Step 9 — 데모 (2026-09-18)
+
+- `deck/demos.js`: three demos, each transcribing a rule shown on the same or previous slide —
+  `d-prefix` (termux-exec path rule, TermuxFile.c 301–341: `/bin`, `/usr/bin`, `/bin/` at index 0
+  or 4), `d-pkg` (pkg.in 409–425 apt branch, first match wins), `d-phantom` (limit 32; default
+  16 from `procs_now`). `check_deck.js` CASES: 12, written first (RED: demos missing).
+- Deviation: PLAN §4 listed ten demos; the other seven (API explorer, port checker, .deb linter,
+  timeline scrubber, install-source helper, release lookup, shebang doctor) are left out — their
+  content is already a generated table or a capture on the slide, and a demo would only restate it.

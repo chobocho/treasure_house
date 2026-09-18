@@ -1,3 +1,10 @@
+### [2026-09-18 05:36] Termux 덱 — 데모 3개(경로 번역기·pkg 해석기·팬텀 계산기)
+- **기획:** 같은 장의 소스 발췌 규칙을 그대로 옮긴 손으로 만져 보는 데모. 기댓값은 발췌와 캡처에서.
+- **TC:** check_deck.js CASES 12건 먼저 — /usr/bin·/system/bin·/bin·상대 경로, in·info·update·upgrade·rm·모르는 명령, 16·40개.
+- **개발:** `termux/deck/demos.js`, `termux/deck/check_deck.js`, `termux/deck/sections/05_filesystem.html`, `06_packages.html`, `08_limits.html`, `termux/PLAN.md`
+- **검증:** 데모 3개 배선·예외 없음·동작 12건 일치 · make all SKEL=1 오류 0건
+- **비고:** 계획의 나머지 7개 데모는 이미 표·캡처가 같은 내용을 보여 빼고 PLAN 에 기록.
+
 ### [2026-09-18 05:33] Termux 대백과사전 덱 16·17부 — 마무리·부록(173장)
 - **기획:** 지도·오해 12가지·종합 퀴즈, 그리고 용어집 262개·생성 표·소스 전문·퀴즈 색인. 우리 코드 커버리지 100%.
 - **TC:** 등급 검사 시험 3건 먼저: 전문 장은 캡처 없이 a, 본문 코드만 장은 여전히 실패, src- 인데 코드 없으면 실패.

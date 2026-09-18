@@ -232,6 +232,22 @@ if (!demoScripts.length) {
     // 한 줄씩 늘고, 데모 하나에 적어도 둘이다.
     // 비어 있는 동안에는 7) 의 "빈 입력에서 안 죽는다" 까지만 본다.
     const CASES = [
+      // termux-exec 경로 규칙 — TermuxFile.c 301–341(5부의 발췌)
+      ['d-prefix', { path: '/usr/bin/python' },
+        '→ /data/data/com.termux/files/usr/bin/python', null],
+      ['d-prefix', { path: '/system/bin/sh' }, '바뀌지 않는다', 'files/usr'],
+      ['d-prefix', { path: '/bin' }, '→ /data/data/com.termux/files/usr/bin', null],
+      ['d-prefix', { path: 'python' }, '바뀌지 않는다', null],
+      // pkg.in 409–425 의 apt 갈래(6부의 발췌) — 처음 맞는 줄
+      ['d-pkg', { cmd: 'in' }, 'apt install', null],
+      ['d-pkg', { cmd: 'info' }, 'apt show', 'install'],
+      ['d-pkg', { cmd: 'update' }, '422행', 'full-upgrade'],
+      ['d-pkg', { cmd: 'upgrade' }, 'apt full-upgrade', null],
+      ['d-pkg', { cmd: 'rm' }, 'apt remove', null],
+      ['d-pkg', { cmd: 'xyz' }, 'ERROR=true', null],
+      // 한도 32(README NOTICE) · 16 은 out/procs_now.txt 의 수
+      ['d-phantom', { procs: '16' }, '16개 남음', '죽을'],
+      ['d-phantom', { procs: '40' }, '8개가 죽을 수 있다', null],
     ];
     let good = 0;
     for (const [id, values, want, wantNot] of CASES) {
