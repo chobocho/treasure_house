@@ -29,9 +29,9 @@ SCENES = [
         '&& git show --stat --oneline HEAD']),
     ('03', '엉뚱한 브랜치에 커밋', [
         'c base', 'c oops',
-        '$ git log --oneline --all --graph',
+        '$ git log --oneline --all --graph --decorate',
         '$ git branch feature && git reset -q --hard HEAD~1 '
-        '&& git log --oneline --all --graph']),
+        '&& git log --oneline --all --graph --decorate']),
     ('04', '마지막 커밋을 무르기(아직 안 보냄)', [
         'c a', 'c b',
         '$ git reset --soft HEAD~1 && git status --short',
@@ -113,7 +113,9 @@ SCENES = [
         '$ git rm -q --cached .env && echo .env > .gitignore',
         '$ git add .gitignore && git commit -q --amend --no-edit',
         '$ git show --stat --oneline HEAD',
-        '$ git log --all --oneline -- .env']),
+        '$ git log --all --oneline -- .env',
+        # 가지에서는 사라졌지만 옛 커밋은 reflog 가 아직 쥐고 있다
+        '$ git show HEAD@{1}:.env']),
     ('18', '비밀이 역사 깊이 들어갔다', [
         'c a', 'echo "token=not-a-real-secret" > .env',
         'git add .env && git commit -q -m env', 'c b', 'c c',
@@ -121,9 +123,16 @@ SCENES = [
         '$ FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch '
         '--tree-filter "rm -f .env" HEAD 2>&1 | tail -1',
         '$ git log --oneline -- .env',
-        '$ git log --oneline']),
+        '$ git log --oneline',
+        # filter-branch 는 옛 역사를 refs/original 에 백업해 둔다
+        '$ git for-each-ref --format="%(refname)" refs/original',
+        '$ git log --oneline refs/original/refs/heads/main -- .env']),
     ('19', '큰 파일을 커밋했다', [
-        'c a', 'echo n > note && head -c 3000000 /dev/zero > big.bin',
+        # 0 으로 채우면 zlib 이 수 KB 로 눌러 버린다 — 압축되지 않는
+        # (그러나 실행마다 같은) 바이트로
+        'c a', 'echo n > note && python3 -c "import random, sys; '
+        'random.seed(1); sys.stdout.buffer.write(random.randbytes('
+        '3000000))" > big.bin',
         'git add note big.bin && git commit -q -m "note and big"',
         'git gc -q',
         '$ git count-objects -vH | grep size-pack',
@@ -196,7 +205,9 @@ SCENES = [
         'c a', 'git clone -q --bare . ../rec_31.git',
         'git remote add origin ../rec_31.git',
         'git push -q origin HEAD:refs/heads/gone && git fetch -q',
-        'git push -q origin :gone',
+        # 내가 지우면 origin/gone 도 같이 지워진다 — 다른 사람이 지운다
+        'git clone -q ../rec_31.git ../rec_31_other '
+        '&& git -C ../rec_31_other push -q origin :gone',
         '$ git branch -r',
         '$ git fetch --prune 2>&1 && git branch -r']),
     ('32', '원격과 갈라졌다', [
