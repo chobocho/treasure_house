@@ -615,3 +615,20 @@ The user approved every recommendation below as-is. Each row is now a decision.
   does not state them); `repos_apt.tsv` 5 tiers (fingerprints to be filled from the step 6 capture —
   gpg is not installed on the proot side); `plugins.tsv` 7; `people.tsv` 7 (names only as they
   appear in commit metadata or upstream files); `claims.md` 49 sourced rows.
+
+### Step 4 — py/ helpers (2026-09-18)
+
+- `py/elf.py` (+ 10 tests): reads PT_INTERP, DT_NEEDED, DT_RUNPATH/RPATH, DT_SONAME from program
+  headers only (what the linker reads), ELF32/64 · LSB/MSB; DT_STRTAB vaddr mapped through PT_LOAD.
+  Tests build ELF bytes in-process (64/32/big-endian/static/truncated/non-ELF) and cross-check a
+  gcc binary against `readelf -d -l`. On the device: Termux bash → `/system/bin/linker64`,
+  RUNPATH `$PREFIX/lib`, needs libandroid-support/libreadline/libiconv/libdl/libc; Ubuntu bash →
+  `/lib/ld-linux-aarch64.so.1`, libtinfo/libc.so.6.
+- `py/deb.py` (+ 10 tests): ar parser + tarfile (none/gz/xz/bz2; zst named and refused, not
+  guessed); control parser with continuation and ` .`; tests build .debs by hand and against real
+  `dpkg-deb --build`; report clipped by display cells (Korean = 2).
+- `py/pkgstat.py` (+ 6 tests): dpkg status paragraphs → installed-only summary, KiB histogram with
+  1024-based edges (the first test draft used 1000 and mislabelled it "1 MiB" — corrected in the
+  test before implementing). Device, proot-read: 170 installed, 3,393,552 KiB, 30 Essential.
+  (The plan's "326 dpkg packages" was a line count, not a package count.)
+- Tests 146 total pass; `make all SKEL=1` 0 errors.

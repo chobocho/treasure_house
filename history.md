@@ -1,3 +1,10 @@
+### [2026-09-18 01:49] Termux 대백과사전 덱 4단계 — elf.py·deb.py·pkgstat.py
+- **기획:** 5·6부가 쓸 표준 라이브러리 도구 셋: ELF 링커 정보, .deb 해부, dpkg status 통계.
+- **TC:** 정상: 손으로 지은 ELF·.deb 와 readelf·dpkg-deb 대조. 가장자리: 32비트·빅 엔디언·정적·잘림·zst·크기 없는 패키지·빈 입력.
+- **개발:** `termux/py/elf.py`, `termux/py/deb.py`, `termux/py/pkgstat.py`, `termux/py/tests/*.py`(3)
+- **검증:** 146 passed, 0 failed · make all SKEL=1 오류 0건
+- **비고:** 기기의 설치 패키지는 170개(계획서의 326 은 줄 수였다). Termux bash 는 linker64·RUNPATH $PREFIX/lib.
+
 ### [2026-09-18 01:44] Termux 대백과사전 덱 3단계 — upstream 26개 핀·문서 127건·자료표·주장 49건
 - **기획:** 기억 대신 출처로: 저장소는 커밋, 위키는 revid, HTML 은 원문 해시로 핀 고정하고 연표·안드로이드 동작·릴리스를 표로 만든다.
 - **TC:** 정상: fetch_src 8·doc_text 21·gh_api 7·native_facts 5. 가장자리: 위키 절 번호 중복·SHA 속 숫자의 IMEI 오탐을 시험으로 먼저 박음.
