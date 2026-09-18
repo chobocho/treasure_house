@@ -797,6 +797,14 @@ svg.diag .key { font-size: 9px; fill: var(--accent2);
     <option value="p5-ch4">· 단계 번호와 의도</option>
     <option value="p5-ch5">· 확장</option>
     <option value="p6">6부 · 명령 해부</option>
+    <option value="p6-ch1">· add 와 commit</option>
+    <option value="p6-ch2">· rm 과 mv</option>
+    <option value="p6-ch3">· restore</option>
+    <option value="p6-ch4">· reset</option>
+    <option value="p6-ch5">· switch</option>
+    <option value="p6-ch6">· stash</option>
+    <option value="p6-ch7">· clean</option>
+    <option value="p6-ch8">· 보는 명령</option>
     <option value="p7">7부 · 브랜치와 머지</option>
     <option value="p8">8부 · 리베이스와 역사 재작성</option>
     <option value="p9">9부 · diff 알고리즘</option>
@@ -5176,18 +5184,894 @@ add 로 해소한 충돌은 <code>git checkout -m 경로</code> 로 되돌립니
 <article class="card section" id="p6">
 <p class="chnum">6부</p>
 <h2>명령 해부</h2>
-<p class="chsub">명령 하나가 세 영역을 어떻게 움직이는가</p>
-<p class="cap">이 부의 목표 장수는 140장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>6부에서 다룰 것</h3>
+<p class="chsub">명령 하나가 세 영역의 어느 칸을 바꾸는가</p>
+</article>
+
+<article class="card" id="p6-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">2~5부에서 객체·참조·인덱스를 따로 봤습니다. 이 부는 날마다 쓰는 명령 스무 가지를 하나씩
+돌려, <b>HEAD · 인덱스 · 작업 트리</b> 가운데 어느 칸이 바뀌는지 표로 확인합니다.</p>
 <ul>
-<li>add · commit · status — 전후 상태를 캡처로</li>
-<li>log · show — 역사를 읽는 두 창</li>
-<li>rm · mv — 이름을 바꾸는 일의 실체</li>
-<li>restore · reset · checkout — 무엇을 어디로 되돌리나</li>
-<li>명령마다 "전 → 후" 캡처 한 쌍</li>
+<li>add · commit · commit -a · amend</li>
+<li>rm · rm --cached · mv</li>
+<li>restore(세 가지) · checkout -- 파일</li>
+<li>reset --soft · --mixed · --hard · reset -- 경로</li>
+<li>switch — 변경을 들고 가기와 거절</li>
+<li>stash — 커밋 두세 개로 된 보관함</li>
+<li>clean · 그리고 보는 명령들(status · diff · log · show)</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-tool">
+<h3>상태 표 읽는 법</h3>
+<p>실험은 모두 같은 출발점 — 파일 <code>a</code> <code>b</code> <code>c</code>, 커밋 둘(둘째에서 <code>b</code> 를
+고침) — 에서 새로 시작합니다. 명령 앞뒤로 이 도구를 돌립니다.</p>
+<div class="src"><b>out/cmd_add__cat-..-cmds-tools-state.py.txt</b><span class="ln">전체 22줄</span><span>경로마다 세 영역의 blob 이름 앞 7자리</span></div>
+<pre class="term" data-out="cmd_add__cat-..-cmds-tools-state.py.txt">$ cat ../cmds-tools/state.py
+import os, subprocess
+# 경로마다 HEAD · 인덱스 · 작업 트리의 blob 이름(앞 7자리), 없으면 -
+def run(*a):
+    return subprocess.run(a, capture_output=True, text=True).stdout
+head, idx, wt = {}, {}, {}
+for line in run("git", "ls-tree", "-r", "HEAD").splitlines():
+    meta, path = line.split("\t")
+    head[path] = meta.split()[2][:7]
+for line in run("git", "ls-files", "-s").splitlines():
+    meta, path = line.split("\t")
+    stage = meta.split()[2]
+    idx[path] = meta.split()[1][:7] + ("" if stage == "0" else ":" + stage)
+for root, dirs, files in os.walk("."):
+    dirs[:] = [d for d in dirs if d != ".git"]
+    for f in files:
+        path = os.path.relpath(os.path.join(root, f), ".")
+        wt[path] = run("git", "hash-object", path).strip()[:7]
+print("%-10s %-9s %-9s %s" % ("path", "HEAD", "index", "worktree"))
+for p in sorted(set(head) | set(idx) | set(wt)):
+    print("%-10s %-9s %-9s %s" % (p, head.get(p, "-"), idx.get(p, "-"),
+                                  wt.get(p, "-")))</pre>
+<p class="cap">칸이 <code>-</code> 면 그 영역에 그 경로가 없다는 뜻입니다. 세 칸이 모두 같으면 그 파일은 깨끗합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-ch1"><p class="chnum">1장</p><h2>add 와 commit</h2><p class="chsub">작업 트리 → 인덱스 → HEAD</p></article>
+
+<article class="card" id="p6-add">
+<h3>git add — 작업 트리를 인덱스로</h3>
+<p><code>a</code> 를 고친 뒤(<code>a1</code> → <code>a2</code>) add 합니다.</p>
+<div class="src"><b>out/cmd_add.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_add.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_add__add-a.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_add__add-a.txt">$ git add a</pre>
+<div class="src"><b>out/cmd_add.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_add.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p>바뀐 칸은 <b>index</b> 하나 — 작업 트리의 <code>c1827f0</code> 이 인덱스로 복사됐습니다. HEAD 는 그대로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-add-new">
+<h3>git add — 새 파일</h3>
+<p>추적하지 않는 파일 <code>d</code> 를 만들고 add 합니다.</p>
+<div class="src"><b>out/cmd_addnew.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 6줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_addnew.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045
+d          -         -         6f18529</pre>
+<div class="src"><b>out/cmd_addnew__add-d.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_addnew__add-d.txt">$ git add d</pre>
+<div class="src"><b>out/cmd_addnew.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 6줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_addnew.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045
+d          -         6f18529   6f18529</pre>
+<p>인덱스 칸이 <code>-</code> 에서 blob 이름으로 — 이제 <code>d</code> 는 추적되는 파일입니다. HEAD 에는 아직 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-commit">
+<h3>git commit — 인덱스를 HEAD 로</h3>
+<p><code>a</code> 를 고쳐 add 까지 한 상태에서 커밋합니다.</p>
+<div class="src"><b>out/cmd_commit.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_commit.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_commit__commit-q-m-third-git-log-oneline-1.txt</b><span class="ln">전체 2줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_commit__commit-q-m-third-git-log-oneline-1.txt">$ git commit -q -m third &amp;&amp; git log --oneline -1
+ff076ce third</pre>
+<div class="src"><b>out/cmd_commit.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_commit.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          c1827f0   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p>바뀐 칸은 <b>HEAD</b> 하나 — 인덱스의 <code>c1827f0</code> 이 새 커밋의 트리가 됐습니다. 작업 트리는 읽지 않습니다(2부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-commit-a">
+<h3>git commit -a — 추적 중인 파일만</h3>
+<p><code>a</code> 를 고치고 새 파일 <code>d</code> 도 만든 뒤, add 없이 <code>-a</code> 로 커밋합니다.</p>
+<div class="src"><b>out/cmd_commita.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 6줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_commita.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045
+d          -         -         6f18529</pre>
+<div class="src"><b>out/cmd_commita__commit-q-a-m-third.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_commita__commit-q-a-m-third.txt">$ git commit -q -a -m third</pre>
+<div class="src"><b>out/cmd_commita.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 6줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_commita.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          c1827f0   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045
+d          -         -         6f18529</pre>
+<p><code>a</code> 는 세 칸이 모두 새 값이 됐지만 <code>d</code> 는 그대로입니다. <code>-a</code> 는 "추적 중인 파일의 변경을 add 한 뒤 커밋" 이라 새 파일은 넣지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-amend">
+<h3>git commit --amend — 마지막 커밋 바꿔치기</h3>
+<p><code>a</code> 를 고쳐 add 한 뒤 메시지는 그대로 두고 amend 합니다.</p>
+<div class="src"><b>out/cmd_amend.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_amend.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_amend__reflog-2.txt</b><span class="ln">전체 3줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_amend__reflog-2.txt">$ git reflog -2
+bebd5c2 HEAD@{0}: commit (amend): second
+d84229d HEAD@{1}: commit: second</pre>
+<div class="src"><b>out/cmd_amend.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_amend.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          c1827f0   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p>HEAD 칸이 인덱스를 따라갔고, 로그에는 여전히 커밋 둘뿐입니다 — 둘째 커밋이 새 커밋으로 <b>바뀌었습니다</b>(이름이 달라짐, 2부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-amend-reflog">
+<h3>amend 가 남긴 흔적</h3>
+<div class="src"><b>out/cmd_amend__reflog-2.txt</b><span class="ln">전체 3줄</span><span>옛 둘째 커밋은 reflog 에</span></div>
+<pre class="term" data-out="cmd_amend__reflog-2.txt">$ git reflog -2
+bebd5c2 HEAD@{0}: commit (amend): second
+d84229d HEAD@{1}: commit: second</pre>
+<p>옛 커밋 <code>d84229d</code> 는 사라지지 않았습니다. 이미 푸시한 커밋을 amend 하면 원격의 역사와 갈라집니다(12부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p6-quiz-1" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 새 파일 <code>x</code> 와 고친 파일 <code>y</code>(추적 중)가 있습니다. <code>git commit -a -m m</code> 을
+하면 커밋에 들어가는 것은 무엇이고, 그 뒤 상태 표에서 <code>x</code> 의 세 칸은 어떻게 보입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>y</code> 의 변경만 들어갑니다. <code>x</code> 는 추적하지 않는 파일이라 <code>-a</code> 가 add 하지
+않습니다. <code>x</code> 는 HEAD <code>-</code>, 인덱스 <code>-</code>, 작업 트리에만 blob 이름 — 실험의 <code>d</code> 와 같습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-ch2"><p class="chnum">2장</p><h2>rm 과 mv</h2><p class="chsub">지우기와 옮기기도 인덱스의 일</p></article>
+
+<article class="card" id="p6-rm">
+<h3>git rm — 인덱스와 작업 트리에서</h3>
+<p>깨끗한 파일 <code>a</code> 를 지웁니다.</p>
+<div class="src"><b>out/cmd_rm.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_rm.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_rm__rm-q-a.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_rm__rm-q-a.txt">$ git rm -q a</pre>
+<div class="src"><b>out/cmd_rm.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_rm.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   -         -
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p>인덱스와 작업 트리 칸이 <code>-</code> 가 됐습니다. HEAD 에는 아직 있으니, 다음 커밋이 "a 를 지움" 이 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-rm-cached">
+<h3>git rm --cached — 인덱스에서만</h3>
+<p>같은 출발점에서 <code>--cached</code> 로 지웁니다.</p>
+<div class="src"><b>out/cmd_rmcached.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_rmcached.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_rmcached__rm-q-cached-a.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_rmcached__rm-q-cached-a.txt">$ git rm -q --cached a</pre>
+<div class="src"><b>out/cmd_rmcached.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_rmcached.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   -         da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p>인덱스 칸만 <code>-</code> — 파일은 디스크에 남고 추적만 멈춥니다. 실수로 커밋한 설정 파일을 저장소에서 빼되 내 디스크에는 두고 싶을 때 씁니다(그 뒤 <code>.gitignore</code> 에 넣습니다).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-rm-dirty">
+<h3>git rm 이 거절할 때</h3>
+<p><code>a</code> 를 고쳐 둔 채(커밋도 add 도 안 함) 지우려 합니다.</p>
+<div class="src"><b>out/cmd_rmdirty.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_rmdirty.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_rmdirty__rm-a-2-1.txt</b><span class="ln">전체 4줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_rmdirty__rm-a-2-1.txt">$ git rm a 2&gt;&amp;1
+error: the following file has local modifications:
+    a
+[exit 1]</pre>
+<div class="src"><b>out/cmd_rmdirty.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_rmdirty.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p>세 칸이 그대로입니다. 지우면 어디에도 없는 내용(<code>c1827f0</code>)을 잃게 되니 git 이 멈췄습니다. 정말 지우려면 <code>-f</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mv">
+<h3>git mv — 지우기와 더하기를 한 번에</h3>
+<p><code>a</code> 의 이름을 <code>z</code> 로 바꿉니다.</p>
+<div class="src"><b>out/cmd_mv.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_mv.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_mv__mv-a-z-git-status-short.txt</b><span class="ln">전체 2줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_mv__mv-a-z-git-status-short.txt">$ git mv a z &amp;&amp; git status --short
+R  a -&gt; z</pre>
+<div class="src"><b>out/cmd_mv.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 6줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_mv.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   -         -
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045
+z          -         da0f8ed   da0f8ed</pre>
+<p><code>a</code> 는 인덱스·작업 트리에서 사라지고 <code>z</code> 가 <b>같은 blob</b>(<code>da0f8ed</code>)으로 생겼습니다. git 에 "이름 바꾸기" 기록은 없고, status 의 <code>R</code> 는 같은 blob 을 보고 짐작한 것입니다(9부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-ch3"><p class="chnum">3장</p><h2>restore</h2><p class="chsub">어디서 가져와 어디에 쓰나</p></article>
+
+<article class="card" id="p6-restore-setup">
+<h3>출발점 — 세 칸이 모두 다른 파일</h3>
+<p>이 장의 실험은 <code>a</code> 를 <code>a2</code> 로 고쳐 add 하고, 다시 <code>a3</code> 으로 고쳐 둡니다.
+HEAD(<code>a1</code>) · 인덱스(<code>a2</code>) · 작업 트리(<code>a3</code>)가 셋 다 다릅니다.</p>
+<div class="src"><b>out/cmd_restore.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>a 의 세 칸이 모두 다르다</span></div>
+<pre class="term" data-out="cmd_restore.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   d616f73
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p><code>restore</code> 는 "어디서(<code>--source</code>) 가져와 어디에(<code>--staged</code> · <code>--worktree</code>)
+쓰나" 두 질문으로 읽습니다. 기본은 인덱스에서 가져와 작업 트리에 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-restore">
+<h3>git restore — 인덱스 → 작업 트리</h3>
+<p>옵션 없이 복원합니다.</p>
+<div class="src"><b>out/cmd_restore.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_restore.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   d616f73
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_restore__restore-a.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_restore__restore-a.txt">$ git restore a</pre>
+<div class="src"><b>out/cmd_restore.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_restore.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p>작업 트리가 인덱스의 <code>c1827f0</code> 으로 돌아왔습니다. <code>a3</code> 은 사라졌습니다 — 어디에도 저장된 적이 없으니 되찾을 수 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-restore-staged">
+<h3>git restore --staged — HEAD → 인덱스</h3>
+<p>같은 출발점에서 <code>--staged</code> 로 복원합니다.</p>
+<div class="src"><b>out/cmd_restores.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_restores.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   d616f73
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_restores__restore-staged-a.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_restores__restore-staged-a.txt">$ git restore --staged a</pre>
+<div class="src"><b>out/cmd_restores.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_restores.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   d616f73
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p>인덱스만 HEAD 의 <code>da0f8ed</code> 로 — "add 를 취소" 입니다. 작업 트리의 <code>a3</code> 은 그대로 남습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-restore-both">
+<h3>git restore --staged --worktree — HEAD → 둘 다</h3>
+<p>둘을 함께 줍니다.</p>
+<div class="src"><b>out/cmd_restoresw.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_restoresw.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   d616f73
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_restoresw__restore-staged-worktree-a.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_restoresw__restore-staged-worktree-a.txt">$ git restore --staged --worktree a</pre>
+<div class="src"><b>out/cmd_restoresw.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_restoresw.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p>세 칸이 모두 HEAD 와 같아졌습니다. 이 파일의 커밋하지 않은 모든 것을 버리는 명령입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-restore-source">
+<h3>git restore --source — 다른 커밋에서</h3>
+<p>깨끗한 상태에서 <code>b</code> 를 한 커밋 전 판으로 꺼냅니다.</p>
+<div class="src"><b>out/cmd_restoresrc.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_restoresrc.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_restoresrc__restore-source-head-1-b.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_restoresrc__restore-source-head-1-b.txt">$ git restore --source=HEAD~1 b</pre>
+<div class="src"><b>out/cmd_restoresrc.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_restoresrc.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   c9c6af7
+c          ae93045   ae93045   ae93045</pre>
+<p>작업 트리만 옛 판(<code>c9c6af7</code> = <code>b1</code>)이 됐습니다. 인덱스는 그대로라 status 에는 "add 하지 않은 변경" 으로 보입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-checkout-file">
+<h3>옛 방식 — git checkout &lt;커밋&gt; -- 파일</h3>
+<p>같은 일을 옛 명령으로 합니다.</p>
+<div class="src"><b>out/cmd_checkoutfile.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_checkoutfile.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_checkoutfile__checkout-head-1-b.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_checkoutfile__checkout-head-1-b.txt">$ git checkout HEAD~1 -- b</pre>
+<div class="src"><b>out/cmd_checkoutfile.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_checkoutfile.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   c9c6af7   c9c6af7
+c          ae93045   ae93045   ae93045</pre>
+<p>이번에는 <b>인덱스와 작업 트리가 함께</b> 바뀌었습니다. <code>checkout</code> 은 브랜치 옮기기와 파일 꺼내기를 한 이름으로 했고, 2.23 에서 나온 <code>switch</code> · <code>restore</code> 가 그 둘을 나눴습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p6-quiz-2" data-quiz>
+<h3>2~3장 퀴즈</h3>
+<p class="q">Q. <code>git add .</code> 로 파일 열 개를 스테이징했는데 그중 <code>secret.env</code> 는 빼고 싶습니다(디스크의
+파일은 지키면서). 어느 명령을 씁니까? <code>git restore secret.env</code> 를 쓰면 무슨 일이 생깁니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>git restore --staged secret.env</code> — 인덱스만 HEAD 로 되돌리고 작업 트리는 그대로 둡니다
+(아직 커밋에 없는 새 파일이면 인덱스에서 빠지기만 합니다). <code>git restore secret.env</code> 는 인덱스의 내용으로
+<b>작업 트리</b>를 덮어써서, 인덱스와 다른 작업 트리의 변경이 있었다면 그것을 잃습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-ch4"><p class="chnum">4장</p><h2>reset</h2><p class="chsub">브랜치를 옮기고, 어디까지 따라오게 하나</p></article>
+
+<article class="card" id="p6-reset-setup">
+<h3>출발점</h3>
+<p><code>a</code> 를 고쳐 add 하고, <code>c</code> 는 고치기만 했습니다. 그 상태에서 <code>reset HEAD~1</code> 을
+세 모드로 각각 합니다.</p>
+<div class="src"><b>out/cmd_reset_soft.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>a 는 스테이징됨, c 는 작업 트리에서만 바뀜</span></div>
+<pre class="term" data-out="cmd_reset_soft.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   16f9ec0</pre>
+<p><code>reset</code> 은 먼저 <b>현재 브랜치를 그 커밋으로 옮기고</b>, 모드에 따라 인덱스와 작업 트리를 거기에 맞춥니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-reset-soft">
+<h3>reset --soft — HEAD 만</h3>
+<p>첫째 커밋으로 soft reset.</p>
+<div class="src"><b>out/cmd_reset_soft.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_reset_soft.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   16f9ec0</pre>
+<div class="src"><b>out/cmd_reset_soft__reset-q-soft-head-1-git-log-oneline.txt</b><span class="ln">전체 2줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_reset_soft__reset-q-soft-head-1-git-log-oneline.txt">$ git reset -q --soft HEAD~1 &amp;&amp; git log --oneline
+2887d79 first</pre>
+<div class="src"><b>out/cmd_reset_soft.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_reset_soft.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          c9c6af7   e6bfff5   e6bfff5
+c          ae93045   ae93045   16f9ec0</pre>
+<p>HEAD 칸의 <code>b</code> 만 옛 값(<code>c9c6af7</code>)이 됐습니다. 인덱스·작업 트리는 그대로라, 둘째 커밋의 변경(<code>b</code>)과 스테이징해 둔 <code>a</code> 가 모두 "커밋할 변경" 으로 남습니다. 커밋 여럿을 하나로 합칠 때 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-reset-mixed">
+<h3>reset --mixed(기본) — HEAD 와 인덱스</h3>
+<p>같은 출발점에서 mixed.</p>
+<div class="src"><b>out/cmd_reset_mixed.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_reset_mixed.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   16f9ec0</pre>
+<div class="src"><b>out/cmd_reset_mixed__reset-q-mixed-head-1-git-log-oneline.txt</b><span class="ln">전체 2줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_reset_mixed__reset-q-mixed-head-1-git-log-oneline.txt">$ git reset -q --mixed HEAD~1 &amp;&amp; git log --oneline
+2887d79 first</pre>
+<div class="src"><b>out/cmd_reset_mixed.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_reset_mixed.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   c1827f0
+b          c9c6af7   c9c6af7   e6bfff5
+c          ae93045   ae93045   16f9ec0</pre>
+<p>인덱스도 HEAD 를 따라갔습니다. 작업 트리의 변경(<code>a2</code> · <code>b2</code> · <code>c2</code>)은 모두 남되 스테이징은 풀렸습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-reset-hard">
+<h3>reset --hard — 셋 다</h3>
+<p>같은 출발점에서 hard.</p>
+<div class="src"><b>out/cmd_reset_hard.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_reset_hard.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   16f9ec0</pre>
+<div class="src"><b>out/cmd_reset_hard__reset-q-hard-head-1-git-log-oneline.txt</b><span class="ln">전체 2줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_reset_hard__reset-q-hard-head-1-git-log-oneline.txt">$ git reset -q --hard HEAD~1 &amp;&amp; git log --oneline
+2887d79 first</pre>
+<div class="src"><b>out/cmd_reset_hard.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_reset_hard.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          c9c6af7   c9c6af7   c9c6af7
+c          ae93045   ae93045   ae93045</pre>
+<p>세 칸이 모두 첫째 커밋과 같아졌습니다. 스테이징한 <code>a2</code> 는 blob 으로 남아 있어 되찾을 수 있지만, add 하지 않은 <code>c2</code> 는 <b>어디에도 없습니다</b>.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-reset-table">
+<h3>세 모드를 한 표로</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>모드</th><th>HEAD(브랜치)</th><th>인덱스</th><th>작업 트리</th><th>잃을 수 있는 것</th></tr>
+<tr><td><code>--soft</code></td><td>옮김</td><td>그대로</td><td>그대로</td><td>없음</td></tr>
+<tr><td><code>--mixed</code></td><td>옮김</td><td>맞춤</td><td>그대로</td><td>스테이징 구분만</td></tr>
+<tr><td><code>--hard</code></td><td>옮김</td><td>맞춤</td><td>맞춤</td><td>add 안 한 변경</td></tr>
+</table></div>
+<p>앞 세 장의 상태 표가 이 표의 근거입니다. 옮겨진 뒤의 옛 커밋은 <code>ORIG_HEAD</code> 와 reflog 로 되찾습니다(4부).</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-reset-path">
+<h3>reset -- 경로 — 브랜치는 그대로, 인덱스 한 칸만</h3>
+<p>경로를 주면 브랜치를 옮기지 않습니다.</p>
+<div class="src"><b>out/cmd_resetpath.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_resetpath.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_resetpath__reset-q-head-1-b.txt</b><span class="ln">전체 1줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_resetpath__reset-q-head-1-b.txt">$ git reset -q HEAD~1 -- b</pre>
+<div class="src"><b>out/cmd_resetpath.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_resetpath.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   c9c6af7   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p><code>b</code> 의 인덱스 칸만 한 커밋 전 값이 됐습니다. <code>restore --staged --source=HEAD~1 b</code> 와 같은 일입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-ch5"><p class="chnum">5장</p><h2>switch</h2><p class="chsub">브랜치를 옮길 때 로컬 변경은?</p></article>
+
+<article class="card" id="p6-switch">
+<h3>변경을 들고 가기</h3>
+<p><code>a</code> 를 고쳐 둔 채 한 커밋 전 브랜치 <code>old</code> 로 옮깁니다. 두 브랜치에서 <code>a</code> 는 같습니다.</p>
+<div class="src"><b>out/cmd_switch.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_switch.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_switch__switch-old-2-1.txt</b><span class="ln">전체 3줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_switch__switch-old-2-1.txt">$ git switch old 2&gt;&amp;1
+Switched to branch 'old'
+M	a</pre>
+<div class="src"><b>out/cmd_switch.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_switch.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   c1827f0
+b          c9c6af7   c9c6af7   c9c6af7
+c          ae93045   ae93045   ae93045</pre>
+<p>HEAD·인덱스는 <code>old</code> 의 것(<code>b</code> = <code>c9c6af7</code>)이 됐고, <code>a</code> 의 작업 트리 변경은 그대로 따라왔습니다. 옮겨도 잃는 것이 없으니 git 이 허락합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-switch-block">
+<h3>들고 갈 수 없으면 멈춘다</h3>
+<p>이번에는 두 브랜치에서 <b>서로 다른</b> 파일 <code>b</code> 를 고쳐 둔 채 옮기려 합니다.</p>
+<div class="src"><b>out/cmd_switchblock.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_switchblock.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   6d0875c
+c          ae93045   ae93045   ae93045</pre>
+<div class="src"><b>out/cmd_switchblock__switch-old-2-1.txt</b><span class="ln">전체 6줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_switchblock__switch-old-2-1.txt">$ git switch old 2&gt;&amp;1
+error: Your local changes to the following files would be overwritten by checkout:
+	b
+
+Aborting
+[exit 1]</pre>
+<div class="src"><b>out/cmd_switchblock.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_switchblock.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   6d0875c
+c          ae93045   ae93045   ae93045</pre>
+<p>아무 칸도 바뀌지 않았습니다. 옮기면 작업 트리의 <code>b</code> 를 <code>old</code> 의 판으로 덮어써야 하는데, 그러면 변경을 잃으니 멈춥니다. 커밋하거나, stash 하거나, <code>switch --merge</code> 로 합쳐서 옮깁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-ch6"><p class="chnum">6장</p><h2>stash</h2><p class="chsub">보관함의 정체는 커밋</p></article>
+
+<article class="card" id="p6-stash">
+<h3>git stash push</h3>
+<p><code>a</code> 는 스테이징, <code>c</code> 는 작업 트리에서만 고쳤고, 새 파일 <code>new</code> 도 있습니다.</p>
+<div class="src"><b>out/cmd_stash.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 6줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_stash.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   16f9ec0
+new        -         -         8ba3a16</pre>
+<div class="src"><b>out/cmd_stash__cat-file-p-stash-0.txt</b><span class="ln">전체 8줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_stash__cat-file-p-stash-0.txt">$ git cat-file -p stash@{0}
+tree 853d4a30490b11d66b85c39ca81191dc4946fcc0
+parent d84229dfc4ac5a862c1b2d642ad931b4c7c6ae6a
+parent 67a1cd0773129c722e2d8720fc81c0bca41d43e9
+author A U Thor &lt;author@example.com&gt; 1700000120 +0900
+committer C O Mitter &lt;committer@example.com&gt; 1700000120 +0900
+
+WIP on main: d84229d second</pre>
+<div class="src"><b>out/cmd_stash.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 6줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_stash.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045
+new        -         -         8ba3a16</pre>
+<p><code>a</code> 와 <code>c</code> 는 HEAD 로 돌아갔고, 추적하지 않는 <code>new</code> 는 그대로 남았습니다(기본 stash 는 추적 중인 파일만 담습니다).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-stash-graph">
+<h3>stash 는 커밋 두 개</h3>
+<div class="src"><b>out/cmd_stash__log-graph-oneline-stash-0.txt</b><span class="ln">전체 7줄</span><span>stash@{0} 에서 닿는 역사</span></div>
+<pre class="term" data-out="cmd_stash__log-graph-oneline-stash-0.txt">$ git log --graph --oneline stash@{0}
+*   87b151c WIP on main: d84229d second
+|\  
+| * 67a1cd0 index on main: d84229d second
+|/  
+* d84229d second
+* 2887d79 first</pre>
+<div class="src"><b>out/cmd_stash__cat-file-p-stash-0.txt</b><span class="ln">전체 8줄</span><span>stash 커밋 자체</span></div>
+<pre class="term" data-out="cmd_stash__cat-file-p-stash-0.txt">$ git cat-file -p stash@{0}
+tree 853d4a30490b11d66b85c39ca81191dc4946fcc0
+parent d84229dfc4ac5a862c1b2d642ad931b4c7c6ae6a
+parent 67a1cd0773129c722e2d8720fc81c0bca41d43e9
+author A U Thor &lt;author@example.com&gt; 1700000120 +0900
+committer C O Mitter &lt;committer@example.com&gt; 1700000120 +0900
+
+WIP on main: d84229d second</pre>
+<p><code>WIP</code> 커밋은 부모가 둘인 머지 모양입니다 — 첫째 부모는 그때의 HEAD, 둘째 부모는 <b>인덱스 상태를 담은
+커밋</b>(<code>index on main</code>)입니다. <code>WIP</code> 커밋의 트리가 작업 트리 상태입니다. <code>refs/stash</code> 가 이
+커밋을 가리키고, 여러 개는 그 reflog(<code>stash@{n}</code>)로 쌓입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-stash-show">
+<h3>stash 의 내용 보기</h3>
+<div class="src"><b>out/cmd_stash__stash-show-p-stash-0.txt</b><span class="ln">전체 15줄</span><span>HEAD 대비 작업 트리 상태의 diff</span></div>
+<pre class="term" data-out="cmd_stash__stash-show-p-stash-0.txt">$ git stash show -p stash@{0}
+diff --git a/a b/a
+index da0f8ed..c1827f0 100644
+--- a/a
++++ b/a
+@@ -1 +1 @@
+-a1
++a2
+diff --git a/c b/c
+index ae93045..16f9ec0 100644
+--- a/c
++++ b/c
+@@ -1 +1 @@
+-c1
++c2</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-stash-pop">
+<h3>git stash pop --index</h3>
+<p>보관한 것을 되돌려 놓습니다. <code>--index</code> 는 스테이징 여부까지 되살리라는 뜻입니다.</p>
+<div class="src"><b>out/cmd_pop.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 6줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_pop.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045
+new        -         -         8ba3a16</pre>
+<div class="src"><b>out/cmd_pop__stash-pop-index-2-1-head-3.txt</b><span class="ln">전체 4줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_pop__stash-pop-index-2-1-head-3.txt">$ git stash pop --index 2&gt;&amp;1 | head -3
+On branch main
+Changes to be committed:
+	modified:   a</pre>
+<div class="src"><b>out/cmd_pop.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 6줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_pop.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   c1827f0   c1827f0
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   16f9ec0
+new        -         -         8ba3a16</pre>
+<p><code>a</code> 는 인덱스까지(스테이징된 채로), <code>c</code> 는 작업 트리에만 — 보관 전 표와 같습니다. <code>--index</code> 가 없으면 전부 작업 트리 변경으로 돌아옵니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-stash-u">
+<h3>git stash -u — 추적 안 하는 파일도</h3>
+<p><code>new</code> 하나만 있는 상태에서 <code>-u</code> 로 보관합니다.</p>
+<div class="src"><b>out/cmd_stashu.before__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 6줄</span><span>전</span></div>
+<pre class="term" data-out="cmd_stashu.before__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045
+new        -         -         8ba3a16</pre>
+<div class="src"><b>out/cmd_stashu__ls-tree-stash-0-3.txt</b><span class="ln">전체 2줄</span><span>명령</span></div>
+<pre class="term" data-out="cmd_stashu__ls-tree-stash-0-3.txt">$ git ls-tree stash@{0}^3
+100644 blob 8ba3a16384aacc37d01564b28401755ce8053f51	new</pre>
+<div class="src"><b>out/cmd_stashu.after__python3-..-cmds-tools-state.py.txt</b><span class="ln">전체 5줄</span><span>후</span></div>
+<pre class="term" data-out="cmd_stashu.after__python3-..-cmds-tools-state.py.txt">$ python3 ../cmds-tools/state.py
+path       HEAD      index     worktree
+a          da0f8ed   da0f8ed   da0f8ed
+b          e6bfff5   e6bfff5   e6bfff5
+c          ae93045   ae93045   ae93045</pre>
+<p><code>new</code> 도 사라졌습니다. 어디에 담겼을까요 — 다음 장.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-stash-u-parent">
+<h3>셋째 부모</h3>
+<div class="src"><b>out/cmd_stashu__cat-file-p-stash-0-grep-parent.txt</b><span class="ln">전체 4줄</span><span>-u 로 만든 stash 는 부모가 셋</span></div>
+<pre class="term" data-out="cmd_stashu__cat-file-p-stash-0-grep-parent.txt">$ git cat-file -p stash@{0} | grep ^parent
+parent d84229dfc4ac5a862c1b2d642ad931b4c7c6ae6a
+parent 4541a1a738d3b2e5e5b038bad955f38de082c874
+parent c6cbae308169c55b890e8476cb94a59d0f1a94a1</pre>
+<div class="src"><b>out/cmd_stashu__ls-tree-stash-0-3.txt</b><span class="ln">전체 2줄</span><span>셋째 부모의 트리에 추적 안 하는 파일이</span></div>
+<pre class="term" data-out="cmd_stashu__ls-tree-stash-0-3.txt">$ git ls-tree stash@{0}^3
+100644 blob 8ba3a16384aacc37d01564b28401755ce8053f51	new</pre>
+<p>셋째 부모는 추적하지 않는 파일만 담은 커밋입니다. stash 가 "특별한 저장소" 가 아니라 커밋 몇 개와 참조 하나라는 것 —
+그래서 잃어버린 stash 도 dangling 커밋으로 찾을 수 있습니다(16부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-ch7"><p class="chnum">7장</p><h2>clean</h2><p class="chsub">추적하지 않는 파일 치우기</p></article>
+
+<article class="card" id="p6-clean">
+<h3>무엇을 지울지 먼저 본다</h3>
+<p><code>.gitignore</code> 에 <code>build/</code> 를 넣고, 추적 안 하는 <code>junk.txt</code> 와 무시되는 <code>build/out.o</code> 를 두었습니다.</p>
+<div class="src"><b>out/cmd_clean__clean-n.txt</b><span class="ln">전체 2줄</span><span>-n: 지우지 않고 보이기만</span></div>
+<pre class="term" data-out="cmd_clean__clean-n.txt">$ git clean -n
+Would remove junk.txt</pre>
+<div class="src"><b>out/cmd_clean__clean-n-d.txt</b><span class="ln">전체 2줄</span><span>-d: 디렉터리도 — 그러나 무시되는 build/ 는 아니다</span></div>
+<pre class="term" data-out="cmd_clean__clean-n-d.txt">$ git clean -n -d
+Would remove junk.txt</pre>
+<div class="src"><b>out/cmd_clean__clean-n-d-x.txt</b><span class="ln">전체 3줄</span><span>-x: 무시 규칙도 넘어서</span></div>
+<pre class="term" data-out="cmd_clean__clean-n-d-x.txt">$ git clean -n -d -x
+Would remove build/
+Would remove junk.txt</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-clean-f">
+<h3>지우기</h3>
+<div class="src"><b>out/cmd_clean__clean-f-d-ls-a.txt</b><span class="ln">전체 8줄</span><span>-f 없이는 지우지 않는다(clean.requireForce)</span></div>
+<pre class="term" data-out="cmd_clean__clean-f-d-ls-a.txt">$ git clean -f -d &amp;&amp; ls -A
+Removing junk.txt
+.git
+.gitignore
+a
+b
+build
+c</pre>
+<p><code>git clean</code> 이 지운 파일은 어디에도 저장된 적이 없어 git 으로 되찾을 수 없습니다. 늘 <code>-n</code> 을 먼저.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-ch8"><p class="chnum">8장</p><h2>보는 명령</h2><p class="chsub">status · diff · log · show</p></article>
+
+<article class="card" id="p6-status-long">
+<h3>status 의 두 목록</h3>
+<p><code>a</code> 를 <code>a2</code> 로 고쳐 add 한 뒤 <code>a3</code> 으로 다시 고쳤습니다.</p>
+<div class="src"><b>out/cmd_view.dirty__status.txt</b><span class="ln">전체 7줄</span><span>같은 파일이 두 목록에</span></div>
+<pre class="term" data-out="cmd_view.dirty__status.txt">$ git status
+On branch main
+Changes to be committed:
+	modified:   a
+
+Changes not staged for commit:
+	modified:   a</pre>
+<div class="src"><b>out/cmd_view.dirty__status-short-branch.txt</b><span class="ln">전체 3줄</span><span>짧게 — MM</span></div>
+<pre class="term" data-out="cmd_view.dirty__status-short-branch.txt">$ git status --short --branch
+## main
+MM a</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-diff-three">
+<h3>diff 셋 — 어느 두 칸을 견주나</h3>
+<div class="src"><b>out/cmd_view.dirty__diff.txt</b><span class="ln">전체 8줄</span><span>인덱스 대 작업 트리 (a2 → a3)</span></div>
+<pre class="term" data-out="cmd_view.dirty__diff.txt">$ git diff
+diff --git a/a b/a
+index c1827f0..d616f73 100644
+--- a/a
++++ b/a
+@@ -1 +1 @@
+-a2
++a3</pre>
+<div class="src"><b>out/cmd_view.dirty__diff-cached.txt</b><span class="ln">전체 8줄</span><span>HEAD 대 인덱스 (a1 → a2)</span></div>
+<pre class="term" data-out="cmd_view.dirty__diff-cached.txt">$ git diff --cached
+diff --git a/a b/a
+index da0f8ed..c1827f0 100644
+--- a/a
++++ b/a
+@@ -1 +1 @@
+-a1
++a2</pre>
+<div class="src"><b>out/cmd_view.dirty__diff-head.txt</b><span class="ln">전체 8줄</span><span>HEAD 대 작업 트리 (a1 → a3)</span></div>
+<pre class="term" data-out="cmd_view.dirty__diff-head.txt">$ git diff HEAD
+diff --git a/a b/a
+index da0f8ed..d616f73 100644
+--- a/a
++++ b/a
+@@ -1 +1 @@
+-a1
++a3</pre>
+<p><code>index</code> 줄의 두 이름이 곧 견준 두 칸의 blob 이름입니다 — 상태 표의 값과 같습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-log-stat">
+<h3>log — 커밋과 그 변경</h3>
+<div class="src"><b>out/cmd_view__log-oneline-stat.txt</b><span class="ln">전체 9줄</span><span>--stat: 파일별 줄 수</span></div>
+<pre class="term" data-out="cmd_view__log-oneline-stat.txt">$ git log --oneline --stat
+d84229d second
+ b | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+2887d79 first
+ a | 1 +
+ b | 1 +
+ c | 1 +
+ 3 files changed, 3 insertions(+)</pre>
+<div class="src"><b>out/cmd_view__log-format-h-an-ad-s-date-short.txt</b><span class="ln">전체 3줄</span><span>--format: 원하는 칸만</span></div>
+<pre class="term" data-out="cmd_view__log-format-h-an-ad-s-date-short.txt">$ git log --format="%h %an %ad %s" --date=short
+d84229d A U Thor 2023-11-15 second
+2887d79 A U Thor 2023-11-15 first</pre>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-log-p">
+<h3>log -p — 부모와의 diff 를 함께</h3>
+<div class="src"><b>out/cmd_view__log-p-1.txt</b><span class="ln">전체 14줄</span><span>마지막 커밋 하나와 그 변경</span></div>
+<pre class="term" data-out="cmd_view__log-p-1.txt">$ git log -p -1
+commit d84229dfc4ac5a862c1b2d642ad931b4c7c6ae6a
+Author: A U Thor &lt;author@example.com&gt;
+Date:   Wed Nov 15 07:14:20 2023 +0900
+
+    second
+
+diff --git a/b b/b
+index c9c6af7..e6bfff5 100644
+--- a/b
++++ b/b
+@@ -1 +1 @@
+-b1
++b2</pre>
+<p>커밋에는 diff 가 없으니(2부), <code>-p</code> 는 그때그때 부모의 트리와 견줘 만든 것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-show">
+<h3>show — 객체 하나 보기</h3>
+<div class="src"><b>out/cmd_view__show-name-status-head.txt</b><span class="ln">전체 8줄</span><span>커밋과 바뀐 파일 이름·종류</span></div>
+<pre class="term" data-out="cmd_view__show-name-status-head.txt">$ git show --name-status HEAD
+commit d84229dfc4ac5a862c1b2d642ad931b4c7c6ae6a
+Author: A U Thor &lt;author@example.com&gt;
+Date:   Wed Nov 15 07:14:20 2023 +0900
+
+    second
+
+M	b</pre>
+<div class="src"><b>out/cmd_view__show-head-1-b.txt</b><span class="ln">전체 2줄</span><span>커밋:경로 — 옛 판의 파일 내용</span></div>
+<pre class="term" data-out="cmd_view__show-head-1-b.txt">$ git show HEAD~1:b
+b1</pre>
+<p><code>show</code> 는 커밋이면 머리와 diff, 트리면 목록, blob 이면 내용, 태그면 태그와 그 대상을 보여 줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-summary">
+<h2>6부 정리 — 명령과 칸</h2>
+<div class="tblwrap"><table class="kv">
+<tr><th>명령</th><th>HEAD</th><th>인덱스</th><th>작업 트리</th></tr>
+<tr><td><code>add</code></td><td></td><td>●</td><td></td></tr>
+<tr><td><code>commit</code></td><td>●</td><td></td><td></td></tr>
+<tr><td><code>rm</code> · <code>rm --cached</code></td><td></td><td>● · ●</td><td>● · </td></tr>
+<tr><td><code>restore</code> · <code>--staged</code></td><td></td><td> · ●</td><td>● · </td></tr>
+<tr><td><code>checkout &lt;커밋&gt; -- 파일</code></td><td></td><td>●</td><td>●</td></tr>
+<tr><td><code>reset --soft</code> · <code>--mixed</code> · <code>--hard</code></td><td>● ● ●</td><td> · ● ●</td><td> · · ●</td></tr>
+<tr><td><code>switch</code></td><td>●</td><td>●</td><td>●(바뀐 파일만)</td></tr>
+<tr><td><code>stash</code> · <code>clean</code></td><td></td><td>● · </td><td>● · ●</td></tr>
+</table></div>
+<p class="cap">● 은 그 칸을 바꾼다는 뜻, 가운뎃점으로 나눈 칸은 앞뒤 명령에 차례로 대응합니다. 모두 이 부의 상태 표에서
+옮긴 것입니다. HEAD 칸의 ● 은 커밋을 만들거나 브랜치(또는 HEAD)를 옮기는 것입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p6-quiz-3" data-quiz>
+<h3>4~8장 퀴즈</h3>
+<p class="q">Q. 커밋 셋을 하나로 합치고 싶습니다. <code>reset</code> 의 어느 모드를 쓰고 그다음 무엇을 합니까?
+<code>reset --hard</code> 로 했다면 무엇을 잃을 수 있습니까? 그리고 stash 가 "커밋" 이라는 것은 어떻게 확인합니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>git reset --soft HEAD~3</code> 뒤 <code>git commit</code> — soft 는 인덱스·작업 트리를 그대로 두니 세 커밋의
+변경이 모두 스테이징된 채 남습니다. <code>--hard</code> 였다면 세 커밋은 reflog 로 되찾을 수 있어도, 그때 add 하지 않은 작업
+트리 변경은 잃습니다. stash 는 <code>git cat-file -p stash@{0}</code> 이 <code>tree</code> 와 <code>parent</code> 줄을 가진
+커밋 객체를 보여 주는 것으로 확인합니다.</div>
+<span class="tier ill">설명용</span>
 </article>
 
 <!-- ===== 07_merge.html ===== -->

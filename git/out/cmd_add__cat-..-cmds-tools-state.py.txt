@@ -1,0 +1,22 @@
+$ cat ../cmds-tools/state.py
+import os, subprocess
+# 경로마다 HEAD · 인덱스 · 작업 트리의 blob 이름(앞 7자리), 없으면 -
+def run(*a):
+    return subprocess.run(a, capture_output=True, text=True).stdout
+head, idx, wt = {}, {}, {}
+for line in run("git", "ls-tree", "-r", "HEAD").splitlines():
+    meta, path = line.split("\t")
+    head[path] = meta.split()[2][:7]
+for line in run("git", "ls-files", "-s").splitlines():
+    meta, path = line.split("\t")
+    stage = meta.split()[2]
+    idx[path] = meta.split()[1][:7] + ("" if stage == "0" else ":" + stage)
+for root, dirs, files in os.walk("."):
+    dirs[:] = [d for d in dirs if d != ".git"]
+    for f in files:
+        path = os.path.relpath(os.path.join(root, f), ".")
+        wt[path] = run("git", "hash-object", path).strip()[:7]
+print("%-10s %-9s %-9s %s" % ("path", "HEAD", "index", "worktree"))
+for p in sorted(set(head) | set(idx) | set(wt)):
+    print("%-10s %-9s %-9s %s" % (p, head.get(p, "-"), idx.get(p, "-"),
+                                  wt.get(p, "-")))
