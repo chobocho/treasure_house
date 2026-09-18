@@ -45,10 +45,9 @@ from build_deck import gitslug  # noqa: E402  같은 규칙이어야 한다
 
 # 실험 모듈의 차례 — 덱의 부 차례를 따른다(가벼운 것부터)
 ORDER = ['hello', 'concepts', 'objects', 'anatomy', 'tree_sort',
-         'refs', 'refs2', 'index', 'index2', 'cmds',
-         'dag', 'merge', 'merge2',
-         'rebase', 'diff', 'pack', 'proto', 'config_hooks', 'limits',
-         'recovery', 'mygit', 'cmdref']
+         'refs', 'refs2', 'index', 'index2', 'cmds', 'dag', 'merge',
+         'merge2', 'rebase', 'rebase2', 'diff', 'pack', 'proto',
+         'config_hooks', 'limits', 'recovery', 'mygit', 'cmdref']
 
 
 def cells(s):
