@@ -207,8 +207,25 @@ func cmdHashObject(ctx *Ctx, args []string) (int, error) {
 	return 0, nil
 }
 
-// pretty 는 cat-file -p 의 몸. 트리는 4단계가 가로챈다.
-var pretty = func(typ string, body []byte) []byte { return body }
+// pretty 는 cat-file -p 의 몸. blob·commit·tag 는 그대로, 트리는
+// 항목마다 "%06o 형식 이름\t경로" (SPEC.md §9, 따옴표는 §8.2).
+func pretty(typ string, body []byte) ([]byte, error) {
+	if typ != "tree" {
+		return body, nil
+	}
+	ents, err := ParseTree(body)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	for _, e := range ents {
+		var mode int
+		fmt.Sscanf(e.Mode, "%o", &mode)
+		fmt.Fprintf(&buf, "%06o %s %s\t%s\n", mode, TypeOfMode(e.Mode),
+			e.Oid, QuotePath(e.Name, false))
+	}
+	return buf.Bytes(), nil
+}
 
 func cmdCatFile(ctx *Ctx, args []string) (int, error) {
 	f, err := parseFlags(args, []string{"-t", "-s", "-p"})
@@ -237,7 +254,11 @@ func cmdCatFile(ctx *Ctx, args []string) (int, error) {
 	case f.on["-s"]:
 		ctx.say("%d\n", len(body))
 	default:
-		ctx.Out.Write(pretty(typ, body))
+		text, err := pretty(typ, body)
+		if err != nil {
+			return 0, err
+		}
+		ctx.Out.Write(text)
 	}
 	return 0, nil
 }
