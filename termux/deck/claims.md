@@ -307,3 +307,7 @@
 | 설치처: F-Droid(F-Droid 가 빌드·서명, 며칠~일주일 지연, 범용 APK·약 180MB), GitHub(≥0.118.0 릴리스·커밋 빌드, 아키텍처별 약 120MB), Google Play(Android 11+ 실험 빌드, 별도 저장소). Android 7 이상 온전 지원 | readme-termux-app 1.3·1.3.1·1.3.2·1.3.3 | README | 2026-09-18 |
 | 위키 Package Management: pkg 권장(별칭·자동 apt update·미러 순환), pkg upgrade 주 1회, uninstall/search/list-all/list-installed/files/clean/autoclean, 데비안 저장소 불가·단일 아키텍처·다운그레이드 없음·root apt 제한 | wiki-package-management 1·2 | 위키 | 2026-09-18 |
 | 공식 창구: termux.dev·GitHub·Reddit·Matrix(Gitter)·Discord·libera.chat #Termux·지원 메일. 비공식 커뮤니티 정보에는 책임지지 않음 | readme-termux-app 1.5.1 · wiki-community | README·위키 | 2026-09-18 |
+| 이 세션: 램 15,073MB 중 여유 수백 MB·스왑 대부분 사용, RSS 상위는 claude 둘 | out/session_self.txt 1·2 | 스냅샷 | 2026-09-18 |
+| PLAN.md §0 의 제약: 보조 에이전트 ≤2, JVM 없음, 큰 빌드 없음, 무거운 일 전 free -m | termux/PLAN.md 55–58행 | 이 저장소 문서 | 2026-09-18 |
+| 이 저장소: 커밋 702, 맨 위 HTML 118, 2026-09 커밋 445. CLAUDE.md 절 6개 | out/repo_self.txt 1–4 | 스냅샷 | 2026-09-18 |
+| proot-distro 저장소에 CLAUDE.md(빈 줄 아닌 줄 2,087)가 있고 proot_cmd.py 5행이 "Development assisted by Claude Code" | out/src_pd_claude.txt 1·2 · proot-distro@f832a56 proot_cmd.py 5 | 소스 캡처 | 2026-09-18 |

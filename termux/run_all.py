@@ -571,6 +571,20 @@ CAPTURES = [
         S('glibc — 우분투의 gcc', 'sh exp/missing_lib.sh gcc '
           'scratch/missing_g | cut -c1-100'),
     ]),
+    # 13부 — 이 저장소 자신. 커밋·덱 수는 날마다 늘어 스냅샷이다
+    Capture('repo_self', 'termux', 'snapshot', [
+        S('저장소의 커밋 수', 'git -C .. log --oneline | wc -l'),
+        S('맨 위의 HTML 문서 수', 'ls ../*.html | wc -l'),
+        S('달마다 커밋', 'git -C .. log --format=%ad '
+          "--date=format:%Y-%m | sort | uniq -c | tail -n 4"),
+        S('저장소 CLAUDE.md 의 절', "grep '^## ' ../CLAUDE.md"),
+    ]),
+    Capture('src_pd_claude', 'termux', 'stable', [
+        S('proot-distro 의 CLAUDE.md 절 제목', "python3 deck/srcpin.py "
+          "grep 'proot-distro:CLAUDE.md' '^## .*' | head -n 12"),
+        S('빈 줄이 아닌 줄 수', "python3 deck/srcpin.py grep "
+          "'proot-distro:CLAUDE.md' '.+' | wc -l"),
+    ]),
     # 9부 — 이 세션을 띄운 proot 명령줄. 추적자(TracerPid)의
     # cmdline 을 읽는다. 세션을 다시 띄우면 바뀔 수 있어 스냅샷이다
     Capture('proot_session', 'proot', 'snapshot', [

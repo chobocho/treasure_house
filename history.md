@@ -1,3 +1,9 @@
+### [2026-09-18 05:26] Termux 대백과사전 덱 13부 — AI 에이전트와 이 저장소(8장)
+- **기획:** 이 덱을 만든 작업장 자체를 증거로: 메모리, 프로세스, 두 세계의 도구, 규칙 파일, upstream 의 CLAUDE.md.
+- **TC:** 캡처 2종(repo_self 스냅샷·src_pd_claude) 추가·session_self 재촬영, 추측 문장 2건 삭제, 조립 검사 오류 0건.
+- **개발:** `termux/deck/sections/13_ai_agents.html`, `termux/run_all.py`, `termux/out/` 3개, `termux/deck/claims.md`, `termux/PLAN.md`, `Termux_대백과사전.html`
+- **검증:** test_run_all 통과 · make all SKEL=1 오류 0건
+
 ### [2026-09-18 05:24] Termux 대백과사전 덱 2부 — 역사(13장)
 - **기획:** 2015 시작부터 2026-09 까지를 시대별 연표로. 날짜는 모두 기계로 모은 timeline.tsv 에서 표로 생성.
 - **TC:** gen_tables 거르개가 값 여러 개를 받게 시험 5건 먼저(RED 확인) — 값 하나·튜플·빈 튜플·거르개 없음·전체 표.

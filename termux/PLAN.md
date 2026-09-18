@@ -892,3 +892,11 @@ The user approved every recommendation below as-is. Each row is now a decision.
 - Part 2 written: 13 slides (budget 140). Every date comes from the machine-collected timeline
   (first commits, GitHub releases, wiki first revisions, notices); 2025+ carries "2026-09 기준".
   The release-per-year figure and SDK steps figure are reused; people only as named in files.
+
+### Step 8 · Part 13 — AI 에이전트와 이 저장소 (2026-09-18)
+
+- Captures: `repo_self` (snapshot — 702 commits, 118 top-level HTML, commits per month, the
+  repo CLAUDE.md sections), `src_pd_claude` (upstream proot-distro ships a ~2,100-line
+  CLAUDE.md), `session_self` re-snapped.
+- Part 13 written: 8 slides (budget 60). The workshop as evidence: memory pressure, two agent
+  sessions side by side, which side's tools were used, rule files here and upstream.
