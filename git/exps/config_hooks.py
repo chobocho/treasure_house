@@ -70,7 +70,8 @@ def run(ctx):
     a.cap('cat .gitattributes')
     a.cap('git config --get-regexp "^(diff|merge)\\."')
     a.cap('git ls-files --eol')
-    # 작업 트리의 a.txt 는 속성보다 먼저 썼다 — 다시 꺼내야 CRLF
+    # 작업 트리의 a.txt 는 git 이 아니라 이 스크립트가 LF 로 썼다 —
+    # eol=crlf 는 git 이 꺼내 쓸 때(checkout) 적용되므로 다시 꺼내야 CRLF
     a.cap('rm a.txt && git checkout a.txt && git ls-files --eol a.txt')
     a.cap('od -c a.txt')
     a.cap('git cat-file -p HEAD:a.txt | od -c', label='attributes.blob')

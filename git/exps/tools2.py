@@ -103,6 +103,9 @@ def submodules(ctx):
 
 def worktrees(ctx):
     r = ctx.repo('wt_twice')
+    # 작업 트리 둘은 저장소 밖(../)에 생긴다 — 앞 실행이 남긴 것을 먼저
+    # 치우지 않으면 첫 worktree add 부터 "already exists" 로 실패한다
+    r.sh('rm -rf ../wt_twice-a ../wt_twice-b')
     commit(r, 0, 'base', {'a.txt': 'a\n'})
     r.sh('git branch topic')
     r.cap('git worktree add -q ../wt_twice-a topic && '
