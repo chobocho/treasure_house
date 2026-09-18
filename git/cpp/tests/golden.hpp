@@ -154,4 +154,47 @@ inline void plant(const std::string& g, const std::string& oid) {
     write_file(g + "/objects/" + oid.substr(0, 2) + "/" + oid.substr(2),
                read("objects/" + oid));
 }
+
+// row 는 golden/errors.tsv 에서 명령 하나의 (첫 줄, 종료 코드).
+inline std::pair<std::string, int> error_row(const std::string& cmd) {
+    for (auto& r : tsv("errors.tsv"))
+        if (r["command"] == cmd)
+            return {r["stderr-first-line"], std::stoi(r["exit"])};
+    throw std::runtime_error("errors.tsv 에 없다: " + cmd);
+}
+
+inline std::string first_line(const std::string& s) {
+    return s.substr(0, s.find('\n'));
+}
+
+// Sandbox 는 임시 디렉터리 안의 작업 트리 w. repo 면 .git 뼈대를 손으로
+// 만든다(init 은 5단계의 일). 위로 올라가다 이 덱의 저장소를 찾지 않게
+// GIT_CEILING_DIRECTORIES 를 둔다(SPEC.md §1.1).
+struct Sandbox {
+    TempDir t;
+    std::string root;
+    mygit::Env env;
+    explicit Sandbox(bool repo)
+        : root(t.path + "/w"), env(mygit::os_env()) {
+        fs::create_directories(root);
+        if (repo) {
+            for (auto d : {"objects/pack", "refs/heads", "refs/tags"})
+                fs::create_directories(root + "/.git/" + d);
+            write_file(root + "/.git/HEAD", "ref: refs/heads/main\n");
+        }
+        env["GIT_CEILING_DIRECTORIES"] = t.path;
+    }
+    mygit::Result run(const std::string& input,
+                      std::vector<std::string> args) {
+        auto r = mygit::run(args, root, env, input);
+        if (r.code == 99) throw mygit::GitError("not implemented", 99);
+        return r;
+    }
+    mygit::Result mygit(std::vector<std::string> args) {
+        return run("", std::move(args));
+    }
+    void put(const std::string& name, const std::string& data) {
+        write_file(root + "/" + name, data);
+    }
+};
 }  // namespace golden

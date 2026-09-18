@@ -12,7 +12,7 @@
 
 namespace mygit {
 
-inline constexpr int STEP = 2;
+inline constexpr int STEP = 3;
 
 // 명령이 멈추는 까닭. code 는 종료 코드(SPEC.md §1.4).
 struct GitError : std::runtime_error {
@@ -67,5 +67,16 @@ Object read_object(const std::string& gitdir, const std::string& oid);
 std::vector<std::string> all_loose(const std::string& gitdir);
 std::string find_object(const std::string& gitdir,
                         const std::string& prefix);
+
+// ── cli.cpp (SPEC.md §1 · §9) ─────────────────────────────────────
+using Env = std::map<std::string, std::string>;
+struct Result {
+    int code;
+    std::string out, err;
+};
+Env os_env();
+// 명령 하나를 돌린다. input 이 nullopt 면 진짜 표준 입력을 읽는다.
+Result run(const std::vector<std::string>& args, const std::string& cwd,
+           const Env& env, std::optional<std::string> input);
 
 }  // namespace mygit
