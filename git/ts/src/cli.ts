@@ -16,6 +16,7 @@ import * as index from './index';
 import * as objects from './objects';
 import * as refs from './refs';
 import * as tree from './tree';
+import * as walk from './walk';
 import * as worktree from './worktree';
 
 type Env = Record<string, string | undefined>;
@@ -286,7 +287,8 @@ function listBranches(ctx: Ctx): number {
 }
 
 function cmdBranch(ctx: Ctx, args: string[]): number {
-  const [, , rest] = parseFlags(args, []);
+  const [on, , rest] = parseFlags(args, ['-d']);
+  if (on.has('-d')) return deleteBranch(ctx, rest);
   if (!rest.length) return listBranches(ctx);
   const name = rest[0];
   const g = ctx.gitdir();
@@ -305,6 +307,30 @@ function cmdBranch(ctx: Ctx, args: string[]): number {
   }
   refs.updateRef(g, HEADS + name, oid, null,
     `branch: Created from ${start}`, ident(ctx));
+  return 0;
+}
+
+// branch -d — HEAD 에서 닿는 브랜치만 지운다(SPEC.md §9.2).
+function deleteBranch(ctx: Ctx, rest: string[]): number {
+  const g = ctx.gitdir();
+  const [cur, head] = refs.readHead(g);
+  for (const name of rest) {
+    const ref = HEADS + name;
+    const oid = refs.resolveRef(g, ref);
+    if (ref === cur) {
+      throw new GitError(`error: cannot delete branch '${name}' used ` +
+        `by worktree at '${ctx.root()}'`, 1);
+    }
+    if (oid === null) {
+      throw new GitError(`error: branch '${name}' not found.`, 1);
+    }
+    if (head === null || !walk.isAncestor(g, oid, head)) {
+      throw new GitError(`error: the branch '${name}' is not fully ` +
+        'merged', 1);
+    }
+    refs.updateRef(g, ref, null, oid, '', '');
+    ctx.say(`Deleted branch ${name} (was ${oid.slice(0, 7)}).\n`);
+  }
   return 0;
 }
 
@@ -499,6 +525,72 @@ function cmdCommit(ctx: Ctx, args: string[]): number {
   return 0;
 }
 
+// ── 7단계: log · merge-base ───────────────────────────────────────
+
+// 커밋 하나를 git log 의 꼴로(SPEC.md §9.1).
+function logEntry(ctx: Ctx, oid: string, oneline: boolean): string {
+  const [, body] = objects.readObject(ctx.gitdir(), oid);
+  const c = commit.parseCommit(body);
+  const short = (o: string) => o.slice(0, 7);
+  if (oneline) return `${short(oid)} ${commit.subjectOf(c.message)}\n`;
+  const [name, mail, secs, tz] = commit.parseIdent(c.author);
+  const rows = [`commit ${oid}`];
+  if (c.parents.length > 1) {
+    rows.push('Merge: ' + c.parents.map(short).join(' '));
+  }
+  rows.push(`Author: ${name} <${mail}>`,
+    `Date:   ${commit.formatDate(secs, tz)}`, '');
+  const msg = c.message.endsWith('\n') ? c.message.slice(0, -1)
+    : c.message;
+  rows.push(...msg.split('\n').map((line) => '    ' + line));
+  return rows.join('\n') + '\n';
+}
+
+function cmdLog(ctx: Ctx, args: string[]): number {
+  const [on, vals, rest] = parseFlags(args, ['--oneline'], ['-n']);
+  const g = ctx.gitdir();
+  let start: string | null;
+  if (rest.length) {
+    start = resolve(ctx, rest[0]);
+    start = start && refs.peel(g, start, 'commit');
+    if (start === null) throw new GitError(AMBIGUOUS(rest[0]));
+  } else {
+    const [branch, head] = refs.readHead(g);
+    if (head === null) {
+      throw new GitError(`fatal: your current branch ` +
+        `'${branch?.slice(HEADS.length)}' does not have any ` +
+        'commits yet');
+    }
+    start = head;
+  }
+  let order = walk.walkLog(g, [start]);
+  if (vals.has('-n')) order = order.slice(0, Number(vals.get('-n')));
+  const oneline = on.has('--oneline');
+  ctx.say(order.map((oid) => logEntry(ctx, oid, oneline))
+    .join(oneline ? '' : '\n'));
+  return 0;
+}
+
+function cmdMergeBase(ctx: Ctx, args: string[]): number {
+  const [on, , rest] = parseFlags(args, ['--all']);
+  if (rest.length !== 2) {
+    throw new GitError('usage: mygit merge-base [--all] <a> <b>', 129);
+  }
+  const g = ctx.gitdir();
+  const [a, b] = rest.map((name) => {
+    const oid = resolve(ctx, name);
+    const c = oid && refs.peel(g, oid, 'commit');
+    if (c) return c;
+    throw new GitError(`fatal: Not a valid object name ${name}`);
+  });
+  const best = walk.mergeBases(g, a, b);
+  if (!best.length) return 1;
+  for (const oid of on.has('--all') ? best : best.slice(0, 1)) {
+    ctx.say(oid + '\n');
+  }
+  return 0;
+}
+
 // ── 틀 ────────────────────────────────────────────────────────────
 const COMMANDS = new Map<string, Command>([
   ['hash-object', cmdHashObject],
@@ -513,6 +605,8 @@ const COMMANDS = new Map<string, Command>([
   ['status', cmdStatus],
   ['write-tree', cmdWriteTree],
   ['commit', cmdCommit],
+  ['log', cmdLog],
+  ['merge-base', cmdMergeBase],
 ]);
 
 // 명령 하나를 돌린다 → [종료 코드, 표준 출력, 표준 오류]. stdin 이
