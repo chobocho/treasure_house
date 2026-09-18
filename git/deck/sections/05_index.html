@@ -1,17 +1,408 @@
 <article class="card section" id="p5">
 <p class="chnum">5부</p>
-<h2>인덱스(스테이징)</h2>
-<p class="chsub">.git/index 한 파일의 모든 것</p>
-<p class="cap">이 부의 목표 장수는 110장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>5부에서 다룰 것</h3>
+<h2>인덱스</h2>
+<p class="chsub">.git/index — 스테이징 영역의 실체</p>
+</article>
+
+<article class="card" id="p5-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">2부에서 인덱스를 "다음 커밋이 될 트리의 초안" 이라고 했습니다. 그 초안은
+<code>.git/index</code> 파일 하나이고, 이 부는 그 파일을 바이트로 엽니다.</p>
 <ul>
-<li>index v2 의 바이트 — 헤더 · 항목 · 확장 · 체크섬</li>
-<li>stat 캐시와 racy git</li>
-<li>assume-unchanged 대 skip-worktree</li>
-<li>확장 TREE · REUC · UNTR</li>
-<li>sparse-checkout 과 sparse index</li>
-<li>인덱스가 있어서 되는 것들</li>
+<li>머리 · 항목 · 확장 · 끝 체크섬 — 파일의 뼈대</li>
+<li>항목마다 적힌 stat 칸, 그것으로 "안 바뀐 파일" 을 빨리 가려내는 법</li>
+<li>그 믿음이 틀리는 자리 — racy git — 과 git 의 대처</li>
+<li>assume-unchanged · skip-worktree · sparse-checkout · 희소 인덱스</li>
+<li>충돌 때의 단계 1·2·3, 의도만 추가(<code>add -N</code>)</li>
+<li>확장 다섯 — TREE · REUC · UNTR · link · sdir</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-ch1"><p class="chnum">1장</p><h2>파일의 뼈대</h2><p class="chsub">DIRC · 항목 · 확장 · SHA-1</p></article>
+
+<article class="card" id="p5-layout">
+<h3>네 부분</h3>
+<ol>
+<li><b>머리 12바이트</b> — 서명 <code>DIRC</code>, 판(2·3·4), 항목 수</li>
+<li><b>항목들</b> — 경로 차례로 정렬, 항목마다 stat 칸·모드·객체 이름·플래그·경로</li>
+<li><b>확장들</b> — 4바이트 서명 + 4바이트 크기 + 내용. 없을 수도 있다</li>
+<li><b>끝 20바이트</b> — 그 앞 전부의 SHA-1</li>
+</ol>
+<p>수는 모두 빅 엔디언입니다. 공식 형식 문서는 <code>DIRC</code> 를 "dircache" 의 줄임이라고 적습니다.
+<!--CITE key=gitformat-index sec="The Git index file has the following format"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-header">
+<h3>머리 12바이트</h3>
+<!--OUT file=index__od-a-d-t-x1-n-12-.git-index.txt note=파일 네 개짜리 저장소의 인덱스 앞 12바이트-->
+<p><code>44 49 52 43</code> = <code>DIRC</code>, <code>00 00 00 02</code> = 판 2, <code>00 00 00 04</code> = 항목 넷.</p>
+<!--OUT file=index__ls-files-stage.txt note=그 네 항목-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-entry-fig">
+<h3>항목 하나의 바이트</h3>
+<!--FIG file=index_entry.svg cap=golden/index/plain.bin 의 머리와 첫 항목 — 진짜 git add 가 쓴 파일-->
+<p class="cap">stat 칸(시각·장치·inode·uid·gid)은 기계마다 다른 값이라 golden 이 0 으로 바꿔 두었습니다.
+모드·크기·blob 이름·경로는 git 이 쓴 그대로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-entry-fields">
+<h3>항목의 칸 — 62바이트 + 경로</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>칸</th><th>바이트</th><th>쓰임</th></tr>
+<tr><td>ctime · mtime</td><td>8 · 8</td><td>초와 나노초. 바뀌었는지 빨리 보기</td></tr>
+<tr><td>dev · ino</td><td>4 · 4</td><td>같은 파일인지(지웠다 새로 만들었는지)</td></tr>
+<tr><td>mode</td><td>4</td><td>종류와 권한 — <code>100644</code> · <code>100755</code> · <code>120000</code> · <code>160000</code></td></tr>
+<tr><td>uid · gid</td><td>4 · 4</td><td>소유자</td></tr>
+<tr><td>size</td><td>4</td><td>파일 크기(아래 32비트)</td></tr>
+<tr><td>객체 이름</td><td>20</td><td>blob 의 SHA-1(이진)</td></tr>
+<tr><td>flags</td><td>2</td><td>assume-valid · 확장 플래그 · 단계(2비트) · 경로 길이(12비트)</td></tr>
+<tr><td>경로 + NUL</td><td>가변</td><td>NUL 1~8 개로 항목 길이를 8의 배수로</td></tr>
+</table></div>
+<!--CITE key=gitformat-index sec="Index entry"-->
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-entry-code">
+<h3>mygit 의 인덱스 쓰기</h3>
+<!--CODE file=py/mygit/index.py lines=88-106 note=판 2 로 쓴다 — 정렬, 62바이트 칸, NUL 채우기, 끝 SHA-1-->
+<p class="cap">부록 A 의 다섯 구현은 이렇게 쓴 인덱스가 진짜 git 의 것과 바이트까지 같은지 시험합니다
+(stat 칸을 같게 맞춘 뒤).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-checksum">
+<h3>끝 20바이트 — 앞부분의 SHA-1</h3>
+<!--OUT file=idxsum__cat-..-idx-tools-sumchk.sh.txt note=앞부분의 SHA-1 과 끝 20바이트를 견준다-->
+<!--OUT file=idxsum__sh-..-idx-tools-sumchk.sh.txt note=같다-->
+<p class="cap">해시 값 자체는 싣지 않았습니다. 인덱스에는 ctime·inode 처럼 돌릴 때마다 다른 칸이 있어
+해시도 매번 다르기 때문입니다 — "같다" 는 판정만 세 번 떠도 같습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-checksum-broken">
+<h3>한 바이트를 깨면 — 누가 알아채나</h3>
+<p>첫 항목의 blob 이름 안의 한 바이트(파일 앞에서 70번째)를 뒤집었습니다.</p>
+<!--OUT file=idxsum.broken__sh-..-idx-tools-sumchk.sh.txt note=체크섬이 어긋났다-->
+<!--OUT file=idxsum.broken__fsck-2-1-head-3.txt note=fsck 는 잡는다-->
+<!--OUT file=idxsum.broken__status-2-1.txt note=status 는 그대로 읽는다-->
+<p><code>status</code> 는 체크섬을 검사하지 않고 읽어, 깨진 blob 이름을 "스테이징한 변경" 으로 보여 줍니다.
+인덱스는 자주 읽히는 파일이라 매번 해시하지 않는 쪽을 택한 것입니다. 검사는 <code>fsck</code> 가 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-checksum-fix">
+<h3>인덱스는 다시 만들 수 있다</h3>
+<!--OUT file=idxsum.rebuilt__rm-.git-index-git-reset-q-git-status-short.txt note=지우고 HEAD 에서 다시 채우면 깨끗-->
+<p>인덱스에는 객체가 없고 이름만 있습니다. 지워도 <code>git reset</code> 이 HEAD 의 트리로 다시 채웁니다.
+잃는 것은 <b>아직 커밋하지 않고 스테이징만 한 상태</b> — 어느 파일을 add 해 두었는지 — 뿐입니다
+(그 blob 들도 객체 저장소에는 남아 있습니다).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-lock">
+<h3>index.lock</h3>
+<!--OUT file=idxlock__add-a.txt-2-1.txt note=잠금 파일이 이미 있을 때-->
+<p>인덱스를 바꾸는 명령은 <code>index.lock</code> 에 새 인덱스를 다 쓴 뒤 이름을 바꿔 넣습니다. 4부의 참조
+잠금과 같은 방식입니다. 편집기 플러그인이 뒤에서 git 을 부르는 동안 명령을 치면 이 메시지를 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p5-quiz-1" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 경로가 <code>hello.txt</code>(9바이트)인 항목은 몇 바이트를 차지합니까? 경로가 <code>ab</code>
+(2바이트)라면요? 그리고 <code>.git/index</code> 를 지우면 무엇을 잃습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 62 + 9 = 71 에 NUL 을 채워 8의 배수로 — 72바이트(NUL 하나). <code>ab</code> 는 62 + 2 = 64 인데
+NUL 이 적어도 하나는 있어야 하므로 72바이트(NUL 여덟). 인덱스를 지우면 "무엇을 스테이징해 두었나" 만 잃습니다.
+<code>git reset</code> 이 HEAD 로 다시 채우고, add 했던 내용의 blob 은 객체 저장소에 남아 있습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-ch2"><p class="chnum">2장</p><h2>stat 캐시</h2><p class="chsub">파일을 읽지 않고 "안 바뀌었다" 고 말하기</p></article>
+
+<article class="card" id="p5-stat-idea">
+<h3>왜 stat 을 적어 두나</h3>
+<p><code>git status</code> 가 파일 수만 개를 모두 읽어 해시하면 느립니다. 그래서 인덱스는 add 할 때의 stat
+(크기·시각·inode…)을 적어 두고, 다음에는 <b>stat 만 견줍니다</b>.</p>
+<ul>
+<li>stat 이 같다 → 내용도 같다고 믿는다(해시하지 않음)</li>
+<li>stat 이 다르다 → 그때만 읽어 해시하고 blob 이름과 견준다</li>
+</ul>
+<!--OUT file=index__ls-files-debug-a.txt.txt note=a.txt 항목의 stat 칸(기계마다 다른 칸은 가렸다)-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-stat-miss">
+<h3>믿음이 틀리는 자리</h3>
+<p>index 실험은 <code>a.txt</code> 를 <b>같은 크기</b>의 다른 내용(<code>aaaa</code> → <code>bbbb</code>)으로 바꾸고
+mtime 을 옛 값으로 되돌렸습니다. ctime 은 보지 말라고(<code>core.trustctime=false</code>) 해 두었습니다.</p>
+<!--OUT file=index__status-short.txt note=아무 변화도 보고하지 않는다-->
+<!--OUT file=index__hash-object-a.txt.txt note=그런데 파일의 blob 이름은-->
+<!--OUT file=index__ls-files-stage-a.txt.txt note=인덱스의 blob 이름과 다르다-->
+<p>stat 이 같으니 git 은 파일을 읽지 않았습니다. 일부러 만든 상황이지만, 시각을 되돌리는 도구
+(압축 풀기, 동기화 프로그램)가 실제로 이런 일을 만듭니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-stat-touch">
+<h3>stat 이 달라지면 바로 보인다</h3>
+<!--OUT file=index.touched__touch-a.txt-git-status-short.txt note=mtime 만 지금으로 바꾸면-->
+<p>mtime 이 달라지자 git 이 파일을 읽어 해시했고, 내용이 바뀐 것을 찾았습니다. 의심스러우면
+<code>git update-index --really-refresh</code> 로 stat 을 무시하고 전부 다시 읽게 할 수 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-racy">
+<h3>racy git — 같은 초의 함정</h3>
+<p>파일 시각은 초(또는 더 굵은) 단위입니다. add 직후 <b>같은 초 안에</b> 같은 크기로 다시 고치면 stat 이
+그대로라 git 이 바뀐 것을 놓칠 수 있습니다. 이런 항목을 "racily clean" 이라고 부릅니다.</p>
+<ul>
+<li>git 의 대처 — 파일의 mtime 이 인덱스 파일 자신의 시각과 같거나 늦으면, stat 이 맞아도
+<b>내용까지 견준다</b>.</li>
+<li>그런 항목을 담아 인덱스를 새로 쓸 때는 크기 칸을 0 으로 적어, 다음 번엔 반드시 다르게 보이게 한다.</li>
+</ul>
+<!--CITE key=technical-racy-git sec="Racy Git"-->
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-racy-deck">
+<h3>이 덱을 만들다 racy 를 만났다</h3>
+<p>인덱스 실험을 두 번 돌렸더니 캡처가 달랐습니다. 한 번은 status 가 파일 내용까지 다시 읽어 인덱스를
+새로 썼고, 다른 한 번은 그러지 않았습니다. 파일을 쓴 시각이 인덱스와 같은 초에 걸렸느냐(racily clean)
+의 차이로 보입니다 — 앞 장의 규칙 그대로입니다.</p>
+<p>그래서 캡처를 세 번 같게 뜨려고, 실험은 파일 시각을 과거(<code>touch -d @1700000000</code>)로 못 박은 뒤
+<code>git update-index --refresh</code> 를 한 번 돌립니다. racy 한 항목이 남지 않게 하는 것입니다.
+그 뒤로 여섯 번 돌려 모두 같았습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-ch3"><p class="chnum">3장</p><h2>믿어라 · 보지 마라</h2><p class="chsub">assume-unchanged · skip-worktree · sparse-checkout</p></article>
+
+<article class="card" id="p5-assume">
+<h3>assume-unchanged — "바뀌지 않았다고 믿어라"</h3>
+<!--OUT file=index__update-index-assume-unchanged-a.txt.txt note=비트를 켠다-->
+<!--OUT file=index.assumed__status-short.txt note=a.txt 를 고쳐도 status 가 침묵한다-->
+<!--OUT file=index__ls-files-v.txt note=-v 는 소문자로 표시한다(h)-->
+<!--OUT file=index.unassumed__status-short.txt note=비트를 끄면 다시 보인다-->
+<p>원래 목적은 <b>성능</b>입니다 — stat 조차 느린 파일 시스템에서 "이 파일은 안 바꾸겠다" 고 사용자가
+약속하는 것. 공식 문서는 이 비트(와 skip-worktree)로 "추적 중인 파일의 변경을 무시" 하려 하지 말라고 적습니다 —
+git 은 어떤 작업에서는 여전히 파일을 견주고, 그 파일을 바꿔야 하는 머지에서는 멈춥니다. 그런 설정 파일은
+샘플을 저장소에 두고 복사해 쓰는 쪽을 권합니다. <!--CITE key=git-update-index sec=NOTES--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-skip">
+<h3>skip-worktree — "작업 트리의 이 파일은 없는 셈 쳐라"</h3>
+<!--OUT file=index__update-index-skip-worktree-src-m.c.txt note=비트를 켠다-->
+<!--OUT file=index.skip__ls-files-v.txt note=S 로 표시된다-->
+<!--OUT file=idxskipver__update-index-skip-worktree-a.txt-od-a-d-t-x1-j-4-n-4-.git-in.txt note=다른 저장소에서 — 비트를 켜자 판이 3 으로-->
+<p>이 비트가 켜진 항목은 작업 트리에 파일이 없어도, 있어서 달라도 git 이 인덱스의 값을 그대로 씁니다.
+판 2 항목에는 이 비트를 담을 자리가 없어서, 켜는 순간 인덱스가 판 3(확장 플래그 2바이트)이 됩니다.
+sparse-checkout 이 이 비트를 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-sparse">
+<h3>sparse-checkout — 일부만 풀어 두기</h3>
+<!--OUT file=index__sparse-checkout-set-cone-docs.txt note=docs 디렉터리만(원뿔 모드)-->
+<!--OUT file=index.sparse__ls-r.txt note=src 가 작업 트리에서 사라졌다-->
+<!--OUT file=index.sparse__ls-files-t.txt note=인덱스에는 그대로 — S(skip-worktree)로-->
+<p>원뿔(cone) 모드는 최상위 파일과 고른 디렉터리만 풉니다. <code>src/m.c</code> 는 커밋에도 인덱스에도 그대로
+있고, 작업 트리에만 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-sparse-off">
+<h3>되돌리기</h3>
+<!--OUT file=index__sparse-checkout-disable.txt note=끄면-->
+<!--OUT file=index.full__ls-r.txt note=다시 전부 풀린다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p5-quiz-2" data-quiz>
+<h3>2~3장 퀴즈</h3>
+<p class="q">Q. 팀원이 "로컬 설정 파일의 내 변경이 자꾸 status 에 보여서 <code>assume-unchanged</code> 를 켰다" 고
+합니다. 무엇이 문제입니까? 그리고 sparse-checkout 으로 작업 트리에서 사라진 파일은 다음 커밋에서 지워집니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> assume-unchanged 는 "안 바꾸겠다" 는 성능용 약속이라, 그 파일이 바뀐 커밋을 머지하는 순간
+git 이 멈추고 손으로 풀어야 합니다. 공식 문서도 변경 무시 용도로 쓰지 말라고 합니다. 저장소에는 샘플 설정만 두고,
+실제 설정은 추적하지 않는 파일로 복사해 <code>.gitignore</code> 에 넣는 것이 맞습니다. sparse-checkout 의 파일은 지워지지 않습니다 — 인덱스에 skip-worktree
+비트와 함께 그대로 있고, 커밋은 인덱스로 만들기 때문입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-ch4"><p class="chnum">4장</p><h2>단계 번호와 의도</h2><p class="chsub">충돌할 때의 1·2·3, 그리고 add -N</p></article>
+
+<article class="card" id="p5-stage-conflict">
+<h3>충돌하면 한 경로가 세 항목이 된다</h3>
+<!--OUT file=idxreuc__merge-q-topic-2-1.txt note=같은 줄을 양쪽이 고쳤다-->
+<!--OUT file=idxreuc__ls-files-stage-abbrev.txt note=f.txt 가 단계 1·2·3 으로-->
+<ul>
+<li><b>1</b> — 공통 조상의 판</li>
+<li><b>2</b> — 우리(HEAD) 판</li>
+<li><b>3</b> — 그쪽(합쳐 들어오는) 판</li>
+</ul>
+<p>단계 0 항목이 없으니 이 인덱스로는 트리를 만들 수 없습니다 — 커밋이 거절되는 까닭입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-stage-read">
+<h3>세 판을 꺼내 보기</h3>
+<!--OUT file=idxreuc__for-s-in-1-2-3-do-git-cat-file-p-s-f.txt-done.txt note=:1:경로 · :2:경로 · :3:경로-->
+<!--OUT file=idxreuc__ls-files-u-abbrev.txt note=-u 는 해소되지 않은 항목만-->
+<p><code>:n:경로</code> 는 "인덱스 단계 n 의 그 경로" 입니다(3부 6장의 이름 부르기). 머지 도구들이 이 셋을
+꺼내 화면에 나란히 보여 줍니다(7부).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-stage-resolve">
+<h3>해소 = 단계 0 항목 하나로</h3>
+<!--OUT file=idxreuc__add-f.txt-git-ls-files-stage-abbrev.txt note=고친 파일을 add 하면-->
+<p>세 항목이 사라지고 단계 0 항목 하나가 됩니다. 이제 트리를 만들 수 있고, 커밋할 수 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-reuc">
+<h3>해소를 되돌리기 — REUC 확장</h3>
+<!--OUT file=idxreuc.after__python3-..-idx-tools-idxext.py.txt note=해소한 뒤 인덱스에 REUC 가 생겼다-->
+<!--OUT file=idxreuc__checkout-m-f.txt-git-ls-files-u-abbrev.txt note=checkout -m 이 세 판을 되살린다-->
+<p>add 로 해소하는 순간 git 은 사라지는 세 판을 <code>REUC</code>(resolve undo) 확장에 적어 둡니다. 잘못
+해소했으면 <code>git checkout -m</code> 으로 충돌 상태로 돌아갈 수 있습니다.
+<!--CITE key=gitformat-index sec="Resolve undo"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-intent">
+<h3>add -N — "추가할 생각이다"</h3>
+<!--OUT file=idxintent__add-n-new.txt-git-ls-files-stage.txt note=빈 blob 이름으로 자리만 잡는다-->
+<!--OUT file=idxintent__status-short.txt note=오른쪽 칸의 A-->
+<!--OUT file=idxintent__diff.txt note=그래서 git diff 에 새 파일 전체가 보인다-->
+<p>인덱스에 항목은 생기지만 내용은 아직 올리지 않았다는 표시가 붙습니다. 새 파일을 <code>git diff</code> 와
+<code>add -p</code> 로 조금씩 올리고 싶을 때 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-intent-commit">
+<h3>의도만으로는 커밋되지 않는다</h3>
+<!--OUT file=idxintent__commit-q-m-try-2-1-git-log-oneline.txt note=커밋해 보면-->
+<p>git 은 "스테이징하지 않은 새 파일" 로 봅니다. 트리를 만들 때 의도만 추가된 항목은 빠지므로, 새로
+넣을 것이 없어 커밋이 만들어지지 않았습니다(로그는 그대로 한 줄).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-ch5"><p class="chnum">5장</p><h2>확장</h2><p class="chsub">항목 뒤에 붙는 부록들</p></article>
+
+<article class="card" id="p5-ext-rule">
+<h3>대문자는 건너뛰어도 되고, 소문자는 안 된다</h3>
+<p>확장은 4바이트 서명과 4바이트 크기로 시작합니다. 공식 형식은 서명의 첫 글자가 <code>A</code>~<code>Z</code>
+이면 <b>선택 확장</b> — 모르는 git 이 무시해도 되는 것 — 이라고 정합니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>서명</th><th>이름</th><th>모르면</th></tr>
+<tr><td><code>TREE</code></td><td>캐시 트리</td><td>무시해도 된다</td></tr>
+<tr><td><code>REUC</code></td><td>해소 되돌리기</td><td>무시해도 된다</td></tr>
+<tr><td><code>UNTR</code></td><td>추적 안 하는 파일 캐시</td><td>무시해도 된다</td></tr>
+<tr><td><code>link</code></td><td>분할 인덱스</td><td>읽으면 안 된다 — 항목이 다른 파일에 있다</td></tr>
+<tr><td><code>sdir</code></td><td>희소 디렉터리 항목</td><td>읽으면 안 된다 — 디렉터리 항목을 파일로 오해한다</td></tr>
+</table></div>
+<!--CITE key=gitformat-index sec="Extensions"-->
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-ext-tool">
+<h3>확장을 뽑아 보는 도구</h3>
+<!--OUT file=idxext__cat-..-idx-tools-idxext.py.txt note=항목을 건너뛴 뒤 서명과 크기를 읽는다-->
+<p class="cap">판 4 는 경로를 눌러 적어 항목 길이를 이 식으로 셀 수 없습니다. 그래서 판 2·3 에만 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-ext-tree">
+<h3>TREE — 디렉터리마다 트리 이름을 기억</h3>
+<!--OUT file=idxext.commit__python3-..-idx-tools-idxext.py.txt note=커밋 직후-->
+<!--OUT file=idxext.added__ls-files-stage-abbrev-src-python3-..-idx-tools-idxext.py.txt note=src/m.c 를 add 하면 TREE 가 줄었다-->
+<!--OUT file=idxext.written__write-tree-python3-..-idx-tools-idxext.py.txt note=write-tree 가 다시 채운다-->
+<p>커밋 때마다 모든 디렉터리의 트리를 다시 계산하면 느립니다. 캐시 트리는 "이 디렉터리의 트리 이름은 이것"
+을 기억하고, 파일 하나가 바뀌면 그 경로의 디렉터리들만 무효로 표시합니다. 53바이트에서 15바이트로 준 것이
+그 표시입니다. <!--CITE key=gitformat-index sec="Cache tree"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-ext-untr">
+<h3>UNTR — 추적 안 하는 파일 찾기를 빠르게</h3>
+<!--OUT file=idxext.untr__update-index-untracked-cache-git-status-s-python3-..-idx-too.txt note=캐시를 켜고 status 한 번-->
+<p>추적 안 하는 파일을 찾으려면 모든 디렉터리를 읽어야 합니다. 이 캐시는 디렉터리의 stat 과 그 안의 추적 안
+하는 파일 목록을 기억해, 바뀐 디렉터리만 다시 읽게 합니다. <code>core.untrackedCache</code> 로 늘 켜 둘 수 있습니다.
+<!--CITE key=gitformat-index sec="Untracked cache"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-ext-link">
+<h3>link — 분할 인덱스</h3>
+<!--OUT file=idxext.split__update-index-split-index-python3-..-idx-tools-idxext.py.txt note=앞쪽 인덱스에는 항목이 없다-->
+<!--OUT file=idxext__ls-.git-grep-index-sed-s-0-9a-f-40.txt note=항목은 sharedindex 파일에-->
+<p>항목 수십만 개짜리 인덱스를 파일 하나 바꿀 때마다 통째로 다시 쓰는 것은 낭비입니다. 분할 인덱스는 큰
+몫을 <code>sharedindex.&lt;이름&gt;</code> 에 두고, 앞쪽 <code>index</code> 에는 바뀐 항목만 적습니다.
+<!--CITE key=gitformat-index sec="Split index"--></p>
+<p class="cap">sharedindex 파일 이름의 해시는 stat 칸 때문에 실행마다 달라 <code>&lt;이름&gt;</code> 으로 가렸습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-versions">
+<h3>판 2 · 3 · 4 — 파일 2,000개로 잰 크기</h3>
+<!--OUT file=idxver.2__update-index-index-version-2-wc-c-.git-index.txt note=판 2-->
+<!--OUT file=idxver.3__update-index-index-version-3-wc-c-.git-index.txt note=판 3 — 확장 플래그를 쓰는 항목이 없으면 판 2 와 같다-->
+<!--OUT file=idxver.4__update-index-index-version-4-wc-c-.git-index.txt note=판 4 — 경로 앞부분을 눌러 적는다-->
+<p>판 4 는 각 경로를 "앞 항목과 겹치는 앞부분의 길이 + 나머지" 로 적어, 같은 디렉터리의 파일이 많을수록
+작아집니다. 이 실험에서는 약 20 % 줄었습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-sparse-index">
+<h3>희소 인덱스 — 디렉터리 하나를 항목 하나로</h3>
+<!--OUT file=idxsparse.full__python3-..-idx-tools-idxext.py.txt note=파일 40개, 항목 40개-->
+<!--OUT file=idxsparse.on__sparse-checkout-set-cone-sparse-index-dir03-python3-..-idx-t.txt note=dir03 만 남기고 희소 인덱스를 켜면-->
+<!--OUT file=idxsparse__ls-files-sparse-tail-4.txt note=풀지 않은 디렉터리는 항목 하나(끝의 /)-->
+<p>sparse-checkout 만으로는 인덱스에 파일이 전부 남습니다(3장). 희소 인덱스는 풀지 않은 디렉터리를
+<b>트리 이름 하나짜리 항목</b>으로 접어 항목 수를 줄입니다 — 40개가 13개(dir03 의 넷 + 나머지 디렉터리 아홉)가 됐습니다.
+<!--CITE key=gitformat-index sec="Sparse Directory Entries"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-sparse-index-compat">
+<h3>그래도 명령은 전체를 본다</h3>
+<!--OUT file=idxsparse__ls-files-wc-l.txt note=--sparse 없이 물으면 파일 40개-->
+<!--OUT file=idxsparse__ls.txt note=작업 트리에는 dir03 하나-->
+<p>희소 인덱스를 아는 명령은 접힌 항목을 그대로 다루고, 모르는 명령을 위해서는 git 이 필요할 때 항목을 다시
+펼칩니다. 서명이 소문자 <code>sdir</code> 인 것은 이 확장을 모르는 git 이 이 인덱스를 읽으면 안 되기 때문입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-summary">
+<h2>5부 정리</h2>
+<div class="tblwrap"><table class="kv">
+<tr><th>생각</th><th>확인한 캡처</th></tr>
+<tr><td>인덱스 = 머리 + 정렬된 항목 + 확장 + SHA-1</td><td>DIRC·판 2·항목 4 · 끝 20바이트 = 앞부분의 SHA-1</td></tr>
+<tr><td>stat 이 같으면 읽지 않는다</td><td>같은 크기·같은 시각으로 바꾼 파일을 놓침 · touch 하면 보임</td></tr>
+<tr><td>racy 는 내용까지 견줘 막는다</td><td>이 덱의 캡처가 흔들린 까닭 · 시각을 못 박아 해결</td></tr>
+<tr><td>비트 둘 · sparse</td><td>assume-unchanged 는 성능용 · skip-worktree 는 판 3 과 sparse 의 바탕</td></tr>
+<tr><td>충돌 = 단계 1·2·3</td><td>add 로 단계 0 하나 · REUC 로 되돌리기</td></tr>
+<tr><td>확장</td><td>TREE 53→15→53 · UNTR · link · sdir(40 → 13)</td></tr>
+</table></div>
+<p>6부는 이 세 영역(작업 트리·인덱스·HEAD)을 명령 하나씩이 어떻게 움직이는지 봅니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p5-quiz-3" data-quiz>
+<h3>4~5장 퀴즈</h3>
+<p class="q">Q. 인덱스 확장 이름이 <code>FSMN</code> 과 <code>link</code> 입니다. 이 확장을 모르는 옛 git 은 각각
+어떻게 해야 합니까? 그리고 충돌 중인 파일을 <code>git add</code> 한 뒤 되돌리고 싶다면 무엇을 씁니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 첫 글자가 대문자인 <code>FSMN</code> 은 선택 확장이라 건너뛰어도 되고, 소문자인
+<code>link</code> 는 필수 확장이라 모르면 그 인덱스를 읽지 말고 멈춰야 합니다(항목이 sharedindex 파일에 있으므로).
+add 로 해소한 충돌은 <code>git checkout -m 경로</code> 로 되돌립니다 — REUC 확장이 세 판을 기억합니다.</div>
+<span class="tier ill">설명용</span>
 </article>
