@@ -959,3 +959,15 @@ The user approved every recommendation below as-is. Each row is now a decision.
     30-day wording; Boot schedules rather than runs in order), 캡처불일치 5, 교차참조 10,
     한국어 1 ("장" vs neighbouring slide), 데모문구 1.
 - Pass 2 found 23 (> 20) → by the plan's rule a third pass is warranted.
+
+### Step 13b — 리뷰 3차 (2026-09-18)
+
+- Parts 0–8 + appendix prose read by one subagent from pass 2's angle. 37 findings, re-verified:
+  네이티브 8 (slides in 3/5/7부 spoke of native captures as if they existed — reworded to "공개
+  시점까지 오지 않았다"; p0-device now lists every place that waits for device.txt; the `$`
+  side is explained as "Termux binaries, but under proot's tracing"), 교차참조 15 ("앞 장/다음 장"
+  used for neighbouring slides; 0부 now says 슬라이드 for slides so 장 means chapter), 캡처불일치 7
+  (native_facts.sh excerpt lines 69–72; fifth termux-exec library; termux-am-socket; 27+3 of the
+  30 non-API commands; …), 초보자 3 (PLAN § numbers removed from prose; FCM, ABI glossed),
+  한국어 3, 모순 1 ("installed nothing" vs the hand-made .deb). Glossary wording now says the
+  arrow points to the slide that explains the word, which is what it does.
