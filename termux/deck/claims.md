@@ -98,10 +98,10 @@
 | Android 12L·13+ 는 settings put global settings_enable_monitor_phantom_procs false 로 두 킬러를 끈다(adb·루트) | android-docs-phantom 2.9.2 | 문서 명령 | 2026-09-18 |
 | Android 14+ 는 개발자 옵션 "Disable child process restrictions" 토글이 있다 | android-docs-phantom 2.9.1 | 문서 문장 | 2026-09-18 |
 | Android 12 에는 CPU 킬러를 끄는 설정이 없다 | android-docs-phantom 2.8.3 | 문서 문장 | 2026-09-18 |
-| Android 14 이상에서 am 명령은 root·shell 만 실행할 수 있다 | gh-packages-termux-execution-environment 1.4.1 | 위키 문장 | 2026-09-18 |
-| Termux 는 에뮬레이션·컨테이너 없이 안드로이드 커널 위에서 NDK 로 컴파일한 프로그램을 그대로 돌린다 | gh-packages-termux-execution-environment 1.1 · wiki-getting-started 1 | 두 문서 | 2026-09-18 |
+| Android 14 이상에서 am 명령은 root·shell 만 실행할 수 있다 | gh-packages-termux-execution-environment 1.5.1 | 위키 문장 | 2026-09-18 |
+| Termux 는 에뮬레이션·컨테이너 없이 안드로이드 커널 위에서 NDK 로 컴파일한 프로그램을 그대로 돌린다 | gh-packages-termux-execution-environment 1.2 · wiki-getting-started 1 | 두 문서 | 2026-09-18 |
 | 접두사 $PREFIX 는 /data/data/com.termux/files/usr, $HOME 은 /data/data/com.termux/files/home 이며 SD 카드로 옮길 수 없다(권한·심볼릭 링크 필요, 경로가 바이너리에 박힘) | wiki-getting-started 1 | 위키 문장 | 2026-09-18 |
-| 공유 저장소(/sdcard)는 noexec 로 마운트되고 심볼릭 링크를 만들 수 없으며 이름의 대소문자를 가리지 않는다 | gh-packages-termux-execution-environment 1.3.1 | 위키 문장 | 2026-09-18 |
+| 공유 저장소(/sdcard)는 noexec 로 마운트되고 심볼릭 링크를 만들 수 없으며 이름의 대소문자를 가리지 않는다 | gh-packages-termux-execution-environment 1.4.1 | 위키 문장 | 2026-09-18 |
 | 부트스트랩은 앱에 실려 오는 최소 패키지 묶음이며 zip 은 termux-packages 릴리스로 빌드된다 | readme-termux-app 1.3 | README 문장 | 2026-09-18 |
 | 기본 저장소는 packages.termux.dev/apt/termux-main (stable main), CDN 은 packages-cf.termux.dev | gh-packages-mirrors 2.2 | 위키 표 | 2026-09-18 |
 | TUR 은 2022-07-02 termux-packages 를 포크해 시작했다 | git tur a1c3f7f | 첫 커밋 제목 | 2026-09-18 |
@@ -133,8 +133,8 @@
 | 루트 파일시스템과 홈은 /data 파티션의 앱 데이터에 있고, 앱을 지우거나 데이터를 지우면 함께 사라진다 | wiki-differences-from-linux 3 | 위키 문장 | 2026-09-18 |
 | Termux 는 단일 사용자다. 모든 것이 앱의 uid 로 돌고 사용자 이름은 uid 에서 나온다 | wiki-differences-from-linux 4 | 위키 문장 | 2026-09-18 |
 | 서버 패키지의 기본 포트를 바꿨다: ftpd 8021 · httpd 8080 · sshd 8022 | wiki-differences-from-linux 4 | 위키 문장 | 2026-09-18 |
-| Termux 앱은 com.termux 라는 이름의 주 프로세스 하나로 뜨고, 세션·작업은 그 프로세스에서 fork 한 자식이다 | gh-packages-termux-execution-environment 1.2 | 위키 문장 | 2026-09-18 |
-| /system/bin 의 파일은 DAC·SELinux 문맥·호출자 검사 때문에 앱이 다 실행할 수는 없다 | gh-packages-termux-execution-environment 1.4.1 | 위키 문장 | 2026-09-18 |
+| Termux 앱은 com.termux 라는 이름의 주 프로세스 하나로 뜨고, 세션·작업은 그 프로세스에서 fork 한 자식이다 | gh-packages-termux-execution-environment 1.3 | 위키 문장 | 2026-09-18 |
+| /system/bin 의 파일은 DAC·SELinux 문맥·호출자 검사 때문에 앱이 다 실행할 수는 없다 | gh-packages-termux-execution-environment 1.5.1 | 위키 문장 | 2026-09-18 |
 | Termux 의 NDK 헤더 패치(ndk-patches/29/pwd.h.patch)는 getpwuid 를 인라인 함수로 덮어써 집을 $HOME, 셸을 $PREFIX/bin/login 으로 바꾼다 | termux-packages@7d5b4d3 ndk-patches/29/pwd.h.patch 15–58행 | git show | 2026-09-18 |
 | 이 기기의 proot 안에서 id 는 uid=0(root) 이지만 보조 그룹에는 1077·3003·9997·20123(u0_a123_cache)·50123(all_a123) 이 남는다 | out/env_termux.txt 2절 | 캡처 | 2026-09-18 |
 | libandroid-support: "Library extending the Android C library (Bionic) for additional multibyte, locale and math support" | termux-packages@7d5b4d3 packages/libandroid-support/build.sh TERMUX_PKG_DESCRIPTION | git show | 2026-09-18 |
@@ -145,12 +145,12 @@
 | /proc 는 보통 hidepid=2 로 마운트되고, /proc/net 은 Android 10 부터 개인정보 때문에 막혔다 | gh-packages-termux-file-system-layout 1.2.1 | 위키 표 | 2026-09-18 |
 | /system/bin 을 PATH 에 넣지 말라(Termux 도구와 충돌) — 대체 경로로만 예외 | gh-packages-termux-file-system-layout 1.2.1 | 위키 표 | 2026-09-18 |
 | /system/bin 의 핵심 유틸리티는 주로 toybox 가 준다 | gh-packages-termux-file-system-layout 1.2.1.1 | 위키 문장 | 2026-09-18 |
-| Android 14 에는 SELinux 파일 문맥 형식이 92개쯤 있다 | gh-packages-termux-execution-environment 1.4.1 | 위키 문장 | 2026-09-18 |
+| Android 14 에는 SELinux 파일 문맥 형식이 92개쯤 있다 | gh-packages-termux-execution-environment 1.5.1 | 위키 문장 | 2026-09-18 |
 | 루트가 아닌 Android 8 이상에서는 seccomp 필터 때문에 정적 링크 프로그램이 돌지 않을 수 있다 | wiki-differences-from-linux 2 | 위키 문장 | 2026-09-18 |
 | android.permission.INTERNET 은 gid inet 에 대응한다 | aosp-platform-xml 52–54행 | 문서 변환본 | 2026-09-18 |
 | termux-app 매니페스트는 INTERNET·저장소·WAKE_LOCK·FOREGROUND_SERVICE·RECEIVE_BOOT_COMPLETED 등 17개 권한을 적고, sharedUserId 와 requestLegacyExternalStorage="true" 를 둔다 | termux-app@084d709 app/src/main/AndroidManifest.xml 5·22–38·46행 | out/src_manifest.txt | 2026-09-18 |
-| Termux 는 세션(TermuxSession)에 execvp, 백그라운드 작업(TermuxTask)에 Runtime.exec() 를 쓴다 | gh-packages-termux-execution-environment 1.2 | 위키 문장 | 2026-09-18 |
-| sshd·crond 처럼 스스로 데몬이 되는 프로그램은 부모가 init(pid 1)이 되어 앱 프로세스에서 떨어지고, 더 쉽게 죽는다 | gh-packages-termux-execution-environment 1.2.3 | 위키 문장 | 2026-09-18 |
+| Termux 는 세션(TermuxSession)에 execvp, 백그라운드 작업(TermuxTask)에 Runtime.exec() 를 쓴다 | gh-packages-termux-execution-environment 1.3 | 위키 문장 | 2026-09-18 |
+| sshd·crond 처럼 스스로 데몬이 되는 프로그램은 부모가 init(pid 1)이 되어 앱 프로세스에서 떨어지고, 더 쉽게 죽는다 | gh-packages-termux-execution-environment 1.3.3 | 위키 문장 | 2026-09-18 |
 | 안드로이드 권한은 설치 때 주는 것(일반·서명), 실행 중 묻는 것(런타임), 특별 권한으로 나뉜다 | dev-android-permissions 1.2 | 문서 절 제목·문장 | 2026-09-18 |
 | Android 11 에서 모든 파일 접근(MANAGE_EXTERNAL_STORAGE)을 선언하면 Google Play 출시에 영향이 있을 수 있다 | dev-android-11-storage 1.8 | 문서 문장 | 2026-09-18 |
 | 이 기기의 /storage/emulated 는 fuse 로, noexec·nosuid·nodev 로 마운트돼 있다 | out/storage.txt 2절 | 캡처(/proc/mounts) | 2026-09-18 |
@@ -175,7 +175,7 @@
 | targetSdk 29 이상 앱도 dlopen()(mmap PROT_EXEC)은 계속 된다 — exec() 만 막힌다 | android-docs-exec-restrictions 1.2.1 | 문서 인용 | 2026-09-18 |
 | 이 기기의 Termux 셸의 SELinux 문맥은 u:r:untrusted_app_27 이다 | out/env_termux.txt 6절 | 캡처 | 2026-09-18 |
 | TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE: disable·enable(기본, 필요할 때만)·force; enable 은 Android 10 이상·root/shell 아님·untrusted_app_25/27 아님·앱 데이터 아래 파일일 때만 쓴다 | termux-exec-usage 1.8.1 | 문서 | 2026-09-18 |
-| 새 세션의 셸은 $PREFIX/bin 의 login·bash·zsh·fish 중 실행 가능한 첫 파일이다(없거나 안전 모드면 /system/bin/sh) | termux-app@084d709 termux-shared/src/main/java/com/termux/shared/termux/shell/command/runner/terminal/TermuxSession.java 93–114 · UnixShellEnvironment.java 56 | 소스 | 2026-09-18 |
+| 새 세션의 셸은 $PREFIX/bin 의 login·bash·zsh·fish·sh 중 실행 가능한 첫 파일이다(UnixShellEnvironment.java 56행, 다섯이 다 없거나 안전 모드면 /system/bin/sh) | termux-app@084d709 termux-shared/src/main/java/com/termux/shared/termux/shell/command/runner/terminal/TermuxSession.java 93–114 · UnixShellEnvironment.java 56 | 소스 | 2026-09-18 |
 | login 은 $PREFIX/lib/libtermux-exec-ld-preload.so 가 있으면 LD_PRELOAD 로 내보내고, coreutils true 가 실패하면 푼다 | termux-tools@a62f7b2 scripts/login.in 42–54 | 소스 | 2026-09-18 |
 | termux-app 은 app·termux-shared·terminal-emulator·terminal-view 네 모듈이다 | termux-app@084d709 settings.gradle | 소스 | 2026-09-18 |
 | Termux 의 터미널 처리는 Android Terminal Emulator(jackpal) 에 기반하며 그 Apache-2.0 코드를 쓴다 | termux-app@084d709 README.md 199행 · LICENSE.md 5행 | 소스 | 2026-09-18 |
@@ -311,3 +311,7 @@
 | PLAN.md §0 의 제약: 보조 에이전트 ≤2, JVM 없음, 큰 빌드 없음, 무거운 일 전 free -m | termux/PLAN.md 55–58행 | 이 저장소 문서 | 2026-09-18 |
 | 이 저장소: 커밋 702, 맨 위 HTML 118, 2026-09 커밋 445. CLAUDE.md 절 6개 | out/repo_self.txt 1–4 | 스냅샷 | 2026-09-18 |
 | proot-distro 저장소에 CLAUDE.md(빈 줄 아닌 줄 2,087)가 있고 proot_cmd.py 5행이 "Development assisted by Claude Code" | out/src_pd_claude.txt 1·2 · proot-distro@f832a56 proot_cmd.py 5 | 소스 캡처 | 2026-09-18 |
+| 앱은 셸 환경에 TERM=xterm-256color 를 넣는다 | termux-app@084d709 termux-shared/…/AndroidShellEnvironment.java 41 | 소스 | 2026-09-18 |
+| root 의 apt 를 막은 까닭: /data 파티션의 소유권과 SELinux 라벨이 어긋나는 것을 막기 위해 | wiki-package-management 1 | 위키 | 2026-09-18 |
+| RUN_COMMAND 는 dangerous 보호 수준이라 사용자가 설정에서 그 앱에 따로 허락해야 한다 | out/src_security.txt 1 · gh-packages-termux-file-system-layout 1.3.1 | 소스·위키 | 2026-09-18 |
+| Termux:Tasker README: RUN_COMMAND 권한은 필수(1.6.2), allow-external-apps 는 선택(1.6.4) | readme-termux-tasker 1.6.2·1.6.4 | README | 2026-09-18 |

@@ -932,3 +932,14 @@ The user approved every recommendation below as-is. Each row is now a decision.
 - index.html card (🖥️ 시스템 & 셸 도구, after Linux 명령어 핸드북) and README row: 587 slides,
   51 captures, 27 pinned upstream repos, 142 documents, 12 experiments, 18 figures, 3 demos,
   32 quizzes, 262 glossary words.
+
+### Step 12 — 리뷰 1차 (2026-09-18)
+
+- Parts 0–8 read by one subagent (memory: one at a time) with claims/data/sources open; parts
+  9–16 checked by me (every number vs its capture). 26 findings, each re-verified against the
+  pinned source / capture / doc before fixing: 사실오류 4 (login-shell list has five entries incl.
+  `sh`; RUN_COMMAND is a dangerous = runtime permission; Tasker's allow-external-apps is
+  Optional; not every plugin released in 2025-09), 캡처불일치 2, 인용범위 5 (the
+  execution-environment doc's section numbers were one level off on 5 slides + claims; pwd.h
+  lines; TERM source; pacman block; NDK path), 교차참조 11 (wrong part numbers), 표기 4.
+  The apt-refuses-root motive is no longer 미확인 — the wiki states it.
