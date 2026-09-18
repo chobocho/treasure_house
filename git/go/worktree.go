@@ -240,3 +240,179 @@ func sortedKeys[V any](m map[string]V) []string {
 	sort.Strings(out)
 	return out
 }
+
+const (
+	overwriteMsg = "error: Your local changes to the following files " +
+		"would be overwritten by checkout:"
+	untrackedMsg = "error: The following untracked working tree " +
+		"files would be overwritten by checkout:"
+)
+
+func writeFile(root, path string, mode uint32, data []byte) error {
+	full := filepath.Join(root, path)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return err
+	}
+	os.Remove(full)
+	// 0666/0777 로 열고 umask 를 따른다 — git 과 같다(SPEC.md §9.3)
+	perm := os.FileMode(0o666)
+	if mode&0o100 != 0 {
+		perm = 0o777
+	}
+	return os.WriteFile(full, data, perm)
+}
+
+// removeFile 은 파일을 지우고, 그래서 비게 된 디렉터리들도 지운다.
+func removeFile(root, path string) {
+	full := filepath.Join(root, path)
+	os.Remove(full)
+	for d := filepath.Dir(full); d != root; d = filepath.Dir(d) {
+		if os.Remove(d) != nil { // 비지 않았으면 실패한다
+			break
+		}
+	}
+}
+
+// CheckoutTree 는 두 갈래 합치기로 작업 트리·인덱스를 old → new 로
+// (SPEC.md §9.3). 경로마다: 옛 트리와 새 트리에서 같으면 손대지
+// 않는다(손댄 내용이 따라온다). 다르면 인덱스가 옛 트리와 같고 작업
+// 트리가 인덱스와 같아야 한다. 옛 트리에 없던 경로에 추적 안 하는
+// 파일이 있으면 그것도 막는다. 하나라도 걸리면 아무것도 바꾸지 않고
+// 멈춘다. O(경로 수 × 해시).
+func CheckoutTree(root, gitdir, oldTree, newTree string) error {
+	old, err := TreeMap(gitdir, oldTree)
+	if err != nil {
+		return err
+	}
+	nw, err := TreeMap(gitdir, newTree)
+	if err != nil {
+		return err
+	}
+	ents, err := ReadIndex(gitdir)
+	if err != nil {
+		return err
+	}
+	idx := map[string]*IndexEntry{}
+	conflicted := map[string]bool{}
+	all := map[string]bool{}
+	for _, e := range ents {
+		all[e.Path] = true
+		if e.Stage > 0 {
+			conflicted[e.Path] = true
+		} else {
+			idx[e.Path] = e
+		}
+	}
+	for p := range old {
+		all[p] = true
+	}
+	for p := range nw {
+		all[p] = true
+	}
+	var local, stray []string
+	for _, p := range sortedKeys(all) {
+		o, inOld := old[p]
+		n, inNew := nw[p]
+		if inOld == inNew && o == n {
+			continue
+		}
+		e, inIdx := idx[p]
+		disk, onDisk := FileState(root, p)
+		switch {
+		case conflicted[p]:
+			local = append(local, p)
+		case !inIdx && !inOld:
+			if onDisk && inNew {
+				stray = append(stray, p)
+			}
+		case !inIdx || Blob{e.Mode, e.Oid} != o || !inOld ||
+			!onDisk || disk != (Blob{e.Mode, e.Oid}):
+			local = append(local, p)
+		}
+	}
+	if len(local)+len(stray) > 0 {
+		var rows []string
+		for _, part := range []struct {
+			head  string
+			paths []string
+		}{{overwriteMsg, local}, {untrackedMsg, stray}} {
+			if len(part.paths) == 0 {
+				continue
+			}
+			rows = append(rows, part.head)
+			for _, q := range part.paths {
+				rows = append(rows, "\t"+QuotePath(q, false))
+			}
+			rows = append(rows, "")
+		}
+		rows = append(rows, "Aborting")
+		return &GitError{strings.Join(rows, "\n"), 1}
+	}
+	for _, p := range sortedKeys(all) {
+		o, inOld := old[p]
+		n, inNew := nw[p]
+		if inOld == inNew && o == n {
+			continue
+		}
+		if !inNew {
+			if inOld {
+				removeFile(root, p)
+				delete(idx, p)
+			}
+			continue
+		}
+		_, data, err := ReadObject(gitdir, n.Oid)
+		if err != nil {
+			return err
+		}
+		if err := writeFile(root, p, n.Mode, data); err != nil {
+			return err
+		}
+		e, err := EntryFromStat(p, filepath.Join(root, p), n.Oid)
+		if err != nil {
+			return err
+		}
+		idx[p] = e
+	}
+	var out []*IndexEntry
+	for _, e := range idx {
+		out = append(out, e)
+	}
+	return WriteIndex(gitdir, out)
+}
+
+// LocalChanges 는 바꾼 뒤 남은 변경 — "M\t경로" 줄들(§9.3 끝). 새
+// HEAD 트리와 견주어 인덱스나 작업 트리가 다른 추적 경로. M 은 내용·
+// 모드, D 는 작업 트리에 없음, A 는 인덱스에만 있음.
+func LocalChanges(root, gitdir, headTree string) ([]string, error) {
+	head, err := TreeMap(gitdir, headTree)
+	if err != nil {
+		return nil, err
+	}
+	ents, err := ReadIndex(gitdir)
+	if err != nil {
+		return nil, err
+	}
+	var rows []string
+	for _, e := range ents {
+		if e.Stage > 0 {
+			continue
+		}
+		cur := Blob{e.Mode, e.Oid}
+		disk, onDisk := FileState(root, e.Path)
+		h, inHead := head[e.Path]
+		letter := ""
+		switch {
+		case !onDisk:
+			letter = "D"
+		case !inHead:
+			letter = "A"
+		case h != cur || disk != cur:
+			letter = "M"
+		default:
+			continue
+		}
+		rows = append(rows, letter+"\t"+QuotePath(e.Path, false))
+	}
+	return rows, nil
+}

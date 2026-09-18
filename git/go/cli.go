@@ -42,6 +42,8 @@ func init() {
 		"log":         cmdLog,
 		"merge-base":  cmdMergeBase,
 		"diff":        cmdDiff,
+		"switch":      cmdSwitch,
+		"checkout":    cmdCheckout,
 	}
 	deleteBranch = deleteMerged
 }
@@ -1148,6 +1150,227 @@ func cmdDiff(ctx *Ctx, args []string) (int, error) {
 		ctx.Out.Write(FileDiff(p, p, old, new))
 	}
 	return 0, nil
+}
+
+// ── 9단계: switch · checkout ─────────────────────────────────────────
+
+// summaryLine 은 '<7글자> <제목>' — HEAD is now at … 의 꼬리.
+func summaryLine(g, oid string) (string, error) {
+	_, body, err := ReadObject(g, oid)
+	if err != nil {
+		return "", err
+	}
+	c, err := ParseCommit(body)
+	if err != nil {
+		return "", err
+	}
+	return oid[:7] + " " + SubjectOf(c.Message), nil
+}
+
+// moveHead 는 작업 트리를 oid 로 옮기고 HEAD 를 branch(또는 "" 이면
+// 분리)로(SPEC.md §9.3). 안내는 표준 오류에, 남은 변경 알림은 표준
+// 출력에. reflog 는 "checkout: moving from <옛> to <arg 그대로>" —
+// 옛 쪽이 분리 상태면 40글자다(§6.3). fresh 는 switch -c 의 안내.
+func moveHead(ctx *Ctx, branch, oid, arg string, report,
+	fresh bool) (int, error) {
+	root, err := ctx.Root()
+	if err != nil {
+		return 0, err
+	}
+	g := filepath.Join(root, ".git")
+	oldBranch, old, err := ReadHead(g)
+	if err != nil {
+		return 0, err
+	}
+	oldTree := ""
+	if old != "" {
+		if oldTree, err = Peel(g, old, "tree"); err != nil {
+			return 0, err
+		}
+	}
+	newTree, err := Peel(g, oid, "tree")
+	if err != nil {
+		return 0, err
+	}
+	if err := CheckoutTree(root, g, oldTree, newTree); err != nil {
+		return 0, err
+	}
+	// 분리 상태를 떠나되 커밋이 바뀔 때만 — 같은 커밋이면 git 도
+	// 찍지 않는다
+	if oldBranch == "" && old != "" && oid != old {
+		line, err := summaryLine(g, old)
+		if err != nil {
+			return 0, err
+		}
+		fmt.Fprintf(&ctx.Err, "Previous HEAD position was %s\n", line)
+	}
+	target := branch
+	if target == "" {
+		target = oid
+	}
+	if err := SetHead(g, target); err != nil {
+		return 0, err
+	}
+	frm := old
+	if oldBranch != "" {
+		frm = strings.TrimPrefix(oldBranch, "refs/heads/")
+	}
+	who, err := ident(ctx, "COMMITTER")
+	if err != nil {
+		return 0, err
+	}
+	if err := AppendReflog(g, "HEAD", old, oid, who,
+		"checkout: moving from "+frm+" to "+arg); err != nil {
+		return 0, err
+	}
+	if report {
+		rows, err := LocalChanges(root, g, newTree)
+		if err != nil {
+			return 0, err
+		}
+		for _, r := range rows {
+			ctx.say("%s\n", r)
+		}
+	}
+	switch {
+	case branch == "":
+		line, err := summaryLine(g, oid)
+		if err != nil {
+			return 0, err
+		}
+		fmt.Fprintf(&ctx.Err, "HEAD is now at %s\n", line)
+	case fresh:
+		fmt.Fprintf(&ctx.Err, "Switched to a new branch '%s'\n", arg)
+	case branch == oldBranch:
+		fmt.Fprintf(&ctx.Err, "Already on '%s'\n", arg)
+	default:
+		fmt.Fprintf(&ctx.Err, "Switched to branch '%s'\n", arg)
+	}
+	return 0, nil
+}
+
+func createAndSwitch(ctx *Ctx, name, start string) (int, error) {
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	if !ValidBranchName(name) {
+		return 0, Fail("fatal: '" + name + "' is not a valid branch " +
+			"name")
+	}
+	if o, _ := ResolveRef(g, "refs/heads/"+name); o != "" {
+		return 0, Fail("fatal: a branch named '" + name +
+			"' already exists")
+	}
+	_, old, err := ReadHead(g)
+	if err != nil {
+		return 0, err
+	}
+	if old == "" && start == "" {
+		// 첫 커밋 전 — HEAD 가 가리키는 이름만 바꾼다
+		if err := SetHead(g, "refs/heads/"+name); err != nil {
+			return 0, err
+		}
+		fmt.Fprintf(&ctx.Err, "Switched to a new branch '%s'\n", name)
+		return 0, nil
+	}
+	arg := start
+	if arg == "" {
+		arg = "HEAD"
+	}
+	oid, err := resolve(ctx, arg)
+	if err == nil && oid != "" {
+		oid, err = Peel(g, oid, "commit")
+	}
+	if err != nil {
+		return 0, err
+	}
+	if oid == "" {
+		return 0, Fail("fatal: invalid reference: " + arg)
+	}
+	who, err := ident(ctx, "COMMITTER")
+	if err != nil {
+		return 0, err
+	}
+	if err := UpdateRef(g, "refs/heads/"+name, oid, "",
+		"branch: Created from "+arg, who); err != nil {
+		return 0, err
+	}
+	// 지금 커밋에서 새 브랜치를 만들 때는 git 이 작업 트리를 건드리지
+	// 않고 남은 변경도 알리지 않는다(golden/scen/checkout.scn)
+	return moveHead(ctx, "refs/heads/"+name, oid, name, oid != old,
+		true)
+}
+
+func cmdSwitch(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, nil, "-c")
+	if err != nil {
+		return 0, err
+	}
+	if name, ok := f.vals["-c"]; ok {
+		start := ""
+		if len(f.rest) > 0 {
+			start = f.rest[0]
+		}
+		return createAndSwitch(ctx, name, start)
+	}
+	if len(f.rest) != 1 {
+		return 0, &GitError{"usage: mygit switch [-c] <branch>", 129}
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	name := f.rest[0]
+	oid, err := ResolveRef(g, "refs/heads/"+name)
+	if err != nil {
+		return 0, err
+	}
+	if oid != "" {
+		return moveHead(ctx, "refs/heads/"+name, oid, name, true,
+			false)
+	}
+	if o, _ := resolve(ctx, name); o != "" {
+		return 0, Fail("fatal: a branch is expected, got commit '" +
+			name + "'")
+	}
+	return 0, Fail("fatal: invalid reference: " + name)
+}
+
+func cmdCheckout(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, nil)
+	if err != nil {
+		return 0, err
+	}
+	if len(f.rest) != 1 {
+		return 0, &GitError{"usage: mygit checkout <branch|commit>",
+			129}
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	name := f.rest[0]
+	oid, err := ResolveRef(g, "refs/heads/"+name)
+	if err != nil {
+		return 0, err
+	}
+	if oid != "" {
+		return moveHead(ctx, "refs/heads/"+name, oid, name, true,
+			false)
+	}
+	oid, err = resolve(ctx, name)
+	if err == nil && oid != "" {
+		oid, err = Peel(g, oid, "commit")
+	}
+	if err != nil {
+		return 0, err
+	}
+	if oid == "" {
+		return 0, &GitError{"error: pathspec '" + name +
+			"' did not match any file(s) known to git", 1}
+	}
+	return moveHead(ctx, "", oid, name, true, false)
 }
 
 // ── 틀 ─────────────────────────────────────────────────────────────
