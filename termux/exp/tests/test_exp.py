@@ -169,6 +169,26 @@ class SyscallLoopTest(unittest.TestCase):
         rc, _out = run('glibc', 'syscall_loop', 'x')
         self.assertEqual(rc, 2)
 
+    def test_getcwd_mode(self):
+        # proot 의 seccomp 목록에 있는 호출(getcwd)과 없는 호출
+        # (getpid)을 나란히 재려고 둘째 인자로 고른다(9부)
+        for s in SIDES:
+            rc, out = run(s, 'syscall_loop', '1000', 'getcwd')
+            self.assertEqual(rc, 0)
+            self.assertEqual(out.strip(), 'getcwd 1000번')
+
+    def test_explicit_getpid_mode(self):
+        rc, out = run('glibc', 'syscall_loop', '5', 'getpid')
+        self.assertEqual((rc, out.strip()), (0, 'getpid 5번'))
+
+    def test_zero_and_unknown_mode(self):
+        rc, out = run('glibc', 'syscall_loop', '0', 'getcwd')
+        self.assertEqual((rc, out.strip()), (0, 'getcwd 0번'))
+        rc, _out = run('glibc', 'syscall_loop', '10', 'open')
+        self.assertEqual(rc, 2)
+        rc, _out = run('glibc', 'syscall_loop', '10', 'getcwd', 'x')
+        self.assertEqual(rc, 2)
+
 
 class TimeitTest(unittest.TestCase):
     def test_median(self):

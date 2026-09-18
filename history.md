@@ -1,3 +1,10 @@
+### [2026-09-18 03:57] Termux 덱 — proot 캡처 4종·syscall_loop getcwd 모드·공용 DNS 허용
+- **기획:** 9부 증거: 이 세션의 proot 명령줄·컨테이너·link2symlink·소스 사실을 캡처로, 가로채는 호출과 아닌 호출의 비용을 실험으로.
+- **TC:** 정상: getcwd 모드 출력(양쪽 libc). 경계: N=0·모르는 모드·인자 초과 거부, 공용 DNS 유지·이웃 주소는 가림.
+- **개발:** `termux/exp/syscall_loop.c`, `termux/exp/tests/test_exp.py`, `termux/tools/scrub.py`, `termux/tools/tests/test_scrub.py`, `termux/tools/native_facts.sh`, `termux/run_all.py`, `termux/out/` 외 N개 파일
+- **검증:** make test 전부 통과 · 캡처 검사 0건 · 개인정보 검사 0건
+- **비고:** syscall_loop.c 의 '모든 호출을 가로챈다' 주석은 소스(seccomp 필터)와 달라 바로잡았다.
+
 ### [2026-09-18 03:42] Git 대백과사전 덱 5단계 — Python mygit 1~12단계(시험 135 · 장면 20 통과)
 - **기획:** SPEC 대로 SHA-1·zlib·객체·트리·커밋/참조·인덱스·log·diff·checkout·merge·팩·전송을 한 단계 한 커밋으로, 장면 실행기로 golden/scen 20개 재생.
 - **TC:** 단계마다 "not implemented" 로 RED 확인 후 GREEN. git 커밋·태그·인덱스·색인 바이트 재현, diff 30쌍 바이트 일치, v2 대화 기록 일치.

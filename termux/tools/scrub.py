@@ -66,7 +66,13 @@ SHARED_OK = {'DCIM', 'Download', 'Documents', 'Movies', 'Music',
              'Android/data/com.termux/files'}
 
 
+# 공용 DNS — 수많은 기기가 같은 값을 쓰니 이 기기를 가리키지 않는다
+RESOLVERS_OK = {'8.8.8.8', '8.8.4.4', '1.1.1.1', '1.0.0.1', '9.9.9.9'}
+
+
 def _ip4_public(s):
+    if s in RESOLVERS_OK:
+        return False
     try:
         a = ipaddress.IPv4Address(s)
     except ValueError:

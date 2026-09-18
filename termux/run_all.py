@@ -201,6 +201,8 @@ BG = 'scratch/build/glibc'
 EXPS = ['hello', 'passwd', 'paths', 'bind_port', 'syscall_loop']
 PROBE = '/tmp /bin/sh /usr/bin/env /etc/passwd /system/bin/sh'
 # 소스 캡처(src_*)는 deck/srcpin.py 로 핀 커밋에서 읽는다
+PD_UBUNTU = ('/data/data/com.termux/files/usr/var/lib/proot-distro/'
+             'containers/ubuntu')
 MANI = 'termux-app:app/src/main/AndroidManifest.xml'
 
 
@@ -364,6 +366,9 @@ CAPTURES = [
         S('bionic: getpid 20만 번 ×3',
           'python3 exp/timeit_exp.py -n 3 -- '
           '%s/syscall_loop 200000' % BB, timeout=600),
+        S('bionic: getcwd 20만 번 ×3 — proot 가 가로채는 호출',
+          'python3 exp/timeit_exp.py -n 3 -- '
+          '%s/syscall_loop 200000 getcwd' % BB, timeout=600),
         S('true 100번 ×3',
           'python3 exp/timeit_exp.py -n 3 -- sh exp/fork_loop.sh 100',
           timeout=600),
@@ -469,6 +474,56 @@ CAPTURES = [
           'sh tools/tmx.sh termux-sms-list; echo "exit=$?"'),
         S('카메라도',
           'sh tools/tmx.sh termux-camera-photo a.jpg; echo "exit=$?"'),
+    ]),
+    # 9부 — 이 세션을 띄운 proot 명령줄. 추적자(TracerPid)의
+    # cmdline 을 읽는다. 세션을 다시 띄우면 바뀔 수 있어 스냅샷이다
+    Capture('proot_session', 'proot', 'snapshot', [
+        S('추적자의 이름', "t=$(awk '/^TracerPid/{print $2}' "
+          "/proc/self/status); awk '/^Name/' /proc/$t/status"),
+        # 줄이 길어 둘로 나눈다 — sysdata 가짜 파일 바인드는 따로
+        S('추적자의 명령줄',
+          "t=$(awk '/^Tr/{print$2}' /proc/self/status); "
+          "tr '\\0' '\\n' </proc/$t/cmdline | grep -v sysdata"
+          " | cut -c-100"),
+        S('그중 sysdata 바인드', "t=$(awk '/^Tr/{print $2}' "
+          "/proc/self/status); tr '\\0' '\\n' < /proc/$t/cmdline"
+          " | grep -o 'sysdata/.*'"),
+        S('가짜 /proc/version', 'cat /proc/version | cut -c1-100'),
+        S('빈 /sys/fs/selinux', 'ls -A /sys/fs/selinux | wc -l'),
+    ]),
+    # --link2symlink — 하드 링크를 심볼릭 링크 둘로 흉내 낸다(9부).
+    # /.l2s 의 개수는 설치한 패키지에 따라 늘어 스냅샷이다
+    Capture('proot_l2s', 'proot', 'snapshot', [
+        S('하드 링크를 만들면', 'mkdir -p scratch/l2s && cd scratch/l2s'
+          " && echo hi >x && ln -f x y && stat -c '%n %h %F' x y"),
+        S('실제로 생긴 것', "cd /.l2s && stat -c '%n  %F' .l2s.x0*"),
+        S('/.l2s 에 쌓인 항목 수', 'ls -A /.l2s | wc -l'),
+        S('지우면 함께 사라진다', 'rm scratch/l2s/x scratch/l2s/y; '
+          "ls -A /.l2s | grep -c '^\\.l2s\\.x0'"),
+    ]),
+    # 이 세션의 컨테이너 — proot-distro 가 설치 때 남긴 것(9부)
+    Capture('proot_container', 'proot', 'stable', [
+        S('컨테이너 디렉터리', 'ls'),
+        S('어느 이미지인가', "grep -o '\"image_ref\": \"[^\"]*\"\\|"
+          "\"arch\": \"[^\"]*\"' manifest.json"),
+        S('안드로이드 사용자를 등록해 둔 줄', 'grep aid_ /etc/passwd; '
+          'grep -c aid_ /etc/group'),
+        S('DNS', 'cat /etc/resolv.conf'),
+    ], cwd=PD_UBUNTU),
+    Capture('src_proot', 'termux', 'stable', [
+        S('proot 가 멈추는 호출의 수', "python3 deck/srcpin.py grep "
+          "'proot:src/syscall/seccomp.c' '^\\s+\\{ PR_' | wc -l"),
+        S('그 목록에 getpid 는', "python3 deck/srcpin.py grep "
+          "'proot:src/syscall/seccomp.c' 'PR_getpid' | wc -l"),
+        S('proot-distro 가 붙이는 옵션', "python3 deck/srcpin.py grep "
+          "'proot-distro:*/proot_cmd.py' 'append\\(\"-.*'"),
+        S('가짜 커널 판', "python3 deck/srcpin.py grep "
+          "'proot-distro:proot_distro/constants.py' "
+          "'KERNEL_RELEASE =.*'"),
+        S('proot 옵션의 한 줄 설명', "python3 deck/srcpin.py grep "
+          "'proot:src/cli/proot.h' 'description = .*'"),
+        S('-p 가 포트를 옮기는 규칙', "python3 deck/srcpin.py grep "
+          "'proot:*/port_switch.c' '#define PORT_.*'"),
     ]),
     # 사용자 설정 디렉터리는 이름만 본다 — 내용은 사용자의 것이다(§3.3)
     Capture('dot_termux', 'termux', 'stable', [

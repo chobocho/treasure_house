@@ -58,6 +58,9 @@ exp bind_port '--scan 1 1100'
 sec "cd '$here' && python3 exp/timeit_exp.py -n 3 -- \
   $b/syscall_loop 200000" 'timeit_exp.py -n 3 -- syscall_loop 200000'
 sec "cd '$here' && python3 exp/timeit_exp.py -n 3 -- \
+  $b/syscall_loop 200000 getcwd" \
+  'timeit_exp.py -n 3 -- syscall_loop 200000 getcwd'
+sec "cd '$here' && python3 exp/timeit_exp.py -n 3 -- \
   sh exp/fork_loop.sh 100" \
   'timeit_exp.py -n 3 -- sh exp/fork_loop.sh 100'
 sec "sh '$here/exp/shebang/run.sh'" 'shebang/run.sh (termux-exec 켬)'

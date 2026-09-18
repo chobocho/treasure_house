@@ -76,7 +76,8 @@ class NativeFactsTest(unittest.TestCase):
                   'shebang/run.sh (LD_PRELOAD 뺌)',
                   "grep ' /storage/emulated ' /proc/mounts",
                   'echo "$LD_PRELOAD"',
-                  'timeit_exp.py -n 3 -- sh exp/fork_loop.sh 100'):
+                  'timeit_exp.py -n 3 -- sh exp/fork_loop.sh 100',
+                  'timeit_exp.py -n 3 -- syscall_loop 200000 getcwd'):
             self.assertIn(h, text)
 
     def test_api_sections_are_read_only_and_bounded(self):

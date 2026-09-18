@@ -47,6 +47,16 @@ class FixTest(unittest.TestCase):
         got, _ = scrub.fix('"ip": "121.130.7.42"\ninet 121.130.7.42/24')
         self.assertEqual(got, '"ip": "<ip>"\ninet <ip>/24')
 
+    def test_public_resolvers_kept(self):
+        # 누구나 쓰는 공용 DNS 는 이 기기를 드러내지 않는다 —
+        # proot-distro 가 resolv.conf 에 적는 값이라 9부가 그대로
+        # 보여 줘야 한다
+        t = 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n1.1.1.1 9.9.9.9'
+        self.assertEqual(scrub.fix(t), (t, 0))
+        self.assertEqual(kinds(t), [])
+        # 이웃 주소는 여전히 가린다
+        self.assertEqual(scrub.fix('8.8.8.9')[0], '<ip>')
+
     def test_private_and_loopback_kept(self):
         t = 'inet 127.0.0.1 10.0.0.5 192.168.1.20 172.20.0.3 0.0.0.0'
         self.assertEqual(scrub.fix(t)[0], t)
