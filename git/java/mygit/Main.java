@@ -1,5 +1,7 @@
 package mygit;
 
+import java.util.List;
+
 // mygit — 만들면서 배우는 Git 의 Java 구현 (git/SPEC.md).
 //
 // Python 구현(py/mygit)과 같은 규격서·같은 golden 으로 시험받는다.
@@ -9,13 +11,18 @@ package mygit;
 public final class Main {
   // 지금까지 만든 부록 A 의 단계. 장면 시험은 자기 단계가 오기
   // 전에는 "N단계에서 켜진다" 는 이유로 건너뛴다.
-  public static final int STEP = 1;
+  public static final int STEP = 3;
 
   private Main() {}
 
   public static void main(String[] args) {
     byteNames();
-    throw GitError.notImplemented();
+    Cli.Result r = Cli.run(List.of(args),
+        System.getProperty("user.dir"), System.getenv(), null);
+    System.out.writeBytes(r.out());
+    System.out.flush();
+    System.err.writeBytes(r.err());
+    System.exit(r.code());
   }
 
   // 파일 이름을 "바이트 문자열"(latin1, 글자 하나 = 바이트 하나)로
