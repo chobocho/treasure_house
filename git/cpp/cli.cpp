@@ -1015,6 +1015,39 @@ int cmd_pack_objects(Ctx& ctx, std::vector<std::string> args) {
     return 0;
 }
 
+// ── 12단계: clone · fetch-pack ──────────────────────────────────────
+
+// cmd_clone 은 멍청한 로컬 clone(SPEC.md §14.2). 안내는 표준 오류에.
+int cmd_clone(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {});
+    if (f.rest.size() != 2)
+        throw GitError("usage: mygit clone <path> <dir>", 129);
+    auto src = ctx.path(f.rest[0]), dst = ctx.path(f.rest[1]);
+    if (!fs::is_directory(src))
+        throw GitError("fatal: repository '" + f.rest[0] +
+                       "' does not exist");
+    ctx.err += "Cloning into '" + f.rest[1] + "'...\n";
+    make_repo(dst);
+    clone_local(src, dst, ident(ctx));
+    ctx.err += "done.\n";
+    return 0;
+}
+
+// cmd_fetch_pack 은 진짜 git upload-pack 과 v2 로 말해 팩을 받는다
+// (SPEC.md §14.3).
+int cmd_fetch_pack(Ctx& ctx, std::vector<std::string> args) {
+    auto f = parse_flags(args, {});
+    if (f.rest.size() < 2)
+        throw GitError("usage: mygit fetch-pack <path> <ref>...", 129);
+    auto log =
+        ctx.env.count("MYGIT_PKT_LOG") ? ctx.env["MYGIT_PKT_LOG"] : "";
+    for (auto& r :
+         fetch_pack(ctx.gitdir(), ctx.path(f.rest[0]),
+                    {f.rest.begin() + 1, f.rest.end()}, ctx.env, log))
+        ctx.out += r.oid + " " + r.name + "\n";
+    return 0;
+}
+
 const std::map<std::string, Command>& commands() {
     static const std::map<std::string, Command> table = {
         {"hash-object", cmd_hash_object},
@@ -1038,6 +1071,8 @@ const std::map<std::string, Command>& commands() {
         {"unpack-pack", cmd_unpack_pack},
         {"verify-pack", cmd_verify_pack},
         {"pack-objects", cmd_pack_objects},
+        {"clone", cmd_clone},
+        {"fetch-pack", cmd_fetch_pack},
     };
     return table;
 }

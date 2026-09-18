@@ -13,7 +13,7 @@
 
 namespace mygit {
 
-inline constexpr int STEP = 11;
+inline constexpr int STEP = 12;
 
 // 명령이 멈추는 까닭. code 는 종료 코드(SPEC.md §1.4).
 struct GitError : std::runtime_error {
@@ -287,6 +287,16 @@ std::pair<std::string, std::vector<PackEntry>> write_pack(
     const std::vector<PackItem>& items);
 std::vector<std::string> verify_lines(std::vector<PackEntry> entries,
                                       const std::string& pack_path);
+
+// ── transport.cpp (SPEC.md §14) ────────────────────────────────────
+std::string pkt_line(std::string_view data);
+std::string render(std::string_view data);
+std::string clone_local(const std::string& src, const std::string& dst,
+                        const std::string& ident);
+std::vector<NamedRef> fetch_pack(
+    const std::string& gitdir, const std::string& src,
+    const std::vector<std::string>& want_refs, const Env& env,
+    const std::string& log_path);
 
 // ── cli.cpp (SPEC.md §1 · §9) ─────────────────────────────────────
 struct Result {
