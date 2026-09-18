@@ -876,3 +876,10 @@ The user approved every recommendation below as-is. Each row is now a decision.
   `missing_proot`. `out/tbl_docs.html` regenerated for the two docs added in Part 14.
 - Part 15 written: 24 slides (budget 110) — 18 entries in message → cause → fix form, each with a
   capture from this device or a wiki/README source. Clock-skew entry dropped (no source).
+
+### Step 8 · Part 1 — 첫 10분 (2026-09-18)
+
+- Part 1 written: 14 slides (budget 90). A short on-ramp: README/wiki facts (install sources,
+  Android versions, pkg commands and limits, keyboard, failsafe, community) plus four captures
+  already recorded (app dir, $PREFIX top level, 170 packages, ~/storage links). Every "why" is a
+  forward pointer to Parts 3–9 rather than repeated here.
