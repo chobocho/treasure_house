@@ -648,3 +648,28 @@ The user approved every proposal below as-is. Each row is now a decision.
   (renamed commands left stale files); `run_all.py` added to `deck/pending.txt` (`make all SKEL=1`
   had been failing on it since the frame commit). Record sizes written under `deck/budget.txt`
   (files test stops at 20k, not the planned 100k).
+
+
+### Step 8 — Figures (2026-09-18, d3d3f77 · 5754441)
+
+- `deck/gen_figs.py` → **17 SVGs** in `deck/figs/` (`make figs`, `make figs-check` = 0 drift): the
+  14 of §4 (hello_objects, dag_bases, three_areas, index_entry, pack_delta, pkt_v2_clone,
+  rebase_before_after, ff_vs_3way, reflog_path, timeline_ribbon, release_cadence, delta_chains,
+  pack_window, proto_v0_v2) + tree_sort, growth, limits_churn. Only three_areas is `ill`; every id,
+  size, count and date in the others is read from out/, golden/ or data/, and `need()` aborts when a
+  capture no longer matches the figure's assumptions (e.g. the delta entry's size must equal
+  verify-pack's column; the merge's parents must be ours, theirs). pack_delta decodes the real
+  OFS_DELTA entry of golden/pack/ofs.pack with mygit.pack's own functions.
+- All 17 rendered with `make figs-png` and looked at; 13 fixes (7 text overlaps, 3 clipped right
+  edges, a misplaced separator, dead space, a `want` line hidden by the ellipsis). timeline_ribbon
+  labels use one row each (right-anchored group latest-first on top, then left group) — greedy level
+  packing kept failing; the layout is now checked (no leader crosses a label).
+- svgkit: text rules are now `svg.diag text.X` — the deck CSS `svg.diag text {font-size:12px}`
+  out-ranked `.tick` so every small label would have been 12px inside the deck only (PNG renders
+  looked fine). Arrows use `.edge` + drawn heads, not `.arw` (the deck puts marker #ah on `.arw`).
+- Capture fix found here: this machine's `find` is **bfs 4.1.1**, and on proot it does not report
+  git's read-only object files as `-type f` — three `find … -type f` captures in `hello` were
+  silently empty. Now `! -type d`. New source captures: hello object list/log/ls-tree/rev-parse,
+  dag parents, full verify-pack chain histogram (702 captures; hello·dag·pack re-run twice, md5 equal).
+- release_cadence counts x.y.0 tags only; its caption says 1.x feature releases were third-digit
+  (mirror: v1.7.1 2010-04-23 feature, v1.7.1.1 maintenance), so 2007–2013 is not "quiet".
