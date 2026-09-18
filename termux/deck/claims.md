@@ -282,3 +282,10 @@
 | 위키 Remote Access: 기본 SSH 포트 8022, sshd 로 띄우고 pkill 로 멈춤, 로그는 logcat, 비밀번호 인증 기본·passwd, ssh-copy-id -p 8022, RSA 2048 최소·4096 이하 | wiki-remote-access 2.2.1 | 위키 | 2026-09-18 |
 | 이 기기 sshd: OpenSSH_10.5p1, 호스트 키 있음, AuthorizedKeysFile .ssh/authorized_keys, sftp-server 는 $PREFIX/libexec | out/sshd.txt 1–3 | 캡처 | 2026-09-18 |
 | 위키 Shells: BASH·Beanshell·Busybox Ash·FISH·IPython·TCSH·Xonsh·ZSH | wiki-shells | 위키 | 2026-09-18 |
+| termux-services: 설치 뒤 셸 재시작으로 서비스 데몬, sv-enable/sv up/sv down/sv-disable, 로그 $PREFIX/var/log/sv/<서비스>/current, 꺼짐 = down 파일. 내 서비스는 var/service/<이름>/run 과 log/run(svlogger) | readme-termux-services · wiki-termux-services | README·위키 | 2026-09-18 |
+| Termux:Boot: 한 번 실행, ~/.termux/boot/ 이름순, 먼저 termux-wake-lock. 예: start-sshd, start-services(profile.d/start-services.sh). 같은 키로 서명되어야 스크립트를 실행할 권한이 있다 | readme-termux-boot 1·1.2·1.2.1 | README | 2026-09-18 |
+| BootReceiver 는 BOOT_COMPLETED 를 받아 파일을 이름(문자열)순 정렬, 파일마다 3초 기한의 JobScheduler 작업, 읽기·실행 권한을 켠다 | out/src_boot.txt 1·2 | 소스 캡처 | 2026-09-18 |
+| BootJobService 는 com.termux.file 주소와 백그라운드 표시를 실은 인텐트를 TermuxService 로 보내고, O 이상이면 startForegroundService | termux-boot@a8493bd BootJobService.java 23–44 | 소스 | 2026-09-18 |
+| exp/serve_once.sh: 127.0.0.1:8080 의 http.server 에서 hello.c 를 받으면 200 1048 | out/serve_local.txt 1 | 캡처 | 2026-09-18 |
+| 위키 Bypassing NAT: NAT 뒤에서는 기본으로 닿을 수 없음. Tor(가장 안전·가상 포트·torrc HiddenServicePort 22 127.0.0.1:8022), Ngrok(OpenSSH 터널·무료는 무작위 포트), Tmate(끊기면 끝) | wiki-bypassing-nat 서두·1·2·3 | 위키 | 2026-09-18 |
+| termux-services 지원 표에 cronie 의 crond 가 있고, termux-job-scheduler 는 termux-api 패키지의 명령이다 | wiki-termux-services · out/tbl_api_cmds.html | 위키·캡처 | 2026-09-18 |

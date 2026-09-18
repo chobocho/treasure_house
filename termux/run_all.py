@@ -520,6 +520,21 @@ CAPTURES = [
         S('node 는', "command -v node || echo '(우분투 쪽에는 없다)'"),
         S('git 은', "command -v git || echo '(우분투 쪽에는 없다)'"),
     ]),
+    # 11부 — Termux:Boot 가 부팅 때 하는 일(소스)과, 폰에 띄운 작은
+    # 웹 서버. 서버는 127.0.0.1 에만 붙이고 한 번 묻고 끈다
+    Capture('src_boot', 'termux', 'stable', [
+        S('부팅 방송을 받고 파일을 이름순으로',
+          "python3 deck/srcpin.py grep "
+          "'termux-boot:*/BootReceiver.java' '.*(ACTION_BOOT|sort).*'"),
+        S('3초 안에 돌 작업으로, 실행 권한도 챙긴다',
+          "python3 deck/srcpin.py grep "
+          "'termux-boot:*/BootReceiver.java' "
+          "'.*(Deadline|set(Read|Exec)).*'"),
+    ]),
+    Capture('serve_local', 'termux', 'stable', [
+        S('exp/ 를 8080 에 내놓고 hello.c 를 한 번 받는다',
+          'sh exp/serve_once.sh 8080 exp hello.c'),
+    ]),
     # 9부 — 이 세션을 띄운 proot 명령줄. 추적자(TracerPid)의
     # cmdline 을 읽는다. 세션을 다시 띄우면 바뀔 수 있어 스냅샷이다
     Capture('proot_session', 'proot', 'snapshot', [

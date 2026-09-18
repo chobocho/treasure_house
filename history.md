@@ -1,3 +1,10 @@
+### [2026-09-18 04:20] Termux 대백과사전 덱 11부 — 활용 II: 자동화와 서버(13장)
+- **기획:** runit 서비스, Termux:Boot 가 부팅 스크립트를 넘기는 길, 폰 위 웹 서버, NAT 너머 접속, 정해진 때 돌리기.
+- **TC:** 실험 11 시험 3건(200·크기, 없는 파일 404, 사용법 오류, 끈 뒤 포트 비움) 먼저 작성해 RED 확인 후 구현.
+- **개발:** `termux/exp/serve_once.sh`, `termux/exp/tests/test_exp.py`, `termux/run_all.py`, `termux/deck/sections/11_auto.html`, `termux/deck/claims.md` 외 4개 파일
+- **검증:** test_exp·test_run_all 통과 · make all SKEL=1 오류 0건
+- **비고:** 서비스를 켜거나 포트를 바깥에 열지 않았다. 서버는 127.0.0.1 에서 한 번 묻고 끔.
+
 ### [2026-09-18 04:15] Termux 대백과사전 덱 10부 — 활용 I: 개발 환경(18장)
 - **기획:** 이 폰의 작업대: 깔린 도구와 판, 도구마다 자기를 어디서 도는 줄 아는지, 파이썬·Node·ssh·git·셸 설정.
 - **TC:** 캡처 2종(dev_termux 스냅샷·dev_proot) 추가, 조립 검사 오류 0건, 출처 없는 문장 1건 삭제.

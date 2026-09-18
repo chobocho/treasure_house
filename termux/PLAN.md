@@ -835,3 +835,14 @@ The user approved every recommendation below as-is. Each row is now a decision.
 - Part 10 written: 18 slides (budget 190) — deliberately short: no Go/Rust builds (decision 10),
   nothing installed. Python/Node/ssh sections are wiki-sourced; the sshd capture shows this
   device's config.
+
+### Step 8 · Part 11 — 활용 II: 자동화와 서버 (2026-09-18)
+
+- Experiment 11 `exp/serve_once.sh` (+3 tests): serves a directory with `python3 -m http.server`
+  on 127.0.0.1, fetches one file with curl, always kills the server (trap) — capture
+  `serve_local` = `200 1048`. Capture `src_boot`: BootReceiver sorts `~/.termux/boot` by name
+  (string order), schedules one JobScheduler job per file with a 3 s deadline, fixes r/x bits;
+  BootJobService hands the script to TermuxService (excerpt).
+- Part 11 written: 13 slides (budget 150). termux-services/runit, Termux:Boot (README + source),
+  local web server, NAT (wiki: Tor/Ngrok/Tmate), scheduling (crond vs termux-job-scheduler and
+  the Doze/phantom walls). No service enabled, nothing exposed.

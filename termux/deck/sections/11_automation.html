@@ -2,19 +2,147 @@
 <p class="chnum">11부</p>
 <h2>활용 II: 자동화와 서버</h2>
 <p class="chsub">꺼지지 않고, 스스로 돌고, 부르면 답하게</p>
-<p class="cap">이 부의 목표 장수는 150장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>11부에서 다룰 것</h3>
+<p>폰은 늘 켜져 있고 늘 들고 다니는 컴퓨터입니다. 서버를 띄우고, 부팅 때 스크립트를 돌리고, 밖에서 들어오게 할 수
+있습니다. 다만 8부의 벽(팬텀 프로세스·Doze·낮은 포트)이 그대로 따라옵니다.</p>
+<div class="note">이 덱은 서비스를 새로 켜거나 포트를 바깥에 열지 않았습니다. 서버 실험은 <code>127.0.0.1</code> 에서
+한 번 묻고 끄는 것까지입니다.</div>
+</article>
+
+<article class="card" id="p11-c1">
+<p class="chnum">1장</p>
+<h2>서비스 — termux-services 와 runit</h2>
+<p>설치(<code>pkg install termux-services</code>) 뒤 셸을 다시 열면 서비스 데몬이 뜹니다. 그다음은 runit 의 명령들:</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>하고 싶은 일</th><th>명령</th></tr>
+<tr><td>켜 두기(다음에도 자동)</td><td><code>sv-enable &lt;서비스&gt;</code></td></tr>
+<tr><td>이번만 띄우기</td><td><code>sv up &lt;서비스&gt;</code></td></tr>
+<tr><td>멈추기 · 끄기</td><td><code>sv down</code> · <code>sv-disable</code></td></tr>
+<tr><td>로그</td><td><code>$PREFIX/var/log/sv/&lt;서비스&gt;/current</code></td></tr>
+</table></div>
+<p>꺼진 서비스는 <code>$PREFIX/var/service/&lt;서비스&gt;/down</code> 파일이 있는 것 — <code>sv-enable</code>/<code>sv-disable</code> 은
+이 파일을 지우고 만들 뿐입니다.</p>
+<p class="cap">출처: termux-services README · 위키 Termux-services</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p11-own-service">
+<h3>내 서비스 만들기</h3>
+<p>위키의 순서: <code>$PREFIX/var/service/&lt;이름&gt;/log</code> 를 만들고 로그 스크립트(<code>svlogger</code>)를 <code>log/run</code>
+으로 링크한 뒤, 실행 가능한 <code>run</code> 스크립트를 <code>$PREFIX/var/service/&lt;이름&gt;/run</code> 에 둔다. runit 의 예제
+스크립트들을 가져다 쓸 수 있다.</p>
+<p>이 기기에는 termux-services 가 깔려 있지 않습니다 — 8부에서 본 <code>sshd</code> 는 사용자가 직접 띄운 데몬(부모 1)입니다.</p>
+<p class="cap">출처: 위키 Termux-services · 8부 procs_now 캡처</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p11-c2">
+<p class="chnum">2장</p>
+<h2>부팅 때 — Termux:Boot</h2>
+<p>README 의 사용법: ① 앱을 설치하고 ② <b>한 번 실행</b>해 부팅 때 돌 수 있게 하고 ③ <code>~/.termux/boot/</code> 를 만들어
+④ 스크립트를 넣는다 — 여럿이면 이름 차례로. ⑤ 기기가 잠들지 않게 하려면 맨 먼저 <code>termux-wake-lock</code>.</p>
+<p>README 의 두 예:</p>
 <ul>
-<li><code>termux-services</code>(runit) 와 cron</li>
-<li>Termux:Boot 로 부팅할 때 실행</li>
-<li>웹 서버와 파일 서버</li>
-<li>알림 스크립트</li>
-<li>위젯 단축</li>
-<li>Tasker 연동</li>
-<li>웨이크락과 배터리</li>
-<li>원격 접속 토폴로지</li>
-<li>NAT 넘기</li>
+<li><code>~/.termux/boot/start-sshd</code> — <code>termux-wake-lock</code> 다음 <code>sshd</code></li>
+<li><code>~/.termux/boot/start-services</code> — <code>termux-wake-lock</code> 다음 <code>$PREFIX/etc/profile.d/start-services.sh</code>
+를 <code>source</code> — 1장의 서비스들을 부팅 때 켠다</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<p class="cap">출처: termux-boot README 1.2·1.2.1</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p11-boot-receiver">
+<h3>Boot 앱이 하는 일</h3>
+<!--OUT file=src_boot.txt sec=1 note=BootReceiver — BOOT_COMPLETED 만, 파일은 이름순-->
+<!--OUT file=src_boot.txt sec=2 note=파일마다 3초 안에 돌 작업 하나, 읽기·실행 권한은 알아서-->
+<p>부팅이 끝났다는 방송(<code>BOOT_COMPLETED</code>)을 받으면 디렉터리의 파일을 이름순으로 정렬하고, 파일마다 JobScheduler
+작업 하나를 "3초 안에" 조건으로 예약합니다. 사용자가 실행 권한을 잊었으면 켜 줍니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p11-boot-job">
+<h3>작업은 Termux 에게 넘긴다</h3>
+<!--CODE file=sources/termux-boot/app/src/main/java/com/termux/boot/BootJobService.java sha=a8493bd6ba016bc370af34aa65fcbe065cc00ced lines=23-44 note=스크립트 경로를 실은 인텐트를 TermuxService 로-->
+<!--SRC repo=termux-boot path=app/src/main/java/com/termux/boot/BootJobService.java sha=a8493bd6ba016bc370af34aa65fcbe065cc00ced lines=23-44-->
+<p>Boot 앱은 스크립트를 스스로 돌리지 않습니다. 스크립트 경로를 <code>com.termux.file</code> 주소로 싸서, 백그라운드 실행
+표시를 붙여 Termux 의 서비스에 보냅니다(Android 8 이상이면 전경 서비스로). 4부에서 본 <code>sharedUserId</code> 와 같은 서명이
+이 부탁을 가능하게 합니다 — README 가 "같은 키로 서명되어야 스크립트 실행 권한이 있다" 고 적는 까닭입니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p11-c3">
+<p class="chnum">3장</p>
+<h2>폰 위의 작은 웹 서버</h2>
+<!--OUT file=serve_local.txt sec=1 note=상태 코드와 받은 바이트-->
+<p>파이썬 표준 라이브러리만으로 <code>exp/</code> 디렉터리를 8080 에 내놓고 <code>hello.c</code> 를 한 번 받았습니다. 200 과
+1048 바이트 — 파일 크기 그대로입니다. 80 이 아니라 8080 인 것은 8부의 포트 벽 때문입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p11-serve-src">
+<h3>실험 11</h3>
+<!--CODE file=exp/serve_once.sh note=127.0.0.1 에만 붙이고, 끝나면 반드시 끈다-->
+<!--OUT file=serve_local.txt sec=1 note=결과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-c4">
+<p class="chnum">4장</p>
+<h2>밖에서 들어오기 — NAT 너머</h2>
+<p>위키 "Bypassing NAT": 통신사와 공유기는 여러 기기가 바깥 주소 하나를 나눠 쓰게 하므로(NAT), 기본으로는 인터넷에서 이
+폰에 닿을 수 없다. 고정 IP 나 공유기의 포트 포워딩이 있다면 이 장은 필요 없다. 그렇지 않을 때의 길 셋:</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>방법</th><th>위키의 설명</th></tr>
+<tr><td>Tor 어니언 서비스</td><td>가장 안전하고 효과적. 종단 간 암호화, root 없이 80 같은 가상 포트, 평범한 인터넷에는 안 보임</td></tr>
+<tr><td>Ngrok</td><td>닫힌 클라이언트 대신 OpenSSH 로 터널. 무료 계정은 TCP 포트가 무작위</td></tr>
+<tr><td>Tmate</td><td>터미널 공유. 쉽지만 손님이 끊으면 연결도 끝난다</td></tr>
+</table></div>
+<p class="cap">출처: 위키 Bypassing NAT 서두·1·2·3절</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p11-tor">
+<h3>Tor 로 sshd 를 내놓는 설정</h3>
+<p>위키의 <code>torrc</code> 예는 두 줄이 핵심입니다: <code>HiddenServiceDir …/home/.tor/hidden_ssh</code> 와
+<code>HiddenServicePort 22 127.0.0.1:8022</code>. 바깥에서는 22 번으로 보이고, 폰 안에서는 8022 의 sshd 로 이어집니다 —
+8부의 낮은 포트 벽을 Tor 가 "가상 포트" 로 넘는 셈입니다.</p>
+<p class="cap">출처: 위키 Bypassing NAT 1.2</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p11-c5">
+<p class="chnum">5장</p>
+<h2>정해진 때에 돌리기</h2>
+<p>길은 둘입니다.</p>
+<ul>
+<li><b>crond</b> — termux-services 의 지원 표에 cronie 의 <code>crond</code> 가 있다(1장).</li>
+<li><b><code>termux-job-scheduler</code></b> — termux-api 패키지의 명령(7부 색인). 안드로이드의 JobScheduler 에 맡긴다.</li>
+</ul>
+<p>어느 쪽이든 8부의 벽을 넘지 못합니다. Doze 동안 JobScheduler 작업은 유지 보수 창까지 미뤄지고, 앱 밖의 데몬은 팬텀
+프로세스 킬러의 대상입니다.</p>
+<p class="cap">출처: 위키 Termux-services 표 · out/tbl_api_cmds.html · developer.android.com Doze 1.1.1</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p11-summary">
+<h3>11부를 한 표로</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>하고 싶은 일</th><th>도구</th><th>따라오는 벽</th></tr>
+<tr><td>늘 떠 있는 서버</td><td>termux-services(runit)</td><td>팬텀 프로세스 · Doze</td></tr>
+<tr><td>부팅 때 시작</td><td>Termux:Boot → TermuxService</td><td>앱을 한 번 실행해 둬야 함</td></tr>
+<tr><td>웹 서버</td><td><code>python3 -m http.server</code> 등</td><td>1024 미만 포트</td></tr>
+<tr><td>밖에서 접속</td><td>Tor · Ngrok · Tmate</td><td>NAT</td></tr>
+<tr><td>정해진 때</td><td>crond · termux-job-scheduler</td><td>Doze</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p11-quiz" data-quiz>
+<h3>11부 퀴즈</h3>
+<p class="q">Q. <code>~/.termux/boot/10-sshd</code> 와 <code>~/.termux/boot/2-lock</code> 두 스크립트를 두었습니다. 부팅 때 어느 쪽이
+먼저 예약되고, 그것이 의도와 맞습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> BootReceiver 는 이름을 <b>문자열</b>로 비교해 정렬하므로 <code>10-sshd</code> 가 <code>2-lock</code> 보다 먼저입니다
+("1" &lt; "2"). wake lock 을 먼저 잡으려 했다면 의도와 다릅니다 — <code>01-lock</code>·<code>10-sshd</code> 처럼 자리수를 맞추거나,
+README 의 예처럼 한 스크립트 안에서 <code>termux-wake-lock</code> 을 첫 줄에 둡니다.</div>
+<span class="tier ill">설명용</span>
 </article>

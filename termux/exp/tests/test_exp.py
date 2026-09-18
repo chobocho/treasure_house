@@ -299,6 +299,51 @@ class ScriptTest(unittest.TestCase):
             self.assertRegex(l, r'^\S+: 종료 \d+ · ')
 
 
+@unittest.skipUnless(shutil.which('curl'), 'curl 이 없다')
+class ServeOnceTest(unittest.TestCase):
+    # 실험 11 — 127.0.0.1 에 웹 서버를 띄워 한 번 묻고 끈다(11부)
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        io.open(os.path.join(self.d, 'a.txt'), 'w').write('x' * 37)
+
+    def tearDown(self):
+        shutil.rmtree(self.d)
+
+    def free_port(self):
+        import socket
+        s = socket.socket()
+        s.bind(('127.0.0.1', 0))
+        port = s.getsockname()[1]
+        s.close()
+        return port
+
+    def serve(self, *args):
+        return subprocess.run(['sh', os.path.join(EXP, 'serve_once.sh')]
+                              + list(args), capture_output=True,
+                              text=True, timeout=60)
+
+    def test_status_and_size(self):
+        port = self.free_port()
+        r = self.serve(str(port), self.d, 'a.txt')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout, '200 37\n')
+        # 끈 뒤에는 그 포트가 비어 있다 — 다시 bind 할 수 있다
+        import socket
+        s = socket.socket()
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(('127.0.0.1', port))
+        s.close()
+
+    def test_missing_file_is_404(self):
+        r = self.serve(str(self.free_port()), self.d, 'none.txt')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(r.stdout.startswith('404 '), r.stdout)
+
+    def test_usage(self):
+        self.assertEqual(self.serve().returncode, 2)
+        self.assertEqual(self.serve('80').returncode, 2)
+
+
 @unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb 가 없다')
 class MkdebTest(unittest.TestCase):
     def test_build(self):
