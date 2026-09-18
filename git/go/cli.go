@@ -49,6 +49,8 @@ func init() {
 		"unpack-pack":  cmdUnpackPack,
 		"verify-pack":  cmdVerifyPack,
 		"pack-objects": cmdPackObjects,
+		"clone":        cmdClone,
+		"fetch-pack":   cmdFetchPack,
 	}
 	deleteBranch = deleteMerged
 }
@@ -1846,6 +1848,60 @@ func cmdPackObjects(ctx *Ctx, args []string) (int, error) {
 	}
 	ctx.say("%s\n", sha)
 	return 0, nil
+}
+
+// ── 12단계: clone · fetch-pack ──────────────────────────────────────
+
+// cmdClone 은 멍청한 로컬 clone(SPEC.md §14.2). 안내는 표준 오류에.
+func cmdClone(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, nil)
+	if err != nil {
+		return 0, err
+	}
+	if len(f.rest) != 2 {
+		return 0, &GitError{"usage: mygit clone <path> <dir>", 129}
+	}
+	src, dst := ctx.Path(f.rest[0]), ctx.Path(f.rest[1])
+	if st, err := os.Stat(src); err != nil || !st.IsDir() {
+		return 0, Fail("fatal: repository '" + f.rest[0] +
+			"' does not exist")
+	}
+	who, err := ident(ctx, "COMMITTER")
+	if err != nil {
+		return 0, err
+	}
+	fmt.Fprintf(&ctx.Err, "Cloning into '%s'...\n", f.rest[1])
+	if _, _, err := makeRepo(dst); err != nil {
+		return 0, err
+	}
+	if _, err := CloneLocal(src, dst, who); err != nil {
+		return 0, err
+	}
+	ctx.Err.WriteString("done.\n")
+	return 0, nil
+}
+
+// cmdFetchPack 은 진짜 git upload-pack 과 v2 로 말해 팩을 받는다
+// (SPEC.md §14.3).
+func cmdFetchPack(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, nil)
+	if err != nil {
+		return 0, err
+	}
+	if len(f.rest) < 2 {
+		return 0, &GitError{"usage: mygit fetch-pack <path> <ref>...",
+			129}
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	got, err := FetchPack(g, ctx.Path(f.rest[0]), f.rest[1:], ctx.Env,
+		ctx.Env["MYGIT_PKT_LOG"])
+	for _, p := range got {
+		ctx.say("%s %s\n", p[0], p[1])
+	}
+	return 0, err
 }
 
 // ── 틀 ─────────────────────────────────────────────────────────────

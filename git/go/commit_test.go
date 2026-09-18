@@ -256,15 +256,7 @@ func TestS63ReflogLineBytes(t *testing.T) {
 func copyDag(t *testing.T, name string) (*sandbox, string) {
 	s := newSandbox(t, false)
 	g := filepath.Join(s.root, ".git")
-	src := filepath.Join(goldenDir, "dag", name, "git")
-	filepath.Walk(src, func(p string, i os.FileInfo, e error) error {
-		rel, _ := filepath.Rel(src, p)
-		if i.IsDir() {
-			return os.MkdirAll(filepath.Join(g, rel), 0o755)
-		}
-		b, _ := os.ReadFile(p)
-		return os.WriteFile(filepath.Join(g, rel), b, 0o644)
-	})
+	copyTree(t, filepath.Join(goldenDir, "dag", name, "git"), g)
 	for _, d := range []string{"objects/pack", "refs/tags"} {
 		os.MkdirAll(filepath.Join(g, d), 0o755)
 	}
@@ -315,5 +307,27 @@ func TestS62RevParse(t *testing.T) {
 	oid, _ := RevParse(g, "HEAD^{tree}")
 	if typ, _, _ := ReadObject(g, oid); typ != "tree" {
 		t.Fatal(typ)
+	}
+}
+
+// copyTree 는 디렉터리를 통째로 베낀다(시험 준비 전용).
+func copyTree(t *testing.T, src, dst string) {
+	err := filepath.Walk(src, func(p string, i os.FileInfo,
+		e error) error {
+		if e != nil {
+			return e
+		}
+		rel, _ := filepath.Rel(src, p)
+		if i.IsDir() {
+			return os.MkdirAll(filepath.Join(dst, rel), 0o755)
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dst, rel), b, 0o644)
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
