@@ -113,3 +113,13 @@ func makeRecipe(t testing.TB, r string) []byte {
 	t.Fatalf("모르는 재료: %s", r)
 	return nil
 }
+
+// osEnv 는 지금 환경의 사본 — 시험이 몇 개를 덧씌운다.
+func osEnv() map[string]string {
+	env := map[string]string{}
+	for _, kv := range os.Environ() {
+		k, v, _ := strings.Cut(kv, "=")
+		env[k] = v
+	}
+	return env
+}
