@@ -74,6 +74,11 @@ class Fig(object):
                 + '\n'.join(self.parts) + '\n</svg>')
 
 
+# 글자 규칙은 svg.diag text.X 꼴로 적는다. 덱의 CSS 에 svg.diag text
+# {font-size:12px} 가 있어서, .tick 처럼 약하게 적으면 덱 안에서만
+# 모든 글자가 12px 로 커진다(PNG 로 따로 렌더하면 멀쩡해 보인다).
+# 화살표는 .arw 가 아니라 .edge + .ah(촉) — 덱의 .arw 는 #ah 표지를
+# 달아 촉이 겹친다.
 # 그림 안에 최소한의 스타일을 같이 넣는다. var(--x, 기본값) 꼴이라
 # 덱 안에서는 덱의 배색을 따르고, 파일 하나만 떼어 렌더해도(그림을
 # 눈으로 검사할 때) 제 모습이 나온다. 이 두 줄이 없으면 SVG 기본값
@@ -84,10 +89,10 @@ STYLE = """<style>
 .ax{stroke:var(--muted,#5b6b7a);stroke-width:1;fill:none}
 .grid{stroke:var(--border,#e1e7ec);stroke-width:.6;
  stroke-dasharray:2 3;fill:none}
-.tick{font-size:8px;fill:var(--muted,#5b6b7a)}
-.axname{font-size:9px;fill:var(--accent2,#1e2b37);font-weight:700}
-.key{font-size:9px;fill:var(--accent2,#1e2b37);font-weight:700}
-.cap{font-size:8.5px;fill:var(--muted,#5b6b7a)}
+svg.diag text.tick{font-size:8px;fill:var(--muted,#5b6b7a)}
+svg.diag text.axname{font-size:9px;fill:var(--accent2,#1e2b37);font-weight:700}
+svg.diag text.key{font-size:9px;fill:var(--accent2,#1e2b37);font-weight:700}
+svg.diag text.cap{font-size:8.5px;fill:var(--muted,#5b6b7a)}
 .cv{fill:none;stroke:var(--accent,#c4411f);stroke-width:1.6}
 .cv1{fill:none;stroke:var(--g1,#2f7a52);stroke-width:1.6}
 .cv2{fill:none;stroke:var(--g2,#25507f);stroke-width:1.6}
@@ -120,10 +125,21 @@ STYLE = """<style>
 .box.off{fill:none;stroke-dasharray:3 2}
 .arw{stroke:var(--net,#7d8a96);stroke-width:1.4;fill:none}
 .arw.hot{stroke:var(--special,#25507f);stroke-width:2.2}
-.lbl{font-size:11px;fill:var(--muted,#5b6b7a)}
+svg.diag text.lbl{font-size:11px;fill:var(--muted,#5b6b7a)}
 .diag text{fill:var(--text,#1c2530)}
 .tie{stroke:var(--net,#7d8a96);stroke-width:1;fill:none}
 .tie.hot{stroke:var(--special,#25507f);stroke-width:1.6}
+.edge{stroke:var(--net,#7d8a96);stroke-width:1.3;fill:none}
+.edge.hot{stroke:var(--special,#25507f);stroke-width:1.8}
+.edge.dim{stroke-dasharray:3 2;opacity:.6}
+.ah{fill:var(--net,#7d8a96);stroke:none}
+.ah.hot{fill:var(--special,#25507f)}
+.bar{fill:var(--g2,#25507f);opacity:.8;stroke:none}
+.bar.a{fill:var(--accent,#c4411f)}
+svg.diag text.mono{font-family:"DeckMono","D2Coding",ui-monospace,
+ monospace;font-size:8.5px}
+svg.diag text.hot{fill:var(--special,#25507f);font-weight:700;
+ font-size:9.5px}
 </style>"""
 
 
