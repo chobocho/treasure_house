@@ -11,8 +11,8 @@ main() 은 그것을 진짜 표준 스트림에 잇는다.
 import os
 import sys
 
-from mygit import (GitError, commit, diff, index, objects, refs, tree,
-                   walk, worktree)
+from mygit import (GitError, commit, diff, index, merge, objects, refs,
+                   tree, walk, worktree)
 
 COMMANDS = {}
 
@@ -738,6 +738,120 @@ def cmd_checkout(ctx, args):
         raise GitError("error: pathspec '%s' did not match any file(s) "
                        "known to git" % name, 1)
     return move_head(ctx, None, oid, name)
+
+
+# ── 10단계: merge ────────────────────────────────────────────────────
+MYGIT_MERGE = 'Merge made by mygit (3-way, no renames).'
+
+
+def _write_git_file(ctx, name, text):
+    with open(os.path.join(ctx.gitdir(), name), 'w', encoding='utf-8',
+              newline='\n') as f:
+        f.write(text)
+
+
+def _is_clean(ctx, head):
+    """인덱스가 HEAD 트리와 같고 추적 파일이 그대로인가(SPEC §12.1)."""
+    g = ctx.gitdir()
+    want = worktree.tree_map(g, refs.peel(g, head, 'tree'))
+    ents = index.read_index(g)
+    have = {e.path: (e.mode, e.oid) for e in ents}
+    if any(e.stage for e in ents) or have != want:
+        return False
+    return all(worktree.file_state(ctx.root(), p) == v
+               for p, v in have.items())
+
+
+@command('merge')
+def cmd_merge(ctx, args):
+    """SPEC.md §12.1 — 이미 최신 · fast-forward · 3-way(충돌 포함)."""
+    _on, _v, rest = parse_flags(args, ())
+    if len(rest) != 1:
+        raise GitError('usage: mygit merge <branch>', 129)
+    g, name = ctx.gitdir(), rest[0]
+    theirs = resolve(ctx, name)
+    theirs = refs.peel(g, theirs, 'commit') if theirs else None
+    if theirs is None:
+        raise GitError('merge: %s - not something we can merge'
+                       % name, 1)
+    branch, head = refs.read_head(g)
+    if not _is_clean(ctx, head):
+        raise GitError('error: mygit: commit your local changes before '
+                       'merging')
+    # git 은 이미 최신이어도 ORIG_HEAD 를 지금 HEAD 로 다시 쓴다
+    # (golden/scen/merge-ff.scn 의 두 번째 merge 뒤)
+    _write_git_file(ctx, 'ORIG_HEAD', head + '\n')
+    if walk.is_ancestor(g, theirs, head):
+        ctx.say('Already up to date.\n')
+        return 0
+    old_tree = refs.peel(g, head, 'tree')
+    if walk.is_ancestor(g, head, theirs):
+        ctx.say('Updating %s..%s\nFast-forward\n'
+                % (head[:7], theirs[:7]))
+        worktree.checkout_tree(ctx.root(), g, old_tree,
+                               refs.peel(g, theirs, 'tree'))
+        refs.update_ref(g, branch or 'HEAD', theirs, head,
+                        'merge %s: Fast-forward' % name, ident(ctx))
+        return 0
+    bases = walk.merge_bases(g, head, theirs)
+    if len(bases) != 1:
+        raise GitError('fatal: mygit: %d merge bases (criss-cross) are '
+                       'not supported' % len(bases))
+    tmap = lambda c: worktree.tree_map(g, refs.peel(g, c, 'tree'))
+    result, notes, conflicts = merge.merge_trees(
+        g, tmap(bases[0]), tmap(head), tmap(theirs), name)
+    apply_merge(ctx, head, result)
+    for line in notes:
+        ctx.say(line + '\n')
+    cur = branch[len('refs/heads/'):] if branch else None
+    is_branch = refs.resolve_ref(g, 'refs/heads/' + name) is not None
+    msg = ("Merge branch '%s'" if is_branch else "Merge commit '%s'") \
+        % name
+    if cur not in (None, 'main', 'master'):
+        msg += ' into %s' % cur
+    if conflicts:
+        _write_git_file(ctx, 'MERGE_HEAD', theirs + '\n')
+        _write_git_file(ctx, 'MERGE_MSG', msg + '\n\n# Conflicts:\n' +
+                        ''.join('#\t%s\n' % p.decode('utf-8', 'replace')
+                                for p in conflicts))
+        ctx.say('Automatic merge failed; fix conflicts and then commit '
+                'the result.\n')
+        return 1
+    t = index_tree(ctx)
+    body = commit.serialize_commit(t, [head, theirs],
+                                   ident(ctx, 'AUTHOR'), ident(ctx),
+                                   msg + '\n')
+    oid = objects.write_object(g, 'commit', body)
+    refs.update_ref(g, branch or 'HEAD', oid, head,
+                    'merge %s: %s' % (name, MYGIT_MERGE), ident(ctx))
+    ctx.say(MYGIT_MERGE + '\n')
+    return 0
+
+
+def apply_merge(ctx, head, result):
+    """합친 결과를 작업 트리와 인덱스에 쓴다. 충돌 경로는 단계 1‥3."""
+    g, root = ctx.gitdir(), ctx.root()
+    ours = worktree.tree_map(g, refs.peel(g, head, 'tree'))
+    ents = {e.path: e for e in index.read_index(g)}
+    staged = []
+    for p, r in result.items():
+        full = os.path.join(os.fsencode(root), p)
+        if r[0] == 'gone':
+            if p in ours:
+                worktree._remove_file(root, p)
+            ents.pop(p, None)
+        elif r[0] == 'clean':
+            if ours.get(p) != (r[1], r[2]):
+                data = objects.read_object(g, r[2])[1]
+                worktree._write_file(root, p, r[1], data)
+                ents[p] = index.entry_from_stat(p, full, r[2])
+        else:
+            _kind, text, stages, mode = r
+            worktree._write_file(root, p, mode, text)
+            ents.pop(p, None)
+            for k, (m, o) in sorted(stages.items()):
+                staged.append(index.IndexEntry(p, o, m, stage=k))
+    index.write_index(g, list(ents.values()) + staged)
 
 
 # ── 틀 ─────────────────────────────────────────────────────────────

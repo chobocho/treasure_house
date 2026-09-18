@@ -979,7 +979,9 @@ index <옛 7글자>..<새 7글자>[ <모드>]
 2. 인덱스가 HEAD 트리와 다르거나 추적 중인 파일이 작업 트리에서 바뀌었으면
    멈춘다 — `error: mygit: commit your local changes before merging` (128).
    git 은 합치기가 건드리지 않는 파일의 변경은 허락한다. 줄임.
-3. `<b>` 가 HEAD 의 조상이면 `Already up to date.` (표준 출력, 0).
+3. `ORIG_HEAD` ← 지금 HEAD(이미 최신이어도 쓴다 — 진짜 git 과 같다,
+   `golden/scen/merge-ff.scn`). `<b>` 가 HEAD 의 조상이면 `Already up to date.`
+   (표준 출력, 0).
 4. HEAD 가 `<b>` 의 조상이면 **fast-forward**: 표준 출력에
    `Updating <옛 7글자>..<새 7글자>` 와 `Fast-forward` 두 줄(git 은 그 뒤에 변경
    통계를 찍는다 — 줄임). `ORIG_HEAD` ← 옛 HEAD, 작업 트리·인덱스를 §9.3 의
