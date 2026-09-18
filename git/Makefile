@@ -167,14 +167,20 @@ test-java: build-java   ## Java 시험 (JVM 하나만 — flock)
 	  sh $(JAVA_LOCK) java -cp build/java mygit.tests.RunTests; \
 	else echo '  Java 시험 아직 없다 (PLAN.md §5 6단계)'; fi
 
-# 시험 파일마다 따로 짓고 돌린다. 하나가 실패해도 나머지를 본다.
+# 라이브러리는 한 번만 짓고(.o), 시험 파일마다 따로 이어 붙여 돌린다.
+# 하나가 실패해도 나머지를 본다.
 test-cpp:               ## C++ 시험 (cpp/tests/test_*.cpp)
 	@if test -d cpp/tests; then \
-	  mkdir -p build/cpp; bad=0; \
+	  mkdir -p build/cpp/obj; bad=0; objs=; \
 	  lib=$$(find cpp -maxdepth 1 -name '*.cpp' ! -name main.cpp); \
+	  for s in $$lib; do \
+	    o="build/cpp/obj/$$(basename $$s .cpp).o"; \
+	    $(CXX) $(CXXFLAGS) -Icpp -c $$s -o $$o || exit 1; \
+	    objs="$$objs $$o"; \
+	  done; \
 	  for t in cpp/tests/test_*.cpp; do \
 	    b="build/cpp/$$(basename $$t .cpp)"; \
-	    $(CXX) $(CXXFLAGS) -Icpp $$t $$lib -o $$b && ./$$b || bad=1; \
+	    $(CXX) $(CXXFLAGS) -Icpp $$t $$objs -o $$b && ./$$b || bad=1; \
 	  done; exit $$bad; \
 	else echo '  C++ 시험 아직 없다 (PLAN.md §5 6단계)'; fi
 
