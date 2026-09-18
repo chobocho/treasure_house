@@ -67,7 +67,7 @@
 |---|---|---|
 | Python | 없음 | `PYTHONPATH=git/py python3 -m mygit <명령> …` |
 | Go | `make build-go` | `git/build/mygit-go <명령> …` |
-| TypeScript | `make build-ts` | `node git/build/ts/src/cli.js <명령> …` |
+| TypeScript | `make build-ts` | `node git/build/ts/src/main.js <명령> …` |
 | Java | `make build-java` | `sh tools/flock_java.sh java -cp git/build/java mygit.Main <명령> …` |
 | C++ | `make build-cpp` | `git/build/mygit-cpp <명령> …` |
 
@@ -631,14 +631,16 @@ $ git ls-files --stage
 
 ### 8.2 경로 따옴표 (git 의 core.quotePath=true)
 
-사람에게 경로를 찍는 모든 자리(`status`·`cat-file -p` 의 트리·`rm --cached`·
-`diff` 머리)에서, 경로에 아래 바이트가 하나라도 있으면 경로 전체를 `"` 로
+사람에게 경로를 찍는 자리(`status`·`cat-file -p` 의 트리·`diff` 머리)에서, 경로에 아래 바이트가 하나라도 있으면 경로 전체를 `"` 로
 감싸고 C 식으로 이스케이프한다. 없으면 그대로 찍는다.
 
 **공백 하나의 예외** — `status` 만은 경로에 공백(0x20)이 있어도 따옴표로 감싼다
-(공백 자체는 이스케이프하지 않는다: `?? "sp ace"`). `cat-file -p`·`rm --cached`·
+(공백 자체는 이스케이프하지 않는다: `?? "sp ace"`). `cat-file -p`·
 `diff` 머리·`stage` 는 공백만으로는 감싸지 않는다(진짜 git 으로 확인 —
 `golden/scen/status.scn`). git 의 porcelain 출력이 기계가 읽기 쉽게 한 선택이다.
+
+**`rm --cached` 는 감싸지 않는다** — `rm '<경로>'` 의 경로는 탭·한글이 있어도
+날것 그대로다(진짜 git 2.55 로 확인, 2026-09-18).
 
 | 바이트 | 찍는 꼴 |
 |---|---|
@@ -1224,8 +1226,9 @@ i < 결과 길이 동안:
 받을 때는 끝의 `\n` 하나를 떼고 읽는다.
 
 **사이드밴드(side-band-64k)** — v2 의 `packfile` 절에서 각 패킷 데이터의 첫
-바이트가 채널이다: 1 = 팩 바이트, 2 = 진행 안내(표준 오류로 흘려보낸다),
-3 = 오류(`fatal: mygit: remote error: <내용>` 으로 끝낸다).
+바이트가 채널이다: 1 = 팩 바이트, 2 = 진행 안내(mygit 은 `no-progress` 를
+보내므로 오지 않는다 — 와도 대화 기록에 한 줄로 남길 뿐이다), 3 = 오류
+(`fatal: mygit: remote error: <내용>` 으로 끝낸다).
 
 <!--EX pkt-->
 ```text

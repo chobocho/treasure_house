@@ -158,7 +158,7 @@ test-go:                ## Go 시험
 
 test-ts: build-ts       ## TypeScript 시험 (node --test)
 	@if test -d build/ts/tests; then \
-	  $(NODE) --test build/ts/tests/; \
+	  $(NODE) --test --test-concurrency=1 'build/ts/tests/*.test.js'; \
 	else echo '  TypeScript 시험 아직 없다 (PLAN.md §5 6단계)'; fi
 
 # 둘이 겹치면 이 기계는 OOM 으로 세션째 죽는다. 스위트 하나 = JVM 하나.
