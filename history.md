@@ -1,3 +1,16 @@
+### [2026-09-18 18:15] Git 덱 재현 검사 강화 — 재실행마다 실험 디렉터리를 비운다
+- **기획:** 저장소 밖(../)에 남은 것 때문에 첫 실행만 다른 캡처는 세 번 검사로 안 잡힌다.
+- **TC:** scratch/repos 를 비운 채 전체 실행 → 캡처 1건(pre-push 훅) 차이 발견.
+- **개발:** `git/tools/record.sh`, `git/exps/config_hooks.py`, `git/exps/merge2.py`, `git/out/`
+- **검증:** 새 record.sh --check 로 1,240개 3회 동일 · make all SKEL=1 오류 0건
+
+### [2026-09-18 16:48] Git 덱 전수 리뷰 1차 — 51건 중 49건 정정
+- **기획:** 서브에이전트 둘이 0~10부·11~20부를 원문·캡처·진짜 git 과 대조, 지적마다 다시 확인.
+- **TC:** really-refresh·로컬 clone·worktree 는 진짜 git 으로 재현해 확인.
+- **개발:** `git/deck/sections/`(17개), `git/deck/glossary.txt`, `git/data/events.tsv`, `git/exps/tools2.py` 외
+- **검증:** make all SKEL=1 오류 0건 · 데모 20건 통과
+- **비고:** 용어집 링크 60여 곳 재지정. 명령어 사전의 "돌린 곳" 누락은 다음 리뷰로.
+
 ### [2026-09-18 16:24] Git 대백과사전 공개 — index·README 에 새 절 "🌿 Git & 버전 관리"
 - **기획:** PLAN 결정 1 대로 "🎬 자동화 & CI/CD" 앞에 새 절, 카드의 수는 빌드 출력에서 센 실제 값.
 - **TC:** 폰트 검사 통과 · make all SKEL=1 오류 0건.
