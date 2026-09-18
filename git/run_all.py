@@ -122,12 +122,8 @@ class Repo(object):
             text += '\n'
         if p.returncode:
             text += '[exit %d]\n' % p.returncode
-        name = '%s__%s.txt' % (label or self.label, gitslug(cmd))
-        if name in Repo.written:
-            raise RuntimeError('캡처 이름이 겹친다: out/%s — label 을 '
-                               '바꿔 부를 것' % name)
-        Repo.written.add(name)
-        write(name, '$ %s\n%s' % (cmd, text))
+        save('%s__%s.txt' % (label or self.label, gitslug(cmd)),
+             '$ %s\n%s' % (cmd, text))
         return text
 
     def write(self, rel, data, mode=None):
@@ -146,6 +142,16 @@ def write(name, text):
     with io.open(os.path.join(OUT, name), 'w', encoding='utf-8',
                  newline='\n') as f:
         f.write(text)
+
+
+def save(name, text):
+    """캡처 하나를 남긴다 — 한 번의 run_all 안에서 이름이 겹치면 멈춘다
+    (뒤의 것이 앞의 것을 조용히 덮으면 덱이 엉뚱한 출력을 싣는다)."""
+    if name in Repo.written:
+        raise RuntimeError('캡처 이름이 겹친다: out/%s — label 을 '
+                           '바꿔 부를 것' % name)
+    Repo.written.add(name)
+    write(name, text)
 
 
 def table(name, head, rows, caption=''):
@@ -171,7 +177,7 @@ class Ctx(object):
         self.env = gitenv.load(os.path.join(SCRATCH, 'home'))
         # 위로 올라가다 treasure_house 를 찾지 않게 (PLAN.md §0.11)
         self.env['GIT_CEILING_DIRECTORIES'] = REPOS
-        self.write, self.table = write, table
+        self.write, self.table, self.save = write, table, save
 
     def repo(self, name, init=True, label=None, bare=False):
         """새 저장소. init 이면 git init -b main 까지(§0.9)."""
@@ -185,6 +191,10 @@ def run(only):
     os.makedirs(OUT, exist_ok=True)
     os.makedirs(REPOS, exist_ok=True)
     ctx = Ctx()
+    if not only:            # 전부 다시 뜰 때는 옛 캡처를 먼저 비운다
+        for f in os.listdir(OUT):
+            if '__' in f and f.endswith('.txt'):
+                os.remove(os.path.join(OUT, f))
     for name in ORDER:
         if only and only not in name:
             continue
