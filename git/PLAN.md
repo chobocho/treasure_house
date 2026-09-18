@@ -487,3 +487,38 @@ The user approved every proposal below as-is. Each row is now a decision.
   `e83c5163` = 2005-04-07 15:13:13 -0700 "Initial revision of "git"…", tag v2.55.0 present.
 - Not in index.html/README yet (per step 1). history.html was rotated in a separate commit
   (dc89bc3) because it hit the 40 KB cap.
+
+### Step 2 — SPEC.md (2026-09-18)
+
+- `SPEC.md` (Korean, 16 sections, ~1,370 lines): scope, run contract, SHA-1 (+ golden/sha1.tsv
+  recipe language), zlib, objects, layout, refs/reflog, index v2, worktree/status, per-command
+  output, walk/merge-base, diff, merge, pack/idx/delta encoder, transport (pkt-line, dumb clone,
+  v2 fetch-pack + `MYGIT_PKT_LOG`), naming table (§15), test layout and golden/ file list (§16).
+- Every byte example is an `<!--EX name-->` block filled by `tools/spec_examples.py --fill` from
+  real git under gitenv; `make spec-check` re-runs it and diffs (added to `make all`). New shared
+  `tools/gitenv.py` loads the env by sourcing gitenv.sh (single source of truth).
+- Facts pinned by running git 2.55.0 (all recorded in SPEC with the date): per-command
+  unknown-name error texts and exit codes (they differ per command — 12 rows in §1.4);
+  `commit -m` whitespace cleanup vs `commit-tree -m` verbatim; subject = first paragraph joined by
+  spaces; default `log` order = date-sorted list with FIFO ties (verified on an 11-commit DAG with
+  equal dates); blank message lines print as four spaces; C-style path quoting (octal for ≥0x80) in
+  status/ls-files/cat-file -p/diff headers; checkout-overwrite error with GIT_ADVICE=0 leaves an
+  empty line before `Aborting`; `Merge branch 'x' into <b>` only when b ∉ {main, master};
+  MERGE_MSG layout; packed-refs header ends with a trailing space; local clone config/reflog.
+- **Deviation/refinement of decision 7 (diff):** a throwaway prototype (scratchpad) of
+  trim-ends + forward greedy Myers + git's xdl_change_compact (no indent heuristic) vs
+  `git -c diff.indentHeuristic=false diff --no-index` on 1,500 random pairs: 253 mismatches, 252
+  of them equal-length ties (git's middle snake + discard pass picks other lines), 1 where git's
+  script is longer; realistic small edits mismatch ~2.5 %. So golden/diff is split: `agree.tsv`
+  (byte-equal) and `tie.tsv` (equal -/+ counts, output differs — shown in part 9 as a lesson).
+  Pinning `diff.indentHeuristic=false` for the byte-equal oracle (heuristic default since 2.14,
+  verified from RelNotes in the mirror).
+- **Merge oracle is `git merge`, not `git merge-file`:** verified that `git merge` joins conflicts
+  separated by ≤ 3 lines regardless of content (ZEALOUS) while merge-file defaults to ALNUM;
+  adjacent-line edits conflict; identical edits merge; refine trims common head/tail. SPEC §12.3.
+- Scope reductions (줄임) are marked in SPEC: no diffstat in commit/merge output, fixed 7-char
+  abbreviations, mygit refuses to merge with local changes, no modify/delete or criss-cross merges,
+  refs written loose on clone (git uses packed-refs), unmerged paths skipped by `diff`.
+- claims.md +3 rows (indent heuristic 2.14, Myers fig. 2/§4b, first commit e83c5163).
+- `make all SKEL=1` 0 errors; `make spec-check` 9/9; `make width` clean.
+

@@ -1,3 +1,10 @@
+### [2026-09-18 01:17] Git 대백과사전 덱 2단계 — SPEC.md(다섯 mygit 의 약속)
+- **기획:** 16절 규격서 — 객체·참조·인덱스·status·명령 출력·걷기·diff·merge·팩·전송·이름표·시험 배치.
+- **TC:** 바이트 예시 9개를 진짜 git 으로 뜨는 spec_examples.py + make spec-check(9/9). diff 원형 1,500쌍 대조로 agree/tie 두 목록 결정.
+- **개발:** `git/SPEC.md`, `git/tools/spec_examples.py`, `git/tools/gitenv.py`, `git/Makefile`, `git/deck/claims.md`, `git/PLAN.md`
+- **검증:** make all SKEL=1 오류 0건 · spec-check 어긋남 0건 · width 0건
+- **비고:** diff 는 git 과 같은 길이의 다른 스크립트를 고르는 경우가 있어 tie 쌍으로 따로 보인다. merge 기준은 git merge(ZEALOUS).
+
 ### [2026-09-18 01:14] Termux 대백과사전 덱 2단계 — tmx.sh 거부 목록·scrub.py·첫 캡처
 - **기획:** 호스트 Termux 로 가는 유일한 문(tmx.sh)과 개인정보 필터(scrub.py), 캡처 틀(run_all.py)을 시험 먼저 만든다.
 - **TC:** 정상: 허용 명령·끝줄·종료 코드·시간 초과. 가장자리: 거부 52종 미실행 증명·쓰기 우회·rm 경로·오탐(/root/TUR)·가린 보고.

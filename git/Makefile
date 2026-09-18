@@ -40,7 +40,8 @@ SRC_ALL     := $(SRC_PY) $(SRC_TS) $(SRC_GO) $(SRC_JAVA) $(SRC_CPP) \
                $(SRC_SH) $(SRC_TOP)
 
 .DEFAULT_GOAL := help
-.PHONY: help deps mirror docs golden golden-check test test-py \
+.PHONY: help deps mirror docs spec spec-check golden golden-check \
+        test test-py \
         test-go test-ts test-java test-cpp build build-go build-ts \
         build-java build-cpp parity run run-check record figs \
         figs-check figs-png tables claims-check width deck \
@@ -74,6 +75,16 @@ mirror:                 ## git/git 부분 복제 (blob 없이, 한 번만)
 docs:                   ## 공식 형식 문서·릴리스 노트 → docs/*.txt
 	@if test -f tools/fetch_docs.py; then $(PY) tools/fetch_docs.py; \
 	else echo '  tools/fetch_docs.py 아직 없다 (PLAN.md §5 4단계)'; fi
+
+# ── 규격서 ─────────────────────────────────────────────────────────
+# SPEC.md 의 바이트 예시(<!--EX-->)는 손으로 쓰지 않는다. 진짜 git
+# 이 뜬 것을 채워 넣고, 다시 떠서 같은지 본다. git 이 바뀌면 여기가
+# 먼저 운다.
+spec:                   ## SPEC.md 의 예시 블록을 진짜 git 으로 채우기
+	$(PY) tools/spec_examples.py --fill
+
+spec-check:             ## SPEC.md 의 예시가 진짜 git 과 같은지
+	$(PY) tools/spec_examples.py --check
 
 # ── 기준 바이트 ────────────────────────────────────────────────────
 # golden/ 은 진짜 git 이 만든다. 다시 만드는 것은 "지금까지의 기준이
@@ -232,8 +243,9 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
-all: tables run-check figs-check deck deck-verify deck-slices \
-     deck-xref deck-check claims-check width font font-check  ## 전부
+all: spec-check tables run-check figs-check deck deck-verify \
+     deck-slices deck-xref deck-check claims-check width font \
+     font-check  ## 전부
 
 # golden/ · out/ · mirror/ 는 절대 지우지 않는다(PLAN.md §7).
 clean:                  ## 덱·빌드 찌꺼기 지우기 (캡처·기준은 남긴다)

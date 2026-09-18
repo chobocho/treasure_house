@@ -62,3 +62,6 @@
 |---|---|---|---|
 | 실험의 고정 시각 1700000000 은 2023-11-14 22:13:20 UTC 이다 | tools/gitenv.sh 의 GIT_*_DATE | `date -u -d @1700000000` | 2026-09-18 |
 | 이 덱의 기준 git 은 2.55.0 이다 | 이 기계의 `git --version` | `git --version` → git version 2.55.0 | 2026-09-18 |
+| git 2.14 에서 diff 의 들여쓰기 휴리스틱(diff.indentHeuristic)이 기본값이 되었다 | git 저장소 v2.14.0 의 Documentation/RelNotes/2.14.0.txt 21–23·69–71행 | mirror: `git show v2.14.0:Documentation/RelNotes/2.14.0.txt`, 태그 날짜 2017-08-04 | 2026-09-18 |
+| Myers 1986 논문의 그림 2 가 탐욕 LCS/SES 알고리즘, 4b 절이 "A Linear Space Refinement" 이다 | E. W. Myers, "An O(ND) Difference Algorithm and Its Variations", Algorithmica 1(2), 1986 (xmailserver.org/diff2.pdf) | PDF 본문에서 "Figure 2 below"·"4b. A Linear Space Refinement" 확인 | 2026-09-18 |
+| 첫 커밋 e83c5163 의 시각은 2005-04-07 15:13:13 -0700, 제목은 Initial revision of "git", the information manager from hell | git 저장소 커밋 e83c5163316f89bfbde7d9ab23ca2e25604af290 | mirror: `git show -s --format='%H %ad %s' --date=iso e83c5163` | 2026-09-18 |
