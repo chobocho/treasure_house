@@ -1,3 +1,10 @@
+### [2026-09-18 02:24] Git 대백과사전 덱 4단계 — 조사(공식 문서·연표 126·CVE 40·출처 대장)
+- **기획:** v2.55.0 태그의 공식 문서 943개와 메일 3통을 docs/ 로, 릴리스·CVE·연표·기여자·명령·자람 표를 mirror 에서 뽑는 make_data.py.
+- **TC:** make data-check 로 생성 표 재현 확인, check_claims 에 formats.tsv 절 제목 존재 검사(32행) 추가. 외부 사실 13건은 원문을 curl 로 받아 문장 대조.
+- **개발:** `git/tools/fetch_docs.py`, `git/tools/adoc_text.py`, `git/tools/make_data.py`, `git/data/*.tsv`(14), `git/deck/claims.md`, `git/deck/check_claims.py`, `git/Makefile`, `git/PLAN.md` 외 12개 파일
+- **검증:** make all SKEL=1 오류 0건 · data-check 어긋남 0건 · 형식 표 32행 근거 확인
+- **비고:** 1차 출처가 없는 "GitHub 창업일"·"2005-04-03 개발 시작"은 싣지 않기로 함. 날짜가 둘인 사건(Hamano 7-26/27, Mercurial 4-19/20)은 시간대 차이로 원문에서 확인.
+
 ### [2026-09-18 01:58] Termux 대백과사전 덱 5단계 — 실험 10종(bionic·glibc 두 번 짓기)
 - **기획:** 같은 C 소스를 Termux clang(bionic)과 proot gcc(glibc)로 지어 차이를 보이고, 스크립트 실험으로 셔뱅·.deb·시그널·웨이크락을 다룬다.
 - **TC:** 정상: 인사 줄 같음·interp 다름·u0_a123·빈 포트 한 줄·137. 가장자리: 사용 중 포트·잘못된 인자·실패해도 웨이크락 해제.

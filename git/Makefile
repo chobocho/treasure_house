@@ -40,7 +40,8 @@ SRC_ALL     := $(SRC_PY) $(SRC_TS) $(SRC_GO) $(SRC_JAVA) $(SRC_CPP) \
                $(SRC_SH) $(SRC_TOP)
 
 .DEFAULT_GOAL := help
-.PHONY: help deps mirror docs spec spec-check golden golden-check \
+.PHONY: help deps mirror docs data data-check spec spec-check \
+        golden golden-check \
         test test-py \
         test-go test-ts test-java test-cpp build build-go build-ts \
         build-java build-cpp parity run run-check record figs \
@@ -75,6 +76,16 @@ mirror:                 ## git/git 부분 복제 (blob 없이, 한 번만)
 docs:                   ## 공식 형식 문서·릴리스 노트 → docs/*.txt
 	@if test -f tools/fetch_docs.py; then $(PY) tools/fetch_docs.py; \
 	else echo '  tools/fetch_docs.py 아직 없다 (PLAN.md §5 4단계)'; fi
+
+# releases·cves·timeline·contributors·commands·growth 표는 손으로
+# 쓰지 않는다 — mirror 의 태그와 docs/ 의 릴리스 노트에서 만든다.
+# 사람이 쓰는 원본은 data/events.tsv·cves_ko.tsv·commands_ko.tsv.
+# mirror 가 있어야 돌므로 make all 에는 넣지 않는다(1분 반쯤).
+data:                   ## mirror·docs → data/ 의 생성 표 여섯
+	$(PY) tools/make_data.py
+
+data-check:             ## data/ 의 생성 표가 mirror 와 그대로인지
+	$(PY) tools/make_data.py --check
 
 # ── 규격서 ─────────────────────────────────────────────────────────
 # SPEC.md 의 바이트 예시(<!--EX-->)는 손으로 쓰지 않는다. 진짜 git

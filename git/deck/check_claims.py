@@ -99,6 +99,32 @@ def check_cites():
     return bad, n
 
 
+def check_formats():
+    """data/formats.tsv 의 절 제목이 docs/<키>.txt 에 진짜 있는가.
+
+    CITE 로 쓰이기 전이라도 표에 적힌 절은 맞아야 한다 — 틀린 줄이
+    표에 남아 있으면 언젠가 누가 그대로 인용한다. docs/ 가 없으면
+    (make docs 전) 건너뛴다. O(표 크기 × 문서 크기).
+    """
+    p = os.path.join(DATA, 'formats.tsv')
+    if not os.path.exists(p) or not os.path.isdir(DOCS):
+        return [], 0
+    bad, n = [], 0
+    for line in read(p).split('\n'):
+        cols = line.split('\t')
+        if line.startswith('#') or len(cols) < 3 or cols[0] == 'format':
+            continue
+        key, sec = cols[1], cols[2]
+        f = os.path.join(DOCS, '%s.txt' % key)
+        n += 1
+        if not os.path.exists(f):
+            bad.append('formats.tsv: docs/%s.txt 가 없다' % key)
+        elif sec != '-' and not re.search(r'^§\t%s$' % re.escape(sec),
+                                          read(f), re.M):
+            bad.append('formats.tsv: %s 에 절 "%s" 가 없다' % (key, sec))
+    return bad, n
+
+
 def check_years():
     """조각 산문의 연도가 근거를 갖고 있는가."""
     ev = evidence_text()
@@ -129,12 +155,13 @@ def check_years():
 
 def main():
     sbad, sn = check_cites()
+    fbad, fn = check_formats()
     ybad, yn = check_years()
-    for line in sbad + ybad:
+    for line in sbad + fbad + ybad:
         print('  ✗ ' + line)
-    print('문서 절 인용 %d건 · 연도 %d건 — 근거 없음 %d건'
-          % (sn, yn, len(sbad) + len(ybad)))
-    return 1 if (sbad or ybad) else 0
+    print('문서 절 인용 %d건 · 형식 표 %d행 · 연도 %d건 — 근거 없음 %d건'
+          % (sn, fn, yn, len(sbad) + len(fbad) + len(ybad)))
+    return 1 if (sbad or fbad or ybad) else 0
 
 
 if __name__ == '__main__':

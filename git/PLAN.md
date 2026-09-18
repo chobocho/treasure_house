@@ -547,3 +547,34 @@ The user approved every proposal below as-is. Each row is now a decision.
   prototype). SPEC §11.2 counts updated (30 / 3).
 - `make all SKEL=1` 0 errors; spec-check 9/9; width clean.
 
+### Step 4 — Research: docs · data · claims (2026-09-18)
+
+- `make docs` (tools/fetch_docs.py + tools/adoc_text.py): all 943 `Documentation/**/*.adoc` at tag
+  **v2.55.0** of the mirror (blobs fetched by id in batches of 200 — `GIT_NO_LAZY_FETCH=1` for the
+  presence check, otherwise the partial clone fetches one blob per round trip), converted so every
+  heading (ATX `==` and setext underline) is a `§<TAB>title` line; keys: gitformat-pack,
+  technical-reftable, relnotes-2.23.0, git-merge … Plus 3 mails via MARC mbox (lore.kernel.org is
+  behind a bot wall): kernel-scm-saga, meet-new-maintainer, announce-1.0.0.
+- `make data` (tools/make_data.py, not in `make all` because it needs mirror/docs; `make data-check`
+  re-derives): releases.tsv (66 x.y.0 tags, taggerdate; column renamed `headline` → `first-feature`
+  = first bullet of "UI, Workflows & Features", verbatim, '-' when the notes have no such section —
+  a "headline" would be an editorial choice), cves.tsv (40 CVEs found in all RelNotes, cURL's one
+  excluded; fixed-in = every notes file listing it; Korean area/summary hand-written in
+  data/cves_ko.tsv from the notes paragraphs), timeline.tsv (126 rows = data/events.tsv 60 curated
+  events + 66 releases; `release:X.Y.Z` resolves dates from tags so no date is typed twice),
+  contributors.tsv (top 25 shortlog --no-merges v2.55.0), growth.tsv (commits/contributors per
+  x.y.0), commands.tsv (193 entries of v2.55.0 command-list.txt with the doc NAME line;
+  Korean one-liners go to data/commands_ko.tsv when part 17 is written).
+- Hand tables: formats.tsv (32 rows; check_claims now verifies every section exists in docs/),
+  people.tsv (15, roles only as far as a cited source says), scale.tsv (4).
+- claims.md: the plan's known traps resolved with sources (table at the top) + 23 rows. Notable
+  outcomes: Hamano handover mail is 2005-07-26 Pacific / 07-27 UTC and says ownership changed in
+  the previous 24h; "Kernel SCM saga" (04-06) never names git; GitHub founding date has no primary
+  source → not used; "development began 2005-04-03" has no primary source → not used; Mercurial
+  body says April 19, LKML post is April 20 EST; Linux 1M commits includes 63,428 BitKeeper-era
+  commits; 2.28 notes do not name init.defaultBranch (name cited from v2.55 git-init doc).
+- 2025+ facts are all from primary sources on disk (mirror tags, v2.55.0 RelNotes, BreakingChanges)
+  and stamped "2026-09 기준": latest release 2.55.0 (2026-06-29), v2.56.0-rc1 (2026-09-16),
+  Git 3.0 has no release date (SHA-256/reftable/main/Rust planned).
+- `make all SKEL=1` 0 errors; claims-check: formats 32 rows OK; width clean.
+
