@@ -11,8 +11,8 @@ main() 은 그것을 진짜 표준 스트림에 잇는다.
 import os
 import sys
 
-from mygit import (GitError, commit, index, objects, refs, tree, walk,
-                   worktree)
+from mygit import (GitError, commit, diff, index, objects, refs, tree,
+                   walk, worktree)
 
 COMMANDS = {}
 
@@ -559,6 +559,75 @@ def cmd_merge_base(ctx, args):
         return 1
     for oid in (best if '--all' in on else best[:1]):
         ctx.say(oid + '\n')
+    return 0
+
+
+# ── 8단계: diff ─────────────────────────────────────────────────────
+def _disk_side(path):
+    """(모드, 이름, 바이트) — 디스크의 파일에서. 없으면 None."""
+    if not os.path.isfile(path):
+        return None
+    with open(path, 'rb') as f:
+        data = f.read()
+    mode = 0o100755 if os.stat(path).st_mode & 0o100 else 0o100644
+    return mode, objects.hash_object('blob', data), data
+
+
+def _tree_map(ctx, rev):
+    """<rev> 의 트리를 펼쳐 {경로: (모드, 이름)}."""
+    g = ctx.gitdir()
+    oid = resolve(ctx, rev)
+    t = refs.peel(g, oid, 'tree') if oid else None
+    if t is None:
+        raise GitError(AMBIGUOUS % rev)
+    return {p: (int(m, 8), o) for m, o, p in tree.flatten_tree(g, t)}
+
+
+@command('diff')
+def cmd_diff(ctx, args):
+    """SPEC.md §11.5 의 네 꼴. --no-index 만 다르면 1 로 끝난다."""
+    on, _v, rest = parse_flags(args, ('--cached', '--no-index'))
+    if '--no-index' in on:
+        if len(rest) != 2:
+            raise GitError('usage: mygit diff --no-index <a> <b>', 129)
+        old, new = (_disk_side(ctx.path(p)) for p in rest)
+        text = diff.file_diff(os.fsencode(rest[0]),
+                              os.fsencode(rest[1]), old, new)
+        ctx.say(text)
+        return 1 if text else 0
+    g = ctx.gitdir()
+    root = os.fsencode(ctx.root())
+    pairs = []              # (경로, 옛 쪽, 새 쪽) — 바이트는 나중에
+    if len(rest) == 2:
+        a, b = _tree_map(ctx, rest[0]), _tree_map(ctx, rest[1])
+        for p in sorted(set(a) | set(b)):
+            pairs.append((p, a.get(p), b.get(p)))
+    elif '--cached' in on:
+        _br, head = refs.read_head(g)
+        a = _tree_map(ctx, head) if head else {}
+        b = {e.path: (e.mode, e.oid) for e in index.read_index(g)
+             if e.stage == 0}
+        for p in sorted(set(a) | set(b)):
+            pairs.append((p, a.get(p), b.get(p)))
+    elif not rest:
+        unmerged = set(e.path for e in index.read_index(g) if e.stage)
+        for e in index.read_index(g):
+            if e.stage or e.path in unmerged:
+                continue          # 충돌 경로는 건너뛴다(줄임)
+            new = _disk_side(os.path.join(root, e.path))
+            pairs.append((e.path, (e.mode, e.oid),
+                          new[:2] if new else None))
+    else:
+        raise GitError(AMBIGUOUS % rest[0])
+    for p, old, new in pairs:
+        if old == new:
+            continue
+        o = diff.blob_side(g, *old) if old else None
+        if new and len(rest) == 0 and '--cached' not in on:
+            n = _disk_side(os.path.join(root, p))
+        else:
+            n = diff.blob_side(g, *new) if new else None
+        ctx.say(diff.file_diff(p, p, o, n))
     return 0
 
 

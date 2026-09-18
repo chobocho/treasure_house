@@ -158,6 +158,37 @@ mygit add .
 mygit status
 '''
 
+# 8단계 — 세 영역 사이의 diff (SPEC.md §11.5). --no-index 쌍은
+# golden/diff/ 가 따로 갖는다.
+SCENARIOS['diff'] = r'''
+mygit init
+write a text:one\ntwo\nthree\n
+write b text:keep\n
+write gone text:bye\n
+mkdir d
+write d/x text:x1\n
+mygit add .
+mygit commit -m one
+append a text:four\n
+rm gone
+write new text:fresh\n
+chmod b 755
+mygit diff
+mygit add .
+mygit diff
+mygit diff --cached
+mygit commit -m two
+mygit diff HEAD~1 HEAD
+mygit diff HEAD HEAD~1
+write 한글.txt text:가\n
+write d/x text:x2\n
+chmod d/x 755
+mygit add .
+mygit diff --cached
+mygit diff
+'''
+
+
 # 9단계 — switch · checkout · branch 지우기
 SCENARIOS['checkout'] = r'''
 mygit init

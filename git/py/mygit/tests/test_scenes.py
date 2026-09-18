@@ -18,8 +18,8 @@ from mygit import cli, index, refs, worktree
 from mygit.tests import golden
 
 # 장면 → 켜지는 단계 (그 장면이 쓰는 명령이 모두 생기는 단계)
-NEEDS = {'plumbing': 6, 'status': 6, 'hello': 7, 'checkout': 9,
-         'errors': 10, 'clone': 12}
+NEEDS = {'plumbing': 6, 'status': 6, 'hello': 7, 'diff': 8,
+         'checkout': 9, 'errors': 10, 'clone': 12}
 ENV = {'GIT_AUTHOR_NAME': 'A U Thor',
        'GIT_AUTHOR_EMAIL': 'author@example.com',
        'GIT_COMMITTER_NAME': 'C O Mitter',
