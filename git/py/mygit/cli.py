@@ -12,7 +12,7 @@ import os
 import sys
 
 from mygit import (GitError, commit, diff, index, merge, objects, pack,
-                   refs, tree, walk, worktree)
+                   refs, transport, tree, walk, worktree)
 
 COMMANDS = {}
 
@@ -190,11 +190,8 @@ CONFIG = ('[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n'
           '\tbare = false\n\tlogallrefupdates = true\n')
 
 
-@command('init')
-def cmd_init(ctx, args):
-    """SPEC.md §5.1 — 이미 있으면 아무것도 덮어쓰지 않는다."""
-    _on, _v, rest = parse_flags(args, ())
-    top = ctx.path(rest[0]) if rest else ctx.cwd
+def make_repo(top):
+    """top/.git 을 SPEC.md §5.1 의 꼴로. → (.git 경로, 이미 있었나)."""
     g = os.path.join(os.path.abspath(top), '.git')
     again = os.path.isdir(g)
     for d in ('objects/pack', 'refs/heads', 'refs/tags'):
@@ -205,6 +202,14 @@ def cmd_init(ctx, args):
         if not os.path.exists(p):
             with open(p, 'w', encoding='utf-8', newline='\n') as f:
                 f.write(text)
+    return g, again
+
+
+@command('init')
+def cmd_init(ctx, args):
+    """SPEC.md §5.1 — 이미 있으면 아무것도 덮어쓰지 않는다."""
+    _on, _v, rest = parse_flags(args, ())
+    g, again = make_repo(ctx.path(rest[0]) if rest else ctx.cwd)
     ctx.say('%s Git repository in %s/\n'
             % ('Reinitialized existing' if again else
                'Initialized empty', g))
@@ -958,6 +963,39 @@ def cmd_pack_objects(ctx, args):
     with open(base + '.idx', 'wb') as f:
         f.write(pack.write_idx(ents, data[-20:]))
     ctx.say(sha + '\n')
+    return 0
+
+
+# ── 12단계: clone · fetch-pack ──────────────────────────────────────
+@command('clone')
+def cmd_clone(ctx, args):
+    """멍청한 로컬 clone(SPEC.md §14.2). 안내는 표준 오류에."""
+    _on, _v, rest = parse_flags(args, ())
+    if len(rest) != 2:
+        raise GitError('usage: mygit clone <path> <dir>', 129)
+    src, dst = ctx.path(rest[0]), ctx.path(rest[1])
+    if not os.path.isdir(src):
+        raise GitError("fatal: repository '%s' does not exist"
+                       % rest[0])
+    ctx.warn("Cloning into '%s'...\n" % rest[1])
+    os.makedirs(dst, exist_ok=True)
+    make_repo(dst)
+    transport.clone_local(src, dst, ident(ctx))
+    ctx.warn('done.\n')
+    return 0
+
+
+@command('fetch-pack')
+def cmd_fetch_pack(ctx, args):
+    """진짜 git upload-pack 과 v2 로 말해 팩을 받는다(SPEC.md §14.3)."""
+    _on, _v, rest = parse_flags(args, ())
+    if len(rest) < 2:
+        raise GitError('usage: mygit fetch-pack <path> <ref>...', 129)
+    got = transport.fetch_pack(ctx.gitdir(), ctx.path(rest[0]),
+                               rest[1:], ctx.env,
+                               ctx.env.get('MYGIT_PKT_LOG'))
+    for oid, name in got:
+        ctx.say('%s %s\n' % (oid, name))
     return 0
 
 
