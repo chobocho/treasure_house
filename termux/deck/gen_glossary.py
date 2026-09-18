@@ -85,7 +85,9 @@ def render(rows):
             body.append('<tr><td><b>%s</b></td><td>%s</td>'
                         '<td><a href="#%s">보기</a></td></tr>'
                         % (html.escape(term), meaning, where))
-        body += ['</table>', '</div>', '</article>']
+        # 용어집은 본문의 뜻을 모은 설명이다 — 증거는 링크된 장에 있다
+        body += ['</table>', '</div>',
+                 '<span class="tier ill">설명용</span>', '</article>']
         parts.append('\n'.join(body))
     return '\n\n'.join(parts)
 

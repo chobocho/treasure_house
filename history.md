@@ -1,3 +1,10 @@
+### [2026-09-18 05:33] Termux 대백과사전 덱 16·17부 — 마무리·부록(173장)
+- **기획:** 지도·오해 12가지·종합 퀴즈, 그리고 용어집 262개·생성 표·소스 전문·퀴즈 색인. 우리 코드 커버리지 100%.
+- **TC:** 등급 검사 시험 3건 먼저: 전문 장은 캡처 없이 a, 본문 코드만 장은 여전히 실패, src- 인데 코드 없으면 실패.
+- **개발:** `termux/deck/build_deck.py`, `termux/deck/tests/test_tier.py`, `termux/deck/gen_glossary.py`, `termux/deck/glossary.txt`, `termux/deck/sections/16_wrapup.html`, `termux/deck/sections/17_appendix.html` 외 3개 파일
+- **검증:** deck 시험 통과 · make all SKEL=1 오류 0건 · 커버리지 3206/3206줄 · 584장
+- **비고:** 합계 584장으로 목표 띠보다 적다 — 채우려고 늘리지 않았다(budget.txt 원칙).
+
 ### [2026-09-18 05:26] Termux 대백과사전 덱 13부 — AI 에이전트와 이 저장소(8장)
 - **기획:** 이 덱을 만든 작업장 자체를 증거로: 메모리, 프로세스, 두 세계의 도구, 규칙 파일, upstream 의 CLAUDE.md.
 - **TC:** 캡처 2종(repo_self 스냅샷·src_pd_claude) 추가·session_self 재촬영, 추측 문장 2건 삭제, 조립 검사 오류 0건.

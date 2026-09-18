@@ -856,8 +856,11 @@ def tier_report(doc):
         # 그림·데모 중 하나가 화면에 있어야 한다(트랜스포머 덱 1차 리뷰에서
         # 근거 없는 a 가 열 장 나왔다). s 는 소스 배지가 있어야 한다.
         if t == 'a':
+            # 부록의 소스 전문 장은 파일 자체가 증거다 — 역검증이 원본과
+            # 대조하고 make test 가 그 파일들을 돌린다
+            fullsrc = aid.startswith('src-') and 'data-src="' in inner
             proof = ('class="term"' in inner or 'data-demo=' in inner
-                     or 'data-table=' in inner
+                     or 'data-table=' in inner or fullsrc
                      or '<svg class="diag"' in inner)
             if not proof:
                 errors.append('%s: 캡처 등급(a)인데 화면에 캡처·생성 표·'

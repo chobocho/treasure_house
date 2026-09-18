@@ -900,3 +900,15 @@ The user approved every recommendation below as-is. Each row is now a decision.
   CLAUDE.md), `session_self` re-snapped.
 - Part 13 written: 8 slides (budget 60). The workshop as evidence: memory pressure, two agent
   sessions side by side, which side's tools were used, rule files here and upstream.
+
+### Step 10 · Parts 16·17 — 마무리 · 부록 (2026-09-18)
+
+- `deck/build_deck.py` tier check: a FULLSRC slide (id `src-…` with `data-src`) is its own
+  evidence — the reverse check compares it with the file and `make test` runs it (+3 tests,
+  `deck/tests/test_tier.py`). Glossary slides get an ill badge (`gen_glossary.py`).
+- Glossary: 262 entries, every arrow checked. Appendix: API index, repos + licences, apt repos,
+  plugins, Android levels, app SDK per tag, all releases, the full timeline, people, the
+  bibliography (docs.tsv), FULLSRC of all 38 non-test source files (3,206 lines, coverage
+  100 %; `deck/pending.txt` is now empty), quiz index, licence note.
+- Part 16: map, 12 misconceptions each linked to the slide that refutes it, 8 synthesis quizzes.
+- Total 584 slides — well under the 1,800 band; per the budget note nothing was padded.
