@@ -12,7 +12,7 @@
 
 namespace mygit {
 
-inline constexpr int STEP = 3;
+inline constexpr int STEP = 4;
 
 // 명령이 멈추는 까닭. code 는 종료 코드(SPEC.md §1.4).
 struct GitError : std::runtime_error {
@@ -67,6 +67,30 @@ Object read_object(const std::string& gitdir, const std::string& oid);
 std::vector<std::string> all_loose(const std::string& gitdir);
 std::string find_object(const std::string& gitdir,
                         const std::string& prefix);
+
+// ── tree.cpp (SPEC.md §4.3) ────────────────────────────────────────
+inline const std::string DIR = "40000";
+struct TreeEntry {
+    std::string mode, name, oid;
+    bool operator==(const TreeEntry&) const = default;
+};
+struct PathEntry {
+    std::string mode, oid, path;
+    bool operator==(const PathEntry&) const = default;
+};
+std::string tree_entry_key(const std::string& mode,
+                           const std::string& name);
+std::vector<TreeEntry> parse_tree(std::string_view body);
+std::string serialize_tree(std::vector<TreeEntry> entries);
+std::string write_tree(const std::string& gitdir,
+                       const std::vector<PathEntry>& entries);
+std::vector<PathEntry> flatten_tree(const std::string& gitdir,
+                                    const std::string& oid,
+                                    const std::string& prefix = "");
+std::string type_of_mode(const std::string& mode);
+
+// ── worktree.cpp (SPEC.md §8) ──────────────────────────────────────
+std::string quote_path(std::string_view path, bool space = false);
 
 // ── cli.cpp (SPEC.md §1 · §9) ─────────────────────────────────────
 using Env = std::map<std::string, std::string>;

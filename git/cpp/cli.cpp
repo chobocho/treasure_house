@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <functional>
@@ -137,9 +138,19 @@ int cmd_hash_object(Ctx& ctx, std::vector<std::string> args) {
     return 0;
 }
 
-// pretty 는 cat-file -p 의 몸. 트리는 4단계에서 붙는다.
+// pretty 는 cat-file -p 의 몸. blob·commit·tag 는 그대로, 트리는
+// 항목마다 "%06o 형식 이름\t경로" (SPEC.md §9, 따옴표는 §8.2).
 std::string pretty(const Object& o) {
-    return o.body;
+    if (o.type != "tree") return o.body;
+    std::string out;
+    for (auto& e : parse_tree(o.body)) {
+        char mode[8];
+        std::snprintf(mode, sizeof mode, "%06o",
+                      unsigned(std::stoul(e.mode, nullptr, 8)));
+        out += std::string(mode) + " " + type_of_mode(e.mode) + " " +
+               e.oid + "\t" + quote_path(e.name) + "\n";
+    }
+    return out;
 }
 
 int cmd_cat_file(Ctx& ctx, std::vector<std::string> args) {
