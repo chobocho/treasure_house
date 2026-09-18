@@ -189,7 +189,7 @@ test: test-py test-go test-ts test-java test-cpp  ## 다섯 언어 (직렬)
 # ── 증거 ───────────────────────────────────────────────────────────
 # 다섯 구현에 같은 대본을 돌려 .git 트리와 객체 목록을 맞대어 본다.
 parity:                 ## 다섯 구현 대조 (out/tbl_parity.html)
-	@if test -f run_all.py; then $(PY) run_all.py --only mygit_parity; \
+	@if test -f run_all.py; then $(PY) run_all.py --only mygit; \
 	else echo '  run_all.py 아직 없다 (PLAN.md §5 7단계)'; fi
 
 run:                    ## 실험을 전부 직렬로 돌려 out/ 를 채운다
