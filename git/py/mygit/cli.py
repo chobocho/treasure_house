@@ -11,7 +11,7 @@ main() 은 그것을 진짜 표준 스트림에 잇는다.
 import os
 import sys
 
-from mygit import GitError, objects, tree, worktree
+from mygit import GitError, commit, objects, refs, tree, worktree
 
 COMMANDS = {}
 
@@ -84,12 +84,18 @@ class Ctx(object):
 
 
 def resolve(ctx, name):
-    """<rev> → 객체 이름. 없으면 None (SPEC.md §6.2).
+    """<rev> → 객체 이름. 없으면 None (SPEC.md §6.2)."""
+    return refs.rev_parse(ctx.gitdir(), name)
 
-    3단계에서는 16진 이름과 앞부분만 푼다. 참조와 뒤붙이(~ ^)는
-    5단계의 refs.rev_parse 가 맡는다.
-    """
-    return objects.find_object(ctx.gitdir(), name)
+
+AMBIGUOUS = ("fatal: ambiguous argument '%s': unknown revision or path "
+             "not in the working tree.\n"
+             "Use '--' to separate paths from revisions, like this:\n"
+             "'git <command> [<revision>...] -- [<file>...]'")
+
+
+def ident(ctx, who='COMMITTER'):
+    return commit.ident_from_env(ctx.env, who)
 
 
 def parse_flags(args, flags, valued=()):
@@ -175,6 +181,166 @@ def cmd_cat_file(ctx, args):
         ctx.say('%d\n' % len(body))
     else:
         ctx.say(pretty(ctx, type_, body))
+    return 0
+
+
+# ── 5단계: init · commit-tree · branch · tag · reflog ─────────────
+CONFIG = ('[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n'
+          '\tbare = false\n\tlogallrefupdates = true\n')
+
+
+@command('init')
+def cmd_init(ctx, args):
+    """SPEC.md §5.1 — 이미 있으면 아무것도 덮어쓰지 않는다."""
+    _on, _v, rest = parse_flags(args, ())
+    top = ctx.path(rest[0]) if rest else ctx.cwd
+    g = os.path.join(os.path.abspath(top), '.git')
+    again = os.path.isdir(g)
+    for d in ('objects/pack', 'refs/heads', 'refs/tags'):
+        os.makedirs(os.path.join(g, d), exist_ok=True)
+    for name, text in (('HEAD', 'ref: refs/heads/main\n'),
+                       ('config', CONFIG)):
+        p = os.path.join(g, name)
+        if not os.path.exists(p):
+            with open(p, 'w', encoding='utf-8', newline='\n') as f:
+                f.write(text)
+    ctx.say('%s Git repository in %s/\n'
+            % ('Reinitialized existing' if again else
+               'Initialized empty', g))
+    return 0
+
+
+@command('commit-tree')
+def cmd_commit_tree(ctx, args):
+    """-p 와 -m 은 몇 번이든, 준 차례대로. 메시지는 원문 그대로 +
+    줄바꿈 — 공백 정리는 commit 명령만 한다(SPEC.md §4.4)."""
+    tree_, parents, msgs = None, [], []
+    it = iter(args)
+    for a in it:
+        if a in ('-p', '-m'):
+            val = next(it, None)
+            if val is None:
+                raise GitError("fatal: mygit: option '%s' needs a value"
+                               % a)
+            if a == '-m':
+                msgs.append(val)
+                continue
+            oid = resolve(ctx, val)
+            if oid is None:
+                raise GitError('fatal: not a valid object name %s'
+                               % val)
+            parents.append(oid)
+        elif a.startswith('-'):
+            raise GitError("fatal: mygit: unknown option '%s'" % a)
+        else:
+            tree_ = a
+    if tree_ is None or not msgs:
+        raise GitError('usage: mygit commit-tree <tree> '
+                       '[-p <parent>]... -m <message>...', 129)
+    oid = resolve(ctx, tree_)
+    t = refs.peel(ctx.gitdir(), oid, 'tree') if oid else None
+    if t is None:
+        raise GitError('fatal: not a valid object name %s' % tree_)
+    body = commit.serialize_commit(t, parents, ident(ctx, 'AUTHOR'),
+                                   ident(ctx), '\n\n'.join(msgs) + '\n')
+    ctx.say(objects.write_object(ctx.gitdir(), 'commit', body) + '\n')
+    return 0
+
+
+def list_branches(ctx):
+    g = ctx.gitdir()
+    cur, head = refs.read_head(g)
+    if cur is None and head:
+        ctx.say('* (HEAD detached at %s)\n' % head[:7])
+    for name, _oid in refs.list_refs(g, 'refs/heads/'):
+        mark = '* ' if name == cur else '  '
+        ctx.say(mark + name[len('refs/heads/'):] + '\n')
+    return 0
+
+
+@command('branch')
+def cmd_branch(ctx, args):
+    on, _v, rest = parse_flags(args, ('-d',))
+    if '-d' in on:
+        return delete_branch(ctx, rest)
+    if not rest:
+        return list_branches(ctx)
+    name = rest[0]
+    g = ctx.gitdir()
+    if not refs.valid_branch_name(name):
+        raise GitError("fatal: '%s' is not a valid branch name" % name)
+    if refs.resolve_ref(g, 'refs/heads/' + name):
+        raise GitError("fatal: a branch named '%s' already exists"
+                       % name)
+    start = rest[1] if len(rest) > 1 else 'HEAD'
+    oid = resolve(ctx, start)
+    oid = refs.peel(g, oid, 'commit') if oid else None
+    if oid is None:
+        raise GitError("fatal: not a valid object name: '%s'" % start)
+    refs.update_ref(g, 'refs/heads/' + name, oid, None,
+                    'branch: Created from %s' % start, ident(ctx))
+    return 0
+
+
+def delete_branch(ctx, rest):
+    """branch -d — 7단계에서 "HEAD 에서 닿는가" 를 보고 지운다."""
+    from mygit import not_implemented
+    not_implemented()
+
+
+@command('tag')
+def cmd_tag(ctx, args):
+    on, vals, rest = parse_flags(args, ('-a',), ('-m',))
+    g = ctx.gitdir()
+    if not rest:
+        for name, _oid in refs.list_refs(g, 'refs/tags/'):
+            ctx.say(name[len('refs/tags/'):] + '\n')
+        return 0
+    name = rest[0]
+    target = rest[1] if len(rest) > 1 else 'HEAD'
+    if refs.read_ref(g, 'refs/tags/' + name):
+        raise GitError("fatal: tag '%s' already exists" % name)
+    oid = resolve(ctx, target)
+    if oid is None:
+        raise GitError("fatal: Failed to resolve '%s' as a valid ref."
+                       % target)
+    if '-a' in on or '-m' in vals:
+        type_, _ = objects.read_object(g, oid)
+        msg = commit.cleanup_message(vals.get('-m', ''))
+        body = commit.serialize_tag(oid, type_, name, ident(ctx), msg)
+        oid = objects.write_object(g, 'tag', body)
+    # 태그는 reflog 를 남기지 않는다 — logallrefupdates 는 브랜치와
+    # HEAD 만 기록한다(git 과 같다)
+    path = os.path.join(g, 'refs', 'tags', name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        f.write(oid + '\n')
+    return 0
+
+
+def reflog_name(ctx, name):
+    """reflog 가 읽을 파일의 참조 이름. HEAD · 브랜치 · refs/…"""
+    g = ctx.gitdir()
+    for cand in (name, 'refs/heads/' + name):
+        if os.path.exists(os.path.join(g, 'logs', cand)):
+            return cand
+    return None
+
+
+@command('reflog')
+def cmd_reflog(ctx, args):
+    """새것부터 '<7글자> <ref>@{n}: <메시지>' (SPEC.md §6.3)."""
+    _on, _v, rest = parse_flags(args, ())
+    rest = [a for a in rest if a != 'show']
+    name = rest[0] if rest else 'HEAD'
+    log = reflog_name(ctx, name)
+    if log is None:
+        if name == 'HEAD':
+            return 0
+        raise GitError(AMBIGUOUS % name)
+    for k, (_o, new, _i, msg) in enumerate(
+            reversed(refs.read_reflog(ctx.gitdir(), log))):
+        ctx.say('%s %s@{%d}: %s\n' % (new[:7], name, k, msg))
     return 0
 
 
