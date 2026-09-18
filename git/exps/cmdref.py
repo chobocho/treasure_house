@@ -18,7 +18,10 @@ from exps.util import commit, tick
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ABSENT = ('is not a git command', "Can't locate", 'unknown command -h',
           'not found', 'No such file or directory')
-LIBS = ('sh-i18n', 'sh-setup')  # 셸 스크립트가 . 으로 읽는 것
+LIBS = ('sh-i18n', 'sh-setup')
+# -h 를 모르는 명령 — 설치는 돼 있으니 대신 이렇게 사용법을 찍는다
+# (git p4 는 파이썬 스크립트라 -h 에 "unknown command" 라고 답한다)
+HELP = {'p4': 'git p4 sync --help'}  # 셸 스크립트가 . 으로 읽는 것
 # 저장소를 바꾸지 않는 예 — 표본 하나를 같이 쓴다(나머지는 매번 새로).
 # 표본은 깨끗해서 작업 트리를 보는 명령은 빈 출력이 된다. 그런 예는
 # 준비(파일 고치기)를 명령줄 앞에 드러내 적고 여기서 뺀다.
@@ -63,8 +66,8 @@ EXAMPLES = {
     'count-objects': 'git count-objects -v',
     'describe': 'git describe --tags',
     'diff': 'git diff HEAD~1 --stat',
-    'diff-files': 'echo more >> notes.txt && git diff-files',
-    'diff-index': 'echo more >> notes.txt && git diff-index HEAD',
+    'diff-files': 'echo more >> notes.txt && git diff-files --abbrev',
+    'diff-index': 'echo more >> notes.txt && git diff-index --abbrev HEAD',
     'diff-tree': 'git diff-tree -r HEAD~1 HEAD',
     'fast-export': 'git fast-export HEAD~1..HEAD | head -12',
     'fetch': 'git clone -q . ../cmdref-clone && '
@@ -134,7 +137,7 @@ def names():
         cols = line.rstrip('\n').split('\t')
         if cols[0].startswith('git-'):
             out.append(cols[0][4:])
-        elif cols[0] in ('gitk', 'gitweb'):
+        elif cols[0] in ('gitk', 'gitweb', 'scalar'):
             out.append(cols[0])
     return out
 
@@ -159,8 +162,9 @@ def run(ctx):
     r = sample(ctx, 'cmdref')
     rows = []
     for name in names():
-        cmd = ('git %s -h' % name if not name.startswith('git')
-               else '%s -h' % name)
+        cmd = HELP.get(name) or ('git %s -h' % name
+                                 if not name.startswith(('git', 'scalar'))
+                                 else '%s -h' % name)
         p = subprocess.run(['sh', '-c', 'timeout 10 %s 2>&1 | head -6'
                             % cmd], cwd=r.path, env=r.env,
                            stdin=subprocess.DEVNULL,
