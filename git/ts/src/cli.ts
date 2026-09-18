@@ -16,6 +16,7 @@ import { GitError } from './errors';
 import * as index from './index';
 import * as merge from './merge';
 import * as objects from './objects';
+import * as pack from './pack';
 import * as refs from './refs';
 import * as tree from './tree';
 import * as walk from './walk';
@@ -907,6 +908,109 @@ function applyMerge(ctx: Ctx, head: string,
   index.writeIndex(g, [...ents.values(), ...staged]);
 }
 
+// ── 11단계: unpack-pack · verify-pack · pack-objects ──────────────
+
+// 팩의 객체를 전부 느슨한 객체로 푼다(SPEC.md §13.3).
+function cmdUnpackPack(ctx: Ctx, args: string[]): number {
+  const [, , rest] = parseFlags(args, []);
+  const g = ctx.gitdir();
+  for (const name of rest) {
+    const ents = pack.readPack(fs.readFileSync(ctx.path(name)),
+      (o) => objects.readObject(g, o));
+    for (const e of ents) objects.writeObject(g, e.type, e.body!);
+  }
+  return 0;
+}
+
+// git verify-pack -v 와 같은 출력. 색인이 팩과 맞지 않으면 오류.
+function cmdVerifyPack(ctx: Ctx, args: string[]): number {
+  const [on, , rest] = parseFlags(args, ['-v']);
+  if (!on.has('-v') || rest.length !== 1 || !rest[0].endsWith('.idx')) {
+    throw new GitError('usage: mygit verify-pack -v <pack>.idx', 129);
+  }
+  const packPath = rest[0].slice(0, -4) + '.pack';
+  const idx = pack.readIdx(fs.readFileSync(ctx.path(rest[0])));
+  const data = fs.readFileSync(ctx.path(packPath));
+  const ents = pack.readPack(data);
+  const rows = (xs: [string, number, number][]) =>
+    xs.map((x) => x.join(' ')).sort().join('\n');
+  if (rows(ents.map((e) => [e.oid, e.offset, e.crc])) !==
+    rows(idx.entries) || !idx.packSum.equals(data.subarray(-20))) {
+    throw new GitError(`fatal: mygit: ${rest[0]} does not match ` +
+      packPath);
+  }
+  for (const row of pack.verifyLines(ents, packPath)) {
+    ctx.say(row + '\n');
+  }
+  return 0;
+}
+
+const MAX_DEPTH = 50;
+
+// pack-objects 가 넣을 PackItem 들 — SPEC.md §13.3 의 차례(커밋 →
+// 트리·blob 전위 순회 → 주석 태그)와 델타 고르기.
+function packItems(ctx: Ctx, useDelta: boolean): pack.PackItem[] {
+  const g = ctx.gitdir();
+  const [, head] = refs.readHead(g);
+  const starts = [head, ...refs.listRefs(g).map(([, o]) => o)]
+    .map((oid) => oid && refs.peel(g, oid, 'commit'))
+    .filter((c): c is string => !!c);
+  const items: pack.PackItem[] = [];
+  const depth: number[] = [];
+  const seen = new Set<string>();
+  const last = new Map<string, number>();  // 경로 → 마지막 blob 번호
+  const add = (type: string, body: Buffer, oid: string,
+    p?: string): void => {
+    seen.add(oid);
+    let base: number | null = null;
+    const k = p === undefined ? undefined : last.get(p);
+    if (useDelta && k !== undefined && depth[k] < MAX_DEPTH) {
+      const d = pack.makeDelta(items[k][1], body);
+      if (2 * d.length < body.length) base = k;
+    }
+    items.push([type, body, base]);
+    depth.push(base === null ? 0 : depth[base] + 1);
+    if (p !== undefined) last.set(p, items.length - 1);
+  };
+  const order = starts.length ? walk.walkLog(g, starts) : [];
+  for (const c of order) add('commit', objects.readObject(g, c)[1], c);
+  const visit = (t: string, prefix: string): void => {
+    if (seen.has(t)) return;
+    const body = objects.readObject(g, t)[1];
+    add('tree', body, t);
+    for (const [mode, name, oid] of tree.parseTree(body)) {
+      if (mode === tree.DIR) {
+        visit(oid, prefix + name + '/');
+      } else if (mode !== '160000' && !seen.has(oid)) {
+        add('blob', objects.readObject(g, oid)[1], oid, prefix + name);
+      }
+    }
+  };
+  for (const c of order) visit(refs.peel(g, c, 'tree')!, '');
+  for (const [, oid] of refs.listRefs(g, 'refs/tags/')) {
+    const [t, body] = objects.readObject(g, oid);
+    if (t === 'tag' && !seen.has(oid)) add('tag', body, oid);
+  }
+  return items;
+}
+
+function cmdPackObjects(ctx: Ctx, args: string[]): number {
+  const [on, , rest] = parseFlags(args, ['--delta']);
+  if (rest.length !== 1) {
+    throw new GitError('usage: mygit pack-objects [--delta] <base>',
+      129);
+  }
+  const items = packItems(ctx, on.has('--delta'));
+  const [data, ents] = pack.writePack(items);
+  const sum = data.subarray(-20);
+  const base = ctx.path(`${rest[0]}-${sum.toString('hex')}`);
+  fs.mkdirSync(path.dirname(base), { recursive: true });
+  fs.writeFileSync(base + '.pack', data);
+  fs.writeFileSync(base + '.idx', pack.writeIdx(ents, sum));
+  ctx.say(sum.toString('hex') + '\n');
+  return 0;
+}
+
 // ── 틀 ────────────────────────────────────────────────────────────
 const COMMANDS = new Map<string, Command>([
   ['hash-object', cmdHashObject],
@@ -927,6 +1031,9 @@ const COMMANDS = new Map<string, Command>([
   ['switch', cmdSwitch],
   ['checkout', cmdCheckout],
   ['merge', cmdMerge],
+  ['unpack-pack', cmdUnpackPack],
+  ['verify-pack', cmdVerifyPack],
+  ['pack-objects', cmdPackObjects],
 ]);
 
 // 명령 하나를 돌린다 → [종료 코드, 표준 출력, 표준 오류]. stdin 이
