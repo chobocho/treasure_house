@@ -1,3 +1,10 @@
+### [2026-09-18 05:50] Termux 대백과사전 공개 — index 카드·README(587장)
+- **기획:** 뼈대 모드를 끄고 전체 검사를 통과시킨 뒤 공개. 네이티브 값이 없다는 사실을 자리표시 대신 본문에 그대로 적는다.
+- **TC:** make all(뼈대 모드 없이) 오류 0건, make record 로 고정 캡처 40개 3회 동일, 글꼴 검사 통과.
+- **개발:** `index.html`, `README.md`, `termux/deck/sections/00_start.html`, `03_android.html`, `07_api.html`, `termux/PLAN.md`, `Termux_대백과사전.html`
+- **검증:** make all 오류 0건 · stable 40/40 재현 · 587장
+- **비고:** data/device.txt(네이티브 값) 미도착 — 오면 native_device 캡처로 채운다. 다음은 리뷰 1·2차.
+
 ### [2026-09-18 05:36] Termux 덱 — 데모 3개(경로 번역기·pkg 해석기·팬텀 계산기)
 - **기획:** 같은 장의 소스 발췌 규칙을 그대로 옮긴 손으로 만져 보는 데모. 기댓값은 발췌와 캡처에서.
 - **TC:** check_deck.js CASES 12건 먼저 — /usr/bin·/system/bin·/bin·상대 경로, in·info·update·upgrade·rm·모르는 명령, 16·40개.

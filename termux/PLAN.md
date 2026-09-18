@@ -922,3 +922,13 @@ The user approved every recommendation below as-is. Each row is now a decision.
 - Deviation: PLAN §4 listed ten demos; the other seven (API explorer, port checker, .deb linter,
   timeline scrubber, install-source helper, release lookup, shebang doctor) are left out — their
   content is already a generated table or a capture on the slide, and a demo would only restate it.
+
+### Step 11 — 공개 (2026-09-18)
+
+- SKEL removed: `make all` (no `--skeleton`) passes — the last two "아직 없습니다" were replaced by
+  what is true at publication: `data/device.txt` never arrived, so native comparisons are stated
+  as missing (Parts 0/3/7 wording fixed so nothing claims native captures exist).
+- `make record`: 40 stable captures identical over three runs.
+- index.html card (🖥️ 시스템 & 셸 도구, after Linux 명령어 핸드북) and README row: 587 slides,
+  51 captures, 27 pinned upstream repos, 142 documents, 12 experiments, 18 figures, 3 demos,
+  32 quizzes, 262 glossary words.
