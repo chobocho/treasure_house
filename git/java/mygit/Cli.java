@@ -321,7 +321,8 @@ public final class Cli {
   }
 
   static int branch(Ctx ctx, List<String> args) {
-    Flags f = parseFlags(args, List.of());
+    Flags f = parseFlags(args, List.of("-d"));
+    if (f.on.contains("-d")) return deleteBranch(ctx, f.rest);
     if (f.rest.isEmpty()) return listBranches(ctx);
     String name = f.rest.get(0);
     String g = ctx.gitdir();
@@ -341,6 +342,32 @@ public final class Cli {
     }
     Refs.updateRef(g, HEADS + name, oid, null,
         "branch: Created from " + start, ident(ctx));
+    return 0;
+  }
+
+  // branch -d — HEAD 에서 닿는 브랜치만 지운다(SPEC.md §9.2).
+  static int deleteBranch(Ctx ctx, List<String> names) {
+    String g = ctx.gitdir();
+    Refs.Head h = Refs.readHead(g);
+    for (String name : names) {
+      String ref = HEADS + name;
+      String oid = Refs.resolveRef(g, ref);
+      if (ref.equals(h.branch())) {
+        throw new GitError("error: cannot delete branch '" + name
+            + "' used by worktree at '" + ctx.root() + "'", 1);
+      }
+      if (oid == null) {
+        throw new GitError("error: branch '" + name + "' not found.",
+            1);
+      }
+      if (h.oid() == null || !Walk.isAncestor(g, oid, h.oid())) {
+        throw new GitError("error: the branch '" + name
+            + "' is not fully merged", 1);
+      }
+      Refs.updateRef(g, ref, null, oid, "", "");
+      ctx.say("Deleted branch " + name + " (was " + oid.substring(0, 7)
+          + ").\n");
+    }
     return 0;
   }
 
@@ -551,6 +578,87 @@ public final class Cli {
     return 0;
   }
 
+  // ── 7단계: log · merge-base ───────────────────────────────────────
+
+  // 커밋 하나를 git log 의 꼴로(SPEC.md §9.1).
+  static String logEntry(Ctx ctx, String oid, boolean oneline) {
+    Commit.CommitObj c = Commit.parseCommit(
+        Objects.readObject(ctx.gitdir(), oid).body());
+    if (oneline) {
+      return oid.substring(0, 7) + " " + Commit.subjectOf(c.message())
+          + "\n";
+    }
+    Commit.Ident a = Commit.parseIdent(c.author());
+    StringBuilder sb = new StringBuilder("commit " + oid + "\n");
+    if (c.parents().size() > 1) {
+      sb.append("Merge:");
+      c.parents().forEach(p -> sb.append(' ').append(p, 0, 7));
+      sb.append('\n');
+    }
+    sb.append("Author: " + a.name() + " <" + a.mail() + ">\nDate:   "
+        + Commit.formatDate(a.secs(), a.tz()) + "\n\n");
+    String msg = c.message().endsWith("\n")
+        ? c.message().substring(0, c.message().length() - 1)
+        : c.message();
+    for (String line : msg.split("\n", -1)) {
+      sb.append("    ").append(line).append('\n');
+    }
+    return sb.toString();
+  }
+
+  static int log(Ctx ctx, List<String> args) {
+    Flags f = parseFlags(args, List.of("--oneline"), "-n");
+    String g = ctx.gitdir();
+    String start;
+    if (!f.rest.isEmpty()) {
+      start = resolve(ctx, f.rest.get(0), "commit");
+      if (start == null) {
+        throw new GitError(AMBIGUOUS.formatted(f.rest.get(0)));
+      }
+    } else {
+      Refs.Head h = Refs.readHead(g);
+      start = h.oid();
+      if (start == null) {
+        throw new GitError("fatal: your current branch '"
+            + h.branch().substring(HEADS.length())
+            + "' does not have any commits yet");
+      }
+    }
+    List<String> order = Walk.walkLog(g, List.of(start));
+    if (f.vals.containsKey("-n")) {
+      order = order.subList(0, Math.min(order.size(),
+          Integer.parseInt(f.vals.get("-n"))));
+    }
+    boolean oneline = f.on.contains("--oneline");
+    ctx.say(String.join(oneline ? "" : "\n", order.stream()
+        .map(oid -> logEntry(ctx, oid, oneline)).toList()));
+    return 0;
+  }
+
+  static int mergeBase(Ctx ctx, List<String> args) {
+    Flags f = parseFlags(args, List.of("--all"));
+    if (f.rest.size() != 2) {
+      throw new GitError("usage: mygit merge-base [--all] <a> <b>",
+          129);
+    }
+    List<String> ids = new ArrayList<>();
+    for (String name : f.rest) {
+      String oid = resolve(ctx, name, "commit");
+      if (oid == null) {
+        throw new GitError("fatal: Not a valid object name " + name);
+      }
+      ids.add(oid);
+    }
+    List<String> best = Walk.mergeBases(ctx.gitdir(), ids.get(0),
+        ids.get(1));
+    if (best.isEmpty()) return 1;
+    for (String oid : f.on.contains("--all") ? best
+        : best.subList(0, 1)) {
+      ctx.say(oid + "\n");
+    }
+    return 0;
+  }
+
   // ── 틀 ────────────────────────────────────────────────────────────
   // 명령 이름 → 함수. 단계가 늘 때마다 한 줄씩 는다.
   private static Command command(String name) {
@@ -567,6 +675,8 @@ public final class Cli {
       case "status" -> Cli::status;
       case "write-tree" -> Cli::writeTree;
       case "commit" -> Cli::commit;
+      case "log" -> Cli::log;
+      case "merge-base" -> Cli::mergeBase;
       default -> null;
     };
   }

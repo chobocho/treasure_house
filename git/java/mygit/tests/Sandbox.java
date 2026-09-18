@@ -2,6 +2,8 @@ package mygit.tests;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +43,20 @@ final class Sandbox implements AutoCloseable {
     // 위로 올라가다 이 덱의 저장소를 찾지 않게 (SPEC.md §1.1)
     env.put("GIT_CEILING_DIRECTORIES", tmp);
     env.putAll(IDENT);
+  }
+
+  // golden/dag/<name>/git — 진짜 git 이 만든 역사를 .git 으로 옮긴 것
+  static Sandbox dag(String name) throws Exception {
+    Sandbox sb = new Sandbox(false);
+    Path src = Path.of(Golden.path("dag", name, "git"));
+    try (var s = Files.walk(src)) {
+      for (Path p : s.toList()) {
+        Files.copy(p, Path.of(sb.gitdir).resolve(src.relativize(p)));
+      }
+    }
+    Fs.mkdirs(Fs.join(sb.gitdir, "objects", "pack"));
+    Fs.mkdirs(Fs.join(sb.gitdir, "refs", "tags"));
+    return sb;
   }
 
   @Override

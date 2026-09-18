@@ -4,8 +4,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static mygit.tests.Check.eq;
 import static mygit.tests.Check.gitError;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -246,16 +244,7 @@ final class CommitTest {
   }
 
   static void withDag(String name, InDag body) throws Exception {
-    String tmp = Golden.tempdir();
-    try {
-      String g = Fs.join(tmp, ".git");
-      Path src = Path.of(Golden.path("dag", name, "git"));
-      try (var s = Files.walk(src)) {
-        for (Path p : s.toList()) {
-          Files.copy(p, Path.of(g).resolve(src.relativize(p)));
-        }
-      }
-      Fs.mkdirs(Fs.join(g, "objects", "pack"));
+    try (var sb = Sandbox.dag(name)) {
       String text = new String(Golden.read("dag", name, "expect.txt"),
           UTF_8);
       String block = text.split("\\$ git log --oneline\n")[1]
@@ -266,9 +255,7 @@ final class CommitTest {
         String[] ab = lines[k].split(" ", 2);
         ids.put(k + ":" + ab[1], ab[0]);
       }
-      body.run(g, ids);
-    } finally {
-      Golden.rmTree(tmp);
+      body.run(sb.gitdir, ids);
     }
   }
 
