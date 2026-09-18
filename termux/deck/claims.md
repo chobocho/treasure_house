@@ -248,3 +248,27 @@
 | l2s 심볼릭 링크는 rootfs 절대 경로를 가리켜 rootfs 를 옮기면 깨지므로 l2s.py 가 고쳐 쓴다 | proot-distro@f832a56 proot_distro/l2s.py 21–32 | 소스 | 2026-09-18 |
 | -p 는 1024 미만 포트의 bind·connect 에 2000 을 더한다 | out/src_proot.txt 5·6 | 소스 캡처 | 2026-09-18 |
 | proot-distro 는 $PREFIX 를 같은 경로에 바인드해 termux-api·pkg 같은 Termux 도구를 안에서 부를 수 있게 한다 | readme-proot-distro 1.3.5.1 | README | 2026-09-18 |
+| Termux 는 한 사용자짜리: 모든 것이 앱 uid 로 돌고, 패키지는 다중 사용자·setuid 를 빼도록 패치, 기본 포트 ftpd 8021·httpd 8080·sshd 8022 | wiki-differences-from-linux 4 | 위키 | 2026-09-18 |
+| $PREFIX 는 옮길 수 없고 sdcard 에 둘 수 없으며(유닉스 권한·링크·소켓 없음), 앱 데이터를 지우면 $PREFIX·$HOME 도 지워진다 | wiki-differences-from-linux 3 | 위키 | 2026-09-18 |
+| 이 앱은 /proc/sys/kernel/pid_max 를 읽을 수 없다(Permission denied) | out/limits.txt 1 | 캡처 | 2026-09-18 |
+| Android 12 는 앱이 fork 한 프로세스를 추적해 기본 32개를 넘으면 죽이고, 과다 CPU 사용도 죽인다. 12 변경 목록에 없이 들어갔다 | android-docs-phantom 2 | 문서 | 2026-09-18 |
+| 팬텀 프로세스는 Runtime.exec()·fork+execvp·daemon() 으로 생기고, Termux 에선 셸의 모든 명령이 대상이다. daemon 은 init 이 부모가 되어 더 쉽게 죽는다 | android-docs-phantom 2.1·2.2 | 문서 | 2026-09-18 |
+| trimPhantomProcessesIfNecessary: 한도를 넘을 때만, 부모 앱 oom adj 높은 쪽·오래된 쪽부터 "Trimming phantom processes" 로 죽인다. 메모리가 부족하지 않아도 | android-docs-phantom 2.3.2 | 문서(AOSP 인용) | 2026-09-18 |
+| 끄는 법: 14+ 개발자 옵션 "Disable child process restrictions", 12L·13+ settings_enable_monitor_phantom_procs false(adb/root), 12 는 device_config max_phantom_processes(구글 서비스가 되돌릴 수 있음). 12 에선 CPU 킬러를 못 끈다 | android-docs-phantom 2.8·2.9 | 문서 | 2026-09-18 |
+| 완전히 끄면 배경 프로세스를 마구 띄우는 앱이 배터리를 많이 쓸 수 있다 | android-docs-phantom 2.12 | 문서 | 2026-09-18 |
+| README NOTICE: [Process completed (signal 9) - press Enter] 가 보일 수 있다 | readme-termux-app 서두 | README | 2026-09-18 |
+| 이 캡처 때 같은 uid 의 프로세스 16개(proot 2·claude 2 포함), 부모가 1 인 것은 sshd | out/procs_now.txt 1–3 | 스냅샷 | 2026-09-18 |
+| Doze: 네트워크 중단, wake lock 무시, 알람·작업·동기화를 유지 보수 창까지 미룸. 움직임·화면·충전으로 풀림 | dev-android-doze 1.1·1.1.1 | 개발자 문서 | 2026-09-18 |
+| TermuxService 는 wake lock 을 잡은 뒤 배터리 최적화가 꺼져 있지 않으면 해제를 요청하고, 매니페스트에 REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 가 있다 | out/src_limits.txt 1·2 · termux-app@084d709 TermuxService.java 322–323 | 소스 | 2026-09-18 |
+| 예외 허용 표: 작업 자동화 앱은 허용, FCM 을 쓸 수 있는 메신저는 불허 | dev-android-doze 1.6 | 개발자 문서 | 2026-09-18 |
+| 위키: ~/.profile 에서 termux-wake-lock, ~/.bash_logout 에서 termux-wake-unlock | wiki-termux-wake-lock | 위키 | 2026-09-18 |
+| 1~1100 bind: 20–23·80·443·445·515·631 과 1024 이상만 성공, 양쪽 같다 | out/exp_bionic.txt 6 · out/exp_glibc.txt 6 | 캡처 | 2026-09-18 |
+| 공유 저장소 권한은 기본으로 없고 시작 때 묻지 않으며, 바깥 SD·USB 쓰기는 안 된다 | wiki-termux-setup-storage | 위키 | 2026-09-18 |
+| Android 11: 다른 앱의 외부 저장소 전용 디렉터리 접근 불가, targetSdk 30+ 는 다른 앱 내부 데이터를 world-readable 이어도 못 읽음 | dev-android-11-storage 1.5 | 개발자 문서 | 2026-09-18 |
+| termux-services 는 runit 으로 서비스를 다루고, 설치 뒤 재시작하면 서비스 데몬이 뜨며 sv-enable 로 켠다. 지원 표에 sshd 8022·crond·nginx 8080·postgres 5432 | wiki-termux-services · readme-termux-services | 위키 | 2026-09-18 |
+| 이식 문제: iconv·gettext 없음(libandroid-support), glob.h 없음, SysV 공유 메모리·세마포어 없음, Android 8 seccomp "Bad system call", Android 9 setuid 차단 | termux-packages.wiki@93c0c86 Common-porting-problems.md | 위키 | 2026-09-18 |
+| 이 기기에 libandroid-* 9개가 깔려 있다 | out/libandroid.txt 1 | 캡처 | 2026-09-18 |
+| termux-packages@7d5b4d3: 패키지 2,206개, .patch 3,226개, 패치가 있는 패키지 1,004개. 최다 openjdk-17 41 | out/porting.txt 1 | 캡처 | 2026-09-18 |
+| 위키 백업 예는 ./home ./usr 을 tar 로 /sdcard 에, Termux 전용 디렉터리에는 두지 말 것 | wiki-backing-up-termux 1 | 위키 | 2026-09-18 |
+| termux-backup 은 $PREFIX 만 싼다 — termux-restore 가 --recursive-unlink 로 지우고 파이프 입력을 지원해야 하므로 | termux-tools@a62f7b2 scripts/termux-backup.in 2–30 | 소스 | 2026-09-18 |
+| 볼륨 아래 = Ctrl, 볼륨 위 + E/T/1/WASD/L/Q = Esc/Tab/F1/화살표/파이프/추가 키 | wiki-touch-keyboard | 위키 | 2026-09-18 |

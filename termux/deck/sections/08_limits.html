@@ -2,22 +2,361 @@
 <p class="chnum">8부</p>
 <h2>한계와 우회</h2>
 <p class="chsub">막히는 곳마다 — 왜 막히나, 어떻게 돌아가나, 그 대가는</p>
-<p class="cap">이 부의 목표 장수는 160장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>8부에서 다룰 것</h3>
+<p>Termux 는 리눅스처럼 보이지만 안드로이드 앱입니다. 앞의 부들이 "어떻게 동작하나" 를 봤다면, 이 부는
+"어디서 막히나" 를 모읍니다. 한계마다 <b>무엇이 막나 · 이 기기에서 본 것 · 돌아가는 길 · 그 대가</b> 순서로 적습니다.</p>
+<div class="note">돌아가는 길 중 adb·root 가 필요한 것은 이 덱이 실행하지 않았습니다(PLAN.md §0.7 — 사용자 기기를
+해치지 않는다). 문서에 적힌 방법을 옮겨 적고 출처를 붙입니다.</div>
+</article>
+
+<article class="card" id="p8-c1">
+<p class="chnum">1장</p>
+<h2>root 가 없다 — 한 사용자짜리 리눅스</h2>
+<p>위키 "Differences from Linux" 의 넷째 절: 모든 것이 Termux 앱과 같은 uid 로 돌고, 사용자 이름은 uid 에서
+나오므로 바꿀 수 없다. 그래서 패키지들은 다중 사용자·setuid/setgid 기능을 빼도록 패치되어 있고, 서버들의 기본
+포트도 바꿨다 — ftpd 8021, httpd 8080, sshd 8022.</p>
+<p>proot 의 <code>uid=0</code> 은 흉내였고(9부), 진짜 root 는 기기를 루팅해야만 생깁니다. 이 덱의 기기는 루팅되지
+않았습니다.</p>
+<p class="cap">출처: 위키 Differences from Linux(revid 6506) 4절</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-pid-max">
+<h3>커널의 설정도 못 읽는다</h3>
+<!--OUT file=limits.txt sec=1 note=/proc/sys/kernel/pid_max-->
+<p>리눅스에서는 누구나 읽는 <code>/proc/sys/kernel/pid_max</code> 가 이 앱에게는 "Permission denied" 입니다.
+대신 <code>ulimit</code> 이 알려 주는 이 셸의 한도는 읽힙니다.</p>
+<!--OUT file=limits.txt sec=2 note=ulimit -a-->
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p8-c2">
+<p class="chnum">2장</p>
+<h2>팬텀 프로세스 — 32개가 넘으면 죽인다</h2>
+<p>Android 12 는 앱이 fork 한 자식 프로세스를 지켜보다가 <b>기본 32개</b>가 넘으면 죽이는 장치를 넣었습니다. 백그라운드에서
+CPU 를 너무 쓰는 프로세스도 죽입니다. Android-Docs(Termux 팀원 agnostic-apollo 의 문서)에 따르면 이 변경은 Android 12
+변경 목록에도, 동작 변경 목록에도 없이 조용히 들어갔습니다.</p>
+<p class="cap">출처: Android-Docs phantom-cached-and-empty-processes 2절</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-phantom-what">
+<h3>팬텀 프로세스란</h3>
+<p>안드로이드가 보기에 앱의 주 프로세스에서 fork 된 모든 프로세스입니다. 만들어지는 길은 셋:</p>
 <ul>
-<li>루트가 없다는 것</li>
-<li>팬텀 프로세스 한도와 CPU 사용 킬러</li>
-<li>Doze 와 배터리 최적화</li>
-<li>targetSdk 와 W^X</li>
-<li>1024 미만 포트(실험)</li>
-<li>스코프드 스토리지</li>
-<li>systemd 도 cron 도 없는 곳</li>
-<li>bionic 과 맞지 않아 이식이 막힌 사례 — 패치 디렉터리 인용</li>
-<li>proot 의 오버헤드</li>
-<li>키보드와 화면</li>
-<li>백업 없이 지우면 끝</li>
-<li>각 한계의 우회법과 그 대가</li>
+<li><code>Runtime.exec()</code> — 자바에서 자식을 띄운다. Termux 의 백그라운드 작업(RUN_COMMAND 등).</li>
+<li>fork + <code>execvp</code> — 네이티브에서. Termux 의 터미널 세션(4부의 <code>create_subprocess</code>).</li>
+<li><code>daemon()</code> — 부모를 떠나 init(pid 1)의 자식이 된다. <code>sshd</code>·<code>crond</code> 같은 것. 앱
+프로세스에 붙어 있지 않아 더 쉽게 죽는다.</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<p>문서의 결론: Termux 에서는 셸에서 돌리는 <b>모든 명령</b>이 대상입니다.</p>
+<p class="cap">출처: Android-Docs 2.1·2.2</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-procs-now">
+<h3>지금 이 앱의 프로세스</h3>
+<!--OUT file=procs_now.txt sec=1 note=이름별 — 이 캡처를 뜨는 파이프라인(ps·sort·uniq…)도 들어 있다-->
+<!--OUT file=procs_now.txt sec=2 note=모두 몇 개-->
+<p>이 덱을 쓰는 동안의 모습입니다. <code>proot</code> 둘과 <code>claude</code> 둘 — 이 기기에서는 두 작업 세션이 함께
+돌고 있었습니다. 32 에 한참 못 미치지만, 빌드 하나가 <code>make -j</code> 로 컴파일러를 여럿 띄우면 금방 닿는 수입니다.</p>
+<p class="cap">스냅샷 · <code>ps</code> 는 같은 uid 의 프로세스만 보여 줍니다</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p8-daemon">
+<h3>데몬은 init 의 자식이 된다</h3>
+<!--OUT file=procs_now.txt sec=3 note=부모 pid 가 1 인 프로세스-->
+<p>문서의 셋째 길 그대로입니다. 이 기기에서 켜 둔 <code>sshd</code> 는 부모가 1 입니다. 앱 프로세스에 매달린 것이
+아니라서, 문서는 이런 프로세스가 죽을 가능성이 더 높다고 적습니다. 11부의 원격 접속이 이 위험을 안고 있습니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p8-phantom-kill">
+<h3>누구부터 죽이나</h3>
+<p>문서가 옮긴 <code>PhantomProcessList.trimPhantomProcessesIfNecessary()</code>(Android 12 r4)의 순서:</p>
+<ol>
+<li>팬텀 프로세스 수가 <code>MAX_PHANTOM_PROCESSES</code> 를 넘을 때만 움직인다.</li>
+<li><b>부모 앱</b>의 oom adj 가 높은(덜 중요한) 쪽부터 — 전경 앱·전경 서비스의 자식은 뒤로 밀린다.</li>
+<li>같으면 <b>오래된</b> 것부터.</li>
+<li>남은 수가 한도 이하가 될 때까지 "Trimming phantom processes" 로 죽인다.</li>
+</ol>
+<p>메모리가 부족하지 않아도 죽입니다 — 저메모리 킬러와 다른 장치입니다.</p>
+<p class="cap">출처: Android-Docs 2.3.2</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-signal9">
+<h3>화면에 남는 것 — signal 9</h3>
+<p>README 의 경고문: 셸을 끝내지 않았는데 <code>[Process completed (signal 9) - press Enter]</code> 가 보일 수 있다.
+9 는 SIGKILL 입니다. 셸은 시그널로 죽은 자식의 종료 상태를 128 + 번호로 적으므로 137 이 됩니다. 킬러를 일부러
+부르지 않고, 우리 자식에게 직접 SIGKILL 을 보내 같은 모양을 만들었습니다(실험 9).</p>
+<!--OUT file=signals.txt sec=1 note=kill -9 한 자식의 종료 상태-->
+<p class="cap">출처: termux-app README 서두의 NOTICE</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p8-signals-src">
+<h3>실험 9</h3>
+<!--CODE file=exp/signals.sh note=킬러를 부르지 않고 같은 종료 상태를 만든다-->
+<!--OUT file=signals.txt sec=1 note=결과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-phantom-off">
+<h3>끄는 법 — 안드로이드 판마다 다르다</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>판</th><th>방법</th><th>필요한 것</th></tr>
+<tr><td>14 이상</td><td>개발자 옵션 → "Disable child process restrictions"</td><td>개발자 옵션을 켠 채로 두기</td></tr>
+<tr><td>12L·13 이상</td><td><code>settings put global settings_enable_monitor_phantom_procs false</code></td><td>adb 또는 root</td></tr>
+<tr><td>12</td><td><code>device_config</code> 로 <code>max_phantom_processes</code> 를 2147483647 로</td><td>adb 또는 root · 구글 서비스가 되돌릴 수 있음</td></tr>
+</table></div>
+<p>14 이상에서 개발자 옵션을 다시 끄면 이 스위치도 꺼져 킬러가 돌아옵니다. Android 12 에서는 CPU 과다 사용 킬러를
+끌 설정이 없습니다.</p>
+<p class="cap">출처: Android-Docs 2.8·2.9 · 이 덱은 어느 것도 실행하지 않았습니다</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-phantom-risk">
+<h3>끄는 대가</h3>
+<p>문서의 저자는 한도를 사실상 없애는 값(2147483647)에 대해 "제 좁은 시야로는 위험이 보이지 않는다" 고 하면서도,
+<b>완전히 끄면 배경 프로세스를 마구 띄우는 앱이 배터리를 많이 쓸 수 있다</b>고, 안드로이드가 앱별 예외를 주는 편이
+낫다고 적습니다. 이 기기에서 그 설정이 어떤 값인지는 사용자가 네이티브에서 돌릴 스크립트가 읽습니다(0부 "이 기기").</p>
+<p class="cap">출처: Android-Docs 2.12</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card quiz" id="p8-quiz-1" data-quiz>
+<h3>1~2장 퀴즈</h3>
+<p class="q">Q. Android 13 폰에서 Termux 로 <code>make -j8</code> 빌드를 돌리고 화면을 껐더니 빌드가
+<code>signal 9</code> 로 끊겼습니다. 가장 먼저 의심할 것과, root 없이 할 수 있는 일은?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 팬텀 프로세스 킬러입니다 — 컴파일러 여덟 개와 셸·make 가 더해져 32 에 가깝고, 백그라운드의 CPU
+과다 사용도 걸립니다. root 없이도 adb(무선 디버깅)로 <code>settings put global settings_enable_monitor_phantom_procs
+false</code> 를 한 번 실행할 수 있습니다(12L·13 이상). 아니면 <code>-j</code> 를 줄이고 화면을 켜 둡니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-c3">
+<p class="chnum">3장</p>
+<h2>Doze — 잠든 폰은 wake lock 을 무시한다</h2>
+<p>개발자 문서: 전원에 꽂지 않은 채 한동안 움직이지 않고 화면이 꺼져 있으면 기기는 Doze 에 들어갑니다. 그동안</p>
+<ul>
+<li>네트워크 접근을 멈추고</li>
+<li><b>wake lock 을 무시하며</b></li>
+<li>알람·작업(JobScheduler)·동기화를 다음 "유지 보수 창" 까지 미룹니다.</li>
+</ul>
+<p>유지 보수 창은 시간이 갈수록 드물어집니다. 사용자가 기기를 움직이거나 화면을 켜거나 충전기를 꽂으면 풀립니다.</p>
+<p class="cap">출처: developer.android.com Doze and App Standby 1.1·1.1.1</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-wakelock-battery">
+<h3>그래서 Termux 는 배터리 최적화 해제를 요청한다</h3>
+<!--OUT file=src_limits.txt sec=1 note=TermuxService.actionAcquireWakeLock() 안-->
+<!--OUT file=src_limits.txt sec=2 note=매니페스트의 권한-->
+<!--SRC repo=termux-app path=app/src/main/java/com/termux/app/TermuxService.java sha=084d709fbf23ea83b5cb85fd3d795c775be06676 lines=322-323-->
+<p><code>termux-wake-lock</code> 이 부르는 이 함수는 4부에서 본 PARTIAL wake lock 과 Wi-Fi lock 을 잡은 뒤,
+배터리 최적화에서 빠져 있지 않으면 해제를 <b>요청</b>합니다. wake lock 만으로는 Doze 를 넘지 못하기 때문입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p8-exemption">
+<h3>배터리 최적화 예외는 누구에게 허락되나</h3>
+<p>개발자 문서의 예외 허용 표에서 Termux 에 가까운 줄은 "작업 자동화 앱 — 핵심 기능이 자동화된 동작을 예약하는 것"
+으로, <b>예외 허용</b>입니다. 반면 메신저처럼 FCM 을 쓸 수 있는 앱은 허용되지 않습니다.</p>
+<p>위키의 권장: 로그인 셸의 <code>~/.profile</code> 에서 <code>termux-wake-lock</code>, <code>~/.bash_logout</code> 에서
+<code>termux-wake-unlock</code>.</p>
+<p class="cap">출처: developer.android.com Doze 1.6 · 위키 Termux-wake-lock(revid 5736)</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-wx">
+<h3>W^X — 앱 데이터의 실행 파일</h3>
+<p>targetSdk 29 이상 앱은 자기 데이터 디렉터리의 파일을 <code>execve()</code> 할 수 없습니다. Termux 가 여전히
+<code>$PREFIX/bin</code> 의 파일을 바로 실행하는 까닭은 targetSdk 28 로 남아 <code>untrusted_app_27</code> 문맥에서 돌기
+때문이고, 그 대가로 Google Play 에 새 판을 올릴 수 없습니다. 자세한 이야기는 5부(정책 원문·이 기기의 SELinux 문맥)와
+4부(targetSdk 의 트레이드오프)에 있습니다.</p>
+<p class="cap">출처: Android-Docs app-data-file-execute-restrictions 1.2.1 · 5부 캡처</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-c4">
+<p class="chnum">4장</p>
+<h2>1024 미만 포트</h2>
+<p>실험 4 는 <code>127.0.0.1</code> 의 포트 1~1100 에 하나씩 <code>bind()</code> 해 보고 곧바로 닫습니다. 같은 소스를
+Termux 의 clang(bionic)과 proot 의 gcc(glibc)로 지어 양쪽에서 돌렸습니다.</p>
+<!--CODE file=exp/bind_port.c lines=1-11 note=무엇을 재나-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-ports-bionic">
+<h3>Termux 쪽 — 거의 다 막히고, 몇 개만 열린다</h3>
+<!--OUT file=exp_bionic.txt sec=6 note=같은 답이 이어지는 구간으로 묶었다-->
+<p>1024 미만에서 열린 포트: 20~23 · 80 · 443 · 445 · 515 · 631. 나머지는 <code>EACCES</code>.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p8-ports-glibc">
+<h3>proot 쪽도 같다</h3>
+<!--OUT file=exp_glibc.txt sec=6 note=가짜 uid 0 이어도 같은 목록-->
+<p>uid 가 0 으로 보여도 결과는 한 글자도 다르지 않습니다. 커널이 보는 것은 가짜 uid 가 아니라 이 앱의 자격입니다
+(9부). 9부에서 본 대로 이 세션은 포트를 옮기는 <code>-p</code> 없이 떴으니, 열린 포트들은 proot 의 일이 아닙니다.</p>
+<p class="cap">왜 이 몇 포트만 열리는지 — <span class="unv">미확인</span>. 두 쪽 모두 proot 의 추적을 받는 프로세스라
+네이티브 결과(0부 "이 기기")가 오면 다시 봅니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p8-ports-bind">
+<h3>실험 4 — 포트 하나 재기</h3>
+<!--CODE file=exp/bind_port.c lines=20-36 note=127.0.0.1 에 bind 하고 곧바로 닫는다-->
+<!--OUT file=exp_bionic.txt sec=1 note=Termux 의 clang 으로 경고 없이 지어졌다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-ports-scan">
+<h3>실험 4 — 구간으로 묶기</h3>
+<!--CODE file=exp/bind_port.c lines=38-78 note=같은 답이 이어지면 한 줄로-->
+<!--OUT file=exp_glibc.txt sec=1 note=proot 의 gcc 로도 경고 없이-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-ports-way">
+<h3>돌아가는 길 — 높은 포트</h3>
+<p>Termux 의 서버 패키지는 처음부터 높은 포트를 씁니다(1장 — sshd 8022 등). 바깥에서 80 으로 들어와야 한다면 proot
+의 <code>-p</code>(9부 — 1024 미만이면 2000 을 더한다)가 남습니다.</p>
+<p class="cap">출처: 위키 Differences from Linux 4 · proot port_switch.c(9부)</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-c5">
+<p class="chnum">5장</p>
+<h2>저장소 — 앱의 집과 공유 저장소</h2>
+<p>$PREFIX 와 $HOME 은 <code>/data</code> 파티션의 앱 전용 디렉터리에 있습니다(3부). 여기에 세 가지 한계가 붙습니다.</p>
+<ul>
+<li>$PREFIX 는 옮길 수 없다 — 모든 프로그램이 그 경로를 박아 두고 있다.</li>
+<li>$PREFIX 의 파일을 sdcard 에 둘 수 없다 — 그 파일 시스템은 유닉스 권한·심볼릭 링크·소켓을 지원하지 않는다.</li>
+<li>앱을 지우거나 데이터를 지우면 $PREFIX 와 $HOME 도 함께 지워진다.</li>
+</ul>
+<p class="cap">출처: 위키 Differences from Linux 3절</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-setup-storage">
+<h3>termux-setup-storage</h3>
+<!--OUT file=storage.txt sec=1 note=~/storage 아래의 링크들-->
+<p>공유 저장소 권한은 기본으로 주어지지 않고 앱이 시작할 때 묻지도 않습니다 — 보통의 동작에는 필요 없기 때문입니다.
+<code>termux-setup-storage</code> 가 권한을 묻고 <code>~/storage</code> 에 링크 묶음을 만듭니다. 위키: 이 권한으로도
+바깥 SD 카드와 USB 로 붙인 드라이브에는 <b>쓸 수 없다</b>.</p>
+<p class="cap">출처: 위키 Termux-setup-storage(revid 6113)</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p8-other-apps">
+<h3>다른 앱의 파일</h3>
+<p>Android 11 부터는 targetSdk 와 무관하게 다른 앱의 외부 저장소 전용 디렉터리(<code>Android/data/&lt;패키지&gt;</code>)에
+접근할 수 없고, targetSdk 30 이상 앱은 다른 앱의 내부 데이터 디렉터리를 — 그 앱이 world-readable 로 열어 두었어도 —
+읽을 수 없습니다. 다른 앱과 파일을 주고받으려면 공유 저장소의 표준 디렉터리(Download 등)나 SAF 를 거쳐야 합니다(3부).</p>
+<p class="cap">출처: developer.android.com Android 11 storage 1.5</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-c6">
+<p class="chnum">6장</p>
+<h2>systemd 도 cron 도 없는 곳</h2>
+<p>서버를 <code>~/.bashrc</code> 에서 띄우는 대신 위키가 권하는 것은 <code>termux-services</code> — runit 의
+프로그램으로 서비스를 켜고 끄는 스크립트 묶음입니다. 설치 뒤 셸을 다시 열면 서비스 데몬이 뜨고, <code>sv-enable
+&lt;서비스&gt;</code> 로 켭니다. 지원 표에는 sshd(8022)·crond·nginx(8080)·postgres(5432) 등이 있습니다.</p>
+<p>기기가 켜질 때 스크립트를 돌리는 일은 Termux:Boot 플러그인(7부)의 몫입니다.</p>
+<p class="cap">출처: 위키 Termux-services · termux-services README</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-c7">
+<p class="chnum">7장</p>
+<h2>bionic 이 막는 이식</h2>
+<p>termux-packages 위키의 "Common porting problems" 가 적는 것 중 몇 가지:</p>
+<ul>
+<li>bionic 에는 iconv·gettext 가 없다 → <code>libandroid-support</code></li>
+<li><code>&lt;glob.h&gt;</code> 가 없다 → <code>libandroid-glob</code></li>
+<li>커널이 System V 공유 메모리를 지원하지 않는다 → ashmem 위에 흉내 낸 <code>libandroid-shmem</code></li>
+<li>System V 세마포어도 없다 → <code>libandroid-posix-semaphore</code></li>
+<li>Android 8 부터 앱에 seccomp 가 걸려 일부 시스템 호출이 "Bad system call" 로 죽는다</li>
+<li>Android 9 부터 setuid 계열 호출이 막힌다</li>
+</ul>
+<p class="cap">출처: termux-packages.wiki Common-porting-problems.md(고정 커밋)</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-libandroid">
+<h3>이 기기에 깔린 메우개들</h3>
+<!--OUT file=libandroid.txt sec=1 note=libandroid-* 패키지-->
+<p>위 목록의 이름들이 그대로 보입니다. 9부의 proot 가 <code>--sysvipc</code> 로 System V IPC 를 흉내 내는 것도
+같은 빈자리 — 커널에 없는 기능 — 을 메우는 일입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p8-patches">
+<h3>패치의 양</h3>
+<!--OUT file=porting.txt sec=1 note=고정 커밋 7d5b4d3 의 packages/ 트리-->
+<!--CODE file=tools/patch_stats.sh lines=1-16 note=작업 트리가 아니라 커밋의 트리를 센다-->
+<p>2,206개 패키지 중 1,004개가 적어도 하나의 <code>.patch</code> 를 갖고, 모두 3,226개입니다. 가장 많은 것은 OpenJDK 와
+Node.js — 운영체제를 깊이 아는 런타임들입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p8-c8">
+<p class="chnum">8장</p>
+<h2>지우면 끝 — 백업</h2>
+<p>위키의 백업 예: 공유 저장소 권한을 얻고 <code>tar -zcf /sdcard/termux-backup.tar.gz -C /data/data/com.termux/files
+./home ./usr</code>. 경고 — 백업을 Termux 의 전용 디렉터리(<code>/data/data/com.termux</code>, <code>/sdcard/Android/data/com.termux</code>
+…)에 두지 말 것. 앱 데이터를 지우면 그곳도 지워진다.</p>
+<p class="cap">출처: 위키 Backing up Termux 1절</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-termux-backup">
+<h3>termux-backup 은 $HOME 을 싸지 않는다</h3>
+<!--CODE file=sources/termux-tools/scripts/termux-backup.in sha=a62f7b21bc6cdfb343c319d920097ad69b814134 lines=2-30 note=머리 주석 — 왜 $PREFIX 만인가-->
+<!--SRC repo=termux-tools path=scripts/termux-backup.in sha=a62f7b21bc6cdfb343c319d920097ad69b814134 lines=2-30-->
+<p><code>termux-restore</code> 는 풀기 전에 대상 트리를 <b>지우므로</b>(<code>--recursive-unlink</code>), 백업에 무엇이 들었는지
+확실해야 합니다. 파이프 입력은 두 번 읽을 수 없으니 구성을 고정해야 했고, 그래서 $PREFIX 만 싼다 — $HOME 은 사용자
+몫이다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p8-c9">
+<p class="chnum">9장</p>
+<h2>키보드와 화면</h2>
+<p>터치 키보드에는 Ctrl·Alt·Esc 가 없습니다. Termux 는 <b>볼륨 아래</b>를 Ctrl 로, <b>볼륨 위</b>를 특수 키 접두로 씁니다:
+볼륨 위+E → Esc, +T → Tab, +1 → F1, +W/A/S/D → 화살표, +L → <code>|</code>, +Q → 추가 키 줄 보이기.</p>
+<p>이 덱의 조작(←/→ 넘기기, ↑/↓ 스크롤)을 폰에서 보는 것도 같은 문제를 푼 것입니다 — 화면 위 버튼과 게임패드.</p>
+<p class="cap">출처: 위키 Touch Keyboard(revid 6554)</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p8-summary">
+<h3>8부를 한 표로</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>한계</th><th>누가 막나</th><th>돌아가는 길</th><th>대가</th></tr>
+<tr><td>root</td><td>앱 샌드박스</td><td>proot 흉내</td><td>흉내뿐(9부)</td></tr>
+<tr><td>팬텀 32</td><td>ActivityManager</td><td>개발자 옵션 · adb 설정</td><td>배터리</td></tr>
+<tr><td>Doze</td><td>전원 관리</td><td>wake lock + 최적화 예외</td><td>배터리</td></tr>
+<tr><td>W^X</td><td>SELinux 정책</td><td>targetSdk 28</td><td>Play 스토어</td></tr>
+<tr><td>낮은 포트</td><td>커널</td><td>높은 포트 · proot -p</td><td>포트 번호가 바뀜</td></tr>
+<tr><td>저장소</td><td>스코프드 스토리지</td><td>termux-setup-storage</td><td>USB·SD 쓰기 불가</td></tr>
+<tr><td>서비스</td><td>init 없음</td><td>termux-services · Boot</td><td>앱이 떠 있어야 함</td></tr>
+<tr><td>이식</td><td>bionic·seccomp</td><td>패치 · libandroid-*</td><td>패치 3,226개</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p8-quiz-2" data-quiz>
+<h3>3~9장 퀴즈</h3>
+<p class="q">Q. <code>termux-backup ~/storage/shared/b.tar.gz</code> 로 백업하고 앱을 지웠다 다시 깔아
+<code>termux-restore</code> 로 풀었습니다. 무엇이 돌아오고 무엇이 사라졌을까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> $PREFIX(설치한 패키지·설정)는 돌아오지만 $HOME(작업 파일·<code>~/.termux</code>·dotfile)은 사라졌습니다 —
+<code>termux-backup</code> 은 $PREFIX 만 쌉니다. $HOME 까지 지키려면 위키처럼 <code>./home ./usr</code> 을 함께 tar 로
+싸서, 앱 전용 디렉터리가 아닌 공유 저장소에 둡니다.</div>
+<span class="tier ill">설명용</span>
 </article>

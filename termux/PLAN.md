@@ -805,3 +805,21 @@ The user approved every recommendation below as-is. Each row is now a decision.
   1.4.1) and its `proot_cmd.py` carries "Development assisted by Claude Code" (for Part 13).
   Marked 미확인: why hard links need emulation on Android, why getprop is EPERM, why the API
   times out. The manual in the repo is 5.1.0 (2014) and lacks the Termux-era extensions.
+
+### Step 8 · Part 8 — 한계와 우회 (2026-09-18)
+
+- Tooling: `tools/patch_stats.sh` (+5 tests) counts `.patch` files in a pinned commit's
+  `packages/` tree (the sparse worktree cannot be counted); `tools/scrub.py` no longer masks a
+  dotted quad followed by `-digit` (Debian versions like `14.0.0.11-1`) — test first.
+- Captures: `procs_now` (snapshot: same-uid process names/count, sshd's parent is 1),
+  `porting` (2,206 packages · 3,226 patches · 1,004 patched packages at 7d5b4d3), `libandroid`
+  (9 filler packages), `src_limits` (TermuxService asks to disable battery optimisations after
+  taking the wake lock; the manifest permission).
+- Part 8 written: 35 slides (budget 160). Phantom processes from Android-Docs (what, who is
+  killed first, how to disable per Android version, the cost), Doze ignores wake locks, W^X as
+  a pointer to Parts 4/5, experiment 4's port scan (20–23·80·443·445·515·631 open on both sides,
+  cause 미확인, native pending), storage limits, termux-services, porting problems +
+  libandroid-*, `termux-backup` backs up only `$PREFIX` (source), touch-keyboard volume keys.
+- Nothing requiring adb/root was executed; commands are quoted from the docs.
+- `exp/wakelock.sh` (experiment 10) is still uncited — it needs the Termux app to answer, which
+  it does not from proot; kept in `pending.txt`.
