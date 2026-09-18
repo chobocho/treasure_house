@@ -11,17 +11,21 @@ tree·commit, 태그 하나, 그리고 네 형식의 객체를 cat-file 로 연�
 def run(ctx):
     r = ctx.repo('hello', init=False)
     r.cap('git init -b main')
-    r.cap('find .git -type f | sort')
+    # -type f 가 아니라 ! -type d — 이 기계의 find(bfs)는 proot 위에서
+    # git 이 읽기 전용으로 쓴 객체 파일을 '파일' 로 못 알아봐 목록이
+    # 조용히 비었다. 뜻은 같고 GNU find 에서도 똑같이 돈다.
+    r.cap('find .git ! -type d | sort')
     r.write('hello.txt', 'hello\n')
     r.cap('git status')
     r.cap('git add hello.txt')
     r.cap('git status --short', label='hello.added')
-    r.cap('find .git/objects -type f | sort', label='hello.added')
+    r.cap('find .git/objects ! -type d | sort', label='hello.added')
     r.cap('git ls-files --stage')
     r.cap('git cat-file -t ce013625030ba8dba906f756967f9e9ca394464a')
     r.cap('git cat-file -p ce013625030ba8dba906f756967f9e9ca394464a')
     r.cap('git commit -m "first commit"')
-    r.cap('find .git/objects -type f | sort', label='hello.committed')
+    r.cap('find .git/objects ! -type d | sort',
+          label='hello.committed')
     r.cap('git cat-file -p HEAD')
     r.cap('git cat-file -p HEAD^{tree}')
     r.cap('git log')
@@ -42,6 +46,12 @@ def run(ctx):
     r.cap('git tag -a v1.0 -m "release 1.0"')
     r.cap('git cat-file -p v1.0')
     r.cap('git count-objects -v')
+    # 객체 그래프(도해 hello_objects)의 원료 — 그림은 이것만 읽는다
+    r.cap('git cat-file --batch-all-objects --batch-check')
+    r.cap('git log --format="%h tree=%t parents=%p %s"')
+    r.cap('git ls-tree -r -t --abbrev HEAD~1')
+    r.cap('git ls-tree -r -t --abbrev HEAD')
+    r.cap('git rev-parse v1.0 v1.0^{commit}')
     # 세 영역: 작업 트리만 · 인덱스까지 · 되돌리기
     r.write('hello.txt', 'hello\nworld\nagain\n')
     r.cap('git status --short', label='hello.wt')

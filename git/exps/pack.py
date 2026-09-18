@@ -51,6 +51,9 @@ def run(ctx):
     r.cap("git verify-pack -v %s | awk '$6 != \"\"' | head -8" % idx,
           label='pack.chain', edit=noname)
     r.cap('git verify-pack -s %s' % idx)
+    # 사슬 길이 분포 전부(도해 delta_chains 의 원료)
+    r.cap('git verify-pack -v %s | grep -E "^(non delta|chain length)"'
+          % idx)
     r.cap('od -A d -t x1 -N 32 .git/objects/pack/*.pack')
     r.cap('git show-index < %s | head -5' % idx)
     # 델타 창과 깊이 — 같은 객체를 다시 싸며 크기를 잰다

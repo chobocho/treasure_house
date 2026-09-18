@@ -27,6 +27,7 @@ def run(ctx):
     commit(r, 7, 'H', {'h': 'H\n'})
     r.sh('git switch -q main')
     r.cap('git log --graph --oneline --all')
+    r.cap('git log --all --format="%h %p %s"')   # 도해 dag 의 원료
     r.cap('git merge-base main side')
     r.cap('git merge-base --all main side')
     r.cap('git log --oneline $(git merge-base --all main side)',
