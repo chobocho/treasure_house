@@ -6,7 +6,7 @@ public final class RunTests {
   static final Class<?>[] SUITES = {Sha1Test.class, ObjectsTest.class,
       BlobTest.class, TreeTest.class, CommitTest.class,
       IndexTest.class, WalkTest.class, DiffTest.class,
-      CheckoutTest.class, MergeTest.class};
+      CheckoutTest.class, MergeTest.class, PackTest.class};
 
   private RunTests() {}
 

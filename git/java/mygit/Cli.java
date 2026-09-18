@@ -976,6 +976,142 @@ public final class Cli {
     Index.writeIndex(g, staged);
   }
 
+  // ── 11단계: unpack-pack · verify-pack · pack-objects ─────────────
+
+  // 팩의 객체를 전부 느슨한 객체로 푼다(SPEC.md §13.3).
+  static int unpackPack(Ctx ctx, List<String> args) {
+    String g = ctx.gitdir();
+    for (String name : parseFlags(args, List.of()).rest) {
+      for (Pack.PackEntry e : Pack.readPack(Fs.read(ctx.path(name)),
+          o -> Objects.readObject(g, o))) {
+        Objects.writeObject(g, e.type, e.body);
+      }
+    }
+    return 0;
+  }
+
+  // git verify-pack -v 와 같은 출력. 색인이 팩과 맞지 않으면 오류.
+  static int verifyPack(Ctx ctx, List<String> args) {
+    Flags f = parseFlags(args, List.of("-v"));
+    if (!f.on.contains("-v") || f.rest.size() != 1
+        || !f.rest.get(0).endsWith(".idx")) {
+      throw new GitError("usage: mygit verify-pack -v <pack>.idx", 129);
+    }
+    String idxPath = f.rest.get(0);
+    String packPath = idxPath.substring(0, idxPath.length() - 4)
+        + ".pack";
+    Pack.Idx idx = Pack.readIdx(Fs.read(ctx.path(idxPath)));
+    byte[] data = Fs.read(ctx.path(packPath));
+    List<Pack.PackEntry> ents = Pack.readPack(data, null);
+    Set<Pack.IdxEntry> got = new HashSet<>();
+    ents.forEach(e -> got.add(new Pack.IdxEntry(e.oid, e.offset,
+        e.crc)));
+    if (!got.equals(new HashSet<>(idx.entries()))
+        || !java.util.Arrays.equals(idx.packSum(), java.util.Arrays
+            .copyOfRange(data, data.length - 20, data.length))) {
+      throw new GitError("fatal: mygit: " + idxPath
+          + " does not match " + packPath);
+    }
+    Pack.verifyLines(ents, packPath).forEach(r -> ctx.say(r + "\n"));
+    return 0;
+  }
+
+  static final int MAX_DEPTH = 50;
+
+  // pack-objects 가 넣을 것들 — SPEC.md §13.3 의 차례(커밋 → 트리·
+  // blob 전위 순회 → 주석 태그)와 델타 고르기.
+  static List<Pack.Item> packItems(Ctx ctx, boolean useDelta) {
+    String g = ctx.gitdir();
+    List<String> starts = new ArrayList<>();
+    List<String> tips = new ArrayList<>();
+    tips.add(Refs.readHead(g).oid());
+    tips.addAll(Refs.listRefs(g).values());
+    for (String oid : tips) {
+      String c = oid == null ? null : Refs.peel(g, oid, "commit");
+      if (c != null) starts.add(c);
+    }
+    Packer pk = new Packer(g, useDelta);
+    List<String> order = starts.isEmpty() ? List.of()
+        : Walk.walkLog(g, starts);
+    for (String c : order) {
+      pk.add("commit", Objects.readObject(g, c).body(), c, null);
+    }
+    for (String c : order) pk.visit(Refs.peel(g, c, "tree"), "");
+    for (String oid : Refs.listRefs(g, "refs/tags/").values()) {
+      Objects.Obj o = Objects.readObject(g, oid);
+      if (o.type().equals("tag") && !pk.seen.contains(oid)) {
+        pk.add("tag", o.body(), oid, null);
+      }
+    }
+    return pk.items;
+  }
+
+  // packItems 의 일꾼 — 넣은 것, 사슬 깊이, 경로마다 마지막 blob
+  private static final class Packer {
+    final String g;
+    final boolean useDelta;
+    final List<Pack.Item> items = new ArrayList<>();
+    final List<Integer> depth = new ArrayList<>();
+    final Set<String> seen = new HashSet<>();
+    final Map<String, Integer> last = new HashMap<>();
+
+    Packer(String g, boolean useDelta) {
+      this.g = g;
+      this.useDelta = useDelta;
+    }
+
+    // 같은 경로로 바로 앞에 넣은 blob 이 있으면 델타를 만들어 보고,
+    // 절반보다 짧을 때만 쓴다(SPEC.md §13.3).
+    void add(String type, byte[] body, String oid, String path) {
+      seen.add(oid);
+      int base = -1;
+      Integer k = path == null ? null : last.get(path);
+      if (useDelta && k != null && depth.get(k) < MAX_DEPTH
+          && 2 * Pack.makeDelta(items.get(k).body(), body).length
+              < body.length) {
+        base = k;
+      }
+      items.add(new Pack.Item(type, body, base));
+      depth.add(base < 0 ? 0 : depth.get(base) + 1);
+      if (path != null) last.put(path, items.size() - 1);
+    }
+
+    // 트리 자신, 그다음 항목을 트리 차례로(하위 트리는 재귀).
+    void visit(String t, String prefix) {
+      if (seen.contains(t)) return;
+      byte[] body = Objects.readObject(g, t).body();
+      add("tree", body, t, null);
+      for (Tree.Entry e : Tree.parseTree(body)) {
+        if (e.mode().equals(Tree.DIR)) {
+          visit(e.oid(), prefix + e.name() + "/");
+        } else if (!e.mode().equals("160000")
+            && !seen.contains(e.oid())) {
+          add("blob", Objects.readObject(g, e.oid()).body(), e.oid(),
+              prefix + e.name());
+        }
+      }
+    }
+  }
+
+  static int packObjects(Ctx ctx, List<String> args) {
+    Flags f = parseFlags(args, List.of("--delta"));
+    if (f.rest.size() != 1) {
+      throw new GitError("usage: mygit pack-objects [--delta] <base>",
+          129);
+    }
+    Pack.Written w = Pack.writePack(packItems(ctx,
+        f.on.contains("--delta")));
+    byte[] sum = java.util.Arrays.copyOfRange(w.data(),
+        w.data().length - 20, w.data().length);
+    String sha = java.util.HexFormat.of().formatHex(sum);
+    String base = ctx.path(f.rest.get(0) + "-" + sha);
+    Fs.mkdirs(Path.of(base).getParent().toString());
+    Fs.write(base + ".pack", w.data());
+    Fs.write(base + ".idx", Pack.writeIdx(w.ents(), sum));
+    ctx.say(sha + "\n");
+    return 0;
+  }
+
   // ── 틀 ────────────────────────────────────────────────────────────
   // 명령 이름 → 함수. 단계가 늘 때마다 한 줄씩 는다.
   private static Command command(String name) {
@@ -998,6 +1134,9 @@ public final class Cli {
       case "switch" -> Cli::switchTo;
       case "checkout" -> Cli::checkout;
       case "merge" -> Cli::merge;
+      case "unpack-pack" -> Cli::unpackPack;
+      case "verify-pack" -> Cli::verifyPack;
+      case "pack-objects" -> Cli::packObjects;
       default -> null;
     };
   }

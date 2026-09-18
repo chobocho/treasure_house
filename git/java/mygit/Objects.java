@@ -10,7 +10,9 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
 
 // 객체 (SPEC.md §4.1 · §4.6) — 이름은 내용의 SHA-1 이다.
@@ -19,6 +21,10 @@ import java.util.TreeSet;
 // 누가 만들어도 같은 이름을 얻는다 — git 이 "내용 주소 저장소" 인
 // 까닭이 이 한 줄이다. 느슨한 객체는 그 바이트를 zlib 으로 눌러
 // .git/objects/<앞 2글자>/<나머지 38글자> 에 둔다.
+//
+// 느슨한 객체에 없으면 팩(objects/pack/*.pack)에서 찾는다(SPEC.md
+// §5.2). 이름이 java.util.Objects 와 같지만 SPEC §15 의 모듈 이름을
+// 따랐다 — 이 패키지 안에서는 이쪽이 이긴다.
 public final class Objects {
   public static final List<String> TYPES =
       List.of("blob", "tree", "commit", "tag");
@@ -93,13 +99,52 @@ public final class Objects {
     return new Obj(parts[0], body);
   }
 
+  private static final Map<String, Map<String, Obj>> PACKS =
+      new HashMap<>();
+
+  // 팩 안 객체 전부 {이름: 객체}. 팩마다 한 번만 읽는다.
+  //
+  // 작은 저장소를 위한 곧은 방법이다 — 색인으로 자리를 찾아 그 항목만
+  // 푸는 대신 팩 전체를 되살려 기억해 둔다(11단계, SPEC.md §5.2).
+  // 기억의 열쇠에 크기·수정 시각을 넣어, 같은 이름의 팩이 바뀌면 다시
+  // 읽는다. 찾는 차례는 파일 이름 차례이고 먼저 찾은 것이 이긴다.
+  static Map<String, Obj> packedObjects(String gitdir) {
+    Map<String, Obj> out = new HashMap<>();
+    String dir = Fs.join(gitdir, "objects", "pack");
+    for (String f : Fs.list(dir)) {
+      String pack = Fs.join(dir, f.replaceAll("\\.idx$", ".pack"));
+      if (!f.endsWith(".idx") || !Fs.exists(pack)) continue;
+      String key;
+      try {
+        Path p = Path.of(pack);
+        key = pack + "\0" + Files.size(p) + "\0"
+            + Files.getLastModifiedTime(p).toMillis();
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
+      }
+      Map<String, Obj> objs = PACKS.get(key);
+      if (objs == null) {
+        objs = new HashMap<>();
+        for (Pack.PackEntry e : Pack.readPack(Fs.read(pack),
+            o -> readObject(gitdir, o))) {
+          objs.put(e.oid, new Obj(e.type, e.body));
+        }
+        PACKS.put(key, objs);
+      }
+      objs.forEach(out::putIfAbsent);
+    }
+    return out;
+  }
+
   // 느슨한 객체를 먼저, 없으면 팩. 없으면 GitError.
   public static Obj readObject(String gitdir, String oid) {
     byte[] raw = Fs.readOrNull(objectPath(gitdir, oid));
-    if (raw == null) {
+    if (raw != null) return parseRaw(Zlib.decompress(raw), oid);
+    Obj hit = packedObjects(gitdir).get(oid);
+    if (hit == null) {
       throw new GitError("fatal: mygit: object " + oid + " not found");
     }
-    return parseRaw(Zlib.decompress(raw), oid);
+    return hit;
   }
 
   // 느슨한 객체의 이름 전부. objects/xx/ 디렉터리를 훑는다.
@@ -123,6 +168,7 @@ public final class Objects {
     String p = prefix.toLowerCase();
     if (p.length() < 4 || !p.matches("[0-9a-f]+")) return null;
     TreeSet<String> ids = new TreeSet<>(allLoose(gitdir));
+    ids.addAll(packedObjects(gitdir).keySet());
     if (p.length() == 40) return ids.contains(p) ? p : null;
     List<String> hits = ids.stream().filter(o -> o.startsWith(p))
         .toList();
