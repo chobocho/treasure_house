@@ -16,6 +16,7 @@ repo@sha 를 열었을 때 보는 것은 그 커밋이기 때문이다.
 """
 import io
 import os
+import re
 import subprocess
 
 # 짧은 SHA 는 이 길이부터 받는다. git 의 기본 약어 길이와 같다.
@@ -99,6 +100,19 @@ class Pins(object):
     def exists(self, path):
         return self.lines(path) is not None
 
+    def grep(self, where, pattern):
+        """'저장소:경로' 의 핀 커밋 파일에서 pattern 과 맞는 조각을
+        '줄번호:조각' 으로. 줄이 72칸을 넘어 코드 블록에 못 싣는
+        파일(XML 따위)을 캡처로 보여 줄 때 쓴다. O(파일 줄 수)."""
+        repo, _, path = where.partition(':')
+        lines = self.lines('sources/%s/%s' % (repo, path))
+        if lines is None:
+            raise LookupError('핀 커밋에 없다: %s' % where)
+        rx = re.compile(pattern)
+        return ['%d:%s' % (i, m.group(0))
+                for i, line in enumerate(lines, 1)
+                for m in rx.finditer(line)]
+
     def missing(self):
         """핀 커밋이 체크아웃에 없는 저장소들 — make sources-check.
 
@@ -125,6 +139,14 @@ class Pins(object):
 def main(argv):
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     pins = Pins(base)
+    if len(argv) == 3 and argv[0] == 'grep':
+        try:
+            for line in pins.grep(argv[1], argv[2]):
+                print(line)
+        except LookupError as err:
+            print(err)
+            return 1
+        return 0
     if '--check' in argv:
         bad = pins.missing()
         for line in bad:
@@ -132,7 +154,7 @@ def main(argv):
         print('핀 고정 저장소 %d개 — 빠진 커밋 %d건'
               % (len(pins.repos()), len(bad)))
         return 1 if bad else 0
-    print('사용법: python3 deck/srcpin.py --check')
+    print('사용법: srcpin.py --check | grep 저장소:경로 패턴')
     return 2
 
 

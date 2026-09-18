@@ -57,6 +57,13 @@ IP6_RE = re.compile(r'(?<![\w:])([0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4})'
 HOME_RE = re.compile(r'(?<![\w/.-])(?:%s|/root)/([^\s\'"<>]*)'
                      % re.escape(HOME))
 SHARED_RE = re.compile(r'%s/[^\s\'"<>]+' % re.escape(SHARED))
+# 안드로이드가 공유 저장소에 만드는 표준 디렉터리 — 이름 자체는 개인
+# 정보가 아니다. 그 **아래**의 파일 이름만 가린다.
+SHARED_OK = {'DCIM', 'Download', 'Documents', 'Movies', 'Music',
+             'Pictures', 'Podcasts', 'Audiobooks', 'Alarms',
+             'Notifications', 'Ringtones', 'Recordings',
+             'Android/media/com.termux',
+             'Android/data/com.termux/files'}
 
 
 def _ip4_public(s):
@@ -86,6 +93,13 @@ def _home_sub(m):
     return '<home>/…'
 
 
+def _shared_sub(m):
+    rest = m.group(0)[len(SHARED) + 1:]
+    if rest in SHARED_OK or rest == '<…>':
+        return m.group(0)
+    return SHARED + '/<…>'
+
+
 def fix(text):
     """(바꾼 글, 바꾼 개수). 두 번 불러도 결과가 같다."""
     n = [0]
@@ -107,9 +121,7 @@ def fix(text):
                             if _ip6_sensitive(m.group(1))
                             else m.group(0)), text)
     text = HOME_RE.sub(count(_home_sub), text)
-    text = SHARED_RE.sub(count(lambda m: SHARED + '/<…>'
-                               if m.group(0) != SHARED + '/<…>'
-                               else m.group(0)), text)
+    text = SHARED_RE.sub(count(_shared_sub), text)
     return text, n[0]
 
 

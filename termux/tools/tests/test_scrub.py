@@ -90,6 +90,18 @@ class FixTest(unittest.TestCase):
         t = 'ls /storage/emulated/0 /sdcard'
         self.assertEqual(scrub.fix(t)[0], t)
 
+    def test_standard_shared_dirs_are_kept(self):
+        # 안드로이드가 만드는 표준 디렉터리 이름은 개인정보가 아니다
+        # (termux-setup-storage 가 거는 ~/storage 링크의 대상)
+        for d in ('DCIM', 'Download', 'Documents', 'Movies', 'Music',
+                  'Pictures', 'Podcasts', 'Audiobooks',
+                  'Android/media/com.termux',
+                  'Android/data/com.termux/files'):
+            t = '/storage/emulated/0/' + d
+            self.assertEqual(scrub.fix(t)[0], t)
+        got, _ = scrub.fix('/storage/emulated/0/DCIM/Camera/a.jpg')
+        self.assertEqual(got, '/storage/emulated/0/<…>')
+
     def test_fix_is_idempotent(self):
         once, _ = scrub.fix('"ssid": "x" inet 8.8.4.4')
         twice, n = scrub.fix(once)

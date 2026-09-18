@@ -196,6 +196,8 @@ BB = 'scratch/build/bionic'
 BG = 'scratch/build/glibc'
 EXPS = ['hello', 'passwd', 'paths', 'bind_port', 'syscall_loop']
 PROBE = '/tmp /bin/sh /usr/bin/env /etc/passwd /system/bin/sh'
+# 소스 캡처(src_*)는 deck/srcpin.py 로 핀 커밋에서 읽는다
+MANI = 'termux-app:app/src/main/AndroidManifest.xml'
 
 
 def exp_steps(cc, out):
@@ -377,6 +379,17 @@ CAPTURES = [
         S('메모리', 'free -m'),
         S('RSS 가 큰 프로세스',
           'ps -eo rss,comm --sort=-rss | head -n 8'),
+    ]),
+    # 핀 커밋의 소스에서 필요한 줄만 뽑는다 — 줄이 72칸을 넘어
+    # 코드 블록에 못 싣는 파일(XML 등)을 위해서다.
+    Capture('src_manifest', 'termux', 'stable', [
+        S('termux-app 이 요청하는 권한',
+          'python3 deck/srcpin.py grep %s \'use.*permission\\.[A-Z_]+\''
+          % MANI),
+        S('sharedUserId', 'python3 deck/srcpin.py grep %s '
+          '\'sharedUserId="[^"]*"\'' % MANI),
+        S('저장소 옛 방식', 'python3 deck/srcpin.py grep %s '
+          '\'requestLegacy[A-Za-z]*="[a-z]*"\'' % MANI),
     ]),
     Import('native_device', os.path.join(BASE, 'data', 'device.txt')),
 ]

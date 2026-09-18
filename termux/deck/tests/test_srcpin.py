@@ -118,6 +118,20 @@ class SrcPinTest(unittest.TestCase):
         p = srcpin.Pins(self.base)
         self.assertEqual(p.lines('sources/demo/src/b.c'), ['x', 'y'])
 
+    # ── grep: 핀 커밋의 파일에서 패턴을 찾는다(캡처용) ─────────────
+    def test_grep_prints_line_and_match(self):
+        got = self.pin.grep('demo:src/a.c', r't[a-z]+')
+        self.assertEqual(got, ['2:two', '3:three'])
+
+    def test_grep_reads_pin_not_worktree(self):
+        # 작업 트리의 a.c 는 'ONE\ntwo' 이지만 핀은 'one…three' 다
+        self.assertEqual(self.pin.grep('demo:src/a.c', r'^one$'),
+                         ['1:one'])
+
+    def test_grep_missing_file_raises(self):
+        with self.assertRaises(LookupError):
+            self.pin.grep('demo:src/none.c', 'x')
+
     # ── sources-check: 핀 커밋이 체크아웃에 들어 있는가 ─────────────
     def test_missing_commits_all_present(self):
         self.assertEqual(self.pin.missing(), [])
