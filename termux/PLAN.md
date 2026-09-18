@@ -632,3 +632,32 @@ The user approved every recommendation below as-is. Each row is now a decision.
   test before implementing). Device, proot-read: 170 installed, 3,393,552 KiB, 30 Essential.
   (The plan's "326 dpkg packages" was a line count, not a package count.)
 - Tests 146 total pass; `make all SKEL=1` 0 errors.
+
+### Step 5 — experiments 1–10 (2026-09-18)
+
+- C (1–5): `hello.c passwd.c paths.c bind_port.c syscall_loop.c`, each compiled **twice** in
+  `exp/tests/test_exp.py` — proot gcc (glibc) and Termux clang via `tmx.sh` (bionic), both with
+  `-std=c99 -Wall -Wextra -Werror -D_DEFAULT_SOURCE` (bionic needed nothing extra). Builds go to
+  `scratch/build/{glibc,bionic}/`. Scripts (6–10): `mkdeb/` (control, postinst, payload, build.sh),
+  `api_call.sh`, `shebang/` (three shebangs + runner), `signals.sh`, `wakelock.sh`, plus
+  `fork_loop.sh` and `timeit_exp.py` (renamed from `timeit.py`: it would shadow the stdlib module).
+  18 tests, RED 17 → GREEN.
+- **Findings (captured in step 6, all proot-side):**
+  1. Bionic `getpwuid(10123)` → `u0_a123`, home = Termux `$HOME`, shell = `$PREFIX/bin/login`,
+     because termux-packages `ndk-patches/29/pwd.h.patch` replaces getpwuid with an inline
+     polyfill (SRC-citable). glibc: `(없음)`.
+  2. Under proot the Termux binaries see Ubuntu's filesystem: `/tmp`, `/bin/sh`, `/etc/passwd` all
+     exist, and all three shebangs run. The native answer needs the user-run script.
+  3. `bind()` on 127.0.0.1, scanning 1–1100 (both libcs, identical): only **20–23, 80, 443, 445,
+     515, 631** succeed below 1024; everything else below 1024 is EACCES. Not proot's port_switch
+     (`getsockname` returns the same port; `-p` shifts by +2000 only when enabled) and not found in
+     the proot sources — the cause is **unverified** and the deck will say so (미확인), showing the
+     capture only. The plan's expectation "80 fails with EACCES" is false on this device.
+  4. `api_call.sh` now reads the method name from the installed `termux-battery-status` script
+     (`$PREFIX/libexec/termux-api BatteryStatus`) instead of hard-coding it; the test was rewritten
+     to assert that property (the first draft faked `termux-api` on PATH, which is not where it lives).
+- `tools/native_facts.sh` extended (+2 tests): `$LD_PRELOAD`, `/proc/mounts` line for
+  `/storage/emulated` (noexec evidence, read-only — no file is written to shared storage), pid_max,
+  `ulimit -a`, and the bionic experiments + shebang runner with and without `LD_PRELOAD`. Missing
+  builds are reported, not skipped silently.
+- Tests: 166 pass; `make all SKEL=1` 0 errors.

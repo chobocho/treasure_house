@@ -62,6 +62,25 @@ class NativeFactsTest(unittest.TestCase):
         for h in ('id', 'uname -a', 'TracerPid'):
             self.assertIn(h, text)
 
+    def test_experiment_sections(self):
+        # 5단계의 bionic 실험을 네이티브에서 돌리는 절. 빌드가 없으면
+        # 없다고 적고 넘어간다 — 조용히 빠지지 않는다.
+        self.run_it()
+        text = io.open(self.out).read()
+        for h in ('bind_port --scan 1 1100', 'paths',
+                  'shebang/run.sh (termux-exec 켬)',
+                  'shebang/run.sh (LD_PRELOAD 뺌)',
+                  "grep ' /storage/emulated ' /proc/mounts",
+                  'echo "$LD_PRELOAD"'):
+            self.assertIn(h, text)
+
+    def test_missing_build_is_reported(self):
+        env = dict(os.environ, PATH=self.d + ':' + os.environ['PATH'],
+                   NATIVE_BUILD=os.path.join(self.d, 'nope'))
+        subprocess.run(['sh', SCRIPT, self.out], env=env,
+                       capture_output=True, text=True)
+        self.assertIn('(빌드 없음', io.open(self.out).read())
+
     def test_first_line_names_the_side(self):
         self.run_it()
         first = io.open(self.out).readline()

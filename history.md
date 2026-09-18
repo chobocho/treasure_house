@@ -1,3 +1,10 @@
+### [2026-09-18 01:58] Termux 대백과사전 덱 5단계 — 실험 10종(bionic·glibc 두 번 짓기)
+- **기획:** 같은 C 소스를 Termux clang(bionic)과 proot gcc(glibc)로 지어 차이를 보이고, 스크립트 실험으로 셔뱅·.deb·시그널·웨이크락을 다룬다.
+- **TC:** 정상: 인사 줄 같음·interp 다름·u0_a123·빈 포트 한 줄·137. 가장자리: 사용 중 포트·잘못된 인자·실패해도 웨이크락 해제.
+- **개발:** `termux/exp/*.c`(5), `termux/exp/*.sh`(4), `termux/exp/shebang/`, `termux/exp/mkdeb/`, `termux/exp/timeit_exp.py`, `termux/exp/tests/test_exp.py`, `termux/tools/native_facts.sh`
+- **검증:** 166 passed, 0 failed · make all SKEL=1 오류 0건
+- **비고:** 이 기기에서 1024 미만 포트는 20–23·80·443·445·515·631 만 bind 된다(원인 미확인). proot 안에서는 /tmp·/bin/sh 가 보여 네이티브 캡처가 필요.
+
 ### [2026-09-18 01:49] Termux 대백과사전 덱 4단계 — elf.py·deb.py·pkgstat.py
 - **기획:** 5·6부가 쓸 표준 라이브러리 도구 셋: ELF 링커 정보, .deb 해부, dpkg status 통계.
 - **TC:** 정상: 손으로 지은 ELF·.deb 와 readelf·dpkg-deb 대조. 가장자리: 32비트·빅 엔디언·정적·잘림·zst·크기 없는 패키지·빈 입력.

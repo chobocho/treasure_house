@@ -666,7 +666,8 @@ def build_nav(body):
 COVER_DIRS = [('py', ('.py',)),
               ('exp', ('.c', '.h', '.sh', '.py')),
               ('tools', ('.py', '.sh'))]
-COVER_FILES = ['Makefile', 'run_all.py']
+COVER_FILES = ['Makefile', 'run_all.py', 'exp/mkdeb/control',
+               'exp/mkdeb/postinst', 'exp/mkdeb/treasure-hello']
 # 부분 인용만 하는 것들 — 빠진 줄이 있어도 오류가 아니다.
 #
 # 커버리지 100 % 는 **우리 코드**(tools/·py/·exp/·run_all.py)에만 건다
