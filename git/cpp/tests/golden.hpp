@@ -2,6 +2,8 @@
 // golden 은 진짜 git 이 만든 기준 바이트다. 시험은 git 을 부르지 않고
 // 이 파일들만 읽는다. 경로는 git/ 에서 도는 make test-cpp 기준.
 #pragma once
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -109,5 +111,47 @@ mygit::GitError git_error(F fn) {
         return e;
     }
     throw std::runtime_error("GitError 가 나지 않았다");
+}
+
+namespace fs = std::filesystem;
+
+// TempDir 는 시험 하나의 임시 디렉터리 — 끝나면 통째로 지운다.
+struct TempDir {
+    std::string path;
+    TempDir() {
+        std::string t = (fs::temp_directory_path() / "mygit-XXXXXX");
+        if (!mkdtemp(t.data())) throw std::runtime_error("mkdtemp");
+        path = t;
+    }
+    ~TempDir() {
+        std::error_code ec;
+        fs::remove_all(path, ec);
+    }
+    TempDir(const TempDir&) = delete;
+};
+
+inline void write_file(const std::string& p, const std::string& data) {
+    fs::create_directories(fs::path(p).parent_path());
+    std::ofstream(p, std::ios::binary | std::ios::trunc) << data;
+}
+
+inline std::string read_file(const std::string& p) {
+    std::ifstream f(p, std::ios::binary);
+    std::ostringstream s;
+    s << f.rdbuf();
+    return s.str();
+}
+
+// gitdir 은 빈 .git 뼈대(objects/pack)를 만든다.
+inline std::string gitdir(const TempDir& t) {
+    auto g = t.path + "/.git";
+    fs::create_directories(g + "/objects/pack");
+    return g;
+}
+
+// plant 는 git 이 쓴 느슨한 객체를 그대로 심는다.
+inline void plant(const std::string& g, const std::string& oid) {
+    write_file(g + "/objects/" + oid.substr(0, 2) + "/" + oid.substr(2),
+               read("objects/" + oid));
 }
 }  // namespace golden
