@@ -719,3 +719,24 @@ The user approved every recommendation below as-is. Each row is now a decision.
   targets `__ANDROID_API__ 24`; bionic `getpwuid` home/shell come from the `pwd.h` NDK patch (SRC).
   `/apex`/`/vendor` were dropped from the chapter — no source fetched for them; the wiki's rootfs
   table (which does not list them) is what the slide shows.
+
+### Step 8 · Part 5 — 파일시스템과 실행 (2026-09-18)
+
+- Pins: `termux-exec` stays at HEAD 2cd0ba6 (= tag v2.5.0, the installed `1:2.5.0-1`); new repo
+  `termux-core-package` pinned at tag v0.4.0 (installed `0.4.0-1`; MIT) because `termuxPrefixPath()`
+  lives there. Installed versions of termux-exec/core are now in the `pkg_script` capture.
+- Assembler: `<pre>` blocks whose code comes from `sources/` may be up to 108 cells (like
+  captures) — re-wrapping upstream code would falsify it; longer lines must still be cut out of the
+  cited range (hit twice: paths.h line 15 at 168 cells, manifest lines). `.srcb` badges now wrap.
+- `doc_text.py`: `__bold__` stripping ate the `__` inside identifiers such as
+  `TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE` — test first, then word-boundary fix.
+- New capture step: `env_termux` 6 = `/proc/self/attr/current` → **`u:r:untrusted_app_27`**, which
+  proot cannot fake; with the sepolicy quoted in Android-Docs (targetSdk 26–28 keep
+  `execute_no_trans` on app data) it is the direct evidence of why targetSdk 28 matters. The first
+  take leaked a trailing NUL into the capture; `run_all --check` now rejects control characters
+  (+1 test) and the command strips it visibly (`tr -d '\0'`).
+- `prefix_du` re-snapped: `du` dies inside proot-distro's container bind paths, so the container is
+  excluded (stated on the slide).
+- Part 5 written: 47 slides (budget 160). a 12 · s 13 · b 12 · ill 10, 2 quizzes, 18 cited ranges
+  all passing check_slices (two moved to blank-line boundaries; `py/elf.py` got one blank line so
+  its excerpt starts on a block boundary — code unchanged, tests green).

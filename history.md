@@ -1,3 +1,10 @@
+### [2026-09-18 02:55] Termux 대백과사전 덱 5부 — 파일시스템과 실행(47장)
+- **기획:** $PREFIX·셔뱅·termux-exec·W^X·시스템 링커 실행·paths.h·RUNPATH 를 핀 고정 소스와 캡처로.
+- **TC:** 조립 검사: 근거 등급 a12·s13·b12, 인용 범위 18개 경계 통과, 연도 4건 근거 확인.
+- **개발:** `termux/deck/sections/05_filesystem.html`, `termux/deck/claims.md`, `termux/PLAN.md`
+- **검증:** make all SKEL=1 오류 0건 · 역검증 통과 · check_slices 어긋남 0건
+- **비고:** 이 셸의 SELinux 문맥 untrusted_app_27 이 targetSdk 28 이 W^X 를 피하는 까닭의 직접 증거. 네이티브 셔뱅 결과는 device.txt 대기.
+
 ### [2026-09-18 02:38] Termux 대백과사전 덱 3부 — 안드로이드 위의 리눅스(54장)
 - **기획:** 앱 샌드박스·uid·앱 데이터·bionic·SELinux·seccomp·Zygote·권한·스코프드 스토리지를 캡처·소스·공식 문서로.
 - **TC:** 조립 검사: 근거 등급 a13·s5·b17, 코드·캡처 역검증 일치, 인용 범위 3개·연도 3건 근거 확인.

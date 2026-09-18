@@ -155,3 +155,25 @@
 | Android 11 에서 모든 파일 접근(MANAGE_EXTERNAL_STORAGE)을 선언하면 Google Play 출시에 영향이 있을 수 있다 | dev-android-11-storage 1.8 | 문서 문장 | 2026-09-18 |
 | 이 기기의 /storage/emulated 는 fuse 로, noexec·nosuid·nodev 로 마운트돼 있다 | out/storage.txt 2절 | 캡처(/proc/mounts) | 2026-09-18 |
 | termux-setup-storage 가 만든 ~/storage 링크는 shared·dcim·downloads·documents·movies·music·pictures·podcasts·audiobooks·external-0·media-0 이다(이 기기) | out/storage.txt 1절 | 캡처 | 2026-09-18 |
+| Termux 경로: /data/data/com.termux(앱 데이터) · …/termux(프로젝트) · …/files(루트) · …/files/home · …/files/usr(접두사) · …/cache(캐시) | gh-packages-termux-file-system-layout 1.3 | 위키 표 | 2026-09-18 |
+| 앱 uid = user_id × 100000 + 10000 + app_id (예: 0 → 10160/u0_a160, 10 → 1010160/u10_a160); 보조 사용자·프로필 id 는 10 부터 | gh-packages-termux-file-system-layout 1.3.1 | 위키 문장 | 2026-09-18 |
+| Termux 앱은 주 사용자(0)에만 설치할 수 있다(패키지가 /data/data/com.termux 를 전제로 지어진다) | gh-packages-termux-file-system-layout 1.3.1 | 위키 문장 | 2026-09-18 |
+| 앱 데이터는 uid DAC · SELinux MCS · targetSdk 30 이상의 격리, 세 겹으로 지켜진다 | gh-packages-termux-file-system-layout 1.3.1 | 위키 목록 | 2026-09-18 |
+| 앱 데이터를 남이 볼 길: 같은 키·같은 sharedUserId 의 앱, SAF 로 사용자가 허락, RUN_COMMAND 같은 API | gh-packages-termux-file-system-layout 1.3.1 | 위키 목록 | 2026-09-18 |
+| Android 8.1 이하에는 /bin 이 없고, 9 이상에서는 /bin 이 /system/bin 링크이며, /usr 는 어느 판에도 없다 | termux-exec-technical 1.2.1 | 문서 문장 | 2026-09-18 |
+| termux-exec 는 exec() 계열을 가로채 /bin/*·/usr/bin/* 경로와 셔뱅의 해석기 경로를 $TERMUX__PREFIX/bin/ 로 바꾼다 | termux-exec-technical 1.2.1.1 | 문서 문장 | 2026-09-18 |
+| LD_PRELOAD 라이브러리는 direct·linker 두 변형이 있고, 주 변형을 $PREFIX/lib/libtermux-exec-ld-preload.so 로 복사해 login 이 LD_PRELOAD 로 내보낸다 | termux-exec-technical 1 · termux-tools@a62f7b2 scripts/login.in 42–54 | 문서 + 소스 | 2026-09-18 |
+| Android 10 부터 SELinux 정책이 targetSdk 29 이상 untrusted_app 이 app_data_file 을 exec 하지 못하게 했다(W^X) | termux-exec-technical 1.1.1 | 문서 문장 | 2026-09-18 |
+| 시스템 링커 실행: /system/bin/linker64 에 실행 파일 경로를 넘기면 앱 데이터의 파일도 실행된다 — 커널·SELinux 는 링커(system_linker_exec)만 본다. 링커의 이 기능은 Android 10 에 들어갔다 | termux-exec-technical 1.1.1.1 | 문서 문장 | 2026-09-18 |
+| 시스템 링커 실행의 문제: LD_PRELOAD 가 모든 입구에 필요, /proc/self/exe 가 링커를 가리킴, 정적 바이너리 불가, execve 직접 호출은 패치 필요, Play 정책과 맞지 않음 | termux-exec-technical 1.1.1.2 | 문서 목록 | 2026-09-18 |
+| termux-fix-shebang 은 첫 줄의 #!…/bin/X 나 #!…/sbin/X 를 #!$PREFIX/bin/X 로 sed 로 고쳐 쓴다 | termux-tools@a62f7b2 scripts/termux-fix-shebang.in 11행 | 소스 | 2026-09-18 |
+| NDK 헤더 패치 paths.h: _PATH_BSHELL → $PREFIX/bin/sh, _PATH_DEFPATH → $PREFIX/bin, _PATH_TMP → $PREFIX/tmp/ | termux-packages@7d5b4d3 ndk-patches/29/paths.h.patch | 소스 | 2026-09-18 |
+| 툴체인 설정은 교차 빌드 때 LDFLAGS 에 -Wl,-rpath=$TERMUX__PREFIX__LIB_DIR 를 더한다 | termux-packages@7d5b4d3 scripts/build/toolchain/termux_setup_toolchain_29.sh 34행 | 소스 | 2026-09-18 |
+| termux-core 의 termuxPrefixPath() 는 /bin·/usr/bin 과 /bin/…·/xxx/bin/… 을 접두사의 bin 으로 바꾼다 | termux-core-package@efbbd0d lib/termux-core_nos_c/tre/src/termux/file/TermuxFile.c 283–350 | 소스 | 2026-09-18 |
+| 이 기기에 설치된 판: termux-exec 1:2.5.0-1, termux-core 0.4.0-1, termux-tools 1.46.0+really1.45.0-1 | out/pkg_script.txt · dpkg -s (tmx) | 캡처·명령 | 2026-09-18 |
+| Android 10 의 sepolicy 는 targetSdk 29 이상 untrusted_app 의 app_data_file execute_no_trans 를 막고, untrusted_app_25(≤25)·untrusted_app_27(26–28) 은 호환을 위해 허용한다 | android-docs-exec-restrictions 1.2.1 (app_neverallows.te·untrusted_app_27.te 인용) | 문서 인용 | 2026-09-18 |
+| targetSdk 29 이상 앱도 dlopen()(mmap PROT_EXEC)은 계속 된다 — exec() 만 막힌다 | android-docs-exec-restrictions 1.2.1 | 문서 인용 | 2026-09-18 |
+| 이 기기의 Termux 셸의 SELinux 문맥은 u:r:untrusted_app_27 이다 | out/env_termux.txt 6절 | 캡처 | 2026-09-18 |
+| TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE: disable·enable(기본, 필요할 때만)·force; enable 은 Android 10 이상·root/shell 아님·untrusted_app_25/27 아님·앱 데이터 아래 파일일 때만 쓴다 | termux-exec-usage 1.8.1 | 문서 | 2026-09-18 |
+| 새 세션의 셸은 $PREFIX/bin 의 login·bash·zsh·fish 중 실행 가능한 첫 파일이다(없거나 안전 모드면 /system/bin/sh) | termux-app@084d709 termux-shared/src/main/java/com/termux/shared/termux/shell/command/runner/terminal/TermuxSession.java 93–114 · UnixShellEnvironment.java 56 | 소스 | 2026-09-18 |
+| login 은 $PREFIX/lib/libtermux-exec-ld-preload.so 가 있으면 LD_PRELOAD 로 내보내고, coreutils true 가 실패하면 푼다 | termux-tools@a62f7b2 scripts/login.in 42–54 | 소스 | 2026-09-18 |
