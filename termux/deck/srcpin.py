@@ -105,6 +105,8 @@ class Pins(object):
         '줄번호:조각' 으로. 줄이 72칸을 넘어 코드 블록에 못 싣는
         파일(XML 따위)을 캡처로 보여 줄 때 쓴다. O(파일 줄 수)."""
         repo, _, path = where.partition(':')
+        if '*' in path:
+            path = self._glob(repo, path)
         lines = self.lines('sources/%s/%s' % (repo, path))
         if lines is None:
             raise LookupError('핀 커밋에 없다: %s' % where)
@@ -112,6 +114,23 @@ class Pins(object):
         return ['%d:%s' % (i, m.group(0))
                 for i, line in enumerate(lines, 1)
                 for m in rx.finditer(line)]
+
+    def _glob(self, repo, pattern):
+        """핀 커밋의 파일 목록에서 pattern 과 맞는 경로 **하나**.
+        둘 이상이거나 없으면 LookupError — 어느 파일인지 모호한 캡처는
+        싣지 않는다."""
+        import fnmatch
+        r = subprocess.run(['git', '-C', os.path.join(self.base, 'sources',
+                                                      repo),
+                            'ls-tree', '-r', '--name-only',
+                            self.sha(repo) or 'HEAD'],
+                           capture_output=True, text=True)
+        hits = [f for f in r.stdout.split('\n')
+                if f and fnmatch.fnmatch(f, pattern)]
+        if len(hits) != 1:
+            raise LookupError('%s:%s 에 맞는 파일이 %d개' % (repo, pattern,
+                                                        len(hits)))
+        return hits[0]
 
     def missing(self):
         """핀 커밋이 체크아웃에 없는 저장소들 — make sources-check.

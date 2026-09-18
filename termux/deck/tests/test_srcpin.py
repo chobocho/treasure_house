@@ -128,6 +128,15 @@ class SrcPinTest(unittest.TestCase):
         self.assertEqual(self.pin.grep('demo:src/a.c', r'^one$'),
                          ['1:one'])
 
+    def test_grep_glob_resolves_one_file_at_pin(self):
+        # 경로가 길어 캡처 명령이 108칸을 넘을 때 — *a.c 로 줄인다
+        self.assertEqual(self.pin.grep('demo:*/a.c', r'^one$'),
+                         ['1:one'])
+
+    def test_grep_glob_must_match_exactly_one(self):
+        with self.assertRaises(LookupError):
+            self.pin.grep('demo:*.none', 'x')
+
     def test_grep_missing_file_raises(self):
         with self.assertRaises(LookupError):
             self.pin.grep('demo:src/none.c', 'x')

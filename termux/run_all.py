@@ -406,6 +406,35 @@ CAPTURES = [
         S('저장소 옛 방식', 'python3 deck/srcpin.py grep %s '
           '\'requestLegacy[A-Za-z]*="[a-z]*"\'' % MANI),
     ]),
+    Capture('src_app', 'termux', 'stable', [
+        S('termux.properties 의 키',
+          "python3 deck/srcpin.py grep 'termux-app:*/TermuxPropertyCons"
+          "tants.java' 'KEY_[A-Z_]+ += +\"[a-z0-9-]+\"'"),
+        S('allow-external-apps',
+          "python3 deck/srcpin.py grep "
+          "'termux-app:*/TermuxConstants.java'"
+          " 'PROP_ALLOW_EXTERNAL_APPS = \"[a-z-]+\"'"),
+        S('RUN_COMMAND 권한', 'python3 deck/srcpin.py grep %s '
+          "'permission.RUN_COMMAND'" % MANI),
+        S('셸을 못 찾으면', "python3 deck/srcpin.py grep "
+          "'termux-app:*/TermuxSession.java' "
+          "'Fall back.*|login shell|\"/system/bin/sh\"'"),
+        S('설치기 머리 주석의 걸음',
+          "python3 deck/srcpin.py grep "
+          "'termux-app:*/TermuxInstaller.java'"
+          " '[(][0-9.]+[)] .*' | cut -c1-100"),
+        S('스테이징을 접두사로',
+          "python3 deck/srcpin.py grep "
+          "'termux-app:*/TermuxInstaller.java'"
+          " 'STAGING_PREFIX_DIR.renameTo[(][A-Z_]+[)]'"),
+        S('웨이크락의 종류', "python3 deck/srcpin.py grep "
+          "'termux-app:*/TermuxService.java' "
+          "'[a-zA-Z]+Manager\\.[A-Z_]+_(LOCK|PERF)'"),
+    ]),
+    # 사용자 설정 디렉터리는 이름만 본다 — 내용은 사용자의 것이다(§3.3)
+    Capture('dot_termux', 'termux', 'stable', [
+        S('~/.termux 에 있는 이름', 'ls -A ~/.termux'),
+    ]),
     Import('native_device', os.path.join(BASE, 'data', 'device.txt')),
 ]
 
