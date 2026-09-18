@@ -1112,6 +1112,42 @@ public final class Cli {
     return 0;
   }
 
+  // ── 12단계: clone · fetch-pack ────────────────────────────────────
+
+  // 멍청한 로컬 clone(SPEC.md §14.2). 안내는 표준 오류에.
+  static int cloneRepo(Ctx ctx, List<String> args) {
+    List<String> rest = parseFlags(args, List.of()).rest;
+    if (rest.size() != 2) {
+      throw new GitError("usage: mygit clone <path> <dir>", 129);
+    }
+    String src = ctx.path(rest.get(0));
+    String dst = ctx.path(rest.get(1));
+    if (!Fs.isDir(src)) {
+      throw new GitError("fatal: repository '" + rest.get(0)
+          + "' does not exist");
+    }
+    ctx.warn("Cloning into '" + rest.get(1) + "'...\n");
+    Fs.mkdirs(dst);
+    makeRepo(dst);
+    Transport.cloneLocal(src, dst, ident(ctx));
+    ctx.warn("done.\n");
+    return 0;
+  }
+
+  // 진짜 git upload-pack 과 v2 로 말해 팩을 받는다(SPEC.md §14.3).
+  static int fetchPack(Ctx ctx, List<String> args) {
+    List<String> rest = parseFlags(args, List.of()).rest;
+    if (rest.size() < 2) {
+      throw new GitError("usage: mygit fetch-pack <path> <ref>...",
+          129);
+    }
+    Transport.fetchPack(ctx.gitdir(), ctx.path(rest.get(0)),
+        rest.subList(1, rest.size()), ctx.env,
+        ctx.env.get("MYGIT_PKT_LOG"))
+        .forEach(g -> ctx.say(g.oid() + " " + g.name() + "\n"));
+    return 0;
+  }
+
   // ── 틀 ────────────────────────────────────────────────────────────
   // 명령 이름 → 함수. 단계가 늘 때마다 한 줄씩 는다.
   private static Command command(String name) {
@@ -1137,6 +1173,8 @@ public final class Cli {
       case "unpack-pack" -> Cli::unpackPack;
       case "verify-pack" -> Cli::verifyPack;
       case "pack-objects" -> Cli::packObjects;
+      case "clone" -> Cli::cloneRepo;
+      case "fetch-pack" -> Cli::fetchPack;
       default -> null;
     };
   }
