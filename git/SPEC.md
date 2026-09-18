@@ -347,7 +347,8 @@ committer <이름> <<메일>> <초> <±hhmm>
 `  lead\n\nx\n\ny\n` 이 된다.
 
 **제목(subject)** 은 메시지의 **첫 문단**(첫 빈 줄 앞까지)의 줄들을 공백
-하나로 이은 것이다. `log --oneline`, `commit` 의 요약 줄, reflog 의 한 줄이
+하나로 이은 것이다. 줄 끝의 공백은 떼고 **줄 앞의 공백은 남긴다** — 메시지
+`  lead\n…` 의 제목은 `  lead` 다(`golden/scen/plumbing.scn`, 진짜 git 확인). `log --oneline`, `commit` 의 요약 줄, reflog 의 한 줄이
 모두 제목을 쓴다. 메시지가 `second\nbody line\n\npara2\n` 이면 제목은
 `second body line` 이다.
 

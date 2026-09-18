@@ -11,7 +11,8 @@ main() 은 그것을 진짜 표준 스트림에 잇는다.
 import os
 import sys
 
-from mygit import GitError, commit, objects, refs, tree, worktree
+from mygit import (GitError, commit, index, objects, refs, tree,
+                   worktree)
 
 COMMANDS = {}
 
@@ -341,6 +342,145 @@ def cmd_reflog(ctx, args):
     for k, (_o, new, _i, msg) in enumerate(
             reversed(refs.read_reflog(ctx.gitdir(), log))):
         ctx.say('%s %s@{%d}: %s\n' % (new[:7], name, k, msg))
+    return 0
+
+
+# ── 6단계: add · rm --cached · status · write-tree · commit ────────
+def rel_path(ctx, spec):
+    """명령줄 경로 → 작업 트리 뿌리에서의 경로 바이트('' 은 뿌리)."""
+    p = os.path.relpath(ctx.path(spec), ctx.root())
+    return b'' if p == '.' else os.fsencode(p).replace(b'\\', b'/')
+
+
+def under(path, rel):
+    return not rel or path == rel or path.startswith(rel + b'/')
+
+
+@command('add')
+def cmd_add(ctx, args):
+    """pathspec 아래의 파일을 올리고, 사라진 파일은 뺀다(SPEC.md §9).
+
+    모든 pathspec 을 먼저 검사한다 — 하나라도 맞는 것이 없으면 아무것도
+    바꾸지 않고 멈춘다(git 과 같다).
+    """
+    _on, _v, rest = parse_flags(args, ())
+    root, g = ctx.root(), ctx.gitdir()
+    ents = index.read_index(g)
+    files = worktree.walk_worktree(root)
+    plan = []
+    for spec in rest:
+        rel = rel_path(ctx, spec)
+        hit_f = [f for f in files if under(f, rel)]
+        hit_i = set(e.path for e in ents if under(e.path, rel))
+        if not hit_f and not hit_i:
+            raise GitError("fatal: pathspec '%s' did not match any "
+                           "files" % spec)
+        plan.append((hit_f, hit_i))
+    by_path = {}
+    for e in ents:
+        by_path.setdefault(e.path, []).append(e)
+    for hit_f, hit_i in plan:
+        for f in hit_f:
+            full = os.path.join(os.fsencode(root), f)
+            with open(full, 'rb') as fh:
+                oid = objects.write_object(g, 'blob', fh.read())
+            by_path[f] = [index.entry_from_stat(f, full, oid)]
+        for p in hit_i - set(hit_f):
+            by_path.pop(p, None)
+    index.write_index(g, [e for es in by_path.values() for e in es])
+    return 0
+
+
+@command('rm')
+def cmd_rm(ctx, args):
+    on, _v, rest = parse_flags(args, ('--cached',))
+    if '--cached' not in on:
+        raise GitError('fatal: mygit: only rm --cached is supported')
+    g = ctx.gitdir()
+    ents = index.read_index(g)
+    have = set(e.path for e in ents)
+    gone = set()
+    for spec in rest:
+        rel = rel_path(ctx, spec)
+        if rel not in have:
+            raise GitError("fatal: pathspec '%s' did not match any "
+                           "files" % spec)
+        gone.add(rel)
+    for p in sorted(gone):
+        ctx.say("rm '%s'\n" % p.decode('utf-8', 'surrogateescape'))
+    index.write_index(g, [e for e in ents if e.path not in gone])
+    return 0
+
+
+@command('status')
+def cmd_status(ctx, args):
+    parse_flags(args, ('--porcelain', '-s', '--short'))
+    for row in worktree.status(ctx.root(), ctx.gitdir()):
+        ctx.say(row + '\n')
+    return 0
+
+
+def index_tree(ctx):
+    """인덱스(단계 0) → 트리 이름. 충돌 경로가 있으면 쓸 수 없다."""
+    ents = index.read_index(ctx.gitdir())
+    if any(e.stage for e in ents):
+        raise GitError('error: Committing is not possible because you '
+                       'have unmerged files.\n'
+                       'fatal: Exiting because of an unresolved '
+                       'conflict.')
+    return tree.write_tree(ctx.gitdir(), [('%o' % e.mode, e.oid, e.path)
+                                          for e in ents])
+
+
+@command('write-tree')
+def cmd_write_tree(ctx, args):
+    parse_flags(args, ())
+    ctx.say(index_tree(ctx) + '\n')
+    return 0
+
+
+@command('commit')
+def cmd_commit(ctx, args):
+    """트리를 쓰고, 커밋하고, 브랜치를 옮긴다(SPEC.md §9 · §6.3).
+
+    부모는 HEAD 와, 머지를 마무리하는 중이면 MERGE_HEAD. 출력은
+    git 의 요약 첫 줄만 — Author 줄과 변경 통계는 줄임이다.
+    """
+    msgs = []
+    it = iter(args)
+    for a in it:
+        if a == '-m':
+            msgs.append(next(it, ''))
+        else:
+            raise GitError("fatal: mygit: unknown option '%s'" % a)
+    g = ctx.gitdir()
+    branch, head = refs.read_head(g)
+    merge_head = refs.resolve_ref(g, 'MERGE_HEAD')
+    t = index_tree(ctx)
+    if head and not merge_head and \
+            refs.peel(g, head, 'tree') == t:
+        ctx.say('nothing to commit\n')
+        return 1
+    msg = commit.cleanup_message('\n\n'.join(msgs))
+    if not msg:
+        raise GitError('Aborting commit due to empty commit message.',
+                       1)
+    parents = [p for p in (head, merge_head) if p]
+    body = commit.serialize_commit(t, parents, ident(ctx, 'AUTHOR'),
+                                   ident(ctx), msg)
+    oid = objects.write_object(g, 'commit', body)
+    subj = commit.subject_of(msg)
+    kind = 'commit (initial)' if not head else \
+        'commit (merge)' if merge_head else 'commit'
+    refs.update_ref(g, branch or 'HEAD', oid, head,
+                    '%s: %s' % (kind, subj), ident(ctx))
+    for f in ('MERGE_HEAD', 'MERGE_MSG'):
+        p = os.path.join(g, f)
+        if os.path.exists(p):
+            os.remove(p)
+    where = branch[len('refs/heads/'):] if branch else 'detached HEAD'
+    ctx.say('[%s%s %s] %s\n' % (where, '' if head else ' (root-commit)',
+                                 oid[:7], subj))
     return 0
 
 

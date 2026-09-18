@@ -88,14 +88,17 @@ def cleanup_message(text):
 
 
 def subject_of(message):
-    """제목 = 첫 문단의 줄들을 공백 하나로 이은 것(SPEC.md §4.4)."""
+    """제목 = 첫 문단의 줄들을 공백 하나로 이은 것(SPEC.md §4.4).
+
+    줄 끝의 공백은 떼지만 **앞의 공백은 남긴다** — "  lead" 라는
+    메시지의 제목은 "  lead" 다(진짜 git 의 commit 요약 줄로 확인,
+    golden/scen/plumbing.scn). 빈 줄을 만나면 거기서 끝난다.
+    """
     lines = []
     for line in message.split('\n'):
         if not line.strip():
-            if lines:
-                break
-            continue
-        lines.append(line.strip())
+            break
+        lines.append(line.rstrip())
     return ' '.join(lines)
 
 
