@@ -43,6 +43,11 @@ NOT_YEAR_AFTER = re.compile(
     r'|MB|KB|GB|M\b|K\b|B\b|ms|files?|objects?|commits?)')
 # 문맥이 연도임을 못 박는 표시 — 이게 붙으면 반드시 근거가 있어야 한다.
 TAG = re.compile(r'<[^>]+>')
+# 날짜(2005-04-07 · 2005-04). YEAR 는 뒤에 '-' 가 오면 건너뛰므로
+# 날짜는 따로 본다 — 날짜 문자열이 근거 글에 그대로 있어야 한다.
+# 연도만 맞고 달·날이 틀린 날짜가 가장 흔한 사실 오류이기 때문이다.
+DATE = re.compile(r'(?<![\d.\-])((?:1[89]|20)\d\d-[01]\d(?:-[0-3]\d)?)'
+                  r'(?![\d.\-])')
 PRE = re.compile(r'<pre.*?</pre>|<!--.*?-->|<code.*?</code>', re.S)
 
 
@@ -126,7 +131,7 @@ def check_formats():
 
 
 def check_years():
-    """조각 산문의 연도가 근거를 갖고 있는가."""
+    """조각 산문의 연도·날짜가 근거를 갖고 있는가."""
     ev = evidence_text()
     ok = allowed_years()
     bad, n = [], 0
@@ -137,6 +142,13 @@ def check_years():
             continue
         text = PRE.sub(' ', read(os.path.join(SECTIONS, name)))
         prose = TAG.sub(' ', text)
+        for m in DATE.finditer(prose):
+            n += 1
+            if m.group(1) not in ev:
+                a = max(0, m.start() - 18)
+                near = prose[a:m.end() + 12].strip()
+                bad.append('%s: 날짜 %s — 근거가 없다 (앞뒤: …%s…)'
+                           % (name, m.group(1), near))
         for m in YEAR.finditer(prose):
             after = prose[m.end():m.end() + 12]
             if NOT_YEAR_AFTER.match(after):
@@ -159,7 +171,7 @@ def main():
     ybad, yn = check_years()
     for line in sbad + fbad + ybad:
         print('  ✗ ' + line)
-    print('문서 절 인용 %d건 · 형식 표 %d행 · 연도 %d건 — 근거 없음 %d건'
+    print('문서 절 인용 %d건 · 형식 표 %d행 · 연도·날짜 %d건 — 근거 없음 %d건'
           % (sn, fn, yn, len(sbad) + len(fbad) + len(ybad)))
     return 1 if (sbad or fbad or ybad) else 0
 
