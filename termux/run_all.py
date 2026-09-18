@@ -42,7 +42,7 @@ import scrub                                       # noqa: E402
 
 # 덱의 캡처 폭 상한(build_deck.py MAX_TERM_COLS 와 같아야 한다)
 MAX_COLS = 108
-PROMPT = {'termux': '$', 'proot': '#'}
+PROMPT = {'termux': '$', 'proot': '#', 'native': '$'}
 SNAP_RE = re.compile(r'# snapshot (\d{4}-\d\d-\d\d)\n')
 
 
@@ -62,6 +62,23 @@ class Capture(object):
         self.cid, self.side, self.kind = cid, side, kind
         self.steps = steps
         self.cwd = cwd or (BASE_T if side == 'termux' else BASE)
+
+
+class Import(object):
+    """사용자가 네이티브 Termux 에서 뜬 파일을 캡처로 들여온다.
+
+    proot 밖의 값(진짜 uid·커널·getprop·Termux:API 의 답)은 이 세션이
+    뜰 수 없다. tools/native_facts.sh 가 만든 파일의 첫 줄
+    '# native_facts 날짜' 가 곧 스냅샷 날짜다. 파일이 아직 없으면
+    건너뛴다 — 그 캡처를 인용한 장이 있으면 조립기가 잡는다.
+    """
+    kind, side = 'snapshot', 'native'
+
+    def __init__(self, cid, path, cmd='tools/native_facts.sh'):
+        self.cid, self.path, self.cmd = cid, path, cmd
+
+
+NATIVE_RE = re.compile(r'# native_facts (\d{4}-\d\d-\d\d)\n')
 
 
 def tmx_runner(side, cmd, cwd, timeout, install):
@@ -115,6 +132,19 @@ def record(cap, outdir, date, runner, force=False):
     """캡처 하나를 떠서 쓰고, 매니페스트 항목을 돌려준다."""
     name = cap.cid + '.txt'
     path = os.path.join(outdir, name)
+    if isinstance(cap, Import):
+        if not os.path.exists(cap.path):
+            return None
+        raw = io.open(cap.path, encoding='utf-8').read()
+        m = NATIVE_RE.match(raw)
+        if not m:
+            raise ValueError('%s: 첫 줄에 native_facts 날짜가 없다'
+                             % cap.path)
+        text, _n = scrub.fix(raw[m.end():].lstrip('\n'))
+        io.open(path, 'w', encoding='utf-8', newline='\n').write(
+            '# snapshot %s\n' % m.group(1) + text)
+        return {'kind': 'snapshot', 'side': 'native',
+                'date': m.group(1), 'cmds': [cap.cmd]}
     entry = {'kind': cap.kind, 'side': cap.side,
              'cmds': [s.cmd for s in cap.steps]}
     if cap.kind == 'snapshot' and os.path.exists(path) and not force:
@@ -162,6 +192,29 @@ def check(outdir):
 # 흔들리는 값은 명령 안에서 걸러 내고, 걸러 낸 방법이 명령 줄에
 # 그대로 보이게 둔다 — 캡처를 사람이 손보지 않는다.
 S = Step
+BB = 'scratch/build/bionic'
+BG = 'scratch/build/glibc'
+EXPS = ['hello', 'passwd', 'paths', 'bind_port', 'syscall_loop']
+PROBE = '/tmp /bin/sh /usr/bin/env /etc/passwd /system/bin/sh'
+
+
+def exp_steps(cc, out):
+    """실험 바이너리를 짓는 걸음 + 돌리는 걸음. 두 쪽이 같은 모양."""
+    return [
+        S('짓기 — 경고 하나도 실패',
+          'sh exp/build.sh %s %s' % (cc, out),
+          timeout=300),
+        S('같은 인사, 다른 libc', '%s/hello' % out),
+        S('getpwuid 는 누구에게 묻나',
+          '%s/passwd 0 1000 2000 10123' % out),
+        S('자기 uid', '%s/passwd' % out),
+        S('그 경로가 있는가',
+          '%s/paths %s $PREFIX/bin/sh' % (out, PROBE)),
+        S('1024 미만 포트 훑기', '%s/bind_port --scan 1 1100' % out),
+        S('시스템 호출 1000번', '%s/syscall_loop 1000' % out),
+    ]
+
+
 CAPTURES = [
     Capture('env_termux', 'termux', 'stable', [
         S('환경 변수', 'env | sort'),
@@ -173,14 +226,168 @@ CAPTURES = [
           "awk '/^TracerPid/{print $1, ($2>0?\"(0 아님)\":0)}' "
           '/proc/self/status'),
     ]),
+    Capture('env_proot', 'proot', 'stable', [
+        S('환경 변수', 'env | sort'),
+        S('신원', "id | tr ' ' '\\n'"),
+        S('커널 — proot 가 보여 주는 값', 'uname -srm'),
+        S('배포판', 'head -n 3 /etc/os-release'),
+        S('이 셸의 실행 파일',
+          'x=$(readlink /proc/$$/exe); echo "$x"'),
+        S('추적자가 있는가',
+          "awk '/^TracerPid/{print $1, ($2>0?\"(0 아님)\":0)}' "
+          '/proc/self/status'),
+    ]),
+    Capture('prefix_tree', 'termux', 'stable', [
+        S('앱 데이터 디렉터리', 'ls -F /data/data/com.termux/files'),
+        S('$PREFIX 의 첫 층', 'ls -F $PREFIX'),
+        S('$PREFIX/etc', 'ls -F $PREFIX/etc'),
+        S('$PREFIX/etc/termux', 'ls -F $PREFIX/etc/termux'),
+        S('bin 에 있는 실행 파일 수', 'ls $PREFIX/bin | wc -l'),
+        S('termux-* 명령 수', 'ls $PREFIX/bin | grep -c ^termux-'),
+    ]),
+    Capture('prefix_du', 'termux', 'snapshot', [
+        S('크기', 'du -sh $PREFIX $HOME 2>/dev/null', timeout=300),
+    ]),
+    Capture('linker_termux', 'termux', 'stable', [
+        S('bash · ls · termux-api 가 부르는 것',
+          'python3 py/elf.py $PREFIX/bin/bash $PREFIX/bin/ls '
+          '$PREFIX/libexec/termux-api'),
+        S('ls 는 무엇인가', 'readlink $PREFIX/bin/ls'),
+    ]),
+    Capture('linker_proot', 'proot', 'stable', [
+        S('우분투의 bash · ls', 'python3 py/elf.py /bin/bash /bin/ls'),
+    ]),
+    Capture('exp_bionic', 'termux', 'stable', exp_steps('clang', BB)),
+    Capture('exp_glibc', 'proot', 'stable', exp_steps('gcc', BG)),
+    Capture('shebang', 'termux', 'stable', [
+        S('셔뱅 셋 — proot 안에서', 'sh exp/shebang/run.sh'),
+        S('termux-exec 를 LD_PRELOAD 로 얹어서',
+          'LD_PRELOAD=$PREFIX/lib/libtermux-exec-ld-preload.so '
+          'sh exp/shebang/run.sh'),
+        S('termux-exec 라이브러리들',
+          "ls $PREFIX/lib | grep '^libtermux-exec'"),
+        S('고칠 사본',
+          'mkdir -p scratch/fix && '
+          'cp exp/shebang/*_sh.sh scratch/fix/'),
+        S('termux-fix-shebang', 'termux-fix-shebang scratch/fix/*.sh'),
+        S('고친 첫 줄', 'head -qn 1 scratch/fix/*.sh'),
+    ]),
+    Capture('dpkg_stats', 'termux', 'stable', [
+        S('설치된 패키지 수', "dpkg -l | grep -c '^ii'"),
+        S('크기로 본 설치 패키지',
+          'python3 py/pkgstat.py $PREFIX/var/lib/dpkg/status'),
+        S('termux-* 명령은 어느 패키지 것인가',
+          'dpkg -S $PREFIX/bin/termux-* | sort'),
+    ]),
+    Capture('apt_sources', 'termux', 'stable', [
+        S('sources.list', 'cat $PREFIX/etc/apt/sources.list'),
+        S('sources.list.d', 'ls $PREFIX/etc/apt/sources.list.d'),
+        S('TUR 한 줄', 'cat $PREFIX/etc/apt/sources.list.d/*.list'),
+        S('믿는 키 파일', 'ls $PREFIX/etc/apt/trusted.gpg.d'),
+        S('apt 를 root 로', 'apt list --installed 2>&1 | head -n 3'),
+    ]),
+    Capture('apt_policy', 'termux', 'snapshot', [
+        S('저장소 우선순위',
+          'apt-cache policy 2>&1 | head -n 20 | cut -c1-100'),
+    ]),
+    Capture('pkg_script', 'termux', 'stable', [
+        S('pkg 는 셸 스크립트다', 'head -n 12 $PREFIX/bin/pkg'),
+        S('설치된 termux-tools',
+          "dpkg -s termux-tools | grep '^Version'"),
+        S('핀 고정 소스(pkg.in @v1.45.0)와 설치본',
+          'sh exp/pkg_diff.sh sources/termux-tools/scripts/pkg.in '
+          '$PREFIX/bin/pkg 1.45.0'),
+    ]),
+    Capture('deb_by_hand', 'termux', 'stable', [
+        S('짓기', 'sh exp/mkdeb/build.sh scratch/deb'),
+        S('control 보기',
+          'dpkg-deb -f scratch/deb/treasure-hello_1.0_all.deb'),
+        S('안에 든 파일',
+          'dpkg-deb -c scratch/deb/treasure-hello_1.0_all.deb | '
+          "awk '{print $1, $2, $6}'"),
+        S('dpkg 로 설치',
+          'dpkg -i scratch/deb/treasure-hello_1.0_all.deb 2>&1',
+          install=True),
+        S('설치된 것 돌리기', 'treasure-hello'),
+        S('dpkg -L', 'dpkg -L treasure-hello'),
+        S('지우기', 'dpkg -r treasure-hello 2>&1'),
+        S('지운 뒤', 'command -v treasure-hello; echo "종료 $?"'),
+    ]),
+    Capture('termux_info', 'termux', 'stable', [
+        S('termux-info — proot 안에서', 'termux-info 2>&1'),
+    ]),
+    Capture('api_mechanism', 'termux', 'stable', [
+        S('termux-battery-status 의 몸통',
+          'cat $PREFIX/bin/termux-battery-status'),
+        S('termux-api 실행 파일',
+          "stat -c '%A %s %n' $PREFIX/libexec/termux-api"),
+        S('명령 스크립트 중 termux-api 를 부르는 것',
+          'grep -l libexec/termux-api $PREFIX/bin/termux-* | wc -l'),
+    ]),
+    Capture('api_proot', 'termux', 'snapshot', [
+        S('proot 안에서 부르면',
+          'timeout 15 termux-battery-status; echo "종료 $?"',
+          timeout=60),
+    ]),
+    Capture('proot_probe', 'proot', 'stable', [
+        S('getprop', '/system/bin/getprop ro.build.version.sdk 2>&1; '
+          'echo "종료 $?"'),
+        S('proot 안에서 proot-distro',
+          '/data/data/com.termux/files/usr/bin/proot-distro list 2>&1 '
+          '| head -n 2 | cut -c1-100'),
+        S('마운트 줄 수', 'grep -c . /proc/mounts'),
+    ]),
+    Capture('proot_cost', 'termux', 'snapshot', [
+        S('bionic: getpid 20만 번 ×3',
+          'python3 exp/timeit_exp.py -n 3 -- '
+          '%s/syscall_loop 200000' % BB, timeout=600),
+        S('true 100번 ×3',
+          'python3 exp/timeit_exp.py -n 3 -- sh exp/fork_loop.sh 100',
+          timeout=600),
+    ]),
+    Capture('limits', 'termux', 'stable', [
+        S('pid_max', 'cat /proc/sys/kernel/pid_max'),
+        S('ulimit -a', 'ulimit -a'),
+    ]),
+    Capture('storage', 'termux', 'stable', [
+        S('~/storage 의 링크', "find ~/storage -maxdepth 1 -type l "
+          "-printf '%f -> %l\\n' 2>&1 | sort"),
+        S('공유 저장소 마운트 줄',
+          "grep ' /storage/emulated ' /proc/mounts | cut -d' ' -f1-4"),
+    ]),
+    Capture('sshd', 'termux', 'stable', [
+        S('ssh 판', 'ssh -V 2>&1'),
+        S('설정 디렉터리', 'ls $PREFIX/etc/ssh'),
+        S('sshd_config 의 켜진 줄',
+          "grep -v '^#' $PREFIX/etc/ssh/sshd_config | grep ."),
+    ]),
+    Capture('toolchains', 'termux', 'snapshot', [
+        S('판', 'clang --version | head -n 1; python3 --version; '
+          'node --version; go version; rustc --version; git --version'),
+    ]),
+    Capture('x11', 'termux', 'stable', [
+        S('X11 관련 패키지',
+          "dpkg -l | awk '/^ii/{print $2}' | "
+          "grep -E 'x11|xfce|vnc|xorg' || echo '(없음)'"),
+    ]),
+    Capture('signals', 'termux', 'stable', [
+        S('SIGKILL 의 137', 'sh exp/signals.sh | tail -n 1'),
+    ]),
+    Capture('session_self', 'proot', 'snapshot', [
+        S('메모리', 'free -m'),
+        S('RSS 가 큰 프로세스',
+          'ps -eo rss,comm --sort=-rss | head -n 8'),
+    ]),
+    Import('native_device', os.path.join(BASE, 'data', 'device.txt')),
 ]
-
 
 def main(argv):
     if '--list' in argv:
         for c in CAPTURES:
-            print('%-16s %-7s %-8s %d걸음'
-                  % (c.cid, c.side, c.kind, len(c.steps)))
+            print('%-16s %-7s %-8s %s'
+                  % (c.cid, c.side, c.kind,
+                     '%d걸음' % len(c.steps) if hasattr(c, 'steps')
+                     else c.path))
         return 0
     if '--check' in argv:
         bad = check(OUT)
@@ -200,8 +407,12 @@ def main(argv):
         if only and c.cid not in only:
             continue
         print('  %-16s %s …' % (c.cid, c.side), flush=True)
-        man[c.cid + '.txt'] = record(c, OUT, date, tmx_runner,
-                                     force=force and c.cid in only)
+        e = record(c, OUT, date, tmx_runner,
+                   force=force and c.cid in only)
+        if e is None:
+            print('    (원본이 아직 없다 — 건너뜀)')
+            continue
+        man[c.cid + '.txt'] = e
     save_manifest(OUT, man)
     bad = check(OUT)
     for line in bad:

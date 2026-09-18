@@ -108,6 +108,42 @@ class RenderTest(unittest.TestCase):
         self.assertNotIn('date', e)
 
 
+class ImportTest(unittest.TestCase):
+    """사용자가 네이티브에서 뜬 파일을 캡처로 들여오기."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.src = os.path.join(self.d, 'device.txt')
+
+    def tearDown(self):
+        shutil.rmtree(self.d)
+
+    def test_import_as_native_snapshot(self):
+        io.open(self.src, 'w').write(
+            '# native_facts 2026-09-19\n\n== 1. id ==\n'
+            'uid=10123(u0_a123)\n{"ssid": "Home"}\n')
+        imp = run_all.Import('native_device', self.src)
+        e = run_all.record(imp, self.d, '2026-09-20', None)
+        self.assertEqual(e, {'kind': 'snapshot', 'side': 'native',
+                             'date': '2026-09-19',
+                             'cmds': ['tools/native_facts.sh']})
+        text = io.open(os.path.join(self.d, 'native_device.txt')).read()
+        self.assertTrue(text.startswith('# snapshot 2026-09-19\n'))
+        self.assertIn('"<ssid>"', text)
+        self.assertNotIn('native_facts 2026', text)
+
+    def test_missing_source_is_skipped(self):
+        imp = run_all.Import('native_device', self.src)
+        self.assertIsNone(run_all.record(imp, self.d, '2026-09-20',
+                                         None))
+
+    def test_header_without_date_is_error(self):
+        io.open(self.src, 'w').write('no header\n')
+        imp = run_all.Import('native_device', self.src)
+        with self.assertRaises(ValueError):
+            run_all.record(imp, self.d, '2026-09-20', None)
+
+
 class CheckTest(unittest.TestCase):
     def setUp(self):
         self.d = tempfile.mkdtemp()

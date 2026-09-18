@@ -661,3 +661,45 @@ The user approved every recommendation below as-is. Each row is now a decision.
   `ulimit -a`, and the bionic experiments + shebang runner with and without `LD_PRELOAD`. Missing
   builds are reported, not skipped silently.
 - Tests: 166 pass; `make all SKEL=1` 0 errors.
+
+### Step 6 — run_all.py captures + record.sh (2026-09-18)
+
+- `run_all.py`: 26 captures (20 stable, 6 snapshot) + `Import('native_device', data/device.txt)`
+  (+3 tests) which turns the user-run native file into a `side=native` snapshot once it exists.
+  `record.sh` rewritten (+3 tests with a fake run_all in a temp dir) to md5 only manifest-`stable`
+  files. **`make record`: stable captures 20 identical over three runs.** Long commands moved into
+  tested scripts (`exp/build.sh`, `exp/pkg_diff.sh`) so every capture line stays ≤ 108 cells.
+- Incident, recorded: the first draft of `test_record.py` ran against the *old* record.sh, which
+  launched the real run_all.py concurrently with the background first run. It was stopped within
+  two minutes; the two snapshots taken in that window (`apt_policy`, `proot_cost`) were re-taken
+  with `--resnap`, and the new record.sh takes `RECORD_BASE` so tests never touch the real tree.
+  A careless `pkill -f` also matched its own shell once — no other effect.
+- **Decision 5 is unusable from this session:** Termux's apt refuses uid 0
+  (`packages/apt/0010-prevent-usage-as-root.patch`, SRC-citable), and proot reports uid 0. No
+  package was installed; the host keeps its 170 packages. `dpkg -i` has no such check, so the
+  hand-made `treasure-hello` is installed and removed inside `deb_by_hand` (host unchanged after).
+  Parts 11 (services, cron) will be written from sources/docs, not captures.
+- Other proot-side facts captured: `getprop` → "Operation not permitted" (exit 126);
+  `proot-distro` refuses to run inside proot; `termux-info` prints "Running as root. Cannot check
+  package updates." and empty Android fields; Termux:API commands time out (exit 124) — so the
+  "safe API" outputs moved to `tools/native_facts.sh` (read-only ones only; no toast/vibrate/
+  notification/clipboard, which would touch the user's screen or clipboard — deviation from §3.3).
+- `pkg_script`: `termux-tools` was re-pinned from HEAD to tag **v1.45.0** (the installed version is
+  `1.46.0+really1.45.0-1`). With the four `@…@` placeholders filled, the only difference between
+  the pinned `pkg.in` and the installed `$PREFIX/bin/pkg` is line 1, the shebang
+  (`#!/bin/bash` → `#!$PREFIX/bin/bash`) — the build rewrites it (Part 5/6 evidence).
+- `proot_cost` (snapshot): 200 000 `getpid` in 47 ms median but 100 `true` execs in 8.2 s under
+  proot — proot does not stop on every syscall (to be sourced in Part 9 before any claim);
+  native timings for the ratio come from `native_facts.sh` (timeit added, +test).
+
+### Step 7 — figures (2026-09-18)
+
+- `deck/gen_figs.py`: 18 SVGs (viewBox 340). Structural: sandbox, app_arch, api_path, execve_path,
+  package_flow, bootstrap_seq (the five steps of TermuxInstaller's header comment), proot_loop,
+  install_tree, plugin_dirs, ssh_topology, backup_scope, threat_model. Data-driven: repo_tiers
+  (repos_apt.tsv), release_bars (releases.tsv), sdk_steps (app_sdk.tsv), phantom_steps
+  (android.tsv, new `short` column), pkg_sizes (out/dpkg_stats), port_scan (out/exp_bionic).
+- Rendered with `make figs-png` (black background) and **looked at**: 5 of 18 fixed — truncated
+  path in sandbox, phantom text cut mid-word and an unrelated `am` row, SDK legend over the line,
+  release bars silently skipping 2023 (a year with no release), identical subtitles in plugin_dirs;
+  proot_loop's title narrowed to path syscalls after the proot_cost snapshot contradicted it.

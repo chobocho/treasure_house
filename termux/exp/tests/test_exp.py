@@ -70,6 +70,26 @@ def run(side, name, *args):
 SIDES = ['glibc'] + (['bionic'] if HAVE_TERMUX else [])
 
 
+class BuildScriptTest(unittest.TestCase):
+    def test_builds_all_five_with_gcc(self):
+        d = tempfile.mkdtemp()
+        try:
+            r = subprocess.run(['sh', os.path.join(EXP, 'build.sh'),
+                                'gcc', d], cwd=BASE,
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(sorted(os.listdir(d)), sorted(C_FILES))
+            self.assertEqual(len(r.stdout.strip().split('\n')), 5)
+        finally:
+            shutil.rmtree(d)
+
+    def test_compiler_error_stops(self):
+        r = subprocess.run(['sh', os.path.join(EXP, 'build.sh'),
+                            'false', tempfile.gettempdir()], cwd=BASE,
+                           capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+
+
 class HelloTest(unittest.TestCase):
     def test_same_greeting_different_libc(self):
         outs = {s: run(s, 'hello')[1].split('\n') for s in SIDES}
@@ -190,6 +210,35 @@ class ScriptTest(unittest.TestCase):
         return subprocess.run(['sh', os.path.join(EXP, script)]
                               + list(args), capture_output=True,
                               text=True, env=env)
+
+    def test_pkg_diff_fills_placeholders(self):
+        src = os.path.join(self.d, 'pkg.in')
+        inst = os.path.join(self.d, 'pkg')
+        io.open(src, 'w').write('#!/bin/bash\nP=@TERMUX_PREFIX@\n'
+                                'A=@TERMUX_APP_PACKAGE@\n'
+                                'C=@TERMUX_CACHE_DIR@\n'
+                                'V=@PACKAGE_VERSION@\n')
+        io.open(inst, 'w').write('#!/bin/bash\nP=/pre\nA=com.termux\n'
+                                 'C=/data/data/com.termux/cache\n'
+                                 'V=9.9\n')
+        env = dict(os.environ, PREFIX='/pre')
+        r = subprocess.run(['sh', os.path.join(EXP, 'pkg_diff.sh'),
+                            src, inst, '9.9'], capture_output=True,
+                           text=True, env=env)
+        self.assertEqual(r.stdout.strip().split('\n')[-1],
+                         'diff 종료 0')
+
+    def test_pkg_diff_shows_difference(self):
+        src = os.path.join(self.d, 'pkg.in')
+        inst = os.path.join(self.d, 'pkg')
+        io.open(src, 'w').write('#!/bin/bash\n')
+        io.open(inst, 'w').write('#!/pre/bin/bash\n')
+        env = dict(os.environ, PREFIX='/pre')
+        r = subprocess.run(['sh', os.path.join(EXP, 'pkg_diff.sh'),
+                            src, inst, '1'], capture_output=True,
+                           text=True, env=env)
+        self.assertIn('> #!/pre/bin/bash', r.stdout)
+        self.assertIn('diff 종료 1', r.stdout)
 
     def test_signals_137(self):
         r = self.sh('signals.sh')

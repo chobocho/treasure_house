@@ -22,6 +22,8 @@ FAKES = {
     'getprop': 'echo "prop:$1"',
     'settings': 'echo "settings:$*"',
     'termux-info': 'echo "info-line"',
+    # 측정(timeit)은 시험에서 돌리지 않는다 — 인자만 되받아 적는다
+    'python3': 'echo "python3 $*"',
 }
 
 
@@ -38,7 +40,9 @@ class NativeFactsTest(unittest.TestCase):
         shutil.rmtree(self.d)
 
     def run_it(self):
-        env = dict(os.environ, PATH=self.d + ':' + os.environ['PATH'])
+        # 실험 빌드는 없는 곳을 가리킨다 — 진짜 바이너리를 돌리지 않게
+        env = dict(os.environ, PATH=self.d + ':' + os.environ['PATH'],
+                   NATIVE_BUILD=os.path.join(self.d, 'nobuild'))
         return subprocess.run(['sh', SCRIPT, self.out], env=env,
                               capture_output=True, text=True)
 
@@ -71,8 +75,24 @@ class NativeFactsTest(unittest.TestCase):
                   'shebang/run.sh (termux-exec 켬)',
                   'shebang/run.sh (LD_PRELOAD 뺌)',
                   "grep ' /storage/emulated ' /proc/mounts",
-                  'echo "$LD_PRELOAD"'):
+                  'echo "$LD_PRELOAD"',
+                  'timeit_exp.py -n 3 -- sh exp/fork_loop.sh 100'):
             self.assertIn(h, text)
+
+    def test_api_sections_are_read_only_and_bounded(self):
+        # proot 에서는 Termux:API 가 답하지 않는다(6단계). 읽기만 하는
+        # 명령을 20초 제한으로 네이티브에서 뜬다. 화면에 흔적을 남기는
+        # 명령(토스트·진동·알림)과 개인정보 명령은 넣지 않는다.
+        self.run_it()
+        text = io.open(self.out).read()
+        for h in ('termux-battery-status', 'termux-sensor -l',
+                  'termux-camera-info', 'termux-wifi-connectioninfo'):
+            self.assertIn('timeout 20 ' + h, text)
+        src = io.open(SCRIPT).read()
+        for bad in ('termux-toast', 'termux-vibrate',
+                    'termux-notification', 'termux-location',
+                    'termux-sms', 'termux-clipboard'):
+            self.assertNotIn(bad, src)
 
     def test_missing_build_is_reported(self):
         env = dict(os.environ, PATH=self.d + ':' + os.environ['PATH'],

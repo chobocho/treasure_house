@@ -377,7 +377,10 @@ def expand_outdir(m):
 
 # 캡처가 뜬 쪽. 프롬프트 기호도 같은 약속이다 — Termux 는 $, proot(uid 0) 는 #
 # (PLAN.md §9 결정 12). proot 캡처를 Termux 것처럼 보이게 두지 않는다.
-SIDES = {'termux': 'Termux $', 'proot': 'proot #', 'both': 'Termux $ · proot #'}
+# native 는 사용자가 proot 밖(네이티브 Termux)에서 뜬 것이다 —
+# tools/native_facts.sh, run_all.Import.
+SIDES = {'termux': 'Termux $', 'proot': 'proot #',
+         'both': 'Termux $ · proot #', 'native': '네이티브 Termux $'}
 _MANIFEST = []
 
 
@@ -404,7 +407,8 @@ def capture_info(name):
     if info.get('kind') not in ('stable', 'snapshot'):
         errors.append('out/%s: kind 가 stable/snapshot 이 아니다' % name)
     if info.get('side') not in SIDES:
-        errors.append('out/%s: side 가 termux/proot/both 가 아니다' % name)
+        errors.append('out/%s: side 가 termux/proot/both/native 가 아니다'
+                      % name)
     if info.get('kind') == 'snapshot' and not re.match(
             r'\d{4}-\d\d-\d\d$', info.get('date', '')):
         errors.append('out/%s: 스냅샷인데 date 가 없다' % name)

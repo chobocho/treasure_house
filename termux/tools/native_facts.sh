@@ -12,7 +12,8 @@
 # 진짜 값은 proot 밖에서만 보인다(§9 결정 8).
 #
 # 뒤쪽 절은 5단계에서 Termux 의 clang 으로 지어 둔 실험 바이너리
-# (scratch/build/bionic/)와 셔뱅 실험을 네이티브에서 돌린다.
+# (scratch/build/bionic/)와 셔뱅 실험, 그리고 proot 에서는 답하지
+# 않는 Termux:API 의 읽기 명령(20초 제한)을 네이티브에서 돌린다.
 # 읽기만 한다. 설정을 바꾸거나 파일을 지우는 명령은 없다.
 # 결과 파일은 커밋 전에 tools/scrub.py 가 검사한다.
 [ $# -eq 1 ] || { echo '사용법: native_facts.sh 결과파일' >&2; exit 2; }
@@ -52,8 +53,19 @@ exp passwd ''
 exp paths '/tmp /bin/sh /usr/bin/env /etc/passwd /system/bin/sh \
   $PREFIX/bin/sh'
 exp bind_port '--scan 1 1100'
+# 9부의 proot 비용 — proot 안에서 뜬 스냅샷(out/proot_cost.txt)과
+# 같은 두 측정을 네이티브에서
+sec "cd '$here' && python3 exp/timeit_exp.py -n 3 -- \
+  $b/syscall_loop 200000" 'timeit_exp.py -n 3 -- syscall_loop 200000'
+sec "cd '$here' && python3 exp/timeit_exp.py -n 3 -- \
+  sh exp/fork_loop.sh 100" \
+  'timeit_exp.py -n 3 -- sh exp/fork_loop.sh 100'
 sec "sh '$here/exp/shebang/run.sh'" 'shebang/run.sh (termux-exec 켬)'
 sec "env -u LD_PRELOAD sh '$here/exp/shebang/run.sh'" \
   'shebang/run.sh (LD_PRELOAD 뺌)'
+for c in termux-battery-status 'termux-sensor -l' termux-camera-info \
+  termux-tts-engines termux-audio-info termux-wifi-connectioninfo; do
+  sec "timeout 20 $c"
+done
 sec 'termux-info'
 echo "적었다: $out"
