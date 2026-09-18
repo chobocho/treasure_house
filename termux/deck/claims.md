@@ -205,3 +205,20 @@
 | NDK 헤더 패치의 경로가 android-ndk-r28b/toolchains/llvm/prebuilt/linux-x86_64 이다 — 공식 빌드의 호스트가 x86-64 리눅스 | termux-packages@7d5b4d3 ndk-patches/29/pwd.h.patch 1–2 | 소스 | 2026-09-18 |
 | massage 단계는 termux_step_strip_elf_symbols 와 termux_step_elf_cleaner 를 부른다 | termux-packages@7d5b4d3 scripts/build/termux_step_massage.sh 58·62 | 소스 | 2026-09-18 |
 | 손으로 만든 treasure-hello .deb 는 proot(uid 0) 에서도 dpkg -i 로 설치·dpkg -r 로 제거된다(apt 와 달리 dpkg 에는 root 검사 패치가 없다) | out/deb_by_hand.txt | 캡처 | 2026-09-18 |
+| termux-api 는 Android 14(API 34) 미만이면 유닉스 소켓으로 앱에 붙고, 14 이상이면 얼린 앱에서 읽기가 멈추는 문제 때문에 am broadcast 를 쓴다(이슈 #638 댓글) | termux-api-package@9e7f153 termux-api.c 45–85 | 소스 | 2026-09-18 |
+| termux-api 는 소켓 상대의 uid 를 SO_PEERCRED 로 확인한다 | termux-api-package@9e7f153 termux-api.c 88–90 | 소스 | 2026-09-18 |
+| TermuxApiReceiver 는 메서드 이름으로 45가지 case 를 나눈다 | termux-api@fc26ce1 app/…/TermuxApiReceiver.java · out/src_api.txt 1 | 소스 | 2026-09-18 |
+| 이 기기에서 termux-* 84개 중 54개 스크립트가 $PREFIX/libexec/termux-api 를 부른다 | out/api_mechanism.txt 3·4 | 캡처 | 2026-09-18 |
+| termux-sms-list 는 threadid·type·read·sender·address·number·received·body·_id 칸을, termux-location 은 latitude·longitude·altitude·accuracy·vertical_accuracy·bearing·speed 칸을 낸다 | termux-api@fc26ce1 SmsInboxAPI.java 250–277 · LocationAPI.java 238–246 | 소스 | 2026-09-18 |
+| termux-sms-list 옵션: -d 날짜·-l 개수·-n 번호·-o 건너뛰기·-t 종류(all·inbox·sent·draft·outbox), 출력은 JSON | wiki-termux-sms-list 1.1 | 위키 | 2026-09-18 |
+| termux-location 옵션: -p gps·network·passive(기본 gps), -r once·last·updates. GPS 는 건물 안에서 잘 안 되고 기기 시계가 맞아야 한다 | wiki-termux-location 1.1·2 | 위키 | 2026-09-18 |
+| tools/tmx.sh 는 개인정보 명령을 실행 전에 거부하고 99 로 끝난다. 시험은 50가지 명령을 넣어 표지 파일이 안 생김을 본다 | out/tmx_deny.txt · tools/tests/test_tmx.py DENIED | 캡처 | 2026-09-18 |
+| termux-* 84개의 주인: termux-api 57·termux-tools 13·termux-core 9·termux-exec 2·termux-am-socket 2·proot 1 | out/dpkg_stats.txt 4 | 캡처 | 2026-09-18 |
+| Termux:Tasker 0.5+ 는 부르는 앱에 com.termux.permission.RUN_COMMAND 권한이 필수이고, 없으면 FireReceiver 권한 오류가 난다 | readme-termux-tasker 1.6.2 | README | 2026-09-18 |
+| ~/.termux/tasker/ 밖의 스크립트를 절대 경로로 부르려면 allow-external-apps=true 가 필요하고, 덜 믿는 앱에 RUN_COMMAND 를 줬다면 켜지 말라(백그라운드에서 임의 명령) | readme-termux-tasker 1.6.3·1.6.4 | README | 2026-09-18 |
+| Termux:X11 의 Termux 쪽 패키지는 x11-repo 의 termux-x11-nightly, 앱은 nightly 릴리스 태그로 받는다 | readme-termux-x11 1.4 | README | 2026-09-18 |
+| Termux:Boot: 한 번 실행해 부팅 실행을 허락하고, ~/.termux/boot/ 의 스크립트를 이름순으로 돌린다. 먼저 termux-wake-lock 을 권한다 | readme-termux-boot 1.2 | README | 2026-09-18 |
+| Termux:Widget: ~/.shortcuts/ 는 전경 세션, ~/.shortcuts/tasks 는 백그라운드 실행. 숨김 디렉터리·깨진 링크·밖을 가리키는 파일은 안 보인다 | readme-termux-widget 1.6.2 | README | 2026-09-18 |
+| Termux:Float 은 터미널을 떠 있는 창으로 보이는 플러그인이다 | readme-termux-float 1 | README | 2026-09-18 |
+| Termux:Styling: 터미널을 길게 눌러 More… → Style → 색·글꼴 고르기 | readme-termux-styling 1.2 | README | 2026-09-18 |
+| Termux:X11 은 NDK 로 지은 완전한 X 서버이고 Android 8 이상, 앱과 termux 패키지 둘 다 필요하다 | readme-termux-x11 1.1·1.4 | README | 2026-09-18 |

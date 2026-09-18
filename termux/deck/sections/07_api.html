@@ -2,16 +2,232 @@
 <p class="chnum">7부</p>
 <h2>Termux:API 와 플러그인</h2>
 <p class="chsub">앱과 명령줄 사이를 잇는 다리</p>
-<p class="cap">이 부의 목표 장수는 170장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>7부에서 다룰 것</h3>
+<p>터미널 안의 프로그램은 안드로이드의 자바 API(배터리·센서·알림·카메라)를 부를 수 없습니다. 그 일을 대신
+해 주는 것이 <b>Termux:API</b> 라는 별도의 앱과, 그 앱에 부탁을 전하는 명령줄 도구입니다. 같은 구조로
+부팅·위젯·Tasker·떠 있는 창·배색·X11 을 맡는 플러그인들이 있습니다.</p>
+<div class="note">이 부의 API 출력 캡처는 사용자가 네이티브에서 뜬 파일에서 옵니다 — proot 안에서는 API 가
+답하지 않았습니다(1장). 개인정보를 읽는 명령은 <b>한 번도 실행하지 않았습니다</b>.</div>
+</article>
+
+<article class="card" id="p7-c1">
+<p class="chnum">1장</p>
+<h2>한 줄이 앱까지 가는 길</h2>
+<!--FIG file=api_path.svg cap=termux-battery-status → termux-api → (소켓 또는 am broadcast) → Termux:API 앱 → JSON-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p7-script">
+<h3>명령은 몇 줄짜리 셸 스크립트다</h3>
+<!--OUT file=api_mechanism.txt sec=1 note=$PREFIX/bin/termux-battery-status 의 몸통-->
+<p>인자를 검사하고 마지막 줄에서 <code>$PREFIX/libexec/termux-api</code> 에 메서드 이름(<code>BatteryStatus</code>)
+하나를 넘길 뿐입니다. 5부의 실험 7(<code>exp/api_call.sh</code>)은 설치된 스크립트에서 그 이름을 읽어
+<code>termux-api</code> 를 직접 부르는 스크립트입니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p7-count">
+<h3>몇 개가 이 길을 쓰나</h3>
+<!--OUT file=api_mechanism.txt sec=3 note=termux-api 를 부르는 termux-* 스크립트 수-->
+<!--OUT file=api_mechanism.txt sec=2 note=termux-api 실행 파일-->
+<p>84개 중 54개가 <code>termux-api</code> 를 부릅니다. 나머지는 <code>termux-tools</code>·<code>termux-core</code> 등의
+명령으로, 앱 없이 셸에서 끝납니다(6부의 주인 목록). 명령마다의 표는 3장에 있습니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p7-socket">
+<h3>termux-api — 소켓이냐 am broadcast 냐</h3>
+<!--CODE file=sources/termux-api-package/termux-api.c sha=9e7f1531e1aa4a9c1e261a2dbde4de93653c366e lines=45-85 note=플러그인에 연락하는 함수의 앞부분-->
+<!--SRC repo=termux-api-package path=termux-api.c sha=9e7f1531e1aa4a9c1e261a2dbde4de93653c366e lines=45-85-->
+<p>Android 14(API 34) 미만이면 먼저 유닉스 소켓으로 앱에 붙습니다. 14 이상에서는 앱 프로세스가 <b>얼어</b>
+있을 때 소켓은 붙지만 답이 오지 않아 <code>read()</code> 가 한없이 기다릴 수 있어서, 앱을 깨우기도 하는
+옛 방식 <code>am broadcast</code> 를 씁니다(주석이 가리키는 이슈 #638). 소켓 상대가 정말 플러그인인지는
+<code>SO_PEERCRED</code> 로 uid 를 확인합니다(88–90행).</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p7-proot-timeout">
+<h3>proot 안에서는 답이 없다</h3>
+<!--OUT file=api_proot.txt note=15초 제한으로 불러 본 termux-battery-status-->
+<p>종료 코드 124 는 <code>timeout</code> 이 끊었다는 뜻입니다. 이 덱은 그 까닭을 확인하지 못했습니다
+(<span class="unv">미확인</span>) — 소켓 쪽의 uid 확인이나 <code>am</code> 경로가 proot 의 가짜 uid 0 과 어긋날
+수는 있지만, 추측입니다. 그래서 API 의 실제 출력은 네이티브 캡처로 받습니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p7-receiver">
+<h3>앱 쪽 — 메서드 이름으로 가른다</h3>
+<!--CODE file=sources/termux-api/app/src/main/java/com/termux/api/TermuxApiReceiver.java sha=fc26ce17e3badf85d4df191af364fcf7798047f1 lines=88-101 note=api_method 를 받아 API 클래스로-->
+<!--SRC repo=termux-api path=app/src/main/java/com/termux/api/TermuxApiReceiver.java sha=fc26ce17e3badf85d4df191af364fcf7798047f1 lines=88-101-->
+<!--OUT file=src_api.txt sec=1 note=case 의 수-->
+<p>인텐트의 <code>api_method</code> 로 45가지 경우를 가르고, 각각 <code>apis/</code> 아래의 클래스 하나를 부릅니다.
+카메라·통화 기록처럼 런타임 권한이 필요한 것은 부르기 전에 권한을 확인하고, 없으면 권한 창을 띄웁니다
+(같은 파일의 <code>checkAndRequestPermissions</code>).</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p7-battery-fields">
+<h3>BatteryStatus 가 돌려주는 칸</h3>
+<!--OUT file=src_api.txt sec=4 note=BatteryStatusAPI.java 가 JSON 에 넣는 이름-->
+<!--SRC repo=termux-api path=app/src/main/java/com/termux/api/apis/BatteryStatusAPI.java sha=fc26ce17e3badf85d4df191af364fcf7798047f1 lines=150-166-->
+<p>네이티브 캡처의 JSON 이 이 이름들로 나와야 합니다(0부 "이 기기"). 값이 없으면 넣지 않는 것
+(<code>…IfSet</code>)도 코드에서 보입니다.</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p7-c2">
+<p class="chnum">2장</p>
+<h2>명령 84개의 색인</h2>
+<p>6부에서 <code>dpkg -S</code> 로 본 주인 패키지와, 스크립트가 <code>termux-api</code> 를 부르는지를 합쳐 표를 만들었습니다
+(<code>tools/api_table.py</code>, 손으로 적지 않음). 전체 84줄은 17부 부록에 있고, 여기서는 두 부분만 봅니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p7-table-src">
+<h3>표는 캡처에서 만든다</h3>
+<!--CODE file=tools/api_table.py sym=build note=캡처 두 개 → 행-->
+<p>입력은 6부의 <code>dpkg_stats</code> 캡처(주인 패키지)와 1장의 <code>api_mechanism</code> 캡처(스크립트
+안의 <code>termux-api</code> 호출)입니다. 캡처가 바뀌면 <code>make tables</code> 가 표를 다시 씁니다.</p>
+<!--OUT file=dpkg_stats.txt sec=4 note=84개 = 57+13+9+2+2+1 — 표의 행 수와 맞는다-->
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p7-sensitive">
+<h3>이 덱이 실행하지 않은 명령 — 개인정보 16개</h3>
+<!--TABLE file=out/tbl_api_sensitive.html cap=privacy=sensitive (PLAN.md §0.8 의 목록)-->
+<p>문자·통화 기록·연락처·위치·카메라·마이크·전화·알림 목록·지문·키 저장소·NFC·USB. 이 덱을 만든 도구
+(<code>tools/tmx.sh</code>)는 이 이름들을 명령 자리에서 보면 <b>실행하기 전에</b> 거부합니다(2장 끝).</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p7-denylist">
+<h3>거부 목록은 코드로 박혀 있다</h3>
+<!--CODE file=tools/tmx.sh lines=81-97 note=명령 자리의 termux-* 이름을 실행 전에 거부한다-->
+<!--OUT file=tmx_deny.txt note=실행 전에 99 로 끝난다 — 사진 파일도 생기지 않았다-->
+<p>시험(<code>tools/tests/test_tmx.py</code>)이 거부 목록의 명령 50가지를 하나씩 넣어 보고, 뒤에 붙인
+<code>touch</code> 가 표지 파일을 만들지 못했음을 — 즉 <b>실행되지 않았음</b>을 — 확인합니다.</p>
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p7-sms-fields">
+<h3>실행하지 않고 출력 모양 알기 — termux-sms-list</h3>
+<!--OUT file=src_api.txt sec=2 note=SmsInboxAPI.java 가 JSON 에 넣는 이름-->
+<!--SRC repo=termux-api path=app/src/main/java/com/termux/api/apis/SmsInboxAPI.java sha=fc26ce17e3badf85d4df191af364fcf7798047f1 lines=250-277-->
+<p>위키는 "출력은 JSON" 과 옵션(<code>-l</code> 개수·<code>-o</code> 건너뛰기·<code>-t</code> 종류·<code>-n</code> 번호 보이기·
+<code>-d</code> 날짜)만 적습니다. 칸 이름은 앱 소스에 있습니다 — 보낸 사람(<code>sender</code>)·번호(<code>number</code>)·
+본문(<code>body</code>). 이 명령이 무엇을 내놓는지 알면, 스크립트에 이 권한을 줄지 판단할 수 있습니다(14부).</p>
+<p class="cap">출처: 위키 Termux-sms-list · 소스</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p7-location-fields">
+<h3>termux-location 의 칸</h3>
+<!--OUT file=src_api.txt sec=3 note=LocationAPI.java 가 JSON 에 넣는 이름-->
+<!--SRC repo=termux-api path=app/src/main/java/com/termux/api/apis/LocationAPI.java sha=fc26ce17e3badf85d4df191af364fcf7798047f1 lines=238-246-->
+<p>위키의 옵션: <code>-p</code> 제공자(gps·network·passive, 기본 gps), <code>-r</code> 요청 종류(once·last·updates).
+위키는 GPS 가 건물 안에서는 잘 안 되고, 기기 시계가 맞아야 한다고 덧붙입니다.</p>
+<p class="cap">출처: 위키 Termux-location · 소스</p>
+<span class="tier s">소스 발췌</span>
+</article>
+
+<article class="card" id="p7-c3">
+<p class="chnum">3장</p>
+<h2>안전한 명령 — 네이티브에서 뜬 것</h2>
+<p>화면이나 설정을 바꾸지 않고 읽기만 하는 명령 몇 개는 사용자가 네이티브 Termux 에서 한 번 돌린
+스크립트로 떴습니다. 토스트·진동·알림처럼 사용자의 화면에 흔적을 남기는 것은 넣지 않았습니다.</p>
+<!--TABLE file=out/tbl_api_native.html cap=run-in-deck=native — tools/native_facts.sh 가 돌린 것-->
+<span class="tier a">이 기기 캡처</span>
+</article>
+
+<article class="card" id="p7-native-script">
+<h3>그 스크립트의 해당 부분</h3>
+<!--CODE file=tools/native_facts.sh lines=66-70 note=20초 제한으로 읽기 명령만-->
+<p>결과는 <code>data/device.txt</code> 에 모이고, 개인정보 검사(<code>tools/scrub.py</code>)를 거쳐 캡처
+<code>native_device</code> 로 들어옵니다. Wi-Fi 이름·주소는 자리표시로 바뀝니다.</p>
+<p class="cap">아직 없습니다 — 사용자의 네이티브 실행을 기다립니다(0부 "이 기기").</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p7-quiz-1" data-quiz>
+<h3>1~3장 퀴즈</h3>
+<p class="q">Q. 어떤 셸 스크립트가 <code>termux-battery-status</code> 만 부릅니다. Termux:API <b>앱</b>을 지우면 명령은
+어떻게 됩니까? <code>termux-api</code> <b>패키지</b>를 지우면?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 앱을 지우면 스크립트와 <code>libexec/termux-api</code> 는 남아 있어 명령은 실행되지만, 요청을 받을
+상대(<code>TermuxApiReceiver</code>)가 없으니 답이 오지 않습니다. 패키지를 지우면 <code>termux-battery-status</code>
+스크립트 자체가 사라집니다 — 1장에서 본 두 조각(패키지와 앱)이 모두 있어야 합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p7-c4">
+<p class="chnum">4장</p>
+<h2>플러그인 — 다른 입구들</h2>
+<p>Termux 에는 API 말고도 부가 앱이 있습니다. 모두 같은 <code>sharedUserId</code> 를 쓰므로(4부) <b>같은 곳에서 받은
+것끼리만</b> 함께 설치됩니다.</p>
+<!--TABLE file=out/tbl_plugins.html cap=data/plugins.tsv — 첫 릴리스는 GitHub 릴리스 목록 기준-->
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p7-plugin-dirs">
+<h3>스크립트를 두는 자리</h3>
+<!--FIG file=plugin_dirs.svg cap=세 플러그인은 정해진 디렉터리의 스크립트만 부른다-->
+<p>Boot 는 <code>~/.termux/boot/</code> 의 스크립트를 이름 차례로 돌리고, 먼저 <code>termux-wake-lock</code> 을 부르라고
+권합니다. Widget 은 <code>~/.shortcuts/</code> 를 전경 세션으로, <code>~/.shortcuts/tasks</code> 를 백그라운드로 돌리며,
+숨김 디렉터리·깨진 링크·밖을 가리키는 파일은 목록에 넣지 않습니다.</p>
+<p class="cap">출처: termux-boot·termux-widget README</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p7-tasker">
+<h3>Termux:Tasker 와 두 개의 문</h3>
+<p>Tasker 같은 자동화 앱이 Termux 명령을 부르려면 README 가 "필수" 로 적은 두 가지가 필요합니다.</p>
 <ul>
-<li>아키텍처 — 앱 · <code>termux-api</code> · 소켓과 브로드캐스트</li>
-<li>명령 카탈로그 — 소유 패키지·권한·개인정보 등급을 캡처에서 만든 표</li>
-<li>안전한 명령 실습 — 배터리·클립보드·알림·음성·센서·진동</li>
-<li>개인정보 명령의 출력 모양 — 실행하지 않고 인용만</li>
-<li>Termux:Boot · Widget · Tasker · Float · Styling</li>
-<li>Termux:X11 앱</li>
+<li>부르는 앱에 <code>com.termux.permission.RUN_COMMAND</code> 권한 — 0.5 이상. 없으면 FireReceiver 가
+권한 오류를 냅니다.</li>
+<li><code>~/.termux/tasker/</code> 밖의 스크립트를 절대 경로로 부르려면 <code>allow-external-apps=true</code>.</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<p>README 는 경고합니다: 덜 믿는 앱에 RUN_COMMAND 권한을 줬다면 <code>allow-external-apps</code> 를 켜지 말라 —
+그 앱이 사용자 모르게 백그라운드에서 아무 명령이나 돌릴 수 있다. 4부의 RUN_COMMAND 인텐트와 같은 문입니다.</p>
+<p class="cap">출처: termux-tasker README 1.6.2·1.6.3·1.6.4</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p7-float-styling">
+<h3>Float 과 Styling</h3>
+<p><b>Termux:Float</b> 은 터미널을 떠 있는 창으로 엽니다. <b>Termux:Styling</b> 은 터미널을 길게
+눌러 More… → Style 에서 색 배합과 글꼴을 고르게 합니다. 이 덱의 배색(0부)은 Styling 이 아니라 앱 소스의 기본
+색표(<code>TerminalColorScheme</code>)에서 왔습니다.</p>
+<p class="cap">출처: termux-float·termux-styling README</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p7-x11">
+<h3>Termux:X11</h3>
+<p>NDK 로 지은 완전한 X 서버입니다. Android 8 이상이고, 앱과 Termux 쪽 패키지(x11-repo 의 <code>termux-x11-nightly</code>)가
+<b>둘 다</b> 있어야 합니다(API 와 같은 두 조각 구조). GitHub 에 남은 릴리스는 nightly 하나뿐이라 첫 릴리스 날짜를
+표에 적을 수 없었습니다. 12부에서 자세히 봅니다.</p>
+<p class="cap">출처: termux-x11 README 1.1·1.4 · 릴리스 목록(2026-09 기준)</p>
+<span class="tier b">문서</span>
+</article>
+
+<article class="card" id="p7-summary">
+<h3>7부를 한 표로</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>조각</th><th>무엇</th><th>이 덱의 증거</th></tr>
+<tr><td>명령</td><td><code>termux-*</code> 셸 스크립트 → <code>libexec/termux-api</code></td><td>캡처 · termux-api.c 발췌</td></tr>
+<tr><td>전달</td><td>API 34 미만 소켓 · 이상은 am broadcast</td><td>termux-api.c 발췌</td></tr>
+<tr><td>앱</td><td><code>TermuxApiReceiver</code> 45가지 case</td><td>소스 캡처</td></tr>
+<tr><td>개인정보</td><td>16개 — 이 덱은 실행하지 않음</td><td>표 · tmx 거부 캡처</td></tr>
+<tr><td>플러그인</td><td>Boot·Widget·Tasker·Float·Styling·X11</td><td>README</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p7-quiz-2" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 부팅할 때 sshd 를 띄우고 싶습니다. Termux:Boot 로 할 때 스크립트 첫 줄 가까이에 무엇을 두라고
+README 가 권합니까? 그리고 그 스크립트를 어디에 둡니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>termux-wake-lock</code> — 기기가 잠들어 프로세스가 멈추지 않게 합니다. 자리는
+<code>~/.termux/boot/</code> 이고, 여러 개면 이름 차례로 돕니다.</div>
+<span class="tier ill">설명용</span>
 </article>

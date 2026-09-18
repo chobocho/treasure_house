@@ -768,3 +768,19 @@ The user approved every recommendation below as-is. Each row is now a decision.
   One unsourced claim was cut ("+really" semantics) and one motive is marked 미확인 (why apt
   refuses root — the patch has no comment).
 - The three `exp/mkdeb/*` data files are now fully cited and left `pending.txt`.
+
+### Step 8 · Part 7 — Termux:API · 플러그인 (2026-09-18)
+
+- Tooling: `tools/api_table.py` (+7 tests) builds `data/api_cmds.tsv` (84 rows) from the
+  `dpkg_stats` owner capture and the `api_mechanism` "calls termux-api" capture — no hand-typed
+  rows; `gen_tables.py` gains two filtered views (privacy=sensitive 16 rows, run-in-deck=native 7).
+- New captures: `src_api` (45 `case` methods in TermuxApiReceiver; the JSON field names of
+  sms-list, location and battery-status read from source — the privacy commands are never run),
+  `tmx_deny` (the inner `tmx.sh` refuses `termux-sms-list` / `termux-camera-photo` with exit 99
+  before anything runs; no photo file appears).
+- Part 7 written: 24 slides (budget 170). Script → `libexec/termux-api` → socket below API 34 /
+  `am broadcast` from 34 (termux-api.c), receiver dispatch, why it times out under proot
+  (motive 미확인), privacy table + denylist, wiki options for sms-list/location, plugins
+  (Boot/Widget/Tasker/Float/Styling/X11) from READMEs. Native API outputs wait for
+  `data/device.txt` (p7-native-script says so on the slide); experiment 7 (`exp/api_call.sh`)
+  stays in `pending.txt` until then.

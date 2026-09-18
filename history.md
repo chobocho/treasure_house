@@ -1,3 +1,10 @@
+### [2026-09-18 03:29] Termux 대백과사전 덱 7부 — Termux:API · 플러그인(24장)
+- **기획:** termux-* 스크립트 → libexec/termux-api → 소켓 또는 am broadcast → 앱 수신기의 길, 개인정보 명령, 플러그인 여섯 개.
+- **TC:** 조립 검사: 인용 범위 40개 경계 통과, 소스 줄 인용 45건 핀 확인, 캡처 등급 오류 3건을 캡처 추가로 해소.
+- **개발:** `termux/deck/sections/07_api.html`, `termux/deck/claims.md`, `termux/deck/src_used.txt`, `termux/PLAN.md`, `Termux_대백과사전.html`
+- **검증:** make all SKEL=1 오류 0건 · 역검증 통과 · 223장
+- **비고:** 네이티브 API 출력은 사용자의 native_facts.sh 실행(data/device.txt)을 기다린다. proot 에서 API 가 멈추는 까닭은 미확인 표시.
+
 ### [2026-09-18 03:28] Termux 덱 — termux-* 명령 색인 도구·API 소스 캡처·거부 캡처
 - **기획:** 7부 표를 손으로 적지 않도록 캡처 두 개(주인 패키지·termux-api 호출)에서 84줄 색인을 만든다.
 - **TC:** 정상: 행 수·주인·needs-app·privacy 분류. 경계: 빈 캡처·모르는 명령·주석 줄·정렬 고정(7건).
