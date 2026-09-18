@@ -1,18 +1,349 @@
 <article class="card section" id="p10">
 <p class="chnum">10부</p>
 <h2>팩파일과 저장소 관리</h2>
-<p class="chsub">델타로 누르고 색인으로 찾는다</p>
-<p class="cap">이 부의 목표 장수는 160장입니다 (PLAN.md §6).</p>
-<hr>
-<h3>10부에서 다룰 것</h3>
+<p class="chsub">객체를 한 파일에, 비슷한 것은 델타로 — 그리고 치우기</p>
+</article>
+
+<article class="card" id="p10-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">2부에서 "모델은 스냅숏, 압축은 그 아래 층의 일" 이라고 했습니다. 이 부가 그 아래 층입니다.</p>
 <ul>
-<li>pack v2 와 idx v2 의 바이트</li>
-<li>가변 길이 정수와 OFS · REF 델타</li>
-<li>델타의 복사·삽입 명령</li>
-<li>델타 창·깊이 휴리스틱 — 실측 표</li>
-<li>gc · prune · repack</li>
-<li>multi-pack-index · 비트맵 · commit-graph</li>
-<li>유지보수 스케줄(maintenance)</li>
+<li>느슨한 객체 200개가 팩 하나가 되기까지</li>
+<li>팩의 바이트 — 머리, 객체 항목, 델타의 복사·끼움 명령</li>
+<li>델타 사슬과 창 — 얼마나 멀리 찾고 얼마나 깊이 쌓나</li>
+<li>색인 — .idx · .rev · multi-pack-index · 비트맵 · commit-graph</li>
+<li>닿지 않는 객체 — prune 과 크러프트 팩</li>
+<li>자동 gc 의 문턱이 실제로 어떻게 계산되나</li>
 </ul>
-<p class="cap">아직 없습니다 — 뼈대만 세워 둔 자리입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-ch1"><p class="chnum">1장</p><h2>느슨한 객체에서 팩으로</h2><p class="chsub">gc 한 번</p></article>
+
+<article class="card" id="p10-loose">
+<h3>커밋 40개를 쌓은 저장소</h3>
+<p>pack 실험: 300줄짜리 파일을 커밋마다 한 줄씩 고치며 40번 커밋했습니다.</p>
+<!--OUT file=pack__count-objects-v-grep-v-size.txt note=모두 느슨한 객체 — 200개-->
+<p>커밋 40 · 트리 40(최상위) + 하위 트리 · blob … 모두 파일 하나씩입니다. 파일마다 거의 같은 300줄을 통째로 담고 있습니다(2부의 스냅숏).</p>
+<p class="cap"><code>size:</code> 줄은 느슨한 객체의 디스크 사용량이라 파일 시스템마다 달라 걸러 냈습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-gc">
+<h3>gc 뒤</h3>
+<!--OUT file=pack.gc__gc-quiet-git-count-objects-v.txt note=느슨한 것 0, 팩 하나에 200개-->
+<!--OUT file=pack__ls-.git-objects-pack.txt note=팩 · 색인 · 역색인-->
+<p>객체 200개가 팩 하나(21 KiB)로 들어갔습니다. 파일 이름의 해시는 팩 내용의 체크섬입니다(부록 A).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-read-same">
+<h3>읽는 쪽에서는 달라진 것이 없다</h3>
+<p>객체를 부르는 명령은 느슨한 파일에 없으면 팩을 찾습니다. <code>cat-file</code> · <code>log</code> · <code>diff</code> 모두 그대로입니다 —
+객체의 이름과 내용은 어디에 저장되든 같습니다(2부의 내용 주소).</p>
+<!--OUT file=pack_inside__verify-pack-v-ls-.git-objects-pack-.idx-head-6.txt note=팩 안의 객체 — 이름 · 형식 · 크기 · 팩 안 크기 · 자리-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-ch2"><p class="chnum">2장</p><h2>팩의 바이트</h2><p class="chsub">PACK · 판 · 개수 · 항목들 · 체크섬</p></article>
+
+<article class="card" id="p10-header">
+<h3>머리 12바이트</h3>
+<!--OUT file=pack__od-a-d-t-x1-n-32-.git-objects-pack-.pack.txt note=팩 파일의 앞 32바이트-->
+<ul>
+<li><code>50 41 43 4b</code> — <code>PACK</code></li>
+<li><code>00 00 00 02</code> — 판 2</li>
+<li><code>00 00 00 c8</code> — 객체 200개</li>
+<li>그다음부터 첫 항목 — <code>97 0d</code> 가 형식·크기, <code>78 9c</code> 부터 zlib 스트림</li>
+</ul>
+<!--CITE key=gitformat-pack sec="pack-*.pack files have the following format:"-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-types">
+<h3>항목 머리 — 형식 3비트, 크기는 가변 길이</h3>
+<p>첫 바이트의 가운데 3비트가 형식, 아래 4비트가 크기의 시작입니다. 맨 위 비트가 1 이면 다음 바이트가 크기의 나머지를 7비트씩 잇습니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>번호</th><th>형식</th></tr>
+<tr><td>1 · 2 · 3 · 4</td><td>commit · tree · blob · tag — 온전한 객체(zlib)</td></tr>
+<tr><td>6</td><td>OFS_DELTA — 같은 팩 안, 몇 바이트 앞의 객체를 바탕으로 한 델타</td></tr>
+<tr><td>7</td><td>REF_DELTA — 이름(20바이트)으로 가리킨 객체를 바탕으로 한 델타</td></tr>
+</table></div>
+<p>앞 장의 <code>97 0d</code>: 0x97 = 1<b>001</b> 0111 → 형식 1(commit), 크기 아래 4비트 7, 이어서 0x0d(13) × 16 = 208 → 크기 215.
+<!--CITE key=gitformat-pack sec="Object types"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p10-header-check">
+<h3>계산한 215 를 확인하면</h3>
+<!--OUT file=pack_inside__verify-pack-v-ls-.git-objects-pack-.idx-head-6.txt note=셋째 칸 — 커밋의 크기 215-->
+<p class="cap">pack 실험과 pack_inside 실험은 같은 방식으로 만든 저장소라 커밋 크기가 같습니다. 부록 A 의 mygit 도 같은 식으로 머리를 풉니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-delta-fig">
+<h3>델타 항목 하나를 풀면</h3>
+<!--FIG file=pack_delta.svg cap=golden/pack/ofs.pack 의 첫 OFS_DELTA 항목 — mygit.pack 의 함수로 풀었다-->
+<ul>
+<li>머리 <code>ec 07</code> — 형식 6(OFS_DELTA), 델타 124바이트</li>
+<li>거리 <code>83 24</code> — 548바이트 앞(자리 910)이 바탕</li>
+<li>델타 첫머리 — 바탕 크기 4607, 결과 크기 4574</li>
+<li>명령 — "바탕의 0~4458 을 복사", "116바이트 끼워 넣기"</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-delta-ops">
+<h3>델타는 명령 두 가지뿐</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>명령</th><th>첫 바이트</th><th>뜻</th></tr>
+<tr><td>복사</td><td>맨 위 비트 1</td><td>아래 7비트가 "뒤따르는 자리·길이 바이트가 있는가" 의 표시 — 바탕의 [자리, 자리+길이) 를 복사</td></tr>
+<tr><td>끼움</td><td>맨 위 비트 0, 값 1~127</td><td>뒤따르는 그 수만큼의 바이트를 그대로 끼움</td></tr>
+<tr><td>(예약)</td><td>0</td><td>쓰지 않는다 — 나오면 오류</td></tr>
+</table></div>
+<p>델타는 "diff" 가 아닙니다. 줄 개념도 없고, 바탕의 아무 조각이나 아무 차례로 복사할 수 있습니다.
+<!--CITE key=gitformat-pack sec="Deltified representation"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p10-disk">
+<h3>디스크에서 차지하는 크기</h3>
+<!--OUT file=pack_inside__cat-..-pack-tools-disk.sh.txt note=객체마다 원래 크기 · 디스크 크기 · 델타 바탕-->
+<!--OUT file=pack_inside__sh-..-pack-tools-disk.sh.txt note=8,334바이트짜리 blob 이 디스크에서는 35~36바이트-->
+<p>델타의 바탕 역시 델타일 수 있습니다(맨 위 둘의 바탕이 셋째). 그렇게 이어진 것이 다음 장의 델타 사슬입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p10-quiz-1" data-quiz>
+<h3>1~2장 퀴즈</h3>
+<p class="q">Q. 팩 항목 머리가 <code>35</code>(16진) 한 바이트입니다. 형식과 크기는? 그리고 OFS_DELTA 와 REF_DELTA 는 바탕을 어떻게 가리킵니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 0x35 = 0<b>011</b> 0101 — 맨 위 비트 0 이라 이 바이트로 끝, 형식 3(blob), 크기 5. OFS_DELTA 는 "이 항목보다
+몇 바이트 앞" 이라는 거리로, REF_DELTA 는 바탕 객체의 이름(20바이트)으로 가리킵니다. 거리는 짧고 이름은 길어서 같은 팩 안에서는
+OFS_DELTA 를 씁니다. REF_DELTA 는 바탕이 팩 밖에 있을 수 있는 얇은 팩(11부)에서 쓰입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-ch3"><p class="chnum">3장</p><h2>델타 사슬과 창</h2><p class="chsub">얼마나 멀리 찾고, 얼마나 깊이 쌓나</p></article>
+
+<article class="card" id="p10-chain">
+<h3>사슬 — 델타의 바탕의 바탕</h3>
+<!--OUT file=pack.chain__verify-pack-v-.git-objects-pack-.idx-awk-6-head-8.txt note=여섯째 칸이 사슬 깊이, 일곱째 칸이 바탕-->
+<p>객체 하나를 되살리려면 사슬 끝의 온전한 객체부터 델타를 차례로 적용해야 합니다. 사슬이 깊을수록 작아지지만 읽기는 느려집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-chain-fig">
+<h3>사슬 길이의 분포</h3>
+<!--FIG file=delta_chains.svg cap=pack 실험의 verify-pack — 델타 아닌 130개를 뺀 70개의 사슬 길이-->
+<!--OUT file=pack__verify-pack-v-.git-objects-pack-.idx-tail-9.txt note=verify-pack 의 끝 — 가장 깊은 사슬 29-->
+<p class="cap"><code>pack.depth=50</code> 이 최대 깊이입니다. 한 파일을 40번 고친 역사라 사슬이 한 줄로 길게 이어졌습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-window">
+<h3>창과 깊이를 바꿔 가며</h3>
+<!--FIG file=pack_window.svg cap=같은 40커밋을 repack -a -d -f 로 다시 쌌을 때-->
+<ul>
+<li><b>창(window)</b> — 델타 바탕을 찾을 때 견줘 볼 이웃 객체 수. 0 이면 델타를 안 만든다</li>
+<li><b>깊이(depth)</b> — 사슬의 최대 길이</li>
+<li>창 1 도 37% 로 줄였다 — 같은 파일의 다음 판이 바로 옆에 오도록 정렬하기 때문(다음 장)</li>
+<li>창·깊이를 키울수록 작아지지만 어느 순간부터는 거의 그대로(14,912 → 14,888)</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-window-table">
+<h3>같은 결과를 표로</h3>
+<!--TABLE file=out/tbl_pack_window.html cap=pack_window — 팩 크기(바이트)와 델타 없음 대비-->
+<p><code>git gc --aggressive</code> 는 창을 크게 잡고 다시 싸서 이 표의 아래쪽으로 갑니다. 시간이 훨씬 더 듭니다.
+<!--CITE key=git-gc sec=AGGRESSIVE--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-heuristics">
+<h3>어느 객체끼리 견주나</h3>
+<p>모든 쌍을 견주면 너무 느리니 git 은 객체를 <b>형식 → 경로 이름 → 크기(큰 것부터)</b> 차례로 정렬한 뒤 창 안의 이웃끼리만 견줍니다.
+형식이 다른 객체끼리는 델타를 만들지 않고, 같은 경로의 여러 판이 나란히 옵니다. 문서는 큰 객체를 바탕으로 삼는 까닭을 "그래야 델타가
+지우기 위주가 되어서" 라고 적습니다.
+<!--CITE key=technical-pack-heuristics--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p10-ch4"><p class="chnum">4장</p><h2>색인들</h2><p class="chsub">.idx · .rev · multi-pack-index · 비트맵 · commit-graph</p></article>
+
+<article class="card" id="p10-idx">
+<h3>.idx — 이름에서 팩 안 자리로</h3>
+<!--OUT file=pack_inside__od-a-d-t-x1-n-16-ls-.git-objects-pack-.idx.txt note=ff 74 4f 63 · 판 2 · fanout 의 첫 칸들-->
+<!--OUT file=pack__show-index-ls-.git-objects-pack-.idx-head-5.txt note=show-index — 자리 · 이름 · CRC32-->
+<p>팩은 앞에서부터만 읽을 수 있어서, 이름으로 객체를 찾으려면 색인이 필요합니다. <code>.idx</code> 는 이름 차례로 정렬된 표이고,
+첫 바이트별 누적 개수(fanout 256칸)로 이분 탐색의 범위를 좁힙니다.
+<!--CITE key=gitformat-pack sec="Version 2 pack-*.idx files support packs larger than 4 GiB, and"--></p>
+<p class="cap">이 캡처를 처음 뜰 때 <code>&lt; .git/objects/pack/*.idx</code> 의 <code>*</code> 를 dash 가 펼치지 않아 "cannot open" 이 찍혔습니다.
+<code>$(ls …)</code> 로 고쳤습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-rev">
+<h3>.rev — 거꾸로 찾는 색인</h3>
+<p><code>.idx</code> 가 "이름 → 자리" 라면 <code>.rev</code> 는 "팩 안 차례 → 이름 차례" 입니다. 비트맵과 크기 계산처럼 팩을 자리 차례로 돌며
+이름을 알아야 하는 일에 씁니다. 1장의 <code>ls</code> 에 이미 있었습니다.
+<!--CITE key=gitformat-pack sec="pack-*.rev files have the format:"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p10-midx">
+<h3>multi-pack-index — 팩이 여럿일 때</h3>
+<!--OUT file=pack.midx__multi-pack-index-write-ls-.git-objects-pack.txt note=팩들의 .idx 를 하나로 묶은 색인-->
+<p>팩이 수십 개면 객체 하나를 찾으려고 .idx 를 수십 개 열어야 합니다. MIDX 는 모든 팩을 한 색인으로 묶습니다.
+<!--CITE key=gitformat-pack sec="multi-pack-index (MIDX) files have the following format:"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-bitmap">
+<h3>비트맵 — "이 커밋에서 닿는 객체" 를 미리</h3>
+<!--OUT file=pack.bitmap__repack-a-d-q-write-bitmap-index-ls-.git-objects-pack.txt note=.bitmap 이 생겼다-->
+<p>clone·fetch 에 응할 때 서버는 "이 커밋들에서 닿는 객체 전부" 를 세야 합니다. 비트맵은 골라 둔 커밋마다 팩의 객체를 비트 하나씩으로
+표시해 두어, 그래프를 걷지 않고 비트 연산으로 답합니다.
+<!--CITE key=technical-bitmap-format sec="On-disk format"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-commit-graph">
+<h3>commit-graph — 커밋 걷기를 빠르게</h3>
+<!--OUT file=pack.cg__commit-graph-write-reachable-ls-.git-objects-info.txt note=objects/info/commit-graph-->
+<!--OUT file=pack__commit-graph-verify.txt note=검사 — 조용하면 통과-->
+<p>커밋마다 부모·트리·세대 번호를 고정 폭 표로 담아, 커밋 객체를 풀지 않고 DAG 를 걷게 합니다. <code>log --graph</code>·
+<code>merge-base</code> 가 큰 저장소에서 빨라지는 까닭입니다.
+<!--CITE key=gitformat-commit-graph sec="Commit-graph files have the following format:"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p10-quiz-2" data-quiz>
+<h3>3~4장 퀴즈</h3>
+<p class="q">Q. <code>pack.window=0</code> 으로 다시 싸면 팩 크기가 어떻게 됩니까? 그리고 팩 파일만 있고 <code>.idx</code> 를 잃어버렸다면 객체를 찾을 수 있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 델타를 하나도 만들지 않아 가장 커집니다 — 실험에서 61,292바이트, 기본값의 네 배쯤. .idx 는 팩을 앞에서부터 읽어
+다시 만들 수 있습니다(<code>git index-pack</code>). 부록 A 의 mygit 도 git 이 만든 팩에서 .idx 를 바이트까지 같게 다시 만듭니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-ch5"><p class="chnum">5장</p><h2>닿지 않는 객체</h2><p class="chsub">prune 과 크러프트 팩</p></article>
+
+<article class="card" id="p10-unreachable">
+<h3>닿지 않는 커밋 하나</h3>
+<p>브랜치를 만들어 빈 커밋을 하나 쌓고 그 브랜치를 지웠습니다. 그 커밋은 이제 어느 참조에서도 닿지 않습니다(reflog 는 셈에서 뺌).</p>
+<!--OUT file=pack__fsck-unreachable-no-reflogs.txt note=닿지 않는 객체 목록-->
+<!--OUT file=pack__fsck-lost-found-no-reflogs.txt note=--lost-found 는 그 가운데 "끝"(dangling)을 .git/lost-found 에 적어 둔다-->
+<p class="cap"><code>unreachable</code> 은 닿지 않는 모든 객체, <code>dangling</code> 은 그 가운데 다른 닿지 않는 객체도 가리키지 않는 끝입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-prune">
+<h3>정말 지우기 — reflog 를 비우고 prune</h3>
+<!--OUT file=pack__reflog-expire-expire-now-all-git-prune-expire-now-v.txt note=지금 기준으로 만료 · 지금 기준으로 prune-->
+<!--OUT file=pack.pruned__fsck-unreachable-no-reflogs.txt note=이제 없다-->
+<p>평소에는 이렇게 빨리 지워지지 않습니다. reflog 는 90일·30일 동안 커밋을 붙잡고(4부), prune 도 기본으로 두 주보다 새 객체는 남깁니다
+(<code>gc.pruneExpire</code>). 잘못한 것을 되돌릴 시간을 주는 장치입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-cruft">
+<h3>크러프트 팩 — 지울 때까지 한 팩에</h3>
+<!--OUT file=pack_cruft__gc-q-cruft-prune-1.week.ago-ls-.git-objects-pack-sed-s-pack.txt note=팩이 둘 — 둘째에는 .mtimes 가 있다-->
+<!--OUT file=pack_cruft__fsck-unreachable-no-reflogs.txt note=닿지 않는 커밋은 아직 있다-->
+<p>유예 기간 안의 닿지 않는 객체를 예전에는 느슨한 파일로 흩어 두었습니다. 크러프트 팩은 그것들을 팩 하나에 모으고, 객체마다의 시각을
+<code>.mtimes</code> 에 적어 유예 기간을 계속 셉니다. <!--CITE key=gitformat-pack sec="Cruft packs"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-cruft-now">
+<h3>유예 없이 치우면</h3>
+<!--OUT file=pack_cruft.now__gc-q-prune-now-ls-.git-objects-pack-sed-s-pack-0-9a-f-pack.txt note=--prune=now — 크러프트 팩이 사라졌다-->
+<!--OUT file=pack_cruft.now__fsck-unreachable-no-reflogs.txt note=닿지 않는 객체 없음-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-ch6"><p class="chnum">6장</p><h2>자동 gc</h2><p class="chsub">문턱이 실제로 계산되는 방식</p></article>
+
+<article class="card" id="p10-auto-doc">
+<h3>문서가 말하는 문턱</h3>
+<p><code>gc.auto</code> 는 "대략 이보다 많은 느슨한 객체가 있으면 <code>git gc --auto</code> 가 팩으로 묶는다" 이고 기본값은 6700 입니다.
+커밋 같은 명령들이 가끔 <code>gc --auto</code> 를 부릅니다. 팩이 50개(<code>gc.autoPackLimit</code>)를 넘어도 합칩니다.
+<!--CITE key=config-gc--></p>
+<p>"대략" 이 무엇인지 실험해 봤습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p10-auto-miss">
+<h3>gc.auto=20 인데 30개로는 돌지 않는다</h3>
+<!--OUT file=pack_auto__config-get-gc.auto.txt note=문턱 20-->
+<!--OUT file=pack_auto__count-objects-cut-d-f1.txt note=느슨한 객체 30개-->
+<!--OUT file=pack_auto__gc-auto-git-count-objects-cut-d-f1.txt note=gc --auto 가 아무것도 안 했다-->
+<!--OUT file=pack_auto__ls-.git-objects-17-2-dev-null-wc-l.txt note=objects/17 디렉터리의 객체 수-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-auto-source">
+<h3>소스를 열어 보면 (v2.55.0)</h3>
+<ul>
+<li><code>builtin/gc.c</code> — 문턱을 <b>256 의 배수로 올려</b> 씁니다. 20 은 256 이 됩니다. 소스 주석은 이것을 "옛 동작을 지키려는 이상한 규칙" 이라고 적습니다.</li>
+<li><code>odb/source-loose.c</code> — 느슨한 객체를 다 세지 않고 <b><code>objects/17</code> 디렉터리 하나의 수 × 256</b> 으로 어림합니다.
+이름은 해시라 256 개 디렉터리에 고르게 퍼진다는 가정입니다.</li>
+</ul>
+<p>그러니 <code>17/</code> 에 객체가 둘 이상(어림 512 &gt; 256)이어야 돕니다. 30개일 때 <code>17/</code> 은 비어 있었습니다.</p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p10-auto-hit">
+<h3>17 로 시작하는 blob 둘을 넣으면</h3>
+<!--OUT file=pack_auto.more__ls-.git-objects-17-wc-l.txt note=이름이 17 로 시작하는 blob 을 골라 둘 넣었다-->
+<!--OUT file=pack_auto.more__count-objects-cut-d-f1.txt note=모두 32개 — 문턱 256 보다 한참 적다-->
+<!--OUT file=pack_auto.more__gc-auto-quiet-git-count-objects-v-grep-e-count-packs.txt note=그래도 돌았다 — 닿지 않는 두 blob 만 남고-->
+<p>남은 둘은 어느 커밋도 가리키지 않는 새 blob 이라 유예 기간 동안 느슨하게 남습니다. 그 둘이 여전히 <code>17/</code> 에 있어 어림이 512 이니
+git 이 "닿지 않는 느슨한 객체가 너무 많다" 고 경고합니다.</p>
+<p class="cap">실험은 <code>gc.autoDetach=false</code> 로 돌렸습니다. 기본값(true)에서는 <code>gc --auto</code> 가 뒤에서 돌아, 바로 뒤의 캡처가 끝나기 전 상태를 찍었습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-maintenance">
+<h3>git maintenance</h3>
+<!--OUT file=pack.maint__maintenance-run-task-gc-quiet-git-count-objects-v.txt note=gc 작업 하나만 돌리기-->
+<p><code>maintenance</code> 는 gc 를 작은 작업들(commit-graph 쓰기, 느슨한 객체 묶기, 팩 조금씩 합치기 …)로 나눠 예약해 돌리는 틀입니다.
+<code>git maintenance start</code> 가 운영체제의 예약 작업(cron·systemd 타이머 등)에 등록합니다(13부). <!--CITE key=git-maintenance sec=TASKS--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-keep">
+<h3>.keep — 이 팩은 건드리지 마라</h3>
+<!--OUT file=pack_keep__repack-a-d-q-ls-.git-objects-pack-sed-s-pack-0-9a-f-pack-sor.txt note=옛 팩에 .keep 을 두고 repack -a -d-->
+<p><code>repack -a -d</code> 는 보통 모든 것을 팩 하나로 다시 쌉니다. <code>.keep</code> 가 붙은 팩은 그대로 두고, 나머지만 새 팩으로 묶어
+팩이 둘 남았습니다. 거대한 옛 역사를 한 번 잘 싸 두고 매번 다시 싸지 않게 할 때 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-summary">
+<h2>10부 정리</h2>
+<div class="tblwrap"><table class="kv">
+<tr><th>생각</th><th>확인한 캡처</th></tr>
+<tr><td>gc 는 느슨한 객체를 팩 하나로</td><td>200개 → 팩 하나 21 KiB</td></tr>
+<tr><td>팩 항목 = 형식 3비트 + 가변 크기 + zlib</td><td><code>97 0d</code> = commit 215</td></tr>
+<tr><td>델타 = 바탕에서 복사 + 끼움</td><td>8,334바이트 blob 이 디스크에서 35바이트</td></tr>
+<tr><td>창과 깊이</td><td>61,292 → 14,888바이트, 사슬 최대 29</td></tr>
+<tr><td>색인</td><td>.idx(ff744f63·판 2) · .rev · MIDX · 비트맵 · commit-graph</td></tr>
+<tr><td>닿지 않는 객체는 유예 뒤에</td><td>reflog·prune 기간 · 크러프트 팩과 .mtimes</td></tr>
+<tr><td>자동 gc 는 어림</td><td>문턱은 256 배수 · <code>objects/17</code> × 256</td></tr>
+</table></div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p10-quiz-3" data-quiz>
+<h3>5~6장 퀴즈</h3>
+<p class="q">Q. 실수로 브랜치를 <code>-D</code> 로 지웠고, 곧바로 <code>git gc</code> 를 돌렸습니다. 커밋을 되찾을 수 있습니까? 그리고 느슨한 객체가
+6,000개인데 <code>gc --auto</code> 가 돌았다면 왜일까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 대개 되찾습니다 — HEAD 의 reflog 가 그 커밋을 가리키고 있어 닿는 객체로 치고, 닿지 않더라도 prune 의 유예 기간(기본 두 주)
+동안은 지우지 않습니다. reflog 에서 이름을 찾아 브랜치를 다시 만들면 됩니다(16부). 6,000개에서 돌았다면 <code>objects/17</code> 의 수 × 256 이
+6,912(6,700 을 256 배수로 올린 값)를 넘었기 때문입니다 — 17/ 에 객체가 스물여덟 개 이상이었던 것입니다.</div>
+<span class="tier ill">설명용</span>
 </article>

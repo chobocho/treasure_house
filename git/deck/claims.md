@@ -95,3 +95,5 @@
 | Windows 코드 약 350만 파일·약 300GB·엔지니어 약 4,000명(2017-05-24) | Brian Harry 블로그 | 원문 curl | 2026-09-18 |
 | 리눅스 커널 100만 번째 커밋 — Ricardo Neri 의 85b23fbc7d88(2020-07-26), BitKeeper 시절 63,428개 포함 | Linux Foundation 블로그 2020-09-30 | 원문 curl | 2026-09-18 |
 | CVE 40건과 고쳐진 판 | Documentation/RelNotes/*.adoc (v2.55.0) | tools/make_data.py → data/cves.tsv | 2026-09-18 |
+| gc --auto 는 gc.auto 를 256 의 배수로 올려 쓰고(20 → 256), 느슨한 객체 수는 objects/17 디렉터리 하나의 수 × 256 으로 어림한다 — 소스 주석은 "옛 동작을 지키려는 이상한 규칙" 이라고 적는다 | git 저장소 v2.55.0 의 builtin/gc.c too_many_loose_objects() · odb/source-loose.c | mirror: `git show v2.55.0:builtin/gc.c` 467–483행 · `git show v2.55.0:odb/source-loose.c` 535–561행 · pack2 실험(30개로는 안 돌고, 17/ 에 둘을 넣자 돎) | 2026-09-18 |
+| recursive 전략은 v2.50.0 부터 ort 의 별칭이다 | Documentation/merge-strategies.adoc (v2.55.0) | docs/merge-strategies.txt 의 `recursive` 항목 | 2026-09-18 |

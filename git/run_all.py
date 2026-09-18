@@ -47,8 +47,8 @@ from build_deck import gitslug  # noqa: E402  같은 규칙이어야 한다
 ORDER = ['hello', 'concepts', 'objects', 'anatomy', 'tree_sort',
          'refs', 'refs2', 'index', 'index2', 'cmds', 'dag', 'merge',
          'merge2', 'rebase', 'rebase2', 'diff', 'diff2', 'pack',
-         'proto', 'config_hooks', 'limits', 'recovery', 'mygit',
-         'cmdref']
+         'pack2', 'proto', 'config_hooks', 'limits', 'recovery',
+         'mygit', 'cmdref']
 
 
 def cells(s):

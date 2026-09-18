@@ -43,7 +43,8 @@ def pack_size(r):
 
 def run(ctx):
     r = history(ctx, 'pack')
-    r.cap('git count-objects -v')
+    # size: 는 느슨한 객체의 디스크 사용량(블록 크기)이라 기계마다 다르다
+    r.cap('git count-objects -v | grep -v "^size:"')
     r.cap('git gc --quiet && git count-objects -v', label='pack.gc')
     r.cap('ls .git/objects/pack')
     idx = '.git/objects/pack/*.idx'
@@ -55,7 +56,9 @@ def run(ctx):
     r.cap('git verify-pack -v %s | grep -E "^(non delta|chain length)"'
           % idx)
     r.cap('od -A d -t x1 -N 32 .git/objects/pack/*.pack')
-    r.cap('git show-index < %s | head -5' % idx)
+    # < 뒤의 * 는 dash 가 펼치지 않는다(처음 판은 "cannot open" 을
+    # 캡처했다) — ls 로 이름을 먼저 얻는다
+    r.cap('git show-index < $(ls %s) | head -5' % idx)
     # 델타 창과 깊이 — 같은 객체를 다시 싸며 크기를 잰다
     rows = []
     for window, depth in ((0, 0), (1, 50), (10, 1), (10, 10), (10, 50),
