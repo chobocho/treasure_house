@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -27,24 +28,27 @@ func init() {
 	// init 에서 채우는 까닭: 표를 변수 초기값으로 두면 Run 을 거쳐
 	// 자기를 부르는 초기화 순환으로 컴파일러가 거절한다.
 	commands = map[string]cmdFunc{
-		"hash-object": cmdHashObject,
-		"cat-file":    cmdCatFile,
-		"init":        cmdInit,
-		"commit-tree": cmdCommitTree,
-		"branch":      cmdBranch,
-		"tag":         cmdTag,
-		"reflog":      cmdReflog,
-		"add":         cmdAdd,
-		"rm":          cmdRm,
-		"status":      cmdStatus,
-		"write-tree":  cmdWriteTree,
-		"commit":      cmdCommit,
-		"log":         cmdLog,
-		"merge-base":  cmdMergeBase,
-		"diff":        cmdDiff,
-		"switch":      cmdSwitch,
-		"checkout":    cmdCheckout,
-		"merge":       cmdMerge,
+		"hash-object":  cmdHashObject,
+		"cat-file":     cmdCatFile,
+		"init":         cmdInit,
+		"commit-tree":  cmdCommitTree,
+		"branch":       cmdBranch,
+		"tag":          cmdTag,
+		"reflog":       cmdReflog,
+		"add":          cmdAdd,
+		"rm":           cmdRm,
+		"status":       cmdStatus,
+		"write-tree":   cmdWriteTree,
+		"commit":       cmdCommit,
+		"log":          cmdLog,
+		"merge-base":   cmdMergeBase,
+		"diff":         cmdDiff,
+		"switch":       cmdSwitch,
+		"checkout":     cmdCheckout,
+		"merge":        cmdMerge,
+		"unpack-pack":  cmdUnpackPack,
+		"verify-pack":  cmdVerifyPack,
+		"pack-objects": cmdPackObjects,
 	}
 	deleteBranch = deleteMerged
 }
@@ -1609,6 +1613,239 @@ func applyMerge(root, g string, ours map[string]Blob,
 		staged = append(staged, e)
 	}
 	return WriteIndex(g, staged)
+}
+
+// ── 11단계: unpack-pack · verify-pack · pack-objects ────────────────
+
+// cmdUnpackPack 은 팩의 객체를 전부 느슨한 객체로 푼다(§13.3).
+func cmdUnpackPack(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, nil)
+	if err != nil {
+		return 0, err
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	for _, name := range f.rest {
+		data, err := os.ReadFile(ctx.Path(name))
+		if err != nil {
+			return 0, err
+		}
+		ents, err := ReadPack(data, func(o string) (string, []byte,
+			error) {
+			return ReadObject(g, o)
+		})
+		if err != nil {
+			return 0, err
+		}
+		for _, e := range ents {
+			if _, err := WriteObject(g, e.Type, e.Body); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
+}
+
+// cmdVerifyPack 은 git verify-pack -v 와 같은 출력. 색인이 팩과 맞지
+// 않으면 오류.
+func cmdVerifyPack(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, []string{"-v"})
+	if err != nil {
+		return 0, err
+	}
+	if !f.on["-v"] || len(f.rest) != 1 ||
+		!strings.HasSuffix(f.rest[0], ".idx") {
+		return 0, &GitError{"usage: mygit verify-pack -v <pack>.idx",
+			129}
+	}
+	packPath := strings.TrimSuffix(f.rest[0], ".idx") + ".pack"
+	raw, err := os.ReadFile(ctx.Path(f.rest[0]))
+	if err != nil {
+		return 0, err
+	}
+	idx, sum, err := ReadIdx(raw)
+	if err != nil {
+		return 0, err
+	}
+	data, err := os.ReadFile(ctx.Path(packPath))
+	if err != nil {
+		return 0, err
+	}
+	ents, err := ReadPack(data, nil)
+	if err != nil {
+		return 0, err
+	}
+	var got, want []string
+	for _, e := range ents {
+		got = append(got, fmt.Sprintf("%s %d %d", e.Oid, e.Offset,
+			e.Crc))
+	}
+	for _, e := range idx {
+		want = append(want, fmt.Sprintf("%s %d %d", e.Oid, e.Offset,
+			e.Crc))
+	}
+	sort.Strings(got)
+	sort.Strings(want)
+	if strings.Join(got, ",") != strings.Join(want, ",") ||
+		!bytes.Equal(sum, data[len(data)-20:]) {
+		return 0, Fail("fatal: mygit: " + f.rest[0] +
+			" does not match " + packPath)
+	}
+	for _, row := range VerifyLines(ents, packPath) {
+		ctx.say("%s\n", row)
+	}
+	return 0, nil
+}
+
+const maxDepth = 50
+
+// packItems 는 pack-objects 가 넣을 객체들 — SPEC.md §13.3 의
+// 차례(커밋 → 트리·blob 전위 순회 → 주석 태그)와 델타 고르기.
+// 바탕은 같은 경로에서 바로 앞에 넣은 blob, 델타가 몸의 절반보다
+// 짧을 때만.
+func packItems(g string, useDelta bool) ([]PackItem, error) {
+	var starts []string
+	_, head, err := ReadHead(g)
+	if err != nil {
+		return nil, err
+	}
+	cands := []string{head}
+	for _, r := range ListRefs(g, "refs/") {
+		cands = append(cands, r.Oid)
+	}
+	for _, oid := range cands {
+		if oid == "" {
+			continue
+		}
+		c, err := Peel(g, oid, "commit")
+		if err != nil {
+			return nil, err
+		}
+		if c != "" {
+			starts = append(starts, c)
+		}
+	}
+	var items []PackItem
+	var depth []int
+	seen, last := map[string]bool{}, map[string]int{}
+	add := func(typ string, body []byte, oid, path string) {
+		seen[oid] = true
+		base := -1
+		if k, ok := last[path]; ok && useDelta && path != "" &&
+			depth[k] < maxDepth {
+			if 2*len(MakeDelta(items[k].Body, body)) < len(body) {
+				base = k
+			}
+		}
+		items = append(items, PackItem{typ, body, base})
+		if base >= 0 {
+			depth = append(depth, depth[base]+1)
+		} else {
+			depth = append(depth, 0)
+		}
+		if path != "" {
+			last[path] = len(items) - 1
+		}
+	}
+	var order []string
+	if len(starts) > 0 {
+		if order, err = WalkLog(g, starts); err != nil {
+			return nil, err
+		}
+	}
+	for _, c := range order {
+		_, body, err := ReadObject(g, c)
+		if err != nil {
+			return nil, err
+		}
+		add("commit", body, c, "")
+	}
+	var visit func(t, prefix string) error
+	visit = func(t, prefix string) error {
+		if seen[t] {
+			return nil
+		}
+		_, body, err := ReadObject(g, t)
+		if err != nil {
+			return err
+		}
+		add("tree", body, t, "")
+		ents, err := ParseTree(body)
+		if err != nil {
+			return err
+		}
+		for _, e := range ents {
+			switch {
+			case e.Mode == Dir:
+				err = visit(e.Oid, prefix+e.Name+"/")
+			case e.Mode != "160000" && !seen[e.Oid]:
+				var blob []byte
+				if _, blob, err = ReadObject(g, e.Oid); err == nil {
+					add("blob", blob, e.Oid, prefix+e.Name)
+				}
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, c := range order {
+		t, err := Peel(g, c, "tree")
+		if err == nil {
+			err = visit(t, "")
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	for _, r := range ListRefs(g, "refs/tags/") {
+		typ, body, err := ReadObject(g, r.Oid)
+		if err != nil {
+			return nil, err
+		}
+		if typ == "tag" && !seen[r.Oid] {
+			add("tag", body, r.Oid, "")
+		}
+	}
+	return items, nil
+}
+
+func cmdPackObjects(ctx *Ctx, args []string) (int, error) {
+	f, err := parseFlags(args, []string{"--delta"})
+	if err != nil {
+		return 0, err
+	}
+	if len(f.rest) != 1 {
+		return 0, &GitError{"usage: mygit pack-objects [--delta] " +
+			"<base>", 129}
+	}
+	g, err := ctx.Gitdir()
+	if err != nil {
+		return 0, err
+	}
+	items, err := packItems(g, f.on["--delta"])
+	if err != nil {
+		return 0, err
+	}
+	data, ents := WritePack(items)
+	sha := fmt.Sprintf("%x", data[len(data)-20:])
+	base := ctx.Path(f.rest[0] + "-" + sha)
+	if err := os.MkdirAll(filepath.Dir(base), 0o755); err != nil {
+		return 0, err
+	}
+	err = os.WriteFile(base+".pack", data, 0o644)
+	if err == nil {
+		err = os.WriteFile(base+".idx",
+			WriteIdx(ents, data[len(data)-20:]), 0o644)
+	}
+	if err != nil {
+		return 0, err
+	}
+	ctx.say("%s\n", sha)
+	return 0, nil
 }
 
 // ── 틀 ─────────────────────────────────────────────────────────────

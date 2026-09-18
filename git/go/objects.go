@@ -20,8 +20,8 @@ import (
 var Types = []string{"blob", "tree", "commit", "tag"}
 
 // PackedObjects 는 팩 안 객체 전부 {이름: 객체}. 11단계 전에는 비었다.
-var PackedObjects = func(gitdir string) map[string]Object {
-	return nil
+var PackedObjects = func(gitdir string) (map[string]Object, error) {
+	return nil, nil
 }
 
 type Object struct {
@@ -119,7 +119,11 @@ func ReadObject(gitdir, oid string) (string, []byte, error) {
 		}
 		return parseRaw(raw, oid)
 	}
-	if o, ok := PackedObjects(gitdir)[oid]; ok {
+	packed, err := PackedObjects(gitdir)
+	if err != nil {
+		return "", nil, err
+	}
+	if o, ok := packed[oid]; ok {
 		return o.Type, o.Body, nil
 	}
 	return "", nil, Fail("fatal: mygit: object " + oid + " not found")
@@ -155,7 +159,11 @@ func FindObject(gitdir, prefix string) (string, error) {
 	for _, o := range AllLoose(gitdir) {
 		ids[o] = true
 	}
-	for o := range PackedObjects(gitdir) {
+	packed, err := PackedObjects(gitdir)
+	if err != nil {
+		return "", err
+	}
+	for o := range packed {
 		ids[o] = true
 	}
 	if len(p) == 40 {
