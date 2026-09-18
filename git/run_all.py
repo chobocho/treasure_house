@@ -49,7 +49,7 @@ ORDER = ['hello', 'concepts', 'objects', 'anatomy', 'tree_sort',
          'merge2', 'rebase', 'rebase2', 'diff', 'diff2', 'pack',
          'pack2', 'proto', 'proto2', 'collab', 'config_hooks',
          'tools2', 'limits', 'daily', 'recovery', 'mygit', 'cmdref',
-         'history']
+         'history', 'appendix']
 
 
 def cells(s):
