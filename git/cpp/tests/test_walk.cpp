@@ -3,6 +3,8 @@
 // expect.txt 는 그 저장소에서 git 이 찍은 log·merge-base 출력이다.
 // equal 은 모든 커밋의 날짜가 같고(§10.1 의 "먼저 온 것이 먼저"),
 // dated 는 날짜가 모두 다르고, criss 는 가장 좋은 공통 조상이 둘이다.
+// criss-equal 은 criss 와 같되 날짜가 모두 같아, 두 공통 조상의
+// 차례를 인자 순서와 부모 순서가 정한다(SPEC.md §10.2).
 #include <algorithm>
 
 #include "golden.hpp"
@@ -11,7 +13,8 @@ using namespace mygit;
 
 TEST(s10_log_and_merge_base_match_git) {
     int n = 0;
-    for (std::string name : {"equal", "dated", "criss"}) {
+    for (std::string name :
+         {"equal", "dated", "criss", "criss-equal"}) {
         golden::Sandbox s(false);
         golden::dag(s, name);
         auto text = golden::read("dag/" + name + "/expect.txt");

@@ -6,6 +6,7 @@
 // insert_by_date). 이 덱의 저장소는 모든 커밋의 날짜가 같게 만들어지
 // 므로, 이 한 줄이 차례의 전부를 정한다.
 #include <algorithm>
+#include <queue>
 #include <set>
 
 #include "mygit.hpp"
@@ -75,25 +76,85 @@ bool is_ancestor(const std::string& gitdir, const std::string& a,
     return ancestors(gitdir, b).count(a) > 0;
 }
 
-// merge_bases 는 가장 좋은 공통 조상들(SPEC.md §10.2), 커미터 날짜
-// 내림차순. 공통 조상 가운데 다른 공통 조상의 조상이 아닌 것만
-// 남긴다. 작은 저장소를 위한 곧은 방법이다 — git 은 날짜로 칠하며
-// 내려가는 더 빠른 길(paint_down_to_common)을 쓴다. O(커밋 수²) 최악.
+// paint 는 git 의 paint_down_to_common(commit-reach.c)이 공통 조상
+// 후보를 찾는 차례 — SPEC.md §10.2 의 1~4. 큐는 날짜 내림차순, 같으면
+// 넣은 차례(seq)가 빠른 것이 먼저. 표시는 P1(a 에서 닿음)·P2(b 에서
+// 닿음)·STALE(이미 찾은 후보의 조상). "넣을 때 STALE 이 아니었던"
+// 커밋이 큐에 남아 있는 동안 돈다(git 의 max_nonstale).
+// O(커밋 수 × log 커밋 수) 시간, O(커밋 수) 공간.
+static std::vector<std::string> paint(const std::string& gitdir,
+                                      const std::string& a,
+                                      const std::string& b) {
+    enum { P1 = 1, P2 = 2, STALE = 4 };
+    struct Slot {
+        int64_t when;
+        uint64_t seq;
+        std::string oid;
+        // priority_queue 는 가장 "큰" 것을 먼저 내준다
+        bool operator<(const Slot& o) const {
+            if (when != o.when) return when < o.when;
+            return seq > o.seq;
+        }
+    };
+    std::map<std::string, int> flags;
+    std::map<std::string, bool> queued;  // 넣을 때 STALE 이 아니었나
+    std::priority_queue<Slot> q;
+    uint64_t seq = 0;
+    int live = 0;
+    auto put = [&](const std::string& c) {
+        if (queued.count(c)) return;  // 이미 큐에 있으면 자리는 그대로
+        bool fresh = !(flags[c] & STALE);
+        queued[c] = fresh;
+        if (fresh) ++live;
+        q.push({info(gitdir, c).when, seq++, c});
+    };
+    flags[a] = P1;
+    put(a);
+    flags[b] |= P2;
+    put(b);
+    std::vector<std::string> found;
+    while (live > 0) {
+        std::string c = q.top().oid;
+        q.pop();
+        if (queued[c]) --live;
+        queued.erase(c);
+        int f = flags[c] & (P1 | P2 | STALE);
+        if (f == (P1 | P2)) {
+            if (std::find(found.begin(), found.end(), c) == found.end())
+                found.push_back(c);
+            f |= STALE;
+        }
+        for (auto& p : info(gitdir, c).parents) {
+            if ((flags[p] & f) == f) continue;
+            flags[p] |= f;
+            put(p);
+        }
+    }
+    std::vector<std::string> out;
+    for (auto& c : found)
+        if (!(flags[c] & STALE)) out.push_back(c);
+    return out;
+}
+
+// merge_bases 는 가장 좋은 공통 조상들(SPEC.md §10.2) — git 과 같은
+// 차례로. paint 가 찾은 후보에서 다른 후보의 조상인 것을 차례를
+// 지키며 빼고(git 의 remove_redundant), 커미터 날짜 내림차순으로 안정
+// 정렬한다. 날짜가 같으면 찾은 차례가 남아 인자 순서에 따라 답의
+// 차례가 바뀐다 — git 도 그렇다. O(커밋 수 × 후보 수).
 std::vector<std::string> merge_bases(const std::string& gitdir,
                                      const std::string& a,
                                      const std::string& b) {
-    auto aa = ancestors(gitdir, a), bb = ancestors(gitdir, b);
-    std::set<std::string> below;
-    std::vector<std::string> common, best;
-    for (auto& c : aa) {
-        if (!bb.count(c)) continue;
-        common.push_back(c);
-        for (auto& p : info(gitdir, c).parents)
-            for (auto& x : ancestors(gitdir, p)) below.insert(x);
+    auto cands = paint(gitdir, a, b);
+    std::vector<std::string> best;
+    for (auto& c : cands) {
+        bool redundant = false;
+        for (auto& o : cands)
+            if (o != c && is_ancestor(gitdir, c, o)) {
+                redundant = true;
+                break;
+            }
+        if (!redundant) best.push_back(c);
     }
-    for (auto& c : common)
-        if (!below.count(c)) best.push_back(c);
-    // 날짜가 같으면 이름 차례 — 집합의 차례가 결과에 새지 않게
     std::stable_sort(best.begin(), best.end(), [&](auto& x, auto& y) {
         return info(gitdir, x).when > info(gitdir, y).when;
     });
