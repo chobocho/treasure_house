@@ -38,6 +38,7 @@ BASE_T = ('/data/data/com.termux/files/home/github/treasure_house'
           '/termux')
 TMX = os.path.join(BASE, 'tools', 'tmx.sh')
 sys.path.insert(0, os.path.join(BASE, 'tools'))
+import anon                                        # noqa: E402
 import scrub                                       # noqa: E402
 
 # 덱의 캡처 폭 상한(build_deck.py MAX_TERM_COLS 와 같아야 한다)
@@ -100,6 +101,35 @@ def cells(s):
                else 1 for c in s)
 
 
+def fold(line, limit=None):
+    """한 줄을 limit 칸 이하 조각으로 — 이어지는 조각은 '↪ ' 로 연다.
+
+    사람이 뜬 파일(Import)은 명령에 cut 을 걸 수 없어 여기서 접는다.
+    자르지 않고 접는 까닭: uname 의 커널 판처럼 줄 끝이 곧 사실이다.
+    공백에서 접으면 그 공백 하나만 줄바꿈으로 바뀐다.
+    시간 O(글자 수), 공간 O(글자 수).
+    """
+    limit = limit or MAX_COLS
+    if cells(line.expandtabs(4)) <= limit:
+        return [line]
+    line = line.expandtabs(4)
+    parts, cur, w, head = [], '', 0, ''
+    for c in line:
+        cw = cells(c)
+        if w + cw > limit:
+            # 공백이 있으면 거기서 — 그 공백 하나는 줄바꿈이 대신한다
+            sp = cur.rfind(' ')
+            keep, cur = ((cur[:sp], cur[sp + 1:]) if sp > 0
+                         else (cur, ''))
+            parts.append(head + keep)
+            head = '↪ '
+            w = cells(head + cur)
+        cur += c
+        w += cw
+    parts.append(head + cur)
+    return parts
+
+
 def render(cap, outputs):
     """걸음마다의 tmx 출력 → 캡처 파일 본문."""
     parts = []
@@ -141,6 +171,9 @@ def record(cap, outdir, date, runner, force=False):
             raise ValueError('%s: 첫 줄에 native_facts 날짜가 없다'
                              % cap.path)
         text, _n = scrub.fix(raw[m.end():].lstrip('\n'))
+        # 공개 저장소에 올리므로 기기 식별값은 가짜로(tools/anon.py)
+        text = anon.native(text)
+        text = '\n'.join(p for ln in text.split('\n') for p in fold(ln))
         io.open(path, 'w', encoding='utf-8', newline='\n').write(
             '# snapshot %s\n' % m.group(1) + text)
         return {'kind': 'snapshot', 'side': 'native',

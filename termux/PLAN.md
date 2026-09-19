@@ -982,3 +982,21 @@ The user approved every recommendation below as-is. Each row is now a decision.
   installed reworded to what procs_now shows), 캡처불일치 2, 교차참조 2, 한국어 2.
 - Pass-to-pass counts: 26 → 23 → 37 (0–8 second look) → 20 (9–16 second look). Both halves have
   now had two independent readings.
+
+### Step 14 — 네이티브 캡처 반영 (2026-09-19)
+
+- `data/device.txt` arrived (user ran `tools/native_facts.sh` in native Termux; the raw file is now
+  listed in termux/.gitignore and not committed; only the scrubbed capture is). Imported as snapshot `out/native_device.txt` (scrub replaced SSID/APK path).
+  Test first: `run_all.fold` wraps imported lines over 108 cells with `↪ ` (the file is hand-made,
+  so no `cut` can be put in its commands) — preferring a space, losing no character.
+- 11 new slides (587 → 598; +4 in 14부 for anon.py → 602): 0부 device table; 3부 native id (uid 10123 inference confirmed),
+  passwd, paths (`/usr/bin/env` missing, `/bin/sh` = Android's via /system link); 5부 shebang with
+  and without LD_PRELOAD (only `#!/usr/bin/env` fails, 127); 7부 battery JSON vs source comments,
+  audio/Wi-Fi/TTS (tts-engines timed out); 8부 phantom setting unreadable from the app ("Failed
+  transaction"), bind scan identical to proot; 9부 cost: getpid ×2.3, getcwd ×231, fork ×11.
+- Every "공개 시점까지 오지 않았다" sentence replaced; 8 claims added. `untrusted_app_27` is no
+  longer 미확인 (5부 already cites the sepolicy doc for targetSdk 26–28).
+- Before publishing (user decision 2026-09-19): device identifiers in the capture are replaced by
+  fake values at import — `tools/anon.py` (model, kernel build tail/time, app PID, battery numbers,
+  sensor names, camera specs, mirror, updatable list), test first. Measurements, exit codes and
+  the uid/SELinux context (already public in older captures) are kept. 0부 device slide says so.

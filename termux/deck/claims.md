@@ -319,3 +319,12 @@
 | 보안 정책: 보상 프로그램은 없지만 심각한 취약점엔 Open Collective 에서 소액 보상을 예외로 줄 수 있다 | termux-security-policy 2 | 공식 문서 | 2026-09-18 |
 | 0.118.0 수정: 프로바이더 읽기 권한을 RUN_COMMAND 로, openFile 모드를 읽기 전용에서 읽기·쓰기로 | post-2022-02-15-vuln 4.2 | 공식 글 | 2026-09-18 |
 | pkg 는 스크립트 첫머리에서 id -u 가 0 이면 "Cannot run 'pkg' command as root" 로 끝난다 | termux-tools@a62f7b2 scripts/pkg.in 3–7 | 소스 | 2026-09-18 |
+| 이 기기(네이티브): Android 17 · SDK 37 · arm64-v8a(모델은 비공개), 커널 6.12.58-android16, Termux 0.119.0-beta.3(F-Droid) · termux-tools 1.45.0 | out/native_device.txt 1·2·4·6·27절 | 사용자가 네이티브에서 뜬 캡처 | 2026-09-18 |
+| 네이티브 id 는 uid 10123(u0_a123), 보조 그룹은 proot 안과 같다, TracerPid 0, SELinux 문맥 untrusted_app_27 — proot 안에서 번호표로 추론한 123 이 맞았다 | out/native_device.txt 5·7절 | 네이티브 캡처 | 2026-09-18 |
+| 앱에서 settings get global … 은 "Failed transaction" 으로 실패(종료 2) — 팬텀 설정값은 앱이 읽을 수 없었다. /proc/sys/kernel/pid_max 도 Permission denied | out/native_device.txt 3·10절 | 네이티브 캡처 | 2026-09-18 |
+| 네이티브에서 stat: /tmp·/bin/sh·/etc/passwd 있음, /usr/bin/env 없음. /bin·/etc 는 위키상 /system 링크, /tmp 가 왜 있는지는 미확인 | out/native_device.txt 14절 · wiki Termux-file-system-layout | 네이티브 캡처 | 2026-09-18 |
+| LD_PRELOAD 를 빼면 #!/usr/bin/env 셔뱅만 127 로 실패, #!/bin/sh 는 /bin 링크 덕에 안드로이드의 sh 로 돈다 | out/native_device.txt 19·20절 | 네이티브 캡처 | 2026-09-18 |
+| 네이티브 bind 1~1100 결과는 proot 안(bionic·glibc)과 같은 목록 — 열린 저포트는 proot 의 일이 아니다. 까닭은 미확인 | out/native_device.txt 15절 · exp_bionic.txt 6절 | 네이티브 캡처 | 2026-09-18 |
+| 네이티브 20만 번: getpid 49.457 ms · getcwd 92.368 ms, env true 100번 1147.404 ms (proot 안 113.742 · 21,305.860 · 12,731.661) | out/native_device.txt 16–18절 · proot_cost.txt | 스냅샷 캡처 | 2026-09-18 |
+| 네이티브에서 Termux:API 가 답했다(battery·sensor·camera-info·audio·wifi 20초 안), tts-engines 만 124 로 끊김. Wi-Fi 는 supplicant UNINITIALIZED·MAC 02:00:00:00:00:00 | out/native_device.txt 21–26절 | 네이티브 캡처 | 2026-09-18 |
+| 공개용 native_device 캡처는 모델·커널 빌드 꼬리·PID·배터리 수치·센서 이름·카메라 사양·미러·갱신 목록을 가짜로 바꿨다 — 측정값·종료 코드는 원본 그대로 | tools/anon.py · tools/tests/test_anon.py | 시험 | 2026-09-19 |

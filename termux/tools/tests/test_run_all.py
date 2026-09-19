@@ -132,6 +132,49 @@ class ImportTest(unittest.TestCase):
         self.assertIn('"<ssid>"', text)
         self.assertNotIn('native_facts 2026', text)
 
+    def test_long_lines_are_folded(self):
+        # 네이티브 줄(id·uname·셔뱅 오류)은 108칸을 넘는다. 사람이 뜬
+        # 파일이라 명령에 cut 을 걸 수 없으니 들여올 때 접는다
+        m = run_all.MAX_COLS
+        exact, long_, wide = 'a' * m, 'b' * (2 * m + 5), '가' * m
+        io.open(self.src, 'w', encoding='utf-8').write(
+            '# native_facts 2026-09-19\n%s\n%s\n%s\n'
+            % (exact, long_, wide))
+        imp = run_all.Import('native_device', self.src)
+        run_all.record(imp, self.d, '2026-09-20', None)
+        lines = io.open(os.path.join(self.d, 'native_device.txt'),
+                        encoding='utf-8').read().split('\n')[1:-1]
+        self.assertEqual(lines[0], exact)            # 딱 108칸은 그대로
+        for ln in lines:
+            self.assertLessEqual(run_all.cells(ln), m)
+        rest = lines[1:]
+        # 원래 줄의 첫 조각만 표시 없이, 이어지는 조각은 '↪ ' 로 시작
+        self.assertEqual([ln.startswith('↪ ') for ln in rest],
+                         [False, True, True, False, True, True])
+        joined = ''.join(ln[2:] if ln.startswith('↪ ') else ln
+                         for ln in rest)
+        # 글자를 잃지 않는다
+        self.assertEqual(joined, long_ + wide)
+
+    def test_device_ids_are_faked(self):
+        # 기기 식별값은 들여올 때 tools/anon.py 가 가짜로 바꾼다
+        io.open(self.src, 'w', encoding='utf-8').write(
+            '# native_facts 2026-09-19\nDevice model:\nSM-G999N\n')
+        imp = run_all.Import('native_device', self.src)
+        run_all.record(imp, self.d, '2026-09-20', None)
+        text = io.open(os.path.join(self.d, 'native_device.txt'),
+                       encoding='utf-8').read()
+        self.assertNotIn('SM-G999N', text)
+        self.assertIn('Device model:', text)
+
+    def test_fold_prefers_space(self):
+        # uname 의 날짜처럼 낱말 가운데서 끊기면 읽는 사람이 속는다
+        m = run_all.MAX_COLS
+        # '2026' 이 108칸 경계에 걸친다
+        line = 'x' * (m - 3) + ' 2026 aarch64'
+        self.assertEqual(run_all.fold(line),
+                         ['x' * (m - 3), '\u21aa 2026 aarch64'])
+
     def test_missing_source_is_skipped(self):
         imp = run_all.Import('native_device', self.src)
         self.assertIsNone(run_all.record(imp, self.d, '2026-09-20',

@@ -1,3 +1,10 @@
+### [2026-09-19 04:39] Termux 덱 네이티브 캡처 반영 — device.txt 로 0·3·5·7·8·9부 11장 추가
+- **기획:** 사용자가 네이티브 Termux 에서 뜬 device.txt 로 '공개 시점까지 오지 않았다' 자리를 실제 값으로 채움.
+- **TC:** 정상: 108칸 이하 줄은 그대로. 경계: 딱 108칸·넓은 글자·공백 우선 접기, 글자 손실 없음.
+- **개발:** `termux/run_all.py`, `termux/tools/anon.py`(신규), `termux/deck/sections/`(7개), `termux/deck/claims.md`, `termux/out/native_device.txt`, `index.html`, `README.md` 외
+- **검증:** 단위 테스트 전부 통과 · make all 오류 0건 · 602장
+- **비고:** 원본 data/device.txt 는 미커밋, 기기 식별값은 anon.py 로 가짜 처리. 팬텀 설정값은 앱에서 읽을 수 없어 미확인.
+
 ### [2026-09-19 02:35] mygit merge-base — 같은 날짜 공통 조상의 차례를 git 과 똑같이
 - **기획:** 리뷰 2차에서 찾은 결함. git 2.55.0 commit-reach.c 의 paint_down_to_common 을 SPEC §10.2 에 옮김.
 - **TC:** golden 에 criss-equal(같은 날짜 교차 머지) 추가, 인자 순서 뒤집기 — 다섯 언어 모두 빨강 확인.
