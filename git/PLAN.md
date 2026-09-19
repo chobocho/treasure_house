@@ -716,3 +716,16 @@ The user approved every proposal below as-is. Each row is now a decision.
   wipes scratch/repos before each rerun** so "first run differs" can no longer hide.
   Glossary pointers were resolved too loosely (60+ pointed at intros) — now title-first + manual.
 - Deferred: part 17 "이 덱에서 돌린 곳" does not count commands run inside cat'd scripts.
+
+
+### Review 2 + mygit merge-base order (2026-09-18/19, d3fbd9a … a5dfe4e)
+
+- Review 2 (quizzes/figures/tables; all 161 part-17 slides; part-19 prose): 2 wrong quiz answers,
+  rebase figure labelled `topic` (now read from the capture), 5 part-17 examples (bisect used a
+  missing HEAD~3, filter-branch -h showed only the warning — `timeout VAR=1 cmd` fails, use `env`),
+  "이 덱에서 돌린 곳" miscounted (GIT directives ignored, cat'd scripts ignored, re-shown captures
+  counted) — generator now committed as deck/gen_cmdref.py.
+- Found a real mygit bug: with two best merge bases of equal date, Python/Java order depended on
+  hash order and Go/C++ used name order; git uses paint_down_to_common's discovery order + stable
+  date sort. Added golden/dag/criss-equal (both argument orders), SPEC §10.2 rule, RED in all five,
+  then ported paint_down_to_common to py/go/ts/java/cpp. Parity 60/60, record 1,240 ×3 (fresh dirs).
