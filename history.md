@@ -1,3 +1,10 @@
+### [2026-09-19 02:35] mygit merge-base — 같은 날짜 공통 조상의 차례를 git 과 똑같이
+- **기획:** 리뷰 2차에서 찾은 결함. git 2.55.0 commit-reach.c 의 paint_down_to_common 을 SPEC §10.2 에 옮김.
+- **TC:** golden 에 criss-equal(같은 날짜 교차 머지) 추가, 인자 순서 뒤집기 — 다섯 언어 모두 빨강 확인.
+- **개발:** `git/{py,go,ts,java,cpp}` 의 walk 5개, `git/tools/make_golden.py`, `git/SPEC.md`, `git/deck/sections/19_mygit.html`
+- **검증:** py 137·ts 134·java 135·go·cpp 85 통과 · 대조표 60칸 ok · record 1,240개 3회 동일
+- **비고:** 기존 대본·장면의 출력은 그대로(날짜가 모두 달랐음). 덱 1,830장.
+
 ### [2026-09-18 23:07] Git 덱 전수 리뷰 2차 — 퀴즈·그림·표, 17부 전체, 19부 해설
 - **기획:** 1차에서 덜 본 곳(퀴즈 정답, 그림, 명령어 사전 161장)을 서브에이전트 둘과 기계 대조로.
 - **TC:** -s ours revert·설정 없는 pull·bisect 예를 진짜 git 으로 재현, 산문 속 해시 52개 대조.
