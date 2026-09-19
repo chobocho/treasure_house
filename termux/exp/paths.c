@@ -2,10 +2,10 @@
  *
  *   paths PATH …
  *
- * 리눅스 배포판이라면 당연한 /tmp·/bin/sh·/etc/passwd 가 네이티브
- * Termux 에는 없다. access() 에 물어 errno 이름으로 답한다.
- * 이 기기의 proot 안에서는 Termux 의 바이너리도 우분투의 파일시스템을
- * 보므로 "있음" 이 나온다 — 그 차이가 곧 9부의 이야기다.
+ * 리눅스 배포판이라면 당연한 경로가 네이티브 Termux 에도 있는가.
+ * 예상과 달리 없던 것은 /usr/bin/env 하나였다(3부의 네이티브 캡처).
+ * access() 에 물어 errno 이름으로 답한다. proot 안에서는 Termux 의
+ * 바이너리도 우분투의 파일시스템을 본다 — 그 차이가 9부의 이야기다.
  */
 #include <errno.h>
 #include <stdio.h>

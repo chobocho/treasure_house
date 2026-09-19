@@ -232,6 +232,13 @@ def check(outdir):
                            % (n, no, w, MAX_COLS))
         for no, kind, shown in scrub.problems(text):
             bad.append('out/%s:%d %s %s' % (n, no, kind, shown))
+        # 접힌 줄을 잇고 가명 처리를 다시 돌려 달라지면 덜 바뀐 것.
+        # 이미 접힌 파일에 돌리면 줄 경계에서 쪼개진 이름을 놓친다
+        # (all_a12 / ↪ 3 — 실제로 샜다). 진짜 값은 찍지 않는다
+        flat = text.replace('\n↪ ', '')
+        if anon.ids(flat) != flat:
+            bad.append('out/%s: 가명 처리가 덜 됐다 — 접힌 줄을 이으면 '
+                       '가짜가 아닌 앱 번호·미러가 남는다' % n)
     return bad
 
 

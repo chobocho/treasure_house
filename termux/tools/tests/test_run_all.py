@@ -263,6 +263,28 @@ class CheckTest(unittest.TestCase):
         self.assertIn('a.txt:2', bad[0])
         self.assertIn('b.txt:1', bad[1])
 
+    def test_app_id_split_by_fold(self):
+        # 이미 접힌 파일에 가명 처리를 돌리면 줄 경계에서 쪼개진
+        # 이름(all_a78 / ↪ 9)이 규칙에 안 걸린다 — 실제로 샜다
+        self.put('a.txt', 'uid=10123(u0_a123) 50123(all_a78\n'
+                 '↪ 9) context=u:r:x\n')
+        self.put('b.txt', 'uid=10123(u0_a123) 50123(all_a123)\n')
+        self.man({'a.txt': {'kind': 'stable', 'side': 'termux'},
+                  'b.txt': {'kind': 'stable', 'side': 'termux'}})
+        bad = run_all.check(self.d)
+        self.assertEqual(len(bad), 1)
+        self.assertIn('a.txt', bad[0])
+        self.assertIn('가명', bad[0])
+        self.assertNotIn('789', bad[0])       # 진짜 값은 찍지 않는다
+
+    def test_unfaked_mirror_in_capture(self):
+        self.put('a.txt', 'deb https://mirror.real.edu/termux/apt/'
+                 'termux-main stable main\n')
+        self.man({'a.txt': {'kind': 'stable', 'side': 'termux'}})
+        bad = run_all.check(self.d)
+        self.assertEqual(len(bad), 1)
+        self.assertIn('가명', bad[0])
+
     def test_generated_tables_are_not_captures(self):
         self.put('tbl_x.html', '<table></table>\n')
         self.man({})

@@ -1,3 +1,10 @@
+### [2026-09-19 08:51] Termux 덱 전수 리뷰 5차 — 가명 누출 1건 포함 29건 정정, 604장
+- **기획:** 리뷰를 받은 적 없는 네이티브·가명 처리 14장과 0~8부·9~17부 3회차 정독(서브에이전트 둘), 기계 검사·그림은 직접.
+- **TC:** 정상: 앱 이름 둘일 때 멱등, 가짜와 같은 진짜 번호가 연쇄로 안 바뀜. 경계: 접힌 줄에서 쪼개진 all_aN·덜 바뀐 미러를 check 가 잡음(값은 안 찍음).
+- **개발:** `termux/tools/anon.py`, `termux/run_all.py`, `termux/tools/tests/`(2개), `termux/out/native_device.txt`, `termux/deck/sections/`(15개), `termux/deck/claims.md`, `termux/deck/glossary.txt`, `termux/exp/`(주석 2개) 외 5개 파일
+- **검증:** make test 238 passed, 0 failed · make all 오류 0건 · 604장
+- **비고:** 누출됐던 all_a 이름은 이전 두 커밋의 이력에 남아 있음 — 이력 재작성은 사용자 결정 대기.
+
 ### [2026-09-19 06:03] Termux 덱 앱 번호·미러 가명 처리 — 모든 캡처에서 가짜 값으로
 - **기획:** 네이티브 캡처에 이어 예전 캡처의 uid·gid·SELinux 범주·미러도 가짜로. 진짜 번호는 소스에 적지 않고 u0_aN 모양으로 찾음.
 - **TC:** 정상: uid·gid 셋·MCS 범주가 가짜 번호 123 으로 일관. 경계: 앱 이름 없는 파일은 그대로, 시스템 gid·TUR 유지, 두 번 불러도 같음.

@@ -40,7 +40,7 @@ KREL_RE = re.compile(r'(-android\d+-\d+)-\S+')
 KDATE_RE = re.compile(r'(SMP PREEMPT) .*? UTC \d{4}')
 PID_RE = re.compile(r'(TERMUX_APP__PID=)\d+')
 MIRROR_RE = re.compile(r'https://([^/\s]+)/\S*termux-main\b')
-APP_RE = re.compile(r'u0_a(\d+)(?!\d)')
+APP_RE = re.compile(r'(?:u0_a|all_a)(\d+)(?!\d)')
 UPD_RE = re.compile(r'(Updatable packages:\n)(?:[^\n]*\[upgradable'
                     r'[^\n]*\n)+')
 SEC_RE = re.compile(r'(== \d+\. [^\n]*(termux-battery-status|'
@@ -85,29 +85,48 @@ def _json_sec(m):
     return m.group(1) + body + m.group(4)
 
 
-def _app(text, real, fake):
-    """앱 번호 real 에서 나온 값을 전부 fake 에서 나온 값으로."""
-    for base in (10000, 20000, 50000):     # uid · 캐시 gid · all gid
-        text = re.sub(r'(?<!\d)%d(?!\d)' % (base + real),
-                      str(base + fake), text)
-    text = re.sub(r'(u0_a|all_a)%d(?!\d)' % real,
-                  r'\g<1>%d' % fake, text)
-    # MCS 범주: 앱 번호의 아래 8비트와 256 + 위 8비트
-    return text.replace('c%d,c%d,c512,c768' % (real & 255,
-                                               256 + (real >> 8)),
-                        'c%d,c%d,c512,c768' % (fake & 255,
-                                               256 + (fake >> 8)))
+NUM_RE = re.compile(r'(?<!\d)([125])(\d{4})(?!\d)')
+NAME_RE = re.compile(r'(u0_a|all_a)(\d+)(?!\d)')
+MCS_RE = re.compile(r'c(\d+),c(\d+)(,c512,c768)')
+
+
+def _app(text, table):
+    """앱 번호에서 나온 값을 table(진짜 → 가짜)대로 한꺼번에.
+
+    번호마다 차례로 바꾸면 앞에서 만든 가짜를 뒤의 규칙이 또
+    바꾼다(100→123 뒤에 123→124). 그래서 종류마다 한 번만 훑는다.
+    """
+    def num(m):                    # uid · 캐시 gid · all gid
+        n = int(m.group(2))
+        return (m.group(1) + '%04d' % table[n] if n in table
+                else m.group(0))
+
+    def name(m):
+        n = int(m.group(2))
+        return m.group(1) + str(table.get(n, n))
+
+    def mcs(m):  # 범주: 앱 번호의 아래 8비트와 256 + 위 8비트
+        n = int(m.group(1)) + ((int(m.group(2)) - 256) << 8)
+        if n not in table:
+            return m.group(0)
+        f = table[n]
+        return 'c%d,c%d%s' % (f & 255, 256 + (f >> 8), m.group(3))
+
+    text = NUM_RE.sub(num, text)
+    return MCS_RE.sub(mcs, NAME_RE.sub(name, text))
 
 
 def ids(text):
     """앱 번호와 미러를 가짜로. 앱 이름(u0_aN)이 없으면 번호는 그대로.
 
     파일마다 u0_aN 에서 번호를 읽는다 — 번호 하나만으로는 그것이
-    앱 번호인지 알 수 없어서다.
+    앱 번호인지 알 수 없어서다. 이름이 여럿이면 작은 번호부터
+    APP_ID, APP_ID+1 … 을 받는다(어느 쪽이 Termux 인지는 모양으로
+    알 수 없다). 가짜끼리는 제자리로 가므로 두 번 불러도 같다.
     """
     real = sorted(set(int(x) for x in APP_RE.findall(text)))
-    for i, n in enumerate(n for n in real if n != APP_ID):
-        text = _app(text, n, APP_ID + i)
+    text = _app(text, dict((n, APP_ID + i)
+                           for i, n in enumerate(real)))
     hosts = set(h for h in MIRROR_RE.findall(text)
                 if h != MIRROR_HOST and not h.endswith('termux.dev'))
     for h in hosts:

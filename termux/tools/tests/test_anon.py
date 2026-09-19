@@ -56,7 +56,7 @@ class AnonTest(unittest.TestCase):
     def test_battery_numbers_fake_keys_kept(self):
         real = {'present': True, 'plugged': 'PLUGGED_AC',
                 'status': 'CHARGING', 'temperature': 33.3,
-                'voltage': 3900, 'current': 123456,
+                'voltage': 3900, 'current': 123789,
                 'percentage': 77, 'charge_counter': 1111111}
         text = sec(21, 'timeout 20 termux-battery-status',
                    json.dumps(real, indent=2))
@@ -96,8 +96,8 @@ class AnonTest(unittest.TestCase):
         text = ('deb https://mirror.example.org/termux/apt/'
                 'termux-main stable main\n'
                 'Updatable packages:\n'
-                'vim/stable 9.2.1100 aarch64 [upgradable from: 9.2]\n'
-                'code-server/tur 4.137.0 aarch64 [upgradable from: 4]\n'
+                'vim/stable 1.2.3789 aarch64 [upgradable from: 1.2]\n'
+                'code-server/tur 7.890.1 aarch64 [upgradable from: 7]\n'
                 'termux-tools version:\n1.45.0\n')
         out = anon.native(text)
         self.assertNotIn('example.org', out)
@@ -118,17 +118,17 @@ class AnonTest(unittest.TestCase):
 
 
 class IdsTest(unittest.TestCase):
-    # 앱 번호 456(시험용). 범주는 c(456 & 255)=c200, c(256 + 1)=c257
+    # 앱 번호 789(시험용). 범주는 c(789 & 255)=c21, c(256 + 3)=c259
     ENV = ('groups=0(root),1077(external_storage),3003(inet),'
-           '20456(u0_a456_cache),50456(all_a456)\n'
-           'aid_u0_a456:x:10456:10456:Termux:/:/sbin/nologin\n'
-           'Uid:\t10456\t10456\nTERMUX__UID=10456\n'
-           'u:r:untrusted_app_27:s0:c200,c257,c512,c768\n')
+           '20789(u0_a789_cache),50789(all_a789)\n'
+           'aid_u0_a789:x:10789:10789:Termux:/:/sbin/nologin\n'
+           'Uid:\t10789\t10789\nTERMUX__UID=10789\n'
+           'u:r:untrusted_app_27:s0:c21,c259,c512,c768\n')
 
     def test_app_id_faked_consistently(self):
         out = anon.ids(self.ENV)
-        self.assertNotIn('456', out)
-        self.assertNotIn('c200,c257', out)
+        self.assertNotIn('789', out)
+        self.assertNotIn('c21,c259', out)
         n = anon.APP_ID
         for want in ('20%d(u0_a%d_cache)' % (n, n), '50%d(all_a%d)'
                      % (n, n), 'aid_u0_a%d:x:10%d:10%d' % (n, n, n),
@@ -141,9 +141,28 @@ class IdsTest(unittest.TestCase):
         self.assertIn('1077(external_storage),3003(inet)', out)
         self.assertEqual(anon.ids(out), out)
 
+    def test_two_apps_idempotent(self):
+        # 앱 이름이 둘이면 작은 번호부터 가짜 번호를 차례로 받는다.
+        # 두 번째 호출이 둘을 하나로 뭉개면 안 된다
+        text = 'u0_a231 10231 x u0_a789 10789 all_a789\n'
+        n = anon.APP_ID
+        want = ('u0_a%d 10%d x u0_a%d 10%d all_a%d\n'
+                % (n, n, n + 1, n + 1, n + 1))
+        once = anon.ids(text)
+        self.assertEqual(once, want)
+        self.assertEqual(anon.ids(once), once)
+
+    def test_real_id_equal_to_fake_does_not_chain(self):
+        # 진짜 번호가 우연히 가짜 번호와 같아도 한 번에 바꾼다 —
+        # 차례로 바꾸면 100→123 뒤에 123→124 가 앞의 것까지 삼킨다
+        n = anon.APP_ID
+        text = 'u0_a100 10100 u0_a%d 10%d\n' % (n, n)
+        self.assertEqual(anon.ids(text), 'u0_a%d 10%d u0_a%d 10%d\n'
+                         % (n, n, n + 1, n + 1))
+
     def test_no_app_name_untouched(self):
         # 앱 이름이 없는 파일에서는 번호를 짐작하지 않는다
-        text = 'Uid:\t10456\nwidth 456\n'
+        text = 'Uid:\t10789\nwidth 789\n'
         self.assertEqual(anon.ids(text), text)
 
     def test_mirror_host_everywhere(self):
@@ -158,7 +177,7 @@ class IdsTest(unittest.TestCase):
         self.assertIn('tur.kcubeterm.com', out)
 
     def test_native_does_ids_too(self):
-        self.assertNotIn('456', anon.native(self.ENV))
+        self.assertNotIn('789', anon.native(self.ENV))
 
 
 if __name__ == '__main__':

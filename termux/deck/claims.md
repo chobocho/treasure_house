@@ -328,3 +328,10 @@
 | 네이티브 20만 번: getpid 49.457 ms · getcwd 92.368 ms, env true 100번 1147.404 ms (proot 안 113.742 · 21,305.860 · 12,731.661) | out/native_device.txt 16–18절 · proot_cost.txt | 스냅샷 캡처 | 2026-09-18 |
 | 네이티브에서 Termux:API 가 답했다(battery·sensor·camera-info·audio·wifi 20초 안), tts-engines 만 124 로 끊김. Wi-Fi 는 supplicant UNINITIALIZED·MAC 02:00:00:00:00:00 | out/native_device.txt 21–26절 | 네이티브 캡처 | 2026-09-18 |
 | 공개용 native_device 캡처는 모델·커널 빌드 꼬리·PID·배터리 수치·센서 이름·카메라 사양·미러·갱신 목록을 가짜로 바꿨다 — 측정값·종료 코드는 원본 그대로 | tools/anon.py · tools/tests/test_anon.py | 시험 | 2026-09-19 |
+| 자리표시(@TERMUX_PREFIX@·@TERMUX_HOME@ …)는 빌드 때 sed 로 채운다 — NDK 헤더 패치는 툴체인 준비에서, 레시피 패치는 termux_step_patch_package 에서, termux-tools 의 *.in 은 Makefile.am 의 do_subst 로 | sources/termux-packages@7d5b4d3 scripts/build/toolchain/termux_setup_toolchain_29.sh 200–206 · scripts/build/termux_step_patch_package.sh 22–34 · sources/termux-tools@a62f7b2 scripts/Makefile.am 31–38 | upstream 소스 | 2026-09-19 |
+| 0.118.0 부터 파일 프로바이더도 allow-external-apps=true 일 때만 열리고, termux.properties 는 읽기 전용으로만 내준다 | post-2022-02-15-vuln 수정 항목 3 · sources/termux-app TermuxOpenReceiver.java 215–226 | upstream 소스 · 공지 글 | 2026-09-19 |
+| bionic 은 /etc/passwd(안드로이드에서는 /system/etc/passwd 링크)를 system_ 계정용으로 읽는다 — 앱 사용자는 거기 없고 uid 에서 계산된다 | sources/docs/aosp-bionic-grp-pwd.txt 59–60 · out/native_device.txt 14절 | upstream 소스 · 네이티브 캡처 | 2026-09-19 |
+| termux-reload-settings 는 colors.properties·font.ttf·termux.properties 를 고친 뒤 다시 읽히는 명령(reload_style 브로드캐스트 → 앱이 reloadProperties) | sources/termux-tools@a62f7b2 scripts/termux-reload-settings.in · sources/termux-app TermuxActivity.java 954–970 | upstream 소스 | 2026-09-19 |
+| /system/bin/sh 는 toybox 가 아니라 mksh | sources/termux-app termux-shared …/TermuxSession.java 108 (주석) | upstream 소스 | 2026-09-19 |
+| proot-distro 의 --shared-tmp 는 $PREFIX/tmp 를 컨테이너의 /tmp 에 바인드한다 | sources/proot-distro proot_distro/commands/login/proot_cmd.py 212–213 | upstream 소스 | 2026-09-19 |
+| 네이티브 배터리 JSON 은 소스의 열다섯 칸 중 energy 만 없다(putLongIfSet — 값이 있을 때만) | out/src_api.txt 4절 · out/native_device.txt 21절 | 캡처 | 2026-09-19 |

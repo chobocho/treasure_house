@@ -1010,3 +1010,32 @@ The user approved every recommendation below as-is. Each row is now a decision.
   now applies it to stable captures too; the seven existing captures were rewritten with it.
 - Prose (0/3/5/6/9부, glossary, claims, this plan) follows the fake number. The archived history
   entry that names the real app id is left byte-for-byte (archive rule) — pending user decision.
+
+### Step 16 — 리뷰 5차 (2026-09-19)
+
+- Scope: the 14 slides added in steps 14–15 (never reviewed) + a third independent reading of
+  parts 0–8 and 9–17 (two subagents), mechanical checks and figure PNGs by me. 29 fixes, each
+  re-verified against the capture / pinned source before editing:
+  - **Anonymisation leak shipped**: `out/native_device.txt` had the all-gid *name* folded mid-token
+    (`all_aNN` / `↪ N`), so step 15's rewrite of the already-folded file missed it while faking
+    the number next to it. Test first: `anon.ids` now maps ids through one table in a single pass
+    (k-th smallest → APP_ID+k; idempotent with two ids, no 100→123→124 chaining), also discovers
+    ids from `all_aN`, and `run_all.check` unfolds each capture and re-runs `anon.ids` — any
+    change means a leftover id/mirror (the message never prints the value). Re-imported the
+    capture; the native sources.list mirror is now `mirror.example.com` too. Test fixtures no
+    longer share any token with the raw device file. The leaked name is still in the history of
+    the two previous commits — history rewrite pending user decision.
+  - 사실오류 5 (files provider also needs allow-external-apps since 0.118 — quiz, 2 tables, myth
+    12; Android does have /etc/passwd, for system accounts; only 3 of 7 plugins date from 2016–17;
+    API predates the app in 2015; /system/bin/sh is mksh), 모순 6 (15부 "/bin/sh missing" vs the
+    native capture — the failing shebang is /usr/bin/env; bind_port.c and paths.c header comments;
+    port 80 advice and two summary rows; settings reload; appendix "all our code" lacks anon.py),
+    낡음 3 (third capture label 네이티브 Termux $; socket-uid guess ruled out by API 37; tense),
+    퀴즈 2, 캡처·자료 불일치 2 (energy key absent; "30 days"), 교차참조·인용 4 (new slide
+    p6-placeholders so that "6부 4장 — prefix is fixed at build time" points at something; wiki
+    table has no /usr row; MCS is 5부; 다음 장 → 다음 슬라이드), 한국어·초보자 2 ("판별"; hint
+    that the getpid ×2.3 gap equals one traced process start — still 미확인). 가명 처리 4 in all
+    (the leak, the two-id idempotency bug, fixture values, glossary marks 123 as fake); 사실오류 is 6
+    with the glossary's --shared-tmp (it binds $PREFIX/tmp, not "Termux's /tmp").
+- 603 → 604 slides. `make test` 238 passed, `make all` 0 errors.
+- Pass-to-pass counts: 26 → 23 → 37 → 20 → 29 (of which 14 in never-reviewed or step-14/15 text).
