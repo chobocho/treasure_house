@@ -343,13 +343,19 @@ def build_dag(env, name, dates):
     return r
 
 
-def build_criss_cross(env):
-    """criss-cross — 가장 좋은 공통 조상이 둘. 날짜는 모두 다르다."""
-    r = Repo('dag-criss', env)
+def build_criss_cross(env, name='dag-criss', dates=True):
+    """criss-cross — 가장 좋은 공통 조상이 둘.
+
+    dates=True 면 날짜가 모두 다르고, False 면 모두 같다. 같으면 두
+    공통 조상(A1·B1)의 차례를 날짜로 가를 수 없어 git 이 칠해 내려가며
+    찾은 차례가 그대로 드러난다 — 인자 순서에 따라 달라진다(SPEC §10.2).
+    """
+    r = Repo(name, env)
     tick = [START_DATE]
 
     def d():
-        tick[0] += 60
+        if dates:
+            tick[0] += 60
         return tick[0]
 
     def c(msg):
@@ -374,14 +380,20 @@ def build_criss_cross(env):
 def g_dag(env):
     for name, r in (('equal', build_dag(env, 'dag-equal', False)),
                     ('dated', build_dag(env, 'dag-dated', True)),
-                    ('criss', build_criss_cross(env))):
+                    ('criss', build_criss_cross(env)),
+                    ('criss-equal',
+                     build_criss_cross(env, 'dag-criss-equal', False))):
         copy_gitdir(r, 'dag/' + name)
         txt = ''
         for args in (('log', '--oneline'), ('log', '--oneline', 't'),
                      ('log',), ('merge-base', '--all', 'main', 't'),
                      ('merge-base', 'main', 't'),
                      ('merge-base', '--all', 'main', 'b'),
-                     ('merge-base', 'main', 'b')):
+                     ('merge-base', 'main', 'b'),
+                     # 인자 순서를 뒤집으면 같은 날짜의 차례가 바뀐다
+                     ('merge-base', '--all', 't', 'main'),
+                     ('merge-base', '--all', 'b', 'main'),
+                     ('merge-base', 'b', 'main')):
             code, so, _ = gitenv.git(env, r.path, *args, check=False)
             if code == 128:
                 continue                   # 그 저장소에 없는 브랜치
