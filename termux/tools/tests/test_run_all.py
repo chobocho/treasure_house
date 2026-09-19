@@ -94,6 +94,14 @@ class RenderTest(unittest.TestCase):
         self.assertIn('"<ssid>"', text)
         self.assertNotIn('HomeNet', text)
 
+    def test_app_id_is_faked(self):
+        # 앱 번호·미러는 고정 캡처에서도 가짜로(tools/anon.py)
+        run = fake({'echo hi': ('20456(u0_a456_cache)\n', 0),
+                    'false': ('', 1)})
+        run_all.record(self.cap(), self.d, '2026-09-18', run)
+        text = io.open(os.path.join(self.d, 't1.txt')).read()
+        self.assertNotIn('456', text)
+
     def test_missing_final_newline_is_added(self):
         run = fake({'echo hi': ('no-newline', 0), 'false': ('', 1)})
         run_all.record(self.cap(), self.d, '2026-09-18', run)
@@ -121,7 +129,7 @@ class ImportTest(unittest.TestCase):
     def test_import_as_native_snapshot(self):
         io.open(self.src, 'w').write(
             '# native_facts 2026-09-19\n\n== 1. id ==\n'
-            'uid=10123(u0_a123)\n{"ssid": "Home"}\n')
+            'uid=10456(u0_a456)\n{"ssid": "Home"}\n')
         imp = run_all.Import('native_device', self.src)
         e = run_all.record(imp, self.d, '2026-09-20', None)
         self.assertEqual(e, {'kind': 'snapshot', 'side': 'native',

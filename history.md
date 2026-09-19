@@ -1,3 +1,10 @@
+### [2026-09-19 06:03] Termux 덱 앱 번호·미러 가명 처리 — 모든 캡처에서 가짜 값으로
+- **기획:** 네이티브 캡처에 이어 예전 캡처의 uid·gid·SELinux 범주·미러도 가짜로. 진짜 번호는 소스에 적지 않고 u0_aN 모양으로 찾음.
+- **TC:** 정상: uid·gid 셋·MCS 범주가 가짜 번호 123 으로 일관. 경계: 앱 이름 없는 파일은 그대로, 시스템 gid·TUR 유지, 두 번 불러도 같음.
+- **개발:** `termux/tools/anon.py`, `termux/run_all.py`, `termux/tools/tests/`(2개), `termux/out/`(7개), `termux/deck/sections/`(6개), `termux/deck/claims.md`, `termux/deck/glossary.txt` 외
+- **검증:** 단위 테스트 전부 통과 · make all 오류 0건 · 603장
+- **비고:** git 이력과 보관 기록(history/archive)에는 예전 값이 남아 있음.
+
 ### [2026-09-19 04:39] Termux 덱 네이티브 캡처 반영 — device.txt 로 0·3·5·7·8·9부 11장 추가
 - **기획:** 사용자가 네이티브 Termux 에서 뜬 device.txt 로 '공개 시점까지 오지 않았다' 자리를 실제 값으로 채움.
 - **TC:** 정상: 108칸 이하 줄은 그대로. 경계: 딱 108칸·넓은 글자·공백 우선 접기, 글자 손실 없음.

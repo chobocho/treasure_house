@@ -101,6 +101,7 @@ class AnonTest(unittest.TestCase):
                 'termux-tools version:\n1.45.0\n')
         out = anon.native(text)
         self.assertNotIn('example.org', out)
+        self.assertIn(anon.MIRROR, out)
         self.assertNotIn('code-server', out)
         self.assertIn('termux-tools version:\n1.45.0\n', out)
 
@@ -114,6 +115,50 @@ class AnonTest(unittest.TestCase):
         # 20초에 끊겨 본문이 빈 절(tts-engines)도 있다
         text = sec(21, 'timeout 20 termux-battery-status', '', 124)
         self.assertEqual(anon.native(text), text)
+
+
+class IdsTest(unittest.TestCase):
+    # 앱 번호 456(시험용). 범주는 c(456 & 255)=c200, c(256 + 1)=c257
+    ENV = ('groups=0(root),1077(external_storage),3003(inet),'
+           '20456(u0_a456_cache),50456(all_a456)\n'
+           'aid_u0_a456:x:10456:10456:Termux:/:/sbin/nologin\n'
+           'Uid:\t10456\t10456\nTERMUX__UID=10456\n'
+           'u:r:untrusted_app_27:s0:c200,c257,c512,c768\n')
+
+    def test_app_id_faked_consistently(self):
+        out = anon.ids(self.ENV)
+        self.assertNotIn('456', out)
+        self.assertNotIn('c200,c257', out)
+        n = anon.APP_ID
+        for want in ('20%d(u0_a%d_cache)' % (n, n), '50%d(all_a%d)'
+                     % (n, n), 'aid_u0_a%d:x:10%d:10%d' % (n, n, n),
+                     'Uid:\t10%d\t10%d' % (n, n),
+                     'TERMUX__UID=10%d' % n,
+                     's0:c%d,c%d,c512,c768' % (n & 255,
+                                               256 + (n >> 8))):
+            self.assertIn(want, out)
+        # 시스템 그룹 번호는 그대로
+        self.assertIn('1077(external_storage),3003(inet)', out)
+        self.assertEqual(anon.ids(out), out)
+
+    def test_no_app_name_untouched(self):
+        # 앱 이름이 없는 파일에서는 번호를 짐작하지 않는다
+        text = 'Uid:\t10456\nwidth 456\n'
+        self.assertEqual(anon.ids(text), text)
+
+    def test_mirror_host_everywhere(self):
+        text = (' 500 https://mirror.real.edu/termux/apt/termux-main '
+                'stable/main aarch64 Packages\n'
+                '     origin mirror.real.edu\n'
+                'deb https://tur.kcubeterm.com tur-packages tur\n')
+        out = anon.ids(text)
+        self.assertNotIn('real.edu', out)
+        self.assertIn('origin mirror.example.com\n', out)
+        # 공개 저장소는 그대로
+        self.assertIn('tur.kcubeterm.com', out)
+
+    def test_native_does_ids_too(self):
+        self.assertNotIn('456', anon.native(self.ENV))
 
 
 if __name__ == '__main__':

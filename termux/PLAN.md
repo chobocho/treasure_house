@@ -160,7 +160,7 @@ Keep `CODE` (extended so `file=sources/…` is allowed with a mandatory `sha=`),
 | Termux prefix | `/data/data/com.termux/files/usr`, bind-mounted read-write into this proot | 326 dpkg packages installed (`dpkg -l` count), 84 `termux-*` executables in `$PREFIX/bin` |
 | Running Termux binaries from proot | **works**: `/data/data/com.termux/files/usr/bin/bash -c '…'` executes bionic bash; `dpkg`, `apt`, `termux-info`, `termux-battery-status` run | `$PREFIX`/`$PATH` are **not** set by that bash — `tools/tmx.sh` must export `PREFIX`, `PATH=$PREFIX/bin`, `HOME=/data/data/com.termux/files/home`, `TMPDIR=$PREFIX/tmp`, `LANG=en_US.UTF-8`, `TERM=xterm-256color`, and unset proot's `LD_*` |
 | Termux:API | app + socket present: `termux-battery-status` returned JSON from proot | proves the `termux-api` ↔ app socket path crosses proot; capture the mechanism (Part 7) |
-| apt sources here | main mirror `mirror.example.com/termux/apt/termux-main`, `tur.list` → `tur.kcubeterm.com` | read-only evidence for Part 6; `apt update` is allowed (network, no state change beyond lists), `apt install` per decision 5 |
+| apt sources here | main mirror (a third-party mirror; faked as `mirror.example.com` in captures), `tur.list` → `tur.kcubeterm.com` | read-only evidence for Part 6; `apt update` is allowed (network, no state change beyond lists), `apt install` per decision 5 |
 | proot side | Ubuntu 26.04.1 LTS, python3 3.14.4, gcc 15.2, node 24.18, git 2.55 | stdlib-only Python; node runs `check_deck.js` (DOM stub); Playwright unusable |
 | Termux side toolchain | `aarch64-linux-android-clang` present in `$PREFIX/bin` | compile `exp/*.c` **twice**: bionic (Termux clang) and glibc (proot gcc) — the differences are Part 3/5 evidence |
 | Network | wiki.termux.com, github.com, raw.githubusercontent.com, api.github.com, f-droid.org all HTTP 200 | `gh_api.py` sends a User-Agent; unauthenticated rate limit 60/h — cache every response in `sources/gh/` |
@@ -1000,3 +1000,13 @@ The user approved every recommendation below as-is. Each row is now a decision.
   fake values at import — `tools/anon.py` (model, kernel build tail/time, app PID, battery numbers,
   sensor names, camera specs, mirror, updatable list), test first. Measurements, exit codes and
   the uid/SELinux context (already public in older captures) are kept. 0부 device slide says so.
+
+### Step 15 — 앱 번호·미러 가명 처리 (2026-09-19)
+
+- User asked to fake the app id and mirror in every capture, not only the native one. Test first:
+  `anon.ids()` reads the app id from `u0_aN` in each file (no real number in the source) and
+  rewrites uid/cache gid/all gid (10000/20000/50000 + N), `u0_aN`/`all_aN` and the MCS pair to
+  the fake app id 123; third-party mirror hosts become `mirror.example.com`. `run_all.record`
+  now applies it to stable captures too; the seven existing captures were rewritten with it.
+- Prose (0/3/5/6/9부, glossary, claims, this plan) follows the fake number. The archived history
+  entry that names the real app id is left byte-for-byte (archive rule) — pending user decision.

@@ -187,6 +187,7 @@ def record(cap, outdir, date, runner, force=False):
     outs = [runner(cap.side, s.cmd, cap.cwd, s.timeout, s.install)[0]
             for s in cap.steps]
     text, _n = scrub.fix(render(cap, outs))
+    text = anon.ids(text)      # 앱 번호·미러는 가짜로(tools/anon.py)
     if cap.kind == 'snapshot':
         text = '# snapshot %s\n' % date + text
         entry['date'] = date
