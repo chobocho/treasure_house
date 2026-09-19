@@ -26,6 +26,14 @@ def run(ctx):
     r.write('../objects-tools/mkblob.py', MKBLOB)
     r.write('../objects-tools/inflate.py', INFLATE)
     r.env['PATH'] = r.env['PATH']
+    obj = '.git/objects/ce/013625030ba8dba906f756967f9e9ca394464a'
+    # git 이 직접 쓴 파일부터 — 느슨한 객체의 기본 압축 수준은 1 이라
+    # 78 01 로 시작한다. 아래 mkblob.py(파이썬 zlib 기본 수준 6)가 쓴
+    # 파일은 78 9c 다. 첫 판은 파이썬이 쓴 파일을 "git 의 파일" 로 실었다.
+    g = ctx.repo('objects_git')
+    g.cap("printf 'hello\\n' | git hash-object -w --stdin")
+    g.cap('od -A d -t x1 ' + obj)
+    g.cap('python3 ../objects-tools/inflate.py %s | od -c' % obj)
     r.cap("printf 'blob 6\\0hello\\n' | sha1sum")
     r.cap("printf 'hello\\n' | git hash-object --stdin")
     r.cap('cat ../objects-tools/mkblob.py')
@@ -34,9 +42,7 @@ def run(ctx):
     r.cap('git cat-file -s ce01362')
     r.cap('git cat-file -p ce01362')
     r.cap('git fsck --strict')
-    obj = '.git/objects/ce/013625030ba8dba906f756967f9e9ca394464a'
     r.cap('od -A d -t x1 ' + obj)
-    r.cap('python3 ../objects-tools/inflate.py %s | od -c' % obj)
     r.cap('git hash-object -t blob /dev/null')
     r.cap('git hash-object -t tree /dev/null')
     r.cap("printf '' | git mktree")

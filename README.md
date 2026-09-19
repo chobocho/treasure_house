@@ -73,7 +73,7 @@
 - 🌊 **[Langflow 가이드.html](./Langflow%20가이드.html)** — 🤖 비주얼 LLM 플로우를 REST API로! 🔌
 
 ### 🌿 Git & 버전 관리 🧬
-- 🌿 **[Git_대백과사전.html](./Git_%EB%8C%80%EB%B0%B1%EA%B3%BC%EC%82%AC%EC%A0%84.html)** — 🔍 진짜 git 2.55 가 채점하는 1,830장 — 캡처 1,240개·실험 32개·그림 17·데모 9·퀴즈 61·용어 255, 부록에 git 을 다섯 언어(py·ts·go·java·C++, 약 21,000줄)로 직접 만든 소스 전문 🛠️
+- 🌿 **[Git_대백과사전.html](./Git_%EB%8C%80%EB%B0%B1%EA%B3%BC%EC%82%AC%EC%A0%84.html)** — 🔍 진짜 git 2.55 가 채점하는 1,830장 — 캡처 1,245개·실험 32개·그림 17·데모 9·퀴즈 60·용어 255, 부록에 git 을 다섯 언어(py·ts·go·java·C++, 약 21,000줄)로 직접 만든 소스 전문 🛠️
 - 🔗 GitHub Actions·GitOps 문서는 아래 🎬 자동화 & CI/CD 에 있다
 
 ### 🎬 자동화 & CI/CD 🔄

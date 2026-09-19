@@ -108,7 +108,33 @@ def build():
             col, want = filt
             body = [r for r in body if r[head.index(col)] == want]
         made[out_name] = render(head, body, cols)
+    made.update(events_dated())
     return made
+
+
+def events_dated():
+    """data/events.tsv 의 when 칸을 날짜로 풀고 날짜순으로 세운 표.
+
+    events.tsv 는 릴리스 사건을 "release:2.0.0" 으로 적는다(날짜를 두 곳에
+    적지 않으려고). 그 표를 그대로 실으면 부록의 날짜 칸에 자리표가
+    찍히고 차례도 뒤섞인다(3차 리뷰). 푼 날짜는 make data 가 mirror 의
+    태그에서 가져와 timeline.tsv 에 적어 두었으니, 사건 글로 거기서 찾는다
+    (이 도구는 mirror 없이 돌아야 한다). O(행 수 log 행 수).
+    """
+    if not os.path.exists(os.path.join(DATA, 'events.tsv')):
+        return {}
+    th, tb = rows_of('timeline.tsv')
+    when = {r[th.index('event')]: r[th.index('date')] for r in tb}
+    head, body = rows_of('events.tsv')
+    k, e = head.index('when'), head.index('event')
+    out = []
+    for r in body:
+        r = list(r)
+        if r[k].startswith('release:'):
+            r[k] = when[r[e]]      # 없으면 여기서 멈춘다 — make data 먼저
+        out.append(r)
+    out.sort(key=lambda r: r[k])
+    return {'tbl_events_dated.html': render(head, out)}
 
 
 def manifest_note():

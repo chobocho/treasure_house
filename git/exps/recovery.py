@@ -141,7 +141,7 @@ SCENES = [
         '$ git reflog expire --expire=now --all && '
         'git gc -q --prune=now',
         '$ git count-objects -vH | grep size-pack']),
-    ('20', '보내기가 거절됐다(되감기 아님)', [
+    ('20', '보내기가 거절됐다(빨리 감기 아님)', [
         'c a', 'git clone -q --bare . ../rec_20.git',
         'git remote add origin ../rec_20.git && git fetch -q',
         'git branch -q -u origin/main',

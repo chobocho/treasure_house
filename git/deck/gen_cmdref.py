@@ -103,7 +103,7 @@ w('''<article class="card section" id="p17">
 <p class="lead">git 2.55.0 의 명령 목록(command-list.txt)에 있는 명령 %d개를 알파벳순으로 한 장씩 싣습니다.</p>
 <ul>
 <li><b>한 줄 설명</b> — 그 명령 설명서의 NAME 줄을 옮긴 것, 원문을 아래에 같이 둡니다.</li>
-<li><b>분류</b> — command-list.txt 의 분류. porcelain(사람용)과 plumbing(스크립트용 배관)의 구분은 6부.</li>
+<li><b>분류</b> — command-list.txt 의 분류. porcelain(사람용)과 plumbing(스크립트용 배관)의 구분은 2부 7장.</li>
 <li><b>사용법</b> — 이 기계에서 <code>git 명령 -h</code> 를 돌린 앞 여섯 줄.</li>
 <li><b>실행 예</b> — 자주 쓰는 명령은 표본 저장소(main·topic, 태그 v1, 커밋 넷)에서 한 번 돌린 캡처.</li>
 <li><b>이 덱에서 돌린 곳</b> — 다른 부의 캡처 가운데 그 명령을 부른 부.</li>

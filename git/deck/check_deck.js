@@ -62,7 +62,11 @@ else ok(`챕터 이동 항목 ${navOpts.length}개 — 전부 실재하는 슬�
 // 본문이 다 채워진 뒤에도 이 검사가 걸렸다 — 인용한 코드는 본문이 아니다.
 const skeleton = process.argv.includes('--skeleton');
 const prose = struct.replace(/<pre[\s\S]*?<\/pre>/g, '');
-const holes = (prose.match(/아직 없습니다|TODO|준비 중입니다/g) || []).length;
+//
+// 뼈대가 실제로 쓰던 문구만 잡는다. '아직 없습니다' · 'TODO' 만으로 찾으면
+// "머지 커밋은 아직 없습니다", "TODO 가 스테이징되어 있다"(13부 훅 실험)
+// 같은 멀쩡한 본문에 걸려, 완성된 덱이 SKEL=1 없이는 통과하지 못했다.
+const holes = (prose.match(/아직 없습니다 — 뼈대만|TODO:|준비 중입니다/g) || []).length;
 if (!holes) ok('플레이스홀더 없음');
 else if (skeleton) ok(`플레이스홀더 ${holes}개 (뼈대 단계라 넘어간다)`);
 else fail(`아직 안 채운 자리 ${holes}개가 남아 있다`);

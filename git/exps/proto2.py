@@ -51,7 +51,7 @@ def pushing(ctx):
     commit(w, 10, 'local', {'f.txt': 'local\n'})
     w.cap('GIT_TRACE_PACKET=1 git push -q origin main 2>&1 | '
           'grep -o "push[<>].*" | cut -c1-100')
-    # --atomic: main 은 되감기가 아니고, dev 는 되감기 거부
+    # --atomic: main 은 빨리 감기, dev 는 빨리 감기가 아니라 거부된다
     o.sh('git config receive.denyNonFastForwards true')
     tick(w, 11)
     w.sh('git switch -q -c dev origin/dev && '

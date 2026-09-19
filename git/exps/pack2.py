@@ -97,6 +97,18 @@ def auto(ctx):
           'grep -E "^(count|packs)"', label='pack_auto.more')
 
 
+def trigger(ctx):
+    """커밋이 끝에 부르는 것은 무엇인가. 2.54 부터 gc --auto 가 아니라
+    maintenance run --auto 이고 기본 전략은 geometric 이다 — 첫 판의
+    본문은 "커밋이 gc --auto 를 부른다" 고 적었다(3차 리뷰에서 정정)."""
+    r = ctx.repo('pack_trigger')
+    r.sh('git config maintenance.autoDetach false')
+    r.write('f', '1\n')
+    r.sh('git add f')
+    r.cap('GIT_TRACE=1 git commit -q -m seed 2>&1 | '
+          'grep -o "run_command: .*"')
+
+
 def keep(ctx):
     r = history(ctx, 'pack_keep', n=3)
     r.sh('git gc -q')
@@ -111,4 +123,5 @@ def run(ctx):
     inside(ctx)
     cruft(ctx)
     auto(ctx)
+    trigger(ctx)
     keep(ctx)

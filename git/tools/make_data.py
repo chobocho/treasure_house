@@ -92,9 +92,14 @@ def cves():
             continue
         ver = name[len('relnotes-'):-4]
         text = open(os.path.join(DOCS, name), encoding='utf-8').read()
+        # 노트 원문의 두 가지 흠 — 2.17.1 은 "CVE-2018-11233 and 11235"
+        # 로 줄여 적었고, 2.36.6 은 "CVS-2023-25815" 로 잘못 적었다.
+        text = text.replace('CVE-2018-11233 and 11235',
+                            'CVE-2018-11233 and CVE-2018-11235')
+        text = text.replace('CVS-2023-25815', 'CVE-2023-25815')
         for c in set(re.findall(r'CVE-\d{4}-\d{4,}', text)):
             seen.setdefault(c, []).append(ver)
-    out = [('cve', 'year', 'affected', 'fixed-in', 'summary', 'source')]
+    out = [('cve', 'year', 'affected', 'noted-in', 'summary', 'source')]
     for c in sorted(seen, key=vkey):
         if c in NOT_GIT:
             continue
@@ -240,7 +245,9 @@ HEADS = {
     'cves.tsv': (
         '# 보안 결함 — docs/ 의 릴리스 노트에 적힌 CVE 전부\n'
         '# (cURL 의 것 하나 뺌). tools/make_data.py 가 만든다.\n'
-        '# fixed-in 은 그 CVE 를 적은 모든 노트의 판,\n'
+        '# noted-in 은 그 CVE 를 이름으로 적은 모든 노트의 판 —\n'
+        '# 고친 판만이 아니라 "c.f." 로 언급만 한 판도 들어가고,\n'
+        '# CVE 이름 없이 앞 판의 수정을 합친 판은 빠진다.\n'
         '# affected·summary 는 data/cves_ko.tsv.\n'),
     'timeline.tsv': (
         '# 연표 — tools/make_data.py 가 data/events.tsv(사람이\n'

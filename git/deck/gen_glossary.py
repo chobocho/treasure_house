@@ -42,7 +42,8 @@ def entries():
     out = []
     with open(SRC, encoding='utf-8') as f:
         for n, line in enumerate(f, 1):
-            line = line.split('#')[0].strip()
+            # 주석은 줄 머리의 '#' 만 — 뜻풀이 안의 '#' 을 자르면 안 된다
+            line = '' if line.startswith('#') else line.strip()
             if not line:
                 continue
             parts = [p.strip() for p in line.split('|')]
@@ -84,7 +85,7 @@ def render(rows):
         for term, meaning, where in chunk:
             body.append('<tr><td><b>%s</b></td><td>%s</td>'
                         '<td><a href="#%s">보기</a></td></tr>'
-                        % (html.escape(term), meaning, where))
+                        % (html.escape(term), html.escape(meaning), where))
         body += ['</table>', '</div>', '</article>']
         parts.append('\n'.join(body))
     return '\n\n'.join(parts)

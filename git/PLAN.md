@@ -729,3 +729,21 @@ The user approved every proposal below as-is. Each row is now a decision.
   hash order and Go/C++ used name order; git uses paint_down_to_common's discovery order + stable
   date sort. Added golden/dag/criss-equal (both argument orders), SPEC §10.2 rule, RED in all five,
   then ported paint_down_to_common to py/go/ts/java/cpp. Parity 60/60, record 1,240 ×3 (fresh dirs).
+
+
+### Review 3 — close reading of prose against evidence (2026-09-19)
+
+- Parts 0·12·14·15·16·18 read by the orchestrator, the rest by six subagents (two at a time), each
+  verifying doubtful claims with real git 2.55 in a scratch dir. 68 findings fixed: fact 12,
+  mismatch 17, contradiction 6, stale 2, xref 17, Korean 13, one addition.
+- Worst: fast-forward was translated "되감기" (= rewind) in 33 places (now "빨리 감기"); part 10 said
+  commits call `gc --auto` (since 2.54 it is `maintenance run --auto`, geometric strategy — new
+  capture `pack_trigger`); #p3-loose-bytes showed a Python-written file as git's (78 9c vs git's
+  78 01 — new repo `objects_git`); #p9-follow ran on a non-rename (now on rename_score); the
+  abbreviated empty tree `4b825dc` does not resolve unless the object exists.
+- Tools: check_deck.js placeholder regex matched ordinary prose, so the finished deck only passed
+  with SKEL=1 — now plain `make all` is green. make_data.py: CVE column renamed `noted-in`, two
+  relnotes quirks handled. gen_glossary.py escapes definitions; gen_tables.py adds
+  tbl_events_dated.html (release: placeholders resolved from timeline.tsv, sorted).
+- record.sh --check: 1,244 captures ×3 equal (fresh dirs). Cards: captures 1,245 (files in out/),
+  quizzes 60 (was miscounted as 61).

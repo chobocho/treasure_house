@@ -124,7 +124,6 @@ def run(ctx):
     # 곡괭이 — 문자열의 수가 바뀐 커밋(-S)과 줄이 맞는 커밋(-G)
     r.cap('git log --oneline -S "line 7"')
     r.cap('git log --oneline -G "line 7"')
-    r.cap('git log --oneline --follow -- b.txt')
     # bisect run — 스크립트가 좋고 나쁨을 판정한다
     r = ctx.repo('bisect')
     for n in range(1, 17):

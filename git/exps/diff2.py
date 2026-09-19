@@ -29,6 +29,11 @@ def renames(ctx):
     r.cap('git diff --name-status -M HEAD~1 HEAD')
     r.cap('git diff --name-status -M80% HEAD~1 HEAD')
     r.cap('git diff --name-status --no-renames HEAD~1 HEAD')
+    # --follow 는 진짜 이름 바꾸기가 있는 역사에서 보여야 한다. 첫 판은
+    # blame 실험의 b.txt(a.txt 의 3줄만 옮긴 새 파일)에 썼는데, 닮은
+    # 정도가 50 % 아래라 따라갈 것이 없어 --follow 없는 log 와 똑같았다.
+    r.cap('git log --oneline --follow -- b.txt')
+    r.cap('git log --oneline -- b.txt')
     # 복사 — 원본(keep.txt)은 이 커밋에서 바뀌지 않았다
     r.write('copy.txt', BODY)
     r.sh('git add copy.txt')

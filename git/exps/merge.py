@@ -31,7 +31,7 @@ def run(ctx):
     r.cap('git merge topic')
     r.cap('git log --oneline --graph', label='merge_ff.after')
     r.cap('cat .git/ORIG_HEAD')
-    # --no-ff — 되감을 수 있어도 머지 커밋을 만든다
+    # --no-ff — 빨리 감을 수 있어도 머지 커밋을 만든다
     r = fork(ctx, 'merge_noff', None, LINES + 'line 9\n')
     r.cap('git merge --no-ff --no-edit topic')
     r.cap('git log --oneline --graph')

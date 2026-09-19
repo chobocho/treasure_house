@@ -3,7 +3,7 @@
 
 origin(bare) 하나를 두고 로컬 경로·file:// 로 clone·fetch·push 한다.
 GIT_TRACE_PACKET 이 찍는 pkt-line 대화로 v0 과 v2 를 견주고, dumb
-HTTP 의 파일 배치, bundle, 얕은 clone, 부분 clone(promisor), 되감기
+HTTP 의 파일 배치, bundle, 얕은 clone, 부분 clone(promisor), 빨리 감기
 거부를 보인다. 패킷 추적 줄 앞의 시각은 명령 안의 grep -o 가 떼어 낸다.
 """
 import re
@@ -67,7 +67,7 @@ def run(ctx):
     w.cap('git -C partial checkout -q main && '
           'git -C partial rev-list --objects --missing=print --all '
           '| grep -c "^?"', label='proto_work.checkout')
-    # push 와 되감기 거부
+    # push 와 빨리 감기 거부
     w.sh('git -C ../proto_origin config '
          'receive.denyNonFastForwards true')
     tick(w, 20)
