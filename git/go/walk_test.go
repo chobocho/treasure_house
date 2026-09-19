@@ -5,6 +5,8 @@ package mygit
 // expect.txt 는 그 저장소에서 git 이 찍은 log·merge-base 출력이다.
 // equal 은 모든 커밋의 날짜가 같고(§10.1 의 "먼저 온 것이 먼저"),
 // dated 는 날짜가 모두 다르고, criss 는 가장 좋은 공통 조상이 둘이다.
+// criss-equal 은 criss 와 같되 날짜가 모두 같아, 두 공통 조상의
+// 차례를 인자 순서와 부모 순서가 정한다(SPEC.md §10.2).
 
 import (
 	"strconv"
@@ -14,7 +16,8 @@ import (
 
 func TestS10LogAndMergeBaseMatchGit(t *testing.T) {
 	n := 0
-	for _, name := range []string{"equal", "dated", "criss"} {
+	for _, name := range []string{
+		"equal", "dated", "criss", "criss-equal"} {
 		s, _ := copyDag(t, name)
 		text := string(gread(t, "dag", name, "expect.txt"))
 		for _, block := range strings.Split(text, "$ git ")[1:] {
