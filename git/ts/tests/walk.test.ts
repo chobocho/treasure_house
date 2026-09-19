@@ -5,6 +5,8 @@
 // 저장소에서 git 이 찍은 log·merge-base 출력이다. equal 은 모든 커밋의
 // 날짜가 같아(§10.1 의 "먼저 온 것이 먼저" 규칙이 차례를 전부 정한다),
 // dated 는 날짜가 모두 다르고, criss 는 가장 좋은 공통 조상이 둘이다.
+// criss-equal 은 criss 와 같되 날짜가 모두 같아, 두 공통 조상의
+// 차례를 인자 순서와 부모 순서가 정한다(SPEC.md §10.2).
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -14,7 +16,7 @@ import * as refs from '../src/refs';
 import * as walk from '../src/walk';
 import * as golden from './golden';
 
-const HISTORIES = ['equal', 'dated', 'criss'];
+const HISTORIES = ['equal', 'dated', 'criss', 'criss-equal'];
 
 // expect.txt → [인자들, 기대 stdout, 기대 코드].
 function expectations(name: string): [string[], string, number][] {

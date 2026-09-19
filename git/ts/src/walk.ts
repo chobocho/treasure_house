@@ -83,22 +83,67 @@ export function isAncestor(gitdir: string, a: string, b: string):
   return ancestors(gitdir, b).has(a);
 }
 
-// 가장 좋은 공통 조상들(SPEC.md §10.2), 커미터 날짜 내림차순.
-//
-// 공통 조상 가운데 다른 공통 조상의 조상이 아닌 것만 남긴다. 작은
-// 저장소를 위한 곧은 방법이다 — git 은 날짜로 칠하며 내려가는 더 빠른
-// 길(paint_down_to_common)을 쓴다. O(커밋 수²) 최악.
-export function mergeBases(gitdir: string, a: string, b: string):
-  string[] {
-  const inB = ancestors(gitdir, b);
-  const common = [...ancestors(gitdir, a)].filter((c) => inB.has(c));
-  const below = new Set<string>();
-  for (const c of common) {
+// git 의 paint_down_to_common(commit-reach.c)이 공통 조상 후보를 찾는
+// 차례 — SPEC.md §10.2 의 1~4. 큐는 walkLog 와 같은 날짜 내림차순 목록
+// 이라, 같은 날짜면 먼저 넣은 것이 먼저 나온다. 표시는 P1(a 에서 닿음)·
+// P2(b 에서 닿음)·STALE(이미 찾은 후보의 조상). "넣을 때 STALE 이
+// 아니었던" 커밋이 큐에 남아 있는 동안 돈다(git 의 max_nonstale).
+// O(커밋 수 × 큐 길이) — 끼우기가 배열이라.
+function paint(gitdir: string, a: string, b: string): string[] {
+  const [P1, P2, STALE] = [1, 2, 4];
+  const flags = new Map<string, number>();
+  const queued = new Map<string, boolean>();  // 넣을 때 STALE 아니었나
+  const queue: string[] = [];
+  const keys: number[] = [];
+  let live = 0;
+  const fl = (c: string) => flags.get(c) ?? 0;
+  const put = (c: string) => {
+    if (queued.has(c)) return;               // 자리는 그대로
+    const fresh = (fl(c) & STALE) === 0;
+    queued.set(c, fresh);
+    if (fresh) live++;
+    const k = -parentsAndDate(gitdir, c)[1];
+    const at = bisectRight(keys, k);
+    keys.splice(at, 0, k);
+    queue.splice(at, 0, c);
+  };
+  flags.set(a, P1);
+  put(a);
+  flags.set(b, fl(b) | P2);
+  put(b);
+  const found: string[] = [];
+  while (live > 0) {
+    keys.shift();
+    const c = queue.shift()!;
+    if (queued.get(c)) live--;
+    queued.delete(c);
+    let f = fl(c) & (P1 | P2 | STALE);
+    if (f === (P1 | P2)) {
+      if (!found.includes(c)) found.push(c);
+      f |= STALE;
+    }
     for (const p of parentsAndDate(gitdir, c)[0]) {
-      ancestors(gitdir, p).forEach((x) => below.add(x));
+      if ((fl(p) & f) === f) continue;
+      flags.set(p, fl(p) | f);
+      put(p);
     }
   }
+  return found.filter((c) => (fl(c) & STALE) === 0);
+}
+
+// 가장 좋은 공통 조상들(SPEC.md §10.2) — git 과 같은 차례로.
+//
+// paint 가 찾은 후보에서 다른 후보의 조상인 것을 차례를 지키며 빼고
+// (git 의 remove_redundant), 커미터 날짜 내림차순으로 안정 정렬한다
+// (Array.prototype.sort 는 ES2019 부터 안정). 날짜가 같으면 찾은 차례가
+// 남아 인자 순서에 따라 답의 차례가 바뀐다 — git 도 그렇다.
+// O(커밋 수 × 후보 수).
+export function mergeBases(gitdir: string, a: string, b: string):
+  string[] {
+  const cands = paint(gitdir, a, b);
   const date = (c: string) => parentsAndDate(gitdir, c)[1];
-  return common.filter((c) => !below.has(c))
+  return cands
+    .filter((c) =>
+      !cands.some((o) => o !== c && isAncestor(gitdir, c, o)))
     .sort((x, y) => date(y) - date(x));
 }
