@@ -1,3 +1,10 @@
+### [2026-09-18 23:07] Git 덱 전수 리뷰 2차 — 퀴즈·그림·표, 17부 전체, 19부 해설
+- **기획:** 1차에서 덜 본 곳(퀴즈 정답, 그림, 명령어 사전 161장)을 서브에이전트 둘과 기계 대조로.
+- **TC:** -s ours revert·설정 없는 pull·bisect 예를 진짜 git 으로 재현, 산문 속 해시 52개 대조.
+- **개발:** `git/deck/sections/`(8개), `git/deck/gen_cmdref.py`(신규), `git/deck/gen_figs.py`, `git/exps/cmdref.py` 외
+- **검증:** record.sh --check(빈 디렉터리) 1,240개 3회 동일 · make all SKEL=1 오류 0건
+- **비고:** mygit merge-base 의 같은 날짜 차례가 git 과 다름(Python·Java 는 실행마다) — git 식으로 고칠 계획.
+
 ### [2026-09-18 18:15] Git 덱 재현 검사 강화 — 재실행마다 실험 디렉터리를 비운다
 - **기획:** 저장소 밖(../)에 남은 것 때문에 첫 실행만 다른 캡처는 세 번 검사로 안 잡힌다.
 - **TC:** scratch/repos 를 비운 채 전체 실행 → 캡처 1건(pre-push 훅) 차이 발견.
