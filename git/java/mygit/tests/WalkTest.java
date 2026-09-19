@@ -17,12 +17,15 @@ import mygit.Walk;
 // 커밋의 날짜가 같아(§10.1 의 "먼저 온 것이 먼저" 규칙이 차례를 전부
 // 정한다), dated 는 날짜가 모두 다르고, criss 는 가장 좋은 공통
 // 조상이 둘이다.
+// criss-equal 은 criss 와 같되 날짜가 모두 같아, 두 공통 조상의
+// 차례를 인자 순서와 부모 순서가 정한다(SPEC.md §10.2).
 final class WalkTest {
   private WalkTest() {}
 
   static void s10_logAndMergeBaseMatchGit() throws Exception {
     int n = 0;
-    for (String name : List.of("equal", "dated", "criss")) {
+    for (String name :
+         List.of("equal", "dated", "criss", "criss-equal")) {
       try (var sb = Sandbox.dag(name)) {
         String text = new String(Golden.read("dag", name, "expect.txt"),
             UTF_8);
