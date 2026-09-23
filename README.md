@@ -35,41 +35,34 @@
 ### 🐹 Go 언어 시리즈 🚀
 - 🐿️ **[Go_기초.html](./Go_%EA%B8%B0%EC%B4%88.html)** — 🌱 《Go로 만드는 GW-BASIC 인터프리터》 선행 학습 — 슬라이스·인터페이스·타입 스위치·error 관용구만 골라 담은 PPT형 252장. 예제·구조체 크기·컴파일러 에러 문구를 Go 1.26으로 전부 실측, 미니 인터프리터 데모 15종 🐹
 - 📜 **[Effective_Go_현대판.html](./Effective_Go_%ED%98%84%EB%8C%80%ED%8C%90.html)** — 🐹 2009년의 명문 《Effective Go》를 Go 1.26 기준으로 다시 읽는 PPT형 10부 25장 119슬라이드. 원문(golangkorea 번역)의 차례를 그대로 따라가되 루프 변수 스코프·%w 에러 래핑·제네릭·이터레이터·GOMAXPROCS cgroup 인식처럼 사실이 바뀐 자리를 버전 배지로 짚습니다. 예제는 전부 Go 1.26.3에서 gofmt·go vet·go run 통과, 터미널 캡처는 실제 출력, go.mod 를 1.21↔1.22 로 바꿔 가며 잰 결과 포함. 데모 4종·퀴즈 4문 ✨
-- 📘 **[Go 심화.md](./Go%20심화.md)** — 🎓 한 단계 더 깊이! Go의 고급 기법 🏔️
 - 🎞️ **[Go_심화_슬라이드.html](./Go_%EC%8B%AC%ED%99%94_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Go 심화》 슬라이드판 PPT형 67장 📱
-- 📗 **[Go 패턴.md](./Go%20패턴.md)** — 🧩 실전 디자인 패턴 모음 ✨
 - 🎞️ **[Go_패턴_슬라이드.html](./Go_%ED%8C%A8%ED%84%B4_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Go 패턴》 슬라이드판 PPT형 90장 📱
 - 🌐 **[go_design_patterns.html](./go_design_patterns.html)** — 🎨 Go 디자인 패턴 웹 가이드 📑
 - 🎞️ **[Go_디자인패턴_슬라이드.html](./Go_%EB%94%94%EC%9E%90%EC%9D%B8%ED%8C%A8%ED%84%B4_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Go 디자인 패턴》 슬라이드판 PPT형 172장 📱
 
 ### 🌙 Lua 언어 시리즈 🎭
 - 🌘 **[Lua_기초.html](./Lua_%EA%B8%B0%EC%B4%88.html)** — 🌱 《Lua로 만드는 GW-BASIC 인터프리터》 선행 학습 — 테이블·다중 반환값·패턴·메타테이블·5.1↔5.4 차이만 골라 담은 PPT형 10부 42장 271슬라이드. 코드 블록 232개를 Lua 5.1.5·5.4.8 두 인터프리터로 대조, 브라우저 데모 14종 🌙
-- 📕 **[Lua 심화.md](./Lua%20심화.md)** — 🔬 Lua의 내부를 파헤치다 🕵️
 - 🎞️ **[Lua_심화_슬라이드.html](./Lua_%EC%8B%AC%ED%99%94_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Lua 심화》 슬라이드판 PPT형 299장 📱
-- 📓 **[Lua 알고리즘.md](./Lua%20알고리즘.md)** — 🧮 알고리즘의 세계로! 🎯
 - 🎞️ **[Lua_알고리즘_슬라이드.html](./Lua_%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Lua 알고리즘》 슬라이드판 PPT형 204장 📱
-- 📔 **[Lua 자료구조.md](./Lua%20자료구조.md)** — 🏗️ 견고한 자료구조 설계 💪
 - 🎞️ **[Lua_자료구조_슬라이드.html](./Lua_%EC%9E%90%EB%A3%8C%EA%B5%AC%EC%A1%B0_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Lua 자료구조》 슬라이드판 PPT형 189장 📱
 
 ### 🔷 TypeScript 시리즈 💙
 - 🧭 **[TypeScript_기초.html](./TypeScript_%EA%B8%B0%EC%B4%88.html)** — 🌱 《TypeScript로 만드는 GW-BASIC 인터프리터》 선행 학습 — 판별 유니언·좁히기·클래스·모듈·async만 골라 담은 PPT형 9부 39장 275슬라이드. 인용한 컴파일러 에러 11종을 tsc 6.0으로 재확인, 데모 10종 🔷
-- 📘 **[TypeScript 알고리즘 가이드북.md](./TypeScript%20알고리즘%20가이드북.md)** — 🎲 알고리즘 완전정복 🏆
 - 🎞️ **[TypeScript_알고리즘_가이드북_슬라이드.html](./TypeScript_%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98_%EA%B0%80%EC%9D%B4%EB%93%9C%EB%B6%81_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《TypeScript 알고리즘 가이드북》 슬라이드판 PPT형 253장 📱
-- 📗 **[TypeScript 자료구조 가이드북.md](./TypeScript%20자료구조%20가이드북.md)** — 🧱 타입 안전한 자료구조 🛡️
 - 🎞️ **[TypeScript_자료구조_가이드북_슬라이드.html](./TypeScript_%EC%9E%90%EB%A3%8C%EA%B5%AC%EC%A1%B0_%EA%B0%80%EC%9D%B4%EB%93%9C%EB%B6%81_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《TypeScript 자료구조 가이드북》 슬라이드판 PPT형 175장 📱
 
 ### 🟩 Node.js 시리즈 🟢
 - 🟩 **[Node.js_완전_가이드.html](./Node.js_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 🌱 왜 Node였는가부터 V8 내부·N-API·SEA까지 13부 65장 419슬라이드. 코드 블록 213개 전부 실행 검증, v0.x→v26 버전사는 공식 문서 근거, 데모 12종·퀴즈 13문 🟢
 
 ### 🖥️ 시스템 & 셸 도구 ⚙️
-- 🐧 **[Linux_명령어_핸드북.md](./Linux_명령어_핸드북.md)** — 🔧 리눅스 마스터의 길 🛤️
+- 🐧 **[Linux_명령어_핸드북.html](./Linux_명령어_핸드북.html)** — 🔧 리눅스 마스터의 길 🛤️
 - 📟 **[Termux_대백과사전.html](./Termux_%EB%8C%80%EB%B0%B1%EA%B3%BC%EC%82%AC%EC%A0%84.html)** — 📱 안드로이드 앱 안의 리눅스를 이 폰에서 뜬 캡처 52개(네이티브 1개 포함)·핀 커밋 소스 발췌로 파헤친 18부 604장. C 실험은 bionic·glibc 양쪽에서 짓고 돌렸으며, 개인정보 명령은 한 번도 실행하지 않음 🔍
-- 🔐 **[SSH 고급 가이드북.md](./SSH%20고급%20가이드북.md)** — 🌐 안전한 원격 접속의 모든 것 🔒
+- 🔐 **[SSH 고급 가이드북.html](./SSH%20고급%20가이드북.html)** — 🌐 안전한 원격 접속의 모든 것 🔒
 - 🖥️ **[TELNET_대백과.html](./TELNET_%EB%8C%80%EB%B0%B1%EA%B3%BC.html)** — 📟 NVT·옵션 협상·raw 실전 예제까지 다루는 파워유저 가이드 🔌
 - 📜 **[ex_완전_가이드.html](./ex_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — ⌨️ QED에서 vim까지의 역사, 주소·정규식·`:g` 완전정복, ex를 LLM처럼 부리는 법 111장 🤖
-- 🔍 **[ripgrep 가이드.md](./ripgrep%20가이드.md)** — ⚡ 초고속 검색의 마법사 🪄
-- 🧰 **[jq 가이드.md](./jq%20가이드.md)** — 📋 JSON을 자유자재로! 🎨
-- 📜 **[YAML 가이드.md](./YAML%20가이드.md)** — ✏️ 설정 파일의 정석 📐
+- 🔍 **[ripgrep 가이드.html](./ripgrep%20가이드.html)** — ⚡ 초고속 검색의 마법사 🪄
+- 🧰 **[jq 가이드.html](./jq%20가이드.html)** — 📋 JSON을 자유자재로! 🎨
+- 📜 **[YAML 가이드.html](./YAML%20가이드.html)** — ✏️ 설정 파일의 정석 📐
 - 🌊 **[Langflow 가이드.html](./Langflow%20가이드.html)** — 🤖 비주얼 LLM 플로우를 REST API로! 🔌
 
 ### 🌿 Git & 버전 관리 🧬
@@ -78,7 +71,7 @@
 
 ### 🎬 자동화 & CI/CD 🔄
 - 🔗 **[n8n_완전_가이드.html](./n8n_%EC%99%84%EC%A0%84_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 🤖 워크플로 자동화 기초부터 라이선스, LLM으로 워크플로 자동 생성·구성도 그리기까지 300장 🧩
-- 🐙 **[github-actions-book.md](./github-actions-book.md)** — 🚀 GitHub Actions 완벽 가이드 🎢
+- 🐙 **[github-actions-book.html](./github-actions-book.html)** — 🚀 GitHub Actions 완벽 가이드 🎢
 - 🎨 **[Penpot_ArgoCD_배포_가이드.html](./Penpot_ArgoCD_%EB%B0%B0%ED%8F%AC_%EA%B0%80%EC%9D%B4%EB%93%9C.html)** — 🚀 k8s를 몰라도 따라 하는 GitOps 사내 배포 슬라이드 70장 🐙
 - 🚀 **[CICD_GitOps_실전_교재.html](./CICD_GitOps_%EC%8B%A4%EC%A0%84_%EA%B5%90%EC%9E%AC.html)** — 🐹 Go 웹서버를 Docker로 말아 k8s에 올리고 Argo CD로 관리하기 — 310장 대학 교재 ☸️
 
@@ -97,11 +90,11 @@
 
 ### 🕹️ GW-BASIC 인터프리터 컬렉션 🎮
 > 💡 **하나의 명세, 네 가지 언어** — 같은 인터프리터를 다양한 언어로 구현! 🌈
-- 🇨 **[GWBASIC_in_C.md](./GWBASIC_in_C.md)** — 💻 C 언어 구현 🔩
-- 🐹 **[GWBASIC_in_Go.md](./GWBASIC_in_Go.md)** — 🦫 Go 언어 구현 🌊
-- 🌙 **[GWBASIC_in_lua.md](./GWBASIC_in_lua.md)** — 🌜 Lua 구현 ✨
-- 🔷 **[GWBASIC_in_TypeScript.md](./GWBASIC_in_TypeScript.md)** — 💎 TypeScript 구현 🎯
-- 🎓 **[scheme-gwbasic-full.md](./scheme-gwbasic-full.md)** — λ Scheme 풀버전 🧙‍♂️
+- 🇨 **[GWBASIC_in_C.html](./GWBASIC_in_C.html)** — 💻 C 언어 구현 🔩
+- 🐹 **[GWBASIC_in_Go.html](./GWBASIC_in_Go.html)** — 🦫 Go 언어 구현 🌊
+- 🌙 **[GWBASIC_in_lua.html](./GWBASIC_in_lua.html)** — 🌜 Lua 구현 ✨
+- 🔷 **[GWBASIC_in_TypeScript.html](./GWBASIC_in_TypeScript.html)** — 💎 TypeScript 구현 🎯
+- 🎓 **[scheme-gwbasic-full.html](./scheme-gwbasic-full.html)** — λ Scheme 풀버전 🧙‍♂️
 
 ### 🔥 언어 만들기 ⚒️
 - ⚒️ **[대장간에서_벼려낸_리스프.html](./%EB%8C%80%EC%9E%A5%EA%B0%84%EC%97%90%EC%84%9C_%EB%B2%BC%EB%A0%A4%EB%82%B8_%EB%A6%AC%EC%8A%A4%ED%94%84.html)** — 🔥 리더 → 컴파일러 → VM을 Go와 Lua로 두 자루 벼리는 PPT형 25장 500슬라이드 — NaN 박싱·SWAR·매직 넘버 나눗셈·마크 비트맵 GC·copy-and-patch JIT. 두 구현이 적합성 테스트에서 바이트 단위로 같은 출력을 내고, 특화 VM이 오히려 느려진 실패도 원인까지 싣습니다. 데모 24종 ⚔️
