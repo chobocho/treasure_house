@@ -1,3 +1,10 @@
+### [2026-09-23 07:52] 파이썬의 진화 덱 3.15 부 리뷰 — 사실오류 6건·근거 보강 4건·표기 4건 정정
+- **기획:** 9부 56장 통독 + PEP 690·810·416·661, 3.15 공식 문서(cmdline·configure·profiling.sampling)와 대조.
+- **TC:** 정상: 9부 py 블록 33개 재실행. 경계: importtime·Tachyon 출력 재측정, 8부와 중복 서술(calendar) 교차 확인.
+- **개발:** `파이썬의_진화.html`
+- **검증:** 31개 정상 종료 + 의도된 예외 2개 · id 중복 0 · 357장 · embed_mono --check 통과
+- **비고:** 미실행 출력(importtime)을 실제 값으로 교체. 가로 폭 렌더링은 Playwright 불가로 미확인.
+
 ### [2026-09-23 07:22] 파이썬의 진화 덱 — Python 3.15 부(9부) 56장 추가
 - **기획:** 3.15.0rc2 whatsnew 기준으로 새 9부(lazy import·컴프리헨션 풀기·frozendict·sentinel·UTF-8 기본·Tachyon 등 9장) 추가, 총정리를 10부로.
 - **TC:** 정상: 9부 py 블록 33개 3.15rc2 실행·출력 대조. 경계: lazy 금지 위치 SyntaxError·필터 모드·3.14 호환 동작 확인.
