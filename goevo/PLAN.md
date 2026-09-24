@@ -626,3 +626,26 @@ and the "오류 N건" line; read it every time.
   the spec's concurrent prime sieve (cited to spec §An example package).
 - Dropped two memory sentences that had no source in docs/ (designers = Plan 9 people; sieve
   "since Newsqueak"). Part 1 may get forward links refined after parts 3–8 exist (PLAN §5 order).
+
+### Part 9 — 1.28 draft and the Go 2 story (2026-09-24)
+
+- 18 slides (budget 25). Go 2 chapter from blogs toward-go2 (2017-07-13, goals + experience
+  reports), go2draft, go2-here-we-come (selection criteria), proposal README (4 steps), compat
+  (2023-08-14 "The answer is never."), error-syntax (2025-06-03, stop pursuing syntax changes).
+- 1.28 chapter from the tip draft only (17 feature rows, 6 with slides). Evidence without 1.28:
+  `go 1.28` in go.mod → "go.mod requires go >= 1.28 (running go 1.27.1; GOTOOLCHAIN=local)";
+  url.MustParse / http.MethodQuery / FlagSet.All → undefined under 1.27.1; the *current*
+  behaviour the draft changes: EncodedLen(MaxInt-10) returns negative (base64 and base32),
+  HTTP_PROXY beats http_proxy, `go vet` is silent on an unchecked Scanner loop.
+- gen_tables: draft versions (cite_keys relnotes-X with a -draft file) get tbl_rel_X.html with
+  date "아직 나오지 않음 — 초안" (test). gover.split_cmd accepts lowercase env names
+  (http_proxy) — found by this batch (test added first).
+- New fact for part 1 (toward-go2 §Introduction): Rob Pike suggested the name "Go" on
+  2007-09-25 (claims/p09.md) — fold into part 1's history table in its revision pass.
+- Correction: test totals written in earlier log entries/history (101, 104, 110) were not
+  counted; recounted with `git worktree` at 03f0fc9 → 95, aedd028 → 98, 26cf334 → 100.
+- **Incident:** a `git stash` (typed while recounting) reverted the subagents' tracked
+  section files for ~2 minutes. 03 was restored from the stash; 04's pre-stash copy was saved to
+  scratch/recovered/ and the subagent told to reconcile. Rule from now on: **no git stash /
+  checkout / reset in this repository while subagents are running**; use `git worktree add` on a
+  temp path for any look at old commits.

@@ -98,7 +98,7 @@ KIND_NAMES = [('lang', '언어'), ('toolchain', '도구'), ('runtime', '런타�
               ('ecosystem', '생태계')]
 
 
-def release_tables(releases, features, api):
+def release_tables(releases, features, api, drafts=()):
     """큰 릴리스마다 개관 표 하나 — tbl_rel_1.N.html (PLAN.md §3.4).
 
     날짜는 releases.tsv, 갈래마다의 기능은 features 의 그 버전 행 전부
@@ -107,13 +107,15 @@ def release_tables(releases, features, api):
     (PLAN.md §5 7단계의 대조가 구조로 풀린다). O(행 수)."""
     e = lambda s: html.escape(s, quote=False)
     out = {}
-    for r in releases:
-        if r.get('kind') != 'major':
-            continue
-        parts = r['version'][2:].split('.')
+    # 초안 노트만 있는 판(drafts)은 날짜 대신 '초안' 이라고 적는다
+    items = [(r['version'], r['date']) for r in releases
+             if r.get('kind') == 'major']
+    items += [('go' + d, '아직 나오지 않음 — 초안') for d in drafts]
+    for version, date in items:
+        parts = version[2:].split('.')
         ver = '1.0' if parts == ['1'] else '.'.join(parts[:2])
         rows = ['<table class="kv">',
-                '<tr><th>날짜</th><td>%s</td></tr>' % e(r['date'])]
+                '<tr><th>날짜</th><td>%s</td></tr>' % e(date)]
         mine = [f for f in features if f.get('version') == ver]
         for kind, name in KIND_NAMES:
             items = []
@@ -155,9 +157,12 @@ def build():
             continue
         made['tbl_%s.html' % name[:-4]] = render(head, body)
     if os.path.exists(os.path.join(DATA, 'releases.tsv')):
+        drafts = [r['key'][len('relnotes-'):] for r in dict_rows('cite_keys.tsv')
+                  if r.get('key', '').startswith('relnotes-')
+                  and r.get('file', '').endswith('-draft.txt')]
         made.update(release_tables(dict_rows('releases.tsv'),
                                    cites.feature_rows(BASE),
-                                   dict_rows('api_added.tsv')))
+                                   dict_rows('api_added.tsv'), drafts))
     for out_name, tsv, cols, filt in VIEWS:
         head, body = rows_of(tsv)
         if filt:

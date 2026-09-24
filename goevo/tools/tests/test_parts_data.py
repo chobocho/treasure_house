@@ -106,6 +106,15 @@ class Overview(unittest.TestCase):
         self.assertIn('tbl_rel_1.21.html', out)
         self.assertNotIn('tbl_rel_1.22.1.html', out)
 
+    def test_draft_release_table(self):
+        # 아직 나오지 않은 판(초안 노트만 있는 1.28)도 개관 표가 있어야 한다
+        feats = [{'version': '1.28', 'kind': 'stdlib', 'title': 'url.MustParse',
+                  'slide-id': 'p9-v128-mustparse'}]
+        out = gen_tables.release_tables([], feats, [], drafts=['1.28'])
+        t = out['tbl_rel_1.28.html']
+        self.assertIn('<th>날짜</th><td>아직 나오지 않음 — 초안</td>', t)
+        self.assertIn('<a href="#p9-v128-mustparse">url.MustParse</a>', t)
+
 
 if __name__ == '__main__':
     unittest.main()

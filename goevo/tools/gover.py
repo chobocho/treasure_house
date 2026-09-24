@@ -73,7 +73,7 @@ def split_cmd(cmd):
         raise ValueError('셸 기능은 쓰지 않는다: %r' % cmd)
     words = shlex.split(cmd)
     env = {}
-    while words and re.match(r'^[A-Z_][A-Z0-9_]*=', words[0]):
+    while words and re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', words[0]):
         k, v = words.pop(0).split('=', 1)
         env[k] = v
     return env, words

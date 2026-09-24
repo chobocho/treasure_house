@@ -73,6 +73,12 @@ class Command(unittest.TestCase):
         self.assertEqual(env, {'GOTOOLCHAIN': 'go1.26.0'})
         self.assertEqual(argv, ['go', 'version'])
 
+    def test_lowercase_env_names(self):
+        # http_proxy 처럼 소문자 이름의 환경 변수도 있다
+        env, argv = gover.split_cmd('HTTP_PROXY=a http_proxy=b go run .')
+        self.assertEqual(env, {'HTTP_PROXY': 'a', 'http_proxy': 'b'})
+        self.assertEqual(argv, ['go', 'run', '.'])
+
     def test_quoted_args(self):
         env, argv = gover.split_cmd("go build -gcflags='-m -l' .")
         self.assertEqual(env, {})
