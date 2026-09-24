@@ -528,3 +528,20 @@ and the "오류 N건" line; read it every time.
   `make docs`: 194 files, 0 failures. Only docs/FETCHED.txt is committed (.gitignore exception).
 - `make width` now checks only what the deck will show (ex/ Go sources + tools/gover.py); tools
   are never shown (§0.13) and the assembler re-checks any `<pre>` anyway.
+
+### Step 3a — make_data + generated tables (2026-09-24)
+
+- tools/make_data.py: releases.tsv (289 rows, 28 majors; go1 → relnotes-1.0; go1.N.0 from 1.21
+  on), api_added.tsv (distinct `(package, decl)` per file with the platform tag stripped and
+  `//deprecated` lines skipped — so 1.1 shows 7,918 "symbols" because go1.1.txt re-lists
+  constants with values; caption the API figure accordingly), godebug.tsv (**deviation from §1**:
+  columns setting | package | introduced-in | default-changed-in | old-value; the source is
+  GOROOT `internal/godebugs/table.go` + the earliest "Go 1.N" section of docs/godebug.txt naming
+  the setting; no English "meaning" column — slides explain in Korean), cite_keys.tsv (generated
+  from FETCHED + blog index titles; relnotes/api keys stay with releases.tsv).
+- `make data-check` = regenerate-and-compare + features.tsv checks (version ∈ majors ∪ draft,
+  kind ∈ 6, cite resolves, relnotes/api cite version == row version, stdlib rows must cite
+  api-V or relnotes-V, unique id and slide-id).
+- check_xref: features whose part file still holds only its cover are *pending* (not an error);
+  once a part has more than its cover, every features.tsv slide-id of that part must exist.
+- Tests 67 (17 make_data + 1 pending rule, RED first). `make all SKEL=1` green.

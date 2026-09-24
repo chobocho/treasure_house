@@ -1,3 +1,10 @@
+### [2026-09-24 18:51] Go의 진화 덱 3단계(1) — 생성 표 넷(make_data)
+- **기획:** 릴리스·API 증가·GODEBUG·인용 키 표를 docs/ 와 설치된 go 의 소스(godebugs/table.go)에서 만든다. features.tsv 검사(버전·인용 대조)도 여기.
+- **TC:** 18건 — 정상(go1·go1.N.0·부 릴리스, 새 패키지, 설정 표) / 경계(플랫폼 꼬리·//deprecated·주석 처리된 설정, 틀린 버전·없는 절·중복 id, 안 쓴 부 대기).
+- **개발:** `goevo/tools/make_data.py`, `goevo/tools/tests/test_make_data.py`, `goevo/deck/check_xref.py`, `goevo/data/releases.tsv` 외 10개 파일
+- **검증:** 67 passed, 0 failed · make all SKEL=1 오류 0건
+- **비고:** 릴리스 289행(큰 릴리스 28), GODEBUG 50행, 인용 키 136개.
+
 ### [2026-09-24 18:49] Go의 진화 덱 2단계 — 공식 문서 받기(fetch_docs·html_text)
 - **기획:** 릴리스 페이지에서 큰 릴리스 28개를 읽어 노트·API 목록을 받고, 명세·FAQ·godebug·블로그 120편·태그를 docs/ 캐시로. 1.28 초안은 go.dev 가 비어 tip 사이트에서.
 - **TC:** 20건 — 정상(제목·dt·문단·pre·명세 머리·마크다운) / 경계(주석·nav·footer 제거, 중첩 li>p, Go 1 표기, 초안 주소, 경로 중복).

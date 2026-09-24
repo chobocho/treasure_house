@@ -105,7 +105,17 @@ def badge_errors(texts, releases, features):
             elif aid in features and len(badges) != 1:
                 bad.append('%s: #%s 는 기능 장인데 배지가 %d개 (정확히 하나)'
                            % (name, aid, len(badges)))
+    # 조각 파일 이름의 앞 두 자리가 부 번호다. 표지 한 장뿐인 부는 아직
+    # 안 쓴 부라, 그 부를 가리키는 기능 장이 없는 것은 오류가 아니다
+    # (3단계에서 features.tsv 를 먼저 다 채우고 5단계에서 부를 쓴다).
+    written = set()
+    for name in texts:
+        if name[:2].isdigit() and len(ART.findall(texts[name])) > 1:
+            written.add(int(name[:2]))
     for aid in sorted(features - set(seen)):
+        m = re.match(r'p(\d+)-', aid)
+        if m and int(m.group(1)) not in written:
+            continue
         bad.append('features.tsv 의 slide-id #%s 가 덱에 없다' % aid)
     return bad
 

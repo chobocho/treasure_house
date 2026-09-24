@@ -249,7 +249,7 @@ SEC = '''<article class="card" id="p7-rangeint">
 class Badges(unittest.TestCase):
     def test_all_rules(self):
         bad = check_xref.badge_errors(
-            {'s.html': SEC}, {'1.20', '1.21', '1.22'},
+            {'07_s.html': SEC}, {'1.20', '1.21', '1.22'},
             {'p7-rangeint', 'p7-two', 'p7-wrong', 'p7-nobadge', 'p7-future',
              'p7-missing'})
         text = '\n'.join(bad)
@@ -261,6 +261,18 @@ class Badges(unittest.TestCase):
         self.assertIn('p7-stray', text)        # features.tsv 에 없는 장
         self.assertIn('p7-missing', text)      # 표에는 있는데 덱에 없다
         self.assertEqual(len(bad), 6)
+
+    def test_unwritten_part_is_pending(self):
+        # 표지 한 장뿐인 부의 기능 장은 아직 안 쓴 것이다 — 빨간불로 세지 않는다.
+        # 그 부에 한 장이라도 더 쓰기 시작하면 그때부터 빠진 장을 센다.
+        cover = '<article class="card section" id="p9"><h2>9</h2></article>\n'
+        texts = {'09_x.html': cover}
+        self.assertEqual(check_xref.badge_errors(texts, {'1.22'},
+                                                 {'p9-draft'}), [])
+        texts = {'09_x.html': cover + '<article class="card" id="p9-a">'
+                                      '<h3>a</h3></article>\n'}
+        bad = check_xref.badge_errors(texts, {'1.22'}, {'p9-draft'})
+        self.assertEqual(len(bad), 1, bad)
 
     def test_class_name_rule(self):
         self.assertEqual(check_xref.badge_class('1.22'), 'v122')
