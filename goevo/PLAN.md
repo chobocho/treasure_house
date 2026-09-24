@@ -462,3 +462,50 @@ and the "오류 N건" line; read it every time.
 
 - The user confirmed all 12 recommendations of §9 as written ("권고안 그대로 확정"). **Do not re-ask
   any of them.** Step 1 (skeleton) may begin. Nothing else changed.
+
+### Step 1 — Skeleton (2026-09-24)
+
+- Step 0 read: §0–§4 here, git/PLAN.md §0–§1 + its last three log entries, build_deck.py /
+  run_all.py / record.sh docstrings. Copied verbatim from git/: deck/{build_deck,verify_deck,
+  check_slices,check_xref,check_claims,chunks,gen_glossary,gen_tables,svgkit}.py, check_deck.js,
+  base/{head,tail}.html (tail already carries the 2026-09-24 ←→ fix), tools/{width,rewrap}.py,
+  tools/record.sh. Then adapted only as §1 says.
+- build_deck: TARGET `Go의_진화.html`; LANG_OF go/mod/sh/py/js/json/tsv/txt; GIT directive
+  removed; **GOVER** added (`goverslug(file, v, godebug, exp, tag)` → `out/<ex-path>__<variant>.txt`,
+  e.g. `ex/07/rangeint` v=1.22 → `07-rangeint__go1.22.txt`; variants joined by `-` in the order
+  lang, `godebug-…`, `exp-…`, tag; first capture line must equal `$ [GODEBUG=… ][GOEXPERIMENT=… ]cmd`,
+  default cmd `go run .`; label shows `ex/… · go 1.N`). run_all.py/gover.py (step 4) must import
+  goverslug/gover_cmdline, not copy them. **REL** `<!--REL v=1.22-->` → date from releases.tsv
+  (tries go1.N and go1.N.0; 1.0 → go1). HARD_CAP 1000; part over budget +10 % is an **error**,
+  over budget a warning. COVER_DIRS ex/ (.go, full coverage), exps/ and tools/ (partial), Makefile
+  and run_all.py partial. Appendix is section file 11 (`part_label(11)` = 부록; generated ids
+  `p11-quiz-index-N`, `p11-gl-N`).
+- New deck/cites.py (one resolver for assembler, claims-check and step-3 data-check): keys from
+  releases.tsv major rows (`relnotes-1.N` → docs/relnotes/go1.N.txt, go1.txt for 1.0, plus
+  `api-1.N` → docs/api/go1.N.txt) and data/cite_keys.tsv (key | name | file). Normal docs need a
+  `§<TAB>heading` line; **api-* keys need the whole API line** as sec.
+- check_claims: formats check replaced by cite_keys file check; new **version check** — every
+  `1.N`/`1.N.M` in prose needs `go1.N` in claims.md or data/*.tsv (Korean particles may be glued:
+  `1.22에서` is caught; `HTTP/1.1`, `v1.2.3`, `1.5배`, `11.3` are not versions; non-Go prefix words
+  go in deck/versions_ok.txt). check_xref: **version badge rules** (class ↔ text, version ∈
+  releases or a relnotes key, badge slide ∈ features.tsv slide-id, every feature slide exactly one
+  badge, every features.tsv slide-id present). check_deck.js: CASES emptied; new check 10 = engine
+  contract (←→ show, typing() guard, ↑↓ scroll, getGamepads).
+- tools/tests/test_deck_rules.py: 29 tests, RED first (28 fail on stubs + 1 added for glued
+  particles), then GREEN. Negative smoke: an unsourced `1.19` + badge in a section fails both
+  claims-check and deck-xref; removing it returns to 0.
+- Palette (decision 4): bg #0b2233→#17485c, accent #00add8 (bars/borders), **--accent-ink
+  #00718d** for accent-coloured text (links, tier.ill) because #00add8 on white is ~2.6:1,
+  titles #1d3557, --special #007d9c; g1–g6 = lang/runtime/toolchain/stdlib/ecosystem/platform;
+  `.vt` badge CSS for v10…v128 (one colour per era, 1.25–1.27 filled gopher blue, 1.28 dashed),
+  `.vt.pre`, `.vt.exp`, `.rel`. Terminal blocks dark navy instead of git's brown.
+- Makefile: targets of §5 step 1 + `test`; exports GOTOOLCHAIN=local, GOFLAGS=-p=1, GOPROXY=off,
+  GOCACHE/GOPATH/GOMODCACHE under scratch/. Placeholder targets print which step adds them.
+  width excludes tools/tests/ (never shown in the deck).
+- Sections: cover + part 0 (7 placeholder guide slides) + 11 part covers = 20 slides. Cover titles
+  carry version ranges; every version and the one date ("2026-09") are backed by 14 claims.md
+  rows verified today by curl of go.dev/doc/devel/release and go.dev/doc/go1.28 (h1 "Go 1.28
+  Release Notes"; no go1.28 line on the release page). data/*.tsv are headers only.
+- `make all SKEL=1`: exit 0, 0 warnings, 20 slides, 18 placeholders, claims 13 versions + 1 date
+  sourced, DeckMono 29 KB. Not in index.html/README yet (step 9). .gitignore: /goevo/docs/,
+  /goevo/scratch/, /goevo/.svgrender/.

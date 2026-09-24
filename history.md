@@ -1,3 +1,10 @@
+### [2026-09-24 18:15] Go의 진화 덱 1단계 — 뼈대(make all SKEL=1 초록, 20장)
+- **기획:** git/deck 조립기·검사기를 그대로 복사하고 PLAN §1 만큼만 고침. GIT 지시자 대신 GOVER(go.mod 언어 버전·GODEBUG 캡처)·REL(릴리스 날짜) 지시자, 상한 1000장·부 예산 +10% 오류.
+- **TC:** 29건 — 정상(GOVER·REL·인용 키·배지) / 경계(1.0↔go1, 1.1↔1.10, 조사 붙은 '1.22에서', HTTP/1.1·1.5배 제외, API 줄 전체 일치). RED 확인 뒤 GREEN.
+- **개발:** `goevo/Makefile`, `goevo/deck/build_deck.py`, `goevo/deck/cites.py`, `goevo/deck/check_claims.py`, `goevo/deck/check_xref.py`, `goevo/deck/check_deck.js`, `goevo/deck/base/head.html`, `goevo/tools/tests/test_deck_rules.py` 외 52개 파일
+- **검증:** 29 passed, 0 failed · make all SKEL=1 오류 0건·경고 0
+- **비고:** 표지 버전 13개·날짜 1개는 go.dev 릴리스 페이지로 확인해 claims.md 에 기록. 다음은 2단계(fetch_docs·html_text).
+
 ### [2026-09-24 18:01] Go의 진화 덱 지시서 — §9 결정 12건 확정 기록
 - **기획:** 사용자가 §9 권고안 12건을 그대로 확정. 지시서 진행 로그와 메모리에 "재질문 금지"로 기록.
 - **TC:** 해당 없음(문서만).
