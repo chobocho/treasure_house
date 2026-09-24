@@ -34,13 +34,12 @@ TOOLS       := ../tools
 FIND        := find
 # 덱에 실릴 소스. 폭 검사를 받는다 — 덱에 실릴 줄은 예외 없이
 # 72칸이다(PLAN.md §0.9). ex/ 의 _test.go 도 발췌해 실릴 수 있어
-# 같이 본다. 도구의 시험(tools/tests/)은 덱에 실리지 않아 뺀다.
+# 같이 본다. 이 덱은 빌드 도구를 가르치지 않으므로(PLAN.md §0.13)
+# 도구 가운데 0부가 증거 방식을 설명하며 인용할 gover.py 만 본다.
+# 다른 도구를 인용하게 되면 조립기의 <pre> 폭 검사가 그 자리에서 잡는다.
 SRC_GO      := $(shell $(FIND) ex -name '*.go' 2>/dev/null | sort)
-SRC_PY      := $(shell $(FIND) tools exps -name '*.py' \
-                 -not -path 'tools/tests/*' 2>/dev/null | sort)
-SRC_SH      := $(shell $(FIND) tools -name '*.sh' 2>/dev/null | sort)
-SRC_TOP     := $(wildcard run_all.py)
-SRC_ALL     := $(SRC_GO) $(SRC_PY) $(SRC_SH) $(SRC_TOP)
+SRC_PY      := $(wildcard tools/gover.py)
+SRC_ALL     := $(SRC_GO) $(SRC_PY)
 # ex/ 아래 go.mod 를 가진 디렉터리 하나가 예제 하나다.
 EX_DIRS     := $(patsubst %/go.mod,%,$(shell $(FIND) ex -name go.mod \
                  2>/dev/null | sort))

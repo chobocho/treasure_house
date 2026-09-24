@@ -509,3 +509,22 @@ and the "오류 N건" line; read it every time.
 - `make all SKEL=1`: exit 0, 0 warnings, 20 slides, 18 placeholders, claims 13 versions + 1 date
   sourced, DeckMono 29 KB. Not in index.html/README yet (step 9). .gitignore: /goevo/docs/,
   /goevo/scratch/, /goevo/.svgrender/.
+
+### Step 2 — fetch_docs + html_text (2026-09-24)
+
+- tools/html_text.py (h1–h6 and `<dt>` → `§<TAB>heading`; paragraphs/li/tr one normalised line,
+  `- ` for li, ` | ` between cells; `<pre>` verbatim; only `<main>` when present; the spec's JSON
+  comment header gives title + "Language version …"), `convert_md` for the proposal README.
+  tools/fetch_docs.py reads the release page first and derives the 28 majors from it (no version
+  list in code), then notes + API files + fixed docs + 120 blog posts + tags.json (496 tags).
+- Findings: (1) spec and API files are pinned to tag go1.27.1 — the tag's spec says "Language
+  version go1.27 (May 26, 2026)", master says August 7 (§2 quoted master). Quote the tag.
+  (2) go.dev/doc/go1.28 is **empty** ("No next release note fragments available.") — the draft
+  lives only on tip.golang.org/doc/go1.28 (fetched; "expected to be released in February 2027").
+  (3) GOROOT has `src/` (not doc/ or api/): `src/internal/godebugs/table.go` is the GODEBUG
+  ground truth (Changed/Old per setting) and `src/internal/goexperiment/` lists 1.27 experiments
+  (greenteagc, jsonv2, simd, runtimesecret, sizespecializedmalloc, …).
+- Tests: 20 new (RED on stubs, then GREEN); fixtures are excerpts of the fetched pages.
+  `make docs`: 194 files, 0 failures. Only docs/FETCHED.txt is committed (.gitignore exception).
+- `make width` now checks only what the deck will show (ex/ Go sources + tools/gover.py); tools
+  are never shown (§0.13) and the assembler re-checks any `<pre>` anyway.

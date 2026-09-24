@@ -1,3 +1,10 @@
+### [2026-09-24 18:49] Go의 진화 덱 2단계 — 공식 문서 받기(fetch_docs·html_text)
+- **기획:** 릴리스 페이지에서 큰 릴리스 28개를 읽어 노트·API 목록을 받고, 명세·FAQ·godebug·블로그 120편·태그를 docs/ 캐시로. 1.28 초안은 go.dev 가 비어 tip 사이트에서.
+- **TC:** 20건 — 정상(제목·dt·문단·pre·명세 머리·마크다운) / 경계(주석·nav·footer 제거, 중첩 li>p, Go 1 표기, 초안 주소, 경로 중복).
+- **개발:** `goevo/tools/fetch_docs.py`, `goevo/tools/html_text.py`, `goevo/tools/tests/test_docs_tools.py`, `goevo/docs/FETCHED.txt` 외 8개 파일
+- **검증:** 49 passed, 0 failed · make docs 194개 실패 0
+- **비고:** 명세·API 는 설치된 go 와 같은 태그 go1.27.1 에 고정.
+
 ### [2026-09-24 18:15] Go의 진화 덱 1단계 — 뼈대(make all SKEL=1 초록, 20장)
 - **기획:** git/deck 조립기·검사기를 그대로 복사하고 PLAN §1 만큼만 고침. GIT 지시자 대신 GOVER(go.mod 언어 버전·GODEBUG 캡처)·REL(릴리스 날짜) 지시자, 상한 1000장·부 예산 +10% 오류.
 - **TC:** 29건 — 정상(GOVER·REL·인용 키·배지) / 경계(1.0↔go1, 1.1↔1.10, 조사 붙은 '1.22에서', HTTP/1.1·1.5배 제외, API 줄 전체 일치). RED 확인 뒤 GREEN.
