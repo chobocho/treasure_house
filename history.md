@@ -1,3 +1,10 @@
+### [2026-09-24 20:57] Go의 진화 덱 4부 — Go 1.5–1.10 85장(서브에이전트, 캡처 69개)
+- **기획:** 자기 호스팅·동시 GC·vendor·HTTP/2·context·SSA·sort.Slice·타입 별칭·monotonic time·빌드 캐시. GC 멈춤의 역사는 ISMM 기조연설 문장을 그대로 인용.
+- **TC:** 캡처 69개 — 정상(context 취소·하위 시험·경계 검사 제거 등) / 경계(go 1.8 에서 타입 별칭 거절, vet 경고 3종 exit≠0, http2client=0 GODEBUG 짝). 들여쓴 하위 시험 시간 가리기 시험 1건 추가.
+- **개발:** `goevo/deck/sections/04_go15_110.html`, `goevo/data/features/p04.tsv`, `goevo/exps/p04.py`, `goevo/ex/04/`(43개), `goevo/deck/claims/p04.md`, `goevo/deck/glossary/p04.txt`, `goevo/tools/gover.py` 외
+- **검증:** 106 passed, 0 failed · 4부 조립·역검증·자료·상호참조·주장·용어집 검사 통과
+- **비고:** 예산 110장 중 85장(채우려고 늘리지 않음). 기조연설의 "2017년 3월" 과 1.8 출시일(2017-02-16)의 차이는 주장 대장에 기록.
+
 ### [2026-09-24 19:54] Go의 진화 덱 3부 — Go 1.1–1.4 55장(서브에이전트, 캡처 37개)
 - **기획:** 1.1–1.4 는 언어 버전으로 막히지 않아 '1.27.1 에서의 동작 + 노트 배지' 로. 릴리스마다 장 표지·개관·퀴즈.
 - **TC:** 캡처 37개 — 정상(메서드 값·3인덱스 슬라이스·-cover·TestMain·go generate 등) / 경계(상수 0 나눗셈·서로게이트·**T·internal 거절 등 6개 exit 1).

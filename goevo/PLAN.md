@@ -670,3 +670,15 @@ and the "오류 N건" line; read it every time.
   against the notes (1.1 int size "more than 2 billion elements", 1.4 stack 8192→2048, heap
   10%–30%). One claim cites the installed source `$GOROOT/src/runtime/iface.go` (staticuint64s)
   together with the capture — acceptable as "1.27.1 behaviour".
+
+### Part 4 — Go 1.5–1.10 (subagent, 2026-09-24)
+
+- 85/110 slides (1.5: 20, 1.6: 12, 1.7: 12, 1.8: 12, 1.9: 13, 1.10: 14 + cover/intro), 96 feature
+  rows (67 with slides), 43 examples (3 EXPECT_FAIL vet demos), 69 captures, 25 claims, 15 glossary
+  lines. Only lang pair: type alias (go 1.8 → "type alias requires go1.9 or later").
+- Decisions: loopback-only HTTP examples (http2 GODEBUG pair, Shutdown) are accepted — no outside
+  network. ISMM keynote says "March of 2017" for stack-rescan removal while 1.8 shipped
+  2017-02-16: slide quotes the keynote wording, claims ledger records the mismatch. Benchmarks use
+  -benchtime=10000x (B/op unstable at 1000x).
+- gover.normalise now also masks indented sub-test durations ("    --- PASS: T/x (0.00s)"),
+  test added; p03/p04 recaptured (p03 unchanged). Tests: 106.

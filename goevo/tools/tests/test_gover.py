@@ -58,6 +58,11 @@ class Normalise(unittest.TestCase):
         self.assertEqual(got, 'BenchmarkSum-8   \t…\t… ns/op\t'
                               '      24 B/op\t       1 allocs/op\n')
 
+    def test_subtest_durations_indented(self):
+        # 하위 시험 줄은 들여쓰기가 있다 — 이것도 가린다
+        self.assertEqual(self.n('    --- PASS: TestA/b (0.00s)\n'),
+                         '    --- PASS: TestA/b (…s)\n')
+
     def test_test_durations(self):
         self.assertEqual(self.n('--- PASS: TestA (0.00s)\n'
                                 'ok  \tex/07/x\t0.012s\n'

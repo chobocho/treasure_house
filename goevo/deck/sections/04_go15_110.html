@@ -1,5 +1,1038 @@
 <article class="card section" id="p4">
 <p class="chnum">4부</p>
-<h2>Go 1.5 – 1.10</h2>
-<p class="chsub">준비 중입니다 — 표제 기능과 날짜는 features.tsv·releases.tsv 에서 온다</p>
+<h2>Go 1.5 – 1.10 — C 를 떠나 지연을 줄이다</h2>
+<p class="chsub">Go 로 쓴 컴파일러 · 동시 GC · SSA · context · 타입 별칭 · 빌드 캐시 ·
+<!--REL v=1.5--> ~ <!--REL v=1.10--></p>
+</article>
+
+<article class="card" id="p4-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">여섯 릴리스 동안 언어는 거의 그대로였습니다. 바뀐 것은 그 아래 — 컴파일러, 런타임,
+도구, 표준 라이브러리입니다.</p>
+<ul>
+<li><a href="#p4-v15">1.5</a> — 컴파일러·런타임이 Go 로 옮겨 가고, GC 가 동시 수집기가 됩니다.</li>
+<li><a href="#p4-v16">1.6</a> — HTTP/2 가 저절로 켜지고, cgo 포인터 규칙이 생깁니다.</li>
+<li><a href="#p4-v17">1.7</a> — SSA 백엔드, 표준 라이브러리로 들어온 context, 하위 테스트.</li>
+<li><a href="#p4-v18">1.8</a> — SSA 가 모든 아키텍처로, sort.Slice, GOPATH 기본값.</li>
+<li><a href="#p4-v19">1.9</a> — 타입 별칭, 단조 시계, math/bits, sync.Map.</li>
+<li><a href="#p4-v110">1.10</a> — 빌드 캐시와 테스트 캐시, strings.Builder.</li>
+</ul>
+<div class="note"><b>읽는 법</b> — 이 시대의 기능은 대부분 go.mod 의 go 줄이 막지 않습니다.
+그래서 거의 모든 캡처는 "1.27.1 에서의 동작" 이고, 역사는 문서 배지로 댑니다. go 줄로 전과 후를
+보일 수 있는 것은 타입 별칭 하나입니다(<a href="#p0-modes">0부 증거의 네 가지 꼴</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1.5 -->
+
+<article class="card section" id="p4-v15"><p class="chnum">1장</p><h2>Go 1.5</h2>
+<p class="chsub">C 없는 툴체인 · 동시 GC · GOMAXPROCS = 코어 수 · internal · vendor 실험 · <!--REL v=1.5--></p></article>
+
+<article class="card" id="p4-v15-overview">
+<h3>Go 1.5 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.5.html-->
+<p class="cap">노트가 스스로 "구현의 구조를 크게 바꾼 릴리스" 라고 부릅니다. 언어 변경은 맵 리터럴
+하나뿐이고, 준비 시간을 벌려고 여섯 달 주기에서도 벗어났습니다.
+<!--CITE key=relnotes-1.5 sec="Introduction to Go 1.5"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v15-nomorec">
+<h3>컴파일러와 런타임에서 C 를 걷어내다 <span class="vt v15">1.5</span></h3>
+<p class="why">1.4 까지는 저장소 안에 C 컴파일러가 따로 있었고, 그것으로 런타임을 빌드했습니다.
+C 코드가 고루틴의 스택 관리와 맞물려 돌게 하려면 전용 컴파일러가 필요했기 때문입니다. 1.5 에서
+런타임이 Go 로 옮겨 가면서 그 컴파일러도 사라졌습니다. <!--CITE key=relnotes-1.5 sec="No more C"--></p>
+<blockquote>It is in effect the same program in a different language.</blockquote>
+<p class="cap">"사실상 같은 프로그램을 다른 언어로 옮긴 것이다." 컴파일러는 새로 짠 것이 아니라 C 코드를
+기계로 번역한 것이라, 새 버그가 거의 생기지 않았고 오히려 숨은 버그를 여럿 찾았다고 노트는
+적습니다. <!--CITE key=relnotes-1.5 sec="Translating"--></p>
+<div class="note"><b>예외</b> — 어셈블러만은 번역이 아니라 Go 로 새로 쓴 프로그램입니다. 상수 계산이
+C 가 아니라 Go 의 연산자 우선순위를 따르게 되었습니다. <!--CITE key=relnotes-1.5 sec="Assembler"--></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v15-bootstrap">
+<h3>Go 로 Go 를 빌드한다 — 부트스트랩 <span class="vt v15">1.5</span></h3>
+<p class="why">컴파일러가 Go 로 쓰였으니, 배포판을 소스에서 빌드하려면 이미 돌아가는 Go 가 있어야
+합니다. 1.4 이후의 배포판(gccgo 포함)이면 됩니다. Go 코어를 고치지 않는 사람에게는 달라지는 것이
+없습니다. <!--CITE key=relnotes-1.5 sec="Build"--></p>
+<div class="warn"><b>대가</b> — 번역된 코드는 Go 답지 않아 느렸습니다. 노트는 "Builds in Go 1.5 will be
+slower by a factor of about two", 곧 빌드가 두 배쯤 느려진다고 미리 밝혔습니다.
+<!--CITE key=relnotes-1.5 sec="Performance"--></div>
+<div class="note"><b>그 뒤</b> — 1.7 과 1.8 노트가 연달아 컴파일러·링커가 빨라졌다고 적습니다. 1.8 은
+직전 릴리스보다 "about 15% faster" 입니다. <!--CITE key=relnotes-1.8 sec="Compiler Toolchain"--></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v15-toolnames">
+<h3>6g·8g 가 go tool compile 하나로 <span class="vt v15">1.5</span></h3>
+<p class="why">아키텍처마다 따로 있던 컴파일러(6g, 8g …)·어셈블러(6a, 8a …)·링커(6l, 8l …)가
+<code>GOOS</code>·<code>GOARCH</code> 로 대상을 고르는 도구 하나씩으로 합쳐졌습니다. 중간 파일의
+<code>.6</code>·<code>.8</code> 같은 확장자도 <code>.o</code> 하나가 되었습니다.
+<!--CITE key=relnotes-1.5 sec="Renaming"--></p>
+<!--GOVER v=1.5 file=ex/04/ldflagsx cmd="go tool compile -V" tag=compilev note=컴파일러는 이제 go tool 아래의 한 이름-->
+<p class="cap">이 go 에 딸린 도구 목록 전체는 <a href="#p0-machine">0부</a>에 있습니다 —
+<code>compile</code>·<code>asm</code>·<code>link</code> 가 거기 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-ldflagsx">
+<h3>링커 -X 의 새 꼴 name=value <span class="vt v15">1.5</span></h3>
+<p class="why">빌드할 때 버전 문자열을 넣는 <code>-X</code> 는 인자 둘(<code>-X 경로.이름 값</code>)을
+받는 별난 플래그였습니다. 1.5 가 다른 Go 플래그처럼 인자 하나(<code>-X 경로.이름=값</code>)를 받는
+꼴을 더했습니다. <!--CITE key=relnotes-1.5 sec="Linker"--></p>
+<!--CODE file=ex/04/ldflagsx/main.go note=링크할 때 바뀔 변수-->
+<!--GOVER v=1.5 file=ex/04/ldflagsx note=그냥 돌리면-->
+<!--GOVER v=1.5 file=ex/04/ldflagsx cmd="go run -ldflags=-X=main.version=release ." tag=x note=새 꼴-->
+<!--GOVER v=1.5 file=ex/04/ldflagsx cmd="go run -ldflags='-X main.version release' ." tag=xold note=옛 두 인자 꼴 — 이제 거절-->
+<div class="note"><b>없어지기까지</b> — 옛 꼴은 1.5·1.6 에서 경고와 함께 받아 주다가 1.7 에서
+지워졌습니다. 예고하고, 경고하고, 지우는 세 단계입니다. <!--CITE key=relnotes-1.7 sec="Compiler Toolchain"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-gc">
+<h3>동시 쓰레기 수집기 <span class="vt v15">1.5</span></h3>
+<p class="why">수집기를 다시 설계해, 되도록 사용자 고루틴과 나란히 돌게 했습니다. 목표는 처리량이
+아니라 지연 — 사용자에게 응답하는 웹 사이트 같은 프로그램의 멈춤 시간입니다.
+<!--CITE key=relnotes-1.5 sec="Garbage collector"--></p>
+<blockquote>The “stop the world” phase of the collector will almost always be under 10 milliseconds
+and usually much less.</blockquote>
+<p class="cap">"세상을 멈추는 단계는 거의 언제나 10 밀리초 아래이고, 보통은 훨씬 짧다."
+<!--CITE key=relnotes-1.5 sec="Garbage collector"--></p>
+<div class="note"><b>전체 속도</b> — Go 1 벤치마크 모음은 평균 "a few percent faster" 였지만, 어떤
+프로그램은 빨라지고 어떤 프로그램은 느려질 수 있다고 노트는 조심스럽게 적습니다.
+<!--CITE key=relnotes-1.5 sec="Performance"--> 멈춤 시간의 뒷이야기는
+<a href="#p4-v18-gcstory">1.8 장의 GC 이야기</a>에서 이어집니다.</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v15-tricolor">
+<h3>삼색 표시·쓸기, 손잡이는 GOGC 하나 <span class="vt v15">1.5</span></h3>
+<p class="why">새 수집기는 동시에 도는 삼색(tri-color) 표시·쓸기 수집기입니다. 사용자 코드가 포인터를
+바꾸는 동안에도 "검은 객체가 흰 객체를 가리키지 않는다" 는 불변식을 쓰기 장벽(write barrier)이
+지킵니다. 조정 손잡이는 여럿 두지 않고 <code>GOGC</code> 하나만 두었습니다.
+<!--CITE key=blog-go15gc sec="The Embellishment"--></p>
+<!--CODE file=ex/04/gogc/main.go note=지금 적용 중인 GOGC 를 읽는다-->
+<!--GOVER v=1.5 file=ex/04/gogc note=기본값-->
+<!--GOVER v=1.5 file=ex/04/gogc cmd="GOGC=200 go run ." tag=gogc200 note=힙을 살아 있는 객체의 세 배까지-->
+<!--GOVER v=1.5 file=ex/04/gogc cmd="GOGC=off go run ." tag=gogcoff note=수집 끄기는 -1-->
+<p class="cap">블로그의 설명: 기본값 100 은 전체 힙이 직전 수집 뒤 살아 있는 객체의 두 배(100 % 더)까지
+자라도록 두고, 200 은 세 배입니다. 1.27.1 에서의 동작입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-gomaxprocs">
+<h3>GOMAXPROCS 의 기본값이 코어 수로 <span class="vt v15">1.5</span></h3>
+<p class="why">이전 릴리스에서 동시에 Go 코드를 돌리는 스레드 수의 기본값은 1 이었습니다. 1.5 부터는
+CPU 의 코어 수입니다. 여러 코어를 가정하지 않고 짠 프로그램이 깨질 수 있어 노트가 "깨질 수 있는
+변경" 으로 경고했습니다. <!--CITE key=relnotes-1.5 sec="Runtime"--></p>
+<!--CODE file=ex/04/gomaxprocs/main.go note=기본값을 묻기만 한다-->
+<!--GOVER v=1.5 file=ex/04/gomaxprocs note=1.27.1 에서의 동작-->
+<!--GOVER v=1.5 file=ex/04/gomaxprocs cmd="GOMAXPROCS=1 go run ." tag=one note=옛 기본값을 손으로-->
+<div class="warn"><b>같은 릴리스의 또 하나</b> — 고루틴을 스케줄하는 순서도 바뀌었습니다. 언어는 순서를
+약속한 적이 없지만, 거기에 기댄 (잘못된) 프로그램이 실제로 깨졌다고 노트는 적습니다.
+<!--CITE key=relnotes-1.5 sec="Runtime"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-maplit">
+<h3>맵 리터럴 키의 타입 생략 <span class="vt v15">1.5</span></h3>
+<p class="why">슬라이스 리터럴은 원소의 타입을 생략할 수 있었는데, 같은 규칙이 맵의 <b>키</b>에는
+적용되지 않았습니다. 노트는 이것을 "an oversight" — 빠뜨린 것이라 부르고 1.5 에서 바로잡았습니다.
+<!--CITE key=relnotes-1.5 sec="Map literals"--></p>
+<!--CODE file=ex/04/maplit/main.go note=키의 Point 를 생략-->
+<!--GOVER v=1.5 file=ex/04/maplit note=1.27.1 에서의 동작-->
+<!--CODE file=ex/04/maplit/old.go note=1.5 이전에 써야 했던 꼴-->
+<!--GOVER v=1.5 file=ex/04/maplit cmd="gofmt -s -d old.go" tag=simplify note=gofmt -s 가 중복 타입을 지운다-->
+<p class="cap">이 변경은 go 줄로 막히지 않습니다. 그래서 <code>go 1.5</code> 아래로 내려도 오류가 나지
+않습니다 — 보일 수 있는 것은 지금의 동작뿐입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-internal">
+<h3>internal 패키지를 모든 저장소에 <span class="vt v15">1.5</span></h3>
+<p class="why"><code>internal</code> 이라는 디렉터리 아래의 패키지는 같은 서브트리에 뿌리를 둔
+패키지만 가져올 수 있습니다. 1.4 에서 Go 코어 안에서 시험했고, 예고한 대로 1.5 에서 모든 저장소로
+넓혔습니다. <!--CITE key=relnotes-1.5 sec="Go command"--></p>
+<!--CODE file=ex/04/internalpkg/a/internal/secret/secret.go note=a 의 속살-->
+<!--CODE file=ex/04/internalpkg/a/a.go note=같은 서브트리라 허용-->
+<!--CODE file=ex/04/internalpkg/main.go note=main 은 a 를 거친다-->
+<!--GOVER v=1.5 file=ex/04/internalpkg note=허용된 길-->
+<!--CODE file=ex/04/internalpkg/bad.go note=서브트리 밖에서 바로 가져오면-->
+<!--GOVER v=1.5 file=ex/04/internalpkg cmd="go build -tags demo ." tag=demo note=go 명령이 거절한다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-vendor">
+<h3>vendor 디렉터리 — 세 릴리스에 걸친 도입 <span class="vt v15">1.5</span></h3>
+<p class="why">외부 의존성을 저장소 안의 <code>vendor</code> 디렉터리에 복사해 두고 쓰는 방식입니다.
+한 번에 켜지 않고 실험 → 기본값 → 표준 기능의 세 단계를 밟았습니다.
+<!--CITE key=relnotes-1.5 sec="Introduction to Go 1.5"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>릴리스</th><th>상태</th></tr>
+<tr><td>1.5</td><td>실험. <code>GO15VENDOREXPERIMENT=1</code> 로 켠다 <!--CITE key=relnotes-1.5 sec="Go command"--></td></tr>
+<tr><td>1.6</td><td>기본으로 켜짐. <code>=0</code> 으로 끌 수 있다. 우연히 <code>vendor</code> 라는 디렉터리가 있던 트리가 가장 흔한 피해자 <!--CITE key=relnotes-1.6 sec="Go command"--></td></tr>
+<tr><td>1.7</td><td>환경 변수 제거. 표준 기능 <!--CITE key=relnotes-1.7 sec="Go command"--></td></tr>
+<tr><td>1.9</td><td><code>./...</code> 가 vendor 아래를 더는 맞추지 않음 <!--CITE key=relnotes-1.9 sec="Vendor matching with ./…"--></td></tr>
+</table></div>
+<p class="cap">의존성의 버전 자체를 기록하는 방법은 이 시대에 끝내 나오지 않았습니다 — 그 이야기는
+<a href="#p5">5부</a>의 모듈입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v15-godoc">
+<h3>go doc — 명령 줄용 문서 <span class="vt v15">1.5</span></h3>
+<p class="why">몇 릴리스 전에 지웠던 <code>go doc</code> 이 명령 줄에 맞춘 새 모습으로 돌아왔습니다.
+<code>godoc</code> 보다 짧게, 패키지나 기호 하나만 보여 주고, 대소문자를 가리지 않으며, 내보내지 않은
+기호도 보여 줄 수 있습니다. <!--CITE key=relnotes-1.5 sec="Go doc command"--></p>
+<!--CODE file=ex/04/godoc/main.go note=같은 릴리스에 들어온 strings.Compare-->
+<!--GOVER v=1.5 file=ex/04/godoc cmd="go doc strings.Compare" tag=doc note=문서가 스스로 쓰지 말라고 한다-->
+<p class="cap"><code>strings.Compare</code> 는 bytes 패키지와 짝을 맞추려고 넣었을 뿐 "otherwise
+unnecessary" 라고 노트가 적습니다. <!--CITE key=relnotes-1.5 sec="Minor changes to the library"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-bigfloat">
+<h3>math/big.Float — 임의 정밀도 실수 <span class="vt v15">1.5</span></h3>
+<p class="why">가수의 비트 수(정밀도)를 고를 수 있는 부동소수점 수입니다. 정밀도를 24(53) 비트로 두면
+float32(float64) 범위 안의 연산은 IEEE-754 연산과 같은 결과를 냅니다. 1.5 컴파일러의 상수 계산도
+자체 구현 대신 math/big 을 쓰게 되었습니다. <!--CITE key=relnotes-1.5 sec="Floats in math/big"--></p>
+<!--CODE file=ex/04/bigfloat/main.go note=1/3 을 세 정밀도로-->
+<!--GOVER v=1.5 file=ex/04/bigfloat note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-flag">
+<h3>flag 사용법 메시지와 `N` 표기 <span class="vt v15">1.5</span></h3>
+<p class="why"><code>PrintDefaults</code> 의 모양이 사람이 읽기 좋게 바뀌었습니다. 설명 속 역따옴표로 감싼
+낱말은 플래그 인자의 이름이 되고, 기본값은 타입의 영값이 아닐 때만 보입니다.
+<!--CITE key=relnotes-1.5 sec="Flag"--></p>
+<!--CODE file=ex/04/flagusage/main.go note=역따옴표 낱말이 인자 이름-->
+<!--GOVER v=1.5 file=ex/04/flagusage note=1.27.1 에서의 동작 — -v 에는 기본값이 없다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-netdns">
+<h3>cgo 없는 Go DNS 해석기 <span class="vt v15">1.5</span></h3>
+<p class="why">대부분의 유닉스에서 DNS 조회에 cgo 가 더는 필요 없어졌습니다. 조회 하나가 스레드가
+아니라 고루틴 하나를 차지하므로, 동시에 여러 조회를 하는 프로그램이 OS 자원을 덜 씁니다. 어느
+해석기를 쓸지는 빌드가 아니라 실행 때 정하고, <code>GODEBUG=netdns</code> 로 고를 수 있습니다.
+<!--CITE key=relnotes-1.5 sec="Net"--></p>
+<!--CODE file=ex/04/netdns/main.go note=/etc/hosts 만 보는 조회-->
+<!--GOVER v=1.5 file=ex/04/netdns note=기본-->
+<!--GOVER v=1.5 godebug=netdns=go+2 file=ex/04/netdns note=해석기가 무엇을 골랐는지 말하게-->
+<p class="cap">이 덱의 실험은 cgo 를 끄고 돌리므로(<code>CGO_ENABLED=0</code>) 언제나 Go 해석기입니다.
+<code>netdns</code> 설정은 없앨 계획이 없다고 GODEBUG 문서가 적습니다.
+<!--CITE key=godebug sec="Go 1.5"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-small">
+<h3>작은 변화들 — 표준 라이브러리 <span class="vt v15">1.5</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>왜</th></tr>
+<tr><td><code>os.LookupEnv</code></td><td>빈 환경 변수와 없는 변수를 가른다 <!--CITE key=api-1.5 sec="pkg os, func LookupEnv(string) (string, bool)"--></td></tr>
+<tr><td><code>base64.RawStdEncoding</code></td><td>패딩(<code>=</code>) 없는 인코딩 <!--CITE key=api-1.5 sec="pkg encoding/base64, var RawStdEncoding *Encoding"--></td></tr>
+<tr><td><code>go/types</code></td><td>x 저장소에서 표준 라이브러리로 이사 <!--CITE key=relnotes-1.5 sec="Go types"--></td></tr>
+</table></div>
+<!--CODE file=ex/04/small15/main.go note=LookupEnv 와 Raw 인코딩-->
+<!--GOVER v=1.5 file=ex/04/small15 note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v15-tools">
+<h3>작은 변화들 — 도구 <span class="vt v15">1.5</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td><code>go tool trace</code></td><td>실행 추적. <code>go test -trace=trace.out</code> 으로 모으고
+브라우저로 본다 <!--CITE key=relnotes-1.5 sec="Trace command"--></td></tr>
+<tr><td><code>go test -count</code></td><td>테스트·벤치마크를 여러 번 돌린다 <!--CITE key=relnotes-1.5 sec="Go command"--></td></tr>
+<tr><td><code>-buildmode</code></td><td>공유 라이브러리, 다른 언어가 부르는 Go 라이브러리 같은 링크 방식
+<!--CITE key=relnotes-1.5 sec="Linker"--></td></tr>
+</table></div>
+<p class="cap">이 기계의 go 에는 <code>trace</code> 도구가 없어 추적 화면은 싣지 않습니다
+(<a href="#p0-machine">0부</a>). 추적을 모으는 비용은 1.7 에서 "at least 400%" 에서 "about 25%" 로
+줄었습니다. <!--CITE key=relnotes-1.7 sec="Go tool trace"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v15-ports">
+<h3>포트 — arm64 의 시작 <span class="vt v15">1.5</span></h3>
+<p class="why">업계가 32비트 x86 을 떠나면서 내려받기 배포판은 줄고(OS X 는 amd64 만), 소스로 빌드하는
+새 포트가 늘었습니다. <!--CITE key=relnotes-1.5 sec="Ports"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>포트</th><th>1.5 에서</th></tr>
+<tr><td>darwin/arm · darwin/arm64</td><td>새 포트</td></tr>
+<tr><td>linux/arm64</td><td>"mostly in place" — cgo 는 외부 링크로만</td></tr>
+<tr><td>ppc64 · ppc64le</td><td>실험 포트</td></tr>
+</table></div>
+<p class="cap">이 덱을 만든 기계는 android/arm64 입니다(<a href="#p0-machine">0부</a>). 그 계보의
+첫걸음이 여기입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p4-v15-quiz" data-quiz>
+<h3>Go 1.5 퀴즈</h3>
+<p class="q">Q. 1.5 에서 GOMAXPROCS 의 기본값을 바꾼 것이 왜 "깨질 수 있는 변경" 이었을까요?
+그리고 같은 릴리스의 어떤 변경이 비슷한 위험을 지녔나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 기본값이 1 이던 시절에는 고루틴이 한 스레드에서 번갈아 돌았으므로, 동기화 없이
+짠 프로그램이 우연히 맞게 돌 수 있었습니다. 코어 수만큼 동시에 돌면 그 우연이 사라집니다. 같은
+릴리스에서 고루틴의 스케줄 순서가 바뀐 것도 같은 종류입니다 — 언어가 약속한 적 없는 순서에 기댄
+프로그램이 깨졌습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1.6 -->
+
+<article class="card section" id="p4-v16"><p class="chnum">2장</p><h2>Go 1.6</h2>
+<p class="chsub">투명한 HTTP/2 · cgo 포인터 규칙 · 맵 오용 감지 · 템플릿 block · <!--REL v=1.6--></p></article>
+
+<article class="card" id="p4-v16-overview">
+<h3>Go 1.6 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.6.html-->
+<p class="cap">언어 명세는 한 글자도 바뀌지 않았습니다. 새 포트, 강제되는 cgo 포인터 규칙, 저절로 켜지는
+HTTP/2, 템플릿 재사용 — 바뀐 것은 전부 구현과 라이브러리입니다.
+<!--CITE key=relnotes-1.6 sec="Introduction to Go 1.6"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v16-http2">
+<h3>투명한 HTTP/2 <span class="vt v16">1.6</span></h3>
+<p class="why">HTTPS 를 쓰는 net/http 의 클라이언트와 서버가 알아서 HTTP/2 를 씁니다. HTTP/1.1 전용
+API 가 따로 없듯이 HTTP/2 전용 API 도 내보내지 않았습니다. <!--CITE key=relnotes-1.6 sec="HTTP/2"--></p>
+<!--CODE file=ex/04/http2/main.go note=127.0.0.1 안에서만 오가는 TLS 서버-->
+<!--GOVER v=1.6 file=ex/04/http2 note=기본 — 협상 결과 HTTP/2-->
+<!--GOVER v=1.6 godebug=http2client=0 file=ex/04/http2 note=클라이언트 쪽 HTTP/2 끄기-->
+<div class="note"><b>끄는 법 둘</b> — 코드로는 <code>Transport.TLSNextProto</code>(서버는
+<code>Server.TLSNextProto</code>)에 nil 이 아닌 빈 맵을 넣습니다. <!--CITE key=relnotes-1.6 sec="HTTP/2"-->
+설정으로는 <code>http2client</code>·<code>http2server</code> 이고, 없앨 계획이 없다고 GODEBUG 문서가
+적습니다. <!--CITE key=godebug sec="Go 1.6"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v16-cgoptr">
+<h3>cgo 포인터 공유 규칙 <span class="vt v16">1.6</span></h3>
+<p class="why">C 코드가 Go 의 쓰레기 수집기와 함께 살 수 있도록 규칙을 정하고, 런타임이 실행 중에
+검사하게 했습니다. 어기면 진단을 찍고 프로그램을 멈춥니다. <!--CITE key=relnotes-1.6 sec="Cgo"--></p>
+<ul>
+<li>Go 가 할당한 메모리의 포인터를 cgo 호출 인자로 C 에 넘길 수 있다.</li>
+<li>단, 그 메모리 안에 Go 메모리를 가리키는 포인터가 없어야 한다.</li>
+<li>그리고 C 는 호출이 끝난 뒤 그 포인터를 붙들고 있으면 안 된다.</li>
+</ul>
+<div class="warn"><b>검사를 끄지 말 것</b> — <code>GODEBUG=cgocheck=0</code> 으로 끌 수 있지만, 걸리는 코드
+대부분은 어떤 식으로든 GC 와 미묘하게 어긋나 있고, 끄면 "더 알 수 없는 실패" 로 바뀔 뿐이라고 노트는
+적습니다. <!--CITE key=relnotes-1.6 sec="Cgo"--></div>
+<p class="cap">이 기계에서는 cgo 를 쓸 수 없어 실행 예제가 없습니다(<a href="#p0-machine">0부</a>).</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v16-mapmisuse">
+<h3>맵 동시 오용 감지 <span class="vt v16">1.6</span></h3>
+<p class="why">한 고루틴이 맵에 쓰는 동안 다른 고루틴이 그 맵을 읽거나 쓰면 안 됩니다. 1.6 런타임은 이것을
+가볍게, 최선을 다해(best-effort) 잡아내고 프로그램을 멈춥니다. <!--CITE key=relnotes-1.6 sec="Runtime"--></p>
+<!--CODE file=ex/04/mapmisuse/main.go note=네 고루틴이 잠금 없이 한 맵에 쓴다-->
+<!--GOVER v=1.6 file=ex/04/mapmisuse cmd="GOTRACEBACK=none go run ." tag=none note=1.27.1 에서의 동작 — 스택은 생략-->
+<div class="warn"><b>최선을 다할 뿐</b> — 감지는 보장이 아닙니다. 더 확실하게 잡으려면 경쟁 검출기를 쓰라고
+노트가 권합니다(이 기계에서는 돌지 않습니다). 1.8 은 "쓰면서 순회" 도 잡도록 넓혔습니다.
+<!--CITE key=relnotes-1.8 sec="Concurrent Map Misuse"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v16-traceback">
+<h3>패닉은 현재 고루틴만 찍는다 <span class="vt v16">1.6</span></h3>
+<p class="why">프로그램을 끝내는 패닉에서 런타임이 이제 기본으로 <b>달리던 고루틴 하나</b>의 스택만
+찍습니다. 대개 그 고루틴만 관계있으니, 나머지를 빼면 충돌 메시지의 잡음이 크게 줍니다.
+<!--CITE key=relnotes-1.6 sec="Runtime"--></p>
+<!--CODE file=ex/04/traceback/main.go note=쉬고 있는 고루틴 하나를 두고 패닉-->
+<!--GOVER v=1.6 file=ex/04/traceback note=기본 — 한 고루틴만-->
+<!--GOVER v=1.6 file=ex/04/traceback cmd="GOTRACEBACK=all go run ." tag=all note=전부 보고 싶을 때-->
+<div class="note"><b>고칠 곳</b> — 시간 초과나 신호를 받고 일부러 패닉해 "전체 상태" 를 남기던 코드는
+패닉 전에 <code>debug.SetTraceback("all")</code> 을 부르라고 노트가 적습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v16-sort">
+<h3>sort.Sort 의 새 구현 <span class="vt v16">1.6</span></h3>
+<p class="why"><code>sort.Sort</code> 를 다시 써서 <code>Less</code>·<code>Swap</code> 호출을 10 % 쯤
+줄였습니다. 대신 같다고 비교되는 원소들의 순서가 전과 달라졌습니다.
+<!--CITE key=relnotes-1.6 sec="Sorting"--></p>
+<!--CODE file=ex/04/sortsort/main.go note=키가 같은 원소가 절반씩-->
+<!--GOVER v=1.6 file=ex/04/sortsort note=1.27.1 에서의 동작 — 윗줄 Sort, 아랫줄 Stable-->
+<div class="warn"><b>함정</b> — <code>Sort</code> 는 같은 원소의 순서를 약속한 적이 없습니다. 윗줄의 순서는
+구현이 바뀌면 또 바뀔 수 있습니다. 입력 순서를 지켜야 하면 <code>Stable</code> 을 쓰거나
+<code>Less</code> 가 원하는 순서를 직접 말하게 하라는 것이 노트의 처방입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v16-template">
+<h3>템플릿 — 공백 다듬기와 block <span class="vt v16">1.6</span></h3>
+<p class="why">두 가지가 템플릿 쓰기를 쉽게 했습니다. 동작 앞뒤의 <code>-</code> 는 그쪽 공백을 지우고,
+새 <code>{{block}}</code> 동작은 이름 붙은 템플릿의 재정의와 함께 "바꿔 끼울 수 있는 조각" 을
+만듭니다. <!--CITE key=relnotes-1.6 sec="Templates"--></p>
+<!--CODE file=ex/04/template/main.go note=노트의 23<45 예와 block 재정의-->
+<!--GOVER v=1.6 file=ex/04/template note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v16-vet">
+<h3>vet — Printf 에 넘긴 함수 값 <span class="vt v16">1.6</span></h3>
+<p class="why"><code>f()</code> 를 넘겨야 할 자리에 <code>f</code> 를 넘기는 실수를 <code>go vet</code> 이
+잡기 시작했습니다. <!--CITE key=relnotes-1.6 sec="Go vet command"--></p>
+<!--CODE file=ex/04/vetprintf/main.go note=괄호를 빠뜨렸다-->
+<!--GOVER v=1.6 file=ex/04/vetprintf cmd="go vet ." tag=vet note=1.27.1 의 vet-->
+<p class="cap">이 예제는 일부러 틀린 코드라 예제 검사(<code>make examples-check</code>)에서 빠져 있습니다.
+<a href="#p4-v110-testvet">1.10</a> 부터는 <code>go test</code> 가 이런 검사를 먼저 돌립니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v16-small">
+<h3>작은 변화들 — 표준 라이브러리 <span class="vt v16">1.6</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>왜</th></tr>
+<tr><td><code>time.Parse</code></td><td>평년의 2월 29일, 4월 31일 같은 없는 날을 거절 <!--CITE key=relnotes-1.6 sec="Minor changes to the library"--></td></tr>
+<tr><td><code>bufio.Scanner.Buffer</code></td><td><code>MaxScanTokenSize</code> 보다 긴 토큰을 읽을 수 있게 <!--CITE key=api-1.6 sec="pkg bufio, method (*Scanner) Buffer([]uint8, int)"--></td></tr>
+<tr><td><code>regexp.Regexp.Copy</code></td><td>많은 고루틴이 한 정규식을 쓸 때의 뮤텍스 경합을 피하는 사본 <!--CITE key=api-1.6 sec="pkg regexp, method (*Regexp) Copy() *Regexp"--></td></tr>
+</table></div>
+<!--CODE file=ex/04/small16/main.go note=윤년·평년·30일 달-->
+<!--GOVER v=1.6 file=ex/04/small16 note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v16-ports">
+<h3>포트와 빌드 모드 <span class="vt v16">1.6</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>1.6 에서</th></tr>
+<tr><td>linux/mips64 · mips64le</td><td>실험 포트 <!--CITE key=relnotes-1.6 sec="Ports"--></td></tr>
+<tr><td>android/386</td><td>실험 포트 <!--CITE key=relnotes-1.6 sec="Ports"--></td></tr>
+<tr><td>pie 빌드 모드</td><td>위치 독립 실행 파일. android·linux 의 여러 아키텍처 <!--CITE key=relnotes-1.6 sec="Compiler Toolchain"--></td></tr>
+</table></div>
+<p class="cap">같은 절의 조용한 변화 하나: 컴파일러의 파서가 yacc 로 생성한 것에서 손으로 쓴 것으로
+바뀌었습니다. <!--CITE key=relnotes-1.6 sec="Compiler Toolchain"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p4-v16-quiz" data-quiz>
+<h3>Go 1.6 퀴즈</h3>
+<p class="q">Q. 1.6 으로 올린 서버가 갑자기 HTTP/2 로 응답해 문제가 생겼습니다. 코드를 고치지 않고 옛
+동작으로 돌리는 방법과, 코드로 고치는 방법을 하나씩 대 보세요.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 설정으로는 <code>GODEBUG=http2server=0</code>(클라이언트는
+<code>http2client=0</code>)입니다. 코드로는 <code>Server.TLSNextProto</code> 에 nil 이 아닌 빈 맵을
+넣습니다. 이 장의 캡처가 클라이언트 쪽 설정으로 HTTP/1.1 로 돌아가는 것을 보였습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1.7 -->
+
+<article class="card section" id="p4-v17"><p class="chnum">3장</p><h2>Go 1.7</h2>
+<p class="chsub">SSA 백엔드 · 표준 라이브러리의 context · 하위 테스트 · 더 작은 바이너리 · <!--REL v=1.7--></p></article>
+
+<article class="card" id="p4-v17-overview">
+<h3>Go 1.7 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.7.html-->
+<p class="cap">x86-64 에 새 컴파일러 백엔드, x/net 에서 올라온 context, 테스트의 계층 구조 — 그리고
+1.5 에서 시작한 vendor 지원을 표준 기능으로 마무리한 릴리스입니다.
+<!--CITE key=relnotes-1.7 sec="Introduction to Go 1.7"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v17-context">
+<h3>context 가 표준 라이브러리로 <span class="vt v17">1.7</span></h3>
+<p class="why">Go 서버는 요청마다 고루틴을 띄우고, 그 고루틴은 다시 DB·RPC 를 부르는 고루틴을
+띄웁니다. 요청이 취소되거나 시간을 넘기면 그 고루틴들이 모두 빨리 끝나야 합니다. 구글이 그 신호와
+시한, 요청 범위의 값을 API 경계 너머로 나르려고 만든 것이 context 패키지입니다.
+<!--CITE key=blog-context sec="Introduction"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>언제</th><th>어디에</th></tr>
+<tr><td>블로그 글(2014)</td><td><code>golang.org/x/net/context</code> 로 공개 <!--CITE key=blog-context sec="Introduction"--></td></tr>
+<tr><td>1.7</td><td>표준 라이브러리 <code>context</code> 로 이사. net·net/http·os/exec 가 받아 씀 <!--CITE key=relnotes-1.7 sec="Context"--></td></tr>
+<tr><td>1.8</td><td>database/sql, <code>net.Resolver</code>, <code>Server.Shutdown</code> 까지 <!--CITE key=relnotes-1.8 sec="More Context Support"--></td></tr>
+<tr><td>1.10</td><td><code>go fix</code> 가 옛 import 경로를 <code>"context"</code> 로 바꿔 준다 <!--CITE key=relnotes-1.10 sec="Fix"--></td></tr>
+</table></div>
+<p class="cap">옛 경로와 새 경로가 "완전히 같은" 것이 된 것은 1.9 의 타입 별칭 덕분입니다 — 1.10 노트의
+괄호 속 한 줄입니다(<a href="#p4-v19-alias">5장</a>).</p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p4-v17-cancel">
+<h3>취소는 트리를 타고 내려간다 <span class="vt v17">1.7</span></h3>
+<p class="why">context 는 부모에서 파생된 자식들로 트리를 이룹니다. 부모를 취소하면 그 아래 모든 자식의
+<code>Done</code> 채널이 닫히고, 값은 그대로 남습니다. <!--CITE key=api-1.7 sec="pkg context, func WithCancel(Context) (Context, CancelFunc)"--></p>
+<!--CODE file=ex/04/cancel/main.go note=뿌리만 취소한다-->
+<!--GOVER v=1.7 file=ex/04/cancel note=1.27.1 에서의 동작-->
+<div class="note"><b>키의 타입</b> — 값의 키로 내보내지 않은 자기 타입(<code>ctxKey</code>)을 쓰면 다른
+패키지의 키와 부딪히지 않습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v17-deadline">
+<h3>시한과 표준 라이브러리 <span class="vt v17">1.7</span></h3>
+<p class="why">context 가 표준이 되자 표준 라이브러리가 받아 쓰기 시작했습니다. <code>http.Request</code>
+에 <code>Context</code>·<code>WithContext</code> 가, os/exec 에 <code>CommandContext</code> 가, net 의
+<code>Dialer</code> 에 <code>DialContext</code> 가 붙었습니다.
+<!--CITE key=api-1.7 sec="pkg net/http, method (*Request) Context() context.Context"--></p>
+<!--CODE file=ex/04/deadline/main.go note=일을 시한과 경주시킨다-->
+<!--GOVER v=1.7 file=ex/04/deadline note=1.27.1 에서의 동작 — 요청은 보내지 않는다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v17-lostcancel">
+<h3>vet -lostcancel — 버린 cancel 함수 <span class="vt v17">1.7</span></h3>
+<p class="why"><code>WithCancel</code>·<code>WithTimeout</code>·<code>WithDeadline</code> 이 돌려준 취소
+함수를 부르지 않으면, 새 context 는 부모가 취소될 때까지 회수되지 않습니다. Background 는 결코
+취소되지 않으니 영영입니다. 1.7 의 vet 이 이것을 잡습니다. <!--CITE key=relnotes-1.7 sec="Go vet"--></p>
+<!--CODE file=ex/04/lostcancel/main.go note=cancel 을 _ 로 버렸다-->
+<!--GOVER v=1.7 file=ex/04/lostcancel cmd="go vet ." tag=vet note=1.27.1 의 vet-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v17-ssa">
+<h3>SSA 백엔드와 경계 검사 제거 <span class="vt v17">1.7</span></h3>
+<p class="why">x86-64 에 정적 단일 대입(SSA) 형식의 새 코드 생성 백엔드가 들어왔습니다. 더 작고 빠른
+코드를 만들고, 경계 검사 제거 같은 최적화의 바탕이 됩니다. 노트의 숫자는 벤치마크 CPU 시간
+"5-35%" 감소입니다. <!--CITE key=relnotes-1.7 sec="Compiler Toolchain"--></p>
+<!--CODE file=ex/04/bce/main.go note=같은 합, 다른 검사 수-->
+<!--GOVER v=1.7 file=ex/04/bce cmd="go build -gcflags='-d=ssa/check_bce/debug=1' ." tag=bce note=남은 경계 검사를 컴파일러가 말한다-->
+<p class="cap"><code>sum4</code> 는 7번째 줄에 검사가 넷, <code>sum4hint</code> 는 11번째 줄의 하나뿐입니다.
+<code>s[3]</code> 이 통과하면 나머지 셋은 안전하다는 것을 SSA 가 증명합니다. 1.27.1 에서의 동작입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v17-binsize">
+<h3>더 작은 바이너리 <span class="vt v17">1.7</span></h3>
+<p class="why">라즈베리 파이나 휴대폰 같은 작은 기기에 Go 를 올리려는 관심이 커지자 바이너리 크기가
+과제가 되었습니다. 1.7 에서는 세 가지가 크기를 줄였습니다. <!--CITE key=blog-go1.7-binary-size sec="Work done in Go 1.7"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>변경</th><th>블로그가 적은 효과</th></tr>
+<tr><td>SSA 백엔드(amd64)</td><td>"~5%"</td></tr>
+<tr><td>메서드 가지치기 — 인터페이스·reflect 로 닿지 않는 메서드를 버림</td><td>"5–20%"</td></tr>
+<tr><td>더 촘촘한 실행 시간 타입 정보</td><td>"a further 5–15%"</td></tr>
+</table></div>
+<p class="cap">결과: 흔한 hello world 가 "2.3MB to 1.6MB", 보통 프로그램은 "about 30% smaller".
+<!--CITE key=blog-go1.7-binary-size sec="Results"--> 노트의 표현은 "sometimes by as much as 20-30%"
+입니다. <!--CITE key=relnotes-1.7 sec="Compiler Toolchain"--> 이 기계에서 재지 않았습니다.</p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p4-v17-subtests">
+<h3>하위 테스트 t.Run <span class="vt v17">1.7</span></h3>
+<p class="why"><code>T</code> 와 <code>B</code> 에 <code>Run</code> 메서드가 생겨 테스트 안에 이름 붙은
+하위 테스트를 둘 수 있게 되었습니다. 표 주도 테스트가 실패를 사례별로 알리고, 공통 준비·정리 코드를
+나눠 쓸 수 있습니다. <!--CITE key=relnotes-1.7 sec="Testing"--></p>
+<!--CODE file=ex/04/subtests/split_test.go sym=TestSplit note=표의 한 행이 하위 테스트 하나-->
+<!--GOVER v=1.7 file=ex/04/subtests cmd="go test -v ." tag=v note=이름이 TestSplit/사례 로 쌓인다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v17-subrun">
+<h3>하나만 골라 돌리기, 하위 벤치마크 <span class="vt v17">1.7</span></h3>
+<p class="why">하위 테스트의 이름은 <code>-run</code> 패턴에서 빗금으로 이어 씁니다. 벤치마크도
+<code>b.Run</code> 으로 크기별 표를 만들 수 있습니다. <!--CITE key=blog-subtests sec="Running specific tests or benchmarks"--></p>
+<!--GOVER v=1.7 file=ex/04/subtests cmd="go test -v -run TestSplit/trailing ." tag=run note=사례 하나만-->
+<!--CODE file=ex/04/subtests/split_test.go sym=BenchmarkJoin note=크기별 하위 벤치마크-->
+<!--GOVER v=1.7 file=ex/04/subtests cmd="go test -run XXX -bench . -benchmem -benchtime=10000x ." tag=bench note=시간은 지우고 할당만-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v17-small">
+<h3>작은 변화들 — 표준 라이브러리 <span class="vt v17">1.7</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>왜</th></tr>
+<tr><td><code>Duration(0).String()</code></td><td><code>"0"</code> 이 아니라 <code>"0s"</code> <!--CITE key=relnotes-1.7 sec="time"--></td></tr>
+<tr><td>JSON 맵의 정수 키</td><td>전에는 문자열 키만. 이제 따옴표 친 십진수로 <!--CITE key=relnotes-1.7 sec="encoding/json"--></td></tr>
+<tr><td><code>reflect.StructOf</code></td><td>실행 중에 구조체 타입을 만든다. 타입 생성자 한 벌의 마지막 조각 <!--CITE key=api-1.7 sec="pkg reflect, func StructOf([]StructField) Type"--></td></tr>
+</table></div>
+<!--CODE file=ex/04/small17/main.go note=셋을 한 번에-->
+<!--GOVER v=1.7 file=ex/04/small17 note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p4-v17-quiz" data-quiz>
+<h3>Go 1.7 퀴즈</h3>
+<p class="q">Q. <code>ctx, _ := context.WithTimeout(parent, time.Second)</code> 는 1초 뒤에 저절로 끝나는데,
+왜 vet 은 취소 함수를 버리지 말라고 할까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 취소 함수를 부르지 않으면 새 context 는 시한이 오거나 부모가 취소될 때까지
+붙들려 있습니다. 일이 일찍 끝나도 타이머와 자원이 그때까지 남습니다. 부모가 Background 이고 시한이 없는
+<code>WithCancel</code> 이면 영영 회수되지 않습니다. 그래서 관용구는 <code>defer cancel()</code> 입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1.8 -->
+
+<article class="card section" id="p4-v18"><p class="chnum">4장</p><h2>Go 1.8</h2>
+<p class="chsub">모든 아키텍처의 SSA · 100 µs 아래의 GC 멈춤 · sort.Slice · 기본 GOPATH · 우아한 종료 · <!--REL v=1.8--></p></article>
+
+<article class="card" id="p4-v18-overview">
+<h3>Go 1.8 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.8.html-->
+<p class="cap">노트의 첫 문단이 요약입니다 — 32비트 MIPS, 더 나은 백엔드, 스택 재스캔을 없애 줄인 GC 멈춤,
+HTTP/2 푸시, HTTP 우아한 종료, 더 넓은 context, 뮤텍스 프로파일, 그리고 "simplifies sorting slices".
+<!--CITE key=relnotes-1.8 sec="Introduction to Go 1.8"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v18-structconv">
+<h3>구조체 변환에서 태그를 무시한다 <span class="vt v18">1.8</span></h3>
+<p class="why">두 구조체 타입 사이의 명시적 변환에서 이제 태그를 보지 않습니다. 필드는 같고 태그만 다른
+두 타입 — DB 용과 API 용 같은 — 을 서로 변환할 수 있습니다.
+<!--CITE key=relnotes-1.8 sec="Changes to the language"--></p>
+<!--CODE file=ex/04/structconv/main.go note=db 태그 타입을 json 태그 타입으로-->
+<!--GOVER v=1.8 file=ex/04/structconv note=1.27.1 에서의 동작-->
+<p class="cap">언어 변경이지만 go 줄이 막는 규칙이 아니라, 옛 동작(컴파일 오류)은 이 기계에서 보일 수
+없습니다. 같은 릴리스의 다른 언어 변경은 부동소수점 상수의 지수를 16비트까지만 지원해도 된다는
+명세 완화이고, gc 와 gccgo 는 여전히 32비트를 지원합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v18-sortslice">
+<h3>sort.Slice — 정렬기 타입 없이 <span class="vt v18">1.8</span></h3>
+<p class="why">정렬할 때마다 <code>Len</code>·<code>Less</code>·<code>Swap</code> 세 메서드를 가진 타입을
+새로 만들던 수고를, less 함수 하나로 줄였습니다. <code>SliceStable</code>·<code>SliceIsSorted</code> 도
+함께 왔습니다. <!--CITE key=relnotes-1.8 sec="Sort"--></p>
+<!--CODE file=ex/04/sortslice/main.go note=옛 방식과 새 방식을 나란히-->
+<!--GOVER v=1.8 file=ex/04/sortslice note=1.27.1 에서의 동작-->
+<div class="note"><b>뒤에서 돕는 것</b> — 아무 슬라이스나 바꿔치기하려고 <code>reflect.Swapper</code> 가
+같은 릴리스에 들어왔습니다. <!--CITE key=relnotes-1.8 sec="reflect"--> 제네릭이 생긴 뒤의 정렬은
+<a href="#p7">7부</a>에서 다시 만납니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v18-gopath">
+<h3>GOPATH 의 기본값 $HOME/go <span class="vt v18">1.8</span></h3>
+<p class="why">GOPATH 를 설정하지 않으면 이제 유닉스에서 <code>$HOME/go</code>, 윈도에서
+<code>%USERPROFILE%/go</code> 를 씁니다. 처음 Go 를 깐 사람이 환경 변수부터 배우지 않아도 되게 한
+변경입니다. <!--CITE key=relnotes-1.8 sec="Default GOPATH"--></p>
+<!--CODE file=ex/04/gopath/main.go note=go/build 가 아는 GOPATH-->
+<!--GOVER v=1.8 file=ex/04/gopath cmd="GOPATH= go run ." tag=unset note=비워 두면 HOME 아래 go-->
+<!--GOVER v=1.8 file=ex/04/gopath cmd="GOPATH= go env GOPATH" tag=env note=go 명령도 같은 답-->
+<p class="cap">이 덱의 실험은 HOME 을 scratch 아래로 옮겨 돌리므로 경로가 <code>/scratch/home/go</code>
+입니다. 모듈이 온 뒤 GOPATH 의 자리는 <a href="#p5">5부</a>에서 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v18-ssaall">
+<h3>SSA 백엔드가 모든 아키텍처로 <span class="vt v18">1.8</span></h3>
+<p class="why">1.7 에서 x86-64 에만 쓰던 SSA 백엔드를 모든 아키텍처로 넓혔습니다. 임시로 두었던
+<code>-ssa=0</code> 플래그는 지웠고, 앞으로의 성능 작업을 위한 새 프런트엔드도 들어왔습니다.
+<!--CITE key=relnotes-1.8 sec="Compiler Toolchain"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>어디서</th><th>노트가 적은 CPU 시간 감소</th></tr>
+<tr><td>32비트 ARM</td><td>"20-30%"</td></tr>
+<tr><td>64비트 x86(1.7 부터 SSA)</td><td>"a more modest 0-10%"</td></tr>
+<tr><td>그 밖의 아키텍처</td><td>"closer to the 32-bit ARM numbers" 일 것</td></tr>
+</table></div>
+<p class="cap">런타임 쪽에서도 <code>defer</code> 의 비용과 Go 에서 C 를 부르는 비용이 각각 "about half"
+로 줄었습니다. <!--CITE key=relnotes-1.8 sec="Defer"--> <!--CITE key=relnotes-1.8 sec="Cgo"-->
+이 기계에서 잰 값이 아닙니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v18-gc">
+<h3>스택 재스캔을 없앤 GC <span class="vt v18">1.8</span></h3>
+<p class="why">1.5 의 동시 수집기에도 마지막에 세상을 멈추고 고루틴 스택을 다시 훑는 단계가 남아
+있었습니다. 1.8 은 그 재스캔을 없앴습니다. <!--CITE key=relnotes-1.8 sec="Garbage Collector"--></p>
+<blockquote>Garbage collection pauses should be significantly shorter than they were in Go 1.7,
+usually under 100 microseconds and often as low as 10 microseconds.</blockquote>
+<p class="cap">"GC 멈춤은 1.7 보다 훨씬 짧아, 보통 100 마이크로초 아래이고 10 마이크로초까지 내려가는
+일도 잦다." <!--CITE key=relnotes-1.8 sec="Garbage Collector"--></p>
+<div class="warn"><b>함께 온 함정</b> — 수집기는 이제 함수 인자를 함수 끝까지 살아 있다고 보지 않습니다.
+파이널라이저를 단 객체를 쓰는 코드는 1.7 의 <code>runtime.KeepAlive</code> 로 생존 지점을 밝혀야 할 수
+있습니다. <!--CITE key=relnotes-1.8 sec="Argument Liveness"--></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v18-gcstory">
+<h3>GC 멈춤, 세 번의 자릿수</h3>
+<p>GC 를 이끈 사람이 2018년 ISMM 기조연설에서 되돌아본 그래프입니다. 숫자는 연설문 그대로입니다.
+<!--CITE key=blog-ismmkeynote sec="The Transcript"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>때</th><th>연설문의 표현</th></tr>
+<tr><td>첫 릴리스, 2015년 8월(1.5)</td><td>"from around 300 - 400 milliseconds down to 30 or 40 milliseconds"</td></tr>
+<tr><td>여섯 달 뒤(1.6)</td><td>"from 40 milliseconds down to 4 or 5"</td></tr>
+<tr><td>1.6.3</td><td>"well under 10 milliseconds, which was our SLO"</td></tr>
+<tr><td>1.8(연설문은 "March of 2017")</td><td>스택 재스캔을 없애 "into the sub-millisecond range"</td></tr>
+<tr><td>2017년 8월(1.9)</td><td>"little improvement"</td></tr>
+<tr><td>2018년 2월(1.10)</td><td>"no substantial change just some clean-up"</td></tr>
+</table></div>
+<p class="cap">그 뒤의 목표는 "500 microseconds stop the world pause per GC cycle" 이었습니다. 이 표의
+어느 숫자도 이 기계에서 잰 것이 아닙니다.</p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p4-v18-shutdown">
+<h3>HTTP 서버의 우아한 종료 <span class="vt v18">1.8</span></h3>
+<p class="why"><code>Server.Shutdown</code> 은 새 연결을 받지 않고, 진행 중인 요청이 끝나기를 기다린 뒤
+돌아옵니다. 갑자기 끊는 <code>Server.Close</code> 도 함께 왔고, Shutdown 은 기다림의 한도를 context 로
+받습니다. <!--CITE key=relnotes-1.8 sec="HTTP Server Graceful Shutdown"--></p>
+<!--CODE file=ex/04/shutdown/main.go note=127.0.0.1 에서 한 번 묻고 닫는다-->
+<!--GOVER v=1.8 file=ex/04/shutdown note=1.27.1 에서의 동작-->
+<p class="cap"><code>Serve</code> 는 이제 <code>http.ErrServerClosed</code>("Server closed")를 돌려주고
+끝납니다 — 정상 종료를 오류와 가를 수 있는 값입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v18-tools">
+<h3>작은 변화들 — 도구 <span class="vt v18">1.8</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td>plugin</td><td>Go 로 쓴 플러그인을 만드는 빌드 모드와 불러오는 <code>plugin</code> 패키지. 리눅스만 <!--CITE key=relnotes-1.8 sec="Plugins"--></td></tr>
+<tr><td><code>go bug</code></td><td>시스템 정보를 채운 버그 보고를 GitHub 에 연다 <!--CITE key=relnotes-1.8 sec="Go bug"--></td></tr>
+<tr><td><code>go doc</code></td><td>인터페이스 안의 메서드 하나를 물을 수 있다 <!--CITE key=relnotes-1.8 sec="Go doc"--></td></tr>
+</table></div>
+<!--GOVER v=1.5 file=ex/04/godoc cmd="go doc io.Writer.Write" tag=method note=인터페이스 메서드를 묻는다-->
+<p class="cap">플러그인은 cgo 가 필요해 이 기계에서는 만들 수 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v18-small">
+<h3>작은 변화들 — 표준 라이브러리 <span class="vt v18">1.8</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>왜</th></tr>
+<tr><td><code>URL.Hostname</code>·<code>Port</code></td><td>포트가 없거나 IPv6 대괄호가 있어도 바르게 가른다 <!--CITE key=api-1.8 sec="pkg net/url, method (*URL) Hostname() string"--></td></tr>
+<tr><td>JSON 실수</td><td>ES6 과 같은 형식. 2<sup>64</sup> 까지의 정수 값은 지수 없이 <!--CITE key=relnotes-1.8 sec="encoding/json"--></td></tr>
+<tr><td><code>time.Until</code></td><td><code>Since</code> 의 짝 <!--CITE key=api-1.8 sec="pkg time, func Until(Time) Duration"--></td></tr>
+</table></div>
+<!--CODE file=ex/04/small18/main.go note=호스트 가르기와 실수 형식-->
+<!--GOVER v=1.8 file=ex/04/small18 note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p4-v18-quiz" data-quiz>
+<h3>Go 1.8 퀴즈</h3>
+<p class="q">Q. 1.8 의 GC 멈춤을 "1 밀리초 아래" 로 끌어내린 결정적 변경은 무엇이었고, 그 변경이 파이널라이저를
+쓰는 코드에 남긴 숙제는 무엇이었나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 수집 끝의 세상을 멈춘 스택 재스캔을 없앤 것입니다. 같은 릴리스에서 수집기는 함수
+인자를 함수 끝까지 살아 있다고 보지 않게 되어, 파이널라이저가 너무 일찍 돌 수 있는 코드는
+<code>runtime.KeepAlive</code> 로 "여기까지는 살아 있어야 한다" 고 밝혀야 합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1.9 -->
+
+<article class="card section" id="p4-v19"><p class="chnum">5장</p><h2>Go 1.9</h2>
+<p class="chsub">타입 별칭 · 단조 시계 · math/bits · sync.Map · t.Helper · <!--REL v=1.9--></p></article>
+
+<article class="card" id="p4-v19-overview">
+<h3>Go 1.9 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.9.html-->
+<p class="cap">Go 1.x 의 열 번째 릴리스입니다. 언어 변경이 둘 — 타입 별칭, 그리고 부동소수점 연산을 언제
+합쳐도(FMA) 되는지의 규칙 — 이고 나머지는 도구·런타임·라이브러리입니다.
+<!--CITE key=relnotes-1.9 sec="Introduction to Go 1.9"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v19-aliaswhy">
+<h3>타입 별칭은 왜 — 큰 코드베이스의 이사</h3>
+<p>API 의 이름을 바꿀 때, 큰 코드베이스는 모든 사용처를 한 번에 고칠 수 없습니다. 옛 이름을 새 이름으로
+넘겨 주는 선언이 있어야 여러 단계에 걸쳐 옮길 수 있는데, C++ 에는 있고 Go 에는 없었습니다.
+<!--CITE key=blog-toward-go2 sec="Example: Alias declarations"--></p>
+<blockquote>Now we were proposing to add aliases not because they were an elegant concept but because
+they solved a significant practical problem with Go meeting its goal of scalable software development.</blockquote>
+<p class="cap">"우아한 개념이라서가 아니라, 규모가 커지는 소프트웨어 개발이라는 Go 의 목표에 걸린 실질적인
+문제를 풀기 때문에 별칭을 제안했다." 첫 제안은 구글만의 문제라는 반응에 부딪혔고, 오픈 소스의 구체적인
+사례로 문제를 다시 설명한 뒤에야 1.9 에 들어갔다고 글은 적습니다.</p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p4-v19-alias">
+<h3>타입 별칭 type T1 = T2 <span class="vt v19">1.9</span></h3>
+<p class="why"><code>type T1 = T2</code> 는 T2 가 가리키는 타입에 T1 이라는 다른 철자를 붙입니다. 둘은
+<b>같은 타입</b>입니다. <code>=</code> 가 없는 <code>type T1 T2</code> 는 새롭고 다른 타입을 만듭니다.
+<!--CITE key=relnotes-1.9 sec="Changes to the language"--></p>
+<!--CODE file=ex/04/alias/main.go note=정의된 타입 하나, 별칭 하나-->
+<!--GOVER v=1.9 file=ex/04/alias note=go.mod 가 go 1.9-->
+<!--GOVER v=1.8 file=ex/04/alias note=사본의 go 줄만 1.8 로-->
+<div class="key"><b>이 부의 유일한 전과 후</b> — 지금의 컴파일러가 go 줄로 막는 이 시대의 언어 기능은 타입
+별칭 하나입니다. 그래서 "1.9 에서 생겼다" 를 컴파일러의 거절 메시지로 보일 수 있습니다.
+<code>%T</code> 가 두 변수 모두 <code>main.Celsius</code> 라고 답하는 것도 보세요 — 별칭은 이름일 뿐
+타입이 아닙니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v19-aliasrepair">
+<h3>별칭으로 점진적 이사</h3>
+<p>타입을 옛 패키지에서 새 패키지로 옮기고, 옛 자리에는 별칭 한 줄을 남깁니다. 아직 옮기지 않은 클라이언트는
+그대로 컴파일되고, 옮긴 클라이언트와 값을 주고받을 수 있습니다.</p>
+<!--CODE file=ex/04/aliasrepair/newpkg/newpkg.go note=새 자리-->
+<!--CODE file=ex/04/aliasrepair/oldpkg/oldpkg.go note=옛 자리에 남긴 별칭-->
+<!--CODE file=ex/04/aliasrepair/main.go note=옮기지 않은 클라이언트-->
+<!--GOVER v=1.9 file=ex/04/aliasrepair note=옛 이름의 값이 새 이름의 자리에 들어간다-->
+<p class="cap">표준 라이브러리 밖의 첫 큰 쓰임이 <code>golang.org/x/net/context</code> 였습니다. 그 패키지의
+"forwarding aliases" 덕분에 1.9 부터 옛 경로가 표준 <code>context</code> 와 완전히 같아졌다고 1.10 노트가
+적습니다. <!--CITE key=relnotes-1.10 sec="Fix"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v19-leapsec">
+<h3>단조 시계는 왜 — 윤초 한 번의 장애</h3>
+<p>경과 시간을 재려고 두 번의 <code>time.Now()</code> 를 빼면, 윤초 때 OS 가 시계를 1초 되돌리는 순간 10
+밀리초짜리 일이 "negative 990 milliseconds" 로 재어질 수 있습니다. Go 1 의 시간 API 는 벽시계만
+드러냈습니다. <!--CITE key=blog-toward-go2 sec="Example: Leap seconds"--></p>
+<p>처음 새 API 를 요청받았을 때 Go 팀은 드문 문제라 보고 기다렸습니다. 그러다 한 클라우드 회사의 Go 코드가
+2016년 말 윤초 때 DNS 요청 시간을 음수로 재어 여러 서버가 동시에 패닉했고, 그 회사가 경험을 글로
+공개했습니다. 글이 나온 지 두 달 만에 해법을 설계하고 구현했습니다.</p>
+<blockquote>(and in fact we did it with no new API)</blockquote>
+<p class="cap">"그리고 새 API 는 하나도 더하지 않았다." 그 방법이 다음 장입니다.</p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p4-v19-monotonic">
+<h3>투명한 단조 시계 <span class="vt v19">1.9</span></h3>
+<p class="why"><code>time.Now()</code> 가 돌려주는 <code>Time</code> 값이 벽시계와 함께 단조 시계 읽기를
+몰래 품습니다. 두 값의 차를 구할 때는 단조 시계를 쓰므로, 벽시계가 조정되어도 경과 시간이 안전합니다.
+<!--CITE key=relnotes-1.9 sec="Transparent Monotonic Time support"--></p>
+<!--CODE file=ex/04/monotonic/main.go note=보이지 않는 두 번째 시계-->
+<!--GOVER v=1.9 file=ex/04/monotonic note=1.27.1 에서의 동작-->
+<div class="warn"><b>함정</b> — <code>==</code> 는 단조 시계 읽기까지 비교합니다. 같은 순간을 가리키는데도
+false 가 나옵니다. 시각 비교는 언제나 <code>Equal</code> 로. <code>String()</code> 끝의
+<code>m=±값</code> 이 그 숨은 읽기입니다. <!--CITE key=relnotes-1.9 sec="time"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v19-mathbits">
+<h3>math/bits — 비트 조작 패키지 <span class="vt v19">1.9</span></h3>
+<p class="why">비트 세기, 앞·뒤 0 세기, 뒤집기, 회전 같은 연산을 최적화된 구현으로 모았습니다. 대부분의
+아키텍처에서 컴파일러가 이 함수들을 알아보고 CPU 명령 하나로 바꿉니다(intrinsic).
+<!--CITE key=relnotes-1.9 sec="New bit manipulation package"--></p>
+<!--CODE file=ex/04/mathbits/main.go note=0xb6 하나로 여섯 연산-->
+<!--GOVER v=1.9 file=ex/04/mathbits note=1.27.1 에서의 동작-->
+<p class="cap"><code>0xb6</code> 을 <code>0b1011_0110</code> 으로 쓰지 않은 까닭: 이진 리터럴과 밑줄은
+1.13 의 문법이라 go 1.9 모듈에서는 컴파일되지 않습니다(<a href="#p5">5부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v19-helper">
+<h3>t.Helper — 실패 위치를 호출한 쪽으로 <span class="vt v19">1.9</span></h3>
+<p class="why">검사 도우미 함수 안에서 <code>t.Errorf</code> 를 부르면, 실패 보고의 파일:줄이 도우미 안을
+가리켜 어느 호출이 실패했는지 알 수 없었습니다. <code>t.Helper()</code> 를 부른 함수는 위치 보고에서
+건너뜁니다. <!--CITE key=relnotes-1.9 sec="Test Helper Functions"--></p>
+<!--CODE file=ex/04/helper/helper_test.go note=같은 검사, Helper 하나 차이-->
+<!--GOVER v=1.9 file=ex/04/helper cmd="go test ." tag=test note=일부러 실패시킨다-->
+<p class="cap">TestPlain 은 도우미 안의 8번째 줄을, TestHelper 는 호출한 24번째 줄을 가리킵니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v19-syncmap">
+<h3>sync.Map — 동시성 맵 <span class="vt v19">1.9</span></h3>
+<p class="why">여러 고루틴이 동시에 불러도 안전하고, 읽기·쓰기·지우기가 분할 상환 상수 시간인 맵 타입입니다.
+영값을 바로 쓸 수 있습니다. <!--CITE key=relnotes-1.9 sec="Concurrent Map"--></p>
+<!--CODE file=ex/04/syncmap/main.go note=잠금 없이 네 고루틴이 쓴다-->
+<!--GOVER v=1.9 file=ex/04/syncmap note=1.27.1 에서의 동작-->
+<div class="warn"><b>함정</b> — 키와 값이 <code>interface{}</code> 입니다. 타입 단언(<code>k.(int)</code>)이
+필요하고, 틀리면 실행 중에 패닉합니다. 제네릭이 없던 시대의 모양입니다(<a href="#p6">6부</a>).
+<code>Range</code> 의 순서도 정해져 있지 않아, 캡처가 매번 같도록 키를 정렬했습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v19-frames">
+<h3>인라인된 프레임과 CallersFrames <span class="vt v19">1.9</span></h3>
+<p class="why">컴파일러가 더 많이 인라인하면서, <code>runtime.Callers</code> 가 준 PC 하나하나를
+<code>FuncForPC</code> 로 풀면 인라인된 프레임을 놓칠 수 있게 되었습니다. 노트의 처방은 1.7 에 들어온
+<code>runtime.CallersFrames</code> 를 쓰라는 것입니다. <!--CITE key=relnotes-1.9 sec="Call stacks with inlined frames"--></p>
+<!--CODE file=ex/04/frames/main.go note=같은 PC 들을 두 방법으로 푼다-->
+<!--GOVER v=1.9 file=ex/04/frames note=1.27.1 에서의 동작-->
+<p class="cap">위 목록의 넷째 항목이 요점입니다. <code>FuncForPC</code> 는 <code>runtime.main</code> 안에 인라인된
+atomic 함수의 이름을 내놓고, <code>CallersFrames</code> 는 바깥 함수 <code>runtime.main</code> 을 제대로
+댑니다. <!--CITE key=api-1.7 sec="pkg runtime, func CallersFrames([]uintptr) *Frames"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v19-tools">
+<h3>작은 변화들 — 도구 <span class="vt v19">1.9</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td>병렬 컴파일</td><td>한 패키지 안의 함수들을 여러 코어로 컴파일. <code>GO19CONCURRENTCOMPILATION=0</code> 으로 끈다 <!--CITE key=relnotes-1.9 sec="Parallel Compilation"--></td></tr>
+<tr><td><code>go test -list</code></td><td>정규식에 맞는 테스트 이름만 찍고 돌리지 않는다 <!--CITE key=relnotes-1.9 sec="Test"--></td></tr>
+<tr><td><code>go env -json</code></td><td>OS 마다 다른 꼴 대신 JSON 으로 <!--CITE key=relnotes-1.9 sec="Env"--></td></tr>
+</table></div>
+<!--GOVER v=1.9 file=ex/04/helper cmd="go test -list ." tag=list note=돌리지 않고 이름만-->
+<!--GOVER v=1.9 file=ex/04/helper cmd="go env -json GOOS GOARCH" tag=envjson note=이 기계의 대상-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p4-v19-quiz" data-quiz>
+<h3>Go 1.9 퀴즈</h3>
+<p class="q">Q. <code>type A = B</code> 와 <code>type A B</code> 의 차이를, 메서드와 변환의 관점에서 말해
+보세요.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 별칭 <code>type A = B</code> 에서 A 는 B 그 자체라 B 의 메서드를 그대로 갖고, 변환
+없이 서로 대입됩니다. <code>type A B</code> 는 새 타입이라 B 의 메서드를 물려받지 않고(인터페이스·임베딩의
+경우 제외), 대입하려면 <code>A(b)</code> 처럼 변환해야 합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1.10 -->
+
+<article class="card section" id="p4-v110"><p class="chnum">6장</p><h2>Go 1.10</h2>
+<p class="chsub">빌드 캐시 · 테스트 결과 캐시 · go test 속의 vet · strings.Builder · <!--REL v=1.10--></p></article>
+
+<article class="card" id="p4-v110-overview">
+<h3>Go 1.10 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.10.html-->
+<p class="cap">빌드한 패키지의 캐시를 고치고, 성공한 테스트 결과를 캐시하고, 테스트 중에 vet 을 자동으로
+돌립니다. 새로 굳힌 안전한 cgo 컴파일러 옵션 목록 때문에 전에 되던 빌드가 "invalid flag" 로 깨질 수 있다는
+경고도 첫 문단에 있습니다. <!--CITE key=relnotes-1.10 sec="Introduction to Go 1.10"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v110-buildcache">
+<h3>빌드 캐시와 내용 기반 판정 <span class="vt v110">1.10</span></h3>
+<p class="why"><code>go build</code> 가 패키지를 다시 빌드할지 정할 때 파일 수정 시각을 보지 않고, 소스의
+내용·빌드 플래그·컴파일된 패키지의 메타데이터만 봅니다. 그리고 최근에 빌드한 패키지를 설치된 패키지와
+따로 캐시에 둡니다. <!--CITE key=relnotes-1.10 sec="Build & Install"--></p>
+<!--GOVER v=1.10 file=ex/04/testcache cmd="go env GOCACHE" tag=gocache note=캐시가 사는 곳(이 덱의 실험은 한곳에 모은다)-->
+<div class="tblwrap"><table class="kv">
+<tr><th>옛 요령</th><th>1.10 부터</th></tr>
+<tr><td><code>-a</code> 로 강제 재빌드</td><td>필요 없음 — 내용으로 판정하므로 늘 알아챈다</td></tr>
+<tr><td><code>go build -i</code> 로 속도 내기</td><td>필요 없음 — 캐시가 대신한다</td></tr>
+<tr><td><code>go install</code> 이 의존성도 설치</td><td>명령 줄에 적은 것만 설치</td></tr>
+</table></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v110-testcache">
+<h3>테스트 결과 캐시 <span class="vt v110">1.10</span></h3>
+<p class="why">테스트 실행 파일과 명령 줄이 전과 같고, 그 실행이 읽은 파일과 환경 변수도 그대로이면
+<code>go test</code> 는 다시 돌리지 않고 지난 출력을 보여 주며 시간 자리에 "(cached)" 를 찍습니다. 캐시를
+건너뛰는 관용구는 <code>-count=1</code> 입니다. <!--CITE key=relnotes-1.10 sec="Test"--></p>
+<!--CODE file=ex/04/testcache/cache_test.go note=바뀌지 않는 테스트-->
+<!--GOVER v=1.10 file=ex/04/testcache cmd="go test ." tag=cached note=같은 명령을 한 번 더-->
+<!--GOVER v=1.10 file=ex/04/testcache cmd="go test -count=1 ." tag=count1 note=캐시 건너뛰기-->
+<div class="warn"><b>캐시되는 조건</b> — 성공한 결과만, 패키지를 명시한 명령만, 그리고
+<code>-cpu</code>·<code>-list</code>·<code>-parallel</code>·<code>-run</code>·<code>-short</code>·<code>-v</code>
+의 조합만입니다. 캡처는 같은 명령을 먼저 한 번 돌려 캐시를 채운 뒤 찍었습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v110-testvet">
+<h3>go test 가 vet 을 먼저 돌린다 <span class="vt v110">1.10</span></h3>
+<p class="why">테스트를 돌리기 전에 vet 의 검사 중 확신이 높은 일부를 자동으로 돌리고, 걸리면 빌드 오류처럼
+다뤄 테스트를 돌리지 않습니다. 끄려면 <code>-vet=off</code> 입니다.
+<!--CITE key=relnotes-1.10 sec="Test"--></p>
+<!--CODE file=ex/04/testvet/sum_test.go note=문자열에 %d-->
+<!--GOVER v=1.10 file=ex/04/testvet cmd="go test ." tag=test note=테스트는 돌지도 않는다-->
+<!--GOVER v=1.10 file=ex/04/testvet cmd="go test -vet=off ." tag=vetoff note=vet 을 끄면 통과-->
+<p class="cap">틀린 줄은 실행되지 않는 가지 안에 있습니다. 그래도 vet 은 잡습니다 — 실행이 아니라 코드를 보는
+검사이기 때문입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v110-failfast">
+<h3>go test -failfast 와 -json <span class="vt v110">1.10</span></h3>
+<p class="why"><code>-failfast</code> 는 테스트 하나가 실패하면 나머지를 시작하지 않습니다(이미 나란히 돌던
+것은 끝까지 둡니다). <code>-json</code> 은 출력을 <code>go tool test2json</code> 에 통과시켜 IDE 가 읽을
+기계용 JSON 으로 바꿉니다. <!--CITE key=relnotes-1.10 sec="Test"--></p>
+<!--CODE file=ex/04/failfast/x_test.go note=셋 중 둘이 실패-->
+<!--GOVER v=1.10 file=ex/04/failfast cmd="go test ." tag=test note=실패 둘을 다 본다-->
+<!--GOVER v=1.10 file=ex/04/failfast cmd="go test -failfast ." tag=failfast note=첫 실패에서 멈춘다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v110-builder">
+<h3>strings.Builder <span class="vt v110">1.10</span></h3>
+<p class="why">문자열을 조금씩 이어 붙이는 일에 <code>bytes.Buffer</code> 대신 쓰라고 만든 타입입니다. API 를
+Buffer 의 일부로 좁힌 덕분에, <code>String</code> 이 바이트를 한 번 더 복사하지 않고 안전하게 문자열을
+돌려줄 수 있습니다. <!--CITE key=relnotes-1.10 sec="strings"--></p>
+<!--CODE file=ex/04/builder/main.go note=영값을 바로 쓴다-->
+<!--GOVER v=1.10 file=ex/04/builder note=1.27.1 에서의 동작-->
+<!--CODE file=ex/04/builder/builder_test.go sym=BenchmarkBuilderGrow note=넷 중 마지막 벤치마크-->
+<!--GOVER v=1.10 file=ex/04/builder cmd="go test -run XXX -bench . -benchmem -benchtime=10000x ." tag=bench note=할당 수만 본다-->
+<p class="cap">Buffer 의 할당 둘 가운데 하나는 <code>String</code> 의 복사입니다. Builder 는 그 복사가
+없고, 크기를 미리 알려 주면(<code>Grow</code>) 할당이 하나로 줍니다. 벤치마크 소스는
+<code>builder_test.go</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v110-gofmt">
+<h3>gofmt 의 작은 변화, 그리고 경고 <span class="vt v110">1.10</span></h3>
+<p class="why">두 모양이 바뀌었습니다. 세 인덱스 슬라이스 <code>x[i+1 : j:k]</code> 는 간격이 고르게
+<code>x[i+1 : j : k]</code> 로, 한 줄로 쓴 메서드 하나짜리 인터페이스 리터럴은 여러 줄로 쪼개지 않습니다.
+<!--CITE key=relnotes-1.10 sec="Gofmt"--></p>
+<!--CODE file=ex/04/gofmt110/main.go note=지금의 gofmt 를 통과한 모양-->
+<!--GOVER v=1.10 file=ex/04/gofmt110 note=1.27.1 에서의 동작-->
+<div class="warn"><b>노트의 권고</b> — gofmt 는 가끔 이렇게 바뀌므로, 저장소의 코드가 특정 판의 gofmt 출력과
+같은지 CI 에서 검사하는 것은 "inherently fragile and not recommended" 라고 적었습니다. 여러 프로그램이 같은
+판을 써야 하면 같은 gofmt 실행 파일을 부르라는 것이 처방입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v110-cgo">
+<h3>cgo — 플래그 허용 목록과 Go 문자열 <span class="vt v110">1.10</span></h3>
+<p class="why"><code>#cgo CFLAGS</code> 같은 줄의 옵션을 허용 목록과 대조합니다. 내려받은 패키지가
+<code>-fplugin</code> 같은 옵션으로 빌드하는 기계에서 임의의 코드를 돌리던 보안 구멍을 막은 것입니다.
+<!--CITE key=relnotes-1.10 sec="Cgo"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>같은 절의 변화</th><th>내용</th></tr>
+<tr><td><code>_GoString_</code></td><td>C 프리앰블의 함수가 Go 문자열을 복사 없이 받는다</td></tr>
+<tr><td>typedef → 별칭</td><td>C 의 <code>typedef X Y</code> 를 Go 타입 별칭으로 — 1.9 의 별칭을 쓴 첫 도구</td></tr>
+<tr><td>일부 포인터 → uintptr</td><td>CoreFoundation 의 CFTypeRef, JNI 의 jobject 처럼 포인터가 아닌 값을 GC 가 오해하지 않게</td></tr>
+</table></div>
+<p class="cap">이 기계에서는 cgo 를 쓸 수 없어 실행 예제가 없습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v110-runtime">
+<h3>작은 변화들 — 런타임 <span class="vt v110">1.10</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td><code>LockOSThread</code> 중첩</td><td>여러 번 잠갔으면 같은 횟수만큼 풀어야 풀린다. 잠긴 스레드는 재사용하지 않는다</td></tr>
+<tr><td>스택 트레이스</td><td>컴파일러가 만든 감싸기 함수(<code>&lt;autogenerated&gt;</code>)가 빠진다</td></tr>
+<tr><td>GOMAXPROCS</td><td>상한이 없어졌다(1.9 에서는 1024)</td></tr>
+</table></div>
+<p class="cap">모두 같은 절입니다. <!--CITE key=relnotes-1.10 sec="Runtime"--> GC 는 실행 중에 쓰는 CPU
+비율을 낮추는 대신 더 오래 돌아 할당 지연을 줄였습니다. <!--CITE key=relnotes-1.10 sec="Garbage Collector"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p4-v110-url">
+<h3>ResolveReference 와 이중 빗금 <span class="vt v110">1.10</span></h3>
+<p class="why">상대 URL 을 풀 때 경로 앞의 겹빗금을 하나로 줄이던 버그를 고쳐 RFC 3986 을 따르게 했습니다.
+그 버그 때문에 <code>http.Client</code> 가 어떤 리다이렉트를 잘못 따라갔습니다.
+<!--CITE key=relnotes-1.10 sec="net/url"--></p>
+<!--CODE file=ex/04/urlresolve/main.go note=노트의 예 그대로-->
+<!--GOVER v=1.10 file=ex/04/urlresolve note=1.27.1 에서의 동작 — 겹빗금 둘 다 남는다-->
+<div class="warn"><b>깨질 수 있는 프로그램</b> — 노트에 따르면 1.9 까지는
+<code>http://host/path//to/page2</code> 였습니다. <code>http://host/</code> 에 <code>/my/api</code> 를 붙여
+만든 겹빗금을 이 함수가 "고쳐 주던" 것에 기대던 코드가 이제 깨집니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v110-fields">
+<h3>bytes.Fields 조각의 용량 <span class="vt v110">1.10</span></h3>
+<p class="why"><code>Fields</code>·<code>FieldsFunc</code>·<code>Split</code>·<code>SplitAfter</code> 가
+돌려주는 조각의 용량을 길이와 같게 했습니다. 그래서 한 조각에 <code>append</code> 해도 입력의 옆 데이터를
+덮어쓰지 않습니다. <!--CITE key=relnotes-1.10 sec="bytes"--></p>
+<!--CODE file=ex/04/fields/main.go note=첫 조각에 한 바이트를 붙인다-->
+<!--GOVER v=1.10 file=ex/04/fields note=1.27.1 에서의 동작 — 입력은 그대로-->
+<p class="cap">용량이 입력 끝까지 열려 있던 시절에는 같은 <code>append</code> 가 입력의 공백 자리를
+덮어썼을 것입니다. 노트가 "most likely to require updating" 이라 꼽은 두 변경 중 하나입니다(다른 하나는
+net/url). <!--CITE key=relnotes-1.10 sec="Standard library"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p4-v110-small">
+<h3>작은 변화들 — 표준 라이브러리 <span class="vt v110">1.10</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>왜</th></tr>
+<tr><td><code>math.Round</code>·<code>RoundToEven</code></td><td>반올림 함수가 드디어 표준에. 0.5 는 0 에서 멀어지는 쪽, 또는 짝수 쪽 <!--CITE key=api-1.10 sec="pkg math, func Round(float64) float64"--></td></tr>
+<tr><td><code>rand.Shuffle</code></td><td>순서 섞기 <!--CITE key=api-1.10 sec="pkg math/rand, func Shuffle(int, func(int, int))"--></td></tr>
+<tr><td><code>DisallowUnknownFields</code></td><td>모르는 JSON 필드를 버리지 않고 오류로 <!--CITE key=api-1.10 sec="pkg encoding/json, method (*Decoder) DisallowUnknownFields()"--></td></tr>
+</table></div>
+<!--CODE file=ex/04/small110/main.go note=셋을 한 번에(난수 씨앗 고정)-->
+<!--GOVER v=1.10 file=ex/04/small110 note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p4-v110-quiz" data-quiz>
+<h3>Go 1.10 퀴즈</h3>
+<p class="q">Q. CI 에서 <code>go test ./...</code> 가 코드를 바꾸지 않았는데도 매번 "(cached)" 를 찍어 불안합니다.
+테스트가 외부 서비스를 부른다면 무엇이 문제이고, 어떻게 해야 할까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 캐시 판정은 테스트 실행 파일·명령 줄·테스트가 읽은 파일과 환경 변수만 봅니다. 외부
+서비스의 상태는 보지 않으므로, 그 서비스가 바뀌어도 지난 성공을 그대로 보여 줍니다. 그런 테스트는
+<code>-count=1</code> 로 캐시를 건너뛰어 돌립니다.</div>
+<span class="tier ill">설명용</span>
 </article>

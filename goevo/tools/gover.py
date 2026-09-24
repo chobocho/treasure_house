@@ -123,7 +123,7 @@ def normalise(text, work, scratch):
     text = re.sub(r'/go-build\d+', '/go-buildN', text)
     text = re.sub(r'^(Benchmark\S*[ ]*\t)[ ]*\d+\t[ ]*[\d.]+ ns/op',
                   r'\1…\t… ns/op', text, flags=re.M)
-    text = re.sub(r'^(--- (?:PASS|FAIL|SKIP): .*\()[\d.]+s\)',
+    text = re.sub(r'^(\s*--- (?:PASS|FAIL|SKIP): .*\()[\d.]+s\)',
                   r'\1…s)', text, flags=re.M)
     text = re.sub(r'^((?:ok|FAIL)\s+\S+\s+)[\d.]+s\b', r'\1…s', text,
                   flags=re.M)
