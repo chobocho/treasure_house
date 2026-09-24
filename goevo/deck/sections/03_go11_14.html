@@ -1,5 +1,669 @@
 <article class="card section" id="p3">
 <p class="chnum">3부</p>
-<h2>Go 1.1 – 1.4</h2>
-<p class="chsub">준비 중입니다 — 표제 기능과 날짜는 features.tsv·releases.tsv 에서 온다</p>
+<h2>Go 1.1 – 1.4 — 약속을 지키며 다듬은 시기</h2>
+<p class="chsub">메서드 값 · 경쟁 검출기 <!--REL v=1.1--> · 세 인덱스 슬라이스 · 시험 범위 <!--REL v=1.2-->
+· 연속 스택 · sync.Pool <!--REL v=1.3--> · for range · internal · go generate · Android <!--REL v=1.4--></p>
+</article>
+
+<article class="card" id="p3-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">Go 1 이후 네 릴리스는 호환성 약속 안에서 움직였습니다. 언어는 조금만 바뀌었고, 대부분의
+힘은 구현 — 성능, 런타임, 도구 — 에 들어갔습니다. 1.2 부터는 여섯 달마다 한 번씩 나오기 시작합니다.
+<!--CITE key=relnotes-1.2 sec="Introduction to Go 1.2"--></p>
+<ul>
+<li>1.1 — 메서드 값, return 규칙 완화, 64비트 <code>int</code>, 경쟁 검출기, <code>bufio.Scanner</code></li>
+<li>1.2 — 세 인덱스 슬라이스, nil 접근의 보장, <code>go test -cover</code>, <code>%[n]</code></li>
+<li>1.3 — 언어 변화 없음. 연속 스택, 정밀 GC, 작은 map 의 무작위 순회, <code>sync.Pool</code></li>
+<li>1.4 — <code>for range x</code>, <code>**T</code> 금지, internal 패키지, <code>go generate</code>, Android</li>
+<li>이 시기의 언어 변화는 go.mod 의 go 줄로 갈리지 않습니다. 그래서 예제는 모두 "1.27.1 에서의 동작" 이고,
+금지된 것은 지금 컴파일러의 오류로 보입니다(<a href="#p0-modes">0부</a>).</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p3-v11"><p class="chnum">1장</p><h2>Go 1.1</h2>
+<p class="chsub">메서드 값 · 끝나는 문장 · 64비트 int · 경쟁 검출기 · 성능 · <!--REL v=1.1--></p></article>
+
+<article class="card" id="p3-v11-overview">
+<h3>Go 1.1 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.1.html-->
+<p class="cap">Go 1 뒤 첫 큰 릴리스이고, 노트가 스스로 밝힌 초점은 성능입니다. 언어에는 뒤로 호환되는 변화
+둘(메서드 값, return 규칙)과 오류 경우의 정리가 들어왔습니다.
+<!--CITE key=relnotes-1.1 sec="Introduction to Go 1.1"--> 1.0 에서 1.1 까지는 한 해가 넘게 걸렸습니다.
+<!--CITE key=relnotes-1.2 sec="Introduction to Go 1.2"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p3-v11-methodvalue">
+<h3>메서드 값 (method values) <span class="vt v11">1.1</span></h3>
+<p class="why">왜 — <code>w.Write</code> 처럼 수신자를 묶은 메서드를 그대로 함수 값으로 넘기고 싶을 때, 전에는
+수신자를 가두는 함수 리터럴을 손으로 써야 했습니다. 1.1 은 <code>x.M</code> 을 "x 에 묶인 함수" 로
+만들었습니다. 수신자를 첫 인자로 받는 메서드 식(<code>(*T).M</code>)과는 다른 것입니다.
+<!--CITE key=relnotes-1.1 sec="Method values"--></p>
+<!--CODE file=ex/03/methodvalue/main.go note=메서드 값·메서드 식·함수 자리에 넘기기-->
+<!--GOVER v=1.1 file=ex/03/methodvalue note=1.27.1 에서의 동작-->
+<div class="warn"><b>함정</b> — 메서드 값을 만드는 순간 수신자가 평가됩니다. 값 수신자(<code>Get</code>)면
+그때의 사본이 묶이므로, 뒤에 원본을 바꿔도 <code>get()</code> 은 옛 값(15)을 돌려줍니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v11-terminating">
+<h3>끝나는 문장 — 마지막 return 이 없어도 된다 <span class="vt v11">1.1</span></h3>
+<p class="why">왜 — 1.1 전에는 값을 돌려주는 함수가 반드시 <code>return</code> 이나 <code>panic</code> 호출로
+끝나야 했습니다. 조건 없는 <code>for</code> 로 끝나는 함수처럼 뻔히 필요 없는 경우에도 그랬습니다. 1.1 은
+"끝나는 문장(terminating statement)" 을 정의해, 마지막 문장이 그것이면 return 을 생략하게 했습니다.
+<!--CITE key=relnotes-1.1 sec="Return requirements"--></p>
+<!--CODE file=ex/03/terminating/main.go note=if-else·조건 없는 for·panic 으로 끝나는 함수-->
+<!--GOVER v=1.1 file=ex/03/terminating note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v11-terminating-2">
+<h3>규칙은 값을 보지 않는다 — 문법만 본다</h3>
+<p>노트는 이 규칙이 "순수하게 문법적" 이라고 강조합니다. 값이 무엇인지 따지지 않으므로 복잡한 분석이
+필요 없습니다. 거꾸로 말하면 사람 눈에는 빠짐없는 갈래도 컴파일러는 인정하지 않습니다.
+<!--CITE key=relnotes-1.1 sec="Return requirements"--></p>
+<!--CODE file=ex/03/missingreturn/main.go note=사람은 알지만 문법은 모른다-->
+<!--GOVER v=1.1 file=ex/03/missingreturn note=두 함수 모두 missing return-->
+<div class="note"><b>고치는 법</b> — 마지막 <code>if</code> 를 <code>else</code> 로 바꾸거나 끝에
+<code>panic("unreachable")</code> 을 둡니다. <code>break</code> 가 있는 <code>for</code> 는 끝나는 문장이 아닙니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v11-divzero">
+<h3>상수 0 으로 나누면 컴파일 오류 <span class="vt v11">1.1</span></h3>
+<p class="why">왜 — Go 1 에서 <code>x/0</code> 은 실행하다 패닉을 냈습니다. 명세를 다지는 과정에서 1.1 은 상수
+0 으로 나누는 정수 나눗셈을 "올바른 프로그램이 아니다" 로 정했습니다. 컴파일할 때 이미 알 수 있는 잘못이기
+때문입니다. <!--CITE key=relnotes-1.1 sec="Integer division by zero"--></p>
+<!--CODE file=ex/03/divzero/main.go note=상수 0 과 변수 0-->
+<!--GOVER v=1.1 file=ex/03/divzero note=지금 컴파일러는 7행만 거절한다-->
+<div class="warn"><b>함정</b> — 막히는 것은 <b>상수</b> 0 뿐입니다. 11행처럼 값이 0 인 변수로 나누면 여전히
+실행 중 패닉입니다(오류가 7행 하나뿐인 것을 보십시오).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v11-surrogate">
+<h3>서로게이트 반쪽은 룬이 아니다 <span class="vt v11">1.1</span></h3>
+<p class="why">왜 — U+D800–U+DFFF 는 UTF-16 에서 큰 코드 포인트를 조립할 때만 쓰는 영역입니다. 1.1 은 컴파일러·
+라이브러리·런타임 모두에서 이 제약을 지키게 했습니다. 룬을 UTF-8 로 바꿀 때 반쪽을 만나면 인코딩 오류로 보고
+U+FFFD 를 냅니다. 노트에 따르면 같은 프로그램이 1.0 에서는 <code>"\ud800"</code> 을 찍었습니다.
+<!--CITE key=relnotes-1.1 sec="Unicode"--></p>
+<!--CODE file=ex/03/surrogate/main.go note=실행 중에 만든 반쪽-->
+<!--GOVER v=1.1 file=ex/03/surrogate note=1.27.1 에서의 동작-->
+<!--CODE file=ex/03/surrogatelit/main.go note=상수로 쓴 반쪽-->
+<!--GOVER v=1.1 file=ex/03/surrogatelit note=리터럴은 컴파일러가 거절-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v11-intsize">
+<h3>64비트 플랫폼의 int 는 64비트 <span class="vt v11">1.1</span></h3>
+<p class="why">왜 — 명세는 <code>int</code> 가 32비트인지 64비트인지를 구현에 맡깁니다. 그때까지의 구현은 어디서나
+32비트였고, 그래서 64비트 기계에서도 원소가 20억 개 넘는 슬라이스를 만들 수 없었습니다. 1.1 부터 gc 와 gccgo
+모두 64비트 플랫폼에서 <code>int</code>·<code>uint</code> 를 64비트로 만듭니다. 같은 릴리스에서 64비트 힙 상한도
+"몇 GB" 에서 "수십 GB" 로 커졌습니다. <!--CITE key=relnotes-1.1 sec="Size of int on 64-bit platforms"-->
+<!--CITE key=relnotes-1.1 sec="Heap size on 64-bit architectures"--></p>
+<!--CODE file=ex/03/intsize/main.go note=노트의 예를 그대로 돌린다-->
+<!--GOVER v=1.1 file=ex/03/intsize note=이 기계(android/arm64)에서-->
+<div class="warn"><b>함정</b> — 암묵 변환이 없으니 컴파일이 깨지는 프로그램은 없지만, "int 는 32비트" 를 가정한
+코드는 조용히 다르게 돕니다. 어디서나 부호 확장을 원하면 <code>int(int32(x))</code> 로 씁니다.</div>
+<div class="note"><b>이어서</b> — Go 1 이 <code>rune</code> 을 따로 만든 까닭 중 하나가 바로 이 확장이었습니다
+(<a href="#p2-v10-rune">2부</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v11-race">
+<h3>경쟁 검출기 (race detector) <span class="vt v11">1.1</span></h3>
+<p class="why">왜 — 같은 변수를 두 고루틴이 동기화 없이 만지고 그중 하나가 쓰기인 버그는, 배포하고 한참 뒤에야
+엉뚱한 증상으로 드러납니다. 1.1 은 이를 찾는 도구를 go 명령에 넣었습니다. <code>-race</code> 를 붙여 빌드하거나
+시험하면 됩니다. 처음에는 64비트 x86 의 리눅스·맥·윈도에서만 됐습니다. <!--CITE key=relnotes-1.1 sec="Race detector"--></p>
+<p>블로그에 따르면 컴파일러가 모든 메모리 접근에 기록 코드를 넣고, 런타임 라이브러리가 동기화 없는 접근을
+지켜봅니다. C/C++ 의 ThreadSanitizer 런타임 위에 지었고, 표준 라이브러리에서만 42개의 경쟁을 찾아냈습니다.
+실행된 코드에서 실제로 일어난 경쟁만 잡으므로 현실적인 부하로 돌려야 합니다.
+<!--CITE key=blog-race-detector sec="Introduction"--> <!--CITE key=blog-race-detector sec="How it works"--></p>
+<div class="warn"><b>이 덱에서는</b> — 이 기계(android/arm64)에서는 <code>-race</code> 가 지원되지 않습니다.
+그 캡처는 <a href="#p0-machine">0부</a>에 있습니다.</div>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p3-v11-buildtag">
+<h3>빌드 제약에 go1.1 태그 <span class="vt v11">1.1</span></h3>
+<p class="why">왜 — 새 기능을 쓰면서도 1.0.x 에서 빌드되는 패키지를 만들려면, 파일을 버전으로 골라야 합니다.
+1.1 은 기본 빌드 제약 목록에 <code>go1.1</code> 태그를 넣었습니다. 이후 릴리스마다 자기 태그가 붙습니다.
+<!--CITE key=relnotes-1.1 sec="Build constraints"--></p>
+<!--CODE file=ex/03/buildtag/new.go note=go1.1 이상에서만-->
+<!--CODE file=ex/03/buildtag/old.go note=1.0.x 에서만-->
+<!--CODE file=ex/03/buildtag/main.go note=어느 쪽이 들어왔나-->
+<!--GOVER v=1.1 file=ex/03/buildtag note=지금의 go 는 go1.1 태그를 켠다-->
+<!--GOVER v=1.1 file=ex/03/buildtag cmd="go list -f '{{.GoFiles}} {{.IgnoredGoFiles}}' ." tag=list note=들어온 파일과 버린 파일-->
+<div class="note"><b>표기</b> — 노트는 당시의 <code>// +build go1.1</code> 줄로 썼습니다. 예제는 지금 gofmt 가
+쓰는 <code>//go:build</code> 줄입니다. 뜻은 같습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v11-perf">
+<h3>성능 — "대개 30%-40%" <span class="vt v11">1.1</span></h3>
+<p class="why">왜 — 노트는 1.1 의 초점이 성능이라고 밝히고, 1.0 대비 전형적인 향상이 "about 30%-40%, sometimes
+much more, but occasionally less or even non-existent" 라고 적었습니다. 이 기계에서 재지 않고 노트의 말을 그대로
+옮깁니다. <!--CITE key=relnotes-1.1 sec="Performance"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>노트가 꼽은 큰 변화</th><th>무엇이 좋아졌나</th></tr>
+<tr><td>컴파일러의 코드 생성과 인라이닝</td><td>32비트 인텔의 부동소수점, <code>append</code>·인터페이스 변환의 인라이닝</td></tr>
+<tr><td>새 map 구현</td><td>메모리 사용량과 CPU 시간이 크게 줄었다</td></tr>
+<tr><td>더 병렬인 GC</td><td>여러 CPU 에서 지연이 줄 수 있다</td></tr>
+<tr><td>더 정밀한 GC</td><td>CPU 를 조금 더 쓰지만 힙이 크게 줄 수 있다(특히 32비트)</td></tr>
+<tr><td>런타임과 네트워크의 결합</td><td>네트워크 작업의 문맥 전환이 줄었다</td></tr>
+</table></div>
+<div class="note"><b>뒷이야기</b> — 새 map 구현은 원소 여덟 개 이하의 작은 map 에서 순회 시작점을 무작위로 고르지
+않았습니다. 이 틈은 1.3 에서 메웁니다(<a href="#p3-v13-mapiter">3장</a>). <!--CITE key=relnotes-1.3 sec="Map iteration"--></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p3-v11-scanner">
+<h3>bufio.Scanner <span class="vt v11">1.1</span></h3>
+<p class="why">왜 — 줄 단위로 읽는 간단한 일에도 <code>ReadBytes</code>·<code>ReadString</code>·특히
+<code>ReadLine</code> 은 쓰기가 쓸데없이 복잡했습니다. <code>Scanner</code> 는 기본값을 "줄 단위, 끝의 줄바꿈 제거"
+로 두고, 병적으로 긴 줄 같은 곤란한 입력에서는 멈추는 쪽으로 문제를 단순하게 만들었습니다.
+<!--CITE key=relnotes-1.1 sec="bufio.Scanner"--></p>
+<!--CODE file=ex/03/scanner/main.go note=줄·낱말·너무 긴 토큰-->
+<!--GOVER v=1.1 file=ex/03/scanner note=1.27.1 에서의 동작-->
+<div class="warn"><b>함정</b> — 루프가 끝난 뒤 <code>Err()</code> 를 보지 않으면 "입력 끝" 과 "너무 긴 줄에서
+멈춤" 을 구별할 수 없습니다. 노트도 오류를 넘어 계속 읽어야 하는 일에는 옛 인터페이스가 필요할 수 있다고 적었습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v11-reflect">
+<h3>reflect 의 큰 보강 <span class="vt v11">1.1</span></h3>
+<p class="why">왜 — 1.1 의 reflect 는 실행 중에 "만드는" 쪽으로 넓어졌습니다. <code>select</code> 문을 실행하고
+(<code>Select</code>), Go 의 변환을 하고(<code>Value.Convert</code>), 함수를 만들고(<code>MakeFunc</code>),
+<code>T</code> 만 가지고 <code>[]T</code>·<code>map[K]V</code>·<code>chan T</code> 타입을 만듭니다.
+<!--CITE key=relnotes-1.1 sec="reflect"--></p>
+<!--CODE file=ex/03/reflectfn/main.go note=MakeFunc·SliceOf·MapOf·Convert·Select-->
+<!--GOVER v=1.1 file=ex/03/reflectfn note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v11-small">
+<h3>작은 변화들 <span class="vt v11">1.1</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td><code>sort.Reverse</code></td><td><code>sort.Sort</code> 의 인자를 감싸면 정렬 차례가 뒤집힌다</td></tr>
+<tr><td><code>strings</code>·<code>bytes</code> 의 <code>TrimPrefix</code>·<code>TrimSuffix</code></td><td>"self-evident properties"</td></tr>
+<tr><td><code>time.Time</code> 의 <code>Round</code>·<code>Truncate</code>·<code>YearDay</code></td><td>시각이 나노초 정밀도가 되면서, 외부에 저장하기 전에 정밀도를 덜어 내는 방법</td></tr>
+</table></div>
+<p class="cap"><!--CITE key=relnotes-1.1 sec="Minor changes to the library"--> <!--CITE key=relnotes-1.1 sec="time"--></p>
+<!--CODE file=ex/03/small11/main.go note=셋을 한 번에-->
+<!--GOVER v=1.1 file=ex/03/small11 note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p3-v11-quiz" data-quiz>
+<h3>Go 1.1 퀴즈</h3>
+<p class="q">Q. <code>c</code> 가 <code>*Counter</code> 이고 <code>Get</code> 이 값 수신자일 때, <code>get := c.Get</code>
+다음에 <code>c.Add(100)</code> 을 하면 <code>get()</code> 은 새 값을 돌려줍니까? 그리고 <code>x/0</code> 과
+<code>x/zero</code>(변수) 중 어느 쪽이 컴파일 오류입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 아닙니다. 메서드 값을 만드는 순간 <code>*c</code> 가 복사되어 묶이므로 옛 값을 돌려줍니다.
+컴파일 오류는 상수 0 으로 나누는 <code>x/0</code> 뿐이고, 변수로 나누는 쪽은 여전히 실행 중 패닉입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p3-v12"><p class="chnum">2장</p><h2>Go 1.2</h2>
+<p class="chsub">세 인덱스 슬라이스 · nil 접근 보장 · 선점 · 시험 범위 · <!--REL v=1.2--></p></article>
+
+<article class="card" id="p3-v12-overview">
+<h3>Go 1.2 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.2.html-->
+<p class="cap">1.1 뒤 약 여섯 달 만에 나온 첫 "짧은 주기" 릴리스입니다. 그래서 변화의 폭은 1.1 보다 작지만, 더 나은
+스케줄러와 새 언어 기능 하나(세 인덱스 슬라이스)가 들어왔습니다. <!--CITE key=relnotes-1.2 sec="Introduction to Go 1.2"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p3-v12-slice3">
+<h3>세 인덱스 슬라이스 a[i:j:k] <span class="vt v12">1.2</span></h3>
+<p class="why">왜 — 슬라이스의 용량은 밑 배열 끝까지입니다. 그래서 <code>array[2:4]</code> 를 받은 쪽이
+<code>append</code> 하면 원래 배열의 다음 칸을 덮어씁니다. 1.2 는 둘째 콜론 뒤에 용량의 끝을 적게 해, 받은 쪽이
+넘볼 수 있는 범위를 자를 수 있게 했습니다. 용량은 <code>k-i</code> 입니다. <!--CITE key=relnotes-1.2 sec="Three-index slices"--></p>
+<!--CODE file=ex/03/slice3/main.go note=노트의 array[2:4:7] 과 append-->
+<!--GOVER v=1.2 file=ex/03/slice3 note=1.27.1 에서의 동작-->
+<div class="warn"><b>함정</b> — 두 인덱스 슬라이스에 대한 <code>append</code> 가 원본 <code>array[4]</code> 를 -1 로
+덮었습니다. <code>cap == len</code> 으로 자른 <code>full</code> 은 새 배열로 복사되어 원본이 그대로입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v12-slice3-2">
+<h3>세 인덱스 꼴의 생략 규칙</h3>
+<p>세 인덱스 꼴에서 첫 인덱스는 생략하면 0 이지만, 나머지 둘은 늘 적어야 합니다. 노트는 "앞으로 기본값을 줄 수도
+있다" 고 적었지만 지금 컴파일러도 여전히 요구합니다. <!--CITE key=relnotes-1.2 sec="Three-index slices"--></p>
+<!--CODE file=ex/03/slice3bad/main.go note=생략해도 되는 것과 안 되는 것-->
+<!--GOVER v=1.2 file=ex/03/slice3bad note=1.27.1 의 거절-->
+<p class="cap">도구도 따라 바뀌었습니다 — <code>go/ast</code> 의 <code>SliceExpr</code> 에 <code>Slice3</code> 필드가 생겼습니다.
+<!--CITE key=api-1.2 sec="pkg go/ast, type SliceExpr struct, Slice3 bool"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v12-nil">
+<h3>nil 포인터를 거친 접근은 반드시 패닉 <span class="vt v12">1.2</span></h3>
+<p class="why">왜 — Go 1.0 에서는 큰 구조체의 nil 포인터 <code>x</code> 로 <code>x.Field</code> 를 읽으면 주소
+<code>1&lt;&lt;24</code> 의 메모리를 그대로 읽을 수 있었습니다. 안전을 위해 1.2 는 nil 주소를 평가해야 하는 모든 식이
+패닉하거나 올바른 값을 내도록 보장했습니다. 필요하면 컴파일러가 검사 코드를 넣습니다.
+<!--CITE key=relnotes-1.2 sec="Use of nil"--></p>
+<!--CODE file=ex/03/nilptr/main.go note=노트의 1<<24 구조체와 nil 배열 포인터-->
+<!--GOVER v=1.2 file=ex/03/nilptr note=1.27.1 에서의 동작-->
+<div class="note"><b>눈여겨볼 점</b> — <code>len(arr)</code> 은 nil 이어도 괜찮습니다. 배열 포인터의 길이는 타입이
+정하는 상수라 주소를 평가하지 않기 때문입니다. 패닉은 <code>arr[2]</code> 에서 납니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v12-runtime">
+<h3>선점·스레드 상한·스택 크기 <span class="vt v12">1.2</span></h3>
+<p class="why">왜 — 그때까지는 끝없이 도는 고루틴이 같은 스레드의 다른 고루틴을 굶길 수 있었습니다. 1.2 는 함수에
+들어갈 때 가끔 스케줄러를 불러, (인라인되지 않은) 함수 호출이 있는 루프는 선점될 수 있게 했습니다. 노트 스스로
+"부분적인" 해결이라고 적었습니다. <!--CITE key=relnotes-1.2 sec="Pre-emption in the scheduler"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>바뀐 것</th><th>노트의 수</th></tr>
+<tr><td>프로그램 하나의 스레드 수 상한</td><td>기본 10,000. <code>debug.SetMaxThreads</code> 로 조정 <!--CITE key=relnotes-1.2 sec="Limit on the number of threads"--></td></tr>
+<tr><td>고루틴의 최소 스택</td><td>4KB → 8KB (스택 조각 전환 비용 때문) <!--CITE key=relnotes-1.2 sec="Stack size"--></td></tr>
+<tr><td>고루틴 하나의 최대 스택</td><td>64비트 1GB, 32비트 250MB. <code>debug.SetMaxStack</code> 으로 조정</td></tr>
+</table></div>
+<!--CODE file=ex/03/rtlimits/main.go note=설정 함수는 이전 값을 돌려준다-->
+<!--GOVER v=1.2 file=ex/03/rtlimits note=지금도 기본값은 그대로-->
+<p class="cap">최소 스택 크기는 오래가지 않았습니다 — 스택 방식이 바뀐 뒤 1.4 에서 다시 줄어듭니다(<a href="#p3-v14-runtime">4장</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v12-cover">
+<h3>시험 범위 go test -cover <span class="vt v12">1.2</span></h3>
+<p class="why">왜 — 노트가 1.2 의 go test 에서 "major new feature" 로 꼽은 것입니다. <code>-cover</code> 를 주면 도구가
+패키지 소스를 고쳐 써서 계측 문장을 넣고, 평소처럼 컴파일·실행한 뒤 기본 통계를 보고합니다. 당시에는 cover
+도구를 go.tools 저장소에서 따로 설치해야 했습니다. <!--CITE key=relnotes-1.2 sec="Test coverage"--></p>
+<!--CODE file=ex/03/cover/grade.go note=네 갈래 중 둘만 시험한다-->
+<!--CODE file=ex/03/cover/grade_test.go lines=6-12 note=시험-->
+<!--GOVER v=1.2 file=ex/03/cover cmd="go test -count=1 -cover ." tag=cover note=문장 기준 범위-->
+<div class="note"><b>방식</b> — 블로그에 따르면 동적 디버깅을 피하고, 컴파일 전에 소스의 실행 구간마다
+<code>GoCover.Count[n] = 1</code> 같은 대입을 넣습니다. 이 대입은 이동 명령 하나로 컴파일되어 전형적인 시험에서
+약 3% 만 더 든다고 합니다. <!--CITE key=blog-cover sec="Test coverage for Go"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v12-fmtindex">
+<h3>서식 지정자의 인자 번호 %[n] <span class="vt v12">1.2</span></h3>
+<p class="why">왜 — 노트가 밝힌 동기는 지역화입니다. 언어마다 낱말 차례가 다르니, 인자 목록은 그대로 두고 서식
+문자열만 바꿔 차례를 바꿀 수 있어야 합니다. <code>[n]</code> 은 1부터 세고, 그 뒤의 인자는 n+1 번째부터 이어집니다.
+폭·정밀도 자리의 <code>*</code> 에도 쓸 수 있습니다. <!--CITE key=relnotes-1.2 sec="The fmt package"--></p>
+<!--CODE file=ex/03/fmtindex/main.go note=노트의 예와 지역화-->
+<!--GOVER v=1.2 file=ex/03/fmtindex note=1.27.1 에서의 동작-->
+<div class="note"><b>쓸모 하나 더</b> — <code>%v … %[1]T</code> 처럼 비싼 식을 한 번만 적고 두 번 찍을 수 있습니다.
+노트의 <code>log.Printf</code> 예가 그 모양입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v12-template">
+<h3>템플릿의 비교 함수와 else if <span class="vt v12">1.2</span></h3>
+<p class="why">왜 — 템플릿 안에서 값을 비교하려면 함수 맵에 직접 함수를 넣어야 했고, 두 번째 조건은
+<code>{{else}}{{if}}…{{end}}{{end}}</code> 로 겹쳐 써야 했습니다. 1.2 는 기본 함수 <code>eq ne lt le gt ge</code> 를
+넣고 <code>{{else if}}</code> 를 허용했습니다. <code>eq</code> 만은 첫 인자를 뒤의 여러 인자와 견줍니다(하나라도 같으면 참).
+<!--CITE key=relnotes-1.2 sec="The text/template and html/template packages"--></p>
+<!--CODE file=ex/03/tmpl/main.go note=eq 여러 인자와 else if-->
+<!--GOVER v=1.2 file=ex/03/tmpl note=1.27.1 에서의 동작-->
+<div class="warn"><b>함정</b> — 이 함수들은 Go 의 연산자와 조금 다릅니다. 기본 타입에만 쓰이고, 부호 있는 정수끼리는
+크기가 달라도 견줄 수 있습니다. 함수 맵에 <code>eq</code> 를 이미 정의한 템플릿은 그 정의가 이깁니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v12-encoding">
+<h3>encoding 패키지 — 마샬러의 공통 인터페이스 <span class="vt v12">1.2</span></h3>
+<p class="why">왜 — json·xml·binary 가 저마다 사용자 정의 마샬링 방법을 가지면, 한 타입이 여러 형식을 지원하려고
+같은 일을 여러 번 해야 합니다. 1.2 의 <code>encoding</code> 패키지는 <code>BinaryMarshaler</code>·<code>TextMarshaler</code>
+와 그 짝을 표준 인터페이스로 정했고, 표준 라이브러리의 인코더들이 이를 따르게 되었습니다.
+<!--CITE key=relnotes-1.2 sec="The new encoding package"--></p>
+<!--CODE file=ex/03/textmarshal/main.go note=MarshalText 하나로 JSON 과 XML 속성-->
+<!--GOVER v=1.2 file=ex/03/textmarshal note=1.27.1 에서의 동작-->
+<div class="note"><b>셋째 줄의 0</b> — <code>fmt</code> 는 <code>MarshalText</code> 를 쓰지 않으므로 <code>Level</code> 이
+정수로 찍힙니다. "DEBUG" 가 대소문자를 무시하고 0 으로 풀린 것입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v12-small">
+<h3>작은 변화들 <span class="vt v12">1.2</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td><code>sort.Stable</code></td><td>안정 정렬. 보통 정렬보다 덜 효율적이다</td></tr>
+<tr><td><code>sha256.Sum256</code> 등 <code>Sum</code> 함수</td><td>성능을 잃지 않고 해시를 간단히</td></tr>
+<tr><td><code>atomic.SwapInt32</code> 등</td><td>원자적으로 바꿔 넣고 옛 값을 돌려준다</td></tr>
+</table></div>
+<p class="cap"><!--CITE key=relnotes-1.2 sec="Minor changes to the library"--></p>
+<!--CODE file=ex/03/small12/main.go note=셋을 한 번에-->
+<!--GOVER v=1.2 file=ex/03/small12 note=1.27.1 에서의 동작-->
+<div class="note"><b>도구 쪽</b> — 1.2 에서 <code>go doc</code> 명령이 지워지고(godoc 은 남음) godoc·vet 의 소스가 go.tools
+저장소로 옮겨졌습니다. package 절이 없는 파일을 main 으로 치던 "옛 흔적" 도 오류가 되었습니다.
+<!--CITE key=relnotes-1.2 sec="The go doc command is deleted"--> <!--CITE key=relnotes-1.2 sec="Changes to the gc compiler and linker"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p3-v12-quiz" data-quiz>
+<h3>Go 1.2 퀴즈</h3>
+<p class="q">Q. <code>array</code> 가 <code>[10]int</code> 일 때 <code>array[2:4:7]</code> 의 길이와 용량은? 그리고 남에게
+슬라이스를 넘기면서 상대의 <code>append</code> 가 내 배열을 덮지 못하게 하려면 어떻게 자릅니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 길이 2, 용량 5(7-2)입니다. <code>s[lo:hi:hi]</code> 처럼 용량을 길이와 같게 자르면 상대의 첫
+<code>append</code> 가 새 배열로 복사하므로 내 배열은 그대로입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p3-v13"><p class="chnum">3장</p><h2>Go 1.3</h2>
+<p class="chsub">언어 변화 없음 · 연속 스택 · 정밀 GC · 작은 map 의 무작위 순회 · sync.Pool · <!--REL v=1.3--></p></article>
+
+<article class="card" id="p3-v13-overview">
+<h3>Go 1.3 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.3.html-->
+<p class="cap">언어 변화가 하나도 없는 릴리스입니다. 노트는 주로 구현 작업 — 정밀 GC, 큰 프로젝트의 빌드를 빠르게 한
+툴체인 재구성, 전반적 성능 — 과 새 플랫폼, 그리고 메모리 모델의 중요한 다듬기를 꼽습니다.
+<!--CITE key=relnotes-1.3 sec="Introduction to Go 1.3"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p3-v13-stack">
+<h3>조각 스택에서 연속 스택으로 <span class="vt v13">1.3</span></h3>
+<p class="why">왜 — 옛 고루틴 스택은 "조각(segmented)" 방식이었습니다. 모자라면 새 조각을 이어 붙이는데, 계산이 조각
+경계를 되풀이해 넘나들면 그때마다 비용이 드는 "hot spot" 문제가 생겼습니다. 1.3 은 연속(contiguous) 방식으로
+바꿨습니다. 더 필요하면 더 큰 한 덩어리로 스택을 통째로 옮기고, 그 비용은 잘 분할 상환됩니다.
+<!--CITE key=relnotes-1.3 sec="Stack"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>릴리스</th><th>고루틴 스택에 일어난 일</th></tr>
+<tr><td>1.2</td><td>최소 크기를 4KB 에서 8KB 로 — 조각 전환 비용을 줄이려고 <!--CITE key=relnotes-1.2 sec="Stack size"--></td></tr>
+<tr><td>1.3</td><td>조각 방식을 버리고 연속 방식으로</td></tr>
+<tr><td>1.4</td><td>시작 크기를 8192 바이트에서 2048 바이트로 — 연속 스택이라 작게 시작해도 된다 <!--CITE key=relnotes-1.4 sec="Changes to the runtime"--></td></tr>
+</table></div>
+<p class="cap">스택을 옮기려면 스택 안의 포인터를 모두 찾아 고쳐야 합니다. 그래서 이 변화는 다음 장의 정밀 GC 와 짝입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p3-v13-precisegc">
+<h3>스택까지 정밀한 GC <span class="vt v13">1.3</span></h3>
+<p class="why">왜 — 힙은 이미 정밀하게 훑고 있었지만 스택은 아니었습니다. 1.3 부터 정수 같은 포인터 아닌 값이
+포인터로 오인되어 메모리 회수를 막는 일이 없습니다. <!--CITE key=relnotes-1.3 sec="Changes to the garbage collector"--></p>
+<p>대가는 규칙입니다. 런타임은 "포인터 타입의 값에는 포인터가, 다른 값에는 포인터가 아닌 것이 들어 있다" 고
+가정합니다.</p>
+<ul>
+<li>unsafe 로 포인터 타입 변수에 정수를 넣는 프로그램은 잘못이며, 런타임이 알아채면 죽습니다.</li>
+<li>정수 타입 변수에 포인터를 숨기는 것도 잘못입니다. 런타임이 모르는 포인터가 가리키는 메모리는 회수될 수 있습니다.</li>
+<li>노트는 이런 코드를 <code>go vet</code> 으로 찾을 수 있다고 적었습니다.</li>
+</ul>
+<div class="note"><b>이어서</b> — 1.4 는 런타임 자체를 Go 로 옮겨 GC 를 "완전히" 정밀하게 만듭니다
+(<a href="#p3-v14-runtime">4장</a>).</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p3-v13-mapiter">
+<h3>작은 map 도 순회 순서가 무작위 <span class="vt v13">1.3</span></h3>
+<p class="why">왜 — Go 1.0 은 순회 차례에 기대는 코드를 막으려고 map 순회를 무작위 위치에서 시작했습니다
+(<a href="#p2-v10-maporder">2부</a>). 그런데 1.1 의 새 map 구현은 원소 여덟 개 이하의 map 에서 이를 빠뜨렸고, 1.1·1.2
+에서는 작은 map 의 차례에 기대는 — 특정 시스템에서만 도는 — 프로그램이 생겼습니다. 1.3 은 그 버그를 드러내려고
+작은 map 에도 무작위를 되돌렸습니다. <!--CITE key=relnotes-1.3 sec="Map iteration"--></p>
+<!--CODE file=ex/03/mapiter/main.go note=원소 셋인 map 을 100번 돈다-->
+<!--GOVER v=1.3 file=ex/03/mapiter note=1.27.1 에서의 동작-->
+<div class="warn"><b>함정</b> — 노트에 따르면 이 문제는 작은 map 만 해당하므로 시험 코드에서 가장 자주 터집니다.
+차례가 필요하면 키를 모아 정렬합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v13-memmodel">
+<h3>메모리 모델 — 버퍼 채널은 세마포어다 <span class="vt v13">1.3</span></h3>
+<p class="why">왜 — 버퍼 채널로 동시 실행 수를 제한하는 관용구(보내서 얻고, 받아서 놓는다)는 널리 쓰였지만, 메모리
+모델이 그것을 보장한다고 적혀 있지는 않았습니다. 1.3 은 버퍼 채널의 보내기·받기에 관한 규칙을 더해 이를 명시했습니다.
+노트는 이것이 언어 변화가 아니라 기대되던 성질을 분명히 한 것이라고 적었습니다.
+<!--CITE key=relnotes-1.3 sec="Changes to the memory model"--></p>
+<!--CODE file=ex/03/semaphore/main.go note=동시에 셋까지-->
+<!--GOVER v=1.3 file=ex/03/semaphore note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v13-pool">
+<h3>sync.Pool <span class="vt v13">1.3</span></h3>
+<p class="why">왜 — 노트는 <code>sync.Pool</code> 을 "중요한 새 타입" 이라 부르며, 시스템이 메모리를 자동으로 회수할 수
+있는 캐시를 효율적으로 만드는 방법이라고 설명합니다. 짧게 쓰고 버리는 버퍼처럼 할당이 잦은 객체를 재사용하는 데
+씁니다. <!--CITE key=relnotes-1.3 sec="Major changes to the library"--></p>
+<!--CODE file=ex/03/pool/pool.go note=버퍼를 빌려 쓰고 돌려준다-->
+<!--CODE file=ex/03/pool/pool_test.go lines=6-12 note=같은 결과가 나오는지-->
+<div class="warn"><b>함정</b> — 풀은 캐시일 뿐입니다. <code>Get</code> 은 아무 때나 새 객체(<code>New</code>)를 줄 수 있고,
+돌려받은 객체에는 지난 내용이 남아 있으니 <code>Reset</code> 부터 합니다. 풀에 넣은 것은 GC 가 알리지 않고 치울 수 있습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v13-runparallel">
+<h3>testing.B.RunParallel <span class="vt v13">1.3</span></h3>
+<p class="why">왜 — 여러 CPU 를 동시에 쓰는 코드(앞 장의 풀처럼)는 한 고루틴짜리 벤치마크로는 제대로 잴 수 없습니다.
+1.3 은 벤치마크 도우미 <code>B</code> 에 <code>RunParallel</code> 을 더했습니다.
+<!--CITE key=relnotes-1.3 sec="Major changes to the library"--></p>
+<!--CODE file=ex/03/pool/pool_test.go sym=BenchmarkLabel note=b.N 번을 여러 고루틴이 나눠 돈다-->
+<!--GOVER v=1.3 file=ex/03/pool cmd="go test -count=1 -bench . -benchtime=100x ." tag=bench note=ns/op 는 지웠다-->
+<p class="cap">이름 뒤의 <code>-4</code> 는 GOMAXPROCS 입니다. 실행 시간 숫자는 이 덱에 싣지 않습니다(<a href="#p0-normalise">0부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v13-ports">
+<h3>플랫폼과 성능 <span class="vt v13">1.3</span></h3>
+<p class="why">왜 — 1.3 은 DragonFly BSD·Solaris·Plan 9 를 실험적으로 지원하고 Native Client(NaCl) 지원을 되살렸습니다.
+반대로 Windows 2000 은 예외 처리의 구현 어려움 때문에 지원을 끊었습니다.
+<!--CITE key=relnotes-1.3 sec="Introduction to Go 1.3"--> <!--CITE key=relnotes-1.3 sec="Removal of support for Windows 2000"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>노트의 성능 항목</th><th>노트의 수</th></tr>
+<tr><td>defer 처리</td><td>defer 를 부르는 고루틴마다 메모리 약 2 KB 절약</td></tr>
+<tr><td>GC (동시 스윕·병렬화·큰 페이지)</td><td>멈춤 시간 50-70% 감소 가능</td></tr>
+<tr><td>경쟁 검출기</td><td>약 40% 빨라짐</td></tr>
+</table></div>
+<p class="cap"><!--CITE key=relnotes-1.3 sec="Performance"--> 링커의 명령 선택 단계를 컴파일러로 옮긴 liblink 도 큰 프로젝트의
+빌드를 크게 빠르게 할 수 있다고 노트는 적었습니다. <!--CITE key=relnotes-1.3 sec="The linker"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p3-v13-quiz" data-quiz>
+<h3>Go 1.3 퀴즈</h3>
+<p class="q">Q. 1.1·1.2 에서만 늘 통과하던 시험이 1.3 에서 가끔 깨졌습니다. 시험은 원소 다섯 개짜리 map 을 돌며 문자열을
+이어 붙여 기대값과 비교합니다. 무엇이 바뀌었고, 어떻게 고칩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 1.1 의 새 map 구현이 여덟 개 이하의 작은 map 에서 순회 시작점을 무작위로 고르지 않던 것을 1.3 이
+되돌렸습니다. 명세는 처음부터 차례를 약속하지 않았으니, 키를 모아 정렬한 뒤 이어 붙여야 합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p3-v14"><p class="chnum">4장</p><h2>Go 1.4</h2>
+<p class="chsub">for range x · **T 금지 · Go 로 쓴 런타임 · internal · go generate · Android · <!--REL v=1.4--></p></article>
+
+<article class="card" id="p3-v14-overview">
+<h3>Go 1.4 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.4.html-->
+<p class="cap">언어 변화는 아주 작은 것 하나(<code>for range x</code>)와, 깨질 수 있는 컴파일러 변경 하나(<code>**T</code>)
+입니다. 힘은 1.5 의 동시 수집기를 준비하는 GC·런타임 작업과 새 도구(go generate)에 들어갔습니다.
+<!--CITE key=relnotes-1.4 sec="Introduction to Go 1.4"--> 블로그는 이 릴리스와 함께 저장소가 Mercurial 에서 Git 으로,
+코드 리뷰가 Gerrit 으로, 이슈가 GitHub 로 옮겨 갔다고 전합니다. <!--CITE key=blog-go1.4 sec="Go 1.4 is released"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p3-v14-forrange">
+<h3>변수 없는 for range x <span class="vt v14">1.4</span></h3>
+<p class="why">왜 — 1.3 까지 for-range 에는 변수가 적어도 하나 있어야 했습니다. 반복 자체만 필요해도
+<code>for _ = range x</code> 처럼 빈 식별자를 적어야 했고, 노트는 이를 "어색했다" 고 적었습니다. 1.4 는 변수 없는 꼴을
+허용했습니다. <!--CITE key=relnotes-1.4 sec="For-range loops"--></p>
+<!--CODE file=ex/03/forrange/main.go note=옛 꼴과 새 꼴, 그리고 구문 트리-->
+<!--GOVER v=1.4 file=ex/03/forrange note=1.27.1 에서의 동작-->
+<!--GOVER v=1.4 file=ex/03/forrange cmd="gofmt -s -d main.go" tag=gofmt note=gofmt -s 는 옛 꼴을 새 꼴로 줄인다-->
+<div class="warn"><b>도구 쪽 함정</b> — 뒤로 호환되는 변화지만 구문 트리를 다루는 도구는 고쳐야 했습니다.
+<code>RangeStmt.Key</code> 가 이제 nil 일 수 있기 때문입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v14-ptrptr">
+<h3>**T 에서 메서드 호출 금지 <span class="vt v14">1.4</span></h3>
+<p class="why">왜 — 명세는 메서드 호출에서 역참조를 한 번만 자동으로 넣도록 합니다. 그런데 gc 와 gccgo 는
+<code>**T</code> 값에 대한 <code>x.M()</code> 을 두 번 역참조해 받아 주고 있었습니다. 1.4 는 이를 명세대로 막았습니다.
+노트는 이것이 깨지는 변경이지만 영향받는 프로그램은 매우 적다고 적었습니다.
+<!--CITE key=relnotes-1.4 sec="Method calls on **T"--></p>
+<!--CODE file=ex/03/ptrptr/main.go note=한 번은 되고 두 번은 안 된다-->
+<!--GOVER v=1.4 file=ex/03/ptrptr note=지금 컴파일러는 17행만 거절한다-->
+<div class="note"><b>고치는 법</b> — 노트대로 역참조를 직접 적습니다: <code>(*x).M()</code>.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v14-runtime">
+<h3>런타임을 C 에서 Go 로 <span class="vt v14">1.4</span></h3>
+<p class="why">왜 — 1.4 전의 런타임(GC·동시성·인터페이스·map·슬라이스·문자열 …)은 대부분 C 로 쓰여 있었습니다. 그러면
+GC 가 런타임 자신의 스택을 정확히 훑을 수 없습니다. 1.4 는 그 대부분을 Go 로 옮겼고, 그 덕에 GC 가 모든 활성 포인터의
+위치를 아는 "완전히 정밀한" 수집기가 되었습니다. <!--CITE key=relnotes-1.4 sec="Changes to the runtime"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>노트가 적은 결과</th><th>내용</th></tr>
+<tr><td>힙 크기</td><td>관련 변화까지 합쳐 이전 릴리스보다 전체적으로 10%-30% 작다</td></tr>
+<tr><td>스택</td><td>연속 스택이라 시작 크기를 8192 바이트에서 2048 바이트로 줄였다</td></tr>
+<tr><td>쓰기 장벽(write barrier)</td><td>힙 포인터 쓰기를 함수 호출로 — 1.5 의 동시 GC 준비. 1.4 에서는 의미 변화 없음</td></tr>
+<tr><td>인터페이스 값</td><td>늘 포인터를 담는다 — 정수를 담는 프로그램은 할당이 늘어난다</td></tr>
+<tr><td><code>GODEBUG=invalidptr=0</code></td><td>명백히 잘못된 포인터 값에서 죽는 검사(1.3~)를 끄는 임시 방편</td></tr>
+</table></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p3-v14-runtime-2">
+<h3>인터페이스에 정수를 담으면 할당된다</h3>
+<p>노트의 넷째 줄을 지금의 런타임으로 확인합니다. 포인터는 인터페이스의 데이터 칸에 그대로 들어가지만, 정수는 힙에
+상자로 담깁니다. <!--CITE key=relnotes-1.4 sec="Changes to the runtime"--></p>
+<!--CODE file=ex/03/ifacealloc/main.go note=testing.AllocsPerRun 으로 할당 수를 센다-->
+<!--GOVER v=1.4 file=ex/03/ifacealloc note=1.27.1 에서의 동작-->
+<div class="note"><b>7 은 왜 0 인가</b> — 지금의 런타임은 0~255 의 작은 정수를 위해 읽기 전용 표
+(<code>runtime.staticuint64s</code>)를 두고 거기를 가리킵니다. 1.4 노트에는 없는, 1.27.1 소스의 동작입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v14-internal">
+<h3>internal 패키지 <span class="vt v14">1.4</span></h3>
+<p class="why">왜 — Go 의 접근 범위는 패키지 안(소문자)과 전체 공개(대문자) 둘뿐입니다. 공개 저장소에 있지만 그
+프로그램 밖에서 쓰이면 곤란한 부품을 둘 곳이 없었습니다. 1.4 의 go 명령은 경로에 <code>internal</code> 이 든 패키지를,
+<code>internal</code> 의 부모 디렉터리 아래에 있는 코드만 가져올 수 있게 했습니다. 언어가 아니라 go 명령의 규칙입니다.
+<!--CITE key=relnotes-1.4 sec="Internal packages"--></p>
+<!--CODE file=ex/03/intpkg/lib/internal/secret/secret.go note=lib/internal/secret-->
+<!--CODE file=ex/03/intpkg/lib/lib.go note=부모 lib 는 가져올 수 있다-->
+<!--CODE file=ex/03/intpkg/main.go note=바깥은 lib 를 거친다-->
+<!--GOVER v=1.4 file=ex/03/intpkg note=된다-->
+<!--CODE file=ex/03/intpkg/outsider/outsider.go note=lib 의 형제 디렉터리-->
+<!--GOVER v=1.4 file=ex/03/intpkg cmd="go build ./outsider" tag=outsider note=go 명령이 거절한다-->
+<div class="note"><b>단계적 적용</b> — 1.4 에서는 이 규칙을 Go 본 저장소에만 강제했고, 1.5 부터 모든 저장소에 강제한다고
+노트가 예고했습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v14-generate">
+<h3>go generate <span class="vt v14">1.4</span></h3>
+<p class="why">왜 — yacc 문법 파일에서 파서를 만들거나 상수 타입의 <code>String</code> 메서드를 만드는 일처럼, 컴파일 전에
+소스를 만드는 도구를 돌리는 일을 go 명령이 자동화하게 했습니다. 소스의 <code>//go:generate</code> 주석에 적은 명령을
+<code>go generate</code> 가 차례로 실행합니다. 빌드가 알아서 돌리지는 않습니다.
+<!--CITE key=relnotes-1.4 sec="The go generate subcommand"--></p>
+<!--CODE file=ex/03/generate/main.go note=지시 주석-->
+<!--GOVER v=1.4 file=ex/03/generate cmd="go generate -x ." tag=generate note=-x 는 돌리는 명령을 찍는다-->
+<p class="cap">생성기는 자기가 어느 파일·몇 행·어느 패키지에서 불렸는지를 환경 변수로 받습니다(<code>GOFILE</code>·<code>GOLINE</code>·<code>GOPACKAGE</code>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v14-generate-2">
+<h3>생성기와 생성된 파일</h3>
+<!--CODE file=ex/03/generate/gen/main.go note=gen — 1.1 의 go/format 으로 gofmt 까지-->
+<!--CODE file=ex/03/generate/squares.go note=gen 이 만든 파일(커밋해 둔다)-->
+<!--GOVER v=1.4 file=ex/03/generate note=생성된 표를 쓰는 프로그램-->
+<div class="note"><b>관례</b> — 블로그는 go generate 가 패키지 작성자용이지 사용자용이 아니라고 말합니다. 생성기가
+받는 쪽 기계에 없을 수 있으니, 생성하고 시험한 파일은 저장소에 커밋해야 합니다.
+<!--CITE key=blog-generate sec="Generating code"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v14-filename">
+<h3>파일 이름 태그는 밑줄 뒤에서만 <span class="vt v14">1.4</span></h3>
+<p class="why">왜 — <code>gopher_arm.go</code> 처럼 밑줄 뒤의 OS·아키텍처 이름은 파일을 그 대상에만 컴파일하게 합니다.
+1.4 전에는 그냥 <code>arm.go</code> 도 같은 태그로 쳤는데, 새 아키텍처가 추가되면 멀쩡하던 파일이 갑자기 태그가 붙어
+빌드가 깨질 수 있었습니다. 1.4 부터는 이름 앞에 밑줄이 있어야만 태그입니다.
+<!--CITE key=relnotes-1.4 sec="Change to file name handling"--></p>
+<!--CODE file=ex/03/filename/main.go note=컴파일된 파일이 제 이름을 남긴다-->
+<!--CODE file=ex/03/filename/linux.go note=밑줄 없음 — 태그 아님-->
+<!--CODE file=ex/03/filename/net_linux.go note=_linux-->
+<!--CODE file=ex/03/filename/net_windows.go note=_windows-->
+<!--GOVER v=1.4 file=ex/03/filename note=1.27.1 에서의 동작-->
+<!--GOVER v=1.4 file=ex/03/filename cmd="go list -f '{{.GoFiles}} {{.IgnoredGoFiles}}' ." tag=list note=들어온 파일과 버린 파일-->
+<div class="note"><b>이 기계에서 덤으로</b> — GOOS 가 android 인데 <code>net_linux.go</code> 가 들어왔습니다. 지금의 go 는
+android 에서 linux 이름 태그도 맞는 것으로 칩니다. 캡처가 그 증거입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v14-android">
+<h3>Android 지원 <span class="vt v14">1.4</span></h3>
+<p class="why">왜 — 1.4 는 Android 를 돌리는 ARM 프로세서용 바이너리를 만들 수 있게 했고, mobile 하위 저장소의 지원
+패키지와 함께 Android 앱이 불러 쓸 <code>.so</code> 라이브러리도 만들 수 있게 했습니다. 노트는 이를 실험적 포트라
+불렀습니다. <!--CITE key=relnotes-1.4 sec="Android"--> 블로그는 이 릴리스의 가장 눈에 띄는 새 기능으로 Android 공식
+지원을 꼽았습니다. <!--CITE key=blog-go1.4 sec="Go 1.4 is released"--></p>
+<!--GOVER v=1.27 file=ex/00/machine cmd="go env GOOS GOARCH GOVERSION GOTOOLCHAIN" tag=env note=이 덱을 만든 기계-->
+<p class="cap">이 덱의 모든 캡처는 바로 그 후손 — android/arm64 의 go — 에서 나왔습니다(<a href="#p0-machine">0부</a>).
+같은 릴리스에서 NaCl 이 ARM 으로, Plan 9 가 AMD64 로 넓어졌습니다. <!--CITE key=relnotes-1.4 sec="NaCl on ARM"--> <!--CITE key=relnotes-1.4 sec="Plan9 on AMD64"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v14-testmain">
+<h3>TestMain <span class="vt v14">1.4</span></h3>
+<p class="why">왜 — 시험 전체에 앞서 한 번 준비하고 끝나고 한 번 정리하는 일(데이터베이스 열기, 임시 디렉터리)을 할 자리가
+없었습니다. 1.4 부터 시험 코드에 <code>func TestMain(m *testing.M)</code> 이 있으면 시험을 바로 돌리는 대신 그 함수를
+부르고, <code>M</code> 으로 시험을 돌립니다. <!--CITE key=relnotes-1.4 sec="Minor changes to the library"--></p>
+<!--CODE file=ex/03/testmain/store.go note=공유 자원-->
+<!--CODE file=ex/03/testmain/store_test.go sym=TestMain note=TestMain-->
+<!--GOVER v=1.4 file=ex/03/testmain cmd="go test -count=1 -v ." tag=test note=준비 → 시험 둘 → 정리-->
+<div class="warn"><b>함정</b> — 준비와 정리는 <code>m.Run()</code> 앞뒤에서 직접 합니다. 이 꼴에서는 <code>m.Run()</code> 의
+결과를 <code>os.Exit</code> 에 넘겨야 실패가 go test 에 전해집니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v14-atomicvalue">
+<h3>sync/atomic.Value <span class="vt v14">1.4</span></h3>
+<p class="why">왜 — 원자적 읽기·쓰기는 정수와 포인터에만 있었습니다. 1.4 의 <code>atomic.Value</code> 는 아무 타입의 값을
+효율적으로 원자적으로 읽고 쓰게 합니다. 읽기가 잦고 쓰기가 드문 설정 값을 통째로 바꿔 끼우는 데 알맞습니다.
+<!--CITE key=relnotes-1.4 sec="Minor changes to the library"--></p>
+<!--CODE file=ex/03/atomicvalue/main.go note=설정을 통째로 바꿔 끼운다-->
+<!--GOVER v=1.4 file=ex/03/atomicvalue note=1.27.1 에서의 동작-->
+<div class="warn"><b>함정</b> — 한 <code>Value</code> 에 넣는 값은 늘 같은 구체 타입이어야 합니다. 다른 타입을
+<code>Store</code> 하면 패닉입니다(마지막 줄). 담은 값은 바꾸지 말고 새 값을 만들어 통째로 넣습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p3-v14-paths">
+<h3>import 경로의 정리 — 정식 경로와 golang.org/x <span class="vt v14">1.4</span></h3>
+<p class="why">왜 — 코드가 github.com 같은 호스팅 서비스에 있으면 한 패키지가 두 경로(호스팅 경로와 "꾸민" 경로)로 가져와질
+수 있습니다. 한 프로그램에 두 벌이 들어가거나, 옛 경로를 쓰다 갱신을 놓치거나, 호스팅을 옮길 때 사용자가 깨집니다.
+1.4 는 package 절에 정식 경로를 적는 주석을 도입했습니다. <!--CITE key=relnotes-1.4 sec="Canonical import paths"--></p>
+<p>노트의 예는 <code>package pdf // import "rsc.io/pdf"</code> 입니다. 이 주석이 있으면 그 밖의 경로(예:
+github.com/rsc/pdf)로 가져오는 패키지를 go 명령이 컴파일하지 않습니다.</p>
+<ul>
+<li>Go 프로젝트의 하위 저장소가 <code>code.google.com/p/go.tools</code> 에서 <code>golang.org/x/tools</code> 같은 경로로 옮겨졌습니다. <!--CITE key=relnotes-1.4 sec="Import paths for the subrepositories"--></li>
+<li><code>syscall</code> 은 본 저장소에 필요한 것 말고는 동결되고, 새 시스템 호출은 <code>golang.org/x/sys</code> 로 갑니다. <!--CITE key=relnotes-1.4 sec="syscall"--></li>
+<li>본 저장소의 <code>src/pkg</code> 층이 없어져 <code>fmt</code> 의 소스가 <code>src/fmt</code> 로 올라왔습니다. <!--CITE key=relnotes-1.4 sec="Changes to package source layout"--></li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p3-v14-small">
+<h3>작은 변화들 <span class="vt v14">1.4</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td><code>fmt</code> 의 map 포인터 출력</td><td>구조체·배열 포인터처럼 <code>&amp;map[one:1]</code> 로. 전에는 16진 주소였다</td></tr>
+<tr><td><code>time</code> 의 마이크로초 표기</td><td>출력은 µ(U+00B5) 로. <code>ParseDuration</code> 은 여전히 us 를 받는다</td></tr>
+<tr><td><code>reflect.Type.Comparable</code></td><td>그 타입이 일반 비교(<code>==</code>)를 지원하는지</td></tr>
+</table></div>
+<p class="cap"><!--CITE key=relnotes-1.4 sec="Minor changes to the library"--></p>
+<!--CODE file=ex/03/small14/main.go note=셋을 한 번에-->
+<!--GOVER v=1.4 file=ex/03/small14 note=1.27.1 에서의 동작-->
+<div class="warn"><b>함정</b> — 지속 시간의 출력 형식에 기대면서 <code>ParseDuration</code> 을 쓰지 않는 코드는 고쳐야
+한다고 노트가 적었습니다. 출력 문자열을 비교하는 시험이 대표적입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p3-v14-quiz" data-quiz>
+<h3>Go 1.4 퀴즈</h3>
+<p class="q">Q. <code>a/b/c/internal/d</code> 패키지를 <code>a/b/c/e</code> 와 <code>a/b/g</code> 가 각각 가져오려 합니다. 어느 쪽이
+됩니까? 그리고 <code>windows.go</code> 라는 파일은 1.4 부터 어느 OS 에서 컴파일됩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>internal</code> 의 부모 <code>a/b/c</code> 아래에 있는 <code>a/b/c/e</code> 만 됩니다. <code>windows.go</code> 는
+밑줄이 없으므로 태그가 아니고, 모든 OS 에서 컴파일됩니다(윈도 전용으로 하려면 <code>os_windows.go</code> 처럼 이름을 바꾸거나
+빌드 제약을 답니다).</div>
+<span class="tier ill">설명용</span>
 </article>

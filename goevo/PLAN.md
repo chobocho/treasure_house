@@ -661,3 +661,12 @@ and the "오류 N건" line; read it every time.
   overlapping the 1.27 dot.
 - data/timeline.tsv: 126 rows; dates are machine-read from FAQ, release page, pre_go1, blog index;
   Korean event texts hand-written (tools/make_timeline.py keeps the recipe).
+
+### Part 3 — Go 1.1–1.4 (subagent, 2026-09-24)
+
+- 55/55 slides (1.1: 14, 1.2: 12, 1.3: 10, 1.4: 15 incl. cover/overview/quiz), 64 feature rows
+  (36 with slides), 32 examples (6 EXPECT_FAIL), 37 captures, 16 claims, 13 glossary lines.
+  Orchestrator re-ran data/xref/claims/verify checks (all green for p3) and spot-checked prose
+  against the notes (1.1 int size "more than 2 billion elements", 1.4 stack 8192→2048, heap
+  10%–30%). One claim cites the installed source `$GOROOT/src/runtime/iface.go` (staticuint64s)
+  together with the capture — acceptable as "1.27.1 behaviour".
