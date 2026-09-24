@@ -571,3 +571,14 @@ and the "오류 N건" line; read it every time.
   links to slide-ids, API line) from releases + features + api_added — the overview/features
   consistency of §5 step 7 holds by construction. Part 0 is a legend: exempt from badge rules.
 - Tests 101 total (gover 15, run_all 6, parts/overview 4, wrap 2, legend 1 added here).
+
+### Part 0 — reading guide (2026-09-24)
+
+- 11 slides + cover (0부 13/12 counting the deck cover — warning only). Evidence slides use real
+  captures: `go version`, the failed `GOTOOLCHAIN=go1.26.0` download ("toolchain not available"),
+  `go tool` list, `-race is not supported on android/arm64`, the lang-directive pair
+  (ex/00/langdir: `range 3` under go 1.22 prints 012; under go 1.21 the compiler refuses with
+  "-lang was set to go1.21; check go.mod"), and the GODEBUG trio (ex/00/panicnil: go 1.21 →
+  *runtime.PanicNilError, go line 1.20 → nil, GODEBUG=panicnil=1 → nil) — the godebug doc says
+  defaults follow the go line, which makes mode (b) usable without env vars. p0-normalise shows
+  gover.normalise() itself. Part 7 should link here instead of repeating panicnil/range-int basics.
