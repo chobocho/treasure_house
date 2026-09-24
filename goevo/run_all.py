@@ -161,6 +161,9 @@ def run(only):
             clear_batch(b)
         batches = {}
     for name in names:
+        if not os.path.exists(os.path.join(HERE, 'exps', name + '.py')):
+            print('  %-14s (아직 없다)' % name)     # 그 부를 아직 안 썼다
+            continue
         clear_batch(name)
         ctx = Ctx(name)
         importlib.import_module('exps.' + name).run(ctx)

@@ -582,3 +582,17 @@ and the "오류 N건" line; read it every time.
   *runtime.PanicNilError, go line 1.20 → nil, GODEBUG=panicnil=1 → nil) — the godebug doc says
   defaults follow the go line, which makes mode (b) usable without env vars. p0-normalise shows
   gover.normalise() itself. Part 7 should link here instead of repeating panicnil/range-int basics.
+
+### Step 4 infra 2 — budget-hint, go lock for vet, subagent brief (2026-09-24)
+
+- tools/budget_hint.py (3 tests): part budget minus 2 (cover+intro) and 3 per release (chapter
+  cover, overview, quiz), rest ∝ release-note bytes, ×2 for 1.25–1.27, largest remainder. Output:
+  3부 1.1 12 · 1.2 11 · 1.3 7 · 1.4 11; 4부 1.5 17 · 1.6 13 · 1.7 14 · 1.8 16 · 1.9 11 · 1.10 19;
+  5부 13/14/16/12/15/18/19; 6부 40/28/36; 7부 41/36/28/36; 8부 1.25 49 · 1.26 56 · 1.27 44.
+- Finding: the compiler's lang gates (types2 verifyVersionf) exist only for go1.9 (alias) and
+  1.13, 1.14, 1.17, 1.18, 1.20, 1.21, 1.22, 1.23, 1.26, 1.27 features — **1.1–1.8 language changes
+  cannot be shown as lang-directive pairs** (a 3-index slice compiles under `go 1.1`). `go 1.0` is
+  a valid go line; bare `go 1` is rejected. List saved for subagents in scratch/brief/langgates.txt.
+- `make examples-check` takes scratch/go.lock (flock) like gover; run_all skips ORDER entries
+  whose module does not exist yet; exps/ORDER lists p00–p11.
+- Subagent brief: scratch/brief/BRIEF.md (gitignored). Parts 3 and 4 delegated in parallel.

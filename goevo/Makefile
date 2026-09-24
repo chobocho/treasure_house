@@ -84,12 +84,14 @@ data-check:             ## features.tsv 의 버전·인용이 docs/ 와 맞는�
 	else echo '  tools/make_data.py 아직 없다 (PLAN.md §5 3단계)'; fi
 
 # 모든 예제는 go vet 과 gofmt 를 통과해야 한다(PLAN.md §3.3). go 는 한
-# 번에 하나만 돈다 — 디렉터리를 차례로 들어간다.
+# 번에 하나만 돈다 — 디렉터리를 차례로 들어가고, 실험(tools/gover.py)과
+# 같은 잠금(scratch/go.lock)을 잡는다. 서브에이전트가 동시에 돌려도 줄을 선다.
 examples-check:         ## ex/ 의 예제 전부 go vet + gofmt -l
 	@bad=0; n=0; \
 	for d in $(EX_DIRS); do \
 	  n=$$((n + 1)); \
-	  (cd $$d && $(GO) vet ./...) || { echo "  ✗ vet: $$d"; bad=1; }; \
+	  (cd $$d && flock $(SCRATCH)/go.lock $(GO) vet ./...) \
+	    || { echo "  ✗ vet: $$d"; bad=1; }; \
 	  out=$$($(GOFMT) -l $$d); \
 	  if test -n "$$out"; then echo "  ✗ gofmt: $$out"; bad=1; fi; \
 	done; echo "  예제 $$n개 — vet·gofmt 검사"; exit $$bad
