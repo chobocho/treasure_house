@@ -1,3 +1,10 @@
+### [2026-09-24 19:02] Go의 진화 덱 4단계 기반 — gover·run_all·부별 자료 파일
+- **기획:** 예제를 결정론 환경에서 go 하나로만(flock) 돌리고 캡처를 정규화. 서브에이전트 둘이 부를 나눠 쓰도록 기능 목록·주장·용어를 부별 파일로.
+- **TC:** 28건 — 정상(언어 버전 내리기·GODEBUG 첫 줄·개관 표) / 경계(경로 앞머리 오치환, 벤치 반복수·ns/op, 셸 기호 거절, 이름 겹침, 기대 밖 종료 코드, 108칸 넘는 캡처).
+- **개발:** `goevo/tools/gover.py`, `goevo/run_all.py`, `goevo/deck/cites.py`, `goevo/deck/gen_tables.py`, `goevo/deck/build_deck.py`, `goevo/deck/verify_deck.py` 외 15개 파일
+- **검증:** 101 passed, 0 failed
+- **비고:** 컴파일러 오류 줄(124칸)은 자르지 않고 화면에서만 접는다(term wrap, 200칸 상한).
+
 ### [2026-09-24 18:51] Go의 진화 덱 3단계(1) — 생성 표 넷(make_data)
 - **기획:** 릴리스·API 증가·GODEBUG·인용 키 표를 docs/ 와 설치된 go 의 소스(godebugs/table.go)에서 만든다. features.tsv 검사(버전·인용 대조)도 여기.
 - **TC:** 18건 — 정상(go1·go1.N.0·부 릴리스, 새 패키지, 설정 표) / 경계(플랫폼 꼬리·//deprecated·주석 처리된 설정, 틀린 버전·없는 절·중복 id, 안 쓴 부 대기).

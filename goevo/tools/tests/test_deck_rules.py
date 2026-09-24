@@ -133,6 +133,20 @@ class GoverDirective(Fixture):
         self.assertIn('go 1.22', out)          # go.mod 의 go 줄을 화면에 보인다
         self.assertIn('$ go run .', out)
 
+    def test_long_compiler_line_gets_wrap_class(self):
+        # go 의 컴파일 오류는 한 줄이 120칸을 넘는다 — 고쳐 싣지 않고
+        # 화면에서만 접는다(바이트는 그대로, verify_deck 가 대조한다)
+        msg = './main.go:7:17: ' + 'x' * 110
+        write(self.root, 'out/07-r__go1.21.txt', '$ go run .\n' + msg + '\n')
+        out = self.expand('v=1.21 file=ex/07/r')
+        self.assertEqual(build_deck.errors, [])
+        self.assertIn('<pre class="term wrap"', out)
+        self.assertIn(msg, out)
+
+    def test_short_capture_has_no_wrap(self):
+        write(self.root, 'out/07-r__go1.22.txt', '$ go run .\n012\n')
+        self.assertIn('<pre class="term" ', self.expand('v=1.22 file=ex/07/r'))
+
     def test_godebug_prefix_must_be_in_capture(self):
         write(self.root, 'out/07-t__godebug-x-0.txt', '$ go run .\n')
         self.expand('godebug=x=0 file=ex/07/t')
@@ -261,6 +275,12 @@ class Badges(unittest.TestCase):
         self.assertIn('p7-stray', text)        # features.tsv 에 없는 장
         self.assertIn('p7-missing', text)      # 표에는 있는데 덱에 없다
         self.assertEqual(len(bad), 6)
+
+    def test_part0_legend_is_exempt(self):
+        # 0부 '배지 읽기' 는 배지 견본을 보인다 — 기능 장이 아니다
+        texts = {'00_start.html': '<article class="card" id="p0-badges">'
+                 '<span class="vt v122">1.22</span></article>'}
+        self.assertEqual(check_xref.badge_errors(texts, set(), set()), [])
 
     def test_unwritten_part_is_pending(self):
         # 표지 한 장뿐인 부의 기능 장은 아직 안 쓴 것이다 — 빨간불로 세지 않는다.

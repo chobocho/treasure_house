@@ -54,6 +54,25 @@ def _rows(base, name):
     return out
 
 
+def feature_rows(base):
+    """기능 목록 전부 — data/features/pNN.tsv 를 파일 이름 차례로 잇는다.
+
+    부마다 파일을 나눈 까닭: 서브에이전트 둘이 서로 다른 부를 동시에
+    쓴다. 한 파일을 둘이 고치면 한쪽의 줄이 사라진다. 행마다 '_file'
+    칸에 어느 파일에서 왔는지 적어 둔다(오류 메시지용)."""
+    d = os.path.join(base, 'data', 'features')
+    if not os.path.isdir(d):
+        return []
+    out = []
+    for name in sorted(os.listdir(d)):
+        if not name.endswith('.tsv'):
+            continue
+        for r in _rows(base, os.path.join('features', name)):
+            r['_file'] = 'data/features/' + name
+            out.append(r)
+    return out
+
+
 def _gofile(ver):
     """'1.0' → 'go1', '1.22' → 'go1.22' — 공식 파일 이름의 규칙."""
     return 'go1' if ver in ('1', '1.0') else 'go' + ver

@@ -71,6 +71,13 @@ MAX_PRE_COLS = 72
 # 그래서 캡처만 상한을 늘리고(블록 안에서 가로로 스크롤된다), 그보다 긴 줄은
 # 인용 범위에서 빼도록 여전히 오류로 잡는다.
 MAX_TERM_COLS = 108
+# 이 덱의 증거는 대개 go 컴파일러의 오류 한 줄이다. "cannot range over 3
+# (untyped int constant): requires go1.22 or later (-lang was set to go1.21;
+# check go.mod)" 는 파일 위치까지 124칸이다. 자르면 증거가 아니고, 가로로
+# 124칸을 밀면 접힌 폴드에서 읽을 수 없다. 그래서 108칸을 넘는 줄이 있는
+# 캡처는 <pre class="term wrap"> 으로 싣고 CSS 가 화면에서만 접는다(바이트는
+# 그대로 — verify_deck 가 대조한다). 그래도 200칸을 넘으면 오류다.
+MAX_WRAP_COLS = 200
 MAX_LI = 14
 
 # 박스 그리기 문자는 <pre> 밖에서 쓰지 않는다. 내장 글꼴(DeckMono)은 고정폭
@@ -347,8 +354,10 @@ def expand_outdir(m):
     if note:
         label = ('<div class="src"><b>out/%s</b><span class="ln">%s</span>'
                  '<span>%s</span></div>\n' % (esc(name), span, esc(note)))
-    return ('%s<pre class="term" data-out="%s"%s>%s</pre>'
-            % (label, esc(name), attrs, esc(text)))
+    wide = max((cells(r.expandtabs(8)) for r in text.split('\n')), default=0)
+    cls = 'term wrap' if wide > MAX_TERM_COLS else 'term'
+    return ('%s<pre class="%s" data-out="%s"%s>%s</pre>'
+            % (label, cls, esc(name), attrs, esc(text)))
 
 
 def _slug(s):
@@ -860,13 +869,15 @@ def overflow_check(doc):
     for m in ART_RE.finditer(doc):
         aid, inner = m.group(2), m.group(4)
         for pm in re.finditer(r'<pre([^>]*)>(.*?)</pre>', inner, re.S):
-            term = 'class="term"' in pm.group(1)
+            term = 'class="term' in pm.group(1)
+            wrap = 'term wrap' in pm.group(1)
             body = html.unescape(re.sub(r'<[^>]+>', '', pm.group(2)))
             rows = body.split('\n')
             if len(rows) > MAX_PRE_LINES:
                 errors.append('%s: <pre> 가 %d줄 (최대 %d)'
                               % (aid, len(rows), MAX_PRE_LINES))
-            limit = MAX_TERM_COLS if term else MAX_PRE_COLS
+            limit = (MAX_WRAP_COLS if wrap else MAX_TERM_COLS) if term \
+                else MAX_PRE_COLS
             wide = max((cells(r.expandtabs(4)) for r in rows), default=0)
             if wide > limit:
                 errors.append('%s: %s 가 %d칸 (최대 %d)'

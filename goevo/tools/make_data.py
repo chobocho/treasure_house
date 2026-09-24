@@ -203,7 +203,7 @@ def check_features(base, rows):
     for r in rows:
         rid, v, kind = r.get('id', ''), r.get('version', ''), r.get('kind', '')
         key, sec = r.get('cite-key', ''), r.get('cite-sec', '')
-        where = 'features.tsv %s' % rid
+        where = '%s %s' % (r.get('_file', 'features.tsv'), rid)
         ids[rid] = ids.get(rid, 0) + 1
         sid = r.get('slide-id', '')
         if sid:
@@ -291,11 +291,11 @@ def main(argv):
         p = os.path.join(DATA, name)
         if not os.path.exists(p) or read(p) != text:
             bad.append('data/%s 가 docs/ 와 어긋난다 — make data' % name)
-    rows = cites._rows(BASE, 'features.tsv')
+    rows = cites.feature_rows(BASE)
     bad += check_features(BASE, rows)
     for b in bad:
         print('  ✗ ' + b)
-    print('자료 검사: 생성 표 %d개 · features.tsv %d행 — 어긋남 %d건'
+    print('자료 검사: 생성 표 %d개 · 기능 목록(data/features/) %d행 — 어긋남 %d건'
           % (len(made), len(rows), len(bad)))
     return 1 if bad else 0
 

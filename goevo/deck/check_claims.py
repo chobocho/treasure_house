@@ -68,15 +68,18 @@ def read(p):
 
 
 def evidence_text():
-    """근거로 인정하는 글 뭉치 — claims.md 와 data/*.tsv 전부."""
+    """근거로 인정하는 글 뭉치 — claims.md 와 부마다의 deck/claims/*.md,
+    data/*.tsv 와 부마다의 data/features/*.tsv 전부."""
     parts = []
     p = os.path.join(HERE, 'claims.md')
     if os.path.exists(p):
         parts.append(read(p))
-    if os.path.isdir(DATA):
-        for name in sorted(os.listdir(DATA)):
-            if name.endswith('.tsv'):
-                parts.append(read(os.path.join(DATA, name)))
+    for d, ext in ((os.path.join(HERE, 'claims'), '.md'),
+                   (DATA, '.tsv'), (os.path.join(DATA, 'features'), '.tsv')):
+        if os.path.isdir(d):
+            for name in sorted(os.listdir(d)):
+                if name.endswith(ext):
+                    parts.append(read(os.path.join(d, name)))
     return '\n'.join(parts)
 
 

@@ -22,6 +22,9 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import cites  # noqa: E402
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(HERE)
 DATA = os.path.join(BASE, 'data')
@@ -90,6 +93,55 @@ def render(head, body, cols=None):
     return '\n'.join(out) + '\n'
 
 
+KIND_NAMES = [('lang', '언어'), ('toolchain', '도구'), ('runtime', '런타임'),
+              ('stdlib', '표준 라이브러리'), ('platform', '플랫폼'),
+              ('ecosystem', '생태계')]
+
+
+def release_tables(releases, features, api):
+    """큰 릴리스마다 개관 표 하나 — tbl_rel_1.N.html (PLAN.md §3.4).
+
+    날짜는 releases.tsv, 갈래마다의 기능은 features 의 그 버전 행 전부
+    (전용 장이 있으면 그리로 가는 링크), API 줄은 api_added.tsv 에서.
+    표가 기능 목록에서 곧장 만들어지므로 개관 장과 목록이 어긋날 수 없다
+    (PLAN.md §5 7단계의 대조가 구조로 풀린다). O(행 수)."""
+    e = lambda s: html.escape(s, quote=False)
+    out = {}
+    for r in releases:
+        if r.get('kind') != 'major':
+            continue
+        parts = r['version'][2:].split('.')
+        ver = '1.0' if parts == ['1'] else '.'.join(parts[:2])
+        rows = ['<table class="kv">',
+                '<tr><th>날짜</th><td>%s</td></tr>' % e(r['date'])]
+        mine = [f for f in features if f.get('version') == ver]
+        for kind, name in KIND_NAMES:
+            items = []
+            for f in mine:
+                if f.get('kind') != kind:
+                    continue
+                t = e(f.get('title', ''))
+                sid = f.get('slide-id', '')
+                items.append('<a href="#%s">%s</a>' % (sid, t) if sid else t)
+            rows.append('<tr><th>%s</th><td>%s</td></tr>'
+                        % (name, ' · '.join(items) or '—'))
+        for a in api:
+            if a.get('version') == ver:
+                pk = a.get('sample-packages', '')
+                rows.append('<tr><th>API</th><td>새 패키지 %s개%s · 새 기호 %s개'
+                            '</td></tr>' % (a['new-packages'],
+                                           '(%s)' % e(pk) if pk else '',
+                                           a['new-symbols']))
+        rows.append('</table>')
+        out['tbl_rel_%s.html' % ver] = '\n'.join(rows) + '\n'
+    return out
+
+
+def dict_rows(name):
+    head, body = rows_of(name)
+    return [dict(zip(head, r)) for r in body]
+
+
 def build():
     """{내보낼 파일 이름: 내용}. 파일로 쓰기 전의 순수한 계산이다."""
     made = {}
@@ -102,6 +154,10 @@ def build():
         if not head:
             continue
         made['tbl_%s.html' % name[:-4]] = render(head, body)
+    if os.path.exists(os.path.join(DATA, 'releases.tsv')):
+        made.update(release_tables(dict_rows('releases.tsv'),
+                                   cites.feature_rows(BASE),
+                                   dict_rows('api_added.tsv')))
     for out_name, tsv, cols, filt in VIEWS:
         head, body = rows_of(tsv)
         if filt:

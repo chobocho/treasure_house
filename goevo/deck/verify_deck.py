@@ -80,7 +80,9 @@ def main():
                 st['code_bad'] += 1
                 problems.append(('코드 불일치', sid, src.group(1)))
 
-        for m in re.finditer(r'<pre class="term"([^>]*)>(.*?)</pre>', body, re.S):
+        # 긴 줄이 있는 캡처는 class="term wrap" 이다 — 이것도 대조한다
+        for m in re.finditer(r'<pre class="term(?: wrap)?"([^>]*)>(.*?)</pre>',
+                             body, re.S):
             attrs, inner = m.group(1), m.group(2)
             o = re.search(r'data-out="([^"]+)"', attrs)
             if not o:

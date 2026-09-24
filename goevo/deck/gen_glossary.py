@@ -25,6 +25,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SECTIONS = os.path.join(HERE, 'sections')
 SRC = os.path.join(HERE, 'glossary.txt')
+# 부마다의 낱말 — 서브에이전트가 동시에 쓰므로 부마다 파일 하나(glossary/pNN.txt)
+PARTS = os.path.join(HERE, 'glossary')
 PER_SLIDE = 9   # 한 장에 몇 낱말. 접힌 화면에서 안 잘리는 수
 
 
@@ -39,18 +41,25 @@ def slide_ids():
 
 
 def entries():
+    files = [SRC]
+    if os.path.isdir(PARTS):
+        files += [os.path.join(PARTS, n) for n in sorted(os.listdir(PARTS))
+                  if n.endswith('.txt')]
     out = []
-    with open(SRC, encoding='utf-8') as f:
-        for n, line in enumerate(f, 1):
-            # 주석은 줄 머리의 '#' 만 — 뜻풀이 안의 '#' 을 자르면 안 된다
-            line = '' if line.startswith('#') else line.strip()
-            if not line:
-                continue
-            parts = [p.strip() for p in line.split('|')]
-            if len(parts) != 3:
-                sys.exit('%s:%d 칸이 %d개 — 셋이어야 한다'
-                         % (SRC, n, len(parts)))
-            out.append(tuple(parts))
+    for src in files:
+        if not os.path.exists(src):
+            continue
+        with open(src, encoding='utf-8') as f:
+            for n, line in enumerate(f, 1):
+                # 주석은 줄 머리의 '#' 만 — 뜻풀이 안의 '#' 을 자르면 안 된다
+                line = '' if line.startswith('#') else line.strip()
+                if not line:
+                    continue
+                parts = [p.strip() for p in line.split('|')]
+                if len(parts) != 3:
+                    sys.exit('%s:%d 칸이 %d개 — 셋이어야 한다'
+                             % (src, n, len(parts)))
+                out.append(tuple(parts))
     return out
 
 

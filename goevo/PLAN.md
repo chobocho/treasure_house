@@ -545,3 +545,29 @@ and the "오류 N건" line; read it every time.
 - check_xref: features whose part file still holds only its cover are *pending* (not an error);
   once a part has more than its cover, every features.tsv slide-id of that part must exist.
 - Tests 67 (17 make_data + 1 pending rule, RED first). `make all SKEL=1` green.
+
+### Step 4 infra — gover + run_all + per-part data (2026-09-24)
+
+- tools/gover.py: `execute(src, cmd, lang, godebug, exp, name)` copies `ex/…` to
+  scratch/work/<capture-stem>/, rewrites **only the copy's** `go` line, runs with a fixed env
+  (GOTOOLCHAIN=local, GOPROXY=off, GOFLAGS=-trimpath -p=1, CGO_ENABLED=0, LANG=C, TZ=UTC, HOME/TMPDIR
+  under scratch, shared scratch/gocache), leading `VAR=val` in cmd go to env, no shell features.
+  **flock on scratch/go.lock** so two subagents never run go at once. normalise(): paths
+  (/work, /scratch, $GOROOT, boundary-safe), goroutine ids, 0xc… heap and +0x… pc offsets,
+  go-build dirs, benchmark iterations + ns/op (B/op, allocs/op kept), test durations.
+  Compile errors print `./main.go:…` relative paths (verified).
+- run_all.py: `ctx.go(ex, cmd='go run .', v=None, godebug=, exp=, tag=, expect=0)` — v defaults to
+  the example's go.mod; name/first line from build_deck.goverslug/gover_cmdline; unexpected exit
+  code aborts; non-zero exit appends `[exit N]`; exps/ORDER; out/batches.json lets `--only X`
+  delete X's old captures first; manifest sha256.
+- **Deviation (capture width):** go's own diagnostics exceed 108 columns (124 for the lang error).
+  Captures may go up to 200 columns; any capture with a line > 108 is emitted as
+  `<pre class="term wrap">` (CSS pre-wrap, bytes unchanged). verify_deck now also checks wrap
+  captures (it silently skipped them — caught on the first wrap capture).
+- **Deviation (parallel writing):** hand data is split per part so two subagents never edit the
+  same file: data/features/pNN.tsv (data/features.tsv removed), deck/claims/pNN.md,
+  deck/glossary/pNN.txt. cites.feature_rows(), check_claims.evidence_text() and
+  gen_glossary.entries() read them all. gen_tables builds `tbl_rel_1.N.html` (date, six kinds with
+  links to slide-ids, API line) from releases + features + api_added — the overview/features
+  consistency of §5 step 7 holds by construction. Part 0 is a legend: exempt from badge rules.
+- Tests 101 total (gover 15, run_all 6, parts/overview 4, wrap 2, legend 1 added here).

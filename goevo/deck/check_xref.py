@@ -77,10 +77,8 @@ def known_versions():
 
 
 def feature_ids():
-    p = os.path.join(BASE, 'data', 'features.tsv')
-    if not os.path.exists(p):
-        return set()
-    return set(r['slide-id'] for r in cites._rows(BASE, 'features.tsv')
+    """data/features/pNN.tsv 전부의 slide-id (비어 있는 행은 개관 표에만 실린다)."""
+    return set(r['slide-id'] for r in cites.feature_rows(BASE)
                if r.get('slide-id'))
 
 
@@ -90,6 +88,8 @@ def badge_errors(texts, releases, features):
     for name in sorted(texts):
         for m in ART.finditer(texts[name]):
             aid, inner = m.group(1), m.group(2)
+            if aid.startswith('p0-'):
+                continue        # 0부는 범례 — 배지 견본을 보이는 자리다
             badges = BADGE.findall(inner)
             seen[aid] = len(badges)
             for cls, v in badges:
