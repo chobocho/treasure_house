@@ -596,3 +596,21 @@ and the "오류 N건" line; read it every time.
 - `make examples-check` takes scratch/go.lock (flock) like gover; run_all skips ORDER entries
   whose module does not exist yet; exps/ORDER lists p00–p11.
 - Subagent brief: scratch/brief/BRIEF.md (gitignored). Parts 3 and 4 delegated in parallel.
+
+### Part 2 — 공개에서 Go 1 까지 (2026-09-24)
+
+- 44 slides (budget 50): launch (FAQ + blog 1year), snapshot era (tables computed in exps/p02 from
+  docs: weekly headings by year = 89, tags weekly.* = 99, release.r* = 12 — both sources shown,
+  neither "fixed"), release/weekly split (blog stable-releases), gofix, Go 1 preview; Go 1
+  language chapter (13 feature rows with slides) where additions run under `go 1.0` and removals
+  are **compile errors of today's compiler** (6 examples marked `EXPECT_FAIL`, skipped by
+  examples-check vet/gofmt, expected exit 1 in exps/p02); package hierarchy table parsed from the
+  Go 1 notes (2 tables); go command, packaged releases, go1compat (Introduction / Expectations),
+  1.0.x dates via REL. 19 feature rows, 9 claims rows (deck/claims/p02.md), data/quotes.tsv seeded
+  (3 quotes), 6 glossary lines.
+- Finding: current compiler messages for removed forms — `m[k] = 0, false` → "assignment
+  mismatch: 1 variable but 2 values"; `import "utf8"` → "package utf8 is not in std";
+  shadowed named result → "result parameter j not in scope at return".
+- Commit discipline while subagents run: only this part's files are staged; out/manifest.json and
+  batches.json are staged from the committed out/ files only (scratch/stage_manifest.py writes the
+  blobs with git hash-object/update-index), and the deck HTML is left for the next consistent build.

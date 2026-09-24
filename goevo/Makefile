@@ -83,18 +83,22 @@ data-check:             ## features.tsv 의 버전·인용이 docs/ 와 맞는�
 	  $(PY) tools/make_data.py --check; \
 	else echo '  tools/make_data.py 아직 없다 (PLAN.md §5 3단계)'; fi
 
-# 모든 예제는 go vet 과 gofmt 를 통과해야 한다(PLAN.md §3.3). go 는 한
+# 모든 예제는 go vet 과 gofmt 를 통과해야 한다(PLAN.md §3.3). 예외는
+# EXPECT_FAIL 파일을 둔 예제 — 사라진 문법을 지금 컴파일러가 거절하는
+# 것을 보이려고 일부러 깨 둔 것이다(§0.6 d). 거절은 실험이 expect 로 본다. go 는 한
 # 번에 하나만 돈다 — 디렉터리를 차례로 들어가고, 실험(tools/gover.py)과
 # 같은 잠금(scratch/go.lock)을 잡는다. 서브에이전트가 동시에 돌려도 줄을 선다.
 examples-check:         ## ex/ 의 예제 전부 go vet + gofmt -l
-	@bad=0; n=0; \
+	@bad=0; n=0; k=0; \
 	for d in $(EX_DIRS); do \
 	  n=$$((n + 1)); \
+	  if test -f $$d/EXPECT_FAIL; then k=$$((k + 1)); continue; fi; \
 	  (cd $$d && flock $(SCRATCH)/go.lock $(GO) vet ./...) \
 	    || { echo "  ✗ vet: $$d"; bad=1; }; \
 	  out=$$($(GOFMT) -l $$d); \
 	  if test -n "$$out"; then echo "  ✗ gofmt: $$out"; bad=1; fi; \
-	done; echo "  예제 $$n개 — vet·gofmt 검사"; exit $$bad
+	done; echo "  예제 $$n개 — vet·gofmt 검사 (일부러 깨진 것 $$k개 제외)"; \
+	exit $$bad
 
 budget-hint:            ## 릴리스 노트 길이에 비례한 기능 장 수 제안
 	@if test -f tools/budget_hint.py; then $(PY) tools/budget_hint.py; \
