@@ -457,3 +457,8 @@ and the "오류 N건" line; read it every time.
 
 - PLAN.md written by the orchestrator (Fable) after verifying §2 on this machine. No code, data or
   docs fetched yet. Waiting for the user's answers to §9 before step 1.
+
+### §9 decisions confirmed (2026-09-24)
+
+- The user confirmed all 12 recommendations of §9 as written ("권고안 그대로 확정"). **Do not re-ask
+  any of them.** Step 1 (skeleton) may begin. Nothing else changed.
