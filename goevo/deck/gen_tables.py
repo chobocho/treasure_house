@@ -20,6 +20,7 @@ import html
 import io
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -139,6 +140,95 @@ def release_tables(releases, features, api, drafts=()):
     return out
 
 
+MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+          'August', 'September', 'October', 'November', 'December']
+
+
+def _table(head, rows, numcols=()):
+    """머리글과 행 → <table>. numcols 의 칸은 오른쪽 맞춤(num)."""
+    e = lambda s: html.escape(str(s), quote=False)
+    out = ['<table>', '<tr>' + ''.join(
+        '<th%s>%s</th>' % (' class="num"' if i in numcols else '', e(h))
+        for i, h in enumerate(head)) + '</tr>']
+    for r in rows:
+        out.append('<tr>' + ''.join(
+            '<td%s>%s</td>' % (' class="num"' if i in numcols else '', e(c))
+            for i, c in enumerate(r)) + '</tr>')
+    out.append('</table>')
+    return '\n'.join(out) + '\n'
+
+
+def _chunks(prefix, head, rows, per, numcols=()):
+    """긴 표를 per 행씩 여러 장으로 — 접힌 화면에서 한 장에 들게."""
+    return dict(('tbl_%s_%d.html' % (prefix, k // per + 1),
+                 _table(head, rows[k:k + per], numcols))
+                for k in range(0, len(rows), per))
+
+
+def appendix_tables(releases, api, godebug, blog_index, fetched, per=14,
+                    min_posts=3):
+    """부록(11부)의 표 — 전부 data/ 와 docs/ 에서 (PLAN.md §4 의 A 줄).
+
+    일정표: 큰 릴리스마다 부 릴리스의 수와 마지막 부 릴리스.
+    API 표: api_added.tsv 그대로(Go 1 의 126 패키지는 줄이 넘쳐 적지 않는다).
+    GODEBUG 표: godebug.tsv 를 per 행씩.
+    저자 색인(인물 색인): 블로그 색인의 저자 칸에서 사람마다 글 수와 첫·끝 날짜
+    (글 min_posts 편 이상).
+    출처 목록: docs/FETCHED.txt 의 경로를 종류별로 센다. O(행 수)."""
+    out = {}
+    majors, cur = [], None
+    for r in releases:
+        if r['kind'] == 'major':
+            cur = [r['version'], r['date'], []]
+            majors.append(cur)
+        elif cur is not None:
+            cur[2].append(r)
+    rows = [(v, d, len(m), '%s (%s)' % (m[-1]['version'], m[-1]['date'])
+             if m else '—') for v, d, m in majors]
+    out.update(_chunks('app_majors', ['판', '날짜', '부 릴리스', '마지막 부 릴리스'],
+                       rows, per, (2,)))
+    rows = [(a['version'], a['new-packages'], a['new-symbols'],
+             a['syscall-symbols'], '(Go 1 의 전부)' if a['version'] == '1.0'
+             else a['sample-packages'] or '—') for a in api]
+    out.update(_chunks('app_api', ['판', '새 패키지', '새 기호', '그중 syscall',
+                                   '새 패키지 이름'], rows, per, (1, 2, 3)))
+    rows = [(g['setting'], g['package'], g['introduced-in'],
+             g['default-changed-in'], g['old-value']) for g in godebug]
+    out.update(_chunks('app_godebug', ['설정', '패키지', '처음 적힌 판',
+                                       '기본값 바뀐 판', '옛 값'], rows, per))
+    people = {}
+    for m in re.finditer(r'<span class="date">(\d+) (\w+) (\d{4})</span><br>'
+                         r'\s*<span class="author">(.*?)<br>', blog_index, re.S):
+        date = '%s-%02d-%02d' % (m.group(3), MONTHS.index(m.group(2)) + 1,
+                                 int(m.group(1)))
+        names = re.sub(r',?\s+(?:on behalf of|for) the Go team.*$', '',
+                       m.group(4))
+        for n in re.split(r',\s*(?:and\s+)?|\s+and\s+', names):
+            n = html.unescape(n.strip())
+            if n:
+                people.setdefault(n, []).append(date)
+    # 인물 색인은 글 min_posts 편 이상인 사람만 — 한 편씩 쓴 사람까지 실으면 여덟 장이 된다
+    rows = sorted(((n, len(ds), min(ds), max(ds)) for n, ds in people.items()
+                   if len(ds) >= min_posts),
+                  key=lambda r: (-r[1], r[0]))
+    out.update(_chunks('app_authors', ['사람', '블로그 글', '처음', '마지막'],
+                       rows, per, (1,)))
+    kinds = [('릴리스 노트', 'relnotes/'), ('API 목록', 'api/'),
+             ('블로그 글', 'blog/'), ('그 밖의 문서', '')]
+    count = dict((k, 0) for k, _ in kinds)
+    for p in fetched:
+        if p == 'blog/index.txt' or not p.endswith('.txt'):
+            continue
+        for k, pre in kinds:
+            if p.startswith(pre):
+                count[k] += 1
+                break
+    out['tbl_app_sources.html'] = _table(['종류', '파일 수'],
+                                         [(k, count[k]) for k, _ in kinds],
+                                         (1,))
+    return out
+
+
 def dict_rows(name):
     head, body = rows_of(name)
     return [dict(zip(head, r)) for r in body]
@@ -163,6 +253,15 @@ def build():
         made.update(release_tables(dict_rows('releases.tsv'),
                                    cites.feature_rows(BASE),
                                    dict_rows('api_added.tsv'), drafts))
+        fetched = [l.split('\t')[0] for l in
+                   read(os.path.join(BASE, 'docs', 'FETCHED.txt')).split('\n')
+                   if l and not l.startswith('#')]
+        index = os.path.join(BASE, 'docs', 'raw', 'blog', 'index.txt')
+        if os.path.exists(index):
+            made.update(appendix_tables(dict_rows('releases.tsv'),
+                                        dict_rows('api_added.tsv'),
+                                        dict_rows('godebug.tsv'),
+                                        read(index), fetched))
     for out_name, tsv, cols, filt in VIEWS:
         head, body = rows_of(tsv)
         if filt:

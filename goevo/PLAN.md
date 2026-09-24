@@ -696,3 +696,13 @@ and the "오류 N건" line; read it every time.
   trace argument format (addresses vary). vet checks run one analyzer at a time because plain
    printed findings in varying order. Captures borrow newer flags (,
   ); slides say so.
+
+### Part A (11부) — appendix (2026-09-24)
+
+- 31/45 slides so far (glossary and quiz index grow as parts land). gen_tables.appendix_tables
+  (tests 6): major schedule with minor counts (2 tables), API growth table (2) + figure, GODEBUG
+  table (4 × 14 rows), people index = blog authors with ≥ 3 posts (from blog index; "on behalf
+  of / for the Go team" tails removed) (3), sources by kind from FETCHED (1), cadence figure.
+- Deviation: no proposals index (proposals.tsv stays empty) — issue numbers in API files are not
+  proposals, and a hand list would be memory; people.tsv replaced by the generated author index.
+  Timeline table goes to part 10 (budget). Tests: 112.
