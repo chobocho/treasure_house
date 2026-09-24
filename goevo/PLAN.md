@@ -649,3 +649,15 @@ and the "오류 N건" line; read it every time.
   scratch/recovered/ and the subagent told to reconcile. Rule from now on: **no git stash /
   checkout / reset in this repository while subagents are running**; use `git worktree add` on a
   temp path for any look at old commits.
+
+### Step 6 start — gen_figs (2 figures) + timeline (2026-09-24)
+
+- deck/gen_figs.py (need()-guarded, FIGURES registry, --check; tests 4): `cadence.svg` (one dot
+  per major from releases.tsv, dashed 1.28 draft point from timeline.tsv) and `api_growth.svg`.
+- Finding: the API-growth spikes (1.1 7,918 · 1.13 4,065 · 1.14 4,521 · 1.16 4,128 · 1.20 4,683)
+  are **syscall constants from new ports** (6,329 / 3,885 / 4,251 / 3,570 / 4,289). api_added.tsv
+  gained `syscall-symbols`; the figure draws non-syscall bars (log) with the full total as a dot.
+  Rendered both with rsvg-convert and looked: fixed a legend overlapping the 1.1 dot and a label
+  overlapping the 1.27 dot.
+- data/timeline.tsv: 126 rows; dates are machine-read from FAQ, release page, pre_go1, blog index;
+  Korean event texts hand-written (tools/make_timeline.py keeps the recipe).

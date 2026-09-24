@@ -89,12 +89,14 @@ def pkg_of(line):
 
 
 def api_added(files):
-    """[(버전, 본문)] (버전 차례) → [(버전, 새 패키지 수, 새 기호 수, 새 패키지)].
+    """[(버전, 본문)] → [(버전, 새 패키지 수, 새 기호 수, 새 패키지, syscall 몫)].
 
     기호는 플랫폼 꼬리를 뗀 (패키지, 선언) 의 가짓수다 — go1.txt 에는
     같은 상수가 운영체제·아키텍처마다 한 줄씩 있다. '//deprecated' 줄은
     더한 것이 아니라 낡았다는 표시라 세지 않는다. 새 패키지는 앞선 어느
-    파일에도 없던 경로다. O(줄 수)."""
+    파일에도 없던 경로다. syscall 몫을 따로 센다 — 새 플랫폼 이식은
+    syscall 상수를 수천 개 싣는다(1.1: 6,329개). 그것을 가르지 않으면
+    그림의 봉우리가 '기능이 많은 판' 으로 읽힌다. O(줄 수)."""
     seen_pkgs, out = set(), []
     for ver, text in files:
         syms, pkgs = set(), set()
@@ -108,7 +110,9 @@ def api_added(files):
         new = sorted(pkgs - seen_pkgs)
         seen_pkgs |= pkgs
         v = '1.0' if ver == '1' else ver
-        out.append((v, str(len(new)), str(len(syms)), ', '.join(new)))
+        sc = sum(1 for p, _ in syms if p == 'syscall')
+        out.append((v, str(len(new)), str(len(syms)), ', '.join(new),
+                    str(sc)))
     return out
 
 
@@ -262,7 +266,8 @@ def build():
                             ['version', 'date', 'kind', 'relnotes-key'], rel),
         'api_added.tsv': tsv(gen % 'docs/api/go1.N.txt',
                              ['version', 'new-packages', 'new-symbols',
-                              'sample-packages'], api_added(files)),
+                              'sample-packages', 'syscall-symbols'],
+                             api_added(files)),
         'godebug.tsv': tsv(gen % '$GOROOT/src/internal/godebugs/table.go'
                            '(go1.27.1)와 docs/godebug.txt',
                            ['setting', 'package', 'introduced-in',

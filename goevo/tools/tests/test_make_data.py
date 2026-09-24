@@ -76,9 +76,23 @@ class ApiAdded(unittest.TestCase):
 
     def test_counts_and_first_packages(self):
         rows = make_data.api_added([('1', GO1), ('1.1', GO11)])
-        self.assertEqual(rows[0], ('1.0', '2', '3', 'archive/tar, log/syslog'))
+        self.assertEqual(rows[0], ('1.0', '2', '3', 'archive/tar, log/syslog',
+                                   '0'))
         # 1.1: 기호 넷(주석·//deprecated 제외), 새 패키지는 go/format 하나
-        self.assertEqual(rows[1], ('1.1', '1', '4', 'go/format'))
+        self.assertEqual(rows[1], ('1.1', '1', '4', 'go/format', '0'))
+
+
+class ApiSyscall(unittest.TestCase):
+    def test_syscall_share_counted_separately(self):
+        # 봉우리의 정체 — 새 플랫폼 이식이 syscall 상수를 수천 개 싣는다
+        go1 = 'pkg os, func Getpid() int\n'
+        nxt = ('pkg syscall (linux-arm64), const AF_ALG = 38\n'
+               'pkg syscall (linux-arm64), const AF_ALG ideal-int\n'
+               'pkg syscall (freebsd-arm64), const AF_ALG = 38\n'
+               'pkg os, func Getuid() int\n')
+        rows = make_data.api_added([('1', go1), ('1.13', nxt)])
+        self.assertEqual(rows[1], ('1.13', '1', '3', 'syscall', '2'))
+        self.assertEqual(rows[0][4], '0')
 
 
 class Godebug(unittest.TestCase):

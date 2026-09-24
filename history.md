@@ -1,3 +1,10 @@
+### [2026-09-24 19:42] Go의 진화 덱 6단계 시작 — 도해 2장(릴리스 주기·API 증가)·연표 126행
+- **기획:** 자료만으로 그리는 도해 생성기(gen_figs)와 연표. API 증가 봉우리가 새 플랫폼의 syscall 상수임을 확인해 표·그림에서 갈라 보임.
+- **TC:** 5건 — 정상(큰 릴리스마다 점 하나·판마다 막대 하나, syscall 몫) / 경계(범례 견본이 세어지지 않음, 초안 점 하나, 날짜 연분수).
+- **개발:** `goevo/deck/gen_figs.py`, `goevo/tools/tests/test_gen_figs.py`, `goevo/tools/make_data.py`, `goevo/data/api_added.tsv`, `goevo/data/timeline.tsv`, `goevo/tools/make_timeline.py`, `goevo/deck/figs/`(2장), `goevo/deck/svgkit.py`
+- **검증:** 105 passed, 0 failed · PNG 로 렌더해 눈으로 확인(겹침 2곳 고침)
+- **비고:** 봉우리 1.1·1.13·1.14·1.16·1.20 은 syscall 이 대부분(6,329·3,885·4,251·3,570·4,289개).
+
 ### [2026-09-24 19:33] Go의 진화 덱 9부 — 1.28 초안과 Go 2 이야기 18장(캡처 6개)
 - **기획:** Go 2 논의의 흐름(2017 문제 먼저 → 2018 초안·기준 → 2023 "깨는 Go 2 는 없다" → 2025 오류 문법 중단)과 tip 의 1.28 초안 노트.
 - **TC:** 캡처 6개 — 1.28 을 요구하는 go.mod·1.28 API 는 1.27.1 이 거절(exit 1), 초안이 바꿀 지금의 동작(EncodedLen 음수·대문자 프록시 우선·vet 침묵). 시험 2건 추가(초안 개관 표, 소문자 환경 변수).
