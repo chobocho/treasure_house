@@ -1,5 +1,289 @@
 <article class="card section" id="p1">
 <p class="chnum">1부</p>
 <h2>탄생 이전 — 구글에서의 설계와 그 계보</h2>
-<p class="chsub">준비 중입니다 — 설계 목표·계보·FAQ 의 "왜 만들었나" 를 docs/ 로 채운다 (5단계, 버전 부들 다음)</p>
+<p class="chsub">무엇이 불편했나 · 세 사람과 첫 두 해 · C·Pascal·CSP 의 계보 · 설계 원칙 · 일부러 뺀 것</p>
+</article>
+
+<article class="card" id="p1-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">Go 는 새 기능을 뽐내려고 만든 언어가 아니라, 큰 회사의 서버 코드를 짜는 일이 너무
+힘들어져서 만든 언어입니다. 이 부는 그 "왜" 를 설계자들의 글로 따라가고, 그 원칙이 지금의 컴파일러에
+어떻게 남아 있는지 돌려 봅니다.</p>
+<ul>
+<li>무엇이 불편했나 — 컴파일 시간, 의존 관계, 언어 선택의 딜레마</li>
+<li>2007년 화이트보드에서 2009년 공개까지</li>
+<li>계보 — 문법은 C, 선언과 패키지는 Pascal 계열, 동시성은 CSP 계열</li>
+<li>원칙 — 의존은 오류, 이름이 곧 공개 범위, 상속 대신 합성, 오류는 값, 도구가 모양을 정한다</li>
+<li>처음에 일부러 뺀 것 — 제네릭·예외·단언·암묵 변환</li>
+</ul>
+<p class="cap">이 부의 캡처는 모두 1.27.1 의 동작입니다. 옛 컴파일러가 아니라, 처음의 원칙이 지금도 그대로인지를 봅니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p1-ch1"><p class="chnum">1장</p><h2>무엇이 불편했나</h2><p class="chsub">셋 가운데 둘만 고르던 시절</p></article>
+
+<article class="card" id="p1-why">
+<h3>셋 가운데 둘</h3>
+<p>FAQ 는 Go 가 구글에서 하던 일에 쓰던 언어와 환경에 대한 좌절에서 나왔다고 적습니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>원한 것</th><th>당시의 주류 언어</th></tr>
+<tr><td>빠른 컴파일</td><td rowspan="3">한 언어에서 셋을 다 가질 수 없었다</td></tr>
+<tr><td>빠른 실행</td></tr>
+<tr><td>쉬운 프로그래밍</td></tr>
+</table></div>
+<p>그래서 할 수 있는 프로그래머들은 안전과 효율 대신 쉬움을 골라 C++ 나 Java 에서 Python·JavaScript 같은
+동적 타입 언어로 옮겨 갔다는 것입니다. <!--CITE key=faq sec="Why did you create a new language?"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p1-why-2">
+<h3>Go 가 노린 조합</h3>
+<p>해석되는 동적 언어의 쉬움과, 정적 타입·컴파일 언어의 효율·안전을 한 언어에 담는 것. 그리고 네트워크와
+다중 코어에 맞는 언어, 큰 실행 파일도 한 컴퓨터에서 몇 초 안에 짓는 언어.</p>
+<p>FAQ 는 이 목표 때문에 나온 결정을 이렇게 꼽습니다 — 계층이 아니라 조합으로 쌓는 타입 체계, 동시성과
+가비지 컬렉션, 의존 관계의 엄격한 명세. 라이브러리나 도구로는 풀 수 없어서 새 언어가 필요했다는 것입니다.
+<!--CITE key=faq sec="Why did you create a new language?"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p1-pain">
+<h3>C 와 C++ 의 의존 관계</h3>
+<p>2012년 발표문 "Go at Google" 은 가장 큰 고통으로 의존 관계와 빌드 시간을 듭니다. 발표문이 적은 숫자를
+그대로 옮깁니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>사례</th><th>발표문의 서술</th></tr>
+<tr><td>1984년 ps.c</td><td>&lt;sys/stat.h&gt; 가 전처리 끝까지 37번 포함 — 36번은 읽고 버린다</td></tr>
+<tr><td>2007년 구글의 큰 C++ 바이너리</td><td>파일 약 2천 개, 이어 붙이면 4.2 MB — #include 를 펼치자
+컴파일러 입력이 8 GB 를 넘었다. 원본 한 바이트에 2000바이트</td></tr>
+<tr><td>그 바이너리의 빌드</td><td>옛 분산 빌드로 45분, 발표 당시 27분</td></tr>
+</table></div>
+<p class="cap"><!--CITE key=splash sec="5. Dependencies in C and C++"--></p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p1-plan9">
+<h3>Plan 9 이 먼저 보인 길</h3>
+<p>발표문은 해결의 실마리를 Plan 9 의 C 라이브러리에서 찾습니다. 헤더 파일이 다른 헤더를 포함하지 못하게 하고,
+모든 #include 를 맨 위 C 파일에 한 번씩만 적게 했습니다.</p>
+<ul>
+<li>의존을 정확한 차례로 한 번씩 적어야 하는 수고가 들었지만,</li>
+<li>의존이 몇 개든 각 헤더는 컴파일마다 딱 한 번 읽혔고,</li>
+<li>그 결과 컴파일이 훨씬 빨랐다는 것입니다.</li>
+</ul>
+<p>Go 는 이 규율을 사람의 수고가 아니라 언어 규칙으로 옮깁니다(4장). <!--CITE key=splash sec="5. Dependencies in C and C++"--></p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card quiz" id="p1-quiz-1" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 2007년의 구글 C++ 빌드에서 원본 1 MB 는 #include 를 펼친 뒤 대략 얼마가 되었다고 발표문은 적습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 원본 한 바이트에 2000바이트이므로 약 2 GB 입니다(4.2 MB → 8 GB 넘게). 컴파일 시간을 잡아먹은 것은
+코드의 양이 아니라 같은 헤더를 거듭 읽는 일이었습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p1-ch2"><p class="chnum">2장</p><h2>세 사람과 첫 두 해</h2><p class="chsub">2007-09-21 화이트보드에서 2009-11-10 공개까지</p></article>
+
+<article class="card" id="p1-history">
+<h3>화이트보드에서 공개까지</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>때</th><th>일</th></tr>
+<tr><td>2007-09-21</td><td>로버트 그리저머·롭 파이크·켄 톰프슨이 화이트보드에 새 언어의 목표를 그리기 시작</td></tr>
+<tr><td>2008년 1월</td><td>켄 톰프슨이 생각을 시험할 컴파일러를 시작 — 출력은 C 코드</td></tr>
+<tr><td>2008년 5월</td><td>이안 테일러가 초안 명세로 GCC 프런트엔드를 따로 시작(훗날의 gccgo)</td></tr>
+<tr><td>2008년 중반</td><td>전업 프로젝트가 되고, 제대로 된 컴파일러를 짤 만큼 언어가 굳음</td></tr>
+<tr><td>2008년 말</td><td>러스 콕스가 합류해 언어와 라이브러리를 시제품에서 실물로</td></tr>
+<tr><td>2009-11-10</td><td>공개 오픈소스 프로젝트가 됨</td></tr>
+</table></div>
+<p class="cap"><!--CITE key=faq sec="What is the history of the project?"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p1-twoimpl">
+<h3>처음부터 구현이 둘</h3>
+<p>명세 초안만 보고 GCC 프런트엔드를 따로 짠 사람이 있었다는 것은, 처음부터 <b>명세가 구현보다 앞선</b>
+언어였다는 뜻입니다. Go 1 은 명세와 함께 두 컴파일러 모음(gc 와 gccgo)을 구현으로 내놓았습니다.
+<!--CITE key=faq sec="What is the history of the project?"--> <!--CITE key=go1compat sec="Introduction"--></p>
+<div class="note"><b>이 덱에서</b> — 릴리스 노트마다 "Status of gccgo" 절이 이어집니다. gc 가 Go 로 다시 쓰여
+자기 자신을 짓게 된 것은 1.5 입니다(<a href="#p4">4부</a>).</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p1-quiz-2" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 켄 톰프슨의 첫 실험용 컴파일러는 무엇을 출력했습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> C 코드입니다(FAQ). 생각을 빨리 시험하려는 도구였고, 제대로 된 컴파일러는 언어가 굳은 2008년 중반부터입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p1-ch3"><p class="chnum">3장</p><h2>계보</h2><p class="chsub">C 가족 · Pascal/Modula/Oberon · CSP</p></article>
+
+<article class="card" id="p1-ancestors">
+<h3>세 줄기</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>줄기</th><th>물려받은 것</th></tr>
+<tr><td>C 가족</td><td>기본 문법</td></tr>
+<tr><td>Pascal / Modula / Oberon</td><td>선언과 패키지</td></tr>
+<tr><td>토니 호어의 CSP 에서 나온 언어들 — Newsqueak, Limbo</td><td>동시성</td></tr>
+</table></div>
+<p>그래도 FAQ 는 "모든 면에서 새 언어" 라고 적습니다. 무엇을 물려받을지는 프로그래머가 실제로 무엇을 하는지를
+보고 정했다는 것입니다. <!--CITE key=faq sec="What are Go’s ancestors?"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p1-decl">
+<h3>이름이 타입보다 먼저</h3>
+<p>C 프로그래머가 놀라는 것 하나는 선언 문법이 C 보다 Pascal 쪽이라는 점입니다 — 이름이 먼저, 타입이 뒤,
+그리고 키워드가 조금 더 있습니다. 함수 타입도 왼쪽에서 오른쪽으로 읽힙니다.
+<!--CITE key=splash sec="10. Syntax"--> <!--CITE key=blog-declaration-syntax sec="Go's Declaration Syntax"--></p>
+<!--CODE file=ex/01/decl/main.go note=함수를 받아 함수를 돌려주는 함수-->
+<!--GOVER v=1.0 file=ex/01/decl note=돌린 결과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p1-csp">
+<h3>통신으로 공유한다 — CSP</h3>
+<p>동시성은 호어의 CSP 에서 온 생각을 씁니다. 고루틴이 채널로 값을 주고받으며 협력합니다. 아래는 Go 명세가
+완전한 예제 패키지로 싣는 소수 체 — 걸러 내는 고루틴의 사슬 — 를 줄여 쓴 것입니다.
+<!--CITE key=faq sec="Why build concurrency on the ideas of CSP?"--> <!--CITE key=spec sec="An example package"--></p>
+<!--CODE file=ex/01/csp/main.go note=걸러 내는 고루틴을 줄줄이 잇는다-->
+<!--GOVER v=1.0 file=ex/01/csp note=처음 소수 열 개-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p1-quiz-3" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. <code>func twice(f func(int) int) func(int) int</code> 를 C 식 선언과 견주면 무엇이 편합니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 이름 → 매개변수 → 결과 차례로 왼쪽에서 오른쪽으로 읽힙니다. C 의 함수 포인터 선언처럼
+안에서 밖으로 풀어 읽을 필요가 없습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p1-ch4"><p class="chnum">4장</p><h2>설계 원칙</h2><p class="chsub">원칙마다, 지금의 컴파일러가 그대로 지키는지 돌려 본다</p></article>
+
+<article class="card" id="p1-principles">
+<h3>덜 치고, 서로 겹치지 않게</h3>
+<ul>
+<li><b>덜 치기</b> — 전방 선언도 헤더도 없고, 모든 것은 한 번만 선언합니다. <code>:=</code> 가 반복을 줄입니다.</li>
+<li><b>타입 계층이 없다</b> — 타입은 그냥 있을 뿐, 서로의 관계를 선언하지 않습니다.</li>
+<li><b>직교성</b> — 메서드는 어느 타입에나 달 수 있고, 구조체는 데이터를, 인터페이스는 추상을 맡습니다.</li>
+</ul>
+<p class="cap"><!--CITE key=faq sec="What are the guiding principles in the design?"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p1-syntax">
+<h3>키워드 25개</h3>
+<p>발표문은 문법이 작고 규칙적이라 타입 정보나 심볼 표 없이도 파싱된다고 적습니다. 키워드는 25개 —
+C99 37개, C++11 84개와 견줍니다. <!--CITE key=splash sec="10. Syntax"--> 지금 몇 개인지 표준 라이브러리의
+<code>go/token</code> 으로 셉니다.</p>
+<!--CODE file=ex/01/keywords/main.go note=Token 값 가운데 키워드인 것-->
+<!--GOVER v=1.0 file=ex/01/keywords note=1.27.1 에서 센 결과-->
+<p class="cap">제네릭(1.18)도 이터레이터(1.23)도 키워드를 하나도 더하지 않았습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p1-deps">
+<h3>쓰지 않는 의존은 오류</h3>
+<p>발표문이 꼽은 첫 단계: 쓰지 않는 import 는 경고가 아니라 <b>컴파일 오류</b>입니다. 의존 목록이 늘
+정확하니, C 처럼 "지워도 되는지 모르는 #include" 가 쌓이지 않습니다. <!--CITE key=splash sec="7. Dependencies in Go"--></p>
+<!--CODE file=ex/01/unusedimport/main.go note=os 를 가져오고 쓰지 않는다-->
+<!--GOVER v=1.0 file=ex/01/unusedimport note=지금 컴파일러-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p1-naming">
+<h3>이름의 첫 글자가 공개 범위</h3>
+<p><code>public</code>·<code>private</code> 키워드 대신 이름 자체가 말합니다 — 첫 글자가 대문자면 패키지 밖에서
+보이고, 아니면 안 보입니다. <!--CITE key=splash sec="11. Naming"--></p>
+<!--CODE file=ex/01/export/shape/shape.go note=패키지 shape-->
+<!--CODE file=ex/01/export/main.go note=밖에서 소문자 이름을 부른다-->
+<!--GOVER v=1.0 file=ex/01/export note=지금 컴파일러-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p1-compose">
+<h3>상속 대신 합성</h3>
+<p>메서드는 어떤 타입에나 달 수 있지만 서브클래스 같은 타입 기반 상속은 없습니다. 발표문은 타입 계층이
+지나치게 쓰였다고 보고 한 걸음 물러섰다고 적습니다. 인터페이스는 메서드 집합일 뿐이고, 만족은 선언하지
+않습니다. <!--CITE key=splash sec="15. Composition not inheritance"--> <!--CITE key=faq sec="Why is there no type inheritance?"--></p>
+<!--CODE file=ex/01/compose/main.go note=끼워 넣기와 암묵적 만족-->
+<!--GOVER v=1.0 file=ex/01/compose note=돌린 결과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p1-errors">
+<h3>오류는 값</h3>
+<p>관례적인 예외 기능이 없습니다. 오류는 <code>Error() string</code> 을 가진 인터페이스 값이고, 여느 값처럼
+돌려주고 검사합니다. <code>panic</code>·<code>recover</code> 는 일부러 거추장스럽게 두었다고 발표문은 적습니다.
+<!--CITE key=splash sec="16. Errors"--> <!--CITE key=faq sec="Why does Go not have exceptions?"--></p>
+<!--CODE file=ex/01/errvalue/main.go note=돌려주고, 감싸고, 검사한다-->
+<!--GOVER v=1.0 file=ex/01/errvalue note=돌린 결과-->
+<div class="note"><b>뒤의 이야기</b> — 오류 감싸기(<code>%w</code>, <code>errors.Is</code>)는 1.13(<a href="#p5">5부</a>),
+오류 처리 문법을 더하자는 제안들의 끝은 <a href="#p9">9부</a>.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p1-noimplicit">
+<h3>암묵적인 수 변환은 없다</h3>
+<p>C 의 "보통 산술 변환" 은 편하지만 헷갈리고, 컴파일러 구현도 복잡하게 만듭니다. Go 는 서로 다른 수 타입을
+섞으면 반드시 변환을 적게 합니다. <!--CITE key=faq sec="Why does Go not provide implicit numeric conversions?"--></p>
+<!--CODE file=ex/01/numconv/main.go note=int·int64·float64 를 섞는다-->
+<!--GOVER v=1.0 file=ex/01/numconv note=지금 컴파일러-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p1-tools">
+<h3>모양은 도구가 정한다 — gofmt</h3>
+<p>문법이 파싱하기 쉬우니 도구를 쓰기 쉽고, 그 가운데 가장 알려진 것이 gofmt 입니다. 처음부터 모든 Go 코드를
+gofmt 의 모양으로 보아 왔기에 Go 프로그램에는 모두에게 익숙한 스타일이 하나 있다고 발표문은 적습니다.
+<!--CITE key=splash sec="17. Tools"--></p>
+<!--CODE file=ex/01/gofmt/main.go note=일부러 흐트러뜨린 파일-->
+<!--GOVER v=1.0 file=ex/01/gofmt cmd="gofmt -d main.go" tag=gofmt note=gofmt 가 고칠 차이-->
+<p class="cap">모양이 흐트러져도 컴파일은 됩니다(<code>go run .</code> 은 0 1 2 를 찍습니다) — 모양은 규칙이 아니라 도구의 몫입니다.</p>
+<!--GOVER v=1.0 file=ex/01/gofmt note=흐트러진 채로 돌린 결과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p1-quiz-4" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. <code>import "os"</code> 를 적고 쓰지 않으면 왜 경고가 아니라 오류입니까? 발표문의 논리로 답하십시오.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 의존 목록이 늘 정확해야 빌드가 필요 없는 것을 읽지 않고, 도구가 의존을 계산할 수 있기 때문입니다.
+경고로 두면 C 의 #include 처럼 "지워도 되는지 모르는" 의존이 쌓입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p1-ch5"><p class="chnum">5장</p><h2>처음에 일부러 뺀 것</h2><p class="chsub">"기능 X 는 왜 없나" 에 대한 답</p></article>
+
+<article class="card" id="p1-featurex">
+<h3>기능 X 는 왜 없나</h3>
+<p>FAQ 의 답은 한결같습니다 — 모든 언어는 새 기능을 담고 누군가 좋아하는 기능을 뺍니다. Go 는 편한 프로그래밍,
+빠른 컴파일, 개념의 직교성, 동시성·GC 같은 기능의 지원을 눈여겨 설계했고, 빠진 것이 있다면 그것이 맞지 않거나
+컴파일 속도·설계의 명료함을 해치기 때문이라는 것입니다. <!--CITE key=faq sec="Why does Go not have feature X?"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p1-omitted">
+<h3>뺀 것, 그리고 그 뒤</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>처음에 뺀 것</th><th>그 뒤</th></tr>
+<tr><td>제네릭 <!--CITE key=faq sec="Why was Go initially released without generic types?"--> <!--CITE key=faq sec="When did Go get generic types?"--></td><td>1.18 에서 타입 매개변수로 들어온다(<a href="#p6">6부</a>)</td></tr>
+<tr><td>예외 <!--CITE key=faq sec="Why does Go not have exceptions?"--></td><td>여전히 없다. 오류 처리 문법 제안의 끝은 <a href="#p9">9부</a></td></tr>
+<tr><td>단언(assert) <!--CITE key=faq sec="Why does Go not have assertions?"--></td><td>여전히 없다</td></tr>
+<tr><td>메서드·연산자 중복 정의 <!--CITE key=faq sec="Why does Go not support overloading of methods and operators?"--></td><td>여전히 없다</td></tr>
+<tr><td>"implements" 선언 <!--CITE key=faq sec="Why doesn’t Go have “implements” declarations?"--></td><td>여전히 없다 — 만족은 암묵적</td></tr>
+</table></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p1-quiz-5" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 처음에 뺀 다섯 가지 가운데 나중에 들어온 것은 무엇이고, 몇 버전입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 제네릭(타입 매개변수)입니다. 1.18 에서 들어왔습니다. 예외·단언·중복 정의·implements 선언은 지금도 없습니다.</div>
+<span class="tier ill">설명용</span>
 </article>

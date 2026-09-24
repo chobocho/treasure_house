@@ -614,3 +614,15 @@ and the "오류 N건" line; read it every time.
 - Commit discipline while subagents run: only this part's files are staged; out/manifest.json and
   batches.json are staged from the committed out/ files only (scratch/stage_manifest.py writes the
   blobs with git hash-object/update-index), and the deck HTML is left for the next consistent build.
+
+### Part 1 — 탄생 이전 (2026-09-24, written early while subagents do parts 3–4)
+
+- 31 slides (budget 35): FAQ "Why did you create a new language?" / history / ancestors /
+  guiding principles / "Why does Go not have …", and Go at Google (SPLASH 2012) §5 numbers quoted
+  verbatim (ps.c 37 includes, 4.2 MB → 8 GB, 45 → 27 min) with claims rows. Principles are shown
+  as **1.27.1 behaviour** under `go 1.0`: go/token counts 25 keywords today (same as the 2012
+  talk), unused import / unexported name / implicit numeric conversion are compile errors
+  (EXPECT_FAIL), gofmt -d exits 1 with a diff, composition + implicit interface, errors as values,
+  the spec's concurrent prime sieve (cited to spec §An example package).
+- Dropped two memory sentences that had no source in docs/ (designers = Plan 9 people; sieve
+  "since Newsqueak"). Part 1 may get forward links refined after parts 3–8 exist (PLAN §5 order).
