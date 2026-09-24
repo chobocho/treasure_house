@@ -682,3 +682,17 @@ and the "오류 N건" line; read it every time.
   -benchtime=10000x (B/op unstable at 1000x).
 - gover.normalise now also masks indented sub-test durations ("    --- PASS: T/x (0.00s)"),
   test added; p03/p04 recaptured (p03 unchanged). Tests: 106.
+
+### Part 5 — Go 1.11–1.17 (subagent, 2026-09-24)
+
+- 101/130 slides (1.11: 13, 1.12: 13, 1.13: 16, 1.14: 10, 1.15: 13, 1.16: 17, 1.17: 17 + 2), 129
+  feature rows, 60 examples (7 EXPECT_FAIL), 98 captures (3 runs identical), 15 claims, 15
+  glossary lines (orchestrator fixed one line whose meaning contained '||', splitting the field).
+- Lang pairs: 1.13 literals / signed shift, 1.14 overlapping interfaces (old error "duplicate
+  method Close", not a requires-message), 1.17 slice→array pointer, unsafe.Add/Slice; module
+  graph pruning shown with  (go 1.16 vs 1.17 go.mod) and the 1.16
+  "builds no longer edit go.mod" behaviour (GOFLAGS=-mod=mod restores it).
+- Not reproducible here, so prose + CITE only: GODEBUG=asyncpreemptoff pair, checkptr, 1.17 stack
+  trace argument format (addresses vary). vet checks run one analyzer at a time because plain
+   printed findings in varying order. Captures borrow newer flags (,
+  ); slides say so.

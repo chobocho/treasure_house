@@ -1,3 +1,10 @@
+### [2026-09-24 23:22] Go의 진화 덱 5부 — Go 1.11–1.17 101장(서브에이전트, 캡처 98개)
+- **기획:** 모듈의 탄생과 가지치기, 오류 감싸기, 비동기 선점, embed·io/fs, //go:build, 레지스터 ABI. 언어 버전 짝은 1.13·1.14·1.17 기능에서.
+- **TC:** 캡처 98개(세 번 같음) — 정상(모듈·%w·embed 등) / 경계(go 1.12·1.13·1.16 으로 내리면 거절, 1.16 부터 빌드가 go.mod 를 안 고침, vet 경고 7종 exit≠0).
+- **개발:** `goevo/deck/sections/05_go111_117.html`, `goevo/data/features/p05.tsv`, `goevo/exps/p05.py`, `goevo/ex/05/`(60개), `goevo/deck/claims/p05.md`, `goevo/deck/glossary/p05.txt` 외
+- **검증:** 106 passed, 0 failed · 5부 조립·역검증·상호참조·주장·용어집 검사 통과(용어집 한 줄 칸 오류는 오케스트레이터가 고침)
+- **비고:** 비동기 선점 전의 멈춤·checkptr·1.17 스택 트레이스 인자는 이 기계에서 결정적으로 재현되지 않아 노트 인용만.
+
 ### [2026-09-24 20:57] Go의 진화 덱 4부 — Go 1.5–1.10 85장(서브에이전트, 캡처 69개)
 - **기획:** 자기 호스팅·동시 GC·vendor·HTTP/2·context·SSA·sort.Slice·타입 별칭·monotonic time·빌드 캐시. GC 멈춤의 역사는 ISMM 기조연설 문장을 그대로 인용.
 - **TC:** 캡처 69개 — 정상(context 취소·하위 시험·경계 검사 제거 등) / 경계(go 1.8 에서 타입 별칭 거절, vet 경고 3종 exit≠0, http2client=0 GODEBUG 짝). 들여쓴 하위 시험 시간 가리기 시험 1건 추가.
