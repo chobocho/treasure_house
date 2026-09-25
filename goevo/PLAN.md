@@ -785,3 +785,12 @@ and the "오류 N건" line; read it every time.
   `make demos` / `demos-check` (in `make all`). Five demos: timeline (p10), ladder (p10), api,
   godebug, which-version quiz (appendix). check_deck.js CASES: 16 expectations, each taken from
   data/·out/ (commented next to the case).
+
+### Step 9 — wrap-up (2026-09-25)
+
+- `make all` without SKEL: exit 0 (tests 130, examples 400 vet+gofmt with 59 EXPECT_FAIL skipped,
+  deck 755 slides 0 errors, verify/slices/xref/deck-check/claims/width/font all green).
+- index.html card (first in "🐹 Go 언어 시리즈") and README line with the build's numbers: 12 parts
+  (0–10 + appendix), 48 chapters, 755 slides, 637 captures, 400 examples, 5 demos, 44 quiz questions.
+  755 is below the 820–960 band; parts were not padded (PLAN §4 note). history.md/.html entry.
+- Next: review 1 and review 2 (§5 step 10), then `record.sh --check` (three full runs) before push.
