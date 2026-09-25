@@ -116,6 +116,8 @@ def normalise(text, work, scratch):
     # 먹으면 안 된다
     for path, name in ((work, '/work'), (scratch, '/scratch')):
         text = re.sub(re.escape(path) + r'(?![\w.-])', name, text)
+    # 캐시(go fix -diff 등)가 다른 작업 사본의 경로를 돌려줄 때가 있다
+    text = re.sub(r'/scratch/work/[^/\s]+(?=/)', '/work', text)
     text = re.sub(r'\bgoroutine \d+\b', 'goroutine N', text)
     text = re.sub(r'\b0xc[0-9a-f]{9,}\b', '0xc…', text)
     text = re.sub(r'\+0x[0-9a-f]+\b', '+0x…', text)

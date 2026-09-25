@@ -23,6 +23,14 @@ class Normalise(unittest.TestCase):
     def n(self, text, work='/s/work/07-x__go1.22'):
         return gover.normalise(text, work=work, scratch='/s')
 
+    def test_other_work_copy_from_cache(self):
+        # go fix -diff 의 출력은 GOCACHE 에서 나온다. 다른 작업 사본에서 만든
+        # 캐시가 쓰이면 그 사본의 경로가 머리 줄에 남는다 — 그것도 /work 로.
+        self.assertEqual(self.n('--- /s/work/try-p08-x/main.go (old)\n'),
+                         '--- /work/main.go (old)\n')
+        self.assertEqual(self.n('/s/work/08-y__go1.26/a.go:1\n'),
+                         '/work/a.go:1\n')
+
     def test_work_and_scratch_paths(self):
         self.assertEqual(self.n('/s/work/07-x__go1.22/main.go:3:2: x\n'),
                          '/work/main.go:3:2: x\n')

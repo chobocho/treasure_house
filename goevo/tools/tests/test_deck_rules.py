@@ -311,5 +311,25 @@ class SplitPart(unittest.TestCase):
         self.assertEqual(build_deck.budget_report(body), {8: 3, 9: 1})
 
 
+class SplitPartChapters(unittest.TestCase):
+    # 8부처럼 한 부를 여러 파일(08_·08b_·08c_)로 나누면 뒤 파일에는 부 표지가
+    # 없다. 앞 두 자리가 같으면 앞 파일의 부를 이어받아야 장 수가 맞다.
+    def test_chapters_in_continuation_files_count(self):
+        files = [
+            ('08_a.html', '<article class="card section" id="p8">'
+                          '<p class="chnum">8부</p></article>\n'
+                          '<article class="card" id="p8-c1">'
+                          '<p class="chnum">1장</p></article>\n'),
+            ('08b_b.html', '<article class="card" id="p8-c2">'
+                           '<p class="chnum">2장</p></article>\n'
+                           '<article class="card" id="p8-x"><h3>x</h3></article>\n'),
+            ('09_c.html', '<article class="card" id="p9-y"><h3>y</h3></article>\n'),
+        ]
+        where, chaps = check_xref.scan_texts(files)
+        self.assertEqual(chaps['8'], 2)
+        self.assertEqual(where['p8-x'], ('8', '2'))
+        self.assertEqual(where['p9-y'], (None, None))   # 다른 부는 잇지 않는다
+
+
 if __name__ == '__main__':
     unittest.main()

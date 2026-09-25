@@ -42,10 +42,24 @@ CHNUM = re.compile(r'<p class="chnum">([^<]+)</p>')
 
 def scan():
     """슬라이드 id → (부, 장). 부·장 표지가 나올 때마다 갈아 끼운다."""
-    where, chaps = {}, {}
+    files = []
     for f in sorted(glob.glob(os.path.join(SECTIONS, '*.html'))):
-        part = chap = None
-        for m in ART.finditer(io.open(f, encoding='utf-8').read()):
+        files.append((os.path.basename(f), io.open(f, encoding='utf-8').read()))
+    return scan_texts(files)
+
+
+def scan_texts(files):
+    """[(파일 이름, 글)] → scan() 과 같은 결과. 한 부가 여러 파일(08_·08b_)로
+    나뉘면 뒤 파일에는 부 표지가 없으므로, 앞 두 자리가 같은 앞 파일의 부와
+    장을 이어받는다. O(글 길이)."""
+    where, chaps = {}, {}
+    prev = (None, None, None)          # (앞 두 자리, 부, 장)
+    for name, text in files:
+        if name[:2] == prev[0]:
+            part, chap = prev[1], prev[2]
+        else:
+            part = chap = None
+        for m in ART.finditer(text):
             cm = CHNUM.search(m.group(2))
             if cm:
                 v = cm.group(1).strip()
@@ -56,6 +70,7 @@ def scan():
                     if part:
                         chaps[part] = max(chaps.get(part, 0), int(chap))
             where[m.group(1)] = (part, chap)
+        prev = (name[:2], part, chap)
     return where, chaps
 
 
