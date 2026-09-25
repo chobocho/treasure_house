@@ -449,6 +449,145 @@ def assign_cross():
     return f
 
 
+# ── 6. 개념도 — 추진·힘·쇼 현장 ────────────────────────────────────────
+
+@fig('stream_tube')
+def stream_tube():
+    """T1 — 모멘텀 이론의 흐름관. 멀리 위 0, 원판 v_i, 멀리 아래 2v_i."""
+    f = Fig(h=236, title='로터를 지나는 흐름관(모멘텀 이론 개념도)')
+    cx = 130
+    # 흐름관의 가장자리 — 위는 넓고 아래로 갈수록 좁아진다.
+    # 연속 방정식: 넓이 × 속도 가 일정 → 멀리 아래의 넓이는 원판의 ½,
+    # 반지름은 1/√2 배.
+    r_disk = 50.0
+    for side in (-1, 1):
+        pts = []
+        for y in range(22, 205, 6):
+            if y <= 96:
+                w = 1.0 + 0.9 * ((96 - y) / 74.0) ** 1.6
+            else:
+                w = 1 / math.sqrt(2) + (1 - 1 / math.sqrt(2)) * math.exp(
+                    -(y - 96) / 22.0)
+            pts.append((cx + side * r_disk * w, y))
+        f.path(pts, 'cv')
+    f.rect(cx - r_disk, 93, 2 * r_disk, 6, 'box g3')
+    f.text(240, 99, '로터 원판 A', 'lbl', 'start')
+    for y, v, lines in ((34, 0, ('멀리 위: 속도 0',)),
+                        (80, 1, ('원판 위: vᵢ',)),
+                        (130, 1, ('원판 아래: vᵢ', '(압력만 뛴다)')),
+                        (180, 2, ('멀리 아래: 2vᵢ', '넓이 A/2'))):
+        if v:
+            arrow(f, cx, y - 6 * v, cx, y + 6 * v, 'edge hot')
+        for k, line in enumerate(lines):
+            f.text(240, y + 3 + 10 * k, line, 'tick', 'start')
+    f.text(170, 218, '추력 T = 2ρA vᵢ² · 필요 동력 P = T vᵢ = T^(3/2)/√(2ρA)',
+           'cap')
+    f.text(170, 230, '화살 길이 = 흐름 속도(개념) · 공식은 4부 T1', 'cap')
+    return f
+
+
+@fig('freebody')
+def freebody():
+    """8부 — 쿼드로터에 걸리는 힘과 토크(옆에서 본 개념도)."""
+    f = Fig(h=210, title='쿼드로터의 자유물체도(옆에서 본 개념도)')
+    cx, cy = 170, 110
+    f.line(cx - 90, cy, cx + 90, cy, 'edge')
+    f.rect(cx - 14, cy - 8, 28, 16, 'box g3')
+    for dx, name in ((-80, 'T₂ = kT·Ω₂²'), (80, 'T₁ = kT·Ω₁²')):
+        f.rect(cx + dx - 18, cy - 4, 36, 3, 'box g5')
+        arrow(f, cx + dx, cy - 6, cx + dx, cy - 56, 'edge hot')
+        f.text(cx + dx, cy - 62, name, 'tick')
+    arrow(f, cx, cy + 10, cx, cy + 62, 'edge')
+    f.text(cx + 6, cy + 58, 'mg (무게)', 'tick', 'start')
+    # 몸 좌표축 — z_B 는 로터 추력의 방향
+    arrow(f, cx, cy, cx + 34, cy, 'edge dim')
+    f.text(cx + 36, cy + 11, 'x_B', 'tick', 'start')
+    arrow(f, cx, cy, cx, cy - 34, 'edge dim')
+    f.text(cx + 5, cy - 28, 'z_B', 'tick', 'start')
+    f.text(170, 22, '추력은 모두 z_B 방향 — 옆으로 가려면 몸을 기울인다',
+           'cap')
+    f.text(170, 190, '토크: 좌우 추력 차 × 팔 길이 = 굴림·키놀이, '
+           '반토크 kQ·Ω² 의 합 = 요', 'cap')
+    f.text(170, 202, '8부 T8(뉴턴-오일러)·T9(믹서)의 그림', 'cap')
+    return f
+
+
+@fig('showday')
+def showday():
+    """11부 — 쇼 당일 현장의 구성(개념도). 선 = 정보가 흐르는 길."""
+    f = Fig(h=224, title='드론쇼 현장의 구성(개념도)')
+    box(f, 12, 30, 92, 26, 'GNSS 위성', 'box g8')
+    box(f, 12, 90, 92, 26, 'RTK 기준국', 'box g2')
+    box(f, 124, 90, 92, 26, '지상국(GCS)', 'box g3')
+    box(f, 236, 60, 92, 26, '쇼 파일', 'box g4')
+    box(f, 236, 120, 92, 26, '안전 파일럿', 'box g5')
+    box(f, 124, 160, 92, 26, '기체 N대', 'box g7')
+    box(f, 12, 160, 92, 26, '지오펜스', 'box off')
+    arrow(f, 58, 56, 58, 88)
+    arrow(f, 104, 103, 122, 103)
+    arrow(f, 236, 73, 218, 96)
+    arrow(f, 170, 116, 170, 158, 'edge hot')
+    arrow(f, 236, 133, 218, 170, 'edge hot')
+    arrow(f, 104, 173, 122, 173, 'edge dim')
+    f.text(176, 140, '보정값 + 명령', 'tick', 'start')
+    f.text(282, 160, '정지·귀환 스위치', 'tick')
+    f.text(170, 206, '기준국이 GNSS 오차를 재어 보내면(RTK) 기체 위치가 '
+           'cm 급이 된다', 'cap')
+    f.text(170, 218, '굵은 선 = 현장 무선 링크 · 11부에서 차례로 풀어 본다',
+           'cap')
+    return f
+
+
+# (관할, 조문, 행 안에 있어야 할 말, 아래 끝 kg, 위 끝 kg, 칸 이름)
+WEIGHT_BANDS = [
+    ('KR', '제306조', '250 g 이하', 0.1, 0.25, '제외'),
+    ('KR', '제306조', '4종 무인동력비행장치: 최대이륙중량 250 g 초과 2 kg',
+     0.25, 2, '4종'),
+    ('KR', '제306조', '3종 무인동력비행장치: 최대이륙중량 2 kg 초과 7 kg',
+     2, 7, '3종'),
+    ('KR', '제306조', '2종 무인동력비행장치: 최대이륙중량 7 kg 초과 25 kg',
+     7, 25, '2종'),
+    ('KR', '제306조', '1종 무인동력비행장치: 최대이륙중량 25 kg 초과',
+     25, 150, '1종'),
+    ('US', '§107.110', '0.55 lb 이하', 0.1, 0.249, '범주1'),
+    ('US', '§107.3', '55 lb 미만', 0.249, 24.9, 'Part 107 small UAS'),
+    ('EU', 'PART 1', '250 g 미만', 0.1, 0.25, 'C0'),
+    ('EU', 'PART 2', '900 g 미만', 0.25, 0.9, 'C1'),
+    ('EU', 'PART 3', '4 kg 미만', 0.9, 4, 'C2'),
+    ('EU', 'PART 4', '25 kg 미만', 4, 25, 'C3·C4'),
+]
+
+
+@fig('weight_classes')
+def weight_classes():
+    """1부 — 무게로 나눈 등급, 한국·미국·EU (data/law.tsv 의 조문)."""
+    rows = tsv('law.tsv')
+    for jur, art, text, _lo, _hi, _name in WEIGHT_BANDS:
+        need(any(r['jurisdiction'] == jur and r['article'] == art
+                 and text in r['requirement(ko)'] for r in rows),
+             '%s %s 에 "%s"' % (jur, art, text))
+    f = Fig(h=210, title='무게로 나눈 등급 — 한국·미국·EU')
+    ax = Axes(f, 40, 20, 290, 120, (0.1, 200), (0, 3), xlog=True)
+    ax.grid(xs=(0.25, 2, 25, 150))
+    ax.xticks((0.1, 0.25, 1, 2, 7, 25, 150), '%g', '최대이륙중량 [kg] (로그 눈금)')
+    lane = {'KR': 2, 'US': 1, 'EU': 0}
+    colors = {'KR': 'g3', 'US': 'g6', 'EU': 'g4'}
+    for jur, _art, _t, lo, hi, name in WEIGHT_BANDS:
+        x0, y0 = ax.at(lo, lane[jur] + 0.9)
+        x1, y1 = ax.at(hi, lane[jur] + 0.1)
+        f.rect(x0 + 0.6, y0, x1 - x0 - 1.2, y1 - y0, 'box ' + colors[jur])
+        if x1 - x0 > 22:
+            f.text((x0 + x1) / 2, (y0 + y1) / 2 + 3, name, 'tick')
+    for jur, k in lane.items():
+        f.text(36, ax.at(1, k + 0.5)[1] + 3, jur, 'key', 'end')
+    f.text(185, 180, '칸 하나 = data/law.tsv 의 조문 한 줄 · KR 제외 = '
+           '조종자 증명 대상 밖', 'cap')
+    f.text(185, 192, 'US 범주1 = 사람 위 비행 · EU C0–C4 = 기체 클래스 · '
+           '빈 곳은 다른 절차', 'cap')
+    f.text(185, 204, 'KR 1종의 위 끝 150 kg 은 연료를 뺀 자체중량', 'cap')
+    return f
+
+
 def render_all():
     made = {}
     for name in sorted(FIGURES):
