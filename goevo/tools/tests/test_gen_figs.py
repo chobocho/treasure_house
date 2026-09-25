@@ -44,5 +44,17 @@ class Figures(unittest.TestCase):
         self.assertEqual(svg.count('class="dot5"'), len(with_sys))
 
 
+class Ladder(unittest.TestCase):
+    def test_cells_from_gate_onward(self):
+        # 기능마다, 막는 판부터 1.27 까지 칸을 채운다 — 칸 수가 곧 자료다
+        svg = gen_figs.FIGURES['ladder']().render()
+        rows = gen_figs.ladder_rows()
+        cols = gen_figs.LADDER_COLS
+        want = sum(1 for _, gate, _ in rows for c in cols
+                   if gen_figs.vkey(c) >= gen_figs.vkey(gate))
+        self.assertEqual(svg.count('class="cell on"'), want)
+        self.assertEqual(len(rows), 14)
+
+
 if __name__ == '__main__':
     unittest.main()

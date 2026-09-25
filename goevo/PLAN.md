@@ -738,3 +738,50 @@ and the "오류 N건" line; read it every time.
   its final pass: this session re-ran p07, split two CODE blocks over 45 lines (rangefunc 51,
   cleanup 46) with `lines=` ranges, and wrote deck/glossary/p07.txt (13 lines). No claims/p07.md:
   claims-check finds evidence for every year/version in the existing ledgers and data.
+
+### Infra 3 — cache paths, split-part chapters (2026-09-25)
+
+- gover.normalise: `go fix -diff` output is served from GOCACHE and may carry the path of
+  another work copy (`/scratch/work/<other-stem>/…`) — now mapped to `/work` as well (test RED
+  first). check_xref.scan_texts(): a file without its own part cover inherits the part/chapter
+  of the previous file with the same two-digit prefix (08b/08c), test RED first. Both found while
+  writing part 8 (one reported by the 1.26 subagent).
+
+### Part 8 — Go 1.25–1.27 (2026-09-25)
+
+- 113/160 slides in three files: 08_ cover + intro + 1.25 (40, subagent), 08b_ 1.26 (43,
+  subagent), 08c_ 1.27 (30, orchestrator). 136 feature rows (48/49/39), 75 examples, 136 captures;
+  p08·p08b·p08c·p10 re-run twice, sha256 identical. Every % figure spot-checked against the notes
+  and blog (greenteagc "roughly the modal improvement" etc.).
+- 1.27 evidence: generic methods and promoted-field keys are the only lang gates (go 1.26 →
+  "requires go1.27"); generalised inference is not gated; `(*Rand).N` from a go 1.26 module
+  compiles and only vet stdversion objects — which 1.27's go test now runs by default (captured
+  both ways); removed GODEBUG in go.mod: final default accepted, old value stops the go command;
+  traceback labels trio (go 1.27 / go 1.26 / tracebacklabels=0) via runtime.Stack's first line;
+  json v1 error messages identical under default and GOEXPERIMENT=nojsonv2 (nine more inputs
+  probed in scratch/probe/jd, all identical); simd under GOEXPERIMENT=simd reports 4 lanes.
+- Findings kept on slides: go mod init writes `go 1.27.1`, not the 1.26 notes' `go 1.(N-1).0`
+  (installed modload.CreateModFile uses gover.Local(); marked 미확인); `/sched/threads/total:threads`
+  vs the notes' `/sched/threads:threads`; nogreenteagc still present in 1.27.1; runtime/secret is a
+  no-op on android/arm64; big.Trunc/Floor/Ceil print as ToZero/… (shared RoundingMode).
+- Gotchas: `go test` captures need `-count=1` ("(cached)" otherwise); the assembler expands tabs
+  to 8 columns, stricter than tools/width.py.
+
+### Part 10 — flows, ladder, gallery, compatibility (2026-09-25)
+
+- 68/70 slides: timeline (9 generated tables), four flows (gen_tables.flow_kind_tables: per kind,
+  one row per version with links; test RED first) with a short narrative per kind, go.mod ladder
+  (tbl_ladder + ladder.svg looked at as PNG + 14 examples each with the refusal one version below),
+  modernisation gallery (five eras, identical output enforced by exps/p10, `go fix -diff` on the Go 1
+  style suggests only strings.FieldsSeq), compatibility (go1compat quote, the net.TCPAddr unkeyed
+  literal from the 2023 compat blog — today's compiler still refuses, vet flags the full unkeyed
+  form — API files, GODEBUG ledger, cost/benefit, "most important design decision").
+- Part 1 history table gained 2007-09-25 (name "Go", from toward-go2) as noted in the part 9 log.
+
+### Step 8 — demos (2026-09-25)
+
+- deck/gen_demos.py (tests 7, RED first) writes deck/demos.js = generated `var DATA` (releases,
+  timeline, features without the draft, ladder results, godebug, api_added) + deck/demos_src.js.
+  `make demos` / `demos-check` (in `make all`). Five demos: timeline (p10), ladder (p10), api,
+  godebug, which-version quiz (appendix). check_deck.js CASES: 16 expectations, each taken from
+  data/·out/ (commented next to the case).

@@ -234,6 +234,27 @@ if (!demoScripts.length) {
     // 아무것도 검사하지 않는 셈이 된다. 데모 하나에 적어도 둘이다.
     // 비어 있는 동안에는 7) 의 "빈 입력에서 안 죽는다" 까지만 본다.
     const CASES = [
+      // 연표 — releases.tsv: go1 2012-03-28, go1.13 2019-09-03 / timeline.tsv: 2019-02-25 Go 1.12 릴리스
+      ['timeline', { year: '2012' }, 'Go 1.0</span> (2012-03-28)', 'Go 1 이전'],
+      ['timeline', { year: '2019' }, 'Go 1.13</span> (2019-09-03)', null],
+      ['timeline', { year: '2019' }, '2019-02-25  Go 1.12 릴리스', null],
+      ['timeline', { year: '1999' }, '2007 ~ 2027', '최신판'],
+      // 어느 판 — features/p07.tsv: p7-122-rangeint 는 1.22
+      ['whichver', { card: 'p7-122-rangeint', guess: '1.22' }, '맞습니다', '틀렸습니다'],
+      ['whichver', { card: 'p7-122-rangeint', guess: 'go1.21' }, 'Go 1.22', '맞습니다'],
+      ['whichver', { card: 'nope' }, '없는 카드', null],
+      // 사다리 — out/ladder_data.txt: minmax 1.21, rangeint 1.22, alias 1.9
+      ['ladder', { go: '1.21' }, '✓</span> min·max·clear', '✓</span> 정수 range'],
+      ['ladder', { go: '1.8' }, '✗ 타입 별칭 (go 1.9)', '<span class="ok">'],
+      ['ladder', { go: 'go1.27' }, '✓</span> 제네릭 메서드', '✗ '],
+      // API — api_added.tsv: 1.21 은 새 패키지 5 · 새 기호 417 · syscall 1
+      ['api', { ver: '1.21' }, '새 패키지 <span class="ok">5</span>개 · 새 기호 417개 (그 가운데 syscall 1개)', null],
+      ['api', { ver: '1.21' }, 'log/slog', null],
+      ['api', { ver: '1.99' }, '가 없습니다', null],
+      // GODEBUG — godebug.tsv: panicnil runtime 1.21 1.21 1
+      ['godebug', { name: 'panicnil' }, '생긴 판 1.21 · 기본값이 바뀐 판 1.21 · 옛 값 panicnil=1', null],
+      ['godebug', { name: 'httpmuxgo121' }, '(net/http)  생긴 판 1.22', null],
+      ['godebug', { name: 'zzz' }, '없는 설정', '생긴 판'],
     ];
     let good = 0;
     for (const [id, values, want, wantNot] of CASES) {

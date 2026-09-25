@@ -141,6 +141,47 @@ def api_growth():
     return f
 
 
+LADDER_COLS = ['1.%d' % n for n in range(8, 28)]
+
+
+def vkey(v):
+    return tuple(int(x) for x in v.split('.'))
+
+
+def ladder_rows():
+    """out/ladder_data.txt — exps/p10.py 가 실제로 돌려 확인한 (예제, 판, 이름)."""
+    with io.open(os.path.join(OUT, 'ladder_data.txt'), encoding='utf-8') as f:
+        return [tuple(l.rstrip('\n').split('\t')) for l in f if l.strip()]
+
+
+@fig('ladder')
+def ladder():
+    """go.mod 의 go 줄 사다리 — 가로는 go 줄(1.8…1.27), 세로는 기능.
+
+    칸이 칠해졌으면 그 go 줄에서 컴파일된다. 칸의 시작은 exps/p10 이
+    '막는 판에서 통과, 한 판 아래에서 거절' 을 돌려 본 결과다."""
+    rows = ladder_rows()
+    need(len(rows) >= 14, '사다리 기능이 14개 이상')
+    need(all(vkey(g) >= (1, 9) for _, g, _ in rows), '막는 판이 1.9 이상')
+    x0, y0, cw, rh = 118, 22, 10.5, 11
+    f = Fig(h=y0 + rh * len(rows) + 34, title='go.mod 의 go 줄 사다리')
+    for j, c in enumerate(LADDER_COLS):
+        if (j % 3 == 0 and c != '1.26') or c == '1.27':
+            f.text(x0 + j * cw + cw / 2, y0 - 6, c[2:], 'tick')
+    for i, (_, gate, name) in enumerate(rows):
+        y = y0 + i * rh
+        f.text(x0 - 4, y + 8, name, 'tick', 'end')
+        for j, c in enumerate(LADDER_COLS):
+            cls = 'cell on' if vkey(c) >= vkey(gate) else 'cell off'
+            f.rect(x0 + j * cw, y, cw - 1, rh - 1.5, cls)
+    yb = y0 + rh * len(rows)
+    f.text(x0 + len(LADDER_COLS) * cw / 2, yb + 12,
+           'go.mod 의 go 1.N (N) — 칠한 칸 = 그 줄에서 컴파일된다', 'cap')
+    f.text(x0 + len(LADDER_COLS) * cw / 2, yb + 25,
+           '출처: go 1.27.1 로 돌린 out/10-ladder-*', 'cap')
+    return f
+
+
 def render_all():
     made = {}
     for name in sorted(FIGURES):

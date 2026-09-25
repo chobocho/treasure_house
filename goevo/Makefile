@@ -143,6 +143,14 @@ figs-png: figs          ## SVG 를 PNG 로 렌더해 본다 (.svgrender/)
 tables:                 ## data/*.tsv → out/tbl_*.html
 	$(PY) deck/gen_tables.py
 
+# 데모의 자료는 표에서 온다. 표를 고치고 demos 를 안 돌리면 데모가
+# 옛 자료를 보인다 — all 의 demos-check 가 잡는다.
+demos:                  ## 표 → deck/demos.js (데모 자료 + demos_src.js)
+	$(PY) deck/gen_demos.py
+
+demos-check:            ## demos.js 가 표와 같은지
+	$(PY) deck/gen_demos.py --check
+
 # 이 덱에서 가장 틀리기 쉬운 것은 코드가 아니라 "몇 버전" 이다.
 claims-check:           ## 인용한 문서 절·연도·버전에 근거가 있는가
 	$(PY) deck/check_claims.py
@@ -178,7 +186,8 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 ## 조립부터 검증까지 — 하나라도 걸리면 여기서 멈춘다
-all: test data-check examples-check tables run-check figs-check deck \
+all: test data-check examples-check tables run-check figs-check \
+     demos-check deck \
      deck-verify deck-slices deck-xref deck-check claims-check width \
      font font-check  ## 전부
 

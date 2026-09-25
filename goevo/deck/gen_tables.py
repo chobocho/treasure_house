@@ -229,6 +229,76 @@ def appendix_tables(releases, api, godebug, blog_index, fetched, per=14,
     return out
 
 
+def flow_tables(timeline, godebug, features, per=14):
+    """10부(흐름으로 다시 읽기)의 표.
+
+    연표: timeline.tsv 를 per 행씩. GODEBUG: 판마다 문서에 처음 적힌 설정의
+    수와 기본값이 바뀐 설정의 수 — 호환성 약속의 '비용' 이 판마다 얼마나
+    드는지. 갈래: 부(시대)마다 기능 목록의 kind 별 행 수. O(행 수)."""
+    out = _chunks('flow_timeline', ['날짜', '사건'],
+                  [(r['date'], r['event']) for r in timeline], per)
+    intro, changed = {}, {}
+    for g in godebug:
+        if g['introduced-in'] != '-':
+            intro[g['introduced-in']] = intro.get(g['introduced-in'], 0) + 1
+        if g['default-changed-in'] != '-':
+            v = g['default-changed-in']
+            changed[v] = changed.get(v, 0) + 1
+    vs = sorted(set(intro) | set(changed),
+                key=lambda v: tuple(int(x) for x in v.split('.')))
+    out['tbl_flow_godebug.html'] = _table(
+        ['판', '처음 적힌 설정', '기본값이 바뀐 설정'],
+        [(v, intro.get(v, 0), changed.get(v, 0)) for v in vs], (1, 2))
+    kinds = [k for k, _ in KIND_NAMES]
+    parts = {}
+    for f in features:
+        m = re.search(r'/p(\d\d)[a-z]?\.tsv$', f.get('_file', ''))
+        if m and f.get('kind') in kinds:
+            row = parts.setdefault(int(m.group(1)), dict((k, 0) for k in kinds))
+            row[f['kind']] += 1
+    out['tbl_flow_kinds.html'] = _table(
+        ['부'] + [n for _, n in KIND_NAMES],
+        [('%d부' % p,) + tuple(parts[p][k] for k in kinds)
+         for p in sorted(parts)], tuple(range(1, len(kinds) + 1)))
+    return out
+
+
+# 갈래마다 한 장에 싣는 판의 수 — 도구·표준 라이브러리는 판마다 줄이
+# 길어 적게 싣는다(접힌 화면에서 한 장이 넘치지 않게).
+FLOW_PER = {'lang': 10, 'runtime': 9, 'toolchain': 6, 'stdlib': 5,
+            'platform': 10, 'ecosystem': 10}
+
+
+def flow_kind_tables(features, per=None):
+    """10부 '네 갈래' — 갈래(kind)마다 판 순서의 표 tbl_flow_<kind>_N.html.
+
+    한 판의 기능은 한 칸에 · 로 잇고, 전용 장이 있으면 그리로 링크한다.
+    기능 목록에서 곧장 만들므로 8부처럼 나중에 쓴 부도 저절로 들어온다.
+    O(행 수 · log 판 수)."""
+    per = dict(FLOW_PER, **(per or {}))
+    e = lambda s: html.escape(s, quote=False)
+    out = {}
+    for kind, _ in KIND_NAMES:
+        byver = {}
+        for f in features:
+            if f.get('kind') != kind:
+                continue
+            t = e(f.get('title', ''))
+            sid = f.get('slide-id', '')
+            byver.setdefault(f['version'], []).append(
+                '<a href="#%s">%s</a>' % (sid, t) if sid else t)
+        vs = sorted(byver, key=lambda v: tuple(int(x) for x in v.split('.')))
+        n = per[kind]
+        for k in range(0, len(vs), n):
+            rows = ['<table>', '<tr><th>판</th><th>바뀐 것</th></tr>']
+            rows += ['<tr><td>%s</td><td>%s</td></tr>'
+                     % (v, ' · '.join(byver[v])) for v in vs[k:k + n]]
+            rows.append('</table>')
+            out['tbl_flow_%s_%d.html' % (kind, k // n + 1)] = \
+                '\n'.join(rows) + '\n'
+    return out
+
+
 def dict_rows(name):
     head, body = rows_of(name)
     return [dict(zip(head, r)) for r in body]
@@ -262,6 +332,10 @@ def build():
                                         dict_rows('api_added.tsv'),
                                         dict_rows('godebug.tsv'),
                                         read(index), fetched))
+        made.update(flow_tables(dict_rows('timeline.tsv'),
+                                dict_rows('godebug.tsv'),
+                                cites.feature_rows(BASE)))
+        made.update(flow_kind_tables(cites.feature_rows(BASE)))
     for out_name, tsv, cols, filt in VIEWS:
         head, body = rows_of(tsv)
         if filt:
