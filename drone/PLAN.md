@@ -1124,3 +1124,17 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   scale and 300-drone transition tables, physics mode (all 12; 4 longest of 60; 3 longest of
   300): max tracking error 9.5 / 10.5 / 8.2 cm. tight60: min distance 1.061 m = 1.5/√2 exactly.
 - Part 16: 57 slides, 8 chapters, a quiz per chapter + part quiz, claims/p16.md, glossary/p16.
+
+### Part 13 — 트릭 모음 (2026-09-25, 0449433)
+
+- 64 slides, 12 chapters, one experiment batch exps/p13 (24 files) and ex/shape_pgm.py (P2
+  heart/star; 6 tests first). Every trick is a simulator function (tricks.* / formation.image).
+- Measured and stated as found: filled heart width grows ∝ √n (300 drones 61.2 m vs 202 m
+  single outline / 93 m triple outline in 16부); Lloyd relaxation made the 60-drone heart less
+  even (CV 0.086 → 0.100) and both hearts slightly larger (min-pair scaling); 2.5-D chessboard
+  depth: front spacing dmin + depth dmin → 3-D √2·dmin (transition-safe), front dmin/√2 → only
+  static-safe; rigid rotation keeps 2.1213 m, a single straight 90° transition dips to 2.001 m;
+  wave limits Aω² ≤ a_max bind before Aω; LED-only motion moves 0.000 m; dithering beats
+  rounding for groups of 2/3/8 but loses at 4 (0.0179 vs 0.0231); staggered takeoff raises
+  min spacing (1.225 → 1.451, 1.500 → 2.067 m) but increases our downwash-exposure proxy
+  (580.7 → 1130.2 pair·s). T35 stays "cited" (Skybrush layered takeoff) — not implemented.
