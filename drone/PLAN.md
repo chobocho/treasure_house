@@ -969,3 +969,17 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
 - Assembler: SHOW counts as evidence for the "실행 검증" badge. SHOW snapshots rendered to PNG
   and inspected: heart/text read well; rings from the top collapse into one circle, so that
   slide uses the audience view.
+
+### Part 14 — 파이썬 시뮬레이터 (2026-09-25)
+
+- 144 slides (budget 200), 9 chapters. Every module: what/why (+ the theorems it witnesses)
+  → one test excerpt (`CODE sym=`) → RED and GREEN captures on one slide → FULLSRC. All
+  2,364 lines of py/droneshow/ are now shown (pending.txt no longer lists them).
+- exps/p14: `red_<m>`/`green_<m>` for 22 modules (+ green_golden), CLI captures (help, plan
+  of ex/spec_small.json → out/show_p14.json, info, fly kinematic/physics, csv head). 23 s.
+- The section file was produced from a per-module table by scratch/gen14.py (not committed;
+  the section file is the source from now on — edit it directly).
+- deck/chunks.py: Python cut points also at indented `def`/`@` after a blank line (class
+  methods were cut mid-body at 42 lines), JS cut points at two-space `function/class/const/
+  let/// ─` (droneshow.js is one IIFE), and a ≤ 6-line tail chunk is merged into the
+  previous one when the result fits in 45 lines.

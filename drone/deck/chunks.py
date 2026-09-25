@@ -66,6 +66,21 @@ def split(text, lang, maxlines=42, minlines=14):
         for i, ln in enumerate(lines):
             if pat.match(ln):
                 cuts.add(i)
+    if lang == 'py':
+        # 클래스 안의 메서드 — 빈 줄 다음의 들여쓴 def 도 자를 자리다.
+        # 없으면 클래스 하나(Controller)가 42줄마다 메서드 한가운데서
+        # 잘린다(드론 덱 14부에서 발견).
+        for i, ln in enumerate(lines):
+            if (i and lines[i - 1].strip() == ''
+                    and re.match(r'^ {4}(?:def |@)', ln)):
+                cuts.add(i)
+    if lang == 'js':
+        # 파일 전체가 즉시 실행 함수 하나라 최상위(들여쓰기 0) 경계가 없다.
+        # 두 칸 들여쓴 정의·절 머리 주석을 경계로 쓴다.
+        js = re.compile(r'^  (?:function |class |const |let |// ─)')
+        for i, ln in enumerate(lines):
+            if js.match(ln):
+                cuts.add(i)
     if lang == 'java':
         # 자바는 파일 전체가 class 하나다. 최상위 경계만 쓰면 자를 자리가
         # 두어 곳뿐이라 조각이 42줄을 훌쩍 넘긴다. 클래스 안의 멤버 선언
@@ -91,6 +106,11 @@ def split(text, lang, maxlines=42, minlines=14):
                 end = best
         out.append((start + 1, end))
         start = end
+    # 서너 줄짜리 꼬리 조각은 슬라이드 한 장을 쓸 값어치가 없다 —
+    # 앞 조각에 붙여도 45줄을 넘지 않으면 붙인다.
+    if (len(out) > 1 and out[-1][1] - out[-1][0] + 1 <= 6
+            and out[-1][1] - out[-2][0] + 1 <= 45):
+        out[-2:] = [(out[-2][0], out[-1][1])]
     return out
 
 
