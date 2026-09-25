@@ -1209,3 +1209,67 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   certified category & U-space, Part 89 Remote ID, 드론법 제10조·제17조, pilot
   qualifications); no numbers for noise/environment; military debate stated neutrally.
 - Makefile shown in 14부 (make all target) and dropped from pending.txt (320a251).
+
+### Part 6 — 통신과 소프트웨어 (2026-09-25, subagent)
+
+- 129 slides (budget 140), 11 chapters + sources/summary: RC link (bands, FHSS toy, ELRS
+  packet rate vs sensitivity, free-space link budget, RSSI/LQ, receiver protocols, CRSF frame +
+  CRC8, baud ceiling, signal-loss behaviour), telemetry (SiK, ELRS telemetry bandwidth vs a 1 Hz
+  HEARTBEAT, heartbeat service, broadcast vs guaranteed delivery, CRSF link statistics), MAVLink
+  anatomy (format, HEARTBEAT XML + enum values, field reordering, pack/run/bytes table, zero
+  truncation, unpack, checksum.h excerpt, x25, CRC_EXTRA from the doc algorithm, seq/ids,
+  signing), CRC (**L28** sketch: the skipped step is "shift/XOR register = remainder mod G",
+  checked by a capture; the rest is full — a product with ≥ 2 terms keeps its distinct top and
+  bottom terms, so G never divides x^k), flight-controller hardware, the three firmwares (PX4
+  modules/uORB/rates, ArduPilot libraries/AP_HAL/AP_Scheduler with the Copter task table,
+  Betaflight task table), ground stations + mission upload protocol, video link (analog VTX,
+  OSD kinds, digital via MSP/DisplayPort — no numbers, no primary comparison data found),
+  failsafe/RTL/geofence (ArduPilot + PX4 docs, test procedure, fence margin), Remote ID
+  (Part 89 §89.105/110/305/310, EU 2019/945 direct remote identification + C1 list, Open Drone
+  ID MAVLink), logs (DataFlash/tlog, ULog bytes, Flight Review / ArduPilot diagnosis rules).
+- New ex programs, tests first (RED 36/36 NotImplementedError on stubs, then GREEN, 36 tests):
+  ex/mavlink_xml.py (XML excerpt → stable size sort → CRC_EXTRA incl. array length byte,
+  extensions excluded; reproduces minimal.h's 50 and **217** for PROTOCOL_VERSION),
+  ex/crsf_crc.py (bitwise CRC8 0xD5 checked against the spec's table rows, frame/check, tick
+  macros, 8N1 time), ex/rf_link.py (FSPL, inverse, budget; x25-seeded per-cycle shuffle hop
+  toy), ex/geofence.py (cylinder, even-odd polygon with half-open edges, v²/2a, first breach),
+  ex/ulog_mini.py (ULog subset writer/reader: header, 'B' first with size 40, I/F/A/D/L,
+  monotonic timestamps; not read by pyulog — no numpy here). ex/mavlink_parse.py now shown in
+  full (removed from deck/pending.txt).
+- Excerpts (tools/excerpt.py): mavlink-protocol-version.xml (common.xml L7720-7728),
+  ardupilot-scheduler-table.cpp (Copter.cpp @9f648cca L115-154), betaflight-task-table.c
+  (tasks.c @70a6a38d L380-414). Indented excerpts are cited from line 1 (header) because
+  check_slices E8 only exempts comment starts at line 2.
+- exps/p06 (24 files, ~7 s, identical on a second run): 11 captures, 13 tables.
+- **Findings:** (1) x25 (checksum.h) equals bitwise reflected division by 0x8408 on 1000/1000
+  random messages → G = x¹⁶+x¹²+x⁵+1 (the docs only name "CRC-16/MCRF4XX"). (2) Exhaustive
+  error counts on the 160 covered bits of a HEARTBEAT: 1-, 2-, 3-bit errors all caught, 4-bit
+  1,174 of 26,294,360 missed; CRSF CRC-8: singles and triples all caught, doubles 105 of 18,336
+  missed. (3) Bursts: b ≤ 12 all caught; b = 16 misses 4 — **all straddling the data/checksum
+  boundary**, because CRC_EXTRA sits between them in the computation but not on the wire; not
+  straddling: 0 misses up to 16, 128 at 17. (4) Free-space model vs docs: ELRS 250 Hz 100 mW
+  24.6–38.9 km vs "over 40 km … or 400 m"; SiK 292 km vs "about 500 m". (5) Fence overshoot
+  in our 6-DOF sim (25 Hz check, hold at breach): 5 m/s → 2.536 m vs v²/2a 1.820 at the 35° tilt
+  limit; 1 m/s → 0.295 m, above both formula values (reaction dominates). (6) Motor-thrust loss
+  at 2 s: 0.8 → 9.24° max attitude error (recovers), 0 → >10° after 0.088 s and flips — the
+  ArduPilot "desired vs actual diverge" signature. (7) Mission upload model: simulated and
+  closed-form failure rates agree (0.0405 vs 0.0426 at p = 0.2).
+- Sources: 53 cite keys (MAVLink minimal.h/overview/heartbeat/mission/signing/opendroneid,
+  ExpressLRS ×6, TBS CRSF spec @001b4058, ArduPilot ×22 incl. Copter.cpp, Betaflight tasks.c,
+  PX4 ×15, QGC, HDZero). elrs-start and elrs-tech fetched but not cited. claims/p06.md 65
+  rows, glossary 30 words. EU 2019/945 has no § lines → CITE without sec, verified-how quotes.
+- `make all SKEL=1`: all my checks green; fails only in others' files — claims-check
+  "242대" in 10_trajectory.html (dc0f0a8) and width on ex/tests/test_p12_skybrush_csv.py:62.
+
+### Step 12 — wrap-up (2026-09-25, a4864be)
+
+- `make all` green **without SKEL** (rc 0): 1,300 slides, 19 parts, 132 chapters, 91 theorems
+  (70 full, all referenced), coverage 5,500/5,500 lines, 155 quizzes, 186 glossary terms,
+  431 files in out/, 15 figures, 253 cite keys; tests tools 156 · py 225 · ex 141 · js 11.
+- Determinism: every batch rerun twice → byte-identical (found and refreshed the stale p00
+  capture from before the curve-sampling fix, eea64cc).
+- Review 2 (proof audit, dc0f0a8): 4 missing full proofs (M26, L16, L17, L23), 9 missing
+  tools/hypothesis lines, L24 counterexample computed via L8. Checklist in
+  scratch/review2/proofs.tsv.
+- index.html: new section "🛸 드론 & 비행 로봇 🚁" after 네트워크 & 무선; README line;
+  history.md rotated (ab5af77) and entry added.

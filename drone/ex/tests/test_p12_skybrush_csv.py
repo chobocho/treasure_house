@@ -59,7 +59,8 @@ class Csv(unittest.TestCase):
     def test_zip_is_byte_for_byte_reproducible(self):
         # 파일 시각을 고정하지 않으면 같은 쇼도 zip 이 매번 달라진다
         with tempfile.TemporaryDirectory() as tmp:
-            a, b = os.path.join(tmp, 'a.zip'), os.path.join(tmp, 'b.zip')
+            a = os.path.join(tmp, 'a.zip')
+            b = os.path.join(tmp, 'b.zip')
             K.write_zip(SHOW, a)
             K.write_zip(SHOW, b)
             with open(a, 'rb') as fa, open(b, 'rb') as fb:
