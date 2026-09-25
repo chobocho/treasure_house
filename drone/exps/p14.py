@@ -11,7 +11,33 @@ MODULES = ['rng', 'vec3', 'quat', 'params', 'linalg', 'rigidbody', 'motor',
 ENV = {'PYTHONPATH': 'py'}
 
 
+def modules(ctx):
+    """모듈마다 줄 수와 시험 수 — 파일에서 센다(표를 손으로 적지
+    않는다). 시험 수는 tests/test_<모듈>.py 의 def test_ 줄 수."""
+    import os
+    names = sorted(f[:-3] for f in os.listdir('py/droneshow')
+                   if f.endswith('.py'))
+    cells = []
+    for n in names:
+        with open('py/droneshow/%s.py' % n, encoding='utf-8') as f:
+            lines = sum(1 for _ in f)
+        t = 'py/tests/test_%s.py' % n
+        tests = '—'
+        if os.path.exists(t):
+            with open(t, encoding='utf-8') as f:
+                got = [l for l in f if l.lstrip().startswith('def test_')]
+            tests = '%d' % len(got)
+        cells.append([n, '%d' % lines, tests])
+    half = (len(cells) + 1) // 2
+    rows = [a + (cells[half + k] if half + k < len(cells) else
+                 ['', '', ''])
+            for k, a in enumerate(cells[:half])]
+    ctx.table('p14_modules', ['모듈', '줄', '시험'] * 2, rows,
+              num=(1, 2, 4, 5))
+
+
 def run(ctx):
+    modules(ctx)
     for m in MODULES:
         ctx.red(m)
         ctx.green(m)
