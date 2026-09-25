@@ -3,3 +3,1102 @@
 <h2>기술 III — 통신과 소프트웨어</h2>
 <p class="chsub">RC 링크·텔레메트리·MAVLink 패킷 해부·펌웨어 3대·페일세이프 · 1부를 읽고 오세요</p>
 </article>
+
+<article class="card" id="p6-intro">
+<h2>이 부의 지도</h2>
+<p class="lead">드론은 하늘에 떠 있는 컴퓨터이고, 땅과 말을 주고받습니다. 조종 명령이 오가는 무선, 상태를 내려보내는 텔레메트리, 그 위에 실리는 패킷, 패킷을 받아 모터까지 이어 주는 펌웨어, 그리고 무엇인가 끊겼을 때의 약속을 차례로 봅니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>장</th><th>무엇</th><th>예제·정리</th></tr>
+<tr><td>1 RC 링크</td><td>대역·도약·감도·수신기 프로토콜·CRSF</td><td>ex/rf_link.py, ex/crsf_crc.py</td></tr>
+<tr><td>2 텔레메트리</td><td>SiK·ExpressLRS 텔레메트리·하트비트</td><td>대역 표</td></tr>
+<tr><td>3 MAVLink 해부</td><td>HEARTBEAT 한 통을 바이트까지</td><td>ex/mavlink_parse.py, ex/mavlink_xml.py</td></tr>
+<tr><td>4 CRC</td><td>왜 비트 하나를 놓치지 않나</td><td>L28</td></tr>
+<tr><td>5 비행 컨트롤러</td><td>보드·포트·Pixhawk 표준</td><td>문서 근거</td></tr>
+<tr><td>6 펌웨어 셋</td><td>PX4·ArduPilot·Betaflight 의 뼈대</td><td>발췌 둘</td></tr>
+<tr><td>7 지상국</td><td>QGroundControl·Mission Planner·미션 규약</td><td>손실 모델</td></tr>
+<tr><td>8 영상 링크</td><td>아날로그와 디지털, OSD</td><td>문서 근거</td></tr>
+<tr><td>9 페일세이프</td><td>무선·배터리·지상국·귀환·지오펜스</td><td>ex/geofence.py</td></tr>
+<tr><td>10 원격 ID</td><td>미국 Part 89·EU 2019/945·Open Drone ID</td><td>문서 근거</td></tr>
+<tr><td>11 로그</td><td>ULog·DataFlash·고장의 모양</td><td>ex/ulog_mini.py</td></tr>
+</table></div>
+<p class="cap">전파의 물리(변조·안테나·다중 경로)는 <b>무선통신_대백과사전.html</b> 이 맡습니다. 이 부는 드론이 그 위에서 무엇을 주고받는지를 봅니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1장 RC 링크 -->
+
+<article class="card section" id="p6-c1"><p class="chnum">1장</p><h2>RC 링크 — 손가락에서 수신기까지</h2>
+<p class="chsub">2.4 GHz 와 900 MHz · 주파수 도약 · 감도와 거리 · 수신기가 비행 컨트롤러에 말하는 법</p></article>
+
+<article class="card" id="p6-rc-what">
+<h3>RC 시스템은 무엇으로 이루어지나</h3>
+<p class="why">PX4 문서는 RC 시스템을 조종자가 손에 든 조종기와, 기체의 무선 모듈이 짝을 이룬 것으로 설명합니다. 둘 다 주고받을 수 있어도 땅쪽을 송신기, 기체쪽을 수신기라 부르고, 수신기는 비행 컨트롤러에 이어집니다 <!--CITE key=px4-rc sec="How do RC Systems Work?"-->.</p>
+<ul>
+<li><b>채널</b>: 조종기의 스틱·스위치 하나하나가 채널입니다. 항공기는 롤·피치·요·추력 네 채널이 적어도 있어야 하고, 8·16채널이면 비행 모드 같은 기능을 더 올릴 수 있다고 같은 문서가 적습니다 <!--CITE key=px4-rc sec="How do RC Systems Work?"-->.</li>
+<li><b>묶기(bind)</b>: 송신기와 수신기가 서로하고만 말하도록 짝을 맺는 절차이고, 방법은 제품마다 다릅니다 <!--CITE key=px4-rc sec="Binding Transmitter/Receiver"-->.</li>
+<li>PX4 는 자율 비행 모드에는 수동 조종 장치가 꼭 있어야 하지는 않다고 적습니다 <!--CITE key=px4-rc sec="Radio Control Systems"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-rc-bands">
+<h3>2.4 GHz 와 900 MHz — 파장이 가르는 것</h3>
+<p class="why">RC 링크는 주로 2.4 GHz 와 868/915 MHz 대역을 씁니다. ExpressLRS 문서는 같은 대역이면 제조사가 달라도 수신기와 송신 모듈이 함께 동작한다고 적고 <!--CITE key=elrs-faq sec="Will x Receiver work with y TX Module from z Manufacturer?"-->, 2.4 GHz 는 안테나가 915 MHz 보다 2.5배 작고 도약할 주파수 폭이 넓으며, 868/915 MHz 는 투과가 좋아 장거리에 유리하다고 비교합니다 <!--CITE key=elrs-signal sec="#Team868/#Team915 or #Team2.4"-->.</p>
+<!--TABLE file=out/tbl_p06_bands.html cap=exps/p06.py rf_bands — 파장 = c/f, 1 km 손실은 자유 공간 모델-->
+<ul>
+<li>파장의 비는 2.67 — 문서의 "2.5배 작다" 는 반파장·4분의 1 파장 안테나가 파장에 비례하기 때문입니다.</li>
+<li>같은 거리에서 자유 공간 손실은 주파수가 높을수록 큽니다(915 MHz 91.7 dB, 2.44 GHz 100.2 dB). 대신 높은 주파수는 작은 안테나로 이득을 얻기 쉽습니다 — 이 덱은 안테나를 다루지 않습니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-fhss">
+<h3>주파수 도약 — 한 채널에 머물지 않는다</h3>
+<p class="why">한 주파수에만 머물면 그 주파수를 누가 막을 때 링크 전체가 끊깁니다. 주파수 도약 확산 스펙트럼(FHSS)은 송신기와 수신기가 약속한 순서로 채널을 옮겨 다니며 잠깐씩만 한 채널을 씁니다. SiK 텔레메트리 무선도 기능 목록에 FHSS 를 적습니다 <!--CITE key=ardupilot-sik sec="Features"-->.</p>
+<ul>
+<li>ExpressLRS 에서 묶음 문구(binding phrase)는 해시되어 도약 순서를 정하는 난수 생성기의 씨앗이 됩니다. 문서는 이것이 보안이 아니라 <b>충돌을 줄이려는</b> 장치라고 못 박습니다 <!--CITE key=elrs-faq sec="Is my binding phrase a secret?"-->.</li>
+<li>그래서 문서는 적어도 여덟 글자의 고유한 문구를 권하고, 암호나 비밀 키가 아니라고 적습니다 <!--CITE key=elrs-binding sec="Unique Phrase"-->.</li>
+</ul>
+<!--CODE file=ex/rf_link.py sym=hops note=이 덱의 장난감 — 문구의 x25 해시를 씨앗으로, 주기마다 채널을 한 번씩-->
+<p class="cap">해시·섞는 법은 이 덱이 고른 것입니다. ExpressLRS 의 실제 알고리즘이 아닙니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-fhss-block">
+<h3>막힌 채널이 있을 때 — 도약은 손실을 나눠 갖는다</h3>
+<p class="why">채널 40개 가운데 k 개를 다른 기기가 막고 있다고 해 봅니다(모델). 한 채널에 머무는 링크는 운이 나쁘면 전부, 좋으면 하나도 잃지 않습니다. 도약하는 링크는 주기마다 모든 채널을 한 번씩 밟으므로 정확히 k/N 만 잃습니다.</p>
+<!--TABLE file=out/tbl_p06_hop_block.html cap=exps/p06.py rf_hop — 50주기 2,000칸, 막힌 채널은 10번부터 연속 k 개-->
+<p>"모 아니면 도" 가 "조금씩 늘 잃음" 으로 바뀝니다. 조금씩 잃는 것은 다음 패킷이 곧 오므로 견딜 수 있습니다 — 링크 품질(LQ)이 100 % 에서 조금 내려앉는 모습입니다(몇 장 뒤).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-fhss-collide">
+<h3>두 조종자가 같은 하늘에 — 부딪힘은 약 1/N</h3>
+<p class="why">서로 다른 문구의 두 링크가 같은 시각에 같은 채널에 있을 확률은, 두 수열이 서로 무관하면 1/N 입니다. 문구가 달라야 하는 까닭이 이것입니다 — 같은 문구면 두 링크가 늘 같은 채널에 있습니다.</p>
+<!--TABLE file=out/tbl_p06_hop_collide.html cap=exps/p06.py rf_hop — 400주기, 문구 pilot-a 와 pilot-b-->
+<p>채널이 많을수록 부딪힘이 줄어듭니다. 2.4 GHz 가 "도약할 폭이 넓어 한꺼번에 여러 조종자가 날 수 있다" 는 문서의 말 <!--CITE key=elrs-signal sec="#Team868/#Team915 or #Team2.4"--> 을 이 표가 수로 보여 줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-elrs-rates">
+<h3>패킷 빠르기와 감도 — 둘을 함께 가질 수는 없다</h3>
+<p class="why">ExpressLRS 는 초당 패킷 수(패킷 레이트)를 고를 수 있습니다. 문서의 표에서 2.4 GHz 는 50 Hz 가 −115 dBm, 250 Hz 가 −108 dBm, 500 Hz 가 −105 dBm 까지 알아듣고, 900 MHz 25 Hz 는 −123 dBm 까지 내려갑니다. 느린 레이트일수록 민감합니다 <!--CITE key=elrs-signal sec="RSSI Sensitivity Limit"--> <!--CITE key=elrs-signal sec="RF Mode Indexes (RFMD)"-->.</p>
+<ul>
+<li>감도 한계는 수신기가 구별할 수 있는 가장 약한 신호이고, 문서는 경고를 그보다 5–10 dB 위에 두라고 권합니다 <!--CITE key=elrs-signal sec="RSSI Sensitivity Limit"-->.</li>
+<li>문서는 ExpressLRS 가 1000 Hz 까지 가능하다고 적습니다 <!--CITE key=elrs-faq sec="How does ExpressLRS compare to other systems?"-->.</li>
+<li>스틱 네 채널은 늘 10비트 해상도로 보내고, 모두 합쳐 16채널까지 다룬다고 적습니다 <!--CITE key=elrs-faq sec="How many channels does ELRS support?"-->.</li>
+</ul>
+<p class="cap">패킷을 짧게 자주 보내면 반응이 빠르지만, 한 패킷에 쓸 에너지가 줄어 먼 곳의 약한 신호를 못 알아듣습니다. 레이서는 빠르기를, 장거리 비행은 감도를 고릅니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-budget-model">
+<h3>링크 예산 — 송신 출력에서 감도까지 몇 dB 가 남나</h3>
+<p class="why">송신 출력 P[dBm] 에 두 안테나 이득을 더하고, 수신기가 알아듣는 가장 약한 신호(감도)를 빼면 길에서 잃어도 되는 손실이 나옵니다. 장애물·반사가 없는 빈 공간이라면 그 손실은 거리의 제곱에 비례합니다.</p>
+<div class="eq">FSPL = 20·log<sub>10</sub>(4π<i>d f</i>/<i>c</i>) dB &nbsp;⟹&nbsp; <i>d</i> = 10<sup>손실/20</sup>·<i>c</i>/(4π<i>f</i>)</div>
+<!--CODE file=ex/rf_link.py sym=dbm..budget note=자유 공간 손실과 그 역함수, 예산-->
+<p class="cap">거리가 두 배면 손실이 20·log<sub>10</sub>2 ≈ 6.02 dB 늘어납니다(시험 test_fspl_distance_doubling_is_6db).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-budget-table">
+<h3>모델이 말하는 거리, 문서가 말하는 거리</h3>
+<!--TABLE file=out/tbl_p06_budget.html cap=exps/p06.py rf_budget — 모델. 감도는 ExpressLRS·SiK 문서 값, 출력 100 mW, 안테나 이득은 가정-->
+<ul>
+<li>ExpressLRS 문서: 2.4 GHz 250 Hz 100 mW 무지향 안테나로 40 km 넘게도 가고, 400 m 에서 그칠 수도 있다 <!--CITE key=elrs-signal sec="How far can I go on X mW?"-->. 모델은 24.6–38.9 km — 좋은 날의 윗한계와 비슷합니다.</li>
+<li>SiK 문서: 표준 구성의 보통 거리는 약 500 m <!--CITE key=ardupilot-sik sec="Expected range"-->. 모델은 수백 km — 모델이 빠뜨린 것(땅 반사, 가림, 잡음, 안테나 방향)이 몇 백 배를 먹습니다.</li>
+</ul>
+<div class="warn">자유 공간 거리는 <b>넘을 수 없는 윗한계</b>이지 기대값이 아닙니다. 문서는 거리를 가르는 가장 큰 요인이 가시선이고 둘째가 간섭이라고 적습니다 <!--CITE key=elrs-signal sec="How far can I go on X mW?"-->.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-power">
+<h3>출력을 두 배로 올리면</h3>
+<!--OUT file=p06_power.txt note=자유 공간에서 출력 두 배 = 거리 √2 배-->
+<p class="why">빈 공간이라면 출력 두 배는 거리 41 % 를 늘립니다. 그런데 ExpressLRS 문서는 간섭 때문에 출력을 두 배로 올릴 때마다 쓸 만한 거리가 10 % 쯤밖에 늘지 않을 수 있다고 적습니다 <!--CITE key=elrs-signal sec="How far can I go on X mW?"-->.</p>
+<p>차이의 까닭: 간섭이 있으면 수신기가 알아듣는 한계가 감도가 아니라 <b>잡음 위로 얼마나 올라왔나</b>(SNR)로 정해집니다. 출력을 높이면 신호와 함께 반사·다른 링크와의 부딪힘도 그대로 남습니다. 그래서 문서는 SNR 을 따로 보고, 출력을 SNR 로 조절합니다 <!--CITE key=elrs-signal sec="What about SNR?"-->.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-lq">
+<h3>RSSI 와 LQ — 얼마나 큰 소리인가, 얼마나 알아들었나</h3>
+<ul>
+<li><b>RSSI</b>(dBm): 받은 신호의 세기. 0 에서 내려가며, 감도 한계보다 커야 알아듣습니다 <!--CITE key=elrs-signal sec="Two Types of Signal Health"-->.</li>
+<li><b>LQ</b>(%): 알아들은 패킷의 비율. ExpressLRS 의 RQly 는 송신기에서 온 마지막 100 개 가운데 성공한 수입니다 <!--CITE key=elrs-faq sec="What does RQly, TQLY, RSSI x2, SNR x2 mean?"-->.</li>
+<li>문서는 하나만 본다면 LQ 를 보라고 합니다 — 패킷이 오지 않으면 날 수 없기 때문입니다. RSSI 는 "절벽" 이 얼마나 가까운지를 알려 줍니다 <!--CITE key=elrs-signal sec="Which do I care about?"-->.</li>
+</ul>
+<p class="cap"><a href="#p6-fhss-block">도약 표</a>에서 막힌 채널 4개는 LQ 를 90 % 로 떨어뜨리지만 RSSI 는 그대로입니다. 세기는 충분한데 대화가 끊기는 경우 — 문서의 "에어혼" 비유와 같습니다 <!--CITE key=elrs-signal sec="Two Types of Signal Health"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-rx-protocols">
+<h3>수신기가 비행 컨트롤러에 말하는 법</h3>
+<p class="why">수신기와 비행 컨트롤러 사이에도 규약이 있습니다. ArduPilot 은 PPM-Sum, SBus, i-BUS, FPort, Spektrum DSM, SRXL, CRSF(ExpressLRS 포함), SUM-D, IRC Ghost 등을 받으며 대부분을 자동으로 알아낸다고 적습니다 <!--CITE key=ardupilot-rc-systems sec="Compatible RC Protocols"--> <!--CITE key=ardupilot-rc-systems sec="Connecting the Receiver"-->.</p>
+<ul>
+<li><b>PPM-Sum·SBus</b>: 선 하나로 모든 채널. RC IN 핀에 꽂습니다 <!--CITE key=ardupilot-rc-systems sec="PPM-Sum/SBus/i-BUS"-->. SBus 는 반전된 신호라 반전을 고를 수 없는 F4 보드의 UART 에는 바깥 인버터가 필요합니다 <!--CITE key=ardupilot-rc-systems sec="RC input to Serial Port"-->.</li>
+<li><b>CRSF·SRXL2</b>: 양방향이라 UART 의 송·수신 두 선을 다 씁니다 <!--CITE key=ardupilot-rc-systems sec="Connecting the Receiver"-->. PX4 도 Crossfire·ExpressLRS 수신기를 여분 UART 로 잇습니다 <!--CITE key=px4-rc sec="Connecting Receivers"-->.</li>
+<li>ArduPilot 은 대부분의 기체에 적어도 5채널이 필요하다고 적습니다 <!--CITE key=ardupilot-rc-systems sec="Number of channels"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-crsf-frame">
+<h3>CRSF 틀 — 동기·길이·유형·내용·CRC8</h3>
+<p class="why">TBS 의 CRSF 규격: 틀은 64 바이트를 넘지 않고, 동기 바이트 0xC8(또는 주소), 길이(유형부터 CRC 까지, 2–62), 유형, 내용, CRC 순입니다. CRC 는 유형과 내용만 덮고, 다항식은 x⁷+x⁶+x⁴+x²+1(0xD5) 입니다 <!--CITE key=crsf-spec sec="Structure"--> <!--CITE key=crsf-spec sec="Frame Details"--> <!--CITE key=crsf-spec sec="CRC"-->.</p>
+<!--CODE file=ex/crsf_crc.py sym=crc8..check note=표 없이 비트마다 나누는 CRC8, 틀 싸기·풀기-->
+<p class="cap">규격은 256칸 표로 계산합니다. 시험 test_table_matches_spec 이 우리 비트 나눗셈으로 만든 256 값의 첫 줄·끝 줄이 규격 표와 같음을 확인합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-crsf-run">
+<h3>RC 채널 틀 하나 — 16채널을 22바이트에</h3>
+<p class="why">유형 0x16 은 16채널을 11비트씩 22바이트에 담습니다. 가운데 1500 µs 가 틱 992 이고, 규격이 두 매크로로 µs 와 틱을 오갑니다 <!--CITE key=crsf-spec sec="0x16 RC Channels Packed Payload"-->.</p>
+<!--CODE file=ex/crsf_crc.py sym=us_to_ticks..frame_time_us note=규격의 두 매크로와 8N1 전송 시간-->
+<!--OUT file=p06_crsf.txt note=내용은 0…21 을 채운 연습 — 11비트 채널을 비트로 싸는 순서는 다루지 않는다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-crsf-time">
+<h3>보 속도가 패킷 레이트의 천장을 정한다</h3>
+<p class="why">CRSF 규격은 기체 쪽 UART 가 기본 416666 보 8N1 이고, 틀의 빠르기는 가장 긴 틀이 한 주기 안에 들어가도록 보 속도에 맞춰 골라야 한다고 적습니다 <!--CITE key=crsf-spec sec="Dual-Wire Full-Duplex UART"--> <!--CITE key=crsf-spec sec="Single-Wire Half-Duplex UART"-->.</p>
+<!--TABLE file=out/tbl_p06_crsf_time.html cap=exps/p06.py crsf_timing — 26바이트 RC 틀, 바이트마다 10비트-->
+<p>115200 보에서는 RC 틀 하나에 2.26 ms — 틀만 잇대도 초당 443 개가 끝입니다. ExpressLRS 문서가 1000 Hz 를 쓰려면 조종기와 송신 모듈 사이 보 속도를 적어도 921000 으로 두라고 하는 것 <!--CITE key=elrs-faq sec="What is required to achieve a 1000 Hz update rate on 2.4 GHz?"--> 과 같은 산수입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-rc-loss">
+<h3>신호가 끊기면 수신기는 무엇을 내보내나</h3>
+<p class="why">PX4 문서는 수신기가 신호를 잃었음을 알리는 방법 셋을 적습니다: 아무것도 내보내지 않기(PX4 가 스스로 알아챔), 스로틀을 낮은 값으로 내보내기(설정하면 알아챔), 마지막 값을 계속 내보내기 — 마지막 것은 <b>PX4 가 다룰 수 없다</b>고 적습니다 <!--CITE key=px4-rc sec="Set Signal-Loss Behaviour"-->.</p>
+<ul>
+<li>CRSF 규격: 끊김 방식이 "cut" 이면 RC 채널 틀이 더는 오지 않고, 비행 컨트롤러는 1초 기다린 뒤 페일세이프를 시작하라고 권합니다 <!--CITE key=crsf-spec sec="0x16 RC Channels Packed Payload"-->.</li>
+<li>ArduPilot 도 싸구려 수신기가 마지막 값을 붙들고 있으면 비행 컨트롤러가 조종을 잃은 줄 모른다고 경고합니다 <!--CITE key=ardupilot-radio-failsafe sec="Receiver Configuration"-->.</li>
+</ul>
+<div class="warn">"마지막 값 유지" 는 링크가 끊겨도 드론이 계속 마지막 스틱대로 날아간다는 뜻입니다. 9장의 무선 페일세이프는 수신기가 끊김을 <b>알려 줄 때만</b> 동작합니다.</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-c1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 친구와 같은 묶음 문구로 각자의 드론을 한 들판에서 날리면 어떤 일이 생길 수 있을까요? 채널이 40개인 도약 모델로 말해 보세요.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 문구가 같으면 도약 순서도 같아서(문구가 씨앗) 두 링크가 늘 같은 시각에 같은 채널을 씁니다 — 부딪힘이 1/40 이 아니라 거의 매 칸입니다. 수신기가 엉뚱한 송신기의 패킷을 받을 수도 있습니다. 그래서 문서는 고유한 문구를 권합니다. 문구는 비밀이 아니라 "서로 다른 순서" 를 만드는 장치입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 2장 텔레메트리 -->
+
+<article class="card section" id="p6-c2"><p class="chnum">2장</p><h2>텔레메트리 — 기체가 땅에 말하는 길</h2>
+<p class="chsub">텔레메트리 무선 · SiK · RC 링크에 실린 텔레메트리 · 하트비트</p></article>
+
+<article class="card" id="p6-telem-what">
+<h3>텔레메트리 무선은 무엇을 하나</h3>
+<p class="why">PX4 문서: 텔레메트리 무선은 QGroundControl 같은 지상국과 기체 사이에 MAVLink 연결을 만들어, 날면서 매개변수를 조율하고 상태를 실시간으로 보고 미션을 바꾸게 해 줍니다 <!--CITE key=px4-telemetry sec="Telemetry Radios/Modems"-->.</p>
+<ul>
+<li>대부분의 텔레메트리 무선은 UART 로 비행 컨트롤러에 붙고 MAVLink 1 이나 2 를 씁니다 <!--CITE key=ardupilot-telemetry sec="Telemetry (landing page)"-->.</li>
+<li>와이파이 텔레메트리는 보통 거리가 짧고 데이터 속도가 높아 영상도 싣기 쉽다고 PX4 문서가 적습니다 <!--CITE key=px4-telemetry sec="Telemetry Radios/Modems"-->.</li>
+<li>허용 대역은 나라마다 다르고, 대체로 미국은 915 MHz, EU·아프리카·오세아니아·아시아 대부분은 433 MHz 를 쓸 수 있다고 적습니다 — 자기 나라 법을 확인하라는 말과 함께 <!--CITE key=px4-telemetry sec="Allowed Frequency Bands"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-sik">
+<h3>SiK 무선 — MAVLink 를 위해 만든 투명 직렬 링크</h3>
+<p class="why">SiK 는 텔레메트리 무선용 오픈소스 펌웨어입니다. ArduPilot 문서가 적는 특징: 수신 감도 −121 dBm, 송신 20 dBm(100 mW), 공중 속도 250 kbps 까지, MAVLink 틀 인식, FHSS, 적응형 시분할(TDM), 데이터 비트 오류를 25 % 까지 고치는 오류 정정 부호 <!--CITE key=ardupilot-sik sec="Features"-->.</p>
+<ul>
+<li>보통 거리는 약 500 m 이고 잡음원과 안테나에 따라 크게 다르다고 적습니다 <!--CITE key=ardupilot-sik sec="Expected range"--> — <a href="#p6-budget-table">1장 예산 표</a>의 자유 공간 거리와 견주어 보세요.</li>
+<li>거리 문제를 찾을 때는 두 무선을 1 m 떨어뜨려 RSSI 가 190 을 넘는지부터 보라고 권합니다 <!--CITE key=ardupilot-sik sec="Diagnosing range issues"-->.</li>
+<li>여럿이 함께 날면 무선마다 다른 Net ID 를 줍니다 <!--CITE key=ardupilot-sik sec="Configuring using the Mission Planner"-->. 기체 쪽 무선은 비행 컨트롤러의 TELEM1 에 꽂습니다 <!--CITE key=px4-sik sec="Setup/Configuration"-->.</li>
+</ul>
+<p class="cap">"오류 정정" 은 4장의 CRC(오류 <b>검출</b>)와 다릅니다 — 정정은 여분의 비트로 틀린 비트를 되돌리고, 검출은 틀렸다는 것만 압니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-elrs-telem">
+<h3>RC 링크에 텔레메트리를 실으면 — 대역이 좁다</h3>
+<p class="why">ExpressLRS 는 조종 패킷 사이사이에 텔레메트리 패킷을 끼웁니다. 텔레메트리 비율(1:2 … 1:128)만큼 칸을 내주고, 링크 통계(LINK)와 비행 컨트롤러 데이터(DATA)가 그 칸을 나눠 씁니다 <!--CITE key=elrs-telem sec="Telemetry Bandwidth"-->.</p>
+<!--TABLE file=out/tbl_p06_telem_fit.html cap=exps/p06.py telem_fit — bps 는 ExpressLRS 문서 표의 250 Hz 줄, HEARTBEAT 는 3장의 21바이트 패킷(모델)-->
+<p>1:128 이면 하트비트 하나(초당 168비트)도 대역을 넘습니다. 1:2 로 칸을 많이 내주면 여유가 생기지만 그만큼 조종 패킷이 줄어듭니다. SiK 의 250 kbps 와는 자릿수가 다릅니다 — RC 링크의 텔레메트리는 배터리 전압·링크 품질처럼 짧은 값을 위한 것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-heartbeat-svc">
+<h3>하트비트 — "나 여기 있다" 를 1초마다</h3>
+<p class="why">MAVLink 의 하트비트 규약: 구성 요소는 HEARTBEAT 를 정기적으로 방송하고 남의 하트비트를 지켜봅니다. 무선 텔레메트리에서는 보통 1 Hz 로 보내고 네다섯 개를 못 받으면 연결이 끊겼다고 봅니다 — 정확한 값은 MAVLink 가 정하지 않고 채널에 맡깁니다 <!--CITE key=mavlink-heartbeat-svc sec="HEARTBEAT Broadcast Frequency"-->.</p>
+<ul>
+<li>고장 난 상태에서는 하트비트를 보내지 말라고 합니다 — 나머지 상태를 모르는 별도 스레드가 하트비트만 보내면 "살아 있다" 는 거짓말이 됩니다 <!--CITE key=mavlink-heartbeat-svc sec="HEARTBEAT Broadcast Frequency"-->.</li>
+<li>QGroundControl 은 비행체(다른 지상국·짐벌이 아닌)에만, 그리고 시스템 ID 가 0 이 아닐 때만 연결합니다 <!--CITE key=mavlink-heartbeat-svc sec="Connecting to a GCS or MAVLink API"-->.</li>
+<li>구성 요소의 종류는 id 가 아니라 HEARTBEAT 의 type·autopilot 칸으로 알아냅니다 <!--CITE key=mavlink-heartbeat-svc sec="Component Identity"-->.</li>
+</ul>
+<p class="cap">9장의 지상국 페일세이프는 바로 이 하트비트가 끊긴 시간을 잽니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-topic-p2p">
+<h3>방송과 확인 배달 — 두 가지 말하기</h3>
+<p class="why">MAVLink 개요 문서: 위치·자세 같은 스트림은 받는 이가 여럿(기체 컴퓨터, 지상국, 클라우드)이므로 대상 ID 없이 방송합니다. 미션·매개변수처럼 설정을 바꾸는 일은 대상 시스템·구성 요소를 적고 다시 보내기로 배달을 보장합니다 <!--CITE key=mavlink-overview sec="Multicast Streams vs. Guaranteed Delivery"--> <!--CITE key=mavlink-overview sec="Point-to-Point Mode"-->.</p>
+<ul>
+<li>방송: 잃어도 곧 새 값이 오므로 다시 보내지 않습니다 — 대역을 아낍니다.</li>
+<li>확인 배달: 한 항목이라도 빠지면 미션이 틀리므로, 응답이 없으면 다시 청합니다(7장의 미션 규약).</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-crsf-telem">
+<h3>CRSF 의 링크 통계 틀</h3>
+<p class="why">CRSF 규격의 0x14 틀은 링크 상태를 한 묶음으로 보냅니다: 위·아래 링크의 RSSI(dBm 에 −1 을 곱한 값), 링크 품질(%), SNR(dB), 쓰는 안테나, RF 프로필, 송신 출력 <!--CITE key=crsf-spec sec="0x14 Link Statistics"-->.</p>
+<p>비행 컨트롤러는 이 값을 OSD·로그·페일세이프 판단에 씁니다. ExpressLRS 는 LQ 와 RSSI 를 채널 15·16 으로도 내보낸다고 문서가 적습니다 <!--CITE key=elrs-signal sec="RSSI Value OSD field"-->.</p>
+<p class="cap">같은 규격에 MAVLink 를 CRSF 틀에 싸서 보내는 유형(0xAA)도 있습니다 <!--CITE key=crsf-spec sec="0xAA CRSF MAVLink Envelope"--> — 규약 위에 규약을 싣는 흔한 방식입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-c2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 하트비트를 별도의 타이머 스레드에서 1초마다 보내도록 짰습니다. 무엇이 문제일까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 본체가 멈추거나 고장 나도 타이머 스레드는 계속 하트비트를 보내, 지상국은 기체가 멀쩡하다고 믿습니다. 지상국 페일세이프도 하트비트로 연결을 판단하므로 끊김을 알아채지 못합니다. MAVLink 문서가 "고장 상태를 모르는 별도 스레드에서 보내지 말라" 고 하는 까닭입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 3장 MAVLink 해부 -->
+
+<article class="card section" id="p6-c3"><p class="chnum">3장</p><h2>MAVLink 패킷 해부 — HEARTBEAT 한 통을 바이트까지</h2>
+<p class="chsub">틀 · 필드 순서 · 0 자르기 · x25 체크섬 · CRC_EXTRA · 서명</p></article>
+
+<article class="card" id="p6-mav-what">
+<h3>MAVLink 는 어떤 규약인가</h3>
+<p class="why">MAVLink 는 자원과 대역이 빠듯한 시스템을 위한 이진 텔레메트리 규약이고, 판 1.0 과 2.0 이 있으며 2.0 구현은 1.0 패킷도 읽고 보냅니다 <!--CITE key=mavlink-overview sec="Protocol Overview"-->.</p>
+<ul>
+<li>메시지 구조는 페이로드에 싣지 않습니다. 보내는 쪽과 받는 쪽이 같은 정의(XML)를 알고 있어야 합니다 <!--CITE key=mavlink-serialization sec="Payload Format"-->.</li>
+<li>여러 바이트 값은 리틀 엔디언으로 보냅니다 <!--CITE key=mavlink-serialization sec="Packet Format"-->.</li>
+<li>MAVLink 2 틀: 0xFD, 길이, 비호환·호환 깃발, 차례 번호, 시스템·구성 요소 ID, 24비트 메시지 ID, 페이로드(최대 255), 체크섬 2바이트, (선택) 서명 13바이트. 가장 짧은 패킷 12바이트, 가장 긴 서명 패킷 280바이트 <!--CITE key=mavlink-serialization sec="MAVLink 2 Packet Format"-->.</li>
+<li>MAVLink 1 은 0xFE 로 시작하고 깃발·서명이 없으며 메시지 ID 가 한 바이트입니다 <!--CITE key=mavlink-serialization sec="MAVLink 1 Packet Format"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-mav-xml">
+<h3>HEARTBEAT 의 정의 — XML 여섯 칸</h3>
+<p class="why">HEARTBEAT(메시지 id 0)의 정의는 minimal.xml 에 있습니다 <!--CITE key=mavlink-minimal-xml sec="minimal.xml"-->. 흔히 쓰는 common.xml 은 맨 앞에서 standard.xml 을 끌어들이는 식으로 정의 파일을 겹겹이 쌓습니다 <!--CITE key=mavlink-common-xml sec="common.xml"-->.</p>
+<!--CODE file=data/excerpts/mavlink-heartbeat.xml lines=1-10 wrap=1 note=minimal.xml — LGPL-3.0(생성 코드는 MIT), 줄이 길어 화면에서 접었다-->
+<p class="cap">custom_mode 만 4바이트이고 나머지는 1바이트입니다. mavlink_version 의 형 uint8_t_mavlink_version 은 "사용자가 쓰지 않고 규약이 넣는" 특별한 형이라고 설명에 적혀 있습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-mav-enums">
+<h3>이 덱이 싸 보낼 값 — 뜻은 열거형에서</h3>
+<p class="why">HEARTBEAT 의 칸 대부분은 minimal.xml 의 열거형 값입니다. 이 장의 예제는 다음 값을 싣습니다 <!--CITE key=mavlink-minimal-xml sec="minimal.xml"-->.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>칸</th><th>값</th><th>열거형 항목</th></tr>
+<tr><td>type</td><td>2</td><td>MAV_TYPE_QUADROTOR</td></tr>
+<tr><td>autopilot</td><td>12</td><td>MAV_AUTOPILOT_PX4 (ArduPilot 은 3)</td></tr>
+<tr><td>base_mode</td><td>0x81</td><td>MAV_MODE_FLAG_SAFETY_ARMED(128) + CUSTOM_MODE_ENABLED(1)</td></tr>
+<tr><td>system_status</td><td>4</td><td>MAV_STATE_ACTIVE (3 은 STANDBY)</td></tr>
+<tr><td>mavlink_version</td><td>3</td><td>규약이 채우는 값 — 예제가 3 을 넣었다</td></tr>
+</table></div>
+<p class="cap">값은 이 덱이 고른 예입니다(무장한 PX4 쿼드). 실제 비행 컨트롤러가 보내는 custom_mode 는 펌웨어마다 비행 모드를 제 방식으로 담습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-mav-order">
+<h3>보내는 순서는 XML 순서가 아니다</h3>
+<p class="why">직렬화 문서: 필드를 크기로 정렬해 보냅니다 — 8바이트, 4바이트, 2바이트, 1바이트 순이고, 같은 크기끼리는 원래 순서를 지킵니다(안정 정렬). 배열은 원소의 형으로 셉니다. 정렬 덕분에 메모리 정렬 문제 없이 빠르게 싸고 풉니다 <!--CITE key=mavlink-serialization sec="Field Reordering"--> <!--CITE key=mavlink-overview sec="Serialization"-->.</p>
+<!--CODE file=ex/mavlink_parse.py lines=10-15 note=HEARTBEAT 의 전송 순서를 손으로 — custom_mode 가 맨 앞으로-->
+<p>XML 에서는 넷째인 custom_mode 가 전송 순서로는 맨 앞입니다. 이 목록이 맞는지는 뒤에서 XML 을 기계로 정렬한 결과와 대조합니다(시험 test_wire_order_matches_hand_list).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-pack">
+<h3>한 통 싸기 — 머리, 몸, 체크섬</h3>
+<!--CODE file=ex/mavlink_parse.py sym=pack note=struct 로 리틀 엔디언 머리 9바이트와 페이로드 9바이트-->
+<ul>
+<li>페이로드 끝의 0 바이트는 잘라 보냅니다(두 장 뒤).</li>
+<li>체크섬은 첫 바이트(0xFD)를 뺀 머리+몸에 <b>CRC_EXTRA 한 바이트를 더해</b> 계산합니다 — 그 바이트는 보내지 않습니다 <!--CITE key=mavlink-serialization sec="Checksum"-->.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-run">
+<h3>돌려 보기 — 21바이트</h3>
+<!--OUT file=p06_mavlink.txt note=ex/mavlink_parse.py — 싸고, 풀고, 한 비트를 뒤집어 본다-->
+<p class="why">21바이트 = 머리 10(0xFD 포함) + 페이로드 9 + 체크섬 2. 다시 푼 값이 넣은 값과 같고, 바이트 12(0부터 셈)의 한 비트만 뒤집어도 체크섬이 어긋나 버려집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-bytes">
+<h3>바이트마다 읽기</h3>
+<!--TABLE file=out/tbl_p06_mav_bytes.html cap=exps/p06.py mav_bytes — 캡처의 21바이트를 칸마다-->
+<p class="cap">msgid 0 은 세 바이트 모두 0 입니다. 여러 바이트 칸은 낮은 바이트가 먼저 옵니다 — 체크섬 0x3E20 이 "20 3e" 로 적힌 까닭입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-trunc">
+<h3>끝의 0 을 자른다 — 길이는 값에 따라 달라진다</h3>
+<p class="why">MAVLink 2 는 직렬화한 페이로드 끝의 0 바이트를 자르고 len 을 줄여 보냅니다. 첫 바이트는 모두 0 이어도 자르지 않고, 중간의 0 은 그대로 둡니다. MAVLink 1 은 늘 다 보냅니다 <!--CITE key=mavlink-serialization sec="Empty-Byte Payload Truncation (MAVLink 2)"-->.</p>
+<!--TABLE file=out/tbl_p06_mav_trunc.html cap=exps/p06.py mav_trunc — 받는 쪽은 잘린 만큼 0 을 붙여 되살린다-->
+<p class="cap">셋째 줄: custom_mode 가 5 이고 나머지가 0 이면 페이로드가 1바이트까지 줄어듭니다. 정렬 때문에 뒤쪽엔 작은 필드가 모이므로 잘리는 것도 주로 그것들입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-unpack">
+<h3>풀기 — 체크섬부터 본다</h3>
+<!--CODE file=ex/mavlink_parse.py sym=unpack note=체크섬이 맞을 때만 필드를 믿는다-->
+<p class="why">받는 쪽은 자기 CRC_EXTRA 를 더해 체크섬을 다시 계산하고, 맞지 않으면 버립니다. 직렬화 문서는 C 라이브러리가 이때 MAVLINK_FRAMING_BAD_CRC 상태를 낸다고 적습니다 <!--CITE key=mavlink-serialization sec="Payload Format"-->.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-x25-c">
+<h3>체크섬 원본 — checksum.h 의 한 바이트 누적</h3>
+<!--CODE file=data/excerpts/mavlink-crc-accumulate.h lines=2-35 wrap=1 note=c_library_v2 checksum.h — MIT(MAVLink 생성 코드)-->
+<p class="cap">초깃값 0xffff, 바이트마다 시프트와 XOR 세 번. 곱셈도 표도 없습니다. 이름은 CRC-16/MCRF4XX 이고 직렬화 문서도 그 이름을 씁니다 <!--CITE key=mavlink-serialization sec="Checksum"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-mav-x25">
+<h3>같은 식을 파이썬으로</h3>
+<!--CODE file=ex/mavlink_parse.py sym=x25 note=crc_accumulate 를 바이트마다 — & 0xFF, & 0xFFFF 가 C 의 형 너비 대신-->
+<p class="why">C 의 uint8_t 는 넘치면 저절로 잘리지만 파이썬 정수는 커지기만 하므로 & 로 자릅니다. 시험 test_crc_check_value 는 입력 '123456789' 의 값을 0x6F91 로 못 박아, 함수를 고치다 식이 바뀌면 바로 알립니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-extra">
+<h3>CRC_EXTRA — 정의가 같은지까지 검사한다</h3>
+<p class="why">체크섬만으로는 "비트가 안 바뀌었다" 까지만 압니다. 두 쪽의 메시지 정의가 다르면(필드 하나를 더했거나 형을 바꿨으면) 바이트는 멀쩡해도 뜻이 틀립니다. 그래서 생성기가 메시지마다 정의의 체크섬 한 바이트(CRC_EXTRA)를 만들고, 보내는 쪽과 받는 쪽이 각자 자기 값을 체크섬 끝에 더합니다. 다르면 체크섬이 맞지 않습니다 <!--CITE key=mavlink-serialization sec="CRC_EXTRA Calculation"-->.</p>
+<ul>
+<li>계산법: 메시지 이름과 빈칸, 전송 순서로 필드마다 형·이름과 빈칸, 배열이면 길이 한 바이트를 x25 에 넣고, 16비트 결과의 두 바이트를 XOR 합니다. 확장 필드는 넣지 않습니다 <!--CITE key=mavlink-serialization sec="CRC_EXTRA Calculation"-->.</li>
+<li>C 라이브러리의 생성 헤더 minimal.h 는 메시지 0 의 값을 50 으로, 메시지 300 의 값을 217 로 적어 둡니다(MAVLINK_MESSAGE_CRCS) <!--CITE key=mavlink-minimal-h sec="minimal.h"-->.</li>
+</ul>
+<!--CODE file=ex/mavlink_parse.py sym=crc_extra note=문서의 절차를 HEARTBEAT 에 — 배열 없음-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-xmlcode">
+<h3>XML 에서 곧장 — 정렬과 배열까지</h3>
+<!--CODE file=ex/mavlink_xml.py sym=parse..crc_extra note=발췌 XML → 전송 순서 → CRC_EXTRA-->
+<p class="cap">배열 PROTOCOL_VERSION 의 spec_version_hash[8] 는 형 uint8_t 로 정렬되고, 길이 8 이 한 바이트로 더해집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-xmlrun">
+<h3>두 메시지로 확인 — 50 과 217</h3>
+<!--CODE file=data/excerpts/mavlink-protocol-version.xml lines=1-10 wrap=1 note=common.xml 의 PROTOCOL_VERSION — 배열 필드 둘-->
+<!--OUT file=p06_mavxml.txt note=ex/mavlink_xml.py — 생성 헤더의 두 값을 다시 만든다-->
+<p class="cap">두 값 모두 minimal.h 와 같습니다(시험 test_heartbeat_extra_is_50, test_protocol_version_extra_is_217). 이 발췌의 PROTOCOL_VERSION 에는 "지원을 빼는 중" 이라는 deprecated 표시가 붙어 있습니다 — 정의는 그대로라 값도 그대로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-mismatch">
+<h3>정의가 어긋나면 — 멀쩡한 바이트도 버려진다</h3>
+<!--OUT file=p06_mav_mismatch.txt note=필드를 XML 순서대로 정렬한 '잘못된 구현' 이 같은 패킷을 받을 때-->
+<p class="why">직렬화 문서는 CRC_EXTRA 를 정렬한 <b>뒤</b>의 순서로 계산하는 까닭을 "정렬을 잘못 구현하면 체크섬이 틀리게 해 잡으려고" 라고 적습니다 <!--CITE key=mavlink-serialization sec="Field Reordering"-->. 캡처가 정확히 그 경우입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mav-seq">
+<h3>차례 번호와 ID — 잃은 것과 보낸 이를 안다</h3>
+<ul>
+<li><b>seq</b>: 구성 요소가 보낼 때마다 1씩 올립니다. 받는 쪽은 건너뛴 번호로 잃은 패킷 수를 셉니다 <!--CITE key=mavlink-serialization sec="MAVLink 2 Packet Format"-->. 한 바이트라 255 다음은 0 입니다.</li>
+<li><b>sysid</b>: 보낸 시스템(기체), 1–255. 0 은 방송 주소라 보낸 이로 쓸 수 없습니다. <b>compid</b>: 한 시스템 안의 구성 요소(비행 컨트롤러, 카메라 …) <!--CITE key=mavlink-serialization sec="MAVLink 2 Packet Format"-->.</li>
+<li><b>incompat_flags</b>: 이해하지 못하는 깃발이 있으면 패킷을 버려야 합니다. 지금 정의된 것은 0x01 서명뿐입니다 <!--CITE key=mavlink-serialization sec="Incompatibility Flags (MAVLink 2)"-->.</li>
+</ul>
+<p class="cap">드론쇼처럼 한 지상국이 여러 대를 부릴 때는 기체마다 sysid 가 달라야 합니다 — 같은 id 두 대는 지상국에게 한 대로 보입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-mav-signing">
+<h3>서명 — 체크섬은 자물쇠가 아니다</h3>
+<p class="why">x25 체크섬과 CRC_EXTRA 는 누구나 계산할 수 있습니다. 누가 보냈는지를 확인하려면 MAVLink 2 의 서명을 씁니다: 비호환 깃발 0x01 을 켜고 13바이트(링크 ID 1바이트, 타임스탬프 48비트, 서명 48비트)를 덧붙입니다 <!--CITE key=mavlink-signing sec="Frame Format"-->.</p>
+<ul>
+<li>서명은 32바이트 비밀 키 뒤에 패킷 전체(머리·페이로드·CRC·링크 ID·타임스탬프)를 붙여 SHA-256 을 계산한 결과의 앞 48비트입니다 <!--CITE key=mavlink-signing sec="Signature"-->.</li>
+<li>타임스탬프는 2015-01-01 부터 10 µs 단위로 세고, 같은 링크에서 늘기만 해야 합니다 <!--CITE key=mavlink-signing sec="Timestamp Handling"-->.</li>
+</ul>
+<p class="cap">ArduPilot 텔레메트리 문서도 서명을 "보안" 항목으로 따로 둡니다 <!--CITE key=ardupilot-telemetry sec="Applications and Info"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-c3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 누군가 HEARTBEAT 정의에 uint16_t 필드를 확장(extensions) 없이 맨 끝에 더한 펌웨어를 만들었습니다. 원래 정의를 쓰는 지상국은 이 기체의 HEARTBEAT 를 받을까요? 확장 필드로 더했다면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 확장 없이 더하면 CRC_EXTRA 가 달라져(이름·형이 계산에 들어가므로) 체크섬이 맞지 않고, 지상국은 모든 HEARTBEAT 를 버립니다 — 기체가 보이지 않습니다. 확장 필드는 CRC_EXTRA 계산에서 빠지므로 값이 그대로이고, 옛 지상국은 모르는 끝 바이트를 무시하고 받습니다. 시험 test_extensions_are_left_out 이 이것을 확인합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 4장 CRC -->
+
+<article class="card section" id="p6-c4"><p class="chnum">4장</p><h2>CRC — 왜 비트 하나를 놓치지 않나</h2>
+<p class="chsub">비트열 = 다항식 · 체크섬 차이는 오류에만 달렸다 · 정리 L28 · 무엇을 놓치나</p></article>
+
+<article class="card" id="p6-crc-idea">
+<h3>비트열을 다항식으로 읽기</h3>
+<p class="why">비트열 1011 을 다항식 <span class="mi"><i>x</i>³ + <i>x</i> + 1</span> 로 읽습니다(어느 쪽 끝을 높은 차수로 둘지는 약속). 계수는 0 과 1 뿐이고, 덧셈은 자리올림 없는 XOR 입니다: 1 + 1 = 0.</p>
+<div class="eq">(<i>x</i>³ + <i>x</i>) + (<i>x</i> + 1) = <i>x</i>³ + 1 &nbsp;&nbsp;(두 <i>x</i> 가 지워진다)</div>
+<ul>
+<li>CRC 는 메시지 다항식을 정해 둔 <b>생성 다항식</b> G 로 나눈 나머지를 붙여 보냅니다. 받는 쪽이 다시 나눠 나머지가 다르면 틀렸다고 봅니다.</li>
+<li>뺄셈도 XOR 이라, 고등학교 다항식 나눗셈을 계수만 XOR 로 바꿔 그대로 할 수 있습니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p6-crc-poly">
+<h3>checksum.h 의 공식은 어떤 G 로 나누나</h3>
+<p class="why">crc_accumulate 에는 다항식이 적혀 있지 않습니다. 같은 입력에 대해 "낮은 비트부터 0x8408 로 비트마다 나누기" 와 결과가 늘 같은지 무작위 메시지 1000개로 재 봅니다.</p>
+<!--OUT file=p06_crc_poly.txt note=exps/p06.py crc_poly — 바이트 공식 = 비트 나눗셈-->
+<p>0x8408 은 0x1021 을 거꾸로 읽은 것 — 비트를 낮은 쪽부터 먹는 "반사형" 이라 다항식도 거꾸로 적힙니다. 그래서 MAVLink 의 G 는 항이 넷인 <span class="mi"><i>x</i>¹⁶ + <i>x</i>¹² + <i>x</i>⁵ + 1</span>, CRSF 의 G 는 규격이 적은 항 여섯의 <span class="mi"><i>x</i>⁸+<i>x</i>⁷+<i>x</i>⁶+<i>x</i>⁴+<i>x</i>²+1</span> 입니다 <!--CITE key=crsf-spec sec="CRC"-->.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-crc-linear">
+<h3>체크섬의 차이는 메시지가 아니라 오류에만 달렸다</h3>
+<p class="why">바이트 공식은 시프트와 XOR 뿐입니다. 두 메시지를 나란히 계산해 XOR 하면 같은 초깃값은 지워지고, 두 메시지의 차이(오류 패턴 e)만 남습니다.</p>
+<!--OUT file=p06_crc_linear.txt note=메시지 셋에 같은 비트를 뒤집으면 체크섬 차이가 셋 다 같고, 초깃값 0 으로 e 만 계산한 값과도 같다-->
+<p>그래서 "이 오류를 잡나?" 는 메시지와 상관없이 오류 패턴 e 하나로 정해집니다. 첫 줄은 세 메시지의 XOR 에서도 같은 성질(홀수 개면 초깃값 몫이 하나 남는다)을 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-l28">
+<h3>정리 L28 — 비트 하나는 반드시 잡힌다</h3>
+<!--THM id=L28-->
+<p class="cap">쓰는 도구: 없음(다항식의 곱). 가정 "항이 둘 이상" 은 5단계에서만 씁니다.</p>
+<div class="proof"><span class="h">증명(개요) — 건너뛰는 것: 시프트·XOR 회로가 곧 G 로 나눈 나머지라는 사실은 증명하지 않고 캡처 p06_crc_poly 로 확인만 합니다</span>
+<ol class="pf">
+<li>받은 패킷 = 보낸 패킷 ⊕ e. <a href="#p6-crc-linear">앞 장</a>대로 데이터 쪽 체크섬은 L(e<sub>데이터</sub>)만큼 바뀝니다. L 은 초깃값 0 의 CRC 입니다. <span class="why">시프트·XOR 은 XOR 에 분배된다</span></li>
+<li>못 알아채려면 그 변화가 체크섬 칸 자체의 뒤집힘 e<sub>칸</sub>과 같아야 합니다: L(e<sub>데이터</sub>) = e<sub>칸</sub>.</li>
+<li>뒤집힌 비트가 체크섬 칸에 있으면 e<sub>데이터</sub> = 0 이라 좌변 0, 우변은 0 이 아님 — 잡힙니다.</li>
+<li>데이터의 비트 i 면 e<sub>칸</sub> = 0 이라, 못 잡으려면 L(<i>x</i><sup><i>i</i></sup>) = 0, 곧 G 가 <i>x</i><sup><i>k</i></sup>(k = i + 체크섬 차수 + 뒤에 붙는 0 의 수) 를 나눠야 합니다. <span class="why">L = G 로 나눈 나머지(건너뛴 사실)</span></li>
+<li>G·H = <i>x</i><sup><i>k</i></sup> 라 하고, G 의 가장 높은 항 <i>x</i><sup><i>a</i></sup>·가장 낮은 항 <i>x</i><sup><i>b</i></sup>(a &gt; b — <b>항이 둘 이상</b>), H 의 <i>x</i><sup><i>c</i></sup>·<i>x</i><sup><i>d</i></sup>(c ≥ d) 를 봅니다.</li>
+<li>곱에서 차수 a + c 가 나오는 짝은 (<i>x</i><sup><i>a</i></sup>, <i>x</i><sup><i>c</i></sup>) 하나뿐이라 지워지지 않고, 차수 b + d 도 마찬가지입니다. <span class="why">다른 짝은 차수가 더 낮다/높다</span></li>
+<li>a + c &gt; b + d 이므로 G·H 에는 서로 다른 항이 적어도 둘 — 항이 하나인 <i>x</i><sup><i>k</i></sup> 일 수 없습니다. 그러므로 G 는 <i>x</i><sup><i>k</i></sup> 를 나누지 못하고, 비트 하나의 오류는 늘 잡힙니다. ∎</li>
+</ol></div>
+<p class="cap">어디에 썼나: MAVLink 의 G 는 항 넷, CRSF 의 G 는 항 여섯이라 둘 다 이 정리에 듭니다. 다음 장 표의 "뒤집힌 비트 1" 줄이 수로 확인합니다.</p>
+<!--WITNESS id=L28-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-crc-weights">
+<h3>비트 여럿이 뒤집히면 — 모두 세어 보기</h3>
+<p class="why">오류 패턴마다 체크섬 차이는 비트 자리별 값("신드롬")의 XOR 입니다. 그래서 1·2·3비트 오류는 모두, 4비트 오류는 "XOR 이 같은 두 쌍" 으로 빠짐없이 셀 수 있습니다.</p>
+<!--TABLE file=out/tbl_p06_crc_weights.html cap=exps/p06.py crc_weights — 덮인 비트 = 체크섬이 덮는 데이터 + 체크섬 칸-->
+<ul>
+<li>두 CRC 모두 비트 하나는 하나도 놓치지 않습니다 — L28.</li>
+<li>CRC-8 은 2비트 오류 18,336 가지 가운데 105 가지를 놓칩니다. L28 은 비트 <b>하나</b>만 약속합니다.</li>
+<li>둘 다 3비트 오류는 하나도 놓치지 않았습니다. 이 두 패킷에서 센 사실일 뿐, 이 덱은 그것을 일반 정리로 세우지 않습니다.</li>
+<li>CRC-16 도 4비트면 1,174 가지를 놓칩니다(4.46×10⁻⁵).</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-crc-burst">
+<h3>몰려서 틀리면 — 연속 오류와 CRC_EXTRA 의 틈</h3>
+<p class="why">무선 잡음은 흔히 붙어 있는 비트들을 한꺼번에 망칩니다. 첫 비트와 끝 비트가 뒤집힌 길이 b 의 창 안에서 가능한 모든 패턴을 셉니다.</p>
+<!--TABLE file=out/tbl_p06_crc_bursts.html cap=exps/p06.py crc_bursts — HEARTBEAT 160비트, 비트 순서는 UART 처럼 바이트마다 낮은 비트 먼저-->
+<ul>
+<li>b ≤ 12 는 하나도 놓치지 않았습니다. b = 16 에서 놓친 4 가지는 <b>모두</b> 데이터와 체크섬 칸의 경계에 걸친 창입니다.</li>
+<li>까닭: 계산에서는 데이터와 체크섬 사이에 CRC_EXTRA 한 바이트가 끼지만 전선에는 없습니다. 전선에서 붙어 있는 16비트가 계산에서는 8비트 떨어진 두 조각이 되어, 사실상 더 긴 창이 됩니다.</li>
+<li>경계에 걸치지 않은 창은 b = 16 까지 놓친 것이 0 이고, b = 17 에서 128 가지를 놓칩니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-crc-limits">
+<h3>CRC 가 하지 않는 일</h3>
+<ul>
+<li><b>인증이 아니다</b>: 누구나 계산할 수 있습니다. 보낸 이를 믿으려면 <a href="#p6-mav-signing">서명</a>이 필요합니다.</li>
+<li><b>고치지 않는다</b>: 틀렸다는 것만 압니다. SiK 무선은 따로 오류 정정 부호를 써 데이터 비트 오류를 25 % 까지 고친다고 적습니다 <!--CITE key=ardupilot-sik sec="Features"-->. 미국 원격 ID 규정도 방송에 오류 정정을 넣으라고 요구합니다 <!--CITE key=ecfr-89 sec="§ 89.310 Minimum performance requirements for standard remote identification unmanned aircraft."--> (10장).</li>
+<li><b>짧은 체크섬은 더 많이 놓친다</b>: <a href="#p4-dshot-crc">4부의 DShot</a> 4비트 체크섬은 같은 칸의 2비트 오류를 놓쳤습니다. 비트 수가 적을수록 우연히 맞아떨어질 몫이 큽니다.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-c4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 생성 다항식을 <span class="mi"><i>x</i>¹⁶</span> 하나로 고른 "CRC" 가 있다면, 비트 하나의 오류를 잡을까요? L28 의 증명에서 어느 단계가 무너지나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 못 잡습니다. G = x¹⁶ 은 항이 하나라 5단계의 "a &gt; b" 가 성립하지 않고, 실제로 x¹⁶ 은 x<sup>k</sup>(k ≥ 16)를 나눕니다. 이 "CRC" 는 메시지의 마지막 16비트를 그대로 옮겨 적는 것과 같아서, 그보다 앞쪽 비트가 뒤집혀도 나머지가 변하지 않습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 5장 비행 컨트롤러 -->
+
+<article class="card section" id="p6-c5"><p class="chnum">5장</p><h2>비행 컨트롤러 — 보드와 포트</h2>
+<p class="chsub">무엇이 들어 있나 · Pixhawk 표준 · 어느 선을 어디에</p></article>
+
+<article class="card" id="p6-fc-what">
+<h3>비행 컨트롤러를 고르는 기준</h3>
+<p class="why">비행 컨트롤러(오토파일럿)는 펌웨어를 올리는 보드입니다 <!--CITE key=px4-fc sec="Flight Controller (Autopilot) Hardware"-->. ArduPilot 문서가 드는 고를 거리는 이렇습니다 <!--CITE key=ardupilot-autopilots sec="Choosing an Autopilot"-->:</p>
+<ul>
+<li>센서 여분(IMU·GPS 를 여럿), 서보·모터 출력 수, UART 수(텔레메트리·GPS·보조 컴퓨터).</li>
+<li>바깥 버스(I2C·CAN), 아날로그 입력(RSSI·전압·전류), 보드에 든 OSD·전원 측정.</li>
+<li>IMU 진동 격리와 IMU 히터(온도 변화가 큰 곳에서 정밀도) — <a href="#p5-temp">5부의 온도 바이어스</a>를 보드가 직접 줄이려는 장치입니다.</li>
+<li>크기와 값 — 문서는 약 25달러부터라고 적습니다.</li>
+</ul>
+<p class="cap">메모리가 작은 F4 보드들은 ArduPilot 기능 일부를 빼고 빌드된다고 같은 문서가 적습니다 <!--CITE key=ardupilot-autopilots sec="Firmware Limitations"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-pixhawk">
+<h3>Pixhawk 표준 — 같은 모양의 여러 제조사 보드</h3>
+<p class="why">PX4 는 Pixhawk 표준을 따르고(상표 사용 포함) 아직 생산되는 보드를 PX4 관리자와 Dronecode 시험 팀이 유지·시험한다고 적습니다. 목록은 FMUv6X·v6C·v5X·v5·v4·v3 같은 설계 이름으로 묶입니다 <!--CITE key=px4-pixhawk-std sec="Pixhawk Standard Autopilots"-->.</p>
+<ul>
+<li>같은 설계 이름(예: FMUv6X)의 보드는 여러 회사가 만듭니다 — Holybro·CUAV·RaccoonLab 의 Pixhawk 6X 류.</li>
+<li>ArduPilot 의 목록도 이 보드들을 "열린 하드웨어" 에 두고, 설계를 공개하지 않은 보드는 "닫힌 하드웨어" 로 나눕니다 <!--CITE key=ardupilot-autopilots sec="Open Hardware"--> <!--CITE key=ardupilot-autopilots sec="Closed Hardware"-->.</li>
+</ul>
+<p class="cap">같은 표준을 따르는 보드끼리는 주변 장치를 옮겨 꽂기 쉽습니다. 예로 PX4 문서는 Cube ID 원격 ID 모듈이 요즘 Pixhawk 보드의 TELEM·CAN 포트에 바로 꽂히는 케이블과 함께 온다고 적습니다 <!--CITE key=px4-remote-id sec="Cube ID"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-fc-ports">
+<h3>무엇을 어디에 꽂나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>장치</th><th>포트</th><th>근거</th></tr>
+<tr><td>SiK 텔레메트리</td><td>TELEM1</td><td><!--CITE key=px4-sik sec="Setup/Configuration"--></td></tr>
+<tr><td>PPM-Sum·S.BUS 수신기</td><td>RC IN(RCIN)</td><td><!--CITE key=px4-rc sec="Connecting Receivers"--></td></tr>
+<tr><td>Spektrum DSM 수신기</td><td>DSM 입력</td><td><!--CITE key=px4-rc sec="Connecting Receivers"--></td></tr>
+<tr><td>CRSF(Crossfire·ExpressLRS)</td><td>여분 UART(송·수신 둘)</td><td><!--CITE key=px4-rc sec="Connecting Receivers"--></td></tr>
+<tr><td>원격 ID 모듈</td><td>보통 TELEM2 또는 CAN</td><td><!--CITE key=px4-remote-id sec="Hardware Setup"--></td></tr>
+</table></div>
+<p class="cap">TELEM2 가 원격 ID 에 흔히 쓰이는 것은 이미 MAVLink 로 설정되어 있기 때문이라고 PX4 문서가 적습니다. 모듈의 TX 는 보드의 RX 로, RX 는 TX 로 엇갈려 잇습니다 <!--CITE key=px4-remote-id sec="Cube ID Serial Port"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-c5-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 추운 곳에서 이륙해 따뜻한 층으로 올라가는 측량 드론을 만듭니다. 비행 컨트롤러를 고를 때 5부에서 배운 것 가운데 무엇을 떠올려야 할까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> MEMS 자이로·가속도계의 바이어스는 온도에 따라 변합니다(5부 1장). 비행 중 온도가 크게 바뀌면 IMU 히터로 온도를 일정하게 두는 보드, 또는 온도 보정을 지원하는 펌웨어·보드를 고릅니다. 여분 IMU 는 하나가 틀어질 때 비교할 거리를 줍니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 6장 펌웨어 셋 -->
+
+<article class="card section" id="p6-c6"><p class="chnum">6장</p><h2>펌웨어 셋의 뼈대 — PX4·ArduPilot·Betaflight</h2>
+<p class="chsub">모듈과 메시지 버스 · 표로 부르는 스케줄러 · 자이로에 묶인 과제</p></article>
+
+<article class="card" id="p6-fw-table">
+<h3>세 펌웨어를 한 표로</h3>
+<!--TABLE file=out/tbl_d_firmware_1.html cap=data/firmware.tsv — 자세 표현은 받은 소스에서 확인한 것만. 미확인은 1차 출처가 없음-->
+<p class="cap">이 장은 셋의 <b>구조</b>를 봅니다. 자세 제어기의 수학은 <a href="#p9">9부</a>(PX4 쿼터니언 오차 발췌, Betaflight 안티 그래비티 발췌)에 있습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-px4-arch">
+<h3>PX4 — 모듈들이 uORB 로 말한다</h3>
+<p class="why">PX4 는 두 층입니다: 추정·제어의 비행 스택, 그리고 장치 드라이버·바깥 통신·메시지 버스의 미들웨어. 기능은 바꿔 끼울 수 있는 모듈로 나뉘고, 모듈끼리는 비동기 메시지로 말합니다 <!--CITE key=px4-architecture sec="PX4 Architectural Overview"-->.</p>
+<ul>
+<li>메시지 버스 uORB 는 발행·구독(publish/subscribe) 방식이라, 새 데이터가 오면 곧바로 반응하고 어느 모듈이든 안전하게 데이터를 가져다 씁니다 <!--CITE key=px4-architecture sec="High-Level Software Architecture"-->.</li>
+<li>비행 스택 안에서는 추정기가 센서를 섞어 상태를 만들고, 제어기가 설정값과 상태로 보정을 내고, 믹서가 힘 명령을 모터 명령으로 바꿉니다 <!--CITE key=px4-architecture sec="Flight Stack"--> — 이 덱의 cascade.py 와 같은 줄기입니다.</li>
+<li>보드에서는 주로 NuttX(BSD 라이선스 RTOS) 위에서 돌고, 리눅스·macOS 에서는 한 프로세스의 스레드들로 돕니다 <!--CITE key=px4-architecture sec="NuttX"--> <!--CITE key=px4-architecture sec="Linux/macOS"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-px4-uorb">
+<h3>uORB 메시지 — .msg 파일에서 코드가 나온다</h3>
+<p class="why">새 토픽은 msg/ 폴더에 .msg 정의 파일을 두면 C/C++ 코드가 자동으로 만들어집니다. 모든 정의에는 uint64 timestamp 가 있어야 하는데, <b>로거가 토픽을 기록하려면 이 칸이 필요하기 때문</b>이라고 문서가 적습니다 <!--CITE key=px4-uorb sec="Adding a New Topic"--> <!--CITE key=px4-uorb sec="Message Definitions"-->.</p>
+<ul>
+<li>uORB 는 기본으로 메시지 하나짜리 버퍼라, 너무 자주 발행하면 덮어써집니다. 대부분은 최신 값만 있으면 되고, 모두 받아야 하면 ORB_QUEUE_LENGTH 로 2의 거듭제곱 길이 큐를 줍니다 <!--CITE key=px4-uorb sec="uORB Buffer Length (ORB_QUEUE_LENGTH)"-->.</li>
+<li>Flight Review 같은 바깥 도구가 로그 속 uORB 메시지를 읽으므로, 필드를 바꿀 때는 그 도구부터 고쳐야 한다고 적습니다 <!--CITE key=px4-uorb sec="Message/Field Deprecation"--> (11장).</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-px4-rates">
+<h3>PX4 의 빠르기는 드라이버가 정한다</h3>
+<p class="why">모듈은 메시지를 기다리므로, 보통 드라이버가 전체의 빠르기를 정합니다. 대부분의 IMU 드라이버는 1 kHz 로 샘플해 적분한 뒤 250 Hz 로 발행하고, 내비게이터처럼 느려도 되는 부분은 훨씬 느리게 돕니다 <!--CITE key=px4-architecture sec="Update Rates"-->.</p>
+<ul>
+<li>모듈은 자기 스택·우선순위를 가진 <b>과제(task)</b>로도, 여럿이 스택을 나눠 쓰는 <b>작업 큐</b>로도 돌 수 있습니다. 작업 큐는 메모리를 덜 쓰지만 잠들거나 파일을 읽는 일은 못 합니다 <!--CITE key=px4-architecture sec="Runtime Environment"-->.</li>
+<li>이 덱의 시뮬레이터도 각속도·자세 250 Hz, 위치 50 Hz, 물리 500 Hz 로 나눠 돕니다 — <a href="#p9-t17">9부 T17</a>의 시간 척도 분리입니다.</li>
+</ul>
+<!--CODE file=py/droneshow/cascade.py lines=1-17 note=이 덱의 캐스케이드 — 루프마다 다른 빠르기-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-ap-arch">
+<h3>ArduPilot — 기체 코드와 공유 라이브러리</h3>
+<p class="why">ArduPilot 은 기체별 코드(Copter·Plane·Rover 의 자기 디렉터리)와 셋이 함께 쓰는 라이브러리로 이루어집니다 <!--CITE key=ardupilot-code-overview sec="Code Overview (Copter)"-->. 보드마다 다른 부분(스레드를 만드는 방식 같은 것)은 그 보드의 AP_HAL 구현이 맡습니다 <!--CITE key=ardupilot-threading sec="Understanding ArduPilot threading"-->.</p>
+<ul>
+<li>모든 보드는 AP_HAL 로 1 kHz 타이머를 주고, 드라이버는 그 타이머에 콜백을 겁니다. 느린 입출력(SD 카드 기록 같은 것)은 우선순위가 낮은 IO 스레드로 보냅니다 <!--CITE key=ardupilot-threading sec="The timer callbacks"--> <!--CITE key=ardupilot-threading sec="HAL specific threads"-->.</li>
+<li>본 스레드의 시간은 AP_Scheduler 가 나눕니다: 새 IMU 샘플을 기다리고, 샘플 사이에 과제 표의 과제들을 부릅니다. 과제마다 빠르기와 예상 시간이 붙은 <b>표 구동</b> 스케줄러입니다 <!--CITE key=ardupilot-threading sec="The AP_Scheduler system"-->.</li>
+</ul>
+<p class="cap">스레드 문서는 APM 보드 시절의 예(ps 출력)를 그대로 싣고 있어 오래된 부분이 있습니다. 구조 설명으로만 씁니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-ap-sched">
+<h3>Copter 의 과제 표 — 빠르기·예상 시간·우선순위</h3>
+<!--CODE file=data/excerpts/ardupilot-scheduler-table.cpp lines=1-41 wrap=1 note=ArduCopter/Copter.cpp — GPL-3.0, 줄이 길어 화면에서 접었다-->
+<ul>
+<li>FAST_TASK 는 IMU 샘플마다: IMU 갱신 → 각속도 제어기 → 모터 출력 → 자세 추정(EKF) 순입니다. "모터 출력을 곧바로" 가 추정보다 앞에 있습니다.</li>
+<li>SCHED_TASK(함수, Hz, µs, 우선순위): rc_loop 250 Hz, throttle_loop 50 Hz, 지오펜스 검사(fence_check) 25 Hz. 파일 머리의 설명은 우선순위를 0–255, 작을수록 높다고 적습니다 <!--CITE key=ardupilot-copter-cpp sec="Copter.cpp"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-bf-tasks">
+<h3>Betaflight 의 과제 표 — 자이로·필터·PID 는 실시간</h3>
+<!--CODE file=data/excerpts/betaflight-task-table.c lines=2-36 wrap=1 note=src/main/fc/tasks.c — GPL-3.0, 줄이 길어 화면에서 접었다-->
+<ul>
+<li>GYRO·FILTER·PID 셋만 TASK_PRIORITY_REALTIME 이고, 주기는 자이로·PID 루프의 빠르기(TASK_GYROPID_DESIRED_PERIOD)를 따릅니다.</li>
+<li>나머지는 Hz 로 주기를 적습니다 — 가속도계 1000 Hz, 자세 100 Hz, 수신기 33 Hz(사건이 오면 곧바로), 직렬 100 Hz.</li>
+</ul>
+<p class="cap">표의 #ifdef 들은 빌드 설정에 따라 과제를 넣고 뺍니다 — GPS 같은 기능은 켠 빌드에만 들어갑니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-fw-compare">
+<h3>셋을 나란히 — 같은 문제, 다른 짜임</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>PX4</th><th>ArduPilot</th><th>Betaflight</th></tr>
+<tr><td>짜임</td><td>모듈 + uORB 발행·구독</td><td>기체 코드 + 라이브러리 + AP_HAL</td><td>과제 표 하나</td></tr>
+<tr><td>빠르기를 정하는 것</td><td>드라이버의 발행 주기</td><td>IMU 샘플 + 과제 표의 Hz</td><td>자이로·PID 주기 + 과제 표의 Hz</td></tr>
+<tr><td>자세 표현</td><td colspan="3"><a href="#p6-fw-table">위 표</a>의 attitude-representation 칸</td></tr>
+</table></div>
+<p class="cap">표의 칸은 이 장의 앞 슬라이드들이 인용한 문서·발췌에서 옮긴 요약입니다. 세 펌웨어 모두 "가장 빠른 루프는 IMU 에 묶고, 느린 일은 뒤로" 라는 같은 생각을 다른 모양으로 구현합니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-c6-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. ArduPilot 과제 표에서 지오펜스 검사는 25 Hz 입니다. 5 m/s 로 울타리를 향해 날 때, 검사 주기 때문에만 생기는 "넘어가서야 알아채는 거리" 는 최대 얼마일까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 검사 간격은 1/25 = 0.04 s 이므로 최대 5 × 0.04 = 0.2 m 입니다. 실제로는 여기에 멈추는 데 드는 거리가 더해집니다 — <a href="#p6-fence-table">9장의 울타리 표</a>에서 우리 시뮬레이터로 잽니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 7장 지상국 -->
+
+<article class="card section" id="p6-c7"><p class="chnum">7장</p><h2>지상국 — 설정하고, 계획하고, 지켜본다</h2>
+<p class="chsub">QGroundControl · Mission Planner · 미션을 잃지 않고 올리는 규약</p></article>
+
+<article class="card" id="p6-gcs-what">
+<h3>지상국이 하는 일</h3>
+<p class="why">ArduPilot 문서: 지상국(GCS)은 땅의 컴퓨터·전화기·송신기에서 도는 프로그램으로, 텔레메트리나 USB 로 기체와 말하며 실시간 상태와 위치를 보여 줍니다. 비행 전 설정과 펌웨어 올리기에도 필요합니다 <!--CITE key=ardupilot-gcs sec="Overview"-->.</p>
+<ul>
+<li><b>Mission Planner</b>: ArduPilot 을 위한 기능이 가장 많은 지상국, 윈도우용 <!--CITE key=ardupilot-mp sec="What is Mission Planner"-->. GPLv3 <!--CITE key=ardupilot-gcs sec="Mission Planner"-->.</li>
+<li><b>QGroundControl</b>: PX4 와 ArduPilot 을 모두 설정하고, 윈도우·macOS·리눅스·안드로이드·iOS 에서 돕니다 <!--CITE key=qgc-guide sec="QGroundControl Guide"-->.</li>
+<li><b>MAVProxy</b>: 리눅스용 명령줄 지상국, 파이썬 모듈로 늘립니다 <!--CITE key=ardupilot-gcs sec="MAVProxy"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-qgc">
+<h3>QGroundControl 이 적는 기능</h3>
+<ul>
+<li>ArduPilot·PX4 기체의 설정 전부, 자율 비행 미션 계획 <!--CITE key=qgc-guide sec="QGroundControl Guide"-->.</li>
+<li>기체 위치·비행 궤적·경유점·계기를 지도에, 영상 스트리밍 위에 계기를 겹쳐.</li>
+<li>조이스틱·게임패드로 직접 조종, 여러 대 관리.</li>
+<li>비행 로그 내려받기, 지오태깅, MAVLink 콘솔, MAVLink 트래픽 살펴보기.</li>
+</ul>
+<p class="cap">"여러 대 관리" 는 드론쇼의 지상국과 다릅니다 — 수백 대를 한 번에 부리는 쇼 소프트웨어는 <a href="#p12">12부</a>의 몫입니다. 여기서는 같은 규약(MAVLink)이 밑바탕이라는 것만 기억해 둡니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-mission-proto">
+<h3>미션 올리기 — 항목마다 청하고 받는다</h3>
+<p class="why">MAVLink 미션 규약은 비행 계획·지오펜스·랠리 지점 세 가지를 같은 순서의 주고받기로 옮깁니다. 손실이 있는 링크에서도 믿고 옮기도록 못 받은 것을 다시 청합니다 <!--CITE key=mavlink-mission sec="Mission (Plan) Protocol"--> <!--CITE key=mavlink-mission sec="Plan Types"-->.</p>
+<ol>
+<li>지상국 → MISSION_COUNT(항목 수).</li>
+<li>기체 → MISSION_REQUEST_INT(seq 0), 지상국 → MISSION_ITEM_INT(0). seq 를 올려 가며 반복.</li>
+<li>마지막 항목을 받으면 기체 → MISSION_ACK(ACCEPTED). 새 미션을 다 받은 뒤에야 옛 미션을 바꿉니다 <!--CITE key=mavlink-mission sec="Upload a Plan to the Vehicle"-->.</li>
+</ol>
+<p class="cap">응답을 기다리는 모든 메시지에 시간 제한을 둡니다: 기본 1500 ms, 항목은 250 ms, 다시 보내기는 최대 5번 <!--CITE key=mavlink-mission sec="Timeouts and Retries"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-mission-model">
+<h3>손실이 있는 링크에서 20항목 올리기 — 모델</h3>
+<p class="why">한 항목의 한 시도 = REQUEST 가 가고 ITEM 이 오기. 둘 다 손실률 p 로 잃는다고 두면 한 시도가 성공할 확률은 (1−p)², 여섯 번(처음 + 다시 5번) 모두 실패하면 올리기가 실패합니다.</p>
+<div class="eq">실패율 = 1 − (1 − (1 − (1−<i>p</i>)²)<sup>6</sup>)<sup>20</sup></div>
+<!--TABLE file=out/tbl_p06_mission.html cap=exps/p06.py mission_upload — 2,000번 흉내(씨앗 고정)와 식. COUNT·ACK 는 모델에서 뺐다-->
+<ul>
+<li>p = 0.05 면 메시지가 8 % 쯤 더 들 뿐 실패는 없습니다 — 다시 청하기가 손실을 흡수합니다.</li>
+<li>p = 0.4 에서 평균 메시지 수가 오히려 적은 것은 대부분 중간에 실패해 멈추기 때문입니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-mission-code">
+<h3>모델의 코드</h3>
+<!--CODE file=exps/p06.py sym=mission_upload note=항목마다 최대 여섯 시도 — 식의 가정을 그대로-->
+<p class="cap">잰 실패율과 식이 표에서 소수 둘째 자리까지 맞습니다(흉내 2,000번의 떨림 안).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p6-c7-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. 미션 규약은 "새 미션을 다 받고 받아들인 뒤에야 옛 미션을 바꾸라" 고 합니다. 이 규칙이 없으면 손실이 많은 링크에서 무슨 일이 생길까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 올리기가 중간에 실패하면(모델의 p = 0.4 처럼) 기체에는 앞부분만 새 미션이고 뒷부분은 비었거나 옛 미션인 뒤섞인 계획이 남습니다. 규칙이 있으면 실패해도 옛 미션이 온전히 남아, 적어도 기체가 무엇을 할지는 압니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 8장 영상 링크 -->
+
+<article class="card section" id="p6-c8"><p class="chnum">8장</p><h2>영상 링크 — 아날로그와 디지털</h2>
+<p class="chsub">5.8 GHz 영상 송신기 · OSD · 디지털 고글과 DisplayPort</p></article>
+
+<article class="card" id="p6-vid-analog">
+<h3>아날로그 FPV — 카메라, 영상 송신기, 고글</h3>
+<p class="why">ArduPilot 의 FPV 문서: 기체에 작은 카메라와 영상 송신기를 싣고 땅에서 수신기와 화면이나 고글로 봅니다. 권하는 부품은 5.8 GHz 25–200 mW 영상 송수신기 짝입니다 <!--CITE key=ardupilot-fpv sec="Recommended parts"-->.</p>
+<ul>
+<li>영상 송신기(VTX)는 비행 컨트롤러가 대역·채널·출력·핏 모드를 바꿀 수 있고, SmartAudio·IRC Tramp·CRSF 로 제어합니다 <!--CITE key=ardupilot-vtx sec="Video Transmitter Support"-->.</li>
+<li>같은 문서는 유럽에서는 기본으로 25 mW 만 허용된다고 적습니다 <!--CITE key=ardupilot-vtx sec="Video transmitter settings"-->.</li>
+<li>FPV 장비는 GPS·RC 수신기에서 되도록 멀리 두라고 합니다 — 간섭 때문에 <!--CITE key=ardupilot-fpv sec="Connection diagram"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-vid-osd">
+<h3>OSD — 영상 위에 비행 정보를 겹친다</h3>
+<p class="why">OSD 는 배터리·고도·모드 같은 값을 영상 위에 글자로 겹칩니다. ArduPilot 은 보드에 든 MAX7456 류 칩과, MSP 로 말하는 바깥 OSD(DJI 고글, DisplayPort 고글)를 모두 다룹니다 <!--CITE key=ardupilot-osd sec="OSD"-->.</p>
+<ul>
+<li><b>텔레메트리형 MSP OSD</b>: 비행 컨트롤러는 값만 보내고 고글이 제 방식으로 그립니다 — 모양을 비행 컨트롤러가 정하지 못합니다 <!--CITE key=ardupilot-msp-osd sec="Telemetry based OSD"-->.</li>
+<li><b>DisplayPort</b>: 비행 컨트롤러가 글자·아이콘과 그 자리를 정해 보냅니다. HDZero·Walksnail 이 이쪽입니다 <!--CITE key=ardupilot-msp-osd sec="MSP OSD"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-vid-digital">
+<h3>디지털 영상 — 이 덱이 말할 수 있는 것</h3>
+<p class="why">디지털 영상 장치(DJI·HDZero·Walksnail)와 비행 컨트롤러는 위의 MSP 로 이어집니다 <!--CITE key=ardupilot-msp-osd sec="MSP OSD"-->. ArduPilot 문서는 DJI 고글·공중 장치로 중거리를 날면서 장거리용 아날로그 VTX 를 따로 두는 구성도 예로 듭니다 <!--CITE key=ardupilot-msp-osd sec="Telemetry based OSD"-->.</p>
+<ul>
+<li>HDZero 누리집은 자기 제품을 "HD 해상도에 거의 0 에 가까운 지연" 이라고 소개합니다 <!--CITE key=hdzero-home sec="Feel the HD resolution with near ZERO latency"--> — 제조사의 말입니다.</li>
+<li>화질·지연·거리를 수로 견줄 1차 자료(같은 조건의 측정)를 이 덱은 구하지 못했습니다. 그래서 수를 싣지 않습니다.</li>
+</ul>
+<p class="cap">대역의 물리는 <a href="#p6-rc-bands">1장 대역 표</a>와 같습니다: 5.8 GHz 는 파장이 짧아(5.2 cm) 안테나가 작고, 같은 거리에서 자유 공간 손실이 2.44 GHz 보다 큽니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-vid-safety">
+<h3>FPV 비행의 안전 주의</h3>
+<ul>
+<li>FPV 카메라는 시야가 좁아 가까운 장애물을 보기 어렵고, 그래서 모형항공협회(AMA)는 모든 FPV 비행에 관찰자를 두게 한다고 ArduPilot 문서가 적습니다 <!--CITE key=ardupilot-fpv sec="Safety Warnings Relating Specifically to FPV Flight"-->.</li>
+<li>영상이 끊길 때를 대비해 RTL 을 부를 수 있게 해 두고, 신호가 약해지는 징후를 알아 두라고 합니다 <!--CITE key=ardupilot-fpv sec="Safety Warnings Relating Specifically to FPV Flight"-->.</li>
+<li>FPV 송신기는 나라마다 주파수·출력·면허 제한이 다릅니다 <!--CITE key=ardupilot-fpv sec="Government/Local Regulations"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-c8-quiz" data-quiz>
+<h3>8장 퀴즈</h3>
+<p class="q">Q. 고글에 보이는 OSD 글자 배치를 바꾸고 싶은데, 비행 컨트롤러의 OSD 설정을 아무리 바꿔도 화면이 그대로입니다. 어떤 종류의 OSD 를 쓰고 있을 가능성이 클까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 텔레메트리형 MSP OSD 입니다. 이 방식은 비행 컨트롤러가 값만 보내고 고글이 제 엔진으로 그리므로 배치를 비행 컨트롤러가 정할 수 없습니다. DisplayPort 방식이면 비행 컨트롤러가 글자와 자리를 정합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 9장 페일세이프 -->
+
+<article class="card section" id="p6-c9"><p class="chnum">9장</p><h2>페일세이프·귀환·지오펜스 — 끊겼을 때의 약속</h2>
+<p class="chsub">무엇이 끊기면 무엇을 하나 · 시험하는 법 · 울타리는 넘은 뒤에야 안다</p></article>
+
+<article class="card" id="p6-fs-list">
+<h3>페일세이프의 종류와 행동의 무게</h3>
+<p class="why">ArduPilot Copter 의 페일세이프 목록: 무선, 배터리, 지상국(GCS), EKF, 추측 항법, 진동, 지형 데이터 손실, 충돌 검사, 낙하산, 독립 감시견 <!--CITE key=ardupilot-failsafe sec="Failsafe"-->.</p>
+<p>PX4 는 행동을 무거운 순서로 적습니다: 없음 → 경고 → 제자리 유지(Hold) → 귀환(Return) → 착륙(Land) → 모터 정지(Disarm) → 비행 종료(Flight termination). 여러 페일세이프가 한꺼번에 걸리면 더 무거운 행동을 합니다 <!--CITE key=px4-safety sec="Failsafe Actions"-->.</p>
+<div class="warn">ArduPilot 은 무선·배터리·지상국 페일세이프로 모드가 바뀌면 원인이 사라져도 <b>그 모드에 머문다</b>고 적습니다. 조종자가 직접 모드를 바꿔야 돌아옵니다 <!--CITE key=ardupilot-failsafe sec="Failsafe"-->.</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-fs-radio">
+<h3>무선 페일세이프 — ArduPilot</h3>
+<p class="why">조종기를 끄거나, 거리 밖으로 나가거나, 수신기 전원·선이 끊기는 일이 RC_FS_TIMEOUT(기본 1초)보다 오래 이어지면 걸립니다. 스로틀 채널이 FS_THR_VALUE 아래로 내려가도 걸립니다 <!--CITE key=ardupilot-radio-failsafe sec="When the failsafe will trigger"-->.</p>
+<ul>
+<li>FS_THR_ENABLE 로 행동을 고릅니다: 0 끔, 1 늘 RTL, 3 늘 착륙, 4 SmartRTL 아니면 RTL … GPS 위치를 못 쓰면 RTL 대신 착륙 <!--CITE key=ardupilot-radio-failsafe sec="Parameter Configuration"-->.</li>
+<li>무장하지 않았으면 아무 일도 없고, 땅에 있으면 바로 모터를 끕니다. Stabilize·Acro 에서 스로틀이 바닥이면 역시 바로 끕니다 <!--CITE key=ardupilot-radio-failsafe sec="What will happen"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-fs-test">
+<h3>페일세이프는 시험해 두는 것이다</h3>
+<p class="why">ArduPilot 문서는 무선 페일세이프 시험을 순서대로 적습니다. 전원을 넣고 한다면 <b>프로펠러를 먼저 뗍니다</b> <!--CITE key=ardupilot-radio-failsafe sec="Testing"-->.</p>
+<ol>
+<li>스로틀 바닥에서 조종기를 끄면 스로틀 값이 FS PWM 값보다 10 이상 낮아지는지("낮은 스로틀" 방식일 때).</li>
+<li>Stabilize, 무장, 스로틀 0 에서 조종기를 끄면 곧바로 무장 해제되는지.</li>
+<li>스로틀을 중간으로 올린 채 끄면 GPS 가 잡혀 있을 때 RTL, 아니면 LAND 로 바뀌는지.</li>
+<li>조종기를 다시 켜고 모드 스위치를 움직여 조종을 되찾을 수 있는지.</li>
+</ol>
+<p class="cap">PX4 는 여러 페일세이프가 겹칠 때의 행동을 "페일세이프 상태 기계 시뮬레이션" 으로 시험해 볼 수 있다고 안내합니다 <!--CITE key=px4-safety sec="Failsafe Actions"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-fs-battery">
+<h3>배터리 페일세이프 — 두 겹</h3>
+<ul>
+<li>ArduPilot: 전압이 BATT_LOW_VOLT 아래로 10초 넘게 있거나 남은 용량이 BATT_LOW_MAH 아래면 걸립니다. 용량의 20 % 를 남겨 두는 설정을 좋은 선택으로 듭니다 <!--CITE key=ardupilot-battery-failsafe sec="When the failsafe will trigger"-->.</li>
+<li>두 번째 문턱(BATT_CRT_VOLT·BATT_CRT_MAH)과 행동을 따로 둘 수 있고, 문서는 낮음 = RTL, 위험 = 착륙을 합리적인 짝으로 듭니다 <!--CITE key=ardupilot-battery-failsafe sec="Two-Layer failsafe"-->.</li>
+<li>PX4: 경고 &gt; 페일세이프 &gt; 비상 세 수준(BAT_LOW_THR, BAT_CRIT_THR, BAT_EMERGEN_THR)을 두고, 권장 행동은 "페일세이프 수준에서 귀환, 비상 수준에서 착륙" 입니다 <!--CITE key=px4-safety sec="Battery level failsafe"-->.</li>
+</ul>
+<p class="cap">전압은 부하가 걸리면 처집니다(<a href="#p4">4부</a> 배터리 장). 그래서 ArduPilot 은 전압 문턱에 "10초 동안" 을 붙이고, 처짐을 보정한 전압을 쓰는 설정도 둡니다 <!--CITE key=ardupilot-battery-failsafe sec="Advanced Settings"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-fs-link">
+<h3>지상국·조종 링크를 잃으면 — 시간 제한과 기다림</h3>
+<ul>
+<li>ArduPilot 지상국 페일세이프는 지상국의 마지막 MAVLink 하트비트 이후 시간을 재고, FS_GCS_TIMEOUT(기본 5초)을 넘으면 걸립니다 <!--CITE key=ardupilot-gcs-failsafe sec="GCS Failsafe"--> — <a href="#p6-heartbeat-svc">2장의 하트비트</a>가 여기 쓰입니다.</li>
+<li>PX4 의 조종 입력 손실: COM_RC_LOSS_T 뒤에 손실로 보고, COM_FAIL_ACT_T 동안 Hold 로 기다린 다음 NAV_RCL_ACT 의 행동을 합니다. 손실 판단 시간은 짧아야 합니다 — 그동안 기체는 마지막 스틱대로 날기 때문입니다 <!--CITE key=px4-safety sec="Manual Control Loss Failsafe"-->.</li>
+<li>PX4 의 데이터 링크 손실: COM_DL_LOSS_T 뒤에 NAV_DLL_ACT <!--CITE key=px4-safety sec="Data Link Loss Failsafe"-->.</li>
+</ul>
+<p class="cap">"기다림" 은 잠깐 끊겼다 이어지는 장거리 링크에서 페일세이프가 곧바로 튀지 않게 하려는 것이라고 PX4 문서가 적습니다 <!--CITE key=px4-safety sec="Manual Control Loss Failsafe"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-rtl">
+<h3>귀환(RTL) — 올라가고, 돌아오고, 내려온다</h3>
+<p class="why">ArduPilot 의 RTL: 먼저 RTL_CLIMB_MIN 이상 또는 RTL_ALT_M(기본 15 m) 중 높은 쪽까지 오른 뒤 집(또는 가장 가까운 랠리 지점)으로 돌아와 머물다 내려앉습니다. 집 근처에서 걸리면 거꾸로 선 원뿔(RTL_CONE_SLOPE)로 쓸데없이 높이 오르지 않게 합니다 <!--CITE key=ardupilot-rtl sec="Overview"-->.</p>
+<ul>
+<li>집은 무장한 자리입니다. 그래서 이륙 자리는 막힘이 없고 사람에게서 떨어져야 합니다 <!--CITE key=ardupilot-rtl sec="Overview"-->.</li>
+<li>RTL 은 기본으로 곧은 길로 돌아오므로 다각형 울타리를 가로지를 수 있고, 경로 계획을 켜면 울타리를 돌아갑니다 <!--CITE key=ardupilot-rtl sec="Overview"-->.</li>
+<li>PX4 는 RTL_TYPE 으로 집·랠리 지점·미션 착륙 경로 등 돌아갈 곳과 길을 고릅니다. 멀티콥터의 기본은 안전 고도로 올라 가장 가까운 집이나 랠리 지점으로 가는 방식입니다 <!--CITE key=px4-return sec="Return Types (RTL_TYPE)"--> <!--CITE key=px4-return sec="Home/Rally Point Return Type (RTL_TYPE=0)"-->.</li>
+</ul>
+<div class="warn">RTL 고도는 기압계 고도입니다 — 기압이 바뀌면 고도도 따라 틀린다고 ArduPilot 문서가 경고합니다 <!--CITE key=ardupilot-rtl sec="Overview"--> (<a href="#p5-c2">5부 2장</a>).</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-fence-kinds">
+<h3>지오펜스 — 원기둥과 다각형</h3>
+<ul>
+<li>ArduPilot 의 원기둥 울타리는 집을 중심으로 한 "깡통" 모양이고, 반지름은 30 m 보다 커야 하며 50 m 이상이 보통이라고 적습니다 <!--CITE key=ardupilot-fence sec="Parameter associated with Cylindrical Fence"-->. 울타리를 켜면 무장 전에 GPS 잠금이 필요합니다 <!--CITE key=ardupilot-fence sec="Warnings:"-->.</li>
+<li>PX4 는 집 중심 원기둥(최대 반지름 GF_MAX_HOR_DIST, 최대 높이 GF_MAX_VER_DIST, 넘었을 때 GF_ACTION)과, QGroundControl 에서 그리는 원·다각형의 포함·제외 구역을 따로 둡니다 <!--CITE key=px4-geofence sec="Geofence"--> <!--CITE key=px4-safety sec="Geofence Failsafe"-->.</li>
+<li>집을 포함하지 않는 울타리, 비행 중에 올리자마자 넘게 되는 울타리는 비행 컨트롤러가 거절합니다 <!--CITE key=px4-geofence sec="Geofence Plan"-->. 울타리는 미션 규약으로 올립니다(7장).</li>
+</ul>
+<p class="cap">이 덱은 울타리를 <b>설정하고 시험하는 법</b>만 다룹니다. 울타리·비행 금지 구역을 피해 가는 방법은 다루지 않습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-fence-code">
+<h3>울타리 판정을 코드로</h3>
+<!--CODE file=ex/geofence.py sym=in_cylinder..in_polygon note=원기둥은 수평 거리와 높이, 다각형은 짝홀 광선 규칙-->
+<!--OUT file=p06_geofence.txt note=ㄱ 자(오목) 울타리 — 파인 곳 (7, 7) 은 밖-->
+<p class="cap">광선이 꼭짓점을 스칠 때 두 번 세지 않도록 변을 반열린 구간으로만 셉니다(시험 test_vertex_ray_counted_once).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-fence-margin">
+<h3>울타리는 넘은 뒤에야 동작한다 — 여유를 둔다</h3>
+<p class="why">PX4 문서: 지오펜스 행동은 기체가 이미 울타리를 넘은 뒤에 걸립니다. 법·안전 때문에 꼭 지켜야 하는 경계라면 행동을 Hold 로 두고 여유를 두되, 멀티콥터의 여유는 적어도 멈춤 거리 <span class="mi"><i>v</i>²/(2<i>a</i>)</span>(최대 수평 속도와 최대 수평 가속도로) — 그리고 뒷바람·위치 불확실성·자세 추종 지연을 생각해 그보다 더 두라고 적습니다 <!--CITE key=px4-safety sec="Geofence Failsafe"-->.</p>
+<!--CODE file=exps/p06.py sym=fly_to_fence note=우리 시뮬레이터: +x 로 날다 25 Hz 판정이 밖을 보면 그 자리에 선다(Hold 흉내)-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-fence-table">
+<h3>우리 드론은 얼마나 넘어가나</h3>
+<!--TABLE file=out/tbl_p06_fence.html cap=exps/p06.py fence — 6자유도 모델, 반지름 10 m, 판정 25 Hz, 멈춤은 이 덱의 장난감-->
+<ul>
+<li>5 m/s 에서 2.536 m 넘어갑니다. 기울기 한계(35°)로 낼 수 있는 가장 큰 감속으로 잰 식 값 1.820 m 보다 큽니다 — 판정 주기, 제어기가 감속을 올리는 시간, 위치 P 제어의 부드러운 멈춤이 더해집니다.</li>
+<li>1 m/s 에서는 0.295 m 로 식 두 값보다 모두 큽니다. 느릴 때는 식보다 반응 지연이 거리를 정합니다.</li>
+<li>그래서 문서가 "식보다 더" 라고 하는 것입니다. 여유는 식으로 시작해 <b>자기 기체로 잰 값</b>으로 정합니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p6-c9-quiz" data-quiz>
+<h3>9장 퀴즈</h3>
+<p class="q">Q. 무선 페일세이프 행동을 RTL 로 두었는데, 수신기가 신호를 잃으면 "마지막 값 유지" 를 하도록 설정되어 있었습니다. 조종기가 꺼지면 어떻게 될까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 비행 컨트롤러에는 여전히 정상처럼 보이는 채널 값이 들어오므로 무선 페일세이프가 걸리지 않고, 기체는 마지막 스틱대로 계속 납니다. RTL 설정은 쓸모가 없습니다. 수신기를 "아무것도 내보내지 않기" 로 두는 것이 먼저이고(1장), 그다음 시험 순서대로 조종기를 꺼서 확인합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 10장 원격 ID -->
+
+<article class="card section" id="p6-c10"><p class="chnum">10장</p><h2>원격 ID — 하늘의 번호판</h2>
+<p class="chsub">미국 14 CFR Part 89 · EU 2019/945 · Open Drone ID 와 MAVLink</p></article>
+
+<article class="card" id="p6-rid-what">
+<h3>원격 ID 는 무엇이고 왜 있나</h3>
+<p class="why">FAA: 원격 ID 는 비행 중인 드론이 식별·위치 정보를 방송해 다른 사람이 받을 수 있게 하는 능력입니다. 더 복잡한 드론 운용의 안전·보안 바탕이 되고, 위험하게 날거나 날면 안 되는 곳을 나는 드론의 조종 위치를 FAA·법 집행 기관이 찾게 해 줍니다 <!--CITE key=faa-remote-id sec="Remote Identification of Drones"-->.</p>
+<p>FAA 가 드는 세 가지 길 <!--CITE key=faa-remote-id sec="Ways to be Remote ID Compliant"-->:</p>
+<ul>
+<li>표준 원격 ID 드론 — 방송 기능을 넣어 만든 기체.</li>
+<li>원격 ID 방송 모듈을 단 드론 — 이 경우 비행 내내 드론을 눈으로 볼 수 있어야 합니다.</li>
+<li>FAA 인정 식별 구역(FRIA) 안에서, 가시권으로 날기.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-rid-us">
+<h3>미국 Part 89 — 무엇을 방송하나</h3>
+<ul>
+<li>§89.105: 2023-09-16 이후 미국 공역의 무인항공기 운용은 §89.110(표준) 이나 §89.115(대체) 를 따라야 합니다 <!--CITE key=ecfr-89 sec="§ 89.105 Remote identification requirement."-->.</li>
+<li>§89.110: 표준 원격 ID 기체는 이륙부터 정지까지 §89.305 의 항목을 방송하고, 방송이 멈추면 조종자는 되도록 빨리 내려앉아야 합니다. 원격 ID 장비를 끄지 않았어야 합니다 <!--CITE key=ecfr-89 sec="§ 89.110 Operation of standard remote identification unmanned aircraft."-->.</li>
+<li>§89.305 방송 항목: 기체의 일련번호 또는 세션 ID, 조종국의 위도·경도와 기하 고도, 기체의 위도·경도·기하 고도와 속도, UTC 시각 표지, 비상 상태 <!--CITE key=ecfr-89 sec="§ 89.305 Minimum message elements broadcast by standard remote identification unmanned aircraft."-->.</li>
+</ul>
+<p class="cap">5부의 GNSS 가 여기서 다시 나옵니다 — 방송하는 위치와 시각이 모두 GNSS 에서 옵니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-rid-perf">
+<h3>§89.310 — 성능 요건은 이 부의 주제들과 겹친다</h3>
+<ul>
+<li>이륙 전 자체 시험, 원격 ID 가 동작하지 않으면 이륙할 수 없음, 비행 내내 감시해 고장을 알림 <!--CITE key=ecfr-89 sec="§ 89.310 Minimum performance requirements for standard remote identification unmanned aircraft."--> — 9장의 페일세이프와 같은 생각입니다.</li>
+<li>방송에 오류 정정을 넣을 것 — 4장의 CRC(검출)보다 한 걸음 더 나아간 요구입니다.</li>
+<li>위치는 95 % 확률로 100 ft 안, 기체 고도는 150 ft 안, 조종국 고도는 15 ft 안. 측정에서 방송까지 1.0 초 안, 초당 적어도 한 번 방송 <!--CITE key=ecfr-89 sec="§ 89.310 Minimum performance requirements for standard remote identification unmanned aircraft."-->.</li>
+<li>변조를 어렵게 설계할 것, 다른 장비와 서로 간섭하지 않을 것.</li>
+</ul>
+<p class="cap">PX4 는 원격 ID 모듈이 없거나 건강하지 않을 때의 무장 검사·비행 중 페일세이프를 COM_ARM_ODID 로 고르게 합니다 <!--CITE key=px4-safety sec="Remote ID Failsafe"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-rid-eu">
+<h3>EU — 직접 원격 식별과 클래스 표시</h3>
+<p class="why">EU 위임규정 2019/945 는 "직접 원격 식별" 을 비행 중인 무인항공기의 정보를 물리적으로 만지지 않고 받을 수 있게 가까이 방송하는 체계로 정의합니다 <!--CITE key=eu-2019-945-->.</p>
+<p>C1 클래스 기체의 직접 원격 식별은 비행 내내, 열린 문서화된 전송 규약으로, 기존 모바일 기기가 받을 수 있게 다음을 방송해야 합니다 <!--CITE key=eu-2019-945-->:</p>
+<ul>
+<li>운용자 등록 번호와 검증 코드, 기체의 고유 일련번호.</li>
+<li>시각, 기체의 위치와 지면 또는 이륙 지점 위의 높이, 진북에서 시계 방향으로 잰 항로와 대지 속도.</li>
+<li>원격 조종자의 위치(없으면 이륙 지점), 비상 상태.</li>
+</ul>
+<p class="cap">같은 규정은 specific 범주에서 120 m 아래를 나는 기체에도 원격 식별 체계를 요구하고, 변조를 어렵게 하라고 적습니다 <!--CITE key=eu-2019-945-->. 미국의 목록과 거의 같은 항목입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-rid-mavlink">
+<h3>Open Drone ID — 원격 ID 를 MAVLink 로</h3>
+<p class="why">MAVLink 의 Open Drone ID 메시지는 ASTM F3411 과 ASD-STAN prEN 4709-002 를 따릅니다. 방송은 블루투스(4·5)나 와이파이(NaN·비컨)로 하고, 블루투스 4 의 작은 크기 때문에 정보를 여러 메시지로 나눕니다 <!--CITE key=mavlink-odid sec="Relevant specifications"--> <!--CITE key=mavlink-odid sec="Broadcast methods and impact on the message design"-->.</p>
+<ul>
+<li>BASIC_ID(기체 ID·종류), LOCATION(위치·고도·방향·속도), SELF_ID, SYSTEM(조종자 위치·시각), OPERATOR_ID, 묶음 MESSAGE_PACK <!--CITE key=mavlink-odid sec="Messages"-->.</li>
+<li>ARM_STATUS: 원격 ID 장치가 "쓸 준비가 됐다" 를 알리고, 비행 스택은 이것을 무장 조건으로 씁니다 — 살아 있음만 알리는 하트비트와 다릅니다 <!--CITE key=mavlink-odid sec="Messages"-->.</li>
+<li>PX4 는 FAA 표준 규칙을 겨냥한 모듈과 Open Drone ID MAVLink 로 일하고, 보통 TELEM2 에 잇습니다 <!--CITE key=px4-remote-id sec="Remote ID (Open Drone ID)"-->. ArduPilot 도 MAVLink 로 붙는 모듈과 혼자 도는 비컨을 나눠 적습니다 <!--CITE key=ardupilot-remoteid sec="Variations"-->.</li>
+</ul>
+<p class="cap">이 덱은 원격 ID 를 <b>갖추고 켜는 법</b>만 다룹니다. 끄거나 속이는 방법은 다루지 않습니다 — §89.110 은 장비를 끄지 않았을 것을 운용 조건으로 둡니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-c10-quiz" data-quiz>
+<h3>10장 퀴즈</h3>
+<p class="q">Q. 원격 ID 의 ARM_STATUS 와 HEARTBEAT 는 둘 다 "장치가 있다" 를 알리는 것 같은데, 왜 따로 있을까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> HEARTBEAT 는 구성 요소가 살아 있다는 것만 알립니다. 원격 ID 는 위치를 받고 방송을 시작할 준비가 되어야 규정을 지킬 수 있으므로(§89.310 의 "동작하지 않으면 이륙 불가"), 비행 스택은 "준비됨" 을 따로 확인해 무장 조건으로 씁니다. 살아 있지만 준비되지 않은 상태를 구별하려는 것입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 11장 로그 -->
+
+<article class="card section" id="p6-c11"><p class="chnum">11장</p><h2>로그 분석 — 날아간 뒤에 되짚기</h2>
+<p class="chsub">기체의 기록과 지상국의 기록 · ULog 를 바이트로 · 고장은 어떤 모양으로 남나</p></article>
+
+<article class="card" id="p6-log-kinds">
+<h3>두 곳에 남는 기록</h3>
+<ul>
+<li>ArduPilot: <b>DataFlash 로그</b>는 기체(대개 SD 카드)에 남고 비행 뒤 내려받습니다. <b>텔레메트리 로그(tlog)</b>는 텔레메트리로 이어진 지상국 PC 에 남습니다 <!--CITE key=ardupilot-logs sec="Log Types (Dataflash vs Tlogs)"-->.</li>
+<li>기록할 항목은 LOG_BITMASK 로 고르고, 보드 플래시에만 기록하는 보드는 공간이 차면 가장 오래된 로그를 덮어씁니다 <!--CITE key=ardupilot-log-mp sec="Logging Parameters"--> <!--CITE key=ardupilot-log-mp sec="On-Board DataFlash Logging"-->.</li>
+<li>PX4 는 uORB 토픽을 ULog 형식으로 기록합니다: 센서·RC 입력, 자세·EKF 같은 내부 상태, 출력된 글 <!--CITE key=px4-ulog sec="ULog File Format"-->.</li>
+</ul>
+<p class="cap">PX4 문서는 로그를 보기 전에 맥락부터 세우라고 합니다: 추락을 담았나 공중에서 끊겼나, 제어기가 설정값을 따라갔나(롤·피치 각속도와 설정값 비교), 진동이 컸나 <!--CITE key=px4-log-analysis sec="Structured Analysis"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-ulog-format">
+<h3>ULog — 스스로를 설명하는 파일</h3>
+<p class="why">ULog 는 기록한 메시지의 형식까지 파일 안에 담습니다. 모든 수는 리틀 엔디언이고, 파일은 머리·정의·데이터 세 부분입니다 <!--CITE key=px4-ulog sec="ULog File Format"--> <!--CITE key=px4-ulog sec="ULog File Structure"-->.</p>
+<ul>
+<li>머리 16바이트: 마법 7바이트 "ULog" + 0x01 0x12 0x35, 판 1바이트, 시작 시각(µs) 8바이트 <!--CITE key=px4-ulog sec="Header Section"-->.</li>
+<li>그 뒤 메시지마다 머리 3바이트(msg_size, msg_type). 머리 바로 뒤에는 반드시 'B'(깃발) 메시지가 옵니다 <!--CITE key=px4-ulog sec="Definition & Data Section Message Header"--> <!--CITE key=px4-ulog sec="'B': Flag Bits Message"-->.</li>
+<li>'F' 는 "이름:형 칸;형 칸;" 꼴의 형식, 'A' 는 형식에 번호(msg_id, 0 부터)를 주는 구독, 'D' 는 그 번호로 싣는 데이터, 'L' 은 로그 글 <!--CITE key=px4-ulog sec="'F': Format Message"--> <!--CITE key=px4-ulog sec="A: Subscription Message"--> <!--CITE key=px4-ulog sec="'D': Logged Data Message"-->.</li>
+<li>구독되는 형식에는 늘어나기만 하는 uint64 timestamp 가 있어야 합니다 — <a href="#p6-px4-uorb">6장</a>의 uORB 규칙과 같은 까닭입니다.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-ulog-write">
+<h3>ULog 를 직접 써 보기</h3>
+<!--CODE file=ex/ulog_mini.py sym=Writer note=문서의 바이트 약속만 — 배열·중첩 형식은 뺐다-->
+<p class="cap">pyulog 같은 공식 도구로 읽어 보지는 않았습니다(이 기계에 numpy 가 없음). 시험 test_p06_ulog 는 문서가 적은 바이트 — 마법, 머리 16바이트, 'B' 가 맨 앞이고 msg_size 40, msg_id 0 부터 — 를 확인합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-ulog-read">
+<h3>그리고 읽기 — 모르는 메시지는 건너뛴다</h3>
+<!--CODE file=ex/ulog_mini.py sym=read note=msg_size 로 다음 메시지를 찾으므로 모르는 유형도 건너뛸 수 있다-->
+<!--OUT file=p06_ulogdemo.txt note=ex/ulog_mini.py — 한 줄짜리 로그의 머리 16바이트-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-ulog-fence">
+<h3>9장의 울타리 비행을 로그로 되짚기</h3>
+<p class="why">5 m/s 로 반지름 10 m 울타리에 닿는 비행을 50 Hz 로 기록하고, 판정 순간에 경고 수준('4') 글을 남긴 뒤, 파일을 다시 읽어 가장 멀리 간 점을 찾습니다.</p>
+<!--OUT file=p06_ulog.txt note=exps/p06.py ulog_fence — 쓰고, 다시 읽고, 로그만으로 잰다-->
+<p>로그로 잰 2.535 m 와 <a href="#p6-fence-table">울타리 표</a>의 2.536 m 가 다른 것은 로그가 50 Hz 로만 남기 때문입니다. 기록 빈도보다 빠른 일은 로그에 다 남지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-log-review">
+<h3>문서가 알려 주는 로그 읽는 법</h3>
+<ul>
+<li><b>추종</b>: Flight Review 의 추정값(빨강)이 설정값(초록)을 가까이 따라가야 하고, 아니면 대개 그 제어기의 PID 이득을 조율해야 합니다 <!--CITE key=px4-flight-review sec="PID Tracking Performance"-->.</li>
+<li><b>진동</b>: ArduPilot 은 VIBE 값이 30 m/s² 아래면 대체로 괜찮고, 60 을 넘으면 거의 늘 문제라고 적습니다 <!--CITE key=ardupilot-log-diag sec="Vibrations"-->. PX4 는 강한 진동의 기준으로 봉우리-봉우리 2–3 m/s² 를 듭니다 <!--CITE key=px4-log-analysis sec="Structured Analysis"-->.</li>
+<li><b>GPS</b>: HDop 1.5 아래면 아주 좋고 2.0 을 넘으면 의심, 위성이 12개 아래로 떨어지는 것도 나쁜 신호 <!--CITE key=ardupilot-log-diag sec="GPS glitches"--> (<a href="#p5-c3">5부 3장</a>의 PDOP).</li>
+<li><b>전원</b>: 로그가 공중에서 갑자기 끝나면 전원 끊김을 의심합니다 <!--CITE key=ardupilot-log-diag sec="Power Problems (BrownOuts, etc)"--> <!--CITE key=px4-log-analysis sec="Ruling Out Power Failures"-->.</li>
+<li><b>페일세이프</b>: DataFlash 의 ERR 메시지를 걸러 보면 어느 하위 체계가 무슨 오류를 냈는지 나옵니다(무선 페일세이프는 Subsys 5) <!--CITE key=ardupilot-log-diag sec="Unexpected ERRORS including Failsafes"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-log-motor">
+<h3>기계 고장은 어떤 모양으로 남나 — 시뮬레이터로 만들어 보기</h3>
+<p class="why">ArduPilot 문서: 모터·ESC 고장, 프로펠러 파손은 로그에서 원하는 롤·피치와 실제 롤·피치가 <b>갑자기 벌어지는</b> 모양으로 나타납니다 <!--CITE key=ardupilot-log-diag sec="Mechanical Failures"-->. 호버 중 t = 2 s 에 모터 1 의 추력을 e 배로 떨어뜨려 봅니다.</p>
+<!--TABLE file=out/tbl_p06_motor.html cap=exps/p06.py motor_loss — 자세 오차 = 원하는 자세와 실제 자세 사이 각. 우리 시뮬레이터에는 땅이 없어 z 가 음수까지 간다-->
+<ul>
+<li>80 % 로 약해지면 제어기가 다른 모터로 메워 오차가 9.24° 에서 그칩니다 — 로그에서는 흔들림 한 번입니다.</li>
+<li>0 이면(모터 정지) 0.088 s 만에 10° 를 넘어 끝내 뒤집힙니다 — 문서가 말하는 "갑자기 벌어짐" 입니다. 네 모터 쿼드는 하나를 잃으면 평형이 없습니다(<a href="#p4-engine-code">4부 1장</a>).</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-log-motor-code">
+<h3>고장을 넣는 코드</h3>
+<!--CODE file=exps/p06.py sym=motor_loss note=명령 회전수에 √e 를 곱한다 — 추력은 회전수의 제곱이므로 e 배-->
+<p class="cap">제어기는 고장을 모릅니다 — 실제 기체처럼, 자세가 틀어진 것을 보고서야 반응합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p6-c11-quiz" data-quiz>
+<h3>11장 퀴즈</h3>
+<p class="q">Q. 로그가 고도 30 m 에서 갑자기 끝났습니다. 원하는 롤과 실제 롤은 끝나기 직전까지 잘 맞았습니다. 무엇부터 의심하고, 무엇을 찾아볼까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 자세가 끝까지 맞았으니 기계 고장(자세가 갑자기 벌어짐)보다 전원 끊김이나 운영체제 오류를 먼저 의심합니다. ArduPilot 에서는 보드 전압(POWR 의 VCC)의 출렁임을, PX4 에서는 SD 카드의 하드 폴트 기록(fault_…log)을 찾아보라고 문서들이 권합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 전문과 정리 -->
+
+<article class="card" id="p6-src-intro">
+<h3>이 부의 예제 전문</h3>
+<p class="why">3장의 ex/mavlink_parse.py·ex/mavlink_xml.py, 1장의 ex/rf_link.py·ex/crsf_crc.py, 9장의 ex/geofence.py, 11장의 ex/ulog_mini.py 를 줄 하나 빠짐없이 싣습니다.</p>
+<ul>
+<li>시험: ex/tests/test_ex.py 의 Mavlink(6개, L28 의 증인 포함), test_p06_mavxml(7), test_p06_crsf(7), test_p06_rf(10), test_p06_fence(6), test_p06_ulog(6).</li>
+<li>실험: exps/p06.py 가 이 부의 표 열셋과 캡처 열하나를 만듭니다(run_all.py --only p06).</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+<!--FULLSRC lang=py file=ex/mavlink_parse.py prefix=p6-src-mav title=mavlink_parse.py-->
+<!--FULLSRC lang=py file=ex/mavlink_xml.py prefix=p6-src-mavxml title=mavlink_xml.py-->
+<!--FULLSRC lang=py file=ex/crsf_crc.py prefix=p6-src-crsf title=crsf_crc.py-->
+<!--FULLSRC lang=py file=ex/rf_link.py prefix=p6-src-rf title=rf_link.py-->
+<!--FULLSRC lang=py file=ex/geofence.py prefix=p6-src-fence title=geofence.py-->
+<!--FULLSRC lang=py file=ex/ulog_mini.py prefix=p6-src-ulog title=ulog_mini.py-->
+
+<article class="card" id="p6-summary">
+<h3>6부 정리</h3>
+<ul>
+<li>RC 링크는 도약으로 간섭을 나눠 갖고(k/N), 느린 패킷일수록 감도가 좋습니다. 자유 공간 거리는 윗한계일 뿐 — 실제는 가림·간섭이 정합니다.</li>
+<li>수신기는 끊김을 "아무것도 안 보내기" 로 알려야 합니다. 마지막 값 유지는 페일세이프를 막습니다.</li>
+<li>MAVLink 2 패킷 = 머리 10 + 페이로드(끝의 0 자름) + x25 체크섬 2(+ 서명 13). 필드는 크기 순, 체크섬에는 정의의 지문 CRC_EXTRA 가 섞입니다.</li>
+<li>CRC 는 비트 하나를 반드시 잡습니다(L28). 여러 비트·긴 연속 오류는 드물게 놓치고, 누가 보냈는지는 서명이 맡습니다.</li>
+<li>세 펌웨어 모두 가장 빠른 루프를 IMU 에 묶습니다 — PX4 는 uORB 발행, ArduPilot 은 과제 표, Betaflight 는 실시간 과제.</li>
+<li>페일세이프는 끊김을 알아챈 뒤, 울타리는 넘은 뒤에 동작합니다. 여유는 식에서 시작해 자기 기체로 잽니다. 원격 ID 는 위치·ID 를 방송하는 번호판입니다.</li>
+<li>로그는 형식을 스스로 담고(ULog), 고장은 "원하는 것과 실제의 갑작스런 벌어짐" 으로 남습니다.</li>
+</ul>
+<p class="cap">다음: <a href="#p7">7부</a> 수학 준비. 이 부의 페일세이프·지오펜스는 <a href="#p11">11부</a> 드론쇼의 안전 설계로 이어집니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p6-quiz" data-quiz>
+<h3>6부 종합 퀴즈</h3>
+<p class="q">Q. 운동장에서 드론 30대로 작은 쇼를 합니다. 이 부에서 배운 것으로 (1) 링크, (2) 패킷, (3) 안전 설정, (4) 비행 뒤에 챙길 것을 하나씩 말하세요.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> (1) 기체마다 다른 sysid 와 겹치지 않는 링크 설정(도약 순서가 다르도록), 그리고 예산 표의 자유 공간 거리가 아니라 현장에서 잰 LQ 로 여유를 봅니다. (2) 모든 기체와 지상국이 같은 MAVLink 정의를 써야 합니다 — 다르면 CRC_EXTRA 가 어긋나 패킷이 버려집니다. (3) 무선·배터리·지상국 페일세이프와 원기둥 울타리를 켜고, 울타리 여유는 가장 빠른 속도에서 잰 넘어섬(울타리 표)보다 크게, 프로펠러를 뗀 채 조종기를 꺼 보는 시험까지. (4) 대마다 로그를 내려받아 원하는 자세와 실제 자세가 벌어진 곳, 진동, 전압을 봅니다.</div>
+<span class="tier ill">설명용</span>
+</article>
