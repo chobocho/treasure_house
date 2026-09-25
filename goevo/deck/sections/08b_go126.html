@@ -1,1 +1,570 @@
 <!-- 8부 2장 — Go 1.26. 8부를 서브에이전트 둘이 나눠 쓰려고 파일을 나눴다(앞 두 자리 08 = 8부). -->
+<article class="card" id="p8-v126"><p class="chnum">2장</p><h2>Go 1.26</h2>
+<p class="chsub">new(expr) · 자기 참조 제약 · 새 go fix · Green Tea GC 기본값 · 슬라이스 스택 할당 · crypto/hpke · <!--REL v=1.26--></p></article>
+
+<article class="card" id="p8-v126-overview">
+<h3>Go 1.26 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.26.html-->
+<p class="cap">노트는 변화 대부분이 툴체인·런타임·라이브러리의 구현에 있다고 적었습니다. 그래도 언어가 두 군데 바뀌었고,
+발표 글은 이것을 "언어 문법과 타입 체계의 의미 있는 다듬기 두 가지" 라고 불렀습니다. 이 장의 모든 사실은 받아 둔 문서와
+1.27.1 의 실행에서 옵니다(2026-09 기준). <!--CITE key=relnotes-1.26 sec="Introduction to Go 1.26"--> <!--CITE key=blog-go1.26 sec="Language changes"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v126-newexpr">
+<h3>new(expr) — 초깃값을 주는 new <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 내장 함수 <code>new</code> 는 새 변수를 만들어 주소를 돌려줍니다. 지금까지 인자는 타입뿐이어서 변수는 늘 0 값으로
+시작했습니다. 1.26 부터는 인자가 식이어도 되고, 그 값이 새 변수의 초깃값이 됩니다. <!--CITE key=relnotes-1.26 sec="Changes to the language"-->
+Alan Donovan 의 글은 이것이 십 년 넘게 논의된 빈틈이었고 가장 인기 있던 언어 변경 제안 가운데 하나를 해결했다고 적었습니다.
+<!--CITE key=blog-gofix sec="Example: a modernizer for Go 1.26’s new(expr)"--></p>
+<!--CODE file=ex/08/v126newexpr/main.go note=타입 대신 값을 준다-->
+<!--GOVER v=1.26 file=ex/08/v126newexpr note=go 1.26-->
+<!--GOVER v=1.25 file=ex/08/v126newexpr note=사본의 go 줄만 1.25 — 식을 받는 줄마다 거절-->
+<div class="note"><b>관문은 go 줄</b> — 컴파일러의 타입 검사기는 <code>new(식)</code> 을 만나면 go1.26 을 요구합니다
+(<code>scratch/brief/langgates.txt</code> 의 <code>builtins.go</code> 줄). 타입을 준 <code>new(int)</code> 는 go 1.25 에서도 그대로 통과해서,
+오류 목록에 9행이 없습니다. 이 방식의 원리는 <a href="#p0-lang">0부</a>에 있습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-newjson">
+<h3>선택적 필드 — 도우미 함수가 사라지다 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — encoding/json 이나 프로토콜 버퍼는 "값이 없음" 을 포인터 <code>*T</code> 의 nil 로 나타냅니다. 이런 필드를 식 하나로
+채우려고 사람들은 <code>newInt</code> 같은 도우미를 써 왔고, proto API 는 아예 <code>proto.Int64</code>·<code>proto.String</code> 을 제공했습니다.
+글은 "Go 1.26 이 이런 도우미를 모두 필요 없게 만든다" 고 적었습니다. <!--CITE key=blog-gofix sec="Example: a modernizer for Go 1.26’s new(expr)"-->
+노트의 예도 같은 장면입니다 — 나이를 모르면 nil, 알면 <code>new(yearsSince(born))</code>. <!--CITE key=relnotes-1.26 sec="Changes to the language"--></p>
+<!--CODE file=ex/08/v126newjson/main.go note=노트의 Person 예를 결정론으로 — 날짜를 고정-->
+<!--GOVER v=1.26 file=ex/08/v126newjson note=도우미와 new(식) 의 결과는 같다-->
+<p class="cap">나이는 Go 의 공개일에서 1.26 의 날까지를 셌습니다. 두 날짜는 이 덱의 자료(<code>data/releases.tsv</code>·주장 대장)에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-newtrap">
+<h3>new(x) 는 x 를 가리키지 않는다 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — <code>new(식)</code> 은 "새 변수" 를 만든다는 원래 뜻을 그대로 지킵니다. 그래서 <code>new(x)</code> 는 x 의 주소가 아니라
+x 의 <b>값을 복사해 둔 새 변수</b>의 주소입니다. <!--CITE key=relnotes-1.26 sec="Changes to the language"--></p>
+<!--CODE file=ex/08/v126newtrap/main.go note=&x 와 new(x) 는 다른 변수-->
+<!--GOVER v=1.26 file=ex/08/v126newtrap note=1.27.1 에서의 동작-->
+<!--CODE file=ex/08/v126newnil/main.go note=인자가 타입을 정할 수 없거나 넘치면-->
+<!--GOVER v=1.26 file=ex/08/v126newnil note=무형 상수는 기본 타입으로 바뀐 뒤 검사된다-->
+<div class="warn"><b>함정</b> — <code>*q = 3</code> 은 x 를 바꾸지 않습니다. 무형 상수는 기본 타입을 얻으므로 <code>new(1 &lt;&lt; 70)</code> 은
+int 를 넘쳐 거절되고, 타입이 없는 <code>nil</code> 은 인자가 될 수 없습니다. 두 오류는 1.27.1 타입 검사기의 <code>new</code> 처리에서
+그대로 나온 문구입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-selfref">
+<h3>자기 자신을 가리키는 제약 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 제네릭 타입이 자기 타입 매개변수 목록에서 자기 자신을 가리키지 못하던 제한이 풀렸습니다. 노트의 예는
+<code>type Adder[A Adder[A]] interface { Add(A) A }</code> — "나와 같은 종류의 타입으로만 인스턴스화하라" 는 제약입니다.
+노트는 이 변화가 제약을 더 강하게 만들 뿐 아니라 타입 매개변수에 관한 명세 규칙도 "아주 조금" 단순하게 한다고 적었습니다.
+<!--CITE key=relnotes-1.26 sec="Changes to the language"--></p>
+<!--CODE file=ex/08/v126selfref/main.go note=Ordered[T Ordered[T]] 를 만족하는 두 타입-->
+<!--GOVER v=1.26 file=ex/08/v126selfref note=go 1.26-->
+<!--GOVER v=1.25 file=ex/08/v126selfref note=go 1.25 로 내려도 — 1.27.1 에서의 동작-->
+<div class="warn"><b>go 줄로 갈리지 않는 변화</b> — <code>new(식)</code> 과 달리 이 규칙은 관문 목록(<code>scratch/brief/langgates.txt</code>)에
+없습니다. 그래서 go 1.25 로 내려도 1.27.1 은 받아 줍니다. 옛 컴파일러의 거절은 노트의 "Previously … was not allowed" 로만
+확인됩니다. 제약의 바탕은 <a href="#p6-v118-constraint">6부</a>에 있습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-typecheck">
+<h3>타입 검사기 안쪽 — 순환 검출을 다시 짜다 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — Mark Freeman 의 글은 1.26 에서 타입 검사기의 "타입 구성(type construction)" 부분을 크게 고쳤다고 소개합니다.
+사용자 쪽에서는 "난해한 타입 정의를 즐기는 사람이 아니라면" 관찰할 수 있는 변화가 없고, 목적은 모서리 경우를 줄여 앞으로의
+개선을 준비하는 것이었습니다. <!--CITE key=blog-type-construction-and-cycle-detection sec="Type Construction and Cycle Detection"--></p>
+<ul>
+<li>타입 검사기는 AST 를 돌며 타입마다 내부 표현을 만듭니다. 타입을 완성하려면 그것이 기대는 타입이 먼저 완성돼야 하므로 깊이 우선입니다.</li>
+<li>재귀 타입(<code>type Node struct { next *Node }</code>)과 배열 크기처럼 값이 타입에 끼는 곳에서 "미완성" 타입이 새어 나갈 수 있습니다.</li>
+<li>새 방식은 미완성 값을 만나면 특별한 invalid 피연산자를 돌려주고 순환 오류를 알립니다. 같은 모양을 모든 경우에 적용했습니다.</li>
+<li>1.26 전에는 더 복잡한 알고리즘과 경우별 순환 검출을 썼고 "늘 동작하지는 않았다" 고 합니다. 새 방식은 (난해한) 컴파일러 패닉 여럿 —
+이슈 #75918, #76383, #76384, #76478 등 — 을 없앴습니다. <!--CITE key=blog-type-construction-and-cycle-detection sec="Conclusion"--></li>
+</ul>
+<p class="cap">바로 앞 장의 자기 참조 제약 완화와 같은 릴리스입니다. 노트가 둘을 직접 잇지는 않으므로, 이 덱도 둘을 인과로 묶지 않습니다.</p>
+<span class="tier c">글 근거</span>
+</article>
+
+<article class="card" id="p8-v126-gofix">
+<h3>go fix 가 다시 태어나다 — 현대화 도구 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 노트는 "유서 깊은(venerable)" go fix 가 완전히 새로 짜여 Go 의 현대화 도구(modernizer)들의 집이 됐다고 적었습니다.
+go vet 과 똑같은 분석 틀 위에 서 있어서, vet 의 분석기가 진단 대신 고침을 제안하고 적용할 수 있습니다. 옛 fixer 들은 모두 낡아
+지워졌습니다. <!--CITE key=relnotes-1.26 sec="Go command"--></p>
+<!--CODE file=ex/08/v126gofix/main.go note=옛 관용구 넷 — if 로 자르기, Index+슬라이스, interface{}, 3절 for-->
+<!--GOVER v=1.26 file=ex/08/v126gofix cmd="go fix -diff ." tag=diff lines=4-37 note=go 1.26 — -diff 는 고치지 않고 보여만 준다-->
+<!--GOVER v=1.20 file=ex/08/v126gofix cmd="go fix -diff ." tag=diff lines=4-23 note=같은 코드, go 줄 1.20 — max·range 정수는 제안하지 않는다-->
+<p class="cap">go 1.20 모듈에서는 1.21 의 <code>max</code> 와 1.22 의 정수 range 를 쓰면 안 되므로 그 두 고침이 빠지고, 1.18 의
+<code>strings.Cut</code>·<code>any</code> 만 남습니다. 글이 말한 대로 도구가 파일의 실효 Go 버전을 묻기 때문입니다.
+<!--CITE key=blog-gofix sec="Improving analysis infrastructure"--></p>
+<div class="warn"><b>한 번으로 끝나지 않는다</b> — 첫 캡처의 <code>clamp</code> 는 <code>max</code> 만 받았습니다. 글은 minmax 가 먼저
+<code>max</code> 를, 다음 실행에서 <code>min</code> 을 제안한다며 go fix 를 고정점에 이를 때까지 — 보통 두 번 — 돌리라고 권합니다.
+<!--CITE key=blog-gofix sec="Synergistic fixes"--> 이 캡처는 매번 원본의 사본에서 돌기 때문에 첫 실행만 보여 줍니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-gofixlist">
+<h3>go fix 의 분석기들 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — go fix 는 go build·go vet 처럼 패키지 패턴을 받고, 성공하면 조용히 소스를 고칩니다. 기본은 모든 분석기를 돌리고,
+<code>-any</code> 처럼 이름으로 하나만 켜거나 <code>-any=false</code> 로 하나만 끌 수 있습니다. 목록은 <code>go tool fix help</code> 입니다.
+<!--CITE key=blog-gofix sec="Running go fix"--></p>
+<!--GOVER v=1.26 file=ex/08/v126gofix cmd="go tool fix help" tag=help lines=27-52 note=1.27.1 의 목록 — 1.27 에서 넷이 더해졌다-->
+<p class="cap">1.27 노트는 atomictypes·embedlit·slicesbackward·unsafefuncs 가 새로 들어왔다고 적었으므로, 1.26 의 목록은 이것보다
+넷이 적습니다. <!--CITE key=relnotes-1.27 sec="go fix"--> 목록 안의 <code>newexpr</code> 이 바로 이 장의 <code>new(식)</code> 을 위한 것이고,
+<code>forvar</code> 는 1.22 의 루프 변수 변경(<a href="#p7-v122-loopvar">7부</a>) 뒤에 남은 <code>x := x</code> 를 지웁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-fixwhy">
+<h3>왜 지금 현대화 도구인가</h3>
+<p>Alan Donovan 의 글이 밝힌 동기는 뜻밖에도 LLM 입니다. <!--CITE key=blog-gofix sec="Modernizers"--></p>
+<ul>
+<li>1.18 의 제네릭 이후 언어와 라이브러리가 빠르게 바뀌면서, <code>maps.Keys</code> 한 번이면 될 흔한 루프들을 단순하게 만들 기회가 많아졌습니다.</li>
+<li>2024년 12월, LLM 코딩 도우미가 학습한 옛 Go 코드의 문체를 그대로 따르고, 새 방식을 쓰라고 해도 거부하거나 그 기능이 없다고
+우기기까지 한다는 것을 알게 됐다고 합니다.</li>
+<li>그래서 앞으로의 모델이 새 관용구로 학습하도록, 공개된 Go 코드 전체에 새 관용구가 반영되게 하는 것이 목표가 됐습니다.</li>
+<li>현대화 도구는 gopls 에도 들어 있어 입력하는 동안 바로 알려 줍니다. 제안 심사 모임은 이제 언어·라이브러리 변경마다 현대화 도구가 함께
+와야 하는지도 검토합니다.</li>
+</ul>
+<p class="cap">go vet 과 go fix 는 구현이 거의 같아졌고, 차이는 기준뿐입니다 — vet 의 분석기는 오탐이 적어야 하고, fix 의 분석기는
+정확성·성능·문체에서 퇴보 없이 적용할 수 있어야 합니다. <!--CITE key=blog-gofix sec="The Go analysis framework"--></p>
+<span class="tier c">글 근거</span>
+</article>
+
+<article class="card" id="p8-v126-fixnew">
+<h3>newexpr — 도우미를 new(식) 으로 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — go fix 의 newexpr 은 <code>newInt</code> 같은 "new 닮은" 함수를 알아보고, 본문을 <code>return new(x)</code> 로 바꾸고
+같은 패키지든 import 하는 패키지든 모든 호출을 <code>new(식)</code> 으로 바꾸자고 제안합니다. 너무 이른 사용을 막으려고 go.mod 가
+go 1.26 이상이거나 파일에 <code>//go:build go1.26</code> 이 있을 때만 고칩니다. <!--CITE key=blog-gofix sec="Example: a modernizer for Go 1.26’s new(expr)"--></p>
+<!--CODE file=ex/08/v126fixnew/main.go note=도우미 둘을 쓰는 옛 코드-->
+<!--GOVER v=1.26 file=ex/08/v126fixnew cmd="go fix -newexpr -diff ." tag=diff lines=4-26 note=go 1.26 — 호출이 new(식) 으로, 도우미엔 //go:fix inline-->
+<!--GOVER v=1.25 file=ex/08/v126fixnew cmd="go fix -newexpr -diff ." tag=diff note=go 1.25 — 아무것도 고치지 않는다-->
+<p class="cap">도우미 자체는 지우지 않고 <code>//go:fix inline</code> 을 달아 둡니다 — 다른 모듈의 호출자도 다음 장의 인라이너로 따라올 수 있게.
+글은 호출이 모두 사라진 도우미는 지워도 되지만 공개 API 라면 남겨야 한다고 덧붙였습니다.
+<!--CITE key=blog-gofix sec="Example: a modernizer for Go 1.26’s new(expr)"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-fixinline">
+<h3>//go:fix inline — 옛 API 에서 새 API 로 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 소스 수준 인라이너는 호출을 피호출 함수의 본문으로 바꾸되, 인자를 매개변수 자리에 대입해 소스에 영구히 남깁니다.
+패키지 작성자가 옛 함수에 <code>//go:fix inline</code> 을 달면, 사용자가 go fix 를 돌릴 때 호출이 새 API 로 옮겨집니다. 글은 이것을
+"셀프서비스" 현대화 도구의 첫 열매라고 불렀습니다. <!--CITE key=blog-inliner sec="//go:fix inline and the source-level inliner"--></p>
+<!--CODE file=ex/08/v126fixinline/oldmath/oldmath.go note=매개변수 순서가 헷갈리는 옛 API-->
+<!--CODE file=ex/08/v126fixinline/newmath/newmath.go note=새 API-->
+<!--CODE file=ex/08/v126fixinline/main.go note=사용자 코드-->
+<!--GOVER v=1.26 file=ex/08/v126fixinline cmd="go fix -diff ./..." tag=diff lines=4-20 note=import 까지 바뀌고, Sub 의 인자는 올바른 순서로-->
+<p class="cap">글의 가상 oldmath 예를 실제 모듈로 옮긴 것입니다. 상수(<code>Pi</code>)에도 같은 지시문이 통합니다. 글에 따르면 인라이너는
+약 7,000줄의 코드이고, Google 사내 저장소에서 이미 18,000개 넘는 변경 목록(changelist)을 준비하는 데 쓰였습니다.
+<!--CITE key=blog-inliner sec="Example: renaming ioutil.ReadFile"--> <!--CITE key=blog-inliner sec="Under the hood of the inliner"--></p>
+<div class="warn"><b>함정</b> — defer 를 쓰는 함수는 호출을 없애면 defer 가 너무 늦게 돕니다. gopls 는 함수 리터럴로 감싸지만, go fix 의
+분석기는 방침상 그런 인라인을 거절합니다. <!--CITE key=blog-inliner sec="6. Defer"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-modinit">
+<h3>go mod init 의 go 줄 — 노트와 1.27.1 이 다르다 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 노트는 1.N.X 툴체인의 <code>go mod init</code> 이 go.mod 에 <code>go 1.(N-1).0</code> 을 적는다고 했습니다. 예로 1.26 과 그 마이너
+릴리스는 <code>go 1.25.0</code> 을, 1.26 의 RC 는 <code>go 1.24.0</code> 을 씁니다. 지원 중인 Go 버전들과 호환되는 모듈을 만들도록 권하려는
+것이고, 더 조절하려면 뒤이어 <code>go get go@버전</code> 을 쓰라고 합니다. <!--CITE key=relnotes-1.26 sec="Go command"--></p>
+<!--CODE file=ex/08/v126modinit/main.go note=빈 임시 디렉터리에서 go mod init 을 부르고 go.mod 를 읽는다-->
+<!--GOVER v=1.26 file=ex/08/v126modinit note=1.27.1 에서의 동작-->
+<div class="warn"><b>문서와 실행이 어긋난다</b> — 규칙대로면 1.27.1 은 <code>go 1.26.0</code> 을 적어야 하는데, 캡처는 <code>go 1.27.1</code> 입니다.
+설치된 1.27.1 소스의 <code>modload.CreateModFile</code> 도 로컬 툴체인 버전(<code>gover.Local()</code>)을 그대로 씁니다. 1.27 노트와
+받아 둔 문서에는 이 동작을 되돌렸다는 말이 없어서, 이유는 <span class="unv">미확인</span>입니다. 이 덱은 노트를 고쳐 쓰지 않고 둘을 나란히 둡니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-tools">
+<h3>go tool doc 이 사라지다 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 1.26 은 cmd/doc 와 <code>go tool doc</code> 을 지웠습니다. <code>go doc</code> 이 같은 플래그와 인자를 받고 같은 동작을 하므로
+대체합니다. <!--CITE key=relnotes-1.26 sec="Go command"--></p>
+<!--GOVER v=1.26 file=ex/08/v126modinit cmd="go tool doc fmt.Println" tag=tooldoc note=도구가 없다-->
+<!--GOVER v=1.26 file=ex/08/v126modinit cmd="go doc fmt.Println" tag=doc note=같은 일을 go doc 으로-->
+<div class="note"><b>같은 릴리스의 도구 소식</b> — pprof 의 웹 UI(<code>-http</code>)는 기본 보기가 불꽃 그래프(flame graph)로 바뀌었고, 옛 그래프
+보기는 "View → Graph" 메뉴나 <code>/ui/graph</code> 에 있습니다. <!--CITE key=relnotes-1.26 sec="Pprof"--> 이 기계의 go 에는 pprof 도구가 없어
+(<a href="#p0-machine">0부</a>) 보여 드릴 수 없습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-greentea">
+<h3>Green Tea GC 가 기본값으로 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 1.25 에서 실험이었던 Green Tea 가비지 컬렉터가 의견을 반영한 뒤 기본으로 켜졌습니다. 작은 객체를 표시·스캔할 때의
+지역성과 CPU 확장성을 높인 설계입니다. 노트는 GC 를 많이 쓰는 실제 프로그램에서 GC 오버헤드가 "10–40%" 줄 것으로 보고,
+새 amd64 CPU(Intel Ice Lake, AMD Zen 4 이후)에서는 벡터 명령으로 "10% 정도" 더 줄 것으로 예상했습니다.
+<!--CITE key=relnotes-1.26 sec="New garbage collector"--></p>
+<!--CODE file=ex/08/v126greentea/main.go note=작은 객체 6만여 개의 트리를 만들고 GC-->
+<!--GOVER v=1.26 file=ex/08/v126greentea note=기본 빌드 — 실험 설정이 기록되지 않는다-->
+<!--GOVER v=1.26 exp=nogreenteagc file=ex/08/v126greentea note=옛 수집기로 빌드 — 빌드 정보에 남는다-->
+<div class="warn"><b>시간은 재지 않았다</b> — 두 실행의 출력은 같습니다. 이 덱은 성능을 이 기계에서 재지 않으므로(<a href="#p0-oracle">0부</a>),
+여기서 보이는 것은 "옛 수집기로 되돌리는 스위치가 1.27.1 에도 있다" 는 사실뿐입니다. 노트는 이 스위치가 1.27 에서 지워질
+것으로 예상했지만, 1.27.1 의 <code>internal/goexperiment</code> 에는 아직 <code>greenteagc</code> 가 있습니다(2026-09 기준).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-greenteawhy">
+<h3>Green Tea 는 무엇을 바꿨나</h3>
+<p>Michael Knyszek 과 Austin Clements 의 글(1.25 때 실험으로 나오며 쓴 글)이 설명하는 요점입니다.
+<!--CITE key=blog-greenteagc sec="The Green Tea Garbage Collector"--></p>
+<ul>
+<li>옛 표시 알고리즘은 포인터를 따라 힙 이곳저곳을 뛰어다니는 "그래프 범람(graph flood)" 이라 캐시를 살리지 못합니다. 글은 주 메모리가
+캐시보다 최대 100배 느릴 수 있다고 적었습니다.
+글은 이것을 "마이크로아키텍처의 재앙" 이라는 제목으로 다룹니다. <!--CITE key=blog-greenteagc sec="“A microarchitectural disaster”"--></li>
+<li>Green Tea 는 객체가 아니라 <b>페이지</b> 단위로 일을 모읍니다. 한 페이지에 스캔할 객체가 쌓이기를 기다렸다가 한 번에 훑습니다.
+<!--CITE key=blog-greenteagc sec="Green Tea"--></li>
+<li>벤치마크 모음에서 GC CPU 비용이 벡터 가속 없이도 10%–40% 줄었고, 10% 감소가 가장 흔한 값이었다고 합니다. 한 페이지에 객체 하나씩만
+스캔하게 되는 작업량은 오히려 나빠질 수 있다고도 적었습니다. <!--CITE key=blog-greenteagc sec="Evaluation"--></li>
+<li>그때의 계획은 "1.26 에서 기본값, <code>GOEXPERIMENT=nogreenteagc</code> 로 끌 수 있게" 였고, 앞 장의 캡처가 그대로입니다.
+<!--CITE key=blog-greenteagc sec="Availability"--></li>
+</ul>
+<span class="tier c">글 근거</span>
+</article>
+
+<article class="card" id="p8-v126-heapbase">
+<h3>힙 시작 주소의 무작위화 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 64비트 플랫폼에서 런타임이 시작할 때 힙의 기준 주소를 무작위로 정합니다. cgo 를 쓰는 프로그램에서 공격자가 메모리
+주소를 예측해 취약점을 이용하기 어렵게 하려는 보안 강화입니다. 빌드할 때 <code>GOEXPERIMENT=norandomizedheapbase64</code> 로 끌 수
+있고, 이 옵트아웃은 앞으로 지워질 예정입니다. <!--CITE key=relnotes-1.26 sec="Heap base address randomization"--></p>
+<!--CODE file=ex/08/v126heapbase/main.go note=주소는 찍지 않고 고정 힌트 영역인지만-->
+<!--GOVER v=1.26 file=ex/08/v126heapbase note=기본 — 힙이 고정 힌트를 떠났다-->
+<!--GOVER v=1.26 exp=norandomizedheapbase64 file=ex/08/v126heapbase note=실험을 끄면 옛 자리-->
+<p class="cap">고정 힌트 값은 1.27.1 의 <code>runtime/malloc.go</code> 에서 읽었습니다 — 대부분의 64비트는 <code>0x00c0&lt;&lt;32</code>,
+arm64 는 <code>0x0040&lt;&lt;32</code>. 그래서 "Go 의 힙 주소는 0xc000… 으로 시작한다" 는 오래된 경험칙은 1.26 부터 맞지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-leak">
+<h3>고루틴 누수 프로파일 — 1.26 의 실험 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 막힌 채 다시는 깨어날 수 없는 고루틴을 GC 로 찾아냅니다. 고루틴 G 가 동시성 기본 요소 P 에서 막혀 있는데 P 가 실행 가능한
+어떤 고루틴에서도 닿을 수 없다면, G 는 영원히 깨어나지 못합니다. 1.26 에서는 <code>GOEXPERIMENT=goroutineleakprofile</code> 로 켜는 실험이었고,
+노트는 1.27 에서 기본으로 켜는 것이 목표라고 했습니다. Uber 의 Vlad Saioc 이 기여했습니다. <!--CITE key=relnotes-1.26 sec="Experimental goroutine leak profile"--></p>
+<!--CODE file=ex/08/v126leak/main.go note=노트의 예를 줄인 것 — 버퍼 없는 채널과 이른 return, 그리고 프로파일에서 함수와 줄만-->
+<!--GOVER v=1.26 file=ex/08/v126leak note=1.27.1 에서의 동작 — 실험 없이 켜져 있다-->
+<!--GOVER v=1.26 exp=goroutineleakprofile file=ex/08/v126leak note=1.26 의 스위치는 이제 없다-->
+<p class="cap">1.27 노트대로 이 프로파일은 정식이 됐고 실험 설정은 지워졌습니다 — 그래서 1.26 의 명령을 그대로 치면 거절됩니다.
+<!--CITE key=relnotes-1.27 sec="Goroutine leak profile"--> 전역 변수나 실행 중인 고루틴의 지역 변수로 닿는 기본 요소에서 막힌 경우는 찾지
+못할 수 있다고 노트가 경고합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-stackslice">
+<h3>append 로 자라는 슬라이스도 스택에 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 컴파일러가 슬라이스의 뒷받침 배열을 스택에 두는 경우가 늘었습니다. Keith Randall 의 글에 따르면 1.25 는 크기가 변수인
+<code>make</code> 에 작은(당시 32바이트) 스택 버퍼를 썼고, 1.26 은 같은 버퍼를 <code>append</code> 자리에서 바로 씁니다. 슬라이스가 함수
+밖으로 나가도, 스택 버퍼에 다 들어갔다면 마지막에 딱 맞는 크기로 한 번만 힙에 옮깁니다(<code>runtime.move2heap</code>). <!--CITE key=relnotes-1.26 sec="Compiler"-->
+<!--CITE key=blog-allocation-optimizations sec="Stack allocation of append-allocated slices"--></p>
+<!--CODE file=ex/08/v126stackslice/main.go note=지역 슬라이스와 돌려주는 슬라이스의 할당 수-->
+<!--GOVER v=1.26 file=ex/08/v126stackslice note=기본 — 원소 4개(32바이트)까지는 0회-->
+<!--GOVER v=1.26 file=ex/08/v126stackslice cmd="go run -gcflags=-d=variablemakehash=n ." tag=off lines=1-5 note=최적화를 끄면 컴파일러가 끈 자리를 알린다-->
+<!--GOVER v=1.26 file=ex/08/v126stackslice cmd="go run -gcflags=-d=variablemakehash=n ." tag=off lines=15-20 note=같은 캡처의 끝 — 1·2·4·8·16 으로 자랄 때마다-->
+<p class="cap">노트가 문제 추적용으로 알려 준 스위치(<code>-gcflags=all=-d=variablemakehash=n</code>)를 main 패키지에만 준 것입니다.
+할당 횟수는 결정론이라 그대로 싣습니다. 1.25 의 변수 크기 <code>make</code> 는 <a href="#p8">8부</a> 1장에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-runtime">
+<h3>런타임의 나머지 — 재지 못한 것들 <span class="vt v126">1.26</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td>cgo 호출</td><td>cgo 호출의 기본 런타임 오버헤드가 "~30%" 줄었다 <!--CITE key=relnotes-1.26 sec="Faster cgo calls"--> — 이 기계는 CGO_ENABLED=0 이라 보일 수 없다</td></tr>
+<tr><td>WebAssembly 힙</td><td>힙을 훨씬 작은 단위로 관리해, 힙이 약 16 MiB 미만인 앱의 메모리 사용이 "크게" 줄었다 <!--CITE key=relnotes-1.26 sec="WebAssembly"--></td></tr>
+<tr><td>부트스트랩</td><td>1.26 을 빌드하려면 Go 1.24.6 이상이 필요하다. 1.28 은 1.26 의 마이너 릴리스 이상을 요구할 것으로 예상 <!--CITE key=relnotes-1.26 sec="Bootstrap"--></td></tr>
+</table></div>
+<p class="cap">발표 글도 성능 소식으로 Green Tea·cgo·슬라이스 스택 할당 셋을 꼽았습니다. <!--CITE key=blog-go1.26 sec="Performance improvements"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v126-linker">
+<h3>실행 파일의 섹션이 바뀌다 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 실행 중인 프로그램에는 영향이 없지만, Go 실행 파일을 분석하는 프로그램과 외부 링크에 링커 스크립트를 쓰는 사람에게는
+영향이 있을 수 있는 변화들입니다. moduledata 가 자기 섹션 <code>.go.module</code> 로 옮겼고, 늘 비어 있던 <code>.gosymtab</code> 은 지워졌고,
+<code>.gopclntab</code> 은 재배치가 없어져 relro 에서 rodata 세그먼트로 옮겼고, 내부 링크의 ELF 섹션은 주소 순으로 정렬됩니다.
+<!--CITE key=relnotes-1.26 sec="Linker"--></p>
+<!--CODE file=ex/08/v126elf/main.go note=자기 실행 파일을 debug/elf 로 연다-->
+<!--GOVER v=1.26 file=ex/08/v126elf note=android/arm64, 내부 링크-->
+<p class="cap">노트의 네 가지가 이 기계의 바이너리에서 그대로 보입니다. 노트는 cutab 슬라이스 길이가 네 배로 잘못 기록되던 것도 고쳤다고 적었습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-ports">
+<h3>포트 — windows/arm 이 떠나다 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 1.25 노트가 예고한 대로, 망가져 있던 32비트 windows/arm 포트가 지워졌습니다. 64비트 windows/arm64 는 오히려 cgo
+프로그램의 내부 링크 모드를 지원하게 됐습니다. <!--CITE key=relnotes-1.26 sec="Windows"--> <!--CITE key=relnotes-1.26 sec="Linker"--></p>
+<!--GOVER v=1.26 file=ex/08/v126ports cmd="GOOS=windows GOARCH=arm go build -o x.exe ." tag=winarm note=지워진 포트로 교차 빌드-->
+<!--GOVER v=1.26 file=ex/08/v126ports cmd="GOOS=windows GOARCH=arm64 go build -o x.exe ." tag=winarm64 note=64비트는 조용히 성공-->
+<!--CODE file=ex/08/v126ports/main.go note=빌드한 프로그램-->
+<div class="tblwrap"><table class="kv">
+<tr><th>포트</th><th>1.26 노트</th></tr>
+<tr><td>darwin</td><td>macOS 12 Monterey 에서 도는 마지막 릴리스. 1.27 은 macOS 13 Ventura 이상 <!--CITE key=relnotes-1.26 sec="Darwin"--></td></tr>
+<tr><td>linux/ppc64</td><td>빅엔디언 ELFv1 ABI 의 마지막 릴리스. 1.27 에서 ELFv2 로 <!--CITE key=relnotes-1.26 sec="PowerPC"--></td></tr>
+<tr><td>linux/riscv64 · s390x</td><td>riscv64 가 경쟁 탐지기를, s390x 가 레지스터 인자 전달을 지원 <!--CITE key=relnotes-1.26 sec="RISC-V"--> <!--CITE key=relnotes-1.26 sec="S390X"--></td></tr>
+</table></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-cryptorand">
+<h3>암호 API 가 rand 인자를 무시한다 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — crypto/ecdh·ecdsa·rsa·dsa 의 키 생성과 서명, crypto/rand.Prime 이 받는 <code>random io.Reader</code> 인자를 이제 무시하고,
+늘 안전한 암호학적 난수를 씁니다. 결정론적 시험에는 새 <code>testing/cryptotest.SetGlobalRandom</code> 을 쓰고, 옛 동작은 새 GODEBUG
+<code>cryptocustomrand=1</code> 이 잠시 되돌립니다. <!--CITE key=relnotes-1.26 sec="crypto/ecdh"--> <!--CITE key=relnotes-1.26 sec="crypto/rsa"--></p>
+<!--CODE file=ex/08/v126cryptorand/main.go note=늘 같은 바이트를 내는 Reader 로 키 둘-->
+<!--GOVER v=1.26 file=ex/08/v126cryptorand note=go 1.26 — Reader 를 무시하므로 두 키가 다르다-->
+<!--GOVER v=1.26 godebug=cryptocustomrand=1 file=ex/08/v126cryptorand note=설정으로 옛 동작-->
+<!--GOVER v=1.25 file=ex/08/v126cryptorand note=go 줄을 1.25 로 — 기본값이 옛 동작-->
+<div class="note"><b>세 가지 실행</b> — GODEBUG 문서는 이 설정이 1.26 에서 생겼고 기본값이 0, 1 이 1.26 전의 동작이라고 적었습니다.
+<!--CITE key=godebug sec="Go 1.26"--> go 줄이 GODEBUG 기본값을 정하므로(<a href="#p7-v121-defaults">7부</a>) go 1.25 모듈은 환경 변수 없이도 옛 동작입니다.
+ed25519 는 조금 달라서, rand 가 nil 일 때만 (덮어쓸 수 있던 <code>crypto/rand.Reader</code> 대신) 안전한 난수를 씁니다.
+<!--CITE key=relnotes-1.26 sec="crypto/ed25519"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-cryptotest">
+<h3>testing/cryptotest — 시험용 전역 난수 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — rand 인자가 사라졌으니 결정론적 시험에는 다른 길이 필요합니다. <code>SetGlobalRandom(t, seed)</code> 는 그 시험이 도는 동안
+crypto/rand 와 crypto/... 패키지의 모든 암묵적 난수원을 결정론적인 것으로 바꿉니다. <!--CITE key=relnotes-1.26 sec="testing/cryptotest"-->
+<!--CITE key=api-1.26 sec="pkg testing/cryptotest, func SetGlobalRandom(*testing.T, uint64) #70942"--></p>
+<!--CODE file=ex/08/v126cryptotest/key.go note=Reader 를 받지 않는 키 생성-->
+<!--CODE file=ex/08/v126cryptotest/key_test.go note=같은 씨앗 둘, 다른 씨앗 하나-->
+<!--GOVER v=1.26 file=ex/08/v126cryptotest cmd="go test -count=1 -v ." tag=test note=씨앗이 같으면 같은 순서의 같은 키-->
+<p class="cap">한 시험 안에서 두 번 부르면 서로 다른 키가 나오고, 씨앗 1 로 시작한 두 시험은 같은 두 키를 같은 순서로 얻습니다. 발표 글은
+crypto/hpke·crypto/mlkem/mlkemtest 와 함께 이 패키지를 1.26 의 새 패키지 셋으로 꼽았습니다. <!--CITE key=blog-go1.26 sec="More improvements and changes"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-hpke">
+<h3>crypto/hpke — 혼합 공개키 암호 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 새 crypto/hpke 패키지는 RFC 9180 의 HPKE(Hybrid Public Key Encryption)를 구현하고, 양자 내성 혼합 KEM 도 지원합니다.
+<!--CITE key=relnotes-1.26 sec="New crypto/hpke package"--> 코드에서 보듯 KEM·KDF·AEAD 세 부품을 고르고,
+받는 사람의 공개키로 봉인해 개인키로 엽니다.</p>
+<!--CODE file=ex/08/v126hpke/main.go note=고전 KEM 과 ML-KEM 혼합 KEM 으로 봉인·개봉-->
+<!--GOVER v=1.26 file=ex/08/v126hpke note=길이와 결과만 — 키와 암호문은 매번 다르다-->
+<p class="cap"><code>Seal</code> 은 캡슐화한 키 뒤에 암호문을 붙여 돌려줍니다(1.27.1 소스의 문서 주석). AEAD 와 평문이 같으니 암호문 부분의 길이는
+같고, 봉인한 길이의 차이(62 대 1150 바이트)는 모두 캡슐화한 키에서 옵니다. KEM·KDF·AEAD 의 생성자 목록은 <!--CITE key=api-1.26 sec="pkg crypto/hpke, func MLKEM768X25519() KEM #75300"-->
+처럼 API 목록에 한 줄씩 있습니다. ML-KEM 자체는 1.24 에 들어왔습니다(<a href="#p7-v124-mlkem">7부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-tlspq">
+<h3>TLS — NIST 곡선 혼합 키 교환이 기본으로 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 양자 내성 혼합 키 교환 SecP256r1MLKEM768 과 SecP384r1MLKEM1024 가 기본으로 켜졌습니다. <code>Config.CurvePreferences</code>
+나 GODEBUG <code>tlssecpmlkem=0</code> 으로 끌 수 있습니다. <!--CITE key=relnotes-1.26 sec="crypto/tls"--> <!--CITE key=godebug sec="Go 1.26"--></p>
+<!--CODE file=ex/08/v126tlspq/main.go note=net.Pipe 위에서 서버·클라이언트 핸드셰이크-->
+<!--GOVER v=1.26 file=ex/08/v126tlspq note=기본 — 서버가 혼합 방식을 받는다-->
+<!--GOVER v=1.26 godebug=tlssecpmlkem=0 file=ex/08/v126tlspq note=설정으로 끄면 P-256 으로 물러선다-->
+<p class="cap">네트워크 없이 한 프로세스 안에서 TLS 1.3 핸드셰이크를 했습니다. 같은 절에 따르면 1.22·1.23 에서 생긴 TLS GODEBUG 넷과
+x509keypairleaf 는 1.27 에서 지워집니다 — <a href="#p8-v126-sunset">이 장 뒤쪽</a>.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-crypto">
+<h3>암호 패키지의 나머지 <span class="vt v126">1.26</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>패키지</th><th>노트의 설명</th></tr>
+<tr><td>crypto/rsa</td><td><code>EncryptOAEPWithOptions</code> 로 OAEP 와 MGF1 에 다른 해시를. 안전하지 않은 PKCS #1 v1.5 암호화 패딩(<code>EncryptPKCS1v15</code> 등)은 폐기 표시 <!--CITE key=relnotes-1.26 sec="crypto/rsa"--></td></tr>
+<tr><td>crypto/ecdsa</td><td><code>PublicKey</code>·<code>PrivateKey</code> 의 big.Int 필드가 폐기 표시 <!--CITE key=relnotes-1.26 sec="crypto/ecdsa"--></td></tr>
+<tr><td>crypto/mlkem</td><td>캡슐화·역캡슐화가 약 18% 빨라졌다. 새 <code>crypto.Decapsulator</code> 인터페이스를 구현 <!--CITE key=relnotes-1.26 sec="crypto/mlkem"--></td></tr>
+<tr><td>crypto/fips140</td><td>FIPS 140-3 Go 암호 모듈 v1.26.0 을 <code>GOFIPS140</code> 으로 고를 수 있고, <code>WithoutEnforcement</code>·<code>Enforced</code> 추가 <!--CITE key=relnotes-1.26 sec="crypto/fips140"--></td></tr>
+</table></div>
+<p class="cap">FIPS 모드 자체는 1.24 에 있습니다(<a href="#p7-v124-fips">7부</a>).</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v126-astype">
+<h3>errors.AsType — 제네릭 As <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 새 <code>AsType</code> 은 <code>As</code> 의 제네릭판입니다. 노트는 타입 안전하고, 더 빠르고, 대부분의 경우 쓰기 쉽다고 적었습니다.
+<!--CITE key=relnotes-1.26 sec="errors"--> <!--CITE key=api-1.26 sec="pkg errors, func AsType[$0 error](error) ($0, bool) #51945"--></p>
+<!--CODE file=ex/08/v126astype/main.go note=As 는 대상 변수의 주소를, AsType 은 타입 인자를-->
+<!--GOVER v=1.26 file=ex/08/v126astype note=돌린 결과-->
+<div class="note"><b>변수가 if 안에 갇힌다</b> — <code>As</code> 는 대상 변수를 바깥에 선언해야 했습니다. <code>AsType</code> 은
+<code>if re, ok := …; ok</code> 꼴로 쓸 수 있어서 else-if 사슬이 자연스럽습니다. go fix 의 <code>errorsastype</code> 분석기가 이 바꿈을
+제안합니다(<a href="#p8-v126-gofixlist">앞의 목록</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-reflectiter">
+<h3>reflect 의 반복자 메서드 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — <code>Type.Fields</code>·<code>Type.Methods</code>·<code>Type.Ins</code>·<code>Type.Outs</code> 가 구조체 필드, 메서드, 함수 타입의
+입력·출력 매개변수를 반복자로 돌려줍니다. <code>Value.Fields</code>·<code>Value.Methods</code> 는 타입 정보와 값을 짝으로 내놓습니다.
+<!--CITE key=relnotes-1.26 sec="reflect"--></p>
+<!--CODE file=ex/08/v126reflectiter/main.go note=NumField·Field(i) 대신 range-->
+<!--GOVER v=1.26 file=ex/08/v126reflectiter note=돌린 결과-->
+<p class="cap">메서드는 이름 순입니다(<code>Old</code> 가 <code>String</code> 앞). 반복자와 range-over-func 는 1.23 에 들어왔습니다(<a href="#p7-v123-rangefunc">7부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-multihandler">
+<h3>slog.NewMultiHandler <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 로그 하나를 여러 곳에 보내려면 지금까지 핸들러를 직접 짜야 했습니다. <code>NewMultiHandler</code> 가 주어진 핸들러 모두를
+부르는 <code>MultiHandler</code> 를 만듭니다. <code>Enabled</code> 는 하나라도 켜져 있으면 참이고, <code>Handle</code>·<code>WithAttrs</code>·<code>WithGroup</code>
+은 켜진 핸들러마다 해당 메서드를 부릅니다. <!--CITE key=relnotes-1.26 sec="log/slog"--></p>
+<!--CODE file=ex/08/v126multihandler/main.go note=텍스트(Debug 이상) + JSON(Warn 이상)-->
+<!--GOVER v=1.26 file=ex/08/v126multihandler note=Debug 는 한 번, Warn 은 두 번-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-allocs">
+<h3>할당이 줄어든 두 함수 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 서식 없는 문자열의 <code>fmt.Errorf("x")</code> 가 덜 할당해 <code>errors.New("x")</code> 와 대체로 같아졌습니다.
+<!--CITE key=relnotes-1.26 sec="fmt"--> <code>io.ReadAll</code> 은 중간 메모리를 덜 쓰고 딱 맞는 크기의 슬라이스를 돌려줍니다. 노트는 "흔히 약 두 배
+빠르고" 전체 할당은 "대개 절반쯤" 이라고 적었습니다. <!--CITE key=relnotes-1.26 sec="io"--></p>
+<!--CODE file=ex/08/v126allocs/main.go note=할당 횟수와 결과 슬라이스의 용량-->
+<!--GOVER v=1.26 file=ex/08/v126allocs note=1.27.1 에서의 동작-->
+<p class="cap">할당 횟수와 <code>len == cap</code> 은 결정론이라 싣지만, 옛 툴체인이 없어 "두 배·절반" 은 이 기계에서 비교하지 못했습니다.
+크기를 숨기려고 <code>io.MultiReader</code> 로 감쌌습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-url">
+<h3>url.Parse — host 의 콜론과 쿼리 개수 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — <code>url.Parse</code> 가 host 부분에 콜론이 잘못 든 URL(<code>http://::1/</code>, <code>http://localhost:80:80/</code>)을 거절합니다.
+대괄호로 감싼 IPv6(<code>http://[::1]/</code>)는 여전히 받습니다. 옛 동작은 <code>urlstrictcolons=0</code> 입니다. <!--CITE key=relnotes-1.26 sec="net/url"-->
+같은 릴리스의 <code>urlmaxqueryparams</code> 는 쿼리 매개변수를 기본 10000개로 제한합니다 — 서비스 거부 공격 때문에 1.25.6·1.24.12 에도
+백포트됐습니다. <!--CITE key=godebug sec="Go 1.26"--></p>
+<!--CODE file=ex/08/v126url/main.go note=콜론 셋과 매개변수 10001개-->
+<!--GOVER v=1.26 file=ex/08/v126url note=기본-->
+<!--GOVER v=1.26 godebug=urlstrictcolons=0,urlmaxqueryparams=0 file=ex/08/v126url note=두 설정으로 옛 동작 — 0 은 한도 없음-->
+<!--GOVER v=1.25 file=ex/08/v126url note=go 줄 1.25 — 콜론만 옛 동작-->
+<div class="warn"><b>go 줄로는 안 풀린다</b> — <code>urlmaxqueryparams</code> 는 GODEBUG 표에서 기본값이 바뀐 버전이 1.24 로 적혀 있습니다
+(<code>data/godebug.tsv</code>). 백포트 때문이라, go 줄을 1.25 로 내려도 한도는 그대로입니다. 반면 <code>urlstrictcolons</code> 는 1.26 이라
+go 1.25 모듈에서는 옛 동작입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-http">
+<h3>net/http — 307 리디렉트와 시험 서버의 example.com <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — ServeMux 의 끝 빗금 리디렉트가 301(Moved Permanently) 대신 307(Temporary Redirect)을 씁니다. <!--CITE key=relnotes-1.26 sec="net/http"--> httptest 의 <code>Server.Client</code> 는
+example.com 과 그 하위 도메인으로 가는 요청을 시험 서버로 돌립니다. <!--CITE key=relnotes-1.26 sec="net/http/httptest"--></p>
+<!--CODE file=ex/08/v126http/main.go note=POST /docs 와 api.example.com-->
+<!--GOVER v=1.26 file=ex/08/v126http note=네트워크 없이 — Host 는 요청한 이름 그대로-->
+<p class="cap">같은 절의 다른 변화 — <code>Client</code> 는 쿠키 범위를 가능하면 <code>Request.Host</code> 로 정하고, <code>Transport.NewClientConn</code>
+은 연결을 직접 관리하려는 사람에게 클라이언트 연결 하나를 줍니다. 쿠키 개수 한도 <code>httpcookiemaxnum</code>(기본 3000)도 1.26 의
+GODEBUG 입니다. <!--CITE key=godebug sec="Go 1.26"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-signal">
+<h3>signal.NotifyContext — 어느 신호였나 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — <code>NotifyContext</code> 가 돌려준 컨텍스트는 신호를 받으면 취소되지만, 지금까지는 어떤 신호였는지 알 수 없었습니다.
+이제 <code>context.CancelCauseFunc</code> 로 취소하면서 받은 신호를 알리는 오류를 원인으로 남깁니다. <!--CITE key=relnotes-1.26 sec="os/signal"--></p>
+<!--CODE file=ex/08/v126signal/main.go note=자기 자신에게 SIGTERM-->
+<!--GOVER v=1.26 file=ex/08/v126signal note=Err 는 그대로, Cause 가 신호를 말한다-->
+<p class="cap"><code>ctx.Err()</code> 는 <code>context canceled</code> 그대로라 Err 만 보는 코드는 달라질 것이 없습니다. 원인 API(<code>context.Cause</code>)는
+1.20 에 들어왔습니다(<a href="#p6-v120-cause">6부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-metrics">
+<h3>runtime/metrics — 스케줄러 지표 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 상태별 고루틴 수(대기·실행 가능 등, <code>/sched/goroutines</code> 아래), 런타임이 아는 OS 스레드 수
+(<code>/sched/threads:threads</code>), 프로그램이 만든 고루틴 총수(<code>/sched/goroutines-created:goroutines</code>)가 더해졌습니다.
+<!--CITE key=relnotes-1.26 sec="runtime/metrics"--></p>
+<!--CODE file=ex/08/v126metrics/main.go note=새 이름들과, 고루틴 100개를 만든 뒤의 누적값-->
+<!--GOVER v=1.26 file=ex/08/v126metrics note=이름과 차이만 — 순간값은 매번 다르다-->
+<div class="warn"><b>노트와 한 글자 차이</b> — 노트는 스레드 지표를 <code>/sched/threads:threads</code> 로 적었지만, 1.27.1 의 <code>metrics.All()</code>
+이 내놓는 이름은 <code>/sched/threads/total:threads</code> 입니다. 코드에 이름을 적을 때는 <code>metrics.All()</code> 로 확인하는 편이 안전합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-artifact">
+<h3>T.ArtifactDir — 시험 산출물의 자리 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 시험이 남기는 파일(스크린숏, 덤프, 보고서)을 둘 표준 자리가 생겼습니다. <code>T</code>·<code>B</code>·<code>F</code> 의
+<code>ArtifactDir</code> 은 디렉터리를 돌려주는데, <code>go test -artifacts</code> 면 출력 디렉터리 아래에 남고, 아니면 시험이 끝나면 지워지는 임시
+디렉터리입니다. 첫 호출은 시험 로그에 <code>=== ARTIFACTS</code> 줄로 위치를 적습니다. <!--CITE key=relnotes-1.26 sec="testing"--></p>
+<!--CODE file=ex/08/v126artifact/report.go note=보고서를 만드는 코드-->
+<!--CODE file=ex/08/v126artifact/report_test.go note=산출물을 쓰고, 무작위 끝자리를 가려 위치를 알린다-->
+<!--GOVER v=1.26 file=ex/08/v126artifact cmd="go test -count=1" tag=test note=플래그 없이 — 임시 디렉터리-->
+<!--GOVER v=1.26 file=ex/08/v126artifact cmd="go test -count=1 -artifacts" tag=artifacts note=-artifacts — 현재 디렉터리의 _artifacts 아래-->
+<p class="cap">실제 경로의 끝은 실행마다 바뀌는 무작위 이름이라(1.27.1 <code>testing</code> 소스의 주석 <code>&lt;output dir&gt;/_artifacts/…/&lt;random&gt;</code>),
+캡처가 결정론이 되도록 시험 스스로 그 부분을 가렸습니다. <code>-v</code> 로 돌리면 <code>=== ARTIFACTS</code> 줄이 전체 경로를 보여 줍니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-bloop">
+<h3>B.Loop 가 인라인을 막지 않는다 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 1.24 의 <code>b.Loop</code> 는 루프 본문의 인라인을 막아, 뜻밖의 할당과 느린 벤치마크를 낳을 수 있었습니다. 1.26 은 이를 고쳐 "모든
+벤치마크를 B.N 방식에서 B.Loop 방식으로 부작용 없이 옮길 수 있다" 고 봅니다. 본문의 인자·결과·대입 변수는 여전히 살아 있게 유지해 벤치마크가
+통째로 지워지지는 않습니다. <!--CITE key=relnotes-1.26 sec="testing"--></p>
+<!--CODE file=ex/08/v126bloop/sq.go note=지역 변수의 주소를 돌려주는 함수-->
+<!--CODE file=ex/08/v126bloop/sq_test.go note=b.Loop 로 쓴 벤치마크-->
+<!--GOVER v=1.26 file=ex/08/v126bloop cmd="go test -count=1 -gcflags=-m -run=NONE -bench=. -benchtime=1x ." tag=m lines=1-7 note=루프 안에서 Scale 이 인라인된다-->
+<!--GOVER v=1.26 file=ex/08/v126bloop cmd="go test -count=1 -run=NONE -bench=. -benchmem -benchtime=1000x ." tag=bench note=ns/op 는 지웠다 — 할당 0-->
+<p class="cap">따로 컴파일된 <code>Scale</code> 에서는 q 가 힙으로 가지만, 루프 안에 인라인되면 호출자의 스택에 남아 할당이 0 입니다. <code>b.Loop</code>
+자체는 <a href="#p7-v124-bloop">7부</a>에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-small">
+<h3>작은 변화들 <span class="vt v126">1.26</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td><code>bytes.Buffer.Peek</code></td><td>버퍼를 전진시키지 않고 다음 n 바이트를 돌려준다 <!--CITE key=relnotes-1.26 sec="bytes"--></td></tr>
+<tr><td><code>netip.Prefix.Compare</code></td><td>두 접두사를 비교한다 <!--CITE key=relnotes-1.26 sec="net/netip"--></td></tr>
+<tr><td><code>sha3.SHA3</code> 의 0 값</td><td>0 값이 바로 쓸 수 있는 SHA3-256, <code>SHAKE</code> 의 0 값은 SHAKE256 <!--CITE key=relnotes-1.26 sec="crypto/sha3"--></td></tr>
+</table></div>
+<!--CODE file=ex/08/v126small/main.go note=셋을 한 번에-->
+<!--GOVER v=1.26 file=ex/08/v126small note=돌린 결과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-small2">
+<h3>작은 변화들 (2) <span class="vt v126">1.26</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td>x509 의 용도 이름</td><td><code>KeyUsage</code>·<code>ExtKeyUsage</code> 의 <code>String</code> 이 RFC 5280 등의 OID 이름을, <code>ExtKeyUsage.OID</code> 가 OID 를 돌려준다 <!--CITE key=relnotes-1.26 sec="crypto/x509"--></td></tr>
+<tr><td><code>ast.ParseDirective</code></td><td><code>//go:generate</code> 같은 지시문 주석을 파싱한다. 도구가 자기 지시문을 관례대로 구현하게 돕는다 <!--CITE key=relnotes-1.26 sec="go/ast"--></td></tr>
+<tr><td><code>token.File.End</code></td><td>파일의 끝 위치를 돌려주는 편의 메서드 <!--CITE key=relnotes-1.26 sec="go/token"--></td></tr>
+</table></div>
+<!--CODE file=ex/08/v126small2/main.go note=용도 이름과 지시문 셋-->
+<!--GOVER v=1.26 file=ex/08/v126small2 note=빈칸이 든 "// go:build" 는 지시문이 아니다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-small3">
+<h3>작은 변화들 (3) — 동작이 바뀐 것 <span class="vt v126">1.26</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td>image/jpeg</td><td>인코더·디코더를 더 빠르고 정확한 새 구현으로 바꿨다. 특정 비트 단위 출력을 기대한 코드는 고쳐야 할 수 있다 <!--CITE key=relnotes-1.26 sec="image/jpeg"--></td></tr>
+<tr><td><code>ReverseProxy.Director</code></td><td>폐기 표시. 악의적 클라이언트가 Director 가 더한 헤더를 hop-by-hop 으로 지정해 지울 수 있고, 1.20 에 들어온 <code>Rewrite</code> 를 쓰라 <!--CITE key=relnotes-1.26 sec="net/http/httputil"--></td></tr>
+<tr><td><code>Dialer.DialTCP</code> 등</td><td><code>DialIP</code>·<code>DialTCP</code>·<code>DialUDP</code>·<code>DialUnix</code> 가 컨텍스트와 함께 네트워크 종류를 골라 연결 <!--CITE key=relnotes-1.26 sec="net"--></td></tr>
+</table></div>
+<p class="cap">셋 다 이 기계에서 의미 있게 보일 수 없어(JPEG 비트 비교 기준 없음, 네트워크 없음) 노트로만 싣습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v126-experiments">
+<h3>실험 패키지 — simd/archsimd 와 runtime/secret <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — 1.26 에는 명시적으로 켜야만 보이는 실험이 둘 더 있습니다. <code>GOEXPERIMENT=simd</code> 의 simd/archsimd 는 아키텍처별 SIMD
+연산(지금은 amd64 의 128·256·512비트 벡터)을, <code>GOEXPERIMENT=runtimesecret</code> 의 runtime/secret 은 비밀을 다룬 뒤 레지스터·스택·새 힙
+할당 같은 임시값을 지우는 장치를 줍니다. <!--CITE key=relnotes-1.26 sec="New experimental simd/archsimd package"--> <!--CITE key=relnotes-1.26 sec="New experimental runtime/secret package"--></p>
+<!--CODE file=ex/08/v126secret/main.go note=secret.Do 안에서 키를 다룬다-->
+<!--CODE file=ex/08/v126secret/off.go note=실험을 켜지 않은 빌드-->
+<!--GOVER v=1.26 file=ex/08/v126secret note=기본 — 패키지가 보이지 않는 빌드-->
+<!--GOVER v=1.26 exp=runtimesecret file=ex/08/v126secret note=실험을 켜면 — 그러나 android/arm64-->
+<div class="warn"><b>켰는데 비밀 모드가 아니다</b> — 노트는 linux 의 amd64·arm64 를 지원한다고 했고, 1.27.1 소스의 <code>Do</code> 는
+GOOS/GOARCH 가 정확히 <code>linux/amd64</code>·<code>linux/arm64</code> 일 때만 비밀 모드로 들어가고 나머지에서는 f 를 그냥 부릅니다.
+이 기계는 <code>android/arm64</code> 라 컴파일은 되지만 보호는 없습니다. simd/archsimd 는 amd64 전용이라 여기서 돌리지 못했습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v126-sunset">
+<h3>1.27 에서 지울 GODEBUG 의 예고 <span class="vt v126">1.26</span></h3>
+<p class="why">왜 — GODEBUG 설정은 영원하지 않습니다. 1.26 노트는 1.22·1.23 에서 생긴 설정들을 다음 주 릴리스에서 지운다고 미리 알렸습니다 —
+1.27 부터는 설정이나 go 줄과 상관없이 새 동작입니다. <!--CITE key=relnotes-1.26 sec="crypto/tls"--> <!--CITE key=relnotes-1.26 sec="go/types"--> <!--CITE key=relnotes-1.26 sec="time"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>설정</th><th>1.27 부터 늘 이렇게</th></tr>
+<tr><td><code>tlsunsafeekm</code> · <code>tlsrsakex</code></td><td>ExportKeyingMaterial 은 TLS 1.3 이나 EMS 필요 · ECDH 없는 RSA 키 교환은 기본에서 빠짐</td></tr>
+<tr><td><code>tls10server</code> · <code>tls3des</code></td><td>기본 최소 버전 TLS 1.2 · 기본 암호 모음에 3DES 없음</td></tr>
+<tr><td><code>x509keypairleaf</code></td><td><code>X509KeyPair</code> 가 늘 <code>Certificate.Leaf</code> 를 채움</td></tr>
+<tr><td><code>gotypesalias</code> · <code>asynctimerchan</code></td><td>go/types 는 늘 Alias 타입 · 타이머 채널은 늘 버퍼 없는(동기) 채널</td></tr>
+</table></div>
+<p class="cap">GODEBUG 문서의 1.27 절은 일곱 설정이 모두 지워졌다고 기록합니다. <!--CITE key=godebug sec="Go 1.27"--> 지워진 설정에 옛 값을 주면
+어떻게 되는지는 <a href="#p7-v123-timer">7부</a>의 캡처에 있습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p8-v126-quiz" data-quiz>
+<h3>Go 1.26 퀴즈</h3>
+<p class="q">Q. <code>x := 1; p := new(x); x = 5</code> 뒤 <code>*p</code> 는 얼마입니까? 그리고 같은 파일을 go 1.25 모듈에서 컴파일하면 어떻게 됩니까?
+마지막으로, go 1.20 모듈에서 <code>go fix</code> 가 <code>if x &lt; 0 { x = 0 }</code> 을 <code>max</code> 로 바꿔 줍니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 1 입니다 — <code>new(x)</code> 는 x 의 값을 복사한 새 변수를 가리킵니다. go 1.25 에서는 "requires go1.26 or later" 로 컴파일이
+거절됩니다. 그리고 바꿔 주지 않습니다 — 현대화 도구는 파일의 Go 버전을 보고, <code>max</code> 는 1.21 의 기능이라 go 1.20 모듈에서는 제안하지 않습니다.</div>
+<span class="tier ill">설명용</span>
+</article>

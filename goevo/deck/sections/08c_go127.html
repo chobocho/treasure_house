@@ -1,1 +1,341 @@
-<!-- 8부 3장 — Go 1.27. 8부를 서브에이전트 둘이 나눠 쓰려고 파일을 나눴다(앞 두 자리 08 = 8부). -->
+<!-- Go 1.27 조각 — 8부를 서브에이전트 둘과 나눠 쓰려고 파일을 나눴다(앞 두 자리 08 = 8부). -->
+
+<article class="card" id="p8-v127"><p class="chnum">3장</p><h2>Go 1.27</h2>
+<p class="chsub">제네릭 메서드 · encoding/json/v2 · crypto/mldsa · uuid · simd(실험) · <!--REL v=1.27--> · 2026-09 기준 최신판</p></article>
+
+<article class="card" id="p8-v127-overview">
+<h3>Go 1.27 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.27.html-->
+<p class="cap">노트는 변화 대부분이 툴체인·런타임·라이브러리의 구현에 있다고 소개하지만, 발표 글은 언어 명세의 눈에 띄는 변화 셋을
+맨 앞에 둡니다. 이 기계의 go 가 바로 1.27.1 이라, 이 장의 거의 모든 항목을 실제로 돌려 봅니다.
+<!--CITE key=relnotes-1.27 sec="Introduction to Go 1.27"--> <!--CITE key=blog-go1.27 sec="Language changes"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v127-genwhy">
+<h3>왜 이제야 제네릭 메서드인가</h3>
+<p>1.18 의 제네릭 제안은 메서드에 타입 매개변수를 허락하지 않았습니다. 제네릭 <b>인터페이스</b> 메서드는 효율적으로 구현하기
+어렵고, 메서드는 주로 인터페이스를 구현하는 수단이라고 보았기 때문입니다. 1.27 은 관점을 바꿉니다 — 메서드는 타입 둘레에 기능을
+모으는 <b>정리 도구</b>이기도 하다는 것입니다. <!--CITE key=blog-generic-methods sec="Generic Methods"--></p>
+<ul>
+<li>함수로 쓰면 이름이 패키지 범위에 쌓이고, 이어 부르기가 안에서 밖으로(<code>MapList(MapList(l, f), g)</code>) 읽힙니다.</li>
+<li>메서드로 쓰면 왼쪽에서 오른쪽으로(<code>l.Map(f).Map(g)</code>) 읽힙니다. <!--CITE key=blog-generic-methods sec="Methods for organization"--></li>
+</ul>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p8-v127-genmethod">
+<h3>제네릭 메서드 (generic methods) <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 메서드 선언이 자기만의 타입 매개변수를 가질 수 있습니다. 받는 타입의 매개변수(E)와 별개로 결과 타입(R)을 메서드가 정합니다.
+<!--CITE key=relnotes-1.27 sec="Changes to the language"--></p>
+<!--CODE file=ex/08/v127genmethod/main.go note=List[E] 의 Map[R] — 메서드 식으로 함수로도-->
+<!--GOVER v=1.27 file=ex/08/v127genmethod note=go 1.27-->
+<!--GOVER v=1.26 file=ex/08/v127genmethod note=go 1.26 — 줄 하나 낮추면 거절-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-geniface">
+<h3>제네릭 메서드는 인터페이스를 채우지 못한다</h3>
+<p>인터페이스 메서드는 타입 매개변수를 선언할 수 없고, 제네릭 메서드로 인터페이스 메서드를 구현할 수도 없습니다.
+<!--CITE key=relnotes-1.27 sec="Changes to the language"--> <code>T.M[int]</code> 의 모양이 <code>func M()</code> 과 같아도 T 는 I 를 구현하지 않습니다 —
+구현은 타입의 성질이지 특정 인스턴스의 성질이 아니기 때문입니다. <!--CITE key=blog-generic-methods sec="Decoupling things"--></p>
+<!--CODE file=ex/08/v127geniface/main.go note=호출은 되고, 대입은 안 된다-->
+<!--GOVER v=1.27 file=ex/08/v127geniface cmd="go build ." tag=build note=have M[P any]() · want M()-->
+<div class="note"><b>왜 막았나</b> — 인터페이스 값의 메서드 호출은 패키지 경계를 넘어 어느 구체 메서드로 갈지 컴파일 때 알 수 없습니다. 제네릭
+인터페이스 메서드라면 어떤 인스턴스의 코드를 미리 만들어 둘지 정할 수 없다는 것이 글의 설명입니다.
+<!--CITE key=blog-generic-methods sec="The trouble with generic interface methods"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-randn">
+<h3>표준 라이브러리의 첫 제네릭 메서드 — (*Rand).N <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 전에는 정수 타입마다 메서드(Int32N·Int64N·IntN …)를 두거나 패키지 함수 <code>rand.N</code> 을 써야 했습니다. 이제
+<code>*Rand</code> 에도 어떤 정수 타입이든 받는 <code>N</code> 이 있습니다. <!--CITE key=blog-go1.27 sec="Language changes"-->
+<!--CITE key=api-1.27 sec="pkg math/rand/v2, method (*Rand) N[$0 intType]($0) $0 #77853"--></p>
+<!--CODE file=ex/08/v127randn/main.go note=고정 씨앗의 PCG — 정의한 타입·Duration 도-->
+<!--GOVER v=1.27 file=ex/08/v127randn note=go 1.27-->
+<!--GOVER v=1.26 file=ex/08/v127randn cmd="go vet ." tag=vet note=go 1.26 모듈에서 — 컴파일은 되지만 vet 이 짚는다-->
+<div class="warn"><b>함정</b> — go 줄을 1.26 으로 낮춰도 이 파일은 <b>컴파일됩니다</b>. 제네릭 메서드를 선언한 것은 표준 라이브러리이고, 부르는 쪽은
+새 문법을 쓰지 않았기 때문입니다. 너무 새 API 를 잡는 것은 컴파일러가 아니라 vet 의 stdversion 검사이고, 1.27 부터는
+<a href="#p8-v127-stdver">go test 가 그것을 기본으로 돌립니다</a>.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-promoted">
+<h3>끌어올린 필드를 리터럴 키로 <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 구조체 리터럴의 키가 최상위 필드 이름만이 아니라 그 타입의 올바른 필드 선택자이면 됩니다. 박아 넣은(embedded)
+구조체의 필드를 바깥 리터럴에서 곧장 채웁니다. <!--CITE key=relnotes-1.27 sec="Changes to the language"--></p>
+<!--CODE file=ex/08/v127promoted/main.go note=발표 글의 Gopher 와 Habitat-->
+<!--GOVER v=1.27 file=ex/08/v127promoted note=go 1.27-->
+<!--GOVER v=1.26 file=ex/08/v127promoted note=go 1.26-->
+<div class="note"><b>이전엔</b> — <code>Gopher{Name: "Gopher", Habitat: Habitat{Burrow: "Burrow #42"}}</code> 처럼 한 겹 더 적었습니다.
+<code>%+v</code> 출력이 보이듯 값의 모양은 똑같습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-infer">
+<h3>함수 타입 추론이 대입 문맥 어디서나 <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 제네릭 함수를 맞는 함수 타입의 변수에 대입하거나 그 타입으로 바꿀 때, 복합 리터럴·변환·채널 보내기 어디서든 타입 인자를
+적지 않아도 됩니다. <!--CITE key=relnotes-1.27 sec="Changes to the language"--> <!--CITE key=blog-go1.27 sec="Language changes"--></p>
+<!--CODE file=ex/08/v127infer/main.go note=발표 글의 세 문맥-->
+<!--GOVER v=1.27 file=ex/08/v127infer note=go 1.27-->
+<!--GOVER v=1.26 file=ex/08/v127infer note=go 1.26 — 그래도 통과한다-->
+<div class="warn"><b>사다리 밖</b> — 이 변화는 go 줄이 막지 않습니다. go 1.26 모듈도 1.27.1 컴파일러에서는 통과하므로, 옛 툴체인에서
+정말 거절됐는지는 이 기계에서 보일 수 없습니다(<a href="#p0-modes">0부</a>). 컴파일러의 판 검사 목록에는 제네릭 메서드와 끌어올린 필드
+둘만 있습니다(<a href="#p10-ladder-table">10부</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-stdver">
+<h3>go test 가 stdversion 을 기본으로 <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — go.mod 의 go 줄(과 파일의 빌드 태그)이 정한 판보다 새 표준 라이브러리 기호를 쓰면 알려 줍니다. 이제 go test 가 먼저 도는
+vet 검사에 들어 있습니다. <!--CITE key=relnotes-1.27 sec="go test"--></p>
+<!--CODE file=ex/08/v127stdver/last.go note=go 1.26 모듈이 1.27 의 CutLast 를 쓴다-->
+<!--CODE file=ex/08/v127stdver/last_test.go note=평범한 시험-->
+<!--GOVER v=1.26 file=ex/08/v127stdver cmd="go test -count=1 ." tag=test note=go 1.26 — 시험 전에 멈춘다-->
+<!--GOVER v=1.27 file=ex/08/v127stdver cmd="go test -count=1 ." tag=test note=go 줄을 올리면 통과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-removed">
+<h3>지운 GODEBUG 설정을 go 명령이 알아본다 <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 지원을 끝낸 설정(예: asynctimerchan)이 go.mod 의 godebug 줄이나 <code>//go:debug</code> 에 있어도, 지우기 전에 정해진
+<b>최종 기본값</b>이면 받아 줍니다. 옛 값이면 go 명령이 실패합니다. 설정을 적어 둔 기존 프로그램이 고치지 않고도 계속 빌드되게 하려는
+호환성 약속의 연장입니다. <!--CITE key=relnotes-1.27 sec="GODEBUG"--></p>
+<!--CODE file=ex/08/v127godebugok/go.mod note=최종 기본값 asynctimerchan=0-->
+<!--CODE file=ex/08/v127godebugok/main.go note=프로그램은 한 줄을 찍을 뿐-->
+<!--GOVER v=1.27 file=ex/08/v127godebugok note=빌드되고 돈다-->
+<!--CODE file=ex/08/v127godebugold/go.mod note=옛 값 asynctimerchan=1-->
+<!--CODE file=ex/08/v127godebugold/main.go note=같은 프로그램-->
+<!--GOVER v=1.27 file=ex/08/v127godebugold note=go.mod 를 읽다가 멈춘다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-timer">
+<h3>asynctimerchan 이 사라졌다 <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 1.23 에 더한 이 설정이 영구히 지워졌습니다. time 패키지가 만드는 채널은 이제 GODEBUG 와 상관없이 언제나 버퍼 없는(동기) 채널입니다.
+<!--CITE key=relnotes-1.27 sec="Runtime"--> 1.23 의 변화는 <a href="#p7-v123-timer">7부</a>에서 GODEBUG 짝으로 보았습니다.</p>
+<!--CODE file=ex/08/v127timer/main.go note=타이머 채널의 용량-->
+<!--GOVER v=1.27 file=ex/08/v127timer note=기본-->
+<!--GOVER v=1.27 godebug=asynctimerchan=1 file=ex/08/v127timer cmd="GOTRACEBACK=none go run ." note=옛 값을 환경 변수로 — 시작하자마자 멈춘다-->
+<div class="note"><b>수명</b> — 1.21 이 정한 "적어도 두 해(네 판)" 를 채우고 지워진 예입니다. 같은 판에 go/types 의 gotypesalias 와 crypto/tls 의
+설정 다섯도 지워졌습니다(<a href="#p8-v127-crypto">이 장</a>). <!--CITE key=blog-compat sec="Expanded GODEBUG Support in Go 1.21"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-labels">
+<h3>트레이스백 머리 줄의 고루틴 라벨 <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — go 줄이 1.27 이상인 모듈의 트레이스백은 머리 줄에 runtime/pprof 의 고루틴 라벨을 싣습니다. 끄는 스위치
+<code>tracebacklabels=0</code> 은 1.26 에 이미 들어가 있었고, 라벨에 민감한 정보가 담길 수 있어 무기한 남겨 둘 예정입니다.
+<!--CITE key=relnotes-1.27 sec="Runtime"--></p>
+<!--CODE file=ex/08/v127labels/main.go note=라벨을 붙이고 자기 트레이스백의 첫 줄을 찍는다-->
+<!--GOVER v=1.27 file=ex/08/v127labels note=go 1.27-->
+<!--GOVER v=1.26 file=ex/08/v127labels note=go 1.26 — 같은 툴체인, 옛 기본값-->
+<!--GOVER v=1.27 godebug=tracebacklabels=0 file=ex/08/v127labels note=go 1.27 + 끄는 스위치-->
+<p class="cap">값 <code>r-42</code> 에만 따옴표가 붙은 것은 영숫자·<code>._/</code> 밖의 글자(여기서는 <code>-</code>)가 있으면 따옴표로 감싸기 때문입니다
+($GOROOT/src/runtime/traceback.go 의 tracebackStringNeedsQuoting, go1.27.1).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-leak">
+<h3>goroutineleak 프로파일이 정식으로 <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 1.26 의 실험이 정식이 되었습니다. 채널·뮤텍스 같은 동시성 기본 요소에 막혀, 깨워 줄 수 있는 어떤 고루틴에서도 닿지 않는
+고루틴을 GC 가 찾아냅니다. runtime/pprof 의 <code>goroutineleak</code> 프로파일과 net/http/pprof 의 <code>/debug/pprof/goroutineleak</code> 으로 봅니다.
+<!--CITE key=relnotes-1.27 sec="Goroutine leak profile"--></p>
+<!--CODE file=ex/08/v127leak/main.go note=아무도 닿을 수 없는 채널에서 기다리는 고루틴 셋-->
+<!--GOVER v=1.27 file=ex/08/v127leak note=셋 다 잡힌다-->
+<div class="warn"><b>함정</b> — 도달 가능성에 기대므로, 전역 변수나 돌 수 있는 고루틴의 지역 변수로 닿는 기본 요소에 막힌 누수는 못 찾을 수 있습니다.
+<!--CITE key=relnotes-1.27 sec="Goroutine leak profile"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-malloc">
+<h3>크기별로 특화한 할당 루틴 <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 컴파일러가 크기에 맞춘 메모리 할당 루틴을 부르게 되어, 80바이트 미만의 작은 할당 일부의 비용이 "up to 30%" 줄었습니다.
+실제 할당이 많은 프로그램 전체로는 "~1%" 를 기대하고, 바이너리는 작업량과 상관없이 "about 60 KB" 커집니다.
+<!--CITE key=relnotes-1.27 sec="Faster memory allocation"--></p>
+<ul>
+<li>끄려면 빌드 때 <code>GOEXPERIMENT=nosizespecializedmalloc</code> — 이 스위치는 1.28 에서 지울 예정입니다.</li>
+<li>이 덱은 속도를 재지 않습니다(<a href="#p0-oracle">0부</a>). 수치는 노트의 문장 그대로입니다.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v127-fix">
+<h3>go fix 의 새 modernizer <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 1.26 에 modernizer 의 집이 된 go fix 에 atomictypes·embedlit·slicesbackward·unsafefuncs 가 더해졌습니다. 기존의 fmtappendf 는 문체
+문제로 빠졌고, waitgroup 은 waitgroupgo 로 이름을 바꿨습니다. <!--CITE key=relnotes-1.27 sec="go fix"--></p>
+<!--CODE file=ex/08/v127fix/main.go note=int64 + atomic 함수, 거꾸로 도는 인덱스 루프-->
+<!--GOVER v=1.27 file=ex/08/v127fix cmd="go fix -diff ." tag=fix note=새 modernizer 둘이 동시에-->
+<p class="cap">atomictypes 가 <code>atomic.Int64</code> 로, slicesbackward 가 <code>slices.Backward</code> 로 바꾸자고 합니다. 고칠 것이 있으면 <code>-diff</code> 는
+끝 상태 1 로 끝납니다. 같은 도구를 옛 문체의 갤러리 파일에 돌린 결과는 <a href="#p10-modern-fix">10부</a>에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-tidy">
+<h3>go mod tidy 가 require 묶음을 둘로 <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 손 편집·병합 충돌·옛 도구 탓에 흩어진 require 묶음을, go 1.27 이상 모듈에서는 tidy 가 직접 의존 하나·간접 의존 하나의 두 묶음으로
+합칩니다. 딸린 주석은 보존됩니다. <!--CITE key=relnotes-1.27 sec="go mod tidy"--></p>
+<!--CODE file=ex/08/v127tidy/go.mod note=손으로 덧붙인 둘째 require — 하위 모듈은 replace 로(내려받기 없음)-->
+<!--GOVER v=1.27 file=ex/08/v127tidy cmd="go mod tidy -diff" tag=tidy note=go 1.27 — 합치자는 diff-->
+<!--GOVER v=1.26 file=ex/08/v127tidy cmd="go mod tidy -diff" tag=tidy note=go 1.26 — 같은 툴체인이 손대지 않는다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-tidysrc">
+<h3>tidy 예제의 나머지</h3>
+<!--CODE file=ex/08/v127tidy/main.go note=두 하위 모듈을 쓰는 main-->
+<!--CODE file=ex/08/v127tidy/alpha/alpha.go note=alpha-->
+<!--CODE file=ex/08/v127tidy/beta/beta.go note=beta-->
+<!--GOVER v=1.27 file=ex/08/v127tidy note=replace 로 이어져 돈다-->
+<p class="cap">하위 모듈의 go 줄은 1.20 입니다. 1.27 로 두면 go 1.26 쪽 tidy 가 의존을 따라 go 줄부터 1.27 로 올려 버려, 비교가 흐려집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-godoc">
+<h3>go doc -ex 와 예제 출력 <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — <code>go doc -ex</code> 가 패키지나 기호의 실행 가능한 예제를 나열하고, 예제 이름을 주면 그 소스를 주석과 함께 찍습니다. 모듈에는
+<code>pkg@version</code> 문법도 됩니다. <!--CITE key=relnotes-1.27 sec="go doc"--></p>
+<!--GOVER v=1.27 file=ex/08/v127small cmd="go doc -ex strings.Cut" tag=docex note=기호 밑에 예제 이름이 붙는다-->
+<!--GOVER v=1.27 file=ex/08/v127small cmd="go doc strings.ExampleCut" tag=docexample note=예제 소스와 기대 출력-->
+<p class="cap">이 기계는 <code>pkg@version</code> 을 보일 수 없습니다 — 예제는 모두 <code>GOPROXY=off</code> 로 돕니다(<a href="#p0-machine">0부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-compiler">
+<h3>컴파일러·링커·도구의 작은 변화 <span class="vt v127">1.27</span></h3>
+<table class="kv">
+<tr><th>클로저 이름</th><td>감싼 함수가 인라인되든 말든 함수 리터럴에 같은 이름을 줍니다. 같은 리터럴의 여러 인스턴스가 코드를 나눠 쓸 수도 있어,
+함수 코드 포인터를 견주는(잘못된) 프로그램은 더 자주 같다고 볼 수 있습니다. <!--CITE key=relnotes-1.27 sec="Compiler"--></td></tr>
+<tr><th>응답 파일</th><td>compile·link·asm·cgo·cover·pack 이 GCC 와 같은 형식의 <code>@file</code> 인자를 읽습니다. <!--CITE key=relnotes-1.27 sec="Tools"--></td></tr>
+<tr><th>bzr</th><td>go 명령이 bzr 버전 관리 지원을 뺐습니다 — bzr 서버의 모듈은 더 받을 수 없습니다. <!--CITE key=relnotes-1.27 sec="Go command"--></td></tr>
+</table>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v127-json">
+<h3>encoding/json/v2 와 jsontext <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — encoding/json 의 큰 개정판입니다. Marshal·Unmarshal 계열이 모두 가변 인자 Options 를 받고, 저수준 문법 처리는 jsontext 가
+맡습니다. 기본값이 더 엄격합니다 — 문자열 속 잘못된 UTF-8 과 한 객체 안의 겹친 이름을 거절합니다.
+<!--CITE key=relnotes-1.27 sec="New encoding/json/v2 and encoding/json/jsontext packages"--></p>
+<!--CODE file=ex/08/v127json/main.go note=같은 입력을 v1 과 v2 에-->
+<!--GOVER v=1.27 file=ex/08/v127json note=v1 은 받고 v2 는 거절한다-->
+<div class="note"><b>실험에서 정식으로</b> — 1.25 에서 <code>GOEXPERIMENT=jsonv2</code> 로 먼저 나왔고
+<!--CITE key=relnotes-1.25 sec="New experimental encoding/json/v2 package"-->, 그 사이 format·unknown 태그 옵션이 빠지고 inline 이 embed 로
+이름을 바꾸는 등 API 가 다듬어졌습니다. <!--CITE key=relnotes-1.27 sec="New encoding/json/v2 and encoding/json/jsontext packages"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-jsonv1">
+<h3>v2 위에서 도는 encoding/json <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 옛 encoding/json 도 이제 v2 구현 위에서 돕니다. 마샬·언마샬 동작은 지키되 오류 문구의 정확한 글은 달라질 수 있다고 노트는
+적습니다. 문제가 생기면 빌드 때 <code>GOEXPERIMENT=nojsonv2</code> 로 옛 구현을 되살립니다.
+<!--CITE key=relnotes-1.27 sec="New encoding/json/v2 and encoding/json/jsontext packages"--></p>
+<!--CODE file=ex/08/v127jsonv1/main.go note=v1 API 로 흔한 오류 셋-->
+<!--GOVER v=1.27 file=ex/08/v127jsonv1 note=기본 — v2 구현-->
+<!--GOVER v=1.27 exp=nojsonv2 file=ex/08/v127jsonv1 note=옛 v1 구현-->
+<p class="cap">두 출력이 한 글자도 다르지 않습니다. 이 기계에서 입력 아홉 가지를 더 넣어 봤을 때도 오류 문구가 모두 같았습니다(덱에는 싣지 않은
+시험, scratch/probe/jd) — "다를 수 있다" 는 약속의 여지이지, 흔한 경우의 현실은 아닙니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-mldsa">
+<h3>양자 내성 서명 crypto/mldsa <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — FIPS 204 가 정한 ML-DSA 서명입니다. crypto/x509 가 ML-DSA 키와 서명을, crypto/tls 가 TLS 1.3 의 ML-DSA 서명을 함께 지원합니다.
+1.24 의 <a href="#p7-v124-mlkem">ML-KEM</a>(키 합의)에 이어 서명 쪽도 표준 라이브러리에 들어온 셈입니다.
+<!--CITE key=relnotes-1.27 sec="New crypto/mldsa package"--></p>
+<!--CODE file=ex/08/v127mldsa/main.go note=고정 씨앗의 키로 결정적 서명-->
+<!--GOVER v=1.27 file=ex/08/v127mldsa note=크기와 검증-->
+<p class="cap">1312·2420 은 API 파일의 상수 MLDSA44PublicKeySize·MLDSA44SignatureSize 와 같습니다.
+<!--CITE key=api-1.27 sec="pkg crypto/mldsa, const MLDSA44SignatureSize = 2420 #77626"--> 씨앗을 0 으로 채운 것은 출력을 고정하려는 시연일 뿐입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-uuid">
+<h3>표준 라이브러리의 uuid <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — UUID 를 만들고 읽는 새 패키지입니다. <code>New</code>(=v4)·<code>NewV4</code>·<code>NewV7</code>·<code>Parse</code>·<code>MustParse</code>·<code>Nil</code>·<code>Max</code> 와,
+<code>[16]byte</code> 인 UUID 타입의 String·Compare·텍스트 마샬링이 있습니다. <!--CITE key=relnotes-1.27 sec="New uuid package"-->
+<!--CITE key=api-1.27 sec="pkg uuid, type UUID [16]uint8 #62026"--></p>
+<!--CODE file=ex/08/v127uuid/main.go note=읽기·판 번호·v7 의 시간 순서-->
+<!--GOVER v=1.27 file=ex/08/v127uuid note=무작위 값은 찍지 않고 성질만-->
+<div class="warn"><b>함정</b> — import 경로가 점 없는 <code>"uuid"</code> 입니다. 이미 외부 uuid 패키지를 쓰는 파일에서 표준 것을 함께 쓰려면
+둘 중 하나에 import 별칭을 붙여야 합니다 — 한 파일 안에서 패키지 이름 <code>uuid</code> 는 하나뿐이기 때문입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-simd">
+<h3>이식 가능한 simd 패키지(실험) <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — 벡터 길이를 코드에 적지 않는 SIMD 타입(Int8s·Float32s …)을 모든 아키텍처에 줍니다. 하드웨어 명령이 있으면 쓰고, 없으면 흉내 냅니다.
+<code>GOEXPERIMENT=simd</code> 로 켭니다. 1.26 에 시작한 아키텍처별 simd/archsimd 는 이번에 arm64 Neon·WebAssembly 128비트를 더했습니다.
+<!--CITE key=relnotes-1.27 sec="New experimental simd package"--> <!--CITE key=relnotes-1.27 sec="Experimental simd/archsimd package"--></p>
+<!--CODE file=ex/08/v127simd/main.go note=길이를 모르는 채로 내적-->
+<!--GOVER v=1.27 exp=simd file=ex/08/v127simd note=이 기계(arm64) — 128비트, float32 네 칸-->
+<!--GOVER v=1.27 file=ex/08/v127simd note=실험을 안 켜면 패키지가 빌드 제약에 걸린다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-small">
+<h3>작은 변화들 1 — CutLast · Int.Divide · URL.Clone <span class="vt v127">1.27</span></h3>
+<!--CODE file=ex/08/v127small/main.go note=셋을 한 파일에-->
+<!--GOVER v=1.27 file=ex/08/v127small note=go 1.27-->
+<div class="warn"><b>함정</b> — <code>big.Trunc</code>·<code>Floor</code>·<code>Ceil</code> 이 ToZero·ToNegativeInf·ToPositiveInf 로 찍힙니다. 새 상수는 big.Float 의
+반올림 방식과 같은 RoundingMode 타입·같은 값(Trunc = 2, Floor = 4, Ceil = 5)이라, String 이 Float 쪽 이름을 돌려줍니다.
+<!--CITE key=api-1.27 sec="pkg math/big, const Trunc = 2 #76821"--></div>
+<p class="cap"><!--CITE key=relnotes-1.27 sec="strings"--> <!--CITE key=relnotes-1.27 sec="math/big"--> <!--CITE key=relnotes-1.27 sec="net/url"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-small2">
+<h3>작은 변화들 2 — Unicode 17 · ComparableHasher <span class="vt v127">1.27</span></h3>
+<!--CODE file=ex/08/v127small2/main.go note=새 문자(Garay)와 비교 가능한 키의 해셔-->
+<!--GOVER v=1.27 file=ex/08/v127small2 note=go 1.27-->
+<p>unicode 패키지와 그것을 쓰는 곳 전체가 Unicode 15 에서 17 로 올라갔습니다. hash/maphash 의 새 Hasher 인터페이스는 앞으로 올 해시 기반 자료
+구조와 값 사이의 계약이고, ComparableHasher 는 == 로 견주는 타입을 위한 기본 구현입니다.
+<!--CITE key=relnotes-1.27 sec="unicode"--> <!--CITE key=relnotes-1.27 sec="hash/maphash"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-testserver">
+<h3>httptest.NewTestServer 와 synctest.Sleep <span class="vt v127">1.27</span></h3>
+<p class="why">왜 — NewTestServer 는 testing/synctest 와 함께 쓰도록 메모리 속 가짜 네트워크에서 도는 서버를 만듭니다. synctest.Sleep 은
+time.Sleep 과 synctest.Wait 를 한 번에 합니다. <!--CITE key=relnotes-1.27 sec="net/http/httptest"--> <!--CITE key=relnotes-1.27 sec="testing/synctest"--></p>
+<!--CODE file=ex/08/v127testserver/slow.go note=5초 걸리는 핸들러-->
+<!--CODE file=ex/08/v127testserver/slow_test.go note=거품 안에서 요청하고 1분 잔다-->
+<!--GOVER v=1.27 file=ex/08/v127testserver cmd="go test -count=1 -v ." tag=test note=가짜 시계로 1분 5초, 실제로는 순식간-->
+<p class="cap">거품 안의 시간은 가짜 시계입니다 — 핸들러의 5초와 Sleep 의 1분이 흐른 것으로 셉니다. synctest 자체의 역사는
+<a href="#p7-v124-synctest">7부</a>(1.24 실험)에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v127-crypto">
+<h3>crypto/tls — 지운 설정 다섯과 그 밖 <span class="vt v127">1.27</span></h3>
+<ul>
+<li>GODEBUG 설정 tlsunsafeekm·tlsrsakex·tls10server(1.22 에 더함), tls3des·x509keypairleaf(1.23 에 더함)을 영구히 지웠습니다.</li>
+<li>1.24 에 이미 지웠지만 그때 노트에 빠졌던 tlskyber 의 삭제도 이번에 적었습니다.</li>
+<li>MLKEM1024 키 교환을 CurvePreferences 에 넣어 켤 수 있고, 양자 내성 혼합 키 교환은 tlsmlkem=0 등이 켜져 있어도 CurvePreferences 로 직접 고를 수 있습니다.</li>
+<li><code>Config.Rand</code> 는 폐기 예정 — 결정적 시험에는 testing/cryptotest.SetGlobalRandom 을 씁니다.</li>
+</ul>
+<p class="cap"><!--CITE key=relnotes-1.27 sec="crypto/tls"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v127-ports">
+<h3>이식 — macOS 13 과 ppc64 ELFv2 <span class="vt v127">1.27</span></h3>
+<ul>
+<li>1.26 노트의 예고대로 macOS 13 Ventura 이상이 필요합니다. <!--CITE key=relnotes-1.27 sec="Darwin"--></li>
+<li>linux/ppc64(빅 엔디언)이 ELFv2 시스템 ABI 로 바이너리를 만듭니다 — 리눅스 커널 3.13 이상이 필요하고, 대신 cgo·PIE·외부 링크가 됩니다.
+<!--CITE key=relnotes-1.27 sec="PowerPC"--></li>
+<li>HTTP/1 응답 본문을 닫으면 읽지 않은 나머지를 적당한 한도까지 비워 연결을 다시 씁니다 — 대부분은 차이가 없거나 빨라집니다.
+<!--CITE key=relnotes-1.27 sec="net/http"--></li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p8-v127-quiz" data-quiz>
+<h3>Go 1.27 퀴즈</h3>
+<p class="q">Q. go.mod 가 <code>go 1.26</code> 인 모듈에서 <code>r.N(int64(10))</code>(1.27 의 제네릭 메서드)을 부르면 컴파일러가 거절합니까? 무엇이 알려 줍니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 컴파일러는 거절하지 않습니다 — 부르는 쪽은 새 문법을 쓰지 않았기 때문입니다. vet 의 stdversion 검사가
+"rand.(*Rand).N requires go1.27 or later (module is go1.26)" 라고 짚고, 1.27 부터는 go test 가 그 검사를 기본으로 돌려 시험 전에 멈춥니다.</div>
+<span class="tier ill">설명용</span>
+</article>

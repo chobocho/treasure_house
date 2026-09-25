@@ -1,5 +1,518 @@
 <article class="card section" id="p8">
 <p class="chnum">8부</p>
-<h2>Go 1.25 – 1.27 — 이 덱의 주인공</h2>
-<p class="chsub">준비 중입니다 — 2배 분량, 받아 둔 docs/ 로만 쓴다 (2026-09 기준)</p>
+<h2>Go 1.25 – 1.27 — 가장 최근의 세 릴리스</h2>
+<p class="chsub">컨테이너를 아는 GOMAXPROCS·synctest 정식판·실험 GC 와 json/v2 <!--REL v=1.25--> · <!--REL v=1.26--> · <!--REL v=1.27-->
+· 2026-09 기준, 받아 둔 문서와 이 기계의 go 1.27.1 로만 씁니다</p>
+</article>
+
+<article class="card" id="p8-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">이 부의 세 릴리스는 이 덱을 쓰는 모델이 배운 자료의 가장자리이거나 그 너머에 있습니다. 그래서 기억은 쓰지 않습니다.
+모든 문장은 받아 둔 릴리스 노트·API 목록·블로그 글에서 오고, 돌릴 수 있는 것은 모두 이 기계의 go 1.27.1 로 돌려 캡처합니다.
+<!--CITE key=relnotes-1.25 sec="Introduction to Go 1.25"--></p>
+<ul>
+<li><a href="#p8-v125">1장 — Go 1.25</a>. 언어 변화가 없는 릴리스입니다. 대신 런타임·도구·표준 라이브러리가 크게 움직였습니다.</li>
+<li><a href="#p8-v126">2장 — Go 1.26</a>: <code>new(식)</code>, Green Tea GC 가 기본값, go fix 의 modernizer. <a href="#p8-v127">3장 — Go 1.27</a>:
+제네릭 메서드, encoding/json/v2, crypto/mldsa, uuid. 1.25 에서 실험으로 들어온 것들이 어떻게 되었는지는 그 장들에서 이어 봅니다.</li>
+<li>언어 변화가 없으면 go 줄 관문(<a href="#p0-lang">0부</a>)으로 전과 후를 가를 수 없습니다. 1장은 GODEBUG 와 GOEXPERIMENT 짝, 그리고 go 줄이 정하는 GODEBUG 기본값으로 전과 후를 보입니다.</li>
+<li>이 기계에서 보일 수 없는 것(경쟁 탐지기·cgo·다른 OS 의 실행·네트워크)은 노트를 인용하는 데서 멈춥니다.</li>
+<li>"지금은 이렇다" 는 문장은 모두 2026-09 기준입니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-v125"><p class="chnum">1장</p><h2>Go 1.25</h2>
+<p class="chsub">컨테이너를 아는 GOMAXPROCS · 비행 기록기 · testing/synctest 정식판 · WaitGroup.Go · 실험 GC·json/v2 · <!--REL v=1.25--></p></article>
+
+<article class="card" id="p8-v125-overview">
+<h3>Go 1.25 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.25.html-->
+<p class="cap">노트의 첫 문단은 변화 대부분이 툴체인·런타임·라이브러리의 구현에 있다고 말합니다. 발표 글은 실험 단계의 두 가지 — 새
+GC 와 encoding/json/v2 — 를 직접 켜서 시험해 달라고 부탁했습니다. <!--CITE key=relnotes-1.25 sec="Introduction to Go 1.25"--> <!--CITE key=blog-go1.25 sec="Go 1.25 is released"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v125-coretypes">
+<h3>명세에서 core type 을 지우다 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 1.25 의 언어 변화는 명세의 문장뿐입니다. 제네릭과 함께 들어온 "core type" 개념을 지우고, 필요한 곳마다 따로 쓴
+문장으로 바꿨습니다. 프로그램에 영향은 없습니다. <!--CITE key=relnotes-1.25 sec="Changes to the language"--> Robert Griesemer 의 글은
+이유를 셋 듭니다 — 제네릭이 아닌 코드를 이해할 때도 core type 을 배워야 했고, 규칙이 지나치게 좁았고, 여러 규칙이 예외처럼 보였습니다.
+<!--CITE key=blog-coretypes sec="Core types"--></p>
+<!--CODE file=ex/08/v125coretypes/main.go note=되는 것 하나, 안 되는 것 둘-->
+<!--GOVER v=1.25 file=ex/08/v125coretypes cmd="go build ." tag=build note=1.27.1 의 메시지 — 어느 타입이 문제인지 짚는다-->
+<p class="cap">글에 따르면 컴파일러 오류도 더는 "core type" 을 말하지 않고, 타입 집합의 어느 타입이 문제인지 짚도록 고쳤습니다.
+<code>close</code> 의 명세도 1.18 전의 첫 문장으로 돌아갔고, 제네릭 피연산자를 위한 문단이 뒤에 따로 붙었습니다. <!--CITE key=blog-coretypes sec="Go 1.25"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-maxprocswhy">
+<h3>GOMAXPROCS 와 컨테이너의 CPU 제한</h3>
+<p>GOMAXPROCS 는 고루틴을 동시에 돌릴 스레드의 최대 수입니다. 1.5 부터 1.24 까지 기본값은 기계의 논리 CPU 수였습니다(<a href="#p4-v15-gomaxprocs">4부</a>).
+<!--CITE key=blog-container-aware-gomaxprocs sec="GOMAXPROCS"--></p>
+<p>Kubernetes 의 CPU 제한은 리눅스 cgroup 의 CPU 대역폭 제한이 됩니다. Go 는 그 제한을 몰라서, 제한보다 많은 CPU 를 쓰려다 커널에
+스로틀링을 당했습니다. 스로틀링은 그 주기(보통 100ms)의 남은 시간 동안 프로그램을 통째로 멈추므로 꼬리 지연에 크게 나쁩니다.
+<!--CITE key=blog-container-aware-gomaxprocs sec="Container Orchestration"--></p>
+<div class="note"><b>모형의 차이</b> — GOMAXPROCS 는 병렬도의 한계이고, CPU 제한은 처리량의 한계입니다. "CPU 8개" 제한은 100ms 마다 CPU 시간
+800ms 이므로, 16개 스레드가 50ms 씩 돌아도 채울 수 있습니다. 제한은 2.5 처럼 소수일 수 있는데, Go 는 늘 올림합니다.
+<!--CITE key=blog-container-aware-gomaxprocs sec="Slightly different models"--></div>
+<p class="cap">글은 Uber 의 go.uber.org/automaxprocs 가 오래 비슷한 동작을 제공해 왔다고 감사를 적었습니다. <!--CITE key=blog-container-aware-gomaxprocs sec="Conclusion"--></p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p8-v125-maxprocs">
+<h3>컨테이너를 아는 GOMAXPROCS <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 1.25 부터 리눅스에서는 cgroup 의 CPU 대역폭 제한이 논리 CPU 수보다 작으면 그것이 기본값이 됩니다. 그리고 모든 OS 에서
+CPU 수나 제한이 바뀌면 런타임이 주기적으로 GOMAXPROCS 를 고칩니다. 환경 변수나 <code>runtime.GOMAXPROCS</code> 로 손수 정하면 둘 다 꺼지고,
+새 <code>runtime.SetDefaultGOMAXPROCS</code> 는 다시 기본값으로 돌립니다. <!--CITE key=relnotes-1.25 sec="Container-aware GOMAXPROCS"--> <!--CITE key=relnotes-1.25 sec="runtime"--></p>
+<!--CODE file=ex/08/v125maxprocs/main.go note=숫자 대신 "NumCPU" 를 찍는다 — 켜진 코어 수가 때마다 달라서-->
+<!--GOVER v=1.25 file=ex/08/v125maxprocs note=기본값-->
+<!--GOVER v=1.25 file=ex/08/v125maxprocs cmd="GOMAXPROCS=2 go run ." tag=env note=환경 변수로 정하면-->
+<div class="warn"><b>이 기계에서는</b> — Termux 의 proot 안에서는 cgroup 을 읽을 권한이 없어, 제한이 걸린 컨테이너의 동작은 보이지 못했습니다.
+노트는 CPU 요청(request)은 보지 않는다고 적었고, 제한 파일을 다시 읽으려고 cgroup 파일의 서술자를 프로세스가 끝날 때까지 열어 둔다고 합니다.
+<!--CITE key=relnotes-1.25 sec="Container-aware GOMAXPROCS"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-godebug">
+<h3>1.25 가 더한 GODEBUG 다섯 — go 줄이 기본값을 정한다</h3>
+<p>새 기본 동작은 모두 GODEBUG 로 끌 수 있고, 그 기본값은 main 모듈의 go 줄을 따릅니다(<a href="#p7-v121-defaults">7부</a>). 그래서
+<code>go list</code> 로 이 패키지에 적용될 기본 설정을 물으면 go 줄 하나로 차이가 드러납니다. <!--CITE key=godebug sec="Default GODEBUG Values"--> <!--CITE key=godebug sec="Go 1.25"--></p>
+<!--GOVER v=1.25 file=ex/08/v125maxprocs cmd="go list -f {{.DefaultGODEBUG}} ." tag=defaults note=go 1.25-->
+<!--GOVER v=1.24 file=ex/08/v125maxprocs cmd="go list -f {{.DefaultGODEBUG}} ." tag=defaults note=사본의 go 줄만 1.24-->
+<div class="tblwrap"><table class="kv">
+<tr><th>1.24 줄에서 더 붙은 것</th><th>뜻</th></tr>
+<tr><td><code>containermaxprocs=0</code> · <code>updatemaxprocs=0</code></td><td>cgroup 제한을 보지 않고, 주기적으로 고치지도 않는다 <!--CITE key=relnotes-1.25 sec="Container-aware GOMAXPROCS"--></td></tr>
+<tr><td><code>decoratemappings=0</code></td><td>익명 메모리 영역에 이름을 붙이지 않는다(<a href="#p8-v125-vmaname">뒤 장</a>) <!--CITE key=relnotes-1.25 sec="VMA names on Linux"--></td></tr>
+<tr><td><code>tlssha1=1</code> · <code>x509sha256skid=0</code></td><td>TLS 1.2 의 SHA-1 서명 허용, 키 식별자는 SHA-1(<a href="#p8-v125-skid">뒤 장</a>) <!--CITE key=relnotes-1.25 sec="crypto/tls"--> <!--CITE key=relnotes-1.25 sec="crypto/x509"--></td></tr>
+</table></div>
+<p class="cap">두 줄에 모두 있는 나머지 설정은 1.26·1.27 이 더한 것입니다(2·3장). GODEBUG 문서의 1.25 항목에는 go 명령 자신의 설정 둘
+(<code>embedfollowsymlinks</code>·<code>allowmultiplevcs</code>)도 있는데, 프로그램에 박히는 기본값이 아니라서 이 목록에는 나오지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-greenteawhy">
+<h3>그린티 — 객체가 아니라 페이지로</h3>
+<p>Michael Knyszek 과 Austin Clements 의 글에 따르면, GC 비용의 약 90% 가 표시(mark)이고, 표시 시간의 상당 부분 — 대개 최소 35% — 은
+힙 메모리를 기다리며 멈춘 시간입니다. 지금의 표시 알고리즘은 포인터를 따라 메모리를 이리저리 뛰어다니므로 CPU 캐시가 소용없습니다.
+<!--CITE key=blog-greenteagc sec="Garbage collection costs"--> <!--CITE key=blog-greenteagc sec="“A microarchitectural disaster”"--></p>
+<p>그린티의 생각은 한 줄입니다 — <b>객체가 아니라 페이지로 일한다.</b> 작업 목록에 객체 대신 페이지를 올리고, 한 페이지에 쌓인 객체들을
+한 번에 훑습니다. 표시 여부도 힙 전체가 아니라 페이지마다 따로 기록합니다. <!--CITE key=blog-greenteagc sec="Green Tea"--></p>
+<p class="cap">글은 벡터 가속 없이도 벤치마크 모음에서 GC CPU 비용이 10%–40% 줄었다고 적고, 한 페이지에 훑을 객체가 하나뿐인 작업은
+나아지지 않거나 나빠질 수 있다고 덧붙였습니다. <!--CITE key=blog-greenteagc sec="Evaluation"--></p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p8-v125-greentea">
+<h3>실험 GC 그린티 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 1.25 는 새 GC 를 실험으로 넣었습니다. 작은 객체의 표시와 훑기를 지역성과 CPU 확장성으로 빠르게 하는 설계이고,
+노트는 GC 를 많이 쓰는 실제 프로그램에서 GC 부담이 10—40% 가량 줄 것으로 기대한다고 적었습니다. 빌드할 때
+<code>GOEXPERIMENT=greenteagc</code> 로 켭니다. <!--CITE key=relnotes-1.25 sec="New experimental garbage collector"--></p>
+<!--CODE file=ex/08/v125greentea/main.go note=빌드 설정에 남은 GOEXPERIMENT 를 읽는다-->
+<!--GOVER v=1.25 exp=greenteagc file=ex/08/v125greentea note=1.25 에서 켜던 방법-->
+<!--GOVER v=1.25 file=ex/08/v125greentea note=1.27.1 의 기본-->
+<!--GOVER v=1.25 exp=nogreenteagc file=ex/08/v125greentea note=1.27.1 에서 끄는 방법-->
+<div class="note"><b>그 뒤</b> — 1.27.1 에서는 아무것도 적지 않은 빌드가 이미 그린티입니다. 글은 1.26 에서 기본으로 만들되
+<code>GOEXPERIMENT=nogreenteagc</code> 로 끌 수 있게 하겠다고 예고했습니다. 그 결과는 2장에서 봅니다. <!--CITE key=blog-greenteagc sec="Availability"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-flightwhy">
+<h3>비행 기록기는 왜 필요했나</h3>
+<p>실행 트레이스는 고루틴이 언제 돌았고 — 더 중요하게 — 언제 돌지 않았는지를 담아 지연 문제를 푸는 데 좋습니다. 그러나
+<code>trace.Start</code>·<code>Stop</code> 은 시험이나 명령줄 도구에나 맞습니다. 며칠씩 도는 웹 서버에서 문제가 난 걸 알았을 때는
+이미 Start 를 부르기에 늦습니다. <!--CITE key=blog-flight-recorder sec="Execution traces"--></p>
+<p>비행 기록기는 트레이스를 파일 대신 메모리에 모으고 마지막 몇 초만 남깁니다. 프로그램이 문제를 알아챈 순간 그 창을 떠 가면 됩니다.
+글은 이것을 "문제 구간으로 곧장 들어가는 메스" 에 비유했습니다. <!--CITE key=blog-flight-recorder sec="Flight recording"--></p>
+<p class="cap">글의 예제는 HTTP 요청 하나가 100ms 넘게 걸리면 스냅숏을 뜨고, <code>go tool trace</code> 로 열어 defer 로 늦게 풀린 뮤텍스를
+찾아냅니다. 글은 1.21 이 트레이스의 부담을 크게 줄였고, 1.22 에서 형식이 나눌 수 있게 바뀐 것이 비행 기록기로 이어졌다고 적었습니다.
+<!--CITE key=blog-flight-recorder sec="Example"--></p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p8-v125-flightrec">
+<h3>runtime/trace.FlightRecorder <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 트레이스를 메모리의 고리 버퍼에 계속 기록하다가, 의미 있는 사건이 나면 <code>WriteTo</code> 로 마지막 몇 초를 떠
+파일에 씁니다. 필요한 트레이스만 남으므로 훨씬 작습니다. 남길 시간과 양은 <code>FlightRecorderConfig</code> 로 정합니다.
+<!--CITE key=relnotes-1.25 sec="Trace flight recorder"--></p>
+<!--CODE file=ex/08/v125flightrec/main.go note=기록 시작 → 일 → 스냅숏-->
+<!--GOVER v=1.25 file=ex/08/v125flightrec note=돌린 결과-->
+<div class="warn"><b>함정</b> — 비행 기록기는 한 프로그램에 하나만 켤 수 있습니다(둘째 줄). <code>trace.Start</code> 와는 함께 돌 수 있습니다.
+설정을 비워 두면 1.27.1 소스 기준으로 최대 10 MiB, 최소 10초를 남깁니다(<code>runtime/trace/flightrecorder.go</code>). 머리말의
+<code>go 1.26 trace</code> 는 툴체인 버전이 아니라 <b>트레이스 형식</b>의 버전입니다 — 1.27.1 의 최신 형식이 Go126 입니다
+(<code>internal/trace/version</code>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-repanic">
+<h3>다시 던진 패닉의 출력 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 패닉을 recover 했다가 같은 값으로 다시 panic 하면, 예전에는 값이 두 번 찍혔습니다. <code>panic: PANIC [recovered]</code>
+다음 줄에 <code>panic: PANIC</code> 이 또 나왔습니다. 1.25 부터는 한 줄에 <code>[recovered, repanicked]</code> 로 적습니다.
+<!--CITE key=relnotes-1.25 sec="Change to unhandled panic output"--></p>
+<!--CODE file=ex/08/v125repanic/main.go note=되돌리고 다시 던지는 흔한 모양-->
+<!--GOVER v=1.25 file=ex/08/v125repanic cmd="GOTRACEBACK=none go run ." tag=run note=스택은 빼고 메시지만-->
+<p class="cap">이 변화는 go 줄로도 GODEBUG 로도 갈리지 않습니다 — 캡처는 1.27.1 에서의 동작입니다. 옛 두 줄 형식은 노트에만 남아 있습니다.
+마지막 <code>exit status 2</code> 는 프로그램의 종료 코드이고, go run 자신은 1 로 끝납니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-vmaname">
+<h3>리눅스에서 메모리 영역에 이름을 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 커널이 익명 VMA 이름(CONFIG_ANON_VMA_NAME)을 지원하면, 런타임이 익명 메모리 매핑에 용도를 적습니다 — 힙이면
+<code>[anon: Go: heap]</code>. <code>/proc/<i>pid</i>/maps</code> 를 보는 도구에서 Go 의 메모리가 무엇인지 알 수 있게 됩니다. 끄는 설정은
+<code>GODEBUG=decoratemappings=0</code> 입니다. <!--CITE key=relnotes-1.25 sec="VMA names on Linux"--></p>
+<!--CODE file=ex/08/v125vmaname/main.go note=자기 /proc/self/maps 에서 "Go:" 이름을 모은다-->
+<!--GOVER v=1.25 file=ex/08/v125vmaname note=go 1.25-->
+<!--GOVER v=1.25 godebug=decoratemappings=0 file=ex/08/v125vmaname note=설정으로 끄면-->
+<!--GOVER v=1.24 file=ex/08/v125vmaname note=사본의 go 줄만 1.24 — 기본값이 옛 동작-->
+<p class="cap">안드로이드 커널이 이 기능을 켜 두어서 폰에서도 보입니다. 1.27.1 소스에는 <code>heap</code> 밖에도 여러 이름이 있지만
+(<code>runtime/mem_linux.go</code> 등), 이 작은 프로그램에서는 두 가지만 나왔습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-nilcheck">
+<h3>늦춰졌던 nil 검사를 바로잡다 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 1.21 에서 생긴 컴파일러 버그로, nil 포인터 검사가 뒤로 밀리는 일이 있었습니다. 아래는 노트에 실린 프로그램 그대로입니다.
+<code>os.Open</code> 이 실패하면 <code>f</code> 가 nil 이므로 <code>f.Name()</code> 에서 패닉해야 하는데, 1.21–1.24 는 검사를 오류 확인 뒤로
+미뤄서 아무 일 없이 끝났습니다. 명세 위반이었습니다. <!--CITE key=relnotes-1.25 sec="nil pointer bug"--></p>
+<!--CODE file=ex/08/v125nilcheck/main.go note=오류를 확인하기 전에 결과를 썼다-->
+<!--GOVER v=1.25 file=ex/08/v125nilcheck note=1.27.1 — 이제는 11행에서 패닉-->
+<div class="warn"><b>고쳐야 할 쪽은 코드</b> — 노트의 처방은 오류 확인을 오류를 낸 문장 바로 뒤로 옮기는 것입니다. 이 수정은 go 줄로도
+GODEBUG 로도 되돌릴 수 없습니다 — 버그를 되살리는 스위치는 없습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-dwarf5">
+<h3>디버그 정보가 DWARF 5 로 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 1.25 의 컴파일러와 링커는 디버그 정보를 DWARF 버전 5 로 만듭니다. 디버그 정보가 차지하는 공간이 줄고, 큰 바이너리일수록
+링크 시간도 줄어듭니다. <code>GOEXPERIMENT=nodwarf5</code> 로 되돌릴 수 있지만, 이 대피로는 나중에 없어질 수 있다고 했습니다.
+<!--CITE key=relnotes-1.25 sec="DWARF5 support"--></p>
+<!--CODE file=ex/08/v125dwarf5/main.go note=자기 실행 파일의 .debug_ 절을 센다-->
+<!--GOVER v=1.25 file=ex/08/v125dwarf5 cmd="go run '-ldflags=-s=false -w=false' ." tag=dwarf note=DWARF 5-->
+<!--GOVER v=1.25 exp=nodwarf5 file=ex/08/v125dwarf5 cmd="go run '-ldflags=-s=false -w=false' ." tag=dwarf note=DWARF 4 로 되돌리면-->
+<!--GOVER v=1.25 file=ex/08/v125dwarf5 note=그냥 go run 이면 디버그 정보가 없다-->
+<p class="cap">DWARF 5 에서는 <code>.debug_loc</code>·<code>.debug_ranges</code> 가 <code>.debug_loclists</code>·<code>.debug_rnglists</code> 로 바뀌고
+<code>.debug_addr</code> 가 더해졌습니다. <code>go run</code> 은 링커에 <code>-s -w</code> 를 넘겨 디버그 정보를 빼므로(1.27.1 의
+<code>cmd/go/internal/work/gc.go</code>) 첫 두 실행은 그것을 되돌렸습니다. 1.27.1 소스는 darwin·ios·aix 에서는 DWARF 5 를 쓰지 않습니다
+(<code>internal/buildcfg/exp.go</code>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-stackmake">
+<h3>크기가 변수인 make 도 스택에 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 컴파일러가 슬라이스의 뒷받침 배열을 스택에 두는 경우가 늘었습니다. 크기가 실행 중에야 정해지는 <code>make</code> 도,
+결과가 함수 밖으로 새지 않고 작으면 힙 할당 없이 끝납니다. 노트는 잘못된 <code>unsafe.Pointer</code> 사용의 피해를 키울 수 있다고 경고하고,
+bisect 도구와 끄는 플래그를 알려 줍니다. <!--CITE key=relnotes-1.25 sec="Faster slices"--></p>
+<!--CODE file=ex/08/v125stackmake/main.go note=버퍼 크기가 인자로 온다-->
+<!--GOVER v=1.25 file=ex/08/v125stackmake note=32바이트까지는 할당 0-->
+<!--GOVER v=1.25 file=ex/08/v125stackmake cmd="go run -gcflags=-d=variablemakehash=n ." tag=off note=노트의 플래그로 끄면-->
+<p class="cap">경계 32바이트는 1.27.1 소스의 기본값입니다(<code>cmd/compile/internal/base/flag.go</code> 의
+<code>VariableMakeThreshold</code>). 노트는 <code>-gcflags=all=-d=variablemakehash=n</code> 을 적었는데, 여기서는 이 패키지만 껐습니다.
+<code>[DISABLED]</code> 줄은 컴파일러가 끈 make 자리마다 bisect 형식으로 알리는 것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-synctestwhy">
+<h3>느리거나 불안하거나 — 동시성 시험의 딜레마</h3>
+<p>Damien Neil 은 진짜 시간을 쓰는 시험은 늘 느리거나 불안정하고, 대개 둘 다라고 적었습니다. 오래 기다리면 느리고, 덜 기다리면 가끔
+실패합니다. net/http 의 시험들이 그랬고, 그것이 이 일의 출발점이었다고 합니다. <!--CITE key=blog-testing-time sec="Slow or flaky: Pick two"--></p>
+<p>동시성 코드를 시험하려면 두 가지가 필요합니다 — 가짜 시간, 그리고 배경 고루틴이 할 일을 다 마쳤는지 기다리는 방법. 가짜 시간을
+인터페이스로 넘기게 하면 코드가 관용에서 벗어납니다. 글의 결론은 네트워크와 달리 가짜 시간의 구현은 하나뿐이라는 것이었습니다 — 시간은
+앞으로 갈 뿐입니다. 그래서 시험 하나의 범위 안에서 time 패키지 자체가 가짜 시계를 쓰게 했습니다. <!--CITE key=blog-testing-time sec="A better way"--></p>
+<p class="cap">1.24 의 실험은 <a href="#p7-v124-synctest">7부</a>에서 보았습니다. 1.25 에서 정식이 되었습니다.
+<!--CITE key=blog-testing-time sec="The synctest experiment"--></p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p8-v125-synctest">
+<h3>testing/synctest 정식판 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — <code>synctest.Test</code> 는 시험 함수를 격리된 "거품(bubble)" 에서 돌립니다. 거품 안의 time 패키지는 가짜 시계를 쓰고,
+거품의 모든 고루틴이 막히면 시계가 즉시 앞으로 갑니다. <code>synctest.Wait</code> 는 거품의 다른 고루틴이 모두 막힐 때까지 기다립니다.
+<!--CITE key=relnotes-1.25 sec="New testing/synctest package"--></p>
+<!--CODE file=ex/08/v125synctest/cache.go note=진짜 time.AfterFunc 로 항목을 지우는 캐시-->
+<!--CODE file=ex/08/v125synctest/cache_test.go lines=10-27 note=한 시간을 기다리는 시험-->
+<!--GOVER v=1.25 file=ex/08/v125synctest cmd="go test -count=1 -v ." tag=test note=한 시간이 순식간에-->
+<div class="note"><b>거품의 시계</b> — 가짜 시계는 늘 2000-01-01 자정(UTC)에서 시작합니다(<code>go doc testing/synctest</code>). 시험은
+한 시간을 잤지만 실제로는 바로 끝났습니다. <code>Wait</code> 는 AfterFunc 가 띄운 고루틴이 일을 마치기를 기다립니다. 뮤텍스에 막힌 것은
+"오래 막힘(durably blocked)" 으로 치지 않으므로 Wait 가 기다려 주지 않습니다(같은 문서).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-synctest2">
+<h3>synctest — 실험에서 정식까지 바뀐 것</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>바뀐 것</th><th>이유(글의 설명)</th></tr>
+<tr><td><code>Run(f func())</code> → <code>Test(t, f)</code></td><td>거품 범위의 <code>*testing.T</code> 가 필요했다 — <code>t.Cleanup</code> 이 거품이 끝난 뒤가 아니라 거품 안에서 돌아야 한다 <!--CITE key=blog-testing-time sec="Replaced Run with Test"--></td></tr>
+<tr><td>뿌리 고루틴이 끝나면 시간이 멈춘다</td><td>영원히 Ticker 를 읽는 고루틴이 있으면 시계가 계속 가서 헷갈렸다. 이제 그런 거품은 교착으로 패닉한다 <!--CITE key=blog-testing-time sec="Time stops when a bubble’s root goroutine returns"--></td></tr>
+<tr><td>같은 순간의 타이머 순서를 무작위로</td><td>만든 순서대로 터지던 것에 기대는 시험을 막는다 <!--CITE key=blog-testing-time sec="Randomized events happening at the same time"--></td></tr>
+</table></div>
+<!--GOVER v=1.25 exp=synctest file=ex/08/v125synctest cmd="go test -count=1 -v ." tag=test note=1.24 의 스위치 — 1.27.1 은 모르는 이름-->
+<p class="cap">노트는 옛 API 가 <code>GOEXPERIMENT=synctest</code> 아래 남아 있지만 1.26 에서 없앤다고 예고했습니다. 1.27.1 에는 그 실험 이름
+자체가 없습니다(<code>internal/goexperiment</code> 에 파일이 없다). <!--CITE key=relnotes-1.25 sec="New testing/synctest package"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-jsonv2why">
+<h3>encoding/json 에는 무엇이 문제였나</h3>
+<p>Joe Tsai 등 여섯 사람의 글은 encoding/json 이 Go 에서 다섯째로 많이 import 되는 패키지라고 소개한 뒤, 고칠 수 없는 동작 결함을 늘어놓습니다.
+<!--CITE key=blog-jsonv2-exp sec="Introduction"--> <!--CITE key=blog-jsonv2-exp sec="Behavior flaws"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>v1 의 동작</th><th>문제</th></tr>
+<tr><td>잘못된 UTF-8 을 받아들인다</td><td>RFC 8259 는 올바른 UTF-8 을 요구한다 — 조용히 데이터가 깨진다</td></tr>
+<tr><td>같은 이름의 멤버가 둘인 객체를 받는다</td><td>뜻이 정해지지 않은 값이고, 실제로 공격에 쓰였다</td></tr>
+<tr><td>nil 슬라이스·map 을 <code>null</code> 로 쓴다</td><td>다른 언어의 구현이 배열 자리의 null 을 거절한다. 조사에서 대부분이 빈 배열·객체를 원했다</td></tr>
+<tr><td>필드 이름을 대소문자 무시로 맞춘다</td><td>놀라운 기본값이고, 보안 약점이며, 성능의 한계다</td></tr>
+</table></div>
+<p class="cap">호환성 약속 때문에 v1 을 고칠 수 없으니 새 주 버전이 필요했습니다. <!--CITE key=blog-jsonv2-exp sec="Trying to fix encoding/json directly"--></p>
+<span class="tier c">역사 근거</span>
+</article>
+
+<article class="card" id="p8-v125-jsonv2">
+<h3>실험 encoding/json/v2 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 1.25 는 새 JSON 구현을 실험으로 넣었습니다. 빌드할 때 <code>GOEXPERIMENT=jsonv2</code> 를 주면 encoding/json/v2 와 저수준의
+encoding/json/jsontext 가 보이고, 기존 encoding/json 도 새 구현 위에서 돕니다(오류 문구는 달라질 수 있다). 노트는 인코딩은 비슷하고
+디코딩은 새 구현이 훨씬 빠르다고 적었습니다. <!--CITE key=relnotes-1.25 sec="New experimental encoding/json/v2 package"--></p>
+<!--CODE file=ex/08/v125jsonv2/main.go note=같은 값·같은 입력을 v1 과 v2 에-->
+<!--GOVER v=1.25 exp=jsonv2 file=ex/08/v125jsonv2 note=1.25 에서 켜던 방법-->
+<div class="warn"><b>함정</b> — v2 는 대소문자를 가려 <code>"name"</code> 을 <code>Name</code> 에 넣지 않는데, <b>오류도 내지 않습니다</b>.
+모르는 멤버를 조용히 버리기 때문입니다. v1 의 <code>Tags:[]</code> 는 nil 슬라이스를 <code>%+v</code> 가 그렇게 찍을 뿐입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-jsonv2vet">
+<h3>json/v2 — 실험 스위치와 vet 이 말해 주는 것</h3>
+<p>같은 예제를 실험을 끄고 빌드하면 v2 패키지 자체가 사라집니다. 그리고 1.27.1 의 vet 은 이 go 1.25 모듈에 경고합니다.</p>
+<!--GOVER v=1.25 exp=nojsonv2 file=ex/08/v125jsonv2 cmd="go build ." tag=build note=실험을 끄면-->
+<!--GOVER v=1.25 file=ex/08/v125jsonv2 cmd="go vet ." tag=vet note=1.27.1 의 vet-->
+<p class="cap">vet 의 stdversion 검사는 API 목록을 기준으로 삼습니다. encoding/json/v2 가 공식 API 목록에 오른 것은 1.27 이라서, 1.25 의 실험
+API 를 쓰는 코드에 "go1.27 부터" 라고 말하는 것입니다. 1.27.1 에서 스위치 없이도 빌드되는 이유는 3장에서 봅니다. 글은 이 실험의 결말이
+포기일 수도, 안정 패키지 채택일 수도 있다고 했었습니다. <!--CITE key=blog-jsonv2-exp sec="Experimenting with jsonv2"--> <!--CITE key=relnotes-1.27 sec="New encoding/json/v2 and encoding/json/jsontext packages"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-wggo">
+<h3>sync.WaitGroup.Go <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 고루틴을 만들며 세는 흔한 모양 — <code>wg.Add(1)</code>, <code>go func() { defer wg.Done(); … }()</code> — 을 한 번의 호출로
+줄였습니다. <!--CITE key=relnotes-1.25 sec="sync"--> <!--CITE key=api-1.25 sec="pkg sync, method (*WaitGroup) Go(func()) #63796"--></p>
+<!--CODE file=ex/08/v125wggo/main.go note=Add·go·Done 을 Go 하나로-->
+<!--GOVER v=1.25 file=ex/08/v125wggo note=돌린 결과-->
+<div class="note"><b>1.27.1 의 구현</b> — <code>Go</code> 는 먼저 <code>Add(1)</code> 을 부르고 새 고루틴에서 f 를 돌린 뒤 Done 합니다. f 가 패닉하면 Done 이
+Wait 를 풀어 프로세스가 패닉을 끝내기 전에 정상 종료해 버릴 수 있어서, 그 경우를 따로 막아 둡니다(<code>sync/waitgroup.go</code>). 루프 변수
+<code>i</code>·<code>w</code> 를 그대로 잡아도 되는 것은 1.22 의 반복별 변수 덕입니다(<a href="#p7-v122-loopvar">7부</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-vetwg">
+<h3>vet 의 새 분석기 — waitgroup·hostport <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — <code>waitgroup</code> 은 자리를 잘못 잡은 <code>WaitGroup.Add</code> 호출을, <code>hostport</code> 는 net.Dial 에 넘길 주소를
+<code>fmt.Sprintf("%s:%d", host, port)</code> 로 만드는 코드를 잡습니다. 후자는 IPv6 에서 동작하지 않으므로 <code>net.JoinHostPort</code> 를
+권합니다. <!--CITE key=relnotes-1.25 sec="Vet"--></p>
+<!--CODE file=ex/08/v125vetwg/main.go note=두 가지 실수를 일부러 넣었다-->
+<!--GOVER v=1.25 file=ex/08/v125vetwg cmd="go vet -waitgroup ." tag=waitgroup note=Add 가 새 고루틴 안에-->
+<!--GOVER v=1.25 file=ex/08/v125vetwg cmd="go vet -hostport ." tag=hostport note=IPv6 에서 깨지는 주소-->
+<div class="warn"><b>왜 틀렸나</b> — Add 가 새 고루틴 안에 있으면 main 의 <code>Wait</code> 가 그보다 먼저 돌아 카운터 0 을 보고 곧장 끝날 수
+있습니다. <code>"::1"</code> 에 <code>":8080"</code> 을 이으면 <code>::1:8080</code> 이 되어 어디까지가 주소인지 알 수 없습니다. 위의
+<code>wg.Go</code> 를 쓰면 첫째 실수는 애초에 생기지 않습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-testattr">
+<h3>T.Attr 와 T.Output <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — <code>T.Attr</code>(B·F 에도)은 시험에 임의의 키·값을 붙여 로그에 <code>=== ATTR</code> 줄로 남깁니다. <code>-json</code> 에서는
+새 "attr" 동작으로 나옵니다. <code>Output</code> 은 <code>TB.Log</code> 와 같은 출력으로 가는 <code>io.Writer</code> 인데, 들여쓰기는 같고
+파일·줄 번호는 붙이지 않습니다. <!--CITE key=relnotes-1.25 sec="testing"--></p>
+<!--CODE file=ex/08/v125testattr/attr_test.go note=속성 하나, Writer 로 한 줄, Log 로 한 줄-->
+<!--GOVER v=1.25 file=ex/08/v125testattr cmd="go test -count=1 -v ." tag=test note=돌린 결과-->
+<div class="note"><b>같은 절의 다른 변화</b> — <code>AllocsPerRun</code> 은 병렬 시험이 도는 중에 부르면 이제 패닉합니다. 다른 시험이 함께
+돌면 그 결과가 본래 흔들리기 때문입니다. <!--CITE key=relnotes-1.25 sec="testing"--> <code>-json</code> 출력은 줄마다 시각이 찍혀 여기
+싣지 않았습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-typeassert">
+<h3>reflect.TypeAssert <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — <code>reflect.Value</code> 를 Go 값으로 바로 바꿉니다. <code>v.Interface().(T)</code> 와 같은 일을 하지만 불필요한 메모리 할당을
+피합니다. <!--CITE key=relnotes-1.25 sec="reflect"--> <!--CITE key=api-1.25 sec="pkg reflect, func TypeAssert[$0 interface{}](Value) ($0, bool) #62121"--></p>
+<!--CODE file=ex/08/v125typeassert/main.go note=주소를 가질 수 있는 필드 값에서-->
+<!--GOVER v=1.25 file=ex/08/v125typeassert note=할당 1 → 0-->
+<div class="warn"><b>늘 차이가 나는 것은 아니다</b> — 처음에 <code>reflect.ValueOf(Event{…}).Field(0)</code> 으로 짰더니 두 방법 모두 할당이 0
+이었습니다. 1.27.1 의 <code>reflect/value.go</code> 를 보면 <code>Interface()</code> 는 주소를 가질 수 있는(addressable) 값일 때만 사본을 새로
+할당합니다. 구조체를 포인터로 받아 필드를 도는 흔한 코드가 바로 그 경우입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-csrf">
+<h3>net/http.CrossOriginProtection <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 교차 사이트 요청 위조(CSRF)를 막습니다. 안전하지 않은 메서드의 교차 출처 브라우저 요청을 거절하는데, 브라우저의 Fetch
+메타데이터를 쓰므로 토큰도 쿠키도 필요 없습니다. 믿는 출처와 우회 패턴을 더할 수 있습니다. <!--CITE key=relnotes-1.25 sec="net/http"--></p>
+<!--CODE file=ex/08/v125csrf/main.go note=httptest 로 여섯 가지 요청-->
+<!--GOVER v=1.25 file=ex/08/v125csrf note=돌린 결과-->
+<div class="warn"><b>무엇을 믿는가</b> — 1.27.1 의 문서 주석(<code>net/http/csrf.go</code>)에 따르면 교차 출처는 <code>Sec-Fetch-Site</code> 헤더로,
+없으면 <code>Origin</code> 의 호스트를 Host 헤더와 견주어 판단합니다. GET·HEAD·OPTIONS 는 늘 통과하므로 그 메서드로 상태를 바꾸면 안 됩니다.
+두 헤더가 모두 없는 요청(마지막 줄 — curl 같은 브라우저 아닌 클라이언트)은 통과합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-osroot">
+<h3>os.Root 의 새 메서드 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 1.24 의 <code>os.Root</code>(<a href="#p7-v124-osroot">7부</a>)는 한 디렉터리 밖으로 나갈 수 없는 파일 API 입니다. 1.25 는
+Chmod·Chown·Chtimes·Lchown·Link·MkdirAll·ReadFile·Readlink·RemoveAll·Rename·Symlink·WriteFile 열두 메서드를 더해, os 패키지의
+흔한 함수를 거의 다 Root 안에서 쓸 수 있게 했습니다. <!--CITE key=relnotes-1.25 sec="os"--></p>
+<!--CODE file=ex/08/v125osroot/main.go note=임시 디렉터리를 뿌리로-->
+<!--GOVER v=1.25 file=ex/08/v125osroot note=돌린 결과-->
+<div class="warn"><b>함정</b> — 뿌리 밖을 가리키는 심볼릭 링크는 <b>만드는 것</b>은 성공합니다(<code>Symlink conf/pw</code>). 막히는 것은 그 링크를
+<b>따라갈 때</b>입니다. 같은 절에서 <code>DirFS</code> 와 <code>Root.FS</code> 가 돌려주는 파일 시스템은 새 <code>io/fs.ReadLinkFS</code> 를
+구현하게 되었습니다(<a href="#p8-v125-small">작은 변화들</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-ignore">
+<h3>go.mod 의 ignore 지시문 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — go 명령이 무시할 디렉터리를 go.mod 에 적습니다. 그 아래 파일은 <code>all</code>·<code>./...</code> 같은 패턴에 걸리지 않지만,
+모듈 zip 에는 여전히 들어갑니다. <!--CITE key=relnotes-1.25 sec="Go command"--> 자바스크립트 도구가 모듈 안에 만든 <code>node_modules</code> 처럼,
+Go 파일이 섞였지만 Go 패키지가 아닌 디렉터리가 전형입니다.</p>
+<!--CODE file=ex/08/v125ignore/go.mod note=ignore 한 줄-->
+<!--CODE file=ex/08/v125ignore/node_modules/pkg/pkg.go note=걸리면 안 되는 파일-->
+<!--GOVER v=1.25 file=ex/08/v125ignore cmd="go list ./..." tag=list note=node_modules 가 빠졌다-->
+<!--GOVER v=1.25 file=ex/08/v125ignore cmd="go list ./node_modules/pkg" tag=direct note=경로를 직접 주면 보인다-->
+<!--GOVER v=1.25 file=ex/08/v125ignore cmd="go mod edit -ignore=./dist -print" tag=edit note=go mod edit 도 안다-->
+<p class="cap">이 기계에서 ignore 줄을 뺀 사본으로 돌려 보면 <code>go list ./...</code> 에 <code>node_modules/pkg</code> 가 셋째 줄로 나옵니다(캡처로는 남기지
+않았습니다 — 실험 도구는 go 줄만 바꿀 수 있습니다). 예제의 나머지 두 파일은 <a href="#p8-v125-gocmd">다음 장</a>에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-gocmd">
+<h3>go 명령의 작은 변화들 <span class="vt v125">1.25</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td>미리 빌드한 도구 줄이기</td><td>컴파일러·링커 같은 핵심 도구만 배포판에 싣고, 빌드·시험이 부르지 않는 도구는 <code>go tool</code> 이 필요할 때 빌드해 돌린다</td></tr>
+<tr><td><code>work</code> 패턴</td><td>작업(예전 이름 main) 모듈의 패키지 전부 — 모듈 모드면 한 모듈, 작업 공간 모드면 작업 공간의 모듈들</td></tr>
+<tr><td>toolchain 줄</td><td>go 명령이 go.mod·go.work 의 go 줄을 올릴 때 자기 버전을 적은 toolchain 줄을 더는 붙이지 않는다</td></tr>
+</table></div>
+<!--CODE file=ex/08/v125ignore/main.go note=ignore 예제의 main-->
+<!--CODE file=ex/08/v125ignore/app/app.go note=그리고 app-->
+<!--GOVER v=1.25 file=ex/08/v125ignore cmd="go list work" tag=work note=작업 모듈의 패키지-->
+<!--GOVER v=1.25 file=ex/08/v125ignore cmd="go tool -n compile" tag=compile note=배포판에 든 도구-->
+<!--GOVER v=1.25 file=ex/08/v125ignore cmd="go tool -n nm" tag=nm note=빌드 캐시에서 빌드된 도구-->
+<p class="cap">세 줄 모두 <!--CITE key=relnotes-1.25 sec="Go command"-->. <code>-n</code> 은 돌리지 않고 무엇을 돌릴지 보여 줍니다. nm 은 더는
+<code>$GOROOT/pkg/tool</code> 에 없고 캐시에 빌드되었습니다. 이 기계의 Termux 판 배포에는 그 디렉터리에 asm·cgo·compile·cover·fix·link·preprofile·vet
+여덟 개만 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-versionjson">
+<h3>go version -m -json <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — 바이너리에 박힌 <code>runtime/debug.BuildInfo</code> 를 JSON 으로 찍습니다. 빌드 정보(<a href="#p6-v118-buildinfo">6부</a>)를
+사람이 아니라 도구가 읽기 쉬워졌습니다. <!--CITE key=relnotes-1.25 sec="Go command"--></p>
+<!--GOVER v=1.25 file=ex/08/v125ignore cmd="go version -m -json /data/data/com.termux/files/usr/lib/go/bin/gofmt" tag=versionjson note=이 기계의 gofmt-->
+<p class="cap">Termux 가 배포한 gofmt 는 <code>-trimpath</code>·<code>CGO_ENABLED=0</code> 으로 빌드되었고, 모듈 밖(<code>cmd/gofmt</code>)이라
+<code>Main</code> 이 비었습니다. 같은 절에서 <code>go doc -http</code> 도 생겼는데, 브라우저를 여는 기능이라 여기서는 돌리지 않았습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-skid">
+<h3>x509 키 식별자는 SHA-256 으로 <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — <code>CreateCertificate</code> 는 SubjectKeyId 가 비어 있으면 채우는데, 이제 SHA-1 이 아니라 앞을 자른 SHA-256 을 씁니다.
+<code>GODEBUG=x509sha256skid=0</code> 은 SHA-1 로 돌립니다. <!--CITE key=relnotes-1.25 sec="crypto/x509"--> 함께 들어온 ecdsa 의
+<code>ParseRawPrivateKey</code>·<code>PublicKey.Bytes</code> 는 crypto/elliptic·math/big 없이 원시 인코딩을 다룹니다. <!--CITE key=relnotes-1.25 sec="crypto/ecdsa"--></p>
+<!--CODE file=ex/08/v125skid/main.go lines=1-26 note=고정한 비밀 스칼라로 키를 만든다-->
+<!--CODE file=ex/08/v125skid/main.go lines=27-46 note=공개키 바이트, CA 인증서, 키 식별자 견주기-->
+<!--GOVER v=1.25 file=ex/08/v125skid note=go 1.25 — SHA-256 의 앞 20바이트-->
+<!--GOVER v=1.25 godebug=x509sha256skid=0 file=ex/08/v125skid note=설정으로 되돌리면 SHA-1-->
+<!--GOVER v=1.24 file=ex/08/v125skid note=go 줄만 1.24 여도 SHA-1-->
+<div class="warn"><b>CA 일 때만</b> — 1.27.1 의 <code>crypto/x509/x509.go</code> 는 템플릿이 <code>IsCA</code> 일 때만 키 식별자를 만듭니다. 주석이 두 방법의
+근거를 적어 둡니다 — SHA-1 은 RFC 5280, SHA-256 의 왼쪽 160비트는 RFC 7093 입니다. 서명은 무작위지만 키 식별자는 공개키에서만 나오므로 캡처가
+늘 같습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-crypto">
+<h3>암호 패키지의 나머지 <span class="vt v125">1.25</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td><code>crypto.MessageSigner</code>·<code>SignMessage</code></td><td>메시지를 직접 해시하는 서명자의 인터페이스. SignMessage 는 가능하면 그것을, 아니면 Signer.Sign 을 쓴다. x509 의 인증서 생성 함수들도 받는다 <!--CITE key=relnotes-1.25 sec="crypto"--> <!--CITE key=relnotes-1.25 sec="crypto/x509"--></td></tr>
+<tr><td>TLS</td><td>TLS 1.2 에서 SHA-1 서명 알고리즘 금지(RFC 9155, <code>tlssha1=1</code> 로 되살림). <code>ConnectionState.CurveID</code>. 서버는 클라이언트가 가장 원하는 것이 아니어도 가장 높은 버전을 고른다 <!--CITE key=relnotes-1.25 sec="crypto/tls"--></td></tr>
+<tr><td>속도</td><td>RSA 키 생성 세 배. FIPS 140-3 모드의 ECDSA·Ed25519 서명 네 배(비 FIPS 와 같아짐). amd64 의 SHA-NI 로 SHA-1 두 배, Apple M 에서 SHA-3 두 배 <!--CITE key=relnotes-1.25 sec="crypto/rsa"--> <!--CITE key=relnotes-1.25 sec="crypto/ecdsa"--> <!--CITE key=relnotes-1.25 sec="crypto/sha1"--> <!--CITE key=relnotes-1.25 sec="crypto/sha3"--></td></tr>
+</table></div>
+<p class="cap">반대 방향도 있습니다 — AVX2 가 없는 amd64 에서는 SHA-1·SHA-256·SHA-512 가 느려졌습니다. 노트는 2015 년 이후의 서버 프로세서는 모두
+AVX2 를 지원한다고 덧붙였습니다. 이 덱은 속도를 재지 않습니다. <!--CITE key=relnotes-1.25 sec="crypto"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v125-small">
+<h3>작은 변화들 <span class="vt v125">1.25</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td><code>hash.Cloner</code>·<code>hash.XOF</code></td><td>상태를 복사하는 해시. 표준 라이브러리의 Hash 구현은 모두 Cloner 다. XOF 는 SHAKE 처럼 출력 길이가 자유로운 해시 <!--CITE key=relnotes-1.25 sec="hash"--></td></tr>
+<tr><td><code>io/fs.ReadLinkFS</code></td><td>파일 시스템 안의 심볼릭 링크를 읽는 인터페이스. MapFS·DirFS·Root.FS 가 구현한다 <!--CITE key=relnotes-1.25 sec="io/fs"--> <!--CITE key=relnotes-1.25 sec="testing/fstest"--></td></tr>
+<tr><td><code>slog.GroupAttrs</code></td><td>Attr 슬라이스로 그룹 Attr 을 만든다. <code>Record.Source</code> 도 생겼다 <!--CITE key=relnotes-1.25 sec="log/slog"--></td></tr>
+</table></div>
+<!--CODE file=ex/08/v125small/main.go lines=1-29 note=Cloner 와 ReadLink-->
+<!--CODE file=ex/08/v125small/main.go lines=30-46 note=Lstat, 그리고 GroupAttrs — 시각은 뺀다-->
+<!--GOVER v=1.25 file=ex/08/v125small note=돌린 결과-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-small2">
+<h3>작은 변화들 (2) <span class="vt v125">1.25</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td>unicode</td><td><code>CategoryAliases</code>("Letter" → "L"). 늘 있었지만 빠져 있던 범주 Cn(배정되지 않은 코드 포인트)·LC(대소문자 글자). C 범주가 Cn 을 품게 되었다 <!--CITE key=relnotes-1.25 sec="unicode"--></td></tr>
+<tr><td>regexp/syntax</td><td><code>\p{…}</code> 가 Any·ASCII·Assigned·Cn·LC 와 <code>\p{Letter}</code> 같은 별칭을 받고, 대소문자·공백·밑줄·하이픈을 무시하고 찾는다 <!--CITE key=relnotes-1.25 sec="regexp/syntax"--></td></tr>
+<tr><td>mime/multipart</td><td><code>FileContentDisposition</code> — 파일 파트의 Content-Disposition 헤더를 만든다 <!--CITE key=relnotes-1.25 sec="mime/multipart"--></td></tr>
+</table></div>
+<!--CODE file=ex/08/v125small2/main.go note=U+0378 은 배정되지 않은 코드 포인트-->
+<!--GOVER v=1.25 file=ex/08/v125small2 note=돌린 결과-->
+<div class="warn"><b>함정</b> — C 범주가 Cn 을 품게 되었으므로 <code>unicode.Is(unicode.C, r)</code> 의 결과가 1.25 에서 바뀐 글자가 있습니다(넷째
+줄). "제어 문자를 거른다" 는 뜻으로 C 를 쓰던 코드는 이제 배정되지 않은 코드 포인트까지 거릅니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-goast">
+<h3>도구 작성자를 위한 go/ast·go/types <span class="vt v125">1.25</span></h3>
+<p class="why">왜 — <code>ast.PreorderStack</code> 은 <code>Inspect</code> 처럼 구문 트리를 돌되, 각 지점에서 둘러싼 노드의 스택을 함께 줍니다.
+<code>types.Var.Kind</code> 는 변수가 패키지 수준·수신자·매개변수·결과·지역 변수·구조체 필드 가운데 무엇인지 알려 줍니다.
+<!--CITE key=relnotes-1.25 sec="go/ast"--> <!--CITE key=relnotes-1.25 sec="go/types"--></p>
+<!--CODE file=ex/08/v125goast/main.go note=작은 소스를 파싱하고 검사한다-->
+<!--GOVER v=1.25 file=ex/08/v125goast note=돌린 결과-->
+<p class="cap">같은 릴리스에서 go/ast 의 옛 Object·Package 장치에 딸린 함수들과 <code>go/parser.ParseDir</code> 가 폐기 예정이 되었고, go/token 에는
+오래 사는 프로그램의 전역 FileSet 문제를 덜어 줄 <code>FileSet.AddExistingFiles</code> 가 생겼습니다. <!--CITE key=relnotes-1.25 sec="go/token"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-v125-runtime">
+<h3>런타임의 작은 변화들 <span class="vt v125">1.25</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>노트의 설명</th></tr>
+<tr><td><code>AddCleanup</code> 의 병렬 실행</td><td>정리 함수가 동시에, 병렬로 돈다 — unique 같은 무거운 사용에도 쓸 만해졌다. 오래 걸리는 정리는 여전히 새 고루틴으로 넘겨야 한다 <!--CITE key=relnotes-1.25 sec="runtime"--></td></tr>
+<tr><td><code>GODEBUG=checkfinalizers=1</code></td><td>GC 주기마다 finalizer·cleanup 의 흔한 실수를 진단하고, 두 대기열의 길이를 stderr 에 주기적으로 알린다 <!--CITE key=relnotes-1.25 sec="runtime"--></td></tr>
+<tr><td>unique</td><td>값을 더 일찍·효율적으로·병렬로 회수한다. Handle 이 사슬을 이룬 값도 한 번의 GC 주기에 걷힌다 <!--CITE key=relnotes-1.25 sec="unique"--></td></tr>
+</table></div>
+<p class="cap">AddCleanup 은 <a href="#p7-v124-cleanup">7부</a>, unique 는 <a href="#p7-v123-unique">7부</a>에서 처음 보았습니다. runtime/pprof 의
+뮤텍스 프로파일도 런타임 내부 잠금의 경합을 임계 구역의 끝으로 바르게 가리키게 되었고, 1.22–1.24 의 옛 동작을 켜던
+<code>runtimecontentionstacks</code> 설정은 없어졌습니다. <!--CITE key=relnotes-1.25 sec="runtime/pprof"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-v125-ports">
+<h3>포트 <span class="vt v125">1.25</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>플랫폼</th><th>노트의 설명</th></tr>
+<tr><td>macOS</td><td>1.24 노트의 예고대로 macOS 12 Monterey 이상을 요구한다 <!--CITE key=relnotes-1.25 sec="Darwin"--></td></tr>
+<tr><td>windows/arm</td><td>고장 난 32비트 windows/arm 을 담은 마지막 릴리스. 1.26 에서 지운다 <!--CITE key=relnotes-1.25 sec="Windows"--></td></tr>
+<tr><td>amd64</td><td><code>GOAMD64=v3</code> 이상에서 곱셈·덧셈을 합친 FMA 명령을 쓴다 — 실수 결과가 달라질 수 있다. 막으려면 <code>float64(a*b)+c</code> 처럼 명시적으로 변환한다 <!--CITE key=relnotes-1.25 sec="AMD64"--></td></tr>
+<tr><td>loong64·riscv64</td><td>linux/loong64 가 경쟁 탐지기를, linux/riscv64 가 plugin 빌드 모드를 지원한다. <code>GORISCV64=rva23u64</code> <!--CITE key=relnotes-1.25 sec="Loong64"--> <!--CITE key=relnotes-1.25 sec="RISC-V"--></td></tr>
+</table></div>
+<!--GOVER v=1.25 file=ex/08/v125wggo cmd="GOOS=windows GOARCH=arm go build ." tag=winarm note=1.27.1 로 교차 빌드하면-->
+<p class="cap">예고는 지켜졌습니다 — 1.27.1 은 windows/arm 짝 자체를 모릅니다. 1.26 노트도 그 포트를 지웠다고 적었습니다. <!--CITE key=relnotes-1.26 sec="Windows"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-v125-quiz" data-quiz>
+<h3>Go 1.25 퀴즈</h3>
+<p class="q">Q. go.mod 의 go 줄이 1.24 인 서비스를 1.25 툴체인으로 다시 빌드해 CPU 제한 2개인 컨테이너에 올렸습니다. GOMAXPROCS 는 제한을
+따릅니까? 그리고 <code>f, err := os.Open(p); name := f.Name()</code> 처럼 오류 확인보다 결과를 먼저 쓴 코드는 어떻게 됩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 따르지 않습니다 — go 줄이 1.24 면 <code>containermaxprocs=0</code>·<code>updatemaxprocs=0</code> 이 기본이라 옛 동작입니다
+(go 줄을 1.25 로 올리거나 GODEBUG 로 켭니다). 두 번째 코드는 파일이 없을 때 이제 패닉합니다. nil 검사 버그 수정은 go 줄과 상관없습니다.</div>
+<span class="tier ill">설명용</span>
 </article>
