@@ -86,26 +86,51 @@ def sphere(n, d, z0=0.0):
 def _on_curves(curves, n, d):
     """여러 곡선 위에 간격 d 로 점을 n 개 — 교차점 근처도 d 를 지킨다.
 
-    배율 S 를 정하면 곡선을 따라 d 마다 점을 제안하고, 이미 받은 점과
-    d 보다 가까우면 버린다(탐욕). 받은 수가 n 이상이 되는 가장 작은
-    S 를 이분법으로 찾고, 곡선 순서대로 고르게 n 개를 골라 낸다.
-    고른 부분집합의 간격은 원래 집합의 간격 이상이다."""
+    배율 S 를 정하면 곡선을 따라가며 직전 제안점에서 곧은 거리(현)가
+    d 가 되는 자리마다 점을 제안하고, 이미 받은 점과 d 보다 가까우면
+    버린다(탐욕). 받은 수가 n 이상이 되는 가장 작은 S 를 이분법으로
+    찾고, 곡선 순서대로 고르게 n 개를 골라 낸다. 고른 부분집합의
+    간격은 원래 집합의 간격 이상이다.
+
+    처음에는 호 길이 d 마다 제안했다. 곡선에서는 현이 호보다 짧아
+    이웃 제안이 d 에 조금 못 미치고, 하나 걸러 버려져 모양이 두 배로
+    커졌다 — 그래서 현으로 잰다. STEP 은 반올림 때문에 이웃이 d 바로
+    아래로 떨어지지 않게 하는 여유다."""
+    step = d * (1 + 1e-9)
+
+    def exit_ball(a, u, c, f0):
+        """a + f·u 가 c 중심 반지름 step 인 공을 나가는 f (> f0), 없으면
+        None. |a − c + f u|² = step² 의 큰 근."""
+        w = [a[k] - c[k] for k in range(3)]
+        uu = V.dot(u, u)
+        if uu == 0.0:
+            return None
+        b = V.dot(w, u)
+        disc = b * b - uu * (V.dot(w, w) - step * step)
+        if disc < 0.0:
+            return None
+        f = (-b + math.sqrt(disc)) / uu
+        return f if f > f0 else None
+
     def accept(s):
         got, grid = [], {}
+
+        def offer(p):
+            if collide.far_enough(grid, p, d):
+                collide.grid_add(grid, p, d, len(got))
+                got.append(p)
+
         for poly in curves:
-            carry = 0.0
+            prev = [c * s for c in poly[0]]
+            offer(prev)
             for a, b in zip(poly, poly[1:]):
                 a, b = [c * s for c in a], [c * s for c in b]
-                seg = V.dist(a, b)
-                t = carry
-                while t <= seg:
-                    f = t / seg
-                    p = [a[k] + (b[k] - a[k]) * f for k in range(3)]
-                    if collide.far_enough(grid, p, d):
-                        collide.grid_add(grid, p, d, len(got))
-                        got.append(p)
-                    t += d
-                carry = t - seg
+                u = [b[k] - a[k] for k in range(3)]
+                f = exit_ball(a, u, prev, 0.0)
+                while f is not None and f <= 1.0:
+                    prev = [a[k] + u[k] * f for k in range(3)]
+                    offer(prev)
+                    f = exit_ball(a, u, prev, f)
         return got
     lo, hi = 1e-3, 1.0
     while len(accept(hi)) < n:

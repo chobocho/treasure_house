@@ -42,6 +42,15 @@ class Shapes(unittest.TestCase):
     def test_globe(self):
         self.check(F.globe(80, D), 80)
 
+    def test_curve_points_are_tight(self):
+        # 곡선 위 점은 이웃과 거의 d 간격이어야 한다 — 호 길이 d 마다
+        # 제안하면 현이 d 보다 조금 짧아 하나 걸러 버려지고, 모양이
+        # 두 배로 커진다(실제로 그랬다, 16부 실습에서 발견).
+        for pts in (F.heart(60, D), F.globe(120, D)):
+            nn = [min(math.dist(p, q) for q in pts if q is not p)
+                  for p in pts]
+            self.assertLess(sum(nn) / len(nn), 1.2 * D)
+
     def test_text(self):
         pts = F.text('HI', D)
         # H 는 '#' 17개, I 는 11개 (5×7 글꼴)

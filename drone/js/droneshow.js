@@ -857,27 +857,42 @@
   const sphere = (n, d, z0 = 0.0) =>
     place(fit(fibonacciUnit(n), d), z0);
   // 곡선 위에 간격 d 로 n 개 — 배율을 이분법으로 (파이썬 _on_curves).
+  // 제안은 호 길이가 아니라 직전 제안점에서 현이 d 가 되는 자리마다.
   function onCurves(curves, n, d) {
+    const step = d * (1 + 1e-9);
+    // a + f·u 가 c 중심 반지름 step 공을 나가는 f (> f0), 없으면 null
+    const exitBall = (a, u, c, f0) => {
+      const w = [a[0] - c[0], a[1] - c[1], a[2] - c[2]];
+      const uu = dot(u, u);
+      if (uu === 0.0) return null;
+      const b = dot(w, u);
+      const disc = b * b - uu * (dot(w, w) - step * step);
+      if (disc < 0.0) return null;
+      const f = (-b + Math.sqrt(disc)) / uu;
+      return f > f0 ? f : null;
+    };
     const accept = (s) => {
       const got = [];
       const g = new Map();
+      const offer = (p) => {
+        if (farEnough(g, p, d)) {
+          gridAdd(g, p, d);
+          got.push(p);
+        }
+      };
       for (const poly of curves) {
-        let carry = 0.0;
+        let prev = poly[0].map((c) => c * s);
+        offer(prev);
         for (let i = 0; i + 1 < poly.length; i++) {
           const a = poly[i].map((c) => c * s);
           const b = poly[i + 1].map((c) => c * s);
-          const seg = dist(a, b);
-          let t = carry;
-          while (t <= seg) {
-            const f = t / seg;
-            const p = [0, 1, 2].map((k) => a[k] + (b[k] - a[k]) * f);
-            if (farEnough(g, p, d)) {
-              gridAdd(g, p, d);
-              got.push(p);
-            }
-            t += d;
+          const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+          let f = exitBall(a, u, prev, 0.0);
+          while (f !== null && f <= 1.0) {
+            prev = [0, 1, 2].map((k) => a[k] + u[k] * f);
+            offer(prev);
+            f = exitBall(a, u, prev, f);
           }
-          carry = t - seg;
         }
       }
       return got;
