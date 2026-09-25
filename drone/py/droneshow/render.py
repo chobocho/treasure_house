@@ -60,7 +60,7 @@ def _proj(show, view):
         return lambda p: (p[0], p[1])
     if view == 'audience':
         pts = [k[1:4] for d in show['drones'] for k in d['keyframes']]
-        c = [sum(q[i] for q in pts) / len(pts) for i in range(3)]
+        c = [V.total(q[i] for q in pts) / len(pts) for i in range(3)]
         cam = camera(c, 150.0, 1.7)
         return lambda p: project(cam, p)
     return lambda p: (p[0], p[2])

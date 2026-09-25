@@ -8,6 +8,7 @@
 import math
 
 from . import collide
+from . import vec3 as V
 from .font5x7 import GLYPHS
 
 GOLDEN = math.pi * (3.0 - math.sqrt(5.0))      # 황금각 (라디안)
@@ -95,7 +96,7 @@ def _on_curves(curves, n, d):
             carry = 0.0
             for a, b in zip(poly, poly[1:]):
                 a, b = [c * s for c in a], [c * s for c in b]
-                seg = math.dist(a, b)
+                seg = V.dist(a, b)
                 t = carry
                 while t <= seg:
                     f = t / seg
@@ -125,7 +126,8 @@ def heart(n, d, z0=0.0):
     curve = []
     for k in range(2001):
         t = 2 * math.pi * k / 2000
-        curve.append([16 * math.sin(t) ** 3, 0.0,
+        s = math.sin(t)
+        curve.append([16 * s * s * s, 0.0,
                       13 * math.cos(t) - 5 * math.cos(2 * t)
                       - 2 * math.cos(3 * t) - math.cos(4 * t)])
     return _place(_on_curves([curve], n, d), z0)
@@ -214,8 +216,9 @@ def image(pgm, n, d, g, lloyd=10):
     for _ in range(lloyd):
         acc = [[0.0, 0.0, 0] for _ in pts]
         for cx, cz in cells:
-            k = min(range(len(pts)), key=lambda i: (pts[i][0] - cx) ** 2
-                    + (pts[i][1] - cz) ** 2)
+            k = min(range(len(pts)), key=lambda i:
+                    (pts[i][0] - cx) * (pts[i][0] - cx)
+                    + (pts[i][1] - cz) * (pts[i][1] - cz))
             acc[k][0] += cx
             acc[k][1] += cz
             acc[k][2] += 1

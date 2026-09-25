@@ -7,17 +7,18 @@
 import itertools
 import math
 
+from . import vec3 as V
+
 
 def cost_matrix(a, b, squared=True):
     """c[i][j] = |aᵢ − bⱼ|² (squared) 또는 |aᵢ − bⱼ|."""
     if squared:
-        return [[sum((p[k] - q[k]) ** 2 for k in range(3)) for q in b]
-                for p in a]
-    return [[math.dist(p, q) for q in b] for p in a]
+        return [[V.dot(V.sub(p, q), V.sub(p, q)) for q in b] for p in a]
+    return [[V.dist(p, q) for q in b] for p in a]
 
 
 def total(c, perm):
-    return sum(c[i][perm[i]] for i in range(len(perm)))
+    return V.total(c[i][perm[i]] for i in range(len(perm)))
 
 
 def brute(c):

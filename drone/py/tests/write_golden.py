@@ -47,11 +47,13 @@ def g_quat():
     g = rng.Rng(101)
     cases = []
     for _ in range(20):
-        a = quat.normalize([g.normal() for _ in range(4)])
-        b = quat.normalize([g.normal() for _ in range(4)])
-        v = [g.uniform() * 2 - 1 for _ in range(3)]
-        ax = [g.normal() for _ in range(3)]
-        ang = g.uniform() * 6.0 - 3.0
+        # 입력도 파일에 적힐 모양(9자리)으로 먼저 자른다 — 그래야 JS 가
+        # 같은 입력으로 계산한다.
+        a = r9(quat.normalize([g.normal() for _ in range(4)]))
+        b = r9(quat.normalize([g.normal() for _ in range(4)]))
+        v = r9([g.uniform() * 2 - 1 for _ in range(3)])
+        ax = r9([g.normal() for _ in range(3)])
+        ang = r9(g.uniform() * 6.0 - 3.0)
         cases.append({'a': a, 'b': b, 'v': v, 'axis': ax, 'angle': ang,
                       'mul': quat.mul(a, b),
                       'rotate': quat.rotate(a, v),
@@ -69,8 +71,8 @@ def g_mixer():
     g = rng.Rng(102)
     cases = []
     for _ in range(10):
-        u = [g.uniform() * 25, g.normal() * 0.5, g.normal() * 0.5,
-             g.normal() * 0.1]
+        u = r9([g.uniform() * 25, g.normal() * 0.5, g.normal() * 0.5,
+                g.normal() * 0.1])
         t, flags = mixer.allocate(p, u, d['T_min'], d['T_max'])
         cases.append({'u': u, 'T': t, 'flags': flags})
     return {'M': mixer.matrix(p), 'Minv': mixer.inverse(p),
@@ -138,10 +140,10 @@ def g_assign():
     g = rng.Rng(103)
     out = []
     for n in (5, 10, 20, 30, 40, 50):
-        a = [[g.uniform() * 30, 0.0, g.uniform() * 30]
-             for _ in range(n)]
-        b = [[g.uniform() * 30, 0.0, g.uniform() * 30]
-             for _ in range(n)]
+        a = r9([[g.uniform() * 30, 0.0, g.uniform() * 30]
+                for _ in range(n)])
+        b = r9([[g.uniform() * 30, 0.0, g.uniform() * 30]
+                for _ in range(n)])
         perm, total, _ops = assign.hungarian(assign.cost_matrix(a, b))
         out.append({'a': a, 'b': b, 'perm': perm, 'total': total})
     return {'cases': out}

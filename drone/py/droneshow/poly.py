@@ -8,6 +8,7 @@
 import math
 
 from . import linalg
+from . import vec3 as V
 
 
 def val(c, t):
@@ -43,7 +44,8 @@ def mul(a, b):
 def int_prod(a, b, big_t):
     """∫₀ᵀ a(t)·b(t) dt — 곱을 전개해 항마다 적분한다(정확)."""
     c = mul(a, b)
-    return sum(x * big_t ** (i + 1) / (i + 1) for i, x in enumerate(c))
+    return V.total(x * big_t ** (i + 1) / (i + 1)
+                   for i, x in enumerate(c))
 
 
 def snap_cost(c, big_t):

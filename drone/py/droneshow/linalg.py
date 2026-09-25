@@ -31,7 +31,9 @@ def solve(a, b):
                     m[r][k] -= f * m[col][k]
                 x[r] -= f * x[col]
     for r in range(n - 1, -1, -1):
-        s = x[r] - sum(m[r][k] * x[k] for k in range(r + 1, n))
+        s = x[r]
+        for k in range(r + 1, n):
+            s -= m[r][k] * x[k]
         x[r] = s / m[r][r]
     return x
 

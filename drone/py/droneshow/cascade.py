@@ -53,7 +53,7 @@ class Controller:
         f = V.scale([asp[0], asp[1], asp[2] + p['g']], p['m'])
         f[2] = max(f[2], 0.1 * p['m'] * p['g'])     # 뒤집혀 밀지 않는다
         lim = math.tan(math.radians(p['tilt_max_deg'])) * f[2]
-        h = math.hypot(f[0], f[1])
+        h = math.sqrt(f[0] * f[0] + f[1] * f[1])
         if h > lim:
             f[0], f[1] = f[0] * lim / h, f[1] * lim / h
         self.f_des = f

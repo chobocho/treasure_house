@@ -7,6 +7,7 @@ SPEC §4.1–4.2, 정리 T3·T9·T10.
 방향은 (+1, −1, +1, −1) 이다(+1 = 위에서 보아 반시계).
 """
 from . import params as P
+from . import vec3 as V
 
 SPIN = (1, -1, 1, -1)
 
@@ -24,13 +25,13 @@ def matrix(p):
 def inverse(p):
     """M⁻¹ = Mᵀ · diag(1/4, 1/(4a²), 1/(4a²), 1/(4c²))."""
     m = matrix(p)
-    d = [sum(x * x for x in row) for row in m]      # 4, 4a², 4a², 4c²
+    d = [V.total(x * x for x in row) for row in m]  # 4, 4a², 4a², 4c²
     return [[m[j][i] / d[j] for j in range(4)] for i in range(4)]
 
 
 def forward(p, t):
     """추력 넷 → [F, τx, τy, τz]."""
-    return [sum(r[k] * t[k] for k in range(4)) for r in matrix(p)]
+    return [V.total(r[k] * t[k] for k in range(4)) for r in matrix(p)]
 
 
 def wrench_map(p):
@@ -42,7 +43,8 @@ def wrench_map(p):
 
 
 def _apply(mi, u):
-    return [sum(mi[i][k] * u[k] for k in range(4)) for i in range(4)]
+    return [V.total(mi[i][k] * u[k] for k in range(4))
+            for i in range(4)]
 
 
 def _inside(t, lo, hi):

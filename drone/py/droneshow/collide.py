@@ -7,6 +7,8 @@
 """
 import math
 
+from . import vec3 as V
+
 
 def min_distance(pts):
     """(거리, i, j), i < j. 같은 거리면 먼저 찾은 쌍.
@@ -23,7 +25,7 @@ def min_distance(pts):
             pj = pts[j]
             if pj[0] - pi[0] >= best:
                 break
-            d = math.dist(pi, pj)
+            d = V.dist(pi, pj)
             if d < best:
                 best, bi, bj = d, min(i, j), max(i, j)
     return best, bi, bj
@@ -41,7 +43,7 @@ def far_enough(grid, p, d):
         for dy in (-1, 0, 1):
             for dz in (-1, 0, 1):
                 for q in grid.get((cx + dx, cy + dy, cz + dz), ()):
-                    if math.dist(p, q) < d:
+                    if V.dist(p, q) < d:
                         return False
     return True
 

@@ -12,6 +12,7 @@ from . import assign as AS
 from . import collide
 from . import poly
 from . import profile as PR
+from . import vec3 as V
 
 KIND = {'trapezoid': 'T', 'minsnap': 'S', 'minjerk': 'J', 'linear': 'L'}
 _C = {'S': poly.rest_to_rest(4), 'J': poly.rest_to_rest(3)}
@@ -88,7 +89,7 @@ def plan(scenes, p, profile=None, fps=25, seed=7):
         if s_i:
             c = AS.cost_matrix(where, sc['points'], True)
             perm, _tot, _ops = AS.hungarian(c)
-            dmax = max(math.dist(where[i], sc['points'][perm[i]])
+            dmax = max(V.dist(where[i], sc['points'][perm[i]])
                        for i in range(n))
             big_t = max(dmax * d1 / p['vmax'],
                         math.sqrt(dmax * d2 / p['amax']))
@@ -214,8 +215,8 @@ def fly_physics(show, p, ids, cfg=None):
                               'a': acceleration(show, d, t)}
         rows = sim.fly(p, ref, show['duration'],
                        start=position(show, d, 0.0), cfg=cfg)
-        errs = [math.dist(r['s'][0:3], position(show, d, r['t']))
+        errs = [V.dist(r['s'][0:3], position(show, d, r['t']))
                 for r in rows]
         out.append({'id': i, 'max_err': max(errs),
-                    'mean_err': sum(errs) / len(errs)})
+                    'mean_err': V.total(errs) / len(errs)})
     return out

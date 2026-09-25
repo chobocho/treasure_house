@@ -10,6 +10,7 @@ import math
 
 from . import assign as AS
 from . import show as SH
+from . import vec3 as V
 
 
 def _track(show, d):
@@ -46,7 +47,8 @@ def under_count(pts, r, h):
     n = 0
     for i, a in enumerate(pts):
         for j, b in enumerate(pts):
-            if i != j and math.hypot(a[0] - b[0], a[1] - b[1]) < r \
+            dx, dy = a[0] - b[0], a[1] - b[1]
+            if i != j and math.sqrt(dx * dx + dy * dy) < r \
                     and 0 < a[2] - b[2] < h:
                 n += 1
     return n
@@ -61,7 +63,7 @@ def takeoff(show, ground, p, delay=0.0):
     s = copy.deepcopy(show)
     first = [d['keyframes'][0][1:4] for d in s['drones']]
     perm, _t, _o = AS.hungarian(AS.cost_matrix(first, ground, True))
-    dmax = max(math.dist(first[i], ground[perm[i]])
+    dmax = max(V.dist(first[i], ground[perm[i]])
                for i in range(len(first)))
     d1, d2 = SH.limits('T', s['profile']['ramp'])
     up = max(dmax * d1 / p['vmax'], math.sqrt(dmax * d2 / p['amax']))
@@ -107,7 +109,7 @@ def layered_depth(pts, depth):
 
 def centroid(pts):
     n = len(pts)
-    return [sum(q[k] for q in pts) / n for k in range(3)]
+    return [V.total(q[k] for q in pts) / n for k in range(3)]
 
 
 def rotate_volume(pts, angle, steps):

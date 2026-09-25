@@ -60,7 +60,7 @@ test-py:                ## 파이썬 시뮬레이터 시험 (py/tests)
 
 test-js:                ## 자바스크립트 이식 시험 (node --test)
 	@if ls js/test/*.test.js >/dev/null 2>&1; then \
-	  $(NODE) --test js/test/; \
+	  $(NODE) --test js/test/*.test.js; \
 	else echo '  js/test 아직 없다 (PLAN.md §5 6단계)'; fi
 
 # 골든 벡터(파이썬이 낸 값)와 JS 가 1e-9 안에서 같은가(PLAN.md §3.3).

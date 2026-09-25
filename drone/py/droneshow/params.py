@@ -29,8 +29,8 @@ def derived(p):
             'c': p['kQ'] / p['kT'],
             'T_hover': t_h,
             'omega_hover': math.sqrt(t_h / p['kT']),
-            'T_max': p['kT'] * p['omega_max'] ** 2,
-            'T_min': p['kT'] * p['omega_min'] ** 2,
+            'T_max': p['kT'] * (p['omega_max'] * p['omega_max']),
+            'T_min': p['kT'] * (p['omega_min'] * p['omega_min']),
             'twr': (4 * p['kT'] * p['omega_max'] ** 2
                     / (p['m'] * p['g'])),
             'area': math.pi * p['r_prop'] ** 2}
