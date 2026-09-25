@@ -1,7 +1,7 @@
 <article class="card section" id="p5">
 <p class="chnum">5부</p>
 <h2>기술 II — 센서와 상태 추정</h2>
-<p class="chsub">MEMS 관성 센서·GNSS·자세 표현·상보 필터·칼만 필터 · 7부를 읽고 오세요</p>
+<p class="chsub">MEMS 관성 센서·GNSS·자세 표현·상보 필터·칼만 필터·장난감 드론 · 7부를 읽고 오세요</p>
 </article>
 
 <article class="card" id="p5-intro">
@@ -17,6 +17,7 @@
 <tr><td>6 상보 필터</td><td>자이로와 가속도계를 섞기</td><td>T23</td></tr>
 <tr><td>7 칼만 필터</td><td>분산으로 섞기, 혁신, EKF</td><td>T24, T25</td></tr>
 <tr><td>8 캘리브레이션</td><td>자이로·가속도계·자력계·온도</td><td>ex/imu_calib.py</td></tr>
+<tr><td>9 장난감 드론</td><td>6축만으로 서기, 가속 중의 착시, 헤드리스의 표류</td><td>T23, L20, ex/toy_imu.py</td></tr>
 </table></div>
 <p class="cap">센서 모델과 추정기의 코드 전체는 <a href="#p14-sensors">14부 sensors</a>·<a href="#p14-estimator">14부 estimator</a>에 있습니다. 이 부는 그 식이 왜 그런지 증명하고 실험으로 잽니다.</p>
 <span class="tier ill">설명용</span>
@@ -1105,6 +1106,148 @@
 <p class="q">Q. 가속도계 보정의 "기수 위" 자세에서 손이 떨려 기체가 조금씩 흔들렸습니다. 어느 계수가 어떻게 틀어질까요? 각도를 15° 틀리게 세운 것과 어느 쪽이 더 나쁠까요?</p>
 <button>답 보기</button>
 <div class="a"><b>A.</b> 흔들리는 동안에는 비력이 +g 가 아니라 +g 에 가속도가 더해진 값이라 x 축의 위쪽 평균이 틀어지고, 영점(위·아래의 평균)과 배율(위·아래의 차) 둘 다 틀어집니다. 각도가 15° 틀린 것은 여섯 자세 모두를 한꺼번에 맞추는 최소제곱 보정이 흡수할 수 있습니다(PX4·ArduPilot 문서가 각도보다 멈춤이 중요하다고 하는 까닭). 이 덱의 accel_six 는 축마다 두 자세만 쓰는 가장 단순한 판이라 각도 오차도 그대로 받습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 9장 장난감 드론 -->
+
+<article class="card section" id="p5-c9"><p class="chnum">9장</p><h2>만원대 장난감 드론 — 6축 센서와 상보 필터만으로 서기</h2>
+<p class="chsub">무엇이 들어 있고 무엇이 빠졌나 · 완구 펌웨어의 상보 필터 · 가속 중의 착시 · 헤드리스가 틀어지는 까닭</p></article>
+
+<article class="card" id="p5-toy-parts">
+<h3>손바닥만 한 완구 한 대의 속</h3>
+<p class="why">값싼 완구 쿼드콥터는 이 부의 센서 가운데 가장 적은 것으로 납니다. 공개된 예로, 오픈소스 대체 펌웨어가 있는 완구 H8 mini 의 하드웨어 목록을 봅니다.</p>
+<ul>
+<li>두뇌: GigaDevice GD32F130 — Cortex-M3, 플래시 32 KB, 48 MHz <!--CITE key=toy-h8-readme sec="Eachine H8 mini acro firmware"-->.</li>
+<li>센서: 자이로 + 가속도계(MPU-6050 호환) — 6축뿐입니다 <!--CITE key=toy-h8-readme sec="Eachine H8 mini acro firmware"-->.</li>
+<li>무선: 2.4 GHz 트랜시버 XN297 <!--CITE key=toy-h8-readme sec="Eachine H8 mini acro firmware"-->.</li>
+</ul>
+<p class="cap">MPU-6050 같은 칩은 자이로 셋과 가속도계 셋을 한 칩에 담고, 자력계는 칩 밖에 따로 달아 보조 I2C 로 읽게 되어 있습니다 <!--CITE key=mpu6000-ds sec="3.1 MPU-60X0 Overview"-->. 목록에 자력계·GNSS·기압계가 없다는 것이 이 장의 출발점입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-toy-what">
+<h3>6축만으로 할 수 있는 것과 없는 것</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>알고 싶은 것</th><th>6축으로?</th><th>까닭</th></tr>
+<tr><td>롤·피치(수평)</td><td>된다</td><td>가속도계가 중력으로 "아래" 를 알려 준다 — 상보 필터(6장)</td></tr>
+<tr><td>요(기수 방향)</td><td>흐른다</td><td>중력은 요를 모른다. 자이로 적분뿐 — 자력계가 필요(2장)</td></tr>
+<tr><td>높이</td><td>못 한다</td><td>기압계·거리 센서가 없다 — 조종자가 스로틀로</td></tr>
+<tr><td>수평 위치</td><td>못 한다</td><td>GNSS·광류가 없다 — 바람에 흘러가면 조종자가 되돌린다(3·4장)</td></tr>
+</table></div>
+<p class="cap">그래서 완구는 "기울기만 스스로 잡고, 나머지는 사람이 잡는" 기계입니다. 표의 첫 줄을 해내는 것이 다음 장들의 펌웨어 코드입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-toy-knobs">
+<h3>완구 펌웨어의 상보 필터 — 손잡이 둘</h3>
+<!--CODE file=data/excerpts/toy-imu-knobs.c wrap=1 note=H8 mini 수평 모드 펌웨어 imu.c — MIT-->
+<ul>
+<li><b>FILTERTIME 2 초</b> — 가속도계로 자이로를 바로잡는 시간 상수. 주석은 1–4 초가 대개 좋다고 적습니다 <!--CITE key=toy-imu-c sec="imu.c"-->.</li>
+<li><b>ACC_MIN 0.7 · ACC_MAX 1.3</b> — 가속도의 크기가 1 g 에서 이만큼 벗어나면 그 걸음에는 가속도계를 믿지 않습니다 <!--CITE key=toy-imu-c sec="imu.c"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-toy-rotate">
+<h3>1단계 — 자이로로 중력 벡터를 돌린다</h3>
+<!--CODE file=data/excerpts/toy-imu-rotate.c wrap=1 note=작은 각 근사: sin ≈ 각, cos ≈ 1 — 축마다 한 번-->
+<p class="why">펌웨어는 자세를 오일러각이나 쿼터니언으로 들지 않고, 몸체에서 본 "중력 벡터" 하나만 듭니다. 세계에 고정된 벡터를 도는 몸체에서 보면 u̇ = −ω × u 로 돕니다(8부 L3 의 몸체 쪽 모습). 걸음이 짧으면(수 ms) 각이 작아 sin·cos 대신 각과 1 로 충분합니다(7부 M14) <!--CITE key=toy-imu-c sec="imu_calc"-->.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-toy-accel">
+<h3>2단계 — 1 g 근처일 때만 가속도 쪽으로 끌어당긴다</h3>
+<!--CODE file=data/excerpts/toy-imu-accel.c wrap=1 note=크기 창을 통과한 가속도만, 정규화해서, 저역 통과로-->
+<!--CODE file=data/excerpts/toy-lpfcalc.c wrap=1 note=util.c — 계수 exp(−dt/T) 와 한 줄 필터-->
+<p class="cap">계수 exp(−dt/T) 는 6장 T23 의 α 입니다 — 걸음마다 옛 추정을 α 만큼, 가속도계를 1 − α 만큼 섞습니다 <!--CITE key=toy-util-c sec="lpfcalc"-->. 한 축 상보 필터를 3차원 벡터에 그대로 쓴 것입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-toy-py">
+<h3>이 덱의 좌표로 옮기기 — ex/toy_imu.py</h3>
+<!--CODE file=ex/toy_imu.py lines=1-29 note=무엇을 옮겼나, 그리고 lpfcalc-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-toy-py2">
+<h3>필터 한 걸음</h3>
+<!--CODE file=ex/toy_imu.py lines=30-66 note=u ← u − (ω×u)dt, 창 안이면 저역 통과-->
+<p class="cap">창의 양 끝(정확히 0.7 g·1.3 g)은 받지 않습니다 — 펌웨어의 &gt; 와 &lt; 그대로(시험 <code>test_gate_is_exclusive</code>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-toy-test">
+<h3>시험 — 기운 채 가속하면 속는다</h3>
+<!--CODE file=ex/tests/test_p05_toy.py sym=test_coordinated_acceleration_fools_it note=몸체 z 로만 미는 비력(L20)을 넣으면-->
+<p class="why">멀티로터의 가속도계는 추력(몸체 z)과 공기 저항만 느낍니다(L20, <a href="#p5-c1">1장</a>). 기운 채 가속하는 동안 가속도계는 "몸체 z 가 아래" 라고 말하고, 그 크기(g/cos θ)는 30° 까지도 1.3 g 창 안입니다. 그래서 필터는 참 20° 기울기를 시간 상수 2 초로 "수평" 쪽으로 끌어당깁니다 — 2 초 뒤 20°·e⁻¹ ≈ 7.4° 로 보입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-toy-dash">
+<h3>실제 비행 모델에서 — 옆으로 20 m 돌진</h3>
+<!--OUT file=p05_toy_tilt.txt note=exps/p05.py toy — 6자유도 모델, 센서 잡음·바이어스 켬(씨앗 31)-->
+<!--TABLE file=out/tbl_p05_toy_dash.html cap=exps/p05.py — 완구 필터를 250 Hz 로 붙이고 참 '위' 와 추정한 '위' 사이의 각을 잼. b·T 는 T23 이 말하는 정상 오차의 크기-->
+<ul>
+<li><b>가속도계만</b>(T → 0): 돌진 시작 0.33 초에 38.5° 틀립니다 — 38.7° 기운 것을 거의 "수평" 으로 봅니다.</li>
+<li><b>T 를 늘리면</b> 가속 중 오차가 줄지만(24.4 → 10.2 → 5.7°), 제자리로 돌아온 뒤 남는 오차가 커집니다(0.43 → 1.71 → 3.41°).</li>
+<li>남는 오차는 T23 의 b·T 와 둘째 자리까지 같습니다 — 자이로 바이어스를 가속도계가 붙잡는 힘이 T 에 반비례하기 때문입니다. <b>자이로만</b>이면 20 초에 16.95° 로 끝없이 커집니다(b·t).</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-toy-tradeoff">
+<h3>2 초라는 선택 — 두 오차 사이</h3>
+<p class="why">짧은 T 는 가속의 착시에 약하고, 긴 T 는 바이어스에 약합니다. 완구 펌웨어의 2 초는 표에서 가속 중 최대 10° 남짓, 제자리 1.7° — 기울기만 잡으면 되는 완구에는 두 오차가 모두 견딜 만한 자리입니다. 칼만 필터(<a href="#p5-c7">7장</a>)는 이 비율을 분산으로 정하고, 큰 비행 제어기는 자이로 바이어스까지 상태로 추정해 이 맞바꿈을 줄입니다.</p>
+<p class="cap">이 표의 바이어스(수평 0.0148 rad/s)는 이 덱의 센서 모델(params.tsv 의 sigma_bg)에서 뽑은 가정입니다. 실제 칩의 바이어스는 켤 때마다·온도마다 다릅니다(1·8장).</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-toy-headless">
+<h3>헤드리스 모드 — 요 각은 자이로 z 의 적분뿐</h3>
+<!--CODE file=data/excerpts/toy-headless.c wrap=1 note=control.c — 켤 때 0, 걸음마다 gyro[2]·looptime 을 더하고 스틱을 돌린다-->
+<p class="why">"헤드리스" 는 기체가 어느 쪽을 보든 스틱의 앞이 처음 켰을 때의 앞이 되게 하는 기능입니다. 코드는 켜는 순간 요 각을 0 으로 두고, 걸음마다 자이로 z 를 더해, 그 각만큼 스틱 벡터를 돌립니다 <!--CITE key=toy-control-c sec="control"-->. 자력계가 없으니 그 요 각을 바로잡을 기준이 없습니다.</p>
+<!--CODE file=ex/toy_imu.py lines=67-89 note=같은 일을 이 덱의 코드로-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-toy-headless-table">
+<h3>가만히 있어도 틀어진다 — 바이어스와 시간</h3>
+<!--TABLE file=out/tbl_p05_toy_headless.html cap=exps/p05.py — 제자리의 자이로(바이어스 + 잡음)를 250 Hz 로 적분. 각은 [°]-->
+<ul>
+<li>바이어스 0.01 rad/s(0.57°/s)면 1 분에 34°, 2 분에 69° — "앞으로" 민 스틱이 비스듬히 옆으로 갑니다.</li>
+<li>틀어짐은 시간에 정비례합니다(표의 60 초 칸은 30 초 칸의 두 배). 잡음은 거의 보이지 않습니다 — 바이어스가 주인입니다(<a href="#p5-c1">1장</a>의 표류).</li>
+<li>그래서 헤드리스는 자주 다시 켜 기준을 새로 잡는 것이 요령입니다 — 코드가 모드를 바꿀 때 요 각을 0 으로 되돌리는 것이 그 자리입니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-toy-cal">
+<h3>켤 때 가만히, 보정은 수평 바닥에서</h3>
+<ul>
+<li>켜면 자이로 보정이 자동으로 돌고 대개 2–4 초 안에 끝납니다. 움직이면 멈췄다가 다시 이어지고, 끝내 안 되면 15 초 뒤 넘어갑니다 <!--CITE key=toy-dual-readme sec="Gyro calibration"-->.</li>
+<li>가속도계 보정은 반드시 수평인 바닥에서 해야 하고, 한 번 하면 저장됩니다 <!--CITE key=toy-dual-readme sec="Accelerometer calibration"-->.</li>
+<li>뒤집힌 채 수평 모드로 바꾸지 말라고 적습니다 <!--CITE key=toy-dual-readme sec="Eachine H8 mini level firmware"-->.</li>
+</ul>
+<p class="cap">첫째는 자이로 바이어스(8장), 둘째는 가속도계 오프셋이 곧 "수평" 의 정의라서입니다. 셋째는 이 장의 필터로 읽을 수 있습니다 — 거꾸로 선 채로는 가속도계가 알려 주는 "위" 와 수평 모드의 목표가 정반대라 제어기가 한 번에 뒤집으려 듭니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-toy-power">
+<h3>모터와 배터리 — ESC 가 없는 기체</h3>
+<ul>
+<li>모터는 마이크로컨트롤러의 타이머 PWM 으로 직접 돌립니다. 설정 파일의 기본은 16 kHz 이고, 주석은 주파수가 높을수록 모터가 더 선형이 된다고 적습니다 <!--CITE key=toy-config-h sec="config.h"-->. 4부의 ESC·DShot 과는 다른 길입니다.</li>
+<li>켤 때 배터리 전압을 64 번 재어 평균하고, 3.3 V 아래면 모터를 돌리지 않고 멈춥니다 <!--CITE key=toy-main-c sec="main"-->. LED 두 번 깜박임이 저전압 표시이고, 비행 중 전압이 떨어져 재시작된 경우가 흔하다고 적습니다 <!--CITE key=toy-dual-readme sec="Led error codes"-->.</li>
+</ul>
+<p class="cap">3.3 V 라는 문턱은 리튬 폴리머 한 칸짜리 전지를 쓴다는 뜻입니다. 셀 수와 방전 곡선은 4부 배터리 장에서 봅니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p5-c9-quiz" data-quiz>
+<h3>9장 퀴즈</h3>
+<p class="q">Q. 완구 드론을 옆으로 세게 몰다가 스틱을 놓았더니 잠깐 한쪽으로 기울어 흘러갑니다. 이 장의 필터로 까닭을 설명해 보세요. 시간 상수 T 를 4 초로 늘리면 나아질까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 가속하는 동안 가속도계는 몸체 z 만 느끼므로 필터가 실제보다 덜 기울었다고 믿습니다(표: T = 2 초에서 최대 10°). 스틱을 놓으면 제어기는 그 틀린 "수평" 으로 돌아가므로 실제로는 조금 기운 채 흘러갑니다. T 를 4 초로 늘리면 이 착시는 5.7° 로 줄지만, 자이로 바이어스가 남기는 정상 오차가 1.7° 에서 3.4° 로 두 배가 되어 가만히 떠 있을 때 더 흘러갑니다. 맞바꿈입니다.</div>
 <span class="tier ill">설명용</span>
 </article>
 

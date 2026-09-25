@@ -20,6 +20,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, 'ex'))
 import gps_trilateration as GT  # noqa: E402
 import imu_calib as C  # noqa: E402
+import toy_imu as TI  # noqa: E402
 
 DEG = 180.0 / math.pi
 FIELD = [1.0, 0.0, -1.5]          # 가정: 수평 1, 아래로 1.5
@@ -737,7 +738,80 @@ def accel_cal(ctx):
               num=(0, 1, 2, 3))
 
 
+def up_error(s, est):
+    """참 '위'(Rᵀe₃)와 추정한 '위' 사이의 각 [°]."""
+    up = Q.rotate(Q.conj(s[6:10]), [0.0, 0.0, 1.0])
+    n = math.sqrt(sum(x * x for x in est))
+    c = sum(u * e for u, e in zip(up, est)) / n
+    return math.acos(max(-1.0, min(1.0, c))) * DEG
+
+
+def toy_fly(p, filtertime, secs=20.0, seed=31):
+    """6자유도 비행(옆으로 20 m 돌진 뒤 제자리)에 완구 필터를 250 Hz 로
+    붙인다. (최대 오차, 그 시각, 8 초 오차, 20 초 오차, 최대 참 기울기)
+    — 각은 [°], 시각은 [s]."""
+    from droneshow import cascade
+    ctl = cascade.Controller(p)
+    st = QR.hover_state(p, [0.0, 0.0, 5.0])
+    sen = S.Sensors(p, rng.Rng(seed))
+    f = TI.ToyIMU(filtertime, g=p['g'])
+    dt = 1.0 / cascade.PHYS_HZ
+    ref = {'p': [20.0, 0.0, 5.0]}
+    worst, t_w, tilt, at8 = 0.0, 0.0, 0.0, 0.0
+    for k in range(round(secs / dt)):
+        cmd = ctl.update(k, st, ref)
+        if k % 2 == 0:
+            d = QR.deriv(p, st, cmd)
+            f.update(sen.gyro(st), sen.accel(st, d), 2 * dt)
+            err = up_error(st, f.est)
+            if err > worst:
+                worst, t_w = err, k * dt
+            tilt = max(tilt, up_error(st, [0.0, 0.0, 1.0]))
+            if k == round(8.0 / dt):
+                at8 = err
+        st = QR.step(p, st, cmd, dt)
+    return worst, t_w, at8, err, tilt
+
+
+def toy(ctx):
+    """5부 9장 — 완구 드론의 6축 상보 필터를 실제 비행 모델에서."""
+    p = params.load()
+    rows = []
+    sen = S.Sensors(p, rng.Rng(31))            # toy_fly 와 같은 씨앗
+    bxy = math.hypot(sen.bias[0], sen.bias[1])
+    for name, T in (('가속도계만(T → 0)', 1e-9), ('T = 0.5 s', 0.5),
+                    ('T = 2 s(펌웨어 기본)', 2.0), ('T = 4 s', 4.0),
+                    ('자이로만(T → ∞)', 1e9)):
+        w, t, e8, e20, tilt = toy_fly(p, T)
+        bound = '%.2f' % (bxy * T * DEG) if T < 100 else '—'
+        rows.append([name, '%.2f' % w, '%.2f' % t, '%.2f' % e8,
+                     '%.2f' % e20, bound])
+    head = ['필터', '최대 오차[°]', '그 시각[s]', '8 초[°]', '20 초[°]',
+            'b·T[°]']
+    ctx.table('p05_toy_dash', head, rows, num=(1, 2, 3, 4, 5))
+    ctx.text('p05_toy_tilt', '옆으로 20 m 돌진하는 동안 참 기울기의 '
+             '최댓값: %.1f° · 수평 자이로 바이어스 %.4f rad/s(씨앗 31)'
+             % (tilt, bxy))
+    rows = []
+    g = rng.Rng(41)
+    for b in (0.002, 0.005, 0.01, 0.02):
+        sen = S.Sensors(p, g)
+        sen.bias = [0.0, 0.0, b]
+        h = TI.Headless()
+        still = [0.0] * 10 + [0.0, 0.0, 0.0] + [0.0] * 4
+        out, t = [], 0.0
+        for k in range(1, 30001):                  # 250 Hz, 120 초
+            h.update(sen.gyro(still)[2], 0.004)
+            if k in (2500, 7500, 15000, 30000):
+                out.append('%.1f' % (h.yaw * DEG))
+        rows.append(['%.3f' % b, '%.2f' % (b * DEG)] + out)
+    ctx.table('p05_toy_headless', ['바이어스[rad/s]', '[°/s]', '10 초',
+                                   '30 초', '60 초', '120 초'], rows,
+              num=(0, 1, 2, 3, 4, 5))
+
+
 def run(ctx):
+    toy(ctx)
     ctx.py('p05_gps', 'ex/gps_trilateration.py')
     ctx.py('p05_calib', 'ex/imu_calib.py')
     accel(ctx)

@@ -1298,3 +1298,16 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
 - Data decisions: timeline 1935 row reworded to IWM's wording; shows 2025-10-17 Shenzhen
   15,947 lowered Guinness → claimed (only state-media source, GWR page not fetched). The
   3부 ladder notes that it mixes different Guinness record titles.
+
+### 5부 9장 — 만원대 장난감 드론 (2026-09-25, user request)
+
+- Sources: open-source level firmware for the H8 mini toy quad (silver13/h8mini-dual @a34d221,
+  MIT) — imu.c (gravity-vector complementary filter: small-angle gyro rotation, accel gate
+  0.7–1.3 g, exp(−dt/T) low-pass, FILTERTIME 2 s), control.c (headless = integrated gyro z),
+  config.h (PWM 16 kHz), main.c (3.3 V start cutoff), util.c (lpfcalc); acro README @c757f3b
+  for the hardware list (GD32F130, MPU-6050-compatible 6-axis, XN297). 7 cite keys, 5 excerpts.
+- ex/toy_imu.py (FLU port) + 13 tests first (RED 12 → GREEN). exps/p05 toy(): the filter on the
+  6-DOF model during a 20 m sideways dash (sensor noise/bias on, seed 31): accel-only 38.5°
+  error; T 0.5/2/4 s → max 24.4/10.2/5.7°, 20-s residual 0.43/1.71/3.41° = T23's b·T
+  (0.42/1.70/3.40°); gyro-only 16.95° at 20 s (= b·t). Headless yaw drift table (b·t).
+- 16 slides (part 5: 116 → 132). index/README counts updated (1,317 slides).
