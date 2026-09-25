@@ -909,7 +909,8 @@
     return Array.from({ length: n },
       (_, k) => pts[Math.floor(k * m / n)]);
   }
-  function heart(n, d, z0 = 0.0) {
+  // layers > 1 이면 ¾, ½ … 배 윤곽을 안쪽에 겹친다 (파이썬 heart)
+  function heart(n, d, z0 = 0.0, layers = 1) {
     const curve = [];
     for (let k = 0; k <= 2000; k++) {
       const t = 2 * Math.PI * k / 2000;
@@ -918,7 +919,11 @@
         13 * Math.cos(t) - 5 * Math.cos(2 * t)
         - 2 * Math.cos(3 * t) - Math.cos(4 * t)]);
     }
-    return place(onCurves([curve], n, d), z0);
+    const curves = [];
+    for (let j = 0; j < layers; j++) {
+      curves.push(curve.map((p) => p.map((c) => c * (1 - 0.25 * j))));
+    }
+    return place(onCurves(curves, n, d), z0);
   }
   function globe(n, d, z0 = 0.0, meridians = 6,
     parallels = [-45, 0, 45]) {

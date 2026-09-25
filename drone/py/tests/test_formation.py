@@ -42,6 +42,15 @@ class Shapes(unittest.TestCase):
     def test_globe(self):
         self.check(F.globe(80, D), 80)
 
+    def test_heart_layers(self):
+        # 겹 하트: 같은 대수를 안쪽 윤곽에 나눠 실어 그림이 작아진다
+        one, three = F.heart(120, D), F.heart(120, D, layers=3)
+        self.check(three, 120)
+        def width(pts):
+            return max(p[0] for p in pts) - min(p[0] for p in pts)
+        self.assertLess(width(three), 0.6 * width(one))
+        self.assertEqual(F.heart(40, D, layers=1), F.heart(40, D))
+
     def test_curve_points_are_tight(self):
         # 곡선 위 점은 이웃과 거의 d 간격이어야 한다 — 호 길이 d 마다
         # 제안하면 현이 d 보다 조금 짧아 하나 걸러 버려지고, 모양이

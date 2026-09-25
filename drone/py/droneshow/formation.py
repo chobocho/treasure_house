@@ -146,8 +146,12 @@ def _on_curves(curves, n, d):
     return [pts[(k * m) // n] for k in range(n)]
 
 
-def heart(n, d, z0=0.0):
-    """x = 16 sin³t, z = 13 cos t − 5 cos 2t − 2 cos 3t − cos 4t."""
+def heart(n, d, z0=0.0, layers=1):
+    """x = 16 sin³t, z = 13 cos t − 5 cos 2t − 2 cos 3t − cos 4t.
+
+    layers > 1 이면 안쪽에 ¾, ½ … 배 윤곽을 겹쳐 그린다. 윤곽선
+    모양은 둘레가 대수에 비례해 커지므로, 대수가 많으면 겹으로 나눠
+    실어야 그림이 하늘(고도 한계) 안에 들어온다(16부)."""
     curve = []
     for k in range(2001):
         t = 2 * math.pi * k / 2000
@@ -155,7 +159,9 @@ def heart(n, d, z0=0.0):
         curve.append([16 * s * s * s, 0.0,
                       13 * math.cos(t) - 5 * math.cos(2 * t)
                       - 2 * math.cos(3 * t) - math.cos(4 * t)])
-    return _place(_on_curves([curve], n, d), z0)
+    curves = [[[c * (1 - 0.25 * j) for c in p] for p in curve]
+              for j in range(layers)]
+    return _place(_on_curves(curves, n, d), z0)
 
 
 def globe(n, d, meridians=6, parallels=(-45, 0, 45), z0=0.0):

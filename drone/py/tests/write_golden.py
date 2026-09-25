@@ -166,6 +166,7 @@ def g_formation():
             'rings': formation.rings(20, d, layers=3, z0=5.0),
             'sphere': formation.sphere(40, d, z0=5.0),
             'heart': formation.heart(30, d, z0=5.0),
+            'heart3': formation.heart(45, d, z0=5.0, layers=3),
             'globe': formation.globe(48, d, z0=5.0),
             'text': formation.text('DRONE', d, z0=5.0),
             'digit': formation.digit(7, d, z0=5.0)}

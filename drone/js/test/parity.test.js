@@ -163,6 +163,7 @@ test('formation — 모양 아홉 가지', () => {
   close(DS.rings(20, d, 3, 5.0), g.rings, 'rings');
   close(DS.sphere(40, d, 5.0), g.sphere, 'sphere');
   close(DS.heart(30, d, 5.0), g.heart, 'heart');
+  close(DS.heart(45, d, 5.0, 3), g.heart3, 'heart3');
   close(DS.globe(48, d, 5.0), g.globe, 'globe');
   close(DS.text('DRONE', d, 5.0), g.text, 'text');
   close(DS.digit(7, d, 5.0), g.digit, 'digit');
