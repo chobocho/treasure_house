@@ -3,3 +3,1143 @@
 <h2>기술 II — 센서와 상태 추정</h2>
 <p class="chsub">MEMS 관성 센서·GNSS·자세 표현·상보 필터·칼만 필터 · 7부를 읽고 오세요</p>
 </article>
+
+<article class="card" id="p5-intro">
+<h2>이 부의 지도</h2>
+<p class="lead">제어기(<a href="#p9">9부</a>)는 드론의 자세와 위치를 "안다" 고 가정합니다. 실제로는 아무도 그것을 알려 주지 않습니다 — 떨리고 치우친 센서 값에서 짐작해야 합니다. 이 부는 센서가 무엇을 재는지, 자세를 어떤 수로 적는지, 여러 센서를 어떻게 섞는지를 봅니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>장</th><th>무엇</th><th>정리·도구</th></tr>
+<tr><td>1 관성 센서</td><td>MEMS 자이로·가속도계, 비력, 표류</td><td>L20</td></tr>
+<tr><td>2 자력계·기압계</td><td>방위, 자기 간섭, 압력과 높이</td><td>ex/imu_calib.py</td></tr>
+<tr><td>3 GNSS·RTK</td><td>의사거리, 위성 넷, 뉴턴 반복, 배치, RTK</td><td>L15, M25, T26</td></tr>
+<tr><td>4 거리·영상 센서</td><td>UWB·광류·ToF·라이다·VIO</td><td>문서 근거</td></tr>
+<tr><td>5 자세 표현</td><td>회전행렬·오일러각·쿼터니언</td><td>T4, L18, T5, L1, T6, L2, T7</td></tr>
+<tr><td>6 상보 필터</td><td>자이로와 가속도계를 섞기</td><td>T23</td></tr>
+<tr><td>7 칼만 필터</td><td>분산으로 섞기, 혁신, EKF</td><td>T24, T25</td></tr>
+<tr><td>8 캘리브레이션</td><td>자이로·가속도계·자력계·온도</td><td>ex/imu_calib.py</td></tr>
+</table></div>
+<p class="cap">센서 모델과 추정기의 코드 전체는 <a href="#p14-sensors">14부 sensors</a>·<a href="#p14-estimator">14부 estimator</a>에 있습니다. 이 부는 그 식이 왜 그런지 증명하고 실험으로 잽니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-noise">
+<h3>이 덱의 센서 — 잡음의 크기</h3>
+<p class="why">시뮬레이터의 센서는 참값에 바이어스와 정규분포 잡음을 더합니다(SPEC §6). 잡음의 크기는 data/params.tsv 의 sigma_* 다섯 줄이고, 이것은 이 덱이 정한 <b>가정</b>입니다 — 어느 칩의 사양도 아닙니다.</p>
+<!--TABLE file=out/tbl_d_params_ctrl_2.html cap=data/params.tsv — 아래 다섯 줄이 센서 잡음-->
+<!--CODE file=py/droneshow/sensors.py sym=gyro..accel note=자이로 = ω + 바이어스 + 잡음, 가속도계 = 비력 + 잡음-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<!-- ============================================================ 1장 관성 센서 -->
+
+<article class="card section" id="p5-c1"><p class="chnum">1장</p><h2>관성 센서 — 자이로와 가속도계</h2>
+<p class="chsub">MEMS 의 원리 · 비력(L20) · 적분하면 생기는 표류</p></article>
+
+<article class="card" id="p5-imu">
+<h3>IMU — 칩 하나에 자이로 셋, 가속도계 셋</h3>
+<p class="why">관성 측정 장치(IMU, inertial measurement unit)는 세 축의 각속도(자이로)와 세 축의 가속도(가속도계)를 잽니다. MEMS IMU 칩의 한 예로 InvenSense MPU-6000/6050 제품 사양서를 봅니다 <!--CITE key=mpu6000-ds sec="7.6 Overview"-->.</p>
+<ul>
+<li><b>자이로</b>: 세 개의 독립된 진동형 MEMS 각속도 센서. 센서가 돌면 코리올리 효과가 진동을 일으키고, 그 진동을 정전용량 픽오프가 잡아 각속도에 비례하는 전압으로 바꿉니다.</li>
+<li><b>가속도계</b>: 축마다 따로 된 검증 질량(proof mass). 가속도가 질량을 밀어낸 변위를 정전용량 센서가 차동으로 잽니다.</li>
+<li>출력은 축마다 16비트 ADC. 자이로 범위는 ±250 ~ ±2000 °/s, 가속도계는 ±2g ~ ±16g 가운데 고릅니다.</li>
+</ul>
+<p class="cap">MEMS(micro-electro-mechanical systems)는 반도체 공정으로 만든 아주 작은 기계 구조입니다. 이 덱은 칩 내부 회로를 다루지 않고, 칩이 내놓는 수가 무엇을 뜻하는지만 봅니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-coriolis">
+<h3>진동형 자이로의 생각 — 코리올리</h3>
+<p class="why">작은 질량을 한 방향(구동 축)으로 계속 흔들어 둡니다. 칩이 그에 수직인 축으로 돌면, 도는 좌표에서 본 질량은 구동 방향과 회전축 모두에 수직인 방향으로 밀립니다. 이 옆 방향 흔들림의 크기가 회전 속도에 비례합니다.</p>
+<ul>
+<li>질량이 가만히 있으면 코리올리 힘도 없습니다 — 그래서 "진동형" 입니다. 속도가 있어야 옆으로 밀립니다.</li>
+<li>옆 흔들림은 구동과 같은 주파수라, 구동 신호로 복조(demodulate)하면 각속도만 남습니다 — 사양서의 "증폭·복조·여과" 가 이 일입니다 <!--CITE key=mpu6000-ds sec="7.6 Overview"-->.</li>
+<li>코리올리 힘의 식(도는 좌표의 운동학)은 이 덱의 1학년 도구 밖이라 유도하지 않습니다.</li>
+</ul>
+<div class="warn">자이로가 재는 것은 <b>각</b>이 아니라 <b>각속도</b>입니다. 각을 알려면 적분해야 하고, 적분은 작은 치우침을 쌓습니다 — 이 장의 끝에서 잽니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-proofmass">
+<h3>가속도계의 생각 — 용수철에 매단 질량</h3>
+<p class="why">검증 질량 m 을 용수철(상수 k)로 틀에 매답니다. 틀이 가속도 <b>a</b> 로 움직이면 질량이 따라오려면 용수철이 힘을 내야 하고, 그만큼 늘어납니다. 그런데 중력은 질량과 틀을 <b>똑같이</b> 끌어당깁니다 — 용수철은 중력만으로는 늘지 않습니다.</p>
+<div class="eq">용수철이 내는 힘 = <i>m</i>(<b>a</b> − <b>g</b>) &nbsp;⟹&nbsp; 변위 = <i>m</i>(<b>a</b> − <b>g</b>)/<i>k</i></div>
+<p>여기서 <b>g</b> = (0, 0, −g) 는 중력 가속도 벡터(이 덱의 z 는 위쪽)입니다. 그래서 가속도계가 재는 것은 <b>a − g</b> — 이름이 <b>비력</b>(specific force, 질량당 중력 아닌 힘)입니다. 다음 장이 이것을 정리로 세웁니다.</p>
+<p class="cap">사양서는 "평평한 곳에 놓으면 x·y 는 0g, z 는 +1g" 라고 적습니다 <!--CITE key=mpu6000-ds sec="7.6 Overview"--> — 가만히 있는데 위로 1g 를 잰다는 말입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-l20">
+<h3>가속도계는 비력을 잰다</h3>
+<!--THM id=L20-->
+<p class="cap">쓰는 도구: M20(뉴턴 법칙). 가정: 검증 질량은 틀에 대해 거의 움직이지 않는다(용수철이 충분히 뻣뻣하다). 몸체 좌표로 옮기는 R 은 <a href="#p5-t4">5장 T4</a>의 회전행렬.</p>
+<div class="proof"><span class="h">증명 — 질량 하나의 힘 평형</span>
+<ol class="pf">
+<li>검증 질량에 걸리는 힘은 중력 <span class="mi">−<i>mg</i><b>e</b>₃</span> 와 용수철 힘 <b>F</b> 뿐입니다. <span class="why">질량은 틀 안에 떠 있다 — 다른 접촉이 없다</span></li>
+<li>질량이 틀과 함께 움직이므로 그 가속도는 틀의 가속도 <span class="mi"><b>v</b>̇</span> 입니다. M20: <span class="mi"><i>m</i><b>v</b>̇ = <b>F</b> − <i>mg</i><b>e</b>₃</span>. <span class="why">가정 — 틀에 대한 움직임은 무시</span></li>
+<li>그래서 <span class="mi"><b>F</b>/<i>m</i> = <b>v</b>̇ + <i>g</i><b>e</b>₃</span> (세계 좌표). 센서가 읽는 것은 용수철 변위, 곧 <b>F</b> 입니다.</li>
+<li>센서의 축은 몸체에 붙어 있으므로 몸체 좌표로 옮기면 <span class="mi"><i>R</i><sup>T</sup>(<b>v</b>̇ + <i>g</i><b>e</b>₃)</span>. <span class="why">T4 — R 의 역은 전치</span></li>
+<li>떠 있으면 <span class="mi"><b>v</b>̇ = 0</span> 이라 크기가 +g, 자유낙하면 <span class="mi"><b>v</b>̇ = −<i>g</i><b>e</b>₃</span> 라 0 입니다. ∎</li>
+</ol></div>
+<p class="cap">어디에 썼나: 시뮬레이터의 sensors.accel, 6장 상보 필터의 "가속도계로 본 기울기", 8장 가속도계 보정(±g 를 기준으로).</p>
+<!--WITNESS id=L20-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-accel-table">
+<h3>네 상황에서 가속도계가 재는 것</h3>
+<!--TABLE file=out/tbl_p05_accel.html cap=exps/p05.py — 6자유도 모델(quadrotor.deriv)의 가속도와 잡음 없는 sensors.accel. 단위 m/s²-->
+<ul>
+<li>호버: 가속도 0 인데 z 로 +9.810 — 중력의 반대 방향, 곧 추력을 잽니다.</li>
+<li>자유낙하: 가속도 −9.810 인데 읽는 값은 0. 떨어지는 드론의 가속도계는 "무중력" 입니다.</li>
+<li>롤 30° 로 호버 회전수를 유지하면 옆으로 −4.905, 아래로 −1.314 m/s² 로 가속하는데, 가속도계는 여전히 몸체 z 로 9.810 만 봅니다 — 기울기 30° 를 <b>0°</b> 로 봅니다.</li>
+</ul>
+<div class="warn">마지막 줄이 이 장의 가장 중요한 함정입니다. 가속도계로 기울기를 읽는 것은 드론이 <b>가속하지 않을 때만</b> 맞습니다. 추력 말고 몸체를 미는 힘(여기서는 항력 0)이 없으면, 가속도계는 늘 몸체 z 방향만 봅니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-accel-tilt">
+<h3>가속하는 동안의 "가짜 기울기"</h3>
+<p class="why">수평으로 가속 a 를 내면 비력은 (a, 0, g) — 가속도계가 보는 "위" 가 <span class="mi">atan(<i>a</i>/<i>g</i>)</span> 만큼 기웁니다. 몸체를 수평으로 둔 채 이 비력을 넣어 봅니다.</p>
+<!--TABLE file=out/tbl_p05_acctilt.html cap=exps/p05.py — 몸체는 수평, v̇ = (a, 0, 0). 잡음 없는 sensors.accel-->
+<p>1 m/s² 만 가속해도 5.82°, 5 m/s² 이면 27.01° 가 틀립니다. 가속도계만으로 자세를 잡는 드론은 가속할 때마다 자세를 잘못 알게 됩니다. 6장의 상보 필터가 가속도계를 "천천히만" 믿는 까닭입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-drift-idea">
+<h3>자이로를 적분하면 — 두 가지 표류</h3>
+<p class="why">각 = 각속도의 적분입니다. 자이로 값 = 참 각속도 + 바이어스 b + 잡음 n 이면, dt 마다 더한 각의 오차는 두 몫입니다.</p>
+<div class="eq"><i>e</i>(<i>t</i>) = <i>b</i>·<i>t</i> + d<i>t</i>·(<i>n</i>₁ + <i>n</i>₂ + ⋯ + <i>n</i><sub><i>N</i></sub>), &nbsp; <i>N</i> = <i>t</i>/d<i>t</i></div>
+<ul>
+<li>바이어스 몫 <span class="mi"><i>bt</i></span> 은 시간에 <b>비례</b>해 커집니다.</li>
+<li>잡음 몫은 서로 독립인 N 개의 합이라 M24 로 분산이 <span class="mi"><i>N</i>·d<i>t</i>²·<i>σ</i>² = <i>t</i>·d<i>t</i>·<i>σ</i>²</span>, 곧 떨림이 <span class="mi"><i>σ</i>√(<i>t</i>·d<i>t</i>)</span> — √t 로 커집니다. 이것을 "무작위 걸음(random walk)" 이라 부릅니다.</li>
+</ul>
+<p class="cap">어느 몫이든 한없이 커집니다. 차이는 속도뿐입니다. 바이어스 쪽이 훨씬 빠르다는 것을 다음 장이 잽니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-drift-table">
+<h3>표류를 재다 — 바이어스 대 잡음</h3>
+<!--TABLE file=out/tbl_p05_drift.html cap=exps/p05.py — b = sigma_bg(0.01 rad/s) 크기의 바이어스 하나, 잡음 σ = sigma_g, 250 Hz. 잡음 칸은 씨앗 60개의 RMS-->
+<ul>
+<li>바이어스 0.01 rad/s 는 100 초 뒤 57.296° — 자세가 완전히 틀립니다.</li>
+<li>잡음만의 떨림은 100 초 뒤에도 0.2° 안쪽이고, 잰 RMS 가 식 <span class="mi"><i>σ</i>√(<i>t</i>·d<i>t</i>)</span> 을 따라갑니다(60판이라 몇 % 흔들립니다).</li>
+</ul>
+<p class="cap">그래서 실무의 첫 과제는 바이어스를 없애는 일입니다 — 켤 때 가만히 두고 재서 빼거나(8장), 비행 중에 계속 추정합니다. PX4 의 EKF2 는 자이로 바이어스를 상태로 두고 추정합니다 <!--CITE key=px4-ekf2 sec="Overview"-->.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-double">
+<h3>가속도계를 두 번 적분하면 — 위치는 더 빨리 틀린다</h3>
+<p class="why">위치 = 가속도의 두 번 적분입니다. 영점이 b 만큼 틀린 가속도계는 위치에 <span class="mi">½<i>bt</i>²</span> 의 오차를 남깁니다 — 시간의 <b>제곱</b>입니다. 자세가 조금 틀려도 같습니다: 기울기를 1° 잘못 알면 중력 g 의 <span class="mi">sin 1°</span> 몫이 수평 가속도로 새어 듭니다.</p>
+<!--TABLE file=out/tbl_p05_double.html cap=exps/p05.py — b = sigma_a 값(0.05 m/s²)을 영점 오차로 둔 예. 가운데 칸은 dt 4 ms 로 두 번 더한 값-->
+<!--OUT file=p05_tilt_acc.txt note=1° 기울기 오차가 만드는 수평 가속도-->
+<p>1 분이면 영점 오차만으로 90 m, 1° 기울기 오차로 308 m 입니다. ArduPilot 문서도 대부분의 비행 컨트롤러에 든 값싼 IMU 는 너무 빨리 표류해서, 바깥의 속도·위치 정보 없이 IMU 만으로는 위치를 추정할 수 없다고 적습니다 <!--CITE key=ardupilot-non-gps sec="Persistent Origin Storage"-->.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-temp">
+<h3>온도와 바이어스</h3>
+<p class="why">MEMS 센서의 바이어스와 배율은 온도에 따라 변합니다. 사양서도 자이로의 영점 출력(ZRO)과 배율의 "온도에 따른 변화" 를 따로 적어 둡니다 <!--CITE key=mpu6000-ds sec="GYROSCOPE ZERO-RATE OUTPUT (ZRO)"-->.</p>
+<ul>
+<li>ArduPilot 은 IMU 온도 보정을 지원합니다. 비행 컨트롤러를 차갑게 식힌 뒤 따뜻한 곳에서 켜서, 온도가 오르는 동안 움직이지 않게 두고 바이어스를 온도의 함수로 배웁니다 <!--CITE key=ardupilot-imu-tempcal sec="IMU Temperature Calibration"-->.</li>
+<li>시작과 끝의 온도 차가 적어도 10 °C 는 되어야 하고 25 °C 이상을 권한다고 같은 문서가 적습니다 <!--CITE key=ardupilot-imu-tempcal sec="Temperature Calibration Procedure"-->.</li>
+<li>PX4 문서는 가속도계를 처음 쓸 때 보정하고, 공장에서 온도 보정을 하지 않은 보드라면 겨울에 다시 보정할 수도 있다고 적습니다 <!--CITE key=px4-accel-cal sec="Accelerometer Calibration"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p5-c1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 엘리베이터가 위로 출발하며 가속하는 순간, 바닥에 놓은 비행 컨트롤러의 가속도계 z 값은 9.81 보다 클까요, 작을까요? 줄이 끊어져 엘리베이터가 떨어지면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> L20 으로 z 값은 <span class="mi"><i>v̇</i><sub>z</sub> + <i>g</i></span> 입니다. 위로 가속하면 9.81 보다 크고(표의 "상승 가속" 줄이 11.870), 자유낙하면 0 입니다. 가속도계는 중력이 아니라 "바닥이 미는 힘" 을 잰다고 생각하면 쉽습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 2장 자력계·기압계 -->
+
+<article class="card section" id="p5-c2"><p class="chnum">2장</p><h2>자력계와 기압계 — 방위와 높이</h2>
+<p class="chsub">지구 자기장으로 요를 · 전류가 만드는 간섭 · 압력으로 높이를</p></article>
+
+<article class="card" id="p5-mag">
+<h3>자력계 — 요를 알려 주는 유일한 관성 밖 센서</h3>
+<p class="why">가속도계는 "위" 를 알려 주지만(L20) 수평면 안에서 어느 쪽을 보는지는 모릅니다 — 요(기수 방향)를 돌려도 중력 방향은 그대로입니다. 지구 자기장은 수평 성분이 있어서 요를 알려 줍니다. 그래서 자력계(나침반)가 필요합니다.</p>
+<ul>
+<li>PX4 EKF2 는 지구 자기장(북·동·아래 세 성분)과 몸체에 붙은 자기 바이어스를 상태로 추정합니다 <!--CITE key=px4-ekf2 sec="Overview"-->.</li>
+<li>같은 문서: 자력계 바이어스는 드론이 <b>돌 때만</b> 관측되고, 참 방위는 GPS 같은 위치·속도 측정이 있는 채로 가속할 때 관측됩니다 <!--CITE key=px4-ekf2 sec="Magnetometer"-->.</li>
+<li>나침반을 안 쓰는 길도 있습니다 — 안테나 두 개의 GNSS 로 방위를 얻거나(3장), GPS 속도로 요를 추정합니다 <!--CITE key=px4-ekf2 sec="Yaw From GPS Velocity"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-mag-heading">
+<h3>자력계로 방위 읽기 — 먼저 수평으로 되돌린다</h3>
+<p class="why">몸체가 요 ψ 만 돌았다면 몸체에서 본 자기장의 수평 성분이 (B<sub>h</sub> cos ψ, −B<sub>h</sub> sin ψ) 꼴이라 <span class="mi">ψ = atan2(−<i>m</i><sub>y</sub>, <i>m</i><sub>x</sub>)</span> 입니다. 몸체가 기울어 있으면 자기장의 <b>수직</b> 성분이 x·y 로 새어 듭니다. 그래서 롤·피치(가속도계·자이로에서 얻은)로 먼저 수평으로 되돌립니다.</p>
+<!--CODE file=ex/imu_calib.py sym=heading note=롤·피치를 되돌린 뒤 atan2-->
+<!--TABLE file=out/tbl_p05_magtilt.html cap=exps/p05.py — 참 요 0.5 rad, 롤만 기울임. 자기장 모양(수직/수평 비)은 가정-->
+<p class="cap">수직 성분이 클수록(자기 복각이 클수록) 기울기를 무시한 오차가 큽니다 — 수직/수평 1.5, 롤 30° 에서 24.37°. 보정하면 0 입니다. 롤·피치가 틀리면 방위도 틀리므로, 1장의 "가짜 기울기" 는 방위에도 번집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-iron">
+<h3>하드 아이언·소프트 아이언</h3>
+<p class="why">드론에 붙은 자석·철 부품은 자력계 값을 비틉니다. 드론을 모든 방향으로 돌리면 참 자기장 벡터는 <b>구</b> 위를 돌아야 하는데, 잰 값은 옮겨지고(하드 아이언 — 영점) 찌그러진(소프트 아이언 — 축마다 배율) 모양이 됩니다.</p>
+<ul>
+<li>PX4 의 완전(complete) 보정은 축마다 영점과 배율을 추정해 하드·소프트 아이언을 둘 다 보상하고, 부분(partial) 보정과 대형 기체 보정은 영점만 추정합니다 <!--CITE key=px4-compass-cal sec="Types of Calibration"-->.</li>
+<li>ArduPilot 의 온보드 보정은 영점에 더해 배율과 방향(orientation)까지 정합니다 <!--CITE key=ardupilot-compass-cal sec="Onboard Calibration"-->.</li>
+</ul>
+<p>수학으로는 "점들에 가장 잘 맞는 구(또는 축마다 늘어난 타원체)를 찾아라" 입니다. 다음 장이 그 계산을 최소제곱 한 번으로 합니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-sphere-fit">
+<h3>구 맞춤이 1차식이 되는 요령</h3>
+<p class="why">중심 <b>c</b>, 반지름 r 인 구 위의 점 <b>m</b> 은 <span class="mi">|<b>m</b> − <b>c</b>|² = <i>r</i>²</span>. 펼치면</p>
+<div class="eq">2<b>c</b>·<b>m</b> + (<i>r</i>² − |<b>c</b>|²) = |<b>m</b>|²</div>
+<p>모르는 수 <b>c</b> 셋과 <span class="mi"><i>k</i> = <i>r</i>² − |<b>c</b>|²</span> 하나에 대해 <b>1차식</b>입니다. 점이 넷보다 많으면 정규방정식 <span class="mi"><i>A</i><sup>T</sup><i>A</i><b>x</b> = <i>A</i><sup>T</sup><b>y</b></span> 로 풉니다(3장 GNSS 와 같은 도구). 축마다 배율이 다르면 <span class="mi"><i>ax</i>² + <i>by</i>² + <i>cz</i>² + <i>dx</i> + <i>ey</i> + <i>fz</i> = 1</span> 의 여섯 계수가 또 1차식입니다.</p>
+<!--CODE file=ex/imu_calib.py sym=lstsq note=정규방정식 — 7부의 가우스 소거(linalg.solve)로-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-sphere-code">
+<h3>구와 타원체 맞춤의 코드</h3>
+<!--CODE file=ex/imu_calib.py sym=fit_sphere..fit_axes note=완전제곱으로 중심과 반지름을 읽는다-->
+<p class="cap">시험 test_hard_iron_centre_and_radius·test_axes_recover_scale 이 알려 준 중심·반지름을 9자리까지 되찾음을 확인합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-mag-fit">
+<h3>보정 전후 — 방위 오차</h3>
+<p class="why">가정한 영점 (0.3, −0.2, 0.1)과 축 배율 (1.1, 0.9, 1.0), 잡음 0.01 을 넣은 점 200개를 만들고 두 방법으로 맞춥니다.</p>
+<!--TABLE file=out/tbl_p05_magfit.html cap=exps/p05.py — 자기장 크기 √(1 + 1.5²), 황금각 나선으로 고른 200 방향-->
+<!--TABLE file=out/tbl_p05_magheading.html cap=exps/p05.py — 수평 자세로 요를 한 바퀴 돌리며 잰 가장 나쁜 방위 오차-->
+<p class="cap">보정이 없으면 26.14°, 영점만 빼면 5.76°, 배율까지 고치면 0.09° — PX4 가 처음 설치 때 완전 보정을 요구하는 까닭이 이 차이입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-interference">
+<h3>자기 간섭 — 전류가 만드는 자기장</h3>
+<p class="why">배터리·배전판·ESC 사이의 굵은 전선에 흐르는 전류는 자기장을 만듭니다. ArduPilot 문서는 전류 고리에서 나오는 자기장이 고리 넓이와 전류에 비례해 커지고, 거리가 멀어지면 <b>거리의 세제곱</b>으로 준다고 설명합니다 <!--CITE key=ardupilot-mag-interference sec="#maxwell-s-equations-the-magnetic-field-on-the-axis-of-a-current-loop"-->.</p>
+<ul>
+<li>그래서 가장 좋은 대책은 외장 나침반(또는 GPS+나침반 모듈)을 기둥 위로 멀리 올리는 것 <!--CITE key=ardupilot-mag-interference sec="Hardware changes to reduce magnetic interference on the compass"-->. 거리를 두 배로 하면 간섭은 1/8 입니다.</li>
+<li>배터리·ESC 사이 전선은 짧게, 꼬아서 — 고리 넓이를 줄입니다. 4-in-1 ESC 는 전류가 한곳에 모여 고리가 작습니다(같은 절).</li>
+<li>PX4 문서도 GNSS/나침반 모듈을 모터·ESC 전원선에서 되도록 멀리, 흔히 받침대 위에 달라고 적습니다 <!--CITE key=px4-gnss sec="Mounting the GNSS/Compass"-->.</li>
+</ul>
+<div class="warn">간섭을 받은 나침반은 멀티콥터를 원을 그리며 돌게 만듭니다. ArduPilot 은 Loiter·RTL·AUTO 에서의 "변기 물 돌듯(toiletbowling)" 선회를 <!--CITE key=ardupilot-mag-interference sec="Overview"-->, PX4 는 점점 커지는 나선을 증상으로 적습니다 <!--CITE key=px4-compass-cal sec="Overview"-->.</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-compassmot">
+<h3>CompassMot — 전류에 비례하는 간섭을 빼기</h3>
+<p class="why">ArduPilot 의 CompassMot 은 전류 측정기가 있을 때 잘 동작합니다. 자기 간섭이 끌어 쓰는 전류에 <b>선형</b>이기 때문입니다. 프로펠러를 뒤집어 달아 드론이 바닥으로 눌리게 하고, 스로틀을 올리며 잽니다 <!--CITE key=ardupilot-compass-advanced sec="CompassMot — compensation for interference from the power wires, ESCs and motors"-->.</p>
+<ul>
+<li>같은 문서의 판정: 간섭이 30 % 미만이면 괜찮고, 31–60 % 는 회색 지대, 60 % 를 넘으면 나침반을 옮기거나 외장 나침반을 쓰라고 합니다.</li>
+<li>선형이면 축마다 직선 <span class="mi"><i>m</i> = <i>m</i>₀ + <i>k</i>·<i>I</i></span> 를 맞춰 k 를 얻고, 비행 중에 <span class="mi"><i>k</i>·<i>I</i></span> 를 빼면 됩니다.</li>
+</ul>
+<!--CODE file=ex/imu_calib.py sym=fit_line note=직선 맞춤 — 같은 lstsq 로-->
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-compassmot-run">
+<h3>전류 보상 실험</h3>
+<p class="why">가정한 간섭 계수(A 당 0.02, −0.01, 0.015)와 잡음 0.01 로 0–30 A 에서 16 점을 재고, 축마다 직선을 맞춥니다.</p>
+<!--OUT file=p05_compassmot_k.txt note=참 계수와 맞춘 계수-->
+<!--TABLE file=out/tbl_p05_compassmot.html cap=exps/p05.py — 수평 자세, 참 요 0.5 rad-->
+<p class="cap">맞춘 계수가 참값과 셋째 자리에서 어긋나도 30 A 에서 방위 오차가 0.84° 에서 0.038° 로 줄어듭니다. 실제 드론의 간섭 크기는 기체마다 다르므로, 표의 절댓값이 아니라 "선형이면 뺄 수 있다" 가 요점입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-baro">
+<h3>기압계 — 압력으로 높이를</h3>
+<p class="why">PX4 문서: 기압계는 대기압을 재고 드론에서 고도 센서로 쓰이며, 대부분의 비행 컨트롤러에 들어 있습니다 <!--CITE key=px4-barometer sec="Barometers"-->. Bosch BMP280 은 압저항(piezo-resistive) 방식의 절대 압력 센서입니다 <!--CITE key=bmp280-ds sec="BMP280"-->.</p>
+<ul>
+<li>BMP280 의 상대 정확도는 ±0.12 hPa 로 "높이 ±1 m 에 해당" 한다고 적혀 있습니다. 온도 계수 오프셋은 1.5 Pa/K(12.6 cm/K)입니다(같은 절).</li>
+<li>공기 기둥의 무게로 보면 높이 h 가 오를 때 압력은 <span class="mi">d<i>p</i> = −<i>ρg</i> d<i>h</i></span> 만큼 줍니다(정수압). 이 덱의 ρ·g 로 계산하면 아래 표입니다.</li>
+</ul>
+<!--TABLE file=out/tbl_p05_baro.html cap=exps/p05.py — ρ = 1.225 kg/m³(params, 해면 표준 대기 가정), g = 9.81. 높이가 크게 바뀌면 ρ 도 바뀌므로 작은 차에만 맞다-->
+<p class="cap">12 Pa ≈ 1 m 는 사양서의 "±0.12 hPa ≈ ±1 m" 그대로입니다. 온도가 1 K 바뀌면 0.125 m 쯤 높이가 흔들리는 셈이라, 기압계는 켤 때의 온도 변화에 민감합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-baro-traps">
+<h3>기압계의 함정 — 바람·지면 효과·드리프트</h3>
+<ul>
+<li><b>정압 위치 오차</b>: 기체 주위의 바람과 자세가 기압 고도에 오차를 만듭니다. PX4 EKF2 는 바람 추정이 켜져 있으면 이 오차를 보상하는 방법을 둡니다 <!--CITE key=px4-ekf2 sec="Correction for Static Pressure Position Error"-->.</li>
+<li><b>바이어스 드리프트</b>: 고도가 그대로여도 주변 기압과 센서 온도가 바뀌면 값이 흘러갑니다. EKF2 는 GNSS 고도를 "흐르지 않는" 기준으로 삼아 이 바이어스를 추정합니다 <!--CITE key=px4-ekf2 sec="Barometer bias compensation"-->.</li>
+<li><b>로터 바람</b>: 이착륙 때 로터 바람이 기압계를 심하게 흔드는 기체는 거리 센서를 조건부로 섞습니다 <!--CITE key=px4-ekf2 sec="Conditional range aiding"-->.</li>
+<li><b>켤 때 맞추기</b>: PX4 는 부팅 뒤 여러 기압계를 주 센서에 맞추는 상대 보정을 먼저 하고, GNSS 수직 정확도가 8 m 이하이면 기압 고도를 GNSS 고도에 맞추는 보정을 합니다 <!--CITE key=px4-barometer sec="GNSS-Baro Calibration"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p5-c2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 나침반 모듈을 배전판 위 3 cm 에서 기둥 위 12 cm 로 옮겼습니다. 전류 간섭은 대략 몇 분의 1 이 될까요? 그래도 CompassMot 이 필요할 수 있는 까닭은?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 거리가 4 배이고 간섭이 거리의 세제곱으로 준다면 1/64 입니다(ArduPilot 문서의 설명, 고리에서 충분히 멀 때). 그래도 전류가 큰 기체라면 남은 몫이 방위를 흔들 수 있고, 그 몫이 전류에 선형이면 CompassMot 처럼 직선으로 빼면 됩니다(실험 표: 30 A 에서 0.84° → 0.038°).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 3장 GNSS·RTK -->
+
+<article class="card section" id="p5-c3"><p class="chnum">3장</p><h2>GNSS 와 RTK — 하늘의 시계로 위치를</h2>
+<p class="chsub">의사거리 · 왜 넷인가(L15) · 뉴턴 반복(T26) · 배치와 PDOP · RTK</p></article>
+
+<article class="card" id="p5-gnss">
+<h3>GNSS — 위성이 보내는 위치와 시각</h3>
+<p class="why">GPS.gov 의 설명: GPS 는 우주·관제·사용자 세 부분으로 되어 있고, 우주 부분은 명목상 24기의 위성이 자기 위치와 시각을 담은 한 방향 신호를 보냅니다. 수신기는 그 신호로 자신의 3차원 위치와 시각을 계산합니다 <!--CITE key=gps-gov-gps sec="GPS"-->.</p>
+<ul>
+<li>GNSS(global navigation satellite system)는 GPS 를 포함한 위성 항법 체계를 통틀어 부르는 말입니다. PX4 는 GPS·GLONASS·Galileo·BeiDou·QZSS·SBAS 등을 지원한다고 적습니다 <!--CITE key=px4-gnss sec="Global Navigation Satellite Systems (GNSS)"-->.</li>
+<li>보통 GNSS 모듈에는 나침반이 함께 들어 있습니다(같은 문서) — 2장의 간섭 이야기가 여기서 다시 나옵니다.</li>
+</ul>
+<p class="cap">전파의 세부(신호 구조·코드·변조)는 무선통신 덱이 다룹니다. 이 장은 "거리 넷으로 위치를 푸는 수학" 에 집중합니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-pseudorange">
+<h3>의사거리 — 시계가 틀린 거리</h3>
+<p class="why">u-blox 의 설명: 모든 GNSS 측위는 수신기와 위성 사이의 거리에서 위치를 계산하고, 그 거리는 빛의 속도에 신호가 오는 데 걸린 시간을 곱해 얻습니다 <!--CITE key=ublox-rtk sec="Real-Time Kinematic (RTK) and GNSS corrections"-->.</p>
+<p>문제는 수신기의 시계입니다. 위성 시계에 비해 수신기 시계가 조금만 틀려도, 빛의 속도를 곱하면 거리가 크게 틀립니다. 그 틀림은 모든 위성에 <b>똑같이</b> 더해집니다. 그래서 잰 거리를 "의사거리(pseudorange)" 라 부르고, 시계 오차 몫 b(거리 단위)를 네 번째 미지수로 둡니다.</p>
+<div class="eq"><i>ρ</i><sub><i>i</i></sub> = |<b>s</b><sub><i>i</i></sub> − <b>r</b>| + <i>b</i>, &nbsp; <i>i</i> = 1, …, <i>n</i></div>
+<p class="cap">모르는 수: 위치 <b>r</b> 의 셋 + b 하나 = 넷. 위성 위치 <b>s</b><sub><i>i</i></sub> 는 신호에 실려 옵니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-l15">
+<h3>왜 위성이 넷인가</h3>
+<!--THM id=L15-->
+<p class="cap">쓰는 도구: M9(계수), M8(해가 하나일 조건). 뉴턴 반복이 매 걸음 푸는 1차 식 <span class="mi"><i>J</i> d<b>x</b> = −<b>f</b></span>(<a href="#p5-m25">M25</a>)에서 봅니다.</p>
+<div class="proof"><span class="h">증명 — 1차 식의 계수</span>
+<ol class="pf">
+<li>의사거리 하나는 J 에 행 하나를 줍니다. J 는 n × 4 행렬입니다. <span class="why">미지수가 넷 — 가정</span></li>
+<li>계수는 행의 수를 넘지 못합니다: 소거하면 피벗은 행마다 많아야 하나입니다. <span class="why">M9</span></li>
+<li>n ≤ 3 이면 계수 ≤ 3 &lt; 4 라 어떤 열에는 피벗이 없고, <span class="mi"><i>J</i> d<b>x</b> = −<b>f</b></span> 는 해가 없거나 무수히 많습니다 — 한 걸음이 정해지지 않습니다. <span class="why">M8</span></li>
+<li>같은 방향에서 온 의사거리 둘은 같은 행(단위 벡터, 1)을 줍니다. 한 행의 배를 빼면 0 행이 되어 피벗을 더하지 않습니다. <span class="why">M9 — 소거는 계수를 바꾸지 않는다</span></li>
+<li>그래서 계수 4 에는 서로 다른 방향의 행이 적어도 넷 필요합니다. ∎</li>
+</ol></div>
+<p class="cap">"넷이면 충분한가" 는 다른 질문입니다 — 넷이 한 원뿔 위에 있으면 여전히 모자랍니다. T26 이 그 조건을 정확히 말합니다.</p>
+<!--WITNESS id=L15-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-m25">
+<h3>뉴턴 반복 — 휘어진 식을 곧게 펴서 푼다</h3>
+<!--THM id=M25-->
+<div class="proof"><span class="h">증명 스케치</span>
+<p>스케치입니다 — 여러 변수의 테일러 전개와 "제곱으로 준다" 의 엄밀한 조건(야코비가 해 근처에서 가역이고 부드럽다)은 증명하지 않고 생각의 줄기만 봅니다.</p>
+<ol class="pf">
+<li>해 근처의 점 <b>x</b> 에서 <span class="mi"><b>f</b>(<b>x</b> + d<b>x</b>) ≈ <b>f</b>(<b>x</b>) + <i>J</i> d<b>x</b></span> — 식마다 1차 테일러 전개(M13)를 한 것입니다.</li>
+<li>오른쪽을 0 으로 두면 <span class="mi"><i>J</i> d<b>x</b> = −<b>f</b></span> — 가우스 소거(M8)로 풉니다.</li>
+<li>버린 것은 2차 항뿐이라, 새 점의 오차는 옛 오차의 제곱 정도입니다. 오차가 10⁻² 면 다음은 10⁻⁴, 그다음은 10⁻⁸.</li>
+</ol></div>
+<!--WITNESS id=M25-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-t26">
+<h3>GNSS 측위 — 넷 이상, 고루 퍼져 있으면</h3>
+<!--THM id=T26-->
+<p class="cap">쓰는 도구: M25(뉴턴), L15, M9, M1(내적), 연쇄법칙. <span class="mi"><b>u</b><sub><i>i</i></sub> = (<b>s</b><sub><i>i</i></sub> − <b>r</b>)/|<b>s</b><sub><i>i</i></sub> − <b>r</b>|</span> 은 수신기에서 위성 i 를 향한 단위 벡터입니다.</p>
+<div class="proof cont"><span class="h">증명 — 야코비</span>
+<ol class="pf">
+<li>미지수 <span class="mi"><b>x</b> = (<b>r</b>, <i>b</i>)</span>, 식 <span class="mi"><i>f</i><sub><i>i</i></sub>(<b>x</b>) = |<b>s</b><sub><i>i</i></sub> − <b>r</b>| + <i>b</i> − <i>ρ</i><sub><i>i</i></sub></span>. 참 위치와 참 시계 오차에서 모든 <span class="mi"><i>f</i><sub><i>i</i></sub> = 0</span>. <span class="why">의사거리의 정의</span></li>
+<li><span class="mi">|<b>s</b> − <b>r</b>| = √((<b>s</b> − <b>r</b>)·(<b>s</b> − <b>r</b>))</span> 를 <b>r</b> 로 미분하면 <span class="mi">−(<b>s</b> − <b>r</b>)/|<b>s</b> − <b>r</b>| = −<b>u</b></span>, b 로 미분하면 1. 그래서 J 의 행 i 는 <span class="mi">(−<b>u</b><sub><i>i</i></sub>, 1)</span>. <span class="why">연쇄법칙</span></li>
+<li>식이 넷보다 많으면 한 걸음은 정규방정식 <span class="mi"><i>J</i><sup>T</sup><i>J</i> d<b>x</b> = −<i>J</i><sup>T</sup><b>f</b></span> 로 풉니다(잔차 제곱합이 가장 작은 걸음). <span class="why">가정 — 넷 이상</span></li>
+<li><span class="mi"><i>J</i><sup>T</sup><i>J</i><b>d</b> = 0</span> 이면 <span class="mi"><b>d</b>·<i>J</i><sup>T</sup><i>J</i><b>d</b> = |<i>J</i><b>d</b>|² = 0</span> 이라 <span class="mi"><i>J</i><b>d</b> = 0</span>. 그래서 J 의 계수가 4 이면 <span class="mi"><i>J</i><sup>T</sup><i>J</i></span> 는 가역입니다. <span class="why">M8, M9</span></li>
+</ol></div>
+<p class="cap">증명은 다음 장에 이어집니다.</p>
+</article>
+
+<article class="card" id="p5-t26b">
+<h3>GNSS 측위 — "고루 퍼져 있다" 의 정확한 뜻</h3>
+<!--THM id=T26 cont-->
+<div class="proof"><span class="h">증명 — 원뿔 조건과 수렴</span>
+<ol class="pf">
+<li>계수가 4 보다 작다는 것은 0 아닌 <span class="mi"><b>d</b> = (<b>a</b>, <i>δ</i>)</span> 가 있어 모든 i 에서 <span class="mi">−<b>u</b><sub><i>i</i></sub>·<b>a</b> + <i>δ</i> = 0</span>, 곧 <span class="mi"><b>u</b><sub><i>i</i></sub>·<b>a</b> = <i>δ</i></span> 라는 것입니다.</li>
+<li><b>a</b> = 0 이면 δ = 0 이 되어 <b>d</b> = 0 — 모순. 그래서 <b>a</b> ≠ 0 이고, M1 로 모든 <b>u</b><sub><i>i</i></sub> 가 <b>a</b> 와 같은 각을 이룹니다: 방향이 모두 <b>a</b> 를 축으로 한 <b>원뿔</b> 위에 있습니다. <span class="why">M1 — 내적 = 길이 × 길이 × cos</span></li>
+<li>대우: 방향들이 어느 한 원뿔 위에 다 놓이지 않으면(이것이 "고루 퍼져 있다" 의 뜻) 계수는 4 이고, 3단계의 한 걸음이 하나로 정해집니다. <span class="why">가정 — 고루 퍼짐</span></li>
+<li>참 해에서 J 가 가역이므로 M25 로 해 근처에서 출발한 뉴턴 반복은 오차가 걸음마다 대략 제곱으로 줄며 참 <span class="mi">(<b>r</b>, <i>b</i>)</span> 로 갑니다 — 위치와 시계 오차를 <b>함께</b>. ∎ <span class="why">M25</span></li>
+</ol></div>
+<p class="cap">어디에 썼나: ex/gps_trilateration.py, 이 장의 배치 표, 4장 UWB(시계 오차가 없으면 미지수 셋). 같은 고도각의 위성 넷은 천정을 축으로 한 원뿔 위에 있으니 풀리지 않습니다 — 표에서 확인합니다.</p>
+<!--WITNESS id=T26-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-gps-code">
+<h3>뉴턴 반복의 코드</h3>
+<!--CODE file=ex/gps_trilateration.py sym=solve note=행 (−u, 1) — 코드는 (r − s)/d 로 적는다. 넷보다 많으면 정규방정식-->
+<p class="cap">코드의 행 <span class="mi">(<b>x</b> − <b>s</b>)/<i>d</i></span> 는 증명의 <span class="mi">−<b>u</b></span> 와 같습니다. 오른쪽 <span class="mi"><i>ρ</i> − (<i>d</i> + <i>b</i>)</span> 는 <span class="mi">−<b>f</b></span> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-gps-run">
+<h3>돌려 보기 — 45 km 틀린 시계에서 출발</h3>
+<p class="why">가상 위성 여섯(궤도 반지름 26,560 km 의 합성 배치)과 참 위치 (1200, −800, 300) m, 시계 오차 45,000 m 로 의사거리를 만들고, 원점·시계 오차 0 에서 출발합니다.</p>
+<!--OUT file=p05_gps.txt note=ex/gps_trilateration.py-->
+<p class="cap">첫 걸음에 잔차가 1.1×10⁵ m 에서 7.6×10⁻² m 로, 둘째 걸음에 0 으로 — M25 의 "제곱으로 준다" 입니다. 위성은 수신기에서 수만 km 떨어져 있어 식이 거의 1차라 첫 걸음부터 가깝습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-geometry">
+<h3>위성 배치가 정확도를 정한다</h3>
+<p class="why">의사거리마다 잡음 σ = 1 m 를 넣고 300번 풀어, 위치 오차가 잡음의 몇 배가 되는지 잽니다. 같은 표에 PDOP(아래 장)를 계산해 둡니다.</p>
+<!--TABLE file=out/tbl_p05_geometry.html cap=exps/p05.py — 수신기는 원점, 시계 오차 45 km. 괄호 안 배치는 exps/p05.py 의 GEOMS-->
+<ul>
+<li>천정 하나 + 낮은 셋: 오차는 σ 의 2배. 예제의 여섯도 비슷합니다.</li>
+<li>예제의 앞 넷은 넷인데도 18.73 배 — 방향이 원뿔에 가깝습니다. 한데 몰린 넷은 223 배.</li>
+<li>같은 고도각 넷과 셋: 계수가 3, 풀리지 않습니다(L15·T26).</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-dop">
+<h3>PDOP — 잡음이 위치 오차로 몇 배 번지나</h3>
+<p class="why">이 덱은 <span class="mi">PDOP = √(<i>A</i><sup>T</sup><i>A</i>)⁻¹ 의 위치 세 대각 성분의 합</span> 으로 정의합니다(A 는 참 해에서의 야코비). 최소제곱 해의 공분산이 <span class="mi"><i>σ</i>²(<i>A</i><sup>T</sup><i>A</i>)⁻¹</span> 이라는 사실은 증명하지 않았지만, 앞 표에서 잰 "RMS 오차 ÷ σ" 가 PDOP 와 몇 % 안에서 맞습니다(1.96 대 2.00, 18.82 대 18.73).</p>
+<!--CODE file=exps/p05.py sym=pdop note=(AᵀA)⁻¹ 의 대각 성분을 열마다 풀어서-->
+<p>PX4 EKF2 가 GNSS 를 항법에 쓰기 전에 요구하는 기본값은 PDOP 2.5 미만, 위성 6기 이상, 수평 위치 표준편차 3 m 미만이고, 표준 모듈의 평균값으로 PDOP 1.0·위성 14기를 예로 듭니다 <!--CITE key=px4-ekf2 sec="GNSS Performance Requirements"-->.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-blunder">
+<h3>위성 하나가 틀리면 — 넷은 모르고, 여섯은 안다</h3>
+<p class="why">의사거리 하나에 10 m 를 더해 봅니다(반사파 같은 큰 오차의 흉내).</p>
+<!--TABLE file=out/tbl_p05_blunder.html cap=exps/p05.py — 잡음 없음, 참 위치 (1200, −800, 300) m-->
+<ul>
+<li>넷: 식 넷에 미지수 넷이라 틀린 값도 <b>정확히</b> 맞춰 버립니다 — 남은 잔차 0. 위치는 8–13 m 틀리는데 아무 경고가 없습니다.</li>
+<li>여섯: 식이 남아 모두를 맞출 수 없으니 잔차가 1–3 m 남습니다. 잔차가 크면 "무언가 틀렸다" 를 알 수 있습니다.</li>
+</ul>
+<p class="cap">위성이 많으면 정확도(PDOP)만이 아니라 <b>이상 탐지</b>도 얻습니다. PX4 EKF2 에는 GNSS 이상 탐지와, 흐르는 GNSS 를 버리는 모드가 있습니다 <!--CITE key=px4-ekf2 sec="GNSS Fault Detection"-->.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-gnss-errors">
+<h3>GNSS 오차의 원천과 크기</h3>
+<ul>
+<li>신호가 오는 시간은 위성 궤도·시계 오차, 전리층·대류권 효과로 틀립니다 <!--CITE key=ublox-rtk sec="Real-Time Kinematic (RTK) and GNSS corrections"-->.</li>
+<li>순간적인 오차는 다중경로(반사), 가림, 간섭이 흔한 원인입니다 <!--CITE key=px4-ekf2 sec="Determination of Poor GPS Accuracy"-->. 철골 건물 사이를 날면 자기장도 비틀리고 GPS 다중경로도 생긴다고 ArduPilot 문서가 경고합니다 <!--CITE key=ardupilot-mag-interference sec="Natural and Artificial Magnetic Anomalies Warning"-->.</li>
+<li>ArduPilot 문서: u-blox M8N 세대의 보통 GPS 정확도는 3–5 m, SBAS 가 있는 지역이면 1 m 대, RTK 보정 자료로는 센티미터 대 <!--CITE key=ardupilot-rtk sec="RTK GPS Correction (Fixed Baseline)"-->.</li>
+<li>SBAS 의 예: 미국 FAA 가 운영하는 WAAS 는 북미 항공 항법을 돕는 위성 기반 보강 체계이고, 일본 MSAS·유럽 EGNOS·인도 GAGAN 과 호환됩니다 <!--CITE key=gps-gov-augmentation sec="Publicly Available GPS Augmentation Systems"-->.</li>
+</ul>
+<p class="cap">이 덱의 시뮬레이터는 이 모든 것을 축마다 σ = 0.3 m 의 흰 잡음 하나(sigma_p)로 줄였습니다. 실제 오차는 천천히 흐르는 성분이 커서 흰 잡음보다 다루기 어렵습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-rtk">
+<h3>RTK — 반송파의 위상으로 센티미터</h3>
+<p class="why">u-blox 의 설명: 보통 GNSS 는 코드로 거리를 재고, RTK 는 반송파의 <b>위상</b>으로 잽니다. L1 반송파의 파장은 19 cm 이고 코드는 약 300 m 에 해당합니다 — 자의 눈금이 훨씬 촘촘합니다 <!--CITE key=ublox-rtk sec="How RTK Differs from Traditional GNSS Positioning"-->.</p>
+<ul>
+<li>반송파에는 시각 도장이 없어서, 위성과 수신기 사이에 파장이 <b>몇 개</b> 들어 있는지 모릅니다. 이 정수를 푸는 것을 정수 모호성 해결(IAR)이라 합니다(같은 절).</li>
+<li>IAR 에는 보정 자료가 필요합니다 — 위치를 정확히 아는 가까운 기준국(또는 기준국 망)이 신호마다 오차를 추정해 보냅니다 <!--CITE key=ublox-rtk sec="Single station RTK"-->.</li>
+<li>기준국과 드론이 가까우면 대기 오차가 거의 같아 차이를 빼면 사라진다는 것이 핵심입니다 — 3장 앞의 "모든 위성에 똑같이 더해지는 b 를 미지수로 둔다" 와 같은 생각입니다.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-rtk-ops">
+<h3>RTK 를 실제로 — 기준국·조사·float 와 fixed</h3>
+<ul>
+<li>RTK 는 GNSS 장치 한 쌍이 필요합니다: 지상의 "기준국(base)" 과 기체의 "이동국(rover)". 기준국은 쓰는 동안 움직이면 안 되고 하늘이 트인 곳에 둡니다 <!--CITE key=px4-rtk sec="Positioning Setup/Configuration"-->.</li>
+<li>기준국은 먼저 자기 위치를 "survey-in" 합니다 — 여러 번 재서 평균을 내며 정해진 오차 안에 일정 시간 머물 때까지 기다립니다. 보정이 들어오면 상태가 "RTK float" 를 거쳐 "RTK fixed" 가 되고, float 는 보정을 쓰지만 가장 정밀한 방식에는 아직 이르지 못한 상태입니다 <!--CITE key=ardupilot-rtk sec="Method 1"-->.</li>
+<li>인터넷의 NTRIP 서비스로 보정을 받을 수도 있습니다. 기준국이 약 100 km 안이면 대개 쓸 만하고, 10 km 멀어질 때마다 부정확도가 약 1–1.5 cm 늘어난다고 같은 문서가 적습니다 <!--CITE key=ardupilot-rtk sec="Method 2"-->.</li>
+<li>PX4 의 기본 매개변수는 미터 급 GPS 에 맞춰져 있어, RTK 에서는 EKF2_GPS_P_NOISE 같은 잡음 값을 0.2 로 낮출 수 있다고 합니다 <!--CITE key=px4-rtk sec="Tuning"--> — 7장의 "측정 분산 R 을 맞춘다" 가 바로 이것입니다.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-gps-yaw">
+<h3>GNSS 로 방위를 — 안테나 둘</h3>
+<p class="why">안테나 두 개의 위치 차(기선)는 기체의 방향을 줍니다. PX4 문서: 신호가 떨어진 두 안테나에 닿는 시간을 비교하는 방식이고, 안테나 사이의 최소 거리는 장치에 따라 다르지만 50 cm 정도이며, 자기 간섭의 영향을 받지 않는 것이 장점입니다 <!--CITE key=px4-rtk sec="Configuring GPS as Yaw/Heading Source"-->.</p>
+<p>EKF2 문서도 GPS 방위가 큰 자기 이상이 있는 곳이나 자기장 복각이 큰 고위도에서 유리하다고 적습니다 <!--CITE key=px4-ekf2 sec="Yaw Measurements"--> — 2장 방위 표에서 수직/수평 비가 클수록 기울기 오차가 커지던 것과 같은 이야기입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-swarm">
+<h3>드론쇼에 RTK 가 필요한 까닭 — 한 표로</h3>
+<p class="why">1.5 m 간격의 10×10 격자에서 드론마다 위치가 축마다 σ 만큼 흔들린다고 두고(추정기가 GNSS 잡음을 그대로 따른다는 거친 가정), 이웃한 두 드론의 가장 가까운 거리를 30판 잽니다.</p>
+<!--TABLE file=out/tbl_p05_swarm.html cap=exps/p05.py — 드론 100대, 씨앗 31. σ 0.02 m 는 이 덱의 가정(센티미터 급)-->
+<p class="cap">σ 0.3 m 면 30판 모두 어딘가의 두 드론이 1 m 안으로 다가서고, 가장 가까울 때는 0.196 m 입니다. 센티미터 급이면 간격 1.5 m 가 거의 그대로 지켜집니다. 쇼의 안전 간격 설계는 <a href="#p11">11부</a>에서 다룹니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p5-c3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 머리 위 하늘에서 네 위성이 모두 고도각 30° 로, 방위만 90° 씩 떨어져 있습니다. 넷이나 되는데 왜 풀리지 않나요? 한 기를 천정으로 옮기면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 네 방향이 모두 천정을 축으로 한 같은 원뿔 위에 있어(<span class="mi"><b>u</b>·<b>e</b><sub>z</sub> = sin 30°</span>) 야코비의 계수가 3 입니다(T26 2단계). 위로 d 만큼 옮기고 시계 오차를 d·sin 30° 만큼 바꾸면 네 의사거리가 1차로는 전혀 변하지 않으니, 높이와 시계 오차를 가를 수 없습니다. 천정으로 한 기를 옮기면 원뿔을 벗어나 계수 4 — 표의 "천정 하나 + 낮은 셋" 은 PDOP 1.96 입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 4장 거리·영상 센서 -->
+
+<article class="card section" id="p5-c4"><p class="chnum">4장</p><h2>GNSS 가 없을 때 — 거리·영상 센서</h2>
+<p class="chsub">UWB · 광류 · ToF 와 라이다 · VIO</p></article>
+
+<article class="card" id="p5-nongps">
+<h3>실내와 다리 밑 — GNSS 없는 항법의 선택지</h3>
+<p class="why">ArduPilot 은 GPS 없이 위치를 추정하는 방법을 한 쪽에 모아 둡니다 — 추적 카메라(RealSense T265·OAK-D·VOXL), 비컨(Nooploop·Pozyx·MarvelMind), 광류, 모션 캡처(OptiTrack·Vicon·Nokov) 등 <!--CITE key=ardupilot-non-gps sec="Non-GPS Navigation"-->.</p>
+<ul>
+<li>PX4 EKF2 도 외부 영상 체계(예: Vicon)의 위치·속도·방위를 받아 섞습니다 <!--CITE key=px4-ekf2 sec="External Vision System"-->.</li>
+<li>공통점: 1장에서 본 대로 IMU 만으로는 위치가 금세 흐르므로(표: 1 분에 90 m), 무엇이든 <b>흐르지 않는</b> 위치·속도 측정이 하나는 있어야 합니다.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-uwb">
+<h3>UWB 비컨 — 실내의 작은 GNSS</h3>
+<p class="why">ArduPilot 문서는 UWB(ultra wide band) 기술의 Nooploop 체계를 실내에서 GPS 를 대신하는 짧은 거리의 대체물로 소개합니다. 노드 다섯 가운데 넷을 기준점(anchor)으로 직사각형 모서리에 세우고, 하나를 기체의 태그로 씁니다 <!--CITE key=ardupilot-nooploop sec="Nooploop for Non-GPS Navigation"--> <!--CITE key=ardupilot-nooploop sec="Placing the anchors"-->. Pozyx 체계도 기준점 넷과 태그 하나를 씁니다 <!--CITE key=ardupilot-pozyx sec="Required Hardware"-->.</p>
+<ul>
+<li>수학은 3장과 같습니다: 기준점까지의 거리 넷에서 위치를 풉니다. 태그와 기준점의 거리를 직접 재는 방식이면 시계 오차 b 가 없어 미지수는 셋입니다.</li>
+<li>T26 의 원뿔 조건처럼 배치가 중요합니다. 미지수가 셋이면 필요한 것은 단위 벡터들이 한 평면에 다 눕지 않는 것 — 기준점을 모두 같은 높이에 두고 태그가 그 높이로 내려오면, 태그에서 본 방향이 모두 수평면에 누워 높이를 가를 수 없습니다.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-flow">
+<h3>광류 — 바닥이 흘러가는 빠르기</h3>
+<p class="why">PX4 문서: 광류(optical flow)는 아래를 보는 카메라와 아래를 보는 거리 센서로 속도를 추정하며, GNSS 가 없는 건물 안·지하에서 씁니다 <!--CITE key=px4-optical-flow sec="Optical Flow"-->. 광류 값은 <b>각도</b>(라디안)이고 이동 거리가 아닙니다 — 앞으로 가면 바닥 그림이 y 축 둘레로 돌아 +Y 로 나옵니다(같은 절).</p>
+<ul>
+<li>높이 h 에서 속도 v 로 나는 드론이 보면, 바로 아래 바닥은 각속도 <span class="mi"><i>v</i>/<i>h</i></span> 로 흘러갑니다(작은 각). 그래서 <span class="mi"><i>v</i> ≈ <i>h</i>·(광류 각속도)</span> — 거리 센서가 꼭 필요한 까닭입니다.</li>
+<li>드론이 제자리에서 기울기만 바꿔도 그림은 흐릅니다. 그 몫은 자이로가 알려 주므로 빼야 합니다: PX4 는 순수 회전에서 광류 적분값과 자이로 적분값이 같아야 하고, 다르면 배율(SENS_FLOW_SCALE)을 고친다고 적습니다 <!--CITE key=px4-optical-flow sec="Scale Factor"-->.</li>
+<li>보통 광류 센서의 해상도가 낮아 높이 20 m 이상에서는 느린 흔들림이 생길 수 있습니다(같은 절). v/h 에서 h 가 크면 같은 v 에 흐름이 작아지기 때문입니다.</li>
+<li>EKF2 는 거리 센서 값이 유효하고 품질 값이 기준을 넘을 때만 광류를 씁니다 <!--CITE key=px4-ekf2 sec="Optical Flow"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-tof">
+<h3>거리 센서 — ToF·라이다·레이더·초음파</h3>
+<p class="why">빛이나 전파를 쏘아 돌아오는 시간 t 를 재면 거리는 <span class="mi"><i>c</i>·<i>t</i>/2</span> 입니다(왕복이라 절반) — 비행시간(time of flight, ToF). PX4 문서의 지원 목록에는 적외선 레이저 ToF, 마이크로파 레이더, 초음파 방식이 함께 있습니다 <!--CITE key=px4-rangefinders sec="Supported Rangefinders"-->.</p>
+<ul>
+<li>같은 표의 예: Lidar-Lite 5 cm – 40 m, LightWare SF11/C 약 120 m 까지, VL53L1X 약 4 m 까지, Smartmicro 레이더 고도계 1–175 m.</li>
+<li>쓰임: 지형 따라 날기, 정밀 호버, 착륙, 법정 높이 경고, 충돌 방지 <!--CITE key=px4-rangefinders sec="Distance Sensors (Rangefinders)"-->.</li>
+<li>아래를 보는 센서가 기울면 비스듬히 잽니다: 기울기 θ 에서 잰 거리 d 의 높이는 <span class="mi"><i>d</i> cos <i>θ</i></span>(평평한 바닥). 자세 추정이 여기에도 쓰입니다.</li>
+</ul>
+<div class="warn">EKF2 문서의 경고: 거리 센서를 높이 기준으로 쓰면 장애물이나 비탈 위에서 가속도계 쪽 추정과 어긋나 측정이 버려질 수 있고, 나무처럼 고르지 않은 바닥 위에서는 값이 매우 나쁩니다 <!--CITE key=px4-ekf2 sec="Range height fusion"-->. 버리는 판단은 7장의 혁신 검사입니다.</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-vio">
+<h3>VIO — 카메라와 IMU 를 함께</h3>
+<p class="why">PX4 문서: 시각-관성 주행 거리계(VIO)는 카메라 영상으로 자세와 위치를 추정하고(시각 주행 거리계), 빠른 움직임에서 영상이 나빠지는 것을 IMU 로 보정하는 기법입니다. 출발점에 대한 상대 위치를 주며, GPS 가 없거나 믿기 어려울 때(실내, 다리 밑) 씁니다 <!--CITE key=px4-vio sec="Visual Inertial Odometry (VIO)"-->.</p>
+<ul>
+<li>카메라는 되도록 렌즈를 아래로, 진동에 매우 민감하니 부드럽게(방진 폼) 답니다 <!--CITE key=px4-vio sec="Camera Mounting"-->.</li>
+<li>ArduPilot 에는 RealSense T265 를 GPS 대신 쓰는 설정 글이 있습니다 — 보조 컴퓨터가 위치 정보를 비행 컨트롤러로 보냅니다 <!--CITE key=ardupilot-vio sec="Intel RealSense T265"-->.</li>
+<li>상대 위치라 출발점(원점)을 정해 주어야 하고, ArduPilot 은 GPS 가 없을 때 원점을 직접 설정하거나 저장해 둔 원점을 다시 쓰게 합니다 <!--CITE key=ardupilot-non-gps sec="Persistent Origin Storage"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-sensor-map">
+<h3>센서 지도 — 무엇이 무엇을 메우나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>센서</th><th>재는 것</th><th>강점</th><th>약점</th></tr>
+<tr><td>자이로</td><td>각속도</td><td>빠르고 매끄럽다</td><td>적분하면 표류(1장)</td></tr>
+<tr><td>가속도계</td><td>비력(L20)</td><td>가만히 있을 때 "위"</td><td>가속 중엔 가짜 기울기, 위치는 제곱으로 흐름</td></tr>
+<tr><td>자력계</td><td>자기장</td><td>요(방위)</td><td>간섭·보정(2장)</td></tr>
+<tr><td>기압계</td><td>압력 → 높이</td><td>어디서나</td><td>드리프트·로터 바람</td></tr>
+<tr><td>GNSS</td><td>의사거리 → 위치</td><td>흐르지 않는 위치</td><td>느림·미터 급·가림(3장)</td></tr>
+<tr><td>거리·광류·VIO</td><td>높이·속도·상대 위치</td><td>실내</td><td>바닥·빛·진동에 좌우</td></tr>
+</table></div>
+<p class="cap">한 센서의 약점을 다른 센서의 강점이 메웁니다. 어떻게 섞을지가 6장(상보 필터)과 7장(칼만 필터)이고, 그 전에 5장에서 "자세" 를 어떤 수로 적을지 정합니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p5-c4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 광류 센서가 높이 2 m 에서 바닥이 0.5 rad/s 로 흐른다고 알려 줍니다. 같은 순간 자이로는 몸체가 같은 축으로 0.2 rad/s 로 돈다고 합니다. 드론의 수평 속도는 대략?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 회전 몫 0.2 rad/s 를 빼면 이동으로 생긴 흐름이 0.3 rad/s, 속도 ≈ h × 0.3 = 0.6 m/s 입니다. 회전을 빼지 않으면 1.0 m/s 로 잘못 읽습니다 — PX4 문서가 순수 회전에서 광류와 자이로가 같아야 한다고 하는 까닭입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 5장 자세 표현 -->
+
+<article class="card section" id="p5-c5"><p class="chnum">5장</p><h2>자세를 수로 — 회전행렬·오일러각·쿼터니언</h2>
+<p class="chsub">T4 · 짐벌 락(L18, T5) · 쿼터니언(L1, T6) · 운동학(L2, T7)</p></article>
+
+<article class="card" id="p5-attitude">
+<h3>자세란 — 몸체의 세 축이 어디를 보는가</h3>
+<p class="why">자세(attitude)는 몸체 좌표계가 세계 좌표계에 대해 얼마나 돌았는가입니다. 이 덱은 세계를 ENU(z 위), 몸체를 FLU(x 앞, z 추력)로 둡니다 — <a href="#p8-frames">8부 1장</a>의 약속입니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>표현</th><th>수의 개수</th><th>좋은 점</th><th>나쁜 점</th></tr>
+<tr><td>회전행렬 R</td><td>9</td><td>벡터를 바로 돌린다, 합성 = 곱</td><td>수가 많고 제약(직교)을 지켜야</td></tr>
+<tr><td>오일러각 (φ, θ, ψ)</td><td>3</td><td>사람이 읽기 쉽다</td><td>피치 ±90° 에서 짐벌 락(T5)</td></tr>
+<tr><td>단위 쿼터니언 q</td><td>4</td><td>특이점 없음, 합성 = 곱</td><td>q 와 −q 가 같은 자세(T6)</td></tr>
+</table></div>
+<p class="cap">PX4 EKF2 의 상태 첫 칸은 NED 항법 좌표에서 몸체 좌표로의 회전을 정하는 쿼터니언입니다 <!--CITE key=px4-ekf2 sec="Overview"-->. 이 장은 세 표현을 차례로 세우고 서로 바꾸는 법을 증명합니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-rotmat">
+<h3>회전행렬 — 열은 몸체의 세 축</h3>
+<p class="why">몸체의 x·y·z 축을 세계 좌표로 적은 단위 벡터 <span class="mi"><b>x</b><sub>B</sub>, <b>y</b><sub>B</sub>, <b>z</b><sub>B</sub></span> 를 열로 세운 행렬이 R 입니다. 몸체 좌표 <span class="mi">(<i>a</i>, <i>b</i>, <i>c</i>)</span> 인 벡터는 세계에서 <span class="mi"><i>a</i><b>x</b><sub>B</sub> + <i>b</i><b>y</b><sub>B</sub> + <i>c</i><b>z</b><sub>B</sub> = <i>R</i>(<i>a</i>, <i>b</i>, <i>c</i>)</span> 입니다.</p>
+<div class="eq left"><i>R</i><sub>x</sub>(<i>φ</i>) = [1 0 0; 0 cos<i>φ</i> −sin<i>φ</i>; 0 sin<i>φ</i> cos<i>φ</i>]<br><i>R</i><sub>y</sub>(<i>θ</i>) = [cos<i>θ</i> 0 sin<i>θ</i>; 0 1 0; −sin<i>θ</i> 0 cos<i>θ</i>]<br><i>R</i><sub>z</sub>(<i>ψ</i>) = [cos<i>ψ</i> −sin<i>ψ</i> 0; sin<i>ψ</i> cos<i>ψ</i> 0; 0 0 1]</div>
+<p class="cap">한 축 둘레의 기본 회전 셋(행을 ; 로 가름). 둘째 열이 y 축, 셋째 열이 z 축이 간 곳입니다 — 예를 들어 <span class="mi"><i>R</i><sub>y</sub>(<i>θ</i>)</span> 의 셋째 열 (sin θ, 0, cos θ) 가 8부 호버 선형화에서 쓴 기운 추력 방향입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-t4">
+<h3>회전행렬은 직교하고 행렬식이 1</h3>
+<!--THM id=T4-->
+<p class="cap">쓰는 도구: M1(내적), M6(행렬식 = 삼중곱), M7(결합법칙), M10(직교 행렬은 길이·내적을 지킨다). 가정: 몸체 축은 서로 수직인 단위 벡터이고 오른손 좌표계(<span class="mi"><b>x</b> × <b>y</b> = <b>z</b></span>)를 이룬다.</p>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li><span class="mi"><i>R</i><sup>T</sup><i>R</i></span> 의 (i, j) 성분은 R 의 i 열과 j 열의 내적입니다. <span class="why">행렬 곱의 정의 — 전치의 i 행 = R 의 i 열</span></li>
+<li>열은 단위 벡터라 대각 성분은 1, 서로 수직이라 나머지는 0 — <span class="mi"><i>R</i><sup>T</sup><i>R</i> = <i>I</i></span>. <span class="why">가정의 앞 절반과 M1</span></li>
+<li><span class="mi">det <i>R</i> = <b>x</b>·(<b>y</b> × <b>z</b>)</span>. 오른손이면 <span class="mi"><b>y</b> × <b>z</b> = <b>x</b></span> 이므로 <span class="mi">det <i>R</i> = <b>x</b>·<b>x</b> = 1</span>. <span class="why">M6, 가정의 뒤 절반</span></li>
+<li>몸체 B 의 좌표를 A 로 옮기는 것이 <span class="mi"><i>R</i><sub>AB</sub></span>, C 를 B 로 옮기는 것이 <span class="mi"><i>R</i><sub>BC</sub></span> 이면 <span class="mi"><b>v</b><sub>A</sub> = <i>R</i><sub>AB</sub>(<i>R</i><sub>BC</sub><b>v</b><sub>C</sub>) = (<i>R</i><sub>AB</sub><i>R</i><sub>BC</sub>)<b>v</b><sub>C</sub></span> — 잇는 것은 곱입니다. ∎ <span class="why">M7</span></li>
+</ol></div>
+<p class="cap">덤: M10 으로 R 은 길이와 내적을 지키고, 역행렬은 전치 <span class="mi"><i>R</i><sup>T</sup></span> 입니다(1단계). 어디에 썼나: L20(비력을 몸체로), 8부의 운동 방정식, 이 장의 쿼터니언.</p>
+<!--WITNESS id=T4-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-euler">
+<h3>오일러각 — 요·피치·롤의 차례로</h3>
+<p class="why">이 덱(그리고 항공의 흔한 약속)은 ZYX 차례를 씁니다: <span class="mi"><i>R</i> = <i>R</i><sub>z</sub>(<i>ψ</i>)<i>R</i><sub>y</sub>(<i>θ</i>)<i>R</i><sub>x</sub>(<i>φ</i>)</span> — 롤 φ, 피치 θ, 요 ψ. 거꾸로 R 에서 각을 읽을 때 피치는 <span class="mi">asin</span> 으로, 롤과 요는 <span class="mi">atan2</span> 로 얻습니다.</p>
+<!--CODE file=py/droneshow/quat.py sym=from_euler..to_euler note=세 기본 회전의 곱, 그리고 거꾸로-->
+<div class="warn">피치 칸 <span class="mi">asin(2(<i>wy</i> − <i>zx</i>))</span> 은 ±90° 에서 끝납니다. 그 자리에서 롤과 요의 atan2 는 둘 다 0/0 에 가까운 수를 받아 뜻을 잃습니다 — 다음 장의 짐벌 락입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-l18">
+<h3>피치 90° 에서는 롤과 요가 한 회전이 된다</h3>
+<!--THM id=L18-->
+<p class="cap">쓰는 도구: M7(행렬 곱), 삼각함수의 뺄셈 공식. 가정: θ = 90°.</p>
+<div class="proof"><span class="h">증명 — 직접 곱한다</span>
+<ol class="pf">
+<li>θ = 90° 면 <span class="mi"><i>R</i><sub>y</sub>(90°) = [0 0 1; 0 1 0; −1 0 0]</span>. <span class="why">cos 90° = 0, sin 90° = 1</span></li>
+<li><span class="mi"><i>R</i><sub>y</sub>(90°)<i>R</i><sub>x</sub>(<i>φ</i>) = [0 sin<i>φ</i> cos<i>φ</i>; 0 cos<i>φ</i> −sin<i>φ</i>; −1 0 0]</span>. <span class="why">M7 — 행 × 열</span></li>
+<li>왼쪽에 <span class="mi"><i>R</i><sub>z</sub>(<i>ψ</i>)</span> 를 곱하면 첫 행은 <span class="mi">(0, cos<i>ψ</i> sin<i>φ</i> − sin<i>ψ</i> cos<i>φ</i>, cos<i>ψ</i> cos<i>φ</i> + sin<i>ψ</i> sin<i>φ</i>) = (0, sin(<i>φ</i>−<i>ψ</i>), cos(<i>φ</i>−<i>ψ</i>))</span>. <span class="why">뺄셈 공식</span></li>
+<li>둘째 행도 같은 계산으로 <span class="mi">(0, cos(<i>φ</i>−<i>ψ</i>), −sin(<i>φ</i>−<i>ψ</i>))</span>, 셋째 행은 <span class="mi">(−1, 0, 0)</span>.</li>
+<li>R 전체가 <span class="mi"><i>φ</i> − <i>ψ</i></span> 에만 달려 있으므로 <span class="mi">(<i>φ</i>+<i>δ</i>, <i>ψ</i>+<i>δ</i>)</span> 는 같은 R, 같은 자세입니다. ∎</li>
+</ol></div>
+<p class="cap">몸체를 90° 세우면 몸체의 x 축(롤 축)이 세계의 수직(요 축)과 겹칩니다. 두 손잡이가 같은 일을 하니 자유도 하나가 사라집니다.</p>
+<!--WITNESS id=L18-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-lock-same">
+<h3>짐벌 락을 수로 보기</h3>
+<!--OUT file=p05_lock_same.txt note=exps/p05.py — 같은 자세, 다른 각-->
+<ul>
+<li>피치 90° 에서 (롤, 요) = (0.2, 0.5) 와 (0.5, 0.8) 은 반올림 오차(10⁻¹⁶)까지 같은 행렬 — L18 그대로. 80° 에서는 0.05 쯤 다릅니다.</li>
+<li>to_euler 는 그 자세를 (1.5708, 90°, 1.5708) 로 읽습니다. 그런데 이 각으로 다시 만든 행렬은 원래와 0.296 이나 다릅니다 — 피치 90° 근처에서는 각 → 행렬 → 각 이 되돌아오지 않습니다.</li>
+</ul>
+<p class="cap">asin 이 1 근처에서 기울기가 무한대라, 반올림 오차 하나가 롤·요의 나눔을 크게 흔들기 때문입니다. 오일러각은 "보여 주는 용도" 로만 쓰는 편이 안전합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-rate-matrix">
+<h3>오일러각의 변화율과 몸체 각속도</h3>
+<p class="why">자이로가 재는 몸체 각속도 <b>ω</b> 와 오일러각의 변화율 <span class="mi">(<i>φ</i>̇, <i>θ</i>̇, <i>ψ</i>̇)</span> 은 같지 않습니다. 각 변화율은 제 회전축 둘레의 각속도이고, 그 축들을 몸체 좌표로 옮겨 더하면 <b>ω</b> 입니다.</p>
+<div class="eq left"><b>ω</b> = <i>φ</i>̇ <b>e</b><sub>x</sub> + <i>R</i><sub>x</sub><sup>T</sup> <i>θ</i>̇ <b>e</b><sub>y</sub> + <i>R</i><sub>x</sub><sup>T</sup><i>R</i><sub>y</sub><sup>T</sup> <i>ψ</i>̇ <b>e</b><sub>z</sub> = <i>E</i>(<i>φ</i>, <i>θ</i>)·(<i>φ</i>̇, <i>θ</i>̇, <i>ψ</i>̇)<br><i>E</i> = [1 0 −sin<i>θ</i>; 0 cos<i>φ</i> sin<i>φ</i> cos<i>θ</i>; 0 −sin<i>φ</i> cos<i>φ</i> cos<i>θ</i>]</div>
+<!--CODE file=py/droneshow/quat.py sym=euler_rate_matrix note=세 열 = 세 회전축을 몸체 좌표로-->
+<p class="cap">이 식의 유도(여러 회전의 각속도를 더하는 규칙)는 설명으로만 두고, 시험 test_rate_matrix_maps_euler_rates_to_body 가 오일러각을 10⁻⁶ 만큼 움직인 회전과 <span class="mi"><i>E</i>·(<i>φ</i>̇, <i>θ</i>̇, <i>ψ</i>̇)</span> 가 10⁻⁶ 안에서 같음을 확인합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-t5">
+<h3>짐벌 락 — E 의 행렬식은 cos θ</h3>
+<!--THM id=T5-->
+<p class="cap">쓰는 도구: M6(3×3 행렬식), M8(가역 조건), L18.</p>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li>첫 열이 (1, 0, 0) 이므로 첫 열로 펼치면 <span class="mi">det <i>E</i> = 1·(cos<i>φ</i>·cos<i>φ</i> cos<i>θ</i> − sin<i>φ</i> cos<i>θ</i>·(−sin<i>φ</i>))</span>. <span class="why">M6 — 첫 열 전개</span></li>
+<li><span class="mi">= cos<i>θ</i>(cos²<i>φ</i> + sin²<i>φ</i>) = cos<i>θ</i></span>. <span class="why">피타고라스 항등식</span></li>
+<li>θ = ±90° 면 det E = 0 이라 E 는 가역이 아니고, <span class="mi"><i>E</i>·(<i>φ</i>̇, <i>θ</i>̇, <i>ψ</i>̇) = <b>ω</b></span> 를 풀 수 없는 <b>ω</b> 가 생깁니다. <span class="why">M8</span></li>
+<li>풀 수 없는 방향이 무엇인지는 L18 이 말합니다: 롤과 요가 같은 회전이 되어 둘을 합쳐도 두 방향을 만들지 못합니다. ∎</li>
+</ol></div>
+<p class="cap">어디에 썼나: 시뮬레이터가 자세를 오일러각이 아니라 쿼터니언으로 드는 까닭(<a href="#p8-why-quat">8부</a>).</p>
+<!--WITNESS id=T5-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-lock-table">
+<h3>90° 에 다가가면 — 필요한 각 변화율이 폭발한다</h3>
+<p class="why">몸체가 제 z 축 둘레로 1 rad/s 돈다(<span class="mi"><b>ω</b> = (0, 0, 1)</span>)고 하고, 롤 0.3 rad 에서 피치를 바꿔 가며 <span class="mi"><i>E</i>(<i>φ</i>̇, <i>θ</i>̇, <i>ψ</i>̇) = <b>ω</b></span> 를 풉니다.</p>
+<!--TABLE file=out/tbl_p05_lock.html cap=exps/p05.py — linalg.solve 로 푼 오일러각 변화율[rad/s]-->
+<p class="cap">det E 가 cos θ 를 따라 줄고(T5), 89.9° 에서 롤·요 변화율이 547 rad/s 로 치솟습니다. 오일러각을 적분하는 시뮬레이터라면 이 근처에서 적분이 무너집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-quat">
+<h3>쿼터니언 — 반각의 코사인과 사인</h3>
+<p class="why">단위 벡터 <b>n</b> 둘레로 각 α 만큼 도는 회전을 네 수 <span class="mi"><i>q</i> = (cos(<i>α</i>/2), sin(<i>α</i>/2) <b>n</b>)</span> 로 적습니다 — 스칼라 하나와 벡터 하나. 두 쿼터니언의 해밀턴 곱은 벡터로 쓰면 짧습니다.</p>
+<div class="eq"><i>p</i> ⊗ <i>q</i> = (<i>p</i>₀<i>q</i>₀ − <b>p</b>·<b>q</b>, &nbsp;<i>p</i>₀<b>q</b> + <i>q</i>₀<b>p</b> + <b>p</b> × <b>q</b>)</div>
+<!--CODE file=py/droneshow/quat.py sym=mul..normalize note=성분으로 펼친 해밀턴 곱, 켤레 q* = (q₀, −q), 크기-->
+<p class="cap">외적 항 때문에 <span class="mi"><i>p</i> ⊗ <i>q</i> ≠ <i>q</i> ⊗ <i>p</i></span> 입니다(시험 test_not_commutative) — 회전의 차례가 중요하다는 사실이 곱에 들어 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-l1">
+<h3>곱의 크기는 크기의 곱</h3>
+<!--THM id=L1-->
+<p class="cap">쓰는 도구: M1, M2(외적은 두 벡터에 수직), M3(라그랑주 항등식).</p>
+<div class="proof"><span class="h">증명 — 펼치고 지운다</span>
+<ol class="pf">
+<li><span class="mi">|<i>pq</i>|² = (<i>p</i>₀<i>q</i>₀ − <b>p</b>·<b>q</b>)² + |<i>p</i>₀<b>q</b> + <i>q</i>₀<b>p</b> + <b>p</b>×<b>q</b>|²</span>. <span class="why">곱의 정의, 크기 = 네 성분 제곱합</span></li>
+<li>둘째 항을 내적으로 펼치면 <span class="mi"><b>p</b>×<b>q</b></span> 와 <b>p</b>·<b>q</b> 와의 교차항은 0 입니다. <span class="why">M2 — 외적은 <b>p</b>, <b>q</b> 에 수직</span></li>
+<li>남는 것: <span class="mi"><i>p</i>₀²|<b>q</b>|² + <i>q</i>₀²|<b>p</b>|² + 2<i>p</i>₀<i>q</i>₀ <b>p</b>·<b>q</b> + |<b>p</b>×<b>q</b>|²</span>.</li>
+<li>첫 항의 <span class="mi">−2<i>p</i>₀<i>q</i>₀ <b>p</b>·<b>q</b></span> 와 지워지고, <span class="mi">(<b>p</b>·<b>q</b>)² + |<b>p</b>×<b>q</b>|² = |<b>p</b>|²|<b>q</b>|²</span>. <span class="why">M3</span></li>
+<li>합: <span class="mi"><i>p</i>₀²<i>q</i>₀² + <i>p</i>₀²|<b>q</b>|² + <i>q</i>₀²|<b>p</b>|² + |<b>p</b>|²|<b>q</b>|² = (<i>p</i>₀² + |<b>p</b>|²)(<i>q</i>₀² + |<b>q</b>|²)</span>. ∎</li>
+</ol></div>
+<p class="cap">어디에 썼나: T6(회전은 길이를 지킨다), T7(오일러 한 걸음의 크기).</p>
+<!--WITNESS id=L1-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-t6">
+<h3>q v q* 는 회전이다</h3>
+<!--THM id=T6-->
+<p class="cap">쓰는 도구: L1, M10, M2. 해밀턴 곱이 결합법칙 <span class="mi">(<i>ab</i>)<i>c</i> = <i>a</i>(<i>bc</i>)</span> 을 만족한다는 것은 성분을 펼쳐 확인할 수 있는 계산이라 이 덱은 싣지 않고 씁니다. 벡터 <b>v</b> 는 스칼라가 0 인 쿼터니언 (0, <b>v</b>) 로 봅니다.</p>
+<div class="proof cont"><span class="h">증명 — 결과는 벡터이고 길이가 같다</span>
+<ol class="pf">
+<li>켤레는 곱의 차례를 뒤집습니다: <span class="mi">(<i>ab</i>)* = <i>b</i>*<i>a</i>*</span>. 벡터 꼴 곱에 넣으면 스칼라는 같고, 벡터는 <span class="mi">−(<i>a</i>₀<b>b</b> + <i>b</i>₀<b>a</b> + <b>a</b>×<b>b</b>)</span> 로 같습니다. <span class="why">M2 — <b>b</b>×<b>a</b> = −<b>a</b>×<b>b</b></span></li>
+<li><span class="mi"><i>w</i> = <i>q</i><b>v</b><i>q</i>*</span> 라 두면 <span class="mi"><i>w</i>* = <i>q</i><b>v</b>*<i>q</i>* = −<i>w</i></span>. 켤레가 자기의 음수인 쿼터니언은 스칼라가 0 — w 는 벡터입니다. <span class="why">1단계 두 번, <b>v</b>* = −<b>v</b></span></li>
+<li><span class="mi">|<i>w</i>| = |<i>q</i>||<b>v</b>||<i>q</i>*| = |<b>v</b>|</span>. <span class="why">L1, |q*| = |q| = 1</span></li>
+<li>곱은 덧셈에 대해 분배되므로 <span class="mi"><b>v</b> ↦ <i>q</i><b>v</b><i>q</i>*</span> 는 선형 사상입니다. <span class="why">성분 식이 각 인자에 1차</span></li>
+</ol></div>
+<p class="cap">증명은 다음 장에 이어집니다.</p>
+</article>
+
+<article class="card" id="p5-t6b">
+<h3>q v q* — 내적, 단위 곱, 그리고 −q</h3>
+<!--THM id=T6 cont-->
+<div class="proof"><span class="h">증명 — 나머지 셋</span>
+<ol class="pf">
+<li>M1 로 <span class="mi"><b>a</b>·<b>b</b> = (|<b>a</b>+<b>b</b>|² − |<b>a</b>|² − |<b>b</b>|²)/2</span>. 선형이고 길이를 지키는 사상은 오른쪽 세 길이를 모두 지키므로 내적도 지킵니다. <span class="why">앞 장 3·4단계</span></li>
+<li>이 선형 사상의 행렬 Q 는 모든 <b>a</b>, <b>b</b> 에서 <span class="mi">(<i>Q</i><b>a</b>)·(<i>Q</i><b>b</b>) = <b>a</b>·<b>b</b></span> — 기저 벡터를 넣으면 <span class="mi"><i>Q</i><sup>T</sup><i>Q</i> = <i>I</i></span>. <span class="why">M10 의 거꾸로</span></li>
+<li>단위 쿼터니언 둘의 곱은 크기가 1·1 = 1. <span class="why">L1</span></li>
+<li><span class="mi">(−<i>q</i>)<b>v</b>(−<i>q</i>)* = (−1)(−1)<i>q</i><b>v</b><i>q</i>* = <i>q</i><b>v</b><i>q</i>*</span> — q 와 −q 는 같은 회전입니다. ∎</li>
+</ol></div>
+<p class="cap">어디에 썼나: 시뮬레이터의 quat.rotate, canonical(스칼라가 0 이상인 쪽을 대표로), 9부 자세 오차(T18). 결과 행렬의 행렬식이 +1 인 것(거울이 아님)은 아래 표가 수로 확인합니다.</p>
+<!--WITNESS id=T6-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-rot-table">
+<h3>T4·T6 을 무작위 200개로</h3>
+<!--TABLE file=out/tbl_p05_rot.html cap=exps/p05.py — 씨앗 41, 정규분포 네 수를 정규화한 무작위 쿼터니언 200개-->
+<!--CODE file=py/droneshow/quat.py sym=rotate..to_matrix note=q v q* 와 같은 일을 하는 행렬 R(q)-->
+<p class="cap">모든 성질이 반올림 오차(10⁻¹⁵) 안에서 성립하고, R(q) 와 R(−q) 는 비트까지 같습니다 — to_matrix 의 성분이 모두 q 의 두 성분의 곱이라 부호가 지워지기 때문입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-l2">
+<h3>쿼터니언과 그 변화율은 수직이다</h3>
+<!--THM id=L2-->
+<p class="cap">쓰는 도구: M1(내적), M2(외적의 수직). 쿼터니언의 내적은 네 성분의 곱의 합입니다.</p>
+<div class="proof"><span class="h">증명 — 한 줄 계산</span>
+<ol class="pf">
+<li><span class="mi"><i>q</i> ⊗ (0, <b>ω</b>) = (−<b>q</b>·<b>ω</b>, <i>q</i>₀<b>ω</b> + <b>q</b>×<b>ω</b>)</span>. <span class="why">곱의 벡터 꼴에서 p₀ = q₀, 둘째 인자의 스칼라 0</span></li>
+<li>q 와 내적: <span class="mi"><i>q</i>₀(−<b>q</b>·<b>ω</b>) + <b>q</b>·(<i>q</i>₀<b>ω</b> + <b>q</b>×<b>ω</b>) = −<i>q</i>₀<b>q</b>·<b>ω</b> + <i>q</i>₀<b>q</b>·<b>ω</b> + 0 = 0</span>. <span class="why">M2 — <b>q</b>×<b>ω</b> 는 <b>q</b> 에 수직</span></li>
+<li>½ 을 곱해도 0 — <span class="mi"><i>q</i>·<i>q</i>̇ = 0</span>. ∎</li>
+</ol></div>
+<p class="cap">뜻: <span class="mi">d|<i>q</i>|²/d<i>t</i> = 2<i>q</i>·<i>q</i>̇ = 0</span> — 참 운동에서는 크기가 변하지 않습니다. 변한다면 그것은 수치 적분의 탓입니다(T7).</p>
+<!--WITNESS id=L2-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-t7">
+<h3>쿼터니언 운동학과 오일러 한 걸음</h3>
+<!--THM id=T7-->
+<p class="cap">쓰는 도구: L1, L2, T4·T6(합성 = 곱), <span class="mi">sin <i>x</i></span>·<span class="mi">cos <i>x</i></span> 의 0 에서의 미분. 가정: 짧은 시간 h 동안 몸체 각속도 <b>ω</b> 는 거의 일정하다.</p>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li>h 동안 몸체는 제 축 <span class="mi"><b>ω</b>/|<b>ω</b>|</span> 둘레로 <span class="mi">|<b>ω</b>|<i>h</i></span> 돕니다: <span class="mi">Δ = (cos(|<b>ω</b>|<i>h</i>/2), sin(|<b>ω</b>|<i>h</i>/2) <b>ω</b>/|<b>ω</b>|)</span>. <span class="why">가정, 쿼터니언의 정의</span></li>
+<li>몸체 좌표의 회전은 오른쪽에 곱합니다: <span class="mi"><i>q</i>(<i>t</i>+<i>h</i>) = <i>q</i>(<i>t</i>) ⊗ Δ</span>. <span class="why">T4 4단계 — 먼저 Δ, 그다음 q</span></li>
+<li><span class="mi">(Δ − 1)/<i>h</i> → (0, <b>ω</b>/2)</span> 이므로 <span class="mi"><i>q</i>̇ = ½ <i>q</i> ⊗ (0, <b>ω</b>)</span>. <span class="why">(cos − 1)/h → 0, sin(xh)/h → x</span></li>
+<li>오일러 한 걸음: <span class="mi"><i>q</i>₁ = <i>q</i> + d<i>t</i>·½<i>q</i>⊗(0, <b>ω</b>) = <i>q</i> ⊗ (1, d<i>t</i> <b>ω</b>/2)</span>. <span class="why">분배법칙</span></li>
+<li><span class="mi">|<i>q</i>₁| = |<i>q</i>|·√(1 + (d<i>t</i>|<b>ω</b>|/2)²)</span> — 정확히, ω 가 0 이 아니면 언제나 1 보다 큰 배율. <span class="why">L1</span></li>
+<li>참 운동은 크기를 지키므로(L2) 이 커짐은 순전히 수치의 탓입니다. q 를 |q| 로 나눠도 <span class="mi"><i>q</i><b>v</b><i>q</i>* = |<i>q</i>|²(<i>q̂</i><b>v</b><i>q̂</i>*)</span> 라 회전 방향은 그대로 — 다시 정규화하면 됩니다. ∎ <span class="why">L2, T6</span></li>
+</ol></div>
+<!--WITNESS id=T7-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-qnorm">
+<h3>오일러 걸음의 크기 — 식과 잰 값</h3>
+<p class="why"><span class="mi"><b>ω</b> = (1, −2, 0.5)</span> rad/s 로 일정하게 돌리며 오일러 걸음을 n 번 밟습니다. 정규화하지 않은 q 의 크기와 T7 의 배율을 n 번 곱한 값, 그리고 매 걸음 정규화한 q 가 정확한 해 <span class="mi"><i>q</i>₀ ⊗ exp</span> 에서 벗어난 각을 잽니다.</p>
+<!--TABLE file=out/tbl_p05_qnorm.html cap=exps/p05.py — 정확한 해 = q₀ ⊗ (축 ω, 각 |ω|t)-->
+<ul>
+<li>잰 크기와 식이 여섯째 자리까지 같습니다 — T7 은 근사가 아니라 등식입니다.</li>
+<li>정규화한 오일러의 각 오차는 dt 를 2.5 배 줄이면 6.25 배 줍니다(10⁻⁴ → 1.6×10⁻⁵) — 이 경우(ω 일정)에는 dt² 로 줍니다.</li>
+</ul>
+<p class="cap">시뮬레이터는 오일러 대신 RK4 를 쓰지만, 같은 까닭으로 걸음마다 쿼터니언을 정규화합니다(<a href="#p8-step-code">8부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p5-c5-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 쿼터니언 (0.6, 0, 0, 0.8) 과 (−0.6, 0, 0, −0.8) 은 각각 어느 축 둘레로 몇 도 도는 회전인가요? 둘은 다른 자세인가요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 첫째는 벡터 부분이 z 방향이라 z 축 둘레로, cos(α/2) = 0.6·sin(α/2) = 0.8 인 각 α 만큼 도는 회전입니다. 둘째는 네 성분의 부호가 모두 반대인 −q 라 T6 의 마지막 줄로 같은 자세입니다(축을 −z 로, 각을 반대로 읽어도 같은 회전). canonical() 은 스칼라가 0 이상인 첫째를 대표로 고릅니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 6장 상보 필터 -->
+
+<article class="card section" id="p5-c6"><p class="chnum">6장</p><h2>상보 필터 — 빠른 것과 흐르지 않는 것을 섞는다</h2>
+<p class="chsub">한 축 필터 · 유계 오차(T23) · α 의 저울질 · 쿼터니언 판</p></article>
+
+<article class="card" id="p5-comp-idea">
+<h3>생각 — 자이로는 짧게, 가속도계는 길게 믿는다</h3>
+<p class="why">자이로 적분은 매끄럽지만 흐르고(1장 표류), 가속도계로 본 기울기는 흐르지 않지만 떨리고 가속 중에는 틀립니다(1장 가짜 기울기). 매 걸음 "자이로로 한 걸음 나아간 값" 과 "가속도계 값" 을 α : (1−α) 로 섞습니다.</p>
+<div class="eq"><i>θ̂</i> ← <i>α</i>(<i>θ̂</i> + <i>ω</i> d<i>t</i>) + (1 − <i>α</i>)<i>θ</i><sub>acc</sub>, &nbsp; 0 &lt; <i>α</i> &lt; 1</div>
+<!--CODE file=py/droneshow/estimator.py sym=complementary_1d note=한 줄 — 14부 estimator 의 첫 함수-->
+<p class="cap">α 를 1 에 가깝게(예: 0.98) 두면 한 걸음마다 가속도계를 2 % 만 믿습니다. 떨림은 거의 들어오지 않고, 그래도 긴 시간에 걸쳐서는 가속도계 쪽으로 끌려가 흐름이 멈춥니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-comp-fig">
+<h3>그림으로 — 셋을 한 축에</h3>
+<!--FIG file=comp.svg cap=out/fig_comp.tsv — 참 각, 자이로 적분, 가속도계 각(회색 점), 상보 필터-->
+<p class="cap">곡선은 exps/pf.py 의 comp 가 시뮬레이터의 complementary_1d 로 계산한 것입니다(바이어스와 잡음을 넣은 자이로·가속도계). 자이로 적분은 바이어스 탓에 한쪽으로 흘러가고, 회색 점(가속도계 각)은 참 각 둘레로 떨리며, 상보 필터는 둘 사이에서 참 각에 붙어 갑니다 — 다음 장의 T23 이 그 까닭입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-t23">
+<h3>상보 필터의 오차는 유계이다</h3>
+<!--THM id=T23-->
+<p class="cap">쓰는 도구: 등비수열과 귀납법(7부). 가정: 자이로 = 참 각속도 + 일정한 b, 가속도계 각 = 참 각(잡음 없음), 참 각은 <span class="mi"><i>θ</i><sub><i>k</i>+1</sub> = <i>θ</i><sub><i>k</i></sub> + <i>ω</i><sub><i>k</i></sub>d<i>t</i></span> 로 움직인다.</p>
+<div class="proof"><span class="h">증명 — 오차의 점화식</span>
+<ol class="pf">
+<li>오차 <span class="mi"><i>e</i><sub><i>k</i></sub> = <i>θ̂</i><sub><i>k</i></sub> − <i>θ</i><sub><i>k</i></sub></span>. 필터 식에 가정을 넣고 <span class="mi"><i>θ</i><sub><i>k</i>+1</sub></span> 을 빼면 <span class="mi"><i>e</i><sub><i>k</i>+1</sub> = <i>α</i><i>e</i><sub><i>k</i></sub> + <i>α</i><i>b</i>d<i>t</i></span>. <span class="why">가정 셋, <span class="mi"><i>α</i><i>θ</i><sub><i>k</i>+1</sub> + (1−<i>α</i>)<i>θ</i><sub><i>k</i>+1</sub> = <i>θ</i><sub><i>k</i>+1</sub></span></span></li>
+<li>고정점 <span class="mi"><i>e</i>* = <i>αb</i>d<i>t</i>/(1 − <i>α</i>)</span> 은 <span class="mi"><i>e</i>* = <i>αe</i>* + <i>αb</i>d<i>t</i></span> 를 만족합니다.</li>
+<li>빼면 <span class="mi"><i>e</i><sub><i>k</i>+1</sub> − <i>e</i>* = <i>α</i>(<i>e</i><sub><i>k</i></sub> − <i>e</i>*)</span>, 귀납으로 <span class="mi"><i>e</i><sub><i>k</i></sub> − <i>e</i>* = <i>α</i><sup><i>k</i></sup>(<i>e</i>₀ − <i>e</i>*)</span>. <span class="why">귀납법</span></li>
+<li>0 &lt; α &lt; 1 이라 <span class="mi"><i>α</i><sup><i>k</i></sup></span> 은 0 으로 가고 <span class="mi">|<i>e</i><sub><i>k</i></sub>| ≤ |<i>e</i>*| + |<i>e</i>₀ − <i>e</i>*|</span> — 유계이고 <span class="mi"><i>e</i>*</span> 로 갑니다. <span class="why">가정 0 &lt; α &lt; 1</span></li>
+<li>자이로만 적분하면 α = 1 과 같아 <span class="mi"><i>e</i><sub><i>k</i></sub> = <i>e</i>₀ + <i>kb</i>d<i>t</i> = <i>e</i>₀ + <i>bt</i></span> — 한없이 커집니다. ∎</li>
+</ol></div>
+<p class="cap">어디에 썼나: 이 장의 α 표, 쿼터니언 판(같은 생각을 3차원에). 가속도계의 잡음·가속도 오차는 가정에서 뺐습니다 — 그 몫은 다음 장들이 잽니다.</p>
+<!--WITNESS id=T23-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-alpha-noise">
+<h3>가속도계 잡음은 얼마나 새어 드나</h3>
+<p class="why">가속도계 각에 독립 잡음 <span class="mi"><i>n</i><sub><i>k</i></sub></span>(분산 σ²)이 있으면 점화식에 한 항이 붙습니다: <span class="mi"><i>e</i><sub><i>k</i>+1</sub> = <i>αe</i><sub><i>k</i></sub> + <i>αb</i>d<i>t</i> + (1−<i>α</i>)<i>n</i><sub><i>k</i>+1</sub></span>.</p>
+<ul>
+<li>잡음 몫의 분산을 V 라 하면, 오래 지나 V 가 멈췄을 때 M24 로 <span class="mi"><i>V</i> = <i>α</i>²<i>V</i> + (1−<i>α</i>)²<i>σ</i>²</span>.</li>
+<li>풀면 <span class="mi"><i>V</i> = (1−<i>α</i>)²<i>σ</i>²/(1−<i>α</i>²) = <i>σ</i>²(1−<i>α</i>)/(1+<i>α</i>)</span> — 떨림은 <span class="mi"><i>σ</i>√((1−<i>α</i>)/(1+<i>α</i>))</span>.</li>
+<li>α → 1 이면 잡음 몫은 0 으로, 바이어스 몫 <span class="mi"><i>αb</i>d<i>t</i>/(1−<i>α</i>)</span> 는 무한대로 — 한쪽을 줄이면 다른 쪽이 커집니다.</li>
+</ul>
+<p class="cap">자이로 잡음 몫(<span class="mi"><i>α</i>d<i>t</i></span> 가 곱해져 아주 작다)은 뺐습니다. 다음 장 표가 두 몫의 제곱합과 잰 값을 견줍니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-alpha">
+<h3>α 를 고르다 — 표 하나</h3>
+<!--TABLE file=out/tbl_p05_alpha.html cap=exps/p05.py — 참 각 sin(0.5t), b = 0.02 rad/s, 자이로 잡음 0.01, 가속도계 잡음 0.05 rad, dt 4 ms, 60 s 가운데 10 s 뒤부터. 단위 rad-->
+<!--OUT file=p05_alpha_ref.txt note=같은 실험에서 자이로만·가속도계만-->
+<ul>
+<li>두 몫의 제곱합과 잰 RMS 가 몇 % 안에서 맞습니다(남는 차는 자이로 잡음 몫).</li>
+<li>이 조건에서 가장 좋은 α 는 0.98 근처 — 상보 필터 0.00677 rad 는 자이로만(0.757)·가속도계만(0.0497)보다 훨씬 작습니다.</li>
+<li>둘째 칸 τ 는 "가속도계로 끌려가는 시간" 입니다. α = 0.98, dt 4 ms 면 0.196 s — 그보다 빠른 움직임은 자이로가, 느린 흐름은 가속도계가 맡습니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-comp-freq">
+<h3>왜 "상보" 인가 — 저역과 고역</h3>
+<p class="why">필터 식을 <span class="mi"><i>θ̂</i> ← <i>θ̂</i> + <i>ω</i>d<i>t</i> + (1−<i>α</i>)(<i>θ</i><sub>acc</sub> − <i>θ̂</i> − <i>ω</i>d<i>t</i>)</span> 로 다시 쓰면, 가속도계 쪽은 <a href="#p9-lowpass">9부의 1차 저역 통과</a>와 같은 꼴입니다 — 시상수 <span class="mi"><i>τ</i> = <i>α</i>d<i>t</i>/(1−<i>α</i>)</span>.</p>
+<ul>
+<li>가속도계 각은 저역 통과를 거쳐 들어옵니다: τ 보다 느린 성분만.</li>
+<li>자이로 적분은 그 나머지, 곧 고역 통과를 거친 것처럼 들어옵니다: 1 − 저역.</li>
+<li>두 거름의 합이 1 이라 참 각은 왜곡 없이 지나갑니다 — 서로를 "채워 주는(complementary)" 한 쌍이라 이름이 그렇습니다.</li>
+</ul>
+<p class="cap">이 관점은 "왜 바이어스(주파수 0)는 가속도계가 이기고 잡음(높은 주파수)은 자이로가 이기는가" 를 한 번에 설명합니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-comp-quat">
+<h3>3차원 — 쿼터니언 상보 필터</h3>
+<p class="why">3차원에서는 각 대신 쿼터니언을 적분하고(T7), 가속도계가 본 "위" 방향과 지금 추정한 자세에서 본 "위" 방향의 외적을 오차 축으로 삼아 그 축으로 k<sub>c</sub> 만큼 각속도를 더합니다.</p>
+<!--CODE file=py/droneshow/estimator.py sym=Complementary note=외적 = 기울기 오차의 축과 크기(sin)-->
+<!--TABLE file=out/tbl_p05_compq.html cap=exps/p05.py — 참 자세 (0.2, −0.1, 0.7) rad 에서 출발, 자이로 바이어스 (0.02, −0.01, 0.015) rad/s 만, 가속도계는 정확, 20 s-->
+<p class="cap">기울기 오차는 수평 바이어스의 크기 ÷ k<sub>c</sub> 쯤에 멈춥니다(k<sub>c</sub> 1 → 1.294°, 5 → 0.259°). 요 칸은 k<sub>c</sub> 를 키워도 줄지 않습니다 — 중력은 요를 모르니까요(2장). 요를 붙잡으려면 자력계나 GNSS 방위를 같은 방식으로 섞어야 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-comp-real">
+<h3>실제 펌웨어의 상보 필터들</h3>
+<ul>
+<li>Madgwick 보고서는 쿼터니언 표현과 경사 하강으로 자이로 오차의 방향을 계산하는 자세 필터를 제안하고, 자기 왜곡 보상과 자이로 바이어스 표류 보상을 포함한다고 적습니다. 장점으로 적은 연산, 10 Hz 같은 낮은 표본율에서의 효과, 조절 매개변수 한두 개를 듭니다 <!--CITE key=madgwick2010 sec="Abstract"-->.</li>
+<li>같은 보고서는 칼만 필터가 대부분의 자세 필터 알고리즘의 바탕이 되었지만 구현이 복잡하고 계산량이 크다고 쓰고, Mahony 등의 상보 필터를 효율적인 해법으로 소개합니다 <!--CITE key=madgwick2010 sec="1 Introduction"-->.</li>
+<li>ArduPilot 문서: EKF 는 "Inertial Nav" 나 DCM 같은 더 단순한 상보 필터 알고리즘보다 여러 측정을 함께 섞어 큰 오차가 있는 측정을 더 잘 거릅니다. 지금의 안정판은 EKF3 를 주 추정기로 쓰고 DCM 을 뒤에서 조용히 돌립니다 <!--CITE key=ardupilot-ekf sec="Extended Kalman Filter (EKF)"-->.</li>
+<li>PX4 EKF2 는 늦게 도착하는 측정을 맞추려고 과거 시점("융합 시간 지평")에서 칼만 필터를 돌리고, 거기서 현재까지는 상보 필터로 IMU 자료를 따라 상태를 앞으로 밀어냅니다 <!--CITE key=px4-ekf2 sec="Overview"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p5-c6-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. 자세 루프를 250 Hz 에서 1000 Hz 로 바꾸면서 α 를 0.98 그대로 두었습니다. 필터의 성질은 어떻게 바뀌나요? 같은 성질을 지키려면 α 를 어떻게 해야 하나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> τ = α·dt/(1−α) 라 dt 가 1/4 이면 τ 도 1/4 — 가속도계를 네 배 빨리 따라가 가속 중의 가짜 기울기와 떨림이 더 들어옵니다. τ 를 지키려면 <span class="mi"><i>α</i> = <i>τ</i>/(<i>τ</i> + d<i>t</i>)</span> 로 다시 계산해 α 를 1 쪽으로 올려야 합니다. 그래서 α 보다 τ(또는 이득 k<sub>c</sub>)로 적는 편이 표본율에 덜 흔들립니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 7장 칼만 필터 -->
+
+<article class="card section" id="p5-c7"><p class="chnum">7장</p><h2>칼만 필터 — 분산으로 섞는다</h2>
+<p class="chsub">가장 좋은 이득(T24) · 예측과 갱신(T25) · 혁신과 검사 · EKF</p></article>
+
+<article class="card" id="p5-kf-idea">
+<h3>상보 필터의 α 를 누가 정하나</h3>
+<p class="why">상보 필터는 섞는 비율을 사람이 정했습니다. 칼만 필터는 "지금 내 추정이 얼마나 불확실한가(분산 P)" 와 "측정이 얼마나 불확실한가(분산 R)" 를 들고 다니며, 매 순간 가장 좋은 비율 K 를 계산합니다. <a href="#p7-blend">7부 8장</a>에서 예고한 계산을 여기서 끝냅니다.</p>
+<ul>
+<li><b>예측</b>: 모델로 한 걸음 나아갑니다. 모델이 완벽하지 않으니 P 가 커집니다(+Q).</li>
+<li><b>갱신</b>: 측정이 오면 <span class="mi"><i>x̂</i> ← <i>x̂</i> + <i>K</i>(<i>z</i> − <i>x̂</i>)</span> 로 섞고 P 가 작아집니다.</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p5-t24">
+<h3>1차원 칼만 이득은 분산을 가장 작게 한다</h3>
+<!--THM id=T24-->
+<p class="cap">쓰는 도구: M23(이차함수의 꼭짓점), M24(독립 변수의 분산). 가정: 예측의 오차 <span class="mi"><i>e</i></span>(분산 P)와 측정의 오차 <span class="mi"><i>v</i></span>(분산 R)는 평균 0 이고 서로 독립.</p>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li>섞은 추정 <span class="mi">(1−<i>K</i>)<i>x̂</i> + <i>Kz</i></span> 의 오차는 <span class="mi">(1−<i>K</i>)<i>e</i> + <i>Kv</i></span>. <span class="why">x̂ = x + e, z = x + v 를 넣고 x 를 뺀다</span></li>
+<li>분산은 <span class="mi">(1−<i>K</i>)²<i>P</i> + <i>K</i>²<i>R</i></span>. <span class="why">M24, 가정 — 독립</span></li>
+<li>펼치면 <span class="mi">(<i>P</i>+<i>R</i>)<i>K</i>² − 2<i>PK</i> + <i>P</i></span> — K 의 이차함수, 이차항 계수 P + R &gt; 0. <span class="why">P, R 가 둘 다 0 은 아니다</span></li>
+<li>M23 에서 a = P + R, b = P 이므로 가장 작은 곳은 <span class="mi"><i>K</i> = <i>P</i>/(<i>P</i>+<i>R</i>)</span>. <span class="why">M23</span></li>
+<li>넣으면 <span class="mi"><i>P</i> − <i>P</i>²/(<i>P</i>+<i>R</i>) = <i>PR</i>/(<i>P</i>+<i>R</i>)</span>. ∎</li>
+</ol></div>
+<p class="cap">읽는 법: R → 0(완벽한 측정)이면 K → 1, P → 0(완벽한 예측)이면 K → 0. 새 분산 PR/(P+R) 은 P 보다도 R 보다도 작습니다 — 섞으면 언제나 이득입니다.</p>
+<!--WITNESS id=T24-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-gain-table">
+<h3>K 를 훑으며 — 식과 표본</h3>
+<p class="why">P = 1, R = 0.25 에서 K 를 바꿔 가며 분산을 식으로 계산하고, 정규분포 오차 2만 쌍을 뽑아 직접 잽니다. 가장 좋은 K 는 0.8 입니다.</p>
+<!--TABLE file=out/tbl_p05_gain.html cap=exps/p05.py — 씨앗 51, 넷째 줄 아래가 K = P/(P+R) = 0.8-->
+<p class="cap">표본 분산이 식을 1 % 안팎으로 따라가고, 가장 낮은 곳이 K = 0.8 의 0.2000 = PR/(P+R) 입니다. K 를 0.9 로 올리면(측정을 더 믿으면) 오히려 나빠집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-seq">
+<h3>같은 것을 거듭 재면 — 평균의 재발견</h3>
+<p class="why">T24 의 새 분산을 뒤집어 쓰면 <span class="mi">1/<i>P</i><sub>새</sub> = 1/<i>P</i> + 1/<i>R</i></span> — 정밀도(분산의 역수)는 더해집니다. 처음 P₀ 에서 R 인 측정을 n 번 넣으면 <span class="mi"><i>P</i><sub><i>n</i></sub> = 1/(1/<i>P</i>₀ + <i>n</i>/<i>R</i>)</span>, P₀ 가 크면 R/n 입니다.</p>
+<!--TABLE file=out/tbl_p05_seq.html cap=exps/p05.py — P₀ = 100, R = 1, kalman_1d_gain·posterior_var 를 거듭-->
+<p class="cap">n 번째 이득이 거의 1/n 이라 칼만 필터는 여기서 "지금까지의 평균" 을 한 번에 하나씩 계산합니다. 8장의 "가만히 두고 평균" 보정이 바로 이것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-predict">
+<h3>예측 — 위치와 속도를 함께</h3>
+<p class="why">위치 x 와 속도 v 를 상태로 두고, 가속도는 모르는 흰 잡음(세기 q)이라 봅니다. 한 걸음 dt 동안 <span class="mi"><i>x</i> ← <i>x</i> + <i>v</i>d<i>t</i></span>, <span class="mi"><i>v</i> ← <i>v</i></span> — 행렬로 <span class="mi"><i>F</i> = [1 d<i>t</i>; 0 1]</span>. 분산은 <span class="mi"><i>P</i> ← <i>FPF</i><sup>T</sup> + <i>Q</i></span> 로 퍼집니다.</p>
+<!--CODE file=py/droneshow/estimator.py sym=Kalman1D note=2×2 라 손으로 펼쳤다 — 갱신은 위치만 잰다(H = [1 0])-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-qr">
+<h3>q 와 r — 이득은 스스로 멈춘다</h3>
+<p class="why">측정 분산 r = 0.09(σ 0.3 m, sigma_p)로 두고 모델 잡음 q 를 바꾸며 예측·갱신을 되풀이합니다. 측정 값과 상관없이 P 와 K 는 200 걸음 안에 한 값에 멈춥니다(정상 칼만 이득).</p>
+<!--TABLE file=out/tbl_p05_qr.html cap=exps/p05.py — dt 0.1 s, 이득 변화가 10⁻⁹ 보다 작아진 첫 걸음-->
+<p class="cap">q 가 클수록(모델을 덜 믿을수록) 위치 이득이 커져 측정을 더 따릅니다. q/r 의 비만이 필터의 성격을 정합니다 — 매개변수 둘이 아니라 하나를 고르는 셈입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-t25">
+<h3>여러 차원의 칼만 필터</h3>
+<!--THM id=T25-->
+<div class="proof"><span class="h">증명 스케치</span>
+<p>스케치입니다 — 행렬의 분산(공분산) 계산 규칙과 "혁신이 흰 잡음" 의 증명은 싣지 않습니다. 일반 유도는 칼만 필터를 다룬 교재에 맡기고, 여기서는 T24 에서 식의 모양이 어디서 오는지만 봅니다.</p>
+<ol class="pf">
+<li>예측: 오차가 <span class="mi"><b>e</b> ← <i>F</i><b>e</b> + <b>w</b></span> 로 가고 둘이 독립이면, M24 의 행렬판으로 <span class="mi"><i>P</i>⁻ = <i>FPF</i><sup>T</sup> + <i>Q</i></span>.</li>
+<li>갱신: 스칼라 측정 <span class="mi"><i>z</i> = <i>H</i><b>x</b> + <i>v</i></span> 이면 <span class="mi"><i>HP</i>⁻<i>H</i><sup>T</sup></span> 가 "측정 방향의 예측 분산" 이라 T24 의 P 자리에, R 은 그대로 — 분모 <span class="mi"><i>S</i> = <i>HP</i>⁻<i>H</i><sup>T</sup> + <i>R</i></span>.</li>
+<li>다른 상태(예: 속도)는 측정 방향과의 공분산 <span class="mi"><i>P</i>⁻<i>H</i><sup>T</sup></span> 만큼 따라 움직입니다 — <span class="mi"><i>K</i> = <i>P</i>⁻<i>H</i><sup>T</sup>/<i>S</i></span>.</li>
+<li>모델과 분산이 맞으면 혁신 <span class="mi"><i>y</i> = <i>z</i> − <i>Hx̂</i>⁻</span> 은 분산이 S 이고 앞뒤가 서로 상관없습니다 — 필터가 이미 쓸 수 있는 정보를 다 썼다는 뜻입니다.</li>
+</ol></div>
+<p class="cap">Madgwick 보고서는 칼만 필터가 대부분의 자세 필터와 상용 관성 센서의 바탕이 되었다고 적습니다 <!--CITE key=madgwick2010 sec="1 Introduction"-->. PX4 EKF2 는 혁신과 혁신 분산을 센서마다 기록합니다 <!--CITE key=px4-ekf2 sec="Observation Innovations & Innovation Variances"-->.</p>
+<!--WITNESS id=T25-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-track">
+<h3>GNSS 같은 측정을 따라가기 — 조율을 재는 법</h3>
+<p class="why">가속이 흰 잡음(q = 0.05)인 참 운동을 3,000 걸음 만들고, 축마다 σ 0.3 m 의 위치 측정(r = 0.09)을 10 Hz 로 넣습니다. 필터의 q, r 를 참값에서 일부러 틀리게 두어 봅니다.</p>
+<!--TABLE file=out/tbl_p05_track.html cap=exps/p05.py — 씨앗 61, 처음 200 걸음을 뺀 값. NIS = y²/S-->
+<ul>
+<li>맞게 두면 위치 RMS 0.122 m — 측정(0.293)의 절반 아래. 속도는 재지도 않았는데 추정됩니다.</li>
+<li>NIS 평균이 1 이면 필터가 스스로 말하는 불확실성(S)이 실제와 맞습니다. r 를 ¼ 로 믿으면(과신) 3.63, 4 배면 0.26.</li>
+<li>q 를 너무 작게 두면 필터가 둔해져 혁신이 앞뒤로 닮습니다(자기상관 +0.195). 맞게 두면 +0.003 — 흰 잡음입니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-glitch">
+<h3>혁신 검사 — 튀는 측정을 버린다</h3>
+<p class="why">1,000–1,009 걸음 동안 측정에 5 m 를 더합니다(반사파 같은 GNSS 오류의 흉내). 혁신의 정규화 제곱 <span class="mi"><i>y</i>²/<i>S</i></span> 가 9(3σ)를 넘는 측정은 갱신하지 않고 버립니다.</p>
+<!--CODE file=exps/p05.py sym=gated note=검사 한 줄 — 넘으면 예측만 하고 지나간다-->
+<!--TABLE file=out/tbl_p05_glitch.html cap=exps/p05.py — 앞 장과 같은 참 운동-->
+<p class="cap">검사가 없으면 추정이 5.679 m 까지 끌려가고, 검사가 있으면 0.160 m 에 머뭅니다. 튄 10개는 모두 버려졌고, 나머지 버림은 튀지 않은 측정 — 드물게 큰 평소의 잡음입니다. 문턱을 너무 낮추면 좋은 측정도 버립니다. PX4 EKF2 도 측정과 상태의 차이, 상태의 분산, 측정의 분산을 함께 보는 혁신 일관성 검사로 거리 센서 값을 버립니다 <!--CITE key=px4-ekf2 sec="Range height fusion"-->.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-baro-fuse">
+<h3>고도 — 가속도계로 예측, 기압계로 갱신</h3>
+<p class="why">같은 Kalman1D 를 고도에 씁니다. 예측의 입력 acc 에 가속도계(250 Hz, 잡음 sigma_a)의 수직 가속도를 넣고, 기압계(50 Hz, 잡음 sigma_b)로 갱신합니다. 참 고도는 <span class="mi">2 sin(0.3<i>t</i>)</span> m.</p>
+<!--TABLE file=out/tbl_p05_barofuse.html cap=exps/p05.py — 60 s 가운데 5 s 뒤부터. 가속도계 바이어스는 넣지 않았다-->
+<p class="cap">기압계만의 떨림 0.098 m 가 0.011 m 로, 재지 않은 상승률까지 0.006 m/s 로 나옵니다. 가속도계의 짧은 정확함과 기압계의 흐르지 않음 — 6장과 같은 생각을 분산이 비율을 정하게 한 것입니다. 실제 가속도계의 바이어스는 상태를 하나 더 두어 함께 추정합니다(PX4 EKF2 의 가속도계 바이어스 상태).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-ekf">
+<h3>EKF — 휘어진 모델은 펴서 쓴다</h3>
+<p class="why">자세·자기장·GNSS 의 식은 1차식이 아닙니다. 확장 칼만 필터(EKF)는 매 걸음 지금의 추정 둘레에서 식을 1차로 펴서(야코비, 3장 뉴턴과 같은 도구) T25 의 식을 씁니다.</p>
+<ul>
+<li>PX4 EKF2 의 상태는 쿼터니언, NED 속도·위치, 자이로·가속도계 바이어스, 지구 자기장, 몸체 자기 바이어스, 바람, 지형 높이입니다. IMU 자료는 <b>예측에만</b> 쓰고 관측으로 쓰지 않으며, 공분산 갱신은 수치 안정을 위해 조셉(Joseph) 꼴로 합니다 <!--CITE key=px4-ekf2 sec="Overview"-->.</li>
+<li>ArduPilot 은 자이로·가속도계·나침반·GPS·대기속도·기압을 EKF 로 섞고, IMU 가 둘 이상이면 IMU 마다 EKF "코어" 를 하나씩 돌려 가장 건강한 코어의 출력을 씁니다 <!--CITE key=ardupilot-ekf sec="Extended Kalman Filter (EKF)"-->.</li>
+<li>조율 매개변수는 곧 R 입니다. 예: EK3_ALT_M_NSE 를 낮추면 가속도계보다 기압계를 더 믿습니다 <!--CITE key=ardupilot-ekf sec="Commonly modified parameters"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-ekf-health">
+<h3>EKF 가 보내는 신호 — 로그로 읽기</h3>
+<ul>
+<li>PX4 EKF2 는 상태, 상태 분산, 관측 혁신과 혁신 분산, 검사 비율을 로그에 남기고 분석 스크립트를 제공합니다 <!--CITE key=px4-ekf2 sec="How do I check the EKF performance?"-->.</li>
+<li>비행 중 자이로 바이어스 추정이 크게 변하면(문서의 예: 델타각 바이어스 변화 5E-4, 약 3 deg/s) 자이로 바이어스가 큰 것이고, 요 축이면 자력계 검사 비율도 크게 오릅니다 <!--CITE key=px4-ekf2 sec="Determination of Excessive Gyro Bias"-->.</li>
+<li>GPS 속도 검사 비율이 1 을 넘으면 그 GPS 속도가 다른 측정과 어긋나 버려졌다는 뜻입니다 <!--CITE key=px4-ekf2 sec="Determination of Poor GPS Accuracy"--> — 앞의 "y²/S ≤ 9" 와 같은 생각에 문턱을 1 로 정규화한 것입니다.</li>
+<li>ArduPilot 의 "Compass Variance" 오류는 EKF 안에서 나침반 방위가 다른 관성 센서의 방위 추정과 어긋난다는 뜻입니다 <!--CITE key=ardupilot-compass-advanced sec="Compass error messages"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p5-c7-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. RTK 로 바꾼 드론에서 GNSS 위치 잡음 매개변수를 미터 급 그대로 두었습니다. 7장의 표로 보면 무엇이 나빠지고, NIS 평균은 1 보다 클까요 작을까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 필터가 쓰는 R 이 실제보다 훨씬 커서 측정을 덜 믿습니다(이득이 작다) — 센티미터 급 측정의 이득을 버리고 예측의 흐름을 더 따릅니다. 표의 "r × 4" 줄처럼 NIS 평균은 1 보다 작아집니다. PX4 문서가 RTK 에서 EKF2_GPS_P_NOISE 를 낮추라고 하는 까닭입니다(3장).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 8장 캘리브레이션 -->
+
+<article class="card section" id="p5-c8"><p class="chnum">8장</p><h2>캘리브레이션 — 알려진 것과 견주어 오차를 뺀다</h2>
+<p class="chsub">자이로 · 가속도계 6면 · 수평 · 나침반 · 광류</p></article>
+
+<article class="card" id="p5-cal-why">
+<h3>보정이란 — 영점·배율·축 어긋남</h3>
+<p class="why">센서가 읽은 값은 대개 <span class="mi">배율 × 참값 + 영점</span> 에 축끼리 조금 섞인 몫(교차축 감도)이 붙은 것입니다. 보정은 참값을 <b>아는</b> 상황(가만히 있다, 한 축이 정확히 위를 본다, 자기장의 크기는 일정하다)을 만들어 그 계수를 거꾸로 푸는 일입니다.</p>
+<ul>
+<li>ArduPilot 에서 가속도계 보정은 필수이고, 세 축의 영점과 축에서 벗어난 변화를 고칩니다 <!--CITE key=ardupilot-accel-cal sec="Accelerometer Calibration"-->.</li>
+<li>보정이 나쁘면 이륙 전 검사가 잡는 일이 많습니다 — PX4 는 "high accelerometer bias", "consistency check failures" 같은 경고를 예로 듭니다 <!--CITE key=px4-accel-cal sec="Accelerometer Calibration"-->.</li>
+</ul>
+<p class="cap">이 장의 계산은 ex/imu_calib.py 가 하고, 시험 ex/tests/test_p05_calib.py(13개)가 알려 준 오차를 되찾는지 확인합니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-gyro-cal">
+<h3>자이로 — 가만히 두고 평균</h3>
+<p class="why">PX4 는 기체를 평평한 곳에 두고 가만히 있게 한 채 자이로를 보정하고, 움직이면 보정을 처음부터 다시 합니다 <!--CITE key=px4-gyro-cal sec="Gyroscope Calibration"--> <!--CITE key=px4-gyro-cal sec="Performing the Calibration"-->. 참 각속도가 0 이니 평균이 곧 바이어스입니다.</p>
+<!--CODE file=ex/imu_calib.py sym=gyro_bias note=축마다 평균-->
+<!--TABLE file=out/tbl_p05_gyrocal.html cap=exps/p05.py — sensors.Sensors(바이어스를 한 번 뽑아 고정)를 250 Hz 로 읽어 평균. 씨앗 10개 × 세 축-->
+<p class="cap">추정 오차가 <span class="mi"><i>σ</i>/√<i>N</i></span> 을 따라 줍니다(M24, 7장의 "거듭 재면"). 1 초만 두어도 오차가 2.85×10⁻⁴ rad/s 로, 바이어스의 크기(sigma_bg 0.01 rad/s)보다 훨씬 작습니다. 움직이면 참값이 0 이 아니라 평균이 바이어스가 아니게 되니, 다시 하는 것이 옳습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-accel-six">
+<h3>가속도계 — 여섯 면으로 세우기</h3>
+<p class="why">ArduPilot 의 보정 자세는 수평, 오른쪽 옆면, 왼쪽 옆면, 기수 아래, 기수 위, 뒤집기 — 여섯입니다. 각 자세에서 누른 직후 가만히 있는 것이 각도를 정확히 맞추는 것보다 중요하고, 수평 말고는 20° 안이면 된다고 적습니다 <!--CITE key=ardupilot-accel-cal sec="Calibration steps"-->. PX4 도 최소제곱 맞춤을 써서 90° 가 완벽할 필요는 없다고 합니다 <!--CITE key=px4-accel-cal sec="Performing the Calibration"-->.</p>
+<ul>
+<li>한 축이 위를 보면 그 축은 <span class="mi"><i>s</i>·<i>g</i> + <i>o</i></span>, 아래를 보면 <span class="mi">−<i>s</i>·<i>g</i> + <i>o</i></span> 를 읽습니다(L20: 가만히 있으면 비력 = +g 위쪽).</li>
+<li>더해서 반으로 나누면 영점 o, 빼서 2g 로 나누면 배율 s. 축 셋 × 두 방향 = 여섯 자세.</li>
+</ul>
+<!--CODE file=ex/imu_calib.py sym=accel_six..apply note=여섯 자세 → 축마다 영점·배율, 그리고 되돌리기-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-accel-cal-table">
+<h3>한 자세에서 몇 개를 평균해야 하나</h3>
+<!--TABLE file=out/tbl_p05_accelcal.html cap=exps/p05.py — 가정한 영점 (0.12, −0.3, 0.05) m/s², 배율 (1.02, 0.97, 1.01), 잡음 sigma_a. 10판 × 세 축-->
+<p class="cap">영점은 위·아래 두 자세의 평균이라 표본이 모두 2N 개 — 오차가 <span class="mi"><i>σ</i>/√(2<i>N</i>)</span> 을 따릅니다. 가만히 있는 것이 중요한 까닭이 여기 있습니다: 흔들리는 동안의 표본은 참값이 ±g 가 아니라 평균에 틀린 값을 섞습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-level">
+<h3>수평 보정 — 비행 컨트롤러가 비뚤게 달렸을 때</h3>
+<ul>
+<li>PX4 의 수평 보정은 비행 컨트롤러 방향의 작은 어긋남을 보상합니다. 멀티콥터는 호버 자세로 평평한 곳에 두고 하며, 눈에 띄게 어긋났거나 위치 제어가 없는 모드에서 한쪽으로 계속 흐를 때 하라고 권합니다 <!--CITE key=px4-level-cal sec="Level Horizon Calibration"-->.</li>
+<li>ArduPilot 의 Calibrate Level 은 처음 보정과 설치 뒤 자세의 차이를 10° 까지만, 롤과 피치만 고칩니다(요는 아님) <!--CITE key=ardupilot-accel-cal sec="Calibration steps"-->.</li>
+</ul>
+<p class="cap">요를 못 고치는 까닭은 2장과 같습니다 — 수평 보정의 기준은 중력이고, 중력은 요를 모릅니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-mag-cal">
+<h3>나침반 보정 — 모든 방향으로 돌리기</h3>
+<ul>
+<li>PX4 의 완전 보정은 정해진 여러 자세에서 지정한 축 둘레로 기체를 돌립니다 <!--CITE key=px4-compass-cal sec="Complete Calibration"-->. ArduPilot 온보드 보정은 앞·뒤·왼쪽·오른쪽·위·아래가 차례로 땅을 보게 돌립니다 <!--CITE key=ardupilot-compass-cal sec="Onboard Calibration"--> — 2장의 구 맞춤에 필요한 "구 위에 고르게 퍼진 점" 을 모으는 동작입니다.</li>
+<li>큰 금속·자기장에서 떨어진 곳에서, 되도록 USB 대신 텔레메트리 무선으로 연결해서 합니다 — USB 도 큰 자기 간섭을 일으킬 수 있습니다 <!--CITE key=px4-compass-cal sec="Preconditions"-->.</li>
+<li>새 장소로 가도 다시 보정할 필요는 없습니다: ArduPilot 은 세계 자기 모델(WMM)로 그 자리의 자북을 진북으로 바꾸고, 복각은 켤 때와 이륙 직후에 보정합니다 <!--CITE key=ardupilot-compass-cal sec="Compass Calibration"-->.</li>
+<li>기체가 너무 커서 돌릴 수 없으면 GNSS 위치와 아는 방위, WMM 으로 하드 아이언 영점만 구하는 방법이 있습니다 <!--CITE key=px4-compass-cal sec="Large Vehicle Calibration"-->.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p5-calib-run">
+<h3>보정 예제를 돌려 보기</h3>
+<p class="why">ex/imu_calib.py 를 그대로 돌리면 잡음 없는 여섯 자세와 세 층 둘레의 자력계 점 36개로 두 보정을 해 보입니다.</p>
+<!--OUT file=p05_calib.txt note=ex/imu_calib.py — 넣은 영점·배율·중심·반지름을 그대로 되찾는다-->
+<p class="cap">잡음이 없으면 정확히 되찾고, 잡음이 있으면 앞 장들의 표처럼 σ/√N 로 다가갑니다. 실제 보정 화면이 "조금 더 돌리세요" 라고 하는 것은 점이 고르게 모일 때까지 기다리는 것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p5-flow-cal">
+<h3>광류와 온도 — 비행 중·가열 중의 보정</h3>
+<ul>
+<li>ArduPilot 의 광류 비행 중 보정: GPS 를 쓰는 EKF3 설정으로 Loiter 모드에서 10 m 이상 올라가, 보조 스위치로 보정을 시작하고 롤·피치 스틱으로 기체를 앞뒤로 흔듭니다 <!--CITE key=ardupilot-optical-flow sec="Inflight Calibration"--> — GPS 속도를 기준 삼아 광류 배율을 맞추는 것입니다.</li>
+<li>IMU 온도 보정은 1장에서 본 대로, 식힌 뒤 데우며 움직이지 않게 두고 바이어스를 온도의 함수로 배웁니다 <!--CITE key=ardupilot-imu-tempcal sec="Temperature Calibration Procedure"-->.</li>
+<li>사양서는 자이로 배율을 공장에서 보정했고, 바이어스·배율의 온도 안정성을 높여 사용자 보정의 필요를 줄였다고 적습니다 <!--CITE key=mpu6000-ds sec="5.1 Gyroscope Features"--> — 그래도 비행 컨트롤러는 켤 때마다 바이어스를 다시 봅니다.</li>
+</ul>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p5-c8-quiz" data-quiz>
+<h3>8장 퀴즈</h3>
+<p class="q">Q. 가속도계 보정의 "기수 위" 자세에서 손이 떨려 기체가 조금씩 흔들렸습니다. 어느 계수가 어떻게 틀어질까요? 각도를 15° 틀리게 세운 것과 어느 쪽이 더 나쁠까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 흔들리는 동안에는 비력이 +g 가 아니라 +g 에 가속도가 더해진 값이라 x 축의 위쪽 평균이 틀어지고, 영점(위·아래의 평균)과 배율(위·아래의 차) 둘 다 틀어집니다. 각도가 15° 틀린 것은 여섯 자세 모두를 한꺼번에 맞추는 최소제곱 보정이 흡수할 수 있습니다(PX4·ArduPilot 문서가 각도보다 멈춤이 중요하다고 하는 까닭). 이 덱의 accel_six 는 축마다 두 자세만 쓰는 가장 단순한 판이라 각도 오차도 그대로 받습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 전문과 정리 -->
+
+<article class="card" id="p5-src-intro">
+<h3>이 부의 예제 전문</h3>
+<p class="why">3장의 ex/gps_trilateration.py 와 2·8장의 ex/imu_calib.py 를 줄 하나 빠짐없이 싣습니다. 시뮬레이터 쪽 sensors.py·estimator.py·quat.py 전문은 <a href="#p14-sensors">14부</a>에 있습니다.</p>
+<ul>
+<li>시험: ex/tests/test_ex.py 의 Gnss(3개, T26·L15·M25 의 증인), ex/tests/test_p05_calib.py(13개).</li>
+<li>실험: exps/p05.py 가 이 부의 표 스물다섯과 캡처 여섯을 만듭니다(run_all.py --only p05).</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+<!--FULLSRC lang=py file=ex/gps_trilateration.py prefix=p5-src-gps title=gps_trilateration.py-->
+<!--FULLSRC lang=py file=ex/imu_calib.py prefix=p5-src-calib title=imu_calib.py-->
+
+<article class="card" id="p5-summary">
+<h3>5부 정리</h3>
+<ul>
+<li>가속도계는 중력이 아니라 비력을 잽니다(L20) — 가만히 있을 때만 "위" 를 알려 주고, 가속 중에는 가짜 기울기를 봅니다.</li>
+<li>자이로 적분은 바이어스로 bt, 잡음으로 σ√(t·dt) 만큼 흐르고, 가속도계 두 번 적분은 제곱으로 흐릅니다.</li>
+<li>GNSS 는 미지수 넷 — 서로 다른 방향 넷 이상(L15)이 한 원뿔에 모이지 않아야(T26) 풀립니다. 배치의 나쁨은 PDOP 만큼 잡음을 키웁니다.</li>
+<li>회전행렬은 직교·행렬식 1(T4), 오일러각은 피치 90° 에서 롤과 요가 합쳐지고(L18, T5), 쿼터니언은 곱이 크기를 지키며(L1, T6) 오일러 걸음은 크기를 정확한 배율로 키웁니다(T7).</li>
+<li>상보 필터는 바이어스 오차를 유계로 묶고(T23), 칼만 필터는 분산으로 가장 좋은 비율을 고릅니다(T24, T25). 혁신이 흰 잡음이고 NIS 가 1 근처면 조율이 맞습니다.</li>
+<li>보정은 참값을 아는 상황을 만들어 계수를 최소제곱으로 푸는 일입니다.</li>
+</ul>
+<p class="cap">다음: <a href="#p6">6부</a> 통신과 소프트웨어. 이 부의 자세 표현은 <a href="#p8">8부</a> 강체 모델과 <a href="#p9">9부</a> 자세 제어로 이어집니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p5-quiz" data-quiz>
+<h3>5부 종합 퀴즈</h3>
+<p class="q">Q. 실내 드론쇼를 준비합니다. GNSS 가 없으니 UWB 비컨 넷과 IMU 로 위치를 잡으려 합니다. 이 부의 표와 정리로 (1) 비컨 배치, (2) 추정기, (3) 보정에서 챙길 것을 하나씩 말하세요.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> (1) 태그에서 본 비컨 방향들이 한 평면(또는 원뿔)에 모이지 않게 — 높이를 달리 세웁니다(T26, 배치 표에서 같은 고도각은 풀리지 않음). (2) IMU 만으로는 1 분에 수십 m 흐르므로(두 번 적분 표) 비컨 거리로 칼만 갱신을 하고, 튀는 거리는 혁신 검사로 버립니다(글리치 표). NIS 평균으로 R 을 맞춥니다. (3) 자이로는 켤 때 가만히 두고 평균, 가속도계는 여섯 면, 나침반은 실내 철골 탓에 믿기 어려우니 방위를 얻는 다른 길을 따로 생각합니다(2장 간섭, 3장 안테나 둘 방위는 GNSS 가 있어야 함).</div>
+<span class="tier ill">설명용</span>
+</article>
