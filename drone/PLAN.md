@@ -634,3 +634,44 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
 
 - The user confirmed all 15 recommendations of §9 as written ("권고안 그대로 확정"). **Do not re-ask
   any of them.** Step 1 (skeleton) may begin. Nothing else changed.
+
+### Step 1 — Skeleton (2026-09-25)
+
+- Step 0 read: §0–§4 here, goevo/PLAN.md step 1–4 log (the freshest copy of the git/deck
+  lineage), goevo build_deck/cites/check_claims/check_xref/verify_deck/gen_glossary/
+  check_deck.js/Makefile/record.sh. **Copied from goevo/ instead of git/** (deviation, same
+  lineage one generation later): deck/{build_deck,verify_deck,check_slices,check_xref,
+  check_claims,chunks,gen_glossary,svgkit,cites}.py, check_deck.js, base/{head,tail}.html
+  (tail carries the 2026-09-24 ←→ fix; head already carries the transformer math kit incl.
+  .thm/.proof/ol.pf), tools/{width,rewrap}.py, tools/record.sh. goevo's per-part split
+  (deck/claims/pNN.md, deck/glossary/pNN.txt) is kept so one subagent can write a part
+  while the foreground writes another.
+- build_deck: TARGET `드론의_모든_것.html`; LANG_OF py/js/json/csv/tsv/xml/txt/sh/c/cpp;
+  find_symbol learned `.js` (function/class/const and indented methods); GOVER and REL
+  removed; **THM** (`<!--THM id=T14-->` → statement box + level badge from theorems.tsv,
+  `cont` → continuation header with the badge only), **WITNESS** (`<!--WITNESS id=T14-->` →
+  the witness-test name from the tsv) and **SHOW** (imports py/droneshow/render.py and calls
+  `snapshot_svg(show, frame, view)`; wrapped in `<div class="show" data-show data-frame
+  data-view>`) added; verify_deck re-renders every SHOW and compares bytes. HARD_CAP 3000,
+  budget +10 % error. APPENDIX = section 18 (`p18-quiz-index-N`, `p18-gl-N`). COVER_DIRS
+  py/ js/ ex/ (full) + exps/ tools/ Makefile run_all.py (partial); `ex/blender_*` partial.
+- deck/cites.py: keys only from data/cite_keys.tsv, columns **key | name | url | kind |
+  licence | file** (name and file added to §1's list: the badge needs a name, the resolver a
+  path). New deck/check_thm.py (`make thm-check`): tsv schema, unknown/심화 prerequisites
+  under 1학년 full proofs, full ⇒ witness `path::name` whose `def` (or node `test('name')`)
+  exists, cited ⇒ cite-key in cite_keys.tsv; sections: THM ids exist, every `.proof` slide
+  has exactly one level badge, and (without `--skeleton`) every tsv row is used.
+  check_claims: version check dropped; **drone counts** (`N대`, N ≥ 100, comma-insensitive,
+  own-simulator counts in deck/counts_ok.txt) and **article numbers** (`제N조(의M)`,
+  `§107.N`) must appear in claims/data. check_xref: version badges dropped; bare "N부" must
+  be 0–17; "정리/보조정리/도구 T14|L3|M5" must be a theorems.tsv id.
+- Palette (decision 4): bg #0b1026→#121838→#1b2350, accent #22d3ee with **--accent-ink
+  #0e7490** for text, --show2 #f472b6 / --show2-ink #be185d, --special #f59e0b with
+  **--special-ink #a16207** for text (amber on white is ~2:1), titles #1e293b; g1–g8 = the
+  eight timeline kinds; `.lv.l1/.lv.adv`, `.thmref`, `.witness`, `.show` (dark sky panel).
+- Makefile: every §5 step-1 target + `test`; SKEL=1 → `--skeleton` for thm-check and
+  deck-check; targets whose tool does not exist yet print which step adds it.
+- tools/tests/test_deck_rules.py: 31 tests — RED 22 failures on stubs (the 9 passing were
+  the cite resolver written first and the constants), then GREEN.
+- Sections: cover + 0부 (7 placeholder guide slides) + 17 part covers + 부록 cover = 27 slides.
+- `make all SKEL=1`: exit 0, 27 slides, 14 placeholders, DeckMono 6 KB. Not in index/README.

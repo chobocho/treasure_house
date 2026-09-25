@@ -1,3 +1,10 @@
+### [2026-09-25 00:16] 드론의 모든 것 덱 1단계 — 뼈대(27장, make all SKEL=1 초록)
+- **기획:** goevo 조립기 계보를 물려받아 GOVER·REL 을 빼고 THM·WITNESS·SHOW 지시자와 정리 검사(thm-check)를 더함. 상한 3000장.
+- **TC:** 31건 — 정상(정리 상자·증인 줄·SHOW 렌더) / 경계(심화 선행 정리, 없는 증인 시험, 증명 장 배지 0·2개, 쉼표 대수 1,218, 조문 제124조의2).
+- **개발:** `drone/deck/build_deck.py`, `drone/deck/check_thm.py`, `drone/deck/check_claims.py`, `drone/deck/check_xref.py`, `drone/deck/cites.py`, `drone/deck/base/head.html`, `drone/Makefile` 외 34개 파일
+- **검증:** tools 시험 31 passed, 0 failed · make all SKEL=1 오류 0건
+- **비고:** 다음은 2단계(fetch_docs·html_text·pdf_text·excerpt).
+
 ### [2026-09-24 23:40] Go의 진화 덱 부록 — 생성 표만으로 31장(일정·API·GODEBUG·인물·출처)
 - **기획:** 부록의 표를 전부 자료에서 생성 — 큰 릴리스 일정과 부 릴리스 수, API 증가, GODEBUG 설정, 블로그 저자 색인, 출처 종류별 수. 용어집·퀴즈 색인은 조립기가 펼침.
 - **TC:** 6건 — 정상(부 릴리스 수·마지막 고침판, 저자 글 수·첫/끝 날짜) / 경계(Go 1 의 126 패키지 생략, 긴 표 14행씩 쪼개기, 'for the Go team' 꼬리 제거·3편 미만 제외).
