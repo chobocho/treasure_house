@@ -245,6 +245,7 @@ WIT_RE = re.compile(r'^<!--WITNESS (?P<args>.+?)-->$', re.M)
 SHOW_RE = re.compile(r'^<!--SHOW (?P<args>.+?)-->$', re.M)
 FIG_RE = re.compile(r'^<!--FIG (?P<args>.+?)-->$', re.M)
 TABLE_RE = re.compile(r'^<!--TABLE (?P<args>.+?)-->$', re.M)
+TSET_RE = re.compile(r'^<!--TABLESET (?P<args>.+?)-->$', re.M)
 CITE_RE = re.compile(r'<!--CITE (?P<args>.+?)-->')
 FULL_RE = re.compile(r'^<!--FULLSRC (?P<args>[^>]+)-->$', re.M)
 _FULLSRC_CACHE = []
@@ -579,6 +580,43 @@ def expand_table(m):
     return '<div class="gtbl" data-table="%s">\n%s%s\n</div>' % (esc(rel), body, capline)
 
 
+TIERS = {'a': '실행 검증', 'b': '문서 근거', 'c': '역사 근거',
+         'ill': '설명용'}
+
+
+def expand_tableset(m):
+    """<!--TABLESET name=src id=p18-src tier=b title=출처 cap=…--> —
+    out/tbl_d_<name>_N.html 을 N 차례로 한 장씩.
+
+    부록의 자료 표는 자료가 늘면 쪽수도 는다. 손으로 _1…_15 를 적어 두면
+    16번째 표가 조용히 빠진다 — 그래서 있는 만큼 펼친다. O(표 수).
+    """
+    args = m.group('args')
+    name, sid = field(args, 'name'), field(args, 'id')
+    tier, title = field(args, 'tier'), field(args, 'title')
+    cap = tail_field(args, 'cap')
+    if tier not in TIERS:
+        errors.append('TABLESET %s: tier %r — a·b·c·ill 중 하나' % (name, tier))
+        return ''
+    pat = re.compile(r'^tbl_d_%s_(\d+)\.html$' % re.escape(name or ''))
+    out = os.path.join(BASE, 'out')
+    names = os.listdir(out) if os.path.isdir(out) else []
+    found = sorted(int(x.group(1)) for x in map(pat.match, names) if x)
+    if not found:
+        errors.append('TABLESET: out/tbl_d_%s_*.html 이 없다 (make tables)'
+                      % name)
+        return ''
+    k = len(found)
+    slides = []
+    for i, num in enumerate(found, 1):
+        slides.append('<article class="card" id="%s-%d">\n<h3>%s %d/%d</h3>\n'
+                      '<!--TABLE file=out/tbl_d_%s_%d.html%s-->\n'
+                      '<span class="tier %s">%s</span>\n</article>'
+                      % (sid, i, title, i, k, name, num,
+                         ' cap=' + cap if cap else '', tier, TIERS[tier]))
+    return '\n\n'.join(slides)
+
+
 def expand_cite(m):
     """<!--CITE key=px4-att sec="update"-->
 
@@ -738,6 +776,7 @@ def expand(text):
     text = expand_srcstat(text)
     text = GLOSS_RE.sub(expand_glossary, text)
     text = QUIZ_RE.sub(expand_quizindex, text)
+    text = TSET_RE.sub(expand_tableset, text)
     text = FULL_RE.sub(expand_fullsrc, text)
     text = CODEDIR_RE.sub(expand_codedir, text)
     text = OUTDIR_RE.sub(expand_outdir, text)

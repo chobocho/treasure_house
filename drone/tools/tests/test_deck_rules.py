@@ -299,6 +299,34 @@ class Wrap(Fixture):
         self.assertTrue(any('wrap' in e for e in build_deck.errors))
 
 
+# ------------------------------------------------------------ 표 묶음
+class TableSet(Fixture):
+    """<!--TABLESET--> — out/tbl_d_<이름>_N.html 을 있는 만큼 슬라이드로."""
+
+    def test_one_slide_per_chunk_in_number_order(self):
+        for k in (1, 2, 10):
+            write(self.root, 'out/tbl_d_src_%d.html' % k,
+                  '<table class="data"><tr><td>%d</td></tr></table>' % k)
+        text = build_deck.expand('<!--TABLESET name=src id=p18-src '
+                                 'tier=b title=출처 cap=목록-->\n')
+        self.assertEqual(text.count('<article class="card"'), 3)
+        self.assertLess(text.index('>1<'), text.index('>2<'))
+        self.assertLess(text.index('>2<'), text.index('>10<'))
+        self.assertIn('id="p18-src-3"', text)
+        self.assertIn('<h3>출처 3/3</h3>', text)
+        self.assertIn('<span class="tier b">문서 근거</span>', text)
+        self.assertEqual(build_deck.errors, [])
+
+    def test_missing_tables_is_error(self):
+        build_deck.expand('<!--TABLESET name=none id=x tier=b title=t-->\n')
+        self.assertTrue(any('none' in e for e in build_deck.errors))
+
+    def test_unknown_tier_is_error(self):
+        write(self.root, 'out/tbl_d_a_1.html', '<table></table>')
+        build_deck.expand('<!--TABLESET name=a id=x tier=z title=t-->\n')
+        self.assertTrue(any('tier' in e for e in build_deck.errors))
+
+
 # ------------------------------------------------------------ 상한·부록
 class Limits(unittest.TestCase):
     def test_hard_cap(self):
