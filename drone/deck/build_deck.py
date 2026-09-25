@@ -958,7 +958,7 @@ def tier_report(doc):
         # 없는 것이 정상이다. 대신 퀴즈의 등급은 사람이 정독으로 본다.
         if t == 'a' and 'quiz' not in attrs:
             proof = ('<pre' in inner or 'data-demo=' in inner
-                     or 'data-table=' in inner
+                     or 'data-table=' in inner or 'data-show=' in inner
                      or '<svg class="diag"' in inner)
             if not proof:
                 errors.append('%s: 실행 검증 배지인데 화면에 코드·출력·'

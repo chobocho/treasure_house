@@ -127,3 +127,25 @@ class Nine(unittest.TestCase):
         th = 4 * math.atan(math.tan(math.radians(120) / 4)
                            * math.exp(-3.0 * t))
         self.assertAlmostEqual(math.degrees(th), 30.0, places=9)
+
+
+import exercises10 as E10  # noqa: E402
+
+
+class Ten(unittest.TestCase):
+    def test_ch2(self):
+        # β′ = 30u² − 60u³ + 30u⁴ → u = ½ 에서 30/16
+        self.assertAlmostEqual(E10.ch2()["β′(½)"], 30 / 16, places=9)
+
+    def test_ch3(self):
+        # 6 > 3²/2 = 4.5 → 사다리꼴, T = d/v + v/a
+        self.assertAlmostEqual(E10.ch3()['T[s]'], 6 / 3 + 3 / 2,
+                               places=12)
+
+    def test_ch7(self):
+        self.assertEqual(E10.ch7()['할당'], [1, 0, 2])
+        self.assertEqual(E10.ch7()['합'], 5)
+
+    def test_ch8(self):
+        self.assertAlmostEqual(E10.ch8()['간격[m]'],
+                               12 * math.sin(math.pi / 12), places=12)

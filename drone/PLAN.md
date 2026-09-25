@@ -949,3 +949,23 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   are re-checked by the assembler's <pre> rule, as in goevo).
 - `make all SKEL=1`: every check green except claims-check, which fails only on two cite
   keys the concurrently running history subagent has added but not fetched yet.
+
+### Part 10 — 궤적·편대·할당 (2026-09-25)
+
+- 65 slides (budget 200), 9 chapters. Full proofs: **L11** (t⁴(1−t)⁴ divides the difference),
+  **L12** (four integrations by parts), **T27** (J(y) = J(x) + J(h)), **L14, L13, T28** (velocity
+  ceiling min(at, a(T−t), v_max) ⇒ area bound ⇒ trapezoid is optimal), **L8, T30** (plain
+  distance: triangle inequality with strictness from non-collinearity), **L24** (explicit
+  counterexample capture), **L21, L9, L10, T31** (CAPT core; design rule: spacing √2·d),
+  **M26, T32**, L16, L17, L23. T29 sketch with a full optimality certificate (u_i + v_j ≤ c_ij,
+  tight perfect matching ⇒ optimal). 4–5장 (curves/A*/RRT/consensus/VO) are concept slides
+  without claims about products or dates.
+- exps/p10: β table, limits, snap-cost perturbations (min increase > 0 over 200), multi-segment
+  derivative jumps (C⁶, jump at 7th), profile times (min-snap 1.4–1.9× trapezoid), Hungarian
+  relaxation counts (÷n³ ≤ 0.34), brute-force agreement 70/70, **crossing table: plain-cost
+  optimum 0 crossings but min distance 0.18δ; squared-cost optimum 80 crossings but ≥ 0.78δ**,
+  Fibonacci spacing (m₁√n ≈ 3.09), Poisson spacing, five static shape shows for SHOW.
+  ex/exercises10.py (+4 tests).
+- Assembler: SHOW counts as evidence for the "실행 검증" badge. SHOW snapshots rendered to PNG
+  and inspected: heart/text read well; rings from the top collapse into one circle, so that
+  slide uses the audience view.
