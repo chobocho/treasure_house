@@ -1138,3 +1138,49 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   rounding for groups of 2/3/8 but loses at 4 (0.0179 vs 0.0231); staggered takeoff raises
   min spacing (1.225 → 1.451, 1.500 → 2.067 m) but increases our downwash-exposure proxy
   (580.7 → 1130.2 pair·s). T35 stays "cited" (Skybrush layered takeoff) — not implemented.
+
+### Part 5 — 센서와 상태 추정 (2026-09-25, subagent)
+
+- 116 slides (budget 200 — dense, no padding), 8 chapters + sources/summary: inertial sensors
+  (MEMS principle from the MPU-6000/6050 product spec, **L20** full: proof-mass force balance,
+  gyro bias vs random-walk drift, double-integration drift, temperature), magnetometer and
+  barometer (tilt-compensated heading, hard/soft iron as a linear least-squares sphere/ellipsoid
+  fit, CompassMot, hydrostatic 12 Pa ≈ 1 m vs the BMP280 sheet), GNSS/RTK (**L15**, **M25**
+  sketch, **T26** full over two slides: J rows (−u, 1), JᵀJ invertible ⟺ rank 4 ⟺ unit
+  vectors not all on one cone; PDOP defined here and checked against Monte Carlo; blunder
+  table; RTK from u-blox/ArduPilot/PX4 docs), non-GNSS sensors (UWB, optical flow, ToF,
+  VIO — docs only), attitude (**T4, L18** by direct multiplication at θ = 90°, **T5** det E =
+  cos θ, **L1** via Lagrange, **T6** over two slides, **L2**, **T7**: q(t+h) = q⊗Δ and the
+  Euler step = q⊗(1, dtω/2) so the norm factor is exact), complementary filter (**T23**
+  error recursion e ← αe + αb·dt; noise part σ√((1−α)/(1+α)) derived and tabled),
+  Kalman (**T24** full, **T25** sketch + CITEs), calibration (gyro averaging σ/√N, six-pose
+  accelerometer σ/√(2N), level, compass procedures).
+- New ex/imu_calib.py (lstsq, gyro_bias, accel_six, apply, fit_sphere, fit_axes, fit_line,
+  heading) + ex/tests/test_p05_calib.py 13 tests: RED 13/13 NotImplementedError, then GREEN.
+  ex/gps_trilateration.py now shown in full (removed from deck/pending.txt).
+- exps/p05 (31 files, ~7 s, deterministic): 2 program captures, 4 text captures, 25 tables.
+- Findings: (1) the first four satellites of ex/gps_trilateration.sats() have PDOP 18.8 —
+  "4 spread" in the brief needed a zenith + 3 low geometry (PDOP 1.96, measured 2.00);
+  same-elevation four are exactly singular (rank 3). (2) with 4 satellites a 10 m blunder
+  leaves zero residual (undetectable); with 6 the residual is 1–3 m. (3) Tilt error of the
+  quaternion complementary filter must be measured in the body frame (world-frame "up"
+  mixes in yaw error); then tilt ≈ |b_xy|/k_c, yaw error never corrected.
+  (4) exps/pf.py comp() docstring line 56 is 73 columns, so the figure slide shows no CODE
+  window. (5) SPEC §6 lists `KalmanCV`, which py/droneshow/estimator.py does not implement.
+  (6) theorems.tsv gives T25 the cite-key madgwick2010, which only states that Kalman filters
+  are the usual basis — the slide adds that CITE plus PX4 EKF2 innovations.
+- Commit 91a9a4e (deck HTML not committed — it was built with the orchestrator's uncommitted
+  build_deck.py/18_appendix.html changes). Sources: 28 cite keys (PX4 compass/accel/gyro/level/EKF2/GNSS/RTK/flow/rangefinders/
+  barometer/VIO, ArduPilot compass ×2/interference/EKF/accel/non-GPS/flow/RTK/Pozyx/
+  Nooploop/VIO/IMU tempcal, GPS.gov ×2, MPU-6000 spec (SparkFun copy — the TDK URL now
+  serves an HTML page), BMP280 sheet, u-blox RTK); claims/p05.md 45 rows, glossary 26 words.
+
+### Appendix (2026-09-25, f2686ce) and glossaries (1106f85)
+
+- deck/gen_tables.appendix(): tbl_d_timeline/shows/law/tools/firmware/sources (14 rows per
+  table, URLs as one link). New assembler directive `<!--TABLESET name= id= tier= title=
+  cap=-->` expands every out/tbl_d_<name>_N.html in number order (tests first), so the
+  appendix grows with the data. Appendix 79 slides; budget raised 80 → 120 (glossary is 9
+  terms per slide and sources grow with every part). Glossaries added for parts 0/7/8/9/10/
+  14/15 (46 terms). Missing THM boxes filled: L7 (filter = backward Euler, 9부) and M27
+  (similarity, 10부) — 5bd403b.
