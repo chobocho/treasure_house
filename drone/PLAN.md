@@ -983,3 +983,64 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   methods were cut mid-body at 42 lines), JS cut points at two-space `function/class/const/
   let/// ─` (droneshow.js is one IIFE), and a ≤ 6-line tail chunk is merged into the
   previous one when the result fits in 45 lines.
+
+### Step 8 — History tables: timeline, shows, products, quotes (2026-09-25)
+
+- Commits: d727954 (timeline 1849–2004, 59 rows; cite_keys.tsv +64 keys = 155; docs/FETCHED.txt;
+  claims/p02.md), 35b85fd (timeline 2005–2019, +102 rows; products.tsv 84; claims/p03.md),
+  3e2f5e3 (timeline 2020–2026-09, +64 = 225; shows.tsv 60; quotes.tsv 19; claims/p11.md).
+  `make data-check` passes with no "(미달)"; check_claims 0 unsupported; `make test` 142 OK.
+- Sources that carry most rows (all fetched 2026-09-25 into docs/ via fetch_docs): FAA's own
+  "Timeline of Drone Integration" (the page is a Knightlab embed; its Google-Sheet CSV export is
+  the cite key `faa-uas-timeline`, 2005-09 → 2019-09 only), IWM "brief history of drones" and
+  V-weapons, NASM (Pioneer, Predator story, 2008 UAV exhibit release, Hewitt-Sperry photo),
+  VFS Vertipedia milestones (Breguet 1907, PKZ 2 1918, de Bothezat 1922, Kaman HTK-1K 1953,
+  Convertawings 1956, X-22A 1966 — legacy milestone pages are server-rendered; ids 1–120 scanned),
+  Model Aviation (RC history, Denny targets), Yamaha history stories 28/44, Tesla Museum exhibit
+  007, Airminded (Morning Chronicle 1849), GA-ASI Predator-25, Apple 2007 iPhone release, Intel
+  investor-site press releases (intc.com works; intel.com/newsroom is 403), Guinness news and
+  record pages (both server-rendered now — 13 news + 8 record keys), Sky Elements record list,
+  EHang/Pablo Air releases, korea.kr policy weekly (UVify), Parrot press archive (2013–2017 only),
+  Wing, Zipline. Korean law dates: version-pinned DRF XML (`MST=`) for 드론법 제정본 and 항공안전법
+  2016 제정본/2017 개정본 — the DRF `lsHistory` list is inside a `<form>` that html_text drops,
+  so the history list was not usable as a cite source.
+- DJI: dji.com geo-redirects (KR IP) — `Cookie: region=US` makes /media-center/announcements
+  pages load; the newsroom tag listings (`/newsroom/news/tags/{product-releases,dji-news}?page=N`)
+  give title+date for 2012–2023; rows cite the article URL and quote the listing title/date.
+  DJI URLs are sources, not cite keys (fetch_docs has no cookie).
+- Failed/not used: navy.mil (fetch_docs 403; curl worked → URL source), olympics.com (fetch_docs
+  timeout; curl worked → URL source), NMUSAF and af.mil (DNS/403 — no Kettering Bug/Firebee/
+  Radioplane fact sheets), analog.com (403), Northrop investor release (no response),
+  blog.wing.com and geoscan.ru (no response), hankyung (403), sz.gov.cn (no response).
+- Plan candidates that were wrong or unverifiable: "1917 Kettering Bug" → first flight Oct 1918
+  (1917-03 is the British Aerial Target); "2018 PyeongChang 1,218" → Guinness flight recorded
+  Dec 2017, aired 2018-02-09; my own recalled "5,293 drones, Sky Elements, Texas 2024" → UVify,
+  Korea, 2024-05-01; Firebee first flight and Israeli RPV dates not verified (NMUSAF down) — only
+  NASM's 1967/1982/1984/1986 statements used; MultiWii start year unverified (only GitHub
+  2012-07-20); Amazon Part 135 month, first UK delivery day, Zipline launch month unverified.
+- Disagreements recorded (claims/p02, p03, p11): Venice 1849 date (15 Jul vs 22 Aug); Big Guff
+  1938 vs 1937; Radioplane 14,891 vs 15,000; Folsom 2,018 (Intel) vs 2,066 (GWR); Russia 2,198
+  (Geoscan, 3 Sep) vs 2,200 (GWR, 4 Sep); 2021 mosaic 5,184/5,164/5,200; 2024 mosaic 7,998 vs
+  8,100; Manvel 9,985 (GWR) vs "1만 대" (정책브리핑) and 24 vs 31 Mar; Hefei 3 vs 5 Feb 2026;
+  Sichuan 33,615 vs 33,605 (two records, same show); Porto 19 vs 20 Jun 2026; World Drone Prix
+  12 vs 13 Mar 2016; DRONELIFE's "2,066 drones in South Korea in 2018" is wrong (Folsom, USA).
+  Tables use the Guinness figure where the kind is Guinness.
+- Military rows keep to dates and programme names (no operational/payload detail, §0.13).
+
+### Part 15 — 자바스크립트 판과 데모 (2026-09-25)
+
+- js/demo.js (six demos: showplayer, physics, attitude, formation, trajectory, pidtune;
+  canvas optional so the DOM stub can run them). build_deck.demo_script() glues
+  js/droneshow.js + `window.DS_DATA = {params: <params.tsv>, shows: {player: …}}` + demo.js;
+  droneshow.js exports to `window` when one exists (the stub's window too).
+- exps/p15: node parity capture (timings stripped), the 65-drone player show (grid → heart →
+  globe → SHOW → 3·2·1 with dark parked extras → heart, spacing √2·dmin), and **the Python
+  version of every demo's summary line** (out/p15_demo_*.txt). check_deck.js CASES now read
+  those files — 7 cases (pidtune, physics, attitude, formation squared/plain, trajectory,
+  showplayer) must match the JS demo output character for character.
+- Part 15: 68 slides — parity (golden list, node capture, close(), the physics parity test,
+  the four places where last digits diverged and how they were aligned, operation order),
+  droneshow.js FULLSRC (30 chunks), the six live demos with explanations, demo.js FULLSRC,
+  assembly and stub checking. Formation lab: plain-distance assignment of "HI" brings two
+  drones to 0.000 m mid-transition; squared keeps exactly the δ/√2 bound.
+- deck/chunks.py: JS labels (two-space definitions, `__demo('id'`, section heads).

@@ -1079,4 +1079,7 @@
   } else {
     root.DS = DS;
   }
-}(typeof globalThis !== 'undefined' ? globalThis : this));
+  // 덱 안에서는 window(검사 스텁이면 그 가짜 window)에, node 에서는
+  // module.exports 로 내보낸다.
+}(typeof window !== 'undefined' ? window
+  : typeof globalThis !== 'undefined' ? globalThis : this));

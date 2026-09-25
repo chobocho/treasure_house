@@ -233,7 +233,26 @@ if (!demoScripts.length) {
     // §3.6, §5 8단계) — 자바스크립트 데모가 스스로 낸 값을 그대로 적으면
     // 아무것도 검사하지 않는 셈이 된다. 데모 하나에 적어도 둘이다.
     // 비어 있는 동안에는 7) 의 "빈 입력에서 안 죽는다" 까지만 본다.
+    // 기댓값은 손으로 적지 않는다 — exps/p15.py 가 같은 입력으로 파이썬
+    // 판을 돌려 out/p15_demo_*.txt 에 남긴 글과 같아야 한다.
+    const OUT = path.join(__dirname, '..', 'out');
+    const expect = (name, a, b) => {
+      const p = path.join(OUT, 'p15_demo_' + name + '.txt');
+      if (!fs.existsSync(p)) return '(기댓값 파일 없음: ' + p + ')';
+      return fs.readFileSync(p, 'utf8').split('\n').slice(a, b).join('\n');
+    };
     const CASES = [
+      ['pidtune', { kp: '4', kd: '0.8' }, expect('pidtune', 0, 3)],
+      ['physics', {}, expect('physics', 0, 1)],
+      ['attitude', { roll: '30', pitch: '20', yaw: '60', k: '3' },
+        expect('attitude', 0, 3)],
+      ['formation', { word: 'HI', d: '1.5', plain: false },
+        expect('formation', 0, 2)],
+      ['formation', { word: 'HI', d: '1.5', plain: true },
+        expect('formation', 2, 4)],
+      ['trajectory', { dist: '12', vmax: '3', amax: '2' },
+        expect('trajectory', 0, 1)],
+      ['showplayer', { time: '0' }, expect('showplayer', 0, 1)],
     ];
     let good = 0;
     for (const [id, values, want, wantNot] of CASES) {

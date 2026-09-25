@@ -977,6 +977,34 @@ def tier_report(doc):
     return total, c, none, ill
 
 
+DEMO_SHOWS = {'player': 'out/show_p15_player.json'}
+
+
+def demo_script():
+    """덱 안의 데모 = droneshow.js + 자료 + demo.js (PLAN.md §3.7).
+
+    자료(DS_DATA)는 기준 쿼드로터 표의 글과 파이썬이 만든 쇼 파일이다
+    — 재생기는 파이썬 판이 계획한 쇼를 자바스크립트 판으로 되돌린다.
+    둘 중 하나라도 없으면(뼈대 단계) 데모 없이 덱만 만든다."""
+    js = os.path.join(BASE, 'js', 'droneshow.js')
+    dm = os.path.join(BASE, 'js', 'demo.js')
+    if not (os.path.exists(js) and os.path.exists(dm)):
+        return ''
+    import json
+    shows = {}
+    for name, rel in sorted(DEMO_SHOWS.items()):
+        p = os.path.join(BASE, rel)
+        if not os.path.exists(p):
+            errors.append('데모 자료 없음: %s (run_all 의 p15)' % rel)
+            return ''
+        shows[name] = json.loads(read(p))
+    data = {'params': read(os.path.join(BASE, 'data', 'params.tsv')),
+            'shows': shows}
+    blob = json.dumps(data, ensure_ascii=False, separators=(',', ':'))
+    return ('<script>\n%s\nwindow.DS_DATA = %s;\n%s\n</script>'
+            % (read(js).rstrip(), blob, read(dm).rstrip()))
+
+
 def main():
     order = [l.strip() for l in read(os.path.join(DECK, 'order.txt')).split('\n')
              if l.strip() and not l.strip().startswith('#')]
@@ -1002,10 +1030,7 @@ def main():
 
     head = read(os.path.join(DECK, 'base', 'head.html')).replace('<!--NAV-->', build_nav(body))
     tail = read(os.path.join(DECK, 'base', 'tail.html'))
-    # 이 덱의 데모 함수들. 아직 없으면 자리만 비운다 — 뼈대 단계에서도 덱은 열려야 한다.
-    demos = os.path.join(DECK, 'demos.js')
-    glue = '<script>\n%s\n</script>' % read(demos).rstrip() if os.path.exists(demos) else ''
-    tail = tail.replace('<!--DEMOS-->', glue)
+    tail = tail.replace('<!--DEMOS-->', demo_script())
 
     doc = head.rstrip('\n') + '\n\n<main class="prose">\n\n' + body + '\n\n' + tail
     overflow_check(doc)

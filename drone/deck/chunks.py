@@ -139,6 +139,11 @@ def label_for(lines, a, b, lang):
                          r'([A-Za-z_$][\w$]*)'),
     }
     pats['c'] = pats['cpp']
+    # 즉시 실행 함수 안의 두 칸 들여쓴 정의와 절 머리 주석(─── 이름 ───)
+    pats['js'] = re.compile(r'^  (?:async\s+)?(?:function|class|const|let)'
+                            r'\s+([A-Za-z_$][\w$]*)'
+                            r"|^  (?:window\.)?__demo\('([^']+)'"
+                            r'|^  // ─── (\S+)')
     pat = pats.get(lang, pats['py'])
     names = []
     for ln in lines[a - 1:b]:
