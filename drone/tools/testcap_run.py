@@ -23,30 +23,54 @@ def _walk(suite):
             yield t
 
 
+class _Rec(unittest.TestResult):
+    """시험마다 (결과, 메시지) 를 적어 둔다. 스위트로 돌려야
+    setUpClass 같은 클래스 준비가 제대로 불린다."""
+
+    def __init__(self):
+        super().__init__()
+        self.rows = {}
+
+    def addSuccess(self, test):
+        self.rows[test.id()] = ('ok', '')
+
+    def addFailure(self, test, err):
+        super().addFailure(test, err)
+        self.rows[test.id()] = ('FAIL', _exc(self.failures[-1][1]))
+
+    def addError(self, test, err):
+        super().addError(test, err)
+        self.rows[test.id()] = ('ERROR', _exc(self.errors[-1][1]))
+
+    def addSkip(self, test, reason):
+        self.rows[test.id()] = ('skip', reason)
+
+
 def main(modname):
     loader = unittest.TestLoader()
-    suite = loader.loadTestsFromName(modname)
-    tests = sorted(_walk(suite), key=lambda t: t.id())
+    tests = sorted(_walk(loader.loadTestsFromName(modname)),
+                   key=lambda t: t.id())
+    rec = _Rec()
+    unittest.TestSuite(tests).run(rec)
     n = ok = fail = err = 0
     lines = []
     for t in tests:
-        res = unittest.TestResult()
-        t.run(res)
         n += 1
+        kind, msg = rec.rows.get(t.id(), ('ERROR', '준비 단계에서 실패'))
         name = t.id().split('.', 1)[1]
-        if res.failures:
+        if kind == 'FAIL':
             fail += 1
-            row = 'FAIL  %s  %s' % (name, _exc(res.failures[0][1]))
-        elif res.errors:
+        elif kind == 'ERROR':
             err += 1
-            row = 'ERROR %s  %s' % (name, _exc(res.errors[0][1]))
-        elif res.skipped:
-            row = 'skip  %s' % name
-            ok += 1
         else:
             ok += 1
-            row = 'ok    %s' % name
+        row = '%-5s %s' % (kind, name) + ('  ' + msg if msg else '')
         lines.append(row[:WIDTH])
+    # 클래스 준비(setUpClass)가 실패하면 시험 id 가 아니라 따로 남는다
+    for _t, text in rec.errors:
+        if _t.id() not in rec.rows:
+            err += 1
+            lines.append(('ERROR %s  %s' % (_t.id(), _exc(text)))[:WIDTH])
     print('\n'.join(lines))
     print('시험 %d개 · 통과 %d · 실패 %d · 오류 %d'
           % (n, ok, fail, err))

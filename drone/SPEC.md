@@ -199,8 +199,16 @@ dimensionless in angular acceleration; the gyroscopic term is not fed forward).
 | rate PID | `kp_rate = 18, ki_rate = 4, kd_rate = 0.4, i_max_rate = 1.0, tau_d_rate = 0.005` |
 | limits | `tilt_max = 35°`, `vmax_ctrl = 5 m/s` |
 
-The rate loop is ~2–3× faster than attitude and ~10× faster than position (time-scale
-separation, T17); experiment `p09_timescale` breaks it on purpose.
+The rate loop's bandwidth (`kp_rate`) is ~2× the attitude gain and the attitude gain ~7×
+the position gain (time-scale separation, T17). Experiment `p09_timescale` breaks it on
+purpose by lowering `kp_rate` to a quarter of `k_att_xy`; lowering only the *sample rate* of
+the rate and attitude loops to 50 Hz does **not** break it (measured in
+`test_cascade.TimeScale` — PLAN.md §3.3 expected otherwise; the slide follows the
+measurement).
+
+A jerk feed-forward (`ref['j']` → body rates by T12's `flat_rates`) is available but does
+not reduce the circle-tracking error of `test_cascade.FeedForward` while drag is unmodelled
+by the controller; the 9부 table shows the four feed-forward levels as measured.
 
 ## 6. Sensors and estimation (`sensors`, `estimator`) — optional path `--sensors`
 
