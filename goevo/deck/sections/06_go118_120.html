@@ -1,5 +1,1079 @@
 <article class="card section" id="p6">
 <p class="chnum">6부</p>
-<h2>Go 1.18 – 1.20</h2>
-<p class="chsub">준비 중입니다 — 표제 기능과 날짜는 features.tsv·releases.tsv 에서 온다</p>
+<h2>Go 1.18 – 1.20 — 제네릭이 들어온 세 릴리스</h2>
+<p class="chsub">제네릭 · 퍼징 · 작업 공간 <!--REL v=1.18--> · 메모리 상한 · atomic 타입 · 문서 주석
+<!--REL v=1.19--> · 여러 오류 감싸기 · 커버리지 · PGO 미리보기 <!--REL v=1.20--></p>
+</article>
+
+<article class="card" id="p6-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">Go 1 이후 가장 큰 언어 변경, 타입 매개변수가 1.18 에 들어옵니다. 발표 글은 그 설계의
+일부가 "Go 를 처음 공개한 십여 년 전" 에 시작됐다고 적습니다. 그 뒤 두 릴리스는 제네릭을 다듬고, 런타임과 도구를
+손봅니다. <!--CITE key=blog-go1.18 sec="Go 1.18 is released!"--></p>
+<ul>
+<li><a href="#p6-v118">1.18</a> — 제네릭(왜·어떻게·무엇이 빠졌나), 퍼징, 작업 공간, 빌드 정보, net/netip</li>
+<li><a href="#p6-v119">1.19</a> — 메모리 모델 개정, atomic 타입, GOMEMLIMIT, 문서 주석 문법, unix 빌드 제약</li>
+<li><a href="#p6-v120">1.20</a> — 슬라이스→배열 변환, errors.Join, 프로그램 커버리지, PGO 미리보기, crypto/ecdh</li>
+</ul>
+<div class="note"><b>읽는 법</b> — 이 시기의 언어 변경은 go.mod 의 go 줄이 막습니다. 그래서 타입 매개변수
+(1.17 ↔ 1.18)와 슬라이스→배열 변환·unsafe.String(1.19 ↔ 1.20)은 같은 소스의 go 줄만 바꿔 전과 후를
+보입니다(<a href="#p0-lang">0부</a>). GODEBUG 짝도 넷 있습니다(<a href="#p0-godebug">0부</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1.18 -->
+
+<article class="card section" id="p6-v118"><p class="chnum">1장</p><h2>Go 1.18</h2>
+<p class="chsub">타입 매개변수 · 퍼징 · 작업 공간 · 빌드 정보 · net/netip · <!--REL v=1.18--></p></article>
+
+<article class="card" id="p6-v118-overview">
+<h3>Go 1.18 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.18.html-->
+<p class="cap">노트는 "a significant release" 라고 소개하고, 발표 블로그는 "our biggest change ever to the
+language" 라고 적었습니다. 제네릭·퍼징·작업 공간에 이어 네 번째 표제가 "최대 20% 성능 향상" 이었을
+정도입니다. <!--CITE key=relnotes-1.18 sec="Introduction to Go 1.18"-->
+<!--CITE key=blog-go1.18 sec="20% Performance Improvements"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v118-whygen">
+<h3>왜 제네릭인가 — 요소 타입만 다른 같은 코드 <span class="vt v118">1.18</span></h3>
+<p class="why">Ian Lance Taylor 의 글은 슬라이스 뒤집기로 시작합니다. <code>[]int</code> 판을 짜고 시험을
+쓰다 버그(<code>last := len(s)</code>)를 찾고, <code>[]string</code> 판을 또 짭니다. 두 함수는 매개변수의
+타입만 다릅니다. 정적 타입 언어인 Go 에는 "아무 슬라이스나 뒤집는 함수 하나" 를 쓸 길이 없었습니다.
+<!--CITE key=blog-why-generics sec="Why generics?"--></p>
+<!--CODE file=ex/06/reverse/main.go note=요소 타입 E 를 빼낸 Reverse 하나-->
+<!--GOVER v=1.18 file=ex/06/reverse note=go.mod 가 go 1.18-->
+<!--GOVER v=1.17 file=ex/06/reverse note=사본의 go 줄만 1.17 로-->
+<p class="cap">오류 넷이 1.18 에 들어온 것을 하나씩 짚습니다 — 타입 매개변수, 미리 선언된 <code>any</code>,
+그리고 호출할 때의 암묵적 인스턴스화. <!--CITE key=relnotes-1.18 sec="Generics"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-before">
+<h3>제네릭 이전의 길 — 인터페이스·리플렉션·코드 생성</h3>
+<p class="why">인터페이스도 일종의 제네릭입니다. <code>sort.Sort</code> 처럼 필요한 메서드를 인터페이스로
+받으면 됩니다. 하지만 그 메서드를 슬라이스 타입마다 똑같이 써야 하므로, 중복을 없앤 것이 아니라 옮겨 줄인
+것뿐이라고 글은 적습니다. 리플렉션은 쓰기 어렵고 느리며, 코드 생성기는 빌드에 단계를 하나 더합니다.
+<!--CITE key=blog-why-generics sec="Go generic programming today"--></p>
+<!--CODE file=ex/06/sortiface/main.go note=타입마다 Len·Swap 을 다시 쓴다-->
+<!--GOVER v=1.18 file=ex/06/sortiface note=같은 결과, 두 배의 메서드-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-principles">
+<h3>설계의 기준 다섯</h3>
+<p class="why">"모든 언어 변경에는 비용이 있다." 글은 이득을 키우고 비용을 줄이는 지침을 먼저 세웠습니다.
+<!--CITE key=blog-why-generics sec="Benefits and costs"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>지침</th><th>뜻</th></tr>
+<tr><td>새 개념은 최소로</td><td>새 문법·키워드·이름을 되도록 적게</td></tr>
+<tr><td>복잡함은 작성자 몫</td><td>제네릭 함수를 부르는 쪽은 보통 함수처럼 부른다</td></tr>
+<tr><td>작성자와 사용자는 따로</td><td>서로의 코드를 몰라도 각자 개발할 수 있게</td></tr>
+<tr><td>빌드도 실행도 빠르게</td><td>빠른 빌드와 빠른 실행 사이의 저울질을 되도록 피한다</td></tr>
+<tr><td>Go 다움을 지킨다</td><td>명료하고 단순한 언어라는 성질</td></tr>
+</table></div>
+<blockquote>generics can bring a significant benefit to the language, but they are only worth doing if Go
+still feels like Go.</blockquote>
+<p class="cap">"제네릭은 언어에 큰 이득을 줄 수 있지만, Go 가 여전히 Go 처럼 느껴질 때만 할 가치가 있다."
+<!--CITE key=blog-why-generics sec="Preserve clarity and simplicity of Go"--></p>
+<span class="tier c">블로그 근거</span>
+</article>
+
+<article class="card" id="p6-v118-contracts">
+<h3>2019 초안의 contract — 채택되지 않은 문법</h3>
+<p class="why">2019년 초안은 타입 매개변수를 <code>(type T)</code> 로 적고, 타입 매개변수의 "타입" 을
+<code>contract</code> 라는 새 선언으로 적었습니다. 2018년 초안보다 훨씬 단순해진 꼴이라고 소개했지만, 결국
+채택되지 않았습니다. <!--CITE key=blog-why-generics sec="Contracts"--></p>
+<!--CODE file=ex/06/contract/main.go note=블로그의 Sequence contract 그대로-->
+<!--GOVER v=1.18 file=ex/06/contract cmd="go build ." tag=build note=지금 컴파일러에게는 문법 오류-->
+<div class="note"><b>블로그 머리말</b> — 이 글에는 2022년 1월에 덧붙인 알림이 있습니다. 여기 적힌 것은
+최종 채택된 제네릭이 아니니 명세와 설계 문서를 보라는 것입니다.
+<!--CITE key=blog-why-generics sec="Draft design"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-nextstep">
+<h3>2020 — contract 를 버리고 인터페이스로</h3>
+<p class="why">새 초안의 가장 큰 변화는 contract 를 버린 것입니다. contract 와 인터페이스 타입의 차이가
+헷갈린다는 의견 때문이었습니다. 타입 매개변수는 이제 인터페이스 타입으로 제약하고, 인터페이스에 타입 목록을
+적을 수 있게 했습니다(제약으로 쓸 때만). <!--CITE key=blog-generics-next-step sec="Updated design"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>함께 나온 것</th><th>내용</th></tr>
+<tr><td>go2go 번역 도구</td><td>초안 문법의 제네릭 코드를 보통 Go 코드로 옮겨 돌려 보는 도구와 전용 플레이그라운드
+<!--CITE key=blog-generics-next-step sec="Experimentation tool"--></td></tr>
+<tr><td>가장 이른 예상</td><td>모두가 만족해도 빨라야 Go 1.17(2021년 8월 예정) — "낙관적인 일정"
+<!--CITE key=blog-generics-next-step sec="Next steps"--></td></tr>
+<tr><td>이론의 도움</td><td>Philip Wadler 와 동료들의 Featherweight Go 논문
+<!--CITE key=blog-generics-next-step sec="Acknowledgements"--></td></tr>
+</table></div>
+<span class="tier c">블로그 근거</span>
+</article>
+
+<article class="card" id="p6-v118-proposal">
+<h3>2021 — 정식 제안, 그리고 1.18</h3>
+<p class="why">2021년 1월, 초안은 언어 변경 제안 절차에 올라갑니다. 글은 "Go 가 처음 나온 2009년 부터
+가장 자주 요청된 기능" 이었고, 첫 (결함 있는) 시도는 2010년까지 거슬러 올라간다고 적었습니다. 받아들여지면
+1.18 베타에 넣는 것이 목표였습니다. <!--CITE key=blog-generics-proposal sec="Why generics?"-->
+<!--CITE key=blog-generics-proposal sec="What happens now?"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>때</th><th>일</th></tr>
+<tr><td>2009-11-10</td><td>Go 공개. 24시간이 안 되어 제네릭을 묻는 첫 댓글 <!--CITE key=blog-why-generics sec="Introduction"--></td></tr>
+<tr><td>2010</td><td>첫 (결함 있는) 시도</td></tr>
+<tr><td>2019-07-31</td><td>"Why Generics?" — contract 초안</td></tr>
+<tr><td>2020-06-16</td><td>"The Next Step for Generics" — 인터페이스 제약, go2go</td></tr>
+<tr><td>2021-01-12</td><td>정식 제안</td></tr>
+<tr><td><!--REL v=1.18--></td><td>Go 1.18 — 타입 매개변수</td></tr>
+</table></div>
+<p class="cap">과정 자체는 <a href="#p9">9부</a>의 제안 절차에서 다룹니다.</p>
+<span class="tier c">블로그 근거</span>
+</article>
+
+<article class="card" id="p6-v118-generics">
+<h3>1.18 노트가 꼽은 언어 변경 여섯 <span class="vt v118">1.18</span></h3>
+<p class="why">노트는 "크지만 완전히 뒤로 호환되는" 변경이라고 적고, 눈에 띄는 것을 여섯으로 추렸습니다.
+<!--CITE key=relnotes-1.18 sec="Generics"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>변경</th><th>이 부의 장</th></tr>
+<tr><td>함수·타입 선언이 타입 매개변수를 받는다</td><td><a href="#p6-v118-typeparam">타입 매개변수</a></td></tr>
+<tr><td>대괄호 속 타입 인자로 인스턴스화한다</td><td><a href="#p6-v118-typeparam">인스턴스화</a></td></tr>
+<tr><td>새 토큰 <code>~</code></td><td><a href="#p6-v118-tilde">~ 와 타입 집합</a></td></tr>
+<tr><td>인터페이스가 타입 집합을 정의한다(제약 전용)</td><td><a href="#p6-v118-constraint">제약</a></td></tr>
+<tr><td>미리 선언된 <code>any</code> = <code>interface{}</code></td><td><a href="#p6-v118-anycomp">any</a></td></tr>
+<tr><td>미리 선언된 <code>comparable</code>(제약 전용)</td><td><a href="#p6-v118-anycomp">comparable</a></td></tr>
+</table></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v118-typeparam">
+<h3>타입 매개변수와 인스턴스화 <span class="vt v118">1.18</span></h3>
+<p class="why">타입 매개변수 목록은 보통 매개변수 목록과 같은 꼴이되 대괄호를 씁니다. 타입 인자를 주는 것을
+인스턴스화라 하고, 두 단계로 일어납니다 — 타입 인자를 대입하고, 각 인자가 제약을 만족하는지 확인합니다.
+인스턴스화만 하고 부르지 않으면 보통 함수 값이 나옵니다. <!--CITE key=blog-intro-generics sec="Type Parameters"--></p>
+<!--CODE file=ex/06/typeparam/main.go note=타입 매개변수 둘, 명시적 인스턴스화, 추론-->
+<!--GOVER v=1.18 file=ex/06/typeparam note=Map[int, string] 은 보통 함수 타입-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-brackets">
+<h3>왜 꺾쇠가 아니라 대괄호인가</h3>
+<p class="why">Java 와 C++ 은 <code>List&lt;Integer&gt;</code> 처럼 꺾쇠를 씁니다. Go 는 그럴 수 없었습니다.
+함수 안에서 <code>&lt;</code> 를 만난 순간 인스턴스화인지 비교 연산인지 가를 수 없기 때문입니다. 타입 정보
+없이 구문 분석이 되어야 한다는 것이 Go 의 핵심 설계 결정입니다.
+<!--CITE key=faq sec="Why does Go use square brackets for type parameter lists?"--></p>
+<!--CODE file=ex/06/brackets/main.go note=FAQ 의 모호한 문장 그대로-->
+<!--GOVER v=1.18 file=ex/06/brackets note=Go 에서는 비교 둘-->
+<p class="cap">꺾쇠를 쓰는 언어였다면 같은 줄이 <code>w&lt;x, y&gt;</code> 의 인스턴스화를
+<code>(z)</code> 로 부르는 것으로도 읽힙니다. FAQ 는 Scala 처럼 대괄호를 쓰는 언어가 Go 말고도 있다고
+덧붙입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-constraint">
+<h3>제약은 인터페이스 — 타입 집합을 적는다 <span class="vt v118">1.18</span></h3>
+<p class="why">타입 매개변수에도 "타입" 이 있어야 합니다. 그것이 제약이고, Go 에서 제약은 인터페이스입니다.
+그런데 <code>&lt;</code> 나 <code>+</code> 는 메서드가 아닙니다. 그래서 인터페이스를 "메서드 집합" 대신
+"타입 집합" 으로 보는 눈을 들였습니다. <code>interface{ int|string|bool }</code> 은 세 타입만의 집합입니다.
+<!--CITE key=blog-intro-generics sec="Type sets"--></p>
+<!--CODE file=ex/06/constraint/main.go note=합집합으로 적은 Number, 그 안에서 쓰는 +-->
+<!--GOVER v=1.18 file=ex/06/constraint note=int, float64, Celsius 가 모두 들어온다-->
+<!--GOVER v=1.17 file=ex/06/constraint note=go 1.17 — 합집합 원소부터 거절-->
+<p class="cap">셋째 오류가 흥미롭습니다. 타입 집합을 이해하지 못하는 판에서는 <code>Number</code> 가
+보통 인터페이스라 <code>+</code> 가 정의되지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-tilde">
+<h3>~T — "밑바탕 타입이 T 인 모든 타입" <span class="vt v118">1.18</span></h3>
+<p class="why">제약을 쓸 때 관심은 대개 <code>string</code> 하나가 아니라 "모든 문자열 타입" 입니다.
+<code>~string</code> 은 밑바탕 타입(underlying type)이 string 인 모든 타입 — string 자신과
+<code>type MyString string</code> 같은 정의된 타입 — 의 집합입니다.
+<!--CITE key=blog-intro-generics sec="Type sets"--></p>
+<!--CODE file=ex/06/notilde/main.go note=~ 가 있는 제약과 없는 제약-->
+<!--GOVER v=1.18 file=ex/06/notilde note=컴파일러가 빠진 ~ 를 짚어 준다-->
+<div class="warn"><b>함정</b> — 제약에서 <code>~</code> 를 빼면 정의된 타입은 전부 밀려납니다. 오류는 첫
+호출(<code>Twice2</code>)이 아니라 둘째 줄에서 납니다. 라이브러리의 제약이 <code>~</code> 없이 적혀 있으면
+사용자가 만든 타입을 받을 수 없습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-anycomp">
+<h3>any 와 comparable <span class="vt v118">1.18</span></h3>
+<p class="why"><code>any</code> 는 빈 인터페이스의 별칭이라 <code>interface{}</code> 대신 어디서나 쓸 수
+있습니다. <code>comparable</code> 은 <code>==</code>·<code>!=</code> 로 비교할 수 있는 모든 타입의 집합이고,
+제약으로만(또는 제약에 끼워서만) 씁니다. <!--CITE key=relnotes-1.18 sec="Generics"--></p>
+<!--CODE file=ex/06/anycomp/main.go note=== 이 필요하면 comparable-->
+<!--GOVER v=1.18 file=ex/06/anycomp note=any 와 interface{} 는 같은 타입-->
+<!--CODE file=ex/06/anyonly/main.go note=제네릭 없이 any 만 쓴 파일-->
+<!--GOVER v=1.17 file=ex/06/anyonly note=go 1.17 — any 도 1.18 의 것-->
+<!--GOVER v=1.18 file=ex/06/anyonly note=go 1.18-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-constraintonly">
+<h3>제약 전용 인터페이스 <span class="vt v118">1.18</span></h3>
+<p class="why">합집합이나 <code>~T</code> 를 담은 인터페이스, 그리고 <code>comparable</code> 은 제약
+자리에서만 쓸 수 있습니다. 값의 타입이 될 수는 없습니다. <!--CITE key=relnotes-1.18 sec="Generics"-->
+블로그는 "지금은" 그렇다고 적으며, 타입을 제한한 인터페이스가 일반 타입으로 쓰일 날을 상상하기 어렵지 않다고
+덧붙였습니다. <!--CITE key=blog-intro-generics sec="Type sets"--></p>
+<!--CODE file=ex/06/constraintvar/main.go note=Number 와 comparable 을 변수 타입으로-->
+<!--GOVER v=1.18 file=ex/06/constraintvar note=둘 다 거절-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-inference">
+<h3>함수 인자 타입 추론, 그리고 그 한계 <span class="vt v118">1.18</span></h3>
+<p class="why">대부분의 호출은 타입 인자를 적지 않습니다. 컴파일러가 보통 인자의 타입을 매개변수의 타입과
+맞춰 추론합니다. 결과에만 쓰이는 타입 매개변수(<code>MakeT[T any]() T</code>)는 이렇게 추론할 수 없습니다.
+<!--CITE key=blog-intro-generics sec="Function argument type inference"--></p>
+<!--CODE file=ex/06/scalebad/main.go note=블로그의 첫 Scale — []E 를 돌려준다-->
+<!--GOVER v=1.18 file=ex/06/scalebad note=Path 가 []int32 가 되어 돌아온다-->
+<p class="cap">오류 문장은 블로그가 적어 둔 것과 같습니다 — "r.String undefined (type []int32 has no field or
+method String)". <code>Path</code> 를 넣었는데 결과 타입이 <code>[]E</code> 라 이름 붙은 타입을 잃었습니다.
+<!--CITE key=blog-intro-generics sec="Constraint type inference"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-inference2">
+<h3>제약 타입 추론 — S ~[]E <span class="vt v118">1.18</span></h3>
+<p class="why">슬라이스 타입 자체를 타입 매개변수 <code>S</code> 로 받고, 제약 <code>~[]E</code> 로 요소 타입
+<code>E</code> 와 이어 줍니다. <code>S</code> 가 인자에서 정해지면, 제약에서 <code>E</code> 가 따라 나옵니다.
+이것이 제약 타입 추론입니다. 블로그는 추론이 "틀린 타입을 추론하느니 차라리 실패하는 쪽" 을 택했다고
+적었습니다. <!--CITE key=blog-intro-generics sec="Constraint type inference"-->
+<!--CITE key=blog-intro-generics sec="Type inference in practice"--></p>
+<!--CODE file=ex/06/scale/main.go note=S 가 Path 로 남는다-->
+<!--GOVER v=1.18 file=ex/06/scale note=Scale(p, 10) — 타입 인자 없이-->
+<div class="note"><b>그 뒤</b> — 1.21 노트는 타입 추론을 더 강하고 정확하게 여러 군데 고쳤다고 적습니다
+<!--CITE key=relnotes-1.21 sec="Changes to the language"-->. 새 slices 패키지도 같은 판입니다
+<!--CITE key=relnotes-1.21 sec="New slices package"-->(<a href="#p7">7부</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-generictype">
+<h3>제네릭 타입과 그 메서드 <span class="vt v118">1.18</span></h3>
+<p class="why">타입도 타입 매개변수를 가질 수 있고, 메서드를 가질 수 있습니다. 쓰려면 인스턴스화해야 합니다
+(<code>Tree[string]</code>). 값은 인터페이스로 감싸지 않고 그 타입 그대로 저장됩니다.
+<!--CITE key=blog-intro-generics sec="Type Parameters"--> <!--CITE key=blog-when-generics sec="General purpose data structures"--></p>
+<!--CODE file=ex/06/stack/main.go note=Stack[T], Pair[K, V], 그리고 둘을 겹친 인스턴스-->
+<!--GOVER v=1.18 file=ex/06/stack note=%T 는 인스턴스의 전체 이름-->
+<!--GOVER v=1.17 file=ex/06/stack lines=1-5 note=go 1.17 — "type instantiation" 도 1.18 의 것(앞부분)-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-shape">
+<h3>구현 — 같은 "모양" 은 코드 한 벌 <span class="vt v118">1.18</span></h3>
+<p class="why">인스턴스마다 따로 컴파일할 수도, 인터페이스 매개변수처럼 한 벌로 컴파일할 수도 있습니다.
+표준 컴파일러는 보통 모양(shape)이 같은 타입 인자마다 한 벌을 만듭니다. 모양은 크기, 포인터의 위치 같은
+성질로 정해집니다. <!--CITE key=faq sec="How are generics implemented in Go?"--></p>
+<!--CODE file=ex/06/shape/main.go note=타입 인자 넷, 그중 float64 와 Celsius 는 모양이 같다-->
+<!--GOVER v=1.18 file=ex/06/shape cmd="go build -gcflags=-m=2 ." tag=m2 lines=2-10 note=컴파일러의 인라인 판단에 드러난 모양-->
+<p class="cap"><code>Largest[go.shape.int]</code>·<code>[go.shape.float64]</code>·<code>[go.shape.string]</code>
+— 모양 셋에 인스턴스 넷입니다. <code>Celsius</code> 는 <code>float64</code> 모양의 코드를 나눠 씁니다.
+1.27.1 에서의 동작이고, FAQ 는 앞으로 이 저울질을 바꿔 볼 수 있다고 적습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-nomethod">
+<h3>빠진 것 — 메서드는 제 타입 매개변수를 못 가진다 <span class="vt v118">1.18</span></h3>
+<p class="why">제네릭 타입은 메서드를 가질 수 있지만, 수신자 말고는 메서드가 자기 타입 매개변수를 선언할
+수 없었습니다. FAQ 가 든 까닭은 구현입니다 — 인터페이스에 담긴 값이 다른 인터페이스를 구현하는지 실행
+중에 따질 때, 어떤 인스턴스가 필요할지 컴파일할 때 알 수 없다는 것입니다.
+<!--CITE key=faq sec="Why does Go not support methods with type parameters?"--></p>
+<!--CODE file=ex/06/genmethod/main.go note=메서드 As 에 [T any]-->
+<!--GOVER v=1.18 file=ex/06/genmethod note=go 1.18 줄 아래에서-->
+<div class="note"><b>2026-09 기준</b> — 오류 문장이 이미 답을 말합니다: "requires go1.27 or later". 1.27 노트는
+메서드가 자기 타입 매개변수를 선언할 수 있게 되었다고 적습니다. <!--CITE key=relnotes-1.27 sec="Changes to the language"-->
+그 이야기는 <a href="#p8">8부</a>에서 합니다. 같은 날 받아 둔 FAQ 는 아직 "We do not anticipate that Go will ever
+add generic methods" 라는 문장을 싣고 있습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-limits">
+<h3>1.18 이 스스로 밝힌 한계 <span class="vt v118">1.18</span></h3>
+<p class="why">노트는 알려진 제약을 여섯 적었습니다. 몇은 다음 판에서 풀고 싶다고, 몇은 풀릴지 모른다고
+했습니다. <!--CITE key=relnotes-1.18 sec="Generics"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>1.18 의 한계</th><th>그 뒤</th></tr>
+<tr><td>제네릭 함수·메서드 안의 타입 선언</td><td>1.20 에서 풀림(<a href="#p6-v120-localtype">3장</a>)</td></tr>
+<tr><td>타입 매개변수 값에 real·imag·complex</td><td>"다음 판에서 풀고 싶다"</td></tr>
+<tr><td>제약에 적힌 메서드만 부를 수 있음</td><td>"다음 판에서 풀고 싶다"</td></tr>
+<tr><td>공통 필드 <code>x.f</code> 접근</td><td>"풀지도 모른다" — 아래 캡처는 1.27.1</td></tr>
+<tr><td>타입 매개변수 임베딩, 메서드 있는 인터페이스의 합집합</td><td>"허용될지 불분명"</td></tr>
+</table></div>
+<!--CODE file=ex/06/fieldaccess/main.go note=Cat·Dog 모두 Name 이 있어도-->
+<!--GOVER v=1.18 file=ex/06/fieldaccess note=1.27.1 에서의 동작 — 아직 거절-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-caution">
+<h3>"신중하게 쓰라" — 노트의 이례적인 경고 <span class="vt v118">1.18</span></h3>
+<p class="why">노트는 새 코드가 실제 운영 환경에서 충분히 시험되지 않았으니 운영 코드에 쓸 때 "appropriate
+caution" 을 당부했습니다. 호환성 약속의 예외 조항 — 명세의 모순을 고치거나 명세를 어긴 버그를 고치면
+기존 프로그램이 깨질 수 있다 — 도 그대로 인용했습니다. <!--CITE key=relnotes-1.18 sec="Generics"--></p>
+<div class="warn"><b>비용</b> — 타입 검사기를 통째로 바꾼 탓에 컴파일이 "roughly 15% slower" 일 수 있고,
+오류 문장이 예전보다 덜 친절한 경우가 있다고 적었습니다. 만들어진 코드의 실행 시간은 그대로입니다.
+<!--CITE key=relnotes-1.18 sec="Compiler"--> 빌드 속도는 1.20 에서 되찾습니다(<a href="#p6-v120-compiler">3장</a>).</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v118-xexp">
+<h3>x/exp — 표준 밖에서 먼저 <span class="vt v118">1.18</span></h3>
+<p class="why">노트는 제네릭을 쓴 실험 패키지 셋을 소개했습니다. <code>golang.org/x/exp/constraints</code>
+(<code>constraints.Ordered</code> 같은 제약), <code>x/exp/slices</code>, <code>x/exp/maps</code> 입니다.
+이 API 는 Go 1 호환성 약속 밖이고, 경험이 쌓이면 바뀔 수 있다고 못 박았습니다.
+<!--CITE key=relnotes-1.18 sec="golang.org/x/exp/slices"--></p>
+<div class="note"><b>생태계</b> — 제네릭은 생태계에도 큰 변화라, 도구·문서·라이브러리가 따라오는 데 시간이
+걸린다고 노트는 적습니다. 이 기계는 모듈 프록시를 쓰지 않으므로(<code>GOPROXY=off</code>) x/exp 는 실행
+예제가 없습니다. 이 패키지들의 표준판은 <a href="#p7">7부</a>에 나옵니다.</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v118-whenuse">
+<h3>언제 제네릭을 쓰나</h3>
+<p class="why">"타입을 정의하지 말고 코드를 써라." 타입 매개변수 제약부터 설계하고 있다면 길을 잘못 든
+것이라고 Ian Lance Taylor 는 적었습니다. <!--CITE key=blog-when-generics sec="Write code"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>쓸 만한 곳</th><th>쓰지 말 곳</th></tr>
+<tr><td>슬라이스·맵·채널을 요소 타입과 무관하게 다룰 때</td><td>값의 메서드만 부른다면 — 인터페이스로</td></tr>
+<tr><td>연결 리스트·트리 같은 범용 자료 구조</td><td>타입마다 메서드 구현이 다르면 — 인터페이스로</td></tr>
+<tr><td>구현이 똑같은 공통 메서드</td><td>메서드도 없고 동작도 타입마다 다르면 — 리플렉션(encoding/json)</td></tr>
+</table></div>
+<blockquote>avoid type parameters until you notice that you are about to write the exact same code multiple
+times.</blockquote>
+<p class="cap">"똑같은 코드를 여러 번 쓰려는 참이라는 것을 알아챌 때까지는 타입 매개변수를 피하라."
+비교가 필요하면 메서드를 요구하는 제약보다 함수를 받으라는 조언도 있습니다.
+<!--CITE key=blog-when-generics sec="One simple guideline"-->
+<!--CITE key=blog-when-generics sec="For type parameters, prefer functions to methods"--></p>
+<span class="tier c">블로그 근거</span>
+</article>
+
+<article class="card" id="p6-v118-vetgen">
+<h3>vet 이 제네릭 코드를 본다 <span class="vt v118">1.18</span></h3>
+<p class="why">vet 은 타입 매개변수를 그 타입 집합의 타입으로 바꾼 비제네릭 코드에서라면 보고했을 오류를
+제네릭 코드에서도 보고합니다. 노트의 예 그대로입니다. <!--CITE key=relnotes-1.18 sec="Updates for Generics"--></p>
+<!--CODE file=ex/06/vetgen/main.go note=~int 에는 맞고 ~string 에는 틀린 %d-->
+<!--GOVER v=1.18 file=ex/06/vetgen cmd="go vet ." tag=vet note=Print[string] 을 떠올려 잡는다-->
+<!--GOVER v=1.18 file=ex/06/vetgen note=실행만 하면 멀쩡해 보인다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-fuzz">
+<h3>퍼징이 go test 안으로 <span class="vt v118">1.18</span></h3>
+<p class="why">퍼징은 입력을 자동으로 바꿔 가며 함수를 두드려 버그를 찾는 시험입니다. 발표 글은 Go 가 "퍼징을
+표준 툴체인에 완전히 통합한 첫 주요 언어" 라고 적었습니다. 퍼즈 테스트는 <code>FuzzXxx(f *testing.F)</code>
+이고, <code>f.Add</code> 로 넣은 씨앗은 평범한 <code>go test</code> 때마다 돕니다.
+<!--CITE key=blog-go1.18 sec="Fuzzing"--> <!--CITE key=relnotes-1.18 sec="Fuzzing"--></p>
+<!--CODE file=ex/06/fuzz/abbrev.go note=바이트로 자르는 함수 — 한글을 반으로 자를 수 있다-->
+<!--CODE file=ex/06/fuzz/abbrev_test.go note=성질: 결과는 늘 올바른 UTF-8-->
+<!--GOVER v=1.18 file=ex/06/fuzz cmd="go test -run FuzzAbbrev -v ." tag=seed note=씨앗 둘은 통과, 저장된 입력 하나가 실패-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-fuzzcache">
+<h3>실패한 입력은 testdata/fuzz 에 남는다 <span class="vt v118">1.18</span></h3>
+<p class="why">퍼징 엔진이 실패하는 입력을 찾으면 그것을 <code>testdata/fuzz/FuzzXxx/</code> 아래 파일로 씁니다.
+커밋해 두면 앞 장처럼 평범한 <code>go test</code> 가 씨앗으로 돌려 회귀 시험이 됩니다. go test 의 새 플래그는
+<code>-fuzz</code>·<code>-fuzztime</code>·<code>-fuzzminimizetime</code> 입니다.
+<!--CITE key=relnotes-1.18 sec="go test"--></p>
+<!--CODE file=ex/06/fuzz/testdata/fuzz/FuzzAbbrev/hangul note=말뭉치 파일 하나 — 인자마다 한 줄-->
+<!--GOVER v=1.18 file=ex/06/fuzz cmd="go doc testing" tag=doc lines=255-265 note=testing 패키지 문서의 해당 문단-->
+<!--GOVER v=1.18 file=ex/06/fuzz cmd="go test -fuzz FuzzAbbrev -fuzztime 20x ." tag=fuzz note=이 기계에서는 퍼징 엔진이 없다-->
+<div class="warn"><b>노트의 경고</b> — 퍼징은 메모리를 많이 쓰고, 넓힌 입력을 <code>$GOCACHE/fuzz</code> 에 크기
+제한 없이 쌓아 "수 GB" 가 될 수 있습니다. 비우는 명령은 <code>go clean -fuzzcache</code> 입니다.
+<!--CITE key=relnotes-1.18 sec="Fuzzing"--></div>
+<p class="cap">android/arm64 는 <code>-race</code> 처럼 <code>-fuzz</code> 도 지원하지 않습니다
+(<a href="#p0-machine">0부</a>). 그래서 이 덱은 씨앗과 저장된 말뭉치의 실행만 보입니다. 파일
+<code>hangul</code> 은 손으로 적은 것이고, 형식은 엔진이 쓰는 것과 같습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-work">
+<h3>작업 공간 — 여러 모듈을 한 번에 <span class="vt v118">1.18</span></h3>
+<p class="why">연례 설문에서 모듈에 대해 가장 많이 나온 어려움이 "여러 모듈을 오가며 작업하기" 였습니다.
+<!--CITE key=blog-go1.18 sec="Workspaces"--> 작업 디렉터리나 그 위에 <code>go.work</code> 가 있으면 go 명령은
+작업 공간 모드가 되어, 그 파일에 적힌 모듈 모두를 주 모듈로 삼습니다.
+<!--CITE key=relnotes-1.18 sec="go work"--></p>
+<!--CODE file=ex/06/work/go.work note=모듈 둘을 한 작업 공간으로-->
+<!--CODE file=ex/06/work/main.go note=주 모듈 — go.mod 에 require 가 없다-->
+<!--CODE file=ex/06/work/greet/greet.go note=이웃 모듈 example.com/greet-->
+<!--GOVER v=1.18 file=ex/06/work note=작업 공간이 이웃을 찾아 준다-->
+<!--GOVER v=1.18 file=ex/06/work cmd="GOWORK=off go run ." tag=off note=작업 공간을 끄면-->
+<div class="note"><b>이전엔</b> — 이웃 모듈을 먼저 공개하거나, 쓰는 쪽 go.mod 에 <code>replace</code> 를 적어 로컬
+사본을 가리키고 공개하기 전에 다시 지워야 했습니다.
+<!--CITE key=blog-get-familiar-with-workspaces sec="Workspaces"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-workcmd">
+<h3>go work 의 명령들 <span class="vt v118">1.18</span></h3>
+<p class="why"><code>go work init</code> 이 파일을 만들고, <code>go work use</code> 가 모듈을 더하고,
+<code>go work edit</code> 가 손 대신 고치고, <code>go work sync</code> 가 작업 공간의 의존성 버전을 각 모듈로
+되돌려 적습니다. <!--CITE key=blog-get-familiar-with-workspaces sec="Workspace commands"--></p>
+<!--GOVER v=1.18 file=ex/06/work cmd="go env GOWORK" tag=env note=지금 쓰는 go.work-->
+<!--GOVER v=1.18 file=ex/06/work cmd="go list -m" tag=list note=주 모듈이 둘-->
+<!--GOVER v=1.18 file=ex/06/work cmd="go work edit -json" tag=json note=도구가 읽는 꼴-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-buildinfo">
+<h3>실행 파일에 빌드 정보가 박힌다 <span class="vt v118">1.18</span></h3>
+<p class="why">go 명령이 빌드 플래그·태그·cgo 여부, 그리고 Git 같은 저장소 안이면 커밋·시각·수정 여부까지
+실행 파일에 넣습니다. <code>go version -m</code>, <code>runtime/debug.ReadBuildInfo</code>, 새
+<code>debug/buildinfo</code> 패키지로 읽습니다. VCS 정보는 <code>-buildvcs=false</code> 로 뺍니다.
+<!--CITE key=relnotes-1.18 sec="go version"--> <!--CITE key=relnotes-1.18 sec="New debug/buildinfo package"--></p>
+<!--CODE file=ex/06/buildinfo/main.go note=GoVersion·Settings 는 1.18 에 생긴 필드-->
+<!--GOVER v=1.18 file=ex/06/buildinfo note=이 덱의 실험 환경-->
+<p class="cap">vcs 줄이 없는 까닭은 실험이 저장소 밖 사본에서 돌기 때문입니다. <code>-trimpath=true</code> 줄은
+1.19 가 더한 것입니다. <!--CITE key=relnotes-1.19 sec="Go command"--> <code>DefaultGODEBUG</code> 는 go 줄이
+정한 GODEBUG 기본값으로, 1.21 의 장치입니다(<a href="#p0-godebug">0부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-plusbuild">
+<h3>go fix 가 // +build 줄을 지운다 <span class="vt v118">1.18</span></h3>
+<p class="why">1.17 이 <code>//go:build</code> 줄을 들이며 두 줄을 함께 두게 했습니다. 1.18 이 나오면서
+1.16 지원이 끝나 모든 지원판이 새 줄을 이해하게 되었고, 그래서 go 1.18 이상을 선언한 모듈에서는
+<code>go fix</code> 가 옛 줄을 지웁니다. <!--CITE key=relnotes-1.18 sec="//go:build lines"--></p>
+<!--CODE file=ex/06/plusbuild/os_linux.go note=1.17 시절의 두 줄-->
+<!--CODE file=ex/06/plusbuild/os_other.go note=반대 조건-->
+<!--CODE file=ex/06/plusbuild/main.go note=어느 파일이 골렸나-->
+<!--GOVER v=1.18 file=ex/06/plusbuild note=android 는 linux 계열-->
+<!--GOVER v=1.18 file=ex/06/plusbuild cmd="go fix -diff ." tag=fix note=go 1.18 — 옛 줄을 지우겠다는 diff-->
+<!--GOVER v=1.17 file=ex/06/plusbuild cmd="go fix -diff ." tag=fix note=go 1.17 — 손대지 않는다-->
+<p class="cap">도구의 동작도 go 줄로 갈립니다. <code>os_other.go</code> 는 이 기계의 빌드에 들지 않아 diff 에
+없습니다. <code>//go:build</code> 자체는 <a href="#p5">5부</a>의 이야기입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-tools">
+<h3>작은 변화들 — go 명령 <span class="vt v118">1.18</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td><code>go get</code></td><td>모듈 모드에서 더는 빌드·설치하지 않고 go.mod 만 고친다. 설치는
+<code>go install 경로@latest</code> <!--CITE key=relnotes-1.18 sec="go get"--></td></tr>
+<tr><td>go.mod 자동 갱신</td><td><code>go mod graph</code>·<code>vendor</code>·<code>verify</code>·<code>why</code> 가
+더는 go.mod·go.sum 을 고치지 않는다 <!--CITE key=relnotes-1.18 sec="Automatic go.mod and go.sum updates"--></td></tr>
+<tr><td>gofmt</td><td>파일을 동시에 읽고 형식화한다 — 여러 CPU 에서 "significantly faster"
+<!--CITE key=relnotes-1.18 sec="Gofmt"--></td></tr>
+</table></div>
+<p class="cap"><code>go get</code> 의 변화는 1.16 에 생긴 <code>go install 경로@버전</code> 을 전제합니다. 두 판을 다
+지원하는 프로젝트는 설치 안내를 둘 다 적어야 한다고 노트는 덧붙였습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v118-unused">
+<h3>클로저 안에서 대입만 한 변수 — 이제 오류 <span class="vt v118">1.18</span></h3>
+<p class="why">함수 리터럴 안에서 값을 넣기만 하고 어디서도 읽지 않는 변수를, 1.18 전 컴파일러는 "선언하고
+쓰지 않음" 으로 보고하지 않았습니다. 오래된 이슈 #8560 입니다. go vet 은 늘 짚었으므로 영향받는 프로그램은
+매우 적을 것이라고 노트는 적습니다. <!--CITE key=relnotes-1.18 sec="Bug fixes"--></p>
+<!--CODE file=ex/06/unusedclosure/main.go note=found 는 쓰기만 하고 읽지 않는다-->
+<!--GOVER v=1.18 file=ex/06/unusedclosure cmd="go build ." tag=build note=1.27.1 에서의 동작-->
+<p class="cap">버그 수정이라 go 줄로 갈리지 않습니다 — go 줄을 1.17 로 내려도 똑같이 거절합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-regabi">
+<h3>레지스터 ABI 가 arm64 로 <span class="vt v118">1.18</span></h3>
+<p class="why">1.17 이 일부 OS 의 amd64 에서 함수 인자·결과를 스택 대신 레지스터로 넘기기 시작했습니다. 1.18 은
+이것을 arm64, ppc64/ppc64le, 모든 OS 의 amd64 로 넓혔습니다. arm64·ppc64 에서 벤치마크는 "typical performance
+improvements of 10% or more" 를 보였습니다. <!--CITE key=relnotes-1.18 sec="Compiler"--></p>
+<div class="note"><b>숫자 둘</b> — 발표 글의 표제는 Apple M1·ARM64·PowerPC64 에서 "up to 20%" 입니다.
+<!--CITE key=blog-go1.18 sec="20% Performance Improvements"--> 노트의 "10% 이상" 과 글의 "최대 20%" 는
+같은 변화를 다른 말로 잰 것이고, 이 덱은 둘 다 재지 않습니다. 같은 절에 따르면 컴파일러는 range 루프나
+레이블 붙은 for 가 있는 함수도 인라인할 수 있게 되었습니다.</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v118-append">
+<h3>append 가 늘리는 공식 <span class="vt v118">1.18</span></h3>
+<p class="why">새 배열을 잡아야 할 때 얼마나 크게 잡을지 정하는 공식을 바꿨습니다. 노트의 말로는
+"less prone to sudden transitions" — 배수가 갑자기 바뀌는 지점이 덜 생깁니다.
+<!--CITE key=relnotes-1.18 sec="Runtime"--></p>
+<!--CODE file=ex/06/appendgrow/main.go note=용량이 바뀔 때만 찍는다-->
+<!--GOVER v=1.18 file=ex/06/appendgrow note=1.27.1 에서의 동작-->
+<p class="cap">256 까지는 두 배이고, 그 뒤로는 배수가 서서히 줄어듭니다. 딱 떨어지지 않는 값은 메모리
+할당기의 크기 등급에 맞춰 올린 것입니다. 이 표는 1.27.1 의 결과이고, 1.17 과 비교한 것이 아닙니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-netip">
+<h3>net/netip — 작고, 불변이고, 비교되는 IP <span class="vt v118">1.18</span></h3>
+<p class="why"><code>net.IP</code> 는 바이트 슬라이스라 <code>==</code> 로 비교할 수 없고 맵의 키가 될 수 없습니다.
+새 <code>netip.Addr</code> 는 메모리를 덜 쓰고, 불변이며, 비교할 수 있습니다. IP+포트인
+<code>AddrPort</code>, CIDR 인 <code>Prefix</code> 도 함께 왔습니다.
+<!--CITE key=relnotes-1.18 sec="New net/netip package"--></p>
+<!--CODE file=ex/06/netip/main.go note=같은 주소를 두 방법으로 만들어 비교-->
+<!--GOVER v=1.18 file=ex/06/netip note=1.27.1 에서의 동작-->
+<p class="cap">net 패키지에도 <code>netip.AddrPort</code> 를 주고받는 UDP 메서드가 생겼고, 노트는 이것이
+할당 없는 입출력을 돕는다고 적습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-cut">
+<h3>strings.Cut <span class="vt v118">1.18</span></h3>
+<p class="why">구분자를 기준으로 문자열을 둘로 자릅니다. 노트는 <code>Index</code>·<code>IndexByte</code>·
+<code>IndexRune</code>·<code>SplitN</code> 의 흔한 쓰임 여럿을 대신하고 단순하게 한다고 적었습니다. bytes 에도
+같은 <code>Cut</code> 이 들어왔습니다. <!--CITE key=relnotes-1.18 sec="strings"--></p>
+<!--CODE file=ex/06/cut/main.go note=Index 로 자르기와 Cut-->
+<!--GOVER v=1.18 file=ex/06/cut note=1.27.1 에서의 동작-->
+<p class="cap">같은 판에 <code>strings.Clone</code> 도 들어왔습니다. 큰 문자열의 일부를 오래 붙들 때 원본 메모리를
+놓아주기 위한 복사입니다. <!--CITE key=api-1.18 sec="pkg strings, func Clone(string) string"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-small">
+<h3>작은 변화들 — 표준 라이브러리 <span class="vt v118">1.18</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td><code>Mutex.TryLock</code></td><td>잠겨 있지 않으면 잠그고 true <!--CITE key=relnotes-1.18 sec="sync"--></td></tr>
+<tr><td><code>utf8.AppendRune</code></td><td>룬의 UTF-8 인코딩을 바이트 슬라이스 뒤에 붙인다 <!--CITE key=relnotes-1.18 sec="unicode/utf8"--></td></tr>
+<tr><td><code>reflect.Pointer</code></td><td><code>Ptr</code>·<code>PtrTo</code> 의 새 이름. 옛 이름도 계속 동작 <!--CITE key=relnotes-1.18 sec="reflect"--></td></tr>
+</table></div>
+<!--CODE file=ex/06/small118/main.go note=셋을 한 번에-->
+<!--GOVER v=1.18 file=ex/06/small118 note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-template">
+<h3>템플릿의 {{break}}·{{continue}} <span class="vt v118">1.18</span></h3>
+<p class="why">range 안에서 반복을 끝내거나 다음으로 넘기는 명령이 생겼습니다. 그리고 <code>and</code>·<code>or</code>
+가 결과가 정해지면 나머지 인자를 평가하지 않게 되었습니다 — 인자가 함수 호출이면 차이가 납니다.
+<!--CITE key=relnotes-1.18 sec="text/template"--></p>
+<!--CODE file=ex/06/tmplbreak/main.go note=skip 은 건너뛰고 stop 에서 멈춘다. fail 은 부르면 panic-->
+<!--GOVER v=1.18 file=ex/06/tmplbreak note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v118-tls">
+<h3>TLS 클라이언트의 기본 최소판과 SHA-1 <span class="vt v118">1.18</span></h3>
+<p class="why"><code>Config.MinVersion</code> 을 비워 두면 클라이언트는 이제 TLS 1.2 부터 협상합니다. 서버 쪽 기본은
+그대로입니다. 그리고 crypto/x509 는 SHA-1 로 서명한 인증서를 거절합니다(자체 서명 루트는 예외).
+<!--CITE key=relnotes-1.18 sec="TLS 1.0 and 1.1 disabled by default client-side"-->
+<!--CITE key=relnotes-1.18 sec="Rejecting SHA-1 certificates"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>되돌리기</th><th>운명</th></tr>
+<tr><td><code>GODEBUG=tls10default=1</code></td><td>1.19 에서 지웠다 <!--CITE key=relnotes-1.19 sec="crypto/tls"--></td></tr>
+<tr><td><code>GODEBUG=x509sha1=1</code></td><td>1.19 에서 지울 계획을 미뤘고, 1.24 에서 지웠다
+<!--CITE key=godebug sec="Go 1.18"--></td></tr>
+</table></div>
+<p class="cap">두 설정 모두 1.27.1 에는 없어서 GODEBUG 짝을 보일 수 없습니다. SHA-1 에 대한 실제 공격은 2017년부터
+시연되었고, 공인 인증 기관은 2015년부터 SHA-1 인증서를 발급하지 않았다고 노트는 적습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-v118-quiz" data-quiz>
+<h3>Go 1.18 퀴즈</h3>
+<p class="q">Q. <code>func Sum[N int | float64](xs ...N) N</code> 에 <code>type Celsius float64</code> 의 값을
+넘기면 컴파일되지 않습니다. 왜이고, 제약을 어떻게 고쳐야 할까요? 그리고 왜 이 함수를
+<code>func Sum(xs ...Number)</code> 처럼 제약 인터페이스를 값의 타입으로 쓰는 식으로 쓸 수는 없을까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>int | float64</code> 의 타입 집합에는 int 와 float64 두 타입뿐이고, Celsius 는
+float64 와 다른 정의된 타입입니다. <code>~int | ~float64</code> 로 쓰면 밑바탕 타입이 float64 인 Celsius 도
+들어옵니다. 합집합이나 <code>~</code> 를 담은 인터페이스는 제약 전용이라 변수·매개변수의 타입이 될 수 없습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1.19 -->
+
+<article class="card section" id="p6-v119"><p class="chnum">2장</p><h2>Go 1.19</h2>
+<p class="chsub">메모리 모델 · atomic 타입 · GOMEMLIMIT · 문서 주석 · unix 빌드 제약 · <!--REL v=1.19--></p></article>
+
+<article class="card" id="p6-v119-overview">
+<h3>Go 1.19 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.19.html-->
+<p class="cap">1.18 뒤 다섯 달 만에 나왔고, 변화는 대부분 툴체인·런타임·라이브러리의 구현에 있습니다. 언어
+변경은 메서드 선언에서 타입 매개변수의 범위를 아주 조금 바로잡은 것 하나이고, 기존 프로그램은 영향이
+없습니다. <!--CITE key=relnotes-1.19 sec="Introduction to Go 1.19"-->
+<!--CITE key=relnotes-1.19 sec="Changes to the language"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v119-memmodel">
+<h3>메모리 모델 개정 <span class="vt v119">1.19</span></h3>
+<p class="why">Go 메모리 모델을 C, C++, Java, JavaScript, Rust, Swift 가 쓰는 모델에 맞춰 고쳤습니다. Go 는
+순차 일관적인(sequentially consistent) 원자 연산만 제공하고, 다른 언어의 더 느슨한 형태는 두지 않습니다.
+이 개정과 함께 쓰기 쉬운 atomic 타입이 들어왔습니다.
+<!--CITE key=relnotes-1.19 sec="Memory Model"--></p>
+<div class="note"><b>실행 예제가 없는 까닭</b> — 문서의 개정이라 go 명령으로 보일 동작이 없습니다. 원자 연산을
+쓰는 새 모양은 <a href="#p6-v119-atomic">다음 장</a>에 있습니다.</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v119-atomic">
+<h3>atomic.Int64 와 atomic.Pointer[T] <span class="vt v119">1.19</span></h3>
+<p class="why">새 타입들은 속의 값을 숨겨, 모든 접근이 원자 API 를 거치게 합니다. <code>Pointer[T]</code> 는
+호출하는 자리에서 <code>unsafe.Pointer</code> 로 바꿀 필요를 없앱니다. <code>Int64</code>·<code>Uint64</code> 는
+32비트 시스템에서도 구조체 안에서 64비트 경계에 저절로 맞춰집니다.
+<!--CITE key=relnotes-1.19 sec="New atomic types"--></p>
+<!--CODE file=ex/06/atomictypes/main.go note=필드 자체가 원자 타입-->
+<!--GOVER v=1.19 file=ex/06/atomictypes note=1.27.1 에서의 동작-->
+<div class="warn"><b>이전엔</b> — <code>int64</code> 필드에 <code>atomic.AddInt64(&amp;s.hits, 2)</code> 를 쓰다가 어느
+한 곳에서 <code>s.hits++</code> 로 그냥 읽고 쓰는 실수를 막을 방법이 없었습니다. 새 타입에는 그런 필드가
+없습니다. <code>Pointer[T]</code> 는 1.18 의 제네릭이 표준 라이브러리 API 에 쓰인 예입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-memlimit">
+<h3>부드러운 메모리 상한 — GOMEMLIMIT <span class="vt v119">1.19</span></h3>
+<p class="why">런타임이 관리하는 메모리 전체(힙과 그 밖)의 상한을 둘 수 있게 되었습니다. 바이너리 매핑, 다른
+언어가 관리하는 메모리 같은 바깥 것은 빠집니다. <code>debug.SetMemoryLimit</code> 이나 같은 뜻의 환경 변수
+<code>GOMEMLIMIT</code> 로 정하고, <code>GOGC</code> 와 함께 작동합니다.
+<!--CITE key=relnotes-1.19 sec="Runtime"--></p>
+<!--CODE file=ex/06/memlimit/main.go note=음수를 넘기면 읽기만 한다-->
+<!--GOVER v=1.19 file=ex/06/memlimit note=기본은 상한 없음-->
+<!--GOVER v=1.19 file=ex/06/memlimit cmd="GOMEMLIMIT=256MiB GOGC=off go run ." tag=env note=환경 변수로-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-gcoff">
+<h3>GOGC=off 여도 상한 앞에서는 GC 가 돈다 <span class="vt v119">1.19</span></h3>
+<p class="why">상한은 <code>GOGC=off</code> 에서도 지켜집니다. 그래서 프로그램이 주어진 메모리를 끝까지 쓰게 할 수
+있습니다. 대신 살아 있는 힙이 상한에 가까워 GC 가 헛돌지 않도록, 런타임은 GC 의 CPU 사용을 (쉬는 시간을 빼고)
+50% 로 묶습니다. <!--CITE key=relnotes-1.19 sec="Runtime"--></p>
+<!--CODE file=ex/06/gclimit/main.go note=1 MiB 씩 96번 버리는 쓰레기-->
+<!--GOVER v=1.19 file=ex/06/gclimit note=기본(GOGC=100)-->
+<!--GOVER v=1.19 file=ex/06/gclimit cmd="GOGC=off go run ." tag=off note=GC 끄기 — 힙이 자라기만 한다-->
+<!--GOVER v=1.19 file=ex/06/gclimit cmd="GOGC=off GOMEMLIMIT=32MiB go run ." tag=limit note=끈 채로 상한만-->
+<div class="warn"><b>함정</b> — 상한은 "부드러운" 것입니다. 살아 있는 데이터가 상한보다 크면 런타임은 멈추지 않고
+메모리를 더 씁니다. 노트는 CPU 상한이 작동한 마지막 GC 주기를 알려 주는 지표
+<code>/gc/limiter/last-enabled:gc-cycle</code> 도 소개합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-doc">
+<h3>문서 주석에 링크·목록·제목 <span class="vt v119">1.19</span></h3>
+<p class="why">문서 주석이 링크, 목록, 더 분명한 제목을 지원합니다. 그리고 gofmt 가 주석을 다시 써서 렌더링될
+뜻이 드러나게 합니다. <!--CITE key=relnotes-1.19 sec="Doc Comments"--></p>
+<!--CODE file=ex/06/docfmt/tally.go note=1.19 이전에 흔하던 모양-->
+<!--GOVER v=1.19 file=ex/06/docfmt cmd="gofmt -d tally.go" tag=gofmt note=gofmt 가 제안하는 고침-->
+<!--GOVER v=1.19 file=ex/06/docfmt cmd="go doc -all ." tag=doc note=go doc 이 보는 모양-->
+<p class="cap">제목은 <code># </code> 로 시작하는 줄이 되고, 들여 쓴 코드 앞에는 빈 줄이 들어갑니다. 들여 쓴
+<code>-</code> 줄은 목록으로 읽힙니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-docpkg">
+<h3>go/doc/comment — 주석을 읽고 다시 쓰는 패키지 <span class="vt v119">1.19</span></h3>
+<p class="why">새 패키지 go/doc/comment 는 문서 주석을 구문 분석하고 다시 형식화하며, HTML·Markdown·텍스트로
+렌더링합니다. gofmt 와 go doc 이 쓰는 그 규칙입니다. <!--CITE key=relnotes-1.19 sec="Doc Comments"--></p>
+<!--CODE file=ex/06/doccomment/main.go note=[이름] 은 문서 링크, [the spec] 은 URL 링크-->
+<!--GOVER v=1.19 file=ex/06/doccomment note=Markdown 으로 렌더링-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-unix">
+<h3>빌드 제약 unix <span class="vt v119">1.19</span></h3>
+<p class="why"><code>//go:build unix</code> 는 GOOS 가 유닉스나 유닉스 비슷한 시스템일 때 참입니다. 1.19 에서는
+aix, android, darwin, dragonfly, freebsd, hurd, illumos, ios, linux, netbsd, openbsd, solaris 입니다. 앞으로 새로
+지원하는 OS 가 더해질 수 있습니다. <!--CITE key=relnotes-1.19 sec="New unix build constraint"--></p>
+<!--CODE file=ex/06/unixtag/family_unix.go note=unix-->
+<!--CODE file=ex/06/unixtag/family_other.go note=!unix-->
+<!--CODE file=ex/06/unixtag/suffix_unix.go note=이름에만 _unix-->
+<!--CODE file=ex/06/unixtag/main.go note=어느 쪽이 골렸나-->
+<!--GOVER v=1.19 file=ex/06/unixtag note=android 는 unix-->
+<!--GOVER v=1.19 file=ex/06/unixtag cmd="GOOS=windows go list -f {{.GoFiles}} ." tag=windows note=windows 로 빌드하면-->
+<div class="warn"><b>함정</b> — <code>unix</code> 는 파일 이름 접미사로는 통하지 않습니다. windows 목록에도
+<code>suffix_unix.go</code> 가 들어 있습니다. <code>family_unix.go</code> 를 가르는 것은 이름이 아니라
+<code>//go:build unix</code> 줄입니다. 1.27.1 에서의 동작입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-tools">
+<h3>작은 변화들 — go 명령 <span class="vt v119">1.19</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td><code>go list -json=필드,…</code></td><td>필요한 필드만 채우고, 그 밖의 계산은 건너뛸 수 있다</td></tr>
+<tr><td><code>-trimpath</code> 기록</td><td>빌드 설정에 남아 <code>go version -m</code> 으로 보인다(<a href="#p6-v118-buildinfo">1장</a>의 캡처)</td></tr>
+<tr><td><code>go generate</code>·<code>go test</code></td><td>하위 프로세스의 PATH 맨 앞에 <code>GOROOT/bin</code> 을 둔다</td></tr>
+</table></div>
+<!--GOVER v=1.19 file=ex/06/unixtag cmd="go list -json=ImportPath,GoFiles ." tag=json note=필드 둘만-->
+<p class="cap">모두 같은 절입니다. <!--CITE key=relnotes-1.19 sec="Go command"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-execdot">
+<h3>PATH 의 "." 에서 찾은 실행 파일은 오류 <span class="vt v119">1.19</span></h3>
+<p class="why"><code>exec.Command</code> 와 <code>LookPath</code> 가 PATH 검색 결과를 현재 디렉터리 기준 상대 경로로
+찾지 않습니다. 흔한 보안 문제의 원인을 없앤 것이지만, 현재 디렉터리의 <code>prog</code> 를
+<code>exec.Command("prog")</code> 로 돌리던 프로그램은 깨질 수 있습니다.
+<!--CITE key=relnotes-1.19 sec="PATH lookups"--></p>
+<!--CODE file=ex/06/execdot/main.go note=현재 디렉터리의 tool, PATH 는 "."-->
+<!--GOVER v=1.19 file=ex/06/execdot note=exec.ErrDot-->
+<!--GOVER v=1.19 godebug=execerrdot=0 file=ex/06/execdot note=옛 동작-->
+<div class="note"><b>되돌리기</b> — <code>execerrdot</code> 설정은 1.19 에 생겼고 지울 계획이 없습니다.
+<!--CITE key=godebug sec="Go 1.19"--> 정말 현재 디렉터리의 것을 돌리려면 <code>./tool</code> 처럼 경로를 적습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-netctx">
+<h3>net 의 시간 초과와 context.DeadlineExceeded <span class="vt v119">1.19</span></h3>
+<p class="why">net 패키지의 함수가 "I/O timeout" 오류를 돌려주면 이제 <code>errors.Is(err,
+context.DeadlineExceeded)</code> 를 만족하고, "operation was canceled" 는 <code>context.Canceled</code> 를
+만족한다고 노트는 적습니다. 오류 문장은 그대로 둔 채입니다. <!--CITE key=relnotes-1.19 sec="net"--></p>
+<!--CODE file=ex/06/netctx/main.go note=127.0.0.1 안에서 시한이 지난 연결과 읽기-->
+<!--GOVER v=1.19 file=ex/06/netctx note=1.27.1 에서의 동작-->
+<div class="warn"><b>함정</b> — 1.27.1 에서 context 시한으로 실패한 <b>연결</b>은 <code>context.DeadlineExceeded</code>
+와 맞지만, <code>SetReadDeadline</code> 으로 실패한 <b>읽기</b>는 <code>os.ErrDeadlineExceeded</code> 와만 맞습니다.
+둘 다 <code>Timeout()</code> 은 참입니다. 시간 초과를 가리려면 <code>net.Error</code> 의 <code>Timeout()</code> 이 가장
+넓게 통합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-append">
+<h3>fmt.Append·Appendf·Appendln <span class="vt v119">1.19</span></h3>
+<p class="why">형식화한 결과를 문자열로 만들지 않고 바이트 슬라이스 뒤에 바로 붙입니다.
+<!--CITE key=relnotes-1.19 sec="fmt"--> encoding/binary 에도 <code>AppendUvarint</code> 와
+<code>AppendByteOrder</code> 가 생겼습니다. <!--CITE key=relnotes-1.19 sec="encoding/binary"--></p>
+<!--CODE file=ex/06/appendf/main.go note=버퍼 하나에 이어 붙이기-->
+<!--GOVER v=1.19 file=ex/06/appendf note=1.27.1 에서의 동작-->
+<!--CODE file=ex/06/appendf/append_test.go sym=BenchmarkAppendf note=Sprintf 판과 나란한 벤치마크-->
+<!--GOVER v=1.19 file=ex/06/appendf cmd="go test -run XXX -bench . -benchmem -benchtime=10000x ." tag=bench note=할당 수만 본다-->
+<p class="cap"><code>Sprintf</code> 는 중간 문자열 하나를 할당하고, <code>Appendf</code> 는 용량이 있는 버퍼에 곧장
+씁니다. 벤치마크 소스 전체는 <code>append_test.go</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-sortfind">
+<h3>pdqsort 와 sort.Find <span class="vt v119">1.19</span></h3>
+<p class="why">정렬 알고리즘을 pattern-defeating quicksort 로 다시 써서 흔한 여러 경우에 빨라졌습니다. 새
+<code>sort.Find</code> 는 <code>Search</code> 와 비슷하지만 같은 값을 찾았는지를 불리언으로 함께 돌려줍니다.
+<!--CITE key=relnotes-1.19 sec="sort"--></p>
+<!--CODE file=ex/06/sortfind/main.go note=Search 와 손 비교, 그리고 Find-->
+<!--GOVER v=1.19 file=ex/06/sortfind note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-small">
+<h3>작은 변화들 — 표준 라이브러리 <span class="vt v119">1.19</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td><code>url.JoinPath</code></td><td>경로 조각들을 이어 새 URL 을 만든다 <!--CITE key=relnotes-1.19 sec="net/url"--></td></tr>
+<tr><td><code>flag.TextVar</code></td><td><code>TextUnmarshaler</code> 면 무엇이든 플래그로 — big.Int, netip.Addr, time.Time <!--CITE key=relnotes-1.19 sec="flag"--></td></tr>
+<tr><td><code>Duration.Abs</code></td><td>−2⁶³ 을 2⁶³−1 로 바꾸는 안전한 절댓값 <!--CITE key=relnotes-1.19 sec="time"--></td></tr>
+</table></div>
+<!--CODE file=ex/06/small119/main.go note=셋을 한 번에-->
+<!--GOVER v=1.19 file=ex/06/small119 note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-vet">
+<h3>vet — errors.As 에 *error <span class="vt v119">1.19</span></h3>
+<p class="why">vet 의 errorsas 검사가 <code>errors.As</code> 의 둘째 인자로 <code>*error</code> 를 넘기는 흔한 실수를
+보고합니다. <!--CITE key=relnotes-1.19 sec="Vet"--></p>
+<!--CODE file=ex/06/vetas/main.go note=모든 오류는 error 이므로 늘 참-->
+<!--GOVER v=1.19 file=ex/06/vetas cmd="go vet ." tag=vet note=vet 이 짚는다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v119-runtime">
+<h3>작은 변화들 — 런타임과 컴파일러 <span class="vt v119">1.19</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td>첫 고루틴 스택</td><td>지금까지의 평균 스택 사용량으로 정한다. 평균보다 적게 쓰는 고루틴은 최대 두 배를 낭비하는 대신 초기 성장·복사를 줄인다</td></tr>
+<tr><td>열린 파일 상한</td><td>os 를 가져오는 유닉스 프로그램은 RLIMIT_NOFILE 의 soft 한도를 hard 한도까지 올린다</td></tr>
+<tr><td>치명 오류 트레이스</td><td>동시 맵 쓰기 같은 복구할 수 없는 오류는 런타임 정보를 뺀 짧은 트레이스를 찍는다(GOTRACEBACK=system·crash 는 예외)</td></tr>
+</table></div>
+<p class="cap">셋 모두 같은 절입니다. <!--CITE key=relnotes-1.19 sec="Runtime"--> 컴파일러는 큰 정수·문자열
+switch 를 점프 테이블로 만들어 "on the order of 20% faster" 일 수 있습니다(amd64·arm64).
+<!--CITE key=relnotes-1.19 sec="Compiler"--> 경쟁 탐지기는 thread sanitizer v3 으로 올라 "typically 1.5x to 2x
+faster" 입니다. <!--CITE key=relnotes-1.19 sec="runtime/race"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-v119-quiz" data-quiz>
+<h3>Go 1.19 퀴즈</h3>
+<p class="q">Q. 컨테이너 메모리 한도가 512 MiB 인 서비스를 <code>GOMEMLIMIT=450MiB GOGC=off</code> 로 돌립니다.
+평소에는 GC 가 거의 돌지 않아 빠릅니다. 그런데 살아 있는 데이터가 480 MiB 로 늘면 무슨 일이 생길까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 상한은 부드러운 것이라 런타임은 450 MiB 를 넘겨서라도 프로그램을 계속 돌립니다. 그 전에
+힙이 상한에 붙으면 GC 가 자주 돌지만, 런타임이 GC 의 CPU 사용을 50% 로 묶어 헛돌기를 막습니다. 살아 있는 데이터
+자체가 컨테이너 한도를 넘으면 OOM 은 피할 수 없습니다 — 상한은 쓰레기를 치우는 시점을 정할 뿐입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1.20 -->
+
+<article class="card section" id="p6-v120"><p class="chnum">3장</p><h2>Go 1.20</h2>
+<p class="chsub">슬라이스→배열 · errors.Join · 프로그램 커버리지 · PGO 미리보기 · crypto/ecdh · <!--REL v=1.20--></p></article>
+
+<article class="card" id="p6-v120-overview">
+<h3>Go 1.20 한눈에</h3>
+<!--TABLE file=out/tbl_rel_1.20.html-->
+<p class="cap">1.19 뒤 여섯 달 만의 릴리스로, 변화 대부분은 툴체인·런타임·라이브러리의 구현에 있습니다. 언어 변경은
+넷 — 슬라이스→배열 변환, unsafe 의 새 함수 셋, 구조체·배열 비교 순서의 명시, 인터페이스 같은 타입의 comparable
+만족입니다. <!--CITE key=relnotes-1.20 sec="Introduction to Go 1.20"-->
+<!--CITE key=relnotes-1.20 sec="Changes to the language"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v120-slicearray">
+<h3>슬라이스를 배열로 바로 변환 <span class="vt v120">1.20</span></h3>
+<p class="why">1.17 이 슬라이스를 배열 <b>포인터</b>로 바꾸는 변환을 들였습니다. 1.20 은 배열 자체로의 변환을
+더해, <code>*(*[4]byte)(x)</code> 대신 <code>[4]byte(x)</code> 로 씁니다.
+<!--CITE key=relnotes-1.20 sec="Changes to the language"--></p>
+<!--CODE file=ex/06/slice2array/main.go note=배열 변환은 복사, 포인터 변환은 공유-->
+<!--GOVER v=1.20 file=ex/06/slice2array note=go 1.20-->
+<!--GOVER v=1.19 file=ex/06/slice2array note=사본의 go 줄만 1.19 로-->
+<div class="warn"><b>함정</b> — 길이는 실행 중에 검사합니다. 슬라이스가 배열보다 짧으면 컴파일은 되고 panic 이
+납니다. 그리고 배열 변환은 그 순간의 복사본이라, 뒤에 슬라이스를 바꿔도 따라가지 않습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-unsafe">
+<h3>unsafe.String·StringData·SliceData <span class="vt v120">1.20</span></h3>
+<p class="why">1.17 의 <code>unsafe.Slice</code> 와 함께, 슬라이스와 문자열 값을 그 내부 표현에 기대지 않고 만들고
+분해하는 수단이 갖춰졌습니다. <!--CITE key=relnotes-1.20 sec="Changes to the language"--></p>
+<!--CODE file=ex/06/unsafestr/main.go note=복사 없이 []byte ↔ string-->
+<!--GOVER v=1.20 file=ex/06/unsafestr note=같은 바이트를 가리킨다-->
+<!--GOVER v=1.19 file=ex/06/unsafestr note=go 1.19 — 셋 다 1.20 의 것-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-comparable">
+<h3>인터페이스도 comparable 을 만족한다 <span class="vt v120">1.20</span></h3>
+<p class="why">1.18·1.19 에서는 <code>comparable</code> 제약에 <code>any</code> 같은 인터페이스를 넣을 수 없었습니다.
+비교가 실행 중에 panic 할 수 있어 "엄격하게 비교 가능" 하지 않기 때문입니다. 1.20 은 사용자가 만든 제네릭 맵의
+키처럼 흔한 쓰임을 위해 이를 허용했습니다. <!--CITE key=relnotes-1.20 sec="Changes to the language"--></p>
+<!--CODE file=ex/06/compiface/main.go note=Set[any] — 키는 무엇이든-->
+<!--GOVER v=1.20 file=ex/06/compiface note=슬라이스를 넣는 순간 panic-->
+<!--GOVER v=1.19 file=ex/06/compiface note=go 1.19 — 인스턴스화부터 거절-->
+<div class="note"><b>저울질</b> — 컴파일 때의 보장 일부를 내주고 쓰임새를 얻었습니다. go/types 에는 "제약을
+만족한다" 와 "인터페이스를 구현한다" 를 가르는 <code>Satisfies</code> 함수가 새로 생겼습니다.
+<!--CITE key=relnotes-1.20 sec="go/types"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-structcmp">
+<h3>구조체는 필드 순서대로, 첫 차이에서 멈춰 비교 <span class="vt v120">1.20</span></h3>
+<p class="why">명세가 구조체 값의 비교를 필드 선언 순서대로 하나씩, 첫 불일치에서 멈추는 것으로 정했습니다.
+배열도 인덱스 순서대로입니다. 전에는 첫 불일치 뒤의 필드도 비교해야 하는 것처럼 읽힐 수 있었고, 그 차이는
+어떤 비교가 panic 하느냐를 가릅니다. <!--CITE key=relnotes-1.20 sec="Changes to the language"--></p>
+<!--CODE file=ex/06/structcmp/main.go note=둘째 필드는 비교할 수 없는 함수 값-->
+<!--GOVER v=1.20 file=ex/06/structcmp note=1.27.1 에서의 동작-->
+<p class="cap">첫 필드가 다르면 둘째 필드는 보지 않으므로 panic 이 없습니다. 첫 필드가 같으면 둘째 필드의 함수
+값을 비교하다 panic 합니다. 명세를 고친 것이라 go 줄로는 갈리지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-localtype">
+<h3>제네릭 함수 안의 타입 선언 <span class="vt v120">1.20</span></h3>
+<p class="why">컴파일러 앞단이 내부 데이터를 다루는 새 방식으로 바뀌어, 제네릭 타입의 문제 여럿이 고쳐지고
+제네릭 함수·메서드 안에 타입을 선언할 수 있게 되었습니다. 1.18 노트가 첫째로 꼽은 한계가 풀린 것입니다.
+<!--CITE key=relnotes-1.20 sec="Compiler"--></p>
+<!--CODE file=ex/06/localtype/main.go note=entry 가 T 를 쓰는 지역 타입-->
+<!--GOVER v=1.20 file=ex/06/localtype note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-compiler">
+<h3>빌드 속도를 되찾다 <span class="vt v120">1.20</span></h3>
+<p class="why">"Go 1.18 and 1.19 saw regressions in build speed" — 제네릭과 그 후속 작업 탓이었습니다. 1.20 은
+빌드 속도를 "up to 10%" 끌어올려 1.17 수준으로 돌려놓았고, 만들어진 코드도 대체로 조금 빨라졌습니다.
+<!--CITE key=relnotes-1.20 sec="Compiler"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>같은 판의 구현 변화</th><th>내용</th></tr>
+<tr><td>익명 인터페이스 순환</td><td>기본으로 컴파일 오류. 문제가 보고되지 않으면 1.22 명세에서 금지할 계획 <!--CITE key=relnotes-1.20 sec="Compiler"--></td></tr>
+<tr><td>심볼 이름</td><td>컴파일러가 만든 심볼의 접두사가 <code>go.</code>·<code>type.</code> 에서 <code>go:</code>·<code>type:</code> 로 <!--CITE key=relnotes-1.20 sec="Linker"--></td></tr>
+<tr><td>GC 내부 구조</td><td>메모리 부담을 줄이고 전체 CPU 성능을 "up to 2%" 높였다 <!--CITE key=relnotes-1.20 sec="Runtime"--></td></tr>
+</table></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v120-cover">
+<h3>테스트가 아닌 프로그램의 커버리지 <span class="vt v120">1.20</span></h3>
+<p class="why"><code>go test -cover</code> 는 1.2 부터 있었지만 패키지 단위였습니다. 실행 파일 전체를 돌리는 통합
+시험은 <code>go test</code> 가 아니라 <code>go build</code> 로 만든 바이너리를 쓰므로 커버리지를 모을 길이
+없었습니다. 1.20 은 <code>go build -cover</code> 로 계측한 바이너리가 <code>GOCOVERDIR</code> 에 결과를 남기게
+했습니다. <!--CITE key=relnotes-1.20 sec="Cover"-->
+<!--CITE key=blog-integration-test-coverage sec="Code coverage for Go integration tests"--></p>
+<!--CODE file=ex/06/cover/main.go note=-h 가 없으면 grade(95) 만 부른다-->
+<!--GOVER v=1.20 file=ex/06/cover cmd="go run -cover ." tag=nodir note=GOCOVERDIR 가 없으면 경고-->
+<!--GOVER v=1.20 file=ex/06/cover cmd="GOCOVERDIR=. go run -cover ." tag=dir note=현재 디렉터리에 남긴다-->
+<!--GOVER v=1.20 file=ex/06/cover cmd="go tool covdata func -i=../06-cover__go1.20-dir" tag=func note=앞 실행의 작업 사본을 읽는다-->
+<p class="cap">함수별 비율 — <code>return "B"</code> 와 <code>-h</code> 가지를 밟지 않았습니다. 여러 번 돌린 결과를 합치는
+<code>go tool covdata merge</code>, 옛 텍스트 형식으로 바꾸는 <code>textfmt</code> 도 있습니다.
+<!--CITE key=blog-integration-test-coverage sec="Working with coverage data files"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-pgo">
+<h3>PGO 미리보기 — 프로파일을 먹인 인라인 <span class="vt v120">1.20</span></h3>
+<p class="why">실행 중에 모은 CPU 프로파일(pprof 형식)을 <code>go build -pgo=파일</code> 로 넘기면, 컴파일러가 자주
+불리는 호출 자리를 더 과감하게 인라인합니다. <code>-pgo=auto</code> 는 main 패키지 디렉터리의
+<code>default.pgo</code> 를 찾습니다. <!--CITE key=relnotes-1.20 sec="Compiler"-->
+<!--CITE key=relnotes-1.20 sec="Go command"--></p>
+<!--CODE file=ex/06/pgo/main.go note=-cpuprofile 로 default.pgo 를 만든 프로그램-->
+<!--GOVER v=1.20 file=ex/06/pgo cmd="go build -pgo=off -gcflags=-m ." tag=off lines=11-15 note=프로파일 없이 — mix 는 인라인 예산(80) 초과-->
+<!--GOVER v=1.20 file=ex/06/pgo cmd="go build -pgo=default.pgo -gcflags=-m ." tag=pgo lines=12-17 note=프로파일을 주면 뜨거운 호출 자리에 인라인-->
+<p class="cap">프로파일 <code>default.pgo</code> 는 이 기계에서 <code>-cpuprofile</code> 로 한 번 떠서 예제에 넣어
+두었습니다(pprof 도구 없이 runtime/pprof 만으로). 캡처는 인라인 판단 줄만 잘라 보였습니다. 발표 글의 예에서는
+약 2.6% 빨라졌고, "typically between 2% and 4%" 라고 적었습니다. 이 덱은 속도를 재지 않습니다.
+<!--CITE key=blog-pgo-preview sec="Evaluation"--> 1.21 에서 기본값이 <code>-pgo=auto</code> 가 됩니다 <!--CITE key=relnotes-1.21 sec="Go command"-->(<a href="#p7">7부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-gotools">
+<h3>작은 변화들 — go 명령 <span class="vt v120">1.20</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td><code>$GOROOT/pkg</code></td><td>표준 라이브러리의 미리 컴파일한 .a 를 더는 싣지 않는다. 필요할 때 빌드해 빌드 캐시에 둔다</td></tr>
+<tr><td><code>go test -skip</code></td><td>패턴에 맞는 테스트·하위 테스트·예제를 건너뛴다</td></tr>
+<tr><td><code>go -C 디렉터리</code></td><td>명령을 돌리기 전에 디렉터리를 옮긴다</td></tr>
+</table></div>
+<!--CODE file=ex/06/skip/skip_test.go note=테스트 셋, 하위 테스트 둘-->
+<!--GOVER v=1.20 file=ex/06/skip cmd="go test -v -run Table -skip TestTable/huge ." tag=sub note=하위 테스트 하나만 빼기-->
+<!--GOVER v=1.20 file=ex/06/skip cmd="go list -f {{.Target}} fmt" tag=target note=fmt 의 설치 위치 — 없음-->
+<!--GOVER v=1.20 godebug=installgoroot=all file=ex/06/skip cmd="go list -f {{.Target}} fmt" tag=target note=옛 동작-->
+<p class="cap">모두 같은 절입니다. <!--CITE key=relnotes-1.20 sec="Go command"--> 옛 동작은 GODEBUG
+<code>installgoroot</code> 로 돌아옵니다. <!--CITE key=godebug sec="Go 1.20"--> C 컴파일러가 없는 시스템에서는
+<code>CGO_ENABLED</code> 의 기본값이 0 이 되었습니다. <!--CITE key=relnotes-1.20 sec="Cgo"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-vet">
+<h3>vet — t.Parallel 뒤의 루프 변수, 2006-02-01 <span class="vt v120">1.20</span></h3>
+<p class="why">하위 테스트 안에서 <code>t.Parallel()</code> 을 부른 뒤 루프 변수를 쓰면, 다른 반복의 값을 보거나
+(대개 사례가 건너뛰어짐) 동기화 없는 접근이 됩니다. vet 이 이것을 잡고, <code>if</code>·<code>switch</code>·
+<code>select</code> 안의 마지막 문장까지 들여다봅니다.
+<!--CITE key=relnotes-1.20 sec="Improved detection of loop variable capture by nested functions"--> ISO 8601 을
+쓰려다 흔히 틀리는 yyyy-dd-mm 형식도 짚습니다. <!--CITE key=relnotes-1.20 sec="New diagnostic for incorrect time formats"--></p>
+<!--CODE file=ex/06/vetloop/loop_test.go note=병렬 하위 테스트가 tc 를 잡는다-->
+<!--GOVER v=1.20 file=ex/06/vetloop cmd="go vet ." tag=vet note=go 1.20-->
+<!--GOVER v=1.22 file=ex/06/vetloop cmd="go vet ." tag=vet note=go 1.22 — 경고가 사라진다-->
+<!--CODE file=ex/06/vettime/date.go note=달과 날이 뒤바뀐 형식-->
+<!--GOVER v=1.20 file=ex/06/vettime cmd="go vet ." tag=vet note=고칠 형식까지 알려 준다-->
+<p class="cap">go 줄이 1.22 이상이면 루프 변수가 반복마다 새로 생기므로 vet 은 더는 경고하지 않습니다. 그
+이야기는 <a href="#p7">7부</a>에서 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-errjoin">
+<h3>여러 오류를 감싸기 — errors.Join <span class="vt v120">1.20</span></h3>
+<p class="why">한 오류가 여러 오류를 감쌀 수 있게 되었습니다. <code>Unwrap() []error</code> 를 가진 오류가 그것이고,
+<code>errors.Is</code>·<code>As</code> 가 그 모두를 살핍니다. <code>fmt.Errorf</code> 는 <code>%w</code> 를 여러 번
+받고, <code>errors.Join</code> 이 오류 목록을 감쌉니다. <!--CITE key=relnotes-1.20 sec="Wrapping multiple errors"--></p>
+<!--CODE file=ex/06/errjoin/main.go note=검증 오류를 모아 한 번에-->
+<!--GOVER v=1.20 file=ex/06/errjoin note=1.27.1 에서의 동작-->
+<div class="note"><b>이전엔</b> — 오류 감싸기(1.13, <a href="#p5">5부</a>)는 한 줄 사슬이었습니다. 여럿을 모으려면
+직접 만든 타입이나 외부 모듈이 필요했습니다. Join 한 오류의 <code>Error()</code> 는 각 오류를 줄바꿈으로
+잇습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-cause">
+<h3>취소에 이유를 — context.WithCancelCause <span class="vt v120">1.20</span></h3>
+<p class="why">주어진 오류로 컨텍스트를 취소하고, 새 함수 <code>context.Cause</code> 로 그 오류를 꺼냅니다.
+<!--CITE key=relnotes-1.20 sec="context"--></p>
+<!--CODE file=ex/06/cause/main.go note=Err 는 그대로, Cause 가 이유를 준다-->
+<!--GOVER v=1.20 file=ex/06/cause note=1.27.1 에서의 동작-->
+<p class="cap"><code>ctx.Err()</code> 의 값은 여전히 <code>context.Canceled</code> 라서 기존 코드는 그대로 돕니다. 이유는
+자식 컨텍스트에도 전해지고, 이유 없이(<code>nil</code>) 취소하면 <code>Cause</code> 는 <code>Err</code> 와 같습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-ecdh">
+<h3>crypto/ecdh <span class="vt v120">1.20</span></h3>
+<p class="why">NIST 곡선과 Curve25519 위의 타원 곡선 디피-헬먼 키 합의를 위한 새 패키지입니다. ECDH 에는 저수준
+crypto/elliptic 대신 이것을 쓰라고 노트는 권합니다. <!--CITE key=relnotes-1.20 sec="New crypto/ecdh package"--></p>
+<!--CODE file=ex/06/ecdh/main.go note=양쪽이 같은 비밀을 얻는지만 본다(키는 매번 다르다)-->
+<!--GOVER v=1.20 file=ex/06/ecdh note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-respctl">
+<h3>http.ResponseController <span class="vt v120">1.20</span></h3>
+<p class="why">요청마다의 추가 기능은 그동안 <code>Flusher</code> 같은 선택적 인터페이스로 더해 왔고, 노트는 그것이
+"not discoverable and clumsy to use" 라고 적습니다. 새 타입이 그 자리를 맡고, 요청별 읽기·쓰기 시한을 정하는
+메서드가 함께 왔습니다. <!--CITE key=relnotes-1.20 sec="HTTP ResponseController"--></p>
+<!--CODE file=ex/06/respctl/main.go note=서버 WriteTimeout 을 이 요청만 풀고, 조각마다 Flush-->
+<!--GOVER v=1.20 file=ex/06/respctl note=127.0.0.1 안에서만-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-rewrite">
+<h3>ReverseProxy 의 Rewrite 훅 <span class="vt v120">1.20</span></h3>
+<p class="why">옛 <code>Director</code> 훅은 나가는 요청만 봅니다. 새 <code>Rewrite</code> 는 들어온 요청과 나갈 요청을
+함께 받아, 악의적인 요청이 훅이 넣은 헤더를 지우게 만드는 경우를 피합니다. <code>SetURL</code> 은 Host 헤더까지
+바꾸고, <code>SetXForwarded</code> 는 X-Forwarded-* 를 적습니다(Rewrite 를 쓰면 기본으로 넣지 않습니다).
+<!--CITE key=relnotes-1.20 sec="New ReverseProxy Rewrite hook"--></p>
+<!--CODE file=ex/06/rewrite/main.go note=백엔드가 받은 것을 되돌려준다-->
+<!--GOVER v=1.20 file=ex/06/rewrite note=127.0.0.1 안에서만-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-rand">
+<h3>math/rand 전역 생성기의 자동 씨앗 <span class="vt v120">1.20</span></h3>
+<p class="why"><code>rand.Int</code> 같은 최상위 함수가 쓰는 전역 생성기가 이제 무작위 값으로 씨앗을 받고,
+<code>rand.Seed</code> 는 폐기 예정이 되었습니다. 같은 수열이 필요하면 <code>rand.New(rand.NewSource(seed))</code>
+로 자기 생성기를 만들라는 것이 노트의 권고입니다. <!--CITE key=relnotes-1.20 sec="math/rand"--></p>
+<!--CODE file=ex/06/randseed/main.go note=전역 수열이 Seed(1) 수열과 같은가-->
+<!--GOVER v=1.20 file=ex/06/randseed note=다르다 — 매번 다른 씨앗-->
+<!--GOVER v=1.20 godebug=randautoseed=0 file=ex/06/randseed note=옛 동작 — 씨앗 1-->
+<!--GOVER v=1.19 file=ex/06/randseed note=go 줄을 1.19 로 내려도 그대로-->
+<div class="warn"><b>함정</b> — 이 설정은 go 줄로 기본값이 바뀌지 않습니다(GODEBUG 표에 기본값 변경 판이 없음).
+<!--CITE key=godebug sec="Go 1.20"--> 그래서 옛 동작은 환경 변수로만 돌아옵니다. 테스트가 전역 생성기의 고정 수열에
+기댔다면 1.20 에서 조용히 깨집니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-zipslip">
+<h3>위험한 경로의 zip·tar, 그리고 filepath.IsLocal <span class="vt v120">1.20</span></h3>
+<p class="why"><code>GODEBUG=zipinsecurepath=0</code> 이면 <code>zip.NewReader</code> 가 절대 경로, 현재 디렉터리 밖을
+가리키는 경로를 가진 항목에 <code>ErrInsecurePath</code> 를 돌려줍니다. tar 에도 같은 설정이 있습니다. 새
+<code>filepath.IsLocal</code> 은 경로가 어휘적으로 디렉터리 안에 머무는지 알려 줍니다.
+<!--CITE key=relnotes-1.20 sec="archive/zip"--> <!--CITE key=relnotes-1.20 sec="path/filepath"--></p>
+<!--CODE file=ex/06/zipslip/main.go note=../../etc 로 나가려는 항목-->
+<!--GOVER v=1.20 file=ex/06/zipslip note=기본 — 오류 없음-->
+<!--GOVER v=1.20 godebug=zipinsecurepath=0 file=ex/06/zipslip note=검사를 켜면-->
+<p class="cap">1.20 의 기본값은 1(옛 동작 유지)이고, 앞으로 0 이 될 수 있다고 GODEBUG 문서는 적습니다.
+<!--CITE key=godebug sec="Go 1.20"--> 오류와 함께 리더도 돌려주므로 확인한 뒤 계속 읽을 수 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-small">
+<h3>작은 변화들 — 표준 라이브러리 <span class="vt v120">1.20</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td><code>time.DateTime</code>·<code>DateOnly</code>·<code>TimeOnly</code></td><td>공개 Go 소스 조사에서 가장 흔했던 형식 셋에 이름을. <code>Time.Compare</code> 도 <!--CITE key=relnotes-1.20 sec="time"--></td></tr>
+<tr><td><code>strings.CutPrefix</code>·<code>CutSuffix</code></td><td>TrimPrefix 에 "잘랐나" 를 더한 것 <!--CITE key=relnotes-1.20 sec="strings"--></td></tr>
+<tr><td><code>sync.Map</code> 의 Swap·CompareAndSwap</td><td>기존 항목을 원자적으로 바꾼다 <!--CITE key=relnotes-1.20 sec="sync"--></td></tr>
+</table></div>
+<!--CODE file=ex/06/small120/main.go note=셋을 한 번에-->
+<!--GOVER v=1.20 file=ex/06/small120 note=1.27.1 에서의 동작-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p6-v120-crypto">
+<h3>상수 시간 암호의 값 <span class="vt v120">1.20</span></h3>
+<p class="why">crypto/rsa 가 더 안전한 상수 시간 백엔드로 바뀌었습니다. 대가로 복호화의 CPU 시간이 대략 15%
+(amd64 의 RSA-2048)에서 45%(arm64 의 RSA-4096) 늘고, 암호화는 "approximately 20x slower" 가 되었다고 노트는
+숫자로 밝혔습니다. <!--CITE key=relnotes-1.20 sec="crypto/rsa"--></p>
+<div class="note"><b>같은 흐름</b> — crypto/ecdsa 도 지원 곡선에서 모든 연산을 상수 시간으로 바꿔 CPU 시간이 5%에서
+30% 늘었습니다(주로 P-384·P-521). <!--CITE key=relnotes-1.20 sec="crypto/ecdsa"--> 그리고 math/big 은 입력에 따라
+시간이 달라져 암호 구현에 맞지 않는다며, 표준 암호 패키지가 공격자가 정한 입력에 대해 그 Int 메서드를 부르지
+않게 했습니다. <!--CITE key=relnotes-1.20 sec="math/big"--></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p6-v120-ports">
+<h3>마지막 판들 <span class="vt v120">1.20</span></h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>내용</th></tr>
+<tr><td>Windows</td><td>Windows 7·8, Server 2008·2012 에서 도는 마지막 판. 1.21 은 Windows 10·Server 2016 이상 <!--CITE key=relnotes-1.20 sec="Windows"--></td></tr>
+<tr><td>macOS</td><td>macOS 10.13 High Sierra·10.14 Mojave 의 마지막 판. 1.21 은 10.15 Catalina 이상 <!--CITE key=relnotes-1.20 sec="Darwin and iOS"--></td></tr>
+<tr><td>부트스트랩</td><td>소스에서 빌드하려면 Go 1.17 이 필요하다. 부트스트랩 툴체인을 대략 한 해에 한 번씩 올릴 계획 <!--CITE key=relnotes-1.20 sec="Bootstrap"--></td></tr>
+</table></div>
+<p class="cap">1.5 이래 오래 1.4 였던 부트스트랩 요구(<a href="#p4-v15-bootstrap">4부</a>)가 여기서 처음 올라갑니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p6-v120-quiz" data-quiz>
+<h3>Go 1.20 퀴즈</h3>
+<p class="q">Q. 검증 함수가 <code>errors.Join(errs...)</code> 를 돌려줍니다. 호출하는 쪽에서 <code>err != nil</code>
+검사가 올바르게 동작할까요? 그리고 로그에 한 줄로 남기려던 코드가 여러 줄을 찍는다면 왜일까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 목록이 비었거나 모두 nil 이면 <code>errors.Join</code> 은 nil 을 돌려주므로 검사는 올바릅니다.
+Join 한 오류의 <code>Error()</code> 는 감싼 오류들의 문장을 줄바꿈으로 잇기 때문에, 한 줄 로그를 원하면 따로
+형식화해야 합니다. 개별 오류는 여전히 <code>errors.Is</code>·<code>As</code> 로 찾을 수 있습니다.</div>
+<span class="tier ill">설명용</span>
 </article>

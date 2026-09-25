@@ -720,3 +720,13 @@ and the "오류 N건" line; read it every time.
   can write it at once; features/claims/glossary/exps get suffixes p08, p08b, p08c. budget_report
   now adds up files sharing a two-digit prefix (test RED 2≠3 → GREEN). Brief: scratch/brief/BRIEF8.md.
 - `make docs` re-run (§0.5): relnotes, release page, spec, API identical; only blog page hashes moved.
+
+### Part 6 — Go 1.18–1.20 (previous session, committed 2026-09-25)
+
+- 84/115 slides (1.18: 41, 1.19: 18, 1.20: 23 + cover/intro), 92 feature rows, 57 examples,
+  93 captures, 25 claims rows, 14 glossary lines. Written by the previous session; this session
+  re-ran p06 twice (1 of 93 captures differed once — 06-appendf bench B/op; 6 further runs at
+  GOMAXPROCS 1/2/4/8 all gave 7 B/op, left for record.sh --check), spot-checked every % figure
+  against the notes (all verbatim), and replaced one intro sentence that over-read the 1.18 blog
+  ("design started over a decade ago when we first released Go").
+- Makefile: three comment/echo lines over 72 columns rewrapped (make width is green again).
