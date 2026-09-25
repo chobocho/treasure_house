@@ -925,3 +925,27 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   order is "what PX4 and ArduPilot document". The fetched PX4 page documents only Airmode
   (boost or reduce the collective to keep torques); yaw-first sacrifice is now labelled as
   this deck's choice (slide p8-saturation says so, with the CITE).
+
+### Part 9 — 자세·위치 제어 (2026-09-25)
+
+- 87 slides (budget 220), 12 chapters. Full proofs: **T13**; **T14** (solve e(t), ė has a
+  single factor sin ω_d t ⇒ first peak at π/ω_d ⇒ overshoot e^{σπ/ω_d}); **T15** (steady state
+  ⇒ ż = 1 − x = 0); **T16** over two slides (positive coefficients ⇒ a real root −c by the
+  intermediate value theorem; p = (s+c)(s²+bs+e); a₂a₁ − a₀ = b(a₁ + c²) ⇒ stable ⟺ b > 0 ⟺
+  a₂a₁ > a₀; converse); **T17** (inner first-order b, outer P k: slow root between k and
+  k(1+4k/b) from ε/2 ≤ 1−√(1−ε) ≤ ε/2+ε²/2); **T18** (error quaternion ODE, v̇ = −k|w|v ⇒ axis
+  fixed, θ̇ = −2k sin(θ/2), g = ln tan(θ/4) has ġ = −k); **T22** (complex steady state);
+  L5, L6, L25. Sketches T19 (with the PX4 excerpt), T21; T20 cited from Lee et al.
+  Proposition 4 (§V) — statement checked against the fetched PDF text.
+- exps/p09 (15 files): P on first order, PD overshoot table (measured = formula to 5
+  digits; ζ≈0.8 settles fastest), PD/PID/saturation/clamp table, cascade poles, time-scale
+  table (sample rate 25 Hz harmless; kp_rate 2 fails), attitude law vs closed form (≤4e-12),
+  yaw-weight table, D noise split into signal/noise parts, low-pass gains, step/yaw/wind/
+  10 m-step flights. ex/exercises9.py (+5 tests); ex/routh.py now fully shown.
+- Assembler: `<!--CODE … wrap=1-->` for data/excerpts/ only → `<pre class="wrap">` (CSS
+  pre-wrap, ≤ 480 columns — upstream firmware/XML lines cannot be re-wrapped); own sources
+  asking for wrap are an error (2 tests). check_slices: the excerpt's line 1 (licence
+  header) may be skipped without E3. Makefile `width` no longer scans exps/ (partial quotes
+  are re-checked by the assembler's <pre> rule, as in goevo).
+- `make all SKEL=1`: every check green except claims-check, which fails only on two cite
+  keys the concurrently running history subagent has added but not fetched yet.

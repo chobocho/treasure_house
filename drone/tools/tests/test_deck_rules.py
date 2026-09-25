@@ -130,9 +130,17 @@ class Thm(Fixture):
         self.assertTrue(any('T99' in e for e in build_deck.errors))
 
     def test_witness_line(self):
+        write(self.root, 'out/w_T14.txt',
+              '$ python3 tools/witness.py T14\nok    test_pid.T\n')
         out = build_deck.expand('<!--WITNESS id=T14-->\n')
         self.assertIn('py/tests/test_pid.py::test_overshoot', out)
         self.assertIn('class="witness"', out)
+        self.assertIn('data-out="w_T14.txt"', out)
+        self.assertEqual(build_deck.errors, [])
+
+    def test_witness_capture_missing(self):
+        build_deck.expand('<!--WITNESS id=T14-->\n')
+        self.assertTrue(any('w_T14' in e for e in build_deck.errors))
 
     def test_witness_missing_is_error(self):
         build_deck.expand('<!--WITNESS id=T20-->\n')
@@ -275,6 +283,20 @@ class Claims(unittest.TestCase):
         got = [a for a, _ in check_claims.articles_in(
             '항공안전법 제129조와 제124조의2, § 107.29 와 §107.35')]
         self.assertEqual(got, ['제129조', '제124조의2', '§107.29', '§107.35'])
+
+
+# ------------------------------------------------------------ 발췌 wrap
+class Wrap(Fixture):
+    def test_excerpt_wraps(self):
+        write(self.root, 'data/excerpts/x.c', '// ' + 'a' * 150 + '\nint x;\n')
+        out = build_deck.expand('<!--CODE file=data/excerpts/x.c wrap=1-->\n')
+        self.assertIn('<pre class="wrap"><code', out)
+        self.assertEqual(build_deck.errors, [])
+
+    def test_own_source_may_not_wrap(self):
+        write(self.root, 'py/a.py', 'x = 1\n')
+        build_deck.expand('<!--CODE file=py/a.py wrap=1-->\n')
+        self.assertTrue(any('wrap' in e for e in build_deck.errors))
 
 
 # ------------------------------------------------------------ 상한·부록

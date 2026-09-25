@@ -55,7 +55,8 @@ def main():
         # data-src 가 없다고 문제 삼지 않는다. 배지 없이 그린 조각은 문제다 —
         # 독자가 "이건 진짜 파일" 이라고 오해하기 때문이다.
         illus = 'class="tier ill"' in body
-        for m in re.finditer(r'<pre><code([^>]*)>(.*?)</code></pre>', body, re.S):
+        for m in re.finditer(r'<pre(?: class="wrap")?><code([^>]*)>(.*?)</code></pre>',
+                             body, re.S):
             attrs, inner = m.group(1), m.group(2)
             if illus and 'data-src' not in attrs:
                 st['illus'] = st.get('illus', 0) + 1

@@ -94,3 +94,36 @@ class Eight(unittest.TestCase):
     def test_ch6_circle(self):
         r = E8.ch6()
         self.assertAlmostEqual(r['구심 가속도'], 1.28, places=12)
+
+
+import exercises9 as E9  # noqa: E402
+
+
+class Nine(unittest.TestCase):
+    def test_ch2(self):
+        r = E9.ch2()
+        self.assertAlmostEqual(r['닫힌 시상수[s]'], 0.006, places=12)
+        self.assertAlmostEqual(r['정상 오차'], 0.2, places=12)
+
+    def test_ch3(self):
+        r = E9.ch3()
+        self.assertAlmostEqual(r['ζ'], 1.8 / (2 * 3), places=12)
+        self.assertAlmostEqual(r['초과량'],
+                               math.exp(-math.pi * 0.3 /
+                                        math.sqrt(1 - 0.09)), places=12)
+
+    def test_ch5(self):
+        r = E9.ch5()
+        self.assertTrue(r['ki=5 안정'])
+        self.assertFalse(r['ki=7 안정'])
+
+    def test_ch6(self):
+        b, k = 20.0, 2.0
+        want = (-b + math.sqrt(b * b - 4 * b * k)) / 2
+        self.assertAlmostEqual(E9.ch6()['느린 극'], want, places=12)
+
+    def test_ch7_closed_form(self):
+        t = E9.ch7()['걸린 시간[s]']
+        th = 4 * math.atan(math.tan(math.radians(120) / 4)
+                           * math.exp(-3.0 * t))
+        self.assertAlmostEqual(math.degrees(th), 30.0, places=9)

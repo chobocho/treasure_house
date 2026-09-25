@@ -22,8 +22,9 @@ TOOLS       := ../tools
 FIND        := find
 # 덱에 실릴 소스. 폭 검사를 받는다 — 덱에 실릴 줄은 예외 없이
 # 72칸이다(PLAN.md §0.9). 시험 파일도 RED·GREEN 장에 발췌되므로
-# 같이 본다.
-SRC_PY      := $(shell $(FIND) py ex exps -name '*.py' \
+# 같이 본다. exps/ 는 부분 인용만 한다 — 인용한 창은 조립기가 <pre>
+# 폭 검사로 다시 잡으므로 여기서는 빼 둔다(goevo 덱과 같은 선택).
+SRC_PY      := $(shell $(FIND) py ex -name '*.py' \
                  2>/dev/null | sort) \
                $(wildcard run_all.py)
 SRC_JS      := $(shell $(FIND) js -name '*.js' 2>/dev/null | sort)

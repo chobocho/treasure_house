@@ -82,7 +82,10 @@ def check(kind, rel, a, b, where, chained=False):
         errs.append(tag + ' — E7 닫힘 괄호로 시작한다')
     elif not first.strip():
         errs.append(tag + ' — E5 빈 줄로 시작한다')
-    elif is_comment(first) and is_comment(prev):
+    elif (is_comment(first) and is_comment(prev)
+          and not (rel.startswith('data/excerpts/') and a == 2)):
+        # 발췌(data/excerpts/)의 1행은 출처·라이선스 머리 줄이다 — 그 다음
+        # 줄부터 자르는 것은 주석 블록 중간이 아니다.
         errs.append(tag + ' — E3 주석 블록 중간에서 시작한다 (%d행부터가 한 덩어리)' % (a - 1))
     elif ext == '.json':
         if prev.rstrip().endswith(':'):

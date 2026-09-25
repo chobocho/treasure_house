@@ -77,6 +77,11 @@ MAX_TERM_COLS = 108
 # 그대로 — verify_deck 가 대조한다). 그래도 200칸을 넘으면 오류다
 # (goevo 덱에서 물려받은 규칙).
 MAX_WRAP_COLS = 200
+# 남의 소스 발췌(data/excerpts/ — 펌웨어·규약 원문)는 줄을 고칠 수 없다.
+# <!--CODE … wrap=1--> 로 실으면 <pre class="wrap"> 이 되어 CSS 가 화면
+# 에서 접는다. 발췌만 이 길을 쓸 수 있고(아래 expand_codedir), 한 줄은
+# 480칸까지다 — MAVLink XML 의 설명 줄이 400칸을 넘는다.
+MAX_EXCERPT_COLS = 480
 MAX_LI = 14
 
 # 박스 그리기 문자는 <pre> 밖에서 쓰지 않는다. 내장 글꼴(DeckMono)은 고정폭
@@ -302,8 +307,14 @@ def expand_codedir(m):
     if note:
         label = ('<div class="src"><b>%s</b><span class="ln">%d–%d</span>'
                  '<span>%s</span></div>\n' % (esc(path), a, b, esc(note)))
-    return ('%s<pre><code data-lang="%s" data-src="%s" data-lines="%d-%d">%s</code></pre>'
-            % (label, lang, path, a, b, esc(body)))
+    pre = '<pre>'
+    if field(args, 'wrap'):
+        if not path.startswith('data/excerpts/'):
+            errors.append('%s: wrap 은 data/excerpts/ 의 발췌만 — 우리 소스는 '
+                          '72칸으로 고칠 것' % path)
+        pre = '<pre class="wrap">'
+    return ('%s%s<code data-lang="%s" data-src="%s" data-lines="%d-%d">%s</code></pre>'
+            % (label, pre, lang, path, a, b, esc(body)))
 
 
 def expand_code(m):
@@ -900,13 +911,14 @@ def overflow_check(doc):
         for pm in re.finditer(r'<pre([^>]*)>(.*?)</pre>', inner, re.S):
             term = 'class="term' in pm.group(1)
             wrap = 'term wrap' in pm.group(1)
+            excerpt = pm.group(1) == ' class="wrap"'
             body = html.unescape(re.sub(r'<[^>]+>', '', pm.group(2)))
             rows = body.split('\n')
             if len(rows) > MAX_PRE_LINES:
                 errors.append('%s: <pre> 가 %d줄 (최대 %d)'
                               % (aid, len(rows), MAX_PRE_LINES))
             limit = (MAX_WRAP_COLS if wrap else MAX_TERM_COLS) if term \
-                else MAX_PRE_COLS
+                else MAX_EXCERPT_COLS if excerpt else MAX_PRE_COLS
             wide = max((cells(r.expandtabs(4)) for r in rows), default=0)
             if wide > limit:
                 errors.append('%s: %s 가 %d칸 (최대 %d)'
