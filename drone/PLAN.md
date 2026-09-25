@@ -1059,3 +1059,44 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
 - Found while drawing: 9부 계단 slide said the tilt peaked at 7° at 0.5 s — sampling artefact
   of the 0.5 s table; true peak ≈ 20° at 0.28 s and 0.6 s is the brake reversal. Corrected.
 - Five figure slides added to 9부 (pd, cascade block, step) and 10부 (snap, L24).
+
+### Part 4 — 기체와 추진 (2026-09-25)
+
+- 87 slides (budget 140), 7 chapters + source/summary: frames (+/X/H/hexa/octo/X8/Y6 from
+  one 4×n mixer builder, engine-out margin), propellers (**T1** full: mass flow → momentum →
+  P = Tv = ½ṁw² ⇒ w = 2v; blade-element idea as concept only; fm·η; kQ·Ω³ = ideal/fm),
+  reaction torque (**T3** full, 5 steps), motors/ESC (KV lower bound, poles/eRPM, PWM,
+  OneShot125, DShot frame + checksum, BDShot, commands, thrust curve), batteries (cells, Wh,
+  C rating, sag, empty voltage, **T2** full, battery-size table), TWR/payload, vibration.
+  Figures frames.svg and stream_tube.svg (orchestrator, b7d15c8) used as 설명용.
+- New ex programs (RED 17/19 on NotImplementedError stubs — 2 vacuous passes over an empty
+  NAMES — then GREEN; 20 tests): ex/frame_mixer.py (rotors → 4×n matrix, min-norm split,
+  per-axis cost, engine_out = max over the 1-D solution line of the weakest rotor's thrust),
+  ex/dshot_packet.py (Betaflight prepareDshotPacket framing re-written, not copied; flips
+  table). Both shown with FULLSRC; ex/hover_power.py and ex/battery_time.py now shown in full
+  (removed from deck/pending.txt).
+- exps/p04 (18 files, ~2 s, deterministic twice): 3 program captures + dry-mass line, 14
+  tables (frames, engine-out, radius, rho, kq, yaw, yaw physics 1 s, protocol timings, KV
+  lower bound, payload, battery size at 150/185 Wh/kg, current/C/sag, rotation frequencies,
+  imbalance force). Model assumptions labelled on slides: 150 Wh/kg, 5 mΩ/cell × 4 (the
+  per-cell value is PX4's "typical"), 10 mg-class imbalance at 0.03 m, 2-blade, 14 poles.
+- **Findings:** (1) my first engine-out test guessed "++−−+− hexa survives every single
+  failure" — false: margin 0.49–0.61 N for 4 of 6 rotors, 0 for rotors 5 and 6; an exhaustive
+  test shows no 3+/3− hexa spin pattern keeps a positive margin for all six (ideal model,
+  thrust ≥ 0, no upper limit). The alternating hexa always needs the opposite rotor at 0.
+  (2) PLAN §3.5 T2 row says "why halving mass does not double time" — with the battery fixed,
+  halving mass gives ×2.75 (P_L = 1 W), i.e. MORE than double; the tsv statement (< 2^{3/2})
+  is right, the PLAN gloss is not. Slide p4-battery-run says so. (3) yaw open-loop run: r
+  lags τz/Jzz·t by ≈ ṙ·τ_m, roll/pitch stay at 1e-17.
+- Sources: 17 cite keys added (PX4 esc_motors, dshot, vibration_isolation, battery,
+  battery_chemistry, frames_multicopter, pwm_escs_and_servo; ArduPilot connect-escs,
+  frame-type, dshot, brushless-escs, thrust-scaling, vibration-damping, measuring-vibration,
+  imu-notch; Betaflight dshot.c @5a09417e, dshot.h @53b8ed04). betaflight.com wiki pages are
+  JS-rendered (1-byte text) — not usable, row dropped. No source found for a KV definition;
+  the KV slide is a physics model (설명용 wording, table from params). px4-pwm-escs is fetched
+  but not cited yet.
+- `make all SKEL=1`: everything up to claims-check green (오류 0건); `width` fails only on
+  another session's untracked ex/lab_show.py and ex/tests/test_p16_lab.py (not mine);
+  font/font-check run separately: pass. A concurrent run_all dropped tbl_p04_kv.html from
+  out/batches.json once — re-ran `--only p04` before committing.
+- Note: PLAN §3.5 T2 row says "why halving mass does not double time" — measured ×2.75 (1 W LED) / ×2.83 (none), i.e. more than double; theorems.tsv's statement (< 2^{3/2}) is the correct one and slide p4-battery-run explains it.
