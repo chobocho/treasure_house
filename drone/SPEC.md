@@ -65,7 +65,7 @@ exactly (integers). `normal()` matches to 1e-9 (log/cos may differ in the last u
 | `L` | 0.12 | m | centre to rotor axis |
 | `Jxx`,`Jyy`,`Jzz` | 2.3e-3, 2.3e-3, 4.0e-3 | kg·m² | diagonal inertia |
 | `kT` | 1.2e-6 | N/(rad/s)² | thrust per rotor `T = kT·Ω²` |
-| `kQ` | 1.5e-8 | N·m/(rad/s)² | reaction torque `Q = kQ·Ω²` |
+| `kQ` | 1.24e-8 | N·m/(rad/s)² | reaction torque `Q = kQ·Ω²`; chosen so that 4·kQ·Ω_h³ ≈ momentum-theory power / `fm` |
 | `tau_m` | 0.03 | s | motor first-order lag |
 | `omega_min`,`omega_max` | 200, 2000 | rad/s | motor speed limits |
 | `c_drag` | 0.08 | N/(m/s) | linear translational drag |

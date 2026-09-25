@@ -21,7 +21,7 @@ class Load(unittest.TestCase):
         p = params.load()
         d = params.derived(p)
         self.assertAlmostEqual(d['a'], 0.12 / 2 ** 0.5, places=15)
-        self.assertAlmostEqual(d['c'], 1.5e-8 / 1.2e-6, places=15)
+        self.assertAlmostEqual(d["c"], 1.24e-8 / 1.2e-6, places=15)
         self.assertAlmostEqual(d['T_hover'], 0.5 * 9.81 / 4, places=15)
         # why 칸의 '약 1000 rad/s' 가 거짓이 아닌지
         self.assertAlmostEqual(d['omega_hover'], 1011, delta=1)
