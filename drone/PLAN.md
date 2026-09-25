@@ -884,3 +884,24 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   looked at (12 drones do not read as a heart; 30 do). deck/pending.txt lists every py/js/ex
   source until its part is written. `make all SKEL=1`: exit 0, 36 slides.
 - params.tsv `why` cells reworded where they asserted unsourced facts about real products.
+
+### Part 7 — 수학 준비 (2026-09-25)
+
+- tools/witness.py (+3 tests): runs the single witness test of a theorem id (loads the test
+  file by path — py/tests and ex/tests are both a package named `tests`); exps/pw writes
+  out/w_<id>.txt for every theorem with a witness (83). `<!--WITNESS id=…-->` now appends that
+  capture (error if missing) — proof slides show the result, not only the name.
+- ex/vectors_demo.py, matrix_demo.py, exercises7.py (+ ex/tests/test_exercises.py, 8 tests
+  that recompute each answer from the definition); exps/p07: tables small_angle (θ³/6 visibly
+  constant), lag (6-DOF RK4 vs 1−e^(−t/τ), diff ≤ 6.4e-8), order (Euler ÷2, RK4 ÷16),
+  roots, normal (seed 7).
+- Part 7: 94 slides, 9 chapters (vectors, matrices, calculus, linear ODEs, complex numbers,
+  Newton, numerical integration, minimum & variance, reading proofs), a "손으로 풀어 보기" per
+  chapter answered by the ex/exercises7.py capture, a quiz per chapter. Full proofs written
+  out: M1 (law of cosines), M2, M3 (Lagrange), M4, M5, M6 (det = triple product), M7, M10,
+  M14 (**integral-inequality proof**: sin θ ≤ θ, 1−cos θ ≤ θ²/2, θ−sin θ ≤ θ³/6, tan t ≤ 2t on
+  [0,1] by convexity ⇒ tan θ − θ ≤ 4θ³/3), M15 (y = x e^(−at)), M16, M18 (factor into two
+  first-order equations — no "guess the solution" step), M19, M21, M23. Sketches say what they
+  skip. p7-read4 tells the T30 story (plan's statement falsified by its own witness).
+- Assembler: OUT `lines=N` (single line). check_claims: `§` articles need a 2–3-digit part
+  (`§107.29`), so "SPEC §4.3" is not an article.

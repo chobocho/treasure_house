@@ -352,7 +352,9 @@ def expand_outdir(m):
         text = '\n'.join(rows[a - 1:b])
         attrs, span = ' data-lines="%d-%d"' % (a, b), '%d–%d' % (a, b)
     elif ln:
-        a, b = (int(x) for x in ln.split('-'))
+        # 'lines=8' 처럼 한 줄만 가리켜도 된다
+        a, b = (int(x) for x in (ln.split('-') if '-' in ln
+                                 else (ln, ln)))
         text = '\n'.join(text.split('\n')[a - 1:b])
         attrs, span = ' data-lines="%d-%d"' % (a, b), '%d–%d' % (a, b)
     else:
@@ -420,7 +422,8 @@ def expand_witness(m):
        증명 장은 "이 식이 맞다는 것을 숫자로도 확인했다" 를 시험 이름으로
        밝힌다(PLAN.md §3.4). 그 이름을 손으로 적으면 시험을 옮기거나
        이름을 바꿀 때 덱만 낡는다. 표에만 적고, 그 시험이 진짜 있는지는
-       make thm-check 가 본다.
+       make thm-check 가 본다. 그 시험 하나만 돌린 캡처(out/w_<id>.txt,
+       tools/witness.py)를 줄 아래에 붙인다 — 이름만이 아니라 결과를 보인다.
     """
     tid = field(m.group('args'), 'id')
     row = theorems().get(tid or '')
@@ -428,7 +431,14 @@ def expand_witness(m):
     if not row or not w or w == '-':
         errors.append('WITNESS id=%s — theorems.tsv 에 증인 시험이 없다' % tid)
         return ''
-    return ('<p class="witness">증인 시험 · <code>%s</code></p>' % esc(w))
+    line = '<p class="witness">증인 시험 · <code>%s</code></p>' % esc(w)
+    cap = 'w_%s.txt' % tid
+    if not os.path.exists(os.path.join(OUTDIR, cap)):
+        errors.append('WITNESS id=%s — out/%s 가 없다 (run_all 의 pw 묶음)'
+                      % (tid, cap))
+        return line
+    return line + '\n' + expand_outdir(re.match(
+        r'(?P<args>.*)', 'file=%s' % cap))
 
 
 _RENDER = {}
