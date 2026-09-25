@@ -1184,3 +1184,28 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   terms per slide and sources grow with every part). Glossaries added for parts 0/7/8/9/10/
   14/15 (46 terms). Missing THM boxes filled: L7 (filter = backward Euler, 9부) and M27
   (similarity, 10부) — 5bd403b.
+
+### Parts 1, 2, 3, 11, 12, 17 (2026-09-25, orchestrator)
+
+- 1부 31 slides (b554e55): UA/UAS/무인비행장치/드론 from KR/US/EU articles, shape classes,
+  weight classes (weight_classes.svg + 제306조/§107.3/§107.110/2019-945), product classes
+  counted from products.tsv (exps/p01 — labelled "not market share"), anatomy map.
+- 2부 37 slides (78aeb12): 1849–2004 from timeline rows only; disagreements stated (Venice
+  date, Kettering Bug 1918 not 1917, Big Guff 1937/1938, Kaman day unknown, 14,891 vs 15,000);
+  Global Hawk first-flight date left 미확인 (only a search summary). Military: dates/names.
+- 3부 50 slides (4f5d52d): keyed sources narrated; URL-only timeline rows (mostly vendor
+  press releases) shown as tables with a source column (exps/p03, 12 rows per table);
+  Guinness ladder of show records.
+- 11부 33 slides (78c3f33): Skybrush suite/clock/safety-check cites, show-related articles
+  (exps/p11 picks law.tsv rows), safety-margin budget, T33 (full), L22 (full), T34 (sketch)
+  with render measurements; industry map from shows.tsv (UVify/유비파이 merged). Cost
+  structure left out (no primary source).
+- 12부 33 slides (39edb06): tools table, Skybrush export/takeoff/RTH/SHOW-ADAPT cites, bpy
+  calls each cited to the API doc. Found: Skybrush's per-drone CSV import assumes linear
+  colour space but our CSV is gamma-coded (L22) → ex/skybrush_csv.py (tests first; zip entry
+  time fixed so the capture is byte-reproducible). Removed the Blender example's unused `step`
+  argument and its unsourced "Bezier by default" claim. 14부 CSV caption corrected (9d68548).
+- 17부 22 slides (5d1ffe2): only directions already written in law/official docs (EASA
+  certified category & U-space, Part 89 Remote ID, 드론법 제10조·제17조, pilot
+  qualifications); no numbers for noise/environment; military debate stated neutrally.
+- Makefile shown in 14부 (make all target) and dropped from pending.txt (320a251).
