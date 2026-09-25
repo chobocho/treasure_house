@@ -1311,3 +1311,13 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   error; T 0.5/2/4 s → max 24.4/10.2/5.7°, 20-s residual 0.43/1.71/3.41° = T23's b·T
   (0.42/1.70/3.40°); gyro-only 16.95° at 20 s (= b·t). Headless yaw drift table (b·t).
 - 16 slides (part 5: 116 → 132). index/README counts updated (1,317 slides).
+
+### Review of 5부 9장 (2026-09-25)
+
+- Fixed 7: the chapter called the analysed code "완구 펌웨어" — it is an open-source replacement
+  firmware, not the (closed) factory firmware; now stated, and price marked unverified. IMU
+  wording now quotes the README's hedge (mostly MPU-6050-compatible, closer to MPU-6500).
+  Motor-drive claim now cited to hardware.h (PWM default, ESC/DShot off, brushed warning;
+  new key toy-hardware-h). Gyro-calibration wording matched to the README (LED stops on
+  movement, 15 s timeout). Upside-down and 1S-battery readings labelled as the deck's
+  interpretation (4.2 V start value cited). EKF gyro-bias states cited to px4-ekf2 §Overview.

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""5부 9장 — ex/toy_imu.py: 완구 드론 펌웨어의 6축 상보 필터와
+"""5부 9장 — ex/toy_imu.py: 완구용 대체 펌웨어의 6축 상보 필터와
 헤드리스."""
 import math
 import os
