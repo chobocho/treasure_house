@@ -385,6 +385,21 @@ def fence(ctx):
               num=(0, 1, 2, 3, 4))
 
 
+def pyulog_check(ctx):
+    """공식 파서 pyulog 로 우리 ULog 를 읽는다. pyulog 는 numpy 가
+    필요해, numpy·pyulog 가 있는 파이썬을 찾아 그것으로 돌린다."""
+    import shutil
+    import subprocess
+    for py in [shutil.which('python3'), shutil.which('python'),
+               '/data/data/com.termux/files/usr/bin/python3']:
+        if py and subprocess.run([py, '-c', 'import pyulog'],
+                                 capture_output=True).returncode == 0:
+            ctx.cmd('p06_pyulog', [py, 'tools/pyulog_check.py'])
+            return
+    raise RuntimeError('pyulog 를 부를 수 있는 파이썬이 없다 '
+                       '(pip install pyulog — numpy 필요)')
+
+
 def ulog_fence(ctx):
     """5 m/s 울타리 비행을 ULog 로 쓰고 다시 읽어 되짚는다."""
     p = params.load()
@@ -453,6 +468,7 @@ def run(ctx):
     ctx.py('p06_rf', 'ex/rf_link.py')
     ctx.py('p06_geofence', 'ex/geofence.py')
     ctx.py('p06_ulogdemo', 'ex/ulog_mini.py')
+    pyulog_check(ctx)
     mav_bytes(ctx)
     mav_trunc(ctx)
     mav_extra_mismatch(ctx)
