@@ -1044,3 +1044,18 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   assembly and stub checking. Formation lab: plain-distance assignment of "HI" brings two
   drones to 0.000 m mid-transition; squared keeps exactly the δ/√2 bound.
 - deck/chunks.py: JS labels (two-space definitions, `__demo('id'`, section heads).
+
+### Step 10 — figures (2026-09-25, 858ed9c · b7d15c8)
+
+- deck/gen_figs.py (goevo frame: FIGURES · need() · --check) reads data/ and out/fig_*.tsv
+  only. The curve data come from a new batch exps/pf.py (step responses, full-model 1 m step,
+  complementary filter vs truth, trapezoid vs min-snap), so run-check hashes them.
+- 15 figures: timeline (+ p2/p3 windows; x axis breaks at 2000), show_sizes (log, marker by
+  record kind, Guinness ladder), frames (+ X H 6 8 coax), step, cascade_step, comp, snap,
+  cascade_block, assign_cross (L24 counterexample, equal axes), stream_tube, freebody,
+  showday, weight_classes (each band need()-checks its law.tsv row). Every PNG looked at.
+- svgkit palette switched to this deck's kind colours (g1–g8 = timeline kinds); .cv7/.cv8,
+  .dotg1–8, .ring, .box.g7/g8 added (head.html too).
+- Found while drawing: 9부 계단 slide said the tilt peaked at 7° at 0.5 s — sampling artefact
+  of the 0.5 s table; true peak ≈ 20° at 0.28 s and 0.6 s is the brake reversal. Corrected.
+- Five figure slides added to 9부 (pd, cascade block, step) and 10부 (snap, L24).
