@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 )
 
@@ -24,13 +23,10 @@ func main() {
 			seen[line[i:]] = true
 		}
 	}
-	names := make([]string, 0, len(seen))
-	for n := range seen {
-		names = append(names, n)
-	}
-	slices.Sort(names)
-	fmt.Println(len(names), "distinct Go mapping names")
-	for _, n := range names {
-		fmt.Println(" ", n)
-	}
+	// Which regions get a mapping of their own depends on the address
+	// layout (the heap base is randomized), so "[anon: Go: heap]" comes
+	// and goes between runs. Print only what every run shows.
+	fmt.Println("Go-named mappings:", len(seen) > 0)
+	im := seen["[anon: Go: immortal metadata]"]
+	fmt.Println("immortal metadata:", im)
 }

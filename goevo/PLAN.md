@@ -820,3 +820,10 @@ and the "오류 N건" line; read it every time.
   p5 langver→p4 alias; part 5 검사기 → 분석기; io.StringWriter row; p05 duplicate vet title.
 - Left as is: "10—40%" (the 1.25 notes' own dash); capture labels that show another example's go
   line where a tool capture was taken in a shared directory (label = the directory actually used).
+
+### record.sh --check (2026-09-25)
+
+- Runs 1–2 identical; run 3 differed in one capture: 08-v125vmaname — "[anon: Go: heap]" gets a
+  mapping of its own only for some address layouts (1 of 6 runs here; heap base is randomized).
+  The example now prints only what every run shows (any Go-named mapping, immortal metadata);
+  the slide says why. p08 then re-run twice more: all 724 out/ files identical to the first.
