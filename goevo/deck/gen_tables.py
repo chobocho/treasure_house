@@ -169,7 +169,7 @@ def appendix_tables(releases, api, godebug, blog_index, fetched, per=14,
                     min_posts=3):
     """부록(11부)의 표 — 전부 data/ 와 docs/ 에서 (PLAN.md §4 의 A 줄).
 
-    일정표: 큰 릴리스마다 부 릴리스의 수와 마지막 부 릴리스.
+    일정표: 큰 릴리스마다 고침판(부 릴리스)의 수와 마지막 고침판.
     API 표: api_added.tsv 그대로(Go 1 의 126 패키지는 줄이 넘쳐 적지 않는다).
     GODEBUG 표: godebug.tsv 를 per 행씩.
     저자 색인(인물 색인): 블로그 색인의 저자 칸에서 사람마다 글 수와 첫·끝 날짜
@@ -185,7 +185,7 @@ def appendix_tables(releases, api, godebug, blog_index, fetched, per=14,
             cur[2].append(r)
     rows = [(v, d, len(m), '%s (%s)' % (m[-1]['version'], m[-1]['date'])
              if m else '—') for v, d, m in majors]
-    out.update(_chunks('app_majors', ['판', '날짜', '부 릴리스', '마지막 부 릴리스'],
+    out.update(_chunks('app_majors', ['판', '날짜', '고침판', '마지막 고침판'],
                        rows, per, (2,)))
     rows = [(a['version'], a['new-packages'], a['new-symbols'],
              a['syscall-symbols'], '(Go 1 의 전부)' if a['version'] == '1.0'

@@ -11,14 +11,13 @@ type Stack[T any] struct {
 // Methods name the type parameter again in the receiver.
 func (s *Stack[T]) Push(v T) { s.items = append(s.items, v) }
 
-func (s *Stack[T]) Pop() (T, bool) {
-	var zero T
-	if len(s.items) == 0 {
-		return zero, false
+// Named results start at zero: an empty stack gives (zero, false).
+func (s *Stack[T]) Pop() (v T, ok bool) {
+	if n := len(s.items); n > 0 {
+		v, s.items = s.items[n-1], s.items[:n-1]
+		ok = true
 	}
-	v := s.items[len(s.items)-1]
-	s.items = s.items[:len(s.items)-1]
-	return v, true
+	return
 }
 
 // Pair has two type parameters.

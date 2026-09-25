@@ -806,3 +806,17 @@ and the "오류 N건" line; read it every time.
   re-recorded; p8-v127-jsonv1 now runs the nine inputs itself (no unpublished probe); author index
   drops the bare "The Go Team" byline (test RED first); glossary duplicates merged (쓰기 장벽, Green
   Tea); timeline + 2026-09-24 simd blog row, timeline tables now 15 rows per page (still 9 pages).
+
+### Review 2 — reader flow, deep re-check of parts 3–5, sibling overlap (2026-09-25)
+
+- 2-A read all parts as a reader who knows basic Go (40 findings: 용어 14 · 흐름 9 · 문체 8 ·
+  증거불일치 4 · 퀴즈 3 · 링크 2); 2-B re-checked every CITE and capture of parts 3–5 line by line
+  (16: 사실오류 8 · 증거불일치 7 · 문체 1 — review 1 had passed these parts quickly). Sibling
+  overlap check (5-line windows vs Go_기초/Effective_Go_현대판/pattern decks): one hit, ex/06/stack's
+  Pop body = Effective Go 현대판 → rewritten with named results, same output.
+- Orchestrator fixes from the lists: 경쟁 탐지기 → 검출기 in feature titles; ladder names 숫자
+  리터럴·시프트 (p10 re-run, figure and demos regenerated); glossary/p00.txt (go 줄, GODEBUG,
+  GOEXPERIMENT, vet 분석기, types2); appendix "부 릴리스" column → 고침판; back-links p4 internal→p3,
+  p5 langver→p4 alias; part 5 검사기 → 분석기; io.StringWriter row; p05 duplicate vet title.
+- Left as is: "10—40%" (the 1.25 notes' own dash); capture labels that show another example's go
+  line where a tool capture was taken in a shared directory (label = the directory actually used).
