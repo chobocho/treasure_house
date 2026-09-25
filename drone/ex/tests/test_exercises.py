@@ -58,3 +58,39 @@ class Seven(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+import exercises8 as E8  # noqa: E402
+
+
+class Eight(unittest.TestCase):
+    def test_ch1_ned(self):
+        self.assertEqual(E8.ch1()['NED'], [4.0, 3.0, -5.0])
+
+    def test_ch2_gyro(self):
+        r = E8.ch2()
+        # ω×Jω = (1,1,0)×(1,2,0) = (0, 0, 1)
+        self.assertEqual(r['ω×Jω'], [0.0, 0.0, 1.0])
+        self.assertEqual(r['에너지'], 0.5 * (1 + 2))
+
+    def test_ch3_rpm(self):
+        om = math.sqrt(0.5 * 9.81 / 4 / 1.2e-6)
+        self.assertAlmostEqual(E8.ch3()['호버 rpm'],
+                               om * 60 / (2 * math.pi), places=9)
+
+    def test_ch4_mixer(self):
+        u = E8.ch4()['u']
+        a = 0.12 / math.sqrt(2)
+        self.assertAlmostEqual(u[0], 4.8, places=12)
+        self.assertAlmostEqual(u[1], a * (1.3 + 1.2 - 1.1 - 1.2),
+                               places=12)
+
+    def test_ch5_tilt(self):
+        r = E8.ch5()
+        self.assertAlmostEqual(r['x 가속도'],
+                               9.81 * math.sin(math.radians(10)),
+                               places=12)
+
+    def test_ch6_circle(self):
+        r = E8.ch6()
+        self.assertAlmostEqual(r['구심 가속도'], 1.28, places=12)

@@ -111,7 +111,10 @@ Rows are mutually orthogonal, so `M·Mᵀ = diag(4, 4a², 4a², 4c²)`, `det M =
 iterations) that keeps `T` inside the limits, or 0 if none does. (3) If still outside, shift
 all four by the same `δ` (collective) so that the spread fits: `δ = Tmin − min T` if
 `min T < Tmin`, else `δ = Tmax − max T`. (4) Clamp each `T_i`. Priority is therefore roll/
-pitch > collective > yaw, the order PX4 and ArduPilot document (CITE in 9부). Returns `T`
+pitch > collective > yaw. Step (3) is a simple form of PX4's documented Airmode (boost or
+reduce the collective so the torques survive; `px4-mc-pid-tuning` §"Airmode & Mixer
+Saturation"); sacrificing yaw first is this deck's choice, not a claim about any firmware.
+Returns `T`
 and a flag set `{yaw_scaled, shifted, clamped}`.
 
 ### 4.3 Equations of motion

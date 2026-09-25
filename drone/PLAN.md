@@ -905,3 +905,23 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   skip. p7-read4 tells the T30 story (plan's statement falsified by its own witness).
 - Assembler: OUT `lines=N` (single line). check_claims: `§` articles need a 2–3-digit part
   (`§107.29`), so "SPEC §4.3" is not an article.
+
+### Part 8 — 강체와 쿼드로터 모델 (2026-09-25)
+
+- 63 slides (budget 180 — kept dense, no padding; candidates for a later expansion pass:
+  inertia tensor from a point-mass model, numeric state-space linearisation at hover,
+  full-file walk-throughs). 7 chapters: frames (ENU/FLU vs MAVLink NED/FRD, cited
+  `SET_ATTITUDE_TARGET (82)`), rigid-body rotation (L3 sketch, **T8 full**: derivation +
+  energy and |Jω| conservation), rotor model (L19 full), X mixer (**L4, T9** — invertibility
+  from L4, det = 16a²c by elimination to a 3×3; **T10**), 6-DOF model and code, hover
+  linearisation (**T11**), differential flatness (**L26, T12** over two slides: thrust/attitude,
+  then p, q from the unit-vector derivative and r from differentiating y_B·x_C = 0).
+- exps/p08: tumble conservation vs dt (RK4 ÷16), intermediate-axis flip table, mixer M and
+  M⁻¹, allocation cases (**yaw authority at hover is only ≈0.049 N·m**), derived params,
+  open loop with one motor +1 % (**roll 148° after 2 s**), linearisation error table,
+  flatness rates vs finite differences (≤2e-11), feed-forward levels × drag on/off.
+  ex/exercises8.py (+6 tests).
+- **Correction:** mixer.py's docstring and SPEC §4.2 claimed the roll/pitch > collective > yaw
+  order is "what PX4 and ArduPilot document". The fetched PX4 page documents only Airmode
+  (boost or reduce the collective to keep torques); yaw-first sacrifice is now labelled as
+  this deck's choice (slide p8-saturation says so, with the CITE).

@@ -3,3 +3,611 @@
 <h2>수학 II — 강체와 쿼드로터 모델</h2>
 <p class="chsub">뉴턴-오일러 방정식·믹서·언더액추에이션·호버 선형화·미분 평탄성 · 7부를 읽고 오세요</p>
 </article>
+
+<article class="card" id="p8-intro">
+<h2>이 부의 목표 — 드론 한 대를 식 17개로</h2>
+<p class="lead">시뮬레이터 안의 드론 한 대는 수 17개의 상태와 그 변화율을 적은 식입니다. 이 부는 그 식을 한 줄씩 유도하고 증명합니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>장</th><th>무엇을</th><th>정리</th></tr>
+<tr><td>1</td><td>좌표계 — 세계 ENU, 몸체 FLU, 회전으로 잇기</td><td>—</td></tr>
+<tr><td>2</td><td>강체의 회전 — 자이로 항과 보존 법칙</td><td>L3, T8</td></tr>
+<tr><td>3</td><td>로터 하나 — 추력·반토크·모터 지연</td><td>L19</td></tr>
+<tr><td>4</td><td>X 배치 믹서 — 추력 넷과 힘·토크 넷</td><td>L4, T9, T10</td></tr>
+<tr><td>5</td><td>6자유도 모델 — 식 17개와 그 코드</td><td>—</td></tr>
+<tr><td>6</td><td>호버 선형화 — 기울면 미끄러진다</td><td>T11</td></tr>
+<tr><td>7</td><td>미분 평탄성 — 궤적이 입력을 정한다</td><td>L26, T12</td></tr>
+</table></div>
+<p class="cap">쿼터니언과 회전행렬의 기본(T4–T7)은 <a href="#p5">5부</a>에서 증명합니다. 이 부는 그 결과를 씁니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 1장 좌표계 -->
+
+<article class="card section" id="p8-c1"><p class="chnum">1장</p><h2>좌표계 — 세계와 몸체</h2>
+<p class="chsub">ENU · FLU · NED · FRD · 회전으로 잇기</p></article>
+
+<article class="card" id="p8-frames">
+<h3>좌표계 둘 — 땅에 붙은 것과 드론에 붙은 것</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>이 덱</th><th>MAVLink(PX4·ArduPilot)</th><th>왜 이렇게</th></tr>
+<tr><td>세계</td><td>ENU — x 동, y 북, z 위</td><td>NED — x 북, y 동, z 아래</td><td>쇼는 관객이 올려다본다 — "위" 가 양수가 편하다</td></tr>
+<tr><td>몸체</td><td>FLU — x 앞, y 왼쪽, z 위(추력)</td><td>FRD — x 앞, y 오른쪽, z 아래</td><td>세계와 같은 손(오른손)이어야 외적의 방향이 맞는다</td></tr>
+</table></div>
+<p>두 쌍 모두 오른손 좌표계이고, 서로 회전 하나로 바뀝니다. ENU → NED 는 축 (1, 1, 0)/√2 둘레 180°, FLU → FRD 는 앞 축 둘레 180° 입니다(<a href="#p7-enu">7부 2장</a>).</p>
+<p class="cap">MAVLink 의 자세 목표는 "MAV_FRAME_LOCAL_NED 에서 MAV_FRAME_BODY_FRD 로" 도는 쿼터니언입니다: <!--CITE key=mavlink-common-msgs sec="SET_ATTITUDE_TARGET (82)"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-rotation">
+<h3>자세 = 몸체 축을 세계에서 본 것</h3>
+<p class="why">회전행렬 <i>R</i> 의 세 열은 몸체의 x·y·z 축을 세계 좌표로 적은 것입니다. 몸체 좌표의 벡터 <b>v</b><sub>B</sub> 는 <span class="mi"><b>v</b><sub>W</sub> = <i>R</i><b>v</b><sub>B</sub></span> 로 세계로 옵니다.</p>
+<ul>
+<li>추력은 몸체 z 축 방향이라 세계에서는 <span class="mi"><i>F</i>·<i>R</i><b>e</b>₃</span> — R 의 셋째 열에 F 를 곱한 것.</li>
+<li><i>R</i> 은 직교하고 det = 1(T4)이라 거꾸로는 전치 <span class="mi"><i>R</i><sup>T</sup></span> 입니다. 가속도계가 재는 비력을 몸체로 옮길 때 씁니다(L20).</li>
+<li>시뮬레이터는 R 대신 단위 쿼터니언 q 를 상태로 들고, 필요할 때 <span class="mi"><b>v</b><sub>W</sub> = <i>q</i> ⊗ <b>v</b><sub>B</sub> ⊗ <i>q</i>*</span> 로 돌립니다(T6).</li>
+</ul>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-why-quat">
+<h3>왜 오일러각이 아니라 쿼터니언을 상태로 드나</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>오일러각 (롤·피치·요)</th><th>쿼터니언</th></tr>
+<tr><td>수의 개수</td><td>3 — 사람이 읽기 좋다</td><td>4 — 크기 1 이라는 조건 하나</td></tr>
+<tr><td>특이점</td><td>피치 ±90° 에서 롤과 요가 겹친다(짐벌 락, T5)</td><td>없다</td></tr>
+<tr><td>합성</td><td>삼각함수 전개가 필요</td><td>곱 하나(T6)</td></tr>
+<tr><td>적분</td><td>변화율 행렬이 특이점 근처에서 터진다</td><td>q̇ = ½q⊗(0,ω) — 크기만 다시 맞추면 된다(T7)</td></tr>
+</table></div>
+<p class="cap">쇼 드론은 뒤집히지 않지만, 시뮬레이터는 제어가 실패하는 실험(9부)에서 드론이 뒤집히는 것까지 적분해야 합니다. 그래서 어떤 자세에서도 멀쩡한 쿼터니언을 씁니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-ned-code">
+<h3>좌표 바꾸기를 코드로 한 번</h3>
+<p class="why">ENU 의 점 (동 3, 북 4, 위 5)은 NED 로 (북 4, 동 3, 아래 −5) 입니다. 행렬 하나를 곱하면 됩니다.</p>
+<!--CODE file=py/droneshow/vec3.py sym=ENU_TO_NED note=ENU → NED-->
+<!--OUT file=p08_exercises.txt lines=2 note=ex/exercises8.py 1장-->
+<p class="cap">같은 행렬이 자기 자신의 역행렬입니다(NN = I) — 180° 회전을 두 번 하면 제자리이기 때문입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-c1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. PX4 문서의 그림에서 "위로 가속" 이 음수로 적혀 있습니다. 이 덱의 좌표로는 부호가 어떻게 되고, 왜 그런가요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> PX4 는 NED 라 z 가 아래쪽이 양수입니다. 위로 가속하면 z 성분이 음수입니다. 이 덱(ENU)에서는 같은 가속이 양수입니다. 두 좌표계는 회전으로 이어지므로 물리는 같고 숫자의 부호만 다릅니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 2장 강체 -->
+
+<article class="card section" id="p8-c2"><p class="chnum">2장</p><h2>강체의 회전 — 뉴턴-오일러 방정식</h2>
+<p class="chsub">돌아가는 좌표계 · 자이로 항 · 에너지와 각운동량</p></article>
+
+<article class="card" id="p8-angvel">
+<h3>각속도 — 몸체 좌표로 잰다</h3>
+<p class="why">자이로스코프는 드론에 붙어 있으므로 각속도를 <b>몸체 좌표</b>로 잽니다: <span class="mi"><b>ω</b> = (<i>p</i>, <i>q</i>, <i>r</i>)</span>, 롤·피치·요 축 둘레의 빠르기(rad/s)입니다.</p>
+<p>자세는 이 각속도로 변합니다. 몸체에 붙은 어떤 벡터 <b>u</b> 가 세계에서 보면 <span class="mi"><b>u</b>̇ = <b>ω</b><sub>W</sub> × <b>u</b></span> 로 돌고, 쿼터니언은 <span class="mi"><i>q</i>̇ = ½ <i>q</i> ⊗ (0, <b>ω</b>)</span> 로 변합니다(T7). 몸체 좌표의 ω 를 쿼터니언의 <b>오른쪽</b>에 곱하는 것이 요점입니다 — 세계 좌표의 ω 라면 왼쪽입니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-l3">
+<h3>돌아가는 좌표계에서의 미분</h3>
+<!--THM id=L3-->
+<div class="proof"><span class="h">증명 스케치</span>
+<p>회전행렬의 시간 미분이 <span class="mi"><i>Ṙ</i> = <i>R</i>[<b>ω</b>]<sub>×</sub></span>(몸체 각속도로 외적을 하는 행렬)라는 사실은 증명하지 않고 씁니다.</p>
+<ol class="pf">
+<li><span class="mi"><b>h</b><sub>W</sub> = <i>R</i><b>h</b><sub>B</sub></span> 를 미분하면 <span class="mi"><i>Ṙ</i><b>h</b><sub>B</sub> + <i>R</i><b>ḣ</b><sub>B</sub></span>. <span class="why">곱의 미분(M11)</span></li>
+<li><span class="mi">= <i>R</i>(<b>ω</b> × <b>h</b><sub>B</sub> + <b>ḣ</b><sub>B</sub>)</span> — 세계 좌표로 옮기기 전의 괄호가 "몸체에서 본 변화 + 좌표계가 도는 몫" 입니다.</li>
+</ol></div>
+<!--WITNESS id=L3-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-t8">
+<h3>뉴턴-오일러 회전 방정식</h3>
+<!--THM id=T8-->
+<p class="cap">쓰는 도구: M21(각운동량과 토크), L3, M2. 가정: J 는 몸체에 고정된 대각 행렬(주축 좌표) — 모양이 변하지 않는 강체.</p>
+<div class="proof cont"><span class="h">증명 — 방정식</span>
+<ol class="pf">
+<li>세계에서 본 각운동량 <span class="mi"><b>H</b> = <i>R</i><i>J</i><b>ω</b></span> 의 변화율은 세계 토크입니다: <span class="mi"><b>Ḣ</b> = <i>R</i><b>τ</b></span>. <span class="why">M21 을 점 질량마다 더함 — 내부의 힘은 짝지어 지워진다고 둔다</span></li>
+<li>L3 에서 <span class="mi"><b>Ḣ</b> = <i>R</i>(<i>J</i><b>ω̇</b> + <b>ω</b> × <i>J</i><b>ω</b>)</span>. <span class="why">J 가 몸체에 고정이라는 가정 — 몸체에서 본 J 의 변화율은 0</span></li>
+<li>두 식에서 R 을 떼면(R 은 가역, T4) <span class="mi"><i>J</i><b>ω̇</b> = <b>τ</b> − <b>ω</b> × <i>J</i><b>ω</b></span>.</li>
+</ol></div>
+<p class="cap">증명은 다음 장에 이어집니다 — 보존 법칙.</p>
+</article>
+
+<article class="card" id="p8-t8b">
+<h3>토크가 없으면 무엇이 보존되나</h3>
+<!--THM id=T8 cont-->
+<p class="cap">쓰는 도구: M2(외적은 두 벡터에 수직), M1, M11.</p>
+<div class="proof"><span class="h">증명 — 보존</span>
+<ol class="pf">
+<li>에너지 <span class="mi"><i>E</i> = ½<b>ω</b>·<i>J</i><b>ω</b></span>. J 가 대각이므로 <span class="mi"><i>Ė</i> = <b>ω</b>·<i>J</i><b>ω̇</b></span>. <span class="why">대각 가정을 여기서 쓴다 — 대칭이면 충분</span></li>
+<li>토크가 0 이면 <span class="mi"><i>J</i><b>ω̇</b> = −<b>ω</b> × <i>J</i><b>ω</b></span>, 그리고 <span class="mi"><b>ω</b>·(<b>ω</b> × <i>J</i><b>ω</b>) = 0</span>. 그래서 <span class="mi"><i>Ė</i> = 0</span>. <span class="why">M2</span></li>
+<li><span class="mi">d/d<i>t</i> |<i>J</i><b>ω</b>|² = 2<i>J</i><b>ω</b>·<i>J</i><b>ω̇</b> = −2<i>J</i><b>ω</b>·(<b>ω</b> × <i>J</i><b>ω</b>) = 0</span>. <span class="why">M2 — Jω 에도 수직</span></li>
+<li>세계에서 본 <b>H</b> 는 1단계에서 τ = 0 이므로 벡터째로 멈춰 있습니다 — 몸체에서 보면 도는데, 세계에서 보면 가만히 있습니다.</li>
+</ol></div>
+<!--WITNESS id=T8-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-gyro-code">
+<h3>식이 코드가 된 모습</h3>
+<!--CODE file=py/droneshow/rigidbody.py sym=omega_dot note=J 는 대각 성분 셋-->
+<!--CODE file=py/droneshow/rigidbody.py sym=attitude_deriv..ang_momentum note=회전만의 상태와 보존량-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-tumble">
+<h3>보존 법칙을 수로 — 토크 없이 도는 강체</h3>
+<p class="why">J = (1, 2, 3) 인 강체를 ω₀ = (0.3, 1.0, 0.2) 로 던지고 10 초 동안 RK4 로 적분합니다. 세 값의 최대 어긋남을 적분 걸음마다 봅니다.</p>
+<!--TABLE file=out/tbl_p08_tumble.html cap=exps/p08.py — 걸음을 반으로 줄이면 에너지 오차가 16 배쯤 준다(RK4 는 4차)-->
+<p>식이 보존을 약속해도 수치 적분은 조금씩 어긋납니다. 그 어긋남이 적분 걸음의 네제곱에 비례해 준다는 것이 "모델은 맞고, 남은 것은 적분 오차" 라는 증거입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-axes">
+<h3>가운데 축은 불안정하다 — 테니스 라켓 정리</h3>
+<p class="why">가장 작은 관성 축이나 가장 큰 관성 축 둘레의 회전은 조금 흔들어도 그대로입니다. 가운데 축 둘레의 회전은 작은 흔들림이 자라 몸체가 뒤집힙니다.</p>
+<!--TABLE file=out/tbl_p08_axes.html cap=exps/p08.py — J = (1, 2, 3), 각속도 2 rad/s 에 0.001 의 흔들림, 20 초-->
+<p>가운데 축(y)으로 던진 것만 다른 축 각속도가 2 까지 자라고, 원래 축의 각속도가 −2 까지 뒤집힙니다. 방정식에 이미 들어 있는 성질이라 시뮬레이터가 따로 가르쳐 주지 않아도 나옵니다. 쿼드로터는 요 축 관성이 가장 커서 요 둘레 회전은 안정한 쪽입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-gyro-drone">
+<h3>드론에서 자이로 항은 얼마나 큰가</h3>
+<ul>
+<li>쿼드로터는 롤과 피치 관성이 같습니다(Jxx = Jyy). 그래서 <span class="mi"><b>ω</b> × <i>J</i><b>ω</b></span> 의 z 성분 <span class="mi">(<i>J</i><sub>yy</sub> − <i>J</i><sub>xx</sub>)<i>pq</i></span> 가 정확히 0 입니다.</li>
+<li>롤·피치 성분은 요 각속도가 있을 때만 생깁니다: <span class="mi">(<i>J</i><sub>zz</sub> − <i>J</i><sub>yy</sub>)<i>qr</i></span> 꼴. 쇼 드론은 요를 천천히 돌리므로 작습니다.</li>
+<li>그래서 이 덱의 제어기는 자이로 항을 앞먹임하지 않습니다(SPEC §5.5). 빠르게 뒤집는 레이싱 드론이라면 이야기가 다릅니다.</li>
+</ul>
+<!--OUT file=p08_exercises.txt lines=3-4 note=ex/exercises8.py 2장 — J = (1, 2, 3), ω = (1, 1, 0)-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-c2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 토크 없이 도는 강체에서 몸체 좌표의 Jω 는 방향이 바뀌는데 크기는 그대로입니다. 세계 좌표의 H 는 방향도 그대로입니다. 둘이 어떻게 동시에 참일 수 있나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> H = R·Jω 입니다. 세계에서 가만히 있는 벡터를 도는 몸체에서 보면 거꾸로 도는 것처럼 보입니다 — 달리는 기차에서 본 산이 뒤로 가는 것과 같습니다. 회전은 길이를 바꾸지 않으므로(M10) 크기는 두 좌표에서 같습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 3장 로터 -->
+
+<article class="card section" id="p8-c3"><p class="chnum">3장</p><h2>로터 하나의 모델</h2>
+<p class="chsub">추력 kT·Ω² · 반토크 kQ·Ω² · 1차 모터 지연 · 호버 회전수</p></article>
+
+<article class="card" id="p8-rotor">
+<h3>추력과 반토크는 회전수의 제곱</h3>
+<div class="eq"><i>T</i> = <i>k</i><sub>T</sub>·<i>Ω</i>² &nbsp;&nbsp;&nbsp; <i>Q</i> = <i>k</i><sub>Q</sub>·<i>Ω</i>²</div>
+<p class="why">프로펠러가 밀어내는 공기의 양과 빠르기가 둘 다 회전수에 비례하므로 추력은 대략 제곱에 비례합니다(<a href="#p4">4부</a>의 모멘텀 이론이 그 까닭을 자세히 봅니다). 반토크 Q 는 공기가 날개를 되미는 힘의 비틀림으로, 몸체를 로터와 반대 방향으로 돌립니다.</p>
+<!--TABLE file=out/tbl_d_params_phys_1.html cap=기준 쿼드로터의 계수 — data/params.tsv-->
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-hover-numbers">
+<h3>호버 회전수와 추력 대 중량비</h3>
+<p class="why">호버에서는 로터 넷이 무게를 나눠 듭니다: <span class="mi"><i>T</i><sub>h</sub> = <i>mg</i>/4</span>, 그래서 <span class="mi"><i>Ω</i><sub>h</sub> = √(<i>mg</i>/(4<i>k</i><sub>T</sub>))</span>. 최대 회전수에서의 총추력을 무게로 나눈 것이 추력 대 중량비입니다.</p>
+<!--OUT file=p08_derived.txt note=params.derived — 표에서 계산한 값-->
+<p class="cap">twr ≈ 3.9 는 "무게의 네 배 가까이 밀 수 있다" 는 뜻입니다. 남는 추력이 기울기와 가속에 쓰이고, 바람을 버티는 여유가 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-rpm">
+<h3>손으로 풀어 보기 — 3장</h3>
+<p class="why">기준 쿼드로터의 호버 회전수를 분당 회전수(rpm)로 바꿔 보세요. <span class="mi">rpm = <i>Ω</i>·60/(2π)</span>.</p>
+<!--OUT file=p08_exercises.txt lines=5 note=ex/exercises8.py 3장-->
+<p class="cap">약 9,650 rpm — 데이터 표의 "까닭" 칸에 적힌 설계 목표와 같습니다(시험 test_params 가 그것을 확인합니다).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-motor-lag">
+<h3>모터는 명령을 곧장 따르지 않는다</h3>
+<div class="eq"><i>Ω̇</i> = (<i>Ω</i><sub>명령</sub> − <i>Ω</i>) / <i>τ</i><sub>m</sub></div>
+<p class="why">모터와 프로펠러에도 관성이 있어 회전수가 명령을 1차 지연으로 따라갑니다(7부 M16). τ<sub>m</sub> = 0.03 s 이면 명령을 바꾼 뒤 0.09 s 에야 95 % 에 닿습니다. 9부에서 이 지연이 제어기의 빠르기에 한계를 긋습니다.</p>
+<!--CODE file=py/droneshow/motor.py sym=clamp_omega..omega_for_thrust note=회전수의 한계와 추력 → 회전수-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-l19">
+<h3>호버는 평형점이다</h3>
+<!--THM id=L19-->
+<p class="cap">쓰는 도구: M20, 4장의 믹서 식(미리 씀). 가정: 수평 자세, 속도·각속도 0, 모터 넷 모두 Ω<sub>h</sub>, 바람 없음.</p>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li>로터마다 <span class="mi"><i>T</i> = <i>k</i><sub>T</sub><i>Ω</i><sub>h</sub>² = <i>mg</i>/4</span>, 합 <span class="mi"><i>F</i> = <i>mg</i></span>. <span class="why">Ω<sub>h</sub> 의 정의</span></li>
+<li>수평이면 <span class="mi"><i>R</i><b>e</b>₃ = <b>e</b>₃</span> 라 <span class="mi"><i>m</i><b>v̇</b> = <i>mg</i><b>e</b>₃ − <i>mg</i><b>e</b>₃ − <i>c</i><b>0</b> = <b>0</b></span>.</li>
+<li>추력 넷이 같으면 믹서의 토크 세 줄이 모두 0 이고(각 줄의 계수 합이 0), ω = 0 이라 자이로 항도 0: <span class="mi"><b>ω̇</b> = <b>0</b></span>.</li>
+<li>명령이 회전수와 같으므로 <span class="mi"><i>Ω̇</i> = 0</span>, 속도 0 이므로 <span class="mi"><b>ṗ</b> = <b>0</b></span>, ω = 0 이므로 <span class="mi"><i>q̇</i> = 0</span>. 17개 변화율이 모두 0.</li>
+</ol></div>
+<!--WITNESS id=L19-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-c3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 드론 무게가 1.5 배가 되면 호버 회전수와 추력 대 중량비는 어떻게 되나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 호버 회전수는 √m 에 비례하므로 √1.5 ≈ 1.22 배, 추력 대 중량비는 최대 추력이 그대로이므로 1/1.5 배(약 2.6)가 됩니다. 남는 추력이 줄어 급한 기동과 바람에 약해집니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 4장 믹서 -->
+
+<article class="card section" id="p8-c4"><p class="chnum">4장</p><h2>X 배치 믹서 — 추력 넷과 힘·토크 넷</h2>
+<p class="chsub">로터 배치 · 믹서 행렬 · 가역성 · 포화 · 언더액추에이션</p></article>
+
+<article class="card" id="p8-layout">
+<h3>로터 배치와 도는 방향</h3>
+<p class="why">몸체 x 축에서 반시계로 45°, 135°, 225°, 315° 자리에 로터 1–4 가 있습니다(팔 길이 L, 좌표로는 ±a, a = L/√2). 이웃한 로터는 서로 반대로 돕니다 — 1·3 은 위에서 보아 반시계, 2·4 는 시계.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>로터</th><th>자리 (x, y)</th><th>도는 방향</th><th>몸체가 받는 반토크</th></tr>
+<tr><td>1</td><td>(+a, +a) 왼쪽 앞</td><td>반시계 (+z)</td><td>시계 (−z)</td></tr>
+<tr><td>2</td><td>(−a, +a) 왼쪽 뒤</td><td>시계 (−z)</td><td>반시계 (+z)</td></tr>
+<tr><td>3</td><td>(−a, −a) 오른쪽 뒤</td><td>반시계 (+z)</td><td>시계 (−z)</td></tr>
+<tr><td>4</td><td>(+a, −a) 오른쪽 앞</td><td>시계 (−z)</td><td>반시계 (+z)</td></tr>
+</table></div>
+<p class="cap">번호 매김은 이 덱의 것입니다. PX4·ArduPilot 은 다른 번호를 쓰므로 섞어 읽지 마세요(SPEC §4.1).</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-mixer-eq">
+<h3>믹서 — 추력 넷이 만드는 것</h3>
+<p class="why">총추력은 합, 롤·피치 토크는 7부의 <span class="mi"><b>r</b> × (0, 0, <i>T</i>) = (<i>yT</i>, −<i>xT</i>, 0)</span>, 요 토크는 반토크의 합입니다.</p>
+<div class="eq left"><i>F</i> = <i>T</i>₁ + <i>T</i>₂ + <i>T</i>₃ + <i>T</i>₄<br>
+<i>τ</i><sub>x</sub> = <i>a</i>(<i>T</i>₁ + <i>T</i>₂ − <i>T</i>₃ − <i>T</i>₄)<br>
+<i>τ</i><sub>y</sub> = <i>a</i>(−<i>T</i>₁ + <i>T</i>₂ + <i>T</i>₃ − <i>T</i>₄)<br>
+<i>τ</i><sub>z</sub> = <i>c</i>(−<i>T</i>₁ + <i>T</i>₂ − <i>T</i>₃ + <i>T</i>₄), &nbsp; <i>c</i> = <i>k</i><sub>Q</sub>/<i>k</i><sub>T</sub></div>
+<!--CODE file=py/droneshow/mixer.py sym=matrix note=네 행이 네 식-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-mixer-numbers">
+<h3>기준 쿼드로터의 믹서 행렬</h3>
+<!--TABLE file=out/tbl_p08_mixer.html cap=exps/p08.py — a = 0.0849 m, c = 0.0103 m-->
+<p>요 줄의 계수(c ≈ 0.01)가 롤·피치 줄(a ≈ 0.08)보다 여덟 배쯤 작습니다. 같은 추력 차이로 요는 훨씬 약하게 돕니다 — 반토크는 추력보다 작은 효과이기 때문입니다. 이 차이가 곧 "요는 가장 먼저 포기한다" 는 설계로 이어집니다(몇 장 뒤).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-l4">
+<h3>믹서의 행은 서로 수직이다</h3>
+<!--THM id=L4-->
+<p class="cap">쓰는 도구: M1(내적), M7.</p>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li>행을 부호만 보면 (1,1,1,1), (1,1,−1,−1), (−1,1,1,−1), (−1,1,−1,1) 에 a, a, c 를 곱한 것입니다.</li>
+<li>서로 다른 두 부호 행의 내적은 +1 두 개와 −1 두 개의 합이라 0 입니다 — 예: (1,1,−1,−1)·(−1,1,1,−1) = −1 + 1 − 1 + 1 = 0. 여섯 쌍을 모두 셈하면 모두 0.</li>
+<li>그래서 <span class="mi"><i>MM</i><sup>T</sup> = diag(4, 4<i>a</i>², 4<i>a</i>², 4<i>c</i>²)</span> 이고, <span class="mi"><i>M</i>·<i>M</i><sup>T</sup><i>D</i><sup>−1</sup> = <i>DD</i><sup>−1</sup> = <i>I</i></span> 이므로 <span class="mi"><i>M</i><sup>−1</sup> = <i>M</i><sup>T</sup><i>D</i><sup>−1</sup></span>. <span class="why">M7 — 곱은 결합된다</span></li>
+</ol></div>
+<!--WITNESS id=L4-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-t9">
+<h3>믹서는 가역이다</h3>
+<!--THM id=T9-->
+<p class="cap">쓰는 도구: L4, 행의 배를 다른 행에 더해도 행렬식은 그대로(7부 M8 의 소거와 같은 성질 — 스케치로 씀). 가정: a &gt; 0, c &gt; 0.</p>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li>가역성은 L4 가 이미 줍니다 — 역행렬을 손으로 적었습니다. <span class="why">가정 a, c &gt; 0 이 D 를 가역으로 만든다</span></li>
+<li>행렬식: 각 행에서 a, a, c 를 밖으로 빼면 <span class="mi">det <i>M</i> = <i>a</i>²<i>c</i>·det <i>H</i></span>, H 는 ±1 행렬.</li>
+<li>H 의 둘째 행에서 첫 행을 빼고, 셋째·넷째 행에 첫 행을 더하면 첫 열이 (1, 0, 0, 0) 이 되고 남는 3×3 은 [[0,−2,−2],[2,2,0],[2,0,2]].</li>
+<li>그 3×3 의 행렬식은 첫 행 전개로 0 + 2·4 − 2·(−4) = 16(M6 의 식). 그래서 <span class="mi">det <i>M</i> = 16<i>a</i>²<i>c</i> &gt; 0</span>.</li>
+</ol></div>
+<!--WITNESS id=T9-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-mixinv">
+<h3>역믹서 — 원하는 힘·토크를 추력 넷으로</h3>
+<!--CODE file=py/droneshow/mixer.py sym=inverse..forward note=M⁻¹ = Mᵀ·diag(1/4, 1/4a², 1/4a², 1/4c²)-->
+<!--TABLE file=out/tbl_p08_mixinv.html cap=exps/p08.py — 요 열의 수가 큰 까닭: c 가 작아서 요 토크 조금에 추력 차이가 많이 든다-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-saturation">
+<h3>추력에는 한계가 있다 — 포화</h3>
+<p class="why">모터는 최소·최대 회전수 사이에서만 돕니다. 역믹서가 내놓은 추력 하나가 범위를 벗어나면 원하는 네 가지(F, τx, τy, τz)를 모두 낼 수는 없습니다. 무엇을 먼저 포기할지 정해야 합니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>차례</th><th>지키는 것</th><th>까닭</th></tr>
+<tr><td>1</td><td>롤·피치 토크</td><td>기울기를 잃으면 자세가 무너지고 모든 것을 잃는다</td></tr>
+<tr><td>2</td><td>총추력</td><td>잠깐 덜 밀거나 더 밀어도 높이는 곧 되찾는다</td></tr>
+<tr><td>3</td><td>요 토크</td><td>기수 방향은 늦게 맞춰도 비행에 지장이 적다</td></tr>
+</table></div>
+<!--CODE file=py/droneshow/mixer.py sym=allocate note=요를 줄이고 → 넷을 함께 옮기고 → 자른다-->
+<p class="cap">"넷을 함께 옮기기" 는 PX4 문서의 Airmode — 총추력을 올리거나 내려 토크를 지키는 것 — 를 단순하게 옮긴 것입니다. 요를 먼저 줄이는 차례는 이 덱이 정한 것이고 특정 펌웨어의 동작이라고 주장하지 않습니다. <!--CITE key=px4-mc-pid-tuning sec="Airmode & Mixer Saturation"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-allocate-table">
+<h3>포화 처리를 수로 보기</h3>
+<!--TABLE file=out/tbl_p08_allocate.html cap=exps/p08.py — 한계 0.048 N ≤ T ≤ 4.8 N-->
+<ul>
+<li>호버에서 요 토크 0.05 N·m 만 요구해도 이미 한계입니다 — 실제로 낸 것은 0.049. 요의 힘은 그만큼 약합니다.</li>
+<li>추력을 거의 다 쓰는 중에 롤을 요구하면(다섯째 줄) 롤 0.3 은 지키고 총추력을 19 에서 15.7 로 줄였습니다.</li>
+<li>추력을 거의 안 쓰는 중에 롤을 요구하면(여섯째 줄) 오히려 총추력을 늘려 롤을 지켰습니다.</li>
+</ul>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-t10">
+<h3>언더액추에이션 — 옆으로는 직접 못 민다</h3>
+<!--THM id=T10-->
+<p class="cap">쓰는 도구: M9(계수), T9.</p>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li>추력 넷이 몸체에 주는 힘은 몸체 z 방향뿐이라, 힘의 x·y 성분 두 줄은 늘 0 입니다. 나머지 네 줄이 믹서 M 입니다. <span class="why">로터 축이 모두 몸체 z 와 나란하다</span></li>
+<li>0 행은 계수를 늘리지 않으므로 계수는 M 의 계수와 같고, M 은 가역(T9)이라 계수 4 입니다.</li>
+<li>그래서 수평 가속을 원하면 먼저 몸체를 기울여 추력의 방향을 바꿔야 합니다 — 위치 → 자세 → 추력의 차례가 여기서 나옵니다.</li>
+</ol></div>
+<!--WITNESS id=T10-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-ex4" data-quiz>
+<h3>손으로 풀어 보기 — 4장</h3>
+<p class="q">Q. 추력이 (T1, T2, T3, T4) = (1.3, 1.2, 1.1, 1.2) N 입니다. 믹서 식으로 F, τx, τy, τz 를 구하고 드론이 어느 쪽으로 기우는지 말하세요.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> F = 4.8 N, τx = a(1.3 + 1.2 − 1.1 − 1.2) = 0.2a ≈ 0.017, τy = a(−1.3 + 1.2 + 1.1 − 1.2) = −0.2a ≈ −0.017, τz = c(−1.3 + 1.2 − 1.1 + 1.2) = 0. +x 토크는 왼쪽을 들고 −y 토크는 앞을 드니, 왼쪽 앞(로터 1 쪽)이 들립니다.
+<!--OUT file=p08_exercises.txt lines=6 note=ex/exercises8.py 4장-->
+</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-c4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 로터 넷이 모두 같은 방향으로 돈다면 믹서 행렬은 어떻게 되고, 무엇을 할 수 없게 되나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 요 줄이 c(−1, −1, −1, −1) 로 바뀌어 첫 줄(총추력)의 배가 됩니다. 두 행이 나란하니 계수가 3 으로 떨어져 M 이 가역이 아니게 됩니다. 총추력과 요를 따로 정할 수 없고, 호버 중에 반토크의 합이 0 이 아니라 몸체가 계속 돕니다 — 그래서 멀티로터는 반대로 도는 로터를 짝짓습니다(4부 T3).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 5장 6자유도 -->
+
+<article class="card section" id="p8-c5"><p class="chnum">5장</p><h2>6자유도 모델 — 식 17개와 그 코드</h2>
+<p class="chsub">상태 · 변화율 · RK4 한 걸음 · 제어 없는 드론</p></article>
+
+<article class="card" id="p8-state">
+<h3>상태 17개</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>칸</th><th>무엇</th><th>좌표</th><th>수</th></tr>
+<tr><td>0–2</td><td>위치 <b>p</b></td><td>세계 ENU</td><td>3</td></tr>
+<tr><td>3–5</td><td>속도 <b>v</b></td><td>세계 ENU</td><td>3</td></tr>
+<tr><td>6–9</td><td>자세 q (w, x, y, z)</td><td>몸체 → 세계</td><td>4</td></tr>
+<tr><td>10–12</td><td>각속도 <b>ω</b></td><td>몸체 FLU</td><td>3</td></tr>
+<tr><td>13–16</td><td>모터 회전수 Ω₁…Ω₄</td><td>—</td><td>4</td></tr>
+</table></div>
+<p>자유도는 여섯(위치 셋, 자세 셋)인데 수가 17개인 것은 속도·각속도가 따로 있고, 자세를 넷(쿼터니언)으로 들고, 모터의 느림까지 상태로 들기 때문입니다.</p>
+<!--CODE file=py/droneshow/quadrotor.py sym=pos..hover_state note=상태를 잘라 보는 이름들과 호버 상태-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-eqs">
+<h3>변화율 — 모델의 전부</h3>
+<div class="eq left"><b>ṗ</b> = <b>v</b><br>
+<b>v̇</b> = (<i>R</i>(<i>q</i>)(0, 0, Σ<i>T</i>ᵢ) − <i>c</i><b>v</b> + <b>f</b><sub>바람</sub>)/<i>m</i> − <i>g</i><b>e</b>₃<br>
+<i>q̇</i> = ½ <i>q</i> ⊗ (0, <b>ω</b>)<br>
+<b>ω̇</b> = <i>J</i><sup>−1</sup>(<b>τ</b> − <b>ω</b> × <i>J</i><b>ω</b>)<br>
+<i>Ω̇</i>ᵢ = (<i>Ω</i><sub>명령,i</sub> − <i>Ω</i>ᵢ)/<i>τ</i><sub>m</sub></div>
+<p class="cap">둘째 줄은 7부 6장의 뉴턴 법칙, 셋째는 T7, 넷째는 T8, 다섯째는 M16 입니다. <b>τ</b> 는 추력 넷 <span class="mi"><i>T</i>ᵢ = <i>k</i><sub>T</sub><i>Ω</i>ᵢ²</span> 을 믹서에 넣어 얻습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-deriv-code">
+<h3>변화율을 코드로</h3>
+<!--CODE file=py/droneshow/quadrotor.py sym=deriv note=식 다섯 줄이 코드 열여섯 줄-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-step-code">
+<h3>한 걸음 — RK4 와 다시 정규화</h3>
+<!--CODE file=py/droneshow/quadrotor.py sym=step note=0.002 초씩-->
+<p>RK4 는 17개 수를 같은 방식으로 나아가게 합니다. 걸음 끝에서 쿼터니언만 크기 1 로 되돌립니다 — 적분이 크기를 조금씩 바꾸기 때문입니다(T7). 모터 명령은 걸음 동안 일정하다고 둡니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-openloop">
+<h3>제어가 없으면 — 모터 하나가 1 % 셀 때</h3>
+<p class="why">호버 상태에서 로터 1 만 회전수를 1 % 올리고, 나머지는 호버 회전수 그대로 둡니다. 제어기는 없습니다.</p>
+<!--TABLE file=out/tbl_p08_openloop.html cap=exps/p08.py — 2 초 뒤 롤 148°, 뒤집혔다-->
+<p>1 % 의 추력 차이가 롤·피치 토크를 만들고, 토크는 각가속도, 각속도, 기울기를 차례로 키웁니다. 기울면 추력이 옆으로 새어 옆으로 미끄러지고, 높이도 잃습니다. 멀티로터는 스스로 서 있지 못하는 기계입니다 — 그래서 9부가 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-integrators">
+<h3>기울기에서 위치까지 — 적분기 넷</h3>
+<p class="why">토크를 넣으면 무엇이 몇 번 적분되어 위치가 되는지 세어 봅니다.</p>
+<div class="eq">토크 → (÷J) 각가속도 → ∫ 각속도 → ∫ 기울기 → (×g) 수평 가속도 → ∫ 속도 → ∫ 위치</div>
+<p>적분이 네 번입니다. 적분 하나마다 반응이 한 박자 늦어지므로, 위치를 곧장 토크로 잡으려 하면 느리고 불안정합니다. 그래서 제어기는 이 사슬을 안쪽부터 한 고리씩 닫습니다 — 각속도, 자세, 속도, 위치(9부 캐스케이드).</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p8-c5-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 모터 지연(τ<sub>m</sub>)을 모델에서 빼고 명령이 곧장 회전수가 된다고 두면, 무엇이 더 쉬워지고 무엇을 잃나요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 상태가 13개로 줄고 적분할 것이 하나 덜 느린 쪽으로 가벼워집니다. 대신 제어기가 모터의 느림을 모르고 설계되어, 시뮬레이터에서는 잘 되던 빠른 제어가 실제 기체에서 흔들릴 수 있습니다. 이 덱은 모터 지연을 남겨 9부의 실패 실험(안쪽 루프가 느릴 때)을 현실에 가깝게 합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 6장 호버 선형화 -->
+
+<article class="card section" id="p8-c6"><p class="chnum">6장</p><h2>호버 선형화 — 기울면 미끄러진다</h2>
+<p class="chsub">작은 각에서 수평 가속도는 기울기에 비례한다</p></article>
+
+<article class="card" id="p8-t11">
+<h3>호버 선형화</h3>
+<!--THM id=T11-->
+<p class="cap">쓰는 도구: M14(작은 각), T4(회전행렬의 열). 가정: 총추력 mg, 요 0, 기울기는 롤 또는 피치 하나.</p>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li>피치 θ(몸체 y 축 둘레)만 있으면 몸체 z 축은 세계에서 <span class="mi"><i>R</i><b>e</b>₃ = (sin <i>θ</i>, 0, cos <i>θ</i>)</span>. <span class="why">y 축 회전행렬의 셋째 열(T4)</span></li>
+<li>추력 mg 를 그 방향으로 두면 <span class="mi"><b>a</b> = <i>g</i>(sin <i>θ</i>, 0, cos <i>θ</i>) − <i>g</i><b>e</b>₃ = (<i>g</i> sin <i>θ</i>, 0, <i>g</i>(cos <i>θ</i> − 1))</span>. <span class="why">가정 "추력 mg" 를 여기서 쓴다</span></li>
+<li>M14 에서 <span class="mi"><i>g</i> sin <i>θ</i> = <i>gθ</i>(1 + <i>O</i>(<i>θ</i>²))</span>, <span class="mi"><i>g</i>(cos <i>θ</i> − 1) = <i>O</i>(<i>θ</i>²)</span>.</li>
+<li>롤 φ(x 축 둘레)만 있으면 <span class="mi"><i>R</i><b>e</b>₃ = (0, −sin <i>φ</i>, cos <i>φ</i>)</span> 라 <span class="mi"><i>ÿ</i> = −<i>g</i> sin <i>φ</i> ≈ −<i>gφ</i></span>. 오른쪽(−y)으로 미끄러집니다. <span class="why">x 축을 오른손으로 돌리면 +y 쪽 끝이 올라간다</span></li>
+</ol></div>
+<!--WITNESS id=T11-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-linear-table">
+<h3>선형화를 수로 — 각을 반으로</h3>
+<!--TABLE file=out/tbl_p08_linear.html cap=exps/p08.py — 추력 mg, 피치만. 상대 오차가 각을 반으로 줄일 때마다 4분의 1-->
+<p>20° 에서도 선형 모델의 수평 가속도 오차는 2 % 입니다. 대신 높이가 새는 몫(z̈ 정확)은 선형 모델에 아예 없습니다 — 기울인 채 추력을 그대로 두면 가라앉습니다. 실제 제어기는 기운 만큼 총추력을 늘립니다(9부의 "f<sub>des</sub>·z<sub>B</sub>").</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-linear-model">
+<h3>선형 모델 — 드론을 이중 적분기 넷으로</h3>
+<p class="why">호버 둘레에서 작은 기울기만 생각하면 드론은 거의 서로 떨어진 네 개의 사슬입니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>축</th><th>사슬</th></tr>
+<tr><td>x (동)</td><td>τ<sub>y</sub> → θ̈ → θ → ẍ ≈ gθ → x</td></tr>
+<tr><td>y (북)</td><td>τ<sub>x</sub> → φ̈ → φ → ÿ ≈ −gφ → y</td></tr>
+<tr><td>z (위)</td><td>F − mg → z̈ → z</td></tr>
+<tr><td>요</td><td>τ<sub>z</sub> → ψ̈ → ψ</td></tr>
+</table></div>
+<p class="cap">9부의 1차·2차 계 분석(T13–T17)은 이 사슬 하나하나에 대한 것입니다. 모델 전체(비선형)는 시뮬레이터가 적분하고, 선형 분석은 설계의 방향만 줍니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p8-ex6" data-quiz>
+<h3>손으로 풀어 보기 — 6장</h3>
+<p class="q">Q. 피치 10° 로 기운 채 총추력 mg 를 내면 수평 가속도는 얼마인가요? 선형 모델 gθ 와 비교하세요.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 정확한 값은 g sin 10° ≈ 1.7035, 선형 모델은 g·0.1745 ≈ 1.7122 m/s². 차이 0.5 % — 선형화 표의 10° 줄과 같습니다.
+<!--OUT file=p08_exercises.txt lines=7-8 note=ex/exercises8.py 5장(선형화)-->
+</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-c6-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. 선형 모델에서는 x 와 y 가 서로 모릅니다. 실제 드론에서 둘이 섞이는 경우를 하나 들어 보세요.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 요가 돌아 있을 때입니다. 요가 90° 면 몸체의 앞이 북쪽이라, 피치로 기울면 동쪽이 아니라 북쪽으로 미끄러집니다. 그래서 제어기는 원하는 가속도를 세계 좌표로 계산한 뒤 요를 반영해 자세를 만듭니다(다음 장의 평탄성).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<!-- ============================================================ 7장 평탄성 -->
+
+<article class="card section" id="p8-c7"><p class="chnum">7장</p><h2>미분 평탄성 — 궤적이 입력을 정한다</h2>
+<p class="chsub">가속도가 추력을, 요가 자세를, 가가속도가 각속도를</p></article>
+
+<article class="card" id="p8-flat-idea">
+<h3>궤적을 알면 나머지가 다 정해진다</h3>
+<p class="why">위치의 궤적 <span class="mi"><b>p</b>(<i>t</i>)</span> 와 요 <span class="mi"><i>ψ</i>(<i>t</i>)</span> 를 (충분히 매끄럽게) 정하면, 그것을 따라 나는 데 필요한 총추력·자세·각속도가 미분만으로 정해집니다. 이 성질을 <b>미분 평탄성</b>이라 부르고, 네 수 (x, y, z, ψ)를 평탄 출력이라 합니다.</p>
+<ul>
+<li>가속도 <span class="mi"><b>a</b> = <b>p̈</b></span> → 추력의 크기와 방향.</li>
+<li>추력 방향 + 요 → 자세.</li>
+<li>가가속도 <span class="mi"><b>j</b> = <b>p</b>⃛</span> + 요 변화율 → 몸체 각속도.</li>
+</ul>
+<p class="cap">이 성질 덕분에 10부는 궤적을 위치만으로 설계하고(최소 스냅), 9부의 제어기는 그 미분을 앞먹임합니다. 이 결과는 Mellinger·Kumar 가 쿼드로터에 대해 보였습니다. <!--CITE key=mellinger2011-minsnap--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p8-l26">
+<h3>추력 방향과 요가 자세를 하나로 정한다</h3>
+<!--THM id=L26-->
+<p class="cap">쓰는 도구: M2, M3. 가정: <b>z</b><sub>B</sub> 가 요 방향 수평벡터 <b>x</b><sub>C</sub> 와 나란하지 않다(드론이 옆으로 90° 눕지 않는다).</p>
+<div class="proof"><span class="h">증명</span>
+<ol class="pf">
+<li><span class="mi"><b>y</b><sub>B</sub> = <b>z</b><sub>B</sub> × <b>x</b><sub>C</sub> / |<b>z</b><sub>B</sub> × <b>x</b><sub>C</sub>|</span> 는 둘에 수직인 단위벡터입니다. <span class="why">M2. 분모가 0 이 아니라는 가정을 여기서 쓴다</span></li>
+<li><span class="mi"><b>x</b><sub>B</sub> = <b>y</b><sub>B</sub> × <b>z</b><sub>B</sub></span> 는 두 단위벡터의 외적으로 둘에 수직이고, 사이각이 90° 라 크기 1 입니다. <span class="why">M3</span></li>
+<li>세 벡터는 서로 수직인 단위벡터이고 <span class="mi"><b>x</b><sub>B</sub> × <b>y</b><sub>B</sub> = <b>z</b><sub>B</sub></span>(오른손)라 이들을 열로 둔 행렬이 회전행렬입니다.</li>
+<li><b>x</b><sub>B</sub> 는 <b>x</b><sub>C</sub> 와 <b>z</b><sub>B</sub> 가 펼치는 평면에 있으므로(<b>y</b><sub>B</sub> 에 수직), 기수를 수평면에 내린 방향이 ψ 입니다.</li>
+</ol></div>
+<!--CODE file=py/droneshow/attitude.py sym=_axes..desired_attitude note=세 축을 세우고 행렬 → 쿼터니언(셰퍼드)-->
+<!--WITNESS id=L26-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-t12">
+<h3>미분 평탄성 — 추력과 자세</h3>
+<!--THM id=T12-->
+<p class="cap">쓰는 도구: M20, L26, M11, L3. 가정: 항력과 바람을 뺀 모델, <span class="mi"><b>a</b> + <i>g</i><b>e</b>₃ ≠ <b>0</b></span>(자유낙하가 아니다), L26 의 가정.</p>
+<div class="proof cont"><span class="h">증명 — 추력과 자세</span>
+<ol class="pf">
+<li>힘은 추력(몸체 z)과 중력뿐이므로 <span class="mi"><i>m</i><b>a</b> = <i>F</i><b>z</b><sub>B</sub> − <i>mg</i><b>e</b>₃</span>, 곧 <span class="mi"><i>F</i><b>z</b><sub>B</sub> = <i>m</i>(<b>a</b> + <i>g</i><b>e</b>₃)</span>. <span class="why">M20, 항력을 뺀다는 가정</span></li>
+<li>z<sub>B</sub> 는 단위벡터이고 추력은 위로만 미므로(F &gt; 0) <span class="mi"><i>F</i> = <i>m</i>|<b>a</b> + <i>g</i><b>e</b>₃|</span>, <span class="mi"><b>z</b><sub>B</sub> = (<b>a</b> + <i>g</i><b>e</b>₃)/|…|</span>. <span class="why">0 이 아니라는 가정 — 나눌 수 있다</span></li>
+<li>z<sub>B</sub> 와 ψ 가 정해졌으니 L26 이 자세 전체를 정합니다.</li>
+</ol></div>
+<p class="cap">각속도는 다음 장에서 — 이 식을 한 번 더 미분합니다.</p>
+</article>
+
+<article class="card" id="p8-t12b">
+<h3>미분 평탄성 — 각속도는 가가속도에서</h3>
+<!--THM id=T12 cont-->
+<p class="cap">쓰는 도구: M11(몫의 미분), L3(몸체에 붙은 벡터의 미분 <span class="mi"><b>ż</b><sub>B</sub> = <b>ω</b> × <b>z</b><sub>B</sub></span>, 세계 성분으로), M2.</p>
+<div class="proof"><span class="h">증명 — 각속도</span>
+<ol class="pf">
+<li><span class="mi"><b>f</b> = <b>a</b> + <i>g</i><b>e</b>₃</span> 이면 <span class="mi"><b>ḟ</b> = <b>j</b></span>. 단위벡터 <span class="mi"><b>z</b><sub>B</sub> = <b>f</b>/|<b>f</b>|</span> 를 미분하면 <span class="mi"><b>h</b> ≡ <b>ż</b><sub>B</sub> = (<b>j</b> − (<b>z</b><sub>B</sub>·<b>j</b>)<b>z</b><sub>B</sub>)/|<b>f</b>|</span>. <span class="why">M11 — 크기가 변하는 몫을 빼면 수직 성분만 남는다</span></li>
+<li>한편 <span class="mi"><b>ω</b> = <i>p</i><b>x</b><sub>B</sub> + <i>q</i><b>y</b><sub>B</sub> + <i>r</i><b>z</b><sub>B</sub></span> 이면 <span class="mi"><b>ż</b><sub>B</sub> = <b>ω</b> × <b>z</b><sub>B</sub> = <i>q</i><b>x</b><sub>B</sub> − <i>p</i><b>y</b><sub>B</sub></span>. <span class="why">x×z = −y, y×z = x</span></li>
+<li>두 식을 맞추면 <span class="mi"><i>p</i> = −<b>h</b>·<b>y</b><sub>B</sub></span>, <span class="mi"><i>q</i> = <b>h</b>·<b>x</b><sub>B</sub></span> — r 은 z<sub>B</sub> 만 봐서는 안 보입니다.</li>
+<li>r 은 L26 의 구성 <span class="mi"><b>y</b><sub>B</sub>·<b>x</b><sub>C</sub> = 0</span> 을 미분해 얻습니다: <span class="mi"><b>ẏ</b><sub>B</sub>·<b>x</b><sub>C</sub> + <b>y</b><sub>B</sub>·<b>ẋ</b><sub>C</sub> = 0</span>, <span class="mi"><b>ẋ</b><sub>C</sub> = <i>ψ̇</i><b>y</b><sub>C</sub></span>.</li>
+<li><span class="mi"><b>x</b><sub>C</sub> = <i>α</i><b>x</b><sub>B</sub> + <i>β</i><b>z</b><sub>B</sub></span>(y<sub>B</sub> 에 수직이므로)로 쓰면 <span class="mi"><b>ẏ</b><sub>B</sub>·<b>x</b><sub>C</sub> = (<b>ω</b>×<b>y</b><sub>B</sub>)·<b>x</b><sub>C</sub> = −<i>αr</i> + <i>βp</i></span>. <span class="why">M2 의 성분 계산</span></li>
+<li>그래서 <span class="mi"><i>r</i> = (<i>βp</i> + <i>ψ̇</i> <b>y</b><sub>B</sub>·<b>y</b><sub>C</sub>)/<i>α</i></span>. <span class="why">α ≠ 0 — L26 의 가정에서 x<sub>B</sub> 는 x<sub>C</sub> 쪽을 본다</span></li>
+</ol></div>
+<!--WITNESS id=T12-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-flat-code">
+<h3>평탄성을 코드로 — 그리고 수치 미분과 대조</h3>
+<!--CODE file=py/droneshow/attitude.py sym=flat_rates note=증명의 1·3·6단계-->
+<!--TABLE file=out/tbl_p08_flat.html cap=exps/p08.py — 반지름 2 m·0.8 rad/s 의 원, 요 0.3 rad/s. 자세를 ±10⁻⁵ 초 떨어진 두 시각에서 만들어 차로 구한 각속도와 비교-->
+<p class="cap">흔히 인용되는 간단한 식 <span class="mi"><i>r</i> = <i>ψ̇</i>·(<b>e</b>₃·<b>z</b><sub>B</sub>)</span> 는 이 구성에서 정확하지 않습니다 — 원 궤적의 표에서 r 이 요 변화율 0.3 과 조금씩 다른 것이 보입니다. 이 덱은 증명한 식만 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-ff">
+<h3>평탄성의 쓸모 — 앞먹임</h3>
+<p class="why">궤적의 미분을 제어기에 미리 알려 주면(앞먹임), 제어기는 오차가 생긴 뒤에야 반응하지 않아도 됩니다. 반지름 2 m·0.8 rad/s 의 원을 네 단계로 따라 납니다.</p>
+<!--TABLE file=out/tbl_p08_ff.html cap=exps/p08.py — 물리 모드 12 초, 처음 4 초를 뺀 최대 위치 오차-->
+<ul>
+<li>속도 앞먹임으로 1.28 m → 0.36 m, 가속도까지 넣으면 0.09 m.</li>
+<li>가가속도(각속도) 앞먹임은 항력이 있을 때 오히려 조금 나빠졌습니다. 항력이 없으면 약간 좋아집니다 — 남은 오차의 주인은 제어기가 모르는 항력이지 가가속도가 아닙니다.</li>
+</ul>
+<p class="cap">예상과 다른 결과도 그대로 싣습니다. 무엇이 남은 오차를 만드는지 가르는 실험(항력 0)을 함께 둔 것이 요점입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-ex7" data-quiz>
+<h3>손으로 풀어 보기 — 7장</h3>
+<p class="q">Q. 반지름 2 m 의 원을 0.8 rad/s 로 도는 드론은 얼마나 기울어야 하나요? T12 의 1–2단계로 구하세요.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 구심 가속도 <span class="mi"><i>rω</i>² = 2·0.64 = 1.28</span> m/s² 가 수평, 중력 보상 g 가 수직이라 기울기는 <span class="mi">atan(1.28/9.81) ≈ 7.4°</span>.
+<!--OUT file=p08_exercises.txt lines=9-10 note=ex/exercises8.py 6장-->
+</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-c7-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. 평탄성으로 궤적을 설계할 때 가가속도가 불연속인 궤적(예: 가속도가 계단처럼 바뀌는 사다리꼴)은 무엇이 문제인가요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 가가속도가 순간적으로 무한대가 되어, T12 가 요구하는 몸체 각속도(p, q)가 무한대가 됩니다. 실제 드론은 자세를 순간 이동할 수 없으므로 그 구간에서 궤적을 놓칩니다. 10부의 최소 스냅 궤적이 가가속도와 스냅까지 연속인 까닭입니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p8-src">
+<h3>예제 전문 — 8부 연습 문제의 답</h3>
+<!--CODE file=ex/exercises8.py lines=1-42 note=ch1~ch4-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p8-src2">
+<h3>예제 전문 — 8부 연습 문제의 답 (계속)</h3>
+<!--CODE file=ex/exercises8.py lines=43-71 note=ch5~ch6 과 출력 모양-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p8-quiz" data-quiz>
+<h3>8부 퀴즈</h3>
+<p class="q">Q. 이 부의 모델에 없는 것 셋을 대고, 각각이 시뮬레이션 결과를 어느 쪽으로 틀리게 할지 말해 보세요.</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> (1) 로터끼리·지면과의 공기 간섭(다운워시, 지면 효과) — 쇼처럼 여러 대가 가까이 날 때 추력이 모델보다 약하거나 흔들립니다(13부 T35). (2) 배터리 전압이 떨어지는 것 — 같은 명령에서 추력이 줄어 끝으로 갈수록 느려집니다. (3) 프로펠러의 비틀림·진동 — 센서 잡음이 늘어 D항이 더 흔들립니다(9부). 모델은 이런 것을 모른다고 알고 써야 합니다.</div>
+<span class="tier ill">설명용</span>
+</article>
