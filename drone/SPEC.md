@@ -254,9 +254,12 @@ Noise parameters are run-config fields; defaults in `data/params.tsv` (`sigma_*`
 - Formation generators return a list of `n` points `[x, y, z]` (ENU, metres), centred at
   the origin in `x`, bottom at `z = z0` unless stated, and must respect `dmin` (tests):
   `grid(n, spacing, plane)`, `circle(n, radius)`, `rings(n, radius, layers, dz)`,
-  `sphere(n, radius)` (Fibonacci lattice), `heart(n, size)` (parametric
-  `x = 16 sin³t, z = 13 cos t − 5 cos 2t − 2 cos 3t − cos 4t`, resampled to equal arc
-  length), `globe(n, radius, meridians, parallels)`, `text(s, pitch)` (built-in 5×7 font,
+  `sphere(n, radius)` (Fibonacci lattice), `heart(n, d, z0, layers=1)` (parametric
+  `x = 16 sin³t, z = 13 cos t − 5 cos 2t − 2 cos 3t − cos 4t`; `layers` nests ¾, ½ …
+  scaled copies), `globe(n, radius, meridians, parallels)`. Points on curves are proposed
+  where the **chord** from the previous proposal reaches `d` (not every arc length `d` —
+  that halved the density, see PLAN log 0c8f03b), greedily accepted, and the scale is
+  bisected until at least `n` are accepted; `text(s, pitch)` (built-in 5×7 font,
   `#` = drone), `image(pgm_text, n, dmin, seed)` (threshold → Poisson-disk thinning with
   seeded dart throwing → Lloyd relaxation, 10 iterations, on the bright pixels),
   `digit(d, pitch)` (countdown). The plane of 2-D formations is `x–z` (facing the audience
