@@ -1,0 +1,165 @@
+    An efficient orientation filter for inertial and
+           inertial/magnetic sensor arrays
+                          Sebastian O.H. Madgwick
+                                  April 30, 2010
+
+
+                                      Abstract
+    This report presents a novel orientation filter applicable to IMUs consisting of
+tri-axis gyroscopes and accelerometers, and MARG sensor arrays that also include
+tri-axis magnetometers. The MARG implementation incorporates magnetic distortion
+and gyroscope bias drift compensation. The filter uses a quaternion representation,
+allowing accelerometer and magnetometer data to be used in an analytically derived
+and optimised gradient-descent algorithm to compute the direction of the gyroscope
+measurement error as a quaternion derivative. The benefits of the filter include: (1)
+computationally inexpensive; requiring 109 (IMU) or 277 (MARG) scalar arithmetic
+operations each filter update, (2) effective at low sampling rates; e.g. 10 Hz, and (3)
+contains 1 (IMU) or 2 (MARG) adjustable parameters defined by observable system
+characteristics. Performance was evaluated empirically using a commercially available
+orientation sensor and reference measurements of orientation obtained using an optical
+measurement system. A simple calibration method is presented for the use of the
+optical measurement equipment in this application. Performance was also benchmarked
+against the propriety Kalman-based algorithm of orientation sensor. Results indicate
+the filter achieves levels of accuracy exceeding that of the Kalman-based algorithm;
+< 0.6◦ static RMS error, < 0.8◦ dynamic RMS error. The implications of the low
+computational load and ability to operate at low sampling rates open new opportunities
+for the use of IMU and MARG sensor arrays in real-time applications of limited power
+or processing resources or applications that demand extremely high sampling rates.
+
+
+
+
+                                          1
+Contents
+1 Introduction                                                                               3
+
+2 Quaternion representation                                                                   4
+
+3 Filter derivation                                                                           6
+  3.1 Orientation from angular rate . . . . . . . . . . . . . . . . . . . . . . . . . .       6
+  3.2 Orientation from vector observations . . . . . . . . . . . . . . . . . . . . . .        6
+  3.3 Filter fusion algorithm . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .    10
+  3.4 Magnetic distortion compensation . . . . . . . . . . . . . . . . . . . . . . . .       11
+  3.5 Gyroscope bias drift compensation . . . . . . . . . . . . . . . . . . . . . . .        12
+  3.6 Filter gains . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .   13
+
+4 Experimentation                                                                            14
+  4.1 Equipment . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .    14
+  4.2 Orientation from optical measurements . . . . . . . . . . . . . . . . . . . . .        14
+  4.3 Calibration of frame alignments . . . . . . . . . . . . . . . . . . . . . . . . .      16
+  4.4 Experimental proceedure . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      18
+
+5 Results                                                                                    19
+  5.1 Typical results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .    19
+  5.2 Static and dynamic performance . . . . . . . . . . . . . . . . . . . . . . . .         21
+  5.3 Filter gain vs. performance . . . . . . . . . . . . . . . . . . . . . . . . . . . .    22
+  5.4 Sampling rate vs. performance . . . . . . . . . . . . . . . . . . . . . . . . . .      23
+  5.5 Gyroscope bias drift . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .     23
+
+6 Discussion                                                                                 24
+
+7 Conclusions                                                                                25
+
+A IMU filter implementation optimised in C                                                   29
+
+B MARG filter implementation optimised in C                                                  30
+
+
+
+
+                                               2
+1     Introduction
+The accurate measurement of orientation plays a critical role in a range of fields includ-
+ing: aerospace [1, 2, 3], robotics [4, 5], navigation [6, 7] and human motion analysis [8, 9]
+and machine interaction [10]. Whilst a variety of technologies enable the measurement of
+orientation, inertial based sensory systems have the advantage of being completely self con-
+tained such that the measurement entity is constrained neither in motion nor to any specific
+environment or location. An IMU (Inertial Measurement Unit) consists of gyroscopes and
+accelerometers enabling the tracking of rotational and translational movements. In order to
+measure in three dimensions, tri-axis sensors consisting of 3 mutually orthogonal sensitive
+axes are required. A MARG (Magnetic, Angular Rate, and Gravity) sensor is a hybrid IMU
+
+
+3     Filter derivation
+3.1    Orientation from angular rate
+A tri-axis gyroscope will measure the angular rate about the x, y and z axes of the senor
+frame, termed ωx , ωy and ωz respectively. If these parameters (in rads−1 ) are arranged into
+the vector S ω defined by equation (10), the quaternion derivative describing the rate of
+change of orientation of the earth frame relative to the sensor frame SE q̇ can be calculated
+[38] as equation (11).
+
+                                     S
+                                                       
+                                         ω = 0 ωx ωy ωz                                        (10)
+
+                                          S     1S     S
+                                          E q̇ = E q̂ ⊗ ω                                       (11)
+                                             2
+    The orientation of the earth frame relative to the sensor frame at time t, E        S qω,t , can
+                                                                       S
+be computed by numerically integrating the quaternion derivative E q̇ω,t as described by
+equations (12) and (13) provided that initial conditions are known. In these equations, S ωt
+is the angular rate measured at time t, ∆t is the sampling period and SE q̂est,t-1 is the previous
+estimate of orientation. The sub-script ω indicates that the quaternion is calculated from
+angular rates.
+
+                                     S         1S            S
+                                     E q̇ ω,t = E q̂est,t-1 ⊗ ωt                               (12)
+                                               2
+                                   S        S             S
+                                   E qω,t = E q̂est,t-1 + E q̇ ω,t ∆t                          (13)
+
+3.2    Orientation from vector observations
+A tri-axis accelerometer will measure the magnitude and direction of the field of gravity in the
+sensor frame compounded with linear accelerations due to motion of the sensor. Similarly, a
+tri-axis magnetometer will measure the magnitude and direction of the earth’s magnetic field
+in the sensor frame compounded with local magnetic flux and distortions. In the context
+of an orientation filter, it will initially be assumed that an accelerometer will measure only
+gravity, a magnetometer will measure only the earth’s magnetic field.
+
+
+
+
+3.4     Magnetic distortion compensation
+Measurements of the earth’s magnetic field will be distorted by the presence of ferromagnetic
+elements in the vicinity of the magnetometer. Investigations into the effect of magnetic
+distortions on an orientation sensor’s performance have shown that substantial errors may
+be introduced by sources including electrical appliances, metal furniture and metal structures
+within a buildings construction [40, 41]. Sources of interference fixed in the sensor frame,
+termed hard iron biases, can be removed through calibration [42, 43, 44, 45]. Sources of
+interference in the earth frame, termed soft iron, cause errors in the measured direction of
+
+                                                         11
+the earth’s magnetic field. Declination errors, those in the horizontal plane relative to the
+earth’s surface, cannot be corrected without an additional reference of heading. Inclination
+errors, those in the vertical plane relative to the earth’s surface, may be compensated for as
+the accelerometer provides an additional measurement of the sensor’s attitude.
+    The measured direction of the earth’s magnetic field in the earth frame at time t, E ĥt , can
+be computed as the normalised magnetometer measurement, S m̂t , rotated by the estimated
+orientation of the sensor provided by the filter, SE q̂est,t-1 ; as described by equation (45). The
+effect of an erroneous inclination of the measured direction earth’s magnetic field, E ĥt , can
+be corrected if the filter’s reference direction of the earth’s magnetic field, E b̂t , is of the same
+inclination. This is achieved by computing E b̂t as E ĥt normalised to have only components
+in the earth frame x and z axes; as described by equation (46).
+
+                      E
+                                                                       ∗
+                          ĥt = 0 hx hy hz = SE q̂est,t-1 ⊗ S m̂t ⊗ SE q̂est,t -1                (45)
+
+                                    E
+                                              p               
+                                        b̂t = 0 h2x + h2y 0 hz                                   (46)
+    Compensating for magnetic distortions in this way ensures that magnetic disturbances
+are limited to only affect the estimated heading component of orientation. The approach also
+eliminates the need for the reference direction of the earth’s magnetic field to be predefined;
+a potential disadvantage of other orientation filter designs [17, 24].
+
+3.5     Gyroscope bias drift compensation
+The gyroscope zero bias will drift over time, with temperature and with motion. Any
+practical implementation of an IMU or MARG sensor array must account for this. An
+advantage of Kalman-based approaches is that they are able to estimate the gyroscope bias
+as an additional state within the system model [26, 30, 15, 24]. However, Mahony et al [35]
+showed that gyroscope bias drift may also be compensated for by simpler orientation filters
+through the integral feedback of the error in the rate of change of orientation. A similar
+approach will be used here.
+    The normalised direction of the estimated error in the rate of change of orientation, SE q̂˙  ,
