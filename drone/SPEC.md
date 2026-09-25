@@ -281,7 +281,12 @@ Noise parameters are run-config fields; defaults in `data/params.tsv` (`sigma_*`
 Keyframes are sorted by `t`; positions in metres (ENU), colours 0..255 integers. Between
 keyframes `k` and `k+1` the position is `p_k + β(u)·(p_{k+1} − p_k)`, `u = (t−t_k)/(t_{k+1}−t_k)`,
 with `β` from `profile` — **the same β for every drone**, so a transition is synchronised
-straight-line motion and CAPT's guarantee applies (T31). Colours interpolate linearly in
+straight-line motion and CAPT's guarantee applies (T31). A keyframe may carry an optional
+8th element, the kind of the segment that *starts* there: `"T"` trapezoid (with the show's
+`ramp`), `"S"` min-snap, `"J"` min-jerk, `"L"` linear (used by the rotation and wave
+tricks, sampled densely). A drone may carry `"lights": [[t, r, g, b], …]`; if present, its
+colour comes from the lights track (linear in time) instead of the keyframes — tricks that
+change light without changing motion (dark moves, LED-only motion) edit only this track. Colours interpolate linearly in
 the stored (gamma-encoded) values unless `"color": "linear-light"` is given, in which case
 they are decoded with γ = 2.2, interpolated, and re-encoded (T34).
 
