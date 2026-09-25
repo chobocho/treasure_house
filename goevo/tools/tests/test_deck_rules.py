@@ -300,5 +300,16 @@ class Badges(unittest.TestCase):
         self.assertEqual(check_xref.badge_class('1.10'), 'v110')
 
 
+class SplitPart(unittest.TestCase):
+    # 한 부를 서브에이전트 둘이 나눠 쓰면 조각 파일이 둘이 된다(08_·08b_·08c_).
+    # 앞 두 자리가 같은 파일의 장수는 한 부로 더해야 예산 검사가 맞다.
+    def test_files_with_same_prefix_add_up(self):
+        body = ('<!-- ===== 08_a.html ===== -->\n<article></article>\n'
+                '<!-- ===== 08b_b.html ===== -->\n<article></article>'
+                '<article></article>\n'
+                '<!-- ===== 09_c.html ===== -->\n<article></article>\n')
+        self.assertEqual(build_deck.budget_report(body), {8: 3, 9: 1})
+
+
 if __name__ == '__main__':
     unittest.main()

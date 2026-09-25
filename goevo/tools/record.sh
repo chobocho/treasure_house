@@ -39,7 +39,7 @@ if [ "${1:-}" = '--check' ]; then
     # 출력을 바꾸지 않고, 지우면 세 번 모두 처음부터 컴파일해 이
     # 기계에서 너무 길다.
     rm -rf scratch/work
-    $PY run_all.py >/dev/null
+    $PY run_all.py --all >/dev/null
     later=$(sums_all)
     if [ "$first" != "$later" ]; then
       echo '  ✗ 두 번 돌린 결과가 다르다:'
@@ -54,4 +54,4 @@ if [ "${1:-}" = '--check' ]; then
   exit 0
 fi
 
-$PY run_all.py
+$PY run_all.py --all

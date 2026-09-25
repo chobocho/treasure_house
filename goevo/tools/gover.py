@@ -121,6 +121,10 @@ def normalise(text, work, scratch):
     text = re.sub(r'\+0x[0-9a-f]+\b', '+0x…', text)
     text = re.sub(r'\b(pc|sp|fp|lr)=0x[0-9a-f]+\b', r'\1=0x…', text)
     text = re.sub(r'/go-build\d+', '/go-buildN', text)
+    # 벤치마크 이름 꼬리 -N 은 GOMAXPROCS 다. 이 기기는 켜진 코어 수가
+    # 때마다 달라(4 와 8) 캡처가 흔들렸다 — 가린다.
+    text = re.sub(r'^(Benchmark\S*?)-\d+(\s)', r'\1-N\2', text,
+                  flags=re.M)
     text = re.sub(r'^(Benchmark\S*[ ]*\t)[ ]*\d+\t[ ]*[\d.]+ ns/op',
                   r'\1…\t… ns/op', text, flags=re.M)
     text = re.sub(r'^(\s*--- (?:PASS|FAIL|SKIP): .*\()[\d.]+s\)',

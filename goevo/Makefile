@@ -106,7 +106,7 @@ budget-hint:            ## 릴리스 노트 길이에 비례한 기능 장 수 �
 
 # ── 증거 ───────────────────────────────────────────────────────────
 run:                    ## 실험을 전부 직렬로 돌려 out/ 를 채운다
-	@if test -f run_all.py; then $(PY) run_all.py; \
+	@if test -f run_all.py; then $(PY) run_all.py --all; \
 	else echo '  run_all.py 아직 없다 (PLAN.md §5 4단계)'; fi
 
 run-check:              ## 캡처의 폭과 manifest 가 맞는지만 본다

@@ -55,8 +55,16 @@ class Normalise(unittest.TestCase):
     def test_benchmark_masks_time_and_iterations_keeps_allocs(self):
         got = self.n('BenchmarkSum-8   \t 1000000\t      1043 ns/op\t'
                      '      24 B/op\t       1 allocs/op\n')
-        self.assertEqual(got, 'BenchmarkSum-8   \t…\t… ns/op\t'
+        # 이름 꼬리(GOMAXPROCS)도 가린다 — test_benchmark_gomaxprocs_suffix
+        self.assertEqual(got, 'BenchmarkSum-N   \t…\t… ns/op\t'
                               '      24 B/op\t       1 allocs/op\n')
+
+    def test_benchmark_gomaxprocs_suffix(self):
+        # 이 기기는 켜진 코어 수가 때마다 달라 -4 와 -8 이 번갈아 나왔다
+        self.assertEqual(self.n('BenchmarkSum-8   \t…\t… ns/op\n'),
+                         'BenchmarkSum-N   \t…\t… ns/op\n')
+        self.assertEqual(self.n('BenchmarkA/sub-4 \t…\n'),
+                         'BenchmarkA/sub-N \t…\n')
 
     def test_subtest_durations_indented(self):
         # 하위 시험 줄은 들여쓰기가 있다 — 이것도 가린다

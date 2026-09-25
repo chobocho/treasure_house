@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """실험을 전부 차례로 돌려 out/ 를 다시 채운다 (PLAN.md §3.3).
 
-    python3 run_all.py              # 전부 (exps/ORDER 차례)
+    python3 run_all.py --all        # 전부 (exps/ORDER 차례) — 먼저 모든 캡처를 지운다
     python3 run_all.py --only p07   # 묶음 하나 — 그 묶음의 옛 캡처를 먼저 지운다
     python3 run_all.py --check      # 폭 검사와 manifest 대조만
 
@@ -200,6 +200,11 @@ def manifest():
 
 def main(argv):
     only = argv[argv.index('--only') + 1] if '--only' in argv else None
+    # 전체 실행은 모든 묶음의 캡처를 먼저 지운다. 서브에이전트가 무심코
+    # 인자 없이 돌려 02~09부 캡처를 날린 일이 있어(2026-09-24) 명시해야만 한다.
+    if not only and '--all' not in argv and '--check' not in argv:
+        raise SystemExit('run_all.py: --only 묶음, --all(전부 다시), '
+                         '--check 가운데 하나를 줄 것')
     if '--check' not in argv:
         print('실험을 돌린다 —')
         run(only)

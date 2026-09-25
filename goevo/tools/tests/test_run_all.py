@@ -85,5 +85,23 @@ class Fake(unittest.TestCase):
             os.path.join(run_all.OUT, '07-r__go1.22.txt')))
 
 
+class FullRunGuard(unittest.TestCase):
+    def test_bare_run_refuses(self):
+        # 인자 없이 돌리면 모든 묶음의 캡처를 먼저 지운다 — 2026-09-24 에
+        # 누군가 그렇게 돌려 02~09부 캡처가 사라졌다. 전체는 --all 로만.
+        # 가드가 없더라도 이 시험이 진짜 실험을 돌리면 안 된다(RED 단계에서
+        # 실제로 전체 실행이 한 번 돌았다) — run 을 가짜로 바꿔 끼운다.
+        saved = run_all.run
+
+        def fake_run(only):
+            raise AssertionError('가드 없이 실험을 돌리려 했다')
+        run_all.run = fake_run
+        try:
+            with self.assertRaises(SystemExit):
+                run_all.main([])
+        finally:
+            run_all.run = saved
+
+
 if __name__ == '__main__':
     unittest.main()

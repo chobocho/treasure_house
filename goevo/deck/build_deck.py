@@ -791,7 +791,9 @@ def budget_report(body):
         name = chunk.split(' =====')[0]
         if not name[:2].isdigit():
             continue
-        counts[int(name[:2])] = chunk.count('<article')
+        # 한 부가 여러 파일(08_·08b_)로 나뉠 수 있다 — 더한다
+        part = int(name[:2])
+        counts[part] = counts.get(part, 0) + chunk.count('<article')
     return counts
 
 

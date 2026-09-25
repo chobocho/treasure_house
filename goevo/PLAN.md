@@ -706,3 +706,17 @@ and the "오류 N건" line; read it every time.
 - Deviation: no proposals index (proposals.tsv stays empty) — issue numbers in API files are not
   proposals, and a hand list would be memory; people.tsv replaced by the generated author index.
   Timeline table goes to part 10 (budget). Tests: 112.
+
+### Session handover + infra fixes (2026-09-25)
+
+- The previous session was ended mid-part-7; an orphaned shell of it was spinning and was killed.
+  Its last edit (split CODE blocks in 07) had landed; p07 was re-run to completion.
+- Found and fixed: 6 part-5 captures had been deleted (restored by `run_all.py --only p05`, bytes
+  identical to HEAD); `run_all.py` with no argument now refuses (`--all` needed) after a bare run
+  wiped captures; gover masks the benchmark `-N` GOMAXPROCS suffix (cores 4↔8 alternated) — the
+  3 bench captures of p03–p05 changed only in that suffix; one gover line was 75 cols (p0-normalise
+  shows it). ex/05 prune/replace got EXPECT_FAIL notes. A stray `ex/scratch/gocache` was removed.
+- **Part 8 is split into three files** (08_ 1.25 + cover, 08b_ 1.26, 08c_ 1.27) so two subagents
+  can write it at once; features/claims/glossary/exps get suffixes p08, p08b, p08c. budget_report
+  now adds up files sharing a two-digit prefix (test RED 2≠3 → GREEN). Brief: scratch/brief/BRIEF8.md.
+- `make docs` re-run (§0.5): relnotes, release page, spec, API identical; only blog page hashes moved.
