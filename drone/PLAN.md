@@ -796,3 +796,91 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
 - golden/: rng, quat, mixer, hover, pid, physics (3 drones × 4 times), poly, assign
   (n = 5…50), profile, formation (9 shapes), show12 (+ frames every 10). test_golden checks
   they are current.
+
+### Step 4b — data-check, law / firmware / show-tools tables (2026-09-25)
+
+- Commits: 9468acf (tools/data_check.py + tools/tests/test_data_check.py, 34 tests),
+  74ede3e (data/law.tsv 69, firmware.tsv 9, tools_show.tsv 15, header-only timeline/shows/
+  products/quotes, cite_keys.tsv +34 keys = 91, docs/FETCHED.txt).
+- data_check: exact headers, empty required cells (line numbers), cell count, kinds
+  (jurisdiction KR|US|EU, tools kind design|server|live|sim|hardware, open-source
+  yes|no|partial, timeline kinds, shows record Guinness|claimed|none), drone-count a plain
+  integer, dates YYYY|YYYY-MM|YYYY-MM-DD checked against the calendar (products.year YYYY
+  only), source = cite key or https:// (any *.wikipedia.org host rejected; several sources
+  joined by ';'). verified-how must start `fetched|websearch YYYY-MM-DD` for rows dated
+  >= 2025 **and for every row of the "current state" tables** (law, firmware, tools_show —
+  licences, articles and product features change; deviation: the brief only asked for
+  dated rows). `미확인` is allowed only in firmware first-release/attitude-representation
+  and only if verified-how says why. Law: `제N조(의M)` must be an exact `§ 제N조` heading,
+  `§N.M` an exact `§ #N.M` line (so 제131조 does not pass on 제131조의2, §107.2 not on
+  §107.29); anything else (EU `Article 4`, `UAS.OPEN.020`, `PART 1`) is found in the body
+  with a boundary (Article 4 != Article 40). A `docs §HEADING` quoted in verified-how must be
+  a § line of the cited doc. Below-minimum tables are warnings printed as "(미달)"; exit 1
+  only on errors. RED: 30 failures / 4 passing on stubs (all assertion failures), then GREEN.
+- New sources (all fetched 2026-09-25, 0 failed): EUR-Lex consolidated
+  **2019/947 @2025-05-01** and **2019/945 @2025-06-24** (latest consolidations listed on the
+  ELI pages; html_text gives no § lines for EUR-Lex, so EU rows quote the article line in
+  verified-how instead of `docs §`). GitHub API repo JSON for PX4, ArduPilot, Betaflight,
+  INAV, MultiWii, Paparazzi, crazyflie, crazyswarm and the skybrush-io org listing (licence
+  spdx, main language, created_at, fork flag); release-by-tag JSON for Betaflight 2.1.0 and
+  INAV 1.0; sha-pinned sources INAV pid.c, crazyflie attitude_pid_controller.c,
+  MultiWii.cpp, Paparazzi stabilization_attitude_{quat,euler}_int.c; ArduPilot history,
+  Auterion PX4 history, Paparazzi readthedocs; Skybrush home, Blender licence, DSS
+  (software, creator, EULA), Verge Aero (system, studio, VVIZ doc), Finale 3D (import, VVIZ
+  spec), Depence, FWsim, DAMODA.
+- Facts that surprised: the DSS EULA (rev. 2026-08-07) names **UVIFY CO., LTD. (Korea)** as
+  licensor while the site header still shows the SPH logo — vendor written "SPH Engineering /
+  UVIFY" with both facts in notes (WebSearch found only a partnership, no acquisition).
+  MultiWii: GitHub API has no licence; the source header says GPL-3. multiwii.com is a parked
+  domain. Crazyswarm docs say Crazyswarm1 is not recommended for new projects.
+- first-release: PX4 2013 (Auterion: born 2011, first stable "two years later"; GitHub's
+  earliest release object is v1.0.0-rc4 2014-12 — both in verified-how), ArduPilot 2009,
+  Betaflight 2015, INAV 2016; MultiWii, Paparazzi ("founded in 2003" only), Crazyflie and the
+  two Skybrush forks 미확인. Attitude: PX4/ArduPilot quaternion, Betaflight/INAV/MultiWii/
+  Crazyflie (PID controller only) Euler, Paparazzi both (two implementations).
+- Every law article was found in the fetched text (69/69). Not added: Part 107 Subpart D
+  categories 2–4, 107.145; KR 벌칙 조항.
+- `make test` 136 OK (includes other sessions' new tests), `make data-check` 통과 (timeline/
+  shows/products 미달 warnings), `check_claims.py` 0 missing, width clean.
+
+### Step 6 + 4a — JS port, ex/ programs, theorems (2026-09-25)
+
+- c790577: js/droneshow.js (1,070 lines, one IIFE, sections = py modules) + js/test/
+  parity.test.js (11 golden checks). RED 11/11 on a stub that throws, then GREEN. Parity
+  needed three things on the Python side (golden values unchanged or regenerated): Python
+  3.12+ `sum()` is compensated (Neumaier) and `math.dist` uses its own algorithm, so the core
+  modules now use `vec3.total` (plain left-to-right) and `vec3.dist` (√Σd²); `16*sin³` is
+  written as products; **golden inputs are rounded to 9 digits before the outputs are
+  computed** (quat/mixer/assign failed at 1e-9 because JS read rounded inputs). node 24's
+  `node --test DIR` does not take a directory: Makefile uses `js/test/*.test.js`.
+- 533009d: ex/ — mavlink_parse (x25 from the checksum.h excerpt; **CRC_EXTRA computed from
+  the message definition = 50**, the value in c_library_v2 minimal.h MAVLINK_MESSAGE_CRCS;
+  `uint8_t_mavlink_version` counts as `uint8_t` as pymavlink's mavparse.py does — both files
+  peeked with curl, need cite keys `mavlink-minimal-h`, `pymavlink-mavparse` before 6부),
+  hover_power (T1), battery_time (T2), routh (T16), gps_trilateration (T26, Newton + normal
+  equations, toy geometry), blender_import_show (not executed; tested against a fake bpy that
+  records calls). 15 tests. **kQ corrected 1.5e-8 → 1.24e-8**: the old value implied a figure
+  of merit 0.50 against params' fm 0.6; now formula 64.2 W and integrated hover 64.05 W agree.
+- 34557c6: data/theorems.tsv 91 rows (M1–M28 tools, L1–L28 lemmas, T1–T35), 70 full proofs
+  each with a witness `path::test`, no 심화 prerequisite under a 1학년 full proof; T20 cited
+  (lee2010-se3), T35 cited (skybrush-formations "Takeoff": layered takeoff ordered to minimise
+  downwash). data/symbols.tsv 40 rows (first-slide filled while writing parts).
+
+### Step 7 infra + Part 0 (2026-09-25)
+
+- run_all.py (goevo lineage): ctx.cmd/py (argv run in drone/, `$ cmd` first line with shell
+  quoting and `VAR=val` prefixes for env), red/green (tools/testcap), text, table
+  (out/tbl_<name>.html, `num=` columns), show (out/show_<name>.json), adopt (a file a command
+  wrote into out/). Manifest = files registered in out/batches.json only (deck/gen_tables.py's
+  tbl_d_* are data views, checked by `gen_tables.py --check`). tools/tests/test_run_all.py 9
+  tests (written right after run_all.py, not RED-first — noted).
+- deck/gen_tables.py: tbl_d_params_phys/ctrl_N, tbl_d_symbols_N, tbl_d_theorems_N (level
+  badge, kind, statement HTML, link to the first slide with that THM box); 3 tests.
+- exps/ORDER p00 p04 p05 p06 p07 p08 p09 p10 p11 p13 p14 p15 p16; exps/p00 (python/node
+  versions, `droneshow plan` of ex/spec_hello.json → out/show_hello.json 30 drones, `info`).
+- Part 0: 18 slides (cover, 2 part maps, oracles, badges, levels with THM M1, proof anatomy,
+  3 notation tables, first show with SHOW snapshot frame 540, code/capture reading, machine,
+  siblings, what the deck does not cover, quiz). The SHOW snapshot was rendered to PNG and
+  looked at (12 drones do not read as a heart; 30 do). deck/pending.txt lists every py/js/ex
+  source until its part is written. `make all SKEL=1`: exit 0, 36 slides.
+- params.tsv `why` cells reworded where they asserted unsourced facts about real products.
