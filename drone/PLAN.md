@@ -1100,3 +1100,27 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   font/font-check run separately: pass. A concurrent run_all dropped tbl_p04_kv.html from
   out/batches.json once — re-ran `--only p04` before committing.
 - Note: PLAN §3.5 T2 row says "why halving mass does not double time" — measured ×2.75 (1 W LED) / ×2.83 (none), i.e. more than double; theorems.tsv's statement (< 2^{3/2}) is the correct one and slide p4-battery-run explains it.
+
+### Curve-sampling fix (2026-09-25, 0c8f03b)
+
+- formation._on_curves proposed a point every arc length d; on a curve the chord is slightly
+  shorter than the arc, so every other proposal was rejected and hearts/globes came out twice
+  as large (mean neighbour gap 1.9d). Now proposals are placed where the chord from the last
+  proposal reaches d·(1+1e-9) (exit root of a ball, per segment). Python + JS + golden; new test
+  test_curve_points_are_tight. p15 player show 147.28 s → 98.52 s (slider max updated); 10부
+  curve slide split in two (the function grew past 45 lines) with a warn box on the old bug.
+
+### Part 16 — 실습 (2026-09-25, b024bdf)
+
+- ex/lab_show.py (12/60/300 versions: ground grid → [TREASURE] → heart → globe → 3·2·1 →
+  heart; unused drones park dark at y = 2d behind the picture; spacing √2·dmin; --tight,
+  --layers) and ex/lab_check.py (min spacing sampled 0.04 s; peak speed/accel exact per
+  segment from max β′/|β″|; altitude from keyframes; duration vs T2 hover time; exit 1 on any
+  failure). Tests first: test_p16_lab (13) and test_p16_check (9), RED on stubs then GREEN.
+- formation.heart(layers=K): nested ¾, ½ … outlines (Python + JS + golden heart3). Found
+  because the 300-drone single-outline heart tops at 202.6 m (fails the example 120 m limit);
+  outline shapes grow ∝ n. Three layers: 104.1 m, show 282.08 s → 136.56 s.
+- exps/p16: plans ×5 (incl. flat300 and tight60), checks ×5 (two expected failures), info,
+  scale and 300-drone transition tables, physics mode (all 12; 4 longest of 60; 3 longest of
+  300): max tracking error 9.5 / 10.5 / 8.2 cm. tight60: min distance 1.061 m = 1.5/√2 exactly.
+- Part 16: 57 slides, 8 chapters, a quiz per chapter + part quiz, claims/p16.md, glossary/p16.
