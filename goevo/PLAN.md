@@ -730,3 +730,11 @@ and the "오류 N건" line; read it every time.
   against the notes (all verbatim), and replaced one intro sentence that over-read the 1.18 blog
   ("design started over a decade ago when we first released Go").
 - Makefile: three comment/echo lines over 72 columns rewrapped (make width is green again).
+
+### Part 7 — Go 1.21–1.24 (previous session, finished 2026-09-25)
+
+- 103/155 slides (1.21: 29, 1.22: 24, 1.23: 21, 1.24: 27 + cover/intro), 108 feature rows,
+  71 examples, 121 captures (two consecutive runs identical). The previous session was ended before
+  its final pass: this session re-ran p07, split two CODE blocks over 45 lines (rangefunc 51,
+  cleanup 46) with `lines=` ranges, and wrote deck/glossary/p07.txt (13 lines). No claims/p07.md:
+  claims-check finds evidence for every year/version in the existing ledgers and data.
