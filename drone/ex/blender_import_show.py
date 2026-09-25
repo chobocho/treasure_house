@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """우리 쇼 파일(JSON)을 Blender 장면으로 — 드론마다 구 하나,
-키프레임마다
-위치·색 키 (12부).
+키프레임마다 위치·색 키 (12부).
 
 **이 기계에서는 Blender 로 실행하지 않았다** — 설치할 수 없다(PLAN.md
 §9 결정 10). 쓰는 bpy 호출은 전부 받아 둔 Blender API 문서로 확인했고,
@@ -9,8 +8,9 @@
 
     blender --background --python ex/blender_import_show.py -- show.json
 
-키프레임 사이는 Blender 의 기본 보간(베지어)이 잇는다 — 우리 쇼의
-β(u)와 같지 않다. 모양을 맞추려면 fps 마다 키를 넣는다(step 인자).
+키프레임 사이를 Blender 가 어떻게 잇는지는 이 예제가 정하지 않는다 —
+우리 쇼의 β(u)와 같다는 보장이 없다. 모양까지 맞추려면 fps 마다 한
+줄인 CSV(ex/skybrush_csv.py, droneshow csv)를 읽어 키를 넣는다.
 """
 import json
 import sys
@@ -18,7 +18,7 @@ import sys
 import bpy  # Blender 안에서만 있다
 
 
-def main(path, step=None):
+def main(path):
     show = json.load(open(path, encoding='utf-8'))
     fps = show['fps']
     for d in show['drones']:
