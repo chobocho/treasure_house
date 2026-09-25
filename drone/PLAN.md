@@ -675,3 +675,124 @@ N종을 다루고, 파이썬(표준 라이브러리만)과 자바스크립트로
   the cite resolver written first and the constants), then GREEN.
 - Sections: cover + 0부 (7 placeholder guide slides) + 17 part covers + 부록 cover = 27 slides.
 - `make all SKEL=1`: exit 0, 27 slides, 14 placeholders, DeckMono 6 KB. Not in index/README.
+
+### Step 2 — Primary-document tooling, cite keys, docs cache, excerpts (2026-09-25)
+
+- Commits: fccf334 (tools + tests + 14 fixtures), ee607be (data/cite_keys.tsv 57 rows,
+  docs/FETCHED.txt, data/excerpts/ 5 + INDEX.tsv). poppler-utils 26.01.0 installed via apt
+  (decision 7).
+- tools/html_text.py (from goevo, widened): `§ heading` for h1–**h6** (EASA puts its body
+  headings in h5 — deviation from "h1–h4") and `<dt>` except Sphinx field lists ("Type:");
+  **`§ #id` anchor lines** for id-bearing headings/dt and for `<section id>`/`div.section`
+  that open with a heading (Drupal `block-*` ids dropped) — CITE can use the URL fragment
+  (`#HEARTBEAT`, `#bpy.types.Object.location`, `#107.29`). Drops nav/footer/aside/button/
+  script/style and ¶/zero-width anchors; `<header>` inside `<main>` is kept (EASA title).
+  `convert_ecfr` (HEAD → §, DIV8 N → `§ #107.29`) and `convert_law` (법제처 DRF XML: 장 →
+  §, each 조문 → `§ 제129조` + `§ 제129조(제목)`, then 항/호/목 lines; 부칙·별표 skipped).
+- tools/pdf_text.sh + pdf_sections.py: `pdftotext -layout` first; if > 40 % of lines have an
+  inner 3-space gap (two-column paper) it re-extracts in reading order (deviation: -layout
+  interleaves IEEE columns). Headings: numbered (≤ 8 words, no comma, no final period, first
+  number ≤ 20, a 3-letter word), roman/lettered, ALL-CAPS (small-caps "R EFERENCES" joined,
+  wrapped caps lines merged, running heads > 3× dropped), named words (Abstract, Contents…);
+  TOC lines skipped. 1003.2005 → 15 clean sections, Madgwick → 25.
+- tools/fetch_docs.py: reads cite_keys.tsv (validates columns/kind/https/.txt/unique),
+  dispatch by content+URL (pdf/c/md/ecfr/law/html/xml/json/text); C/C++ gets `§ file` +
+  `§ Class::function` before each top-level definition (`{` before `;` within 8 lines,
+  `__attribute__` stripped, comments skipped; source lines unchanged). Sends
+  `Accept-Encoding: gzip` (eCFR API answers **406** without it). 20 s timeout, ×3 retry,
+  0.3 s pause; `--missing`, `--only KEY`; FETCHED.txt merged, not truncated, on partial runs.
+- tools/excerpt.py: refuses branch URLs (sha must be in the raw URL), ≤ 40 lines, header in
+  the language's comment (`//`, `#`, `<!-- -->`): `repo path @sha Lstart-end · licence ·
+  fetched date`; `--pin OWNER/REPO PATH` asks the GitHub API; `--all` (= `make data`)
+  re-cuts byte-identically from INDEX.tsv after checking the sha against cite_keys.tsv.
+- Tests: tools/tests/test_docs_tools.py, 58 tests; RED 45 failures on stubs (assertions,
+  after two index/IndexError tests were rewritten as assertions), +2 RED later for PDF
+  formula debris ("1 T T", "2 Ω d") and "vs." titles found on the full papers; GREEN.
+  `make test` 89 OK (31 + 58). width.py clean on all new tools.
+- Sources that worked (57/57 fetched, 0 failed):
+  - 항공안전법 text: **`https://www.law.go.kr/DRF/lawService.do?OC=test&target=law&type=XML&ID=012524`**
+    (법령ID, so it always returns the current version; MST=286927 gave identical bytes on
+    2026-09-25 — 공포 2026-06-16 제21822호, 시행 2026-09-17). Same API: 시행령 ID=012843,
+    시행규칙 ID=012848 (제312조의2 특별비행승인 is there), 드론법 ID=013479. IDs came from
+    `DRF/lawSearch.do?OC=test&target=law&type=XML&query=…`.
+  - eCFR: **`https://www.ecfr.gov/api/versioner/v1/full/2026-09-23/title-14.xml?part=107`**
+    and `…?part=89` (date = `up_to_date_as_of` from `/api/versioner/v1/titles.json`; needs
+    gzip). Pinned date — bump it when re-fetching for a later session.
+  - Madgwick report: x-io.co.uk returns **403** (Cloudflare) even with a browser UA; fetched
+    from `https://www.samba.org/tridge/UAV/madgwick_internal_report.pdf` (same 1.5 MB report,
+    "April 30, 2010").
+  - Mellinger–Kumar 2011 and Turpin–Michael–Kumar CAPT 2014: kumarrobotics.org lists both
+    (teachPress search `?tsr=`) but links no PDF → cited via Crossref JSON
+    (`api.crossref.org/works/10.1109/ICRA.2011.5980409`, `…/10.1177/0278364913515307`);
+    prove the results ourselves (§3.5) as planned.
+  - Skybrush docs moved: doc.collmot.com → `docs.skybrush.io/public/…`; the CSV import format
+    is on Studio's `panels/formations/formations.html` (dt "From static CSV file": `Name,
+    x_m, y_m, z_m, Red, Green, Blue`; zipped per-drone CSV with `Time_msec`). Plugin repo is
+    `skybrush-io/studio-blender` (GPL-3.0).
+  - drone.onestop.go.kr: systemintro1/2/4 fetched; no `<main>`, so the text starts with the
+    menu (content follows). Special-flight procedure text is thin there — cite the 시행규칙.
+- Not added: PX4 parameter reference (3.7 MB — too big), ardupilot `copter/docs/tuning.html`
+  (page says "superseded and ARCHIVED" — used tuning-process-instructions + common-tuning),
+  history/Wikipedia rows (later step).
+- Licences recorded: PX4 BSD-3-Clause, ArduPilot/Betaflight/Skybrush/crazyflie GPL-3.0
+  (GitHub API spdx). **MAVLink is not plain MIT**: mavlink/mavlink COPYING = (L)GPL-3 for the
+  generator/definitions with an MIT grant for generated code → rows say "LGPL-3.0 (생성 코드는
+  MIT)"; c_library_v2 has no licence file of its own, recorded "MIT (MAVLink 생성 코드)".
+- Excerpts (data/excerpts/, INDEX.tsv has the why):
+  - px4-att-quat-error.cpp — AttitudeControl.cpp L141-180 @2a0e0481713c (2026-06-26)
+  - ardupilot-thrust-vector-rotation.cpp — AC_AttitudeControl.cpp L1064-1103 @e4b7c11761da
+    (2026-08-30): `thrust_vector_rotation_angles` (thrust_heading_rotation_angles still
+    exists but delegates the two-rotation split to it)
+  - betaflight-antigravity-dterm.c — pid.c L1126-1154 @46acf611013e (2026-09-17)
+  - mavlink-heartbeat.xml — **minimal.xml** L747-755 @2e0efccfa88e (2026-08-27): HEARTBEAT
+    is no longer in common.xml (common → standard → minimal include); cite key
+    `mavlink-minimal-xml` added (common.xml @dc252db7ba20 kept for the rest)
+  - mavlink-crc-accumulate.h — c_library_v2 checksum.h L22-55 @27ffe84e79d2 (2022-01-06)
+- For later steps: upstream lines exceed 72 columns (PX4/ArduPilot/Betaflight comments reach
+  100–200) — CODE slides need `lines=` sub-windows or a wrap policy; the header line (full
+  40-char sha) is ~150 columns, so CODE should start at line 2 (build_deck LANG_OF already
+  maps .h/.xml). check_claims: 57 keys, 0 missing.
+
+### Step 3 + 5 — SPEC.md and the Python simulator (2026-09-25)
+
+- Commits: 0eb2fd3 (SPEC.md, data/params.tsv, 9 base modules), 3ed2205 (control, estimation,
+  trajectory), 7c84fea (formation/assign/collide/show/tricks/render/cli + golden/ 11 files).
+  `py/droneshow/` 21 modules, 2,364 lines (cap 3,000; largest formation.py 224); 223 tests,
+  ~11 s (`python3 -m unittest discover -s tests -t .` in py/). Widths clean.
+- **RNG deviation:** xorshift128 on four 32-bit words instead of xorshift128+ (the + variant
+  needs 64-bit integers = BigInt in JS). SPEC §2 pins the state/seed rule; Box–Muller.
+- tools/testcap.py + testcap_run.py: timing-free test captures (`green MODULE`), and
+  **reproducible RED**: `red MODULE` copies py/ to scratch/red and replaces every function
+  body of that module with `raise NotImplementedError('구현 전')` via ast — names and
+  signatures stay, so the RED is "not implemented", never an import error. Runs the tests as
+  one suite (class fixtures work). 14부's RED/GREEN captures come from this (run_all).
+- Measured facts that **changed the plan's statements** (fix the slide, not the oracle):
+  1. **T17** — lowering only the *sample rate* of the rate+attitude loops to 50 Hz does not
+     break the cascade (tilt 20.0° vs 19.9°); lowering the rate-loop *gain* (bandwidth) to a
+     quarter of the attitude gain does (tilt > 2×, never settles). SPEC §5.6 updated;
+     p09_timescale must use the gain version and show the 50 Hz non-failure too.
+  2. **T30 as written in §3.5 is false.** Counterexample (test_assign.Crossing): a1 = X − u,
+     b1 = X + 10u, a2 = X − 10w, b2 = X + w, u·w = 0.9 — paths cross, squared cost keep 242 <
+     swap 383.8. The classic non-crossing result holds for the **plain** distance cost
+     (triangle inequality). Restate T30: "plain-distance optimum has no crossings (full);
+     squared optimum may cross (counterexample)". What squared costs *do* give: every pair of
+     the optimum satisfies (a_i − a_j)·(b_i − b_j) ≥ 0 (else a swap lowers the cost by
+     −2(Δa·Δb)), hence under synchronised straight-line motion |x_i − x_j|² = (1−β)²|Δa|² +
+     β²|Δb|² + 2β(1−β)Δa·Δb ≥ δ²/2 — distance ≥ δ/√2 (δ = min start/goal spacing). That is
+     T31's full freshman proof (CAPT core, any dimension); formations for a dmin show must be
+     spaced √2·dmin. test_assign also finds a plain-cost assignment that collides.
+  3. **T12** — the yaw rate from flatness is r = (β p + ψ̇ y_B·y_C)/α (α = x_C·x_B, β = x_C·z_B),
+     obtained by differentiating y_B ⊥ x_C; it matches finite differences of the attitude to
+     1e-6. The often-quoted r = ψ̇ z_W·z_B is not exact for this construction — do not put it
+     on a slide without the source text.
+  4. Circle tracking (r 2 m, 0.8 rad/s): max error 1.28 m without feed-forward, 0.36 with v,
+     0.086 with v+a, 0.115 with v+a+jerk-rates; with drag off 0.057/0.053 — the unmodelled drag
+     (not the missing jerk term) dominates. 9부 shows this 4-level table.
+- Show format extended (SPEC §9.1): optional 8th keyframe element = segment kind (T/S/J/L)
+  and an optional per-drone `lights` track, so light-only tricks never touch motion.
+  Colour rounding uses floor(x+½) (Python's round is banker's; JS Math.round is not).
+- Tricks as functions (tricks.py): dark_move, takeoff (stagger by target height), under_count
+  (downwash exposure metric), layered_depth, rotate_volume, wave, led_only_motion, dither.
+- golden/: rng, quat, mixer, hover, pid, physics (3 drones × 4 times), poly, assign
+  (n = 5…50), profile, formation (9 shapes), show12 (+ frames every 10). test_golden checks
+  they are current.
