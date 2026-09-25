@@ -205,7 +205,8 @@ def appendix_tables(releases, api, godebug, blog_index, fetched, per=14,
                        m.group(4))
         for n in re.split(r',\s*(?:and\s+)?|\s+and\s+', names):
             n = html.unescape(n.strip())
-            if n:
+            # 팀 전체 이름의 글은 사람이 아니다(p11-people-read 가 그렇게 밝힌다)
+            if n and not re.match(r'(?i)^the go team$', n):
                 people.setdefault(n, []).append(date)
     # 인물 색인은 글 min_posts 편 이상인 사람만 — 한 편씩 쓴 사람까지 실으면 여덟 장이 된다
     rows = sorted(((n, len(ds), min(ds), max(ds)) for n, ds in people.items()
@@ -334,7 +335,7 @@ def build():
                                         read(index), fetched))
         made.update(flow_tables(dict_rows('timeline.tsv'),
                                 dict_rows('godebug.tsv'),
-                                cites.feature_rows(BASE)))
+                                cites.feature_rows(BASE), per=15))
         made.update(flow_kind_tables(cites.feature_rows(BASE)))
     for out_name, tsv, cols, filt in VIEWS:
         head, body = rows_of(tsv)

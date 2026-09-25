@@ -118,6 +118,9 @@ def normalise(text, work, scratch):
         text = re.sub(re.escape(path) + r'(?![\w.-])', name, text)
     # 캐시(go fix -diff 등)가 다른 작업 사본의 경로를 돌려줄 때가 있다
     text = re.sub(r'/scratch/work/[^/\s]+(?=/)', '/work', text)
+    # 캐시에서 온 vet 진단은 남의 사본 쪽 상대 경로(../x/main.go)다
+    text = re.sub(r'^\.\./[^/\s]+/(?=[^\s:]+\.go:\d)', '', text,
+                  flags=re.M)
     text = re.sub(r'\bgoroutine \d+\b', 'goroutine N', text)
     text = re.sub(r'\b0xc[0-9a-f]{9,}\b', '0xc…', text)
     text = re.sub(r'\+0x[0-9a-f]+\b', '+0x…', text)

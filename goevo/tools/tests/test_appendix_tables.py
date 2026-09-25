@@ -70,6 +70,15 @@ class Appendix(unittest.TestCase):
         self.assertIn('<td>Nicholas Husin</td>', t)
         self.assertNotIn('behalf', t)
 
+    def test_team_byline_is_not_a_person(self):
+        # 글쓴이 칸이 팀 전체인 글 — 인물 색인에 사람으로 올리지 않는다
+        idx = INDEX + ('<p class="blogtitle">\n  <a href="/blog/e">E</a>, '
+                       '<span class="date">2 May 2024</span><br>\n'
+                       '  <span class="author">The Go Team<br></span>\n</p>\n')
+        out = gen_tables.appendix_tables(REL, API, GD, idx, FETCHED,
+                                         per=14, min_posts=1)
+        self.assertNotIn('Go Team', out['tbl_app_authors_1.html'])
+
     def test_for_the_team_tail_and_minimum(self):
         idx = INDEX + ('<p class="blogtitle">\n  <a href="/blog/d">D</a>, '
                        '<span class="date">1 May 2024</span><br>\n'

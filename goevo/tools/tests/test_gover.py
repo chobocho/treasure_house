@@ -31,6 +31,17 @@ class Normalise(unittest.TestCase):
         self.assertEqual(self.n('/s/work/08-y__go1.26/a.go:1\n'),
                          '/work/a.go:1\n')
 
+    def test_vet_relative_path_from_cache(self):
+        # go vet 의 결과도 캐시에서 온다 — 다른 작업 사본을 가리키는 상대
+        # 경로(../try-p06/main.go)가 남는다. 지금 사본이 낸 모양(main.go)으로.
+        self.assertEqual(self.n('../try-p06/main.go:8:14: fmt.Printf format\n'),
+                         'main.go:8:14: fmt.Printf format\n')
+        self.assertEqual(self.n('../08-x__go1.25/sub/a_test.go:3:1: x\n'),
+                         'sub/a_test.go:3:1: x\n')
+        # 프로그램이 찍은 평범한 상대 경로는 건드리지 않는다
+        self.assertEqual(self.n('see ../docs/readme.txt\n'),
+                         'see ../docs/readme.txt\n')
+
     def test_work_and_scratch_paths(self):
         self.assertEqual(self.n('/s/work/07-x__go1.22/main.go:3:2: x\n'),
                          '/work/main.go:3:2: x\n')

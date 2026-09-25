@@ -794,3 +794,15 @@ and the "오류 N건" line; read it every time.
   (0–10 + appendix), 48 chapters, 755 slides, 637 captures, 400 examples, 5 demos, 44 quiz questions.
   755 is below the 820–960 band; parts were not padded (PLAN §4 note). history.md/.html entry.
 - Next: review 1 and review 2 (§5 step 10), then `record.sh --check` (three full runs) before push.
+
+### Review 1 — facts and evidence (2026-09-25)
+
+- Two reviewer subagents on per-part dumps (scratch/review1/dump.py → partNN.txt, BRIEF.md):
+  A = parts 0–5, 9 (11 findings), B = parts 6–8, 10, A (17). Totals: 사실오류 13 · 증거불일치 7 ·
+  문체 5 · 표기 3 = 28, all fixed. Prose fixes were made by the reviewers in their files and read
+  back by the orchestrator (1.20 loopclosure, 1.10 GC wording, go2draft "Yesterday" re-checked).
+- Orchestrator fixes: vet captures served from GOCACHE printed another copy's relative path
+  (`../try-p06/main.go`) — gover strips `^../<dir>/` before `*.go:N` (test RED first), 10 captures
+  re-recorded; p8-v127-jsonv1 now runs the nine inputs itself (no unpublished probe); author index
+  drops the bare "The Go Team" byline (test RED first); glossary duplicates merged (쓰기 장벽, Green
+  Tea); timeline + 2026-09-24 simd blog row, timeline tables now 15 rows per page (still 9 pages).
