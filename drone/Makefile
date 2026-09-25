@@ -53,7 +53,7 @@ test:                   ## 도구 시험 (tools/tests, unittest)
 	$(PY) -m unittest discover -s tools/tests
 
 # 시뮬레이터의 공식 증인(PLAN.md §3.5)과 골든 벡터 작성기. 90초 안.
-test-py:                ## 파이썬 시뮬레이터·예제 시험 (py/tests, ex/tests)
+test-py:                ## 시뮬레이터·예제 시험 (py/tests, ex/tests)
 	cd py && $(PY) -m unittest discover -s tests -t .
 	$(PY) -m unittest discover -s ex/tests -t ex
 
