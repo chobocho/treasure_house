@@ -38,7 +38,6 @@
 - 📜 **[Effective_Go_현대판.html](./Effective_Go_%ED%98%84%EB%8C%80%ED%8C%90.html)** — 🐹 2009년의 명문 《Effective Go》를 Go 1.26 기준으로 다시 읽는 PPT형 10부 25장 119슬라이드. 원문(golangkorea 번역)의 차례를 그대로 따라가되 루프 변수 스코프·%w 에러 래핑·제네릭·이터레이터·GOMAXPROCS cgroup 인식처럼 사실이 바뀐 자리를 버전 배지로 짚습니다. 예제는 전부 Go 1.26.3에서 gofmt·go vet·go run 통과, 터미널 캡처는 실제 출력, go.mod 를 1.21↔1.22 로 바꿔 가며 잰 결과 포함. 데모 4종·퀴즈 4문 ✨
 - 🎞️ **[Go_심화_슬라이드.html](./Go_%EC%8B%AC%ED%99%94_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Go 심화》 슬라이드판 PPT형 67장 📱
 - 🎞️ **[Go_패턴_슬라이드.html](./Go_%ED%8C%A8%ED%84%B4_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Go 패턴》 슬라이드판 PPT형 90장 📱
-- 🌐 **[go_design_patterns.html](./go_design_patterns.html)** — 🎨 Go 디자인 패턴 웹 가이드 📑
 - 🎞️ **[Go_디자인패턴_슬라이드.html](./Go_%EB%94%94%EC%9E%90%EC%9D%B8%ED%8C%A8%ED%84%B4_%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C.html)** — 📽️ 《Go 디자인 패턴》 슬라이드판 PPT형 172장 📱
 
 ### 🌙 Lua 언어 시리즈 🎭
