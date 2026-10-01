@@ -78,9 +78,8 @@ def csproj_props(src):
 
 
 def lang_version(src):
-    """csproj 의 LangVersion. 없으면 오류 — 기본값(latest)에 기대면 SDK
-    를
-    올리는 날 캡처가 조용히 바뀐다."""
+    """csproj 의 LangVersion. 없으면 오류 — 기본값(latest)에 기대면
+    SDK 를 올리는 날 캡처가 조용히 바뀐다."""
     v = csproj_props(src).get('LangVersion')
     if not v:
         raise ValueError('%s 의 csproj 에 LangVersion 이 없다' % src)
@@ -137,8 +136,7 @@ def normalise(text, work, scratch):
 def _run(argv, cwd, env):
     os.makedirs(SCRATCH, exist_ok=True)
     with open(os.path.join(SCRATCH, 'dotnet.lock'), 'w') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)          # dotnet 은 한 번에
-        하나
+        fcntl.flock(lock, fcntl.LOCK_EX)    # dotnet 은 한 번에 하나
         return subprocess.run(argv, cwd=cwd, env=env,
                               stdin=subprocess.DEVNULL,
                               stdout=subprocess.PIPE,

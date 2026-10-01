@@ -102,5 +102,15 @@ class CheckKey(unittest.TestCase):
             shutil.rmtree(d)
 
 
+class RunsThroughTheLock(unittest.TestCase):
+    # _run 은 시험에서 한 번도 안 돌았다 — 그 안의 줄이 깨져(주석이 접혀
+    # 맨 낱말이 코드 줄로 떨어짐) run_all 이 NameError 로 멈춘 일이 있다.
+    # dotnet 대신 true 를 돌려 잠금·서브프로세스 길만 지난다.
+    def test_run_trivial_command(self):
+        p = csver._run(['true'], tempfile.gettempdir(),
+                       {'PATH': os.environ.get('PATH', '')})
+        self.assertEqual(p.returncode, 0)
+
+
 if __name__ == '__main__':
     unittest.main()
