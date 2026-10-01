@@ -435,3 +435,10 @@ comments + Korean header line; two review passes before push.
 - `make all SKEL=1` green: 644 slides, tests 91, data 130 rows, examples 561 (125 FAIL), coverage
   13849/13849, verify, slices 12, xref 187 links, claims 0 missing, deck-check 0, font pass.
 - Next: part 5 (C# 4.0, 130) as p05 + p05b, and part 6 (C# 5.0, 170) — two subagents.
+
+### run_all.py — batches.json merge under a lock (2026-10-01)
+
+- `run()` held the batches dict read at start and wrote it back at the end, so a parallel `--only` lost
+  the other batch's key. Now `update_batch()` takes `fcntl.flock(out/.batches.lock)`, re-reads, sets its
+  own key and writes; `--all` saves `{}` after clearing. Test first (RED: pB key lost), tests 98 OK,
+  `--only p00` leaves batches.json byte-identical. Parallel subagents may now run batches at once.

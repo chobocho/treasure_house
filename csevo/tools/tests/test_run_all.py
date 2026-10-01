@@ -99,6 +99,37 @@ class Fake(unittest.TestCase):
             os.path.join(run_all.OUT, '10-rec__cs9.0.txt')))
 
 
+class ConcurrentBatches(Fake):
+    """서브에이전트 둘이 각자 --only 로 돌리면 batches.json 을 같이 고친다.
+    한쪽이 시작할 때 읽은 사본으로 끝에 덮어쓰면 다른 쪽 항목이 사라졌다
+    (2026-10-01, p04 가 p04b 의 항목을 지웠다)."""
+
+    def test_only_run_keeps_key_written_meanwhile(self):
+        exps = os.path.join(self.root, 'exps')
+        os.makedirs(exps)
+        with io.open(os.path.join(exps, 'ORDER'), 'w') as f:
+            f.write('pA\npB\n')
+        open(os.path.join(exps, 'pA.py'), 'w').close()
+        run_all.save_batches({'pA': ['old.txt']})
+
+        class Mod(object):
+            @staticmethod
+            def run(ctx):
+                # 이 묶음이 도는 사이 다른 프로세스가 pB 를 적는다
+                run_all.save_batches({'pA': ['old.txt'], 'pB': ['b.txt']})
+                ctx.cs('ex/10/rec')
+        saved = (run_all.HERE, run_all.importlib.import_module)
+        run_all.HERE = self.root
+        run_all.importlib.import_module = lambda name: Mod
+        try:
+            run_all.run('pA')
+        finally:
+            run_all.HERE, run_all.importlib.import_module = saved
+        with io.open(os.path.join(run_all.OUT, 'batches.json')) as f:
+            self.assertEqual(json.load(f), {'pA': ['10-rec__cs9.0.txt'],
+                                            'pB': ['b.txt']})
+
+
 class FullRunGuard(unittest.TestCase):
     def test_bare_run_refuses(self):
         # 인자 없이 돌리면 모든 묶음의 캡처를 먼저 지운다 — goevo 에서

@@ -24,6 +24,7 @@
   · 재현: out/manifest.json 에 파일마다 SHA-256. tools/record.sh --check 가
     세 번 돌려 같은지 본다.
 """
+import fcntl
 import hashlib
 import importlib
 import io
@@ -133,6 +134,17 @@ def save_batches(b):
         f.write(json.dumps(b, indent=1, sort_keys=True) + '\n')
 
 
+def update_batch(name, files):
+    """batches.json 의 자기 항목만 고친다. 서브에이전트 둘이 --only 로 같이
+    돌면 시작할 때 읽은 사본으로 덮어써 남의 항목을 지웠다(2026-10-01 p04 ·
+    p04b). 그래서 쓰기 직전에 잠그고 다시 읽는다."""
+    with open(os.path.join(OUT, '.batches.lock'), 'w') as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        b = load_batches()
+        b[name] = sorted(files)
+        save_batches(b)
+
+
 def clear_batch(batch):
     """그 묶음이 지난번에 쓴 캡처를 지운다."""
     for name in load_batches().get(batch, []):
@@ -153,14 +165,13 @@ def order():
 def run(only):
     os.makedirs(OUT, exist_ok=True)
     Ctx.taken = set()
-    batches = load_batches()
     names = [n for n in order() if not only or n == only]
     if only and not names:
         raise SystemExit('exps/ORDER 에 %s 가 없다' % only)
     if not only:
-        for b in list(batches):
+        for b in list(load_batches()):
             clear_batch(b)
-        batches = {}
+        save_batches({})
     for name in names:
         if not os.path.exists(os.path.join(HERE, 'exps', name + '.py')):
             print('  %-14s (아직 없다)' % name)     # 그 부를 아직 안 썼다
@@ -168,8 +179,7 @@ def run(only):
         clear_batch(name)
         ctx = Ctx(name)
         importlib.import_module('exps.' + name).run(ctx)
-        batches[name] = sorted(ctx.written)
-        save_batches(batches)
+        update_batch(name, ctx.written)
         print('  %-14s 캡처 %d개' % (name, len(ctx.written)))
         sys.stdout.flush()
 
