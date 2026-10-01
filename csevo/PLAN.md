@@ -415,3 +415,23 @@ comments + Korean header line; two review passes before push.
   3장 block that had been appended after 4장 was moved back), 04b_cs3 66 slides (6장·7장 done, 8장·9장
   missing), 179 example dirs, but **no exps/p04*.py, no captures, no claims/glossary** — every p04
   example is untested. Resume briefs: scratch/brief/p04_resume.md, p04b_resume.md.
+
+### Part 4 (p04 + p04b, C# 3.0) — resumed subagents (2026-10-01)
+
+- p04 112 slides (1장 10, 2장 var·익명 형식 30, 3장 초기화자·자동 속성·partial 26, 4장 람다 26, 5장 확장
+  메서드 24), 16 rows, 98 examples (24 EXPECT_FAIL), 128 captures, 38 claims, 13 glossary. p04b 105 slides
+  (6장 쿼리 식 36, 7장 LINQ to Objects 30, 8장 식 트리 28, 9장 정리 11), 11 rows, 90 examples (11 FAIL),
+  96 captures, 28 claims, 11 glossary. Part 4 = 217/240. Both rewrote prose that disagreed with the first
+  real captures (lambda count, dynamic receiver compiles and fails at run time, partial-method errors at
+  v3 are worded with C# 9 rules, extension blocks at 13.0 are syntax errors not a gate message).
+- **Shared-tool race**: run_all.py read-modify-writes out/batches.json, so two batches at once lose each
+  other's key (p04b's vanished once). Fixed by rerun; rule until fixed: after parallel subagents, rerun
+  the batches sequentially (done here: p04+p04b ×2, identical, same bytes as the subagents').
+- Findings: extension `Add` in collection initializers compiles at v3 (no gate; docs place it in C# 6);
+  non-capturing lambdas are cached as instances of a generated class at v3 and v14; `M(Func)` vs
+  `M(Expression<Func>)` with a lambda is CS0121; at 14.0 `$"…"` is allowed in expression trees but
+  `?.`, tuples, patterns, throw, switch expressions, `^` are refused; .NET 10 ExpressionType has 85
+  values; List<T>.Sort of 20 items is unstable, OrderBy stable.
+- `make all SKEL=1` green: 644 slides, tests 91, data 130 rows, examples 561 (125 FAIL), coverage
+  13849/13849, verify, slices 12, xref 187 links, claims 0 missing, deck-check 0, font pass.
+- Next: part 5 (C# 4.0, 130) as p05 + p05b, and part 6 (C# 5.0, 170) — two subagents.
