@@ -123,6 +123,13 @@ class CsverSlug(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_deck.csverslug('out/08/tuples', v='7.3')
 
+    def test_version_only_for_csrun(self):
+        # dotnet --version 같은 명령에 -langversion 을 끼우면 안 된다 —
+        # 버전은 이름(slug)에만 남는다
+        self.assertEqual(build_deck.csver_cmdline('dotnet --version',
+                                                  v='14.0'),
+                         'dotnet --version')
+
     def test_cmdline_shows_env_and_flags(self):
         self.assertEqual(build_deck.csver_cmdline('csrun'), 'csrun')
         self.assertEqual(

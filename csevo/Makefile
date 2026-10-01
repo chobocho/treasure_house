@@ -32,10 +32,10 @@ FIND        := find
 # 덱에 실릴 소스. 폭 검사를 받는다 — 덱에 실릴 줄은 예외 없이
 # 72칸이다(PLAN.md §0.9). 이 덱은 빌드 도구를 가르치지 않으므로
 # (PLAN.md §0.13) 도구 가운데 0부가 증거 방식을 설명하며 보일
-# tools/csrun 만 본다. 다른 도구를 인용하게 되면 조립기의 <pre> 폭
-# 검사가 그 자리에서 잡는다.
+# tools/csrun 과 csver.py 만 본다. 다른 도구를 인용하게 되면
+# 조립기의 <pre> 폭 검사가 그 자리에서 잡는다.
 SRC_CS      := $(shell $(FIND) ex -name '*.cs' 2>/dev/null | sort)
-SRC_TOOL    := $(wildcard tools/csrun)
+SRC_TOOL    := $(wildcard tools/csrun tools/csver.py)
 SRC_ALL     := $(SRC_CS) $(SRC_TOOL)
 # ex/ 아래 csproj 를 가진 디렉터리 하나가 예제 하나다.
 EX_DIRS     := $(patsubst %/,%,$(dir $(shell \

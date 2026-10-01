@@ -458,6 +458,9 @@ def csver_cmdline(cmd, v=None, flags=None, env=None):
          → 'csrun -langversion:8.0 -nullable:enable -- a'
     """
     words = cmd.split(' ', 1)
+    if words[0] != 'csrun':
+        # dotnet --version 같은 명령 — 언어 버전은 캡처 이름에만 남는다
+        return ('%s ' % env if env else '') + cmd
     out = [words[0]]
     if v:
         out.append('-langversion:' + v)

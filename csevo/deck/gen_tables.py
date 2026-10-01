@@ -115,6 +115,19 @@ def _chunks(prefix, head, rows, per, numcols=()):
                 for k in range(0, len(rows), per))
 
 
+def gate_counts(releases, gates):
+    """버전마다 컴파일러가 그 버전을 요구하는 기능(게이트)의 수 —
+    tbl_gate_counts.html. 0부와 16부가 "왜 C# 1–5 는 -langversion 짝이
+    드문가" 를 이 표로 보인다. 게이트가 없는 버전도 0 으로 적는다. O(행 수)."""
+    n = {}
+    for g in gates:
+        k = cites.vnorm(g['required-version'])
+        n[k] = n.get(k, 0) + 1
+    rows = [('C# ' + r['version'], r['date'],
+             str(n.get(cites.vnorm(r['version']), 0))) for r in releases]
+    return _table(['버전', '나온 달', '게이트 수'], rows, numcols=(2,))
+
+
 def dict_rows(name):
     head, body = rows_of(name)
     return [dict(zip(head, r)) for r in body]
@@ -132,6 +145,9 @@ def build():
         if not head:
             continue
         made['tbl_%s.html' % name[:-4]] = render(head, body)
+    if os.path.exists(os.path.join(DATA, 'langgates.tsv')):
+        made['tbl_gate_counts.html'] = gate_counts(
+            dict_rows('releases.tsv'), dict_rows('langgates.tsv'))
     # 버전 개관·부록·흐름 표는 3단계 이후 goevo/deck/gen_tables.py 에서
     # C# 자료에 맞춰 옮겨 온다(PLAN.md §4).
     for out_name, tsv, cols, filt in VIEWS:

@@ -308,3 +308,32 @@ comments + Korean header line; two review passes before push.
   version**, unique id/slide-id). md_text: link targets with parentheses (LVH's `[C# 2](….aspx)`)
   — found in the first table run, test RED first.
 - Tests 69. `make all SKEL=1` green.
+
+### Step 4 — csrun + csver + run_all, part 0 (2026-10-01)
+
+- tools/csrun (29 lines, shown on p0-csrun): reads ex.csproj's LangVersion/Nullable/
+  AllowUnsafeBlocks/OutputType with sed, appends command-line flags after them (**csc takes the last
+  `-langversion`**, verified), compiles `*.cs` with csc.dll `-noconfig -nostdlib -deterministic
+  -debug:portable -pathmap:$PWD=/work` against the 10.0.12 ref pack, writes a runtimeconfig and
+  `exec dotnet exec`. `CSRUN_COMPILE_ONLY=1` stops after compiling (examples-check).
+- tools/csver.py (port of gover): copy to scratch/work/<stem>, `build_argv` puts `-langversion:v`
+  + flags right after `csrun` (other commands untouched), env prefix → environment, flock
+  scratch/dotnet.lock, 60 s; normalise = paths, ≥9-hex-digit addresses, CRLF. `--check` compiles
+  every example at its csproj version, 0 warnings unless EXPECT_WARN, EXPECT_FAIL skipped, results
+  cached by sha256 of sources+csproj+csrun (scratch/check/). run_all.py: goevo's with `ctx.cs(ex,
+  cmd='csrun', v=None, flags, env, tag, expect)`; v defaults to the csproj LangVersion and is
+  **always written in the first line** (`$ csrun -langversion:12.0`). csver_cmdline leaves
+  non-csrun commands alone (`$ dotnet --version`) — test RED first.
+- Findings: (1) under `-langversion:8.0`, `record Point(int X, int Y);` is not refused as
+  "records" — it parses as a top-level local function returning type `record` (six diagnostics:
+  CS8400 top-level statements, CS8112, CS0246 'record', …; with a class named Program it even gives
+  CS0260 partial Program). Kept in scratch/later/ for part 10's trap slide. (2) Each refused version
+  has its own error code (CS9058 for 11.0); not claimed on a slide until ErrorCode.cs is cited.
+  (3) `-langversion:1` and `ISO-1` both accepted; a C# 1 program prints runtime 10.0.12.
+  (4) **DOTNET_GCHeapHardLimit**: without it CoreCLR started fine 3/3 today, so the deck does not
+  call it required (kept as a safety default in csrun/csver/Makefile; memory note corrected).
+- gen_tables.gate_counts → tbl_gate_counts.html (test first): gates per version incl. zeros (1.2: 0,
+  5.0: 1). Part 0 written: 15 slides (cover, 13 + part cover) — oracle, gate source, few-gate
+  versions, four evidence modes, gate pair (collection expressions 12.0 vs 11.0), runtime under
+  langversion 1/ISO-1, csrun listing, normalise, how-to, badges, machine, scope. p00 run twice:
+  identical. Tests 88.

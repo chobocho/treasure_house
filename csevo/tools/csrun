@@ -1,0 +1,29 @@
+#!/bin/sh
+# csrun — MSBuild 없이 C# 예제 하나를 컴파일하고 돌린다.
+#   csrun [csc 플래그…] [-- 프로그램 인자…]   (예제 디렉터리 안에서)
+# ex.csproj 의 LangVersion·Nullable·AllowUnsafeBlocks·OutputType 을
+# csc 플래그로 옮기고, 명령 줄의 플래그를 그 뒤에 붙인다(뒤가 이긴다).
+set -eu
+# 이 값이 없으면 CoreCLR 이 못 뜬다(안드로이드의 가상 주소 한도)
+: "${DOTNET_GCHeapHardLimit:=0x30000000}"
+export DOTNET_GCHeapHardLimit
+D=/usr/lib/dotnet
+REF=$(ls -d $D/packs/Microsoft.NETCore.App.Ref/10.0.*/ref/net10.0 |
+  tail -1)
+p() { sed -n "s:.*<$1>\(.*\)</$1>.*:\1:p" ex.csproj | head -1; }
+lv=$(p LangVersion) nu=$(p Nullable)
+us=$(p AllowUnsafeBlocks) ty=$(p OutputType)
+set -- ${lv:+-langversion:$lv} ${nu:+-nullable:$nu} \
+  ${us:+-unsafe} "$@"
+f=; while [ $# -gt 0 ] && [ "$1" != -- ]; do f="$f $1"; shift; done
+[ $# -gt 0 ] && shift                         # '--' 를 뗀다
+t=exe; [ "$ty" = Library ] && t=library
+mkdir -p bin
+dotnet $D/sdk/10.0.112/Roslyn/bincore/csc.dll -nologo -noconfig \
+  -nostdlib -deterministic -debug:portable -pathmap:"$PWD"=/work \
+  -t:$t $f $(for r in "$REF"/*.dll; do printf -- '-r:%s ' "$r"; done) \
+  -out:bin/a.dll *.cs
+[ "$t" = library ] || [ -n "${CSRUN_COMPILE_ONLY:-}" ] && exit 0
+echo '{"runtimeOptions":{"tfm":"net10.0","framework":
+ {"name":"Microsoft.NETCore.App","version":"10.0.0"}}}' > bin/a.rc.json
+exec dotnet exec --runtimeconfig bin/a.rc.json bin/a.dll "$@"
