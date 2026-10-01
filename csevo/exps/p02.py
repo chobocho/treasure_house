@@ -1,0 +1,112 @@
+# -*- coding: utf-8 -*-
+"""2부 앞 조각 — C# 1.0 의 형식 체계와 식. 예제는 전부 -langversion:1 로
+컴파일한다(그것이 C# 1 문법이라는 증거다). 뒤 버전과의 대비는 같은
+소스를 그 버전으로 다시 컴파일한 캡처 하나씩만 둔다.
+
+종료 코드: 처리하지 않은 예외는 SIGABRT 라 -6, 컴파일 거절은 1."""
+
+BOOM = -6       # 처리하지 않은 예외 — 런타임이 abort 한다
+REFUSED = 1     # 컴파일러의 거절
+
+
+def run(ctx):
+    # 1장 — C# 1.0 개관
+    ctx.cs('ex/02/hello', expect=3)                 # Main 의 반환값이 종료 코드
+    ctx.cs('ex/02/lacks', expect=REFUSED)
+    ctx.cs('ex/02/lacks', v='6')
+    ctx.cs('ex/02/typeroot')
+    ctx.cs('ex/02/collections', expect=BOOM)
+
+    # 2장 — 통합 형식 체계
+    ctx.cs('ex/02/valref')
+    ctx.cs('ex/02/valparam')
+    ctx.cs('ex/02/structctor', expect=REFUSED)
+    ctx.cs('ex/02/structctor', v='11.0')            # 필드 자동 기본값(C# 11)
+    ctx.cs('ex/02/structnew')
+    ctx.cs('ex/02/equals')
+    ctx.cs('ex/02/eqfail', expect=REFUSED)
+    ctx.cs('ex/02/simple')
+    ctx.cs('ex/02/literals')
+    ctx.cs('ex/02/implicitnum')
+    ctx.cs('ex/02/boxing')
+    ctx.cs('ex/02/boxeq')
+    ctx.cs('ex/02/unbox', expect=BOOM)
+    ctx.cs('ex/02/boxmut')
+    ctx.cs('ex/02/boxmutfail', expect=REFUSED)
+    ctx.cs('ex/02/enumbasic')
+    ctx.cs('ex/02/enumir')
+    ctx.cs('ex/02/enumany')
+    ctx.cs('ex/02/enumzero', expect=REFUSED)
+    ctx.cs('ex/02/flags')
+    ctx.cs('ex/02/arrays', expect=BOOM)
+    ctx.cs('ex/02/arrayref')
+    ctx.cs('ex/02/covariance', expect=BOOM)
+    ctx.cs('ex/02/covtoday', expect=BOOM)           # csproj 가 14.0
+    ctx.cs('ex/02/strimm')
+    ctx.cs('ex/02/utf16')
+    ctx.cs('ex/02/verbatim')
+    ctx.cs('ex/02/strswitch')
+    ctx.cs('ex/02/switchrules', expect=REFUSED)
+    ctx.cs('ex/02/switchrules', v='2', expect=REFUSED)  # bool 거절만 사라진다
+    ctx.cs('ex/02/strintern')
+    ctx.cs('ex/02/strobj')                          # EXPECT_WARN: CS0253
+    ctx.cs('ex/02/strformat')
+    ctx.cs('ex/02/interp', expect=REFUSED)
+    ctx.cs('ex/02/interp', v='6')
+    ctx.cs('ex/02/decimal', expect=BOOM)
+    ctx.cs('ex/02/decfail', expect=REFUSED)
+    ctx.cs('ex/02/checked', expect=BOOM)
+    ctx.cs('ex/02/constovf', expect=REFUSED)
+    ctx.cs('ex/02/minvalue', expect=BOOM)
+    ctx.cs('ex/02/constro')
+    ctx.cs('ex/02/constir')
+    ctx.cs('ex/02/constfail', expect=REFUSED)
+    ctx.cs('ex/02/constswitch', expect=REFUSED)
+    ctx.cs('ex/02/rostruct')
+
+    # 3장 — 식과 연산자·매개변수
+    ctx.cs('ex/02/opover')
+    ctx.cs('ex/02/opnames')
+    ctx.cs('ex/02/opcall', expect=REFUSED)
+    ctx.cs('ex/02/oppair', expect=REFUSED)
+    ctx.cs('ex/02/opnull', expect=BOOM)
+    ctx.cs('ex/02/opcompound')
+    ctx.cs('ex/02/opcomp14', expect=REFUSED)
+    ctx.cs('ex/02/opcomp14', v='14.0')              # 복합 대입 연산자(C# 14)
+    ctx.cs('ex/02/optrue')
+    ctx.cs('ex/02/conv', expect=BOOM)
+    ctx.cs('ex/02/convtrap', expect=BOOM)
+    ctx.cs('ex/02/convfail', expect=REFUSED)
+    ctx.cs('ex/02/refout')
+    ctx.cs('ex/02/refoutfail', expect=REFUSED)
+    ctx.cs('ex/02/refref')
+    ctx.cs('ex/02/refelem')
+    ctx.cs('ex/02/paramir')
+    ctx.cs('ex/02/outvar', expect=REFUSED)
+    ctx.cs('ex/02/outvar', v='7.0')                 # out 변수 선언(C# 7)
+    ctx.cs('ex/02/params')
+    ctx.cs('ex/02/paramstrap')
+    ctx.cs('ex/02/overload')
+    ctx.cs('ex/02/overamb', expect=REFUSED)
+    ctx.cs('ex/02/isas', expect=BOOM)
+    ctx.cs('ex/02/isasfail', expect=REFUSED)
+    ctx.cs('ex/02/typeofex')
+    ctx.cs('ex/02/sizeofex')
+    ctx.cs('ex/02/sizeoffail', expect=REFUSED)
+    ctx.cs('ex/02/cond')
+    ctx.cs('ex/02/condfail', expect=REFUSED)
+    ctx.cs('ex/02/condtarget')                      # 대상 형식 조건식(C# 9)
+    ctx.cs('ex/02/intdiv', expect=BOOM)
+    ctx.cs('ex/02/divzero', expect=BOOM)
+    ctx.cs('ex/02/floatcast')
+    ctx.cs('ex/02/checkflag')
+    ctx.cs('ex/02/checkflag', flags='-checked', tag='checked', expect=BOOM)
+    ctx.cs('ex/02/promo')
+    ctx.cs('ex/02/promofail', expect=REFUSED)
+    ctx.cs('ex/02/shift')
+    ctx.cs('ex/02/nan')
+    ctx.cs('ex/02/concat')
+    ctx.cs('ex/02/order')
+    ctx.cs('ex/02/incdec')
+    ctx.cs('ex/02/logic')
+    ctx.cs('ex/02/boolfail', expect=REFUSED)

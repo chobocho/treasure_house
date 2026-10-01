@@ -337,3 +337,45 @@ comments + Korean header line; two review passes before push.
   versions, four evidence modes, gate pair (collection expressions 12.0 vs 11.0), runtime under
   langversion 1/ISO-1, csrun listing, normalise, how-to, badges, machine, scope. p00 run twice:
   identical. Tests 88.
+
+### Step 5 setup — standard docs, overview tables, chunked parts, subagent brief (2026-10-01)
+
+- docs: + the C# standard draft chapters (csharpstandard `standard/*.md`, 32 files, keys `std-<chapter>`)
+  — C# 1–5 features cite the spec text because their whats-new coverage is a few lines.
+- gen_tables.release_tables (port, test first) → `out/tbl_rel_<vnorm>.html` per version: month,
+  .NET · VS pair, feature titles per kind (links to slide-ids), gate count. Correction: the step-4 entry
+  says tests 88 — it was 87; now 89.
+- Parts are written in **chunks** (`NN_` + `NNb_` …) so two subagents can work at once and no
+  subagent has to hold 200 slides: chunk = section file + data/features/pNNx.tsv + claims/glossary/
+  exps of the same suffix. budget_report sums chunks by prefix; check_xref continues part/chapter
+  numbering across chunk files. Brief for part writers: scratch/brief/BRIEF.md (gitignored; English).
+- Wave 1 launched: p02 (C# 1.0 type system & expressions, ~100) and p03 (C# 2.0 generics, nullable,
+  iterators, ~105). Next: p02b (C# 1.0 members/delegates/exceptions + C# 1.2), p03b (anonymous
+  methods, delegate inference/variance, partial/static/accessors, small gates), then part 4 (C# 3.0)
+  as p04/p04b.
+
+### Part 2 first half (p02) + part 3 first half (p03) — subagents (2026-10-01)
+
+- p02 (C# 1.0 type system & expressions): 97 slides (cover+intro, 1장 overview 9, 2장 형식 체계 45,
+  3장 식·연산자·매개변수 41), 34 feature rows, 88 examples (23 EXPECT_FAIL, 1 EXPECT_WARN), 95
+  captures, 14 claims, 14 glossary lines. p03 (C# 2.0 generics, nullable, iterators): 102 slides
+  (1장 8, 2장 제네릭 42, 3장 nullable 23, 4장 반복기 28 + covers/quizzes), 17 rows (4 with msgid),
+  96 examples (20 EXPECT_FAIL, 2 EXPECT_WARN), 108 captures, 28 claims, 13 glossary lines.
+  Both re-ran their batch twice with identical bytes (p02 also after the csver fix).
+- Shared tool bug found by p02: tools/csver.py `_run` had a comment word wrapped onto its own code line
+  (`하나` → NameError) by my step-4 rewrap — fixed, test added (21912dc). Lesson: never machine-wrap
+  code files; only docstrings/comment paragraphs with tools/rewrap.py.
+- Findings (deck material): C# 1/2 refusal codes are CS8022/CS8023 (per target version); a file with
+  several gated features at v=1 reports only the generics errors (one feature per refusal example);
+  calling generic/extension methods is not gated — only the syntax (`<…>`, declarations); variance is
+  gated on declaration only (`IEnumerable<object> e = new List<string>()` compiles at v2 because the
+  BCL declares `out T`; declaring `out T` → CS8023 'type variance' needs 4); `??` has no gate and no
+  version in docs (marked 미확인); unhandled exception exit code here is -6; .NET 10 throws
+  OverflowException for unchecked int.MinValue / -1 (implementation-defined in the standard);
+  `yield` in try-with-catch is still CS1626 at 14.0; ref locals in iterators refused at 12.0 (CS9202),
+  accepted at 13.0; CS0171 at v1 suggests "language version '11.0' to auto-default the field".
+- Commit discipline with a subagent (p02b) running: only p02/p03 files staged (p02b's three new
+  ex/02 dirs unstaged); checks run on an export of the index (`git checkout-index --prefix`) with docs
+  symlinked: tables, run-check, deck (231 slides, coverage 4385/4385, 오류 0), verify, slices, xref
+  (54 badges), claims (0), deck-check, data-check (51 rows), glossary — all clean; the deck HTML of
+  that export (font embedded) is what is committed.
