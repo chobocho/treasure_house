@@ -442,3 +442,21 @@ comments + Korean header line; two review passes before push.
   the other batch's key. Now `update_batch()` takes `fcntl.flock(out/.batches.lock)`, re-reads, sets its
   own key and writes; `--all` saves `{}` after clearing. Test first (RED: pB key lost), tests 98 OK,
   `--only p00` leaves batches.json byte-identical. Parallel subagents may now run batches at once.
+
+### Parts 5–6 — session restart; p05 batch was broken (2026-10-01, evening)
+
+- The previous session (and its p05/p06 subagents) died. 05_cs4 had 111 slides (1장 10, 2장 43, 3장 31,
+  4장 20, 5장 10 + cover/intro/part quiz), 06_cs5 95 slides (1장 10, 2장 13, 3장 32, 4장 23, 5장 20) —
+  both structurally complete. A 06b_cs5 placeholder and p06b in ORDER/order.txt were already there.
+- `run_all --only` p05/p06 twice gave identical bytes, **but p05 had aborted** at ex/05/varis (Pretty()
+  crashed on the nested KeyCollection type: no backtick) — both passes stopped at the same place, so
+  "identical" proved nothing. Lesson: read run_all's tail for a Traceback, not just the sha256.
+  `make all SKEL=1` then failed with 25 missing captures (51 errors).
+- Fixed: varis guard; varvalue BAD line now `Take(nums)` → CS1503 (CS0266 line was 218 cols);
+  ex/05/namednontrail/Program.cs → N.cs (CS1738 line 203 cols). p05 now 120 captures, 0 over 200.
+  check_claims flagged CS1977/CS1961 in prose as years → wrapped in `<code>`.
+- 58 p05 captures (48 examples) were never seen by the writer → a fixer subagent reconciles prose with
+  them (scratch/brief/p05_review.md). In parallel p06b (scratch/brief/p06b.md) writes 6장~.
+- Briefs for part 7 written: p07 (~90: 1장 개관·Roslyn, 2장 보간, 3장 nameof, 4장 ?.) and p07b (~80: 5장~
+  식 본문, 자동 속성, using static·필터·인덱스 초기화자, 정리). 07b_cs6.html placeholder + ORDER/order.txt.
+  Launch after the current two finish (≤ 2 subagents).
