@@ -154,6 +154,34 @@ BLOGS = [
     'csharp-15-union-types',
 ]
 
+# 1부(C# 이전)와 버전 부의 "왜" — 공식 문서 밖의 1차 자료. 위키백과는
+# 인용하지 않고, 위키백과가 인용한 원자료를 직접 받는다(PLAN.md §0.4).
+#   · PDC 2000 — Microsoft Learn 의 행사 페이지(C# 발표·시연, 날짜·장소)
+#   · Sun 과의 자바 소송 합의 보도자료(2001-01-23)
+#   · Artima "A Conversation with Anders Hejlsberg" 8편(2003) — 설계자 본인의
+#     말로 된 설계 이유(가상 메서드 기본값, checked exception, 대리자, 제네릭 …)
+HISTORY = [
+    ('pdc-2000', 'https://learn.microsoft.com/en-us/shows/pdc-2000/'),
+    ('ms-sun-settlement-2001',
+     'https://news.microsoft.com/source/2001/01/23/microsoft-reaches-'
+     'agreement-to-settle-contract-dispute-with-sun-microsystems/'),
+] + [('artima-' + slug, 'https://www.artima.com/articles/' + slug)
+     for slug in ('the-c-design-process',
+                  'the-trouble-with-checked-exceptions',
+                  'delegates-components-and-simplexity',
+                  'versioning-virtual-and-override',
+                  'contracts-and-interoperability',
+                  'inappropriate-abstractions', 'generics-in-c-java-and-c',
+                  'clr-design-choices')]
+# news.microsoft.com 은 스크립트 같은 UA 를 403 으로 막는다(2026-10-01 확인).
+BROWSER_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/126.0 Safari/537.36')
+
+
+def ua_for(url):
+    return BROWSER_UA if 'news.microsoft.com' in url else UA
+
+
 TREE_URL = ('https://api.github.com/repos/dotnet/csharplang/git/trees/%s'
             '?recursive=1' % CSLANG_SHA)
 PROPOSAL = re.compile(r'^proposals/csharp-\d+\.\d+/.+\.md$')
@@ -209,6 +237,9 @@ def plan(tree, index):
                           % (STD_SHA, name), kind='md'))
     items += proposal_items(tree)
     items += channel_items(index)
+    for name, url in HISTORY:
+        items.append(dict(path='history/%s.txt' % name, url=url,
+                          kind='html'))
     for slug in BLOGS:
         items.append(dict(path='blog/%s.txt' % slug,
                           url='https://devblogs.microsoft.com/dotnet/%s/'
@@ -237,7 +268,9 @@ def get(url):
     last = None
     for attempt in range(3):
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': UA})
+            req = urllib.request.Request(url, headers={
+                'User-Agent': ua_for(url),
+                'Accept': 'text/html,application/xhtml+xml,*/*'})
             with urllib.request.urlopen(req, timeout=30) as r:
                 return r.read()
         except (urllib.error.URLError, OSError) as e:

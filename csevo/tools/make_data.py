@@ -203,6 +203,11 @@ def cite_keys(paths, titles):
             rows.append((key, 'C# %s 기능 명세 %s' % (cites.vnorm(m.group(1)),
                                                     m.group(2)), p))
             continue
+        m = re.match(r'history/(.+)\.txt$', p)
+        if m:
+            rows.append(('hist-' + m.group(1),
+                         titles.get('history/' + m.group(1), m.group(1)), p))
+            continue
         m = re.match(r'standard/(.+)\.txt$', p)
         if m:
             rows.append(('std-' + m.group(1),
@@ -245,14 +250,17 @@ def blog_titles():
     devblogs 의 꼬리(' - .NET Blog')는 뗀다."""
     import html
     out = {}
-    d = os.path.join(DOCS, 'raw', 'blog')
-    if os.path.isdir(d):
+    for sub, pre in (('blog', ''), ('history', 'history/')):
+        d = os.path.join(DOCS, 'raw', sub)
+        if not os.path.isdir(d):
+            continue
         for name in sorted(os.listdir(d)):
             m = re.search(r'<title>(.*?)</title>', read(os.path.join(d, name)),
                           re.S)
             if m:
                 t = html.unescape(re.sub(r'\s+', ' ', m.group(1))).strip()
-                out[name[:-4]] = re.sub(r'\s+-\s+\.NET Blog$', '', t)
+                t = re.sub(r'\s+-\s+\.NET Blog$', '', t)
+                out[pre + name[:-4]] = t
     return out
 
 

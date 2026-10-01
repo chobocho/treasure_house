@@ -140,6 +140,17 @@ class Plan(unittest.TestCase):
         self.assertIn('standard/foreword.txt', items)
         self.assertIn(fetch_docs.STD_SHA, items['standard/classes.txt'])
 
+    def test_history_pages(self):
+        items = dict((i['path'], i) for i in
+                     fetch_docs.plan(self.tree, self.index))
+        self.assertIn('history/artima-the-c-design-process.txt', items)
+        self.assertIn('history/artima-clr-design-choices.txt', items)
+        self.assertEqual(items['history/pdc-2000.txt']['kind'], 'html')
+        # news.microsoft.com 은 브라우저가 아닌 UA 를 403 으로 막는다
+        self.assertTrue(fetch_docs.ua_for(
+            items['history/ms-sun-settlement-2001.txt']['url'])
+            .startswith('Mozilla/5.0 (Windows'))
+
     def test_paths_are_unique(self):
         paths = [i['path'] for i in fetch_docs.plan(self.tree, self.index)]
         self.assertEqual(len(paths), len(set(paths)))

@@ -121,7 +121,7 @@ class CiteKeys(unittest.TestCase):
                  'roslyn/MessageID.cs', 'roslyn/Language-Feature-Status.txt',
                  'blog/introducing-csharp-14.txt', 'releases/8.0.json',
                  'raw/csharplang-tree.json', 'ecma-334.txt',
-                 'standard/classes.txt']
+                 'standard/classes.txt', 'history/pdc-2000.txt']
         rows = dict((k, (n, f)) for k, n, f in
                     make_data.cite_keys(paths, {'introducing-csharp-14':
                                                 'Introducing C# 14'}))
@@ -138,6 +138,7 @@ class CiteKeys(unittest.TestCase):
         self.assertEqual(rows['rel-8.0'][1], 'releases/8.0.json')
         self.assertNotIn('raw/csharplang-tree', ''.join(rows))
         self.assertEqual(rows['std-classes'][1], 'standard/classes.txt')
+        self.assertEqual(rows['hist-pdc-2000'][1], 'history/pdc-2000.txt')
 
 
 FEATURES = ('id\tversion\tkind\ttitle\tcite-key\tcite-sec\tslide-id\tmsgid\n'
