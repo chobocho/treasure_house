@@ -263,3 +263,26 @@ comments + Korean header line; two review passes before push.
 - Tests 41 (RED: 31 failed for the intended reasons; then GREEN). `make all SKEL=1`: exit 0, 26
   slides, 24 placeholders, claims 16 versions sourced, DeckMono 28 KB. .gitignore: /csevo/docs/*
   (except FETCHED.txt), /csevo/scratch/, /csevo/.svgrender/.
+
+### Step 2 — fetch_docs + md_text (2026-10-01)
+
+- tools/md_text.py (new; the C# sources are markdown): ATX and setext headings → `§<TAB>heading`
+  with inline markup removed (`code`, [links](), *em*, `\#`, {#anchor}, tags); fenced code verbatim and
+  never a heading (`#nullable`, `#:sdk`); YAML front matter kept and its closing `---` not read as a
+  setext underline; BOM stripped (Roslyn breaking-change docs start with one — caught after the first
+  fetch, test RED first). tools/html_text.py copied unchanged from goevo (ECMA page, devblogs).
+- tools/fetch_docs.py: every GitHub source pinned to a commit — dotnet/docs 91cc9093, csharplang
+  93d55a09, dotnet/core 44927bc8, csharpstandard 107068a0, and Roslyn at **the installed SDK's VMR
+  commit 95017c711e** (MessageID.cs, LanguageVersion.cs, CSharpResources.resx, Language Feature
+  Status, 12 compiler breaking-change docs, Deviations from Standard, warning waves). Whats-new pages
+  removed from main (C# 6, 7, 7.1–7.3, 8, 9, 10, 11) come from the parent of the removing commit
+  (found with the GitHub API today, hard-coded with the removing hashes in a comment). Proposals: the
+  csharplang tree (one API call, cached in docs/raw) → every `proposals/csharp-N.M/*.md` (139; inactive
+  and rejected excluded; csharp-15.0 kept for the part-16 note). .NET channel releases.json from the
+  pinned dotnet/core copy (not builds.dotnet, which moves). 10 devblogs posts (only URLs that answered
+  200 today; C# 13 has no "introducing" post at the guessed slug).
+- Findings: dotnet/docs already has csharp-15.md and csharplang lists "C# 15.0 - .NET 11 and Visual
+  Studio 2026 version 18.8" (unions, closed hierarchies, …) — part 16 note material, still no code.
+  ECMA-334 page lists editions 1–7 (December 2001 … ; V7 = ECMA-334:2023).
+- `make docs`: 203 documents, 0 failures, 29 MB (cache, gitignored); docs/FETCHED.txt committed.
+  Tests 56 (md_text 7, plan 6, ledger 2 + 41 earlier); RED on stubs first.
