@@ -379,3 +379,39 @@ comments + Korean header line; two review passes before push.
   symlinked: tables, run-check, deck (231 slides, coverage 4385/4385, 오류 0), verify, slices, xref
   (54 badges), claims (0), deck-check, data-check (51 rows), glossary — all clean; the deck HTML of
   that export (font embedded) is what is committed.
+
+### p02b + p03b finished; csrun -parallel-; aborted recapture (2026-10-01)
+
+- p02b (C# 1.0 classes/members/delegates/exceptions/misc + C# 1.2): 98 slides (part 2 195/200),
+  38 rows, 90 examples, 101 captures, 26 claims, 15 glossary; Artima quotes on virt/pme/del/nochecked
+  "why" slides (tier c). p03b (anonymous methods & delegates, partial/static/accessors/aliases,
+  #pragma/fixed buffers, C# 2.0 wrap-up): 101 slides (part 3 203/210), 14 rows (all 9 gated with
+  msgid), 96 examples, 125 captures, 44 claims, 15 glossary.
+- **Both found the same determinism bug**: csc compiles types in parallel, so diagnostics spanning
+  several types/files come out in a different order per run (staticbad: 4 runs → 4 orders, measured
+  with md5). tools/csrun now always passes `-parallel-` (4/4 identical; `-parallel+` varies again).
+  Captures that passed `flags=-parallel-` explicitly keep it in their first line (redundant now).
+- Other findings: method-group conversion, delegate inference and method-group variance are NOT gated
+  (compile at v1); each target version has its own refusal code (CS8022 v1 … CS8026 v5, CS8320 7.2,
+  CS8400 8.0, CS9058 11, CS9202 12, CS9260 13); method-group delegate caching differs at 10.0 vs 11.0;
+  `module:` gate warning prints the raw enum name `IDS_FeatureModuleAttrLoc`; BeginInvoke throws
+  PlatformNotSupportedException on .NET 10; `-langversion:1.2` is CS1617; declaration errors hide
+  method-body errors (split refusal examples).
+- **Incident**: a full recapture (p00…p03b) started while the p04/p04b subagents compiled → swap
+  15.8/16.3 GB, every batch hit the 60 s csrun timeout *after* run_all had cleared that batch's old
+  captures. Committed captures restored from HEAD (134 files, `git restore --source=HEAD` on deleted
+  paths only). Rule: **recapture only when no subagent is running dotnet**; p02b/p03b (uncommitted)
+  must be recaptured before they are committed.
+
+### p02b + p03b committed after a clean recapture (2026-10-01)
+
+- No subagent running → `run_all.py --only` p02 p02b p03 p03b, twice: sha256 of all 0[23]-*.txt +
+  manifest identical across passes, and the committed p02/p03 captures came out byte-identical to HEAD
+  (so `-parallel-` changed none of them). 460 captures in manifest.
+- Committed from an index export (p04/p04b work-in-progress left unstaged): deck 429 slides (part 2
+  195/200, part 3 203/210), coverage 9155/9155, verify 392 code + 434 output blocks, xref 82 links,
+  claims 0 missing, glossary 57 terms, deck-check 0, font 587 glyphs.
+- p04/p04b subagents from the previous session died with it: 04_cs3 97 slides (5장 unfinished; a
+  3장 block that had been appended after 4장 was moved back), 04b_cs3 66 slides (6장·7장 done, 8장·9장
+  missing), 179 example dirs, but **no exps/p04*.py, no captures, no claims/glossary** — every p04
+  example is untested. Resume briefs: scratch/brief/p04_resume.md, p04b_resume.md.
