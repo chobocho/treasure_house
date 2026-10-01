@@ -115,6 +115,45 @@ def _chunks(prefix, head, rows, per, numcols=()):
                 for k in range(0, len(rows), per))
 
 
+KIND_NAMES = [('lang', '언어'), ('runtime', '런타임'), ('compiler', '컴파일러'),
+              ('library', '라이브러리'), ('platform', '플랫폼'),
+              ('ecosystem', '생태계')]
+
+
+def release_tables(releases, features, gates):
+    """버전마다 개관 표 하나 — tbl_rel_<버전>.html (goevo 에서 옮김).
+
+    나온 달·VS·.NET 은 releases.tsv, 갈래마다의 기능은 features 의 그 버전
+    행 전부(전용 장이 있으면 그리로 가는 링크), 게이트 수는 langgates.tsv.
+    표가 기능 목록에서 곧장 만들어지므로 개관 장과 목록이 어긋날 수 없다.
+    버전 비교는 끝의 .0 을 뗀 꼴로 한다(cites.vnorm). O(행 수)."""
+    e = lambda s: html.escape(s, quote=False)
+    out = {}
+    for r in releases:
+        ver = cites.vnorm(r['version'])
+        pair = ' · '.join(x for x in (r.get('framework', ''), r.get('vs', ''))
+                          if x)
+        rows = ['<table class="kv">',
+                '<tr><th>나온 달</th><td>%s</td></tr>' % e(r['date']),
+                '<tr><th>함께 나온 것</th><td>%s</td></tr>' % e(pair or '—')]
+        mine = [f for f in features if cites.vnorm(f.get('version', '')) == ver]
+        for kind, name in KIND_NAMES:
+            items = []
+            for f in mine:
+                if f.get('kind') != kind:
+                    continue
+                t = e(f.get('title', ''))
+                sid = f.get('slide-id', '')
+                items.append('<a href="#%s">%s</a>' % (sid, t) if sid else t)
+            rows.append('<tr><th>%s</th><td>%s</td></tr>'
+                        % (name, ' · '.join(items) or '—'))
+        n = sum(1 for g in gates if cites.vnorm(g['required-version']) == ver)
+        rows.append('<tr><th>컴파일러 게이트</th><td>%d개</td></tr>' % n)
+        rows.append('</table>')
+        out['tbl_rel_%s.html' % ver] = '\n'.join(rows) + '\n'
+    return out
+
+
 def gate_counts(releases, gates):
     """버전마다 컴파일러가 그 버전을 요구하는 기능(게이트)의 수 —
     tbl_gate_counts.html. 0부와 16부가 "왜 C# 1–5 는 -langversion 짝이
@@ -146,6 +185,9 @@ def build():
             continue
         made['tbl_%s.html' % name[:-4]] = render(head, body)
     if os.path.exists(os.path.join(DATA, 'langgates.tsv')):
+        made.update(release_tables(dict_rows('releases.tsv'),
+                                   cites.feature_rows(BASE),
+                                   dict_rows('langgates.tsv')))
         made['tbl_gate_counts.html'] = gate_counts(
             dict_rows('releases.tsv'), dict_rows('langgates.tsv'))
     # 버전 개관·부록·흐름 표는 3단계 이후 goevo/deck/gen_tables.py 에서

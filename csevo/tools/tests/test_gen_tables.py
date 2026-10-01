@@ -31,5 +31,37 @@ class GateCounts(unittest.TestCase):
             '<tr><td>C# 9</td><td>2020-11</td><td class="num">2</td></tr>'])
 
 
+class ReleaseTables(unittest.TestCase):
+    def test_one_table_per_version_with_links_and_gates(self):
+        releases = [{'version': '7.3', 'date': '2018-05',
+                     'vs': 'Visual Studio 2017 version 15.7', 'framework': ''},
+                    {'version': '12', 'date': '2023-11',
+                     'vs': 'Visual Studio 2022 version 17.8',
+                     'framework': '.NET 8'}]
+        feats = [{'version': '12', 'kind': 'lang', 'title': '컬렉션 식',
+                  'slide-id': 'p13-coll'},
+                 {'version': '12.0', 'kind': 'lang', 'title': '기본 생성자',
+                  'slide-id': ''},
+                 {'version': '12', 'kind': 'library', 'title': 'A<B>',
+                  'slide-id': ''},
+                 {'version': '7.3', 'kind': 'lang', 'title': 'x',
+                  'slide-id': ''}]
+        gates = [{'required-version': '12'}, {'required-version': '12'}]
+        out = gen_tables.release_tables(releases, feats, gates)
+        self.assertEqual(sorted(out), ['tbl_rel_12.html', 'tbl_rel_7.3.html'])
+        t = out['tbl_rel_12.html']
+        self.assertIn('<tr><th>나온 달</th><td>2023-11</td></tr>', t)
+        self.assertIn('<tr><th>함께 나온 것</th><td>.NET 8 · '
+                      'Visual Studio 2022 version 17.8</td></tr>', t)
+        # 12 와 12.0 은 같은 버전이다(vnorm)
+        self.assertIn('<tr><th>언어</th><td><a href="#p13-coll">컬렉션 식</a>'
+                      ' · 기본 생성자</td></tr>', t)
+        self.assertIn('<tr><th>라이브러리</th><td>A&lt;B&gt;</td></tr>', t)
+        self.assertIn('<tr><th>런타임</th><td>—</td></tr>', t)
+        self.assertIn('<tr><th>컴파일러 게이트</th><td>2개</td></tr>', t)
+        self.assertIn('<tr><th>함께 나온 것</th><td>Visual Studio 2017 '
+                      'version 15.7</td></tr>', out['tbl_rel_7.3.html'])
+
+
 if __name__ == '__main__':
     unittest.main()
