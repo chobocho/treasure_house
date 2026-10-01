@@ -78,6 +78,10 @@ class MdText(unittest.TestCase):
                          'params collections')
         self.assertEqual(c('**Bold** and *em* {#anchor}'), 'Bold and em')
         self.assertEqual(c('Title ##'), 'Title')
+        # Language-Version-History.md 의 진짜 제목 — 주소 안에 괄호가 있다
+        self.assertEqual(c('[C# 2](https://msdn.microsoft.com/library/'
+                           '7cz8t42e(v=vs.80).aspx) - Visual Studio 2005'),
+                         'C# 2 - Visual Studio 2005')
         self.assertEqual(c('C\\# and <sup>1</sup>'), 'C# and 1')
 
 

@@ -286,3 +286,25 @@ comments + Korean header line; two review passes before push.
   ECMA-334 page lists editions 1–7 (December 2001 … ; V7 = ECMA-334:2023).
 - `make docs`: 203 documents, 0 failures, 29 MB (cache, gitignored); docs/FETCHED.txt committed.
   Tests 56 (md_text 7, plan 6, ledger 2 + 41 earlier); RED on stubs first.
+
+### Step 3a — make_data + generated tables (2026-10-01)
+
+- tools/make_data.py → four generated tables. **langgates.tsv** (183 rows): the `RequiredVersion()`
+  switch of the installed compiler's MessageID.cs — versions read from the `return
+  LanguageVersion.CSharpN` lines, *not* the comments (the fetched file labels the C# 14 group
+  "C# 13.0 features"); feature names from CSharpResources.resx (the words printed in CS8xxx errors;
+  9 gates have no resource name — left blank). Gates per version: 1:1 2:13 3:10 4:4 5:1 6:12 7:11
+  7.1:4 7.2:8 7.3:13 8:22 9:25 10:18 11:15 12:8 13:9 14:9 — C# 5 (async) has a single gate, so most
+  C# 1–5 "before/after" must use mode (b)–(d) of §0.6.
+  **releases.tsv** (18 rows, **deviation**: generated, not hand-written): name and month from the
+  version history (`C# version N` + `*Released Month YYYY*`), VS/.NET pairing from csharplang's
+  Language-Version-History headings; C# 15 (LVH only) is left out. Dates are months (YYYY-MM) —
+  the docs give no days. **dotnet.tsv** (13 rows): GA (`x.y.0`) date per channel from the pinned
+  releases.json; .NET 11 has no GA yet. .NET Framework rows still to come by hand (with sources).
+  **cite_keys.tsv** (202): whatsnew-N, history, lvh, prop-N-<name>, msgid, langversion, roslyn-*,
+  rel-*, blog-* (titles from the raw page `<title>`, " - .NET Blog" removed), ecma-334, std-readme.
+- `make data-check`: regenerate-and-compare + features rows (version ∈ releases via vnorm, kind ∈
+  lang/runtime/compiler/library/ecosystem/platform, cite resolves, **msgid's gate version == row
+  version**, unique id/slide-id). md_text: link targets with parentheses (LVH's `[C# 2](….aspx)`)
+  — found in the first table run, test RED first.
+- Tests 69. `make all SKEL=1` green.
