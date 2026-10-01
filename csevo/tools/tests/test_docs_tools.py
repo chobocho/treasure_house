@@ -133,6 +133,13 @@ class Plan(unittest.TestCase):
         self.assertEqual(it['kind'], 'raw')
         self.assertIn('/dotnet/dotnet/95017c711e', it['url'])
 
+    def test_standard_chapters_pinned(self):
+        items = dict((i['path'], i['url'])
+                     for i in fetch_docs.plan(self.tree, self.index))
+        self.assertIn('standard/classes.txt', items)
+        self.assertIn('standard/foreword.txt', items)
+        self.assertIn(fetch_docs.STD_SHA, items['standard/classes.txt'])
+
     def test_paths_are_unique(self):
         paths = [i['path'] for i in fetch_docs.plan(self.tree, self.index)]
         self.assertEqual(len(paths), len(set(paths)))

@@ -130,6 +130,20 @@ FIXED = [
      'json'),
 ]
 
+# C# 표준(ECMA-334 의 다음 판 초안, csharpstandard 의 standard/) — C# 1–5
+# 의 기능은 버전별 문서가 짧아 명세 본문을 근거로 인용한다. 목록은
+# 2026-10-01 의 저장소 트리에서 옮겼다.
+STANDARD = [
+    'README', 'arrays', 'attributes', 'basic-concepts', 'bibliography',
+    'classes', 'conformance', 'conversions', 'delegates',
+    'documentation-comments', 'enums', 'exceptions', 'expressions',
+    'foreword', 'general-description', 'grammar', 'interfaces',
+    'introduction', 'lexical-structure', 'namespaces',
+    'normative-references', 'patterns', 'portability-issues', 'ranges',
+    'scope', 'standard-library', 'statements', 'structs',
+    'terms-and-definitions', 'types', 'unsafe-code', 'variables',
+]
+
 # 받을 devblogs 글 — devblogs.microsoft.com/dotnet/<꼬리>/. 부를 쓰다
 # 인용할 글이 늘면 여기에 더하고 make docs 를 다시 돌린다(2026-10-01 에
 # 200 으로 답한 것만 적었다).
@@ -189,6 +203,10 @@ def plan(tree, index):
         name = _slug(os.path.splitext(os.path.basename(d))[0])
         items.append(dict(path='roslyn/%s.txt' % name,
                           url=ROSLYN + urllib.parse.quote(d), kind='md'))
+    for name in STANDARD:
+        items.append(dict(path='standard/%s.txt' % name,
+                          url=RAW + 'dotnet/csharpstandard/%s/standard/%s.md'
+                          % (STD_SHA, name), kind='md'))
     items += proposal_items(tree)
     items += channel_items(index)
     for slug in BLOGS:

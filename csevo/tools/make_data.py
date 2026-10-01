@@ -203,6 +203,11 @@ def cite_keys(paths, titles):
             rows.append((key, 'C# %s 기능 명세 %s' % (cites.vnorm(m.group(1)),
                                                     m.group(2)), p))
             continue
+        m = re.match(r'standard/(.+)\.txt$', p)
+        if m:
+            rows.append(('std-' + m.group(1),
+                         'C# 표준 초안 %s.md' % m.group(1), p))
+            continue
         m = re.match(r'blog/(.+)\.txt$', p)
         if m:
             rows.append(('blog-' + m.group(1),
