@@ -460,3 +460,9 @@ comments + Korean header line; two review passes before push.
 - Briefs for part 7 written: p07 (~90: 1장 개관·Roslyn, 2장 보간, 3장 nameof, 4장 ?.) and p07b (~80: 5장~
   식 본문, 자동 속성, using static·필터·인덱스 초기화자, 정리). 07b_cs6.html placeholder + ORDER/order.txt.
   Launch after the current two finish (≤ 2 subagents).
+- p05 reconciled (fixer subagent): all 58 late captures checked; 2 slide notes/captions corrected
+  (p5-v4-named-attr: two CS8024 at v3, not one; p5-v4-opt-caller: why "dyn line 0"), varis comment
+  shortened (74 cols). 3 full p05 runs identical (120 captures; one run > 10 min under swap).
+  Findings: a user `class dynamic` hides the contextual keyword (same output at v3 and v4);
+  `typeof(dynamic)` CS1962, `new dynamic()` CS8386, `dynamic.Equals` CS0103.
+- p06 committed alone first (7a6ef08, export with HEAD manifest + p06 keys), then p05 the same way.
