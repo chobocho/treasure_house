@@ -1,0 +1,901 @@
+<article class="card" id="p9-v8-pat"><p class="chnum">3장</p><h2>패턴의 확장 — 식이 된 switch</h2>
+<p class="chsub">switch 식 · 속성 패턴 · 위치 패턴 · 튜플 패턴 · 재귀 패턴 · 포인터의 null 패턴 · 결정 DAG · 뒤 버전의 패턴</p></article>
+
+<article class="card" id="p9-v8-pat-why">
+<h3>왜 — "데이터와 기능이 떨어져 사는" 설계</h3>
+<p class="why">whats-new 의 설명: C# 7.0 의 형식 패턴과 상수 패턴은 "the first tentative steps" 였고, 마이크로서비스와 클라우드 구조로 가면서 다른 도구가
+필요해졌다는 것입니다. C# 8.0 은 "more pattern expressions in more places" 를 더하고, 패턴 안에 패턴을 넣는 <b>재귀 패턴</b>을 들여옵니다.
+<!--CITE key=whatsnew-8 sec="More patterns in more places"--></p>
+<p>제안서는 목표를 함수형 언어의 대수적 데이터 형식과 패턴 매칭에서 얻는 이점이라고 적고, 영감을 준 언어로 F# 과 Scala 를 듭니다.
+<!--CITE key=prop-8-patterns sec="Summary"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>C# 7.0 이 연 것</th><th>C# 8.0 이 더한 것</th></tr>
+<tr><td><code>is</code> 와 <code>switch</code> 문의 형식·상수·<code>var</code> 패턴(<a href="#p8-v7-pat-switch">8부</a>)</td>
+<td><code>switch</code> <b>식</b> — 값을 내는 switch</td></tr>
+<tr><td>패턴 하나 = 검사 하나</td><td>속성 <code>{ P: … }</code>, 위치 <code>( … )</code>, 튜플 패턴 — 안에 다시 패턴</td></tr>
+<tr><td><code>case null</code></td><td><code>{ }</code> — null 이 아닌 모든 것, 포인터의 <code>null</code></td></tr>
+</table></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p9-v8-switchexpr">
+<h3>switch 식 (switch expression) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">왜 — whats-new: <code>switch</code> 문은 <code>case</code> 마다 값을 하나씩 내는 일이 많은데, switch 식은 "fewer repetitive <code>case</code> and
+<code>break</code> keywords, and fewer curly braces" 로 같은 일을 합니다. 변수가 <code>switch</code> 앞에 오고, <code>case</code> 와 <code>:</code> 는
+<code>=&gt;</code> 로, <code>default</code> 는 <code>_</code> 로 바뀌며, 몸체는 문이 아니라 식입니다.
+<!--CITE key=whatsnew-8 sec="Switch expressions"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureSwitchExpression:"--></p>
+<!--CODE file=ex/09/swbasic/Program.cs note=신호등 — 다음 신호와 초를 switch 식으로-->
+<!--CSVER v=8.0 file=ex/09/swbasic note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/swbasic note=C# 7.3 으로 내리면-->
+<p class="cap">거절 문장이 말하는 기능은 'switch expression' 이 아니라 <b>'recursive patterns'</b> 입니다. 컴파일러의 기능 목록에는 switch 식의 항목이
+따로 있지만(<code>IDS_FeatureSwitchExpression</code>), 그 자원 문자열은 꺾쇠로 감싼 <code>&lt;switch expression&gt;</code> 이고 이 덱의 어느 캡처에도
+나오지 않았습니다. switch 식은 재귀 패턴과 한 기능으로 확인됩니다 — 아래 <a href="#p9-v8-pat-gates">게이트 표</a>.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-switchexpr-stmt">
+<h3>문과 식 — 같은 일을 두 번 써 보기</h3>
+<p class="why">whats-new 는 같은 무지개 변환을 switch 문으로 다시 써서 견줍니다. 여기서는 HTTP 상태 코드로 같은 대비를 해 봅니다.
+<!--CITE key=whatsnew-8 sec="Switch expressions"--></p>
+<!--CODE file=ex/09/swstmt/Program.cs note=Statement 와 Expression 은 같은 표를 다르게 쓴다-->
+<!--CSVER v=8.0 file=ex/09/swstmt note=C# 8.0-->
+<!--CSVER v=8.0 file=ex/09/swstmt flags=-define:BAD tag=bad note=switch 식을 문으로 쓰면-->
+<p class="cap">switch 식은 값을 내는 <b>식</b>이라 홀로 문이 될 수 없습니다. 제안서도 "not permitted as an <i>expression_statement</i>" 라고
+적고, 나중에 풀어 볼 수 있다는 메모를 남겼습니다. 갈래 사이를 넘어가는(fall-through) 일도 없습니다 — 갈래 하나가 식 하나이기 때문입니다.
+<!--CITE key=prop-8-patterns sec="Switch Expression"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-switchexpr-type">
+<h3>switch 식의 형식 — 갈래들의 공통 형식, 없으면 대상 형식</h3>
+<p class="why">제안서: switch 식의 형식은 <code>=&gt;</code> 오른쪽 식들의 "best common type" 이고, 그런 형식이 없으면 새로 생긴
+<b>switch 식 변환</b>(switch expression conversion)이 대상 형식으로 각 갈래를 바꿉니다. <!--CITE key=prop-8-patterns sec="Switch Expression"--></p>
+<!--CODE file=ex/09/swtype/Program.cs note=int 와 double, string 과 null, int 와 string-->
+<!--CSVER v=8.0 file=ex/09/swtype note=C# 8.0-->
+<!--CSVER v=8.0 file=ex/09/swtype flags=-define:BAD tag=bad note=공통 형식도 대상 형식도 없으면-->
+<p class="cap"><code>1</code> 과 <code>2.5</code> 의 공통 형식은 <code>double</code> 이라 <code>a</code> 는 <code>Double</code> 입니다. <code>null</code> 은 형식이
+없는 갈래라 <code>"yes"</code> 의 형식을 따릅니다. <code>object c</code> 처럼 대상 형식이 있으면 <code>1</code> 과 <code>"one"</code> 이 각각
+<code>object</code> 로 바뀌지만, <code>var</code> 에는 대상이 없어 <code>CS8506</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-switchexpr-exh">
+<h3>빠뜨린 갈래 — 컴파일은 경고, 실행은 예외</h3>
+<p class="why">whats-new: "A switch expression must either produce a value or throw an exception. If none of the cases match, the switch expression throws an
+exception. The compiler generates a warning for you if you don't cover all possible cases" <!--CITE key=whatsnew-8 sec="Positional patterns"--></p>
+<!--CODE file=ex/09/swexh/Program.cs note=Club 의 갈래가 없다-->
+<!--CSVER v=8.0 file=ex/09/swexh note=C# 8.0 — 경고 하나, 그리고 넷째 값에서-->
+<div class="warn"><b>함정</b> — <code>CS8509</code> 는 오류가 아니라 경고라 빌드는 성공합니다. 문장이 빠진 값(<code>Suit.Club</code>)까지 짚어 주는데도,
+경고를 지나치면 실행 중 <code>SwitchExpressionException</code> 으로 프로세스가 죽습니다. 같은 일을 switch 문으로 쓰면 아무 일도 없이 지나갔을 자리입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-switchexpr-enum">
+<h3>열거형의 이름을 다 써도 — 이름 없는 값</h3>
+<p class="why">열거형 변수에는 이름 붙은 값 말고도 그 바탕 형식의 어떤 값이든 들어갈 수 있습니다(<code>(B)7</code>). 그래서 이름을 전부
+갈래로 써도 switch 식은 "모든 값" 을 덮지 못합니다.</p>
+<!--CODE file=ex/09/swenum/E.cs note=Off·On 을 다 썼다 — 그래도 (B)7 이 들어오면-->
+<!--CSVER v=8.0 file=ex/09/swenum note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">경고 번호가 앞 장과 다른 <code>CS8524</code> 입니다 — "involving an unnamed enum value" 와 반례 <code>(B)2</code> 까지 적습니다. 실행에서
+잡은 예외는 <code>System.Runtime.CompilerServices.SwitchExpressionException</code>, 바탕은 <code>InvalidOperationException</code> 이고,
+<code>UnmatchedValue</code> 로 맞지 않은 값(7)을 들고 옵니다. 제안서가 이름까지 정해 둔 형식입니다.
+<!--CITE key=prop-8-patterns sec="Switch Expression"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-switchexpr-when">
+<h3>when 가드와 _ — 갈래에 조건을 더하기</h3>
+<p class="why">갈래에는 C# 7.0 의 <code>case … when</code> 처럼 가드(case guard)를 붙일 수 있습니다. 제안서의 문법은
+<code>pattern case_guard? '=&gt;' expression</code> 이고, 실행 때는 패턴이 맞고 가드가 <code>true</code> 인 첫 갈래가 값을 냅니다.
+<!--CITE key=prop-8-patterns sec="Switch Expression"--></p>
+<!--CODE file=ex/09/swwhen/Program.cs note=0, 양수(가드), 나머지(_)-->
+<!--CSVER v=8.0 file=ex/09/swwhen note=C# 8.0-->
+<p class="cap">가드가 거짓이면 다음 갈래로 넘어갑니다 — <code>-5</code> 는 <code>int n</code> 에는 맞지만 <code>n &gt; 0</code> 이 거짓이라 <code>_</code> 에
+닿습니다. <code>_</code> 는 "default" 의 자리이고, 마지막 갈래로 두면 앞 두 장의 경고와 예외가 생길 여지가 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-proppat">
+<h3>속성 패턴 (property pattern) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">왜 — whats-new 의 예는 주소로 판매세를 셈하는 일입니다. 세금 계산은 <code>Address</code> 클래스의 핵심 책임이 아니고 "It will change over time,
+likely more often than address format changes". 규칙을 클래스 밖에 두고, 객체의 속성을 패턴으로 맞춥니다. 여기서는 배송비로 다시 씁니다.
+<!--CITE key=whatsnew-8 sec="Property patterns"--></p>
+<!--CODE file=ex/09/patprop/Program.cs note=나라와 도시로 배송비 — 규칙은 Address 밖에-->
+<!--CSVER v=8.0 file=ex/09/patprop note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/patprop note=C# 7.3 으로 내리면-->
+<p class="cap">갈래는 위에서 아래로 처음 맞는 것이 이깁니다 — 제주가 일반 한국 갈래보다 위에 있어야 합니다. 7.3 의 거절은 속성 패턴마다 하나씩,
+이름은 다시 'recursive patterns' 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-proppat-null">
+<h3>{ } — null 이 아니면 무엇이든</h3>
+<p class="why">제안서: 속성 패턴은 먼저 입력이 <code>null</code> 이 아닌지 확인합니다. 그래서 하위 패턴이 하나도 없는 <code>{ }</code> 는
+"null-checking pattern" 이 되고, 제안서는 <code>s is {} x</code> 를 <code>s is string x</code>, <code>s is object o</code> 와 나란히 듭니다.
+<!--CITE key=prop-8-patterns sec="Property Pattern"--></p>
+<!--CODE file=ex/09/patnull/Program.cs note=string, int?, object 에 { } 를-->
+<!--CSVER v=8.0 file=ex/09/patnull note=C# 8.0-->
+<p class="cap"><code>null</code> 은 <code>{ Length: 0 }</code> 에도 <code>{ } t</code> 에도 맞지 않아 셋째 줄에 닿습니다. <code>int?</code> 에서는
+"값이 있는가" 가 되고, 맞으면 <code>v</code> 는 <code>int?</code> 가 아니라 <code>int</code> 로 묶입니다. <code>{ } t</code> 는 이름을 붙여도 정적
+형식이 그대로라 <code>t</code> 는 <code>string</code> 입니다 — <code>is object o</code> 와 다른 점입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-proppat-nest">
+<h3>속성 패턴 안의 속성 패턴</h3>
+<p class="why">속성 패턴의 하위 패턴 자리에는 어떤 패턴이든 올 수 있습니다 — 다시 속성 패턴도, <code>var</code> 도, <code>null</code> 도.
+"Patterns may be recursive so that parts of the data may be matched against sub-patterns." <!--CITE key=prop-8-patterns sec="Patterns"--></p>
+<!--CODE file=ex/09/patnest/Program.cs note=주문 → 구매자 → 집 → 도시와 구역-->
+<!--CSVER v=8.0 file=ex/09/patnest note=C# 8.0-->
+<p class="cap">셋째 주문(부산)은 셋째 갈래 <code>{ Home: null }</code> 에 맞지 않고 넷째 <code>{ Buyer: { } }</code> 로 갑니다. <code>Qty: var q</code> 처럼
+속성 하나를 맞추면서 꺼내 쓸 수도 있습니다. 중괄호가 세 겹 쌓인 첫 갈래가 이 문법의 불편한 곳입니다 — 다음 장.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-proppat-ext10">
+<h3>뒤 버전 — 확장 속성 패턴 A.B, C# 10</h3>
+<p class="why">겹친 중괄호 <code>{ Home: { Name: … } }</code> 를 점 하나로 줄이는 꼴은 C# 10 의 기능입니다. 컴파일러가 버전을 확인하는 기능 목록에
+'extended property patterns' 로 들어 있습니다. <!--CITE key=msgid sec="case MessageID.IDS_FeatureExtendedPropertyPatterns: // semantic check"--></p>
+<!--CODE file=ex/09/patext10/Program.cs note=같은 검사 — C# 8 의 중첩과 C# 10 의 점-->
+<!--CSVER v=10.0 file=ex/09/patext10 note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/09/patext10 note=C# 9.0 으로 내리면-->
+<p class="cap">셋째 줄 — <code>Home</code> 이 <code>null</code> 이면 <code>Home.Name</code> 을 읽다 죽지 않고 그냥 <code>False</code> 입니다. 점 꼴도 중첩 꼴과
+똑같이 각 단계의 null 검사를 품습니다. 자세한 것은 11부에서 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-proppat-type">
+<h3>형식 + 속성 + 이름 — 한 패턴에 셋</h3>
+<p class="why">제안서의 문법은 <code>type? property_subpattern simple_designation?</code> 입니다. 형식을 앞에 쓰면 그 형식인지 먼저 보고, 뒤에 이름을 쓰면
+맞은 값을 그 형식의 변수로 받습니다. 제안서의 예가 <code>o is string { Length: 5 } s</code> 이고, 익명 형식에도 쓸 수 있다고 적습니다.
+<!--CITE key=prop-8-patterns sec="Property Pattern"--></p>
+<!--CODE file=ex/09/pattype/Program.cs note=object 하나를 string·구조체·배열·null 로 가른다-->
+<!--CSVER v=8.0 file=ex/09/pattype note=C# 8.0-->
+<p class="cap">필드(<code>Size.W</code>)도 속성처럼 맞춥니다. <code>"hi"</code> 는 두 <code>string</code> 갈래에 모두 맞지 않아 마지막 <code>_</code> 에서
+형식 이름(<code>String</code>)으로 나옵니다. 마지막 줄은 이름이 없는 익명 형식의 속성을 패턴으로 맞춘 것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pospat">
+<h3>위치 패턴 (positional pattern) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">왜 — C# 7.0 의 분해(<code>Deconstruct</code>, <a href="#p8">8부</a>)가 이미 객체를 낱개의 변수로 풀어 줍니다. whats-new: "When a
+<code>Deconstruct</code> method is accessible, you can use positional patterns to inspect properties of the object and use those properties for a pattern."
+문서의 사분면 예를 체스판 칸으로 다시 씁니다. <!--CITE key=whatsnew-8 sec="Positional patterns"--></p>
+<!--CODE file=ex/09/patpos/Program.cs note=(행, 열) 로 칸의 자리를 가른다-->
+<!--CSVER v=8.0 file=ex/09/patpos note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/patpos note=C# 7.3 으로 내리면-->
+<p class="cap">제안서: 위치 패턴은 입력이 <code>null</code> 이 아닌지 보고, <code>Deconstruct</code> 를 불러 나온 값마다 하위 패턴을 맞춥니다.
+<code>var (r, k)</code> 는 <code>(var r, var k)</code> 의 줄임입니다. 7.3 의 거절은 위치 패턴마다 하나, 그 안의 <code>_</code> 마다 또 하나라 22·23행에서는 둘씩
+나옵니다. <!--CITE key=prop-8-patterns sec="Positional Pattern"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pospat-ituple">
+<h3>Deconstruct 가 없어도 — object 와 ITuple <span class="vt v8">C# 8.0</span></h3>
+<p class="why">제안서의 셋째 규칙: 형식을 적지 않았고 입력이 <code>object</code> 나 <code>ITuple</code> 이면, 실행 때 그 객체가
+<code>System.Runtime.CompilerServices.ITuple</code> 을 구현하는지 보고 <code>Length</code> 와 인덱서로 원소를 꺼내 맞춥니다.
+<!--CITE key=prop-8-patterns sec="Positional Pattern"--></p>
+<!--CODE file=ex/09/patituple/Program.cs note=object 하나를 원소 수와 값으로 가른다-->
+<!--CSVER v=8.0 file=ex/09/patituple note=C# 8.0-->
+<p class="cap"><code>Tuple&lt;int, int&gt;</code>(클래스)와 상자에 든 <code>(3, 4)</code>(구조체) 모두 맞고, <code>Deconstruct</code> 가 하나도 없는
+<code>Pair</code> 도 <code>ITuple</code> 만으로 맞습니다. 배열은 <code>ITuple</code> 이 아니라 맞지 않습니다. 원소 수가 다른 패턴(셋)은
+<code>Length</code> 로 걸러집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pospat-names">
+<h3>위치 패턴에 이름 붙이기 — 이름은 검사된다</h3>
+<p class="why">하위 패턴에는 <code>identifier ':' pattern</code> 처럼 이름을 붙일 수 있습니다. 제안서: 튜플이면 그 이름이 그 자리의 튜플 원소를 가리켜야
+하고, <code>Deconstruct</code> 면 그 매개변수 이름과 맞아야 합니다. <!--CITE key=prop-8-patterns sec="Positional Pattern"--></p>
+<!--CODE file=ex/09/patnames/Program.cs note=Deconstruct 의 매개변수 이름, 튜플 원소의 이름-->
+<!--CSVER v=8.0 file=ex/09/patnames note=C# 8.0-->
+<!--CSVER v=8.0 file=ex/09/patnames flags=-define:BAD tag=bad note=이름을 틀리게 쓰면-->
+<p class="cap">이름은 순서를 바꾸는 장치가 아니라 <b>읽는 이를 위한 확인</b>입니다. <code>low</code> 는 <code>Deconstruct</code> 의 <code>lo</code> 와 달라
+<code>CS8517</code>, 첫 자리에 <code>Height</code> 를 쓰면 그 자리 원소(<code>Item1</code>, 이름 <code>Width</code>)가 아니라 <code>CS8516</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-tuplepat">
+<h3>튜플 패턴 (tuple pattern) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">왜 — "Some algorithms depend on multiple inputs." 입력 여럿을 튜플 하나로 묶어 switch 하면 됩니다. whats-new 는 가위바위보의 승자를
+고르는 switch 식을 예로 듭니다. 같은 놀이를 열거형으로 다시 씁니다. <!--CITE key=whatsnew-8 sec="Tuple patterns"--></p>
+<!--CODE file=ex/09/pattuple/Program.cs note=두 손을 튜플로 묶어 한 번에 가른다-->
+<!--CSVER v=8.0 file=ex/09/pattuple note=C# 8.0-->
+<p class="cap">아홉 경우를 갈래 다섯이 덮습니다 — A 가 이기는 셋, <code>var (x, y) when x == y</code> 의 무승부 셋, 나머지는 <code>_</code>. 튜플 패턴은
+따로 있는 문법이 아니라 입력이 튜플 형식일 때의 위치 패턴입니다(제안서의 첫 규칙). 컴파일러도 C# 7.3 에서 같은 'recursive patterns' 로
+거절합니다 — <a href="#p9-v8-pat-gates">게이트 표</a>. <!--CITE key=prop-8-patterns sec="Positional Pattern"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-tuplepat-eval">
+<h3>튜플 리터럴을 고를 때 — 원소는 한 번씩, 문은 괄호 하나</h3>
+<p class="why">제안서는 switch <b>문</b>에서 튜플 리터럴을 고를 때 쓰던 겹괄호 <code>switch ((a, b))</code> 를 <code>switch (a, b)</code> 로 줄일 수 있게
+했습니다. <!--CITE key=prop-8-patterns sec="Optional parens when switching on a tuple literal"--></p>
+<!--CODE file=ex/09/pattupleval/Program.cs note=원소를 만드는 메서드가 몇 번 불리나-->
+<!--CSVER v=8.0 file=ex/09/pattupleval note=C# 8.0-->
+<p class="cap">갈래 넷이 첫 원소를 살펴봐도 <code>A</code> 와 <code>B</code> 는 한 번씩, 왼쪽부터 불립니다. 원소를 한 번 셈해 둔 뒤 패턴을 맞추기
+때문입니다. 아래 switch 문은 괄호가 한 겹인데도 튜플을 고릅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-recpat">
+<h3>재귀 패턴 (recursive patterns) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">왜 — whats-new: "Recursive patterns are patterns that can contain other patterns." 위치·속성 패턴의 하위 패턴 자리에 다시 위치·속성·형식·상수·
+<code>var</code> 패턴이 들어갑니다. 제안서가 말한 "대수적 데이터 형식" 쪽의 쓰임 — 식 트리 다듬기 — 를 해 봅니다.
+<!--CITE key=whatsnew-8 sec="More patterns in more places"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureRecursivePatterns: // semantic check"--></p>
+<!--CODE file=ex/09/patrec/Program.cs note=Num 과 Op 로 된 식을 패턴으로 줄인다-->
+<!--CSVER v=8.0 file=ex/09/patrec note=C# 8.0-->
+<p class="cap"><code>Op('+', Num(0), var x)</code> 한 줄이 "덧셈이고, 왼쪽이 Num 이고, 그 값이 0" 이라는 세 겹의 검사입니다. 둘째 식은 덧셈 둘을 먼저
+줄인 뒤 곱셈을 남겼습니다(마지막 <code>Op(var s, …)</code> 갈래). C# 7.3 으로 내리면 이 파일 하나에 오류 17개 — 바깥 패턴과 안쪽 패턴마다 하나씩입니다.</p>
+<!--CSVER v=7.3 file=ex/09/patrec note=C# 7.3 으로 내리면-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pat-gates">
+<h3>컴파일러가 대는 기능 이름 — 거의 전부 'recursive patterns'</h3>
+<p>이 장의 예제 아홉을 그대로 <code>-langversion:7.3</code> 으로 컴파일해, 오류 문장의 기능 이름만 뽑았습니다.</p>
+<!--TABLE file=out/tbl_p09b_gates73.html-->
+<p class="cap">switch 식도, 튜플 패턴도, <code>{ }</code> 도 모두 'recursive patterns' 로 거절됩니다. 괄호 하나짜리 <code>switch (A(), B())</code>
+줄(<code>pattupleval</code> 22행)에는 오류가 없고, 그 아래 <code>case (1, 2)</code> 의 위치 패턴(24행)이 거절됩니다. 따로 이름이 나온 것은
+포인터의 <code>null</code> 패턴 하나뿐입니다. 컴파일러의 기능 목록에는 switch 식(<code>IDS_FeatureSwitchExpression</code>)이 따로 있지만, 이 아홉 캡처에서는
+한 번도 쓰이지 않았습니다. 8부가 찾은 것(<a href="#p8-v7-throw-switch8">switch 식과 throw</a>)과 같은 결과입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-varpat">
+<h3>var 패턴과 무시 패턴 _</h3>
+<p class="why">제안서: <code>var</code> 패턴은 언제나 맞고, <code>var (x, (y, z))</code> 는 <code>(var x, (var y, var z))</code> 와 같습니다.
+무시 패턴 <code>_</code> 도 언제나 맞지만 "may not be used as the pattern of an <i>is_pattern_expression</i>".
+<!--CITE key=prop-8-patterns sec="Var Pattern"--> <!--CITE key=prop-8-patterns sec="Discard Pattern"--></p>
+<!--CODE file=ex/09/patvar/Program.cs note=튜플을 돌려받아 바로 풀고 조건까지-->
+<!--CSVER v=8.0 file=ex/09/patvar note=C# 8.0-->
+<!--CSVER v=8.0 file=ex/09/patvar flags=-define:BAD tag=bad note=is 의 오른쪽에 _ 하나-->
+<p class="cap"><code>var v</code> 는 <code>null</code> 에도 맞아 <code>True</code>, 형식 패턴 <code>is string</code> 은 <code>False</code> 입니다. <code>s is _</code>
+는 무시 패턴이 아니라 <code>_</code> 라는 <b>형식</b>을 찾다가 <code>CS0246</code> 입니다 — C# 7 이전부터 <code>is</code> 의 오른쪽은 형식이었기 때문입니다.
+Roslyn 의 문서는 그런 형식이 실제로 있을 때 경고(<code>CS8413</code>)를 낸다고 적습니다.
+<!--CITE key=roslyn-compiler-breaking-changes-vs2019--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-nullptr">
+<h3>포인터의 null 상수 패턴 <span class="vt v8">C# 8.0</span></h3>
+<p class="why">C# 7.0 의 상수 패턴 <code>null</code> 은 포인터 형식에는 쓸 수 없었습니다. C# 8.0 은 이것을 'null pointer constant pattern' 이라는
+별도의 기능으로 열었습니다. 문서의 설명은 컴파일러의 기능 목록 한 줄뿐입니다.
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureNullPointerConstantPattern: //semantic check"--></p>
+<!--CODE file=ex/09/patnullptr/Program.cs note=int* 를 switch 식과 is 로-->
+<!--CSVER v=8.0 file=ex/09/patnullptr note=C# 8.0 (-unsafe)-->
+<!--CSVER v=7.3 file=ex/09/patnullptr note=C# 7.3 으로 내리면-->
+<p class="cap">7.3 의 거절에 이름이 둘 섞입니다 — switch 식 자체(6행)와 <code>_</code>(9행)는 'recursive patterns', 포인터에 쓴 <code>null</code>
+(8행·19행)은 'null pointer constant pattern'. <code>q == null</code> 의 비교 연산은 옛날부터 됐으므로 거절되지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pat-order">
+<h3>가려진 갈래는 오류 — CS8510</h3>
+<p class="why">제안서: "It is an error if some <i>switch_expression_arm</i>'s pattern cannot affect the result because some previous pattern and guard will
+always match." 순서가 결과를 정하므로, 결과에 닿을 수 없는 갈래는 실수로 봅니다. <!--CITE key=prop-8-patterns sec="Switch Expression"--></p>
+<!--CODE file=ex/09/patorder/Program.cs note=고의로 깨진 예제 — { } 뒤의 string, _ 뒤의 0, object 뒤의 string-->
+<!--CSVER v=8.0 file=ex/09/patorder note=C# 8.0-->
+<p class="cap">switch 식에서는 <code>CS8510</code>, switch 문에서는 C# 7.0 부터 있던 <code>CS8120</code> 입니다. <code>{ }</code> 는 null 이 아닌
+모든 것이라 그 뒤의 <code>string s</code> 는 닿을 수 없습니다. 반대로 <code>{ }</code> 다음의 <code>_</code> 는 남은 <code>null</code> 을 받으므로 오류가
+아닙니다(10행).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pat-byte">
+<h3>byte 의 256 갈래 — 문서의 "C# 8 과 9" 를 다시 재 보면</h3>
+<p class="why">Roslyn 의 C# 9 호환성 문서: <code>byte</code> 의 값을 모두 갈래로 쓴 switch 식은 "Would produce a warning when compiled in C# 8.0 … but
+produces no warning in C# 9.0", 거기에 대체 갈래를 더하면 C# 8.0 에선 경고가 사라지지만 C# 9.0 에선 오류라고 적습니다.
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-5 sec="This document lists known breaking changes in Roslyn in C# 9.0 which will be introduced with .NET 5 (Visual Studio 2019 version 16.8)."--></p>
+<!--CODE file=ex/09/patbyte/Program.cs lines=1-30 note=0 부터 255 까지 갈래 하나씩(앞)-->
+<!--CODE file=ex/09/patbyte/Program.cs lines=31-53 note=(뒤) — BAD 면 _ 갈래가 더해진다-->
+<!--CSVER v=8.0 file=ex/09/patbyte note=C# 8.0 — 경고 없음-->
+<!--CSVER v=9.0 file=ex/09/patbyte note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/09/patbyte flags=-define:BAD tag=bad note=C# 8.0 에 _ 갈래를 더하면-->
+<!--CSVER v=9.0 file=ex/09/patbyte flags=-define:BAD tag=bad note=C# 9.0 에 _ 갈래를 더하면-->
+<div class="warn"><b>꼴 (나) 의 확인</b> — 지금의 컴파일러는 <code>-langversion:8.0</code> 에서도 C# 9 처럼 굽니다. 경고는 어느 쪽에도 없고, <code>_</code> 를
+더하면 둘 다 <code>CS8510</code> 오류입니다. 문서가 말한 차이는 언어 버전이 아니라 <b>컴파일러 버전</b>의 차이였던 것입니다 — 이 동작은 언어 버전에
+묶여 있지 않습니다(<a href="#p0-evidence">0부</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pat-dag">
+<h3>컴파일러가 만드는 것 — 검사를 나눠 쓰는 결정 DAG</h3>
+<p class="why">제안서: 패턴이 속성을 읽는 차례는 정해져 있지 않고, 컴파일러는 <code>Deconstruct</code> 와 속성 읽기의 차례를 바꾸거나 "may assume
+that returned values are the same from multiple calls" 라는 언어 설계 회의(LDM)의 결정이 있습니다. 그래서 여러 갈래에 같은 검사가 나오면 한 번만 할 수
+있습니다. <!--CITE key=prop-8-patterns sec="Order of evaluation in pattern-matching"--></p>
+<!--CODE file=ex/09/patdag/Program.cs note=Kind 가 갈래 다섯에 나온다 — getter 를 세어 본다-->
+<!--CSVER v=8.0 file=ex/09/patdag note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">위에서 아래로 갈래를 하나씩 해 보는 것이라면 <code>Box(2, 9)</code> 는 <code>Kind</code> 를 다섯 번쯤 읽어야 합니다. 실제로는 어느 상자든
+<code>Kind</code> 한 번, 필요하면 <code>Size</code> 한 번입니다. Roslyn 은 갈래 전체를 검사들의 그래프(결정 DAG, decision DAG)로 바꾸고 같은 검사의 결과를
+나눠 씁니다. <b>그래서 패턴에서 읽는 속성은 부작용이 없어야 합니다</b> — 몇 번 읽힐지는 컴파일러가 정합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pat-decon">
+<h3>Deconstruct 도 한 번 — 갈래가 몇 개든</h3>
+<p class="why">같은 결정이 <code>Deconstruct</code> 에도 적용됩니다. 위치 패턴 다섯 갈래가 모두 같은 <code>Deconstruct</code> 를 쓰면, 컴파일러는 한 번 불러
+나온 값을 모든 갈래에 씁니다. <!--CITE key=prop-8-patterns sec="Order of evaluation in pattern-matching"--></p>
+<!--CODE file=ex/09/patdecon/Program.cs note=Deconstruct 가 불릴 때마다 센다-->
+<!--CSVER v=8.0 file=ex/09/patdecon note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">맨 끝 <code>_</code> 에 닿은 <code>(-1, 4)</code> 도 한 번입니다. 제안서는 그 뒤에 "we will be very careful before making any changes to the
+compiler-generated order of evaluation" 이라고 덧붙였습니다 — 이 캡처는 지금의 Roslyn 이 그렇게 한다는 것이지 언어가 약속한 횟수가 아닙니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pat-il">
+<h3>문자열 갈래가 많으면 — 해시로 가르기</h3>
+<p class="why">제안서의 "가능한 최적화": 패턴이 정수나 문자열이면 컴파일러는 옛 switch 문과 같은 코드를 낼 수 있다. 무엇을 냈는지는 메서드의 IL 에서
+호출 명령만 뽑아 보면 보입니다. <!--CITE key=prop-8-patterns sec="Some Possible Optimizations"--></p>
+<!--CODE file=ex/09/patil/Program.cs lines=1-29 note=문자열 갈래 둘(Few)과 여덟(Many), 그리고 C# 1 의 switch 문(Stmt)-->
+<!--CSVER v=8.0 file=ex/09/patil note=C# 14 / .NET 10 에서의 동작 — 구현 세부-->
+<!--CODE file=ex/09/patil/Il.cs lines=1-33 note=도구(앞) — 명령 코드 표와 피연산자 크기-->
+<!--CODE file=ex/09/patil/Il.cs lines=34-55 note=도구(뒤) — IL 바이트를 명령 단위로 걸으며 call·newobj 의 대상만 모은다-->
+<p class="cap">갈래가 둘이면 <code>string.op_Equality</code> 로 하나씩 견줍니다. 여덟이면 먼저 <code>ComputeStringHash</code> 를 부르는 코드가 되고,
+같음 비교 여덟은 갈래마다 하나씩 남습니다. switch 식(Many)과 C# 1 문법의 switch 문(Stmt)이 <b>같은 호출 목록</b>을 냅니다 — 제안서가 말한 "the same kind of code"
+입니다. 몇 개부터 해시를 쓰는지는 Roslyn 의 구현 세부입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pat-rel9">
+<h3>뒤 버전 — 관계 패턴과 and·or·not, C# 9</h3>
+<p class="why">C# 8.0 에서 "0 보다 크다" 는 <code>int n when n &gt; 0</code> 처럼 가드로만 쓸 수 있었습니다. C# 9 는 <code>&lt; 0</code>, <code>&gt;= 90</code>
+같은 관계 패턴과 패턴을 묶는 <code>and</code>·<code>or</code>·<code>not</code> 을 더했습니다.
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureRelationalPattern: // semantic check"--></p>
+<!--CODE file=ex/09/patrel9/Program.cs note=점수를 관계 패턴으로-->
+<!--CSVER v=9.0 file=ex/09/patrel9 note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/09/patrel9 note=C# 8.0 으로 내리면-->
+<p class="cap">한 줄에서 기능 이름이 넷으로 갈립니다 — 'relational pattern', 'or pattern', 'and pattern', 'not pattern'. C# 8.0 의 패턴이 모두 'recursive
+patterns' 하나로 묶였던 것과 대조됩니다. 10부에서 다시 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pat-list11">
+<h3>뒤 버전 — 목록 패턴, C# 11</h3>
+<p class="why">C# 8.0 의 위치 패턴은 원소 수가 정해진 것(<code>Deconstruct</code>, 튜플)만 맞춥니다. 배열·목록의 길이와 원소를 맞추는
+<code>[first, .., last]</code> 는 C# 11 의 목록 패턴입니다. 이것은 다음 장의 인덱스·범위(<code>Length</code>, 인덱서, 슬라이스)에 기댑니다.
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureListPattern: // semantic check"--></p>
+<!--CODE file=ex/09/patlist11/Program.cs note=길이와 처음·끝 원소로 배열을 가른다-->
+<!--CSVER v=11.0 file=ex/09/patlist11 note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/09/patlist11 note=C# 10.0 으로 내리면-->
+<p class="cap"><code>.. var mid</code> 가 가운데 조각을 배열로 받습니다(2 between). 갈래마다 'list pattern' 하나씩 거절됩니다. 12부에서 다시 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-pat-runtime">
+<h3>같이 온 런타임 — SwitchExpressionException 과 ITuple <span class="vt v8">C# 8.0</span></h3>
+<p class="why">3장의 패턴 가운데 런타임 형식에 기대는 것은 둘입니다. 빠짐없지 않은 switch 식이 던지는 예외와, 형식 없는 위치 패턴이 쓰는
+<code>ITuple</code> 입니다. 제안서가 둘 다 이름으로 적습니다. <!--CITE key=prop-8-patterns sec="Switch Expression"-->
+<!--CITE key=prop-8-patterns sec="Positional Pattern"--></p>
+<!--CODE file=ex/09/patrt/Program.cs note=두 형식이 사는 곳, ITuple 을 구현한 것-->
+<!--CSVER v=8.0 file=ex/09/patrt note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">둘 다 <code>System.Private.CoreLib</code> 의 <code>System.Runtime.CompilerServices</code> 이름공간에 있습니다. <code>Tuple</code> 과
+<code>ValueTuple</code> 은 <code>ITuple</code> 을 구현하지만 <code>KeyValuePair</code> 는 아닙니다 — <code>KeyValuePair</code> 를 <code>object</code>
+로 받아 형식 없는 <code>(k, v)</code> 로 맞추면 실패합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p9-v8-pat-quiz" data-quiz>
+<h3>3장 퀴즈 — 패턴의 확장</h3>
+<p class="q">Q1. 열거형 <code>B { Off, On }</code> 의 두 값을 모두 갈래로 쓴 switch 식이 경고를 냅니다. 왜이고, 경고를 무시하면 무슨 일이 생깁니까?</p>
+<p class="q">Q2. <code>{ Kind: 1, … }</code> 갈래 다섯이 있는 switch 식에서 <code>Kind</code> getter 는 몇 번 불립니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 열거형 변수에는 <code>(B)7</code> 처럼 이름 없는 값도 들어갈 수 있어서입니다(<code>CS8524</code>). 그런 값이 들어오면
+<code>SwitchExpressionException</code> 이 던져지고 <code>UnmatchedValue</code> 에 그 값이 실립니다. 끝에 <code>_</code> 갈래를 두면 됩니다.<br>
+<b>A2.</b> 이 덱의 캡처에서는 한 번입니다. 컴파일러가 갈래를 결정 DAG 로 바꿔 같은 검사를 나눠 쓰기 때문입니다. 다만 횟수는 언어가 약속한 것이 아니라
+— 제안서는 컴파일러가 순서를 바꾸고 같은 값을 가정해도 된다고 적습니다 — getter 에 부작용을 두면 안 됩니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-v8-idx"><p class="chnum">4장</p><h2>인덱스와 범위 — ^ 와 ..</h2>
+<p class="chsub">끝에서 세는 인덱스 · 범위 연산자 · System.Index 와 System.Range · 복사와 공유 · Length·Slice 로 얻는 암시적 지원 · 뒤 버전</p></article>
+
+<article class="card" id="p9-v8-idx-why">
+<h3>왜 — 끝에서 세기, 조각 잘라 내기</h3>
+<p class="why">범위 제안서의 두 문장이 동기입니다. "C# has no way of indexing a collection from the end, but rather most indexers use the "from start" notion, or
+do a "length - i" expression." 그리고 "C# has no syntactic way to access "ranges" or "slices" of collections" — 그래서
+<code>list.Skip(5).Take(2)</code> 같은 LINQ 에 기대야 했다는 것입니다. <!--CITE key=prop-8-ranges sec="System.Index"-->
+<!--CITE key=prop-8-ranges sec="System.Range"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>C# 7.3</th><th>C# 8.0</th></tr>
+<tr><td><code>a[a.Length - 1]</code></td><td><code>a[^1]</code></td></tr>
+<tr><td><code>s.Substring(2, 3)</code>, <code>a.Skip(2).Take(3).ToArray()</code></td><td><code>s[2..5]</code>, <code>a[2..5]</code></td></tr>
+<tr><td>(없음)</td><td><code>Index i = ^1;</code> <code>Range r = 1..^1;</code> — 값으로 들고 다닌다</td></tr>
+</table></div>
+<p class="cap">버전 기록은 이 기능을 "Ranges, indexes, and asynchronous streams require new types in the .NET Core 3.0 libraries" 라고 적습니다 —
+언어 기능이 라이브러리 형식(<code>System.Index</code>, <code>System.Range</code>)에 기대는 C# 8.0 의 첫 사례입니다. <!--CITE key=history sec="C# version 8.0"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p9-v8-index">
+<h3>끝에서 세는 인덱스 ^ (index from end) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">whats-new: <code>^0</code> 은 <code>sequence[sequence.Length]</code> 와 같고, "For any number <code>n</code>, the index <code>^n</code> is the same as
+<code>sequence.Length - n</code>." 문서는 단어 배열에 앞·뒤 번호를 주석으로 달아 보입니다. 요일로 다시 씁니다.
+<!--CITE key=whatsnew-8 sec="Indices and ranges"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureIndexOperator: // semantic check"--></p>
+<!--CODE file=ex/09/idxbasic/Program.cs note=앞에서 세는 번호와 끝에서 세는 번호-->
+<!--CSVER v=8.0 file=ex/09/idxbasic note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/idxbasic note=C# 7.3 으로 내리면-->
+<p class="cap"><code>^1</code> 이 마지막, <code>^7</code>(= <code>^Length</code>)이 첫 원소입니다. 끝에서 세는 번호가 1 부터인 까닭은 <code>^0</code> 이
+<code>Length</code> — 끝 바로 뒤 — 이기 때문입니다. <code>^n</code> 처럼 변수도 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-index-type">
+<h3>^1 은 System.Index 라는 값이다</h3>
+<p class="why">제안서: <code>^</code> 는 "It will be lowered into the appropriate <code>System.Index</code> factory method call" 이고, <code>int</code> 에서
+<code>Index</code> 로의 암시적 변환도 있습니다. <code>Index</code> 는 음수로 만들면 예외를 던집니다. <!--CITE key=prop-8-ranges sec="System.Index"-->
+<!--CITE key=prop-8-ranges sec="Runtime behavior"--></p>
+<!--CODE file=ex/09/idxtype/Program.cs note=Index 를 변수에 담고, 길이가 다른 배열 둘에 쓴다-->
+<!--CSVER v=8.0 file=ex/09/idxtype note=C# 8.0-->
+<p class="cap"><code>last</code> 는 "끝에서 1" 이라는 뜻만 들고 있고, 어느 배열에 쓰느냐에 따라 30 도 5 도 됩니다. <code>GetOffset(10)</code> 이 그 셈(10 − 1
+= 9)입니다. <code>^n</code> 에 −1 을 주면 <code>Index</code> 생성자의 <code>value</code> 매개변수가 <code>ArgumentOutOfRangeException</code> 을 던집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-index-zero">
+<h3>^0 은 끝 바로 뒤 — 원소가 아니다</h3>
+<p class="why">whats-new: "Note that <code>sequence[^0]</code> does throw an exception, just as <code>sequence[sequence.Length]</code> does." 반면 범위의 끝으로는
+<code>^0</code> 이 자연스럽습니다 — 범위의 끝은 포함하지 않기 때문입니다. <!--CITE key=whatsnew-8 sec="Indices and ranges"--></p>
+<!--CODE file=ex/09/idxzero/Program.cs note=a[^0], a[^4], a[1..^0]-->
+<!--CSVER v=8.0 file=ex/09/idxzero note=C# 8.0-->
+<div class="warn"><b>함정</b> — <code>^0</code> 의 예외는 <code>Index</code> 가 아니라 배열 접근이 던지는 <code>IndexOutOfRangeException</code> 입니다. 제안서도
+"<code>^0</code> does not throw" — <code>Index</code> 값 자체는 멀쩡하고 그것을 원소로 쓰는 순간에 실패합니다. <code>^4</code> 는 3 − 4 = −1 번 원소라 같은 예외입니다.
+<!--CITE key=prop-8-ranges sec="Runtime behavior"--></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-range">
+<h3>범위 연산자 .. (range operator) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">whats-new: "The start of the range is inclusive, but the end of the range is exclusive". 양쪽 끝은 생략할 수 있고, 범위도 변수에 담을 수
+있습니다. <!--CITE key=whatsnew-8 sec="Indices and ranges"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureRangeOperator: // semantic check"--></p>
+<!--CODE file=ex/09/rngbasic/Program.cs note=앞·뒤를 생략하고, ^ 와 섞고, 변수에 담는다-->
+<!--CSVER v=8.0 file=ex/09/rngbasic note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/rngbasic note=C# 7.3 으로 내리면-->
+<p class="cap"><code>w[3..3]</code> 처럼 시작과 끝이 같으면 빈 배열이지 오류가 아닙니다. 7.3 의 거절은 <code>..</code> 마다 'range operator', 그 안의
+<code>^</code> 마다 'index operator' 가 따로 나옵니다 — 두 기능은 컴파일러의 목록에서도 따로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-range-type">
+<h3>1..^1 은 System.Range 라는 값이다</h3>
+<p class="why">제안서: <code>..</code> 는 <code>Range</code> 생성자나 팩토리(<code>StartAt</code>, <code>EndAt</code>, <code>All</code>)로 낮춰집니다. 생성자만
+있어도 모든 꼴을 만들 수 있고, 다른 멤버가 있으면 그것으로 바꿔 쓸 수 있습니다. <!--CITE key=prop-8-ranges sec="Well-known types and members"--></p>
+<!--CODE file=ex/09/rngtype/Program.cs note=Range 의 Start·End, 팩토리와의 같음, GetOffsetAndLength-->
+<!--CSVER v=8.0 file=ex/09/rngtype note=C# 8.0-->
+<p class="cap">같은 <code>2..^1</code> 이 길이 5 에서는 (2, 2개), 길이 10 에서는 (2, 7개)입니다 — <code>Range</code> 는 길이를 모르는 채 두 <code>Index</code>
+를 들고 있다가 길이를 받을 때 셈합니다. <code>..</code> 와 <code>Range.All</code> 은 같은 값입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-range-prec">
+<h3>함정 — .. 는 + 보다 먼저 묶인다</h3>
+<p class="why">제안서의 문법은 범위 연산자를 위해 새 우선순위를 만듭니다: "This new precedence group is lower than the <i>unary operators</i> and higher than the
+<i>multiplicative arithmetic operators</i>." 덧셈은 그보다 더 아래입니다. <!--CITE key=prop-8-ranges sec="System.Range"--></p>
+<!--CODE file=ex/09/rngprec/Program.cs note=i 부터 세 개 — 괄호가 있어야 한다-->
+<!--CSVER v=8.0 file=ex/09/rngprec note=C# 8.0-->
+<!--CSVER v=8.0 file=ex/09/rngprec flags=-define:BAD tag=bad note=괄호를 빼면-->
+<p class="cap"><code>a[i..i + 3]</code> 는 <code>(i..i) + 3</code> 으로 읽혀 <code>Range</code> 에 <code>int</code> 를 더하려다 <code>CS0019</code> 입니다. 단항
+연산자인 <code>^</code> 는 <code>..</code> 보다 먼저 묶이므로 <code>^3..</code> 은 괄호가 필요 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-range-copy">
+<h3>배열의 범위는 복사, Span 의 범위는 공유</h3>
+<p class="why">제안서: 배열의 범위는 <code>System.Runtime.CompilerServices.RuntimeHelpers.GetSubArray</code> 로, 그 밖의 형식은 <code>Slice</code> 로 낮춰집니다.
+<code>GetSubArray</code> 는 새 배열을 돌려주고, <code>Span&lt;T&gt;.Slice</code> 는 같은 메모리를 가리키는 창을 돌려줍니다.
+<!--CITE key=prop-8-ranges sec="Implicit Range support"--></p>
+<!--CODE file=ex/09/rngcopy/Program.cs note=조각을 고친 뒤 원래 배열을 찍는다-->
+<!--CSVER v=8.0 file=ex/09/rngcopy note=C# 8.0-->
+<div class="warn"><b>함정</b> — <code>a[1..3]</code> 은 볼 때마다 할당입니다. 전체 범위 <code>a[..]</code> 도 원래 배열이 아니라 새 사본입니다. 조각을 고쳐 원래
+배열을 바꾸려 했다면 <code>AsSpan()</code> 을 거쳐야 합니다(<a href="#p8-v7_2-span-slice">8부의 Span 조각</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-range-string">
+<h3>문자열의 범위는 Substring</h3>
+<p class="why">제안서는 <code>string</code> 을 특별히 다룹니다: "the method <code>Substring</code> will be used instead of <code>Slice</code>."
+<!--CITE key=prop-8-ranges sec="Implicit Range support"--></p>
+<!--CODE file=ex/09/rngstring/Program.cs note=앞 둘, 가운데, 뒤 둘 — 그리고 s[..]-->
+<!--CSVER v=8.0 file=ex/09/rngstring note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">배열과 반대로 <code>s[..]</code> 는 원래 문자열 <b>그 객체</b>입니다(<code>True</code>). <code>Substring(0, Length)</code> 이 자기 자신을 돌려주는
+.NET 의 구현 때문입니다 — 문자열은 바꿀 수 없으니 같은 객체여도 문제가 없습니다. 새 문자열을 만들지 않으려면 <code>AsSpan()</code> 을 잘라
+<code>int.Parse</code> 에 바로 넘깁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-range-il">
+<h3>컴파일러가 부르는 것 — 형식마다 다른 메서드</h3>
+<p class="why">제안서: 두 연산자는 "lowered to regular indexer/method calls, with no change in subsequent compiler layers". 3장의 IL 도구로
+<code>Slice</code> 메서드의 호출만 뽑아 봅니다. <!--CITE key=prop-8-ranges sec="IL Representation"--></p>
+<!--CODE file=ex/09/patil/Program.cs lines=30-51 note=배열·문자열·Span 의 범위와 배열의 ^1-->
+<!--CSVER v=8.0 file=ex/09/patil cmd="csrun -- Slice" tag=slice note=C# 14 / .NET 10 에서의 동작 — 구현 세부-->
+<p class="cap">배열의 범위는 <code>Index</code> 두 개로 <code>Range</code> 를 만든 뒤 <code>GetSubArray</code>, 문자열은 <code>Range</code> 없이 길이를 읽어
+<code>Substring</code>, Span 은 <code>Slice</code> 입니다. 배열의 <code>a[^1]</code> 은 호출이 하나도 없습니다 — <code>a[a.Length - 1]</code> 로 바로
+바뀌어 <code>ldlen</code> 명령만 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-idx-pattern">
+<h3>Length 와 this[int] 만 있으면 — 암시적 Index 지원 <span class="vt v8">C# 8.0</span></h3>
+<p class="why">제안서: <code>Length</code> 나 <code>Count</code> 속성(<i>Countable</i>)과 <code>int</code> 하나를 받는 인덱서가 있는 형식이면, 언어가
+<code>this[Index]</code> 가 있는 것처럼 다뤄 줍니다. "This allows developers to use the <code>Index</code> feature on existing types without the need for
+modification." 제안서의 부작용 예(Get → Length 순서)를 다시 써 봅니다. <!--CITE key=prop-8-ranges sec="Implicit Index support"--></p>
+<!--CODE file=ex/09/idxpattern/Program.cs note=Index 를 모르는 Ring 에 ^1-->
+<!--CSVER v=8.0 file=ex/09/idxpattern note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/idxpattern note=C# 7.3 으로 내리면-->
+<p class="cap"><code>Get()[^1]</code> 은 <code>Get()</code> 한 번, <code>Length</code> 한 번, <code>this[3]</code> 입니다 — 제안서가 정한 순서(받는 쪽 → 인수 →
+길이 → 인덱서) 그대로입니다. 변수에 담은 <code>Index</code> 도 같은 꼴(<code>GetOffset(Length)</code>)이고, 보통의 <code>[1]</code> 은 <code>Length</code>
+를 읽지 않습니다. C# 7.3 으로 내리면 이 암시적 지원도 같은 'index operator' 로 거절됩니다 — <code>^1</code> 하나에 두 번(27행의 35·41열).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-rng-pattern">
+<h3>Slice(int, int) 가 있으면 — 암시적 Range 지원</h3>
+<p class="why">범위도 같은 방식입니다: Countable 이고 <code>int</code> 두 개를 받는 <code>Slice</code> 가 있으면 됩니다. 시작과 길이로 바꿔 넘기며, "In case
+both <code>Length</code> and <code>Count</code> are present, <code>Length</code> will be preferred." <!--CITE key=prop-8-ranges sec="Implicit Range support"-->
+<!--CITE key=prop-8-ranges sec="Implicit Index support"--></p>
+<!--CODE file=ex/09/rngpattern/Program.cs note=Count 와 Length 를 다 가진 형식-->
+<!--CSVER v=8.0 file=ex/09/rngpattern note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/rngpattern note=C# 7.3 으로 내리면 — .. 와 ^ 가 따로-->
+<p class="cap"><code>log[1..4]</code> 는 길이를 읽지 않고 바로 <code>Slice(1, 3)</code> — 두 끝이 앞에서 센 <code>int</code> 라 4 − 1 로 셈이 끝납니다.
+<code>^2..</code> 처럼 끝에서 세면 길이가 필요하고, 이때 <code>Count</code> 가 아니라 <code>Length</code> 를 읽습니다. 제안서가 <code>Slice</code> 라는 이름을
+고른 까닭은 Span 류가 이미 그 이름을 썼기 때문입니다. <!--CITE key=prop-8-ranges sec="Choice of Slice as a name"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-idx-list">
+<h3>List&lt;T&gt; — ^ 는 되고, 범위는 .NET 10 에서 된다</h3>
+<p class="why">whats-new 는 인덱스·범위를 지원하는 형식으로 배열, <code>string</code>, <code>Span&lt;T&gt;</code>, <code>ReadOnlySpan&lt;T&gt;</code> 를 듭니다.
+<code>List&lt;T&gt;</code> 는 <code>Count</code> 와 <code>this[int]</code> 가 있으니 암시적 Index 지원으로 <code>^1</code> 이 됩니다. 제안서는
+<code>List&lt;T&gt;</code> 가 <code>Slice</code> 를 가졌다면 좋았을 형식이라고 적었습니다. <!--CITE key=whatsnew-8 sec="Indices and ranges"-->
+<!--CITE key=prop-8-ranges sec="Choice of Slice as a name"--></p>
+<!--CODE file=ex/09/idxlist/Program.cs note=^1 읽기·쓰기, 그리고 list[1..3]-->
+<!--CSVER v=8.0 file=ex/09/idxlist note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">.NET 10 의 <code>List&lt;T&gt;</code> 에는 <code>Slice(Int32, Int32)</code> 가 있어(마지막 줄) <code>list[1..3]</code> 이 컴파일되고 새
+<code>List&lt;int&gt;</code> 를 돌려줍니다 — 사본이라 <code>part[0] = 99</code> 가 원래 목록에 닿지 않습니다. 언어는 그대로인데 라이브러리가 메서드 하나를
+더해 범위가 생긴 것입니다. 이 메서드가 어느 .NET 에서 생겼는지는 받아 둔 문서에 없어 적지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-idx-where">
+<h3>^ 가 안 되는 곳 — 다차원 배열, Dictionary, IEnumerable</h3>
+<p class="why">제안서의 구현 결정: "The indexer used for the Index pattern must have exactly one int parameter", 그리고 "we look for original definitions, not
+constructed members". <!--CITE key=prop-8-ranges sec="Decisions made during implementation"--></p>
+<!--CODE file=ex/09/idxwhere/Program.cs note=고의로 깨진 예제 — 네 가지 거절-->
+<!--CSVER v=8.0 file=ex/09/idxwhere note=C# 8.0-->
+<p class="cap">다차원 배열은 <code>CS0029</code>. <code>Dictionary&lt;int, string&gt;</code> 은 <code>Count</code> 도 <code>this[int]</code> 도 있어 보이지만, 원래
+정의의 인덱서는 <code>this[TKey]</code> 라 패턴에 들지 않습니다(<code>CS1503</code>) — 들었다면 <code>d[^1]</code> 이 "마지막 원소" 가 아니라 "키가
+Count − 1 인 값" 이 됐을 것입니다. 인덱서가 없는 <code>IEnumerable</code>·<code>Queue</code> 는 <code>CS0021</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-range-err">
+<h3>범위가 어긋나면 — 모두 ArgumentOutOfRangeException</h3>
+<p class="why">범위는 실행 때 길이에 맞춰 시작과 길이로 바뀝니다(<code>GetOffsetAndLength</code>). 시작이 끝보다 뒤이거나 길이를 넘으면 그 셈에서 실패합니다.</p>
+<!--CODE file=ex/09/rngerr/Program.cs note=시작 > 끝, 끝 > 길이, 시작 < 0-->
+<!--CSVER v=8.0 file=ex/09/rngerr note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">배열·문자열·Span 모두 같은 예외입니다. 앞 장의 <code>a[^0]</code>(원소 접근, <code>IndexOutOfRangeException</code>)과 예외 형식이 다르다는 것이
+함정입니다. 빈 범위 <code>a[1..1]</code> 은 예외가 아닙니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-idx-linq">
+<h3>라이브러리가 받는 Index·Range — 길이 없는 시퀀스에도</h3>
+<p class="why">언어의 <code>^</code>·<code>..</code> 는 인덱서가 있는 형식에만 붙습니다(앞 장의 <code>IEnumerable</code>). 그러나 <code>Index</code> 와 <code>Range</code>
+는 보통의 값이라 메서드 인수로도 넘길 수 있고, .NET 10 의 LINQ 에는 그것을 받는 오버로드가 있습니다.</p>
+<!--CODE file=ex/09/idxlinq/Program.cs note=yield 로 만든 시퀀스에 ElementAt(^1), Take(2..^1)-->
+<!--CSVER v=8.0 file=ex/09/idxlinq note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">언어 버전은 8.0 그대로입니다 — 쓴 문법은 C# 8 의 <code>^</code> 와 <code>..</code> 뿐이고, 나머지는 라이브러리의 메서드입니다. 이 오버로드들이
+어느 .NET 에서 생겼는지는 받아 둔 문서에 없어 적지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-idx-runtime">
+<h3>같이 온 런타임 — System.Index, System.Range, GetSubArray <span class="vt v8">C# 8.0</span></h3>
+<p class="why">제안서가 "well-known types and members" 로 적은 것은 <code>Index(int, bool)</code> 생성자, <code>GetOffset</code>, <code>Range</code> 의 생성자와
+<code>StartAt</code>·<code>EndAt</code>·<code>All</code>, 그리고 배열용 <code>RuntimeHelpers.GetSubArray</code> 입니다. 버전 기록은 이것을 .NET Core 3.0
+라이브러리의 새 형식이라고 적습니다. <!--CITE key=prop-8-ranges sec="Well-known types and members"--> <!--CITE key=history sec="C# version 8.0"--></p>
+<!--CODE file=ex/09/idxrt/Program.cs note=두 형식의 공개 멤버와 GetSubArray 의 시그니처-->
+<!--CSVER v=8.0 file=ex/09/idxrt note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">둘 다 <code>System.Private.CoreLib</code> 의 값 형식입니다 — <code>^1</code> 과 <code>1..2</code> 는 힙 할당이 없습니다. 제안서의 목록에 더해
+.NET 10 에는 <code>Index.Start</code>·<code>Index.End</code>, <code>FromStart</code>·<code>FromEnd</code> 같은 멤버도 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-idx-init13">
+<h3>뒤 버전 — 객체 초기화자 안의 ^, C# 13</h3>
+<p class="why">C# 8.0 의 <code>^</code> 는 객체 초기화자의 인덱서 자리(<code>{ [^1] = 9 }</code>)에서는 쓸 수 없었습니다. 컴파일러의 기능 목록은 이것을
+C# 13 의 'implicit indexer initializer' 로 둡니다. <!--CITE key=msgid sec="case MessageID.IDS_FeatureImplicitIndexerInitializer:"--></p>
+<!--CODE file=ex/09/idxinit13/Program.cs note=Length·this[int] 가 있는 Buffer 를 초기화자에서-->
+<!--CSVER v=13.0 file=ex/09/idxinit13 note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/09/idxinit13 note=C# 12.0 으로 내리면-->
+<p class="cap">초기화자에서도 <code>^1</code> 이 <code>Length − 1</code> 로 셈해져 마지막 칸에 9 가 들어갔습니다. 14부에서 다시 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p9-v8-idx-quiz" data-quiz>
+<h3>4장 퀴즈 — 인덱스와 범위</h3>
+<p class="q">Q1. <code>int[] a</code> 에 대해 <code>a[a.Length..]</code> 와 <code>a[^0]</code> 은 각각 어떻게 됩니까?</p>
+<p class="q">Q2. <code>var x = a[i..i + 2];</code> 는 왜 컴파일되지 않습니까?</p>
+<p class="q">Q3. <code>a[1..3][0] = 9;</code> 와 <code>a.AsSpan()[1..3][0] = 9;</code> 중 <code>a</code> 를 바꾸는 것은?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> <code>a[a.Length..]</code> 은 빈 배열입니다(시작과 끝이 모두 길이 — <code>a[1..1]</code> 처럼). <code>a[^0]</code> 은 원소 접근이라
+<code>IndexOutOfRangeException</code> 입니다.<br>
+<b>A2.</b> <code>..</code> 가 <code>+</code> 보다 먼저 묶여 <code>(i..i) + 2</code> 가 되기 때문입니다(<code>CS0019</code>). <code>a[i..(i + 2)]</code> 로 씁니다.<br>
+<b>A3.</b> 뒤의 것입니다. 배열의 범위는 <code>GetSubArray</code> 가 만든 사본이고, Span 의 범위는 같은 메모리를 가리킵니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p9-v8-async"><p class="chnum">5장</p><h2>비동기 스트림과 using — 기다리며 돌고, 기다리며 닫는다</h2>
+<p class="chsub">IAsyncEnumerable 과 await foreach · 취소 · ConfigureAwait · 상태 기계 · await using · using 선언 · ref struct 의 Dispose 패턴</p></article>
+
+<article class="card" id="p9-v8-asyncstream">
+<h3>비동기 스트림 (asynchronous streams) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">왜 — 제안서: C# 에는 반복기도 async 메서드도 있지만 "no support for a method that is both an iterator and an async method". whats-new 가 꼽는
+세 조건은 <code>async</code> 한정자, <code>IAsyncEnumerable&lt;T&gt;</code> 반환, 그리고 <code>yield return</code> 입니다. 쓰는 쪽은 <code>foreach</code>
+앞에 <code>await</code> 를 붙입니다. 첫 모습은 <a href="#p6-v5-after-stream">6부</a>에서 봤습니다 — 여기서는 더 깊이 봅니다.
+<!--CITE key=prop-8-async-streams sec="Summary"--> <!--CITE key=whatsnew-8 sec="Asynchronous streams"-->
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureAsyncStreams: // semantic check"--></p>
+<!--CODE file=ex/09/asbasic/Program.cs note=쪽(page)을 하나씩 받아 오는 스트림-->
+<!--CSVER v=8.0 file=ex/09/asbasic note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/asbasic note=C# 7.3 으로 내리면-->
+<p class="cap"><code>Pages(3)</code> 를 불러도 몸체는 한 줄도 돌지 않습니다 — "[Pages starts]" 는 첫 <code>MoveNextAsync</code>, 곧 <code>await foreach</code>
+가 시작될 때 찍힙니다. 동기 반복기(<a href="#p3">3부</a>)와 같은 늦은 실행입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-as-vstask">
+<h3>C# 7.3 이라면 — Task&lt;List&lt;T&gt;&gt; 는 다 모은 뒤에야</h3>
+<p class="why">C# 7.3 에서 "비동기로 여러 값을 돌려주기" 는 보통 <code>Task&lt;List&lt;T&gt;&gt;</code> 였습니다. 값 하나하나는 비동기로 만들어도 호출자는 마지막
+값까지 기다려야 첫 값을 봅니다.</p>
+<!--CODE file=ex/09/asvstask/Program.cs note=같은 세 값을 두 방식으로-->
+<!--CSVER v=8.0 file=ex/09/asvstask note=C# 8.0-->
+<p class="cap">위는 "made" 셋 다음에 "got" 셋, 아래는 made·got 이 번갈아 나옵니다. 비동기 스트림은 첫 값을 바로 쓰게 하고, 목록 전체를 메모리에 모을
+필요도 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-as-manual">
+<h3>await foreach 를 풀어 쓰면</h3>
+<p class="why">제안서가 적은 "typical consumption (without additional language features)" 이 <code>await foreach</code> 의 뜻입니다:
+<code>GetAsyncEnumerator</code>, <code>while (await e.MoveNextAsync())</code>, <code>Current</code>, 그리고 <code>finally</code> 의
+<code>await e.DisposeAsync()</code>. <!--CITE key=prop-8-async-streams sec="IAsyncEnumerable / IAsyncEnumerator"--></p>
+<!--CODE file=ex/09/asmanual/Program.cs note=같은 스트림을 설탕으로 한 번, 손으로 한 번-->
+<!--CSVER v=8.0 file=ex/09/asmanual note=C# 8.0-->
+<p class="cap">두 번 모두 반복기의 <code>finally</code> 가 끝에 돕니다 — <code>DisposeAsync</code> 가 그것을 부릅니다. <code>MoveNextAsync</code> 가
+<code>Task&lt;bool&gt;</code> 이 아니라 <code>ValueTask&lt;bool&gt;</code> 인 것은 할당을 줄이려는 선택이라고 제안서가 적습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-as-pattern">
+<h3>인터페이스 없이 await foreach — 이름으로 찾는다</h3>
+<p class="why">제안서: <code>await foreach</code> 는 <code>IAsyncEnumerable&lt;T&gt;</code> 말고도 같은 모양의 공개 멤버(<code>GetAsyncEnumerator</code>,
+<code>MoveNextAsync</code>, <code>Current</code>, <code>DisposeAsync</code>)를 패턴으로 받습니다. 할당을 피하는 구조체 열거자를 쓸 수 있게 하려는
+것입니다. <!--CITE key=prop-8-async-streams sec="foreach"--></p>
+<!--CODE file=ex/09/aspattern/Program.cs note=아무 인터페이스도 없는 Countdown-->
+<!--CSVER v=8.0 file=ex/09/aspattern note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/aspattern note=C# 7.3 으로 내리면-->
+<p class="cap"><code>DisposeAsync</code> 도 이름으로 찾아 불렀습니다. 동기 <code>foreach</code> 가 C# 1 부터 <code>GetEnumerator</code> 를 이름으로 찾던
+방식(<a href="#p2">2부</a>)을 비동기로 옮긴 것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-as-cancel">
+<h3>취소 토큰 두 개 — [EnumeratorCancellation] 이 합친다 <span class="vt v8">C# 8.0</span></h3>
+<p class="why">제안서: 특성이 붙은 매개변수가 있으면 "if a token is passed to the <code>GetAsyncEnumerator</code> method, that token should be used instead of the
+value originally passed". <a href="#p6-v5-after-cancel">6부</a>는 <code>WithCancellation</code> 하나만 봤습니다. 호출에도 토큰을 주고
+<code>WithCancellation</code> 에도 주면 어떻게 될까요? <!--CITE key=prop-8-async-streams sec="Cancellation"--></p>
+<!--CODE file=ex/09/ascancel/Program.cs note=a 는 호출에, b 는 WithCancellation 에 — 어느 쪽을 취소해도-->
+<!--CSVER v=8.0 file=ex/09/ascancel note=C# 8.0-->
+<!--CSVER v=8.0 file=ex/09/ascancel flags="-define:BAD -nowarn:8425" tag=bad note=특성을 빼면(경고는 끄고)-->
+<p class="cap">특성이 있으면 a 를 취소하든 b 를 취소하든 2 에서 멈춥니다 — 반복기가 보는 <code>ct</code> 는 둘을 이은 토큰입니다(다음 장의
+<code>combinedTokens</code> 필드). 특성을 빼면 b 는 버려져 5 까지 돕니다. 이때 컴파일러는 경고를 냅니다 — 자원 파일의 문장 그대로
+"…none of them is decorated with the 'EnumeratorCancellation' attribute, so the cancellation token parameter from the generated
+'IAsyncEnumerable&lt;&gt;.GetAsyncEnumerator' will be unconsumed". 이 문장이 캡처의 200칸을 넘어, 위 캡처는 <code>-nowarn:8425</code> 로 껐습니다.
+<!--CITE key=roslyn/CSharpResources--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-as-finally">
+<h3>break 하면 — finally 가 기다려 가며 돈다</h3>
+<p class="why">제안서가 <code>IAsyncDisposable</code> 이 꼭 필요하다고 본 까닭: "Since <code>finally</code> blocks may contain <code>await</code>s, and since
+<code>finally</code> blocks need to be run as part of disposing of iterators, we need async disposal." <!--CITE key=prop-8-async-streams sec="IAsyncDisposable"--></p>
+<!--CODE file=ex/09/asfinally/Program.cs note=100 줄짜리 커서를 2 줄만 읽고 break-->
+<!--CSVER v=8.0 file=ex/09/asfinally note=C# 8.0-->
+<p class="cap"><code>break</code> 가 루프를 끝내면 <code>await foreach</code> 의 <code>finally</code> 가 <code>DisposeAsync</code> 를 기다리고, 그것이 반복기의
+<code>finally</code> — 안의 <code>await Task.Delay</code> 까지 — 를 돌립니다. "after the loop" 는 커서가 닫힌 뒤에야 찍힙니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-as-config">
+<h3>ConfigureAwait 와 WithCancellation — 인터페이스가 아닌 래퍼</h3>
+<p class="why">whats-new: "By default, stream elements are processed in the captured context. If you want to disable capturing of the context, use the
+…<code>ConfigureAwait</code> extension method." 제안서는 이 래퍼가 패턴 기반 <code>await foreach</code> 로 돌게 설계했습니다.
+<!--CITE key=whatsnew-8 sec="Asynchronous streams"--> <!--CITE key=prop-8-async-streams sec="ConfigureAwait"--></p>
+<!--CODE file=ex/09/asconfig/Program.cs note=두 래퍼의 형식과 인터페이스 수-->
+<!--CSVER v=8.0 file=ex/09/asconfig note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">.NET 10 에서 둘 다 <code>ConfiguredCancelableAsyncEnumerable&lt;T&gt;</code> 라는 구조체이고, 구현한 인터페이스가 0 개입니다. 그래도
+<code>await foreach</code> 가 도는 것은 앞의 패턴 규칙 덕분입니다. 대신 <code>IAsyncEnumerable&lt;T&gt;</code> 를 받는 메서드에는 넘길 수 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-as-sm">
+<h3>컴파일러가 만드는 것 — 비동기 반복기 클래스의 필드</h3>
+<p class="why"><a href="#p6-v5-after-streamsm">6부</a>는 생성된 클래스가 구현하는 인터페이스를 봤습니다. 이번엔 그 클래스가 무엇을 들고 다니는지 필드를
+봅니다. 이름과 형식은 Roslyn 의 구현 세부이고 언어가 정한 것이 아닙니다.</p>
+<!--CODE file=ex/09/assm/Program.cs note=매개변수 둘, 지역 변수 하나인 비동기 반복기-->
+<!--CSVER v=8.0 file=ex/09/assm note=C# 14 / .NET 10 에서의 동작 — 구현 세부-->
+<p class="cap">상태(<code>&lt;&gt;1__state</code>)와 현재 값, 매개변수의 원본(<code>&lt;&gt;3__n</code>)과 작업용 사본(<code>n</code>) — 동기 반복기와 같은 뼈대입니다. 거기에
+async 의 빌더(<code>AsyncIteratorMethodBuilder</code>), <code>MoveNextAsync</code> 의 <code>ValueTask&lt;bool&gt;</code> 를 받쳐 줄
+<code>ManualResetValueTaskSourceCore</code>, 취소를 위한 <code>&lt;&gt;x__combinedTokens</code>, 그리고 Dispose 중인지를 적는
+<code>&lt;&gt;w__disposeMode</code> 가 더해졌습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-as-linq">
+<h3>LINQ — 제안서는 미뤘고, .NET 10 에는 있다</h3>
+<p class="why">제안서: <code>Enumerable</code> 의 오버로드가 200 개쯤인데 비동기판을 따로 만들면 또 그만큼이라, 언어·코어 라이브러리에서는 하지 않고
+커뮤니티의 Interactive Extensions(Ix)를 돕겠다고 적었습니다 — "the proposal is to do nothing additional here right now".
+<!--CITE key=prop-8-async-streams sec="LINQ"--></p>
+<!--CODE file=ex/09/aslinq/Program.cs note=비동기 스트림에 Where·Select·ToArrayAsync-->
+<!--CSVER v=8.0 file=ex/09/aslinq note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">.NET 10 의 참조 팩에는 <code>System.Linq.AsyncEnumerable</code> 이라는 어셈블리가 있고, 패키지 없이 이 코드가 돕니다. 언제 들어왔는지는 받아 둔
+문서에 없어 적지 않습니다 — "2026-10 기준, .NET 10 에는 있다" 까지입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-as-errors">
+<h3>비동기 스트림의 규칙 — 네 가지 거절</h3>
+<p class="why">whats-new: <code>await foreach</code> 를 쓰는 메서드는 <code>async</code> 여야 하고, 비동기 스트림을 만드는 메서드는 <code>async</code> 한정자와
+<code>yield return</code> 을 함께 가져야 합니다. <!--CITE key=whatsnew-8 sec="Asynchronous streams"--></p>
+<!--CODE file=ex/09/aserrors/A.cs note=고의로 깨진 예제 — async 없는 소비자·생산자, yield 없는 async, catch 안의 yield-->
+<!--CSVER v=8.0 file=ex/09/aserrors note=C# 8.0-->
+<p class="cap"><code>yield</code> 가 없으면 반복기가 아니라 보통의 async 메서드가 되어, 반환 값이 없다는 <code>CS0161</code> 이 나옵니다. <code>catch</code> 가 있는
+<code>try</code> 안의 <code>yield return</code> 은 C# 2 의 규칙(<code>CS1626</code>)이 비동기 반복기에도 그대로입니다. 파일 이름이 <code>A.cs</code> 인 것은
+<code>CS4033</code> 의 긴 문장이 캡처의 줄 한도에 들어가게 하려는 것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-asyncusing">
+<h3>await using (asynchronous using) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">왜 — whats-new: C# 8.0 은 <code>IAsyncDisposable</code> 을 구현한 형식을 지원하고 "You use the <code>await using</code> statement" 로 씁니다.
+제안서의 말로는 닫는 일 자체가 시간이 걸릴 수 있기 때문입니다 — "closing files (requiring flushes)" 같은. 블록 꼴과 선언 꼴이 있다는 것은
+<a href="#p6-v5-after-using">6부</a>에서 봤고, 여기서는 닫는 <b>차례</b>를 봅니다. <!--CITE key=whatsnew-8 sec="Asynchronous disposable"-->
+<!--CITE key=prop-8-async-streams sec="IAsyncDisposable"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureAsyncUsing:"--></p>
+<!--CODE file=ex/09/asyncusing/Program.cs note=한 문에 둘, 선언으로 둘-->
+<!--CSVER v=8.0 file=ex/09/asyncusing note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/asyncusing note=C# 7.3 으로 내리면-->
+<p class="cap">연 차례의 거꾸로 닫힙니다 — a, b 를 열면 b, a. 선언 꼴의 c, d 는 <code>Main</code> 이 끝날 때 d, c 입니다. 동기 <code>using</code> 의 규칙이
+그대로이고, 다른 점은 <code>DisposeAsync</code> 의 <code>ValueTask</code> 를 기다린다는 것뿐입니다. C# 7.3 의 거절에는 'asynchronous using'·'using declarations'
+마다 'pattern-based disposal' 이 하나씩 따라옵니다 — <code>await using</code> 이 <code>DisposeAsync</code> 를 이름(패턴)으로 찾기 때문으로 보이며,
+<a href="#p6-v5-after-using">6부</a>도 같은 것을 봤습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-au-both">
+<h3>Dispose 와 DisposeAsync 를 다 가진 형식</h3>
+<p class="why">제안서: 한 형식이 <code>IDisposable</code> 과 <code>IAsyncDisposable</code> 을 함께 구현해도 되고, 어느 쪽을 먼저 부르든 처음 것만 의미가
+있어야 합니다. Roslyn 의 호환성 문서는 <code>await using</code> 이 인터페이스 구현보다 공개 <code>DisposeAsync()</code> 를 고르도록 바뀌었다고
+적습니다("Introduced in Visual Studio 2022 version 17.10p3"). <!--CITE key=prop-8-async-streams sec="IAsyncDisposable"-->
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-8 sec="Prefer pattern-based over interface-based disposal in async using"--></p>
+<!--CODE file=ex/09/auboth/Program.cs note=Dispose, 명시적 IAsyncDisposable.DisposeAsync, 공개 DisposeAsync-->
+<!--CSVER v=8.0 file=ex/09/auboth note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>using</code> 은 <code>Dispose</code>, <code>await using</code> 은 공개 <code>DisposeAsync</code> 하나만 부릅니다 — 둘 다 부르지 않습니다.
+변수의 형식이 <code>IAsyncDisposable</code> 이면 공개 메서드가 보이지 않으니 인터페이스 구현이 불립니다. 같은 객체라도 정적 형식에 따라 다른 메서드가
+불리는 셈이라, 두 구현은 같은 일을 해야 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-usingdecl">
+<h3>using 선언 (using declaration) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">왜 — 제안서: <code>using</code> 문은 좋은 도구지만 "requires quite a bit of ceremony". 자원이 여럿이면 문이 겹겹이 쌓이고, 그래서 코딩
+지침들이 이 경우만 중괄호 규칙에 예외를 둘 정도였다는 것입니다. <code>using</code> 을 지역 변수 선언 앞에 붙이면 둘러싼 범위가 끝날 때 닫힙니다.
+<!--CITE key=prop-8-using sec="Motivation"--> <!--CITE key=whatsnew-8 sec="Using declarations"-->
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureUsingDeclarations: // semantic check"--></p>
+<!--CODE file=ex/09/usedecl/Program.cs note=선언 셋(하나는 둘을 한 줄에)과 return 42-->
+<!--CSVER v=8.0 file=ex/09/usedecl note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/usedecl note=C# 7.3 으로 내리면-->
+<p class="cap">제안서의 규칙 그대로 "disposed in the reverse order in which they are declared" — d, c, b, a 입니다. 반환 값 42 는 <b>닫기 전에</b> 셈해집니다:
+"body" 다음에 Dispose 넷이 돌고, 그 뒤에 호출자가 "Work() = 42" 를 찍습니다. <!--CITE key=prop-8-using sec="using declaration"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-ud-scope">
+<h3>"둘러싼 범위" — 루프 몸체, if 블록, 메서드</h3>
+<p class="why">whats-new: "the file is disposed when the closing brace for the method is reached. That's the end of the scope in which <code>file</code> is declared."
+범위는 메서드만이 아니라 선언이 놓인 블록입니다. <!--CITE key=whatsnew-8 sec="Using declarations"--></p>
+<!--CODE file=ex/09/usescope/Program.cs note=메서드 범위 하나, 루프 몸체 하나, if 블록 하나-->
+<!--CSVER v=8.0 file=ex/09/usescope note=C# 8.0-->
+<p class="cap">루프 몸체 안의 <code>r</code> 은 바퀴마다 열리고 닫힙니다. <code>outer</code> 는 "end of Main" 뒤, 메서드를 나갈 때 닫힙니다.</p>
+<div class="warn"><b>함정</b> — 블록 안에서 일찍 닫혀야 하는 자원(잠금, 파일 핸들)에 메서드 범위의 using 선언을 쓰면, 메서드가 끝날 때까지 쥐고 있게 됩니다.
+그럴 땐 옛 <code>using</code> 문이나 블록 <code>{ }</code> 을 씁니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-ud-goto">
+<h3>제안서의 goto 예제 — 지금의 컴파일러는 거절한다</h3>
+<p class="why">제안서: "There are no restrictions around <code>goto</code>, or any other control flow construct in the face of a <code>using</code> declaration." 그리고
+레이블 뒤의 using 선언으로 <code>goto</code> 를 되돌리면 "Causes f2 to be disposed but has no effect on f1" 이라는 예를 듭니다.
+<!--CITE key=prop-8-using sec="using declaration"--></p>
+<!--CODE file=ex/09/usegoto/Program.cs note=제안서의 예를 그대로 옮긴 꼴-->
+<!--CSVER v=8.0 file=ex/09/usegoto note=C# 8.0-->
+<p class="cap">Roslyn 은 <code>CS8649</code> — "A goto cannot jump to a location before a using declaration within the same block" — 로 거절합니다. 제안서의 문장과 실제
+컴파일러가 어긋나는 곳입니다. 이 덱은 컴파일러를 따릅니다: using 선언 앞으로 되돌아가는 <code>goto</code> 는 C# 14 / .NET 10 에서 오류입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-ud-bad">
+<h3>using 선언을 못 쓰는 곳</h3>
+<p class="why">제안서의 제약: <code>case</code> 레이블 바로 안에는 못 오고(블록 안이어야 함), 선언마다 초기화가 있어야 하며, 형식은 <code>IDisposable</code> 이거나
+패턴을 만족해야 합니다. 지역 변수는 "implicitly read-only" 입니다. <!--CITE key=prop-8-using sec="using declaration"--></p>
+<!--CODE file=ex/09/usebad/Program.cs note=고의로 깨진 예제 — switch 구역, 초기화 없음, 다시 대입, int-->
+<!--CSVER v=8.0 file=ex/09/usebad note=C# 8.0-->
+<p class="cap"><code>case</code> 바로 안은 <code>CS8647</code> — 문장이 "consider using braces" 라고 해법까지 말합니다. 제안서는 그 까닭을 수명 문제로 들고, 중괄호
+하나면 되는 우회가 쉬워 따로 규칙을 만들지 않았다고 적습니다. <code>using var t;</code> 는 오류가 둘(<code>CS0818</code>, <code>CS0210</code>)입니다.
+<!--CITE key=prop-8-using sec="case labels without blocks"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-ud-null">
+<h3>null 이면 건너뛰고, 예외가 나도 닫는다</h3>
+<p class="why">제안서: using 선언은 같은 자리의 <code>using</code> 문과 "the same effect" 이고, <code>using</code> 의 규칙 — "a <code>null</code> value will not
+cause an exception to be thrown" — 이 그대로입니다. <!--CITE key=prop-8-using sec="using declaration"--> <!--CITE key=prop-8-using sec="pattern-based using"--></p>
+<!--CODE file=ex/09/usenull/Program.cs note=null 을 받은 using var, 몸체에서 던지는 using var-->
+<!--CSVER v=8.0 file=ex/09/usenull note=C# 8.0-->
+<p class="cap">첫 호출은 <code>r</code> 이 <code>null</code> 이라 "dispose" 가 없고 예외도 없습니다. 둘째 호출은 몸체가 던졌지만 "dispose" 가 먼저 찍히고, 그
+뒤에 바깥의 <code>catch</code> 가 받습니다 — <code>try</code>/<code>finally</code> 로 바뀌기 때문입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-disposal">
+<h3>ref struct 의 Dispose 패턴 (disposable ref structs) <span class="vt v8">C# 8.0</span></h3>
+<p class="why">왜 — whats-new: <code>ref</code> 로 선언한 구조체는 인터페이스를 구현할 수 없어 <code>IDisposable</code> 도 구현할 수 없습니다
+(<a href="#p8-v7_2-refstruct">8부</a>). 그래서 "it must have an accessible <code>void Dispose()</code> method" 이면 using 에 쓸 수 있게 했습니다.
+<!--CITE key=whatsnew-8 sec="Disposable ref structs"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureDisposalPattern: //semantic check"--></p>
+<!--CODE file=ex/09/usedisposal/Program.cs note=stackalloc 버퍼를 빌려 쓰고 돌려주는 Lease-->
+<!--CSVER v=8.0 file=ex/09/usedisposal note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/usedisposal note=C# 7.3 으로 내리면-->
+<!--CSVER v=8.0 file=ex/09/usedisposal flags=-define:BAD tag=bad note=보통 구조체에 Dispose 만 두면-->
+<p class="cap">C# 7.3 은 ref struct 를 쓴 <code>using</code> 문(26행)을 'pattern-based disposal' 하나로 거절합니다. 패턴은 <b>ref struct 에만</b> 열렸습니다. <code>Dispose</code> 가 있는 보통 구조체 <code>Plain</code> 은 여전히 <code>CS1674</code> 입니다 — 제안서가
+"the notion of a disposable pattern for <code>ref struct</code> types" 라고 범위를 그었습니다. 인터페이스를 구현할 수 있는 형식은 인터페이스를 쓰라는 것입니다.
+<!--CITE key=prop-8-using sec="pattern-based using"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-disp-foreach">
+<h3>foreach 도 ref struct 열거자의 Dispose 를 부른다</h3>
+<p class="why">Roslyn 의 VS2019 호환성 문서: "A ref struct enumerator with an accessible <code>void Dispose()</code> instance method will now have it invoked at the
+end of enumeration", 그 예의 메서드 이름이 "Called in C# 8.0 only" 입니다. <!--CITE key=roslyn-compiler-breaking-changes-vs2019--></p>
+<!--CODE file=ex/09/usedispforeach/Program.cs note=ref struct 열거자와 클래스 열거자, 둘 다 Dispose 만 있다-->
+<!--CSVER v=8.0 file=ex/09/usedispforeach note=C# 8.0-->
+<!--CSVER v=7.3 file=ex/09/usedispforeach note=C# 7.3 으로 내리면-->
+<p class="cap">ref struct 열거자는 끝에 <code>Dispose</code> 가 불리고, <code>IDisposable</code> 이 아닌 클래스 열거자는 불리지 않습니다. C# 7.3 으로 내리면
+<code>foreach</code> 문이 'pattern-based disposal' 로 거절됩니다 — 조용히 동작이 바뀌는 대신, 옛 버전에서는 컴파일 자체를 막습니다. ref struct 가
+<code>IDisposable</code> 을 구현할 수 있게 된 것은 C# 13 입니다(<a href="#p8-v7_2-refstruct-later">8부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p9-v8-async-runtime">
+<h3>같이 온 런타임 — IAsyncEnumerable, IAsyncDisposable 과 그 도우미 <span class="vt v8">C# 8.0</span></h3>
+<p class="why">제안서는 두 인터페이스와 <code>IAsyncDisposable</code> 을 "the core .NET libraries" 에 더한다고 적고, 버전 기록은 비동기 스트림이 .NET Core 3.0
+라이브러리의 새 형식에 기댄다고 적습니다. <!--CITE key=prop-8-async-streams sec="IAsyncEnumerable / IAsyncEnumerator"-->
+<!--CITE key=history sec="C# version 8.0"--></p>
+<!--CODE file=ex/09/asrt/Program.cs note=5장이 쓴 형식과 그 어셈블리-->
+<!--CSVER v=8.0 file=ex/09/asrt note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">인터페이스 셋, 특성, 컴파일러용 빌더(<code>AsyncIteratorMethodBuilder</code>), <code>ConfigureAwait</code>·<code>WithCancellation</code> 의 래퍼와
+확장 메서드까지 모두 <code>System.Private.CoreLib</code> 에 있습니다. LINQ(<a href="#p9-v8-as-linq">앞 장</a>)만 별도 어셈블리입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p9-v8-async-quiz" data-quiz>
+<h3>5장 퀴즈 — 비동기 스트림과 using</h3>
+<p class="q">Q1. 비동기 반복기를 부른 직후, 첫 <code>await foreach</code> 전에 몸체의 첫 줄은 돌았습니까?</p>
+<p class="q">Q2. <code>using var a = …; using var b = …;</code> 가 있는 메서드가 <code>return F(a);</code> 로 끝납니다. <code>F</code>, <code>a.Dispose</code>,
+<code>b.Dispose</code> 의 차례는?</p>
+<p class="q">Q3. <code>Dispose()</code> 가 있지만 <code>IDisposable</code> 을 구현하지 않은 보통 구조체를 <code>using var</code> 에 쓸 수 있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 아닙니다. 몸체는 첫 <code>MoveNextAsync</code> 에서 시작합니다 — 동기 반복기와 같은 늦은 실행입니다.<br>
+<b>A2.</b> <code>F</code> 가 먼저 셈해지고, 그 뒤 선언의 거꾸로 <code>b</code>, <code>a</code> 순으로 닫힙니다.<br>
+<b>A3.</b> 없습니다(<code>CS1674</code>). C# 8.0 의 Dispose 패턴은 인터페이스를 구현할 수 없는 ref struct 에만 열렸습니다.</div>
+<span class="tier ill">설명용</span>
+</article>

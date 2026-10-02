@@ -524,3 +524,53 @@ comments + Korean header line; two review passes before push.
   InAttribute only on abstract/delegate Invoke; tuple == vs Equals differ on NaN; refusal code by
   target version: CS8302 (7.1), CS8320 (7.2), CS8370 (7.3). private protected cross-assembly only as
   a spec table (csrun builds one assembly).
+- Part 8 committed (39005f9): 229/260, deck 1289, `make all SKEL=1` green in the work tree.
+- Part 9 (C# 8.0, 220) briefs: p09 (~80: cover, 1장 개관·런타임 결합, 2장 nullable 참조 형식), p09b (~75:
+  3장 패턴의 확장, 4장 인덱스와 범위, 5장 비동기 스트림과 using), p09c (~65: 6장 기본 인터페이스 메서드,
+  7장 작은 기능들, 8장 정리 + p9-quiz). Placeholders 09b_cs8/09c_cs8 + ORDER/order.txt. p09 and p09b
+  launched; p09c after one of them finishes.
+- Part 10 (C# 9.0, 200) briefs written ahead: p10 (~75: cover, 1장 개관·.NET 5·warning wave 5, 2장 레코드와
+  init), p10b (~70: 3장 최상위 문, 4장 패턴 3, 5장 nint·함수 포인터·SkipLocalsInit), p10c (~55: 6장 다듬기,
+  7장 모듈 초기화자·partial·nullable 보강, 8장 정리 + p10-quiz). Earlier C# 9 forward slides to link:
+  p2-v1-condfail, p5-v4-var-later, p6-v5-after-ext, p7-v6-immut-rec, p8-v7-discard-lambda9,
+  p8-v7-pat-later9, p8-v7-locfn-attr9. Placeholders 10b/10c + ORDER entries are made after part 9 is
+  committed.
+- p09 done: 75 slides (cover+intro 2, 1장 개관 13, 2장 nullable 참조 형식 60), 12 rows, 57 examples
+  (2 FAIL, 25 WARN), 80 captures (two identical runs), 23 claims, 13 glossary. Findings: `#pragma
+  warning disable nullable` is a silent no-op at 8.0 and 14.0 (specs describe it; -nowarn:nullable
+  works); CS8618 text suggests 'required' even at 8.0 (wording follows the compiler) and sits on the
+  ctor; `T t = default` unconstrained: silent at 8.0, CS8600 at 9.0 (keyed on langversion); nameof(param)
+  in [NotNullIfNotNull] compiles at 8.0; .NET 10 NullableAttribute is public in CoreLib (no embedded
+  copy); notnull leaves GenericParameterAttributes None (only Nullable(1)); object.ToString() is
+  `string?` on .NET 10; flow-analysis gaps (null check makes a param maybe-null, Where(x != null) does
+  not narrow, array elements untracked); `m!!` CS8715, param `s!!` at 14 is CS1003; unconstrained T?
+  refusal at 8.0 is CS8627 (261 cols — checked in exps, not shown). csrun ignores
+  <WarningsAsErrors> (slide uses -warnaserror:nullable). p09c launched.
+- p09b done: 73 slides (3장 패턴 31, 4장 인덱스와 범위 20, 5장 비동기 스트림과 using 22), 18 rows, 63
+  examples (5 FAIL, 2 WARN), 97 captures + out/tbl_p09b_gates73.html, 54 claims, 15 glossary.
+  Findings: at 7.3 switch expressions, tuple patterns, `{ }`, `var (x, y)` are all refused as
+  "recursive patterns" — the `<switch expression>` message never appears; `switch (A(), B())` itself
+  is not refused, only `case (1, 2)`; Roslyn's C# 9 breaking-change doc on byte exhaustiveness does
+  not reproduce (8.0 and 9.0 alike); the using proposal's goto-back example is refused (CS8649);
+  on .NET 10 `list[1..3]` compiles (List<T>.Slice, a copy); `a[i..i + 3]` CS0019 (`..` binds tighter);
+  all named enum members still CS8524; `s[..]` same string object, `a[..]` new array; without
+  [EnumeratorCancellation] the WithCancellation token is ignored; System.Linq.AsyncEnumerable is in
+  the .NET 10 ref pack; KeyValuePair is not ITuple.
+- p10 launched while p09c runs (part 9 will be committed from an export without p10 files).
+
+### Session restart 2026-10-02 (2) — p09c finished on disk, p10 resumed
+
+- The previous session died at ~12:13 while p09c (verification pass) and p10 were running. p09c is
+  content-complete: 09c_cs8 64 slides (6장 기본 인터페이스 메서드 24, 7장 작은 기능들 28, 8장 정리 12 incl.
+  p9-quiz/p9-quiz2), 13 rows, 75 captures, 22 claims, 11 glossary. Part 9 = 75 + 73 + 64 = 212/220.
+  The orchestrator re-runs `--only p09c` twice and commits part 9 from an export (without p10 files).
+- p10 had 54 example dirs (ov*/rec*/init*/with*) but only 6 in exps/p10.py and no slide; a resume
+  brief scratch/brief/p10_resume.md was written and p10 relaunched. p10b/p10c wait for the part-9
+  commit (placeholders 10b/10c + ORDER entries after it).
+- p09c fixes by the orchestrator: two `-define:BAD` captures had compiler lines over 200 columns
+  (dimclass CS1061 245, v8unmgdgen CS8377 222) → removed from the slides, exps/p09c.py checks the
+  refusal and code via csver.execute (LONGLINE, like p10's ovtcond); p9-sum-docs tier a → b (hand
+  table); v8old/v8new slices start at `static void Main` (E5). Re-ran `--only p09c` twice: 78
+  captures, 09- manifest entries identical.
+- Part 9 committed: 212/220 (75 + 73 + 64), 42 rows, 166 examples, 254 captures, deck 1500; export
+  `make all SKEL=1` green.
