@@ -474,3 +474,27 @@ comments + Korean header line; two review passes before push.
   call → line of the method-name token; `await using` at 7.3 also reports pattern-based disposal;
   Span across await: CS4007 at 13/14, CS9202 at 12; foreach of 3 → 3 closure objects, for → 1.
 - p07 and p07b subagents launched (parallel).
+- Part 8 (C# 7.0–7.3, 260) briefs: p08 (~95: 1장 개관, 2장 튜플·분해, 3장 패턴, 4장 out var·지역 함수),
+  p08b (~85: 5장 C# 7.0 나머지 ref·throw·식 본문·리터럴·task-like, 6장 C# 7.1), p08c (~80: 7장 C# 7.2,
+  8장 C# 7.3, 9장 정리 + p8-quiz). Reserved cross-chunk ids listed in each brief. Placeholders
+  08b_cs7/08c_cs7 + ORDER/order.txt. Launch two at a time after p07/p07b.
+- p07 done: 80 slides (cover+intro 2, 1장 개관·Roslyn 16, 2장 보간 29, 3장 nameof 15, 4장 ?. 18), 7 rows,
+  61 examples, 94 captures, 34 claims, 13 glossary. Waits for p07b to commit part 7 together (links
+  into p07b's reserved ids). Findings: interpolation lowering ignores langversion (a string target uses
+  DefaultInterpolatedStringHandler even at v6; FormattableString → FormattableStringFactory.Create;
+  expression trees string.Format); await in a hole → string.Format; gates12 at v5 reports only 4 of 12;
+  later features refused with "use 14.0" wording (nameof(List<>), `a?.b = c`); `@$` at 7.3 CS8401,
+  newlines in holes at 10 CS8967; C# 11 nameof scope not gated; the documented C# 11 nameof shadowing
+  break reproduces at 6/10/11 alike (CS0704); nameof(int) CS1525; Roslyn API usable by reflection from
+  the SDK bincore path (hard-coded /usr/lib/dotnet/sdk/10.0.112 — breaks on SDK upgrade); -deterministic
+  dll hash/MVID reproducible. p08 launched.
+
+### Session restart 2026-10-02 — p07b and p08 finished, p08b/p08c launched
+
+- The previous session died while p07b and p08 were wrapping up. Both fragments are content-complete:
+  07b_cs6 75 slides (5장 식 본문, 6장 자동 속성, 7장 using static·필터·인덱스 초기화자, 8장 정리 + p7-quiz,
+  p7-quiz2), 08_cs7 89 slides (cover + 1장–4장). Re-ran `--only p07b` (110 captures, no Traceback)
+  and `--only p08` (104 captures); a stale until-loop from the dead session was killed.
+- Part 7 is checked in an export (HEAD csevo/tools + part-7 files, manifest/batches = HEAD + 07-/p07*
+  keys, docs symlinked — `rm -rf` the checked-out docs/ first, FETCHED.txt is tracked).
+- p08b and p08c subagents launched (p08 commits together with them: it links their reserved ids).
