@@ -498,3 +498,29 @@ comments + Korean header line; two review passes before push.
 - Part 7 is checked in an export (HEAD csevo/tools + part-7 files, manifest/batches = HEAD + 07-/p07*
   keys, docs symlinked — `rm -rf` the checked-out docs/ first, FETCHED.txt is tracked).
 - p08b and p08c subagents launched (p08 commits together with them: it links their reserved ids).
+- Part 7 committed (895a578): 155/170, deck 1061, export `make all SKEL=1` green.
+- p08b done: 69 slides (5장 C# 7.0 나머지 43, 6장 C# 7.1 26), 14 rows, 58 examples (15 FAIL), 101
+  captures (two identical runs), 37 claims, 13 glossary, table out/tbl_p08b_gates6.html. Findings: ref
+  local in async/iterator at 7.0 → CS8107 naming the 13.0 gate (CS9202 at 12); switch expression at 7.3
+  reported as "recursive patterns"; event add/remove `=>` gated as expression-bodied accessor; block vs
+  `=>` IL differs only in debug (identical with -optimize+); `1_000.111_1e-1_000` compiles to 0 silently;
+  task-like types ungated (custom builder runs at v5); default-literal restrictions at every version,
+  pattern cases CS8505 (docs say CS8363/CS8313); `ok ? 1 : default` as int? → 0; inferred tuple names
+  at 7.0 → use-site CS8306, names through Select inference escape it; `(p.Item2, p.Rest).Item2` is
+  p.Rest; generic pattern refusal at 7.0 only for T-typed input, `case null` on open T needs 8.0
+  (CS8511); void Main + async Task Main → void Main runs, CS8892 only with -warn:5; -refout keeps a
+  struct's private field, load → BadImageFormatException; history/whatsnew say "three" 7.1 features
+  and list four. -refonly cited only.
+- p08c done: 71 slides (7장 C# 7.2 37, 8장 C# 7.3 23, 9장 정리 11 + p8-quiz/p8-quiz2), 28 rows, 53
+  examples (15 FAIL, 1 WARN), 94 captures (two identical runs), 27 claims, 13 glossary. Part 8 =
+  89 + 69 + 71 = 229/260. Findings: history §7.2 lists five 7.3 features (stackalloc initializers, fixed
+  pattern, unpinned fixed buffers, ref reassignment, new constraints — MessageID/lvh/compiler say 7.3;
+  slide p8-v7_2-docs); using Span/Slice/int.Parse(span) compiles at 7.1, only declaring a ref struct and
+  stackalloc-to-Span are gated ("ref structs"); .NET 10 `Unsafe.AsRef(in x)` refused below 12 (CS8320
+  ref readonly parameters); `[field:]` on auto-prop at 7.2 is warning CS8371 and still emitted;
+  improved overload candidates ungated in wording but 7.2 → CS0120/CS0453/CS0407, 7.3 compiles; `in`
+  tie-break same at 7.2/7.3; `where T : enum` → CS9010; ref structs carry [Obsolete] + 
+  CompilerFeatureRequired("RefStructs"), attribute is IsByRefLike (proposal says IsRefLike); modreq
+  InAttribute only on abstract/delegate Invoke; tuple == vs Equals differ on NaN; refusal code by
+  target version: CS8302 (7.1), CS8320 (7.2), CS8370 (7.3). private protected cross-assembly only as
+  a spec table (csrun builds one assembly).
