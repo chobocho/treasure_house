@@ -574,3 +574,50 @@ comments + Korean header line; two review passes before push.
   captures, 09- manifest entries identical.
 - Part 9 committed: 212/220 (75 + 73 + 64), 42 rows, 166 examples, 254 captures, deck 1500; export
   `make all SKEL=1` green.
+- Part 9 commit is 7c933af. Placeholders 10b_cs9 (p10b-pending) / 10c_cs9 (p10c-pending) + order.txt /
+  ORDER entries made; p10b launched next to the resumed p10. p10c waits for one of them.
+- p10 done (resumed): 71 slides (cover+intro 2, 1장 개관 10, 2장 레코드와 init 59), 13 rows, 56 examples
+  (6 FAIL, 2 WARN), 80 captures (two identical runs), 30 claims, 14 glossary. ovtcond removed (target-
+  typed ?: is p10c's; CS8957 check moved to p10c's brief). Findings: 'records' refusal only on `with`
+  — at 8.0 `record P(int X, int Y);` parses as a top-level local function (CS8400/CS8112/CS0246);
+  record-name refusal code by langversion 8.0 CS8400, 9.0 CS8773, 10.0 CS8936, 11.0 CS9058; `record
+  class` at 9.0 refused as 'record structs'; wave-5 warnings keyed on -warn:5 not langversion (CS7023,
+  CS8073 at 7.3); dynamic binder refuses init writes on .NET 10 (reflection SetValue bypasses); user
+  IsExternalInit wins; `set; init;` CS1007, `with` as a statement CS1002, user `==` in a record CS0111;
+  record with NaN == itself (tuple not); overridden EqualityContract makes == asymmetric; cyclic record
+  ToString → catchable InsufficientExecutionStackException; `with` skips positional-init validation;
+  covariant <Clone>$ is a new slot + PreserveBaseOverridesAttribute; derived record re-synthesizes
+  ToString (why C# 10 sealed). gen_glossary --check: `ref struct` defined twice (p06b, p08c) — fix at
+  review. p10c launched (brief note: LONGLINE check for CS8957).
+- p10b done: 65 slides (3장 최상위 문 20, 4장 패턴 3 21, 5장 nint·함수 포인터·SkipLocalsInit 24), 13 rows,
+  49 examples (2 FAIL, 2 WARN), 104 captures + out/tbl_p10b_gates8.html (two identical runs), 21
+  claims, 13 glossary. Findings: async top-level → `Task <Main>$` + wrapper `<Main>`; CS0161 on
+  '<top-level-statements-entry-point>'; top-level + declared Main is warning CS7022 (whatsnew says
+  error), `-main:App` runs App.Main; non-partial `Program` CS0260 even at 9.0; `x is not 1 or 2` and
+  `case 2 or 3 or 2` silent even at -warn:9999; relational patterns on enums; the breaking-change
+  `o is not x` not reproducible; no NativeIntegerAttribute on .NET 10 at 9.0; IntPtr arithmetic
+  compiles at 8.0 (runtime feature); delegate 64 B/call at 9.0 vs 0 at 11 (method-group cache);
+  SkipLocalsInit ungated (works at 7.3), inherited by lambdas/static local functions.
+- p10b reported a run_all race: width_problems()/manifest() died with FileNotFoundError when another
+  --only batch deleted its captures between listdir and open → fixed + 2 tests (48f4e07, 100 tests).
+- Part 11 (C# 10, 150) briefs: p11 (~78: cover, 1장 개관, 2장 구조체와 record struct, 3장 global using·
+  파일 범위 네임스페이스), p11b (~70: 4장 보간 문자열 처리기, 5장 람다와 패턴, 6장 작은 기능들, 7장 정리 +
+  p11-quiz). Placeholder 11b + ORDER entry after part 10 is committed.
+- p11 launched next to p10c (part 10 will be committed from an export without p11 files).
+- p10c done: 49 slides (6장 다듬기 23, 7장 코드 생성기 지원과 nullable 보강 15, 8장 정리 11 + p10-quiz/
+  p10-quiz2), 17 rows, 36 examples (5 FAIL, 1 WARN), 60 captures + out/tbl_p10c_gates8.html (three
+  LONGLINE checks: tccond CS8957, nltq/nldefault CS8627), 25 claims, 14 glossary. Part 10 = 71 + 65 +
+  49 = 185/200. Findings: static lambdas emitted like non-capturing lambdas (instance method on <>c);
+  `int? n = new();` → 0 with HasValue; the target-typed ?: ambiguity in the proposal does not
+  reproduce; covariant override NewSlot + PreserveBaseOverrides, GetBaseDefinition() is itself;
+  extension GetEnumerator silently unused when the type implements IEnumerable; `int _ = 5; (_, _) =>
+  _` returns 5; module initializers in declaration order as <Module>..cctor; `[GeneratedRegex]`
+  without the generator → only CS8795; nullable ctor analysis not keyed on langversion; static-member
+  variance at 8.0 is CS8904 (proposal CS1961); the whole C# 9 program at 8.0 gives only CS0116/CS0246
+  'record'/CS0238. No source generator runs under csrun (pmgen/Gen.cs is a labelled hand-written
+  stand-in).
+- Orchestrator: ex/10/topns line 4 was 77 columns (p10-v9-top-ns) → split by hand into two lines.
+  Re-running p10, p10b, p10c twice (p10b's manifest may have been lost to the race fixed in 48f4e07).
+- Part 10 reruns: p10/p10b/p10c twice each, all exit=0, the 247 part-10 manifest entries identical.
+  Part 10 committed: 185/200 (71 + 65 + 49), 43 rows, 139 examples, 243 captures, deck 1684; export
+  `make all SKEL=1` green on the first run.

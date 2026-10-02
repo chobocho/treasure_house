@@ -1,0 +1,634 @@
+<article class="card" id="p10-v9-fit"><p class="chnum">6장</p><h2>다듬기 — 형식 이름을 덜 쓰는 일곱 가지</h2>
+<p class="chsub">대상 형식 new() · static 람다 · 대상 형식 ?: · 공변 반환 · 확장 GetEnumerator · _ 매개변수 · 지역 함수의 특성</p></article>
+
+<article class="card" id="p10-v9-fit-why">
+<h3>"Fit and finish" — 문서가 묶은 작은 기능들</h3>
+<p>버전 기록은 이 기능들을 "C# 9 adds many other small features that improve developer productivity, both writing and reading code" 라는 한
+문장으로 묶습니다. <!--CITE key=history sec="Fit and finish features"--> whats-new 는 같은 절을 "Many of the other features help you write code more
+efficiently" 로 엽니다. <!--CITE key=whatsnew-9 sec="Fit and finish features"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>기능</th><th>한 줄</th><th>이 장</th></tr>
+<tr><td>대상 형식 <code>new()</code></td><td>형식을 아는 자리에서 형식 이름을 뺀다</td><td><a href="#p10-v9-targetnew">new()</a></td></tr>
+<tr><td><code>static</code> 익명 함수</td><td>포착을 금지하는 람다</td><td><a href="#p10-v9-static-lambda">static</a></td></tr>
+<tr><td>대상 형식 조건식</td><td><code>b ? 1 : null</code> 이 <code>int?</code> 로</td><td><a href="#p10-v9-targetcond">?:</a></td></tr>
+<tr><td>공변 반환 형식</td><td><code>override</code> 가 더 좁은 형식을 돌려준다</td><td><a href="#p10-v9-covariant">공변</a></td></tr>
+<tr><td>확장 <code>GetEnumerator</code></td><td><code>foreach</code> 가 확장 메서드도 찾는다</td><td><a href="#p10-v9-extenum">foreach</a></td></tr>
+<tr><td>람다의 <code>_</code> 매개변수</td><td>쓰지 않는 매개변수에 이름을 주지 않는다</td><td><a href="#p10-v9-lambda-discard">_</a></td></tr>
+<tr><td>지역 함수의 특성 · <code>extern</code></td><td>메서드에 되던 것을 지역 함수에도</td><td><a href="#p10-v9-locfn-attr">특성</a></td></tr>
+</table></div>
+<p class="cap">일곱 가지 모두 컴파일러가 C# 9 로 확인하는 기능입니다(<a href="#p10-v9-gates">1장</a>). 공변 반환만 런타임의 새 기능을 요구하고, 나머지는
+컴파일러가 혼자 처리합니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p10-v9-targetnew">
+<h3>대상 형식 new() (target-typed new) <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: "Allow field initialization without duplicating the type", 그리고 "Instantiate an object without spelling out the type".
+발표 글은 대상 형식(target typing)을 "when an expression gets its type from the context of where it's being used" 라고 풀고, <code>null</code> 과
+람다가 원래 그렇다고 적습니다. <!--CITE key=prop-9-target-typed-new sec="Motivation"--> <!--CITE key=blog-c-9-0-on-the-record sec="Target-typed new expressions"--></p>
+<!--CODE file=ex/10/tnbasic/Program.cs note=필드 · 반환 · 지역 변수 · 배열 초기화자 · 인수-->
+<!--CSVER v=9.0 file=ex/10/tnbasic note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/tnbasic note=C# 8.0 으로 내리면-->
+<p class="cap">거절은 <code>new()</code> 가 쓰인 자리마다 하나, 일곱 개입니다(29행에 둘). 17행의 필드처럼 형식 이름이 길수록 이득이 큽니다 — 제안서의 첫 예도
+<code>Dictionary&lt;string, List&lt;int&gt;&gt;</code> 필드입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-tn-where">
+<h3>new() 가 안 되는 곳 — 대상이 없거나 만들 수 없을 때</h3>
+<p>명세: <code>new()</code> 는 그 자체로 형식이 없고, 모든 형식으로 가는 "object creation conversion" 만 있습니다. 단항·이항 연산자의 피연산자나,
+그런 변환이 일어나지 않는 자리에 쓰면 오류입니다. <!--CITE key=prop-9-target-typed-new sec="Specification"--> 제안서가 꼽은 자리를 한 파일에 모았습니다.
+<!--CITE key=prop-9-target-typed-new sec="Miscellaneous"--></p>
+<!--CODE file=ex/10/tnbad/Program.cs note=일부러 깨진 파일 — 줄마다 하나씩-->
+<!--CSVER v=9.0 file=ex/10/tnbad note=C# 9.0-->
+<p class="cap">오류는 세 갈래입니다. 대상이 없다(<code>var</code>, 멤버 접근 — <code>CS8754</code>), 연산자의 피연산자다(<code>CS8310</code>), 대상 형식이 맞지
+않는다(배열·<code>dynamic</code> — <code>CS8752</code>). 열거형·인터페이스·대리자는 따로 금지되지 않고, <code>new Color(1)</code> 을 적었을 때와 같은 옛 오류
+(<code>CS1729</code>·<code>CS0144</code>)로 거절됩니다 — 명세의 "같은 뜻의 객체 생성 식" 그대로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-tn-work">
+<h3>뜻밖에 되는 new() — int? 는 null 이 아니다</h3>
+<p>명세: 대상 형식 <code>T</code> 가 <code>Nullable</code> 이면 <code>new()</code> 는 그 바탕 형식 <code>T0</code> 를 만듭니다. 제안서는 <code>throw new()</code> 가
+되고(대상은 <code>System.Exception</code>) 튜플 대상의 <code>new()</code> 는 "same as (0, 0)" 이라고 적습니다. <!--CITE key=prop-9-target-typed-new sec="Specification"-->
+<!--CITE key=prop-9-target-typed-new sec="Miscellaneous"--></p>
+<!--CODE file=ex/10/tnwork/Program.cs note=int? · 튜플 · 열거형 · object · throw-->
+<!--CSVER v=9.0 file=ex/10/tnwork note=C# 9.0-->
+<div class="warn"><b>함정</b> — <code>int? n = new();</code> 는 <code>null</code> 이 아니라 <b>0 을 가진 값</b>입니다(<code>HasValue</code> 가 True). <code>new()</code>
+는 "기본값" 이 아니라 "바탕 형식의 생성자 호출" 이기 때문입니다. 비우고 싶으면 <code>default</code> 나 <code>null</code> 을 씁니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-tn-over">
+<h3>오버로드가 하나 늘면 — new() 의 깨지는 변경</h3>
+<p>제안서의 단점 절: 대상 형식 <code>new</code> 가 새 종류의 깨지는 변경을 만든다는 걱정이 있었지만, <code>null</code> 과 <code>default</code> 에 이미 있는 일이고
+"that has not been a significant problem" 이었다고 적습니다. <!--CITE key=prop-9-target-typed-new sec="Drawbacks"--> 어떤 변경인지 봅니다.</p>
+<!--CODE file=ex/10/tnover/Program.cs note=M(A) 하나일 때, 그리고 M(B) 가 더해지면-->
+<!--CSVER v=9.0 file=ex/10/tnover note=M(A) 만 있을 때-->
+<!--CSVER v=9.0 file=ex/10/tnover flags=-define:B2 tag=b2 note=-define:B2 — 오버로드 M(B) 를 더하면-->
+<p class="cap"><code>M(new())</code> 는 대상을 메서드의 매개변수에서 얻습니다. 매개변수 없는 생성자를 가진 형식을 받는 오버로드가 하나 더 생기면, 고치지 않은
+호출 줄이 <code>CS0121</code> 로 깨집니다. 라이브러리가 오버로드를 더하면 그 라이브러리를 쓰는 쪽 코드가 깨질 수 있다는 뜻입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-tn-tree">
+<h3>식 트리 안의 new() — 제안서의 질문 하나</h3>
+<p>제안서의 질문 목록: "Should we forbid usages in expression trees? (no)". 식 트리가 대상 형식 <code>new()</code> 를 어떻게 적는지 봅니다.
+<!--CITE key=prop-9-target-typed-new sec="Questions"--></p>
+<!--CODE file=ex/10/tntree/Program.cs note=Expression&lt;Func&lt;Point&gt;&gt; 에 () =&gt; new(1, 2)-->
+<!--CSVER v=9.0 file=ex/10/tntree note=C# 9.0-->
+<p class="cap">트리에는 <code>new Point(1, 2)</code> 가 그대로 들어 있습니다 — 노드 종류 <code>New</code>, 형식 <code>Point</code>. 대상 형식은 컴파일 때 정해져
+트리에 남지 않습니다. C# 3 의 식 트리가 C# 14 까지도 받지 않는 문법(<code>?.</code>, 튜플, 패턴 …)과 달리 이것은 그냥 생성자 호출입니다
+(<a href="#p4-v3-et-later">4부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-static-lambda">
+<h3>static 익명 함수 (static anonymous function) <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: "Avoid unintentionally capturing state from the enclosing context, which can result in unexpected retention of captured objects or
+unexpected additional allocations." 상수와 static 멤버는 쓸 수 있고, <code>nameof()</code> 안에서는 지역 변수도 됩니다.
+<!--CITE key=prop-9-static-anonymous-functions sec="Motivation"--> <!--CITE key=prop-9-static-anonymous-functions sec="Detailed design"--></p>
+<!--CODE file=ex/10/slstatic/Program.cs note=const · static 필드 · nameof · 무명 메서드에도 static-->
+<!--CSVER v=9.0 file=ex/10/slstatic note=C# 9.0-->
+<!--CSVER v=9.0 file=ex/10/slstatic flags=-define:BAD tag=bad note=-define:BAD — 지역 변수와 this-->
+<!--CSVER v=8.0 file=ex/10/slstatic note=C# 8.0 으로 내리면-->
+<p class="cap">거절 번호가 둘로 나뉩니다 — 지역 변수는 <code>CS8820</code>, 인스턴스 멤버(<code>inst</code> 는 <code>this.inst</code>)는 <code>CS8821</code>.
+C# 8 의 static 지역 함수(<a href="#p9-v8-staticlocal">9부</a>)가 익명 함수로 넓어진 것이고, 기본 꼴은 <a href="#p9-v8-sl-later">9부의 예고</a>에서 봤습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-sl-cache">
+<h3>static 을 붙여도 생성 코드는 그대로</h3>
+<p>제안서: static 익명 함수가 메타데이터에서 static 메서드가 된다는 보장은 없고("left up to the compiler implementation"), 올바른 프로그램에서
+<code>static</code> 을 지워도 "does not change the meaning of the program" 입니다. <!--CITE key=prop-9-static-anonymous-functions sec="Detailed design"--></p>
+<!--CODE file=ex/10/slcache/Program.cs note=같은 람다를 두 번 만들어 같은 대리자인지 · 메서드가 static 인지-->
+<!--CSVER v=9.0 file=ex/10/slcache note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">static 람다와 포착 없는 보통 람다가 <b>똑같습니다</b> — 둘 다 숨은 클래스 <code>&lt;&gt;c</code> 의 인스턴스 메서드이고(<code>static=False</code>),
+두 번 만들어도 같은 대리자 객체(캐시)입니다. 포착하는 람다만 매번 새 객체입니다. <code>static</code> 은 할당을 줄이는 최적화 스위치가 아니라
+<b>"포착하면 오류로 알려 달라"</b> 는 표시입니다. 포착 없는 람다의 캐시는 <a href="#p4-v3-lambda-cache">4부</a>부터 같았습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-sl-nested">
+<h3>static 람다 안의 람다 — 경계는 한 겹</h3>
+<p>제안서: static 이 아닌 지역 함수나 익명 함수는 둘러싼 static 익명 함수의 상태는 포착할 수 있지만 "cannot capture state outside the enclosing
+<i>static anonymous function</i>". <!--CITE key=prop-9-static-anonymous-functions sec="Detailed design"--></p>
+<!--CODE file=ex/10/slnested/Program.cs note=static 람다의 매개변수 k 를 안쪽 람다가 포착-->
+<!--CSVER v=9.0 file=ex/10/slnested note=C# 9.0-->
+<!--CSVER v=9.0 file=ex/10/slnested flags=-define:BAD tag=bad note=-define:BAD — 안쪽 람다가 바깥의 outer 를-->
+<p class="cap">안쪽 람다는 static 이 아니어도 <code>k</code> 를 포착합니다 — <code>k</code> 는 static 람다 <b>안</b>의 것이기 때문입니다. 한 겹 더 바깥의
+<code>outer</code> 를 쓰면 안쪽 람다가 static 이 아니어도 같은 <code>CS8820</code> 입니다. 오류는 <code>outer</code> 를 쓴 자리에 납니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-targetcond">
+<h3>대상 형식 조건식 (target-typed ?:) <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 두 갈래 사이에 공통 형식이 없어도, 두 갈래가 모두 대상 형식 <code>T</code> 로 변환되면 조건식을 <code>T</code> 로 받는 "conditional expression
+conversion" 이 생겼습니다. whats-new: "some conditional expressions that previously required casts or wouldn't compile now just work".
+<!--CITE key=prop-9-target-typed-conditional-expression sec="Conditional Expression Conversion"--> <!--CITE key=whatsnew-9 sec="Fit and finish features"--></p>
+<!--CODE file=ex/10/tccond/Program.cs note=int 와 null, int 와 string-->
+<!--CSVER v=9.0 file=ex/10/tccond note=C# 9.0-->
+<p class="cap">C# 8.0 으로 내리면 두 줄 모두 <code>CS8957</code>("Conditional expression is not valid in language version 8.0 because a common type was not
+found between 'int' and '&lt;null&gt;'…")로 거절됩니다. 그 한 줄이 200칸을 넘어 이 덱의 캡처 폭에 들지 않으므로 싣지 않았습니다 — 실험 묶음
+(<code>exps/p10c.py</code>)이 매번 거절과 오류 번호만 확인합니다. C# 1 시절의 처방(<code>(object)</code> 캐스트)과 대상이 없는 경우는
+<a href="#p2-v1-condfail">2부</a>에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-tc-over">
+<h3>조건식과 오버로드 — 제안서가 걱정한 모호함</h3>
+<p>제안서의 설계 노트: 새 변환 때문에 <code>M(b ? 1 : 2)</code> 가 <code>M(short)</code> 로 옮겨 가지 않게 "better conversion" 규칙을 고쳤고, 그 대가로
+<code>N(b ? 1 : 2, 1)</code> 이 "ambiguous with this feature" 가 된다고 적습니다. <!--CITE key=prop-9-target-typed-conditional-expression sec="Design Notes"--></p>
+<!--CODE file=ex/10/tcover/Program.cs note=M(short)/M(long) · N 의 두 쌍 · P(short?)/P(long?)-->
+<!--CSVER v=9.0 file=ex/10/tcover flags=-define:PAIR tag=pair note=C# 9.0, -define:PAIR-->
+<!--CSVER v=8.0 file=ex/10/tcover flags=-define:PAIR tag=pair note=C# 8.0, -define:PAIR-->
+<!--CSVER v=9.0 file=ex/10/tcover flags=-define:NUL tag=nul note=C# 9.0, -define:NUL — 공통 형식이 없는 조건식-->
+<p class="cap">처음 두 줄은 노트대로입니다 — <code>?:</code> 는 <code>M(long)</code>, switch 식은 <code>M(short)</code>. 그러나 노트가 모호해진다고 한
+<code>N(b ? 1 : 2, 1)</code> 은 <b>이 컴파일러에서 모호하지 않고</b> 8.0 과 9.0 이 똑같이 <code>N(long)</code> 입니다. <code>b ? 1 : 2</code> 에는 공통 형식
+<code>int</code> 가 있어 새 변환이 끼어들 일이 없기 때문입니다. 새 변환이 실제로 고르는 것은 <code>b ? 1 : null</code> 처럼 공통 형식이 없을 때이고, 그때는
+더 좁은 <code>short?</code> 쪽이 이깁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-covariant">
+<h3>공변 반환 형식 (covariant returns) <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: "different method names have to be invented to work around the language constraint that overrides must return the same type
+as the overridden method." Roslyn 의 <code>Compilation.WithOptions</code> 를 예로 듭니다. 읽기 전용 속성의 재정의도 더 좁은 형식을 적을 수 있습니다.
+<!--CITE key=prop-9-covariant-returns sec="Motivation"--> <!--CITE key=prop-9-covariant-returns sec="Class Property and Indexer Override"--></p>
+<!--CODE file=ex/10/covbasic/Program.cs note=발표 글의 Animal/Tiger 꼴 — 메서드와 get 전용 속성-->
+<!--CSVER v=9.0 file=ex/10/covbasic note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/covbasic note=C# 8.0 으로 내리면-->
+<p class="cap">호출하는 쪽이 <code>Tiger</code> 로 부르면 <code>Meat</code> 와 <code>Tiger</code> 를 캐스트 없이 받습니다. <code>Animal</code> 로 불러도 같은
+재정의가 돕니다. 메서드 한 쌍의 기본 꼴은 <a href="#p5-v4-var-later">5부</a>(C# 4 의 변성과는 다른 기능)에서 봤고, 레코드의 복제 메서드가 이 기능을
+쓰는 것은 <a href="#p10-v9-rec-abstract">2장</a>에서 봤습니다. <!--CITE key=blog-c-9-0-on-the-record sec="Covariant returns"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-cov-meta">
+<h3>공변 반환은 새 슬롯 — 메타데이터에서 보면</h3>
+<p>CLR 의 메서드 재정의는 원래 반환 형식까지 같아야 합니다. 그래서 C# 9 의 컴파일러는 좁은 형식의 재정의를 <b>새 가상 슬롯</b>으로 내보내고 특성 하나로
+"기반의 슬롯도 이것이 맡는다" 고 표시합니다. 그것을 따르는 것이 런타임 기능 <code>CovariantReturnsOfClasses</code> 입니다(<a href="#p10-v9-runtime">1장</a>).</p>
+<!--CODE file=ex/10/covreflect/Program.cs note=Clone 이라는 메서드를 모두 · newslot · 기반 정의 · 특성-->
+<!--CSVER v=9.0 file=ex/10/covreflect note=C# 14 / .NET 10 에서의 동작-->
+<div class="warn"><b>함정</b> — 리플렉션에는 <code>Clone</code> 이 둘입니다. <code>Tiger.Clone</code> 의 <code>GetBaseDefinition()</code> 은 자기 자신이라
+"<code>Animal.Clone</code> 을 재정의했다" 는 사실이 보통의 재정의 관계로 드러나지 않습니다. 이어 주는 것은
+<code>PreserveBaseOverridesAttribute</code> 뿐입니다. 이름으로 찾는 <code>GetMethod("Clone")</code> 은 모호하다고 던지지 않고 <code>Tiger</code> 쪽을 돌려줍니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-cov-rules">
+<h3>공변 반환이 안 되는 세 곳</h3>
+<p>제안서의 규칙: 재정의의 반환 형식은 기반 것으로 <b>암시적 참조 변환</b>이 돼야 하고(값 반환일 때만), 속성은 기반이 <b>읽기 전용</b>일 때만 좁힐 수
+있습니다. 인터페이스 멤버의 공변 반환은 "to be considered later" 로 남았습니다. <!--CITE key=prop-9-covariant-returns sec="Class Method Override"-->
+<!--CITE key=prop-9-covariant-returns sec="Class Property and Indexer Override"--></p>
+<!--CODE file=ex/10/covbad/Program.cs note=값 형식 · get/set 속성 · 인터페이스 구현 — 일부러 깨진 파일-->
+<!--CSVER v=9.0 file=ex/10/covbad note=C# 9.0-->
+<p class="cap"><code>object</code> 에서 <code>int</code> 는 박싱이라 참조 변환이 아니어서 옛 오류 <code>CS0508</code> 그대로입니다. get/set 속성은 <code>CS1715</code>
+에 더해, 좁힌 속성의 <code>set</code> 이 기반의 <code>set</code> 을 구현하지 못해 <code>CS0534</code> 까지 납니다. 인터페이스 구현은 <code>CS0738</code> — 반환
+형식이 정확히 같아야 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-cov-iface">
+<h3>제안서가 적은 깨지는 변경 — 일어나지 않았다</h3>
+<p>제안서의 뒷부분은 암시적 인터페이스 구현에도 공변 반환을 허용하는 안을 적고, 그러면 아래 프로그램이 "C1.M" 대신 "C2.M" 을 찍게 된다며 "Due to
+this breaking change, we might consider not supporting covariant return types on implicit implementations" 라고 덧붙입니다.
+<!--CITE key=prop-9-covariant-returns sec="Implicit Interface Implementations"--></p>
+<!--CODE file=ex/10/covimpl/Program.cs note=제안서의 예 그대로-->
+<!--CSVER v=9.0 file=ex/10/covimpl note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/covimpl note=C# 8.0-->
+<p class="cap">둘 다 "C1.M" 입니다. 설계 회의 목록의 마지막 줄 — "a decision to support overriding of class methods only in C# 9.0" — 대로, C# 9 의 공변 반환은
+클래스의 <code>override</code> 에만 들어왔습니다. <!--CITE key=prop-9-covariant-returns sec="Design meetings"--> 제안서의 문장을 기능의 동작으로 읽으면 안 되는
+예입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-extenum">
+<h3>확장 GetEnumerator (extension GetEnumerator) <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: "This will bring <code>foreach</code> inline with how other features in C# are implemented, including async and pattern-based
+deconstruction." 단점 절은 이것이 "things that weren't designed to be <code>foreach</code>ed" — 예컨대 <code>Range</code> — 도 돌게 한다고 적습니다.
+<!--CITE key=prop-9-extension-getenumerator sec="Motivation"--> <!--CITE key=prop-9-extension-getenumerator sec="Drawbacks"--></p>
+<!--CODE file=ex/10/eerange/Program.cs note=제안서가 단점으로 든 Range 를 정말로 foreach-->
+<!--CSVER v=9.0 file=ex/10/eerange note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/eerange note=C# 8.0 으로 내리면-->
+<p class="cap">whats-new 는 "you can add <code>foreach</code> support to any type" 이라고 하면서 "You should limit its use to when enumerating an object makes sense
+in your design" 이라고 못 박습니다. <!--CITE key=whatsnew-9 sec="Fit and finish features"--> 확장 <code>GetAwaiter</code>(<a href="#p6-v5-extawait">6부</a>)와
+확장 <code>Deconstruct</code>(<a href="#p8-v7-decon-ext">8부</a>)는 처음부터 됐고, <code>foreach</code> 만 C# 9 에서야 같은 줄에 섰습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-ee-order">
+<h3>확장은 마지막 후보 — 그리고 정수도 돈다</h3>
+<p>명세가 고친 <code>foreach</code> 의 순서: 인스턴스 <code>GetEnumerator</code> → <code>IEnumerable&lt;T&gt;</code>·<code>IEnumerable</code> 인터페이스 → 그래도
+없을 때 <b>확장</b> <code>GetEnumerator</code>. 원래라면 오류였을 때만 확장을 봅니다("when it would otherwise be an error").
+<!--CITE key=prop-9-extension-getenumerator sec="Summary"--> <!--CITE key=prop-9-extension-getenumerator sec="Detailed design"--></p>
+<!--CODE file=ex/10/eeorder/Program.cs note=이미 IEnumerable 인 Bag 에 확장을 더하면 · int 에 확장을 달면-->
+<!--CSVER v=9.0 file=ex/10/eeorder note=C# 9.0-->
+<div class="warn"><b>함정</b> — <code>Bag</code> 의 확장 메서드는 경고 하나 없이 <b>영영 불리지 않습니다</b>. 확장으로 순회 방식을 "바꿀" 수는 없고, 순회할 수
+없던 형식에 "붙일" 수만 있습니다. 반대로 <code>foreach (int x in 3)</code> 처럼 순회의 뜻이 모호한 코드도 컴파일됩니다 — 문서가 쓸모 있는 곳에만
+쓰라고 한 까닭입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-extenum-async">
+<h3>확장 GetAsyncEnumerator — await foreach 도 같이 <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: <code>await foreach</code> 의 규칙에서 "Extension methods do not contribute." 한 줄을 지우는 것이 바뀐 전부입니다. 게이트는 따로
+있어서 기능 이름이 <code>extension GetAsyncEnumerator</code> 입니다. <!--CITE key=prop-9-extension-getenumerator sec="Detailed design"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureExtensionGetAsyncEnumerator: // semantic check"--></p>
+<!--CODE file=ex/10/eeasync/Program.cs note=ChannelReader 를 그대로 await foreach-->
+<!--CSVER v=9.0 file=ex/10/eeasync note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/eeasync note=C# 8.0 으로 내리면-->
+<p class="cap"><code>ChannelReader&lt;T&gt;</code> 는 <code>ReadAllAsync()</code> 로 <code>IAsyncEnumerable</code> 을 내주지만 스스로는 순회할 수 없습니다. 확장 한
+줄이 그 사이를 잇습니다. <code>Task&lt;int[]&gt;</code> 에 확장을 붙인 첫 예는 <a href="#p6-v5-after-ext">6부</a>에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-lambda-discard">
+<h3>람다의 버리기 매개변수 (lambda discard parameters) <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: "Unused parameters do not need to be named." <code>_</code> 가 <b>둘 이상</b>일 때만 버리기이고, 하나뿐이면 "for backwards
+compatibility reasons" 보통 매개변수입니다. 버리기 매개변수는 "do not introduce any names to any scopes" — 바깥의 <code>_</code> 를 가리지도 않습니다.
+<!--CITE key=prop-9-lambda-discard-parameters sec="Motivation"--> <!--CITE key=prop-9-lambda-discard-parameters sec="Detailed design"--></p>
+<!--CODE file=ex/10/ldbasic/Program.cs note=형식을 적은 _ · 무명 메서드의 _ · 바깥에 _ 라는 지역 변수가 있으면-->
+<!--CSVER v=9.0 file=ex/10/ldbasic note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/ldbasic note=C# 8.0 으로 내리면-->
+<div class="warn"><b>함정</b> — 둘째 줄의 5 를 보십시오. <code>(_, _) =&gt; _</code> 의 몸체에 있는 <code>_</code> 는 매개변수가 아니라 <b>바깥의 지역 변수</b>
+<code>_</code>(값 5)입니다. 버리기는 이름을 만들지 않으니 이름 찾기가 바깥으로 나갑니다. <code>_ =&gt; _ * 10</code> 의 <code>_</code> 는 하나뿐이라 매개변수입니다.
+<code>_</code> 가 이름이기도 하다는 규칙은 <a href="#p8-v7-discard-lambda9">8부</a>에서 봤습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-locfn-attr">
+<h3>지역 함수의 특성 (local function attributes) <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: 메서드·매개변수·형식 매개변수에 붙어 뜻이 있는 특성은 지역 함수에 붙여도 같은 뜻입니다. <code>[Conditional]</code> 도 되지만
+"A conditional local function must also be <code>static</code>". whats-new 는 nullable 분석 특성을 예로 듭니다.
+<!--CITE key=prop-9-local-function-attributes sec="Attributes"--> <!--CITE key=whatsnew-9 sec="Fit and finish features"--></p>
+<!--CODE file=ex/10/lfaattr/Program.cs note=[NotNullWhen] 매개변수 · [Conditional] 지역 함수 — nullable 을 켠 프로젝트-->
+<!--CSVER v=9.0 file=ex/10/lfaattr note=C# 9.0-->
+<!--CSVER v=9.0 file=ex/10/lfaattr flags=-define:DEBUG tag=debug note=-define:DEBUG-->
+<!--CSVER v=9.0 file=ex/10/lfaattr flags=-define:BAD tag=bad note=-define:BAD — static 이 아닌 [Conditional]-->
+<!--CSVER v=8.0 file=ex/10/lfaattr note=C# 8.0 으로 내리면-->
+<p class="cap"><code>IsSet</code> 의 <code>[NotNullWhen(true)]</code> 덕에 12행의 <code>s.Length</code> 에 <code>CS8602</code> 가 없습니다. <code>Log</code> 호출은
+<code>DEBUG</code> 가 없으면 인자째 사라집니다. 특성을 리플렉션으로 읽는 예는 <a href="#p8-v7-locfn-attr9">8부</a>에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-lfa-extern">
+<h3>extern 지역 함수 <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 같은 제안서의 둘째 절: 지역 함수에 <code>extern</code> 이 허용되고, 몸체 자리는 세미콜론이며, "An external local function must also be
+<code>static</code>". <!--CITE key=prop-9-local-function-attributes sec="Extern"--> 특성과 짝을 이뤄야 쓸모가 있습니다 — <code>[DllImport]</code> 가 특성이기 때문입니다.</p>
+<!--CODE file=ex/10/lfaextern/Program.cs note=C 라이브러리의 abs 를 지역 함수로 선언-->
+<!--CSVER v=9.0 file=ex/10/lfaextern note=C# 9.0 — 이 기계의 libc 를 부른다-->
+<!--CSVER v=8.0 file=ex/10/lfaextern note=C# 8.0 으로 내리면-->
+<p class="cap">거절이 둘 — 특성(<code>local function attributes</code>)과 <code>extern</code>(<code>extern local functions</code>)이 따로 게이트를 가집니다. 문서
+세 곳 어디에도 <code>extern</code> 지역 함수의 이름은 없고(<a href="#p10-v9-docs">1장</a>), 기능 명세의 한 절과 컴파일러의 게이트에만 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p10-v9-fit-quiz" data-quiz>
+<h3>6장 퀴즈 — 다듬기</h3>
+<p class="q">Q. 다음 세 줄은 각각 무엇을 찍습니까? (가) <code>int? n = new(); Console.WriteLine(n.HasValue);</code>
+(나) <code>int _ = 5; Func&lt;int, int, int&gt; f = (_, _) =&gt; _; Console.WriteLine(f(1, 2));</code>
+(다) 포착 없는 <code>static x =&gt; x + 1</code> 대리자의 <code>Method.IsStatic</code></p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> (가) True — <code>new()</code> 는 바탕 형식 <code>int</code> 의 생성자라 0 을 가진 값입니다(<a href="#p10-v9-tn-work">tn-work</a>).
+(나) 5 — 버리기 매개변수는 이름을 만들지 않아 몸체의 <code>_</code> 는 바깥 지역 변수입니다(<a href="#p10-v9-lambda-discard">_</a>).
+(다) False — 이 컴파일러는 static 람다도 숨은 클래스의 인스턴스 메서드로 내보냅니다. <code>static</code> 은 포착을 막을 뿐입니다
+(<a href="#p10-v9-sl-cache">sl-cache</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-v9-gen"><p class="chnum">7장</p><h2>코드 생성기 지원과 nullable 보강</h2>
+<p class="chsub">소스 생성기 · 모듈 초기화자 · 구현이 반드시 있는 partial 메서드 · 제약 없는 T? · MemberNotNull · where T : default · static 멤버의 변성</p></article>
+
+<article class="card" id="p10-v9-srcgen">
+<h3>소스 생성기 (source generators) — 두 기능의 이유 <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — whats-new: 코드 생성기는 Roslyn 분석기와 비슷한 구성 요소로, "analyze code and write new source code files as part of the compilation
+process". 그리고 "Source generators can only add code; they aren't allowed to modify any existing code in the compilation." 이 장의 두 언어 기능은
+그 제약 때문에 들어왔습니다. <!--CITE key=whatsnew-9 sec="Support for code generators"--> 언어 버전 기록은 C# 9.0 목록 끝에 "Source Generators" 를 한
+줄로 적고 발표 글로 이어 둡니다. <!--CITE key=lvh sec="C# 9.0 - .NET 5 and Visual Studio 2019 version 16.8"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>생성기가 못 하는 것</th><th>그래서 생긴 고리</th><th>이 장</th></tr>
+<tr><td>사람이 쓴 메서드에 몸체를 넣기</td><td>사람이 선언하고 생성기가 구현하는 partial 메서드 — 값·<code>out</code>·접근 한정자까지</td><td><a href="#p10-v9-partial">partial</a></td></tr>
+<tr><td>사람이 쓴 <code>Main</code> 에 등록 호출을 끼우기</td><td>아무도 부르지 않아도 먼저 도는 메서드 <code>[ModuleInitializer]</code></td><td><a href="#p10-v9-modinit">모듈 초기화자</a></td></tr>
+</table></div>
+<div class="note"><b>이 덱에서 보이지 못하는 것</b> — 생성기는 컴파일러에 실리는 분석기 어셈블리입니다. 이 덱의 <code>csrun</code>(<a href="#p0-csrun">0부</a>)은 분석기를
+싣지 않으므로 생성기가 돈 캡처는 없습니다. 아래 예제의 "생성된 조각" 은 손으로 쓴 대역이고, 그렇다고 파일 첫머리에 적어 두었습니다.</div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p10-v9-modinit">
+<h3>모듈 초기화자 (module initializers) <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: .NET 플랫폼에는 어셈블리(정확히는 모듈)의 초기화 코드를 쓰는 기능이 있었지만 C# 에 드러나 있지 않았습니다. 동기는 셋 — 라이브러리가
+"eager, one-time initialization" 을 하게, 정적 생성자의 실행 여부 검사 비용을 피하게, 그리고 "Enable source generators to run some global initialization
+logic without the user needing to explicitly call anything". <!--CITE key=prop-9-module-initializers sec="Summary"--> <!--CITE key=prop-9-module-initializers sec="Motivation"--></p>
+<!--CODE file=ex/10/mibasic/Program.cs note=생성기가 썼다고 치는 GeneratedSetup.Init — 아무도 부르지 않는다-->
+<!--CSVER v=9.0 file=ex/10/mibasic note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/mibasic note=C# 8.0 으로 내리면-->
+<p class="cap"><code>Main</code> 이 시작할 때 목록은 이미 차 있습니다. 거절은 특성이 붙은 14행 한 곳 — 게이트가 메서드의 특성에서 확인됩니다("semantic check on
+method attribute"). <!--CITE key=msgid sec="case MessageID.IDS_FeatureModuleInitializers: // semantic check on method attribute"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-mi-order">
+<h3>누가 먼저 도는가 — 모듈 초기화자와 정적 생성자</h3>
+<p>제안서는 초기화자가 여럿이면 컴파일러가 모두 부르되 차례는 "reserved, but deterministic" 이라고만 적습니다. whats-new 는 런타임이 "before any other field
+access or method invocation within the entire module" 에 부른다고 적습니다. <!--CITE key=prop-9-module-initializers sec="Detailed design"-->
+<!--CITE key=whatsnew-9 sec="Support for code generators"--></p>
+<!--CODE file=ex/10/miorder/Program.cs note=초기화자 둘(Zeta 가 먼저 선언) · 정적 생성자 둘-->
+<!--CSVER v=9.0 file=ex/10/miorder note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">이 컴파일러에서는 소스에 선언된 차례(<code>Zeta</code> → <code>Alpha</code>)입니다 — 다만 명세가 약속한 차례가 아니므로 기대면 안 됩니다.
+<code>Config</code> 의 정적 생성자는 <code>InitA</code> 가 필드를 읽는 순간에 돌고, <code>App</code> 의 정적 생성자는 초기화자가 다 끝난 뒤 <code>Main</code>
+바로 앞에 돕니다. 초기화자 안에서 건드린 형식의 정적 생성자는 초기화자 도중에 돈다는 뜻입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-mi-meta">
+<h3>컴파일러가 만드는 것 — &lt;Module&gt; 의 정적 생성자</h3>
+<p>제안서: 특성이 붙은 메서드가 있으면 "the compiler will emit a module initializer which calls each of the attributed methods". 그 모듈 초기화자가 어디에
+들어가는지, 실행 중인 자기 어셈블리 파일을 <code>System.Reflection.Metadata</code> 로 열어 봅니다.
+<!--CITE key=prop-9-module-initializers sec="Detailed design"--></p>
+<!--CODE file=ex/10/mimeta/Program.cs note=&lt;Module&gt; 형식의 메서드와 IL 바이트 · call 토큰을 메서드 이름으로-->
+<!--CSVER v=9.0 file=ex/10/mimeta note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">자리는 특별한 형식 <code>&lt;Module&gt;</code> 의 정적 생성자 <code>.cctor</code> 입니다. IL 은 11바이트 — <code>28</code>(call)과 4바이트 토큰이 두 번, 끝의 <code>2A</code>(ret)입니다. 리플렉션의 <code>GetTypes()</code> 에는
+<code>&lt;Module&gt;</code> 이 나오지 않아 메타데이터를 직접 읽었습니다. 이 예제의 IL 해석은 <code>call</code> 만 있다고 가정한 것이라 다른 메서드에 쓰면 안 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-mi-rules">
+<h3>모듈 초기화자가 될 수 없는 메서드 — CS8813–CS8816</h3>
+<p>제안서의 조건: static, 매개변수 없음, <code>void</code> 반환, 제네릭이 아니고 제네릭 형식 안에 있지 않음, 모듈 안에서 접근 가능(실효 접근성
+<code>internal</code> 이나 <code>public</code>) — "This also means the method cannot be a local function". <!--CITE key=prop-9-module-initializers sec="Detailed design"--></p>
+<!--CODE file=ex/10/mibad/Program.cs note=조건 하나씩 어긴 메서드 · LOCAL 이면 지역 함수만-->
+<!--CSVER v=9.0 file=ex/10/mibad note=C# 9.0-->
+<!--CSVER v=9.0 file=ex/10/mibad flags=-define:LOCAL tag=local note=-define:LOCAL — 지역 함수에 붙이면-->
+<p class="cap">오류 번호 넷이 조건 넷에 대응합니다 — 꼴(<code>CS8815</code>), 제네릭(<code>CS8816</code>), 접근성(<code>CS8814</code>), 보통 멤버 메서드가 아님
+(<code>CS8813</code>). 지역 함수 쪽을 따로 컴파일한 것은 형식 선언의 오류가 있으면 메서드 몸체 안의 오류가 보고되지 않기 때문입니다. 지역 함수에 특성을 붙이는
+것 자체는 <a href="#p10-v9-locfn-attr">6장</a>의 기능으로 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-partial">
+<h3>partial 메서드의 확장 (extended partial methods) <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: C# 3 의 partial 메서드는 구현이 없으면 호출째 지워야 해서 <code>void</code> 반환, <code>out</code> 없음, 접근 한정자 없음이라는 제약이
+있었습니다. C# 9 는 그 제약을 풀고, 대신 그런 선언은 "a definition must exist" 를 요구합니다. 그러면 사람이 선언하고 생성기가 구현하는 반대 방향이 됩니다.
+<!--CITE key=prop-9-extending-partial-methods sec="Motivation"--> <!--CITE key=prop-9-extending-partial-methods sec="Detailed Design"--></p>
+<!--CODE file=ex/10/pmgen/Program.cs note=사람이 쓰는 조각 — 값 반환 · out · internal · virtual 이면서 인터페이스 구현-->
+<!--CODE file=ex/10/pmgen/Gen.cs note=생성기가 쓸 조각 — 손으로 쓴 대역-->
+<!--CSVER v=9.0 file=ex/10/pmgen note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/pmgen note=C# 8.0 으로 내리면-->
+<p class="cap">거절은 선언 셋과 구현 셋에 하나씩, 여섯입니다. <code>GetName</code> 은 <code>virtual</code> 이면서 인터페이스 <code>INamed</code> 를 구현합니다 —
+제안서의 <code>IStudent</code> 예와 같은 꼴입니다. C# 3 의 제약이 왜 있었는지와 "인자째 지워진다" 는 <a href="#p4-v3-partial-args">4부</a>에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-pm-rules">
+<h3>옛 규칙과 새 규칙 — 접근 한정자가 가른다</h3>
+<p>whats-new: 깨지는 변경을 피하려고 "the compiler considers any partial method without an access modifier to follow the old rules. If the partial method includes
+the <code>private</code> access modifier, the new rules govern". 제안서의 <code>M1</code>/<code>M2</code>/<code>M3</code> 예와 두 조각이 어긋나는 경우를 넣었습니다.
+<!--CITE key=whatsnew-9 sec="Support for code generators"--> <!--CITE key=prop-9-extending-partial-methods sec="Detailed Design"--></p>
+<!--CODE file=ex/10/pmbad/Program.cs note=구현 없는 M1 과 M3 · 접근 한정자가 다른 M4 · 매개변수 이름만 다른 M5-->
+<!--CSVER v=9.0 file=ex/10/pmbad note=C# 9.0-->
+<p class="cap"><code>M1</code> 은 구현이 없어도 됩니다(옛 규칙, 호출째 사라짐). 똑같이 private 인 <code>M3</code> 은 <code>private</code> 을 <b>적었다는 것만으로</b>
+<code>CS8795</code> 입니다. 접근 한정자가 다르면 <code>CS8799</code>. 매개변수 이름(<code>x</code> 와 <code>y</code>)은 달라도 됩니다 — 제안서가 "the only aspects
+which can differ are parameter names and attribute lists" 라고 적은 대로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-pm-regex">
+<h3>생성기가 채울 자리 — 생성기 없이 컴파일하면</h3>
+<p>제안서의 동기 절은 정규식을 예로 듭니다 — <code>[RegexGenerated("(dog|cat|fish)")] partial bool IsPetMatch(string input);</code> 처럼 선언만 하면 생성기가
+구현을 쓰는 꼴입니다. <!--CITE key=prop-9-extending-partial-methods sec="Motivation"--> .NET 10 의 라이브러리에는 이름이 비슷한 <code>GeneratedRegexAttribute</code>
+가 있습니다. 같은 패턴으로 선언하고 생성기 없이 컴파일합니다.</p>
+<!--CODE file=ex/10/pmregex/Program.cs note=[GeneratedRegex] 와 몸체 없는 private static partial 메서드-->
+<!--CSVER v=9.0 file=ex/10/pmregex note=C# 9.0 · 분석기 없이-->
+<p class="cap">특성 이름은 풀렸고(형식을 찾지 못했다는 오류가 없습니다), 거절은 "구현이 있어야 한다" 는 <code>CS8795</code> 하나입니다. 이 선언은 구현 조각을
+누군가 — 여기서는 생성기 — 가 더해 줄 때만 컴파일됩니다. 이 덱은 생성기를 싣지 않으므로(<a href="#p10-v9-srcgen">앞에서</a>) 생성기가 쓴 조각은 보이지
+않습니다. partial 은 그 뒤 속성(C# 13)과 생성자·이벤트(C# 14)로 넓어집니다(<a href="#p3-v2-partial-later">3부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-nullable9">
+<h3>제약 없는 T? (unconstrained T?) <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: "In C#9, <code>?</code> annotations can be applied to any type parameter, regardless of constraints." <code>T</code> 가 값 형식으로
+대체되면 "<code>T?</code> represents an instance of <code>T</code>" — <code>Nullable&lt;T&gt;</code> 가 아닙니다. 반환값의 <code>T?</code> 는 <code>[MaybeNull]T</code>
+와 같습니다. <!--CITE key=prop-9-unconstrained-type-parameter-annotations sec="? annotation"--></p>
+<!--CODE file=ex/10/nltq/Program.cs note=제약 없는 T? 와 struct 제약의 T? 를 리플렉션으로 — nullable 을 켠 프로젝트-->
+<!--CSVER v=9.0 file=ex/10/nltq note=C# 9.0-->
+<p class="cap"><code>Any&lt;int&gt;</code> 의 반환 형식은 그냥 <code>Int32</code> 이고 nullable 정보도 <code>NotNull</code> 입니다 — 제약 없는 <code>T?</code> 는 형식이
+아니라 <b>주석</b>이라 런타임 형식을 바꾸지 않습니다. <code>where T : struct</code> 의 <code>T?</code> 만 <code>Nullable`1</code> 입니다. C# 8.0 으로 내리면
+<code>CS8627</code> 인데, 그 한 줄이 200칸을 넘어 싣지 않았습니다(실험 묶음이 확인만 합니다). 이 기능을 처음 소개한 장은
+<a href="#p9-v8-nrt-tq">9부</a>입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-nl-mnn">
+<h3>[MemberNotNull] 과 [MemberNotNullWhen] <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 메서드나 속성이 "이것이 끝나면(또는 true 를 돌려주면) 이 멤버는 null 이 아니다" 라고 알리는 특성입니다. 라이브러리의 특성일 뿐인데 컴파일러가
+C# 9 로 확인하는 게이트를 따로 둡니다. <!--CITE key=msgid sec="case MessageID.IDS_FeatureMemberNotNull:"--> 제안서는 메서드를 나갈 때 멤버가 아직 null 일 수
+있으면 경고하는 것을 "the behavior we have shipped for <code>[MemberNotNull]</code>" 이라 부릅니다. <!--CITE key=prop-9-nullable-constructor-analysis sec="Consequences of this approach"--></p>
+<!--CODE file=ex/10/nlmnn/Program.cs note=Loaded 가 true 면 Text 는 null 이 아니다 · Load 가 끝나면 Text 는 null 이 아니다-->
+<!--CSVER v=9.0 file=ex/10/nlmnn note=C# 9.0 — 경고 0-->
+<!--CSVER v=9.0 file=ex/10/nlmnn flags=-define:BAD tag=bad note=-define:BAD — 약속을 어기면-->
+<!--CSVER v=8.0 file=ex/10/nlmnn note=C# 8.0 으로 내리면-->
+<div class="warn"><b>함정</b> — 약속을 어기면 컴파일러는 <b>메서드를 나가는 자리</b>(20행의 닫는 중괄호)에 <code>CS8774</code> 를 냅니다. 경고일 뿐이라 프로그램은
+돌고, 31행에서 그 약속을 믿은 <code>a.Text.Length</code> 가 <code>NullReferenceException</code> 으로 죽습니다. 생성자에서 쓰는 기본 꼴은
+<a href="#p9-v8-nrt-membernotnull">9부</a>에 있습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-nl-default">
+<h3>where T : default — 재정의의 T? <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: 재정의·명시적 구현 메서드의 <code>T?</code> 는 호환성 때문에 <code>Nullable&lt;T&gt;</code> 로 읽힙니다. 제약 없는 <code>T?</code> 를 뜻하려면
+표시가 필요해 "C#9 allows a new <code>where T : default</code> constraint" 가 생겼습니다. 반환의 <code>T?</code> 는 <code>[MaybeNull]T</code>, 인수의 <code>T?</code> 는
+<code>[AllowNull]T</code> 와 같아서 C# 8 식 특성으로 선언한 기반 메서드를 재정의할 수 있습니다. <!--CITE key=prop-9-unconstrained-type-parameter-annotations sec="default constraint"-->
+<!--CITE key=prop-9-unconstrained-type-parameter-annotations sec="? annotation"--></p>
+<!--CODE file=ex/10/nldefault/Program.cs note=제안서의 A/B — 특성으로 쓴 기반을 T? 로 재정의-->
+<!--CSVER v=9.0 file=ex/10/nldefault note=C# 9.0 — 경고 0-->
+<!--CSVER v=9.0 file=ex/10/nldefault flags=-define:BAD tag=bad note=-define:BAD — 재정의가 아닌 곳에-->
+<p class="cap">특성(<code>[MaybeNull]</code>)과 <code>T?</code> 가 서로를 재정의해도 경고가 없습니다 — 둘이 같은 뜻이라는 제안서의 말 그대로입니다. 재정의가 아닌 곳의
+<code>default</code> 제약은 <code>CS8823</code>. C# 8.0 으로 내리면 <code>T?</code> 의 <code>CS8627</code> 둘과 'default type parameter constraints' 거절 둘이 나오는데,
+앞의 줄이 200칸을 넘어 싣지 않았습니다. 제안서의 <code>A2</code>/<code>B2</code> 꼴은 <a href="#p9-v8-overcon-default">9부</a>에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-nl-ctor">
+<h3>생성자의 nullable 분석 — 언어 버전에 묶이지 않은 변화 <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: C# 8 의 생성자 분석은 확정 할당에 기대어, 생성자 안에서 아직 쓰지 않은 속성을 읽어도 경고가 없고(<code>Prop.ToString()</code>), 도우미 메서드로
+채운 뒤 <code>throw</code> 로 확인해도 "unexpected warning" 을 냈습니다. 새 방식은 멤버를 maybe-null 로 시작해 생성자를 나갈 때 확인합니다.
+<!--CITE key=prop-9-nullable-constructor-analysis sec="Problems with the definite-assignment based approach"--> <!--CITE key=prop-9-nullable-constructor-analysis sec="Proposed approach"--></p>
+<!--CODE file=ex/10/nlctor/Program.cs note=제안서의 두 예 — C 는 Init() 뒤 throw, D 는 쓰기 전에 읽기-->
+<!--CSVER v=9.0 file=ex/10/nlctor note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/nlctor note=같은 파일을 C# 8.0 으로-->
+<p class="cap">두 캡처가 같습니다 — <code>C</code> 에는 <code>CS8618</code> 이 없고, <code>D</code> 의 24행에는 <code>CS8602</code> 가 납니다. 제안서가 고치려던 두 문제가
+<b>8.0 으로 컴파일해도</b> 새 방식대로입니다. 이 분석은 언어 버전이 아니라 컴파일러 버전을 따릅니다(꼴 (나)가 아닙니다 — <a href="#p0-evidence">0부</a>). 옛 동작은 지금의
+컴파일러로 보일 수 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-v9-varstatic">
+<h3>인터페이스 static 멤버의 변성 <span class="vt v9">C# 9.0</span></h3>
+<p class="why">왜 — 제안서: <code>out T</code> 인터페이스의 static 필드는 되는데 같은 꼴의 static 속성·메서드·이벤트는 <code>CS1961</code> 이었습니다. static 이고 가상이
+아니니 "there aren't any safety issues here". 그래서 변성 안전성 규칙은 "do not apply to occurrences of types within declarations of static members".
+<!--CITE key=prop-9-variance-safety-for-static-interface-members sec="Motivation"--> <!--CITE key=prop-9-variance-safety-for-static-interface-members sec="Variance safety"--></p>
+<!--CODE file=ex/10/v9varstatic/Program.cs note=제안서의 I&lt;out T&gt; — 필드 · 속성 · 메서드, 그리고 T 를 받는 static 메서드-->
+<!--CSVER v=9.0 file=ex/10/v9varstatic note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/v9varstatic note=C# 8.0 으로 내리면-->
+<p class="cap">8.0 의 거절은 기능 이름을 단 <code>CS8400</code> 이 아니라 전용 문장 <code>CS8904</code> 이고, 제안서가 적은 <code>CS1961</code> 도 아닙니다. 공변 <code>T</code>
+를 <b>받는</b> <code>Echo(T t)</code> 까지 C# 9 에서 됩니다 — 인스턴스 멤버였다면 변성이 깨지는 자리입니다. 인터페이스의 static 멤버 자체는 C# 8 의 기본 인터페이스
+메서드(<a href="#p9-v8-dim-mods">9부</a>)에서 왔습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p10-v9-gen-quiz" data-quiz>
+<h3>7장 퀴즈 — 생성기와 nullable</h3>
+<p class="q">Q. 두 파일로 된 <code>partial class C</code> 에 (가) <code>partial void OnSaved();</code> (나) <code>private partial void OnLoaded();</code> 를 선언하고
+어느 쪽도 구현하지 않았습니다. 어느 것이 컴파일됩니까? 그리고 (다) <code>static T? Any&lt;T&gt;() =&gt; default;</code> 의 <code>Any&lt;int&gt;()</code> 는
+null 을 돌려줍니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> (가)만 컴파일됩니다 — 접근 한정자가 없으면 C# 3 의 옛 규칙이라 구현이 없어도 되고 호출째 사라집니다. (나)는 똑같이 private 이지만
+<code>private</code> 을 적었으므로 새 규칙이라 <code>CS8795</code> 입니다(<a href="#p10-v9-pm-rules">pm-rules</a>). (다) 아닙니다 — 0 입니다. 제약 없는 <code>T?</code>
+는 값 형식에서 <code>T</code> 그 자체이고, 반환 형식도 <code>Int32</code> 입니다(<a href="#p10-v9-nullable9">nullable9</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-sum"><p class="chnum">8장</p><h2>10부 정리 — C# 9.0 을 한 장씩 다시</h2>
+<p class="chsub">기능 지도 · 8.0 으로 내린 표 · 같은 프로그램 두 벌 · 문서와 어긋난 곳 · C# 10 으로</p></article>
+
+<article class="card" id="p10-sum-map1">
+<h3>C# 9.0 의 기능 지도 (1) — 데이터, 진입점, 패턴</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>기능</th><th>한 줄</th><th>장</th></tr>
+<tr><td>레코드 <code>record</code></td><td>내용으로 비교되는 참조 형식 — 위치 레코드, 값 동등성, <code>ToString</code></td><td><a href="#p10-v9-records">2장</a> · <a href="#p10-v9-rec-positional">위치</a> · <a href="#p10-v9-rec-equality">동등성</a> · <a href="#p10-v9-rec-tostring">출력</a></td></tr>
+<tr><td><code>with</code> 식</td><td>복제한 뒤 init 으로 고치는 비파괴 변경</td><td><a href="#p10-v9-with">with</a> · <a href="#p10-v9-with-lower">번역</a></td></tr>
+<tr><td><code>init</code> 접근자</td><td>생성 단계에서만 쓰는 setter, <code>modreq(IsExternalInit)</code></td><td><a href="#p10-v9-init">init</a> · <a href="#p10-v9-init-modreq">메타데이터</a></td></tr>
+<tr><td>최상위 문</td><td><code>Main</code> 없이 파일 첫머리에 문 — <code>Program.&lt;Main&gt;$</code></td><td><a href="#p10-v9-toplevel">3장</a> · <a href="#p10-v9-top-main">생성</a></td></tr>
+<tr><td>관계·논리·괄호·형식 패턴</td><td><code>&lt; 0</code> · <code>and</code> · <code>or</code> · <code>not</code> · <code>( )</code> · 이름 없는 형식</td><td><a href="#p10-v9-patterns">4장</a> · <a href="#p10-v9-pat-andor">and/or</a> · <a href="#p10-v9-pat-notnull">not null</a> · <a href="#p10-v9-pat-type">형식</a></td></tr>
+<tr><td>.NET 5 · 경고 웨이브 5</td><td>짝이 된 런타임, <code>-warn:5</code> 에서만 켜지는 경고</td><td><a href="#p10-v9-net5">1장</a> · <a href="#p10-v9-wave5">웨이브</a></td></tr>
+</table></div>
+<p class="cap">발표 글이 꼽은 이번 버전의 초점 — "terse and immutable representation of data shapes" — 이 이 표의 위 세 줄입니다(<a href="#p10-intro">10부를 읽는 법</a>).</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-sum-map2">
+<h3>C# 9.0 의 기능 지도 (2) — 성능, 다듬기, 생성기, nullable</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>기능</th><th>한 줄</th><th>장</th></tr>
+<tr><td><code>nint</code> · 함수 포인터 · <code>[SkipLocalsInit]</code></td><td>네이티브 크기 정수, <code>delegate*</code>, 0 채우기 생략</td><td><a href="#p10-v9-nint">5장</a> · <a href="#p10-v9-fnptr">fnptr</a> · <a href="#p10-v9-localsinit">localsinit</a></td></tr>
+<tr><td>대상 형식 <code>new()</code> · 대상 형식 <code>?:</code></td><td>형식을 문맥에서 받는 식 둘</td><td><a href="#p10-v9-targetnew">6장</a> · <a href="#p10-v9-targetcond">?:</a></td></tr>
+<tr><td><code>static</code> 익명 함수 · <code>_</code> 매개변수</td><td>포착 금지 표시, 이름 없는 매개변수</td><td><a href="#p10-v9-static-lambda">static</a> · <a href="#p10-v9-lambda-discard">_</a></td></tr>
+<tr><td>공변 반환</td><td>클래스의 <code>override</code> 만, 런타임 기능이 필요</td><td><a href="#p10-v9-covariant">공변</a> · <a href="#p10-v9-cov-meta">메타데이터</a></td></tr>
+<tr><td>확장 <code>GetEnumerator</code>·<code>GetAsyncEnumerator</code></td><td><code>foreach</code>·<code>await foreach</code> 가 마지막에 확장을 찾는다</td><td><a href="#p10-v9-extenum">foreach</a> · <a href="#p10-v9-extenum-async">await</a></td></tr>
+<tr><td>지역 함수의 특성 · <code>extern</code></td><td>메서드의 특성이 지역 함수에도</td><td><a href="#p10-v9-locfn-attr">특성</a> · <a href="#p10-v9-lfa-extern">extern</a></td></tr>
+<tr><td>모듈 초기화자 · partial 메서드의 확장</td><td>소스 생성기가 기대는 고리 둘</td><td><a href="#p10-v9-srcgen">7장</a> · <a href="#p10-v9-modinit">초기화자</a> · <a href="#p10-v9-partial">partial</a></td></tr>
+<tr><td>제약 없는 <code>T?</code> · <code>MemberNotNull</code> · <code>where T : default</code></td><td>nullable 참조 형식의 빈자리 메우기</td><td><a href="#p10-v9-nullable9">T?</a> · <a href="#p10-v9-nl-mnn">MemberNotNull</a> · <a href="#p10-v9-nl-default">default</a></td></tr>
+<tr><td>static 멤버의 변성</td><td>인터페이스 static 멤버는 변성 검사에서 빠진다</td><td><a href="#p10-v9-varstatic">변성</a></td></tr>
+</table></div>
+<p class="cap">이 표와 <a href="#p10-v9-overview">1장의 개관 표</a>는 같은 기능 목록(data/features/p10*.tsv)에서 왔습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-sum-gates">
+<h3>6장·7장의 예제를 C# 8.0 으로 내리면 — 캡처에서 뽑은 표</h3>
+<p>이 조각의 언어 버전 짝(가)을 한데 모았습니다. 칸은 캡처에서 기계로 뽑았고, 오류 줄이 200칸을 넘어 캡처를 싣지 않은 셋도 실험 묶음이 같은 방법으로 뽑았습니다.</p>
+<!--TABLE file=out/tbl_p10c_gates8.html-->
+<p class="cap">대부분은 <code>CS8400</code>("C# 8.0 에는 없다")에 기능 이름을 답니다. 예외는 셋 — static 멤버의 변성(<code>CS8904</code>), 대상 형식 조건식(<code>CS8957</code>),
+제약 없는 <code>T?</code>(<code>CS8627</code>)는 "unless language version '9.0' or greater is used" 를 품은 전용 문장입니다. 그래서 게이트 이름
+<code>variance safety for static interface members</code> 는 어떤 진단에도 나오지 않습니다. extern 지역 함수는 <code>[DllImport]</code> 까지 걸려 이름이 둘입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-sum-v8">
+<h3>같은 프로그램 (1) — C# 8.0 으로 쓰면</h3>
+<p>도시 넷의 기온을 분류하는 작은 프로그램입니다. 불변 클래스와 동등성을 손으로 쓰고, switch 식의 <code>when</code> 가드로 범위를 나눕니다.</p>
+<!--CODE file=ex/10/v9old/Program.cs lines=1-19 note=불변 클래스 Reading — 동등성·해시·출력을 손으로-->
+<!--CODE file=ex/10/v9old/Program.cs lines=20-47 note=Label 과 Main-->
+<!--CSVER v=8.0 file=ex/10/v9old note=C# 8.0-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-sum-v9">
+<h3>같은 프로그램 (2) — C# 9.0 으로 쓰면</h3>
+<p>같은 일을 이 부의 기능으로 다시 씁니다. 출력은 한 글자도 다르지 않습니다.</p>
+<!--CODE file=ex/10/v9new/Program.cs note=최상위 문 · new() · static 람다 · with · is not null · 관계 패턴 · record-->
+<!--CSVER v=9.0 file=ex/10/v9new note=C# 9.0-->
+<!--CSVER v=8.0 file=ex/10/v9new note=C# 8.0 으로 내리면-->
+<div class="warn"><b>함정</b> — 8.0 의 오류 셋 어디에도 C# 9 의 기능 이름이 없습니다. 29행의 <code>sealed record Reading(…);</code> 은 8.0 의 규칙으로는 전역에 놓인
+<b><code>record</code> 형식을 돌려주는 메서드</b>이고(<code>CS0116</code>·<code>CS0246</code>·<code>CS0238</code>), 그 선언 오류가 최상위 문·<code>new()</code>·<code>with</code>·관계 패턴의
+거절을 모두 가립니다. 레코드 한 줄의 비슷한 함정은 <a href="#p10-v9-records">2장</a>에서 봤습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p10-sum-diff">
+<h3>두 벌의 차이 — 줄마다 어느 장인가</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>C# 8.0</th><th>C# 9.0</th><th>장</th></tr>
+<tr><td>불변 클래스 + <code>Equals</code>·<code>GetHashCode</code>·<code>ToString</code> 손으로</td><td><code>sealed record Reading(string City, double Temp);</code></td><td><a href="#p10-v9-records">2장</a></td></tr>
+<tr><td><code>WithTemp(22)</code> 메서드</td><td><code>list[2] with { Temp = 22 }</code></td><td><a href="#p10-v9-with">2장</a></td></tr>
+<tr><td><code>class Program</code> + <code>static void Main()</code></td><td>최상위 문, <code>Label</code> 은 지역 함수</td><td><a href="#p10-v9-toplevel">3장</a> · <a href="#p10-v9-top-locfn">지역 함수</a></td></tr>
+<tr><td><code>double t when t &gt;= 0 &amp;&amp; t &lt; 15</code></td><td><code>&lt; 15 =&gt; "cool"</code></td><td><a href="#p10-v9-patterns">4장</a></td></tr>
+<tr><td><code>!(o is null)</code></td><td><code>o is not null</code></td><td><a href="#p10-v9-pat-notnull">4장</a></td></tr>
+<tr><td><code>new List&lt;Reading&gt;</code> · <code>new Reading(…)</code> 넷</td><td><code>new()</code> · <code>new(…)</code></td><td><a href="#p10-v9-targetnew">6장</a></td></tr>
+<tr><td><code>r =&gt; r.Temp &gt;= 15</code></td><td><code>static r =&gt; …</code></td><td><a href="#p10-v9-static-lambda">6장</a></td></tr>
+</table></div>
+<p class="cap">8.0 판이 47줄, 9.0 판이 29줄입니다. 줄어든 몫의 대부분은 레코드 한 줄이 대신한 클래스 몸체입니다. 9.0 판의 관계 패턴은 위에서부터 차례로 맞춰 보므로
+<code>&lt; 15</code> 갈래에 "0 이상" 을 다시 적지 않아도 됩니다 — 8.0 판의 <code>when</code> 가드는 그것을 일일이 적었습니다.</p>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p10-sum-docs">
+<h3>이 조각에서 문서와 컴파일러가 어긋난 곳</h3>
+<p>6장·7장을 쓰며 기능 명세의 문장과 이 기계의 컴파일러·런타임이 다르게 말한 곳을 모았습니다. 판정은 늘 캡처 쪽입니다(<a href="#p0-oracle">0부</a>).</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>문서</th><th>이 기계</th><th>장</th></tr>
+<tr><td>조건식 제안서: <code>N(b ? 1 : 2, 1)</code> 이 모호해진다</td><td>8.0·9.0 모두 <code>N(long)</code> — 공통 형식이 있어 새 변환이 끼지 않는다</td><td><a href="#p10-v9-tc-over">6장</a></td></tr>
+<tr><td>공변 반환 제안서: 암시적 인터페이스 구현이 "C2.M" 을 찍게 된다</td><td>"C1.M" — 클래스의 <code>override</code> 에만 들어왔다</td><td><a href="#p10-v9-cov-iface">6장</a></td></tr>
+<tr><td>변성 제안서: static 속성·메서드는 <code>CS1961</code></td><td>8.0 에서 <code>CS8904</code> — 언어 버전을 말하는 전용 문장</td><td><a href="#p10-v9-varstatic">7장</a></td></tr>
+<tr><td>생성자 분석 제안서: C# 8 의 분석은 <code>Prop.ToString()</code> 을 놓친다</td><td>8.0 으로 컴파일해도 <code>CS8602</code> — 언어 버전이 아니라 컴파일러를 따른다</td><td><a href="#p10-v9-nl-ctor">7장</a></td></tr>
+<tr><td>모듈 초기화자 제안서: 차례는 "reserved"</td><td>선언 차례로 불렸다 — 약속은 아니다</td><td><a href="#p10-v9-mi-order">7장</a></td></tr>
+<tr><td>static 익명 함수 제안서: static 메서드가 될지는 보장하지 않는다</td><td>맞다 — 포착 없는 보통 람다와 똑같이 인스턴스 메서드, 같은 캐시</td><td><a href="#p10-v9-sl-cache">6장</a></td></tr>
+</table></div>
+<p class="cap">위 넷은 제안서가 설계 도중의 걱정이나 옛 컴파일러의 동작을 적은 것이고, 아래 둘은 일부러 열어 둔 것입니다. 어느 쪽이든 제안서의 문장을 지금 기능의 동작으로
+옮겨 적었다면 이 덱은 틀렸을 것입니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p10-sum-cs10">
+<h3>C# 10 이 이어받는 것</h3>
+<p>버전 기록은 C# 10 이 "removing ceremony, separating data from algorithms, and improved performance for the .NET Runtime" 의 일을 잇는다고 적습니다.
+<!--CITE key=history sec="C# version 10"--> C# 9 에서 시작된 줄을 따라가면 이렇습니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>C# 9.0 (이 부)</th><th>C# 10 (11부)</th></tr>
+<tr><td>레코드는 클래스뿐</td><td><code>record struct</code>, 그리고 <code>record class</code> 라는 이름(<a href="#p10-v9-rec-struct10">2장의 예고</a>)</td></tr>
+<tr><td><code>with</code> 는 레코드에만</td><td>구조체와 익명 형식에도 <code>with</code>(<a href="#p10-v9-with-struct10">예고</a>)</td></tr>
+<tr><td>레코드의 <code>ToString</code> 은 파생 레코드가 다시 만든다</td><td><code>sealed override ToString</code>(<a href="#p10-v9-rec-sealed10">예고</a>)</td></tr>
+<tr><td>최상위 문 — 그래도 <code>using</code> 줄은 남는다</td><td><code>global using</code> 과 파일 범위 네임스페이스(<a href="#p10-v9-top-global10">예고</a> · <a href="#p10-v9-top-ns">namespace X;</a>)</td></tr>
+<tr><td>지역 함수에 특성</td><td>람다에 특성, 람다의 자연 형식과 반환 형식</td></tr>
+<tr><td>관계·논리 패턴</td><td>확장 속성 패턴 <code>{ A.B: 1 }</code>(<a href="#p10-v9-pat-later">예고</a>)</td></tr>
+</table></div>
+<p class="cap">C# 10 은 .NET 6 과 함께 나왔고, 버전 기록은 이때를 "more of a shift to the yearly cadence for .NET releases" 라고 적습니다. 이 이야기는 11부에서 이어집니다.
+<!--CITE key=history sec="C# version 10"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p10-quiz" data-quiz>
+<h3>10부 퀴즈 1 — 런타임이 필요한 것, 컴파일러만으로 되는 것</h3>
+<p class="q">Q. C# 9.0 의 기능 가운데 (가) 공변 반환 (나) <code>init</code> 접근자 (다) 대상 형식 <code>new()</code> (라) <code>[ModuleInitializer]</code> (마) static 람다를
+"런타임의 새 기능이 있어야 함", "라이브러리에 형식 하나만 있으면 됨", "컴파일러만으로 됨" 으로 나누면?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 런타임 기능 — (가). 좁힌 재정의는 새 슬롯과 <code>PreserveBaseOverridesAttribute</code> 로 나가고, 그것을 잇는 것은 런타임의
+<code>CovariantReturnsOfClasses</code> 입니다(<a href="#p10-v9-cov-meta">cov-meta</a>). 형식 하나 — (나)의 <code>IsExternalInit</code>(직접 선언해도 됩니다,
+<a href="#p10-v9-init-poly">init-poly</a>)와 (라)의 <code>ModuleInitializerAttribute</code>. 모듈 초기화자를 부르는 <code>&lt;Module&gt;</code> 의 정적 생성자 자체는
+CLR 에 원래 있던 자리입니다(<a href="#p10-v9-mi-meta">mi-meta</a>). 컴파일러만 — (다)와 (마). <code>new()</code> 는 보통의 생성자 호출로, static 람다는 보통 람다와
+같은 코드로 나갑니다(<a href="#p10-v9-tn-tree">tn-tree</a> · <a href="#p10-v9-sl-cache">sl-cache</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p10-quiz2" data-quiz>
+<h3>10부 퀴즈 2 — 거절 문장 읽기</h3>
+<p class="q">Q. C# 9 로 쓴 파일을 <code>-langversion:8.0</code> 으로 컴파일했더니 <code>Feature '…' is not available in C# 8.0</code> 이 하나도 없이
+<code>CS0116</code>·<code>CS0246 'record'</code> 만 나왔습니다. 파일에는 C# 9 의 기능이 없다는 뜻입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 아닙니다. <code>record</code> 는 문맥 키워드라 8.0 의 규칙으로는 <code>record</code> 형식을 돌려주는 메서드 선언으로 읽히고, 그 <b>선언 오류</b>가
+메서드 몸체와 최상위 문 안의 거절(<code>new()</code>, <code>with</code>, 관계 패턴 …)을 가립니다(<a href="#p10-sum-v9">sum-v9</a>). 기능 이름이 찍히지 않는 거절도
+있습니다 — static 멤버의 변성은 <code>CS8904</code>, 대상 형식 조건식은 <code>CS8957</code> 입니다(<a href="#p10-sum-gates">8.0 으로 내린 표</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
