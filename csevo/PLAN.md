@@ -466,3 +466,11 @@ comments + Korean header line; two review passes before push.
   Findings: a user `class dynamic` hides the contextual keyword (same output at v3 and v4);
   `typeof(dynamic)` CS1962, `new dynamic()` CS8386, `dynamic.Equals` CS0103.
 - p06 committed alone first (7a6ef08, export with HEAD manifest + p06 keys), then p05 the same way.
+- p06b (6장 호출자 정보 21, 7장 foreach 포착 11, 8장 그 밖의 C# 5 6, 9장 비동기의 그 뒤 14, 10장 정리 7 =
+  59 slides; part 6 154/170): 4 rows, 42 examples (3 FAIL), 61 captures, 27 claims, 12 glossary.
+  Findings: caller-info attributes are not gated (filled at v4; CallerArgumentExpression works at v5);
+  foreach fresh-variable capture is not keyed on langversion (v3/v4/v5 all print 1 2 3 — old behaviour
+  shown as a labelled desugaring); CallerMemberName gives `<Main>$`, `.ctor`, `op_Addition`; multi-line
+  call → line of the method-name token; `await using` at 7.3 also reports pattern-based disposal;
+  Span across await: CS4007 at 13/14, CS9202 at 12; foreach of 3 → 3 closure objects, for → 1.
+- p07 and p07b subagents launched (parallel).
