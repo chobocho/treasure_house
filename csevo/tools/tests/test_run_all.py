@@ -130,6 +130,34 @@ class ConcurrentBatches(Fake):
                                             'pB': ['b.txt']})
 
 
+class VanishingCapture(unittest.TestCase):
+    """다른 묶음이 제 캡처를 지우는 사이에 listdir 와 open 이 끼면
+    FileNotFoundError 로 manifest 를 못 쓰고 끝났다(2026-10-02 p10b·p10c)."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix='runall-gone-')
+        self.saved = (run_all.OUT, os.listdir)
+        run_all.OUT = self.root
+        with io.open(os.path.join(self.root, 'a.txt'), 'w') as f:
+            f.write('ok\n')
+        real = os.listdir
+
+        def listdir_with_ghost(path):
+            # 목록에는 있었는데 열기 전에 지워진 캡처
+            return real(path) + ['gone.txt', 'gone.html']
+        os.listdir = listdir_with_ghost
+
+    def tearDown(self):
+        run_all.OUT, os.listdir = self.saved
+        shutil.rmtree(self.root)
+
+    def test_width_problems_skips_vanished(self):
+        self.assertEqual(run_all.width_problems(), [])
+
+    def test_manifest_skips_vanished(self):
+        self.assertEqual(sorted(run_all.manifest()), ['a.txt'])
+
+
 class FullRunGuard(unittest.TestCase):
     def test_bare_run_refuses(self):
         # 인자 없이 돌리면 모든 묶음의 캡처를 먼저 지운다 — goevo 에서

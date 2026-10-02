@@ -189,8 +189,13 @@ def width_problems():
     for name in sorted(os.listdir(OUT)):
         if not name.endswith('.txt'):
             continue
-        with io.open(os.path.join(OUT, name), encoding='utf-8') as f:
-            text = f.read()
+        # 다른 묶음(--only)이 그 사이에 제 캡처를 지웠으면 건너뛴다 —
+        # 지운 쪽이 다시 쓰며 제 manifest 줄을 고친다
+        try:
+            with io.open(os.path.join(OUT, name), encoding='utf-8') as f:
+                text = f.read()
+        except FileNotFoundError:
+            continue
         for i, line in enumerate(text.split('\n'), 1):
             w = cells(line.expandtabs(8))
             if w > MAX_COLS:
@@ -204,8 +209,11 @@ def manifest():
     out = {}
     for name in sorted(os.listdir(OUT)):
         if name.endswith('.txt') or name.endswith('.html'):
-            with open(os.path.join(OUT, name), 'rb') as f:
-                out[name] = hashlib.sha256(f.read()).hexdigest()
+            try:
+                with open(os.path.join(OUT, name), 'rb') as f:
+                    out[name] = hashlib.sha256(f.read()).hexdigest()
+            except FileNotFoundError:   # width_problems 와 같은 경합
+                continue
     return out
 
 
