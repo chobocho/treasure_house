@@ -1,0 +1,776 @@
+<article class="card" id="p11-v10-ih"><p class="chnum">4장</p><h2>보간 문자열 처리기 — 받는 쪽이 문자열을 만든다</h2>
+<p class="chsub">처리기 패턴 · bool 로 멈추기 · 처리기 인수 · 오버로드 · StringBuilder · Debug.Assert · string.Create · 상수 보간 문자열</p></article>
+
+<article class="card" id="p11-v10-ih-why">
+<h3>왜 — string.Format 번역의 네 가지 비용</h3>
+<p>제안서는 보간 문자열이 대부분 <code>string.Format</code> 호출로 번역된다는 데서 시작해 그 번역이 비효율적인 까닭을 넷 꼽습니다.
+<!--CITE key=prop-10-improved-interpolated-strings sec="Motivation"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>제안서의 문장</th><th>뜻</th></tr>
+<tr><td>"It boxes any struct arguments"</td><td><code>int</code> 구멍 하나가 상자 하나</td></tr>
+<tr><td>"It has to allocate an array for the arguments in most cases."</td><td>인수 배열(<code>object[]</code>) 하나</td></tr>
+<tr><td>"There is no opportunity to avoid instantiating the instance if it's not needed."</td><td>로그 수준이 꺼져 있어도 문자열은 만들어진다</td></tr>
+<tr><td>"It can never use <code>Span</code> or other ref struct types today"</td><td>스택 버퍼에 바로 쓰는 길이 없다</td></tr>
+</table></div>
+<p>발표 글은 같은 문제를 이렇게 요약합니다 — "This can lead to a lot of allocations – the boxing of arguments, allocation of an argument array, and of course
+the resulting string itself. Also, it leaves no wiggle room in the meaning of the actual interpolation." 그리고 해법을 "a library pattern that allows an
+API to “take over” the handling of an interpolated string argument expression" 이라 부릅니다. <!--CITE key=blog-welcome-to-csharp-10 sec="Interpolated string handlers"--></p>
+<p class="cap">7부에서 이미 두 가지를 봤습니다 — 지금의 SDK 는 <code>-langversion:6</code> 으로도 <code>DefaultInterpolatedStringHandler</code> 로 번역하고
+(<a href="#p7-v6-interp-rule">7부</a>), 처리기는 구멍을 건너뛸 수 있습니다(<a href="#p7-v6-interp-skip10">7부의 예고</a>). 이 장은 그 패턴을 한 걸음씩 엽니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p11-v10-handler">
+<h3>보간 문자열 처리기 (interpolated string handler) <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — 제안서의 규칙: 보간 문자열이 인수로 넘어갈 때 매개변수 형식이 <code>[InterpolatedStringHandler]</code> 이고, 정수 둘(<code>literalLength</code>,
+<code>formattedCount</code>)을 받는 생성자와 인스턴스 <code>AppendLiteral</code>·<code>AppendFormatted</code> 가 있으면 "then we lower the interpolation using that,
+instead of into a traditional call to <code>string.Format(formatStr, args)</code>". <!--CITE key=prop-10-improved-interpolated-strings sec="The handler pattern"--></p>
+<!--CODE file=ex/11/ihtrace/Program.cs note=불린 것을 하나씩 찍는 처리기 — ref struct 가 아닌 보통 struct-->
+<!--CSVER v=10.0 file=ex/11/ihtrace note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/ihtrace note=C# 9.0 으로 내리면-->
+<p class="cap"><code>literalLength</code> 8 은 <code>{{n}}=</code>·<code> s=</code>·<code>!</code> 를 이스케이프를 푼 뒤 센 글자 수입니다(<code>{n}=</code> 은 넉 자). 너비와 서식이 있는
+구멍은 이름 붙은 인수 <code>alignment</code>·<code>format</code> 으로 넘어오고, <code>string</code> 구멍은 비제네릭 판이 이깁니다. <code>+</code> 로 이은 두 보간 문자열은
+처리기 <b>하나</b>로 합쳐집니다(<code>new(2, 2)</code>) — 제안서가 "an additive_expression composed entirely of interpolated_string_expressions" 를 함께 받기 때문입니다.
+<!--CITE key=prop-10-improved-interpolated-strings sec="Interpolated string handler conversion"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-pattern">
+<h3>처리기 패턴 한눈에</h3>
+<p>제안서의 생성자 결정·<code>Append…</code> 결정·변환 절을 표 하나로 줄였습니다. <!--CITE key=prop-10-improved-interpolated-strings sec="Constructor resolution"-->
+<!--CITE key=prop-10-improved-interpolated-strings sec="Append... method overload resolution"--> <!--CITE key=prop-10-improved-interpolated-strings sec="Performing the conversion"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>자리</th><th>규칙</th><th>이 장</th></tr>
+<tr><td>형식</td><td><code>[InterpolatedStringHandler]</code> 를 단 클래스나 구조체(ref struct 아니어도 됨)</td><td><a href="#p11-v10-handler">앞</a> · <a href="#p11-v10-ih-local">class</a></td></tr>
+<tr><td>생성자</td><td><code>(int literalLength, int formattedCount</code> [, 특성이 고른 인수…] [, <code>out bool</code>]<code>)</code></td><td><a href="#p11-v10-ih-order">순서</a></td></tr>
+<tr><td>특성 인수</td><td>매개변수의 <code>[InterpolatedStringHandlerArgument("이름")]</code>, <code>""</code> 은 받는 객체</td><td><a href="#p11-v10-ih-argbad">규칙</a></td></tr>
+<tr><td><code>AppendLiteral</code></td><td><code>string</code> 하나. 확장 메서드는 안 된다</td><td><a href="#p11-v10-handler">앞</a></td></tr>
+<tr><td><code>AppendFormatted</code></td><td>구멍의 식 + 이름 붙은 <code>alignment</code>·<code>format</code></td><td><a href="#p11-v10-handler">앞</a></td></tr>
+<tr><td>반환</td><td>모두 <code>void</code> 이거나 모두 <code>bool</code>. <code>false</code> 면 거기서 멈춘다</td><td><a href="#p11-v10-ih-bool">bool</a></td></tr>
+<tr><td><code>out bool</code> 이 false</td><td><code>Append…</code> 를 하나도 부르지 않는다 — 구멍도 평가하지 않는다</td><td><a href="#p11-v10-ih-assert">Assert</a></td></tr>
+</table></div>
+<p class="cap">생성자 대신 <code>Create</code> 메서드를 쓰자는 안은 "We will restrict to constructors for now" 로 접혔습니다. 처리기의 <code>Dispose</code> 도 부르지 않기로
+했습니다 — 처리기를 지역 변수에 담을 수 있어 수명이 분명하지 않기 때문입니다. <!--CITE key=prop-10-improved-interpolated-strings sec="Constructor resolution"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p11-v10-ih-bool">
+<h3>bool 을 돌려주는 Append — 중간에서 멈추기</h3>
+<p>제안서: <code>Append…</code> 가 <code>bool</code> 을 돌려주면 "the result is logically anded with all preceding <code>Fax</code> calls". <code>false</code> 가 나오면 뒤의 조각을
+부르지 않습니다. 이 예제의 처리기는 정해진 길이를 넘으면 <code>...</code> 를 붙이고 멈춥니다. 길이는 <code>[InterpolatedStringHandlerArgument("max")]</code> 로
+같은 메서드의 다른 인수에서 받습니다. <!--CITE key=prop-10-improved-interpolated-strings sec="Performing the conversion"--></p>
+<!--CODE file=ex/11/ihbool/Program.cs lines=1-29 note=길이 제한 처리기 Clip-->
+<!--CODE file=ex/11/ihbool/Program.cs lines=30-46 note=같은 보간을 길이 30 과 8 로-->
+<!--CSVER v=10.0 file=ex/11/ihbool note=C# 10.0-->
+<p class="cap">길이 8 에서는 <code>Next()</code> 가 두 번만 돌았습니다. 둘째 구멍(<code>500</code>)은 평가된 뒤에 <code>Add</code> 가 <code>false</code> 를 돌려줬고, 그래서 셋째
+구멍은 평가조차 되지 않았습니다. 멈추는 단위는 "조각" 입니다 — 이미 평가한 구멍은 되돌리지 않습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-order">
+<h3>처리기가 받는 인수와 평가 순서</h3>
+<p>제안서의 번역 순서: 보간 문자열보다 <b>앞</b>에 있는 인수를 먼저 차례대로 평가해 임시 변수에 두고, 생성자를 그 값들과 <code>out bool</code> 로 부른 뒤,
+<code>true</code> 일 때만 <code>Append…</code> 를 부릅니다. <!--CITE key=prop-10-improved-interpolated-strings sec="Performing the conversion"--> 받는 객체(<code>""</code>)와
+<code>level</code> 을 함께 받는 로거로 그 순서를 찍습니다.</p>
+<!--CODE file=ex/11/ihorder/Program.cs lines=1-27 note=로거와 처리기 — 받는 객체와 level 을 함께 받는다-->
+<!--CODE file=ex/11/ihorder/Program.cs lines=28-46 note=모든 식이 평가될 때 줄을 찍는다-->
+<!--CSVER v=10.0 file=ex/11/ihorder note=C# 10.0-->
+<p class="cap">받는 객체 → <code>level</code> → 처리기 생성자 → 구멍 → <code>Write</code> 차례입니다. <code>level 1</code> 에서는 구멍(<code>Say("hole", 7)</code>)이 평가되지
+않았는데도 <code>Write</code> 는 불립니다 — 메서드는 그대로 불리고, 빈 처리기를 받습니다. 이것이 7부에서 본 "구멍을 건너뛰는 로거" 의 뼈대입니다
+(<a href="#p7-v6-interp-skip10">7부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-argbad">
+<h3>처리기 인수의 두 규칙 — 앞에 있을 것, 받는 객체가 있을 것</h3>
+<p>제안서의 최종 검증: 생성자에 넘길 인수가 보간 문자열보다 "lexically after" 에 있으면 오류이고, static 메서드에서 받는 객체(<code>""</code>)를 요구해도
+오류입니다. <!--CITE key=prop-10-improved-interpolated-strings sec="Constructor resolution"--></p>
+<!--CODE file=ex/11/ihafter/Program.cs note=처리기 매개변수 h 뒤에 n 이 있는 Late, 그리고 static NoThis-->
+<!--CSVER v=10.0 file=ex/11/ihafter note=C# 10.0 — 이름 붙은 인수로 n 을 앞에-->
+<!--CSVER v=10.0 file=ex/11/ihafter flags=-define:BAD tag=bad note=-define:BAD — static 메서드에 ""-->
+<p class="cap">이름 붙은 인수로 <code>n</code> 을 먼저 적으면 됩니다. 위치 인수로 <code>Late($"{1}", 2)</code> 라고 쓰면(<code>-define:LATE</code>) <code>CS8950</code> 으로
+거절되고, <code>#pragma</code> 를 빼면(<code>-define:WARN</code>) 선언 쪽에 경고 <code>CS8947</code> 이 납니다. 두 문장 모두 한 줄이 200칸을 넘어 캡처로 싣지
+못했습니다 — 실험 묶음(<code>exps/p11b.py</code>)이 매번 종료 코드와 번호만 확인합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-over">
+<h3>string 오버로드 옆의 처리기 — 상수면 string, 아니면 처리기</h3>
+<p class="why">제안서는 "better conversion" 규칙에 첫 줄을 더했습니다 — 상수가 <b>아닌</b> 보간 문자열에서는 처리기로 가는 변환이 낫다. 그래서 "<code>Log($"{1}")</code>
+Calls Log(TraceLoggerParamsInterpolatedStringHandler p), because <code>$"{1}"</code> is not a constant expression". <!--CITE key=prop-10-improved-interpolated-strings sec="Better conversion from expression adjustments"--></p>
+<!--CODE file=ex/11/ihover/Program.cs note=Log(string) 과 Log(H) — 여섯 가지 인수-->
+<!--CSVER v=10.0 file=ex/11/ihover note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/ihover note=C# 9.0 으로 내리면 — 거절 없이 고르는 것이 바뀐다-->
+<div class="warn"><b>함정</b> — C# 9.0 에서는 오류가 없습니다. 처리기 형식이 정의된 같은 소스가, 언어 버전만 내리면 <b>조용히</b> 모두 <code>string</code> 판을 부릅니다.
+처리기 오버로드만 있을 때는 9.0 이 '<code>interpolated string handlers</code>' 로 거절하지만(<a href="#p11-v10-handler">앞</a>), 다른 길이 있으면 그 길로 갑니다. 언어 버전에 묶인
+동작(0부의 꼴 (나))입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-runtime">
+<h3>같이 온 런타임 — .NET 10 의 처리기 형식들 <span class="vt v10">C# 10.0</span></h3>
+<p class="why">발표 글: "when you see parameter types of the form <code>SomethingInterpolatedStringHandler</code> the API author has done some work behind the scenes to handle
+interpolated strings more appropriately for their purposes." 예로 <code>StringBuilder.Append</code>, <code>Debug.Assert</code>, <code>String.Create()</code> 를 듭니다.
+<!--CITE key=blog-welcome-to-csharp-10 sec="Interpolated string handlers"--> .NET 10 의 <code>System.Private.CoreLib</code> 을 리플렉션으로 훑었습니다.</p>
+<!--CODE file=ex/11/ihruntime/Program.cs note=[InterpolatedStringHandler] 형식과 그것을 받는 공개 메서드-->
+<!--CSVER v=10.0 file=ex/11/ihruntime note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">처리기는 여섯이고 그중 다섯이 중첩 형식입니다 — 처리기는 그것을 받는 API 옆에 삽니다. 메서드 이름마다 처리기를 받는 판이 둘씩 있습니다. <code>DefaultInterpolatedStringHandler</code> 를 매개변수로 받는 공개 메서드는 없습니다 —
+컴파일러가 <code>string</code> 이 되는 보간에 직접 씁니다(<a href="#p7-v6-interp-il">7부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-sb">
+<h3>StringBuilder.Append($"…") — 중간 문자열 없이</h3>
+<p>발표 글: <code>sb.Append($"Hello {args[0]}, how are you?")</code> 는 예전엔 새로 만든 문자열로 <code>Append(string)</code> 을 불렀지만, 이제
+<code>Append(ref StringBuilder.AppendInterpolatedStringHandler)</code> 가 이기고 조각들이 "individually appended to the StringBuilder" 된다.
+<!--CITE key=blog-welcome-to-csharp-10 sec="Interpolated string handlers"--> 같은 일을 네 가지로 하면서 호출 한 번의 할당 바이트를 셉니다.</p>
+<!--CODE file=ex/11/ihsb/Program.cs note=GC.GetAllocatedBytesForCurrentThread 로 1000 번의 평균-->
+<!--CSVER v=10.0 file=ex/11/ihsb env=DOTNET_TieredCompilation=0 note=.NET 10 에서의 동작 — 계층 컴파일을 끄고-->
+<p class="cap">처리기 판만 0 입니다. 문자열 지역 변수를 거치면 그 문자열(평균 39바이트)이 생기고, <code>AppendFormat</code> 은 <code>int</code> 를 상자에 담습니다(24바이트).
+시간이 아니라 할당 바이트만 셌고, JIT 이 처음에 쓰는 덜 최적화된 코드가 섞이지 않도록 <code>DOTNET_TieredCompilation=0</code> 으로 돌렸습니다. 속도의 이득은
+문서의 숫자로만 말할 수 있는데, 받아 둔 문서에는 숫자가 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-assert">
+<h3>Debug.Assert — 조건이 참이면 메시지를 만들지 않는다</h3>
+<p>발표 글: <code>Debug.Assert(condition, $"{SomethingExpensiveHappensHere()}")</code> 는 대부분 조건이 참이라 메시지가 필요 없는데도 매번 계산됐다. 이제
+"<code>Debug.Assert</code> now has an overload with a custom interpolated string builder, which ensures that the second argument isn't even evaluated unless the
+condition is false." <!--CITE key=blog-welcome-to-csharp-10 sec="Interpolated string handlers"--></p>
+<!--CODE file=ex/11/ihassert/Program.cs note=#define DEBUG · 실패를 찍는 TraceListener · 비싼 Dump-->
+<!--CSVER v=10.0 file=ex/11/ihassert note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/ihassert note=같은 소스를 C# 9.0 으로-->
+<div class="warn"><b>함정</b> — 같은 소스가 C# 9.0 에서는 <code>Dump</code> 를 <b>매번</b> 부릅니다(1, 2, 3). 앞 장처럼 <code>string</code> 판이 있으니 거절 없이 그쪽으로 가기
+때문입니다. 반대로 C# 10 에서는 구멍의 부수 효과가 조건에 따라 사라집니다. 메시지를 문자열 지역 변수에 먼저 담으면(<code>msg</code>) 처리기가 끼어들 틈이 없어
+언제나 계산됩니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-create">
+<h3>string.Create 와 Span.TryWrite — 문화권과 스택 버퍼</h3>
+<p>발표 글의 셋째 예: "String.Create() lets you specify the <code>IFormatProvider</code> used to format the expressions in the holes". 제안서의 넷째 비용(ref struct 를
+쓸 수 없다)은 <code>Span&lt;char&gt;</code> 에 바로 쓰는 <code>TryWrite</code> 가 풉니다. <!--CITE key=blog-welcome-to-csharp-10 sec="Interpolated string handlers"-->
+<!--CITE key=prop-10-improved-interpolated-strings sec="Motivation"--></p>
+<!--CODE file=ex/11/ihcreate/Program.cs note=소수점이 쉼표인 문화권 · 8칸 스택 버퍼-->
+<!--CSVER v=10.0 file=ex/11/ihcreate note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>string.Create(comma, …)</code> 은 구멍을 그 문화권으로 서식화합니다(<code>1,5</code>). <code>TryWrite</code> 는 버퍼가 모자라면 예외 대신 <code>False</code> 와
+0 을 돌려줍니다 — 10자짜리 결과는 8칸에 들어가지 않습니다. 이 캡처의 "현재 문화권" 은 이 덱의 실행 환경(<code>LANG=C</code>)이라 <code>1.5</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-local">
+<h3>처리기 지역 변수와 캐스트 — 메서드 인수가 아니어도</h3>
+<p>제안서의 변환은 인수 자리에 묶이지 않습니다. 보간 문자열에서 처리기 형식으로 가는 암시적 변환이므로 지역 변수의 초기화자나 캐스트에서도 처리기가 만들어지고,
+제안서도 "handlers can be assigned to locals (such as <code>MyHandler handler = $"{MyCode()}";</code>)" 라고 적습니다.
+<!--CITE key=prop-10-improved-interpolated-strings sec="Performing the conversion"--></p>
+<!--CODE file=ex/11/ihlocal/Program.cs note=class 처리기 Parts — 조각 수를 센다-->
+<!--CSVER v=10.0 file=ex/11/ihlocal note=C# 10.0-->
+<p class="cap">처리기는 클래스여도 됩니다. <code>(Parts)$"{a}{b}"</code> 는 글자 없는 구멍 둘이라 <code>new Parts(0, 2)</code> 입니다. <code>var</code> 는 여전히
+<code>string</code> 입니다 — 보간 문자열의 자연 형식은 C# 10 에서도 바뀌지 않았습니다(<a href="#p7-v6-interp-target">7부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-async">
+<h3>함정 — 구멍 안의 await 와 ref struct 처리기</h3>
+<p>제안서는 ref struct 처리기가 async 메서드에서 문제가 될 수 있다고 보고, <code>DefaultInterpolatedStringHandler</code> 는 구멍에 <code>await</code> 가 없을 때만 쓰도록
+여지를 남겼습니다("the current context supports using that type"). <!--CITE key=prop-10-improved-interpolated-strings sec="InterpolatedStringHandler and Usage"-->
+사용자가 만든 ref struct 처리기에는 그런 여지가 없습니다.</p>
+<!--CODE file=ex/11/ihasync/Program.cs note=Log(H) 와 Log(string) — async Main 안에서-->
+<!--CSVER v=10.0 file=ex/11/ihasync note=C# 10.0-->
+<!--CSVER v=10.0 file=ex/11/ihasync flags=-define:AWAIT tag=await note=-define:AWAIT — 처리기 인수의 구멍에 await-->
+<p class="cap">처리기 오버로드가 이기는 자리에 <code>await</code> 를 넣으면 <code>string</code> 판으로 물러서지 않고 <code>CS4007</code> 입니다. 오류 위치는 <code>await</code> 줄이
+아니라 메서드 본문의 첫 줄(25행)입니다. <code>string</code> 지역 변수에 먼저 담으면(28행) 그 보간은 7부에서 본 대로 구멍을 먼저 모두 평가하는 번역(<code>string.Format</code> 의
+차례)을 받습니다(<a href="#p7-v6-interp-await">7부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ih-index">
+<h3>인덱서의 처리기 — 객체 초기화자에서는 안 된다</h3>
+<p>Roslyn 의 깨지는 변경 목록: "Indexers that take an interpolated string handler and require the receiver as an input for the constructor cannot be used in an object
+initializer." 아직 다 만들어지지 않은 객체를 처리기가 볼 수 있기 때문입니다. SDK 6.0.200(Visual Studio 2022 17.1)부터입니다.
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Interpolated string handlers and indexer initialization"--></p>
+<!--CODE file=ex/11/ihindex/Program.cs note=받는 객체(Table)를 처리기에 넘기는 인덱서-->
+<!--CSVER v=10.0 file=ex/11/ihindex note=C# 10.0-->
+<!--CSVER v=10.0 file=ex/11/ihindex flags=-define:BAD tag=bad note=-define:BAD — 객체 초기화자 안의 같은 인덱서-->
+<p class="cap">보통의 인덱서 호출에서는 처리기가 받는 객체의 상태(<code>Count</code>)를 읽습니다. 같은 인덱서를 <code>new Table { [$"b{2}"] = 20 }</code> 에 쓰면
+<code>CS8976</code> 입니다. 제안서도 중첩 초기화자의 평가 순서 때문에 "we forbid the scenario entirely" 라고 적었습니다.
+<!--CITE key=prop-10-improved-interpolated-strings sec="Constructor resolution"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-constinterp">
+<h3>상수 보간 문자열 (constant interpolated strings) <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — <code>const string S3 = S1 + "…"</code> 는 이미 되는데 같은 것을 보간으로 써 달라는 "many community requests" 가 있었습니다. 명세는 상수 식 목록에
+보간 문자열을 더합니다 — "provided that all components are constant expressions of type <code>string</code> and all interpolated components lack alignment and format
+specifiers". <!--CITE key=prop-10-constant_interpolated_strings sec="Motivation"--> <!--CITE key=prop-10-constant_interpolated_strings sec="Constant Expressions"--></p>
+<!--CODE file=ex/11/ciconst/Program.cs note=const · 축자 보간 · 겹친 보간 · switch 의 상수 패턴-->
+<!--CSVER v=10.0 file=ex/11/ciconst note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/ciconst note=C# 9.0 으로 내리면-->
+<p class="cap">7부의 예고(<a href="#p7-v6-interp-const10">7부</a>)는 const 필드·특성 인수·<code>case</code> 를 봤습니다. 여기서는 한 걸음 더 — 축자 보간 <code>$@</code>,
+보간 안의 보간, switch 식의 상수 패턴(<code>$"{Name}!"</code>)도 상수이고, 결과는 컴파일 때 만든 문자열 상수라 같은 글자의 리터럴과 <b>같은 객체</b>
+(<code>True</code>)입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ci-bad">
+<h3>상수가 안 되는 보간 — 숫자, 너비, 서식</h3>
+<p>whats-new: 구멍은 숫자 상수일 수 없다. "those constants are converted to strings at run time. The current culture may affect their string representation." 발표
+글도 "they are sensitive to Culture, and can't be computed at compile time" 이라고 적습니다. <!--CITE key=whatsnew-10 sec="Constant interpolated strings"-->
+<!--CITE key=blog-welcome-to-csharp-10 sec="Constant interpolated strings"--></p>
+<!--CODE file=ex/11/ciconst/Program.cs lines=11-15 note=앞 예제의 #if BAD 갈래-->
+<!--CSVER v=10.0 file=ex/11/ciconst flags=-define:BAD tag=bad note=-define:BAD-->
+<p class="cap">셋 다 같은 <code>CS0133</code>("must be constant")입니다. 문자열 상수에 너비(<code>,8</code>)나 서식(<code>:U</code>)을 붙여도 상수가 아닙니다 — 명세의
+"lack alignment and format specifiers" 그대로입니다. 문화권을 타지 않는 <code>string</code> 만 상수로 남깁니다. 오버로드에서 상수 보간이 <code>string</code> 판을
+고르는 것은 <a href="#p11-v10-ih-over">앞</a>에서 봤습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p11-v10-ih-quiz" data-quiz>
+<h3>4장 퀴즈 — 보간 문자열 처리기</h3>
+<p class="q">Q. <code>Debug.Assert(x &gt; 0, $"{Dump(x)}")</code> 가 있는 프로젝트의 언어 버전을 10 에서 9 로 내렸습니다. 컴파일 오류는 없습니다. 무엇이 달라집니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> C# 9 에서는 처리기 변환이 고려되지 않아 <code>Debug.Assert(bool, string)</code> 판이 골라집니다. 그래서 <code>Dump(x)</code> 가 조건과 상관없이
+<b>매번</b> 평가됩니다(<a href="#p11-v10-ih-assert">4장</a>). 같은 소스, 거절 없는 다른 동작 — 오버로드 옆에 <code>string</code> 판이 있는 처리기 API 는 모두
+그렇습니다(<a href="#p11-v10-ih-over">4장</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-v10-la"><p class="chnum">5장</p><h2>람다와 패턴 — 형식을 스스로 갖는 람다</h2>
+<p class="chsub">자연 형식 · Delegate 와 Expression · 합성 대리자 · 형식 유추 · 반환 형식 · 특성 · 오버로드의 변화 · 확장 속성 패턴</p></article>
+
+<article class="card" id="p11-v10-la-why">
+<h3>왜 — 람다를 쓸 때마다 대리자 형식을 적어야 했다</h3>
+<p>제안서는 세 가지를 한꺼번에 제안합니다 — 람다의 특성, 명시적 반환 형식, 람다와 메서드 그룹의 자연 대리자 형식. 동기는 이렇게 적었습니다:
+"Requiring explicit delegate types for lambdas and method groups has been a friction point for customers, and has become an impediment to progress in ASP.NET
+with recent work on MapAction." <!--CITE key=prop-10-lambda-improvements sec="Motivation"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>제안</th><th>제안서가 댄 까닭</th></tr>
+<tr><td>특성</td><td>"parity with methods and local functions"</td></tr>
+<tr><td>반환 형식</td><td>매개변수 형식을 적을 수 있는 것과의 대칭, 그리고 겹친 람다에서 "control over compiler performance"</td></tr>
+<tr><td>자연 형식</td><td><code>var</code> 초기화자처럼 대리자 형식 없이 람다를 쓰는 자리를 늘린다</td></tr>
+</table></div>
+<p class="cap">발표 글도 "one of the driving scenarios has been to make ASP.NET Minimal APIs even more straightforward" 라고 적습니다. 그래서 이 장의 예제는
+<code>Delegate</code> 를 받는 API 에서 끝납니다(<a href="#p11-v10-la-mini">작은 라우터</a>). <!--CITE key=blog-welcome-to-csharp-10 sec="Improvements for lambda expressions and method groups"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p11-v10-lambda">
+<h3>람다와 메서드 그룹의 자연 형식 (natural type) <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — 제안서: 매개변수 형식이 명시되고 반환 형식을 알 수 있으면 람다는 자연 형식을 갖는다. 메서드 그룹은 "if all candidate methods in the method
+group have a common signature" 일 때 갖는다. 그 형식은 <code>Func</code>·<code>Action</code> 입니다. <!--CITE key=prop-10-lambda-improvements sec="Natural (function) type"-->
+<!--CITE key=prop-10-lambda-improvements sec="Delegate types"--></p>
+<!--CODE file=ex/11/lanatural/Program.cs note=var 로 받은 람다·익명 메서드·메서드 그룹-->
+<!--CSVER v=10.0 file=ex/11/lanatural note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/lanatural note=C# 9.0 으로 내리면-->
+<p class="cap">C# 2 의 익명 메서드(<code>delegate (object o) { }</code>)도 자연 형식을 얻습니다. <code>Console.Read</code> 는 오버로드가 하나라 <code>Func&lt;int&gt;</code> 입니다.
+C# 9.0 의 거절은 일곱 줄 모두 'inferred delegate type' 이고, 반환 형식을 적은 16행에는 'lambda return type' 이 하나 더 붙습니다(오류 8개). C# 3 의 장에서 본 예고(<a href="#p4-v3-lambda-natural">4부</a>)의 <code>var inc = (int x) =&gt; x + 1</code> 이 이 규칙의 가장 짧은 꼴입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-bad">
+<h3>아직 형식이 없는 것 — 매개변수 형식, 오버로드, default</h3>
+<p>제안서의 <code>var</code> 절이 그대로 오류 예로 듭니다 — <code>var f1 = () =&gt; default;</code> 와 <code>var f2 = x =&gt; x;</code> 는 "cannot infer type". 발표 글은
+<code>var write = Console.Write;</code> 를 "Multiple overloads, can't choose" 라고 적습니다. <!--CITE key=prop-10-lambda-improvements sec="var"-->
+<!--CITE key=blog-welcome-to-csharp-10 sec="Natural types for method groups"--></p>
+<!--CODE file=ex/11/lanatural/Program.cs lines=30-34 note=앞 예제의 #if BAD 갈래-->
+<!--CSVER v=10.0 file=ex/11/lanatural flags=-define:BAD tag=bad note=-define:BAD-->
+<p class="cap">셋 다 같은 <code>CS8917</code> 입니다. C# 3 의 거절(<a href="#p4-v3-var-rules">4부</a>)은 <code>x =&gt; x</code> 에서 지금도 그대로입니다 — C# 10 은 매개변수
+형식을 유추해 주지 않고, 적힌 형식으로 대리자 형식을 고를 뿐입니다. 반환 형식을 정할 수 없는 <code>default</code> 는 반환 형식을 적어 풀 수 있습니다(<a href="#p11-v10-la-ret">뒤</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-obj">
+<h3>Delegate·object·Expression 으로 — 새 변환</h3>
+<p>제안서: 함수 형식에서 <code>System.MulticastDelegate</code> 와 그 기반 형식·인터페이스로, 그리고 <code>Expression</code>·<code>LambdaExpression</code> 으로 가는 암시적 변환이
+생긴다. 메서드 그룹을 <code>object</code> 로 바꾸면 "the conversion is valid but perhaps unintentional" 이라 경고를 낸다. <!--CITE key=prop-10-lambda-improvements sec="Conversions"--></p>
+<!--CODE file=ex/11/laobj/Program.cs note=Delegate · object · Expression 변수에 람다와 메서드 그룹-->
+<!--CSVER v=10.0 file=ex/11/laobj note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/laobj note=C# 9.0 으로 내리면 — 'Feature' 문장이 아니다-->
+<!--CSVER v=10.0 file=ex/11/laobj flags=-define:WARN tag=warn note=-define:WARN — object oops = Seven-->
+<div class="warn"><b>함정</b> — C# 9.0 의 거절은 "Feature … is not available" 이 아니라 예전부터 있던 <code>CS1660</code>·<code>CS0428</code> 입니다. 언어 버전을 올리라는 말이
+없으니 오류만 보고는 C# 10 의 기능이라는 것을 알 수 없습니다. <code>object oops = Seven;</code> 은 C# 10 에서 컴파일되고 <code>Func`1</code> 이 찍힙니다 — <code>Seven()</code> 을
+쓰려던 것이라면 경고 <code>CS8974</code> 가 유일한 단서입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-synth">
+<h3>Func·Action 로 안 되는 꼴 — 컴파일러가 대리자를 만든다</h3>
+<p>제안서: ref·out 같은 by-value 아닌 매개변수, 16개를 넘는 매개변수, 형식 인수가 될 수 없는 형식이면 "a synthesized <code>internal</code> anonymous delegate type"
+을 만들고, 매개변수 이름은 <code>arg1, ..., argn</code> (하나면 <code>arg</code>)입니다. 서명이 같으면 같은 형식을 씁니다. <!--CITE key=prop-10-lambda-improvements sec="Delegate types"--></p>
+<!--CODE file=ex/11/lasynth/Program.cs note=ref · out · 매개변수 17개-->
+<!--CSVER v=10.0 file=ex/11/lasynth note=C# 10.0-->
+<p class="cap">합성 형식은 모두 <code>public=False</code>(internal)이고 매개변수 이름은 제안서대로 <code>arg</code> 입니다. 이름 <code>&lt;&gt;F{00000001}`2</code> 는
+반환이 있는 꼴(<code>F</code>)과 ref 종류의 표시를 담고, 제네릭이라 같은 꼴을 여러 형식이 함께 씁니다. 매개변수 17개는 <code>&lt;&gt;F`18</code> — 16개까지인
+<code>Func</code> 를 넘었습니다(<a href="#p11-v10-la-runtime">런타임</a>). 이 이름들은 컴파일러가 정하는 것이라 코드가 기댈 것이 아닙니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-infer">
+<h3>형식 유추도 자연 형식을 본다 — 배열, 제네릭, Delegate 제약</h3>
+<p>제안서: 형식 유추의 첫 단계는 매개변수 형식이 대리자가 아니어도(예: <code>System.Delegate</code> 로 제약한 형식 매개변수) 람다를 받아들이고, 최선 공통 형식은 형식 유추로
+정의되므로 <code>new[] { (string s) =&gt; s.Length, … }</code> 가 <code>Func&lt;string, int&gt;[]</code> 가 된다. <!--CITE key=prop-10-lambda-improvements sec="First phase"-->
+<!--CITE key=prop-10-lambda-improvements sec="Best common type"--></p>
+<!--CODE file=ex/11/lainfer/Program.cs note=new[] · Run<T> where T : Delegate · Two<T>(T, T)-->
+<!--CSVER v=10.0 file=ex/11/lainfer note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/lainfer note=C# 9.0 으로 내리면-->
+<!--CSVER v=14.0 file=ex/11/lainfer flags=-define:BAD tag=bad note=-define:BAD — C# 14.0 에서도-->
+<div class="warn"><b>함정</b> — 배열 초기화자는 되는데 <code>?:</code> 의 두 람다는 C# 14 에서도 <code>CS0173</code> 입니다. 제안서가 함수 형식을 쓰는 자리로 꼽은 것은 변환,
+형식 유추와 최선 공통 형식, <code>var</code> 초기화자뿐입니다. 버리기(<code>_ = () =&gt; 1</code>)도 제안서대로 거절되고, 서명이 다른 두 람다는 <code>T</code> 를 정하지 못합니다.
+C# 9.0 의 거절도 앞 장처럼 'Feature' 문장이 아닙니다(<code>CS0826</code>·<code>CS0411</code>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-ret">
+<h3>람다의 명시적 반환 형식 (explicit return type) <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — 발표 글의 예: <code>var choose = (bool b) =&gt; b ? 1 : "two";</code> 는 반환 형식을 유추할 수 없다. 반환 형식은 괄호로 싼 매개변수 목록 앞에 씁니다.
+제안서는 명시적 반환 형식에서 메서드 형식 유추가 "exact inference" 를 한다고 정했습니다. <!--CITE key=blog-welcome-to-csharp-10 sec="Return types for lambdas"-->
+<!--CITE key=prop-10-lambda-improvements sec="Explicit return type"--></p>
+<!--CODE file=ex/11/laret/Program.cs note=int? · ref int · Of<T>(Func<T>) 의 유추-->
+<!--CSVER v=10.0 file=ex/11/laret note=C# 10.0-->
+<!--CSVER v=10.0 file=ex/11/laret flags=-define:BAD tag=bad note=-define:BAD-->
+<p class="cap"><code>int?</code> 를 적으면 <code>null</code> 가지가 풀리고, 적지 않으면 <code>CS8917</code> 입니다. <code>ref int</code> 를 돌려주는 람다는 <code>Func</code> 가 담을 수 없어
+합성 형식(<code>&lt;&gt;F{00000008}`2</code>)이 되고, 그 반환에 대입한 10 이 배열에 들어갔습니다. <code>long () =&gt; 1</code> 은 <code>T</code> 를 <code>Int64</code> 로
+고정합니다. <code>Func&lt;object&gt;</code> 에 <code>string ()</code> 람다를 넣는 것은 제안서대로 거절됩니다(<code>CS8934</code>) — 반환 형식 사이의 공변 변환은 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-attr">
+<h3>람다의 특성 (lambda attributes) <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — 메서드·지역 함수와의 대칭입니다(지역 함수의 특성은 C# 9, <a href="#p8-v7-locfn-attr9">8부</a>). 특성은 "emitted to metadata on the method that maps to
+the lambda" 되고, 제안서는 <code>Delegate</code> 의 <code>MethodInfo</code> 로 그것을 읽는 쓰임을 겨냥합니다. 특성이 있으면 매개변수 목록에 괄호가 있어야 합니다.
+<!--CITE key=prop-10-lambda-improvements sec="Attributes"--></p>
+<!--CODE file=ex/11/laattr/Program.cs note=람다 · 반환값 · 매개변수의 특성, 리플렉션으로 읽기-->
+<!--CSVER v=10.0 file=ex/11/laattr note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/laattr note=C# 9.0 으로 내리면-->
+<!--CSVER v=10.0 file=ex/11/laattr flags=-define:BAD tag=bad note=-define:BAD — 괄호 없는 x-->
+<p class="cap">특성은 람다가 번역된 메서드 <code>&lt;Main&gt;b__1_1</code> 에 붙어 있습니다. 제안서는 이 이름과 위치(<code>App+&lt;&gt;c</code>)에 기대지 말라고 적습니다 —
+"How lambdas and local functions are emitted can, and has, changed between compiler versions." 발표 글대로 특성은 람다를 부를 때 아무 효과가 없고, 코드 분석과 리플렉션을 위한 것입니다. <!--CITE key=blog-welcome-to-csharp-10 sec="Attributes on lambdas"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-cond">
+<h3>제안서의 열린 문제 — 람다에 [Conditional] 을 달면</h3>
+<p>제안서는 "Should <code>System.Diagnostics.ConditionalAttribute</code> be disallowed on lambda expressions since there are few scenarios where a lambda expression could be used
+conditionally?" 를 열린 문제로 남겼습니다. <!--CITE key=prop-10-lambda-improvements sec="Open issues"--> 메서드와 지역 함수(C# 9)에서는 되는 특성이라, 지금의 답을 컴파일러에게
+물었습니다.</p>
+<!--CODE file=ex/11/lacond/Program.cs note=메서드 · 정적 지역 함수 · (#if LAMBDA) 람다에 Conditional-->
+<!--CSVER v=10.0 file=ex/11/lacond note=C# 10.0 — DEBUG 없이-->
+<!--CSVER v=10.0 file=ex/11/lacond flags=-define:DEBUG tag=debug note=-define:DEBUG-->
+<!--CSVER v=10.0 file=ex/11/lacond flags=-define:LAMBDA tag=lambda note=-define:LAMBDA — 람다에 단 Conditional-->
+<p class="cap"><code>DEBUG</code> 가 없으면 메서드와 지역 함수의 호출이 통째로 사라집니다. 람다에 달면 <code>CS0577</code> — 생성자·연산자·명시적 구현과 같은 목록에
+"lambda expression" 이 들어갔습니다. 지금의 컴파일러에서 그 열린 문제의 답은 "금지" 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-mini">
+<h3>세 기능을 한데 — Delegate 를 받는 작은 라우터</h3>
+<p>제안서의 MapAction 예는 이 장의 세 기능이 왜 함께 왔는지 보여 줍니다 — <code>app.MapAction([HttpGet("/")] () =&gt; new Todo(...))</code>. 특성은 경로를, 자연 형식은
+캐스트 없는 <code>Delegate</code> 인수를, 매개변수 형식은 바인딩을 맡습니다. 같은 모양을 BCL 만으로 흉내 냈습니다. <!--CITE key=prop-10-lambda-improvements sec="Motivation"--></p>
+<!--CODE file=ex/11/lamini/Program.cs note=Map(Delegate) — 특성으로 경로, 매개변수로 바인딩-->
+<!--CSVER v=10.0 file=ex/11/lamini note=C# 10.0-->
+<p class="cap">C# 9 였다면 <code>Map((Func&lt;string, string&gt;)(name =&gt; …))</code> 처럼 캐스트를 적어야 하고, 람다에 특성을 붙일 수 없으니 경로는 다른 인수로 받아야 합니다.
+실제 ASP.NET Core 는 이 덱의 범위 밖입니다 — 이 예제는 그 모양만 빌렸습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-break">
+<h3>깨지는 변경 — 새 변환이 오버로드 결정을 바꾼다</h3>
+<p>Roslyn 의 C# 10 깨지는 변경 2번: 새 함수 형식 변환은 "may change overload resolution in cases where the compiler searches iteratively for overloads and stops at the
+first type or namespace scope containing any applicable overloads." 3번: 유추된 람다 형식이 인수 형식이 되어 예전엔 고를 수 있던 호출이 모호해진다.
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-6 sec="This document lists known breaking changes in Roslyn in C# 10.0 which will be introduced with .NET 6."--></p>
+<!--CODE file=ex/11/labreak/Program.cs note=문서의 예 2a·2b·3 을 한 파일로-->
+<!--CSVER v=10.0 file=ex/11/labreak note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/labreak note=같은 소스를 C# 9.0 으로-->
+<!--CSVER v=10.0 file=ex/11/labreak flags=-define:AMBIG tag=ambig note=-define:AMBIG — C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/labreak flags=-define:AMBIG tag=ambig note=-define:AMBIG — C# 9.0-->
+<div class="warn"><b>함정</b> — 문서의 예가 그대로 재현됩니다. 인스턴스 메서드 <code>C.M(Delegate)</code> 이 이제 적용 가능해져서 확장 메서드까지 찾아가지 않고,
+파생 클래스의 <code>B.M(Expression)</code> 에서 멈춰 기반 클래스로 가지 않습니다. 거절 없이 <b>다른 메서드</b>가 불립니다 — 언어 버전에 묶인 동작(0부의 꼴 (나))입니다.
+3번 예는 C# 9.0 에서 컴파일되고 C# 10.0 에서 <code>CS0121</code> 입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-runtime">
+<h3>같이 온 런타임 — 자연 형식이 고르는 Func 와 Action</h3>
+<p>발표 글: "the compiler will use an available <code>Func</code> or <code>Action</code> delegate, if a suitable one exists. Otherwise, it will synthesize a delegate type".
+<!--CITE key=blog-welcome-to-csharp-10 sec="Natural types for lambdas"--> 그 "있는 것" 이 무엇인지 .NET 10 의 <code>System.Private.CoreLib</code> 에서 셌습니다.</p>
+<!--CODE file=ex/11/laruntime/Program.cs note=System.Func`N · System.Action`N 의 개수-->
+<!--CSVER v=10.0 file=ex/11/laruntime note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">제네릭 <code>Func</code> 는 형식 인수 1–17 개(매개변수 0–16 + 반환), 제네릭 <code>Action</code> 은 1–16 개이고 비제네릭 <code>Action</code> 이 따로 있습니다. 이것이
+제안서의 "more than 16 parameters" 경계입니다(<a href="#p11-v10-la-synth">앞</a>). 식 트리 <code>Expression&lt;T&gt;</code> 는 다른 어셈블리
+(<code>System.Linq.Expressions</code>)에 삽니다. C# 10 이 새로 요구한 런타임 형식은 없습니다 — 합성 대리자도 컴파일러가 어셈블리 안에 만듭니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-la-later">
+<h3>뒤 버전 — 기본값과 params 를 가진 람다, C# 12</h3>
+<p>제안서는 열린 문제로 "Should default values be supported for lambda expression parameters for completeness?" 를 남겼습니다. <!--CITE key=prop-10-lambda-improvements sec="Open issues"-->
+컴파일러는 그 답을 C# 12 의 기능 둘로 압니다. <!--CITE key=msgid sec="case MessageID.IDS_FeatureLambdaOptionalParameters: // semantic check"--></p>
+<!--CODE file=ex/11/lalater/Program.cs note=기본값 · params 람다 — 이 예제만 LangVersion 12.0-->
+<!--CSVER v=12.0 file=ex/11/lalater note=C# 12.0-->
+<!--CSVER v=10.0 file=ex/11/lalater note=C# 10.0 으로 내리면-->
+<!--CSVER v=12.0 file=ex/11/lalater flags=-define:BAD tag=bad note=-define:BAD — Func 로 받기-->
+<p class="cap">기본값은 <code>Func</code> 가 담을 수 없어 합성 형식이 됩니다. 이번 이름은 <code>&lt;&gt;f__AnonymousDelegate0`2</code> — ref 매개변수 때의
+<code>&lt;&gt;F{…}</code> 와 꼴이 다릅니다. 기본값이 형식의 일부라 같은 서명의 <code>Func&lt;string, string&gt;</code> 로도 바뀌지 않습니다(<code>CS0029</code>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-proppat">
+<h3>확장 속성 패턴 (extended property patterns) <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — 제안서의 동기는 한 문장입니다: "When you want to match a child property, nesting another recursive pattern adds too much noise which will hurt readability
+with no real advantage." <code>{ Prop1.Prop2: pattern }</code> 은 <code>{ Prop1: { Prop2: pattern } }</code> 과 "exactly equivalent" 이고, 앞 멤버가 nullable 값
+형식이면 그 바탕 형식에서 다음 이름을 찾습니다. <!--CITE key=prop-10-extended-property-patterns sec="Motivation"--> <!--CITE key=prop-10-extended-property-patterns sec="Detailed design"--></p>
+<!--CODE file=ex/11/ppbasic/Program.cs note=switch 식의 점 경로 · Size? 를 지나는 경로 · 지정과 함께-->
+<!--CSVER v=10.0 file=ex/11/ppbasic note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/ppbasic note=C# 9.0 으로 내리면-->
+<p class="cap"><code>Box.Inner.W</code> 는 <code>Size?</code> 를 지나며 <code>.Value</code> 없이 <code>W</code> 에 닿습니다. 경로의 각 단계에 null 검사가 들어 있어 <code>Box</code> 가 없는
+주문은 첫 세 갈래를 조용히 지나 <code>no box</code> 에 닿습니다. 점 경로 끝에도 지정(<code>inner</code>)과 겹친 패턴을 붙일 수 있습니다. C# 8 의 장에서 본
+예고(<a href="#p9-v8-proppat-ext10">9부</a>)는 null 인 중간 단계를 봤습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-pp-eval">
+<h3>같은 경로를 여러 번 쓰면 — 속성은 몇 번 읽히나</h3>
+<p>제안서: "Repeated member paths are allowed. The compilation of pattern matching can take advantage of common parts of patterns." <!--CITE key=prop-10-extended-property-patterns sec="Detailed design"-->
+"can" 이라고만 적었으니, 읽을 때마다 찍는 속성으로 지금의 컴파일러가 실제로 어떻게 하는지 봤습니다.</p>
+<!--CODE file=ex/11/ppeval/Program.cs note=Next 를 읽을 때마다 [이름.Next] 를 찍는 연결 목록-->
+<!--CSVER v=10.0 file=ex/11/ppeval note=C# 10.0-->
+<p class="cap">점 경로 셋이 <code>Next</code> 를 여섯 번 적었지만 읽기는 노드마다 한 번, 모두 세 번입니다. 중첩 꼴도 똑같이 세 번입니다 — 두 꼴은 같은 결정 트리로
+컴파일됩니다. 짧은 목록에서는 첫 <code>Next</code> 가 <code>null</code> 이라 한 번 읽고 끝납니다. 다만 이것은 이 컴파일러의 동작이고, 명세가 약속한 횟수는 아닙니다 —
+패턴 안의 속성에 부수 효과를 두지 않는 편이 안전합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-pp-bad">
+<h3>점 경로에 쓸 수 있는 것 — 이름과 점뿐</h3>
+<p>제안서의 문법은 <code>subpattern_name : identifier | subpattern_name '.' identifier</code> 입니다. 호출, 인덱서, <code>?.</code> 은 들어갈 자리가 없고, 첫 이름은 입력
+형식의 멤버여야 합니다. <!--CITE key=prop-10-extended-property-patterns sec="Detailed design"--></p>
+<!--CODE file=ex/11/ppbad/Program.cs note=Length 같은 BCL 속성은 된다 · #if 갈래 둘-->
+<!--CSVER v=10.0 file=ex/11/ppbad note=C# 10.0-->
+<!--CSVER v=10.0 file=ex/11/ppbad flags=-define:BAD tag=bad note=-define:BAD — ?. 와 형식 이름-->
+<!--CSVER v=10.0 file=ex/11/ppbad flags=-define:CALL tag=call note=-define:CALL — 메서드 호출-->
+<p class="cap"><code>?.</code> 는 전용 오류 <code>CS8918</code>("Identifier or a simple member access expected")로 거절됩니다 — 점 경로가 이미 null 을 검사하니 필요도 없습니다.
+<code>{ Item.Name: … }</code> 은 형식 패턴이 아니라 <code>object</code> 의 멤버 <code>Item</code> 을 찾다가 <code>CS0117</code> 입니다. 메서드 호출은 문법에서 걸러져
+<code>CS1003</code>(쉼표가 와야 한다)이라는, 원인을 짐작하기 어려운 문장이 나옵니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p11-v10-la-quiz" data-quiz>
+<h3>5장 퀴즈 — 람다와 패턴</h3>
+<p class="q">Q. <code>c.M(() =&gt; { })</code> 가 있습니다. <code>C</code> 에는 <code>M(Delegate)</code> 가, 확장 메서드 쪽에는 <code>M(this object, Action)</code> 이 있습니다. 언어 버전을
+9 에서 10 으로 올리면 무엇이 달라집니까? 컴파일 오류가 납니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 오류는 없고 불리는 메서드가 바뀝니다. C# 9 에서는 람다가 <code>Delegate</code> 로 바뀌지 않아(<code>CS1660</code> 의 그 규칙) 인스턴스 메서드가 후보에서
+빠지고 확장 메서드가 불립니다. C# 10 에서는 함수 형식 변환으로 <code>C.M(Delegate)</code> 이 적용 가능해지고, 컴파일러는 확장 메서드까지 찾아가지 않습니다
+(<a href="#p11-v10-la-break">5장</a>). 자연 형식은 새 문법만이 아니라 기존 호출의 뜻도 바꿉니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-v10-small"><p class="chnum">6장</p><h2>작은 기능들 — 제약을 풀고 정보를 더하다</h2>
+<p class="chsub">섞인 분해 · 확정 대입 · 메서드의 비동기 빌더 · CallerArgumentExpression · #line 범위 · 공개 아닌 멤버의 구현 · 작은 변화들</p></article>
+
+<article class="card" id="p11-v10-decon">
+<h3>분해에서 선언과 대입을 섞기 (mixed deconstruction) <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — whats-new: "This change removes a restriction from earlier versions of C#." 예전엔 분해가 모두 기존 변수에 대입하거나 모두 새 변수를 선언해야
+했습니다. 발표 글의 예 <code>(x2, var y3) = (0, 1);</code> 은 "Works in C# 10 onwards" 입니다. <!--CITE key=whatsnew-10 sec="Assignment and declaration in same deconstruction"-->
+<!--CITE key=blog-welcome-to-csharp-10 sec="Mix declarations and variables in deconstruction"--></p>
+<!--CODE file=ex/11/dcmix/Program.cs note=속성·새 변수·배열 원소 · 루프 밖의 누적값 · for 초기화자-->
+<!--CSVER v=10.0 file=ex/11/dcmix note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/dcmix note=C# 9.0 으로 내리면-->
+<!--CSVER v=10.0 file=ex/11/dcmix flags=-define:BAD tag=bad note=-define:BAD — foreach 에서-->
+<p class="cap">왼쪽에는 지역 변수뿐 아니라 속성(<code>p.X</code>)과 배열 원소도 섞을 수 있습니다. 루프 밖에서 이어지는 값(<code>last</code>)과 한 바퀴만 쓰는 값(<code>name</code>)을
+한 줄에 받는 것이 이 기능이 겨냥한 모양입니다. <code>for</code> 초기화자도 됩니다. <code>foreach</code> 는 여전히 반복 변수를 모두 선언해야 합니다(<code>CS8186</code>).
+C# 7.0 의 장에서 본 예고(<a href="#p8-v7-decon-mix10">8부</a>)의 한 걸음 뒤입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-dc-order">
+<h3>섞인 분해의 평가 순서 — 왼쪽의 받는 쪽부터</h3>
+<p>섞어 쓸 수 있게 되자 왼쪽에 속성·인덱서·새 변수가 한꺼번에 올 수 있습니다. 무엇이 언제 평가되는지 모든 식에 줄을 찍어 확인했습니다.</p>
+<!--CODE file=ex/11/dcorder/Program.cs note=Say 가 평가될 때 찍는다 · X 의 set 도 찍는다-->
+<!--CSVER v=10.0 file=ex/11/dcorder note=C# 10.0-->
+<p class="cap">왼쪽의 받는 쪽(<code>box</code>)과 인덱스(<code>2</code>)가 먼저, 그다음 오른쪽 셋이 왼쪽부터, 마지막에 대입입니다. 그래서 오른쪽의 식이 왼쪽 인덱스에 쓰인 변수를 바꿔도
+대입될 자리는 이미 정해져 있습니다. 새 변수 <code>name</code> 은 평가할 것이 없어 줄이 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-defassign">
+<h3>개선된 확정 대입 (improved definite assignment) <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — 제안서: 명세의 확정 대입에는 "a few gaps which have caused users inconvenience" 가 있었고, 특히 bool 상수와의 비교, 조건부 접근, null 병합이다.
+whats-new 는 그 경고들이 "false positives" 였다고 적습니다. 제안서의 다섯 시나리오를 그대로 옮겼습니다. <!--CITE key=prop-10-improved-definite-assignment sec="Summary"-->
+<!--CITE key=whatsnew-10 sec="Improved definite assignment"--></p>
+<!--CODE file=ex/11/dacases/Program.cs lines=1-27 note== true · is true · ?. == true · ?. ?? false · ?: false-->
+<!--CSVER v=10.0 file=ex/11/dacases note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/dacases note=C# 9.0 으로 내려도-->
+<!--CSVER v=7.3 file=ex/11/dacases note=C# 7.3 으로 내려도-->
+<div class="warn"><b>문서와 다른 곳</b> — whats-new 는 "These examples generated warnings in previous versions of C#, but don't in C# 10" 이라고 적지만, 지금의 컴파일러는 언어
+버전을 보지 않습니다. C# 9.0 에서도, <code>out var</code> 가 처음 생긴 C# 7 대인 7.3 에서도 다섯 줄이 모두 컴파일됩니다. 이 개선은 분석기의 수정이라 옛 버전으로 컴파일해도
+적용됩니다. 덱은 문서대로 C# 10 의 것으로 셉니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-da-trap">
+<h3>확정 대입의 경계 — == true 는 되고 != false 는 안 된다</h3>
+<p>제안서의 규칙은 "조건부 접근이 null 이 아니었을 때" 의 상태를 비교 결과로 옮깁니다. <code>c?.M(out x) == true</code> 가 참이면 <code>c</code> 는 null 이 아니었고 <code>M</code> 이
+불렸습니다. <code>!= false</code> 는 <code>null != false</code> 도 참이라 그런 보장이 없습니다. <!--CITE key=prop-10-improved-definite-assignment sec="==/!= (relational equality operator) expressions"--></p>
+<!--CODE file=ex/11/dacases/Program.cs lines=28-36 note=앞 예제의 #if BAD 갈래-->
+<!--CSVER v=10.0 file=ex/11/dacases flags=-define:BAD tag=bad note=-define:BAD-->
+<p class="cap">컴파일러는 <code>bool?</code> 의 세 값(<code>true</code>·<code>false</code>·<code>null</code>)을 따로 셉니다. <code>== false</code> 의 <code>else</code> 갈래에는 <code>null</code> 이 섞이니
+<code>o7</code> 도 대입되지 않은 것입니다. 사람 눈에 "같은 뜻" 인 조건이 분석에서는 다릅니다 — 고칠 때는 <code>== true</code> 꼴로 쓰는 것이 안전합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-asyncbuilder">
+<h3>메서드에 단 AsyncMethodBuilder (async method builder override) <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — 제안서: 빌더가 반환 형식에 묶여 있어 남의 형식(<code>Task&lt;T&gt;</code>)에 자기 빌더를 쓰려면 새 작업 형식을 만들어야 했다. 그래서 특성을 메서드에 붙이게 하고,
+열린 제네릭 빌더면 반환 형식의 형식 인수를 끼워 넣는다. 빌더에는 공개 <code>Create</code> 와 <code>Task</code> 속성이 있어야 합니다. <!--CITE key=prop-10-async-method-builders sec="Motivation"-->
+<!--CITE key=prop-10-async-method-builders sec="Determining the builder type for an async method"--></p>
+<!--CODE file=ex/11/abcustom/Log.cs note=보통의 Task<T> 빌더를 감싸 불린 것을 찍는 LogBuilder<T>-->
+<!--CSVER v=9.0 file=ex/11/abcustom note=다음 장의 Program.cs 까지 C# 9.0 으로-->
+<p class="cap">빌더 패턴은 C# 7.0 의 작업 형식(task-like)과 같습니다(<a href="#p8-v7-tasktype-later10">8부</a>). C# 9.0 의 거절은 메서드에 단 특성 한 줄뿐입니다 — 지역 함수와 람다에 단
+같은 특성(본문 안에 있다)은 오류로 나오지 않았습니다. 메서드 선언에 오류가 있으면 본문의 오류가 보고되지 않기 때문입니다 — <a href="#p11-sum-new">7장</a>의 C# 9.0 캡처에서 더 크게 보입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ab-where">
+<h3>빌더를 다는 세 자리 — 메서드, 지역 함수, 람다</h3>
+<p>제안서: "This allows the attribute to be applied on methods or local functions or lambdas." 다만 "It is an error to apply the attribute to a lambda with an implicit
+return type." 람다에는 C# 10 의 반환 형식이 필요합니다(<a href="#p11-v10-la-ret">5장</a>). <!--CITE key=prop-10-async-method-builders sec="Using AsyncMethodBuilderAttribute on methods"--></p>
+<!--CODE file=ex/11/abcustom/Program.cs note=Twice · Local · lam 에 LogBuilder, Plain 에는 없음-->
+<!--CSVER v=10.0 file=ex/11/abcustom note=C# 10.0-->
+<!--CSVER v=10.0 file=ex/11/abcustom flags=-define:BAD tag=bad note=-define:BAD — 반환 형식 없는 async 람다-->
+<p class="cap">세 자리 모두 <code>Create</code> → <code>Start</code> → <code>SetResult</code> 가 찍히고, 특성이 없는 <code>Plain</code> 은 아무것도 찍지 않습니다 — 같은 <code>Task&lt;int&gt;</code>
+를 돌려주는데도 빌더가 메서드마다 다릅니다. 상태 기계 이름(<code>&lt;Twice&gt;d__0</code>, <code>&lt;&lt;Main&gt;g__Local|2_0&gt;d</code>)은 컴파일러가 붙인 것입니다. 반환 형식이
+없는 람다는 <code>CS8935</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-callerarg">
+<h3>CallerArgumentExpression — 인수의 식을 문자열로 <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — 제안서: 단언이 실패하면 어느 단언인지 알 수 없다. 특성이 가리킨 매개변수의 인수 식을 컴파일러가 문자열로 넘긴다. 확장 메서드의 <code>this</code> 도 가리킬 수 있고,
+정적 메서드 꼴로 부르면 "it will behave as if first parameter wasn't marked <code>this</code>". <!--CITE key=prop-10-caller-argument-expression sec="Detailed design"-->
+<!--CITE key=prop-10-caller-argument-expression sec="Extension methods"--></p>
+<!--CODE file=ex/11/caexpr/Program.cs lines=1-25 note=Verify — 식 둘을 받는 InRange, this 를 가리키는 ShouldBe-->
+<!--CODE file=ex/11/caexpr/Program.cs lines=26-46 note=부르는 쪽-->
+<!--CSVER v=10.0 file=ex/11/caexpr note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/caexpr note=C# 9.0 으로 내려도-->
+<p class="cap">식은 소스의 글자 그대로입니다 — <code>index   *   2</code> 의 공백은 남고 뒤의 주석은 빠졌습니다. 인수를 직접 주면(<code>"explicit"</code>) 그것이 이깁니다. .NET 10 의
+<code>ThrowIfGreaterThan</code> 이 <code>index</code> 라는 이름을 아는 것도 같은 특성 덕입니다. C# 9.0 에서도 출력이 같습니다 — 게이트가 없다는 것은 C# 5 의 장에서도 봤습니다
+(<a href="#p6-v5-caller-argexpr">6부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ca-odd">
+<h3>문서와 다른 곳 — 없는 매개변수 이름을 가리키면</h3>
+<p>제안서의 "Extra details": "If <code>null</code> or a string that is not a parameter name (e.g. <code>"notAParameterName"</code>) is provided, the compiler will pass in an
+empty string." <!--CITE key=prop-10-caller-argument-expression sec="Extra details"--> 앞 예제의 <code>#if ODD</code> 갈래가 그 경우입니다.</p>
+<!--CODE file=ex/11/caexpr/Program.cs lines=19-23 note=CallerArgumentExpression("nope") — 그런 매개변수는 없다-->
+<!--CSVER v=10.0 file=ex/11/caexpr flags=-define:ODD tag=odd note=-define:ODD-->
+<div class="warn"><b>문서와 다른 곳</b> — 빈 문자열이 아니라 기본값 <code>"default"</code> 가 들어왔고, 경고 <code>CS8963</code>("will have no effect")가 납니다. 지금의 컴파일러는
+잘못된 특성을 무시하고 보통의 선택적 매개변수로 다룹니다. 제안서는 구현 전의 설계 문서라 이런 차이가 남습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-ca-runtime">
+<h3>같이 온 런타임 — 두 특성을 쓰는 .NET 10</h3>
+<p>발표 글은 <code>ArgumentNullException.ThrowIfNull()</code> 을 "A good example of how this attribute can be used" 로 듭니다. <!--CITE key=blog-welcome-to-csharp-10 sec="Caller expression attribute"-->
+제안서는 <code>AsyncMethodBuilderAttribute</code> 의 대상에 <code>AttributeTargets.Method</code> 를 더하자고 적었습니다. <!--CITE key=prop-10-async-method-builders sec="Using AsyncMethodBuilderAttribute on methods"-->
+.NET 10 의 CoreLib 에서 둘을 확인했습니다.</p>
+<!--CODE file=ex/11/caruntime/Program.cs note=CallerArgumentExpression 매개변수를 가진 공개 정적 메서드 · 특성의 대상-->
+<!--CSVER v=10.0 file=ex/11/caruntime note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">12개는 인수 검사 도우미(<code>ThrowIf…</code>)이고 나머지 하나는 <code>Debug.Assert</code> 입니다 — 제안서가 맨 처음 예로 든 바로 그 메서드입니다. 각 메서드가 어느 .NET 판에서
+들어왔는지는 받아 둔 문서로 확인하지 못해 적지 않습니다. <code>AsyncMethodBuilder</code> 의 대상에는 <code>Method</code> 가 들어 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-line">
+<h3>확장된 #line — 줄만이 아니라 범위와 열 <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — 제안서: Razor 같은 DSL 이 만든 C# 은 <code>#line</code> 으로 원래 파일의 줄만 가리킬 수 있어, 디버거의 시퀀스 포인트(sequence point)가 원본의 정확한 열을
+가리키지 못했다. 새 꼴 <code>#line (줄, 열) - (줄, 열) [문자 오프셋] "파일"</code> 은 대응할 범위를 주고, 첫 줄의 열은 "L.start.character + max(c – character offset, 0)"
+으로 옮깁니다. <!--CITE key=prop-10-enhanced-line-directives sec="Motivation"--> <!--CITE key=prop-10-enhanced-line-directives sec="Detailed design"--></p>
+<!--CODE file=ex/11/lnspan/Program.cs note=StackFrame 으로 부른 자리의 파일·줄·열을 찍는다-->
+<!--CSVER v=10.0 file=ex/11/lnspan note=C# 10.0-->
+<!--CSVER v=10.0 file=ex/11/lnspan flags=-define:WARN tag=warn note=-define:WARN — 진단의 위치도 옮겨진다-->
+<!--CSVER v=9.0 file=ex/11/lnspan note=C# 9.0 으로 내려도-->
+<p class="cap">옛 꼴 <code>#line 20</code> 은 줄만 바꾸고 열 9 는 생성된 코드의 들여쓰기 그대로입니다. 범위 꼴은 열을 원본 기준으로 옮기는데, 오프셋이 없으면 들여쓰기 8칸이 더해져
+11 이 되고, 오프셋 8 을 주면 생성기가 붙인 앞부분이 빠져 원본의 열 3 이 됩니다. 경고 <code>CS0168</code> 의 위치 <code>page.razor(9,7)</code> 도 같은 식으로 옮겨졌습니다.
+이 문법은 C# 9.0 에서도 받아들여집니다 — 게이트가 없습니다. whats-new 의 말대로 "You likely won't use the new format, but you'll see its effects."
+<!--CITE key=whatsnew-10 sec="Enhanced #line pragma"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-nonpublic">
+<h3>공개 아닌 인터페이스 멤버의 암시적 구현 <span class="vt v10">C# 10.0</span></h3>
+<p class="why">왜 — C# 8 의 기본 인터페이스 메서드 명세는 <code>internal</code>·<code>protected</code> 인터페이스 멤버를 두고 "You can only implement non-public interface members
+explicitly" 라고 정했습니다. <!--CITE key=prop-8-default-interface-methods sec="Overriding non-public interface members (closed)"--> 컴파일러의 게이트 목록에는 C# 10 의
+기능으로 이름 없이 들어 있습니다(<a href="#p11-v10-gates">1장</a>). <!--CITE key=msgid sec="case MessageID.IDS_FeatureImplicitImplementationOfNonPublicMembers: // semantic check"--></p>
+<!--CODE file=ex/11/npimpl/Program.cs note=명세의 이름 IA · MI · MP 그대로 — C 는 암시적, D 는 명시적-->
+<!--CSVER v=10.0 file=ex/11/npimpl note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/npimpl note=C# 9.0 으로 내리면-->
+<p class="cap">C# 10 에서는 <code>public</code> 클래스 멤버가 <code>internal</code>·<code>protected internal</code> 인터페이스 멤버를 암시적으로 구현합니다. C# 9.0 의 거절은 'Feature'
+문장이 아니라 전용 오류 <code>CS8704</code>("cannot implicitly implement a non-public member in C# 9.0")이고 버전을 올리라고 말합니다. whats-new·버전 기록·발표 글에는 이
+변화가 없습니다 — 받아 둔 문서 가운데 이 기능을 C# 10 의 것으로 적은 곳은 컴파일러의 게이트뿐입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-np-spec">
+<h3>그래도 남은 규칙 — 구현하는 쪽은 public 이어야 한다</h3>
+<p>C# 8 명세의 예는 클래스 쪽도 <code>internal void MI() {}</code>·<code>protected void MP() {}</code> 로 적고 "are these implementations? Decision: NO" 라고 답합니다.
+<!--CITE key=prop-8-default-interface-methods sec="Overriding non-public interface members (closed)"--> 앞 예제의 <code>#if INTERNAL</code> 갈래가 그 꼴입니다.</p>
+<!--CODE file=ex/11/npimpl/Program.cs lines=24-30 note=클래스 쪽도 공개 아닌 멤버-->
+<!--CSVER v=10.0 file=ex/11/npimpl flags=-define:INTERNAL tag=internal note=-define:INTERNAL — C# 10.0-->
+<p class="cap">C# 10 이 푼 것은 "인터페이스 쪽이 공개가 아니어도 된다" 뿐입니다. 구현하는 클래스 멤버가 <code>internal</code> 이면 여전히 <code>CS0737</code>("because it is not
+public")입니다. 명세의 두 결정 가운데 하나만 바뀐 셈입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-v10-small-misc">
+<h3>작은 변화들 — 패턴의 null! 와 문서의 버전</h3>
+<p>Roslyn 의 C# 10 깨지는 변경 1번: "Beginning with C# 10.0, null suppression operator is no longer allowed in patterns." 예는 <code>if (o is null!) {}</code> 입니다.
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-6 sec="This document lists known breaking changes in Roslyn in C# 10.0 which will be introduced with .NET 6."--></p>
+<!--CODE file=ex/11/v10null/Program.cs note=#if OLD 의 o is null!-->
+<!--CSVER v=10.0 file=ex/11/v10null note=C# 10.0-->
+<!--CSVER v=10.0 file=ex/11/v10null flags=-define:OLD tag=old note=-define:OLD — C# 10.0-->
+<!--CSVER v=8.0 file=ex/11/v10null flags=-define:OLD tag=old note=-define:OLD — C# 8.0 으로 내려도-->
+<div class="tblwrap"><table class="kv">
+<tr><th>변화</th><th>문서</th><th>지금의 컴파일러</th></tr>
+<tr><td>패턴 안의 <code>null!</code></td><td>C# 10.0 부터 금지</td><td>C# 8.0 에서도 <code>CS8598</code> — 언어 버전을 보지 않는다</td></tr>
+<tr><td>확정 대입의 개선</td><td>C# 10 의 것</td><td>7.3 에서도 적용(<a href="#p11-v10-defassign">앞</a>)</td></tr>
+<tr><td>자연 형식과 오버로드</td><td>C# 10 의 깨지는 변경</td><td>언어 버전에 따라 다른 메서드(<a href="#p11-v10-la-break">5장</a>)</td></tr>
+</table></div>
+<p class="cap">깨지는 변경 목록의 "Beginning with C# 10.0" 은 그 컴파일러(.NET 6 SDK)부터라는 뜻으로 읽어야 맞습니다 — 지금의 SDK 는 어느 언어 버전에서나 거절합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p11-v10-small-quiz" data-quiz>
+<h3>6장 퀴즈 — 작은 기능들</h3>
+<p class="q">Q. <code>if (map?.TryGetValue(k, out var v) != false) Use(v);</code> 는 C# 10 에서 컴파일됩니까? <code>== true</code> 로 바꾸면 어떻습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>!= false</code> 는 <code>CS0165</code> 입니다 — <code>map</code> 이 null 이면 비교가 <code>null != false</code>, 곧 참이 되어 <code>TryGetValue</code> 가 불리지 않은 채
+<code>Use(v)</code> 에 닿습니다. <code>== true</code> 는 참일 때 <code>map</code> 이 null 이 아니었음을 보장하므로 컴파일됩니다(<a href="#p11-v10-da-trap">6장</a>). 그리고 이 개선은
+언어 버전을 보지 않아 C# 9.0 으로 컴파일해도 똑같습니다(<a href="#p11-v10-defassign">6장</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p11-sum"><p class="chnum">7장</p><h2>11부 정리 — C# 10 을 한자리에</h2>
+<p class="chsub">기능 장 목록 · 게이트 표 · 같은 프로그램 두 판 · 문서와 컴파일러 · C# 11 로 · 11부 퀴즈</p></article>
+
+<article class="card" id="p11-sum-table">
+<h3>C# 10 기능 장 — 1장에서 3장까지</h3>
+<p>버전 기록은 C# 10 을 "removing ceremony, separating data from algorithms, and improved performance for the .NET Runtime" 의 연속으로 적습니다. <!--CITE key=history sec="C# version 10"-->
+이 부에서 배지를 단 장을 차례대로 모았습니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>장</th><th>기능</th><th>슬라이드</th></tr>
+<tr><td>1장</td><td>.NET 6 · 같이 온 런타임 · SDK 의 암시적 using</td><td><a href="#p11-v10-net6">net6</a> · <a href="#p11-v10-runtime">런타임</a> · <a href="#p11-v10-implicit">암시적 using</a></td></tr>
+<tr><td>1장</td><td>경고 웨이브 6 · 미리 보기 기능 둘</td><td><a href="#p11-v10-wave6">웨이브 6</a> · <a href="#p11-v10-preview">미리 보기</a></td></tr>
+<tr><td>2장</td><td><code>record struct</code> · 값 동등성 · ToString · 위치 필드</td><td><a href="#p11-v10-recstruct">record struct</a> · <a href="#p11-v10-rs-equality">동등성</a> · <a href="#p11-v10-rs-print">ToString</a> · <a href="#p11-v10-rs-field">필드</a></td></tr>
+<tr><td>2장</td><td>레코드의 <code>sealed ToString</code></td><td><a href="#p11-v10-rs-sealed">sealed</a></td></tr>
+<tr><td>2장</td><td>매개변수 없는 구조체 생성자 · 필드 초기화자</td><td><a href="#p11-v10-structctor">생성자</a> · <a href="#p11-v10-st-init">초기화자</a> · <a href="#p11-v10-st-noctor">17.0 과 17.1</a></td></tr>
+<tr><td>2장</td><td>구조체·익명 형식의 <code>with</code></td><td><a href="#p11-v10-wi-struct">구조체</a> · <a href="#p11-v10-wi-anon">익명 형식</a></td></tr>
+<tr><td>3장</td><td><code>global using</code> · 파일 범위 네임스페이스</td><td><a href="#p11-v10-globalusing">global using</a> · <a href="#p11-v10-filens">namespace X;</a></td></tr>
+</table></div>
+<p class="cap">4장부터는 <a href="#p11-sum-table2">다음 장</a>에 있습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p11-sum-table2">
+<h3>C# 10 기능 장 — 4장에서 6장까지</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>장</th><th>기능</th><th>슬라이드</th></tr>
+<tr><td>4장</td><td>보간 문자열 처리기 · .NET 10 의 처리기 형식</td><td><a href="#p11-v10-handler">처리기</a> · <a href="#p11-v10-ih-runtime">런타임</a></td></tr>
+<tr><td>4장</td><td>상수 보간 문자열</td><td><a href="#p11-v10-constinterp">const</a></td></tr>
+<tr><td>5장</td><td>람다·메서드 그룹의 자연 형식</td><td><a href="#p11-v10-lambda">자연 형식</a></td></tr>
+<tr><td>5장</td><td>람다의 반환 형식 · 특성</td><td><a href="#p11-v10-la-ret">반환 형식</a> · <a href="#p11-v10-la-attr">특성</a></td></tr>
+<tr><td>5장</td><td>확장 속성 패턴</td><td><a href="#p11-v10-proppat">A.B</a></td></tr>
+<tr><td>6장</td><td>섞인 분해 · 개선된 확정 대입</td><td><a href="#p11-v10-decon">분해</a> · <a href="#p11-v10-defassign">확정 대입</a></td></tr>
+<tr><td>6장</td><td>메서드의 AsyncMethodBuilder · CallerArgumentExpression</td><td><a href="#p11-v10-asyncbuilder">빌더</a> · <a href="#p11-v10-callerarg">식 문자열</a></td></tr>
+<tr><td>6장</td><td>확장된 <code>#line</code> · 공개 아닌 멤버의 암시적 구현</td><td><a href="#p11-v10-line">#line</a> · <a href="#p11-v10-nonpublic">구현</a></td></tr>
+</table></div>
+<p class="cap">언어 버전 기록의 C# 10 목록 가운데 증분 소스 생성기만 배지가 없습니다 — 언어가 아니라 Roslyn 의 기능이라 1장에서 문서 비교로만 다뤘습니다(<a href="#p11-v10-docs">1장</a>).
+<!--CITE key=lvh sec="C# 10.0 - .NET 6 and Visual Studio 2022 version 17.0"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p11-sum-gates">
+<h3>C# 9.0 으로 내리면 — 4장–6장의 거절 표</h3>
+<p>4장–6장의 예제 가운데 C# 9.0 에서 거절되는 것을 모아, 컴파일러가 댄 기능 이름과 오류 번호를 캡처에서 뽑았습니다. 1장의 표(<a href="#p11-v10-gates">게이트</a>)가 컴파일러의
+목록이라면, 이것은 그 목록이 실제 오류로 나오는 모양입니다.</p>
+<!--TABLE file=out/tbl_p11b_gates9.html-->
+<p class="cap">세 줄은 'Feature' 문장이 아닙니다. 람다를 <code>Delegate</code> 로 바꾸는 일과 형식 유추는 예전부터 있던 오류(<code>CS1660</code>·<code>CS0411</code>·<code>CS0826</code>)로
+거절되고, 공개 아닌 멤버의 구현은 전용 오류 <code>CS8704</code> 입니다. 게이트가 없는 확정 대입·CallerArgumentExpression·<code>#line</code> 은 이 표에 없습니다 — C# 9.0 에서도
+그대로 돌았습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-sum-old">
+<h3>같은 프로그램, C# 9.0 판</h3>
+<p>C# 10 의 기능을 한 프로그램에 모으고, 같은 출력을 C# 9.0 으로 쓴 판과 나란히 둡니다. 먼저 C# 9.0 판입니다.</p>
+<!--CODE file=ex/11/v10old/Program.cs note=using 두 줄 · 중괄호 네임스페이스 · record class · 겹친 속성 패턴 · Func 를 적은 람다-->
+<!--CSVER v=9.0 file=ex/11/v10old note=C# 9.0-->
+<p class="cap">들여쓰기 한 단이 파일 전체에 걸려 있고, 상수는 <code>+</code> 로 잇고, 람다에는 <code>Func&lt;Item, bool&gt;</code> 을 적었습니다. 분해는 둘 다 새 변수입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-sum-new">
+<h3>같은 프로그램, C# 10 판</h3>
+<!--CODE file=ex/11/v10new/Program.cs note=global using · namespace Shop; · record struct · 상수 보간 · 자연 형식 · A.B · 섞인 분해-->
+<!--CSVER v=10.0 file=ex/11/v10new note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/11/v10new note=C# 9.0 으로 내리면 — 선언의 거절만 나온다-->
+<p class="cap">출력이 똑같습니다. C# 9.0 으로 내리면 오류는 다섯 개 — <code>global using</code> 둘, 파일 범위 네임스페이스, <code>record struct</code>, 상수 보간 문자열입니다. 본문에
+있는 자연 형식(22행)·확장 속성 패턴(28행)·섞인 분해(36행)는 보고되지 않았습니다. 선언 단계에서 오류가 나면 메서드 본문의 진단이 나오지 않기 때문입니다
+(<a href="#p11-v10-asyncbuilder">6장</a>에서도 봤습니다). 언어 버전을 내렸을 때 나온 오류 수가 고칠 곳의 수는 아닙니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p11-sum-docs">
+<h3>11부 뒤쪽에서 찾은 문서와 컴파일러의 차이</h3>
+<p>4장–6장의 캡처가 문서와 다르게 말한 곳입니다. 1장의 문서끼리의 차이는 <a href="#p11-v10-docs">1장</a>에 있습니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>문서의 말</th><th>캡처</th></tr>
+<tr><td>확정 대입의 개선 — "generated warnings in previous versions of C#"</td><td>7.3 · 9.0 에서도 적용(<a href="#p11-v10-defassign">6장</a>)</td></tr>
+<tr><td>"Beginning with C# 10.0" 패턴의 <code>null!</code> 금지</td><td>8.0 에서도 <code>CS8598</code>(<a href="#p11-v10-small-misc">6장</a>)</td></tr>
+<tr><td>CallerArgumentExpression 의 틀린 이름 → 빈 문자열</td><td>기본값 + 경고 <code>CS8963</code>(<a href="#p11-v10-ca-odd">6장</a>)</td></tr>
+<tr><td>CallerArgumentExpression · <code>#line</code> 범위 — C# 10 의 기능</td><td>게이트가 없어 C# 9.0 에서도 동작(<a href="#p11-v10-callerarg">6장</a> · <a href="#p11-v10-line">6장</a>)</td></tr>
+<tr><td>공개 아닌 멤버의 암시적 구현 — 어느 목록에도 없음</td><td>C# 9.0 에서 <code>CS8704</code>, C# 10 에서 컴파일(<a href="#p11-v10-nonpublic">6장</a>)</td></tr>
+<tr><td>확장 속성 패턴 — 공통 부분을 "can" 활용</td><td>같은 경로의 속성은 한 번만 읽었다(<a href="#p11-v10-pp-eval">5장</a>)</td></tr>
+<tr><td>처리기 API — 9.0 에서 거절이 있을 것 같지만</td><td><code>string</code> 판이 있으면 조용히 그쪽으로(<a href="#p11-v10-ih-over">4장</a>)</td></tr>
+</table></div>
+<p class="cap">표는 이 덱의 캡처를 손으로 옮긴 것입니다. 각 줄의 증거는 링크한 장의 캡처에 있습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p11-sum-cs11">
+<h3>C# 11 이 이어받는 것</h3>
+<p>C# 10 에서 시작되거나 멈춘 줄이 C# 11 에서 이어집니다. C# 11 은 12부에서 다룹니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>C# 10 (이 부)</th><th>C# 11 (12부)</th></tr>
+<tr><td>보간 구멍 안의 줄바꿈은 C# 10.0 에서 <code>CS8967</code>(<a href="#p7-v6-interp-newline11">7부</a>)</td><td>"Newlines in string interpolations", 그리고 원시 문자열 리터럴</td></tr>
+<tr><td>확장 속성 패턴 <code>{ A.B: 1 }</code></td><td>목록 패턴 <code>[1, .., 3]</code></td></tr>
+<tr><td>자연 형식 — 오버로드가 하나인 메서드 그룹</td><td>"Improved method group conversion to delegate"</td></tr>
+<tr><td>구조체 필드 초기화자 · 생성자(<a href="#p11-v10-structctor">2장</a>)</td><td>"Auto-default struct" · "Required members"</td></tr>
+<tr><td>미리 보기: 정적 추상 멤버 · 제네릭 특성(<a href="#p11-v10-preview">1장</a>)</td><td>제네릭 수학 · 제네릭 특성이 정식 기능으로</td></tr>
+</table></div>
+<p class="cap">오른쪽 칸의 따옴표는 whats-new 의 제목입니다. <!--CITE key=whatsnew-11 sec="Newlines in string interpolations"--> <!--CITE key=whatsnew-11 sec="List patterns"-->
+<!--CITE key=whatsnew-11 sec="Improved method group conversion to delegate"--> <!--CITE key=whatsnew-11 sec="Auto-default struct"--> <!--CITE key=whatsnew-11 sec="Required members"-->
+<!--CITE key=whatsnew-11 sec="Generic math support"--> <!--CITE key=whatsnew-11 sec="Generic attributes"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p11-quiz" data-quiz>
+<h3>11부 퀴즈</h3>
+<p class="q">Q. C# 10 프로젝트를 C# 9.0 으로 내렸더니 오류가 다섯 개였습니다. 다섯 곳만 고치면 C# 9.0 으로 컴파일됩니까? 오류 없이 동작만 바뀌는 곳은 없습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 둘 다 아닙니다. 선언 단계의 오류(<code>global using</code>, <code>record struct</code> …)가 있으면 메서드 본문의 오류는 보고되지 않습니다 — 고치고 나면 람다의 자연 형식,
+확장 속성 패턴, 섞인 분해가 새로 나옵니다(<a href="#p11-sum-new">7장</a>). 그리고 거절 없이 뜻만 바뀌는 곳도 있습니다 — 처리기와 <code>string</code> 오버로드가 함께 있는
+API(<a href="#p11-v10-ih-assert">4장</a>), 자연 형식이 바꾼 오버로드 결정(<a href="#p11-v10-la-break">5장</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p11-quiz2" data-quiz>
+<h3>11부 퀴즈 2</h3>
+<p class="q">Q. <code>var f = (ref int x) =&gt; x++;</code> 와 <code>var g = (string s = "a") =&gt; s;</code>(C# 12) 의 형식은 무엇이고, <code>Func</code> 변수에 넣을 수 있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 둘 다 <code>Func</code> 가 아니라 컴파일러가 합성한 internal 대리자입니다 — ref 매개변수는 <code>Func</code> 의 형식 인수가 될 수 없고(<a href="#p11-v10-la-synth">5장</a>), 기본값은
+<code>Func</code> 가 담을 수 없습니다(<a href="#p11-v10-la-later">5장</a>). 그래서 <code>g</code> 를 <code>Func&lt;string, string&gt;</code> 에 넣으면 <code>CS0029</code> 입니다.
+<code>f</code> 는 애초에 맞는 <code>Func</code> 가 없습니다.</div>
+<span class="tier ill">설명용</span>
+</article>

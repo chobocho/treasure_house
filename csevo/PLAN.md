@@ -621,3 +621,22 @@ comments + Korean header line; two review passes before push.
 - Part 10 reruns: p10/p10b/p10c twice each, all exit=0, the 247 part-10 manifest entries identical.
   Part 10 committed: 185/200 (71 + 65 + 49), 43 rows, 139 examples, 243 captures, deck 1684; export
   `make all SKEL=1` green on the first run.
+- Part 10 commit is 9923844. Placeholder 11b_cs10 (p11b-pending) + order.txt/ORDER entries made; p11b launched next to p11.
+- 2026-10-03: session restart found p11 content-complete (74 slides, unreported) and p11b at 4장 (18 slides); p11b relaunched with scratch/brief/p11b_resume.md; orchestrator verifies p11.
+- p11 verified by the orchestrator: 74 slides (cover+intro 2, 1장 12, 2장 ~43, 3장 ~17), 18 rows, 30 claims,
+  11 glossary. guscope -define:BAD printed its two CS0246 lines in a run-dependent order → split into
+  BAD (Col alias) / BAD2 (Console alias), one error each. Re-ran `--only p11` twice: 98 captures, the
+  p11 manifest entries identical. Static checks clean for p11 files.
+- p11b done (resumed): 61 slides (4장 보간 문자열 처리기 18, 5장 람다와 패턴 18, 6장 작은 기능들 15, 7장 정리 10 +
+  p11-quiz/p11-quiz2), 15 rows, 38 examples, 84 captures + out/tbl_p11b_gates9.html, 31 claims, 14
+  glossary. Findings: 9.0 refusals with no 'Feature' wording for lambda→Delegate/object (CS1660/CS0428)
+  and natural-type inference (CS0826/CS0411); non-public implicit impl CS8704 asks for 10.0; improved
+  definite assignment, #line spans, CallerArgumentExpression all work at 9.0/7.3 (ungated); `o is
+  null!` CS8598 at 8.0 too (breaking-change doc says C# 10); wrong CallerArgumentExpression name →
+  default value + CS8963 (proposal: empty string); the inferred-delegate breaking change reproduces
+  exactly; `?:` over two lambdas still CS0173 at 14; [Conditional] on a lambda CS0577; synthesized
+  delegate names differ (<>F{…} for ref/out, <>f__AnonymousDelegate for defaults); 13 CoreLib methods
+  take CallerArgumentExpression on .NET 10.
+- Orchestrator: ex/11/ovpreview was in FAIL but had no EXPECT_FAIL marker → examples-check failed;
+  marker added. Re-ran `--only p11b` twice: the 182 part-11 manifest entries identical. `make all
+  SKEL=1` green in the working tree (no subagent running): deck 1818, 11부 135/150.
