@@ -640,3 +640,8 @@ comments + Korean header line; two review passes before push.
 - Orchestrator: ex/11/ovpreview was in FAIL but had no EXPECT_FAIL marker → examples-check failed;
   marker added. Re-ran `--only p11b` twice: the 182 part-11 manifest entries identical. `make all
   SKEL=1` green in the working tree (no subagent running): deck 1818, 11부 135/150.
+- Part 11 commit is 9a2887e. Part 12 (C# 11, 190) briefs: p12 (~68: cover, 1장 개관 + method-group cache,
+  2장 문자열 — raw/UTF-8/newlines/span patterns, 3장 제네릭 특성과 nameof), p12b (~62: 4장 제네릭 수학,
+  5장 연산자와 정수 — checked operators, >>>, relaxed shift, numeric IntPtr), p12c (~60: 6장 목록 패턴,
+  7장 required 와 auto-default, 8장 ref 필드와 scoped, 9장 file 형식과 정리 + p12-quiz). Placeholders
+  12b_cs11/12c_cs11 + order.txt/ORDER entries made. p12 and p12b launched; p12c waits for one of them.
