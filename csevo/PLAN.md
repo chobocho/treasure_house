@@ -645,3 +645,30 @@ comments + Korean header line; two review passes before push.
   5장 연산자와 정수 — checked operators, >>>, relaxed shift, numeric IntPtr), p12c (~60: 6장 목록 패턴,
   7장 required 와 auto-default, 8장 ref 필드와 scoped, 9장 file 형식과 정리 + p12-quiz). Placeholders
   12b_cs11/12c_cs11 + order.txt/ORDER entries made. p12 and p12b launched; p12c waits for one of them.
+- 2026-10-03: session restart found p12/p12b had written nothing (both died with the session). Placeholder
+  commit e561f9f pushed; p12 and p12b relaunched fresh. p12c still waits for one of them.
+- p12b done: 57 slides (4장 제네릭 수학 34, 5장 연산자와 정수 23), 8 rows (4 gated), 45 examples (1 FAIL gmold,
+  0 WARN), 80 captures + out/tbl_p12b_diag4/diag5.html (two LONGLINE: gmfloat CS0315, gmpat CS9060), 25
+  claims, 11 glossary; two identical `--only p12b` runs. Findings: 10.0 refuses declarations with CS8703 but
+  uses (`T.Zero`) with CS8936; TSelf not enforced; derived class as TSelf CS0311; int implements operators
+  explicitly; CreateTruncating(1e10→int) saturates; checked operator bodies stay unchecked; dynamic ignores
+  user-defined checked operators; `>>>` CS7053 in expression trees; numeric IntPtr keyed on the runtime
+  (same output at 9.0/10.0/11.0). Unhandled exceptions under -checked+ exit -6. p12c launched next to p12.
+- p12 done: 64 slides (cover+intro 2, 1장 개관 14, 2장 문자열 34, 3장 제네릭 특성과 nameof 14), 10 rows (6 gated
+  incl. method-group cache), 47 examples (0 FAIL/WARN; broken forms behind -define), 116 captures incl.
+  tbl_p12_rawerr/u8err/gaerr (one LONGLINE: gaconstraint CS0311), 25 claims, 14 glossary; two identical
+  `--only p12` runs. Findings: proposal's `"\uD801\uD802"u8` refused CS9026; `(ReadOnlySpan<byte>)"…"` CS0030;
+  `[A<nint>]` compiles (proposal forbids); extended nameof ungated (nameof(T) in attribute even at C# 6);
+  nameof shadowing same at 10.0 as 11.0 (breaking-change doc says 11); method-group cache `<>O.<0>__X`
+  only for static methods/static local functions; `"hello"u8` field is 6 bytes and concatenations share it;
+  `class required` CS9029 at 11.0. No Roslyn breaking-change entry for the cache (slide cites §10.8 instead).
+- p12c done: 61 slides (6장 목록 패턴 14, 7장 required 와 구조체 기본값 17, 8장 ref 필드와 scoped 17, 9장 file 형식과
+  정리 13 + p12-quiz/p12-quiz2), 7 rows (5 gated), 43 examples (0 FAIL/WARN), 122 batch outputs incl.
+  tbl_p12c_diag7/diag8/diag9/adpairs, 24 claims, 13 glossary; two identical `--only p12c` runs. Findings:
+  required Obsolete text says "Constructors of types…"; CS9040 "or or" typo; auto-default IL is per-field
+  stfld (proposal: this = default); CS9018–CS9022 only via analyzer config/-warnaserror+, not -warn:9999;
+  returning `out` by ref is CS9075 even at 7.3 (doc CS8166); RefSafetyRules(11) emitted at every langversion;
+  `class scoped {}` CS9062 (doc CS9056); file-local name `<Program>F<64 hex>__Helper`; ref field to a ref
+  struct CS9050 at 14.0. A C# 10 consumer of required members cannot be shown (csrun builds one assembly).
+- Orchestrator: re-ran p12/p12b/p12c twice each, all exit=0, the 320 part-12 manifest entries identical;
+  `make all SKEL=1` green: deck 1999, 12부 182/190. Part 12 committed.

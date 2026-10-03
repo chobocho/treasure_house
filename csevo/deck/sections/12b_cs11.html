@@ -1,4 +1,690 @@
-<article class="card" id="p12b-pending">
-<h2>12부 (이어서)</h2>
-<p>준비 중입니다 — 제네릭 수학과 연산자</p>
+<article class="card" id="p12-v11-math"><p class="chnum">4장</p><h2>제네릭 수학 — 연산자를 인터페이스에</h2>
+<p class="chsub">static abstract · static virtual · TSelf · 제약된 호출 · INumber&lt;T&gt; · CreateChecked · 직접 만든 수 형식</p></article>
+
+<article class="card" id="p12-v11-math-why">
+<h3>왜 — 연산자는 static 이라 추상화할 수 없었다</h3>
+<p class="why">제안서의 동기: "There is currently no way to abstract over static members and write generalized code that applies across types that define those
+static members. This is particularly problematic for member kinds that <i>only</i> exist in a static form, notably operators."
+<!--CITE key=prop-11-static-abstracts-in-interfaces sec="Motivation"--> 발표 글은 더 짧게 묻고 답합니다 — "How do you abstract over operations that are
+inherently static – such as operators? The traditional answer is “poorly”." <!--CITE key=blog-welcome-to-csharp-11 sec="Abstracting over static members"--></p>
+<!--CODE file=ex/12/gmold/Program.cs note=제약 없는 T 의 Sum — 아무 버전에서나 안 된다-->
+<!--CSVER v=10.0 file=ex/12/gmold note=C# 10.0-->
+<!--CSVER v=14.0 file=ex/12/gmold note=C# 14.0 — 지금도 같다-->
+<p class="cap">제약 없는 <code>T</code> 에는 <code>+</code> 가 없습니다. C# 2 의 제약(<a href="#p3-v2-constraint-kinds">3부</a>)으로는 "T 에 <code>+</code> 가 있다" 를 말할 길이
+없었습니다. 지금의 컴파일러도 같은 <code>CS0019</code> 입니다 — 고치는 길은 새 연산자 문법이 아니라 새 <b>제약</b>입니다. 그 제약이 이 장의 주제입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-before">
+<h3>이전엔 — 연산을 값으로 넘기거나, dynamic 으로</h3>
+<p>C# 11 이전의 우회로 둘을 같은 프로그램에 담았습니다. 하나는 호출하는 쪽이 0 과 <code>+</code> 를 대리자로 넘기는 것, 다른 하나는 C# 4 의
+<code>dynamic</code>(<a href="#p5-v4-dyn">5부</a>)으로 <code>+</code> 를 실행 중에 찾는 것입니다. 발표 글은 셋째 길을 "forests of overloads containing essentially the
+same code" 라고 부릅니다. <!--CITE key=blog-welcome-to-csharp-11 sec="Abstracting over static members"--></p>
+<!--CODE file=ex/12/gmbefore/Program.cs note=Func<T,T,T> 를 받는 Sum 과 dynamic 으로 더하는 SumDyn-->
+<!--CSVER v=10.0 file=ex/12/gmbefore note=C# 10.0-->
+<p class="cap">대리자 판은 부를 때마다 0 과 <code>+</code> 를 알려 줘야 합니다. <code>dynamic</code> 판은 알려 줄 것이 없지만 원소마다 실행 중에 연산자를 찾고,
+<code>+</code> 가 없는 <code>DateTime</code> 은 컴파일이 아니라 실행 중에 <code>RuntimeBinderException</code> 으로 무너집니다. 제네릭 수학은 이 확인을 컴파일
+때로 되돌려 놓습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-static-abstract">
+<h3>인터페이스의 static abstract 멤버 (static abstract members) <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — 제안서의 요약: "An interface is allowed to specify abstract static members that implementing classes and structs are then required to provide an
+explicit or implicit implementation of. The members can be accessed off of type parameters that are constrained by the interface."
+<!--CITE key=prop-11-static-abstracts-in-interfaces sec="Summary"--> 예제는 발표 글의 <code>IMonoid</code> 를 그대로 옮겼습니다.
+<!--CITE key=blog-welcome-to-csharp-11 sec="Abstracting over static members"--></p>
+<!--CODE file=ex/12/samonoid/Program.cs note=발표 글의 IMonoid<TSelf> 와 MyInt, AddAll<T>-->
+<!--CSVER v=11.0 file=ex/12/samonoid note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/samonoid note=C# 10.0 으로 내리면-->
+<p class="cap"><code>AddAll&lt;MyInt&gt;</code> 안의 <code>T.Zero</code> 와 <code>+=</code> 가 <code>MyInt</code> 의 static 멤버로 갑니다. 원소가 없으면 <code>T.Zero</code> 가
+그대로 결과입니다. C# 10.0 의 거절은 기능 이름이 아니라 "The modifier 'abstract' is not valid for this item" 꼴이고 선언 두 줄만 짚습니다 —
+<a href="#p11-v10-preview">11부</a>에서 본 미리 보기 때와 같은 문장입니다. <!--CITE key=msgid sec="case MessageID.IDS_FeatureStaticAbstractMembersInInterfaces: // semantic check"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-sum">
+<h3>필요한 연산자만 요구하는 제약 — BCL 의 수 형식에 그대로</h3>
+<p class="why">whats-new: "you can implement the <code>System.IAdditionOperators&lt;TSelf, TOther, TResult&gt;</code> interface in a type that implements
+<code>operator +</code>. Other interfaces define other mathematical operations or well-defined values." <!--CITE key=whatsnew-11 sec="Generic math support"-->
+이 <code>Sum</code> 은 <code>+</code> 와 덧셈의 항등원(0) 두 가지만 요구합니다.</p>
+<!--CODE file=ex/12/gmsum/Program.cs note=IAdditionOperators + IAdditiveIdentity 만-->
+<!--CSVER v=11.0 file=ex/12/gmsum note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/gmsum note=C# 10.0 으로 내리면-->
+<p class="cap"><code>int</code>·<code>double</code>·<code>decimal</code>·<code>BigInteger</code> 가 한 <code>Sum</code> 을 지납니다. .NET 의 수 형식들이 이 인터페이스들을 이미
+구현하기 때문입니다(<a href="#p12-v11-math-bcl">뒤</a>). C# 10.0 에서는 쓰는 자리(<code>T.AdditiveIdentity</code>, <code>s += x</code>)가
+'static abstract members in interfaces' 로 거절됩니다. 같은 기능이 선언 쪽(<code>CS8703</code>)과 쓰는 쪽(<code>CS8936</code>)에서 다른 번호로 거절됩니다.
+<a href="#p10-v9-nint-later11">10부의 예고</a>는 <code>INumber&lt;T&gt;</code> 하나로 썼고, 여기서는 두 인터페이스만 요구했습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-tself">
+<h3>TSelf — "자기 자신" 을 형식 매개변수로</h3>
+<p class="why">발표 글: "Notice how the interface takes a type parameter for “itself”. That’s because static members don’t have a <code>this</code>."
+<!--CITE key=blog-welcome-to-csharp-11 sec="Abstracting over static members"--> 제안서는 연산자의 피연산자 자리에 <code>T</code> 를 허락하는 조건을 적습니다 — <code>T</code> 가
+"<i>directly</i> constrained by what the spec calls the "instance type"" 이어야 합니다. <!--CITE key=prop-11-static-abstracts-in-interfaces sec="Operator restrictions"--></p>
+<!--CODE file=ex/12/saself/Program.cs note=IAdd<TSelf>, 제약 없는 ILoose, 그리고 IAdd<Cm> 을 구현한 Odd-->
+<!--CSVER v=11.0 file=ex/12/saself note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/saself flags=-define:BAD tag=bad note=-define:BAD — where T : ILoose<T> 가 없으면-->
+<div class="warn"><b>함정</b> — <code>where TSelf : IAdd&lt;TSelf&gt;</code> 는 "TSelf 가 바로 그 구현 형식" 이라고 강제하지 않습니다. <code>Odd : IAdd&lt;Cm&gt;</code>
+은 경고 없이 컴파일되고(<code>True</code>), <code>Odd</code> 는 <code>Cm</code> 둘을 더하는 연산자를 명시적으로 구현합니다. 제약은 <code>Cm</code> 이
+<code>IAdd&lt;Cm&gt;</code> 이기만 하면 만족됩니다 — TSelf 는 규칙이 아니라 관례입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-inherit">
+<h3>클래스 계층 — static 구현은 물려받지만 TSelf 는 물려받지 않는다</h3>
+<p class="why">제안서: static 멤버가 static abstract 멤버를 구현하는 규칙은 "the same as for instance members" 이고, 실행 때 쓰이는 구현은 "the one that exists on the
+actual type provided as a type argument" 입니다. <!--CITE key=prop-11-static-abstracts-in-interfaces sec="Implementing static abstract members"-->
+<!--CITE key=prop-11-static-abstracts-in-interfaces sec="Accessing static abstract interface members"--></p>
+<!--CODE file=ex/12/sainherit/Program.cs note=Animal·Cat·Dog 의 Kind, 그리고 Base·Sub 의 Make-->
+<!--CSVER v=11.0 file=ex/12/sainherit note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/sainherit flags=-define:BAD tag=bad note=-define:BAD — M<Sub>()-->
+<p class="cap"><code>Cat</code> 은 <code>Animal</code> 의 <code>Kind</code> 를 물려받아 "animal" 이고, 인터페이스를 다시 적은 <code>Dog</code> 는 자기 <code>Kind</code> 로
+"dog" 입니다. 그러나 <code>Sub : Base</code> 는 <code>IMk&lt;Base&gt;</code> 일 뿐 <code>IMk&lt;Sub&gt;</code> 가 아니라서 <code>M&lt;Sub&gt;()</code> 은 제약에서
+거절됩니다(<code>CS0311</code>). TSelf 패턴은 상속 한 단계를 넘어가지 못합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-call">
+<h3>부르는 자리 — 형식 매개변수 위에서만</h3>
+<p class="why">제안서: "A static abstract interface member <code>M</code> may be accessed on a type parameter <code>T</code> using the expression <code>T.M</code> when
+<code>T</code> is constrained by an interface <code>I</code>". 명시적 구현은 "a qualified name along with the <code>static</code> modifier" 로 씁니다.
+<!--CITE key=prop-11-static-abstracts-in-interfaces sec="Accessing static abstract interface members"--> <!--CITE key=prop-11-static-abstracts-in-interfaces sec="Implementation of interface members"--></p>
+<!--CODE file=ex/12/sacall/Program.cs note=암시적으로 구현한 Cat, 명시적으로 구현한 Dog-->
+<!--CSVER v=11.0 file=ex/12/sacall note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/sacall flags=-define:BAD tag=bad note=-define:BAD — IName<Cat>.Name-->
+<!--CSVER v=11.0 file=ex/12/sacall flags=-define:BAD2 tag=bad2 note=-define:BAD2 — Dog.Name-->
+<p class="cap">인터페이스 이름으로 부르면 <code>CS8926</code> 입니다 — 어느 구현인지 정해 줄 형식 인수가 없기 때문입니다. 명시적으로 구현한 <code>Name</code> 은
+<code>Dog</code> 의 이름으로는 보이지 않고(<code>CS0117</code>) <code>T</code> 를 거쳐야만 불립니다. 인스턴스 멤버의 명시적 구현과 같은 규칙입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-kinds">
+<h3>요구할 수 있는 멤버 — 메서드부터 변환 연산자까지</h3>
+<p class="why">제안서: "Static interface members other than fields are allowed to also have the <code>abstract</code> modifier." 예로 메서드·속성·이벤트·
+<code>+</code>·<code>==</code>·<code>!=</code>·<code>implicit</code>·<code>explicit</code> 변환을 듭니다. 변환 연산자를 찾는 규칙도 형식 매개변수의 "<i>effective interface
+set</i>" 까지 넓혔습니다. <!--CITE key=prop-11-static-abstracts-in-interfaces sec="Abstract static members"-->
+<!--CITE key=prop-11-static-abstracts-in-interfaces sec="§10.5.4 User defined implicit conversions"--></p>
+<!--CODE file=ex/12/sakinds/Program.cs lines=1-34 note=멤버 종류마다 하나씩 요구하는 IKinds<T> 와 구현 N-->
+<!--CODE file=ex/12/sakinds/Program.cs lines=35-51 note=T 로 모두 불러 본다-->
+<!--CSVER v=11.0 file=ex/12/sakinds note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/sakinds flags=-define:BAD tag=bad note=-define:BAD — static abstract 필드-->
+<p class="cap">제네릭 메서드 안의 <code>T a = 5</code> 가 인터페이스의 <code>implicit operator T(int)</code> 로 풀리고, <code>a == 5</code> 도 5 를 <code>T</code> 로 바꾼 뒤
+<code>T</code> 의 <code>==</code> 를 부릅니다. 필드는 안 됩니다(<code>CS0681</code>). <code>N</code> 이 <code>Equals</code>·<code>GetHashCode</code> 를 함께 정의한 것은
+<code>==</code> 를 정의하면 나는 경고 <code>CS0660</code>·<code>CS0661</code> 을 피하려는 것입니다(<a href="#p2-v1-oppair">2부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-virtual">
+<h3>static virtual — 기본 구현이 있는 static 멤버 <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — 제안서: "Virtual static members are required to have a body." 기본 구현 절은 다른 static virtual 멤버를 인터페이스 이름이 아니라 "self" 형식
+매개변수로 부르게 했습니다 — "other static virtual members could just be called on that self type". <!--CITE key=prop-11-static-abstracts-in-interfaces sec="Virtual static members"-->
+<!--CITE key=prop-11-static-abstracts-in-interfaces sec="Default implementations"--></p>
+<!--CODE file=ex/12/savirtual/Program.cs note=기본 Twice 를 쓰는 Cm, 바꾸는 Loud-->
+<!--CSVER v=11.0 file=ex/12/savirtual note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/savirtual note=C# 10.0 으로 내리면-->
+<!--CSVER v=11.0 file=ex/12/savirtual flags=-define:BAD tag=bad note=-define:BAD — Cm.Twice-->
+<p class="cap"><code>Cm</code> 은 기본 <code>Twice</code>(4 + 4 = 8)를, <code>Loud</code> 는 자기 <code>Twice</code>(-1)를 씁니다. C# 10.0 은 'virtual' 에도 <code>CS8703</code>
+을 냅니다 — 컴파일러의 기능 목록(<code>MessageID</code>)에 static virtual 만의 항목은 없습니다. 기본 구현은 <code>Cm</code> 의 멤버가 되지 않습니다(<code>CS0117</code>).
+C# 8 의 기본 인터페이스 메서드(<a href="#p9-v8-dim-class">9부</a>)와 같은 규칙입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-typearg">
+<h3>형식 인수가 될 수 없는 인터페이스 — CS8920</h3>
+<p class="why">제안서: "An interface containing or inheriting a static abstract/virtual member that does not have most specific implementation in the interface cannot be
+used as a type argument. If all static abstract/virtual members have most specific implementation, the interface can be used as a type argument."
+설계 회의는 이 구멍을 "type hole" 이라고 불렀습니다. <!--CITE key=prop-11-static-abstracts-in-interfaces sec="Interfaces as type arguments"--></p>
+<!--CODE file=ex/12/satypearg/Program.cs note=몸체 없는 IZero<T>, 몸체 있는 IHello-->
+<!--CSVER v=11.0 file=ex/12/satypearg note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/satypearg flags=-define:BAD tag=bad note=-define:BAD — List<IZero<Cm>>-->
+<p class="cap"><code>List&lt;IHello&gt;</code> 는 되고, <code>H&lt;IHello&gt;()</code> 는 <code>T.Hi</code> 로 인터페이스의 기본 구현을 부릅니다. <code>List&lt;IZero&lt;Cm&gt;&gt;</code>
+는 거절됩니다 — <code>T</code> 가 <code>IZero&lt;Cm&gt;</code> 라면 <code>T.Zero</code> 를 부를 구현이 어디에도 없기 때문입니다. 제약이 있든 없든, 어느 제네릭 형식의 형식
+인수로도 쓸 수 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-rules">
+<h3>작은 규칙들 — sealed, 클래스, 이름 겹침</h3>
+<p class="why">제안서는 instance 멤버와 맞추려고 static 멤버(필드 제외)에 "an optional <code>sealed</code> modifier, even though they are non-virtual by default" 를 허락했습니다.
+<!--CITE key=prop-11-static-abstracts-in-interfaces sec="Explicitly non-virtual static members"--></p>
+<!--CODE file=ex/12/sarules/Program.cs note=static sealed, 같은 이름을 요구하는 IA·IB, 추상 클래스-->
+<!--CSVER v=11.0 file=ex/12/sarules note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/sarules note=C# 10.0 으로 내리면-->
+<!--CSVER v=11.0 file=ex/12/sarules flags=-define:CLASS tag=class note=-define:CLASS-->
+<!--CSVER v=11.0 file=ex/12/sarules flags=-define:AMBIG tag=ambig note=-define:AMBIG-->
+<div class="tblwrap"><table class="kv">
+<tr><th>규칙</th><th>캡처</th></tr>
+<tr><td>인터페이스의 <code>static sealed</code> — 뜻은 그대로, 적을 수만 있게 됐다</td><td>C# 10.0 에서는 'sealed' 도 <code>CS8703</code></td></tr>
+<tr><td>static abstract 는 인터페이스에만 — 추상 클래스도 안 된다</td><td><code>CS0112</code></td></tr>
+<tr><td>두 인터페이스가 같은 이름을 요구하면 <code>T.Name</code> 은 모호하다</td><td><code>CS0229</code> — 구현 하나(<code>Both.Name</code>)는 둘을 다 채운다</td></tr>
+</table></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-il-tool">
+<h3>IL 을 들여다볼 작은 도구</h3>
+<p>다음 두 장은 컴파일러가 <code>T.One</code> 이나 <code>x + y</code> 를 무엇으로 번역하는지 IL 로 봅니다. 리플렉션으로 메서드 몸체의 바이트를 읽고,
+<code>System.Reflection.Emit.OpCodes</code> 의 표로 명령을 풀어, 형식이나 메서드를 가리키는 명령만 찍는 도구입니다.</p>
+<!--CODE file=ex/12/sail/Il.cs lines=1-27 note=명령 표와 피연산자 크기-->
+<!--CODE file=ex/12/sail/Il.cs lines=28-57 note=Dump — 토큰을 형식·메서드 이름으로-->
+<p class="cap"><code>tools/csrun</code> 은 <code>-optimize</code> 없이 컴파일합니다. 그래서 보이는 것은 최적화하지 않은 IL 이고, 그중 형식·메서드를 가리키는 줄만 걸러 찍습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-il">
+<h3>제약된 호출 — constrained. T</h3>
+<p class="why">제안서: "At runtime, the actual member implementation used is the one that exists on the actual type provided as a type argument."
+<!--CITE key=prop-11-static-abstracts-in-interfaces sec="Accessing static abstract interface members"--> 그 "실제 형식" 이 IL 의 어디에 실리는지 봅니다.</p>
+<!--CODE file=ex/12/sail/Program.cs note=Next<T> 의 IL 을 앞 장의 도구로-->
+<!--CSVER v=11.0 file=ex/12/sail note=C# 11.0-->
+<p class="cap"><code>T.One</code> 과 <code>+</code> 는 둘 다 인터페이스의 static 메서드(<code>INumberBase`1::get_One</code>, <code>IAdditionOperators`3::op_Addition</code>)를
+가리키는 <code>call</code> 이고, 앞에 <code>constrained. T</code> 접두사가 붙습니다. 어느 형식의 구현으로 갈지는 실행 때의 <code>T</code> 가 정합니다 —
+<code>int</code> 로 부르면 42, <code>double</code> 로 부르면 1.5 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-box">
+<h3>함정 — 인터페이스 형식으로 받으면 상자가 생긴다</h3>
+<p><code>INumber&lt;int&gt;</code> 는 형식 인수로는 못 쓰지만(<a href="#p12-v11-sa-typearg">앞</a>) 매개변수 형식으로는 쓸 수 있습니다. 그때 <code>int</code> 는 상자에
+담깁니다(<a href="#p3-v2-generics-box">3부의 박싱</a>). 같은 비교를 두 가지로 쓰고 호출하는 쪽까지 IL 을 찍었습니다.</p>
+<!--CODE file=ex/12/sail/Program.cs lines=10-15 note=인터페이스 형식 매개변수 PosI 와 제약된 PosG-->
+<!--CSVER v=11.0 file=ex/12/sail cmd="csrun -- box" tag=box note=프로그램 인자 box — 네 메서드의 IL-->
+<p class="cap"><code>CallI</code> 는 <code>PosI</code> 를 부르기 전에 <code>box Int32</code> 를 하고, <code>PosI</code> 안의 <code>CompareTo</code> 는 인터페이스를 거친
+<code>callvirt</code> 입니다. <code>CallG</code> 에는 <code>box</code> 가 없고, <code>PosG</code> 의 <code>CompareTo</code> 앞에는 <code>constrained. T</code> 가 붙습니다. static 멤버는
+형식 매개변수로만 부를 수 있으니(<a href="#p12-v11-sa-call">앞</a>) 제네릭 수학은 늘 아래쪽 길을 탑니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-runtime">
+<h3>런타임이 보는 static abstract</h3>
+<p class="why">제안서가 적은 C# 11 이전의 규칙: "Static interface members today are implicitly non-virtual, and do not allow <code>abstract</code>, <code>virtual</code> or
+<code>sealed</code> modifiers." <!--CITE key=prop-11-static-abstracts-in-interfaces sec="Rules before C# 11"--> 런타임 쪽 표시는 9부에서 본 <code>RuntimeFeature</code> 목록의
+<code>VirtualStaticsInInterfaces</code> 입니다(<a href="#p9-v8-dim-runtime">9부</a>).</p>
+<!--CODE file=ex/12/saruntime/Program.cs note=RuntimeFeature, 인터페이스 메서드의 플래그, 구현 지도-->
+<!--CSVER v=11.0 file=ex/12/saruntime note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>get_Zero</code> 는 static 이면서 abstract·virtual 인 메서드입니다. <code>GetInterfaceMap</code> 은 static 슬롯도 채워 보여 줍니다. <code>int</code> 의
+<code>op_Addition</code> 은 <code>IAdditionOperators&lt;…&gt;.op_Addition</code> 이라는 이름의 <b>명시적</b> 구현입니다 — <code>int</code> 에 공개 <code>op_Addition</code> 은 없고,
+<code>int</code> 끼리의 <code>+</code> 는 여전히 컴파일러가 아는 기본 제공 연산자입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-factory">
+<h3>수학 밖의 쓰임 — static 팩터리</h3>
+<p class="why">발표 글: "static virtual members are useful for other things than math. For instance you can abstract over factory methods for a hierarchy of types."
+<!--CITE key=blog-welcome-to-csharp-11 sec="Abstracting over static members"--></p>
+<!--CODE file=ex/12/safactory/Program.cs lines=1-29 note=Kind 와 Create 를 요구하는 IShape — 생성자는 private-->
+<!--CODE file=ex/12/safactory/Program.cs lines=30-48 note=형식 인수만으로 만들고 이름을 찍는 Make<T>-->
+<!--CSVER v=11.0 file=ex/12/safactory note=C# 11.0-->
+<p class="cap"><code>Make&lt;T&gt;</code> 는 생성자가 private 인 형식도 <code>T.Create</code> 로 만들고, 형식의 이름 같은 static 정보도 <code>T.Kind</code> 로 얻습니다. C# 2 의
+<code>new()</code> 제약(<a href="#p3-v2-constraint-kinds">3부</a>)이 부를 수 있는 것은 매개변수 없는 공개 생성자 하나뿐이었습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sa-dim">
+<h3>C# 8 의 인터페이스 static 멤버와 무엇이 다른가</h3>
+<p>9부의 기본 인터페이스 메서드도 인터페이스에 static 멤버를 허락했습니다(<a href="#p9-v8-dim-later">9부의 예고</a>). 다른 점을 이 장의 캡처로 정리합니다.
+<!--CITE key=prop-11-static-abstracts-in-interfaces sec="Rules before C# 11"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>C# 8 (9부)</th><th>C# 11 (이 장)</th></tr>
+<tr><td>몸체</td><td>있어야 한다, 비가상</td><td>abstract 는 없다 · virtual 은 있다 · sealed 는 지금처럼</td></tr>
+<tr><td>부르는 법</td><td>인터페이스 이름으로 <code>I.M()</code></td><td>형식 매개변수로 <code>T.M()</code> — 이름으로는 <code>CS8926</code>(<a href="#p12-v11-sa-call">앞</a>)</td></tr>
+<tr><td>구현 형식</td><td>상관없다</td><td>static 멤버로 채워야 한다(암시적·명시적)</td></tr>
+<tr><td>형식 인수</td><td>상관없다</td><td>몸체 없는 멤버가 있으면 <code>CS8920</code>(<a href="#p12-v11-sa-typearg">앞</a>)</td></tr>
+</table></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p12-v11-math-hist">
+<h3>미리 보기에서 정식으로 — 네 기능의 묶음</h3>
+<p>버전 기록의 C# 10 항목은 static abstract members in interfaces 를 generic attributes 와 함께 "preview" 기능으로 적고, C# 11 항목은 "C# 11 introduces
+<i>generic math</i> and several features that support that goal" 이라고 요약합니다. <!--CITE key=history sec="C# version 10"--> <!--CITE key=history sec="C# version 11"-->
+발표 글도 "which was in preview in C# 10" 이라고 적습니다. <!--CITE key=blog-welcome-to-csharp-11 sec="Abstracting over static members"--></p>
+<p>whats-new 는 제네릭 수학을 언어 기능 넷의 묶음으로 봅니다. <!--CITE key=whatsnew-11 sec="Generic math support"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>whats-new 의 낱말</th><th>이 부</th></tr>
+<tr><td><code>static virtual</code> members in interfaces</td><td><a href="#p12-v11-static-abstract">4장</a></td></tr>
+<tr><td>checked user defined operators</td><td><a href="#p12-v11-checked-op">5장</a></td></tr>
+<tr><td>relaxed shift operators</td><td><a href="#p12-v11-shift">5장</a></td></tr>
+<tr><td>unsigned right-shift operator</td><td><a href="#p12-v11-urshift">5장</a></td></tr>
+</table></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p12-v11-math-bcl">
+<h3>같이 온 런타임 — .NET 7 의 수학 인터페이스 <span class="vt v11">C# 11.0</span></h3>
+<p class="why">발표 글: ".NET 7 comes with a new namespace <code>System.Numerics</code> chock-full of math interfaces … All the numeric types in .NET now implement these new
+interfaces – and you can add them for your own types too!" <!--CITE key=blog-welcome-to-csharp-11 sec="Abstracting over static members"--> <code>System.Int32</code> 이
+구현하는 인터페이스를 리플렉션으로 셌습니다.</p>
+<!--CODE file=ex/12/gmifaces/Program.cs note=typeof(int).GetInterfaces() 를 이름순으로-->
+<!--CSVER v=11.0 file=ex/12/gmifaces note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>int</code> 하나가 인터페이스 32개를 구현합니다. 연산자마다 하나(<code>IAdditionOperators</code>, <code>IShiftOperators</code> …), 항등원
+(<code>IAdditiveIdentity</code>), 범위(<code>IMinMaxValue</code>), 구문 분석(<code>IParsable</code>)이 따로 있습니다. 하나는 공개가 아닌 인터페이스입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-inumber">
+<h3>INumber&lt;T&gt; 를 통째로 구현하면 — static abstract 메서드 58개</h3>
+<p>인터페이스의 상속 사슬을 모두 모으고, 그 안의 static abstract·static virtual 메서드를 셉니다(속성 접근자와 연산자도 메서드로 셉니다).</p>
+<!--CODE file=ex/12/gmhier/Program.cs note=인터페이스 다섯의 닫힘과 static 메서드 수-->
+<!--CSVER v=11.0 file=ex/12/gmhier note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>IAdditionOperators</code> 는 abstract 하나(<code>op_Addition</code>)와 virtual 하나(<code>op_CheckedAddition</code> — 기본 구현이 있다)입니다.
+<code>INumber</code> 는 인터페이스 24개, abstract 58개입니다. 직접 만든 형식이 <code>INumber&lt;T&gt;</code> 를 통째로 구현하려면 58개를 채워야 합니다. 그래서
+알고리즘은 필요한 인터페이스만 요구하는 편이 낫습니다(<a href="#p12-v11-math-sum">앞</a>, <a href="#p12-v11-math-user">뒤</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-family">
+<h3>형식마다 다른 묶음 — Complex 는 INumber 가 아니다</h3>
+<p>제네릭 알고리즘이 요구하는 인터페이스가 곧 받을 수 있는 형식의 목록입니다. 대표 인터페이스 일곱을 형식 여덟에 맞춰 봤습니다.</p>
+<!--CODE file=ex/12/gmfamily/Program.cs note=머리글자 — NB INumberBase · N INumber · BI IBinaryInteger · FP IFloatingPoint · MM IMinMaxValue · SN·UN 부호-->
+<!--CSVER v=11.0 file=ex/12/gmfamily note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>Complex</code> 는 <code>INumberBase</code> 뿐입니다 — <code>INumber</code> 는 비교 연산자(<code>IComparisonOperators</code>)를 요구하기 때문입니다
+(<a href="#p12-v11-math-inumber">앞의 목록</a>). 크기 한계가 없는 <code>BigInteger</code> 에는 <code>IMinMaxValue</code> 가 없습니다. <code>char</code> 는 부호 없는 이진
+정수(<code>IBinaryInteger</code>·<code>IUnsignedNumber</code>)로 구현돼 있어, <code>INumber&lt;T&gt;</code> 를 요구하는 알고리즘에 <code>char</code> 가 들어갑니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-ops">
+<h3>TSelf·TOther·TResult — 세 자리의 연산자 인터페이스</h3>
+<p><code>IAdditionOperators&lt;TSelf, TOther, TResult&gt;</code> 는 더하는 쪽과 결과의 형식을 따로 둡니다. <!--CITE key=whatsnew-11 sec="Generic math support"-->
+직접 만든 <code>Day + int → Day</code> 로 써 보고, CoreLib 의 값 형식이 이 세 자리를 어떻게 채웠는지 리플렉션으로 봅니다.</p>
+<!--CODE file=ex/12/gmaddop/Program.cs lines=1-23 note=Day : IAdditionOperators<Day, int, Day> 와 Step<T, TD>-->
+<!--CODE file=ex/12/gmaddop/Program.cs lines=24-46 note=CoreLib 을 훑는다-->
+<!--CSVER v=11.0 file=ex/12/gmaddop note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">CoreLib 의 제네릭 아닌 값 형식 18개는 모두 <code>TOther == TSelf</code> 입니다. <code>DateTime</code> 은 <code>System.Numerics</code> 인터페이스를 하나도
+구현하지 않습니다 — <code>DateTime + TimeSpan</code> 연산자가 있어도 이 <code>Step</code> 에는 넣을 수 없습니다. 세 자리가 다른 조합은 직접 만든 형식의 몫입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-create">
+<h3>다른 수에서 T 로 — CreateChecked·Saturating·Truncating</h3>
+<p><code>INumberBase&lt;T&gt;</code> 의 static 메서드 셋은 다른 수 형식의 값을 <code>T</code> 로 바꿉니다. 셋은 넘치는 값을 다루는 방법만 다릅니다.</p>
+<!--CODE file=ex/12/gmcreate/Program.cs note=같은 값을 세 메서드로-->
+<!--CSVER v=11.0 file=ex/12/gmcreate note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">Checked 는 던지고, Saturating 은 끝값에 붙고, Truncating 은 정수끼리면 높은 비트를 버립니다(300 → 44, -5 → 251). <code>double</code> → <code>int</code> 는
+셋 다 소수부를 버리는데, 1e10 은 Truncating 도 2147483647 이고 NaN 은 0 입니다 — 부동소수점에서 온 Truncating 은 이름과 달리 끝값에 붙습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-const">
+<h3>제네릭 코드 안의 숫자 상수 — 2 는 T 가 아니다</h3>
+<p>제네릭 코드에서 <code>T</code> 를 다룰 때 가장 먼저 걸리는 것은 리터럴입니다. 평균을 내려면 개수(<code>int</code>)로 나눠야 하고, 절반을 내려면 2 로 나눠야 합니다.</p>
+<!--CODE file=ex/12/gmconst/Program.cs note=Average 와 Half — 상수를 T 로 만드는 법-->
+<!--CSVER v=11.0 file=ex/12/gmconst note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/gmconst flags=-define:BAD tag=bad note=-define:BAD — x / 2-->
+<!--CSVER v=11.0 file=ex/12/gmconst flags=-define:BAD2 tag=bad2 note=-define:BAD2 — x / (T)2-->
+<p class="cap"><code>x / 2</code> 는 <code>T</code> 와 <code>int</code> 사이의 <code>/</code> 를 찾다 실패하고(<code>CS0019</code>), <code>(T)2</code> 같은 캐스트도 없습니다
+(<code>CS0030</code>). 상수는 <code>T.One + T.One</code> 이나 <code>T.CreateChecked(2)</code> 처럼 <code>T</code> 의 static 멤버로 만듭니다. <code>int</code> 의 평균은 정수
+나눗셈이라 2 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-base">
+<h3>INumberBase 의 static 도우미 — Abs·IsNegative·Radix</h3>
+<p>예전 같으면 <code>Math.Abs</code> 의 오버로드 숲이었을 것들이 <code>T.Abs(x)</code> 처럼 형식으로 부르는 static 멤버가 됐습니다.</p>
+<!--CODE file=ex/12/gmbase/Program.cs note=int·double·decimal·Half·Complex 에 같은 Show-->
+<!--CSVER v=11.0 file=ex/12/gmbase note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>decimal</code> 의 <code>Radix</code> 는 10, 나머지는 2 입니다. <code>Complex</code> 의 <code>Abs</code> 는 크기 5 이고, <code>MaxMagnitude(x, 1)</code> 은 크기가
+큰 쪽을 그대로 돌려줍니다(-7 은 -7). <code>Half</code> -0.5 와 1 에서는 1 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-float">
+<h3>부동소수점만의 인터페이스 — IRootFunctions·IFloatingPointConstants</h3>
+<p>제곱근이나 π 처럼 정수에는 없는 것은 따로 인터페이스가 있습니다. 필요한 것만 요구하면 <code>double</code>·<code>float</code>·<code>Half</code> 가 한 소스로 돕니다.</p>
+<!--CODE file=ex/12/gmfloat/Program.cs note=Hypot 과 CircleArea-->
+<!--CSVER v=11.0 file=ex/12/gmfloat note=C# 11.0-->
+<p class="cap">세 형식 모두 5 이고, π 는 형식마다 자기 정밀도입니다(<code>Half</code> 는 3.14). <code>int</code> 로 부르면(<code>-define:BAD</code>) <code>int</code> 가
+<code>IRootFunctions&lt;int&gt;</code> 가 아니라서 <code>CS0315</code> 로 거절됩니다. 이 오류 줄은 200칸을 넘어 캡처로 싣지 못했고, 실험 묶음(<code>exps/p12b.py</code>)이
+매번 종료 코드와 번호만 확인합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-checked">
+<h3>제네릭 코드 안의 checked — op_CheckedAddition 으로</h3>
+<p>제네릭 코드의 <code>checked(a + b)</code> 는 인터페이스의 checked 연산자를 부릅니다. 5장의 checked 사용자 정의 연산자(<a href="#p12-v11-checked-op">5장</a>)가
+제네릭 수학에 필요했던 까닭이 여기 있습니다.</p>
+<!--CODE file=ex/12/gmchecked/Program.cs note=+ 만 정의한 W, 그리고 Add·AddC-->
+<!--CSVER v=11.0 file=ex/12/gmchecked note=C# 11.0-->
+<p class="cap"><code>int</code> 는 기본 문맥에서 감싸 돌고 <code>checked</code> 에서 던집니다. <code>double</code> 은 <code>checked</code> 에서도 <code>Infinity</code> 입니다.
+<code>+</code> 만 정의한 <code>W</code> 는 <code>checked(a + b)</code> 에서도 <code>[W.+]</code> 를 찍습니다 — <code>op_CheckedAddition</code> 이 virtual 이고 기본 몸체가 보통
+<code>+</code> 로 되돌아가기 때문입니다(<a href="#p12-v11-math-inumber">앞의 셈</a>: abstract 1, virtual 1).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-parse">
+<h3>함정 — T.Parse 에는 인수 하나짜리가 없다</h3>
+<p><code>IParsable&lt;T&gt;</code> 는 수 밖의 형식도 구현하는 구문 분석 인터페이스이고, <code>INumberBase&lt;T&gt;</code> 는 <code>NumberStyles</code> 판을 더합니다.</p>
+<!--CODE file=ex/12/gmparse/Program.cs note=P<T> 와 Hex<T>-->
+<!--CSVER v=11.0 file=ex/12/gmparse note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/gmparse flags=-define:BAD tag=bad note=-define:BAD — T.Parse(s)-->
+<p class="cap"><code>int.Parse("12")</code> 처럼 형식에 직접 있는 한 인수 판은 인터페이스에 없습니다. 그래서 <code>T.Parse(s)</code> 는 <code>CS1501</code> 이고,
+<code>IFormatProvider</code> 를 함께 넘겨야 합니다. <code>DateOnly</code>·<code>TimeSpan</code> 같은 수 아닌 형식도 같은 <code>P&lt;T&gt;</code> 를 지납니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-pattern">
+<h3>함정 — T 에는 숫자 상수 패턴을 쓸 수 없다</h3>
+<p class="why">제안서: <code>T : INumberBase&lt;T&gt;</code> 에 <code>t is 1</code> 을 쓰면 "the constant <code>1</code> pattern will first type check the incoming <code>T</code>
+against <code>int</code>. This is unintuitive, so it is blocked". <!--CITE key=prop-11-static-abstracts-in-interfaces sec="Pattern matching"--></p>
+<!--CODE file=ex/12/gmpat/Program.cs note=T.One 과의 == , 그리고 object 의 is 1-->
+<!--CSVER v=11.0 file=ex/12/gmpat note=C# 11.0-->
+<p class="cap"><code>-define:BAD</code> 의 <code>t is 1</code> 은 <code>CS9060</code> 으로 막힙니다(오류 줄이 200칸을 넘어 캡처 대신 실험 묶음이 번호를 확인합니다). 막지
+않았다면 무슨 일이 났을지는 <code>object</code> 로 받은 <code>BoxedOne(1.0)</code> 이 보여 줍니다 — "int 1 인가" 를 물어 <code>False</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-user">
+<h3>직접 만든 수 형식 — 필요한 인터페이스 넷만</h3>
+<p>발표 글의 말대로 "you can add them for your own types too" 입니다. 7 로 나눈 나머지의 수 <code>Mod7</code> 은 <code>INumber&lt;T&gt;</code> 의 58개 대신 알고리즘이
+쓰는 넷만 구현합니다. <!--CITE key=blog-welcome-to-csharp-11 sec="Abstracting over static members"--></p>
+<!--CODE file=ex/12/gmmod/Program.cs note=Mod7 과 Sum·Pow-->
+<!--CSVER v=11.0 file=ex/12/gmmod note=C# 11.0-->
+<p class="cap"><code>Mod7</code> 이 <code>int</code>·<code>double</code>·<code>BigInteger</code> 와 나란히 같은 <code>Sum</code>·<code>Pow</code> 를 지납니다. 5 + 4 = 9 ≡ 2,
+3<sup>6</sup> = 729 ≡ 1 (mod 7) 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-vec">
+<h3>제네릭 수 위의 제네릭 형식 — Vec2&lt;T&gt;</h3>
+<p>수 형식을 받는 쪽만이 아니라 만드는 쪽도 제네릭이 될 수 있습니다. <code>Vec2&lt;T&gt;</code> 는 <code>T</code> 의 <code>+</code>·<code>*</code> 로 자기 연산을 정의합니다.</p>
+<!--CODE file=ex/12/gmvec/Program.cs note=Vec2<T> where T : INumber<T>-->
+<!--CSVER v=11.0 file=ex/12/gmvec note=C# 11.0-->
+<p class="cap"><code>Vec2&lt;T&gt;</code> 는 자신도 <code>IAdditionOperators</code> 를 구현해 앞의 <code>Sum</code> 에 그대로 들어갑니다. <code>int</code>·<code>double</code>·
+<code>decimal</code> 벡터가 한 소스에서 나옵니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-math-diag">
+<h3>4장의 거절 모음</h3>
+<!--TABLE file=out/tbl_p12b_diag4.html-->
+<p class="cap">실험 묶음이 각 거절 캡처의 첫 오류 줄에서 뽑은 표입니다. C# 10.0 의 거절이 선언 쪽은 <code>CS8703</code>("modifier … not valid"), 쓰는 쪽은
+<code>CS8936</code>("Feature …")으로 갈린다는 점과, 나머지는 모두 C# 11 의 새 규칙이 낸 거절이라는 점을 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p12-v11-math-quiz" data-quiz>
+<h3>제네릭 수학 퀴즈</h3>
+<p class="q">Q. <code>static T Half&lt;T&gt;(T x) where T : INumber&lt;T&gt; =&gt; x / 2;</code> 는 왜 컴파일되지 않고, 어떻게 고칩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 2 는 <code>int</code> 이고 <code>T</code> 와 <code>int</code> 사이의 <code>/</code> 가 없어서 <code>CS0019</code> 입니다. <code>(T)2</code> 캐스트도 <code>CS0030</code>
+입니다. <code>T.CreateChecked(2)</code> 나 <code>T.One + T.One</code> 으로 2 를 <code>T</code> 로 만들어 나눕니다(<a href="#p12-v11-math-const">앞</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p12-v11-ops"><p class="chnum">5장</p><h2>연산자와 정수 — 제네릭 수학이 요구한 것</h2>
+<p class="chsub">checked 연산자 · &gt;&gt;&gt; · 시프트의 둘째 피연산자 · 숫자형 IntPtr</p></article>
+
+<article class="card" id="p12-v11-ops-why">
+<h3>왜 — "Generic math created other requirements on the language"</h3>
+<p>whats-new 는 4장의 static abstract 멤버 다음에 이 문장을 적고 언어 기능 셋을 더 꼽습니다. <!--CITE key=whatsnew-11 sec="Generic math support"--> 각 제안서의
+동기는 모두 제네릭 수학 인터페이스에서 출발합니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>기능</th><th>제안서의 동기</th></tr>
+<tr><td>checked 사용자 정의 연산자</td><td>"impossible to expose a type such as <code>Int128</code> or <code>UInt128</code> without the language simultaneously shipping its own support"
+<!--CITE key=prop-11-checked-user-defined-operators sec="Motivation"--></td></tr>
+<tr><td>부호 없는 오른쪽 시프트 <code>&gt;&gt;&gt;</code></td><td>"the type might not necessary have an unsigned counterpart defined or known upfront by the generic math code"
+<!--CITE key=prop-11-unsigned-right-shift-operator sec="Motivation"--></td></tr>
+<tr><td>시프트 연산자 요구 완화</td><td>"the conversion to <code>int</code> may not be possible or even well-defined" <!--CITE key=prop-11-relaxing_shift_operator_requirements sec="Motivation"--></td></tr>
+</table></div>
+<p class="cap">숫자형 IntPtr(<a href="#p12-v11-nint">뒤</a>)는 언어 기능이라기보다 런타임의 변화입니다. 이 장의 끝에서 봅니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p12-v11-checked-op">
+<h3>checked 사용자 정의 연산자 (checked user-defined operators) <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — 제안서: "There is no way for a user to declare a type and support both checked and unchecked versions of an operator." 그래서
+<code>operator</code> 뒤에 <code>checked</code> 를 붙인 판을 따로 선언하게 했습니다. checked 판은 넘치면 던지고, 보통 판은 "a truncated result" 를 돌려주리라고
+가정합니다. <!--CITE key=prop-11-checked-user-defined-operators sec="Motivation"--> <!--CITE key=prop-11-checked-user-defined-operators sec="Semantics"--></p>
+<!--CODE file=ex/12/ckbasic/Program.cs note=감싸 도는 + 와 던지는 checked +-->
+<!--CSVER v=11.0 file=ex/12/ckbasic note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/ckbasic note=C# 10.0 으로 내리면-->
+<div class="note"><b>이전엔</b> — C# 1 부터 <code>checked</code> 문맥은 기본 제공 정수 연산의 넘침만 바꿨습니다(<a href="#p2-v1-checked">2부</a>). 사용자 정의 연산자는
+문맥과 상관없이 하나뿐이었습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ck-flag">
+<h3>-checked 스위치 — 기본 문맥이 바뀌면 고르는 연산자도 바뀐다</h3>
+<p>2부에서 본 csc 의 <code>-checked</code> 스위치(<a href="#p2-v1-checkflag">2부</a>)는 표시가 없는 식의 문맥을 checked 로 바꿉니다. 같은 소스를 그 스위치로 돌립니다.
+<!--CITE key=std-expressions sec="12.8.20 The checked and unchecked operators"--></p>
+<!--CODE file=ex/12/ckbasic/Program.cs lines=15-28 note=앞 장과 같은 App-->
+<!--CSVER v=11.0 file=ex/12/ckbasic flags=-checked+ tag=checked note=-checked+ 로 컴파일하면-->
+<p class="cap">이번엔 맨 처음의 <code>x + y</code> 부터 <code>op_CheckedAddition</code> 이 불려 처리되지 않은 예외로 끝납니다. 사용자 정의 연산자도 기본 제공 연산처럼
+빌드 설정에 따라 다른 메서드로 컴파일된다는 뜻입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ck-pair">
+<h3>짝 규칙 — checked 판만 둘 수는 없다</h3>
+<p class="why">제안서: "a <code>checked operator</code> declaration requires a pair-wise declaration of a <code>regular operator</code> (the return type should match as well)."
+checked 문맥에서는 checked 판과, 짝이 없는 보통 판이 후보입니다. <!--CITE key=prop-11-checked-user-defined-operators sec="Binary operators"-->
+<!--CITE key=prop-11-checked-user-defined-operators sec="Candidate user-defined operators"--></p>
+<!--CODE file=ex/12/ckpair/Program.cs note=+ 는 두 판, - 는 보통 판만-->
+<!--CSVER v=11.0 file=ex/12/ckpair note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/ckpair flags=-define:BAD tag=bad note=-define:BAD — checked * 만-->
+<p class="cap"><code>checked(x - y)</code> 는 checked 판이 없으니 보통 <code>-</code> 로 되돌아가 246 입니다 — 예외가 없습니다. checked 판만 있는 <code>*</code> 는
+<code>CS9025</code> 로 거절됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ck-conv">
+<h3>checked 명시적 변환 — implicit 은 안 된다</h3>
+<p class="why">명시적 변환 연산자도 checked 판을 가질 수 있습니다. 암시적 변환은 제외됐습니다 — "In general, implicit conversion operators are not supposed to throw."
+<!--CITE key=prop-11-checked-user-defined-operators sec="Conversion operators"--> <!--CITE key=prop-11-checked-user-defined-operators sec="(Resolved) Should we support implicit checked conversion operators?"--></p>
+<!--CODE file=ex/12/ckconv/Program.cs note=(sbyte) 변환의 두 판-->
+<!--CSVER v=11.0 file=ex/12/ckconv note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/ckconv flags=-define:BAD tag=bad note=-define:BAD — implicit operator checked-->
+<p class="cap">200 은 보통 판에서 -56, <code>checked((sbyte)…)</code> 에서는 넘침입니다. <code>implicit operator checked</code> 는 <code>CS9024</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ck-body">
+<h3>함정 — checked 연산자의 몸체는 checked 문맥이 아니다</h3>
+<p class="why">제안서: "Checked/unchecked context within the body of a <code>checked operator</code> is not affected by the presence of the <code>checked</code> keyword. In
+other words, the context is the same as immediately at the beginning of the operator declaration." <!--CITE key=prop-11-checked-user-defined-operators sec="Checked vs. unchecked context within a checked operator"--></p>
+<!--CODE file=ex/12/ckbody/Program.cs note=안쪽 checked(…) 를 잊은 checked +-->
+<!--CSVER v=11.0 file=ex/12/ckbody note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/ckbody flags=-checked+ tag=checked note=-checked+ 로 컴파일하면-->
+<p class="cap">기본 빌드에서는 <code>[checked +]</code> 가 불렸는데도 -2147483648 입니다 — 몸체 안의 <code>int</code> 덧셈은 기본 문맥(unchecked)입니다. 프로젝트 전체를
+<code>-checked+</code> 로 빌드해야 같은 몸체가 던집니다. checked 판의 몸체에는 <code>checked(…)</code> 를 직접 적어야 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ck-meta">
+<h3>메타데이터 이름과 식 트리</h3>
+<p class="why">제안서는 ECMA-335 의 연산자 이름에 <i>op_CheckedIncrement</i>·<i>op_CheckedUnaryNegation</i>·<i>op_CheckedAddition</i>·<i>op_CheckedExplicit</i> 등을
+더했고, 식 트리에서는 <code>AddChecked</code> 같은 팩터리를 <code>MethodInfo</code> 와 함께 쓰기로 했습니다. <!--CITE key=prop-11-checked-user-defined-operators sec="Names in metadata"-->
+<!--CITE key=prop-11-checked-user-defined-operators sec="Linq Expression Trees"--></p>
+<!--CODE file=ex/12/ckmeta/Program.cs note=특수 이름 메서드와 두 식 트리-->
+<!--CSVER v=11.0 file=ex/12/ckmeta note=C# 11.0-->
+<p class="cap">연산자마다 <code>op_…</code> 와 <code>op_Checked…</code> 가 짝으로 생깁니다(<a href="#p2-v1-opnames">2부의 op_ 이름</a>). 식 트리의 <code>checked(a + b)</code> 는
+<code>AddChecked</code> 노드이고 그 메서드가 <code>op_CheckedAddition</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ck-dyn">
+<h3>함정 — dynamic 은 checked 연산자를 고르지 않는다</h3>
+<p class="why">제안서의 dynamic 절은 약속이 아니라 계획입니다 — "We will investigate the cost of adding support for checked operators in dynamic invocation in CoreCLR and
+pursue an implementation if the cost is not too high." <!--CITE key=prop-11-checked-user-defined-operators sec="Dynamic"--></p>
+<!--CODE file=ex/12/ckdyn/Program.cs note=같은 checked(… + …) 를 dynamic 과 정적 바인딩으로-->
+<!--CSVER v=11.0 file=ex/12/ckdyn note=C# 14 / .NET 10 에서의 동작-->
+<div class="warn"><b>함정</b> — <code>dynamic</code> 으로 묶인 <code>checked(d + y)</code> 는 보통 <code>+</code> 를 불러 44 를 냅니다. 같은 런타임 바인더가 <code>int</code> 의
+checked 는 지킵니다(<code>int Overflow</code>, <a href="#p5-v4-dyn-checked">5부</a>) — 사용자 정의 checked 연산자만 .NET 10 의 바인더에 닿지 않습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ck-runtime">
+<h3>같이 온 런타임 — Int128 과 BCL 의 checked 연산자 <span class="vt v11">C# 11.0</span></h3>
+<p class="why">제안서가 이 기능 없이는 내놓을 수 없다고 한 형식이 <code>Int128</code>·<code>UInt128</code> 입니다. <!--CITE key=prop-11-checked-user-defined-operators sec="Motivation"-->
+CoreLib 에서 checked 연산자를 공개 메서드로 선언한 형식을 리플렉션으로 찾았습니다.</p>
+<!--CODE file=ex/12/ckint128/Program.cs note=Int128 의 넘침과 op_Checked… 를 선언한 형식-->
+<!--CSVER v=11.0 file=ex/12/ckint128 note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">공개 checked 연산자를 가진 형식은 넷 — <code>Half</code>·<code>Int128</code>·<code>NFloat</code>·<code>UInt128</code> 입니다. <code>int</code> 같은 기본 제공
+형식은 인터페이스의 checked 연산자를 명시적으로 구현할 뿐 공개 메서드로 두지 않습니다(<a href="#p12-v11-sa-runtime">4장</a>). 언어가 직접 아는 형식이 아니라서
+연산자를 메서드로 가져야 하는 형식들입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-urshift">
+<h3>부호 없는 오른쪽 시프트 &gt;&gt;&gt; (unsigned right shift) <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — 제안서: 부호 있는 정수를 높은 비트 복제 없이 밀려면 "a cast to an unsigned type before the shift operation and a cast back after it is required".
+<code>&gt;&gt;&gt;</code> 는 "the high-order empty bit positions are set to zero" 이고 상수식에도 쓸 수 있습니다. <!--CITE key=prop-11-unsigned-right-shift-operator sec="Motivation"-->
+<!--CITE key=prop-11-unsigned-right-shift-operator sec="Shift operators"--> <!--CITE key=prop-11-unsigned-right-shift-operator sec="Constant expressions"--></p>
+<!--CODE file=ex/12/urbasic/Program.cs note=int·long·nint·int? 와 >>>=, 상수-->
+<!--CSVER v=11.0 file=ex/12/urbasic note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/urbasic note=C# 10.0 으로 내리면-->
+<p class="cap"><code>-8 &gt;&gt; 1</code> 은 부호 비트를 채워 -4, <code>-8 &gt;&gt;&gt; 1</code> 은 0 을 채워 2147483644 입니다(두 이진 줄의 첫 자리). <code>nint</code>(60번 밀어 15)와
+<code>int?</code>(올린 꼴)에도 있습니다. C# 10.0 은 <code>&gt;&gt;&gt;</code> 가 여러 번 나와도 첫 자리(<code>const</code>) 하나만 짚었습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ur-before">
+<h3>이전엔 캐스트 두 번 — 그리고 작은 형식의 함정</h3>
+<p class="why">whats-new: "Before C# 11, to force an unsigned right-shift, you would need to cast any signed integer type to an unsigned type, perform the shift, then cast
+the result back to a signed type." <!--CITE key=whatsnew-11 sec="Generic math support"--> 제안서는 <code>&gt;&gt;&gt;</code> 의 왼쪽 피연산자도 <code>int</code>·<code>uint</code>·
+<code>long</code>·<code>ulong</code> 중 하나로 올린다고 적습니다. <!--CITE key=prop-11-unsigned-right-shift-operator sec="Integral types"--></p>
+<!--CODE file=ex/12/urbefore/Program.cs note=캐스트 판과 >>> 판, sbyte, 회전 수-->
+<!--CSVER v=11.0 file=ex/12/urbefore note=C# 11.0-->
+<div class="warn"><b>함정</b> — <code>sbyte</code> -8 의 <code>&gt;&gt;&gt; 1</code> 은 8비트 답 124 가 아니라 2147483644(<code>Int32</code>)입니다. <code>int</code> 로 올린 뒤
+32비트에서 밀기 때문입니다. 8비트 답은 여전히 <code>byte</code> 로 바꿔 <code>&gt;&gt;</code> 해야 나옵니다. 회전 수도 <code>&gt;&gt;</code> 처럼 <code>&amp; 31</code> 로 잘립니다
+(<code>1 &gt;&gt;&gt; 33</code> 은 0, <a href="#p2-v1-shift">2부</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ur-user">
+<h3>사용자 정의 &gt;&gt;&gt; — 예약돼 있던 op_UnsignedRightShift</h3>
+<p class="why">제안서: <code>&gt;&gt;&gt;</code> 는 오버로드할 수 있는 이항 연산자가 되고, 메타데이터 이름은 ECMA-335 가 이미 예약해 둔 <i>op_UnsignedRightShift</i> 입니다.
+Roslyn 의 호환성 문서는 그 결과 다른 언어로 만든 <code>op_UnsignedRightShift</code> 를 메서드로 부르던 코드가 <code>CS0571</code> 이 된다고 적습니다.
+<!--CITE key=prop-11-unsigned-right-shift-operator sec="Metadata name"--> <!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Unsigned right shift operator"--></p>
+<!--CODE file=ex/12/uruser/Program.cs note=16비트 Word 의 >> 와 >>>-->
+<!--CSVER v=11.0 file=ex/12/uruser note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/uruser flags=-define:BAD tag=bad note=-define:BAD — 메서드 이름으로 부르면-->
+<p class="cap"><code>Word</code> 는 자기 폭(16비트)에서 0 을 채우므로 -8 의 <code>&gt;&gt;&gt; 1</code> 이 32764 입니다 — 앞 장의 승격 함정이 없습니다. 복합 대입
+<code>&gt;&gt;&gt;=</code> 도 따라옵니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ur-limits">
+<h3>식 트리와 dynamic 에는 없는 &gt;&gt;&gt;</h3>
+<p class="why">제안서: 식 트리는 "semantics of predefined <code>&gt;&gt;&gt;</code> operators on signed types cannot be accurately represented without adding conversions to an
+unsigned type and back" 이라서 지원하지 않고, <code>dynamic</code> 도 <code>ExpressionType</code> 에 해당 값이 없어 지원하지 않습니다.
+<!--CITE key=prop-11-unsigned-right-shift-operator sec="Linq Expression Trees"--> <!--CITE key=prop-11-unsigned-right-shift-operator sec="Dynamic Binding"--></p>
+<!--CODE file=ex/12/urlimits/Program.cs note=람다는 되고, 식 트리와 dynamic 은?-->
+<!--CSVER v=11.0 file=ex/12/urlimits note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/urlimits flags=-define:TREE tag=tree note=-define:TREE-->
+<!--CSVER v=11.0 file=ex/12/urlimits flags=-define:DYN tag=dyn note=-define:DYN-->
+<p class="cap">대리자로 컴파일하는 람다는 되지만, 식 트리는 <code>CS7053</code>, <code>dynamic</code> 은 컴파일 때 바로 <code>CS0019</code> 입니다 — 실행 중의 예외가 아니라
+컴파일러의 거절이라는 점이 <a href="#p12-v11-ck-dyn">checked 연산자</a>와 다릅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-shift">
+<h3>시프트 연산자의 둘째 피연산자 — int 가 아니어도 <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — 제안서: 시프트 횟수가 "the result of another computation, such as shifting based on the <code>leading zero count</code>" 인 경우가 흔하고, 그 결과의
+자연스러운 형식은 입력과 같은 형식입니다. 그래서 둘째 피연산자가 <code>int</code> 여야 한다는 제한만 지웠습니다. <!--CITE key=prop-11-relaxing_shift_operator_requirements sec="Motivation"-->
+<!--CITE key=prop-11-relaxing_shift_operator_requirements sec="Binary operators"--></p>
+<!--CODE file=ex/12/shrelax/Program.cs note=Big << Big — 선행 0 의 수만큼 밀기-->
+<!--CSVER v=11.0 file=ex/12/shrelax note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/shrelax note=C# 10.0 으로 내리면-->
+<p class="cap">1011 이 64비트의 맨 위로 올라갑니다(선행 0 은 60개). 횟수가 <code>Big</code> 이라 <code>int</code> 로 바꾸는 캐스트가 없습니다. 첫 피연산자가 그 형식이어야
+한다는 제한은 남았습니다(<a href="#p12-v11-sh-cout">다음 장</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sh-cout">
+<h3>제안서가 걱정한 쓰임 — cout &lt;&lt; "string"</h3>
+<p class="why">제안서의 단점 절: "Users will be able to define operators that do not follow the recommended guidelines, such as implementing <code>cout &lt;&lt; "string"</code> in
+C#." 남은 규칙은 "the restriction that the first operand be the class or struct containing the operator declaration remains" 입니다.
+<!--CITE key=prop-11-relaxing_shift_operator_requirements sec="Drawbacks"--> <!--CITE key=prop-11-relaxing_shift_operator_requirements sec="Shift operators"--></p>
+<!--CODE file=ex/12/shcout/Program.cs note=string 과 int 를 받는 Out 의 <<-->
+<!--CSVER v=11.0 file=ex/12/shcout note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/shcout flags=-define:BAD tag=bad note=-define:BAD — "x" << cout-->
+<p class="cap">C# 11 에서는 정말로 됩니다. 시프트의 후보 연산자는 왼쪽 형식에서만 찾으므로 <code>"x" &lt;&lt; cout</code> 은 <code>CS0019</code> 입니다.
+<!--CITE key=prop-11-relaxing_shift_operator_requirements sec="Binary operator overload resolution"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sh-generic">
+<h3>BCL 의 IShiftOperators — 횟수는 그래도 int</h3>
+<p>제안서가 든 동기(<code>TSelf</code> 형식의 선행 0 개수로 밀기)를 BCL 의 인터페이스로 써 봅니다. .NET 의 시프트 인터페이스가 둘째 자리에 무엇을 뒀는지도 봅니다.</p>
+<!--CODE file=ex/12/shgeneric/Program.cs note=Norm<T> 과 IShiftOperators 의 형식 인수-->
+<!--CSVER v=11.0 file=ex/12/shgeneric note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">BCL 의 정수 형식은 모두 <code>IShiftOperators&lt;TSelf, Int32, TSelf&gt;</code> 입니다. 그래서 <code>T.LeadingZeroCount(x)</code>(형식 <code>T</code>)를
+<code>int.CreateChecked</code> 로 바꿔야 합니다. 둘째 피연산자의 해방은 BCL 이 아니라 직접 만든 형식(<a href="#p12-v11-shift">앞</a>)에서 쓰입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-nint">
+<h3>숫자형 IntPtr — nint 는 System.IntPtr 의 별칭 <span class="vt v11">C# 11.0</span></h3>
+<p class="why">whats-new: "The <code>nint</code> and <code>nuint</code> types now alias <code>System.IntPtr</code> and <code>System.UIntPtr</code>, respectively."
+<!--CITE key=whatsnew-11 sec="Numeric IntPtr and UIntPtr"--> 제안서는 <code>int</code> 와 <code>System.Int32</code> 의 관계와 같다고 하고, 그 동작을 켜는 것이
+"The <code>System.Runtime.CompilerServices.RuntimeFeature.NumericIntPtr</code> runtime feature flag" 라고 적습니다. <!--CITE key=prop-11-numeric-intptr sec="Summary"--></p>
+<!--CODE file=ex/12/nialias/Program.cs note=RuntimeFeature, typeof, IntPtr 산술, nint.Zero·Size-->
+<!--CSVER v=11.0 file=ex/12/nialias note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/nialias note=C# 10.0-->
+<!--CSVER v=9.0 file=ex/12/nialias note=C# 9.0-->
+<p class="cap">세 언어 버전의 출력이 같습니다. C# 9 의 명세는 <code>nint.Zero</code>·<code>nint.Size</code> 를 "explicitly excluded" 라고 적었지만
+<!--CITE key=prop-9-native-integers sec="Type members"-->, .NET 10 을 대상으로 하면 <code>-langversion:9.0</code> 에서도 보입니다. 바뀐 것을 정하는 것은 언어 버전이
+아니라 대상 런타임의 플래그입니다(<a href="#p10-v9-nint-type">10부</a>, <a href="#p10-v9-nint-ptr">10부의 IntPtr 산술</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ni-checked">
+<h3>IntPtr 도 checked 에서 넘친다 — C# 8.0 으로 컴파일해도</h3>
+<p class="why">Roslyn 의 .NET 7 호환성 문서: 숫자형 IntPtr 플랫폼에서는 "<code>IntPtr</code> and <code>UIntPtr</code> have built-in <code>checked</code> operators, which can now
+throw when an overflow occurs." 예제의 <code>Add</code> 는 문서의 예 그대로입니다. <!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Checked operators on System.IntPtr and System.UIntPtr"--></p>
+<!--CODE file=ex/12/nichecked/Program.cs note=문서의 Add(IntPtr, int) 와 (int) 변환-->
+<!--CSVER v=11.0 file=ex/12/nichecked note=C# 11.0-->
+<!--CSVER v=8.0 file=ex/12/nichecked note=C# 8.0 — nint 라는 낱말이 없던 버전-->
+<p class="cap"><a href="#p10-v9-nint-checked">10부</a>는 C# 9.0 의 <code>nint</code> 로 같은 넘침을 봤습니다. 여기서는 한 걸음 더 내려 <code>nint</code> 가 없던 C# 8.0 으로
+컴파일해도 <code>IntPtr + int</code> 와 <code>(int)IntPtr</code> 가 checked 에서 던집니다. 호환성 문서가 권하는 길은 <code>unchecked</code> 를 적거나 숫자형 IntPtr 이
+없는 대상으로 내리는 것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ni-ambig">
+<h3>깨지는 변경 — UIntPtr + int 는 이제 모호하다</h3>
+<p class="why">호환성 문서: 숫자형 IntPtr 플랫폼에서는 "the operator <code>+(UIntPtr, int)</code> defined in <code>System.UIntPtr</code> can no longer be used" — 대신
+"Operator '+' is ambiguous on operands of type 'nuint' and 'int'" 입니다. 고치는 길로 <code>UIntPtr.Add</code> 와 <code>unchecked((nuint)y)</code> 를 듭니다.
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Addition of System.UIntPtr and System.Int32"--></p>
+<!--CODE file=ex/12/niambig/Program.cs note=문서의 M(UIntPtr, int) 와 두 우회로-->
+<!--CSVER v=11.0 file=ex/12/niambig note=C# 11.0 — 우회로-->
+<!--CSVER v=11.0 file=ex/12/niambig flags=-define:BAD tag=bad note=-define:BAD-->
+<!--CSVER v=8.0 file=ex/12/niambig flags=-define:BAD tag=bad note=C# 8.0 에서도 -define:BAD-->
+<p class="cap">거절 문장이 C# 8.0 에서도 <code>'nuint'</code> 라는 이름을 씁니다 — 그 버전에는 없는 낱말인데, 컴파일러가 숫자형 <code>UIntPtr</code> 를 그렇게 부르기
+때문입니다. 이 거절도 언어 버전이 아니라 대상 런타임에 묶여 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ni-dyn">
+<h3>dynamic 이 아는 IntPtr 연산 — 형식에 선언된 것만</h3>
+<p class="why">C# 9 의 명세는 <code>nint</code> 의 연산자가 컴파일러가 만드는 것이라 런타임 바인더에는 없다고 적었습니다. <!--CITE key=prop-9-native-integers sec="Dynamic"-->
+<a href="#p10-v9-nint-dyn">10부</a>가 그 동작을 확인했고, 여기서는 무엇이 바인더에 보이는지를 리플렉션으로 봅니다.</p>
+<!--CODE file=ex/12/nidyn/Program.cs note=IntPtr 에 선언된 op_Addition, 그리고 d + 1 과 d + x-->
+<!--CSVER v=11.0 file=ex/12/nidyn note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>IntPtr</code> 형식에 실제로 선언된 <code>+</code> 는 <code>op_Addition(IntPtr, Int32)</code> 하나입니다. 그래서 <code>d + 1</code> 은 되고 <code>d + x</code>
+(<code>IntPtr + IntPtr</code>)는 실행 중에 거절됩니다. 숫자형 IntPtr 로 바뀐 것은 정적 컴파일러가 아는 연산이고, 런타임 바인더의 눈에는 그대로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ops-diag">
+<h3>5장의 거절 모음</h3>
+<!--TABLE file=out/tbl_p12b_diag5.html-->
+<p class="cap">실험 묶음이 각 거절 캡처의 첫 오류 줄에서 뽑은 표입니다. 언어 버전 게이트 셋(<code>CS8936</code>)은 모두 "Feature …" 꼴이고 기능 이름이 컴파일러의
+<code>MessageID</code> 와 같습니다. <!--CITE key=msgid sec="case MessageID.IDS_FeatureCheckedUserDefinedOperators: // semantic check for declarations, parsing check for doc comments"-->
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureUnsignedRightShift: // semantic check for declarations and consumption, parsing check for doc comments"-->
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureRelaxedShiftOperator: // semantic check"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p12-v11-ops-quiz" data-quiz>
+<h3>연산자와 정수 퀴즈</h3>
+<p class="q">Q. <code>operator checked +</code> 를 선언한 구조체에서 <code>checked(a + b)</code> 가 넘쳐도 예외가 나지 않았습니다. 가능한 까닭 두 가지는?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> (1) checked 판의 몸체가 기본 문맥(unchecked)이라 안쪽 연산에 <code>checked(…)</code> 를 적지 않았다(<a href="#p12-v11-ck-body">앞</a>).
+(2) 식이 <code>dynamic</code> 으로 묶여 런타임 바인더가 보통 <code>+</code> 를 골랐다(<a href="#p12-v11-ck-dyn">앞</a>).</div>
+<span class="tier ill">설명용</span>
 </article>

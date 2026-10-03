@@ -1,4 +1,758 @@
-<article class="card" id="p12c-pending">
-<h2>12부 (이어서)</h2>
-<p>준비 중입니다 — 목록 패턴 · required · ref 필드 · file 형식 · 정리</p>
+<article class="card" id="p12-v11-lists"><p class="chnum">6장</p><h2>목록 패턴 — 배열의 모양을 패턴으로</h2>
+<p class="chsub">[1, .., 3] · 슬라이스 패턴 · 받는 형식 · 내림 · 겹친 패턴 · 빠짐없는 switch · 복사 · C# 12 의 짝</p></article>
+
+<article class="card" id="p12-v11-lp-why">
+<h3>왜 — 패턴 매칭 이야기의 다음 장</h3>
+<p class="why">발표 글: "Pattern matching is one of the ongoing stories in C# that we just keep filling out." 그리고 "C# 11 adds list patterns to the story. With list
+patterns you can apply patterns recursively to the individual elements of list-like input – or to a range of them." <!--CITE key=blog-welcome-to-csharp-11 sec="List patterns"--></p>
+<!--CODE file=ex/12/lpwhy/Program.cs note=같은 판정을 C# 10 식(Old)과 C# 11 식(New)으로-->
+<!--CSVER v=11.0 file=ex/12/lpwhy note=C# 11.0 — 두 칸이 같다-->
+<p class="cap"><code>Old</code> 는 길이를 먼저 묻고 인덱서로 원소를 꺼내 비교합니다. 길이 검사와 인덱싱의 차례를 틀리면 <code>IndexOutOfRangeException</code> 입니다. <code>New</code> 는
+배열의 모양 자체를 적습니다. <code>[1, 9]</code> 도 <code>[1, .., 9]</code> 에 맞습니다 — <code>..</code> 는 원소 0개에도 맞습니다. 앞 부들의 예고
+(<a href="#p8-v7-pat-later11">8부</a>, <a href="#p9-v8-pat-list11">9부</a>, <a href="#p10-v9-pat-later">10부</a>)를 여기서 이어 받습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-listpat">
+<h3>목록 패턴 (list patterns) <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — whats-new: "<i>List patterns</i> extend pattern matching to match sequences of elements in a list or an array." 원소 자리에는 아무 패턴이나 오고,
+"The discard pattern (<code>_</code>) matches any single element, and the new <i>range pattern</i> (<code>..</code>) matches any sequence of zero or more elements."
+<!--CITE key=whatsnew-11 sec="List patterns"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureListPattern: // semantic check"--></p>
+<!--CODE file=ex/12/lpbasic/Program.cs note=빈 목록 · 원소 하나 · 정확히 1 2 3 · 시작 · 끝 · 둘-->
+<!--CSVER v=11.0 file=ex/12/lpbasic note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/lpbasic note=C# 10.0 으로 내리면-->
+<p class="cap"><code>[1, 9, 9, 9]</code> 는 <code>[1, ..]</code> 에서 멈춥니다 — switch 는 위에서부터입니다. <code>object</code> 에는 먼저 형식 패턴(<code>int[] and</code>)을 붙여야 목록
+패턴을 쓸 수 있습니다. C# 10.0 의 거절은 갈래마다 하나씩, 일곱 줄 모두 <code>CS8936</code> 'list pattern' 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-lp-slice">
+<h3>슬라이스 패턴 — .. var rest 의 형식은 무엇인가</h3>
+<p class="why">제안서: 슬라이스 패턴의 입력 형식은 "the return type of the underlying <code>this[Range]</code> or <code>Slice</code> method with two exceptions: For
+<code>string</code> and arrays, <code>string.Substring</code> and <code>RuntimeHelpers.GetSubArray</code> will be used, respectively." <!--CITE key=prop-11-list-patterns sec="Lowering"--></p>
+<!--CODE file=ex/12/lpslice/Program.cs note=배열 · string · List<int> · Span<int> 에서 .. var-->
+<!--CSVER v=11.0 file=ex/12/lpslice note=C# 11.0-->
+<p class="cap">잘라 낸 조각은 원래와 같은 형식입니다 — 배열은 <code>Int32[]</code>, 문자열은 <code>String</code>, 목록은 <code>List`1</code>, Span 은 Span. <code>List&lt;T&gt;</code> 의
+조각은 .NET 10 의 <code>List&lt;T&gt;.Slice</code> 에서 옵니다(<a href="#p9-v8-idx-list">9부</a>). <code>[.., var a, var b]</code> 처럼 슬라이스를 앞에 두면 끝의 원소에 이름을
+붙입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-lp-types">
+<h3>받는 형식 — 셀 수 있고 인덱싱할 수 있으면</h3>
+<p class="why">제안서: 목록 패턴은 "any type that is <i>countable</i> as well as <i>indexable</i>" 에 쓰이고, 하위 패턴이 있는 슬라이스는 "<i>countable</i> as well as
+<i>sliceable</i>" 이어야 합니다. 이 규칙은 C# 8 의 "range indexer pattern" 에서 왔습니다(<a href="#p9-v8-idx-pattern">9부</a>). <!--CITE key=prop-11-list-patterns sec="Pattern compatibility"--></p>
+<!--CODE file=ex/12/lptypes/Program.cs note=Count 와 this[int] 만 있는 Bag-->
+<!--CSVER v=11.0 file=ex/12/lptypes note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/lptypes flags=-define:BAD tag=bad note=-define:BAD — 자를 길이 없는데 .. var r-->
+<!--CSVER v=11.0 file=ex/12/lptypes flags=-define:BAD2 tag=bad2 note=-define:BAD2 — IEnumerable<int>-->
+<div class="warn"><b>함정</b> — 자를 수 없는 형식의 <code>.. var r</code> 는 목록 패턴 전용 문장이 아니라 <code>CS1503</code> "cannot convert from 'System.Range' to 'int'" 입니다.
+컴파일러가 <code>Range</code> 를 <code>int</code> 인덱서에 넘겨 보다 실패한 것입니다. 반면 <code>IEnumerable&lt;int&gt;</code> 에는 전용 오류 <code>CS8985</code>("No suitable
+'Length' or 'Count' property")가 나옵니다. 하위 패턴 없는 <code>..</code> 만 쓰면 <code>Bag</code> 도 됩니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-lp-slicem">
+<h3>Slice(int, int) 를 달면 — 시작과 길이로 불린다</h3>
+<p class="why">제안서: 자를 수 있다는 것은 "an accessible indexer that takes a <code>Range</code> as an argument or otherwise an accessible <code>Slice</code> method with two
+<code>int</code> parameters" 가 있다는 뜻입니다. 하위 패턴 없는 슬라이스는 "acts like a proper discard" 라 아무것도 부르지 않습니다.
+<!--CITE key=prop-11-list-patterns sec="Pattern compatibility"--> <!--CITE key=prop-11-list-patterns sec="Lowering"--></p>
+<!--CODE file=ex/12/lpslicem/Program.cs note=Slice 가 불릴 때마다 인수를 찍는 Bag-->
+<!--CSVER v=11.0 file=ex/12/lpslicem note=C# 11.0-->
+<p class="cap"><code>[_, .. var mid, _]</code> 는 <code>Slice(1, 3)</code> — 끝 인덱스가 아니라 <b>길이</b>입니다. <code>[.. var all]</code> 도 통째로 <code>Slice(0, 5)</code> 를, <code>[var f, .. var rest]</code> 는 <code>Slice(1, 4)</code> 를 부르고,
+조각 안에 다시 목록 패턴을 겹칠 수 있습니다. 마지막 줄 <code>[1, .., 5]</code> 는 <code>Slice</code> 를 부르지 않았습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-lp-lower">
+<h3>내림 — Count 는 몇 번 읽히나</h3>
+<p class="why">제안서의 내림: <code>expr is [1, 2, 3]</code> 은 "<code>expr.Length is 3</code> &amp;&amp; <code>expr[new Index(0, fromEnd: false)] is 1</code> …" 과 같습니다. 그리고
+"<code>[..]</code> will not emit a Length check". 원소를 맞추는 차례는 "unspecified" 입니다. <!--CITE key=prop-11-list-patterns sec="Lowering"-->
+<!--CITE key=prop-11-list-patterns sec="Unresolved questions"--> <!--CITE key=prop-11-list-patterns sec="Subsumption checking"--></p>
+<!--CODE file=ex/12/lplower/Program.cs note=Count 와 인덱서를 읽을 때마다 찍는 Log-->
+<!--CSVER v=11.0 file=ex/12/lplower note=C# 11.0 — 실제로 불린 차례-->
+<p class="cap"><code>Count</code> 는 패턴마다 한 번입니다. <code>^1</code> 은 <code>Index</code> 를 받는 인덱서가 없으니 <code>Count - 1</code>, 곧 <code>[2]</code> 로 바뀌어 불립니다.
+<code>[1, 2, 4]</code> 는 앞에서부터 셋을 다 읽고 실패했고, <code>[..]</code> 는 아무것도 읽지 않았습니다. switch 의 두 갈래는 <code>[0]</code> 을 한 번만 읽습니다 — 결정
+그래프(DAG)가 같은 검사를 나눠 쓰기 때문입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-lp-nested">
+<h3>겹친 패턴 — 속성 패턴 안의 목록, 목록 안의 목록</h3>
+<p class="why">whats-new: "You can match elements using any pattern, including constant, type, property and relational patterns." 제안서: 슬라이스의 하위 패턴이 목록이면
+"subpatterns are treated as if they were a direct subpattern of the containing list". <!--CITE key=whatsnew-11 sec="List patterns"-->
+<!--CITE key=prop-11-list-patterns sec="Subsumption checking"--></p>
+<!--CODE file=ex/12/lpnested/Program.cs note=record 의 속성 안 목록, 2차원 들쭉날쭉 배열, 슬라이스 안의 패턴-->
+<!--CSVER v=11.0 file=ex/12/lpnested note=C# 11.0-->
+<p class="cap"><code>Id: ['A', ..]</code> 는 문자열의 첫 글자를, <code>Qty: [&gt; 0, ..]</code> 는 첫 수량을 봅니다 — C# 9 의 관계 패턴이 원소 자리에 들어갑니다. <code>A8</code> 은
+첫 수량이 0 이라 "plain" 입니다. <code>Qty.Length</code> 는 C# 10 의 확장 속성 패턴입니다(<a href="#p11-v10-proppat">11부</a>). 슬라이스 뒤에는 목록 패턴도, 속성 패턴
+<code>{ Length: 2 }</code> 도 옵니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-lp-exhaust">
+<h3>빠짐없는 switch — 컴파일러가 빠진 모양을 예로 든다</h3>
+<p class="why">제안서: 목록 패턴의 포섭 검사는 "just like positional patterns with <code>ITuple</code>" — 자리마다의 하위 패턴에 "an additional node for testing length" 가 더해집니다.
+<!--CITE key=prop-11-list-patterns sec="Subsumption checking"--></p>
+<!--CODE file=ex/12/lpexhaust/Program.cs note=길이로 가르는 Size, 처음과 끝으로 가르는 Ends-->
+<!--CSVER v=11.0 file=ex/12/lpexhaust note=C# 11.0 — 경고 없음-->
+<!--CSVER v=11.0 file=ex/12/lpexhaust flags=-define:BAD tag=bad note=-define:BAD — [_] 를 빼면-->
+<!--CSVER v=11.0 file=ex/12/lpexhaust flags=-define:BAD2 tag=bad2 note=-define:BAD2 — [_, .., &lt; 0] 을 빼면-->
+<div class="warn"><b>함정</b> — <code>CS8509</code> 의 예는 목록 패턴 모양이 아닐 수 있습니다. <code>[_]</code> 를 빼면 "<code>{ Length: 1 }</code>" 이라고 길이로 말하고,
+<code>[_, .., &lt; 0]</code> 을 빼면 "<code>[0, -1]</code>" 이라는 구체적인 배열을 듭니다. 어느 쪽이든 경고일 뿐이라 프로그램은 돌고, 그 모양이 들어오면
+<code>SwitchExpressionException</code> 으로 끝납니다(종료 코드 -6).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-lp-subsume">
+<h3>같은 원소를 두 번 묻는 패턴 — 도달할 수 없는 case</h3>
+<p class="why">제안서의 예: <code>case [_, .., 1]:</code> 다음의 <code>case [.., _, 1]:</code> 는 "produces an error because both patterns yield the same DAG". 반면
+<code>[_, 1, ..]</code> 와 <code>[.., 1, _]</code> 는 다릅니다 — 길이에 따라 같은 원소일 수도, 아닐 수도 있습니다. <!--CITE key=prop-11-list-patterns sec="Subsumption checking"--></p>
+<!--CODE file=ex/12/lpsubsume/Program.cs note=끝 · 둘째 · 끝에서 둘째, 그리고 길이 3 에서의 두 이름-->
+<!--CSVER v=11.0 file=ex/12/lpsubsume note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/lpsubsume flags=-define:BAD tag=bad note=-define:BAD — 같은 검사를 다시-->
+<p class="cap"><code>[.., _, 1]</code> 은 <code>CS8120</code>(도달할 수 없는 case)입니다. 길이가 3 인 <code>{ 5, 7, 9 }</code> 에서는 <code>[1]</code> 과 <code>[^2]</code> 가 같은 원소라
+<code>b</code> 와 <code>c</code> 가 둘 다 7 입니다. 제안서가 "a test for this value is inserted into the decision DAG" 라고 적은 경우입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-lp-neg">
+<h3>깨지는 변경 — Length·Count 는 음수가 아니라고 본다</h3>
+<p class="why">Roslyn 의 호환성 문서: <code>Length</code> 와 <code>Count</code> 는 "are assumed to be non-negative for purpose of subsumption and exhaustiveness analysis of patterns and
+switches." 문서의 예 <code>i is { Length: -1 }</code> 은 오류가 됐고, 이 변경은 "made as part of adding list patterns" 입니다.
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Length, Count assumed to be non-negative in patterns"--></p>
+<!--CODE file=ex/12/lpneg/Program.cs note=음수 갈래 없는 switch, Length: -1, 그리고 or 안의 Length &lt; 0-->
+<!--CSVER v=11.0 file=ex/12/lpneg note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/lpneg flags=-define:BAD tag=bad note=-define:BAD — Length: -1-->
+<!--CSVER v=11.0 file=ex/12/lpneg flags=-define:BAD2 tag=bad2 note=-define:BAD2 — or 의 한쪽만 불가능-->
+<!--CSVER v=10.0 file=ex/12/lpneg flags=-define:BAD tag=bad note=C# 10.0 으로 내려도 -define:BAD-->
+<p class="cap"><code>Count: &lt; 0</code> 갈래 없이도 <code>CS8509</code> 가 없고, <code>{ Length: -1 }</code> 은 <code>CS8518</code>(결코 맞을 수 없다)입니다. C# 10.0 으로 내려도 같습니다 —
+문서가 이 변경을 언어 버전이 아니라 컴파일러 판(SDK 6.0.200)에 묶었기 때문입니다. <code>or</code> 의 한쪽만 불가능한 <code>{ Length: &lt; 0 } or [_]</code> 은 아무
+진단 없이 컴파일됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-lp-copy">
+<h3>함정 — 배열의 .. var rest 는 매번 새 배열</h3>
+<p class="why">발표 글은 목록 패턴의 예로 <code>[var first, ..var rest] =&gt; first + AddAll&lt;T&gt;(rest)</code> 라는 재귀를 듭니다. <!--CITE key=blog-welcome-to-csharp-11 sec="List patterns"-->
+배열의 조각은 <code>GetSubArray</code> 가 만든 새 배열입니다(<a href="#p9-v8-range-copy">9부</a>). 같은 재귀를 배열과 <code>ReadOnlySpan&lt;int&gt;</code> 로 견줘 봅니다.</p>
+<!--CODE file=ex/12/lpcopy/Program.cs note=조각에 쓰기, 그리고 1..100 의 재귀 합 두 가지-->
+<!--CSVER v=11.0 file=ex/12/lpcopy note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">배열의 조각에 쓴 99 는 원래 배열에 닿지 않고, Span 의 조각에 쓴 99 는 닿습니다. 원소 100개의 재귀 합에서 배열 판은 조각 원소 4950개를 베끼며 22376바이트를
+할당했고, Span 판은 0바이트입니다. 재귀로 쪼개는 알고리즘이라면 슬라이스 패턴의 입력을 Span 으로 받는 편이 맞습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-lp-later12">
+<h3>뒤 버전 — C# 12 의 컬렉션 식은 목록 패턴의 짝</h3>
+<p class="why">C# 12 의 컬렉션 식 제안서: 목록 패턴은 "matching and deconstruction of list-like values" 를 주지만 "unlike almost all other pattern constructs, this
+matching/deconstruction syntax lacks the corresponding construction syntax." 그래서 만드는 문법을 <code>[e1, ..c2, e2]</code> 로, 패턴의 <code>[p1, ..p2, p3]</code> 에 맞췄습니다.
+<!--CITE key=prop-12-collection-expressions sec="Motivation"--></p>
+<!--CODE file=ex/12/lplater12/Program.cs note=[.. head, 3, 4] 로 만들고 [1, 2, .. var tail] 로 가른다-->
+<!--CSVER v=12.0 file=ex/12/lplater12 note=C# 12.0-->
+<!--CSVER v=11.0 file=ex/12/lplater12 note=C# 11.0 으로 내리면-->
+<p class="cap">C# 11.0 으로 내리면 거절은 만드는 쪽(<code>collection expressions</code>) 넷뿐이고, 목록 패턴 두 줄은 통과합니다. 패턴이 한 버전 먼저 왔습니다. 컬렉션 식은 13부에서
+다룹니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p12-v11-lp-quiz" data-quiz>
+<h3>6장 퀴즈 — 목록 패턴</h3>
+<p class="q">Q. <code>Count</code> 와 <code>this[int]</code> 만 있는 형식 <code>Bag</code> 에 <code>b is [var first, .. var rest]</code> 를 쓰면 어떻게 됩니까? 컴파일되게 하려면
+무엇을 더하고, 그때 <code>Bag</code> 의 원소가 5개라면 무엇이 불립니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>Range</code> 를 받는 인덱서도 <code>Slice</code> 도 없어서 <code>CS1503</code>(Range 를 int 로 바꿀 수 없다)입니다(<a href="#p12-v11-lp-types">앞</a>).
+<code>Slice(int start, int length)</code> 를 더하면 되고, 이때 <code>Slice(1, 4)</code> 가 불립니다 — 두 번째 인수는 끝이 아니라 길이입니다
+(<a href="#p12-v11-lp-slicem">앞</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p12-v11-init"><p class="chnum">7장</p><h2>required 와 구조체 기본값 — 만들 때의 약속</h2>
+<p class="chsub">required · SetsRequiredMembers · new() 제약 · 붙일 수 없는 곳 · 상속 · 메타데이터 · nullable · 구조체 필드의 자동 기본값 · 숨은 경고</p></article>
+
+<article class="card" id="p12-v11-rq-why">
+<h3>왜 — 생성자 매개변수를 층마다 되풀이하던 일</h3>
+<p class="why">제안서의 동기: "Object hierarchies today require a lot of boilerplate to carry data across all levels of the hierarchy." <!--CITE key=prop-11-required-members sec="Motivation"-->
+발표 글: "When creating types that used object initializers, you used to be unable to specify that some properties must be initialized." <!--CITE key=blog-welcome-to-csharp-11 sec="Required members"--></p>
+<!--CODE file=ex/12/rqwhy/Program.cs note=생성자로 강제하는 Person·Student, init 만 있는 Person2-->
+<!--CSVER v=10.0 file=ex/12/rqwhy note=C# 10.0-->
+<p class="cap">생성자로 강제하면 파생 클래스 <code>Student</code> 가 부모의 매개변수를 모두 다시 받아 넘겨야 합니다. C# 9 의 <code>init</code> 은 초기화자로 쓰게 해 줬지만 빠뜨린
+<code>Last</code> 는 조용히 null 입니다. 이 빈칸은 <a href="#p7-v6-immut-required">7부</a>와 <a href="#p10-v9-required11">10부</a>에서 예고했습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-required">
+<h3>required 멤버 (required members) <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — whats-new: "You can add the <code>required</code> modifier to properties and fields to enforce constructors and callers to initialize those values."
+<!--CITE key=whatsnew-11 sec="Required members"--> 예제는 발표 글의 <code>Person</code> 그대로이고, 글은 "It is now an error to create a <code>Person</code> without initializing both the
+required properties" 라고 적습니다. <!--CITE key=blog-welcome-to-csharp-11 sec="Required members"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureRequiredMembers: // semantic check"--></p>
+<!--CODE file=ex/12/rqbasic/Program.cs note=발표 글의 Person — FirstName·LastName 은 required-->
+<!--CSVER v=11.0 file=ex/12/rqbasic note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/rqbasic flags=-define:BAD tag=bad note=-define:BAD — LastName 을 빠뜨리면-->
+<!--CSVER v=10.0 file=ex/12/rqbasic note=C# 10.0 으로 내리면-->
+<p class="cap">빠뜨린 멤버마다 <code>CS9035</code> 가 하나씩 나오고, 문장이 채울 곳을 "object initializer or attribute constructor" 둘로 말합니다(<a href="#p12-v11-rq-attr">뒤</a>).
+C# 10.0 의 거절은 선언한 두 줄에만 나옵니다. <code>MiddleName</code> 처럼 <code>required</code> 가 없는 멤버는 예전처럼 빠뜨려도 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rq-sets">
+<h3>[SetsRequiredMembers] — 생성자가 다 채운다는 약속</h3>
+<p class="why">제안서: 이 특성은 생성자에서 요구를 없애지만 "The constructor body is not validated to ensure that it definitely sets the required members of the type." 그리고 이 특성이 붙은
+생성자로 잇는(<code>: this(…)</code>) 생성자에도 붙여야 합니다. <!--CITE key=prop-11-required-members sec="SetsRequiredMembersAttribute"--></p>
+<!--CODE file=ex/12/rqsets/Program.cs note=빈 생성자, 둘 다 채우는 생성자, 아무것도 안 채우는 생성자-->
+<!--CSVER v=11.0 file=ex/12/rqsets note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/rqsets flags=-define:BAD tag=bad note=-define:BAD — 특성 없이 this(…) 로 잇기-->
+<!--CSVER v=11.0 file=ex/12/rqsets flags=-define:BAD2 tag=bad2 note=-define:BAD2 — new Person()-->
+<!--CSVER v=11.0 file=ex/12/rqsets flags=-nullable:enable tag=nullable note=-nullable:enable-->
+<div class="warn"><b>함정</b> — <code>Person(int)</code> 는 아무것도 채우지 않는데도 오류가 없고 <code>Last</code> 는 null 입니다. nullable 을 켜야 <code>CS8618</code> 이 나오는데, 그 문장은
+이미 <code>required</code> 인 속성에게 "Consider adding the 'required' modifier" 를 권합니다. 특성이 요구를 지우면 컴파일러에게는 보통 생성자와 같아집니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rq-new">
+<h3>new() 제약과 default — 약속을 지킬 수 없는 곳</h3>
+<p class="why">제안서: 계약을 내건 매개변수 없는 생성자를 가진 형식은 <code>new()</code> 제약의 형식 인수가 될 수 없습니다 — "there is no way for the generic instantiation to ensure that the
+requirements are satisfied." 구조체는 "not enforced on instances of <code>struct</code> types created with <code>default</code>" 이지만 <code>new StructType()</code> 에는 적용됩니다.
+<!--CITE key=prop-11-required-members sec="new() constraint"--> <!--CITE key=prop-11-required-members sec="struct defaults"--></p>
+<!--CODE file=ex/12/rqnew/Program.cs note=required 필드를 가진 구조체 Point 와 클래스 Box-->
+<!--CSVER v=11.0 file=ex/12/rqnew note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/rqnew flags=-define:BAD tag=bad note=-define:BAD — Make<Box>()-->
+<!--CSVER v=11.0 file=ex/12/rqnew flags=-define:BAD2 tag=bad2 note=-define:BAD2 — new Point()-->
+<p class="cap"><code>default</code> 와 배열의 원소는 0 으로 채워진 채 아무 진단이 없습니다. <code>new Point()</code> 는 구조체에 직접 쓴 생성자가 없어도 <code>CS9035</code> 입니다.
+<code>CS9040</code> 문장에는 "generic type or or method" 라고 "or" 가 두 번 들어 있습니다 — 컴파일러 문장 그대로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rq-rules">
+<h3>required 를 붙일 수 없는 곳 — 채울 길이 없으면 안 된다</h3>
+<p class="why">제안서: "It is an error to mark a member required if the member cannot be set in any context where the containing type is visible." 필드는 <code>readonly</code> 일 수 없고,
+속성은 형식만큼 보이는 setter 나 initer 가 있어야 합니다. <code>static</code> 과 함께 쓸 수 없고 인덱서·인터페이스에는 붙지 않으며, 가리는 것(hide)도 오류입니다.
+<!--CITE key=prop-11-required-members sec="Accessibility"--> <!--CITE key=prop-11-required-members sec="required modifier"--></p>
+<!--CODE file=ex/12/rqrules/Program.cs note=BAD1–BAD8 — 갈래마다 오류 하나-->
+<!--CSVER v=11.0 file=ex/12/rqrules note=C# 11.0 — 기호 없이-->
+<p class="cap">여덟 갈래를 하나씩 켜서 컴파일한 결과는 <a href="#p12-v11-rq-diag">다음 장</a>의 표에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rq-diag">
+<h3>required 의 거절 모음</h3>
+<!--TABLE file=out/tbl_p12c_diag7.html-->
+<p class="cap">실험 묶음이 각 캡처의 첫 오류 줄에서 뽑았습니다. 전용 번호는 <code>CS9030</code>–<code>CS9040</code> 사이에 모여 있지만, <code>static</code>·인덱서·인터페이스는
+전용 문장 없이 옛 <code>CS0106</code>("not valid for this item")입니다. readonly 필드와 setter 없는 속성은 같은 <code>CS9034</code>("must be settable")로 묶였습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rq-inherit">
+<h3>상속 — 목록은 물려받고, override 는 required 를 다시 적는다</h3>
+<p class="why">제안서: 형식은 "inherit these lists from their base types automatically". required 멤버를 override 할 때는 "the <code>required</code> keyword must be included", 그리고
+required 가 아니던 멤버를 override 에서 required 로 만들 수 있습니다. <!--CITE key=prop-11-required-members sec="Detailed Design"--> <!--CITE key=prop-11-required-members sec="Accessibility"--></p>
+<!--CODE file=ex/12/rqinherit/Program.cs note=Cat 은 물려받고 Dog 는 Sound 를 더한다, Sub 의 override-->
+<!--CSVER v=11.0 file=ex/12/rqinherit note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/rqinherit flags=-define:BAD tag=bad note=-define:BAD — override 에서 required 를 빼면-->
+<!--CSVER v=11.0 file=ex/12/rqinherit flags=-define:BAD2 tag=bad2 note=-define:BAD2 — Dog 에 Sound 없이-->
+<p class="cap"><a href="#p12-v11-rq-why">앞</a>의 <code>Student</code> 와 달리 <code>Cat</code> 은 생성자 하나 없이 <code>Name</code> 의 약속을 물려받습니다. <code>Dog</code> 는 기본값 "?" 가
+있던 <code>Sound</code> 를 override 로 required 로 올렸고, 그래서 빠뜨리면 <code>CS9035</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rq-attr">
+<h3>채우는 다른 두 길 — 특성의 이름 붙은 인수, 그리고 with</h3>
+<p class="why">제안서: 소비자는 required 멤버를 객체 초기화자에서, 또는 "via the <i>named_argument_list</i> section of an <i>attribute_target</i>" 에서 채웁니다. 레코드는 합성된 복사
+생성자에 <code>SetsRequiredMembersAttribute</code> 를 답니다. <!--CITE key=prop-11-required-members sec="Enforcement"--> <!--CITE key=prop-11-required-members sec="SetsRequiredMembersAttribute"--></p>
+<!--CODE file=ex/12/rqattr/Program.cs note=required 속성을 가진 특성 TagAttribute, required 레코드 R-->
+<!--CSVER v=11.0 file=ex/12/rqattr note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/rqattr flags=-define:BAD tag=bad note=-define:BAD — [Tag(Order = 2)]-->
+<p class="cap">특성을 적는 <code>[Tag(…)]</code> 도 객체 생성이라 <code>Name</code> 을 빠뜨리면 <code>CS9035</code> 입니다. <code>r1 with { }</code> 는 <code>X</code> 를 적지 않아도 됩니다 — 복사
+생성자가 <code>[SetsRequiredMembers]</code> 라서입니다. 값은 원본에서 베껴 오므로 약속도 지켜집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rq-meta">
+<h3>메타데이터 — 옛 컴파일러를 막는 Obsolete</h3>
+<p class="why">제안서: required 멤버와 그 형식에는 <code>RequiredMemberAttribute</code>, 특성 없는 생성자에는 <code>CompilerFeatureRequiredAttribute("RequiredMembers")</code> 와 오류로 표시된
+<code>ObsoleteAttribute</code> 를 답니다 — "to prevent any older compilers from using these constructors". <code>modreq</code> 를 쓰지 않은 까닭은 "to maintain binary compat" 입니다.
+<!--CITE key=prop-11-required-members sec="Metadata Representation"--></p>
+<!--CODE file=ex/12/rqmeta/Program.cs note=형식·속성·두 생성자의 특성을 리플렉션으로-->
+<!--CSVER v=11.0 file=ex/12/rqmeta note=C# 14 / .NET 10 에서의 동작-->
+<div class="warn"><b>문서와 다른 점</b> — 제안서가 적은 Obsolete 문장은 "Types with required members are not supported in this version of your compiler" 인데, 지금의 컴파일러가 단 것은
+"<b>Constructors of</b> types with required members …" 입니다. <code>True</code> 는 오류로 다루라는 뜻입니다. ref struct 를 지킨 방법(<a href="#p8-v7_2-refstruct-meta">8부</a>)과 같은
+두 겹입니다. 옛 컴파일러가 실제로 거절하는 모습은 csrun 이 한 어셈블리만 만들어 보이지 못했습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rq-null">
+<h3>nullable 과 함께 — = null! 이 필요 없어진다</h3>
+<p class="why">제안서: required 멤버는 "not required to be initialized to a valid nullable state at the end of a constructor" — 채우는 일이 생성자에서 호출자로 넘어갔기 때문입니다.
+<!--CITE key=prop-11-required-members sec="Effect on nullable analysis"--> nullable 경고 <code>CS8618</code> 은 <a href="#p9">9부</a>에서 봤습니다.</p>
+<!--CODE file=ex/12/rqnull/Program.cs note=경고 나는 Old, null! 로 막은 Bang, required 인 New-->
+<!--CSVER v=11.0 file=ex/12/rqnull note=C# 11.0 — nullable 켬-->
+<!--CSVER v=11.0 file=ex/12/rqnull flags=-define:OLD tag=old note=-define:OLD-->
+<!--CSVER v=11.0 file=ex/12/rqnull flags=-define:BAD tag=bad note=-define:BAD — Name = null-->
+<p class="cap"><code>= null!</code> 은 경고만 끄고 null 을 그대로 남깁니다(<code>True</code>). <code>required</code> 는 경고를 끄는 대신 채울 책임을 호출자에게 지웁니다. 그래도 그 자리에
+null 을 넣으면 nullable 경고 <code>CS8625</code> 가 납니다 — required 는 "채웠는가" 를, nullable 은 "무엇으로 채웠는가" 를 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-autodefault">
+<h3>구조체 필드의 자동 기본값 (auto-default structs) <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — 제안서: C# 1.0 부터 구조체 생성자는 <code>this</code> 를 out 매개변수처럼 모두 대입해야 했고, 그래서 setter 에 검사가 있는 속성은 "assign some value in the constructor
+before "really" assigning through the property setter" 같은 되풀이가 필요했습니다. 바뀐 규칙은 대입하지 않은 필드를 "initialize them implicitly to <code>default</code> instead of giving
+definite assignment errors" 입니다. <!--CITE key=prop-11-auto-default-structs sec="Motivation"--> <!--CITE key=prop-11-auto-default-structs sec="Summary"-->
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureAutoDefaultStructs: // semantic check"--></p>
+<!--CODE file=ex/12/adbasic/Program.cs note=제안서의 MagnitudeVector3d, setter 로 검사하는 Celsius-->
+<!--CSVER v=11.0 file=ex/12/adbasic note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/adbasic note=C# 10.0 으로 내리면-->
+<p class="cap">C# 10.0 은 <code>MagnitudeVector3d()</code> 에 필드마다 <code>CS0171</code>, <code>Celsius</code> 의 setter 호출에 <code>CS0188</code> 을 냅니다. 둘 다 문장 끝에서 11.0 을
+권합니다. <a href="#p2-v1-struct">2부</a>·<a href="#p4-v3-autoprop-struct">4부</a>·<a href="#p11-v10-st-assign">11부</a>가 이 거절을 C# 1·3·10 에서 봤고, 여기서는 그 규칙이 막던
+코드 — setter 에 검사를 둔 속성 — 가 되는 것을 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ad-il">
+<h3>무엇이 들어가나 — 생성자의 IL 을 읽는 도구</h3>
+<p>제안서는 대입이 "inserted at the <i>beginning of the constructor</i>" 라고 적습니다. <!--CITE key=prop-11-auto-default-structs sec="Adjusting definite assignment"--> 확인하려고
+<a href="#p12-v11-sa-il">4장</a>의 해독기를 고쳐 생성자의 IL 을 <code>nop</code> 만 빼고 모두 찍게 했습니다. 필드·형식·메서드 토큰은 이름으로 바꿉니다.</p>
+<!--CODE file=ex/12/adlower/Il.cs lines=1-26 note=명령 표와 피연산자 크기-->
+<!--CODE file=ex/12/adlower/Il.cs lines=27-53 note=Ops — 명령 이름의 목록-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ad-lower">
+<h3>제안서의 예 1·2·4·5 — 필드마다 0 을 먼저 대입한다</h3>
+<p class="why">제안서의 예: (1) 아무것도 대입하지 않으면 "Compiler inserts an assignment of <code>this = default</code>", (2) <code>x</code> 만 대입하면 "<code>y = default</code>", (4) 갈래마다
+다른 필드면 다시 <code>this = default</code>, (5) 메서드 호출 앞에 <code>x</code> 만 대입했으면 "<code>y = default</code>". 그리고 "the compiler should probably be free to implement whatever
+heuristic it wants". <!--CITE key=prop-11-auto-default-structs sec="Adjusting definite assignment"--></p>
+<!--CODE file=ex/12/adlower/Program.cs note=생성자 넷을 가진 S 와 그 IL 을 찍는 Main-->
+<!--CSVER v=11.0 file=ex/12/adlower note=C# 14 / .NET 10 에서의 동작 — 디버그 빌드의 IL-->
+<p class="cap">제안서가 <code>this = default</code> 라고 적은 예 1·4 에서도 지금의 컴파일러는 <code>initobj</code> 대신 <code>stfld x</code>·<code>stfld y</code> 에 0 을 하나씩 넣습니다. 예 2·5 는
+<code>y</code> 만 0 으로 만든 뒤 본문이 시작됩니다. 예 4 는 갈래 뒤에 다시 대입하니 같은 필드에 두 번 쓰는 셈이고, 제안서가 말한 "double assignments" 가 이것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ad-warn">
+<h3>꺼져 있는 경고 — 옛 오류는 사라지지 않고 숨었다</h3>
+<p class="why">제안서: 두 번 대입이 신경 쓰이는 사용자를 위해 예전의 확정 대입 오류를 "<i>disabled-by-default</i> warning diagnostics" 로 남긴다. 그 심각도를 오류로 올리면 "opt in to the
+pre-C# 11 behavior" 입니다. <!--CITE key=prop-11-auto-default-structs sec="Adjusting definite assignment"--> 경고 문장은 컴파일러 자원에 있습니다.
+<!--CITE key=roslyn/CSharpResources--></p>
+<!--CODE file=ex/12/adwarn/S.cs note=X 를 읽고, P 를 읽고, this 를 읽는 생성자와 제안서의 예 4-->
+<!--CODE file=ex/12/adwarn/warn.txt note=경고를 켜는 전역 분석기 설정 — csc -analyzerconfig:warn.txt-->
+<!--CSVER v=11.0 file=ex/12/adwarn note=C# 11.0 — 아무 진단 없음-->
+<!--CSVER v=11.0 file=ex/12/adwarn flags=-analyzerconfig:warn.txt tag=on note=설정을 켜면-->
+<p class="cap">기본 빌드는 조용합니다. 설정 파일로 심각도를 <code>warning</code> 으로 주면 <code>CS9018</code>–<code>CS9022</code> 다섯 가지가 여섯 줄로 나옵니다. 출력은 같습니다 —
+경고는 컴파일러가 0 을 넣은 자리를 알려 줄 뿐입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-ad-pairs">
+<h3>C# 10 의 오류와 C# 11 의 숨은 경고는 짝이다</h3>
+<p>같은 <code>S.cs</code> 를 <code>-langversion:10.0</code> 으로 컴파일한 오류와 C# 11 에서 켠 경고를 줄마다 맞댔습니다. 실험 묶음은 위치가 하나라도 어긋나면 표를 만들지 않습니다.</p>
+<!--TABLE file=out/tbl_p12c_adpairs.html-->
+<!--CSVER v=11.0 file=ex/12/adwarn flags=-warn:9999 tag=w9999 note=-warn:9999 — 경고 웨이브로는 켜지지 않는다-->
+<!--CSVER v=11.0 file=ex/12/adwarn flags=-warnaserror+:CS9022 tag=err note=-warnaserror+:CS9022 — 하나만 오류로-->
+<p class="cap">여섯 오류가 여섯 경고로 하나씩 옮겨 갔습니다. 이 경고들은 <code>-warn:9999</code> 로도 나오지 않습니다 — 경고 웨이브가 아니라 꺼진 채 태어난 진단입니다. 하나를
+<code>-warnaserror+</code> 로 올리면 그 하나만 C# 10 의 규칙으로 돌아갑니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p12-v11-init-quiz" data-quiz>
+<h3>7장 퀴즈 — required 와 자동 기본값</h3>
+<p class="q">Q1. <code>required</code> 속성을 가진 <code>Box</code> 를 <code>static T Make&lt;T&gt;() where T : new()</code> 에 넘길 수 있습니까? <code>[SetsRequiredMembers]</code> 를 단
+생성자가 아무것도 채우지 않으면 무엇이 알려 줍니까?</p>
+<p class="q">Q2. C# 11 에서 구조체 생성자가 필드 하나를 대입하지 않아도 조용합니다. 그 자리를 알고 싶으면 어떻게 합니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 넘길 수 없습니다 — <code>CS9040</code>(<a href="#p12-v11-rq-new">앞</a>). 특성이 붙은 생성자의 본문은 검사하지 않으므로 오류는 없고, nullable 을 켜야
+<code>CS8618</code> 이 납니다(<a href="#p12-v11-rq-sets">앞</a>).
+<b>A2.</b> 꺼져 있는 <code>CS9018</code>–<code>CS9022</code> 의 심각도를 분석기 설정이나 <code>-warnaserror+</code> 로 올립니다. <code>-warn:9999</code> 로는 켜지지 않습니다
+(<a href="#p12-v11-ad-pairs">앞</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p12-v11-refs"><p class="chnum">8장</p><h2>ref 필드와 scoped — Span 을 직접 만든다</h2>
+<p class="chsub">ref 필드 · 작은 Span · readonly 조합 · null ref · scoped 매개변수와 지역 변수 · out 의 변화 · [UnscopedRef] · 깨지는 변경 · RefSafetyRules</p></article>
+
+<article class="card" id="p12-v11-rf-why">
+<h3>왜 — 런타임만 쓰던 ByReference&lt;T&gt;</h3>
+<p class="why">제안서의 동기: "Today <code>Span&lt;T&gt;</code> is accomplished by using the <code>internal</code> type <code>ByReference&lt;T&gt;</code> which the runtime effectively treats as a <code>ref</code>
+field." 언어가 그 안전을 검사하지 못했고, "only dotnet/runtime can use this type as it's <code>internal</code>, so 3rd parties can not design their own primitives based on
+<code>ref</code> fields." <!--CITE key=prop-11-low-level-struct-improvements sec="Motivation"--> 그래서 제안서가 세운 목표와 C# 11 이 실제로 담은 것은 이렇습니다.
+<!--CITE key=prop-11-low-level-struct-improvements sec="Summary"--> <!--CITE key=prop-11-low-level-struct-improvements sec="Safe fixed size buffers"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>제안서의 목표</th><th>C# 11</th></tr>
+<tr><td><code>ref struct</code> 가 <code>ref</code> 필드를 선언하게</td><td>들어옴 — <code>ref</code> 필드와 <code>scoped</code></td></tr>
+<tr><td><code>struct</code> 가 자기 필드를 <code>ref</code> 로 돌려주게</td><td>들어옴 — <code>[UnscopedRef]</code></td></tr>
+<tr><td><code>ref</code> 필드가 <code>ref struct</code> 를 가리키게</td><td>남은 제안("open proposals")</td></tr>
+<tr><td>안전한 <code>fixed</code> 버퍼</td><td>"not delivered in C# 11"</td></tr>
+</table></div>
+<p class="cap">ref 의 앞 이야기 — ref 지역 변수와 반환, ref struct, Span — 는 <a href="#p8-v7-ref-later">8부</a>와 <a href="#p8-v7_2-refstruct">8부의 ref struct</a>에 있습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p12-v11-reffields">
+<h3>ref 필드 (ref fields) <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — whats-new: "You can declare <code>ref</code> fields inside a <code>ref struct</code>. This supports types such as <code>System.Span&lt;T&gt;</code> without special attributes or
+hidden internal types." 제안서: <code>ref</code> 필드는 "<code>ELEMENT_TYPE_BYREF</code>" 서명으로 기록되며 "no different than how we emit <code>ref</code> locals or <code>ref</code> arguments".
+<!--CITE key=whatsnew-11 sec="ref fields and ref scoped variables"--> <!--CITE key=prop-11-low-level-struct-improvements sec="Provide ref fields and scoped"-->
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureRefFields: // semantic check"--></p>
+<!--CODE file=ex/12/rfbasic/Program.cs note=ref T 필드 하나를 가진 Ref<T>-->
+<!--CSVER v=11.0 file=ex/12/rfbasic note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/rfbasic note=C# 10.0 으로 내리면-->
+<p class="cap"><code>r.Value = 5</code> 는 <code>x</code> 에 쓰고, <code>r.Value = ref y</code> 는 필드가 가리키는 곳을 바꿉니다 — C# 7.3 의 ref 재대입(<a href="#p8-v7_3-refreassign">8부</a>)이
+필드에도 됩니다. 배열의 원소도 가리킬 수 있습니다. C# 10.0 의 거절은 필드 선언 한 줄뿐입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rf-span">
+<h3>작은 Span 을 직접 — ref T 와 길이 하나</h3>
+<p class="why">제안서는 이 설계가 끝나면 <code>Span&lt;T&gt;</code> 가 "<code>readonly ref T _field; readonly int _length;</code>" 두 필드로 정의된다고 적고, 값 하나를 감싸는 생성자
+<code>Span(ref T value)</code> 를 예로 듭니다. <!--CITE key=prop-11-low-level-struct-improvements sec="Detailed Design"--></p>
+<!--CODE file=ex/12/rfspan/Program.cs lines=1-31 note=readonly ref struct MySpan<T> — 배열 생성자, 값 하나 생성자, 인덱서-->
+<!--CODE file=ex/12/rfspan/Program.cs lines=32-47 note=배열 위와 지역 변수 위에서-->
+<!--CSVER v=11.0 file=ex/12/rfspan note=C# 11.0-->
+<p class="cap"><code>s[1] = 20</code> 이 배열에 닿고, 지역 변수 하나 위의 <code>MySpan</code> 도 됩니다. 원소 위치는 <code>Unsafe.Add</code>, 배열의 첫 칸은
+<code>MemoryMarshal.GetArrayDataReference</code> 가 주는데 둘 다 <code>unsafe</code> 문맥 없이 부르는 BCL 메서드입니다. 범위 검사는 직접 해야 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rf-runtime">
+<h3>같이 온 런타임 — .NET 10 의 Span&lt;T&gt; 는 ref 필드다</h3>
+<p class="why">제안서: 이 기능은 "requires runtime support and changes to the ECMA spec. As such these will only be enabled when the corresponding feature flag is set in corelib."
+<!--CITE key=prop-11-low-level-struct-improvements sec="Provide ref fields and scoped"--></p>
+<!--CODE file=ex/12/rfruntime/Program.cs note=RuntimeFeature, Span<int> 의 필드, new Span<int>(ref local)-->
+<!--CSVER v=11.0 file=ex/12/rfruntime note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>Span&lt;int&gt;</code> 의 <code>_reference</code> 는 <code>System.Int32&amp;</code>, 곧 ref 필드입니다. CoreLib 에는 <code>System.ByReference</code> 라는 형식이 아직 있지만
+제네릭이 아니고 Span 은 그것을 쓰지 않습니다. 제안서가 "does not exist today but will be added" 라고 한 <code>Span(ref T)</code> 생성자도 있어서 지역 변수 위의 길이 1 짜리
+Span 을 만듭니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rf-rules">
+<h3>readonly 와의 조합 — 가리키는 곳과 값, 둘 중 무엇이 고정인가</h3>
+<p class="why">제안서: <code>readonly ref</code> 는 "cannot be ref reassigned outside a constructor or <code>init</code> methods", <code>ref readonly</code> 는 "can be ref reassigned but cannot
+be value assigned". <code>readonly ref struct</code> 의 ref 필드는 <code>readonly ref</code> 여야 합니다. ref 필드는 <code>ref struct</code> 안에만 둡니다.
+<!--CITE key=prop-11-low-level-struct-improvements sec="Provide ref fields and scoped"--></p>
+<!--CODE file=ex/12/rfrules/Program.cs lines=1-30 note=제안서의 ReadOnlyExample 세 필드-->
+<!--CODE file=ex/12/rfrules/Program.cs lines=31-51 note=BAD3–BAD5 와 Main-->
+<!--CSVER v=11.0 file=ex/12/rfrules note=C# 11.0 — 기호 없이-->
+<!--CSVER v=14.0 file=ex/12/rfrules flags=-define:BAD5 tag=bad5 note=-define:BAD5 — C# 14.0 에서도-->
+<p class="cap"><code>Uses</code> 가 <code>Field1</code> 을 <code>a[1]</code> 로 옮기고 <code>Field2</code> 로 <code>a[1]</code> 에 1 을 써서 합이 5 가 됐습니다. 다섯 갈래의 오류는
+<a href="#p12-v11-rf-diag">8장의 거절 표</a>에 있습니다. ref struct 를 가리키는 ref 필드(<code>CS9050</code>)는 C# 14.0 에서도 거절됩니다 — 제안서가 남긴 과제 그대로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rf-null">
+<h3>함정 — default 의 ref 필드는 null 을 가리킨다</h3>
+<p class="why">제안서: <code>default</code> 로 만든 ref struct 의 ref 필드는 "will have the value <code>null</code>. Any attempt to use such fields will result in a
+<code>NullReferenceException</code> being thrown." 그래서 ref 필드는 <code>Unsafe.IsNullRef</code> 로 확인하라고 권합니다.
+<!--CITE key=prop-11-low-level-struct-improvements sec="Provide ref fields and scoped"--></p>
+<!--CODE file=ex/12/rfnull/Program.cs note=제안서의 S1 — 확인하는 GetValue, 확인하지 않는 Raw-->
+<!--CSVER v=11.0 file=ex/12/rfnull note=C# 11.0-->
+<p class="cap">언어는 ref 가 null 일 수 없는 것처럼 다루지만 런타임 수준에서는 합법입니다. <code>default</code> 와 배열의 원소처럼 생성자를 거치지 않는 길이 있는 한, ref 필드를
+가진 형식은 쓰기 전에 확인해야 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rf-return">
+<h3>ref 필드는 ref 로 내줄 수 있다 — 보통 필드는 아니다</h3>
+<p class="why">제안서: <code>ref e.F</code> 의 ref-safe-context 는 "If <code>F</code> is a <code>ref</code> field its <i>ref-safe-context</i> is the <i>safe-context</i> of <code>e</code>." 그래서
+"<code>ref</code> fields can be returned as <code>ref</code> from a <code>ref struct</code> but normal fields cannot." <!--CITE key=prop-11-low-level-struct-improvements sec="Provide ref fields and scoped"--></p>
+<!--CODE file=ex/12/rfreturn/Program.cs note=제안서의 RS — Prop1 은 ref 필드, Prop2 는 보통 필드-->
+<!--CSVER v=11.0 file=ex/12/rfreturn note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/rfreturn flags=-define:BAD tag=bad note=-define:BAD — 보통 필드를 ref 로-->
+<!--CSVER v=11.0 file=ex/12/rfreturn flags=-define:BAD2 tag=bad2 note=-define:BAD2 — 지역 변수를 가리키는 RS-->
+<p class="cap"><code>Pass</code> 의 <code>rs</code> 는 메서드와 함께 사라지지만 그것이 가리키는 <code>x</code> 는 호출자의 것이라 반환할 수 있습니다. 같은 코드라도 <code>rs</code> 가 지역
+변수를 가리키면 <code>CS8352</code> 입니다. 컴파일러는 ref struct 값이 "무엇을 가리킬 수 있는가" 를 따라갑니다(<a href="#p8-v7_2-stackalloc-escape">8부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-scoped">
+<h3>scoped 매개변수 — "이 ref 는 밖으로 나가지 않는다" <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — whats-new: "You can add the <code>scoped</code> modifier to any <code>ref</code> declaration. This limits the scope where the reference can escape to." 제안서: ref 매개변수가
+반환되는 ref struct 에 담길 수 있게 되자, <code>scoped</code> 로 "the same rules as C# 10" 을 되돌릴 수 있게 했습니다. <!--CITE key=whatsnew-11 sec="ref fields and ref scoped variables"-->
+<!--CITE key=prop-11-low-level-struct-improvements sec="scoped modifier"--></p>
+<!--CODE file=ex/12/scbasic/Program.cs note=ref 를 잡을 수 있는 Wrap, scoped 로 약속한 Bump-->
+<!--CSVER v=11.0 file=ex/12/scbasic note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/scbasic flags=-define:BAD tag=bad note=-define:BAD — Wrap(ref local) 을 반환-->
+<!--CSVER v=11.0 file=ex/12/scbasic flags=-define:BAD2 tag=bad2 note=-define:BAD2 — scoped p 를 Span 에-->
+<!--CSVER v=10.0 file=ex/12/scbasic note=C# 10.0 으로 내리면-->
+<p class="cap"><code>Wrap(ref p)</code> 는 .NET 10 의 <code>Span(ref T)</code> 로 <code>p</code> 를 결과에 담습니다. 그래서 지역 변수를 넘긴 결과는 반환할 수 없습니다(<code>CS8347</code>). <code>Bump</code> 는
+<code>scoped</code> 라서 지역 변수를 받아도 결과를 반환할 수 있고, 대신 안에서 <code>p</code> 를 담으려 하면 <code>CS9075</code> 입니다. C# 10.0 의 거절은 'scoped' 가 아니라 'ref fields'
+라는 이름으로 나옵니다 — 컴파일러는 둘을 한 게이트로 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sc-local">
+<h3>scoped 지역 변수 — 힙과 스택을 한 변수에</h3>
+<p class="why">제안서: 지역 변수의 <code>scoped</code> 는 "sets the lifetime … to of <i>function-member</i> irrespective of the initializer lifetime." 그래서 <code>default</code> 로 시작한
+<code>scoped Span&lt;int&gt;</code> 는 반환할 수 없고, <code>scoped</code> 없는 <code>Span&lt;int&gt; span2 = default</code> 는 반환할 수 있습니다. <!--CITE key=prop-11-low-level-struct-improvements sec="scoped modifier"--></p>
+<!--CODE file=ex/12/sclocal/Program.cs note=크기에 따라 힙 배열이나 stackalloc 을 담는 buf-->
+<!--CSVER v=11.0 file=ex/12/sclocal note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/sclocal flags=-define:BAD tag=bad note=-define:BAD — scoped 를 반환-->
+<!--CSVER v=11.0 file=ex/12/sclocal flags=-define:BAD2 tag=bad2 note=-define:BAD2 — 반환할 수 있는 변수에 stackalloc-->
+<p class="cap"><code>buf</code> 는 <code>new int[n]</code> 로 시작해도 <code>scoped</code> 라서 나중에 <code>stackalloc</code> 을 받을 수 있습니다. <code>scoped</code> 가 없으면 초기화자가
+정한 넓은 수명 때문에 <code>stackalloc</code> 이 <code>CS8353</code> 입니다. 작은 크기는 스택, 큰 크기는 힙 — 이 흔한 꼴을 C# 10 까지는 변수 둘로 써야 했습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sc-out">
+<h3>out 은 이제 암시적으로 scoped — 그리고 언어 버전을 보지 않는다</h3>
+<p class="why">제안서: "<code>out</code> parameters are implicitly <code>scoped out</code> going forward. From a compat perspective this means they cannot be returned by <code>ref</code>." 되돌리는 길은
+<code>[UnscopedRef] out</code> 입니다. <!--CITE key=prop-11-low-level-struct-improvements sec="Change the behavior of out parameters"--> Roslyn 의 호환성 문서는 조건을 "With language version
+C# 11 or later, or with .NET 7.0 or later" 라고 적습니다. <!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Cannot return an out parameter by reference"--></p>
+<!--CODE file=ex/12/scout/Program.cs note=제안서의 Sneaky·SneakyOut 과 Read·Use-->
+<!--CSVER v=11.0 file=ex/12/scout note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/scout flags=-define:BAD tag=bad note=-define:BAD — out 을 ref 로 반환-->
+<!--CSVER v=7.3 file=ex/12/scout flags=-define:BAD tag=bad note=C# 7.3 으로 내려도 -define:BAD-->
+<!--CSVER v=7.3 file=ex/12/scout note=C# 7.3 — [UnscopedRef] 도 그대로-->
+<div class="warn"><b>문서와 다른 점</b> — 호환성 문서의 예는 <code>CS8166</code>("because it is not a ref parameter")인데 지금의 컴파일러는 <code>CS9075</code>("because it is scoped to the current
+method")입니다. 그리고 C# 7.3 으로 내려도 같은 오류입니다. .NET 10 을 대상으로 하면 ref 안전 규칙은 언어 버전과 상관없이 C# 11 의 것입니다(<a href="#p12-v11-rf-safety">뒤</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sc-unscoped">
+<h3>[UnscopedRef] — 구조체가 자기 필드를 ref 로 <span class="vt v11">C# 11.0</span></h3>
+<p class="why">제안서: 구조체의 인스턴스 멤버가 필드를 ref 로 돌려주지 못하는 것은 "simply the default chosen by the ref safe context rules" 이고, <code>UnscopedRefAttribute</code> 는
+"the opposite of the <code>scoped</code> lifetime annotation" 입니다. 인스턴스 멤버에 붙이면 <code>this</code> 의 ref-safe-context 가 한 단계 넓어집니다.
+<!--CITE key=prop-11-low-level-struct-improvements sec="Provide unscoped"--></p>
+<!--CODE file=ex/12/scunscoped/Program.cs note=Count 를 ref 로 내주는 Counter-->
+<!--CSVER v=11.0 file=ex/12/scunscoped note=C# 11.0-->
+<!--CSVER v=11.0 file=ex/12/scunscoped flags=-define:BAD tag=bad note=-define:BAD — 특성 없이-->
+<!--CSVER v=11.0 file=ex/12/scunscoped flags=-define:BAD2 tag=bad2 note=-define:BAD2 — 임시 값의 Count 를 반환-->
+<p class="cap"><a href="#p8-v7-ref-structfld">8부</a>가 C# 7.0 에서 본 <code>CS8170</code> 이 특성 하나로 풀립니다. 속성에 쓰고, ref 로 받아 더하고, ref 지역 변수로 올려서 16 이
+됐습니다. 그래도 사라질 임시 값(<code>new Counter()</code>)의 필드를 메서드 밖으로 내보내는 것은 <code>CS8156</code> 으로 막힙니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-sc-break">
+<h3>깨지는 변경 — 문서의 예 둘을 지금의 컴파일러로</h3>
+<p class="why">호환성 문서는 C# 11 의 ref 안전 규칙이 낳은 변경으로 "Instance method on ref struct may capture unscoped ref parameters"(<code>CS8350</code>)와 "Method ref struct return escape
+analysis depends on ref escape of ref arguments" — 숨은 <code>in</code> 기본 인수를 포함해 — 를 듭니다. <!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Instance method on ref struct may capture unscoped ref parameters"-->
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Method ref struct return escape analysis depends on ref escape of ref arguments"--></p>
+<!--CODE file=ex/12/scbreak/Program.cs note=문서의 R<T> 와 MayCapture(in int i = 0)-->
+<!--CSVER v=11.0 file=ex/12/scbreak flags=-define:DOC tag=doc note=-define:DOC — 문서의 첫 예-->
+<!--CSVER v=11.0 file=ex/12/scbreak flags=-define:BAD2 tag=bad2 note=-define:BAD2 — 문서의 둘째 예-->
+<!--CSVER v=11.0 file=ex/12/scbreak flags=-define:BAD3 tag=bad3 note=-define:BAD3 — R 이 정말 잡으려 하면-->
+<div class="warn"><b>문서와 다른 점</b> — 첫 예 <code>r.MayCaptureArg(ref i)</code> 는 오류 없이 돕니다. 대신 ref struct 의 메서드가 ref 매개변수를 자기 ref 필드에 담으려 하면 그
+자리에서 <code>CS9079</code> 입니다 — 호출하는 쪽이 아니라 메서드 쪽에서 막힙니다. 둘째 예는 그대로 거절되지만 오류가 둘이고 첫 줄은 <code>CS8156</code> 입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rf-meta">
+<h3>메타데이터 — Int32&amp;, IsReadOnly, ScopedRef</h3>
+<p class="why">제안서: <code>readonly ref</code> 는 <code>initonly</code>, <code>ref readonly</code> 는 <code>IsReadOnlyAttribute</code> 로 기록합니다. <code>scoped</code> 는 <code>ScopedRefAttribute</code>
+로 남기되 "only be emitted when the syntax causes the value to differ from its default state. For example <code>scoped out</code> will cause no attribute to be emitted."
+<!--CITE key=prop-11-low-level-struct-improvements sec="Provide ref fields and scoped"--> <!--CITE key=prop-11-low-level-struct-improvements sec="ScopedRefAttribute"--></p>
+<!--CODE file=ex/12/rfmeta/Program.cs note=Holder 의 세 필드와 Take 의 네 매개변수, S.F 의 특성-->
+<!--CSVER v=11.0 file=ex/12/rfmeta note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">세 필드 모두 형식이 <code>System.Int32&amp;</code> 입니다. <code>scoped ref p</code> 와 <code>scoped Span&lt;int&gt; s</code> 에는 <code>ScopedRefAttribute</code> 가 있고,
+<code>scoped out o</code> 에는 원래 있던 <code>OutAttribute</code> 뿐입니다 — out 은 이미 scoped 라서입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rf-safety">
+<h3>RefSafetyRules(11) — 어느 언어 버전으로 컴파일해도</h3>
+<p class="why">제안서: 컴파일러는 "<code>[module: RefSafetyRules(11)]</code> attribute when the module is compiled with <code>-langversion:11</code> or higher or compiled with a corlib containing
+the feature flag for <code>ref</code> fields" 를 내보내고, 다른 모듈의 메서드를 부를 때 이 표시로 C# 11 규칙과 C# 7.2 규칙 가운데 하나를 고릅니다.
+<!--CITE key=prop-11-low-level-struct-improvements sec="RefSafetyRulesAttribute"--></p>
+<!--CODE file=ex/12/rfsafety/Program.cs note=모듈에 붙은 특성을 찍는다 — C# 1 문법만으로-->
+<!--CSVER v=11.0 file=ex/12/rfsafety note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/rfsafety note=C# 10.0-->
+<!--CSVER v=7.3 file=ex/12/rfsafety note=C# 7.3-->
+<!--CSVER v=1 file=ex/12/rfsafety note=C# 1-->
+<p class="cap">네 언어 버전 모두 <code>RefSafetyRulesAttribute 11</code> 입니다. .NET 10 의 CoreLib 에 ref 필드 플래그가 있으니 둘째 조건이 늘 참입니다. 앞 장들에서 C# 7.3 으로
+내려도 <code>out</code> 규칙이 바뀌지 않은 까닭이 이것입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-rf-diag">
+<h3>8장의 거절 모음 — ref 안전</h3>
+<!--TABLE file=out/tbl_p12c_diag8.html-->
+<p class="cap">실험 묶음이 각 캡처의 첫 오류 줄에서 뽑았습니다. ref 필드의 선언 규칙에는 <code>CS9050</code>·<code>CS9059</code> 같은 새 번호가 생겼지만, readonly 와 수명의 거절은
+<code>CS0191</code>·<code>CS8170</code>·<code>CS8352</code> 처럼 C# 7 시절의 번호를 그대로 씁니다. <code>readonly ref</code> 를 다시 가리킬 때의 문장은 "cannot be assigned to" — ref 재대입도
+대입으로 부릅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p12-v11-refs-quiz" data-quiz>
+<h3>8장 퀴즈 — ref 필드와 scoped</h3>
+<p class="q">Q1. <code>static Span&lt;int&gt; F(ref int p)</code> 에 지역 변수를 넘긴 결과를 반환하려니 <code>CS8347</code> 입니다. <code>F</code> 가 <code>p</code> 를 결과에 담지 않는다면
+무엇을 고치면 됩니까?</p>
+<p class="q">Q2. 이 프로젝트를 <code>-langversion:10.0</code> 으로 내리면 <code>out</code> 매개변수를 ref 로 반환할 수 있게 됩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 매개변수를 <code>scoped ref int p</code> 로 선언합니다. 그러면 호출하는 쪽은 지역 변수를 넘기고도 결과를 반환할 수 있습니다(<a href="#p12-v11-scoped">앞</a>).
+<b>A2.</b> 아닙니다. .NET 10 을 대상으로 하면 C# 7.3 에서도 <code>CS9075</code> 입니다. 되돌리려면 <code>[UnscopedRef] out</code> 을 씁니다(<a href="#p12-v11-sc-out">앞</a>,
+<a href="#p12-v11-rf-safety">앞</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p12-sum"><p class="chnum">9장</p><h2>file 형식과 12부 정리</h2>
+<p class="chsub">file 형식 · 메타데이터 이름 · 서명의 규칙 · 예약된 이름 · C# 11 기능 장 · 같은 프로그램 두 판 · 문서와 컴파일러 · C# 12 로 · 12부 퀴즈</p></article>
+
+<article class="card" id="p12-v11-file">
+<h3>file 형식 (file-local types) <span class="vt v11">C# 11.0</span></h3>
+<p class="why">왜 — 제안서: "Our primary motivation is from source generators." 생성기가 넣는 파일은 "implementation details which are hidden from the rest of the compilation" 을 담을 수 있어야
+하고, 사용자 코드와 겹치지 않을 이름을 "search" 하는 일을 줄이려 했습니다. <!--CITE key=prop-11-file-local-types sec="Motivation"--> whats-new: "This feature helps source generator
+authors avoid naming collisions." <!--CITE key=whatsnew-11 sec="File local types"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureFileTypes: // semantic check"--></p>
+<!--CODE file=ex/12/flbasic/A.cs note=A.cs 의 file class Widget-->
+<!--CODE file=ex/12/flbasic/B.cs note=B.cs 의 file class Widget — 이름이 같다-->
+<!--CODE file=ex/12/flbasic/Program.cs note=Program.cs 의 보통 Widget-->
+<!--CSVER v=11.0 file=ex/12/flbasic note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/flbasic note=C# 10.0 으로 내리면-->
+<p class="cap">같은 이름의 형식 셋이 한 어셈블리에 있고 서로 부딪치지 않습니다. <code>A.cs</code> 안에서는 <code>file</code> 형식이 보통 <code>Widget</code> 을 가립니다 — 제안서가 "permit a
+file-local type to <i>shadow</i> … a non-file-local type" 이라고 적은 규칙입니다. <!--CITE key=prop-11-file-local-types sec="Remarks"--> 소스 생성기는 이 부의 csrun 으로 돌릴 수
+없어서(<a href="#p10-v9-gen">10부</a>) 손으로 쓴 파일 둘로 보였습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-fl-meta">
+<h3>메타데이터의 이름 — &lt;파일&gt;F + 해시 + __이름</h3>
+<p class="why">제안서: 이름이 같은 file 형식들은 런타임에게 서로 다른 형식이고 "The type's accessibility and name in metadata is implementation-defined." 특성으로 쓴 file 형식을
+"detecting … by a hard-coded string name is likely to be impractical" 하니 <code>typeof</code> 로 찾으라고 하며 예제를 듭니다. <!--CITE key=prop-11-file-local-types sec="Naming"-->
+<!--CITE key=prop-11-file-local-types sec="Attributes"--></p>
+<!--CODE file=ex/12/flmeta/Program.cs note=제안서의 MyFileLocalAttribute 예제와 Helper 의 이름-->
+<!--CSVER v=11.0 file=ex/12/flmeta note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">지금의 컴파일러는 <code>&lt;Program&gt;F</code> 뒤에 16진 64자리를 붙이고 <code>__Helper</code> 로 끝냅니다. 앞의 <code>Program</code> 은 파일 이름이고, <code>internal</code> 이라
+<code>IsPublic</code> 은 <code>False</code> 입니다. 소스에 적은 이름 <code>"Helper"</code> 로는 <code>GetType</code> 이 찾지 못합니다. 이 이름 짓기는 "implementation-defined" 이므로
+문자열로 기대지 말아야 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-fl-sig">
+<h3>서명에는 나올 수 없다 — file 형식은 file 형식 안에서만</h3>
+<p class="why">제안서: file 형식이 쓰이는 곳에서 보이지 않을 수 있으므로 "file-local types can only appear in signatures or as base types of other file-local types". 보통 형식이 file
+인터페이스를 구현하는 것은 됩니다. 접근성 한정자는 함께 쓸 수 없고, 최상위 형식에만 붙으며, <code>global using static</code> 에도 쓸 수 없습니다.
+<!--CITE key=prop-11-file-local-types sec="Only allow signature usage in members of file-local types"--> <!--CITE key=prop-11-file-local-types sec="Accessibility"-->
+<!--CITE key=prop-11-file-local-types sec="global using static"--></p>
+<!--CODE file=ex/12/flsig/Program.cs note=file 형식 Util·IShape·Box 와 BAD1–BAD4-->
+<!--CSVER v=11.0 file=ex/12/flsig note=C# 11.0 — 기호 없이-->
+<!--TABLE file=out/tbl_p12c_diag9.html-->
+<p class="cap">표의 앞 네 줄이 <code>BAD1</code>–<code>BAD4</code> 를 하나씩 켠 결과입니다. 뒤 세 줄은 <a href="#p12-v11-fl-names">다음 장</a>의 것입니다. 오류 번호가 <code>CS9051</code>–<code>CS9056</code>
+에 모여 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-v11-fl-names">
+<h3>깨지는 변경 — file·scoped·required 라는 형식 이름</h3>
+<p class="why">Roslyn 의 호환성 문서: "Starting in C# 11, types cannot be named <code>file</code>" — <code>@file</code> 로 피합니다. <code>scoped</code> 와 <code>required</code> 도 같습니다.
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Types cannot be named file"--> <!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Types cannot be named scoped"-->
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-7 sec="Types cannot be named required"--></p>
+<!--CODE file=ex/12/flnames/Program.cs note=갈래마다 형식 하나 — 기호가 없으면 @file-->
+<!--CSVER v=11.0 file=ex/12/flnames note=C# 11.0 — @file 은 된다-->
+<!--CSVER v=11.0 file=ex/12/flnames flags=-define:SCOPED tag=scoped note=-define:SCOPED-->
+<!--CSVER v=10.0 file=ex/12/flnames flags=-define:SCOPED tag=scoped note=C# 10.0 에서 -define:SCOPED-->
+<div class="warn"><b>문서와 다른 점</b> — 문서는 <code>class scoped {}</code> 를 "Error CS9056" 이라고 적었지만 실제 번호는 <code>CS9062</code> 입니다(<code>file</code> 은 CS9056,
+<code>required</code> 는 CS9029 로 문서와 같습니다 — <a href="#p12-v11-fl-sig">앞 장의 표</a>). 이 변경은 언어 버전에 묶여 있어 C# 10.0 에서는 <code>class scoped</code> 가 그대로 됩니다.
+<code>@file</code> 로 만든 형식의 이름도 <code>file</code> 입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-sum-table">
+<h3>C# 11 기능 장 — 1장에서 5장까지</h3>
+<p>버전 기록은 C# 11 의 기능을 열여섯 줄로 적습니다(<a href="#p12-v11-docs">1장</a>). <!--CITE key=history sec="C# version 11"--> 이 부에서 배지를 단 장을 차례대로
+모았습니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>장</th><th>기능</th><th>슬라이드</th></tr>
+<tr><td>1장</td><td>.NET 7 · 같이 온 런타임</td><td><a href="#p12-v11-net7">net7</a> · <a href="#p12-v11-runtime">런타임</a></td></tr>
+<tr><td>1장</td><td>메서드 그룹 대리자의 캐시 · 경고 웨이브 7</td><td><a href="#p12-v11-mgcache">캐시</a> · <a href="#p12-v11-wave7">웨이브 7</a></td></tr>
+<tr><td>2장</td><td>원시 문자열 · UTF-8 문자열</td><td><a href="#p12-v11-raw">"""</a> · <a href="#p12-v11-utf8">u8</a></td></tr>
+<tr><td>2장</td><td>보간 구멍의 줄바꿈 · Span&lt;char&gt; 상수 패턴</td><td><a href="#p12-v11-newline">줄바꿈</a> · <a href="#p12-v11-spanpat">Span 패턴</a></td></tr>
+<tr><td>3장</td><td>제네릭 특성 · nameof 범위</td><td><a href="#p12-v11-genattr">A&lt;T&gt;</a> · <a href="#p12-v11-nameof">nameof</a></td></tr>
+<tr><td>4장</td><td>static abstract · static virtual · 수학 인터페이스</td><td><a href="#p12-v11-static-abstract">abstract</a> · <a href="#p12-v11-sa-virtual">virtual</a> · <a href="#p12-v11-math-bcl">INumber</a></td></tr>
+<tr><td>5장</td><td>checked 연산자 · Int128</td><td><a href="#p12-v11-checked-op">checked</a> · <a href="#p12-v11-ck-runtime">Int128</a></td></tr>
+<tr><td>5장</td><td>&gt;&gt;&gt; · 시프트 완화 · 숫자형 IntPtr</td><td><a href="#p12-v11-urshift">&gt;&gt;&gt;</a> · <a href="#p12-v11-shift">시프트</a> · <a href="#p12-v11-nint">nint</a></td></tr>
+</table></div>
+<p class="cap">6장부터는 <a href="#p12-sum-table2">다음 장</a>에 있습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p12-sum-table2">
+<h3>C# 11 기능 장 — 6장에서 9장까지</h3>
+<div class="tblwrap"><table class="kv">
+<tr><th>장</th><th>기능</th><th>슬라이드</th></tr>
+<tr><td>6장</td><td>목록 패턴 · 슬라이스 패턴</td><td><a href="#p12-v11-listpat">[1, ..]</a> · <a href="#p12-v11-lp-slice">.. var</a></td></tr>
+<tr><td>7장</td><td>required 멤버 · SetsRequiredMembers</td><td><a href="#p12-v11-required">required</a> · <a href="#p12-v11-rq-sets">특성</a></td></tr>
+<tr><td>7장</td><td>구조체 필드의 자동 기본값 · 숨은 경고</td><td><a href="#p12-v11-autodefault">자동 기본값</a> · <a href="#p12-v11-ad-pairs">CS9018–CS9022</a></td></tr>
+<tr><td>8장</td><td>ref 필드 · scoped · [UnscopedRef]</td><td><a href="#p12-v11-reffields">ref 필드</a> · <a href="#p12-v11-scoped">scoped</a> · <a href="#p12-v11-sc-unscoped">특성</a></td></tr>
+<tr><td>8장</td><td>RefSafetyRules — 런타임에 묶인 규칙</td><td><a href="#p12-v11-rf-safety">RefSafetyRules</a></td></tr>
+<tr><td>9장</td><td>file 형식</td><td><a href="#p12-v11-file">file</a></td></tr>
+</table></div>
+<p class="cap">컴파일러의 C# 11 게이트 열다섯(<a href="#p12-v11-gates">1장</a>) 가운데 이 표의 6–9장이 다섯 — list pattern, required members, auto default struct fields, ref fields,
+file types — 을 맡았습니다. <!--CITE key=msgid sec="case MessageID.IDS_FeatureListPattern: // semantic check"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p12-sum-old">
+<h3>같은 프로그램, C# 10 판</h3>
+<p>12부의 기능 여럿을 한 프로그램에 모으고, 같은 출력을 C# 10 으로 쓴 판과 나란히 둡니다. 먼저 C# 10 판입니다.</p>
+<!--CODE file=ex/12/v11old/Program.cs lines=1-36 note=생성자로 받는 Item, 형식마다 Sum, 길이와 인덱서로 가르는 Kind-->
+<!--CODE file=ex/12/v11old/Program.cs lines=37-57 note=\n 을 넣은 머리글, Encoding 으로 센 UTF-8 바이트-->
+<!--CSVER v=10.0 file=ex/12/v11old note=C# 10.0-->
+<p class="cap"><code>Sum</code> 은 <code>int</code> 판과 <code>double</code> 판을 따로 썼고, 머리글은 <code>\n</code> 으로 이었고, <code>Item</code> 은 생성자 매개변수로만 필수 값을 강제합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-sum-new">
+<h3>같은 프로그램, C# 11 판</h3>
+<!--CODE file=ex/12/v11new/Program.cs lines=1-28 note=required · file static class · INumber<T> 의 Sum · 목록 패턴의 Kind-->
+<!--CODE file=ex/12/v11new/Program.cs lines=29-50 note=원시 문자열의 머리글 · u8 의 Length-->
+<!--CSVER v=11.0 file=ex/12/v11new note=C# 11.0-->
+<!--CSVER v=10.0 file=ex/12/v11new note=C# 10.0 으로 내리면 — 선언의 거절만 나온다-->
+<p class="cap">출력이 똑같습니다. C# 10.0 으로 내리면 오류는 셋 — <code>file</code> 하나와 <code>required</code> 둘 — 뿐입니다. 본문에 있는 목록 패턴(22–24행)·<code>T.Zero</code>(15행)·
+원시 문자열(33행)·<code>u8</code>(48행)은 보고되지 않았습니다. 선언 단계의 오류가 메서드 본문의 진단을 가립니다(<a href="#p11-sum-new">11부</a>에서도 봤습니다).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p12-sum-docs">
+<h3>문서와 컴파일러가 다른 곳 — 12부에서 찾은 것</h3>
+<p>문서끼리의 차이는 <a href="#p12-v11-docs">1장</a>에 있습니다. 여기는 문서와 지금의 컴파일러(SDK 10.0.112)가 다른 곳입니다 — 모두 이 부의 캡처가 증거입니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>문서가 적은 것</th><th>지금의 컴파일러</th><th>어디서</th></tr>
+<tr><td>required 생성자의 Obsolete 문장 "Types with required members …"</td><td>"Constructors of types with required members …"</td><td><a href="#p12-v11-rq-meta">7장</a></td></tr>
+<tr><td>자동 기본값의 예 1·4 는 <code>this = default</code></td><td>필드마다 <code>stfld</code> 로 0 을 넣는다</td><td><a href="#p12-v11-ad-lower">7장</a></td></tr>
+<tr><td>out 을 ref 로 반환하면 <code>CS8166</code></td><td><code>CS9075</code> — C# 7.3 으로 내려도</td><td><a href="#p12-v11-sc-out">8장</a></td></tr>
+<tr><td><code>r.MayCaptureArg(ref i)</code> 는 <code>CS8350</code></td><td>오류 없음 — 메서드 쪽이 <code>CS9079</code> 로 막는다</td><td><a href="#p12-v11-sc-break">8장</a></td></tr>
+<tr><td><code>class scoped {}</code> 는 <code>CS9056</code></td><td><code>CS9062</code></td><td><a href="#p12-v11-fl-names">9장</a></td></tr>
+<tr><td>C# 9 명세: <code>nint.Zero</code> 는 "explicitly excluded"</td><td>.NET 10 대상이면 C# 9.0 에서도 보인다</td><td><a href="#p12-v11-nint">5장</a></td></tr>
+<tr><td>인터페이스가 "itself" 를 형식 매개변수로 받는다</td><td>제약은 관례일 뿐 강제하지 않는다</td><td><a href="#p12-v11-sa-tself">4장</a></td></tr>
+</table></div>
+<p class="cap">언어 버전과 상관없이 대상 런타임이 정하는 것도 여럿이었습니다 — ref 안전 규칙(<a href="#p12-v11-rf-safety">8장</a>), 숫자형 IntPtr(<a href="#p12-v11-nint">5장</a>),
+<code>Length</code> 의 음수 아님 가정(<a href="#p12-v11-lp-neg">6장</a>). "C# 10 으로 내리면 옛 동작" 이 늘 맞지는 않습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p12-sum-cs12">
+<h3>C# 12 가 이어받는 것</h3>
+<p>C# 11 에서 시작되거나 멈춘 줄이 C# 12 에서 이어집니다. C# 12 는 13부에서 다룹니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>C# 11 (이 부)</th><th>C# 12 (13부)</th></tr>
+<tr><td>목록 패턴 — 가르는 문법만(<a href="#p12-v11-lp-later12">6장</a>)</td><td>"Collection expressions" — 만드는 문법 <code>[1, ..xs]</code></td></tr>
+<tr><td>required · init — 초기화자로 채우기</td><td>"Primary constructors" — 클래스·구조체에도 매개변수 목록</td></tr>
+<tr><td>ref 필드 · scoped — 안전한 fixed 버퍼는 빠짐(<a href="#p12-v11-rf-why">8장</a>)</td><td>"Inline arrays" — 구조체 안의 고정 크기 배열</td></tr>
+<tr><td>file 형식 · 제네릭 특성 — 형식 이름을 다루는 도구</td><td>"Alias any type" — 튜플·배열에도 <code>using</code> 별칭</td></tr>
+</table></div>
+<p class="cap">오른쪽 칸의 따옴표는 C# 12 whats-new 의 제목입니다. <!--CITE key=whatsnew-12 sec="Collection expressions"--> <!--CITE key=whatsnew-12 sec="Primary constructors"-->
+<!--CITE key=whatsnew-12 sec="Inline arrays"--> <!--CITE key=whatsnew-12 sec="Alias any type"--> 인라인 배열 문서는 그 구조체가 "performance characteristics similar to an unsafe fixed
+size buffer" 를 주어야 한다고 적습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p12-quiz" data-quiz>
+<h3>12부 퀴즈 (1)</h3>
+<p class="q">Q1. <code>static int Sum(int[] a) =&gt; a switch { [] =&gt; 0, [var h, .. var t] =&gt; h + Sum(t) };</code> 에 원소 100개를 넣으면 무엇이 문제입니까?</p>
+<p class="q">Q2. 소스 생성기가 <code>Helper</code> 라는 형식을 사용자 코드와 부딪치지 않게 넣고 싶습니다. C# 11 에서 무엇을 쓰고, 그 형식을 리플렉션 문자열 <code>"Helper"</code> 로 찾을 수
+있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 배열의 슬라이스는 매번 새 배열이라 원소 4950개를 베끼며 22376바이트를 할당합니다. <code>ReadOnlySpan&lt;int&gt;</code> 로 받으면 0바이트입니다(<a href="#p12-v11-lp-copy">6장</a>).
+<b>A2.</b> <code>file class Helper</code> 를 씁니다(<a href="#p12-v11-file">9장</a>). 메타데이터 이름은 <code>&lt;파일&gt;F…__Helper</code> 꼴이라 <code>GetType("Helper")</code> 는 null 이고,
+<code>typeof(Helper)</code> 로 찾아야 합니다(<a href="#p12-v11-fl-meta">9장</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p12-quiz2" data-quiz>
+<h3>12부 퀴즈 (2)</h3>
+<p class="q">Q. 어떤 팀이 C# 11 로 옮기면서 문제가 생기면 <code>&lt;LangVersion&gt;10.0&lt;/LangVersion&gt;</code> 으로 되돌리면 된다고 합니다. .NET 10 을 대상으로 할 때 이 말이 맞지 않는 것 두 가지는?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> (1) ref 안전 규칙 — 모듈에는 어느 언어 버전에서나 <code>RefSafetyRules(11)</code> 이 붙고, <code>out</code> 을 ref 로 반환하는 코드는 C# 7.3 에서도 <code>CS9075</code> 입니다
+(<a href="#p12-v11-rf-safety">8장</a>). (2) 숫자형 IntPtr — <code>IntPtr</code> 의 산술과 checked 넘침은 대상 런타임이 정합니다(<a href="#p12-v11-nint">5장</a>). <code>Length</code> 를 음수로
+보지 않는 패턴 분석도 C# 10.0 에서 같습니다(<a href="#p12-v11-lp-neg">6장</a>).</div>
+<span class="tier ill">설명용</span>
 </article>
