@@ -700,3 +700,35 @@ comments + Korean header line; two review passes before push.
   6장 오버로드 해석 우선순위, 7장 작은 기능들 — \e, method group natural type, ^ in object initializers, 8장 field 미리
   보기, 9장 정리 + p14-quiz + p14-sum-cs14). No announcing-C#-13 blog in docs/. Placeholders 14b_cs13/14c_cs13 +
   order.txt/ORDER entries made. p14 and p14b launched; p14c waits for one of them.
+- p14 done: 56 slides (cover+intro 2, 1장 개관 14, 2장 params 컬렉션 30, 3장 Lock 10), 9 rows (2 gated), 36 examples (0 FAIL,
+  1 WARN lkobj CS9216), 71 captures (no LONGLINE), 18 claims, 12 glossary; two identical `--only p14` runs.
+  Findings: MessageID.cs has `// C# 13.0 features.` twice (first above C# 14 ones); partial properties refuse
+  with CS8703 at 12.0 (no feature name); `\e` is a lexer check whose refusal hides other gates in the file;
+  lock-object proposal says lock in async is an error, but C# 13 compiles it without await (CS1996 with await,
+  CS4007 with hand-written EnterScope); whats-new `Concat<T>(params ReadOnlySpan<T>)` with an array infers
+  T = int[] at 13 and int at 14; no warning wave 9 (`-warn:9` enables nothing); recompiling at 13.0 switches BCL
+  calls to span overloads (string.Join 80 → 32 bytes); `params HashSet<T>` drops duplicates. Glossary
+  duplicates: UnscopedRef (p12c/p14b) and `ref struct` (pre-existing). p14c launched next to p14b.
+- p14b done: 53 slides (4장 ref struct 의 확장 39 — allows ref struct 11, ref struct interfaces 11, ref/unsafe in iterators
+  and async 14; 5장 partial 속성과 인덱서 14), 6 rows (4 gated), 40 examples (0 FAIL/WARN), 110 captures incl.
+  tbl_p14b_diag4/diag5 (one LONGLINE: riconv CS1061), 24 claims, 12 glossary (its UnscopedRef duplicate of p12c
+  removed); two identical `--only p14b` runs. Findings: lambda natural type over Span is runtime-keyed (Func`2 at
+  10.0–13.0); Span locals in iterators not crossing yield already compile at 12.0; an unused Span parameter
+  of an iterator is not an error at any version (CS4007 only where used), async refuses the declaration
+  (CS4012); the proposal's "warn about yield inside lock" does not exist; `refStruct is IFace` CS0184 → False;
+  `t.ToString()` on allows-ref-struct T CS0029; interface-parameter calls 24 B each vs constrained generic 0;
+  partial interface property virtual vs method not (compiler-keyed); multi-flag CSVER needs quoted flags.
+- Orchestrator: p8-v7_2-refstruct-capture said the iterator error "was hidden" — wrong (verified at 7.2: unused
+  Span parameter of an iterator compiles; using it gives CS4007). Caption fixed, links p14-v13-ru-param.
+- p14c done: 50 slides (6장 오버로드 해석 우선순위 15, 7장 작은 기능들 17, 8장 field 미리 보기 7, 9장 정리 11 + p14-quiz,
+  p14-sum-cs14, p14-sum-codes), 7 rows (3 gated), 30 examples (1 FAIL orambig), 85 captures incl. tbl_p14c_diag6/7/8 +
+  tbl_p14c_codes (CS9258 lines over 200 → -nowarn:9258 + separate text check), 23 claims, 13 glossary. Findings:
+  ORP's delegate workaround fails (CS0123); ORP in a referenced assembly silently ignored at 12.0 (Trace.Assert
+  message "n > 5" at 13.0, "" at 12.0); 63 ORP methods in .NET 10 ref pack, all -1; method-group natural type is
+  langversion-keyed with no gate (CS8917 at 12.0); natural type and called method can differ; likely compiler
+  bug — implicit Range in object initializers calls Slice(start, start); `[^1]` initializer reads the receiver
+  twice; `field` at 13.0: CS9260 only with mixed accessors, else CS0103; Roslyn docs say CS9272 where the
+  compiler emits CS9273; per-version "not available" codes table (13.0 = CS9260).
+- Orchestrator: `make all SKEL=1` green (deck 2322, 14부 159/170, 1834 examples); re-ran p14/p14b/p14c twice each,
+  all exit=0, 71/110/85 captures, each batch's manifest entries identical; rebuilt deck byte-identical. Part 14
+  committed and pushed.

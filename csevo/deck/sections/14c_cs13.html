@@ -1,4 +1,630 @@
-<article class="card" id="p14c-pending">
-<h2>14부 (이어서)</h2>
-<p>준비 중입니다 — 오버로드 해석 우선순위 · 작은 기능들 · field 미리 보기 · 정리</p>
+<article class="card" id="p14-v13-or"><p class="chnum">6장</p><h2>오버로드 해석 우선순위 — 라이브러리가 판을 고른다</h2>
+<p class="chsub">왜 · 특성 하나 · 규칙 · 상속과 확장 메서드 · 부를 수 없게 되는 판 · 음수 · 언어 버전 · .NET 10 의 쓰임 · 붙일 수 없는 곳 · 퀴즈</p></article>
+
+<article class="card" id="p14-v13-or-why">
+<h3>왜 — 새 오버로드를 더하면 모호해지거나 밀린다</h3>
+<p class="why">제안서의 동기: 옛 멤버를 남겨 둔 채 새 멤버를 더하면 옛 멤버가 "may cause unwanted overload resolution failures when there is a perfectly good
+alternative" 입니다. 예로 든 것 하나가 <code>StringValues</code> — <code>string</code> 과 <code>string[]</code> 양쪽으로 암시적 변환이 있어 <code>params string[]</code> 와
+<code>params ReadOnlySpan&lt;string&gt;</code> 오버로드에 넘기면 "it is ambiguous" 입니다. <!--CITE key=prop-13-overload-resolution-priority sec="Motivation"--></p>
+<!--CODE file=ex/14/orambig/Program.cs note=StringValues 를 흉내 낸 Values 와 Log.Write 두 판-->
+<!--CSVER v=13.0 file=ex/14/orambig note=C# 13.0 — 특성 없이-->
+<p class="cap">배열 판은 <code>Values → string[]</code> 로 정상 꼴, 스팬 판은 <code>Values → string</code> 으로 확장 꼴에 맞습니다. 둘 다 사용자 정의 변환 하나라
+컴파일러는 어느 쪽도 더 낫다고 보지 않습니다. <code>"x", "y", "z"</code> 는 모호하지 않습니다 — 스팬 판이 이깁니다(<a href="#p14-v13-pm-over">2장</a>). 13부는 풀리지 않는
+모호함 하나를 C# 14 에서도 <code>CS0121</code> 로 보았습니다(<a href="#p13-v12-rr-over">13부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-orp">
+<h3>오버로드 해석 우선순위 (overload resolution priority) <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — whats-new: "the compiler recognizes the <code>OverloadResolutionPriorityAttribute</code> to prefer one overload over another. Library authors
+can use this attribute to ensure that a new, better overload is preferred over an existing overload." 예제는 제안서의 것 그대로입니다.
+<!--CITE key=whatsnew-13 sec="Overload resolution priority"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureOverloadResolutionPriority:"--></p>
+<!--CODE file=ex/14/orbasic/Program.cs note=제안서의 C1 — 스팬 판에 우선순위 1-->
+<!--CSVER v=13.0 file=ex/14/orbasic note=C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/orbasic flags=-define:NOPRI tag=nopri note=-define:NOPRI — 특성을 빼면-->
+<!--CSVER v=12.0 file=ex/14/orbasic note=C# 12.0 으로 내리면-->
+<p class="cap">배열 변수 <code>arr</code> 는 보통 <code>int[]</code> 판(항등 변환)에 맞습니다. 특성이 붙으면 그 판은 후보에서 빠지고 <code>Span</code> 이 찍힙니다. 컬렉션 식
+<code>[4, 5]</code> 는 특성이 없어도 스팬 판입니다. C# 12.0 의 거절은 특성을 붙인 자리 하나, 기능 이름은 <code>overload resolution priority</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-or-fix">
+<h3>앞의 모호함을 특성 하나로 풀면</h3>
+<p>whats-new: "This feature is intended for library authors to avoid ambiguity when adding new overloads." <!--CITE key=whatsnew-13 sec="Overload resolution priority"-->
+<a href="#p14-v13-or-why">앞 장</a>의 <code>Log</code> 에서 스팬 판에만 <code>[OverloadResolutionPriority(1)]</code> 을 붙입니다(<code>#if PRI</code>).</p>
+<!--CSVER v=13.0 file=ex/14/orambig flags=-define:PRI tag=pri note=-define:PRI — 스팬 판에 우선순위 1-->
+<p class="cap"><code>Log.Write(v)</code> 가 스팬 판을 부릅니다. 원소가 하나인 것은 <code>v</code> 가 <code>string</code> 으로 바뀌어 확장 꼴로 들어갔기 때문입니다 —
+<code>"a,b"</code> 한 개입니다. 부르는 쪽 코드는 한 글자도 바뀌지 않았습니다. 라이브러리를 다시 받아 컴파일만 하면 오류가 사라지는 것, 이것이 제안서가 말한
+"steering API consumers" 입니다. <!--CITE key=prop-13-overload-resolution-priority sec="Summary"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-or-rule">
+<h3>규칙 — 적용 가능한 후보를 선언한 형식마다 묶어 거른다</h3>
+<p>제안서는 표준 §12.6.4.1 의 "가장 나은 멤버 고르기" 앞에 묶고 거르는 단계를 끼웁니다. 우선순위는 32비트 정수, 기본값은 0 입니다.
+<!--CITE key=prop-13-overload-resolution-priority sec="Overload resolution priority"--></p>
+<ul>
+<li>적용 가능한 후보만 남긴다(전과 같다).</li>
+<li><b>남은 후보를 선언한 형식으로 묶는다.</b> 묶음마다 우선순위가 가장 높은 것보다 낮은 후보를 지운다. override 의 우선순위는 "the least-derived declaration"
+에서 온다.</li>
+<li><b>묶음들을 다시 합친다.</b> 그다음 보통의 "더 나은 함수 멤버" 비교(§12.6.4.3)로 하나를 고른다.</li>
+</ul>
+<p class="cap">거르기는 "the very end of the overload resolution process" 에 일어나므로 "a base type cannot make its members higher-priority than any derived
+type" 입니다 — 제안서는 이것을 의도라고 적습니다. 음수도 됩니다: "can be used to mark a specific overload as worse than all other default overloads".
+다음 세 장이 묶음의 경계를 컴파일러로 확인합니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p14-v13-or-type">
+<h3>파생 형식이 이긴다 — 우선순위는 형식의 경계를 넘지 않는다</h3>
+<p class="why">제안서의 둘째 예: <code>Base</code> 의 스팬 판에 우선순위 1 이 있어도 <code>Derived</code> 의 배열 판이 불린다 — "members from Base are not considered
+due to finding an applicable member in Derived". <!--CITE key=prop-13-overload-resolution-priority sec="Overload resolution priority"--></p>
+<!--CODE file=ex/14/orderive/Program.cs note=제안서의 Base·Derived, 그리고 두 줄을 더 부른다-->
+<!--CSVER v=13.0 file=ex/14/orderive note=C# 13.0-->
+<p class="cap">첫 줄은 제안서대로 <code>Derived</code> 입니다. 우선순위를 보기 전에, 파생 형식에 적용 가능한 멤버가 있으면 기반 형식의 멤버는 후보가 되지
+않습니다. <code>Base</code> 로 캐스트하거나 스팬을 직접 넘겨 <code>Derived.M(int[])</code> 이 맞지 않게 하면 그제야
+<code>Base</code> 의 판이 불립니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-or-ext">
+<h3>확장 메서드 — 담은 정적 클래스마다 따로</h3>
+<p class="why">제안서의 열린 질문 하나: 확장 메서드는 같은 범위의 것을 한데 놓고 우선순위를 비교해야 할까? 답은 "We will always group. The above example will
+print <code>Ext2 ReadOnlySpan</code>". <!--CITE key=prop-13-overload-resolution-priority sec="Answer"--></p>
+<!--CODE file=ex/14/orext/Program.cs note=제안서의 Ext1·Ext2, 그리고 Ext1 을 정적 호출로-->
+<!--CSVER v=13.0 file=ex/14/orext note=C# 13.0-->
+<p class="cap"><code>Ext1</code> 묶음에서는 우선순위 1 의 <code>Span</code> 판만 남고, <code>Ext2</code> 묶음에는 <code>ReadOnlySpan</code> 판 하나가 남습니다. 합친 둘을
+보통 규칙으로 견주니 <code>Ext2</code> 의 <code>ReadOnlySpan</code> 판이 이겼습니다 — <code>Ext1</code> 에 우선순위 1 이 붙어 있어도 다른 클래스의 판을 누르지
+못합니다. <code>Ext1.M(…)</code> 처럼 클래스를 적어 부르면 묶음이 하나뿐이라 <code>Span</code> 판입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-or-call">
+<h3>함정 — 부를 수 없게 되는 오버로드</h3>
+<p class="why">제안서의 "Callability of members": 우선순위는 "can make certain members effectively uncallable from source". 우회로의 첫째로 "Converting the
+method to a delegate" 를 들고, <code>M3(object)</code> 처럼 참조 형식의 가변성이 걸리면 "this strategy will fail" 이라고 적습니다. <!--CITE key=prop-13-overload-resolution-priority sec="Callability of members"--></p>
+<!--CODE file=ex/14/orcall/Program.cs note=제안서의 C3 의 M1·M3 — 대리자 둘은 #if 로-->
+<!--CSVER v=13.0 file=ex/14/orcall note=C# 13.0 — 직접 호출과 리플렉션-->
+<!--CSVER v=13.0 file=ex/14/orcall flags=-define:DEL1 tag=del1 note=-define:DEL1 — Action&lt;int&gt; 로-->
+<!--CSVER v=14.0 file=ex/14/orcall flags=-define:DEL1 tag=del1 note=같은 DEL1 을 C# 14.0 으로-->
+<!--CSVER v=13.0 file=ex/14/orcall flags=-define:DEL3 tag=del3 note=-define:DEL3 — Action&lt;string&gt; 으로-->
+<div class="warn"><b>함정</b> — <code>M1</code> 은 대리자로도 못 부릅니다. 메서드 그룹 변환도 오버로드 해석이라 우선순위가 <code>M1(int)</code> 을 먼저 지우고,
+남은 <code>M1(long)</code> 은 <code>Action&lt;int&gt;</code> 에 맞지 않아 <code>CS0123</code> 입니다(C# 14.0 도 같다). <code>M3</code> 는 제안서 말대로 오류 없이
+<code>M3(object)</code> 로 갑니다. 남는 길은 리플렉션입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-or-neg">
+<h3>음수 우선순위 — 옛 판을 뒤로 미는 쪽</h3>
+<p class="why">제안서가 꼽은 BCL 의 (가상의, "hypothetical") 쓰임 첫째는 <code>Debug.Assert</code> 에 <code>CallerArgumentExpression</code> 판을 더하고 "make it preferred over the existing
+overload" 하는 것입니다. 새 판을 올리는 대신 옛 판을 -1 로 내려도 같습니다. <!--CITE key=prop-13-overload-resolution-priority sec="Motivation"--></p>
+<!--CODE file=ex/14/orneg/Program.cs note=That(bool) 에 -1, 식의 글자를 받는 판은 기본값 0-->
+<!--CSVER v=13.0 file=ex/14/orneg note=C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/orneg flags=-define:NOPRI tag=nopri note=-define:NOPRI — 특성을 빼면-->
+<!--CSVER v=12.0 file=ex/14/orneg note=C# 12.0 으로 내리면-->
+<p class="cap">특성이 없으면 기본값을 채울 필요가 없는 <code>That(bool)</code> 판이 이겨 글자가 실리지 않습니다 — <code>CallerArgumentExpression</code>(<a href="#p11-v10-callerarg">11부</a>)
+판을 더하기만 해서는 소용이 없던 까닭입니다. -1 이 그 판을 지워 실패한 식의 글자가 찍힙니다. 이 예제를 C# 12.0 으로 내리면 특성을 붙인
+자리에서 거절됩니다 — 다음 장의 BCL 과는 다릅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-or-lang">
+<h3>게이트는 붙이는 쪽에만 — 메타데이터의 특성은 C# 12 가 조용히 무시</h3>
+<p class="why">제안서의 "Langversion Behavior": 구현은 "only issues langversion errors when <code>OverloadResolutionPriorityAttribute</code> is applied, <i>not</i>
+when it actually influences anything". 참조한 라이브러리의 특성은 "silently ignoring the attribute in previous language versions" 로 정했습니다.
+"<code>Debug.Assert(bool)</code> is being de-prioritized in .NET 9" 가 그 이유로 적혀 있습니다. <!--CITE key=prop-13-overload-resolution-priority sec="Langversion Behavior (Answered)"--></p>
+<!--CODE file=ex/14/orlang/Program.cs note=Fail 을 찍는 TraceListener — #define 으로 TRACE·DEBUG 를 켠다-->
+<!--CSVER v=13.0 file=ex/14/orlang note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/orlang note=C# 12.0 — 같은 소스, 거절 없이-->
+<p class="cap">같은 소스, 같은 .NET 10 참조인데 언어 버전만 바꾸니 출력이 달라집니다. C# 13 은 우선순위 -1 인 <code>Assert(bool)</code> 를 지우고 메시지
+매개변수에 식의 글자를 채우는 판을 부릅니다. C# 12 는 특성을 모르는 척하고 옛 판을 불러 메시지가 빈 문자열입니다. 이 덱의 증거 방식 (나) — 언어 버전에
+묶인 동작 — 의 한 예입니다(<a href="#p0-evidence">0부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-or-bcl">
+<h3>.NET 10 은 어디에 쓰나 — 모두 -1 <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — 컴파일러가 읽는 것은 참조 어셈블리입니다. 이 기계의 참조 팩(<code>Microsoft.NETCore.App.Ref</code> 10.0.12)에서 메서드에 붙은
+<code>OverloadResolutionPriorityAttribute</code> 를 메타데이터로 직접 셉니다. <!--CITE key=prop-13-overload-resolution-priority sec="Langversion Behavior (Answered)"--></p>
+<!--CODE file=ex/14/orbcl/Program.cs lines=1-24 note=특성 생성자의 형식 이름을 찾는 두 도우미-->
+<!--CODE file=ex/14/orbcl/Program.cs lines=25-55 note=참조 팩의 dll 마다 특성을 훑는다-->
+<!--CSVER v=13.0 file=ex/14/orbcl note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">63개 메서드, 값은 모두 -1 입니다 — 어느 판을 올린 곳은 없고 모두 기본값 0 아래로 내린 것입니다. 56개가 <code>MemoryExtensions</code> 입니다. 참조
+어셈블리는 실행할 수 없는 메타데이터 껍데기라 리플렉션 대신 <code>System.Reflection.Metadata</code> 로 읽었습니다. .NET 9 의 참조 팩은 이 기계에 없어 C# 13 이 나온 날의 수는 셀 수 없습니다(2026-10 기준).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-or-where">
+<h3>붙일 수 없는 곳 — 무시될 자리면 오류</h3>
+<p class="why">제안서: 인덱서 아닌 속성, 접근자, 변환 연산자, 람다, 지역 함수, 종료자, 정적 생성자에 붙이면 오류입니다. override 처럼 "a location it would be
+ignored" 도 오류입니다 — 경고나 무시보다 "the most cautious approach" 를 골랐습니다. <!--CITE key=prop-13-overload-resolution-priority sec="System.Runtime.CompilerServices.OverloadResolutionPriorityAttribute"-->
+<!--CITE key=prop-13-overload-resolution-priority sec="Answer"--></p>
+<!--CODE file=ex/14/orwhere/Program.cs note=생성자·인덱서·메서드는 되고, #if 갈래 여덟은 안 된다-->
+<!--CSVER v=13.0 file=ex/14/orwhere flags=-define:OVR tag=ovr note=-define:OVR — override-->
+<!--CSVER v=13.0 file=ex/14/orwhere flags=-define:LOCAL tag=local note=-define:LOCAL — 지역 함수-->
+<p class="cap">번호는 둘입니다. override 만 <code>CS9261</code> "on an overriding member" 이고, 나머지 일곱은 모두 <code>CS9262</code> "on this member" 입니다.
+제안서가 "not currently blocked" 라고 적었던 지역 함수도 지금은 막혀 있습니다(같은 절의 답 "All of the locations listed above are blocked"). 갈래마다의 문장은
+<a href="#p14-v13-or-diag">장 끝의 표</a>에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-or-virt">
+<h3>override 와 인터페이스 구현 — 어디의 우선순위를 읽나</h3>
+<p class="why">제안서: 우선순위는 "the least-derived declaration" 에서 읽고, 인터페이스 멤버를 구현한 멤버에게는 "not inherited or inferred" 입니다 —
+<code>params</code> 수식어가 하는 대로입니다. <!--CITE key=prop-13-overload-resolution-priority sec="Overload resolution priority"--> <!--CITE key=prop-13-overload-resolution-priority sec="Answer"--></p>
+<!--CODE file=ex/14/oriface/Program.cs note=virtual 판의 우선순위 1, 인터페이스 멤버의 우선순위 1-->
+<!--CSVER v=13.0 file=ex/14/oriface note=C# 13.0-->
+<p class="cap">첫 줄: <code>Derived</code> 의 override 에는 특성이 없지만(붙이면 <code>CS9261</code>) <code>Base</code> 선언의 1 을 물려받아 <code>object</code> 판이 불립니다.
+둘째 줄: <code>C</code> 의 구현 메서드에는 우선순위가 없어 보통 규칙대로 <code>string</code> 판입니다. 셋째 줄: 같은 객체를 <code>I</code> 로 부르면 인터페이스
+선언의 1 이 보여 <code>object</code> 판입니다. 받는 변수의 형식이 결과를 가릅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-or-diag">
+<h3>6장의 진단 한눈에</h3>
+<p>이 장의 거절 캡처에서 첫 오류의 번호와 문장을 뽑았습니다.</p>
+<!--TABLE file=out/tbl_p14c_diag6.html-->
+<p class="cap">언어 버전의 거절은 <code>CS9202</code> 하나이고, 특성이 놓인 자리를 따지는 새 번호는 <code>CS9261</code>·<code>CS9262</code> 둘입니다. <code>CS0121</code> 과
+<code>CS0123</code> 은 오래된 오버로드 진단 그대로입니다 — 우선순위는 진단을 늘리기보다 후보를 줄이는 쪽입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p14-v13-or-quiz" data-quiz>
+<h3>6장 퀴즈 — 오버로드 해석 우선순위</h3>
+<p class="q">Q. .NET 10 을 참조하는 프로젝트를 <code>-langversion:12.0</code> 으로 컴파일합니다. <code>Debug.Assert(n &gt; 5)</code> 가 실패하면 메시지에 식의 글자
+<code>n &gt; 5</code> 가 실릴까요? 같은 프로젝트에 우선순위 특성을 직접 붙인 메서드가 있다면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 실리지 않습니다. C# 12 는 참조 어셈블리의 우선순위 -1 을 조용히 무시하고 옛 판 <code>Assert(bool)</code> 를 불러 메시지가 빈 문자열입니다
+(<a href="#p14-v13-or-lang">앞에서</a>). 특성을 소스에 직접 붙이면 그 자리가 <code>CS9202</code> 로 거절됩니다(<a href="#p14-v13-or-neg">앞에서</a>). 게이트는
+특성을 "붙이는" 쪽에만 있습니다.</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p14-v13-small"><p class="chnum">7장</p><h2>작은 기능들 — \e, 메서드 그룹, 초기화자의 ^</h2>
+<p class="chsub">ESC 문자 · \x 의 함정 · 메서드 그룹의 자연 형식 · 범위마다 · 깨지는 변경 · 개체 초기화자의 끝에서 세는 인덱스 · 평가 순서 · 퀴즈</p></article>
+
+<article class="card" id="p14-v13-esc">
+<h3>새 이스케이프 시퀀스 \e (escape sequence) <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — whats-new: "You can use <code>\e</code> as a character literal escape sequence for the <code>ESCAPE</code> character, Unicode <code>U+001B</code>.
+Previously, you used <code>\u001b</code> or <code>\x1b</code>." 제안서는 <code>'\e'</code> 가 넷과 같아야 한다고 적습니다 — <code>(char)0x1b</code>, <code>'\u001b'</code>,
+<code>'\U0000001b'</code>, <code>'\x1b'</code>. <!--CITE key=whatsnew-13 sec="New escape sequence"--> <!--CITE key=prop-13-esc-escape-sequence sec="Summary"--></p>
+<!--CODE file=ex/14/esbasic/Program.cs note=제안서의 네 비교와 ANSI 제어 문자열 하나-->
+<!--CSVER v=13.0 file=ex/14/esbasic note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/esbasic note=C# 12.0 으로 내리면-->
+<p class="cap">넷 다 <code>True</code>, <code>"\e[1m"</code> 은 네 글자 <code>1B 5B 31 6D</code> 입니다. C# 12.0 은 <code>\e</code> 가 나온 두 곳을 모두 거절합니다.
+<code>MessageID.cs</code> 가 이 기능에만 "lexer check" 를 붙인 대로 어휘 분석기가 리터럴마다 확인합니다 — 그래서 같은 파일의 다른 거절을 가립니다(<a href="#p14-v13-gates-demo">1장</a>).
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureStringEscapeCharacter: // lexer check"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-es-hex">
+<h3>왜 \x1b 가 아닌가 — 16진 자리가 넷까지 늘어난다</h3>
+<p class="why">whats-new: "Using <code>\x1b</code> wasn't recommended because if the next characters following <code>1b</code> were valid hexadecimal digits, those
+characters became part of the escape sequence." <!--CITE key=whatsnew-13 sec="New escape sequence"--> 표준의 문법은 <code>'\\x' Hex_Digit Hex_Digit? Hex_Digit?
+Hex_Digit?</code> 이고, 같은 절의 주석이 <code>"\x9Bad text"</code> 가 <code>U+9BAD</code> 로 시작한다는 예를 듭니다. <!--CITE key=std-lexical-structure sec="6.4.5.5 Character literals"--></p>
+<!--CODE file=ex/14/eshex/Program.cs note=ESC 뒤에 16진 숫자로 읽히는 글자가 오면-->
+<!--CSVER v=13.0 file=ex/14/eshex note=C# 13.0-->
+<div class="warn"><b>함정</b> — <code>"\x1b7"</code> 은 두 글자가 아니라 <code>U+01B7</code> 한 글자이고, <code>"\x1bE1"</code> 은 <code>U+1BE1</code> 입니다. 컴파일러는
+아무 말도 하지 않습니다. <code>[</code> 처럼 16진 숫자가 아닌 글자가 뒤따를 때만 생각한 대로 됩니다. <code>\u</code> 는 언제나 네 자리라 안전하지만 길고,
+<code>\e</code> 는 짧고 뒤의 글자를 삼키지 않습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-es-where">
+<h3>\e 가 통하는 리터럴 — 다른 이스케이프와 같은 자리</h3>
+<p class="why">제안서의 설계는 표준의 <code>Simple_Escape_Sequence</code> 에 <code>'\\e'</code> 하나를 더하고 표에 "Escape character U+001B" 줄을 붙이는 것뿐입니다.
+<!--CITE key=prop-13-esc-escape-sequence sec="Detailed design"--> 그러니 <code>\n</code> 이 통하는 곳에서 통하고, 통하지 않는 곳에서 통하지 않아야 합니다.</p>
+<!--CODE file=ex/14/eswhere/Program.cs note=문자 · 문자열 · 보간 · UTF-8 · 축자 · 원시 문자열, #if UPPER 는 대문자-->
+<!--CSVER v=13.0 file=ex/14/eswhere note=C# 13.0 — UTF-8 바이트를 16진으로-->
+<!--CSVER v=13.0 file=ex/14/eswhere flags=-define:UPPER tag=upper note=-define:UPPER — '\E'-->
+<p class="cap">보간 문자열과 UTF-8 리터럴(<a href="#p12-v11-utf8">12부</a>)에서도 <code>1B</code> 입니다. 축자 문자열(<code>@</code>)과 원시 문자열(<a href="#p12-v11-raw">12부</a>)은
+이스케이프를 해석하지 않으니 글자 둘 <code>\</code>·<code>e</code>(<code>5C 65</code>)입니다. 대문자 <code>\E</code> 는 없는 시퀀스라 <code>CS1009</code> "Unrecognized
+escape sequence" 입니다 — 대소문자를 가리는 것도 다른 이스케이프와 같습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-es-old">
+<h3>C# 12 까지의 ESC — 그리고 꺼진 #if 안의 \e</h3>
+<p class="why">표준: 조건부 컴파일로 건너뛴 구역은 "no tokens, except those for pre-processing directives, are generated" 이고 "skipped source code ... may be
+lexically incorrect" 입니다. <!--CITE key=std-lexical-structure sec="6.5.5 Conditional compilation directives"--> 어휘 분석 단계의 게이트인 <code>\e</code> 에도
+그대로일까요? 이 예제는 <code>-langversion:12.0</code> 프로젝트입니다.</p>
+<!--CODE file=ex/14/esold/Program.cs note=ESC 를 쓰는 네 길, 그리고 #if CS13 안의 \e-->
+<!--CSVER v=12.0 file=ex/14/esold note=C# 12.0-->
+<!--CSVER v=12.0 file=ex/14/esold flags=-define:CS13 tag=cs13 note=-define:CS13, C# 12.0-->
+<!--CSVER v=13.0 file=ex/14/esold flags=-define:CS13 tag=cs13 note=-define:CS13, C# 13.0-->
+<p class="cap">기호를 켜지 않으면 C# 12.0 이 <code>\e</code> 가 든 줄을 보지도 않아 거절이 없습니다. 켜는 순간 <code>CS9202</code> 입니다. 여러 언어 버전으로 빌드하는
+라이브러리라면 <code>\e</code> 를 버전 기호 뒤에 둘 수 있다는 뜻입니다. 네 길 가운데 <code>\x1b</code> 는 <a href="#p14-v13-es-hex">앞 장</a>의 함정을 안고 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-mg-rule">
+<h3>메서드 그룹의 자연 형식 — C# 10 의 규칙과 C# 13 의 고침</h3>
+<p>C# 10 은 <code>var f = M;</code> 처럼 대상 형식 없이 메서드 그룹을 쓸 수 있게 했습니다(<a href="#p11-v10-lambda">11부</a>). 그 규칙은 "A method group has a
+natural type if all candidate methods in the method group have a common signature" 이고, 후보에는 "the containing type and all extension method scopes" 가
+다 들어갑니다. <!--CITE key=prop-13-method-group-natural-type-improvements sec="Context on method group natural type"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th></th><th>C# 10–12</th><th>C# 13</th></tr>
+<tr><td>후보를 모으는 범위</td><td>형식과 모든 확장 메서드 범위를 한꺼번에</td><td>"scope-by-scope" — 인스턴스 멤버부터, 후보가 없을 때만 다음 범위로</td></tr>
+<tr><td>형식 인수 없는 제네릭 메서드</td><td>후보</td><td>뺀다("Prune generic instance methods when no type arguments are provided")</td></tr>
+<tr><td>줄일 수 없거나 제약을 못 맞추는 제네릭 확장 메서드</td><td>후보</td><td>뺀다</td></tr>
+<tr><td>한 범위의 후보끼리 서명이 다르면</td><td>자연 형식 없음</td><td>자연 형식 없음(다음 범위로 가지 않는다)</td></tr>
+</table></div>
+<p class="cap">whats-new 는 이것을 "small optimizations to overload resolution involving method groups" 라 부르고, 새 방식이 "more closely follows the general algorithm
+for overload resolution" 이라고 적습니다. <!--CITE key=whatsnew-13 sec="Method group natural type"--> <!--CITE key=prop-13-method-group-natural-type-improvements sec="Summary"-->
+<!--CITE key=prop-13-method-group-natural-type-improvements sec="Proposal"--> 13부는 C# 12 가 이 자연 형식에 기본값과 <code>params</code> 를 담게 한 것을 봤습니다(<a href="#p13-v12-ld-mgroup">13부</a>).</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p14-v13-mgnatural">
+<h3>메서드 그룹 자연 형식의 개선 (method group natural type) <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — whats-new: "The new behavior is to prune the set of candidate methods at each scope ... The process continues to the next outer scope only if
+no candidate methods are found." <!--CITE key=whatsnew-13 sec="Method group natural type"--> 인스턴스 메서드와 서명이 다른 확장 메서드가 함께 있을 때가 가장 흔한
+경우입니다.</p>
+<!--CODE file=ex/14/mgnatural/Program.cs note=인스턴스 M(int) 과 확장 M(string), 그리고 var-->
+<!--CSVER v=13.0 file=ex/14/mgnatural note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/mgnatural note=C# 12.0 으로 내리면-->
+<p class="cap">C# 13 은 인스턴스 범위에서 <code>M(int)</code> 하나를 찾고 멈춰 <code>Action&lt;int&gt;</code> 입니다. C# 12 는 확장 메서드까지 모아 서명이 둘이라
+<code>CS8917</code> 입니다. 거절의 문장에 기능 이름이 없습니다 — 게이트(<a href="#p14-v13-gates">1장</a>의 아홉)가 아니라 언어 버전에 따라 다른 알고리즘을 고르는
+것입니다. Roslyn 문서도 "this does not affect <code>LangVersion=13</code> and later because of a different delegate inference algorithm" 이라고 적습니다.
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-9 sec="Default and params parameters are considered in method group natural type"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-mg-scope">
+<h3>확장 메서드도 안쪽 범위부터</h3>
+<p class="why">제안서: 첫 범위 다음은 "each scope subsequent scope of extension methods" 입니다 — 확장 메서드는 둘러싼 이름공간마다 범위가 하나씩입니다.
+<!--CITE key=prop-13-method-group-natural-type-improvements sec="Summary"--></p>
+<!--CODE file=ex/14/mgnest/Program.cs note=Outer 의 E1.M(string) 과 Outer.Inner 의 E2.M(int)-->
+<!--CSVER v=13.0 file=ex/14/mgnest note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/mgnest note=C# 12.0 으로 내리면-->
+<p class="cap"><code>Program</code> 에서 가까운 <code>Inner</code> 범위에 후보가 하나 있으니 C# 13 은 거기서 멈춥니다. C# 12 는 두 범위를 한데 모아 서명이 갈려 다시
+<code>CS8917</code> 입니다. 오버로드 해석이 확장 메서드를 안쪽 범위부터 찾는 것과 같은 순서입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-mg-generic">
+<h3>함정 — 자연 형식은 확장 메서드에서, 부르는 것은 제네릭 인스턴스 메서드</h3>
+<p class="why">제안서: 첫 범위에서는 "methods on the relevant type with arity matching the provided type arguments" 만 후보입니다 — <code>var f = c.M;</code> 처럼
+형식 인수가 없으면 제네릭 <code>M&lt;T&gt;</code> 는 빠집니다. <!--CITE key=prop-13-method-group-natural-type-improvements sec="Proposal"--></p>
+<!--CODE file=ex/14/mggeneric/Program.cs note=인스턴스 M<T>(T) 와 확장 M(int), #if NOEXT 는 확장 메서드를 뺀 꼴-->
+<!--CSVER v=13.0 file=ex/14/mggeneric note=C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/mggeneric flags=-define:NOEXT tag=noext note=-define:NOEXT — 확장 메서드가 없으면-->
+<div class="warn"><b>함정</b> — <code>Action&lt;int&gt;</code> 라는 형식은 확장 메서드 <code>E.M(int)</code> 에서 왔는데, 불린 것은 <code>C.M&lt;T&gt;</code> 입니다. 자연
+형식을 정한 뒤의 변환은 보통의 오버로드 해석이라 <code>T = int</code> 로 추론되는 인스턴스 메서드가 확장 메서드를 이깁니다. 확장 메서드를 지우면 후보가 하나도
+없어 <code>CS8917</code> 입니다. C# 12.0 은 확장 메서드가 있어도 <code>CS8917</code> 입니다(<a href="#p14-v13-small-diag">장 끝의 표</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-mg-cons">
+<h3>제약을 못 맞추는 제네릭 확장 메서드를 뺀다</h3>
+<p class="why">제안서: 확장 메서드 범위의 후보는 "can be substituted with the provided type arguments and reduced using the value of the receiver while
+satisfying contstraints" 인 것만입니다(오타는 원문). <!--CITE key=prop-13-method-group-natural-type-improvements sec="Proposal"--></p>
+<!--CODE file=ex/14/mgcons/Program.cs note=where T : struct 인 M<T>(T) 와 where T : class 인 M<T>(T, int)-->
+<!--CSVER v=13.0 file=ex/14/mgcons note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/mgcons note=C# 12.0 으로 내리면-->
+<p class="cap"><code>M&lt;string&gt;</code> 이면 첫 판은 <code>struct</code> 제약에 걸려 빠지고, 남은 판의 서명 <code>(string, int)</code> 가 자연 형식
+<code>Action&lt;string, int&gt;</code> 이 됩니다. C# 12 는 제약을 보지 않고 두 판을 다 후보로 둬 서명이 갈립니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-mg-break">
+<h3>깨지는 변경 — 기본값과 params 가 자연 형식을 가른다 <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — Roslyn 문서(17.13): 전에는 기본값이나 <code>params</code> 가 있으면 컴파일러가 "unexpectedly inferred different delegate type depending on the
+order of candidates in source" 였고, 이제는 모호함 오류입니다. 또 C# 12 이하에서는 "<code>params</code> modifier must match across all methods" 입니다.
+예제의 <code>Test1</code>·<code>C.M</code>·<code>E.M</code> 은 문서의 것입니다. <!--CITE key=roslyn-compiler-breaking-changes-dotnet-9 sec="Default and params parameters are considered in method group natural type"--></p>
+<!--CODE file=ex/14/mgbreak/Program.cs note=문서의 두 예 — #if BAD 는 Test1-->
+<!--CSVER v=13.0 file=ex/14/mgbreak note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/mgbreak note=C# 12.0 으로 내리면-->
+<!--CSVER v=13.0 file=ex/14/mgbreak flags=-define:BAD tag=bad note=-define:BAD, C# 13.0-->
+<p class="cap">둘째 예는 문서대로입니다 — C# 12 에서 <code>CS8917</code>, C# 13 은 인스턴스 범위의 <code>C.M</code> 하나로 정해집니다. 첫째 예(<code>Test1</code>,
+문서: "previously <code>Action&lt;long[]&gt;</code> - now error")는 C# 13 에서도 <code>CS8917</code> 입니다. 두 확장 메서드가 같은 범위에 있고 하나만
+<code>params</code> 라서입니다. 이쪽은 언어 버전이 아니라 17.13 컴파일러의 수정이라, 지금의 SDK 로는 옛 결과를 볼 수 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-idxinit">
+<h3>개체 초기화자의 암시적 인덱스 (implicit index access) <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — whats-new: "The implicit 'from the end' index operator, <code>^</code>, is now allowed in an object initializer expression for single-dimension
+collections." 예제는 whats-new 의 <code>TimerRemaining</code> 그대로입니다. "In versions before C# 13, the <code>^</code> operator can't be used in an object
+initializer." <!--CITE key=whatsnew-13 sec="Implicit index access"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureImplicitIndexerInitializer:"--></p>
+<!--CODE file=ex/14/iibasic/Program.cs note=whats-new 의 카운트다운 — [^1] 부터 [^10] 까지-->
+<!--CSVER v=13.0 file=ex/14/iibasic note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/iibasic note=C# 12.0 으로 내리면-->
+<p class="cap"><code>9 8 … 0</code> — 열 칸을 뒤에서부터 채웠습니다. C# 12.0 은 열 줄 하나하나를 <code>implicit indexer initializer</code> 로 거절합니다. 9부는
+<code>Buffer</code> 형식으로 같은 일을 앞당겨 봤습니다(<a href="#p9-v8-idx-init13">9부</a>). 이 장은 그다음 — 언제 길이를 읽는지, 무엇이 안 되는지를 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ii-order">
+<h3>초기화자의 ^ — 받는 쪽을 원소마다 두 번 읽는다</h3>
+<p class="why">C# 8 의 제안서: 암시적 <code>^</code> 는 받는 쪽 → 인수 → 길이 순으로 셈하고, "The <code>receiver</code> and <code>Length</code> expressions will
+be spilled as appropriate to ensure any side effects are only executed once" 입니다(<a href="#p9-v8-idx-pattern">9부</a>). <!--CITE key=prop-8-ranges sec="Implicit Index support"--> 중첩된 개체 초기화자 <code>B = { [^1] = … }</code> 에서는 어떨까요?</p>
+<!--CODE file=ex/14/iiorder/Program.cs note=B 의 get, Length, 값, 인덱서 set 을 찍는다-->
+<!--CSVER v=13.0 file=ex/14/iiorder note=C# 13.0-->
+<p class="cap">초기화자의 <code>[^1]</code> 하나에 <code>get B</code> 가 두 번입니다 — 길이를 읽으려고 한 번, 인덱서에 쓰려고 또 한 번. 값 <code>V(9)</code> 는 길이를
+읽은 뒤에 셈합니다. 같은 초기화자라도 <code>[3]</code> 이면 <code>get B</code> 는 한 번이고, 문장 <code>h.B[^4] = …</code> 도 받는 쪽을 한 번만 읽습니다(마지막
+<code>get B</code> 는 출력 줄의 것). 제안서의 "only executed once" 와 다릅니다 — 받는 쪽 속성에 부수 효과가 있다면 C# 13 의 초기화자에서만 그 효과가 두 배입니다(2026-10 기준, SDK 10.0.112).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ii-trap">
+<h3>함정 — 초기화하는 순간의 길이로 센다</h3>
+<p class="why">whats-new 는 이 기능을 "single-dimension collections" 에 대해 적고, 예제는 처음부터 길이가 10 인 배열입니다. <!--CITE key=whatsnew-13 sec="Implicit index access"-->
+<code>^1</code> 은 "길이 − 1" 이니(<a href="#p9-v8-idx">9부</a>) 초기화자가 도는 그 순간의 길이가 답을 정합니다.</p>
+<!--CODE file=ex/14/iitrap/Program.cs note=원소 셋인 List, 빈 List, #if DICT 는 Dictionary-->
+<!--CSVER v=13.0 file=ex/14/iitrap note=C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/iitrap flags=-define:DICT tag=dict note=-define:DICT — Dictionary&lt;int, string&gt;-->
+<div class="warn"><b>함정</b> — <code>new List&lt;int&gt; { [^1] = 5 }</code> 는 "마지막 원소를 5 로" 가 아닙니다. 그때 <code>Count</code> 가 0 이라 인덱스 -1 에
+쓰려다 <code>ArgumentOutOfRangeException</code> 입니다. 컴파일러는 경고하지 않습니다. 생성자 인수로 원소를 먼저 넣은 <code>List</code> 는 <code>1 2 9</code>
+입니다. <code>Dictionary&lt;int, string&gt;</code> 는 <code>Count</code> 와 <code>int</code> 열쇠의 인덱서가 있어도 <code>Index</code> 를 받지 않습니다(<code>CS1503</code>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ii-range">
+<h3>초기화자의 범위 — Slice 의 길이 인수가 어긋난다</h3>
+<p class="why">언어 버전 기록은 이 기능을 "allows indexers in object initializers to use implicit Index/Range indexers" 라고 적습니다 — <code>^</code> 만이 아니라
+범위(<code>..</code>)도입니다. <!--CITE key=lvh sec="C# 13.0 - .NET 9 and Visual Studio 2022 version 17.12"--> 암시적 범위는 <code>Slice(start, length)</code> 로
+낮춰집니다(<a href="#p9-v8-rng-pattern">9부</a>). <!--CITE key=prop-8-ranges sec="Implicit Range support"--></p>
+<!--CODE file=ex/14/iirange/Program.cs note=Slice 의 인수를 찍는 Buf, 초기화자와 문장, 그리고 배열-->
+<!--CSVER v=13.0 file=ex/14/iirange note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/14/iirange note=C# 14.0 으로 올려도-->
+<!--CSVER v=12.0 file=ex/14/iirange note=C# 12.0 으로 내리면 — Buf 의 두 곳만-->
+<div class="warn"><b>함정</b> — 문장 <code>h.B[1..3]</code> 은 <code>Slice(1, 2)</code>, <code>[2..^1]</code>(길이 8)은 <code>Slice(2, 5)</code> 로 맞습니다. 같은 범위를
+초기화자에 쓰면 <code>Slice(1, 1)</code>·<code>Slice(2, 2)</code> — 길이 자리에 시작 값이 들어갑니다. 이 기계의 SDK 10.0.112 에서 C# 14.0 도 같습니다
+(2026-10 기준). 배열의 범위는 C# 8 부터 새 배열을 만드는 복사라(<a href="#p9-v8-range-copy">9부</a>) <code>[0] = 7</code> 이 사라지고, C# 12.0 도 거절하지
+않습니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-small-diag">
+<h3>7장의 진단 한눈에</h3>
+<p>이 장의 거절 캡처에서 첫 오류의 번호와 문장을 뽑았습니다.</p>
+<!--TABLE file=out/tbl_p14c_diag7.html-->
+<p class="cap"><code>CS9202</code> 로 거절되는 것은 <code>\e</code> 와 초기화자의 인덱스뿐입니다. 메서드 그룹의 고침은 C# 12.0 에서 기능 이름 없는 <code>CS8917</code> 로
+드러납니다 — 같은 컴파일러가 언어 버전에 따라 다른 알고리즘을 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p14-v13-small-quiz" data-quiz>
+<h3>7장 퀴즈 — 작은 기능들</h3>
+<p class="q">Q1. <code>Console.Write("\x1b7")</code> 와 <code>Console.Write("\e7")</code> 은 같은 글자들을 쓸까요?</p>
+<p class="q">Q2. 인스턴스 메서드 <code>M(int)</code> 와 확장 메서드 <code>M(string)</code> 이 있을 때 <code>var f = c.M;</code> 은 C# 12 와 C# 13 에서 어떻게 될까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 아닙니다. <code>\x</code> 는 16진 숫자를 넷까지 삼켜 <code>"\x1b7"</code> 은 <code>U+01B7</code> 한 글자이고, <code>"\e7"</code> 은 ESC 와
+<code>7</code> 두 글자입니다(<a href="#p14-v13-es-hex">앞에서</a>).<br><b>A2.</b> C# 12 는 모든 범위의 후보를 모아 서명이 갈려 <code>CS8917</code>, C# 13 은
+인스턴스 범위에서 멈춰 <code>Action&lt;int&gt;</code> 입니다. 게이트가 아니라 언어 버전에 따라 다른 알고리즘입니다(<a href="#p14-v13-mgnatural">앞에서</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p14-v13-fk"><p class="chnum">8장</p><h2>field 키워드 미리 보기 — C# 13 에 실려 C# 14 에서 정식으로</h2>
+<p class="chsub">미리 보기 기능 · 이 SDK 에서의 13.0·preview·14.0 · 들어온 판 · field 라는 이름의 멤버 · 접근자 안의 지역 변수 · 진단</p></article>
+
+<article class="card" id="p14-v13-field">
+<h3>field 키워드 (the field keyword) <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — whats-new(C# 13): "The <code>field</code> contextual keyword is in C# 13 as a preview feature. The token <code>field</code> accesses the compiler
+synthesized backing field in a property accessor." 그리고 "We want to learn from your experiences using it." <!--CITE key=whatsnew-13 sec="The field keyword"-->
+C# 14 의 whats-new 는 같은 기능을 정식 기능으로 싣습니다. <!--CITE key=whatsnew-14 sec="The field keyword"--></p>
+<!--CODE file=ex/14/fkbasic/Program.cs note=Trim 하는 set 과 field++ 하는 get — 뒷받침 필드를 선언하지 않는다-->
+<!--CSVER v=14.0 file=ex/14/fkbasic note=C# 14.0 — 이 예제의 프로젝트 버전-->
+<!--CSVER v=13.0 file=ex/14/fkbasic note=C# 13.0 으로 내리면-->
+<!--CSVER v=preview file=ex/14/fkbasic note=-langversion:preview-->
+<p class="cap">컴파일러는 두 속성에 <code>&lt;Name&gt;k__BackingField</code> 처럼 자동 속성과 같은 이름의 필드를 만듭니다. 이 SDK 에서 C# 13.0 의 거절은 한 곳 —
+<code>get;</code> 과 몸체 있는 <code>set</code> 을 섞은 <code>Name</code> 선언 — 이고 기능 이름은 <code>field keyword</code>, 게이트는 C# 14 입니다(<a href="#p14-v13-gates">1장</a>의
+아홉에 없는 까닭). <code>Visits</code> 는 보고되지 않았습니다(<a href="#p14-v13-fk-ident">다음 장</a>). <code>-langversion:preview</code> 는 이 SDK 에서도 받아 주고
+결과가 14.0 과 같습니다. 이 기능의 전부는 15부에서 다룹니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-fk-ident">
+<h3>C# 13 까지의 field — 접근자 안의 보통 이름</h3>
+<p class="why">C# 14 의 제안서: "The existence of the <code>field</code> contextual keyword within property accessor bodies is a potentially breaking change."
+접근자 몸체 안에서 <code>field</code> 는 "a keyword and not an identifier" 입니다. <!--CITE key=prop-14-field-keyword sec="Breaking changes"--> 그러면 C# 13 의 접근자 안에서 <code>field</code> 는 무엇일까요? 이번에는
+두 접근자 모두 몸체가 있습니다.</p>
+<!--CODE file=ex/14/fkbody/Program.cs note=get·set 둘 다 몸체, 뒷받침 필드는 field-->
+<!--CSVER v=14.0 file=ex/14/fkbody note=C# 14.0-->
+<!--CSVER v=13.0 file=ex/14/fkbody note=C# 13.0 으로 내리면-->
+<p class="cap">C# 13.0 은 "기능이 없다" 가 아니라 <code>CS0103</code> "The name 'field' does not exist" 를 두 번 냅니다 — 키워드가 아니라 아직 선언되지 않은 이름으로
+봅니다. 그래서 C# 13 에서 <code>field</code> 라는 멤버가 있으면 그것을 읽습니다(<a href="#p14-v13-fk-shadow">뒤에서</a>). <a href="#p14-v13-field">앞 장</a>의
+<code>CS9260</code> 은 자동 접근자 <code>get;</code> 과 몸체 있는 접근자를 섞은 선언 쪽에서 났습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-fk-when">
+<h3>미리 보기로 들어와 한 버전 뒤에 정식으로</h3>
+<p>문서 넷이 같은 일을 다른 자리에서 적습니다. <!--CITE key=whatsnew-13 sec="What's new in C# 13"--> <!--CITE key=roslyn-language-feature-status sec="C# 14.0"-->
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureFieldKeyword:"--> <!--CITE key=lvh sec="C# 13.0 - .NET 9 and Visual Studio 2022 version 17.12"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>문서</th><th>무엇이라 적나</th></tr>
+<tr><td>whats-new(C# 13)</td><td>"Beginning with Visual Studio 17.12, C# 13 includes the <code>field</code> contextual keyword as a preview feature."</td></tr>
+<tr><td>Roslyn 기능 상태 표</td><td>"C# 14.0" 절의 첫 줄 — <code>field</code> keyword in properties, "Merged into 17.12p3"</td></tr>
+<tr><td><code>MessageID.cs</code></td><td><code>IDS_FeatureFieldKeyword</code> 는 <code>return LanguageVersion.CSharp14;</code> 묶음의 첫 줄 — 그 묶음 위의 주석은 <code>// C# 13.0 features.</code></td></tr>
+<tr><td>언어 버전 기록(csharplang)</td><td>C# 13.0 목록에 <code>field</code> 가 없다</td></tr>
+</table></div>
+<p class="cap">기능 상태 표의 17.12p3 은 C# 13 이 나온 17.12(<a href="#p14-v13-net9">1장</a>)의 미리 보기 판입니다. 코드는 C# 13 과 함께 들어왔고, 지금의 컴파일러는 그 기능을 C# 14 에
+매어 둡니다. 1장이 짚은 "주석이 둘인" <code>MessageID.cs</code>(<a href="#p14-v13-gates">1장</a>)의 첫 주석이 바로 이 묶음 위에 있습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p14-v13-fk-shadow">
+<h3>깨지는 변경 — field 라는 이름의 멤버</h3>
+<p class="why">whats-new(C# 13): "The new <code>field</code> keyword shadows a field named <code>field</code> in the scope of a property accessor. You can either change the
+name of the <code>field</code> variable, or use the <code>@</code> token". <!--CITE key=whatsnew-13 sec="The field keyword"--> Roslyn 의 .NET 10 깨지는 변경 문서는 이것을
+"Introduced in Visual Studio 2022 version 17.12" 로 적고 경고 <code>CS9258</code> 를 보입니다. <!--CITE key=roslyn-compiler-breaking-changes-dotnet-10 sec="Expression field in a property accessor refers to synthesized backing field"--></p>
+<!--CODE file=ex/14/fkshadow/Program.cs note=필드 field 를 세 가지로 읽는 속성 A·B·C-->
+<!--CSVER v=13.0 file=ex/14/fkshadow note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/14/fkshadow flags=-nowarn:9258 tag=nowarn note=C# 14.0 — 경고 CS9258 을 끄고-->
+<div class="warn"><b>함정</b> — 같은 소스가 C# 13 에서 <code>7 7 7</code>, C# 14 에서 <code>0 7 7</code> 입니다. <code>A</code> 의 <code>field</code> 는 새 뒷받침 필드를
+가리켜 0 이고, <code>this.field</code> 와 <code>@field</code> 만 옛 멤버를 읽습니다. 끄지 않으면 C# 14.0 은 <code>CS9258</code> "In language version 14.0, the
+'field' keyword binds to a synthesized backing field" 를 냅니다 — 이 덱의 캡처 폭(200칸)을 넘는 줄이라 실험 묶음이 경고와 <code>0 7 7</code> 을 따로 확인합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-fk-local">
+<h3>접근자 안의 지역 변수 field — C# 14 에서는 오류</h3>
+<p class="why">C# 14 의 제안서: "If a variable named <code>field</code> is declared in a property accessor, an error is reported." <!--CITE key=prop-14-field-keyword sec="Breaking changes"-->
+Roslyn 문서(17.14)는 그 번호를 <code>CS9272</code> 로 적습니다. <!--CITE key=roslyn-compiler-breaking-changes-dotnet-10 sec="Variable named field disallowed in a property accessor"--></p>
+<!--CODE file=ex/14/fklocal/Program.cs note=지역 변수 field 와 @field-->
+<!--CSVER v=13.0 file=ex/14/fklocal note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/14/fklocal flags=-nowarn:9258,219 tag=nowarn note=C# 14.0 — 경고 둘을 끄고-->
+<p class="cap">C# 13 에서는 평범한 지역 변수라 <code>6 8</code> 입니다. C# 14 의 번호는 문서의 <code>CS9272</code> 가 아니라 <code>CS9273</code> 이고, 문장은 문서와 같습니다.
+선언을 <code>@field</code> 로 쓰면(<code>Fixed</code>) 두 버전 모두 됩니다 — 제안서가 권하는 "adding the initial <code>@</code>" 입니다. 끈 경고는 둘째 줄
+<code>return field</code> 의 <code>CS9258</code> 과 쓰지 않는 지역 변수 경고 <code>CS0219</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-fk-diag">
+<h3>8장의 진단 — 버전마다 다른 '없는 기능' 번호</h3>
+<p>이 장의 거절 캡처에서 첫 오류의 번호와 문장을 뽑았습니다.</p>
+<!--TABLE file=out/tbl_p14c_diag8.html-->
+<p class="cap">같은 <code>field</code> 를 C# 12.0 은 <code>CS9202</code>, C# 13.0 은 <code>CS9260</code> 으로 거절합니다. 문장의 틀은 같고 번호만 다릅니다 — 컴파일러는 "이
+기능은 C# N 에 없다" 를 버전마다 다른 번호로 냅니다(13부의 C# 11.0 거절은 <code>CS9058</code>). <code>field</code> 의 나머지 — 초기화자, nullable, 구조체 — 는 C# 14 를 다루는
+15부에서 이어집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-sum"><p class="chnum">9장</p><h2>14부 정리 — C# 13 을 한 장에</h2>
+<p class="chsub">기능 지도 · 같은 프로그램 C# 12 와 C# 13 · '없는 기능' 의 번호 · 문서와 컴파일러 · 들어온 판 · C# 14 가 이어받는 것 · 퀴즈</p></article>
+
+<article class="card" id="p14-sum-features">
+<h3>14부의 C# 13 — 기능마다 어느 장에서</h3>
+<p>14부의 세 조각이 다룬 C# 13 기능과 그 대표 장입니다. 오른쪽 칸은 <a href="#p14-v13-gates">1장</a>의 컴파일러 게이트 이름입니다.</p>
+<div class="tblwrap"><table class="kv">
+<tr><th>장</th><th>기능(대표 장)</th><th>게이트</th></tr>
+<tr><td>1장</td><td><a href="#p14-v13-net9">.NET 9</a> · <a href="#p14-v13-runtime">같이 온 형식</a> · <a href="#p14-v13-wave">경고 웨이브 9 는 없다</a> · 깨지는 변경 <a href="#p14-v13-brk-inline">record struct 의 [InlineArray]</a></td><td>없음</td></tr>
+<tr><td>2장</td><td><a href="#p14-v13-params">params 컬렉션</a> · <a href="#p14-v13-params-span">params 스팬</a> · <a href="#p14-v13-pm-better">더 나은 변환</a></td><td><code>params collections</code> · 없음</td></tr>
+<tr><td>3장</td><td><a href="#p14-v13-lock">Lock 객체</a> · <a href="#p14-v13-lk-object">CS9216</a></td><td><code>Lock object</code></td></tr>
+<tr><td>4장</td><td><a href="#p14-v13-allowsref">allows ref struct</a> · <a href="#p14-v13-refiface">ref struct 인터페이스</a> · <a href="#p14-v13-refasync">반복기·async 의 ref</a></td><td><code>allows ref struct constraint</code> · <code>ref struct interfaces</code> · <code>ref and unsafe in async and iterator methods</code></td></tr>
+<tr><td>5장</td><td><a href="#p14-v13-partialprop">partial 속성과 인덱서</a></td><td>(이름 없음 — <code>CS8703</code>)</td></tr>
+<tr><td>6장</td><td><a href="#p14-v13-orp">오버로드 해석 우선순위</a> · <a href="#p14-v13-or-bcl">.NET 10 의 -1</a></td><td><code>overload resolution priority</code></td></tr>
+<tr><td>7장</td><td><a href="#p14-v13-esc">\e</a> · <a href="#p14-v13-mgnatural">메서드 그룹 자연 형식</a> · <a href="#p14-v13-mg-break">그 깨지는 변경</a> · <a href="#p14-v13-idxinit">초기화자의 ^</a></td><td><code>string escape character</code> · 없음(언어 버전에 묶임) · <code>implicit indexer initializer</code></td></tr>
+<tr><td>8장</td><td><a href="#p14-v13-field">field 키워드(미리 보기)</a></td><td><code>field keyword</code> — C# 14 의 게이트</td></tr>
+</table></div>
+<p class="cap">게이트 아홉은 C# 12.0 으로 내리면 거절됩니다(partial 속성만 다른 꼴). 게이트가 없는 것은 셋으로 갈립니다 — 언어 버전에 따라 다른 알고리즘을 고르는 것(메서드
+그룹, 더 나은 변환, 참조한 우선순위 특성), 모든 언어 버전에 적용되는 컴파일러 수정(<code>[InlineArray]</code>, <code>Test1</code> 의 모호함), 다음 버전의 게이트에 매인
+미리 보기(<code>field</code>).</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p14-sum-old">
+<h3>같은 프로그램 — C# 12 판</h3>
+<p>C# 13 기능 일곱을 쓰는 작은 프로그램을 먼저 C# 12 로 씁니다. 다음 장이 C# 13 판입니다.</p>
+<!--CODE file=ex/14/w13old/Program.cs note=\u001b · object 잠금 · params int[] · 캐스트 · 앞에서 센 [2] · ref 없는 반복기-->
+<!--CSVER v=12.0 file=ex/14/w13old note=C# 12.0-->
+<p class="cap">잠금은 <code>object</code>, <code>params</code> 는 배열이고, 초기화자는 길이 3 을 알고 <code>[2]</code> 로 씁니다. <code>Pick</code> 이 <code>object</code> 판을
+부르게 하려면 부르는 쪽이 <code>(object)</code> 로 캐스트해야 합니다. 반복기는 <code>ref</code> 지역 변수 없이 배열을 두 번 인덱싱합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-sum-new">
+<h3>같은 프로그램 — C# 13 판</h3>
+<p>주석이 붙은 줄마다 C# 13 기능 하나입니다.</p>
+<!--CODE file=ex/14/w13new/Program.cs note=partial 속성 · \e · Lock · params 스팬 · 우선순위 · 반복기의 ref · 초기화자의 ^-->
+<!--CSVER v=13.0 file=ex/14/w13new note=C# 13.0 — 출력이 같다-->
+<!--CSVER v=12.0 file=ex/14/w13new note=C# 12.0 으로 내리면-->
+<p class="cap">출력이 글자 하나까지 같습니다. 달라진 것은 누가 무엇을 아느냐입니다 — <code>Pick("s")</code> 의 선택을 부르는 쪽이 아니라 라이브러리(<code>Fmt</code>)가 정하고,
+초기화자는 배열의 길이를 몰라도 됩니다. C# 12.0 의 거절은 <code>\e</code> 두 곳뿐입니다. 어휘 분석 단계의 거절이 나머지 여섯을 가립니다(<a href="#p14-v13-gates-demo">1장</a>) —
+13부의 정리에서 선언의 거절이 몸체를 가린 것(<a href="#p13-sum-new">13부</a>)보다 한 단계 앞입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-sum-codes">
+<h3>'없는 기능' 의 번호 — C# 13 이 CS9260 을 더했다</h3>
+<p>이 부의 거절은 C# 12.0 에서 <code>CS9202</code>, <code>field</code> 를 C# 13.0 으로 내리면 <code>CS9260</code> 이었습니다(<a href="#p14-v13-fk-diag">8장</a>). C# 14 기능
+하나(<code>p?.N = 41</code>, null 조건부 대입)를 여러 언어 버전으로 컴파일해 번호를 모읍니다. <!--CITE key=whatsnew-14 sec="Null-conditional assignment"--></p>
+<!--CODE file=ex/14/w13codes/Program.cs note=C# 14 의 ?.= 하나-->
+<!--CSVER v=14.0 file=ex/14/w13codes note=C# 14.0-->
+<!--TABLE file=out/tbl_p14c_codes.html-->
+<p class="cap">문장은 "Feature '…' is not available in C# N" 으로 같고, 번호는 언어 버전마다 하나씩입니다. 새 언어 버전이 나올 때마다 컴파일러가 "그 버전에는 없다" 는
+번호를 하나씩 더해 왔고, C# 13 의 몫이 <code>CS9260</code> 입니다. 그래서 이 덱의 거절 캡처는 번호만 봐도 어느 버전으로 내렸는지 알 수 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-sum-docs">
+<h3>문서와 컴파일러가 다른 곳 — 6장부터 8장까지</h3>
+<p><a href="#p14-v13-docs">1장의 표</a>에 이어 뒤의 장들이 찾은 어긋남입니다. 4장·5장의 진단은 <a href="#p14-v13-rs-diag">4장</a>·<a href="#p14-v13-pp-diag">5장</a>의
+표에 있습니다. <!--CITE key=prop-13-overload-resolution-priority sec="Callability of members"--> <!--CITE key=prop-8-ranges sec="Implicit Index support"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>무엇</th><th>문서</th><th>컴파일러·런타임</th></tr>
+<tr><td>우선순위에 밀린 판을 부르는 길</td><td>제안서: 대리자로 바꾸면 된다(가변성이 걸리는 경우만 예외)</td><td><code>Action&lt;int&gt;</code> 도 <code>CS0123</code>(<a href="#p14-v13-or-call">6장</a>)</td></tr>
+<tr><td>메서드 그룹의 고침</td><td>버전 기록: "Small optimizations to overload resolution"</td><td>C# 12.0 은 <code>CS8917</code>, C# 13.0 은 됨 — 언어 버전에 묶임(<a href="#p14-v13-mgnatural">7장</a>)</td></tr>
+<tr><td>자연 형식과 실제로 불리는 메서드</td><td>(적지 않음)</td><td>형식은 확장 메서드에서, 호출은 제네릭 인스턴스 메서드(<a href="#p14-v13-mg-generic">7장</a>)</td></tr>
+<tr><td>초기화자의 <code>^</code> 가 받는 쪽을 읽는 횟수</td><td>C# 8 제안서: "only executed once"</td><td>원소마다 두 번(<a href="#p14-v13-ii-order">7장</a>)</td></tr>
+<tr><td>초기화자의 범위 <code>[1..3]</code></td><td>C# 8 제안서: <code>Slice(start, length)</code></td><td><code>Slice(1, 1)</code> — 길이 자리에 시작 값(<a href="#p14-v13-ii-range">7장</a>)</td></tr>
+<tr><td>C# 13 의 <code>field</code></td><td>whats-new: C# 13 의 미리 보기 기능</td><td><code>-langversion:13.0</code> 은 <code>CS9260</code>, 게이트는 C# 14(<a href="#p14-v13-field">8장</a>)</td></tr>
+<tr><td>접근자 안의 지역 변수 <code>field</code></td><td>Roslyn 문서: <code>CS9272</code></td><td><code>CS9273</code>(<a href="#p14-v13-fk-local">8장</a>)</td></tr>
+<tr><td><code>CS9258</code> 의 문장</td><td>Roslyn 문서: "The 'field' keyword binds …"</td><td>"In language version 14.0, the 'field' keyword binds …"(<a href="#p14-v13-fk-shadow">8장</a>)</td></tr>
+</table></div>
+<p class="cap">초기화자의 두 줄은 C# 8 제안서의 규칙, 그리고 같은 연산을 문장(statement)으로 썼을 때의 캡처와 견준 것입니다. 범위 쪽은 이 덱의
+컴파일러(SDK 10.0.112)에서 C# 14.0 도 같았습니다(2026-10 기준). 덱은 캡처를 근거로 쓰고 문서의 문장은 그대로 옮깁니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p14-sum-when">
+<h3>기능이 들어온 판 — Roslyn 기능 상태 표</h3>
+<p>C# 13 의 whats-new 에는 기능마다의 판이 없습니다. Roslyn 의 기능 상태 표가 "Merged into …" 로 적습니다. <!--CITE key=roslyn-language-feature-status sec="C# 13.0"-->
+<!--CITE key=roslyn-language-feature-status sec="C# 14.0"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>기능</th><th>기능 상태 표</th></tr>
+<tr><td>Escape character(<code>\e</code>)</td><td>17.9p1</td></tr>
+<tr><td>Method group natural type improvements</td><td>17.9p2</td></tr>
+<tr><td>Implicit indexer access in object initializers</td><td>17.9p3</td></tr>
+<tr><td><code>Lock</code> object</td><td>17.10p2</td></tr>
+<tr><td>Params-collections</td><td>17.10p3("Merged to")</td></tr>
+<tr><td>Ref/unsafe in iterators/async · Ref Struct Interfaces</td><td>17.11p2</td></tr>
+<tr><td>Partial properties</td><td>17.11p3</td></tr>
+<tr><td>Overload Resolution Priority</td><td>17.12p1("Merged to")</td></tr>
+<tr><td>Collection expression better conversion</td><td>17.12p3</td></tr>
+<tr><td><code>field</code> keyword in properties("C# 14.0" 절)</td><td>17.12p3</td></tr>
+</table></div>
+<p class="cap">C# 12 가 17.8 과 함께 나온 바로 다음 판(17.9)부터 C# 13 기능이 들어오기 시작해, C# 13 이 나온 17.12 의 미리 보기 판에서 끝납니다(<a href="#p14-v13-net9">1장</a>).
+마지막 판에 함께 들어온 <code>field</code> 는 표의 다음 절, C# 14 에 적혀 있습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p14-sum-cs14">
+<h3>C# 14 가 이어받는 것</h3>
+<p>C# 14 의 whats-new 제목 가운데 이 부의 기능에서 이어지는 것입니다. C# 14 는 15부에서 다룹니다. <!--CITE key=whatsnew-14 sec="What's new in C# 14"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>C# 13 (이 부)</th><th>C# 14 (15부)</th></tr>
+<tr><td>미리 보기 <code>field</code>(<a href="#p14-v13-field">8장</a>)</td><td>"The field keyword" — 정식 기능 <!--CITE key=whatsnew-14 sec="The field keyword"--></td></tr>
+<tr><td>params 스팬의 추론 함정(<a href="#p14-v13-pm-infer">2장</a>) · .NET 10 의 <code>MemoryExtensions</code> -1(<a href="#p14-v13-or-bcl">6장</a>)</td><td>"Implicit span conversions" — 스팬을 일급으로 <!--CITE key=whatsnew-14 sec="Implicit span conversions"--></td></tr>
+<tr><td>partial 속성과 인덱서(<a href="#p14-v13-partialprop">5장</a>)</td><td>"More partial members" — 생성자와 이벤트 <!--CITE key=whatsnew-14 sec="More partial members"--></td></tr>
+<tr><td>메서드 그룹과 확장 메서드의 범위(<a href="#p14-v13-mg-scope">7장</a>)</td><td>"Extension members" — 확장 속성과 정적 확장 멤버 <!--CITE key=whatsnew-14 sec="Extension members"--></td></tr>
+<tr><td>초기화자의 대입(<a href="#p14-v13-idxinit">7장</a>)</td><td>"Null-conditional assignment" — <code>?.</code> 의 왼쪽 대입 <!--CITE key=whatsnew-14 sec="Null-conditional assignment"--></td></tr>
+</table></div>
+<p class="cap">C# 14 는 .NET 10 과 함께입니다 — 이 덱의 SDK 가 바로 그 컴파일러입니다(2026-10 기준). 이 밖에 "Unbound generic types and nameof", "Simple lambda
+parameters with modifiers", "User defined compound assignment" 가 같은 목록에 있습니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p14-quiz" data-quiz>
+<h3>14부 퀴즈 (1) — 게이트와 언어 버전</h3>
+<p class="q">Q. C# 13 의 변화 가운데 <code>CS9202</code> 없이 C# 12.0 에서 다른 결과를 내는 것을 이 부에서 둘 고르면?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 예를 들어 메서드 그룹의 자연 형식(C# 12.0 은 <code>CS8917</code>, <a href="#p14-v13-mgnatural">7장</a>)과 참조 어셈블리의 우선순위 특성(C# 12.0 은
+조용히 무시해 <code>Trace.Assert</code> 의 메시지가 빈 문자열, <a href="#p14-v13-or-lang">6장</a>). 컬렉션 식의 더 나은 변환(<a href="#p14-v13-pm-better">2장</a>)도 언어 버전에
+묶여 있습니다. 반대로 <code>record struct</code> 의 <code>[InlineArray]</code> 오류는 C# 12.0 에서도 같습니다(<a href="#p14-v13-brk-inline">1장</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p14-quiz2" data-quiz>
+<h3>14부 퀴즈 (2) — field</h3>
+<p class="q">Q1. 필드 <code>private int field = 7;</code> 이 있는 클래스의 속성 <code>A { get { return field; } }</code> 는 C# 13 과 C# 14 에서 각각 무엇을 돌려줄까요?</p>
+<p class="q">Q2. 그 클래스에서 C# 14 로 올려도 7 을 돌려주게 하려면?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> C# 13 은 필드를 읽어 7, C# 14 는 새 뒷받침 필드를 읽어 0 이고 경고 <code>CS9258</code> 이 납니다(<a href="#p14-v13-fk-shadow">8장</a>).<br>
+<b>A2.</b> <code>this.field</code> 나 <code>@field</code> 로 씁니다. 지역 변수의 이름이 <code>field</code> 라면 선언도 <code>@field</code> 로 써야 C# 14 의 <code>CS9273</code>
+을 피합니다(<a href="#p14-v13-fk-local">8장</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card quiz" id="p14-quiz3" data-quiz>
+<h3>14부 퀴즈 (3) — 같은 꼴, 다른 뜻</h3>
+<p class="q">Q. 길이 4 짜리 배열 속성 <code>Arr</code> 를 가진 객체를 <code>new H { Arr = { [^1] = 7 } }</code> 로 만들면 마지막 칸이 7 일까요?
+<code>{ Arr = { [1..3] = { [0] = 7 } } }</code> 이면 <code>Arr[1]</code> 이 7 일까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 앞의 것은 그렇습니다 — 초기화자의 <code>^1</code> 은 그 순간의 길이 4 로 셈해 <code>[3]</code> 입니다(<a href="#p14-v13-idxinit">7장</a>). 뒤의 것은
+아닙니다. 배열의 범위는 새 배열을 만드는 복사라 7 은 그 사본에 쓰이고 사라집니다 — C# 12.0 도 거절하지 않습니다(<a href="#p14-v13-ii-range">7장</a>의
+<code>0 0 0 0</code>).</div>
+<span class="tier ill">설명용</span>
 </article>

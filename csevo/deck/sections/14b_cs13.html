@@ -1,4 +1,704 @@
-<article class="card" id="p14b-pending">
-<h2>14부 (이어서)</h2>
-<p>준비 중입니다 — allows ref struct · ref struct 인터페이스 · 반복기와 async 의 ref · partial 속성</p>
+<article class="card" id="p14-v13-refstruct"><p class="chnum">4장</p><h2>ref struct 의 확장 — 제네릭·인터페이스·async 로</h2>
+<p class="chsub">allows ref struct · 인터페이스를 구현하는 ref struct · 반복기와 async 안의 ref 지역 변수와 unsafe · 반복기의 안전 문맥</p></article>
+
+<article class="card" id="p14-v13-rs-why">
+<h3>왜 — Span 이 .NET 의 추상화에 끼지 못했다</h3>
+<p class="why">제안서의 동기: "The inability for <code>ref struct</code> to implement interfaces means they cannot participate in fairly fundamental abstraction
+techniques of .NET." <code>Span&lt;T&gt;</code> 는 순서 있는 목록의 성질을 다 가졌는데도 <code>IReadOnlyList&lt;T&gt;</code>·<code>IEnumerable&lt;T&gt;</code> 를
+받는 메서드에 들어가지 못해 "specific methods must be coded for <code>Span&lt;T&gt;</code> that have virtually the same implementation" 이었습니다.
+<!--CITE key=prop-13-ref-struct-interfaces sec="Motivation"--> whats-new 는 세 기능을 한 묶음으로 소개합니다 — "This feature and the following two features
+enable <code>ref struct</code> types to use new constructs." <!--CITE key=whatsnew-13 sec="ref and unsafe in iterators and async methods"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>C# 7.2 의 제약(<a href="#p8-v7_2-refstruct-why">8부</a>)</th><th>C# 13 에서</th><th>이 장</th></tr>
+<tr><td>형식 인수가 될 수 없다</td><td><code>where T : allows ref struct</code> 이면 된다</td><td><a href="#p14-v13-allowsref">allows</a></td></tr>
+<tr><td>인터페이스를 구현할 수 없다</td><td>구현은 되지만 인터페이스로 바꿀 수는 없다</td><td><a href="#p14-v13-refiface">인터페이스</a></td></tr>
+<tr><td>async·반복기 안에 둘 수 없다</td><td><code>await</code>·<code>yield</code> 를 넘지 않으면 된다</td><td><a href="#p14-v13-refasync">async</a></td></tr>
+<tr><td>박싱·힙의 필드·배열 원소·포착 금지</td><td>그대로 — 형식 매개변수 <code>T</code> 에도 걸린다</td><td><a href="#p14-v13-ar-limit">제약</a></td></tr>
+</table></div>
+<p class="cap">whats-new 의 말대로 "You won't use these features unless you write your own <code>ref struct</code> types" — 대개는 BCL 의 스팬 API 가 넓어지는
+것으로 간접 혜택을 봅니다. <!--CITE key=whatsnew-13 sec="ref and unsafe in iterators and async methods"--></p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p14-v13-allowsref">
+<h3>allows ref struct 반제약 (anti-constraint) <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — whats-new: C# 13 이전에는 "<code>ref struct</code> types couldn't be declared as the type argument for a generic type or method." 이제
+제네릭 선언이 "an anti-constraint, <code>allows ref struct</code>" 를 달 수 있고, 그러면 "The compiler enforces ref safety rules on all instances of that
+type parameter." <!--CITE key=whatsnew-13 sec="allows ref struct"--> 예제의 <code>Identity</code> 는 제안서의 것입니다.
+<!--CITE key=prop-13-ref-struct-interfaces sec="ref struct Generic Parameters"--></p>
+<!--CODE file=ex/14/arbasic/Program.cs note=Identity<T> 와 ref struct Holder<T> — 둘 다 T 에 Span 을 받는다-->
+<!--CSVER v=13.0 file=ex/14/arbasic note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/arbasic note=C# 12.0 으로 내리면-->
+<!--CSVER v=13.0 file=ex/14/arbasic flags=-define:BAD tag=bad note=-define:BAD — 반제약 없는 F<T> 에 Span-->
+<p class="cap"><code>Holder&lt;Span&lt;int&gt;&gt;</code> 를 거쳐 쓴 42 가 원래 배열의 <code>local[2]</code> 에 보입니다 — 복사가 아니라 같은 메모리입니다.
+<code>string</code>·<code>int</code> 도 여전히 됩니다. 반제약을 빼면 <code>CS9244</code> — 문장이 "a type parameter allowing ref structs" 를 요구합니다
+(<a href="#p8-v7_2-refstruct-heap">8부</a>에서 C# 7.2 예제에 섞여 나온 그 낱말). <!--CITE key=msgid sec="case MessageID.IDS_FeatureAllowsRefStructConstraint:"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ar-limit">
+<h3>T 가 ref struct 일 수도 있으면 — 힙으로 가는 길이 모두 막힌다</h3>
+<p class="why">제안서: 이 반제약이 붙은 형식 매개변수는 "has all of the behaviors of a <code>ref struct</code> type" — 박싱할 수 없고, 수명 규칙을 따르고,
+"cannot be used in <code>static</code> fields, elements of an array, etc ...", 그리고 <code>scoped</code> 를 붙일 수 있습니다.
+<!--CITE key=prop-13-ref-struct-interfaces sec="ref struct Generic Parameters"--></p>
+<!--CODE file=ex/14/arlimit/Program.cs note=-define 마다 T 를 힙에 두려는 길 하나-->
+<!--CSVER v=13.0 file=ex/14/arlimit note=C# 13.0 — 아무것도 켜지 않으면-->
+<!--CSVER v=13.0 file=ex/14/arlimit flags=-define:FIELD tag=field note=-define:FIELD — 클래스의 필드-->
+<!--CSVER v=13.0 file=ex/14/arlimit flags=-define:BOX tag=box note=-define:BOX — object 로 박싱-->
+<!--CSVER v=13.0 file=ex/14/arlimit flags=-define:ARRAY tag=array note=-define:ARRAY — 배열 원소-->
+<!--CSVER v=13.0 file=ex/14/arlimit flags=-define:LAMBDA tag=lambda note=-define:LAMBDA — 람다의 포착-->
+<p class="cap">네 오류 모두 <a href="#p8-v7_2-refstruct-heap">8부</a>에서 <code>Span</code> 에 대해 본 번호(<code>CS8345</code>·<code>CS0029</code>·<code>CS0611</code>)와 같은
+무리이고, 대상이 구체 형식이 아니라 <code>'T'</code> 입니다. 람다 쪽은 "parameter 't' that has ref-like type" 이라고 부릅니다 — <code>T</code> 가 실제로
+<code>int</code> 로 불려도 메서드 본문은 최악의 경우를 기준으로 검사됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ar-pass">
+<h3>함정 — 다른 제네릭에 넘기지도, ToString 을 부르지도 못한다</h3>
+<p class="why">제안서: 이런 <code>T</code> 는 "Cannot be used as a generic argument unless the corresponding parameter is also <code>where T: allows ref struct</code>"
+입니다. <!--CITE key=prop-13-ref-struct-interfaces sec="ref struct Generic Parameters"--> 반제약은 전염됩니다 — 부르는 쪽이 달면 불리는 쪽도 달아야 합니다.</p>
+<!--CSVER v=13.0 file=ex/14/arlimit flags=-define:LIST tag=list note=-define:LIST — new List<T>()-->
+<!--CSVER v=13.0 file=ex/14/arlimit flags=-define:TOSTR tag=tostr note=-define:TOSTR — t.ToString()-->
+<p class="cap"><code>List&lt;T&gt;</code> 의 <code>T</code> 에는 반제약이 없어 <code>CS9244</code> 입니다(코드는 <a href="#p14-v13-ar-limit">앞 장</a>). 더 뜻밖인 것은
+<code>t.ToString()</code> — <code>Span&lt;T&gt;</code> 는 <code>ToString</code> 을 재정의했지만 <code>T</code> 로는 그것을 알 수 없으므로 <code>object</code> 의 메서드를
+부르는 박싱으로 보고 <code>CS0029</code> 입니다. 8부의 <code>r.ToString()</code> 과 같은 이유입니다(<a href="#p8-v7_2-refstruct-heap">8부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ar-escape">
+<h3>T 도 수명 규칙을 따른다 — 스택을 가리킬 수 있는 값은 못 돌려준다</h3>
+<p class="why">제안서의 <code>M2</code>: <code>span</code> 이 지역 <code>stackalloc</code> 을 가리키므로 그것을 받아 만든 <code>T</code> 의 "safe-to-escape is current
+method" 이고, 그래서 <code>return t;</code> 는 오류입니다. <!--CITE key=prop-13-ref-struct-interfaces sec="ref struct Generic Parameters"--> 수명 규칙 자체는
+<a href="#p12-v11-scoped">12부</a>의 <code>scoped</code> 와 같습니다.</p>
+<!--CODE file=ex/14/arescape/Program.cs note=Make<T>(span) 의 결과와 scoped T 매개변수-->
+<!--CSVER v=13.0 file=ex/14/arescape note=C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/arescape flags=-define:BAD tag=bad note=-define:BAD — return t-->
+<p class="cap"><code>Make</code> 는 실제로 <code>default</code> 만 돌려주지만 컴파일러는 서명만 보고 "결과가 <code>span</code> 을 품었을 수 있다" 고 판단합니다 —
+<code>CS8352</code>. 같은 메서드가 <code>int</code> 로 불리면 아무 일도 없지만, 본문은 <code>T</code> 가 ref struct 인 경우에 맞춰 한 번만 검사됩니다.
+<code>scoped T</code> 는 "이 매개변수는 밖으로 새지 않는다" 는 약속이라 스택의 <code>s</code> 도 받습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ar-syntax">
+<h3>반제약을 적는 자리 — 맨 끝, class 와는 함께 못 쓴다</h3>
+<p class="why">제안서: "The <code>allows ref struct</code> must be the last constraint in the <code>where</code> clause", <code>class</code> 제약이나 참조 형식
+기반 제약과는 함께 쓸 수 없습니다. 그리고 "The anti-constraint is not "inherited" from a type parameter type constraint" — <code>where S : T</code> 의
+<code>S</code> 는 ref struct 를 받지 않습니다. <!--CITE key=prop-13-ref-struct-interfaces sec="ref struct Generic Parameters"--></p>
+<!--CODE file=ex/14/arsyntax/Program.cs note=struct 와 함께 · 맨 앞에 · class 와 함께 · S : T-->
+<!--CSVER v=13.0 file=ex/14/arsyntax note=C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/arsyntax flags=-define:LAST tag=last note=-define:LAST — allows 뒤에 IDisposable-->
+<!--CSVER v=13.0 file=ex/14/arsyntax flags=-define:CLASS tag=class note=-define:CLASS — class 와 함께-->
+<!--CSVER v=13.0 file=ex/14/arsyntax flags=-define:INHERIT tag=inherit note=-define:INHERIT — C<Span<int>, Span<int>>-->
+<p class="cap"><code>struct, allows ref struct</code> 는 "값 형식이면 ref struct 도 좋다" 는 뜻이라 <code>Span&lt;int&gt;</code>·<code>int</code> 를 다 받습니다. 셋째
+거절이 <code>T</code> 가 아니라 <code>S</code> 를 짚습니다 — <code>T</code> 자리의 <code>Span&lt;int&gt;</code> 는 받아들여졌고, 반제약이 없는 <code>S</code> 가 막혔습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ar-new">
+<h3>new() 와 함께 — 제네릭 코드가 ref struct 를 만든다</h3>
+<p class="why">반제약은 다른 제약과 섞을 수 있습니다(<a href="#p14-v13-ar-syntax">앞 장</a>). <code>new()</code> 와 섞으면 제네릭 메서드가 ref struct 를 스택에
+직접 만들고, .NET 10 의 <code>Activator.CreateInstance&lt;T&gt;</code> 도 이 반제약을 달았습니다(<a href="#p14-v13-ar-runtime">런타임 장</a>의 Activator 1).</p>
+<!--CODE file=ex/14/arnew/Program.cs note=new T() 와 Activator.CreateInstance<T>() 로 만든 Counter-->
+<!--CSVER v=13.0 file=ex/14/arnew note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>new T()</code> 는 <code>Counter</code> 의 매개변수 없는 생성자(C# 10, <a href="#p11-v10-structctor">11부</a>)를 불러 100 을 냅니다.
+<code>Activator</code> 판도 100 입니다 — 리플렉션 경로로도 ref struct 가 만들어집니다. 람다 <code>c =&gt; c.N</code> 이 <code>Func&lt;Counter, int&gt;</code> 가 되는
+것도 이 장의 다른 결과입니다(<a href="#p14-v13-ar-func">Func</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ar-meta">
+<h3>메타데이터 — 형식 매개변수의 플래그 하나, 특성은 없다</h3>
+<p class="why">제안서: 이 반제약은 "<code>System.Reflection.GenericParameterAttributes.AllowByRefLike(0x0020)</code>" 플래그로 적히고, 런타임이 지원하는지는
+"<code>System.Runtime.CompilerServices.RuntimeFeature.ByRefLikeGenerics</code>" 필드로 압니다. <!--CITE key=prop-13-ref-struct-interfaces sec="Representation in metadata"--></p>
+<!--CODE file=ex/14/armeta/Program.cs note=Box<T> · Plain<T> · Func<T> · Span<T> 의 형식 매개변수를 읽는다-->
+<!--CSVER v=13.0 file=ex/14/armeta note=C# 14 / .NET 10 에서의 동작-->
+<!--CSVER v=13.0 file=ex/14/armeta flags=-define:BAD tag=bad note=-define:BAD — Span<Span<int>>-->
+<p class="cap">값은 32(0x20)이고, <code>Box&lt;&gt;</code> 에는 특성이 하나도 없어 <code>attr</code> 줄이 찍히지 않았습니다 — ref struct 자신에 붙던 <code>Obsolete</code>·
+<code>CompilerFeatureRequired</code>(<a href="#p8-v7_2-refstruct-meta">8부</a>) 같은 옛 컴파일러 막이가 형식 매개변수에는 없습니다. <code>Func&lt;&gt;</code> 는
+공변(<code>out</code>)이면서 반제약을 달았고, <code>Span&lt;&gt;</code> 자신의 <code>T</code> 는 <code>None</code> — 그래서 <code>Span&lt;Span&lt;int&gt;&gt;</code> 는
+여전히 <code>CS9244</code> 입니다. 제안서는 이것을 이 제안의 "beyond the scope" 로 남겼습니다. <!--CITE key=prop-13-ref-struct-interfaces sec="Span&lt;Span&lt;T&gt;&gt;"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ar-func">
+<h3>Func 와 Action 이 Span 을 받는다 — 그리고 C# 12 의 거절</h3>
+<p class="why">C# 10 의 람다 제안서는 "if <code>ref struct</code> types are allowed type arguments" 이면 더 많은 서명이 <code>Action&lt;&gt;</code>·<code>Func&lt;&gt;</code>
+에 묶일 수 있다고 미뤄 두었습니다. 이 제안서가 그 문장을 인용하고, 반제약이 붙은 <code>Action&lt;&gt;</code>·<code>Func&lt;&gt;</code> 가 "will be used in more
+scenarios involving ref struct types" 라고 적습니다. <!--CITE key=prop-13-ref-struct-interfaces sec="Delegate type for the anonymous function or method group"--></p>
+<!--CODE file=ex/14/arfunc/Program.cs note=Func<ReadOnlySpan<char>, int> · Action<Span<int>> · var 로 받은 람다-->
+<!--CSVER v=13.0 file=ex/14/arfunc note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/arfunc note=C# 12.0 으로 내리면-->
+<p class="cap">C# 12.0 의 거절이 9행과 12행 — <code>Func&lt;ReadOnlySpan&lt;char&gt;, int&gt;</code> 와 <code>Action&lt;Span&lt;int&gt;&gt;</code> 를 <b>적은</b> 자리입니다.
+반제약을 단 것은 .NET 의 <code>Func</code> 인데, 그것을 Span 으로 채우는 쪽이 C# 13 의 기능이기 때문입니다. 그런데 18행 <code>var len = (Span&lt;int&gt; s)
+=&gt; …</code> 은 거절 목록에 없습니다 — <a href="#p14-v13-ar-natural">다음 장</a>.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ar-natural">
+<h3>함정 — 람다의 자연 형식은 언어 버전과 상관없이 Func 가 된다</h3>
+<p class="why">C# 10 의 규칙: 매개변수 형식이 "not valid type arguments" 이면 컴파일러가 합성한 익명 대리자 형식이 됩니다.
+<!--CITE key=prop-10-lambda-improvements sec="Delegate types"--> C# 13 의 제안서: "If target runtime supports <code>allows ref struct</code> constraints, generic
+anonymous delegate types will include <code>allows ref struct</code> constraint for their type parameters." — 조건이 언어 버전이 아니라 <b>대상 런타임</b>입니다.
+<!--CITE key=prop-13-ref-struct-interfaces sec="Delegate type for the anonymous function or method group"--></p>
+<!--CODE file=ex/14/arnatural/Program.cs note=Span 매개변수 람다 둘을 var 로 받는다-->
+<!--CSVER v=13.0 file=ex/14/arnatural note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/arnatural note=C# 12.0-->
+<!--CSVER v=10.0 file=ex/14/arnatural note=C# 10.0 — 람다의 자연 형식이 처음 생긴 버전-->
+<p class="cap">세 버전 모두 <code>Func`2</code> 입니다. 같은 컴파일러가 C# 12.0 에서 <code>Func&lt;Span&lt;int&gt;, int&gt;</code> 를 손으로 적으면 거절하고
+(<a href="#p14-v13-ar-func">앞 장</a>), 추론해서 고른 <code>Func&lt;Span&lt;int&gt;, int&gt;</code> 는 받습니다. 자연 형식(<a href="#p11-v10-lambda">11부</a>)을
+고르는 규칙이 .NET 10 의 <code>Func</code> 를 보고 판단한다는 뜻입니다 — 언어 버전 짝으로는 보이지 않는 변화입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ar-design">
+<h3>왜 "allows" 인가 — 버린 문법과 자동 적용</h3>
+<p class="why">제안서의 결정: "use <code>where T: allows ref struct</code>". 다른 제약은 받을 형식을 줄이는데 이것은 늘리므로 "a new syntax prefix,
+<code>allows</code>, to make that clearer" 입니다. <!--CITE key=prop-13-ref-struct-interfaces sec="ref struct Generic Parameters"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>검토한 길</th><th>결론</th></tr>
+<tr><td><code>~ref struct</code> · <code>include ref struct</code> · 따로 쓰는 <code>allow T : ref struct</code> 절</td><td>"<code>where T: allows ref struct</code> syntax had a slightly stronger preference in LDM discussions" <!--CITE key=prop-13-ref-struct-interfaces sec="Anti-Constraint syntax"--></td></tr>
+<tr><td>대리자·인터페이스에 컴파일러가 알아서 붙이기</td><td>"do not auto-apply" — 대상 프레임워크마다 결과가 갈리고, 인터페이스에 기본 구현 하나를 더하면 멀리서 깨진다 <!--CITE key=prop-13-ref-struct-interfaces sec="Auto-applying to delegate members"--></td></tr>
+<tr><td>라이브러리가 나중에 떼기</td><td>"Removing the <code>allows ref struct</code> anti-constraint is always a breaking change: source and binary." <!--CITE key=prop-13-ref-struct-interfaces sec="allows ref struct anti-constraint"--></td></tr>
+<tr><td>공변·반변과 섞기</td><td>"no new issues" — 보통 구조체 인수가 변성을 없애듯 ref struct 도 그렇다 <!--CITE key=prop-13-ref-struct-interfaces sec="Co and contra variance"--></td></tr>
+</table></div>
+<p class="cap">그래서 반제약은 BCL 이 한 형식씩 손으로 단 것입니다. 무엇이 달렸는지는 <a href="#p14-v13-ar-runtime">다음 장</a>에서 셉니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p14-v13-ar-runtime">
+<h3>같이 온 런타임 — .NET 10 에서 반제약을 단 제네릭</h3>
+<p>제안서는 구현이 없는 정의 — 대리자, 인터페이스, abstract 메서드 — 에는 반제약을 "safely" 붙일 수 있다고 적습니다.
+<!--CITE key=prop-13-ref-struct-interfaces sec="allows ref struct anti-constraint"--> .NET 10 의 <code>System.Private.CoreLib</code> 에서 최상위 공개 형식과 그
+메서드를 리플렉션으로 셉니다.</p>
+<!--CODE file=ex/14/arruntime/Program.cs note=AllowByRefLike 가 붙은 형식 매개변수를 가진 형식·메서드-->
+<!--CSVER v=13.0 file=ex/14/arruntime note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">형식 50개 중 40개가 <code>Action</code>·<code>Func</code> 가족 같은 대리자이고, 나머지는 <code>IEnumerable&lt;T&gt;</code>·<code>IEquatable&lt;T&gt;</code>·
+<code>IComparer&lt;T&gt;</code> 같은 인터페이스입니다 — 제안서의 "safe" 목록 그대로입니다. <code>List&lt;T&gt;</code> 같은 구현 형식은 없습니다(<a href="#p14-v13-ar-pass">앞의 함정</a>).
+메서드 51개 중 35개가 <code>Unsafe</code> 입니다. 중첩 형식은 세지 않았습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-refiface">
+<h3>인터페이스를 구현하는 ref struct (ref struct interfaces) <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — whats-new: "Before C# 13, <code>ref struct</code> types weren't allowed to implement interfaces. Beginning with C# 13, they can."
+<!--CITE key=whatsnew-13 sec="ref struct interfaces"--> 제안서는 이 기능이 "only useful when combined with the ability for <code>ref struct</code> to participate in
+generic arguments" 라고 적습니다 — 인터페이스로 바꿀 수 없으니 제약을 거쳐서만 부를 수 있기 때문입니다. <!--CITE key=prop-13-ref-struct-interfaces sec="ref struct interfaces"--></p>
+<!--CODE file=ex/14/ribasic/Program.cs note=ICounter 를 ref struct 와 클래스가 함께 구현, 알고리즘은 하나-->
+<!--CSVER v=13.0 file=ex/14/ribasic note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/ribasic note=C# 12.0 으로 내리면-->
+<p class="cap"><code>Vowels</code> 하나가 문자열을 복사하지 않는 <code>SpanText</code> 와 보통 클래스 <code>StringText</code> 를 다 받습니다 — 동기 절이 말한 "same
+implementation" 의 중복이 사라졌습니다. C# 12.0 은 두 게이트를 따로 짚습니다: 9행의 인터페이스 목록(<code>ref struct interfaces</code>)과 26행의 반제약.
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureRefStructInterfaces:"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ri-conv">
+<h3>인터페이스 형식으로는 바꿀 수 없다 — 그것이 박싱이므로</h3>
+<p class="why">제안서: 인터페이스를 구현해도 "it cannot be directly cast to it as that represents a boxing action". whats-new 는 명시적 구현 멤버가
+"can be accessed only through a type parameter where that type parameter <code>allows ref struct</code>" 라고 덧붙입니다.
+<!--CITE key=prop-13-ref-struct-interfaces sec="ref struct interfaces"--> <!--CITE key=whatsnew-13 sec="ref struct interfaces"--></p>
+<!--CODE file=ex/14/riconv/Program.cs note=명시적으로 구현한 IName.Name 과 네 가지 시도-->
+<!--CSVER v=13.0 file=ex/14/riconv note=C# 13.0 — 제네릭을 거친 호출-->
+<!--CSVER v=13.0 file=ex/14/riconv flags=-define:CONV tag=conv note=-define:CONV — IName n = t-->
+<!--CSVER v=13.0 file=ex/14/riconv flags=-define:CAST tag=cast note=-define:CAST — (IName)t-->
+<p class="cap">암시적 변환은 <code>CS0029</code>, 명시적 캐스트도 <code>CS0030</code> 입니다. <code>-define:DIRECT</code>(<code>t.Name()</code>)는 오류 줄이 200칸을 넘어
+싣지 못했고, 실험 묶음이 <code>CS1061</code> 로 거절되는 것만 확인합니다 — 명시적 구현은 <code>Tag</code> 의 멤버로 보이지 않습니다. 남은 길은
+<code>Call&lt;T&gt;</code> 하나입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ri-is">
+<h3>함정 — 구현했는데 t is IName 은 False</h3>
+<p class="why">형식 검사 <code>is</code> 는 변환이 있는지를 묻습니다. ref struct 에서 인터페이스로 가는 변환은 박싱이라 없으므로(<a href="#p14-v13-ri-conv">앞 장</a>)
+컴파일러는 이 식을 상수 <code>false</code> 로 봅니다.</p>
+<!--CSVER v=13.0 file=ex/14/riconv flags=-define:PAT tag=pat note=-define:PAT — Console.WriteLine(t is IName)-->
+<p class="cap">오류가 아니라 경고 <code>CS0184</code>("never of the provided type")이고 프로그램은 <code>False</code> 를 찍습니다. <code>Tag</code> 는 분명히
+<code>IName</code> 을 구현했는데도요. 같은 코드가 보통 <code>struct</code> 였다면 박싱 뒤 <code>True</code> 였을 것입니다 — "구현한다" 와 "그 형식으로 볼 수
+있다" 가 ref struct 에서는 갈립니다. 경고를 끄는 프로젝트에서는 조용한 버그가 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ri-alloc">
+<h3>제약을 거친 호출은 박싱하지 않는다 — 할당 바이트로 보기</h3>
+<p class="why">보통 구조체도 인터페이스 매개변수로 넘기면 박싱됩니다. 제네릭 제약을 거친 호출은 박싱 없이 구조체의 메서드를 바로 부릅니다 —
+구조체가 그 메서드를 제 손으로 구현했다면(<a href="#p9-v8-dim-alloc">9부</a>). ref struct 는 박싱이 아예 불가능하므로 이 길만 열려 있습니다. <!--CITE key=prop-13-ref-struct-interfaces sec="ref struct interfaces"--></p>
+<!--CODE file=ex/14/rialloc/Program.cs note=1000번 부르는 동안 이 스레드가 할당한 바이트-->
+<!--CSVER v=13.0 file=ex/14/rialloc note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>IValue</code> 매개변수로 넘긴 <code>Num</code> 은 부를 때마다 24바이트 박스를 만들어 1000번에 24000바이트입니다. 같은 <code>Num</code> 을
+<code>ViaGeneric</code> 으로 넘기면 0, ref struct <code>Ref</code> 도 0 입니다. 바이트 수는 이 기계의 .NET 10 런타임에서 잰 것이고, 덱이 주장하는 것은 0 과
+0 이 아닌 것의 차이입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ri-equ">
+<h3>IEquatable&lt;자기 자신&gt; — ref struct 가 형식 인수이면서 구현자</h3>
+<p class="why">.NET 10 의 <code>IEquatable&lt;T&gt;</code> 는 반제약을 달았습니다(<a href="#p14-v13-ar-runtime">런타임 장</a>). 그러면 ref struct 가 자기 자신을
+형식 인수로 하는 인터페이스를 구현할 수 있고, <code>where T : IEquatable&lt;T&gt;</code> 꼴의 오래된 제네릭 관용구에 그대로 들어갑니다.</p>
+<!--CODE file=ex/14/riequ/Program.cs note=Word : IEquatable<Word> 와 Same<T>(T a, T b)-->
+<!--CSVER v=13.0 file=ex/14/riequ note=C# 13.0-->
+<p class="cap">"Span" 과 "span" 은 대소문자를 무시해 같고, "Spam" 과는 다릅니다. 같은 <code>Same</code> 이 <code>int</code> 에도 쓰입니다. 두 <code>Word</code> 는 한 문자열의
+서로 다른 조각을 가리킬 뿐 복사본이 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ri-dim">
+<h3>기본 구현이 있어도 ref struct 는 전부 구현해야 한다</h3>
+<p class="why">제안서: 기본 인터페이스 메서드(<a href="#p9-v8-dim">9부</a>)의 몸체 안에서 <code>this</code> 는 인터페이스 형식이라 "there are no protections against
+the default implementation boxing the <code>this</code> member". 그래서 "a <code>ref struct</code> will be forced to implement all members of an interface, even if
+they have default implementations." <!--CITE key=prop-13-ref-struct-interfaces sec="ref struct interfaces"--></p>
+<!--CODE file=ex/14/ridim/Program.cs note=Hello 에 기본 구현이 있는 IGreet · ref struct R · 클래스 C-->
+<!--CSVER v=13.0 file=ex/14/ridim note=C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/ridim flags=-define:MISSING tag=missing note=-define:MISSING — R 이 Hello 를 빼먹으면-->
+<p class="cap">클래스 <code>C</code> 는 기본 구현 "hello class" 를 쓰고, <code>R</code> 은 자기 구현 "hi ref" 를 씁니다. 빼먹으면 <code>CS9245</code> — 기본 구현이
+있는 <code>Hello</code> 가 "cannot implement … for ref struct" 입니다. <a href="#p9-v8-dim-alloc">9부</a>에서 기본 구현을 쓰는 구조체는
+제네릭으로 불러도 호출마다 24바이트 상자를 만들었습니다 — ref struct 에는 그 상자가 허용되지 않으니 기본 구현을 쓸 길이 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ri-sealed">
+<h3>sealed 인터페이스 멤버는 T 로 부를 수 없다 — 런타임 예외를 막으려고</h3>
+<p class="why">제안서: 런타임은 ref struct 에서 기본 인터페이스 멤버가 불리면 예외를 던지도록 바뀌고, 그것을 컴파일 때 막으려고 "the compiler will report an error
+for an invocation of a non-virtual instance method (or property) on a type parameter that allows ref struct". <!--CITE key=prop-13-ref-struct-interfaces sec="ref struct interfaces"--></p>
+<!--CSVER v=13.0 file=ex/14/ridim flags=-define:SEALED tag=sealed note=-define:SEALED — t.Shout()-->
+<p class="cap"><code>sealed</code> 멤버는 구현 형식이 대신할 수 없으므로 ref struct 에서는 반드시 기본 몸체가 돌고, 그 몸체는 <code>this</code> 를 박싱할 수 있습니다 —
+<code>CS9246</code>(코드는 <a href="#p14-v13-ri-dim">앞 장</a>). 막지 못하는 경우도 제안서에 적혀 있습니다: 인터페이스에 기본 구현 멤버를 <b>나중에</b> 더하고,
+다시 컴파일하지 않은 다른 어셈블리의 ref struct 를 제네릭으로 부르면 그때 런타임 예외입니다. <!--CITE key=prop-13-ref-struct-interfaces sec="Default Interface Methods"-->
+<code>csrun</code> 은 어셈블리 하나만 만들므로 이 덱은 그 예외를 보이지 못합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ri-using">
+<h3>using 과 foreach 가 인터페이스 구현을 쓴다</h3>
+<p class="why">제안서: <code>using</code> 은 자원이 ref struct 이면 <code>IDisposable</code> 구현을 쓰고(<a href="#p9-v8-disposal">C# 8</a> 의 패턴 <code>Dispose</code> 가 없을 때),
+<code>allows ref struct</code> 인 <code>T</code> 도 유효 인터페이스에 <code>IDisposable</code> 이 있으면 됩니다. 다만 인터페이스는 ref struct 가 아니므로 "a pattern
+<code>Dispose</code> method will not be recognized on a type parameter that <code>allows ref struct</code>". <!--CITE key=prop-13-ref-struct-interfaces sec="using statement"-->
+<code>foreach</code> 도 ref struct 의 <code>IEnumerable&lt;T&gt;</code> 구현을 씁니다. <!--CITE key=prop-13-ref-struct-interfaces sec="foreach statement"--></p>
+<!--CODE file=ex/14/riusing/Program.cs note=명시적 IDisposable · 명시적 IEnumerable<int> · 제네릭 using(t)-->
+<!--CSVER v=13.0 file=ex/14/riusing note=C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/riusing flags=-define:BAD tag=bad note=-define:BAD — Dispose 만 가진 IClose 의 T-->
+<p class="cap">명시적으로만 구현한 <code>Dispose</code> 를 <code>using</code> 이 두 번 다 찾았습니다. <code>IClose</code> 에도 <code>Dispose()</code> 가 있지만 <code>T</code>
+에 대해서는 패턴으로 찾지 않아 <code>CS1674</code> 입니다. <code>Three</code> 는 열거자를 클래스(<code>List</code> 의 것)로 돌려주므로 ref struct 를 돌면서도
+열거자는 힙에 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ri-pref">
+<h3>함정 — 같은 값, 다른 Dispose: 패턴이 먼저다</h3>
+<p class="why">제안서: "preference is given to a <code>Dispose</code> method that implements the pattern, and only if one is not found, <code>IDisposable</code>
+implementation is used." 그런데 제네릭 <code>T</code> 에서는 패턴을 찾지 않습니다. <!--CITE key=prop-13-ref-struct-interfaces sec="using statement"--></p>
+<!--CODE file=ex/14/ripref/Program.cs note=공개 Dispose() 와 명시적 IDisposable.Dispose() 를 둘 다 가진 Two-->
+<!--CSVER v=13.0 file=ex/14/ripref note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/ripref note=C# 12.0 으로 내리면-->
+<p class="cap">직접 쓴 <code>using</code> 은 공개 <code>Dispose()</code> 를, 제네릭 <code>Use&lt;T&gt;</code> 안의 <code>using</code> 은 <code>IDisposable.Dispose</code> 를
+부릅니다. 두 메서드가 다른 일을 하면 같은 값이 어디서 쓰이느냐에 따라 정리 방식이 바뀝니다 — 둘을 같게 두는 것이 안전합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ri-unscoped">
+<h3>인터페이스 멤버의 [UnscopedRef] — 받는 쪽을 가리킬 수 있다는 표시</h3>
+<p class="why">제안서: 인터페이스가 ref struct 의 수명 문제까지 표현하도록 "the language will allow <code>[UnscopedRef]</code> to appear on interface methods and
+properties". 구현 쪽은 이 특성을 생략해도 되지만 "a member with <code>[UnscopedRef]</code> may not be used to implement a member that lacks the attribute".
+<!--CITE key=prop-13-ref-struct-interfaces sec="ref struct interfaces"--> 특성 자체는 C# 11 의 것입니다(<a href="#p12-v11-sc-unscoped">12부</a>).</p>
+<!--CODE file=ex/14/riunscoped/Program.cs note=ref 필드를 가진 Cell 과 ICell 의 두 ref 속성-->
+<!--CSVER v=13.0 file=ex/14/riunscoped note=C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/riunscoped flags=-define:BAD tag=bad note=-define:BAD — ref t.Own 을 반환-->
+<!--CSVER v=13.0 file=ex/14/riunscoped flags=-define:BAD2 tag=bad2 note=-define:BAD2 — 구현 쪽 Target 에만 특성-->
+<p class="cap"><code>Target</code> 은 <code>Cell</code> 밖의 <code>x</code> 를 가리키므로 돌려줄 수 있고, <code>Pick(...) = 50</code> 이 <code>x</code> 를 바꿉니다.
+<code>Own</code> 은 받는 쪽(매개변수 <code>t</code>) 안을 가리킬 수 있다고 인터페이스가 밝혔으므로 <code>CS8166</code> 입니다. 인터페이스에 없는 특성을 구현 쪽에
+붙이면 <code>CS9102</code> — 부르는 쪽이 인터페이스만 보고 내린 판단이 깨지기 때문입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ri-runtime">
+<h3>같이 온 런타임 — .NET 10 의 열거자들이 IEnumerator&lt;T&gt; 를 구현한다</h3>
+<p>whats-new 가 말한 간접 혜택("<code>Span&lt;T&gt;</code> and <code>ReadOnlySpan&lt;T&gt;</code> gain more functionality")이 어디에 있는지,
+<code>System.Private.CoreLib</code> 의 공개 ref struct 중 인터페이스를 구현한 것을 셉니다. <!--CITE key=whatsnew-13 sec="ref and unsafe in iterators and async methods"--></p>
+<!--CODE file=ex/14/riruntime/Program.cs note=공개 ref struct 의 인터페이스 · Span 열거자를 제네릭으로 받는 Sum-->
+<!--CSVER v=13.0 file=ex/14/riruntime note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap">공개 ref struct 25개 중 다섯 — 모두 열거자이고 <code>IEnumerator&lt;T&gt;</code> 를 구현합니다. <code>Span&lt;int&gt;</code> 자신은 인터페이스가 0개입니다.
+그래서 <code>Sum&lt;E&gt;</code> 하나가 <code>Span&lt;int&gt;.Enumerator</code> 와 <code>List&lt;int&gt;.Enumerator</code> 를 다 받습니다. Span 을 <code>IEnumerable&lt;T&gt;</code>
+로 넘기는 일은 여전히 안 됩니다 — 그것은 박싱입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-refasync">
+<h3>async·반복기 안의 ref 와 Span 지역 변수 (ref in async) <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — 제안서: ref 지역 변수와 ref struct 지역 변수는 <code>yield</code>·<code>await</code> 를 넘어 쓰이지 않으면 "they do not need to be hoisted" 이므로
+막을 까닭이 없습니다. <!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Motivation"--> whats-new: C# 13 에서 async 메서드는 ref 지역 변수와 "local variables
+of a <code>ref struct</code> type" 을 선언할 수 있고, 다만 "those variables can't be accessed across an <code>await</code> boundary." <!--CITE key=whatsnew-13 sec="ref and unsafe in iterators and async methods"--></p>
+<!--CODE file=ex/14/rubasic/Program.cs note=await 사이의 ReadOnlySpan·stackalloc, yield 사이의 ReadOnlySpan-->
+<!--CSVER v=13.0 file=ex/14/rubasic note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/rubasic note=C# 12.0 으로 내리면-->
+<p class="cap"><code>stackalloc</code> 으로 만든 스택 메모리를 async 메서드 안에서 쓰고, <code>await</code> 앞에서 값만 <code>int</code> 로 꺼냈습니다. C# 12.0 의 거절은
+async 쪽 11–13행 셋 — <code>foreach</code> 가 만드는 Span 열거자까지 짚습니다. 그런데 반복기의 24행은 거절 목록에 없습니다(<a href="#p14-v13-ru-old">다음 장</a>).
+ref 지역 변수 쪽은 <a href="#p8-v7-ref-later13">8부</a>, async 의 Span 블록은 <a href="#p6-v5-after-ref">6부</a>에서 짧게 봤습니다. <!--CITE key=msgid sec="case MessageID.IDS_FeatureRefUnsafeInIteratorAsync:"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-old">
+<h3>무엇이 정말 막혀 있었나 — 반복기의 Span 지역 변수는 이미 됐다</h3>
+<p class="why">whats-new 는 "Before C# 13, iterator methods … and <code>async</code> methods couldn't declare local <code>ref</code> variables" 라고 적습니다.
+<!--CITE key=whatsnew-13 sec="ref and unsafe in iterators and async methods"--> 세 가지를 따로 떼어 C# 12.0 으로 컴파일해 봤습니다.</p>
+<!--CODE file=ex/14/ruold/Program.cs note=반복기의 Span 지역 변수 · 반복기의 ref 지역 변수 · async 의 Span 지역 변수-->
+<!--CSVER v=12.0 file=ex/14/ruold note=C# 12.0 — 반복기의 Span 지역 변수만-->
+<!--CSVER v=12.0 file=ex/14/ruold flags=-define:REF tag=ref note=-define:REF, C# 12.0 — 반복기의 ref 지역 변수-->
+<!--CSVER v=12.0 file=ex/14/ruold flags=-define:ASYNC tag=async note=-define:ASYNC, C# 12.0 — async 의 Span 지역 변수-->
+<p class="cap">반복기 안의 <code>ReadOnlySpan&lt;char&gt;</code> 지역 변수는 C# 12.0 에서도 컴파일되고 돌아갑니다. 막혀 있던 것은 반복기의 <code>ref</code> 지역 변수와
+async 메서드의 ref struct 지역 변수였습니다 — whats-new 의 문장대로입니다. 그러니 C# 13 이 반복기에 새로 연 것은 <code>ref</code> 지역 변수와
+<a href="#p14-v13-ru-unsafe">unsafe 블록</a>이고, async 에는 둘 다입니다. 옛 컴파일러가 실제로 어땠는지는 이 기계에서 확인할 수 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-across">
+<h3>await·yield 를 넘으면 — 그 순간 "할당되지 않은" 변수가 된다</h3>
+<p class="why">제안서의 명세 문장: <code>await</code> 식이나 <code>yield return</code> 문 뒤에서는 "all ref local variables and variables of a <code>ref struct</code> type
+in scope are considered definitely unassigned". 이 오류는 다른 ref 안전성 오류와 달리 <code>unsafe</code> 문맥에서도 경고로 낮춰지지 않습니다.
+<!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Detailed design"--></p>
+<!--CODE file=ex/14/ruacross/Program.cs note=await 앞에서 만든 Span·ref, yield 앞에서 만든 Span-->
+<!--CSVER v=13.0 file=ex/14/ruacross note=C# 13.0 — 넘기 전에만 쓴다-->
+<!--CSVER v=13.0 file=ex/14/ruacross flags=-define:SPAN tag=span note=-define:SPAN — await 뒤의 s-->
+<!--CSVER v=13.0 file=ex/14/ruacross flags=-define:REF tag=ref note=-define:REF — await 뒤의 r-->
+<!--CSVER v=13.0 file=ex/14/ruacross flags=-define:YIELD tag=yield note=-define:YIELD — yield 뒤의 s-->
+<p class="cap">Span 은 <code>CS4007</code>("cannot be preserved across 'await' or 'yield' boundary"), ref 지역 변수는 <code>CS9217</code> 입니다. 둘 다 문장에
+await 와 yield 가 함께 들어 있습니다 — 두 상태 기계가 같은 규칙을 쓴다는 뜻이고, 제안서의 첫 줄 "Unify behavior between iterators and async methods" 그대로입니다.
+<!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Summary"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-trap">
+<h3>함정 — Span 을 foreach 하며 yield 하기</h3>
+<p class="why">보이는 지역 변수는 하나도 <code>yield</code> 를 넘지 않는 것 같아도, <code>foreach</code> 는 컬렉션과 열거자를 숨은 지역 변수로 둡니다. 그 숨은 변수가 루프 몸체의
+<code>yield return</code> 을 넘습니다 — 명세의 "even implicitly in compiler-synthesized code" 입니다. <!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Detailed design"--></p>
+<!--CODE file=ex/14/rutrap/Program.cs note=-define:BAD 이면 Span 을 foreach, 아니면 인덱스로-->
+<!--CSVER v=13.0 file=ex/14/rutrap note=C# 13.0 — 인덱스 루프-->
+<!--CSVER v=13.0 file=ex/14/rutrap flags=-define:BAD tag=bad note=-define:BAD — foreach (char c in text.AsSpan())-->
+<p class="cap">오류는 10행의 <code>foreach</code> 자체에 붙고 형식은 <code>ReadOnlySpan&lt;char&gt;</code> 입니다. 고치는 길은 <code>yield</code> 를 넘어 살아남는 것을
+Span 이 아닌 것 — 문자열과 인덱스 — 으로 두는 것입니다. 인덱스마다 새 Span 을 만들어도 그 Span 은 다음 <code>yield</code> 전에 죽습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-param">
+<h3>여전히 안 되는 것 — Span 매개변수, 그런데 반복기는 조금 다르다</h3>
+<p class="why">C# 13 이 연 것은 지역 변수입니다. 매개변수는 그대로 막혀 있고, 제안서는 반복기의 금지 목록에 포인터 형식까지 더했습니다 — "or an parameter of a
+<code>ref struct</code> type <b>or a pointer type</b>". <!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Detailed design"--></p>
+<!--CODE file=ex/14/ruparam/Program.cs note=async 의 ReadOnlySpan 매개변수 · 반복기의 Span 매개변수(쓰는 것과 안 쓰는 것)-->
+<!--CSVER v=13.0 file=ex/14/ruparam note=C# 13.0 — string 을 받아 안에서 Span 을 만든다-->
+<!--CSVER v=13.0 file=ex/14/ruparam flags=-define:ASYNC tag=async note=-define:ASYNC-->
+<!--CSVER v=13.0 file=ex/14/ruparam flags=-define:ITER tag=iter note=-define:ITER — 반복기가 s 를 쓴다-->
+<!--CSVER v=14.0 file=ex/14/ruparam flags=-define:ITER tag=iter note=-define:ITER, C# 14.0-->
+<!--CSVER v=13.0 file=ex/14/ruparam flags=-define:UNUSED tag=unused note=-define:UNUSED — 반복기가 s 를 안 쓴다-->
+<p class="cap">async 는 선언에서 <code>CS4012</code> 입니다. 반복기는 선언이 아니라 쓰는 자리에서 <code>CS4007</code>("cannot be preserved across … boundary")이고,
+<b>쓰지 않는</b> Span 매개변수는 컴파일되어 돕니다 — 명세 문장(매개변수 목록 자체가 오류)과 다릅니다. 반복기 몸체는 첫 <code>MoveNext</code> 에서야 돌기 시작하므로
+몸체에서 쓰는 매개변수는 그 경계를 넘는 셈이고, 컴파일러는 그 쓰임만 짚습니다. 이 차이는 Roslyn 의 표준 이탈 문서에 없습니다(2026-10 기준).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-foreach">
+<h3>await 사이에서 되는 것들 — ref foreach, ref struct 의 using, Lock</h3>
+<p class="why">제안서: 명세 변경만으로 "more constructs can work" — <code>await</code> 와 <code>yield</code> 가 없는 구간 안의 ref struct <code>using</code>, ref struct 열거자의
+<code>foreach</code>, <code>foreach (ref …)</code>, 그리고 <code>lock (new System.Threading.Lock())</code>. <!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Detailed design"--></p>
+<!--CODE file=ex/14/ruforeach/Program.cs note=두 await 사이의 Span·ref foreach·using·lock-->
+<!--CSVER v=13.0 file=ex/14/ruforeach note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/ruforeach note=C# 12.0 으로 내리면-->
+<p class="cap"><code>ref</code> 반복 변수로 배열을 열 배 하고, ref struct <code>Scope</code> 를 정리하고, <code>Lock</code> 으로 잠근 뒤 61 을 돌려줍니다. <code>Lock</code> 의
+<code>lock</code> 은 ref struct <code>Lock.Scope</code> 를 쓰는 <code>using</code> 이라 async 안에서는 C# 13 이 필요합니다(<a href="#p14-v13-lock">3장</a>). C# 12.0 에서
+22행은 'Lock object' 게이트가 먼저 짚습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-lower">
+<h3>상태 기계에 올라가지 않는다 — 필드를 들여다보기</h3>
+<p class="why">컴파일러는 async 메서드를 상태 기계 형식으로 바꾸고, <code>await</code> 를 넘는 지역 변수를 그 필드로 끌어올립니다(<a href="#p6-v5-sm-fields">6부</a>).
+제안서의 핵심은 넘지 않는 ref·ref struct 지역 변수는 "do not need to be hoisted" 라는 것입니다. <!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Motivation"--></p>
+<!--CODE file=ex/14/rulower/Program.cs note=Work 의 상태 기계 형식과 그 필드를 리플렉션으로-->
+<!--CSVER v=13.0 file=ex/14/rulower note=csrun 기본(디버그 IL)-->
+<!--CSVER v=13.0 file=ex/14/rulower flags=-optimize+ tag=opt note=-optimize+-->
+<p class="cap">필드에는 <code>keep</code>·<code>first</code>·<code>text</code> 가 있고 <code>s</code> 는 없습니다 — Span 은 스택에만 있다가 <code>await</code> 전에 죽습니다.
+디버그 IL 에서는 상태 기계가 <code>class</code>, <code>-optimize+</code> 에서는 <code>struct</code> 입니다(<a href="#p6-v5-sm-opt">6부</a>와 같다). 지역 변수 번호(<code>5__1</code>·<code>5__2</code>)는
+빌드마다 달라 기대면 안 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-unsafe">
+<h3>반복기 안의 unsafe 블록 — 단 yield 는 그 밖에서</h3>
+<p class="why">whats-new: "C# 13 allows <code>unsafe</code> contexts in iterator methods. However, all <code>yield return</code> and <code>yield break</code> statements must
+be in safe contexts." <!--CITE key=whatsnew-13 sec="ref and unsafe in iterators and async methods"--> 제안서는 반복기에서 지역 변수·매개변수의 주소를 얻는 것도
+오류로 정했습니다 — 상태 기계의 필드로 옮겨질 수 있는 변수이기 때문입니다. <!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Detailed design"--></p>
+<!--CODE file=ex/14/ruunsafe/Program.cs note=fixed 로 배열을 고정해 읽고, 블록 밖에서 yield-->
+<!--CSVER v=13.0 file=ex/14/ruunsafe note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/ruunsafe note=C# 12.0 으로 내리면-->
+<!--CSVER v=13.0 file=ex/14/ruunsafe flags=-define:YIELD tag=yield note=-define:YIELD — unsafe 안의 yield-->
+<!--CSVER v=13.0 file=ex/14/ruunsafe flags=-define:ADDR tag=addr note=-define:ADDR — &i-->
+<p class="cap">C# 12.0 은 <code>unsafe</code> 블록과 그 안의 포인터 셋을 모두 게이트로 짚습니다. C# 13.0 안의 규칙은 둘 — <code>CS9238</code>(unsafe 블록 안의
+<code>yield return</code>)과 <code>CS9239</code>(반복기에서 <code>&amp;</code> 지역 변수). <code>fixed</code> 로 고정한 배열 원소는 지역 변수가 아니라 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-async">
+<h3>async 쪽 unsafe — 원래 됐고, 이제 명세가 await 를 막는다</h3>
+<p class="why">제안서: async 메서드의 <code>unsafe</code> 블록은 "the spec has never disallowed" 이므로 바꿀 것이 없고, 대신 명세에 "It is a compile-time error for an
+unsafe context … to contain an <code>await</code> expression" 을 더합니다. async 에서 지역 변수의 주소를 얻는 것은 C# 12 의 경고 웨이브 경고입니다.
+<!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Detailed design"--> <!--CITE key=roslyn-warnversion-warning-waves sec="Warning level 8"--></p>
+<!--CODE file=ex/14/ruasync/Program.cs note=await 뒤의 unsafe 블록 · 그 안의 await · &v-->
+<!--CSVER v=13.0 file=ex/14/ruasync note=C# 13.0-->
+<!--CSVER v=7.3 file=ex/14/ruasync note=C# 7.3 — 게이트 없음-->
+<!--CSVER v=13.0 file=ex/14/ruasync flags=-define:AWAIT tag=await note=-define:AWAIT-->
+<!--CSVER v=13.0 file=ex/14/ruasync flags=-define:ADDR tag=addr note=-define:ADDR — 기본 경고 수준-->
+<!--CSVER v=13.0 file=ex/14/ruasync flags="-define:ADDR -warn:8" tag=addr8 note=-define:ADDR -warn:8-->
+<p class="cap">같은 프로그램이 C# 7.3 에서도 돕니다 — async 의 unsafe 블록은 이 기능과 무관합니다. unsafe 안의 <code>await</code> 는 <code>CS4004</code>.
+<code>&amp;v</code> 는 기본 수준(4)에서 조용하고 <code>-warn:8</code> 에서 <code>CS9123</code> 경고입니다 — 반복기의 같은 코드가 오류(<code>CS9239</code>)인 것과
+다릅니다. 제안서는 async 쪽을 오류로 올리는 것이 "a breaking change" 라 남겨 두었습니다. <!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Alternatives"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-mod">
+<h3>unsafe 반복기 — 서명은 unsafe, 몸체는 safe</h3>
+<p class="why">제안서: 반복기 선언에 <code>unsafe</code> 를 달면 "the signature is in an unsafe scope but the iterator block used to implement that iterator still
+defines a safe scope", 그리고 "in C# 12 it is an error to have an iterator method marked with the <code>unsafe</code> modifier, but that is allowed in C# 13".
+<!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Detailed design"--></p>
+<!--CODE file=ex/14/rumod/Program.cs note=int*[] 매개변수를 받는 unsafe 반복기-->
+<!--CSVER v=13.0 file=ex/14/rumod note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/rumod note=C# 12.0 으로 내리면-->
+<!--CSVER v=13.0 file=ex/14/rumod flags=-define:BODY tag=body note=-define:BODY — 몸체에서 *ptrs[0]-->
+<p class="cap">포인터 배열 매개변수는 서명이라 받지만, 몸체에서 그 포인터를 따라가면 <code>CS0214</code>("only be used in an unsafe context")입니다 — 메서드에
+<code>unsafe</code> 를 달았는데도요. 몸체에서 포인터를 쓰려면 <a href="#p14-v13-ru-unsafe">앞 장</a>처럼 안에 <code>unsafe</code> 블록을 다시 엽니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-break">
+<h3>깨지는 변경 — 반복기가 안전 문맥을 연다</h3>
+<p class="why">Roslyn 문서: 명세는 반복기가 안전 문맥을 연다고 했지만 "Roslyn does not implement that in C# 12 and lower" 였고, C# 13 에서 바로잡았습니다. 그래서
+unsafe 클래스 안 반복기의 지역 함수가 물려받던 unsafe 문맥을 잃습니다. "You can work around the break simply by adding the <code>unsafe</code> modifier to the
+local function." <!--CITE key=roslyn-compiler-breaking-changes-dotnet-9 sec="Iterators introduce safe context in C# 13 and newer"--></p>
+<!--CODE file=ex/14/rubreak/Program.cs note=unsafe class C 의 반복기 M 과 그 지역 함수-->
+<!--CSVER v=12.0 file=ex/14/rubreak flags=-define:OLD tag=old note=-define:OLD, C# 12.0 — 지역 함수에 unsafe 없이-->
+<!--CSVER v=13.0 file=ex/14/rubreak flags=-define:OLD tag=old note=-define:OLD, C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/rubreak note=C# 13.0 — 고친 꼴-->
+<p class="cap">같은 소스가 언어 버전만으로 갈립니다 — 언어 버전에 묶인 동작(<a href="#p0-evidence">0부</a>의 나)입니다. C# 13.0 의 오류는 게이트 문장이 아니라
+<code>CS0214</code> 셋이라 원인을 짐작하기 어렵습니다. 고친 꼴은 C# 12.0 에서도 컴파일됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-await">
+<h3>반대쪽 — 같은 자리의 await 는 이제 된다</h3>
+<p class="why">제안서의 깨지는 변경 예제에는 짝이 있습니다. unsafe 클래스 안 반복기의 async 지역 함수에서 <code>await Task.Yield();</code> 는 "error in C# 12, allowed
+in C# 13" — 지역 함수가 unsafe 문맥이 아니게 되었기 때문입니다. <!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Breaking changes"--></p>
+<!--CODE file=ex/14/ruawait/Program.cs note=unsafe class C 의 반복기 안 async 지역 함수-->
+<!--CSVER v=13.0 file=ex/14/ruawait note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/ruawait note=C# 12.0 으로 내리면-->
+<p class="cap">C# 12.0 은 <code>CS4004</code>("Cannot await in an unsafe context") — 지역 함수가 클래스의 unsafe 를 물려받았다는 증거입니다. 한 가지 고침이
+한쪽 코드는 깨고 다른 쪽 코드는 살렸습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-ru-lock">
+<h3>반복기의 lock 안에서 yield — 제안서의 경고는 없었다</h3>
+<p class="why">제안서 요약의 둘째 줄: "Warn about <code>yield</code> inside <code>lock</code>." 대안 절은 이것을 오류나 경고 웨이브로 만드는 것이 "a breaking change" 라고
+적고, <code>Lock</code> 객체의 <code>lock</code> 은 ref struct 를 쓰는 <code>using</code> 이라 오류가 난다고 적습니다.
+<!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Summary"--> <!--CITE key=prop-13-ref-unsafe-in-iterators-async sec="Alternatives"--></p>
+<!--CODE file=ex/14/rulock/Program.cs note=object 로 잠근 반복기 · LOCK 이면 System.Threading.Lock-->
+<!--CSVER v=13.0 file=ex/14/rulock flags=-warn:9999 tag=w9999 note=-warn:9999 — object 의 lock-->
+<!--CSVER v=13.0 file=ex/14/rulock flags=-define:LOCK tag=lock note=-define:LOCK — Lock 의 lock-->
+<p class="cap"><code>-warn:9999</code> 에서도 경고가 없고, 이 SDK 의 <code>CSharpResources.resx</code> 에도 그런 문장이 없습니다. 실행은 위험을 그대로 보여 줍니다 —
+값을 받은 바깥 루프에서 잠금이 아직 잡혀 있습니다(<code>held: True</code>). <code>Lock</code> 으로 바꾸면 <code>Lock.Scope</code> 가 <code>yield</code> 를 넘는다는
+<code>CS4007</code> 로 막힙니다(<a href="#p14-v13-lock">3장</a>). 2026-10 기준.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-rs-diag">
+<h3>4장의 거절 모음</h3>
+<!--TABLE file=out/tbl_p14b_diag4.html-->
+<p class="cap">실험 묶음이 각 거절 캡처의 첫 진단 줄에서 뽑은 표입니다. 언어 버전 게이트는 <code>CS9202</code> 하나이고 나머지는 C# 13 안의 규칙입니다. 그중
+<code>CS8345</code>·<code>CS0611</code>·<code>CS0029</code> 는 <a href="#p8-v7_2-refstruct-heap">8부</a>의 C# 7.2 캡처에서도 본 번호입니다 — 대상이 구체 형식에서
+<code>'T'</code> 로 바뀌었을 뿐, 옛 규칙이 형식 매개변수로 넓어졌습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p14-v13-rs-quiz" data-quiz>
+<h3>4장 퀴즈 — ref struct 의 확장</h3>
+<p class="q">Q1. <code>ref struct Tag : IName</code> 일 때 <code>t is IName</code> 은 무엇을 내고, <code>IName</code> 의 메서드를 박싱 없이 부르는 길은?</p>
+<p class="q">Q2. C# 13 반복기에서 <code>foreach (char c in text.AsSpan()) yield return c;</code> 가 거절되는 까닭은?</p>
+<p class="q">Q3. <code>static int F&lt;T&gt;(T t) where T : allows ref struct =&gt; t.ToString().Length;</code> 는 컴파일되나?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 경고 <code>CS0184</code> 와 함께 <code>False</code> — 인터페이스로의 변환이 박싱이라 없습니다. <code>where T : IName, allows ref struct</code> 인 제네릭으로
+부릅니다(<a href="#p14-v13-ri-is">앞</a>). <b>A2.</b> <code>foreach</code> 의 숨은 지역 변수(Span)가 <code>yield return</code> 을 넘기 때문입니다 — <code>CS4007</code>
+(<a href="#p14-v13-ru-trap">앞</a>). <b>A3.</b> 아니요. <code>T</code> 로는 재정의된 <code>ToString</code> 을 알 수 없어 <code>object</code> 로의 박싱이 필요하고,
+<code>CS0029</code> 입니다(<a href="#p14-v13-ar-pass">앞</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p14-v13-pp"><p class="chnum">5장</p><h2>partial 속성과 인덱서 — 선언과 구현을 나눈다</h2>
+<p class="chsub">정의 조각과 구현 조각 · 생성기의 자리 · 하나씩만 · 서명 맞추기 · 특성 합치기 · 문서 주석 · 인터페이스 · C# 14 의 field</p></article>
+
+<article class="card" id="p14-v13-pp-why">
+<h3>왜 — partial 메서드가 간 길을 속성도 간다</h3>
+<p class="why">whats-new: partial 속성과 인덱서는 "generally follow the same rules as <code>partial</code> methods: you create one <i>declaring declaration</i> and one
+<i>implementing declaration</i>." <!--CITE key=whatsnew-13 sec="More partial members"--> C# 13 의 제안서에는 동기 절이 없습니다. 쓰임새는 C# 14 의 두 문서가 적습니다 —
+<code>field</code> 제안서는 생성기가 사용자에게 "<code>[field: ...]</code> targeted attributes on the property definition part" 를 쓰게 해 주려 한다고 하고,
+<!--CITE key=prop-14-field-keyword sec="Initializers"--> C# 14 발표 글은 partial 멤버의 확장을 "enhance partial types for source generators" 로 묶습니다.
+<!--CITE key=blog-introducing-csharp-14 sec="More productivity for you"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>버전</th><th>partial 이 붙는 곳</th><th>이 덱</th></tr>
+<tr><td>C# 2</td><td>형식</td><td><a href="#p3-v2-partial-why">3부</a></td></tr>
+<tr><td>C# 3</td><td>메서드 — <code>void</code>, 구현이 없으면 호출째 지운다</td><td><a href="#p4-v3-partial-why">4부</a></td></tr>
+<tr><td>C# 9</td><td>메서드 — 값·<code>out</code>·접근 한정자, 대신 구현 필수</td><td><a href="#p10-v9-partial">10부</a></td></tr>
+<tr><td>C# 13</td><td>속성과 인덱서 — 구현 필수</td><td>이 장</td></tr>
+<tr><td>C# 14</td><td>이벤트와 생성자</td><td><a href="#p3-v2-partial-later">3부의 미리 보기</a></td></tr>
+</table></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p14-v13-partialprop">
+<h3>partial 속성과 인덱서 (partial properties) <span class="vt v13">C# 13.0</span></h3>
+<p class="why">왜 — 제안서: partial 속성 선언은 "a <i>defining declaration</i> when its accessors all have semicolon bodies, and it lacks the <code>extern</code>
+modifier. Otherwise, it is an <i>implementing declaration</i>." 인덱서도 같은 규칙으로 함께 들어왔습니다. <!--CITE key=prop-13-partial-properties sec="Defining and implementing declarations"-->
+<!--CITE key=prop-13-partial-properties sec="Indexers"--></p>
+<!--CODE file=ex/14/ppbasic/Program.cs note=Name 속성과 읽기 전용 인덱서를 두 조각으로-->
+<!--CSVER v=13.0 file=ex/14/ppbasic note=C# 13.0-->
+<!--CSVER v=12.0 file=ex/14/ppbasic note=C# 12.0 으로 내리면-->
+<p class="cap">정의 조각은 자동 속성처럼 생겼지만 자동 속성이 아닙니다 — 값은 구현 조각의 <code>name</code> 필드에 있고 <code>set</code> 이 <code>Trim()</code> 합니다.
+C# 12.0 의 거절은 "Feature … is not available" 꼴이 아니라 <code>CS8703</code>("The modifier 'partial' is not valid for this item") 넷이고, 고칠 버전으로
+13.0 을 짚습니다. <!--CITE key=msgid sec="case MessageID.IDS_FeaturePartialProperties:"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-pp-gen">
+<h3>생성기가 구현하는 속성 — 손으로 쓴 대역으로 보기</h3>
+<p class="why">사람이 <code>[Notify]</code> 를 단 정의 조각만 쓰고, 변경 알림을 하는 구현 조각은 소스 생성기가 쓰는 구성입니다(<a href="#p10-v9-srcgen">10부</a>).
+이 덱의 <code>csrun</code> 은 생성기를 싣지 않으므로 둘째 파일은 손으로 쓴 대역이고, 첫머리에 그렇게 적었습니다.</p>
+<!--CODE file=ex/14/ppgen/Program.cs note=사람이 쓰는 조각-->
+<!--CODE file=ex/14/ppgen/Gen.cs note=생성기가 쓸 조각 — 손으로 쓴 대역-->
+<!--CSVER v=13.0 file=ex/14/ppgen note=C# 13.0-->
+<p class="cap">같은 값 30 을 두 번 넣으면 알림은 한 번입니다. 사용하는 쪽(<code>Main</code>)은 보통 속성을 쓰듯 쓰고, 속성의 이름·형식·접근성은 사람이 쓴 조각이
+정합니다 — 생성된 조각은 서명을 바꿀 수 없습니다(<a href="#p14-v13-pp-match">서명 맞추기</a>). C# 9 의 partial 메서드(<a href="#p10-v9-partial">10부</a>)와 같은
+분업이 속성으로 넓어졌습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-pp-rules">
+<h3>정의 하나, 구현 하나 — 빠지면 둘 다 오류</h3>
+<p class="why">제안서: "A partial property must have one <i>defining declaration</i> and one <i>implementing declaration</i>." C# 3 의 partial 메서드와 달리 구현을
+생략할 수 없습니다 — 속성은 값을 돌려줘야 하므로 호출째 지울 수 없습니다. <!--CITE key=prop-13-partial-properties sec="Defining and implementing declarations"--></p>
+<!--CODE file=ex/14/ppbad/Program.cs note=-define 마다 B 의 조각을 다르게 둔다-->
+<!--CSVER v=13.0 file=ex/14/ppbad note=C# 13.0 — A 만-->
+<!--CSVER v=13.0 file=ex/14/ppbad flags=-define:MISSING tag=missing note=-define:MISSING — A 의 구현이 없다-->
+<!--CSVER v=13.0 file=ex/14/ppbad flags=-define:ONLYIMPL tag=onlyimpl note=-define:ONLYIMPL — B 의 정의가 없다-->
+<p class="cap"><code>CS9248</code>("must have an implementation part")와 <code>CS9249</code>("must have a definition part")가 짝입니다. <code>[GeneratedRegex]</code> 를
+단 partial 속성도 생성기가 돌지 않으면 <code>CS9248</code> 로 끝납니다(<a href="#p14-v13-pp-runtime">뒤</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-pp-auto">
+<h3>함정 — 구현 조각은 자동 속성 꼴일 수 없다</h3>
+<p class="why">제안서: 세미콜론 접근자 꼴을 정의 조각에 쓰기로 했으므로 "a partial property cannot be <i>automatically implemented</i>". 컴파일러가 선언 하나만 보고 정의인지
+구현인지 알 수 있어야 하기 때문입니다 — 같은 선언을 두 번 써서 자동 속성을 만드는 길도 그래서 막았습니다. <!--CITE key=prop-13-partial-properties sec="Defining and implementing declarations"--></p>
+<!--CSVER v=13.0 file=ex/14/ppbad flags=-define:BOTHAUTO tag=bothauto note=-define:BOTHAUTO — { get; set; } 두 번-->
+<!--CSVER v=13.0 file=ex/14/ppbad flags=-define:TWOIMPL tag=twoimpl note=-define:TWOIMPL — 구현이 둘-->
+<!--CSVER v=13.0 file=ex/14/ppbad flags=-define:HALF tag=half note=-define:HALF — { get => 2; set; }-->
+<p class="cap">같은 꼴을 두 번 쓰면 둘 다 정의 조각이 되어 <code>CS9250</code> 과 함께 "구현이 없다" 는 <code>CS9248</code> 이 나옵니다(코드는 <a href="#p14-v13-pp-rules">앞 장</a>).
+접근자 하나만 몸체를 준 <code>{ get =&gt; 2; set; }</code> 는 C# 13.0 에서 'field keyword' 게이트에 걸립니다 — 그 꼴은 C# 14 의 <code>field</code> 와 함께 열렸습니다
+(<a href="#p14-v13-pp-field">뒤</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-pp-match">
+<h3>서명 맞추기 — 접근성·init 은 오류, 매개변수 이름은 경고</h3>
+<p class="why">제안서: 두 조각은 같은 한정자를 가져야 하고, 런타임에 의미 있는 형식 차이는 오류, 나머지 구문 차이는 경고입니다. 매개변수 이름이 다르면 경고이고 "The
+parameter names from the definition part are used at use sites and in emit." partial 메서드와 달리 불일치 진단이 "not held behind a warning wave" 입니다.
+<!--CITE key=prop-13-partial-properties sec="Matching signatures"--></p>
+<!--CODE file=ex/14/ppmatch/Program.cs note=private set · init · 인덱서 매개변수 x 와 y-->
+<!--CSVER v=13.0 file=ex/14/ppmatch note=C# 13.0-->
+<!--CSVER v=13.0 file=ex/14/ppmatch flags=-define:ACC tag=acc note=-define:ACC — 구현 쪽 set 에 private 이 없다-->
+<!--CSVER v=13.0 file=ex/14/ppmatch flags=-define:INIT tag=init note=-define:INIT — init 대신 set-->
+<!--CSVER v=13.0 file=ex/14/ppmatch flags=-define:NAME tag=name note=-define:NAME — 구현 쪽 이름이 y-->
+<p class="cap">접근성 차이는 partial 메서드와 같은 <code>CS8799</code>, <code>init</code> 차이는 <code>CS9254</code> 입니다. 이름이 다르면 경고 <code>CS9256</code> 뿐이고,
+<code>c[x: 21]</code> 의 명명 인수와 리플렉션이 보는 이름은 정의 조각의 <code>x</code> 입니다. 제안서의 예시 문장은 "Partial property declarations …" 인데 이
+컴파일러는 "Partial member declarations …" 라고 적습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-pp-attr">
+<h3>특성 합치기 — 두 조각의 특성이 한 멤버에 모인다</h3>
+<p class="why">제안서: partial 메서드처럼 "the attributes in the resulting property are the combined attributes of the parts are concatenated in an unspecified order,
+and duplicates are not removed." 인덱서의 매개변수 특성도 합쳐집니다. <!--CITE key=prop-13-partial-properties sec="Attribute merging"--> <!--CITE key=prop-13-partial-properties sec="Indexers"--></p>
+<!--CODE file=ex/14/ppattr/Program.cs note=속성·get 접근자·인덱서 매개변수에 조각마다 다른 [Tag]-->
+<!--CSVER v=13.0 file=ex/14/ppattr note=C# 13.0-->
+<p class="cap">속성, 접근자, 매개변수 모두 <code>def</code> 와 <code>impl</code> 이 함께 있습니다. 차례는 명세가 정하지 않으므로 예제가 정렬해서 찍습니다. 형식의 속성은
+<code>P</code> 와 <code>Item</code> 둘 — 조각이 둘이어도 메타데이터의 속성은 하나입니다. 생성기가 사용자의 정의 조각에 붙은 특성을 읽고 구현 조각을 쓰는 구성이
+그래서 성립합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-pp-doc">
+<h3>문서 주석 — 둘 다 있으면 구현 조각의 것만 남는다</h3>
+<p class="why">제안서: 주석이 한쪽에만 있으면 그것을 쓰고, "When doc comments are present on both parts, all the doc comments on the definition part are dropped, and
+only the doc comments on the implementation part are used." 예제는 제안서의 것 그대로입니다. <!--CITE key=prop-13-partial-properties sec="Documentation comments"--></p>
+<!--CODE file=ex/14/ppdoc/Program.cs note=정의 조각의 summary·returns 와 구현 조각의 summary-->
+<!--CSVER v=13.0 file=ex/14/ppdoc flags=-doc:bin/doc.xml tag=doc note=-doc:bin/doc.xml 로 컴파일하고 그 파일을 읽는다-->
+<p class="cap"><code>P:C.Prop</code> 에는 "Implementation part comment" 하나뿐이고, 정의 조각의 <code>&lt;returns&gt;</code> 도 함께 사라졌습니다 — 한 줄씩 합치는 것이
+아니라 통째로 버립니다. 생성기가 구현 조각에 주석을 달면 사람이 정의 조각에 쓴 주석은 문서 파일에 남지 않는다는 뜻입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-pp-runtime">
+<h3>같이 온 런타임 — [GeneratedRegex] 가 속성에도 붙는다</h3>
+<p>.NET 의 정규식 소스 생성기는 partial 메서드에 붙는 특성이었습니다(<a href="#p10-v9-pm-regex">10부</a>). .NET 10 의 특성 정의가 어디에 붙을 수 있다고 적는지
+리플렉션으로 읽습니다.</p>
+<!--CODE file=ex/14/ppregex/Program.cs note=AttributeUsage 의 ValidOn · BAD 이면 [GeneratedRegex] partial 속성-->
+<!--CSVER v=13.0 file=ex/14/ppregex note=C# 14 / .NET 10 에서의 동작-->
+<!--CSVER v=13.0 file=ex/14/ppregex flags=-define:BAD tag=bad note=-define:BAD — 생성기 없이-->
+<p class="cap"><code>GeneratedRegexAttribute</code> 는 <code>Method, Property</code>, P/Invoke 생성기의 <code>LibraryImportAttribute</code> 는 아직 <code>Method</code> 뿐입니다.
+<code>csrun</code> 에는 생성기가 없어서 특성을 단 partial 속성은 구현 조각이 없다는 <code>CS9248</code> 로 끝납니다 — 실제 빌드에서는 생성기가 그 조각을 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-pp-iface">
+<h3>인터페이스의 partial 속성 — 컴파일러가 바꾼 기본값</h3>
+<p class="why">Roslyn 문서(.NET 10): partial 인터페이스 속성·이벤트가 비 partial 멤버와 달리 암시적으로 <code>virtual</code>·<code>public</code> 이 아니던 "inconsistency"
+를 고쳤고, 예제의 출력이 "wrote 1 previously, writes 2 now" 입니다. partial 인터페이스 <b>메서드</b>는 더 큰 깨짐을 피하려 그대로 둡니다.
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-10 sec="Partial properties and events are now implicitly virtual and public"-->
+<!--CITE key=roslyn-deviations-from-standard sec="Interface partial methods"--></p>
+<!--CODE file=ex/14/ppiface/Program.cs note=partial 속성 P 와 partial 메서드 M, 클래스 C 가 둘 다 2 를 돌려준다-->
+<!--CSVER v=13.0 file=ex/14/ppiface note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/14/ppiface note=C# 14.0-->
+<p class="cap"><code>P</code> 는 가상이라 <code>C</code> 의 2, <code>M</code> 은 비가상이라 인터페이스의 1 입니다. C# 13.0 과 14.0 의 출력이 같습니다 — 이 고침은 언어 버전이
+아니라 컴파일러(Visual Studio 2026 version 18.0 preview 1 부터)에 묶였으므로, 같은 C# 13 소스가 컴파일러를 올리면 2 를 냅니다. 옛 컴파일러의 1 은 이 기계에서
+보일 수 없습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-pp-field">
+<h3>뒤 버전 — C# 14 의 field 가 구현 조각을 줄인다</h3>
+<p class="why">C# 14 의 <code>field</code> 제안서: 초기화자는 "Either declaring or implementing property locations can use an initializer, but not both", 그리고 자동
+접근자는 "At least one implementing accessor must be manually implemented, but the other accessor can be automatically implemented." <!--CITE key=prop-14-field-keyword sec="Initializers"-->
+<!--CITE key=prop-14-field-keyword sec="Auto-accessors"--> partial 속성 제안서가 "the <code>field</code> keyword makes things simple enough" 라고 미뤄 둔 그 길입니다.
+<!--CITE key=prop-13-partial-properties sec="Defining and implementing declarations"--></p>
+<!--CODE file=ex/14/ppfield/Program.cs note=정의 조각의 초기화자, field 를 쓰는 구현 조각, 접근자 하나만 몸체-->
+<!--CSVER v=14.0 file=ex/14/ppfield note=C# 14.0-->
+<!--CSVER v=13.0 file=ex/14/ppfield note=C# 13.0 으로 내리면-->
+<!--CSVER v=14.0 file=ex/14/ppbad flags=-define:HALF tag=half note=-define:HALF, C# 14.0 — 앞의 { get => 2; set; }-->
+<p class="cap"><code>Count</code> 의 <code>set</code> 만 몸체를 주고 <code>get</code> 은 자동입니다. C# 13.0 은 'field keyword' 게이트와 초기화자의 <code>CS8050</code> 을
+냅니다(선언 단계 오류라 몸체 안의 <code>field</code> 는 짚이지 않았습니다). 앞에서 거절된 <code>ppbad</code> 의 <code>HALF</code> 는 C# 14.0 에서 컴파일되고, <code>get</code>
+도 <code>field</code> 를 쓰라는 경고 <code>CS9266</code> 이 붙습니다. <code>field</code> 자체는 이 부의 8장(미리 보기)과 15부의 몫입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p14-v13-pp-diag">
+<h3>5장의 거절 모음</h3>
+<!--TABLE file=out/tbl_p14b_diag5.html-->
+<p class="cap">실험 묶음이 각 거절 캡처의 첫 진단 줄에서 뽑은 표입니다. 게이트는 둘 — C# 12.0 의 <code>CS8703</code>(한정자 'partial')과 C# 13.0 의 <code>CS9260</code>
+('field keyword')입니다. 나머지는 partial 속성 자체의 규칙으로, 조각의 개수(<code>CS9248</code>–<code>CS9251</code>)와 서명의 일치(<code>CS8799</code>·<code>CS9254</code>·
+<code>CS9256</code>)로 나뉩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p14-v13-pp-quiz" data-quiz>
+<h3>5장 퀴즈 — partial 속성</h3>
+<p class="q">Q1. C# 13 에서 <code>public partial int N { get; set; }</code> 를 같은 형식 안에 두 번 쓰면 자동 속성 하나가 되나?</p>
+<p class="q">Q2. 정의 조각은 <code>this[int x]</code>, 구현 조각은 <code>this[int y]</code> 일 때 명명 인수에는 어느 이름을 쓰나?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 아니요. 세미콜론 접근자 꼴은 언제나 정의 조각이라 둘 다 정의가 되고 <code>CS9250</code>·<code>CS9248</code> 입니다(<a href="#p14-v13-pp-auto">앞</a>).
+<b>A2.</b> 선언은 경고 <code>CS9256</code> 과 함께 컴파일되지만, 쓰는 곳과 메타데이터의 이름은 정의 조각의 것입니다 — 예제에서 <code>c[x: 21]</code> 이
+컴파일되고 리플렉션도 <code>x</code> 를 봤습니다. 명명 인수에는 <code>x</code> 를 씁니다(<a href="#p14-v13-pp-match">앞</a>).</div>
+<span class="tier ill">설명용</span>
 </article>
