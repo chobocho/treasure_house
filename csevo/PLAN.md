@@ -732,3 +732,9 @@ comments + Korean header line; two review passes before push.
 - Orchestrator: `make all SKEL=1` green (deck 2322, 14부 159/170, 1834 examples); re-ran p14/p14b/p14c twice each,
   all exit=0, 71/110/85 captures, each batch's manifest entries identical; rebuilt deck byte-identical. Part 14
   committed and pushed.
+- Part 14 commit is c99b435 (pushed). Part 15 (C# 14, 200) briefs: p15 (~68: cover, 1장 개관 + .NET 10 + warning wave
+  10 + .NET 10 breaking changes, 2장 확장 멤버 — methods, properties, static members, operators), p15b (~66: 3장 field
+  키워드, 4장 암묵적 Span 변환 + Enumerable.Reverse break, 5장 null 조건 대입), p15c (~66: 6장 partial 이벤트와 생성자,
+  7장 사용자 정의 복합 대입, 8장 작은 기능들 — nameof unbound generics, lambda modifiers, expression-tree optional/
+  named args, #: directives, 9장 정리 + p15-quiz + p15-sum-cs15 → 16부). Placeholders 15b_cs14/15c_cs14 +
+  order.txt/ORDER entries made. p15 and p15b launched; p15c waits for one of them.
