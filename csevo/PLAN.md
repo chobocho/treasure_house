@@ -672,3 +672,25 @@ comments + Korean header line; two review passes before push.
   struct CS9050 at 14.0. A C# 10 consumer of required members cannot be shown (csrun builds one assembly).
 - Orchestrator: re-ran p12/p12b/p12c twice each, all exit=0, the 320 part-12 manifest entries identical;
   `make all SKEL=1` green: deck 1999, 12부 182/190. Part 12 committed.
+- Part 12 commit is 95c40b7 (pushed). Part 13 (C# 12, 170) briefs: p13 (~60: cover, 1장 개관 + .NET 8 breaking
+  changes, 2장 기본 생성자, 3장 형식 별칭), p13b (~58: 4장 컬렉션 식, 5장 람다의 기본값과 params), p13c (~52: 6장 ref
+  readonly 매개변수, 7장 인라인 배열, 8장 작은 기능들 — nameof instance, [Experimental], interceptors, 9장 정리 +
+  p13-quiz). Placeholders 13b_cs12/13c_cs12 + order.txt/ORDER entries made. p13 and p13b launched; p13c waits.
+- 2026-10-06: session restart found p13 (60 cards, cover + 1장–3장 incl. quizzes) and p13b (55 cards, 4장–5장
+  incl. quizzes) content-complete on disk but unreported; p13c had written nothing (still `p13c-pending`).
+  p13c launched fresh from scratch/brief/p13c.md; orchestrator verifies p13/p13b (`--only` twice each).
+  width / claims-check / data-check clean. User: commit and push when part 13 is done.
+- p13/p13b verified by the orchestrator: `--only p13` twice (81 captures) and `--only p13b` twice (97 captures),
+  all exit=0, no Traceback, each batch's manifest entries identical between runs.
+- p13c done: 51 slides (6장 ref readonly 매개변수 16, 7장 인라인 배열 13, 8장 작은 기능들 12, 9장 정리 10 + p13-quiz/
+  p13-quiz2/p13-quiz3), 6 rows (3 gated), 32 examples (1 FAIL icbasic — needs -features:InterceptorsNamespaces,
+  1 WARN rrdeleg), 97 captures + out/tbl_p13c_diag6/7/8.html (one LONGLINE: ianot CS1061), 18 claims, 12 glossary;
+  two identical `--only p13c` runs. Findings: C# 11 consumers of .NET 10 `ref readonly` APIs get CS9058 for
+  `in`/no modifier; Marshal.QueryInterface still `in`; ambiguity example still CS0121 at 14.0; ref→in breaking
+  change reproduces exactly; 4 inline-array helpers (proposal: 2); `{[0] = 1}` CS0021 (proposal CS1913);
+  [InlineArray] checks also at 11.0; `nameof(Person.Name.Length)` worked at C# 6, only the simple-name form is
+  gated; [Experimental] is an error even at 7.3 (whats-new: "warning"); interceptors are a feature flag (work at
+  7.3), CS9137 recommends <InterceptorsNamespaces>. Known: gen_glossary --check `ref struct` defined twice
+  (p06b/p08c, pre-existing).
+- Orchestrator: `make all SKEL=1` green in the working tree: deck 2164, 13부 166/170 (60 + 55 + 51), 100 tests,
+  1728 examples. Part 13 committed and pushed.
