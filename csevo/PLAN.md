@@ -694,3 +694,9 @@ comments + Korean header line; two review passes before push.
   (p06b/p08c, pre-existing).
 - Orchestrator: `make all SKEL=1` green in the working tree: deck 2164, 13부 166/170 (60 + 55 + 51), 100 tests,
   1728 examples. Part 13 committed and pushed.
+- Part 13 commit is 6421aee (pushed). Part 14 (C# 13, 170) briefs: p14 (~60: cover, 1장 개관 + .NET 9 breaking
+  changes + no warning wave 9, 2장 params 컬렉션 + better conversion, 3장 Lock 객체), p14b (~58: 4장 ref struct 의 확장 —
+  allows ref struct, ref struct interfaces, ref/unsafe in iterators and async; 5장 partial 속성과 인덱서), p14c (~52:
+  6장 오버로드 해석 우선순위, 7장 작은 기능들 — \e, method group natural type, ^ in object initializers, 8장 field 미리
+  보기, 9장 정리 + p14-quiz + p14-sum-cs14). No announcing-C#-13 blog in docs/. Placeholders 14b_cs13/14c_cs13 +
+  order.txt/ORDER entries made. p14 and p14b launched; p14c waits for one of them.
