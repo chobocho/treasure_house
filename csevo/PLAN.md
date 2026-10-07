@@ -777,3 +777,10 @@ comments + Korean header line; two review passes before push.
   p15/p15b/p15c twice each, then `make all SKEL=1`.
 - Orchestrator: re-ran p15/p15b/p15c twice each, all exit=0, 113/107/117 captures, the 337 part-15 manifest entries
   identical; `make all SKEL=1` green: deck 2507, 15부 186/200, 100 tests, 1966 examples. Part 15 committed and pushed.
+- Part 15 commit is c151dac (pushed). Part 16 (흐름으로 다시 읽기, 90) briefs: p16 (~45: cover, intro, 1장 연표 —
+  tbl_releases/timeline/dotnet + features-vs-gates table, 2장 네 갈래 — 언어·런타임(RuntimeFeature probe)·도구·표준,
+  3장 langversion 사다리 — default per TFM, `-langversion:?`, one-feature-per-version ladder → tbl_p16_ladder,
+  silent behaviour switches), p16b (~45: 4장 같은 프로그램 다섯 시대 — one program in C# 1.2/2/3/7.3/14 idiom with
+  byte-identical output → tbl_p16b_eras, 5장 호환성 — contextual keywords → tbl_p16b_kw, warning waves, breaking-change
+  docs, 6장 다음 버전 — ≤2 prose slides on C# 15, 7장 정리 + p16-quiz). Placeholder 16b_flows + order.txt/ORDER
+  entries made. p16 and p16b launched together.
