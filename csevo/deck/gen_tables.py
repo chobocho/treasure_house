@@ -167,6 +167,209 @@ def gate_counts(releases, gates):
     return _table(['버전', '나온 달', '게이트 수'], rows, numcols=(2,))
 
 
+# ---------------------------------------------------------------- 16부
+# 16부(흐름으로 다시 읽기)는 앞의 부를 버전 축으로 다시 묶는다. 표는 전부
+# releases.tsv · dotnet.tsv · langgates.tsv · 기능 목록에서 계산한다 —
+# 간격·짝·개수를 눈으로 세면 틀리기 때문이다.
+
+def _month(d):
+    """'2019-09' 또는 '2019-09-23' → 해×12 + 달 (달 차이 계산용)."""
+    y, m = d.split('-')[:2]
+    return int(y) * 12 + int(m)
+
+
+def _vs_short(s):
+    """'Visual Studio 2017 version 15.7' → 'VS 2017 15.7' — 접힌 화면 폭."""
+    return re.sub(r'\bversion ', '', s.replace('Visual Studio', 'VS'))
+
+
+def _part_link(p):
+    return '<a href="#p%d">%d부</a>' % (p, p) if p else '—'
+
+
+def _html_table(head, rows, numcols=()):
+    """_table 과 같되 칸 내용이 이미 HTML 이다(링크를 담는다)."""
+    e = lambda s: html.escape(str(s), quote=False)
+    out = ['<table>', '<tr>' + ''.join(
+        '<th%s>%s</th>' % (' class="num"' if i in numcols else '', e(h))
+        for i, h in enumerate(head)) + '</tr>']
+    for r in rows:
+        out.append('<tr>' + ''.join(
+            '<td%s>%s</td>' % (' class="num"' if i in numcols else '', c)
+            for i, c in enumerate(r)) + '</tr>')
+    out.append('</table>')
+    return '\n'.join(out) + '\n'
+
+
+def version_parts(features):
+    """버전 → 그 버전의 기능 행이 사는 부 번호(파일 이름 pNN 의 NN).
+    한 버전이 여러 부에 걸치면 가장 앞의 부. O(행 수)."""
+    out = {}
+    for f in features:
+        m = re.search(r'/p(\d+)[a-z]*\.tsv$', f.get('_file', ''))
+        if not m:
+            continue
+        v, p = cites.vnorm(f.get('version', '')), int(m.group(1))
+        if v and (v not in out or p < out[v]):
+            out[v] = p
+    return out
+
+
+def p16_timeline(releases, parts):
+    """연표 두 장 — .NET 짝이 없는 버전들(tbl_p16_rel_1)과 있는 버전들
+    (tbl_p16_rel_2). 간격은 앞 버전에서 몇 달 뒤인가. O(행 수)."""
+    e = lambda s: html.escape(s, quote=False)
+    one, two, prev = [], [], None
+    for r in releases:
+        gap = '—' if prev is None else str(_month(r['date']) - prev)
+        prev = _month(r['date'])
+        link = _part_link(parts.get(cites.vnorm(r['version'])))
+        cells = ['C# ' + e(r['version']), e(r['date']), gap]
+        if r.get('framework'):
+            two.append(cells + [e(r['framework']), e(_vs_short(r['vs'])),
+                                link])
+        else:
+            one.append(cells + [e(_vs_short(r['vs'])), link])
+    return {
+        'tbl_p16_rel_1.html': _html_table(
+            ['버전', '나온 달', '간격(달)', 'Visual Studio', '부'], one,
+            numcols=(2,)),
+        'tbl_p16_rel_2.html': _html_table(
+            ['버전', '나온 달', '간격(달)', '.NET', 'Visual Studio', '부'],
+            two, numcols=(2,)),
+    }
+
+
+def p16_cadence(releases):
+    """간격 통계 — .NET 짝이 없는 시대, 있는 시대, 전체. 시대를 넘는
+    간격은 전체에만 센다. O(행 수)."""
+    def stats(label, rs, gaps):
+        if not gaps:
+            return [label, str(len(rs)), '—', '—', '—']
+        return [label, str(len(rs)), str(min(gaps)), str(max(gaps)),
+                '%.1f' % (sum(gaps) / float(len(gaps)))]
+
+    def gaps_of(rs):
+        return [_month(b['date']) - _month(a['date'])
+                for a, b in zip(rs, rs[1:])]
+
+    vs = [r for r in releases if not r.get('framework')]
+    net = [r for r in releases if r.get('framework')]
+    rows = []
+    for rs, tail in ((vs, ' (Visual Studio 와 함께)'), (net, ' (.NET 과 함께)')):
+        if rs:
+            label = 'C# %s–%s%s' % (rs[0]['version'], rs[-1]['version'], tail)
+            rows.append(stats(label, rs, gaps_of(rs)))
+    rows.append(stats('전체', releases, gaps_of(releases)))
+    return _table(['묶음', '버전 수', '최소 간격', '최대 간격', '평균(달)'],
+                  rows, numcols=(1, 2, 3, 4))
+
+
+def p16_pairs(releases, dotnet):
+    """.NET Core·.NET 릴리스마다 짝이 된 C# 버전(releases.tsv 의 framework
+    칸)과 두 날짜의 달 차이. 짝이 없는 릴리스도 한 줄. O(행 수)."""
+    e = lambda s: html.escape(s, quote=False)
+    by = dict((r.get('framework'), r) for r in releases if r.get('framework'))
+    rows = []
+    for d in dotnet:
+        name = '%s %s' % (d['product'], d['version'])
+        r = by.get(name)
+        if r:
+            rows.append([e(name), e(d['date']), 'C# ' + e(r['version']),
+                         e(r['date']),
+                         str(_month(d['date']) - _month(r['date']))])
+        else:
+            rows.append([e(name), e(d['date']), '—', '—', '—'])
+    return _html_table(['.NET', 'GA 날짜', 'C#', 'C# 나온 달', '달 차이'],
+                       rows, numcols=(4,))
+
+
+def p16_featgates(releases, features, gates):
+    """버전마다 — 덱의 기능 행, 그중 게이트(msgid)가 적힌 행, 그 행들이
+    가리키는 서로 다른 게이트, 컴파일러의 게이트 전부. 마지막 줄은 합.
+    O(행 수)."""
+    rows, tot = [], [0, 0, 0, 0]
+    for r in releases:
+        v = cites.vnorm(r['version'])
+        mine = [f for f in features if cites.vnorm(f.get('version', '')) == v]
+        gated = [f for f in mine if f.get('msgid')]
+        nums = [len(mine), len(gated), len(set(f['msgid'] for f in gated)),
+                sum(1 for g in gates
+                    if cites.vnorm(g['required-version']) == v)]
+        tot = [a + b for a, b in zip(tot, nums)]
+        rows.append(['C# ' + r['version']] + [str(n) for n in nums])
+    rows.append(['합'] + [str(n) for n in tot])
+    return _table(['버전', '기능 행', '게이트 행', '다룬 게이트',
+                   '컴파일러 게이트'], rows, numcols=(1, 2, 3, 4))
+
+
+KIND_COLS = [('lang',), ('runtime',), ('compiler',), ('library',),
+             ('ecosystem', 'platform')]
+
+
+def p16_kinds(features):
+    """부마다 갈래별 기능 행 수 — 언어·런타임·컴파일러·라이브러리·그 밖
+    (생태계·플랫폼). 버전 칸은 그 부의 버전들. 마지막 줄은 합. O(행 수)."""
+    parts = {}
+    for f in features:
+        m = re.search(r'/p(\d+)[a-z]*\.tsv$', f.get('_file', ''))
+        if not m:
+            continue
+        p = parts.setdefault(int(m.group(1)), {'v': [], 'n': [0] * 5})
+        v = f.get('version', '')
+        if v not in p['v']:
+            p['v'].append(v)
+        for i, kinds in enumerate(KIND_COLS):
+            if f.get('kind') in kinds:
+                p['n'][i] += 1
+    rows, tot = [], [0] * 6
+    for num in sorted(parts):
+        p = parts[num]
+        ns = p['n'] + [sum(p['n'])]
+        tot = [a + b for a, b in zip(tot, ns)]
+        rows.append([_part_link(num),
+                     html.escape(' · '.join(p['v']), quote=False)]
+                    + [str(n) for n in ns])
+    rows.append(['합', ''] + [str(n) for n in tot])
+    return _html_table(['부', '버전', '언어', '런타임', '컴파일러',
+                        '라이브러리', '그 밖', '합'], rows,
+                       numcols=(2, 3, 4, 5, 6, 7))
+
+
+def p16_standard(releases, ecma_text):
+    """ECMA 표준 페이지의 'Visual C# 버전 ↔ ECMA-334 ↔ ISO/IEC' 표에 그
+    버전이 나온 달과 '몇 해 뒤의 표준인가' 를 붙인다. 표의 V1 은
+    releases.tsv 의 1.0, V7 은 7.0 과 맞춘다. O(줄 수)."""
+    e = lambda s: html.escape(s, quote=False)
+    date = dict((cites.vnorm(r['version']), r['date']) for r in releases)
+    rows = []
+    for line in ecma_text.split('\n'):
+        m = re.match(r'^V(\d+) \| ([^|]+) \| (.+)$', line.strip())
+        if not m:
+            continue
+        v, ecma, iso = m.group(1), m.group(2).strip(), m.group(3).strip()
+        iso = re.sub(r'\s*\(.*\)$', '', iso)
+        d = date.get(v, '—')
+        y = re.search(r':(\d{4})$', ecma)
+        lag = (str(int(y.group(1)) - int(d[:4]))
+               if y and d != '—' else '—')
+        rows.append(['V' + v, e(d), e(ecma), e(iso), lag])
+    return _html_table(['Visual C#', 'C# 나온 달', 'ECMA-334', 'ISO/IEC',
+                        '늦음(해)'], rows, numcols=(4,))
+
+
+def p16_tables(releases, dotnet, features, gates, ecma_text):
+    """16부의 표 전부 — {파일 이름: 내용}."""
+    made = p16_timeline(releases, version_parts(features))
+    made['tbl_p16_cadence.html'] = p16_cadence(releases)
+    made['tbl_p16_pair.html'] = p16_pairs(releases, dotnet)
+    made['tbl_p16_featgates.html'] = p16_featgates(releases, features, gates)
+    made['tbl_p16_kinds.html'] = p16_kinds(features)
+    if ecma_text:
+        made['tbl_p16_std.html'] = p16_standard(releases, ecma_text)
+    return made
+
+
 def dict_rows(name):
     head, body = rows_of(name)
     return [dict(zip(head, r)) for r in body]
@@ -190,6 +393,12 @@ def build():
                                    dict_rows('langgates.tsv')))
         made['tbl_gate_counts.html'] = gate_counts(
             dict_rows('releases.tsv'), dict_rows('langgates.tsv'))
+        # 16부 — ECMA 표는 docs/ 캐시에 있을 때만(없으면 make docs)
+        ecma = os.path.join(BASE, 'docs', 'ecma-334.txt')
+        made.update(p16_tables(
+            dict_rows('releases.tsv'), dict_rows('dotnet.tsv'),
+            cites.feature_rows(BASE), dict_rows('langgates.tsv'),
+            read(ecma) if os.path.exists(ecma) else ''))
     # 버전 개관·부록·흐름 표는 3단계 이후 goevo/deck/gen_tables.py 에서
     # C# 자료에 맞춰 옮겨 온다(PLAN.md §4).
     for out_name, tsv, cols, filt in VIEWS:

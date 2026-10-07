@@ -784,3 +784,23 @@ comments + Korean header line; two review passes before push.
   byte-identical output → tbl_p16b_eras, 5장 호환성 — contextual keywords → tbl_p16b_kw, warning waves, breaking-change
   docs, 6장 다음 버전 — ≤2 prose slides on C# 15, 7장 정리 + p16-quiz). Placeholder 16b_flows + order.txt/ORDER
   entries made. p16 and p16b launched together.
+- Session died ~12:46 with p16 and p16b running (no slides written by either). p16 left gen_tables.py +209 /
+  test_gen_tables.py +161 / ecma-334 fixture (make test green, 107), tbl_p16_* tables, ex/16 ld*/st*, exps/p16.py
+  (first --only run cut by OSError 38). p16b left ex/16 er*/kw*/cp*, exps/p16b.py (eras run once → 16-er* captures,
+  tbl_p16b_eras; kw/waves/breaking never run). Wrote p16_resume.md, p16b_resume.md, digests p16_prev.txt/p16b_prev.txt;
+  relaunched both.
+- p16 done (resumed): 45 slides (cover+intro 2, 1장 연표 12, 2장 네 갈래 13, 3장 사다리 18), 6 examples (1 FAIL stver),
+  36 batch files (32 captures + tbl_p16_ladder_1/_2/_codes/_rungs), 18 claims, 12 glossary; runs 2 and 3 identical.
+  Findings: default LangVersion per TFM (net48/ns2.0 7.3, ns2.1/nc3.1 8.0, net5..10 9..14, net11 capped 14);
+  one gate code per version (CS8022..CS9260); `module` at C# 1 only CS1645; record at 8.0 → CS0260 (not a rung);
+  183/183 compiler gates covered by feature rows. To fix: data/timeline.tsv empty (tbl_timeline unused);
+  p16b's two over-wide kw captures make run_all exit 1.
+- p16b done (resumed): 47 slides (4장 다섯 시대 19, 5장 호환성 14, 6장 다음 버전 5, 7장 정리 9 incl. p16-quiz/2/3,
+  p16-end → #p17), 10 examples (0 FAIL), 48 batch files (41 captures + tbl_p16b_eras/_today/_kw/_kw2/_waves/_brk/
+  _docs), 27 claims, 11 glossary; two identical runs. Keyword trials go through csver.execute into tables only
+  (CS9258/CS0267 lines over 200 cols). Findings: a declaration error hides later body gates (erstage); `@` names
+  avoid CS8981; -warn accepts any level ≥0, wave 9 = wave 8; `field` flips 7→0 at 14.0 with only CS9258/CS0414;
+  old-era code compiles at 14.0 with 0 warnings, only -nullable:enable warns; csharplang version history already
+  has a "C# 15.0 - .NET 11" heading. Note: tbl_p16b_docs (doc_tally) reads deck/sections — editing any -docs table
+  in another part needs a p16b rerun. Part 16 = 45 + 47 = 92/90. data/timeline.tsv is still header-only since
+  step 1 (tbl_timeline unused; p16 uses tbl_p16_rel_*). Orchestrator re-running p16/p16b twice + make all SKEL=1.
