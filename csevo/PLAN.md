@@ -738,3 +738,42 @@ comments + Korean header line; two review passes before push.
   7장 사용자 정의 복합 대입, 8장 작은 기능들 — nameof unbound generics, lambda modifiers, expression-tree optional/
   named args, #: directives, 9장 정리 + p15-quiz + p15-sum-cs15 → 16부). Placeholders 15b_cs14/15c_cs14 +
   order.txt/ORDER entries made. p15 and p15b launched; p15c waits for one of them.
+- 2026-10-07: session restart found p15 (14 example dirs ov*/xm*, xm* untested, no exps/p15.py, no slides) and
+  p15b (17 fk* example dirs tried by hand, exps/p15b.py never run, no slides) — both killed with the session.
+  Wrote scratch/brief/p15_resume.md and p15b_resume.md plus transcript digests p15_prev.txt/p15b_prev.txt
+  (texts, commands, truncated results of the dead agents). p15 and p15b relaunched; p15c waits for one of them.
+- p15b done (resumed): 59 slides (3장 field 21, 4장 Span 25, 5장 ?.= 13), 11 rows (3 gated), 43 examples (1 FAIL spspan,
+  2 WARN fkwarn/fknullset), 107 captures incl. tbl_p15b_diag3/4/5 + tbl_p15b_long, 14 claims, 13 glossary; two
+  identical `--only p15b` runs. Extra ids p15-v14-long, p15-v14-mid-docs (docs table for 3–5장). Findings: `[field: X]`
+  without backing field only CS0657; no setter nullable warning (NRE at run time); no CS0414/CS0649 on backing
+  fields; span gate refusals are CS1929/CS0411/CS1503/CS0029/CS0121 (no CS9260/CS8773); `Span<object> s = string[]`
+  compiles at 13.0 and throws ArrayTypeMismatchException, CS0266 at 14.0 (not in breaking-change doc); silent overload
+  moves at 14.0; Enumerable.Reverse break impossible on net10 (IL binds Reverse(T[]) at both); blog Span "After"
+  allocates 88 B. To check: overlap of p15-v14-sp-bcl with p15's runtime slide; fkbreak csproj is 13.0 under a
+  C# 14 badge. p15c launched next to p15.
+- p15 done (resumed): 65 slides (cover+intro 2, 1장 개관 18, 2장 확장 멤버 45 with 2 quizzes), 12 rows (1 gated), 47 examples
+  (1 FAIL ovnet10), 113 captures incl. tbl_p15_diag2a/diag2b/long (4 LONGLINE: CS1061 ×2, CS9286 ×2), 20 claims, 12
+  glossary; two identical `--only p15` runs. Findings: nameless gate = ExpressionOptionalAndNamedArguments; old codes
+  CS0854/CS1929 at 13.0; partial events CS8703; non-generic extension block at 13.0 parses as a constructor (only
+  `extension<T>` gives clean CS9260); .NET 10 blog lists three C# 13 features as C# 14; LTS end Nov 10 vs eol-date
+  2028-11-14; ExtensionMarkerAttribute (proposal: ExtensionMarkerNameAttribute); skeleton bodies ldnull;throw;
+  `$T0`; duplicate extension property CS9286 not CS0121; struct receiver property set lost silently; CS9282 family;
+  extension property in expression tree CS9296; nameof extension member CS9316; CS9265 appears at 11.0 too.
+- Orchestrator: `make deck` after p15 found 17 width errors in p15b slides (sources over 72 cells, fk-capture 46 lines)
+  and glossary duplicates "null 조건 대입"(p07)/"뒷받침 필드"(p04) — sent back to p15b to fix and re-run.
+- p15b fixes: 19 sources shortened by hand (fk/sp/na ≤72 cells, fkcapture 45 lines), re-ran `--only p15b` twice (107
+  captures, identical), naindex caption updated (`2 7`), glossary duplicates removed (11 lines), fk-break slide now
+  says the project is 13.0 and the same source is compiled at 14.0. User (2026-10-07): commit and push when part 15
+  is done.
+- p15c done: 62 slides (6장 partial 이벤트와 생성자 14, 7장 복합 대입 17, 8장 작은 기능들 19, 9장 정리 12 incl. p15-quiz/quiz2/
+  quiz3, p15-sum-docs/-codes/-cs15), 9 rows (5 gated), 42 examples (4 FAIL + pecrash via CRASHCHECK), 117 captures incl.
+  tbl_p15c_crash/diag6/diag7/diag8/diag8b/long, 16 claims, 13 glossary; two identical `--only p15c` runs. Findings:
+  csc stack overflow (exit 134) on a partial event implementing a same-named interface event (13.0 and 14.0);
+  documented `scoped scoped s` lambda break does not reproduce — `(scoped s = default)` CS9099→CS9098 does;
+  out-of-position named args in expression trees still CS9307; dynamic ignores instance `+=`; 0 op_*Assignment in
+  .NET 10 ref pack; `#:` gated by -features:FileBasedProgram not langversion, `#!` on line 2 CS1040; no C# 15 in
+  SDK 10.0.112 (-langversion:15 CS1617); CS9272 = params on implicitly typed lambda parameter.
+- Orchestrator: p15-v14-docs link `#p15-quiz` → `#p15-sum-docs`. Part 15 = 65 + 59 + 62 = 186/200. Re-running
+  p15/p15b/p15c twice each, then `make all SKEL=1`.
+- Orchestrator: re-ran p15/p15b/p15c twice each, all exit=0, 113/107/117 captures, the 337 part-15 manifest entries
+  identical; `make all SKEL=1` green: deck 2507, 15부 186/200, 100 tests, 1966 examples. Part 15 committed and pushed.

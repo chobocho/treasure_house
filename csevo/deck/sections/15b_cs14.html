@@ -1,4 +1,774 @@
-<article class="card" id="p15b-pending">
-<h2>15부 (이어서)</h2>
-<p>준비 중입니다 — field 키워드 · 암묵적 Span 변환 · null 조건 대입</p>
+<article class="card" id="p15-v14-fk"><p class="chnum">3장</p><h2>field 키워드 — 자동 속성과 손으로 쓴 속성 사이</h2>
+<p class="chsub">get; 과 몸체 있는 접근자 섞기 · 뒷받침 필드의 정체 · 초기화자와 생성자 · init · nullable 분석 · [field: …] · 키워드가 되는 자리 · 람다·정적·구조체·override · 필드 경고 · 아직 손으로 쓰는 필드</p></article>
+
+<article class="card" id="p15-v14-fk-why">
+<h3>왜 — 한 줄의 논리 때문에 필드를 통째로 선언해야 했다</h3>
+<p class="why">제안서의 동기: 접근자에 논리를 조금 넣으려 해도 "this confronts users with the overhead of declaring a backing field", 그리고 그 필드는
+"scoped to the entire class which can result in accidental bypassing of the accessors from within the class." <!--CITE key=prop-14-field-keyword sec="Motivation"-->
+블로그는 이 기능을 "a bridge between auto‑implemented and fully hand‑written properties" 라고 부릅니다. <!--CITE key=blog-introducing-csharp-14 sec="The field keyword"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>앞에서 본 것</th><th>이 장에서 더 가는 곳</th></tr>
+<tr><td>C# 3 자동 속성, C# 14 의 <code>field</code> 미리 보기(<a href="#p4-v3-autoprop-field14">4부</a>)</td><td>접근자의 꼴과 뒷받침 필드의 정체</td></tr>
+<tr><td>C# 6 의 get 만 있는 자동 속성과 초기화자(<a href="#p4-v3-autoprop-later">4부</a>)</td><td>초기화자는 setter 를 부르지 않는다</td></tr>
+<tr><td>C# 9 의 <code>init</code> 접근자(<a href="#p10-v9-init">10부</a>)</td><td><code>init =&gt; field = …</code> 과 <code>with</code></td></tr>
+<tr><td>C# 13 미리 보기 — <code>CS9260</code>·<code>CS0103</code>(<a href="#p14-v13-field">14부</a>)</td><td>정식 기능의 규칙 — nullable · 특성 · 구조체</td></tr>
+<tr><td><code>field</code> 라는 멤버·지역 변수(<a href="#p14-v13-fk-shadow">14부</a>)</td><td>키워드가 되는 자리와 되지 않는 자리</td></tr>
+<tr><td>partial 속성과 <code>field</code>(<a href="#p14-v13-pp-field">14부</a>)</td><td>— (그대로)</td></tr>
+</table></div>
+<p class="cap">14부 8장이 "들어온 길" 을 보았다면, 이 장은 C# 14 에서 정식이 된 규칙을 하나씩 돌려 봅니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p15-v14-field">
+<h3>field 키워드 (the field keyword) <span class="vt v14">C# 14.0</span></h3>
+<p class="why">왜 — whats-new: "The token <code>field</code> is replaced with a compiler synthesized backing field." 전에는 값 하나를 거르려 해도 "you had
+to declare a backing field and implement both accessors" 였습니다. <!--CITE key=whatsnew-14 sec="The field keyword"-->
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureFieldKeyword:"--> 예제는 whats-new 의 <code>Email</code> 을 줄인 것입니다.</p>
+<!--CODE file=ex/15/fkbasic/Program.cs note=get; 은 자동, set 만 몸체 — 필드 선언이 없다-->
+<!--CSVER v=14.0 file=ex/15/fkbasic note=C# 14.0-->
+<!--CSVER v=13.0 file=ex/15/fkbasic note=C# 13.0 으로 내리면-->
+<p class="cap">null 을 넣으면 빈 문자열이 되고, 아무것도 넣지 않은 처음 값은 <code>null</code> 입니다 — 뒷받침 필드의 기본값이지 <code>set</code> 을 거친 값이
+아닙니다. C# 13.0 의 거절은 <code>get;</code> 과 몸체 있는 <code>set</code> 을 섞은 선언 자리 한 줄입니다(<a href="#p14-v13-field">14부</a>와 같은 <code>CS9260</code>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-forms">
+<h3>접근자의 다섯 꼴 — 게으른 get, 둘 다 몸체, set 만, 읽기만, private set</h3>
+<p class="why">제안서: 두 접근자 모두 몸체를 가져도 되고, "Expression-bodied properties and properties with only a <code>get</code> accessor may also use
+<code>field</code>", 그리고 "Set-only properties may also use <code>field</code>". <!--CITE key=prop-14-field-keyword sec="Detailed design"--></p>
+<!--CODE file=ex/15/fkforms/Program.cs note=Title·Version·Tag·Tag2·Count — field 를 쓰는 다섯 속성-->
+<!--CSVER v=14.0 file=ex/15/fkforms note=C# 14.0-->
+<p class="cap"><code>Title</code> 은 <code>Compute</code> 를 한 번만 부릅니다(<code>computed=1</code>). <code>Version</code> 은 쓸 때 1 을 더해 2 입니다. <code>Tag</code> 는
+set 만 있어 읽을 길이 없는데도 컴파일됩니다. <code>Tag2</code> 는 아무도 쓰지 않아 늘 <code>null</code> — 경고도 없습니다(<a href="#p15-v14-fk-warn">뒤에서</a>).
+<code>Count</code> 의 <code>private set</code> 은 <code>field</code> 와 견주어 큰 값만 남겨 5 다음에 3 을 넣어도 5 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-meta">
+<h3>뒷받침 필드의 정체 — 자동 속성과 같은 이름, 같은 특성</h3>
+<p class="why">제안서가 바꾼 표준 문장: 자동 속성에는 "a hidden <b>unnamed</b> backing field" 가 있고, "only a semicolon-only get accessor" 인 자동 속성의
+필드는 <code>readonly</code> 입니다. 그리고 <code>Debug.Assert</code> 처럼 빠지는 호출 안에서만 <code>field</code> 를 써도 "The backing field is generated" 입니다.
+<!--CITE key=prop-14-field-keyword sec="Properties"--> <!--CITE key=prop-14-field-keyword sec="[Conditional] code"--></p>
+<!--CODE file=ex/15/fkmeta/Program.cs note=C 의 private 인스턴스 필드를 선언 차례대로-->
+<!--CSVER v=14.0 file=ex/15/fkmeta note=C# 14.0-->
+<p class="cap">이름 없는 필드라지만 메타데이터에는 이름이 있습니다 — 자동 속성 <code>Auto</code> 와 똑같은 <code>&lt;이름&gt;k__BackingField</code> 에 같은 두 특성입니다.
+<code>field</code> 를 쓰지 않는 <code>Plain</code> 에는 필드가 없고, <code>{ get; }</code> 인 <code>Fixed</code> 만 <code>initonly</code> 입니다. <code>Checked</code> 는
+<code>DEBUG</code> 기호 없이 컴파일해 <code>Debug.Assert</code> 호출이 빠졌는데도 필드가 남았습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-init">
+<h3>초기화자는 setter 를 부르지 않는다 <span class="vt v14">C# 14.0</span></h3>
+<p class="why">제안서: "The backing field is directly initialized rather than the setter being called." 초기화자는 기반 생성자보다 먼저 돌기 때문에 인스턴스
+메서드인 setter 를 부를 수 없습니다. 그래서 setter 를 거치려면 생성자에서 대입하라고 합니다. 예제는 제안서의 뷰 모델 그대로입니다.
+<!--CITE key=prop-14-field-keyword sec="Property initializers"--></p>
+<!--CODE file=ex/15/fkinit/Program.cs note=IsActive 의 초기화자 = true 와 생성자의 Name = name-->
+<!--CSVER v=14.0 file=ex/15/fkinit note=C# 14.0-->
+<p class="cap"><code>= true</code> 는 <code>Set</code> 을 거치지 않아 <code>HasPendingChanges</code> 가 <code>False</code> 로 남습니다. 생성자에서 <code>Name</code> 에
+<code>"x"</code> 를 대입하면 setter 가 돌아 <code>True</code> 가 됩니다. <code>null</code> 은 기본값과 같아 <code>Set</code> 이 바꾼 것이 없다고 봅니다.
+C# 6 의 자동 속성 초기화자도 뒷받침 필드에 바로 들어가는 같은 길이었습니다. <!--CITE key=whatsnew-6 sec="Auto-property initializers"--></p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-ctor">
+<h3>생성자의 대입 — setter 가 있으면 setter, 없으면 필드</h3>
+<p class="why">제안서: "assignment in the constructor calls the (potentially virtual) setter if it exists, and if there is no setter it falls back to directly
+assigning to the backing field." 예제의 <code>P1</code>~<code>P4</code> 는 제안서의 것에 로그를 단 것입니다. <!--CITE key=prop-14-field-keyword sec="Constructor assignment"--></p>
+<!--CODE file=ex/15/fkctor/Program.cs note=P1·P2 는 get 만, P3·P4 는 set 에 로그-->
+<!--CSVER v=14.0 file=ex/15/fkctor note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/fkctor flags=-define:BAD tag=bad note=-define:BAD — 생성자 밖에서 c.P1 = 5-->
+<p class="cap">로그는 <code>P3</code>·<code>P4</code> 두 줄뿐이고 <code>P4</code> 는 setter 가 10 을 곱해 40 입니다. <code>get</code> 만 있는 <code>P1</code> 은 생성자
+안에서는 대입되지만 밖에서는 <code>CS0200</code> — 읽기 전용 자동 속성(C# 6)과 같은 규칙입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-initacc">
+<h3>init 접근자의 field — with 식도 같은 접근자를 지난다</h3>
+<p class="why">제안서: "For properties with an <code>init</code> accessor, everything that applies below to <code>set</code> would apply instead to the
+<code>init</code> accessor." <!--CITE key=prop-14-field-keyword sec="Detailed design"--> 블로그의 Before/After 도 <code>init =&gt; field = value ?? throw …</code>
+입니다. <!--CITE key=blog-introducing-csharp-14 sec="The field keyword"--></p>
+<!--CODE file=ex/15/fkinitacc/Program.cs note=record 의 Text(init 검사)와 Upper(게으른 캐시)-->
+<!--CSVER v=14.0 file=ex/15/fkinitacc note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/fkinitacc flags=-define:BAD tag=bad note=-define:BAD — m.Text = "x"-->
+<div class="warn"><b>함정</b> — <code>m with { Text = "bye" }</code> 의 <code>Upper</code> 가 <code>HI</code> 입니다. <code>with</code> 는 레코드를 복사하는데,
+<code>Upper</code> 의 뒷받침 필드도 복사되어 옛 캐시가 따라옵니다. <code>field ??=</code> 캐시는 레코드의 다른 속성에 기대면 안 됩니다. <code>null</code> 은
+<code>init</code> 의 검사에 걸리고, 밖에서의 대입은 C# 9 의 <code>CS8852</code> 그대로입니다(<a href="#p10-v9-init">10부</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-null">
+<h3>field 의 nullable 분석 — get 이 null 에 견디는가 <span class="vt v14">C# 14.0</span></h3>
+<p class="why">제안서의 핵심 장면은 게으른 초기화입니다 — <code>public C() { }</code> 에서 "It would be undesirable to warn about 'Prop' being uninitialized
+here". <!--CITE key=prop-14-field-keyword sec="Nullability"--> 그래서 get 을 두 번 분석합니다. 필드를 nullable 로 보았을 때만 생기는 경고가 있으면
+"the property is not null-resilient", 없으면 필드는 nullable 로 다룹니다. <!--CITE key=prop-14-field-keyword sec="Nullability of the backing field"--></p>
+<!--CODE file=ex/15/fknull/Program.cs note=Nullable 켬 — Lazy 는 ??=, Strict·Bad 는 get => field-->
+<!--CSVER v=14.0 file=ex/15/fknull note=C# 14.0 — Lazy 만-->
+<!--CSVER v=14.0 file=ex/15/fknull flags="-define:EMPTYSET -nowarn:9264" tag=emptyset note=-define:EMPTYSET — CS9264 를 끄고-->
+<p class="cap"><code>Lazy</code> 의 get 은 필드가 null 이어도 null 을 돌려주지 않으므로(null-resilient) 빈 생성자에 경고가 없습니다. <code>get =&gt; field</code>
+인 <code>Strict</code>·<code>Bad</code> 는 견디지 못해 생성자 끝에서 <code>CS9264</code> 를 받습니다 — 200칸이 넘는 문장은 <a href="#p15-v14-long">표</a>에 있고,
+"safely handling the case where 'field' is null in the 'get' accessor" 를 권합니다. <code>Bad</code> 의 빈 <code>set</code> 은 따로 <code>CS9266</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-nullset">
+<h3>setter 는 작은 생성자 — 제안서의 경고는 나오지 않았다</h3>
+<p class="why">제안서의 setter 분석: 필드가 null 에 견디지 못하는 속성의 setter 는 끝에서 필드를 채워야 하고, 예제의 <code>set { }</code> 에 "We should warn
+here that <code>field</code> may be null when exiting." — "the setter is treated as a 'mini-constructor' for the backing field."
+<!--CITE key=prop-14-field-keyword sec="Setter analysis"--> <!--CITE key=prop-14-field-keyword sec="Remarks"--> 예제는 제안서의 것 그대로입니다.</p>
+<!--CODE file=ex/15/fknullset/Program.cs note=제안서의 C — set { } 와, 조건부로만 쓰는 PARTIAL-->
+<!--CSVER v=14.0 file=ex/15/fknullset note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/fknullset flags=-define:PARTIAL tag=partial note=-define:PARTIAL — 길이가 2 이상일 때만 대입-->
+<div class="warn"><b>함정</b> — Nullable 을 켰는데도 nullable 경고는 없고 실행은 <code>NullReferenceException</code> 입니다. 빈 <code>set</code> 에 붙은
+<code>CS9266</code> 은 "set 이 field 를 쓰지 않는다" 는 별개의 경고이고, <code>field</code> 를 조건부로만 채우는 <code>PARTIAL</code> 은 경고가 하나도 없습니다.
+제안서가 그린 setter 의 null 검사는 이 컴파일러(Roslyn 5.0)에 없습니다(2026-10 기준). C# 13.0 에서는 이 파일의 <code>field</code> 가 <code>CS0103</code> 입니다(<a href="#p15-v14-fk-diag">표</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-attr">
+<h3>[field: …] — 뒷받침 필드에 특성 달기 <span class="vt v14">C# 14.0</span></h3>
+<p class="why">제안서: "any property that uses a backing field in one of its accessors will be able to use field-targeted attributes". 필드가 없는
+속성에 달면 "❌ Error, will not compile" 이라고 적습니다. <!--CITE key=prop-14-field-keyword sec="Field-targeted attributes"--></p>
+<!--CODE file=ex/15/fkattr/Program.cs note=필드 전용 특성 Note 를 Name·Level 의 뒷받침 필드에-->
+<!--CSVER v=14.0 file=ex/15/fkattr note=C# 14.0-->
+<!--CSVER v=13.0 file=ex/15/fkattr flags=-nowarn:0657 tag=nowarn note=C# 13.0 — 경고 CS0657 을 끄고-->
+<p class="cap">특성은 리플렉션에서 <code>&lt;Name&gt;k__BackingField</code> 에 붙어 보입니다. 필드가 없는 <code>Plain</code> 에 다는 <code>-define:BAD</code> 는
+제안서의 말과 달리 오류가 아니라 경고 <code>CS0657</code> 이고, 특성을 버린 채 실행됩니다(문장 전체는 <a href="#p15-v14-long">표</a>). C# 13.0 은 <code>Level</code>
+선언에서 <code>CS9260</code> 을 내고, 키워드가 아닌 <code>Name =&gt; field ??= …</code> 쪽에도 같은 <code>CS0657</code> 을 냅니다 — 그 버전에서는 뒷받침 필드가 없는
+속성이기 때문입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-where">
+<h3>field 가 키워드가 되는 자리 — 접근자 몸체뿐</h3>
+<p class="why">제안서의 문법: <code>field</code> 는 "primary expression" 으로 쓰일 때, "In method bodies of <code>get</code>, <code>set</code>, and <code>init</code>
+accessors in properties <i>but not</i> indexers" 와 그 안의 람다·지역 함수에서만 키워드입니다. <!--CITE key=prop-14-field-keyword sec="Syntax"--> 속성 초기화자는
+"as in previous versions of C#", 이벤트 접근자에서는 "<code>field</code> is <i>not</i> a keyword". <!--CITE key=prop-14-field-keyword sec="field in property initializer"-->
+<!--CITE key=prop-14-field-keyword sec="field in event accessor"--></p>
+<!--CODE file=ex/15/fkwhere/Program.cs note=상수 field 가 있는 클래스 — 초기화자·@field·인덱서·메서드·이벤트-->
+<!--CSVER v=14.0 file=ex/15/fkwhere note=C# 14.0-->
+<!--CSVER v=13.0 file=ex/15/fkwhere note=C# 13.0 — 같은 출력-->
+<p class="cap">다섯 자리 모두 상수 <code>-1</code> 을 읽고, 두 버전의 출력이 같으며 <code>CS9258</code> 도 없습니다. 인덱서(<code>9 = -1 + 10</code>)와 이벤트
+접근자에는 뒷받침 필드가 생기지 않으니 <code>field</code> 는 그냥 이름입니다. 키워드가 되는 곳은 속성 접근자의 몸체 하나입니다
+(<a href="#p15-v14-fk-break">다음 장</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-break">
+<h3>깨지는 변경 — field 라는 멤버를 쓰던 접근자 <span class="vt v14">C# 14.0</span></h3>
+<p class="why">Roslyn: "The warning CS9258 is reported when the identifier would have bound to a different symbol with language version 13 or earlier." 피하려면
+"use 'this.field' or '@field' instead" 또는 이름을 바꿉니다. <!--CITE key=roslyn-compiler-breaking-changes-dotnet-10 sec="Expression field in a property accessor refers to synthesized backing field"-->
+14부는 같은 변화를 세 속성으로 보였습니다(<a href="#p14-v13-fk-shadow">14부</a>). 여기서는 고친 판과 컴파일러의 둘째 신호를 봅니다. 이 예제의
+프로젝트 버전은 옛 코드의 것인 C# 13.0 이고, 같은 소스를 C# 14.0 으로 올려 컴파일합니다.</p>
+<!--CODE file=ex/15/fkbreak/Program.cs note=멤버 field 를 접근자와 메서드에서 읽는 Legacy — FIX 는 this.field·@field-->
+<!--CSVER v=13.0 file=ex/15/fkbreak note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/fkbreak flags=-nowarn:9258 tag=nowarn note=C# 14.0 — CS9258 을 끄고-->
+<!--CSVER v=14.0 file=ex/15/fkbreak flags=-define:FIX tag=fix note=-define:FIX, C# 14.0-->
+<p class="cap">C# 14.0 에서 <code>Value</code> 는 새 뒷받침 필드에 5 를 쓰고 읽으므로 그대로 5 이지만, 메서드 <code>Raw()</code> 의 <code>field</code> 는 여전히 멤버라 0
+입니다. 그래서 컴파일러는 <code>CS9258</code> 말고도 "<code>Legacy.field</code> 는 대입되지 않는다" 는 <code>CS0649</code> 를 냅니다 — 경고를 꺼도 남는 신호입니다.
+<code>this.field</code>·<code>@field</code> 로 고친 판은 두 버전 모두 <code>5 5</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-capture">
+<h3>람다와 지역 함수 안의 field</h3>
+<p class="why">제안서: "<code>field</code> should be able to be captured in local functions and lambdas", 예제는 정적 속성 안의 <code>static () =&gt; field</code>
+입니다. <!--CITE key=prop-14-field-keyword sec="Captures"--> 그리고 <code>nameof(field)</code> 는 <code>nameof(nint)</code> 처럼 "will fail to compile".
+<!--CITE key=prop-14-field-keyword sec="nameof"--></p>
+<!--CODE file=ex/15/fkcapture/Program.cs note=정적 Ticks 의 static 람다, 인스턴스 Log 의 지역 함수 — 아래는 #if 셋-->
+<!--CSVER v=14.0 file=ex/15/fkcapture note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/fkcapture flags=-define:STATIC tag=static note=-define:STATIC — 인스턴스 속성의 static 람다-->
+<!--CSVER v=14.0 file=ex/15/fkcapture flags="-define:LAMBDA -nowarn:9258" tag=lambda note=-define:LAMBDA — 람다 매개변수 field-->
+<p class="cap"><code>Ticks</code> 는 정적 뒷받침 필드라 <code>static</code> 람다가 잡을 수 있고, 인스턴스 속성에서는 <code>this</code> 를 거쳐야 해 <code>CS8821</code>
+입니다. 람다 매개변수 이름 <code>field</code> 는 <code>CS9273</code>(문서는 <code>CS9272</code> — <a href="#p14-v13-fk-local">14부</a>), 그리고 본문의 <code>field</code> 는
+매개변수가 아니라 <code>bool</code> 속성 <code>Any</code> 의 뒷받침 필드에 묶여 <code>bool &gt; int</code> 의 <code>CS0019</code> 입니다. <code>nameof(field)</code> 는
+<code>CS8081</code>(<a href="#p15-v14-fk-diag">표</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-static">
+<h3>정적 속성과 인터페이스 — 정적은 되고 인스턴스는 안 된다</h3>
+<p class="why">제안서: 인터페이스의 속성에서도 자동 접근자는 뒷받침 필드를 뜻하고, 인스턴스 속성이면 "an error is reported that instance fields are not
+supported" — 정적이면 됩니다. <!--CITE key=prop-14-field-keyword sec="Interface properties and auto-accessors"--></p>
+<!--CODE file=ex/15/fkstatic/Program.cs note=인터페이스의 정적 Mode, 클래스의 정적 Port — IFACE 는 인스턴스-->
+<!--CSVER v=14.0 file=ex/15/fkstatic note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/fkstatic flags=-define:IFACE tag=iface note=-define:IFACE — 인터페이스의 인스턴스 속성-->
+<p class="cap">정적 뒷받침 필드도 같은 <code>&lt;이름&gt;k__BackingField</code> 이고, 인터페이스 <code>ISettings</code> 안에 정적 필드로 생깁니다. 인스턴스
+속성은 문장 그대로 "Interfaces cannot contain instance fields" — 오류가 속성이 아니라 필드에서 납니다. 인터페이스의 정적 멤버는 C# 8 의 기본 구현
+무리입니다(<a href="#p9-v8-dim-later">9부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-struct">
+<h3>구조체의 field — readonly 면 필드도 initonly</h3>
+<p class="why">제안서: "The synthesized backing field is <i>read-only</i> when the containing type is a <code>struct</code> and the property or containing type is
+declared <code>readonly</code>." 그러면 필드는 메타데이터에서 <code>initonly</code> 이고 초기화자·생성자 밖의 수정은 오류입니다. 예제의 <code>P0</code>~<code>P4</code>
+는 제안서의 것입니다. <!--CITE key=prop-14-field-keyword sec="Readonly field"--></p>
+<!--CODE file=ex/15/fkstruct/Program.cs note=readonly 속성 P0·P3, 캐시하는 P1 — P2·P4 는 #if-->
+<!--CSVER v=14.0 file=ex/15/fkstruct note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/fkstruct flags=-define:P2 tag=p2 note=-define:P2 — readonly 속성의 field ??=-->
+<div class="warn"><b>함정</b> — <code>P1</code> 의 <code>field ??= Load()</code> 캐시는 지역 변수에서는 한 번만 부르지만(<code>Loads=1</code>), <code>static readonly</code>
+필드에 담긴 구조체에서는 읽을 때마다 부릅니다(<code>Loads=3</code>). 읽기 전용 위치의 구조체는 방어 복사본 위에서 get 이 돌아 캐시가 버려지기 때문입니다.
+<code>readonly</code> 인 <code>P3</code> 는 set 이 필드를 읽기만 하므로 허용되고, 필드에 쓰는 <code>P2</code>·<code>P4</code> 는 <code>CS0191</code>(<a href="#p15-v14-fk-diag">표</a>)입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-over">
+<h3>override 속성의 field — 기반과 따로인 필드</h3>
+<p class="why">제안서: 재정의한 속성의 <code>field</code> 는 "the backing field for the overriding property, separate from the backing field of the base property",
+그리고 자동 속성처럼 "must override all accessors". <!--CITE key=prop-14-field-keyword sec="Overrides"--></p>
+<!--CODE file=ex/15/fkover/Program.cs note=Base 의 가상 자동 속성 N 과 Derived 의 field 판-->
+<!--CSVER v=14.0 file=ex/15/fkover note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/fkover flags=-define:HALF tag=half note=-define:HALF — get 만 재정의-->
+<p class="cap"><code>Derived</code> 는 50 을 들고 있고, <code>base.N</code> 은 기반의 초기화자 값 1 그대로입니다 — 두 클래스에 같은 이름의 필드
+<code>&lt;N&gt;k__BackingField</code> 가 하나씩 있습니다. get 만 재정의하면 <code>CS8080</code> "must override all accessors" 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-warn">
+<h3>필드 경고 — 제안서는 CS0414·CS0649 라 했지만</h3>
+<p class="why">제안서: <code>field</code> 를 쓰면 "the compiler's existing analysis of unassigned or unread fields will include that field", 그리고 두 문장을 적습니다 —
+<code>CS0414</code> "The backing field for property 'Xyz' is assigned but its value is never used", <code>CS0649</code> "… is never assigned to".
+<!--CITE key=prop-14-field-keyword sec="Field usage warnings"--> <code>{ set; }</code> 만은 "Disallowed today, continue disallowing" 입니다.
+<!--CITE key=prop-14-field-keyword sec="Scenarios similar to { set; }"--></p>
+<!--CODE file=ex/15/fkwarn/Program.cs note=보통 필드 x·y 와 뒷받침 필드를 쓰는 A·B·D-->
+<!--CSVER v=14.0 file=ex/15/fkwarn note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/fkwarn flags=-define:SETONLY tag=setonly note=-define:SETONLY — { set; }-->
+<p class="cap">보통 필드 <code>x</code>·<code>y</code> 는 <code>CS0649</code>·<code>CS0414</code> 를 받습니다. 그런데 쓰기만 하는 <code>A</code> 는 <code>CS0414</code> 대신
+"get 이 field 를 쓰지 않는다" 는 <code>CS9266</code> 이고, 한 번도 쓰지 않는 <code>B</code> 는 아무 경고도 없습니다. 뒷받침 필드의 <code>CS0414</code>·<code>CS0649</code>
+는 이 컴파일러에서 나오지 않았습니다(2026-10 기준). <code>{ set; }</code> 는 자동 속성의 규칙 그대로 <code>CS8051</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-hand">
+<h3>아직 손으로 쓰는 필드 — 함께 쓰는 상태, 메서드, ref</h3>
+<p class="why"><code>field</code> 는 그 속성의 접근자 안에서만 보입니다 — 제안서가 동기로 든 장점("only have it be available to the bodies of the accessors")의
+뒷면입니다. <!--CITE key=prop-14-field-keyword sec="Motivation"--> ref 를 돌려주는 속성에는 "the <code>field</code> keyword will not be available".
+<!--CITE key=prop-14-field-keyword sec="Ref-returning properties"--></p>
+<!--CODE file=ex/15/fkhand/Program.cs note=섭씨·화씨가 나누는 celsius, 한 번만 만드는 Label-->
+<!--CSVER v=14.0 file=ex/15/fkhand note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/fkhand flags=-define:RESET tag=reset note=-define:RESET — 메서드에서 field 를 비우려면-->
+<!--CSVER v=14.0 file=ex/15/fkhand flags=-define:REF tag=ref note=-define:REF — ref 를 돌려주는 속성-->
+<div class="warn"><b>함정</b> — <code>t.C = 0</code> 뒤에도 <code>Label</code> 은 <code>T=100</code> 입니다. <code>field ??=</code> 캐시를 비울 길이 접근자 밖에 없고,
+메서드에서 <code>field</code> 를 쓰면 <code>CS0103</code> — 그 자리에서는 그냥 없는 이름입니다. 두 속성이 나누는 상태, 캐시 무효화, ref 반환에는 여전히
+이름 있는 필드가 필요합니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-fk-diag">
+<h3>3장의 진단 — 거절과 경고를 한 표에</h3>
+<p>이 장의 거절 캡처에서 첫 오류(없으면 첫 경고)의 번호와 문장 앞부분을 실험 묶음이 뽑았습니다.</p>
+<!--TABLE file=out/tbl_p15b_diag3.html-->
+<p class="cap">문장에 <code>field</code> 를 담은 번호는 <code>CS9273</code>(지역·매개변수 이름)과 경고 <code>CS9258</code>·<code>CS9264</code>·<code>CS9266</code> 입니다.
+나머지는 모두 자동 속성·읽기 전용 필드·인터페이스의 일반 번호를 그대로 씁니다 — 컴파일러가 <code>field</code> 를 쓰는 속성을 "자동 속성의 한 종류" 로 다룬다는
+흔적입니다(<code>CS8051</code>·<code>CS8080</code>·<code>CS8145</code> 의 "Auto-implemented properties").</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p15-v14-fk-quiz" data-quiz>
+<h3>3장 퀴즈 — field 키워드</h3>
+<p class="q">Q1. <code>public bool IsActive { get; set =&gt; Set(ref field, value); } = true;</code> 에서 <code>= true</code> 는 <code>Set</code> 을 부를까요?</p>
+<p class="q">Q2. 클래스에 <code>int field;</code> 가 있고 속성 접근자가 <code>return field;</code> 입니다. C# 14 로 올렸을 때 이 접근자가 읽는 것은? 같은 클래스의
+메서드 <code>int Raw() =&gt; field;</code> 는?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 부르지 않습니다. 초기화자는 뒷받침 필드에 바로 들어갑니다. setter 를 거치려면 생성자에서 대입합니다(<a href="#p15-v14-fk-init">앞에서</a>).<br>
+<b>A2.</b> 접근자는 새 뒷받침 필드(경고 <code>CS9258</code>), 메서드는 여전히 멤버 <code>field</code> 입니다. 둘이 갈라져 멤버에는 <code>CS0649</code> 도 붙습니다
+(<a href="#p15-v14-fk-break">앞에서</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p15-v14-sp"><p class="chnum">4장</p><h2>암묵적 Span 변환 — 스팬이 언어의 일급 형식으로</h2>
+<p class="chsub">다섯 가지 변환 · 확장 메서드의 받는 쪽 · 공변 · 형식 추론 · 오버로드 해석 · 깨지는 변경(공변 배열·모호함·반환 형식·Reverse) · 코드 생성 · 식 트리 · 할당</p></article>
+
+<article class="card" id="p15-v14-sp-why">
+<h3>왜 — 변환은 있었지만 언어가 몰랐다</h3>
+<p class="why">제안서의 동기: "C# doesn't recognize the relationship between <code>ReadOnlySpan&lt;T&gt;</code>, <code>Span&lt;T&gt;</code>, and <code>T[]</code>, so even though
+there are user-defined conversions between these types, they cannot be used for extension method receivers, cannot compose with other user-defined
+conversions, and don't help with all generic type inference scenarios." 그래서 BCL 은 "an entire set of <code>Span&lt;T&gt;</code> and <code>T[]</code> overloads"
+를 따로 두어야 했습니다. <!--CITE key=prop-14-first-class-span-types sec="Motivation"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>앞에서 본 것</th><th>C# 14 에서</th></tr>
+<tr><td>C# 7.2 의 Span 가족 — 변환은 형식이 정의한 연산자(<a href="#p8-v7_2-span">8부</a>)</td><td>언어가 아는 "암묵적 스팬 변환"</td></tr>
+<tr><td>C# 12 컬렉션 식의 스팬 대상(<a href="#p13-v12-ce-span">13부</a>)</td><td>— (그대로)</td></tr>
+<tr><td>C# 13 params 스팬 — 배열 하나를 넘기면 <code>T = int[]</code>(<a href="#p14-v13-pm-infer">14부</a>)</td><td>형식 추론이 스팬을 지난다</td></tr>
+<tr><td>.NET 10 <code>MemoryExtensions</code> 의 우선순위 -1(<a href="#p14-v13-or-bcl">14부</a>)</td><td>오버로드 해석이 스팬 판을 고른다</td></tr>
+</table></div>
+<p class="cap">whats-new 의 요약: "The span types can be extension method receivers, compose with other conversions, and help with generic type inference
+scenarios." <!--CITE key=whatsnew-14 sec="Implicit span conversions"--> 이 장은 그 셋을 차례로 돌리고, 오버로드 해석이 바뀌며 생긴 깨지는 변경을 재현합니다.</p>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p15-v14-span">
+<h3>암묵적 Span 변환 (implicit span conversions) <span class="vt v14">C# 14.0</span></h3>
+<p class="why">왜 — 제안서의 첫 예는 <code>arr.StartsWith(1)</code> 입니다 — 배열이 <code>ReadOnlySpan&lt;T&gt;</code> 를 받는 확장 메서드의 받는 쪽(receiver)이 되는
+것. 전에는 "user-defined conversions … are not considered for extension receivers" 였습니다. <!--CITE key=prop-14-first-class-span-types sec="Motivation"-->
+<!--CITE key=msgid sec="case MessageID.IDS_FeatureFirstClassSpan:"--></p>
+<!--CODE file=ex/15/spbasic/Program.cs note=ReadOnlySpan<int> 를 받는 확장 메서드 Total — 인수로, 받는 쪽으로-->
+<!--CSVER v=14.0 file=ex/15/spbasic note=C# 14.0-->
+<p class="cap">인수 자리의 <code>Sum(arr)</code>·<code>Sum(span)</code> 는 C# 13.0 에서도 컴파일됩니다 — 형식이 정의한 사용자 정의 변환 연산자 덕입니다. C# 13.0 이
+거절하는 것은 받는 쪽 두 줄이고, 번호는 <code>CS1929</code> "requires a receiver of type 'System.ReadOnlySpan&lt;int&gt;'" 입니다(줄이 200칸을 넘어
+<a href="#p15-v14-long">표</a>로). 제안서 주석의 "CS8773 in C# 13" 도, 게이트의 <code>CS9260</code> 도 아닙니다(<a href="#p15-v14-sp-diag">뒤에서</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-list">
+<h3>다섯 가지 변환 — 넷은 원래 있던 연산자, 하나가 새것</h3>
+<p class="why">제안서의 목록: 배열 → <code>Span&lt;T&gt;</code>, 배열 → <code>ReadOnlySpan&lt;U&gt;</code>, <code>Span&lt;T&gt;</code> → <code>ReadOnlySpan&lt;U&gt;</code>,
+<code>ReadOnlySpan&lt;T&gt;</code> → <code>ReadOnlySpan&lt;U&gt;</code>(<code>T</code> 가 <code>U</code> 로 공변 변환될 때), <code>string</code> →
+<code>ReadOnlySpan&lt;char&gt;</code>. 그리고 이것을 "the list of standard implicit conversions" 에 넣습니다. <!--CITE key=prop-14-first-class-span-types sec="Span conversions"--></p>
+<!--CODE file=ex/15/spconv/Program.cs note=대입으로 하나씩 — COV 는 스팬끼리의 공변-->
+<!--CSVER v=13.0 file=ex/15/spconv note=C# 13.0 — 기본 판도 통과-->
+<!--CSVER v=13.0 file=ex/15/spconv flags=-define:COV tag=cov note=-define:COV, C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/spconv flags=-define:COV tag=cov note=-define:COV, C# 14.0-->
+<p class="cap">기본 판은 C# 13.0 에서도 같은 출력입니다. <code>Span</code>·<code>ReadOnlySpan</code>·<code>string</code> 에 <code>op_Implicit</code> 가 있고,
+<code>string[]</code> → <code>ReadOnlySpan&lt;object&gt;</code> 도 배열 공변(<code>string[]</code> → <code>object[]</code>)을 먼저 거쳐 그 연산자에 닿습니다.
+<!--CITE key=std-arrays sec="17.6 Array covariance"-->
+C# 13.0 이 거절하는 것은 스팬에서 스팬으로의 공변 둘뿐입니다. 바뀐 것은 "변환이 있느냐" 보다 "어떤 종류의 변환이냐" — 사용자 정의에서 표준 암묵적 변환으로입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-cov">
+<h3>ReadOnlySpan 의 공변 — 읽기만 하니까</h3>
+<p class="why">제안서: 이 규칙의 목표는 "to replicate some amount of covariance for <code>System.ReadOnlySpan&lt;T&gt;</code>" — 런타임을 고치지 않고 .NET 9 의 API
+하나로 "as if the <code>T</code> was declared as <code>out T</code> in some scenarios" 처럼 다룹니다. <!--CITE key=prop-14-first-class-span-types sec="Variance"--></p>
+<!--CODE file=ex/15/spcov/Program.cs note=ReadOnlySpan<object> 를 받는 Join 에 string[]·Span·ReadOnlySpan-->
+<!--CSVER v=14.0 file=ex/15/spcov note=C# 14.0-->
+<!--CSVER v=13.0 file=ex/15/spcov note=C# 13.0 으로 내리면-->
+<p class="cap">C# 13.0 은 <code>Span&lt;string&gt;</code>·<code>ReadOnlySpan&lt;string&gt;</code> 에서 <code>ReadOnlySpan&lt;object&gt;</code> 로 가는 세 곳을
+<code>CS1503</code>·<code>CS0029</code> 로 거절하고, <code>string[]</code> 하나만 배열 공변으로 통과시킵니다. 변환된 스팬의 원소는 여전히 <code>String</code> 입니다 —
+복사가 아니라 같은 메모리를 다른 형식으로 보는 것입니다. 이 변환이 부르는 메서드는 <a href="#p15-v14-sp-codegen">코드 생성</a>에서 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-span">
+<h3>쓸 수 있는 Span 에는 공변이 없다 — 실행 오류가 컴파일 오류로</h3>
+<p class="why">제안서: 명시적 스팬 변환에는 "From an <i>array_type</i> with element type <code>Ti</code> to <code>System.Span&lt;Ui&gt;</code> … provided an explicit
+reference conversion exists" 가 있고, "User-defined conversions are not considered when converting between types for which an implicit or an explicit
+span conversion exists." <!--CITE key=prop-14-first-class-span-types sec="Span conversions"--> <!--CITE key=prop-14-first-class-span-types sec="User defined conversions"--></p>
+<!--CODE file=ex/15/spspan/Program.cs note=string[] 를 Span<object> 로 — CAST 는 명시적 변환-->
+<!--CSVER v=13.0 file=ex/15/spspan note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/spspan note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/spspan flags=-define:CAST tag=cast note=-define:CAST, C# 14.0-->
+<div class="warn"><b>함정</b> — C# 13 은 <code>string[]</code> → <code>object[]</code> → <code>op_Implicit</code> 로 받아 놓고 실행에서
+<code>ArrayTypeMismatchException</code> 을 냅니다(<code>Span&lt;T&gt;</code> 생성자의 검사). C# 14 는 명시적 스팬 변환이 있으니 사용자 정의 연산자를 보지 않고
+<code>CS0266</code> "An explicit conversion exists" 로 거절합니다. 캐스트를 쓰면 다시 실행 예외입니다. 이 변화는 Roslyn 의 깨지는 변경 문서에 없습니다
+(<a href="#p15-v14-span-break">목록</a>).</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-infer">
+<h3>스팬을 지나는 형식 추론 <span class="vt v14">C# 14.0</span></h3>
+<p class="why">제안서는 정확 추론과 하한 추론에 "<code>V</code> is a <code>ReadOnlySpan&lt;V₁&gt;</code> and <code>U</code> is an array type <code>U₁[]</code> or a
+<code>Span&lt;U₁&gt;</code> or <code>ReadOnlySpan&lt;U₁&gt;</code>" 같은 줄을 더합니다. 배열에서 <code>Span&lt;Vᵢ&gt;</code> 로는 "an <i>exact inference</i>",
+<code>ReadOnlySpan&lt;Vᵢ&gt;</code> 로는 "a <i>lower-bound inference</i>" 입니다. <!--CITE key=prop-14-first-class-span-types sec="Type inference"--></p>
+<!--CODE file=ex/15/spinfer/Program.cs note=First·Fill·Kind 에 형식 인수 없이 배열을-->
+<!--CSVER v=14.0 file=ex/15/spinfer note=C# 14.0-->
+<!--CSVER v=13.0 file=ex/15/spinfer note=C# 13.0 으로 내리면-->
+<!--CSVER v=14.0 file=ex/15/spinfer flags=-define:MIXED tag=mixed note=-define:MIXED — Fill(words, o)-->
+<p class="cap">C# 13.0 의 거절은 <code>CS0411</code> 넷입니다. <code>Fill(nums, 0)</code> 은 둘째 인수에서 <code>T = int</code> 를 얻고 배열은 연산자로 넘어가 C# 13.0
+에서도 통과합니다. <code>MIXED</code> 의 <code>Span&lt;T&gt;</code> 는 정확 추론이라 <code>T</code> 가 <code>string</code> 이어야 하는데 둘째 인수가 <code>object</code> 라
+C# 14 에서도 <code>CS0411</code> 입니다. 14부의 params 함정(<code>Concat(arr)</code> 의 <code>T = int[]</code>)이 C# 14 에서 풀린 것도 이 규칙입니다
+(<a href="#p14-v13-pm-infer">14부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-compose">
+<h3>사용자 정의 변환과 이어진다 — string 이 바로 Word 로</h3>
+<p class="why">동기의 둘째 항목 "cannot compose with other user-defined conversions" 입니다. 사용자 정의 변환은 앞뒤에 표준 변환을 하나씩 붙일 수 있는데,
+스팬 변환이 표준 암묵적 변환 목록에 들어가 그 앞자리에 설 수 있게 됐습니다. <!--CITE key=prop-14-first-class-span-types sec="Motivation"-->
+<!--CITE key=prop-14-first-class-span-types sec="Span conversions"--></p>
+<!--CODE file=ex/15/spcompose/Program.cs note=ReadOnlySpan<char> 에서 오는 변환 연산자만 가진 Word-->
+<!--CSVER v=14.0 file=ex/15/spcompose flags=-define:STR tag=str note=-define:STR, C# 14.0-->
+<!--CSVER v=13.0 file=ex/15/spcompose flags=-define:STR tag=str note=-define:STR, C# 13.0-->
+<p class="cap"><code>Word b = "  yo  ";</code> 는 <code>string</code> → <code>ReadOnlySpan&lt;char&gt;</code>(스팬 변환) → <code>Word</code>(사용자 정의) 입니다. C# 13
+에서는 첫 단계도 사용자 정의 연산자라, 사용자 정의 변환 둘을 잇지 않는 규칙에 걸려 <code>CS0029</code> 입니다. <code>.AsSpan()</code> 을 직접 부른 줄은 두 버전
+모두 됩니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-better">
+<h3>오버로드 해석 — 스팬 변환이, 그중에서도 ReadOnlySpan 이 이긴다 <span class="vt v14">C# 14.0</span></h3>
+<p class="why">제안서는 "better conversion from expression" 에 "<code>C₁</code> is an implicit span conversion and <code>C₂</code> is not" 을, "better conversion
+target" 에 "<code>T₁</code> is <code>System.ReadOnlySpan&lt;E₁&gt;</code>, <code>T₂</code> is <code>System.Span&lt;E₂&gt;</code>" 를 더합니다.
+<!--CITE key=prop-14-first-class-span-types sec="Better conversion from expression"--> <!--CITE key=prop-14-first-class-span-types sec="Better conversion target"-->
+새로 적용 가능해진 판이 "any potential ambiguity with another overload is avoided" 하도록 한 규칙입니다. <!--CITE key=prop-14-first-class-span-types sec="Betterness remarks"--></p>
+<!--CODE file=ex/15/spover/Program.cs note=M(IEnumerable|ReadOnlySpan) 과 N(Span|ReadOnlySpan)-->
+<!--CSVER v=13.0 file=ex/15/spover note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/spover flags=-define:AMBIG tag=ambig note=-define:AMBIG, C# 14.0-->
+<!--CSVER v=13.0 file=ex/15/spover flags=-define:AMBIG tag=ambig note=-define:AMBIG, C# 13.0-->
+<div class="warn"><b>함정</b> — <code>N(a)</code> 는 오류도 경고도 없이 C# 13 의 <code>Span</code> 판에서 C# 14 의 <code>ReadOnlySpan</code> 판으로 옮겨 갑니다. 두 판이
+같은 일을 하면 괜찮지만 다르면 동작이 조용히 바뀝니다. <code>Span</code> 변수를 넘기면 두 버전 모두 <code>Span</code> 판 — 항등 변환이 먼저입니다. C# 13 에서
+모호하던 <code>M(a)</code> 는 C# 14 에서 스팬 판으로 풀립니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-lookup">
+<h3>확장 메서드 찾기 — 안쪽 범위의 ReadOnlySpan 판에서 멈춘다</h3>
+<p class="why">제안서: "By allowing <i>implicit span conversions</i> in extension method lookup, we can potentially change what extension method is resolved".
+예제는 제안서의 N1·N2 그대로이고 주석은 "Prints N2 today, N1 tomorrow" 입니다. <!--CITE key=prop-14-first-class-span-types sec="Extension method lookup"--></p>
+<!--CODE file=ex/15/splookup/Program.cs note=N1 의 ReadOnlySpan 판, using 으로 들어온 N2 의 Span 판-->
+<!--CSVER v=13.0 file=ex/15/splookup note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/splookup note=C# 14.0-->
+<p class="cap">확장 메서드는 안쪽 이름 공간(<code>N1</code>)부터 찾고, 맞는 후보가 있는 첫 범위에서 멈춥니다. C# 13 에서 <code>Span&lt;string&gt;</code> 은
+<code>N1</code> 의 <code>ReadOnlySpan</code> 받는 쪽이 될 수 없어 <code>using N2</code> 까지 나갔고, C# 14 는 <code>N1</code> 에서 멈춥니다. 오버로드 해석의 "더 나은
+판" 이 아니라 찾기 범위가 결과를 바꿉니다 — <code>Span</code> 판이 항등 변환인데도 집니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-udc">
+<h3>상속을 건너는 변환 — Base 의 메서드에서 Derived 의 메서드로</h3>
+<p class="why">제안서: 스팬 변환이 표준 변환이 되면 "we can potentially change behavior when user-defined conversions are involved in a type hierarchy." 예제는
+제안서 그대로이고 <code>int</code> 쪽은 "already behaves as the new C# 14 behavior will" 입니다. <!--CITE key=prop-14-first-class-span-types sec="User-defined conversions through inheritance"--></p>
+<!--CODE file=ex/15/spudc/Program.cs note=Base.M(Span<string>) 과 Derived.M(Derived), Derived 의 두 변환 연산자-->
+<!--CSVER v=13.0 file=ex/15/spudc note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/spudc note=C# 14.0-->
+<p class="cap">오버로드 해석은 가장 파생된 형식의 메서드를 먼저 보고, 거기 적용 가능한 것이 있으면 기반의 메서드는 보지 않습니다. C# 14 에서
+<code>Span&lt;string&gt;</code> → <code>ReadOnlySpan&lt;string&gt;</code>(표준) → <code>Derived</code>(사용자 정의) 가 이어져 <code>Derived.M</code> 이 적용 가능해졌고,
+<code>Base.M(Span&lt;string&gt;)</code> 의 항등 변환은 보이지도 않습니다. <code>int</code> 는 이미 <code>int</code> → <code>long</code> → <code>Derived</code> 로 그랬습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-mgroup">
+<h3>메서드 그룹 변환은 스팬 변환을 보지 않는다</h3>
+<p class="why">제안서: "Span conversion is not considered when overload resolution is performed for a method group conversion." 그러지 않으면 기존 코드가
+<code>CS1113</code> "defined on value type 'Span&lt;int&gt;' cannot be used to create delegates" 로 깨지기 때문입니다. <!--CITE key=prop-14-first-class-span-types sec="Extension receiver"--></p>
+<!--CODE file=ex/15/spmgroup/Program.cs note=Span 판과 IEnumerable 판 — 호출과 대리자-->
+<!--CSVER v=14.0 file=ex/15/spmgroup note=C# 14.0-->
+<!--CSVER v=13.0 file=ex/15/spmgroup note=C# 13.0-->
+<p class="cap">같은 <code>a.M</code> 이 호출이면 <code>Span</code> 판, 대리자로 만들면 <code>IEnumerable</code> 판입니다. 값 형식인 <code>Span</code> 을 받는 쪽으로 하는
+확장 메서드는 대리자의 대상이 될 수 없으니 컴파일러가 그 후보를 아예 보지 않습니다. C# 13.0 은 둘 다 <code>IEnumerable</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-span-break">
+<h3>깨지는 변경 — 공변 배열이 Span 판에서 터진다 <span class="vt v14">C# 14.0</span></h3>
+<p class="why">Roslyn: C# 14 는 C# 13 이 <code>IEnumerable&lt;T&gt;</code> 판을 고르던 곳에서 <code>Span&lt;T&gt;</code> 판을 고를 수 있고, "that can lead to an
+<code>ArrayTypeMismatchException</code> at runtime if used with a covariant array". 예제는 문서의 <code>C.R</code> 에 출력을 단 것입니다.
+<!--CITE key=roslyn-compiler-breaking-changes-dotnet-10 sec="Span and ReadOnlySpan overloads are applicable in more scenarios in C# 14 and newer"--></p>
+<!--CODE file=ex/15/spcovarr/Program.cs note=R(IEnumerable)·R(Span), RO 는 ReadOnlySpan 판을 더함-->
+<!--CSVER v=13.0 file=ex/15/spcovarr note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/spcovarr note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/spcovarr flags=-define:RO tag=ro note=-define:RO, C# 14.0-->
+<div class="tblwrap"><table class="kv">
+<tr><th>Roslyn 문서의 사례</th><th>이 장의 재현</th></tr>
+<tr><td>공변 배열과 <code>Span</code> 판</td><td>이 장 — 우회로 <code>AsEnumerable()</code> 이나 <code>ReadOnlySpan</code> 판</td></tr>
+<tr><td>새 모호함(<code>Assert.Equal</code>)</td><td><a href="#p15-v14-sp-ambig">다음 장</a></td></tr>
+<tr><td><code>ReadOnlySpan</code> 선호로 바뀐 반환 형식(<code>MemoryMarshal.Cast</code>)</td><td><a href="#p15-v14-sp-ros">반환 형식</a></td></tr>
+<tr><td><code>Enumerable.Reverse</code></td><td><a href="#p15-v14-sp-reverse">재현</a> · <a href="#p15-v14-sp-bcl">.NET 10 의 대응</a></td></tr>
+<tr><td>(문서에 없음) <code>string[]</code> → <code>Span&lt;object&gt;</code></td><td><a href="#p15-v14-sp-span">앞에서</a></td></tr>
+</table></div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-ambig">
+<h3>새로 생긴 모호함 — 배열 판과 스팬 판이 함께 맞는다</h3>
+<p class="why">Roslyn: <code>Assert.Equal([2], x)</code> 가 "previously <code>Assert.Equal&lt;T&gt;(T[], T[])</code>, now ambiguous with
+<code>Assert.Equal&lt;T&gt;(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</code>", 우회로는 <code>x.AsSpan()</code> 이나 API 쪽의 <code>OverloadResolutionPriorityAttribute</code>
+입니다. <!--CITE key=roslyn-compiler-breaking-changes-dotnet-10 sec="Span and ReadOnlySpan overloads are applicable in more scenarios in C# 14 and newer"--> 제안서는
+까닭을 "previously failed type inference for the Span overload" 로 적습니다. <!--CITE key=prop-14-first-class-span-types sec="Ambiguities"--></p>
+<!--CODE file=ex/15/spambig/Program.cs note=xUnit 의 두 판을 흉내 낸 Check.Equal-->
+<!--CSVER v=13.0 file=ex/15/spambig flags=-define:OLD tag=old note=-define:OLD, C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/spambig flags=-define:OLD tag=old note=-define:OLD, C# 14.0-->
+<p class="cap">C# 13 에서는 <code>long[]</code> 에서 <code>Span&lt;T&gt;</code> 의 <code>T</code> 를 추론하지 못해 스팬 판이 후보에서 빠졌고 <code>T[]</code> 판이 뽑혔습니다.
+C# 14 는 추론이 성공해 둘 다 적용 가능해지고, 어느 판도 모든 인수에서 낫지는 않아 <code>CS0121</code> 입니다. 라이브러리가 할 수 있는 처방이 14부의 우선순위 특성입니다(<a href="#p14-v13-orp">14부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-ros">
+<h3>ReadOnlySpan 이 이겨서 깨지는 코드 — 진짜 MemoryMarshal.Cast</h3>
+<p class="why">Roslyn: "<code>ReadOnlySpan&lt;T&gt;</code> is generally preferred over <code>Span&lt;T&gt;</code> by overload resolution in C# 14", 그래서 두 판이 "both
+taking and returning the same span type" 이면 컴파일이 깨질 수 있습니다. <!--CITE key=roslyn-compiler-breaking-changes-dotnet-10 sec="Span and ReadOnlySpan overloads are applicable in more scenarios in C# 14 and newer"-->
+문서는 흉내 낸 클래스를 쓰지만 여기서는 .NET 10 의 <code>System.Runtime.InteropServices.MemoryMarshal</code> 를 그대로 부릅니다.</p>
+<!--CODE file=ex/15/spcast/Program.cs note=double[] 을 ulong 스팬으로 — Kind 는 결과의 형식 이름-->
+<!--CSVER v=13.0 file=ex/15/spcast note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/spcast note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/spcast flags=-define:OLD tag=old note=-define:OLD, C# 14.0-->
+<p class="cap">배열을 바로 넘긴 <code>Cast</code> 의 결과가 C# 13 은 <code>Span`1</code>, C# 14 는 <code>ReadOnlySpan`1</code> 입니다. 그래서 그 결과를
+<code>Span&lt;ulong&gt;</code> 에 담던 줄이 C# 14 에서 <code>CS0029</code> — 우회로는 <code>x.AsSpan()</code> 으로 <code>Span</code> 판을 고르는 것입니다.
+<code>Kind</code> 는 C# 13 의 <code>allows ref struct</code>(<a href="#p14-v13-allowsref">14부</a>)로 스팬을 박싱 없이 받습니다. <code>3FF0000000000000</code> 은
+<code>1.0</code> 의 비트입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-reverse">
+<h3>같은 a.Rev() 가 제자리 뒤집기로 — Reverse 깨짐의 재현</h3>
+<p class="why">제안서: 배열의 <code>x.Reverse()</code> 는 전에 <code>Enumerable.Reverse&lt;T&gt;(this IEnumerable&lt;T&gt;)</code> 에 묶였지만 "now it binds to
+<code>void MemoryExtensions.Reverse&lt;T&gt;(this Span&lt;T&gt;)</code>" — 이것은 "does the reversal in-place and returns <code>void</code>" 입니다.
+<!--CITE key=prop-14-first-class-span-types sec="Calling Reverse on an array"--> .NET 10 에는 배열 판이 있어 진짜 <code>Reverse</code> 로는 재현되지 않으므로
+(<a href="#p15-v14-sp-bcl">뒤에서</a>) 같은 모양의 확장 메서드 둘로 재현합니다.</p>
+<!--CODE file=ex/15/sprev/Program.cs note=OldLinq.Rev(IEnumerable) 와 Mem.Rev(Span) — 결과를 버리는 a.Rev();-->
+<!--CSVER v=13.0 file=ex/15/sprev note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/sprev note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/sprev flags=-define:VAR tag=var note=-define:VAR, C# 14.0-->
+<div class="warn"><b>함정</b> — 결과를 버리는 문장 <code>a.Rev();</code> 는 C# 13 에서 새 목록을 만들어 버릴 뿐 배열은 <code>1,2,3</code> 그대로였고, C# 14 에서는
+배열을 제자리에서 뒤집어 <code>3,2,1</code> 입니다. 컴파일 오류도 경고도 없습니다. 결과를 쓰는 <code>var copy = a.Rev();</code> 만 <code>CS0815</code> 로 드러납니다
+— 제안서의 <code>foreach (var x in a.Reverse())</code> 오류도 같은 까닭입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-bcl">
+<h3>같이 온 런타임 — .NET 10 의 Reverse(T[]) 와 CastUp <span class="vt v14">C# 14.0</span></h3>
+<p class="why">Roslyn: "On <code>net10.0</code>, there is <code>Enumerable.Reverse(this T[])</code> which takes precedence and hence the break is avoided." 깨짐은 C# 14 로
+.NET 10 보다 낮은 대상을 쓸 때뿐이고, 그것은 "an unsupported configuration" 입니다. <!--CITE key=roslyn-compiler-breaking-changes-dotnet-10 sec="Enumerable.Reverse"-->
+변환 자체는 제안서의 코드 생성 표대로 <code>op_Implicit</code>·<code>ReadOnlySpan&lt;T&gt;.CastUp</code>·<code>MemoryExtensions.AsSpan(string)</code> 에 기댑니다.
+<!--CITE key=prop-14-first-class-span-types sec="Code generation"--></p>
+<!--CODE file=ex/15/spbcl/Program.cs note=실행 중인 런타임을 리플렉션으로 — Reverse·CastUp·AsSpan, 확장 메서드의 받는 쪽-->
+<!--CSVER v=14.0 file=ex/15/spbcl note=C# 14 / .NET 10 에서의 동작-->
+<p class="cap"><code>Enumerable.Reverse</code> 는 판이 둘이고 둘째가 <code>TSource[]</code> 입니다 — 배열에는 항등 변환인 이 판이 스팬 변환보다 앞섭니다.
+<code>MemoryExtensions</code> 의 확장 메서드 가운데 <code>ReadOnlySpan`1</code> 을 받는 133개, <code>Span`1</code> 을 받는 83개가 C# 14 부터 배열에서 바로 불립니다
+(14부가 센 우선순위 -1 은 이 가운데 56개 — <a href="#p14-v13-or-bcl">14부</a>). 이 수는 실행 중인 런타임의 것이고, 컴파일러가 읽는 참조 어셈블리와 같은지는 따로
+세지 않았습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-iltool">
+<h3>IL 의 호출만 뽑는 도구 — 14부의 것 그대로</h3>
+<p>컴파일러가 만든 것은 IL 에서 봅니다. 도구는 14부(<a href="#p14-v13-pm-iltool">14부</a>)의 <code>Il.cs</code> 를 첫 줄 주석만 바꿔 가져왔습니다 —
+<code>MethodBody.GetILAsByteArray()</code> 를 연산 코드 표로 훑어 메서드·형식을 가리키는 명령만 찍습니다.</p>
+<!--CODE file=ex/15/spil/Il.cs lines=1-26 note=OpCodes 의 모든 연산 코드를 표로, 피연산자 크기-->
+<!--CODE file=ex/15/spil/Il.cs lines=27-53 note=명령을 하나씩 건너며 토큰을 ResolveMember 로 이름에-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-codegen">
+<h3>코드 생성 — string 은 C# 14 에서 AsSpan 으로</h3>
+<p class="why">제안서: "<code>MemoryExtensions.AsSpan</code> is used instead of the equivalent implicit operator defined on <code>string</code>. This means the codegen is
+different between LangVersions (the implicit operator is used in C# 13; the static method <code>AsSpan</code> is used in C# 14)." <!--CITE key=prop-14-first-class-span-types sec="Code generation"--></p>
+<!--CODE file=ex/15/spil/Program.cs note=변환 하나씩을 담은 작은 메서드들 — COV 는 공변 둘-->
+<!--CSVER v=13.0 file=ex/15/spil cmd="csrun -- Str Arr Spn Has Rev" tag=il note=C# 13.0 — 다섯 메서드의 IL-->
+<!--CSVER v=14.0 file=ex/15/spil cmd="csrun -- Str Arr Spn Has Rev" tag=il note=C# 14.0 — 같은 다섯-->
+<!--CSVER v=14.0 file=ex/15/spil flags=-define:COV cmd="csrun -- Up ArrUp" tag=cov note=-define:COV, C# 14.0-->
+<p class="cap"><code>Str</code> 는 문서 그대로 <code>String.op_Implicit</code> 에서 <code>MemoryExtensions.AsSpan</code> 으로 바뀝니다. 배열·<code>Span</code> 은 두 버전 모두
+형식의 <code>op_Implicit</code> 입니다. <code>Has</code>(<code>a.Contains(3)</code>)는 <code>Enumerable.Contains</code> 에서 <code>op_Implicit</code> +
+<code>MemoryExtensions.Contains</code> 로 — 오버로드 해석의 변화가 IL 에 그대로 보입니다. <code>Rev</code> 는 두 버전 모두 <code>Enumerable.Reverse</code> 입니다.
+스팬끼리의 공변은 <code>CastUp</code>, <code>string[]</code> 에서는 배열 공변 뒤의 <code>op_Implicit</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-etree">
+<h3>식 트리 — 스팬 판이 들어가면 해석기가 못 돌린다</h3>
+<p class="why">제안서: <code>MemoryExtensions.Contains</code> 같은 스팬 판이 "even inside expression trees" 에서도 뽑히는데 "ref structs are not supported by the
+interpreter engine". 우회로는 <code>Enumerable.Contains</code> 를 직접 부르는 것이고, LINQ-to-SQL 같은 번역기도 "need to react" 합니다.
+<!--CITE key=prop-14-first-class-span-types sec="Expression trees"--></p>
+<!--CODE file=ex/15/spetree/Program.cs note=array.Contains(num) 와 Enumerable.Contains(array, num) 를 해석 모드로-->
+<!--CSVER v=13.0 file=ex/15/spetree note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/spetree note=C# 14.0-->
+<p class="cap">C# 14 의 트리에는 <code>op_Implicit(array)</code> 가 끼어 있고, <code>preferInterpretation: true</code> 의 <code>Compile</code> 이
+<code>ArgumentException</code> 으로 멈춥니다. 같은 람다가 C# 13 에서는 <code>Enumerable.Contains</code> 라 됩니다. 트리를 읽는 쪽에는 메서드가 바뀐 것 자체가
+깨지는 변경입니다. 식 트리의 선택·명명 인수(C# 14)는 8장에서 다룹니다(<a href="#p15-v14-etargs">8장</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-alloc">
+<h3>할당 — 같은 소스가 IEnumerable 판에서 스팬 판으로</h3>
+<p class="why">블로그: 라이브러리가 이 변환으로 "framework optimizations that reduce allocations through broader zero-allocation paths" 를 얻는다고 적습니다.
+<!--CITE key=blog-introducing-csharp-14 sec="Implicit span conversions"--> 시간을 재지 않고, 14부처럼 같은 호출 100번 동안 힙에 잡힌 바이트를
+<code>GC.GetAllocatedBytesForCurrentThread()</code> 로 셉니다(<a href="#p14-v13-params-span">14부</a>).</p>
+<!--CODE file=ex/15/spalloc/Program.cs note=Total(IEnumerable<int>) 과 Total(ReadOnlySpan<int>) — arr.Total() 100번-->
+<!--CSVER v=13.0 file=ex/15/spalloc note=C# 13.0-->
+<!--CSVER v=14.0 file=ex/15/spalloc note=C# 14.0-->
+<p class="cap">C# 13 은 배열을 받는 쪽으로 쓸 수 있는 <code>IEnumerable</code> 판만 보여 호출마다 32바이트 — 배열의 열거자 객체 하나입니다. C# 14 는 스팬 판을
+골라 0 입니다. 소스는 한 글자도 바뀌지 않았습니다. 스팬 판을 더한 라이브러리는, 사용자가 C# 14 로 올리는 것만으로 할당이 사라질 수 있습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-blog">
+<h3>블로그의 Before/After 를 돌려 보면</h3>
+<p class="why">블로그의 Before 는 <code>line.AsSpan(0, 5)</code> 와 <code>new(buffer, 0, 8)</code>, After 는 <code>ProcessKey(line[..5]); // substring slice implicitly
+converts</code> 와 <code>Accumulate(buffer[..8]);</code> 입니다. <!--CITE key=blog-introducing-csharp-14 sec="Implicit span conversions"--> 두 판을 같은 방법으로 셉니다.</p>
+<!--CODE file=ex/15/spblog/Program.cs note=Before 와 After 를 두 번씩 — 두 번째 호출의 바이트와 buffer[0]-->
+<!--CSVER v=14.0 file=ex/15/spblog note=C# 14.0-->
+<!--CSVER v=13.0 file=ex/15/spblog note=C# 13.0-->
+<div class="warn"><b>함정</b> — After 는 호출마다 88바이트를 잡고, <code>Accumulate</code> 가 더한 1 이 <code>buffer</code> 에 남지 않습니다(<code>buffer[0]</code> 이
+Before 의 2 그대로). <code>string</code> 의 <code>[..5]</code> 는 새 문자열, 배열의 <code>[..8]</code> 은 새 배열을 만들고 나서 스팬으로 바뀌기 때문입니다. 그리고 이
+After 는 C# 13.0 에서도 같은 결과 — 인수 자리의 변환은 원래 있던 연산자입니다(<a href="#p15-v14-sp-list">앞에서</a>). 스팬을 원하면 여전히 <code>AsSpan</code>
+입니다.</div>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-sp-diag">
+<h3>4장의 진단 — 게이트는 있는데 '이 기능은 없다' 는 없다</h3>
+<p><code>MessageID.cs</code> 는 first-class Span types 를 C# 14 게이트로 적습니다. <!--CITE key=msgid sec="case MessageID.IDS_FeatureFirstClassSpan:"--> 이 장의
+거절 캡처에서 첫 오류를 뽑았습니다.</p>
+<!--TABLE file=out/tbl_p15b_diag4.html-->
+<p class="cap">C# 13.0 의 거절 가운데 <code>Feature 'first-class Span types' is not available</code>(<code>CS9260</code>)은 하나도 없습니다. 낮은 버전은 새 변환이
+없는 것처럼 해석하고 평범한 번호 — <code>CS1929</code>·<code>CS0411</code>·<code>CS1503</code>·<code>CS0029</code>·<code>CS0121</code> — 로 거절합니다. 제안서 주석의
+<code>CS8773</code> 도 나오지 않았습니다. 그리고 여러 사례는 거절조차 없이 다른 판을 고릅니다(<a href="#p15-v14-sp-better">앞에서</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-long">
+<h3>200칸을 넘은 진단 — 3·4장</h3>
+<p>캡처 한 줄은 200칸까지 싣습니다. 그보다 긴 진단은 실험 묶음이 종료 코드와 들어 있어야 할 문구를 확인한 뒤, 번호와 문장 전체를 이 표로 옮겼습니다.</p>
+<!--TABLE file=out/tbl_p15b_long.html-->
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card quiz" id="p15-v14-sp-quiz" data-quiz>
+<h3>4장 퀴즈 — 암묵적 Span 변환</h3>
+<p class="q">Q1. <code>void N(Span&lt;int&gt;)</code> 와 <code>void N(ReadOnlySpan&lt;int&gt;)</code> 가 있을 때 <code>N(new int[3])</code> 은 C# 13 과 C# 14 에서 각각 어느
+판일까요? 컴파일 오류가 날까요?</p>
+<p class="q">Q2. C# 14 로 올렸더니 <code>Span&lt;object&gt; s = words;</code>(<code>words</code> 는 <code>string[]</code>)가 컴파일되지 않습니다. 버그일까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> C# 13 은 <code>Span</code> 판, C# 14 는 <code>ReadOnlySpan</code> 판이고 오류는 없습니다 — 조용히 바뀝니다(<a href="#p15-v14-sp-better">앞에서</a>).<br>
+<b>A2.</b> 아닙니다. C# 13 은 그 줄을 받고 실행에서 <code>ArrayTypeMismatchException</code> 을 냈습니다. C# 14 는 명시적 스팬 변환이 있어 사용자 정의 연산자를 보지
+않고 <code>CS0266</code> 으로 미리 막습니다(<a href="#p15-v14-sp-span">앞에서</a>).</div>
+<span class="tier ill">설명용</span>
+</article>
+
+<article class="card" id="p15-v14-na"><p class="chnum">5장</p><h2>null 조건 대입 — ?. 가 대입의 왼쪽으로</h2>
+<p class="chsub">오른쪽은 받는 쪽이 null 이 아닐 때만 · ?[ ] 대입 · 복합 대입과 ??= · ++/-- 는 아직 · 식의 값과 형식 · 사슬 · 이벤트 · 안 되는 자리</p></article>
+
+<article class="card" id="p15-v14-na-why">
+<h3>왜 — 메서드는 되는데 속성 대입은 안 되던 비대칭</h3>
+<p class="why">제안서의 동기는 둘입니다 — "Parity between properties and <code>Set()</code> methods", 그리고 "Attaching event handlers in UI code".
+<!--CITE key=prop-14-null-conditional-assignment sec="Motivation"--> 블로그의 Before 는 <code>if (customer is not null) { customer.Order = …; customer.Total += …; }</code>,
+After 는 그 두 줄을 <code>customer?.</code> 로 쓴 것입니다. <!--CITE key=blog-introducing-csharp-14 sec="Null-conditional assignment"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>앞에서 본 것</th><th>이 장에서 더 가는 곳</th></tr>
+<tr><td>C# 6 의 <code>?.</code>·<code>?[]</code> — 왼쪽을 한 번만 평가(<a href="#p7-v6-nullcond">7부</a>)</td><td>대입에서도 한 번 — 오른쪽은 아예 건너뛴다</td></tr>
+<tr><td><code>?.Invoke</code> 로 이벤트 올리기(<a href="#p7-v6-nullcond-event">7부</a>)</td><td>처리기 붙이기·떼기 <code>?.E += h</code></td></tr>
+<tr><td>C# 14 미리 보기 — <code>=</code>·<code>+=</code>·이벤트, <code>++</code> 는 <code>CS1059</code>(<a href="#p7-v6-nullcond-assign14">7부</a>)</td><td><code>?[]</code>·<code>??=</code>·식의 형식·사슬·안 되는 자리</td></tr>
+<tr><td>C# 6 으로 컴파일하면 "C# 14 를 쓰라"(<a href="#p7-v6-nullcond-lvalue6">7부</a>)</td><td>— (그대로)</td></tr>
+</table></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card" id="p15-v14-nullassign">
+<h3>null 조건 대입 (null-conditional assignment) <span class="vt v14">C# 14.0</span></h3>
+<p class="why">왜 — whats-new: "The right side of the <code>=</code> operator is evaluated only when the left side isn't null. If <code>customer</code> is null, the code doesn't
+call <code>GetCurrentOrder</code>." <!--CITE key=whatsnew-14 sec="Null-conditional assignment"--> <!--CITE key=msgid sec="case MessageID.IDS_FeatureNullConditionalAssignment:"-->
+제안서는 문장으로 쓰인 <code>P?.A = B</code> 를 "equivalent to <code>if (P is not null) P.A = B;</code>, except that <code>P</code> is only evaluated once" 로 정의합니다.
+<!--CITE key=prop-14-null-conditional-assignment sec="Specification"--></p>
+<!--CODE file=ex/15/nabasic/Program.cs note=Find 와 GetOrder 가 불릴 때마다 한 줄씩 찍는다-->
+<!--CSVER v=14.0 file=ex/15/nabasic note=C# 14.0-->
+<!--CSVER v=13.0 file=ex/15/nabasic note=C# 13.0 으로 내리면-->
+<p class="cap"><code>Find</code> 는 문장마다 한 번씩 불리고, <code>bob</code> 이 null 이면 <code>GetOrder("B1")</code> 은 불리지 않습니다. 이것은 C# 6 부터 메서드 호출
+<code>?.SetOrder(GetOrder("B2"))</code> 의 인수에 적용되던 규칙과 같습니다 — 제안서가 말한 "parity" 입니다. C# 13.0 은 대입 두 줄을 게이트 그대로
+<code>CS9260</code> "Feature 'null conditional assignment'" 로 거절하고, 메서드 호출 줄은 받습니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-na-index">
+<h3>?[ ] 의 왼쪽 대입 — 배열과 사전</h3>
+<p class="why">제안서의 세 번째 예는 <code>arr?[42] = new object();</code> 이고, 문법은 "<i>null_conditional_element_access</i> <i>assignment_operator</i>
+<i>expression</i>" 입니다. <!--CITE key=prop-14-null-conditional-assignment sec="Summary"--> <!--CITE key=prop-14-null-conditional-assignment sec="Specification"--></p>
+<!--CODE file=ex/15/naindex/Program.cs note=null 과 진짜 배열·사전을 같은 Update 에-->
+<!--CSVER v=14.0 file=ex/15/naindex note=C# 14.0-->
+<p class="cap"><code>Update(null, null)</code> 은 아무것도 하지 않고 예외도 없습니다. 진짜 배열·사전에는 <code>=</code>·<code>+=</code>·<code>-=</code> 가 모두 먹고, 사전의
+인덱서 setter 는 없는 키 <code>ink</code> 를 더합니다(둘째 줄이 <code>pen</code>·<code>ink</code> 의 값 <code>2 7</code>). <code>?[]</code> 가 막는 것은 받는 쪽의 null 뿐이라 범위를 벗어난 인덱스는 그대로
+<code>IndexOutOfRangeException</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-na-compound">
+<h3>복합 대입과 ??= — 되고, ++ 와 -- 는 안 된다</h3>
+<p class="why">제안서: "All forms of compound assignment are allowed." 그리고 <code>a?.b ??= c</code> 를 "if (a is not null) { if (a.b is null) { a.b = c; } }" 로
+풉니다. 증감 연산자는 "not supported" — <code>a?.b++</code> 와 <code>--a?.b</code> 둘 다 오류입니다. <!--CITE key=prop-14-null-conditional-assignment sec="Detailed design"-->
+<!--CITE key=prop-14-null-conditional-assignment sec="Complex examples"--></p>
+<!--CODE file=ex/15/nacompound/Program.cs note=+= · *= · ??= 를 on 과 off 에, INC·PREDEC 는 증감 연산자-->
+<!--CSVER v=14.0 file=ex/15/nacompound note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/nacompound flags=-define:PREDEC tag=predec note=-define:PREDEC — --on?.Hits-->
+<p class="cap"><code>off?.Hits += Step(4)</code> 의 <code>Step(4)</code> 는 불리지 않습니다 — 복합 대입의 오른쪽도 같은 규칙입니다. <code>3 * 2 = 6</code>, 그리고
+<code>??=</code> 는 첫 값 <code>first</code> 만 남깁니다. 앞에 붙인 <code>--</code> 도 뒤에 붙인 <code>++</code>(<a href="#p7-v6-nullcond-assign14">7부</a>)와 같은
+<code>CS1059</code> "must be a variable, property or indexer" 입니다 — 게이트가 아니라 C# 14 에서도 막혀 있는 자리입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-na-type">
+<h3>대입식의 값 — null 이 될 수 있는 형식으로</h3>
+<p class="why">제안서: 문장이 아닌 자리의 <code>P?.A = B</code> 는 "<code>(P is null) ? (T?)null : (P.A = B)</code>" 입니다. 그래서 값을 쓰려면 "the expression's
+type must be known to be of a value type or a reference type" — 제약 없는 <code>T</code> 는 "'T' cannot be made nullable" 입니다.
+<!--CITE key=prop-14-null-conditional-assignment sec="Specification"--> <!--CITE key=prop-14-null-conditional-assignment sec="Detailed design"--></p>
+<!--CODE file=ex/15/natype/Program.cs note=대입식을 제네릭 Kind<T> 에 넘겨 T 를 본다-->
+<!--CSVER v=14.0 file=ex/15/natype note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/natype flags=-define:GENERIC tag=generic note=-define:GENERIC — 제약 없는 T 의 대입식 값-->
+<p class="cap"><code>int</code> 필드에 대입한 식의 형식은 <code>Nullable`1</code>(<code>int?</code>)이고, 받는 쪽이 null 이면 값도 null 입니다. <code>string</code> 은
+그대로 <code>String</code> 입니다. 복합 대입 <code>none?.N += 1</code> 도 <code>int?</code> 로 받을 수 있습니다. 같은 대입을 문장으로만 쓰면 제약 없는 <code>T</code>
+에도 됩니다 — <code>CS8978</code> 은 값을 쓸 때만 납니다. C# 6 의 <code>?.</code> 읽기와 같은 규칙입니다(<a href="#p7-v6-nullcond-generic">7부</a>).</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-na-chain">
+<h3>사슬과 겹친 대입 — 어디서 멈추나</h3>
+<p class="why">제안서의 복잡한 예: <code>a?.b?.c = d</code> 는 <code>a</code>, 그다음 <code>a.b</code> 가 null 이면 멈추고, <code>a?.b = c?.d = e?.f</code> 는 오른쪽부터
+"<code>a?.b = (c?.d = e?.f)</code>" 입니다. <!--CITE key=prop-14-null-conditional-assignment sec="Complex examples"--></p>
+<!--CODE file=ex/15/nachain/Program.cs note=Next 가 있는 a 와 없는 lone, 그리고 세 겹 대입-->
+<!--CSVER v=14.0 file=ex/15/nachain note=C# 14.0-->
+<p class="cap"><code>lone?.Next?.Name</code> 은 <code>lone.Next</code> 가 null 이라 멈춰 <code>lone</code> 은 그대로입니다. 세 겹 대입은 <code>e.Tag</code> 를
+<code>c.Tag</code> 에, 그 값을 <code>a.Tag</code> 에 넣습니다. 마지막 줄의 함정 — 오른쪽이 <code>none?.Tag</code> 처럼 null 로 끝나도 왼쪽 <code>a</code> 가 null
+이 아니면 대입은 일어나 <code>a.Tag</code> 가 null 이 됩니다. <code>?.</code> 는 받는 쪽만 봅니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-na-event">
+<h3>이벤트 처리기 붙이기와 떼기 — UI 코드의 동기</h3>
+<p class="why">제안서의 둘째 예가 <code>c?.E += () =&gt; { … };</code> 이고, 동기 둘째가 "Attaching event handlers in UI code" 입니다.
+<!--CITE key=prop-14-null-conditional-assignment sec="Summary"--> <!--CITE key=prop-14-null-conditional-assignment sec="Motivation"--></p>
+<!--CODE file=ex/15/naevent/Program.cs note=아직 만들지 않은 버튼일 수 있는 Form.Ok 에 +=·-=-->
+<!--CSVER v=14.0 file=ex/15/naevent note=C# 14.0-->
+<!--CSVER v=14.0 file=ex/15/naevent flags=-define:ASSIGN tag=assign note=-define:ASSIGN — ?.Click = log-->
+<p class="cap">버튼이 없는 <code>empty</code> 에는 아무 일도 없고, 붙인 처리기는 한 번 불린 뒤 <code>-=</code> 로 떨어집니다. 이벤트는 <code>?.</code> 가 붙어도 선언한
+형식 밖에서는 <code>+=</code>·<code>-=</code> 만 됩니다 — <code>=</code> 는 이벤트의 규칙 그대로 <code>CS0070</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-na-struct">
+<h3>안 되는 자리 (1) — 받는 쪽이 값 형식이면</h3>
+<p class="why">제안서: 이 기능은 "generally doesn't work when the receiver of the conditional access is a value type" — null 이 될 수 없는 구조체에는 <code>?.</code>
+자체가 안 되고, <code>MyStruct?</code> 는 "<code>a.Value</code> is not a variable" 이라 대입할 곳이 없습니다. <!--CITE key=prop-14-null-conditional-assignment sec="Detailed design"--></p>
+<!--CODE file=ex/15/nanot/Program.cs note=ref 를 돌려주는 Slot, 그리고 #if 넷 — 구조체 둘, ref, 분해-->
+<!--CSVER v=14.0 file=ex/15/nanot flags=-define:STRUCT tag=struct note=-define:STRUCT — Point p-->
+<!--CSVER v=14.0 file=ex/15/nanot flags=-define:NULLABLE tag=nullable note=-define:NULLABLE — Point? q-->
+<p class="cap">구조체 <code>p</code> 에는 <code>?.</code> 자체가 안 되어 <code>CS0023</code> 이고, <code>Point?</code> 는 <code>?.</code> 는 되지만 <code>q.Value</code> 의 복사본에
+쓰게 되므로 <code>CS0131</code> 입니다. 구조체를 고칠 거라면 지역 변수로 꺼내 고친 뒤 다시 넣어야 합니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-na-ref">
+<h3>안 되는 자리 (2) — 여전히 변수는 아니다</h3>
+<p class="why">제안서: "Conditional access expressions are still not lvalues, and it's still not allowed to e.g. take a <code>ref</code> to them", 분해 대입의 왼쪽도
+안 됩니다. 한편 ref 를 돌려주는 메서드 호출 <code>c?.M() = 42</code> 는 "equivalent to: if (c is not null) c.M() = 42;" 입니다.
+<!--CITE key=prop-14-null-conditional-assignment sec="Detailed design"--> <!--CITE key=prop-14-null-conditional-assignment sec="Complex examples"--></p>
+<!--CSVER v=14.0 file=ex/15/nanot note=C# 14.0 — 기본 판(코드는 앞 장)-->
+<!--CSVER v=14.0 file=ex/15/nanot flags=-define:REF tag=ref note=-define:REF — ref c?.V-->
+<!--CSVER v=14.0 file=ex/15/nanot flags=-define:DECON tag=decon note=-define:DECON — (c?.V, y) = (1, 2)-->
+<p class="cap"><code>c?.Slot() = 42</code> 는 <code>c</code> 의 숨은 필드에 42 를 쓰고, null 인 <code>d</code> 에는 <code>Slot()</code> 을 부르지도 않습니다. <code>?.</code>
+가 들어간 식은 대입의 왼쪽이 될 수 있을 뿐 변수가 되지는 않아, <code>ref</code> 인수는 <code>CS1510</code>, 분해 대입은 <code>CS0131</code> 입니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-na-diag">
+<h3>5장의 진단 — 게이트 하나, 나머지는 옛 번호</h3>
+<p>이 장의 거절 캡처에서 첫 오류의 번호와 문장 앞부분을 뽑았습니다. <!--CITE key=msgid sec="case MessageID.IDS_FeatureNullConditionalAssignment:"--></p>
+<!--TABLE file=out/tbl_p15b_diag5.html-->
+<p class="cap">4장과 달리 이 기능의 게이트는 C# 13.0 에서 <code>CS9260</code> 으로 이름을 대고 나옵니다. C# 14 에서도 막힌 자리는 모두 기능 이름이 들어가지 않은 일반 번호 —
+<code>CS1059</code>·<code>CS8978</code>·<code>CS0070</code>·<code>CS0023</code>·<code>CS0131</code>·<code>CS1510</code> — 를 그대로 씁니다.</p>
+<span class="tier a">실행 검증</span>
+</article>
+
+<article class="card" id="p15-v14-mid-docs">
+<h3>3–5장에서 문서와 컴파일러가 다른 곳</h3>
+<p>제안서·Roslyn 문서·블로그의 문장을 이 덱의 SDK(Roslyn 5.0)로 돌려 본 결과입니다(2026-10 기준). <!--CITE key=prop-14-field-keyword sec="Field usage warnings"-->
+<!--CITE key=prop-14-first-class-span-types sec="Motivation"--></p>
+<div class="tblwrap"><table class="kv">
+<tr><th>문서</th><th>컴파일러·런타임</th></tr>
+<tr><td>제안서: 필드 없는 속성의 <code>[field: …]</code> 는 오류</td><td>경고 <code>CS0657</code>, 특성을 버리고 실행(<a href="#p15-v14-fk-attr">3장</a>)</td></tr>
+<tr><td>제안서: 빈 <code>set</code> 에 nullable 경고</td><td>nullable 경고 없음, 실행은 <code>NullReferenceException</code>(<a href="#p15-v14-fk-nullset">3장</a>)</td></tr>
+<tr><td>제안서: 뒷받침 필드에 <code>CS0414</code>·<code>CS0649</code></td><td>나오지 않음 — 쓰기만 하면 <code>CS9266</code>(<a href="#p15-v14-fk-warn">3장</a>)</td></tr>
+<tr><td>Roslyn: 지역 변수 <code>field</code> 는 <code>CS9272</code></td><td><code>CS9273</code>(<a href="#p15-v14-fk-capture">3장</a>, <a href="#p14-v13-fk-local">14부</a>)</td></tr>
+<tr><td>제안서: <code>arr.StartsWith(1)</code> 는 C# 13 에서 <code>CS8773</code></td><td><code>CS1929</code> — 스팬 게이트의 <code>CS9260</code> 은 어디에도 없음(<a href="#p15-v14-sp-diag">4장</a>)</td></tr>
+<tr><td>Roslyn 깨지는 변경 목록</td><td>목록에 없는 <code>string[]</code> → <code>Span&lt;object&gt;</code> 의 <code>CS0266</code>(<a href="#p15-v14-sp-span">4장</a>)</td></tr>
+<tr><td>블로그: <code>line[..5]</code> 가 스팬으로</td><td>새 문자열·새 배열을 만든 뒤의 변환, 88바이트(<a href="#p15-v14-sp-blog">4장</a>)</td></tr>
+</table></div>
+<span class="tier b">문서 근거</span>
+</article>
+
+<article class="card quiz" id="p15-v14-na-quiz" data-quiz>
+<h3>5장 퀴즈 — null 조건 대입</h3>
+<p class="q">Q1. <code>order?.Total += Price(item);</code> 에서 <code>order</code> 가 null 이면 <code>Price</code> 는 불릴까요?</p>
+<p class="q">Q2. <code>a?.Tag = b?.Tag;</code> 에서 <code>a</code> 는 null 이 아니고 <code>b</code> 는 null 입니다. <code>a.Tag</code> 는 그대로일까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A1.</b> 불리지 않습니다. 복합 대입의 오른쪽도 받는 쪽이 null 이 아닐 때만 평가합니다(<a href="#p15-v14-na-compound">앞에서</a>).<br>
+<b>A2.</b> 아닙니다. <code>?.</code> 는 왼쪽의 받는 쪽 <code>a</code> 만 봅니다. 오른쪽 값이 null 이므로 <code>a.Tag</code> 에 null 이 들어갑니다(<a href="#p15-v14-na-chain">앞에서</a>).</div>
+<span class="tier ill">설명용</span>
 </article>
