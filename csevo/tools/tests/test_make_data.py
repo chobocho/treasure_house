@@ -173,6 +173,35 @@ class CiteKeys(unittest.TestCase):
         self.assertEqual(rows['std-classes'][1], 'standard/classes.txt')
         self.assertEqual(rows['hist-pdc-2000'][1], 'history/pdc-2000.txt')
 
+    def test_history_names_are_tidied(self):
+        # 받은 HTML 의 <title> 은 사이트 꼬리·검색어 꼬리가 붙어 있고, 연재 쪽마다 같아
+        # 출처 목록에서 줄을 구별할 수 없었다(리뷰 2, p17-src-12).
+        cw = 'The A-Z of Programming Languages: C# - C#, C, f#, a-z of programming languages - Computerworld'
+        paths = ['history/artima-the-c-design-process.txt',
+                 'history/cw-hejlsberg-2008-1.txt', 'history/cw-hejlsberg-2008-2.txt',
+                 'history/ms-ecma-2001.txt', 'history/pdc-2000.txt',
+                 'history/ms-truth-about-delegates.txt',
+                 'history/sun-about-delegates.txt']
+        titles = {'history/artima-the-c-design-process': 'artima - The C# Design Process',
+                  'history/cw-hejlsberg-2008-1': cw,
+                  'history/cw-hejlsberg-2008-2': cw.replace('C#, C, f#, a-z', 'a-z'),
+                  'history/ms-ecma-2001': 'ECMA Standardizes Key .NET Technologies - Source',
+                  'history/pdc-2000': 'PDC 2000 | Microsoft Learn'}
+        rows = dict((k, n) for k, n, f in make_data.cite_keys(paths, titles))
+        self.assertEqual(rows['hist-artima-the-c-design-process'],
+                         'Artima 인터뷰 “The C# Design Process”')
+        self.assertEqual(rows['hist-cw-hejlsberg-2008-1'],
+                         'Computerworld 인터뷰 “The A-Z of Programming Languages: C#” 1/2쪽')
+        self.assertEqual(rows['hist-cw-hejlsberg-2008-2'],
+                         'Computerworld 인터뷰 “The A-Z of Programming Languages: C#” 2/2쪽')
+        self.assertEqual(rows['hist-ms-ecma-2001'],
+                         'Microsoft 보도자료 “ECMA Standardizes Key .NET Technologies”')
+        self.assertEqual(rows['hist-pdc-2000'], 'Microsoft Learn “PDC 2000”')
+        self.assertEqual(rows['hist-ms-truth-about-delegates'],
+                         'Microsoft 기술 문서 “The Truth about Delegates”')
+        self.assertEqual(rows['hist-sun-about-delegates'],
+                         'Sun 백서 “About Microsoft\'s "Delegates"”')
+
 
 FEATURES = ('id\tversion\tkind\ttitle\tcite-key\tcite-sec\tslide-id\tmsgid\n'
             'rec\t9\tlang\trecord\twhatsnew-9\tRecord types\tp10-rec\tIDS_FeatureRecords\n'

@@ -211,6 +211,38 @@ NAMES = {
 }
 
 
+# <title> 이 없는 역사 문서(웹 아카이브의 옛 페이지)는 본문 첫 제목에서 손으로 옮긴다.
+HIST_NAMES = {
+    'ms-truth-about-delegates': 'Microsoft 기술 문서 “The Truth about Delegates”',
+    'sun-about-delegates': 'Sun 백서 “About Microsoft\'s "Delegates"”',
+}
+
+
+def hist_name(stem, titles, paths):
+    """역사 문서의 배지 이름. 받은 <title> 에서 사이트 꼬리('- Source',
+    '| Microsoft Learn', Computerworld 의 검색어 꼬리)를 떼고 출처를 앞에 단다.
+    Computerworld 연재는 쪽마다 제목이 같아 'N/전체쪽' 을 붙여야 줄이 갈린다."""
+    if stem in HIST_NAMES:
+        return HIST_NAMES[stem]
+    t = titles.get('history/' + stem, stem)
+    m = re.match(r'artima - (.+)$', t)
+    if m:
+        return 'Artima 인터뷰 “%s”' % m.group(1)
+    m = re.match(r'(cw-.+)-(\d+)$', stem)
+    if m:
+        total = sum(1 for q in paths
+                    if re.match(r'history/%s-\d+\.txt$' % re.escape(m.group(1)), q))
+        head = t.split(' - ')[0]     # 뒤는 검색어 꼬리와 사이트 이름
+        return 'Computerworld 인터뷰 “%s” %s/%d쪽' % (head, m.group(2), total)
+    m = re.match(r'(.+?)\s+-\s+Source$', t)
+    if m:
+        return 'Microsoft 보도자료 “%s”' % m.group(1)
+    m = re.match(r'(.+?)\s+\|\s+Microsoft Learn$', t)
+    if m:
+        return 'Microsoft Learn “%s”' % m.group(1)
+    return t
+
+
 def cite_keys(paths, titles):
     """FETCHED 의 경로들 → [(키, 이름, 파일)] 키 차례."""
     rows = []
@@ -242,7 +274,7 @@ def cite_keys(paths, titles):
         m = re.match(r'history/(.+)\.txt$', p)
         if m:
             rows.append(('hist-' + m.group(1),
-                         titles.get('history/' + m.group(1), m.group(1)), p))
+                         hist_name(m.group(1), titles, paths), p))
             continue
         m = re.match(r'standard/(.+)\.txt$', p)
         if m:
