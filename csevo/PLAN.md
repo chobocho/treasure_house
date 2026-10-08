@@ -823,3 +823,6 @@ comments + Korean header line; two review passes before push.
   COOL "January 1999" still unsourced → 미확인 on the slide. 26 claims, 13 glossary.
 - Orchestrator: <!--GLOSSARY--> now expands, so the glossary duplicate check ran for the first time: removed
   p06b "ref struct" (p08c keeps it), p16 "RuntimeFeature" (p09 keeps) and p16 "ECMA-334" (p06b keeps).
+- Part 1 + appendix commit is f791fcc (pushed; deck 2759, `make all` green without SKEL). Step 8: index.html card in a new
+  "🟪 C# 시리즈" section and README line (numbers from data: 18 releases, 183 gates, 1,992 examples, 3,369 captures,
+  114 generated tables, 150 quizzes, 461 glossary terms); history.md entry. Next: step 9 reviews 1 and 2.
