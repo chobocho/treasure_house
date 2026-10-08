@@ -1,4 +1,4 @@
-// 슬라이드 p15-v14-sp-infer — 스팬을 거치는 형식 추론, C# 14
+// 슬라이드 p15-v14-sp-infer — 스팬을 거치는 형식 유추, C# 14
 using System;
 
 class Program

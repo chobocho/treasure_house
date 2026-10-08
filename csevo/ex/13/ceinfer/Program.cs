@@ -1,4 +1,4 @@
-// 슬라이드 p13-v12-ce-infer — 컬렉션 식과 형식 추론, C# 12
+// 슬라이드 p13-v12-ce-infer — 컬렉션 식과 형식 유추, C# 12
 using System;
 using System.Collections.Generic;
 

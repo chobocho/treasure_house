@@ -1,4 +1,4 @@
-// 슬라이드 p7-v6-dictinit-once — 인덱서 인자는 한 번만, C# 6.0
+// 슬라이드 p7-v6-dictinit-once — 인덱서 인수는 한 번만, C# 6.0
 using System;
 using System.Collections.Generic;
 

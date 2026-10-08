@@ -1,4 +1,4 @@
-// 슬라이드 p4-v3-ext-near — 가까운 이름공간이 이긴다, C# 3.0
+// 슬라이드 p4-v3-ext-near — 가까운 네임스페이스가 이긴다, C# 3.0
 using System;
 
 namespace Outer

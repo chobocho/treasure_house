@@ -1,4 +1,4 @@
-// 슬라이드 p9-v8-coalesce — 널 병합 할당 ??=, C# 8.0
+// 슬라이드 p9-v8-coalesce — null 병합 할당 ??=, C# 8.0
 using System;
 using System.Collections.Generic;
 

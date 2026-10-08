@@ -1,4 +1,4 @@
-// 슬라이드 p15-v14-sp-list — 다섯 가지 암묵적 Span 변환, C# 14
+// 슬라이드 p15-v14-sp-list — 다섯 가지 암시적 Span 변환, C# 14
 using System;
 
 class Program

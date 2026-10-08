@@ -115,7 +115,7 @@ DIAG7 = [
     ('mggeneric', 'noext', 'C# 13.0 — 확장 메서드를 빼면'),
     ('mgcons', 'v12', 'C# 12.0 — 제약을 못 맞추는 M<string>'),
     ('mgbreak', 'v12', 'C# 12.0 — params 가 다른 두 M'),
-    ('mgbreak', 'bad', '문서의 Test1 — 순서에 따라 달랐던 추론'),
+    ('mgbreak', 'bad', '문서의 Test1 — 순서에 따라 달랐던 유추'),
     ('iibasic', 'v12', 'C# 12.0 에서 [^1] = 0'),
     ('iirange', 'v12', 'C# 12.0 에서 Slice 로 낮추는 [1..3]'),
     ('iitrap', 'dict', 'Dictionary<int, string> 에 [^1]'),

@@ -1,4 +1,4 @@
-// 슬라이드 p5-v4-dyn-refarg — ref 매개변수에 dynamic 인자, C# 4.0
+// 슬라이드 p5-v4-dyn-refarg — ref 매개변수에 dynamic 인수, C# 4.0
 using System;
 
 class Program

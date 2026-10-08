@@ -1,4 +1,4 @@
-// 슬라이드 p4-v3-var-rules — var 가 거절되는 다섯 자리, C# 3.0
+// 슬라이드 p4-v3-var-rules — var 가 거절되는 여섯 자리, C# 3.0
 using System;
 
 class App

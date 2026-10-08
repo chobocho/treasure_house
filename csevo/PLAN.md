@@ -844,3 +844,11 @@ comments + Korean header line; two review passes before push.
   p03/p03b/p07/p08/p08c each run twice, identical. `make all` green: 127 tests, 2759 slides, 3488 captures.
   Left for review 2: p9-v8-nrt-wae and p11-v10-quiz (MSBuild behaviour, no capture), p15-v14-fk-null Bad CS9264 (true by
   run, not shown), glossary near-duplicates. Findings: scratch/review1/findings_*.md, orchestrator_todo.md.
+- Review 2 (reader flow, 2026-10-08) done: 2 reviewers per round, 4 rounds (sessions died at 15:46 and 16:11; resumed from
+  scratch/review2/orchestrator.md). 260 findings (용어 74 · 링크 70 · 문체 57 · 흐름 44 · 퀴즈 6 · 증거불일치 6 · 사실오류 2).
+  Orchestrator: new part-2 ending p2-sum / p2-quiz / p2-end (deck 2759 → 2762); p3-intro chapter links; p12-v11-rq-diag and
+  p15-v14-xm-resolve reordered; glossary 461 → 441 (20 near-duplicates merged); deck-wide term pass (scratch/review2/termpass.py:
+  서명→시그니처, 이름공간→네임스페이스, 인자→인수, 추론→유추, 질의 식→쿼리 식, 개체→객체 초기화자, 암묵적→암시적, 재대입→재할당,
+  반환형→반환 형식, with particles); double-escaped gate names fixed at the source (make_data unescapes resx, CITE label unescapes
+  sec); generated rows 무명/추론 fixed in exps + out + manifest. Kept on purpose: duplicate experiments across parts (back-linked),
+  data/*.tsv provenance in release tables, capture-width asides, p15-v14-fk-null CS9264. Open: p17-src-12 display names.

@@ -1,4 +1,4 @@
-// 슬라이드 p4-v3-linq-argcheck — 인자 검사는 바로, C# 3.0
+// 슬라이드 p4-v3-linq-argcheck — 인수 검사는 바로, C# 3.0
 using System;
 using System.Collections.Generic;
 using System.Linq;

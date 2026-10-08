@@ -1,4 +1,4 @@
-// 슬라이드 p5-v4-dyn-subexpr — dynamic 아닌 인자는 정적 형식, C# 4.0
+// 슬라이드 p5-v4-dyn-subexpr — dynamic 아닌 인수는 정적 형식, C# 4.0
 using System;
 
 class Program

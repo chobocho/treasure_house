@@ -1,4 +1,4 @@
-// 슬라이드 p12-v11-raw-u8 — 원시 문자열에 u8 을 붙이면, C# 11.0
+// 슬라이드 p12-v11-utf8-raw — 원시 문자열에 u8 을 붙이면, C# 11.0
 using System;
 using System.Text;
 

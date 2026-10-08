@@ -1,4 +1,4 @@
-// 슬라이드 p6-v5-trap-lazyarg — 인자 검사가 늦게 터진다, C# 5.0
+// 슬라이드 p6-v5-trap-lazyarg — 인수 검사가 늦게 터진다, C# 5.0
 using System;
 using System.Threading.Tasks;
 

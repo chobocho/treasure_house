@@ -1,4 +1,4 @@
-// 슬라이드 p6-v5-caller-argexpr — 인자 식을 문자열로, C# 10.0
+// 슬라이드 p6-v5-caller-argexpr — 인수 식을 문자열로, C# 10.0
 using System;
 using System.Runtime.CompilerServices;
 

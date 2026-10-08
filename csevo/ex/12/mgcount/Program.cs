@@ -1,4 +1,4 @@
-// 슬라이드 p12-v11-mgcache-trap — 대리자의 동일성에 기댄 코드, C# 11.0
+// 슬라이드 p12-v11-mgcache-trap — 대리자의 정체에 기댄 코드, C# 11.0
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;

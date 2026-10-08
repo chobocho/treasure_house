@@ -1,4 +1,4 @@
-// 슬라이드 p3-v2-partial-ns — 이름공간을 빠뜨린 조각, C# 2.0
+// 슬라이드 p3-v2-partial-ns — 네임스페이스를 빠뜨린 조각, C# 2.0
 using System;
 
 partial class Order                  // meant to be Shop.Order

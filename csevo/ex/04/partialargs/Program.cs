@@ -1,4 +1,4 @@
-// 슬라이드 p4-v3-partial-args — 구현 없으면 인자째 사라진다, C# 3.0
+// 슬라이드 p4-v3-partial-args — 구현 없으면 인수째 사라진다, C# 3.0
 using System;
 using System.Reflection;
 

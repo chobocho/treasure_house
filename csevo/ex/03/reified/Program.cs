@@ -1,4 +1,4 @@
-// 슬라이드 p3-v2-reified — 형식 인자는 실행 중에도 남는다, C# 2.0
+// 슬라이드 p3-v2-reified — 형식 인수는 실행 중에도 남는다, C# 2.0
 using System;
 using System.Collections.Generic;
 

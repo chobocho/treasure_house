@@ -1,4 +1,4 @@
-// 슬라이드 p14-v13-pp-match — 두 조각의 서명이 어긋나면, C# 13.0
+// 슬라이드 p14-v13-pp-match — 두 조각의 시그니처가 어긋나면, C# 13.0
 using System;
 
 partial class C

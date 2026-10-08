@@ -1,4 +1,4 @@
-// 슬라이드 p10-v9-top-sig — 진입점의 서명은 본문이 정한다, C# 9.0
+// 슬라이드 p10-v9-top-sig — 진입점의 시그니처는 본문이 정한다, C# 9.0
 using System;
 using System.Reflection;
 using System.Threading.Tasks;

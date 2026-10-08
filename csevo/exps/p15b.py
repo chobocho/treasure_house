@@ -155,7 +155,7 @@ DIAG3 = [
     ('fkhand', 'ref', 'ref 를 돌려주는 속성의 ref field'),
 ]
 DIAG4 = [
-    ('spinfer', 'v13', 'C# 13.0 — 배열에서 ReadOnlySpan<T> 의 T 추론'),
+    ('spinfer', 'v13', 'C# 13.0 — 배열에서 ReadOnlySpan<T> 의 T 유추'),
     ('spcov', 'v13', 'C# 13.0 — Span<string> 을 ReadOnlySpan<object> 로'),
     ('spconv', 'cov13.0', 'C# 13.0 — ReadOnlySpan<string> 을 <object> 로'),
     ('spover', 'ambig13.0', 'C# 13.0 — IEnumerable<int> 판과 스팬 판'),

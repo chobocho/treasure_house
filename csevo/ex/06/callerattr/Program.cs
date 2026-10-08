@@ -1,4 +1,4 @@
-// 슬라이드 p6-v5-caller-attr — 특성 인자와 partial 메서드, C# 5.0
+// 슬라이드 p6-v5-caller-attr — 특성 인수와 partial 메서드, C# 5.0
 using System;
 using System.Reflection;
 using System.Runtime.CompilerServices;

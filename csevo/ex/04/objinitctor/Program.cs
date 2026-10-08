@@ -1,4 +1,4 @@
-// 슬라이드 p4-v3-objinit-ctor — 생성자 인자와 초기화자를 함께, C# 3.0
+// 슬라이드 p4-v3-objinit-ctor — 생성자 인수와 초기화자를 함께, C# 3.0
 using System;
 
 class Window

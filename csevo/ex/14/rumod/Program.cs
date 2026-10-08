@@ -1,4 +1,4 @@
-// 슬라이드 p14-v13-ru-mod — unsafe 반복기의 서명과 몸체, C# 13.0
+// 슬라이드 p14-v13-ru-mod — unsafe 반복기의 시그니처와 몸체, C# 13.0
 using System;
 using System.Collections.Generic;
 

@@ -1,4 +1,4 @@
-// 슬라이드 p3-v2-anon-infer — 익명 메서드에서 형식 인자 유추, C# 2.0
+// 슬라이드 p3-v2-anon-infer — 익명 메서드에서 형식 인수 유추, C# 2.0
 using System;
 using System.Collections.Generic;
 

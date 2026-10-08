@@ -1,4 +1,4 @@
-// 슬라이드 p6-v5-whenallorder — WhenAll 의 결과는 인자 차례, C# 5.0
+// 슬라이드 p6-v5-whenallorder — WhenAll 의 결과는 인수 차례, C# 5.0
 using System;
 using System.Threading.Tasks;
 

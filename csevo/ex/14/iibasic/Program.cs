@@ -1,4 +1,4 @@
-// 슬라이드 p14-v13-idxinit — 개체 초기화자의 암시적 인덱스 ^, C# 13
+// 슬라이드 p14-v13-idxinit — 객체 초기화자의 암시적 인덱스 ^, C# 13
 using System;
 
 public class TimerRemaining

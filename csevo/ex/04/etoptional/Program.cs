@@ -1,4 +1,4 @@
-// 슬라이드 p4-v3-et-cs14 — 식 트리 안의 선택적·명명된 인자, C# 14
+// 슬라이드 p4-v3-et-cs14 — 식 트리 안의 선택적·명명된 인수, C# 14
 using System;
 using System.Linq.Expressions;
 

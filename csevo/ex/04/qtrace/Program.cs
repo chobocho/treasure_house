@@ -1,4 +1,4 @@
-// 슬라이드 p4-v3-query-trace-run — 쿼리마다 불린 메서드, C# 3.0
+// 슬라이드 p4-v3-query-trace-run — 쿼리마다 호출된 메서드, C# 3.0
 using System;
 
 class Program

@@ -1,4 +1,4 @@
-// 슬라이드 p6-v5-infer — async 람다의 추론된 반환 형식, C# 5.0
+// 슬라이드 p6-v5-infer — async 람다의 유추된 반환 형식, C# 5.0
 using System;
 using System.Threading.Tasks;
 

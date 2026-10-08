@@ -147,7 +147,7 @@ DIAG5 = [
     ('ldvalues', 'bad2', 'ref 매개변수의 기본값'),
     ('ldvalues', 'bad3', '기본값 뒤에 필수 매개변수'),
     ('ldimplicit', 'bad', '형식 없는 매개변수의 기본값'),
-    ('ldimplicit', 'bad2', '무명 메서드(delegate)의 기본값'),
+    ('ldimplicit', 'bad2', '익명 메서드(delegate)의 기본값'),
     ('lpmeta', 'bad', 'params 람다를 Func<int[], int> 에'),
     ('lpmix', 'bad', 'params 매개변수의 기본값'),
     ('lpmix', 'bad2', 'params 뒤에 매개변수'),

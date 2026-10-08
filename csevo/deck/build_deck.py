@@ -628,7 +628,9 @@ def expand_cite(m):
                       '(표에 먼저 넣을 것)' % key)
         name = key
     _CITE_USED.append((key, sec))
-    tail = '<span class="cl">§%s</span>' % esc(sec) if sec else ''
+    # 절 제목은 문서 원문(마크다운)의 &lt; 같은 엔티티를 그대로 담는다 — data-sec 는
+    # check_claims 가 원문과 맞춰 보는 열쇠라 그대로 두고, 보이는 표지만 풀어서 찍는다.
+    tail = '<span class="cl">§%s</span>' % esc(html.unescape(sec)) if sec else ''
     return ('<span class="cite" data-cite="%s" data-sec="%s">%s %s</span>'
             % (esc(key), esc(sec), esc(name), tail))
 

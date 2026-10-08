@@ -1,4 +1,4 @@
-// 슬라이드 p15-v14-pe-sig — 두 조각의 서명 맞추기, C# 14
+// 슬라이드 p15-v14-pe-sig — 두 조각의 시그니처 맞추기, C# 14
 using System;
 
 partial class Conn

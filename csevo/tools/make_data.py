@@ -32,6 +32,7 @@ data/features/pNN.tsv 를 검사한다: 버전이 releases.tsv 에 있는가, ki
 """
 import io
 import json
+import html
 import os
 import re
 import sys
@@ -73,7 +74,9 @@ def langgates(msgid_text, resx_text):
     RequiredVersion() 안에서 case 줄을 모으다가 return 줄을 만나면 그
     버전을 붙인다. 주석 처리된 return(//return LanguageVersion.Preview)은
     정규식이 '^\\s*return' 이라 안 걸린다."""
-    names = dict((k, v.strip()) for k, v in RESX.findall(resx_text))
+    # resx 는 XML 이라 &lt;switch expression&gt; 처럼 엔티티로 담는다. 표 생성기가 다시
+    # 이스케이프하므로 여기서 풀어 둬야 화면에 컴파일러가 찍는 글자 그대로 나온다.
+    names = dict((k, html.unescape(v.strip())) for k, v in RESX.findall(resx_text))
     lines = msgid_text.split('\n')
     start = next((i for i, l in enumerate(lines)
                   if 'LanguageVersion RequiredVersion(' in l), None)

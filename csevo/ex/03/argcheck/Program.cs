@@ -1,4 +1,4 @@
-// 슬라이드 p3-v2-iterator-args — 인자 검사가 늦게 터진다, C# 2.0
+// 슬라이드 p3-v2-iterator-args — 인수 검사가 늦게 터진다, C# 2.0
 using System;
 using System.Collections.Generic;
 

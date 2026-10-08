@@ -1,4 +1,4 @@
-// 슬라이드 p4-v3-query-trace — 불린 메서드를 찍는 쿼리 형식, C# 3.0
+// 슬라이드 p4-v3-query-trace — 호출된 메서드를 찍는 쿼리 형식, C# 3.0
 using System;
 using System.Collections.Generic;
 using System.Linq;
