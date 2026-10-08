@@ -1,4 +1,4 @@
-// 슬라이드 p14-v13-ru-break — 반대쪽: 이제 await 가 된다, C# 13.0
+// 슬라이드 p14-v13-ru-await — 반대쪽: 이제 await 가 된다, C# 13.0
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;

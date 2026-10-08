@@ -104,7 +104,8 @@ FLAGS = [
 # 오류 줄이 200칸을 넘어 캡처로 싣지 못하는 것 — 종료 코드와 번호만
 # (예제, 언어 버전, 기호, 종료 코드, 진단 번호들)
 LONGLINE = [
-    # FrozenDictionary 의 빌더는 C# 12 규칙에 맞지 않아 Add 를 찾는다
+    # 참조 팩의 FrozenDictionary 에는 [CollectionBuilder] 가 없어(런타임에만 있다)
+    # 컬렉션 초기화자의 길로 Add 를 찾는다
     ('cedict', None, 'FZ', 1, ['error CS0144', 'error CS1061']),
     ('cedict', '14.0', 'FZ', 1, ['error CS0144', 'error CS1061']),
     # string 에는 인수 없는 생성자도 Add 도 없다
@@ -119,7 +120,7 @@ DIAG4 = [
     ('cenotype', 'bad2', '[1, 2, 3].Length'),
     ('cenotype', 'bad3', '[1, 2, 3].Sum() — 확장 메서드'),
     ('cenotype', 'sum', 'Enumerable.Sum([1, 2, 3])'),
-    ('ceinfer', 'bad', 'AsArray([]) — 원소 없는 추론'),
+    ('ceinfer', 'bad', 'AsArray([]) — 원소 없는 유추'),
     ('cenested', 'bad', 'int[,] 에 [[1, 2], [3, 4]]'),
     ('cespread', 'bad', '[.. 42] — 열거할 수 없는 것'),
     ('cerange', 'bad', 'Range[] 에 [..2]'),

@@ -1,4 +1,4 @@
-// 슬라이드 p11-v10-small — 패턴 안의 null! 금지, C# 10.0
+// 슬라이드 p11-v10-small-misc — 패턴 안의 null! 금지, C# 10.0
 using System;
 
 class App

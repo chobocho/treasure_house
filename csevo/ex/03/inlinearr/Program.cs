@@ -1,4 +1,4 @@
-// 슬라이드 p3-v2-fixed-later — 안전한 후계자 인라인 배열, C# 12
+// 슬라이드 p3-v2-fixed-inline — 안전한 후계자 인라인 배열, C# 12
 using System;
 using System.Runtime.CompilerServices;
 

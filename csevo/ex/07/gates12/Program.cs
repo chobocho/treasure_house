@@ -1,4 +1,4 @@
-// 슬라이드 p7-v6-gates — C# 6 의 게이트 열두 개를 한 파일에, C# 6.0
+// 슬라이드 p7-v6-gates-demo — 게이트 열두 개를 한 파일에, C# 6.0
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;

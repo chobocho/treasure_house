@@ -6,7 +6,7 @@ class App
     static void Main()
     {
         Func<int, int> inc = static x => x + 1;   // may capture nothing
-        Func<int, int, int> first = (a, _) => a;  // discard parameter
+        Func<int, int, int> first = (a, _) => a;  // _ 하나는 보통 이름
         Console.WriteLine(inc(1) + " " + first(7, 8));
     }
 }

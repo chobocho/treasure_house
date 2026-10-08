@@ -23,7 +23,7 @@ RUN = [
     'v73tupeq', 'v73tupeqorder', 'v73tupeqwarn', 'v73reref', 'v73reffor',
     'v73stackinit', 'v73enumdel', 'v73unmanaged', 'v73unmgen', 'v73unmmeta',
     'v73fieldattr', 'v73exprvar', 'v73overload', 'v73fixed', 'v73fixbuf',
-    'v73pathmap', 'v73rt',
+    'v73pathmap', 'v73rt', 'v73ovlbreak', 'v73unmmodreq',
     # 9장 — 정리
     'v73sum6', 'v73sum73', 'v73to8',
 ]
@@ -107,5 +107,7 @@ def run(ctx):
     # 중첩 stackalloc 은 C# 8 — 8.0 에서 되고 7.3 에서 거절
     ctx.cs('ex/08/v73stackinit', v='8.0', flags='-define:NEST', tag='nest')
     ctx.cs('ex/08/v73stackinit', flags='-define:NEST', tag='nest', expect=1)
+    # 7.3 의 오버로드 개선이 7.2 에서 되던 호출을 모호하게 만든다(리뷰 3)
+    ctx.cs('ex/08/v73ovlbreak', v='7.3', expect=1)
     # 제네릭 구조체 P<int> 는 C# 8.0 에서 unmanaged — 거절이 둘로 준다
     ctx.cs('ex/08/v73unmbad', v='8.0', expect=1)

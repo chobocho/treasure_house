@@ -1,4 +1,4 @@
-// 슬라이드 p15-v14-na-not — null 조건 대입이 안 되는 자리, C# 14
+// 슬라이드 p15-v14-na-struct — null 조건 대입이 안 되는 자리, C# 14
 using System;
 
 struct Point { public int X { get; set; } }

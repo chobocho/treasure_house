@@ -852,3 +852,14 @@ comments + Korean header line; two review passes before push.
   반환형→반환 형식, with particles); double-escaped gate names fixed at the source (make_data unescapes resx, CITE label unescapes
   sec); generated rows 무명/추론 fixed in exps + out + manifest. Kept on purpose: duplicate experiments across parts (back-linked),
   data/*.tsv provenance in release tables, capture-width asides, p15-v14-fk-null CS9264. Open: p17-src-12 display names.
+- Review 3 (close reading against evidence, 2026-10-08) done: 12 reviewers in 6 rounds (2 at a time), full dumps, small
+  throwaway experiments under scratch/review3/exp (≈45 compiler runs). 140 defects (증거불일치 55 · 사실오류 39 · 표기 20 · 시효 9 ·
+  모순 8 · 링크 7 · 퀴즈 2). Worst: 7.3's overload improvements DO break code that compiled at 7.2 (new ex/08/v73ovlbreak, 7.2/7.3
+  pair); "overload resolution never depends on langversion" (contradicted by part 15); "C# 5.0 changed meaning only"; "C# 8 first
+  tied to the runtime"; `(a, _) => a` called a discard; "any dynamic use adds Microsoft.CSharp"; [CollectionBuilder]/[Experimental]
+  counts taken from the runtime instead of the reference pack; ^ in initializers worked at C# 8 for this[Index] types; C# 5 standard
+  has no task-type builder section (standard-v7 §15.15.2). Tools: dump.py kept <…> and blank lines in fences (both were lost in
+  reviews 1–2); tools/csrun comment (-parallel- fixes order between runs, not source order); 10 ex/ header slide ids fixed by a
+  deck-wide script; review-2 term pass extended to data/features and exps labels; new ex/08/v73unmmodreq shows modreq(UnmanagedType).
+  `make all` green: 128 tests, 1,994 examples, 3,491 captures (3,376 + 115 tables), 2,759 slides. record.sh --check NOT run
+  (two full re-runs, hours on this machine); the only re-captured batch, p08c, was run twice and compared.

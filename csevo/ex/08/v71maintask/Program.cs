@@ -1,4 +1,4 @@
-// 슬라이드 p8-v7_1-asyncmain-task — async 없는 Task<int> Main, C# 7.1
+// 슬라이드 p8-v7_1-asyncmain — async 없는 Task<int> Main, C# 7.1
 using System;
 using System.Threading.Tasks;
 

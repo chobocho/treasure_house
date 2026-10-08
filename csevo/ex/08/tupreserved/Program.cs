@@ -1,4 +1,4 @@
-// 슬라이드 p8-v7-tuple-reserved — 쓸 수 없는 요소 이름, C# 7.0
+// 슬라이드 p8-v7-tuple-reserved — 쓸 수 없는 원소 이름, C# 7.0
 class App
 {
     static void Main()

@@ -1,4 +1,4 @@
-// 슬라이드 p2-v1-staticfail — 정적과 인스턴스를 섞으면, C# 1.0
+// 슬라이드 p2-v1-static — 정적과 인스턴스를 섞으면, C# 1.0
 class Counter
 {
     int count;

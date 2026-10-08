@@ -1,4 +1,4 @@
-// 슬라이드 p8-v7_3-unmanaged-later — 제네릭 구조체도 unmanaged, C# 8.0
+// 슬라이드 p8-v7_3-unmanaged-bad — 제네릭 구조체도 unmanaged, C# 8.0
 using System;
 
 struct Pair<T>

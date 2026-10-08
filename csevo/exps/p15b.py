@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""15부 가운데 조각 — C# 14 의 field 키워드(3장), 암묵적 Span 변환(4장),
+"""15부 가운데 조각 — C# 14 의 field 키워드(3장), 암시적 Span 변환(4장),
 null 조건 대입(5장)의 증거. 예제는 ex/15/ 아래의 fk*·sp*·na* 이다(p15·
 p15c 는 같은 ex/15 에 다른 이름으로 쓴다).
 
@@ -22,7 +22,7 @@ RUN = [
     'fkbasic', 'fkmeta', 'fkforms', 'fkinit', 'fkctor', 'fkinitacc',
     'fknull', 'fknullset', 'fkattr', 'fkwhere', 'fkcapture', 'fkstatic',
     'fkstruct', 'fkwarn', 'fkover', 'fkhand', 'fkbreak',
-    # 4장 — 암묵적 Span 변환
+    # 4장 — 암시적 Span 변환
     'spbasic', 'spconv', 'spcov', 'spinfer', 'spover', 'spcast',
     'spcovarr', 'spambig', 'sprev', 'splookup', 'spudc', 'spcompose',
     'spetree', 'spmgroup', 'spalloc', 'spbcl', 'spblog',
@@ -164,7 +164,7 @@ DIAG4 = [
     ('spcast', 'old', 'MemoryMarshal.Cast(배열) 를 Span 에 담음'),
     ('spambig', 'old', '배열 판과 스팬 판이 같이 맞는 호출'),
     ('sprev', 'var', 'var 에 void 인 Rev() 의 결과'),
-    ('spspan', 'fail', 'string[] 를 Span<object> 에 암묵적으로'),
+    ('spspan', 'fail', 'string[] 를 Span<object> 에 암시적으로'),
 ]
 DIAG5 = [
     ('nabasic', 'v13', 'C# 13.0 에서 ?. 의 왼쪽 대입'),
