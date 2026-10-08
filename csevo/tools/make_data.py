@@ -138,13 +138,46 @@ def product_name(channel):
     return '.NET Core', channel
 
 
-def ga_row(channel, data, src):
-    """채널의 releases.json → GA(x.y.0) 행, 아직 안 나왔으면 None."""
+PUBLISHED = re.compile(r'article:published_time"\s+content="(\d{4}-\d\d-\d\d)')
+
+
+def raw_announcement(major):
+    """devblogs 의 "Announcing .NET N" 원본 HTML(docs/raw/blog/…), 없으면 None."""
+    p = os.path.join(DOCS, 'raw', 'blog', 'announcing-dotnet-%s.txt' % major)
+    return read(p) if os.path.exists(p) else None
+
+
+def reissued(r):
+    """x.y.0 항목이 뒤의 재배포로 덮였는가 — 대표 SDK 가 그 항목의 첫 SDK
+    (가장 낮은 판)가 아니면 날짜도 재배포 날이다. 9.0.json 의 9.0.0 이
+    그렇다(2024-12-03, SDK 9.0.101)."""
+    sdks = [s.get('version', '') for s in r.get('sdks') or []]
+    main = (r.get('sdk') or {}).get('version')
+    if len(sdks) < 2 or not main:
+        return False
+    return main != min(sdks, key=lambda v: [int(x) for x in
+                                            re.findall(r'\d+', v)])
+
+
+def ga_row(channel, data, src, announce=raw_announcement):
+    """채널의 releases.json → GA(x.y.0) 행, 아직 안 나왔으면 None.
+
+    재배포로 날짜가 덮인 항목은 발표 글의 게시일을 쓰고 출처도 그 글로
+    적는다. 발표 글을 안 받았으면 멈춘다 — 틀린 날을 조용히 싣지 않게.
+    """
     want = channel + '.0'
     for r in data.get('releases', []):
         if r.get('release-version') == want:
             prod, ver = product_name(channel)
-            return (prod, ver, r['release-date'], src)
+            if not reissued(r):
+                return (prod, ver, r['release-date'], src)
+            major = channel.split('.')[0]
+            m = PUBLISHED.search(announce(major) or '')
+            if not m:
+                sys.exit('make_data: %s 의 %s 은 재배포로 날짜가 덮였다(%s) — '
+                         'tools/fetch_docs.py BLOGS 에 announcing-dotnet-%s 를 '
+                         '더하고 받을 것' % (src, want, r['release-date'], major))
+            return (prod, ver, m.group(1), 'blog/announcing-dotnet-%s.txt' % major)
     return None
 
 

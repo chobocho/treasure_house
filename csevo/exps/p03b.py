@@ -84,6 +84,12 @@ def run(ctx):
     # 지금도 같은 것
     ctx.cs('ex/03/forcapture', v='14.0')           # for 변수는 하나뿐
     ctx.cs('ex/03/anontype', v='14.0', expect=1)   # 오늘의 진단은 CS8917
+    ctx.cs('ex/03/anonyield', v='14.0', flags='-define:LAMBDA', tag='lambda',
+           expect=1)                               # 람다의 yield 도 CS1621
+
+    # 조각 사이의 초기화 차례 — Program.cs 를 명령 줄 앞에 한 번 더 세우면
+    # (CS2002 경고) 차례가 뒤집힌다: 파일이 놓인 차례가 정한다
+    ctx.cs('ex/03/partialorder', flags='Program.cs', tag='first')
 
     # 버전에 묶인 동작 (나) — C# 11 부터 메서드 그룹 변환의 대리자를 캐시한다
     ctx.cs('ex/03/mgcache', v='10.0')

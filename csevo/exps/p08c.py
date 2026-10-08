@@ -102,6 +102,8 @@ def run(ctx):
     ctx.cs('ex/08/roasref', v='12.0')
     # 7.1 컴파일러가 받던 default ?? 1 — 지금의 컴파일러는 7.1 에서도 거절
     ctx.cs('ex/08/v72break', v='7.1', expect=1)
+    # async 를 람다·반복기와 한 파일에 두면 CS1988 하나만 남는다
+    ctx.cs('ex/08/inplimit', flags='-define:ASYNC', tag='async', expect=1)
     # 중첩 stackalloc 은 C# 8 — 8.0 에서 되고 7.3 에서 거절
     ctx.cs('ex/08/v73stackinit', v='8.0', flags='-define:NEST', tag='nest')
     ctx.cs('ex/08/v73stackinit', flags='-define:NEST', tag='nest', expect=1)

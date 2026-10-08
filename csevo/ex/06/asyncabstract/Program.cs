@@ -1,4 +1,4 @@
-// 슬라이드 p6-v5-asyncimpl — 몸체 없는 멤버와 async, C# 5.0
+// 슬라이드 p6-v5-asyncabstract — 몸체 없는 멤버와 async, C# 5.0
 using System.Threading.Tasks;
 
 interface IStore

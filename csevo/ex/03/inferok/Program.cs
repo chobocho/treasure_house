@@ -1,4 +1,4 @@
-// 슬라이드 p3-v2-inference-fail — 유추가 되는 경우, C# 2.0
+// 슬라이드 p3-v2-inference-ok — 유추가 되는 경우, C# 2.0
 using System;
 
 class App

@@ -1,4 +1,4 @@
-// probe
+// 슬라이드 p9-v8-overcon — 재정의 메서드의 제약, C# 8.0
 using System;
 
 class Base

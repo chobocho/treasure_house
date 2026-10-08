@@ -1,4 +1,4 @@
-// 슬라이드 p6-v5-rettypes — 그 밖의 반환 형식은 거절, C# 5.0
+// 슬라이드 p6-v5-rettypebad — 그 밖의 반환 형식은 거절, C# 5.0
 using System.Collections.Generic;
 using System.Threading.Tasks;
 

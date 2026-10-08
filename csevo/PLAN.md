@@ -826,3 +826,21 @@ comments + Korean header line; two review passes before push.
 - Part 1 + appendix commit is f791fcc (pushed; deck 2759, `make all` green without SKEL). Step 8: index.html card in a new
   "🟪 C# 시리즈" section and README line (numbers from data: 18 releases, 183 gates, 1,992 examples, 3,369 captures,
   114 generated tables, 150 quizzes, 461 glossary terms); history.md entry. Next: step 9 reviews 1 and 2.
+### Review 1 — facts and evidence (2026-10-08)
+- Step 8 commit 26f207c. Review 1 set up like goevo's: scratch/review1/dump.py → partNN.txt (18 dumps), BRIEF.md;
+  2 reviewers per round, 5 rounds: R1 = {0,1,2} + {3,17}; R2 = {4,5} + {6,7}; R3 = {8,16} + {9,11};
+  R4 = {10,12} + {13,14}; R5 = {15} + backlog (Hejlsberg spelling, -parallel- captures, 미확인 items).
+- Orchestrator (during R1): .NET 9 GA date. 9.0.json's 9.0.0 entry is a re-issue (sdk 9.0.101 of sdks
+  [9.0.101, 9.0.100], 2024-12-03); only channel affected. make_data.ga_row now detects a re-issued GA entry and takes
+  the date from the announcement post's article:published_time (docs/raw/blog/announcing-dotnet-N.txt), stopping
+  if the post is not fetched (3 tests, RED first). BLOGS += announcing-dotnet-9. dotnet.tsv 9 → 2024-11-12; part 14
+  p14-v13-net9 / p14-v13-docs now show the release date and say why the index date is later; claims/p14.md row.
+- Review 1 done: 9 reviewers over 5 rounds read all 2759 slides. Found 175 (표기 60 · 증거불일치 45 · 사실오류 37 · 링크 15 ·
+  문체 14 · 퀴즈 3 · 배지 1 kept on purpose); ~200 bare-slug link texts replaced; quotes not in docs found and fixed in parts
+  11 and 14. Conventions: 앤더스 헤일스버그, -parallel- redundant, 해라체 reported speech OK (scratch/review1/BRIEF.md).
+  Capture batch (scratch/review1/CAPTURES.md): 10 items — p03 nullq table (CS8023+CS8627, LONGLINE), p03b anonyield
+  LAMBDA@14.0 + partialorder `first`, p07 interpmanual10 (3, 2) byte-identical + ncgeneric class case, p08 v71mainvoid@7.0,
+  inplimit ASYNC (CS1988 only), tupdeconuser BAD (CS0029), tupobject renamed, in-copy → std §12.6.6.1 + p2-v1-rostruct;
+  p03/p03b/p07/p08/p08c each run twice, identical. `make all` green: 127 tests, 2759 slides, 3488 captures.
+  Left for review 2: p9-v8-nrt-wae and p11-v10-quiz (MSBuild behaviour, no capture), p15-v14-fk-null Bad CS9264 (true by
+  run, not shown), glossary near-duplicates. Findings: scratch/review1/findings_*.md, orchestrator_todo.md.

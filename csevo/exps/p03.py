@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 """3부 앞 조각 — C# 2.0 의 제네릭·nullable 값 형식·반복기의 증거."""
+import re
+
+import csver   # run_all.py 가 tools/ 를 sys.path 에 넣어 둔다
 
 # 고의로 깨진 예제(EXPECT_FAIL) — 컴파일러의 거절이 증거다
 FAIL = ['listbad', 'inferfail', 'noconstraint', 'constraintbad',
@@ -56,3 +59,18 @@ def run(ctx):
     ctx.cs('ex/03/yieldcatch', v='14.0', expect=1) # 지금도 거절
     ctx.cs('ex/03/sigconstraint', v='14.0', expect=1)
     ctx.cs('ex/03/itercs13', v='12.0', expect=1)   # ref 지역 변수는 C# 13
+
+    # 제약 없는 T? — 오류 줄(CS8627)이 200칸을 넘어 캡처로 싣지 못한다.
+    # 컴파일러 출력에서 진단을 뽑아 표로 싣는다(문장은 컴파일러의 것 그대로)
+    code, text = csver.execute(csver.BASE + '/ex/03/nullablet2', 'csrun',
+                               v='2', flags='-define:Q',
+                               name='p03-check-nullablet2-q')
+    diags = re.findall(r'^Program\.cs\((\d+),(\d+)\): error (CS\d+): (.*)$',
+                       text, re.M)
+    if code != 1 or [d[2] for d in diags] != ['CS8023', 'CS8627']:
+        raise RuntimeError('[p03] nullablet2(-define:Q) 는 CS8023·CS8627 '
+                           '이어야 한다\n%s' % text)
+    ctx.table('p03_nullq', ['자리', '진단', '문장'],
+              [['(%s,%s)' % (l, c), n, m] for l, c, n, m in diags],
+              caption='ex/03/nullablet2 를 csrun -langversion:2 -define:Q '
+                      '로 컴파일한 출력에서 뽑은 표 (종료 1)')

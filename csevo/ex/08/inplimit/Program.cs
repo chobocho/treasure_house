@@ -13,6 +13,13 @@ class App
     {
         yield return x;                 // an iterator
     }
+#if ASYNC
+    static async System.Threading.Tasks.Task<int> Later(in int x)
+    {
+        await System.Threading.Tasks.Task.Yield();
+        return x;
+    }
+#endif
 
     static void Main() { }
 }

@@ -11,7 +11,7 @@ class App
 
         string a = $"{name}: {n,5:X}!";
 
-        var h = new DefaultInterpolatedStringHandler(4, 2);
+        var h = new DefaultInterpolatedStringHandler(3, 2);
         h.AppendFormatted(name);
         h.AppendLiteral(": ");
         h.AppendFormatted(n, 5, "X");

@@ -1,4 +1,4 @@
-// 슬라이드 p9-v8-gates-demo — C# 8.0 의 게이트 여섯을 한 파일에, C# 8.0
+// 슬라이드 p9-v8-gates-demo — C# 8.0 의 게이트 다섯을 한 파일에, C# 8.0
 using System;
 
 class App

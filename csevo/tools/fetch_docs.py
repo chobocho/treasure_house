@@ -151,7 +151,7 @@ BLOGS = [
     'whats-new-in-csharp-7-0', 'new-features-in-c-7-0', 'building-c-8-0',
     'c-9-0-on-the-record', 'welcome-to-csharp-10', 'welcome-to-csharp-11',
     'announcing-csharp-12', 'introducing-csharp-14', 'announcing-dotnet-10',
-    'csharp-15-union-types',
+    'csharp-15-union-types', 'announcing-dotnet-9',
 ]
 
 # 1부(C# 이전)와 버전 부의 "왜" — 공식 문서 밖의 1차 자료. 위키백과는

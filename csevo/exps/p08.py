@@ -49,7 +49,7 @@ BAD = [
     ('tupvsclass', 1), ('tupmutable', 1), ('tupequals', 1),
     ('tupasync', 1), ('tuplinq', 1), ('discident', 1),
     ('patnullable', 1), ('outvoverload', 1), ('locfnlambda', 1),
-    ('locfnstatic8', 1), ('tupnull', 1),
+    ('locfnstatic8', 1), ('tupnull', 1), ('tupdeconuser', 1),
 ]
 
 # C# 6 으로 내리면 거절되는 것 — 언어 버전 짝 (가)

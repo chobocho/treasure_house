@@ -1,4 +1,4 @@
-// 슬라이드 p3-v2-accessor-lookup — 숨긴 속성의 private set, C# 2.0
+// 슬라이드 p3-v2-accessor-lookup — 숨긴 속성의 protected set, C# 2.0
 using System;
 
 class A

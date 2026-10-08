@@ -3,7 +3,11 @@ using System;
 
 class App
 {
+#if Q
+    static T? Maybe<T>(T x)
+#else
     static Nullable<T> Maybe<T>(T x)
+#endif
     {
         return x;
     }

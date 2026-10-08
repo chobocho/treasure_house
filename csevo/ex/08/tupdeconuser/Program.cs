@@ -29,5 +29,8 @@ class App
         Console.WriteLine(x + y + " " + (a + b + c));
         (int, int) t = (p.X, p.Y);  // a Point is not a tuple
         Console.WriteLine(t);
+#if BAD
+        (int, int) u = p;           // deconstructible, not convertible
+#endif
     }
 }

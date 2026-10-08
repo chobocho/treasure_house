@@ -9,8 +9,8 @@ class App
         object o = p;
         var back = ((string, int))o;        // unbox: no names
         Console.WriteLine(back.Item1);
-        var named = ((string name, int age))o;  // names come back
-        Console.WriteLine(named.name);
+        var named = ((string who, int n))o; // any names come back
+        Console.WriteLine(named.who + " " + named.n);
 
         dynamic d = p;
         Console.WriteLine(d.Item2);         // the real field

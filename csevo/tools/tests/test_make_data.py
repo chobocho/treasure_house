@@ -107,6 +107,39 @@ class DotnetRows(unittest.TestCase):
         self.assertEqual(p('5.0'), ('.NET', '5'))
         self.assertEqual(p('1.0'), ('.NET Core', '1.0'))
 
+    def test_reissued_ga_takes_the_announcement_date(self):
+        # 9.0.json 의 9.0.0 은 2024-12-03 보안 재배포(SDK 9.0.101)로 날짜가
+        # 덮였다 — GA 는 발표 글의 게시일(article:published_time)로 잡는다
+        ch = {'releases': [
+            {'release-version': '9.0.0', 'release-date': '2024-12-03',
+             'sdk': {'version': '9.0.101'},
+             'sdks': [{'version': '9.0.101'}, {'version': '9.0.100'}]}]}
+        meta = '<meta property="article:published_time" ' \
+               'content="2024-11-12T16:00:00+00:00" />'
+        self.assertEqual(
+            make_data.ga_row('9.0', ch, 'releases/9.0.json',
+                             announce=lambda major: meta),
+            ('.NET', '9', '2024-11-12', 'blog/announcing-dotnet-9.txt'))
+
+    def test_reissued_ga_without_announcement_fails(self):
+        ch = {'releases': [
+            {'release-version': '9.0.0', 'release-date': '2024-12-03',
+             'sdk': {'version': '9.0.101'},
+             'sdks': [{'version': '9.0.101'}, {'version': '9.0.100'}]}]}
+        with self.assertRaises(SystemExit):
+            make_data.ga_row('9.0', ch, 'releases/9.0.json',
+                             announce=lambda major: None)
+
+    def test_first_sdk_ga_keeps_its_own_date(self):
+        ch = {'releases': [
+            {'release-version': '10.0.0', 'release-date': '2025-11-11',
+             'sdk': {'version': '10.0.100'},
+             'sdks': [{'version': '10.0.100'}]}]}
+        self.assertEqual(
+            make_data.ga_row('10.0', ch, 'releases/10.0.json',
+                             announce=lambda major: None),
+            ('.NET', '10', '2025-11-11', 'releases/10.0.json'))
+
     def test_unreleased_channel_has_no_row(self):
         ch = {'releases': [{'release-version': '11.0.0-rc.1',
                             'release-date': '2026-09-08'}]}

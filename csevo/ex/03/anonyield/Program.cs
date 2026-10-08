@@ -8,7 +8,11 @@ class App
 {
     static void Main()
     {
+#if LAMBDA
+        Source s = () =>
+#else
         Source s = delegate
+#endif
         {
             yield return 1;
         };
