@@ -173,6 +173,38 @@ HISTORY = [
                   'contracts-and-interoperability',
                   'inappropriate-abstractions', 'generics-in-c-java-and-c',
                   'clr-design-choices')]
+# 1부를 쓰며 더한 것(2026-10-07). 사라진 페이지는 웨이백의 원본 사본
+# ('id_' — 웨이백의 머리띠를 덧붙이지 않은 그날의 바이트)으로 받는다.
+#   · Computerworld "The A-Z of Programming Languages: C#"(2008-10-01) 7쪽 —
+#     헤일스버그가 코드명 Cool 의 뜻과 이름을 바꾼 까닭을 말한 유일한 1차 자료
+#     (위키백과가 인용하는 원자료). 8쪽째는 댓글뿐이라 뺐다.
+#   · Sun 의 "About Microsoft's 'Delegates'" 와 마이크로소프트의 반박
+#     "The Truth about Delegates" — Visual J++ 의 대리자를 두고 두 회사가
+#     직접 쓴 글
+#   · C# 발표 보도자료(2000-06-26), ECMA 표준 승인 보도자료(2001-12-13)
+_CW = ('http://www.computerworld.com.au/article/261958/'
+       'a-z_programming_languages_c_/')
+_CW_SNAP = ['20100212013346', '20100831222133', '20100324141119',
+            '20100324124400', '20100324141230', '20100324130909',
+            '20110607055117']
+HISTORY += [('cw-hejlsberg-2008-%d' % (i + 1),
+             'https://web.archive.org/web/%sid_/%s%s'
+             % (ts, _CW, '?pp=%d' % (i + 1) if i else ''))
+            for i, ts in enumerate(_CW_SNAP)] + [
+    ('sun-about-delegates',
+     'https://web.archive.org/web/20001211000700id_/'
+     'http://www.java.sun.com/docs/white/delegates.html'),
+    ('ms-truth-about-delegates',
+     'https://web.archive.org/web/20010413125611id_/'
+     'http://msdn.microsoft.com/visualj/technical/articles/delegates/'
+     'truth.asp'),
+    ('ms-csharp-announce-2000',
+     'https://news.microsoft.com/source/2000/06/26/microsoft-introduces-'
+     'highly-productive-net-programming-language-c/'),
+    ('ms-ecma-2001',
+     'https://news.microsoft.com/source/2001/12/13/ecma-standardizes-key-'
+     'net-technologies/'),
+]
 # news.microsoft.com 은 스크립트 같은 UA 를 403 으로 막는다(2026-10-01 확인).
 BROWSER_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
               '(KHTML, like Gecko) Chrome/126.0 Safari/537.36')
@@ -263,6 +295,19 @@ def fetched_line(path, url, date, data, head):
                       head))
 
 
+def old_dates(text):
+    """FETCHED.txt 의 글 → {경로: 받은 날}. --missing 은 다시 받지 않은
+    문서의 줄에 이 날짜를 그대로 둔다 — 오늘 날짜로 덮으면 장부가 "그날
+    무엇을 봤는가" 를 잃는다. 머리 줄(#)은 건너뛴다. O(줄 수)."""
+    out = {}
+    for line in text.split('\n'):
+        cols = line.split('\t')
+        if line.startswith('#') or len(cols) < 3:
+            continue
+        out[cols[0]] = cols[2]
+    return out
+
+
 def get(url):
     """주소 하나를 받는다. 세 번까지 다시, 30초 제한, 리다이렉트는 따라간다."""
     last = None
@@ -314,7 +359,8 @@ def main(argv):
     missing_only = '--missing' in argv
     today = datetime.date.today().isoformat()
     os.makedirs(DOCS, exist_ok=True)
-    tree_raw, _ = cached('csharplang-tree.json', TREE_URL, missing_only)
+    tree_raw, tree_new = cached('csharplang-tree.json', TREE_URL,
+                                missing_only)
     idx_raw, _ = cached('releases-index.json', FIXED[3][1], missing_only)
     tree = json.loads(tree_raw.decode('utf-8'))
     if tree.get('truncated'):
@@ -322,14 +368,23 @@ def main(argv):
         return 1
     index = json.loads(idx_raw.decode('utf-8'))
     log, bad, n_new = [], [], 0
-    log.append(fetched_line('raw/csharplang-tree.json', TREE_URL, today,
+    ledger = os.path.join(DOCS, 'FETCHED.txt')
+    seen = {}
+    if missing_only and os.path.exists(ledger):
+        with open(ledger, encoding='utf-8') as f:
+            seen = old_dates(f.read())
+    log.append(fetched_line('raw/csharplang-tree.json', TREE_URL,
+                            today if tree_new else
+                            seen.get('raw/csharplang-tree.json', today),
                             tree_raw, '%d entries' % len(tree['tree'])))
     for it in plan(tree, index):
         dst = os.path.join(DOCS, it['path'])
         raw_dst = os.path.join(DOCS, 'raw', it['path'])
+        date = today
         if missing_only and os.path.exists(dst) and os.path.exists(raw_dst):
             with open(raw_dst, 'rb') as f:
                 data = f.read()
+            date = seen.get(it['path'], today)
         else:
             try:
                 data = idx_raw if it['url'] == FIXED[3][1] else get(it['url'])
@@ -345,7 +400,7 @@ def main(argv):
             text = md_text.convert(text)
         save(raw_dst, data)
         save(dst, text.encode('utf-8'))
-        log.append(fetched_line(it['path'], it['url'], today, data,
+        log.append(fetched_line(it['path'], it['url'], date, data,
                                 head_of(it['path'], it['kind'], text)))
     with open(os.path.join(DOCS, 'FETCHED.txt'), 'w', encoding='utf-8',
               newline='\n') as f:

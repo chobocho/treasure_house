@@ -151,6 +151,26 @@ class Plan(unittest.TestCase):
             items['history/ms-sun-settlement-2001.txt']['url'])
             .startswith('Mozilla/5.0 (Windows'))
 
+    def test_part1_sources(self):
+        # 1부(탄생 이전)의 1차 자료 — 사라진 페이지는 웨이백의 원본(id_)
+        items = dict((i['path'], i) for i in
+                     fetch_docs.plan(self.tree, self.index))
+        for n in range(1, 8):
+            it = items['history/cw-hejlsberg-2008-%d.txt' % n]
+            self.assertEqual(it['kind'], 'html')
+            self.assertRegex(it['url'], r'^https://web\.archive\.org/web/'
+                             r'\d{14}id_/http://www\.computerworld\.com\.au/')
+        self.assertTrue(items['history/cw-hejlsberg-2008-1.txt']['url']
+                        .endswith('a-z_programming_languages_c_/'))
+        self.assertTrue(items['history/cw-hejlsberg-2008-7.txt']['url']
+                        .endswith('?pp=7'))
+        for name in ('sun-about-delegates', 'ms-truth-about-delegates',
+                     'ms-csharp-announce-2000', 'ms-ecma-2001'):
+            self.assertIn('history/%s.txt' % name, items)
+        self.assertTrue(fetch_docs.ua_for(
+            items['history/ms-ecma-2001.txt']['url'])
+            .startswith('Mozilla/5.0 (Windows'))
+
     def test_paths_are_unique(self):
         paths = [i['path'] for i in fetch_docs.plan(self.tree, self.index)]
         self.assertEqual(len(paths), len(set(paths)))
@@ -168,6 +188,16 @@ class Ledger(unittest.TestCase):
         self.assertEqual(cols[:3], ['a.txt', 'http://u', '2026-10-01'])
         self.assertTrue(re.match(r'^[0-9a-f]{64}$', cols[3]))
         self.assertEqual(cols[4], 'T')
+
+    def test_old_dates(self):
+        # --missing 로 새 문서만 받을 때, 다시 받지 않은 문서의 줄은 처음
+        # 받은 날을 지킨다 — 장부의 날짜가 "그날 무엇을 봤는가" 다
+        text = ('# 머리 줄\n'
+                'a.txt\thttp://a\t2026-10-01\t' + '0' * 64 + '\tA\n'
+                'b/c.txt\thttp://c\t2026-10-03\t' + '1' * 64 + '\tC\n')
+        self.assertEqual(fetch_docs.old_dates(text),
+                         {'a.txt': '2026-10-01', 'b/c.txt': '2026-10-03'})
+        self.assertEqual(fetch_docs.old_dates(''), {})
 
 
 if __name__ == '__main__':

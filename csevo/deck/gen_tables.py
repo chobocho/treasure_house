@@ -370,6 +370,488 @@ def p16_tables(releases, dotnet, features, gates, ecma_text):
     return made
 
 
+# ---------------------------------------------------------------- 부록(17부)
+# 부록의 표는 전부 여기서 만든다 — 버전 찾아가기, 게이트 표, 용어집 색인,
+# 출처 목록과 그 인용 수, 예제·캡처의 수. 인용 수는 조각 파일(부록 제외)을
+# 세고, 예제 수는 ex/ 와 out/manifest.json 을 센다. 손으로 센 수는 없다.
+
+def _cover_of(v, ids, suffix=''):
+    """버전 → 그 버전 장 표지의 id(pN-v<cls>, suffix 가 있으면 그것을 붙인
+    id — 예: '-overview'). 여럿이면 가장 앞의 부."""
+    cls = cites.vnorm(v).replace('.', '_')
+    best = None
+    for i in ids:
+        m = re.match(r'^p(\d+)-v%s%s$' % (re.escape(cls), re.escape(suffix)),
+                     i)
+        if m and (best is None or int(m.group(1)) < best[0]):
+            best = (int(m.group(1)), i)
+    return best
+
+
+def app_where(releases, features, gates, ids):
+    """버전 찾아가기 — 버전마다 표지·부·개관 장으로 가는 링크와, 그 버전
+    배지를 단 장의 수(기능 행의 서로 다른 slide-id), 컴파일러 게이트 수.
+    O(행 수 × id 수)."""
+    e = lambda s: html.escape(s, quote=False)
+    rows = []
+    for r in releases:
+        v = cites.vnorm(r['version'])
+        cov = _cover_of(v, ids)
+        name = 'C# ' + e(r['version'])
+        if cov:
+            ov = cov[1] + '-overview'
+            cells = ['<a href="#%s">%s</a>' % (cov[1], name), e(r['date']),
+                     _part_link(cov[0]),
+                     '<a href="#%s">개관</a>' % ov if ov in ids else '—']
+        else:
+            cells = [name, e(r['date']), '—', '—']
+        sids = set(f['slide-id'] for f in features
+                   if f.get('slide-id')
+                   and cites.vnorm(f.get('version', '')) == v)
+        n = sum(1 for g in gates if cites.vnorm(g['required-version']) == v)
+        rows.append(cells + [str(len(sids)), str(n)])
+    return _html_table(['버전', '나온 달', '부', '개관', '배지 단 장',
+                        '게이트'], rows, numcols=(4, 5))
+
+
+def app_releases(releases, dotnet):
+    """버전 일정표의 긴 꼴 — Visual Studio 이름을 줄이지 않고, 짝이 된 .NET 의
+    GA 날짜(dotnet.tsv)를 붙인다. O(행 수)."""
+    ga = dict(('%s %s' % (d['product'], d['version']), d['date'])
+              for d in dotnet)
+    rows = []
+    for r in releases:
+        fw = r.get('framework', '')
+        rows.append(['C# ' + r['version'], r['date'], r.get('vs', '') or '—',
+                     fw or '—', ga.get(fw, '—') if fw else '—'])
+    return _table(['버전', '나온 달', 'Visual Studio', '.NET', 'GA 날짜'],
+                  rows)
+
+
+def _short_msgid(m):
+    return re.sub(r'^IDS_(Feature)?', '', m)
+
+
+def gate_links(gates, features, msgid_cites, ids):
+    """게이트마다 그것을 보이는 장 — (어떻게, [(id, 글자)]).
+
+    차례대로 본다. (row) 그 MessageID 를 적은 기능 행의 장. (shared) 행에
+    장이 없으면, 같은 파일에서 바로 앞의 장 있는 행이 같은 인용(키·절)일
+    때 그 장 — '작은 변화들' 처럼 한 장을 여러 행이 나눠 쓰는 꼴이다.
+    (cite) MessageID.cs 의 그 case 줄을 인용한 장. (overview) 행은 있으나
+    장이 없으면 그 버전의 개관 장. (none) 덱에 없음. O(게이트 × 행)."""
+    out = {}
+    for g in gates:
+        mid = g['msgid']
+        mine = [(i, f) for i, f in enumerate(features)
+                if f.get('msgid') == mid]
+        got, seen = [], set()
+        for _i, f in mine:
+            sid = f.get('slide-id', '')
+            if sid and sid not in seen:
+                seen.add(sid)
+                got.append((sid, f.get('title', '')))
+        if got:
+            out[mid] = ('row', got)
+            continue
+        for i, f in mine:
+            for j in range(i - 1, -1, -1):
+                p = features[j]
+                if p.get('_file') != f.get('_file'):
+                    break
+                if not p.get('slide-id'):
+                    continue
+                if (p.get('cite-key'), p.get('cite-sec')) == \
+                        (f.get('cite-key'), f.get('cite-sec')):
+                    got.append((p['slide-id'], f.get('title', '')))
+                break
+            if got:
+                break
+        if got:
+            out[mid] = ('shared', got)
+            continue
+        title = mine[0][1].get('title', '') if mine else ''
+        cited = msgid_cites.get(mid, [])
+        if cited:
+            out[mid] = ('cite', [(cited[0], title or _short_msgid(mid))])
+            continue
+        if mine:
+            ov = _cover_of(g['required-version'], ids, '-overview')
+            if ov:
+                out[mid] = ('overview', [(ov[1], title + ' (개관)')])
+                continue
+        out[mid] = ('none', [])
+    return out
+
+
+def _pack(groups, per, ncols, unit=''):
+    """[(머리 글자, [행 html])] → 장마다의 행 목록. 한 장에 per 줄(머리 줄
+    포함)까지. 무리가 장을 넘으면 다음 장 첫 줄에 '(이어서)' 머리를 다시
+    단다. 머리 줄이 장의 마지막 줄로 남지 않게 한다. O(행 수)."""
+    def head(label, n, cont):
+        return '<tr><th colspan="%d">%s · %s%d개%s</th></tr>' % (
+            ncols, label, unit, n, ' (이어서)' if cont else '')
+    slides = [[]]
+    for label, rows in groups:
+        for i, r in enumerate(rows):
+            cur = slides[-1]
+            if i == 0:
+                if cur and len(cur) + 2 > per:
+                    slides.append([])
+                    cur = slides[-1]
+                cur.append(head(label, len(rows), False))
+            elif len(cur) + 1 > per:
+                slides.append([])
+                cur = slides[-1]
+                cur.append(head(label, len(rows), True))
+            cur.append(r)
+    return [s for s in slides if s]
+
+
+def _paged(prefix, head_html, slides):
+    return dict(('tbl_%s_%d.html' % (prefix, k + 1),
+                 '<table>\n%s\n%s\n</table>\n' % (head_html, '\n'.join(s)))
+                for k, s in enumerate(slides))
+
+
+def app_gates(releases, gates, links, per=16):
+    """게이트 표 — 버전마다 머리 줄, 게이트마다 (Roslyn 의 기능 이름, 이
+    덱에서 보이는 장). 접힌 화면에 들게 per 줄씩 여러 장. O(게이트 수)."""
+    e = lambda s: html.escape(s, quote=False)
+    groups = []
+    for r in releases:
+        v = cites.vnorm(r['version'])
+        rows = []
+        for g in gates:
+            if cites.vnorm(g['required-version']) != v:
+                continue
+            name = (e(g['feature']) if g.get('feature') else
+                    '<code>%s</code> (이름 없음)' % e(_short_msgid(g['msgid'])))
+            _how, got = links.get(g['msgid'], ('none', []))
+            where = ' · '.join('<a href="#%s">%s</a>' % (sid, e(t))
+                               for sid, t in got) or '—'
+            rows.append('<tr><td>%s</td><td>%s</td></tr>' % (name, where))
+        if rows:
+            groups.append(('C# ' + e(r['version']), rows))
+    return _paged('app_gates', '<tr><th>Roslyn 의 기능 이름</th>'
+                  '<th>이 덱에서</th></tr>', _pack(groups, per, 2, '게이트 '))
+
+
+GATE_HOW = [('row', '기능 행의 장'), ('shared', '앞 행과 같은 장(같은 인용)'),
+            ('cite', 'MessageID 줄을 인용한 장'), ('overview', '버전 개관만'),
+            ('none', '덱에 없음')]
+
+
+def app_gates_how(links):
+    """게이트가 어떤 길로 장에 이어졌나 — 길마다의 수와 합. O(게이트 수)."""
+    rows = [[name, str(sum(1 for h, _g in links.values() if h == how))]
+            for how, name in GATE_HOW]
+    rows.append(['합', str(len(links))])
+    return _table(['이어진 길', '게이트'], rows, numcols=(1,))
+
+
+CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
+CHO_BASE = {'ㄲ': 'ㄱ', 'ㄸ': 'ㄷ', 'ㅃ': 'ㅂ', 'ㅆ': 'ㅅ', 'ㅉ': 'ㅈ'}
+CHO_ROWS = 'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ'
+
+
+def _initial(term):
+    """낱말 → ('sym'|'latin'|'hangul', 묶음 글자)."""
+    c = term[:1]
+    if '가' <= c <= '힣':
+        j = CHO[(ord(c) - 0xAC00) // 588]
+        return 'hangul', CHO_BASE.get(j, j)
+    if c in CHO:
+        return 'hangul', CHO_BASE.get(c, c)
+    if c.isalpha() and c.upper() != c.lower() and ord(c.upper()) < 0x250:
+        return 'latin', c.upper()
+    return 'sym', ''
+
+
+def app_glossary_index(rows, per):
+    """용어집 찾아보기 — 첫 글자 묶음마다 그 낱말들이 있는 용어집 장.
+
+    차례는 gen_glossary.render 와 같다(소문자로 견준 차례, 한 장에 per
+    낱말, 장 id 는 p17-gl-N). 로마자는 글자마다 처음 나오는 장, 한글은
+    초성(된소리는 예사소리에 묶는다)마다 그 낱말들이 걸친 장 전부.
+    O(낱말 수 log 낱말 수)."""
+    terms = sorted((r[0] for r in rows), key=lambda t: t.lower())
+    sym, latin, han = [], {}, {}
+    for k, t in enumerate(terms):
+        n = k // per + 1
+        kind, ch = _initial(t)
+        if kind == 'sym':
+            if n not in sym:
+                sym.append(n)
+        elif kind == 'latin':
+            latin.setdefault(ch, n)
+        else:
+            han.setdefault(ch, set()).add(n)
+
+    def links(ns):
+        return ' · '.join('<a href="#p17-gl-%d">%d</a>' % (n, n)
+                          for n in sorted(ns))
+    out = []
+    if sym:
+        out.append(['기호·숫자', links(sym)])
+    if latin:
+        out.append(['로마자', ' · '.join(
+            '<a href="#p17-gl-%d">%s</a>' % (latin[c], c)
+            for c in sorted(latin))])
+    for c in CHO_ROWS:
+        if c in han:
+            out.append([c, links(han[c])])
+    return _html_table(['첫 글자', '용어집 장'], out)
+
+
+CITE_KEY_RE = re.compile(r'<!--CITE key=(\S+?)(?=\s|-->)(.*?)-->')
+ART_RE = re.compile(r'<article[^>]*\bid="([^"]+)"[^>]*>(.*?)</article>', re.S)
+
+
+def cite_tally(files):
+    """[(조각 이름, 글)] → ({키: [그 키를 인용한 장 id, 덱 차례]},
+    {MessageID: [그 case 줄을 인용한 장 id]}). 한 장이 여러 번 인용해도
+    한 번. O(글 길이)."""
+    keys, msg = {}, {}
+    for _name, text in files:
+        for am in ART_RE.finditer(text):
+            sid = am.group(1)
+            for cm in CITE_KEY_RE.finditer(am.group(2)):
+                k = cm.group(1)
+                lst = keys.setdefault(k, [])
+                if sid not in lst:
+                    lst.append(sid)
+                if k == 'msgid':
+                    for mid in re.findall(r'MessageID\.(\w+)', cm.group(2)):
+                        lst2 = msg.setdefault(mid, [])
+                        if sid not in lst2:
+                            lst2.append(sid)
+    return keys, msg
+
+
+SRC_KINDS = [
+    ('버전 기록·새 기능', ('whatsnew/', 'csharplang/Language-Version-History')),
+    ('기능 명세(csharplang 제안)', ('csharplang/proposals/',)),
+    ('표준', ('standard/', 'csharpstandard/', 'ecma-334')),
+    ('컴파일러(Roslyn)', ('roslyn/',)),
+    ('.NET 릴리스', ('releases',)),
+    ('블로그(devblogs)', ('blog/',)),
+    ('역사 기록', ('history/',)),
+]
+SRC_OTHER = '그 밖'
+# 갈래의 머리 줄이 이미 말하는 이름 앞머리 — 표에서는 뗀다
+SRC_STRIP = re.compile(r'^(C# [\d.]+ 기능 명세 |C# 표준 초안 |Roslyn 문서 '
+                       r'|devblogs )')
+
+
+def src_kind(path):
+    for label, prefixes in SRC_KINDS:
+        if path.startswith(prefixes):
+            return label
+    return SRC_OTHER
+
+
+def _natural(s):
+    return [int(x) if x.isdigit() else x for x in re.split(r'(\d+)', s)]
+
+
+def app_src_kinds(keys, tally):
+    """출처 갈래마다 — 받아 둔 문서 수, 그중 인용된 문서, 그 갈래를 인용한
+    장의 수(겹치지 않게). 마지막 줄은 합. O(키 수 + 인용 수)."""
+    labels = [l for l, _p in SRC_KINDS] + [SRC_OTHER]
+    rows, all_slides, tot = [], set(), [0, 0]
+    for label in labels:
+        mine = [k for k in keys if src_kind(k['file']) == label]
+        if not mine:
+            continue
+        cited = [k for k in mine if tally.get(k['key'])]
+        slides = set(s for k in mine for s in tally.get(k['key'], []))
+        all_slides |= slides
+        tot = [tot[0] + len(mine), tot[1] + len(cited)]
+        rows.append([label, str(len(mine)), str(len(cited)),
+                     str(len(slides))])
+    rows.append(['합', str(tot[0]), str(tot[1]), str(len(all_slides))])
+    return _table(['갈래', '문서', '인용된 문서', '인용한 장'], rows,
+                  numcols=(1, 2, 3))
+
+
+def app_src_lists(keys, tally, urls, per=24):
+    """출처 목록 — 갈래마다(제안은 버전마다) 머리 줄, 문서마다 (이름 —
+    받은 주소로 링크, 인용한 장 수, 처음 인용한 장). O(키 수 log 키 수)."""
+    e = lambda s: html.escape(s, quote=False)
+    groups = {}
+    for k in keys:
+        label = src_kind(k['file'])
+        m = re.match(r'^csharplang/proposals/csharp-([\d.]+)/', k['file'])
+        if m:
+            label = '기능 명세 C# %s' % cites.vnorm(m.group(1))
+        groups.setdefault(label, []).append(k)
+    order = []
+    for label, _p in SRC_KINDS + [(SRC_OTHER, ())]:
+        if label.startswith('기능 명세('):
+            order += sorted((g for g in groups if g.startswith('기능 명세 C#')),
+                            key=_natural)
+        elif label in groups:
+            order.append(label)
+    packed = []
+    for label in order:
+        rows = []
+        for k in sorted(groups[label], key=lambda k: _natural(k['file'])):
+            name = e(SRC_STRIP.sub('', k['name']))
+            url = urls.get(k['file'])
+            if url:
+                name = '<a href="%s">%s</a>' % (html.escape(url, quote=True),
+                                                name)
+            sl = tally.get(k['key'], [])
+            first = '—'
+            if sl:
+                pm = re.match(r'^p(\d+)-', sl[0])
+                first = '<a href="#%s">%s</a>' % (
+                    sl[0], '%s부' % pm.group(1) if pm else sl[0])
+            rows.append('<tr><td>%s</td><td class="num">%d</td><td>%s</td>'
+                        '</tr>' % (name, len(sl), first))
+        packed.append((e(label), rows))
+    return _paged('app_src', '<tr><th>문서</th><th class="num">장</th>'
+                  '<th>처음</th></tr>', _pack(packed, per, 3))
+
+
+def app_src_pins(fetched):
+    """받아 둔 문서를 (저장소 또는 사이트, 고정 커밋) 으로 묶어 — 파일 수와
+    받은 날. GitHub 의 raw·API 주소는 주소 속 커밋을 7자로 적는다.
+    O(줄 수 log 줄 수)."""
+    e = lambda s: html.escape(s, quote=False)
+    groups = {}
+    for r in fetched:
+        u = re.sub(r'^https?://', '', r['url'])
+        m = (re.match(r'^raw\.githubusercontent\.com/([^/]+/[^/]+)/'
+                      r'([0-9a-f]{7,40})/', u)
+             or re.match(r'^api\.github\.com/repos/([^/]+/[^/]+)/git/trees/'
+                         r'([0-9a-f]{7,40})', u))
+        key = (m.group(1), m.group(2)[:7]) if m else (u.split('/')[0], '')
+        g = groups.setdefault(key, [0, set()])
+        g[0] += 1
+        g[1].add(r['date'])
+    rows = []
+    for (src, sha), (n, dates) in sorted(groups.items()):
+        rows.append([e(src), '<code>%s</code>' % sha if sha else '—', str(n),
+                     ' · '.join(sorted(dates))])
+    return _html_table(['출처', '커밋', '파일', '받은 날'], rows, numcols=(2,))
+
+
+def app_examples(parts):
+    """부마다 예제 디렉터리·소스 파일·줄·일부러 깬 예제(EXPECT_FAIL)·캡처
+    (out/manifest.json 의 NN-* 항목). 마지막 줄은 합. O(부 수)."""
+    cols = ('ex', 'files', 'lines', 'fail', 'caps')
+    rows, tot = [], [0] * len(cols)
+    for p in sorted(parts):
+        ns = [parts[p].get(c, 0) for c in cols]
+        tot = [a + b for a, b in zip(tot, ns)]
+        rows.append([_part_link(p) if p else '<a href="#p0">0부</a>']
+                    + [str(n) for n in ns])
+    rows.append(['합'] + [str(n) for n in tot])
+    return _html_table(['부', '예제', '소스 파일', '줄', '일부러 깬 것',
+                        '캡처'], rows, numcols=(1, 2, 3, 4, 5))
+
+
+def section_files():
+    """order.txt 차례의 조각 [(이름, 글)] — 부록(17_)은 뺀다(제 인용을
+    세지 않게)."""
+    order = [l.strip() for l in read(os.path.join(HERE, 'order.txt'))
+             .split('\n') if l.strip() and not l.strip().startswith('#')]
+    out = []
+    for fn in order:
+        p = os.path.join(HERE, 'sections', fn)
+        if fn.startswith('17') or not os.path.exists(p):
+            continue
+        out.append((fn, read(p)))
+    return out
+
+
+def all_ids():
+    ids = set()
+    d = os.path.join(HERE, 'sections')
+    for fn in sorted(os.listdir(d)):
+        if fn.endswith('.html'):
+            ids |= set(re.findall(r'\bid="([^"]+)"', read(os.path.join(d, fn))))
+    return ids
+
+
+def fetched_rows():
+    p = os.path.join(BASE, 'docs', 'FETCHED.txt')
+    out = []
+    if not os.path.exists(p):
+        return out
+    for line in read(p).split('\n'):
+        if not line.strip() or line.startswith('#'):
+            continue
+        c = line.split('\t')
+        if len(c) >= 3:
+            out.append({'path': c[0], 'url': c[1], 'date': c[2]})
+    return out
+
+
+SRC_EXT = ('.cs', '.java')
+
+
+def example_stats():
+    """ex/NN/<예제>/ 를 센다 — 예제(디렉터리), 소스 파일(.cs·.java, bin/
+    밑은 뺀다), 줄, EXPECT_FAIL, 그리고 out/manifest.json 의 'NN-' 캡처."""
+    parts = {}
+    exdir = os.path.join(BASE, 'ex')
+    for nn in sorted(os.listdir(exdir)) if os.path.isdir(exdir) else []:
+        if not (nn.isdigit() and os.path.isdir(os.path.join(exdir, nn))):
+            continue
+        st = parts.setdefault(int(nn), {'ex': 0, 'files': 0, 'lines': 0,
+                                        'fail': 0, 'caps': 0})
+        for slug in sorted(os.listdir(os.path.join(exdir, nn))):
+            d = os.path.join(exdir, nn, slug)
+            if not os.path.isdir(d):
+                continue
+            st['ex'] += 1
+            st['fail'] += os.path.exists(os.path.join(d, 'EXPECT_FAIL'))
+            for root, dirs, names in os.walk(d):
+                dirs[:] = sorted(x for x in dirs if x not in ('bin', 'obj'))
+                for n in names:
+                    if n.endswith(SRC_EXT):
+                        st['files'] += 1
+                        st['lines'] += len(read(os.path.join(root, n))
+                                           .splitlines())
+    mp = os.path.join(OUT, 'manifest.json')
+    if os.path.exists(mp):
+        for k in json.loads(read(mp)):
+            m = re.match(r'^(\d\d)-', k)
+            if m and int(m.group(1)) in parts:
+                parts[int(m.group(1))]['caps'] += 1
+    return parts
+
+
+def appendix_tables(examples=True):
+    """부록의 표 전부 — {파일 이름: 내용}. 파일을 읽는 것은 여기뿐이다.
+    examples=False 면 예제 수 표를 뺀다 — ex/ 의 파일 이천여 개를 여는
+    데 이 기계(proot)에서 10초 남짓 걸려, 시험에서는 건너뛴다."""
+    import gen_glossary
+    releases, gates = dict_rows('releases.tsv'), dict_rows('langgates.tsv')
+    feats, ids = cites.feature_rows(BASE), all_ids()
+    tally, msg = cite_tally(section_files())
+    made = {'tbl_app_where.html': app_where(releases, feats, gates, ids),
+            'tbl_app_rel.html': app_releases(releases,
+                                             dict_rows('dotnet.tsv'))}
+    links = gate_links(gates, feats, msg, ids)
+    made.update(app_gates(releases, gates, links))
+    made['tbl_app_gates_how.html'] = app_gates_how(links)
+    made['tbl_app_glidx.html'] = app_glossary_index(
+        gen_glossary.entries(), gen_glossary.PER_SLIDE)
+    keys = dict_rows('cite_keys.tsv')
+    fetched = fetched_rows()
+    made['tbl_app_src_kinds.html'] = app_src_kinds(keys, tally)
+    made.update(app_src_lists(keys, tally,
+                              dict((r['path'], r['url']) for r in fetched)))
+    made['tbl_app_src_pins.html'] = app_src_pins(fetched)
+    if examples:
+        made['tbl_app_ex.html'] = app_examples(example_stats())
+    return made
+
+
 def dict_rows(name):
     head, body = rows_of(name)
     return [dict(zip(head, r)) for r in body]
@@ -399,6 +881,8 @@ def build():
             dict_rows('releases.tsv'), dict_rows('dotnet.tsv'),
             cites.feature_rows(BASE), dict_rows('langgates.tsv'),
             read(ecma) if os.path.exists(ecma) else ''))
+        # 부록(17부) — 조각 파일·용어집·ex/·manifest 도 센다
+        made.update(appendix_tables())
     # 버전 개관·부록·흐름 표는 3단계 이후 goevo/deck/gen_tables.py 에서
     # C# 자료에 맞춰 옮겨 온다(PLAN.md §4).
     for out_name, tsv, cols, filt in VIEWS:

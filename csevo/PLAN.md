@@ -168,8 +168,8 @@ features. LANG_OF: cs, csproj(xml), sh, txt, tsv, json. HARD_CAP 3000.
 | 14 | C# 13 — params 컬렉션, Lock, ref struct 제네릭, partial 속성 | 2024 | 170 |
 | 15 | C# 14 — 확장 멤버, field, `?.=`, Span 변환, 부분 생성자 | 2025 | 200 |
 | 16 | 흐름으로 다시 읽기 — 네 갈래, langversion 사다리, 같은 프로그램 다섯 시대, C# 15 진행 중 제안 | — | 90 |
-| A(17) | 부록 — 버전 일정표, 게이트 표, 용어집, 퀴즈 색인, 출처 | — | 60 |
-| | **Total** | | **2,910** (cap 3000) |
+| A(17) | 부록 — 버전 일정표, 게이트 표, 용어집, 퀴즈 색인, 출처 | — | 100 |
+| | **Total** | | **2,950** (cap 3000) |
 
 Within parts, feature slides per version ∝ the length of that version's sources (budget_hint),
 latest three (12–14) ×1.5. Families before have landed *below* budget; never pad to reach it —
@@ -216,6 +216,7 @@ has a claims/data row) · width · font + font-check.
 2. Size: band 2,600–3,000, hard cap 3000.
 3. End at C# 14; C# 15 only as a prose note in part 16 (no code).
 4. File `CSharp의_진화.html`, directory `csevo/`.
+5. (2026-10-07) Appendix budget 60 → 100: the glossary alone renders 51 slides (451 terms, 9 per slide), kept in full.
 Defaults taken without asking (repo norms): palette = .NET purple (`#512bd4` accent, titles
 `#2a1b5c`, background `#1b1038 → #3a2a78`, `--special` `#6b3fd8`); no photos; English code
 comments + Korean header line; two review passes before push.
@@ -804,3 +805,21 @@ comments + Korean header line; two review passes before push.
   has a "C# 15.0 - .NET 11" heading. Note: tbl_p16b_docs (doc_tally) reads deck/sections — editing any -docs table
   in another part needs a p16b rerun. Part 16 = 45 + 47 = 92/90. data/timeline.tsv is still header-only since
   step 1 (tbl_timeline unused; p16 uses tbl_p16_rel_*). Orchestrator re-running p16/p16b twice + make all SKEL=1.
+- Part 16 commit is 564d6ad (pushed; deck 2598). Part 1 (탄생 이전, 60) brief p01.md: 자바·J++·소송, 헤일스버그,
+  PDC 2000, design decisions as C# 1 code with Java 21 contrasts (javac/java under the dotnet flock, captured by
+  exps/p01.py), ECMA (link tbl_p16_std), 정리+quiz; COOL only with a primary source. Appendix brief p17.md:
+  generated 일정표, gate table by version, <!--GLOSSARY--> (51 slides), <!--QUIZINDEX-->, sources by kind with cite
+  counts, 직접 해 보기. User (2026-10-07): appendix budget 60 → 100 (budget.txt, §3, §6.5). p01 and p17 launched.
+- p17 done: 99/100 (cover+intro 2, 1장 버전 찾아가기 3, 2장 게이트 표 16 = how + 14 pages, 3장 용어집 ~54 incl.
+  가나다 jump table, 4장 퀴즈 색인 3, 5장 출처 17 = kinds/pins/12 pages/examples/howto, 6장 직접 해 보기 4 incl.
+  p17-end). gen_tables.py "부록" block: 34 tbl_app_* tables, 11 test classes (124 tests). 183/183 gates link a slide
+  (IDS_AwaitInCatchAndFinally only via a slide citing its MessageID line: row cs6-await-catch has no slide-id).
+  ~35 of 255+ cite keys never cited (std-* front matter, rel-* JSONs, a few proposals). SRCSTAT unused (no FULLSRC).
+  .NET 9 date issue → review_todo.md.
+- p01 done: 64/60 (cover+intro 2, 1장 자바와 J++ 11, 2장 헤일스버그 9, 3장 .NET 발표 9, 4장 설계 결정 23, 5장 ECMA 5,
+  6장 정리 5). 10 C# examples (1 WARN virtcs CS0114) + 14 java/ dirs (23 .java, OpenJDK 21) via jrun in exps/p01.py
+  under the dotnet flock; 25 captures; 11 new sources (Computerworld 2008 Hejlsberg ×7 via Wayback = COOL source,
+  Sun/MS delegate papers, MS press releases 2000-06-26 and 2001-12-13); fetch_docs --missing keeps old dates now.
+  COOL "January 1999" still unsourced → 미확인 on the slide. 26 claims, 13 glossary.
+- Orchestrator: <!--GLOSSARY--> now expands, so the glossary duplicate check ran for the first time: removed
+  p06b "ref struct" (p08c keeps it), p16 "RuntimeFeature" (p09 keeps) and p16 "ECMA-334" (p06b keeps).
