@@ -4,7 +4,7 @@ struct Week {
     hours: [u32; 7],
 }
 
-// [] 는 Index 트레이트다. 문자열로도 색인하게 만들 수 있다.
+// [] 는 Index 트레이트다. 문자열을 인덱스로 받게 만들 수도 있다.
 impl Index<&str> for Week {
     type Output = u32;
 

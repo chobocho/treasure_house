@@ -117,6 +117,26 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
 - unwinding = "되감기(unwinding)" (p09-panic-unwind); backtrace = "백트레이스".
 - A callout that only says "this syntax is taught in part N" is a `.note` headed
   "미리 쓰는 문법" — once at first use in the part, not on every slide.
+- Part 10 terms (as p10 defines them): 트레이트 바운드(trait bound) where the thing is
+  named, "조건(을 달다)" as the plain running word; 타입 인자 for `<T>` (kept book-wide,
+  an exception to 매개변수/인자); 단형화; 터보피시; 기본 구현; 고아 규칙; newtype 패턴;
+  정적 디스패치 / 동적 디스패치; 트레이트 객체; 메서드 표(vtable); 상위 트레이트; 포괄
+  구현; 확장 트레이트; 연관 타입 / 연관 상수 / 연관 함수; const 제네릭; "dyn 과 맞지
+  않는다" (dyn compatible).
+- On an error slide "오류 첫 줄" means the `error[…]` headline (not the `$ …` line).
+- A note that cashes in something the reader used by rote earlier is headed "이미 써 온 것".
+- Part 10 targets other parts quote: p10-generic-fn (트레이트 바운드), p10-generic-nobound
+  (E0369 on T), p10-mono, p10-turbofish, p10-trait-basic, p10-trait-default,
+  p10-trait-param (`impl Trait`), p10-bounds-where, p10-trait-not-impl (E0277 = "어떤
+  타입이 어떤 트레이트를 구현하지 않았다" — the end of the E0277 chain; later E0277 slides
+  point here), p10-return-impl, p10-return-impl-two, p10-trait-scope, p10-orphan (E0117),
+  p10-newtype, p10-derive-debug, p10-derive-table, p10-display-impl, p10-clone-copy,
+  p10-copy-string (E0204), p10-eq-ord, p10-hash-key, p10-default-derive, p10-from-into,
+  p10-into-param, p10-try-from, p10-from-str, p10-as-ref, p10-op-add, p10-op-index,
+  p10-op-table, p10-dyn-vec (트레이트 객체), p10-dyn-unsized (Sized), p10-dyn-size (메서드
+  표), p10-static-dynamic, p10-dyn-incompatible (E0038), p10-enum-vs-dyn, p10-assoc-type,
+  p10-generic-vs-assoc, p10-supertrait, p10-blanket, p10-extension, p10-const-generic.
+  Part 10 has NO slide for `Iterator` or `Drop` (parts 12 and 14 own them).
 - Part 9 targets other parts quote: p09-panic-basic, p09-panic-unwind ("패닉이 나도 값은
   정리됩니다" — part 14's drop-order slide must acknowledge it), p09-assert, p09-panic-when
   (예상한 실패인가), p09-opt-match, p09-opt-unwrap, p09-opt-expect, p09-opt-defaults,

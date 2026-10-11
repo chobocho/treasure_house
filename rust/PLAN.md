@@ -309,3 +309,12 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   212 → p09-opt-question; 12b_iter 144 → p09-real-collect, 307 → p09-opt-defaults, 67;
   13_mod 323 → p09-res-main; 16_more 361 → p09-err-display. Part 14: p14-drop-order has no
   link to p09-panic-unwind / p06-drop-scope (section D chain).
+- Part 10 reviewed (review 2), no reordering. Notes for later batches — overlaps that must
+  acknowledge part 10: p11-static-bound ↔ p10-generic-fn; p12-impl-iterator ↔
+  p10-trait-default / p10-assoc-type; p12-return-closure ↔ p10-return-impl; p14-box-dyn ↔
+  p10-dyn-vec; p14-deref-coercion ↔ p10-as-ref. `#p10` / `#p10-chN` links to retarget in
+  12_iter (ch2 ×3, ch5, ch6), 12b_iter (ch1), 13_mod 454, 14_ptr 73/112, 01_history
+  (490 trait → p10-trait-basic, 499 dyn → p10-dyn-vec, 586 → p10-trait-param, 590/647 →
+  p10-const-generic). Open evidence gaps to decide at the end: p09-err-display "Error 는
+  Debug 도 요구", p09-todo unimplemented!/unreachable!, p10-mono "사본", p10-static-dynamic
+  "한 벌씩".
