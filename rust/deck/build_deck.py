@@ -15,6 +15,7 @@
      <!--REL v=1.65-->          → 1.65(2022-11-03)
      <!--SINCE key=let-else-->  → 버전 배지
      <!--SRC key=rust-1.0-->    → 출처 링크
+     <!--FACT id=first-release--> → 근거가 확인된 역사 주장의 출처 링크
 
    검사는 build() 끝의 목록과 같다. 하나라도 걸리면 종료 코드 1.
    O(조각 글자 수 + 인용한 파일 크기) — 한 번 훑고 끝난다.
@@ -41,6 +42,9 @@ MAX_PRE_COLS = 72
 MAX_TERM_COLS = 108
 MAX_WRAP_COLS = 200
 PLACEHOLDER = '준비 중입니다'
+# 역사 부는 연도·주장마다 근거를 요구한다(PLAN.md §0.5).
+HISTORY_PARTS = (1,)
+YEAR = re.compile(r'(?<![\d.#-])(19[5-9]\d|20[0-4]\d)(?![\d.])')
 LANG_OF = {'.rs': 'rust', '.toml': 'toml', '.txt': 'text', '.md': 'text', '.sh': 'sh'}
 
 DIRECTIVE = re.compile(r'<!--([A-Z]+)((?:\s+[a-z]+=(?:"[^"]*"|[^\s>]*(?:\s(?![a-z]+=)[^\s>]*)*))*)\s*-->')
@@ -107,6 +111,7 @@ class Builder(object):
         self.releases = tsv(os.path.join(root, 'data', 'releases.tsv'), 'version')
         self.features = tsv(os.path.join(root, 'data', 'features.tsv'), 'key')
         self.sources = tsv(os.path.join(root, 'data', 'sources.tsv'), 'key')
+        self.evidence = tsv(os.path.join(root, 'data', 'evidence.tsv'), 'id')
         self.manifest = rsrun.manifest_load(root)
         self.used = set()           # 슬라이드가 인용한 예제
         self.where = ''             # 오류 문구에 붙일 "조각:줄"
@@ -233,7 +238,44 @@ class Builder(object):
                 return ''
             return ('<a class="src" href="%s" title="%s">출처</a>'
                     % (html.escape(s['url']), html.escape(s['title'])))
+        if name == 'FACT':
+            e = self.evidence.get(a.get('id', ''))
+            s = self.sources.get(e['source']) if e else None
+            if not e or not s:
+                self.err('FACT: data/evidence.tsv 에 없는 주장 %s (facts.tsv 에 적고 make data)' % a.get('id'))
+                return ''
+            title = '%s — %s' % (s['title'], e['matched'])
+            if len(title) > 160:
+                title = title[:159] + '…'
+            return '<a class="src" href="%s" title="%s">출처</a>' % (html.escape(s['url']), html.escape(title))
         return None
+
+    def history_check(self, fname, text):
+        """역사 부의 장마다 — 근거 지시자가 하나는 있고, 적힌 연도가 그 근거 안에 있는가."""
+        for n, m in enumerate(ARTICLE.finditer(text), 1):
+            attrs, inner = m.group(1), m.group(2)
+            self.where = '%s:%d' % (fname, text.count('\n', 0, m.start()) + 1)
+            if 'section' in attrs or 'class="chnum"' in inner or 'quiz' in attrs:
+                continue
+            allowed, cited = set(), 0
+            for d in DIRECTIVE.finditer(inner):
+                a = {k: (q if q else u).strip() for k, q, u in ATTR.findall(d.group(2))}
+                name = d.group(1)
+                if name == 'FACT' and a.get('id') in self.evidence:
+                    e = self.evidence[a['id']]
+                    allowed.update(YEAR.findall(e['matched']))
+                    allowed.update(YEAR.findall(self.sources.get(e['source'], {}).get('date', '')))
+                elif name == 'SRC' and a.get('key') in self.sources:
+                    allowed.update(YEAR.findall(self.sources[a['key']].get('date', '')))
+                elif name == 'REL' and a.get('v') in self.releases:
+                    allowed.update(YEAR.findall(self.releases[a['v']]['date']))
+                if name in ('FACT', 'SRC', 'REL', 'SINCE', 'RUN', 'OUT'):
+                    cited += 1
+            if not cited:
+                self.err('근거 없는 역사 슬라이드 — FACT·SRC·REL 가운데 하나는 단다')
+            prose = re.sub(r'<[^>]+>', ' ', DIRECTIVE.sub(' ', inner))
+            for y in sorted(set(YEAR.findall(prose)) - allowed):
+                self.err('%s년 — 이 장의 근거(FACT·SRC 날짜·REL) 어디에도 없는 연도' % y)
 
     def expand(self, m):
         name = m.group(1)
@@ -263,6 +305,8 @@ class Builder(object):
             else:
                 body = html.unescape(re.sub(r'<[^>]+>', '', m.group(2))).strip('\n').split('\n')
                 self.measure(fname, body, MAX_PRE_COLS, '그림')
+        if part in HISTORY_PARTS:
+            self.history_check(fname, text)
         out = []
         pos = 0
         for m in DIRECTIVE.finditer(text):

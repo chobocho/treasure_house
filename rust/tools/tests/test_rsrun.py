@@ -144,6 +144,26 @@ class Capture(unittest.TestCase):
         self.assertEqual(cap, '$ ./a\na  \n')
 
 
+class Prune(unittest.TestCase):
+    def test_orphan_capture_and_row_are_removed(self):
+        root = tempfile.mkdtemp(prefix='prune-test-')
+        self.addCleanup(shutil.rmtree, root, True)
+        for rel, text in (('ex/02/keep.rs', 'fn main() {}\n'), ('out/02/keep.txt', '$ x\n'),
+                          ('ex/02/gone.rs', 'fn main() {}\n'), ('out/02/gone.txt', '$ y\n')):
+            os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
+            with open(os.path.join(root, rel), 'w') as f:
+                f.write(text)
+        rsrun.manifest_update(root, 'ex/02/keep.rs', 'rustc 1')
+        rsrun.manifest_update(root, 'ex/02/gone.rs', 'rustc 1')
+        os.remove(os.path.join(root, 'ex/02/gone.rs'))         # 예제를 지웠거나 이름을 바꿨다
+        self.assertEqual(rsrun.orphans(root), ['out/02/gone.txt'])
+        rsrun.prune(root)
+        self.assertEqual(rsrun.orphans(root), [])
+        self.assertFalse(os.path.exists(os.path.join(root, 'out/02/gone.txt')))
+        self.assertEqual(list(rsrun.manifest_load(root)), ['ex/02/keep.rs'])
+        self.assertTrue(os.path.exists(os.path.join(root, 'out/02/keep.txt')))
+
+
 @unittest.skipUnless(rsrun.toolchain_ok(), 'rustc 가 없다')
 class RealCompiler(unittest.TestCase):
     def setUp(self):
@@ -171,6 +191,12 @@ class RealCompiler(unittest.TestCase):
         self.assertTrue(cap.startswith('$ rustc --edition 2024 moved.rs\n'))
         self.assertIn('error[E0382]', cap)
         self.assertIn('--> moved.rs:4:', cap)        # 줄 번호가 화면과 같다
+        self.assertTrue(cap.endswith('[종료 코드 1]\n'))
+
+    def test_syntax_error_without_a_code(self):
+        # 문법 오류에는 E 번호가 없다 — expect: error 는 "오류로 실패" 만 뜻한다.
+        cap = self.run_ex('semi.rs', 'fn main() {\n    let a = 1\n}\n//@ expect: error\n')
+        self.assertIn('error: expected `;`', cap)
         self.assertTrue(cap.endswith('[종료 코드 1]\n'))
 
     def test_wrong_expected_code_fails(self):

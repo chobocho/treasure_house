@@ -52,8 +52,9 @@ data-check:             ## features·sources 의 근거가 docs/ 에 있는지
 
 # ── 예제 ───────────────────────────────────────────────────────────
 # 문법 오류를 보이려고 일부러 깨 둔 예제는 rustfmt 가 읽지 못한다.
-# 그런 파일은 이름을 nofmt_ 로 시작해 검사에서 뺀다.
-RS := $(shell find ex -name '*.rs' ! -name 'nofmt_*' 2>/dev/null | sort)
+# 그런 파일은 ex/nofmt.txt 에 경로를 적어 검사에서 뺀다.
+RS := $(shell find ex -name '*.rs' 2>/dev/null | sort \
+        | grep -v -x -F -f ex/nofmt.txt)
 
 fmt:                    ## ex/ 의 예제를 rustfmt 로 다듬는다 (72칸)
 	@test -z "$(RS)" || $(RUSTFMT) --config-path ex/rustfmt.toml $(RS)

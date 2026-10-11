@@ -9,6 +9,7 @@
      python3 tools/rsrun.py --check ex/06      다시 돌려 이미 있는 캡처와 같은지만 본다
      python3 tools/rsrun.py --all --stale      캡처가 없거나 낡은 것만 돌린다
      python3 tools/rsrun.py --manifest-check   돌리지 않고 해시만 대조한다
+     python3 tools/rsrun.py --prune            예제가 사라진 캡처를 지운다
 
    예제의 꼴은 둘이다.
      ex/NN/name.rs   파일 하나. 파일 **끝**에 `//@ key: value` 지시자를 둔다.
@@ -277,7 +278,9 @@ def _run_file(path, name, sandbox, env, timeout):
         if rc == 0:
             raise RsrunError('컴파일 오류를 기대했는데(%s) 컴파일됐다' % ','.join(d['expect']))
         for c in d['expect']:
-            if 'error[%s]' % c not in text:
+            # 문법 오류에는 E 번호가 없다 — 'error' 는 "오류로 실패했다" 만 본다.
+            want = '\nerror' if c == 'error' else 'error[%s]' % c
+            if want not in '\n' + text:
                 raise RsrunError('기대한 오류 %s 가 없다\n%s' % (c, text))
         return format_capture(steps)
     if rc != 0:
@@ -392,6 +395,33 @@ def stale(root, rel, rows=None):
     return ''
 
 
+def orphans(root):
+    """예제가 사라진 캡처 — 예제를 지우거나 이름을 바꾸면 남는다."""
+    have = set(capture_path(e) for e in examples(root))
+    found = []
+    out = os.path.join(root, 'out')
+    for base, _, files in os.walk(out):
+        for n in sorted(files):
+            rel = os.path.relpath(os.path.join(base, n), root)
+            if n.endswith('.txt') and rel not in have:
+                found.append(rel)
+    return sorted(found)
+
+
+def prune(root):
+    """주인 없는 캡처와 장부 줄을 지운다."""
+    for rel in orphans(root):
+        os.remove(os.path.join(root, rel))
+    have = set(examples(root))
+    rows = manifest_load(root)
+    p = os.path.join(root, 'out', 'MANIFEST.tsv')
+    with io.open(p, 'w', encoding='utf-8', newline='') as f:
+        f.write('example\tsource_sha256\tcapture_sha256\trustc\n')
+        for k in sorted(rows):
+            if k in have:
+                f.write('\t'.join((k,) + rows[k]) + '\n')
+
+
 def rustc_version():
     out = subprocess.run([RUSTC, '--version'], capture_output=True, text=True).stdout
     m = re.match(r'rustc (\S+)', out)
@@ -421,8 +451,15 @@ def main(argv=None):
     ap.add_argument('--check', action='store_true', help='다시 돌려 캡처와 같은지만 본다')
     ap.add_argument('--manifest-check', action='store_true', help='돌리지 않고 해시만 본다')
     ap.add_argument('-q', '--quiet', action='store_true', help='캡처를 화면에 찍지 않는다')
+    ap.add_argument('--prune', action='store_true', help='예제가 사라진 캡처·장부 줄을 지운다')
     args = ap.parse_args(argv)
     root = ROOT
+
+    if args.prune:
+        for o in orphans(root):
+            print('  - ' + o)
+        prune(root)
+        return 0
 
     if args.manifest_check:
         rows = manifest_load(root)
@@ -430,8 +467,12 @@ def main(argv=None):
         bad = [(e, why) for e, why in bad if why]
         for e, why in bad:
             print('  ✗ %s — %s' % (e, why))
-        print('  예제 %d개 — 낡은 캡처 %d개' % (len(examples(root)), len(bad)))
-        return 1 if bad else 0
+        lost = orphans(root)
+        for o in lost:
+            print('  ✗ %s — 예제가 없는 캡처 (python3 tools/rsrun.py --prune)' % o)
+        print('  예제 %d개 — 낡은 캡처 %d개, 주인 없는 캡처 %d개'
+              % (len(examples(root)), len(bad), len(lost)))
+        return 1 if bad or lost else 0
 
     targets = _targets(root, args)
     if not targets:

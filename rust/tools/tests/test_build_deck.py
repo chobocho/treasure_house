@@ -223,6 +223,57 @@ class Rules(Tree):
         self.assertIn('200칸', self.errs())
 
 
+class History(Tree):
+    """역사 부(1부)의 규칙 — 연도는 근거가 있어야 한다."""
+
+    def setUp(self):
+        super().setUp()
+        self.put('deck/order.txt', '01_history.html\n06_own.html\n')
+        self.put('deck/budget.txt', '1 10\n6 10\n')
+        self.put('data/sources.tsv', 'key\turl\ttitle\tdate\n'
+                 'rust-1.0\thttps://blog.rust-lang.org/x\tAnnouncing Rust 1.0\t2015-05-15\n'
+                 'releases\thttps://example.org/RELEASES.md\tRust Release Notes\t\n')
+        self.put('data/evidence.tsv', 'id\tsource\tmatched\n'
+                 'first-release\treleases\tVersion 0.1 (2012-01-20)\n'
+                 'one-oh\trust-1.0\tToday we are very proud to announce the 1.0 release\n')
+        self.section('<article class="card" id="p06-a"><!--RUN file=ex/06/a.rs--></article>\n')
+
+    def history(self, body):
+        self.put('deck/sections/01_history.html',
+                 '<article class="card section" id="p01"><p class="chnum">1부</p><h2>역사</h2></article>\n'
+                 '<article class="card" id="p01-a">' + body + '</article>\n')
+
+    def test_fact_renders_a_source_link(self):
+        self.history('<p>첫 공개판은 2012년입니다. <!--FACT id=first-release--></p>')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertIn('<a class="src" href="https://example.org/RELEASES.md" '
+                      'title="Rust Release Notes — Version 0.1 (2012-01-20)">출처</a>', r.html)
+
+    def test_year_from_source_date_and_rel(self):
+        self.history('<p>2015년에 1.0 이 나왔습니다. <!--FACT id=one-oh--> '
+                     '그 뒤 <!--REL v=1.65--> 에… 2022년.</p>')
+        self.assertEqual(self.build().errors, [])
+
+    def test_year_without_evidence_is_an_error(self):
+        self.history('<p>2006년에 시작했습니다. <!--FACT id=first-release--></p>')
+        self.assertIn('2006', self.errs())
+
+    def test_unknown_fact(self):
+        self.history('<p>x <!--FACT id=nope--></p>')
+        self.assertIn('nope', self.errs())
+
+    def test_history_slide_without_any_source_is_an_error(self):
+        self.history('<p>그냥 주장만 있습니다.</p>')
+        self.assertIn('근거', self.errs())
+
+    def test_other_parts_are_not_year_checked(self):
+        self.history('<p>x <!--FACT id=first-release--></p>')
+        self.section('<article class="card" id="p06-a"><!--RUN file=ex/06/a.rs-->'
+                     '<p>1999년 이야기</p></article>\n')
+        self.assertEqual(self.build().errors, [])
+
+
 class Width(unittest.TestCase):
     def test_width(self):
         self.assertEqual(build_deck.width('abc'), 3)

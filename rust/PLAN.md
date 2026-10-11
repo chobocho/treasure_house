@@ -164,5 +164,14 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   `deck/check_deck.js` (goevo's, demo cases emptied), Makefile. `make all SKEL=1` green, 19 slides.
 - Highlighter in `deck/base/tail.html` taught Rust: lifetimes (`.lt`) vs char literals, raw
   strings, attributes (`.at`), macros, suffixed numbers. Theme recoloured (rust orange).
-- Authors: example names starting `nofmt_` skip rustfmt (for deliberate syntax errors).
+- Authors: deliberate syntax-error examples that rustfmt cannot parse are listed in `ex/nofmt.txt`.
 - The built deck HTML is not committed until wrap-up (rebuildable; avoids churn).
+
+### Step 3 — data tools; authoring kit (2026-10-11)
+- `tools/fetch_docs.py`, `tools/make_data.py` (+21 tests, 87 total). `data/releases.tsv`
+  generated from RELEASES.md (155 releases, newest 1.99 2026-10-01). Builder gained `FACT`
+  and the history-part rule (every slide cites; every year must appear in its evidence).
+- rsrun: `expect: error` (syntax errors without a code), `--prune`, orphan check.
+- `deck/OUTLINE.md` (chapter contract for all parts), `deck/AUTHORING.md` (subagent brief),
+  part 2 chapter 1 written by the orchestrator as the model chapter (10 slides).
+- Known red: `#p02-ch3` link dangles until part 2 chapter 3 exists.
