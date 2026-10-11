@@ -262,3 +262,13 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   the Technology Review article ("by 2013") and the release notes (0.11/0.12, 2014);
   the cached Android post has only title and date. `rustup-beta` fact is cited nowhere.
 - index.html card, README and history.md updated to the real figures. Not pushed.
+
+### Review 2 in progress — reader flow and style (2026-10-11)
+- Brief: `deck/REVIEW2.md` (ea97894b). One reviewer at a time, batches ≤ 90 slides,
+  commit per batch only when `make deck` exits 0. Review-2 commits are NOT pushed yet
+  (origin/main = 420c95d0); ask the user before pushing.
+- Done: parts 0+2 (0f9b305a). Running: part 3.
+- Remaining order: 4+5 → 6 → 7 → 8 → 9 → 10 → 11+14 → 12 → 13+15 → 16+appendix → 1.
+- After the last batch: `make all` (no SKEL), `rsrun --all --check` ×3 with counts and exit
+  codes logged, card/README figures only if slide or example counts changed, history.md
+  entry, memory note, then report and ask about push.

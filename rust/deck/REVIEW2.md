@@ -87,6 +87,17 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
   how to read a message.
 - When you add a sentence that says what a capture shows (review 1 did not see it), list
   it in your report under "new capture-reading sentences" so it can be double-checked.
+- English gloss: once per part, on the slide that defines or first explains the term —
+  not in the part intro's chapter list.
+- A reference to something a specific slide teaches links to that slide, not to the part
+  cover (`#pNN` stays for "the whole part"). Check the id exists with
+  `grep -o 'id="pNN[^"]*"' deck/sections/NN*.html`. Part 3 targets other parts quote:
+  p03-scope (스코프 — later parts say "스코프를 벗어나면"), p03-shadow, p03-immut/p03-mut,
+  p03-overflow, p03-overflow-release, p03-nan, p03-nan-sort (실수 sort 오류, E0277),
+  p03-static, p03-ch4 (형변환), p03-as-int, p03-int-methods (abs), p03-char, p03-tuple
+  (튜플 풀기), p03-array-get (배열 인덱스 패닉), p03-ch5.
+- A later error slide that repeats an error number or message seen earlier says so in one
+  clause with a link ("2부에서 본 E0277 과 같은 꼴"), then reads only what is new.
 
 **Line references.** Source lines: "N번 줄". Lines of a capture: "출력 N번째 줄" (or
 "화면의 N번째 줄"). Columns are not cited.

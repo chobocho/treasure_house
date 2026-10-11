@@ -8,7 +8,7 @@ fn main() {
     let b: i64 = order.into();
     println!("a = {a} ({})", type_name_of_val(&a));
     println!("b = {b} ({})", type_name_of_val(&b));
-    // 2장에서 막혔던 비교
+    // 2장에서 막혔던 견주기
     let stock: i64 = 1000;
     println!("{}", stock > order.into());
     // 정수 → 실수, 글자 → 번호, bool → 수 도 잃을 것이 없다
