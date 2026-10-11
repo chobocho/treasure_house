@@ -1,16 +1,17 @@
 <article class="card section" id="p15">
 <p class="chnum">15부</p>
 <h2>동시성 기초</h2>
-<p class="chsub">스레드 · move 와 범위 스레드 · 채널 · Mutex 와 Arc · Send 와 Sync</p>
+<p class="chsub">스레드 · move 와 스코프 스레드 · 채널 · Mutex 와 Arc · Send 와 Sync</p>
 </article>
 
 <article class="card" id="p15-intro">
 <h2>이 부에서 할 일</h2>
-<p class="lead">여러 스레드가 같은 데이터를 건드리다 생기는 버그(데이터 경쟁)는 찾기도 고치기도 어렵습니다. Rust 는
+<p class="lead">여러 스레드가 같은 데이터를 건드리다 생기는 버그(데이터 경쟁, data race)는 찾기도 고치기도 어렵습니다. Rust 는
 그것을 소유권과 타입으로 막습니다. 새 규칙을 배우는 것이 아니라, 6부의 규칙이 스레드 사이에서도 그대로
-지켜지는 것을 봅니다.</p>
+지켜지는 것을 봅니다. 쓰는 도구는 12부의 클로저와, 14부 끝의 <a href="#p14-threads">짝 표</a>에서 예고한 <code>Arc</code> ·
+<code>Mutex</code> 입니다.</p>
 <ul>
-<li><b>1장</b> — 스레드: 만들기, 기다리기, 값 넘기기(<code>move</code>), 빌려주기(범위 스레드)</li>
+<li><b>1장</b> — 스레드: 만들기, 기다리기, 값 넘기기(<code>move</code>), 빌려주기(스코프 스레드)</li>
 <li><b>2장</b> — 채널: 스레드 사이에 값을 보내기</li>
 <li><b>3장</b> — 공유 상태: <code>Mutex</code>, <code>Arc</code>, 원자 타입</li>
 <li><b>4장</b> — <code>Send</code> 와 <code>Sync</code>, 한 번만 만드는 전역 값</li>
@@ -22,13 +23,15 @@
 <article class="card" id="p15-ch1">
 <p class="chnum">1장</p>
 <h2>스레드</h2>
-<p class="chsub">spawn 과 join · 결과 받기 · move · 범위 스레드 · 스레드의 패닉</p>
+<p class="chsub">spawn 과 join · 결과 받기 · 빌릴 수 없다 · move · 여럿 모으기 · 스코프 스레드 · 스레드의 패닉</p>
 </article>
 
 <article class="card" id="p15-spawn">
 <h3>spawn 으로 만들고 join 으로 기다린다</h3>
-<p class="lead"><code class="nb">thread::spawn</code> 에 클로저(<a href="#p12">12부</a>)를 주면 운영 체제의 새 스레드에서 그것을 돌립니다. 돌려받은
-손잡이의 <code>join()</code> 은 그 스레드가 끝날 때까지 기다립니다.</p>
+<p class="lead">스레드(thread)는 한 프로그램 안에서 따로 도는 실행 흐름이고, 패닉 줄에서 본
+<code class="nb">thread 'main'</code> 이 그 하나입니다. <code class="nb">thread::spawn</code> 에
+<a href="#p12-closure-basic">클로저</a>를 주면 운영 체제의 새 스레드에서 그것을 돌립니다. 돌려받은 손잡이의 <code>join()</code> 은
+그 스레드가 끝날 때까지 기다립니다. 뒤에 붙은 <code>unwrap()</code> 은 다음 슬라이드에서 봅니다.</p>
 <!--RUN file=ex/15/spawn_join.rs note=스레드 하나를 만들고 끝나기를 기다린다-->
 <div class="warn"><b>join 을 빼먹으면</b> — <code>main</code> 이 끝나면 프로그램도 끝나므로, 새 스레드의 줄이 찍힐지 장담할 수
 없습니다. 실행마다 달라질 수 있는 화면이라 이 책에서는 돌려 보이지 않습니다. 두 줄의 순서가 늘 같은 것은
@@ -39,21 +42,24 @@
 <h3>스레드의 결과를 받는다</h3>
 <p class="lead">클로저의 값이 스레드의 결과입니다. <code>join()</code> 이 그것을 돌려줍니다.</p>
 <!--RUN file=ex/15/join_value.rs note=백만까지의 합을 다른 스레드에서-->
-<div class="note"><b><code>unwrap()</code> 이 붙는 까닭</b> — <code>join()</code> 은 <code>Result</code> 를 돌려줍니다. 그 스레드가
-패닉했으면 <code>Err</code> 입니다(<a href="#p15-panic-join">이 장의 끝</a>). 새 스레드는 아무것도 찍지 않으므로 두 줄의
+<div class="note"><b><code>unwrap()</code> 이 붙는 까닭</b> — <code>join()</code> 은 <code>Result</code> 를 돌려주고, 9부의
+<a href="#p09-res-unwrap"><code>unwrap()</code></a> 이 <code>Ok</code> 의 속을 꺼냅니다. 그 스레드가 패닉했으면 <code>Err</code>
+입니다(<a href="#p15-panic-join">이 장의 끝</a>). 새 스레드는 아무것도 찍지 않으므로 두 줄의
 순서는 늘 같습니다.</div>
 </article>
 
 <article class="card" id="p15-borrow-err">
 <h3>스레드는 지역 변수를 빌릴 수 없다 — E0373</h3>
-<p class="lead">새 스레드는 자기를 만든 함수보다 오래 살 수도 있습니다. 그러면 빌려 간 지역 변수가 먼저 사라집니다.
-컴파일러는 그 가능성만으로 거절합니다.</p>
+<p class="lead">앞의 두 클로저는 바깥 변수를 쓰지 않았습니다. 이번 클로저는 <code>main</code> 의 <code>names</code> 를 찍으므로,
+12부에서 본 대로 <a href="#p12-capture-ref">빌려서</a> 붙잡습니다. 그런데 새 스레드는 자기를 만든 함수보다 오래 살 수 있고,
+그러면 빌려 간 지역 변수가 먼저 사라집니다. 컴파일러는 그 가능성만으로 거절합니다.</p>
 <!--RUN file=ex/15/borrow_err.rs note=클로저가 names 를 빌린다-->
 <ul>
-<li><b>첫 줄과 두 꼬리표</b> — "클로저가 지금 함수보다 오래 살 수 있는데 <code>names</code> 를 빌린다". 5번 줄 <code class="nb">||</code> 가 그
+<li><b>오류 첫 줄</b> — "클로저가 지금 함수보다 오래 살 수 있는데 <code>names</code> 를 빌린다". 5번 줄 <code class="nb">||</code> 가 그
 클로저이고, 6번 줄이 빌리는 자리입니다.</li>
-<li><b><code>note:</code></b> — <code class="nb">thread::spawn</code> 이 인자에 <code class="nb">'static</code> 을 요구한다고 알려 줍니다. "잠깐 빌린 참조를
-품지 말라" 는 조건이었습니다(<a href="#p11">11부</a>).</li>
+<li><b><code>note:</code></b> — <code class="nb">thread::spawn</code> 이 인자에 <code class="nb">'static</code> 을 요구한다고 알려 줍니다. 11부에서
+<a href="#p11-static-bound">"잠깐 빌린 참조를 품지 않았는가" 만 묻는다</a>고 한 조건입니다. <code>names</code> 를 빌린 이 클로저는 그
+참조를 품고 있습니다.</li>
 <li><b><code>help:</code></b> — <code>move</code> 를 붙여 클로저가 <code>names</code> 를 가져가게 하라며 고친 5번 줄을 보여 줍니다. 다음
 슬라이드가 그것입니다.</li>
 </ul>
@@ -61,20 +67,23 @@
 
 <article class="card" id="p15-move">
 <h3>move — 빌리지 말고 가져간다</h3>
-<p class="lead">클로저 앞에 <code>move</code> 를 붙이면 쓰는 변수의 소유권을 클로저가 가져갑니다(<a href="#p12">12부</a>). 값이
-스레드와 함께 사니 먼저 사라질 일이 없습니다.</p>
+<p class="lead">12부에서 본 대로 <a href="#p12-capture-move"><code>move</code> 를 쓰면 클로저가 쓰는 변수를 빌리지 않고
+가져갑니다</a>. 거기서는 클로저를 함수 밖으로 돌려줄 때 썼고, 여기서는 스레드가 자기를 만든 함수보다 오래 살 수 있어서
+씁니다. 값이 스레드와 함께 사니 먼저 사라질 일이 없습니다. 앞 슬라이드의 <code>help:</code> 가 보여 준 대로
+<code class="nb">||</code> 앞에 <code>move</code> 만 붙였습니다.</p>
 <!--RUN file=ex/15/move_ok.rs note=names 가 새 스레드로 옮겨 간다-->
 </article>
 
 <article class="card" id="p15-move-after">
 <h3>넘긴 값은 더 쓸 수 없다 — E0382</h3>
-<p class="lead">옮겨 간 값을 원래 스레드에서 다시 쓰면 평소의 이동 오류가 납니다. 두 스레드가 같은 벡터를 동시에
-건드릴 길이 타입 검사에서 막힙니다.</p>
+<p class="lead">앞 슬라이드의 코드에서 스레드를 만든 뒤 <code>main</code> 이 <code>names</code> 를 한 번 더 찍습니다. 옮겨 간 값을
+원래 스레드에서 다시 쓰면 평소의 이동 오류가 납니다.</p>
 <!--RUN file=ex/15/move_after.rs note=넘긴 뒤에 main 에서 또 쓴다 — 6부의 그 오류-->
-<div class="note"><b>읽는 법</b> — 5번 줄 <code class="nb">move ||</code> 에서 값이 클로저 안으로 옮겨 갔고(6번 줄에서 쓰기 때문), 8번 줄이
-옮긴 뒤에 빌리려는 자리입니다. 4번 줄의 꼬리표는 <code class="nb">Vec&lt;&amp;str&gt;</code> 가 <code>Copy</code> 가 아니라서 이동이라고
-알려 줍니다. <code>help:</code> 는 양쪽에서 다 써야 한다면 옮기기 전에 복제해 두라고 권합니다.</div>
-<div class="key"><b>새로 배울 규칙이 없다</b> — <a href="#p06">6부</a>의 이동 규칙 그대로입니다. 두 스레드가 같은 벡터를 함께 건드리려는
+<div class="note"><b>읽는 법</b> — 12부에서 <a href="#p12-capture-move-after">클로저가 가져간 값을 밖에서 쓰려다</a> 본 E0382 와
+같은 꼴입니다. 5번 줄 <code class="nb">move ||</code> 에서 값이 클로저 안으로 옮겨 갔고(6번 줄에서 쓰기 때문), 8번 줄이 옮긴 뒤에
+빌리려는 자리입니다. 4번 줄에 붙은 말은 <code class="nb">Vec&lt;&amp;str&gt;</code> 가 <code>Copy</code> 가 아니라서 이동이라는 것입니다.
+<code>help:</code> 는 양쪽에서 다 써야 한다면 옮기기 전에 복제해 두라고 권합니다.</div>
+<div class="key"><b>새로 배울 규칙이 없다</b> — 6부의 <a href="#p06-move-assign">이동 규칙</a> 그대로입니다. 두 스레드가 같은 벡터를 함께 건드리려는
 코드가 실행 중의 버그가 아니라 컴파일 오류로 나옵니다.</div>
 </article>
 
@@ -86,17 +95,21 @@
 </article>
 
 <article class="card" id="p15-scope">
-<h3>범위 스레드 — 빌려 쓰는 스레드 <!--SINCE key=scoped-threads--></h3>
-<p class="lead"><code class="nb">thread::scope</code> 안에서 만든 스레드는 그 범위가 끝나기 전에 반드시 끝납니다. 컴파일러가
-그것을 알기 때문에 지역 변수를 <code>move</code> 없이 빌릴 수 있습니다.</p>
+<h3>스코프 스레드 — 빌려 쓰는 스레드 <!--SINCE key=scoped-threads--></h3>
+<p class="lead"><code>move</code> 로 넘긴 값은 <a href="#p15-move-after">원래 스레드에서 더 쓸 수 없었습니다</a>. 잠깐 빌려주기만 하고
+싶을 때 쓰는 것이 스코프 스레드(scoped thread)입니다. <code class="nb">thread::scope</code> 안에서 만든 스레드는 그 스코프가 끝나기
+전에 반드시 끝납니다. 컴파일러가 그것을 알기 때문에 지역 변수를 <code>move</code> 없이 빌릴 수 있습니다.</p>
 <!--RUN file=ex/15/scope.rs note=벡터를 반으로 나눠 두 스레드가 더한다-->
-<div class="tip"><b>먼저 이것부터</b> — 잠깐 나눠 일하고 다시 모이는 계산에는 범위 스레드가 간단합니다. 값을 옮길
+<div class="note"><b>읽는 법</b> — 10번 줄과 11번 줄의 클로저에 <code>move</code> 가 없습니다. 두 스레드는 <code>numbers</code> 의 앞 절반과
+뒤 절반을 빌려 더했고, 스코프가 끝난 뒤 16번 줄에서 <code>main</code> 이 <code>numbers</code> 를 그대로 찍었습니다.</div>
+<div class="tip"><b>먼저 이것부터</b> — 잠깐 나눠 일하고 다시 모이는 계산에는 스코프 스레드가 간단합니다. 값을 옮길
 필요도, 3장에서 볼 <code>Arc</code> 로 감쌀 필요도 없습니다.</div>
 </article>
 
 <article class="card" id="p15-panic-join">
 <h3>스레드가 패닉하면</h3>
-<p class="lead">패닉은 그 스레드만 끝냅니다. 기다리던 쪽은 <code>join()</code> 의 <code>Err</code> 로 그 사실을 압니다.</p>
+<p class="lead">패닉은 그 스레드만 끝냅니다. 9부에서 <a href="#p09-panic-basic">패닉이 프로그램을 끝낸 것</a>은 패닉한 스레드가
+<code>main</code> 이었기 때문입니다. 기다리던 쪽은 <code>join()</code> 의 <code>Err</code> 로 그 사실을 압니다.</p>
 <!--RUN file=ex/15/panic_join.rs note=일꾼은 쓰러지고 main 은 계속 간다-->
 <div class="note"><b>이름 없는 스레드</b> — 패닉 줄의 <code class="nb">'&lt;unnamed&gt;'</code> 는 스레드에 이름을 붙이지 않았다는
 뜻입니다. 지금까지 본 <code class="nb">'main'</code> 자리입니다. 끝에 종료 코드 줄이 없습니다 — 일꾼은 패닉했지만
@@ -110,20 +123,23 @@
 <button>답 보기</button>
 <div class="a"><b>A.</b> 새 스레드가 <code>names</code> 의 주인인 함수보다 오래 살 수 있어서입니다(E0373). ① <code>move</code> 로
 소유권을 넘기거나(<a href="#p15-move">move</a>), ② <code class="nb">thread::scope</code> 안에서 만들어 빌려 쓰게
-합니다(<a href="#p15-scope">범위 스레드</a>).</div>
+합니다(<a href="#p15-scope">스코프 스레드</a>).</div>
 </article>
 
 <article class="card" id="p15-ch2">
 <p class="chnum">2장</p>
 <h2>채널</h2>
-<p class="chsub">보내는 쪽과 받는 쪽 · 보내면 소유권도 간다 · 보내는 쪽이 여럿 · 닫히는 때</p>
+<p class="chsub">보내는 쪽과 받는 쪽 · 차례로 받기 · 보내면 소유권도 간다 · 보내는 쪽이 여럿 · 닫힌 채널</p>
 </article>
 
 <article class="card" id="p15-channel">
 <h3>채널 — 스레드 사이의 우편함</h3>
-<p class="lead"><code class="nb">mpsc::channel()</code> 은 보내는 쪽(<code>tx</code>)과 받는 쪽(<code>rx</code>)을 한 쌍으로
+<p class="lead">1장에서는 스레드가 끝날 때 결과 하나를 <code>join</code> 으로 받았습니다. 도는 동안 값을 주고받으려면
+채널(channel)을 씁니다. <code class="nb">mpsc::channel()</code> 은 보내는 쪽(<code>tx</code>)과 받는 쪽(<code>rx</code>)을 한 쌍으로
 만듭니다. 한 스레드가 넣은 값을 다른 스레드가 꺼냅니다.</p>
 <!--RUN file=ex/15/channel.rs note=새 스레드가 보내고 main 이 받는다-->
+<p class="cap">8번 줄의 <a href="#p15-move"><code>move</code></a> 가 <code>tx</code> 를 새 스레드로 넘겼습니다. <code>join</code> 은 없지만
+12번 줄의 <code>recv()</code> 가 값이 올 때까지 기다립니다.</p>
 <div class="note"><b>mpsc</b> — multiple producer, single consumer. 보내는 쪽은 여럿일 수 있고 받는 쪽은 하나입니다.</div>
 </article>
 
@@ -136,21 +152,23 @@
 
 <article class="card" id="p15-channel-moved">
 <h3>보낸 값은 내 것이 아니다 — E0382</h3>
-<p class="lead"><code>send</code> 는 값의 소유권을 채널로 옮깁니다. 보낸 뒤에 그 값을 쓰면 이동 오류입니다. 보낸 쪽과 받은
-쪽이 같은 값을 동시에 쥐는 일이 없습니다.</p>
+<p class="lead"><code>send</code> 는 값의 소유권을 채널로 옮깁니다. 6부에서 본 <a href="#p06-move-fn">함수에 넘긴 값</a>과 같아서,
+보낸 뒤에 그 값을 쓰면 이동 오류입니다. 보낸 쪽과 받은 쪽이 같은 값을 동시에 쥐는 일이 없습니다.</p>
 <!--RUN file=ex/15/channel_moved.rs note=보낸 뒤에 msg 를 찍는다-->
-<div class="note"><b>읽는 법</b> — 6번 줄 <code class="nb">send(msg)</code> 에서 값이 옮겨 갔고(<code class="nb">value moved here</code>), 7번 줄이 그 뒤에
-빌리려는 자리입니다. 5번 줄의 꼬리표는 <code>String</code> 이 <code>Copy</code> 가 아니라서 이동이라고 알려 줍니다. <code>help:</code> 는
-보낸 뒤에도 써야 한다면 복제본을 보내라고 권합니다.</div>
+<div class="note"><b>읽는 법</b> — <a href="#p15-move-after">1장의 E0382</a> 와 같은 꼴이고, 옮긴 자리가 클로저가 아니라
+<code>send</code> 의 인자입니다. 6번 줄 <code class="nb">send(msg)</code> 에서 값이 옮겨 갔고(<code class="nb">value moved here</code>), 7번 줄이
+그 뒤에 빌리려는 자리입니다. 5번 줄에 붙은 말은 <code>String</code> 이 <code>Copy</code> 가 아니라서 이동이라는 것입니다.
+<code>help:</code> 는 보낸 뒤에도 써야 한다면 복제본을 보내라고 권합니다.</div>
 </article>
 
 <article class="card" id="p15-channel-multi">
 <h3>보내는 쪽이 여럿일 때</h3>
-<p class="lead"><code>tx</code> 를 <code>clone</code> 하면 보내는 쪽이 하나 더 생깁니다. 스레드마다 하나씩 쥐여 줍니다.</p>
+<p class="lead"><code>tx</code> 를 복제하면(<code class="nb">tx.clone()</code>) 보내는 쪽이 하나 더 생깁니다. 스레드마다 하나씩 쥐여
+줍니다. <a href="#p15-channel">mpsc</a> 의 "보내는 쪽은 여럿" 이 이것입니다.</p>
 <!--RUN file=ex/15/channel_multi.rs note=세 스레드가 한 채널로 보낸다-->
-<div class="warn"><b>원본 <code>tx</code> 를 버리는 줄</b>이 없으면 받는 쪽은 "아직 보낼 사람이 있다" 고 보고 끝없이
-기다립니다(멈춰 버리는 프로그램이라 돌려 보이지는 않습니다). 그리고 도착 순서는 정해져 있지 않으므로 모은 뒤
-정렬했습니다.</div>
+<div class="warn"><b>원본 <code>tx</code> 도 버린다</b> — 13번 줄의 <a href="#p14-drop-early"><code class="nb">drop(tx)</code></a> 가 없으면
+받는 쪽은 "아직 보낼 사람이 있다" 고 보고 끝없이 기다립니다(멈춰 버리는 프로그램이라 돌려 보이지는 않습니다). 도착
+순서는 정해져 있지 않으므로 모은 뒤 정렬했습니다.</div>
 </article>
 
 <article class="card" id="p15-channel-closed">
@@ -172,14 +190,18 @@
 <article class="card" id="p15-ch3">
 <p class="chnum">3장</p>
 <h2>공유 상태</h2>
-<p class="chsub">Mutex 와 열쇠 · Rc 는 못 보낸다 · Arc&lt;Mutex&lt;T&gt;&gt; · RwLock · 원자 타입</p>
+<p class="chsub">Mutex 와 열쇠 · Rc 는 못 보낸다 · Arc 만으로는 못 고친다 · Arc&lt;Mutex&lt;T&gt;&gt; · 스코프 스레드와 Mutex · RwLock · 원자 타입 · 교착</p>
 </article>
 
 <article class="card" id="p15-mutex">
 <h3>Mutex — 한 번에 하나만</h3>
-<p class="lead"><code class="nb">Mutex&lt;T&gt;</code> 는 값을 감싸고, <code>lock()</code> 으로 잠근 쪽에만 "열쇠"(guard)를 줍니다.
+<p class="lead">채널은 값을 넘겨주는 길이었습니다. 넘기지 않고 여러 스레드가 한 값을 함께 고쳐야 할 때는 잠금을 씁니다.
+<code class="nb">Mutex&lt;T&gt;</code> 는 값을 감싸고, <code>lock()</code> 으로 잠근 쪽에만 "열쇠"(guard)를 줍니다.
 속의 값에는 열쇠를 통해서만 닿을 수 있습니다. 열쇠가 사라지면 잠금이 풀립니다.</p>
-<!--RUN file=ex/15/mutex_basic.rs note=잠그고, 고치고, 범위를 벗어나며 푼다-->
+<!--RUN file=ex/15/mutex_basic.rs note=잠그고, 고치고, 스코프를 벗어나며 푼다-->
+<div class="note"><b>읽는 법</b> — 7번 줄의 열쇠는 9번 줄에서 <a href="#p06-drop-scope">스코프를 벗어나 정리</a>되며 잠금을 풉니다.
+정리될 때 할 일을 적는 14부의 <a href="#p14-drop-order"><code>Drop</code></a> 이 여기서는 잠금 풀기입니다. 그래서 11번 줄이 다시 잠글
+수 있었고, 1 과 10 을 더한 11 이 찍혔습니다.</div>
 <div class="key"><b>잠그는 것을 잊을 수 없다</b> — 잠금과 데이터를 따로 두면 잠그지 않고도 데이터를 건드릴 수 있습니다.
 여기서는 데이터가 <code>Mutex</code> 안에 있어서 잠그지 않으면 닿을 길이 없습니다.</div>
 <p class="cap"><code>lock()</code> 도 <code>join()</code> 처럼 <code>Result</code> 를 돌려주어 <code>unwrap()</code> 이 붙습니다. <code>Err</code> 가 되는
@@ -191,19 +213,22 @@
 <p class="lead"><code>Mutex</code> 도 주인은 하나입니다. <code>move</code> 로 첫 스레드에 넘기면 둘째 스레드에 줄 것이
 없습니다.</p>
 <!--RUN file=ex/15/mutex_no_arc.rs note=반복문에서 두 번 넘긴다-->
-<div class="note"><b>읽는 법</b> — 8번 줄 <code class="nb">move ||</code> 밑의 꼬리표가 핵심입니다. "반복문의 앞 바퀴에서 이미 클로저 안으로
-옮겨 갔다". 7번 줄이 그 반복문이고, 9번 줄이 클로저가 <code>counter</code> 를 쓰는 자리입니다. 5번 줄의 꼬리표는
-<code class="nb">Mutex&lt;i32&gt;</code> 가 <code>Copy</code> 가 아니라서 이동이라고 알려 줍니다.</div>
+<div class="note"><b>읽는 법</b> — 번호는 <a href="#p15-move-after">1장의 E0382</a> 그대로이고, 새로 볼 것은 8번 줄
+<code class="nb">move ||</code> 에 붙은 말입니다. "반복문의 앞 바퀴에서 이미 클로저 안으로 옮겨 갔다". 7번 줄이 그 반복문이고, 9번 줄이
+클로저가 <code>counter</code> 를 쓰는 자리입니다. 5번 줄에 붙은 말은 <code class="nb">Mutex&lt;i32&gt;</code> 가 <code>Copy</code> 가 아니라서
+이동이라는 것입니다.</div>
 </article>
 
 <article class="card" id="p15-rc-not-send">
 <h3>Rc 는 스레드를 건너가지 못한다 — E0277</h3>
-<p class="lead">여럿이 갖게 하려면 <code>Rc</code> 였습니다(<a href="#p14">14부</a>). 그런데 <code>Rc</code> 는 주인 수를 세는
+<p class="lead">여럿이 갖게 하려면 <a href="#p14-rc-share"><code>Rc</code></a> 였습니다. 그런데 <code>Rc</code> 는 주인 수를 세는
 일이 스레드에 안전하지 않습니다. 컴파일러가 그것을 알고 막습니다.</p>
 <!--RUN file=ex/15/rc_not_send.rs note=Rc 를 새 스레드로 옮긴다-->
 <ul>
-<li><b>첫 줄</b> — "<code class="nb">Rc&lt;i32&gt;</code> 는 스레드 사이로 안전하게 보낼 수 없다". 밑줄은 7~9번 줄의 클로저 전체입니다.</li>
-<li><b><code>help:</code></b> — <code class="nb">Rc&lt;i32&gt;</code> 에 <code>Send</code> 트레이트가 구현돼 있지 않다고 말합니다. <code>Send</code> 는
+<li><b>오류 첫 줄</b> — "<code class="nb">Rc&lt;i32&gt;</code> 는 스레드 사이로 안전하게 보낼 수 없다". 밑줄은 7번부터 9번 줄까지의 클로저
+전체입니다.</li>
+<li><b><code>help:</code></b> — 10부에서 E0277 은 늘 <a href="#p10-trait-not-impl">"어떤 타입이 어떤 트레이트를 구현하지 않았다"</a>
+였습니다. 여기서는 타입이 <code class="nb">Rc&lt;i32&gt;</code>, 트레이트가 <code>Send</code> 입니다. <code>Send</code> 는
 <a href="#p15-send-sync">4장</a>에서 봅니다.</li>
 <li><b><code>note:</code> 둘</b> — <code>Rc</code> 가 이 클로저 안에서 쓰이기 때문이고, 그 클로저에 <code>Send</code> 를 요구한 쪽은
 <code>spawn</code> 이라고 알려 줍니다. 마지막 경로는 표준 라이브러리 소스의 자리입니다.</li>
@@ -212,29 +237,37 @@
 
 <article class="card" id="p15-arc-no-mutex">
 <h3>Arc 만으로는 고칠 수 없다 — E0594</h3>
-<p class="lead"><code>Arc</code> 는 수를 원자적으로 세는 <code>Rc</code> 입니다(atomically reference counted). 스레드를 건너갈 수
-있지만, <code>Rc</code> 처럼 속의 값은 읽게만 해 줍니다(<a href="#p14">14부</a>). 여러 스레드가 잠금 없이 한 값을 고치려는
-코드는 여기서 막힙니다.</p>
+<p class="lead">14부 끝의 <a href="#p14-threads">표</a>에서 <code>Rc</code> 의 짝이던 <code>Arc</code> 는 수를 원자적으로 세는
+<code>Rc</code> 입니다(atomically reference counted). 스레드를 건너갈 수 있지만, <code>Rc</code> 처럼
+<a href="#p14-rc-immutable">속의 값은 읽게만</a> 해 줍니다. 여러 스레드가 잠금 없이 한 값을 고치려는 코드는 여기서 막힙니다.</p>
 <!--RUN file=ex/15/arc_no_mutex.rs note=여덟 스레드가 잠금 없이 올리려 한다-->
 <div class="note"><b>읽는 법</b> — "<code>Arc</code> 속의 데이터에는 대입할 수 없다". 11번 줄의 <code class="nb">*counter += 1</code> 이 막힌
-자리입니다. <code>help:</code> 가 까닭을 말합니다 — 역참조한 것을 고치려면 <code>DerefMut</code> 이 있어야 하는데
-<code class="nb">Arc&lt;i32&gt;</code> 에는 없습니다. 이번에는 <code>Send</code> 를 탓하는 오류가 없습니다.</div>
+자리입니다. <code>help:</code> 는 14부에서 <code>Rc</code> 속을 고치려다 본 것과 같은 말입니다 — 역참조한 것을 고치려면
+<code>DerefMut</code> 이 있어야 하는데 <code class="nb">Arc&lt;i32&gt;</code> 에는 없습니다. 이번에는 <code>Send</code> 를 탓하는 오류가
+없습니다.</div>
 </article>
 
 <article class="card" id="p15-arc-mutex">
 <h3>Arc&lt;Mutex&lt;T&gt;&gt; — 함께 갖고, 차례로 고친다</h3>
-<p class="lead"><code>Arc</code> 로 함께 갖고, 속의 <code>Mutex</code> 로 한 번에 하나씩 고칩니다. 스레드마다
-<code class="nb">Arc::clone</code> 한 것을 하나씩 가져갑니다.</p>
+<p class="lead"><code>Arc</code> 로 함께 갖고, 속의 <code>Mutex</code> 로 한 번에 하나씩 고칩니다. 14부의
+<a href="#p14-rc-refcell"><code class="nb">Rc&lt;RefCell&lt;T&gt;&gt;</code></a> 와 같은 모양에서 두 겹을 스레드 사이에서 쓰는 짝으로
+바꾼 것입니다. 스레드마다 <code class="nb">Arc::clone</code> 한 것을 하나씩 가져갑니다.</p>
 <!--RUN file=ex/15/arc_mutex.rs note=여덟 스레드가 천 번씩 올린다-->
 <div class="note"><b>답은 늘 8000</b> — 한 번에 한 스레드만 읽고 더하고 쓰므로 빠지는 덧셈이 없습니다. 모두 <code>join</code> 한 뒤에
 찍으니 화면도 늘 같습니다. 잠금 없이 같은 일을 하려던 코드는 앞 슬라이드에서 컴파일되지 않았습니다.</div>
+<div class="note"><b>RefCell 과 견주면</b> — <code>lock()</code> 이 열쇠를 내주는 모양은 <code>RefCell</code> 의
+<a href="#p14-refcell-basic"><code>borrow_mut()</code></a> 과 닮았습니다. 다만 <code>RefCell</code> 은 빌려 준 값을 또 가변으로 빌리면
+<a href="#p14-refcell-panic">패닉</a>했고, 여기서는 여덟 스레드가 같은 값을 8000 번 잠갔는데 패닉 없이 끝났습니다. 잠겨 있으면
+풀릴 때까지 기다리기 때문입니다(<a href="#p15-deadlock">교착</a>에서 다시 봅니다).</div>
 </article>
 
 <article class="card" id="p15-scope-mutex">
-<h3>범위 스레드에서는 Arc 도 필요 없다</h3>
-<p class="lead"><code>Arc</code> 가 필요했던 까닭은 스레드가 언제 끝날지 몰라서였습니다. 범위 스레드는 끝나는 때가
-정해져 있으니 <code>Mutex</code> 를 그냥 빌려 씁니다.</p>
+<h3>스코프 스레드에서는 Arc 도 필요 없다</h3>
+<p class="lead"><code>Arc</code> 가 필요했던 까닭은 스레드가 언제 끝날지 몰라서였습니다. 1장의
+<a href="#p15-scope">스코프 스레드</a>는 끝나는 때가 정해져 있으니 <code>Mutex</code> 를 그대로 빌려 씁니다.</p>
 <!--RUN file=ex/15/scope_mutex.rs note=낱말의 길이를 한 벡터에 모은다-->
+<p class="cap">12번 줄에 <code>move</code> 가 있지만 옮겨 가는 것은 11번 줄에서 만든 참조 <code class="nb">&amp;lengths</code> 와 낱말
+<code>w</code> 입니다. <code>Mutex</code> 는 <code>main</code> 에 남아 16번 줄에서 다시 쓰입니다.</p>
 <div class="note"><b><code>join</code> 도, <code>lock</code> 도 없는 끝</b> — <code>scope</code> 가 끝나며 네 스레드를 모두 기다립니다. 그 뒤에는
 <code>main</code> 혼자라서 <code class="nb">into_inner()</code> 로 <code>Mutex</code> 를 벗겨 속의 벡터를 꺼냅니다. 넣은 순서는 정해져 있지
 않으므로 정렬한 뒤 찍습니다.</div>
@@ -243,14 +276,18 @@
 <article class="card" id="p15-rwlock">
 <h3>RwLock — 읽기는 여럿, 쓰기는 혼자</h3>
 <p class="lead">읽는 일이 대부분이면 <code>RwLock</code> 을 쓸 수 있습니다. 읽는 잠금은 여럿이 함께 잡고, 쓰는 잠금은 혼자
-잡습니다. 빌림 규칙과 같은 모양입니다.</p>
+잡습니다. 6부의 빌림 규칙 <a href="#p06-borrow-rule">읽는 쪽 여럿 아니면 고치는 쪽 하나</a>와 같은 모양입니다.</p>
 <!--RUN file=ex/15/rwlock.rs note=읽는 잠금 둘, 그다음 쓰는 잠금 하나-->
+<div class="note"><b>읽는 법</b> — 7번 줄과 8번 줄의 읽는 잠금 둘이 함께 살아 있는 채로 9번 줄이 <code class="nb">v1 v1</code> 을
+찍었습니다. 둘이 10번 줄에서 사라진 뒤 12번 줄이 쓰는 잠금을 잡아 글자를 덧붙였습니다.</div>
 </article>
 
 <article class="card" id="p15-atomic">
 <h3>원자 타입 — 숫자 하나에는 잠금이 과하다</h3>
 <p class="lead">횟수 세기처럼 숫자 하나를 바꾸는 일에는 원자 타입(<code class="nb">AtomicUsize</code> 등)을 씁니다. 읽고
-더하고 쓰는 일이 끼어들 틈 없이 한 번에 일어납니다.</p>
+더하고 쓰는 일이 끼어들 틈 없이 한 번에 일어납니다. 14부 끝의 <a href="#p14-threads">표</a>에서 <code>Cell</code> 의 짝이던
+타입이고, 아래는 <a href="#p15-arc-mutex"><code class="nb">Arc&lt;Mutex&lt;T&gt;&gt;</code> 로 한 세기</a>를 <code>Mutex</code> 없이 다시 한
+것입니다.</p>
 <!--RUN file=ex/15/atomic.rs note=같은 세기를 잠금 없이-->
 <div class="note"><b><code class="nb">Ordering::Relaxed</code></b> — 다른 메모리 접근과의 순서를 얼마나 엄격히 맞출지 고르는
 인자입니다. 이 세기는 가장 느슨한 것으로도 8000 이 나옵니다. 나머지 선택지는 이 책에서 다루지 않습니다.</div>
@@ -272,17 +309,17 @@
 <article class="card quiz" id="p15-ch3-quiz" data-quiz>
 <h3>퀴즈 — 공유 상태</h3>
 <p class="q">Q. 한 스레드 안의 <code class="nb">Rc&lt;RefCell&lt;T&gt;&gt;</code> 에 해당하는 것을 스레드 사이에서는 무엇으로
-쓸까요? 왜 그대로 못 쓸까요?</p>
+쓸까요? <code>Rc</code> 는 왜 그대로 못 쓸까요?</p>
 <button>답 보기</button>
 <div class="a"><b>A.</b> <code class="nb">Arc&lt;Mutex&lt;T&gt;&gt;</code> 입니다. <code>Rc</code> 는 수를 세는 일이 스레드에 안전하지 않아
-다른 스레드로 보낼 수 없고(<a href="#p15-rc-not-send">E0277</a>), <code>RefCell</code> 도 여러 스레드가 함께 쓸 수
-없습니다(<a href="#p15-refcell-not-sync">4장</a>).</div>
+다른 스레드로 보낼 수 없습니다(<a href="#p15-rc-not-send">E0277</a>). <code>RefCell</code> 을 그대로 못 쓰는 까닭은
+<a href="#p15-refcell-not-sync">4장</a>에서 봅니다.</div>
 </article>
 
 <article class="card" id="p15-ch4">
 <p class="chnum">4장</p>
 <h2>Send 와 Sync</h2>
-<p class="chsub">컴파일러가 스레드 안전을 아는 방법 · 한 번만 만드는 전역 값 · 고르는 법</p>
+<p class="chsub">두 표시 Send 와 Sync · RefCell 은 Sync 가 아니다 · 한 번만 만드는 전역 값 · 고르는 법</p>
 </article>
 
 <article class="card" id="p15-send-sync">
@@ -296,43 +333,50 @@
 <tr><td><code>Sync</code></td><td>여러 스레드가 <b>함께 참조해도</b> 된다</td><td><code class="nb">RefCell&lt;T&gt;</code> · <code class="nb">Cell&lt;T&gt;</code></td></tr>
 </table>
 </div>
+<p class="cap">두 표시의 뜻과, 그 표시가 없는 타입의 예입니다. 오른쪽 칸의 셋은 14부에서
+<a href="#p14-threads">한 스레드 안에서만 쓴다</a>고 한 타입입니다.</p>
 <ul>
 <li>정수, <code>String</code>, <code class="nb">Vec&lt;i32&gt;</code> 처럼 평범한 타입은 둘 다입니다.</li>
 <li>구조체는 필드가 전부 <code>Send</code> 면 <code>Send</code> 입니다. 하나라도 아니면 아닙니다. 클로저도 같습니다 — 3장의
 오류에서 <code>Rc</code> 를 품은 클로저가 그래서 막혔습니다.</li>
-<li><code class="nb">thread::spawn</code> 이 받는 클로저는 <code>Send</code> 여야 합니다. 오류의
-<code class="nb">required by a bound in `spawn`</code> 이 그 말입니다.</li>
+<li><code class="nb">thread::spawn</code> 은 받는 클로저에 <code>Send</code> 를 <a href="#p10-generic-fn">트레이트 바운드</a>로 걸어
+둡니다. 오류의 <code class="nb">required by a bound in `spawn`</code> 이 그 말입니다.</li>
 </ul>
 </article>
 
 <article class="card" id="p15-refcell-not-sync">
 <h3>RefCell 은 함께 쓸 수 없다 — E0277</h3>
-<p class="lead"><code>Arc</code> 로 감싸면 될 것 같지만, 속의 <code>RefCell</code>(<a href="#p14">14부</a>)이 <code>Sync</code> 가 아닙니다.
+<p class="lead"><code>Arc</code> 로 감싸면 될 것 같지만, 속의 <a href="#p14-refcell-basic"><code>RefCell</code></a> 이 <code>Sync</code> 가 아닙니다.
 빌림을 세는 일이 스레드에 안전하지 않기 때문입니다.</p>
 <!--RUN file=ex/15/refcell_not_sync.rs note=Arc 안에 RefCell — 컴파일러가 대신 쓸 것까지 알려 준다-->
 <ul>
-<li><b>첫 줄</b> — "<code class="nb">RefCell&lt;i32&gt;</code> 는 스레드 사이에서 안전하게 <b>함께 쓸</b> 수 없다". <code>Rc</code> 때는 "보낼" 수
-없다였습니다. <code>help:</code> 가 말하는 트레이트도 이번에는 <code>Sync</code> 입니다.</li>
+<li><b>오류 첫 줄</b> — "<code class="nb">RefCell&lt;i32&gt;</code> 는 스레드 사이에서 안전하게 <b>함께 쓸</b> 수 없다".
+<a href="#p15-rc-not-send"><code>Rc</code> 때</a>와 같은 E0277 이고, 그때는 "보낼" 수 없다였습니다. <code>help:</code> 가 말하는
+트레이트도 이번에는 <code>Sync</code> 입니다.</li>
 <li><b>첫 <code>note:</code></b> — 여러 스레드에서 함께 고치려면 <code class="nb">std::sync::RwLock</code> 을 쓰라고 권합니다.</li>
 <li><b>둘째 <code>note:</code></b> — <code class="nb">Arc&lt;RefCell&lt;i32&gt;&gt;</code> 가 <code>Send</code> 이려면 속이 <code>Sync</code> 여야 한다는
 말입니다. 나머지 둘은 <code>Rc</code> 때와 같습니다.</li>
 </ul>
+<div class="tip"><b>고치려면</b> — <code>RefCell</code> 자리에 <code>Mutex</code> 나 오류가 권하는 <code>RwLock</code> 을 넣습니다. 3장의
+<a href="#p15-arc-mutex"><code class="nb">Arc&lt;Mutex&lt;T&gt;&gt;</code></a> 가 그 모양입니다.</div>
 </article>
 
 <article class="card" id="p15-once-lock">
 <h3>OnceLock — 한 번만 만드는 값 <!--SINCE key=once-lock--></h3>
-<p class="lead">설정처럼 처음 필요할 때 한 번 만들고 그 뒤로는 읽기만 하는 전역 값에 씁니다. 여러 스레드가 동시에
-불러도 만드는 일은 한 번만 일어납니다.</p>
+<p class="lead">3부의 <a href="#p03-static"><code>static</code></a> 은 값이 컴파일할 때 정해졌습니다. <code>OnceLock</code> 은
+설정처럼 실행 중 처음 필요할 때 한 번 만들고 그 뒤로는 읽기만 하는 전역 값에 씁니다. 여러 스레드가 동시에 불러도 만드는
+일은 한 번만 일어납니다.</p>
 <!--RUN file=ex/15/once_lock.rs note=세 스레드가 부르지만 "읽는다" 는 한 번만 찍힌다-->
 <div class="note"><b>화면이 늘 같은 까닭</b> — 어느 스레드가 만들지는 정해져 있지 않지만, 값이 만들어진 뒤에야 누구든
-<code>config()</code> 에서 돌아옵니다. <code>main</code> 은 <code>join</code> 한 뒤에 찍으므로 "읽는다" 가 늘 첫 줄입니다. 9 는 세 스레드가
-받은 같은 문자열 <code class="nb">port=8080</code> 의 길이입니다. <code>static</code> 은 <a href="#p03">3부</a>에서 봤습니다.</div>
+<code>config()</code> 에서 돌아옵니다. <code>main</code> 은 <code>join</code> 한 뒤에 찍으므로 "읽는다" 가 늘 맨 먼저 찍힙니다. 9 는 세
+스레드가 받은 같은 문자열 <code class="nb">port=8080</code> 의 길이입니다.</div>
 </article>
 
 <article class="card" id="p15-lazy-lock">
 <h3>LazyLock — 처음 쓸 때 계산되는 전역 값 <!--SINCE key=lazy-lock--></h3>
-<p class="lead">만드는 방법을 선언할 때 함께 적어 두는 모양입니다. 처음 쓰이는 순간에 한 번 계산됩니다 — 화면에서
-"main 시작" 이 먼저 찍힙니다.</p>
+<p class="lead">앞 슬라이드의 <code>OnceLock</code> 은 만드는 방법을 쓰는 자리(<code>get_or_init</code>)에 적었습니다.
+<code>LazyLock</code> 은 선언할 때 함께 적어 둡니다. 처음 쓰이는 순간에 한 번 계산됩니다 — 화면에서 "main 시작" 이 먼저
+찍힙니다.</p>
 <!--RUN file=ex/15/lazy_lock.rs note=처음 쓸 때 표가 만들어진다-->
 <div class="note"><b>한 번만</b> — "표를 만든다" 는 12번 줄에서 처음 쓸 때 한 번 찍히고, 13번 줄에서 다시 쓸 때는 찍히지
 않습니다.</div>
@@ -340,13 +384,14 @@
 
 <article class="card" id="p15-choose">
 <h3>어느 도구를 쓸까</h3>
+<p class="lead">이 부의 도구를 "하려는 일" 에서 거꾸로 찾는 표입니다. 왼쪽 칸에서 내 일을 찾아 오른쪽 칸을 씁니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>하려는 일</th><th>쓸 것</th></tr>
 <tr><td>일을 나눠 하고 결과만 모은다</td><td><code class="nb">thread::scope</code> / <code>spawn</code> + <code>join</code></td></tr>
 <tr><td>값을 다른 스레드로 넘긴다</td><td><code>move</code> 클로저, 채널</td></tr>
 <tr><td>일거리를 줄 세워 건넨다</td><td>채널(<code>mpsc</code>)</td></tr>
-<tr><td>여럿이 한 값을 고친다</td><td><code class="nb">Arc&lt;Mutex&lt;T&gt;&gt;</code> (범위 스레드에서는 <code>Mutex</code> 만)</td></tr>
+<tr><td>여럿이 한 값을 고친다</td><td><code class="nb">Arc&lt;Mutex&lt;T&gt;&gt;</code> (스코프 스레드에서는 <code>Mutex</code> 만)</td></tr>
 <tr><td>읽기가 대부분이다</td><td><code class="nb">Arc&lt;RwLock&lt;T&gt;&gt;</code></td></tr>
 <tr><td>숫자·깃발 하나</td><td>원자 타입</td></tr>
 <tr><td>한 번 만들고 읽기만 한다</td><td><code>OnceLock</code> · <code>LazyLock</code></td></tr>
@@ -354,6 +399,9 @@
 </div>
 <div class="tip"><b>나눠 갖기보다 넘겨주기</b> — 값을 한 스레드가 갖고 메시지로 주고받는 쪽이 더 단순할 때가 많습니다. 공유가
 정말 필요할 때 <code>Mutex</code> 를 꺼냅니다.</div>
+<div class="note"><b>다음</b> — 이 부에 새 규칙은 없었습니다. 6부의 소유권과 빌림, 그리고 <code>Send</code> · <code>Sync</code> 두 표시가
+스레드 사이의 실수를 컴파일 오류로 바꿨습니다. 기초 문법은 여기까지입니다. <a href="#p16">16부</a>는 남의 코드에서 만나는
+매크로 · <code>unsafe</code> · <code>async</code> 를 알아볼 수 있을 만큼 봅니다.</div>
 </article>
 
 <article class="card quiz" id="p15-ch4-quiz" data-quiz>

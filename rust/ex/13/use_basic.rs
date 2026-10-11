@@ -9,7 +9,7 @@ mod shapes {
     }
 }
 
-// use — 긴 경로를 이 범위로 끌어온다.
+// use — 긴 경로를 이 스코프로 끌어온다.
 use shapes::circle;
 use shapes::square;
 

@@ -117,6 +117,21 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
 - unwinding = "되감기(unwinding)" (p09-panic-unwind); backtrace = "백트레이스".
 - A callout that only says "this syntax is taught in part N" is a `.note` headed
   "미리 쓰는 문법" — once at first use in the part, not on every slide.
+- Part 13 terms: 뿌리 파일 / 뿌리 모듈 (crate root); 다시 내놓기 (`pub use`); 실행 크레이트
+  / 라이브러리 크레이트; 단위 시험 / 통합 시험 / 문서 시험; 기능(feature); 속성
+  (attribute). Visibility is "보이는 곳", not "공개 범위". Targets: p13-mod-inline,
+  p13-mod-private (E0603), p13-paths, p13-use, p13-reexport, p13-field-private (E0616),
+  p13-pub-crate, p13-modfile, p13-libbin, p13-cargo-toml, p13-features, p13-crates-io,
+  p13-test-basic, p13-test-fail, p13-test-asserts, p13-test-should-panic, p13-test-result,
+  p13-test-mod, p13-test-integration, p13-cargo-test, p13-doc-comments, p13-doctest,
+  p13-attr-allow, p13-attr-deprecated, p13-attr-cfg, p13-attr-table.
+- Part 15 terms: 스코프 스레드(scoped thread) — not "범위 스레드"; 손잡이 (JoinHandle);
+  열쇠 (guard); 원자 타입; 교착(deadlock); 데이터 경쟁(data race); "보내는 쪽 / 받는 쪽".
+  Targets: p15-spawn, p15-join-value, p15-borrow-err (E0373), p15-move, p15-move-after,
+  p15-scope, p15-panic-join, p15-channel, p15-channel-multi, p15-mutex, p15-rc-not-send
+  (Send), p15-arc-no-mutex, p15-arc-mutex, p15-scope-mutex, p15-rwlock, p15-atomic,
+  p15-deadlock, p15-send-sync, p15-refcell-not-sync (Sync), p15-once-lock, p15-lazy-lock,
+  p15-choose (hands over to part 16).
 - The dereference star is written `*` in code font, not "별". "마지막 줄", not "끝줄".
   Callout heads are not "첫 줄 / 둘째 줄" — quote the value or name the method.
 - A table's reading sentence is the lead or a `<p class="cap">` after the table.

@@ -5,7 +5,7 @@ fn main() {
     let words = ["rust", "is", "fun", "really"];
     let lengths = Mutex::new(Vec::new());
 
-    // scope 안에서는 Arc 없이 Mutex 를 그냥 빌려 쓴다.
+    // scope 안에서는 Arc 없이 Mutex 를 그대로 빌려 쓴다.
     thread::scope(|s| {
         for w in words {
             let lengths = &lengths;

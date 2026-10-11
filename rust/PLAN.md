@@ -332,3 +332,8 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   15: 15_conc ~30 `#p12` → p12-closure-basic, ~64 → p12-capture-move; part 1: 01_history
   485 "(12부)". No performance/zero-cost note exists in part 12 (outline listed one); none
   was invented.
+- Parts 13 and 15 reviewed (review 2), counts unchanged (47, 37; book 922). "범위 스레드" →
+  "스코프 스레드" in sections, data/features.tsv and deck/glossary.tsv. p13-attr-table's
+  caption used to say `#![…]` never appears in the book's examples — it does once
+  (ex/01/feature_gate.rs on p01-nightly); now says so. Notes — part 1: p01-cratesio `#p13`
+  → p13-crates-io; appendix/part 16: check for "범위 스레드". Remaining batches: 16+17, 1.
