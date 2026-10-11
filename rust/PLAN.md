@@ -344,3 +344,33 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   prelude; appendix edition table (p01-ed-table is the only one). Notes — part 1:
   p01-ed2024-setvar `#p16` → p16-unsafe-call, p01-async → p16-ch3, macro rows of
   p01-milestones → p16-derive. Remaining batch: part 1.
+
+### Review 2 finished — 922 slides (2026-10-11)
+- Last batch: part 1 (860119bc). Every part has been read straight through for flow and
+  voice by one reviewer at a time (13 batches, largest reviewer conversation 282k tokens).
+  About 1,570 fixes by the reviewers' own counts: 링크·시제 410 · 흐름 283 · 중복 239 ·
+  용어 234 · 콜아웃 180 · 문체 101 · 분량 66 · 제목 49 · 퀴즈 4 · 예제 2 · 사실 1.
+- What changed in substance: later parts no longer re-teach from zero — a repeated error
+  number or idea is acknowledged in one clause with a slide-level link and only the new
+  part is read; cross-part links went from part covers to slides; terms were unified
+  (스코프, 불변/가변 참조·빌림, 복제, 풀어 헤치기, 인덱스, 컬렉션, 스코프 스레드 …);
+  "출력 N번째 줄" phrases that ignored the `$ …` line were replaced by quoted values.
+- Count changes: +1 slide (p12-adapter-table) → 922; glossary 59 → 64 terms. Two examples
+  extended so the slide's claim is shown, not asserted (ex/04/match_bind.rs,
+  ex/08/str_methods.rs). One false sentence fixed (p13-attr-table on `#![…]`).
+- Reordered inside chapters: p07-unit-struct, p07-refutable, p09-opt-iflet, p09-res-chain,
+  p09-err-main-box, p12-closure-infer.
+- Left on purpose: outline items without a slide (part 8 borrow+push E0502 and formatting
+  recap; part 10 Iterator preview and Drop; part 11 `T: 'a`; part 12 performance note;
+  part 16 never type / impl Trait elsewhere / shadowed prelude; appendix edition table);
+  19 fixed terms that do not fit the glossary's last page; part 1 has quizzes only for
+  chapters 4 and 6. Documentation-based sentences kept: Mutex blocks while locked,
+  Rc/RefCell counting is not thread-safe, `sort` is stable, get_unchecked skips the bounds
+  check, monomorphization makes one copy per type. Two were compile-checked in scratch
+  (Error requires Debug → E0277; unimplemented!/unreachable! exist).
+- Final verification: `make all` rc=0 (103 tests OK, 606 sources rustfmt-clean, 922 slides
+  0 errors 0 notices, 1254 blocks verified 0 mismatches, 1336 cross-references all real,
+  font check passes).
+  `rsrun --all --check` three passes in a row, each exit 0 with 621 ✓ / 0 ✗ (from the log).
+- index.html card and README say 922 slides and 64 glossary terms; history.md has the
+  review-2 entry. Review-2 commits (ea97894b … wrap-up) are NOT pushed — ask the user.
