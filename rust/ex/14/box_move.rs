@@ -1,6 +1,6 @@
 fn main() {
     let a = Box::new(String::from("hello"));
-    let b = a; // 주소만 옮겨 간다 — 힙의 글자는 그대로
+    let b = a; // 이동 — 이제 주인은 b 다
     println!("{b}");
     println!("{a}");
 }

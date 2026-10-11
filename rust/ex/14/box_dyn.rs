@@ -18,7 +18,7 @@ impl Shape for Square {
 }
 
 fn main() {
-    // 크기가 다른 타입들을 Box 에 넣으면 한 벡터에 담을 수 있다.
+    // 서로 다른 타입도 Box<dyn Shape> 로는 한 벡터에 담긴다.
     let shapes: Vec<Box<dyn Shape>> =
         vec![Box::new(Circle(1.0)), Box::new(Square(2.0))];
     for s in &shapes {

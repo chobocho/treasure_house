@@ -8,7 +8,7 @@ impl Drop for Noisy {
 
 fn main() {
     let _a = Noisy("a");
-    let _b = Noisy("b");
+    let _b = Box::new(Noisy("b")); // Box 속의 값도 함께 정리된다
     {
         let _c = Noisy("c");
         println!("안쪽 블록 끝");
