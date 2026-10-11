@@ -98,6 +98,17 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
   (튜플 풀기), p03-array-get (배열 인덱스 패닉), p03-ch5.
 - A later error slide that repeats an error number or message seen earlier says so in one
   clause with a link ("2부에서 본 E0277 과 같은 꼴"), then reads only what is new.
+- collection = "컬렉션" everywhere (part 8's title); "모음" only for vowels.
+- "갈래" is a branch of `match` or of `if`/`else`.
+- "범위를 넘다/벗어나다" for an index outside an array or slice is fine (a value range).
+- Space between a closing Korean quote and a particle (`"…" 입니다` / `"…"입니다`): parts
+  differ; not a defect, do not change either way.
+- Link text for a slide two or more away may be a short phrase taken from its title; it
+  need not be the whole title.
+- "출력 N번째 줄" counts the lines of the dark box as shown, the `$ …` command line
+  included. Prefer "출력 첫 줄/마지막 줄" or quoting the words when that is clearer.
+- Part titles and scope come from deck/OUTLINE.md, not from the orchestrator's brief — if
+  the brief disagrees with the outline, follow the outline and say so in the report.
 
 **Line references.** Source lines: "N번 줄". Lines of a capture: "출력 N번째 줄" (or
 "화면의 N번째 줄"). Columns are not cited.
