@@ -6,5 +6,6 @@ fn main() {
     println!("&String {}바이트", size_of::<&String>());
     println!("&str    {}바이트", size_of::<&str>());
     println!("whole.len() = {}", whole.len());
+    println!("s.capacity() = {}", s.capacity());
     println!("world.len() = {}", world.len());
 }

@@ -29,6 +29,12 @@ at. Check, in this order:
 6. **Korean.** 합니다체 throughout; fixed terms from AUTHORING.md's glossary (소유권, 빌림, 참조,
    수명, 이동, 트레이트, 구조체, 열거형, 변형, 가리기, 식, 문 …); typos, spacing, awkward
    literal translations; no hype words.
+   **"장" 은 챕터에만 쓴다.** The book counts chapters as "1장, 2장" and the writers also
+   used "앞 장 / 다음 장 / 이 장" for a single slide, which is ambiguous. Go through every
+   "앞 장", "다음 장", "이 장", "앞의 장", "위 장", "N장 뒤" in your parts and decide by meaning:
+   an adjacent or current SLIDE becomes "앞 슬라이드 / 다음 슬라이드 / 이 슬라이드" (or
+   "앞에서 / 바로 다음에서" when that reads better); a CHAPTER stays "N장 / 이 장 / 다음 장".
+   When the reference is to a specific slide that is not adjacent, link it by id.
 7. **Code quality.** Examples are idiomatic, minimal, and their Korean comments say why.
 
 ## How to fix

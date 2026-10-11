@@ -1,4 +1,4 @@
-// 5장의 first_word 에서 매개변수만 &str 로 바꿨다
+// 5장의 first_word 에서 매개변수를 &str 로 바꿨다
 fn first_word(s: &str) -> &str {
     let bytes = s.as_bytes();
     for i in 0..bytes.len() {
@@ -6,6 +6,7 @@ fn first_word(s: &str) -> &str {
             return &s[..i];
         }
     }
+    // 받은 것이 이미 &str 이라 &s[..] 대신 그대로 돌려준다
     s
 }
 
