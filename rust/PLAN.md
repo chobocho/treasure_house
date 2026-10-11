@@ -303,3 +303,9 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p08-map-word-count), 38 (`#p08`); appendix: 17_appendix 45 "색인" → 인덱스, 132 `#p08`;
   parts 15/16: "N~M번 줄" → "N번부터 M번 줄까지". All later parts: "출력 N번째 줄" counts
   the `$ …` line — check each use.
+- Part 9 reviewed (review 2); three slides reordered inside their chapters (p09-opt-iflet,
+  p09-res-chain, p09-err-main-box), count unchanged. Notes for later batches — `#p09`
+  cover links: 10_trait 222/268 → p09-err-display; 10b_trait 13 → p09-err-from; 11_life
+  212 → p09-opt-question; 12b_iter 144 → p09-real-collect, 307 → p09-opt-defaults, 67;
+  13_mod 323 → p09-res-main; 16_more 361 → p09-err-display. Part 14: p14-drop-order has no
+  link to p09-panic-unwind / p06-drop-scope (section D chain).

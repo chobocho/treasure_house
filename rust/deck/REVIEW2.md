@@ -114,6 +114,19 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
 - A sentence added about what a method does must be shown by the capture on that slide; if
   it rests only on documentation, either leave it out or report it so the example can be
   extended (p08-str-methods got a Korean `find` line for this reason).
+- unwinding = "되감기(unwinding)" (p09-panic-unwind); backtrace = "백트레이스".
+- A callout that only says "this syntax is taught in part N" is a `.note` headed
+  "미리 쓰는 문법" — once at first use in the part, not on every slide.
+- Part 9 targets other parts quote: p09-panic-basic, p09-panic-unwind ("패닉이 나도 값은
+  정리됩니다" — part 14's drop-order slide must acknowledge it), p09-assert, p09-panic-when
+  (예상한 실패인가), p09-opt-match, p09-opt-unwrap, p09-opt-expect, p09-opt-defaults,
+  p09-opt-map, p09-opt-and-then, p09-opt-question (`?` on Option), p09-opt-tests,
+  p09-res-match, p09-res-unwrap, p09-res-unused, p09-res-defaults (map_err),
+  p09-real-convert (ok_or / ok), p09-res-question (`?`), p09-res-question-unit (E0277),
+  p09-res-main (종료 코드 1 과 101), p09-res-mixed, p09-err-enum, p09-err-display (impl
+  Display + Error), p09-err-from (`?` = return Err(From::from(e))), p09-err-box,
+  p09-err-main-box, p09-err-source, p09-err-choose, p09-real-collect
+  (`Result<Vec<_>, _>`), p09-real-partition, p09-real-cheat.
 - Part 8 targets other parts quote: p08-str-two (String vs &str), p08-str-format,
   p08-str-index (no s[0], E0277), p08-str-utf8 (len 은 바이트), p08-str-chars-bytes,
   p08-str-nth, p08-str-split, p08-str-parse (first `unwrap`), p08-str-compare,
