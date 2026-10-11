@@ -1,3 +1,10 @@
+### [2026-10-11 11:09] Rust 기초 문법집 덱 — 뼈대와 조립 도구
+- **기획:** template.html 을 head·tail 로 갈라 빌드형 덱으로 만든다. 상한 1000장, 표준 라이브러리만, 예제는 전부 실제 rustc 1.99.0 으로 돌린 것만 싣는다(rust/PLAN.md).
+- **TC:** 정상(지시자 해석·명령 줄·캡처 형식·RUN/CODE/OUT 펼치기) / 경계(가운데 지시자, 기대와 다른 오류 코드·종료 코드, 무한 루프 시간 초과, 낡은 캡처, 72칸·45줄·1000장 초과, 손으로 쓴 pre).
+- **개발:** `rust/tools/rsrun.py`, `rust/deck/build_deck.py`, `rust/deck/verify_deck.py`, `rust/deck/check_deck.js`, `rust/deck/base/*.html`, `rust/Makefile`, `rust/PLAN.md`, `.gitignore` 외 조각 18개
+- **검증:** 65 passed, 0 failed · make all SKEL=1 오류 0건(19장)
+- **비고:** 본문은 아직 플레이스홀더. 하이라이터에 Rust 수명·날 문자열·속성 처리를 더했다(덱의 tail.html 한정).
+
 ### [2026-10-09 08:48] C#의 진화 예제 폴더의 빌드 산출물 정리 — bin/ 129개 파일 추적 해제
 - **기획:** 7부 작성 때 예제 폴더 안에서 csrun 을 직접 돌려 생긴 bin/(a.dll·a.pdb·a.rc.json) 43곳이 커밋돼 있던 것을 뺌.
 - **TC:** 정상(덱 빌드·역검증이 bin/ 없이 통과) / 경계(다시 생겨도 .gitignore 가 막는다).
