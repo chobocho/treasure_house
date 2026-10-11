@@ -1,10 +1,11 @@
 #[must_use]
-fn checksum(data: &[u8]) -> u32 {
-    data.iter().map(|b| *b as u32).sum()
+fn add_tax(price: u32) -> u32 {
+    price + price / 10
 }
 
 fn main() {
-    checksum(b"rust"); // 계산만 하고 결과를 버렸다
-    println!("끝");
+    let price = 1000;
+    add_tax(price); // 계산만 하고 결과를 버렸다
+    println!("{price}");
 }
 //@ warnings: show
