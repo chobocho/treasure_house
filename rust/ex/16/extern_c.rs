@@ -8,7 +8,7 @@ unsafe extern "C" {
 
 fn main() {
     let text: &CStr = c"hello"; // 끝에 0 이 붙는 C 문자열
-    // 안전: abs 는 어떤 정수든 받고, text 는 0 으로 끝난다.
+    // 안전: -7 의 절댓값은 c_int 에 들어가고, text 는 0 으로 끝난다.
     let (a, n) = unsafe { (abs(-7), strlen(text.as_ptr())) };
     println!("{a} {n}");
 }

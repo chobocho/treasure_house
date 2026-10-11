@@ -86,6 +86,22 @@ class Expand(Tree):
         self.assertIn('<p class="fname">ex/06/a.rs · -&gt; () 와 Option&lt;u8&gt; =&gt; 둘 다</p>', r.html)
         self.assertIn('data-src="out/06/a.txt"', r.html)
 
+    def test_note_starting_with_a_quoted_word_is_kept_whole(self):
+        # note="a가" 를 세 가지로 — 따옴표로 시작한다고 거기서 끊기면 안 된다.
+        self.section('<article class="card" id="p06-a">\n'
+                     '<!--RUN file=ex/06/a.rs note="a가" 를 세 가지로 본다-->\n</article>\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertIn('<p class="fname">ex/06/a.rs · "a가" 를 세 가지로 본다</p>', r.html)
+
+    def test_fully_quoted_value_still_works(self):
+        self.section('<article class="card" id="p06-a">\n'
+                     '<!--CODE file=ex/06/a.rs note="lines=2 처럼 보이는 글" lines=2-3-->\n</article>\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertIn('<p class="fname">ex/06/a.rs · lines=2 처럼 보이는 글</p>', r.html)
+        self.assertIn('data-lines="2-3"', r.html)
+
     def test_unexpanded_directive_is_reported_even_with_angle_brackets(self):
         self.section('<article class="card" id="p06-a"><!--RUN file=ex/06/a.rs--></article>\n'
                      '<article class="card" id="p06-b">\n<!--RUN file = ex/06/a.rs note=a > b-->\n</article>\n')

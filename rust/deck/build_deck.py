@@ -56,9 +56,14 @@ LANG_OF = {'.rs': 'rust', '.toml': 'toml', '.txt': 'text', '.md': 'text', '.sh':
 # 값에는 > 가 올 수 있다(note=-> () , Option<u8>). 지시자의 끝은 --> 뿐이다.
 # 따옴표 없는 값은 "--> 가 아닌 글자들" 이고, 다음 key= 앞의 공백에서 끝난다.
 _WORD = r'(?:(?!-->)\S)+'
-_VALUE = r'(?:"[^"]*"|%s(?:\s+(?![a-z]+=)%s)*)?' % (_WORD, _WORD)
+# 따옴표로 감싼 값은 닫는 따옴표 바로 뒤가 다음 key= 이거나 지시자의 끝일 때만
+# 그렇게 읽는다 — note="a가" 를 세 가지로 … 처럼 따옴표로 "시작" 할 뿐인 값이
+# 첫 낱말에서 끊기지 않게 하기 위해서다.
+_QUOTED = r'"[^"]*"(?=\s+[a-z]+=|\s*(?:-->|$))'
+_VALUE = r'(?:%s|%s(?:\s+(?![a-z]+=)%s)*)?' % (_QUOTED, _WORD, _WORD)
 DIRECTIVE = re.compile(r'<!--([A-Z]+)((?:\s+[a-z]+=%s)*)\s*-->' % _VALUE)
-ATTR = re.compile(r'([a-z]+)=(?:"([^"]*)"|(%s(?:\s+(?![a-z]+=)%s)*)?)' % (_WORD, _WORD))
+ATTR = re.compile(r'([a-z]+)=(?:"([^"]*)"(?=\s+[a-z]+=|\s*$)|(%s(?:\s+(?![a-z]+=)%s)*)?)'
+                  % (_WORD, _WORD))
 ARTICLE = re.compile(r'<article\b([^>]*)>(.*?)</article>', re.S)
 PRE = re.compile(r'<pre\b([^>]*)>(.*?)</pre>', re.S)
 # 박스 그리기 문자는 <pre> 밖에서 쓰지 않는다 — 내장 글꼴(DeckMono)은 고정폭
