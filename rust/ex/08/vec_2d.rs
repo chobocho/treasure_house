@@ -4,9 +4,10 @@ fn main() {
     grid[1][2] = 7;
     grid.push(vec![9]);
 
+    let mut cells = 0;
     for row in &grid {
         println!("{row:?}");
+        cells += row.len();
     }
-    let cells: usize = grid.iter().map(|r| r.len()).sum();
     println!("{cells}칸");
 }

@@ -12,6 +12,7 @@ fn main() {
 
     println!("{}", takes_owned(owned.clone())); // 복사해 넘긴다
     println!("{}", takes_borrowed(&owned)); // &String → &str
+    println!("{}", takes_borrowed(owned.as_str())); // 메서드로도 된다
     println!("{}", takes_borrowed(lit));
     println!("{}", takes_borrowed(&owned[..3])); // 일부만
     println!("{}", takes_owned(owned)); // 마지막에는 넘겨줘도 된다

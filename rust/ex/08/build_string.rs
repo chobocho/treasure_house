@@ -11,8 +11,7 @@ fn main() {
     }
     // join — 같은 일을 한 줄로.
     let b = items.join(", ");
-    // 바꾸면서 모으기.
-    let c: Vec<String> =
-        items.iter().map(|s| format!("[{s}]")).collect();
-    println!("{a}\n{b}\n{}", c.concat());
+    // 바꾸면서 모으기 — String 들을 모으면 이어 붙은 String 이 된다.
+    let c: String = items.iter().map(|s| format!("[{s}]")).collect();
+    println!("{a}\n{b}\n{c}");
 }

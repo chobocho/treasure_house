@@ -1,5 +1,7 @@
 fn main() {
-    let (a, b, c) = ("tic", "tac", "toe");
+    let a = String::from("tic");
+    let b = String::from("tac");
+    let c = String::from("toe");
 
     // 여럿을 이을 때는 format! 이 낫다 — 아무것도 가져가지 않는다.
     let s = format!("{a}-{b}-{c}");
