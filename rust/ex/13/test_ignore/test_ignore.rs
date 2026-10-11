@@ -10,4 +10,3 @@ fn slow() {
     let total: u64 = (1..=10_000_000u64).sum();
     assert_eq!(total, 50_000_005_000_000);
 }
-//@ test

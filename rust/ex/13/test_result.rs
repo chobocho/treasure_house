@@ -10,4 +10,13 @@ fn doubles() -> Result<(), ParseIntError> {
     assert_eq!(double("21")?, 42);
     Ok(())
 }
+
+// 일부러 실패시킨다 — "x" 는 수가 아니라서 ? 가 Err 를 돌려준다.
+#[test]
+fn doubles_x() -> Result<(), ParseIntError> {
+    assert_eq!(double("x")?, 0);
+    Ok(())
+}
 //@ test
+//@ args: --test-threads=1
+//@ exit: 101

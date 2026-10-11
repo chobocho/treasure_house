@@ -13,3 +13,4 @@ fn adds_negative() {
     assert_eq!(add(-2, 2), 0);
 }
 //@ test
+//@ args: --test-threads=1

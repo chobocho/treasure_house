@@ -19,4 +19,5 @@ fn message_shows_values() {
     assert!(is_even(n), "{n} 은 짝수가 아니다");
 }
 //@ test
+//@ args: --test-threads=1
 //@ exit: 101

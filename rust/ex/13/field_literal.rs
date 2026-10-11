@@ -3,6 +3,12 @@ mod bank {
         pub owner: String,
         balance: u64, // pub 이 없다
     }
+
+    impl Account {
+        pub fn balance(&self) -> u64 {
+            self.balance
+        }
+    }
 }
 
 fn main() {
@@ -11,6 +17,6 @@ fn main() {
         owner: String::from("kim"),
         balance: 100,
     };
-    println!("{}", a.owner);
+    println!("{} {}", a.owner, a.balance());
 }
 //@ expect: E0451

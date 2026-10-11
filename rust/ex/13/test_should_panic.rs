@@ -17,3 +17,4 @@ fn divides() {
     assert_eq!(divide(6, 3), 2);
 }
 //@ test
+//@ args: --test-threads=1
