@@ -103,6 +103,18 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
   compiler's immutable/mutable borrow). "읽는 참조/읽는 빌림" only as a gloss at the
   definition (p06-ref-no-write). "읽는 쪽 여럿 아니면 고치는 쪽 하나" is the book's phrase
   for the rule and stays.
+- `clone()` is "복제(하다)" / "복제본"; "복사" is for `Copy` types and plain copying of
+  bytes ("힙까지 복사" as a description is fine). Defined on p06-clone.
+- destructuring = "풀어 헤치기" (glossed on p03-tuple and p07-pat-struct), not "구조 분해".
+  refutable / irrefutable = "안 맞을 수 있는 패턴 / 반드시 맞는 패턴" (p07-refutable).
+- Part 7 targets other parts quote: p07-struct-basic, p07-struct-debug (derive(Debug),
+  `{:#?}`), p07-tuple-struct-mixup (newtype), p07-method-basic, p07-self-table (three
+  receiver shapes), p07-assoc-fn (`new`, `Self`), p07-enum-data, p07-enum-missing-arm
+  (E0004 on an enum), p07-option-enum ("null 대신 Option" — part 9 ch 2 builds on it and
+  must not re-teach it), p07-ch4, p07-pat-struct, p07-pat-guard, p07-pat-slice,
+  p07-pat-moved / p07-pat-ref / p07-pat-mut, p07-if-let, p07-let-else, p07-while-let,
+  p07-matches, p07-let-chain, p07-refutable (E0005), p07-let-destructure,
+  p07-param-pattern (the reader's first closure), p07-state-machine.
 - Part 6 targets other parts quote: p06-drop-scope (정리/drop), p06-rules, p06-move-assign
   (first E0382), p06-move-fn, p06-clone, p06-borrow-rule (the rule), p06-nll-early (빌림은
   마지막으로 쓴 줄까지), p06-push-holding (push 와 참조; loop variant p06-iter-invalid),

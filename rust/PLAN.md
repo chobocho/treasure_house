@@ -288,3 +288,10 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p06-str-slice, p06-take-slice, p06-vec-move (E0507), p06-literal-string. Parts 9 and 14:
   p09-panic-unwind and p14-drop-order must acknowledge p06-drop-scope; 14_ptr.html says
   "읽는 빌림" ×3 → 불변 빌림.
+- Part 7 reviewed (review 2); two slides reordered inside their chapters (p07-unit-struct,
+  p07-refutable), count unchanged. Decisions: clone = 복제, destructuring = 풀어 헤치기.
+  Notes for later batches — cover links `#p07` to retarget: 01_history 593/659 (let … else →
+  p07-let-else), 596 (→ p07-let-chain); 08_coll 22 ("7부에서 한 번 본" closure →
+  p07-param-pattern); 09_err 184; 10b_trait 181; 13_mod 454 (derive → p07-struct-debug).
+  Part 9: p09-opt-match / p09-opt-not-value must acknowledge p07-option-enum (its `.key`
+  "null 대신 Option" overlaps part 9's "null 이 없는 언어").
