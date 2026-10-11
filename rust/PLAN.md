@@ -245,3 +245,20 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   that cut the top of a file (compiler line numbers then disagree with the box), error
   slides that did not read the message, claims a capture does not show (speed, other
   languages, "가장 흔한").
+
+### Review 1 finished — 921 slides (2026-10-11)
+- Last reviews committed: 16+0+17 (796f8f5e), part 1 (86b2eacf). Every part has now been
+  read against its sources and captures by a reviewer (one at a time; the two largest
+  reviewer conversations were 308k and 338k tokens — keep batches ≤ 80 slides next time).
+- Part 1: 45 "source says less than the Korean" fixes, +68 facts (83 → 152), 17 unsourced
+  sentences removed, the 32-length array limit corrected from 1.51 to 1.47, experiment pairs
+  made byte-identical apart from `//@` lines, new E0554 slide for `#![feature]` on stable.
+- Builder: a `note=` that merely starts with a quoted word is no longer cut at the closing
+  quote (2 labels restored). 103 tests.
+- Final verification: `make all` rc=0 (621 examples, 921 slides, 1254 blocks verified,
+  font check passes); `rsrun --all --check` three passes in a row, each exit 0 with
+  621 ✓ / 0 ✗ (counts taken from the logs this time).
+- Open, recorded on the slides rather than resolved: the GC removal date differs between
+  the Technology Review article ("by 2013") and the release notes (0.11/0.12, 2014);
+  the cached Android post has only title and date. `rustup-beta` fact is cited nowhere.
+- index.html card, README and history.md updated to the real figures. Not pushed.
