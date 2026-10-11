@@ -12,8 +12,9 @@ impl FromStr for Point {
 
     fn from_str(s: &str) -> Result<Self, String> {
         let (x, y) = s.split_once(',').ok_or("쉼표가 없다")?;
-        let x = x.trim().parse().map_err(|_| format!("x: {x}"))?;
-        let y = y.trim().parse().map_err(|_| format!("y: {y}"))?;
+        let (x, y) = (x.trim(), y.trim());
+        let x = x.parse().map_err(|_| format!("x: {x}"))?;
+        let y = y.parse().map_err(|_| format!("y: {y}"))?;
         Ok(Point { x, y })
     }
 }

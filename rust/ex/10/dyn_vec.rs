@@ -25,7 +25,7 @@ impl Shape for Square {
 }
 
 fn main() {
-    // dyn Shape — "Shape 을 구현한 무언가".
+    // dyn Shape — "Shape 를 구현한 무언가".
     // 실제 타입은 실행 중에 정해진다.
     let shapes: Vec<Box<dyn Shape>> =
         vec![Box::new(Circle(1.0)), Box::new(Square(2.0))];

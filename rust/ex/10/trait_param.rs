@@ -17,7 +17,7 @@ impl Shape for Circle {
     }
 }
 
-// impl Shape — "Shape 을 구현한 타입이면 무엇이든".
+// impl Shape — "Shape 를 구현한 타입이면 무엇이든".
 fn print_area(shape: &impl Shape) {
     println!("{:.2}", shape.area());
 }

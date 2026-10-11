@@ -20,6 +20,8 @@ fn main() {
     println!("{} {}", a < b, b < c);
     let mut all = [c, a, b];
     all.sort();
-    println!("{:?}", all.map(|v| (v.major, v.minor)));
+    for v in all {
+        println!("{}.{}", v.major, v.minor);
+    }
     println!("{:?}", a.max(b));
 }

@@ -9,10 +9,16 @@ impl Index<&str> for Week {
     type Output = u32;
 
     fn index(&self, day: &str) -> &u32 {
-        let i = ["월", "화", "수", "목", "금", "토", "일"]
-            .iter()
-            .position(|d| *d == day)
-            .expect("요일 이름이 아니다");
+        let i = match day {
+            "월" => 0,
+            "화" => 1,
+            "수" => 2,
+            "목" => 3,
+            "금" => 4,
+            "토" => 5,
+            "일" => 6,
+            _ => panic!("요일 이름이 아니다"),
+        };
         &self.hours[i]
     }
 }

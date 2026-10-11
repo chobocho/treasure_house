@@ -13,6 +13,6 @@ impl Named for Port {
 }
 
 fn main() {
-    println!("{}", Port(8080).name());
+    println!("{}", Port(8080).0);
 }
 //@ expect: E0277

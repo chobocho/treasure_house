@@ -19,7 +19,11 @@ impl Shape for Square {
 
 // &dyn Shape — Box 없이 빌려서도 쓴다.
 fn total(shapes: &[&dyn Shape]) -> f64 {
-    shapes.iter().map(|s| s.area()).sum()
+    let mut sum = 0.0;
+    for s in shapes {
+        sum += s.area();
+    }
+    sum
 }
 
 fn pick(round: bool) -> Box<dyn Shape> {
