@@ -228,3 +228,20 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   covers anything they change afterwards.
 - "장" is reserved for chapters; adjacent slides are "앞 슬라이드 / 다음 슬라이드"
   (rule added to REVIEW.md; parts 2, 3, 6 fixed by hand).
+
+### Review 1 — parts 4–15 done; a real flake found (2026-10-11)
+- Reviews committed: 4–5 (0c6942f8), 7 (f9d8c83d), 8 (cce5db57), 9 (dceea36a),
+  10 (fbeb2214), 11+14 (a535c1ed), 12 (47dd770c), 13+15 (936479d7). Running: 16+0+17.
+  Left: part 1 (history). Backing slides added by reviewers/orchestrator: 4부 +2, 11부 +2,
+  12부 +2, 15부 +1 → 919 slides. index/README still say 912 — fix at the end of review.
+- **Correction to the earlier "full re-run found no mismatch" entry:** that run did pass, but
+  it did not prove determinism. The 13+15 reviewer hit a mismatch in `ex/13/test_asserts.rs`
+  on a later run: libtest runs tests on several threads and prints result lines in
+  completion order. Four multi-test examples were affected; all now carry
+  `//@ args: --test-threads=1`, and rsrun refuses an unpinned multi-test example (test added,
+  101 tests). One passing run is not evidence of determinism — thread-order cases need
+  repeated runs (part 15 was run 10×, part 13 3×).
+- Most frequent defect classes across my own parts: forward use without a pointer, slices
+  that cut the top of a file (compiler line numbers then disagree with the box), error
+  slides that did not read the message, claims a capture does not show (speed, other
+  languages, "가장 흔한").

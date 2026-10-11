@@ -38,6 +38,9 @@ capture is right and your expectation was wrong — rewrite the prose, never the
   that carry no code) · `//@ exit: 101` (a panic is expected) · `//@ edition: 2021` ·
   `//@ flags: -O` · `//@ test` (compile with `--test`) · `//@ args: a b` ·
   `//@ stdin: 3\n4\n` · `//@ warnings: show` · `//@ norun`.
+- A `//@ test` example with more than one `#[test]` must add `//@ args: --test-threads=1`:
+  libtest runs tests on several threads and prints result lines in completion order, so the
+  capture would differ between runs. rsrun refuses the example otherwise.
 - An example that rustfmt cannot parse (deliberate syntax error) is listed in `ex/nofmt.txt`.
 - Multi-file / cargo examples: a directory `ex/NN/name/` with a `RUN` file (one shell
   command per line: `cargo run -q`, `cargo test -q`, `rustc --edition 2024 main.rs`,

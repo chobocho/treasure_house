@@ -46,6 +46,17 @@ class Directives(unittest.TestCase):
         _, d = rsrun.parse_directives('x\n//@ stdin: 3\\n4\\n\n')
         self.assertEqual(d['stdin'], '3\n4\n')
 
+    def test_several_tests_need_a_single_thread(self):
+        # libtest 는 시험을 여러 스레드로 돌려 결과 줄의 순서가 실행마다 바뀔 수 있다.
+        two = '#[test]\nfn a() {}\n#[test]\nfn b() {}\n'
+        with self.assertRaises(rsrun.RsrunError):
+            rsrun.parse_directives(two + '//@ test\n')
+        _, d = rsrun.parse_directives(two + '//@ test\n//@ args: --test-threads=1\n')
+        self.assertTrue(d['test'])
+        # 시험이 하나면 순서가 없으니 그냥 된다.
+        _, d = rsrun.parse_directives('#[test]\nfn a() {}\n//@ test\n')
+        self.assertTrue(d['test'])
+
     def test_directive_in_the_middle_is_an_error(self):
         # 가운데에 두면 화면의 줄 번호와 컴파일러가 말하는 줄 번호가 어긋난다.
         with self.assertRaises(rsrun.RsrunError):

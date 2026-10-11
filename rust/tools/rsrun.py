@@ -111,7 +111,14 @@ def parse_directives(text):
             if "'" in val or '%' in val:
                 raise RsrunError("stdin 에 ' 와 %% 는 못 쓴다 (printf 로 보이기 때문)")
             d[key] = val.replace('\\n', '\n')
-    return '\n'.join(lines) + '\n', d
+    code = '\n'.join(lines) + '\n'
+    # libtest 는 시험을 여러 스레드로 돌린다 — 시험이 둘 이상이면 결과 줄의 순서가
+    # 실행마다 바뀔 수 있다. 캡처가 흔들리지 않게 한 스레드로 돌리도록 요구한다.
+    if d['test'] and len(re.findall(r'(?m)^\s*#\[test\]', code)) > 1 \
+            and '--test-threads=1' not in d['args']:
+        raise RsrunError('시험이 둘 이상이면 //@ args: --test-threads=1 을 단다'
+                         '(결과 줄의 순서가 실행마다 바뀔 수 있다)')
+    return code, d
 
 
 def shown_commands(name, d):
