@@ -9,6 +9,6 @@ impl Drop for Lock {
 fn main() {
     let lock = Lock("잠금");
     println!("잠근 채로 일한다");
-    drop(lock); // 범위가 끝나기 전에 미리 정리한다
+    drop(lock); // 스코프가 끝나기 전에 미리 정리한다
     println!("풀고 나서 계속한다");
 }

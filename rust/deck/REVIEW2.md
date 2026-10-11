@@ -117,6 +117,27 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
 - unwinding = "되감기(unwinding)" (p09-panic-unwind); backtrace = "백트레이스".
 - A callout that only says "this syntax is taught in part N" is a `.note` headed
   "미리 쓰는 문법" — once at first use in the part, not on every slide.
+- "사라지다" is the plain word for a value or name going away; "정리되다(drop)" where the
+  compiler's "dropped" or `Drop` is the point. Both are fine.
+- "복제" is only for `clone()`. `to_string()` / `to_owned()` making a new `String` is
+  "새 String 을 만든다" or a plain "복사".
+- Part 11 terms: 수명(lifetime); 매달린 참조(dangling reference); 수명 생략(elision);
+  "들어오는 / 나가는 참조" for input / output lifetimes; 수명 인자; 수명 표기. Targets:
+  p11-dangle-scope (first E0597), p11-dangle-fix (the definition), p11-dangle-return
+  (first E0106), p11-longest, p11-longest-too-long, p11-local-annotated ("표기는 값이
+  사는 기간을 바꾸지 않습니다. 이미 정해져 있는 관계를 설명할 뿐"), p11-wrong-annotation
+  (E0621), p11-elide-one, p11-elide-rules, p11-underscore (`'_`), p11-struct-missing,
+  p11-struct-outlive, p11-struct-impl, p11-struct-owned, p11-static-str, p11-static-bound
+  (`T: 'static` — "잠깐 빌린 참조를 품지 않았는가 만 묻습니다"; part 15's spawn error points
+  here), p11-static-bound-fail, p11-fixes, p11-drill.
+- Part 14 terms: 스마트 포인터; 역참조 강제(deref coercion); 내부 가변성(interior
+  mutability); 누수(leak); "주인 수" for the strong count; 약한 참조. Targets:
+  p14-box-basic, p14-recursive-err (E0072), p14-recursive-box, p14-box-dyn, p14-deref-impl,
+  p14-deref-coercion, p14-drop-order (`impl Drop`, order), p14-drop-early (`drop()`),
+  p14-drop-method (E0040), p14-rc-share (Rc::clone 이 복제하는 것은 포인터뿐), p14-rc-count,
+  p14-rc-immutable (E0596), p14-refcell-basic, p14-refcell-panic (같은 규칙을 실행 중에),
+  p14-cell-copy, p14-rc-refcell, p14-cycle-leak, p14-weak-basic, p14-weak-tree, p14-choose,
+  p14-threads (hands over to part 15).
 - Part 10 terms (as p10 defines them): 트레이트 바운드(trait bound) where the thing is
   named, "조건(을 달다)" as the plain running word; 타입 인자 for `<T>` (kept book-wide,
   an exception to 매개변수/인자); 단형화; 터보피시; 기본 구현; 고아 규칙; newtype 패턴;

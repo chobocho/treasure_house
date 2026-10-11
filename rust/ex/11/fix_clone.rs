@@ -7,7 +7,7 @@ fn main() {
     let winner;
     {
         let y = String::from("fig");
-        // 결과를 복사해 가지면 y 에 매이지 않는다.
+        // 결과를 복제해 가지면 y 에 매이지 않는다.
         winner = longest(&x, &y).to_string();
     }
     println!("{winner}");

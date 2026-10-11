@@ -318,3 +318,11 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p10-const-generic). Open evidence gaps to decide at the end: p09-err-display "Error 는
   Debug 도 요구", p09-todo unimplemented!/unreachable!, p10-mono "사본", p10-static-dynamic
   "한 벌씩".
+- Parts 11 and 14 reviewed (review 2), no slide moved. Notes for later batches — part 12:
+  p12-three-iters "모음" → 컬렉션, p12-closure-vec `#p14-ch1` → p14-box-dyn, part end of 11
+  hands over via p12-return-closure. Part 13: last content slide p13-attr-table has no
+  hand-over to part 14. Part 15: `#p14` → p14-rc-share / p14-rc-immutable /
+  p14-refcell-basic on p15-rc-not-send / p15-arc-no-mutex / p15-refcell-not-sync;
+  p15-borrow-err `#p11` → p11-static-bound and "꼬리표" for span labels; "7~9번 줄";
+  cover/intro "범위 스레드" (scoped threads — decide the term). Evidence gaps noted:
+  p14-cell-copy (`get` needs Copy — not stated), p14-drop-method "두 번 정리" is reasoning.
