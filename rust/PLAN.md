@@ -175,3 +175,15 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
 - `deck/OUTLINE.md` (chapter contract for all parts), `deck/AUTHORING.md` (subagent brief),
   part 2 chapter 1 written by the orchestrator as the model chapter (10 slides).
 - Known red: `#p02-ch3` link dangles until part 2 chapter 3 exists.
+
+### Parts 0, 1, 2 (2026-10-11)
+- Part 1 (history, 60 slides, orchestrator): 24 sources in `data/sources.tsv`, 83 facts in
+  `data/facts.tsv` → `data/evidence.tsv`; 19 experiments in `ex/01` (pre-1.0 leftovers and
+  edition differences run on today's compiler). Facts: a space in an evidence regex matches
+  any whitespace run (fetched text wraps mid-sentence).
+- Part 0 (15 slides, orchestrator): `ex/00/machine` shows the toolchain and the rustc shim.
+- Part 2 (43 slides): chapter 1 by the orchestrator, chapters 2–4 by a subagent (177k tokens,
+  14 min). cargo new / clippy / cargo fmt all work offline in the sandbox. `cargo clean` must
+  be `-q` (it prints a size that can drift).
+- Builder: generated appendix slides `ECODES` / `GLOSSARY` / `SOURCES` (+4 tests, 93 total).
+- `make all SKEL=1` green at 133 slides.
