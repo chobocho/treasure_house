@@ -215,3 +215,16 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
 - Appendix: keyword and precedence tables are transcribed from the fetched Rust Reference
   pages (sources `ref-keywords`, `ref-expressions`); glossary in `deck/glossary.tsv` (46).
 - Review 1 started: one subagent at a time, guide in `deck/REVIEW.md`. Parts 2–3 first.
+
+### Review 1 in progress; full re-run (2026-10-11)
+- Reviews done: parts 2–3 (8 fixes), part 6 (9 fixes), committed 9f5e6e75. Running: 4–5.
+  Queue: 7, 8, 9+11, 10, 12+13, 14+15+16, 0+1+17 — one reviewer at a time (`deck/REVIEW.md`).
+- New builder check: an E-code in a slide title must appear in that slide's capture
+  (error); a code shown but missing from the title is a notice. 100 tests.
+- Full `rsrun --all --check` (every example re-run and compared with its capture) reported
+  no mismatch: the filtered log had no `✗` line and no `실패` summary. The log kept only
+  non-`✓` lines, so the count is taken from the example list (611 at the time), not from
+  the log. It ran while the 4–5 reviewer was editing; their own `--check ex/04 ex/05`
+  covers anything they change afterwards.
+- "장" is reserved for chapters; adjacent slides are "앞 슬라이드 / 다음 슬라이드"
+  (rule added to REVIEW.md; parts 2, 3, 6 fixed by hand).
