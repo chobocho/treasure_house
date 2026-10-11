@@ -274,6 +274,64 @@ class History(Tree):
         self.assertEqual(self.build().errors, [])
 
 
+class Appendix(Tree):
+    """부록의 생성 슬라이드 — 오류 번호 찾아보기 · 용어집 · 출처."""
+
+    def setUp(self):
+        super().setUp()
+        self.put('deck/order.txt', '06_own.html\n17_appendix.html\n')
+        self.put('deck/budget.txt', '6 10\n17 20\n')
+        self.example('ex/06/b.rs', CODE, CAP)
+        self.section(
+            '<article class="card" id="p06-a"><h3>이동하면 못 쓴다 — E0382</h3>'
+            '<!--RUN file=ex/06/a.rs--></article>\n'
+            '<article class="card" id="p06-b"><h3>두 번 빌리면 — E0499 · E0502</h3>'
+            '<!--RUN file=ex/06/b.rs--></article>\n'
+            '<article class="card" id="p06-c"><h3>또 이동 &amp; 오류 — E0382</h3><p>x</p></article>\n')
+
+    def appendix(self, body):
+        self.put('deck/sections/17_appendix.html',
+                 '<article class="card section" id="p17"><p class="chnum">부록</p><h2>부록</h2></article>\n' + body)
+
+    def test_ecodes_index_links_every_slide_that_shows_a_code(self):
+        self.appendix('<!--ECODES per=2-->\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertIn('<article class="card" id="p17-ecodes-1">', r.html)
+        self.assertIn('<article class="card" id="p17-ecodes-2">', r.html)       # 코드 셋, 장당 둘
+        self.assertNotIn('p17-ecodes-3', r.html)
+        self.assertIn('<td><code>E0382</code></td><td><a href="#p06-a">이동하면 못 쓴다</a> · '
+                      '<a href="#p06-c">또 이동 &amp; 오류</a></td>', r.html)
+        self.assertIn('<td><code>E0502</code></td><td><a href="#p06-b">두 번 빌리면</a></td>', r.html)
+        self.assertEqual(r.per_part[17], 3)
+
+    def test_glossary_is_paged_sorted_and_link_checked(self):
+        self.put('deck/glossary.tsv', 'ko\ten\tdesc\twhere\n'
+                 '소유권\townership\t값의 주인은 하나다\tp06-a\n'
+                 '빌림\tborrowing\t주인을 바꾸지 않고 잠시 쓴다\tp06-b\n')
+        self.appendix('<!--GLOSSARY per=1-->\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        # 가나다순 — 용어 칸끼리 견준다('소유권' 은 6부 표지 제목에도 나온다).
+        self.assertLess(r.html.index('>빌림</a>'), r.html.index('>소유권</a>'))
+        self.assertIn('<td><a href="#p06-b">빌림</a><br><span class="en">borrowing</span></td>'
+                      '<td>주인을 바꾸지 않고 잠시 쓴다</td>', r.html)
+        self.assertEqual(r.per_part[17], 3)
+        self.put('deck/glossary.tsv', 'ko\ten\tdesc\twhere\n소유권\townership\t설명\tp99-x\n')
+        self.assertIn('p99-x', self.errs())
+
+    def test_sources_lists_every_source_with_its_date(self):
+        self.appendix('<!--SOURCES per=10-->\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertIn('<article class="card" id="p17-sources-1">', r.html)
+        self.assertIn('<a href="https://blog.rust-lang.org/x">Announcing Rust 1.0</a>', r.html)
+
+    def test_generated_slides_must_be_outside_an_article(self):
+        self.appendix('<article class="card" id="p17-x"><!--ECODES per=2--></article>\n')
+        self.assertIn('ECODES', self.errs())
+
+
 class Width(unittest.TestCase):
     def test_width(self):
         self.assertEqual(build_deck.width('abc'), 3)

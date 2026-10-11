@@ -97,7 +97,8 @@ def match_facts(rows, docs):
             errs.append('facts: %s — 받아 둔 출처가 없다(docs/%s.txt, make docs)' % (fid, src))
             continue
         try:
-            m = re.search(ev, cache[src], re.S) if ev else None
+            # 받아 둔 글은 문장 가운데서 줄이 바뀐다. 근거의 공백 하나는 공백 연속과 맞춘다.
+            m = re.search(ev.replace(' ', r'\s+'), cache[src], re.S) if ev else None
         except re.error as e:
             errs.append('facts: %s — 정규식 오류 %s' % (fid, e))
             continue

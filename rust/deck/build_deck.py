@@ -17,6 +17,12 @@
      <!--SRC key=rust-1.0-->    → 출처 링크
      <!--FACT id=first-release--> → 근거가 확인된 역사 주장의 출처 링크
 
+   슬라이드를 통째로 만들어 내는 지시자(부록용 — <article> 밖에 둔다):
+
+     <!--ECODES per=12-->    제목이 "— E0382" 로 끝나는 장을 모은 오류 번호 찾아보기
+     <!--GLOSSARY per=9-->   deck/glossary.tsv (ko·en·desc·where) → 가나다순 용어집
+     <!--SOURCES per=10-->   data/sources.tsv → 출처 목록
+
    검사는 build() 끝의 목록과 같다. 하나라도 걸리면 종료 코드 1.
    O(조각 글자 수 + 인용한 파일 크기) — 한 번 훑고 끝난다.
 """
@@ -277,9 +283,48 @@ class Builder(object):
             for y in sorted(set(YEAR.findall(prose)) - allowed):
                 self.err('%s년 — 이 장의 근거(FACT·SRC 날짜·REL) 어디에도 없는 연도' % y)
 
+    # ── 슬라이드를 만들어 내는 지시자 ─────────────────────────────
+    def pages(self, slug, title, head, rows, per):
+        """표의 행들을 per 개씩 끊어 슬라이드 여러 장으로. 장수는 예산에 그대로 잡힌다."""
+        per = max(1, per)
+        chunks = [rows[i:i + per] for i in range(0, len(rows), per)] or [[]]
+        out = []
+        for n, chunk in enumerate(chunks, 1):
+            out.append('<article class="card" id="p%02d-%s-%d">\n<h3>%s (%d/%d)</h3>\n'
+                       '<div class="tblwrap">\n<table class="kv">\n<tr>%s</tr>\n%s\n</table>\n</div>\n</article>'
+                       % (self.part, slug, n, title, n, len(chunks),
+                          ''.join('<th>%s</th>' % h for h in head),
+                          '\n'.join('<tr>%s</tr>' % ''.join('<td>%s</td>' % c for c in r) for r in chunk)))
+        return '\n\n'.join(out)
+
+    def generated(self, name, a):
+        per = int(a['per']) if a.get('per', '').isdigit() else 12
+        if name == 'ECODES':
+            rows = [('<code>%s</code>' % code,
+                     ' · '.join('<a href="#%s">%s</a>' % (sid, t) for sid, t in self.ecodes[code]))
+                    for code in sorted(self.ecodes)]
+            return self.pages('ecodes', '오류 번호 찾아보기', ('번호', '나오는 곳'), rows, per)
+        if name == 'GLOSSARY':
+            terms = tsv(os.path.join(self.root, 'deck', 'glossary.tsv'), 'ko')
+            rows = []
+            for ko in sorted(terms):
+                t = terms[ko]
+                head = '<a href="#%s">%s</a>' % (t['where'], esc(ko)) if t.get('where') else esc(ko)
+                rows.append((head + '<br><span class="en">%s</span>' % esc(t['en']), t['desc']))
+            return self.pages('glossary', '용어집', ('용어', '뜻'), rows, per)
+        rows = [('<a href="%s">%s</a>' % (html.escape(x['url']), esc(x['title'])), x.get('date', ''))
+                for x in self.sources.values()]
+        return self.pages('sources', '출처', ('글', '나온 날'), rows, per)
+
     def expand(self, m):
         name = m.group(1)
         a = {k: (q if q else u).strip() for k, q, u in ATTR.findall(m.group(2))}
+        if name in ('ECODES', 'GLOSSARY', 'SOURCES'):
+            before = m.string[:m.start()]
+            if before.count('<article') != before.count('</article>'):
+                self.err('%s 는 슬라이드를 만들어 낸다 — <article> 밖에 둔다' % name)
+                return ''
+            return self.generated(name, a)
         if name == 'RUN':
             return self.run(a)
         if name == 'CODE':
@@ -294,7 +339,7 @@ class Builder(object):
 
     # ── 조각 하나 ──────────────────────────────────────────────────
     def fragment(self, fname):
-        part = int(fname[:2])
+        part = self.part = int(fname[:2])
         text = read(os.path.join(self.root, 'deck', 'sections', fname))
         # 손으로 쓴 <pre> 는 지시자를 펴기 전에 본다(편 뒤에는 구별할 수 없다).
         for m in PRE.finditer(text):
@@ -364,6 +409,18 @@ class Builder(object):
                  if ln.strip() and not ln.startswith('#')]
         self.ids, self.subids, self.links = set(), set(), []
         self.nav = ['    <option value="top">챕터 이동…</option>']
+        # 오류 번호 찾아보기는 모든 조각의 제목을 봐야 한다 — 먼저 한 번 훑는다.
+        self.ecodes = {}
+        for f in order:
+            for m in ARTICLE.finditer(read(os.path.join(d, 'sections', f))):
+                h = re.search(r'<h3[^>]*>(.*?)</h3>', m.group(2), re.S)
+                sid = re.search(r'\bid="([^"]+)"', m.group(1))
+                if not h or not sid:
+                    continue
+                title = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', DIRECTIVE.sub('', h.group(1)))).strip()
+                short = re.sub(r'\s*—\s*E0\d{3}.*$', '', title)
+                for code in sorted(set(re.findall(r'\bE0\d{3}\b', title))):
+                    self.ecodes.setdefault(code, []).append((sid.group(1), short))
         bodies = [self.fragment(f) for f in order]
         self.where = ''
         for fname, h in self.links:

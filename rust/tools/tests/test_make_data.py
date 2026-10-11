@@ -85,6 +85,15 @@ class Facts(unittest.TestCase):
         self.assertEqual(errs, [])
         self.assertEqual(ev, [('first', 'releases', 'Version 0.1 (2012-01-20)')])   # 공백은 하나로
 
+    def test_a_space_in_evidence_matches_any_run_of_whitespace(self):
+        # 받아 둔 글은 문장 가운데서 줄이 바뀐다 — 근거를 한 줄로 적어도 맞아야 한다.
+        with open(os.path.join(self.docs, 'post.txt'), 'w', encoding='utf-8') as f:
+            f.write('Today we are very proud to announce the\n1.0 release of Rust\n')
+        ev, errs = make_data.match_facts(
+            self.facts(('one', 'post', r'proud to announce the 1\.0 release')), self.docs)
+        self.assertEqual(errs, [])
+        self.assertEqual(ev[0][2], 'proud to announce the 1.0 release')
+
     def test_missing_evidence_and_missing_source(self):
         _, errs = make_data.match_facts(self.facts(('x', 'releases', r'Version 7\.7')), self.docs)
         self.assertEqual(len(errs), 1)
