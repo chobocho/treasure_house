@@ -53,8 +53,12 @@ HISTORY_PARTS = (1,)
 YEAR = re.compile(r'(?<![\d.#-])(19[5-9]\d|20[0-4]\d)(?![\d.])')
 LANG_OF = {'.rs': 'rust', '.toml': 'toml', '.txt': 'text', '.md': 'text', '.sh': 'sh'}
 
-DIRECTIVE = re.compile(r'<!--([A-Z]+)((?:\s+[a-z]+=(?:"[^"]*"|[^\s>]*(?:\s(?![a-z]+=)[^\s>]*)*))*)\s*-->')
-ATTR = re.compile(r'([a-z]+)=(?:"([^"]*)"|((?:[^\s>]|\s(?![a-z]+=))*))')
+# 값에는 > 가 올 수 있다(note=-> () , Option<u8>). 지시자의 끝은 --> 뿐이다.
+# 따옴표 없는 값은 "--> 가 아닌 글자들" 이고, 다음 key= 앞의 공백에서 끝난다.
+_WORD = r'(?:(?!-->)\S)+'
+_VALUE = r'(?:"[^"]*"|%s(?:\s+(?![a-z]+=)%s)*)?' % (_WORD, _WORD)
+DIRECTIVE = re.compile(r'<!--([A-Z]+)((?:\s+[a-z]+=%s)*)\s*-->' % _VALUE)
+ATTR = re.compile(r'([a-z]+)=(?:"([^"]*)"|(%s(?:\s+(?![a-z]+=)%s)*)?)' % (_WORD, _WORD))
 ARTICLE = re.compile(r'<article\b([^>]*)>(.*?)</article>', re.S)
 PRE = re.compile(r'<pre\b([^>]*)>(.*?)</pre>', re.S)
 # 박스 그리기 문자는 <pre> 밖에서 쓰지 않는다 — 내장 글꼴(DeckMono)은 고정폭
@@ -161,6 +165,20 @@ class Builder(object):
         if wide:
             self.err('%s: %s %d번째 줄이 %d칸 — %d칸까지' % (rel, what, wide[0][0], wide[0][1], max_cols))
 
+    def balanced(self, rel, part, spec):
+        """잘라 온 Rust 코드의 중괄호가 맞는가 — 함수 가운데서 끊긴 인용을 잡는다.
+
+           문자열·문자·주석 안의 중괄호는 세지 않는다. 한 번 훑는다, O(글자 수).
+        """
+        text = '\n'.join(part)
+        text = re.sub(r'//[^\n]*', '', text)
+        text = re.sub(r'"(?:\\.|[^"\\])*"', '""', text)
+        text = re.sub(r"'(?:\\.|[^'\\])'", "''", text)
+        depth = text.count('{') - text.count('}')
+        if depth:
+            self.err('%s: lines=%s 가 블록 경계에 맞지 않는다(중괄호 %+d) — 함수·블록 단위로 자른다'
+                     % (rel, spec, depth))
+
     def check_fresh(self, ex):
         self.used.add(ex)
         why = rsrun.stale(self.root, ex, self.manifest)
@@ -181,6 +199,8 @@ class Builder(object):
         lo, hi = self.slice(rel, lines, a.get('lines'))
         part = lines[lo - 1:hi]
         self.measure(rel, part, MAX_PRE_COLS, '코드')
+        if ext == '.rs' and a.get('lines'):
+            self.balanced(rel, part, a['lines'])
         lang = 'text' if base == 'RUN' else LANG_OF.get(ext, 'text')
         label = rel + (' · ' + a['note'] if a.get('note') else '')
         return ('<p class="fname">%s</p>\n<pre data-src="%s" data-lines="%d-%d">'
@@ -362,7 +382,7 @@ class Builder(object):
         out.append(text[pos:])
         body = ''.join(out)
         self.where = fname
-        left = re.search(r'<!--\s*[A-Z]{2,}\b[^>]*-->', body)
+        left = re.search(r'<!--\s*[A-Z]{2,}\b.*?-->', body, re.S)
         if left:
             self.err('펴지지 않은 지시자: %s' % left.group(0)[:60])
         if BOXDRAW.search(PRE.sub('', body)):

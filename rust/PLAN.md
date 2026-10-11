@@ -202,3 +202,16 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
 - Part 15 captures re-run 3× identical. Version badges now 25 rows in features.tsv.
 - Remaining: 3b (running), 6, 7, 8, 10, 12, 13 (subagents, one at a time), 16 and the
   appendix (orchestrator), then wrap-up and review.
+
+### All parts written — 912 slides (2026-10-11)
+- Subagents wrote 2 (ch2–4), 3a, 3b, 6a, 6b; the orchestrator wrote 0, 1, 4, 5, 7, 8, 9, 10,
+  11, 12, 13, 14, 15, 16 and the appendix in parallel. 610 examples, 30 version badges,
+  27 sources, 83 history facts. `make all` (no SKEL) green: 98 tests, 1233 blocks verified.
+- Builder fixes found late: (1) a `note=` containing `>` (`->`, `Option<u8>`, `=>`) made the
+  directive silently vanish — 8 slides had lost their code; fixed with a regression test and
+  the "unused example" check is what exposed it. (2) new check: a `.rs` CODE slice must be
+  brace-balanced (cut at function/block boundaries).
+- rsrun: doctest timings are normalized too (`ran in`, `compilation took`).
+- Appendix: keyword and precedence tables are transcribed from the fetched Rust Reference
+  pages (sources `ref-keywords`, `ref-expressions`); glossary in `deck/glossary.tsv` (46).
+- Review 1 started: one subagent at a time, guide in `deck/REVIEW.md`. Parts 2–3 first.

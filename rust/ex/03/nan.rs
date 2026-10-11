@@ -7,7 +7,7 @@ fn main() {
     println!("0.0 / 0.0  = {nan}");
     println!("inf + 1.0  = {}", inf + 1.0);
     println!("inf - inf  = {}", inf - inf);
-    // NaN 은 무엇과 견주어도 거짓이다 — 자기 자신과도
+    // ==, <, > 어느 것으로 견주어도 거짓이다 — 자기 자신과도
     println!("nan == nan ? {}", nan == nan);
     println!("nan < 1.0  ? {}", nan < 1.0);
     println!("nan > 1.0  ? {}", nan > 1.0);

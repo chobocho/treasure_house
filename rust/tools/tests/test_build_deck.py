@@ -77,6 +77,20 @@ class Expand(Tree):
                       '<span class="p">$ rustc --edition 2024 a.rs &amp;&amp; ./a</span>\n'
                       '[1, 2]\n</pre>', r.html)
 
+    def test_note_may_contain_angle_brackets_and_arrows(self):
+        # 설명에 -> 나 Vec<T> 를 쓰면 지시자가 조용히 사라지던 결함의 회귀 시험.
+        self.section('<article class="card" id="p06-a">\n'
+                     '<!--RUN file=ex/06/a.rs note=-> () 와 Option<u8> => 둘 다-->\n</article>\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertIn('<p class="fname">ex/06/a.rs · -&gt; () 와 Option&lt;u8&gt; =&gt; 둘 다</p>', r.html)
+        self.assertIn('data-src="out/06/a.txt"', r.html)
+
+    def test_unexpanded_directive_is_reported_even_with_angle_brackets(self):
+        self.section('<article class="card" id="p06-a"><!--RUN file=ex/06/a.rs--></article>\n'
+                     '<article class="card" id="p06-b">\n<!--RUN file = ex/06/a.rs note=a > b-->\n</article>\n')
+        self.assertIn('펴지지 않은 지시자', self.errs())
+
     def test_code_lines_slice(self):
         self.section('<article class="card" id="p06-a">\n'
                      '<!--CODE file=ex/06/a.rs lines=2-3-->\n'
@@ -160,6 +174,22 @@ class Rules(Tree):
         self.section(self.ok_slide() +
                      '<article class="card" id="p06-l"><!--CODE file=ex/06/l.rs--></article>\n')
         self.assertIn('45줄', self.errs())
+
+    def test_code_slice_must_end_on_a_block_boundary(self):
+        # lines= 가 함수 가운데서 끊기면 화면의 코드가 닫히지 않은 채 끝난다.
+        self.section(self.ok_slide() + '<article class="card" id="p06-s">'
+                     '<!--CODE file=ex/06/a.rs lines=1-3--></article>\n')
+        self.assertIn('중괄호', self.errs())
+        self.section(self.ok_slide() + '<article class="card" id="p06-s">'
+                     '<!--CODE file=ex/06/a.rs lines=2-3--></article>\n')
+        self.assertEqual(self.build().errors, [])            # 본문 줄만 — 균형이 맞다
+
+    def test_braces_inside_strings_and_comments_do_not_count(self):
+        self.example('ex/06/f.rs', 'fn main() {\n    println!("{{ {}", 1); // }\n}\n'
+                     'fn other() {}\n', CAP)
+        self.section(self.ok_slide() + '<article class="card" id="p06-s">'
+                     '<!--CODE file=ex/06/f.rs lines=1-3--></article>\n')
+        self.assertEqual(self.build().errors, [])
 
     def test_duplicate_and_missing_id(self):
         self.section(self.ok_slide() + self.ok_slide())
