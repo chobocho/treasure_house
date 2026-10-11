@@ -117,6 +117,22 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
 - unwinding = "되감기(unwinding)" (p09-panic-unwind); backtrace = "백트레이스".
 - A callout that only says "this syntax is taught in part N" is a `.note` headed
   "미리 쓰는 문법" — once at first use in the part, not on every slide.
+- The dereference star is written `*` in code font, not "별". "마지막 줄", not "끝줄".
+  Callout heads are not "첫 줄 / 둘째 줄" — quote the value or name the method.
+- A table's reading sentence is the lead or a `<p class="cap">` after the table.
+- A paraphrase of a compiler label inside a reading note goes in Korean quotes ("…한다").
+- Part 12 terms: 클로저(closure); 붙잡기(capture); 반복자; 어댑터(adapter) / 소비자
+  (consumer); 게으르다(lazy); 사슬 (a dotted chain); 당기다 (a consumer pulling); 그릇 (the
+  target of `collect`). Targets: p12-closure-basic, p12-closure-infer, p12-closure-capture,
+  p12-capture-ref / p12-capture-mut / p12-capture-move ("move 를 쓰면 쓰는 변수를 빌리지
+  않고 가져갑니다 … move 는 붙잡는 방법만 바꿉니다" — part 15's spawn slide quotes this),
+  p12-capture-mut-conflict (E0502), p12-capture-move-after (E0382), p12-fn-traits,
+  p12-param-fn, p12-param-fnmut, p12-param-fnonce, p12-return-closure, p12-closure-vec,
+  p12-next, p12-for-sugar, p12-three-iters, p12-lazy, p12-lazy-consumed ("어댑터는 계획만
+  쌓고, 소비자가 next 로 당겨야 돕니다"), p12-impl-iterator, p12-sources, p12-map-filter,
+  p12-enumerate-zip, p12-filter-map, p12-adapter-table, p12-collect, p12-collect-untyped
+  (E0283), p12-sum-count, p12-fold, p12-min-max-by, p12-any-all-find, p12-consumer-table,
+  p12-rewrite-loop, p12-sorting, p12-grouping, p12-generators.
 - "사라지다" is the plain word for a value or name going away; "정리되다(drop)" where the
   compiler's "dropped" or `Drop` is the point. Both are fine.
 - "복제" is only for `clone()`. `to_string()` / `to_owned()` making a new `String` is

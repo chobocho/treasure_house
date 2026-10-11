@@ -90,6 +90,7 @@ capture is right and your expectation was wrong — rewrite the prose, never the
   `data-quiz`, `.q`, `<button>답 보기</button>`, `.a`). Quiz answers must be backed by an
   example you ran (in this chapter).
 - Links: inside your part, any id. To other parts, only the part cover `#pNN`.
+  (Superseded once the whole book existed: REVIEW2.md asks for slide-level links.)
 - Version claims ("1.65 부터"): do not type a version from memory. Find the line in
   `docs/releases.txt` (`grep -n -i 'let.else' docs/releases.txt`, then look up which
   `Version` heading it is under), add a row to `data/features.tsv`

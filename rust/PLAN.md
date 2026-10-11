@@ -326,3 +326,9 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p15-borrow-err `#p11` → p11-static-bound and "꼬리표" for span labels; "7~9번 줄";
   cover/intro "범위 스레드" (scoped threads — decide the term). Evidence gaps noted:
   p14-cell-copy (`get` needs Copy — not stated), p14-drop-method "두 번 정리" is reasoning.
+- Part 12 reviewed (review 2): 61 → 62 slides (new p12-adapter-table closing the adaptor
+  catalogue; p12-closure-infer moved before capture). BOOK TOTAL IS NOW 922 — index.html
+  card (line ~765), README.md (~47) and history must say 922 at the wrap-up. Notes — part
+  15: 15_conc ~30 `#p12` → p12-closure-basic, ~64 → p12-capture-move; part 1: 01_history
+  485 "(12부)". No performance/zero-cost note exists in part 12 (outline listed one); none
+  was invented.
