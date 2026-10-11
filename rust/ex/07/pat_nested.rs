@@ -30,7 +30,8 @@ fn main() {
         print!("{} ", touches_origin(s));
     }
     println!();
-    if let Shape::Circle { r, .. } = &shapes[0] {
-        println!("반지름 {r}");
+    match &shapes[0] {
+        Shape::Circle { r, .. } => println!("반지름 {r}"),
+        Shape::Line(..) => {}
     }
 }

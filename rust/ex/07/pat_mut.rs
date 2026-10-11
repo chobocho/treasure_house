@@ -14,8 +14,9 @@ fn deposit(a: &mut Account, amount: u32) {
 fn main() {
     let mut a = Account::Open { balance: 100 };
     deposit(&mut a, 50);
-    if let Account::Open { balance } = &a {
-        println!("{balance}");
+    match &a {
+        Account::Open { balance } => println!("{balance}"),
+        Account::Closed => {}
     }
     deposit(&mut Account::Closed, 1);
 }

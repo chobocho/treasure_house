@@ -1,5 +1,4 @@
 // 데이터 없는 열거형은 정수로 바꿀 수 있다. 번호를 직접 줄 수도 있다.
-#[derive(Clone, Copy)]
 enum Status {
     Ok = 200,
     NotFound = 404,

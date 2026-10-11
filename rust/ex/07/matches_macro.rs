@@ -15,7 +15,4 @@ fn main() {
         let fast = matches!(s, State::Running { speed } if *speed > 60);
         println!("{s:?}: {active} {fast}");
     }
-    let finished =
-        states.iter().filter(|s| matches!(s, State::Done)).count();
-    println!("{finished}");
 }

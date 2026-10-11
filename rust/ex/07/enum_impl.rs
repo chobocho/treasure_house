@@ -17,6 +17,9 @@ impl Coin {
 
 fn main() {
     let purse = [Coin::Won500, Coin::Won100, Coin::Won100, Coin::Won10];
-    let total: u32 = purse.iter().map(|c| c.value()).sum();
+    let mut total = 0;
+    for c in &purse {
+        total += c.value();
+    }
     println!("{total}");
 }

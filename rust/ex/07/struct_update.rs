@@ -1,4 +1,3 @@
-#[derive(Debug)]
 struct Config {
     host: String,
     port: u16,
@@ -13,6 +12,5 @@ fn main() {
     };
     // 몇 개만 바꾸고 나머지는 base 에서 가져온다.
     let secure = Config { port: 443, ..base };
-    println!("{secure:?}");
     println!("{} {} {}", secure.host, secure.port, secure.verbose);
 }

@@ -8,7 +8,7 @@ struct Request {
 impl Request {
     fn new(url: &str) -> Self {
         Self {
-            url: url.to_string(),
+            url: String::from(url),
             retries: 0,
             verbose: false,
         }

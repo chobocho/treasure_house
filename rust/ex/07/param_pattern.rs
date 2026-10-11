@@ -8,7 +8,7 @@ fn sum((a, b): (i32, i32)) -> i32 {
     a + b
 }
 
-fn norm1(&Point { x, y }: &Point) -> i32 {
+fn norm1(Point { x, y }: &Point) -> i32 {
     x.abs() + y.abs()
 }
 
@@ -21,6 +21,6 @@ fn main() {
         print!("{n}{c} "); // for 의 변수 자리도
     }
     // 클로저의 매개변수도
-    let total: i32 = pairs.iter().map(|(n, _)| n).sum();
-    println!("{total}");
+    let add = |(a, b): (i32, i32)| a + b;
+    println!("{}", add((1, 2)));
 }

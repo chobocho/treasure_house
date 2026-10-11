@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug)]
 enum Light {
     Red,
     Yellow,
@@ -18,5 +18,5 @@ fn next(l: Light) -> Light {
 
 fn main() {
     let l = next(next(Red));
-    println!("{l:?} {}", l == Yellow);
+    println!("{l:?}");
 }

@@ -6,12 +6,4 @@ fn main() {
         print!("{top} ");
     }
     println!("비었다");
-
-    let mut chars = "a1b2".chars();
-    while let Some(c) = chars.next() {
-        if c.is_ascii_digit() {
-            print!("[{c}]");
-        }
-    }
-    println!();
 }

@@ -1,5 +1,5 @@
 // 열거형 — "이것들 가운데 하나".
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 enum Direction {
     North,
     East,
@@ -18,5 +18,6 @@ fn turn_right(d: Direction) -> Direction {
 
 fn main() {
     let d = turn_right(Direction::North);
-    println!("{d:?} {:?}", turn_right(d));
+    println!("{d:?}");
+    println!("{:?}", turn_right(d));
 }
