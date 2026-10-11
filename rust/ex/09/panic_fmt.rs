@@ -1,6 +1,6 @@
 fn withdraw(balance: u32, amount: u32) -> u32 {
     if amount > balance {
-        panic!("잔액 {balance} 에서 {amount} 를 뺄 수 없다");
+        panic!("출금 {amount} > 잔액 {balance}");
     }
     balance - amount
 }
