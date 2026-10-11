@@ -187,3 +187,18 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   be `-q` (it prints a size that can drift).
 - Builder: generated appendix slides `ECODES` / `GLOSSARY` / `SOURCES` (+4 tests, 93 total).
 - `make all SKEL=1` green at 133 slides.
+
+### Parts 4, 5 (2026-10-11)
+- Part 4 (49 slides, 37 examples) and part 5 (34 slides, 24 examples) written by the
+  orchestrator while the part-3a subagent ran. `rsrun --check` identical for ex/00,01,04,05.
+- rustc 1.99 notes: "cannot find type" is E0425 (not E0412); `let b = a = 5;` warns
+  `unused_assignments` unless `a` is read first; `5..1` gives no warning.
+
+### Parts 3a, 9, 11, 14, 15 (2026-10-11)
+- 3a (31 slides) by a subagent (143k tokens, 11 min); 3b running. Orchestrator wrote
+  part 9 (51), part 11 (45), part 14 (41), part 15 (36) in parallel with the subagents.
+- Authoring lessons added to AUTHORING.md: format only your own files (not `make fmt`);
+  Korean counts 2 columns for the builder but 1 for rustfmt.
+- Part 15 captures re-run 3× identical. Version badges now 25 rows in features.tsv.
+- Remaining: 3b (running), 6, 7, 8, 10, 12, 13 (subagents, one at a time), 16 and the
+  appendix (orchestrator), then wrap-up and review.
