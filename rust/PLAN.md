@@ -337,3 +337,10 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   caption used to say `#![…]` never appears in the book's examples — it does once
   (ex/01/feature_gate.rs on p01-nightly); now says so. Notes — part 1: p01-cratesio `#p13`
   → p13-crates-io; appendix/part 16: check for "범위 스레드". Remaining batches: 16+17, 1.
+- Part 16 and the appendix reviewed (review 2): counts unchanged (37, 30; book 922).
+  Glossary 59 → 64 rows (되감기·복제·스코프·정리·풀어 헤치기), still 8 pages — the card and
+  README say "용어집 59낱말" and must say 64 at the wrap-up. Outline items that have no
+  slide and were NOT added: part 16 ch 4 never type / impl Trait in more places / shadowed
+  prelude; appendix edition table (p01-ed-table is the only one). Notes — part 1:
+  p01-ed2024-setvar `#p16` → p16-unsafe-call, p01-async → p16-ch3, macro rows of
+  p01-milestones → p16-derive. Remaining batch: part 1.

@@ -117,6 +117,18 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
 - unwinding = "되감기(unwinding)" (p09-panic-unwind); backtrace = "백트레이스".
 - A callout that only says "this syntax is taught in part N" is a `.note` headed
   "미리 쓰는 문법" — once at first use in the part, not on every slide.
+- "범위 밖" for "out of scope of this book" → "이 책에서 다루지 않습니다". "갈래" is not a
+  table column head for "category" (use "쓰임" / "종류").
+- For a capture with no error, cite the SOURCE line and quote what it printed ("4번 줄의
+  `{n:5}` 가 찍은 `[   42]`") rather than counting output lines.
+- Part 16: a chapter of the taster part opens with a `.note` headed "이 장을 마치면".
+  Targets: p16-macro-basic, p16-macro-arms, p16-macro-map, p16-macro-std, p16-derive,
+  p16-unsafe-what, p16-raw-ptr-safe (E0133), p16-raw-ptr, p16-unsafe-call, p16-unsafe-fn,
+  p16-extern-c, p16-unsafe-checked (E0499 inside unsafe — 빌림 검사는 꺼지지 않는다),
+  p16-async-lazy, p16-block-on, p16-await, p16-async-why, p16-type-alias, p16-raw-ident,
+  p16-labeled-block, p16-inline-const, p16-underscore (closes the teaching arc).
+  The glossary (deck/glossary.tsv) has 64 rows and its last page is full: one more row
+  adds a slide.
 - Part 13 terms: 뿌리 파일 / 뿌리 모듈 (crate root); 다시 내놓기 (`pub use`); 실행 크레이트
   / 라이브러리 크레이트; 단위 시험 / 통합 시험 / 문서 시험; 기능(feature); 속성
   (attribute). Visibility is "보이는 곳", not "공개 범위". Targets: p13-mod-inline,
