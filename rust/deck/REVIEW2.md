@@ -99,6 +99,15 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
 - A later error slide that repeats an error number or message seen earlier says so in one
   clause with a link ("2부에서 본 E0277 과 같은 꼴"), then reads only what is new.
 - collection = "컬렉션" everywhere (part 8's title); "모음" only for vowels.
+- `&T` is "불변 참조", `&mut T` "가변 참조"; the act is "불변 빌림 / 가변 빌림" (the
+  compiler's immutable/mutable borrow). "읽는 참조/읽는 빌림" only as a gloss at the
+  definition (p06-ref-no-write). "읽는 쪽 여럿 아니면 고치는 쪽 하나" is the book's phrase
+  for the rule and stays.
+- Part 6 targets other parts quote: p06-drop-scope (정리/drop), p06-rules, p06-move-assign
+  (first E0382), p06-move-fn, p06-clone, p06-borrow-rule (the rule), p06-nll-early (빌림은
+  마지막으로 쓴 줄까지), p06-push-holding (push 와 참조; loop variant p06-iter-invalid),
+  p06-char-boundary, p06-str-slice, p06-take-str / p06-take-slice (&str·&[T] 로 받기),
+  p06-vec-move (E0507), p06-mem-take, p06-three-ways (보기·고치기·갖기), p06-stack-heap.
 - "갈래" is a branch of `match` or of `if`/`else`.
 - "범위를 넘다/벗어나다" for an index outside an array or slice is fine (a value range).
 - Space between a closing Korean quote and a particle (`"…" 입니다` / `"…"입니다`): parts

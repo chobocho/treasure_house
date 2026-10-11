@@ -272,3 +272,19 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
 - After the last batch: `make all` (no SKEL), `rsrun --all --check` ×3 with counts and exit
   codes logged, card/README figures only if slide or example counts changed, history.md
   entry, memory note, then report and ask about push.
+- Review 2 batches committed so far: 0+2 (0f9b305a), 3 (9d4db97e), 4+5 (dea9684c). Running:
+  part 6. Brief lesson: take part titles from OUTLINE.md (the 4+5 brief wrongly called
+  part 5 "함수와 모듈"). ex/04/match_bind.rs now runs three values so the guard arm is
+  evidenced. Decisions keep accumulating in REVIEW2.md ("Decisions added …" block).
+- Notes for later batches — part 7: p07-pat-tuple/p07-pat-guard should acknowledge
+  p04-match-bind (가드), p07-enum-missing-arm (E0004) should acknowledge p04-match-missing,
+  07b line ~9 `#p04` → `#p04-ch4`, 튜플 풀기 → p03-tuple. Part 8: NaN → p03-nan, char →
+  p03-char. Part 10: 실수 sort 오류 → p03-nan-sort. Part 12: "모음" → "컬렉션"
+  (p12-three-iters). Part 15: static → p03-static. Part 0: p00-broken "3부에서" could go to
+  p03-mut-type.
+- Part 6 reviewed (review 2). Notes for later batches — part 1: p01-nll "그 변수의 범위가
+  끝날 때까지" → 스코프, link `#p06` → `#p06-nll-early`. Part 8: 08_coll.html links
+  "6부 N장" to the cover → p06-push-holding (p08-vec-capacity), p06-char-boundary /
+  p06-str-slice, p06-take-slice, p06-vec-move (E0507), p06-literal-string. Parts 9 and 14:
+  p09-panic-unwind and p14-drop-order must acknowledge p06-drop-scope; 14_ptr.html says
+  "읽는 빌림" ×3 → 불변 빌림.
