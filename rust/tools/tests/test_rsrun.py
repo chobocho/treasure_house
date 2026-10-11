@@ -108,6 +108,11 @@ class Normalize(unittest.TestCase):
         self.assertIn('finished in 0.00s', out)
         self.assertIn('target(s) in 0.00s', out)
 
+    def test_doctest_timings(self):
+        s = 'all doctests ran in 1.35s; merged doctests compilation took 1.26s\n'
+        self.assertEqual(rsrun.normalize(s, '/s'),
+                         'all doctests ran in 0.00s; merged doctests compilation took 0.00s\n')
+
     def test_sandbox_path(self):
         s = 'Compiling demo v0.1.0 (/a/b/scratch/run/x)\n'
         self.assertEqual(rsrun.normalize(s, '/a/b/scratch/run/x'),

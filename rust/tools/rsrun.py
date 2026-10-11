@@ -136,6 +136,7 @@ def shown_commands(name, d):
 _TID = re.compile(r"^(thread '[^'\n]*' \()\d+(\) panicked)", re.M)
 _TEST_TIME = re.compile(r'(finished in )\d+\.\d+s')
 _CARGO_TIME = re.compile(r'(target\(s\) in )\d+\.\d+s')
+_DOC_TIME = re.compile(r'(doctests (?:ran in|compilation took) )\d+\.\d+s')
 
 
 def normalize(text, sandbox):
@@ -144,6 +145,7 @@ def normalize(text, sandbox):
     text = _TID.sub(r'\1tid\2', text)
     text = _TEST_TIME.sub(r'\g<1>0.00s', text)
     text = _CARGO_TIME.sub(r'\g<1>0.00s', text)
+    text = _DOC_TIME.sub(r'\g<1>0.00s', text)
     return text
 
 
