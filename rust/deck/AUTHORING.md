@@ -45,6 +45,11 @@ capture is right and your expectation was wrong — rewrite the prose, never the
 - Never guess what the compiler says. Error slides exist only for errors you have captured.
 - Compile-error examples: keep them minimal so the diagnostic is short (aim ≤ 20 lines,
   ≤ 108 columns). Always follow with the fixed version (same slide if short, else the next).
+- cargo output that depends on sizes or counts drifts between toolchains — use `-q`
+  (`cargo clean -q`). `cargo new --vcs none`, `cargo fmt --check`, `cargo clippy` all work
+  offline in the sandbox (see part 2 chapter 2).
+- A slide whose `<h3>` ends with "— E0382" is picked up by the appendix error-code index, so
+  put the code in the title of every slide that shows that error (and only those).
 - Renamed or deleted an example? `python3 tools/rsrun.py --prune` removes the orphan capture.
 
 ## Slides
