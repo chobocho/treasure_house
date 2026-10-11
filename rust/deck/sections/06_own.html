@@ -1,5 +1,465 @@
 <article class="card section" id="p06">
 <p class="chnum">6부</p>
 <h2>소유권·빌림·슬라이스</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">주인은 하나 · 대입하면 이동 · clone 과 Copy · &amp;T 와 &amp;mut T · 빌림 규칙 · 슬라이스</p>
+</article>
+
+<article class="card" id="p06-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">Rust 가 다른 언어와 가장 다른 곳입니다. 가비지 컬렉터 없이 메모리를 안전하게 다루려고 Rust 는
+"값마다 주인이 하나" 라는 규칙을 골랐고, 뒤의 부들은 모두 이 규칙 위에 서 있습니다.</p>
+<ul>
+<li><b>1장</b> — 왜 소유권인가: 메모리는 누가 돌려주는가, 스택과 힙, 범위가 끝나면 정리된다</li>
+<li><b>2장</b> — 이동: 대입하고 함수에 넘기면 주인이 바뀐다, <code>clone</code> 과 <code>Copy</code></li>
+<li><b>3장</b> — 참조와 빌림: 주인을 바꾸지 않고 읽고(<code class="nb">&amp;T</code>) 고친다(<code class="nb">&amp;mut T</code>)</li>
+<li><b>4장</b> — 빌림 규칙: 읽는 쪽 여럿 아니면 고치는 쪽 하나</li>
+<li><b>5장</b> — 슬라이스: 값의 한 구간만 빌리기</li>
+<li><b>6장</b> — 실전 패턴: 무엇을 받고 무엇을 돌려줄 것인가</li>
+</ul>
+<div class="note"><b>예제의 주인공은 <code>String</code></b> — 힙에 값을 두는 타입 가운데 가장 흔해서입니다. 여기서는
+소유권을 보는 데 필요한 만큼만 쓰고, 문자열 다루는 법은 <a href="#p08">8부</a>에서 봅니다.</div>
+</article>
+
+<article class="card" id="p06-ch1">
+<p class="chnum">1장</p>
+<h2>왜 소유권인가</h2>
+<p class="chsub">메모리는 누가 돌려주는가 · 스택과 힙 · 규칙 세 줄 · 범위가 끝나면 정리된다</p>
+</article>
+
+<article class="card" id="p06-who-frees">
+<h3>빌린 메모리는 누가 돌려주는가</h3>
+<p class="lead">길이를 미리 알 수 없는 값은 실행 중에 메모리를 얻어 담습니다. 다 쓰면 돌려줘야 합니다. 누가, 언제
+돌려주는지가 언어마다 다릅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>방식</th><th>누가 돌려주나</th><th>치르는 값</th></tr>
+<tr><td>손으로<br>C 의 <code>malloc</code>·<code>free</code></td><td>프로그래머</td><td>잊으면 샌다. 두 번 돌려주거나 돌려준 뒤에
+쓰면 프로그램이 망가진다.</td></tr>
+<tr><td>가비지 컬렉터<br>Java·Go·Python·JavaScript</td><td>실행 중에 도는 수거기</td><td>수거에 시간과 메모리가 든다. 언제
+돌려줄지 정할 수 없다.</td></tr>
+<tr><td>소유권<br>Rust</td><td>컴파일러가 넣어 둔 코드</td><td>규칙을 어긴 코드는 컴파일되지 않는다.</td></tr>
+</table>
+</div>
+<div class="key"><b>Rust 의 답</b> — 값마다 주인(owner)을 하나 정하고, 주인이 사라질 때 값도 함께 정리합니다. 검사는
+컴파일할 때 끝납니다.</div>
+</article>
+
+<article class="card" id="p06-stack-heap">
+<h3>스택과 힙</h3>
+<p class="lead">크기가 정해진 값은 스택(stack)에 놓입니다. 길이가 바뀌는 값은 힙(heap)에 자리를 얻고, 스택에는 그
+자리를 가리키는 작은 머리만 둡니다. <code>String</code> 이 그렇습니다.</p>
+<pre class="fig">   스택                              힙
+   (크기가 정해진 값)                (실행 중에 얻는 공간)
+
+s  +----------+-----+                +---+---+---+---+---+
+   | ptr      |  *--+--------------&gt;| h | e | l | l | o |
+   | len      |  5  |                +---+---+---+---+---+
+   | capacity |  5  |
+   +----------+-----+
+n  | 42             |
+   +----------------+
+</pre>
+<ul>
+<li><b>ptr</b> 힙의 어디인가 · <b>len</b> 지금 몇 바이트를 쓰는가 · <b>capacity</b> 몇 바이트까지 얻어 두었는가</li>
+<li>정수 <code>n</code> 은 값 전체가 스택에 있습니다. 돌려줄 것이 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-literal-string">
+<h3>문자열 리터럴과 String 은 다른 타입이다</h3>
+<p class="lead">지금까지 쓴 <code>"hello"</code> 는 실행 파일 안에 박혀 있는 글자입니다. 힙을 쓰지 않습니다. 힙에 글자를
+두는 타입은 <code>String</code> 이고, <code class="nb">String::from</code> 으로 만듭니다.</p>
+<!--RUN file=ex/06/literal_string.rs note=같은 글자, 다른 타입-->
+<div class="note"><b>&amp;str 과 String</b> — 리터럴의 타입 <code class="nb">&amp;str</code> 은 "어딘가에 있는 글자를 가리키는 것" 이고
+<code>String</code> 은 "글자를 직접 가진 것" 입니다. 이 부에서 차츰 분명해집니다. 출력의
+<code class="nb">alloc::string::String</code> 은 <code>String</code> 을 경로까지 적은 이름입니다.</div>
+</article>
+
+<article class="card" id="p06-layout">
+<h3>String 의 머리는 늘 세 칸이다</h3>
+<p class="lead">그림의 세 칸을 숫자로 확인합니다. 이 기계(64비트)에서 한 칸은 8바이트이므로 머리는 24바이트입니다.</p>
+<!--RUN file=ex/06/layout.rs note=글자가 늘어도 스택 쪽은 24바이트-->
+<div class="note"><b>len 과 capacity</b> — 두 글자를 붙이자 힙의 자리를 10바이트로 넓혀 다시 얻었고, 그 가운데 7바이트를
+씁니다. <code>len</code> 은 쓰는 만큼, <code>capacity</code> 는 얻어 둔 만큼입니다.</div>
+</article>
+
+<article class="card" id="p06-rules">
+<h3>소유권 규칙 세 줄</h3>
+<p class="lead">힙의 글자들을 누가 돌려줄지 정하는 규칙입니다. 이 부 전체가 이 세 줄을 풀어 쓴 것입니다.</p>
+<ol>
+<li>값에는 <b>주인(owner)</b>인 변수가 있다.</li>
+<li>주인은 한 번에 <b>하나</b>뿐이다.</li>
+<li>주인이 <b>범위(scope)를 벗어나면</b> 값은 정리된다.</li>
+</ol>
+<div class="key"><b>소유권(ownership)</b> — 어떤 값을 정리할 책임입니다. <code class="nb">let s = String::from("hello");</code> 에서
+<code>s</code> 가 그 글자들의 주인입니다. 3번은 바로 다음 장에서, 2번은 2장에서 확인합니다.</div>
+</article>
+
+<article class="card" id="p06-drop-scope">
+<h3>범위가 끝나면 값은 정리된다</h3>
+<p class="lead">정리되는 순간을 눈으로 보려고, 사라질 때 한 줄을 찍는 타입을 만들었습니다. <code>Drop</code> 은 값이 정리될
+때 할 일을 적는 트레이트이며 <a href="#p14">14부</a>에서 봅니다.</p>
+<!--RUN file=ex/06/drop_scope.rs note=닫는 중괄호마다 그 안의 값이 정리된다-->
+<div class="note"><b>읽는 법</b> — <code>_b</code> 는 안쪽 블록이 닫힐 때, <code>_a</code> 는 <code>main</code> 이 닫힐 때 정리됩니다.
+우리가 부른 적 없는 <code>drop</code> 이 그 자리에서 불렸습니다. 컴파일러가 넣어 둔 것입니다.</div>
+</article>
+
+<article class="card" id="p06-drop-fn">
+<h3>함수가 끝날 때도 마찬가지다</h3>
+<p class="lead">함수의 본문도 범위입니다. 함수 안에서 만든 값은 함수가 돌아갈 때 정리됩니다.</p>
+<!--RUN file=ex/06/drop_fn.rs note=work 가 돌아가기 직전에 정리된다-->
+<div class="key"><b>String 도 똑같다</b> — <code>String</code> 의 정리는 힙의 글자들을 돌려주는 일입니다. 그래서
+<code>free</code> 를 쓸 일이 없고, 잊을 수도 없습니다. 자원을 값에 묶어 값이 사라질 때 함께 돌려주는 이 방식을
+RAII 라고 부릅니다.</div>
+</article>
+
+<article class="card quiz" id="p06-ch1-quiz" data-quiz>
+<h3>퀴즈 — 왜 소유권인가</h3>
+<p class="q">Q. 100글자짜리 <code>String</code> 과 5글자짜리 <code>String</code> 에 <code>size_of_val</code> 을 쓰면 값이
+다를까요? 그리고 그 글자들이 차지한 힙은 언제 돌려줄까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 같습니다. <code>size_of_val</code> 이 세는 것은 스택의 머리 세 칸(이 기계에서 24바이트)이고, 글자는
+힙에 있습니다(<a href="#p06-layout">머리는 늘 세 칸</a>). 힙은 주인인 변수의 범위가 끝날 때 돌려줍니다
+(<a href="#p06-drop-scope">범위가 끝나면</a>).</div>
+</article>
+
+<article class="card" id="p06-ch2">
+<p class="chnum">2장</p>
+<h2>이동</h2>
+<p class="chsub">대입하면 주인이 바뀐다 · clone · Copy 타입 · 함수에 넘기기와 돌려받기 · 일부만 옮기기</p>
+</article>
+
+<article class="card" id="p06-move-assign">
+<h3>대입하면 소유권이 옮겨 간다 — E0382</h3>
+<p class="lead">다른 언어라면 아무 일도 없는 코드입니다. Rust 에서는 <code class="nb">let s2 = s1;</code> 이 값의 주인을
+<code>s2</code> 로 바꿉니다. 이것을 이동(move)이라 하고, 그 뒤로 <code>s1</code> 은 쓸 수 없습니다.</p>
+<!--RUN file=ex/06/move_assign.rs note=옮긴 뒤에 s1 을 쓴다-->
+<div class="key"><b>읽는 법</b> — 세 자리를 짚습니다. 2번 줄: <code>s1</code> 의 타입은 <code>Copy</code> 가 아니라서 이동한다.
+3번 줄: 여기서 옮겼다. 6번 줄: 옮긴 뒤에 썼다. <code>println!</code> 은 값을 빌려서 찍기 때문에 "borrow of moved
+value" 라고 합니다.</div>
+</article>
+
+<article class="card" id="p06-move-fig">
+<h3>옮겨 가는 것은 머리 세 칸이다</h3>
+<p class="lead">이동할 때 복사되는 것은 스택의 머리뿐입니다. 힙의 글자들은 그 자리에 그대로 있고, 가리키는 쪽만
+<code>s2</code> 로 바뀝니다.</p>
+<pre class="fig">            스택                        힙
+
+s1  +-----+-----+
+    | ptr |  *  |   더 쓸 수 없다
+    | len |  5  |
+    | cap |  5  |
+    +-----+-----+
+          |
+          |  머리 세 칸만 복사
+          v
+s2  +-----+-----+                 +---+---+---+---+---+
+    | ptr |  *--+----------------&gt;| h | e | l | l | o |
+    | len |  5  |                 +---+---+---+---+---+
+    | cap |  5  |                  복사하지 않는다
+    +-----+-----+
+</pre>
+<div class="note"><b>s1 은 어떻게 되나</b> — 컴파일러가 그 이름을 더 쓰지 못하게 막습니다. 그 검사는 앞의 E0382 처럼
+컴파일할 때 끝납니다.</div>
+</article>
+
+<article class="card" id="p06-move-once">
+<h3>왜 막는가 — 주인이 둘이면 두 번 정리한다</h3>
+<p class="lead"><code>s1</code> 과 <code>s2</code> 가 둘 다 주인이라면, 범위가 끝날 때 같은 힙을 두 번 돌려주게 됩니다. C 에서
+이중 해제(double free)라 부르는 버그입니다. 주인이 하나이면 정리도 한 번입니다.</p>
+<!--RUN file=ex/06/move_once.rs note=이름은 a 와 b 둘인데 정리는 한 번-->
+<div class="note"><b>읽는 법</b> — <code>a</code> 가 범위를 벗어날 때는 아무 일도 일어나지 않았습니다. 값을 넘겨준 이름은 더는
+주인이 아니기 때문입니다.</div>
+</article>
+
+<article class="card" id="p06-clone">
+<h3>둘 다 쓰려면 clone 으로 복사한다</h3>
+<p class="lead">컴파일러의 <code>help:</code> 가 권한 방법입니다. <code>clone()</code> 은 힙의 글자까지 새로 만들어, 서로
+상관없는 값 둘을 만듭니다.</p>
+<!--RUN file=ex/06/clone.rs note=s2 를 고쳐도 s1 은 그대로-->
+<div class="warn"><b>공짜가 아니다</b> — <code>help:</code> 에 "성능 비용을 받아들일 수 있다면" 이라는 단서가 붙어 있었습니다.
+글자 수만큼 힙을 새로 얻어 베낍니다. 읽기만 할 것이라면 3장의 빌림이 답입니다.</div>
+</article>
+
+<article class="card" id="p06-copy-types">
+<h3>정수는 옮겨 가지 않고 복사된다</h3>
+<p class="lead">정수는 다른 변수에 대입한 뒤에도 원래 변수를 쓸 수 있습니다. 정수·실수·<code>bool</code>·<code>char</code>
+는 값 전체가 스택에 있어서, 그대로 베끼면 온전한 복사본이 됩니다. 이런 타입을 <code>Copy</code> 타입이라 합니다.</p>
+<!--RUN file=ex/06/copy_types.rs note=대입한 뒤에도 양쪽을 다 쓴다-->
+<div class="key"><b>Copy 가 되는 까닭</b> — 따로 돌려줄 힙이 없습니다. 주인이 둘이어도 두 번 정리할 것이 없으니 막을
+이유가 없습니다.</div>
+</article>
+
+<article class="card" id="p06-not-copy">
+<h3>힙을 가진 값이 하나라도 들어 있으면 Copy 가 아니다 — E0382</h3>
+<p class="lead">앞에서 튜플 <code class="nb">(1, 2.0)</code> 은 복사됐습니다. <code>String</code> 을 하나 넣으면 튜플 전체가
+이동하는 타입이 됩니다.</p>
+<!--RUN file=ex/06/not_copy.rs note=정수와 String 을 묶은 튜플-->
+<div class="note"><b>읽는 법</b> — 2번 줄의 설명에 타입이 통째로 적혀 있습니다. "<code class="nb">(i32, String)</code> 은
+<code>Copy</code> 가 아니다". 이동인지 복사인지는 값이 아니라 <b>타입</b>이 정합니다.</div>
+</article>
+
+<article class="card" id="p06-move-fn">
+<h3>함수에 넘기는 것도 이동이다 — E0382</h3>
+<p class="lead">인자를 넘기는 것은 매개변수에 대입하는 것과 같습니다. <code>String</code> 을 넘기면 주인이 함수의
+매개변수로 바뀌고, 함수가 끝날 때 거기서 정리됩니다.</p>
+<!--RUN file=ex/06/move_fn.rs note=넘긴 뒤에 s 를 쓴다-->
+<div class="key"><b>읽는 법</b> — 7번 줄에서 옮겼고 8번 줄에서 썼습니다. <code>note:</code> 는 함수 쪽을 짚습니다. "이 매개변수가
+소유권을 가져간다. 가질 필요가 없다면 빌리도록 바꿔라". 그 방법이 3장입니다.</div>
+</article>
+
+<article class="card" id="p06-give-back">
+<h3>돌려받으면 다시 쓸 수 있다</h3>
+<p class="lead">반환도 이동입니다. 함수가 받은 값을 돌려주면 주인이 부른 쪽으로 돌아옵니다. 길이까지 알려 주려면
+튜플로 묶어야 합니다.</p>
+<!--RUN file=ex/06/give_back.rs note=넘겼다가 결과와 함께 돌려받는다-->
+<div class="warn"><b>번거롭다</b> — 길이 하나 알자고 값을 줬다가 되받습니다. 돌아가기는 하지만 함수마다 이렇게 쓸 수는
+없습니다. 3장의 참조가 이 불편을 없앱니다.</div>
+</article>
+
+<article class="card" id="p06-return-new">
+<h3>함수 안에서 만든 값을 돌려준다</h3>
+<p class="lead">1장에서 함수 안의 값은 함수가 끝날 때 정리된다고 했습니다. 돌려주는 값은 예외입니다. 정리되지 않고
+주인만 바뀝니다.</p>
+<!--RUN file=ex/06/return_new.rs note=s 의 주인이 line 으로 바뀐다-->
+<div class="note"><b>복사도 없다</b> — 힙의 별들은 한 번 만들어진 그 자리에 있습니다. 부른 쪽이 받는 것은 머리 세
+칸입니다.</div>
+</article>
+
+<article class="card" id="p06-move-loop">
+<h3>반복문 안에서 옮기면 두 번째 바퀴가 없다 — E0382</h3>
+<p class="lead">한 번만 쓰는 것처럼 보이지만, 반복문은 같은 줄을 여러 번 지납니다. 첫 바퀴에서 넘긴 값은 둘째
+바퀴에 없습니다.</p>
+<!--RUN file=ex/06/move_loop.rs note=같은 값을 두 번 넘기려 한다-->
+<div class="key"><b>읽는 법</b> — 옮긴 줄과 쓴 줄이 같은 8번 줄입니다. 그래서 "앞 바퀴에서 여기서 옮겼다(in previous
+iteration of loop)" 고 하고, 7번 줄에 "이 반복문 안" 이라는 표시를 답니다.</div>
+</article>
+
+<article class="card" id="p06-move-loop-fix">
+<h3>바퀴마다 새 값을 넘긴다</h3>
+<p class="lead">함수가 소유권을 꼭 가져가야 한다면 돌 때마다 복사본을 만들어 넘깁니다. 원본은 <code>main</code> 에
+남습니다.</p>
+<!--RUN file=ex/06/move_loop_fix.rs note=clone 한 것을 넘긴다-->
+<div class="tip"><b>먼저 물을 것</b> — <code>consume</code> 이 정말 값을 가져야 할까요? 찍기만 한다면 빌려 받게 고치는 편이
+낫습니다(3장). 복사는 그다음 수단입니다.</div>
+</article>
+
+<article class="card" id="p06-vec-move">
+<h3>벡터의 칸에서 값을 빼낼 수는 없다 — E0507</h3>
+<p class="lead"><code class="nb">names[0]</code> 을 변수에 대입하면 이동이 되어야 합니다. 그러면 벡터의 첫 칸은 주인 없는
+빈 자리가 됩니다. Rust 는 그런 벡터를 허락하지 않습니다.</p>
+<!--RUN file=ex/06/vec_move.rs note=첫 칸의 String 을 옮기려 한다-->
+<div class="note"><b>읽는 법</b> — "인덱스로 가리킨 자리에서는 옮겨 낼 수 없다". <code>help:</code> 가 둘입니다. 빌리거나
+(<code class="nb">&amp;names[0]</code>), 복사하거나(<code class="nb">.clone()</code>). 까닭으로 든 것은 이번에도 "<code>String</code>
+은 <code>Copy</code> 가 아니다" 입니다.</div>
+</article>
+
+<article class="card" id="p06-vec-move-fix">
+<h3>칸의 값을 얻는 네 가지 길</h3>
+<p class="lead">정수처럼 <code>Copy</code> 인 칸은 그냥 복사됩니다. <code>String</code> 이라면 복사한다, 빌린다, 꺼내서
+벡터에서 뺀다, 벡터를 통째로 넘긴다 가운데서 고릅니다. 벡터 자체는 <a href="#p08">8부</a>에서 봅니다.</p>
+<!--RUN file=ex/06/vec_move_fix.rs note=넷 다 벡터에 빈 칸을 남기지 않는다-->
+<div class="note"><b>3번과 4번</b> — <code>remove</code> 는 값을 내주고 뒤의 칸을 당겨 채웁니다. <code class="nb">for name in names</code>
+는 벡터를 통째로 옮겨 받아 값을 하나씩 내줍니다.</div>
+</article>
+
+<article class="card" id="p06-partial-move">
+<h3>튜플의 한 칸만 옮기면 전체는 쓸 수 없다 — E0382</h3>
+<p class="lead">튜플의 칸은 하나씩 따로 옮길 수 있습니다. 다만 한 칸이 빠진 튜플은 온전한 값이 아니므로, 전체를
+쓰려 하면 막힙니다.</p>
+<!--RUN file=ex/06/partial_move.rs note=pair.0 을 옮긴 뒤 pair 전체를 찍는다-->
+<div class="key"><b>읽는 법</b> — 이번에는 "부분 이동(partial move)" 이라고 합니다. 3번 줄에서 <code class="nb">pair.0</code> 만
+옮겨졌고, 6번 줄에서 <code>pair</code> 전체를 빌리려 했습니다. <code>note:</code> 는 그 칸의 타입이 <code>Copy</code> 가
+아니라서 옮겨졌다고 덧붙입니다.</div>
+</article>
+
+<article class="card" id="p06-partial-ok">
+<h3>옮기지 않은 칸은 그대로 쓴다</h3>
+<p class="lead">컴파일러는 칸마다 따로 추적합니다. <code class="nb">pair.0</code> 이 떠났어도 <code class="nb">pair.1</code> 의 주인은
+여전히 <code>pair</code> 입니다.</p>
+<!--RUN file=ex/06/partial_ok.rs note=남은 칸을 쓰거나, 한 번에 다 푼다-->
+<div class="tip"><b>둘 다 필요하면</b> — 패턴으로 한 번에 풉니다. <code>both</code> 는 통째로 비고, <code>a</code> 와 <code>b</code> 가
+한 칸씩 주인이 됩니다.</div>
+</article>
+
+<article class="card" id="p06-reassign">
+<h3>비운 변수에 새 값을 넣을 수 있다</h3>
+<p class="lead">이동으로 못 쓰게 되는 것은 값이지 변수의 자리가 아닙니다. <code>mut</code> 변수라면 새 값을 대입해 다시
+주인으로 만들 수 있습니다.</p>
+<!--RUN file=ex/06/reassign.rs note=옮긴 뒤 새 값을 넣는다-->
+</article>
+
+<article class="card" id="p06-move-cheap">
+<h3>이동은 싸다</h3>
+<p class="lead">아무리 긴 문자열도 옮길 때 복사되는 것은 머리 세 칸입니다. 값을 함수에 넘기고 돌려받는 일을 겁낼
+까닭이 없습니다.</p>
+<!--RUN file=ex/06/move_cheap.rs note=5000바이트짜리도 머리는 24바이트-->
+<div class="key"><b>이동과 clone 의 차이</b> — 이동은 머리만 베끼고 앞 이름을 못 쓰게 합니다. <code>clone</code> 은 힙까지
+베끼고 둘 다 살려 둡니다. Rust 는 비싼 쪽을 글자로 적어야만 일어나게 해 두었습니다.</div>
+</article>
+
+<article class="card quiz" id="p06-ch2-quiz" data-quiz>
+<h3>퀴즈 — 이동</h3>
+<p class="q">Q. <code class="nb">let a = 5; let b = a;</code> 뒤에는 <code>a</code> 를 쓸 수 있고,
+<code class="nb">let s = String::from("x"); let t = s;</code> 뒤에는 <code>s</code> 를 쓸 수 없습니다. 왜 다를까요? <code>s</code> 도
+쓰고 싶다면 어떻게 할까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 정수는 <code>Copy</code> 타입이라 값이 복사되고(<a href="#p06-copy-types">정수는 복사된다</a>),
+<code>String</code> 은 힙을 가진 타입이라 소유권이 옮겨 갑니다(<a href="#p06-move-assign">대입하면 이동</a>). 둘 다
+쓰려면 <code class="nb">let t = s.clone();</code> 으로 힙까지 복사합니다(<a href="#p06-clone">clone</a>).</div>
+</article>
+
+<article class="card" id="p06-ch3">
+<p class="chnum">3장</p>
+<h2>참조와 빌림</h2>
+<p class="chsub">&amp;T 로 읽기 · &amp;mut T 로 고치기 · * 로 따라가기 · 참조를 돌려주기 · 셋을 견준 표</p>
+</article>
+
+<article class="card" id="p06-ref-read">
+<h3>&amp; 를 붙이면 넘기지 않고 빌려준다</h3>
+<p class="lead">2장에서는 길이 하나 알자고 값을 줬다가 되받았습니다. 매개변수를 <code class="nb">&amp;String</code> 으로 적으면
+함수는 값을 갖지 않고 잠깐 보기만 합니다. 이것이 빌림(borrowing)이고, <code class="nb">&amp;s</code> 로 만든 것이
+참조(reference)입니다.</p>
+<!--RUN file=ex/06/ref_read.rs note=넘긴 뒤에도 s 를 쓴다-->
+<div class="key"><b>두 군데에 적는다</b> — 함수는 타입에 <code class="nb">&amp;String</code>, 부르는 쪽은 값에 <code class="nb">&amp;s</code>.
+부르는 코드만 봐도 "넘기는 것이 아니라 빌려주는 것" 임이 보입니다.</div>
+</article>
+
+<article class="card" id="p06-ref-fig">
+<h3>참조는 주인을 가리키는 한 칸이다</h3>
+<p class="lead">참조는 값이 있는 자리를 담은 한 칸입니다. 힙의 글자를 직접 가리키지 않고, 주인의 머리를 가리킵니다.</p>
+<pre class="fig">r                  s                           힙
+
++-----+            +-----+-----+
+|  *--+-----------&gt;| ptr |  *--+------------&gt;+---+---+---+---+---+
++-----+            | len |  5  |             | h | e | l | l | o |
+참조: 한 칸        | cap |  5  |             +---+---+---+---+---+
+                   +-----+-----+
+                   주인: 머리 세 칸
+</pre>
+<!--RUN file=ex/06/ref_size.rs note=머리는 24바이트, 참조는 8바이트-->
+<div class="note"><b>C 의 포인터와 다른 점</b> — Rust 의 참조는 늘 살아 있는 값을 가리킵니다. 그것을 컴파일러가 어떻게
+지키는지가 4장과 <a href="#p11">11부</a>입니다.</div>
+</article>
+
+<article class="card" id="p06-ref-keeps">
+<h3>빌려준 값은 부른 쪽에 남는다</h3>
+<p class="lead">1장의 <code>Noisy</code> 로 견줍니다. 값을 받은 함수는 주인이 되어 그 값을 정리합니다. 참조를 받은 함수는
+아무것도 정리하지 않습니다.</p>
+<!--RUN file=ex/06/ref_keeps.rs note=a 는 take 안에서, b 는 main 끝에서 정리된다-->
+<div class="note"><b>읽는 법</b> — <code class="nb">a 정리</code> 는 <code>take</code> 가 돌아가는 자리에, <code class="nb">b 정리</code> 는
+<code class="nb">main 끝</code> 뒤에 찍혔습니다. 참조는 주인이 아니므로 사라져도 값은 그대로입니다.</div>
+</article>
+
+<article class="card" id="p06-ref-no-write">
+<h3>&amp; 로 빌린 값은 고칠 수 없다 — E0596</h3>
+<p class="lead">변수가 기본으로 불변이듯 참조도 기본으로 불변입니다. <code class="nb">&amp;String</code> 으로 받은 함수는 읽을
+수만 있습니다.</p>
+<!--RUN file=ex/06/ref_no_write.rs note=빌린 문자열에 글자를 붙이려 한다-->
+<div class="key"><b>읽는 법</b> — "<code>s</code> 는 <code>&amp;</code> 참조라서 가변으로 빌릴 수 없다". <code>push_str</code> 은 값을
+고치는 메서드라 고칠 수 있는 참조가 필요합니다. <code>help:</code> 가 1번 줄의 타입을
+<code class="nb">&amp;mut String</code> 으로 바꾸라고 합니다.</div>
+</article>
+
+<article class="card" id="p06-ref-mut">
+<h3>고치려면 &amp;mut 로 빌린다</h3>
+<p class="lead">가변 참조(mutable reference) <code class="nb">&amp;mut T</code> 는 빌린 값을 고칠 수 있는 참조입니다. 이번에도 두
+군데에 적습니다. 타입에 <code class="nb">&amp;mut String</code>, 부르는 쪽에 <code class="nb">&amp;mut s</code>.</p>
+<!--RUN file=ex/06/ref_mut.rs note=main 의 s 가 바뀌었다-->
+<div class="tip"><b>부르는 쪽에서 보인다</b> — <code class="nb">add_world(&amp;mut s)</code> 를 보면 이 함수가 <code>s</code> 를 고칠 수
+있다는 것을 함수 본문을 열지 않고도 압니다.</div>
+</article>
+
+<article class="card" id="p06-need-mut">
+<h3>변수가 mut 여야 &amp;mut 로 빌려줄 수 있다 — E0596</h3>
+<p class="lead">앞의 코드에서 <code class="nb">let mut s</code> 의 <code>mut</code> 만 뺐습니다. 주인도 고칠 수 없는 값을 남에게
+"고쳐도 된다" 며 빌려줄 수는 없습니다.</p>
+<!--RUN file=ex/06/need_mut.rs note=불변 변수를 &mut 로 빌려주려 한다-->
+<div class="note"><b>같은 번호, 다른 자리</b> — 앞의 E0596 은 "참조가 <code>&amp;</code> 다" 였고 고칠 곳은 함수의 타입이었습니다.
+이번은 "변수가 가변으로 선언되지 않았다" 이고 고칠 곳은 6번 줄의 <code>let</code> 입니다. <code>help:</code> 대로 고치면
+<a href="#p06-ref-mut">앞 슬라이드의 코드</a>가 됩니다.</div>
+</article>
+
+<article class="card" id="p06-deref">
+<h3>* 로 참조가 가리키는 값에 닿는다</h3>
+<p class="lead">참조는 값 자체가 아니라 값을 가리키는 것입니다. 가리키는 값을 꺼내 계산하거나 고치려면 앞에
+<code>*</code> 를 붙입니다. 역참조(dereference)라 합니다.</p>
+<!--RUN file=ex/06/deref.rs note=읽기, 견주기, 고치기-->
+<ul>
+<li><code class="nb">*r + 1</code> — 정수는 <code>Copy</code> 라서 참조를 따라가 값을 복사해 옵니다. <code>a</code> 는 그대로입니다.</li>
+<li><code class="nb">*m += 1</code> — <code class="nb">&amp;mut</code> 를 따라가 <code>n</code> 자체를 고칩니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-auto-deref">
+<h3>메서드와 println! 은 알아서 따라간다</h3>
+<p class="lead">그런데 지금까지 <code class="nb">s.len()</code> 에도 <code class="nb">println!("{s}")</code> 에도 <code>*</code> 를 쓰지
+않았습니다. 점(<code>.</code>)으로 메서드를 부를 때와 값을 찍을 때는 참조를 자동으로 따라가기 때문입니다.</p>
+<!--RUN file=ex/06/auto_deref.rs note=* 가 있든 없든, 참조가 몇 겹이든-->
+<div class="note"><b>그래서 * 를 쓸 일은</b> 참조가 가리키는 값을 직접 계산하거나 대입할 때 정도입니다. 앞 슬라이드의
+<code class="nb">*r + 1</code>, <code class="nb">*m += 1</code> 같은 자리입니다.</div>
+</article>
+
+<article class="card" id="p06-reborrow">
+<h3>받은 &amp;mut 를 다른 함수에 넘긴다</h3>
+<p class="lead">매개변수 <code>x</code> 는 이미 <code class="nb">&amp;mut i32</code> 입니다. 아래 함수에 넘길 때는
+<code class="nb">&amp;mut</code> 를 다시 붙이지 않고 그대로 줍니다.</p>
+<!--RUN file=ex/06/reborrow.rs note=main 의 n 을 두 단계 아래에서 고친다-->
+<div class="note"><b>두 번 넘겨도 된다</b> — <code class="nb">add_one(x)</code> 를 연달아 불렀습니다. 넘길 때마다 <code>x</code> 를 잠깐
+다시 빌려주고, 함수가 돌아오면 되찾습니다. 재빌림(reborrow)이라 하며 따로 적을 것은 없습니다.</div>
+</article>
+
+<article class="card" id="p06-return-ref">
+<h3>받은 값의 안쪽을 가리키는 참조는 돌려줄 수 있다</h3>
+<p class="lead">함수가 참조를 돌려주기도 합니다. 빌려 받은 튜플의 한 칸을 골라 그 참조를 내줍니다. 가리키는 값은
+부른 쪽에 있으므로 함수가 끝나도 사라지지 않습니다.</p>
+<!--RUN file=ex/06/return_ref.rs note=복사 없이 긴 쪽을 가리킨다-->
+<div class="note"><b>어디서 온 참조인가</b> — 받은 참조가 하나뿐이면 컴파일러는 돌려주는 참조가 거기서 나왔다고 봅니다.
+이 관계를 따지는 개념이 수명이며 <a href="#p11">11부</a>에서 봅니다.</div>
+</article>
+
+<article class="card" id="p06-return-local">
+<h3>함수 안에서 만든 값의 참조는 돌려줄 수 없다 — E0515</h3>
+<p class="lead">시그니처는 앞과 같은 모양입니다. 하지만 이번에 돌려주려는 것은 받은 값이 아니라 함수 안에서 새로
+만든 <code>loud</code> 를 가리키는 참조입니다.</p>
+<!--RUN file=ex/06/return_local.rs note=loud 는 shout 이 끝날 때 정리된다-->
+<div class="key"><b>읽는 법</b> — "지역 변수 <code>loud</code> 의 참조를 돌려줄 수 없다 — 이 함수가 주인인 값을 가리킨다". 주인이
+함수 안에 있으니 함수가 끝나면 값이 정리되고, 참조는 사라진 값을 가리키게 됩니다.</div>
+</article>
+
+<article class="card" id="p06-return-local-fix">
+<h3>새로 만든 값은 통째로 돌려준다</h3>
+<p class="lead">반환 타입에서 <code>&amp;</code> 를 떼고 값을 그대로 돌려줍니다. 2장에서 본 대로 주인이 부른 쪽으로
+바뀌므로 정리되지 않습니다.</p>
+<!--RUN file=ex/06/return_local_fix.rs note=&String 이 아니라 String-->
+<div class="tip"><b>가르는 기준</b> — 받은 것의 일부를 가리키면 참조로, 함수 안에서 만든 것이면 값으로 돌려줍니다.</div>
+</article>
+
+<article class="card" id="p06-ref-table">
+<h3>값 · 참조 · 가변 참조</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th><code>T</code></th><th><code class="nb">&amp;T</code></th><th><code class="nb">&amp;mut T</code></th></tr>
+<tr><td>부르는 이름</td><td>값</td><td>참조</td><td>가변 참조</td></tr>
+<tr><td>주인인가</td><td>주인이다</td><td>빌렸다</td><td>빌렸다</td></tr>
+<tr><td>읽기</td><td>된다</td><td>된다</td><td>된다</td></tr>
+<tr><td>고치기</td><td><code>mut</code> 변수이면</td><td>안 된다</td><td>된다</td></tr>
+<tr><td>함수에 넘기면</td><td>이동한다<br>(<code>Copy</code> 는 복사)</td><td>주인은 그대로</td><td>주인은 그대로</td></tr>
+<tr><td>정리하는 쪽</td><td>받은 쪽</td><td>원래 주인</td><td>원래 주인</td></tr>
+<tr><td>한 번에 몇 개</td><td>주인 하나</td><td>여럿</td><td>4장에서</td></tr>
+</table>
+</div>
+<p class="cap">읽기만 하는 참조는 여럿 만들 수 있었습니다(<a href="#p06-ref-fig">r 과 r2</a>). 가변 참조는 어떨까요? 마지막
+칸이 다음 장의 주제입니다.</p>
+</article>
+
+<article class="card quiz" id="p06-ch3-quiz" data-quiz>
+<h3>퀴즈 — 참조와 빌림</h3>
+<p class="q">Q. <code class="nb">fn add(s: &amp;String) { s.push_str("!"); }</code> 를 <code class="nb">let s = String::from("hi");
+add(&amp;s);</code> 로 부릅니다. 컴파일되게 하려면 몇 군데를 고쳐야 할까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 세 군데입니다. 매개변수 타입을 <code class="nb">&amp;mut String</code> 으로
+(<a href="#p06-ref-no-write">&amp; 로는 고칠 수 없다</a>), 부르는 쪽을 <code class="nb">add(&amp;mut s)</code> 로
+(<a href="#p06-ref-mut">&amp;mut 로 빌린다</a>), 그리고 변수를 <code class="nb">let mut s</code> 로
+(<a href="#p06-need-mut">변수가 mut 여야</a>).</div>
 </article>
