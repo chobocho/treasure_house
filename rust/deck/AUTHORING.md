@@ -12,7 +12,8 @@ catalogue in `../template.html` (slides `c-callout`, `c-table`, `c-flow`, `c-qui
 
 ```
 1. write   ex/NN/name.rs                      (≤ 30 lines is ideal, hard limit 45; ≤ 72 columns)
-2. format  make fmt                           (rustfmt, max_width 72)
+2. format  rustfmt --config-path ex/rustfmt.toml ex/NN/name.rs   (only your own files —
+           other writers have work in progress; rustfmt is /data/data/com.termux/files/usr/bin/rustfmt)
 3. run     python3 tools/rsrun.py ex/NN/name.rs    → out/NN/name.txt, capture printed
 4. slide   <!--RUN file=ex/NN/name.rs note=…-->    in deck/sections/NN_*.html
 5. build   make deck SKEL=1                   read every "✗" line and fix it
@@ -26,6 +27,8 @@ capture is right and your expectation was wrong — rewrite the prose, never the
 
 - One idea per file. Names are short English snake_case (`move_fn.rs`), shown to the reader.
 - Comments inside examples are Korean, short, and say *why* (not what). Identifiers English.
+  The builder counts a Korean character as 2 columns (limit 72); rustfmt counts it as 1.
+  Put a Korean comment on its own line when the code line is long.
 - Output must be **deterministic**: no time, no random, no addresses (`{:p}`), no HashMap
   iteration order (sort or use BTreeMap), no racing threads. `rsrun --check` must pass twice.
 - Must compile **without warnings** (prefix unused names with `_`), unless the warning is
