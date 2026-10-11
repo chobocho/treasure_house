@@ -1,5 +1,336 @@
 <article class="card section" id="p14">
 <p class="chnum">14부</p>
 <h2>스마트 포인터</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">Box · Deref 와 Drop · Rc · RefCell · Weak — 소유권 규칙을 넓히는 라이브러리 타입들</p>
+</article>
+
+<article class="card" id="p14-intro">
+<h2>이 부에서 할 일</h2>
+<p class="lead">소유권의 기본 규칙은 "주인은 하나, 고치려면 혼자 빌린다" 였습니다. 실제 프로그램에는 그 틀에 안 맞는
+모양이 있습니다 — 자기를 품는 타입, 여럿이 함께 갖는 값, 불변 참조 뒤에서 고치기. 그럴 때 쓰는 것이
+스마트 포인터입니다. 전부 표준 라이브러리의 평범한 타입입니다.</p>
+<ul>
+<li><b>1장</b> — <code class="nb">Box&lt;T&gt;</code>: 값을 힙에 두기, 재귀 타입</li>
+<li><b>2장</b> — <code>Deref</code> 와 <code>Drop</code>: 포인터처럼 보이게 하는 두 트레이트</li>
+<li><b>3장</b> — <code class="nb">Rc&lt;T&gt;</code>: 주인이 여럿인 값</li>
+<li><b>4장</b> — <code class="nb">RefCell&lt;T&gt;</code> 와 <code class="nb">Cell&lt;T&gt;</code>: 내부 가변성</li>
+<li><b>5장</b> — <code class="nb">Weak&lt;T&gt;</code> 와 순환 참조, 고르는 법</li>
+</ul>
+</article>
+
+<article class="card" id="p14-ch1">
+<p class="chnum">1장</p>
+<h2>Box</h2>
+<p class="chsub">값을 힙에 · 재귀 타입에는 Box 가 필요하다 · 수식 나무</p>
+</article>
+
+<article class="card" id="p14-box-basic">
+<h3>Box — 값을 힙에 두고 주소를 가진다</h3>
+<p class="lead"><code class="nb">Box::new(값)</code> 은 값을 힙에 놓고, 그 자리를 가리키는 포인터를 돌려줍니다. 주인이
+하나라는 규칙은 그대로입니다. <code>Box</code> 가 사라지면 힙의 값도 함께 정리됩니다.</p>
+<!--RUN file=ex/14/box_basic.rs note=스택의 5 와 힙의 5-->
+<div class="note"><b>마지막에 찍힌 8</b> — <code>Box</code> 자체의 크기는 속에 무엇이 들었든 포인터 하나(이 기계에서 8바이트)입니다.
+다음 장이 이 성질을 씁니다.</div>
+</article>
+
+<article class="card" id="p14-recursive-err">
+<h3>자기를 품는 타입은 크기를 정할 수 없다 — E0072</h3>
+<p class="lead">"목록은 값 하나와 나머지 목록" 이라고 그대로 적으면, 컴파일러는 이 타입의 크기를 계산하다 끝이 나지
+않습니다. <code>List</code> 안에 <code>List</code> 가, 그 안에 또 <code>List</code> 가 있기 때문입니다.</p>
+<!--RUN file=ex/14/recursive_err.rs note=자기 안에 자기가 통째로 들어 있다-->
+</article>
+
+<article class="card" id="p14-recursive-box">
+<h3>Box 로 끊는다</h3>
+<p class="lead">나머지 목록을 통째로 품는 대신 <code>Box</code> 에 넣어 가리킵니다. <code>Box</code> 의 크기는 정해져 있으므로
+<code>List</code> 의 크기도 정해집니다.</p>
+<!--RUN file=ex/14/recursive_box.rs note=1 → 2 → 3 → 끝-->
+<div class="note"><b>16 바이트</b> — 정수 하나와 포인터 하나의 자리입니다. 목록이 아무리 길어도 타입의 크기는 같습니다.</div>
+</article>
+
+<article class="card" id="p14-expr-tree">
+<h3>나무 모양 자료 — 수식</h3>
+<p class="lead">재귀 타입이 가장 자주 쓰이는 곳은 나무입니다. 수식 <code class="nb">(1 + 2) * 4</code> 를 열거형으로 적고
+재귀 함수로 계산합니다.</p>
+<!--RUN file=ex/14/expr_tree.rs note=더하기와 곱하기 마디가 자식 둘을 Box 로 가진다-->
+</article>
+
+<article class="card" id="p14-box-move">
+<h3>Box 도 주인은 하나다 — E0382</h3>
+<p class="lead"><code>Box</code> 를 다른 변수에 넣으면 이동합니다. 포인터만 옮겨 가고 힙의 값은 제자리에 있지만, 옛 이름은
+더 쓸 수 없습니다.</p>
+<!--RUN file=ex/14/box_move.rs note=a 를 b 로 옮긴 뒤 a 를 쓴다-->
+<div class="tip"><b>큰 값을 싸게 넘기기</b> — 큰 구조체를 <code>Box</code> 에 넣어 두면 넘길 때 포인터 하나만 옮겨집니다.</div>
+</article>
+
+<article class="card" id="p14-box-dyn">
+<h3>Box&lt;dyn Trait&gt; — 다른 타입들을 한 그릇에</h3>
+<p class="lead"><a href="#p10">10부</a>에서 본 트레이트 객체입니다. <code>Circle</code> 과 <code>Square</code> 는 크기가 다르지만
+<code>Box</code> 에 넣으면 둘 다 포인터라 한 벡터에 담깁니다.</p>
+<!--RUN file=ex/14/box_dyn.rs note=원과 정사각형을 한 벡터에-->
+</article>
+
+<article class="card quiz" id="p14-ch1-quiz" data-quiz>
+<h3>퀴즈 — Box</h3>
+<p class="q">Q. <code class="nb">enum List { Cons(i32, List), Nil }</code> 은 왜 컴파일되지 않고,
+<code class="nb">Cons(i32, Box&lt;List&gt;)</code> 는 왜 될까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 앞의 것은 <code>List</code> 가 자기를 통째로 품어 크기가 끝없이 커집니다(E0072). <code>Box</code> 는
+속이 무엇이든 포인터 하나 크기라서, 그것을 품은 <code>List</code> 의 크기가 정해집니다
+(<a href="#p14-recursive-box">Box 로 끊는다</a>).</div>
+</article>
+
+<article class="card" id="p14-ch2">
+<p class="chnum">2장</p>
+<h2>Deref 와 Drop</h2>
+<p class="chsub">* 가 하는 일 · 내 타입에 * 붙이기 · 역참조 강제 · 정리되는 순서 · 미리 정리하기</p>
+</article>
+
+<article class="card" id="p14-deref-box">
+<h3>참조처럼 따라간다</h3>
+<p class="lead"><code>Box</code> 가 "스마트 포인터" 인 까닭의 절반입니다. 참조에 하듯 <code>*</code> 로 속의 값에 닿고,
+메서드를 부를 때는 그마저 생략합니다.</p>
+<!--RUN file=ex/14/deref_box.rs note=참조 r 과 Box b 를 똑같이 다룬다-->
+</article>
+
+<article class="card" id="p14-deref-missing">
+<h3>아무 타입에나 * 를 쓸 수는 없다 — E0614</h3>
+<p class="lead">값 하나를 감싼 내 구조체입니다. <code>Box</code> 와 닮았지만 <code>*</code> 를 붙이면 컴파일러가 거절합니다.</p>
+<!--RUN file=ex/14/deref_missing.rs note=MyBox 에 * 를 붙인다-->
+</article>
+
+<article class="card" id="p14-deref-impl">
+<h3>Deref 를 구현하면 * 가 된다</h3>
+<p class="lead"><code>*</code> 는 <code>Deref</code> 트레이트의 <code>deref</code> 메서드를 부르는 연산자입니다. 구현해 주면 내
+타입도 포인터처럼 쓸 수 있습니다.</p>
+<!--RUN file=ex/14/deref_impl.rs note=속의 값의 참조를 돌려주는 deref-->
+<div class="note"><b><code class="nb">type Target = T;</code></b> 는 연관 타입입니다(<a href="#p10">10부</a>). "<code>*</code> 를 붙이면
+무엇이 나오는가" 를 적습니다.</div>
+</article>
+
+<article class="card" id="p14-deref-coercion">
+<h3>역참조 강제 — &amp;String 이 &amp;str 자리에 들어가는 까닭</h3>
+<p class="lead"><code class="nb">&amp;str</code> 을 받는 함수에 <code class="nb">&amp;String</code> 을 넘겨 왔습니다. 타입이 다른데도 됐던 것은
+컴파일러가 <code>Deref</code> 를 필요한 만큼 대신 불러 주기 때문입니다.</p>
+<!--RUN file=ex/14/deref_coercion.rs note=같은 함수에 세 가지 타입을 넘긴다-->
+<div class="key"><b>참조에서만, 정해진 길로만</b> — 일어나는 것은 <code>Deref</code> 를 따라가는 변환뿐입니다. <code>i32</code> 가
+<code>i64</code> 로 바뀌는 식의 암묵 변환은 여전히 없습니다.</div>
+</article>
+
+<article class="card" id="p14-drop-order">
+<h3>Drop — 사라질 때 할 일</h3>
+<p class="lead">스마트 포인터의 나머지 절반입니다. 값이 범위를 벗어날 때 <code>Drop</code> 의 <code>drop</code> 이 불립니다.
+<code>Box</code> 는 여기서 힙을 돌려주고, 파일은 닫히고, 잠금은 풀립니다.</p>
+<!--RUN file=ex/14/drop_order.rs note=정리될 때 한 줄 찍는 값 셋-->
+<div class="key"><b>만든 순서의 거꾸로</b> — <code>b</code> 가 <code>a</code> 보다 먼저 정리됩니다. 나중에 만든 것이 먼저 만든 것을
+빌리고 있을 수 있기 때문입니다.</div>
+</article>
+
+<article class="card" id="p14-drop-early">
+<h3>미리 정리하려면 drop(값)</h3>
+<p class="lead">범위 끝까지 기다리지 않고 지금 정리하고 싶을 때는 함수 <code>drop</code> 에 값을 넘깁니다. 소유권이 그
+함수로 옮겨 가고, 함수가 끝나며 정리됩니다.</p>
+<!--RUN file=ex/14/drop_early.rs note=잠금을 일찍 푼다-->
+</article>
+
+<article class="card" id="p14-drop-method">
+<h3>drop 메서드를 직접 부를 수는 없다 — E0040</h3>
+<p class="lead">직접 부를 수 있다면 범위 끝에서 한 번 더 불려 두 번 정리될 것입니다. 그래서 막혀 있습니다.</p>
+<!--RUN file=ex/14/drop_method.rs note=lock.drop()-->
+</article>
+
+<article class="card quiz" id="p14-ch2-quiz" data-quiz>
+<h3>퀴즈 — Deref 와 Drop</h3>
+<p class="q">Q. 한 함수에서 <code>a</code>, <code>b</code> 순서로 만든 두 값은 함수가 끝날 때 어떤 순서로 정리될까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>b</code> 가 먼저, <code>a</code> 가 나중입니다. 만든 순서의 거꾸로입니다
+(<a href="#p14-drop-order">Drop</a>). 순서를 바꾸고 싶으면 <code class="nb">drop(a);</code> 로 먼저 정리합니다.</div>
+</article>
+
+<article class="card" id="p14-ch3">
+<p class="chnum">3장</p>
+<h2>Rc</h2>
+<p class="chsub">주인이 여럿 · 세는 포인터 · 마지막 주인이 사라질 때 · 고칠 수는 없다</p>
+</article>
+
+<article class="card" id="p14-share-box">
+<h3>두 목록이 꼬리를 함께 쓰고 싶다 — E0382</h3>
+<p class="lead"><code>3 → 5 → 10</code> 과 <code>4 → 5 → 10</code> 이 <code>5 → 10</code> 부분을 함께 쓰게 하려 합니다.
+<code>Box</code> 로는 안 됩니다. 꼬리의 주인은 하나뿐이라 첫 목록에 넣는 순간 옮겨 갑니다.</p>
+<!--CODE file=ex/14/share_box.rs lines=8-13 note=tail 을 두 번 넣는다-->
+<!--OUT file=out/14/share_box.txt lines=1-11 note=두 번째에서 막힌다-->
+</article>
+
+<article class="card" id="p14-rc-share">
+<h3>Rc — 주인을 세는 포인터</h3>
+<p class="lead"><code class="nb">Rc&lt;T&gt;</code>(reference counted)는 값 옆에 "주인이 몇인가" 를 적어 둡니다.
+<code class="nb">Rc::clone</code> 은 값을 복사하지 않고 그 수만 하나 올립니다.</p>
+<!--RUN file=ex/14/rc_share.rs note=같은 꼬리를 가리키는 두 목록-->
+<div class="note"><b>관례</b> — <code class="nb">tail.clone()</code> 이라고 써도 같지만, 값을 통째로 복사하는 <code>clone</code> 과
+구별하려고 <code class="nb">Rc::clone(&amp;tail)</code> 로 씁니다.</div>
+</article>
+
+<article class="card" id="p14-rc-count">
+<h3>수는 오르고 내린다</h3>
+<p class="lead"><code>Rc</code> 를 하나 더 만들면 수가 오르고, 하나가 사라지면 내립니다.
+<code class="nb">Rc::strong_count</code> 로 지금 수를 볼 수 있습니다.</p>
+<!--RUN file=ex/14/rc_count.rs note=1 → 2 → 3 → 2 → 1-->
+</article>
+
+<article class="card" id="p14-rc-drop">
+<h3>마지막 주인이 사라질 때 정리된다</h3>
+<p class="lead">수가 0 이 되는 순간 값이 정리됩니다. 그 전에는 누가 사라져도 값은 남습니다.</p>
+<!--RUN file=ex/14/rc_drop.rs note=a 를 버려도 남고, b 까지 버리면 정리된다-->
+<div class="note"><b>1부에서 본 것</b> — Rust 는 가비지 컬렉터를 버렸습니다. 참조를 세는 방식은 필요한 값에만, 쓰는 사람이 직접
+고릅니다.</div>
+</article>
+
+<article class="card" id="p14-rc-immutable">
+<h3>Rc 속의 값은 고칠 수 없다 — E0596</h3>
+<p class="lead">주인이 여럿이라는 것은 읽는 쪽이 여럿이라는 뜻입니다. 빌림 규칙(여럿이 읽거나, 혼자 쓰거나)에 따라
+<code>Rc</code> 는 불변 접근만 줍니다.</p>
+<!--RUN file=ex/14/rc_immutable.rs note=함께 쓰는 벡터에 push-->
+<div class="tip"><b>그래도 고쳐야 한다면</b> 다음 장의 <code>RefCell</code> 과 함께 씁니다.</div>
+</article>
+
+<article class="card quiz" id="p14-ch3-quiz" data-quiz>
+<h3>퀴즈 — Rc</h3>
+<p class="q">Q. <code class="nb">let a = Rc::new(v); let b = Rc::clone(&amp;a); drop(a);</code> 뒤에 <code>v</code> 는 정리됐을까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 아닙니다. 주인이 둘이었다가 하나(<code>b</code>)가 남았습니다. <code>b</code> 까지 사라져 수가 0 이 될 때
+정리됩니다(<a href="#p14-rc-drop">마지막 주인</a>).</div>
+</article>
+
+<article class="card" id="p14-ch4">
+<p class="chnum">4장</p>
+<h2>RefCell 과 Cell</h2>
+<p class="chsub">내부 가변성 · 빌림 검사를 실행 중으로 · Rc&lt;RefCell&lt;T&gt;&gt; · Cell</p>
+</article>
+
+<article class="card" id="p14-refcell-basic">
+<h3>RefCell — mut 없이 고친다</h3>
+<p class="lead"><code class="nb">RefCell&lt;T&gt;</code> 는 불변으로 보이는 값의 속을 고칠 수 있게 해 줍니다. <code>borrow()</code> 로
+읽는 빌림을, <code>borrow_mut()</code> 로 쓰는 빌림을 얻습니다. 이것을 내부 가변성(interior mutability)이라고
+합니다.</p>
+<!--RUN file=ex/14/refcell_basic.rs note=let 뒤에 mut 가 없다-->
+</article>
+
+<article class="card" id="p14-refcell-panic">
+<h3>규칙은 그대로다 — 검사하는 때만 다르다</h3>
+<p class="lead">"여럿이 읽거나, 혼자 쓰거나" 는 여기서도 지켜져야 합니다. 다만 컴파일할 때가 아니라 <b>실행 중에</b>
+검사합니다. 어기면 컴파일 오류가 아니라 패닉입니다.</p>
+<!--RUN file=ex/14/refcell_panic.rs note=읽는 빌림이 살아 있는데 쓰는 빌림을 얻는다-->
+<div class="warn"><b>컴파일러가 못 잡는다</b> — 이 파일은 경고 없이 컴파일됐습니다. <code>RefCell</code> 을 쓰면 빌림 오류를 찾는
+일이 컴파일러에게서 시험과 실행으로 넘어옵니다.</div>
+</article>
+
+<article class="card" id="p14-refcell-try">
+<h3>패닉 대신 물어보기 — try_borrow_mut</h3>
+<p class="lead"><code>try_</code> 가 붙은 쪽은 빌릴 수 없을 때 패닉하지 않고 <code>Err</code> 를 돌려줍니다. 빌림은 그것을 들고
+있던 값이 사라질 때 끝납니다.</p>
+<!--RUN file=ex/14/refcell_try.rs note=읽는 빌림이 있는 동안과 끝난 뒤-->
+</article>
+
+<article class="card" id="p14-refcell-logger">
+<h3>&amp;self 메서드에서 속을 고친다</h3>
+<p class="lead">가장 흔한 쓰임새입니다. 바깥에서 보기에는 읽기만 하는 메서드(<code class="nb">&amp;self</code>)인데, 안에서는
+횟수를 세거나 기록을 남겨야 할 때입니다.</p>
+<!--RUN file=ex/14/refcell_logger.rs note=방문할 때마다 세는 카운터-->
+</article>
+
+<article class="card" id="p14-cell-copy">
+<h3>Cell — 빌려주지 않고 통째로 바꾼다</h3>
+<p class="lead">정수처럼 복사되는 작은 값에는 <code class="nb">Cell&lt;T&gt;</code> 가 더 간단합니다. 빌림을 내주지 않고
+<code>get</code> 으로 값을 복사해 꺼내고 <code>set</code> 으로 통째로 넣습니다. 빌림이 없으니 실행 중 패닉도 없습니다.</p>
+<!--RUN file=ex/14/cell_copy.rs note=같은 카운터를 Cell 로-->
+</article>
+
+<article class="card" id="p14-rc-refcell">
+<h3>Rc&lt;RefCell&lt;T&gt;&gt; — 여럿이 갖고, 누구든 고친다</h3>
+<p class="lead"><code>Rc</code> 는 여럿이 갖게 하지만 고칠 수 없고, <code>RefCell</code> 은 고칠 수 있게 하지만 주인은 하나입니다.
+둘을 겹치면 "함께 갖고 함께 고치는 값" 이 됩니다.</p>
+<!--RUN file=ex/14/rc_refcell.rs note=두 선수가 한 점수를 올린다-->
+<div class="note"><b>읽는 순서</b> — 바깥이 <code>Rc</code>(누가 갖는가), 안쪽이 <code>RefCell</code>(어떻게 고치는가)입니다.
+스레드 사이에서는 같은 구실을 <code class="nb">Arc&lt;Mutex&lt;T&gt;&gt;</code> 가 합니다(<a href="#p15">15부</a>).</div>
+</article>
+
+<article class="card quiz" id="p14-ch4-quiz" data-quiz>
+<h3>퀴즈 — RefCell</h3>
+<p class="q">Q. <code class="nb">let r = cell.borrow(); let w = cell.borrow_mut();</code> 은 컴파일될까요? 실행하면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 컴파일은 됩니다. 실행하면 둘째 줄에서 "RefCell already borrowed" 로 패닉합니다
+(<a href="#p14-refcell-panic">규칙은 그대로다</a>). <code>RefCell</code> 은 빌림 규칙을 없애는 것이 아니라 검사를 실행
+중으로 미룹니다.</div>
+</article>
+
+<article class="card" id="p14-ch5">
+<p class="chnum">5장</p>
+<h2>Weak 와 순환 참조</h2>
+<p class="chsub">서로를 가리키면 아무도 정리되지 않는다 · 약한 참조 · 부모를 아는 나무 · 고르는 법</p>
+</article>
+
+<article class="card" id="p14-cycle-leak">
+<h3>고리를 만들면 새어 나간다</h3>
+<p class="lead"><code>a</code> 가 <code>b</code> 를, <code>b</code> 가 <code>a</code> 를 <code>Rc</code> 로 가리킵니다. <code>main</code> 이 끝나
+변수 둘이 사라져도 서로가 서로의 주인이라 수가 0 이 되지 않습니다.</p>
+<!--RUN file=ex/14/cycle_leak.rs note=정리될 때 한 줄 찍는 마디 둘-->
+<div class="warn"><b>"정리" 가 찍히지 않았다</b> — 메모리가 새었습니다(leak). 안전 규칙을 어긴 것은 아니어서 컴파일러는 막지
+않습니다. Rust 가 막아 주는 것은 잘못된 접근이지, 새는 것까지는 아닙니다.</div>
+</article>
+
+<article class="card" id="p14-weak-basic">
+<h3>Weak — 주인이 아닌 참조</h3>
+<p class="lead"><code class="nb">Weak&lt;T&gt;</code> 는 값을 가리키되 주인 수에 들지 않습니다. 값이 이미 사라졌을 수 있으므로,
+쓰려면 <code>upgrade()</code> 로 "아직 있는가" 를 물어야 하고 답은 <code>Option</code> 입니다.</p>
+<!--RUN file=ex/14/weak_basic.rs note=주인이 사라지면 upgrade 는 None-->
+</article>
+
+<article class="card" id="p14-weak-tree">
+<h3>부모를 아는 나무</h3>
+<p class="lead">부모는 자식을 갖고(<code>Rc</code>), 자식은 부모를 가리키기만 합니다(<code>Weak</code>). 고리가 생기지 않아
+전부 정리됩니다.</p>
+<!--CODE file=ex/14/weak_tree.rs lines=4-8 note=가리키는 방향에 따라 강하게, 약하게-->
+<!--CODE file=ex/14/weak_tree.rs lines=24-34 note=잎을 뿌리에 달고, 잎에서 부모를 찾는다-->
+<!--OUT file=out/14/weak_tree.txt note=이번에는 둘 다 정리된다-->
+<div class="key"><b>"누가 누구를 갖는가"</b> 를 먼저 정합니다. 갖는 방향은 <code>Rc</code>, 거꾸로 가리키는 방향은
+<code>Weak</code> 입니다.</div>
+</article>
+
+<article class="card" id="p14-choose">
+<h3>무엇을 고를까</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>타입</th><th>주인</th><th>고치기</th><th>검사하는 때</th><th>쓰는 곳</th></tr>
+<tr><td><code class="nb">Box&lt;T&gt;</code></td><td>하나</td><td>보통의 <code>mut</code></td><td>컴파일</td><td>힙에 두기, 재귀 타입</td></tr>
+<tr><td><code class="nb">Rc&lt;T&gt;</code></td><td>여럿</td><td>못 한다</td><td>컴파일</td><td>함께 읽는 값</td></tr>
+<tr><td><code class="nb">Weak&lt;T&gt;</code></td><td>아님</td><td>—</td><td>실행(<code>upgrade</code>)</td><td>거꾸로 가리키기</td></tr>
+<tr><td><code class="nb">RefCell&lt;T&gt;</code></td><td>하나</td><td><code>&amp;</code> 뒤에서</td><td>실행(패닉)</td><td>내부 가변성</td></tr>
+<tr><td><code class="nb">Cell&lt;T&gt;</code></td><td>하나</td><td>통째로 바꾸기</td><td>필요 없음</td><td>작은 복사형 값</td></tr>
+<tr><td><code class="nb">Rc&lt;RefCell&lt;T&gt;&gt;</code></td><td>여럿</td><td><code>&amp;</code> 뒤에서</td><td>실행(패닉)</td><td>함께 갖고 고치는 값</td></tr>
+</table>
+</div>
+<div class="tip"><b>먼저 보통의 소유권으로</b> — 주인 하나와 참조로 풀리면 그것이 가장 좋습니다. 이 표의 아래로 갈수록
+컴파일러가 대신 봐 주던 것을 우리가 직접 챙겨야 합니다.</div>
+</article>
+
+<article class="card" id="p14-threads">
+<h3>이 부의 타입들은 한 스레드 안에서만 쓴다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>한 스레드 안에서</th><th>스레드 사이에서</th><th>다른 점</th></tr>
+<tr><td><code class="nb">Rc&lt;T&gt;</code></td><td><code class="nb">Arc&lt;T&gt;</code></td><td>수를 세는 일이 원자적이다</td></tr>
+<tr><td><code class="nb">RefCell&lt;T&gt;</code></td><td><code class="nb">Mutex&lt;T&gt;</code> · <code class="nb">RwLock&lt;T&gt;</code></td><td>패닉 대신 기다린다</td></tr>
+<tr><td><code class="nb">Cell&lt;T&gt;</code></td><td>원자 타입(<code class="nb">AtomicU32</code> …)</td><td>한 번에 읽고 바꾼다</td></tr>
+</table>
+</div>
+<p class="cap"><code>Rc</code> 를 다른 스레드로 보내려 하면 컴파일러가 막습니다. 그 화면은 <a href="#p15">15부</a>에서 봅니다.</p>
+</article>
+
+<article class="card quiz" id="p14-ch5-quiz" data-quiz>
+<h3>퀴즈 — Weak</h3>
+<p class="q">Q. 자식이 부모를 <code>Rc</code> 로 가리키고 부모도 자식을 <code>Rc</code> 로 갖는 나무는 무엇이 문제일까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 부모와 자식이 서로의 주인이 되어 고리가 생깁니다. 바깥의 변수가 다 사라져도 수가 0 이 되지 않아
+아무것도 정리되지 않습니다(<a href="#p14-cycle-leak">고리를 만들면</a>). 자식 → 부모 방향을 <code>Weak</code> 로
+바꿉니다(<a href="#p14-weak-tree">부모를 아는 나무</a>).</div>
 </article>
