@@ -107,6 +107,22 @@ nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표
   bytes ("힙까지 복사" as a description is fine). Defined on p06-clone.
 - destructuring = "풀어 헤치기" (glossed on p03-tuple and p07-pat-struct), not "구조 분해".
   refutable / irrefutable = "안 맞을 수 있는 패턴 / 반드시 맞는 패턴" (p07-refutable).
+- index (noun) = "인덱스" (parts 6, 8; the trait is `Index`); "번호" / "N번 칸" stays as
+  the plain word for a position; not "색인".
+- "꼬리표" is not used for the compiler's span labels (say "N번 줄에 붙은 …").
+- Line ranges: "3번부터 6번 줄까지", not "3~6번 줄".
+- A sentence added about what a method does must be shown by the capture on that slide; if
+  it rests only on documentation, either leave it out or report it so the example can be
+  extended (p08-str-methods got a Korean `find` line for this reason).
+- Part 8 targets other parts quote: p08-str-two (String vs &str), p08-str-format,
+  p08-str-index (no s[0], E0277), p08-str-utf8 (len 은 바이트), p08-str-chars-bytes,
+  p08-str-nth, p08-str-split, p08-str-parse (first `unwrap`), p08-str-compare,
+  p08-vec-create, p08-vec-push-pop, p08-vec-index-get, p08-vec-iterate, p08-vec-capacity,
+  p08-vec-bulk (retain/sort/dedup), p08-vec-strings, p08-map-basic (get → Option<&V>),
+  p08-map-entry, p08-map-word-count (entry + 순서가 정해지지 않음), p08-map-moves-key,
+  p08-map-float-key (Hash/Eq, E0277), p08-btreemap, p08-sets, p08-choose,
+  p08-to-string-ways, p08-sort-strings (sort_by_key; full treatment p12-sorting), p08-cow,
+  p08-grapheme, p08-str-cheat. collect chain: p02-args → p08-intro → p12-collect.
 - Part 7 targets other parts quote: p07-struct-basic, p07-struct-debug (derive(Debug),
   `{:#?}`), p07-tuple-struct-mixup (newtype), p07-method-basic, p07-self-table (three
   receiver shapes), p07-assoc-fn (`new`, `Self`), p07-enum-data, p07-enum-missing-arm

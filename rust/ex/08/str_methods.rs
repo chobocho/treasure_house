@@ -9,4 +9,5 @@ fn main() {
     println!("{:?} {:?}", t.find("Rust"), t.find("Go"));
     println!("{}", t.replace("Rust", "World"));
     println!("{} {}", t.is_empty(), "".is_empty());
+    println!("{:?}", "가나다".find("나")); // 한글 한 글자는 3바이트
 }

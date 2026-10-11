@@ -295,3 +295,11 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p07-param-pattern); 09_err 184; 10b_trait 181; 13_mod 454 (derive → p07-struct-debug).
   Part 9: p09-opt-match / p09-opt-not-value must acknowledge p07-option-enum (its `.key`
   "null 대신 Option" overlaps part 9's "null 이 없는 언어").
+- Part 8 reviewed (review 2). ex/08/str_methods.rs gained a Korean `find` line so "byte
+  index, not char index" is shown, not asserted. Decision: index = 인덱스. Notes for later
+  batches — part 10: 10_trait 63 (len 은 바이트 → p08-str-utf8), 317 (실수 키 오류 →
+  p08-map-float-key), 10b_trait "색인" ×2 → 인덱스; part 11: 11_life 325 → p08-str-utf8;
+  part 12: 12b_iter 282 ("8부에서 미뤄 둔" → p08-sort-strings), 300 (entry →
+  p08-map-word-count), 38 (`#p08`); appendix: 17_appendix 45 "색인" → 인덱스, 132 `#p08`;
+  parts 15/16: "N~M번 줄" → "N번부터 M번 줄까지". All later parts: "출력 N번째 줄" counts
+  the `$ …` line — check each use.
