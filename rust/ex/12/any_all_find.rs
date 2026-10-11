@@ -6,4 +6,8 @@ fn main() {
     println!("{:?}", v.iter().find(|x| **x > 10)); // 처음 맞는 원소
     println!("{:?}", v.iter().position(|x| *x > 10)); // 그 자리
     println!("{:?}", v.iter().find(|x| **x > 100));
+
+    // 답이 정해지면 멈춘다 — 어디까지 보는지 inspect 로 찍는다.
+    let big = v.iter().inspect(|x| print!("{x}? ")).any(|x| *x > 5);
+    println!("{big}");
 }

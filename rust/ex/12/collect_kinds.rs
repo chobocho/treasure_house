@@ -11,4 +11,8 @@ fn main() {
         words.iter().map(|w| (*w, w.len())).collect();
 
     println!("{list:?}\n{set:?}\n{text}\n{map:?}");
+
+    // 받는 변수가 없으면 메서드 쪽에 적는다(터보피시).
+    let kinds = words.iter().collect::<BTreeSet<_>>().len();
+    println!("{kinds}");
 }

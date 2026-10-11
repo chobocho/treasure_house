@@ -6,7 +6,7 @@ struct Countdown {
 impl Iterator for Countdown {
     type Item = u32;
 
-    fn next(&mut self) -> Option<u32> {
+    fn next(&mut self) -> Option<Self::Item> {
         if self.n == 0 {
             None
         } else {
@@ -21,7 +21,7 @@ fn main() {
         print!("{n} ");
     }
     println!("발사");
-    // map, filter, sum … 나머지는 전부 공짜로 따라온다.
+    // filter, sum 은 구현하지 않았다 — next 위에 지어진 기본 메서드다.
     let total: u32 = Countdown { n: 10 }.filter(|n| n % 2 == 0).sum();
     println!("{total}");
 }
