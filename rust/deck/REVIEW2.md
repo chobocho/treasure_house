@@ -74,6 +74,20 @@ book** · 반복자 iterator · 어댑터 adapter · 소비자 consumer · 슬�
 nouns such as "비교 연산자") · 자리 capacity / memory place · 꼬리표 file label / enum tag ·
 화면 what the dark box shows as a whole, 출력 what the program printed.
 
+**Decisions added after the first review-2 pass (parts 0 and 2):**
+- Table cells are noun phrases; when a cell must state a condition or a sentence it is a
+  short 한다체 clause ("있어야 붙는다", "판마다 깨진다") — not 합니다체, not "-음/-됨".
+- No "-세요" endings ("보세요", "의심하세요"): write a 합니다체 statement ("…부터 봅니다",
+  "…를 먼저 의심합니다") or a noun-phrase callout head.
+- A crate from outside the standard library is "바깥 크레이트" (not "외부 크레이트").
+- "자리" may also mean a position in the source or on the screen ("패닉이 난 자리").
+- 화면/출력: do not hunt for these. Fix only where the choice misleads (calling a compiler
+  message "the program's output"); "출력" for the whole dark box is fine in titles.
+- Reading notes are `.note` with the head "읽는 법". `.key` is for the one takeaway, not for
+  how to read a message.
+- When you add a sentence that says what a capture shows (review 1 did not see it), list
+  it in your report under "new capture-reading sentences" so it can be double-checked.
+
 **Line references.** Source lines: "N번 줄". Lines of a capture: "출력 N번째 줄" (or
 "화면의 N번째 줄"). Columns are not cited.
 
