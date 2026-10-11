@@ -201,6 +201,26 @@ class Rules(Tree):
         self.section(self.ok_slide().replace('p06-a', 'p07-a'))
         self.assertIn('p06', self.errs())
 
+    def test_title_code_must_be_shown_on_the_slide(self):
+        self.example('ex/06/e.rs', CODE + '//@ expect: E0382\n',
+                     '$ rustc --edition 2024 e.rs\nerror[E0382]: borrow of moved value\n[종료 코드 1]\n')
+        ok = ('<article class="card" id="p06-e"><h3>옮긴 값을 쓰면 — E0382</h3>'
+              '<!--RUN file=ex/06/e.rs--></article>\n')
+        self.section(self.ok_slide() + ok)
+        self.assertEqual(self.build().errors, [])
+        # 제목의 번호가 화면에 없다 — 번호를 잘못 적었거나 캡처를 안 실었다.
+        self.section(self.ok_slide() + ok.replace('E0382</h3>', 'E0499</h3>'))
+        self.assertIn('E0499', self.errs())
+
+    def test_shown_error_code_missing_from_title_is_a_notice(self):
+        self.example('ex/06/e.rs', CODE + '//@ expect: E0382\n',
+                     '$ rustc --edition 2024 e.rs\nerror[E0382]: borrow of moved value\n[종료 코드 1]\n')
+        self.section(self.ok_slide() + '<article class="card" id="p06-e"><h3>옮긴 값을 쓰면</h3>'
+                     '<!--RUN file=ex/06/e.rs--></article>\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertTrue(any('E0382' in w for w in r.warns))
+
     def test_dead_internal_link(self):
         self.section(self.ok_slide() + '<article class="card" id="p06-b">'
                      '<a href="#p99-x">저기</a></article>\n')
@@ -311,13 +331,19 @@ class Appendix(Tree):
         super().setUp()
         self.put('deck/order.txt', '06_own.html\n17_appendix.html\n')
         self.put('deck/budget.txt', '6 10\n17 20\n')
-        self.example('ex/06/b.rs', CODE, CAP)
+        # 제목의 오류 번호는 그 장의 캡처에 실제로 있어야 한다(title_codes).
+        moved = '$ rustc --edition 2024 a.rs\nerror[E0382]: borrow of moved value\n[종료 코드 1]\n'
+        twice = ('$ rustc --edition 2024 b.rs\nerror[E0499]: cannot borrow twice\n'
+                 'error[E0502]: cannot borrow\n[종료 코드 1]\n')
+        self.example('ex/06/a.rs', CODE, moved)
+        self.example('ex/06/b.rs', CODE, twice)
         self.section(
             '<article class="card" id="p06-a"><h3>이동하면 못 쓴다 — E0382</h3>'
             '<!--RUN file=ex/06/a.rs--></article>\n'
             '<article class="card" id="p06-b"><h3>두 번 빌리면 — E0499 · E0502</h3>'
             '<!--RUN file=ex/06/b.rs--></article>\n'
-            '<article class="card" id="p06-c"><h3>또 이동 &amp; 오류 — E0382</h3><p>x</p></article>\n')
+            '<article class="card" id="p06-c"><h3>또 이동 &amp; 오류 — E0382</h3>'
+            '<!--OUT file=out/06/a.txt--></article>\n')
 
     def appendix(self, body):
         self.put('deck/sections/17_appendix.html',

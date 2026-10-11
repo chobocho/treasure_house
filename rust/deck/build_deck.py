@@ -402,6 +402,7 @@ class Builder(object):
             self.ids.add(sid)
             if sid != 'top' and not re.match(r'^p%02d(-|$)' % part, sid):
                 self.err('id 는 p%02d 로 시작한다: %s' % (part, sid))
+            self.title_codes(sid, m.group(2))
             self.subids.update(re.findall(r'\bid="([^"]+)"', m.group(2)))
             self.links += [(fname, h) for h in re.findall(r'href="#([^"]+)"', m.group(2))]
             self.nav_item(part, sid, m.group(1), m.group(2))
@@ -409,6 +410,24 @@ class Builder(object):
             self.err('<article> 열고 닫는 수가 맞지 않는다')
         self.r.per_part[part] = self.r.per_part.get(part, 0) + n
         return body
+
+    def title_codes(self, sid, inner):
+        """제목의 오류 번호(— E0382)와 그 장에 실린 캡처의 error[E…] 를 맞춰 본다.
+
+           제목에 있는데 화면에 없으면 오류(번호를 잘못 적었다). 화면에 있는데 제목에
+           없으면 알림 — 부록의 오류 번호 찾아보기가 제목에서 번호를 모으기 때문이다.
+        """
+        h = re.search(r'<h3[^>]*>(.*?)</h3>', inner, re.S)
+        titled = set(re.findall(r'\bE0\d{3}\b', h.group(1))) if h else set()
+        shown = set()
+        for pre in re.findall(r'<pre class="term[^"]*"[^>]*>(.*?)</pre>', inner, re.S):
+            shown.update(re.findall(r'error\[(E0\d{3})\]', pre))
+        if 'class="chnum"' in inner or 'data-quiz' in inner or '-ecodes' in sid:
+            return
+        for code in sorted(titled - shown):
+            self.err('%s: 제목의 %s 가 이 장의 캡처에 없다' % (sid, code))
+        for code in sorted(shown - titled):
+            self.r.warns.append('%s: 캡처에 %s 가 있는데 제목에 없다' % (sid, code))
 
     def nav_item(self, part, sid, attrs, inner):
         h = re.search(r'<h[12][^>]*>(.*?)</h[12]>', inner, re.S)
