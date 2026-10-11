@@ -9,7 +9,7 @@ fn main() {
         score: 0,
     };
     let name = &p.name;
-    // 클로저는 score 만 고치지만, 2018 까지는 p 전체를 빌렸다.
+    // 클로저 bump 는 p.score 하나만 고친다.
     let mut bump = || p.score += 1;
     bump();
     println!("{} {}", name, p.score);

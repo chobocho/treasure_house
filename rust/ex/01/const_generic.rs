@@ -9,5 +9,5 @@ fn sum<const N: usize>(xs: [i32; N]) -> i32 {
 
 fn main() {
     println!("{}", sum([1, 2, 3]));
-    println!("{}", sum([10; 40])); // 길이 40 — 32 를 넘어도 된다
+    println!("{}", sum([10; 40])); // 길이 40 도 같은 함수로
 }

@@ -1,6 +1,6 @@
 fn main() {
     let names = [String::from("a"), String::from("b")];
-    // 2021 부터: 값(String)을 꺼내 준다 — 배열은 소비된다.
+    // 에디션에 따라 n 이 참조(&String)이기도, 값(String)이기도 하다.
     for n in names.into_iter() {
         let _: String = n;
     }
