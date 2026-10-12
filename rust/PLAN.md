@@ -593,3 +593,38 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   work's (`user-select: text` on main.prose in template.html, every deck/base/head.html
   and the built decks). Review commits stage the Rust deck WITHOUT that hunk; do not fold
   it in or revert it.
+- 21a written (chapters 1–2: macro_rules! 심화 · 날 포인터와 메모리; 41 slides incl. cover
+  and intro — ch 1 = 23, ch 2 = 16; 45 examples: 43 files + directory examples `export/`,
+  `dollar/`; 14 compile-error files; 2 quizzes). order.txt: `21_low.html` uncommented by
+  the orchestrator (the writer could not; its own green build was on a shadow copy).
+  Orchestrator re-ran: `make all` rc=0 at 1,311 slides (one notice: part 21 under 80 % of
+  budget), `rsrun --check ex/21` ×3 = 45 ✓ / 0 ✗ each; read alloc_drop, uninit_array,
+  raw_parts, write_drop for soundness — no objection. New codes in out/: E0432, E0433,
+  E0512 (61 distinct; the appendix lookup still lists 56 — orchestrator's part-27 job).
+  Badges +12 → 106 (macro-literal 1.32, macro-rep-opt 1.32, macro-use-path 1.30, ptr-add
+  1.26, ptr-offset-from 1.47, nonnull 1.25, std-alloc 1.28, drop-in-place 1.8,
+  maybe-uninit 1.36, maybe-uninit-write 1.55, maybe-uninit-read 1.60, float-to-bits 1.20).
+  Part-0 map, card and README set to 23부 · 1,311슬라이드 · 예제 966 · 캡처 998 · 퀴즈 99 ·
+  버전 표기 106건.
+  For the 21b writer: plain-text forward mentions to link — p21 cover chsub, p21-intro
+  lead ("뒤의 두 장은 …") and its 3장/4장 bullets (bullets stay unlinked, book
+  convention), p21-mem-table lead ("3장처럼 … 4장처럼 …"); the intro note is headed
+  "1장과 2장의 화면" and covers only chapters 1–2 — extend or correct it; `Noisy` (a Drop
+  type printing "  정리: 이름") is reused in four ch-2 examples; p18-size-align promises
+  `#[repr(C)]` "21부에서 봅니다" → chapter 4 must cash it; words kept from earlier parts:
+  자리를 잡다 / 돌려주다 (alloc / dealloc; "할당" is used nowhere), 배치 (layout), 종류
+  (fragment specifier). Second half may use at most 47 slides (budget 80, ceiling 88).
+  For the reviewer — inference rather than capture: p21-ambiguity ("1 other option"),
+  p21-literal-commit (rests on one twin pair), p21-crate-bare (title generalises from two
+  captures), p21-muncher (which arm took which item), p21-nonnull ("same look as
+  Option<Box<u8>>"), p21-alloc (handle_alloc_error branch never ran — said on the slide);
+  doc-attributed sentences were checked against doc.rust-lang.org by the writer, not
+  against this toolchain's text: p21-ptr-rules table, p21-ptr-add, p21-ptr-end,
+  p21-write-drop, p21-read-swap, p21-nonnull, p21-alloc, p21-uninit, p21-uninit-array,
+  p21-raw-parts, p21-transmute-size, p21-export; "Miri catches some of these" is from
+  memory. Loose badge labels: macro-rep-opt ("2015 에디션은 1.37"), std-alloc, ptr-add,
+  macro-use-path. Left out for lack of evidence: expansion traces, `expr_2021`/edition
+  differences, default recursion limit as a number, `vis`/`lifetime`/`ty`/`path`/`stmt`/
+  `meta`, `from_raw_parts_mut`, `unsafe fn` bodies. New terms for the glossary: 메타변수,
+  토큰, 토큰 한 덩이(token tree), 항목(item), 재귀 한도, tt 떼어 내기(tt muncher), 내부 규칙,
+  별칭 규칙. Unchecked by a reviewer: everything in 21a (review comes after 21b).
