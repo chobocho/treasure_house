@@ -774,3 +774,41 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   link p22-poll-needs-pin; p16-async-why "여기까지만 봅니다" and p01-async "맛보기만"
   predate part 22; p21-intro "async 는 22부에서 잇습니다" → #p22; p21-wrap "다음" note →
   #p22. Unchecked by a reviewer: everything in 22a.
+- 22b written (chapters 4–5: async 문법 더 · 타이머 없이, plus p22-wrap; 27 slides — ch 4 =
+  17, ch 5 = 9, wrap 1; 21 examples, 6 compile-error files: E0373, E0382 ×2 in one file,
+  E0038, E0277, and two code-less "future cannot be sent between threads safely";
+  2 quizzes) → part 22 = 64 slides (budget 60, ceiling 66), 48 examples, deck 1,413.
+  order.txt: `22b_async.html` uncommented. Orchestrator re-ran: `make all` rc=0 (1,413장 ·
+  오류 0 · 알림 0 · 어긋남 0), `rsrun --check ex/22` ×3 = 48 ✓ / 0 ✗ each; grep finds no
+  `unsafe`, thread, or clock in ex/22; read Timer/Sleep (timeout.rs 75–147): `advance`
+  wakes while holding the RefCell borrow, which is fine because TaskWaker only touches
+  the Mutex-guarded ready queue. Badges +3 → 122 (async-closures 1.85, asyncfn-prelude
+  1.85, rpit-in-traits 1.75). No new error codes in out/ (61 distinct; the appendix
+  lookup still lists 56). Card and README set to 24부 · 1,413슬라이드 · 예제 1,049 ·
+  캡처 1,084 · 퀴즈 106 · 버전 표기 122건.
+  Generated twins: pieces + `mk.py`/`spec.py` under `scratch/w22b/` (git-ignored);
+  `lines.py` audits "N번 줄". Executor prefix: exec5_yield.rs 1–121 byte-identical in
+  spawn_borrow_err, spawn_no_move, afit_run, afit_dyn_err, cancel_exec, select2;
+  exec1_block_on.rs 1–36 in closure_async, closure_block, closure_asyncfn. Chapter 5
+  deviates (said on the slides and in p22-intro): chan.rs drops `Gate` (unused → dead-code
+  warning); sleep_ticks.rs is a twin step of the executor (field `timer`, `run`'s `else`
+  calls `self.timer.advance()`); timeout.rs = tick executor + Timer/Sleep + channel +
+  Select2; timeout_nodrop.rs = timeout.rs minus `impl Drop for Sleep`.
+  22a edits by the 22b writer (p22-intro only): 4장/5장 bullets, both notes extended to
+  the whole part.
+  For the reviewer — inference rather than capture: p22-select2-run ("the .await drops
+  Select2 when it yields"), p22-spawn-borrow ("the block took `waiting` by value without
+  move"), p22-async-closure (key sentence), p22-not-send (key head generalises from one
+  example + the compiler's note); attributed: p22-cancel-drop ("Future has only poll" —
+  from memory), p22-afit-dyn / p22-not-send-fix / p22-runtime (AFIT announcement,
+  docs/afit-2023.txt lines 70, 76, 84–85 — no FACT rows for the dyn/Send sentences),
+  p22-runtime (two rows are "알려져 있다" with no source, said in the note). Four-box
+  slides: p22-afit-send, p22-tick-run, p22-timeout. afit_dyn_err's note cites line 124,
+  visible only in the capture's excerpt; p22-tick-run cites "exec5_yield.rs 의 103번 줄"
+  inside a note= attribute; afit_send_fixed.rs changes a comment line as well as the
+  parameter line. p22-ch3-table's note "1장부터 3장까지의 예제에는 unsafe 가 없습니다" is
+  true but narrower than the part. The `async_fn_in_trait` lint is avoided (non-pub
+  trait), not mentioned. Toolchain-specific: the Rc-across-.await error has no code and
+  `drop(shared)` before the .await still fails; E0038's "because method `fetch` is
+  `async`"; two E0382 in closure_block. New terms: async 클로저, 취소 (cancellation), 틱.
+  Unchecked by a reviewer: all of part 22.
