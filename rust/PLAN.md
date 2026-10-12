@@ -963,3 +963,68 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   additions, beyond the 23a/23b lists): p00-normalize says "세 가지뿐" but rsrun also
   normalises doctest times, and it does not say that a directory example runs each `$`
   line from the root; the appendix error index needs E0453.
+- Part 24 is written project by project, each followed at once by its own review
+  (write wc → review wc → write grep → …), so that review lessons reach the next writer.
+- 24 project 1 written (part cover, p24-intro for all four projects, chapter 1 낱말 세기
+  wc; 37 slides — cover 1, intro 1, chapter 35 incl. its cover; 10 directory examples:
+  the eight-step chain wc1_count → wc2_chars → wc3_files → wc4_total → wc5_flags →
+  wc6_error → wc7_tests → wc8_final and the E0277 twin pair wc7_array / wc7_slice; 1
+  quiz). order.txt: `24_proj.html` uncommented. Orchestrator re-ran: `make all` rc=0 at
+  1,513 slides (one notice: part 24 under 80 % of budget), `rsrun --check ex/24` ×3 =
+  10 ✓ / 0 ✗ each (about 32 s per run); no `target/` or `Cargo.lock` under ex/24; no
+  `unwrap`/`expect`/`panic!`/`unsafe` in main.rs or in lib.rs outside `mod tests`; the
+  final capture's totals add up. No badge rows added (141); no new error codes (62).
+  Part-0 map, card and README set to 26부 · 1,513슬라이드 · 예제 1,096 · 캡처 1,174 ·
+  퀴즈 112 · 버전 표기 141건.
+  Generated: `scratch/w24a/mk.py` (+ `pieces/`, `twins.py`; git-ignored) — lib.rs is ONE
+  master file with marker lines `//@@ a+` / `//@@ a-b`, step k gets the lines whose
+  range contains k, so the twins are strict by construction; data-file bytes are Python
+  literals in mk.py; `lines.py` audits "N번 줄"; `probe.py DIR` runs a scratch directory
+  through rsrun's sandbox without touching out/.
+  This program's definitions (stated on p24-wc-rules, each tested): line = number of
+  `\n` bytes; word = maximal run between ASCII whitespace on bytes; character =
+  `String::from_utf8_lossy(bytes).chars().count()`; columns `{:>5}` in the fixed order
+  lines · words · chars · bytes; total line when two or more names were given; exit 0 /
+  1 (something unreadable) / 2 (bad invocation); `-` alone stays a file name; whole-input
+  reads, no speed claim. bad.bin (invalid UTF-8) is created inside the RUN, never
+  committed.
+  For the next project writers: slide prefix `p24-wc-…` and directories `wcN_…` are
+  taken — use `p24-grep-…` / `grepN_…`, `p24-calc-…` / `calcN_…`, `p24-kv-…` /
+  `kvN_…`; chapter layout = reuse table → finished program in use → steps table → steps
+  (code slice, then capture) → tests → rules table → files table → quiz → "더 해 볼 것"
+  with a "다음" note; code-box captions start with the step directory name and "N번 줄"
+  always means that step's file; RUN conventions: `cargo build -q` once, then
+  `./target/debug/<name>`; stdin only through `|` or `<` on that line; `cargo test -q
+  --lib` / `--test <file>` rather than bare `cargo test` except once at the end; a
+  whole-file OUT of a test capture ends on a blank line — slice it; decide the final
+  program first and tag lines by step; put the unit-test module at the bottom so earlier
+  line numbers stay stable; let `run` take its final signature the first time it appears
+  (introduce the config struct BEFORE `run` exists — the writer's own regret). p24-intro
+  lists chapters 2–4 as plain text from the outline (no glosses for tokenizer / parser /
+  REPL — each writer corrects their own line) and its "이 부의 화면" note is scoped to
+  chapter 1 ("1장의 화면은…", "1장의 예제는 환경 변수를 읽지 않습니다") — widen it per
+  project. p24-wc-more's "다음" note names chapter 2 in plain text.
+  For the reviewer: statements not shown by a capture — p24-wc-count (what
+  `is_ascii_whitespace` answers; five bytes tested, vertical tab not mentioned),
+  p24-wc-count-space / p24-wc-chars-bad (Unicode names; "\xff/\xfe never appear in
+  UTF-8"), p24-wc-run ("read_to_end is the byte-side sibling of read_to_string"; `mut` on
+  stdin attributed to p17-file-open), p24-wc-stdin-fail (the `?` after `writeln!` is
+  never exercised — said, links p17-out-writeln-fail), p24-wc-test-files ("ran at the
+  package root" inferred), p24-wc-test-array ("converted" read off two outcomes),
+  p24-wc-test-all (which group is which inferred from counts), p24-wc-error-test (the
+  `else { panic! }` arm never runs — said). Unsure: key head of p24-wc-flags-row and
+  title of p24-wc-chars-bad rest on few cases; p24-wc-test-array has four boxes;
+  p24-wc-rules and p24-wc-summary are two tables in a row; prose says "첫 / 셋째 단계"
+  while tables say "1단계 / 3단계"; quiz ① links a step-5 capture though it asks about
+  "이 장의 wc". Machine-specific on screen: os errors 2 and 21, `od`'s format, the shell
+  accepting `< data` for a directory, the E0277 diagnostic with a /rustc/… path. New
+  terms: 전각 빈칸 (U+3000), 대체 문자 (U+FFFD), 쪽 넘김 (form feed); first uses in the
+  book: `String::from_utf8_lossy`, `Read::read_to_end`, `u8::is_ascii_whitespace`, slice
+  `split` with a closure, `od -An -tx1`. Badge wanted but not sourced:
+  `is_ascii_whitespace`.
+  Later (0–23 additions): p17-tool-wc-count runs this machine's `wc memo.txt` in its
+  capture and says "다른 것은 칸의 폭뿐" — relabel or drop; part 17's wc reads with
+  `read_line` into a String (non-UTF-8 input not shown) → could point to
+  p24-wc-bad-bytes; p17-tool-test's key ("run and main left untested") → p24-wc-test-run /
+  p24-wc-test-cli; p13-libbin-lib, p23-test-bin-lib → p24-wc-main; p23-wrap's "24부" → #p24.
+  Unchecked by a reviewer: all of 24 project 1.
