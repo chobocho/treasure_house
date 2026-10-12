@@ -543,3 +543,28 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   note says "1장부터 3장까지의 예제는" and "sleep 으로 잠드는 예제는 … 하나" — extend or
   correct it for chapters 4–5. Second half may use at most 34 slides (budget 70,
   ceiling 77). Unchecked by a reviewer: everything in 20a (review comes after 20b).
+- 20b written (chapters 4–5: 스레드 풀 만들기 · thread_local 과 나눠 풀기; 26 slides, 18
+  examples, 2 quizzes) → part 20 = 69 slides (budget 70), 51 examples, deck 1,270.
+  Orchestrator re-ran: `make all` rc=0, `rsrun --check ex/20` ×3 = 51 ✓ / 0 ✗ each; the
+  writer also ran each of the 13 threaded binaries 200× (one distinct output each).
+  Error slides: E0277 (p20-pool-rx-share, p20-tl-static-err), E0499 (p20-split-mut-err) —
+  no new codes. Badges +4 (available-parallelism 1.59, local-key-cell 1.73,
+  local-key-refcell 1.73, int-div-ceil 1.73) → 94. Not evidenced, left out: thread_local!
+  `const { }` init. Orchestrator edits in 20a: intro bullets unlinked again (book
+  convention), p20-atomic-ordering "1장부터 3장까지의 예제는" → "이 부의 예제는".
+  For the reviewer — sentences that rest on inference, not on a run: p20-pool-drop (warn:
+  join before dropping the sender never finishes), p20-pool-together (warn: the
+  `while let … lock().recv()` form keeps the gate closed), p20-pool-panic (no poisoning
+  cascade), p20-pool-drop-waits (queued jobs drain before Err), p20-pool-table (no
+  respawn), p20-split-mut-err (reading of the '1 labels), p20-pool-rx-mutex ("may differ
+  per run"), p20-tl-with (LocalKey<RefCell>::take "same release" — badge regex matches
+  only with_borrow); doc-attributed: p20-split-auto ×2. Determinism by argument:
+  pool_panic, pool_together, pool_drop, split_auto (spawns 100 scoped threads), tl_init.
+  New terms for the glossary: 스레드 풀, 일꾼, 스레드 지역 값, 올림 나눗셈(div_ceil).
+  Later (0–16 additions): p15-many → p20-pool-why; p15-scope → p20-split-sum; p15-channel,
+  p15-refcell-not-sync → p20-pool-rx-share; p15-arc-mutex → p20-pool-rx-mutex;
+  p15-panic-join → p20-pool-panic; p15-choose → p20-split-table; p15-once-lock,
+  p15-lazy-lock, p14-cell-copy → p20-tl-basic; p03-static → p20-tl-static-err;
+  p06-option-take, p14-drop-order → p20-pool-drop; p06-split-at-mut, p12-windows-chunks →
+  p20-split-fill; p12-closure-vec, p19-dyn-send → p20-pool-struct; 19b's closing note
+  ("20부 동시성 심화는") can link #p20.
