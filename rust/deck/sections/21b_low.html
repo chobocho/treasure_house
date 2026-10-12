@@ -1,11 +1,664 @@
 <article class="card" id="p21-ch3">
 <p class="chnum">3장</p>
 <h2>작은 Vec 만들기</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">세 필드의 약속 · 자리를 잡지 않는 new · 자리 늘리기 · push · 크기가 0 인 타입 · Deref 로 슬라이스 되기 · Drop · pop · IntoIterator 와 forget · next · 덜 쓴 반복자의 정리 · Vec 과 견주기 · 정리 횟수 세기 · Send · 한눈에</p>
+</article>
+
+<article class="card" id="p21-vec-plan">
+<h3>MyVec 의 세 필드와 그 약속 — 만드는 것과 만들지 않는 것</h3>
+<p class="lead">8부에서 벡터는 <a href="#p08-vec-capacity">잡아 둔 자리와 넣은 개수가 따로</a>였고, 2장에서는 앞의 몇 칸만 채운 배열을
+<a href="#p21-uninit-array"><code>len</code> 으로 따로 세었습니다</a>. 이 장은 2장의 도구만으로 그 벡터를 직접 만듭니다. 이름은
+<code class="nb">MyVec&lt;T&gt;</code> 이고 필드는 포인터 <code>ptr</code>, 잡아 둔 칸 수 <code>cap</code>, 값이 든 칸 수 <code>len</code> 셋입니다. 세
+필드는 아래 두 줄 가운데 하나의 모습이어야 하고, 메서드는 끝날 때마다 그 모습을 지킵니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>때</th><th><code>ptr</code></th><th><code>cap</code></th><th><code>len</code></th></tr>
+<tr><td>막 만들었다</td><td>어느 자리도 가리키지 않는다 — 따라가지 않는다</td><td>0</td><td>0</td></tr>
+<tr><td>자리를 잡았다</td><td><code>T</code> 가 <code>cap</code> 칸인 자리의 맨 앞</td><td>잡아 둔 칸 수</td><td>값이 든 칸 수 — 앞에서부터 채우고 <code>cap</code> 을 넘지 않는다</td></tr>
+</table>
+</div>
+<div class="warn"><b>확인해 줄 도구가 없다</b> — 2장의 <a href="#p21-ptr-rules">첫 슬라이드</a>에서 본 대로 화면은 정의되지 않은 동작이 없다는 증거가 못
+되고, 그런 잘못을 잡아 주는 Miri 는 이 책을 만든 기계에 없습니다. <code>MyVec</code> 도 그런 도구로 확인하지 못했습니다. 대신 내놓는
+증거는 둘입니다. 같은 일을 표준 <code>Vec</code> 에도 시켜 <a href="#p21-vec-same">같은 결과가 나오는지</a>, 그리고 넣은 값이
+<a href="#p21-vec-drops">빠짐없이 한 번씩만 정리되는지</a>입니다.</div>
+<div class="note"><b>만들지 않는 것</b> — 크기가 0 인 타입은 받지 않고, <a href="#p21-vec-zst">컴파일할 때 막습니다</a>. 든 값을 고치는 길,
+가운데에 넣고 빼는 메서드, 잡은 자리를 줄이는 메서드도 만들지 않습니다.</div>
+</article>
+
+<article class="card" id="p21-vec-new">
+<h3>new 는 자리를 잡지 않는다 — cap 0 과 NonNull::dangling</h3>
+<p class="lead">구조체와 <code>new</code> 부터 적습니다. 이 장의 파일은 모두 이 슬라이드의 코드로 시작하고, 뒤의 슬라이드는 더한 줄만
+보입니다. 포인터는 2장에서 본 <a href="#p21-nonnull"><code>NonNull</code></a> 로 들고 다닙니다.</p>
+<!--CODE file=ex/21/vec_push.rs lines=1-12 note=필드 셋과 그 약속-->
+<!--CODE file=ex/21/vec_push.rs lines=15-31 note=impl<T> MyVec<T> 블록 안의 첫 메서드 셋 — new 와 읽기만 하는 둘-->
+<div class="note"><b>읽는 법</b> — 4번부터 7번 줄까지의 주석이 <a href="#p21-vec-plan">앞 슬라이드</a>의 표입니다. 둘째 상자의 세 메서드는
+<code class="nb">impl&lt;T&gt; MyVec&lt;T&gt;</code> 블록 안에 있고, 다음 두 슬라이드의 메서드도 같은 블록에 이어집니다. <code>new</code> 는
+<code>alloc</code> 을 부르지 않고 <code>cap</code> 과 <code>len</code> 을 0 으로 둡니다. 비워 둘 수 없는 <code>ptr</code> 에는 19번 줄의
+<code class="nb">NonNull::dangling()</code> 을 넣습니다. 문서는 이 함수가 주는 포인터를 "정렬은 맞지만 매달린(dangling)" 포인터, 곧 어느 값도 가리키지 않는 포인터라고 적고, 벡터처럼 자리를 나중에 잡는 타입을 처음 만들 때 쓴다고 설명합니다. 널이 아니어서
+<code>NonNull</code> 에 담기지만 따라가서는 안 됩니다. 5번 줄의 약속이 그것입니다. 17번 줄은
+<a href="#p21-vec-zst">크기가 0 인 타입을 막는 줄</a>입니다. 이 파일을 돌린 화면은 <a href="#p21-vec-push">push 슬라이드</a>에
+있습니다.</div>
+</article>
+
+<article class="card" id="p21-vec-grow">
+<h3>자리를 늘린다 — 새로 잡고, 값을 옮기고, 옛 자리를 돌려준다</h3>
+<p class="lead">넣을 칸이 없을 때 <code>push</code> 가 부를 <code>grow</code> 입니다. 8부의 벡터가
+<a href="#p08-vec-capacity">자리가 모자라면 옮겨 간</a> 그 일을 2장의 <a href="#p21-alloc"><code>alloc</code> · <code>dealloc</code></a> 과
+<a href="#p21-read-swap"><code>read</code> · <code>write</code></a> 로 적습니다.</p>
+<!--CODE file=ex/21/vec_push.rs lines=33-70 note=배치를 구하는 layout 과, 자리를 늘리는 grow-->
+<div class="note"><b>읽는 법</b> — 43번부터 46번 줄까지가 새 칸 수를 정합니다. 처음에는 4 칸, 그 뒤로는 두 배입니다. 이 책이 정한
+수이고, 표준 <code>Vec</code> 이 늘리는 방식과는 상관이 없습니다. <code class="nb">saturating_mul</code> 은 3부에서 본
+<a href="#p03-overflow-choice"><code class="nb">saturating_add</code></a> 의 곱셈 짝입니다. 50번 줄이 새 자리를 잡고, 51번 줄의
+<a href="#p07-let-else"><code class="nb">let … else</code></a> 가 널을 거릅니다. 54번부터 61번 줄까지가 옛 자리의 값을 하나씩
+<code>read</code> 로 꺼내 새 자리에 <code>write</code> 로 넣습니다. 62번 줄은 옛 자리가 있을 때만, 그 자리를 잡을 때와 같은 배치로
+돌려줍니다. 68번과 69번 줄이 두 필드를 새 자리에 맞춥니다. 52번 줄은 2장의 <a href="#p21-alloc">alloc 슬라이드</a>에서 말한 대로 이
+책의 실행에서는 돌지 않았습니다.</div>
+<!--OUT file=out/21/vec_cap.txt lines=12-17 note=main 끝에 layout(16) 과 layout(usize::MAX) 의 크기를 찍는 두 줄을 더한 쌍둥이 vec_cap.rs-->
+<div class="warn"><b>옮긴 값은 정리하지 않는다</b> — 58번 줄의 <code>read</code> 뒤에는 같은 값이 옛 칸과 <code>value</code> 두 군데에
+있습니다. 59번 줄이 <code>value</code> 를 새 칸으로 옮기고, 옛 칸은 다시 읽지도 정리하지도 않은 채 66번 줄에서 자리째 돌려줍니다.
+<a href="#p21-alloc-drop"><code>dealloc</code> 은 값을 정리하지 않으므로</a> 값은 새 자리에 하나만 남습니다. 그 값들이 한 번씩만
+정리되는 것은 <a href="#p21-vec-drop">Drop 슬라이드</a>에서 확인합니다. 위 화면은 34번 줄의 <code>layout</code> 을 직접 부른 쌍둥이
+파일의 것입니다. <code>u32</code> 16 칸은 64 바이트이고, <code class="nb">usize::MAX</code> 칸은
+<code class="nb">Layout::array</code> 가 <code>Err</code> 를 주어 37번 줄에서 패닉했습니다. 패닉 줄의 <code class="nb">37:23</code> 이 그
+자리입니다.</div>
+</article>
+
+<article class="card" id="p21-vec-push">
+<h3>push 는 len 번 칸에 write 하고 len 을 올린다</h3>
+<p class="lead">값이 든 칸은 앞의 <code>len</code> 칸이므로 새 값이 갈 곳은 <code>len</code> 번 칸입니다. 그 칸이 잡은 자리 밖이면 먼저
+<a href="#p21-vec-grow">앞 슬라이드</a>의 <code>grow</code> 를 부릅니다.</p>
+<!--CODE file=ex/21/vec_push.rs lines=72-80 note=impl 블록의 마지막 메서드-->
+<!--CODE file=ex/21/vec_push.rs lines=83-90 note=수 아홉을 넣으며 len 과 cap 을 찍는다-->
+<!--OUT file=out/21/vec_push.txt note=줄마다 len 과 cap-->
+<div class="note"><b>읽는 법</b> — 78번 줄은 대입이 아니라 <code>write</code> 입니다. <code>len</code> 번 칸은 값이 없는 칸이고,
+<a href="#p21-write-drop">대입은 옛 값부터 정리하려 들기</a> 때문입니다. 85번 줄이 찍은 <code class="nb">0 0</code> 은 막 만든 벡터입니다.
+첫 <code>push</code> 뒤에 <code class="nb">1 4</code>, 다섯째 뒤에 <code class="nb">5 8</code>, 아홉째 뒤에
+<code class="nb">9 16</code> 입니다. 아홉 번 넣는 동안 <code>cap</code> 이 0 · 4 · 8 · 16 으로 세 번 바뀌었습니다. <code>len</code> 이
+<code>cap</code> 과 같아진 다음의 <code>push</code> 에서만 73번 줄이 <code>grow</code> 를 불렀습니다.</div>
+<div class="warn"><b>아직 없는 것 둘</b> — 이 파일에는 넣은 값을 다시 읽는 길이 없습니다. <a href="#p21-vec-deref">Deref</a> 로 만듭니다. 잡은 자리를
+마지막에 돌려주는 코드도 없습니다. <code>dealloc</code> 을 부르는 곳은 앞 슬라이드의 <code>grow</code> 안 한 군데뿐이고, 그것은 옛 자리를 돌려줍니다. 16 칸짜리 마지막 자리는
+누수이고, <a href="#p21-vec-drop">Drop</a> 에서 고칩니다.</div>
+</article>
+
+<article class="card" id="p21-vec-zst">
+<h3>크기가 0 인 타입은 컴파일할 때 걸러 낸다 — E0080</h3>
+<p class="lead">부록의 <a href="#p27-sizes">타입의 크기</a> 표에서 <code class="nb">()</code> 는 0 바이트였습니다. 그런 타입은 몇 칸을 잡아도
+배치의 크기가 0 이고, 2장에서 본 대로 문서는 <a href="#p21-alloc">크기가 0 인 배치로 <code>alloc</code> 을 부르는 것</a>을 정의되지 않은
+동작이라고 적습니다. <code>MyVec</code> 는 그런 타입을 받지 않기로 하고, <code>new</code> 의 17번 줄에 19부에서 본
+<a href="#p19-const-assert-n"><code class="nb">const { }</code> 안의 단언</a>을 적어 뒀습니다. 앞 슬라이드의 <code>main</code> 에서
+<code>u32</code> 대신 <code class="nb">()</code> 를 넣어 봅니다.</p>
+<!--CODE file=ex/21/vec_zst.rs lines=83-90 note=vec_push.rs 의 86번과 87번 줄만 바꾼 쌍둥이-->
+<!--OUT file=out/21/vec_zst.txt lines=1-18 note=17번 줄의 단언이 컴파일을 멈춘다-->
+<div class="note"><b>읽는 법</b> — 번호와 꼴은 19부의 그 슬라이드에서 읽은 E0080 그대로입니다. 오류 첫 줄에 17번 줄에 적어 둔 글이
+나오고, 실패한 상수의 이름에 <code class="nb">MyVec::&lt;()&gt;</code> 가 들어 있습니다. 마지막 <code>note:</code> 는 84번 줄의
+<code class="nb">MyVec::new()</code> 를 <code class="nb">()</code> 용으로 만들어 내다가 만났다고 합니다. 84번 줄에는 타입을 적지 않았고,
+87번 줄에서 <code class="nb">()</code> 를 넣어 <code>T</code> 가 정해졌습니다. 같은 17번 줄을 가진 앞 슬라이드의 파일은 <code>T</code> 가
+<code>u32</code> 여서 컴파일됐습니다.</div>
+</article>
+
+<article class="card" id="p21-vec-deref">
+<h3>Deref 로 슬라이스를 빌려주면 인덱스와 iter 가 따라온다</h3>
+<p class="lead">넣은 값을 읽는 길을 냅니다. 10부의 <a href="#p10-op-index"><code>Index</code></a> 를 구현하면 <code class="nb">v[i]</code>
+하나를 얻습니다. 여기서는 14부의 <a href="#p14-deref-impl"><code>Deref</code></a> 를 구현해 값이 든 칸들을 슬라이스
+<code class="nb">[T]</code> 로 빌려줍니다. 인덱스도, 범위 검사도, <code>iter</code> 도 슬라이스가 이미 가진 것이어서 따로 적지 않아도
+됩니다. 포인터와 길이를 슬라이스로 바꾸는 것은 2장의 <a href="#p21-raw-parts"><code class="nb">from_raw_parts</code></a> 입니다.</p>
+<!--CODE file=ex/21/vec_deref.rs lines=83-95 note=vec_push.rs 의 impl 블록 아래에 더한 구현 — 1번부터 81번 줄까지는 그대로-->
+<!--CODE file=ex/21/vec_deref.rs lines=97-110 note=같은 수 다섯을 표준 Vec 에도 넣는다-->
+<!--OUT file=out/21/vec_deref.txt-->
+<!--OUT file=out/21/vec_oob.txt lines=2-7 note=105번 줄의 v[4] 를 v[5] 로만 바꾼 쌍둥이 vec_oob.rs-->
+<div class="note"><b>읽는 법</b> — <code>MyVec</code> 에 인덱스나 <code>iter</code> 를 적은 곳은 없습니다. 105번 줄의
+<code class="nb">v[0]</code> 과 <code class="nb">v[4]</code> 가 10 과 50, 106번 줄의 범위가 <code class="nb">[20, 30]</code>, 107번 줄의
+합이 150 입니다. 108번 줄의 <code>first</code> 와 <code>contains</code> 도 슬라이스의 메서드입니다. 109번 줄의 <code>true</code> 는 같은 수를
+넣은 <code>Vec</code> 과 내용이 같다는 것입니다. 104번 줄의 <code>len</code> 은 <code>MyVec</code> 에 적어 둔 메서드입니다. 둘째 화면의
+쌍둥이는 5번 칸을 읽으려다 패닉했습니다. 8부의 <a href="#p08-vec-index-get"><code>Vec</code> 이 낸 패닉</a>과 수만 다르고 글은
+같습니다.</div>
+<div class="note"><b>안전: 주석</b> — 88번부터 90번 줄까지입니다. 막 만든 벡터에서는 <code>ptr</code> 이
+<a href="#p21-vec-new"><code>dangling</code></a> 이고 <code>len</code> 이 0 입니다. 문서는 길이가 0 인 슬라이스에도 널이 아니고 정렬이 맞는
+포인터를 요구하고, 그런 포인터로 <code class="nb">NonNull::dangling()</code> 을 듭니다. 87번 줄의 시그니처는 슬라이스의 수명을
+<code class="nb">&amp;self</code> 에 묶습니다. 2장의 그 슬라이드가 문서에서 옮긴 "안전한 수명에 묶으라" 는 말대로입니다.</div>
+</article>
+
+<article class="card" id="p21-vec-drop">
+<h3>Drop — 값이 든 칸을 정리하고, 잡은 자리가 있으면 돌려준다</h3>
+<p class="lead">벡터가 사라질 때 할 일을 14부의 <a href="#p14-drop-order"><code>Drop</code></a> 에 적습니다. 일은 둘이고 순서가 있습니다.
+먼저 값이 든 <code>len</code> 칸을 <a href="#p21-alloc-drop"><code class="nb">drop_in_place</code></a> 로 정리하고, 그다음에 자리를
+돌려줍니다. 2장의 <code>Noisy</code> 다섯을 넣어 확인합니다.</p>
+<!--CODE file=ex/21/vec_drop.rs lines=97-113 note=vec_deref.rs 의 Deref 구현 아래에 더한 구현-->
+<!--CODE file=ex/21/vec_drop.rs lines=124-132 note=115번부터 122번 줄까지는 2장의 Noisy 그대로다-->
+<!--OUT file=out/21/vec_drop.txt-->
+<!--OUT file=out/21/vec_leak.txt note=97번부터 113번 줄까지의 Drop 구현을 지운 쌍둥이 vec_leak.rs-->
+<div class="note"><b>읽는 법</b> — <code>main</code> 은 <code>Noisy</code> 다섯을 넣는 것으로 바꿨습니다. 다섯째 <code>push</code> 뒤의 <code class="nb">5 8</code> 에서 자리가 4 칸에서 8 칸으로 옮겨 갔습니다.
+그때 <code class="nb">정리:</code> 줄은 찍히지 않았습니다. <a href="#p21-vec-grow"><code>grow</code></a> 는 값을 옮기기만 했습니다.
+<code class="nb">main 끝</code> 뒤에 <code>a</code> 부터 <code>e</code> 까지가 넣은 순서대로 한 번씩 정리됐습니다. 둘째 화면은
+<code>Drop</code> 구현을 지운 쌍둥이 파일의 것입니다. <code class="nb">정리:</code> 줄이 하나도 없습니다. 값 다섯도, 8 칸짜리 자리도
+그대로 남는 누수입니다.</div>
+<div class="note"><b>안전: 주석</b> — 99번 줄은 0 번부터 <code>len</code> 앞까지만 돕니다. 이 실행에서 5번부터 7번 칸은 잡아 두기만 한
+칸이라 정리할 값이 없습니다. 106번 줄은 <code>cap</code> 이 0 이 아닐 때만 돌려줍니다. 0 이면 <code>ptr</code> 은 잡은 자리가 아닙니다.
+107번 줄의 배치는 <code>grow</code> 가 그 자리를 잡을 때 쓴 것과 같은 <code class="nb">layout(cap)</code> 입니다.</div>
+</article>
+
+<article class="card" id="p21-vec-pop">
+<h3>pop 은 len 을 먼저 줄이고 그 칸을 read 로 꺼낸다</h3>
+<p class="lead">8부의 <a href="#p08-vec-push-pop"><code>pop</code></a> 은 끝의 값을 <code>Option</code> 으로 꺼내 줬습니다. 꺼낸 값의 주인은
+부른 쪽이 되고, 벡터는 그 칸을 더는 자기 값으로 치지 않아야 합니다.</p>
+<!--CODE file=ex/21/vec_pop.rs lines=115-125 note=vec_drop.rs 의 Drop 구현 아래에 더한 impl 블록-->
+<!--CODE file=ex/21/vec_pop.rs lines=136-150 note=셋을 넣고 하나를 꺼낸다-->
+<!--OUT file=out/21/vec_pop.txt-->
+<div class="note"><b>읽는 법</b> — 메서드를 7부에서 본 대로 <a href="#p07-method-multi-impl">따로 선 <code>impl</code> 블록</a>에
+적었습니다. 120번 줄이 <code>len</code> 을 줄이고 123번 줄이 그 칸을 <code>read</code> 로 꺼냅니다. 화면의
+<code class="nb">꺼낸 값 c</code> 바로 뒤에 <code class="nb">정리: c</code> 가 있습니다. 144번 줄에서 <code>last</code> 가 스코프를
+벗어났습니다. 145번 줄이 찍은 <code class="nb">2 4</code> 는 값이 둘, 자리는 그대로 네 칸이라는 것입니다. 148번 줄의 <code>true</code> 는
+빈 벡터의 <code>pop</code> 이 117번 줄에서 <code>None</code> 을 줬다는 것입니다. <code class="nb">main 끝</code> 뒤에는 <code>a</code> 와
+<code>b</code> 만 정리됐습니다. <code>c</code> 가 든 칸은 <code>len</code> 밖이어서 <a href="#p21-vec-drop"><code>Drop</code></a> 이 건드리지
+않았습니다.</div>
+<div class="note"><b>자리를 잡은 적 없는 벡터</b> — 147번 줄의 <code>empty</code> 는 <code>push</code> 를 한 번도 받지 않아
+<code>cap</code> 이 0 인 채로 사라집니다. <code>Drop</code> 의 <code class="nb">if self.cap != 0</code> 이 그때 <code>dealloc</code> 을
+건너뛰게 합니다.</div>
+</article>
+
+<article class="card" id="p21-vec-into-iter">
+<h3>IntoIterator — 통째로 넘기면 반복자가 자리의 주인이 된다</h3>
+<p class="lead">12부에서 <code class="nb">for x in v</code> 는 <a href="#p12-three-iters"><code class="nb">into_iter()</code> 가 내주는
+반복자</a>로 돌았고, <code>v</code> 는 옮겨 갔습니다. 그 <code class="nb">into_iter</code> 는 <code>IntoIterator</code> 트레이트의
+메서드입니다. 19부의 <a href="#p19-gat-for-err">오류</a>가 이름만 보여 준 트레이트이고, Rust 레퍼런스는 <code>for</code> 가
+<code>in</code> 뒤의 값에 이 메서드를 부른다고 적습니다. <code>MyVec</code> 에 구현합니다. 값을 하나씩 내주는 일은 새 타입
+<code>MyIter</code> 가 맡습니다.</p>
+<!--CODE file=ex/21/vec_iter.rs lines=127-152 note=vec_pop.rs 의 pop 아래에 더한 타입과 구현-->
+<div class="note"><b>읽는 법</b> — 137번과 138번 줄은 10부에서 본 <a href="#p10-assoc-type">연관 타입</a>입니다. <code>Item</code> 은 내줄
+값의 타입이고 <code>IntoIter</code> 는 반복자의 타입입니다. 140번 줄은 <code>self</code> 를 값으로 받아서, 부른 쪽의 <code>MyVec</code> 이
+이 함수로 옮겨 옵니다. 141번부터 146번 줄까지가 <code>ptr</code> · <code>cap</code> · <code>len</code> 을 <code>MyIter</code> 에 그대로
+넘기고 <code>next</code> 를 0 으로 둡니다. 128번 줄의 주석이 <code>MyIter</code> 의 약속입니다. 값은 <code>next</code> 번 칸부터
+<code>len</code> 앞까지만 남아 있습니다. 돌린 화면은 다음 두 슬라이드에 있습니다.</div>
+<div class="warn"><b>149번 줄이 두 번 정리를 막는다</b> — 146번 줄 뒤에는 같은 자리를 가리키는 것이 <code>self</code> 와 <code>iter</code>
+둘입니다. <code>self</code> 가 그대로 함수 끝에서 스코프를 벗어나면 <a href="#p21-vec-drop"><code>MyVec</code> 의 <code>Drop</code></a> 이
+값과 자리를 정리하고, <code>iter</code> 는 그 뒤에 같은 자리를 또 쓰게 됩니다. 2장에서 문서가 정의되지 않은 동작이라고 적은
+<a href="#p21-alloc">이미 돌려준 자리를 쓰는 것</a>입니다. <code class="nb">std::mem::forget(값)</code> 은 값을 받아 정리하지 않고
+없앱니다. 문서는 이 함수가 <code>unsafe</code> 가 아닌 까닭을, 정리 코드가 반드시 돈다는 것이 Rust 의 안전 보증에 들어 있지 않기
+때문이라고 적습니다. 149번 줄을 뺀 프로그램은 돌려 보이지 않습니다.</div>
+</article>
+
+<article class="card" id="p21-vec-next">
+<h3>next 는 next 번 칸을 read 로 꺼내고 한 칸 나아간다</h3>
+<p class="lead">12부에서 <a href="#p12-impl-iterator">내 타입을 반복자로 만들 때</a> 적은 것은 <code>Item</code> 과 <code>next</code>
+둘이었습니다. <code>MyIter</code> 도 같습니다. 꺼내는 방법은 <a href="#p21-vec-pop"><code>pop</code></a> 과 같은 <code>read</code> 이고,
+끝이 아니라 앞에서부터 꺼냅니다.</p>
+<!--CODE file=ex/21/vec_iter.rs lines=154-167 note=앞 슬라이드의 구현 바로 아래-->
+<!--CODE file=ex/21/vec_iter.rs lines=196-210 note=여섯을 넣고, 하나를 pop 하고, 나머지를 for 로 돈다-->
+<!--OUT file=out/21/vec_iter.txt lines=1-4 note=all 이 찍은 세 줄-->
+<div class="note"><b>읽는 법</b> — 158번 줄은 <code>next</code> 가 <code>len</code> 에 닿으면 <code>None</code> 을 줍니다. 163번 줄이 그 칸의 값을
+꺼내고 164번 줄이 <code>next</code> 를 올려서, 꺼낸 칸은 <code>MyIter</code> 의 약속에서 값이 없는 칸이 됩니다. 202번 줄이
+<code class="nb">6 8</code> 을, 203번 줄의 <code>pop</code> 이 <code class="nb">Some(60)</code> 을 찍었습니다. 205번 줄의 <code>for</code> 는
+<code>nums</code> 를 통째로 받아 남은 다섯을 넣은 순서대로 내줬고, 합은 150 입니다. 화면의 나머지 줄은 다음 슬라이드에서
+읽습니다.</div>
+</article>
+
+<article class="card" id="p21-vec-iter-drop">
+<h3>덜 쓴 반복자는 남은 값을 정리하고 자리를 돌려준다 — MyIter 의 Drop</h3>
+<p class="lead"><code>for</code> 가 끝까지 돌면 칸은 모두 비고 자리만 남습니다. 중간에 그만두면 <code>next</code> 번 칸부터
+<code>len</code> 앞까지에 값이 남습니다. 어느 쪽이든 자리의 주인은 이제 <code>MyIter</code> 입니다.
+<a href="#p21-vec-drop"><code>MyVec</code> 의 <code>Drop</code></a> 이 하던 두 가지를 <code>MyIter</code> 가 합니다.</p>
+<!--CODE file=ex/21/vec_iter.rs lines=169-185 note=정리할 칸이 0 번이 아니라 next 번부터다-->
+<!--CODE file=ex/21/vec_iter.rs lines=212-232 note=다섯 가운데 둘만 받는다-->
+<!--OUT file=out/21/vec_iter.txt lines=5-13 note=partly 가 찍은 줄-->
+<!--OUT file=out/21/vec_iter_leak.txt note=169번부터 185번 줄까지를 지운 쌍둥이 vec_iter_leak.rs — 컴파일 경고와 실행-->
+<div class="note"><b>읽는 법</b> — 220번 줄에서 받은 <code>a</code> 와 <code>b</code> 는 <code>x</code> 가 스코프를 벗어나는 222번 줄에서
+하나씩 정리됐습니다. <code class="nb">반복자를 버린다</code> 뒤의 세 줄은 225번 줄의
+<a href="#p14-drop-early"><code>drop</code></a> 이 부른 <code>MyIter</code> 의 <code>Drop</code> 입니다. 171번 줄이 2번 칸부터 4번 칸까지를
+돌아 <code>c</code> · <code>d</code> · <code>e</code> 를 정리했습니다. <code>a</code> 와 <code>b</code> 는 다시 찍히지 않았고, 226번 줄의 <code class="nb">partly 끝</code> 뒤에도 정리된 것이 없습니다. 다섯 값이 한
+번씩입니다. 앞 슬라이드의 <code>all</code> 에서는 <code>for</code> 가 끝났을 때 <code>next</code> 와 <code>len</code> 이 같아서 171번 줄이 돌 칸이
+없고, 178번 줄부터의 자리 돌려주기만 남습니다.</div>
+<div class="warn"><b>Drop 이 없으면</b> — 둘째 화면입니다. 컴파일은 됐고 경고가 하나 붙었습니다 — "필드 <code>cap</code> 을 읽는 곳이
+없다". <code>cap</code> 은 자리를 돌려줄 때만 읽는 수입니다. <code>note:</code> 는 이 경고가 기본으로 켜져 있다는 말입니다. 실행한
+화면에서는 <code class="nb">반복자를 버린다</code> 뒤에 <code class="nb">정리:</code> 줄이 없습니다. <code>c</code> · <code>d</code> ·
+<code>e</code> 와 자리가 남는 누수입니다. <a href="#p21-vec-into-iter"><code>forget</code></a> 으로 잊은 <code>MyVec</code> 의
+<code>Drop</code> 이 대신 돌아 주지도 않았습니다.</div>
+</article>
+
+<article class="card" id="p21-vec-same">
+<h3>같은 일을 Vec 에도 시켜 견준다 — 매크로 하나를 두 번 펼친다</h3>
+<p class="lead"><a href="#p21-vec-plan">이 장의 첫 슬라이드</a>가 말한 첫째 증거입니다. <code>MyVec</code> 과 <code>Vec</code> 에 글자까지
+같은 코드를 돌리려고 1장의 매크로를 씁니다. <code class="nb">script!</code> 는 벡터를 만드는 식 하나를
+<a href="#p21-expr-unit"><code>expr</code></a> 로 받고, 그 벡터에 일을 시킬 때마다 보이는 것을 글로 모아 돌려줍니다.</p>
+<!--CODE file=ex/21/vec_same.rs lines=187-217 note=1번부터 185번 줄까지는 앞 슬라이드까지의 MyVec 와 MyIter 그대로다-->
+<!--OUT file=out/21/vec_same.txt note=MyVec 쪽이 모은 여덟 줄, 그리고 견준 결과-->
+<div class="note"><b>읽는 법</b> — 211번과 212번 줄이 같은 매크로를 <code class="nb">MyVec::new()</code> 와
+<code class="nb">Vec::new()</code> 로 부릅니다. 본문이 쓰는 <code>pop</code> · <code>push</code> · <code>len</code> · <code>capacity</code> ·
+인덱스 · <code>iter</code> · <code class="nb">into_iter</code> 는 두 타입에 모두 있는 이름입니다. 192번 줄은 빈 벡터의 <code>pop</code> 이라
+<code>None</code>, 196번 줄은 열 개를 넣은 뒤의 <code class="nb">10 true</code>, 197번 줄은 내용 전체입니다. 198번 줄이 끝의 둘을 꺼냈고,
+199번 줄이 7 을 넣은 뒤 200번 줄이 <code class="nb">1 7 9</code> 를, 201번 줄이 합 211 을 적었습니다. 203번 줄은 반복자에서 둘을 받고,
+204번 줄이 나머지 일곱을 모았습니다. 213번 줄이 찍은 것은 <code>MyVec</code> 쪽의 여덟 줄입니다. 216번 줄의 <code>true</code> 는
+<code>Vec</code> 쪽의 여덟 줄이 그것과 모두 같다는 것입니다.</div>
+<div class="warn"><b>같다는 것이 말해 주는 만큼만</b> — 이 매크로가 시킨 일에서 두 벡터가 같은 값을 보였다는 데까지입니다. 정의되지 않은
+동작이 없다는 증거는 <a href="#p21-ptr-rules">여전히 아닙니다</a>. 196번 줄은 <code>cap</code> 을 서로 견주지 않고
+<code class="nb">len &lt;= cap</code> 만 봤습니다. 자리를 얼마나 잡아 두는지는 두 벡터가 같아야 할 까닭이 없습니다.</div>
+</article>
+
+<article class="card" id="p21-vec-drops">
+<h3>넣은 값 열셋이 네 가지 길에서 한 번씩만 정리된다 — 번호를 장부에 적는다</h3>
+<p class="lead">둘째 증거입니다. <code>Noisy</code> 는 화면의 줄을 눈으로 세게 했습니다. 이번에는 값마다 번호를 주고, 정리될 때 그 번호를
+장부에 적게 합니다. 장부는 14부의 <a href="#p14-rc-refcell"><code class="nb">Rc&lt;RefCell&lt;…&gt;&gt;</code></a> 로 모든 값이 함께
+씁니다. 값이 사라지는 길은 넷입니다. 벡터째로, <code>pop</code> 으로, 반복자에서 받아서, 덜 쓴 반복자와 함께입니다.</p>
+<!--CODE file=ex/21/vec_drops.rs lines=190-232 note=187번과 188번 줄은 RefCell 과 Rc 를 가져오는 use 다-->
+<!--OUT file=out/21/vec_drops.txt note=장부, Vec 의 장부와 같은가, 0 부터 12 까지가 한 번씩인가-->
+<div class="note"><b>읽는 법</b> — 장부 맨 앞의 <code class="nb">0, 1, 2</code> 는 207번 줄에서 통째로 버린 <code>whole</code> 의 값입니다.
+209번 줄이 3 부터 12 까지 열 개를 <code>v</code> 에 넣습니다. <a href="#p21-vec-push">cap 이 4 · 8 · 16 으로</a> 바뀌는 수입니다. 213번
+줄에서 <code>pop</code> 한 12, 215번 줄에서 반복자에게 받아 바로 버린 3 이 그다음입니다. 216번 줄은 4 를 <code>kept</code> 에 받아
+둡니다. 217번 줄에서 반복자를 버리자 남아 있던 5 부터 11 까지가 적혔고, 218번 줄의 4 가 맨 뒤입니다. 212번 줄의
+<a href="#p09-assert"><code class="nb">assert!</code></a> 는 걸리지 않았습니다. 228번 줄의 <code>true</code> 는 <code>Vec</code> 에 같은
+일을 시킨 장부와 순서까지 같다는 것입니다. 231번 줄의 <code>true</code> 는 장부를 크기순으로 놓으면 0 부터 12 까지라는 것입니다.
+열셋이 빠짐도 겹침도 없이 한 번씩 적혔습니다.</div>
+</article>
+
+<article class="card" id="p21-vec-send">
+<h3>날 포인터를 품은 MyVec 는 스레드로 보낼 수 없다 — E0277</h3>
+<p class="lead">15부에서 <a href="#p15-send-sync"><code>Send</code></a> 는 다른 스레드로 옮겨도 되는 타입에 붙는 표시였고, 구조체는
+필드가 모두 <code>Send</code> 여야 <code>Send</code> 였습니다. <code class="nb">MyVec&lt;u32&gt;</code> 를
+<a href="#p15-move"><code>move</code> 클로저</a>에 담아 새 스레드로 넘겨 봅니다.</p>
+<!--CODE file=ex/21/vec_send_err.rs lines=187-202 note=1번부터 185번 줄까지는 MyVec 와 MyIter 그대로다-->
+<!--OUT file=out/21/vec_send_err.txt lines=1-24 note=194번 줄의 클로저를 넘기지 못한다-->
+<!--CODE file=ex/21/vec_send.rs lines=187-189 note=main 위에 이 세 줄과 빈 줄 하나를 더한 쌍둥이 vec_send.rs-->
+<!--OUT file=out/21/vec_send.txt-->
+<div class="note"><b>읽는 법</b> — 번호와 꼴은 15부에서 <a href="#p15-rc-not-send"><code>Rc</code> 를 보내려다 본 E0277</a> 과 같고, 이번
+타입은 <code class="nb">NonNull&lt;u32&gt;</code> 입니다. <code>help:</code> 는 그 타입에 <code>Send</code> 가 구현돼 있지 않다고 하고,
+바로 아래 <code>note:</code> 는 그것이 8번 줄의 <code class="nb">MyVec&lt;u32&gt;</code> 안에 들어 있기 때문이라고 합니다. 문서는
+<code>NonNull</code> 이 <code>Send</code> 가 아닌 까닭을 "가리키는 데이터를 다른 것도 함께 가리키고 있을 수 있어서" 라고 적습니다.</div>
+<div class="tip"><b>고치려면</b> — <code>MyVec</code> 는 그렇지 않다는 것을 쓴 사람이 보증합니다. 189번 줄의
+<code class="nb">unsafe impl</code> 은 16부의 <a href="#p16-unsafe-what">다섯 가지</a> 가운데 넷째, <code>unsafe</code> 트레이트를
+구현하는 일입니다. 187번과 188번 줄의 주석이 근거를 적습니다. 자리와 값을 <code>MyVec</code> 혼자 가지므로, 벡터를 옮기는 것은 값들을
+옮기는 것과 같습니다. 그래서 <code class="nb">T: Send</code> 일 때만입니다. 넷째 화면에서 새 스레드가 <code>for</code> 로 돌아 더한 합
+100 이 찍혔습니다. <code>MyIter</code> 에는 붙이지 않았습니다. 196번 줄의 <code>for</code> 가 만드는 반복자는 새 스레드 안에서 생겨,
+스레드를 건너가지 않습니다.</div>
+</article>
+
+<article class="card" id="p21-vec-table">
+<h3>MyVec 를 이룬 조각과 조각마다 지킨 것 — 한눈에</h3>
+<p class="lead">왼쪽은 <code>MyVec</code> 가 하는 일, 가운데는 그 일을 적은 슬라이드, 오른쪽은 그 코드가 <code>unsafe</code> 블록 앞의
+주석에서 지킨 것입니다. 고칠 때는 오른쪽 칸이 여전히 맞는지부터 봅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>하는 일</th><th>슬라이드</th><th>지킨 것</th></tr>
+<tr><td>만든다</td><td><a href="#p21-vec-new"><code>new</code></a></td><td>자리를 잡지 않는다 — <code>cap</code> 이 0 이면 <code>ptr</code> 을 따라가지 않는다</td></tr>
+<tr><td>크기가 0 인 타입을 막는다</td><td><a href="#p21-vec-zst">const 단언</a></td><td>크기가 0 인 배치로 <code>alloc</code> 을 부르지 않는다</td></tr>
+<tr><td>자리를 늘린다</td><td><a href="#p21-vec-grow"><code>grow</code></a></td><td>옮긴 값은 정리하지 않는다 · 옛 자리는 잡을 때의 배치로 돌려준다</td></tr>
+<tr><td>끝에 넣는다</td><td><a href="#p21-vec-push"><code>push</code></a></td><td>값이 없는 칸에는 <code>write</code></td></tr>
+<tr><td>읽는다</td><td><a href="#p21-vec-deref"><code>Deref</code></a></td><td>값이 든 <code>len</code> 칸만 슬라이스로 빌려준다</td></tr>
+<tr><td>사라진다</td><td><a href="#p21-vec-drop"><code>Drop</code></a></td><td><code>len</code> 칸을 정리한 뒤에, <code>cap</code> 이 0 이 아니면 돌려준다</td></tr>
+<tr><td>끝에서 꺼낸다</td><td><a href="#p21-vec-pop"><code>pop</code></a></td><td><code>len</code> 을 먼저 줄이고 그 칸만 <code>read</code> 한다</td></tr>
+<tr><td>통째로 넘긴다</td><td><a href="#p21-vec-into-iter"><code class="nb">into_iter</code></a></td><td>넘겨준 <code>MyVec</code> 는 <code>forget</code> 으로 잊는다</td></tr>
+<tr><td>하나씩 내준다</td><td><a href="#p21-vec-next"><code>next</code></a></td><td>꺼낸 칸은 다시 읽지 않는다</td></tr>
+<tr><td>반복자가 사라진다</td><td><a href="#p21-vec-iter-drop"><code>MyIter</code> 의 <code>Drop</code></a></td><td><code>next</code> 번 칸부터만 정리하고 돌려준다</td></tr>
+<tr><td>스레드로 보낸다</td><td><a href="#p21-vec-send"><code class="nb">unsafe impl Send</code></a></td><td><code class="nb">T: Send</code> 일 때만</td></tr>
+<tr><td>맞는지 견준다</td><td><a href="#p21-vec-same">같은 일을 <code>Vec</code> 에</a> · <a href="#p21-vec-drops">장부</a></td><td>같은 값, 값마다 한 번의 정리</td></tr>
+</table>
+</div>
+<p class="cap">벡터가 필요할 때 쓰는 것은 <code>Vec</code> 입니다. 이 표는 그런 타입의 속을 읽거나, 표준 라이브러리에 없는 컬렉션을 직접
+적어야 할 때 따라갈 순서입니다.</p>
+</article>
+
+<article class="card quiz" id="p21-ch3-quiz" data-quiz>
+<h3>퀴즈 — 작은 Vec 만들기</h3>
+<p class="q">Q. <code>MyVec</code> 에 <code>Noisy</code> 다섯(<code>a</code> 부터 <code>e</code>)을 넣고, <code class="nb">into_iter()</code> 로 얻은
+반복자에서 <code class="nb">next()</code> 로 둘을 받은 뒤 반복자를 버렸습니다. <code class="nb">정리:</code> 줄은 몇 번, 어떤 순서로
+찍힐까요? <code>MyIter</code> 에 <code>Drop</code> 구현이 없다면 무엇이 달라질까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 다섯 번이고 <code>a</code> 부터 <code>e</code> 까지 차례대로입니다. <code>a</code> 와 <code>b</code> 는 받은 변수가
+스코프를 벗어날 때, <code>c</code> · <code>d</code> · <code>e</code> 는 반복자를 버릴 때 <code>MyIter</code> 의 <code>Drop</code> 이
+<code>next</code> 번 칸부터 정리합니다(<a href="#p21-vec-iter-drop">vec_iter.rs 의 화면</a>). <code>Drop</code> 구현이 없으면
+<code>a</code> 와 <code>b</code> 두 번뿐입니다. 같은 슬라이드의 쌍둥이 화면에서 <code>c</code> · <code>d</code> · <code>e</code> 는 찍히지
+않았습니다. <code class="nb">into_iter</code> 가 <a href="#p21-vec-into-iter"><code>MyVec</code> 를 <code>forget</code> 으로 잊었기</a>
+때문에 <code>MyVec</code> 의 <code>Drop</code> 도 돌지 않습니다.</div>
 </article>
 
 <article class="card" id="p21-ch4">
 <p class="chnum">4장</p>
 <h2>FFI</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">선언마다 적는 safe 와 unsafe · extern 앞의 unsafe · C 타입의 이름 · CString · 매달린 포인터 경고 · CStr::from_ptr · 포인터 인자로 받는 결과 · 콜백 · #[repr(C)] · 구조체를 값으로 받기 · not FFI-safe · 함수 내놓기 · 속성 안의 unsafe · union · static mut · static mut 의 참조 · 세 가지 길 · 찾는 표</p>
+</article>
+
+<article class="card" id="p21-ffi-safe">
+<h3>extern 블록의 선언마다 safe 인지 unsafe 인지 적는다 <!--SINCE key=unsafe-extern--></h3>
+<p class="lead">16부는 C 의 <code>abs</code> 와 <code>strlen</code> 을 <a href="#p16-extern-c"><code class="nb">unsafe extern "C"</code> 블록에
+선언하고 <code>unsafe</code> 블록에서 불렀습니다</a>. 다른 언어의 함수를 부르고, 다른 언어에서 불리는 이 통로를 FFI(foreign function
+interface)라고 합니다. 이 장은 16부의 그 슬라이드 위에 올립니다. 먼저 선언입니다. 블록 안의 선언 하나하나에 <code>safe</code> 나
+<code>unsafe</code> 를 붙일 수 있습니다.</p>
+<!--RUN file=ex/21/ffi_safe.rs note=C 표준 라이브러리의 sqrt · strlen · atoi-->
+<div class="note"><b>읽는 법</b> — 6번 줄에서 <code>safe</code> 로 선언한 <code>sqrt</code> 는 15번 줄에서 <code>unsafe</code> 블록 없이 불렀고
+4 를 찍었습니다. 8번 줄은 <code>unsafe</code> 를 적은 선언이고, 10번 줄은 16부처럼 아무것도 적지 않은 선언입니다. 18번과 20번 줄은 두
+호출을 따로 감쌌습니다. 16부에서 컴파일러는 <a href="#p16-unsafe-checked">필요 없는 <code>unsafe</code> 블록에 경고</a>를 붙였습니다.
+20번 줄에는 경고가 없습니다. 아무것도 적지 않은 선언은 <code>unsafe</code> 입니다. 출력의 5 는 <code>"hello"</code> 의 길이, 42 는
+<code>atoi</code> 가 글 <code>"42"</code> 를 읽은 수입니다.</div>
+<div class="warn"><b>safe 는 선언한 사람의 약속이다</b> — <code>safe</code> 라고 적으면 부르는 쪽은 어떤 인자든 넣을 수 있습니다. 그래도
+정의되지 않은 동작이 없다는 것을 선언한 사람이 보증하고, 4번 줄 블록 앞의 <code>unsafe</code> 가 그 책임의 표시입니다. C 표준에서
+<code>sqrt</code> 는 음수를 받아도 정의되지 않은 동작이 아닙니다. 16부가 부른 <code>abs</code> 는 다릅니다. C 표준은 결과가
+<code>int</code> 에 들어가지 않을 때의 동작을 정하지 않습니다. 16부의 주석이 "-7 의 절댓값은 c_int 에 들어가고" 를 적은 까닭이고, 그런
+함수는 <code>unsafe</code> 로 둡니다.</div>
+</article>
+
+<article class="card" id="p21-ffi-extern-2021">
+<h3>2024 에디션은 unsafe 없는 extern 블록을 받지 않는다 — extern blocks must be unsafe</h3>
+<p class="lead">1부가 옮겨 적은 <a href="#p01-ed2024">2024 에디션의 변화</a> 가운데 "extern 블록에 unsafe 키워드를 붙여야 한다" 가
+있었습니다. 그때는 돌려 보지 않았습니다. 1부가 <a href="#p01-ed2024-gen"><code>gen</code></a> 에서 한 것처럼, 글자까지 같은 파일을 두
+에디션으로 컴파일합니다.</p>
+<!--RUN file=ex/21/extern_2024.rs note=2024 에디션-->
+<!--OUT file=out/21/extern_2021.txt note=글자까지 같은 파일(extern_2021.rs)을 2021 에디션으로-->
+<div class="note"><b>읽는 법</b> — 오류 첫 줄은 "extern 블록은 unsafe 여야 한다" 이고 번호가 없습니다. 3번부터 5번 줄까지의 블록을 짚고,
+<code>help:</code> 가 <code>extern</code> 키워드 앞에 <code>unsafe</code> 가 필요하다고 합니다. 둘째 화면에서 2021 에디션은 같은 파일을 받아
+7 을 찍었습니다. 화면 첫 줄의 <code class="nb">--edition 2021</code> 만 다릅니다.</div>
+<div class="tip"><b>고치려면</b> — 3번 줄을 <a href="#p21-ffi-safe">앞 슬라이드</a>의 4번 줄처럼 <code class="nb">unsafe extern "C" {</code>
+로 적습니다. 블록 안의 선언이 C 쪽 함수와 맞는지는 컴파일러가 확인하지 못합니다. 2024 에디션은 그 책임을 블록 앞에 적게 했습니다.</div>
+</article>
+
+<article class="card" id="p21-c-types">
+<h3>c_int 와 c_long 은 대상 플랫폼이 정하는 별명이다 <!--SINCE key=ffi-c-types--></h3>
+<p class="lead">C 의 <code>int</code> 와 <code>long</code> 은 비트 수가 이름에 적혀 있지 않습니다. <code class="nb">std::ffi</code> 는 그
+타입들에 맞춘 이름 <code>c_int</code> · <code>c_long</code> · <code>c_char</code> 를 두고, 0부에서 본
+<a href="#p00-machine">대상 플랫폼</a>마다 알맞은 Rust 타입의 <a href="#p16-type-alias">별명</a>으로 정해 둡니다. 18부의
+<a href="#p18-type-name"><code class="nb">type_name</code></a> 으로 이 기계의 답을 봅니다.</p>
+<!--RUN file=ex/21/c_types.rs note=이름과 바이트 수-->
+<div class="note"><b>읽는 법</b> — 6번 줄이 <code class="nb">i32 4</code> 를, 7번 줄이 <code class="nb">i64 8</code> 을 찍었습니다. 이 책을
+만든 기계에서 <code>c_int</code> 는 <code>i32</code>, <code>c_long</code> 은 <code>i64</code> 의 별명입니다. <code class="nb">type_name</code>
+은 별명이 아니라 본래 타입의 이름을 줬습니다. 10번 줄에서 <code>c_char</code> 는 한 바이트입니다. 12번 줄의 <code>true</code> 는
+<code class="nb">*const c_void</code> 가 <code>usize</code> 와 크기가 같다는 것입니다. <code>c_void</code> 는 C 의
+<code class="nb">void*</code> 를 적을 때 포인터 뒤에 두는 타입입니다.</div>
+<div class="warn"><b>이 수는 이 기계의 것이다</b> — 문서는 <code>c_long</code> 이 대상 플랫폼에 따라 32 비트이기도 하고,
+<code>c_char</code> 가 <code>i8</code> 이기도 <code>u8</code> 이기도 하다고 적습니다. 그래서 C 의 <code>long</code> 이 오가는 자리에는
+<code>i64</code> 가 아니라 <code>c_long</code> 이라고 적습니다. <code>c_char</code> 의 부호에 기대는 코드도 쓰지 않습니다.</div>
+</article>
+
+<article class="card" id="p21-cstring">
+<h3>CString — 끝에 0 을 붙여 C 에 넘길 글을 만든다</h3>
+<p class="lead">C 의 글은 길이를 들고 다니지 않고, 0 바이트가 나오는 곳에서 끝납니다. Rust 의 <code>String</code> 과
+<code class="nb">&amp;str</code> 은 <a href="#p06-slice-fig">주소와 길이</a>이고 끝에 0 이 없습니다. 16부는 끝에 0 이 붙는 리터럴
+<code class="nb">c"hello"</code> 를 썼습니다. 실행 중에 만든 글은 <code>CString</code> 으로 옮깁니다.</p>
+<!--RUN file=ex/21/cstring.rs note=String 을 CString 으로 바꿔 strlen 에 넘긴다-->
+<div class="note"><b>읽는 법</b> — 9번 줄의 글은 9 바이트입니다. 13번 줄의 <code class="nb">CString::new</code> 가 그 <code>String</code> 을
+넘겨받았고, 14번 줄이 찍은 10 은 끝의 0 까지 센 바이트 수입니다. 17번 줄의 <code class="nb">as_ptr()</code> 가 준 포인터로
+<code>strlen</code> 은 9 를 셌습니다. 0 앞까지입니다. 21번 줄은 가운데에 0 이 든 글이라 <code>Err</code> 입니다. C 쪽에서는 그 0 에서 글이
+끝나 버립니다. <code>NulError</code> 안의 2 는 0 이 있던 자리이고, 뒤의 다섯 수는 넘긴 바이트입니다. <code class="nb">CString::new</code>
+가 <code>Result</code> 를 주는 것이 이 경우 때문이고, 13번 줄은 그것을 <code>unwrap</code> 으로 꺼냈습니다.</div>
+<div class="key"><b>글의 주인은 owned 다</b> — <code class="nb">as_ptr()</code> 가 준 포인터는 <code>owned</code> 가 가진 자리를 가리킵니다.
+16번 줄의 주석이 적은 대로, <code>owned</code> 가 살아 있는 동안만 쓸 수 있습니다. 다음 슬라이드가 그것을 어긴 모양입니다.</div>
+</article>
+
+<article class="card" id="p21-cstring-dangle">
+<h3>변수에 담지 않은 CString 의 as_ptr 는 매달린 포인터를 준다 — 컴파일러의 경고</h3>
+<p class="lead">앞 슬라이드의 13번과 17번 줄을 줄여, <code>CString</code> 을 만든 자리에서 바로 <code class="nb">as_ptr()</code> 를
+부르고 포인터만 변수에 담아 봅니다. 컴파일만 하고 돌리지는 않습니다.</p>
+<!--RUN file=ex/21/cstring_dangle.rs note=CString 은 변수에 담기지 않았다-->
+<div class="note"><b>읽는 법</b> — 경고 첫 줄은 "임시 <code>CString</code> 이 문 끝에서 정리되므로 매달린 포인터가
+만들어진다" 입니다. 3장의 <a href="#p21-vec-new"><code class="nb">NonNull::dangling</code></a> 에서 본 낱말이고, 11부의
+<a href="#p11-dangle-fix">매달린 참조</a>와 같은 뜻입니다. 이번에는 가리키던 값이 사라진 포인터입니다. 9번 줄의
+<code class="nb">-----</code> 아래에 "이 <code>CString</code> 은 문 끝에서 정리된다", <code class="nb">^^^^^^</code> 아래에 "포인터가 여기서
+만들어진다" 가 붙었습니다. <code>help:</code> 는 <code>CString</code> 을 변수에 묶어 포인터보다 오래 살게 하라고 합니다. 앞 슬라이드의
+<code>owned</code> 가 그 모양입니다. 첫 <code>note:</code> 는 "매달린 포인터는 그 자체로는 안전하지만 따라가면 정의되지 않은 동작" 이고,
+둘째는 지역 변수를 가리키는 포인터를 돌려주면 늘 매달린 포인터가 된다는 말입니다. 셋째는 값이 언제 정리되는지를 적은 레퍼런스의
+주소이고, 넷째는 이 경고가 기본으로 켜져 있다는 말입니다.</div>
+<div class="warn"><b>오류가 아니라 경고다</b> — 화면은 <code class="nb">warning: 1 warning emitted</code> 로 끝났고 오류는 없습니다. 매달린
+참조는 11부에서 컴파일 오류였지만, 날 포인터는 만드는 것까지는 안전해서 컴파일러가 막지 않습니다. 11번 줄의 <code>strlen</code> 은 이미
+돌려준 자리를 읽게 됩니다. 그래서 이 파일은 돌리지 않았습니다.</div>
+</article>
+
+<article class="card" id="p21-cstr-from-ptr">
+<h3>C 가 준 포인터는 널인지 보고 CStr::from_ptr 로 빌린다 — getenv</h3>
+<p class="lead">반대 방향입니다. C 함수가 글을 가리키는 포인터를 돌려줍니다. <code>getenv</code> 는 환경 변수의 값을 주고, 그런 이름이
+없으면 널을 줍니다. 받은 포인터에서 <code class="nb">&amp;CStr</code> 을 만드는 것이 <code class="nb">CStr::from_ptr</code> 입니다.
+16부의 리터럴 <code class="nb">c"hello"</code> 가 그 타입이었습니다.</p>
+<!--RUN file=ex/21/getenv.rs note=있는 이름 하나, 없는 이름 하나-->
+<div class="note"><b>읽는 법</b> — 26번부터 29번 줄까지가 변수 하나를 넣고 하나를 지워, 결과가 이 기계의 환경에 기대지 않게 합니다.
+<code class="nb">set_var</code> 는 1부에서 본 대로 <a href="#p01-ed2024-setvar">2024 에디션에서 <code>unsafe</code></a> 이고, 이 파일에서는
+<code class="nb">remove_var</code> 도 같은 블록 안에 적었습니다. 30번 줄의 호출에서 13번 줄의 <code>getenv</code> 는 널이 아닌 포인터를
+줬습니다. 19번 줄이 그것을 <code class="nb">&amp;CStr</code> 로 빌리고, 20번 줄이 <code>"rust"</code> 와 <code class="nb">to_str()</code>
+의 <code class="nb">Ok("rust")</code> 를 찍었습니다. 21번 줄이 <code>String</code> 으로 복사해 <code class="nb">Some("rust")</code> 가
+나왔습니다. 31번 줄의 호출은 널을 받아 15번 줄에서 <code>None</code> 으로 돌아갔습니다. <code class="nb">빌린 글</code> 줄이 한 번만
+찍힌 것이 그것입니다.</div>
+<div class="warn"><b>from_ptr 의 조건</b> — 문서는 포인터가 널이 아니고 0 으로 끝나는 글을 가리켜야 하며, 돌려받은
+<code class="nb">&amp;CStr</code> 을 쓰는 동안 그 메모리가 살아 있고 바뀌지 않아야 한다고 적습니다. 2장의
+<a href="#p21-raw-parts"><code class="nb">from_raw_parts</code></a> 처럼 수명은 쓰는 쪽이 정하게 됩니다. <code>getenv</code> 가 준 포인터가
+언제까지 유효한지는 C 라이브러리의 일이어서, 17번과 18번 줄의 주석대로 빌린 채 들고 다니지 않고 그 자리에서 복사했습니다.</div>
+</article>
+
+<article class="card" id="p21-strtol">
+<h3>C 함수가 포인터 인자에 결과를 적어 준다 — strtol</h3>
+<p class="lead">C 함수는 돌려줄 것이 둘이면 하나를 포인터 인자가 가리키는 곳에 적어 주곤 합니다. <code>strtol</code> 은 글의 앞에서 수를
+읽어 돌려주고, 어디서 멈췄는지를 둘째 인자가 가리키는 곳에 적습니다. 적힐 곳은 Rust 의 변수이고, 16부에서 본
+<a href="#p16-raw-ptr"><code class="nb">&amp;raw mut</code></a> 로 그 변수의 포인터를 넘깁니다.</p>
+<!--RUN file=ex/21/strtol.rs note=읽은 수와, 읽은 바이트 수-->
+<div class="note"><b>읽는 법</b> — 15번 줄이 <code>end</code> 를 널 포인터로 만들어 둡니다. 18번 줄의 <code class="nb">&amp;raw mut end</code>
+는 포인터를 가리키는 포인터 <code class="nb">*mut *mut c_char</code> 입니다. <code>strtol</code> 이 돌아오면 <code>end</code> 는 읽다 멈춘
+글자를 가리킵니다. 22번 줄이 2장의 <a href="#p21-ptr-add"><code class="nb">offset_from</code></a> 으로 글의 처음에서 거기까지를
+셉니다. 27번 줄은 <code class="nb">(120, 3)</code> 입니다. 120 을 읽고 세 바이트 뒤의 <code>k</code> 에서 멈췄습니다. 28번 줄은
+<code class="nb">(-7, 2)</code> 입니다. 29번 줄의 <code class="nb">(0, 0)</code> 은 수가 없는 글입니다. 돌려준 0 만으로는 "0 을 읽었다"
+와 가릴 수 없고, 한 바이트도 나아가지 않았다는 둘째 값이 그것을 알려 줍니다.</div>
+<div class="note"><b>안전: 주석</b> — 16번과 17번 줄은 <code>strtol</code> 에 넘기는 두 포인터의 조건이고, 19번과 20번 줄은
+<code class="nb">offset_from</code> 이 요구하는 "두 포인터가 같은 자리 안" 입니다. 돌려받는 <code>c_long</code> 은
+<a href="#p21-c-types">이 기계에서 64 비트</a>입니다. Rust 의 글에서 수를 읽을 때는 8부의
+<a href="#p08-str-parse"><code>parse</code></a> 를 씁니다.</div>
+</article>
+
+<article class="card" id="p21-qsort">
+<h3>C 가 Rust 함수를 부른다 — qsort 에 넘기는 extern "C" fn</h3>
+<p class="lead"><code>qsort</code> 는 배열과 함께 "두 칸을 견주는 함수" 를 받아, 배열을 차례대로 줄 세우는 동안 그 함수를 부릅니다. 이렇게
+넘겨주고 저쪽에서 불리는 함수를 콜백(callback)이라고 합니다. C 가 부르려면 함수가 C 의 방식으로 인자를 받아야 하고, 정의 앞의
+<code class="nb">extern "C"</code> 가 그것을 정합니다.</p>
+<!--RUN file=ex/21/qsort.rs note=i32 여섯 칸을 C 의 qsort 로 줄 세운다-->
+<div class="note"><b>읽는 법</b> — 5번 줄은 5부에서 본 <a href="#p05-fn-pointer">함수 포인터</a> 타입 앞에
+<code class="nb">unsafe extern "C"</code> 를 붙인 것이고, 13번 줄의 <code class="nb">by_value</code> 가 그 타입의 함수입니다.
+<code>qsort</code> 는 칸의 타입을 모르고 주소만 넘기므로 인자는 <code class="nb">*const c_void</code> 둘입니다. 19번 줄이 그것을
+<code class="nb">*const i32</code> 로 바꿔 따라가고, 20번 줄이 18부의 <a href="#p18-ordering"><code>cmp</code></a> 가 준
+<code>Ordering</code> 을 <code>as</code> 로 <code>c_int</code> 로 바꿉니다. 27번 줄이 찍은 <code class="nb">-1 0 1</code> 이
+<code>Less</code> · <code>Equal</code> · <code>Greater</code> 를 그렇게 바꾼 수입니다. 37번 줄에서 함수의 이름을 값으로 넘겼습니다. 39번 줄이
+줄 선 배열을 찍었고, 40번 줄의 <code>true</code> 는 31번 줄의 <code>sort</code> 와 결과가 같다는 것입니다.</div>
+<div class="warn"><b>콜백이 지킬 것</b> — 견준 결과를 뺄셈으로 만들지 않았습니다. 29번 줄의 수로 <code class="nb">i32::MAX - (-5)</code>
+를 하면 <a href="#p03-overflow"><code>i32</code> 에 들어가지 않습니다</a>. 그리고 콜백은 패닉하지 않아야 합니다. 9부의
+<a href="#p09-panic-unwind">되감기</a>는 Rust 의 호출 스택을 거슬러 오르는 일인데, <code class="nb">by_value</code> 를 부른 쪽은 C 의
+<code>qsort</code> 입니다. 릴리스 노트는 <!--SINCE key=extern-c-abort--> 부터 <code class="nb">extern "C"</code> 함수에서 잡히지 않은
+패닉이 프로그램을 그 자리에서 멈춘다(abort)고 적습니다. 돌려 보이지 않았습니다. 32번부터 34번 줄까지의 주석이 이 조건들을
+적습니다.</div>
+</article>
+
+<article class="card" id="p21-repr-c">
+<h3>#[repr(C)] 는 필드를 적은 순서대로, C 의 규칙으로 놓는다</h3>
+<p class="lead">18부는 <code class="nb">#[repr(C)]</code> 를 <a href="#p18-size-align">"적은 순서대로 놓게 하는 속성"</a> 이라고만 하고 이
+부로 미뤘습니다. C 와 구조체를 주고받으려면 두 언어가 필드의 자리를 똑같이 알아야 합니다. Rust 의 기본 배치는 18부에서 본 대로 필드의
+순서를 약속하지 않습니다. <code class="nb">#[repr(C)]</code> 는 C 컴파일러가 쓰는 규칙을 따르게 합니다. 같은 필드 넷을 두 가지 순서로
+적습니다.</p>
+<!--RUN file=ex/21/repr_c.rs note=필드의 자리는 18부에서 본 offset_of! 로 묻는다-->
+<div class="note"><b>읽는 법</b> — 35번 줄이 찍은 <code class="nb">[1, 2, 4]</code> 는 <code>u8</code> · <code>u16</code> · <code>u32</code> 의
+정렬입니다. 이 기계의 수입니다. 24번 줄의 <code class="nb">layout!</code> 은 1장에서 본 <a href="#p21-rep-kinds"><code>+</code> 반복</a>으로
+필드마다 자리를 찍고, 빗금 뒤에 전체 크기와 정렬을 찍습니다. <code>Wide</code> 는 <code class="nb">0 4 8 10 / 12 4</code> 입니다.
+<code>tag</code> 가 0, <code>value</code> 는 4 의 배수인 4, <code>flag</code> 가 8, <code>count</code> 는 2 의 배수인 10 입니다. 1번부터
+3번까지와 9번 바이트는 18부에서 본 패딩입니다. <code>Tight</code> 는 <code class="nb">0 4 6 7 / 8 4</code> 로 빈 바이트가 없습니다. 같은
+필드 넷인데 적은 순서에 따라 12 바이트와 8 바이트입니다.</div>
+<div class="key"><b>적은 순서가 약속이 된다</b> — Rust 레퍼런스는 <code class="nb">#[repr(C)]</code> 구조체의 규칙을 이렇게 적습니다. 필드는
+적은 순서대로, 앞 필드가 끝난 뒤 자기 정렬의 배수인 가장 가까운 자리에 놓고, 전체 크기는 가장 큰 정렬의 배수로 맞춥니다. 위의 수는 그
+규칙에 세 타입의 정렬을 넣은 결과입니다. 18부의 <code>Fixed</code> 가 12 바이트였던 것도 같은 규칙입니다. 5번과 15번 줄의
+<a href="#p13-attr-allow"><code class="nb">#[allow(dead_code)]</code></a> 는 읽지 않는 필드의 경고를 끈 것입니다.</div>
+</article>
+
+<article class="card" id="p21-repr-c-div">
+<h3>C 함수가 구조체를 값으로 돌려준다 — div 와 #[repr(C)] 구조체</h3>
+<p class="lead">C 의 <code>div</code> 는 몫과 나머지를 구조체 <code class="nb">div_t</code> 하나에 담아 돌려줍니다. 포인터가 아니라
+구조체 값이 그대로 건너옵니다. Rust 쪽에 같은 배치의 구조체가 있어야 받을 수 있습니다.</p>
+<!--RUN file=ex/21/div.rs note=17 과 -17 을 5 로 나눈다-->
+<div class="note"><b>읽는 법</b> — 5번부터 9번 줄까지가 받는 구조체입니다. <code>c_int</code> 둘이고 <code>quot</code> 가 먼저입니다. 3번과
+4번 줄의 주석대로, 이 책을 만든 기계의 C 헤더 <code class="nb">stdlib.h</code> 에 적힌 순서를 따랐습니다. 필드의 타입과 순서를 C 쪽
+정의에 맞추는 것은 적는 사람의 일입니다. 19번 줄이 <code class="nb">3 2</code> 를, 20번 줄이 <code class="nb">-3 -2</code> 를
+찍었습니다. 21번 줄은 Rust 의 <code>/</code> 와 <code>%</code> 로 같은 계산을 한 것이고 역시 <code class="nb">-3 -2</code> 입니다. 22번 줄의
+<code>true</code> 는 <code>DivT</code> 의 크기가 <code>c_int</code> 둘이라는 것입니다.</div>
+<div class="warn"><b>div 를 unsafe 로 둔 까닭</b> — C 표준은 나누는 수가 0 이거나 몫이 <code>int</code> 에 들어가지 않을 때의 동작을 정하지
+않습니다. 그래서 13번 줄은 <a href="#p21-ffi-safe"><code>safe</code></a> 가 아니고, 17번 줄의 주석이 두 호출이 그 경우가 아님을
+적습니다.</div>
+</article>
+
+<article class="card" id="p21-repr-c-missing">
+<h3>#[repr(C)] 가 없는 구조체를 extern 선언에 쓰면 — not FFI-safe</h3>
+<p class="lead">앞 슬라이드의 <code>div.rs</code> 에서 5번 줄의 <code class="nb">#[repr(C)]</code> 만 지운 쌍둥이
+<code class="nb">div_norepr.rs</code> 를 컴파일합니다. 한 줄이 지워져, 쌍둥이 파일에서는 구조체가 5번 줄에서 시작하고 <code>div</code> 의
+선언이 12번 줄입니다. 컴파일만 하고 돌리지는 않습니다.</p>
+<!--OUT file=out/21/div_norepr.txt note=컴파일은 되고 경고가 하나 나온다-->
+<div class="note"><b>읽는 법</b> — 경고 첫 줄은 "<code>extern</code> 블록이 FFI 에 안전하지 않은 타입 <code>DivT</code> 를 쓴다" 이고, 12번
+줄의 반환 타입을 짚습니다. <code>help:</code> 는 구조체에 <code class="nb">#[repr(C)]</code> 나
+<code class="nb">#[repr(transparent)]</code> 를 붙이라고 하고, 그 아래 <code>note:</code> 가 까닭을 적습니다 — "이 구조체는 배치가 정해져
+있지 않다". 둘째 <code>note:</code> 는 타입을 정의한 5번 줄을 짚고, 마지막은 이 경고가 기본으로 켜져 있다는 말입니다.
+<code class="nb">#[repr(transparent)]</code> 는 이 책에서 다루지 않습니다.</div>
+<div class="warn"><b>돌리지 않은 까닭</b> — 경고여서 컴파일은 끝까지 갔습니다. 그러나 18부에서 <code>Plain</code> 의 필드가
+<a href="#p18-size-align">적은 순서와 다르게 놓였던</a> 것처럼, 기본 배치에서는 <code>quot</code> 와 <code>rem</code> 이 어디에 놓일지
+약속이 없습니다. 이 프로그램이 맞는 수를 찍는다 해도 그것은 약속된 결과가 아닙니다.</div>
+</article>
+
+<article class="card" id="p21-ffi-export">
+<h3>Rust 함수를 C 쪽에 내놓는다 — #[unsafe(no_mangle)] 와 extern "C" <!--SINCE key=unsafe-attr--></h3>
+<p class="lead">이번에는 Rust 함수가 불리는 쪽입니다. 필요한 것은 둘입니다. 하나는 <a href="#p21-qsort">콜백</a>에서 본
+<code class="nb">extern "C"</code> 이고, 하나는 부르는 쪽이 찾을 이름입니다. 컴파일된 함수가 링커에게 보이는 이름을 기호(symbol)라고
+합니다. Rust 레퍼런스는 <code class="nb">no_mangle</code> 속성이 기호 이름을 바꿔 적는 일(mangling)을 끄고, 함수의 이름을 그대로 기호
+이름으로 쓰게 한다고 적습니다. 1장의 <a href="#p21-export">두 크레이트 예제</a>와 같은 꼴로 컴파일합니다.</p>
+<!--CODE file=ex/21/ffi_export/calc.rs note=내놓는 크레이트-->
+<!--CODE file=ex/21/ffi_export/main.rs note=부르는 크레이트 — 이름과 타입만 선언한다-->
+<!--OUT file=out/21/ffi_export.txt note=컴파일 두 번, 그리고 실행-->
+<div class="note"><b>읽는 법</b> — <code>calc.rs</code> 의 9번 줄이 속성이고, 10번 줄이 <code class="nb">pub extern "C" fn</code> 입니다.
+<code>main.rs</code> 의 4번부터 7번 줄까지는 16부에서 C 함수에 쓰던 선언 그대로입니다. 11번 줄은 <code class="nb">calc::add</code> 를 Rust
+경로로 불렀고, 13번 줄은 <code class="nb">calc_add</code> 를 선언한 이름만으로 불렀습니다. 둘 다 5 입니다. 14번 줄의
+<code class="nb">calc_twice(21)</code> 은 42 입니다. <code>calc.rs</code> 에서 그 함수의 이름은 <code>double</code> 이고, 15번 줄의
+<code class="nb">export_name</code> 속성이 기호 이름을 따로 정했습니다. <code>calc.rs</code> 의 5번 줄은
+<a href="#p03-overflow-choice"><code class="nb">wrapping_add</code></a> 입니다. 내놓는 함수도 콜백처럼 패닉하지 않게 적었습니다.</div>
+<div class="note"><b>부르는 쪽도 Rust 다</b> — 이 책의 도구는 C 컴파일러를 돌리지 않습니다. 그래서 C 프로그램 대신, C 함수를 부를 때와 같은
+선언을 적은 Rust 크레이트가 불렀습니다. <code>main.rs</code> 가 <code class="nb">calc_add</code> 와 <code class="nb">calc_twice</code>
+에 대해 아는 것은 4번부터 7번 줄에 적은 이름과 타입뿐입니다. C 프로그램이 같은 두 이름을 부르는 것은 돌려 보이지 못했습니다.</div>
+</article>
+
+<article class="card" id="p21-no-mangle-2021">
+<h3>2024 에디션은 unsafe 없는 no_mangle 을 받지 않는다 — unsafe attribute used without unsafe</h3>
+<p class="lead">속성을 <code class="nb">unsafe( )</code> 로 감싸는 표기도 <a href="#p21-ffi-extern-2021">extern 블록 앞의
+<code>unsafe</code></a> 처럼 2024 에디션에서 필수가 됐습니다. 옛 표기 <code class="nb">#[no_mangle]</code> 로 적은 파일을 두 에디션으로
+컴파일합니다.</p>
+<!--RUN file=ex/21/no_mangle_2024.rs note=2024 에디션-->
+<!--OUT file=out/21/no_mangle_2021.txt note=글자까지 같은 파일(no_mangle_2021.rs)을 2021 에디션으로-->
+<div class="note"><b>읽는 법</b> — 오류 첫 줄은 "unsafe 속성을 unsafe 없이 썼다" 이고 번호가 없습니다. 3번 줄의
+<code class="nb">no_mangle</code> 을 짚고, <code>help:</code> 가 <code class="nb">unsafe(...)</code> 로 감싼 줄을 보여 줍니다. 둘째 화면에서
+2021 에디션은 같은 파일을 받아 5 를 찍었습니다.</div>
+<div class="warn"><b>속성인데 왜 unsafe 인가</b> — 에디션 안내서는 까닭을 이렇게 적습니다. <code class="nb">no_mangle</code> 로 내놓은 이름이
+프로그램에 함께 이어지는 다른 기호, 이를테면 C 라이브러리의 함수 이름과 겹치면 정의되지 않은 동작이 될 수 있고, 컴파일러는 그 겹침을
+확인해 주지 못합니다. <a href="#p21-ffi-export">앞 슬라이드</a>의 <code class="nb">export_name</code> 도 같은 까닭으로
+<code class="nb">unsafe( )</code> 안에 적었습니다. 그 예제가 이름 앞에 <code class="nb">calc_</code> 를 붙인 것도 겹치지 않게 하려는
+것입니다.</div>
+</article>
+
+<article class="card" id="p21-union">
+<h3>union 의 필드를 읽는 것은 unsafe 다 — E0133</h3>
+<p class="lead">16부의 <a href="#p16-unsafe-what">다섯 가지</a> 가운데 다섯째입니다. <code>union</code>(<!--SINCE key=union--> 부터)은 C 의
+공용체에 맞춘 타입으로, 모든 필드가 같은 자리를 함께 씁니다. 7부의 <a href="#p07-enum-data">열거형</a>과 달리, 지금 어느 필드로 값이
+들어 있는지는 어디에도 적혀 있지 않습니다. 네 바이트를 <code>u32</code> 로도, 바이트 넷으로도 보는 <code>union</code> 입니다.</p>
+<!--RUN file=ex/21/union_read.rs note=n 으로 넣고, n 으로도 bytes 로도 읽는다-->
+<!--OUT file=out/21/union_err.txt lines=1-8 note=14번 줄을 let n = b.n; 으로만 바꾼 쌍둥이 union_err.rs-->
+<div class="note"><b>읽는 법</b> — 10번 줄은 필드 하나를 골라 값을 만듭니다. <code>unsafe</code> 밖에 있습니다. 11번 줄의 크기는 4 입니다.
+두 필드가 모두 4 바이트입니다. 14번 줄이 <code>n</code> 을 읽어 <code class="nb">0x12345678</code> 을 찍었습니다. 19번 줄은 넣은 적
+없는 필드 <code>bytes</code> 로 읽습니다. 20번 줄의 <code>true</code> 는 그 바이트 넷이 2장에서 본
+<a href="#p21-bits"><code class="nb">to_ne_bytes</code></a> 의 결과와 같다는 것입니다. 바이트 자체는 그때처럼 찍지 않았습니다. 둘째 화면의
+쌍둥이는 <code>unsafe</code> 를 뺀 14번 줄에서 막혔습니다. 번호는 16부에서 <a href="#p16-raw-ptr-safe">날 포인터를 따라가려다 본 E0133</a>
+이고, 이번 까닭은 "union 필드에 닿는 것" 입니다. <code>note:</code> 는 그 필드가 제대로 채워져 있지 않을 수 있고, 채워지지 않은 데이터를
+쓰면 정의되지 않은 동작이라고 합니다.</div>
+<div class="warn"><b>읽어도 되는 필드인지는 사람이 안다</b> — 13번 줄의 주석은 마지막으로 넣은 필드를 읽는다는 것입니다. 17번과 18번 줄의
+주석은 다른 필드로 읽어도 되는 까닭을 적습니다. 네 바이트가 모두 채워져 있고, 2장에서 본
+<a href="#p21-transmute-size">안 되는 비트 모양</a>이 <code class="nb">[u8; 4]</code> 에는 없습니다. 2번 줄의
+<code class="nb">#[repr(C)]</code> 는 C 의 공용체와 같은 배치를 약속합니다. C 와 맞출 일이 아니면 7부의 열거형을 씁니다.</div>
+</article>
+
+<article class="card" id="p21-static-mut">
+<h3>static mut — 읽는 것도 고치는 것도 unsafe 인 전역 변수</h3>
+<p class="lead">다섯 가지의 셋째입니다. 3부의 <a href="#p03-static"><code>static</code></a> 은 프로그램 내내 한 자리에 놓이는 값이었습니다.
+<code>mut</code> 를 붙이면 어디서나 고칠 수 있는 전역 변수가 됩니다. 어느 함수에서나, 어느 스레드에서나 닿을 수 있어서 6부의
+<a href="#p06-borrow-rule">빌림 규칙</a>을 컴파일러가 지켜 줄 수 없습니다. 그래서 닿는 일이 모두 <code>unsafe</code> 입니다.</p>
+<!--RUN file=ex/21/static_mut.rs note=부를 때마다 1 을 더한다-->
+<div class="note"><b>읽는 법</b> — 7번 줄의 <code class="nb">CALLS += 1</code> 도, 값을 복사해 읽기만 하는 14번 줄도 <code>unsafe</code>
+블록 안에 있습니다. 14번 줄의 블록에 <a href="#p21-ffi-safe">"필요 없는 unsafe" 경고</a>가 붙지 않았습니다. 읽는 것만으로도
+<code>unsafe</code> 입니다. <code>record</code> 를 두 번 불러 2 가 찍혔습니다. 5번과 6번 줄의 주석이 이 프로그램에서 괜찮은 까닭을
+적습니다. 스레드가 하나뿐이고, <code>CALLS</code> 를 가리키는 참조를 만들지 않습니다. 여러 스레드가 함께 고치면 16부의 E0133 이 꼽던
+<a href="#p15-intro">데이터 경쟁</a>이 됩니다.</div>
+</article>
+
+<article class="card" id="p21-static-mut-ref">
+<h3>static mut 을 가리키는 참조는 2024 에디션에서 오류다 — creating a shared reference to mutable static</h3>
+<p class="lead">앞 슬라이드는 값을 복사해 읽었습니다. 참조를 만들면 이야기가 달라집니다. 8번 줄은 <code class="nb">&amp;CALLS</code> 를
+만들고, 12번 줄은 <code>CALLS</code> 를 <code class="nb">println!</code> 에 그대로 넘깁니다.</p>
+<!--CODE file=ex/21/static_ref_2024.rs note=참조를 만드는 두 줄-->
+<!--OUT file=out/21/static_ref_2024.txt lines=1-14 note=2024 에디션 — 첫째 오류, 8번 줄-->
+<!--OUT file=out/21/static_ref_2024.txt lines=16-24 note=둘째 오류, 12번 줄-->
+<!--OUT file=out/21/static_ref_2021.txt lines=26-30 note=글자까지 같은 파일(static_ref_2021.rs)을 2021 에디션으로 — 화면의 끝-->
+<div class="note"><b>읽는 법</b> — 오류 첫 줄은 "바뀔 수 있는 static 을 가리키는 불변 참조를 만든다" 이고 번호가 없습니다. 첫
+<code>note:</code> 가 까닭입니다 — "그 참조가 사는 동안 static 이 고쳐지거나 그것의 가변 참조가 만들어지면 정의되지 않은 동작". 둘째는
+에디션 안내서의 주소이고, 셋째는 이 검사 <code class="nb">static_mut_refs</code> 가 2024 에디션에서 기본으로 오류(deny)라는 말입니다.
+<code>help:</code> 는 <code class="nb">&amp;raw const</code> 로 날 포인터를 만들라고 합니다. 둘째 오류는 <code>&amp;</code> 를 적지 않은
+12번 줄입니다. 컴파일러는 거기서도 불변 참조가 만들어진다고 하고, <code>help:</code> 는 14부에서 본
+<a href="#p14-refcell-basic">내부 가변성</a>을 가진 타입을 쓰라고 권합니다.</div>
+<div class="note"><b>2021 에디션에서는 경고였다</b> — 셋째 화면은 같은 파일을 2021 에디션으로 컴파일한 화면의 끝입니다. 경고 둘과 함께
+컴파일되어 <code class="nb">1 1</code> 을 찍었습니다. 릴리스 노트에 따르면 이 검사는 <!--SINCE key=static-mut-refs--> 에 경고로
+들어왔습니다. 이 파일의 두 참조는 7번과 11번 줄의 주석대로 조건을 지킵니다. 2024 에디션은 지켰는지를 가리지 않고, 참조를 만드는
+것부터 막습니다.</div>
+</article>
+
+<article class="card" id="p21-static-ways">
+<h3>전역으로 바뀌는 값을 두는 세 가지 길 — 원자 타입 · Mutex · &amp;raw</h3>
+<p class="lead">앞 슬라이드의 두 <code>help:</code> 가 길을 알려 줬습니다. 내부 가변성을 가진 타입, 그리고
+<code class="nb">&amp;raw</code> 입니다. 내부 가변성을 가진 타입 가운데 <code>static</code> 에 둘 수 있는 것은 20부에서
+<a href="#p20-tl-static-err"><code>Cell</code> 이 막혔을 때</a> 본 대로 스레드에 안전한 것들입니다. 세 길을 한 파일에 적습니다.</p>
+<!--RUN file=ex/21/static_ways.rs note=호출 횟수를 세 군데에 센다-->
+<div class="note"><b>읽는 법</b> — 5번 줄은 15부의 <a href="#p15-atomic">원자 타입</a>입니다. <code>mut</code> 가 없고, 14번 줄의
+<code class="nb">fetch_add</code> 도 26번 줄의 <code>load</code> 도 <code>unsafe</code> 밖에 있습니다. 8번 줄은
+<a href="#p15-mutex"><code>Mutex</code></a> 를 <code>static</code> 에 바로 둔 것입니다. 15번 줄이 잠그고 이름을 넣었고, 27번 줄이
+<code class="nb">["a", "b"]</code> 를 찍었습니다. 11번 줄은 <code class="nb">static mut</code> 그대로입니다. 17번 줄의
+<code class="nb">&amp;raw mut</code> 는 참조를 거치지 않고 날 포인터를 만들고, <code>unsafe</code> 밖에 있습니다. 20번 줄이 2장의
+<a href="#p21-read-swap"><code>read</code> 와 <code>write</code></a> 로 1 을 더합니다. 29번 줄도 포인터로 읽어 2 를 찍었습니다.</div>
+<div class="key"><b>앞의 둘을 먼저 쓴다</b> — 원자 타입과 <code>Mutex</code> 에는 <code>unsafe</code> 가 없고, 15부에서 본 대로 여러 스레드가
+함께 써도 됩니다. 셋째 길은 참조를 만들지 않았을 뿐입니다. 스레드가 하나뿐이라는 것과 포인터가 가리키는 곳이 살아 있다는 것은 18번과
+19번 줄의 주석이 적고, 지키는 것은 사람입니다.</div>
+</article>
+
+<article class="card" id="p21-ffi-table">
+<h3>하려는 일로 찾는 표 — FFI</h3>
+<p class="lead">왼쪽에서 하려는 일을 찾습니다. 가운데는 이 장에서 쓴 것이고, 오른쪽은 그것을 쓸 때 사람이 지켜야 하는 것입니다. 오른쪽
+칸은 컴파일러가 확인해 주지 않습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>하려는 일</th><th>쓸 것</th><th>지킬 것</th></tr>
+<tr><td>C 함수를 선언한다</td><td><a href="#p21-ffi-safe"><code class="nb">unsafe extern "C"</code> · <code>safe</code> · <code>unsafe</code></a></td><td>선언이 C 쪽 함수와 맞는다 · <code>safe</code> 는 어떤 인자에도 괜찮을 때만</td></tr>
+<tr><td>C 의 <code>int</code> · <code>long</code> 을 적는다</td><td><a href="#p21-c-types"><code>c_int</code> · <code>c_long</code></a></td><td>크기를 수로 적어 두지 않는다</td></tr>
+<tr><td>Rust 의 글을 C 에 넘긴다</td><td><a href="#p21-cstring"><code class="nb">CString::new</code> · <code class="nb">as_ptr</code></a></td><td><a href="#p21-cstring-dangle"><code>CString</code> 을 변수에 담아 둔다</a></td></tr>
+<tr><td>C 가 준 글을 읽는다</td><td><a href="#p21-cstr-from-ptr">널 검사 · <code class="nb">CStr::from_ptr</code></a></td><td>빌린 채 두지 않고 복사한다</td></tr>
+<tr><td>C 가 결과를 적을 곳을 넘긴다</td><td><a href="#p21-strtol"><code class="nb">&amp;raw mut</code> 변수</a></td><td>변수가 호출이 끝날 때까지 산다</td></tr>
+<tr><td>C 가 부를 함수를 넘긴다</td><td><a href="#p21-qsort"><code class="nb">extern "C" fn</code></a></td><td>패닉하지 않는다</td></tr>
+<tr><td>구조체를 주고받는다</td><td><a href="#p21-repr-c"><code class="nb">#[repr(C)]</code></a></td><td><a href="#p21-repr-c-div">필드의 타입과 순서를 C 쪽 정의에 맞춘다</a></td></tr>
+<tr><td>Rust 함수를 내놓는다</td><td><a href="#p21-ffi-export"><code class="nb">#[unsafe(no_mangle)]</code> · <code class="nb">extern "C"</code></a></td><td><a href="#p21-no-mangle-2021">이름이 다른 기호와 겹치지 않는다</a></td></tr>
+<tr><td>같은 자리를 두 타입으로 본다</td><td><a href="#p21-union"><code>union</code></a></td><td>읽는 필드에 유효한 값이 있다</td></tr>
+<tr><td>전역으로 바뀌는 값을 둔다</td><td><a href="#p21-static-ways">원자 타입 · <code>Mutex</code></a></td><td><a href="#p21-static-mut-ref"><code class="nb">static mut</code> 이면 참조를 만들지 않는다</a></td></tr>
+</table>
+</div>
+<p class="cap">2021 에디션까지의 표기로 적힌 코드를 2024 에디션으로 옮길 때 만나는 오류 셋은
+<a href="#p21-ffi-extern-2021">extern 블록</a>, <a href="#p21-no-mangle-2021">no_mangle</a>,
+<a href="#p21-static-mut-ref">static mut 의 참조</a> 슬라이드에 있습니다.</p>
+</article>
+
+<article class="card quiz" id="p21-ch4-quiz" data-quiz>
+<h3>퀴즈 — FFI</h3>
+<p class="q">Q. C 의 <code>strlen</code> 에 넘길 포인터를 <code class="nb">let p = CString::new("hello").unwrap().as_ptr();</code> 로 만들고,
+다음 줄에서 <code class="nb">unsafe { strlen(p) }</code> 를 불렀습니다. 컴파일될까요? 무엇이 잘못됐고, 어떻게 고칠까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 컴파일은 됩니다. 오류가 아니라 경고가 나옵니다 — "임시 <code>CString</code> 이 문 끝에서 정리되므로 매달린 포인터가
+만들어진다"(<a href="#p21-cstring-dangle">cstring_dangle.rs 의 화면</a>). <code>CString</code> 이 변수에 담기지 않아 그 줄에서 사라졌고,
+<code>p</code> 는 이미 돌려준 자리를 가리킵니다. 그래서 그 파일은 돌리지 않았습니다. 고치려면 경고의 <code>help:</code> 대로
+<code>CString</code> 을 먼저 변수에 담고, 그 변수가 살아 있는 동안 <code class="nb">as_ptr()</code> 를 넘깁니다.
+<a href="#p21-cstring">cstring.rs</a> 의 13번과 17번 줄이 그렇게 적었고, <code>strlen</code> 은 9 를 돌려줬습니다.</div>
+</article>
+
+<article class="card" id="p21-wrap">
+<h3>21부를 마치며 — 장마다 남긴 표</h3>
+<p class="lead">이 부는 <a href="#p16">16부</a>의 매크로와 <code>unsafe</code> 위에 네 장을 올렸습니다. 장마다 끝에 표를 하나씩 남겼습니다.
+아래 목록에서 필요한 표로 갑니다.</p>
+<ul>
+<li><b>1장</b> — 매크로가 받을 것과 하려는 일에 맞는 표기: <a href="#p21-macro-table">하려는 일로 찾는 표 — macro_rules!</a></li>
+<li><b>2장</b> — 날 포인터로 하는 일마다 쓴 도구와 평소의 안전한 길: <a href="#p21-mem-table">하려는 일로 찾는 표 — 날 포인터와 메모리</a></li>
+<li><b>3장</b> — <code>MyVec</code> 를 이룬 조각과 조각마다 지킨 것: <a href="#p21-vec-table">MyVec 를 이룬 조각</a></li>
+<li><b>4장</b> — C 와 주고받는 일마다 쓸 것과 사람이 지킬 것: <a href="#p21-ffi-table">하려는 일로 찾는 표 — FFI</a></li>
+</ul>
+<div class="note"><b>다음</b> — 22부 async 심화는 16부의 <a href="#p16-ch3">async 맛보기</a>에서 이어집니다. 이 부가 매크로와
+<code>unsafe</code> 에 한 것처럼, 16부가 한 번씩만 써 본 퓨처와 실행기를 더 깊이 봅니다.</div>
 </article>

@@ -628,3 +628,42 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   `meta`, `from_raw_parts_mut`, `unsafe fn` bodies. New terms for the glossary: 메타변수,
   토큰, 토큰 한 덩이(token tree), 항목(item), 재귀 한도, tt 떼어 내기(tt muncher), 내부 규칙,
   별칭 규칙. Unchecked by a reviewer: everything in 21a (review comes after 21b).
+- 21b written (chapters 3–4: 작은 Vec 만들기 · FFI, plus p21-wrap; 38 slides — ch 3 = 17,
+  ch 4 = 20, wrap 1; 35 examples: 14 `vec_*.rs` + 20 files + directory `ffi_export/`;
+  6 compile-error files, 2 compile-only warning files, 2 expected panics; 2 quizzes) →
+  part 21 = 79 slides (budget 80), 80 examples, deck 1,349. order.txt: `21b_low.html`
+  uncommented. Orchestrator re-ran: `make all` rc=0 (1,349장 · 오류 0 · 알림 0 · 어긋남 0),
+  `rsrun --check ex/21` ×3 = 80 ✓ / 0 ✗ each; read all of MyVec/MyIter (vec_iter.rs
+  1–185) for soundness — no objection (grow computes the new layout before touching
+  state; into_iter's `mem::forget` on line 149 prevents the double free; both Drop impls
+  free only when cap != 0, with layout(cap)). Badges +6 → 112 (unsafe-extern 1.82,
+  unsafe-attr 1.82, extern-c-abort 1.81, union 1.19, ffi-c-types 1.64, static-mut-refs
+  1.77). No new error codes in out/ (61). Card and README set to 23부 · 1,349슬라이드 ·
+  예제 1,001 · 캡처 1,035 · 퀴즈 101 · 버전 표기 112건.
+  The `vec_*.rs` files were GENERATED from `scratch/w21b/pieces/*.rs` by
+  `scratch/w21b/pieces/mk.py` (git-ignored; lines 1–81 are byte-identical in all 14).
+  The committed ex/ files are the source of truth; whoever changes MyVec edits the piece,
+  rustfmts it, runs mk.py and re-runs rsrun on all vec_*.rs — or, without the pieces,
+  applies the same change to every file and checks the chain with `diff`.
+  Outline deviation: `Index` is not implemented; `v[i]` comes through
+  `Deref<Target = [T]>` (reason on p21-vec-deref; intro bullet changed to match).
+  21a edits by the 21b writer: p21-intro lead links, 3장/4장 bullets, note re-headed
+  "이 부의 화면" and extended; p21-mem-table lead links.
+  For the reviewer: p21-intro's second note ("돌려 보이지 않는 것 — 2장은 …") still speaks
+  only of chapter 2; MyVec has no PhantomData (nothing about variance/drop check is on a
+  slide); `main` could bypass the const assert with a struct literal (no example does);
+  an element whose drop panics leaks the rest (not on a slide); doc-attributed sentences
+  in 21b were checked from memory only — least sure: p21-no-mangle-2021 (the edition
+  guide's reason for unsafe attributes); `ffi_export/main.rs` calls `calc::add` by path,
+  which is also what makes rustc link the rlib (the slide presents it only as contrast);
+  `div`'s field order was read from this machine's stdlib.h. Target-specific values
+  printed: c_types (i32 4, i64 8), repr_c aligns [1, 2, 4].
+  New terms for the glossary: FFI, 콜백, 기호(symbol), 매달린 포인터, 공용체. Sorting is
+  "줄 세우다" in ch 4 so that 정렬 stays alignment.
+  Later (0–20 additions): p16-unsafe-what says `static mut`, unsafe traits and `union`
+  "은 이 책에서 다루지 않습니다" — now wrong, reword + link p21-static-mut / p21-union /
+  p21-vec-send; p18-size-align "21부에서 봅니다" → #p21-repr-c; p19-gat-for-err →
+  #p21-vec-into-iter; p01-ed2024 / p01-ed-table `unsafe extern` row → #p21-ffi-extern-2021
+  (unsafe attributes and static mut references are not in part 1's list: could add
+  #p21-no-mangle-2021, #p21-static-mut-ref); p16-extern-c → #p21-ffi-safe; p20-wrap's
+  "다음" note → #p21. Unchecked by a reviewer: all of part 21.
