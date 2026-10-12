@@ -935,3 +935,31 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p13-cargo-toml (profiles named only; "예제" for Cargo's examples) → p23-prof-keys;
   p13-test-should-panic → p23-test-expected; p13-test-integration → p23-test-common;
   p13-attr-allow → p23-lints-deny. Unchecked by a reviewer: all of part 23.
+- Part 23 reviewed (one reviewer over both halves, 63 slides): 사실오류 1 · 증거불일치 2 ·
+  근거없음 6 · 절단 1 · 순서 2 · 표기 5 · 퀴즈 0 · 코드 1; style 2. Chapters 2, 3 and 5 came
+  out close to clean; most defects sat in chapter 1, the intro and p23-test-threads.
+  Examples changed 6 (no .rs touched): `members` reordered to app-first in ws,
+  ws_noresolver, ws_inherit, ws_more so that "text-kit compiled first" is evidence of
+  dependency order (lesson 74); test_helpers and test_common_rs now run
+  `cargo test -q -p wordbox --test common` so Cargo's message says "in `wordbox` package"
+  instead of "in default-run packages" (lesson 77). Captures changed through rsrun:
+  ws_inherit (1 line), test_helpers (2), test_common_rs (1). Slides ±0 → part 23 = 63
+  (budget 60, ceiling 66), deck 1,476, card numbers unchanged. Orchestrator re-ran:
+  `make all` rc=0 (오류 0 · 알림 0 · 어긋남 0), `rsrun --check ex/23` ×3 = 37 ✓ / 0 ✗;
+  no `target/` or `Cargo.lock` under ex/23. All 19 badge rows checked against
+  docs/releases.txt — unchanged. All twin pairs `diff -r` strict. p23-intro now says:
+  each `$` line starts at the sandbox root, `VAR=v` lasts one line, GREETING ·
+  WITH_BANNER · UPDATE_GOLDEN are unset elsewhere, and what a twin directory is.
+  Kept unsplit: the six four-box slides. Vouched from memory only: "virtual workspace",
+  the additive-features advice, what examples/ is for, "프로필은 컴파일 설정 한 벌에 붙인
+  이름"; p23-prof-abort's "the shell prints Aborted" rests on a scratch probe. Lessons
+  73–80 in AUTHORING.md. Open: p23-build-rerun's capture does not isolate the
+  `rerun-if-changed` line (colors.txt is inside the package; the slide admits the default
+  rule is not shown — a twin editing an unlisted file would isolate it); p23-ws-p's
+  "13부에서 본 차례대로라면" is still an inference; test_common_rs/tests/count.rs line 1
+  comment says "common/mod.rs" (strict twin, shown on no slide); build_env could flake
+  only on a filesystem with 1-second mtimes. Glossary candidates: 워크스페이스, 멤버,
+  path 의존성, 기본 기능, 빌드 스크립트, 프로필, 기준 파일, 수준, 시험 대상. Later (0–22
+  additions, beyond the 23a/23b lists): p00-normalize says "세 가지뿐" but rsrun also
+  normalises doctest times, and it does not say that a directory example runs each `$`
+  line from the root; the appendix error index needs E0453.

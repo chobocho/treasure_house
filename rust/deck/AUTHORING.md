@@ -310,3 +310,23 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
     lacks, say so, rather than paraphrasing the old note as if it were on this screen.
 72. A key head is a title too: "A 가 B 를 정한다" drawn from one error message is a
     generalisation. Head it with what the message pointed at.
+73. Each `$` line of a directory example runs from the sandbox root; `cd x && …` and
+    `VAR=v …` last one line. Say so in the part's intro, and never write "typed in order"
+    unqualified.
+74. Order evidence needs an order that could have been otherwise: do not list the
+    dependency first in `members` and then say Cargo ordered it.
+75. "Same command" across twins means byte-identical RUN lines; the intro's definition of
+    a twin covers add, remove and move, and says when the commands differ.
+76. A cut inside a failing run still shows the result line and `[종료 코드 N]` (use two
+    slices); the cut note names the slides that showed the omitted blocks, not "앞의 두
+    슬라이드".
+77. Cargo messages change with how the package was selected ("in default-run packages"
+    vs "in `x` package"); probe both and prefer wording that does not collide with a key
+    the part teaches.
+78. Every environment variable an example reads at build or test time is a dependence on
+    the caller's shell (rsrun strips only CARGO*/RUST*); list them in the part's intro.
+79. `cargo new` in a workspace inserts into a sorted `members` list in sorted position, so
+    a later `cat Cargo.toml` depends on the members order.
+80. For a line the program did not print (`Aborted`, `ls:`), find the printer with a
+    scratch probe and write "이 기계의 셸이 …"; use "Cargo 문서는 …" only for sentences you
+    can place, otherwise "이 책은 … 로 읽습니다" hung on a release-note line.
