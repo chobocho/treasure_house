@@ -438,3 +438,24 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   slide is not about that function). The reviewer's nine lessons are in AUTHORING.md
   items 11–19. Doc-attributed sentences (read_dir order, BufReader/BufWriter rationale,
   Stdin's own lines/read_line) are from memory of the std docs — no docs on this machine.
+- 2026-10-12 pushed at the user's request ("푸시하고 계속 진행해"): origin/main = dec8bacf.
+  That commit (part-0 map lists part 17, p16 closing note hands over to part 17, card and
+  README say 19부 1,015슬라이드 · 예제 684 · 캡처 705 · 퀴즈 80 · 버전 표기 41건, font
+  subset re-embedded) was made in a separate git worktree (scratchpad/wt, branch pub-sync)
+  because the part-18 writer was mid-edit in the main tree. LOCAL main is one commit
+  behind: when no agent is running, restore the built deck file and
+  `git merge --ff-only pub-sync`, then `git worktree remove` + delete the branch.
+- From now on: a new part's commit also updates the part-0 map, the card/README figures
+  and runs `make font` (new Korean glyphs in code need the DeckMono subset re-embedded;
+  `make deck` alone keeps the old subset).
+- Local main fast-forwarded to dec8bacf; worktree and branch pub-sync removed.
+- 18a written (chapters 1–3: 수 더 깊이 · 비교와 정렬 · 해시와 맵 더; 45 slides, 35
+  examples, `rsrun --check ex/18` all ✓ on 9 runs; +15 badge rows, data-check 0 errors,
+  56 badges). Second half may use at most 43 slides (part ceiling 88). Second-half writer
+  must adjust p18-intro's descriptions of chapters 4–6 and its "이 부의 화면" note, and
+  p18-map-table's "다음 장 … 4장" can then be linked. New terms: 비트(연산자), 밀기(shift),
+  플래그, 진법, 마스크, 빅/리틀 엔디언, 이진 탐색, 안정 정렬, 해시, 씨앗. Doc-attributed
+  sentences on p18-ord-impl, p18-stable, p18-binary-search, p18-partition-point,
+  p18-hash-same, p18-hash-broken (from memory of the docs). hash_broken.rs uses a
+  fixed-seed hasher on purpose; binary_search.rs prints Err(2) for an unsorted vector
+  (this toolchain's result — the slide says so).
