@@ -1,5 +1,13 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+// from 에서 to 까지 — to 가 앞서면 duration_since 는 Err 다
+fn gap(from: SystemTime, to: SystemTime) -> String {
+    match to.duration_since(from) {
+        Ok(d) => format!("{d:?} 뒤"),
+        Err(e) => format!("{:?} 앞 ({e})", e.duration()),
+    }
+}
+
 fn main() {
     // 지금 시각 — 기준 시각에서 얼마나 지났는지로 받는다
     let now = SystemTime::now();
@@ -16,10 +24,7 @@ fn main() {
     // 기준에 길이를 더해 만든 시각은 수까지 정해진다
     let day = Duration::from_secs(86_400);
     let t: SystemTime = UNIX_EPOCH + day * 3;
-    println!("{:?}", t.duration_since(UNIX_EPOCH));
-    match UNIX_EPOCH.duration_since(t) {
-        Ok(d) => println!("지났다: {d:?}"),
-        Err(e) => println!("아직이다: {:?} 남았다 ({e})", e.duration()),
-    }
+    println!("{}", gap(UNIX_EPOCH, t));
+    println!("{}", gap(t, UNIX_EPOCH));
     println!("t < now              {}", t < now);
 }

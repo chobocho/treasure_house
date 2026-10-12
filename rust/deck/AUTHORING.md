@@ -193,3 +193,22 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
     an id link, forward references included.
 19. The part intro's description of how the part's screens work is a factual claim about
     every example: write it last and check it against all of them.
+
+### Lessons from the review of part 18 (apply from part 19 on)
+20. A title is a claim too. A generalising `<h3>` ("같은 값이면 해시도 같다") gets
+    contradicted by the next slide. Lesson 11 applies to titles and to example comments.
+21. Do not rely on evaluation order inside one `println!` (a mutating call as a positional
+    argument next to an inline-captured `{name}`). Bind the result with `let` first.
+22. A quiz answer's last step ("then add `?`") needs a capture like any other sentence; so
+    does "이 모양이면 … 할 수 있습니다".
+23. Every `match` arm that prints must run — helper functions included. Call the helper
+    both ways rather than leave a dead arm.
+24. No negative claims about documentation ("문서에 약속이 없어서"): they cannot be checked.
+    Say what the example does ("순서에 기대지 않으려고 정렬했다").
+25. "N번부터 M번 줄까지는 X 를 했다": check that every line in the range does X.
+26. A link target must teach the linked word itself, not a neighbour (`mem::replace` is on
+    p06-mem-swap, not p06-mem-take). Grep the target slide for the word before linking.
+27. A word with two senses in one part (정렬: sort / alignment) is disambiguated at the
+    definition and avoided in the intro and `chsub`.
+28. Machine-dependent `true` lines (clock, environment, installed programs): name every
+    such line on the slide, not only the obvious one.

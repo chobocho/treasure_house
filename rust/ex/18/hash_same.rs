@@ -18,7 +18,7 @@ fn main() {
     let a = Seat { row: 3, col: 7 };
     let b = Seat { row: 3, col: 7 };
     let c = Seat { row: 7, col: 3 };
-    // 같은 값이면 해시도 같다
+    // 따로 만든 a 와 b — 값이 같고 해시도 같다
     println!("{} {}", a == b, hash_of(&a) == hash_of(&b));
     println!("{} {}", a == c, hash_of(&a) == hash_of(&c));
 

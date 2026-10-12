@@ -468,3 +468,12 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   PermissionDenied is this machine's, p18-env-vars makes a negative claim about the docs,
   p18-size-align cites the Reference; system_time relies on the machine clock (> 1.7e9 s).
   Part 18 still needs its review pass.
+- Part 18 reviewed (facts + style): 사실오류 3 · 증거불일치 4 · 근거없음 9 · 순서 3 · 표기 4 ·
+  퀴즈 1 · 코드 3; style 21. 84 slides unchanged; 5 examples changed (cmd_fail gained a
+  signal-killed child → `code()` None shown; opt_slot binds before printing; opt_layers
+  shows `?` after transpose; system_time runs both arms; hash_same comment). All
+  doc-attributed sentences kept with attribution; 11 badges spot-checked. Lessons 20–28
+  added to AUTHORING.md. Open: "손잡이" now also for Child/ChildStdin (style sheet says
+  JoinHandle — accept as the general word for a handle); shift under -O not shown.
+  Outline note: split_whitespace/strip_prefix are part 8's, not part 18's.
+- Next: 19a (19_gen.html ch 1–3), 19b, review 19; then 20 …

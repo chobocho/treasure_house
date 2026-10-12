@@ -17,6 +17,8 @@ fn run(program: &str, args: &[&str]) -> String {
 fn main() {
     println!("echo    {}", run("echo", &["안녕"]));
     println!("sh      {}", run("sh", &["-c", "exit 3"]));
+    // 신호를 받아 죽은 자식에게는 종료 코드가 없다
+    println!("kill    {}", run("sh", &["-c", "kill -9 $$"]));
     println!("no-tool {}", run("no-such-tool", &[]));
 
     // 실행 파일이 아닌 파일을 돌리려 한다

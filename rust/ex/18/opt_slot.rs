@@ -16,9 +16,12 @@ fn main() {
 
     // replace — 새 값을 넣고, 있던 것을 돌려받는다
     let mut best: Option<u32> = None;
-    println!("{:?} {best:?}", best.replace(72));
-    println!("{:?} {best:?}", best.replace(91));
+    let old = best.replace(72);
+    println!("{old:?} {best:?}");
+    let old = best.replace(91);
+    println!("{old:?} {best:?}");
 
     // take — 꺼내고 None 을 남긴다
-    println!("{:?} {best:?}", best.take());
+    let old = best.take();
+    println!("{old:?} {best:?}");
 }
