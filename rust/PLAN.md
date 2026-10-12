@@ -489,3 +489,17 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p19-const-array promises "6장", p19-dyn-table promises "5장"; adjust p19-intro items 4–6.
   Later (additions to 0–16): p10-ch2-quiz can link p19-impl-arg-err; p10-derive-table can
   point forward to p19-cond-derive; `*box` moving a non-Copy value is taught nowhere.
+- 2026-10-12 pushed again at the user's request: origin/main = 0dbe67fb (parts 17, 18 with
+  reviews, and the first half of part 19; card and map match the pushed deck: 1,146
+  slides). 19b is being written.
+- 19b written (chapters 4–6: 타입으로 설계하기 · 고차 바운드와 함수 · const 와 제네릭; 49
+  slides, 64 examples) → part 19 = 96 slides (ceiling 99), 119 examples; `rsrun --check
+  ex/19` all 119 ✓ on 5 runs; new E-codes E0392, E0631, E0080; +4 badge rows (84).
+  Appendix error index grew to 31 slides. Two titles carry two E-codes, three carry a code
+  plus a SINCE badge (new title shapes — reviewer to judge). Doc-attributed from memory:
+  p19-hrtb-sugar (Reference: elision in Fn sugar), p19-fn-sizes (fn item types are
+  zero-sized), p19-clone-box (Box<local> is local for the orphan rule). Unlinked:
+  p19-const-kinds "다음" → 20부. Later (0–16 additions): p12-three-iters "collection gone
+  after into_iter" vs Copy arrays; array `Copy` taught nowhere; p01-const-generics on the
+  32 limit vs `Default` still stopping at 32 (p19-cg-from-fn).
+- Part 19 review will run in two halves (96 slides, 119 examples is too large for one).

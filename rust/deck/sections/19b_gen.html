@@ -1,17 +1,749 @@
 <article class="card" id="p19-ch4">
 <p class="chnum">4장</p>
 <h2>타입으로 설계하기</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">단위를 타입으로 가르기 · 바꾸겠다고 적는 변환 · 검사를 통과한 값만 있는 타입 · PhantomData · derive 가 표시뿐인 T 에 다는 조건 · 타입 상태 패턴 · 지나간 상태의 값 · 꼭 채울 칸이 있는 빌더 · 타입에 붙이는 must_use · 봉인한 트레이트 · 허가로 쓰는 표시 트레이트 · 실수와 모양의 표</p>
+</article>
+
+<article class="card" id="p19-unit-mix">
+<h3>속이 같은 f64 라도 단위가 다르면 더해지지 않게 한다 — E0308</h3>
+<p class="lead">활주로는 미터로, 유도로는 피트로 잰 값이 있습니다. 둘 다 <code>f64</code> 로 두면 더하는 데 아무 걸림이 없고, 그래서 틀린
+합이 조용히 나옵니다.</p>
+<!--RUN file=ex/19/unit_f64.rs note=1200 미터와 300 피트를 더했다-->
+<!--CODE file=ex/19/unit_mix_err.rs note=단위마다 타입을 만들고, Add 는 Meters 끼리만-->
+<!--OUT file=out/19/unit_mix_err.txt lines=1-9 note=+ 의 오른쪽이 Feet 이다-->
+<div class="note"><b>읽는 법</b> — 위 화면의 1500 은 1200 미터와 300 피트를 그대로 더한 수입니다. 컴파일할 때도 실행할 때도 알림이 없습니다.
+<code>unit_mix_err.rs</code> 는 두 단위를 7부에서 본 <a href="#p07-tuple-struct-mixup">값 하나를 감싼 튜플 구조체</a>로 가르고, 10부의
+<a href="#p10-op-add"><code>Add</code></a> 를 <code>Meters</code> 에만 구현했습니다. 번호는 7부에서 인자 순서를 바꿨을 때와 같은 E0308 이고,
+이번에 막힌 곳은 <code>+</code> 의 오른쪽입니다. 21번 줄의 <code>taxi</code> 아래에 "<code>Meters</code> 를 기대했는데 <code>Feet</code> 이
+왔다", <code>runway</code> 아래에 "이것이 <code>Meters</code> 라서 그렇게 기대했다" 가 붙었습니다. 13번 줄의 <code>add</code> 가
+<code>rhs</code> 를 <code>Meters</code> 로만 받습니다.</div>
+</article>
+
+<article class="card" id="p19-unit-convert">
+<h3>단위를 바꾸는 길을 하나만 열어 둔다</h3>
+<p class="lead">더하려면 단위를 맞춰야 합니다. 10부의 <a href="#p10-from-into"><code>From</code></a> 으로 "피트에서 미터를 만들 수 있다" 를
+한 번 적고, 더하는 자리에서는 바꾸겠다고 적습니다. 배율 0.3048 은 그 구현 한 곳에만 있습니다.</p>
+<!--RUN file=ex/19/unit_add.rs note=Meters::from(taxi) 와 taxi.into()-->
+<div class="note"><b>읽는 법</b> — 28번 줄의 <code class="nb">Meters::from(taxi)</code> 가 300 피트를 미터로 바꿨고 합은
+<code class="nb">Meters(1291.44)</code> 입니다. 29번 줄의 <code class="nb">{total:.2?}</code> 는 <code class="nb">{:?}</code> 에 소수 자릿수
+<code>.2</code> 를 함께 적은 서식입니다. 30번 줄은 같은 변환을 <code>into()</code> 로 불렀고, 31번 줄이 그것을 두 번 더해
+<code class="nb">Meters(1382.88)</code> 을 냈습니다.</div>
+<div class="key"><b>섞는 줄은 막히고, 바꾸는 줄은 소스에 남는다</b> — 앞 슬라이드의 21번 줄은 컴파일되지 않았고, 이 슬라이드의 28번 줄에는
+무엇을 무엇으로 바꾸는지가 적혀 있습니다.</div>
+</article>
+
+<article class="card" id="p19-valid-newtype">
+<h3>검사를 통과한 값만 있는 타입을 만든다</h3>
+<p class="lead">전자우편 주소를 <code class="nb">&amp;str</code> 로 넘기면, 받는 함수마다 주소가 맞는지 다시 확인하거나 누군가 확인했다고
+믿어야 합니다. 주소를 감싼 타입을 만들고, 값을 만드는 길을 검사하는 <a href="#p07-assoc-fn">연관 함수</a> 하나로 좁힙니다. 그러면 <code>Email</code> 을 받는 함수는
+검사가 끝난 값을 받습니다.</p>
+<!--RUN file=ex/19/email_valid.rs note=글 셋을 parse 에 넣는다-->
+<div class="note"><b>읽는 법</b> — 4번 줄의 <code>addr</code> 에는 <code>pub</code> 이 없습니다. 13부에서 본 대로
+<a href="#p13-field-private">구조체의 필드는 따로 공개</a>하므로 <code>mail</code> 모듈 밖에서는 이 칸에 손댈 수 없습니다. 밖에서 값을 만드는
+길은 8번 줄의 <code>parse</code> 이고, 반환 타입은 <code>Result</code> 입니다. 34번 줄의 세 글 가운데 첫째만 <code>@</code> 앞에 이름이
+있고 뒤에 점이 있어 11번 줄의 가드를 지났습니다. 13번 줄이 소문자로 바꿔 담아서 <code class="nb">kim@example.com</code> 으로 찍혔습니다.
+나머지 둘은 16번 줄의 갈래로 갔습니다. 29번 줄의 <code>send</code> 는 아무것도 확인하지 않습니다.</div>
+</article>
+
+<article class="card" id="p19-valid-private">
+<h3>모듈 밖에서는 검사를 건너뛰어 만들 수도, 속을 바꿀 수도 없다 — E0451 · E0616</h3>
+<p class="lead">"<code>Email</code> 이 있으면 검사를 통과한 것" 이라는 약속은 다른 길로 값을 만들 수 없어야 지켜집니다. 모듈 밖에서 필드를
+직접 채워 만들어 보고, 이미 만든 값의 속을 바꿔 봅니다. <code>mail</code> 모듈은 검사만 줄였고 나머지는 앞 슬라이드와 같습니다.</p>
+<!--CODE file=ex/19/email_make_err.rs lines=22-31 note=27번 줄 — parse 를 거치지 않고 만든다-->
+<!--OUT file=out/19/email_make_err.txt lines=1-9 note=addr 를 채울 수 없다-->
+<!--OUT file=out/19/email_set_err.txt lines=1-6 note=만든 값에 real.addr = … 로 새 글을 넣으려 한 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 둘 다 13부에서 읽은 번호입니다. 위는 <a href="#p13-field-literal">E0451</a> 입니다. 28번 줄의
+<code>addr</code> 가 비공개 필드라서 <code>mail</code> 밖에서는 <code class="nb">Email { … }</code> 로 만들 수 없습니다. 아래는
+<a href="#p13-field-private">E0616</a> 이고, <code>parse</code> 를 통과한 <code>real</code> 의 <code>addr</code> 에 새 글을 넣으려던 쌍둥이
+<code>email_set_err.rs</code> 의 27번 줄이 막혔습니다.</div>
+<div class="key"><b>약속을 지키는 것은 모듈의 벽이다</b> — <code>mail</code> 모듈 안에서는 앞 슬라이드의 14번 줄처럼 <code>addr</code> 를 직접
+채웁니다. 검사를 빠뜨리지 않았는지 살필 곳이 그 모듈 하나로 줄었습니다.</div>
+</article>
+
+<article class="card" id="p19-phantom-err">
+<h3>쓰지 않는 타입 인자는 둘 수 없다 — E0392</h3>
+<p class="lead">사용자 번호와 주문 번호는 둘 다 <code>u32</code> 입니다. 앞에서처럼 <code>UserId</code> 와 <code>OrderId</code> 를 따로 만들면
+섞이지 않지만, 번호의 종류마다 같은 구조체를 또 써야 합니다. 구조체는 <code class="nb">Id&lt;T&gt;</code> 하나만 두고 "무엇의 번호인가"
+를 타입 인자로 가르려 합니다.</p>
+<!--CODE file=ex/19/phantom_err.rs note=T 는 어느 필드에도 나오지 않는다-->
+<!--OUT file=out/19/phantom_err.txt lines=1-9 note=T 를 쓰지 않았다-->
+<div class="note"><b>읽는 법</b> — 처음 보는 번호입니다. 오류 첫 줄은 "타입 인자 <code>T</code> 가 한 번도 쓰이지 않았다" 이고 5번 줄의
+<code>T</code> 를 짚습니다. 필드는 6번 줄의 <code>u32</code> 하나뿐이라 <code>T</code> 가 어느 필드의 타입에도 나오지 않습니다. 첫
+<code>help:</code> 가 길을 셋 적습니다 — <code>T</code> 를 지우거나, 필드에서 <code>T</code> 를 쓰거나, <code>PhantomData</code> 같은
+표시(marker)를 쓰라고 합니다. 둘째 <code>help:</code> 는 <code>T</code> 를 const 인자로 쓰려던 것이라면 그렇게 적으라는 말이고, 여기에는
+해당하지 않습니다.</div>
+</article>
+
+<article class="card" id="p19-phantom-id">
+<h3>PhantomData&lt;T&gt; 필드를 두면 Id&lt;User&gt; 와 Id&lt;Order&gt; 가 갈린다 — E0308</h3>
+<p class="lead"><code>help:</code> 가 이름을 댄 <code class="nb">std::marker::PhantomData&lt;T&gt;</code> 는 <code>T</code> 타입의 값을 담지 않으면서
+"이 구조체는 <code>T</code> 를 쓴다" 고 알리는 타입입니다. 필드 하나를 그 타입으로 두면 앞 슬라이드의 구조체가 컴파일됩니다.</p>
+<!--RUN file=ex/19/phantom_id.rs note=번호 둘, 그리고 크기-->
+<!--OUT file=out/19/phantom_mix_err.txt lines=1-9 note=28번 줄을 cancel(&user, &order) 로 바꾼 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 9번 줄이 그 필드이고, 값을 만들 때는 16번 줄처럼 <code>PhantomData</code> 라고만 적습니다. 3번과 4번 줄의
+<code>User</code> 와 <code>Order</code> 는 7부의 <a href="#p07-unit-struct">필드가 없는 구조체</a>이고, 이 파일은 그 값을 한 번도 만들지
+않습니다. 타입 인자 자리에 이름으로만 쓰였습니다. 29번 줄에서 <code class="nb">Id&lt;User&gt;</code> 의 크기는 <code>u32</code> 와 같은
+4 바이트이고, 30번 줄에서 <code>kind</code> 필드의 크기는 0 입니다. 이 책을 만든 기계와 컴파일러 1.99 의 값입니다. 아래 화면은 두 번호를
+바꿔 넘긴 쌍둥이 <code>phantom_mix_err.rs</code> 의 것입니다. 7부에서 <a href="#p07-tuple-struct-mixup"><code>Meters</code> 와
+<code>Seconds</code> 를 바꿔 넣었을 때</a>와 같은 E0308 이고, 두 인자에 expected · found 가 하나씩 붙었습니다.</div>
+</article>
+
+<article class="card" id="p19-phantom-derive">
+<h3>derive 는 표시로만 쓴 T 에도 조건을 단다 — E0369</h3>
+<p class="lead">번호 둘이 같은지 견주려고 <code class="nb">Id&lt;T&gt;</code> 에 <code class="nb">derive(PartialEq)</code> 를 붙였습니다.
+견줄 것은 <code>raw</code> 하나이고, <code>User</code> 의 값은 어디에도 없습니다.</p>
+<!--CODE file=ex/19/phantom_derive_err.rs note=6번 줄에 derive 가 있고, User 에는 없다-->
+<!--OUT file=out/19/phantom_derive_err.txt lines=1-18 note=까닭을 User 에서 찾는다-->
+<div class="note"><b>읽는 법</b> — 10부에서 <a href="#p10-eq-missing"><code>==</code> 를 쓰다 본 E0369</a> 입니다. 그때는 견주는 구조체에
+<code>PartialEq</code> 가 없었습니다. 이번에는 6번 줄에 <code>derive</code> 가 있는데도 <code class="nb">Id&lt;User&gt;</code> 에
+<code>==</code> 를 쓸 수 없다고 하고, <code>note:</code> 가 까닭을 4번 줄의 <code>User</code> 에서 찾습니다 — "<code>User</code> 에
+<code>PartialEq</code> 구현이 빠진 것 같다". 1장에서 본 대로 <a href="#p19-cond-derive"><code>derive</code> 가 만드는 구현에는 조건이
+달립니다</a>. <code>T</code> 가 나오는 필드가 값을 담지 않는 9번 줄의 <code class="nb">PhantomData&lt;T&gt;</code> 하나뿐인데도
+그랬습니다.</div>
+<div class="tip"><b>고치려면</b> — <code>help:</code> 는 <code>User</code> 에 <code class="nb">derive(PartialEq)</code> 를 붙이라고 권합니다. 다른
+길은 <code>PartialEq</code> 를 손으로 구현하면서 <code>T</code> 에 조건을 달지 않는 것입니다. 그렇게 쓴 <code>phantom_derive.rs</code> 의
+구현과 출력입니다.</div>
+<!--CODE file=ex/19/phantom_derive.rs lines=19-24 note=impl<T> 에 조건이 없다-->
+<!--OUT file=out/19/phantom_derive.txt lines=2-2 note=번호 7 과 7, 그리고 7 과 8 을 견줬다-->
+</article>
+
+<article class="card" id="p19-conn-bool">
+<h3>상태를 bool 필드로 두면 순서를 어긴 호출은 실행 중에야 드러난다</h3>
+<p class="lead">연결은 연 다음에야 보낼 수 있습니다. 열렸는지를 <code>bool</code> 필드로 들고 다니면 <code>send</code> 는 부를 때마다 그
+필드를 확인해야 하고, <code>open</code> 을 빠뜨린 호출도 컴파일됩니다. 7부의 <a href="#p07-state-machine">상태 기계</a>도 같은 식이었습니다.
+상태에 맞지 않는 행동은 <code>match</code> 의 마지막 갈래에서, 곧 실행 중에 걸러졌습니다.</p>
+<!--RUN file=ex/19/conn_bool.rs note=open 을 부르기 전에 한 번, 부른 뒤에 한 번 보낸다-->
+<div class="note"><b>읽는 법</b> — 32번 줄은 <code>open</code> 을 부르기 전의 <code>send</code> 입니다. 컴파일됐고, 실행 중에 21번 줄의 확인에
+걸려 <code class="nb">db: 열지 않은 연결</code> 이 됐습니다. 35번 줄에서 연 뒤의 36번 줄은 보냈습니다. 이 프로그램은 <code>Err</code> 를
+찍기라도 했습니다. 부르는 쪽이 <code>Result</code> 를 보지 않으면 9부에서 본 <a href="#p09-res-unused">경고</a> 하나가 남습니다.</div>
+</article>
+
+<article class="card" id="p19-typestate">
+<h3>상태를 타입으로 옮기면 순서를 어긴 호출이 컴파일되지 않는다 — E0599</h3>
+<p class="lead">상태마다 타입을 하나씩 만들고 연결을 <code class="nb">Conn&lt;S&gt;</code> 로 씁니다. <code>send</code> 는
+<code class="nb">impl Conn&lt;Open&gt;</code> 블록에만 둡니다. 10부에서 <a href="#p10-generic-impl"><code class="nb">impl Point&lt;f64&gt;</code></a>
+로 타입 하나를 짚어 메서드를 둔 것과 같은 문법입니다. 상태를 바꾸는 메서드는 <code>self</code> 를 가져가고 다음 상태의 값을 돌려줍니다.
+이런 설계를 타입 상태 패턴(typestate pattern)이라고 부릅니다.</p>
+<!--RUN file=ex/19/conn_state.rs note=Closed 와 Open, 그리고 Conn<S>-->
+<!--OUT file=out/19/conn_state_err.txt lines=1-11 note=open 을 부르지 않고 conn.send("hello") 를 부른 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 4번과 5번 줄의 상태는 <a href="#p07-unit-struct">필드가 없는 구조체</a>이고, 9번 줄에서 앞의
+<a href="#p19-phantom-id"><code>PhantomData</code></a> 로만 쓰입니다. 20번 줄의 <code>open</code> 은 <code class="nb">Conn&lt;Closed&gt;</code>
+를 가져가 <code class="nb">Conn&lt;Open&gt;</code> 을 돌려주고, 28번 줄의 <code>send</code> 는 27번 줄의 블록에 있습니다. 39번부터 42번
+줄까지가 열고 · 보내고 · 닫고 · 다시 열어 보냈습니다. 43번 줄에서 <code class="nb">Conn&lt;Open&gt;</code> 의 크기는 <code>String</code>
+하나와 같은 24 바이트이고, 44번 줄에서 <code>Open</code> 의 크기는 0 입니다. 이 책을 만든 기계와 컴파일러 1.99 의 값입니다. 아래 화면은
+<code>open</code> 없이 <code>send</code> 를 부른 쌍둥이 <code>conn_state_err.rs</code> 의 것입니다. 1장에서 읽은
+<a href="#p19-cond-method-err">E0599</a> 이고 타입 자리가 <code class="nb">Conn&lt;Closed&gt;</code> 입니다. 새로 읽을 것은 마지막
+<code>note:</code> 입니다 — "그 메서드는 <code class="nb">Conn&lt;Open&gt;</code> 에서 찾았다".</div>
+<div class="key"><b>앞 슬라이드와 견주면</b> — 같은 실수가 거기서는 실행 중의 <code>Err</code> 였고 여기서는 컴파일 오류입니다. <code>send</code>
+의 본문에는 상태를 확인하는 줄이 없고, 반환 타입도 <code>Result</code> 가 아닙니다.</div>
+</article>
+
+<article class="card" id="p19-typestate-moved">
+<h3>지나간 상태의 값은 다시 쓸 수 없다 — E0382</h3>
+<p class="lead">타입을 가르는 것만으로는 모자랍니다. 닫은 뒤에는 닫기 전의 <code class="nb">Conn&lt;Open&gt;</code> 값이 손에 남아 있지
+않아야 합니다. 앞 슬라이드의 <code>close</code> 는 <code>self</code> 를 가져갑니다. 닫은 뒤에 닫기 전의 변수를 써 봅니다.</p>
+<!--CODE file=ex/19/conn_moved_err.rs lines=38-44 note=40번 줄에서 닫고, 42번 줄에서 닫기 전의 conn 을 쓴다-->
+<!--OUT file=out/19/conn_moved_err.txt lines=1-17 note=conn 은 옮겨 간 값이다-->
+<div class="note"><b>읽는 법</b> — 6부의 <a href="#p06-move-assign">E0382</a> 입니다. 40번 줄의 <code>close</code> 호출이 <code>conn</code> 을
+옮겨 갔고, 42번 줄이 그 뒤에 빌리려 했습니다. <code>note:</code> 는 32번 줄의 <code>self</code> 를 짚어 "<code>close</code> 는 받는 값
+<code>self</code> 의 소유권을 가져간다" 고 적습니다. 7부의 <a href="#p07-self-table"><code>self</code> 의 세 가지 모양</a> 가운데
+"가져간다" 입니다.</div>
+<div class="key"><b>타입 상태 패턴의 두 부품</b> — 상태마다 다른 타입, 그리고 <code>self</code> 를 가져가는 전이입니다. 앞의 것이 없는 메서드를
+E0599 로 막고, 뒤의 것이 지나간 값을 E0382 로 막습니다.</div>
+</article>
+
+<article class="card" id="p19-builder-option">
+<h3>꼭 채울 칸을 Option 으로 두면 빠뜨린 것은 build 가 돌 때 드러난다</h3>
+<p class="lead">요청을 만드는 빌더입니다. 7부에서 <a href="#p07-method-chain"><code>self</code> 를 돌려줘 점으로 이어 부르는 모양</a>으로
+봤습니다. 재시도 횟수는 없어도 되고 주소는 꼭 있어야 합니다. 아직 채우지 않은 주소를
+<code>Option</code> 으로 들고 있다가 <code>build</code> 에서 확인합니다.</p>
+<!--RUN file=ex/19/builder_option.rs note=url 을 채운 것 하나, 빠뜨린 것 하나-->
+<div class="note"><b>읽는 법</b> — 31번 줄은 <code>url</code> 과 <code>retries</code> 를 점으로 이어 불렀고 <code>Ok</code> 가 나왔습니다.
+34번 줄은 <code>url</code> 을 빠뜨렸는데 컴파일됐고, 25번 줄의 <a href="#p09-real-convert"><code>ok_or</code></a> 와 <code>?</code> 가
+<code class="nb">Err("url 이 없다")</code> 를 냈습니다. 24번 줄의 반환 타입이 <code>Result</code> 인 까닭은 그 한 가지입니다.</div>
+</article>
+
+<article class="card" id="p19-builder-state">
+<h3>꼭 채울 칸의 상태를 타입 인자로 옮기면 build 는 실패하지 않는다 — E0599</h3>
+<p class="lead">주소 칸의 상태를 타입 인자 <code>U</code> 로 옮깁니다. 이번 상태는 값을 품습니다. <code>NoUrl</code> 은 비어 있고
+<code>HasUrl</code> 은 <code>String</code> 을 가집니다. <code>build</code> 는 <code class="nb">Builder&lt;HasUrl&gt;</code> 에만 둡니다.</p>
+<!--RUN file=ex/19/builder_state.rs note=url 을 먼저 채운 것, 나중에 채운 것-->
+<!--OUT file=out/19/builder_state_err.txt lines=1-11 note=Builder::new().retries(3).build() 로 url 을 빠뜨린 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 17번 줄의 <code>url</code> 이 <code class="nb">Builder&lt;NoUrl&gt;</code> 을 가져가
+<code class="nb">Builder&lt;HasUrl&gt;</code> 을 돌려줍니다. 26번 줄의 <code>retries</code> 는 <code class="nb">impl&lt;U&gt;</code> 블록에
+있어서 42번 줄처럼 <code>url</code> 보다 먼저 불러도 되고, 받은 타입 <code class="nb">Builder&lt;U&gt;</code> 그대로 돌려줍니다. 34번 줄의
+<code>build</code> 는 <code>Result</code> 가 아니라 <code>String</code> 을 돌려주고, 35번 줄이 7부의
+<a href="#p07-let-destructure"><code>let</code> 패턴</a>으로 <code>HasUrl</code> 속의 글을 꺼냅니다. 아래는 <code>url</code> 을 빠뜨린 쌍둥이
+<code>builder_state_err.rs</code> 의 화면입니다. <a href="#p19-typestate">타입 상태 패턴</a>에서 본 E0599 와 같은 꼴이고, <code>note:</code> 가
+<code>build</code> 를 <code class="nb">Builder&lt;HasUrl&gt;</code> 에서 찾았다고 알려 줍니다.</div>
+<div class="key"><b>앞 슬라이드와 견주면</b> — 빠뜨린 <code>url</code> 이 거기서는 실행 중의 <code>Err</code> 였고 여기서는 컴파일
+오류입니다.</div>
+</article>
+
+<article class="card" id="p19-must-use">
+<h3>돌려준 다음 상태를 받지 않고 버리면 — 타입에 붙이는 #[must_use]</h3>
+<p class="lead">타입 상태 패턴에서 전이는 새 값을 돌려줍니다. <code class="nb">conn.open();</code> 이라고만 쓰면 원래 값은 옮겨 가고,
+돌려준 <code class="nb">Conn&lt;Open&gt;</code> 은 받는 변수 없이 버려집니다. 5부에서 <a href="#p05-must-use">함수에 붙인
+<code class="nb">#[must_use]</code></a> 를 이번에는 타입에 붙입니다.</p>
+<!--RUN file=ex/19/must_use.rs note=32번 줄 — conn.open(); 의 결과를 받지 않았다-->
+<div class="note"><b>읽는 법</b> — 경고는 32번 줄에 붙었고, 경고 첫 줄은 "반드시 써야 하는 <code>Conn</code> 이 쓰이지 않았다" 입니다. 속성은 17번
+줄의 <code>open</code> 이 아니라 5번 줄, 구조체 <code>Conn</code> 위에 있습니다. 첫 <code class="nb">= note:</code> 가 5번 줄에 적어 둔 글을
+그대로 보여 줍니다. <code>help:</code> 는 5부에서 본 <code class="nb">let _ =</code> 입니다. 경고일 뿐이라 프로그램은 돌았고, 33번 줄에서
+받아 둔 연결로 34번 줄이 한 번 보냈습니다. 이 예제의 8번 줄은 <code>PhantomData</code> 대신 상태 값을 그대로 담았습니다.</div>
+</article>
+
+<article class="card" id="p19-sealed-open">
+<h3>공개한 트레이트는 다른 크레이트도 구현할 수 있다</h3>
+<p class="lead">단위를 다루는 라이브러리 크레이트 <code>units</code> 입니다. <code>name</code> 은 <code>Unit</code> 의 <code>index</code>
+로 이름표 배열을 읽습니다. 쓴 사람은 <code>Unit</code> 을 구현한 타입이 <code>Meter</code> 와 <code>Foot</code> 둘뿐이라고 믿었습니다. 이
+라이브러리를 가져다 쓰는 크레이트가 <code>Mile</code> 에 <code>Unit</code> 을 구현합니다.</p>
+<!--CODE file=ex/19/unit_open/units.rs note=라이브러리 크레이트 — name 은 index 가 0 아니면 1 이라고 믿는다-->
+<!--CODE file=ex/19/unit_open/main.rs note=가져다 쓰는 크레이트 — Mile 의 index 는 2-->
+<!--OUT file=out/19/unit_open.txt note=컴파일 두 번, 그리고 실행-->
+<div class="note"><b>읽는 법</b> — 화면의 첫 명령은 rustc 의 옵션 <code class="nb">--crate-type lib</code> 로 <code>units.rs</code> 를 라이브러리
+크레이트로 컴파일하고, 둘째 명령은 <code class="nb">--extern</code> 으로 그 결과를 <code>units</code> 라는 이름으로 넘겨
+<code>main.rs</code> 를 컴파일합니다. 13부에서는 <a href="#p13-libbin">cargo 로 두 크레이트를 한 패키지에</a> 뒀습니다.
+<code>main.rs</code> 의 7번 줄이 <code>Mile</code> 에 <code>Unit</code> 을 구현했고 컴파일됐습니다. 14번 줄은 <code>m</code> 과
+<code>ft</code> 를 찍었습니다. 15번 줄에서 <code>Mile</code> 의 <code>index</code> 가 2 를 돌려주자 <code>units.rs</code> 26번 줄의
+<code class="nb">NAMES[…]</code> 가 3부에서 본 <a href="#p03-array-get"><code class="nb">index out of bounds</code></a> 로
+패닉했습니다. 패닉이 난 자리는 라이브러리 안입니다.</div>
+</article>
+
+<article class="card" id="p19-sealed">
+<h3>봉인한 트레이트 — 밖에서 쓸 수는 있다</h3>
+<p class="lead"><code>Unit</code> 에 10부의 <a href="#p10-supertrait">상위 트레이트</a>로 <code>Sealed</code> 를 답니다. <code>Sealed</code>
+는 <code>pub</code> 이지만 <code>pub</code> 이 없는 모듈 <code>sealed</code> 안에 있습니다. <code>Unit</code> 을 구현하려면 <code>Sealed</code>
+부터 구현해야 하는데, 13부에서 본 대로 <a href="#p13-mod-private">비공개인 것은 밖에서 보이지 않습니다</a>. 이렇게 구현할 수 있는 쪽을 내
+크레이트로 닫아 둔 트레이트를 봉인한 트레이트(sealed trait)라고 부릅니다.</p>
+<!--CODE file=ex/19/unit_sealed/units.rs lines=1-16 note=라이브러리 크레이트의 앞부분 — 나머지는 앞 슬라이드와 같다-->
+<!--CODE file=ex/19/unit_sealed/main.rs note=가져다 쓰는 크레이트 — Unit 을 조건으로 쓰고 메서드를 부른다-->
+<!--OUT file=out/19/unit_sealed.txt lines=1-3 note=컴파일 두 번, 그리고 실행-->
+<div class="note"><b>읽는 법</b> — <code>units.rs</code> 의 3번 줄에는 <code>pub</code> 이 없고 4번 줄에는 있습니다. 8번 줄이
+<code>Sealed</code> 를 상위 트레이트로 달았고, 15번과 16번 줄이 내 타입 둘에 <code>Sealed</code> 를 구현했습니다. <code>Sealed</code> 는
+메서드가 없는 <a href="#p19-overlap-fix">표시 트레이트</a>입니다. <code>main.rs</code> 의 5번 줄은 <code>Unit</code> 을 조건으로 썼고 6번 줄은
+<code>index</code> 를 불렀습니다. 둘 다 컴파일됐고 <code class="nb">0 번 칸 m</code> 과 <code class="nb">1 번 칸 ft</code> 가 나왔습니다.
+밖에서 구현해 보는 것은 다음 슬라이드입니다.</div>
+</article>
+
+<article class="card" id="p19-sealed-err">
+<h3>봉인한 트레이트는 밖에서 구현할 수 없다 — E0277 · E0603</h3>
+<p class="lead">앞 슬라이드의 <code>units</code> 를 그대로 두고, 가져다 쓰는 쪽에서 <code>Mile</code> 에 <code>Unit</code> 을 구현해 봅니다.
+같은 예제 디렉터리의 다른 파일 <code>impl_unit.rs</code> 입니다.</p>
+<!--CODE file=ex/19/unit_sealed/impl_unit.rs lines=1-10 note=6번 줄 — impl Unit for Mile-->
+<!--OUT file=out/19/unit_sealed.txt lines=4-9 note=Mile 은 Sealed 가 아니다-->
+<!--OUT file=out/19/unit_sealed.txt lines=23-27 note=같은 오류의 note — Unit 에 달린 조건-->
+<div class="note"><b>읽는 법</b> — <a href="#p10-trait-not-impl">E0277</a> 이 대는 타입은 <code>Mile</code>, 트레이트는
+<code class="nb">units::sealed::Sealed</code> 입니다. 내가 구현하려던 것은 <code>Unit</code> 인데 채워지지 않은 조건은 그 상위 트레이트입니다.
+<code>note:</code> 가 <code>units.rs</code> 8번 줄의 <code class="nb">sealed::Sealed</code> 를 짚습니다. 화면에서 뺀 그다음 줄은 200 칸이
+넘어서 싣지 못했습니다. 그 줄은 <code>Unit</code> 을 "sealed trait" 이라고 부르고, 구현하려면 닿을 수 없는
+<code class="nb">units::sealed::Sealed</code> 도 구현해야 한다고 적습니다.</div>
+<!--OUT file=out/19/unit_sealed.txt lines=37-50 note=Sealed 부터 구현해 본 impl_sealed.rs-->
+<div class="note"><b>Sealed 를 구현하려 하면</b> — 위 화면은 <code class="nb">impl units::sealed::Sealed for Mile {}</code> 을 더한
+<code>impl_sealed.rs</code> 의 것입니다. 13부의 <a href="#p13-mod-private">E0603</a> 이고, 이번에 비공개인 것은 함수가 아니라 모듈
+<code>sealed</code> 입니다. <code>Sealed</code> 아래에는 "공개적으로 다시 내놓지 않은 트레이트" 라고 붙었습니다. 13부에서 본
+<a href="#p13-reexport">다시 내놓기</a>가 없다는 말입니다.</div>
+</article>
+
+<article class="card" id="p19-marker-permission">
+<h3>표시 트레이트를 허가로 쓴다 — E0277</h3>
+<p class="lead">1장에서는 <a href="#p19-overlap-fix">표시 트레이트</a>로 포괄 구현을 받을 타입을 골랐습니다. 같은 도구로 "이 함수에 넘겨도
+되는 타입" 을 고릅니다. 로그에 남겨도 되는 타입에만 <code>Loggable</code> 을 붙이고, <code>log</code> 는 <code>Loggable</code> 만 받습니다.
+<code>UserName</code> 과 <code>Password</code> 는 둘 다 <code class="nb">derive(Debug)</code> 를 붙인 타입입니다.</p>
+<!--RUN file=ex/19/marker_log.rs note=UserName 에만 표시를 붙였다-->
+<!--OUT file=out/19/marker_log_err.txt lines=1-19 note=log("비밀번호", &secret); 을 더한 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 13번 줄이 <code>UserName</code> 에만 표시를 붙였고 본문은 비어 있습니다. 23번 줄의 <code>log</code> 가 이름을
+찍었습니다. 아래는 <code class="nb">log("비밀번호", &amp;secret)</code> 을 더한 쌍둥이 <code>marker_log_err.rs</code> 의 화면입니다.
+<a href="#p10-trait-not-impl">E0277</a> 이 대는 타입은 <code>Password</code>, 트레이트는 <code>Loggable</code> 입니다. 둘째 <code>help:</code>
+는 <code>Loggable</code> 을 구현한 타입으로 13번 줄의 <code>UserName</code> 을 보여 줍니다.</div>
+<div class="key"><b>허가는 한 줄이다</b> — 어떤 타입이 <code>log</code> 에 넘어갈 수 있는지는 <code class="nb">impl Loggable for</code> 를 적은
+줄들이 정합니다. 이 파일에는 13번 줄 하나입니다.</div>
+</article>
+
+<article class="card" id="p19-design-table">
+<h3>막고 싶은 실수와 쓰는 모양</h3>
+<p class="lead">이 장의 모양들을 "무슨 실수를 막는가" 로 찾는 표입니다. 왼쪽에서 실수를 찾으면, 가운데의 모양을 썼을 때 그 실수를 알려 주는
+것이 셋째 칸이고, 마지막 칸이 돌려 본 슬라이드입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>막고 싶은 실수</th><th>쓰는 모양</th><th>알려 주는 것</th><th>이 장에서</th></tr>
+<tr><td>단위가 다른 수를 섞어 계산한다</td><td>단위마다 값 하나를 감싼 타입, 연산자는 같은 타입끼리만</td><td>E0308</td><td><a href="#p19-unit-mix">Meters 와 Feet</a></td></tr>
+<tr><td>검사하지 않은 값을 쓴다</td><td>비공개 필드와 검사하는 연관 함수</td><td>E0451 · E0616</td><td><a href="#p19-valid-private">Email</a></td></tr>
+<tr><td>종류가 다른 번호를 바꿔 넘긴다</td><td><code class="nb">Id&lt;T&gt;</code> 와 <code class="nb">PhantomData&lt;T&gt;</code></td><td>E0308</td><td><a href="#p19-phantom-id">Id&lt;User&gt;</a></td></tr>
+<tr><td>순서를 어겨 메서드를 부른다</td><td>타입 상태 패턴 — 상태마다 타입</td><td>E0599</td><td><a href="#p19-typestate">Conn&lt;S&gt;</a></td></tr>
+<tr><td>지나간 상태의 값을 다시 쓴다</td><td><code>self</code> 를 가져가는 전이</td><td>E0382</td><td><a href="#p19-typestate-moved">close 뒤의 send</a></td></tr>
+<tr><td>꼭 채울 칸을 빠뜨린다</td><td>칸의 상태를 타입 인자로 둔 빌더</td><td>E0599</td><td><a href="#p19-builder-state">Builder&lt;U&gt;</a></td></tr>
+<tr><td>돌려준 값을 받지 않고 버린다</td><td>타입에 <code class="nb">#[must_use]</code></td><td>경고</td><td><a href="#p19-must-use">conn.open();</a></td></tr>
+<tr><td>다른 크레이트가 내 트레이트를 구현한다</td><td>봉인한 트레이트</td><td>E0277</td><td><a href="#p19-sealed-err">Unit 과 Mile</a></td></tr>
+<tr><td>넘기면 안 되는 타입을 함수에 넘긴다</td><td>표시 트레이트를 조건으로</td><td>E0277</td><td><a href="#p19-marker-permission">Loggable</a></td></tr>
+</table>
+</div>
+<p class="cap">셋째 칸은 모두 컴파일할 때 나옵니다. 실행 중에 들어오는 값의 검사가 없어지는 것은 아닙니다. 표 둘째 줄의 <code>parse</code> 는
+<a href="#p19-valid-newtype">실행 중에 <code>Result</code> 를 돌려줬습니다</a>. 검사하는 곳이 한 군데로 모였을 뿐입니다.</p>
+</article>
+
+<article class="card quiz" id="p19-ch4-quiz" data-quiz>
+<h3>퀴즈 — 타입으로 설계하기</h3>
+<p class="q">Q. 연결을 <code class="nb">Conn&lt;Closed&gt;</code> 와 <code class="nb">Conn&lt;Open&gt;</code> 으로 쓰고, <code>send</code> 는
+<code class="nb">impl Conn&lt;Open&gt;</code> 에만, <code class="nb">close(self)</code> 는 <code class="nb">Conn&lt;Closed&gt;</code> 를 돌려주게
+했습니다. ① 열지 않은 연결에 <code>send</code> 를 부르는 줄과 ② <code class="nb">let closed = conn.close();</code> 뒤에
+<code class="nb">conn.send("hello");</code> 를 부르는 줄은 각각 어떤 오류로 막힐까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> ① <code class="nb">Conn&lt;Closed&gt;</code> 에는 <code>send</code> 가 없어서 E0599 입니다. <code>note:</code> 가 그
+메서드를 <code class="nb">Conn&lt;Open&gt;</code> 에서 찾았다고 알려 줍니다(<a href="#p19-typestate">타입 상태 패턴</a>). ②
+<code>close</code> 가 <code>self</code> 를 가져가 <code>conn</code> 은 옮겨 간 값이므로 E0382 입니다(<a href="#p19-typestate-moved">지나간
+상태의 값</a>).</div>
 </article>
 
 <article class="card" id="p19-ch5">
 <p class="chnum">5장</p>
 <h2>고차 바운드와 함수</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">함수의 수명 인자로는 안 되는 조건 · for&lt;'a&gt; · 줄여 적은 Fn(&amp;str) -&gt; &amp;str · 참조를 돌려주는 클로저 · 수명 인자를 받는 연관 타입의 조건 · 함수와 클로저의 크기 · 함수 포인터가 받지 않는 클로저 · 메서드의 이름을 값으로 · 생성자도 함수 · 서로 다른 클로저 돌려주기 · 함수를 받아 함수를 돌려주기 · fn 포인터 · impl Fn · dyn Fn 의 표</p>
+</article>
+
+<article class="card" id="p19-hrtb-named-err">
+<h3>함수의 수명 인자 하나로는 안에서 만든 값을 넘길 수 없다 — E0597</h3>
+<p class="lead">글을 줄 단위로 돌며, 받은 클로저 <code>pick</code> 이 고른 조각을 찍는 <code>each_line</code> 입니다. <code>pick</code> 은
+<code class="nb">&amp;str</code> 를 받아 그 일부를 <code class="nb">&amp;str</code> 로 돌려줍니다. 받는 참조와 돌려주는 참조의 수명이 같다고
+적으려고, 11부에서 한 대로 <a href="#p11-longest">수명에 이름 <code class="nb">'a</code> 를 붙여</a> 함수의 인자로 뒀습니다.</p>
+<!--CODE file=ex/19/hrtb_named_err.rs note=2번 줄의 'a 를 4번 줄의 조건이 쓴다-->
+<!--OUT file=out/19/hrtb_named_err.txt lines=1-16 note=padded 를 'a 동안 빌려야 한다고 한다-->
+<div class="note"><b>읽는 법</b> — 11부의 <a href="#p11-dangle-scope">E0597</a> 이고 오류 첫 줄도 같은 "<code>padded</code> 가 충분히 오래 살지
+못한다" 입니다. 새로 읽을 것은 8번 줄에 붙은 말입니다 — "인자가 <code>padded</code> 를 <code class="nb">'a</code> 동안 빌려 둘 것을
+요구한다". 2번 줄 아래에는 "수명 <code class="nb">'a</code> 가 여기서 정의됐다", 9번 줄 아래에는 "<code>padded</code> 가 빌린 채로 여기서
+정리된다" 가 붙었습니다. <code class="nb">'a</code> 는 <code>each_line</code> 의 <code class="nb">&lt;…&gt;</code> 에 적힌 인자이고,
+<code>padded</code> 는 함수 안의 7번 줄에서 만들어져 9번 줄에서 사라집니다.</div>
+</article>
+
+<article class="card" id="p19-hrtb-for">
+<h3>for&lt;'a&gt; — 어떤 수명에든 성립해야 한다는 조건</h3>
+<p class="lead">적으려던 말은 "함수의 인자로 정해진 수명 하나에" 가 아니라 "어떤 수명의 <code class="nb">&amp;str</code> 를 넣든 같은 수명의
+<code class="nb">&amp;str</code> 를 돌려준다" 입니다. 조건 앞에 <code class="nb">for&lt;'a&gt;</code> 를 붙이면 그렇게 읽습니다.
+<code class="nb">'a</code> 는 함수의 인자 목록에서 빠지고 그 조건 안에서만 쓰는 이름이 됩니다. <code class="nb">for&lt;…&gt;</code> 가 붙은
+조건을 고차 트레이트 바운드(higher-ranked trait bound)라고 하고, 이 부에서는 줄여서 고차 바운드라고 부릅니다.</p>
+<!--RUN file=ex/19/hrtb_for.rs note=클로저 하나, 함수 하나를 pick 으로 넘긴다-->
+<div class="note"><b>읽는 법</b> — 2번 줄의 <code class="nb">&lt;…&gt;</code> 에서 <code class="nb">'a</code> 가 빠지고 4번 줄의 조건 앞으로
+갔습니다. 본문은 앞 슬라이드와 같은데 컴파일됐습니다. 17번 줄의 클로저는 줄의 앞뒤 빈칸을 뗀 조각을, 18번 줄의 함수
+<code>first_word</code> 는 첫 낱말을 돌려줬습니다. <code>first_word</code> 의 시그니처는 11부의
+<a href="#p11-elide-one">들어오는 참조가 하나</a>인 모양입니다.</div>
+</article>
+
+<article class="card" id="p19-hrtb-sugar">
+<h3>Fn(&amp;str) -&gt; &amp;str 라고만 적어도 된다 — 두 조건은 서로를 채운다</h3>
+<p class="lead">수명을 하나도 적지 않은 <code class="nb">Fn(&amp;str) -&gt; &amp;str</code> 도 조건으로 쓸 수 있습니다. 앞 슬라이드의
+<code class="nb">for&lt;'a&gt; Fn(&amp;'a str) -&gt; &amp;'a str</code> 와 어떻게 다른지 보려고, 두 조건으로 받는 함수를 하나씩 쓰고 받은
+<code>pick</code> 을 서로에게 넘깁니다.</p>
+<!--RUN file=ex/19/hrtb_sugar.rs note=each_long 은 each_short 를, each_back 은 each_long 을 부른다-->
+<div class="note"><b>읽는 법</b> — 14번 줄은 길게 적은 조건으로 받은 <code>pick</code> 을 짧게 적은 <code>each_short</code> 에 넘겼고, 19번 줄은
+거꾸로 짧게 적은 조건으로 받은 것을 <code>each_long</code> 에 넘겼습니다. 둘 다 컴파일됐습니다. 한쪽 조건을 채운 <code>F</code> 가 다른 쪽
+조건도 채웠습니다. 23번과 24번 줄의 출력도 앞 슬라이드와 같은 꼴입니다. 화면이 보여 주는 것은 여기까지입니다. Rust 레퍼런스는 수명 생략을
+다루는 절에서 짧은 모양을 긴 모양으로 풀어 적습니다. 11부에서 본 <a href="#p11-elide-rules">생략 규칙</a>이 <code>Fn</code> 의 괄호 안에도
+쓰인다는 설명입니다.</div>
+<div class="tip"><b>평소에는 짧게</b> — <code class="nb">for&lt;'a&gt;</code> 를 손으로 적는 자리는 이 장의
+<a href="#p19-closure-ref-fix">클로저를 변수에 담을 때</a>와 <a href="#p19-lend-generic">수명 인자를 받는 연관 타입</a>에서 나옵니다.</div>
+</article>
+
+<article class="card" id="p19-closure-ref-err">
+<h3>참조를 돌려주는 클로저를 변수에 먼저 담으면 컴파일되지 않는다</h3>
+<p class="lead">앞의 두 슬라이드는 클로저를 조건이 걸린 인자 자리에 바로 적었습니다. 첫 낱말을 돌려주는 같은 모양의 클로저를 이번에는
+변수에 먼저 담습니다. 매개변수의 타입 <code class="nb">&amp;str</code> 는 적어 줬습니다.</p>
+<!--RUN file=ex/19/closure_ref_err.rs note=3번 줄 — 받은 s 의 일부를 돌려준다-->
+<div class="note"><b>읽는 법</b> — 번호가 없는 오류이고 오류 첫 줄은 "수명이 충분히 길지 않을 수 있다" 입니다. 11부에서
+<a href="#p11-elide-self-wrong">같은 첫 줄</a>을 봤습니다. 3번 줄의 <code class="nb">&amp;str</code> 아래에 "이 참조의 수명을
+<code class="nb">'1</code> 이라 하자", 그 옆에 "클로저의 반환 타입은 <code class="nb">&amp;'2 str</code>", 본문 아래에 "이 값을 돌려주려면
+<code class="nb">'1</code> 이 <code class="nb">'2</code> 보다 오래 살아야 한다" 가 붙었습니다. 컴파일러가 받는 참조와 돌려주는 참조에 서로
+다른 수명 <code class="nb">'1</code> 과 <code class="nb">'2</code> 를 줬습니다. 같은 일을 하는 함수 <code>first_word</code> 는
+<a href="#p19-hrtb-for">앞에서</a> 수명을 적지 않고도 컴파일됐습니다.</div>
+</article>
+
+<article class="card" id="p19-closure-ref-fix">
+<h3>조건이 걸린 자리에 바로 적거나, 조건을 거는 함수를 거친다</h3>
+<p class="lead">같은 클로저를 고차 바운드가 걸린 매개변수 자리에 바로 적으면 컴파일됩니다. 변수에 담아 둬야 한다면, 받은 클로저를 그대로
+돌려주는 함수를 하나 두고 그 함수에 조건을 겁니다.</p>
+<!--RUN file=ex/19/closure_ref_fix.rs note=show 에 바로 적은 것, constrain 을 거쳐 변수에 담은 것-->
+<div class="note"><b>읽는 법</b> — 17번 줄의 클로저는 앞 슬라이드 3번 줄과 본문이 같고, <code>show</code> 의 인자 자리에 적혔습니다. 19번 줄은
+2번 줄의 <code>constrain</code> 을 거쳐 변수 <code>first</code> 에 담았습니다. <code>constrain</code> 의 본문은 받은 <code>f</code> 를
+돌려주는 6번 줄뿐이고, 하는 일은 4번 줄의 조건을 거는 것입니다. 20번 줄에서 <code>first</code> 를 직접 불렀고 21번 줄에서
+<code>show</code> 에 넘겼습니다. 17번과 19번 줄의 클로저에는 매개변수의 타입도 적지 않았습니다.</div>
+<div class="tip"><b>셋째 길</b> — 붙잡는 것이 없다면 <a href="#p19-hrtb-for"><code>first_word</code></a> 처럼 <code>fn</code> 으로 씁니다.</div>
+</article>
+
+<article class="card" id="p19-lend-generic">
+<h3>수명 인자를 받는 연관 타입의 조건에는 for&lt;'a&gt; 를 직접 적는다 — E0277</h3>
+<p class="lead">2장의 <a href="#p19-gat-trait"><code>Lending</code></a> 을 구현한 타입이면 무엇이든 받아 내주는 값을 찍는
+<code>print_all</code> 을 만듭니다. <code class="nb">{}</code> 로 찍으려면 1장에서 <a href="#p19-assoc-bound">반복자의 <code>Item</code> 에 조건을
+단</a> 것처럼 <code class="nb">L::Item</code> 에 <code>Display</code> 를 달아야 합니다. 그런데 이 <code>Item</code> 은 수명 인자를 받는
+<code class="nb">Item&lt;'a&gt;</code> 입니다. 트레이트와 <code>Shouter</code> 는 2장의 것 그대로이고, 먼저 조건 없이 써 봅니다.</p>
+<!--CODE file=ex/19/lend_generic_err.rs lines=28-33 note=31번 줄에서 x 를 {} 로 찍는다-->
+<!--OUT file=out/19/lend_generic_err.txt lines=1-13 note=help 가 적어 준 where 절의 수명 자리는 '_ 다-->
+<div class="note"><b>읽는 법</b> — 1장의 <a href="#p19-assoc-bound-err">E0277</a> 과 같은 꼴이고, 타입 자리가
+<code class="nb">&lt;L as Lending&gt;::Item&lt;'_&gt;</code> 입니다. 31번 줄의 <code>x</code> 가 그 타입입니다. 마지막 <code>help:</code> 는
+"연관 타입을 더 좁히라" 며 <code>where</code> 절을 적어 주는데, 수명 자리가 <code class="nb">'_</code> 입니다. 30번 줄의
+<code class="nb">it.next()</code> 가 <code>it</code> 를 빌리는 수명이고, 함수의 시그니처에는 그 수명을 가리키는 이름이 없습니다.</div>
+<!--CODE file=ex/19/lend_generic.rs lines=30-45 note=34번 줄 — for<'a> L::Item<'a>: Display-->
+<!--OUT file=out/19/lend_generic.txt note=Shouter 가 내준 둘-->
+<div class="note"><b>고친 것</b> — 34번 줄이 그 자리에 <code class="nb">for&lt;'a&gt;</code> 를 썼습니다. "어떤 수명
+<code class="nb">'a</code> 로 빌려주든 <code class="nb">L::Item&lt;'a&gt;</code> 는 <code>Display</code> 다" 로 읽습니다. 이번 조건은
+<code>Fn</code> 이 아니고, <code class="nb">for&lt;'a&gt;</code> 를 손으로 적었습니다. 44번 줄에서 넘긴 <code>Shouter</code> 가 <code>AB</code> 와
+<code>CD</code> 를 내줬고 37번 줄이 찍었습니다.</div>
+</article>
+
+<article class="card" id="p19-fn-sizes">
+<h3>함수와 클로저를 값으로 재 보면 — 0, 붙잡은 만큼, 주소 하나, 주소 둘</h3>
+<p class="lead">함수를 넘기는 모양들을 견주기 전에, 넘어가는 값의 크기부터 잽니다. 18부의
+<a href="#p18-size-align"><code>size_of_val</code></a> 로 클로저 둘, 함수 이름, 함수 포인터, 트레이트 객체 둘을 잽니다.</p>
+<!--RUN file=ex/19/fn_sizes.rs note=여섯 가지를 재고, 여섯 가지를 부른다-->
+<div class="note"><b>읽는 법</b> — 16번 줄에서 아무것도 붙잡지 않은 <code>plain</code> 은 0 바이트, <code>i32</code> 인 <code>offset</code> 을
+<code>move</code> 로 가져간 <code>shifted</code> 는 4 바이트입니다. 17번 줄에서 함수 이름 <code>double</code> 을 그대로 재면 0 이고, 11번 줄에서
+<code class="nb">fn(i32) -&gt; i32</code> 로 타입을 적어 담은 <code>ptr</code> 는 8 입니다. 18번 줄의 <code class="nb">&amp;dyn Fn</code> 과
+<code class="nb">Box&lt;dyn Fn&gt;</code> 은 16 으로, 3장에서 잰 <a href="#p19-three-ways"><code class="nb">&amp;dyn Shape</code> 와
+<code class="nb">Box&lt;dyn Shape&gt;</code></a> 와 같습니다. 19번과 20번 줄은 여섯을 모두 불렀습니다. <code>plain</code> · <code>double</code> ·
+<code>ptr</code> 는 2 를, <code>shifted</code> 와 그것을 가리키는 <code>by_ref</code>, 그것을 담은 <code>boxed</code> 는 11 을 냈습니다. Rust
+레퍼런스는 함수 이름의 타입을 함수마다 따로 있는 크기 0 의 타입으로 적고, 11번 줄 같은 자리에서 5부의
+<a href="#p05-fn-pointer">함수 포인터</a>로 바뀐다고 설명합니다.</div>
+<div class="warn"><b>이 툴체인에서는</b> — 0 · 4 · 8 · 16 은 이 책을 만든 64비트 기계와 컴파일러 1.99 가 낸 수입니다.</div>
+</article>
+
+<article class="card" id="p19-fn-ptr-capture">
+<h3>함수 포인터는 붙잡은 것이 있는 클로저를 받지 않는다 — E0308</h3>
+<p class="lead">5부에서 <a href="#p05-apply">함수를 인자로 넘길 때</a> 매개변수를 <code class="nb">fn(i32) -&gt; i32</code> 로 적었습니다. 그
+자리에 클로저를 넘겨 봅니다. 하나는 아무것도 붙잡지 않고, 하나는 <code>offset</code> 을 붙잡습니다.</p>
+<!--CODE file=ex/19/fn_ptr_capture_err.rs note=함수 하나, 클로저 둘을 apply 에 넘긴다-->
+<!--OUT file=out/19/fn_ptr_capture_err.txt lines=1-16 note=16번 줄만 막혔다-->
+<div class="note"><b>읽는 법</b> — 5부의 <a href="#p05-arg-type">인자의 E0308</a> 이고, 16번 줄에 "함수 포인터를 기대했는데 클로저가 왔다" 가
+붙었습니다. 12번 줄의 함수와 14번 줄의 붙잡은 것 없는 클로저는 걸리지 않았습니다. 새로 읽을 것은 <code>note:</code> 입니다 — "클로저는
+변수를 하나도 붙잡지 않을 때만 <code>fn</code> 타입으로 바뀔 수 있다". <code>offset</code> 아래에 "여기서 붙잡았다" 고 붙었습니다.
+<a href="#p19-fn-sizes">앞 슬라이드</a>에서 함수 포인터는 8 바이트였고, <code>offset</code> 을 붙잡은 클로저는 그 값 4 바이트를 들고
+있었습니다.</div>
+<div class="tip"><b>고치려면</b> — 12부에서 본 <a href="#p12-param-fn"><code class="nb">impl Fn(i32) -&gt; i32</code></a> 로 받습니다. <code>apply</code> 의 매개변수만
+그렇게 바꾼 <code>fn_ptr_capture.rs</code> 의 출력입니다.</div>
+<!--OUT file=out/19/fn_ptr_capture.txt lines=2-4 note=셋 다 받았다-->
+</article>
+
+<article class="card" id="p19-fn-path-err">
+<h3>메서드의 이름을 값으로 넘길 때는 원소의 타입이 그대로 맞아야 한다 — E0631</h3>
+<p class="lead">5부에서 <a href="#p05-apply"><code class="nb">i32::abs</code> 를 함수에 넘겼습니다</a>. 반복자의 <code>map</code> 에도 클로저
+<code class="nb">|w| w.len()</code> 대신 메서드의 이름 <code class="nb">str::len</code> 을 넘길 수 있습니다. 늘 하던 대로 <code>iter()</code>
+로 돌며 넘겨 봅니다.</p>
+<!--CODE file=ex/19/fn_path_err.rs note=4번 줄 — map(str::len)-->
+<!--OUT file=out/19/fn_path_err.txt lines=1-13 note=시그니처 둘을 나란히 적어 준다-->
+<!--OUT file=out/19/fn_path_err.txt lines=16-19 note=같은 오류의 help-->
+<div class="note"><b>읽는 법</b> — 처음 보는 번호입니다. 오류 첫 줄은 "함수 인자의 타입이 맞지 않는다" 이고 4번 줄의
+<code class="nb">str::len</code> 을 짚습니다. <code class="nb">= note:</code> 가 시그니처 둘을 나란히 적습니다. 기대한 것은
+<code class="nb">fn(&amp;&amp;_) -&gt; _</code>, 넘긴 것은 <code class="nb">fn(&amp;_) -&gt; _</code> 입니다. 12부에서 본 대로
+<a href="#p12-three-iters"><code>iter()</code> 는 참조를 내주므로</a> <code class="nb">&amp;str</code> 의 배열에서는 원소가
+<code class="nb">&amp;&amp;str</code> 인데, <code class="nb">str::len</code> 은 <code class="nb">&amp;str</code> 를 받습니다.
+<code>help:</code> 는 클로저로 감싸 <code class="nb">*arg0</code> 로 한 겹 벗기라고 권합니다. 화면에서 뺀 둘째 오류는 같은 줄의
+<code>collect</code> 에 붙은 E0599 입니다.</div>
+<div class="tip"><b>고치려면</b> — 원소가 <code class="nb">&amp;str</code> 로 나오게 돕니다. 다음 슬라이드는 <code>into_iter()</code> 로
+돌았습니다.</div>
+</article>
+
+<article class="card" id="p19-fn-path">
+<h3>메서드의 이름을 map 과 fold 에 넘긴다</h3>
+<p class="lead">원소의 타입을 맞추면 클로저를 쓰던 자리에 메서드의 이름이 들어갑니다. 인자가 하나인 메서드는 <code>map</code> 에, 둘인
+메서드는 <code>fold</code> 에 넘기고, 함수 포인터의 배열에도 담아 봅니다.</p>
+<!--RUN file=ex/19/fn_path.rs note=str::len · String::from · str::to_uppercase · usize::max · u32::pow-->
+<div class="note"><b>읽는 법</b> — 4번 줄은 <a href="#p12-three-iters"><code>into_iter()</code></a> 로 돌아 원소가
+<code class="nb">&amp;str</code> 이고, <code class="nb">str::len</code> 이 그대로 맞았습니다. 8번 줄의 <code class="nb">String::from</code> 은
+<code class="nb">&amp;str</code> 를 <code>String</code> 으로 바꿨습니다. 2번 줄의 배열은 4번 줄에서 <code>into_iter()</code> 한 뒤에도 8번 줄에서
+다시 쓰였습니다. 13번과 14번 줄은 <code class="nb">String::as_str</code> 과 <code class="nb">str::to_uppercase</code> 를 이었습니다. 19번 줄의
+<code class="nb">usize::max</code> 는 인자가 둘이라 12부의 <a href="#p12-fold"><code>fold</code></a> 가 받는 함수 자리에 맞았고 6 을
+냈습니다. 20번 줄은 <code class="nb">u32::pow</code> 와 <code class="nb">u32::max</code> 를 타입이
+<code class="nb">fn(u32, u32) -&gt; u32</code> 인 칸에 담았습니다. 5부에서 <a href="#p05-fn-pointer">함수를 배열에 담은</a> 것과 같고, 이번에
+담은 것은 표준 라이브러리의 메서드입니다.</div>
+</article>
+
+<article class="card" id="p19-fn-ctor">
+<h3>튜플 구조체와 변형의 이름은 함수다</h3>
+<p class="lead">7부부터 <code class="nb">Meters(1.5)</code> 나 <code class="nb">Some(3)</code> 처럼 이름 뒤에 괄호를 붙여 값을 만들었습니다.
+괄호를 떼고 이름만 넘기면 그것이 "<code>f64</code> 를 받아 <code>Meters</code> 를 돌려주는 함수" 입니다. 클로저
+<code class="nb">|x| Meters(x)</code> 로 감싸지 않습니다.</p>
+<!--RUN file=ex/19/fn_ctor.rs note=Meters · Shape::Circle · Some · Shape::Square 를 값으로 쓴다-->
+<div class="note"><b>읽는 법</b> — 18번 줄의 <code class="nb">map(Meters)</code> 가 실수 둘을 <code>Meters</code> 둘로 만들었고, 19번 줄이 속을
+꺼내 더한 3.5 가 나왔습니다. 23번 줄은 열거형의 변형 <code class="nb">Shape::Circle</code> 을, 24번 줄은
+<a href="#p07-option-enum"><code>Option</code> 의 변형</a> <code>Some</code> 을 같은 식으로 넘겼습니다. 27번 줄은
+<code class="nb">Shape::Square</code> 를 타입이 <code class="nb">fn(f64) -&gt; Shape</code> 인 변수에 담았고, 28번 줄에서 불러 만든 정사각형이
+출력 마지막 줄입니다.</div>
+</article>
+
+<article class="card" id="p19-fn-return">
+<h3>붙잡은 것이 있는 클로저 둘은 한 impl Fn 으로 돌려줄 수 없다 — E0308</h3>
+<p class="lead">12부에서 <a href="#p12-return-closure">클로저를 돌려주는 함수</a>의 반환 타입을 <code class="nb">impl Fn</code> 으로
+적었습니다. <code>by</code> 를 붙잡은 클로저 둘 가운데 하나를 이름에 따라 골라 돌려주려 하면, 10부에서 본 대로 <a href="#p10-return-impl-two"><code class="nb">impl Trait</code> 은 한
+가지 타입만 돌려줄 수 있어서</a> 막힙니다.</p>
+<!--CODE file=ex/19/fn_return_err.rs note=두 갈래의 클로저가 저마다 by 를 붙잡는다-->
+<!--OUT file=out/19/fn_return_err.txt lines=1-20 note=똑같이 생겨도 타입이 다르다고 한다-->
+<div class="note"><b>읽는 법</b> — 10부의 그 슬라이드와 같은 E0308, "<code>if</code> 와 <code>else</code> 의 타입이 다르다" 입니다. 새로 읽을 것은
+둘째 <code class="nb">= note:</code> 입니다 — "똑같이 생겼더라도 두 클로저의 타입이 같은 경우는 없다". 12부에서
+<a href="#p12-closure-vec">클로저는 하나하나가 서로 다른 이름 없는 타입</a>이라고 한 그대로입니다. 첫 <code class="nb">= note:</code> 가 그 두
+타입을 <code class="nb">{closure@파일:줄:칸}</code> 꼴로 적었습니다. <code class="nb">= help:</code> 는 상자에 담아 트레이트 객체로 쓰라고
+권합니다.</div>
+<div class="tip"><b>고치려면</b> — 반환 타입을 <code class="nb">Box&lt;dyn Fn(i32) -&gt; i32&gt;</code> 로 바꾸고 갈래마다
+<code class="nb">Box::new</code> 로 감쌉니다. 아래 <code>fn_return_box.rs</code> 는 붙잡은 것 없는 클로저, <code>by</code> 를 붙잡은 클로저,
+메서드의 이름 <code class="nb">i32::abs</code> 를 한 반환 타입에 담았습니다. 맨 아래 화면은 두 갈래 모두 아무것도 붙잡지 않는 클로저로 쓴
+<code>fn_return_plain.rs</code> 의 것입니다. 반환 타입이 <code class="nb">impl Fn</code> 인 채로 컴파일됐고, 돌려받은 값의 크기를 8 로
+찍었습니다. <a href="#p19-fn-sizes">앞에서 잰</a> 함수 포인터의 크기입니다.</div>
+<!--CODE file=ex/19/fn_return_box.rs note=갈래 셋이 모두 Box<dyn Fn(i32) -> i32> 다-->
+<!--OUT file=out/19/fn_return_box.txt note=double · add · 그 밖-->
+<!--OUT file=out/19/fn_return_plain.txt note=붙잡은 것 없는 |x| x * 2 와 |x| x + 1 을 impl Fn 으로 돌려준 쌍둥이 파일 — 마지막 줄이 크기-->
+</article>
+
+<article class="card" id="p19-compose">
+<h3>함수 둘을 받아 함수 하나를 돌려준다 — E0373</h3>
+<p class="lead">함수를 받는 것과 돌려주는 것을 한 함수에 모읍니다. <code>compose</code> 는 <code>f</code> 와 <code>g</code> 를 받아
+"<code>f</code> 를 부르고 그 결과로 <code>g</code> 를 부르는" 클로저를 돌려줍니다. 매개변수는 12부의
+<a href="#p12-param-fn"><code class="nb">impl Fn</code></a>, 반환 타입도 <a href="#p12-return-closure"><code class="nb">impl Fn</code></a>
+이고, 타입 인자 <code>A</code> · <code>B</code> · <code>C</code> 가 두 함수가 이어지는 곳의 타입을 맞춥니다.</p>
+<!--RUN file=ex/19/compose.rs note=str::len 과 클로저를, 클로저와 클로저를 잇는다-->
+<!--OUT file=out/19/compose_err.txt lines=1-18 note=7번 줄의 move 를 뺀 쌍둥이 파일의 첫째 오류-->
+<div class="note"><b>읽는 법</b> — 11번 줄은 메서드의 이름 <code class="nb">str::len</code> 과 클로저를 이어 <code>abc</code> 의 길이 3 을 제곱한
+9 를 냈습니다. 16번 줄은 <code>offset</code> 을 붙잡은 클로저와 <code class="nb">format!</code> 을 부르는 클로저를 이었고, 5 와 -10 에서
+<code class="nb">&lt;15&gt;</code> 와 <code class="nb">&lt;0&gt;</code> 이 나왔습니다. 7번 줄의 <code>move</code> 는 12부에서 본 대로
+<a href="#p12-capture-move">쓰는 변수를 가져가서 붙잡게</a> 합니다. 아래 화면은 그 <code>move</code> 를 뺀 쌍둥이
+<code>compose_err.rs</code> 의 첫째 오류입니다. 15부에서 <a href="#p15-borrow-err">스레드에 넘긴 클로저로 읽은 E0373</a> 이고, 이번에는
+<code>note:</code> 가 "클로저가 여기서 반환된다" 고 적습니다. 오류 첫 줄대로 <code>g</code> 는 지금 함수 <code>compose</code> 가 가진 값인데,
+돌려준 클로저는 그 함수보다 오래 살 수 있습니다. 그 파일의 오류는 넷입니다. 둘째는 <code>f</code> 에 같은 말을 하고, 나머지 둘은 이 책에서
+다루지 않는 E0310 입니다.</div>
+</article>
+
+<article class="card" id="p19-fn-table">
+<h3>fn 포인터 · impl Fn · dyn Fn — 받는 것과 넘어가는 것</h3>
+<p class="lead">함수를 받는 세 모양을 한 표에 놓습니다. 3장의 <a href="#p19-dyn-table">넷 가운데 고르기</a>가 미뤄 둔 표입니다. 칸마다 그
+말을 돌려 본 슬라이드를 마지막 칸에 적었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th><code class="nb">fn(i32) -&gt; i32</code></th><th><code class="nb">impl Fn(i32) -&gt; i32</code></th><th><code class="nb">&amp;dyn Fn</code> · <code class="nb">Box&lt;dyn Fn&gt;</code></th><th>돌려 본 곳</th></tr>
+<tr><td>보통 함수 · 메서드의 이름</td><td>받는다</td><td>받는다</td><td>받는다</td><td><a href="#p19-fn-ptr-capture">apply</a> · <a href="#p19-fn-path">ops</a> · <a href="#p19-compose">compose</a> · <a href="#p19-fn-return">pick</a></td></tr>
+<tr><td>붙잡은 것이 없는 클로저</td><td>받는다</td><td>받는다</td><td>받는다</td><td><a href="#p19-fn-ptr-capture">apply</a> · <a href="#p19-fn-return">pick</a></td></tr>
+<tr><td>붙잡은 것이 있는 클로저</td><td>받지 않는다(E0308)</td><td>받는다</td><td>받는다</td><td><a href="#p19-fn-ptr-capture">apply</a> · <a href="#p19-fn-sizes">by_ref 와 boxed</a></td></tr>
+<tr><td>넘어가는 값의 크기</td><td>8</td><td>넘긴 것마다 다르다 — 잰 것은 0 과 4</td><td>16</td><td><a href="#p19-fn-sizes">size_of_val</a></td></tr>
+<tr><td>서로 다른 것을 한 배열 · 한 반환 타입에</td><td>된다</td><td>붙잡은 것이 있는 클로저 둘은 안 된다(E0308)</td><td>된다</td><td><a href="#p19-fn-path">ops</a> · <a href="#p19-fn-return">pick</a></td></tr>
+</table>
+</div>
+<p class="cap">크기는 이 책을 만든 64비트 기계와 컴파일러 1.99 의 값입니다. <code class="nb">impl Fn</code> 과 <code class="nb">dyn Fn</code> 이
+갈리는 곳은 10부의 <a href="#p10-static-dynamic">컴파일 때 고르기, 실행 중에 고르기</a> 그대로이고, 12부에서
+<a href="#p12-closure-vec">클로저 여럿을 한 벡터에 담은</a> 것이 표의 마지막 줄 셋째 칸입니다.</p>
+<div class="tip"><b>고르기</b> — 받는 쪽은 <code class="nb">impl Fn</code> 으로 시작합니다. 표에서 그 칸은 셋째 줄까지 모두 "받는다" 입니다. 여러 개를 한데
+담거나 갈래마다 다른 것을 돌려줘야 할 때 <code class="nb">Box&lt;dyn Fn&gt;</code> 으로 옮깁니다.</div>
+</article>
+
+<article class="card quiz" id="p19-ch5-quiz" data-quiz>
+<h3>퀴즈 — 고차 바운드와 함수</h3>
+<p class="q">Q. <code class="nb">fn apply(f: fn(i32) -&gt; i32, x: i32) -&gt; i32</code> 에 ① <code class="nb">|x| x + 1</code> 과 ②
+<code class="nb">|x| x + offset</code>(<code>offset</code> 은 바깥의 지역 변수)을 넘기면 각각 어떻게 될까요? 둘 다 받으려면 매개변수를 어떻게
+적을까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> ① 은 컴파일됩니다. 아무것도 붙잡지 않은 클로저는 <code>fn</code> 타입으로 바뀝니다. ② 는 E0308 입니다.
+<code>note:</code> 가 "클로저는 변수를 하나도 붙잡지 않을 때만 <code>fn</code> 타입으로 바뀔 수 있다" 고 알려 줍니다. 매개변수를
+<code class="nb">f: impl Fn(i32) -&gt; i32</code> 로 적으면 둘 다 받습니다(<a href="#p19-fn-ptr-capture">함수 포인터는 붙잡은 것이 있는 클로저를
+받지 않는다</a>).</div>
 </article>
 
 <article class="card" id="p19-ch6">
 <p class="chnum">6장</p>
 <h2>const 와 제네릭</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">const fn 이 부르지 못하는 것 · while 로 채우는 표 · 상수를 계산하다 넘치면 · 컴파일할 때 확인하는 크기 · const 인자에 거는 조건 · 길이가 같아야 하는 배열 둘 · 아무 길이의 배열 채우기 · 행과 열이 맞아야 하는 곱셈 · 중괄호로 감싸는 const 인자 · const 인자의 기본값 · 컴파일할 때 정해지는 것들</p>
+</article>
+
+<article class="card" id="p19-const-for-err">
+<h3>const fn 안에서는 for 를 쓸 수 없다 — E0015</h3>
+<p class="lead">5부에서 <a href="#p05-const-fn"><code class="nb">const fn</code></a> 으로 상수와 배열 길이를 계산했습니다. 그때의
+<code>kib</code> 는 곱셈 한 줄이었습니다. 이번에는 표 하나를 통째로 컴파일할 때 채우려 합니다. 칸을 돌며 채우려고 <code>for</code> 를
+썼습니다.</p>
+<!--CODE file=ex/19/const_for_err.rs note=4번 줄 — for i in 0..N-->
+<!--OUT file=out/19/const_for_err.txt lines=1-8 note=상수 함수에서는 for 를 쓸 수 없다고 한다-->
+<!--OUT file=out/19/const_trait_err.txt lines=1-8 note=const fn 안에서 제네릭 T 의 T::default() 를 부른 const_trait_err.rs-->
+<div class="note"><b>읽는 법</b> — 5부에서 <a href="#p05-not-const"><code>const</code> 를 뗀 함수를 상수 자리에서 부르다</a> 본 E0015 입니다.
+그때는 내가 쓴 함수에 <code>const</code> 가 없었습니다. 이번 오류 첫 줄은 "상수 함수에서는
+<code class="nb">Range&lt;usize&gt;</code> 에 <code>for</code> 를 쓸 수 없다" 이고 4번 줄의 <code class="nb">0..N</code> 을 짚습니다.
+<code class="nb">= note:</code> 는 "상수 함수 안의 호출은 상수 함수, 튜플 구조체, 튜플 변형으로 한정된다" 입니다. 아래 화면은
+<code class="nb">const fn</code> 안에서 타입 인자 <code>T</code> 의 <code class="nb">T::default()</code> 를 부른
+<code>const_trait_err.rs</code> 의 것입니다. 같은 번호이고 <code class="nb">= note:</code> 도 같은 글입니다. 첫 줄은 "상수가 아닌 연관 함수
+<code class="nb">&lt;T as Default&gt;::default</code> 를 부를 수 없다" 입니다. 둘 다 이 책의 컴파일러 1.99 에서 그렇습니다.</div>
+</article>
+
+<article class="card" id="p19-const-table">
+<h3>while 로 돌면 표를 컴파일할 때 채울 수 있다 <!--SINCE key=const-fn--></h3>
+<p class="lead">번호를 직접 세는 <code>while</code> 로 같은 표를 채웁니다. 자릿수를 세는 <code>digits</code> 도
+<code class="nb">const fn</code> 으로 쓰고, 5부에서 본 대로 <a href="#p05-const-fn">상수 자리에서도 실행 중에도</a> 불러 봅니다.</p>
+<!--RUN file=ex/19/const_table.rs note=squares 와 digits — 둘 다 while 로 돈다-->
+<div class="note"><b>읽는 법</b> — 22번 줄의 <code>TABLE</code> 은 2번 줄의 <code>squares</code> 가 채운 여섯 칸입니다. <code>N</code> 은 어디에도
+적지 않았고, 받는 쪽의 타입이 <code class="nb">[u32; 6]</code> 입니다. 24번 줄의 <code>WIDTH</code> 는 <code>digits</code> 로
+<code class="nb">TABLE[5]</code> 인 25 의 자릿수를 센 2 이고, 29번 줄에서 배열의 길이로 쓰였습니다. 3부에서 본 대로
+<a href="#p03-array-len">배열의 길이는 타입의 일부</a>라서, 29번 줄이 컴파일됐다는 것은 <code>WIDTH</code> 가 컴파일할 때 정해졌다는
+뜻입니다. 32번 줄의 <code>n</code> 은 실행 중에 글에서 읽은 수이고, 33번 줄이 같은 <code>digits</code> 로 그 자릿수 5 를 냈습니다.</div>
+</article>
+
+<article class="card" id="p19-const-overflow">
+<h3>상수를 계산하다 넘치면 컴파일되지 않는다 — E0080</h3>
+<p class="lead">3부에서 <a href="#p03-lit-range">범위를 넘는 리터럴</a>이, 18부에서 <a href="#p18-shift-overflow">적어 둔 칸 수만큼 미는
+연산</a>이 컴파일할 때 막혔습니다. <code class="nb">const fn</code> 을 불러 계산한 상수가 넘칠 때도 컴파일할 때 드러납니다. 5부의
+<code>kib</code> 에 큰 수를 넘깁니다.</p>
+<!--CODE file=ex/19/const_overflow_err.rs note=7번 줄 — 4_194_304 에 1024 를 곱하면 u32 를 넘는다-->
+<!--OUT file=out/19/const_overflow_err.txt lines=1-12 note=BIG 의 계산이 kib 안에서 실패했다-->
+<div class="note"><b>읽는 법</b> — 처음 보는 번호입니다. 오류 첫 줄은 "<code class="nb">4194304_u32 * 1024_u32</code> 를 계산하려는데, 넘친다"
+입니다. 7번 줄의 호출 아래에 "<code>BIG</code> 의 계산이 이 호출 안에서 실패했다" 가 붙었고, <code>note:</code> 가 <code>kib</code> 안의 2번
+줄을 짚어 "실패가 여기서 일어났다" 고 합니다. 5번 줄의 <code>SMALL</code> 은 걸리지 않았습니다. 3부와 18부의 그 화면에는 번호가 없었고, 이
+화면에는 E0080 이 붙었습니다.</div>
+<!--OUT file=out/19/const_overflow_run.txt note=같은 수를 실행 중에 "4194304".parse() 로 읽어 kib 에 넘긴 const_overflow_run.rs-->
+<div class="note"><b>실행 중이었다면</b> — 위 화면은 같은 수를 실행 중에 글에서 읽어 같은 <code>kib</code> 에 넘긴
+<code>const_overflow_run.rs</code> 의 것입니다. 컴파일됐고, <code class="nb">kib(4)</code> 의 4096 을 찍은 뒤
+<code class="nb">attempt to multiply with overflow</code> 로 패닉했습니다. 3부의 <a href="#p03-overflow">넘침 패닉</a>입니다. 같은 함수와 같은
+수가 상수 자리에서는 컴파일 오류, 실행 중에는 패닉이 됐습니다.</div>
+</article>
+
+<article class="card" id="p19-const-assert">
+<h3>크기에 대한 믿음을 컴파일할 때 확인한다 — E0080 <!--SINCE key=const-panic--></h3>
+<p class="lead">파일의 머리 부분인 구조체 <code>Header</code> 를 8 바이트라고 믿고 쓴 코드가 있습니다. 18부에서 본 대로
+<a href="#p18-size-align">구조체의 크기는 필드 크기의 합이 아닐 수 있습니다</a>. 그 믿음을 상수의 값 자리에 <code class="nb">assert!</code>
+로 적어 두면, 어긋났을 때 컴파일되지 않습니다. 이렇게 지켜져야 하는 조건을 코드에 적어 둔 것을 단언(assertion)이라고 합니다.</p>
+<!--RUN file=ex/19/const_assert.rs note=10번 줄 — 이름 없는 상수와 assert!-->
+<!--OUT file=out/19/const_assert_err.txt lines=1-6 note=Header 에 version: u8 칸을 더한 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 10번 줄의 <code class="nb">const _</code> 는 이름을 붙이지 않은 상수이고 타입은 <code class="nb">()</code>
+입니다. 값 자리에 9부의 <a href="#p09-assert"><code class="nb">assert!</code></a> 를 썼습니다. 조건이 참이어서 컴파일됐고 20번 줄이 크기 8 을
+찍었습니다. 이 책을 만든 기계와 컴파일러 1.99 의 값입니다. 아래 화면은 <code>u8</code> 칸 하나를 더한 쌍둥이
+<code>const_assert_err.rs</code> 의 것입니다. 앞 슬라이드의 E0080 이고, 오류 첫 줄이 "계산하다 패닉했다" 에 이어 실패한 조건을 그대로
+적습니다. 짚은 곳은 칸을 더한 8번 줄이 아니라 단언을 적은 12번 줄입니다.</div>
+<div class="key"><b>실행하지 않아도 걸린다</b> — 9부의 <code class="nb">assert!</code> 는 그 줄이 실행될 때 패닉했습니다. 상수의 값 자리에 둔
+<code class="nb">assert!</code> 는 컴파일할 때 계산되고, 거짓이면 실행 파일이 만들어지지 않습니다.</div>
+</article>
+
+<article class="card" id="p19-const-assert-n">
+<h3>const 인자에 건 단언은 그 값으로 쓰인 곳에서만 걸린다 — E0080</h3>
+<p class="lead">칸이 <code>N</code> 개인 고리 버퍼 <code class="nb">Ring&lt;N&gt;</code> 입니다. <code>push</code> 는 넣을 칸을
+<code class="nb">next % N</code> 으로 고르므로 <code>N</code> 이 0 이면 안 됩니다. <code>new</code> 안에 16부에서 본
+<a href="#p16-inline-const"><code class="nb">const { }</code></a> 를 두고 그 안에 <code class="nb">assert!(N &gt; 0, …)</code> 를 적습니다.</p>
+<!--RUN file=ex/19/const_assert_n.rs note=Ring<3> 에 넷을 밀어 넣는다-->
+<!--OUT file=out/19/const_assert_n_err.txt lines=1-18 note=main 에 let mut empty: Ring<0> = Ring::new(); 를 더한 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 10번 줄의 단언은 <code>N</code> 을 씁니다. 24번 줄의 <code class="nb">Ring&lt;3&gt;</code> 에서는 참이라
+컴파일됐고, 넷을 밀어 넣은 뒤의 칸은 <code class="nb">[4, 2, 3]</code> 입니다. 아래 화면은 <code class="nb">Ring&lt;0&gt;</code> 을 만드는
+줄을 더한 쌍둥이 <code>const_assert_n_err.rs</code> 의 것입니다. 앞에서 읽은 E0080 이고, 오류 첫 줄에 10번 줄에 적어 둔 글이 그대로
+나옵니다. 실패한 상수는 <code class="nb">Ring::&lt;0&gt;::new::{constant#0}</code> 라고 적혀 있습니다. 새로 읽을 것은 마지막
+<code>note:</code> 입니다 — "위 오류는 <code class="nb">fn Ring::&lt;0&gt;::new</code> 를 만들어 내다가(instantiating) 만났다". 26번 줄을
+짚습니다. 같은 파일의 24번 줄 <code class="nb">Ring&lt;3&gt;</code> 은 걸리지 않았습니다. 10부에서 본 대로
+<a href="#p10-mono">제네릭은 쓰인 타입마다 따로 컴파일</a>됩니다.</div>
+<!--OUT file=out/19/const_assert_n_run.txt note=그 쌍둥이에서 단언만 뺀 const_assert_n_run.rs-->
+<div class="note"><b>단언이 없었다면</b> — 위 화면은 <code class="nb">Ring&lt;0&gt;</code> 을 만드는 줄은 두고 단언만 뺀
+<code>const_assert_n_run.rs</code> 의 것입니다. 컴파일됐고, 실행 중에 <code>push</code> 의 <code class="nb">%</code> 에서 "나누는 수가 0 인
+나머지 계산" 으로 패닉했습니다.</div>
+</article>
+
+<article class="card" id="p19-cg-add">
+<h3>두 배열의 길이가 같아야 한다는 것을 N 하나로 적는다 — E0308 <!--SINCE key=const-generics--></h3>
+<p class="lead">1부에서 <a href="#p01-const-generics">어떤 길이의 배열이든 받는 <code>sum</code></a> 을, 10부에서
+<a href="#p10-const-generic"><code>N</code> 을 가진 내 타입</a>을 봤습니다. 이 장의 나머지는 const 제네릭으로 "두 값의 길이가 맞아야 한다" 를
+적습니다. 먼저 슬라이스로 쓴 칸끼리 더하기입니다. 길이를 실행 중에야 알아서 <code>Result</code> 를 돌려줍니다.</p>
+<!--RUN file=ex/19/cg_add_slice.rs note=슬라이스로 받는다 — 길이가 다르면 Err-->
+<!--RUN file=ex/19/cg_add.rs note=배열로 받는다 — 매개변수 둘과 반환 타입에 같은 N-->
+<!--OUT file=out/19/cg_add_err.txt lines=1-14 note=add([1, 2, 3], [10, 20]) 을 부른 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — <code>cg_add_slice.rs</code> 의 15번 줄은 길이 3 과 2 를 넘겼고 실행 중에 <code>Err</code> 가 됐습니다.
+<code>cg_add.rs</code> 의 2번 줄은 두 매개변수와 반환 타입에 같은 <code>N</code> 을 적었습니다. 본문에 길이를 견주는 줄이 없고, 반환 타입도
+<code>Result</code> 가 아닙니다. 11번 줄에서 <code>N</code> 은 3, 14번 줄에서는 2 이고, 돌려받은 <code>pair</code> 의 크기는 <code>i32</code>
+둘인 8 바이트입니다. 아래 화면은 세 칸과 두 칸을 넘긴 쌍둥이 <code>cg_add_err.rs</code> 의 것입니다. 3부의
+<a href="#p03-array-len">배열 길이 E0308</a> 과 같은 말입니다 — "크기 3 인 배열을 기대했는데 크기 2 인 배열이 왔다". <code>note:</code> 는
+1번 줄의 둘째 매개변수 <code class="nb">b: [i32; N]</code> 에 밑줄을 그었습니다.</div>
+</article>
+
+<article class="card" id="p19-cg-from-fn">
+<h3>길이가 제네릭 N 인 배열은 Default 가 아니다, array::from_fn 으로 채운다 — E0277 <!--SINCE key=array-from-fn--></h3>
+<p class="lead">앞 슬라이드는 <code class="nb">[0; N]</code> 으로 배열을 만들었습니다. 이번에는 원소의 타입도 제네릭 <code>T</code> 로 두고,
+기본값으로 채운 <code>N</code> 칸짜리 배열을 돌려주는 <code>blank</code> 를 씁니다. <code>T</code> 에 <code>Default</code> 조건을 달고
+10부의 <a href="#p10-default-derive"><code class="nb">Default::default()</code></a> 를 불렀습니다.</p>
+<!--CODE file=ex/19/cg_default_err.rs note=3번 줄 — [T; N] 의 기본값을 달라고 한다-->
+<!--OUT file=out/19/cg_default_err.txt lines=1-17 note=[T; N] 은 Default 가 아니다-->
+<!--OUT file=out/19/cg_default_33_err.txt lines=1-6 note=[u8; 32] 와 [u8; 33] 에 Default::default() 를 부른 cg_default_33_err.rs-->
+<div class="note"><b>읽는 법</b> — <a href="#p10-trait-not-impl">E0277</a> 이 대는 타입은 <code class="nb">[T; N]</code>, 트레이트는
+<code>Default</code> 입니다. <code class="nb">= help:</code> 가 <code>Default</code> 를 구현한 타입을 늘어놓습니다.
+<code class="nb">[T; 0]</code>, <code class="nb">[T; 1]</code> 처럼 길이가 하나씩 적혀 있고 "27 개 더" 로 끝납니다. 아래 화면에서는 2번 줄의
+<code class="nb">[u8; 32]</code> 는 걸리지 않고 3번 줄의 <code class="nb">[u8; 33]</code> 만 같은 오류가 났습니다. 1부에서
+<a href="#p01-const-generics">표준 라이브러리의 배열 메서드가 길이 32 까지만 됐던 때</a>를 읽었습니다. <code>Default</code> 에는 그 경계가
+이 책의 컴파일러 1.99 에서도 보입니다.</div>
+<!--RUN file=ex/19/cg_from_fn.rs note=blank 의 본문을 array::from_fn 으로 바꿨다-->
+<div class="note"><b>고친 것</b> — <code class="nb">std::array::from_fn</code> 은 칸마다 클로저를 불러 배열을 채웁니다. 5번 줄이
+<code class="nb">T::default()</code> 를 돌려주는 클로저를 넘겼고, 9번 줄의 <code>String</code> 셋과 11번 줄의 40 칸이 만들어졌습니다. 클로저는
+칸의 번호를 받습니다. 14번 줄은 번호의 제곱을, 16번 줄은 번호를 넣은 글을 칸마다 만들었습니다.</div>
+</article>
+
+<article class="card" id="p19-matrix">
+<h3>행과 열이 맞아야 곱해지는 행렬 — E0308</h3>
+<p class="lead">const 인자를 둘 둡니다. <code class="nb">Matrix&lt;R, C&gt;</code> 는 <code>R</code> 행 <code>C</code> 열입니다. 곱셈은
+왼쪽의 열 수와 오른쪽의 행 수가 같아야 하고, 결과는 왼쪽의 행 수와 오른쪽의 열 수를 가집니다. 그 규칙을 <code>mul</code> 의 시그니처에
+그대로 적습니다.</p>
+<!--RUN file=ex/19/matrix.rs note=2 행 3 열과 3 행 2 열을 두 순서로 곱한다-->
+<!--OUT file=out/19/matrix_err.txt lines=1-11 note=a.mul(&a) — 2 행 3 열에 2 행 3 열을 곱하려 한 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 8번 줄에서 <code>self</code> 는 <code class="nb">Matrix&lt;R, C&gt;</code>, <code>rhs</code> 는
+<code class="nb">Matrix&lt;C, K&gt;</code>, 결과는 <code class="nb">Matrix&lt;R, K&gt;</code> 입니다. <code>C</code> 가 두 곳에 같은 이름으로
+적혀 있고, <code>K</code> 는 이 메서드만의 const 인자입니다. 29번 줄은 2 행 3 열에 3 행 2 열을 곱해 2 행 2 열을, 31번 줄은 순서를 바꿔
+3 행 3 열을 냈습니다. 결과의 타입은 어디에도 적지 않았습니다. 아래 화면은 <code class="nb">a.mul(&amp;a)</code> 를 부른 쌍둥이
+<code>matrix_err.rs</code> 의 것입니다. E0308 이 "<code>3</code> 을 기대했는데 <code>2</code> 가 왔다" 고 하고,
+<code class="nb">= note:</code> 가 두 타입을 나란히 적습니다. 기대한 것은 <code class="nb">&amp;Matrix&lt;3, _&gt;</code>, 온 것은
+<code class="nb">&amp;Matrix&lt;2, 3&gt;</code> 입니다.</div>
+<div class="key"><b>4장과 같은 생각</b> — <a href="#p19-unit-mix">단위가 다른 수를 섞는 줄</a>이 컴파일되지 않았듯, 크기가 맞지 않는 곱셈이
+컴파일되지 않습니다. 이번에 타입을 가른 것은 이름이 아니라 수입니다.</div>
+</article>
+
+<article class="card" id="p19-cg-brace">
+<h3>const 인자 자리의 계산식은 중괄호로 감싼다</h3>
+<p class="lead">2장에서 <a href="#p19-const-array"><code class="nb">blank::&lt;{ Name::WIDTH }&gt;()</code></a> 처럼 const 인자를 중괄호로
+감싸 넘겼습니다. 감싸지 않아도 되는 것 둘과 감싸야 하는 것 하나를 나란히 놓습니다.</p>
+<!--RUN file=ex/19/cg_brace.rs note=리터럴 · 상수의 이름 · 계산식-->
+<!--OUT file=out/19/cg_brace_err.txt lines=1-11 note=blank::<WIDTH * 2 + 1>() 로 중괄호를 뺀 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 9번 줄의 리터럴 8 과 10번 줄의 상수 이름 <code>WIDTH</code> 는 그대로 적었고, 12번 줄의 계산식은 중괄호
+안에 있습니다. 세 배열의 길이는 8 · 4 · 9 입니다. 아래 화면은 그 중괄호를 뺀 쌍둥이 <code>cg_brace_err.rs</code> 의 것입니다. 번호가 없는
+문법 오류이고, 첫 줄은 "<code>,</code> 나 <code>&gt;</code> 가 올 자리에 <code>*</code> 가 왔다" 입니다. <code>help:</code> 가 까닭과 고친
+줄을 함께 적습니다 — "식은 중괄호로 감싸야 const 제네릭 인자로 쓸 수 있다".</div>
+<!--OUT file=out/19/cg_plus_err.txt lines=1-8 note=fn push<const N: usize>(a: [u8; N], last: u8) -> [u8; N + 1] 로 쓴 cg_plus_err.rs 의 첫째 오류-->
+<div class="note"><b>제네릭 안에서 N 으로 계산하기</b> — 위 화면은 받은 배열보다 한 칸 긴 배열을 돌려주려고 반환 타입에
+<code class="nb">[u8; N + 1]</code> 을 적은 <code>cg_plus_err.rs</code> 의 것입니다. 오류 첫 줄은 2장에서
+<a href="#p19-const-array"><code class="nb">F::WIDTH</code> 를 길이에 쓰다 본</a> "제네릭 매개변수는 const 연산에 쓸 수 없다" 그대로입니다.
+이번 <code class="nb">= help:</code> 는 "const 인자는 여기서 <code>N</code> 처럼 홀로만 쓸 수 있다" 입니다. 위 예제 12번 줄의
+<code>WIDTH</code> 는 제네릭 인자가 아니라 1번 줄의 상수입니다. 이 책의 컴파일러 1.99 에서 그렇습니다.</div>
+</article>
+
+<article class="card" id="p19-cg-default">
+<h3>const 인자의 기본값은 타입을 적은 자리에서 쓰인다 — E0284 <!--SINCE key=const-generics-defaults--></h3>
+<p class="lead">버퍼의 크기를 const 인자로 두는데, 대부분의 자리에서는 16 이면 됩니다. 선언의 인자 뒤에 <code class="nb">= 16</code>
+을 적으면 타입 자리에 <code>Buf</code> 라고만 써도 됩니다.</p>
+<!--RUN file=ex/19/cg_param_default.rs note=Buf 와 Buf<64>-->
+<!--OUT file=out/19/cg_param_default_err.txt lines=1-16 note=let buf = Buf::new(); 로 타입을 어디에도 적지 않은 쌍둥이 파일의 첫째 오류-->
+<div class="note"><b>읽는 법</b> — 14번 줄은 타입 자리에 <code>Buf</code> 라고만 적었고 길이가 16 입니다. 15번 줄은 64 를 적었습니다. 17번 줄의
+<code class="nb">size_of::&lt;Buf&gt;()</code> 도 16 입니다. 아래 화면은 타입을 어디에도 적지 않은 쌍둥이
+<code>cg_param_default_err.rs</code> 의 것입니다. 3부에서 <a href="#p03-parse-notype"><code>parse</code> 의 타입 표기를 빼고 본 E0284</a>
+이고, 13번 줄에 붙은 "이 지점에서 타입이 정해져 있어야 한다" 도 같습니다. 이번 오류 첫 줄은 타입이
+<code class="nb">Buf&lt;_&gt;</code> 까지만 정해졌다고 합니다. 새로 읽을 것은 <code>note:</code> 입니다. 1번 줄의 const 인자를 짚어 "<code>Buf</code>
+의 이 const 제네릭 인자 때문에 필요하다" 고 합니다. <code>help:</code> 는 <code>buf</code> 에 타입을 적되 const 인자 <code>N</code> 의 값을
+밝히라고 권합니다. 1번 줄에 기본값 16 이 있는데도 13번 줄의 <code class="nb">Buf::new()</code> 는 <code>N</code> 을 16 으로 채우지
+않았습니다. 그 파일의 오류는 둘이고 둘째도 같은 번호입니다.</div>
+</article>
+
+<article class="card" id="p19-const-kinds">
+<h3>컴파일할 때 정해지는 것들</h3>
+<p class="lead">이 책에서 본 "컴파일할 때 정해지는 것" 여섯을 한 표에 놓습니다. 줄마다 무엇에 쓰는지, 처음 본 슬라이드와 이 부에서 더 본
+슬라이드를 적었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이름</th><th>적는 모양</th><th>쓰임</th><th>처음 본 곳</th><th>이 부에서</th></tr>
+<tr><td>상수</td><td><code class="nb">const MAX: u32 = 8;</code></td><td>이름 붙은 값</td><td><a href="#p03-const">3부</a></td><td><a href="#p19-const-overflow">넘치는 상수</a> · <a href="#p19-const-assert">이름 없는 상수의 단언</a></td></tr>
+<tr><td><code>static</code></td><td><code class="nb">static NAME: &amp;str = "…";</code></td><td>프로그램 내내 한 자리에 놓이는 값</td><td><a href="#p03-static">3부</a></td><td>—</td></tr>
+<tr><td><code class="nb">const fn</code></td><td><code class="nb">const fn kib(n: u32) -&gt; u32</code></td><td>상수 자리에서도 실행 중에도 부르는 함수</td><td><a href="#p05-const-fn">5부</a></td><td><a href="#p19-const-for-err">부르지 못하는 것</a> · <a href="#p19-const-table">while 로 채운 표</a></td></tr>
+<tr><td><code class="nb">const { }</code></td><td><code class="nb">const { assert!(N &gt; 0) }</code></td><td>그 자리에서 컴파일할 때 계산하는 식</td><td><a href="#p16-inline-const">16부</a></td><td><a href="#p19-const-assert-n">const 인자에 건 단언</a></td></tr>
+<tr><td>const 제네릭</td><td><code class="nb">&lt;const N: usize&gt;</code></td><td>타입과 함수가 받는 값 인자</td><td><a href="#p10-const-generic">10부</a></td><td><a href="#p19-cg-add">길이가 같은 배열</a> · <a href="#p19-matrix">행렬</a> · <a href="#p19-cg-default">기본값</a></td></tr>
+<tr><td>연관 상수</td><td><code class="nb">const WIDTH: usize;</code></td><td>타입마다 다른 상수</td><td><a href="#p10-assoc-const">10부</a></td><td><a href="#p19-assoc-const">제네릭 코드가 읽는 상수</a> · <a href="#p19-const-array">배열 길이로</a></td></tr>
+</table>
+</div>
+<p class="cap">표의 아래 두 줄은 누가 값을 정하느냐가 다릅니다. const 제네릭은 쓰는 쪽이 <code class="nb">Buf&lt;64&gt;</code> 처럼 값을 골라 타입에
+적고, 연관 상수는 구현하는 쪽이 <code class="nb">Name::WIDTH</code> 처럼 타입마다 정해 둡니다.</p>
+<div class="note"><b>다음</b> — 이 부는 10부의 제네릭과 트레이트 위에 한 층을 올렸습니다. 조건을 다는 자리, 연관 타입과 GATs, 트레이트 객체,
+타입으로 하는 설계, 고차 바운드, 그리고 const 였습니다. 20부 동시성 심화는 <a href="#p15">15부</a>의 동시성 기초에서 이어집니다.</div>
+</article>
+
+<article class="card quiz" id="p19-ch6-quiz" data-quiz>
+<h3>퀴즈 — const 와 제네릭</h3>
+<p class="q">Q. <code class="nb">const fn kib(n: u32) -&gt; u32 { n * 1024 }</code> 가 있습니다. ①
+<code class="nb">const BIG: u32 = kib(4_194_304);</code> 와 ② 같은 수를 실행 중에 글에서 읽어 <code class="nb">kib(n)</code> 을 부르는 줄은
+각각 어떻게 될까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 곱이 <code>u32</code> 를 넘습니다. ① 은 컴파일할 때 계산되므로 E0080 으로 컴파일되지 않고, <code>note:</code> 가
+<code>kib</code> 안의 곱셈 줄을 짚습니다. ② 는 컴파일되고, 실행 중에 <code class="nb">attempt to multiply with overflow</code> 로
+패닉합니다(<a href="#p19-const-overflow">상수를 계산하다 넘치면</a>).</div>
 </article>
