@@ -529,3 +529,17 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
 - Part 20 skeleton split into 20_conc.html (cover, intro, ch 1–3) and 20b_conc.html
   (ch 4–5) so each writer run ends with a file that builds without the skeleton flag.
   Do the same for 22, 23, 26 before their first run.
+- 2026-10-12 pushed at the user's request: origin/main = 070af746 (part 19 fully reviewed; 1,201 slides).
+- 20a written (chapters 1–3: 채널 더 · 기다리기와 깨우기 · 공유 상태 설계; 43 slides incl.
+  cover and intro, 33 examples, no compile-error example, 3 quizzes). The writer's session
+  ended before its report reached the log, so the orchestrator verified from the tree:
+  `make all` (no SKEL) rc=0 at 1,244 slides, `rsrun --check ex/20` ×3 = 33 ✓ / 0 ✗ each.
+  Six badge rows added to data/features.tsv (recv-timeout 1.12, try-iter 1.15,
+  compare-exchange 1.10, condvar-wait-while 1.42, atomic-fetch-max 1.45,
+  mutex-clear-poison 1.77; data-check green, 90 badges). Part-0 map, card and README set
+  to 22부 · 1,244슬라이드 · 예제 903 · 캡처 929 · 퀴즈 95 · 버전 표기 90건.
+  For the 20b writer: plain-text forward mentions to link — p20-jobs ("스레드 풀은 4장에서"),
+  p20-share-table ("다음 장" note), the intro's 4장/5장 bullets; the intro's "이 부의 화면"
+  note says "1장부터 3장까지의 예제는" and "sleep 으로 잠드는 예제는 … 하나" — extend or
+  correct it for chapters 4–5. Second half may use at most 34 slides (budget 70,
+  ceiling 77). Unchecked by a reviewer: everything in 20a (review comes after 20b).
