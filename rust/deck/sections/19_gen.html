@@ -1,28 +1,675 @@
 <article class="card section" id="p19">
 <p class="chnum">19부</p>
 <h2>제네릭·트레이트 심화</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">바운드 더 깊이 · 연관 타입과 GATs · 트레이트 객체 심화 · 타입으로 설계하기 · 고차 바운드와 함수 · const 와 제네릭</p>
 </article>
 
 <article class="card" id="p19-intro">
 <h2>이 부에서 할 일</h2>
-<p class="lead">준비 중입니다</p>
+<p class="lead"><a href="#p10">10부</a>에서 제네릭과 트레이트의 문법을 한 번씩 썼습니다. 이 부는 그 위에 올리는 2층입니다. 10부가 가르친
+것은 다시 설명하지 않고 그 슬라이드로 가는 링크만 답니다. 문법이 추상적인 부라서 순서를 거꾸로 잡았습니다. 슬라이드마다 컴파일되지 않는
+프로그램이나 손이 많이 가는 프로그램을 먼저 놓고, 문법은 그 답으로 꺼냅니다.</p>
+<ul>
+<li><b>1장</b> — 바운드 더 깊이: 조건이 맞을 때만 있는 메서드와 구현, <code class="nb">?Sized</code>, 겹치는 구현, 연관 타입에 다는 조건</li>
+<li><b>2장</b> — 연관 타입과 GATs: 연관 타입을 직접 설계하기, 제네릭 코드가 읽는 연관 상수, 제네릭 연관 타입과 빌려주는 반복자</li>
+<li><b>3장</b> — 트레이트 객체 심화: <code class="nb">dyn Any</code>, <code>dyn</code> 과 맞는 트레이트 설계, 세 모양의 크기, 상위 트레이트의 객체로 바꾸기</li>
+<li><b>4장</b> — 타입으로 설계하기: 단위를 타입으로 가르기, <code>PhantomData</code>, 타입 상태 패턴, 봉인한 트레이트, 표시 트레이트</li>
+<li><b>5장</b> — 고차 바운드와 함수: <code class="nb">for&lt;'a&gt;</code> 바운드, 참조를 돌려주는 클로저, <code>fn</code> 포인터 · <code class="nb">impl Fn</code> · <code class="nb">dyn Fn</code></li>
+<li><b>6장</b> — const 와 제네릭: <code class="nb">const fn</code>, const 제네릭 더 깊이, 컴파일할 때 계산하는 상수</li>
+</ul>
+<div class="note"><b>이 부의 화면</b> — 1장부터 3장까지의 예제는 파일도, 표준 입력도, 명령 줄 인자도 쓰지 않습니다. 예제 아래에 그것을 조금
+달리 쓴 짝 파일의 화면을 붙일 때가 많습니다. 이 부에서는 그 짝을 쌍둥이 파일이라고 부르고, 무엇을 달리 썼는지는 화면 위의 꼬리표에
+적었습니다. 크기를 찍은 수(<a href="#p19-three-ways">3장</a>)는 이 책을 만든 64비트 기계의 값이고, 타입의 이름을 찍은
+글(<a href="#p19-sized-fix">1장</a>)은 18부에서 본 대로 <a href="#p18-type-name">컴파일러 버전에 따라 바뀔 수 있는</a> 글입니다.</div>
 </article>
 
 <article class="card" id="p19-ch1">
 <p class="chnum">1장</p>
 <h2>바운드 더 깊이</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">impl 블록에 단 조건 · 조건이 맞을 때만 있는 메서드 · 메서드 하나의 where · 조건부 구현 · derive 가 다는 조건 · ?Sized · 겹치는 구현 · 표시 트레이트 · 연관 타입에 단 조건 · impl Trait 인자와 터보피시</p>
+</article>
+
+<article class="card" id="p19-cond-all">
+<h3>impl 블록에 단 조건은 new 에도 걸린다 — E0277</h3>
+<p class="lead">값에 이름표를 붙이는 <code class="nb">Labeled&lt;T&gt;</code> 를 만듭니다. <code>line</code> 이 값을 <code class="nb">{}</code> 로
+찍으려면 <code class="nb">T: Display</code> 가 있어야 해서, 10부에서 본 <a href="#p10-generic-impl"><code class="nb">impl&lt;T&gt;</code></a> 에
+조건을 달았습니다. 정수를 담을 때는 됩니다. 벡터를 담으려 하니 값을 만드는 데서 막힙니다.</p>
+<!--CODE file=ex/19/cond_all.rs note=new 와 line 이 한 블록에 있다-->
+<!--OUT file=out/19/cond_all.txt lines=1-16 note=22번 줄 — new 를 부를 수 없다-->
+<div class="note"><b>읽는 법</b> — <a href="#p10-trait-not-impl">10부에서 읽은 E0277</a> 대로 타입은 <code class="nb">Vec&lt;&amp;str&gt;</code>,
+트레이트는 <code>Display</code> 입니다. 새로 읽을 것은 <code>note:</code> 입니다. 그 조건이 <code class="nb">Labeled::&lt;T&gt;::new</code> 에
+걸려 있다고 하고, 조건이 적힌 곳으로 9번 줄의 <code class="nb">T: Display</code> 를 짚습니다. 11번 줄의 <code>new</code> 본문은 값을
+찍지 않습니다. 그래도 같은 블록 안에 있어서 같은 조건이 걸렸습니다.</div>
+</article>
+
+<article class="card" id="p19-cond-method">
+<h3>impl 블록을 둘로 나눈다 — 어떤 T 에든 있는 것, 조건이 맞을 때만 있는 것</h3>
+<p class="lead">10부에서 <a href="#p10-generic-impl"><code class="nb">impl Point&lt;f64&gt;</code></a> 로 <code>f64</code> 일 때만 있는
+메서드를 만들었습니다. 타입 하나를 짚는 대신 조건을 적으면 "<code>Display</code> 인 <code>T</code> 일 때만 있는 메서드" 가 됩니다.
+조건이 필요 없는 <code>new</code> 와 <code>value</code> 는 조건 없는 블록으로 옮깁니다.</p>
+<!--RUN file=ex/19/cond_method.rs note=블록 둘 — 조건 없는 것과 T: Display 인 것-->
+<div class="note"><b>읽는 법</b> — 28번 줄에서 벡터를 담은 <code>tags</code> 가 만들어졌고, 29번 줄이 조건 없는 <code>value()</code> 로 길이
+2 를 찍었습니다. 27번 줄의 <code class="nb">port.line()</code> 은 정수가 <code>Display</code> 라서 19번 줄의 블록에 든 메서드를
+불렀습니다.</div>
+</article>
+
+<article class="card" id="p19-cond-method-err">
+<h3>조건에 안 맞는 T 에서 그 메서드를 부르면 — E0599</h3>
+<p class="lead">앞 슬라이드의 <code>tags</code> 에서 <code>line</code> 을 부릅니다. 속의 타입 <code class="nb">Vec&lt;&amp;str&gt;</code> 은
+<code>Display</code> 가 아닙니다.</p>
+<!--CODE file=ex/19/cond_method_err.rs note=22번 줄 — tags.line()-->
+<!--OUT file=out/19/cond_method_err.txt lines=1-17 note=메서드는 있는데 조건이 안 맞는다-->
+<div class="note"><b>읽는 법</b> — 번호는 10부의 <a href="#p10-generic-impl-missing">E0599</a> 이고, 오류 첫 줄의 말은 17부에서
+<a href="#p17-file-no-buf"><code>File</code> 에 <code>lines</code> 를 부르다</a> 처음 본 것입니다 — "메서드가 있기는 한데 트레이트
+바운드가 채워지지 않았다". 그때는 채워지지 않은 조건이 글로만 적혀 있었습니다. 이번에는 조건이 내 코드에 있어서, <code>note:</code>
+가 14번 줄의 <code class="nb">T: Display</code> 아래에 "채워지지 않은 조건이 여기서 들어왔다" 고 적습니다. 그 조건은
+<code class="nb">Vec&lt;&amp;str&gt;: std::fmt::Display</code> 입니다.</div>
+<div class="tip"><b>고치려면</b> — <code>Display</code> 인 값을 담거나, 앞 슬라이드의 29번 줄처럼 조건 없는 블록의 메서드만 씁니다.</div>
+</article>
+
+<article class="card" id="p19-where-method">
+<h3>조건은 메서드 하나에도 달 수 있다 — E0277</h3>
+<p class="lead">조건이 다른 메서드마다 <code>impl</code> 블록을 새로 여는 대신, 메서드의 시그니처 뒤에 10부의
+<a href="#p10-bounds-where"><code>where</code> 절</a>을 붙입니다. <code>line</code> 은 <code>Display</code> 를, <code>is_default</code> 는
+<code>Default</code> 와 <code>PartialEq</code> 를 요구합니다. 블록은 하나입니다.</p>
+<!--RUN file=ex/19/where_method.rs note=메서드마다 자기 조건을 단다-->
+<!--OUT file=out/19/where_method_err.txt lines=1-15 note=벡터를 담은 값에 line() 을 부른 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 33번 줄에서 <code class="nb">Vec&lt;&amp;str&gt;</code> 을 담은 <code>tags</code> 가
+<code>is_default()</code> 를 불러 <code>true</code> 를 냈습니다. 빈 벡터가 <code>Vec</code> 의 기본값과 같습니다. 아래 화면은 벡터를 담은
+값에 <code>line()</code> 을 부른 쌍둥이 <code>where_method_err.rs</code> 의 것입니다. 번호가 앞 슬라이드의 E0599 가 아니라 E0277 입니다.
+조건을 메서드에 달았더니 "그런 메서드가 없다" 가 아니라 "<code>line</code> 에 걸린 조건이 안 맞는다" 로 바뀌었고, <code>note:</code> 가
+11번 줄의 <code class="nb">T: Display</code> 를 짚습니다.</div>
+<div class="note"><b>이미 본 꼴</b> — 3부에서 <a href="#p03-nan-sort">실수 배열에 <code>sort()</code> 를 부르다 본 오류</a>의 마지막
+<code>note:</code> 가 같은 꼴입니다. 거기서는 <code>sort</code> 에 걸린 조건 <code>Ord</code> 를 실수가 채우지 못했습니다.</div>
+</article>
+
+<article class="card" id="p19-cond-impl">
+<h3>트레이트 구현에도 조건을 단다 — E0277</h3>
+<p class="lead">메서드가 아니라 트레이트 구현을 조건에 걸 수도 있습니다. <code>Summary</code> 를 받는 <code>report</code> 가 있고,
+<code class="nb">Labeled&lt;T&gt;</code> 는 속의 값이 <code class="nb">{}</code> 로 찍힐 때만 요약을 만들 수 있습니다.
+<code class="nb">impl&lt;T: Display&gt; Summary for Labeled&lt;T&gt;</code> 는 "<code>T</code> 가 <code>Display</code> 이면
+<code class="nb">Labeled&lt;T&gt;</code> 는 <code>Summary</code> 다" 입니다. 조건부 구현(conditional implementation)이라고 합니다.</p>
+<!--RUN file=ex/19/cond_impl.rs note=정수와 문자열을 담은 값만 report 에 넘겼다-->
+<!--OUT file=out/19/cond_impl_err.txt lines=1-17 note=벡터를 담은 tags 를 report 에 넘긴 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 33번 줄의 <code>tags</code> 는 만들어졌고 34번 줄이 이름표와 길이를 찍었습니다. 아래 화면은 그
+<code>tags</code> 를 <code>report</code> 에 넘긴 쌍둥이 <code>cond_impl_err.rs</code> 의 것입니다. 오류 첫 줄은
+<a href="#p10-trait-not-impl">E0277</a> 그대로 <code class="nb">Vec&lt;&amp;str&gt;</code> 과 <code>Display</code> 입니다. 새로 읽을 것은
+<code>help:</code> 입니다 — "트레이트 <code>Summary</code> 는 <code class="nb">Labeled&lt;T&gt;</code> 에 조건부로 구현돼 있다". 19번 줄의
+<code class="nb">T: Display</code> 아래에 채워지지 않은 조건을 적었습니다. 마지막 <code>note:</code> 는
+<code class="nb">Labeled&lt;Vec&lt;&amp;str&gt;&gt;</code> 이 <code>Summary</code> 가 되려면 그 조건이 필요하다는 말입니다.</div>
+<div class="note"><b>포괄 구현과 견주면</b> — 10부의 <a href="#p10-blanket">포괄 구현</a>은 <code class="nb">for T</code> 로 조건에 맞는 모든
+타입에 걸었습니다. 여기서는 <code class="nb">for Labeled&lt;T&gt;</code> 라서 구현을 받는 것은 내 타입 하나의 여러 꼴뿐입니다.</div>
+</article>
+
+<article class="card" id="p19-cond-derive">
+<h3>derive 가 만드는 구현에도 조건이 달린다 — E0277</h3>
+<p class="lead">10부에서 <code>derive</code> 는 <a href="#p10-copy-string">모든 필드가 그 트레이트를 구현해야 붙는다</a>고 했습니다. 제네릭
+구조체에서는 필드의 타입이 <code>T</code> 라서, 붙이는 자리에서는 그것을 알 수 없습니다. <code class="nb">Labeled&lt;T&gt;</code> 에
+<code class="nb">derive(Debug)</code> 를 붙이고, <code>Debug</code> 가 아닌 <code>Raw</code> 를 담아 찍어 봅니다.</p>
+<!--CODE file=ex/19/cond_derive_err.rs note=Raw 에는 derive 를 붙이지 않았다-->
+<!--OUT file=out/19/cond_derive_err.txt lines=1-16 note=첫째 오류 — 20번 줄-->
+<!--OUT file=out/19/cond_derive_err.txt lines=41-45 note=둘째 오류(21번 줄)의 가운데 — Vec 도 같다-->
+<div class="note"><b>읽는 법</b> — 오류는 둘이고 둘 다 <a href="#p10-derive-debug">10부에서 본</a> <code>Raw</code> 와 <code>Debug</code> 의 E0277
+입니다. 1번 줄의 <code>derive</code> 도, 정수를 담아 찍은 15번 줄도 걸리지 않았습니다. 첫째 오류의 <code>help:</code> 는 앞 슬라이드와
+같은 말입니다 — "<code>Debug</code> 는 <code class="nb">Labeled&lt;T&gt;</code> 에 조건부로 구현돼 있다". 2번 줄의 <code>T</code> 아래에
+채워지지 않은 조건 <code class="nb">Raw: Debug</code> 를 적었습니다. 둘째 오류는 21번 줄의 <code class="nb">vec![Raw]</code> 에서 났고,
+같은 말을 <code>Vec</code> 에 합니다. 화면은 <code>Vec</code> 을 타입 인자 둘로 적었는데, 둘째 <code>A</code> 는 이 책에서 다루지 않습니다.</div>
+<div class="tip"><b>고치려면</b> — 화면에서 뺀 마지막 <code>help:</code> 가 <code>Raw</code> 에 <code class="nb">#[derive(Debug)]</code> 를 붙이라고
+권합니다. 그렇게 고친 <code>cond_derive.rs</code> 의 출력입니다.</div>
+<!--OUT file=out/19/cond_derive.txt lines=3-5 note=Raw 에 derive(Debug) 를 붙인 뒤-->
+</article>
+
+<article class="card" id="p19-sized-err">
+<h3>T 자리에 str 이 오면 — E0277</h3>
+<p class="lead">무엇이든 <code class="nb">{}</code> 로 찍어 대괄호에 넣는 <code>show</code> 입니다. 참조로 받으니 정수의 참조도
+<code class="nb">&amp;str</code> 도 받을 것 같습니다. <code class="nb">&amp;str</code> 인 <code>s</code> 를 넘기면 매개변수의
+<code class="nb">&amp;T</code> 와 맞춰져 <code>T</code> 는 <code>str</code> 이 됩니다.</p>
+<!--CODE file=ex/19/sized_err.rs note=9번 줄은 되고 11번 줄이 막힌다-->
+<!--OUT file=out/19/sized_err.txt lines=1-19 note=str 의 크기를 알 수 없다-->
+<div class="note"><b>읽는 법</b> — 10부에서 <a href="#p10-dyn-unsized"><code class="nb">dyn Shape</code> 를 지역 변수에 담으려다</a> 본
+E0277 과 같은 말이고, 트레이트도 같은 <code>Sized</code> 입니다. 이번 타입은 <code>str</code> 입니다. 6부부터 문자열 조각을 늘
+<a href="#p06-str-slice"><code class="nb">&amp;str</code></a> 로, 곧 참조 뒤에 두고 썼습니다. 새로 읽을 것은 <code>note:</code> 입니다 —
+"<code>show</code> 의 암묵적인(implicit) <code>Sized</code> 조건". 3번 줄의 <code>T</code> 를 짚습니다. 적은 조건은 <code>Display</code>
+하나인데, 이 <code>T</code> 에는 적지 않은 <code>Sized</code> 가 하나 더 붙어 있었습니다.</div>
+<div class="tip"><b>help: 가 고친 줄</b> — <code class="nb">T: Display + ?Sized</code>. "암묵적인 <code>Sized</code> 제한을 푼다" 고 적혀
+있습니다. 다음 슬라이드입니다.</div>
+</article>
+
+<article class="card" id="p19-sized-fix">
+<h3>?Sized — 붙어 있던 Sized 조건을 뗀다</h3>
+<p class="lead"><code>help:</code> 대로 고칩니다. 다른 조건은 "이것을 할 수 있어야 한다" 를 더하는데, <code class="nb">?Sized</code> 는
+거꾸로 붙어 있던 조건을 뗍니다. "크기를 몰라도 된다" 로 읽습니다.</p>
+<!--RUN file=ex/19/sized_fix.rs note=값 옆에 T 의 이름을 찍는다-->
+<div class="note"><b>읽는 법</b> — 6번 줄이 18부의 <a href="#p18-type-name"><code>type_name</code></a> 으로 <code>T</code> 의 이름을 함께
+찍습니다. 13번 줄에서 <code>T</code> 는 <code>str</code>, 15번 줄에서는 <code class="nb">dyn core::fmt::Display</code> 입니다. 둘 다
+10부에서 본 대로 <a href="#p10-dyn-unsized">포인터 뒤에만 둘 수 있는</a> 타입이고, 5번 줄의 <code>x</code> 는 참조
+<code class="nb">&amp;T</code> 입니다. 11번 줄처럼 크기가 정해진 <code>i32</code> 도 그대로 받았습니다.</div>
+</article>
+
+<article class="card" id="p19-unsized-struct">
+<h3>구조체의 T 에도 같은 조건이 붙어 있다 — E0277</h3>
+<p class="lead">무엇이든 <code>Box</code> 에 담아 이름표를 붙이는 <code class="nb">Shelf&lt;T&gt;</code> 입니다. 문자열 조각 <code>str</code>,
+슬라이스 <code class="nb">[u8]</code>, 트레이트 객체 <code class="nb">dyn Display</code> 를 담으려 합니다. 구조체의 타입 인자에도
+<code class="nb">?Sized</code> 를 적어야 합니다.</p>
+<!--RUN file=ex/19/unsized_struct.rs note=Box 뒤에 크기를 모르는 타입 셋-->
+<!--OUT file=out/19/unsized_struct_err.txt lines=1-17 note=3번 줄의 ?Sized 만 뺀 쌍둥이 파일의 첫째 오류-->
+<div class="note"><b>읽는 법</b> — 9번 · 13번 · 17번 줄에서 <code>T</code> 는 차례로 <code>str</code>, <code class="nb">[u8]</code>,
+<code class="nb">dyn Display</code> 이고, 21번부터 23번 줄까지가 <code>Box</code> 속의 길이 5 와 3, 값 7 을 찍었습니다. 아래 화면은
+<code class="nb">?Sized</code> 만 뺀 쌍둥이 <code>unsized_struct_err.rs</code> 의 첫째 오류입니다. <a href="#p19-sized-err">앞에서 읽은 E0277</a> 과 같은 말이고, 이번에는
+<code>Shelf</code> 의 암묵적인 <code>Sized</code> 조건입니다. 그 파일의 오류는 여섯이고 모두 이 꼴입니다.</div>
+<div class="note"><b>이미 써 온 것</b> — 10부부터 쓴 <a href="#p10-dyn-vec"><code class="nb">Box&lt;dyn Shape&gt;</code></a> 가 이 모양입니다.
+표준 라이브러리 문서에는 <code>Box</code> 의 선언에 <code class="nb">T: ?Sized</code> 가 적혀 있습니다.</div>
+</article>
+
+<article class="card" id="p19-overlap-err">
+<h3>포괄 구현과 따로 쓴 구현이 겹치면 — E0119</h3>
+<p class="lead">10부의 <a href="#p10-blanket">포괄 구현</a>으로 <code>Display</code> 인 모든 타입에 <code>describe</code> 를 붙였습니다.
+<code>String</code> 만은 따옴표를 둘러 주고 싶어서 구현을 하나 더 씁니다.</p>
+<!--CODE file=ex/19/overlap_err.rs note=8번 줄은 모든 Display 타입에, 15번 줄은 String 에-->
+<!--OUT file=out/19/overlap_err.txt lines=1-9 note=String 에 구현이 둘이다-->
+<div class="note"><b>읽는 법</b> — 오류 첫 줄은 "타입 <code>String</code> 에 트레이트 <code>Describe</code> 의 구현이 충돌한다" 입니다.
+8번 줄에는 "첫 구현이 여기", 15번 줄에는 "<code>String</code> 에 충돌하는 구현" 이라고 붙었습니다. <code>String</code> 은
+<code>Display</code> 이므로 8번 줄의 포괄 구현이 이미 <code>String</code> 을 덮고 있고, 15번 줄이 같은 자리에 하나를 더 놓았습니다.
+이렇게 두 구현이 같은 타입을 덮는 것을 구현이 겹친다(overlap)고 합니다.</div>
+<div class="key"><b>더 좁게 쓴 쪽이 이기지 않는다</b> — 컴파일러는 15번 줄을 8번 줄보다 앞세우지 않고 오류로 처리했습니다. 10부의
+<a href="#p10-orphan">고아 규칙</a>이 두 크레이트가 같은 구현을 따로 쓰는 일을 막았다면, 이 오류는 한 파일 안에서 같은 일을 막습니다.</div>
+</article>
+
+<article class="card" id="p19-overlap-future">
+<h3>지금 겹치지 않아도 거절한다 — E0119</h3>
+<p class="lead">이 장의 <a href="#p19-cond-all">첫 슬라이드</a>에서 <code class="nb">Vec&lt;&amp;str&gt;</code> 은 <code>Display</code> 가 아니었습니다. 그러면
+<code class="nb">Vec&lt;T&gt;</code> 에 따로 구현해도 포괄 구현과 겹칠 일이 없어 보입니다.</p>
+<!--CODE file=ex/19/overlap_future.rs note=7번 줄은 모든 Display 타입에, 14번 줄은 Vec<T> 에-->
+<!--OUT file=out/19/overlap_future.txt lines=1-11 note=같은 번호, 그리고 note 한 줄-->
+<div class="note"><b>읽는 법</b> — 앞 슬라이드와 같은 E0119 이고 타입 자리가 <code class="nb">Vec&lt;_&gt;</code> 입니다. 새로 읽을 것은 마지막
+<code>note:</code> 입니다 — "upstream 크레이트가 앞으로의 버전에서 <code class="nb">Vec&lt;_&gt;</code> 에 <code>Display</code> 구현을 더할
+수 있다". upstream 은 내가 가져다 쓰는 쪽의 크레이트이고, 여기서는 <code>Vec</code> 과 <code>Display</code> 를 가진 표준 라이브러리입니다.
+그런 구현이 생기면 7번 줄과 14번 줄이 앞 슬라이드처럼 겹칩니다.</div>
+<div class="warn"><b>"지금은 구현하지 않는다" 는 근거가 못 된다</b> — 컴파일러는 <code>Vec</code> 이 오늘 <code>Display</code> 가 아니라는 것을
+두 구현이 겹치지 않는 근거로 받아 주지 않았습니다.</div>
+</article>
+
+<article class="card" id="p19-overlap-fix">
+<h3>포괄 구현의 조건을 내 표시 트레이트로 바꾼다</h3>
+<p class="lead">포괄 구현의 조건을 남의 <code>Display</code> 에서 내가 만든 <code>Plain</code> 으로 바꿉니다. <code>Plain</code> 은 메서드가
+하나도 없는 트레이트이고, 포괄 구현을 받을 타입에만 붙입니다. 이렇게 "이 타입은 해당한다" 는 표시로만 쓰는 트레이트를 표시
+트레이트(marker trait)라고 합니다.</p>
+<!--RUN file=ex/19/overlap_fix.rs note=E0119 로 거절됐던 String 구현과 Vec<T> 구현이 함께 들어 있다-->
+<div class="note"><b>읽는 법</b> — 8번 줄의 <code class="nb">trait Plain: Display {}</code> 는 10부의
+<a href="#p10-supertrait">상위 트레이트</a>로 <code>Display</code> 를 둬서, 14번 줄이 <code class="nb">{self}</code> 로 찍을 수 있습니다.
+9번과 10번 줄이 <code>i32</code> 와 <code>f64</code> 에 표시를 붙였습니다. <code>String</code> 과 <code>Vec</code> 에는 붙이지 않았습니다. 18번 줄의 <code>String</code> 구현과 24번 줄의
+<code class="nb">Vec&lt;T&gt;</code> 구현이 이번에는 컴파일됐고, 출력의 <code class="nb">글 "hi"</code> 와
+<code class="nb">3칸짜리 벡터</code> 가 그 둘이 낸 것입니다.</div>
+<div class="note"><b>앞의 note 와 견주면</b> — <a href="#p19-overlap-future">앞 슬라이드</a>의 <code>note:</code> 가 걱정한 것은 upstream
+크레이트가 <code>Display</code> 구현을 더하는 일이었습니다. <code>Plain</code> 은 이 파일에서 만든 트레이트입니다. 포괄 구현을 버리고
+타입마다 따로 구현하는 길과, 따로 다룰 타입을 10부의 <a href="#p10-newtype">newtype 패턴</a>으로 감싸는 길도 있는데, 이 책은 표시 트레이트를 쓰는 길만 돌려 봤습니다.</div>
+</article>
+
+<article class="card" id="p19-assoc-bound-err">
+<h3>반복자라는 것만으로는 내주는 값을 찍을 수 없다 — E0277</h3>
+<p class="lead">반복자를 받아 내주는 값을 한 줄씩 찍는 함수입니다. 조건 <code class="nb">I: Iterator</code> 는 "반복자다" 만 말하고,
+무엇을 내주는지는 말하지 않습니다.</p>
+<!--CODE file=ex/19/assoc_bound_err.rs note=4번 줄에서 x 를 {} 로 찍는다-->
+<!--OUT file=out/19/assoc_bound_err.txt lines=1-13 note=Item 이 Display 인지 모른다-->
+<div class="note"><b>읽는 법</b> — <a href="#p10-trait-not-impl">E0277</a> 의 타입 자리에
+<code class="nb">&lt;I as Iterator&gt;::Item</code> 이 왔습니다. "<code>I</code> 를 <code>Iterator</code> 로 볼 때의 <code>Item</code>" 이고,
+10부의 <a href="#p10-assoc-type">연관 타입</a>을 줄이지 않고 적은 이름입니다. 12부에서는 구현하는 쪽이
+<a href="#p12-impl-iterator"><code class="nb">type Item = u32;</code></a> 로 그 자리를 채웠습니다. 여기서는 받는 쪽이라 <code>Item</code> 이
+무엇일지 모르고, 그것이 <code>Display</code> 라는 조건도 없습니다. 10부에서 <a href="#p10-generic-nobound">조건 없는 <code>T</code> 에
+<code>&gt;</code> 를 쓰다</a> 막힌 것과 같은 일입니다. <code>help:</code> 가 달아야 할 <code>where</code> 절을 적어 줍니다.</div>
+</article>
+
+<article class="card" id="p19-assoc-bound">
+<h3>연관 타입에 조건을 달거나, 한 타입으로 못 박는다 — E0271</h3>
+<p class="lead">길은 둘입니다. <code class="nb">where I::Item: Display</code> 는 <code>Item</code> 에 조건을 답니다.
+<code class="nb">Iterator&lt;Item = u32&gt;</code> 는 <code>Item</code> 을 한 타입으로 정합니다. 뒤의 모양은 10부에서 반환 타입
+<a href="#p10-return-impl"><code class="nb">impl Iterator&lt;Item = u32&gt;</code></a> 로 먼저 봤습니다.</p>
+<!--RUN file=ex/19/assoc_bound.rs note=print_all 은 조건을 달고, total 은 못 박는다-->
+<!--OUT file=out/19/assoc_bound_pin_err.txt lines=1-8 note=Vec<u32> 인 v 로 total(v.iter()) 를 부른 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 24번과 25번 줄에서 <code>print_all</code> 은 문자열 배열의 반복자와 정수 범위를 둘 다 받았습니다.
+7번 줄의 <code class="nb">I::Item</code> 은 앞 슬라이드의 <code class="nb">&lt;I as Iterator&gt;::Item</code> 을 짧게 적은 것입니다. 26번과
+27번 줄의 <code>total</code> 은 60 과 30 을 냈습니다. 30 은 1 · 4 · 9 · 16 의 합입니다. 아래 화면은 쌍둥이
+<code>assoc_bound_pin_err.rs</code> 의 것이고 번호는 처음 보는 E0271 입니다. 오류 첫 줄이 그대로 읽힙니다 —
+"<code class="nb">Iter&lt;'_, u32&gt;</code> 가 <code>u32</code> 를 내주는 반복자이기를 기대했는데 <code class="nb">&amp;u32</code> 를
+내준다". 12부에서 본 대로 <a href="#p12-three-iters"><code>iter()</code> 는 참조를 내줍니다</a>.</div>
+<div class="tip"><b>고르기</b> — 본문이 <code>Item</code> 으로 하는 일이 "찍는다" 처럼 트레이트 하나면 조건을 답니다. 18번 줄처럼 그 값을
+<code>u32</code> 인 <code>sum</code> 에 더해야 하면 못 박습니다.</div>
+</article>
+
+<article class="card" id="p19-impl-arg-err">
+<h3>impl Trait 으로 받은 타입은 터보피시로 적어 줄 수 없다 — E0107</h3>
+<p class="lead">10부에서 매개변수의 <a href="#p10-trait-param"><code class="nb">impl Trait</code></a> 은 이름 있는 타입 인자를 짧게 쓴
+것이라고 했고, <a href="#p10-ch2-quiz">퀴즈</a>에서 "터보피시로 타입을 직접 적어야 할 때는 뒤의 모양을 쓴다" 고만 했습니다. 그 말을
+확인합니다. <code class="nb">Option&lt;impl Debug&gt;</code> 를 받는 함수에 <code>None</code> 을 넘기면서
+<a href="#p10-turbofish">터보피시</a>로 타입을 적어 봅니다.</p>
+<!--CODE file=ex/19/impl_arg_err.rs note=13번 줄 — show::<i32>(None)-->
+<!--OUT file=out/19/impl_arg_err.txt lines=1-15 note=제네릭 인자를 받지 않는 함수라고 한다-->
+<div class="note"><b>읽는 법</b> — 처음 보는 번호입니다. 오류 첫 줄은 "이 함수는 제네릭 인자를 0 개 받는데 1 개가 주어졌다" 이고,
+13번 줄의 <code class="nb">::&lt;i32&gt;</code> 아래에 "필요 없는 제네릭 인자를 지우라" 고 붙었습니다. 첫 <code>note:</code> 는 3번 줄의
+<code>show</code> 를 "제네릭 매개변수 0 개로 정의된 함수" 라고 부릅니다. 마지막 <code>note:</code> 가 까닭입니다 —
+"<code class="nb">impl Trait</code> 은 제네릭 인자로 직접 지정할 수 없다".</div>
+</article>
+
+<article class="card" id="p19-impl-arg-fix">
+<h3>이름을 붙인 타입 인자는 직접 적어 줄 수 있다</h3>
+<p class="lead">같은 함수를 이름 있는 타입 인자 <code>T</code> 로 고쳐 씁니다. 본문은 그대로입니다.</p>
+<!--RUN file=ex/19/impl_arg_fix.rs note=show 의 시그니처를 바꿨다-->
+<div class="note"><b>읽는 법</b> — 13번 줄의 <code class="nb">show::&lt;i32&gt;(None)</code> 이 컴파일됐고 <code>없음</code> 을 찍었습니다.
+14번 줄은 타입을 함수 쪽이 아니라 값 쪽에 <code class="nb">None::&lt;&amp;str&gt;</code> 로 적었습니다.</div>
+<div class="tip"><b>고르기</b> — 부르는 쪽이 타입을 적어 줘야 할 수 있는 함수는 이름 있는 타입 인자로 씁니다. 인자를 보고 타입이
+정해지는 함수는 짧은 <code class="nb">impl Trait</code> 으로 충분합니다.</div>
+</article>
+
+<article class="card quiz" id="p19-ch1-quiz" data-quiz>
+<h3>퀴즈 — 바운드 더 깊이</h3>
+<p class="q">Q. <code class="nb">fn show&lt;T: Display&gt;(x: &amp;T)</code> 에 <code class="nb">let s: &amp;str = "hello";</code> 를
+<code class="nb">show(s)</code> 로 넘기면 컴파일되지 않습니다. 까닭은 무엇이고, 어디를 고치면 될까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code class="nb">&amp;T</code> 가 <code class="nb">&amp;str</code> 과 맞춰져 <code>T</code> 는 <code>str</code> 이
+됩니다. <code>T</code> 에는 적지 않은 <code>Sized</code> 조건이 붙어 있는데 <code>str</code> 은 크기를 알 수 없는 타입입니다
+(<a href="#p19-sized-err">E0277</a>). <code class="nb">T: Display + ?Sized</code> 로 그 조건을 떼면 됩니다
+(<a href="#p19-sized-fix">?Sized</a>).</div>
 </article>
 
 <article class="card" id="p19-ch2">
 <p class="chnum">2장</p>
 <h2>연관 타입과 GATs</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">돌려주는 타입이 구현마다 다른 트레이트 · 타입 인자였다면 · 다른 연관 타입으로 짓는 연관 타입 · 제네릭 코드가 읽는 연관 상수 · 연관 상수와 배열 길이 · 연관 타입에 단 조건 · 자기 것을 빌려주는 반복자 · 제네릭 연관 타입 · for 와 while let · 한 번에 하나만 빌려준다</p>
+</article>
+
+<article class="card" id="p19-parser-assoc">
+<h3>돌려주는 타입이 구현마다 다르면 그 자리를 비워 둔다</h3>
+<p class="lead">글 한 조각을 값으로 읽는 파서를 여럿 만들려 합니다. <code>Int</code> 는 <code>i64</code> 를, <code>Flag</code> 는
+<code>bool</code> 을 돌려줍니다. 하는 일은 같은데 <code>parse</code> 의 반환 타입이 구현마다 달라서, 트레이트의 시그니처에 적을 타입이
+없습니다. 10부에서 <code>Container</code> 로 본 <a href="#p10-assoc-type">연관 타입</a>이 들어갈 자리입니다. 이 장의 앞쪽은 이 <code>Parser</code> 를 여러 번 다시 씁니다.</p>
+<!--RUN file=ex/19/parser_assoc.rs note=파서 둘, 그리고 어느 파서에든 쓰는 parse_all 하나-->
+<div class="note"><b>읽는 법</b> — 3번 줄이 자리를 비우고, 5번 줄이 그 자리를 <code class="nb">Self::Output</code> 으로 씁니다. 12번 줄과
+20번 줄의 구현이 <code>i64</code> 와 <code>bool</code> 로 채웁니다. 32번 줄의 <code>parse_all</code> 은 함수 하나이고, 35번 줄의 반환
+타입은 <code class="nb">P::Output</code> 을 따라갑니다. 40번 줄에서는 정수를 담은 <code>Option</code> 의 벡터가, 41번 줄에서는 <code>bool</code> 을 담은 <code>Option</code> 의 벡터가 나왔습니다.
+받는 변수 <code>nums</code> 와 <code>flags</code> 에는 타입을 적지 않았습니다.</div>
+</article>
+
+<article class="card" id="p19-parser-param-err">
+<h3>타입 인자였다면 구현이 둘일 때 골라 줘야 한다 — E0283</h3>
+<p class="lead">같은 트레이트를 <code class="nb">Parser&lt;T&gt;</code> 로 써 봅니다. 10부에서
+<a href="#p10-generic-vs-assoc">타입 인자를 받는 트레이트는 한 타입에 여러 번 구현할 수 있고, 쓰는 쪽이 어느 것인지 골라 줘야 한다</a>고
+했습니다. 그 예제는 받는 변수에 타입을 적어 골랐습니다. 적지 않으면 어떻게 되는지 봅니다. <code>Number</code> 에
+<code class="nb">Parser&lt;i64&gt;</code> 와 <code class="nb">Parser&lt;f64&gt;</code> 를 둘 다 구현했습니다.</p>
+<!--CODE file=ex/19/parser_param_err.rs note=26번 줄 — nums 에 타입을 적지 않았다-->
+<!--OUT file=out/19/parser_param_err.txt lines=1-17 note=Number: Parser<_> 에 맞는 impl 이 둘이다-->
+<div class="note"><b>읽는 법</b> — 12부에서 <a href="#p12-collect-untyped"><code>collect</code> 로 본 E0283</a> 이고, 오류 첫 줄도 같은
+"type annotations needed" 입니다. <code>nums</code> 는 <code class="nb">Vec&lt;Option&lt;_&gt;&gt;</code> 까지만 정해졌습니다. 새로 읽을
+것은 <code>note:</code> 입니다 — "<code class="nb">Number: Parser&lt;_&gt;</code> 를 채우는 <code>impl</code> 이 여럿 있다". 8번 줄과
+15번 줄을 둘 다 짚습니다.</div>
+<div class="tip"><b>고치려면</b> — 화면에서 뺀 <code>help:</code> 는 <code>nums</code> 에 타입을 적으라고 권합니다.
+<code class="nb">let nums: Vec&lt;Option&lt;f64&gt;&gt;</code> 로 적은 <code>parser_param.rs</code> 의 출력이 아래입니다.
+<a href="#p19-parser-assoc">앞 슬라이드</a>의 연관 타입에서는 적을 것이 없었습니다.</div>
+<!--OUT file=out/19/parser_param.txt lines=2-2 note=f64 쪽 구현이 골라졌다-->
+</article>
+
+<article class="card" id="p19-parser-pair">
+<h3>연관 타입은 다른 연관 타입으로 지을 수 있다</h3>
+<p class="lead"><code class="nb">port = 8080</code> 처럼 <code>=</code> 로 나뉜 두 조각을 읽으려 합니다. 왼쪽과 오른쪽을 읽을 파서를 받아
+이어 붙이는 <code class="nb">Pair&lt;A, B&gt;</code> 를 만듭니다. 이 파서가 돌려줄 타입은 <code>A</code> 와 <code>B</code> 가 무엇이냐에
+달려 있습니다.</p>
+<!--RUN file=ex/19/parser_pair.rs note=Pair(Word, Int) 와 Pair(Int, Int)-->
+<div class="note"><b>읽는 법</b> — 28번 줄이 두 파서의 <code>Output</code> 을 튜플로 묶어 자기 <code>Output</code> 으로 삼습니다. 36번 줄의
+<code class="nb">Pair(Word, Int)</code> 는 <code class="nb">("port", 8080)</code> 을, 40번 줄의 <code class="nb">Pair(Int, Int)</code> 는
+<code class="nb">(3, 9)</code> 를 냈습니다. 어디에도 그 튜플 타입을 적지 않았습니다. 38번 줄은 오른쪽이, 42번 줄은 왼쪽이 정수가 아니어서
+31번 줄의 <a href="#p09-opt-question"><code>?</code></a> 에서 <code>None</code> 이 됐고, 39번 줄은 <code>=</code> 가 없어 30번 줄의
+<code>?</code> 에서 <code>None</code> 이 됐습니다.</div>
+<div class="note"><b>1장과 이어서</b> — 26번 줄은 1장의 <a href="#p19-cond-impl">조건부 구현</a>입니다. <code>A</code> 와 <code>B</code> 가
+<code>Parser</code> 일 때만 <code class="nb">Pair&lt;A, B&gt;</code> 가 <code>Parser</code> 입니다. 그 조건이 있어서 28번 줄이
+<code class="nb">A::Output</code> 이라고 적을 수 있습니다.</div>
+</article>
+
+<article class="card" id="p19-assoc-const">
+<h3>제네릭 코드는 값이 아니라 타입에 상수를 묻는다</h3>
+<p class="lead">읽지 못했을 때 무엇으로 읽으려 했는지를 알리고, 너무 긴 글은 읽기 전에 거절하려 합니다. 이름과 길이 한도는 파서
+타입마다 다른 상수이므로 10부의 <a href="#p10-assoc-const">연관 상수</a>로 트레이트에 적습니다. 10부에서는 트레이트 안에서
+<code class="nb">Self::SYMBOL</code> 로 읽었습니다. 여기서는 제네릭 함수가 타입 인자 <code>P</code> 로 읽습니다.</p>
+<!--RUN file=ex/19/assoc_const.rs note=read 하나가 파서마다 다른 이름과 한도를 쓴다-->
+<div class="note"><b>읽는 법</b> — 31번 · 32번 · 34번 줄이 <code class="nb">P::MAX_LEN</code> 과 <code class="nb">P::NAME</code> 을 읽습니다.
+값 <code>p</code> 뒤가 아니라 타입 <code>P</code> 뒤에 <code>::</code> 를 붙였습니다. 39번 줄에서 <code>P</code> 는 <code>Int</code> 라서
+<code class="nb">정수 아님: 4x</code> 가 나왔습니다. 41번 줄의 <code>maybe</code> 는 5 바이트라 한도 5 를 넘지 않았고, 읽지 못해
+<code class="nb">참거짓 아님</code> 이 됐습니다. 42번 줄의 <code>perhaps</code> 는 7 바이트라 31번 줄에서 걸렸습니다.</div>
+</article>
+
+<article class="card" id="p19-const-array">
+<h3>연관 상수를 배열 길이로 — 타입을 짚으면 되고, 타입 인자로는 안 된다</h3>
+<p class="lead">폭이 정해진 칸으로 이루어진 레코드를 다룹니다. 칸마다 폭이 달라서 <code>Field</code> 의 연관 상수 <code>WIDTH</code> 로
+두고, 그 폭만큼의 바이트 배열을 만들려 합니다. 3부에서 <a href="#p03-array-len">배열의 길이는 타입의 일부</a>였습니다.</p>
+<!--RUN file=ex/19/const_array.rs note=Code::WIDTH 와 Name::WIDTH 를 길이로 쓴다-->
+<!--OUT file=out/19/const_array_err.txt lines=1-16 note=fn blank<F: Field>() -> [u8; F::WIDTH] 로 쓴 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 24번과 25번 줄은 타입을 짚어 <code class="nb">Code::WIDTH</code> 라고 적었고, 길이 4 와 16 인 배열이
+됐습니다. 아래 화면은 타입 인자 <code>F</code> 로 <code class="nb">F::WIDTH</code> 를 길이에 쓴 쌍둥이
+<code>const_array_err.rs</code> 의 것입니다. 번호가 없는 오류 둘입니다. 첫째는 "제네릭 매개변수는 const 연산에 쓸 수 없다" 이고
+<code>note:</code> 가 "타입 인자는 const 식에 쓸 수 없다" 고 덧붙입니다. 둘째는 13번 줄의 길이가 "제네릭 매개변수에 달린 상수 식" 이라고
+합니다. 이 책의 컴파일러 1.99 에서 그렇습니다.</div>
+<div class="tip"><b>돌아가는 길</b> — 18번 줄처럼 길이를 10부의 <a href="#p10-const-generic">const 제네릭</a> <code>N</code> 으로 받습니다.
+28번 줄에서 부르는 쪽이 타입을 짚어 <code class="nb">{ Name::WIDTH }</code> 로 넘겼고 길이 12 가 나왔습니다. const 제네릭은 이 부
+6장에서 더 봅니다.</div>
+</article>
+
+<article class="card" id="p19-parser-bound">
+<h3>연관 타입의 조건은 트레이트에 한 번만 적을 수 있다 — E0277</h3>
+<p class="lead">읽은 값을 <code class="nb">{:?}</code> 로 찍는 <code>show</code> 를 어느 파서에든 쓰려 합니다. 1장에서는
+<a href="#p19-assoc-bound">함수 쪽에 <code class="nb">where I::Item: Display</code> 를</a> 달았습니다. 트레이트가 내 것이면 조건을 연관 타입의
+선언에 적어 둘 수 있습니다. <code class="nb">type Output: Debug;</code> 는 "<code>Output</code> 은 구현하는 쪽이 정하되
+<code>Debug</code> 여야 한다" 입니다.</p>
+<!--RUN file=ex/19/parser_bound.rs note=show 에는 where 절이 없다-->
+<!--OUT file=out/19/parser_bound_err.txt lines=1-12 note=Debug 가 아닌 Token 을 Output 으로 정한 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 21번 줄의 <code>show</code> 는 조건이 <code class="nb">P: Parser</code> 하나뿐인데 22번 줄이
+<code>Output</code> 을 <code class="nb">{:?}</code> 로 찍었습니다. 아래 화면은 <code class="nb">#[derive(Debug)]</code> 가 없는
+<code>Token</code> 을 <code>Output</code> 으로 정한 쌍둥이 <code>parser_bound_err.rs</code> 의 것입니다.
+<a href="#p10-trait-not-impl">E0277</a> 이 대는 타입은 <code>Token</code>, 트레이트는 <code>Debug</code> 입니다. 오류가 난 곳은 쓰는 쪽이
+아니라 구현의 15번 줄 <code class="nb">type Output = Token;</code> 이고, <code>note:</code> 가 4번 줄의 <code class="nb">: Debug</code> 를
+짚습니다.</div>
+<div class="key"><b>조건을 어디에 적는가</b> — 함수에 적으면 그 함수를 부를 때 검사하고, 트레이트의 연관 타입에 적으면 구현할 때
+검사합니다. 위의 오류는 <code>show</code> 를 한 번도 부르지 않은 파일에서 났습니다.</div>
+</article>
+
+<article class="card" id="p19-lend-iter-err">
+<h3>자기 버퍼를 빌려주는 반복자는 Iterator 로 쓸 수 없다</h3>
+<p class="lead">낱말을 하나씩 대문자로 바꿔 내주는 반복자를 만듭니다. 낱말마다 새 <code>String</code> 을 만드는 대신 버퍼 하나를 돌려
+쓰고, 그 버퍼를 <code class="nb">&amp;str</code> 로 빌려주려 합니다. 12부에서 한 대로
+<a href="#p12-impl-iterator"><code>Iterator</code> 를 구현</a>하면서 <code class="nb">type Item = &amp;str;</code> 이라고 적었습니다.</p>
+<!--CODE file=ex/19/lend_iter_err.rs lines=1-20 note=18번 줄 — 내 필드 buf 를 빌려준다-->
+<!--OUT file=out/19/lend_iter_err.txt lines=1-12 note=Item 에 적은 & 에 붙일 수명이 없다-->
+<div class="note"><b>읽는 법</b> — 번호가 없는 오류입니다. 오류 첫 줄은 "연관 타입 <code class="nb">Iterator::Item</code> 은 수명 인자 없이
+선언돼 있어서, 빌린 타입을 쓰려면 그 수명이 구현하는 타입에서 와야 한다" 입니다. 11부에서
+<a href="#p11-struct-missing">참조를 필드로 두려면 수명 인자가 필요했듯</a> <code class="nb">&amp;str</code> 에는 수명이 있어야 하는데,
+<code>Shouter</code> 에는 수명 인자가 없습니다. <code>note:</code> 는 더 곧게 말합니다 — "<code>Item</code> 을 자기 자신에게서 빌려주는
+<code>Iterator</code> 는 만들 수 없다".</div>
+<!--OUT file=out/19/lend_life_err.txt lines=17-27 note=impl<'a> 로 수명 인자를 지어내 Item = &'a str 로 적은 쌍둥이 파일의 둘째 오류-->
+<div class="note"><b>수명 인자를 지어내도</b> — 위 화면은 8번 줄에 수명 인자 <code class="nb">'a</code> 를 만들고 9번과 11번 줄의
+<code class="nb">&amp;str</code> 를 <code class="nb">&amp;'a str</code> 로 바꾼 쌍둥이 <code>lend_life_err.rs</code> 의 둘째 오류입니다. 화면에서 뺀 첫째 오류 E0207 은 그 <code class="nb">'a</code> 가 어디에도 묶여 있지 않다는
+것입니다. 둘째 오류는 11번 줄의 <code class="nb">&amp;mut self</code> 의 수명을 <code class="nb">'1</code> 이라 부르고, "수명
+<code class="nb">'a</code> 의 데이터를 돌려주기로 했는데 <code class="nb">'1</code> 의 데이터를 돌려준다" 고 합니다. 18번 줄이 돌려주는 것은
+<code>self</code> 를 빌린 동안만 쓸 수 있는 참조인데, <code>Item</code> 에는 그 수명을 적을 자리가 없습니다.</div>
+</article>
+
+<article class="card" id="p19-gat-trait">
+<h3>연관 타입에 수명 인자를 단다 — 제네릭 연관 타입 <!--SINCE key=gats--></h3>
+<p class="lead"><code>Item</code> 에 "<code>next</code> 가 <code>self</code> 를 빌린 그 수명" 을 넘겨줄 자리를 만듭니다.
+<code class="nb">type Item&lt;'a&gt;</code> 처럼 연관 타입에 인자를 단 것이 제네릭 연관 타입(generic associated types, GATs)입니다.
+1부에서 <a href="#p01-let-else"><code>let … else</code> 와 같은 날 안정화된 큰 기능</a>으로 이름만 봤습니다. 표준 <code>Iterator</code> 는
+바꿀 수 없으니 트레이트를 직접 씁니다. 이렇게 자기 것을 빌려주는 반복자를 빌려주는 반복자(lending iterator)라고 부릅니다.</p>
+<!--RUN file=ex/19/lend_gat.rs note=Lending 을 직접 쓰고, Shouter 에 구현하고, while let 으로 돈다-->
+<div class="note"><b>읽는 법</b> — 3번 줄의 <code class="nb">Item&lt;'a&gt;</code> 는 수명을 받아 타입이 되는 자리입니다. 7번 줄의
+<code class="nb">Self::Item&lt;'_&gt;</code> 에서 <a href="#p11-underscore"><code class="nb">'_</code></a> 는 11부의 생략 규칙대로
+<a href="#p11-elide-rules"><code class="nb">&amp;mut self</code> 의 수명</a>입니다. 17번 줄의 구현이 그 자리를
+<code class="nb">&amp;'a str</code> 로 채우고, 19번 줄은 <code class="nb">Option&lt;&amp;str&gt;</code> 이라고만 적었습니다. 37번 줄의
+<code class="nb">while let</code> 이 <code>AB</code> · <code>CD</code> · <code>EF</code> 를 차례로 받았고, 40번 줄은 세 번 내준 뒤의
+<code>pos</code> 3 을 찍었습니다.</div>
+<!--OUT file=out/19/lend_gat_nowhere.txt lines=1-10 note=4번과 5번 줄의 where 절을 뺀 쌍둥이 파일-->
+<div class="note"><b><code class="nb">where Self: 'a</code></b> — 4번과 5번 줄은 11부의
+<a href="#p11-static-bound"><code class="nb">T: 'static</code></a> 과 같은 꼴의 조건입니다. <code>Self</code> 가 <code class="nb">'a</code> 보다
+짧게 사는 참조를 품지 않았다는 뜻입니다. 빼면 위 화면처럼 "<code>Item</code> 에 필요한 조건이 빠졌다" 며 그 절을 그대로 적어 줍니다. <code>note:</code> 는 이
+조건이 "지금은" 필요하다고 적습니다.</div>
+</article>
+
+<article class="card" id="p19-gat-for-err">
+<h3>빌려주는 반복자는 for 에 넣을 수 없다 — E0277</h3>
+<p class="lead">앞 슬라이드는 <code class="nb">while let</code> 으로 돌았습니다. 같은 <code>Shouter</code> 를 <code>for</code> 에 넣어
+봅니다. 트레이트와 구현은 앞 슬라이드와 같고 <code>main</code> 만 다릅니다.</p>
+<!--CODE file=ex/19/lend_for_err.rs lines=30-40 note=37번 줄 — for w in it-->
+<!--OUT file=out/19/lend_for_err.txt lines=1-13 note=Shouter 는 Iterator 가 아니다-->
+<div class="note"><b>읽는 법</b> — <a href="#p10-trait-not-impl">E0277</a> 이 대는 타입은 <code>Shouter</code>, 트레이트는
+<code>Iterator</code> 입니다. 12부에서 <a href="#p12-for-sugar"><code>for</code> 는 <code>next</code> 를 대신 불러 주는 문법</a>이라고
+했는데, 그 <code>next</code> 는 <code>Iterator</code> 의 것입니다. <code>Lending</code> 은 메서드 이름이 같을 뿐 다른 트레이트입니다.
+마지막 <code>note:</code> 는 <code>Shouter</code> 가 <code>IntoIterator</code> 가 되려면 그 구현이 필요하다고 합니다. 이 책에서 처음 보는
+이름이고, 여기서는 <code>for</code> 가 건 조건으로만 읽습니다.</div>
+<div class="tip"><b>고치려면</b> — 12부의 그 슬라이드가 <code>for</code> 를 손으로 푼 모양이 <code class="nb">while let Some(x) = it.next()</code>
+였습니다. <a href="#p19-gat-trait">앞 슬라이드</a>의 37번 줄이 그 모양입니다.</div>
+</article>
+
+<article class="card" id="p19-gat-two-err">
+<h3>내준 것을 쥔 채로 다음 것을 받을 수 없다 — E0499</h3>
+<p class="lead">빌려주는 반복자에서 낱말 둘을 받아 함께 찍으려 합니다. 버퍼는 하나뿐이고, <code>next</code> 는 부를 때마다 그 버퍼를 지우고 다시 씁니다(<a href="#p19-gat-trait">앞의 구현</a> 22번부터
+24번 줄까지).</p>
+<!--CODE file=ex/19/lend_two_err.rs lines=30-40 note=first 를 쥔 채로 next 를 또 부른다-->
+<!--OUT file=out/19/lend_two_err.txt lines=1-10 note=it 를 두 번 가변으로 빌렸다-->
+<div class="note"><b>읽는 법</b> — 6부에서 본 <a href="#p06-two-mut">E0499</a> 그대로입니다. 37번 줄이 <code>it</code> 를 가변으로 빌렸고,
+그 결과인 <code>first</code> 를 39번 줄이 쓰므로 빌림이 거기까지 이어집니다. 그 사이 38번 줄이 또 빌렸습니다. 37번 줄의
+<code>first</code> 는 <code>it</code> 속의 버퍼를 가리키는 <code class="nb">Option&lt;&amp;str&gt;</code> 입니다.</div>
+<div class="tip"><b>고치려면</b> — 다음 것을 받기 전에 새 <code>String</code> 으로 옮겨 둡니다. 아래는 <code>lend_two.rs</code> 의
+<code>main</code> 입니다. 위쪽 절반은 표준 <code>Iterator</code> 로 같은 일을 한 것이고, 거기서는 내준 둘을 그대로 함께 쥐었습니다.</div>
+<!--CODE file=ex/19/lend_two.rs lines=28-45 note=표준 Iterator 로 한 번, 빌려주는 반복자로 한 번-->
+<!--OUT file=out/19/lend_two.txt note=첫 줄은 표준 Iterator, 마지막 줄은 빌려주는 반복자-->
+</article>
+
+<article class="card quiz" id="p19-ch2-quiz" data-quiz>
+<h3>퀴즈 — 연관 타입과 GATs</h3>
+<p class="q">Q. <code class="nb">type Item&lt;'a&gt; = &amp;'a str;</code> 로 <code>Lending</code> 을 구현한 <code>Shouter</code> 를
+<code class="nb">for w in it { … }</code> 에 넣으면 컴파일되지 않습니다. 까닭은 무엇이고, 어떻게 돌아야 할까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>for</code> 는 <code>Iterator</code> 를 요구하는데 <code>Shouter</code> 가 구현한 것은 직접 쓴
+<code>Lending</code> 입니다(<a href="#p19-gat-for-err">E0277</a>). <code class="nb">while let Some(w) = it.next() { … }</code> 로
+<code>next</code> 를 직접 부릅니다(<a href="#p19-gat-trait">제네릭 연관 타입</a>).</div>
 </article>
 
 <article class="card" id="p19-ch3">
 <p class="chnum">3장</p>
 <h2>트레이트 객체 심화</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">dyn Any 와 downcast_ref · Box&lt;dyn Any&gt; 와 downcast · downcast 사슬과 열거형 · 타입으로 찾는 보관함 · 제네릭 메서드와 dyn · where Self: Sized · Clone 과 clone_box · 세 모양의 크기 · 기본 구현과 동적 디스패치 · dyn Trait + Send · 상위 트레이트의 객체로 바꾸기 · 넷 가운데 고르기</p>
+</article>
+
+<article class="card" id="p19-any-basic">
+<h3>dyn Any 로 받으면 아는 타입일 때 속을 꺼낼 수 있다 — E0597</h3>
+<p class="lead">값을 받아 알림 글을 만드는 <code>describe</code> 가 있습니다. 어떤 타입이 올지 모르고, 정수나 <code>String</code> 이면 속을
+꺼내 더 자세히 적으려 합니다. <code class="nb">std::any::Any</code> 는 실행 중에 원래 타입을 물어볼 수 있게 하는 트레이트입니다.
+<code class="nb">&amp;dyn Any</code> 로 받아 <code class="nb">downcast_ref::&lt;T&gt;()</code> 로 묻습니다. 답은
+<code class="nb">Option&lt;&amp;T&gt;</code> 입니다. 트레이트 객체에서 원래 타입으로 되돌리는 이 일을 다운캐스트(downcast)라고 합니다.</p>
+<!--RUN file=ex/19/any_basic.rs note=정수 · String · 실수 · &str 를 넘긴다-->
+<div class="note"><b>읽는 법</b> — 5번과 7번 줄이 차례로 <code>i32</code> 인지, <code>String</code> 인지 묻습니다. 15번과 16번 줄의 값은 속이
+꺼내졌습니다. 17번 줄의 실수와 19번 줄의 <code class="nb">&amp;str</code> 은 어느 쪽도 아니어서 <code>모르는 타입</code> 입니다. 8부에서
+본 대로 <a href="#p08-str-two"><code class="nb">&amp;str</code> 과 <code>String</code> 은 다른 타입</a>이고, 여기서는 아무것도 바꿔 주지
+않습니다. 22번 줄의 <code class="nb">is::&lt;T&gt;()</code> 는 꺼내지 않고 맞는지만 답합니다. 42 는 <code>i32</code> 여서 <code>i64</code>
+로 물으면 <code>false</code> 이고 23번 줄은 <code>None</code> 입니다. 25번 줄의 <code>type_id()</code> 가 주는 <code>TypeId</code> 는 찍지
+않고 같은지만 견줬습니다.</div>
+<!--OUT file=out/19/any_static_err.txt lines=1-13 note=String 을 잠깐 빌린 &str 를 &dyn Any 로 넘긴 any_static_err.rs-->
+<div class="warn"><b>잠깐 빌린 것은 받지 않는다</b> — 위 화면의 번호는 11부의
+<a href="#p11-dangle-scope">E0597</a> 입니다. 12번 줄에 "이 변환은 <code>owned</code> 가 <code class="nb">'static</code> 동안 빌려져 있기를
+요구한다" 고 붙었습니다. <code class="nb">dyn Any</code> 로 바뀌려면 11부의
+<a href="#p11-static-bound"><code class="nb">T: 'static</code></a>, 곧 잠깐 빌린 참조를 품지 않은 타입이어야 합니다. 위 예제 19번 줄의
+<code class="nb">"hi"</code> 는 <a href="#p11-static-str">리터럴</a>이라 통과했습니다.</div>
+</article>
+
+<article class="card" id="p19-box-any">
+<h3>Box&lt;dyn Any&gt; 는 downcast 로 상자째 되찾는다</h3>
+<p class="lead">빌려 보는 것이 아니라 넘겨받아 가져야 할 때가 있습니다. 서로 다른 타입의 값을 <code class="nb">Box&lt;dyn Any&gt;</code> 로 한
+벡터에 모았다가, <code>String</code> 이면 꺼내 가지려 합니다. <code class="nb">Box&lt;dyn Any&gt;</code> 의
+<code class="nb">downcast::&lt;T&gt;()</code> 는 <code>Result</code> 를 돌려줍니다. 맞으면 <code class="nb">Box&lt;T&gt;</code>, 아니면 받은
+상자 그대로입니다.</p>
+<!--RUN file=ex/19/box_any.rs note=String 이 든 상자와 u8 이 든 상자-->
+<div class="note"><b>읽는 법</b> — 5번 줄에서 <code>downcast</code> 가 <code>Ok</code> 를 주면 <code class="nb">*s</code> 로
+<a href="#p14-deref-box">상자 속의 값</a>을 꺼냅니다. 첫째 상자는 13번 줄에서 <code>hi</code> 가 됐습니다. 둘째 상자는 <code>Err</code> 에
+담겨 그대로 돌아왔고, 16번 줄이 그 상자에 <code class="nb">is::&lt;u8&gt;()</code> 을 다시 물어 <code>true</code> 를 받았습니다. 틀리게
+물어도 값을 잃지 않습니다.</div>
+<div class="warn"><b>&amp;상자 와 상자 속은 다르다</b> — 23번 줄처럼 <code class="nb">&amp;b</code> 를 <code class="nb">&amp;dyn Any</code>
+로 받으면, 가리키는 것은 속의 <code>u8</code> 이 아니라 상자입니다. 25번 줄에서 <code>outer</code> 는 <code>false</code>, 26번 줄에서
+<code class="nb">Box&lt;dyn Any&gt;</code> 로 물으면 <code>true</code> 입니다. 속을 가리키게 하려면 24번 줄처럼 <code>as_ref()</code> 를
+부릅니다.</div>
+</article>
+
+<article class="card" id="p19-any-events">
+<h3>downcast 사슬은 빠뜨린 타입을 알려 주지 않는다 — E0004</h3>
+<p class="lead">이벤트를 <code class="nb">Box&lt;dyn Any&gt;</code> 로 모아 처리합니다. 처리기는 <code>downcast_ref</code> 를 줄줄이 이어
+타입을 가립니다. 나중에 <code>Scroll</code> 을 더했고, 처리기는 고치지 않았습니다.</p>
+<!--RUN file=ex/19/any_events.rs note=Scroll 을 다루는 갈래가 없다-->
+<!--OUT file=out/19/events_enum_err.txt lines=1-6 note=같은 이벤트를 열거형으로 쓰고 Scroll 갈래를 빠뜨린 events_enum_err.rs-->
+<div class="note"><b>읽는 법</b> — 25번 줄의 <code>Scroll</code> 은 16번 줄의 <code>else</code> 로 떨어져 <code>?</code> 가 됐습니다.
+컴파일할 때도 실행할 때도 알림이 없습니다. 아래 화면은 같은 이벤트 셋을 열거형 <code>Event</code> 의 변형으로 쓴
+<code>events_enum_err.rs</code> 의 것입니다. 7부에서 본 <a href="#p07-enum-missing-arm">E0004</a> 가
+<code class="nb">&amp;Event::Scroll</code> 을 다루지 않았다고 컴파일할 때 알립니다.</div>
+<div class="tip"><b>종류를 내가 다 안다면 열거형</b> — 10부의 <a href="#p10-enum-vs-dyn">종류가 정해져 있으면 열거형도 답</a> 그대로입니다.
+<code>Scroll</code> 갈래를 더한 <code>events_enum.rs</code> 의 출력이 아래입니다.</div>
+<!--OUT file=out/19/events_enum.txt lines=2-4 note=갈래 셋-->
+</article>
+
+<article class="card" id="p19-any-store">
+<h3>올 타입을 미리 알 수 없는 보관함은 Any 로 맡아 둔다</h3>
+<p class="lead">플러그인마다 자기 설정 타입을 정해 맡기는 보관함을 만듭니다. 보관함을 쓰는 쪽은 그 타입들을 모르므로 열거형의 변형으로
+적어 둘 수 없습니다. 타입을 키로 삼아 <code class="nb">Box&lt;dyn Any&gt;</code> 를 맡아 두고, 꺼낼 때 <code>downcast_ref</code> 로
+되돌립니다.</p>
+<!--RUN file=ex/19/any_store.rs note=4번부터 18번 줄까지의 Store 에는 Theme 도 Volume 도 나오지 않는다-->
+<div class="note"><b>읽는 법</b> — 12번 줄이 <code class="nb">TypeId::of::&lt;T&gt;()</code> 를 키로 값을 넣고, 16번 줄이 같은 키로 찾아
+<code class="nb">downcast_ref::&lt;T&gt;()</code> 로 되돌립니다. 꺼낼 타입은 28번 줄처럼 <a href="#p10-turbofish">터보피시</a>로 적습니다.
+28번과 29번 줄은 넣어 둔 <code>dark</code> 와 7 을 받았습니다. 30번 줄은 넣은 적 없는 <code>String</code> 을 물어 <code>None</code> 을
+받았습니다. 32번 줄에서 <code>Volume</code> 을 또 넣으니 34번 줄의 값은 9 로 바뀌었고 칸 수는 2 입니다.</div>
+<div class="key"><b>갈리는 곳</b> — 받는 쪽이 타입의 목록을 아는가입니다. 알면 <a href="#p19-any-events">앞 슬라이드</a>처럼 열거형이 빠뜨린
+것을 잡아 줍니다. 모르면 <code>Any</code> 로 맡아 두고 꺼내는 쪽이 타입을 댑니다.</div>
+</article>
+
+<article class="card" id="p19-dyn-generic-err">
+<h3>제네릭 메서드를 더했더니 dyn 으로 쓸 수 없게 됐다 — E0038</h3>
+<p class="lead">10부의 <code>Shape</code> 에 넓이에 배율을 곱해 주는 <code>area_times</code> 를 더합니다. 배율을 정수로도 실수로도 받으려고
+타입 인자 <code>N</code> 을 뒀습니다. 그러자 잘 되던 <code class="nb">Vec&lt;Box&lt;dyn Shape&gt;&gt;</code> 가 컴파일되지 않습니다.</p>
+<!--CODE file=ex/19/dyn_generic_err.rs note=5번 줄 — 타입 인자가 있는 메서드-->
+<!--OUT file=out/19/dyn_generic_err.txt lines=1-17 note=Shape 가 dyn 과 맞지 않게 됐다-->
+<div class="note"><b>읽는 법</b> — 10부에서 읽은 <a href="#p10-dyn-incompatible">E0038</a> 이고 <code>note:</code> 의 vtable 까지 같습니다.
+새로 읽을 것은 5번 줄에 붙은 까닭입니다 — "메서드 <code>area_times</code> 에 제네릭 타입 인자가 있어서". 10부에서는 반환 타입의
+<code>Self</code> 가 까닭이었습니다. 오류가 가리키는 곳은 메서드를 더한 5번 줄이 아니라 <code class="nb">dyn Shape</code> 를 적은 27번
+줄입니다. 26번 줄의 <code class="nb">Square(2.0).area_times(3)</code> 은 걸리지 않았습니다.</div>
+<div class="note"><b>10부의 두 슬라이드를 이으면</b> — <a href="#p10-mono">제네릭은 쓰인 타입마다 따로 컴파일</a>되고,
+<a href="#p10-dyn-size"><code>dyn</code> 은 메서드 표에서 찾아 부릅니다</a>. <code>area_times</code> 는 <code>N</code> 이 정해지기 전에는
+함수 하나가 아닙니다.</div>
+</article>
+
+<article class="card" id="p19-dyn-sized">
+<h3>where Self: Sized — 그 메서드만 dyn 에서 뺀다</h3>
+<p class="lead">앞 슬라이드의 첫 <code>help:</code> 는 그 메서드를 다른 트레이트로 옮기라고 했습니다. 옮기지 않고 푸는 길이 있습니다.
+1장에서 본 <a href="#p19-where-method">메서드 하나에 다는 <code>where</code></a> 로 <code class="nb">Self: Sized</code> 를 답니다.
+<code class="nb">dyn Shape</code> 는 <a href="#p10-dyn-unsized"><code>Sized</code> 가 아니므로</a> 이 메서드는 <code class="nb">dyn Shape</code>
+에는 없는 메서드가 됩니다.</p>
+<!--RUN file=ex/19/dyn_sized.rs note=6번과 7번 줄을 더했다-->
+<!--OUT file=out/19/dyn_sized_err.txt lines=1-9 note=33번 줄을 s.area_times(3) 으로 바꾼 쌍둥이 파일-->
+<div class="note"><b>읽는 법</b> — 30번 줄의 <code class="nb">Vec&lt;Box&lt;dyn Shape&gt;&gt;</code> 가 컴파일됐고 33번 줄이 넓이 둘을
+찍었습니다. 29번 줄은 크기를 아는 타입 <code>Square</code> 에서 <code>area_times</code> 를 불러 12 를 냈습니다. 아래 화면은
+<code class="nb">dyn Shape</code> 에서 그 메서드를 부른 쌍둥이 <code>dyn_sized_err.rs</code> 의 것입니다. 번호가 없는 오류이고, 첫 줄은
+"<code>area_times</code> 메서드는 트레이트 객체에서 부를 수 없다" 입니다. 7번 줄의 <code class="nb">Self: Sized</code> 아래에 "여기에
+<code>Sized</code> 조건이 있다" 고 붙었습니다.</div>
+</article>
+
+<article class="card" id="p19-dyn-clone-err">
+<h3>Clone 을 상위 트레이트로 두면 dyn 과 맞지 않게 된다 — E0038</h3>
+<p class="lead">도형 목록 <code class="nb">Vec&lt;Box&lt;dyn Shape&gt;&gt;</code> 를 통째로 복제하려 합니다. 그냥 <code>clone()</code> 을
+부르면 아래 <code>note:</code> 처럼 <code class="nb">Box&lt;dyn Shape&gt;: Clone</code> 이 채워지지 않았다며 막힙니다. 그래서 "도형은 복제할
+수 있어야 한다" 를 10부의 <a href="#p10-supertrait">상위 트레이트</a>로 적어 봤습니다.</p>
+<!--OUT file=out/19/dyn_noclone_err.txt lines=8-10 note=상위 트레이트 없이 shapes.clone() 을 부른 쌍둥이 파일의 note-->
+<!--CODE file=ex/19/dyn_clone_err.rs note=2번 줄 — trait Shape: Clone-->
+<!--OUT file=out/19/dyn_clone_err.txt lines=1-15 note=이번에는 dyn Shape 라고 적은 줄이 막힌다-->
+<div class="note"><b>읽는 법</b> — 앞에서 읽은 <a href="#p19-dyn-generic-err">E0038</a> 이고 까닭이 또 다릅니다. 2번 줄의 <code>Clone</code>
+아래에 "<code class="nb">Self: Sized</code> 를 요구하기 때문" 이라고 붙었습니다. 표준 라이브러리 문서에서 <code>Clone</code> 은
+<code>Sized</code> 를 상위 트레이트로 두고, <code>clone</code> 은 <code>Self</code> 를 값으로 돌려줍니다. 10부에서
+<a href="#p10-dyn-incompatible"><code>Self</code> 를 돌려주는 <code>duplicate</code></a> 가 막힌 것과 같은 자리입니다. 맨 위 화면의
+<code>note:</code> 는 <code class="nb">Box&lt;dyn Shape&gt;: Clone</code> 이 <code class="nb">Vec&lt;Box&lt;dyn Shape&gt;&gt;: Clone</code> 에
+필요하다고 적습니다. 1장에서 <a href="#p19-cond-derive"><code>Vec</code> 의 <code>Debug</code> 로 본</a> 조건 달린 구현과 같은 꼴입니다.</div>
+</article>
+
+<article class="card" id="p19-clone-box">
+<h3>clone_box — 복제를 "상자를 돌려주는 메서드" 로 약속한다</h3>
+<p class="lead"><code>Self</code> 를 돌려주는 <code>clone</code> 대신, <code class="nb">Box&lt;dyn Shape&gt;</code> 를 돌려주는 메서드를
+트레이트에 둡니다. 구현하는 쪽은 자기 <code>clone()</code> 을 불러 상자에 담습니다. 그런 다음 상자
+<code class="nb">Box&lt;dyn Shape&gt;</code> 에 <code>Clone</code> 을 직접 구현합니다.</p>
+<!--RUN file=ex/19/clone_box.rs note=원본을 drop 한 뒤 복제본으로 넓이를 찍는다-->
+<div class="note"><b>읽는 법</b> — 4번 줄의 <code>clone_box</code> 는 반환 타입에 <code>Self</code> 가 없습니다. 17번과 26번 줄이 7번과 9번
+줄에서 <code>derive</code> 한 <code>clone()</code> 을 불러 새 상자에 담습니다. 31번 줄의 구현은 속의 <code>clone_box</code> 를 부르기만
+합니다. 그 구현이 있어서 40번 줄의 <code class="nb">shapes.clone()</code> 이 컴파일됐습니다. 41번 줄에서 원본을
+<a href="#p14-drop-early"><code>drop</code></a> 한 뒤에도 43번 줄이 <code>copy</code> 로 넓이 둘을 찍었습니다.</div>
+<div class="note"><b>31번 줄과 고아 규칙</b> — <code>Box</code> 도 <code>Clone</code> 도 표준 라이브러리의 것인데 10부의
+<a href="#p10-orphan">E0117</a> 이 나지 않았습니다. 속에 든 <code class="nb">dyn Shape</code> 가 이 파일의 타입입니다. Rust 레퍼런스는
+<code class="nb">Box&lt;T&gt;</code> 를, 속의 <code>T</code> 가 내 것이면 내 타입으로 쳐 주는 몇 안 되는 타입 가운데 하나로 적습니다.</div>
+</article>
+
+<article class="card" id="p19-three-ways">
+<h3>같은 호출을 제네릭 · &amp;dyn · Box&lt;dyn&gt; 으로 — 넘어가는 것의 크기가 다르다</h3>
+<p class="lead">10부에서 <a href="#p10-static-dynamic">컴파일 때 고르기와 실행 중에 고르기</a>를 표로 견줬습니다. 이번에는 같은
+<code>area</code> 호출을 세 모양의 함수로 쓰고, 넘어가는 것의 크기를 잽니다. 매개변수에 적는
+<a href="#p10-trait-param"><code class="nb">impl Shape</code></a> 는 첫째 모양과 같은 길입니다.</p>
+<!--RUN file=ex/19/three_ways.rs note=area_generic · area_ref · area_box-->
+<div class="note"><b>읽는 법</b> — 35번부터 37번 줄까지는 세 함수가 같은 넓이를 냈습니다. 38번 줄에서 <code class="nb">&amp;Circle</code>
+과 <code class="nb">&amp;Rect</code> 는 8 바이트입니다. 39번 줄의 <code class="nb">&amp;dyn Shape</code> 와
+<code class="nb">Box&lt;dyn Shape&gt;</code> 는 16 바이트이고, 10부에서 잰 <a href="#p10-dyn-size">주소 둘</a>입니다. 43번 줄의
+<code>size_of_val</code> 은 18부에서 <a href="#p18-size-align">타입 대신 값에 크기를 물은</a> 함수입니다. 타입이 같은
+<code class="nb">&amp;dyn Shape</code> 둘에 물었는데 8 과 16 이 나왔습니다. <code>f64</code> 하나인 <code>Circle</code> 과 둘인
+<code>Rect</code> 입니다.</div>
+<div class="warn"><b>이 툴체인에서는</b> — 8 과 16 은 이 책을 만든 64비트 기계와 컴파일러 1.99 가 낸 수입니다.</div>
+</article>
+
+<article class="card" id="p19-dyn-default">
+<h3>기본 구현이 dyn 뒤에서 부르는 메서드도 그 값의 타입 것이다</h3>
+<p class="lead">트레이트의 <a href="#p10-trait-default">기본 구현</a>은 한 번만 쓰는 코드입니다. 그 안의
+<code class="nb">self.name()</code> 이 누구의 <code>name</code> 을 부를지는 <code>self</code> 가 무엇이냐에 달려 있습니다.
+<code class="nb">Box&lt;dyn Shape&gt;</code> 로 섞어 담은 목록에서 <code>label()</code> 을 부릅니다.</p>
+<!--RUN file=ex/19/dyn_default.rs note=원 · 정사각형 · 원-->
+<div class="note"><b>읽는 법</b> — 43번 줄은 원소가 무엇인지 적지 않고 <code>label()</code> 을 부릅니다. 첫째와 셋째 원소에서는 6번 줄의
+기본 구현이 돌았고, 7번 줄의 <code class="nb">self.name()</code> 이 16번 줄의 <code>원</code> 을 받아 왔습니다. 둘째 원소에서는 31번 줄이
+덮어쓴 <code>label</code> 이 돌았습니다. 어느 본문을 부를지가 37번 줄의 벡터에 담긴 값에 따라 실행 중에 골라졌습니다. 10부에서 이름 붙인
+<a href="#p10-static-dynamic">동적 디스패치</a>입니다.</div>
+</article>
+
+<article class="card" id="p19-dyn-send">
+<h3>스레드로 보낼 트레이트 객체는 dyn Trait + Send — E0277</h3>
+<p class="lead">넓이 계산을 다른 스레드에 맡깁니다. <code class="nb">Box&lt;dyn Shape&gt;</code> 를 <code>move</code> 클로저로 넘겼더니,
+15부에서 <a href="#p15-rc-not-send"><code>Rc</code> 를 넘기다 본</a> 오류가 납니다.</p>
+<!--CODE file=ex/19/dyn_send_err.rs note=16번 줄 — Box<dyn Shape>-->
+<!--OUT file=out/19/dyn_send_err.txt lines=1-10 note=dyn Shape 는 Send 가 아니다-->
+<div class="note"><b>읽는 법</b> — 15부의 E0277 과 같은 말이고, 타입 자리가 <code class="nb">dyn Shape</code>, 트레이트가 <code>Send</code>
+입니다. 속에 든 것은 <code>f64</code> 하나를 가진 <code>Circle</code> 입니다. 그런데 16번 줄에서 타입을
+<code class="nb">dyn Shape</code> 라고만 적었고, 그 이름은 "<code>Shape</code> 를 구현한 무언가" 까지만 말합니다.</div>
+<div class="tip"><b>고치려면</b> — 타입에 <code class="nb">+ Send</code> 를 더합니다. 16번 줄을
+<code class="nb">Box&lt;dyn Shape + Send&gt;</code> 로만 바꾼 <code>dyn_send.rs</code> 의 출력이 아래입니다.</div>
+<!--OUT file=out/19/dyn_send.txt note=같은 Circle 이 이번에는 건너갔다-->
+</article>
+
+<article class="card" id="p19-upcast">
+<h3>트레이트 객체를 상위 트레이트의 객체로 바꾼다 <!--SINCE key=trait-upcasting--></h3>
+<p class="lead">도형 목록을 돌며 두 가지를 하려 합니다. <code>Shape</code> 를 모르고 <code class="nb">&amp;dyn Debug</code> 만 받는
+<code>log</code> 에 넘기기, 그리고 원이면 반지름을 꺼내기입니다. <code>Shape</code> 의 <a href="#p10-supertrait">상위 트레이트</a>로
+<code>Debug</code> 와 <code>Any</code> 를 적어 두면 <code class="nb">&amp;dyn Shape</code> 를 <code class="nb">&amp;dyn Debug</code> 로도
+<code class="nb">&amp;dyn Any</code> 로도 바꿀 수 있습니다. 상위 트레이트 쪽으로 올라가는 이 바꾸기를 업캐스트(upcast)라고 합니다.</p>
+<!--RUN file=ex/19/upcast.rs note=&dyn Shape 하나에서 &dyn Debug 와 &dyn Any 를 얻는다-->
+<div class="note"><b>읽는 법</b> — 37번과 38번 줄은 받는 쪽에 타입을 적었을 뿐인데 <code class="nb">&amp;dyn Shape</code> 가 그 타입으로
+바뀌었습니다. 40번 줄의 <code class="nb">log(debug)</code> 가 <code class="nb">Circle(1.0)</code> 과 <code class="nb">Square(2.0)</code>
+를 찍었습니다. 39번 줄의 <code class="nb">downcast_ref::&lt;Circle&gt;()</code> 은 원에서만 <code class="nb">Some(1.0)</code> 을 냈습니다.</div>
+<div class="note"><b>이 장의 첫 슬라이드와 이어서</b> — <a href="#p19-any-basic">거기서는</a> 처음부터 <code class="nb">&amp;dyn Any</code> 로
+받았습니다. 여기서는 <code>Shape</code> 의 메서드를 쓰다가, 원래 타입이 필요한 자리에서만 <code class="nb">&amp;dyn Any</code> 로
+건너갔습니다.</div>
+</article>
+
+<article class="card" id="p19-dyn-table">
+<h3>넷 가운데 고르기 — 제네릭 · &amp;dyn · Box&lt;dyn&gt; · 열거형</h3>
+<p class="lead">이 장과 10부에서 본 네 길을 한 표에 놓습니다. 위에서부터 물음을 읽고, 답이 "못 한다" 인 칸을 지워 가며 고릅니다. 마지막
+줄은 그 길을 이 장에서 돌려 본 슬라이드입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>제네릭 · <code class="nb">impl Trait</code></th><th><code class="nb">&amp;dyn Trait</code></th><th><code class="nb">Box&lt;dyn Trait&gt;</code></th><th>열거형</th></tr>
+<tr><td>서로 다른 타입을 한 벡터에</td><td>못 한다</td><td>된다</td><td>된다</td><td>된다</td></tr>
+<tr><td>값을 갖는가</td><td>적기 나름</td><td>빌린다</td><td>갖는다</td><td>갖는다</td></tr>
+<tr><td>종류를 더하는 쪽</td><td><code>impl</code> 을 쓰는 누구나</td><td><code>impl</code> 을 쓰는 누구나</td><td><code>impl</code> 을 쓰는 누구나</td><td>열거형을 쓴 쪽</td></tr>
+<tr><td>빠뜨린 종류</td><td>—</td><td>—</td><td>—</td><td>컴파일러가 알린다</td></tr>
+<tr><td>제네릭 메서드</td><td>부른다</td><td>못 부른다</td><td>못 부른다</td><td>—</td></tr>
+<tr><td>이 장에서</td><td><a href="#p19-three-ways">area_generic</a></td><td><a href="#p19-upcast">log</a></td><td><a href="#p19-clone-box">clone_box</a></td><td><a href="#p19-any-events">Event</a></td></tr>
+</table>
+</div>
+<p class="cap">"제네릭 메서드" 줄은 <a href="#p19-dyn-sized"><code class="nb">where Self: Sized</code></a> 를 단 메서드의 이야기입니다.
+<code class="nb">dyn Any</code> 는 표의 <code>dyn</code> 두 칸에 드는 트레이트 객체이고, <a href="#p19-any-store">올 타입을 모르는 쪽</a>이
+원래 타입을 되찾을 때 씁니다.</p>
+<div class="note"><b>클로저도 같은 표</b> — 12부에서 <a href="#p12-closure-vec">클로저 여럿을 한 벡터에 담은</a>
+<code class="nb">Box&lt;dyn Fn(i32) -&gt; i32&gt;</code> 가 이 표의 셋째 칸입니다. 함수와 클로저를 넘기는 모양들은 이 부 5장에서 따로
+견줍니다.</div>
+</article>
+
+<article class="card quiz" id="p19-ch3-quiz" data-quiz>
+<h3>퀴즈 — 트레이트 객체 심화</h3>
+<p class="q">Q. <code>Shape</code> 에 <code class="nb">fn area_times&lt;N: Into&lt;f64&gt;&gt;(&amp;self, k: N) -&gt; f64</code> 를 더했더니
+<code class="nb">Vec&lt;Box&lt;dyn Shape&gt;&gt;</code> 가 컴파일되지 않습니다. 메서드를 다른 트레이트로 옮기지 않고 고치려면 무엇을 적을까요?
+고친 뒤 <code class="nb">dyn Shape</code> 에서 <code>area_times</code> 를 부르면 어떻게 될까요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 그 메서드에 <code class="nb">where Self: Sized</code> 를 답니다. 그러면 <code>Shape</code> 를 다시
+<code class="nb">dyn</code> 으로 쓸 수 있습니다(<a href="#p19-dyn-sized">where Self: Sized</a>). <code class="nb">dyn Shape</code> 에서 그
+메서드를 부르면 "트레이트 객체에서 부를 수 없다" 는 컴파일 오류가 나고, <code>Square</code> 같은 크기를 아는 타입에서는 그대로
+불립니다.</div>
 </article>

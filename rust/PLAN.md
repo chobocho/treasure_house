@@ -477,3 +477,15 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   JoinHandle — accept as the general word for a handle); shift under -O not shown.
   Outline note: split_whitespace/strip_prefix are part 8's, not part 18's.
 - Next: 19a (19_gen.html ch 1–3), 19b, review 19; then 20 …
+- 19a written (chapters 1–3: 바운드 더 깊이 · 연관 타입과 GATs · 트레이트 객체 심화; 47
+  slides, 55 examples of which 26 are compile errors; `rsrun --check ex/19` all 55 ✓ on 5
+  runs; new E-codes E0119, E0271, E0107; +1 badge row trait-upcasting 1.86). Second half
+  has 52 slides of head-room. p01-let-else no longer says "GATs 는 이 책에서 다루지
+  않습니다" — links p19-gat-trait. For the 19 reviewer: p19-clone-box's orphan-rule reason
+  is from memory of the Reference; "쌍둥이 파일" is this part's word for a variant file
+  (decide whether to keep); 다운캐스트/업캐스트 transliterations; p19-gat-trait's gloss of
+  `Self: 'a`; slides with 3–4 blocks (p19-cond-derive, p19-gat-two-err). Second-half
+  writer: chapter 4's marker traits must acknowledge p19-overlap-fix (표시 트레이트);
+  p19-const-array promises "6장", p19-dyn-table promises "5장"; adjust p19-intro items 4–6.
+  Later (additions to 0–16): p10-ch2-quiz can link p19-impl-arg-err; p10-derive-table can
+  point forward to p19-cond-derive; `*box` moving a non-Copy value is taught nowhere.
