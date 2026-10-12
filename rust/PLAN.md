@@ -1028,3 +1028,40 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p24-wc-bad-bytes; p17-tool-test's key ("run and main left untested") → p24-wc-test-run /
   p24-wc-test-cli; p13-libbin-lib, p23-test-bin-lib → p24-wc-main; p23-wrap's "24부" → #p24.
   Unchecked by a reviewer: all of 24 project 1.
+- 24 project 1 reviewed (38 slides after the review): 사실오류 6 · 증거불일치 3 · 근거없음 11 ·
+  절단 0 · 순서 1 · 표기 6 · 퀴즈 1 · 코드 1; style 8. The writer's numbers and line
+  references were all correct; the defects were over-general frame sentences, mechanism
+  words, unread capture rows, and one hole: the rules table promised exit codes 0/1/2
+  but a non-UTF-8 argument panics inside `env::args()` (exit 101). Kept as the book's
+  taught idiom and SHOWN: new slide p24-wc-args-bad (wc3_files' RUN gained
+  `./target/debug/wc "$(printf 'caf\351.txt')"` with `#@ exit: 101`), a rules-table row
+  "받지 못하는 것", exercise 9 (`args_os`). Also: a vertical-tab assertion in the step-1
+  test (the word rule's one surprising edge — `is_ascii_whitespace` is true only for
+  09 0a 0c 0d 20), CODE boxes for the `use` lines added at steps 3 and 6, "N단계"
+  everywhere, 대체 글자 (part 17's word, not 대체 문자), quiz questions name their step.
+  Generator used (pieces/lib.rs +2 lines, RUN.3 +2 lines); chain sizes re-verified;
+  only out/24/wc3_files.txt changed (+6 lines). Slides +1 → project 1 = 38, part 24 = 38,
+  deck 1,514. Orchestrator re-ran: `make all` rc=0 (오류 0 · 어긋남 0; the budget notice
+  stays), `rsrun --check ex/24` ×3 = 10 ✓ / 0 ✗; card and README set to 1,514슬라이드 ·
+  캡처 1,175. This entry supersedes the "24 project 1 written" entry where they differ
+  (slide count, wc3's RUN, lib.rs line counts 61/84/131/147/254/288, "0.00s only").
+  Edges probed and consistent with the rules: empty argument, `--` ("모르는 옵션 --"),
+  flag after path, repeated flag, six-digit number (column widens — said in the rules
+  cap), whitespace-only file, CRLF, lone \r, two unreadable files, unreadable file as
+  the only argument, stdin + flags, stdout write error (EPIPE → "wc: Broken pipe", 1;
+  not shown), stderr write error (`eprintln!` panics, 101 — one sentence). Lessons
+  81–93 in AUTHORING.md. Open: `--help` prints "모르는 옵션 --"; the write-error path
+  is an exercise (a failing-`Write` test would evidence it); p24-wc-test-array is still
+  four boxes. p24-intro's "이 부의 화면" note is still scoped to chapter 1 and now also
+  carries `(tid)` and the RUST_BACKTRACE caveat — each project writer widens it.
+  Edges the remaining projects must probe first — grep: non-UTF-8 pattern / file names,
+  invalid UTF-8 inside a file (`lines()` returns Err mid-file: decide and show), `-`,
+  `--`, an empty pattern, exit 1 "no match" vs "unreadable"; calc: integer overflow and
+  division by zero must not panic, deep nesting overflows the recursive-descent stack
+  (state a limit), error positions in bytes or chars for Korean input, empty line and
+  EOF in the REPL; kv: keys/values containing the separator or a newline, a missing or
+  corrupt store file, `lock().unwrap()` poisoning, worker-thread output order fixed.
+  Later (0–23 additions): the four part-17 tools use `env::args()` and never say a
+  non-UTF-8 argument panics → p17-path-to-str or p02-args could point to
+  p24-wc-args-bad; p17's wc counts words with `split_whitespace` (p24-wc-count-space now
+  says the rule differs). Glossary candidates: 전각 빈칸, 대체 글자, 쪽 넘김, 깨진 바이트.

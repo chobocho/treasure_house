@@ -102,6 +102,8 @@ mod tests {
         assert_eq!(count(b"  one two\n\nthree  ").words, 3);
         // 탭 · CR · 쪽 넘김(\x0c)도 가른다
         assert_eq!(count(b"a\tb\rc\x0cd").words, 4);
+        // 세로 탭(\x0b)은 ASCII 공백으로 치지 않는다
+        assert_eq!(count(b"a\x0bb").words, 1);
         assert_eq!(count(b" \n\t").words, 0);
         // split 만으로는 빈칸 둘 사이의 빈 조각도 나온다
         let pieces = b"a  b".split(|b| b.is_ascii_whitespace());

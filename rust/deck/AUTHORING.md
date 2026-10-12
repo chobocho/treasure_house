@@ -330,3 +330,37 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
 80. For a line the program did not print (`Aborted`, `ls:`), find the printer with a
     scratch probe and write "이 기계의 셸이 …"; use "Cargo 문서는 …" only for sentences you
     can place, otherwise "이 책은 … 로 읽습니다" hung on a release-note line.
+
+### Lessons from the review of part 24, project 1 (building a program in step directories)
+
+81. Probe the finished program before writing slides: an empty argument, a non-UTF-8
+    argument (`"$(printf 'caf\351.txt')"`), `--`, a repeated flag, a six-digit number, a
+    just-outside-the-set byte, an unwritable stdout and stderr. Each outcome becomes a
+    rules-table row with a capture or test, an exercise, or a "받지 못하는 것" row.
+82. `env::args()` panics (exit 101) on a non-UTF-8 argument, and `eprintln!` panics when
+    stderr cannot be written. A chapter that promises "exit codes 0/1/2" shows or states
+    these.
+83. A definition that leans on a std predicate (`is_ascii_whitespace`,
+    `char::is_whitespace`, `is_alphanumeric`, `trim`) names the exact set and tests one
+    member just outside it.
+84. "The slide shows only the new lines" is a claim about every box: a box holds only new
+    lines, or its caption says which are new. A `use` or `const` added at the top gets
+    its own one- or two-line CODE box on the slide that first needs it.
+85. Steps are "N단계" with N from the directory name, defined once in the steps table.
+86. A quiz about "the program" names the step whose capture answers it, or the command
+    goes into the final step's RUN.
+87. Decide every edge assertion of a definition before writing slides: one assertion
+    inserted into the step-1 test moved seven slices and 25 line references across four
+    steps. Re-run the line audit (`lines.py`) after every generator run.
+88. In step chapters, read the rows that are not new as well (totals, columns not under
+    discussion).
+89. A refactoring step's capture is identical before and after: say so in the title and
+    give the step a test only the new code can pass.
+90. When the new program changes a rule of the earlier-part program it builds on, say so
+    where the rule is introduced ("17부의 … 와 다른 점").
+91. Mechanism words ("converted", "the sibling of", "the code decides") become the
+    compiler's own word quoted from the screen, or "소스를 따라가면".
+92. Relative `data/…` paths next to `CARGO_MANIFEST_DIR`: say why each is used; the
+    screen shows only that cargo was typed at the package root.
+93. `/dev/full` cannot be opened on this machine and a broken-pipe run is timing-dependent;
+    show a write failure with a failing `Write` impl in a test.
