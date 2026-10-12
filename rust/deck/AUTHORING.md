@@ -168,3 +168,28 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
 10. **Machine.** One `rustc`/`cargo` at a time (rsrun takes a lock — never bypass it,
     never run `cargo` directly outside rsrun), `rustfmt` only on your own files, no
     `make fmt`, no `git stash/checkout/reset`, do not commit.
+
+### Lessons from the review of part 17 (apply from part 18 on)
+11. Do not generalise from one example ("X 의 메서드는 …", "항상 …"). Say what the lines
+    shown do. Both factual errors in part 17 were generalisations the same chapter
+    contradicted a few slides later.
+12. A "because" needs its own evidence. A mechanism attached to a correct observation
+    (why append lands at the end, why drop cannot report, what the buffer does) is either
+    shown (typed `let` bindings, a counter, a twin run) or attributed to the std
+    documentation in so many words, saying what the screen does and does not show.
+13. "X 가 없으면 …" needs a twin: write the variant and show its capture on the same
+    slide with an OUT directive.
+14. Exercise every branch that prints a message with a RUN invocation or a test. If a
+    branch cannot be triggered deterministically, say so on the slide.
+15. Pipes and two processes: decide by mechanism who writes last. When the order would
+    depend on the other tool, send the program's stderr to a file (`2> err.txt`) and
+    `cat` it afterwards. `/dev/full` is not usable in this sandbox; the machine runs as
+    root, so permission errors cannot be produced.
+16. Statements about the shell, the OS or the terminal are worded "이 기계에서는 … /
+    셸이 …" and never name other systems.
+17. At most two callouts per slide. A third is usually a source-line gloss or a key
+    repeating the title — fold it into the reading note.
+18. "앞 슬라이드 / 다음 슬라이드" only for the adjacent slide; anything further away is
+    an id link, forward references included.
+19. The part intro's description of how the part's screens work is a factual claim about
+    every example: write it last and check it against all of them.

@@ -421,3 +421,20 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   경로, 구분자, 덧붙이기, 확장자, 항목(read_dir), 대체 글자. out/17/path_str.txt contains one
   U+FFFD ON PURPOSE (display() of a non-UTF-8 name) — not mojibake. Unlinked: p17-summary
   "다음" names 18부 in plain text. Part 17 still needs its review pass.
+- data/features.tsv: +6 rows (fs-read-to-string 1.26, exit-code 1.61, stdin-lines 1.62,
+  io-read-to-string 1.65, io-error-other 1.74, file-create-new 1.77), `make data-check`
+  0 errors (42 badges). SINCE directives still to add on p17-file-read-to-string,
+  p17-file-bytes, p17-write-fs-write, p17-out-exitcode, p17-in-lines, p17-in-all,
+  p17-write-buf-drop-fail, p17-write-open-options — after the part-17 review finishes.
+  Card/README "버전 표기 36건" must be recounted at the wrap-up.
+- Part 17 review running (facts + style in one pass).
+- Part 17 reviewed (facts + style, one pass): 3 wrong statements (two generalisations about
+  `Path` methods, the intro's claim about every example), 2 wrong references, 23
+  unevidenced sentences decided one by one (3 got evidence: twin ex/17/ask_no_flush.rs,
+  typed bindings in path_parts.rs, one more head invocation; the rest reworded to what the
+  capture shows or attributed to the std docs). 93 slides, 63 examples. Orchestrator then
+  hardened ex/17/yes (stderr to a file, `cat` afterwards — order no longer depends on which
+  `head` is installed) and attached 7 version badges (io-error-other row dropped: its
+  slide is not about that function). The reviewer's nine lessons are in AUTHORING.md
+  items 11–19. Doc-attributed sentences (read_dir order, BufReader/BufWriter rationale,
+  Stdin's own lines/read_line) are from memory of the std docs — no docs on this machine.
