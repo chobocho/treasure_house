@@ -1,15 +1,19 @@
 mod mail {
+    // 필드가 비공개라서 모듈 밖에서는 parse 로만 만든다.
     pub struct Email {
         addr: String,
     }
 
     impl Email {
         pub fn parse(text: &str) -> Result<Email, String> {
-            if text.contains('@') {
-                let addr = text.to_lowercase();
-                Ok(Email { addr })
-            } else {
-                Err(format!("주소가 아님: {text}"))
+            match text.split_once('@') {
+                Some((name, host))
+                    if !name.is_empty() && host.contains('.') =>
+                {
+                    let addr = text.to_lowercase();
+                    Ok(Email { addr })
+                }
+                _ => Err(format!("주소가 아님: {text}")),
             }
         }
 
@@ -21,12 +25,18 @@ mod mail {
 
 use mail::Email;
 
+// Email 을 받는 함수는 다시 검사하지 않는다.
+fn send(to: &Email) {
+    println!("{} 에게 보냄", to.as_str());
+}
+
 fn main() {
     let real = Email::parse("kim@example.com").unwrap();
     // 검사를 거치지 않고 만들려 한다.
     let fake = Email {
         addr: String::from("주소 아님"),
     };
-    println!("{} {}", real.as_str(), fake.as_str());
+    send(&real);
+    send(&fake);
 }
 //@ expect: E0451

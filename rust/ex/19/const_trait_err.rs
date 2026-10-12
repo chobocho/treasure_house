@@ -8,4 +8,4 @@ const ZEROS: [u8; 4] = filled();
 fn main() {
     println!("{ZEROS:?}");
 }
-//@ expect: error
+//@ expect: E0015

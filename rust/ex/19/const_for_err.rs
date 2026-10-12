@@ -12,4 +12,4 @@ const TABLE: [u32; 6] = squares();
 fn main() {
     println!("{TABLE:?}");
 }
-//@ expect: error
+//@ expect: E0015

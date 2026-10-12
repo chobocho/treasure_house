@@ -22,7 +22,6 @@ impl<const N: usize> Ring<N> {
 
 fn main() {
     let mut ring: Ring<3> = Ring::new();
-    // 칸이 없는 고리를 만들려 한다.
     let mut empty: Ring<0> = Ring::new();
     empty.push(9);
     for v in 1..=4 {

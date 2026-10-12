@@ -38,8 +38,8 @@ impl Builder<HasUrl> {
 }
 
 fn main() {
-    // url 을 빠뜨렸다.
-    let bad = Builder::new().retries(3).build();
-    println!("{bad}");
+    let a = Builder::new().retries(3).build();
+    let b = Builder::new().retries(5).url("/ready").build();
+    println!("{a}\n{b}");
 }
 //@ expect: E0599

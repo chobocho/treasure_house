@@ -3,9 +3,7 @@ struct Header {
     kind: u8,
     flags: u8,
     checksum: u16,
-    length: u32,
-    // 나중에 칸 하나를 더했다.
-    version: u8,
+    length: u64,
 }
 
 // 크기가 8 이 아니면 컴파일하지 않는다.
@@ -17,9 +15,8 @@ fn main() {
         flags: 0,
         checksum: 7,
         length: 16,
-        version: 2,
     };
     println!("{} {} {} {}", h.kind, h.flags, h.checksum, h.length);
-    println!("{} {}", h.version, size_of::<Header>());
+    println!("{}", size_of::<Header>());
 }
 //@ expect: E0080

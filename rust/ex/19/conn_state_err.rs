@@ -37,10 +37,10 @@ impl Conn<Open> {
 
 fn main() {
     let conn = Conn::new("db");
-    // open 을 부르는 것을 잊었다.
     conn.send("hello");
-    let conn = conn.open();
-    conn.send("hello");
-    let _conn = conn.close();
+    let conn = conn.close();
+    conn.open().send("again");
+    println!("{} {}", size_of::<Conn<Open>>(), size_of::<String>());
+    println!("{}", size_of::<Open>());
 }
 //@ expect: E0599

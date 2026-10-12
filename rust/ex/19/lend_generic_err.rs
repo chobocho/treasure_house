@@ -1,3 +1,4 @@
+// 빌려주는 반복자 — 내준 것은 다음 next 전까지만 쓸 수 있다.
 trait Lending {
     type Item<'a>
     where
@@ -21,6 +22,7 @@ impl Lending for Shouter {
         self.buf.clear();
         self.buf.push_str(word);
         self.buf.make_ascii_uppercase();
+        // 내 버퍼를 빌려준다.
         Some(&self.buf)
     }
 }

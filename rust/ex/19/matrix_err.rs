@@ -26,8 +26,9 @@ fn main() {
     let b = Matrix {
         cells: [[1, 0], [0, 1], [1, 1]],
     };
-    // 2 행 3 열에 2 행 3 열을 곱하려 한다.
-    let aa = a.mul(&a);
-    println!("{:?} {:?}", aa.cells, b.cells);
+    let ab = a.mul(&a);
+    println!("{:?}", ab.cells);
+    let ba = b.mul(&a);
+    println!("{:?}", ba.cells);
 }
 //@ expect: E0308

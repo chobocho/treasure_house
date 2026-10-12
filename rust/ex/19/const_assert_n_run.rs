@@ -6,6 +6,8 @@ struct Ring<const N: usize> {
 
 impl<const N: usize> Ring<N> {
     fn new() -> Ring<N> {
+        // 단언을 뺐다.
+        // N 이 0 인 Ring 도 만들어진다.
         Ring {
             slots: [0; N],
             next: 0,
@@ -20,7 +22,6 @@ impl<const N: usize> Ring<N> {
 
 fn main() {
     let mut ring: Ring<3> = Ring::new();
-    // 칸이 없는 고리를 만들려 한다.
     let mut empty: Ring<0> = Ring::new();
     empty.push(9);
     for v in 1..=4 {

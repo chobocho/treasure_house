@@ -4,4 +4,4 @@ fn main() {
     let lens: Vec<usize> = words.iter().map(str::len).collect();
     println!("{lens:?}");
 }
-//@ expect: error
+//@ expect: E0631

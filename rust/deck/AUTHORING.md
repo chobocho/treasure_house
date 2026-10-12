@@ -231,3 +231,22 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
 34. No untested alternatives ("…하는 길도 있는데 돌려 보지 않았다"): run it or leave it out.
 35. A compiler-source path (`/rustc/<hash>/library/…:line`) inside a shown range gets one
     clause saying what it is (this toolchain's std source) — it is not something to cite.
+
+### Lessons from the review of part 19, second half (apply from part 20 on)
+36. When acknowledging a repeated E-number, link the slide whose capture has the SAME
+    headline (grep the earlier capture), and do not call a `note:` "new" that an earlier
+    slide already read.
+37. Do not rely silently on an untaught `Copy` of a composite value (an array or a closure
+    reused after `into_iter()` or after `Box::new(x)`). Use `iter()` / a fresh value.
+38. A SINCE badge sits on the feature it is about. Not on a title whose subject is a
+    different or newer feature, and not after "— E0xxx" (it reads as "the error since
+    N"): put it in the prose there, as "(1.57 부터)" with the directive.
+39. A line that exists only to silence a lint (dead_code) still prints on screen: read it
+    in the note or restructure so it is not needed.
+40. A table row or quiz step must rest on a RUNNING capture, not on "that line was not
+    flagged in a file that failed to compile".
+41. `//@ expect:` names the code when the capture has one (`expect: E0631`, not
+    `expect: error`).
+42. At most four boxes (code + captures) on a slide. A run-time "before" plus its
+    compile-time "after" plus a twin is two slides.
+43. A slice (`lines=a-b`) does not end on a blank line or a bare `|` line.

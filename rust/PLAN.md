@@ -513,3 +513,19 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   (lesson 31) during the second-half review. Later (0–16 additions): p10-orphan needs a
   forward clause to p19-clone-box; p10-ch2-quiz → p19-impl-arg-err; part 11 `T: 'a` slide
   should be linked from p19-gat-trait when it exists.
+- 2026-10-12 pushed at the user's request: origin/main = 56a08d98 (part 19 written, first half reviewed; 1,197 slides).
+- Part 19 second half reviewed: 사실오류 1 · 증거불일치 14 · 근거없음 15 · 절단 3 · 순서 7 ·
+  표기 15 · 퀴즈 1 · 코드 6; style 34. Fourteen of nineteen twins were not strict — all
+  rebuilt (22 examples changed, 0 added). +4 slides: p19-clone-box-orphan (in 19_gen),
+  p19-cg-add-slice, p19-cg-array-default-err, p19-fn-return-box. Part 19 = 101 slides
+  (budget 95, ceiling 104), 120 examples, deck 1,201. Kept as one slide by the reviewer's
+  call: the two-code titles p19-valid-private (E0451 · E0616) and p19-sealed-err (E0277 ·
+  E0603). Lessons 36–43 in AUTHORING.md. Doc-attributed from memory, still unchecked:
+  p19-fn-sizes (fn item type is zero-sized and coerces to a fn pointer). Later (0–16
+  additions): p10-orphan → p19-clone-box-orphan; p12-return-closure's "15부에서 봅니다" →
+  also p19-compose; p05-const-fn has no badge (const-fn 1.31 exists now); p07-state-machine
+  → p19-typestate; glossary must keep 타입 상태 (removed feature, p01-change) and 타입 상태
+  패턴 apart.
+- Part 20 skeleton split into 20_conc.html (cover, intro, ch 1–3) and 20b_conc.html
+  (ch 4–5) so each writer run ends with a file that builds without the skeleton flag.
+  Do the same for 22, 23, 26 before their first run.
