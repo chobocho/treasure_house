@@ -414,3 +414,10 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   links that can be added now: p17-out-flush → p17-file-io-result, p17-in-all →
   p17-file-table, p17-in-redirect → p17-file-total. New terms for the glossary: 표준 출력 /
   표준 오류 / 표준 입력, 버퍼(링), 얇은 main. Not evidenced: file closed on drop.
+- 17b written (chapters 4–6, 47 slides, 30 examples) → part 17 = 93 slides, 62 examples;
+  `rsrun --check ex/17` all 62 ✓ on repeated runs. First-half forward mentions linked.
+  Badges wanted: fs::write 1.26 → p17-write-fs-write; File::create_new 1.77 →
+  p17-write-open-options; io::Error::other 1.74 → p17-write-buf-drop-fail. New terms:
+  경로, 구분자, 덧붙이기, 확장자, 항목(read_dir), 대체 글자. out/17/path_str.txt contains one
+  U+FFFD ON PURPOSE (display() of a non-UTF-8 name) — not mojibake. Unlinked: p17-summary
+  "다음" names 18부 in plain text. Part 17 still needs its review pass.
