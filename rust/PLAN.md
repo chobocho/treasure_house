@@ -722,3 +722,55 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   panicking-drop leak or the struct-literal bypass. Later (0–20 additions): REVIEW2.md
   calls p11-dangle-fix "the definition" of 매달린 참조 but the word is only on
   p11-dangle-scope — check other links to it.
+- Part 22 skeleton split into 22_async.html (cover, intro, ch 1–3) and 22b_async.html
+  (ch 4–5); OUTLINE.md heading and order.txt updated to match.
+- 22a written (chapters 1–3: Future 를 손으로 · 실행기 키우기 · Pin; 37 slides incl. cover
+  and intro — ch 1 = 10, ch 2 = 13, ch 3 = 12; 27 examples, 5 compile-error files
+  (E0277 ×2, E0596, E0382, E0599), one expected panic (async_again); 3 quizzes). No
+  `unsafe`, no threads, no clock, no external crate anywhere in ex/22. Orchestrator
+  re-ran: `make all` rc=0 at 1,386 slides (one notice: part 22 under 80 % of budget),
+  `rsrun --check ex/22` ×3 = 27 ✓ / 0 ✗ each; read selfref_move (the stale pointer goes
+  only to `ptr::eq`; stack slot vs `Box` forces the addresses apart) and the final
+  executor (exec5_yield.rs 63–120). No new error codes in out/ (61). Badges +7 → 119
+  (future-trait 1.36, task-wake 1.51, pin-type 1.33, unpin-trait 1.33, phantom-pinned
+  1.33, box-into-pin 1.63, pin-macro 1.68). Part-0 map, card and README set to 24부 ·
+  1,386슬라이드 · 예제 1,028 · 캡처 1,063 · 퀴즈 104 · 버전 표기 119건.
+  The chapter-2 chain exec1_block_on → exec2_queue → exec3_wake → exec4_join →
+  exec5_yield and its twins (exec2_forget, exec3_forget, exec3_rc) were GENERATED from
+  `scratch/w22a/pieces/*.rs` by `scratch/w22a/mk.py` + `spec.py` (git-ignored;
+  re-running reproduces ex/22 byte for byte); `scratch/w22a/lines.py` prints the source
+  line behind every "N번 줄" per slide. The first two chain steps are replacements, not
+  pure extensions (the slides say so).
+  For the 22b writer: reuse `ex/22/exec5_yield.rs` — 8–25 `Countdown(u32)` (wakes itself,
+  Output = &'static str), 27–61 `Shared` + `Gate(Rc<RefCell<Shared>>)` (`open()`, stores
+  the waker), 63–120 the executor (`type Task = Pin<Box<dyn Future<Output = ()>>>`,
+  `type ReadyQueue = Arc<Mutex<VecDeque<usize>>>`, `TaskWaker { id, ready }`,
+  `Executor { tasks: Vec<Option<Task>>, ready, log }`, `spawn(&mut self, impl Future<Output
+  = ()> + 'static)`, `run(&mut self) -> usize` = number of unfinished tasks when the ready
+  queue is empty — the hook for a tick counter), 122–174 `Fut`, `Join2`, `join2`, `after`,
+  197–219 `yield_now`, `walk`, `race`. A task cannot spawn (`spawn` takes &mut self);
+  there is no join handle; duplicate wake-ups print "(N번은 이미 끝났다)" and are skipped —
+  a channel that wakes without `take()` will produce those lines. p22-intro's notes
+  "이 부의 화면" and "돌려 보이지 않는 것" speak only of chapters 1–3; its 4장/5장 bullets
+  are from the outline. Conventions: no `use std::future::Future;` (2024 prelude, said on
+  p22-poll-ready), SeqCst, `pin!` + `as_mut().poll(&mut cx)` for hand polling, particles
+  `Countdown` 은/을/이 · `Join2` 는/를/가 · `Gate` 는/를/가, 큐 (not 줄) for queue, "정해진
+  순서". What happens to unfinished tasks when the executor is dropped is not shown —
+  that is ch 4's "cancel = drop". Sourced but unused badge lines: poll_fn / task::ready! /
+  IntoFuture 1.64, future::ready / pending 1.48. Second half may use at most 29 slides
+  (budget 60, ceiling 66).
+  For the reviewer — vouched from memory only (no local docs): p22-waker-count (who
+  returns Pending must arrange a wake-up), p22-poll-after-ready, p22-exec-waker-rc,
+  p22-pin-box, p22-pin-swap-err, p22-unpin-free, p22-async-size (WHY async futures are
+  !Unpin — the writer's least sure), p22-ch3-table. Unsure: p22-self-ref's wording about
+  the stale pointer (does not say "UB" flatly); p22-pin-macro's title ends "— E0382" though
+  half the slide is the fix (lesson 31 tension); p22-exec-wake-run's "already finished"
+  branch does not run in exec3_wake (said, links p22-join2-run); outline items without a
+  slide of their own: `Pin<&mut T>`, "run until all done". Toolchain-specific values:
+  async_size's three `true` lines, `{async block@…}` type names, a /rustc/… path in
+  pin_new_err, the "`async fn` resumed after completion" panic text. New terms: 태스크
+  (task; part 1 uses the word for old Rust's tasks), 깨우다/깨움 (wake), 고정하다 (pin).
+  Later (0–21 additions): p16-block-on "까닭은 이 책에서 다루지 않습니다" → now false,
+  link p22-poll-needs-pin; p16-async-why "여기까지만 봅니다" and p01-async "맛보기만"
+  predate part 22; p21-intro "async 는 22부에서 잇습니다" → #p22; p21-wrap "다음" note →
+  #p22. Unchecked by a reviewer: everything in 22a.

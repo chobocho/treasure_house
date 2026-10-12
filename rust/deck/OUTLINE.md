@@ -290,7 +290,7 @@ racing threads, no timing numbers.
    (edition 2024 spelling — cash in p01-ed2024), `union` (brief), `static mut` and why
    the 2024 edition rejects references to it
 
-## 22부 async 심화 (60) — file 22_async.html (5 chapters)
+## 22부 async 심화 (60) — files 22_async.html (1–3), 22b_async.html (4–5)
 1. Future 를 손으로 — `impl Future` by hand (a countdown that returns `Pending` n times),
    `Poll`, `Context`, what a `Waker` is for (a counting waker built with the `Wake` trait)
 2. 실행기 키우기 — from part 16's `block_on` to a queue of tasks: `spawn`, run until all
