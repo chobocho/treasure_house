@@ -64,7 +64,7 @@ impl Executor {
     // 끝나지 않은 태스크의 수를 돌려준다.
     fn run(&mut self) -> usize {
         loop {
-            // 열쇠는 이 문에서 사라진다. poll 안의 wake 가 다시 잠근다.
+            // 열쇠는 이 let 문까지다. poll 안의 wake 가 다시 잠근다.
             let next = self.ready.lock().unwrap().pop_front();
             let Some(id) = next else {
                 // 큐가 비었다. 잠든 태스크가 있으면 틱을 돌려 깨운다.

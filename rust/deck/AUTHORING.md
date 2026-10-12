@@ -297,3 +297,16 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
 65. Grep the whole book before the first use of a term (링커), and fix a code name's
     particle once per part (`MyVec` 은/을/이/과).
 66. Every printed line gets read, including the ones before the interesting one.
+67. A hand-made primitive with a single slot (`Option<Waker>`, one receiver) states its
+    capacity where it is defined, and no later example exceeds it — even on a path that
+    "never fires".
+68. "X 가 먼저 찍혔다, 그러므로 Y 는 아직 돌지 않았다" needs Y to print something. If the
+    body is silent, read a counter ("poll 2번") or add a print.
+69. In a file that uses a metaphor word (문 = door), do not use the same word in another
+    sense (문 = statement) in a comment; write "let 문".
+70. An intro sentence of the form "X 는 N장에서만 본다" is grepped against the other
+    half of the part before it is written.
+71. When an earlier capture of the same error carried a `note:` that the new capture
+    lacks, say so, rather than paraphrasing the old note as if it were on this screen.
+72. A key head is a title too: "A 가 B 를 정한다" drawn from one error message is a
+    generalisation. Head it with what the message pointed at.

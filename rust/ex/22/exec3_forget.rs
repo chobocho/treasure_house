@@ -98,7 +98,7 @@ impl Executor {
     // 큐가 빌 때까지 돈다. 끝나지 않은 태스크의 수를 돌려준다.
     fn run(&mut self) -> usize {
         loop {
-            // 열쇠는 이 문에서 사라진다. poll 안의 wake 가 다시 잠근다.
+            // 열쇠는 이 let 문까지다. poll 안의 wake 가 다시 잠근다.
             let next = self.ready.lock().unwrap().pop_front();
             let Some(id) = next else { break };
             let Some(task) = self.tasks[id].as_mut() else {

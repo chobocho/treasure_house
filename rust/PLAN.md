@@ -812,3 +812,29 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   `drop(shared)` before the .await still fails; E0038's "because method `fetch` is
   `async`"; two E0382 in closure_block. New terms: async 클로저, 취소 (cancellation), 틱.
   Unchecked by a reviewer: all of part 22.
+- Part 22 reviewed (one reviewer over both halves, 64 slides): 사실오류 4 · 증거불일치 1 ·
+  근거없음 7 · 절단 0 · 순서 0 · 표기 4 · 퀴즈 0 · 코드 1; style 1. Slices, "N번 줄", quizzes
+  and all 71 external link targets came out clean. The one code defect: cancel_exec.rs
+  had two tasks awaiting clones of one `Gate`, whose single Waker slot the second waiter
+  overwrote (a lost wake-up had the gate ever opened) → each task has its own gate;
+  p22-waker-stored now states the one-waiter capacity. Executor, Join2, Select2,
+  Chan/Recv, Timer/Sleep walked for lost wake-ups, RefCell double borrows and
+  termination — judged correct (`Chan` has the same one-receiver limit, never violated,
+  not stated). Titles fixed: p22-pin-swap-err ("Unpin 이 아닌 값은 …"), p22-self-ref
+  ("옛 자리를 가리킨다"). Examples changed 15 through the pieces + mk.py of scratch/w22a
+  and scratch/w22b (a shared comment in the executor; cancel_exec's main); line counts
+  unchanged, every capture byte-identical. Slides ±0 → part 22 = 64 (budget 60, ceiling
+  66), deck 1,413, card numbers unchanged. Orchestrator re-ran: `make all` rc=0 (오류 0 ·
+  알림 0 · 어긋남 0), `rsrun --check ex/22` ×3 = 48 ✓ / 0 ✗; prefix exec5_yield 1–121
+  still byte-identical in its six files; three new line readings spot-checked — match.
+  Kept by the reviewer's call: p22-pin-macro as one slide with its "— E0382" title.
+  Vouched from memory only: all contract sentences (Poll::Pending, Future::poll's Panics
+  section, Wake vs RawWaker, Pin, Unpin, DerefMut for Pin, new_unchecked); not sure of the
+  exact docs wording: p22-async-size's lead. Sourced in docs/afit-2023.txt: p22-afit-dyn,
+  p22-not-send-fix, p22-runtime row 1. Lessons 67–72 in AUTHORING.md. Open:
+  p22-closure-block's second E0382 labels are read only as "같은 꼴"; p22-box-stays' key
+  is unqualified ("Unpin 이 아니면"); p22-pin-swap-err acknowledges E0596 through
+  p14-rc-immutable, whose headline differs. Glossary rows to add: 태스크, 깨우다/깨움,
+  고정하다, 취소, 틱, async 클로저. Later (0–21 additions): as listed under "22a written",
+  plus p08-vecdeque's title calls a queue "줄" where part 22 says 큐; p22-wrap's "23부"
+  mention becomes a link when part 23 exists.

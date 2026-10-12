@@ -98,7 +98,7 @@ impl Executor {
     // 큐가 빌 때까지 돈다. 끝나지 않은 태스크의 수를 돌려준다.
     fn run(&mut self) -> usize {
         loop {
-            // 열쇠는 이 문에서 사라진다. poll 안의 wake 가 다시 잠근다.
+            // 열쇠는 이 let 문까지다. poll 안의 wake 가 다시 잠근다.
             let next = self.ready.lock().unwrap().pop_front();
             let Some(id) = next else { break };
             let Some(task) = self.tasks[id].as_mut() else {
@@ -137,18 +137,18 @@ async fn wait_job(name: &'static str, gate: Gate) {
 }
 
 fn main() {
-    // never 는 아무도 열지 않고, soon 은 2번 태스크가 연다.
-    let never = Gate::default();
+    // 0번과 3번의 문은 저마다 따로이고, 아무도 열지 않는다.
+    // soon 은 2번 태스크가 연다.
     let soon = Gate::default();
     let mut ex = Executor::default();
-    ex.spawn(wait_job("0번", never.clone()));
+    ex.spawn(wait_job("0번", Gate::default()));
     ex.spawn(wait_job("1번", soon.clone()));
     ex.spawn(async move {
         Countdown(2).await;
         println!("2번: 문을 연다");
         soon.open();
     });
-    ex.spawn(wait_job("3번", never.clone()));
+    ex.spawn(wait_job("3번", Gate::default()));
     let left = ex.run();
     println!("poll 순서 {:?}, 끝나지 않은 태스크 {left}", ex.log);
 
