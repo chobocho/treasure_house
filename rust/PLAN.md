@@ -667,3 +667,31 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   (unsafe attributes and static mut references are not in part 1's list: could add
   #p21-no-mangle-2021, #p21-static-mut-ref); p16-extern-c → #p21-ffi-safe; p20-wrap's
   "다음" note → #p21. Unchecked by a reviewer: all of part 21.
+- Part 21 first half reviewed (chapters 1–2, 41 slides): 사실오류 3 · 증거불일치 2 ·
+  근거없음 11 · 절단 2 · 순서 3 · 표기 6 · 퀴즈 0 · 코드 2; style 5. All 13 chapter-2
+  `unsafe` examples judged sound as written (no redesign; two `// 안전:` comments
+  completed — raw_parts, write_drop — captures byte-identical). The three factual fixes:
+  p21-pat's title (an `expr` capture CAN sit in pattern position when it is a literal —
+  narrowed to `Some(_)`), p21-err-expanded's title (not every post-expansion error points
+  at two places), p21-ptr-rules' table (now scoped to non-zero-sized access and says the
+  docs call the precise rules undetermined). Titles narrowed to their example (ids
+  intact): p21-op-err, p21-expr-unit, p21-pat, p21-ambiguity, p21-err-expanded,
+  p21-crate-bare. Badge labels tightened: macro-rep-opt, macro-use-path. Slides ±0,
+  examples ±0 → part 21 = 79, deck 1,349, card numbers unchanged. Orchestrator re-ran:
+  `make all` rc=0 (오류 0 · 알림 0 · 어긋남 0), `rsrun --check ex/21` ×3 = 80 ✓ / 0 ✗.
+  Term decisions: in part 21 a Rust item is "정의" (the word `item` shown once) and 항목
+  stays "list entry" — do NOT add 항목(item) to the glossary; 토큰 한 덩이 (not 덩어리);
+  야간판(nightly) as in part 1; dangling in ch 2 = "사라진 값을 가리키다", 매달린 포인터
+  is defined in ch 3. Lessons 52–59 in AUTHORING.md. Vouched from memory only (no local
+  API docs): every "문서는 … 적습니다" of ch 2; least sure — NonNull "may dangle",
+  "precise rules not determined yet", the zero-sized exception, "Miri catches some".
+  Open: p21-alloc-drop's title would be shown more directly by a leak twin; inner_top.rs
+  and geom_hidden.rs carry a stale comment (sources not shown); a private twin
+  (scratch/r21a/munch_end.rs) confirms p21-muncher's end cases but is not an example.
+  For the 21b reviewer: p21-intro now asserts for ch 3–4 that no program the docs call UB
+  is run and that the two compile-only files state their reason — confirm; p21-ptr-rules'
+  caption asserts no example in the part reads/writes a zero-sized type through a
+  pointer — confirm; p21-vec-zst uses past tense for the appendix (lesson 58);
+  p21-vec-plan's "Miri" sentence drops the "일부"; screen ordinals: p21-vec-deref counts
+  captures, p21-vec-send counts CODE boxes too (lesson 56). Later (0–20 additions): part
+  13's two unglossed 항목 (item) → 정의 or one gloss.

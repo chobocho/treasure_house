@@ -266,3 +266,20 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
     grep the earlier chapters before glossing.
 51. After an example changes length, re-count every "N번 줄" that points at its last lines
     (the closing `}` is a line; the part-20 review left one such number off by one).
+52. Before writing "X 는 … 못 한다" in a title, run the smallest counter-case from the
+    neighbouring category (a literal for `expr`-in-pattern). A title about how a class of
+    diagnostics looks ("두 자리를 짚는다") is checked against every other diagnostic in
+    the chapter.
+53. A `// 안전:` comment answers every condition the slide's "문서의 조건" sentence lists
+    (non-null, aligned, in bounds, initialised, aliasing), or the slide says which one is
+    left out and why.
+54. If the example removes the values before the call whose "does not do Y" is the title,
+    the capture shows nothing. Say what the function receives, or add a leak twin.
+55. Two inputs that print the same thing (`[] []`) do not show which branch ran. Write
+    "소스를 따라가면", not "…했습니다".
+56. "N째 화면" counts captures only; on CODE+OUT slides name the screen by content.
+57. A badge label and the sentence it sits in may not mention anything the matched
+    release-note line does not ("경로로", "2018 에디션부터").
+58. The appendix is a later part: present tense ("부록의 표에도 … 나옵니다").
+59. A negative "there is no way to show it" is itself a claim. Write what the book does
+    not do.

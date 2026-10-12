@@ -12,8 +12,8 @@ fn main() {
     let p = &raw mut slot;
 
     println!("대입");
-    // 안전: p 는 살아 있는 slot 을 가리키고, 그 자리에는 값 a 가 있다.
-    // 대입은 옛 값을 정리한 다음 새 값을 넣는다.
+    // 안전: p 는 살아 있는 slot 을 가리키고 정렬이 맞다. 그 자리에는
+    // 값 a 가 있어서, 대입이 옛 값을 정리해도 된다.
     unsafe { *p = Noisy("b") };
 
     println!("write");
