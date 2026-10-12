@@ -568,3 +568,28 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p06-option-take, p14-drop-order → p20-pool-drop; p06-split-at-mut, p12-windows-chunks →
   p20-split-fill; p12-closure-vec, p19-dyn-send → p20-pool-struct; 19b's closing note
   ("20부 동시성 심화는") can link #p20.
+- Part 20 reviewed (one reviewer over both halves; the first reviewer run died without an
+  edit and was restarted): 사실오류 0 · 증거불일치 2 · 근거없음 8 · 절단 0 · 순서 4 ·
+  표기 4 · 퀴즈 1 · 코드 2; style 5. Chapters 1–3 came out close to clean, most defects sat
+  in 20b and at the seam. Examples changed 3 (send_error, split_auto, tl_basic comment),
+  none added; slides ±0 → part 20 = 69, deck 1,270, card numbers unchanged. Orchestrator
+  re-ran: `make all` rc=0 (1,270장 · 오류 0 · 어긋남 0), `rsrun --check ex/20` ×3 =
+  51 ✓ / 0 ✗ each; spot-check found one off-by-one the reviewer left (p20-split-auto
+  "45번 줄" → 44). Term decisions: 일꾼(worker) is now glossed on p20-jobs (glossary row
+  must target p20-jobs); 조각 = slice chunk only, pool components = 부품; thread-local =
+  스레드 지역 값; div_ceil = 올림 나눗셈 / 올려 나누다 (no English gloss). Removed:
+  p20-share-table's "다음 장" handover note (duplicated p20-pool-why). Lessons 44–51 in
+  AUTHORING.md. Open: `Job` is spelled with and without `+ 'static` (jobs.rs vs pool
+  files) and no capture shows they are one type; p20-park's "표(token)" collides with
+  표 = table; std API "문서는 … 적습니다" sentences in the part were checked from memory
+  only (no local API docs) — loosest are p20-atomic-ops and p20-cas. Later (0–19
+  additions, beyond the 20b list): p15-mutex "Err … 다루지 않습니다" → p20-poison;
+  p15-atomic "나머지 선택지 …" → p20-atomic-ordering; p15-arc-mutex → also p20-try-lock;
+  p15-deadlock → p20-lock-order-safe; p15-channel-multi → p20-try-iter; p16-underscore,
+  p17-out-lock → p20-guard-scope; p18-ordering → p20-atomic-ordering; p06-vec-two →
+  p20-split-mut-err. Glossary candidates from 20a: 조건 변수, 바쁜 대기, 까닭 없는 깨어남,
+  자리가 정해진 채널, 만나서 건네는 채널, 파이프라인, 독, 메모리 순서.
+- The working tree carries an uncommitted two-line CSS change that is the user's, not this
+  work's (`user-select: text` on main.prose in template.html, every deck/base/head.html
+  and the built decks). Review commits stage the Rust deck WITHOUT that hunk; do not fold
+  it in or revert it.

@@ -1,11 +1,11 @@
-use std::sync::mpsc;
+use std::sync::mpsc::{self, SendError};
 use std::thread;
 
 fn main() {
     let (tx, rx) = mpsc::channel();
     drop(rx); // 받는 쪽이 사라졌다
     let letter = String::from("부치지 못한 편지");
-    let err = tx.send(letter).unwrap_err();
+    let err: SendError<String> = tx.send(letter).unwrap_err();
     println!("{err}");
     let back: String = err.0; // 보내려던 값이 그 안에 있다
     println!("돌려받았다: {back}");
@@ -14,11 +14,13 @@ fn main() {
     let (tx, rx) = mpsc::sync_channel(0);
     let producer = thread::spawn(move || {
         let mut n = 1;
-        // 받는 쪽이 사라지면 Err 가 와서 반복문을 나온다.
-        while tx.send(n).is_ok() {
-            n += 1;
+        // 받는 쪽이 사라지면 Err 가 못 보낸 값을 들고 돌아온다.
+        loop {
+            match tx.send(n) {
+                Ok(()) => n += 1,
+                Err(SendError(back)) => break back,
+            }
         }
-        n
     });
     let first: Vec<u32> = rx.iter().take(3).collect();
     drop(rx);

@@ -250,3 +250,19 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
 42. At most four boxes (code + captures) on a slide. A run-time "before" plus its
     compile-time "after" plus a twin is two slides.
 43. A slice (`lines=a-b`) does not end on a blank line or a bare `|` line.
+44. A "N번 줄" must be inside the slice shown on that slide. If it points into a function
+    shown on another slide, name the function and link that slide.
+45. When a part is written in two runs, the second run re-reads the first half for anything
+    that counts chapters ("세 장"), for the intro lead, for type aliases reused under the
+    same name, and for words it is about to give a second sense (lesson 27 across halves).
+46. If the screen cannot tell which branch produced a value (`map_or(default, …)`,
+    `unwrap_or`), the branch is unexercised even if it ran. Put the expression in a helper
+    and call it with a hand-made value for each side.
+47. Do not spawn O(n) threads to show a boundary case; shrink the input instead.
+48. A caption that claims an order must be checked against the slide order after the last
+    slide is written.
+49. Every field of a printed tuple or struct is read in the note, or not printed.
+50. A term gets its gloss at first technical use in the part, not where its chapter starts;
+    grep the earlier chapters before glossing.
+51. After an example changes length, re-count every "N번 줄" that points at its last lines
+    (the closing `}` is a line; the part-20 review left one such number off by one).

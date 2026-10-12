@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::thread;
 
 thread_local! {
-    // 부른 횟수 — 스레드마다 하나씩 따로 생긴다.
+    // 부른 횟수 — 스레드마다 따로 센다.
     static CALLS: Cell<u32> = Cell::new(0);
 }
 
