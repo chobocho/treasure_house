@@ -695,3 +695,30 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p21-vec-plan's "Miri" sentence drops the "일부"; screen ordinals: p21-vec-deref counts
   captures, p21-vec-send counts CODE boxes too (lesson 56). Later (0–20 additions): part
   13's two unglossed 항목 (item) → 정의 or one gloss.
+- Part 21 second half reviewed (chapters 3–4 + wrap, 38 slides): 사실오류 4 · 증거불일치
+  11 · 근거없음 8 · 절단 0 · 순서 6 · 표기 6 · 퀴즈 1 · 코드 5; style 2; badges 3 re-placed,
+  2 labels tightened. No soundness defect: MyVec judged sound in every state walked
+  (never allocated, after grow, grow panicking in layout, pop to empty, into_iter of an
+  empty vector, half-consumed iterator, element whose drop panics → leak only), provided
+  values come from `new()`; the struct-literal bypass of the const assertion is now said
+  on p21-vec-zst. Every extern declaration checked against bionic's headers (sqrt,
+  strlen, atoi, abs, strtol, qsort, div match; getenv returns `*const c_char` for C's
+  `char *` — ABI-identical, left). Examples changed 17, all comment-level except
+  ffi_export/calc.rs (`add` now takes/returns c_int); the 14 vec_*.rs were regenerated
+  through scratch/w21b/pieces + mk.py (first confirmed to reproduce the committed files
+  byte-for-byte); every capture byte-identical. Slides ±0 → part 21 = 79, deck 1,349.
+  Orchestrator: p21-intro's ch-4 bullet "C 쪽에 내놓기" → "정한 이름으로 내놓기" (matches
+  the new p21-ffi-export title); re-ran `make all` rc=0 (오류 0 · 알림 0 · 어긋남 0),
+  `rsrun --check ex/21` ×3 = 80 ✓ / 0 ✗; spot-checked four new line readings — all match.
+  Decision kept: p21-ffi-export says in three sentences that deleting main.rs line 11
+  (the only use of the `calc` crate name) ends in a linker error, from a run that is not
+  shown because the message carries temp names (scratch/r21b/ffi_nopath).
+  Terms: `MyVec` 은/을/이/과, `MyIter` 는/를/가; 매달린 포인터 defined at p21-vec-new
+  (acknowledges p11-dangle-scope); FFI, 콜백, 링커, 기호 glossed at first use; extern
+  items are "선언". Glossary candidates: FFI, 콜백, 기호, 링커, 매달린 포인터, 공용체.
+  Lessons 60–66 in AUTHORING.md. Vouched from memory only: every doc/Reference/C-standard
+  sentence of 21b except p21-qsort (1.81) and p21-static-mut-ref (1.77), which are in
+  docs/releases.txt; least sure p21-no-mangle-2021. Open: no twin shows the
+  panicking-drop leak or the struct-literal bypass. Later (0–20 additions): REVIEW2.md
+  calls p11-dangle-fix "the definition" of 매달린 참조 but the word is only on
+  p11-dangle-scope — check other links to it.

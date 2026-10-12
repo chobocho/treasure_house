@@ -45,8 +45,8 @@ impl<T> MyVec<T> {
             n => n.saturating_mul(2),
         };
         let new_layout = Self::layout(new_cap);
-        // 안전: T 의 크기는 0 이 아니고 new_cap 은 4 이상이라, 잡을
-        // 크기가 0 이 아니다.
+        // 안전: new 가 크기 0 인 T 를 걸러 냈고 new_cap 은 4 이상이라,
+        // 잡을 크기가 0 이 아니다.
         let raw = unsafe { alloc(new_layout) };
         let Some(new_ptr) = NonNull::new(raw as *mut T) else {
             handle_alloc_error(new_layout)
@@ -124,7 +124,7 @@ impl<T> MyVec<T> {
     }
 }
 
-// MyVec 를 통째로 넘겨받아 값을 앞에서부터 하나씩 내주는 반복자.
+// MyVec 을 통째로 넘겨받아 값을 앞에서부터 하나씩 내주는 반복자.
 // next 부터 len 앞까지의 칸에만 값이 남아 있다.
 struct MyIter<T> {
     ptr: NonNull<T>,
@@ -177,14 +177,14 @@ impl<T> Drop for MyIter<T> {
         }
         if self.cap != 0 {
             let layout = MyVec::<T>::layout(self.cap);
-            // 안전: MyVec 가 이 배치로 잡은 자리를 넘겨받았고, 남은
+            // 안전: MyVec 이 이 배치로 잡은 자리를 넘겨받았고, 남은
             // 값이 없다. 한 번 돌려준다.
             unsafe { dealloc(self.ptr.as_ptr() as *mut u8, layout) };
         }
     }
 }
 
-// 안전: MyVec 는 자리와 그 안의 값을 혼자 가진다. 다른 스레드로
+// 안전: MyVec 은 자리와 그 안의 값을 혼자 가진다. 다른 스레드로
 // 옮기는 것은 값들을 옮기는 것과 같아서, T 가 Send 이면 괜찮다.
 unsafe impl<T: Send> Send for MyVec<T> {}
 

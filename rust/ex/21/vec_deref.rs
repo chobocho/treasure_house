@@ -45,8 +45,8 @@ impl<T> MyVec<T> {
             n => n.saturating_mul(2),
         };
         let new_layout = Self::layout(new_cap);
-        // 안전: T 의 크기는 0 이 아니고 new_cap 은 4 이상이라, 잡을
-        // 크기가 0 이 아니다.
+        // 안전: new 가 크기 0 인 T 를 걸러 냈고 new_cap 은 4 이상이라,
+        // 잡을 크기가 0 이 아니다.
         let raw = unsafe { alloc(new_layout) };
         let Some(new_ptr) = NonNull::new(raw as *mut T) else {
             handle_alloc_error(new_layout)

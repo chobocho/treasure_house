@@ -283,3 +283,17 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
 58. The appendix is a later part: present tense ("부록의 표에도 … 나옵니다").
 59. A negative "there is no way to show it" is itself a claim. Write what the book does
     not do.
+60. A `// 안전:` comment lists only real preconditions — "fits in the type" is one for
+    `atoi`/`abs`/`div`, not for `strtol`.
+61. An example obeys the rule its own chapter's table states (`c_int`, not `i32`, in a
+    function that is declared with `c_int` on the other side).
+62. On a slide showing two differently numbered files, say which box each "N번 줄"
+    belongs to.
+63. Before writing "the caller knows only X", delete the "contrast" line and run it — it
+    may be what links the crate. A run that cannot be shown (temp paths in the message)
+    is said to be unshown, with the reason.
+64. A table lead describing a column must hold for every row; rows go in slide order when
+    the caption mentions order.
+65. Grep the whole book before the first use of a term (링커), and fix a code name's
+    particle once per part (`MyVec` 은/을/이/과).
+66. Every printed line gets read, including the ones before the interesting one.

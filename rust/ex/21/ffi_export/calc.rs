@@ -1,7 +1,7 @@
 use std::ffi::c_int;
 
 // Rust 쪽에서 경로로 부르는 평범한 함수
-pub fn add(a: i32, b: i32) -> i32 {
+pub fn add(a: c_int, b: c_int) -> c_int {
     a.wrapping_add(b)
 }
 

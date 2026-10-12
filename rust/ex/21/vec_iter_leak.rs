@@ -45,8 +45,8 @@ impl<T> MyVec<T> {
             n => n.saturating_mul(2),
         };
         let new_layout = Self::layout(new_cap);
-        // 안전: T 의 크기는 0 이 아니고 new_cap 은 4 이상이라, 잡을
-        // 크기가 0 이 아니다.
+        // 안전: new 가 크기 0 인 T 를 걸러 냈고 new_cap 은 4 이상이라,
+        // 잡을 크기가 0 이 아니다.
         let raw = unsafe { alloc(new_layout) };
         let Some(new_ptr) = NonNull::new(raw as *mut T) else {
             handle_alloc_error(new_layout)
@@ -124,7 +124,7 @@ impl<T> MyVec<T> {
     }
 }
 
-// MyVec 를 통째로 넘겨받아 값을 앞에서부터 하나씩 내주는 반복자.
+// MyVec 을 통째로 넘겨받아 값을 앞에서부터 하나씩 내주는 반복자.
 // next 부터 len 앞까지의 칸에만 값이 남아 있다.
 struct MyIter<T> {
     ptr: NonNull<T>,

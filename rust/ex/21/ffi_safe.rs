@@ -1,6 +1,6 @@
 use std::ffi::{c_char, c_int};
 
-// C 표준 라이브러리의 함수 셋. 항목마다 safe 인지 unsafe 인지 적는다.
+// C 표준 라이브러리의 함수 셋. 선언마다 safe 나 unsafe 를 적을 수 있다.
 unsafe extern "C" {
     // 어떤 f64 를 넣어도 된다.
     safe fn sqrt(x: f64) -> f64;

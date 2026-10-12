@@ -14,7 +14,7 @@ unsafe extern "C" {
 fn leading_number(text: &CStr) -> (c_long, isize) {
     let mut end: *mut c_char = ptr::null_mut();
     // 안전: text 는 0 으로 끝난다. end 는 살아 있는 변수이고, strtol 은
-    // 거기에 포인터 하나를 적는다. 예제의 수는 c_long 에 들어간다.
+    // 거기에 포인터 하나를 적는다.
     let n = unsafe { strtol(text.as_ptr(), &raw mut end, 10) };
     // 안전: strtol 이 적어 준 end 는 text 의 글 안이나 끝의 0 을
     // 가리킨다. 같은 자리 안의 두 포인터다.
