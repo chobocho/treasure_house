@@ -1,4 +1,8 @@
-# Outline — Rust 기초 문법집 (target 945 slides, hard cap 2000 since 2026-10-12)
+# Outline — Rust 기초 문법집 (target ≈1,870 slides, hard cap 2000 since 2026-10-12)
+
+> Parts 0–16 are the first edition (922 slides, reviewed twice). Parts 17–26 and the
+> additions listed under "Expansion" at the end were approved on 2026-10-12. The appendix
+> moved from part 17 to part 27 (ids `p27-*`, examples `ex/27`).
 
 Chapter-level contract for the whole book. A writer takes one part (or half) and must
 stay inside its row: what is listed under another part is taught there, not here — link
@@ -188,7 +192,176 @@ sort results, never print from racing threads.
 4. 그 밖의 문법 — type aliases, `impl Trait` in more places, never type, labeled blocks,
    `const` blocks/items, shadowed prelude, raw identifiers `r#`
 
-## 부록 (35) — orchestrator
+## 부록 = part 27 (45) — orchestrator
 Keyword table (strict/reserved/weak), operator table with precedence, format-spec cheat
 sheet, error-code index (every E-code shown in the book → slide link), edition
 differences table, glossary (Korean ↔ English), sources.
+
+---
+
+# Expansion (approved 2026-10-12) — parts 17–26
+
+Same rules as the first edition: std only, every example really compiled and run by
+`tools/rsrun.py`, compile-error examples allowed with their fixed twin, captures must be
+deterministic. Three bands: 17–23 "표준 라이브러리와 심화", 24–26 "실전", 27 부록.
+Writers follow `AUTHORING.md` AND the style sheet in `REVIEW2.md` from the start
+(fixed terms, slide-level links, "acknowledge the earlier slide in one clause").
+
+## 17부 입출력과 파일 (90) — files 17_io.html (1–3), 17b_io.html (4–6)
+1. 표준 출력과 오류 출력 — `print!` vs `println!` vs `eprintln!` (stdout/stderr shown apart
+   with a RUN-file redirect), `io::stdout().lock()`, `write!`/`writeln!` on `io::Write`
+   (cash in p09-err-display's `write!`), `flush`, `process::exit` vs returning `ExitCode`
+2. 표준 입력 — `read_line` recap (p02-parse-trim), `stdin().lines()`, `BufRead`, a number
+   per line with `?`, end of input, summing a column (`//@ stdin:` directive)
+3. 파일 읽기 — `fs::read_to_string`, `File::open` + `BufReader::lines`, missing file →
+   `io::Error` and `ErrorKind::NotFound`, `io::Result`, bytes with `fs::read`
+4. 파일 쓰기 — `fs::write`, `File::create`, `OpenOptions` (append), `BufWriter`, formatted
+   lines, what happens to buffered data on drop
+5. 경로와 디렉터리 — `Path`/`PathBuf`, `join`, `file_name`/`extension`/`parent`,
+   `exists`, `create_dir_all`, `read_dir` (SORT before printing), `metadata().len()`,
+   `remove_file`/`remove_dir_all`, why paths are not `String` (`OsStr`, `display()`)
+6. 작은 도구 — `cat`, `wc`, `head` in miniature: args + files + stdin fallback + errors
+   with the file name; functions generic over `R: BufRead` / `W: Write` tested with
+   `&[u8]` / `Vec<u8>` / `io::Cursor`; `From<io::Error>` for an own error (p09-err-from)
+
+## 18부 표준 라이브러리 둘러보기 (80) — files 18_std.html (1–3), 18b_std.html (4–6)
+1. 수 더 깊이 — bit operators and shifts, `count_ones`/`leading_zeros`/`trailing_zeros`,
+   `pow`, `rem_euclid`, `abs_diff`, `i128`, `from_str_radix`, `to_be_bytes`/`from_le_bytes`,
+   float `to_bits`, `checked_*`/`wrapping_*`/`saturating_*` only as a link to p03
+2. 비교와 정렬 — `Ordering`, `cmp`/`partial_cmp`/`total_cmp`, `then_with`, `Reverse`,
+   `min`/`max`/`clamp`, sorting by several keys, `sort` vs `sort_unstable` (show what
+   stability means on equal keys), `binary_search`, `partition_point`
+3. 해시와 맵 더 — implementing `Hash` by hand, the `Eq`/`Hash` agreement, own key type,
+   `BTreeMap::range`, `entry` API in full, `retain`, sets operations; never print a
+   `HashMap` in iteration order
+4. 시간 — `Duration` arithmetic and formatting (deterministic), `Instant` (compare, never
+   print elapsed), `SystemTime`/`UNIX_EPOCH` (explain; print nothing that varies)
+5. 프로세스와 환경 — `env::var`/`vars` (print only what the example sets), `Command`
+   running a fixed program (`echo`, the example itself), exit status, piping output
+6. 그 밖의 도구 — `mem::size_of`/`align_of`, `type_name`, `Option`/`Result` combinators
+   not yet shown (`zip`, `xor`, `transpose`, `flatten`, `take`, `replace`, `get_or_insert`),
+   iterator extras (`scan`, `last`, `nth`, `cycle().take`, `sum` of `Result`s), `char`
+   and `str` extras (`split_whitespace`, `rsplit`, `strip_prefix`, `char::from_digit`)
+
+## 19부 제네릭·트레이트 심화 (90) — files 19_gen.html (1–3), 19b_gen.html (4–6)
+1. 바운드 더 깊이 — conditional `impl<T: Bound>` blocks, `where` on methods, `?Sized`,
+   overlapping impls rejected (E0119), blanket impls revisited
+2. 연관 타입과 GATs — a trait with an associated type by hand, associated consts in
+   generic code, generic associated types (a lending iterator; version badge; cash in
+   p01-let-else's GATs sentence)
+3. 트레이트 객체 심화 — `dyn Any` and `downcast_ref`, designing a dyn-compatible trait
+   (generic method → E0038 → `where Self: Sized`), `&dyn` vs `Box<dyn>` vs generics on one
+   example, trait upcasting (version badge)
+4. 타입으로 설계하기 — newtypes for units (metres vs feet: mixing is a compile error),
+   `PhantomData`, the typestate pattern (calling `send` before `connect` does not
+   compile), sealed traits, marker traits
+5. 고차 바운드와 함수 — `for<'a>` bounds, closures that return references, `fn` pointer vs
+   `impl Fn` vs `dyn Fn` as one table with evidence (sizes)
+6. const 와 제네릭 — `const fn` (and what it cannot do: an E-code), const generics in
+   depth (`impl<const N: usize>`, array of any length), consts computed at compile time
+   (overflow in a const is a compile error)
+
+## 20부 동시성 심화 (70) — file 20_conc.html (5 chapters)
+1. 채널 더 — `sync_channel` (bounded, 0 = rendezvous), `try_recv`, `recv_timeout`
+   (designed so the outcome is fixed), a three-stage pipeline
+2. 기다리기와 깨우기 — `Condvar` with a `while` loop, `Barrier`, a blocking queue by hand
+3. 공유 상태 설계 — mutex poisoning (a thread panics holding the lock → `PoisonError`),
+   `try_lock`, lock ordering (explain; show the safe order), atomics and
+   `compare_exchange`, `Ordering` (explain only)
+4. 스레드 풀 만들기 — a worker pool step by step (channel + `Arc<Mutex<Receiver>>`),
+   shutdown in `Drop`, results collected in a fixed order
+5. thread_local 과 나눠 풀기 — `thread_local!`, scoped threads splitting a slice
+   (`chunks`, parallel sum equals sequential sum), `available_parallelism` (do not print)
+**Every capture deterministic** — join in a fixed order, sort results, never print from
+racing threads, no timing numbers.
+
+## 21부 매크로·unsafe·FFI 심화 (80) — files 21_low.html (1–2), 21b_low.html (3–4)
+1. macro_rules! 심화 — all fragment specifiers that matter (`tt`, `pat`, `literal`,
+   `block`, `item`), nested repetition, recursion and the tt-muncher, internal rules,
+   optional trailing comma, `$crate` and `#[macro_export]` (directory example), reading a
+   macro error, hygiene again
+2. 날 포인터와 메모리 — `add`/`offset`, `read`/`write`, `NonNull`, `std::alloc` with
+   `Layout`, `MaybeUninit`, `slice::from_raw_parts`, `transmute` vs `to_bits`/`from_bits`
+3. 작은 Vec 만들기 — `MyVec<T>` step by step: allocate, `push`, grow, `Index`, `Drop`,
+   `IntoIterator`; tested against `Vec`; say plainly that no UB checker (Miri) is
+   available on this machine
+4. FFI — more libc calls (`strlen`, `getenv`, `qsort` with a Rust callback), `CStr`/
+   `CString`, `#[repr(C)]` structs, exporting with `#[unsafe(no_mangle)] extern "C"`
+   (edition 2024 spelling — cash in p01-ed2024), `union` (brief), `static mut` and why
+   the 2024 edition rejects references to it
+
+## 22부 async 심화 (60) — file 22_async.html (5 chapters)
+1. Future 를 손으로 — `impl Future` by hand (a countdown that returns `Pending` n times),
+   `Poll`, `Context`, what a `Waker` is for (a counting waker built with the `Wake` trait)
+2. 실행기 키우기 — from part 16's `block_on` to a queue of tasks: `spawn`, run until all
+   done, fixed order; joining two futures by hand; a hand-made `yield_now`
+3. Pin — why (a value that points into itself must not move), `Pin<&mut T>`, `pin!`,
+   `Box::pin`, `Unpin`
+4. async 문법 더 — async blocks capturing, async closures (version badge), `async fn` in
+   traits (cash in p01-afit; version badge), cancelling = dropping (a `Drop` print as
+   evidence), a future that is not `Send` (the error)
+5. 타이머 없이 — a channel and a "sleep" counted in ticks on the toy executor; what a
+   real runtime adds (explain only, no external crates)
+
+## 23부 Cargo·프로젝트 심화 (60) — file 23_cargo.html (5 chapters, directory examples)
+1. 워크스페이스 — two crates (lib + bin) with a path dependency, `cargo run -p`, one
+   `Cargo.lock`/`target`
+2. features — real flags: `[features]`, `#[cfg(feature = "…")]`, default features,
+   `--features` / `--no-default-features` changing the output
+3. build.rs 와 컴파일 때 정보 — a build script emitting `cargo::rustc-cfg`, `env!`
+   (`CARGO_PKG_VERSION`), `option_env!`, `include_str!`
+4. 시험 더 — helpers shared between tests, `should_panic(expected = …)`, testing a
+   binary through its lib, a golden-file test, `--test-threads=1` and why this book pins it
+5. 실행 파일 여러 개와 프로필 — `src/bin/*`, `examples/`, profile settings whose effect a
+   capture can show (`overflow-checks`, `debug-assertions`), the `[lints]` table
+All offline; no external crates.
+
+## 24부 실전 프로젝트 (160) — files 24_proj.html, 24b_proj.html, 24c_proj.html, 24d_proj.html
+Four programs built in steps; every step compiles and runs; each ends with tests.
+1. (24) 낱말 세기 `wc` — args, files and stdin, counts of lines/words/bytes/chars, errors
+   with file names, lib + bin split, tests on `&[u8]`
+2. (24b) 미니 `grep` — search, `-i` `-n` `-v` `-c` flags parsed by hand into a struct,
+   several files, exit codes 0/1/2, tests
+3. (24c) 식 계산기 — tokenizer → recursive-descent parser → evaluator; `enum Expr` with
+   `Box`; own error type with positions; a REPL over stdin lines; tests
+4. (24d) 작은 키-값 저장소 — commands `set`/`get`/`del`/`list`; a text file format;
+   `trait Storage` with in-memory and file-backed impls; a scripted run with worker
+   threads behind `Arc<Mutex<_>>`; tests
+Each project opens with what it reuses (links to the teaching slides) and closes with
+"더 해 볼 것". ~40 slides per project.
+
+## 25부 연습 문제와 풀이 (120) — files 25_ex.html, 25b_ex.html
+About 55 problems following parts 2–23 in order. One slide states the task and shows the
+expected output; the next shows a solution that was run (RUN). Problems never need
+anything the named part has not taught. Chapter per band: 2–5, 6–7, 8–9, 10–12, 13–16,
+17–23.
+
+## 26부 컴파일 오류 처방전 (70) — file 26_errs.html
+By symptom, not by number: 소유권·빌림 / 타입 / 이름·모듈 / 수명 / 트레이트 / 패턴 / 그 밖.
+Each entry is a pair — the smallest program that produces the error (real message) and
+the fixed program. Prefer error codes NOT yet in the book (about 30 new codes), and for
+codes already taught give a different situation plus a link to the teaching slide. The
+appendix error index picks the codes up from the titles.
+
+## 27 부록 (45) — orchestrator
+First-edition tables plus: index rows for parts 17–26, the glossary terms that did not
+fit (컬렉션, 교착, 누수, 터보피시 …) and terms the new parts define, an edition table.
+
+## Additions to parts 0–16 (≈ +30; the rest of the head-room is in the budgets)
+- 1부: quizzes for chapters 1, 2, 3, 5 (+4).
+- 7부: a fixed twin for p07-enum-missing-arm (+1).
+- 8부: borrow + push in a `Vec` (E0502, acknowledging p06-push-holding) (+1); a
+  formatting recap that only links back to part 2 (+1).
+- 9부: evidence for "Error 는 Debug 도 요구한다" (E0277) and for `unimplemented!` /
+  `unreachable!` (+2).
+- 10부: evidence that monomorphization makes one copy per type if a deterministic
+  capture exists (e.g. distinct `fn` item addresses compared, not printed) — otherwise
+  leave the sentence; what `#[derive]` generates (hand-written equivalent side by side) (+2).
+- 11부: `T: 'a` bound (+2); a fixed twin for p11-static-required (+1).
+- 12부: `sort` vs `sort_unstable` evidence moves to 18부 ch 2 — link only.
+- 14부: `RefCell` guard lives until dropped (an unused guard still blocks) (+1); `Cell`
+  needs `Copy` for `get` (E0599/E0277) (+1).
+- 15부: `Mutex::lock` waits (a deterministic design) (+1); `move` with a `Copy` value (+1).
+- 16부: never type `!` in more places, `impl Trait` in argument/return recap, shadowing
+  a prelude name (+4); the closing note moves to its own slide and now hands over to
+  part 17 instead of the appendix (+1).

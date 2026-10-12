@@ -120,3 +120,51 @@ Memory is nearly exhausted on this device. Run **one** command at a time, never 
 background, never in parallel, no sub-agents, no `cargo` unless the part needs it, no
 `make all` (the orchestrator runs it), no `make -j`. Do not read whole large files
 (`docs/releases.txt` is 930 KB — grep it). Do not read the built deck HTML.
+
+## Expansion (parts 17–26) — what is different from the first edition
+
+Read `deck/OUTLINE.md` → "Expansion" for your part's contract, then the style sheet in
+`deck/REVIEW2.md` (section B and the "Decisions added …" block). The first edition was
+written before that sheet existed and needed ~1,570 fixes; you write to it from the start.
+
+1. **The reader has read parts 0–16.** Nothing in them is re-taught. When you use
+   something they teach, acknowledge it in one clause with a SLIDE-level link
+   (`<a href="#p09-res-question">9부</a>에서 본 <code>?</code>`) and say only what is new.
+   REVIEW2.md lists the stable target ids per part; list others with
+   `grep -o 'id="pNN[^"]*"' deck/sections/NN*.html`.
+2. **Links.** Slide-level to parts that exist in `deck/order.txt`. A part that is still
+   commented out there does not exist yet: mention it in plain text ("24부에서 봅니다"),
+   no link — the orchestrator links it later. Never link a commented-out part.
+3. **Terms** come from REVIEW2.md (스코프, 불변/가변 참조·빌림, 복제, 붙잡기, 풀어 헤치기,
+   인덱스, 컬렉션, 되감기, 트레이트 바운드, 스코프 스레드 …). A new term gets its English
+   gloss once, on the slide that defines it, and a row in your report under "new terms"
+   (the orchestrator adds glossary rows — do not edit `deck/glossary.tsv`).
+4. **Reading a capture.** Error slides carry a `.note` headed "읽는 법" that reads the
+   message (headline = "오류 첫 줄", labels by source line "N번 줄"). Never count output
+   lines ("둘째 줄") — quote the value or cite the source line that printed it. A repeated
+   error number is read in full only the first time in the BOOK; later: one clause + link.
+5. **Evidence.** Every sentence about what code does is shown by the capture on that
+   slide (or links the slide whose capture shows it). No speed claims, no "most common",
+   no comparisons with other languages. If the natural sentence needs evidence the
+   example lacks, extend the example.
+6. **Determinism (parts 17, 18, 20, 22, 23 especially).** A capture must be byte-identical
+   on every run: sort `read_dir` results and map keys; never print time, addresses,
+   thread ids, absolute paths, random hasher output or anything from racing threads;
+   join threads in a fixed order. Run each such example at least 5 times
+   (`python3 tools/rsrun.py --check ex/NN/x.rs` after the first run) before you trust it.
+   Examples run in a fresh sandbox directory, so creating files in the current directory
+   is safe; a directory example (`ex/NN/name/` + `RUN`) may ship input files and use
+   shell commands (`cat`, `ls`, `printf … |`) in `RUN`.
+7. **Structure.** Part cover `chsub`, chapter covers' `chsub` (topics in slide order),
+   `pNN-intro` with the chapter list, a quiz per chapter (`data-quiz`), a table that
+   closes a catalogue chapter (with a sentence saying how to read it), and a last slide
+   whose `.note` headed "다음" hands over to the next part.
+8. **Version badges.** A feature newer than 1.0 that the slide is about gets
+   `<!--SINCE key=…-->`; the key must exist in `data/features.tsv` (see PLAN.md §3 for
+   how a row is checked against the cached release notes). If you need a new key, do not
+   guess the version: report it and write the slide without the badge.
+9. **Budget.** `deck/budget.txt` has your part's target; the builder fails above +10 %.
+   Aim for the target; under 80 % is a warning.
+10. **Machine.** One `rustc`/`cargo` at a time (rsrun takes a lock — never bypass it,
+    never run `cargo` directly outside rsrun), `rustfmt` only on your own files, no
+    `make fmt`, no `git stash/checkout/reset`, do not commit.

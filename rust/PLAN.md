@@ -376,3 +376,31 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
 - index.html card and README say 922 slides and 64 glossary terms; history.md has the
   review-2 entry. Review-2 commits (ea97894b … wrap-up) are NOT pushed — ask the user.
 - 2026-10-12: pushed at the user's request — origin/main = b70b21f6.
+
+## Expansion to ≈1,870 slides (approved by the user 2026-10-12)
+
+- User decisions: hard cap 2000 ("상한 2000장으로 해"), then "약 1,890장까지" — the full
+  list: additions to parts 0–16 plus ten new parts. Everything else as before (std only,
+  only running examples, one subagent at a time, Korean to the user, push only on request).
+- Structure: appendix renumbered 17 → 27 (ids p27-*, ex/27, out/27). New parts 17–26 have
+  skeleton files in deck/sections and are listed COMMENTED OUT in deck/order.txt; a part's
+  lines are uncommented when its writer starts, so a non-skeleton `make deck` always
+  passes at commit time. Contracts: deck/OUTLINE.md "Expansion". Budgets: deck/budget.txt
+  (appendix target is 36 for now; raise to 45 when it grows). Writers' rules:
+  deck/AUTHORING.md "Expansion (parts 17–26)".
+- Batches (one writer at a time, ≤ ~45 slides per run; then one reviewer per part):
+  17a 17b · 18a 18b · 19a 19b · 20 (two runs: ch1–3, ch4–5) · 21a 21b · 22 (two runs) ·
+  23 (two runs) · 24 24b 24c 24d · 25a 25b (after 17–23 exist) · 26 (two runs) ·
+  additions to 0–16 (orchestrator) · appendix + part-0 map + p16 hand-over (orchestrator).
+- After each writer: orchestrator checks the report, runs non-skeleton `make deck`,
+  `rsrun --check ex/NN` twice, commits that part. After all: links to parts that did not
+  exist yet, glossary rows, index rows, `make all`, `rsrun --all --check` ×3, card/README
+  figures, history entry, memory note, report, ask about push.
+- To do at the end (do not forget): part 0's map table (p00, lists parts 1–16 + 부록) and
+  the sentence "2부부터 16부까지가 문법"; p16-underscore's closing note ("본문을 마치며")
+  → hands over to part 17; index.html card / README text (parts count, slide count,
+  example count, new topics); REVIEW2.md target lists for the new parts.
+
+### Expansion progress log
+- 2026-10-12: cap raised (a23149db). Appendix renumbered, outline/budget/authoring
+  written, 18 skeleton files created (commented out in order.txt).
