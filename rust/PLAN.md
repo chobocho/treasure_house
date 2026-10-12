@@ -838,3 +838,59 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   고정하다, 취소, 틱, async 클로저. Later (0–21 additions): as listed under "22a written",
   plus p08-vecdeque's title calls a queue "줄" where part 22 says 큐; p22-wrap's "23부"
   mention becomes a link when part 23 exists.
+- Part 23 skeleton split into 23_cargo.html (cover, intro, ch 1–3) and 23b_cargo.html
+  (ch 4–5); OUTLINE.md heading and order.txt updated to match.
+- 23a written (chapters 1–3: 워크스페이스 · features · build.rs 와 컴파일 때 정보; 35 slides
+  incl. cover and intro — 11 per chapter; 18 examples: 17 directory + env_missing.rs; six
+  end in an error (Cargo's own in ws, ws_more ×2, feat_fixed; rustc's in feat_gated E0425,
+  inc, env_missing), three carry a deliberate warning (ws_noresolver, feat_typo,
+  build_cfg_nocheck); 3 quizzes). Orchestrator re-ran: `make all` rc=0 at 1,448 slides
+  (one notice: part 23 under 80 % of budget), `rsrun --check ex/23` ×3 = 18 ✓ / 0 ✗ each
+  (a full check takes about 45 s); no `target/` or `Cargo.lock` under ex/23. No new error
+  codes in out/ (61). Badges +13 → 135 (cargo-run-ws 1.30, lockfile-v4 1.78,
+  resolver-field 1.51, resolver-3 1.84, ws-inherit 1.64, cargo-new-inherit 1.71,
+  cargo-new-member 1.75, cargo-all-features 1.13, check-cfg-rustc 1.79, check-cfg-cargo
+  1.80, build-rerun-if-changed 1.6, build-rustc-env 1.19, cargo-directive-colons 1.77).
+  Part-0 map, card and README set to 25부 · 1,448슬라이드 · 예제 1,067 · 캡처 1,114 ·
+  퀴즈 109 · 버전 표기 135건.
+  The captures depend on the caller's environment: `GREETING` and `WITH_BANNER` must be
+  UNSET where rsrun runs (rsrun strips only CARGO*/RUST*), or four captures change.
+  rsrun facts the writer designed around (nothing patched): only RUN lines that START
+  with `cargo ` or `rustc ` get the 120 s timeout — `X=1 cargo …` and `cd x && cargo …`
+  get 10 s; the sandbox is `scratch/run/<basename>`, so directory names must be unique;
+  rsrun sets CARGO_TARGET_DIR to `<sandbox>/target` (same as Cargo's default for a
+  workspace — checked in a probe with the variable unset); RUN files spell `-q` unless
+  Cargo's own lines are the evidence and never `--offline` (rsrun sets
+  CARGO_NET_OFFLINE); `#@ exit: 101` for Cargo failures; twins are separate directories
+  (a `sed -i` inside a RUN gave a timing-dependent rebuild); `cargo::warning` is replayed
+  from cache, so it is no evidence that build.rs ran; never print a hashed `target/` path
+  (use a glob).
+  For the 23b writer: `ex/23/ws` (text-kit lib with `shout` + one unit test, and `app`)
+  suits "testing a binary through its lib" — copy it under a new name; p23-intro's note
+  "이 부의 화면" is scoped "1장부터 3장까지"; plain-text forward mentions to link —
+  p23-ws-two-bins ("한 패키지에 실행 파일이 여럿인 경우는 5장에서"), p23-check-cfg
+  ("`[lints]` 표는 5장에서" — its warning prints a ready-made `[lints.rust]
+  unexpected_cfgs` table); words: 워크스페이스, 멤버, 의존성 / path 의존성, 기본 기능, 빌드
+  스크립트, 묶음 (test group), "뿌리의 Cargo.toml", `Cargo.lock` (not 잠금 파일 — 잠금 is
+  the mutex word). Second half may use at most 31 slides (budget 60, ceiling 66).
+  For the reviewer — captures with Cargo progress lines whose content rests on Cargo's
+  caching: ws, ws_more (three `Compiling` lines, order under -j1), ws_noresolver,
+  ws_inherit, feat_ws (`cargo build` prints exactly `Compiling plain` — the unification
+  evidence), build_env (run 2 prints no `Compiling`; the rebuild after `echo purple >>
+  colors.txt` rests on colors.txt's mtime being newer than the build-script output —
+  judge whether a coarse-mtime filesystem could make it flaky), build_cfg_norerun (stale
+  output rests on Cargo's default rerun rule). Attributed from memory (no local Cargo
+  book): p23-ws-resolver ("virtual workspace"), p23-ws-lock (`version = 4` is the
+  lock-file format number), p23-feat-unify (the additive-features advice), p23-build-rs
+  (Cargo compiles and runs build.rs before the package). Unsure: p23-feat-unify's title
+  generalises from one workspace; p23-ws-p calls the second test group the doc-test group
+  "13부에서 본 차례대로라면"; p23-env-missing merges the `env!` error and `option_env!`
+  on one four-box slide; `cd` and `rm` appear in captures for the first time in the book;
+  ws_more's capture lines 1–6 are shown on no slide; feat has six cargo commands.
+  Toolchain-specific text: `Finished \`dev\` profile [unoptimized + debuginfo]`,
+  `version = 4`, "and 34 more", nightly doc URLs in rustc warnings, "(os error 2)".
+  Later (0–22 additions): p02-cargo-toml "`[dependencies]` … 늘 빈칸" and p13-crates-io
+  "그 칸이 늘 비어 있습니다" → acknowledge p23-ws-path-dep; p13-cargo-toml says
+  `[workspace]` and profiles are named only → link p23-ws-root (and ch 5 when written);
+  p16-macro-std shows `concat!` but never reads it; p22-wrap's "23부" → #p23.
+  Unchecked by a reviewer: everything in 23a.

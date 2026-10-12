@@ -303,7 +303,7 @@ racing threads, no timing numbers.
 5. 타이머 없이 — a channel and a "sleep" counted in ticks on the toy executor; what a
    real runtime adds (explain only, no external crates)
 
-## 23부 Cargo·프로젝트 심화 (60) — file 23_cargo.html (5 chapters, directory examples)
+## 23부 Cargo·프로젝트 심화 (60) — files 23_cargo.html (1–3), 23b_cargo.html (4–5); directory examples
 1. 워크스페이스 — two crates (lib + bin) with a path dependency, `cargo run -p`, one
    `Cargo.lock`/`target`
 2. features — real flags: `[features]`, `#[cfg(feature = "…")]`, default features,
