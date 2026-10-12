@@ -404,3 +404,13 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
 ### Expansion progress log
 - 2026-10-12: cap raised (a23149db). Appendix renumbered, outline/budget/authoring
   written, 18 skeleton files created (commented out in order.txt).
+- 17a written (chapters 1–3, 46 slides, 32 examples; `rsrun --check ex/17` ×3 all 32 ✓).
+  Badges wanted but no key yet (add rows to data/features.tsv in one batch at the end,
+  release-note lines in docs/releases.txt): ExitCode 1.61 → p17-out-exitcode; Stdin::lines
+  1.62 → p17-in-lines; io::read_to_string 1.65 → p17-in-all; fs::read_to_string / fs::read
+  1.26 → p17-file-read-to-string, p17-file-bytes. Plain-text forward mentions to link once
+  17b exists: p17-out-write-vec (4장·6장), p17-file-read-to-string (5장), p17-file-with-name
+  (6장: own error with file name), p17-file-total (6장), p17-file-table (4장); in-file
+  links that can be added now: p17-out-flush → p17-file-io-result, p17-in-all →
+  p17-file-table, p17-in-redirect → p17-file-total. New terms for the glossary: 표준 출력 /
+  표준 오류 / 표준 입력, 버퍼(링), 얇은 main. Not evidenced: file closed on drop.
