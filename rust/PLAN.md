@@ -459,3 +459,12 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p18-hash-same, p18-hash-broken (from memory of the docs). hash_broken.rs uses a
   fixed-seed hasher on purpose; binary_search.rs prints Err(2) for an unsorted vector
   (this toolchain's result — the slide says so).
+- 18b written (chapters 4–6: 시간 · 프로세스와 환경 · 그 밖의 도구; 39 slides, 31 examples)
+  → part 18 = 84 slides, 66 examples; `rsrun --check ex/18` all 66 ✓ on 7 runs; +23 badge
+  rows (79 badges, data-check 0 errors). Unlinked plain text: p18-size-align "21부",
+  p18-misc-table "다음" → 19부. New terms: 시간의 길이, 순간, 마감, 기준 시각, 환경 변수,
+  프로세스, 자식 프로세스/부모, 종료 상태, 신호, 파이프, 정렬(alignment — second sense),
+  패딩. For the reviewer: p18-cmd-status names "유닉스 계열" (lesson 16), p18-cmd-fail's
+  PermissionDenied is this machine's, p18-env-vars makes a negative claim about the docs,
+  p18-size-align cites the Reference; system_time relies on the machine clock (> 1.7e9 s).
+  Part 18 still needs its review pass.
