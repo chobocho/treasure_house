@@ -1,5 +1,623 @@
 <article class="card" id="p24-ch2">
 <p class="chnum">2장</p>
 <h2>미니 grep</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">이 프로젝트가 쓰는 것 · 다 만든 모습 · 여덟 단계 · 맞는다는 것 · Config 와 첫 인자 · 수명 표기와 search · 줄의 정의 · -v 와 -i · run 과 종료 코드 · 얇은 main · 표준 입력 · 빈 글과 -- · 고른 줄이 없으면 1 · 읽지 못한 파일 · 글이 아닌 바이트 · 줄의 모양 · -n 과 이름 칸 · 줄 끝의 \r\n · -c · run 을 부르는 시험 · 늘 실패하는 쓸 곳 · 실행 파일을 띄우는 시험 · 기준 파일 · 정한 것과 놓인 곳 · 더 해 볼 것</p>
+</article>
+
+<article class="card" id="p24-grep-reuse">
+<h3>이 프로젝트가 쓰는 것</h3>
+<p class="lead">1장의 <code>wc</code> 는 인자를 손으로 읽어 <code>Config</code> 에 담고, 읽을 곳 하나와 쓸 곳 둘을 받는 <code>run</code> 에 일을 맡기고, 종료 코드 셋으로 끝났습니다.
+이 장의 <code>grep</code> 은 패턴이 든 줄을 골라 찍는 프로그램이고, 그 틀을 그대로 가져옵니다. 새로 하는 일은 셋입니다 — 줄이 패턴에 맞는지 가리는 일, 고를 줄을 바꾸는 옵션 둘과 찍는 모양을 바꾸는
+옵션 둘, 그리고 고른 줄이 있었는지까지 알리는 종료 코드입니다. 첫 표는 그러느라 다시 쓰는 것과 그것을 배운 슬라이드이고, 둘째 표는 1장에서 그대로 가져온 것입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>쓰는 것</th><th>배운 곳</th></tr>
+<tr><td>글 안에서 글 찾기, 대소문자</td><td><a href="#p08-str-methods"><code>contains</code> · <code class="nb">to_lowercase</code></a> · <a href="#p08-str-compare"><code class="nb">eq_ignore_ascii_case</code></a></td></tr>
+<tr><td>글을 줄로 쪼개기, 번호 붙이기</td><td><a href="#p08-str-split"><code>lines()</code></a> · <a href="#p12-enumerate-zip"><code>enumerate</code></a></td></tr>
+<tr><td>거르고, 바꾸고, 모으기</td><td><a href="#p12-map-filter"><code>filter</code> · <code>map</code></a> · <a href="#p12-collect"><code>collect</code></a></td></tr>
+<tr><td>주변의 값을 쓰는 클로저</td><td><a href="#p12-closure-capture">붙잡기</a></td></tr>
+<tr><td>빌린 조각을 돌려주는 함수의 수명 표기</td><td><a href="#p11-longest-missing">E0106</a> · <a href="#p11-first-only">상관없는 참조에는 붙이지 않는다</a></td></tr>
+<tr><td>튜플 패턴, 몇 필드만 다른 구조체 값</td><td><a href="#p07-pat-tuple">튜플 패턴</a> · <a href="#p07-struct-update">갱신 문법</a></td></tr>
+<tr><td>파일을 통째로 글로 읽기</td><td><a href="#p17-file-read-to-string"><code class="nb">fs::read_to_string</code></a> · <a href="#p17-file-bad-utf8">UTF-8 이 아닌 파일</a></td></tr>
+<tr><td>읽는 쪽의 트레이트로 끝까지 읽기</td><td><a href="#p17-file-open"><code>Read</code> 의 <code class="nb">read_to_string</code></a></td></tr>
+<tr><td><code>Write</code> 를 직접 구현한 타입</td><td><a href="#p17-write-buf-count"><code>Counter</code></a> · <a href="#p17-write-buf-drop-fail">늘 실패하는 <code>Full</code></a></td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>1장에서 그대로 가져온 것</th><th>1장의 슬라이드</th></tr>
+<tr><td>옵션을 손으로 읽어 구조체에 담기</td><td><a href="#p24-wc-config"><code>Config</code> 와 <code class="nb">parse_args</code></a></td></tr>
+<tr><td>읽을 곳 하나와 쓸 곳 둘을 받는 <code>run</code>, 얇은 <code>main</code></td><td><a href="#p24-wc-run"><code>run</code></a> · <a href="#p24-wc-main"><code>main</code></a></td></tr>
+<tr><td>잘못 부르면 쓰는 법을 알리고 2</td><td><a href="#p24-wc-flags-run"><code>run</code> 의 맨 앞</a></td></tr>
+<tr><td>읽지 못한 파일은 알리고 넘어가기, 이름을 담는 오류 타입</td><td><a href="#p24-wc-missing">알리고 넘어간다</a> · <a href="#p24-wc-error-type"><code>WcError</code></a></td></tr>
+<tr><td>시험 세 층</td><td><a href="#p24-wc-test-run"><code>run</code> 을 부르는 시험</a> · <a href="#p24-wc-test-cli">실행 파일을 띄우는 시험</a> · <a href="#p24-wc-test-golden">기준 파일</a></td></tr>
+<tr><td>받지 못하는 인자</td><td><a href="#p24-wc-args-bad">UTF-8 이 아닌 인자</a></td></tr>
+</table>
+</div>
+<p class="cap">두 표 모두 왼쪽이 이 장의 코드에 나오는 것입니다. 첫 표의 오른쪽은 그것을 처음 설명한 슬라이드이고, 둘째 표의 오른쪽은 1장에서 그것을 만든 슬라이드입니다. 이 장은 오른쪽의 설명을 되풀이하지 않고, 1장과 달라지는 곳만 말합니다.</p>
+</article>
+
+<article class="card" id="p24-grep-goal">
+<h3>다 만들면 이렇게 돈다</h3>
+<p class="lead">마지막 단계의 패키지를 빌드해 돌린 화면입니다. 여기까지 가는 길을 여덟 단계로 나눠 걷습니다. 화면은 1장처럼 <a href="#p02-cargo-build"><code class="nb">target/debug/</code></a> 의
+실행 파일을 직접 부릅니다. 실행 파일의 이름이 <code>grep</code> 이라서, 이 기계에 깔린 같은 이름의 명령이 대신 돌지 않게 늘 경로까지 적습니다. 입력 파일은 둘이고 <code>cat</code> 으로 먼저 봅니다.</p>
+<!--OUT file=out/24/grep8_final.txt lines=1-39 note=마지막 단계 grep8_final 의 실행 파일-->
+<div class="note"><b>읽는 법</b> — <code class="nb">data/memo.txt</code> 는 다섯 줄이고 셋째 줄이 비었습니다. <code class="nb">data/todo.txt</code> 는 세 줄입니다. <code class="nb">cargo build -q</code> 는 아무것도 찍지
+않았습니다. <code class="nb">grep rust data/memo.txt</code> 는 <code>rust</code> 가 든 두 줄을 찍었습니다. 대문자로 시작하는 <code class="nb">Rust book</code> 의 줄은 빠졌습니다.
+<code class="nb">-in</code> 을 주고 파일을 둘 준 실행에서는 그 줄과 <code class="nb">learn RUST</code> 까지 다섯 줄이 나왔고, 줄마다 앞에 파일 이름과 줄 번호가 콜론으로 붙었습니다.
+<code class="nb">-vn</code> 은 거꾸로 <code>rust</code> 가 없는 줄 셋을 번호 1 · 3 · 5 와 함께 찍었습니다. 빈 줄은 <code class="nb">3:</code> 뿐입니다. <code class="nb">-ci</code> 는 줄 대신
+파일마다 이름과 고른 줄의 수 3 과 2 를 찍었습니다. 파일을 주지 않은 <code class="nb">printf … | grep -n rust</code> 는 표준 입력에서 찾아 이름 없이 <code class="nb">2:rust</code> 를 찍었습니다.
+<code>zig</code> 는 어느 줄에도 없어서 아무것도 찍지 않고 종료 코드 1 입니다. 없는 <code class="nb">data/none.txt</code> 를 끼운 실행은 알림 한 줄을 내고 나머지 파일에서 한 줄을 찍었는데,
+고른 줄이 있는데도 종료 코드는 2 입니다. 모르는 옵션 <code class="nb">-x</code> 에는 쓰는 법을 알리고 역시 2 입니다.</div>
+<div class="warn"><b>이 책의 grep 입니다</b> — 이름과 옵션 글자는 익숙한 명령에서 빌렸지만, 무엇을 줄로 보고 무엇을 맞는다고 할지, 줄을 어떤 모양으로 찍고 몇으로 끝낼지는 이 장이 정합니다.
+어느 기계의 <code>grep</code> 과 출력이 같다고 말하지 않습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-steps">
+<h3>여덟 단계 — 단계마다 컴파일되고 돈다</h3>
+<p class="lead">1장과 같은 방식입니다. 단계 하나가 예제 디렉터리 하나이고, 뒤 단계는 앞 단계의 파일을 그대로 두고 줄을 더하거나 적어 둔 줄만 바꾼 사본입니다. 슬라이드가 싣지도 말하지도 않은 줄은
+앞 단계의 것 그대로입니다. 1장에서는 <code>run</code> 이 생긴 뒤에 <code>Config</code> 가 들어와 <code>run</code> 의 여섯 줄을 고쳐야 했습니다. 이번에는 <code>Config</code> 를 먼저 만듭니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>디렉터리</th><th>더하는 것</th><th>돌려 보는 것</th></tr>
+<tr><td><code class="nb">grep1_match</code></td><td><code class="nb">src/lib.rs</code> 의 <code class="nb">is_match</code> — 줄이 패턴에 맞는가</td><td>단위 시험</td></tr>
+<tr><td><code class="nb">grep2_config</code></td><td><code>Config</code> 와 <code class="nb">parse_args</code> — 패턴, 파일 이름, 옵션 <code class="nb">-i -v</code></td><td>단위 시험</td></tr>
+<tr><td><code class="nb">grep3_search</code></td><td><code>selects</code> 와 <code>search</code> — 글에서 줄 고르기</td><td>단위 시험</td></tr>
+<tr><td><code class="nb">grep4_run</code></td><td><code>run</code>, 오류 타입, <code class="nb">src/main.rs</code>, 입력 파일 둘, 종료 코드</td><td>실행 파일 — 파일들과 표준 입력, 단위 시험</td></tr>
+<tr><td><code class="nb">grep5_number</code></td><td>줄 앞의 파일 이름, 옵션 <code class="nb">-n</code></td><td>실행 파일, 단위 시험</td></tr>
+<tr><td><code class="nb">grep6_count</code></td><td>옵션 <code class="nb">-c</code></td><td>실행 파일, 단위 시험</td></tr>
+<tr><td><code class="nb">grep7_tests</code></td><td><code>run</code> 을 부르는 통합 시험</td><td>통합 시험</td></tr>
+<tr><td><code class="nb">grep8_final</code></td><td>실행 파일을 띄우는 시험, 기준 파일</td><td>실행 파일, 모든 시험</td></tr>
+</table>
+</div>
+<p class="cap">위에서 아래로 가는 차례가 이 장의 차례입니다. 디렉터리 이름에 든 숫자가 단계의 번호이고, 이 장은 <code class="nb">grep4_run</code> 을 4단계라고 부릅니다. 옵션은 그 뜻을 만드는 단계에서
+<code class="nb">parse_args</code> 에 들어옵니다. 그래서 4단계의 <code>grep</code> 에 <code class="nb">-n</code> 은 <a href="#p24-grep-exit">아직 모르는 옵션</a>입니다.</p>
+</article>
+
+<article class="card" id="p24-grep-match">
+<h3>맞는다는 것은 줄 안에 패턴이 그대로 들어 있다는 것 — 이 프로그램이 고른 것</h3>
+<p class="lead">가장 안쪽의 물음부터 함수로 만듭니다. 줄 하나와 패턴 하나를 받아 맞는지 답합니다. 8부에서 본 <a href="#p08-str-methods"><code>contains</code></a> 한 줄입니다.
+1단계의 파일은 <code class="nb">Cargo.toml</code> 과 <code class="nb">src/lib.rs</code> 둘입니다.</p>
+<!--CODE file=ex/24/grep1_match/Cargo.toml note=패키지 이름이 grep — 이 파일은 끝까지 바뀌지 않는다-->
+<!--CODE file=ex/24/grep1_match/src/lib.rs lines=1-4 note=grep1_match — 줄과 패턴을 받아 맞는지 답한다-->
+<div class="note"><b>읽는 법</b> — <code class="nb">Cargo.toml</code> 은 패키지 이름만 다르고 <a href="#p24-wc-count">1장의 것</a>과 같습니다. <code class="nb">lib.rs</code> 의 2번 줄은 줄과 패턴을 둘 다
+<code class="nb">&amp;str</code> 로 받고, 3번 줄이 <code>contains</code> 의 답을 그대로 돌려줍니다. 한 줄짜리 일을 함수로 떼어 이름을 붙인 것은, "맞는다" 의 뜻을 정하는 곳을 이 한 군데로 두려는
+것입니다.</div>
+<div class="key"><b>이 프로그램의 정의 — 맞는다</b> — 이 장에서 패턴은 <code>grep</code> 에 주는 찾을 글을 가리킵니다. 7부의 패턴을 말할 때는 "튜플 패턴" 처럼 앞에 말을 붙여 적습니다. 패턴은 글자 그대로 찾는 글입니다. 점이나 별표에 특별한 뜻을 주는 정규식(regular expression)은 받지 않습니다. 정규식을 읽어 줄에 맞춰 보는 일은 그것만으로
+프로젝트 하나이고, 이 장은 하지 않습니다. 다음 슬라이드의 시험이 이 정의를 적어 둡니다.</div>
+</article>
+
+<article class="card" id="p24-grep-match-test">
+<h3>정의를 시험으로 적어 둔다 — 낱말 속이어도 맞고, 대소문자가 다르면 안 맞는다</h3>
+<p class="lead">같은 <code class="nb">lib.rs</code> 의 아래쪽, 13부에서 본 <a href="#p13-test-mod">시험 모듈</a>입니다. <code class="nb">is_match</code> 가 받는 것이 글 둘뿐이라 파일도 인자도
+필요 없습니다.</p>
+<!--CODE file=ex/24/grep1_match/src/lib.rs lines=6-37 note=grep1_match — 시험 모듈 전부-->
+<!--OUT file=out/24/grep1_match.txt lines=1-5 note=라이브러리의 단위 시험만 돌린다-->
+<div class="note"><b>읽는 법</b> — 화면은 3개 통과입니다. <code class="nb">--lib</code> 은 23부에서 본 <a href="#p23-test-helper">라이브러리의 단위 시험만 돌리는 옵션</a>입니다. 12번 줄은 줄 가운데의
+<code>rust</code> 를 찾습니다. 14번 줄의 <code>trust</code> 에도 <code>rust</code> 가 있습니다. 낱말의 경계는 따지지 않습니다. 16번 줄은 <code>Rust</code> 로 시작하는 줄에 <code>rust</code> 가 없다고
+답함을 봅니다. 18번과 19번 줄은 점이 점 한 글자만 찾음을 봅니다. <code class="nb">a.c</code> 에는 점이 있고, <code>abc</code> 에는 <code class="nb">a.c</code> 가 없습니다. 24번 줄은 한글 패턴
+<code>녹이</code> 입니다. 32번과 33번 줄은 빈 패턴이 글이 있는 줄에도 빈 줄에도 맞음을, 35번 줄은 빈 줄에 <code>a</code> 가 없음을 봅니다.</div>
+<div class="note"><b>27번 줄 — 눈에 같아 보여도 다른 글</b> — <code class="nb">\u{1100}\u{1161}</code> 은 자모 ㄱ 과 ㅏ 를 따로 적은 두 <code>char</code> 이고, <code class="nb">\u{AC00}</code> 은 한 글자
+<code>가</code> 입니다. 화면에는 같은 글자로 보일 수 있지만 <code class="nb">is_match</code> 는 맞지 않는다고 답했습니다. 8부에서 본 <a href="#p08-grapheme">같아 보이는 두 é</a> 와 같은 사정입니다.
+이 프로그램은 둘을 같게 만들어 주지 않습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-config">
+<h3>Config 를 먼저 만든다 — 옵션이 아닌 첫 인자가 패턴이다</h3>
+<p class="lead">2단계는 명령 줄입니다. 1장의 <a href="#p24-wc-config"><code>Config</code> 와 <code class="nb">parse_args</code></a> 와 같은 틀이므로 달라진 곳만 봅니다. <code>wc</code> 에서는 옵션이 아닌
+인자가 모두 파일 이름이었습니다. <code>grep</code> 에서는 그 가운데 첫째가 패턴입니다. <code class="nb">lib.rs</code> 의 맨 위에 상수 하나를, <code class="nb">is_match</code> 아래에 구조체와 함수를 더했습니다.</p>
+<!--CODE file=ex/24/grep2_config/src/lib.rs lines=1-1 note=grep2_config — 파일 맨 위에 더한 상수-->
+<!--CODE file=ex/24/grep2_config/src/lib.rs lines=8-51 note=같은 파일에 더한 구조체와 읽는 함수-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 둘째 상자의 것입니다. 26번 줄의 <code class="nb">strip_prefix('-')</code> 와 28번 줄의 가드, 29번부터 37번 줄까지의 글자마다 도는 반복문은 1장과 같은 꼴입니다. 이 단계가 아는
+옵션은 31번과 32번 줄의 둘이고, 33번 줄의 나머지 갈래는 <code>Err</code> 로 돌아갑니다. 40번과 41번 줄이 옵션이 아닌 인자를 받습니다. 40번 줄의 가드는 패턴 자리가 아직 비어 있는지를 묻고, 그렇다면 그 인자가
+패턴이 됩니다. 그 뒤에 오는 것은 41번 줄에서 파일 이름으로 모입니다. 44번부터 50번 줄까지는 반복이 끝난 뒤입니다. 패턴을 받았으면 <code>cfg</code> 에 넣어 <code>Ok</code> 로, 끝까지 받지 못했으면
+<code class="nb">패턴이 없다</code> 를 <code>Err</code> 로 돌려줍니다. 9번 줄의 <code>derive</code> 셋은 1장과 같은 쓰임입니다. 첫 상자의 <code>USAGE</code> 는 4단계의 <code>run</code> 이 씁니다.</div>
+<div class="note"><b>1장과 다른 두 곳</b> — 22번 줄은 패턴을 <code class="nb">String</code> 이 아니라 <code>Option</code> 으로 들고 시작합니다. 빈 글 <code class="nb">""</code> 도 패턴으로 받기 때문에, 비어 있는지로는 "아직
+없다" 를 가를 수 없습니다. 24번과 27번 줄은 <code class="nb">--</code> 입니다. <code class="nb">--</code> 에서 <code class="nb">-</code> 하나를 떼면 <code class="nb">"-"</code> 가 남고, 27번 줄이 그것을 만나면
+<code class="nb">flags_done</code> 을 켭니다. 그 뒤로는 27번과 28번 줄의 가드가 둘 다 거짓이라 <code class="nb">-</code> 로 시작하는 인자도 40번과 41번 줄로 내려갑니다. 패턴이 <code class="nb">-</code> 로 시작할 수도 있어서 둔
+길이고, 1장에서는 <a href="#p24-wc-more">과제로 남긴 것</a>입니다. 다음 두 슬라이드의 시험이 이 규칙들을 봅니다.</div>
+</article>
+
+<article class="card" id="p24-grep-config-test">
+<h3>parse_args 의 시험 ① — 첫 인자가 패턴, 옵션은 어디에 와도 된다</h3>
+<p class="lead">1장의 <a href="#p24-wc-config-test">시험</a>처럼 목록을 만들어 넘깁니다. 같은 파일의 시험 모듈에 도우미 하나와 시험 다섯을 더했고, 이 슬라이드가 앞의 둘입니다.</p>
+<!--CODE file=ex/24/grep2_config/src/lib.rs lines=85-116 note=grep2_config — 시험 모듈에 더한 도우미와 시험 둘-->
+<!--OUT file=out/24/grep2_config.txt lines=1-5 note=시험이 여덟으로 늘었다-->
+<div class="note"><b>읽는 법</b> — 92번 줄은 옵션 없이 인자 셋을 줍니다. 94번 줄이 첫째가 패턴임을, 95번 줄이 나머지 둘이 파일 이름임을, 96번 줄이 두 옵션이 꺼져 있음을 봅니다. 98번 줄은 패턴만 주고,
+99번 줄이 파일 이름이 없음을 봅니다. 111번 줄은 <code class="nb">-i</code> 를 패턴 앞에, <code class="nb">-v</code> 를 파일 이름 뒤에 줍니다. 112번 줄은 읽어 낸 <code>Config</code> 를 104번 줄에서 만든
+<code>want</code> 와 통째로 견줍니다. 114번 줄은 둘을 <code class="nb">-vi</code> 로 붙이고 <code class="nb">-i</code> 를 한 번 더 주는데, 115번 줄에서 같은 <code>want</code> 와 같습니다. 화면은 8개 통과입니다.
+1단계의 셋에 이 단계의 다섯이 더해졌습니다.</div>
+<div class="note"><b>109번 줄의 <code class="nb">..Config::default()</code></b> — 7부에서 본 <a href="#p07-struct-update">갱신 문법</a>입니다. 이 단계의 <code>Config</code> 는 필드가 넷이고 넷을 다 적었으므로, 여기서 가져올
+필드는 없습니다. 5단계와 6단계에서 필드가 하나씩 늘어도 이 시험을 고치지 않으려고 적어 둔 줄입니다.</div>
+</article>
+
+<article class="card" id="p24-grep-config-dash">
+<h3>parse_args 의 시험 ② — 빈 패턴은 패턴이고, 없는 패턴은 오류다</h3>
+<p class="lead">나머지 시험 셋은 가장자리입니다. <code class="nb">--</code> 뒤에 오는 것, 패턴 자리가 빈 글일 때와 아예 없을 때, 그리고 모르는 옵션입니다.</p>
+<!--CODE file=ex/24/grep2_config/src/lib.rs lines=118-155 note=grep2_config — 시험 모듈에 더한 나머지 시험 셋-->
+<!--OUT file=out/24/grep2_config.txt lines=3-5 note=앞 슬라이드와 같은 실행-->
+<div class="note"><b>읽는 법</b> — 120번 줄에서 <code class="nb">--</code> 앞의 <code class="nb">-i</code> 는 옵션으로 읽혔고(125번 줄), 뒤의 <code class="nb">-v</code> 는 패턴이, <code class="nb">-x</code> 는 파일 이름이
+됐습니다. <code>invert</code> 는 꺼진 채입니다. 127번 줄은 <code class="nb">--</code> 를 두 번 줍니다. 첫째가 옵션을 끝내고, 둘째는 글 그대로 패턴입니다. 130번 줄의 <code class="nb">-</code> 하나는
+<code class="nb">--</code> 없이도 옵션이 아닙니다. 첫째가 패턴, 둘째가 파일 이름입니다. 137번 줄은 빈 글 하나를 주고, 그것이 패턴으로 읽힘을 봅니다. 138번 줄은 인자가 하나도 없을 때, 141번 줄은 옵션과
+<code class="nb">--</code> 만 있을 때입니다. 둘 다 <code class="nb">패턴이 없다</code> 입니다. 147번 줄의 <code class="nb">-ix</code> 는 <code>i</code> 까지 읽고 <code>x</code> 에서 <code>Err</code> 가 됩니다.
+150번 줄은 패턴 뒤에 온 <code class="nb">-x</code> 도 옵션으로 읽힘을 봅니다. 153번 줄의 <code class="nb">--help</code> 는 <code class="nb">--</code> 와 같지 않으므로 옵션 묶음으로 읽히고, 그 첫 글자 <code class="nb">-</code>
+에서 <code class="nb">모르는 옵션 --</code> 가 됩니다.</div>
+<div class="key"><b>이 프로그램이 정한 것 — 패턴 자리</b> — 옵션이 아닌 첫 인자가 패턴입니다. 빈 글도 패턴이고, 패턴이 없으면 잘못 부른 것입니다. <code class="nb">-</code> 로 시작하는 패턴은 <code class="nb">--</code> 뒤에 적습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-search-nolife">
+<h3>빌린 줄을 돌려주는 search — 수명 표기를 빼면 컴파일러가 묻는다 — E0106</h3>
+<p class="lead">3단계는 글 하나에서 줄을 골라 돌려주는 <code>search</code> 입니다. 8부에서 본 대로 <a href="#p08-str-split">쪼갠 조각은 원본을 빌린 <code class="nb">&amp;str</code></a> 이라, 고른 줄을 새
+<code>String</code> 으로 만들지 않고 받은 글을 빌린 채로 돌려줍니다. 그런데 이 함수에는 들어오는 참조가 둘입니다. 찾을 글과 <code>Config</code> 입니다. 3단계의 <code>search</code> 에서 수명 표기만 뺀 쌍둥이
+디렉터리를 먼저 컴파일해 봅니다.</p>
+<!--CODE file=ex/24/grep3_nolife/src/lib.rs lines=70-78 note=grep3_nolife — search 의 머리에 수명 표기가 없다-->
+<!--OUT file=out/24/grep3_nolife.txt note=라이브러리가 컴파일되지 않는다-->
+<div class="note"><b>읽는 법</b> — 11부의 <a href="#p11-longest-missing">E0106</a> 과 오류 첫 줄도 <code class="nb">help:</code> 의 꼴도 같습니다. 72번 줄에서 반환 타입 안의 <code class="nb">&amp;str</code> 을 짚어
+"이름 붙은 수명 인자가 있어야 한다" 고 하고, 들어오는 두 참조 <code class="nb">&amp;str</code> 과 <code class="nb">&amp;Config</code> 에 밑줄을 그었습니다. 첫 <code class="nb">help:</code> 가 까닭입니다. "반환 타입에 빌린 값이
+있는데, <code>text</code> 에서 빌린 것인지 <code>cfg</code> 에서 빌린 것인지 시그니처가 말하지 않는다" 입니다. 둘째 <code class="nb">help:</code> 는 세 참조에 모두 <code>'a</code> 를 붙인 72번 줄을 권합니다.
+<code class="nb">For more information</code> 줄은 2부에서 본 <a href="#p02-macro-bang"><code class="nb">--explain</code></a> 안내이고, 끝의 <code class="nb">error: could not compile</code> 줄은 Cargo 가 덧붙인 것입니다.
+종료 코드는 101 입니다.</div>
+<div class="note"><b>쌍둥이에서 달라진 곳</b> — <code>search</code> 의 머리뿐입니다. 3단계의 파일에서는 그 머리가 넉 줄이고, 표기를 뺀 것은 <code>rustfmt</code> 가 한 줄로 이었습니다. 다음 슬라이드에 넉 줄짜리가 있습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-search">
+<h3>줄은 text 에서만 빌린다 — 'a 는 text 와 반환 타입에만 붙인다</h3>
+<p class="lead">컴파일러가 권한 줄은 <code>cfg</code> 에도 <code>'a</code> 를 붙였습니다. 그러나 돌려주는 줄은 <code>text</code> 의 조각이고 <code>cfg</code> 에서 빌리는 것은 없습니다. 11부에서 본 대로
+<a href="#p11-first-only">상관없는 참조에는 붙이지 않습니다</a>. 3단계의 <code class="nb">lib.rs</code> 에서 <code class="nb">parse_args</code> 아래에 더한 메서드와 함수입니다.</p>
+<!--CODE file=ex/24/grep3_search/src/lib.rs lines=53-81 note=grep3_search — 줄 하나를 고를지 답하는 selects 와, 글에서 줄을 고르는 search-->
+<div class="note"><b>읽는 법</b> — 72번부터 75번 줄까지가 <code>search</code> 의 머리입니다. <code>'a</code> 는 <code>text</code> 와, 반환 타입의 튜플 안에 든 <code class="nb">&amp;str</code> 에만 있습니다. 76번 줄의
+<a href="#p08-str-split"><code>lines()</code></a> 가 글을 줄로 쪼개고, 77번 줄의 <a href="#p12-enumerate-zip"><code>enumerate</code></a> 가 0 부터 번호를 붙입니다. 78번 줄의 <code>filter</code> 는 줄마다
+<code class="nb">cfg.selects</code> 에 묻습니다. 클로저가 매개변수가 아닌 <code>cfg</code> 를 쓰는 것은 12부에서 본 <a href="#p12-closure-capture">붙잡기</a>입니다. 79번 줄이 번호에 1 을 더해 사람이 세는 줄 번호로
+바꾸고, 80번 줄이 반환 타입대로 벡터에 모읍니다. 이 사슬이 그대로 컴파일된다는 것과 돌려준 값은 <a href="#p24-grep-search-test">다음 슬라이드의 시험</a>에서 봅니다.</div>
+<div class="note"><b>55번부터 67번 줄까지 — selects</b> — <code>Config</code> 의 메서드입니다. <code class="nb">-i</code> 가 꺼져 있으면 63번 줄이 1단계의 <code class="nb">is_match</code> 를 그대로 부릅니다. 켜져 있으면 59번과
+60번 줄이 줄과 패턴을 둘 다 <code class="nb">to_ascii_lowercase</code> 로 바꾼 글을 넘깁니다. 여기서 처음 쓰는 <code>str</code> 의 메서드이고, 새 <code>String</code> 을 돌려줍니다. 무엇을 바꾸고 무엇을 그대로 두는지는
+<a href="#p24-grep-search-flags">시험</a>이 봅니다. 66번 줄은 <code class="nb">-v</code> 입니다. <code>bool</code> 둘을 <code class="nb">!=</code> 로 견주므로, <code>invert</code> 가 거짓이면 <code>found</code> 그대로이고
+참이면 그 반대입니다.</div>
+</article>
+
+<article class="card" id="p24-grep-search-test">
+<h3>줄이 무엇인지 시험으로 적어 둔다 — 줄바꿈 없이 끝난 줄도 한 줄이다</h3>
+<p class="lead"><code>search</code> 가 돌려주는 것은 번호와 줄의 짝입니다. 그러면 무엇이 한 줄인지부터 정해야 합니다. 이 프로그램은 <code>lines()</code> 가 내는 조각을 줄로 삼고, 그 조각이 어떤 것인지를 시험으로
+적어 둡니다. 3단계의 시험 모듈에 더한 것 가운데 앞쪽입니다.</p>
+<!--CODE file=ex/24/grep3_search/src/lib.rs lines=187-224 note=grep3_search — 도우미, 시험에 쓸 글, 시험 둘-->
+<!--OUT file=out/24/grep3_search.txt lines=1-5 note=시험이 열둘로 늘었다-->
+<div class="note"><b>읽는 법</b> — 도우미 <code>cfg</code> 는 패턴만 정하고 나머지는 기본값에서 가져옵니다. 195번 줄의 <code>TEXT</code> 는 네 줄이고 셋째가 빈 줄입니다. 200번 줄은 <code>rust</code> 로 찾은 결과가 번호 2 의
+<code>rust</code> 와 번호 4 의 <code class="nb">trust rust</code> 임을 봅니다. 번호는 1 부터이고, <code>rust</code> 가 두 번 든 넷째 줄도 한 번만 나옵니다. 201번 줄은 없는 패턴에 빈 벡터가, 203번 줄은 빈 패턴에 빈 줄까지 네 줄이 모두 나옴을 봅니다.
+210번 줄부터가 줄의 정의입니다. <code class="nb">"a\nb"</code> 는 두 줄이고(210번), <code class="nb">"a\n"</code> 은 한 줄이며(212번), 빈 글에는 줄이 없습니다(214번). 216번 줄에서는 줄 끝의 <code class="nb">\r\n</code> 이 둘 다
+빠져 <code class="nb">"a"</code> 와 <code class="nb">"b"</code> 가 나왔고, 218번 줄에서는 <code class="nb">\r</code> 하나를 사이에 둔 <code class="nb">a\rb</code> 가 한 줄로 남았습니다. 220번 줄의 패턴에는 줄바꿈이 들어 있는데, 줄에는
+줄바꿈이 없으니 어느 줄에도 맞지 않습니다. 223번 줄은 십만 글자 뒤에 <code>rust</code> 가 붙은 줄도 한 줄로 고름을 봅니다. 화면은 12개 통과입니다. 앞 단계의 여덟에 이 둘과 다음 슬라이드의 둘이 더해졌습니다.</div>
+<div class="key"><b>이 프로그램의 정의 — 줄</b> — 줄은 <code class="nb">\n</code> 이나 <code class="nb">\r\n</code> 에서 끝나고, 그 줄바꿈은 줄에 들지 않습니다. 마지막 조각은 줄바꿈이 없어도 한 줄입니다.
+1장의 <code>wc</code> 는 <a href="#p24-wc-count-test">줄바꿈 바이트를 세어</a> <code class="nb">a\nb</code> 를 한 줄이라고 했습니다. 여기서는 두 줄입니다.</div>
+</article>
+
+<article class="card" id="p24-grep-search-flags">
+<h3>-v 는 답을 뒤집고, -i 는 A 부터 Z 까지만 소문자로 본다 — 이 프로그램이 고른 것</h3>
+<p class="lead">고를 줄을 바꾸는 옵션 둘의 시험입니다. <code class="nb">-i</code> 는 "대소문자를 가리지 않는다" 인데, 어디까지를 대소문자로 볼지 정해야 합니다. 이 프로그램은 ASCII 영문자 스물여섯 자만 봅니다.</p>
+<!--CODE file=ex/24/grep3_search/src/lib.rs lines=226-263 note=grep3_search — 시험 모듈에 더한 나머지-->
+<!--OUT file=out/24/grep3_search.txt lines=3-5 note=앞 슬라이드와 같은 실행-->
+<div class="note"><b>읽는 법</b> — 232번 줄은 <code>invert</code> 를 켜고 <code>rust</code> 로 찾습니다. 나온 것은 <code>rust</code> 가 없는 첫째 줄과 빈 줄인 셋째 줄이고, 번호는 고른 차례가 아니라 원래 글에서의 번호 1 과 3 입니다. 238번
+줄은 빈 패턴을 뒤집습니다. 빈 패턴은 모든 줄에 맞으므로 고를 줄이 없습니다. 251번 줄은 <code class="nb">-i</code> 를 켜고 <code>RuSt</code> 로 찾아 <code>Rust</code> · <code>rust</code> · <code class="nb">trust rust</code> 의
+세 줄을 얻고, 253번 줄은 <code class="nb">-i</code> 없이는 한 줄도 없음을 봅니다. 256번 줄은 바이트 값으로 <code>Z</code> 바로 다음이 <code class="nb">[</code> 이고 <code>z</code> 바로 다음이 <code class="nb">{</code> 임을, 257번 줄은
+그 둘이 <code class="nb">-i</code> 로도 맞지 않음을 봅니다. 259번과 260번 줄은 <code>café</code> 로 찾습니다. <code>CAFé</code> 에는 맞고 <code>CAFÉ</code> 에는 맞지 않습니다. 두 글이 다른 곳은 마지막 글자뿐이고, <code>É</code> 는 ASCII 밖의
+대문자입니다. 262번 줄의 전각 영문자 둘도 서로 맞지 않습니다.</div>
+<div class="key"><b>이 프로그램의 정의 — <code class="nb">-i</code></b> — 줄과 패턴 양쪽에서 ASCII 대문자 <code>A</code> 부터 <code>Z</code> 까지만 소문자로 바꾼 다음 견줍니다. 그 밖의 글자는 대소문자가 있는 글자여도 그대로
+견줍니다. 유니코드의 대소문자까지 보는 <a href="#p08-str-methods"><code class="nb">to_lowercase</code></a> 로 바꾸는 일은 <a href="#p24-grep-more">더 해 볼 것</a>에 남깁니다.</div>
+</article>
+
+<article class="card" id="p24-grep-run">
+<h3>run 의 머리는 1장과 같다 — 몸통이 세는 것이 둘이다</h3>
+<p class="lead">4단계에서 프로그램이 처음 돕니다. <code>run</code> 의 매개변수 넷과 반환 타입은 1장의 <a href="#p24-wc-run"><code>run</code></a> 과 같습니다. 읽을 곳 하나, 쓸 곳 둘을 받고 종료 코드를
+<code>Ok</code> 에 담아 돌려줍니다. <code>Config</code> 가 이미 있으므로 처음부터 <code class="nb">parse_args</code> 를 부릅니다. <code class="nb">lib.rs</code> 의 맨 위에 <code>use</code> 세 줄을, 시험 모듈 바로 위에 이
+함수를 더했습니다.</p>
+<!--CODE file=ex/24/grep4_run/src/lib.rs lines=1-3 note=grep4_run — 파일 맨 위에 더한 세 줄-->
+<!--CODE file=ex/24/grep4_run/src/lib.rs lines=132-169 note=같은 파일의 run — 파일이 없으면 표준 입력에서, 있으면 파일마다-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 둘째 상자의 것입니다. 140번부터 148번 줄까지는 1장의 <a href="#p24-wc-flags-run">잘못 불렀을 때의 아홉 줄</a>과 도구 이름만 다릅니다. 150번과 151번 줄이 이 함수가 끝까지
+들고 가는 두 값입니다. 고른 줄의 수와, 읽지 못한 파일이 있었는지입니다. 152번 줄은 파일 이름이 없을 때입니다. 155번 줄의 <code class="nb">read_to_string</code> 은 17부에서 본
+<a href="#p17-file-open"><code>Read</code> 의 메서드</a>이고, 표준 입력을 끝까지 읽어 <code>String</code> 하나에 담습니다. 1장은 같은 자리에서 <code class="nb">read_to_end</code> 로 바이트를 읽었습니다. 158번 줄부터는
+파일마다 돕니다. 읽혔으면 160번 줄이 <code class="nb">write_hits</code> 가 돌려준 수를 <code>selected</code> 에 더하고, 읽지 못했으면 163번 줄이 알리고 164번 줄이 <code>failed</code> 를 켠 뒤 다음 파일로 갑니다.
+168번 줄이 두 값을 <code class="nb">exit_code</code> 에 넘겨 종료 코드를 얻습니다. <code class="nb">read_text</code> · <code class="nb">write_hits</code> · <code class="nb">exit_code</code> 는
+<a href="#p24-grep-read">다음 슬라이드</a>에 있습니다.</div>
+<div class="key"><b>읽는 방식 — 이 프로그램이 고른 것</b> — 입력 하나를 통째로 <code>String</code> 으로 읽은 다음 줄로 쪼갭니다. 그래서 <code>search</code> 는 글 하나만 받으면 되고, 고른 줄은 그 글을 빌린 조각으로
+남습니다. 치르는 값도 있습니다. 통째로 읽는 일은 통째로 실패합니다. <a href="#p24-grep-bad-utf8">글이 아닌 바이트가 든 파일</a>에서 그 화면을 봅니다.</div>
+</article>
+
+<article class="card" id="p24-grep-read">
+<h3>읽는 read_text, 쓰는 write_hits, 종료 코드를 정하는 exit_code</h3>
+<p class="lead"><code>run</code> 이 부르는 함수 셋입니다. 같은 단계의 <code class="nb">lib.rs</code> 에서 <code>search</code> 와 <code>run</code> 사이에 더했습니다. 읽는 쪽은 1장에서 6단계에 만든
+<a href="#p24-wc-error-type">이름을 담는 오류 타입</a>을 처음부터 씁니다.</p>
+<!--CODE file=ex/24/grep4_run/src/lib.rs lines=87-108 note=grep4_run — 이름을 담는 오류 타입과, 파일 하나를 글로 읽는 함수-->
+<!--CODE file=ex/24/grep4_run/src/lib.rs lines=110-130 note=같은 파일 — 고른 줄을 쓰는 함수와 종료 코드를 정하는 함수-->
+<div class="note"><b>읽는 법</b> — 88번부터 100번 줄까지의 <code>GrepError</code> 는 1장의 <code>WcError</code> 와 이름만 다릅니다. 103번 줄의 <code class="nb">read_text</code> 는
+<a href="#p17-file-read-to-string"><code class="nb">fs::read_to_string</code></a> 으로 읽고, 실패하면 <code class="nb">map_err</code> 로 이름을 곁에 넣습니다. 1장의 <code class="nb">count_file</code> 은 읽어서 세기까지 했고, 이
+함수는 읽은 글을 돌려주기만 합니다. 111번 줄의 <code class="nb">write_hits</code> 는 <code>pub</code> 이 없는, 이 파일 안에서만 쓰는 함수입니다. 116번 줄이 <code>search</code> 로 줄을 고르고, 117번과 118번 줄이
+고른 줄을 한 줄씩 씁니다. 번호는 이 단계에서는 쓰지 않아 <code>_</code> 로 받습니다. 120번 줄이 고른 줄의 수를 돌려줍니다. 124번 줄의 <code class="nb">exit_code</code> 는 7부에서 본
+<a href="#p07-pat-tuple">튜플 패턴</a>으로 세 경우를 가릅니다. 읽지 못한 것이 있으면 고른 줄의 수를 보지 않고 2, 없으면 고른 줄이 0 일 때 1, 그 밖에는 0 입니다.</div>
+<div class="key"><b>17부 · 1장과 다른 점 — 종료 코드 1 의 뜻</b> — 17부의 <a href="#p17-tool-head-main"><code>head</code></a> 와 1장의 <code>wc</code> 에서 1 은 "일하다 실패했다" 였습니다. 이 프로그램에서 1 은 실패가 아니라
+"찾아봤는데 고른 줄이 없다" 는 답입니다. 그래서 실패는 잘못 부른 것이든 읽지 못한 것이든 2 로 모으고, 읽지 못한 것이 있으면 고른 줄이 있어도 2 로 합니다. 이 장이 정한 것입니다.</div>
+</article>
+
+<article class="card" id="p24-grep-main">
+<h3>main 은 1장과 한 줄이 다르다 — run 이 Err 를 돌려줘도 2 다</h3>
+<p class="lead">같은 단계에 <code class="nb">src/main.rs</code> 가 생깁니다. 1장의 <a href="#p24-wc-main"><code>main</code></a> 과 하는 일이 같고, 이 파일도 마지막 단계까지 바뀌지 않습니다.</p>
+<!--CODE file=ex/24/grep4_run/src/main.rs note=grep4_run — 실행 크레이트의 전부-->
+<!--OUT file=out/24/grep4_run.txt lines=1-6 note=4단계의 파일 다섯-->
+<div class="note"><b>읽는 법</b> — 9번 줄이 라이브러리를 패키지 이름 <code>grep</code> 으로 부릅니다. 1장과 다른 곳은 15번 줄입니다. 1장은 여기서 <code class="nb">ExitCode::FAILURE</code>, 곧 1 로 끝냈습니다. 이
+프로그램의 1 은 "고른 줄이 없다" 이므로 2 를 돌려줍니다. 11번부터 16번 줄까지의 갈래가 도는 화면은 <a href="#p24-grep-bad-utf8">글이 아닌 표준 입력</a>에 있습니다. <code>find</code> 가 보인 파일은 다섯이고,
+<code class="nb">data/</code> 의 둘이 입력으로 쓸 파일입니다.</div>
+<div class="warn"><b>1장에서 본 것 둘은 여기서도 그대로다</b> — 6번 줄은 1장과 같은 <code class="nb">env::args()</code> 입니다. 1장에서 본 대로 <a href="#p24-wc-args-bad">UTF-8 이 아닌 인자에는 패닉</a>하고, 이 프로그램에서는
+패턴도 인자입니다. 14번 줄의 <code>eprintln!</code> 도 1장과 같아서, <a href="#p24-wc-stdin-fail">표준 오류에 쓰지 못하는 경우</a>는 이 장도 다루지 않습니다. 두 화면을 이 장은 다시 싣지 않았습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-run-out">
+<h3>돌려 본다 — -i 와 -v 가 고르는 줄을 바꾼다</h3>
+<p class="lead">4단계의 실행 파일입니다. 입력을 <code>cat</code> 으로 먼저 보고, 같은 파일에서 다섯 가지로 찾습니다.</p>
+<!--OUT file=out/24/grep4_run.txt lines=7-30 note=grep4_run — 그대로, -i, -v, 둘 다, 그리고 한글 패턴-->
+<div class="note"><b>읽는 법</b> — <code class="nb">data/memo.txt</code> 는 다섯 줄이고 셋째 줄이 비었습니다. <code class="nb">cargo build -q</code> 는 아무것도 찍지 않았습니다. <code class="nb">grep rust</code> 는
+<code>rust</code> 가 든 두 줄을 파일에 있던 차례대로, 줄 그대로 찍었습니다. 이름도 번호도 붙지 않습니다. <code class="nb">-i</code> 를 주자 <code class="nb">Rust book</code> 의 줄이 더해져 세 줄입니다.
+<code class="nb">-v</code> 는 처음 실행에서 빠졌던 세 줄입니다. 가운데의 빈 줄도 고른 줄이라 화면에 빈 줄로 찍혔습니다. <code class="nb">-iv</code> 는 둘을 함께 켠 것입니다. 대소문자를 가리지 않고도
+<code>rust</code> 가 없는 줄은 빈 줄과 마지막 줄뿐입니다. 한글 패턴 <code>녹</code> 은 그 글자가 든 두 줄을 골랐습니다.</div>
+<div class="note"><b>두 옵션이 만나는 곳</b> — <a href="#p24-grep-search"><code>selects</code></a> 는 먼저 <code class="nb">-i</code> 를 따져 맞는지를 정하고, 그 답을 <code class="nb">-v</code> 로 뒤집습니다. <code class="nb">-iv</code> 의 화면이
+그 차례대로입니다. <code class="nb">-i</code> 로 맞는 세 줄을 뺀 나머지 두 줄이 나왔습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-stdin">
+<h3>파일을 주지 않으면 표준 입력에서 찾는다 — 줄바꿈 없이 끝난 줄에도 줄바꿈을 붙여 찍는다</h3>
+<p class="lead">파일 이름이 없으면 <a href="#p24-grep-run"><code>run</code></a> 은 표준 입력을 끝까지 읽어 거기서 찾습니다. 둘째 입력 파일 <code class="nb">data/todo.txt</code> 는 줄바꿈 없이 끝납니다. 그 마지막
+줄이 어떻게 찍히는지도 함께 봅니다.</p>
+<!--OUT file=out/24/grep4_run.txt lines=31-42 note=grep4_run — 꺾쇠로, 파이프로, 그리고 바이트로 본 마지막 줄-->
+<div class="note"><b>읽는 법</b> — <code class="nb">data/todo.txt</code> 는 세 줄입니다. <code class="nb">&lt; data/todo.txt</code> 로 이은 실행은 <code>rust</code> 가 든 한 줄을 찍었습니다. 대문자로 쓴
+<code class="nb">learn RUST</code> 는 빠졌습니다. <code>printf</code> 의 두 줄을 파이프로 받은 실행은 <code class="nb">-i</code> 로 <code>Rust</code> 를 골랐습니다. 그다음 두 실행은 바이트를 봅니다.
+<code class="nb">od -An -c</code> 는 이 기계의 명령으로, 받은 바이트를 글자로 한 줄에 적어 줍니다. 역시 이 기계의 명령인 <code class="nb">tail -c 5</code> 가 준 파일의 마지막 다섯 바이트는 빈칸과 <code>RUST</code> 입니다. 파일은
+줄바꿈 없이 <code>T</code> 에서 끝납니다. 그런데 <code>grep</code> 이 찍은 같은 줄은 <code class="nb">\n</code> 으로 끝났습니다.</div>
+<div class="note"><b>줄바꿈은 쓰는 쪽이 붙인다</b> — <a href="#p24-grep-search-test">줄의 정의</a>에서 줄바꿈은 줄에 들지 않았습니다. <a href="#p24-grep-read"><code class="nb">write_hits</code></a> 는 고른 줄을
+<code>writeln!</code> 으로 쓰고, 화면의 <code class="nb">\n</code> 은 거기서 온 것입니다. 입력의 마지막 줄에 줄바꿈이 있었는지는 출력에 남지 않습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-pattern">
+<h3>빈 패턴은 모든 줄을 고르고, -- 뒤의 -v 는 패턴이다</h3>
+<p class="lead">2단계에서 <a href="#p24-grep-config-dash">시험으로 정해 둔 패턴 자리의 규칙</a> 둘을 실행 파일로 봅니다. 셸에서 빈 글은 <code class="nb">''</code> 로 적습니다.</p>
+<!--OUT file=out/24/grep4_run.txt lines=43-48 note=grep4_run — 빈 패턴, 그리고 - 로 시작하는 패턴-->
+<div class="note"><b>읽는 법</b> — 빈 패턴을 준 실행은 <code class="nb">data/todo.txt</code> 의 세 줄을 모두 찍었습니다. <a href="#p24-grep-match-test">빈 패턴은 어느 줄에나 맞는다</a>는 1단계의 시험 그대로입니다.
+둘째 실행의 인자는 <code class="nb">--</code> 와 <code class="nb">-v</code> 둘입니다. <code class="nb">-v</code> 가 옵션으로 읽혔다면 패턴이 없어 잘못 부른 것이 됐을 것입니다. 화면은 <code class="nb">ls -v</code> 한
+줄입니다. <code class="nb">-v</code> 라는 글이 든 줄을 찾은 것이고, 뒤집히지도 않았습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-exit">
+<h3>고른 줄이 없으면 1, 잘못 부르면 2 — 종료 코드가 답을 전한다</h3>
+<p class="lead">아무것도 찍지 않은 실행은 화면만으로는 "없다" 인지 "잘못됐다" 인지 가릴 수 없습니다. 종료 코드가 그것을 가릅니다. 앞의 세 실행은 고른 줄이 없는 경우이고, 뒤의 세 실행은 잘못 부른
+경우입니다.</p>
+<!--OUT file=out/24/grep4_run.txt lines=49-64 note=grep4_run — 없는 패턴, 빈 입력, 뒤집은 빈 패턴, 그리고 잘못 부른 셋-->
+<div class="note"><b>읽는 법</b> — <code>zig</code> 는 <code class="nb">data/memo.txt</code> 의 어느 줄에도 없습니다. 아무것도 찍히지 않았고 종료 코드는 1 입니다. <code class="nb">&lt; /dev/null</code> 은 표준 입력에 빈
+입력을 이은 것입니다. 줄이 없으니 고를 줄도 없어 1 입니다. <code class="nb">-v ''</code> 는 모든 줄에 맞는 빈 패턴을 뒤집었으므로 역시 고른 줄이 없습니다. 세 실행 모두 알림은 없습니다. <code class="nb">-i</code> 만 준
+실행은 패턴이 없습니다. <code class="nb">grep: 패턴이 없다</code> 와 쓰는 법이 나오고 종료 코드는 2 입니다. <code class="nb">-n</code> 은 이 단계의 <code class="nb">parse_args</code> 가 모르는 옵션이라 <code class="nb">grep: 모르는 옵션 -n</code> 이 나왔고, 역시 2 입니다. 쓰는 법의
+<code class="nb">[-iv]</code> 에도 <code>n</code> 이 없습니다. 같은 명령에 <code class="nb">2&gt; /dev/null</code> 을 붙이자 종료 코드만 남았습니다. 알림 두 줄은 표준 오류로 갔고 표준 출력에는 아무것도 나가지 않았습니다.</div>
+<div class="key"><b>종료 코드 셋</b> — 0 은 고른 줄이 있다, 1 은 고른 줄이 없다, 2 는 잘못 불렀거나 읽지 못한 입력이 있다 입니다. 0 인 실행은 <a href="#p24-grep-run-out">앞에서 본 화면들</a>이고, 읽지 못한 입력은
+다음 슬라이드에서 봅니다.</div>
+</article>
+
+<article class="card" id="p24-grep-missing">
+<h3>읽지 못한 파일은 알리고 넘어간다 — 고른 줄이 있어도 종료 코드는 2 다</h3>
+<p class="lead">세 파일 가운데 둘째가 없는 이름입니다. 1장의 <a href="#p24-wc-missing">알리고 넘어간다</a>와 같은 틀이고, 달라진 것은 종료 코드입니다. 같은 명령을 세 번 치고, 마지막에는 파일 자리에
+디렉터리를 줍니다.</p>
+<!--OUT file=out/24/grep4_run.txt lines=65-81 note=grep4_run — data/none.txt 는 없고, data 는 디렉터리다-->
+<div class="note"><b>읽는 법</b> — 첫 실행은 <code class="nb">memo.txt</code> 의 두 줄, <code class="nb">grep: data/none.txt: …</code> 알림, <code class="nb">todo.txt</code> 의 한 줄을 차례로 냈습니다. 한 파일의 실패가
+나머지를 막지 않았습니다. 고른 줄이 셋인데 종료 코드는 2 입니다. <code class="nb">2&gt; /dev/null</code> 을 붙인 실행에서는 알림만 빠졌고, <code class="nb">&gt; /dev/null</code> 을 붙인 실행에서는 알림만 남았습니다.
+세 실행 모두 2 입니다. 알림 끝의 <code class="nb">No such file or directory (os error 2)</code> 는 <a href="#p17-file-missing">이 기계의 운영 체제가 준 글</a>입니다. 마지막 실행은 <code>zig</code> 를 찾습니다.
+디렉터리 <code>data</code> 는 읽지 못해 <code class="nb">Is a directory (os error 21)</code> 알림이 나왔고, <code class="nb">todo.txt</code> 에는 <code>zig</code> 가 없습니다. 고른 줄이 없지만 종료 코드는 1 이 아니라 2
+입니다.</div>
+<div class="note"><b>어느 파일의 줄인가</b> — 첫 실행의 세 줄에는 파일 이름이 없습니다. 알림이 사이에 끼지 않았다면 어디까지가 <code class="nb">memo.txt</code> 의 줄인지 화면만으로는 알 수 없습니다. 줄 앞에 이름을 붙이는 일은
+<a href="#p24-grep-prefix">5단계</a>에서 합니다.</div>
+</article>
+
+<article class="card" id="p24-grep-bad-utf8">
+<h3>글이 아닌 바이트가 하나라도 있으면 그 입력에서는 한 줄도 찾지 않는다 — 이 프로그램이 고른 것</h3>
+<p class="lead"><a href="#p24-grep-run">통째로 읽기로 한 것</a>의 값을 여기서 치릅니다. 17부처럼 <a href="#p17-file-bad-utf8"><code>printf</code> 로 UTF-8 이 될 수 없는 바이트 둘</a>(<code class="nb">\377\376</code>)을
+둘째 줄에 넣은 파일을 만듭니다. 첫째 줄과 셋째 줄은 올바른 글이고 <code>rust</code> 가 들어 있습니다.</p>
+<!--OUT file=out/24/grep4_run.txt lines=82-89 note=grep4_run — bad.bin 을 만들어 파일로, 그리고 표준 입력으로 준다-->
+<div class="note"><b>읽는 법</b> — 첫 실행에서 <code class="nb">bad.bin</code> 의 줄은 하나도 찍히지 않았습니다. <code class="nb">rust 1</code> 도 <code class="nb">rust 3</code> 도 없습니다. 알림의
+<code class="nb">stream did not contain valid UTF-8</code> 은 17부의 그 슬라이드에서 본 표준 라이브러리의 글이고, 운영 체제가 낸 오류가 아니라서 <code class="nb">(os error …)</code> 가 붙지 않았습니다. 그다음 파일
+<code class="nb">todo.txt</code> 의 한 줄은 찍혔고 종료 코드는 2 입니다. 읽지 못한 파일과 똑같이 다뤄졌습니다. 둘째 실행은 같은 파일을 표준 입력에 이었습니다. 알림에 이름이 없습니다. <code class="nb">grep:</code> 뒤에 까닭만 붙이는 것은 <a href="#p24-grep-main"><code>main</code></a> 의 <code>Err</code> 갈래에 있는 <code>eprintln!</code> 이고, 그 갈래는 2 로 끝냅니다. 이 입력에서
+<code>run</code> 이 <code>Err</code> 를 돌려준다는 것은 7단계의 <a href="#p24-grep-test-files">시험</a>이 봅니다.</div>
+<div class="key"><b>1장과 다른 점</b> — 1장의 <code>wc</code> 는 <a href="#p24-wc-bad-bytes">깨진 바이트를 대체 글자로 바꿔 끝까지 셌습니다</a>. 이 <code>grep</code> 은 입력 하나를 통째로 글로 읽지 못하면 그 입력을 읽지 못한
+것으로 칩니다. 고른 줄이 반쯤만 나오는 일은 없지만, 깨진 바이트 앞의 줄도 얻지 못합니다. 1장처럼 바꿔 읽는 길과 17부의 <a href="#p17-file-bad-line">줄마다 읽는 길</a>은
+<a href="#p24-grep-more">더 해 볼 것</a>에 남깁니다.</div>
+</article>
+
+<article class="card" id="p24-grep-exit-test">
+<h3>종료 코드의 앞뒤를 시험으로 적어 둔다 — 읽지 못한 것이 먼저다</h3>
+<p class="lead"><code class="nb">exit_code</code> 를 함수로 떼어 둔 덕에, 파일을 읽지 않고도 네 경우를 다 볼 수 있습니다. 4단계의 시험 모듈에 더한 시험 둘입니다.</p>
+<!--CODE file=ex/24/grep4_run/src/lib.rs lines=353-370 note=grep4_run — 시험 모듈에 더한 시험 둘-->
+<!--OUT file=out/24/grep4_run.txt lines=90-94 note=같은 디렉터리의 마지막 명령-->
+<div class="note"><b>읽는 법</b> — 355번 줄은 고른 줄이 셋이고 읽지 못한 것이 없으면 0 임을, 356번 줄은 고른 줄이 없으면 1 임을 봅니다. 358번과 359번 줄은 읽지 못한 것이 있을 때입니다. 고른 줄이 셋이어도, 없어도 2
+입니다. <a href="#p24-grep-missing">앞에서 본 화면</a>의 첫 실행이 358번 줄의 경우이고 마지막 실행이 359번 줄의 경우입니다. 둘째 시험은 1장의 <a href="#p24-wc-error-test">오류가 값이라서 종류를 묻는 시험</a>과 같은 꼴입니다.
+367번 줄이 이름을, 368번 줄이 종류 <code>NotFound</code> 를, 369번 줄이 <code>Display</code> 가 만든 글이 이름으로 시작하는지를 봅니다. 364번 줄의 <code>else</code> 갈래는 없는 파일이 읽혔을 때만 도는 자리이고,
+시험이 통과한 이 화면에서는 돌지 않았습니다. 화면은 14개 통과입니다. 앞 단계의 열둘에 이 둘이 더해졌습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-row">
+<h3>줄 앞에 붙는 칸은 둘이다 — 이름과 번호, 없는 칸은 콜론까지 빠진다</h3>
+<p class="lead">5단계는 찍는 모양입니다. 파일이 여럿이면 어느 파일의 줄인지, <code class="nb">-n</code> 을 주면 몇째 줄인지를 줄 앞에 붙입니다. 먼저 한 줄의 모양을 만드는 함수입니다. 1장의
+<a href="#p24-wc-row"><code class="nb">format_row</code></a> 처럼 글을 돌려주기만 하고 어디에도 쓰지 않습니다. <code class="nb">lib.rs</code> 에서 <code>search</code> 아래에 더했습니다.</p>
+<!--CODE file=ex/24/grep5_number/src/lib.rs lines=90-102 note=grep5_number — 있는 칸만 콜론으로 잇는다-->
+<!--CODE file=ex/24/grep5_number/src/lib.rs lines=400-410 note=같은 파일의 시험 모듈에 더한 시험-->
+<!--OUT file=out/24/grep5_number.txt lines=40-44 note=같은 디렉터리의 마지막 명령-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 두 상자 모두 <code class="nb">lib.rs</code> 의 것입니다. 이름과 번호는 있을 수도 없을 수도 있어서 둘 다 <code>Option</code> 으로 받습니다. 96번 줄이 그 둘을 튜플로 묶어 네 경우로
+가릅니다. 97번 줄은 둘 다 있을 때, 98번과 99번 줄은 하나만 있을 때, 100번 줄은 둘 다 없을 때이고 그때는 내용을 그대로 돌려줍니다. 시험의 404번 줄이 <code class="nb">a.txt:12:rust</code> 를, 405번 줄이 번호 없는
+<code class="nb">a.txt:rust</code> 를, 406번 줄이 이름 없는 <code class="nb">12:rust</code> 를, 407번 줄이 칸 없는 <code>rust</code> 를 봅니다. 409번 줄은 내용이 빈 글일 때 줄이 <code class="nb">3:</code> 에서 끝남을 봅니다.
+화면은 15개 통과입니다. 앞 단계의 열넷에 이 시험이 더해졌습니다.</div>
+<div class="key"><b>이 프로그램이 정한 것 — 줄의 모양</b> — <code class="nb">이름:번호:내용</code> 입니다. 차례는 늘 이 차례이고, 칸 사이에는 콜론 하나뿐 빈칸이 없습니다. 없는 칸은 콜론과 함께 빠집니다.</div>
+</article>
+
+<article class="card" id="p24-grep-number">
+<h3>-n 이 들어오는 자리 넷 — 상수, 필드, 갈래, 그리고 write_hits</h3>
+<p class="lead">옵션 하나를 더하는 데 손댈 곳입니다. 쓰는 법의 글, <code>Config</code> 의 필드, <code class="nb">parse_args</code> 의 갈래, 그리고 그 옵션의 뜻을 실제로 만드는 곳입니다. 앞의 셋은 한두 줄씩이고,
+뜻은 <code class="nb">write_hits</code> 에 있습니다.</p>
+<!--CODE file=ex/24/grep5_number/src/lib.rs lines=5-5 note=grep5_number — 바뀐 한 줄. 괄호 안에 n 이 늘었다-->
+<!--CODE file=ex/24/grep5_number/src/lib.rs lines=21-22 note=Config 에 더한 필드-->
+<!--CODE file=ex/24/grep5_number/src/lib.rs lines=39-39 note=parse_args 의 match 에 더한 갈래-->
+<!--CODE file=ex/24/grep5_number/src/lib.rs lines=127-144 note=write_hits — 131번 줄이 새 줄이고, 135번부터 141번 줄까지가 앞 단계의 두 줄을 대신한다-->
+<div class="note"><b>읽는 법</b> — 네 상자 모두 5단계의 <code class="nb">lib.rs</code> 입니다. 5번 줄은 <a href="#p24-grep-exit">4단계의 화면</a>에서 <code class="nb">[-iv]</code> 였던 글입니다. 22번 줄의 필드와 39번 줄의 갈래가
+생겨서, 이 단계부터 <code class="nb">-n</code> 은 모르는 옵션이 아닙니다. <code class="nb">write_hits</code> 는 131번 줄에서 이름 칸을 매개변수로 받습니다. 135번 줄은 4단계에서 <code>_</code> 로 버리던 번호를 이제
+받습니다. 136번부터 140번 줄까지가 <code class="nb">-n</code> 의 뜻입니다. 켜져 있으면 번호를 <code>Some</code> 에 넣고, 꺼져 있으면 <code>None</code> 으로 번호 칸을 비웁니다. 141번 줄이 이름과 번호와 줄을
+<a href="#p24-grep-row"><code class="nb">format_row</code></a> 에 넘겨 만든 한 줄을 씁니다. 4단계의 그 자리는 줄을 그대로 쓰는 <code class="nb">writeln!(out, "{line}")?</code> 였습니다.</div>
+<div class="note"><b>고치지 않은 시험</b> — 2단계의 <a href="#p24-grep-config-test">시험</a>은 <code>Config</code> 를 통째로 견줍니다. 필드가 하나 늘었는데도 그 시험은 한 글자도 바뀌지 않았고,
+<a href="#p24-grep-row">앞 슬라이드의 화면</a>에서 통과한 열다섯 가운데 하나입니다. 그 시험의 <code class="nb">..Config::default()</code> 가 새 필드를 채웁니다.</div>
+</article>
+
+<article class="card" id="p24-grep-prefix">
+<h3>이름을 둘 이상 받았을 때만 줄 앞에 이름을 붙인다</h3>
+<p class="lead">이름 칸을 채울지는 <code>run</code> 이 정합니다. 파일을 하나만 주었으면 어느 파일의 줄인지 물을 것이 없으므로 붙이지 않습니다. <code>run</code> 의 뒤쪽에서 석 줄을 더하고 두 군데를
+바꿨습니다.</p>
+<!--CODE file=ex/24/grep5_number/src/lib.rs lines=175-195 note=grep5_number — run 의 뒤쪽. 181번 · 182번 · 184번 줄이 새 줄이고, 179번 줄과 186번부터 188번 줄까지가 바뀌었다-->
+<!--OUT file=out/24/grep5_number.txt lines=1-22 note=파일 둘, 하나, 하나가 없는 둘, 그리고 -n-->
+<div class="note"><b>읽는 법</b> — 182번 줄이 받은 이름이 둘 이상인지를 한 번 정해 두고, 184번 줄이 파일마다 이름 칸을 만듭니다. 179번 줄의 표준 입력에는 늘 <code>None</code> 입니다. 186번부터 188번 줄까지는 4단계의 한 줄이
+인자 하나가 늘어 길어진 것입니다. <code class="nb">cargo build -q</code> 는 아무것도 찍지 않았습니다. 첫 실행은 파일이 둘이라 세 줄 모두 <code class="nb">data/memo.txt:</code> 나 <code class="nb">data/todo.txt:</code> 로 시작합니다. 4단계에서
+<a href="#p24-grep-missing">가릴 수 없던 것</a>이 가려집니다. 파일을 하나만 준 둘째 실행에는 이름이 없습니다. 셋째 실행은 이름을 둘 주었고 하나는 없는 파일입니다. 읽은 파일은 하나뿐인데 줄에 이름이
+붙었습니다. 182번 줄이 보는 것이 읽은 파일의 수가 아니라 받은 이름의 수이기 때문입니다. 알림이 나왔고 종료 코드는 2 입니다. <code class="nb">-n</code> 을 준 넷째 실행은 줄 앞에 번호 2 와 4 를 붙였고, 파일을 둘
+준 마지막 실행은 이름, 번호, 줄의 차례입니다. <code class="nb">-i</code> 로 고른 다섯 줄이고, 번호는 파일마다 1 부터 다시 셉니다.</div>
+<div class="note"><b>1장의 합계 줄과 같은 물음</b> — 1장의 <code>wc</code> 도 <a href="#p24-wc-total">합계 줄을 낼지</a>를 센 파일의 수가 아니라 받은 이름의 수로 정했습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-number-out">
+<h3>번호는 고른 차례가 아니라 원래 줄의 번호다 — 빈 패턴에 -n 을 주면 모든 줄에 번호가 붙는다</h3>
+<p class="lead">같은 단계의 실행 파일로 <code class="nb">-n</code> 을 세 가지로 더 봅니다. 뒤집어서, 표준 입력에서, 그리고 빈 패턴으로입니다.</p>
+<!--OUT file=out/24/grep5_number.txt lines=23-32 note=grep5_number — -vn, 표준 입력, 빈 패턴-->
+<div class="note"><b>읽는 법</b> — <code class="nb">-vn</code> 은 <code>rust</code> 가 없는 세 줄을 찍었고 번호는 1 · 3 · 5 입니다. 고른 줄에 차례로 1 · 2 · 3 을 매긴 것이 아니라 파일에서의 번호입니다. 빈 줄은
+<code class="nb">3:</code> 에서 끝났습니다. <a href="#p24-grep-row"><code class="nb">format_row</code> 의 시험</a>이 빈 내용으로 본 모양입니다. 표준 입력에서 찾은 둘째 실행은 <code class="nb">2:Rust</code> 입니다. 번호는 붙고 이름 칸은 없습니다.
+<code class="nb">-n</code> 과 <code class="nb">-i</code> 를 따로 적었습니다. 셋째 실행은 빈 패턴입니다. 모든 줄이 골라지므로 <code class="nb">data/todo.txt</code> 의 세 줄이 번호와 함께 다 나왔습니다. 줄바꿈 없이 끝나는
+<code class="nb">learn RUST</code> 도 번호 3 의 한 줄입니다.</div>
+</article>
+
+<article class="card" id="p24-grep-edges">
+<h3>시험으로 정해 둔 가장자리 둘을 실행 파일로 본다 — 줄 끝의 \r\n, 그리고 É</h3>
+<p class="lead">3단계에서 <a href="#p24-grep-search-test">줄의 정의</a>와 <a href="#p24-grep-search-flags"><code class="nb">-i</code> 의 정의</a>를 시험으로 적었습니다. 그 둘이 화면에서는 어떻게 보이는지를
+5단계의 실행 파일로 봅니다. 줄 끝이 <code class="nb">\r\n</code> 인 입력과, ASCII 밖의 대문자가 든 입력입니다.</p>
+<!--OUT file=out/24/grep5_number.txt lines=33-39 note=grep5_number — \r\n 으로 끝나는 줄, 그리고 Cafe · CAFÉ · café-->
+<div class="note"><b>읽는 법</b> — 첫 실행의 입력은 세 줄입니다. 앞의 두 줄은 <code class="nb">\r\n</code> 으로 끝나고 마지막 줄은 줄바꿈이 없습니다. <a href="#p24-grep-stdin">앞에서 쓴</a> <code class="nb">od -An -c</code> 로
+출력의 바이트를 봤습니다. <code class="nb">1:a rust</code> 뒤에 <code class="nb">\r</code> 없이 <code class="nb">\n</code> 이 왔고, 번호는 1 과 3 입니다. 입력의 <code class="nb">\r\n</code> 은 찍힌 줄에서
+<code class="nb">\n</code> 하나가 됐습니다. <code>od</code> 는 한 줄에 열여섯 바이트씩 적어서 둘째 줄의 끝이 다음 줄로 넘어갔습니다. 나머지 두 실행은 같은 세 줄에서 <code class="nb">-in</code> 으로 찾습니다. 패턴
+<code>cafe</code> 에는 번호 1 의 <code>Cafe</code> 만 나왔습니다. <code>CAFÉ</code> 와 <code>café</code> 의 마지막 글자는 <code>e</code> 가 아닙니다. 패턴 <code>café</code> 에는 번호 3 의 <code>café</code> 만
+나왔습니다. <code class="nb">-i</code> 를 주었는데도 <code>CAFÉ</code> 는 빠졌습니다.</div>
+<div class="warn"><b>줄을 그대로 옮기는 것이 아니다</b> — 이 프로그램이 찍는 것은 <code>lines()</code> 가 준 조각에 <code class="nb">\n</code> 을 붙인 것입니다. 줄 끝이 <code class="nb">\r\n</code> 인 파일에서 고른 줄을 모아도
+원래 파일의 바이트와 같지 않습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-count">
+<h3>-c 는 줄 대신 수를 쓴다 — 같은 네 자리에 줄을 더한다</h3>
+<p class="lead">6단계는 마지막 옵션입니다. <code class="nb">-c</code> 를 주면 고른 줄을 찍지 않고, 입력마다 고른 줄의 수 한 줄을 씁니다. 손댈 곳은 <a href="#p24-grep-number">앞 단계의 넷</a>과 같습니다.</p>
+<!--CODE file=ex/24/grep6_count/src/lib.rs lines=5-5 note=grep6_count — 바뀐 한 줄. 괄호 안에 c 가 늘었다-->
+<!--CODE file=ex/24/grep6_count/src/lib.rs lines=23-24 note=Config 에 더한 필드-->
+<!--CODE file=ex/24/grep6_count/src/lib.rs lines=42-42 note=parse_args 의 match 에 더한 갈래-->
+<!--CODE file=ex/24/grep6_count/src/lib.rs lines=130-153 note=write_hits — 138번부터 143번 줄까지가 새 줄-->
+<div class="note"><b>읽는 법</b> — 네 상자 모두 6단계의 <code class="nb">lib.rs</code> 입니다. <code class="nb">write_hits</code> 에서 바뀐 줄은 없고 여섯 줄이 끼어들었습니다. 137번 줄의 <code>search</code> 는 앞 단계 그대로
+줄을 고릅니다. 138번 줄이 <code class="nb">-c</code> 를 보고, 켜져 있으면 140번 줄이 고른 줄의 수를 글로 바꿉니다. 141번 줄은 그 글을 내용 자리에 넣어 <code class="nb">format_row</code> 를 부릅니다. 이름 칸은 받은
+그대로 넘기고 번호 칸은 <code>None</code> 입니다. 142번 줄이 거기서 돌아가므로 144번 줄부터의 반복문은 돌지 않습니다. 돌려주는 값은 두 길 모두 고른 줄의 수입니다.</div>
+<div class="key"><b>이 프로그램이 정한 것 — <code class="nb">-c</code> 와 다른 옵션</b> — 세는 것은 <code>search</code> 가 고른 줄이므로 <code class="nb">-i</code> 와 <code class="nb">-v</code> 는 그대로 듣습니다. 번호를 붙일 줄이 없으므로
+<code class="nb">-n</code> 은 아무 일도 하지 않습니다. 종료 코드는 찍은 것이 아니라 고른 줄의 수로 정합니다. 다음 두 슬라이드가 화면과 시험으로 봅니다.</div>
+</article>
+
+<article class="card" id="p24-grep-count-out">
+<h3>세는 것은 패턴이 나온 횟수가 아니라 고른 줄의 수다</h3>
+<p class="lead">6단계의 실행 파일입니다. 파일 하나에, 둘에, 다른 옵션과 함께, 표준 입력에, 그리고 고른 줄이 없을 때와 읽지 못한 파일이 있을 때입니다.</p>
+<!--OUT file=out/24/grep6_count.txt lines=1-23 note=grep6_count — 여덟 가지로 부른다-->
+<div class="note"><b>읽는 법</b> — <code class="nb">cargo build -q</code> 는 아무것도 찍지 않았습니다. 첫 실행은 2 입니다. <code class="nb">data/memo.txt</code> 에서 <code>rust</code> 가 든 줄은 <a href="#p24-grep-prefix">번호 2 와 4 의 둘</a>이고, 그 가운데
+<code class="nb">trust 안에도 rust 가 있다</code> 에는 <code>rust</code> 가 두 번 나오지만 한 줄로 셉니다. 파일을 둘 주면 줄을 찍을 때와 같은 규칙으로 이름이 붙어 <code class="nb">data/memo.txt:2</code> 와
+<code class="nb">data/todo.txt:1</code> 입니다. <code class="nb">-ci</code> 는 3 과 2 로 늘었습니다. <code class="nb">-vc</code> 의 3 은 <code>rust</code> 가 없는 줄의 수입니다. 다섯 줄 가운데 둘을 뺀 나머지입니다.
+<code class="nb">-nc</code> 는 첫 실행과 같은 2 뿐이고 번호 칸은 없습니다. 표준 입력에서는 이름 없이 1 입니다. <code>zig</code> 를 센 실행은 두 파일 모두 0 을 찍었는데 종료 코드는 1 입니다. 찍은 줄은 있어도 고른 줄이
+없기 때문입니다. 마지막 실행은 없는 파일의 알림 다음에 <code class="nb">data/memo.txt:2</code> 를 찍고 2 로 끝났습니다. 읽지 못한 파일에는 수를 쓰지 않습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-count-test">
+<h3>-c 의 시험 — write_hits 를 벡터에 쓰게 해서 본다</h3>
+<p class="lead"><code class="nb">write_hits</code> 는 <code>pub</code> 이 아니지만, 13부에서 본 대로 <a href="#p13-test-mod">같은 파일의 시험 모듈은 안쪽 함수를 부를 수 있습니다</a>. 쓸 곳 자리에 17부의
+<a href="#p17-out-write-vec"><code class="nb">Vec&lt;u8&gt;</code></a> 를 넣어 쓴 글과 돌려준 수를 함께 봅니다. 6단계의 시험 모듈에 더한 도우미와 시험입니다.</p>
+<!--CODE file=ex/24/grep6_count/src/lib.rs lines=421-451 note=grep6_count — 시험 모듈에 더한 것-->
+<!--OUT file=out/24/grep6_count.txt lines=24-28 note=같은 디렉터리의 마지막 명령-->
+<div class="note"><b>읽는 법</b> — 도우미 <code>hits</code> 는 3단계의 <a href="#p24-grep-search-test"><code>TEXT</code></a> 네 줄을 <code class="nb">write_hits</code> 에 넘기고, 벡터에 쓰인 글과 돌려준 수를 짝으로 줍니다.
+434번 줄은 <code class="nb">-c</code> 로 <code>trust</code> 를 찾습니다. 그 글이 든 줄은 하나라서 쓴 글이 <code class="nb">"1\n"</code> 이고 돌려준 수도 1 입니다. 435번 줄은 이름을 주면 <code class="nb">a.txt:1</code> 이 됨을
+봅니다. 441번 줄은 <code class="nb">-n</code> 을 함께 켜도 쓴 글이 그대로임을 봅니다. 443번 줄에서 <code class="nb">-v</code> 까지 켜면 444번 줄의 수는 <code>trust</code> 가 없는 줄의 수 3 입니다. 450번 줄은 고른 줄이
+없을 때도 <code class="nb">"0\n"</code> 을 쓰고, 돌려주는 수가 0 임을 봅니다. <code>run</code> 은 이 수를 더해 <a href="#p24-grep-read"><code class="nb">exit_code</code></a> 에 넘깁니다. 화면은 16개 통과입니다. 앞 단계의
+열다섯에 이 시험이 더해졌습니다.</div>
+<div class="note"><b>437번부터 443번 줄까지 — 앞의 값을 가져다 쓴다</b> — <code>cn</code> 은 <code>c</code> 에서, <code>cv</code> 는 <code>cn</code> 에서 한 필드만 바꾼 값입니다. 7부에서 본 대로
+<a href="#p07-struct-update-moved">갱신 문법은 나머지 필드를 옮겨 갑니다</a>. 그래서 <code>c</code> 는 439번 줄 뒤로, <code>cn</code> 은 443번 줄 뒤로 쓰지 않았습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-test-run">
+<h3>run 을 프로세스 없이 부른다 — 종료 코드와 두 출력을 한 번에 본다</h3>
+<p class="lead">7단계부터는 시험만 더합니다. 1장의 <a href="#p24-wc-test-run"><code class="nb">tests/run.rs</code></a> 와 같은 방법입니다. 표준 입력 자리에 <code class="nb">&amp;[u8]</code> 를, 쓸 곳 둘의 자리에
+<code class="nb">Vec&lt;u8&gt;</code> 를 넣고 <code class="nb">grep::run</code> 을 부릅니다. 이 프로그램은 종료 코드가 답의 일부라서, 시험마다 코드와 출력을 함께 견줍니다.</p>
+<!--CODE file=ex/24/grep7_tests/tests/run.rs lines=1-15 note=grep7_tests — 새 파일 tests/run.rs 의 머리와 도우미-->
+<!--CODE file=ex/24/grep7_tests/tests/run.rs lines=17-42 note=같은 파일의 시험 셋-->
+<!--OUT file=out/24/grep7_tests.txt lines=1-5 note=tests/run.rs 만 골라 돌린다-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 두 상자 모두 <code class="nb">tests/run.rs</code> 의 것입니다. 도우미 <code class="nb">run_grep</code> 은 1장의 <code class="nb">run_wc</code> 와 부르는 함수만 다릅니다. 1번 줄의
+<code>use</code> 는 다음 두 슬라이드의 시험이 씁니다. 20번 줄은 인자로 <code class="nb">-n</code> 과 패턴 <code>b</code> 를, 표준 입력으로 줄바꿈 없이 끝나는 세 줄을 줍니다. 21번 줄이 기대하는 것은 종료 코드
+0 과 <code class="nb">"1:ab\n3:b\n"</code> 입니다. 이름 칸이 없고, 입력에서 줄바꿈이 없던 마지막 줄도 <code class="nb">\n</code> 으로 끝납니다. 27번과 28번 줄은 고른 줄이 없을 때입니다. 종료 코드 1 에 두 출력이 다
+비었습니다. 30번과 31번 줄은 <code class="nb">-c</code> 가 <code class="nb">"0\n"</code> 을 써도 1 임을, 33번과 34번 줄은 빈 패턴이라도 입력이 비었으면 1 임을 봅니다. 39번 줄은 옵션만 주고 패턴을 뺍니다. 40번 줄이
+종료 코드 2 와 빈 표준 출력을, 41번 줄이 표준 오류의 두 줄을 봅니다. 화면은 7개 통과입니다. 나머지 넷은 다음 두 슬라이드에 있습니다.</div>
+<div class="note"><b>unwrap 이 있는 곳</b> — 11번 줄의 <code>unwrap</code> 은 <code>run</code> 이 <code>Err</code> 를 돌려주면 패닉해서 시험을 실패로 만듭니다. 1장에서 본 대로 시험에서는 예상 밖의 값이 곧 실패여야 합니다.
+<code class="nb">src/</code> 에서 <code>unwrap</code> 을 쓰는 곳은 이 장에서도 시험 모듈뿐입니다.</div>
+</article>
+
+<article class="card" id="p24-grep-test-files">
+<h3>패키지에 든 입력 파일로 시험한다 — 고른 줄이 있어도 2, 글이 아닌 표준 입력은 Err</h3>
+<p class="lead">같은 <code class="nb">tests/run.rs</code> 의 다음 시험 셋입니다. 앞의 둘은 <code class="nb">data/</code> 의 파일을 실제로 읽고, 셋째는 표준 입력 자리에 글이 아닌 바이트를 넣습니다.</p>
+<!--CODE file=ex/24/grep7_tests/tests/run.rs lines=44-81 note=grep7_tests — 없는 파일을 끼워서, 같은 파일을 두 번, 그리고 깨진 표준 입력-->
+<!--OUT file=out/24/grep7_tests.txt lines=3-5 note=앞 슬라이드와 같은 실행-->
+<div class="note"><b>읽는 법</b> — 46번과 47번 줄의 인자는 패턴 <code>rust</code> 와 이름 셋이고 가운데가 없는 파일입니다. 50번 줄이 종료 코드 2 를 봅니다. 그런데 57번 줄이 견주는 표준 출력에는 고른 줄 셋이 다 있습니다.
+<code class="nb">todo.txt</code> 를 먼저 주었으므로 그 줄이 먼저이고, 이름을 둘 이상 받았으므로 줄마다 이름이 붙었습니다. 59번 줄은 1장처럼 알림이 <code class="nb">grep: data/none.txt: </code> 로 시작하는지만 봅니다. 그 뒤는
+<a href="#p24-wc-test-files">운영 체제가 정하는 글</a>입니다. 64번 줄은 같은 파일을 두 번 줍니다. 66번 줄의 기대대로 두 번 찾아 두 줄을 씁니다. 이름이 같아도 받은 이름은 둘이라 이름 칸이 붙습니다. 76번 줄은 표준 입력 자리에
+둘째 줄이 깨진 바이트를 넣습니다. <code class="nb">&amp;b"…"[..]</code> 는 1장에서 본 <a href="#p24-wc-test-array">바이트 문자열을 슬라이스로 넘기는 모양</a>입니다. 78번 줄은 <code>run</code> 이 <code>Err</code> 를
+돌려줬고 그 종류가 <code>InvalidData</code> 임을, 80번 줄은 깨진 바이트 앞의 줄 <code>a</code> 도 쓰이지 않았고 알림도 <code>run</code> 이 쓰지 않았음을 봅니다. <a href="#p24-grep-bad-utf8">글이 아닌 표준 입력의 화면</a>에서 이름
+없는 알림을 찍은 것이 <code>main</code> 이었다는 것과 맞습니다.</div>
+<div class="note"><b>상대 경로</b> — 이 시험들은 <code class="nb">data/…</code> 로 시작하는 이름을 그대로 씁니다. 1장의 그 시험처럼, 이 화면에서는 <code class="nb">cargo test</code> 를 패키지의 뿌리에서 쳤고 시험이 통과했으니 두 파일이
+그 이름으로 읽혔습니다. 이름은 출력의 이름 칸에 그대로 찍히므로 바꿔 적지 않았습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-test-write">
+<h3>쓰기가 실패하면 run 은 Err 를 돌려준다 — 늘 실패하는 쓸 곳으로 본다</h3>
+<p class="lead"><code>run</code> 안의 <code>writeln!</code> 뒤에는 모두 <code>?</code> 가 붙어 있습니다. 그 길을 실행 파일로 돌리려면 표준 출력이 쓰기를 거절해야 하는데, 그런 화면은 이 책이 만들지 않았습니다. 대신 17부의
+<a href="#p17-write-buf-drop-fail">늘 실패하는 <code>Full</code></a> 처럼 <code>Write</code> 를 직접 구현한 타입을 쓸 곳 자리에 넣습니다. 1장이 <a href="#p24-wc-more">과제로 남긴 시험</a>입니다.</p>
+<!--CODE file=ex/24/grep7_tests/tests/run.rs lines=83-110 note=grep7_tests — 같은 파일의 마지막 시험-->
+<!--OUT file=out/24/grep7_tests.txt lines=3-5 note=같은 실행 — 일곱 가운데 하나가 이 시험이다-->
+<div class="note"><b>읽는 법</b> — 84번 줄의 <code>Broken</code> 은 필드가 없는 구조체입니다. 86번부터 94번 줄까지가 <code>Write</code> 의 두 메서드입니다. 88번 줄의 <code>write</code> 는 무엇을 받든
+<a href="#p17-write-buf-drop-fail"><code class="nb">io::Error::other</code></a> 로 만든 오류를 돌려줍니다. 101번 줄은 표준 출력 자리에 <code>Broken</code> 을 넣고, 맞는 줄이 하나 있는 입력으로 <code>run</code> 을 부릅니다.
+102번 줄이 <code>Err</code> 를 꺼내 그 글이 88번 줄의 <code class="nb">닫힌 출력</code> 임을 봅니다. 쓰기의 실패가 <code>?</code> 를 타고 <code>run</code> 밖까지 나왔습니다. 105번 줄은 같은 <code>Broken</code> 에 맞는 줄이 없는
+패턴을 줍니다. 106번 줄에서 결과는 <code>Err</code> 가 아니라 1 입니다. 쓸 줄이 없으면 쓰기를 부르지 않습니다. 108번 줄은 반대로 알림 자리에 <code>Broken</code> 을 넣고 인자를 주지 않습니다. 패턴이 없다는 알림을 쓰다가
+실패했고, 109번 줄에서 그것도 <code>Err</code> 로 돌아왔습니다.</div>
+<div class="note"><b>그다음은 main</b> — <code>run</code> 이 <code>Err</code> 를 돌려주면 <a href="#p24-grep-main"><code>main</code></a> 이 알리고 2 로 끝낸다는 것은 <a href="#p24-grep-bad-utf8">글이 아닌 표준 입력의 화면</a>에서
+봤습니다. 이 시험은 쓰기의 실패도 같은 <code>Err</code> 로 나온다는 데까지를 봅니다.</div>
+</article>
+
+<article class="card" id="p24-grep-test-cli">
+<h3>실행 파일을 띄워 종료 코드 셋을 본다 — tests/cli.rs</h3>
+<p class="lead"><code class="nb">tests/run.rs</code> 는 <code class="nb">main.rs</code> 를 거치지 않습니다. <code>run</code> 이 돌려준 수가 정말 종료 코드가 되는지는 1장의
+<a href="#p24-wc-test-cli"><code class="nb">tests/cli.rs</code></a> 처럼 실행 파일을 띄워야 보입니다. 8단계에 더한 파일이고, 종료 코드 0 · 1 · 2 를 하나씩, 2 는 두 가지로 봅니다.</p>
+<!--CODE file=ex/24/grep8_final/tests/cli.rs note=grep8_final — 실행 파일을 네 번 띄운다-->
+<!--OUT file=out/24/grep8_final.txt lines=46-50 note=tests/cli.rs 만 골라 돌린다-->
+<div class="note"><b>읽는 법</b> — 4번 줄의 <code>EXE</code> 가 실행 파일의 경로입니다. 도우미 <code>launch</code> 는 인자를 주어 띄우고 종료 코드와 두 출력을 글로 돌려줍니다. 종료 코드는 18부에서 본 대로 <a href="#p18-cmd-status"><code>code()</code> 가 <code>Option</code> 에 담아</a> 줍니다. 16번 줄은 있는 낱말을 찾습니다. 17번 줄이 0 과 <code class="nb">"1:milk\n"</code> 을, 18번 줄이 빈 표준 오류를 봅니다. 23번 줄은 없는 낱말입니다.
+24번 줄이 1 과 빈 출력 둘을 봅니다. 29번 줄은 없는 파일을 끼웁니다. 31번 줄에서 고른 줄 하나가 이름과 함께 나왔는데 종료 코드는 2 이고, 32번 줄이 알림의 앞머리를 봅니다. 37번 줄은 모르는 옵션입니다. 38번 줄이 2 와 빈 표준
+출력을, 39번 줄이 쓰는 법까지 두 줄인 표준 오류를 봅니다. 화면은 4개 통과입니다.</div>
+<div class="note"><b>띄운 프로세스의 표준 입력</b> — 네 시험 가운데 셋은 파일 이름을 주어 띄우고, 넷째는 인자를 읽다가 끝납니다. 넷 다 띄운 <code>grep</code> 이 표준 입력을 읽지 않는 경우입니다. 표준 입력에 글을 먹이는 시험은
+<a href="#p24-grep-more">더 해 볼 것</a>에 남깁니다.</div>
+</article>
+
+<article class="card" id="p24-grep-test-golden">
+<h3>이름과 번호가 다 붙은 출력을 기준 파일과 통째로 견준다 — tests/golden.rs</h3>
+<p class="lead">줄의 모양을 건드리면 출력의 모든 줄이 달라집니다. 1장의 <a href="#p24-wc-test-golden"><code class="nb">tests/golden.rs</code></a> 처럼 기준 파일 하나를 둡니다. 두 파일에서 <code class="nb">-in</code> 으로
+<code>rust</code> 를 찾은 출력입니다.</p>
+<!--CODE file=ex/24/grep8_final/tests/golden.rs note=grep8_final — run 의 출력을 기준 파일과 견준다-->
+<!--OUT file=out/24/grep8_final.txt lines=40-45 note=기준 파일 tests/golden/in_rust.txt-->
+<!--OUT file=out/24/grep8_final.txt lines=52-56 note=tests/golden.rs 만 골라 돌린다-->
+<div class="note"><b>읽는 법</b> — 1장의 그 시험과 같은 짜임이고, 5번 줄의 파일 이름과 10번 줄의 인자가 이 프로그램의 것입니다. 4번과 5번 줄이 기준 파일의 경로를 만들고, 17번 줄이 <code>run</code> 을 부릅니다. 18번과 19번 줄이 종료 코드 0 과 빈 표준
+오류를 보고, 21번 줄이 20번 줄에서 읽어 온 기준 파일과 표준 출력 전체를 견줍니다. <code>cat</code> 이 보인 다섯 줄이 기준 파일입니다. <a href="#p24-grep-goal">다 만들면 이렇게 돈다</a>에서 같은 인자로 돌린 화면과 같은 다섯
+줄입니다. 화면은 1개 통과입니다.</div>
+<div class="note"><b>이 기준 파일에 든 규칙</b> — 다섯 줄에 <a href="#p24-grep-row">줄의 모양</a>, <a href="#p24-grep-prefix">이름 칸의 규칙</a>, <code class="nb">-i</code> 가 고르는 줄, 파일마다 다시 세는 번호가 한꺼번에
+들어 있습니다. 그 가운데 하나라도 바꾸면 이 시험이 깨집니다.</div>
+</article>
+
+<article class="card" id="p24-grep-test-all">
+<h3>cargo test 한 번에 여섯 묶음, 시험 스물여덟</h3>
+<p class="lead">옵션 없이 <code class="nb">cargo test -q</code> 를 치면 13부에서 본 대로 <a href="#p13-cargo-test">묶음이 차례로</a> 돕니다. 이 패키지에도 1장처럼 라이브러리, 실행 파일,
+<code class="nb">tests/</code> 의 파일 셋, 문서 시험까지 여섯 묶음이 있습니다.</p>
+<!--OUT file=out/24/grep8_final.txt lines=58-87 note=grep8_final — 모든 시험-->
+<div class="note"><b>읽는 법</b> — <code class="nb">-q</code> 를 붙인 화면에는 묶음의 이름이 없어서, 1장에서 한 대로 <a href="#p24-wc-test-all">13부의 차례와 시험의 수</a>로 읽습니다. 첫 묶음의 16 은 6단계에서
+<code class="nb">lib.rs</code> 의 단위 시험만 돌렸을 때의 <a href="#p24-grep-count-test">16개 통과</a>와 같은 수입니다. 둘째 묶음의 0 은 시험이 없는 <code class="nb">main.rs</code> 의 자리입니다. 그다음 4 · 1 · 7 은 파일마다 따로
+돌렸을 때의 <a href="#p24-grep-test-cli"><code class="nb">cli.rs</code></a> · <a href="#p24-grep-test-golden"><code class="nb">golden.rs</code></a> · <a href="#p24-grep-test-run"><code class="nb">run.rs</code></a> 의 수와
+같습니다. 마지막 0 은 문서 시험의 자리입니다. 통과한 시험은 모두 28 이고 실패는 없습니다.</div>
+<div class="note"><b>시험이 맡은 층</b> — 단위 시험은 정의를 봅니다. 맞는다는 것, 줄, <code class="nb">-i</code> 와 <code class="nb">-v</code>, 인자를 읽는 규칙, 줄의 모양, <code class="nb">-c</code>, 종료 코드의 앞뒤입니다.
+<code class="nb">tests/run.rs</code> 는 그것들을 엮은 <code>run</code> 을 종료 코드까지, <code class="nb">tests/golden.rs</code> 는 출력 전체의 모양을, <code class="nb">tests/cli.rs</code> 는 실행 파일을 봅니다.</div>
+</article>
+
+<article class="card" id="p24-grep-rules">
+<h3>이 프로그램이 정한 것 한눈에</h3>
+<p class="lead">이 장에서 "이 프로그램은 이렇게 한다" 고 정한 것을 모았습니다. 오른쪽 칸의 링크가 그것을 화면이나 시험으로 보인 슬라이드입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>무엇</th><th>정한 것</th><th>보인 곳</th></tr>
+<tr><td>맞는다</td><td>줄 안에 패턴이 글자 그대로 있다. 정규식은 받지 않는다</td><td><a href="#p24-grep-match-test">시험</a></td></tr>
+<tr><td>빈 패턴</td><td>모든 줄에 맞는다</td><td><a href="#p24-grep-match-test">시험</a> · <a href="#p24-grep-pattern">실행</a></td></tr>
+<tr><td>줄</td><td><code class="nb">\n</code> 이나 <code class="nb">\r\n</code> 에서 끝나고 그 줄바꿈은 줄에 들지 않는다. 마지막 조각은 줄바꿈이 없어도 한 줄이다</td><td><a href="#p24-grep-search-test">시험</a></td></tr>
+<tr><td>찍는 줄</td><td><code class="nb">이름:번호:내용</code> 에 <code class="nb">\n</code>. 없는 칸은 콜론까지 빠진다. 입력의 <code class="nb">\r\n</code> 은 남지 않는다</td><td><a href="#p24-grep-row">format_row</a> · <a href="#p24-grep-stdin">마지막 줄</a> · <a href="#p24-grep-edges">\r\n</a></td></tr>
+<tr><td><code class="nb">-i</code></td><td>양쪽의 ASCII 대문자 A 부터 Z 까지만 소문자로 바꿔 견준다</td><td><a href="#p24-grep-search-flags">시험</a> · <a href="#p24-grep-edges">É</a></td></tr>
+<tr><td><code class="nb">-v</code></td><td>맞지 않는 줄을 고른다. <code class="nb">-i</code> 를 먼저 따지고 그 답을 뒤집는다</td><td><a href="#p24-grep-search-flags">시험</a> · <a href="#p24-grep-run-out">실행</a></td></tr>
+<tr><td><code class="nb">-n</code></td><td>원래 글에서 1 부터 센 줄 번호. 파일마다 다시 센다</td><td><a href="#p24-grep-prefix">실행</a> · <a href="#p24-grep-number-out">-vn</a></td></tr>
+<tr><td><code class="nb">-c</code></td><td>입력마다 고른 줄의 수 한 줄. <code class="nb">-i</code> 와 <code class="nb">-v</code> 는 듣고 <code class="nb">-n</code> 은 아무 일도 하지 않는다</td><td><a href="#p24-grep-count-out">실행</a> · <a href="#p24-grep-count-test">시험</a></td></tr>
+<tr><td>이름 칸</td><td>이름을 둘 이상 받았을 때만 붙인다. 표준 입력에는 없다</td><td><a href="#p24-grep-prefix">실행</a> · <a href="#p24-grep-test-files">같은 파일 두 번</a></td></tr>
+<tr><td>옵션 적기</td><td>어디에 와도, 붙여 써도, 거듭 써도 된다. <code class="nb">--</code> 뒤와 <code class="nb">-</code> 하나는 옵션이 아니다</td><td><a href="#p24-grep-config-test">시험 ①</a> · <a href="#p24-grep-config-dash">시험 ②</a></td></tr>
+<tr><td>패턴 자리</td><td>옵션이 아닌 첫 인자. 없으면 잘못 부른 것이다</td><td><a href="#p24-grep-config-dash">시험 ②</a> · <a href="#p24-grep-exit">실행</a></td></tr>
+<tr><td>읽는 방식</td><td>입력 하나를 통째로 글로 읽는다. UTF-8 이 아닌 바이트가 있으면 그 입력은 읽지 못한 것이다</td><td><a href="#p24-grep-bad-utf8">bad.bin</a></td></tr>
+<tr><td>읽지 못한 파일</td><td>표준 오류에 <code class="nb">grep: 이름: 까닭</code>, 다음 파일로 간다</td><td><a href="#p24-grep-missing">알리고 넘어간다</a></td></tr>
+<tr><td>읽거나 쓰지 못한 표준 입출력</td><td><code>run</code> 이 <code>Err</code> 를 돌려준다. <code>main</code> 은 <code>Err</code> 를 받으면 이름 없이 알리고 2 로 끝낸다</td><td><a href="#p24-grep-bad-utf8">표준 입력</a> · <a href="#p24-grep-test-write">쓰기</a></td></tr>
+<tr><td>종료 코드</td><td>0 고른 줄이 있다 · 1 고른 줄이 없다 · 2 잘못 불렀거나 읽지 못한 것이 있다. 2 가 먼저다</td><td><a href="#p24-grep-exit">실행</a> · <a href="#p24-grep-exit-test">시험</a> · <a href="#p24-grep-test-cli">cli.rs</a></td></tr>
+<tr><td>받지 못하는 것</td><td>UTF-8 이 아닌 인자 — 1장의 <code>wc</code> 와 같은 <code class="nb">env::args()</code> 를 쓴다</td><td><a href="#p24-wc-args-bad">1장의 패닉한 화면</a></td></tr>
+</table>
+</div>
+<p class="cap">가운데 칸은 이 장의 <code>grep</code> 이 하는 일이고, 다른 기계의 <code>grep</code> 이 어떻게 하는지에 대한 말이 아닙니다. 마지막 줄만은 이 장의 화면이 아니라 1장의 화면을 가리킵니다.
+이 장은 그 실행을 싣지 않았습니다.</p>
+</article>
+
+<article class="card" id="p24-grep-summary">
+<h3>무엇이 어디에 있나 — 마지막 단계의 패키지</h3>
+<p class="lead">마지막 단계 <code class="nb">grep8_final</code> 의 파일과 그 안에 든 것입니다. 오른쪽 칸의 링크가 그것을 만든 슬라이드입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>파일</th><th>든 것</th><th>만든 곳</th></tr>
+<tr><td><code class="nb">Cargo.toml</code></td><td>패키지 이름 <code>grep</code>, 의존성 없음</td><td><a href="#p24-grep-match">1단계</a></td></tr>
+<tr><td><code class="nb">src/lib.rs</code></td><td><code class="nb">is_match</code></td><td><a href="#p24-grep-match">1단계</a></td></tr>
+<tr><td><code class="nb">src/lib.rs</code></td><td><code>USAGE</code>, <code>Config</code>, <code class="nb">parse_args</code></td><td><a href="#p24-grep-config">2단계</a> · <a href="#p24-grep-number">5단계</a> · <a href="#p24-grep-count">6단계</a></td></tr>
+<tr><td><code class="nb">src/lib.rs</code></td><td><code>selects</code>, <code>search</code></td><td><a href="#p24-grep-search">3단계</a></td></tr>
+<tr><td><code class="nb">src/lib.rs</code></td><td><code class="nb">format_row</code></td><td><a href="#p24-grep-row">5단계</a></td></tr>
+<tr><td><code class="nb">src/lib.rs</code></td><td><code>GrepError</code>, <code class="nb">read_text</code>, <code class="nb">exit_code</code></td><td><a href="#p24-grep-read">4단계</a></td></tr>
+<tr><td><code class="nb">src/lib.rs</code></td><td><code class="nb">write_hits</code></td><td><a href="#p24-grep-read">4단계</a> · <a href="#p24-grep-number">5단계</a> · <a href="#p24-grep-count">6단계</a></td></tr>
+<tr><td><code class="nb">src/lib.rs</code></td><td><code>run</code></td><td><a href="#p24-grep-run">4단계</a> · <a href="#p24-grep-prefix">5단계</a></td></tr>
+<tr><td><code class="nb">src/lib.rs</code></td><td>시험 모듈 — 단위 시험 16</td><td><a href="#p24-grep-match-test">1단계</a>부터 <a href="#p24-grep-count-test">6단계</a>까지</td></tr>
+<tr><td><code class="nb">src/main.rs</code></td><td><code>main</code> — 손잡이 셋을 넘기고 종료 코드로 바꾼다</td><td><a href="#p24-grep-main">4단계</a></td></tr>
+<tr><td><code class="nb">data/</code></td><td>입력 파일 둘</td><td><a href="#p24-grep-main">4단계</a></td></tr>
+<tr><td><code class="nb">tests/run.rs</code></td><td><code>run</code> 을 부르는 시험 7</td><td><a href="#p24-grep-test-run">7단계</a></td></tr>
+<tr><td><code class="nb">tests/cli.rs</code></td><td>실행 파일을 띄우는 시험 4</td><td><a href="#p24-grep-test-cli">8단계</a></td></tr>
+<tr><td><code class="nb">tests/golden.rs</code> · <code class="nb">tests/golden/in_rust.txt</code></td><td>기준 파일과 견주는 시험 1</td><td><a href="#p24-grep-test-golden">8단계</a></td></tr>
+</table>
+</div>
+<p class="cap"><code class="nb">src/lib.rs</code> 는 든 것이 많아 여덟 줄로 나눠 적었습니다. 나머지는 파일이나 디렉터리마다 한 줄입니다. 1장의 <a href="#p24-wc-summary">같은 표</a>와 견주면 <code class="nb">main.rs</code> 와
+<code class="nb">tests/</code> 의 세 파일이 같은 자리에 있습니다.</p>
+</article>
+
+<article class="card quiz" id="p24-grep-quiz" data-quiz>
+<h3>퀴즈 — 화면과 종료 코드를 미리 적어 보기</h3>
+<p class="q">Q. <code class="nb">./target/debug/grep</code> 을 <code>grep</code> 으로 줄여 적습니다. 둘 다 마지막 단계의 <code>grep</code> 입니다. ① <code class="nb">printf 'Rust\n\nrust' | grep -vn rust</code> 는 표준 출력에 무엇을
+찍고 몇으로 끝납니까? ② <code class="nb">grep -c RUST data/none.txt data/todo.txt</code> 에서 <code class="nb">data/none.txt</code> 는 없는 파일이고, <code class="nb">data/todo.txt</code> 의 세 줄은
+<code>milk</code> · <code class="nb">rust book 읽기</code> · <code class="nb">learn RUST</code> 입니다. 표준 출력에는 무엇이 나오고 종료 코드는 몇입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> ① <code class="nb">1:Rust</code> 와 <code class="nb">2:</code> 두 줄을 찍고 0 으로 끝납니다. <code class="nb">-i</code> 가 없으므로 <code>Rust</code> 에는 <code>rust</code> 가 없고, 빈 줄에도
+없습니다. <code class="nb">-v</code> 가 그 둘을 고릅니다. 줄바꿈 없이 끝난 셋째 줄 <code>rust</code> 도 한 줄이지만 패턴에 맞으므로 빠집니다. 번호는 원래 글에서의 번호이고(<a href="#p24-grep-number-out">-vn</a>),
+빈 줄은 콜론에서 끝납니다. 고른 줄이 있으니 0 입니다. ② 표준 출력에는 <code class="nb">data/todo.txt:1</code> 한 줄입니다. 대문자 <code>RUST</code> 가 든 줄은 하나이고, 이름을 둘 받았으므로 이름 칸이 붙습니다
+(<a href="#p24-grep-prefix">받은 이름의 수</a>). 없는 파일의 알림은 표준 오류로 가고 그 파일에는 수를 쓰지 않습니다(<a href="#p24-grep-count-out">-c 의 마지막 실행</a>). 고른 줄이 있지만 읽지 못한 파일이 있으므로
+종료 코드는 2 입니다(<a href="#p24-grep-exit-test">읽지 못한 것이 먼저다</a>). 두 명령은 마지막 단계의 디렉터리에서 그대로 돌려 본 것이고, 화면이 위에 적은 대로였습니다.</div>
+</article>
+
+<article class="card" id="p24-grep-more">
+<h3>더 해 볼 것</h3>
+<p class="lead">마지막 단계의 패키지를 복사해 놓고 고쳐 보는 과제입니다. 풀이는 싣지 않았습니다. 과제마다 손댈 파일과 함수를 적었습니다. 이 장에서 "정했다" 고 한 것을 바꾸는 과제가 많으므로, 고치기 전에
+어느 시험이 깨질지부터 짚어 보면 무엇을 바꾸는지가 분명해집니다.</p>
+<ul>
+<li><b>줄의 처음과 끝</b> — 패턴이 <code class="nb">^</code> 로 시작하면 줄의 처음에서만, <code class="nb">$</code> 로 끝나면 줄의 끝에서만 맞게 합니다. <code class="nb">lib.rs</code> 의
+<code class="nb">is_match</code> 한 군데를 고칩니다. 정규식의 가장 작은 조각이고, <code class="nb">^</code> 라는 글자 자체를 찾을 길도 정해야 합니다.</li>
+<li><b>낱말로만 찾는 옵션</b> — <a href="#p24-grep-match-test"><code>trust</code> 안의 <code>rust</code></a> 는 빼고 싶을 때의 옵션입니다. 무엇이 낱말의 경계인지부터 시험으로 적습니다. 옵션 하나가 들어오는
+<a href="#p24-grep-number">자리 넷</a>을 그대로 밟습니다.</li>
+<li><b>유니코드의 대소문자</b> — <code>selects</code> 의 <code class="nb">to_ascii_lowercase</code> 를 <a href="#p08-str-methods"><code class="nb">to_lowercase</code></a> 로 바꿉니다.
+<a href="#p24-grep-search-flags">3단계의 시험</a> 가운데 어느 줄이 깨지는지 먼저 봅니다.</li>
+<li><b>줄마다 읽기</b> — <code class="nb">read_text</code> 대신 17부의 <a href="#p17-file-bufreader"><code>BufReader</code> 의 <code>lines()</code></a> 로 한 줄씩 읽으며 찾습니다.
+<a href="#p17-file-bad-line">깨진 줄 앞의 줄</a>은 이미 찍힌 뒤입니다. 그때 무엇을 알리고 몇으로 끝낼지 정합니다.</li>
+<li><b>깨진 바이트를 바꿔 읽기</b> — 1장처럼 <a href="#p24-wc-chars-bad"><code class="nb">String::from_utf8_lossy</code></a> 로 읽어, <a href="#p24-grep-bad-utf8"><code class="nb">bad.bin</code></a> 의
+첫째 줄과 셋째 줄이 찍히게 합니다. 깨진 둘째 줄을 고르는 패턴이 있는지도 생각해 봅니다.</li>
+<li><b>표준 입력의 알림에도 이름을</b> — 지금은 표준 입력을 읽지 못하면 <code>main</code> 이 이름 없이 알립니다. <code>run</code> 이 파일과 같은 길로 알리고 다음으로 가게 합니다.</li>
+<li><b><code class="nb">-</code> 를 표준 입력으로</b> — 지금은 <code class="nb">-</code> 하나가 <a href="#p24-grep-config-dash">파일 이름으로 남습니다</a>. 파일 이름 자리의 <code class="nb">-</code> 에서
+<code>stdin</code> 을 읽게 하고, 그 줄의 이름 칸에 무엇을 적을지 정합니다.</li>
+<li><b>디렉터리를 주면 그 안에서 찾기</b> — 지금은 <a href="#p24-grep-missing">디렉터리를 읽지 못한 파일로 알립니다</a>. 17부의 <a href="#p17-dir-walk">재귀로 훑기</a>로 그 안의 파일을 모두 찾습니다.
+파일을 찾는 차례가 돌릴 때마다 같아야 시험할 수 있습니다.</li>
+<li><b>실행 파일의 표준 입력에 쓰는 시험</b> — <code class="nb">tests/cli.rs</code> 에 18부의 <a href="#p18-cmd-stdin">자식의 표준 입력에 쓰기</a>로, 파일 이름 없이 띄운 <code>grep</code> 에 글을 먹이는
+시험을 더합니다.</li>
+<li><b>UTF-8 이 아닌 인자</b> — 1장의 <a href="#p24-wc-more">같은 과제</a>입니다. 이 프로그램에서는 패턴도 인자라서, 글이 아닌 패턴을 받았을 때의 일도 정해야 합니다.</li>
+</ul>
+<div class="note"><b>다음</b> — 3장은 식 계산기입니다. 이번에는 줄을 고르는 대신 줄 하나를 읽어 그 뜻을 계산합니다.</div>
 </article>

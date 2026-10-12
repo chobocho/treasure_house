@@ -1065,3 +1065,69 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   non-UTF-8 argument panics → p17-path-to-str or p02-args could point to
   p24-wc-args-bad; p17's wc counts words with `split_whitespace` (p24-wc-count-space now
   says the rule differs). Glossary candidates: 전각 빈칸, 대체 글자, 쪽 넘김, 깨진 바이트.
+- 24 project 2 written (chapter 2 미니 grep; 41 slides incl. its cover; 9 directory
+  examples: the eight-step chain grep1_match → grep2_config → grep3_search → grep4_run →
+  grep5_number → grep6_count → grep7_tests → grep8_final and the E0106 twin grep3_nolife;
+  1 quiz) → part 24 = 79, deck 1,555. order.txt: `24b_proj.html` uncommented.
+  Orchestrator re-ran: `make all` rc=0 (오류 0 · 어긋남 0; the budget notice stays),
+  `rsrun --check ex/24` ×3 = 19 ✓ / 0 ✗ each (61–69 s per run for both projects); no
+  `target/`, `Cargo.lock` or `bad.bin` under ex/24; no `unwrap`/`expect`/`panic!`/
+  `unsafe` in main.rs or in lib.rs above `#[cfg(test)]`. No badge rows added (141); no
+  new error codes (62). Card and README set to 1,555슬라이드 · 예제 1,105 · 캡처 1,203 ·
+  퀴즈 113.
+  Generated: `scratch/w24b/mk.py` (+ `pieces/`, `twins.py`, `probe.py`, `lines.py`,
+  `links.py`, `slices.py`; git-ignored) — same marker mechanism as w24a plus a
+  72-column check (wide characters count 2) and an "only my prefix" guard; the SLIDE file
+  was assembled from `scratch/w24b/sec/01…06.html` by `asm.py` — edit 24b_proj.html
+  directly from now on (the pieces are stale after the first direct edit).
+  This program's rules (stated on p24-grep-rules, each tested): match =
+  `line.contains(pattern)`, plain text, no regex; an empty pattern matches every line, a
+  missing pattern is a usage error; a line = what `str::lines()` yields (ends at \n or
+  \r\n, terminator not part of the line — so CRLF input comes out with \n only; a lone
+  \r does not split); row = `[name:][number:]body`; `-i` = ASCII only
+  (`to_ascii_lowercase` on both sides); `-v` inverts after `-i`; `-n` = 1-based number
+  in the original text; `-c` = one count line per input, `-n` then does nothing; name
+  cell only when two or more names were GIVEN; flags anywhere / joined / repeated, `--`
+  ends flags, lone `-` is positional; whole-input read as `String`, so any invalid UTF-8
+  makes that whole input unreadable; exit 0 selected / 1 none / 2 usage error or anything
+  unreadable, and 2 outranks 0 and 1 (pure fn `exit_code`); a write failure makes `run`
+  return Err (shown by a failing `Write` impl `Broken` in tests/run.rs), main prints
+  `grep: reason` and exits 2.
+  24_proj.html edits by this writer: p24-intro's 2장 item and "이 부의 화면" note
+  (widened to chapters 1–2), p24-wc-more's "다음" link.
+  For the reviewer: not shown by a capture — p24-grep-main warn (the non-UTF-8-argument
+  panic is acknowledged by link to p24-wc-args-bad, probed only in scratch), p24-grep-run-out
+  / p24-grep-stdin second notes (order of -i then -v; the \n comes from writeln!),
+  p24-grep-bad-utf8 (that main's Err arm printed the nameless notice), p24-grep-test-write
+  ("쓸 줄이 없으면 쓰기를 부르지 않습니다" inferred from Ok(1)), p24-grep-rules row
+  "읽거나 쓰지 못한 표준 입출력" (write failure → exit 2 through the binary is not
+  captured; stderr-unwritable `eprintln!` panic not probed), p24-grep-config-dash (why
+  `--help` gives "모르는 옵션 --"), p24-grep-quiz (answers rest on the tail of
+  grep8_final.txt, which no slide shows). Unsure: four boxes on p24-grep-number and
+  p24-grep-count; p24-grep-rules has 16 rows; p24-grep-bad-utf8's title rests on one
+  file; step 4 is large (10 slides off one capture); `write_hits` gains its `name`
+  parameter at step 5 (+45 −5, not purely additive); grep3_nolife's diff is +1 −4 because
+  rustfmt joins the header (said on the slide), and one of its capture lines is 140
+  columns; read_error_keeps_path_and_kind duplicates chapter 1's test. Machine/toolchain
+  text on screen: os errors 2 and 21, "stream did not contain valid UTF-8", `od`/`tail`
+  formats, the E0106 wording. New words: 정규식, 패턴 as "the text to search for"
+  (disambiguated from Rust patterns on p24-grep-match; kept out of p24-intro), 번호 칸,
+  콜론 (the book's word for ":"). First uses on a slide: `str::to_ascii_lowercase`,
+  `bool != bool` as XOR, `tail -c`, `od -An -c`, `str::repeat`. Badge wanted but not
+  sourced: `str::to_ascii_lowercase`.
+  For the next two project writers: copy `scratch/w24b/mk.py` (not w24a's); put every
+  precedence or decision rule in a tiny pure function with one unit test; add struct
+  fields at the step that uses them and write earlier whole-struct tests with
+  `..Default::default()`; a binary named like a system tool is always invoked as
+  `./target/debug/<name>`; quiz commands go at the END of the final RUN; give helper
+  functions their final parameters at first appearance so later steps are purely
+  additive; probe std helpers before stating their edges (the brief wrongly assumed \r
+  stays in a `lines()` line); taken names: grep1_match … grep8_final, grep3_nolife,
+  ids p24-grep-….
+  Later (0–23 and chapter-1 additions): p17-tool-rules / p17-tool-head-main state "0 · 1 ·
+  2 — 성공, 일하다 난 실패, 잘못 부른 것" as the rule for small tools → forward pointer to
+  p24-grep-read (which redefines 1); p08-str-split says nothing about \r\n or an
+  unterminated last line → p24-grep-search-test; p24-wc-more's exercises 2 (`--`) and 7
+  (failing-Write test) are now worked in chapter 2 — point forward; p18-hash-impl uses
+  `to_ascii_lowercase` without saying ASCII-only → p24-grep-search-flags.
+  Unchecked by a reviewer: all of 24 project 2.
