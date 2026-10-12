@@ -39,7 +39,7 @@ sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import rsrun  # noqa: E402
 
 TARGET_NAME = 'Rust_기초_문법집.html'
-HARD_CAP = 1000            # 사용자가 정한 상한(PLAN.md §6)
+HARD_CAP = 2000            # 사용자가 정한 상한(PLAN.md §6) — 2026-10-12 에 1000 에서 올렸다
 # 접힌 폴더블(374px)에서 한 화면·가로 스크롤 없는 폭. 다른 덱들에서 재서 정한 값.
 MAX_PRE_LINES = 45
 MAX_PRE_COLS = 72

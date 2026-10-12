@@ -1,4 +1,4 @@
-# Outline — Rust 기초 문법집 (target 945 slides, hard cap 1000)
+# Outline — Rust 기초 문법집 (target 945 slides, hard cap 2000 since 2026-10-12)
 
 Chapter-level contract for the whole book. A writer takes one part (or half) and must
 stay inside its row: what is listed under another part is taught there, not here — link

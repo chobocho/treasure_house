@@ -263,10 +263,17 @@ class Rules(Tree):
         self.assertIn('예산', self.errs())
 
     def test_hard_cap(self):
-        self.put('deck/budget.txt', '6 2000\n')
+        self.put('deck/budget.txt', '6 4000\n')
+        self.section(self.ok_slide() + ''.join(
+            '<article class="card" id="p06-x%d"><p>x</p></article>\n' % i for i in range(2000)))
+        self.assertIn('상한은 2000장', self.errs())
+
+    def test_under_hard_cap_is_not_an_error(self):
+        # 옛 상한(1000장)을 넘어도 새 상한(2000장) 아래면 상한 오류가 없어야 한다.
+        self.put('deck/budget.txt', '6 4000\n')
         self.section(self.ok_slide() + ''.join(
             '<article class="card" id="p06-x%d"><p>x</p></article>\n' % i for i in range(1000)))
-        self.assertIn('1000장', self.errs())
+        self.assertNotIn('상한', self.errs())
 
     def test_unused_example_is_an_error_when_finished(self):
         self.example('ex/06/unused.rs', CODE, CAP)

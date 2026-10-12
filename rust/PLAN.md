@@ -34,8 +34,9 @@ state that survives a killed session (this machine kills sessions — see §0.8)
 9. **Foldable layout.** Code `<pre>` ≤ 45 lines and ≤ 72 columns (Korean = 2 columns);
    captures ≤ 108 columns. `ex/rustfmt.toml` sets `max_width = 72`. One slide = one idea; a
    slide normally shows one example and its output (the `RUN` directive).
-10. **Hard cap 1000 slides** (user decision). Target 945, band 850–960. `deck/budget.txt` holds
-    per-part targets; the builder fails above 1000 total or above +10 % for a part.
+10. **Hard cap 2000 slides** (user decision; 1000 until 2026-10-12). Per-part targets in
+    `deck/budget.txt` are still the 945-slide ones until an expansion plan is agreed; the
+    builder fails above 2000 total or above +10 % for a part.
 11. **Language:** deck prose Korean 합니다체; identifiers in English; comments inside examples
     in Korean (short, ≤ 72 columns with the code). Commit messages Korean descriptive, no
     prefix (repo convention). No `git push` unless the user asks.
@@ -149,7 +150,7 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
 3. File `Rust_기초_문법집.html`, directory `rust/`.
 4. History: one part (~60) plus "since version" badges on syntax slides.
 5. One writing subagent at a time.
-6. Hard cap 1000 slides.
+6. Hard cap 2000 slides (raised from 1000 on 2026-10-12).
 
 ## Progress log (append only; newest at the bottom)
 
@@ -374,3 +375,4 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   `rsrun --all --check` three passes in a row, each exit 0 with 621 ✓ / 0 ✗ (from the log).
 - index.html card and README say 922 slides and 64 glossary terms; history.md has the
   review-2 entry. Review-2 commits (ea97894b … wrap-up) are NOT pushed — ask the user.
+- 2026-10-12: pushed at the user's request — origin/main = b70b21f6.
