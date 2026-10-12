@@ -212,3 +212,22 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
     definition and avoided in the intro and `chsub`.
 28. Machine-dependent `true` lines (clock, environment, installed programs): name every
     such line on the slide, not only the obvious one.
+
+### Lessons from the review of part 19, first half (apply from part 20 on)
+29. Strict twins only. A variant file ("쌍둥이 파일") is made by COPYING the shown file and
+    changing only the lines the slide names; `diff` the two before writing the note. Six
+    twins in part 19 were separately written shorter programs, so every "N번 줄" in their
+    notes pointed at numbering the shown source did not have.
+30. Direction words for boxes: "둘째 화면" / "위 화면", never "아래 화면" for a box that
+    sits above the sentence.
+31. If the builder forces "— E0xxx" into a title because a twin's error headline is in the
+    shown range, and the slide's point is not that error, the slide carries two ideas:
+    split it or move the twin.
+32. No "only" / "last" claims about a partly shown capture ("마지막 note:", "…고만
+    적습니다") when the cut hides more; do not end a slice on a `note:` header whose
+    snippet is cut off.
+33. No forward use by idiom inside the part: a construct a later chapter of the same part
+    teaches (a function path as a value, say) is not used casually in an earlier chapter.
+34. No untested alternatives ("…하는 길도 있는데 돌려 보지 않았다"): run it or leave it out.
+35. A compiler-source path (`/rustc/<hash>/library/…:line`) inside a shown range gets one
+    clause saying what it is (this toolchain's std source) — it is not something to cite.

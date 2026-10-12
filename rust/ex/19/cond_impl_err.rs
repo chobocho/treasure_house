@@ -27,6 +27,9 @@ fn report(item: &impl Summary) {
 }
 
 fn main() {
+    report(&Labeled::new("port", 8080));
+    report(&Labeled::new("host", "localhost"));
+    // Vec 을 담은 값도 만들 수는 있다.
     let tags = Labeled::new("tags", vec!["a", "b"]);
     report(&tags);
 }

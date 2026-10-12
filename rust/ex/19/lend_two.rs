@@ -32,14 +32,14 @@ fn main() {
     let second = plain.next();
     println!("{first:?} {second:?}");
 
-    // 빌려주는 쪽 — 다음을 부르기 전에 새 String 으로 옮겨 둔다.
+    // 빌려주는 쪽 — 다음을 부르기 전에 새 String 으로 복사해 둔다.
     let words = vec!["ab", "cd"];
     let mut it = Shouter {
         words,
         pos: 0,
         buf: String::new(),
     };
-    let first = it.next().map(String::from);
-    let second = it.next().map(String::from);
+    let first = it.next().map(|w| w.to_string());
+    let second = it.next().map(|w| w.to_string());
     println!("{first:?} {second:?}");
 }

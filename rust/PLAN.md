@@ -503,3 +503,13 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   after into_iter" vs Copy arrays; array `Copy` taught nowhere; p01-const-generics on the
   32 limit vs `Default` still stopping at 32 (p19-cg-from-fn).
 - Part 19 review will run in two halves (96 slides, 119 examples is too large for one).
+- Part 19 first half reviewed: 사실오류 2 · 증거불일치 8 · 근거없음 9 · 절단 3 · 순서 6 ·
+  표기 12; style 18. Main finding: six "쌍둥이" captures came from separately written
+  programs, not strict twins (line numbers in the notes did not match the shown source) —
+  all rebuilt by copy-and-change. +1 slide (p19-any-static split off p19-any-basic), +1
+  example (clone_box_vec_err.rs: the orphan-rule boundary shown by the compiler, E0117).
+  Part 19 = 97 slides; budget raised 90 → 95 (ceiling 104). Lessons 29–35 in AUTHORING.md.
+  p19-clone-box's title now ends "— E0117" (forced by the twin in range) → split it
+  (lesson 31) during the second-half review. Later (0–16 additions): p10-orphan needs a
+  forward clause to p19-clone-box; p10-ch2-quiz → p19-impl-arg-err; part 11 `T: 'a` slide
+  should be linked from p19-gat-trait when it exists.

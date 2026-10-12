@@ -23,6 +23,6 @@ fn total<I: Iterator<Item = u32>>(items: I) -> u32 {
 fn main() {
     print_all(["a", "b"].iter());
     print_all(1..=2);
-    println!("{}", total(vec![10, 20, 30].into_iter()));
+    println!("{}", total(vec![10_u32, 20, 30].into_iter()));
     println!("{}", total((1..=4).map(|x| x * x)));
 }

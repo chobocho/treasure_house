@@ -37,7 +37,9 @@ fn main() {
     println!("{:?}", entry.parse("port = 8080"));
     println!("{:?}", entry.parse("port = many"));
     println!("{:?}", entry.parse("no equals"));
+    // 두 None 이 갈린 곳 — split_once 만 따로 불러 본다.
+    println!("{:?}", "port = many".split_once('='));
+    println!("{:?}", "no equals".split_once('='));
     let range = Pair(Int, Int);
     println!("{:?}", range.parse("3=9"));
-    println!("{:?}", range.parse("x=9"));
 }

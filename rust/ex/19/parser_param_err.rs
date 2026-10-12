@@ -24,6 +24,6 @@ fn parse_all<T, P: Parser<T>>(p: &P, texts: &[&str]) -> Vec<Option<T>> {
 
 fn main() {
     let nums = parse_all(&Number, &["42", " -7 ", "x"]);
-    println!("{}", nums.len());
+    println!("{nums:?}");
 }
 //@ expect: E0283

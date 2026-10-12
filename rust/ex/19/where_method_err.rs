@@ -6,19 +6,30 @@ struct Labeled<T> {
 }
 
 impl<T> Labeled<T> {
+    fn new(label: &'static str, value: T) -> Self {
+        Labeled { label, value }
+    }
+
+    // 이 메서드에만 조건을 단다.
     fn line(&self) -> String
     where
         T: Display,
     {
         format!("{} = {}", self.label, self.value)
     }
+
+    fn is_default(&self) -> bool
+    where
+        T: Default + PartialEq,
+    {
+        self.value == T::default()
+    }
 }
 
 fn main() {
-    let tags = Labeled {
-        label: "tags",
-        value: vec!["a", "b"],
-    };
-    println!("{}", tags.line());
+    let port = Labeled::new("port", 8080);
+    println!("{} {}", port.line(), port.is_default());
+    let tags: Labeled<Vec<&str>> = Labeled::new("tags", Vec::new());
+    println!("{} {}", tags.label, tags.line());
 }
 //@ expect: E0277
