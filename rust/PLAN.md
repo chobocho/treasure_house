@@ -894,3 +894,44 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   `[workspace]` and profiles are named only → link p23-ws-root (and ch 5 when written);
   p16-macro-std shows `concat!` but never reads it; p22-wrap's "23부" → #p23.
   Unchecked by a reviewer: everything in 23a.
+- 23b written (chapters 4–5: 시험 더 · 실행 파일 여러 개와 프로필, plus p23-wrap; 28 slides —
+  ch 4 = 14, ch 5 = 13, wrap 1; 19 directory examples; 2 quizzes) → part 23 = 63 slides
+  (budget 60, ceiling 66), 37 examples, deck 1,476. order.txt: `23b_cargo.html`
+  uncommented. Orchestrator re-ran: `make all` rc=0 (1,476장 · 오류 0 · 알림 0 · 어긋남 0),
+  `rsrun --check ex/23` ×3 = 37 ✓ / 0 ✗ each (about 94 s per run); no `target/` or
+  `Cargo.lock` under ex/23. New error code in out/: E0453 (62 distinct; the appendix
+  lookup still lists 56). Badges +6 → 141 (cargo-bin-exe 1.43, test-threads 1.12,
+  test-threads-one 1.33, default-run 1.37, custom-profiles 1.57, lints-table 1.74). Card
+  and README set to 25부 · 1,476슬라이드 · 예제 1,086 · 캡처 1,147 · 퀴즈 111 ·
+  버전 표기 141건.
+  Environment: `UPDATE_GOLDEN` must be UNSET where rsrun runs (with `GREETING` and
+  `WITH_BANNER`), or test_golden_changed's first command passes. rsrun does NOT add
+  `--test-threads=1` to RUN-file `cargo test` lines (only single-file `//@ test`);
+  the RUN files use `-q` (dots) and spell the pin only where named lines could reorder.
+  Four optimized builds in the part (prof, prof_keys ×2 profiles, prof_inherit).
+  Machine-specific on screen: prof_abort's `Aborted` + exit 134; `ls` error text + exit 2.
+  23a edits by the 23b writer: p23-intro's note (scope widened to the part, `(tid)`,
+  twin wording), links in p23-ws-two-bins and p23-check-cfg.
+  For the reviewer: p23-intro's lead still describes chapters 1–3 only ("패키지가 여럿인
+  프로젝트와, 컴파일하는 동안 정해지는 것들"); p23-test-threads' title ("이름 순으로 선다")
+  rests on one three-test run + libtest's help text + the 1.33 note; four-box slides
+  p23-bin-dir (carries src/bin AND default-run), p23-test-common, p23-test-bin-lib,
+  p23-test-shared, p23-lints-forbid; p23-test-common-rs translates Cargo's "in default-run
+  packages" literally (collides with ch 5's `default-run` key; `-p wordbox` gives a
+  cleaner message); p23-prof-abort does not say who prints `Aborted`; p23-prof-custom's
+  inheritance claim rests on the prof_inherit twin; p23-lints-cfg re-shows a mid-diagnostic
+  slice (lines 10–12) of build_cfg_nocheck.txt; `sed -n "/…/,/…/p"`, `grep -E`, `cd`,
+  `rm`, `find … | sort` appear in captures — each glossed once?; from memory (no local
+  Cargo/libtest docs): p23-prof-overflow ("프로필은 컴파일 설정 한 벌에 붙인 이름"),
+  p23-examples (what examples/ is for), p23-lints-deny ("경고마다 수준이 있고");
+  inference worded as reading: p23-lints-deny (`-D unused-variables` is what Cargo
+  passed), p23-test-shared warn, p23-prof-abort warn (BufWriter), p23-test-golden-fail
+  warn. Terms: 기준 파일 (golden file), 프로필 (first gloss in the book), 수준 (lint level),
+  시험 대상 / 실행 파일 대상 (target), 조각 (expected substring), 도우미; a lint is "경고"
+  (part 13's word; p02-clippy says "검사 도구(lint)"); Cargo's examples are "examples/ 의
+  프로그램", never "예제". Left out: any multi-threaded capture, `[workspace.lints]`,
+  `[lints.clippy]`, opt-level, speed/size claims, `--nocapture`.
+  Later (0–22 additions): p03-overflow-release "cargo 에서도 같습니다" → p23-prof-overflow;
+  p13-cargo-toml (profiles named only; "예제" for Cargo's examples) → p23-prof-keys;
+  p13-test-should-panic → p23-test-expected; p13-test-integration → p23-test-common;
+  p13-attr-allow → p23-lints-deny. Unchecked by a reviewer: all of part 23.

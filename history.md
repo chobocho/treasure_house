@@ -1,3 +1,10 @@
+### [2026-10-12 20:24] Rust 덱 23부 Cargo·프로젝트 심화 뒤 절반 — 28장, 부 전체 63장
+- **기획:** 4장은 시험끼리 나눠 쓰는 도우미, `should_panic(expected)`, 라이브러리를 거쳐 실행 파일 시험하기, 기준 파일 시험, `--test-threads=1`. 5장은 `src/bin`·`examples`, 화면으로 보이는 프로필 설정, `[lints]` 표.
+- **TC:** 정상(같은 소스가 dev 에서 패닉하고 release 에서 넘침, 프로필 키로 되돌리기, 빌드된 실행 파일을 시험에서 돌리기) / 경계(`tests/common.rs` 가 빈 시험 묶음이 됨, 기대와 다른 패닉 글, 패닉하지 않는 함수, 바뀐 출력의 기준 파일 시험, 한 파일을 함께 쓰는 시험 셋, `panic = "abort"`, `forbid` 를 `allow` 로 풀려 할 때 E0453).
+- **개발:** `rust/deck/sections/23b_cargo.html`, `rust/deck/sections/23_cargo.html`, `rust/ex/23/**`, `rust/out/23/**`, `rust/data/features.tsv`, `rust/deck/order.txt`, `index.html`, `README.md` 외 3개 파일
+- **검증:** make all 1,476장 오류 0건·알림 0건·어긋남 0건 · 23부 예제 37개 재실행 3회 모두 일치 · 버전 표기 141건 대조 오류 0건
+- **비고:** 리뷰 전. 63장(예산 60·상한 66).
+
 ### [2026-10-12 19:36] Rust 덱 23부 Cargo·프로젝트 심화 앞 절반 — 35장, 예제 18개
 - **기획:** 2부와 13부의 둘째 층. 1장 워크스페이스, 2장 features, 3장 build.rs 와 컴파일 때 정보. 바깥 크레이트 없이 path 의존성만 쓰고, 모래 상자에서 Cargo 가 실제로 낸 출력을 증거로 삼는다.
 - **TC:** 정상(멤버 둘의 한 `Cargo.lock`·한 `target`, 같은 소스가 `--features` 에 따라 다른 출력, 빌드 스크립트가 넘긴 값) / 경계(실행 파일이 둘인 뿌리에서 `cargo run`, 멤버가 아닌 패키지, 없는 기능 이름, 오타 난 `cfg` 경고, 없는 환경 변수의 `env!`, 빌드 뒤 지운 파일, 다시 돌지 않는 build.rs).
