@@ -1,5 +1,690 @@
 <article class="card" id="p24-ch3">
 <p class="chnum">3장</p>
 <h2>식 계산기</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">이 프로젝트가 쓰는 것 · 다 만든 모습 · 아홉 단계 · 토큰, 나무, 값 · 종류와 자리를 담는 오류 타입 · tokenize · 본보기 tokens · 수의 정의 · 빈칸과 자리 · 문법 네 줄 · 식의 나무 · Parser · 왼쪽부터 묶기 · 읽지 못한 줄 · 우선순위 · 괄호와 부호 · eval 과 넘침 · 가장 작은 수 · ? 로 잇는 calc · Display 와 자리를 짚는 줄 · 토큰 수의 한계 · 빠진 갈래 · run 과 얇은 main · 값과 알림이 가는 곳 · 글이 아닌 줄 · run 을 부르는 시험 · 실행 파일에 줄을 먹이는 시험 · 기준 파일 둘 · 정한 것과 놓인 곳 · 더 해 볼 것</p>
+</article>
+
+<article class="card" id="p24-calc-reuse">
+<h3>이 프로젝트가 쓰는 것</h3>
+<p class="lead">1장과 2장은 줄을 세고 줄을 골랐습니다. 줄 안에 무엇이 적혔는지는 따지지 않았습니다. 이 장의 <code>calc</code> 는 <code class="nb">2 + 3 * 4</code> 같은 줄을 읽어 그 값을 찍습니다.
+그러려면 줄을 뜻이 있는 낱개로 끊어야 합니다. 이 장은 그 낱개를 토큰이라고 부릅니다. 21부에서 <a href="#p21-tt-pieces">컴파일러가 소스를 끊어 읽는 낱개</a>를 부른 말과 같은 말이고, 여기서는 이 계산기가 받는 수 · 연산자 · 괄호를 가리킵니다.
+이 장에서 식이라고 하면 Rust 의 식이 아니라 이 계산기가 받는 수식입니다. 새로 하는 일은 넷입니다 — 줄을 토큰으로 나누기, 토큰을 읽어 식의 나무를 짓기, 나무를 따라 계산하기, 그리고 줄의 어디가 틀렸는지를 담는 오류 타입입니다. 첫 표는 그러느라 다시 쓰는 것과 그것을 배운 슬라이드이고, 둘째 표는 앞의 두 장에서 그대로 가져온 것입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>쓰는 것</th><th>배운 곳</th></tr>
+<tr><td>데이터를 가진 열거형, 빠진 갈래를 찾아 주는 <code>match</code></td><td><a href="#p07-enum-data">변형마다 다른 데이터</a> · <a href="#p07-enum-missing-arm">E0004</a></td></tr>
+<tr><td>자기를 품는 타입과 <code>Box</code>, 나무</td><td><a href="#p14-recursive-err">E0072</a> · <a href="#p14-recursive-box"><code>Box</code> 로 끊는다</a> · <a href="#p14-expr-tree">수식 나무</a></td></tr>
+<tr><td>자기를 부르는 함수</td><td><a href="#p05-recursion">재귀</a></td></tr>
+<tr><td>글자와 그 바이트 자리, 꺼내지 않고 엿보기</td><td><a href="#p08-str-chars-bytes"><code class="nb">char_indices</code></a> · <a href="#p12-peekable"><code>peekable</code></a></td></tr>
+<tr><td>숫자 글자를 수로</td><td><a href="#p03-char-methods"><code class="nb">to_digit</code></a></td></tr>
+<tr><td>넘침과 0 으로 나누기를 값으로 받기</td><td><a href="#p03-overflow-choice"><code class="nb">checked_add</code></a> · <a href="#p03-div-zero"><code class="nb">checked_div</code></a> · <a href="#p03-div-rem">0 쪽으로 버리는 나눗셈</a></td></tr>
+<tr><td><code>Option</code> 과 <code>Result</code> 잇기</td><td><a href="#p09-opt-question"><code>Option</code> 의 <code>?</code></a> · <a href="#p09-real-convert"><code class="nb">ok_or</code></a> · <a href="#p09-res-defaults"><code class="nb">map_err</code></a> · <a href="#p09-res-question"><code>?</code></a></td></tr>
+<tr><td>종류를 나눈 오류 타입</td><td><a href="#p09-err-enum">열거형</a> · <a href="#p09-err-display"><code>Display</code> 와 <code>Error</code></a> · <a href="#p09-err-from"><code>From</code></a></td></tr>
+<tr><td>빌린 슬라이스를 든 구조체와 그 메서드</td><td><a href="#p11-struct-missing">참조를 필드로</a> · <a href="#p11-struct-impl"><code class="nb">impl&lt;'a&gt;</code></a> · <a href="#p08-vec-index-get"><code>get</code></a></td></tr>
+<tr><td>모듈을 파일로 나누고 이름을 다시 내놓기</td><td><a href="#p13-modfile"><code class="nb">mod 이름;</code></a> · <a href="#p13-reexport"><code class="nb">pub use</code></a></td></tr>
+<tr><td>라이브러리를 쓰는 본보기 프로그램</td><td><a href="#p23-examples"><code class="nb">examples/</code></a></td></tr>
+<tr><td>표준 입력을 줄마다 읽기</td><td><a href="#p17-in-lines"><code>lines()</code></a> · <a href="#p17-file-bufreader"><code>BufReader</code></a> · <a href="#p17-file-bad-line">깨진 줄에서만 실패</a></td></tr>
+<tr><td>띄운 프로그램의 표준 입력에 쓰기</td><td><a href="#p18-cmd-stdin"><code class="nb">Stdio::piped</code></a></td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>앞 장에서 그대로 가져온 것</th><th>그 슬라이드</th></tr>
+<tr><td>읽을 곳 하나와 쓸 곳 둘을 받는 <code>run</code>, 얇은 <code>main</code></td><td><a href="#p24-wc-run">1장의 <code>run</code></a> · <a href="#p24-grep-main">2장의 <code>main</code></a></td></tr>
+<tr><td>결과는 표준 출력으로, 알림은 표준 오류로</td><td><a href="#p24-wc-missing">한 길씩 버려 본 화면</a></td></tr>
+<tr><td>종료 코드를 정하는 작은 함수</td><td><a href="#p24-grep-read"><code class="nb">exit_code</code></a></td></tr>
+<tr><td>시험 세 층</td><td><a href="#p24-wc-test-run"><code>run</code> 을 부르는 시험</a> · <a href="#p24-wc-test-cli">실행 파일을 띄우는 시험</a> · <a href="#p24-wc-test-golden">기준 파일</a></td></tr>
+<tr><td>늘 실패하는 쓸 곳</td><td><a href="#p24-grep-test-write"><code>Broken</code></a></td></tr>
+<tr><td>받지 못하는 인자</td><td><a href="#p24-wc-args-bad">UTF-8 이 아닌 인자</a></td></tr>
+</table>
+</div>
+<p class="cap">두 표 모두 왼쪽이 이 장의 코드에 나오는 것입니다. 첫 표의 오른쪽은 그것을 처음 설명한 슬라이드이고, 둘째 표의 오른쪽은 1장이나 2장에서 그것을 만든 슬라이드입니다. 이 장은 오른쪽의 설명을 되풀이하지 않고, 달라지는 곳만 말합니다.</p>
+</article>
+
+<article class="card" id="p24-calc-goal">
+<h3>다 만들면 이렇게 돈다</h3>
+<p class="lead">마지막 단계의 패키지를 빌드해 돌린 화면입니다. 여기까지 가는 길을 아홉 단계로 나눠 걷습니다. 화면은 앞의 두 장처럼 <a href="#p02-cargo-build"><code class="nb">target/debug/</code></a> 의
+실행 파일을 직접 부릅니다. 입력 파일 <code class="nb">data/sums.txt</code> 는 한 줄에 식 하나씩 아홉 줄이고, 넷째 줄은 비었습니다. <code>cat</code> 으로 먼저 봅니다.</p>
+<!--OUT file=out/24/calc9_final.txt lines=1-32 note=마지막 단계 calc9_final 의 실행 파일-->
+<div class="note"><b>읽는 법</b> — <code class="nb">cargo build -q</code> 는 아무것도 찍지 않았습니다. 이 장의 글에서는 <code class="nb">./target/debug/calc</code> 를 <code>calc</code> 로 줄여 적습니다. 파일을 표준 입력에 이은 실행은 줄마다 답을 냈습니다.
+앞의 세 줄은 14 · 20 · 3 입니다. 곱셈을 먼저 했고, 괄호 안을 먼저 했고, 뺄셈은 왼쪽부터 했습니다. 빈 줄에는 아무것도 찍지 않았고, <code class="nb">-7 / 2</code> 는 -3 입니다.
+나머지 네 줄은 값을 내지 못한 줄입니다. 줄마다 알림이 석 줄씩 나왔습니다. 까닭과 <code class="nb">(자리 N)</code>, 받은 줄 그대로, 그리고 틀린 곳 아래에 <code>^</code> 를 놓은 줄입니다. 자리는 줄의 처음부터 0 으로 시작해 센 번호이고, <a href="#p24-calc-error">1단계</a>에서 정합니다.
+<code class="nb">1 + 2 / 0</code> 에서는 <code>/</code> 아래에, 닫히지 않은 괄호에서는 여는 괄호 아래에, 한글 <code>가</code> 가 낀 줄에서는 그 글자 아래에, 넘친 덧셈에서는 <code>+</code> 아래에 <code>^</code> 가 있습니다.
+틀린 줄이 있어도 끝까지 갔고, 종료 코드는 1 입니다. 그다음 실행은 식을 인자로 주었습니다. 인자 하나가 한 줄이고, 답은 14 와 -20 입니다.</div>
+<div class="warn"><b>이 책의 계산기입니다</b> — 무엇을 수로 읽고, 어떤 연산을 어떤 차례로 하고, 무엇을 오류로 치고, 알림을 어떤 모양으로 찍을지는 이 장이 정합니다. 화면의 알림은 모두 이 프로그램이 만든 글입니다.
+다른 계산기가 같은 줄에 무엇을 내는지는 말하지 않습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-steps">
+<h3>아홉 단계 — 단계마다 컴파일되고 돈다</h3>
+<p class="lead">앞의 두 장과 같은 방식입니다. 단계 하나가 예제 디렉터리 하나이고, 뒤 단계는 앞 단계의 파일을 그대로 두고 파일이나 줄을 더하거나 적어 둔 줄만 바꾼 사본입니다. 슬라이드가 싣지도 말하지도 않은 줄은
+앞 단계의 것 그대로입니다. 이번에는 소스가 한 파일이 아닙니다. 13부에서 본 대로 <a href="#p13-modfile">모듈을 파일로 나눠</a>, 하는 일마다 파일 하나를 둡니다. 그래서 코드 상자의 꼬리표에는 단계의 디렉터리 이름과 함께 파일 이름을 적습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>디렉터리</th><th>더하는 것</th><th>돌려 보는 것</th></tr>
+<tr><td><code class="nb">calc1_token</code></td><td><code class="nb">error.rs</code> 의 오류 타입, <code class="nb">token.rs</code> 의 <code>tokenize</code> — 줄을 토큰으로</td><td>단위 시험, 본보기 <code>tokens</code></td></tr>
+<tr><td><code class="nb">calc2_parse</code></td><td><code class="nb">expr.rs</code> 의 나무, <code class="nb">parse.rs</code> 의 <code>parse</code> — 수와 <code class="nb">+ -</code></td><td>단위 시험, 본보기 <code>tree</code></td></tr>
+<tr><td><code class="nb">calc3_term</code></td><td><code class="nb">* /</code> 와 우선순위</td><td>단위 시험, 본보기 <code>tree</code></td></tr>
+<tr><td><code class="nb">calc4_paren</code></td><td>괄호와 부호 <code>-</code></td><td>단위 시험, 본보기 <code>tree</code></td></tr>
+<tr><td><code class="nb">calc5_eval</code></td><td><code class="nb">eval.rs</code> 의 <code>eval</code> — 나무를 값으로, <code class="nb">lib.rs</code> 의 <code>calc</code></td><td>단위 시험</td></tr>
+<tr><td><code class="nb">calc6_caret</code></td><td>오류의 <code>Display</code>, 자리를 짚는 줄</td><td>단위 시험</td></tr>
+<tr><td><code class="nb">calc7_limit</code></td><td>한 줄에 받는 토큰 수의 한계</td><td>단위 시험</td></tr>
+<tr><td><code class="nb">calc8_run</code></td><td><code>run</code>, <code class="nb">src/main.rs</code>, 입력 파일</td><td>실행 파일 — 표준 입력과 인자</td></tr>
+<tr><td><code class="nb">calc9_final</code></td><td><code class="nb">tests/</code> 의 통합 시험 셋, 기준 파일</td><td>실행 파일, 모든 시험</td></tr>
+</table>
+</div>
+<p class="cap">위에서 아래로 가는 차례가 이 장의 차례입니다. 디렉터리 이름에 든 숫자가 단계의 번호이고, 이 장은 <code class="nb">calc5_eval</code> 을 5단계라고 부릅니다. 실행 파일은 8단계에서 처음 생깁니다. 그 앞에서는
+단위 시험과, 23부에서 본 <a href="#p23-examples"><code class="nb">examples/</code> 의 본보기 프로그램</a> 둘로 돌려 봅니다. <code>tokens</code> 는 토큰 목록을, <code>tree</code> 는 나무를 찍습니다.</p>
+</article>
+
+<article class="card" id="p24-calc-pipeline">
+<h3>줄 하나가 값이 되기까지 — 토큰, 나무, 값</h3>
+<p class="lead">줄 하나는 세 번 모양을 바꿉니다. 글이 토큰의 목록이 되고, 목록이 나무가 되고, 나무가 수 하나가 됩니다. 일마다 함수 하나이고, 그 함수가 든 파일도 하나씩입니다.</p>
+<div class="flow">
+<span class="box">글</span><span class="arr">→</span>
+<span class="box">토큰의 목록</span><span class="arr">→</span>
+<span class="box">식의 나무</span><span class="arr">→</span>
+<span class="box">값</span>
+</div>
+<ul>
+<li><b>토큰(token)으로 나누기</b> — 글자를 앞에서부터 읽어 수 · 연산자 · 괄호로 끊습니다. <code class="nb">12</code> 는 글자 둘이지만 토큰 하나입니다. 이 일을 하는 <code>tokenize</code> 가 1단계입니다.</li>
+<li><b>식의 나무 짓기</b> — 토큰을 차례로 읽어 "무엇과 무엇을 먼저 셈하는가" 가 드러나는 나무를 만듭니다. 14부의 <a href="#p14-expr-tree">수식 나무</a>와 같은 것이고, 거기서는 손으로 지은 나무를 이번에는 <code>parse</code> 가 짓습니다. 2단계부터 4단계까지입니다.</li>
+<li><b>계산하기</b> — 나무를 따라 내려가며 값을 구합니다. 14부의 그 슬라이드에 있던 <code>eval</code> 을, 넘침과 0 으로 나누기를 오류로 돌려주게 고쳐 씁니다. 5단계입니다.</li>
+</ul>
+<div class="key"><b>세 일이 하나의 오류 타입을 쓴다</b> — 어느 일에서든 틀린 곳을 만나면 "무엇이, 줄의 몇 번째 자리에서" 를 담은 값 하나를 돌려줍니다. 그래서 토큰이 저마다 제 자리를 달고 다닙니다. 그 오류 타입부터 만듭니다.</div>
+</article>
+
+<article class="card" id="p24-calc-error">
+<h3>오류 타입부터 만든다 — 종류 하나와 자리 하나</h3>
+<p class="lead">1단계의 파일은 다섯입니다. <code class="nb">Cargo.toml</code>, 뿌리 파일 <code class="nb">src/lib.rs</code>, 오류 타입이 든 <code class="nb">src/error.rs</code>, 토큰을 만드는 <code class="nb">src/token.rs</code>, 그리고 본보기 프로그램 하나입니다.
+먼저 세 일이 함께 쓸 오류 타입입니다. 9부에서는 <a href="#p09-err-enum">오류의 경우마다 변형 하나</a>를 두고 변형이 데이터를 가졌습니다. 여기서는 모든 오류가 똑같이 자리 하나를 가져야 하므로, 종류만 열거형으로 두고 자리는 구조체의 필드로 뺍니다.</p>
+<!--OUT file=out/24/calc1_token.txt lines=1-6 note=calc1_token — 1단계의 파일 다섯-->
+<!--CODE file=ex/24/calc1_token/src/lib.rs note=calc1_token 의 src/lib.rs — 모듈 둘을 선언하고 이름 넷을 다시 내놓는다-->
+<!--CODE file=ex/24/calc1_token/src/error.rs note=같은 단계의 src/error.rs — 종류와 자리-->
+<div class="note"><b>읽는 법</b> — <code class="nb">Cargo.toml</code> 은 패키지 이름이 <code>calc</code> 인 것만 1장의 <a href="#p24-wc-count">그 파일</a>과 다르고, 마지막 단계까지 바뀌지 않습니다. <code class="nb">lib.rs</code> 의 1번과 2번 줄은 13부에서 본 <a href="#p13-modfile"><code class="nb">mod 이름;</code></a> 입니다. 내용은
+<code>find</code> 가 보인 <code class="nb">src/error.rs</code> 와 <code class="nb">src/token.rs</code> 에 있습니다. 4번과 5번 줄의 <a href="#p13-reexport"><code class="nb">pub use</code></a> 는 그 안의 이름을 크레이트의 뿌리에 다시 내놓습니다. 그래서 바깥에서는 <code class="nb">calc::tokenize</code> 라고만 적습니다.
+<a href="#p24-calc-token-run">본보기 프로그램</a>이 그렇게 부릅니다. <code class="nb">error.rs</code> 의 <code>Kind</code> 는 데이터가 없는 변형뿐인 열거형이고, 이 단계에는 토큰을 만들다 날 수 있는 둘만 있습니다. 변형은 그것을 쓰는 단계에서 하나씩 늡니다.
+<code>CalcError</code> 는 그 종류와 자리 <code>pos</code> 를 묶습니다. 17번부터 21번 줄까지는 7부에서 본 <a href="#p07-assoc-fn">연관 함수 <code>new</code></a> 입니다.</div>
+<div class="key"><b>이 프로그램의 정의 — 자리</b> — 자리(position)는 받은 줄의 처음부터 0 으로 시작해 센 바이트 번호입니다. 글자 번호도 화면의 칸 번호도 아닙니다. 그래도 되는 까닭은 <a href="#p24-calc-token-space">자리 앞에는 ASCII 만 있다</a>에서 시험으로 봅니다.
+<code class="nb">error.rs</code> 2번 줄의 <code>Copy</code> 는 종류를 값처럼 넘기려고, 2번과 11번 줄의 <code>PartialEq</code> 와 <code>Debug</code> 는 시험이 <code class="nb">assert_eq!</code> 로 오류를 통째로 견주려고 붙였습니다. 9부의 <a href="#p09-err-from">From 예제</a>에도 <code>CalcError</code> 라는 이름이 있었는데, 이름만 같은 다른 타입입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-token">
+<h3>tokenize — 글자를 하나씩 꺼내고, 숫자가 이어지는지는 엿본다</h3>
+<p class="lead"><code class="nb">src/token.rs</code> 입니다. 토큰의 종류는 여덟이고, 데이터를 가진 것은 수뿐입니다. <code>tokenize</code> 는 줄을 받아 토큰과 그 자리의 짝을 벡터로 돌려줍니다. 8부에서 본
+<a href="#p08-str-chars-bytes"><code class="nb">char_indices</code></a> 가 글자마다 바이트 자리를 함께 주므로, 자리는 따로 세지 않습니다.</p>
+<!--CODE file=ex/24/calc1_token/src/token.rs lines=1-19 note=calc1_token 의 src/token.rs — 토큰, 그리고 숫자 하나를 붙이는 함수-->
+<!--CODE file=ex/24/calc1_token/src/token.rs lines=21-59 note=같은 파일의 tokenize-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 두 상자 모두 <code class="nb">token.rs</code> 의 것입니다. 1번 줄의 <a href="#p13-paths"><code class="nb">crate::</code></a> 는 같은 크레이트의 <code>error</code> 모듈에서 두 이름을 끌어옵니다. <code>Token</code> 의 마지막 변형 <code>End</code> 는 글자가 아니라 줄이 끝난 자리를 나타냅니다.
+25번 줄은 <code class="nb">char_indices</code> 에 12부의 <a href="#p12-peekable"><code>peekable</code></a> 을 붙였습니다. 26번 줄의 <a href="#p07-while-let"><code class="nb">while let</code></a> 이 자리와 글자를 하나씩 꺼냅니다. 27번 줄은 그 글자에 3부의
+<a href="#p03-char-methods"><code class="nb">to_digit(10)</code></a> 을 묻습니다. <code>Some</code> 이면 수의 첫 숫자입니다. 30번 줄이 다음 글자를 꺼내지 않고 엿보고, 31번 줄의 <a href="#p07-let-else"><code class="nb">let … else</code></a> 가 숫자가 아니면 안쪽 반복을 나옵니다.
+엿보기만 했으므로 그 글자는 바깥 반복의 다음 차례에 그대로 나옵니다. 숫자였다면 34번 줄이 넘어가고, 35번 줄이 읽던 값 뒤에 붙입니다.
+40번 줄부터는 숫자가 아닌 글자입니다. 42번 줄은 빈칸과 탭을 버리고 다음 글자로 갑니다. 43번부터 48번 줄까지가 한 글자짜리 토큰 여섯이고, 49번 줄의 나머지 갈래는 <code>UnknownChar</code> 를 들고 돌아갑니다.
+54번 줄이 토큰을 그 첫 글자의 자리와 함께 넣습니다. 57번 줄은 맨 끝에 <code>End</code> 를 줄의 길이와 함께 넣습니다.</div>
+<div class="note"><b>17번부터 19번 줄까지 — push_digit</b> — 읽던 값에 10 을 곱하고 새 숫자를 더합니다. 3부에서 본 대로 <a href="#p03-overflow-choice"><code class="nb">checked_</code> 로 시작하는 메서드</a>는 넘치면 <code>None</code> 을 주고, 그 표가 말한 대로 곱셈에도 같은 이름이 있습니다.
+가운데의 <code>?</code> 는 9부에서 본 <a href="#p09-opt-question"><code>Option</code> 의 <code>?</code></a> 입니다. <code class="nb">i64::from</code> 은 3부의 <a href="#p03-from-into">잃을 것이 없는 변환</a>입니다. 36번 줄의 <a href="#p09-real-convert"><code class="nb">ok_or</code></a> 가 그 <code>None</code> 을 <code>TooBig</code> 오류로 바꾸고,
+<code>?</code> 가 들고 돌아갑니다. 그 오류의 자리는 넘친 숫자가 아니라 26번 줄에서 받은 <code>pos</code>, 곧 수의 첫 숫자입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-token-run">
+<h3>토큰마다 제 자리가 붙어 나온다 — 본보기 tokens 로 본다</h3>
+<p class="lead">라이브러리뿐이라 아직 돌릴 실행 파일이 없습니다. 23부에서 본 <a href="#p23-examples"><code class="nb">examples/</code></a> 에 받은 인자를 <code>tokenize</code> 에 넘겨 결과를 <code class="nb">{:?}</code> 로 찍는 프로그램을 둡니다.
+<code>Token</code> 과 <code>CalcError</code> 에 <code>Debug</code> 를 붙여 두었으므로 그대로 찍힙니다.</p>
+<!--CODE file=ex/24/calc1_token/examples/tokens.rs note=calc1_token 의 examples/tokens.rs — 이 파일은 끝까지 바뀌지 않는다-->
+<!--OUT file=out/24/calc1_token.txt lines=13-23 note=인자 다섯을 준다. 넷째는 빈칸 하나다-->
+<div class="note"><b>읽는 법</b> — 명령의 <code class="nb">--</code> 는 23부에서 본 대로 <a href="#p23-test-bin-lib">그 뒤가 프로그램의 인자</a>라는 표시입니다. 인자마다 두 줄이 나옵니다. 6번 줄이 받은 글을 따옴표와 함께 찍고, 7번 줄이 <code>tokenize</code> 의 결과를 찍습니다.
+<code class="nb">12 + 3</code> 은 토큰 넷입니다. 글자 둘인 <code>12</code> 가 <code class="nb">Num(12)</code> 하나가 됐고 자리는 첫 글자의 0 입니다. <code>+</code> 는 3, <code>3</code> 은 5 이고, 빈칸은 토큰이 되지 않았습니다. 끝의
+<code class="nb">(End, 6)</code> 의 6 은 줄의 길이입니다. 붙여 쓴 <code class="nb">(4-5)</code> 와 <code class="nb">6*7/8</code> 도 글자마다 따로 토큰이 됐습니다. 세 줄에 수와 연산자 넷, 괄호 둘이 다 나왔습니다. 빈칸 하나뿐인 인자는 <code class="nb">(End, 1)</code> 하나입니다.
+마지막 인자에서는 <code>Ok</code> 가 아니라 <code>Err</code> 입니다. 종류는 <code>UnknownChar</code>, 자리는 <code>가</code> 가 있는 4 입니다. 그 앞에서 읽은 <code>1</code> 과 <code>+</code> 는 돌려주지 않습니다.</div>
+<div class="note"><b>이 본보기도 인자를 글로 받는다</b> — 5번 줄은 1장에서 <a href="#p24-wc-args-bad">UTF-8 이 아닌 인자에 패닉한</a> 그 <code class="nb">env::args()</code> 입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-token-num">
+<h3>수는 0 부터 9 까지가 이어진 것이다 — 이 프로그램이 고른 것</h3>
+<p class="lead">같은 <code class="nb">token.rs</code> 의 아래쪽, 13부에서 본 <a href="#p13-test-mod">시험 모듈</a>입니다. 무엇을 수로 읽는지를 시험 둘로 적어 둡니다. <code>tokenize</code> 가 기대는 것은
+<code class="nb">to_digit(10)</code> 하나이므로, 그것이 <code>Some</code> 을 주는 글자와 바로 그 바깥의 글자를 함께 봅니다.</p>
+<!--CODE file=ex/24/calc1_token/src/token.rs lines=63-68 note=calc1_token 의 src/token.rs — 시험 모듈의 머리와 도우미-->
+<!--CODE file=ex/24/calc1_token/src/token.rs lines=96-132 note=같은 시험 모듈의 시험 둘-->
+<!--OUT file=out/24/calc1_token.txt lines=7-11 note=라이브러리의 단위 시험만 돌린다-->
+<div class="note"><b>읽는 법</b> — 64번 줄은 7부에서 본 <a href="#p07-enum-use">변형 이름 끌어오기</a>를 <code>*</code> 로 한 번에 한 것입니다. 도우미 <code>err</code> 는 종류와 자리로 <code>Err</code> 값을 만듭니다. 10부의 <a href="#p10-generic-fn">타입 인자</a> <code>T</code> 를 둔 것은,
+이 도우미를 <code>Ok</code> 쪽 타입이 다른 여러 함수의 결과와 견주려는 것입니다. 99번 줄은 <code>007</code> 이 7 임을 봅니다. 앞의 0 은 그대로 읽힙니다. 101번과 102번 줄에서 밑줄과 점은 자리 1 의 모르는 글자입니다. 이 계산기에는 <code class="nb">1_000</code> 도 <code class="nb">1.5</code> 도 없습니다.
+104번 줄은 ASCII 표에서 <code>9</code> 바로 다음이 콜론임을, 105번 줄은 그 콜론이 수에 붙지 않음을 봅니다. 108번 줄의 두 글자는 전각 숫자 3 과, 유니코드 표에 ARABIC-INDIC DIGIT THREE 로 실린 U+0663 입니다.
+109번 줄에서 처음 쓰는 <code class="nb">is_numeric</code> 은 두 글자에 참이라고 답했습니다. 그런데 110번 줄의 <code class="nb">to_digit(10)</code> 은 <code>None</code> 이고, 112번 줄에서 <code>tokenize</code> 도 모르는 글자로 돌려줍니다.
+화면은 6개 통과입니다. 이 둘과 다음 슬라이드의 넷입니다. <code class="nb">--lib</code> 은 23부에서 본 <a href="#p23-test-helper">라이브러리의 단위 시험만 돌리는 옵션</a>입니다.</div>
+<div class="note"><b>119번부터 132번 줄까지 — i64 에 담기는 데까지</b> — 3부에서 본 <a href="#p03-minmax"><code class="nb">i64::MAX</code></a> 는 9223372036854775807 입니다. 120번과 121번 줄은 <code class="nb">push_digit</code> 이 마지막 숫자 7 까지는 받고 8 은 받지 않음을 봅니다.
+124번 줄에서 그 수는 토큰이 되고, 126번 줄에서 1 큰 수는 <code>TooBig</code> 입니다. 131번 줄의 서른 자리 수도 같고, 자리는 그 수가 시작한 4 입니다. 넘친 수를 잘라 읽거나 돌려서 읽지 않습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-token-space">
+<h3>토큰을 띄우는 것은 빈칸과 탭뿐이고, 자리 앞에는 ASCII 만 있다</h3>
+<p class="lead">나머지 시험 넷입니다. 토큰과 자리의 짝, 빈 줄, 토큰 사이를 띄우는 글자, 그리고 자리를 바이트로 세어도 되는 까닭입니다.</p>
+<!--CODE file=ex/24/calc1_token/src/token.rs lines=70-94 note=calc1_token 의 src/token.rs — 토큰과 자리, 빈 줄-->
+<!--CODE file=ex/24/calc1_token/src/token.rs lines=134-155 note=같은 시험 모듈 — 띄우는 글자, 한글이 낀 줄-->
+<!--OUT file=out/24/calc1_token.txt lines=9-11 note=앞 슬라이드와 같은 실행-->
+<div class="note"><b>읽는 법</b> — 72번과 73번 줄은 <a href="#p24-calc-token-run">본보기가 찍은 첫 결과</a>를 값으로 견줍니다. 75번부터 87번 줄까지는 붙여 쓴 아홉 글자가 토큰 아홉과 <code>End</code> 가 됨을 봅니다. 92번 줄에서 빈 글의 토큰은 <code class="nb">(End, 0)</code> 하나이고,
+93번 줄에서 빈칸과 탭뿐인 세 글자도 <code>End</code> 하나입니다. 자리는 줄의 길이 3 입니다. 137번 줄은 탭도 토큰을 띄움을 봅니다. 139번 줄의 세 글자는 1장에서 본 <a href="#p24-wc-count-space">전각 빈칸</a>, 유니코드 표에 NO-BREAK SPACE 로 실린 U+00A0, 그리고 CR 입니다.
+140번 줄에서 3부의 <a href="#p03-char-methods"><code class="nb">is_whitespace</code></a> 는 셋 다 공백이라고 답했지만, 142번 줄에서 <code>tokenize</code> 는 셋 다 모르는 글자로 돌려줍니다. <code>tokenize</code> 의 소스가 건너뛰는 글자는 <code class="nb">' '</code> 와 <code class="nb">'\t'</code> 둘뿐입니다.</div>
+<div class="key"><b>자리가 바이트 번호여도 되는 까닭</b> — 148번과 149번 줄에서 한글 <code>가</code> 의 자리는 4 와 1 입니다. 그 앞의 글자가 모두 1 바이트라서 바이트로 세든 글자로 세든 같은 수입니다. 151번 줄의 세 줄은 모르는 글자가 여럿이거나 뒤쪽에 있는 줄입니다.
+153번 줄은 어느 줄에서든 알린 자리의 앞쪽이 ASCII 뿐임을 봅니다. 소스를 따라가면 <code>tokenize</code> 는 첫 모르는 글자에서 돌아가고, 그 앞에서 받아들인 글자는 숫자 열, 연산자 넷, 괄호 둘, 빈칸, 탭으로 모두 ASCII 입니다.
+그래서 이 프로그램에서는 자리가 곧 그 앞에 놓인 글자의 수입니다. 화면의 칸 수와도 같은지는 탭이 낄 때만 달라지고, 그것은 <a href="#p24-calc-caret">6단계</a>에서 다룹니다.</div>
+</article>
+
+<article class="card" id="p24-calc-grammar">
+<h3>문법 — 이 계산기가 받는 식을 네 줄로 적는다</h3>
+<p class="lead">토큰이 어떤 차례로 놓여야 식인지를 먼저 적어 둡니다. 그런 규칙을 문법(grammar)이라고 합니다. 이 계산기의 문법은 네 줄이고, 이 장이 정한 것입니다. 2단계부터 4단계까지의 <code>parse</code> 는 위의 세 줄을 한 줄씩 코드로 옮깁니다.</p>
+<pre class="fig">식   = 항   { ("+" | "-") 항 }
+항   = 인수 { ("*" | "/") 인수 }
+인수 = 수 | "-" 인수 | "(" 식 ")"
+수   = 숫자 { 숫자 }</pre>
+<ul>
+<li><b>읽는 법</b> — <code>=</code> 의 왼쪽이 이름이고 오른쪽이 그것의 생김새입니다. 따옴표 안은 그 글자 그대로, <code>|</code> 는 "또는", 중괄호는 "0 번 이상 되풀이" 입니다.</li>
+<li><b>식(expression)</b> — 항 하나, 또는 항들을 <code>+</code> 나 <code>-</code> 로 이은 것입니다. <b>항(term)</b> 은 인수 하나, 또는 인수들을 <code>*</code> 나 <code>/</code> 로 이은 것입니다.</li>
+<li><b>인수(factor)</b> — 수 하나이거나, 앞에 <code>-</code> 가 붙은 인수이거나, 괄호로 싼 식입니다. 함수에 넘기는 값을 뜻하는 인자(argument)와 다른 말입니다.</li>
+<li><b>수</b> — 숫자가 하나 이상 이어진 것입니다. 이 줄은 1단계의 <a href="#p24-calc-token-num"><code>tokenize</code></a> 가 이미 맡았습니다.</li>
+</ul>
+<div class="note"><b>재귀로 내려가며 읽기</b> — 문법의 줄마다 함수를 하나씩 둡니다. <code class="nb">parse_expr</code> 는 식을, <code class="nb">parse_term</code> 은 항을, <code class="nb">parse_factor</code> 는 인수를 읽습니다. 문법에서 식이 항으로, 항이 인수로 적혀 있듯이 함수도 그 차례로 아래 것을 부릅니다.
+인수의 줄에는 인수와 식이 다시 나오므로, 4단계의 <code class="nb">parse_factor</code> 는 자기 자신과 <code class="nb">parse_expr</code> 를 부릅니다. 5부에서 본 <a href="#p05-recursion">재귀</a>입니다. 문법의 줄을 따라 함수가 함수를 부르며 읽는 이 방식을 영어로는 recursive descent 라고 합니다.</div>
+<div class="key"><b>한 단계에 한 줄씩</b> — 2단계는 <code class="nb">식 = 인수 { ("+" | "-") 인수 }</code> 와 <code class="nb">인수 = 수</code> 까지만 읽습니다. 3단계가 항의 줄을 끼우고, 4단계가 인수의 줄을 마저 채웁니다.</div>
+</article>
+
+<article class="card" id="p24-calc-expr">
+<h3>식의 나무 — 마디는 수 하나이거나, 두 식 사이의 연산이다</h3>
+<p class="lead">2단계는 파일 셋을 더합니다. 그 가운데 <code class="nb">src/expr.rs</code> 가 <code>parse</code> 가 돌려줄 나무입니다. 14부의 <a href="#p14-expr-tree">수식 나무</a>는 연산마다 변형을 따로 두었습니다. 여기서는 두 식을 잇는 변형을 <code>Bin</code> 하나로 두고,
+어느 연산인지는 열거형 <code>Op</code> 로 담습니다. 나무에서 값이나 연산 하나가 놓인 곳을 14부처럼 마디(node)라고 부릅니다.</p>
+<!--CODE file=ex/24/calc2_parse/src/expr.rs note=calc2_parse 의 src/expr.rs — 새 파일-->
+<!--CODE file=ex/24/calc2_parse/src/lib.rs note=같은 단계의 src/lib.rs — 2 · 3 · 7 · 8번 줄이 새 줄-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 첫 상자 <code class="nb">expr.rs</code> 의 것입니다. 15번 줄의 <code>Bin</code> 은 네 칸입니다. 왼쪽 식, 연산, 그 연산자가 줄에서 있던 자리, 오른쪽 식입니다. 왼쪽과 오른쪽은 <code>Expr</code> 자신이라서 14부에서 본 대로
+<a href="#p14-recursive-box"><code>Box</code> 에 넣어</a> 가리킵니다. <code>Box</code> 를 빼면 그 앞 슬라이드의 <a href="#p14-recursive-err">E0072</a> 이고, 여기서 다시 돌려 보지는 않습니다. 이 단계의 <code>Op</code> 는 <code>Add</code> 와 <code>Sub</code> 둘입니다. 곱셈과 나눗셈은 3단계에서 늡니다.
+10번 줄의 <code>Debug</code> 는 나무를 <code class="nb">{:?}</code> 로 찍으려고, <code>PartialEq</code> 는 시험이 나무를 통째로 견주려고 붙였습니다. 둘째 상자의 <code class="nb">lib.rs</code> 는 모듈 둘과 다시 내놓는 이름 셋이 늘었습니다.</div>
+<div class="note"><b>마디에 자리를 넣어 둔 까닭</b> — 토큰은 자리를 달고 다니지만, 나무가 되고 나면 토큰은 남지 않습니다. 5단계의 <code>eval</code> 이 "이 나눗셈에서 0 으로 나눴다" 고 알리려면 그 나눗셈의 자리가 나무에 있어야 합니다.
+그래서 <code>Bin</code> 의 셋째 칸에 연산자의 자리를 넣습니다. 수 하나인 <code>Num</code> 에는 넣지 않았습니다. 수는 토큰이 될 때 이미 검사를 마쳤습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-parse">
+<h3>parse 와 Parser — 목록을 빌리고, 어디까지 읽었는지를 든다</h3>
+<p class="lead"><code class="nb">src/parse.rs</code> 의 위쪽입니다. 바깥에 내놓는 것은 함수 <code>parse</code> 하나이고, 일은 그 안에서 만드는 <code>Parser</code> 가 합니다. <code>Parser</code> 는 토큰 목록을 빌린 슬라이스와, 지금 볼 토큰의 인덱스를 가집니다.
+토큰을 집을 때는 <code class="nb">tokens[i]</code> 가 아니라 8부에서 본 <a href="#p08-vec-index-get"><code>get</code></a> 을 씁니다.</p>
+<!--CODE file=ex/24/calc2_parse/src/parse.rs lines=1-20 note=calc2_parse 의 src/parse.rs — parse 와 Parser-->
+<!--CODE file=ex/24/calc2_parse/src/parse.rs lines=23-39 note=같은 파일 — impl&lt;'a&gt; Parser&lt;'a&gt; 블록 안의, 토큰을 보는 메서드 둘-->
+<div class="note"><b>읽는 법</b> — 17번부터 20번 줄까지의 <code>Parser</code> 는 11부에서 본 <a href="#p11-struct-missing">참조를 필드로 둔 구조체</a>라서 <code>'a</code> 가 붙었고, 메서드를 담은 <code>impl</code> 블록의 머리에도 <code class="nb">impl&lt;'a&gt; Parser&lt;'a&gt;</code> 로 <a href="#p11-struct-impl">같이 적습니다</a>. 줄 번호는 두 상자 모두 <code class="nb">parse.rs</code> 의 것입니다. 24번 줄의 <code>peek</code> 은 지금 볼 토큰을 돌려주기만 합니다.
+25번 줄이 <code>get</code> 으로 집고, 26번 줄의 패턴 <code class="nb">&amp;pair</code> 가 참조를 벗겨 짝을 복사해 꺼냅니다. <code>Token</code> 에 <a href="#p24-calc-token"><code>Copy</code></a> 를 붙여 둔 까닭입니다. 28번 줄은 인덱스가 목록을 벗어났을 때입니다. 패닉하는 대신 <code>End</code> 를 자리 0 과 함께 돌려줍니다.
+33번 줄의 <code>next</code> 는 지금 볼 토큰을 돌려주고 인덱스를 하나 올립니다. 35번 줄의 <code class="nb">pair.0</code> 은 짝의 <a href="#p03-tuple">첫 칸</a>, 곧 토큰입니다. <code>End</code> 에서는 올리지 않습니다.
+6번 줄의 <code>parse</code> 는 7번 줄에서 <code>Parser</code> 를 만들고, 8번 줄에서 식 하나를 읽습니다. 10번부터 13번 줄까지가 그 뒤의 검사입니다. 식을 읽고 난 자리의 토큰이 <code>End</code> 면 나무를 돌려주고, 다른 것이면 그 자리를 담아 <code>Trailing</code> 을 돌려줍니다.</div>
+<div class="note"><b>28번 줄이 도는 때</b> — <code>tokenize</code> 가 만든 목록은 <code>End</code> 로 끝나고, 소스를 따라가면 <code>next</code> 는 <code>End</code> 를 넘지 않으므로 그 목록에서는 28번 줄에 닿지 않습니다. 닿는 것은 누군가 <code>End</code> 없는 목록을 손으로 만들어 넘겼을 때입니다.
+그 경우를 <a href="#p24-calc-parse-err">시험</a>이 봅니다.</div>
+</article>
+
+<article class="card" id="p24-calc-parse-expr">
+<h3>문법의 줄을 함수로 옮긴다 — parse_expr 와 parse_factor</h3>
+<p class="lead">같은 파일의 아래쪽입니다. 이 단계의 문법은 두 줄이고, 함수마다 위에 그 줄을 주석으로 적었습니다. 중괄호의 "0 번 이상 되풀이" 는 <a href="#p04-loop"><code>loop</code></a> 가 됩니다.</p>
+<!--CODE file=ex/24/calc2_parse/src/parse.rs lines=41-66 note=calc2_parse 의 src/parse.rs — 같은 impl 블록 안의 나머지 메서드 둘-->
+<!--CODE file=ex/24/calc2_parse/src/error.rs lines=8-13 note=같은 단계의 src/error.rs — Kind 에 더한 여섯 줄-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 첫 상자 <code class="nb">parse.rs</code> 의 것입니다. 59번 줄의 <code class="nb">parse_factor</code> 는 토큰 하나를 받아 넘어갑니다. 수면 62번 줄이 <code>Num</code> 마디를 돌려줍니다. 줄이 끝났으면 <code>Ended</code>, 그 밖의 토큰이면 <code>NotOperand</code> 이고, 두 오류 모두 60번 줄에서 받은 그 토큰의 자리를 담습니다. 둘째 상자가 이 단계에서 <code>Kind</code> 에 는 변형 셋입니다. 셋째 <code>Trailing</code> 은 앞 슬라이드의 <code>parse</code> 가 씁니다.
+42번 줄의 <code class="nb">parse_expr</code> 는 43번 줄에서 인수 하나를 읽어 <code>left</code> 에 둡니다. 45번 줄이 다음 토큰을 넘어가지 않고 봅니다. <code>+</code> 나 <code>-</code> 면 46번부터 50번 줄까지가 그것을 <code>Op</code> 로 바꾸고, 다른 것이면 49번 줄이 지금까지의 <code>left</code> 를 돌려줍니다.
+연산자였다면 51번 줄이 그 토큰을 넘어가고, 52번 줄이 인수를 하나 더 읽고, 54번 줄이 <code>left</code> 와 그것을 <code>Bin</code> 마디로 묶어 다시 <code>left</code> 에 넣습니다. 45번 줄에서 받아 둔 <code>pos</code> 가 마디의 셋째 칸에 들어갑니다.</div>
+<div class="key"><b>54번 줄 — 읽은 것이 왼쪽으로 내려간다</b> — 연산자를 하나 만날 때마다, 그때까지 읽은 나무 전체가 새 마디의 왼쪽 칸에 들어갑니다. <code class="nb">8 - 3 - 2</code> 를 따라가면 <code>left</code> 는 <code class="nb">Num(8)</code>, 그다음 <code class="nb">8 - 3</code> 의 마디, 그다음 그 마디를 왼쪽에 둔 새 마디가 됩니다.
+그렇게 지어진 나무는 다음 슬라이드에서 찍어 봅니다.</div>
+</article>
+
+<article class="card" id="p24-calc-left">
+<h3>8 - 3 - 2 는 (8 - 3) - 2 로 묶인다 — 본보기 tree 가 찍은 나무</h3>
+<p class="lead">둘째 본보기 프로그램 <code>tree</code> 는 인자를 <code>tokenize</code> 와 <code>parse</code> 에 차례로 넘겨, 돌아온 것을 <code class="nb">{:?}</code> 로 찍습니다. 같은 연산자가 이어질 때 어느 쪽부터 묶이는지를 나무의 생김새로 봅니다.</p>
+<!--CODE file=ex/24/calc2_parse/examples/tree.rs note=calc2_parse 의 examples/tree.rs — 이 파일도 끝까지 바뀌지 않는다-->
+<!--OUT file=out/24/calc2_parse.txt lines=7-11 note=인자 여섯 가운데 앞의 둘-->
+<!--CODE file=ex/24/calc2_parse/src/parse.rs lines=71-96 note=같은 단계의 src/parse.rs — 시험 모듈의 머리, 도우미 셋, 첫 시험-->
+<pre class="fig">   8 - 3 - 2 의 나무                 오른쪽부터 묶었다면
+
+        Sub (자리 6)                     Sub
+       /            \                   /   \
+  Sub (자리 2)      Num(2)          Num(8)   Sub
+  /          \                              /   \
+Num(8)      Num(3)                      Num(3)  Num(2)</pre>
+<div class="note"><b>읽는 법</b> — <code class="nb">tree.rs</code> 6번 줄의 <code class="nb">and_then</code> 은 9부에서 <a href="#p09-res-chain"><code>Result</code> 를 내는 일을 이어 붙인</a> 메서드입니다. <code>tokenize</code> 가 <code>Ok</code> 면 그 목록으로 <code>parse</code> 를 부르고, <code>Err</code> 면 그대로 둡니다.
+두 함수의 오류 타입이 같아서 바꿀 것이 없습니다. <code>42</code> 는 <code class="nb">Num(42)</code> 마디 하나입니다. <code class="nb">8 - 3 - 2</code> 의 바깥 <code>Bin</code> 은 자리 6 의 <code>Sub</code> 이고, 그 왼쪽 칸에 자리 2 의 <code>Sub</code> 가 통째로 들어 있습니다.
+오른쪽 칸은 <code class="nb">Num(2)</code> 입니다. 왼쪽 그림이 그 글을 나무로 그린 것입니다. 먼저 묶인 것은 <code class="nb">8 - 3</code> 입니다. 마지막 상자는 <code class="nb">parse.rs</code> 의 시험 모듈입니다. 도우미 <code>tree</code> 는 줄을 나무까지 가져가고, <code>show</code> 는 그 나무를 <code class="nb">{:?}</code> 로 찍은 글을 줍니다.
+91번과 92번 줄이 화면에 찍힌 그 글을 그대로 적어 견줍니다. 95번 줄의 <code class="nb">1+2-3</code> 도 왼쪽부터 묶였고, 빈칸이 없어 자리가 1 과 3 입니다. 이 시험이 통과한 화면은 다음 슬라이드에 있습니다.</div>
+<div class="key"><b>이 프로그램의 정의 — 묶이는 방향</b> — 같은 줄의 연산자가 이어지면 왼쪽부터 묶습니다. 부록의 <a href="#p27-precedence">우선순위 표</a>가 Rust 의 <code class="nb">+ -</code> 에 적은 방향과 같습니다. 오른쪽 그림처럼 묶였다면 <code class="nb">Bin(Num(8), Sub, 2, Bin(…))</code> 이 찍혔을 것입니다.
+두 나무는 값도 다릅니다. 왼쪽은 5 에서 2 를 빼고, 오른쪽은 8 에서 1 을 뺍니다. 값은 <a href="#p24-calc-eval-test">5단계의 시험</a>이 계산해 봅니다.</div>
+</article>
+
+<article class="card" id="p24-calc-parse-err">
+<h3>읽지 못한 줄은 종류와 자리를 돌려준다 — 끊긴 식, 먼저 온 연산자, 남은 토큰</h3>
+<p class="lead">이 단계에서 <code>Kind</code> 에 는 변형은 셋이었습니다. 인수가 올 자리에서 줄이 끝난 것, 그 자리에 다른 토큰이 있는 것, 그리고 식을 다 읽었는데 토큰이 남은 것입니다. <a href="#p24-calc-left">앞 슬라이드</a>와 같은 <code>tree</code> 실행의 나머지 넷과 시험으로 봅니다.</p>
+<!--OUT file=out/24/calc2_parse.txt lines=12-19 note=calc2_parse — 같은 tree 실행의 나머지 넷-->
+<!--CODE file=ex/24/calc2_parse/src/parse.rs lines=98-117 note=같은 단계의 src/parse.rs — 시험 모듈의 나머지 시험 둘-->
+<!--OUT file=out/24/calc2_parse.txt lines=1-5 note=단위 시험 — 1단계의 여섯에 셋이 늘었다-->
+<div class="note"><b>읽는 법</b> — <code class="nb">1 +</code> 는 <code>Ended</code> 이고 자리는 줄의 길이 3 입니다. <code>End</code> 토큰이 가진 자리입니다. <code class="nb">+ 1</code> 은 첫 토큰부터 인수가 아니라서 자리 0 의 <code>NotOperand</code> 입니다. 이 계산기에는 더하기 부호가 없습니다.
+<code class="nb">1 2</code> 는 <code>1</code> 까지가 식이고 자리 2 의 <code>2</code> 가 남아 <code>Trailing</code> 입니다. <code class="nb">2 * 3</code> 도 같은 <code>Trailing</code> 입니다. <code>tokenize</code> 는 <code>*</code> 를 토큰으로 만들지만 이 단계의 문법에는 곱셈이 없어서, <code>2</code> 뒤에 남은 토큰이 됐습니다.
+시험의 100번부터 104번 줄까지가 같은 경우를 값으로 견줍니다. 101번 줄의 빈 줄은 자리 0 의 <code>Ended</code> 이고, 103번 줄의 <code class="nb">1 + + 2</code> 는 둘째 <code>+</code> 의 자리 4 를 알립니다. 106번 줄은 <code>tokenize</code> 의 오류가 그대로 나옴을 봅니다.
+화면은 9개 통과입니다. 1단계의 여섯에, 이 둘과 앞 슬라이드의 시험 하나가 더해졌습니다.</div>
+<div class="note"><b>110번부터 117번 줄까지 — End 없는 목록</b> — <a href="#p24-calc-parse"><code>peek</code> 의 <code>None</code> 갈래</a>가 도는 경우입니다. 111번 줄의 빈 목록은 자리 0 의 <code>Ended</code> 입니다. 112번 줄의 수 하나뿐인 목록은 그대로 읽힙니다. 114번 줄은 <code>+</code> 에서 목록이 끝납니다.
+이때도 <code>Ended</code> 이고, 자리는 알 길이 없어 0 입니다. 세 경우 모두 패닉하지 않았습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-term">
+<h3>항의 줄을 끼운다 — 곱셈은 한 층 아래에서 먼저 묶인다</h3>
+<p class="lead">3단계는 <code class="nb">* /</code> 입니다. 문법에 항의 줄이 들어오고, 식의 줄은 인수 대신 항을 잇게 바뀝니다. 코드도 그대로 따라갑니다. <code class="nb">parse_expr</code> 에서 석 줄이 바뀌고, 그 아래에 <code class="nb">parse_term</code> 이 새로 생깁니다.
+<code class="nb">parse_factor</code> 는 그대로입니다.</p>
+<!--CODE file=ex/24/calc3_term/src/parse.rs lines=41-72 note=calc3_term 의 src/parse.rs — 41 · 43 · 52번 줄이 바뀐 줄이고, 58번부터 72번 줄까지가 새 줄-->
+<!--CODE file=ex/24/calc3_term/src/expr.rs lines=3-8 note=같은 단계의 src/expr.rs — 6번과 7번 줄이 새 줄-->
+<!--OUT file=out/24/calc3_term.txt lines=7-13 note=본보기 tree 에 세 줄을 준다-->
+<pre class="fig">   2 + 3 * 4 의 나무
+
+     Add (자리 2)
+    /            \
+Num(2)         Mul (자리 6)
+              /            \
+          Num(3)          Num(4)</pre>
+<div class="note"><b>읽는 법</b> — 줄 번호는 첫 상자 <code class="nb">parse.rs</code> 의 것입니다. 41번 줄의 주석과 43번 · 52번 줄의 호출에서 <a href="#p24-calc-parse-expr">2단계의 인수</a>가 항으로 바뀌었습니다. 59번 줄의 <code class="nb">parse_term</code> 은 <code class="nb">parse_expr</code> 와 생김새가 같고,
+잇는 연산자가 <code>*</code> 와 <code>/</code> 이며 읽는 것이 인수입니다. 화면의 <code class="nb">2 + 3 * 4</code> 에서 바깥 마디는 <code>Add</code> 이고, 그 오른쪽 칸에 <code class="nb">3 * 4</code> 의 <code>Mul</code> 마디가 통째로 들어 있습니다. 그림이 그 나무입니다.
+<code class="nb">2 * 3 + 4</code> 에서는 <code>Mul</code> 마디가 <code>Add</code> 의 왼쪽 칸에 있습니다. 어느 쪽에 적든 곱셈이 한 덩어리로 먼저 묶였습니다. <code class="nb">8 / 4 / 2</code> 는 2단계의 뺄셈처럼 왼쪽부터 묶여, 자리 2 의 <code>Div</code> 가 자리 6 의 <code>Div</code> 의 왼쪽 칸에 있습니다.</div>
+<div class="key"><b>이 프로그램의 정의 — 우선순위</b> — <code class="nb">* /</code> 가 <code class="nb">+ -</code> 보다 먼저 묶입니다. 우선순위(precedence)를 정하는 표는 코드에 없습니다. 소스를 따라가면 <code class="nb">parse_expr</code> 는 <code>+</code> 를 보기 전에 먼저 <code class="nb">parse_term</code> 을 부르고,
+<code class="nb">parse_term</code> 은 <code>*</code> 와 <code>/</code> 가 이어지는 동안 돌아오지 않습니다. 그래서 <code class="nb">3 * 4</code> 가 마디 하나가 된 다음에야 <code class="nb">parse_expr</code> 의 54번 줄이 그것을 <code>Add</code> 의 오른쪽에 넣습니다.
+문법에서 아래 줄에 적힌 것일수록 먼저 묶입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-term-test">
+<h3>우선순위를 시험으로 적어 둔다 — 2 + 3 * 4 와 2 * 3 + 4</h3>
+<p class="lead">3단계의 <code class="nb">parse.rs</code> 시험 모듈에 더한 시험입니다. 2단계의 도우미 <a href="#p24-calc-left"><code>show</code></a> 로 나무를 글로 바꿔 견줍니다.</p>
+<!--CODE file=ex/24/calc3_term/src/parse.rs lines=135-145 note=calc3_term 의 src/parse.rs — 시험 모듈에 더한 시험-->
+<!--OUT file=out/24/calc3_term.txt lines=1-5 note=단위 시험 — 2단계의 아홉에 하나가 늘었다-->
+<div class="note"><b>읽는 법</b> — 137번부터 143번 줄까지는 <a href="#p24-calc-term">앞 슬라이드의 화면</a>에 찍힌 세 나무를 그대로 적어 견줍니다. 144번 줄의 <code class="nb">2 * * 3</code> 은 둘째 <code>*</code> 의 자리 4 에서 <code>NotOperand</code> 입니다. <code class="nb">parse_term</code> 이 첫 <code>*</code> 를 넘어가
+인수를 읽으려 한 자리에 연산자가 또 있었습니다. 2단계에서 <code class="nb">2 * 3</code> 은 <a href="#p24-calc-parse-err">남은 토큰</a>이었습니다. 이 단계에서는 식입니다. 화면은 10개 통과입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-paren">
+<h3>인수의 줄을 마저 채운다 — 괄호는 식을, 부호는 인수를 다시 부른다</h3>
+<p class="lead">4단계에서 문법이 다 찹니다. 인수는 수 하나이거나, <code>-</code> 가 붙은 인수이거나, 괄호로 싼 식입니다. 인수 앞에 붙는 이 <code>-</code> 를 이 장은 부호라고 부릅니다. 10부에서 <a href="#p10-op-more">단항 <code>-</code></a> 라고 한 것입니다. <code class="nb">parse_factor</code> 의 <code>match</code> 에 갈래 둘이 끼어들고, 나무에는 부호를 나타내는 변형이,
+오류의 종류에는 닫히지 않은 괄호가 늡니다.</p>
+<!--CODE file=ex/24/calc4_paren/src/parse.rs lines=74-94 note=calc4_paren 의 src/parse.rs — 74번 줄이 바뀐 줄이고, 79번부터 90번 줄까지가 새 줄-->
+<!--CODE file=ex/24/calc4_paren/src/expr.rs lines=16-17 note=같은 단계의 src/expr.rs — Expr 에 더한 변형-->
+<!--CODE file=ex/24/calc4_paren/src/error.rs lines=14-15 note=같은 단계의 src/error.rs — Kind 에 더한 변형-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 첫 상자 <code class="nb">parse.rs</code> 의 것입니다. 79번 줄은 인수 자리에 <code>-</code> 가 온 때입니다. 80번 줄이 그 뒤의 인수를 읽고, 81번 줄이 <code>-</code> 의 자리와 함께 <code>Neg</code> 마디로 쌉니다.
+83번 줄은 여는 괄호입니다. 84번 줄이 그 안의 식을 통째로 읽고, 86번 줄이 다음 토큰을 받습니다. 닫는 괄호면 87번 줄이 안에서 읽은 나무를 그대로 돌려줍니다. 괄호를 나타내는 마디는 없습니다.
+닫는 괄호가 아니면 88번 줄이 <code>Unclosed</code> 를 돌려주는데, 담는 자리는 76번 줄에서 받은 여는 괄호의 자리입니다. 91번과 92번 줄은 2단계 그대로입니다. 앞 단계까지 나머지 갈래로 가서 <code>NotOperand</code> 가 되던 <code>-</code> 와 여는 괄호가 이제 제 갈래를 얻었습니다.</div>
+<div class="key"><b>여기서 재귀가 생긴다</b> — 80번 줄에서 <code class="nb">parse_factor</code> 는 자기 자신을 부릅니다. 84번 줄이 부르는 <code class="nb">parse_expr</code> 는 <code class="nb">parse_term</code> 을 거쳐 다시 <code class="nb">parse_factor</code> 로 옵니다. 5부에서 본 대로
+<a href="#p05-recursion">깊이에는 끝이 있습니다</a>. 그리고 얼마나 깊이 들어갈지는 받은 줄의 괄호와 부호가 정합니다. 그 깊이를 묶어 두는 일은 <a href="#p24-calc-limit">7단계</a>에서 합니다.</div>
+</article>
+
+<article class="card" id="p24-calc-paren-run">
+<h3>괄호는 나무에 남지 않고, 부호는 곱셈보다 먼저 묶인다</h3>
+<p class="lead">4단계의 <code>tree</code> 로 괄호와 부호가 든 줄 넷을 찍고, 같은 것을 시험으로 적어 둡니다.</p>
+<!--OUT file=out/24/calc4_paren.txt lines=7-15 note=calc4_paren — 본보기 tree 에 네 줄을 준다-->
+<!--CODE file=ex/24/calc4_paren/src/parse.rs lines=159-190 note=같은 단계의 src/parse.rs — 시험 모듈에 더한 시험 둘-->
+<div class="note"><b>읽는 법</b> — <code class="nb">(2 + 3) * 4</code> 의 바깥 마디는 <code>Mul</code> 이고, 왼쪽 칸에 <code>Add</code> 마디가 들어 있습니다. 괄호 없이 적은 <a href="#p24-calc-term">3단계의 나무</a>와 안팎이 바뀌었습니다. 찍힌 글 어디에도 괄호를 나타내는 것은 없고,
+자리만 괄호 한 글자만큼 밀려 3 과 8 입니다. <code class="nb">-2 * 3</code> 은 <code>Mul</code> 의 왼쪽 칸이 <code class="nb">Neg(0, Num(2))</code> 입니다. 부호가 <code>2</code> 에만 붙었습니다. <code class="nb">2 - -3</code> 의 첫 <code>-</code> 는 자리 2 의 <code>Sub</code> 이고
+둘째 <code>-</code> 는 자리 4 의 <code>Neg</code> 입니다. 같은 글자가 놓인 곳에 따라 다르게 읽혔습니다. <code class="nb">--3</code> 은 <code>Neg</code> 안에 <code>Neg</code> 입니다. 시험의 161번 줄과 172번부터 181번 줄까지는 화면의 네 나무를 글로 적어 견줍니다. 163번 줄은 괄호를 두 겹 싼 <code>7</code> 이 <code class="nb">Num(7)</code> 하나임을,
+165번 줄은 괄호로 오른쪽을 먼저 묶으면 <a href="#p24-calc-left">2단계의 오른쪽 그림</a>과 같은 나무가 됨을 봅니다. 184번 줄처럼 괄호를 치면 부호가 곱셈 전체에 붙습니다. 188번 줄에서 더하기 부호는 여전히 <code>NotOperand</code> 이고,
+189번 줄의 <code>-</code> 하나뿐인 줄은 자리 1 에서 끝난 것으로 알립니다.</div>
+<div class="note"><b>부호가 먼저라는 것</b> — 문법에서 부호는 인수의 줄, 곧 맨 아래 줄에 있습니다. <code class="nb">-2 * 3</code> 과 <code class="nb">-(2 * 3)</code> 은 값이 같은 -6 이라 값으로는 가를 수 없고, 화면의 나무로만 다릅니다.
+부록의 <a href="#p27-precedence">우선순위 표</a>에서도 단항 <code>-</code> 는 <code class="nb">* /</code> 보다 윗줄입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-paren-err">
+<h3>닫히지 않은 괄호는 여는 괄호의 자리를 알린다</h3>
+<p class="lead">괄호가 들어오면 짝이 맞지 않는 줄도 생깁니다. 같은 단계의 <code>tree</code> 에 그런 줄 넷을 주고, 시험으로 더 봅니다.</p>
+<!--OUT file=out/24/calc4_paren.txt lines=16-24 note=calc4_paren — 짝이 맞지 않는 줄 넷-->
+<!--CODE file=ex/24/calc4_paren/src/parse.rs lines=192-204 note=같은 단계의 src/parse.rs — 시험 모듈의 마지막 시험-->
+<!--OUT file=out/24/calc4_paren.txt lines=1-5 note=단위 시험 — 3단계의 열에 셋이 늘었다-->
+<div class="note"><b>읽는 법</b> — <code class="nb">(1</code> 은 <code>Unclosed</code> 이고 자리는 줄 끝의 2 가 아니라 여는 괄호의 0 입니다. <code class="nb">()</code> 는 괄호 안에 인수가 올 자리 1 에 닫는 괄호가 있어 <code>NotOperand</code> 입니다.
+<code class="nb">1)</code> 은 <code>1</code> 까지가 식이고 자리 1 의 닫는 괄호가 남아 <code>Trailing</code> 입니다. <code class="nb">2(3)</code> 도 <code>Trailing</code> 입니다. 수 뒤에 괄호를 붙여 써도 곱셈으로 읽지 않습니다.
+시험의 196번 줄은 괄호 안에 토큰이 남은 <code class="nb">(1 2</code> 도 <code>Unclosed</code> 임을, 197번 줄은 괄호가 두 겹일 때 닫히지 않은 바깥 괄호의 자리 4 를 알림을 봅니다. 198번 줄의 여는 괄호 하나는 그 안에서 줄이 끝난 것이라
+자리 1 의 <code>Ended</code> 입니다. 200번 줄의 닫는 괄호 하나는 자리 0 의 <code>NotOperand</code> 입니다. 화면은 13개 통과입니다.</div>
+<div class="key"><b>이 프로그램이 정한 것 — 한 줄에 오류 하나</b> — <code>parse</code> 는 처음 만난 틀린 곳에서 <code>?</code> 로 돌아갑니다. <code class="nb">(1 2</code> 에는 남은 토큰도 있고 닫히지 않은 괄호도 있지만 알리는 것은 하나입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-eval">
+<h3>eval — 나무를 따라 내려가며 셈하고, 넘침과 0 으로 나누기는 값으로 돌려준다</h3>
+<p class="lead">5단계는 나무를 수 하나로 바꿉니다. 14부의 <a href="#p14-expr-tree"><code>eval</code></a> 은 실수를 <code>+</code> 와 <code>*</code> 로 셈했고 실패할 일이 없었습니다. 이 <code>eval</code> 은 <code>i64</code> 를 셈하고, 셈이 안 되는 경우를 <code>Result</code> 로 돌려줍니다.
+3부에서 본 대로 <a href="#p03-overflow-choice">넘칠 수 있는 셈</a>과 <a href="#p03-div-zero">바깥에서 온 수로 하는 나눗셈</a>에는 <code class="nb">checked_</code> 로 시작하는 메서드를 씁니다. 새 파일 <code class="nb">src/eval.rs</code> 이고, <code>Kind</code> 에는 변형 둘이 늡니다.</p>
+<!--CODE file=ex/24/calc5_eval/src/eval.rs lines=1-36 note=calc5_eval 의 src/eval.rs — 연산 하나를 하는 apply 와, 나무를 도는 eval-->
+<!--CODE file=ex/24/calc5_eval/src/error.rs lines=16-19 note=같은 단계의 src/error.rs — Kind 에 더한 넉 줄-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 첫 상자 <code class="nb">eval.rs</code> 의 것입니다. 20번 줄의 <code>eval</code> 은 마디의 변형 셋을 가릅니다. <code>Num</code> 이면 22번 줄이 그 수를 돌려줍니다. <code>Bin</code> 이면 31번 줄이 왼쪽 칸의 나무로, 32번 줄이 오른쪽 칸의 나무로 자기를 다시 부릅니다.
+<code>left</code> 는 <code>Box</code> 를 가리키는 참조인데 <code class="nb">&amp;Expr</code> 를 받는 <code>eval</code> 에 그대로 넘어갑니다. 14부의 그 슬라이드에서 본 모양입니다. 두 값을 얻으면 33번 줄이 <code>apply</code> 에 넘깁니다.
+<code>Neg</code> 면 24번 줄이 안쪽을 먼저 구하고, 26번 줄의 <code class="nb">checked_neg</code> 가 부호를 바꿉니다. 이 책에서 처음 쓰는 메서드이고, 바꾼 값이 <code>i64</code> 에 없으면 <code>None</code> 을 준다는 것은 <a href="#p24-calc-eval-edge">시험</a>이 봅니다.
+6번 줄의 <code>apply</code> 는 연산 하나와 수 둘을 받습니다. 8번부터 10번 줄까지는 넘치면 <code>None</code> 입니다. 13번 줄의 <a href="#p07-pat-guard">가드</a>가 나누는 수 0 을 먼저 걸러 <code>DivByZero</code> 로 돌려보내고, 14번 줄은 그 밖의 나눗셈입니다. 16번 줄이 남은 <code>None</code> 을 <code>Overflow</code> 로 바꿉니다.</div>
+<div class="note"><b>자리는 누가 붙이나</b> — <code>apply</code> 가 받는 것은 수뿐이라 줄의 어디인지 모릅니다. 그래서 종류 <code>Kind</code> 만 돌려줍니다. 나무를 쥔 <code>eval</code> 의 33번 줄이 9부에서 본 <a href="#p09-res-defaults"><code class="nb">map_err</code></a> 로, 마디에 넣어 둔 연산자의 자리를 붙여 <code>CalcError</code> 로 만듭니다.
+27번 줄도 부호의 자리를 붙입니다. <a href="#p24-calc-expr">마디에 자리를 넣어 둔 까닭</a>이 여기서 쓰입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-eval-test">
+<h3>나무의 생김새가 값을 정한다 — 8 - 3 - 2 는 3 이고, -7 / 2 는 -3 이다</h3>
+<p class="lead"><code class="nb">eval.rs</code> 의 시험 모듈입니다. 도우미 <code>value</code> 가 줄 하나를 토큰, 나무, 값까지 가져갑니다. 앞 단계들에서 나무로 본 것을 이번에는 값으로 봅니다.</p>
+<!--CODE file=ex/24/calc5_eval/src/eval.rs lines=40-74 note=calc5_eval 의 src/eval.rs — 시험 모듈의 머리, 도우미 둘, 시험 둘-->
+<!--OUT file=out/24/calc5_eval.txt lines=1-5 note=단위 시험 — 4단계의 열셋에 일곱이 늘었다-->
+<div class="note"><b>읽는 법</b> — 46번 줄의 도우미는 세 함수를 한 줄에 겹쳐 부릅니다. <code>?</code> 가 둘인데, 세 함수의 오류 타입이 같아서 그대로 올려 보냅니다. 55번 줄의 14 는 <a href="#p24-calc-term">곱셈이 먼저 묶인 나무</a>의 값이고, 56번 줄의 20 은
+<a href="#p24-calc-paren-run">괄호가 덧셈을 먼저 묶은 나무</a>의 값입니다. 58번 줄이 <a href="#p24-calc-left">2단계의 왼쪽 그림</a>입니다. 값은 3 입니다. 59번 줄은 괄호로 오른쪽 그림처럼 묶은 것이고 7 입니다. 묶이는 방향이 값을 바꿨습니다.
+60번 줄의 나눗셈도 왼쪽부터라 2 를 2 로 나눈 1 입니다. 오른쪽부터였다면 8 을 2 로 나눈 4 입니다. 61번과 62번 줄은 부호가 겹친 경우이고, 63번 줄은 앞에 0 을 붙인 수입니다.
+화면은 20개 통과입니다. 이 파일의 다섯과 <code class="nb">lib.rs</code> 의 둘이 늘었습니다. 나머지는 다음 두 슬라이드에 있습니다.</div>
+<div class="key"><b>이 프로그램의 정의 — 나눗셈</b> — 몫의 소수점 아래를 0 쪽으로 버립니다. 68번 줄의 3 과 70번 줄의 -3 입니다. 작은 쪽으로 내렸다면 70번 줄은 -4 였을 것입니다. 3부에서 본 <a href="#p03-div-rem">Rust 의 정수 나눗셈</a> 그대로이고,
+<code class="nb">checked_div</code> 도 같은 값을 줬습니다. 73번 줄에서 <code class="nb">1 / 2 * 2</code> 는 왼쪽부터 묶여 먼저 0 이 되고, 답도 0 입니다. 나머지는 구하지 않습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-eval-edge">
+<h3>넘침과 0 으로 나누기는 오류 값이다 — 가장 작은 수는 한 번에 적을 수 없다</h3>
+<p class="lead">같은 시험 모듈의 나머지 셋입니다. 셈이 안 되는 경우마다 어떤 종류가 어느 자리와 함께 나오는지, 그리고 <code>i64</code> 의 양 끝에서 무슨 일이 있는지를 적어 둡니다.</p>
+<!--CODE file=ex/24/calc5_eval/src/eval.rs lines=76-117 note=calc5_eval 의 src/eval.rs — 시험 모듈의 나머지 시험 셋-->
+<!--OUT file=out/24/calc5_eval.txt lines=3-5 note=앞 슬라이드와 같은 실행-->
+<div class="note"><b>읽는 법</b> — 78번과 79번 줄에서 0 으로 나누면 나뉘는 수가 무엇이든 <code>DivByZero</code> 입니다. 81번과 82번 줄은 <code class="nb">checked_div</code> 가 0 으로 나눌 때와 <code class="nb">i64::MIN</code> 을 -1 로 나눌 때 똑같이 <code>None</code> 을 줌을 봅니다.
+<code>apply</code> 는 0 을 먼저 봤으므로 83번 줄에서 뒤의 것은 <code>Overflow</code> 로 갈립니다. 84번부터 86번 줄까지는 덧셈 · 뺄셈 · 곱셈의 넘침이고, 88번과 89번 줄은 끝값에 꼭 닿는 셈이 그대로 됨을 봅니다.
+94번 줄부터는 줄을 넣어 자리를 봅니다. <code class="nb">1 + 2 / 0</code> 의 자리 6 은 <code>/</code> 이고, 97번 줄의 자리 20 은 <code>+</code> 입니다. 101번 줄은 양쪽이 다 틀린 줄입니다. 왼쪽은 0 으로 나누고 오른쪽은 넘칩니다. 나온 것은 왼쪽의 <code>DivByZero</code> 입니다.
+103번 줄처럼 둘의 자리를 바꾸면 <code>Overflow</code> 가 나옵니다. <a href="#p24-calc-eval"><code>eval</code></a> 이 왼쪽 칸을 먼저 구하고, 거기서 <code>?</code> 로 돌아갔습니다.</div>
+<div class="warn"><b>108번부터 117번 줄까지 — i64::MIN 은 수 하나로 적히지 않는다</b> — 3부에서 본 대로 <a href="#p03-minmax">부호 있는 쪽은 음수가 하나 더 많습니다</a>. <code class="nb">-9223372036854775808</code> 은 <code>i64</code> 에 있는 값이지만, 이 계산기는 <code>-</code> 를 붙이기 전에 숫자들을 먼저 수로 읽습니다.
+그 수 9223372036854775808 이 <code>i64</code> 에 없어서 110번 줄은 자리 1 의 <code>TooBig</code> 입니다. 111번 줄처럼 1 을 빼서 만들면 됩니다. 그렇게 만든 값의 부호를 바꾸면(113번 줄) 자리 0 의 <code>-</code> 에서, -1 로 나누면(115번 줄) 자리 27 의 <code>/</code> 에서 <code>Overflow</code> 입니다.
+어느 경우에도 패닉하지 않았고, 값이 돌아서 엉뚱한 수가 되지도 않았습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-calc">
+<h3>세 함수를 ? 로 잇는다 — 오류 타입이 하나라서 From 을 쓰지 않는다</h3>
+<p class="lead">같은 단계에서 <code class="nb">lib.rs</code> 에 함수 <code>calc</code> 가 생깁니다. 줄 하나를 받아 <code>tokenize</code>, <code>parse</code>, <code>eval</code> 을 차례로 부릅니다. 9부에서는 <a href="#p09-err-from">종류가 다른 오류를 <code>From</code> 으로 모았습니다</a>.
+여기서는 세 함수가 처음부터 같은 <code>CalcError</code> 를 돌려주므로 모을 것이 없고, <code>?</code> 만 붙이면 됩니다. 이 장이 오류 타입을 하나로 둔 까닭입니다.</p>
+<!--CODE file=ex/24/calc5_eval/src/lib.rs lines=1-24 note=calc5_eval 의 src/lib.rs — 2번 · 8번 줄과 13번부터 24번 줄까지가 새 줄-->
+<!--CODE file=ex/24/calc5_eval/src/lib.rs lines=28-49 note=같은 파일의 시험 모듈 안-->
+<!--OUT file=out/24/calc5_eval.txt lines=3-5 note=앞 슬라이드와 같은 실행 — 스물 가운데 둘이 이 시험이다-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 두 상자 모두 <code class="nb">lib.rs</code> 의 것입니다. 16번 · 21번 · 22번 줄에 <code>?</code> 가 하나씩 있습니다. 36번 줄은 세 함수를 다 거친 값 14 를 봅니다. 38번부터 40번 줄까지는 같은 줄의 끝만 바꿔, 세 함수에서 하나씩 오류를 냅니다.
+<code>가</code> 는 <code>tokenize</code> 가, 끊긴 식은 <code>parse</code> 가, 0 으로 나누기는 <code>eval</code> 이 돌려준 것인데 <code>calc</code> 를 부른 쪽에는 모두 같은 타입의 값으로 옵니다. 어느 것에나 자리가 있습니다.</div>
+<div class="key"><b>이 프로그램이 정한 것 — 토큰이 없는 줄</b> — 18번 줄은 토큰 목록이 <code>End</code> 하나뿐인지를 봅니다. 그런 줄은 오류가 아니라 <code class="nb">Ok(None)</code>, 곧 "계산할 것이 없다" 입니다. 45번 줄의 빈 줄과 46번 줄의 빈칸과 탭뿐인 줄이 그렇습니다.
+48번 줄의 전각 빈칸 하나는 다릅니다. 1단계에서 정한 대로 <a href="#p24-calc-token-space">모르는 글자</a>입니다. 무엇이 빈 줄인지를 <code>tokenize</code> 와 따로 정하지 않고 그 결과로 정했기 때문에 두 규칙이 어긋날 수 없습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-display">
+<h3>오류가 스스로 말한다 — Display 는 까닭과 자리를 한 줄로 만든다</h3>
+<p class="lead">지금까지 오류는 <code class="nb">{:?}</code> 로만 찍었습니다. 6단계는 사람에게 보일 글을 만듭니다. 9부에서 본 대로 오류 타입에는 <a href="#p09-err-display"><code>Display</code> 와 <code>Error</code></a> 를 구현합니다. <code class="nb">error.rs</code> 의 맨 위에 <code>use</code> 한 줄을,
+<code>CalcError</code> 아래에 구현 둘을 더했습니다.</p>
+<!--CODE file=ex/24/calc6_caret/src/error.rs lines=1-1 note=calc6_caret 의 src/error.rs — 파일 맨 위에 더한 한 줄-->
+<!--CODE file=ex/24/calc6_caret/src/error.rs lines=37-53 note=같은 파일에 더한 구현 둘-->
+<!--CODE file=ex/24/calc6_caret/src/error.rs lines=77-86 note=같은 파일의 시험 모듈 — 이 단계에서 생긴 모듈의 첫 시험-->
+<!--OUT file=out/24/calc6_caret.txt lines=1-5 note=단위 시험 — 5단계의 스물에 넷이 늘었다-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 6단계의 <code class="nb">error.rs</code> 의 것입니다. 39번 줄의 <code>match</code> 는 종류 여덟에 글 하나씩을 짝짓습니다. 나머지 갈래 <code>_</code> 는 두지 않았습니다. 49번 줄이 그 글 뒤에 <code class="nb">(자리 N)</code> 을 붙여 씁니다.
+53번 줄은 본문 없는 <code class="nb">impl Error</code> 입니다. 시험의 80번과 82번 줄이 만들어진 글을 그대로 견줍니다. <code class="nb">to_string()</code> 은 10부에서 본 대로 <a href="#p10-display-impl"><code>Display</code> 를 구현하면 따라오는 메서드</a>입니다.
+84번 줄은 이 오류를 9부의 <a href="#p09-err-box"><code class="nb">Box&lt;dyn Error&gt;</code></a> 에 넣고, 85번 줄이 거기서도 같은 글이 나옴을 봅니다. 화면은 24개 통과입니다. 이 시험과 다음 슬라이드의 셋이 늘었습니다.</div>
+<div class="note"><b>글에 든 수</b> — <code class="nb">(자리 6)</code> 의 6 은 <a href="#p24-calc-error">1단계에서 정한</a> 그 수, 0 부터 센 바이트 번호 그대로입니다. 사람이 세는 "일곱째 글자" 로 바꾸지 않았습니다. 사람에게는 수보다 다음 슬라이드의 <code>^</code> 가 자리를 알려 줍니다.</div>
+</article>
+
+<article class="card" id="p24-calc-caret">
+<h3>자리 아래에 ^ 를 놓는다 — 알림은 석 줄이다</h3>
+<p class="lead">자리를 수로만 알리면 사람이 글자를 세어야 합니다. 받은 줄을 한 번 더 찍고, 그 아랫줄의 같은 칸에 <code>^</code> 를 놓습니다. 이 장은 그 줄을 "자리를 짚는 줄" 이라고 부릅니다. <code class="nb">error.rs</code> 에 함수 둘을 더하고, <code class="nb">lib.rs</code> 가 그 둘을 다시 내놓습니다.</p>
+<!--CODE file=ex/24/calc6_caret/src/error.rs lines=55-71 note=calc6_caret 의 src/error.rs — 자리를 짚는 줄과 알림 석 줄-->
+<!--CODE file=ex/24/calc6_caret/src/lib.rs lines=7-7 note=같은 단계의 src/lib.rs — 바뀐 한 줄. 이름 둘이 늘었다-->
+<!--CODE file=ex/24/calc6_caret/src/error.rs lines=88-112 note=src/error.rs 의 시험 모듈 — 나머지 시험 셋-->
+<!--OUT file=out/24/calc6_caret.txt lines=3-5 note=앞 슬라이드와 같은 실행-->
+<div class="note"><b>읽는 법</b> — 59번 줄은 줄에서 자리 앞까지를 6부에서 본 <a href="#p06-char-boundary"><code>get</code></a> 으로 잘라 냅니다. 자리가 글자 경계가 아니거나 줄보다 길면 <code>get</code> 은 <code>None</code> 이고, 그때는 9부의 <a href="#p09-opt-defaults"><code class="nb">unwrap_or</code></a> 가 줄 전체를 대신 줍니다.
+60번부터 63번 줄까지가 그 앞부분의 글자마다 빈칸 하나를 놓되 탭은 탭 그대로 둡니다. 64번 줄이 끝에 <code>^</code> 를 붙입니다. 69번 줄의 <code>report</code> 는 <code class="nb">calc:</code> 와 <code>Display</code> 의 글, 받은 줄, 자리를 짚는 줄을 줄바꿈 둘로 잇습니다.
+시험의 90번부터 92번 줄까지는 자리 2 · 3 · 0 에 빈칸이 둘 · 셋 · 없음임을 봅니다. 91번 줄의 3 은 줄의 길이, 곧 줄이 끝난 바로 다음 칸입니다. 94번과 95번 줄은 한글이 낀 줄입니다. <code>가</code> 앞이 네 글자와 한 글자라서 빈칸도 넷과 하나입니다.
+110번과 111번 줄이 알림 석 줄을 통째로 견줍니다.</div>
+<div class="key"><b>자리를 짚는 줄이 맞는 까닭과 그 끝</b> — 자리는 바이트 번호인데 빈칸은 글자 수만큼 놓습니다. 둘이 같은 것은 <a href="#p24-calc-token-space">자리 앞에 ASCII 만 있기</a> 때문입니다. 나무를 짓거나 계산하다 난 오류는 토큰으로 다 나뉜 줄에서만 나고, 그런 줄은 통째로 ASCII 입니다. ASCII 가운데 화면에서 한 칸이 아닌 것은 탭이라서, 97번 줄처럼 탭은 탭으로 옮깁니다.
+받은 줄과 짚는 줄이 같은 자리까지 같은 글자로 가게 하려는 것이고, 탭이 낀 화면은 이 장에 싣지 않았습니다. 103번과 104번 줄은 올 수 없는 자리를 넣어도 패닉하지 않음을 봅니다. 한글처럼 폭이 두 칸인 글자의 아래에서는 <code>^</code> 가 그 왼쪽 칸에 놓입니다.
+이 문법에서는 그런 글자가 자리 앞에 올 수 없지만, 한글 이름을 받는 문법으로 키우면 칸 수를 따로 세어야 합니다. <a href="#p24-calc-more">더 해 볼 것</a>에 남깁니다.</div>
+</article>
+
+<article class="card" id="p24-calc-limit">
+<h3>재귀의 깊이는 받은 줄이 정한다 — 토큰 수에 한계를 둔다</h3>
+<p class="lead">이 프로그램에는 자기를 다시 부르는 함수가 둘 있습니다. <a href="#p24-calc-paren"><code class="nb">parse_factor</code></a> 는 괄호와 부호를 만날 때마다, <a href="#p24-calc-eval"><code>eval</code></a> 은 나무를 한 층 내려갈 때마다 자기를 부릅니다.
+5부에서 본 대로 <a href="#p05-recursion">호출마다 스택을 쓰고 깊이에는 끝이 있는데</a>, 여기서는 그 깊이를 프로그램이 아니라 받은 줄이 정합니다. 괄호를 얼마든지 겹친 줄이 올 수 있습니다. 7단계는 한 줄에 받는 토큰의 수를 200 으로 묶습니다.</p>
+<!--CODE file=ex/24/calc7_limit/src/parse.rs lines=5-6 note=calc7_limit 의 src/parse.rs — 파일 위쪽에 더한 상수-->
+<!--CODE file=ex/24/calc7_limit/src/parse.rs lines=10-16 note=같은 파일 — parse 의 맨 앞에 더한 일곱 줄-->
+<!--CODE file=ex/24/calc7_limit/src/lib.rs lines=10-10 note=같은 단계의 src/lib.rs — 바뀐 한 줄. 상수도 다시 내놓는다-->
+<div class="note"><b>읽는 법</b> — <code class="nb">parse.rs</code> 11번 줄의 <code class="nb">tokens.get(MAX_TOKENS)</code> 는 목록의 201 번째 칸을 집어 봅니다. 인덱스는 0 부터이므로 200 번이 201 번째입니다. 그 칸이 있고 <code>End</code> 가 아니면 12번 줄의 <a href="#p07-pat-guard">가드</a>가 참이고,
+13번 줄이 그 토큰의 자리를 담아 <code>TooLong</code> 을 돌려줍니다. 그 칸이 없거나 <code>End</code> 면 15번 줄로 가서 아무 일도 하지 않습니다. 토큰이 꼭 200 개인 줄에서는 201 번째 칸이 <code>End</code> 입니다.
+이 검사는 <code>Parser</code> 를 만들기 전, 곧 재귀가 시작되기 전에 끝납니다.</div>
+<div class="key"><b>깊이가 아니라 토큰 수를 묶은 까닭</b> — 깊어지는 길이 둘이기 때문입니다. 소스를 따라가면 <code class="nb">parse_factor</code> 는 자기나 <code class="nb">parse_expr</code> 를 다시 부르기 전에 반드시 <code>-</code> 나 여는 괄호 하나를 넘어갑니다. 그래서 파서의 재귀는 토큰 수보다 깊어질 수 없습니다.
+또 하나는 나무입니다. <a href="#p24-calc-parse-expr"><code class="nb">parse_expr</code></a> 는 재귀 없이 <code>loop</code> 로 돌지만, 연산자를 만날 때마다 읽은 나무를 왼쪽 칸으로 한 층씩 내립니다. 괄호가 하나도 없는 <code class="nb">1+1+1+…</code> 도 나무는 깊고, <code>eval</code> 은 그 깊이만큼 자기를 부릅니다.
+마디 하나에는 토큰이 적어도 하나 들므로 나무의 깊이도 토큰 수를 넘지 못합니다. 토큰 수 하나를 묶으면 두 길이 다 묶입니다. <a href="#p24-calc-limit-test">시험</a>이 세 가지 생김새의 줄로 봅니다. 한계를 넘는 깊이로 돌리는 화면은 이 책에 없습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-limit-noarm">
+<h3>종류를 하나 더하면 컴파일러가 빠진 갈래를 찾아 준다 — E0004</h3>
+<p class="lead">한계를 넘은 줄을 알리려면 <code>Kind</code> 에 변형이 하나 더 있어야 합니다. 변형을 더하고 나서 손댈 곳이 어디인지는 컴파일러가 압니다. 7단계에서 <code>Display</code> 의 갈래 한 줄만 뺀 쌍둥이 디렉터리를 빌드해 봅니다.</p>
+<!--CODE file=ex/24/calc7_noarm/src/error.rs lines=22-23 note=calc7_noarm 의 src/error.rs — Kind 에 더한 변형. 7단계와 같은 줄이다-->
+<!--OUT file=out/24/calc7_noarm.txt note=라이브러리가 컴파일되지 않는다-->
+<!--CODE file=ex/24/calc7_limit/src/error.rs lines=50-50 note=calc7_limit 의 src/error.rs — 쌍둥이에서 뺀 그 한 줄-->
+<div class="note"><b>읽는 법</b> — 7부에서 본 <a href="#p07-enum-missing-arm">E0004</a> 와 같은 꼴입니다. 오류 첫 줄은 "<code class="nb">Kind::TooLong</code> 을 다루지 않았다" 이고, 41번 줄의 <code class="nb">match self.kind</code> 를 짚습니다. 7부의 화면에서는 참조를 갈라서 변형 이름 앞에 <code>&amp;</code> 가 붙었고,
+여기서는 값을 갈라서 붙지 않았습니다. <code>note:</code> 는 5번 줄의 <code>Kind</code> 정의로 가서 23번 줄의 <code>TooLong</code> 에 "not covered" 를 답니다. 그 사이의 <code class="nb">...</code> 은 줄을 건너뛰었다는 표시입니다. 둘째 <code>note:</code> 는 가르는 값의 타입이 <code>Kind</code> 라고 적습니다.
+<code>help:</code> 는 49번 줄 아래에 갈래를 더한 모양을 보여 주는데, 값 자리에 9부에서 본 <a href="#p09-todo"><code class="nb">todo!()</code></a> 를 넣어 두었습니다. 무슨 글을 쓸지는 컴파일러가 모릅니다. <code class="nb">For more information</code> 줄은 2부에서 본 <a href="#p02-macro-bang"><code class="nb">--explain</code></a> 안내이고,
+끝의 <code class="nb">error: could not compile</code> 줄은 Cargo 가 덧붙인 것입니다. 종료 코드는 101 입니다. 마지막 상자의 한 줄을 그 자리에 적은 것이 7단계이고, 그 빌드와 시험은 다음 슬라이드에 있습니다.</div>
+<div class="tip"><b>나머지 갈래를 두지 않은 덕</b> — <a href="#p24-calc-display"><code>Display</code> 의 <code>match</code></a> 에 <code class="nb">_ =&gt; "알 수 없는 오류"</code> 같은 갈래가 있었다면 이 쌍둥이는 그대로 컴파일됐을 것이고, 새 종류의 알림은 그 글로 나갔을 것입니다.
+7부의 그 슬라이드가 "<code>_</code> 를 아끼는 까닭" 으로 말한 것입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-limit-test">
+<h3>토큰 200 개까지는 읽고 201 개째에서 돌려보낸다</h3>
+<p class="lead">한계의 바로 안쪽과 바로 바깥쪽을 시험으로 적어 둡니다. 깊어지는 생김새 셋, 곧 부호를 겹친 줄, 괄호를 겹친 줄, 더하기를 이어 쓴 줄로 봅니다. 나무의 깊이를 재는 도우미 <code>depth</code> 는 시험 모듈 안에만 있습니다.</p>
+<!--CODE file=ex/24/calc7_limit/src/parse.rs lines=216-252 note=calc7_limit 의 src/parse.rs — 시험 모듈에 더한 도우미와 시험 둘-->
+<!--OUT file=out/24/calc7_limit.txt lines=1-5 note=단위 시험 — 6단계의 스물넷에 둘이 늘었다-->
+<div class="note"><b>읽는 법</b> — 217번 줄의 <code>depth</code> 도 <code>eval</code> 처럼 나무를 따라 자기를 부릅니다. 수 하나가 1 이고, <code>Neg</code> 는 안쪽보다 1 깊고, <code>Bin</code> 은 두 칸 가운데 깊은 쪽보다 1 깊습니다. 230번 줄은 18부에서 쓴 <a href="#p18-char-digit"><code>repeat</code></a> 로 <code>-</code> 199 개를 잇고 <code>1</code> 을 붙입니다.
+토큰이 꼭 200 개인 줄이고, 231번 줄에서 읽혔으며 깊이도 200 입니다. 233번 줄은 괄호 99 겹입니다. 토큰은 199 개인데 깊이는 1 입니다. <a href="#p24-calc-paren-run">괄호는 나무에 남지 않기</a> 때문입니다.
+236번 줄은 괄호 없이 1 을 백 개 더한 줄입니다. 깊이가 100 입니다. 243번 줄부터는 토큰이 하나씩 더 많은 세 줄입니다. 셋 다 <code>TooLong</code> 이고, 자리는 201 번째 토큰이 있는 200 입니다. 세 줄 모두 빈칸이 없어 토큰의 번호와 자리가 같습니다.
+250번 줄은 <code>+</code> 만 201 개입니다. 첫 토큰부터 틀린 줄이지만 알리는 것은 <code>TooLong</code> 입니다. 한계의 검사가 먼저입니다. 화면은 26개 통과입니다.</div>
+<div class="key"><b>이 프로그램이 정한 것 — 한 줄의 길이</b> — 한 줄에 토큰 200 개까지입니다. 글자 수나 빈칸의 수는 묶지 않습니다. 200 은 이 장이 고른 수이고, <code class="nb">MAX_TOKENS</code> 한 군데에 적혀 있습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-run">
+<h3>run — 줄마다 답하고, 틀린 줄은 알리고 다음 줄로 간다</h3>
+<p class="lead">8단계에서 프로그램이 처음 돕니다. <code>run</code> 의 매개변수 넷과 반환 타입은 1장의 <a href="#p24-wc-run"><code>run</code></a> 과 같습니다. 달라진 것은 읽는 방식입니다. 2장의 <code>grep</code> 은 <a href="#p24-grep-run">입력을 통째로 읽은 다음</a> 일했습니다.
+이 프로그램은 줄 하나를 읽으면 그 줄의 답부터 쓰고 다음 줄을 읽습니다. <code class="nb">lib.rs</code> 의 맨 위에 <code>use</code> 한 줄을, <code>calc</code> 와 시험 모듈 사이에 함수 셋을 더했습니다.</p>
+<!--CODE file=ex/24/calc8_run/src/lib.rs lines=1-1 note=calc8_run 의 src/lib.rs — 파일 맨 위에 더한 한 줄-->
+<!--CODE file=ex/24/calc8_run/src/lib.rs lines=28-52 note=같은 파일 — 줄 하나에 답하는 answer 와, 종료 코드를 정하는 exit_code-->
+<!--CODE file=ex/24/calc8_run/src/lib.rs lines=54-80 note=같은 파일의 run — 인자가 없으면 표준 입력의 줄마다, 있으면 인자마다-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 세 상자 모두 <code class="nb">lib.rs</code> 의 것입니다. 30번 줄의 <code>answer</code> 는 <code>pub</code> 이 없는 함수입니다. 35번 줄이 5단계의 <a href="#p24-calc-calc"><code>calc</code></a> 를 부르고 세 경우를 가릅니다.
+값이 있으면 37번 줄이 <code>out</code> 에 한 줄로 씁니다. 값이 없는 줄이면 41번 줄이 아무것도 쓰지 않습니다. 오류면 43번 줄이 6단계의 <a href="#p24-calc-caret"><code>report</code></a> 가 만든 석 줄을 <code>err</code> 에 씁니다. 돌려주는 <code>bool</code> 은 그 줄이 오류였는지입니다.
+61번 줄은 인자가 없을 때입니다. 63번 줄이 <code>stdin</code> 을 17부에서 본 <a href="#p17-file-bufreader"><code>BufReader</code></a> 로 감싸 <code>lines()</code> 를 부릅니다. <code>lines()</code> 는 <a href="#p17-in-bufread"><code>BufRead</code> 의 메서드</a>이고 <code>run</code> 이 받은 것은 <code>Read</code> 라고만 적혀 있어서, 17부에서 <code>File</code> 을 감쌌듯이 감쌉니다.
+1번 줄의 <code>BufRead</code> 는 그 메서드를 쓰려고 끌어왔습니다. 64번 줄의 <code>?</code> 는 줄을 읽지 못했을 때 <code>run</code> 을 끝냅니다. 65번 줄이 줄마다 <code>answer</code> 를 부르고, 오류였으면 <code>failed</code> 를 켠 뒤 다음 줄로 갑니다.
+69번 줄부터는 인자가 있을 때입니다. 인자 하나하나를 8부의 <a href="#p08-str-split"><code>lines()</code></a> 로 쪼개 줄마다 같은 <code>answer</code> 에 넘깁니다. 이때는 <code>stdin</code> 을 읽지 않습니다. 79번 줄이 <code>failed</code> 를 종료 코드로 바꿉니다.</div>
+<div class="key"><b>이 프로그램이 정한 것 — 줄과 답</b> — 줄 하나에 답은 하나입니다. 값이면 표준 출력에 한 줄, 오류면 표준 오류에 알림 석 줄, 토큰이 없는 줄이면 아무것도 없습니다. 틀린 줄이 다음 줄을 막지 않습니다. 17부의 <a href="#p17-in-ask">묻는 말</a> 같은 것은 찍지 않습니다.
+받는 옵션도 없어서, 인자는 모두 식으로 읽습니다. 2장처럼 종료 코드는 <a href="#p24-grep-read">작은 함수</a>가 정하는데, 여기서는 0 과 1 둘뿐입니다. 오류였던 줄이 하나라도 있으면 1 입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-main">
+<h3>main 은 2장과 같은 짜임이다 — 처음 돌려 본다</h3>
+<p class="lead">같은 단계에 <code class="nb">src/main.rs</code> 와 입력 파일 <code class="nb">data/sums.txt</code> 가 생깁니다. <code>main</code> 은 2장의 <a href="#p24-grep-main"><code>main</code></a> 에서 도구 이름과 주석만 바꾼 것이고, 이 파일도 마지막 단계까지 바뀌지 않습니다.
+<a href="#p24-calc-goal">다 만들면 이렇게 돈다</a>에서 본 입력을 이 단계의 실행 파일에 넣습니다.</p>
+<!--CODE file=ex/24/calc8_run/src/main.rs note=calc8_run 의 src/main.rs — 실행 크레이트의 전부-->
+<!--OUT file=out/24/calc8_run.txt lines=1-12 note=8단계의 파일 열하나-->
+<!--OUT file=out/24/calc8_run.txt lines=13-41 note=입력 파일을 보고, 빌드하고, 표준 입력에 잇는다-->
+<div class="note"><b>읽는 법</b> — 2장의 파일과 다른 줄은 넷입니다. 9번과 14번 줄의 도구 이름, 12번과 13번 줄의 주석입니다. 15번 줄은 2장처럼 2 입니다. 이 프로그램에서도 1 은 실패가 아니라 "오류인 줄이 있었다" 는 답이기 때문입니다.
+<code>find</code> 가 보인 파일은 열하나입니다. <code class="nb">src/</code> 의 여섯 가운데 <code class="nb">main.rs</code> 만 실행 크레이트이고 나머지 다섯이 라이브러리입니다. <code class="nb">data/sums.txt</code> 는 아홉 줄이고 넷째 줄이 비었습니다.
+<code class="nb">cargo build -q</code> 는 아무것도 찍지 않았습니다. 실행은 앞의 세 줄에 14 · 20 · 3 을 찍었습니다. 빈 줄에는 아무것도 없고, <code class="nb">-7 / 2</code> 는 -3 입니다. 그 뒤 네 줄은 알림 석 줄씩입니다.
+0 으로 나눈 줄은 자리 6 의 <code>/</code> 아래에, 닫히지 않은 괄호는 자리 4 의 여는 괄호 아래에, <code>가</code> 가 낀 줄은 자리 4 의 그 글자 아래에, 넘친 덧셈은 자리 20 의 <code>+</code> 아래에 <code>^</code> 가 있습니다.
+아홉 줄에 답이 여덟이고 종료 코드는 1 입니다.</div>
+<div class="warn"><b>앞의 두 장에서 말한 것 둘은 여기서도 그대로다</b> — 6번 줄은 1장에서 <a href="#p24-wc-args-bad">UTF-8 이 아닌 인자에 패닉한</a> <code class="nb">env::args()</code> 이고, 이 프로그램에서는 인자가 곧 식입니다. 14번 줄의 <code>eprintln!</code> 도 같아서,
+<a href="#p24-wc-stdin-fail">표준 오류에 쓰지 못하는 경우</a>는 이 장도 다루지 않습니다. 두 경우를 <code>calc</code> 로 돌린 화면은 이 장에 싣지 않았습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-run-split">
+<h3>값은 표준 출력으로, 알림은 표준 오류로 간다 — 인자로 준 식, 값이 없는 줄</h3>
+<p class="lead">앞 슬라이드의 화면에서는 값과 알림이 한데 섞여 나왔습니다. 1장에서 한 것처럼 <a href="#p24-wc-missing">한 길씩 버려 봅니다</a>. 그다음 식을 인자로 주고, 값이 없는 줄이 낀 입력과 빈 입력을 줍니다.</p>
+<!--OUT file=out/24/calc8_run.txt lines=42-74 note=calc8_run — 같은 입력을 두 번 더, 인자, 값이 없는 줄, 그리고 틀린 줄이 먼저인 입력-->
+<div class="note"><b>읽는 법</b> — <code class="nb">2&gt; /dev/null</code> 을 붙인 실행에는 값 넷만 남았고, <code class="nb">&gt; /dev/null</code> 을 붙인 실행에는 알림 넷만 남았습니다. 값은 <code>out</code> 으로, 알림은 <code>err</code> 로 갔습니다. 두 실행 모두 종료 코드는 1 입니다.
+알림만 남은 화면에서도 어느 줄의 알림인지는 알 수 있습니다. 알림마다 받은 줄이 들어 있기 때문입니다. 인자 둘을 준 실행은 14 와 3 입니다. <code class="nb">10 / 3</code> 의 몫에서 소수점 아래가 버려졌습니다. 오류가 없으니 종료 코드는 0 이라 화면에 표시가 없습니다.
+그다음 입력은 네 줄입니다. 둘째 줄은 비었고, 셋째 줄은 빈칸과 탭뿐이고, 넷째 줄은 줄바꿈 없이 끝납니다. 찍힌 것은 2 와 4 둘이고 종료 코드는 0 입니다. 값이 없는 두 줄은 답도 알림도 내지 않았고, 줄바꿈 없이 끝난 마지막 줄도 한 줄로 읽혔습니다.
+<code class="nb">&lt; /dev/null</code> 은 빈 입력입니다. 아무것도 찍지 않고 0 으로 끝났습니다.</div>
+<div class="note"><b>마지막 실행 — 틀린 줄이 먼저다</b> — 입력의 첫 줄 <code class="nb">1 +</code> 는 끊긴 식이고 둘째 줄은 <code class="nb">2 + 2</code> 입니다. 화면에는 알림 석 줄이 먼저, 그 아래에 4 가 나왔습니다. 틀린 줄에서 멈추지 않고 다음 줄에 답했고,
+한 화면에 섞인 값과 알림의 차례는 입력의 줄 차례입니다. 종료 코드는 1 입니다. 다만 두 길을 따로 받으면 값과 알림 사이의 앞뒤는 남지 않습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-run-bad">
+<h3>글이 아닌 줄을 만나면 거기서 멈추고 2 로 끝난다 — 앞 줄의 답은 이미 나갔다</h3>
+<p class="lead">표준 입력이 올바른 UTF-8 이 아닐 수도 있습니다. 17부에서 본 대로 <a href="#p17-file-bad-line">줄마다 읽으면 깨진 줄에서만 실패</a>합니다. 먼저 줄 끝이 <code class="nb">\r\n</code> 인 입력을 주고, 그다음 둘째 줄에 UTF-8 이 될 수 없는 바이트 <code class="nb">\377</code> 을 넣은 입력을 줍니다.</p>
+<!--OUT file=out/24/calc8_run.txt lines=75-84 note=calc8_run — \r\n 으로 끝나는 두 줄, 그리고 깨진 둘째 줄-->
+<!--CODE file=ex/24/calc8_run/src/lib.rs lines=107-111 note=같은 단계의 src/lib.rs — 시험 모듈에 더한 시험-->
+<!--OUT file=out/24/calc8_run.txt lines=85-89 note=단위 시험 — 7단계의 스물여섯에 하나가 늘었다-->
+<div class="note"><b>읽는 법</b> — 첫 실행의 두 줄은 <code class="nb">\r\n</code> 으로 끝납니다. 첫 줄은 2 를 냈고, 둘째 줄은 닫히지 않은 괄호의 알림을 냈습니다. 1단계에서 <a href="#p24-calc-token-space">CR 은 모르는 글자</a>라고 정했는데 그 알림이 아닙니다.
+표준 입력을 줄로 쪼갠 <code>lines()</code> 도 2장에서 본 <a href="#p24-grep-search-test">글의 <code>lines()</code></a> 처럼 줄 끝의 <code class="nb">\r\n</code> 을 둘 다 뗐습니다. 알림에 다시 찍힌 줄도 <code class="nb">2 * (3</code> 에서 끝났습니다. 둘째 실행은 첫 줄의 답 2 를 찍은 다음
+<code class="nb">calc: stream did not contain valid UTF-8</code> 한 줄을 내고 종료 코드 2 로 끝났습니다. 셋째 줄 <code class="nb">2 + 2</code> 의 답은 없습니다. 이 알림은 <code class="nb">calc:</code> 뒤에 자리도 받은 줄도 없는 한 줄입니다.
+<code>run</code> 이 쓰는 알림은 석 줄이므로, 소스에서 이 모양을 찍는 곳은 <a href="#p24-calc-main"><code>main</code></a> 의 <code>Err</code> 갈래에 있는 <code>eprintln!</code> 입니다. 그 글은 17부에서 본, <a href="#p17-file-bad-utf8">이 툴체인의 표준 라이브러리가 주는 글</a>입니다.</div>
+<div class="key"><b>종료 코드 셋, 그리고 2장과 다른 점</b> — 0 은 오류인 줄이 없다, 1 은 오류인 줄이 있었다, 2 는 읽거나 쓰는 일 자체가 실패했다 입니다. 0 과 1 은 108번 줄의 시험대로 <code class="nb">exit_code</code> 가 정하고, 2 는 <code>run</code> 이 <code>Err</code> 를 돌려줬을 때 <code>main</code> 이 정합니다.
+2장의 <code>grep</code> 은 <a href="#p24-grep-bad-utf8">깨진 바이트가 든 입력에서 한 줄도 찍지 않았습니다</a>. 이 프로그램은 깨진 줄 앞의 줄에는 이미 답했고, 깨진 줄부터는 읽지 않습니다. 줄마다 읽고 줄마다 답하기로 한 데서 따라 나오는 일입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-test-run">
+<h3>run 을 프로세스 없이 부른다 — 여러 줄을 넣고 값과 알림과 종료 코드를 한 번에 본다</h3>
+<p class="lead">9단계는 시험만 더합니다. 앞의 두 장과 같은 세 층이고, 첫째는 <a href="#p24-wc-test-run"><code class="nb">tests/run.rs</code></a> 입니다. 표준 입력 자리에 <code class="nb">&amp;[u8]</code> 를, 쓸 곳 둘의 자리에
+<code class="nb">Vec&lt;u8&gt;</code> 를 넣고 <code class="nb">calc::run</code> 을 부릅니다. 줄마다 답하는 프로그램이라서, 입력은 여러 줄을 한 글에 담아 넣습니다.</p>
+<!--CODE file=ex/24/calc9_final/tests/run.rs lines=1-15 note=calc9_final 의 tests/run.rs — 새 파일의 머리와 도우미-->
+<!--CODE file=ex/24/calc9_final/tests/run.rs lines=17-59 note=같은 파일의 시험 셋-->
+<!--OUT file=out/24/calc9_final.txt lines=51-55 note=tests/run.rs 만 골라 돌린다-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 두 상자 모두 <code class="nb">tests/run.rs</code> 의 것입니다. 도우미 <code class="nb">run_calc</code> 는 2장의 <a href="#p24-grep-test-run"><code class="nb">run_grep</code></a> 과 제 이름, 그리고 부르는 함수만 다릅니다. 1번 줄의 <code>use</code> 는 다음 슬라이드의 시험이 씁니다.
+20번 줄의 입력은 네 줄입니다. 둘째 줄이 비었고, 셋째 줄이 끊긴 식이고, 넷째 줄은 줄바꿈 없이 끝납니다. 21번 줄이 종료 코드 1 과 값 두 줄을, 22번부터 27번 줄까지가 알림 석 줄을 글자 그대로 봅니다. 알림도 줄바꿈으로 끝납니다.
+33번 줄은 줄 끝이 <code class="nb">\r\n</code> 인 입력이고, 34번 줄에서 값은 <code class="nb">\n</code> 으로만 끝나 있습니다. 36번 줄의 빈 입력과 38번 줄의 값이 없는 줄뿐인 입력은 둘 다 종료 코드 0 에 두 출력이 비었습니다.
+46번 줄은 인자와 표준 입력을 함께 줍니다. 47번 줄의 표준 출력에는 인자의 5 뿐입니다. 표준 입력의 <code class="nb">6 * 7</code> 이 읽혔다면 42 도 있었을 것입니다. 인자가 있으면 표준 입력은 읽지 않습니다. 48번 줄은 둘째 인자 <code class="nb">4 *</code> 의 알림이 나왔음을 봅니다.
+50번 줄에서는 인자 안의 <code class="nb">\n</code> 과 <code class="nb">\r\n</code> 이 줄을 갈라 답이 셋이고, 빈 인자는 아무것도 내지 않았습니다. 56번 줄의 <code class="nb">-h</code> 는 옵션이 아니라 식으로 읽혀, 자리 1 의 <code>h</code> 가 모르는 글자입니다. 화면은 6개 통과입니다.</div>
+<div class="note"><b>unwrap 이 있는 곳</b> — 11번부터 13번 줄까지의 <code>unwrap</code> 셋은 1장의 도우미에서 본 <a href="#p24-wc-test-run">같은 자리의 셋</a>입니다. 이 장에서도 <code class="nb">src/</code> 의 시험 모듈 밖에는 <code>unwrap</code> 도 <code>expect</code> 도 <code class="nb">[i]</code> 로 집는 줄도 없습니다.
+<code class="nb">unwrap_or</code> 하나가 <a href="#p24-calc-caret"><code class="nb">caret_line</code></a> 에 있는데, 패닉하지 않고 대신할 값을 주는 메서드입니다.</div>
+</article>
+
+<article class="card" id="p24-calc-test-edges">
+<h3>낯선 글자, 아주 긴 줄, 깨진 줄, 쓰지 못하는 곳 — 어느 것도 패닉이 아니다</h3>
+<p class="lead">같은 <code class="nb">tests/run.rs</code> 의 나머지 시험 셋은 가장자리입니다. 프로그램이 정한 답이 값이든 알림이든 <code>Err</code> 든, 패닉이 아닌 그 답이 나오는지를 봅니다. 마지막 시험은 2장의 <a href="#p24-grep-test-write">늘 실패하는 쓸 곳</a>을 그대로 가져옵니다.</p>
+<!--CODE file=ex/24/calc9_final/tests/run.rs lines=61-87 note=calc9_final 의 tests/run.rs — 낯선 글자와 긴 줄, 그리고 깨진 바이트-->
+<!--CODE file=ex/24/calc9_final/tests/run.rs lines=89-117 note=같은 파일 — Broken 과 마지막 시험-->
+<!--OUT file=out/24/calc9_final.txt lines=53-55 note=앞 슬라이드와 같은 실행-->
+<div class="note"><b>읽는 법</b> — 64번 줄의 <code class="nb">\0</code> 은 값이 0 인 바이트입니다. 66번 줄에서 자리 2 의 모르는 글자로 알립니다. 68번 줄은 빈칸 십만 개 뒤에 수 하나를 둔 줄이고 69번 줄에서 답은 7 입니다. 빈칸은 토큰이 아니라서 <a href="#p24-calc-limit-test">한계</a>에 걸리지 않습니다.
+71번 줄의 숫자 십만 개는 <code>TooBig</code> 이고, 73번 줄의 수 십만 개는 <code>TooLong</code> 입니다. 자리 400 은 201 번째 수가 있는 곳입니다. 수와 빈칸이 두 글자씩이기 때문입니다. 79번 줄은 2장에서처럼 <a href="#p24-grep-test-files"><code class="nb">&amp;b"…"[..]</code></a> 로 깨진 바이트가 든 입력을 넣습니다.
+83번 줄이 <code>run</code> 이 <code>Err</code> 를 돌려줬고 종류가 <code>InvalidData</code> 임을, 85번 줄이 그 앞 줄의 답 <code class="nb">2\n</code> 은 이미 쓰였고 뒷줄의 답은 없음을, 86번 줄이 <code>run</code> 은 알림을 쓰지 않았음을 봅니다.
+<a href="#p24-calc-run-bad">깨진 줄의 화면</a>에서 이름 없는 한 줄을 찍은 것이 <code>main</code> 이었다는 것과 맞습니다.</div>
+<div class="note"><b>102번부터 117번 줄까지 — 쓰지 못하는 곳</b> — 89번부터 100번 줄까지의 <code>Broken</code> 은 2장의 것과 한 글자도 다르지 않습니다. 106번 줄은 값을 쓸 자리에 그것을 넣고, 107번 줄이 <code>run</code> 이 그 오류를 <code>Err</code> 로 돌려줌을 봅니다. 109번 줄의 입력에는 값이 없는 줄뿐입니다.
+111번 줄에서 결과는 <code>Err</code> 가 아니라 0 입니다. 무엇을 쓰든 실패하는 쓸 곳인데 <code>Err</code> 가 아니니, 이 실행은 <code>out</code> 에 쓰려 한 적이 없습니다. 113번 줄은 알림 자리에 <code>Broken</code> 을 넣고 끊긴 식을 줍니다. 115번 줄에서 이것도 <code>Err</code> 입니다.
+<code>run</code> 이 <code>Err</code> 를 돌려주면 <code>main</code> 이 알리고 2 로 끝낸다는 것은 깨진 줄의 화면에서 봤습니다. 다만 알림 자리가 실패한 때에는 <code>main</code> 의 <code>eprintln!</code> 도 같은 표준 오류에 써야 합니다. 그 경우는 이 장이 다루지 않습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-test-cli">
+<h3>실행 파일을 띄워 표준 입력에 줄을 먹인다 — tests/cli.rs</h3>
+<p class="lead"><code class="nb">tests/run.rs</code> 는 <code class="nb">main.rs</code> 를 거치지 않습니다. 종료 코드 2 는 <code>main</code> 이 정하므로 실행 파일을 띄워야 보입니다. 앞의 두 장은 <a href="#p24-grep-more">표준 입력에 쓰는 시험을 과제로 남겼습니다</a>.
+줄마다 읽는 이 프로그램에서는 그것이 본디 쓰임이라, 18부에서 본 <a href="#p18-cmd-stdin">자식의 표준 입력에 쓰기</a>로 도우미를 만듭니다.</p>
+<!--CODE file=ex/24/calc9_final/tests/cli.rs lines=1-29 note=calc9_final 의 tests/cli.rs — 띄우고, 먹이고, 받는 도우미-->
+<!--CODE file=ex/24/calc9_final/tests/cli.rs lines=31-54 note=같은 파일의 시험 셋 — 종료 코드 0 · 1 · 2-->
+<!--OUT file=out/24/calc9_final.txt lines=57-61 note=tests/cli.rs 만 골라 돌린다-->
+<div class="note"><b>읽는 법</b> — 줄 번호는 두 상자 모두 <code class="nb">tests/cli.rs</code> 의 것입니다. 5번 줄의 <code>EXE</code> 는 23부에서 본 <a href="#p23-test-bin-exe">실행 파일의 경로</a>입니다. 15번부터 17번 줄까지가 세 길을 모두 파이프로 잇고, 18번 줄이 띄웁니다.
+21번부터 24번 줄까지의 블록은 18부의 그 슬라이드와 같은 모양입니다. 22번 줄이 자식의 표준 입력 손잡이를 꺼내고, 23번 줄이 받은 바이트를 씁니다. <code class="nb">write_all</code> 은 이 책에서 처음 쓰는 <code>Write</code> 의 메서드로, 글이 아닌 바이트 슬라이스를 그대로 받습니다.
+깨진 바이트를 먹여야 해서 <code>writeln!</code> 대신 썼습니다. 블록이 끝나면 손잡이가 스코프를 벗어나고, 18부가 문서를 빌려 말한 대로 그때 자식의 표준 입력이 닫힙니다. 25번 줄이 자식이 끝나기를 기다려 출력을 모읍니다.
+33번 줄은 세 줄을 먹이고, 34번부터 37번 줄까지가 종료 코드 0, 값 두 줄, 빈 표준 오류를 봅니다. 42번 줄은 식을 인자로 줍니다. 0 으로 나눈 인자가 먼저인데도 43번 줄의 값 42 가 나왔고 종료 코드는 1 입니다. 44번 줄이 알림 석 줄을 그대로 견줍니다.
+49번 줄은 깨진 둘째 줄입니다. 50번 줄에서 첫 줄의 답 2 가 나왔고 종료 코드는 2 입니다. 52번과 53번 줄은 표준 오류가 <code class="nb">calc:</code> 로 시작하는 한 줄임을 봅니다. 화면은 3개 통과입니다.</div>
+<div class="note"><b>먹이는 글의 크기</b> — 이 도우미는 입력을 다 쓴 다음에 25번 줄에서 출력을 받습니다. 세 시험이 먹이는 것은 몇 줄뿐이고, 아주 큰 입력을 먹이는 시험은 쓰지 않았습니다.</div>
+</article>
+
+<article class="card" id="p24-calc-test-golden">
+<h3>입력 한 벌과 기대하는 두 출력을 파일로 둔다 — tests/golden.rs</h3>
+<p class="lead">알림의 글이나 모양을 건드리면 여러 줄이 한꺼번에 달라집니다. 앞의 두 장처럼 <a href="#p24-wc-test-golden">기준 파일</a>을 둡니다. 이 프로그램은 답을 두 길로 내므로 기준 파일도 둘입니다. 입력은 <code class="nb">data/sums.txt</code> 이고,
+기대하는 표준 출력이 <code class="nb">tests/golden/sums.out</code>, 기대하는 표준 오류가 <code class="nb">tests/golden/sums.err</code> 입니다.</p>
+<!--CODE file=ex/24/calc9_final/tests/golden.rs note=calc9_final 의 tests/golden.rs — run 의 두 출력을 기준 파일 둘과 견준다-->
+<!--OUT file=out/24/calc9_final.txt lines=33-50 note=기준 파일 둘-->
+<!--OUT file=out/24/calc9_final.txt lines=63-67 note=tests/golden.rs 만 골라 돌린다-->
+<div class="note"><b>읽는 법</b> — 4번 줄의 <code>ROOT</code> 는 23부에서 본 <a href="#p23-test-golden"><code class="nb">CARGO_MANIFEST_DIR</code></a> 입니다. 1장은 그 뒤에 <code class="nb">concat!</code> 으로 경로를 이었고, 여기서는 파일이 셋이라 9번 · 11번 · 14번 줄에서 <code>format!</code> 으로 잇습니다.
+9번 줄은 입력을 17부의 <a href="#p17-file-bytes"><code class="nb">fs::read</code></a> 로 바이트 그대로 읽고, 18번 줄이 그 슬라이스를 표준 입력 자리에 넣어 <code>run</code> 을 부릅니다. 19번 줄이 종료 코드 1 을, 20번과 21번 줄이 두 출력 전체를 기준 파일과 견줍니다.
+<code>cat</code> 이 보인 <code class="nb">sums.out</code> 은 값 넉 줄이고, <code class="nb">sums.err</code> 는 알림 넷, 열두 줄입니다. <a href="#p24-calc-run-split">한 길씩 버려 본 화면</a>에 나온 두 덩어리와 같은 줄들입니다. 화면은 1개 통과입니다.</div>
+<div class="note"><b>이 기준 파일에 든 것</b> — <code class="nb">sums.err</code> 의 열두 줄에는 알림의 글 넷, <code class="nb">(자리 N)</code> 의 수, 그리고 <code>^</code> 앞의 빈칸 수가 들어 있습니다. 한글이 낀 <code class="nb">1 + 가</code> 의 줄도 그 가운데 하나입니다. 자리를 세는 방식을 바꾸면 이 시험이 깨집니다.</div>
+</article>
+
+<article class="card" id="p24-calc-test-all">
+<h3>cargo test 한 번에 여섯 묶음, 시험 서른일곱</h3>
+<p class="lead">옵션 없이 <code class="nb">cargo test -q</code> 를 치면 13부에서 본 대로 <a href="#p13-cargo-test">묶음이 차례로</a> 돕니다. 이 패키지에도 라이브러리, 실행 파일, <code class="nb">tests/</code> 의 파일 셋, 문서 시험까지 여섯 묶음이 있습니다.</p>
+<!--OUT file=out/24/calc9_final.txt lines=69-98 note=calc9_final — 모든 시험-->
+<div class="note"><b>읽는 법</b> — <code class="nb">-q</code> 를 붙인 화면에는 묶음의 이름이 없어서, 1장에서 한 대로 <a href="#p24-wc-test-all">13부의 차례와 시험의 수</a>로 읽습니다. 첫 묶음의 27 은 8단계에서 라이브러리의 단위 시험만 돌렸을 때의 <a href="#p24-calc-run-bad">27개 통과</a>와 같은 수입니다.
+모듈 다섯과 뿌리 파일의 시험이 한 묶음입니다. 둘째 묶음의 0 은 시험이 없는 <code class="nb">main.rs</code> 의 자리입니다. 그다음 3 · 1 · 6 은 파일마다 따로 돌렸을 때의
+<a href="#p24-calc-test-cli"><code class="nb">cli.rs</code></a> · <a href="#p24-calc-test-golden"><code class="nb">golden.rs</code></a> · <a href="#p24-calc-test-run"><code class="nb">run.rs</code></a> 의 수와 같습니다. 마지막 0 은 문서 시험의 자리입니다. 통과한 시험은 모두 37 이고 실패는 없습니다.
+<code class="nb">examples/</code> 의 두 본보기는 묶음으로 나오지 않았습니다.</div>
+<div class="note"><b>시험이 맡은 층</b> — 단위 시험은 정의를 봅니다. 무엇이 수이고 토큰인지, 나무가 어떻게 묶이는지, 셈이 안 될 때 무엇이 나오는지, 알림의 글과 자리를 짚는 줄, 토큰 수의 한계입니다. <code class="nb">tests/run.rs</code> 는 그것들을 엮은 <code>run</code> 을 줄 여럿으로,
+<code class="nb">tests/golden.rs</code> 는 두 출력 전체의 모양을, <code class="nb">tests/cli.rs</code> 는 실행 파일과 종료 코드 2 를 봅니다.</div>
+</article>
+
+<article class="card" id="p24-calc-rules">
+<h3>이 프로그램이 정한 것 ① — 받는 식과 그 값</h3>
+<p class="lead">이 장에서 "이 프로그램은 이렇게 한다" 고 정한 것을 두 슬라이드에 모았습니다. 이 슬라이드는 무엇을 식으로 받고 어떻게 셈하는지입니다. 오른쪽 칸의 링크가 그것을 화면이나 시험으로 보인 슬라이드입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>무엇</th><th>정한 것</th><th>보인 곳</th></tr>
+<tr><td>수</td><td>ASCII 숫자 0 부터 9 까지가 이어진 것. 앞의 0 은 그대로 읽는다. 밑줄 · 점 · 전각 숫자는 모르는 글자다</td><td><a href="#p24-calc-token-num">시험</a></td></tr>
+<tr><td>수의 크기</td><td><code>i64</code> 에 담기는 데까지. 넘으면 수의 첫 숫자의 자리로 알린다. 가장 작은 값은 수 하나로 적지 못한다</td><td><a href="#p24-calc-token-num">시험</a> · <a href="#p24-calc-eval-edge">i64::MIN</a></td></tr>
+<tr><td>토큰 사이</td><td>빈칸과 탭만 건너뛴다. 전각 빈칸 · U+00A0 · CR 은 모르는 글자다</td><td><a href="#p24-calc-token-space">시험</a></td></tr>
+<tr><td>연산</td><td><code class="nb">+ - * /</code> 와 부호 <code>-</code>, 괄호. 더하기 부호와 붙여 쓴 곱셈은 없다</td><td><a href="#p24-calc-paren-run">나무</a> · <a href="#p24-calc-paren-err">2(3)</a></td></tr>
+<tr><td>우선순위</td><td>부호가 먼저, 다음이 <code class="nb">* /</code>, 다음이 <code class="nb">+ -</code></td><td><a href="#p24-calc-term">2 + 3 * 4</a> · <a href="#p24-calc-paren-run">-2 * 3</a></td></tr>
+<tr><td>묶이는 방향</td><td>같은 줄의 연산자는 왼쪽부터 묶는다</td><td><a href="#p24-calc-left">나무</a> · <a href="#p24-calc-eval-test">값</a></td></tr>
+<tr><td>나눗셈</td><td>몫을 0 쪽으로 버린다. 나머지는 구하지 않는다</td><td><a href="#p24-calc-eval-test">-7 / 2</a></td></tr>
+<tr><td>셈이 안 될 때</td><td>0 으로 나누기와 <code>i64</code> 를 넘는 값은 오류다. 그 연산자의 자리로 알린다</td><td><a href="#p24-calc-eval-edge">시험</a></td></tr>
+<tr><td>오류의 수</td><td>한 줄에서 처음 만난 하나만 알린다. 계산은 왼쪽 칸이 먼저다</td><td><a href="#p24-calc-paren-err">(1 2</a> · <a href="#p24-calc-eval-edge">양쪽이 틀린 줄</a></td></tr>
+<tr><td>한 줄의 길이</td><td>토큰 200 개까지</td><td><a href="#p24-calc-limit-test">시험</a></td></tr>
+</table>
+</div>
+<p class="cap">가운데 칸은 이 장의 <code>calc</code> 가 하는 일이고, 다른 계산기가 어떻게 하는지에 대한 말이 아닙니다. 줄을 어디서 읽고 답을 어디에 쓰는지, 몇으로 끝나는지는 다음 슬라이드에 이어집니다.</p>
+</article>
+
+<article class="card" id="p24-calc-rules-run">
+<h3>이 프로그램이 정한 것 ② — 줄, 답이 가는 곳, 종료 코드</h3>
+<p class="lead">이어서 줄을 어디서 어떻게 읽는지, 값과 알림을 어디에 어떤 모양으로 쓰는지, 몇으로 끝나는지입니다. 표를 읽는 법은 앞 슬라이드와 같습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>무엇</th><th>정한 것</th><th>보인 곳</th></tr>
+<tr><td>입력</td><td>인자가 없으면 표준 입력의 줄마다, 있으면 인자마다. 인자 안의 줄바꿈도 줄을 가른다. 옵션은 없다</td><td><a href="#p24-calc-run">run</a> · <a href="#p24-calc-test-run">시험</a></td></tr>
+<tr><td>줄</td><td><code class="nb">\n</code> 이나 <code class="nb">\r\n</code> 에서 끝난다. 줄바꿈 없이 끝난 마지막 줄도 한 줄이다</td><td><a href="#p24-calc-run-split">마지막 줄</a> · <a href="#p24-calc-run-bad">\r\n</a></td></tr>
+<tr><td>값이 없는 줄</td><td>토큰이 없는 줄. 아무것도 쓰지 않고, 오류로 치지도 않는다</td><td><a href="#p24-calc-calc">calc</a> · <a href="#p24-calc-run-split">실행</a></td></tr>
+<tr><td>값과 알림</td><td>값은 표준 출력에 한 줄. 알림은 표준 오류에 석 줄 — <code class="nb">calc: 까닭 (자리 N)</code>, 받은 줄 그대로, 자리를 짚는 줄</td><td><a href="#p24-calc-caret">report</a> · <a href="#p24-calc-run-split">한 길씩</a></td></tr>
+<tr><td>자리</td><td>0 부터 센 바이트 번호. 그 앞에는 ASCII 만 있다. 짚는 줄에서 탭은 탭으로 옮긴다</td><td><a href="#p24-calc-error">정의</a> · <a href="#p24-calc-token-space">시험</a> · <a href="#p24-calc-caret">^</a></td></tr>
+<tr><td>틀린 줄 다음</td><td>알리고 다음 줄로 간다</td><td><a href="#p24-calc-run-split">틀린 줄이 먼저인 입력</a></td></tr>
+<tr><td>글이 아닌 줄</td><td>표준 입력에서 만나면 거기서 멈춘다. 앞 줄의 답은 이미 나갔다</td><td><a href="#p24-calc-run-bad">실행</a> · <a href="#p24-calc-test-edges">시험</a></td></tr>
+<tr><td>쓰지 못한 값이나 알림</td><td><code>run</code> 이 <code>Err</code> 를 돌려준다</td><td><a href="#p24-calc-test-edges">Broken</a></td></tr>
+<tr><td>종료 코드</td><td>0 오류인 줄이 없다 · 1 오류인 줄이 있었다 · 2 읽거나 쓰는 일이 실패했다</td><td><a href="#p24-calc-run-bad">실행</a> · <a href="#p24-calc-test-cli">cli.rs</a></td></tr>
+<tr><td>받지 못하는 것</td><td>UTF-8 이 아닌 인자 — 앞의 두 장과 같은 <code class="nb">env::args()</code> 를 쓴다. 표준 오류에 쓰지 못하는 경우도 다루지 않는다. 알림은 받은 줄을 거르지 않고 다시 찍는다</td><td><a href="#p24-wc-args-bad">1장의 패닉한 화면</a> · <a href="#p24-calc-main">main</a> · <a href="#p24-calc-caret">report</a></td></tr>
+</table>
+</div>
+<p class="cap">종료 코드 2 를 실행 파일로 본 것은 글이 아닌 줄의 경우뿐입니다. 쓰지 못한 값과 알림은 시험으로 <code>run</code> 의 <code>Err</code> 까지만 봤습니다. 마지막 줄의 앞 둘은 이 장의 화면이 아니라 1장의 화면과 <code>main</code> 의 소스를 가리킵니다.
+그 두 경우를 <code>calc</code> 로 돌린 화면은 이 장에 싣지 않았습니다.</p>
+</article>
+
+<article class="card" id="p24-calc-summary">
+<h3>무엇이 어디에 있나 — 마지막 단계의 패키지</h3>
+<p class="lead">마지막 단계 <code class="nb">calc9_final</code> 의 파일과 그 안에 든 것입니다. 오른쪽 칸의 링크가 그것을 만든 슬라이드입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>파일</th><th>든 것</th><th>만든 곳</th></tr>
+<tr><td><code class="nb">Cargo.toml</code></td><td>패키지 이름 <code>calc</code>, 의존성 없음</td><td><a href="#p24-calc-error">1단계</a></td></tr>
+<tr><td><code class="nb">src/lib.rs</code></td><td>모듈 다섯의 선언과 다시 내놓는 이름들</td><td><a href="#p24-calc-error">1단계</a>부터 <a href="#p24-calc-limit">7단계</a>까지</td></tr>
+<tr><td><code class="nb">src/lib.rs</code></td><td><code>calc</code>, <code>answer</code>, <code class="nb">exit_code</code>, <code>run</code>, 단위 시험 3</td><td><a href="#p24-calc-calc">5단계</a> · <a href="#p24-calc-run">8단계</a></td></tr>
+<tr><td><code class="nb">src/error.rs</code></td><td><code>Kind</code>, <code>CalcError</code>, <code>Display</code>, <code class="nb">caret_line</code>, <code>report</code>, 단위 시험 4</td><td><a href="#p24-calc-error">1단계</a> · <a href="#p24-calc-display">6단계</a> · <a href="#p24-calc-caret">6단계</a></td></tr>
+<tr><td><code class="nb">src/token.rs</code></td><td><code>Token</code>, <code class="nb">push_digit</code>, <code>tokenize</code>, 단위 시험 6</td><td><a href="#p24-calc-token">1단계</a></td></tr>
+<tr><td><code class="nb">src/expr.rs</code></td><td><code>Op</code>, <code>Expr</code></td><td><a href="#p24-calc-expr">2단계</a> · <a href="#p24-calc-term">3단계</a> · <a href="#p24-calc-paren">4단계</a></td></tr>
+<tr><td><code class="nb">src/parse.rs</code></td><td><code class="nb">MAX_TOKENS</code>, <code>parse</code>, <code>Parser</code> 와 그 메서드 다섯, 단위 시험 9</td><td><a href="#p24-calc-parse">2단계</a> · <a href="#p24-calc-term">3단계</a> · <a href="#p24-calc-paren">4단계</a> · <a href="#p24-calc-limit">7단계</a></td></tr>
+<tr><td><code class="nb">src/eval.rs</code></td><td><code>apply</code>, <code>eval</code>, 단위 시험 5</td><td><a href="#p24-calc-eval">5단계</a></td></tr>
+<tr><td><code class="nb">src/main.rs</code></td><td><code>main</code> — 손잡이 셋을 넘기고 종료 코드로 바꾼다</td><td><a href="#p24-calc-main">8단계</a></td></tr>
+<tr><td><code class="nb">examples/</code></td><td>본보기 <code>tokens</code> 와 <code>tree</code></td><td><a href="#p24-calc-token-run">1단계</a> · <a href="#p24-calc-left">2단계</a></td></tr>
+<tr><td><code class="nb">data/sums.txt</code></td><td>입력 아홉 줄</td><td><a href="#p24-calc-main">8단계</a></td></tr>
+<tr><td><code class="nb">tests/run.rs</code></td><td><code>run</code> 을 부르는 시험 6</td><td><a href="#p24-calc-test-run">9단계</a></td></tr>
+<tr><td><code class="nb">tests/cli.rs</code></td><td>실행 파일을 띄우는 시험 3</td><td><a href="#p24-calc-test-cli">9단계</a></td></tr>
+<tr><td><code class="nb">tests/golden.rs</code> · <code class="nb">tests/golden/</code> 의 둘</td><td>기준 파일 둘과 견주는 시험 1</td><td><a href="#p24-calc-test-golden">9단계</a></td></tr>
+</table>
+</div>
+<p class="cap"><code class="nb">src/lib.rs</code> 만 두 줄로 나눠 적었습니다. 오류의 종류 <code>Kind</code> 는 1단계의 둘에서 시작해 2 · 4 · 5 · 7단계에서 늘어 아홉이 됐습니다. 앞의 두 장의 <a href="#p24-grep-summary">같은 표</a>와 견주면 <code class="nb">main.rs</code> 와
+<code class="nb">tests/</code> 의 세 파일이 같은 자리에 있고, <code class="nb">lib.rs</code> 하나였던 라이브러리가 파일 여섯이 됐습니다.</p>
+</article>
+
+<article class="card quiz" id="p24-calc-quiz" data-quiz>
+<h3>퀴즈 — 값과 알림을 미리 적어 보기</h3>
+<p class="q">Q. <code class="nb">./target/debug/calc</code> 를 <code>calc</code> 로 줄여 적습니다. 둘 다 마지막 단계의 <code>calc</code> 입니다. ① <code class="nb">printf '2 - 3 - 4\n2 * -3 + 1\n7 / 2 * 2\n' | calc</code> 는 표준 출력에 세 줄을 찍습니다. 차례로 얼마입니까?
+② <code class="nb">calc '(1 + 2' '1 + 2)' '4 / (2 - 2)'</code> 는 인자 셋이 모두 틀린 식입니다. 인자마다 알림의 <code>^</code> 는 어느 글자 아래에 놓이고, 표준 출력에는 무엇이 나오며, 종료 코드는 몇입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> ① -5 · -5 · 6 입니다. 첫 줄은 왼쪽부터 묶여 -1 에서 4 를 뺍니다(<a href="#p24-calc-left">묶이는 방향</a>). 오른쪽부터였다면 3 입니다. 둘째 줄의 둘째 <code>-</code> 는 부호라서 2 에 -3 을 곱한 -6 에 1 을 더합니다(<a href="#p24-calc-paren-run">부호</a>).
+셋째 줄은 7 을 2 로 나눈 몫 3 에 2 를 곱합니다. 소수점 아래를 버렸으므로 7 로 돌아오지 않습니다(<a href="#p24-calc-eval-test">나눗셈</a>). ② 첫 인자는 닫히지 않은 괄호라서 자리 0 의 여는 괄호 아래입니다(<a href="#p24-calc-paren-err">Unclosed</a>).
+둘째 인자는 <code class="nb">1 + 2</code> 까지가 식이고 닫는 괄호가 남아, 자리 5 의 그 괄호 아래입니다. 셋째 인자는 괄호 안이 0 이 되어 0 으로 나누기이고, 자리 2 의 <code>/</code> 아래입니다. 0 을 만든 <code class="nb">(2 - 2)</code> 가 아니라 나눗셈의 연산자를 짚습니다(<a href="#p24-calc-eval-edge">연산자의 자리</a>).
+값을 낸 인자가 없으니 표준 출력은 비고, 종료 코드는 1 입니다. 2 가 아닙니다. 읽고 쓰는 일은 모두 됐습니다(<a href="#p24-calc-run-bad">종료 코드 셋</a>). 두 명령은 마지막 단계 <code class="nb">calc9_final</code> 에서 모든 시험 다음에 돌렸습니다. 그 화면입니다.
+<!--OUT file=out/24/calc9_final.txt lines=100-114 note=calc9_final — 두 명령을 그대로 돌린 화면-->
+</div>
+</article>
+
+<article class="card" id="p24-calc-more">
+<h3>더 해 볼 것</h3>
+<p class="lead">마지막 단계의 패키지를 복사해 놓고 고쳐 보는 과제입니다. 풀이는 싣지 않았습니다. 과제마다 손댈 파일과 함수를 적었습니다. 문법을 키우는 과제는 <a href="#p24-calc-grammar">문법의 네 줄</a>에서 어느 줄이 바뀌는지부터 적고,
+그 줄을 읽는 함수를 고칩니다.</p>
+<ul>
+<li><b>나머지 <code>%</code></b> — <code class="nb">token.rs</code> 의 <code>Token</code>, <code class="nb">expr.rs</code> 의 <code>Op</code>, <code class="nb">parse_term</code>, <code>apply</code> 에 한 군데씩 더합니다. <a href="#p24-calc-limit-noarm">컴파일러가 빠진 갈래를 짚어 주는</a> 곳이 어디인지 봅니다.
+음수의 나머지를 3부의 <a href="#p03-div-rem">어느 쪽</a>으로 정할지, 0 으로 나눈 나머지는 무엇인지를 시험에 먼저 적습니다.</li>
+<li><b>거듭제곱</b> — 오른쪽부터 묶이는 연산입니다. 문법에 줄 하나를 인수와 항 사이에 끼웁니다. <a href="#p24-calc-parse-expr">왼쪽부터 묶는 <code>loop</code></a> 와 다른 모양이 필요합니다. <code class="nb">2 ^ 3 ^ 2</code> 의 나무를 먼저 손으로 그려 봅니다.</li>
+<li><b>더하기 부호</b> — 지금은 <a href="#p24-calc-paren-run"><code class="nb">+3</code> 이 오류</a>입니다. <code class="nb">parse_factor</code> 에 갈래 하나를 더합니다. 나무에 마디를 남길지 말지를 정합니다.</li>
+<li><b>이름 붙인 값</b> — <code class="nb">x = 3</code> 같은 줄을 받아, 뒤의 줄에서 <code>x</code> 를 쓰게 합니다. 이름과 값을 담은 8부의 <a href="#p08-map-basic"><code>HashMap</code></a> 을 <code>run</code> 이 줄 사이에 들고 다닙니다. 없는 이름을 썼을 때의 오류와 그 자리도 정합니다.</li>
+<li><b>한글 이름과 자리를 짚는 줄</b> — 앞 과제에서 이름에 한글을 받으면 <a href="#p24-calc-caret">자리 앞에 ASCII 만 있다</a>는 것이 깨집니다. 자리를 바이트로 둘지 글자로 바꿀지, 폭이 두 칸인 글자 뒤에서 <code>^</code> 를 어디에 놓을지를 시험으로 먼저 적습니다.</li>
+<li><b>알림에 줄 번호</b> — 표준 오류만 따로 받았을 때 몇째 줄의 알림인지 보이게 합니다. 17부의 <a href="#p17-in-lineno"><code>enumerate</code></a> 로 번호를 붙이고, <code class="nb">tests/golden/sums.err</code> 가 어떻게 바뀌는지 봅니다.</li>
+<li><b>한 줄의 오류를 모두 알리기</b> — 지금은 <a href="#p24-calc-paren-err">처음 만난 하나</a>만 알립니다. <code>tokenize</code> 가 모르는 글자를 만나도 멈추지 않고 모아 두게 하면 무엇을 돌려줘야 하는지부터 정합니다.</li>
+<li><b>깨진 줄을 건너뛰기</b> — 지금은 <a href="#p24-calc-run-bad">글이 아닌 줄에서 멈춥니다</a>. <code>run</code> 의 <code class="nb">line?</code> 를 <code>match</code> 로 바꿔 알리고 다음 줄로 가게 합니다. 그때 종료 코드를 1 로 할지 2 로 할지 정합니다.</li>
+<li><b>알림에 찍는 줄 거르기</b> — <code>report</code> 는 받은 줄을 그대로 다시 찍습니다. <a href="#p24-calc-test-edges">NUL 바이트가 든 줄</a>도 그렇습니다. 화면에 찍기 곤란한 글자를 다른 글자로 바꿔 찍되, <code>^</code> 가 여전히 맞는 칸에 놓이게 합니다.</li>
+<li><b>UTF-8 이 아닌 인자</b> — 1장의 <a href="#p24-wc-more">같은 과제</a>입니다. 이 프로그램에서는 인자가 식이라서, 글이 아닌 인자를 받았을 때 무엇을 알릴지도 정해야 합니다.</li>
+</ul>
+<div class="note"><b>다음</b> — 4장은 작은 키-값 저장소입니다. 이번에는 줄이 식이 아니라 명령이고, 답을 내려면 앞 줄들이 남긴 것을 기억해야 합니다.</div>
 </article>

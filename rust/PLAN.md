@@ -1164,3 +1164,82 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   stderr — state what happens when it is unwritable. For kv: fix worker output order by
   joining in a fixed order; state what a poisoned lock does; test a key or value
   containing the separator or a newline.
+- 24 project 3 written (chapter 3 식 계산기; 44 slides incl. its cover — at the ceiling;
+  10 directory examples: the nine-step chain calc1_token → calc2_parse → calc3_term →
+  calc4_paren → calc5_eval → calc6_caret → calc7_limit → calc8_run → calc9_final and the
+  E0004 twin calc7_noarm; 1 quiz) → part 24 = 124, deck 1,600. order.txt:
+  `24c_proj.html` uncommented. Orchestrator re-ran: `make all` rc=0 (오류 0 · 어긋남 0;
+  the budget notice stays), `rsrun --check ex/24` ×3 = 29 ✓ / 0 ✗ each (81–103 s per run
+  for three projects); no `target/` or `Cargo.lock` under ex/24; a scan of calc9_final's
+  non-test code finds no `unwrap()`/`expect`/`panic!`/`unreachable!`/`unsafe`/indexing;
+  read `parse`'s limit check (`tokens.get(MAX_TOKENS)` must be End). No badge rows added
+  (141); no new error codes (62). Card and README set to 1,600슬라이드 · 예제 1,115 ·
+  캡처 1,236 · 퀴즈 114.
+  Package layout: src/{lib,error,token,expr,parse,eval,main}.rs, examples/{tokens,tree}.rs
+  (steps before the binary exists are shown with `cargo run -q --example`), tests/{run,
+  cli,golden}.rs + two golden files; 27 unit + 10 integration tests.
+  Generated: `scratch/w24c/mk.py` (multi-file FILES, trailing-newline fix, NOWIDTH=1) +
+  `pieces/`, `twins.py`, `portfmt.py` (ports rustfmt hunks back into pieces), `lines.py`,
+  `slices.py`, `links.py`, `probe.py`, `show.py`; the SLIDE file was assembled from
+  `scratch/w24c/sec/01…08.html` by `asm.py` — edit 24c_proj.html directly from now on.
+  This calculator's rules (p24-calc-rules ① and p24-calc-rules-run ②, each tested):
+  grammar 식 = 항 {(+|-) 항}, 항 = 인수 {(*|/) 인수}, 인수 = 수 | "-" 인수 | "(" 식 ")",
+  수 = 숫자 {숫자}; i64; a literal is a run of chars with `to_digit(10)` Some (ASCII
+  0–9), must fit i64 else TooBig at its first digit — so `-9223372036854775808` is
+  TooBig (the digits are read before the sign); no unary plus; division truncates toward
+  zero; DivByZero and Overflow distinguished (`b == 0` first, then `checked_div`);
+  checked add/sub/mul/neg with the operator's position; whitespace = exactly space and
+  tab; position = 0-based BYTE offset, and everything before a reported position is ASCII
+  by construction (tokenizing stops at the first unknown char), so the caret lands right
+  for the cases shown; LIMIT = `MAX_TOKENS = 200` tokens per line, checked before any
+  recursion — a TOKEN limit, not a nesting-depth counter (the writer's deliberate
+  deviation: a nesting counter misses `1+1+1+…`, whose left-deep tree makes eval and
+  drop recurse as deep as the operator count; every recursive call consumes ≥ 1 token);
+  value → stdout, error → stderr as three lines (notice with 자리 N, the line echoed, the
+  caret line); a line with no tokens writes nothing; no args → stdin lines, args → each
+  arg is input; exit 0 / 1 (some error line) / 2 (I/O failure); no prompt, no options.
+  Stack margin (scratch-only probe, MAX_TOKENS raised to 2000 in a 2 MB test thread):
+  sign chain ×2000, 2000-token sum and 1000-token parens pass; 2000-token parens died
+  with SIGSEGV — so ≥ 5× margin at 200. No shown or captured input exceeds 200 tokens.
+  Edits outside the file: p24-intro (3장 item; "이 부의 화면" widened to chapters 1–3 and
+  the `--example` sentence), p24-grep-more's "다음" link.
+  For the reviewer: source-following arguments, not captures — "everything before a
+  position is ASCII" (p24-calc-token-space / -caret; five lines tested), precedence and
+  the depth bound (p24-calc-term key, p24-calc-limit key; three shapes tested);
+  p24-calc-limit says only that the book has no screen for exceeding the stack and does
+  NOT say what happens (drop recursion is not mentioned); p24-calc-caret's tab handling
+  is test-only and "wide glyph → caret under its left column" is a statement about
+  monospace display; p24-calc-run-bad (that main's eprintln! printed the one-line notice
+  — inferred); p24-calc-test-cli ("block ends → child's stdin closes" rests on
+  p18-cmd-stdin); p24-calc-main warn and rules ② last row (non-UTF-8 argument, unwritable
+  stderr — probed in scratch only, 101 both); p24-calc-left / -paren-run ("오른쪽부터
+  였다면 …" values are hand arithmetic). Unsure: 44 slides (ceiling); steps 5–7 have
+  unit-test-only captures (9 slides off "N passed" screens); p24-calc-grammar carries a
+  4-item list plus two callouts; p24-calc-left has three boxes and a figure; the E0004
+  capture has a 132-column line; Unclosed for `(1 2` points at the opening paren;
+  "수나 괄호가 올 자리다" does not mention that `-` is valid there; `Parser::next`
+  shares a name with `Iterator::next`; no tab ever appears on a screen; probe-only
+  facts not on slides: closed stdout/stderr (`>&-`) makes writes silently succeed.
+  Machine/toolchain text: "stream did not contain valid UTF-8", the E0004 wording.
+  Terms: 토큰 (calculator sense, glossed against p21-tt-pieces), 식 / 항 / 인수 (인수
+  because 인자 is the book's "argument"), 문법, 재귀로 내려가며 읽기, 식의 나무 (p14's
+  수식 나무 acknowledged), 자리 (0-based byte offset), 자리를 짚는 줄 (the caret line),
+  부호 (unary minus), 값이 없는 줄, 우선순위 / 묶이는 방향 (p27-precedence's words).
+  First uses in the book: `char::is_numeric`, `i64::checked_neg`, `Write::write_all`,
+  `use Enum::*`.
+  For the kv writer: copy `scratch/w24c/mk.py` + `portfmt.py` (write pieces unformatted,
+  generate with NOWIDTH=1, port rustfmt's hunks back, then generate for real); number
+  one file at a time (`cat -n a b` numbers cumulatively); the builder rejects a slice
+  that is not brace-balanced — cut inside an `impl` block and name the impl head in the
+  caption; give error types a `new` (rustfmt explodes long struct literals); use
+  `impl<'a> X<'a>` (the book has no `impl X<'_>`); make each test conclusive (an input
+  that would pass either way proves nothing); taken names calc1_token … calc9_final,
+  calc7_noarm, ids p24-calc-…; edit p24-intro's note again and link #p24-ch4 from
+  p24-calc-more.
+  Later (0–23 and chapters 1–2 additions): p05-recursion "깊이에는 끝이 있다" →
+  p24-calc-limit; p14-expr-tree → p24-calc-eval; p12-peekable → p24-calc-token;
+  p03-overflow-choice / p03-div-zero → p24-calc-eval-edge; p24-wc-more, p24-grep-more and
+  p24-grep-test-cli leave "실행 파일의 표준 입력에 쓰는 시험" open → p24-calc-test-cli;
+  p24-intro's "프로젝트의 짜임" says every code-box caption carries the step directory
+  name, but only the first box of a slide does — loosen the wording.
+  Unchecked by a reviewer: all of 24 project 3.
