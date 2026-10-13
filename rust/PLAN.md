@@ -1274,3 +1274,40 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   candidates: 문법, 항, 인수, 식의 나무, 자리를 짚는 줄, 묶이는 방향. Later (0–23
   additions): p03-char-methods (`to_digit`) → p24-calc-token-num (others as listed under
   "24 project 3 written").
+- 24 project 4 written (작은 키-값 저장소, 45 slides incl. cover `p24-ch4` and the part's
+  closing slide `p24-wrap`; file `24d_proj.html`, assembled from `scratch/w24d/sec/*.html`
+  by `asm.py` — the section file is the source of truth from now on). Part 24 = 169 (budget
+  160, ceiling 176), deck 1,645, examples 1,124, captures 1,267, quizzes 115. Nine
+  directories: chain `kv1_command … kv8_final` + E0277 twin `kv7_nosend` (one line:
+  `AnyStore` without `+ Send`). Final package: 9 files in `src/`, 43 tests (30 unit + 13
+  integration). Design as written (deviations from the brief, all kept): `Storage` has
+  THREE impls — `MemStore`, `FileStore`, `Locked` (`Arc<Mutex<Box<dyn Storage + Send>>>`,
+  one lock per method, so `work` never changes between step 6 and 7); all four trait
+  methods return `Result<_, KvError>` (the lock can be poisoned on any); `parse_command`
+  → `CmdError` and a bad line / missing key is a `Reply` (run continues, exit 1) while
+  `KvError` = store or I/O failed (exit 2); step 6 already runs script files sequentially
+  and step 7 swaps only the middle of `run_scripts` — same two shell commands, same
+  screen. Rules: key = non-empty, no U+0020; value = rest of line (may be empty); `list`
+  in byte order (BTreeMap); file line = `escape(key) TAB escape(value)` with exactly
+  `\\ \t \n \r`; load errors name file + line (no tab / bad escape / duplicate key);
+  whole file rewritten by `fs::write` after each mutation (no atomic replace — exercise);
+  no args → MemStore, 1st arg store file, rest script files; exits 0/1/2. Determinism:
+  workers write only into their own two `Vec<u8>`; `main` joins all in spawn order, then
+  writes in argument order; the three scripts use disjoint key prefixes and no `list`; a
+  `.warn` says the program does not enforce this. Lost update = single-threaded test
+  interleaving two `Locked` handles by hand (`p24-kv-jobs-lost`). Poisoned / panicked
+  worker → `KvError`, unit-tested only (unreachable from the binary — said). Orchestrator
+  re-ran: `make all` rc=0 (1,645장 · 오류 0 · 어긋남 0 · 퀴즈 115), `rsrun --check -q
+  ex/24` ×3 = 38 ✓ / 0 ✗ (≈140 s each); non-test code of kv8_final has no
+  unwrap/expect/panic!/indexing; no `target/`, `Cargo.lock`, `*.kv` under `ex/`; read
+  `shared.rs`, `work`, `collect`, `run_scripts`, the kv7_jobs capture, `p24-kv-jobs-plan`
+  … `-spawn`, `p24-wrap`. Writer edits in siblings: `p24-intro` (4장 item, "이 부의 화면"
+  note) and the "다음" note of `p24-calc-more`. Card text: "(넷 가운데 셋)" removed.
+  Writer's open points for the reviewer: steps 1–5 are unit-test-only screens (15 slides);
+  `p24-kv-run` and `p24-kv-jobs-fail` have four boxes; E0277 capture shown whole (32
+  lines, widest line 108 columns); `list` prints escaped lines while `get` prints raw;
+  script mode prints a script's answers before its notices; closed stdout/stderr and the
+  CRLF store re-saved with LF are on no slide; `p24-intro` "프로젝트의 짜임" still says
+  every code-box caption names the step directory (only the first box does); no slide in
+  the book covers re-locking a mutex the same thread holds. Glossary candidates: 저장소
+  (second sense), 명령 파일. Unchecked by a reviewer: all of 24 project 4.
