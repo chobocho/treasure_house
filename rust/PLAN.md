@@ -1396,3 +1396,50 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   `push_str` without naming it; p07-let-else's lead says the else block leaves "the
   function" while the next slide also lists break/continue. Unchecked by a reviewer:
   all of 25a.
+- 25b written (chapters 4–6 = parts 10–12 / 13–16 / 17–23, problems 28–54): 60 slides in
+  `25b_ex.html` (ch4 20, ch5 18, ch6 22). Part 25 = 122 (budget 120, ceiling 132), deck
+  1,767, examples 1,190, captures 1,389, quizzes 115. 35 new units in `ex/25/` (31 single
+  files incl. 8 `_bad` twins; 4 directories: `kitchen`, `stockroom`, `ruler`, `shopws`);
+  `ex/25` = 66 units. Problems: 28 order_dyn (re-solves 16, same screen), 29 cards (fix
+  E0277 — also needs a field swap), 30 frac, 31 span_any, 32 unprefix (fix E0106), 33
+  pieces, 34 retry, 35 stats_iter (re-solves 20, same screen), 36 running (fix E0502) |
+  37 tank (fix E0616), 38 grade (`//@ test`), 39 kitchen (dir), 40 bst, 41 till (fix
+  E0596), 42 lines_par (threads), 43 tickets (threads), 44 checklist (macro) | 45
+  stockroom (dir; re-solves 22 from a file, first six lines identical), 46 runs (stdin),
+  47 chores (fix E0599), 48 perm, 49 nearest, 50 parcel (fix E0599), 51 jobs_send (fix
+  E0277, threads), 52 tagged (macro), 53 ruler (dir, features), 54 shopws (dir,
+  workspace). NO problem for part 22 (said on `p25-intro` item 6 and `p25-ch6-map`);
+  parts 19 and 20 have only a fix-it; no async, no unsafe/FFI. Thread determinism: 42
+  joins in spawn order and prints after each join; 43 prints only totals after all joins
+  (sold = min(stock, Σwants) under any lock order: check and decrement share one guard —
+  I read the file); 51 has one worker on one channel, main prints after join; ten-run
+  checks 10/10 each (writer, twice). Writer's edits in `25_ex.html`: `p25-intro` items
+  4–6, first note (multi-file solutions), second note rewritten for all six chapters,
+  `p25-ch3-map` "다음" link. Audit trail: `scratch/w25b/uses.tsv` (598 rows, 0
+  mismatches, 53 code-only matches). Section file joined from `scratch/w25b/c*.html` —
+  the section file is the source of truth. Orchestrator re-ran: `make all` rc=0 (1,767장
+  · 오류 0 · 어긋남 0 · 알림 0), `rsrun --check -q ex/25` ×3 = 66 ✓ / 0 ✗; read problem 43
+  (statement, file, capture). FOR THE REVIEWER — writer's weak list: 28 `Box::new`
+  before part 14 (given `main` only); 29 `dedup` under `T: Ord` alone (supertraits never
+  stated) and the unexplained need for `Eq, PartialOrd` + a field swap the error does
+  not mention; 30 tuple in `unwrap_or`, `for (a, b) in pairs`; 32 `as_str()` only in a
+  table, and the note's argument why the help's "'a on both" fails (E0597 seen in a
+  deleted probe, on no slide); 33 `word == ""` on purpose; 34/36 multi-statement closure
+  bodies; 38 `mod tests` in a single `--test` file; 39 `super::CONST`; 40 `*self =
+  Tree::Node(…)` shown nowhere; 43 `for &want in wants`; 45 `let [_, path] = &args[..]
+  else`; 47 `let line: String = line?;` (annotation only to keep ONE error); 48 indexing
+  an array literal, `1 << i`; 49 leans on `min_by_key` returning the first of equal
+  minima (evidence: this screen only); 50 tuple struct with `PhantomData`; 52 inherent
+  associated const, macro emitting enum + impl; 51 `+ 'static` observed, not explained.
+  Possible repeats of worked examples: 50 (p19-typestate's twin), 51 (p20-jobs +
+  p19-dyn-send), 47 (p17-file-no-buf), 37 (p13-field-private), 41 (p14-rc-immutable),
+  53 (p23-feat-default), 39 (p13-modfile). Tall slides: p25-q-jobs-send, p25-a-frac,
+  p25-a-order-dyn; captures wider than 108 columns: unprefix_bad 143, till_bad 120,
+  jobs_send_bad 109. Statement rules only the source can show: 35, 42, 45, 49, and each
+  fix-it's "leave X unchanged". For part 26: part 25 uses E0004 E0106 E0277 E0382 E0502
+  E0506 E0596 E0599 E0616 (none new); real-message facts — `file.lines()` on a bare
+  `File` also prints a future-incompat warning and a second E0599 on `!`; the non-Send
+  boxed-closure E0277 ends with a misleading "use parentheses" help; E0106's help puts
+  `'a` on all references; missing-`Ord` E0277 suggests only `#[derive(Ord)]`. Later (0–24
+  additions): p15-mutex says a `lock()` Err "이 책에서 다루지 않습니다" — p20-poison now
+  covers it. Unchecked by a reviewer: all of part 25.
