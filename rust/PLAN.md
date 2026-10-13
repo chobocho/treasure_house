@@ -1348,3 +1348,51 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p17-write-roundtrip → p24-kv-file; p10-static-dynamic / p14-box-dyn → p24-kv-run;
   p15-many → p24-kv-jobs-spawn; p13-test-mod → p24-kv-check; p23-test-shared →
   p24-kv-file-test; p08-btreemap → p24-kv-mem.
+- 25a written (part 25 "연습 문제와 풀이", chapters 1–3 = parts 2–5 / 6·7 / 8·9): 62 slides
+  in `25_ex.html` (cover, intro, 3 × [chapter cover + 9 problems × 2 + closing table
+  `p25-chN-map`]); 31 single-file examples in `ex/25/` (4 compile-error twins:
+  `words_bad` E0382, `top_price_bad` E0506, `light_bad` E0004, `recipe_bad` E0277). Deck
+  1,707, examples 1,155, captures 1,326, quizzes 115 (the part has NO quiz slides — said
+  on `p25-intro`). Conventions settled: ids `p25-q-<slug>` / `p25-a-<slug>`; titles
+  "문제 N — …" / "풀이 N — …", N = 1…27 (25b continues at 28); problem slide = lead → given
+  CODE slice of the solution file (if any) → rule list → OUT slice without the `$` line
+  ("찍혀야 하는 화면") → `.note` "쓸 수 있는 것 — N부까지." → optional `.tip` "실마리"; a
+  fix-it shows RUN of the `_bad` twin + OUT of the fixed twin and no tip; solution slide
+  = RUN (or CODE of the written part + OUT) + one "읽는 법"; closing table 문제 · 따라간
+  부 · 쓴 것. Problems: 1 receipt, 2 bases_in (stdin), 3 hms, 4 rgb, 5 change, 6 dice,
+  7 month_days, 8 reduce, 9 day_of_year | 10 words (fix), 11 bonus, 12 top_price (fix),
+  13 mask, 14 stock, 15 light (fix), 16 order, 17 seat, 18 span | 19 wrap, 20 stats,
+  21 dice_map (same screen as 6), 22 ledger, 23 round_robin, 24 menu, 25 recipe (fix,
+  exit 1), 26 hours, 27 hours_enum (same screen as 26). Chapter 1 has no fix-it. Four
+  solution files exceed 45 lines (day_of_year 49, order 47, hours 46, hours_enum 73) —
+  their solution slides show only the written part. Hard-rule audit trail:
+  `scratch/w25a/uses.tsv` (584 rows: slug · part · item · teaching slide · regex) +
+  `uses_check.py` (0 mismatches; 123 rows match only in the slide's example code).
+  Section file is joined from `scratch/w25a/s*.html` by `join.sh` — the section file is
+  the source of truth from now on. Orchestrator re-ran: `make all` rc=0 (1,707장 · 오류
+  0 · 어긋남 0 · 알림 1 = part 25 under budget, expected until 25b), `rsrun --check -q
+  ex/25` ×3 = 31 ✓ / 0 ✗; read `p25-intro` and problem 17 (statement, file, capture,
+  reading) end to end. Part-0 map gained the part-25 row; card text "연습 문제와
+  풀이(앞 절반)까지", "27부(0~25부+부록)". FOR THE REVIEWER — the writer's own list of
+  weak "teaching slides": arithmetic/comparison operators have no dedicated slide (`+`
+  `*` only as println! arguments in part 2; `-` cited to p03-usize prose); `-=` only in
+  p05-mut-param's code; `String::new()` and `push_str` used in a part-6 problem (13)
+  though taught in part 8; `for _step in 0..n` (6) rests on p03-unused (a `let`);
+  `continue` inside `let … else` (17, 22) only in p07-let-else-nodiverge's prose;
+  composed patterns never shown as such (`[row @ b'A'..=b'E', col @ b'1'..=b'9']`;
+  `let [a, b, c] = &words[..] else`; `let (Some(low), Some(high)) = (…) else`); tuple
+  destructuring in `for` over a borrowed slice (24); `*name` copying a `&str` out of
+  `&&str` (22); format specs `{n:#12x}`, `{:-<29}` on "", `{:<5}` on a bool; `&mut
+  scores[..]` (11); `-> &u32` into a slice (12); `.is_empty()` / `.chars().count()` only
+  in example code; `impl Display` / `impl From` by rote as part 9 does (27); `map_err`
+  with a capturing closure (25, 26). Statement edges no printed line exercises: 2
+  (invalid input → expect), 13 (number exactly `keep` long), 17 (0- or 1-byte names),
+  24 (coupon equal to the sum), 26 (which `-`/`:` splits when there are several).
+  Solution 21's last sentence names an unrun HashMap alternative. Toolchain text in
+  captures 26/27 ("invalid digit found in string", "cannot parse integer from empty
+  string") is labelled. Later-band rework candidates for 25b: 5, 6/21, 20 (iterators);
+  16 (trait); 13, 18 (Display); 27 (Box<dyn Error>); 26 (FromStr); 19, 22 (stdin/files);
+  23 (threads/channels). Found while linking (not changed): p06-literal-string uses
+  `push_str` without naming it; p07-let-else's lead says the else block leaves "the
+  function" while the next slide also lists break/continue. Unchecked by a reviewer:
+  all of 25a.
