@@ -513,3 +513,25 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
 151. A word with two senses in a part (실수 = mistake / float) stays out of titles.
 152. "N번 줄의 f" for a method names the `fn` line; the line that does the thing is
      cited separately.
+
+### Lessons from the review of part 26, second half
+153. A symptom title must not also describe the fixed twin or a compiling example
+     elsewhere in the book: name what was missing ("`..` 없이", "Send 를 적지 않은",
+     "&str 로").
+154. A negative about notation ("이 표기는 이 책에서 다루지 않는다") is grepped by the
+     token shape (`<X as Y>::`) in both `deck/sections` and `out/`, not by a word.
+155. With two errors, the `--explain` line names the first number of the "Some errors
+     have detailed explanations" line, which is in ascending order and need not be the
+     first error on screen. Read both lines as they are.
+156. "Same chain / same order as slide X" needs a line-by-line diff of the note chains;
+     a subsequence is not "the same".
+157. Before writing a cure, grep the book for the construct that does what the reader
+     wanted (`ExitCode`, `Box<dyn FnOnce() + Send>`, `let [..] = &v[..] else`): a
+     compiler help lists only some cures.
+158. A hygiene line is tested by deleting it in BOTH twins; the slide says which twin
+     needs it and what the run without it printed.
+159. In a repeated-shape error, the labels on the primary line still get one clause
+     after the diff with the teaching capture.
+160. Helper scripts must never let awk/sed/cat fall back to stdin on an empty file
+     variable (a reviewer's helper hung for 120 s that way): guard the variable and
+     redirect `</dev/null`.

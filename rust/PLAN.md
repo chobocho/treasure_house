@@ -1622,3 +1622,34 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p08-str-parse and p18-min-max-clamp; back-links p01-ed2021-iter21 / p08-vec-iterate →
   p26-for-moved, p04-scope-loop / p03-scope → p26-typo-local, p01-int → p26-use-missing;
   `p26-intro` credits `rustc --explain` to p02-macro-bang (p00-broken is first).
+- 26 second half reviewed (chapters 4–7, 36 slides, unchanged; NO example or capture
+  changed; `26_errs.html` untouched): 사실오류 2 · 증거불일치 6 · 근거없음 6 · 절단 0 · 순서
+  12 · 표기 14 · 퀴즈 0 · 코드 0; style/flow 5, re-teaching 0. All 28 "싣지 않은 실행"
+  claims re-run from fresh probes (`scratch/r26b/u/`): 28 confirmed, 0 contradicted, 1
+  imprecise line number. Five unshown runs replaced by links to slides that SHOW the
+  screen (p11-static-bound-fail, p10-return-impl-two, p07-let-destructure, …); no entry
+  keeps more than two. Eleven titles narrowed (lesson 147/153: "&str 을 for 에", "Send 를
+  적지 않은 Box<dyn Fn> 을 …", "구조체 패턴에서 .. 없이 필드 하나를 뺐다", "i32 를 as bool
+  로", "const 에 String::from 으로 만든 값을" — `String::new()` in a const compiles, …);
+  table rows follow. `p26-ret-dyn`: the `--explain` line names E0277, not the first
+  error on screen (I read the capture tail: "Some errors …: E0277, E0746" / explain
+  E0277 — matches). `p26-boxed-send`: "same chain as p24-kv-jobs-nosend" was false (a
+  subsequence) → reworded; the closing "use parentheses" help is said not to be the
+  cure, from the unshown run. Hygiene lines now said (assign_left line 3). Closer
+  earlier screens acknowledged: p19-const-for-err, p02-macro-bang (same-shaped `= note:`),
+  p24-calc-limit-noarm / p25-a-light (E0004 help), p02-semicolon (code-less error),
+  p17-out-exitcode (the book's way to return an exit status). E0310 was in
+  out/19/compose_err.txt (lines 38–65, not shown) — the slide's "번호만 적고 지나간 오류" is
+  exact. Threads: thread_escape and boxed_send ×10 ✓ each. Orchestrator re-ran: `make
+  all` rc=0 (1,840장 · 오류 0 · 어긋남 0), `rsrun --check -q ex/26` ×3 = 108 ✓ / 0 ✗;
+  confirmed `Unique` is line 11 of out/19/dyn_send_err.txt while p19-dyn-send shows 1–10.
+  Lessons 153–160 in AUTHORING.md. PART 26 IS COMPLETE — all of parts 17–26 are written
+  and reviewed. Open: two tall slides (ret-dyn, boxed-send) not seen rendered;
+  `p26-vec-pat`'s fixed twin relies on `i32: Copy` (it is the compiler's own help);
+  "이름 공간" has no gloss or glossary row. The complete back-link list into part 26 and
+  the stale sentences found are in `scratch/backlinks-26.md` (git-ignored; the earlier
+  lists are in `scratch/appendix-worklist-raw.md`, extracted from this log).
+  REMAINING (orchestrator): (1) additions to parts 1–16 (brief
+  `scratch/brief-add016.md`), (2) back-link + stale-sentence pass, (3) appendix: index
+  rows for 17–26, glossary, edition table, budget line 27 → 45+, (4) review of the
+  additions and a final whole-deck check.
