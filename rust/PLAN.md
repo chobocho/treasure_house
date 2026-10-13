@@ -1520,3 +1520,41 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p12-min-max-by — closure argument type and ties; p18-shift — shift count type;
   p13-test-mod — tests module only in a cargo lib; p15-mutex still says a `lock()` Err is
   not covered (p20-poison covers it).
+- 26a written (part 26 "컴파일 오류 처방전", chapters 1–3 소유권·빌림 / 타입 / 이름·모듈): 34
+  slides in `26_errs.html` (cover, intro, 3 × [chapter cover + entries + `p26-chN-map`];
+  entries 9 + 9 + 8 = 26, ONE slide each). Skeleton split by the orchestrator:
+  `26b_errs.html` holds chapters 4–7 (still commented in order.txt); OUTLINE header
+  updated. 52 examples in `ex/26/` (25 `_bad` + 25 fixed single files, directory pair
+  `no_mod_bad/` + `no_mod/`). Deck 1,802 (appendix 31 → 32: the generated error index
+  grew a page), examples 1,242, captures 1,441, codes in slide titles 60 → 76. Entry
+  markup: `<h3>증상 — E0xxx</h3>` · lead ("…할 때 만납니다") · RUN of `x_bad.rs` · `.note`
+  읽는 법 (line numbers of the BAD file) · `.tip` 처방 · CODE slice of `x.rs` · OUT of the
+  fixed run (two lines) — four boxes per entry. Closing table: 증상 · 번호 · 처방 · 규칙을
+  가르친 곳. Working words defined on `p26-intro`: 틀린 파일 / 고친 파일 / 싣지 않은 실행.
+  16 codes NEW to the book: E0508 E0509 E0503 E0716 | E0689 E0608 E0606 E0618 E0069
+  E0609 E0615 | E0601 E0435 E0424 E0405 E0624. Taught codes revisited: E0381 E0382 E0507
+  E0594 E0502 | E0277 E0308 | E0425 E0433 E0432 (+ E0599 beside E0424 on
+  `p26-self-missing`, the only two-error capture). Probe record
+  `scratch/w26a/probes.tsv` (74 rows): on rustc 1.99 "cannot find type" prints E0425 —
+  E0412 never appeared; `vec.len` gives E0616 (not E0615); `"42" as i32` gives E0606 with
+  a raw-pointer help; E0252/E0255/E0415/E0416/E0426 always come with a warning; E0401,
+  E0364/5, E0254, E0492 come as several errors. About twenty "싣지 않은 실행" sentences
+  (helps applied literally etc.) rest on scratch probes only. Orchestrator re-ran: `make
+  all` rc=0 (1,802장 · 오류 0 · 어긋남 0 · 알림 1 = part 26 under budget until 26b), `rsrun
+  --check -q ex/26` ×3 = 52 ✓ / 0 ✗; read `p26-temp-dropped` against its capture and twin
+  diff. Part-0 map gained the part-26 row; card "28부(0~26부+부록)", "오류 번호 76종".
+  FOR THE REVIEWER: four boxes per slide (brief said three); four bad files over 15 lines
+  (self_iter_call 23, drop_field 17, field_out 16, private_method 16);
+  `p26-self-iter-call` has the same message shape as p06-iter-invalid (said);
+  `p26-drop-field` and `p26-array-move` read alike; `for_assign_bad.rs` carries a `push`
+  only to keep `mut` used (said); `p26-no-mod`'s bad RUN starts with `cat helper.rs`;
+  long readings on p26-index-i32 and p26-self-missing; attributions to check: `&String`
+  in a `&str` RETURN position → p06-take-str (shows arguments only), "곱셈은 언제나 *",
+  temporaries → p20-guard-scope. p26-intro deliberately does NOT repeat p00-machine's
+  "오류 번호와 뜻은 같습니다" (E0412 → E0425 on this toolchain; no capture of the old
+  number). Left for 26b: ch4 E0521 (probe exists), E0597, E0515, E0106, E0621, E0310,
+  "lifetime may not live long enough"; ch6 E0026, E0416, E0530; ch7 candidates E0252 /
+  E0255, E0057, E0604, E0054, E0560, E0070, E0600, E0423, E0403, E0426, the non-Send
+  boxed closure's "use parentheses" help. Later (0–25): p00-machine's claim about
+  numbers; p08-vec-iterate → p26-for-moved; p13-modfile → p26-no-mod; p08-str-index →
+  p26-index-i32. Unchecked by a reviewer: all of 26a.

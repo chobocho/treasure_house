@@ -336,7 +336,7 @@ expected output; the next shows a solution that was run (RUN). Problems never ne
 anything the named part has not taught. Chapter per band: 2–5, 6–7, 8–9, 10–12, 13–16,
 17–23.
 
-## 26부 컴파일 오류 처방전 (70) — file 26_errs.html
+## 26부 컴파일 오류 처방전 (70) — files 26_errs.html (1–3), 26b_errs.html (4–7)
 By symptom, not by number: 소유권·빌림 / 타입 / 이름·모듈 / 수명 / 트레이트 / 패턴 / 그 밖.
 Each entry is a pair — the smallest program that produces the error (real message) and
 the fixed program. Prefer error codes NOT yet in the book (about 30 new codes), and for
