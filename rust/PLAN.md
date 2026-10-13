@@ -1688,3 +1688,41 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p16-prelude-shadow, p10-ord-four, p10-ord-alone. Lesson for AUTHORING: the builder
   rejects a CODE slice with unbalanced braces (a `fn` header alone must be widened).
   Unchecked by a reviewer: all 27 additions.
+- Back-link + stale-sentence pass and the appendix done (one agent; log
+  `scratch/final-pass-log.md`). Deck 1,867 → 1,877 (appendix 34 → 44, budget line 27 →
+  50), badges 141 → 142, glossary 64 → 112 terms. No example or capture changed.
+  (A) 23 stale or false sentences fixed, among them p00-machine (numbers are "this
+  toolchain's"; the orchestrator trimmed the E0425 clause the agent had added there),
+  p01-async, p13-cargo-toml, p13-crates-io, p15-atomic, p16-unsafe-what, p16-block-on,
+  p16-async-why, p17-tool-wc-count, p17-tool-rules, p19-compose (E0310 → p26-box-static),
+  p19-gat-for-err, p24-kv-jobs-nosend (Unique), p26-intro (`--explain` credit →
+  p00-broken); four made stale by the additions to parts 1–16 (p19-impl-arg-err — E0107
+  now first at p16-prelude-shadow; p19-cond-method-err and p17-file-no-buf — the E0599
+  headline now first at p14-cell-get-copy; p24-calc-limit-noarm — the E0004 help now
+  first at p07-enum-arm-added). 63 forward pointers added, never more than one per
+  slide, 36 of them as a new trailing `<p class="cap">`; ten plain "N부" mentions in
+  closing notes turned into links. 113 pairs skipped ("application only", "next slide
+  follows", one-per-slide), all logged. Badges: const-fn on p05-const-fn (key existed),
+  io-error-other 1.74 on p17-write-buf-drop-fail (new row); `is_ascii_whitespace` /
+  `to_ascii_lowercase` not sourced. (B) New appendix slides: p27-editions (after
+  p27-keywords-reserved; every cell from part 1's evidence: REL 1.0/1.31/1.56/1.85 and
+  the FACT/SRC directives of p01-ed-table; the right column links slides that compiled
+  one file under two editions), p27-index-3 (parts 17–18), p27-index-4 (19–23),
+  p27-index-5 (three columns: four projects with their rules tables, six exercise
+  bands with p25-chN-map, seven symptom chapters with p26-chN-map). p27-ecodes-intro:
+  "번호가 없는 오류도 있습니다" with four linked kinds; part 26 goes the other way.
+  Glossary rows added with `where` = the defining slide (list in the agent's report;
+  both-sense rows for 저장소 and 정렬). Left OUT of the glossary: 컬렉션 and 인덱스 (no
+  defining slide), 손잡이 (used at p15-spawn before its gloss at p17-out-flush), 쌍둥이
+  파일 / 얇은 main / 식의 나무 / 이름 공간 / 종료 코드 / 약한 참조 / 기본 구현 (no English
+  form or no gloss), one-chapter terms, working words, and about forty glossed terms
+  cut for size (환경 변수, 패딩, 안정 정렬, 표시 트레이트, 고차 트레이트 바운드, …).
+  p00-map lead now names three bands (17–23, 24–26). Orchestrator re-ran: `make all`
+  rc=0 (1,877장 · 오류 0 · 어긋남 0 · 버전 표기 142), glossary column check clean (113
+  lines, no deleted line, no duplicate), `git diff -- ex out` empty; read p27-editions
+  and about twenty of the pointer edits in parts 6, 15 and 19. Card: 1,877슬라이드 ·
+  버전 표기 142건 · 용어집 112낱말. Open (not changed): p06-borrow-why says "데이터 경합"
+  where REVIEW2 and part 15 say "데이터 경쟁" (a title); p00-normalize's title "세 가지뿐"
+  (doctest times are also normalised); p16-macro-std shows `concat!` unread; part 13
+  uses "항목" without a gloss; p10-mono has no evidence; REVIEW2's note "glossary has 64
+  rows" lags; the 36 new caps and the new appendix slides were not seen rendered.
