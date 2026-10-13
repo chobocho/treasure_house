@@ -1443,3 +1443,41 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   `'a` on all references; missing-`Ord` E0277 suggests only `#[derive(Ord)]`. Later (0–24
   additions): p15-mutex says a `lock()` Err "이 책에서 다루지 않습니다" — p20-poison now
   covers it. Unchecked by a reviewer: all of part 25.
+- 25 first half reviewed (problems 1–27, 62 slides, unchanged count): 사실오류 5 ·
+  증거불일치 3 · 근거없음 1 · 절단 0 · 순서 2 · 표기 3 · 퀴즈(문제문) 8 · 코드 1; style/flow
+  14, re-teaching 0. Hard rule, per problem: 23 clean or accepted as compositions of
+  taught pieces (each now named with links); FOUR promises not strictly true and kept
+  with a clause (raising the part would break the order, rewriting was not possible
+  within the part): 13 (`String::new()` — named by no prose in parts 2–6; same shape as
+  p06-return-new's example), 22 (`*name` copies `&str` out of `&&str` — "a shared
+  reference is Copy" is nowhere in the book), 24 and 25 (`&&str` passed where `&str` is
+  expected — deref coercion, taught only at p14-deref-coercion; forward pointer added).
+  Statements: rules added in 1 (blank before the total), 2 (prefix inside the width;
+  lowercase hex), 19 (no empty line before a long first word), 20 (scores 0–100, so the
+  sums cannot overflow); 2's `expect` clause cut. Inputs gained an edge: `seat.rs` +"A"
+  (+1 capture line), `wrap.rs` +line 31 (a long FIRST word; the `!line.is_empty() &&`
+  guard decided no printed line before — a probe without it printed the same screen).
+  Code: `mask.rs` index loop → element loop (capture identical). False reading sentence
+  in `p25-a-wrap` rewritten with counts (21, 18 — I recomputed both). Unrun HashMap
+  alternative in solution 21 replaced by what p08-map-word-count does. Fix-it captures
+  diffed against the teaching captures: 10 `words` is the SAME situation as p06-move-fn
+  (kept, said on the slide; `&String` is a second valid fix, now stated); 15's `help:`
+  (two ways; the wildcard is what the statement forbids) read in full for the first
+  time in the book. Overlaps acknowledged: 15 ↔ p07-state-machine, 21 ↔
+  p08-map-word-count, 25 ↔ p09-real-config. Pinned captures (`order`, `stats`,
+  `ledger`) untouched; both same-screen pairs still identical below `$` (I re-diffed).
+  Orchestrator re-ran: `make all` rc=0 (1,767장 · 오류 0 · 어긋남 0), `rsrun --check -q
+  ex/25` ×3 = 66 ✓ / 0 ✗. Lessons 130–138 in AUTHORING.md. Open: problem 10's situation;
+  long single-paragraph notes (mask, light, ledger, menu, recipe); tip 8 gives Euclid's
+  algorithm; `p25-intro` generalisations over all 54 problems ("새로 배우는 문법은
+  없습니다", "쓴 것마다 … 잇습니다"); `p25-ch3-map` lead does not say row 25 is a fix-it;
+  `scratch/w25a/uses.tsv` not updated. TEACHING GAPS in parts 2–9 exposed (Later, 0–16
+  additions): no slide for arithmetic/comparison operators as such (`!=`, unary minus,
+  `-=` only in code); p06-copy-types omits shared references (yet
+  ex/08/map_collect.rs:14 `keys.push(*name)` relies on it); p06-auto-deref covers only
+  method calls and println!, p05-arg-type says arguments are never converted (yet
+  ex/08/build_string.rs:10 passes `&&str` to `push_str`); `String::new()` unexplained on
+  p02-read-line / p06-return-new; p06-literal-string uses `push_str` unnamed; p05-return
+  has no bare `return;`; p07-enum-missing-arm and p04-match-missing cut the `help:`;
+  `for x in slice` yielding references is prose only from p08-vec-iterate; p03-int-methods
+  prose omits max/min; p07-let-else lead says "the function" only.

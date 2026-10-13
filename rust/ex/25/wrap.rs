@@ -28,4 +28,5 @@ fn main() {
         println!("|{line:<12}|");
     }
     println!("{}줄", wrap("   ", 12).len());
+    println!("{:?}", wrap("extraordinarily so", 12));
 }

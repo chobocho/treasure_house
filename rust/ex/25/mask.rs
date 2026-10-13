@@ -12,8 +12,8 @@ fn masked(card: &str, keep: usize) -> String {
     let hidden = &card[..card.len() - shown.len()];
     let bytes = hidden.as_bytes();
     let mut out = String::new();
-    for i in 0..bytes.len() {
-        if bytes[i] == b'-' {
+    for b in bytes {
+        if *b == b'-' {
             out.push_str("-");
         } else {
             out.push_str("*");

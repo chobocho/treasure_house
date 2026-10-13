@@ -11,7 +11,7 @@ fn seat(label: &str) -> Option<(usize, usize)> {
 
 fn main() {
     let mut taken = [[false; 9]; 5];
-    for label in ["B7", "E1", "F3", "A0", "C12", "b7", "B7"] {
+    for label in ["B7", "E1", "F3", "A0", "C12", "A", "b7", "B7"] {
         let Some((row, col)) = seat(label) else {
             println!("{label}: 없는 자리");
             continue;

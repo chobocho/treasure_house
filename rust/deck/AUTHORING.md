@@ -451,3 +451,26 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
      "has already happened" differs between them.
 129. A determinism argument covers every artefact a screen shows (the answers AND the
      file that `cat` prints) and the failure path, not only the happy path.
+
+### Lessons from the review of part 25, first half (exercises; apply from 25b's review and part 26 on)
+130. In a fix-it pair, line numbers on the solution slide come from the SOLUTION file;
+     every line after the first changed one differs between the twins.
+131. A compound condition in a solution needs an input where each operand alone decides
+     a printed line. Check by deleting the operand in a scratch copy and diffing the
+     capture.
+132. An edge is "unexercised" only if two reasonable implementations would print
+     different things there; when both branches give the same value, do not list it.
+133. A token audit misses implicit steps: deref coercion at an argument (`&&str` where
+     `&str` is expected), copying `&T` out of `&&T`, array to slice. Audit the TYPES at
+     every call and every `*`, not only the tokens.
+134. For "same headline as the teaching slide", normalise names and positions and diff
+     the two captures. If only names differ, the bad program is the teaching example
+     renamed — say so or change the situation.
+135. A solution obeys the preferences the named parts state in their own titles (an
+     index loop where `p04-for-index` says to loop over the elements is a defect).
+136. After adding a line to a given `main`, re-read every "화면의 마지막 줄" and every
+     `lines=` of both the problem and the solution slide.
+137. A statement that licenses `unwrap` or plain arithmetic by "fits in T" bounds the
+     VALUES by the domain ("0 부터 100 까지"), or sums can overflow.
+138. No "X 로 했다면 … 해야 합니다" about an alternative that was not run; say what the
+     linked example did.
