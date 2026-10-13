@@ -25,4 +25,4 @@ fn main() -> io::Result<()> {
     println!("{groups}덩어리");
     Ok(())
 }
-//@ stdin: 맑음\n맑음\n맑음\n비\n\n\n맑음\n눈\n눈
+//@ stdin: \n\n맑음\n맑음\n맑음\n비\n맑음\n눈\n눈

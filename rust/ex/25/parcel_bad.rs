@@ -12,10 +12,6 @@ impl Parcel<Packed> {
     fn pack(item: &'static str) -> Parcel<Packed> {
         Parcel(item, 0, PhantomData)
     }
-
-    fn pay(self, fee: u32) -> Parcel<Paid> {
-        Parcel(self.0, fee, PhantomData)
-    }
 }
 
 impl Parcel<Paid> {
@@ -32,7 +28,7 @@ impl Parcel<Sent> {
 
 fn main() {
     let parcel = Parcel::pack("책 두 권");
-    let parcel = parcel.send();
+    let parcel = parcel.pay(3500).send();
     println!("{}", parcel.label());
 }
 //@ expect: E0599

@@ -474,3 +474,25 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
      VALUES by the domain ("0 부터 100 까지"), or sums can overflow.
 138. No "X 로 했다면 … 해야 합니다" about an alternative that was not run; say what the
      linked example did.
+
+### Lessons from the review of part 25, second half (apply from part 26 on)
+139. Before "그때의 note:/help: 는 …", check the teaching slide's `lines=`: compare with
+     the slice the slide SHOWS, not with the whole capture file.
+140. For every bad twin, apply the compiler's `help:` literally in a scratch copy and
+     run it. Note whether it compiles, errors again, or prints a different screen —
+     and say on the slide only what you ran.
+141. A twin whose cure is the teaching slide's cure trains recall. Make the cure differ
+     (a missing method instead of a skipped call; a non-`Send` capture instead of a
+     missing `+ Send`), or say in one clause that it is the same situation.
+142. A screen shows hygiene or shadowing only if the other reading would print
+     something else.
+143. An annotation that exists only to keep the error count at one is said on the
+     slide, with the unshown run named as unshown.
+144. rustfmt wraps method chains at 60 columns, before the 72-column limit: run
+     `rustfmt --check` before fixing line numbers on a slide.
+145. A headline and a label can name the same type differently (`Parcel<State>` /
+     `Parcel<Packed>`): read both as written.
+146. A fix that needs a supertrait (`Ord: Eq + PartialOrd`), an inherent associated
+     const, `*self = value`, a block-bodied closure or `|_|` leans on something no
+     slide of parts 2–23 teaches in prose: avoid it in a bad/fixed pair or gloss it in
+     one clause with the closest slide.

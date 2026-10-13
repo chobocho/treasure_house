@@ -22,6 +22,6 @@ fn main() {
     let n = check!(age >= 14, age >= 19, name.len() <= 8);
     println!("{n}개 통과");
 
-    let n = check!(name == "ferris" && age % 2 == 1,);
+    let n = check!(name == "ferris" && age % 2 == 1, passed == 100,);
     println!("{n}개 통과, 바깥의 passed 는 {passed}");
 }

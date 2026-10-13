@@ -1481,3 +1481,42 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   has no bare `return;`; p07-enum-missing-arm and p04-match-missing cut the `help:`;
   `for x in slice` yielding references is prose only from p08-vec-iterate; p03-int-methods
   prose omits max/min; p07-let-else lead says "the function" only.
+- 25 second half reviewed (problems 28–54, 60 slides, unchanged count): 사실오류 5 ·
+  증거불일치 1 · 근거없음 4 · 절단 0 · 순서 3 · 표기 1 · 퀴즈(문제문) 11 · 코드 0; style/flow
+  29, re-teaching 0. Hard rule: 24 clean or accepted as compositions (glossed + linked);
+  29 FIXED by changing the bad twin (it now derives `PartialEq, Eq, PartialOrd`, so only
+  `Ord` is missing — `derive(Ord)` alone gave TWO E0277 and the book states supertraits
+  nowhere; capture byte-identical; the field swap is fair: a rule + the `{:?}` screen
+  force it, and the lead now says to compare the screen after it compiles); 40 (`*self =
+  Tree::Node(…)`) and 52 (inherent associated const) kept with a clause — promises not
+  strictly true. Two fix-its were the teaching example renamed and got a NEW situation:
+  50 `parcel` (the `pay` method itself is missing; the learner writes the transition —
+  E0599 without the `= note:`; headline says `Parcel<State>`, label `Parcel<Packed>`)
+  and 51 `jobs_send` (the alias keeps `+ Send`; a job captures an `Rc` shared with main;
+  cure Rc → Arc on lines 1, 21, 22; capture 18 lines instead of 41; first reading in the
+  book of "required for the cast from `Box<{closure}>` to `Box<dyn … + Send>`"; fixed
+  screen still `[42, 101, 3]`). Three same-situation fix-its kept and said so (37 tank,
+  41 till, 47 chores). Edges added to inputs: `checklist.rs` (+`passed == 100` — hygiene
+  is now decided by a printed line), `runs.rs` (two blank lines first — the `count > 0
+  &&` operand now decides a line; a no-guard probe prints 4덩어리), `stockroom/RUN` (4th
+  run with two arguments → usage, exit 2). `p25-intro` generalisations softened ("새
+  문법을 가르치는 슬라이드는 없습니다. 배운 것 둘을 처음 보는 모양으로 맞물린 자리 … 는
+  풀이의 읽는 법이 짚습니다"); `p25-ch3/5/6-map` leads say which rows are fix-its. 49's
+  tie rule attributed to the std documentation. Overlaps acknowledged: 39 ↔ p13-modfile,
+  48 ↔ p18-flags, 53 ↔ p23-feat-default, 54 ↔ p23-ws-* (53 and 54 are in substance the
+  part-23 builds with other names — kept, said). Threads: 42, 43, 51 sound by reading;
+  10/10 each. Orchestrator re-ran: `make all` rc=0 (1,767장 · 오류 0 · 어긋남 0), `rsrun
+  --check -q ex/25` ×3 = 66 ✓ / 0 ✗, jobs_send ×5 ✓; read the new `jobs_send` pair (diff
+  = lines 1, 21, 22; one error) and re-diffed the three same-screen pairs (28↔16, 35↔20,
+  45↔22 first six lines) — identical. Lessons 139–146 in AUTHORING.md. PART 25 IS
+  COMPLETE. Open: tall slides (p25-a-frac, p25-a-order-dyn, p25-a-stockroom);
+  `scratch/w25*/uses.tsv` not updated; part 22 has no problem and the slide gives no
+  reason; the "use parentheses" help of the non-Send boxed closure no longer has an
+  example (part 26 may show it); whether `cargo -q` hides a missing-resolver warning in
+  `shopws` was not probed. TEACHING GAPS in parts 10–23 (Later): p10-eq-ord /
+  p10-supertrait — `Ord`'s supertraits; p10-trait-not-impl cuts `note:`/`help:`;
+  p19-dyn-send cuts the note chain; p06-deref — no plain `*r = value`; p10-assoc-const —
+  no inherent const; p12-closure-basic — no block body in prose, no `|_|`;
+  p12-min-max-by — closure argument type and ties; p18-shift — shift count type;
+  p13-test-mod — tests module only in a cargo lib; p15-mutex still says a `lock()` Err is
+  not covered (p20-poison covers it).

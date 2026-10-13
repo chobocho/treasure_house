@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 
@@ -16,11 +17,13 @@ fn main() {
         answers
     });
 
-    let base = 100;
-    let words = vec!["가", "나", "다"];
+    // 값 목록 하나를 main 과 둘째 일감이 함께 갖는다.
+    let prices = Arc::new(vec![30, 60, 11]);
+    let shared = Arc::clone(&prices);
     tx.send(Box::new(|| 6 * 7)).unwrap();
-    tx.send(Box::new(move || base + 1)).unwrap();
-    tx.send(Box::new(move || words.len() as u32)).unwrap();
+    tx.send(Box::new(move || shared.iter().sum())).unwrap();
+    let count = prices.len() as u32;
+    tx.send(Box::new(move || count)).unwrap();
     drop(tx); // 일감이 더 없다
 
     println!("{:?}", worker.join().unwrap());
