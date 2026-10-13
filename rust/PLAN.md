@@ -1595,3 +1595,30 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   back-links p07-refutable → p26-for-some, p12-for-each → p26-break-closure,
   p04-match-missing → p26-str-match, p11-fixes → chapter 4. Unchecked by a reviewer: all
   of part 26.
+- 26 first half reviewed (chapters 1–3, 34 slides, unchanged; NO example or capture
+  changed): 사실오류 6 · 증거불일치 6 · 근거없음 5 · 절단 0 · 순서 2 · 표기 6 · 퀴즈 0 · 코드 0;
+  style/flow 8, re-teaching 0. All 21 "싣지 않은 실행" claims re-run from fresh probes
+  (`scratch/r26a/u/`): 21 confirmed, 0 contradicted, 1 incomplete (self-missing's second
+  help also prints an unused-variable warning — added). Every "help is the cure" claim
+  compared character by character with its twin: holds. All 16 new codes really absent
+  from the rest of the book. Titles that over-generalised were narrowed: `p26-ambig-float`
+  ("타입을 적지 않은 수 리터럴에 sqrt 를 불렀다" — `42.to_string()` in ex/08 and `3.min(8)`
+  in ex/18 compile without a suffix; I confirmed both lines exist), `p26-ref-cast`
+  ("참조를 as f64 로 …"), `p26-use-missing` ("use 없이 HashMap::new() 를 불렀다" — the
+  type-annotation case is E0425, as out/01/old_int.txt shows), `p26-uninit-branch`.
+  `p26-intro` now true of all 54 entries: titles carry a number only when the compiler
+  gave one; taught codes compare screens "when an earlier screen of the same shape
+  exists"; "싣지 않은 실행" defined for all its uses. Closer earlier captures
+  acknowledged: p01-ed2021-iter21 (the `into_iter` note, unread there) on `p26-for-moved`;
+  p01-int (same headline text, E0425) on `p26-use-missing`; p04-scope-loop on
+  `p26-typo-local`. Attributions reworded to what the capture or the linked slide shows
+  (`&String` in a return position; "곱셈은 언제나 *"; `as` and negatives). No bad file
+  could be made smaller (the four over 15 lines are rustfmt's struct-literal expansion).
+  Orchestrator re-ran: `make all` rc=0 (1,840장 · 오류 0 · 어긋남 0), `rsrun --check -q
+  ex/26` ×3 = 108 ✓ / 0 ✗. Lessons 147–152 in AUTHORING.md. Open: chapter fit of
+  `p26-const-local` and `p26-temp-dropped` (pointer added, nothing moved); the map leads'
+  negative claim "규칙을 따로 가르친 슬라이드가 없는 두 줄". Later (0–25): p03-int-methods
+  says "리터럴에 바로 메서드를 부를 때는 접미사로 타입을 밝혀 줍니다" — contradicted by
+  p08-str-parse and p18-min-max-clamp; back-links p01-ed2021-iter21 / p08-vec-iterate →
+  p26-for-moved, p04-scope-loop / p03-scope → p26-typo-local, p01-int → p26-use-missing;
+  `p26-intro` credits `rustc --explain` to p02-macro-bang (p00-broken is first).

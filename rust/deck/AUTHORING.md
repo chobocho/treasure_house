@@ -496,3 +496,20 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
      const, `*self = value`, a block-bodied closure or `|_|` leans on something no
      slide of parts 2–23 teaches in prose: avoid it in a bad/fixed pair or gloss it in
      one clause with the closest slide.
+
+### Lessons from the review of part 26, first half (error entries)
+147. A symptom title is a claim over the whole book: grep `ex/` for the same construct
+     COMPILING (`3.min(8)`, `42.to_string()`) before writing "X 를 했다 — E0xxx", and
+     name the method or type when only that case fails.
+148. "Same headline" is grepped by its TEXT, not by its code: the same sentence can
+     carry another number (`cannot find type` is E0425 at `p01-int`, E0433 elsewhere),
+     and the closest capture may sit on a slide that showed it without reading it.
+149. When an unshown run is a neighbouring mistake, first grep `out/` for a SHOWN
+     capture of that shape and link it; keep "(싣지 않은 실행)" only for what no slide
+     shows, at most two per entry, and record every warning of such a run, not only
+     its errors.
+150. A part intro's definition of a working word is checked against every kind of use
+     in the whole part; a rule about titles is checked against every title.
+151. A word with two senses in a part (실수 = mistake / float) stays out of titles.
+152. "N번 줄의 f" for a method names the `fn` line; the line that does the thing is
+     cited separately.
