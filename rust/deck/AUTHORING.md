@@ -416,3 +416,38 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
      any listing order; make thread output deterministic by design (fixed join order,
      print after join), never by a claim about interleaving; say what a poisoned lock
      does.
+
+### Lessons from the review of part 24, project 4 (apply from part 25 on)
+117. Before writing "N부에서 본 대로 X", read the target slide's sentence for X. A slide
+     whose title matches can teach the opposite case (`p20-guard-scope` is about a
+     temporary guard dying at the end of the statement; a guard bound to a variable is
+     `p15-mutex`).
+118. "N째 명령 / N째 실행" is recounted against the `$` lines of the capture. Where a
+     chapter defines a word as its own term (명령 = a line the program reads), the
+     everyday sense gets its full name everywhere, captions included (셸의 명령).
+119. "Outside the test module there is no `unwrap`" must account for `#[cfg(test)]`
+     functions that are not inside `mod tests`.
+120. In a Cargo error capture, `For more information about this error, try …` is
+     rustc's line and only `error: could not compile …` is Cargo's. Say which, on every
+     slide that reads the tail of such a capture.
+121. A path under a directory that does not exist gives a deterministic write failure
+     even for root: use it to put a write failure on a binary screen instead of
+     "소스를 따라가면".
+122. For a threaded program, decide and SHOW what happens when one worker fails. Three
+     inputs (harmless, failing, harmless) with disjoint effects give a deterministic
+     screen that shows "earlier written, later not".
+123. "X 로는 만들 수 없는 것들" over a list: probe each member. A closing generalisation
+     over N programs is checked clause by clause against each program, and its counted
+     words ("세 층") must match the chapters' own counts. An exercise slide's frame
+     ("과제마다 파일과 함수를 적었다") is checked item by item.
+124. A definition of "a step copy" must cover deletion: `diff` every step pair and look
+     for hunks that only remove.
+125. Do not reuse, as a callout head, a phrase the previous slide just disambiguated.
+126. When acknowledging a repeated E-code, compare the two captures note by note and
+     read every `note:` the new one prints, including ones the earlier slide showed but
+     did not read.
+127. "A 는 N번 줄에서 둔 것" — check for an earlier line that set it first.
+128. A rules row about failure names the mode (stdin vs files/threads) whenever what
+     "has already happened" differs between them.
+129. A determinism argument covers every artefact a screen shows (the answers AND the
+     file that `cat` prints) and the failure path, not only the happy path.

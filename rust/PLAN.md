@@ -1311,3 +1311,40 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   every code-box caption names the step directory (only the first box does); no slide in
   the book covers re-locking a mutex the same thread holds. Glossary candidates: 저장소
   (second sense), 명령 파일. Unchecked by a reviewer: all of 24 project 4.
+- 24 project 4 reviewed (45 slides, unchanged): 사실오류 10 · 증거불일치 9 · 근거없음 12 ·
+  절단 0 · 순서 9 · 표기 11 · 퀴즈 0 · 코드 1 (a comment); style 9, re-teaching 0. The
+  program needed no change (≈60 probe inputs over commands, replies, file format/load,
+  saving, arguments). Thread verdict, all five points HOLD for this code: only `main`
+  writes; all handles are joined in spawn order with no short-circuit; replies depend
+  only on a script's own keys (every script used with workers has a disjoint prefix and
+  no `list`; `list` and the quiz commands are separate single-threaded processes); the
+  final file is the union (save only under the lock, whole map); threaded tests compare
+  order-independent facts. Every command calls exactly ONE storage method, so "one lock
+  per command" holds. What the slides had not said: when a worker returns `Err` the
+  others are still joined, sheets of earlier arguments are written, `sheets?` returns
+  the first `Err` in argument order, later sheets are not written, exit 2 — now said
+  and SHOWN. Two screens added through the generator (RUN lines only, captures appended
+  so no slice shifted): kv6 — five commands on `no-such-dir/x.kv` (get/list/del pass
+  without touching the path, first `set` exits 2); kv7 — `ask.txt data/fruit.txt
+  tell.txt` on `no-such-dir/jobs.kv` (ask's notice, the store error, no tell notice,
+  exit 2). Comment fix in `command.rs:17` in all kv steps ("첫 낱말" → "이름"). Wrong link
+  targets: "variable-bound guard dies at scope end" pointed at `p20-guard-scope`
+  (temporaries) → `p15-mutex` (3 places). `p24-wrap`: test layers were three, are four
+  (unit · run · cli · golden). `p24-intro` + `p24-kv-steps`: a step copy may also REMOVE
+  a line (kv5→kv6 is the part's only pure deletion; all 29 step pairs diffed). The
+  "every code-box caption carries the step directory" sentence is TRUE (the builder
+  prints the full path) — unchanged. Forward sentences added: `p24-grep-more` →
+  p24-calc-run-bad, `p24-calc-more` → p24-kv-run. Slides ±0 → part 24 = 169, deck 1,645;
+  captures 1,268 (+1 OUT slice). Orchestrator re-ran: `make all` rc=0 (오류 0 · 어긋남 0),
+  `rsrun --check -q ex/24` ×3 = 38 ✓ / 0 ✗; read both new captures and checked the cited
+  line numbers of six new reading sentences (storage.rs 26/29, format.rs 89/95/96 in
+  kv3, tests/run.rs 86, main.rs 14, lib.rs 176/180) — all match. Lessons 117–129 in
+  AUTHORING.md. PART 24 IS COMPLETE. Open (not fixed): `check_storage` never asserts
+  the VALUES `list` returns; no test asserts memory-after-failed-save; closed
+  stdout/stderr on no slide; a lone CR at EOF becomes part of the key/value; idiom nits
+  `Option<&String>`, `.map(|v| v.clone())`. Glossary candidates unchanged (저장소 2nd
+  sense, 명령 파일). Later (0–23 additions): p15-arc-mutex → p24-kv-jobs-lost; p20-poison /
+  p20-poison-recover → p24-kv-jobs-locked; p19-dyn-send → p24-kv-jobs-nosend;
+  p17-write-roundtrip → p24-kv-file; p10-static-dynamic / p14-box-dyn → p24-kv-run;
+  p15-many → p24-kv-jobs-spawn; p13-test-mod → p24-kv-check; p23-test-shared →
+  p24-kv-file-test; p08-btreemap → p24-kv-mem.

@@ -14,7 +14,7 @@ pub enum Command {
 // 줄을 명령으로 읽지 못한 까닭
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CmdError {
-    // 첫 낱말이 set · get · del · list 가 아니다
+    // 이름이 set · get · del · list 가 아니다
     Unknown,
     // 키가 올 자리가 비었다
     NoKey,
