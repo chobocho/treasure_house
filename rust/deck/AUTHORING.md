@@ -535,3 +535,25 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
 160. Helper scripts must never let awk/sed/cat fall back to stdin on an empty file
      variable (a reviewer's helper hung for 120 s that way): guard the variable and
      redirect `</dev/null`.
+
+### Lessons from the review of the additions to parts 1–16 and of the appendix
+161. After choosing `lines=` for a fixed twin, grep the slide's prose for line numbers
+     beyond that slice (a tip about `main` while `main` is cut). The builder rejects a
+     CODE slice with unbalanced braces: a `fn` header alone must be widened to the body.
+162. Order on a screen does not show WAITING: if the screen is identical when the other
+     thread simply arrives late, write "순서" and say what the screen does not show.
+163. A hygiene token in an example (`clone()` to reuse a value) is read on the slide;
+     delete it in a probe and say what happened.
+164. "Whether X copies or moves is decided by the type" is a claim over every binding
+     form: probe the annotated `let` (a `&mut` reborrows) before writing it.
+165. A new slide that repeats a trick an earlier slide of the same chapter used
+     silently (a std path next to a shadowing alias) acknowledges it.
+166. A quiz must not ask for "N other things" when the chapter offers more than N.
+167. Appendix tables that restate part-1 claims copy the FACT directives cell by cell,
+     not only the caption's.
+168. Glossary: grep the whole book for the word before writing "두 뜻"; `where` is a
+     slide that DEFINES the term, not its first use; the sentence says no more than
+     that slide.
+169. Tooling: `cmd <<'EOF' </dev/null` gives the script EMPTY stdin (the later redirect
+     wins) — put helpers in files; this machine's grep rejects `.{0,60}` around Korean
+     text — search with Python.

@@ -1726,3 +1726,37 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   (doctest times are also normalised); p16-macro-std shows `concat!` unread; part 13
   uses "항목" without a gloss; p10-mono has no evidence; REVIEW2's note "glossary has 64
   rows" lags; the 36 new caps and the new appendix slides were not seen rendered.
+- Additions to parts 1–16 and the appendix additions reviewed (no example or capture
+  changed): on the 27 slides — 사실오류 0 · 증거불일치 2 · 근거없음 3 · 절단 1 · 순서 0 (NO
+  forward use anywhere: channels are chapter 2 of part 15, before p15-mutex-waits) · 표기
+  1 · 퀴즈 1 · 코드 0; style/flow 3; 16 of 27 clean. Fixes: p15-mutex-waits said the
+  screen "확인합니다" that lock waits — the screen is the same if the worker simply
+  arrives late → the slide now says the screen shows the ORDER and that the waiting
+  itself is not printed (title kept as the rule); p06-ref-copy's lead implied a `&mut`
+  always moves on assignment (an annotated `let m2: &mut i32 = m;` reborrows and
+  compiles) → narrowed to "Copy 인지는 타입이 정합니다"; p16-prelude-shadow's tip cited
+  lines of `main` that no box showed → slice widened to 16–23, the second error's label
+  read, p16-type-alias's earlier use of the std path acknowledged; p12-closure-body's
+  `clone()` read (unshown run: without it E0382); p01-quiz-steps asked for "two other"
+  features where the chapter has three; titles/leads of p03-operators, p05-return-unit,
+  p11-outlives(-required) tightened. All eight unshown runs re-probed: confirmed.
+  Part-1 quizzes: every answer step rests on a FACT row and a slide of its chapter.
+  Appendix: p27-editions row 2018 lacked the FACT directives p01-ed-table carries for
+  "async 가 키워드 · try 가 예약어" (added); eleven example pairs diffed — the cap's two
+  exceptions are exactly the two non-identical pairs; p27-index-3 lead corrected; every
+  item of ③ ④ occurs in the chapter it links. Glossary: all 48 new rows checked, 5
+  changed (메서드, 버퍼 — sentences trimmed to the defining slide; 저장소 → where
+  p24-kv-reuse; 정렬 and 태스크 — a third / earlier sense added). Orchestrator: added
+  p06-ref-copy to the E0382 row of `p06-ecodes`; re-ran `make all` rc=0 (1,877장 · 오류 0
+  · 어긋남 0). Lessons 161–169 in AUTHORING.md. Open: p15-mutex-waits's example comment
+  line 15 states the rule; p16-prelude-shadow is tall; `const 제네릭` has no English form
+  on a slide; `데이터 경합` (p06-borrow-why) vs `데이터 경쟁`.
+- FINAL CHECK (2026-10-13): every example of the book re-run against the committed
+  captures, directory by directory: 1,329 ✓ / 0 ✗ / every rc 0 (ex/00 … ex/27; about 14
+  minutes in all); no `target/` or `Cargo.lock` under `ex/`; `make all` rc=0 — 1,877장 ·
+  오류 0 · 알림 0 · 역검증 어긋남 0 · 퀴즈 119 · 버전 표기 142 · 예제 1,329 (낡은 캡처 0, 주인
+  없는 캡처 0). THE EXPANSION IS COMPLETE: parts 17–26 written and reviewed, additions to
+  parts 1–16 written and reviewed, back-links and appendix done. Final numbers: 28 parts
+  (0–26 + appendix), 1,877 slides (ceiling 2,000), 1,329 examples, 1,531 captures, 119
+  quizzes, 92 error codes in titles, 142 version badges, 112 glossary terms, 152 history
+  facts, 30 sources. Nothing pushed.
