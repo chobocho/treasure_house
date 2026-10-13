@@ -364,3 +364,26 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
     screen shows only that cargo was typed at the package root.
 93. `/dev/full` cannot be opened on this machine and a broken-pipe run is timing-dependent;
     show a write failure with a failing `Write` impl in a test.
+
+### Lessons from the review of part 24, project 2
+
+94. "여기서 처음 쓰는 X" is a claim about the whole book: `grep -rn X ex/ deck/sections`
+    before writing it.
+95. "N줄이 다르다 / 이름만 다르다 / 한 줄이 다르다" about a file inherited from an earlier
+    project: `diff` the two files and list the lines; comments count.
+96. A frame sentence in a steps-table cap is checked against every row of that table.
+97. A gloss of a shell tool's output format ("한 줄에") is checked against every later
+    use of that tool in the chapter.
+98. "이 책이 만들지 않았다 / 다시 싣지 않았다": grep the earlier parts first, and count
+    how many screens the earlier chapter really has.
+99. A rules-table row that says "X → 알리고 N 으로 끝낸다" is probed for every channel the
+    row's label covers. stderr is a channel.
+100. Ordering claims between two options need an input where the other order would
+     differ; otherwise write "소스를 따라가면".
+101. Quiz commands placed at the end of the final RUN must be shown: put the OUT slice
+     inside the answer block.
+102. A term reused in a new sense is glossed on the first slide that uses it (usually the
+     reuse slide), not at its "definition" slide.
+103. Machine- or toolchain-made text is labelled on the slide where it first appears —
+     usually the "다 만들면" slide.
+104. A rules table over about 10 rows is split by theme into two slides from the start.

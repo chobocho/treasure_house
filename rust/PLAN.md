@@ -1131,3 +1131,36 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   (failing-Write test) are now worked in chapter 2 — point forward; p18-hash-impl uses
   `to_ascii_lowercase` without saying ASCII-only → p24-grep-search-flags.
   Unchecked by a reviewer: all of 24 project 2.
+- 24 project 2 reviewed (42 slides after the review): 사실오류 7 · 증거불일치 2 · 근거없음 10 ·
+  절단 0 · 순서 5 · 표기 7 · 퀴즈 1 · 코드 0; style 3 (one of them re-teaching chapter 1).
+  The program needed no change and no example, capture or generator was touched; numbers,
+  line references, slices and step sizes were all correct. Defects: over-general frame
+  sentences, false "first / only / same" statements (e.g. "main 은 1장과 한 줄이 다르다"
+  — the diff shows five lines; "여기서 처음 쓰는 메서드" — part 18 already used it), a
+  rules row that was false for stderr (`eprintln!` panics, 101), unlabelled inferences.
+  p24-grep-rules (16 rows) split into p24-grep-rules ("① 고르는 줄과 찍는 모양", 9 rows)
+  and the new p24-grep-rules-run ("② 명령 줄, 읽기, 종료 코드", 7 rows); the quiz now
+  carries its OUT slice (grep8_final.txt 89–95) inside the answer block — the first quiz
+  in the book with a capture box in `.a` (builder, verify and deck-check pass; look at it
+  once on a phone). 24_proj.html: p24-wc-more's exercises 2 and 7 point forward to
+  p24-grep-config and p24-grep-test-write; p24-intro checked and unchanged. Slides +1 →
+  project 2 = 42, part 24 = 80, deck 1,556. Orchestrator re-ran: `make all` rc=0 (오류 0 ·
+  어긋남 0), `rsrun --check ex/24` ×3 = 19 ✓ / 0 ✗; checked the quiz slice against the
+  capture and the main.rs diff claim; card and README set to 1,556슬라이드 · 캡처 1,204.
+  Edges probed (all consistent with the rules, nothing changed): pattern equal to / longer
+  than a line, tab or colon in the pattern (rows with colons are ambiguous — nothing claims
+  otherwise), `-c` with zero in one of two files (`name:0`, exit 0) and with an unreadable
+  file, zero-byte file vs one empty line, `-- milk -n`, `-- -- file`, a directory as the
+  only file, repeated/joined flags, `< data`, a NUL byte, É/é · Σ/σ · Ａ/ａ under `-i`
+  (not folded), `"a\r"` at EOF, `--help`, newline inside the pattern, stdout closed early
+  (Broken pipe, 2 — probe only), non-UTF-8 argument (panic, 101), stderr unwritable
+  (panic, 101). Lessons 94–104 in AUTHORING.md. Open: `selects` lowercases the pattern
+  once per line (not a book contradiction); a colon in a file name makes a row
+  unparseable (could be an exercise). Glossary candidates: 정규식, 번호 칸. Later (0–23
+  additions): p17-in-all / p17-file-bad-utf8 → p24-grep-bad-utf8 (others as listed under
+  "24 project 2 written").
+  For calc: probe overflow, division by zero and nesting depth before writing the rules
+  table; decide byte vs char positions with a Korean input in a test; REPL notices go to
+  stderr — state what happens when it is unwritable. For kv: fix worker output order by
+  joining in a fixed order; state what a poisoned lock does; test a key or value
+  containing the separator or a newline.
