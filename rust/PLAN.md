@@ -1243,3 +1243,34 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   p24-intro's "프로젝트의 짜임" says every code-box caption carries the step directory
   name, but only the first box of a slide does — loosen the wording.
   Unchecked by a reviewer: all of 24 project 3.
+- 24 project 3 reviewed (44 slides, unchanged): 사실오류 5 · 증거불일치 6 · 근거없음 9 ·
+  절단 0 · 순서 5 · 표기 11 · 퀴즈 0 · 코드 1; style 7, re-teaching 1. The program needed
+  no change: ~90 probe inputs (parsing, arithmetic, positions, limit, running) all behave
+  as the rules say; grammar and parser match exactly; the ASCII-before-position invariant
+  HOLDS (UnknownChar and TooBig return inside tokenize before any non-ASCII is accepted;
+  every other kind needs a fully tokenized line; args are split by `lines()` and tokenized
+  one line at a time) — only the slide's argument was incomplete; the token-limit argument
+  HOLDS and is tight (a 200-token sign chain reaches depth 200); `parse` is the only path
+  from a line to recursion; not bounded: a hand-made tree passed to `pub eval` (now said).
+  Defects: miscounts read off screens ("src/ 의 여섯" — seven; "모듈 다섯" — four have
+  tests; "토큰 넷" counting End), over-general frame sentences, rule rows not true per
+  channel (stderr EPIPE → 101; `>&-` → silent success) — rows now speak from the code's
+  view ("쓸 곳이 Err 를 돌려주면"; "2 = run 이 Err 를 돌려줬다"). One code addition
+  through the generator: tests/run.rs +6 lines running EVAL at the limit (a 200-token sign
+  chain = -1; 100 ones summed = 100); capture unchanged. Slides ±0 → project 3 = 44, part
+  24 = 124, deck 1,600; card numbers unchanged. Orchestrator re-ran: `make all` rc=0
+  (오류 0 · 어긋남 0), `rsrun --check ex/24` ×3 = 29 ✓ / 0 ✗; read the added test and
+  the caret capture (`1 + 가` → `^` in column 5, under 가's left column). Chapters 1–2:
+  p24-wc-more, p24-grep-more and p24-grep-test-cli now point forward to
+  p24-calc-test-cli (the stdin-writing CLI test). Figures on p24-calc-left, -term and
+  -grammar checked node by node against captures and source. Kept: the nine
+  unit-test-only slides (each claim cites its assertion line), p24-calc-left (3 boxes +
+  figure), the 132-column E0004 line. Lessons 105–116 in AUTHORING.md. Open: parse.rs
+  line 10's comment has the same off-by-one the slide had ("재귀의 깊이는 토큰의 수를
+  넘지 못한다"); the notice "수나 괄호가 올 자리다" omits the sign (clause on the slide
+  only); `>&-` losing output silently is on no slide; a line of any byte length is read
+  whole (only tokens are bounded — said); p24-grep-more's "줄마다 읽기" exercise is now
+  worked for calc (not pointed forward — outside the reviewer's spots). Glossary
+  candidates: 문법, 항, 인수, 식의 나무, 자리를 짚는 줄, 묶이는 방향. Later (0–23
+  additions): p03-char-methods (`to_digit`) → p24-calc-token-num (others as listed under
+  "24 project 3 written").

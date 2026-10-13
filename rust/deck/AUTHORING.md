@@ -387,3 +387,32 @@ written before that sheet existed and needed ~1,570 fixes; you write to it from 
 103. Machine- or toolchain-made text is labelled on the slide where it first appears —
      usually the "다 만들면" slide.
 104. A rules table over about 10 rows is split by theme into two slides from the start.
+
+### Lessons from the review of part 24, project 3
+
+105. Re-count every number word against the screen after the last generator run (files
+     under `src/`, modules with tests, tokens on a line).
+106. A term's counting rule is part of its definition: decide whether sentinels (`End`)
+     count, say it once, and grep every count.
+107. A source-following proof lists every return path and every function on a cycle.
+108. If a limit exists because of function B, test B at the limit, not only the function
+     that enforces it.
+109. Phrase failure rows from the code's view ("쓸 곳이 Err 를 돌려주면") unless every
+     channel was probed from outside: EPIPE on stderr → 101, a closed descriptor (`>&-`)
+     → writes silently succeed.
+110. "같다" about an inherited signature: diff the header, binding modes (`mut`) included.
+111. Grep first uses in TEST code too.
+112. Do not reuse a chapter-wide word (줄) for a second thing without a qualifier
+     ("문법의 줄").
+113. An exercise states a convention as a choice ("이 과제에서는 … 로 정합니다"), not a
+     fact.
+114. A twin whose RUN differs from its sibling's names both commands on the slide.
+115. `make deck` alone leaves the base font: run `make all` (or `make font`) before
+     comparing the built deck with the committed one. The builder already prints the full
+     path on every CODE box.
+116. Before a storage/CLI project: probe separator, newline, CR, NUL and empty strings in
+     every user-supplied field; missing, empty, corrupt, non-UTF-8 and unterminated data
+     files; duplicate keys; wrong argument counts and unknown commands; state and sort
+     any listing order; make thread output deterministic by design (fixed join order,
+     print after join), never by a claim about interleaving; say what a poisoned lock
+     does.

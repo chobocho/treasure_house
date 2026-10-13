@@ -72,6 +72,12 @@ fn odd_characters_and_long_lines() {
     assert!(err.starts_with("calc: 수가 너무 크다 (자리 0)\n"));
     let (_, _, err) = run_calc(&[], &"1 ".repeat(100_000));
     assert!(err.starts_with("calc: 토큰이 너무 많다 (자리 400)\n"));
+    // 토큰이 꼭 200 개인 줄은 값까지 간다. 부호 199 개와 1 이다
+    let line = "-".repeat(199) + "1";
+    assert_eq!(run_calc(&[], &line).1, "-1\n");
+    // 1 을 백 번 더한 줄 — 토큰 199 개, 나무의 깊이 100
+    let line = "1".to_string() + &"+1".repeat(99);
+    assert_eq!(run_calc(&[], &line).1, "100\n");
 }
 
 #[test]
