@@ -1653,3 +1653,38 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   `scratch/brief-add016.md`), (2) back-link + stale-sentence pass, (3) appendix: index
   rows for 17–26, glossary, edition table, budget line 27 → 45+, (4) review of the
   additions and a final whole-deck check.
+- Additions to parts 1–16 written: 27 new slides (deck 1,840 → 1,867), 31 new examples
+  (1,329), captures 1,531, quizzes 115 → 119, codes in titles 91 → 92 (E0309). Per part
+  (after [target]): 1: 64 [64] p01-quiz-start/-churn/-stable/-steps · 3: 65 [66]
+  p03-operators · 5: 35 [35] p05-return-unit · 6: 90 [90] p06-ref-copy (E0382 for a moved
+  `&mut`) · 7: 77 [78] p07-enum-arm-added · 8: 67 [70] p08-vec-push-borrowed (E0502),
+  p08-fmt-recap · 9: 53 [54] p09-unreachable, p09-err-no-debug (E0277) · 10: 76 [80]
+  p10-derive-by-hand, p10-ord-alone, p10-ord-four · 11: 50 [51] p11-static-required-fix,
+  p11-outlives, p11-outlives-required (E0309) · 12: 63 [66] p12-closure-body · 14: 43
+  [45] p14-refcell-guard, p14-cell-get-copy (E0599) · 15: 39 [41] p15-move-copy,
+  p15-mutex-waits · 16: 41 [46] p16-never-expr, p16-impl-trait-both, p16-prelude-shadow
+  (E0107 · E0308), p16-wrap (the closing note moved here from p16-underscore; hands over
+  to part 17). NOT done: monomorphization evidence (rustc itself warns
+  `unpredictable_function_pointer_comparisons`; p10-mono keeps its sentence without a
+  capture). Done differently: Ord supertraits take two slides; the part-7 fixed twin
+  also changes `main` (a strict copy warns about unused variants — said on the slide);
+  part 11's `T: 'a` uses the fallback (the struct compiles with or without the bound;
+  the required place is `Box<dyn Display + 'a>`, E0309). Existing sentences changed:
+  p03-int-methods (suffix sentence → `pow`/`isqrt` only, link p26-ambig-float), p15-mutex
+  (lock Err → p20-poison), p12-sorting (+ link p18-stable), p09-err-from ("앞 슬라이드" →
+  link), p16-intro item 4, p16-type-alias "다섯은" → "여덟은", rows in p06-ref-table and
+  p11-fixes, fourteen chapter `chsub`s. No existing example or capture changed (`git
+  diff -- ex out` shows only 31 new MANIFEST rows). Determinism: p15-mutex-waits — main
+  holds the guard from before the spawn until after its own push; the worker signals on
+  a channel BEFORE locking and main receives before pushing, so main never joins while
+  holding the guard; only main prints (I read the file). Orchestrator re-ran: `make all`
+  rc=0 (1,867장 · 오류 0 · 어긋남 0 · 퀴즈 119), `rsrun --check -q` on all twelve changed
+  directories = 530 ✓ / 0 ✗, mutex_waits ×5 ✓. Now FIRST in reading order: E0107 at
+  p16-prelude-shadow (before p19-impl-arg-err); the E0599 "method exists … but its trait
+  bounds were not satisfied" headline at p14-cell-get-copy; the E0004 `help:` at
+  p07-enum-arm-added. Claims resting on unshown runs are labelled on the slides
+  (p07-enum-arm-added, p10-ord-four, p16-prelude-shadow, p03-int-methods). Back-link
+  list: `scratch/backlinks-add016.md`. Tall new slides not seen rendered:
+  p16-prelude-shadow, p10-ord-four, p10-ord-alone. Lesson for AUTHORING: the builder
+  rejects a CODE slice with unbalanced braces (a `fn` header alone must be widened).
+  Unchecked by a reviewer: all 27 additions.
