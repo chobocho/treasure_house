@@ -1558,3 +1558,40 @@ Total 945. Large parts are split into `NN_` and `NNb_` files (one subagent task 
   boxed closure's "use parentheses" help. Later (0–25): p00-machine's claim about
   numbers; p08-vec-iterate → p26-for-moved; p13-modfile → p26-no-mod; p08-str-index →
   p26-index-i32. Unchecked by a reviewer: all of 26a.
+- 26b written (chapters 4–7 수명 / 트레이트 / 패턴 / 그 밖): 36 slides in `26b_errs.html`
+  (entries 6 + 9 + 7 + 6 = 28, one slide each, four boxes; 4 closing tables). Part 26 =
+  70 (budget 70), deck 1,840 (appendix 32 → 34), examples 1,298, captures 1,497, codes in
+  slide titles 76 → 91. 56 new single files in `ex/26/` (108 units in all). 15 codes NEW:
+  E0261 E0726 E0310 E0521 | E0407 E0053 E0191 E0746 | E0023 E0532 E0027 E0529 | E0070
+  E0054 E0267. Taught codes revisited: E0515 E0597 | E0277 (for over &str) E0599 E0046
+  E0119 E0277 (boxed Fn not Send — same cure as p19-dyn-send, said; reads the misleading
+  "use parentheses" help) | E0004 E0308 E0005 | E0015 E0277 (`fn main() -> i32`). One
+  code-less entry `p26-fmt-args` (`//@ expect: error`). `p26-ret-dyn` is the second
+  two-error capture of the part (E0746 + E0277). One twin REMOVES a line
+  (`p26-derive-twice`) — intro amended. Writer's edits in `26_errs.html`: `p26-intro`
+  only (chapter-list lines 4–7; "바꾼 것도, 더한 것도, 뺀 것도"; the "이 부의 화면" note
+  widened to the whole part). Probe record `scratch/w26b/probes.tsv` (77 rows): E0637 →
+  E0106; E0530 → E0308 + E0277; E0533 → E0532; E0010 → two code-less errors; never alone
+  on 1.99: E0408 (+E0381), E0416 (+3 warnings), E0592 (+E0034), `-> dyn Trait` (+1 or 2
+  E0277); dropped: E0621, E0050, E0186, E0034, E0790, E0225 (a note line over the
+  builder's 200-column limit), E0026, E0527, E0030, E0164, E0057, E0604, E0268, E0572,
+  and the code-less "lifetime may not live long enough" (already shown at
+  p11-elide-self-wrong). NO syntax-error entry (rustfmt cannot parse such a file;
+  `ex/nofmt.txt` was outside the writer's edit list). About 30 "싣지 않은 실행" sentences
+  rest on `scratch/w26b/p/`. Orchestrator re-ran: `make all` rc=0 (1,840장 · 오류 0 ·
+  어긋남 0 · 알림 0), `rsrun --check -q ex/26` ×3 = 108 ✓ / 0 ✗; read `p26-thread-escape`'s
+  twin (one added line; the fixed twin joins before returning) and its capture. Card:
+  "컴파일 오류 처방전까지", "오류 번호 91종". FOR THE REVIEWER: tallest slides p26-ret-dyn
+  (32-line capture, three unshown runs) and p26-boxed-send (29 lines); p26-string-pat
+  compares with the part's own p26-str-to-string and p05-arg-type's capture was NOT
+  diffed; p26-main-i32 has no capture diff against a teaching slide; hygiene lines
+  (`.to_string()` in ret_dyn — said; line 9 of field_skip — said; the first `println!`
+  in assign_left — NOT said); p26-thread-escape's sentence that `move` moved the
+  reference; p26-impl-typo's "E0046 은 이 화면에 없습니다"; the rendering of the odd `=
+  help:` on p26-loop-borrow; "항목의 짜임" still says "제목은 증상과 오류 번호입니다" while
+  p26-fmt-args has no number; bad files over 15 lines (impl_typo 17, item_missing 16).
+  Later (0–25): p19-compose says E0310 is "이 책에서 다루지 않는" — stale; p27-ecodes-intro
+  lists code-less errors as "문법 오류, 일부 금지 린트" (p26-fmt-args is a macro error);
+  back-links p07-refutable → p26-for-some, p12-for-each → p26-break-closure,
+  p04-match-missing → p26-str-match, p11-fixes → chapter 4. Unchecked by a reviewer: all
+  of part 26.
