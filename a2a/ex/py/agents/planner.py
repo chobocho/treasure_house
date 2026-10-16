@@ -16,7 +16,6 @@ from a2a.helpers.proto_helpers import (
     get_data_parts,
     get_message_text,
     new_data_part,
-    new_task_from_user_message,
     new_text_part,
 )
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -34,7 +33,13 @@ from a2a.types import (
 from a2a.utils.signing import create_signature_verifier
 from jwt import PyJWK
 
-from agents.common import PROVIDER, jsonrpc_interface, parse_args, serve
+from agents.common import (
+    PROVIDER,
+    begin,
+    jsonrpc_interface,
+    parse_args,
+    serve,
+)
 from workshop import domain
 from workshop.fixtures import FIXTURES
 
@@ -56,7 +61,9 @@ ASK = {
 def card(url):
     return AgentCard(
         name="보물상사 기획 에이전트",
-        description="한 문장 요청으로 워크숍 숙소·식사·교통·정산을 꾸립니다.",
+        description=(
+            "한 문장 요청으로 워크숍 숙소·식사·교통·정산을 꾸립니다."
+        ),
         version="1.0.0",
         provider=PROVIDER,
         supported_interfaces=[jsonrpc_interface(url)],
@@ -155,6 +162,10 @@ async def follow_up(c, task, text, token):
     return done
 
 
+# endregion
+
+
+# region: token
 async def get_token(c, scope, client_id, secret):
     """카드의 securitySchemes 에서 토큰 주소를 찾아 토큰을 받는다."""
     flow = c.security_schemes["oauth"].oauth2_security_scheme.flows
@@ -190,15 +201,19 @@ def plan_markdown(req, lodging, meals, bus, sheet):
             "# 보물상사 가을 워크숍 계획서",
             "",
             f"- 일정: {req['date']}부터 {req['nights']}박",
-            f"- 인원: {req['headcount']}명(채식 {req['vegetarians']}명)",
             (
-                f"- 숙소: {lodging['venueName']} {int(lodging['rooms'])}실"
-                f" — {won(lodging['total'])}"
+                f"- 인원: {req['headcount']}명"
+                f"(채식 {req['vegetarians']}명)"
+            ),
+            (
+                f"- 숙소: {lodging['venueName']}"
+                f" {int(lodging['rooms'])}실 — {won(lodging['total'])}"
             ),
             f"- 식사: {len(meals['slots'])}끼 — {won(meals['total'])}",
             f"- 교통: {int(bus['days'])}일 — {won(bus['total'])}",
             (
-                f"- 합계: {won(sheet['total'])} / 예산 {won(sheet['budget'])}"
+                f"- 합계: {won(sheet['total'])}"
+                f" / 예산 {won(sheet['budget'])}"
                 f" (남음 {won(sheet['remaining'])})"
             ),
             f"- 결재: {sheet['approvedBy']}",
@@ -221,16 +236,11 @@ class PlannerExecutor(AgentExecutor):
         )
 
     async def execute(self, ctx: RequestContext, queue: EventQueue):
-        task = ctx.current_task or new_task_from_user_message(
-            ctx.message
-        )
-        if ctx.current_task is None:
-            await queue.enqueue_event(task)
-        up = TaskUpdater(queue, task.id, task.context_id)
+        task, up = await begin(ctx, queue)
         if task.id in self.waiting:
             await self.resume(ctx, up, task)
             return
-        heard = [*task.history, ctx.message]
+        heard = task.history  # begin() 이 이번 메시지까지 넣어 둔다
         text = " ".join(
             get_message_text(m)
             for m in heard
@@ -288,6 +298,8 @@ class PlannerExecutor(AgentExecutor):
                 ("숙소", "식사", "교통"), quotes, strict=True
             )
         ]
+        # endregion
+        # region: settle
         token = await get_token(
             cards["settle"], "payment:read", self.client_id, self.secret
         )

@@ -193,3 +193,28 @@ subagent task each.
   is in `make all`. Caveat for part 1: GitHub lists v0.1.0/v0.2.0 as published
   2025-06-09 (back-filled) — never present those as original release dates.
 - TS port subagent running (`scratch/brief-port.md`, log `scratch/port-ts-log.md`).
+
+### TS port done; follow-up Task rule (2026-10-16)
+- `ex/ts/agents/` (8 files) by subagent; py/ts cross-checked in 6 combos (sub-agents ×
+  planner × ask language) with `scratch/run_all.sh` (+ `h.sh`, `drive.py` for push/cancel):
+  identical except one line, below. Signed card: Ed25519 signature byte-identical py/ts.
+- **Spec §3.1.2** (Task stream MUST begin with the Task) also on follow-up turns. TS SDK
+  enforces it; **Python SDK 1.2.2 neither emits it nor tolerates it**: if the executor
+  re-enqueues the Task on a follow-up, `active_task._handle_initial_task` logs "already
+  exists. Ignoring task replacement" and sets `message_to_save = None` → the user's reply
+  is dropped from history (verified: planner forgot the 2nd answer). Decision: Python
+  `begin()` enqueues only on the first turn; TS `begin()` re-publishes the Task with state
+  WORKING (re-publishing the stale INPUT/AUTH_REQUIRED state makes a *blocking* Python-side
+  call return at once). Consequence: when the *server* is TS, the ask transcript has one
+  extra `task WORKING` line after each `> reply`. Part 16 shows this; refs: `scratch/ref/`
+  (py servers) and `scratch/ref-ts/` (ts servers).
+- Other TS findings for parts 8/12/16: `agentCardHandler` JSON.stringify's the ts-proto
+  object (oneofs as `$case`, empty defaults) → agents serve `AgentCard.toJSON`;
+  `canonicalizeAgentCard` drops oneofs on typed cards → sign/verify the JSON form; jose
+  keeps header insertion order vs PyJWT sorted → insert `alg,jku,kid,typ`;
+  `keepBusAliveStates` default keeps AUTH_REQUIRED streams open → set to INPUT_REQUIRED;
+  second CancelTask: TS returns the task (§3.3.1 idempotent) vs Python -32002 (§3.1.5) —
+  a real spec tension; TS logs "Reference task … not found." on stderr; Python card's
+  `scopes` map order varies per process (JCS sorting keeps the signature stable).
+- Python regions split to ≤ 45 lines (settlement: tokens/bearer/card/sign/executor;
+  planner: discover/delegate/token/plan/settle; common: begin).

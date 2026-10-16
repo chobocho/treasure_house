@@ -7,7 +7,6 @@ INPUT_REQUIRED 로 되묻기(같은 taskId 로 이어 말하기), REJECTED.
 from a2a.helpers.proto_helpers import (
     get_message_text,
     new_data_part,
-    new_task_from_user_message,
     new_text_part,
 )
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -18,6 +17,7 @@ from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 from agents.common import (
     PROVIDER,
     as_ints,
+    begin,
     data_of,
     jsonrpc_interface,
     parse_args,
@@ -73,13 +73,9 @@ def from_text(text):
 
 class LodgingExecutor(AgentExecutor):
     async def execute(self, ctx: RequestContext, queue: EventQueue):
-        task = ctx.current_task
-        if task is None:  # 첫 메시지 — Task 를 먼저 알려야 한다
-            task = new_task_from_user_message(ctx.message)
-            await queue.enqueue_event(task)
-        up = TaskUpdater(queue, task.id, task.context_id)
+        task, up = await begin(ctx, queue)
         # 지금까지 들은 것 전부(이력 + 이번 메시지)를 합친다.
-        heard = [*task.history, ctx.message]
+        heard = task.history  # begin() 이 이번 메시지까지 넣어 둔다
         req = data_of(*heard)
         for m in heard:
             req.update(from_text(get_message_text(m)))

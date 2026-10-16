@@ -10,7 +10,6 @@ import asyncio
 from a2a.helpers.proto_helpers import (
     new_data_part,
     new_raw_part,
-    new_task_from_user_message,
     new_text_part,
 )
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -26,6 +25,7 @@ from a2a.types import (
 from agents.common import (
     PROVIDER,
     as_ints,
+    begin,
     data_of,
     jsonrpc_interface,
     parse_args,
@@ -82,12 +82,7 @@ class CateringExecutor(AgentExecutor):
         self.step = step_ms / 1000  # 끼니 사이 쉬는 시간(보여 주기용)
 
     async def execute(self, ctx: RequestContext, queue: EventQueue):
-        task = ctx.current_task or new_task_from_user_message(
-            ctx.message
-        )
-        if ctx.current_task is None:
-            await queue.enqueue_event(task)
-        up = TaskUpdater(queue, task.id, task.context_id)
+        _, up = await begin(ctx, queue)
         req = as_ints(
             data_of(ctx.message), "nights", "headcount", "vegetarians"
         )

@@ -11,7 +11,6 @@ from urllib.parse import parse_qs
 
 from a2a.helpers.proto_helpers import (
     new_data_part,
-    new_task_from_user_message,
     new_text_part,
 )
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -42,6 +41,7 @@ from starlette.routing import Route
 from agents.common import (
     PROVIDER,
     as_ints,
+    begin,
     data_of,
     jsonrpc_interface,
     parse_args,
@@ -147,13 +147,13 @@ class RequireBearer:
 # endregion
 
 
-# region: card
 def skill(sid, name, desc):
     return AgentSkill(
         id=sid, name=name, description=desc, tags=["budget", "workshop"]
     )
 
 
+# region: card
 def card(url, extended=False):
     oauth = SecurityScheme(
         oauth2_security_scheme=OAuth2SecurityScheme(
@@ -198,6 +198,10 @@ def card(url, extended=False):
     )
 
 
+# endregion
+
+
+# region: sign
 def signed(c, url):
     """공개 카드에 서명을 단다. EdDSA 는 결정적이라 매번 같은 값."""
     sign = create_agent_card_signer(
@@ -223,16 +227,11 @@ async def jwks_endpoint(request):
 # region: executor
 class SettlementExecutor(AgentExecutor):
     async def execute(self, ctx: RequestContext, queue: EventQueue):
-        task = ctx.current_task or new_task_from_user_message(
-            ctx.message
-        )
-        if ctx.current_task is None:
-            await queue.enqueue_event(task)
-        up = TaskUpdater(queue, task.id, task.context_id)
+        task, up = await begin(ctx, queue)
         auth = ctx.call_context.state.get("auth")
         who = ctx.call_context.user.user_name
         scopes = set(auth.scopes) if auth else set()
-        req = data_of(*task.history, ctx.message)
+        req = data_of(*task.history)  # 이번 메시지까지 들어 있다
         items = [as_ints(i, "amount") for i in req.get("items", [])]
         result = domain.settle(
             {
@@ -267,12 +266,11 @@ class SettlementExecutor(AgentExecutor):
         )
         await up.complete()
 
+    # endregion
+
     async def cancel(self, ctx: RequestContext, queue: EventQueue):
         task = ctx.current_task
         await TaskUpdater(queue, task.id, task.context_id).cancel()
-
-
-# endregion
 
 
 if __name__ == "__main__":

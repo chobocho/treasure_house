@@ -7,19 +7,56 @@
 import argparse
 
 import uvicorn
-from a2a.helpers.proto_helpers import get_data_parts
+from a2a.helpers.proto_helpers import (
+    get_data_parts,
+    new_task_from_user_message,
+)
+from a2a.server.agent_execution import RequestContext
+from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.routes import (
     create_agent_card_routes,
     create_jsonrpc_routes,
 )
-from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import AgentInterface, AgentProvider, Message
+from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
+from a2a.types import (
+    AgentInterface,
+    AgentProvider,
+    Message,
+    Task,
+)
 from starlette.applications import Starlette
 
 PROVIDER = AgentProvider(
     organization="보물상사", url="https://treasure-house.example"
 )
+
+
+# region: begin
+async def begin(ctx: RequestContext, queue: EventQueue):
+    """실행을 시작한다: 첫 메시지면 Task 를 먼저 싣고 갱신기를 돌려준다.
+
+    명세 3.1.2 는 Task 스트림이 Task 로 시작하기를 요구한다. 그런데
+    파이썬 SDK 1.2.2 는 이어 말하기에서 실행기가 Task 를 다시 실으면
+    'Task … already exists' 를 남기고 이번 사용자 메시지를 이력에서
+    버린다(active_task.py 의 message_to_save = None). 그래서 이어
+    말하기에서는 싣지 않는다 — 스트림 첫 사건이 Task 가 아니게 되는
+    것은 이 SDK 의 한계로 16부에서 다룬다.
+    돌려주는 Task 의 history 에는 이번 메시지까지 들어 있다.
+    """
+    if ctx.current_task is None:
+        task = new_task_from_user_message(ctx.message)
+        await queue.enqueue_event(task)
+    else:
+        task = Task()
+        task.CopyFrom(ctx.current_task)
+        seen = {m.message_id for m in task.history}
+        if ctx.message.message_id not in seen:
+            task.history.append(ctx.message)
+    return task, TaskUpdater(queue, task.id, task.context_id)
+
+
+# endregion
 
 
 def parse_args(description, **extra):

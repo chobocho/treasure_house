@@ -1,4 +1,6 @@
-"""총무팀의 명령줄 클라이언트 — 에이전트에게 말을 걸고 오가는 것을 찍는다.
+"""총무팀의 명령줄 클라이언트.
+
+에이전트에게 말을 걸고 오가는 것을 찍는다.
 
     python agents/ask.py URL [--data JSON] [--token T] 첫말 [답1 답2 …]
 
@@ -67,7 +69,10 @@ def state_name(state):
 
 
 def show(event):
-    """StreamResponse 하나를 한 줄로. 돌려주는 값은 (taskId, ctx, 상태)."""
+    """StreamResponse 하나를 한 줄로 찍는다.
+
+    돌려주는 값은 (taskId, contextId, 상태) — 메시지면 None.
+    """
     kind = event.WhichOneof("payload")
     if kind == "message":
         print(f"message: {show_parts(event.message.parts)}")
@@ -88,7 +93,8 @@ def show(event):
     flags = "+" if a.append else ""
     flags += " (끝)" if a.last_chunk else ""
     print(
-        f"artifact {a.artifact.name}{flags}: {show_parts(a.artifact.parts)}"
+        f"artifact {a.artifact.name}{flags}: "
+        f"{show_parts(a.artifact.parts)}"
     )
     return a.task_id, a.context_id, None
 

@@ -228,9 +228,9 @@ export function settle(req: SettleRequest): SettleResult {
 // Go 의 RE2 에는 뒤보기(lookbehind)가 없다. 세 언어가 같은 정규식을
 // 쓰려고, 채식 인원을 먼저 찾아 지운 다음 전체 인원을 찾는다.
 const VEG = /채식\s*(\d+)명/;
-const DATE = /(\d{4}-\d{2}-\d{2})/;
-const NIGHTS = /(\d+)박/;
-const HEADCOUNT = /(\d+)명/;
+export const DATE = /(\d{4}-\d{2}-\d{2})/;
+export const NIGHTS = /(\d+)박/;
+export const HEADCOUNT = /(\d+)명/;
 const BUDGET = /예산\s*([\d,]+)원/;
 const DEPART = /출발\s*(\S+)/;
 
