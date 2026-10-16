@@ -339,3 +339,20 @@ subagent task each.
   ErrorInfo: py `metadata:{}`, ts no metadata, go `metadata.timestamp`, none puts taskId as
   §9.5's example does; TS has no artifact id generator; CancelTask/GetTask return the Task
   as `result` directly.
+
+### Part 6 first third — 47 slides; lodging agents' history bug fixed (2026-10-16)
+- `06_bare.html` ch1–3 (goal, dispatch/errors ×3, store/transitions ×3). The writer built
+  the complete bare lodging server ×3 (`ex/{py,ts}/06/bare_lodging.*`, `ex/go/06/bare_lodging`
+  + `bare_store`/`barestore`) with regions for 06b/06c (list in the 6a report: card,
+  rpc-error, a2a-errors, version, lodging, work, check, begin, send, get, cancel, stream,
+  methods, dispatch, call, http; store: states, ids, store, move, artifact, view; Go extra
+  helpers, find, envelope, types, events). Bare servers start every stream with a Task
+  (follow-ups with WORKING) → their transcripts equal `scratch/ref-ts/`.
+- **Bug found by the writer, fixed by the orchestrator: all three final lodging agents
+  read the whole history, including their own questions, so the example "(예: 2026-10-30)"
+  counted as the user's date.** Now they read ROLE_USER messages only (py/ts/go). Verified:
+  `'숙소 부탁합니다' '30명' '1박' '2026-11-06'` → asks the date until given → 춘천 1,860,000.
+  Side effect: TS-accepted role-less message is now "not heard" → p04-msg-required-ts
+  rewritten (INPUT_REQUIRED instead of COMPLETED).
+- Findings: Go 1.27 has a std `uuid` package; Python SDK version validator accepts any
+  same-major version ("1.5") although §3.6 says match Major.Minor (part 14).

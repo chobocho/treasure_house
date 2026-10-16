@@ -12,7 +12,7 @@ from a2a.helpers.proto_helpers import (
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
-from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Role
 
 from agents.common import (
     PROVIDER,
@@ -75,7 +75,10 @@ class LodgingExecutor(AgentExecutor):
     async def execute(self, ctx: RequestContext, queue: EventQueue):
         task, up = await begin(ctx, queue)
         # 지금까지 들은 것 전부(이력 + 이번 메시지)를 합친다.
-        heard = task.history  # begin() 이 이번 메시지까지 넣어 둔다
+        # 사용자가 한 말만 듣는다 — 이력에는 에이전트가 되물은 말도
+        # 있고, 그 예시("예: 2026-10-30")를 답으로 읽으면 안 된다.
+        # begin() 이 이번 메시지까지 이력에 넣어 둔다.
+        heard = [m for m in task.history if m.role == Role.ROLE_USER]
         req = data_of(*heard)
         for m in heard:
             req.update(from_text(get_message_text(m)))

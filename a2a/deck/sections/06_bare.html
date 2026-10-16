@@ -1,10 +1,539 @@
 <article class="card section" id="p06">
 <p class="chnum">6부</p>
 <h2>맨손 구현 — 표준 라이브러리만으로 서버·클라이언트</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">목표 → 라우팅·디스패치·오류 코드 → Task 저장소·상태 전이 → SendMessage·GetTask·CancelTask → SSE 스트림 → 맨손 클라이언트 → SDK 클라이언트로 두드리기 → 맨손이 놓친 것</p>
 </article>
 
-<article class="card" id="p06-todo">
-<h3>맨손 구현 — 표준 라이브러리만으로 서버·클라이언트</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p06-intro">
+<h3>블랙박스였던 숙소 에이전트를 SDK 없이 직접 만든다</h3>
+<p class="lead">3~5부는 완성 에이전트를 띄워 놓고 와이어만 읽었습니다. 이 부는 그 상자를 엽니다 — A2A 서버가 "기계적으로" 해야 하는 일을 세 언어의 표준 라이브러리로 하나씩 짭니다. SDK 가 해 주는 일이 무엇인지는 손으로 해 봐야 보입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th></tr>
+<tr><td><a href="#p06-ch1">1장</a></td><td>목표 — 숙소 에이전트 축소판, "표준 라이브러리만" 의 뜻, 첫 실행</td></tr>
+<tr><td><a href="#p06-ch2">2장</a></td><td>라우팅·JSON-RPC 디스패치·오류 코드 — 판 헤더(-32009), 메서드 표, -32700·-32600·-32601·-32602</td></tr>
+<tr><td><a href="#p06-ch3">3장</a></td><td>Task 저장소와 상태 전이 — 맵 하나, id, 이력, 어떤 전이를 허락할지 정하기</td></tr>
+<tr><td>4장</td><td>SendMessage·GetTask·CancelTask — 새 작업과 이어 말하기, historyLength, 취소</td></tr>
+<tr><td>5장</td><td>SendStreamingMessage — SSE 로 이벤트 흘리기</td></tr>
+<tr><td>6장</td><td>맨손 클라이언트 — 카드 읽기 → 인터페이스 고르기 → 호출</td></tr>
+<tr><td>7장</td><td>맨손 서버를 SDK 클라이언트로 두드리기 — 세 언어 × 세 서버</td></tr>
+<tr><td>8장</td><td>맨손이 놓친 것 — SDK 가 대신 해 주던 일</td></tr>
+</table>
+</div>
+<div class="key"><b>이 부의 규칙</b> — 서버는 파이썬 <code>http.server</code>, Node <code>node:http</code>, Go <code>net/http</code> 와 각 언어의 표준 모듈, 그리고 우리 업무 모듈 <code>workshop</code> 만 씁니다. 업무 규칙과 말투는 완성 숙소 에이전트와 같게 맞춥니다.</div>
+</article>
+
+<!-- ==== 1장 목표 ==== -->
+
+<article class="card" id="p06-ch1">
+<p class="chnum">1장</p>
+<h2>목표 — 숙소 에이전트를 SDK 없이</h2>
+<p class="chsub">서버가 할 일 목록 → 만들 것과 뺄 것 → 목표 대본 → 표준 라이브러리만 → 가져다 쓰는 것 세기 → 프로그램 지도 → 카드 → 카드 넷 견주기 → 첫 실행 → 이어 말하기의 결정</p>
+</article>
+
+<article class="card" id="p06-goal-why">
+<h3>SDK 를 걷어 내면 서버가 할 일이 목록으로 남는다</h3>
+<p class="lead">3~5부에서 와이어로 본 것을 서버 쪽에서 다시 적으면 이렇습니다. 이 목록이 6부의 차례이고, 7~9부에서 SDK 가 각 줄을 어디서 하는지 찾아봅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>서버가 할 일</th><th>이 부</th><th>와이어로 본 곳</th></tr>
+<tr><td>정해진 경로에서 카드를 내준다</td><td>1장</td><td><a href="#p03-wellknown">3부</a></td></tr>
+<tr><td>HTTP 요청을 경로로 나눈다 — GET 카드, POST <code>/</code></td><td>2장</td><td><a href="#p02-http-server">2부</a></td></tr>
+<tr><td>JSON-RPC 봉투를 읽고, 틀리면 표준 오류로 답한다</td><td>2장</td><td><a href="#p02-rpc-codes">2부</a></td></tr>
+<tr><td><code>A2A-Version</code> 헤더를 본다</td><td>2장</td><td>(14부)</td></tr>
+<tr><td>메서드 이름으로 처리 함수를 고르고, 인자를 검사한다</td><td>2장·4장</td><td><a href="#p04-msg-required">4부</a></td></tr>
+<tr><td>작업을 짓고(id) 저장한다, 이력을 쌓는다</td><td>3장</td><td><a href="#p05-task-fields">5부</a></td></tr>
+<tr><td>상태를 옮긴다 — 허락한 전이만</td><td>3장</td><td><a href="#p05-state-rules">5부</a></td></tr>
+<tr><td>Task 로 답한다, 스트림이면 SSE 이벤트로</td><td>4·5장</td><td><a href="#p05-mode-rule">5부</a></td></tr>
+</table>
+</div>
+<div class="note"><b>숙소를 고르는 일은 이 목록에 없다</b> — 그것은 에이전트의 업무(<code>workshop</code>)이고, SDK 판에서는 실행기(AgentExecutor)가 맡습니다. 위의 일들은 어떤 에이전트든 똑같이 해야 하는 "프로토콜 쪽" 일입니다.</div>
+</article>
+
+<article class="card" id="p06-goal-scope">
+<h3>만들 것은 숙소 에이전트의 축소판 — 메서드 넷과 카드 한 장</h3>
+<p class="lead">시나리오의 숙소 에이전트가 쓰는 기능만 남겼습니다. 막는 호출, 되묻기(INPUT_REQUIRED), 거절(REJECTED), 견적(COMPLETED + 아티팩트), 그리고 스트림입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>만든다</th><th>하는 일</th><th>장</th></tr>
+<tr><td>카드</td><td><code>GET /.well-known/agent-card.json</code></td><td>1장</td></tr>
+<tr><td><code>SendMessage</code></td><td>새 작업 또는 이어 말하기, 끝나거나 멈출 때까지 하고 Task 로 답</td><td>4장</td></tr>
+<tr><td><code>GetTask</code></td><td>저장된 작업을 <code>historyLength</code> 만큼의 이력과 함께</td><td>4장</td></tr>
+<tr><td><code>CancelTask</code></td><td>멈춰 있는 작업을 CANCELED 로</td><td>4장</td></tr>
+<tr><td><code>SendStreamingMessage</code></td><td>같은 일을 SSE 이벤트로</td><td>5장</td></tr>
+</table>
+</div>
+<ul>
+<li><b>빼는 것</b> — <code>ListTasks</code>·<code>SubscribeToTask</code>·푸시 설정 넷·<code>GetExtendedAgentCard</code>, 인증, HTTP+JSON·gRPC 바인딩. 메서드 표에 없으니 부르면 <code>-32601</code> 입니다(2장).</li>
+<li>빠진 것이 무엇을 뜻하는지는 8장이 SDK 와 견주어 정리합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-goal-target">
+<h3>목표 대본 — 완성 에이전트(SDK)는 이렇게 답한다</h3>
+<p class="lead">총무팀 CLI(<code>ask</code>, <a href="#p05-ir-plan">5부</a>에서 쓴 파이썬 SDK 클라이언트)를 완성 숙소 에이전트에 붙였습니다. 날짜·박 수는 DataPart 로 주고, 인원은 되물음에 글로 답합니다. 끝으로 막는 호출로 문 닫은 날을 묻습니다.</p>
+<!--OUT file=out/06/goal.txt part=터미널 5 lines=1-14-->
+<!--OUT file=out/06/goal.txt part=터미널 5 lines=60-61-->
+<div class="key"><b>맨손 서버의 합격선</b> — 같은 CLI 를 붙였을 때 이 줄들이 그대로 나오면, 맨손 서버가 SDK 클라이언트와 말이 통한다는 첫 증거입니다. 세 언어의 클라이언트 × 세 서버를 다 맞춰 보는 것은 7장입니다.</div>
+</article>
+
+<article class="card" id="p06-goal-std">
+<h3>"표준 라이브러리만" — 언어마다 쓰는 것</h3>
+<p class="lead">서버 하나에 필요한 부품은 다섯입니다. 세 언어 모두 언어와 함께 오는 모듈로 채워집니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>부품</th><th>파이썬</th><th>TypeScript(Node)</th><th>Go</th></tr>
+<tr><td>HTTP 서버</td><td><code>http.server</code></td><td><code>node:http</code></td><td><code>net/http</code></td></tr>
+<tr><td>JSON</td><td><code>json</code></td><td>내장 <code>JSON</code></td><td><code>encoding/json</code></td></tr>
+<tr><td>id(UUID)</td><td><code>uuid.uuid4</code></td><td><code>node:crypto</code> 의 <code>randomUUID</code></td><td><code>uuid.New</code></td></tr>
+<tr><td>시각</td><td><code>datetime</code></td><td><code>Date</code></td><td><code>time</code></td></tr>
+<tr><td>명령줄</td><td><code>argparse</code></td><td><code>node:util</code> 의 <code>parseArgs</code></td><td><code>flag</code></td></tr>
+</table>
+</div>
+<ul>
+<li><b>Go 의 <code>uuid</code></b> — 이 기계의 Go 1.27.1 표준 라이브러리에 들어 있는 패키지입니다. <code>go doc uuid.New</code>: "At this time, New is equivalent to NewV4."</li>
+<li><b>TypeScript</b> — Node 24 가 <code>.ts</code> 의 타입 표기를 지우고 바로 돌립니다. <code>tsc</code> 는 타입 검사에만 씁니다.</li>
+<li><b><code>workshop</code></b> — SDK 가 아니라 우리 업무 모듈입니다. 숙소 고르기와 "30명" 을 읽는 정규식을 완성 에이전트와 함께 써서, 답의 숫자와 말이 같아집니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-goal-deps">
+<h3>가져다 쓰는 것을 세어 보면 — SDK 는 어디에도 없다</h3>
+<p class="lead">파이썬·TS 는 서버와 <code>workshop</code> 의 import 줄을 모았고, Go 는 <code>go list</code> 로 표준이 아닌 패키지만 골랐습니다.</p>
+<!--OUT file=out/06/deps.txt-->
+<div class="note"><b>남는 것은 우리 코드뿐</b> — 파이썬의 <code>bare_store</code>·<code>workshop</code>, TS 의 <code>./bare_store.ts</code>·<code>../workshop/domain.ts</code>, Go 의 <code>example.com/workshop/…</code> 셋. 나머지는 모두 언어에 딸린 모듈입니다(TS 의 <code>import {</code> 줄은 여러 줄짜리 import 의 첫 줄).</div>
+</article>
+
+<article class="card" id="p06-goal-map">
+<h3>프로그램은 언어마다 둘 — 저장소와 서버</h3>
+<p class="lead">세 언어가 같은 모양으로 나뉩니다. 슬라이드는 파일 전체 대신 구역(region)을 잘라 보여 줍니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>저장소</td><td><code>06/bare_store.py</code></td><td><code>06/bare_store.ts</code></td><td><code>06/barestore/</code> 패키지</td></tr>
+<tr><td>서버</td><td><code>06/bare_lodging.py</code></td><td><code>06/bare_lodging.ts</code></td><td><code>06/bare_lodging/</code></td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>구역</th></tr>
+<tr><td>1장</td><td>서버의 <code>card</code></td></tr>
+<tr><td>2장</td><td>서버의 <code>http</code>·<code>rpc-error</code>·<code>a2a-errors</code>·<code>version</code>·<code>methods</code>·<code>dispatch</code>·<code>call</code></td></tr>
+<tr><td>3장</td><td>저장소의 <code>states</code>·<code>ids</code>·<code>store</code>·<code>move</code></td></tr>
+<tr><td>4·5장</td><td>서버의 <code>lodging</code>·<code>work</code>(업무)·<code>check</code>·<code>begin</code>·<code>send</code>·<code>get</code>·<code>cancel</code>·<code>stream</code>, 저장소의 <code>artifact</code>·<code>view</code></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p06-goal-card">
+<h3>카드는 완성 에이전트와 같은 dict 한 장</h3>
+<p class="lead"><a href="#p03-bare-card">3부의 맨손 카드</a>는 필수 필드만 적었습니다. 이번에는 SDK 판 숙소 에이전트의 카드와 같은 아홉 키를 적습니다 — SDK 클라이언트가 같은 인터페이스를 고르고, <code>streaming: true</code> 를 보고 스트림으로 부르게 하려고요.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=card-->
+<div class="note"><b>url 은 <code>--url</code> 로</b> — 안 주면 붙는 주소(<code>http://127.0.0.1:P/</code>)를 적습니다. 바깥 주소를 적어야 하는 까닭은 <a href="#p03-url-problem">3부</a>에서 봤습니다.</div>
+</article>
+
+<article class="card" id="p06-goal-card-same">
+<h3>네 카드의 뜻은 같다 — 바이트까지 같은 것은 TS 하나</h3>
+<p class="lead">완성 에이전트와 맨손 셋을 같은 <code>--url</code> 로 띄우고, 카드를 받아 첫 장과 견줬습니다. 뜻은 JSON 을 읽은 객체로, 바이트는 받은 그대로 비교합니다.</p>
+<!--CODE file=ex/py/06/card_same.py region=compare-->
+<!--OUT file=out/06/card.txt part=터미널 5-->
+<ul>
+<li><b>파이썬 맨손</b> — 키 차례는 같지만 <code>json.dumps</code> 의 기본값이 쉼표·쌍점 뒤에 빈칸을 넣습니다(<a href="#p02-json-py">2부</a>).</li>
+<li><b>Go 맨손</b> — 카드를 맵으로 만들었고, <code>encoding/json</code> 은 맵의 키를 알파벳 차례로 씁니다(<a href="#p02-json-go">2부</a>). 그래서 첫 키가 <code>capabilities</code> 입니다.</li>
+<li><b>TS 맨손</b> — <code>JSON.stringify</code> 는 빈칸 없이, 넣은 차례대로 씁니다. 그 바이트가 SDK 판 카드와 같았습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-goal-run">
+<h3>맨손 서버 셋에 같은 대본 — 한 줄만 다르다</h3>
+<p class="lead">같은 CLI 를 맨손 서버 셋에 차례로 붙였습니다. 파이썬 서버는 전부, TS·Go 서버는 상태 줄만 골라 실었습니다.</p>
+<!--OUT file=out/06/goal.txt part=터미널 5 lines=15-29 note=파이썬 맨손 서버-->
+<!--OUT file=out/06/goal.txt part=터미널 5 lines=30-59 grep=^\[|^task|^status|^> note=TS·Go 맨손 서버 — 아티팩트 줄은 뺐다-->
+<ul>
+<li>견적의 숫자·이름·되물음의 글이 <a href="#p06-goal-target">목표 대본</a>과 같습니다. 카드의 <code>streaming: true</code> 를 보고 CLI 가 스트림으로 불렀으니 SSE 응답도 SDK 클라이언트가 읽어 냈습니다.</li>
+<li>다른 줄은 <code>&gt; 30명</code> 다음의 <code>task WORKING</code> 하나입니다 — 다음 장에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-goal-follow">
+<h3>task WORKING — 맨손 서버는 이어 말하기의 스트림도 Task 로 시작한다</h3>
+<p class="lead">§3.1.2: "the stream <b>MUST</b> begin with the Task object". <a href="#p05-follow-rule">5부</a>에서 SDK 판 파이썬 서버만 이어 말하기에서 이 규칙을 못 지켰고, 그 까닭은 SDK 의 사정이었습니다(<a href="#p05-follow-why">5부</a>). 맨손 서버에는 애초에 SDK 가 없으니 스펙대로 갑니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=stream-->
+<ul>
+<li>첫 이벤트는 상태를 WORKING 으로 옮긴 지금의 Task 입니다 — TS·Go 완성 에이전트와 같은 선택(<a href="#p05-follow-ts-go">5부</a>)이라, 맨손 서버의 대본은 TS·Go 완성 에이전트의 대본과 같습니다.</li>
+<li>서버 쪽 기록 줄은 완성 에이전트와 같습니다 — 아래는 완성(파이썬)과 맨손(Go).</li>
+</ul>
+<!--OUT file=out/06/goal.txt server=final-->
+<!--OUT file=out/06/goal.txt server=bare-go-->
+</article>
+
+<article class="card quiz" id="p06-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 같은 CLI 로 "30명" 이라고 이어 말했더니 맨손 서버에서는 <code>task WORKING</code> 줄이 하나 더 찍혔습니다. 이 줄은 무엇이고, 완성 에이전트(파이썬 SDK)에서는 왜 안 찍혔습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 둘째 스트림의 첫 이벤트로 온 Task 입니다 — §3.1.2 는 Task 스트림이 Task 로 시작해야 한다고 정하고, 맨손 서버는 상태를 WORKING 으로 옮긴 Task 를 먼저 보냅니다(<a href="#p06-goal-run">첫 실행</a>, <a href="#p06-goal-follow">stream 구역</a>). 파이썬 SDK 1.2.2 는 이어 말하기에서 Task 를 다시 실으면 사용자의 답을 이력에서 버리므로, 완성 에이전트는 첫 마디에만 Task 를 싣습니다(<a href="#p05-follow-why">5부</a>).</div>
+</article>
+
+<!-- ==== 2장 라우팅·디스패치·오류 ==== -->
+
+<article class="card" id="p06-ch2">
+<p class="chnum">2장</p>
+<h2>라우팅·JSON-RPC 디스패치·오류 코드</h2>
+<p class="chsub">요청 하나가 지나는 길 → HTTP 경로 → 오류 코드 아홉 → 오류는 예외 하나 → A2A 오류와 ErrorInfo → 판 헤더(-32009) → 봉투 검사 → 판·메서드·인자 → TypeScript → Go → 세 언어 비교 → 틀린 요청 열 가지 → 와이어로 읽기</p>
+</article>
+
+<article class="card" id="p06-rpc-path">
+<h3>요청 하나가 지나는 길 — 문마다 걸리면 돌려줄 오류가 정해져 있다</h3>
+<p class="lead">서버는 바깥 문부터 차례로 검사합니다. 앞 문에서 걸린 요청은 뒤를 보지 않습니다 — 그래서 어느 오류가 나느냐는 검사의 차례가 정합니다.</p>
+<pre class="fig">
+ HTTP 요청
+   │ 경로·메서드    GET 카드 경로 → 카드
+   │                POST / 가 아니면 → 404
+   ▼
+ 본문 → JSON        못 읽으면 → -32700
+   ▼
+ 봉투               객체·jsonrpc·method·id → -32600
+   ▼
+ A2A-Version        1.0 이 아니면 → -32009
+   ▼
+ 메서드 표          없는 이름 → -32601
+   ▼
+ params             틀린 모양·필드 → -32602
+   ▼
+ 처리 함수          -32001·-32002·-32004, 버그 → -32603
+   ▼
+ 응답               JSON 하나, 또는 SSE 이벤트 여럿
+</pre>
+<div class="note"><b>HTTP 상태는 늘 200</b> — 경로가 틀린 404 만 HTTP 층의 답이고, 그 아래는 모두 JSON-RPC 의 <code>error</code> 객체로 답합니다(<a href="#p02-rpc-error">2부</a>에서 본 "봉투는 잘 받았다").</div>
+</article>
+
+<article class="card" id="p06-rpc-http-py">
+<h3>바깥 문 — 경로 둘만 받는다, 나머지는 404</h3>
+<p class="lead">파이썬 <code>http.server</code> 의 처리기입니다. 카드는 GET, JSON-RPC 는 POST <code>/</code> 하나로 들어옵니다. 본문은 <code>dispatch</code> 에 넘기고, 돌아온 것이 JSON 하나면 그대로, 이벤트 목록이면 SSE 로 씁니다(SSE 는 5장).</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=http-->
+<ul>
+<li><code>protocol_version</code> 을 바꾸지 않았으니 응답은 HTTP/1.0 — 답 하나를 쓰면 연결을 닫습니다. 스트림의 끝을 연결의 끝으로 알리기에 편합니다.</li>
+<li><code>log_message</code> 를 비워 요청마다 찍히는 접속 기록을 껐습니다. 서버 기록에는 업무 줄(<code>[숙소] …</code>)만 남습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-rpc-codes">
+<h3>이 서버가 내는 오류는 아홉 — JSON-RPC 다섯, A2A 넷</h3>
+<p class="lead">문구는 JSON-RPC 쪽은 §9.5 의 "Standard Message" 를 그대로 썼습니다. A2A 오류의 문구는 스펙이 정하지 않아(§9.5 의 보기에 "Task not found" 하나) 짧게 지었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>code</th><th>message</th><th>이 서버가 내는 때</th></tr>
+<tr><td><code>-32700</code></td><td>Invalid JSON payload</td><td>본문이 JSON 이 아니다</td></tr>
+<tr><td><code>-32600</code></td><td>Request payload validation error</td><td>객체가 아니다·<code>jsonrpc</code>·<code>method</code>·<code>id</code> 가 틀리다</td></tr>
+<tr><td><code>-32601</code></td><td>Method not found</td><td>메서드 표에 없는 이름</td></tr>
+<tr><td><code>-32602</code></td><td>Invalid parameters</td><td>params·message·historyLength 가 틀리다</td></tr>
+<tr><td><code>-32603</code></td><td>Internal error</td><td>우리 코드의 버그(전이 표 위반 따위)</td></tr>
+<tr><td><code>-32001</code></td><td>Task not found</td><td>없는 taskId</td></tr>
+<tr><td><code>-32002</code></td><td>Task cannot be canceled</td><td>끝난 작업의 취소</td></tr>
+<tr><td><code>-32004</code></td><td>Unsupported operation</td><td>끝난 작업에 이어 말하기</td></tr>
+<tr><td><code>-32009</code></td><td>Version not supported</td><td>판 헤더가 1.0 이 아니다(없으면 0.3)</td></tr>
+</table>
+</div>
+<div class="note"><b>§5.4 의 나머지 다섯은 내지 않는다</b> — <code>-32003</code>(푸시)·<code>-32005</code>(미디어 타입)·<code>-32006</code>·<code>-32007</code>(확장 카드)·<code>-32008</code>(확장)은 그 기능이 이 서버에 없어서 일어날 자리가 없습니다.</div>
+</article>
+
+<article class="card" id="p06-rpc-error-py">
+<h3>오류는 예외 하나 — 어디서 던져도 dispatch 가 봉투에 싼다</h3>
+<p class="lead">처리 함수는 몇 겹 아래에서든 <code>RpcError</code> 를 던지기만 합니다. 받아서 <code>{"jsonrpc", "id", "error"}</code> 로 싸는 곳은 <code>dispatch</code> 한 곳입니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=rpc-error-->
+<div class="note"><b><code>data</code> 는 있을 때만</b> — §9.5 는 <code>error.data</code> 를 "array of objects, each containing a <code>@type</code> key" 로 정합니다. 표준 다섯 가운데 <code>-32602</code> 만 어느 필드가 틀렸는지를 싣고, 나머지는 code·message 둘입니다.</div>
+</article>
+
+<article class="card" id="p06-rpc-a2a-py">
+<h3>A2A 오류는 data 에 ErrorInfo 를 — reason·domain·metadata</h3>
+<p class="lead">§9.5 는 <code>google.rpc.ErrorInfo</code> 를 쓰라고 권하고(SHOULD), §10.6 은 <code>reason</code> 을 "The A2A error type in UPPER_SNAKE_CASE without the "Error" suffix", <code>domain</code> 을 <code>"a2a-protocol.org"</code> 로 정합니다. 틀린 인자는 §9.5 의 보기처럼 <code>google.rpc.BadRequest</code> 로 싣습니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=a2a-errors-->
+<div class="tip"><b>metadata 에 taskId</b> — §9.5 의 보기는 <code>metadata</code> 에 <code>taskId</code> 를 담습니다. <a href="#p05-err-data-rule">5부</a>에서 본 세 SDK 는 그렇게 하지 않았는데, 맨손 서버는 보기대로 합니다. 판 오류에는 읽은 판을 담습니다.</div>
+</article>
+
+<article class="card" id="p06-rpc-version">
+<h3>판 헤더 — 비어 있으면 0.3, 1.0 이 아니면 -32009</h3>
+<p class="lead">§3.6.2: "If the version is not supported by the interface, agents <b>MUST</b> return a <code>VersionNotSupportedError</code>." 그리고 "Agents <b>MUST</b> interpret empty value as 0.3 version." 패치 번호는 §3.6 이 "<b>MUST</b> not be considered" 라고 합니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=version-->
+<ul>
+<li>이 서버의 카드는 <code>protocolVersion: "1.0"</code> 인터페이스 하나뿐이라, 받는 판도 1.0 하나입니다.</li>
+<li><b>판을 메서드보다 먼저 본다</b> — v0.3 의 메서드 이름은 <code>message/send</code>·<code>tasks/get</code> 이었습니다(스펙 저장소의 <code>whats-new-v1.md</code>). 판을 알아야 메서드 이름을 어떻게 읽을지 정해집니다.</li>
+<li>판이 여럿인 서버와 협상은 14부의 몫입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-rpc-dispatch-py">
+<h3>봉투 검사 — 요청 객체 하나, id 는 꼭</h3>
+<p class="lead"><code>dispatch</code> 는 JSON 을 읽고 봉투만 봅니다. 봉투가 틀리면 <code>id</code> 를 믿을 수 없으니 응답의 <code>id</code> 는 <code>null</code> 입니다(<a href="#p02-rpc-null-id">2부</a>).</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=dispatch-->
+<ul>
+<li><b>배치와 알림은 받지 않는다</b> — A2A 스펙은 배치를 말하지 않고(<a href="#p02-rpc-a2a-batch">2부</a>), A2A 의 메서드는 모두 답을 돌려줍니다. 그래서 배열도, <code>id</code> 없는 요청도 <code>-32600</code> 입니다.</li>
+<li><b>버그는 <code>-32603</code></b> — 예상한 예외(전이 표 위반 <code>IllegalMove</code>, 이상한 입력값의 <code>ValueError</code> 따위)는 stderr 에 적고 Internal error 로 답합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-rpc-call-py">
+<h3>판 → 메서드 → params — 그다음에야 처리 함수</h3>
+<p class="lead"><code>call</code> 이 문 셋을 차례로 검사합니다. 메서드 표는 이름 하나에 처리 함수와 "답이 SSE 인가" 를 짝지은 dict 입니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=call-->
+<!--CODE file=ex/py/06/bare_lodging.py region=methods-->
+<div class="key"><b>메서드 표가 곧 이 서버의 능력 목록</b> — 이름은 §9.4 의 PascalCase 그대로입니다. 표에 없는 <code>ListTasks</code> 를 부르면 <code>-32601</code> 이고, 메서드를 하나 더하려면 함수 하나와 표의 한 줄이면 됩니다.</div>
+</article>
+
+<article class="card" id="p06-rpc-ts">
+<h3>TypeScript — 같은 길, 메서드 표에는 Object.hasOwn</h3>
+<p class="lead">구조는 파이썬과 같습니다(<code>dispatch</code> 가 봉투, <code>call</code> 이 판·메서드·인자). 다른 점만 봅니다.</p>
+<!--CODE file=ex/ts/06/bare_lodging.ts region=call-->
+<ul>
+<li><b><code>Object.hasOwn</code></b> — 메서드 표는 평범한 객체라 <code>METHODS["toString"]</code> 처럼 물려받은 이름도 값을 줍니다. 자기 키인지 먼저 물어야 "<code>toString</code>" 이 <code>-32601</code> 이 됩니다.</li>
+<li><b>헤더 이름은 소문자</b> — Node 는 받은 헤더 이름을 소문자로 바꿔 둡니다. <code>version</code> 구역은 <code>headers["a2a-version"]</code> 를 읽습니다.</li>
+<li>오류는 <code>throw</code>, 받는 쪽은 <code>e instanceof RpcError</code> 로 가릅니다. 그 밖의 예외는 모두 <code>-32603</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-rpc-go">
+<h3>Go — id 는 받은 바이트 그대로, 오류는 돌려주는 값</h3>
+<p class="lead">Go 판의 <code>dispatch</code> 입니다. 판·메서드·인자 검사(<code>call</code>)는 3장에서 잠금과 함께 봅니다.</p>
+<!--CODE file=ex/go/06/bare_lodging/main.go region=dispatch-->
+<ul>
+<li><b><code>json.RawMessage</code></b> — <code>id</code> 를 풀지 않고 바이트로 들고 있다가 응답에 그대로 넣습니다. <code>1</code> 은 <code>1</code> 로, <code>"a"</code> 는 <code>"a"</code> 로 돌아갑니다(<a href="#p02-rpc-server-go">2부</a>와 같은 수).</li>
+<li><b>오류는 값</b> — 처리 함수는 <code>(any, error)</code> 를 돌려주고, <code>*rpcError</code> 가 <code>error</code> 를 구현합니다. 예외가 없으니 "버그" 는 <code>*rpcError</code> 가 아닌 <code>error</code> 로 가립니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-rpc-cmp">
+<h3>세 언어 비교 — 같은 문, 다른 자물쇠</h3>
+<p class="lead">문의 차례와 오류 코드는 셋이 같습니다. 다른 것은 각 언어가 "틀렸다" 를 알아채고 전하는 방법입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>JSON 이 아님</td><td><code>json.loads</code> 의 <code>ValueError</code></td><td><code>JSON.parse</code> 가 던진다</td><td><code>json.Valid</code> 가 false</td></tr>
+<tr><td>id 를 들고 있는 법</td><td>읽은 값(str·int)</td><td>읽은 값(string·number)</td><td><code>json.RawMessage</code>(바이트)</td></tr>
+<tr><td>오류를 전하는 법</td><td><code>raise RpcError</code></td><td><code>throw new RpcError</code></td><td><code>return …, *rpcError</code></td></tr>
+<tr><td>메서드 표</td><td>dict</td><td>객체 + <code>Object.hasOwn</code></td><td><code>map[string]method</code></td></tr>
+<tr><td>판 헤더 읽기</td><td><code>headers.get("A2A-Version")</code></td><td><code>headers["a2a-version"]</code></td><td><code>Header.Get("A2A-Version")</code></td></tr>
+<tr><td>버그 → -32603</td><td>예외 넷을 잡는다</td><td><code>RpcError</code> 가 아닌 모든 것</td><td><code>*rpcError</code> 가 아닌 <code>error</code></td></tr>
+</table>
+</div>
+<div class="note"><b>헤더 이름은 대소문자를 가리지 않는다</b> — §9.2 "Service parameter keys are case-insensitive". 파이썬 <code>headers.get</code> 과 Go <code>Header.Get</code> 이 알아서 맞춰 주고, Node 는 미리 소문자로 바꿔 둡니다.</div>
+</article>
+
+<article class="card" id="p06-rpc-probe">
+<h3>틀린 요청 열 가지 — SDK 를 거치지 않은 바이트로</h3>
+<p class="lead">시험 쪽(<code>rpc_probe.py</code>)은 <code>urllib</code> 로 본문을 그대로 보내고, 답의 오류만 한 줄씩 찍습니다. 세 맨손 서버에 같은 열 가지를 보냅니다(파이썬 서버 앞에는 와이어 탭).</p>
+<!--CODE file=ex/py/06/rpc_probe.py region=cases-->
+</article>
+
+<article class="card" id="p06-rpc-probe-out">
+<h3>세 서버의 답이 줄마다 같다</h3>
+<p class="lead">한 줄 = HTTP 상태, <code>error.code</code>, <code>error.message</code>, ErrorInfo 의 <code>reason</code> 또는 BadRequest 의 틀린 필드, 그리고 어느 경우인지.</p>
+<!--OUT file=out/06/errors.txt part=터미널 5 lines=1-11 note=파이썬 서버(탭 너머)-->
+<!--OUT file=out/06/errors.txt part=터미널 5 lines=23-33 note=Go 서버 — TS 서버도 글자까지 같다-->
+<ul>
+<li><b>판이 먼저</b> — "판 0.3 + 옛 이름" 은 <code>-32601</code> 이 아니라 <code>-32009</code> 입니다. "v1.0 에 옛 이름" 에서야 <code>-32601</code> 이 나옵니다.</li>
+<li><b>판 1.0.1</b> 은 통과했습니다 — 패치 번호를 보지 않으니 없는 작업까지 가서 <code>-32001</code>.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-rpc-wire-version">
+<h3>판 헤더가 없는 요청 — 서버는 0.3 으로 읽고 -32009</h3>
+<p class="lead">탭이 본 첫 주고받음입니다. 요청 헤더에 <code>A2A-Version</code> 줄이 없습니다.</p>
+<!--OUT file=out/06/errors.txt wire=py-wire ex=1-->
+<div class="note"><b><code>metadata.version</code> 이 <code>"0.3"</code></b> — 빈 값을 0.3 으로 읽었다는 기록입니다. <code>id</code> 는 받은 <code>1</code> 그대로입니다 — 봉투는 맞았으니까요.</div>
+</article>
+
+<article class="card" id="p06-rpc-wire-order">
+<h3>같은 옛 이름 message/send — 판에 따라 -32009 와 -32601</h3>
+<p class="lead">셋째(판 0.3)와 여덟째(판 1.0) 주고받음에서 판·메서드·답의 code 만 골랐습니다.</p>
+<!--OUT file=out/06/errors.txt wire=py-wire ex=3 grep=^→|^←|A2A-Version|"method"|"code"|"message": " note=판 0.3-->
+<!--OUT file=out/06/errors.txt wire=py-wire ex=8 grep=^→|^←|A2A-Version|"method"|"code"|"message": " note=판 1.0-->
+<div class="key"><b>판을 모르면 이름을 해석할 수 없다</b> — 0.3 클라이언트에게 "그런 메서드 없다"(-32601)는 틀린 진단입니다. "그 판은 안 쓴다"(-32009)가 클라이언트가 고칠 수 있는 답입니다.</div>
+</article>
+
+<article class="card" id="p06-rpc-wire-envelope">
+<h3>봉투가 틀리면 id 는 null — 깨진 JSON, 배치, 알림</h3>
+<p class="lead">다섯째(깨진 JSON)는 통째로, 여섯째(배치)·일곱째(알림)는 요청 줄과 답만 골랐습니다.</p>
+<!--OUT file=out/06/errors.txt wire=py-wire ex=5-->
+<!--OUT file=out/06/errors.txt wire=py-wire ex=6-7 grep=^→|^←|^  \[|"(id|method|jsonrpc)"|"code"|validation-->
+<div class="note"><b>배치의 답이 배열이 아니다</b> — 배열을 요청 객체로 받지 않았으니 단건 오류 하나로 답했습니다. 알림(<code>id</code> 없음)에도 답했습니다 — JSON-RPC 서버라면 알림에 답하지 않지만(<a href="#p02-rpc-notify">2부</a>), 이 서버는 알림을 "틀린 요청" 으로 정했습니다.</div>
+</article>
+
+<article class="card" id="p06-rpc-wire-params">
+<h3>A2A 오류엔 ErrorInfo, 틀린 인자엔 BadRequest</h3>
+<p class="lead">넷째(없는 작업)와 열째(파트가 없는 메시지)의 답만 골랐습니다.</p>
+<!--OUT file=out/06/errors.txt wire=py-wire ex=4 lines=12-31 note=없는 작업-->
+<!--OUT file=out/06/errors.txt wire=py-wire ex=10 lines=16-36 note=파트가 없는 메시지-->
+<ul>
+<li><code>-32001</code> 의 <code>data[0]</code> — <code>@type</code> 이 <code>…google.rpc.ErrorInfo</code>, <code>reason</code> 이 <code>TASK_NOT_FOUND</code>, <code>metadata.taskId</code> 가 물어본 <code>"nope"</code>.</li>
+<li><code>-32602</code> 의 <code>data[0]</code> — <code>fieldViolations</code> 에 <code>message.parts</code> 와 그 까닭. §3.3.2 "Servers <b>SHOULD</b> specify which parameter(s) failed validation and why" 를 따른 것입니다.</li>
+</ul>
+</article>
+
+<article class="card quiz" id="p06-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. <code>A2A-Version</code> 헤더 없이 <code>{"jsonrpc":"2.0","id":1,"method":"message/send",…}</code> 를 맨손 서버에 보내면 어떤 code 가 옵니까? 헤더를 <code>1.0</code> 으로 달면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 헤더가 없으면 0.3 으로 읽으므로 메서드를 보기도 전에 <code>-32009</code>(Version not supported)입니다 — "판 헤더 없음" 과 "판 0.3 + 옛 이름" 줄이 둘 다 <code>-32009</code> 였습니다(<a href="#p06-rpc-probe-out">세 서버의 답</a>). <code>1.0</code> 을 달면 판 문을 지나 메서드 표에서 걸려 <code>-32601</code>(Method not found)입니다(<a href="#p06-rpc-wire-order">와이어</a>).</div>
+</article>
+
+<!-- ==== 3장 Task 저장소·상태 전이 ==== -->
+
+<article class="card" id="p06-ch3">
+<p class="chnum">3장</p>
+<h2>Task 저장소와 상태 전이</h2>
+<p class="chsub">저장소가 할 일 → 파이썬 저장소 → id 와 시각 ×3 → 상태를 옮기며 물음을 이력으로 → 전이 표를 정한다 → 표의 코드 → 표가 답하는 세 질문 → 시험 → TypeScript → Go → 동시성 ×3 → 세 언어 비교</p>
+</article>
+
+<article class="card" id="p06-store-what">
+<h3>저장소는 taskId 로 찾는 맵 하나 — 연산은 다섯</h3>
+<p class="lead">작업은 프로세스의 메모리에만 삽니다. 서버를 다시 띄우면 사라집니다 — 디스크에 두는 저장소는 17부에서 만듭니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>연산</th><th>하는 일</th><th>누가 부르나</th></tr>
+<tr><td><code>create</code></td><td>첫 메시지로 Task 를 짓는다 — id·contextId, 상태 SUBMITTED, 이력에 그 메시지</td><td>새 작업의 SendMessage</td></tr>
+<tr><td><code>get</code></td><td>taskId → Task, 없으면 없음</td><td>이어 말하기·GetTask·CancelTask</td></tr>
+<tr><td><code>append</code></td><td>사용자 메시지를 이력에 — <code>taskId</code>·<code>contextId</code> 를 채워서</td><td>이어 말하기</td></tr>
+<tr><td><code>move</code></td><td>상태를 옮긴다 — 전이 표가 허락할 때만</td><td>업무 코드·이어 말하기·취소</td></tr>
+<tr><td><code>add_artifact</code></td><td>아티팩트를 붙인다</td><td>업무 코드(견적)</td></tr>
+</table>
+</div>
+<div class="note"><b>move 와 add_artifact 는 스트림 이벤트를 돌려준다</b> — 바뀐 일을 알리는 <code>statusUpdate</code>·<code>artifactUpdate</code> 입니다. 막는 호출은 이것을 버리고, 스트림은 SSE 로 내보냅니다(4·5장). 와이어로 내보낼 모습을 뜨는 <code>view</code> 는 4장의 historyLength 와 함께 봅니다.</div>
+</article>
+
+<article class="card" id="p06-store-py">
+<h3>파이썬 — dict 하나, Task 도 dict</h3>
+<p class="lead">Task 는 와이어의 JSON 모양 그대로 dict 로 둡니다. 내보낼 때 다시 짜 맞출 필요가 없습니다.</p>
+<!--CODE file=ex/py/06/bare_store.py region=store-->
+<ul>
+<li><b>contextId</b> — 클라이언트가 정해 온 맥락은 그대로 씁니다. <a href="#p04-ctx-client">4부</a>에서 세 SDK 서버가 그렇게 했습니다.</li>
+<li><b><code>ids | msg | ids</code></b> — 첫 <code>ids</code> 가 키의 차례(messageId·contextId·taskId)를 정하고, 끝의 <code>ids</code> 가 값을 덮습니다. 클라이언트가 보낸 <code>taskId</code>·<code>contextId</code> 가 무엇이었든 저장소의 값이 남습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-store-ids">
+<h3>id 는 UUID 판 4, 시각은 §5.6.1 의 꼴 — 세 언어</h3>
+<p class="lead">taskId 는 "server-generated" 이고 "<b>MUST</b> generate a unique taskId"(§3.4.2) 입니다. 무작위 128비트 중 122비트를 쓰는 UUID 판 4 로 짓습니다. 시각은 §5.6.1 의 "<code>YYYY-MM-DDTHH:mm:ss.sssZ</code>" 입니다.</p>
+<!--CODE file=ex/py/06/bare_store.py region=ids-->
+<!--CODE file=ex/ts/06/bare_store.ts region=ids-->
+<!--CODE file=ex/go/06/barestore/store.go region=ids-->
+<div class="note"><b>캡처에서는 <code>&lt;id1&gt;</code>·<code>&lt;시각&gt;</code></b> — 실행마다 바뀌는 값이라 캡처 도구가 바꿔 적습니다(0부). 맨손 서버도 SDK 서버처럼 UUID 를 쓰므로 같은 규칙으로 읽힙니다.</div>
+</article>
+
+<article class="card" id="p06-store-move">
+<h3>상태를 옮길 때 지난 물음을 이력으로 내린다</h3>
+<p class="lead"><code>move</code> 는 상태를 바꾸는 유일한 길입니다. 먼저 전이 표를 묻고, 지금 <code>status.message</code>(에이전트의 물음)가 있으면 이력 끝에 붙인 뒤 새 상태로 갈아 끼웁니다.</p>
+<!--CODE file=ex/py/06/bare_store.py region=move-->
+<ul>
+<li><b>물음을 옮기는 때</b> — 다음 상태가 올 때. 파이썬·Go SDK 와 같은 쪽입니다(TS SDK 는 받는 즉시 이력에도, <a href="#p05-ir-hist-cmp">5부</a>). 이어 말하기는 WORKING 으로 먼저 옮긴 뒤 사용자 메시지를 붙이므로 이력이 물음 → 답 차례가 됩니다(시험은 <a href="#p06-store-rules">뒤에서</a>).</li>
+<li><b>갈아 끼운다</b> — 지난 <code>status</code> dict 를 고치지 않고 새 dict 를 넣습니다. 앞서 돌려준 이벤트가 붙들고 있는 상태가 뒤에서 바뀌지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-store-trans-why">
+<h3>어떤 전이를 허락할지는 우리가 정한다 — SDK 는 다 받았다</h3>
+<p class="lead">스펙에는 전이 표가 없고(<a href="#p05-state-rules">5부</a>), 세 SDK 는 WORKING → SUBMITTED 도 그대로 실었습니다(<a href="#p05-stub-cmp">5부</a>). 맨손 서버는 표를 하나 정해 저장소에 박아 둡니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>지금</th><th>갈 수 있는 곳</th><th>까닭</th></tr>
+<tr><td>SUBMITTED</td><td>WORKING·중단 둘·종료 넷</td><td>받자마자 끝낼 수도(숙소 견적), 되물을 수도 있다</td></tr>
+<tr><td>WORKING</td><td>WORKING·중단 둘·종료 넷</td><td>WORKING → WORKING 은 진행 소식(10부의 식사 에이전트)</td></tr>
+<tr><td>INPUT_REQUIRED</td><td>WORKING·CANCELED</td><td>답이 오면 다시 일하고, 기다리다 취소될 수 있다</td></tr>
+<tr><td>AUTH_REQUIRED</td><td>WORKING·CANCELED</td><td>같은 까닭(12부)</td></tr>
+<tr><td>종료 넷</td><td>없음</td><td>§3.1.1 "cannot accept further messages"</td></tr>
+</table>
+</div>
+<div class="key"><b>표에 없는 둘</b> — 누구도 SUBMITTED 로 돌아가지 않고, 중단 상태에서 곧장 끝나지 않습니다(답을 듣고 WORKING 을 거쳐야 한다). 중단 상태가 끝없이 기다리는 일은 표가 아니라 시간 제한이 막을 일입니다(17부).</div>
+</article>
+
+<article class="card" id="p06-store-trans-py">
+<h3>전이 표는 dict 하나 — 종료 상태는 키가 없다</h3>
+<p class="lead">"갈 곳이 없다" 를 따로 적지 않습니다. 종료 넷을 표의 키에서 빼 두면 <code>ALLOWED.get(src, ())</code> 가 빈 튜플을 주고, 어디로도 못 갑니다.</p>
+<!--CODE file=ex/py/06/bare_store.py region=states-->
+<div class="note"><b>위반은 버그다</b> — 표를 어기는 것은 요청이 아니라 우리 업무 코드입니다. 그래서 <code>IllegalMove</code> 는 <code>RpcError</code> 가 아니고, 새어 나가면 <code>dispatch</code> 가 <code>-32603</code> 으로 바꿉니다(<a href="#p06-rpc-dispatch-py">2장</a>).</div>
+</article>
+
+<article class="card" id="p06-store-trans-uses">
+<h3>표 하나가 세 질문에 답한다</h3>
+<p class="lead">서버의 세 곳이 <code>can_move</code> 를 묻습니다. 셋 다 "그 상태에서 나갈 길이 있나" 이고, 답에 따라 다른 오류가 나갑니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>묻는 곳</th><th>질문</th><th>길이 없으면</th></tr>
+<tr><td>이어 말하기(<code>begin</code>)</td><td>지금 상태 → WORKING?</td><td><code>-32004</code> — 끝난 작업에는 말을 못 건다(§3.1.1)</td></tr>
+<tr><td><code>CancelTask</code></td><td>지금 상태 → CANCELED?</td><td><code>-32002</code> — 취소할 수 없는 상태(§3.1.5)</td></tr>
+<tr><td><code>move</code> 자신</td><td>업무 코드가 청한 전이</td><td><code>IllegalMove</code> → <code>-32603</code></td></tr>
+</table>
+</div>
+<ul>
+<li><b>CANCELED 의 재취소</b> — 표만 보면 <code>-32002</code> 지만, 그 앞에서 "이미 CANCELED 면 그대로 돌려준다" 를 골랐습니다. 스펙의 두 문장(<a href="#p05-cancel-spec">5부</a>) 가운데 §3.3.1 의 멱등 쪽, TS·Go SDK 와 같은 쪽입니다.</li>
+<li>세 오류를 와이어로 일으키는 것은 4장(SendMessage·CancelTask)의 몫입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-store-rules">
+<h3>시험 — 작업 하나를 이리저리 옮겨 본다</h3>
+<p class="lead">저장소만 가져다 쓰는 작은 프로그램입니다. 되묻고, 답 전에 끝내려 하고, 답을 받고, 뒤로 가려 하고, 끝낸 뒤 다시 움직이려 합니다.</p>
+<!--RUN file=ex/py/06/store_rules.py region=try-->
+<ul>
+<li>INPUT_REQUIRED → COMPLETED, WORKING → SUBMITTED, COMPLETED → WORKING·CANCELED 가 거부됐습니다.</li>
+<li>WORKING 으로 옮기자 이력이 <code>USER AGENT</code> 가 됐고(물음이 내려옴), 답을 붙이자 <code>USER AGENT USER</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-store-ts">
+<h3>TypeScript — Map 과 펼침(...)으로 키의 차례를 맞춘다</h3>
+<p class="lead">구조는 같고, Task 의 모양을 타입으로 적었습니다(<code>types</code> 구역). 파이썬과 다른 곳만 봅니다.</p>
+<!--CODE file=ex/ts/06/bare_store.ts region=store-->
+<ul>
+<li><b><code>Map</code></b> — 평범한 객체를 맵으로 쓰면 <code>"__proto__"</code> 같은 키가 말썽입니다. taskId 는 클라이언트가 보내 오는 글자이니 <code>Map</code> 이 안전합니다.</li>
+<li><b>펼침의 차례</b> — 객체 리터럴에서 같은 키가 다시 나오면 값만 바뀌고 자리는 처음 그대로입니다. 파이썬의 <code>ids | msg | ids</code> 와 같은 결과입니다.</li>
+<li><code>msg.contextId || newId()</code> — 빈 문자열도 "없음" 으로 칩니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-store-go">
+<h3>Go — 구조체와 포인터 맵, 그리고 자물쇠 Mu</h3>
+<p class="lead">Task·Message 는 구조체이고(필드 차례 = 와이어의 키 차례), 저장소는 <code>map[string]*Task</code> 입니다. 파이썬·TS 에 없는 것이 하나 있습니다 — <code>sync.Mutex</code>.</p>
+<!--CODE file=ex/go/06/barestore/store.go region=store-->
+<ul>
+<li><b>값 복사</b> — <code>Append</code> 의 <code>msg</code> 는 값으로 넘어온 복사본이라 두 id 를 채워도 부른 쪽의 메시지는 그대로입니다.</li>
+<li><b><code>Mu</code> 는 부르는 쪽이 잡는다</b> — 저장소 연산 하나하나가 아니라 "요청 하나를 처리하는 동안" 을 잠가야 하기 때문입니다. 다음 장에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-store-lock">
+<h3>동시성 — 파이썬·Node 는 한 번에 하나, Go 는 자물쇠</h3>
+<p class="lead">"찾고 → 상태를 보고 → 옮기는" 세 걸음 사이에 다른 요청이 끼면, 같은 작업을 두 번 옮길 수 있습니다. 세 서버가 이것을 막는 방법이 다릅니다.</p>
+<!--CODE file=ex/go/06/bare_lodging/main.go region=call-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>요청을 받는 방식</th><th>저장소를 지키는 법</th></tr>
+<tr><td>파이썬</td><td><code>HTTPServer</code> — 스레드 하나가 요청을 하나씩</td><td>필요 없다(대신 느린 요청 하나가 나머지를 세운다)</td></tr>
+<tr><td>TS</td><td>스레드 하나 + 이벤트 루프</td><td><code>dispatch</code> 에 <code>await</code> 가 없어 한 번에 돈다</td></tr>
+<tr><td>Go</td><td>요청마다 고루틴 — 동시에 돈다</td><td>처리 함수가 도는 동안 <code>store.Mu</code></td></tr>
+</table>
+</div>
+<div class="warn"><b>자물쇠를 쥔 채 쓰지 않는다</b> — Go 의 <code>call</code> 은 처리 함수가 이벤트 목록을 다 만든 뒤 자물쇠를 놓고, 응답(SSE 포함)은 놓은 뒤에 씁니다. 느린 클라이언트 하나가 저장소 전체를 붙들지 않게요. 그래서 내보낼 Task 는 <code>View</code> 가 복사본으로 떠 둡니다.</div>
+</article>
+
+<article class="card" id="p06-store-cmp">
+<h3>세 언어 비교 — 같은 표, 같은 시험 결과</h3>
+<p class="lead">TS·Go 판 시험(<code>store_rules.ts</code>·<code>store_rules</code>)도 같은 차례로 옮겨 봤습니다. Go 는 전부, TS 는 거부 줄만 실었습니다 — 둘 다 파이썬과 글자까지 같습니다.</p>
+<!--OUT file=out/06/store_rules.go.txt-->
+<!--OUT file=out/06/store_rules.ts.txt grep=거부-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>Task</td><td>dict</td><td>타입을 단 객체</td><td>구조체(<code>json</code> 태그)</td></tr>
+<tr><td>저장소</td><td><code>dict</code></td><td><code>Map</code></td><td><code>map[string]*Task</code> + <code>Mutex</code></td></tr>
+<tr><td>전이 위반</td><td><code>raise IllegalMove</code></td><td><code>throw new IllegalMove</code></td><td><code>return Event{}, IllegalMove{…}</code></td></tr>
+<tr><td>빈 목록 빼기</td><td><code>view</code> 가 직접</td><td><code>view</code> 가 직접</td><td><code>omitempty</code> 태그</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p06-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. INPUT_REQUIRED 에서 기다리는 작업을 업무 코드가 곧장 COMPLETED 로 옮기려 하면 맨손 저장소는 어떻게 합니까? 그 요청을 보낸 클라이언트는 무엇을 받게 됩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 전이 표에서 INPUT_REQUIRED 가 갈 곳은 WORKING·CANCELED 뿐이라 <code>IllegalMove</code> 로 거부합니다 — 시험의 <code>COMPLETED 거부 — TASK_STATE_INPUT_REQUIRED → TASK_STATE_COMPLETED</code> 줄(<a href="#p06-store-rules">시험</a>). 이 예외는 <code>RpcError</code> 가 아니므로 <code>dispatch</code> 가 받아 <code>-32603</code> Internal error 로 답합니다(<a href="#p06-rpc-dispatch-py">2장</a>) — 요청이 아니라 서버 코드가 틀렸다는 뜻입니다.</div>
 </article>

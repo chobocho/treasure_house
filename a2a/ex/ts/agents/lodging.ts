@@ -2,7 +2,7 @@
 //
 // 보여 주는 것: 막는(blocking) SendMessage → Task, DataPart 입출력,
 // INPUT_REQUIRED 로 되묻기(같은 taskId 로 이어 말하기), REJECTED.
-import { TaskState } from "@a2a-js/sdk";
+import { Role, TaskState } from "@a2a-js/sdk";
 import type {
   AgentExecutor,
   ExecutionEventBus,
@@ -78,7 +78,11 @@ class LodgingExecutor implements AgentExecutor {
   async execute(ctx: RequestContext, bus: ExecutionEventBus) {
     const { task, up } = begin(ctx, bus);
     // 지금까지 들은 것 전부(이력 + 이번 메시지)를 합친다.
-    const heard = [...task.history, ctx.userMessage];
+    // 사용자가 한 말만 듣는다 — 이력에는 에이전트가 되물은 말도
+    // 있고, 그 예시("예: 2026-10-30")를 답으로 읽으면 안 된다.
+    const heard = [...task.history, ctx.userMessage].filter(
+      (m) => m.role === Role.ROLE_USER,
+    );
     const req = dataOf(...heard);
     for (const m of heard) Object.assign(req, fromText(textOf(m)));
     const missing = Object.keys(QUESTIONS).filter((k) => !(k in req));

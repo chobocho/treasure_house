@@ -77,7 +77,15 @@ func (executor) Execute(
 			return
 		}
 		// 지금까지 들은 것 전부(이력 + 이번 메시지)를 합친다.
-		heard := task.History // Begin 이 이번 메시지까지 넣어 둔다
+		// 사용자가 한 말만 듣는다 — 이력에는 에이전트가 되물은 말도
+		// 있고, 그 예시("예: 2026-10-30")를 답으로 읽으면 안 된다.
+		// Begin 이 이번 메시지까지 이력에 넣어 둔다.
+		var heard []*a2a.Message
+		for _, m := range task.History {
+			if m.Role == a2a.MessageRoleUser {
+				heard = append(heard, m)
+			}
+		}
 		req := common.DataOf(heard...)
 		for _, m := range heard {
 			maps.Copy(req, fromText(common.TextOf(m)))
