@@ -1,3 +1,10 @@
+### [2026-10-16 14:38] A2A 덱 5부 뒤 절반 — 종료 상태·historyLength·아티팩트·오류(57장), Go 이력 결함 수정
+- **기획:** 거절·실패·취소, historyLength 세 경우, 아티팩트, 작업 둘레 오류와 ErrorInfo 모양을 세 서버로 보이고, 리뷰에서 드러난 Go 에이전트 이력 결함을 고친다.
+- **TC:** 정상 — 세 언어 클라이언트로 GetTask·아티팩트 읽기. 경계 — 실행기 예외, 음수 historyLength, 재취소, 끝난 작업에 말 걸기, 같은 messageId 순서.
+- **개발:** a2a/deck/sections/05b_task.html, 05_task.html, 04b_message.html, a2a/ex/go/agents/common/, a2a/ex/*/05/, a2a/tools/a2arun.py 외 다수
+- **검증:** 03~05 캡처 --check 2~3회 일치, 도구 시험 141 통과, make all SKEL=1 rc=0
+- **비고:** 5부 118장. Go Begin 이 되물은 말을 이력에서 지우던 것을 고치고 슬라이드 다섯 장을 바로잡았다.
+
 ### [2026-10-16 13:07] A2A 덱 5부 앞 절반 — Task 모양·상태 기계·막는 호출·다중 턴(61장)
 - **기획:** Task 의 필드, 상태 아홉과 전이, blocking 과 returnImmediately, 완료 Task 읽기, INPUT_REQUIRED 다중 턴을 세 서버로 보인다.
 - **TC:** 정상 — 숙소 세 번 되묻기 ×3 클라이언트, 교통 즉시 반환과 폴링. 경계 — 끝난 작업에 늦은 갱신, 거꾸로 가는 전이, 이어 말하기에 Task 다시 싣기.

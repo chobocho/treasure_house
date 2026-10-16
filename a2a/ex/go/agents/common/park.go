@@ -43,7 +43,7 @@ func (u *Updater) AwaitReply(
 	}
 	select {
 	case r := <-ch:
-		t := working(r.Task)
+		t := working(r.Task, nil) // 답은 아래에서 붙인다
 		t.History = append(t.History[:len(t.History):len(t.History)],
 			r.Msg)
 		return r, u.yield(t, nil)
@@ -91,7 +91,7 @@ func (h waiter) SendStreamingMessage(
 	}
 }
 
-// resume 은 실행기에 메시지를 넘기고 그 뒤의 사건을 흘린다.
+// resume 은 실행기에 메시지를 넘기고 그 뒤의 이벤트를 흘린다.
 func (h waiter) resume(
 	ctx context.Context, req *a2a.SendMessageRequest, ch chan Reply,
 ) iter.Seq2[a2a.Event, error] {
@@ -101,8 +101,8 @@ func (h waiter) resume(
 			&a2a.SubscribeToTaskRequest{ID: id})
 		next, stop := iter.Pull2(sub)
 		defer stop()
-		// 구독의 첫 사건은 저장소의 작업 그대로(멈춘 상태)다. 내보내지
-		// 않고 실행기가 이어 갈 바탕으로 넘긴다.
+		// 구독의 첫 이벤트는 저장소의 작업 그대로(멈춘 상태)다.
+		// 내보내지 않고 실행기가 이어 갈 바탕으로 넘긴다.
 		first, err, _ := next()
 		task, isTask := first.(*a2a.Task)
 		if err != nil || !isTask {

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""wiretap.py 시험 — 기록 형식(헤더 허용 목록·JSON 보기·SSE 사건)과, 진짜 소켓으로 중계해 보기.
+"""wiretap.py 시험 — 기록 형식(헤더 허용 목록·JSON 보기·SSE 이벤트)과, 진짜 소켓으로 중계해 보기.
 
    중계 시험은 이 프로세스 안에 위쪽 서버(가짜 에이전트)와 탭을 스레드로 띄운다.
-   SSE 는 '흘려 보내는가' 가 핵심이라, 위쪽이 둘째 사건을 내기 전에 클라이언트가
-   첫 사건을 이미 받았는지 — 그리고 기록에도 이미 적혔는지 — 를 본다.
+   SSE 는 '흘려 보내는가' 가 핵심이라, 위쪽이 둘째 이벤트를 내기 전에 클라이언트가
+   첫 이벤트를 이미 받았는지 — 그리고 기록에도 이미 적혔는지 — 를 본다.
 """
 import http.client
 import http.server
@@ -109,7 +109,7 @@ class Format(unittest.TestCase):
 
 # ── 진짜 소켓 ─────────────────────────────────────────────────────
 class Upstream(http.server.BaseHTTPRequestHandler):
-    """가짜 에이전트. /sse 는 사건 하나를 내고, 시험이 신호를 줄 때까지 기다렸다가 둘째를 낸다."""
+    """가짜 에이전트. /sse 는 이벤트 하나를 내고, 시험이 신호를 줄 때까지 기다렸다가 둘째를 낸다."""
     protocol_version = 'HTTP/1.1'
     gate = None
     seen = []
@@ -208,7 +208,7 @@ class Live(unittest.TestCase):
         c.request('GET', '/sse', headers={'Accept': 'text/event-stream'})
         r = c.getresponse()
         self.assertEqual(r.getheader('Content-Type'), 'text/event-stream')
-        # 위쪽은 아직 둘째 사건을 내지 않았다 — 첫 사건이 벌써 와 있어야 흘려 보낸 것이다.
+        # 위쪽은 아직 둘째 이벤트를 내지 않았다 — 첫 이벤트가 벌써 와 있어야 흘려 보낸 것이다.
         self.assertEqual(r.readline(), b'data: {"n":1}\n')
         self.assertEqual(r.readline(), b'\n')
         self.assertIn('  data: {\n    "n": 1\n  }\n', self.logtext())

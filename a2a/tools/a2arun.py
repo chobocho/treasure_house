@@ -272,7 +272,7 @@ def examples(root):
 
 
 # ── 명세 ───────────────────────────────────────────────────────────
-VERBS = {'serve': (('name', 'cmd', 'ready'), ()),
+VERBS = {'serve': (('name', 'cmd', 'ready'), ('stderr',)),
          'tap': (('name', 'listen', 'target'), ('order',)),
          'run': (('cmd',), ('exit', 'timeout')),
          'wait': (('ms',), ())}
@@ -282,7 +282,9 @@ _INTS = ('listen', 'target', 'exit', 'timeout', 'ms')
 def parse_spec(text):
     """명세 → 단계 dict 의 목록. 줄 끝의 # 은 주석(따옴표 안은 빼고).
 
-       serve name=N cmd="LANG:..." ready=http://127.0.0.1:P/… | tcp:P
+       serve name=N cmd="LANG:..." ready=http://127.0.0.1:P/… | tcp:P [stderr=drop]
+             stderr=drop — 서버의 stderr 를 버린다(명령 줄에 2>/dev/null 이 붙어 보인다).
+             SDK 가 메모리 주소 든 경고를 흘려 캡처가 흔들릴 때만 쓴다.
        tap   name=N listen=P target=P [order=sorted]
        run   cmd="LANG:..." [exit=N] [timeout=S]
        wait  ms=N
@@ -332,6 +334,8 @@ def parse_spec(text):
             raise RunError('%d번 줄: %s 에 %s 가 없다' % (no, verb, ', '.join(miss)))
         if 'cmd' in s and s['cmd'].split(':', 1)[0] not in ('py', 'ts', 'go', 'sh'):
             raise RunError('%d번 줄: cmd 는 py: ts: go: sh: 로 시작한다: %s' % (no, s['cmd']))
+        if s.get('stderr', 'drop') != 'drop':
+            raise RunError('%d번 줄: stderr 는 drop 만 받는다' % no)
         if s.get('order', 'sorted') != 'sorted':
             raise RunError('%d번 줄: order 는 sorted 만 받는다' % no)
         if 'name' in s:
@@ -809,9 +813,13 @@ def run_spec(root, rel, scratch, ready_timeout=READY_TIMEOUT):
                 argv, cwd, shown = r
                 s['term'] = term
                 outfile = os.path.join(work, s['name'] + '.out')
+                drop = s.get('stderr') == 'drop'
+                if drop:
+                    shown += ' 2>/dev/null'
                 with open(outfile, 'wb') as f:
                     p = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                                         stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
+                                         stdout=f, start_new_session=True,
+                                         stderr=subprocess.DEVNULL if drop else subprocess.STDOUT)
                 procs.append((s, p, outfile))
                 head.append('[터미널 %d] $ %s' % (term, shown))
                 _wait_ready(s if s['verb'] == 'serve' else dict(s, ready='tcp:%d' % s['listen']),

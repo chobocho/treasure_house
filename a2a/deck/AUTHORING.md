@@ -53,7 +53,18 @@ capture. Never guess what an SDK does; read its installed source or run it.
   does not help). The wire tap sorts keys under `data`/`metadata` (deeply) and
   `scopes`/`securitySchemes`/`schemes` (one level) — declared in part 0. So show a Python
   server's JSON **through the tap or the `ask` CLI** (which sorts), never as raw `curl`
-  stdout, or `--check` will fail. Run `a2arun --check` on every capture
+  stdout, or `--check` will fail.
+- **Python SDK stderr noise**: on some error paths (e.g. a message to a terminal task) the
+  Python SDK prints OpenTelemetry "Failed to detach context" tracebacks with memory
+  addresses. If a server's stderr is not part of the lesson, add `stderr=drop` to its
+  `serve` line (the capture shows `2>/dev/null` on the command). Never drop stderr that a
+  slide talks about.
+- **Python SDK timing-dependent wording**: right after a task finishes, a message to it
+  gets "is already completed."; after the SDK cleans up its in-memory task it gets "is
+  in terminal state: …". Wait (≥ 1 s) before such a request so the capture is stable.
+- **Go agents' `Begin`** moves the previous status message into history before
+  re-publishing the Task (the Go SDK stores Task events as-is). Do not describe "Go keeps
+  no agent questions in history" — that was a bug in our code, fixed 2026-10-16. Run `a2arun --check` on every capture
   at least twice before you trust it.
 - Ports: 10000 + NN·100 + k. One runner at a time (it locks).
 - Trailing directives: Python `# @ key: value` (ruff rewrites `#@` to `# @`), TS/Go

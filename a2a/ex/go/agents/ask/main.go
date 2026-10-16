@@ -135,8 +135,8 @@ func line(format string, a ...any) {
 	fmt.Println(strings.TrimRight(s, " \t\n")) // 파이썬 rstrip()
 }
 
-// show 는 사건 하나를 한 줄로 찍는다. 작업 사건이면 그 작업의
-// taskId·contextId·상태를 돌려준다(아티팩트 사건의 상태는 빈 값).
+// show 는 이벤트 하나를 한 줄로 찍는다. 작업 이벤트가면 그 작업의
+// taskId·contextId·상태를 돌려준다(아티팩트 이벤트의 상태는 빈 값).
 func show(ev a2a.Event) (a2a.TaskID, string, a2a.TaskState) {
 	switch e := ev.(type) {
 	case *a2a.Message:
@@ -239,7 +239,7 @@ func main() {
 	}
 }
 
-// send 는 스트림이든 막는 호출이든 사건의 흐름으로 돌려준다.
+// send 는 스트림이든 막는 호출이든 이벤트의 흐름으로 돌려준다.
 func send(
 	ctx context.Context, c *a2aclient.Client,
 	req *a2a.SendMessageRequest, noStream bool,

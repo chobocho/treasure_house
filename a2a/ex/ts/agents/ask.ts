@@ -113,7 +113,8 @@ function show(ev: StreamResponse): Seen | undefined {
   return undefined;
 }
 
-// 스트림이면 사건을 하나씩, 막는 호출이면 결과 하나를 사건처럼 낸다.
+// 스트림이면 이벤트를 하나씩, 막는 호출이면 결과 하나를
+// 이벤트처럼 낸다.
 async function* send(
   client: Client,
   message: Message,

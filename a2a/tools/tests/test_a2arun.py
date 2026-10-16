@@ -520,6 +520,27 @@ class RealSpec(Tree):
         self.assertIn(str(self.P + 1), str(e.exception))
         self.assertFalse(os.path.exists(self.pids))             # 서버는 뜨지도 않았다
 
+    def test_stderr_drop_hides_only_stderr_and_says_so(self):
+        # SDK 가 stderr 에 주소가 든 traceback 을 흘리는 서버를 위해:
+        # 명령 줄에 2>/dev/null 을 붙여 보여 주고, stdout 은 그대로 둔다.
+        self.put('ex/py/02/noisy.py', 'import socket, sys, time\n'
+                 's = socket.socket()\ns.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n'
+                 's.bind(("127.0.0.1", int(sys.argv[1])))\ns.listen(1)\n'
+                 'print("보이는 줄", flush=True)\n'
+                 'print("0x7f00 같은 소음", file=sys.stderr, flush=True)\n'
+                 'time.sleep(60)\n#@ norun\n')
+        rel = self.spec('serve name=n cmd="py:02/noisy.py %d" ready=tcp:%d stderr=drop\n'
+                        'wait ms=200\nrun cmd="sh:true"\n' % (self.P + 3, self.P + 3))
+        cap = self.run_ex(rel)
+        self.assertIn('[터미널 1] $ python 02/noisy.py %d 2>/dev/null\n' % (self.P + 3), cap)
+        self.assertIn('── 터미널 1 (n) 출력 ──\n보이는 줄', cap)
+        self.assertNotIn('소음', cap)
+
+    def test_stderr_takes_only_drop(self):
+        with self.assertRaises(a2arun.RunError):
+            a2arun.parse_spec('serve name=a cmd="py:x.py" ready=tcp:10201 stderr=keep\n'
+                              'run cmd="sh:true"\n')
+
     def test_server_dying_early_is_an_error(self):
         self.put('ex/py/02/quit.py', 'import socket, sys\ns = socket.socket()\n'
                  's.bind(("127.0.0.1", int(sys.argv[1])))\ns.listen(1)\nprint("곧 끝")\n#@ norun\n')

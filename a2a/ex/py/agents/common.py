@@ -40,7 +40,7 @@ async def begin(ctx: RequestContext, queue: EventQueue):
     파이썬 SDK 1.2.2 는 이어 말하기에서 실행기가 Task 를 다시 실으면
     'Task … already exists' 를 남기고 이번 사용자 메시지를 이력에서
     버린다(active_task.py 의 message_to_save = None). 그래서 이어
-    말하기에서는 싣지 않는다 — 스트림 첫 사건이 Task 가 아니게 되는
+    말하기에서는 싣지 않는다 — 스트림 첫 이벤트가 Task 가 아니게 되는
     것은 이 SDK 의 한계로 16부에서 다룬다.
     돌려주는 Task 의 history 에는 이번 메시지까지 들어 있다.
     """

@@ -129,7 +129,7 @@ const TERMINAL = [
 // 실행 중인 작업 → 갱신기. 취소 요청에는 taskId 만 오기 때문이다.
 const live = new Map<string, Updater>();
 
-// 파이썬 SDK 의 TaskUpdater 몫. TS SDK 에는 없어서 사건
+// 파이썬 SDK 의 TaskUpdater 몫. TS SDK 에는 없어서 이벤트
 // (statusUpdate·artifactUpdate)을 직접 만들어 버스에 싣는다.
 export class Updater {
   readonly stop = new AbortController();
@@ -190,7 +190,7 @@ export class Updater {
 type Chunk = { id?: string; append?: boolean; lastChunk?: boolean };
 
 // region: begin
-// TS SDK 는 실행마다 첫 사건이 Task(또는 Message)이기를 강제한다 —
+// TS SDK 는 실행마다 첫 이벤트가 Task(또는 Message)이기를 강제한다 —
 // 같은 taskId 로 이어 말할 때도 그렇다(명세 3.1.2 의 스트림 규칙).
 // 그래서 이어 말하기에도 지금의 Task 를 다시 싣는다. 답을 받았으니
 // 상태는 WORKING 으로 — 멈춘 상태 그대로 실으면 막는 호출이 그것을
@@ -256,7 +256,7 @@ export function serve(
     typed,
     new InMemoryTaskStore(),
     executor,
-    undefined, // 사건 버스 관리자: 기본값
+    undefined, // 이벤트 버스 관리자: 기본값
     store,
     sender,
     extended || undefined,

@@ -318,3 +318,24 @@ subagent task each.
   appends at once, go never (4 turns → 7/7/4 messages); TS enforces the first-event rule,
   Go does not for stored tasks; §3.4.3 still says "input-required"; interrupted states
   that end an execution: py both, ts/go INPUT_REQUIRED only.
+
+### Part 5 complete — 118 slides; Go history bug fixed (2026-10-16)
+- `05b_task.html` ch6–9 (57 slides): REJECTED/FAILED/CANCELED ×3, historyLength ×3,
+  artifacts ×3, task errors and ErrorInfo shapes ×3.
+- **Our Go `common.Begin` dropped the agent's question from history** when re-publishing
+  the Task (Go SDK stores Task events as-is, moving status messages into history only on
+  status updates). Fixed in `working()` (moves the old status.message first; identity
+  check `h[n-1] == cur` so a duplicate messageId keeps the right order). Rewrote
+  p04-dup-hist, p05-ir-hist, p05-ir-hist-cmp, p05-hl-go-short, p05-hl-cmp; Go region
+  `begin` split into `begin` + `working` (≤ 45 lines). Old term "사건" removed from all
+  agent code comments.
+- errors.run was flaky (1 in ~6): Python wording "already completed" vs "in terminal state"
+  depends on SDK cleanup timing → `errors.py` waits 1 s first; that path makes the Python
+  server print OpenTelemetry tracebacks with addresses → new runner option
+  `serve … stderr=drop` (shown as `2>/dev/null`, TDD, 2 tests). Verified 3× identical.
+- Findings: executor exceptions → py -32603 without data (FAILED stored silently), ts FAILED
+  task with "Agent execution error: …", go FAILED task without message (or -32603 +
+  INTERNAL_ERROR if no Task yet); negative historyLength: py -32602, ts/go treat as 0;
+  ErrorInfo: py `metadata:{}`, ts no metadata, go `metadata.timestamp`, none puts taskId as
+  §9.5's example does; TS has no artifact id generator; CancelTask/GetTask return the Task
+  as `result` directly.
