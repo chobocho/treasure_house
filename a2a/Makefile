@@ -29,7 +29,7 @@ export GOTOOLCHAIN := local
 export GOFLAGS :=
 
 .DEFAULT_GOAL := help
-.PHONY: help deps docs test fmt lint ts-check golden run run-check \
+.PHONY: help deps docs sources data data-check test fmt lint ts-check golden run run-check \
         manifest-check deck deck-verify deck-check font font-check all clean
 
 help:                   ## 이 목록
@@ -54,9 +54,19 @@ docs:                   ## A2A 스펙 v1.0.1 → docs/spec/ (+ docs/FETCHED.txt)
 	tar -xzf scratch/a2a-spec.tar.gz -C $(DOCS)/spec --strip-components=1
 	{ printf 'a2aproject/A2A %s\t%s\n' '$(SPEC_TAG)' '$(SPEC_URL)'; \
 	  printf 'sha256\t%s\n' "$$(sha256sum scratch/a2a-spec.tar.gz | cut -d' ' -f1)"; \
-	  printf 'fetched\t%s\n' "$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } > $(DOCS)/FETCHED.txt
+	  printf 'fetched\t%s\n' "$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } >> $(DOCS)/FETCHED.txt
 	rm -f scratch/a2a-spec.tar.gz
 	@cat $(DOCS)/FETCHED.txt
+
+# 1부(역사)의 출처 글. 주장은 data/facts.tsv, 맞은 근거는 data/evidence.tsv.
+sources:                ## data/sources.tsv 의 출처 → docs/<key>.txt (없는 것만)
+	$(PY) tools/fetch_sources.py
+
+data:                   ## facts.tsv 를 받아 둔 출처에 대 evidence.tsv 를 만든다
+	$(PY) tools/make_data.py
+
+data-check:             ## evidence.tsv 가 최신이고 모든 주장의 근거가 맞는지
+	$(PY) tools/make_data.py --check
 
 # ── 시험 ───────────────────────────────────────────────────────────
 # PLAN.md §0.8: 파이썬 도구는 전부 시험을 먼저 쓴다(RED → GREEN).
@@ -126,7 +136,7 @@ font-check:             ## 내장 글꼴이 덱의 글자를 다 덮는지
 	$(PY) $(TOOLS)/embed_mono_font.py --check $(DECK)
 
 all:                    ## 전부 — 시험부터 글꼴까지, 하나라도 걸리면 여기서 멈춘다
-all: test lint ts-check golden manifest-check deck deck-verify deck-check \
+all: test data-check lint ts-check golden manifest-check deck deck-verify deck-check \
      font font-check
 
 # out/ 은 절대 지우지 않는다(증거다). docs/ 는 make docs 로 되살린다.

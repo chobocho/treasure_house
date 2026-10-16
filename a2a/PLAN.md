@@ -178,3 +178,18 @@ subagent task each.
   `urllib.parse`. Keys switched to Ed25519 (deterministic signatures).
 - Next: TS and Go ports of the agents (one subagent each, after the tools agent), with the
   rule that `ask` transcripts and server log lines are identical across languages.
+
+### Tools landed; history sources (2026-10-16)
+- Tools subagent done (report in session): a2arun/wiretap/build_deck/verify/check_deck, 126
+  tests, `make all SKEL=1` green. Deviations accepted: single-file captures carry the
+  language (`out/NN/x.py.txt`), Python directives are `# @ key:` (ruff), specs may continue
+  with `\`, shared-source hashing covers every non-NN dir of a language root. Gate dirs
+  deleted; first commit b042a020.
+- History data: `tools/fetch_sources.py` + `tools/make_data.py` (facts only; 9 tests,
+  RED first), `data/sources.tsv` (9 primary sources: Google launch 2025-04-09, Google
+  donation + LF press 2025-06-23, LF AI & Data ACP merge 2025-08-29, Anthropic MCP
+  2024-11-25, GitHub releases API, CHANGELOG / announcing-1.0 / whats-new at tag v1.0.1),
+  `data/facts.tsv` 13 seed facts, all matched. `make sources data data-check`; data-check
+  is in `make all`. Caveat for part 1: GitHub lists v0.1.0/v0.2.0 as published
+  2025-06-09 (back-filled) — never present those as original release dates.
+- TS port subagent running (`scratch/brief-port.md`, log `scratch/port-ts-log.md`).
