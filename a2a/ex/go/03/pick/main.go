@@ -63,7 +63,8 @@ func main() {
 			found++
 			tags := strings.Join(s.Tags, ",")
 			modes := strings.Join(outModes(card, s), ",")
-			fmt.Printf("  %s · %s [%s] → %s\n", card.Name, s.ID, tags, modes)
+			fmt.Printf("  %s · %s [%s] → %s\n",
+				card.Name, s.ID, tags, modes)
 		}
 	}
 	fmt.Printf("  고른 곳 %d\n", found)

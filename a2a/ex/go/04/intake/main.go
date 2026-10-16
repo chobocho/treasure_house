@@ -75,8 +75,8 @@ func (intake) Cancel(
 }
 
 func main() {
-	// SDK 의 slog 기록(표준 오류)에서 날짜·시각을 뺀다 — 캡처는 실행마다
-	// 같아야 하는데, 이 꼴(2026/10/16 12:00:00)은 정규화되지 않는다.
+	// SDK 의 slog 기록(표준 오류)에서 날짜·시각을 뺀다 —
+	// 시각은 실행마다 달라 캡처에서 읽을 거리가 못 된다.
 	log.SetFlags(0)
 	args := common.ParseArgs("보물상사 접수 에이전트")
 	common.Serve(card(args.URL), intake{}, args.Port, common.Options{})

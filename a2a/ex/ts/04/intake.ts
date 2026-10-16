@@ -62,7 +62,8 @@ const handler = new DefaultRequestHandler(
 );
 // endregion
 const app = express();
-const wire = AgentCard.toJSON(card) as AgentCard; // oneof 를 와이어 모양으로
+// oneof 를 와이어 모양으로
+const wire = AgentCard.toJSON(card) as AgentCard;
 app.use(
   "/.well-known/agent-card.json",
   agentCardHandler({ agentCardProvider: async () => wire }),

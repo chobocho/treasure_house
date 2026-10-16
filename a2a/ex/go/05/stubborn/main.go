@@ -70,7 +70,8 @@ func (stubborn) Cancel(
 func main() {
 	log.SetFlags(0) // SDK 기록(표준 오류)의 날짜·시각을 뺀다
 	args := common.ParseArgs("보물상사 고집 에이전트")
-	common.Serve(card(args.URL), stubborn{}, args.Port, common.Options{})
+	common.Serve(card(args.URL), stubborn{}, args.Port,
+		common.Options{})
 }
 
 //@ norun

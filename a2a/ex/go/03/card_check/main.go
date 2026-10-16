@@ -59,7 +59,8 @@ func list(o obj, name string) []obj {
 func required(c obj) []finding {
 	var out []finding
 	miss := func(path string) {
-		out = append(out, finding{"오류", path + ": 필수인데 없거나 비었다"})
+		msg := path + ": 필수인데 없거나 비었다"
+		out = append(out, finding{"오류", msg})
 	}
 	for _, k := range card {
 		if absent(c, k) {
@@ -112,7 +113,8 @@ func interfaces(c obj, cardURL string) []finding {
 		}
 		if u != "" && host(u) != home {
 			out = append(out, finding{"경고",
-				fmt.Sprintf("%s.url: 카드를 받은 곳(%s)과 다르다", at, home)})
+				fmt.Sprintf("%s.url: 카드를 받은 곳(%s)과 다르다",
+					at, home)})
 		}
 	}
 	return out
@@ -134,7 +136,8 @@ func cardURL(addr string) string {
 	if strings.HasSuffix(addr, ".json") {
 		return addr
 	}
-	return strings.TrimSuffix(addr, "/") + "/.well-known/agent-card.json"
+	const well = "/.well-known/agent-card.json"
+	return strings.TrimSuffix(addr, "/") + well
 }
 
 func main() {

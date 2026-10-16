@@ -23,7 +23,10 @@ def rpc(method, params):
 
 
 def say(*parts, task=None):
-    """SendMessage — 이어 말하기면 taskId 만 단다(맥락은 서버가 찾는다)."""
+    """SendMessage — 이어 말하기면 taskId 만 단다.
+
+    맥락(contextId)은 서버가 찾는다.
+    """
     msg = {"messageId": f"m-{next(N)}", "role": "ROLE_USER"}
     msg |= {"taskId": task} if task else {}
     msg["parts"] = list(parts)

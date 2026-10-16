@@ -5,6 +5,7 @@
    언어 셋(py·ts·go), 구역 표시(region), 캡처의 구역(part·server·wire·ex·grep), 장부 대조.
 """
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -70,11 +71,22 @@ class Tree(unittest.TestCase):
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, 'w', encoding='utf-8', newline='') as f:
             f.write(text)
+        # 예제 디렉터리에 새 파일을 더하면 같은 부의 장부를 다시 적는다
+        # (실제로는 a2arun --all). 이미 적은 예제나 fixtures 를 고치는
+        # 것은 낡음을 보려는 시험이므로 다시 적지 않는다.
+        recorded = getattr(self, 'recorded', [])
+        if re.match(r'ex/(py|ts|go)/\d\d/', rel) and rel not in recorded:
+            for r in recorded:
+                a2arun.manifest_update(self.root, r, 'python 3.14')
 
     def example(self, rel, code, cap, main=None):
         self.put(main or rel, code)
         self.put(a2arun.capture_path(rel), cap)
-        a2arun.manifest_update(self.root, rel, 'python 3.14')
+        # 같은 부 디렉터리가 입력이라, 예제를 더하면 앞서 적은 장부도
+        # 다시 적는다(실제로는 a2arun --all 이 하는 일).
+        self.recorded = getattr(self, 'recorded', []) + [rel]
+        for r in self.recorded:
+            a2arun.manifest_update(self.root, r, 'python 3.14')
 
     def spec(self):
         self.put('ex/py/06/bus.py', 'print("bus ready")\n#@ norun\n')

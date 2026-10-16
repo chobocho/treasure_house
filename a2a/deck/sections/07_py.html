@@ -1,10 +1,690 @@
 <article class="card section" id="p07">
 <p class="chnum">7부</p>
 <h2>공식 SDK — Python</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">패키지 지도 → 타입 → 실행기(AgentExecutor) → 요청 처리기와 Task 저장소 → 서버 띄우기 → 클라이언트 → 숙소 에이전트 완성판 → 시험 → 이 SDK 만의 것</p>
 </article>
 
-<article class="card" id="p07-todo">
-<h3>공식 SDK — Python</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p07-intro">
+<h3>6부에서 손으로 한 일을, 이번에는 a2a-sdk 로 짓는다</h3>
+<p class="lead">3~5부는 완성 에이전트를 밖에서 두드렸고, 6부는 SDK 없이 같은 일을 손으로 했습니다. 이 부는 파이썬으로 A2A 에이전트를 만들 사람을 위한 부입니다 — 설치된 <code>a2a-sdk</code> 1.2.2 의 소스를 열어 가며, 메아리 에이전트에서 시작해 숙소 에이전트 완성판까지 SDK 로 쌓아 올립니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th></tr>
+<tr><td><a href="#p07-ch1">1장</a></td><td>패키지 지도 — extra(선택 설치 묶음), 하위 패키지, 이름에서 파일 찾기</td></tr>
+<tr><td><a href="#p07-ch2">2장</a></td><td>타입 — protobuf 메시지로 Message·Part·Task 만들고 읽기</td></tr>
+<tr><td><a href="#p07-ch3">3장</a></td><td>실행기(AgentExecutor) — 이벤트 큐에 넣는 일, TaskUpdater</td></tr>
+<tr><td><a href="#p07-ch4">4장</a></td><td>요청 처리기와 Task 저장소 — DefaultRequestHandler, InMemoryTaskStore</td></tr>
+<tr><td><a href="#p07-ch5">5장</a></td><td>서버 띄우기 — 라우트 팩토리, Starlette 와 uvicorn, 카드</td></tr>
+<tr><td>6장</td><td>클라이언트 — <code>create_client</code>, 막는 호출과 스트림, 답 읽기</td></tr>
+<tr><td>7장</td><td>숙소 에이전트 완성판 — INPUT_REQUIRED·REJECTED, 골든 대조</td></tr>
+<tr><td>8장</td><td>시험 — SDK 서버를 네트워크 없이 프로세스 안에서</td></tr>
+<tr><td>9장</td><td>이 SDK 만의 것 — v0.3 호환, DB 저장소, 원격 측정</td></tr>
+</table>
+</div>
+<div class="key"><b>세 부가 같은 뼈대</b> — 8부(TypeScript)와 9부(Go)는 이 부와 장 번호·장 제목이 같습니다. 한 언어만 따라가도 되고, 견주고 싶으면 같은 번호의 장을 나란히 펴면 됩니다. 장마다 끝의 "정리" 표가 그 언어의 이름을 같은 줄에 모읍니다. 예제는 <code>ex/py/07/</code> 에 있고, 단계 파일(<code>step1_echo.py</code>, <code>step2_task.py</code>, …)이 완성 에이전트(<code>ex/py/agents/</code>)로 수렴합니다.</div>
+</article>
+
+<!-- ==== 1장 패키지 지도 ==== -->
+
+<article class="card" id="p07-ch1">
+<p class="chnum">1장</p>
+<h2>패키지 지도 — 설치본에서 읽는다</h2>
+<p class="chsub">몸통과 extra 열한 가지 → 하위 패키지와 줄 수 → 서버 쪽 여섯 칸 → 요청 하나가 지나는 길 → 완성 에이전트가 쓰는 이름 37개 → 이름에서 파일·줄 찾기 → 정리</p>
+</article>
+
+<article class="card" id="p07-map-pkg">
+<h3>a2a-sdk 는 몸통 하나에 extra(선택 설치 묶음) 열한 가지다</h3>
+<p class="lead">무엇을 깔았는지부터 셉니다. 패키지 메타데이터(<code>Requires-Dist</code>)를 읽어 늘 따라오는 의존과, extra 이름마다 더 까는 패키지를 나누고, 이 venv 에 있는지 표시했습니다(<code>O</code> 있음, <code>.</code> 없음).</p>
+<!--RUN file=ex/py/07/sdk_extras.py-->
+<ul>
+<li>이 책은 <code>a2a-sdk[http-server,grpc,signing]==1.2.2</code> 를 깔았습니다(<code>ex/py/requirements.txt</code>). 서버를 띄우려면 <code>http-server</code>(Starlette·sse-starlette)가 있어야 합니다.</li>
+<li>몸통에 protobuf 가 있는 것이 이 SDK 의 성격을 말해 줍니다 — 타입이 proto 에서 생성된 메시지입니다(2장).</li>
+<li>uvicorn 은 어느 extra 에도 없습니다. ASGI 서버는 따로 고르라는 뜻이고, 이 책은 uvicorn 을 따로 깔았습니다(5장). <code>sql</code> 무리(sqlalchemy)는 이 venv 에 없어 DB 저장소는 9장에서 소스로만 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-map-tree">
+<h3>설치본 2만 7천 줄 — 서버가 4할, v0.3 호환이 3할</h3>
+<p class="lead">하위 패키지마다 파이썬 파일 수와 줄 수를 세고, <code>__init__.py</code> 의 문서 문자열 첫 줄을 옆에 붙였습니다. 서버 쪽은 한 층 더 내려갔습니다.</p>
+<!--RUN file=ex/py/07/sdk_map.py-->
+<ul>
+<li><code>server/</code> 10,663줄 — 이 부 3~5장이 여기서 삽니다. <code>client/</code> 3,390줄은 6장입니다.</li>
+<li><code>compat/</code> 8,038줄은 v0.3 피어와 말하기 위한 계층입니다(9장, 14부). <code>migrations/</code> 는 DB 저장소의 스키마 이력입니다.</li>
+<li><code>types/</code> 가 985줄뿐인 것은 생성된 <code>a2a_pb2.py</code> 가 proto 설명자를 바이트로 품고 있어서입니다. 필드 목록은 옆의 <code>a2a_pb2.pyi</code>(편집기용 타입 힌트)에 있습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-map-server">
+<h3>서버 쪽 여섯 칸 — 우리가 채우는 칸은 하나다</h3>
+<p class="lead"><code>server/</code> 아래 여섯 하위 패키지가 맡은 일을 이 부의 장과 짝지었습니다. 에이전트를 만드는 사람이 직접 쓰는 것은 실행기 하나이고, 나머지는 조립합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>하위 패키지</th><th>대표 이름</th><th>하는 일</th><th>어디서</th></tr>
+<tr><td><code>agent_execution/</code></td><td><code>AgentExecutor</code>·<code>RequestContext</code></td><td>에이전트의 두뇌 — 우리가 상속해 채운다</td><td><a href="#p07-ch3">3장</a></td></tr>
+<tr><td><code>events/</code></td><td><code>EventQueue</code></td><td>실행기가 이벤트를 넣는 큐</td><td><a href="#p07-ch3">3장</a></td></tr>
+<tr><td><code>tasks/</code></td><td><code>TaskUpdater</code>·<code>InMemoryTaskStore</code></td><td>상태·아티팩트 이벤트 만들기, Task 저장, 푸시</td><td><a href="#p07-ch3">3장</a>·<a href="#p07-ch4">4장</a>·11부</td></tr>
+<tr><td><code>request_handlers/</code></td><td><code>DefaultRequestHandler</code></td><td>A2A 메서드 열하나를 받아 실행기·저장소를 부린다</td><td><a href="#p07-ch4">4장</a></td></tr>
+<tr><td><code>routes/</code></td><td><code>create_jsonrpc_routes</code> 등</td><td>HTTP 경로 ↔ 처리기 (JSON-RPC·REST·카드)</td><td><a href="#p07-ch5">5장</a></td></tr>
+<tr><td><code>cluster/</code></td><td><code>VersionedTaskStore</code></td><td>여러 복제본이 한 저장소를 나눠 쓸 때</td><td>17부</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p07-map-flow">
+<h3>요청 하나가 지나는 길 — 경로 → 처리기 → 실행기 → 저장소</h3>
+<p class="lead">SendMessage 한 번이 서버 안에서 거치는 칸을 위에서 아래로 그렸습니다. 6부의 맨손 서버가 한 파일에서 하던 일을 SDK 는 이렇게 나눠 맡깁니다.</p>
+<pre class="fig">
+  HTTP POST /
+    │
+    ▼  routes/ · JsonRpcDispatcher          본문을 읽어 메서드 고르기
+  request_handlers/ · DefaultRequestHandler
+    │  on_message_send(params, context)     작업 찾기, 실행 준비
+    ▼
+  agent_execution/ · AgentExecutor
+    │  execute(ctx, queue)                  우리가 쓴 코드
+    ▼  events/ · queue.enqueue_event(…)
+  tasks/ · TaskStore                        이벤트로 Task 를 고쳐 저장
+    │
+    ▼
+  처리기가 답을 골라 JSON-RPC 응답으로
+</pre>
+<div class="note"><b>이벤트가 저장소를 고친다</b> — <a href="#p06-work-sdk">6부</a>에서 본 대로 SDK 판에서는 실행기가 Task 를 직접 저장하지 않습니다. 이벤트를 큐에 넣으면 처리기 쪽(<code>server/agent_execution/active_task.py</code>)이 그것을 받아 저장된 Task 에 반영합니다. 4장에서 이 길을 HTTP 없이 직접 불러 봅니다.</div>
+</article>
+
+<article class="card" id="p07-map-used">
+<h3>완성 에이전트 다섯이 쓰는 SDK 이름은 37개뿐이다</h3>
+<p class="lead">2만 7천 줄을 다 알아야 에이전트를 만들 수 있는 것은 아닙니다. 완성 에이전트(<code>agents/*.py</code>)의 <code>from a2a… import</code> 를 ast 로 모아, 이름마다 몇 파일이 쓰는지 셌습니다.</p>
+<!--OUT file=out/07/used_names.py.txt-->
+<ul>
+<li>서버를 세우는 데 드는 것은 <code>server.*</code> 의 열 개입니다 — 실행기·큐·갱신기·처리기·저장소·경로 둘. 푸시 둘은 교통 에이전트(11부)의 것입니다.</li>
+<li><code>client</code> 셋은 기획 에이전트와 <code>ask</code> CLI 가 씁니다(6장). <code>utils.signing</code> 둘은 서명된 카드(12부)입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-map-where">
+<h3>이름에서 파일과 줄로 — DefaultRequestHandler 의 진짜 이름은 V2 다</h3>
+<p class="lead">소스를 읽으려면 그 이름이 어디 있는지 알아야 합니다. <code>inspect.getsourcefile</code>·<code>getsourcelines</code> 로 이 부에서 쓸 이름의 자리를 찾았습니다.</p>
+<!--CODE file=ex/py/07/where.py region=where-->
+<!--OUT file=out/07/where.py.txt-->
+<ul>
+<li><code>request_handlers/__init__.py</code> 에 <code>DefaultRequestHandler = DefaultRequestHandlerV2</code> 가 있습니다. 옛 처리기는 같은 폴더의 <code>default_request_handler.py</code> 에 <code>LegacyRequestHandler</code> 라는 이름으로 남아 있습니다 — 파일 이름만 보고 열면 다른 클래스를 읽게 됩니다.</li>
+<li>protobuf 타입은 소스가 없습니다. <code>a2a.proto</code> 의 <code>lf.a2a.v1</code> 패키지에서 생성됐다는 것만 설명자가 알려 줍니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ch1-sum">
+<h3>1장 정리 — 할 일마다 파이썬 SDK 의 이름</h3>
+<p class="lead">이 표의 왼쪽 열은 8·9부에도 그대로 나옵니다. 오른쪽만 그 언어의 이름으로 바뀝니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>파이썬 SDK</th><th>설치본(<code>a2a/</code> 아래)</th><th>장</th></tr>
+<tr><td>설치</td><td><code>pip install "a2a-sdk[http-server]"</code></td><td>extra 열한 가지</td><td><a href="#p07-map-pkg">1장</a></td></tr>
+<tr><td>프로토콜 타입</td><td><code>a2a.types</code> (protobuf 메시지)</td><td><code>types/a2a_pb2.py</code></td><td><a href="#p07-ch2">2장</a></td></tr>
+<tr><td>타입 도우미</td><td><code>a2a.helpers</code> (<code>new_*</code>·<code>get_*</code>)</td><td><code>helpers/proto_helpers.py</code></td><td><a href="#p07-ch2">2장</a></td></tr>
+<tr><td>에이전트의 두뇌</td><td><code>AgentExecutor</code></td><td><code>server/agent_execution/</code></td><td><a href="#p07-ch3">3장</a></td></tr>
+<tr><td>이벤트 내보내기</td><td><code>EventQueue</code>·<code>TaskUpdater</code></td><td><code>server/events/</code>·<code>server/tasks/</code></td><td><a href="#p07-ch3">3장</a></td></tr>
+<tr><td>메서드 처리</td><td><code>DefaultRequestHandler</code>(= V2)</td><td><code>server/request_handlers/</code></td><td><a href="#p07-ch4">4장</a></td></tr>
+<tr><td>Task 저장</td><td><code>InMemoryTaskStore</code></td><td><code>server/tasks/</code></td><td><a href="#p07-ch4">4장</a></td></tr>
+<tr><td>HTTP 에 달기</td><td><code>create_*_routes</code> + Starlette + uvicorn</td><td><code>server/routes/</code></td><td><a href="#p07-ch5">5장</a></td></tr>
+<tr><td>다른 에이전트 부르기</td><td><code>create_client</code></td><td><code>client/</code></td><td>6장</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p07-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. <code>DefaultRequestHandler</code> 가 SendMessage 를 어떻게 처리하는지 보려고 <code>server/request_handlers/default_request_handler.py</code> 를 열었습니다. 이 파일을 읽으면 무엇이 잘못되고, 어느 파일의 몇째 줄부터 읽어야 합니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 그 파일의 클래스는 옛 처리기 <code>LegacyRequestHandler</code> 입니다. 우리가 쓰는 <code>DefaultRequestHandler</code> 는 <code>DefaultRequestHandlerV2</code> 의 별명이고, <a href="#p07-map-where">where.py</a> 가 찾은 자리는 <code>a2a/server/request_handlers/default_request_handler_v2.py:90</code> 입니다(그 줄은 클래스에 붙은 장식자에서 시작합니다).</div>
+</article>
+
+<!-- ==== 2장 타입 ==== -->
+
+<article class="card" id="p07-ch2">
+<p class="chnum">2장</p>
+<h2>타입 — protobuf 메시지로 Message·Part·Task 다루기</h2>
+<p class="chsub">a2a.types 의 세 무리 → enum 은 int → 메시지를 만드는 세 길 → 와이어 이름은 json_format → = 로 못 넣는 필드 → 넣으면 복사, 꺼내면 참조 → None 대신 빈 값 → oneof 와 enum 의 느슨함 → DataPart 와 Value → Task 만들기 → Task 읽기 → 정리</p>
+</article>
+
+<article class="card" id="p07-ty-kinds">
+<h3>a2a.types 는 proto 에서 나온 메시지 44개, enum 둘, 오류 13개다</h3>
+<p class="lead">파이썬 SDK 의 타입은 손으로 쓴 클래스가 아니라 <code>a2a.proto</code> 를 protoc 로 돌려 생성한 protobuf 메시지입니다. <code>a2a.types.__all__</code> 의 이름을 종류별로 나눴습니다.</p>
+<!--CODE file=ex/py/07/types_list.py region=kinds-->
+<!--OUT file=out/07/types_list.py.txt lines=1-6-->
+<ul>
+<li>오류 13개는 <code>a2a.utils.errors</code> 의 예외 클래스를 다시 내보낸 것입니다. 실행기에서 던지면 JSON-RPC 오류 코드가 됩니다(<a href="#p07-rh-codes">4장</a>).</li>
+<li><code>A2ARequest</code> 는 요청 타입 여럿을 <code>|</code> 로 묶은 별명입니다(<code>types/__init__.py</code>). 그 묶음에 <code>ListTasksRequest</code> 는 빠져 있습니다 — 이름을 믿고 "모든 요청" 으로 쓰면 안 됩니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ty-enum">
+<h3>enum 값은 int 다 — 사람이 읽을 이름은 Name() 으로 얻는다</h3>
+<p class="lead">enum 두 개의 이름과 수를 폈습니다. proto3 규칙대로 0 은 <code>…_UNSPECIFIED</code> 이고, 와이어에는 수가 아니라 이름이 갑니다(<a href="#p04-pj-state">4부</a>).</p>
+<!--CODE file=ex/py/07/types_list.py region=enums-->
+<!--OUT file=out/07/types_list.py.txt lines=7-20-->
+<div class="note"><b>찍을 때는 이름으로</b> — 끝난 작업의 <code>print(task.status.state)</code> 는 <code>3</code> 을 찍습니다. 로그에는 <code>TaskState.Name(state)</code>, 문자열에서 되돌릴 때는 <code>TaskState.Value("TASK_STATE_COMPLETED")</code> 를 씁니다. 이 부의 예제가 모두 그렇게 찍습니다.</div>
+</article>
+
+<article class="card" id="p07-ty-build">
+<h3>메시지는 키워드 생성자로 — 필드 이름은 proto 의 snake_case</h3>
+<p class="lead">같은 사용자 메시지를 세 길로 만들었습니다. 생성자, 빈 메시지에 채우기, 그리고 <code>a2a.helpers</code> 의 도우미입니다.</p>
+<!--CODE file=ex/py/07/types_build.py region=build-->
+<!--OUT file=out/07/types_build.py.txt lines=1-3-->
+<ul>
+<li>protobuf 메시지는 값으로 비교합니다 — 생성자로 만든 <code>a</code> 와 하나씩 채운 <code>b</code> 가 같습니다.</li>
+<li><code>parts.add(text=…)</code> 는 반복 필드에 새 Part 를 만들어 붙이고 그것을 돌려줍니다.</li>
+<li><code>new_text_message</code> 의 <code>role</code> 기본값은 <code>ROLE_AGENT</code> 입니다(<code>helpers/proto_helpers.py:44</code>). 에이전트가 답을 지을 때를 위한 도우미라서, 사용자 메시지를 만들 때는 <code>role=Role.ROLE_USER</code> 를 꼭 줍니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ty-wire">
+<h3>와이어 모양(camelCase·enum 이름)은 json_format 이 만든다</h3>
+<p class="lead">파이썬 속성은 <code>message_id</code>, 와이어 필드는 <code>messageId</code> 입니다. 둘 사이를 잇는 것은 protobuf 의 <code>json_format</code> 이고, SDK 도 같은 함수로 주고받습니다(<code>server/routes/jsonrpc_dispatcher.py</code> 의 <code>MessageToDict</code>·<code>ParseDict</code>).</p>
+<!--CODE file=ex/py/07/types_build.py region=wire-->
+<!--OUT file=out/07/types_build.py.txt lines=4-13-->
+<div class="key"><b>두 이름을 섞지 않는다</b> — 파이썬 코드에서는 언제나 snake_case, JSON 에서는 언제나 camelCase 입니다. 생성자에 와이어 이름을 주면 <code>ValueError</code> 입니다. <code>ensure_ascii=False</code> 를 빼면 한글이 <code>숙</code> 꼴로 나옵니다.</div>
+</article>
+
+<article class="card" id="p07-ty-assign">
+<h3>메시지 필드에는 = 로 넣을 수 없다 — 안쪽을 채우거나 CopyFrom</h3>
+<p class="lead">파이썬 객체처럼 <code>task.status = TaskStatus(…)</code> 로 쓰고 싶어지지만, protobuf 메시지의 하위 메시지 필드는 대입을 받지 않습니다.</p>
+<!--CODE file=ex/py/07/types_fields.py region=assign-->
+<!--OUT file=out/07/types_fields.py.txt lines=1-3-->
+<ul>
+<li><code>task.status.state = …</code> 처럼 안쪽 스칼라에 넣으면 <code>status</code> 가 저절로 생깁니다.</li>
+<li>통째로 바꿀 때는 <code>CopyFrom</code>, 일부만 덮을 때는 <code>MergeFrom</code> 입니다. <code>TaskUpdater.update_status</code> 도 <code>status.message.CopyFrom(message)</code> 로 상태 메시지를 넣습니다(<code>server/tasks/task_updater.py</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ty-copy">
+<h3>넣으면 복사, 꺼내면 참조 — 따로 두려면 CopyFrom</h3>
+<p class="lead">이력에 메시지를 넣은 뒤 원본을 고치고, 이력에서 꺼낸 것을 고치고, 사본을 떠 둔 뒤 또 고쳤습니다.</p>
+<!--CODE file=ex/py/07/types_fields.py region=copy-->
+<!--OUT file=out/07/types_fields.py.txt lines=4-6-->
+<ul>
+<li><code>append</code> 는 넣는 순간의 값을 복사합니다 — 넣은 뒤 <code>msg</code> 를 "40명" 으로 바꿔도 이력은 "30명" 입니다.</li>
+<li><code>task.history[0]</code> 은 task 안의 그 객체입니다 — 고치면 task 가 바뀝니다("50명").</li>
+<li>완성 에이전트의 <code>begin</code> 이 <code>ctx.current_task</code> 를 바로 고치지 않고 <code>Task()</code> 에 <code>CopyFrom</code> 한 다음 쓰는 까닭입니다(<a href="#p07-ex-follow">3장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ty-presence">
+<h3>None 이 없는 세계 — 안 채운 문자열은 "" 이고, 스칼라에는 HasField 가 없다</h3>
+<p class="lead">contextId 없이 온 메시지의 <code>context_id</code> 를 읽으면 무엇이 나올까요. "없음" 을 묻는 법도 필드 종류마다 다릅니다.</p>
+<!--CODE file=ex/py/07/types_presence.py region=presence-->
+<!--OUT file=out/07/types_presence.py.txt lines=1-5-->
+<ul>
+<li>proto3 의 보통 스칼라는 "안 보냄" 과 "빈 값" 을 가르지 않습니다. 그래서 검사는 <code>if not msg.context_id:</code> 입니다 — SDK 도 그렇게 씁니다(<code>params.message.task_id or None</code>, <code>default_request_handler_v2.py</code> 의 <code>_setup_active_task</code>).</li>
+<li>하위 메시지는 <code>HasField</code> 로 묻고, 읽기만 해서는 생기지 않습니다. 반대로 생성자에 <code>None</code> 을 주면 안 준 것과 같습니다 — 도우미 <code>new_message</code> 가 <code>task_id=None</code> 을 그대로 넘기는 것이 그 덕입니다(<code>proto_helpers.py:28</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ty-loose">
+<h3>oneof 는 마지막에 넣은 것만 남고, enum 필드는 아무 수나 받는다</h3>
+<p class="lead">Part 의 내용(<code>text</code>·<code>raw</code>·<code>url</code>·<code>data</code>)은 oneof <code>content</code> 입니다(<a href="#p04-part-kinds">4부</a>). 하나를 넣은 뒤 다른 것을 넣고, enum 필드에 이름과 모르는 수를 넣어 봤습니다.</p>
+<!--CODE file=ex/py/07/types_presence.py region=oneof-->
+<!--CODE file=ex/py/07/types_presence.py region=enum-->
+<!--OUT file=out/07/types_presence.py.txt lines=6-9-->
+<ul>
+<li><code>url</code> 을 넣자 <code>text</code> 가 소리 없이 지워졌습니다. 와이어에서 두 내용을 함께 보내면 파이썬 서버는 <code>-32602</code> 로 거절하지만(<a href="#p04-part-two">4부</a>), 파이썬 객체 안에서는 경고 없이 바뀝니다.</li>
+<li>enum 필드는 이름 문자열도, 정의에 없는 99 도 받습니다. 값 검사는 우리 몫입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ty-data">
+<h3>DataPart 의 dict 는 Value 를 지나 float 로 돌아온다</h3>
+<p class="lead">숙소 요청을 <code>new_data_part</code> 로 넣고 <code>get_data_parts</code> 로 꺼냈습니다. 와이어에서 본 <code>30.0</code>(<a href="#p04-data-py">4부</a>)이 타입 층에서는 이렇게 생깁니다.</p>
+<!--CODE file=ex/py/07/types_data.py region=data-->
+<!--OUT file=out/07/types_data.py.txt-->
+<ul>
+<li>안쪽은 <code>struct_value.fields</code> 라는 map 이고 수는 <code>number_value</code>(double) 하나뿐입니다. 꺼내면 <code>float</code> 입니다.</li>
+<li><code>back == req</code> 가 참이라 놓치기 쉽습니다 — 파이썬에서 <code>30.0 == 30</code> 이니까요. 그러나 <code>range(30.0)</code> 은 <code>TypeError</code> 이고, 업무 규칙 <code>choose_lodging</code> 도 그래서 정수를 요구합니다. 견적 실행기(<a href="#p07-ex-quote">3장</a>)와 완성 에이전트의 <code>as_ints</code> 가 정수로 되돌립니다.</li>
+<li>Struct 의 키 차례는 프로세스마다 다를 수 있어 <code>sort_keys=True</code> 로 찍었습니다. 와이어 탭이 <code>data</code>·<code>metadata</code> 아래 키를 정렬해 적는 것도 같은 까닭입니다(0부의 정규화 표).</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ty-task-make">
+<h3>Task 는 new_task_from_user_message 로 — 사용자 메시지가 아니면 거절한다</h3>
+<p class="lead">에이전트 쪽에서 Task 를 짓는 도우미입니다. SUBMITTED 상태, 이력에 그 메시지 하나, id 와 contextId 는 메시지에 있으면 그것을 쓰고 없으면 uuid4 를 짓습니다(<code>proto_helpers.py:277</code>).</p>
+<!--CODE file=ex/py/07/types_task.py region=make-->
+<!--CODE file=ex/py/07/types_task.py region=guard-->
+<!--OUT file=out/07/types_task.py.txt grep=새 Task|ValueError-->
+<div class="note"><b>세 가지를 검사한다</b> — 역할이 <code>ROLE_USER</code> 가 아니면, 파트가 없으면, 빈 글 파트가 있으면 <code>ValueError</code> 입니다. 서버 안에서는 처리기가 메시지에 taskId·contextId 를 미리 채워 두므로(<a href="#p07-ex-ctx">3장</a>), 이 도우미가 지은 Task 의 id 는 요청의 것과 같아집니다.</div>
+</article>
+
+<article class="card" id="p07-ty-task-read">
+<h3>받은 JSON 은 ParseDict 로 — 모르는 필드는 오류, 너그럽게 읽으려면 ignore_unknown_fields</h3>
+<p class="lead">클라이언트 쪽 일입니다. 서버가 보낼 모양(<code>MessageToDict</code>)을 다시 <code>Task</code> 로 읽고, 거기에 스펙에 없는 <code>createdAt</code> 을 하나 끼워 봤습니다(<a href="#p05-task-time">5부</a>에서 본, 어느 SDK 도 안 쓰는 필드입니다).</p>
+<!--CODE file=ex/py/07/types_task.py region=read-->
+<!--OUT file=out/07/types_task.py.txt lines=3-5-->
+<div class="warn"><b>SDK 안에서도 둘로 갈린다</b> — 설치본을 보면 서버의 JSON-RPC 디스패처(<code>jsonrpc_dispatcher.py:300</code>)와 카드 읽기(<code>client/card_resolver.py:27</code>)는 <code>ignore_unknown_fields=True</code> 로 읽고, 클라이언트가 JSON-RPC 응답을 읽는 곳(<code>client/transports/jsonrpc.py:83</code> 등)은 그 옵션 없이 읽습니다. 서버가 새 필드를 보태면 파이썬 클라이언트 쪽이 먼저 걸릴 수 있다는 뜻입니다 — 6장에서 클라이언트를 열 때 다시 봅니다.</div>
+</article>
+
+<article class="card" id="p07-ch2-sum">
+<h3>2장 정리 — 타입을 다루는 손잡이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>파이썬 SDK</th></tr>
+<tr><td>타입의 정체</td><td><code>a2a.proto</code> 에서 생성한 protobuf 메시지(<code>a2a.types</code>)</td></tr>
+<tr><td>메시지 만들기</td><td>키워드 생성자(snake_case), <code>new_text_message</code>·<code>new_message</code></td></tr>
+<tr><td>Part 만들기</td><td><code>Part(text=…)</code>, <code>new_text_part</code>·<code>new_data_part</code>·<code>new_raw_part</code>·<code>new_url_part</code></td></tr>
+<tr><td>Part 종류 알기</td><td><code>part.WhichOneof("content")</code>, <code>part.HasField("data")</code></td></tr>
+<tr><td>DataPart 꺼내기</td><td><code>get_data_parts(parts)</code> → dict, 수는 <code>float</code></td></tr>
+<tr><td>enum ↔ 이름</td><td><code>TaskState.Name(n)</code>·<code>TaskState.Value("…")</code></td></tr>
+<tr><td>하위 메시지 바꾸기</td><td>안쪽 필드에 넣기, <code>CopyFrom</code>·<code>MergeFrom</code> (= 대입 불가)</td></tr>
+<tr><td>사본 뜨기</td><td><code>new = Task(); new.CopyFrom(old)</code></td></tr>
+<tr><td>"없음" 묻기</td><td>스칼라는 <code>""</code>·<code>0</code> 과 비교, 메시지는 <code>HasField</code></td></tr>
+<tr><td>Task 만들기</td><td><code>new_task_from_user_message(msg)</code>, <code>new_task(…)</code></td></tr>
+<tr><td>JSON ↔ 객체</td><td><code>json_format.MessageToDict</code>·<code>ParseDict</code>(<code>ignore_unknown_fields</code>)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p07-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 실행기에서 <code>ask = up.new_agent_message([…])</code> 를 만들어 <code>task.history.append(ask)</code> 한 뒤, 깜빡한 말을 보태려고 <code>ask.parts.append(new_text_part("예: 30명"))</code> 을 했습니다. <code>task.history</code> 의 마지막 메시지에는 파트가 몇 개 있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 처음 넣은 그대로입니다. 반복 필드의 <code>append</code> 는 넣는 순간의 값을 복사하므로, 그 뒤에 <code>ask</code> 를 고쳐도 이력의 사본은 바뀌지 않습니다 — <a href="#p07-ty-copy">types_fields.py</a> 에서 "40명" 으로 고친 뒤에도 이력이 "30명" 이었던 것과 같습니다. 고치려면 <code>task.history[-1]</code> 을 꺼내 고쳐야 합니다(꺼낸 것은 참조).</div>
+</article>
+
+<!-- ==== 3장 실행기 ==== -->
+
+<article class="card" id="p07-ch3">
+<p class="chnum">3장</p>
+<h2>실행기(AgentExecutor) — 이벤트를 큐에 넣는 일</h2>
+<p class="chsub">채울 메서드 둘 → 문서 문자열의 약속 → RequestContext 에서 읽는 것 → 메아리 실행기 → 서버 없이 돌리는 큐 → 넣을 수 있는 이벤트 넷 → 견적 실행기 → 견적이 낸 이벤트 → TaskUpdater 의 손잡이 → 이어 말하기의 begin → 정리</p>
+</article>
+
+<article class="card" id="p07-ex-api">
+<h3>실행기는 메서드 둘 — execute 와 cancel, 둘 다 큐에 이벤트를 넣는다</h3>
+<p class="lead">"에이전트를 만든다" 는 말의 파이썬 SDK 판 뜻은 <code>AgentExecutor</code> 를 상속해 추상 메서드를 채우는 것입니다. 무엇을 채워야 하는지 설치본의 추상 클래스에 물었습니다.</p>
+<!--RUN file=ex/py/07/executor_api.py-->
+<ul>
+<li>두 메서드 모두 돌려주는 값이 없습니다. 실행기의 결과는 <code>event_queue</code> 에 넣은 이벤트뿐입니다 — 6부 맨손 서버가 목록에 담아 <code>return</code> 하던 것(<a href="#p06-work-sdk">6부</a>)을 여기서는 큐에 넣습니다.</li>
+<li><code>EventQueue</code> 도 우리 쪽에서 보면 메서드 하나(<code>enqueue_event</code>)짜리입니다. 꺼내는 쪽은 처리기가 쥐고 있습니다(<code>server/events/event_queue.py</code>: "The consumer is framework-managed").</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ex-contract">
+<h3>execute 의 약속 — 설치본 문서 문자열이 정한 것</h3>
+<p class="lead"><code>server/agent_execution/agent_executor.py</code> 의 <code>execute</code> 문서 문자열은 실행기와 SDK 사이의 계약서입니다. 줄 번호와 함께 옮깁니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>줄</th><th>약속</th><th>이 책에서</th></tr>
+<tr><td>27–28</td><td>같은 요청으로 <code>execute</code> 를 동시에 두 번 부르지 않는다</td><td>—</td></tr>
+<tr><td>29–31</td><td>잡지 않은 예외는 작업을 실패 상태로 옮긴다</td><td><a href="#p05-fail-py">5부</a>, <a href="#p07-rh-silent">4장</a></td></tr>
+<tr><td>32–33</td><td>돌아간 뒤에는 <code>context</code>·<code>event_queue</code> 를 건드리지 않는다</td><td><a href="#p05-stub-wire">5부</a>의 "되살아난" 작업</td></tr>
+<tr><td>34–37</td><td>정상으로 돌아가기 전에 종료 상태나 중단 상태(INPUT/AUTH_REQUIRED)로 옮긴다</td><td><a href="#p07-ex-quote">견적 실행기</a></td></tr>
+<tr><td>38–49</td><td>INPUT_REQUIRED 를 내고 돌아가면 다음 메시지로 다시 불린다. AUTH_REQUIRED 는 돌아가거나(in-bound) 돌아가지 않고 기다린다(out-of-band)</td><td>7장, 12부</td></tr>
+<tr><td>51–53</td><td>취소 요청이 오면 <code>execute</code> 를 돌리던 asyncio 작업을 취소하고 <code>cancel()</code> 을 부른다</td><td><a href="#p05-cancel-plan">5부</a>, 11부</td></tr>
+<tr><td>55–58</td><td>허락된 흐름은 둘 — Message 하나, 또는 Task 를 넣고 상태·아티팩트 갱신을 여럿</td><td><a href="#p07-ex-events">이 장</a></td></tr>
+<tr><td>60–62</td><td><code>return_immediately=True</code> 면 첫 이벤트(Message 나 Task)까지만 기다려 답한다</td><td><a href="#p07-rh-when">4장</a></td></tr>
+</table>
+</div>
+<div class="warn"><b>문서의 상태 이름이 틀렸다</b> — 29–31줄은 예외가 작업을 <code>TaskState.TASK_STATE_ERROR</code> 로 옮긴다고 적었지만, <a href="#p07-ty-enum">TaskState</a> 에 그런 값은 없습니다. 실제로 저장되는 것은 <code>TASK_STATE_FAILED</code> 입니다(<a href="#p05-fail-py">5부</a>, <a href="#p07-rh-silent">4장</a>).</div>
+</article>
+
+<article class="card" id="p07-ex-ctx">
+<h3>RequestContext — 처리기가 만들어 넘기는 요청 한 건</h3>
+<p class="lead">실행기가 읽는 것은 거의 다 <code>ctx</code> 에 있습니다. 속성 열 개를 쓰임새로 묶었습니다(<code>server/agent_execution/context.py</code>).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>속성</th><th>무엇</th><th>언제 채워지나</th></tr>
+<tr><td><code>message</code>, <code>get_user_input()</code></td><td>이번에 받은 Message, 그 글 파트를 줄바꿈으로 이은 것</td><td>늘</td></tr>
+<tr><td><code>task_id</code>, <code>context_id</code></td><td>이번 요청의 id — 없으면 uuid 를 지어 <b>메시지에도</b> 써 넣는다</td><td>생성자에서</td></tr>
+<tr><td><code>current_task</code></td><td>저장소에 있던 Task, 첫 마디면 <code>None</code></td><td><code>execute</code> 바로 앞(<code>active_task.py:595</code>)</td></tr>
+<tr><td><code>configuration</code>, <code>metadata</code></td><td>요청의 설정, 메타데이터(dict 로)</td><td>늘</td></tr>
+<tr><td><code>related_tasks</code></td><td>referenceTaskIds 의 작업들</td><td>기본 처리기는 <b>채우지 않는다</b>(<code>should_populate_referred_tasks=False</code>) — 15부</td></tr>
+<tr><td><code>call_context</code>, <code>tenant</code>, <code>requested_extensions</code></td><td>HTTP 쪽 정보 — 사용자·헤더·확장</td><td><a href="#p07-srv-who">5장</a>, 14부</td></tr>
+</table>
+</div>
+<!--OUT file=out/07/drive.txt lines=1-4 note=서버 없이 만든 RequestContext — 메아리 실행기에도 task_id 가 있다-->
+</article>
+
+<article class="card" id="p07-ex-echo">
+<h3>메아리 실행기 — Message 하나를 넣으면 그것이 답이다</h3>
+<p class="lead">1단계 에이전트입니다. 받은 글 앞에 "받은 말:" 을 붙여 에이전트 Message 하나를 큐에 넣고 끝냅니다. Task 를 만들지 않으니 즉답형(<a href="#p04-reply-two">4부</a>)입니다.</p>
+<!--CODE file=ex/py/07/step1_echo.py region=executor-->
+<ul>
+<li><code>new_text_message</code> 는 role 을 <code>ROLE_AGENT</code> 로, messageId 를 uuid4 로 채웁니다. <code>context_id</code> 만 요청의 것을 넘깁니다(<a href="#p04-msg-agent">4부</a>: 서버 메시지에는 contextId 가 있어야 합니다).</li>
+<li>Message 만 내는 에이전트에는 취소할 작업이 없으니 <code>cancel</code> 은 <code>UnsupportedOperationError</code> 를 던집니다 — 메서드가 추상이라 비워 둘 수는 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ex-drive">
+<h3>서버 없이 실행기 돌리기 — enqueue_event 하나만 채운 큐</h3>
+<p class="lead">실행기는 보통 함수입니다. <code>EventQueue</code> 의 문서 문자열이 길을 알려 줍니다: "To run an executor outside the framework, write a custom subclass"(<code>event_queue.py:34</code>). 받은 이벤트를 찍기만 하는 큐와, 손으로 만든 <code>RequestContext</code> 로 돌립니다.</p>
+<!--CODE file=ex/py/07/drive.py region=queue-->
+<!--CODE file=ex/py/07/drive.py region=context-->
+<div class="note"><b>EventQueue() 를 바로 만들지 않는다</b> — 추상 클래스를 그대로 부르면 경고와 함께 옛 구현 <code>EventQueueLegacy</code> 가 나옵니다(<code>event_queue.py</code> 의 <code>__new__</code>, "will be removed in a future release"). 실행기를 시험 삼아 돌릴 때는 이렇게 하위 클래스를 씁니다. SDK 서버를 통째로 프로세스 안에서 시험하는 법은 8장입니다.</div>
+</article>
+
+<article class="card" id="p07-ex-events">
+<h3>큐에 넣을 수 있는 것은 넷 — Message 하나, 또는 Task 와 그 갱신들</h3>
+<p class="lead"><code>Event</code> 는 네 타입의 합집합입니다(<a href="#p07-ex-api">앞 슬라이드</a>의 출력). 넣는 차례에 따라 두 흐름으로 갈립니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>흐름</th><th>넣는 것</th><th>클라이언트가 받는 것</th></tr>
+<tr><td>즉답</td><td><code>Message</code> 하나 — 그 뒤엔 아무것도</td><td><code>result.message</code></td></tr>
+<tr><td>작업</td><td><code>Task</code> 먼저, 그다음 <code>TaskStatusUpdateEvent</code>·<code>TaskArtifactUpdateEvent</code> 여럿</td><td><code>result.task</code>(막는 호출) 또는 이벤트 스트림(10부)</td></tr>
+</table>
+</div>
+<!--OUT file=out/07/drive.txt lines=1-5 note=메아리 — 이벤트는 Message 하나-->
+<div class="key"><b>차례는 처리기가 검사한다</b> — 이 PrintQueue 는 무엇이든 받지만, 진짜 처리기는 Message 를 두 번 넣거나 Task 보다 상태를 먼저 넣으면 거절합니다. 일곱 가지 반칙과 그 결과는 <a href="#p07-rh-rules">4장</a>에서 봅니다.</div>
+</article>
+
+<article class="card" id="p07-ex-quote">
+<h3>견적 실행기 — Task 를 먼저 싣고, 나머지는 갱신기(TaskUpdater)로</h3>
+<p class="lead">2단계 에이전트는 DataPart 로 날짜·박 수·인원을 받아 업무 규칙 <code>choose_lodging</code> 을 부릅니다. 결과에 따라 아티팩트를 내고 끝내거나, 까닭을 달아 거절합니다.</p>
+<!--CODE file=ex/py/07/step2_task.py region=executor-->
+<ul>
+<li><code>TaskUpdater(queue, task.id, task.context_id)</code> 는 그 작업의 상태·아티팩트 이벤트를 지어 같은 큐에 넣어 주는 도우미입니다. 큐와 id 만 쥐고 있을 뿐 저장소는 모릅니다.</li>
+<li><code>request_of</code> 는 DataPart 를 합치고 <code>nights</code>·<code>headcount</code> 를 정수로 되돌립니다(<a href="#p07-ty-data">2장</a>). 빠진 항목을 되묻는 일은 7장의 완성판이 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ex-quote-out">
+<h3>견적이 낸 이벤트 — Task, WORKING, 아티팩트, COMPLETED</h3>
+<p class="lead">같은 PrintQueue 로 견적 실행기를 두 번 돌렸습니다. 10월 30일 30명과, 세 숙소가 모두 쉬는 12월 31일입니다.</p>
+<!--SPEC file=ex/run/07/drive.run-->
+<!--OUT file=out/07/drive.txt lines=6-20-->
+<ul>
+<li>Task 의 id(<code>&lt;id3&gt;</code>)가 <code>ctx.task_id</code> 와 같습니다. <code>RequestContext</code> 가 지은 id 를 메시지에 써 넣었고, <code>new_task_from_user_message</code> 가 메시지의 것을 썼기 때문입니다.</li>
+<li>거절은 아티팩트 없이 REJECTED 상태 하나로 끝납니다. 까닭("가능한 숙소가 없습니다")은 상태 메시지에 실렸습니다(<a href="#p05-rej-py">5부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ex-updater">
+<h3>TaskUpdater 의 손잡이 — 상태 하나에 메서드 하나</h3>
+<p class="lead"><code>server/tasks/task_updater.py</code> 의 메서드를 모았습니다. 상태 메서드는 모두 <code>update_status(state, message)</code> 를 부르는 한 줄짜리입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>메서드</th><th>내는 이벤트</th></tr>
+<tr><td><code>submit</code>·<code>start_work</code></td><td>상태 SUBMITTED·WORKING</td></tr>
+<tr><td><code>requires_input</code>·<code>requires_auth</code></td><td>INPUT_REQUIRED·AUTH_REQUIRED (중단 상태 — 7장, 12부)</td></tr>
+<tr><td><code>complete</code>·<code>failed</code>·<code>reject</code>·<code>cancel</code></td><td>종료 상태 넷</td></tr>
+<tr><td><code>update_status(state, message, timestamp, metadata)</code></td><td>아무 상태나 — 시각을 안 주면 지금(UTC)</td></tr>
+<tr><td><code>add_artifact(parts, artifact_id, name, metadata, append, last_chunk, extensions)</code></td><td>아티팩트 갱신 — id 를 안 주면 uuid, 청크는 10부</td></tr>
+<tr><td><code>new_agent_message(parts, metadata)</code></td><td>이벤트 아님 — taskId·contextId 를 단 에이전트 Message 를 지어 돌려줄 뿐</td></tr>
+</table>
+</div>
+<div class="note"><b>종료 뒤의 갱신</b> — 갱신기는 종료 상태를 한 번 내면 그 뒤의 <code>update_status</code> 를 <code>RuntimeError</code> 로 막습니다. 그러나 그 표시는 갱신기 객체 하나에만 있어서, 새 갱신기로 보내면 저장소의 작업이 WORKING 으로 "되살아납니다"(<a href="#p05-stub-py">5부</a>). 실행기 하나에는 갱신기 하나만 둡니다.</div>
+</article>
+
+<article class="card" id="p07-ex-follow">
+<h3>이어 말하기 — current_task 를 복사해 쓰고, Task 는 다시 싣지 않는다</h3>
+<p class="lead">같은 taskId 로 두 번째 메시지가 오면 처리기는 저장된 Task 를 <code>ctx.current_task</code> 에 넣어 <code>execute</code> 를 다시 부릅니다. 완성 에이전트 다섯이 함께 쓰는 시작 코드가 그 경우를 가릅니다.</p>
+<!--CODE file=ex/py/agents/common.py region=begin-->
+<ul>
+<li><code>current_task</code> 의 이력에는 <b>이번 메시지가 아직 없습니다</b>. SDK 는 그것을 실행기의 첫 상태·아티팩트 갱신이 올 때 저장합니다(<code>active_task.py</code> 의 <code>message_to_save</code>). 그래서 사본(<a href="#p07-ty-copy">2장</a>)에 직접 붙여 씁니다.</li>
+<li>이어 말하기에서 Task 를 다시 큐에 넣으면 SDK 가 "already exists" 를 남기고 이번 사용자 메시지를 이력에서 버립니다 — <a href="#p05-follow-why">5부</a>에서 확인한 이 SDK 의 결함입니다. 숙소 에이전트를 끝까지 짓는 것은 7장입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ch3-sum">
+<h3>3장 정리 — 실행기를 쓰는 손잡이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>파이썬 SDK</th></tr>
+<tr><td>실행기 모양</td><td><code>class X(AgentExecutor)</code> — <code>async execute(ctx, queue)</code>, <code>async cancel(ctx, queue)</code></td></tr>
+<tr><td>이벤트 내보내기</td><td><code>await queue.enqueue_event(ev)</code> — 돌려주는 값 없음</td></tr>
+<tr><td>요청 읽기</td><td><code>ctx.message</code>, <code>ctx.get_user_input()</code>, <code>ctx.task_id</code>·<code>ctx.context_id</code></td></tr>
+<tr><td>이어 말하기 알기</td><td><code>ctx.current_task is not None</code> (이번 메시지는 아직 이력에 없음)</td></tr>
+<tr><td>즉답</td><td><code>new_text_message(…, context_id=ctx.context_id)</code> 하나</td></tr>
+<tr><td>작업 시작</td><td><code>new_task_from_user_message(ctx.message)</code> 를 먼저 넣는다(첫 마디만)</td></tr>
+<tr><td>상태·아티팩트</td><td><code>TaskUpdater</code> — <code>start_work</code>·<code>add_artifact</code>·<code>complete</code>·<code>reject</code>·<code>requires_input</code></td></tr>
+<tr><td>에이전트 말 짓기</td><td><code>up.new_agent_message(parts)</code></td></tr>
+<tr><td>취소</td><td>SDK 가 <code>execute</code> 를 취소한 뒤 <code>cancel</code> 을 부른다 — CANCELED 를 넣는다</td></tr>
+<tr><td>서버 없이 돌리기</td><td><code>EventQueue</code> 하위 클래스 + <code>RequestContext(ServerCallContext(), SendMessageRequest(…))</code></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p07-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 견적 실행기는 Task 의 id 를 직접 짓지 않습니다. 그런데 <a href="#p07-ex-quote-out">출력</a>에서 Task 의 id 는 어떻게 <code>task_id</code> 줄의 값과 같았습니까? 누가, 언제 지은 id 입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>RequestContext</code> 의 생성자가 지었습니다. 요청 메시지에 taskId 가 없으면 uuid 를 지어 <code>ctx.task_id</code> 로 두고 <b>메시지의 <code>task_id</code> 에도 써 넣습니다</b>(<code>context.py</code> 의 <code>_check_or_generate_task_id</code>). <code>new_task_from_user_message</code> 는 메시지의 <code>task_id</code> 가 있으면 그것을 쓰므로, 출력의 <code>task_id &lt;id3&gt;</code> 과 <code>Task &lt;id3&gt;</code> 이 같아졌습니다. 서버 안에서는 처리기가 이 생성자를 부르고, Task 의 id 가 다르면 거절합니다(<a href="#p07-rh-rules-out">4장</a>의 OtherId).</div>
+</article>
+
+<!-- ==== 4장 요청 처리기와 Task 저장소 ==== -->
+
+<article class="card" id="p07-ch4">
+<p class="chnum">4장</p>
+<h2>요청 처리기와 Task 저장소</h2>
+<p class="chsub">메서드 열하나 → 생성자의 손잡이 → HTTP 없이 처리기 부르기 → 막는 호출은 언제 돌아오나 → 반칙하는 실행기 일곱 → 차례 반칙의 결과 → 침묵과 예외 → A2A 오류 열셋 → 소유자별 저장소 → 꺼내면 사본 → 정리</p>
+</article>
+
+<article class="card" id="p07-rh-methods">
+<h3>요청 처리기는 A2A 메서드 열하나를 on_* 메서드 열하나로 받는다</h3>
+<p class="lead">JSON-RPC 디스패처가 아는 메서드 이름과 그 params 타입, 그리고 처리기 인터페이스(<code>RequestHandler</code>)의 추상 메서드를 나란히 찍었습니다.</p>
+<!--CODE file=ex/py/07/handler_api.py region=methods-->
+<!--OUT file=out/07/handler_api.py.txt lines=1-25-->
+<ul>
+<li>짝은 이름으로 맞춰집니다 — <code>SendMessage</code> ↔ <code>on_message_send</code>, <code>SendStreamingMessage</code> ↔ <code>on_message_send_stream</code>, <code>SubscribeToTask</code> ↔ <code>on_subscribe_to_task</code> …. 디스패처는 <code>match method:</code> 로 고릅니다(<code>jsonrpc_dispatcher.py:520</code>).</li>
+<li>REST·gRPC 경로도 같은 처리기의 같은 메서드를 부릅니다(13부). 처리기는 전송을 모릅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-rh-options">
+<h3>필수는 셋 — 실행기, 저장소, 카드. 나머지는 각 부의 손잡이다</h3>
+<!--CODE file=ex/py/07/handler_api.py region=options-->
+<!--OUT file=out/07/handler_api.py.txt lines=26-38-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>인자</th><th>쓰임</th><th>어디서</th></tr>
+<tr><td><code>agent_card</code></td><td>기능 검사(스트림·푸시·확장 카드)와 입력 모드 검사의 근거</td><td><a href="#p03-caps-server-cmp">3부</a></td></tr>
+<tr><td><code>validate_input_modes</code></td><td>켜면 카드에 없는 mediaType 을 <code>-32005</code> 로</td><td><a href="#p04-file-ctype">4부</a></td></tr>
+<tr><td><code>extended_agent_card</code>·<code>extended_card_modifier</code></td><td>확장 카드와, 호출자마다 고치는 함수</td><td><a href="#p03-caps-xcard">3부</a>, 12부</td></tr>
+<tr><td><code>push_config_store</code>·<code>push_sender</code>·<code>push_url_validator</code></td><td>푸시 설정 저장, 보내기, 웹훅 주소 검사</td><td>11부</td></tr>
+<tr><td><code>request_context_builder</code></td><td><code>RequestContext</code> 를 짓는 것 — 기본은 referenceTaskIds 를 안 읽는다</td><td><a href="#p07-ex-ctx">3장</a>, 15부</td></tr>
+<tr><td><code>event_stream</code></td><td>여러 복제본 사이의 이벤트(<code>cluster/</code>)</td><td>17부</td></tr>
+<tr><td><code>queue_manager</code></td><td>받기만 하고 쓰지 않는다 — 넘기면 DeprecationWarning</td><td>—</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p07-rh-direct">
+<h3>HTTP 없이 처리기 부르기 — ServerCallContext 하나면 된다</h3>
+<p class="lead">처리기는 보통의 비동기 객체입니다. 2단계 견적 실행기로 처리기를 만들고, SendMessage·GetTask·ListTasks 와 스트림을 직접 불렀습니다. HTTP 서버도, JSON 도 없습니다.</p>
+<!--CODE file=ex/py/07/direct.py region=handler-->
+<!--CODE file=ex/py/07/direct.py region=calls-->
+<div class="note"><b><code>ServerCallContext</code></b> — "누가, 어떤 HTTP 요청으로" 를 담는 pydantic 모델입니다(<code>server/context.py</code>: <code>state</code>·<code>user</code>·<code>tenant</code>·<code>requested_extensions</code>). 서버에서는 경로가 HTTP 요청으로 지어 넘기고(<a href="#p07-srv-who">5장</a>), 여기서는 빈 것(익명)을 씁니다.</div>
+</article>
+
+<article class="card" id="p07-rh-when">
+<h3>막는 호출은 Task 가 종료·중단 상태가 될 때 돌아온다 — returnImmediately 면 첫 Task 에서</h3>
+<!--OUT file=out/07/direct.py.txt-->
+<ul>
+<li><code>on_message_send</code> 는 실행기가 낸 이벤트를 따라가다가, Task 의 상태가 종료 넷이나 중단 둘이 되면 그 Task 를 답으로 고릅니다. <code>return_immediately</code> 면 첫 Task(SUBMITTED)에서 멈추고, 실행기는 뒤에서 마저 돕니다(<code>default_request_handler_v2.py</code> 의 <code>on_message_send</code>). 와이어에서 본 모습은 <a href="#p05-mode-out">5부</a>입니다.</li>
+<li>스트림은 카드의 <code>capabilities.streaming</code> 이 꺼져 있어 처리기가 막았습니다. 그 검사(<code>@validate</code>)는 거절하기 전에 <code>Validation failure: …</code> 를 오류 수준으로 기록합니다(<code>request_handler.py:374</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p07-rh-rules">
+<h3>반칙하는 실행기 일곱 — 차례 넷, 침묵 하나, 예외 둘</h3>
+<p class="lead"><a href="#p07-ex-events">3장</a>의 두 흐름을 일부러 어기는 실행기를 썼습니다. 각각을 새 처리기에 물려 SendMessage 를 2초까지 기다리고, 답과 저장소에 남은 작업의 상태를 찍습니다.</p>
+<!--CODE file=ex/py/07/rules.py region=bad-->
+</article>
+
+<article class="card" id="p07-rh-rules-out">
+<h3>차례를 어기면 InvalidAgentResponseError — 저장소에는 FAILED 가 남거나 아무것도 없다</h3>
+<!--OUT file=out/07/rules.py.txt lines=1-13-->
+<ul>
+<li>차례 검사는 처리기 쪽 소비자가 합니다(<code>active_task.py</code> 의 <code>_handle_message_event</code>·<code>_handle_task_modification_event</code>). 와이어에서는 <code>-32006</code> 입니다(<a href="#p07-rh-codes">오류 표</a>).</li>
+<li>Task 를 이미 저장한 뒤의 반칙(<code>MessageAfterTask</code>)은 그 작업을 FAILED 로 남깁니다. Task 를 싣기 전의 반칙은 아무것도 남기지 않습니다.</li>
+<li><code>OtherId</code> 는 실행기의 잘못인데 <code>InvalidParamsError</code>, 와이어로는 <code>-32602</code> Invalid params 입니다 — 클라이언트의 인자가 틀렸다는 코드입니다. 검사하는 곳이 <code>server/tasks/task_manager.py:229</code> 라서 그렇습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-rh-silent">
+<h3>아무것도 내지 않은 실행기는 막는 호출을 끝없이 붙잡는다</h3>
+<!--OUT file=out/07/rules.py.txt lines=14-22-->
+<ul>
+<li><b>Silent</b> — 이벤트 없이 돌아간 실행기에 대해 처리기는 "Task 가 만들어지기를" 기다립니다(<code>active_task.py:967</code>, <code>await self._task_created.wait()</code>). 아무도 만들지 않으니 2초 제한을 건 이 예제가 아니면 답이 오지 않습니다. 실행기의 모든 갈래가 무언가를 넣는지 꼭 확인합니다.</li>
+<li><b>Refuses</b> — A2A 오류를 던지면 그 오류가 그대로 클라이언트에게 갑니다(와이어로는 <code>-32602</code>). 그러나 저장소에는 FAILED 작업이 남습니다. 거절이 목적이면 오류보다 <code>up.reject(…)</code>(<a href="#p07-ex-quote">3장</a>)가 맞습니다.</li>
+<li><b>Crashes</b> — 아무 예외는 <code>-32603</code> 이 되고 작업은 FAILED 로 남습니다(<a href="#p05-fail-py">5부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p07-rh-codes">
+<h3>던질 수 있는 A2A 오류 열셋 — 클래스가 곧 와이어의 코드다</h3>
+<p class="lead">SDK 는 오류 클래스마다 JSON-RPC 코드와, HTTP+JSON 바인딩의 상태·이유(reason)를 표로 둡니다(<code>a2a/utils/errors.py</code> 의 <code>JSON_RPC_ERROR_CODE_MAP</code>·<code>A2A_ERROR_MAPPING</code>).</p>
+<!--OUT file=out/07/error_codes.py.txt-->
+<div class="note"><b>실행기와 처리기 모두 같은 표를 쓴다</b> — 처리기가 스스로 던지는 것(작업 없음 <code>-32001</code>, 스트림 미지원 <code>-32004</code>)도, 실행기가 던진 것도 이 표로 옮겨집니다. 표에 없는 예외는 <code>-32603</code> 입니다. 코드 하나하나를 일부러 일으키는 것은 16부입니다.</div>
+</article>
+
+<article class="card" id="p07-store-owner">
+<h3>InMemoryTaskStore 는 소유자별로 나뉜다 — 남의 작업은 "없다"</h3>
+<p class="lead">저장소 인터페이스(<code>server/tasks/task_store.py</code>)는 <code>save</code>·<code>get</code>·<code>list</code>·<code>delete</code> 넷이고, 모두 호출자(<code>ServerCallContext</code>)를 받습니다. 메모리 저장소는 그 호출자로 칸을 나눕니다.</p>
+<!--CODE file=ex/py/07/store.py region=owner-->
+<!--OUT file=out/07/store.py.txt lines=1-4-->
+<ul>
+<li>칸의 이름은 <code>context.user.user_name</code> 입니다(<code>server/owner_resolver.py</code> 의 <code>resolve_user_scope</code>). 다른 사람이 같은 taskId 로 GetTask 를 하면 작업이 없다(<code>-32001</code>)는 답을 받습니다.</li>
+<li>익명 호출자의 이름은 <code>""</code> 이라 익명끼리는 한 칸을 나눠 씁니다 — 지금까지 이 책의 에이전트가 그랬습니다. 로그인으로 사용자를 세우는 일은 12부입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-store-copy">
+<h3>꺼낸 Task 는 사본이다 — 고쳤으면 save 해야 남는다</h3>
+<p class="lead">꺼낸 Task 를 save 없이 COMPLETED 로 고친 뒤 다시 꺼냈습니다. 기본값(<code>use_copying=True</code>)과 끈 경우입니다.</p>
+<!--CODE file=ex/py/07/store.py region=copy-->
+<!--OUT file=out/07/store.py.txt lines=5-6-->
+<div class="key"><b>기본은 사본</b> — <code>CopyingTaskStoreAdapter</code> 가 넣을 때와 꺼낼 때 <code>CopyFrom</code> 으로 사본을 뜹니다. 문서 문자열의 말로는 "hides missing save calls" 를 막으려는 것이고, DB 저장소와 같은 동작이 되게 하려는 것입니다(<code>inmemory_task_store.py</code>). 우리 저장소를 쓸 때(17부)도 이 성질을 지켜야 메모리 저장소에서 통과한 코드가 DB 에서도 돕니다.</div>
+</article>
+
+<article class="card" id="p07-ch4-sum">
+<h3>4장 정리 — 처리기와 저장소의 손잡이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>파이썬 SDK</th></tr>
+<tr><td>처리기 만들기</td><td><code>DefaultRequestHandler(agent_executor=…, task_store=…, agent_card=…)</code></td></tr>
+<tr><td>메서드 ↔ 처리기</td><td><code>SendMessage</code> → <code>on_message_send(params, context)</code> 등 열하나</td></tr>
+<tr><td>HTTP 없이 부르기</td><td><code>await handler.on_message_send(SendMessageRequest(…), ServerCallContext())</code></td></tr>
+<tr><td>막는 호출의 끝</td><td>Task 가 종료·중단 상태일 때, 또는 Message 하나 — <code>return_immediately</code> 면 첫 Task</td></tr>
+<tr><td>실행기 반칙 검사</td><td>처리기가 한다 — <code>InvalidAgentResponseError</code>(<code>-32006</code>)</td></tr>
+<tr><td>실행기에서 오류 내기</td><td><code>raise InvalidParamsError(message=…)</code> 등 — 작업은 FAILED 로 남는다</td></tr>
+<tr><td>오류 ↔ 코드</td><td><code>JSON_RPC_ERROR_CODE_MAP</code>, <code>A2A_ERROR_MAPPING</code></td></tr>
+<tr><td>저장소</td><td><code>InMemoryTaskStore(owner_resolver=…, use_copying=True)</code></td></tr>
+<tr><td>저장소 인터페이스</td><td><code>TaskStore</code> — <code>save</code>·<code>get</code>·<code>list</code>·<code>delete</code>, 모두 <code>context</code> 를 받는다</td></tr>
+<tr><td>기능 검사</td><td>카드의 <code>capabilities</code> 로 처리기가 — 스트림·푸시·확장 카드</td></tr>
+<tr><td>끄기</td><td><code>await handler.aclose()</code> — 돌던 작업을 정리한다(ASGI lifespan 에 단다)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p07-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 숙소 실행기의 한 갈래에서 실수로 <code>return</code> 만 하고 아무 이벤트도 넣지 않았습니다. 그 갈래로 가는 SendMessage(막는 호출)를 보낸 클라이언트에게는 무슨 일이 생기고, 저장소에는 무엇이 남습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 답이 오지 않습니다. 처리기는 Task 가 만들어지기를 기다리는데(<code>active_task.py:967</code>) 아무도 만들지 않습니다 — <a href="#p07-rh-silent">rules.py</a> 의 <code>Silent</code> 는 2초 제한에 걸려 <code>TimeoutError</code> 로 끝났고, 저장소는 비어 있었습니다(<code>저장 []</code>). 클라이언트 쪽 시간 제한만이 그 호출을 끝냅니다.</div>
+</article>
+
+<!-- ==== 5장 서버 띄우기 ==== -->
+
+<article class="card" id="p07-ch5">
+<p class="chnum">5장</p>
+<h2>서버 띄우기 — 라우트 팩토리, Starlette, uvicorn</h2>
+<p class="chsub">라우트 팩토리 셋 → 앱은 경로 목록, 띄우는 것은 uvicorn → 서버 셋을 탭 뒤에 → 카드 경로 → 메아리의 답 → 견적의 답 → JSON-RPC 경로 옮기기 → 헤더가 실행기에 닿는 길 → 정리</p>
+</article>
+
+<article class="card" id="p07-srv-routes">
+<h3>라우트 팩토리는 Starlette Route 목록을 돌려줄 뿐이다</h3>
+<p class="lead">SDK 는 웹 서버를 띄우지 않습니다. <code>a2a.server.routes</code> 의 함수 셋이 처리기를 HTTP 경로에 묶은 <code>Route</code> 목록을 만들어 줄 뿐이고, 앱을 짓고 띄우는 것은 우리 몫입니다.</p>
+<!--CODE file=ex/py/07/routes.py region=routes-->
+<!--OUT file=out/07/routes.py.txt-->
+<ul>
+<li>JSON-RPC 는 경로 하나(<code>POST</code>), 카드도 하나(<code>GET</code>)입니다. REST(HTTP+JSON) 는 열둘에, 같은 열둘을 <code>/{tenant}</code> 아래에 한 번 더 답니다 — 13부의 몫입니다.</li>
+<li><code>SubscribeToTask</code> 의 REST 경로는 GET 과 POST 둘 다 받습니다. proto(GET)와 스펙 §5.3 표(POST)가 엇갈리는 자리를 SDK 가 둘 다 받아 넘긴 것입니다(13부).</li>
+</ul>
+</article>
+
+<article class="card" id="p07-srv-app">
+<h3>앱은 경로 목록을 이어 붙인 Starlette 하나 — 띄우는 것은 uvicorn</h3>
+<p class="lead">1단계 메아리 에이전트의 <code>main</code> 입니다. 실행기·저장소·카드로 처리기를 짓고(<a href="#p07-ch4">4장</a>), 카드 경로와 JSON-RPC 경로를 한 Starlette 앱에 담아 uvicorn 으로 띄웁니다.</p>
+<!--CODE file=ex/py/07/step1_echo.py region=serve-->
+<ul>
+<li>카드의 url 은 바깥에서 닿는 주소입니다(<a href="#p03-url-problem">3부</a>). 그래서 <code>--url</code> 을 따로 받습니다 — 다음 슬라이드에서 탭의 주소를 넣습니다.</li>
+<li>uvicorn 은 SDK 의 의존이 아니라서(<a href="#p07-map-pkg">1장</a>) 따로 깔았습니다. <code>log_level="warning"</code> 은 요청마다 찍는 접근 기록을 끕니다. 끌 때 돌던 작업을 정리하려면 Starlette 의 lifespan 에 <code>handler.aclose()</code> 를 답니다(<code>default_request_handler_v2.py:176</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p07-srv-spec">
+<h3>서버 셋을 탭 뒤에 — 메아리는 /, 견적은 /a2a</h3>
+<p class="lead">1단계 메아리, 2단계 견적(JSON-RPC 를 <code>/a2a</code> 에), 그리고 헤더를 되돌려 주는 실험 서버를 띄우고 각각 앞에 와이어 탭을 세웠습니다. 요청 본문은 <code>ex/run/07/rpc/*.json</code> 입니다.</p>
+<!--SPEC file=ex/run/07/serve.run-->
+<div class="note"><b>세 서버 모두 <code>uvicorn.run</code> 하나</b> — 2단계가 1단계와 다른 것은 실행기와 카드, 그리고 <code>create_jsonrpc_routes(handler, args.path)</code> 의 경로 인자뿐입니다(<a href="#p07-srv-path">조금 뒤</a>).</div>
+</article>
+
+<article class="card" id="p07-srv-card">
+<h3>카드 경로는 create_agent_card_routes 가 — 빈 필드는 적지 않는다</h3>
+<!--OUT file=out/07/serve.txt wire=echo-wire ex=1-->
+<ul>
+<li>경로는 <code>AGENT_CARD_WELL_KNOWN_PATH</code>(<code>/.well-known/agent-card.json</code>, <code>utils/constants.py</code>)이고, <code>card_url=</code> 로 바꿀 수 있습니다.</li>
+<li>기능을 하나도 켜지 않은 카드라 <code>"capabilities": {}</code> 입니다. 이 경로는 약한 ETag 를 달고, <code>cache_control=</code> 을 주면 <code>Cache-Control</code> 도 답니다 — 캐시 이야기는 <a href="#p03-cache-py">3부</a>입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-srv-echo">
+<h3>메아리의 답은 result.message — 실행기가 넣은 Message 그대로</h3>
+<!--OUT file=out/07/serve.txt wire=echo-wire ex=2-->
+<ul>
+<li><code>result.message</code> 의 <code>messageId</code> 는 <code>new_text_message</code> 가 지은 uuid, <code>contextId</code> 는 처리기가 지어 <code>ctx.context_id</code> 로 넘긴 것입니다(<a href="#p07-ex-echo">3장</a>).</li>
+<li>Task 를 만들지 않았으니 이 답에는 taskId 가 없습니다. 같은 서버에 GetTask 를 해도 찾을 작업이 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-srv-quote">
+<h3>견적의 답은 result.task — 이벤트 넷이 Task 하나로 접혔다</h3>
+<p class="lead">2단계 서버에 같은 DataPart 요청을 보냈습니다. 응답 쪽만 잘랐습니다.</p>
+<!--OUT file=out/07/serve.txt wire=quote-wire ex=1 lines=25-54-->
+<ul>
+<li><a href="#p07-ex-quote-out">3장</a>에서 실행기가 낸 이벤트는 넷이었지만, 막는 호출의 답은 마지막 상태의 Task 하나입니다. WORKING 은 저장소를 거쳐 지나갔을 뿐 답에는 없습니다 — 이벤트를 하나하나 받으려면 스트림(10부)입니다.</li>
+<li>견적의 <code>8.0</code>·<code>2100000.0</code> 은 <a href="#p07-ty-data">2장</a>의 Value 가 와이어에 나타난 모습입니다(<a href="#p04-data-server">4부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p07-srv-path">
+<h3>JSON-RPC 경로는 create_jsonrpc_routes 의 둘째 인자 — 카드의 url 과 같아야 한다</h3>
+<p class="lead">2단계는 <code>--path /a2a</code> 로 JSON-RPC 를 <code>/a2a</code> 에 달고, 카드의 url 도 같은 경로로 적습니다. 경로를 벗어난 요청 둘(<code>POST /</code>, <code>GET /a2a</code>)의 답입니다.</p>
+<!--CODE file=ex/py/07/step2_task.py region=serve-->
+<!--OUT file=out/07/serve.txt wire=quote-wire ex=2-3 lines=25-32 note=POST / 와 GET /a2a 에 대한 답-->
+<div class="warn"><b>JSON-RPC 오류가 아니다</b> — 경로가 없거나(<code>404</code>) 메서드가 틀린(<code>405</code>) 요청은 Starlette 가 글 한 줄로 돌려보냅니다. 처리기까지 가지 못했으니 <code>-32601</code> 같은 JSON-RPC 오류도 없습니다. 카드의 url 을 잘못 적으면 클라이언트가 받는 것이 이것입니다(<a href="#p03-url-dead-errors">3부</a>).</div>
+</article>
+
+<article class="card" id="p07-srv-who">
+<h3>HTTP 헤더는 call_context.state 로 실행기에 닿는다</h3>
+<p class="lead">경로는 HTTP 요청마다 <code>ServerCallContext</code> 를 지어 처리기에 넘기고, 그것이 <code>ctx.call_context</code> 로 실행기까지 옵니다. 받은 것을 파트 다섯으로 돌려주는 실행기를 띄우고, 헤더 셋을 달아 불렀습니다.</p>
+<!--CODE file=ex/py/07/headers.py region=executor-->
+<!--OUT file=out/07/serve.txt wire=who-wire ex=1 lines=1-5 note=요청 — 탭은 정해 둔 헤더만 적어 X-Workshop-Team 은 여기 없다-->
+<!--OUT file=out/07/serve.txt wire=who-wire ex=1 lines=30-46 note=답의 파트 다섯-->
+<ul>
+<li>기본 빌더(<code>server/routes/common.py</code> 의 <code>DefaultServerCallContextBuilder</code>)는 헤더 전부를 소문자 키의 dict 로 <code>state["headers"]</code> 에 담고, <code>A2A-Extensions</code> 헤더를 풀어 <code>requested_extensions</code> 에 넣습니다(14부).</li>
+<li>사용자는 Starlette 의 <code>request.user</code> 가 있을 때만 세웁니다. 인증 미들웨어가 없으니 익명(<code>''</code>, <code>False</code>)입니다 — 미들웨어로 사용자를 세우는 것은 12부입니다. 빌더를 바꾸려면 <code>create_jsonrpc_routes(…, context_builder=…)</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p07-ch5-sum">
+<h3>5장 정리 — 서버를 세우는 손잡이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>파이썬 SDK</th></tr>
+<tr><td>카드 서빙</td><td><code>create_agent_card_routes(card, card_modifier=, card_url=, cache_control=)</code></td></tr>
+<tr><td>JSON-RPC 달기</td><td><code>create_jsonrpc_routes(handler, rpc_url, context_builder=, enable_v0_3_compat=)</code></td></tr>
+<tr><td>HTTP+JSON 달기</td><td><code>create_rest_routes(handler, path_prefix=)</code> — 13부</td></tr>
+<tr><td>앱</td><td><code>Starlette(routes=[…])</code> (FastAPI 는 <code>add_a2a_routes_to_fastapi</code>, <code>fastapi</code> extra)</td></tr>
+<tr><td>띄우기</td><td><code>uvicorn.run(app, host=, port=)</code> — SDK 밖의 패키지</td></tr>
+<tr><td>바깥 주소</td><td>카드 <code>AgentInterface(url=…)</code> 에 — 경로까지 JSON-RPC 경로와 같게</td></tr>
+<tr><td>요청 정보 → 실행기</td><td><code>ServerCallContext</code> — <code>state["headers"]</code>·<code>user</code>·<code>requested_extensions</code></td></tr>
+<tr><td>경로 밖의 요청</td><td>Starlette 의 <code>404</code>·<code>405</code> 글 한 줄 (JSON-RPC 오류 아님)</td></tr>
+<tr><td>끄기</td><td>lifespan 에서 <code>await handler.aclose()</code></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p07-ch5-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 견적 서버를 <code>--path /a2a</code> 로 띄우면서 카드의 url 만 <code>http://127.0.0.1:10712/</code> 로 잘못 적었습니다. 이 카드를 읽고 SendMessage 를 보낸 클라이언트는 어떤 HTTP 응답을 받고, 그 본문은 JSON-RPC 오류입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>POST /</code> 에는 경로가 없으니 Starlette 가 <code>404 Not Found</code> 와 <code>text/plain</code> 본문 "Not Found" 로 답합니다 — <a href="#p07-srv-path">serve 캡처</a>에서 <code>POST /</code> 에 돌아온 답이 바로 그것입니다. 요청이 처리기까지 가지 못했으므로 JSON-RPC 오류 객체(<code>error.code</code>)는 없습니다.</div>
 </article>

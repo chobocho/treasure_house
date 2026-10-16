@@ -17,7 +17,9 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 )
 
-var bus = map[string]any{"headcount": 30, "nights": 1, "depart": "강남역"}
+var bus = map[string]any{
+	"headcount": 30, "nights": 1, "depart": "강남역",
+}
 
 func name(t *a2a.Task) string {
 	return strings.TrimPrefix(string(t.Status.State), "TASK_STATE_")

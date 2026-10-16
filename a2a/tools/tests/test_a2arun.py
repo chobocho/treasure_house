@@ -285,14 +285,24 @@ class Manifest(Tree):
 
     def test_inputs_cover_example_workshop_fixtures(self):
         names = [p for p, _ in a2arun.inputs(self.root, 'ex/py/02/a.py')]
-        self.assertEqual(names, ['ex/py/02/a.py', 'ex/py/workshop', 'ex/fixtures'])
+        self.assertEqual(names, ['ex/py/02/a.py', 'ex/py/02', 'ex/py/workshop', 'ex/fixtures'])
 
     def test_other_shared_dirs_are_inputs_but_gate_and_caches_are_not(self):
         for rel in ('ex/py/agents/bus.py', 'ex/py/gate/x.py', 'ex/py/__pycache__/x.pyc',
                     'ex/py/.ruff_cache/x', 'ex/py/requirements.txt'):
             self.put(rel, 'x\n')
         names = [p for p, _ in a2arun.inputs(self.root, 'ex/py/02/a.py')]
-        self.assertEqual(names, ['ex/py/02/a.py', 'ex/py/agents', 'ex/py/workshop', 'ex/fixtures'])
+        self.assertEqual(names, ['ex/py/02/a.py', 'ex/py/02', 'ex/py/agents', 'ex/py/workshop',
+                                 'ex/fixtures'])
+
+    def test_sibling_in_the_same_part_dir_makes_it_stale(self):
+        # 07/drive.py 가 07/step1_echo.py 를 import 하듯, 같은 부 디렉터리의
+        # 형제가 바뀌어도 캡처는 낡은 것이 되어야 한다.
+        self.put('ex/py/02/helper.py', 'X = 1\n')
+        a2arun.manifest_update(self.root, 'ex/py/02/a.py', 'python 3')
+        self.assertEqual(a2arun.stale(self.root, 'ex/py/02/a.py'), '')
+        self.put('ex/py/02/helper.py', 'X = 2\n')
+        self.assertIn('ex/py/02', a2arun.stale(self.root, 'ex/py/02/a.py'))
 
     def test_example_changed(self):
         self.put('ex/py/02/a.py', 'print(2)\n')
@@ -316,6 +326,7 @@ class Manifest(Tree):
         self.put('ex/ts/02/c.ts', 'x;\n')
         names = [p for p, _ in a2arun.inputs(self.root, 'ex/run/02/c.run')]
         self.assertEqual(names, ['ex/run/02/c.run', 'ex/py/02/s.py', 'ex/ts/02/c.ts',
+                                 'ex/py/02', 'ex/ts/02',
                                  'ex/py/workshop', 'ex/ts/workshop', 'ex/fixtures',
                                  'tools/wiretap.py'])
 

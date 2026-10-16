@@ -67,6 +67,10 @@ capture. Never guess what an SDK does; read its installed source or run it.
   no agent questions in history" — that was a bug in our code, fixed 2026-10-16. Run `a2arun --check` on every capture
   at least twice before you trust it.
 - Ports: 10000 + NN·100 + k. One runner at a time (it locks).
+- **Every line of every example file is ≤ 72 columns** (`make lint` runs
+  `tools/check_width.py` over all of `ex/`), not only the excerpted regions.
+- Examples may import siblings in the same part directory; the whole `ex/<lang>/NN/`
+  directory is an input of every capture made from it.
 - Trailing directives: Python `# @ key: value` (ruff rewrites `#@` to `# @`), TS/Go
   `//@ key: value`. Keys: `args stdin exit timeout norun env`. Captures of single files
   carry the language: `out/NN/name.py.txt`, `.ts.txt`, `.go.txt`; specs `out/NN/name.txt`.
@@ -126,6 +130,8 @@ capture. Never guess what an SDK does; read its installed source or run it.
   "사건" 은 쓰지 않는다), JSON-RPC notification JSON-RPC 알림(푸시 알림과 헷갈리지
   않게 앞에 JSON-RPC 를 붙인다), batch 배치, wiretap 와이어 탭, filter 필터("거르개"는
   쓰지 않는다), body limit 본문 한도.
+  Python extra → "extra(선택 설치 묶음)", route factory 라우트 팩토리, owner-scoped
+  store 소유자별 저장소(분리). Never coin playful new words ("덤", "공장", "칸막이").
   Enum values and method names stay in English as on the wire (`TASK_STATE_WORKING`,
   `SendMessage`).
 

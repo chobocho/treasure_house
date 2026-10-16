@@ -17,7 +17,9 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 )
 
-var meals = map[string]any{"nights": 1, "headcount": 30, "vegetarians": 2}
+var meals = map[string]any{
+	"nights": 1, "headcount": 30, "vegetarians": 2,
+}
 
 // region: read
 func part(p *a2a.Part) string {

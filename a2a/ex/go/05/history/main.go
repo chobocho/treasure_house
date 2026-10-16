@@ -18,7 +18,9 @@ import (
 	"example.com/workshop/agents/common"
 )
 
-var bus = map[string]any{"headcount": 30, "nights": 1, "depart": "강남역"}
+var bus = map[string]any{
+	"headcount": 30, "nights": 1, "depart": "강남역",
+}
 
 func line(t *a2a.Task) string {
 	said := []string{}

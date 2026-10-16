@@ -471,6 +471,13 @@ def inputs(root, rel):
                   if os.path.isdir(os.path.join(full, d))]
     else:
         langs, tap = [kind_of(rel)], False
+    # 예제가 든 부 디렉터리(ex/py/07 …) 통째 — 같은 부의 형제 파일을
+    # import 하는 예제가 있어서(07/drive.py → 07/step1_echo.py).
+    progs = [i for i in items if kind_of(i) != 'run' or i != rel]
+    for i in progs:
+        m = re.match(r'^(ex/(?:py|ts|go)/\d\d)/', i)
+        if m and m.group(1) not in items:
+            items.append(m.group(1))
     for lang in ('py', 'ts', 'go'):
         if lang in langs:
             items += shared(root, lang)

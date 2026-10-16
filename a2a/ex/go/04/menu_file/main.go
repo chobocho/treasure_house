@@ -62,7 +62,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	meals := map[string]any{"nights": 1, "headcount": 30, "vegetarians": 2}
+	meals := map[string]any{
+		"nights": 1, "headcount": 30, "vegetarians": 2,
+	}
 	msg := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewDataPart(meals))
 	msg.ID = "menu-go"
 	req := &a2a.SendMessageRequest{Message: msg}

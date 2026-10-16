@@ -66,7 +66,8 @@ func main() {
 	check(err)
 	msg := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewDataPart(request))
 	msg.ID = "read-go"
-	res, err := c.SendMessage(ctx, &a2a.SendMessageRequest{Message: msg})
+	req := &a2a.SendMessageRequest{Message: msg}
+	res, err := c.SendMessage(ctx, req)
 	check(err)
 	read(res.(*a2a.Task)) // 숙소 에이전트는 Task 로 답한다
 }

@@ -84,7 +84,7 @@ fmt:                    ## 예제를 다듬는다 (ruff·prettier·gofmt, 72칸)
 
 # ex/py 가 PYTHONPATH 뿌리다 — ruff 가 workshop·agents 를 first-party 로 보도록 src 를 준다
 # (안 주면 import 정렬(I001)이 그 둘을 서드파티로 보고 틀렸다고 한다).
-lint:                   ## 다듬어졌는지 · 정적 검사 (ruff · prettier · gofmt · go vet)
+lint:                   ## 다듬어졌는지 · 정적 검사 (ruff · prettier · gofmt · go vet · 72칸)
 	$(RUFF) format --line-length 72 --check ex/py
 	$(RUFF) check --config 'src = ["ex/py"]' ex/py
 	test -z "$(TS)" || (cd ex/ts && npx prettier --print-width 72 --check \
@@ -92,6 +92,9 @@ lint:                   ## 다듬어졌는지 · 정적 검사 (ruff · prettier
 	@bad=$$(gofmt -l $$(find ex/go -name '*.go' -not -path 'ex/go/gate/*')); \
 	  if test -n "$$bad"; then echo "  ✗ gofmt 를 안 거친 파일: $$bad"; exit 1; fi
 	cd ex/go && $(GO) vet -p 1 $$($(GO) list ./... | grep -v '/gate/')
+	$(PY) tools/check_width.py $$(find ex/py ex/ts ex/go \( -name node_modules \
+	  -o -name gate -o -name '.*' \) -prune -o \( -name '*.py' -o -name '*.ts' \
+	  -o -name '*.go' -o -name '*.run' \) -type f -print)
 
 ts-check:               ## TypeScript 타입 검사 (tsc --noEmit, tsconfig)
 	cd ex/ts && npx tsc -p .

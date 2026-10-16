@@ -50,7 +50,8 @@ func main() {
 	}
 	msg := a2a.NewMessage(a2a.MessageRoleUser, fourParts()...)
 	msg.ID = "parts-go"
-	res, err := c.SendMessage(ctx, &a2a.SendMessageRequest{Message: msg})
+	req := &a2a.SendMessageRequest{Message: msg}
+	res, err := c.SendMessage(ctx, req)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

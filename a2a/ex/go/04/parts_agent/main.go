@@ -107,7 +107,8 @@ func (echoParts) Cancel(
 
 func main() {
 	args := common.ParseArgs("보물상사 파트 확인 에이전트")
-	common.Serve(card(args.URL), echoParts{}, args.Port, common.Options{})
+	common.Serve(card(args.URL), echoParts{}, args.Port,
+		common.Options{})
 }
 
 //@ norun

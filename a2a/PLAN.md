@@ -381,3 +381,22 @@ subagent task each.
   **version handling: TS SDK rejects "1.0.1" (exact match, violates §3.6), py accepts "1.5"
   (major only), Go SDK server never reads A2A-Version; none supports `?A2A-Version=`**;
   a half-sent request stalls the Python bare server (single-threaded).
+
+### Part 7 first half — 62 slides; width check; part-dir inputs (2026-10-16)
+- `07_py.html` ch1–5 (package map, types, executor, handler/store, serving), with
+  reusable "N장 정리" tables for parts 8/9. Step examples `ex/py/07/step1_echo.py`,
+  `step2_task.py` (7b continues with step3…). Terms fixed: 덤→extra(선택 설치 묶음),
+  경로 공장→라우트 팩토리, 주인별 칸막이→소유자별 분리/저장소.
+- Tools (TDD): `tools/check_width.py` in `make lint` (all example lines ≤ 72; 17 old lines
+  fixed in parts 3–6); single-file and spec captures now hash their whole part dir
+  `ex/<lang>/NN` (siblings imported by drivers); build_deck test fixture re-records the
+  manifest when a test adds a new example file. One unexplained `make all` rc=2 that did
+  not reproduce (suspect live tool tests' port timing) — watch for it.
+- Findings: executor that enqueues nothing → blocking SendMessage hangs forever
+  (active_task.py:967); Task with a different id → -32602 (blamed on the client); A2A error
+  raised by the executor goes to the client but the task is stored FAILED; docstring says
+  TASK_STATE_ERROR (doesn't exist); client transport parses responses strictly while the
+  server ignores unknown fields (7b ch6 should run it); `related_tasks` empty by default
+  (`should_populate_referred_tasks=False`, part 15); InMemoryTaskStore scoped by
+  `user.user_name` (anonymous share ""); REST SubscribeToTask registered for GET and POST;
+  `A2ARequest` union lacks ListTasksRequest; uvicorn is in no extra.

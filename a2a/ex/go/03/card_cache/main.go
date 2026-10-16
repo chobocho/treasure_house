@@ -53,7 +53,8 @@ func main() {
 		}
 		etag := first.Header.Get("ETag")
 		fmt.Println(base)
-		fmt.Printf("  GET → %d · ETag %s\n", first.StatusCode, orDash(etag))
+		fmt.Printf("  GET → %d · ETag %s\n",
+			first.StatusCode, orDash(etag))
 		cc := first.Header.Get("Cache-Control")
 		fmt.Printf("    Cache-Control %s\n", orDash(cc))
 		if etag == "" {
