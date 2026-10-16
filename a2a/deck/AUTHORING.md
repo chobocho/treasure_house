@@ -105,7 +105,9 @@ capture. Never guess what an SDK does; read its installed source or run it.
   extension 확장, security scheme 보안 스킴, scope 스코프, token 토큰,
   signature 서명, canonicalization 정규화(JCS), executor 실행기(AgentExecutor),
   request handler 요청 처리기, event queue 이벤트 큐, orchestrator 오케스트레이터,
-  delegate 맡기다/위임, interop 상호운용.
+  delegate 맡기다/위임, interop 상호운용, event 이벤트(SSE 이벤트·스트림 이벤트 —
+  "사건" 은 쓰지 않는다), JSON-RPC notification JSON-RPC 알림(푸시 알림과 헷갈리지
+  않게 앞에 JSON-RPC 를 붙인다), batch 배치, wiretap 와이어 탭.
   Enum values and method names stay in English as on the wire (`TASK_STATE_WORKING`,
   `SendMessage`).
 

@@ -237,3 +237,14 @@ subagent task each.
   fails the task when a push fails → custom sender; in-memory store refuses anonymous
   ListTasks (-31401) → login hook "anonymous"; gob deep copy needs plain JSON values in
   DataParts; UUIDv7 ids; `Www-Authenticate` header casing.
+
+### Part 2 written — 74 slides (2026-10-16)
+- Subagent wrote `02_basics.html` (5 chapters, 74 slides, 28 example files, 9 specs, 22
+  captures, all `--check` twice). Orchestrator review: "사건" → "이벤트" everywhere (terms
+  list updated), Go rpc_client width fix, softened an unbacked "always" in the batch note.
+- Tool fix (TDD): `a2arun._read` now keeps CR (`newline=''`) so `curl -i` captures can pass
+  `--check`. Sources added: `jsonrpc`, `whatwg-sse` (part 2 cites them in prose; review
+  should add SRC links).
+- Findings for later parts: spec never mentions batch, Python SDK rejects it (-32600
+  "Batch requests are not supported", jsonrpc_dispatcher.py:246); §9.3 template still says
+  `"method": "category/action"`; §9.5 message strings differ from JSON-RPC 2.0's.

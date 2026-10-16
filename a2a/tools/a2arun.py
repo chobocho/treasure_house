@@ -3,8 +3,8 @@
 """a2arun — 예제를 진짜로 돌려 그 화면(캡처)을 out/ 에 남긴다. 이 덱에서 코드를 돌리는 것은 이것 하나뿐이다.
 
      python3 tools/a2arun.py ex/py/02/hello_json.py     파일 하나 — out/02/hello_json.py.txt
-     python3 tools/a2arun.py ex/go/02/hello_json        Go 패키지 디렉터리 하나
-     python3 tools/a2arun.py ex/run/02/curl_card.run    여러 프로세스(서버·탭·클라이언트) 명세
+     python3 tools/a2arun.py ex/go/02/json_numbers      Go 패키지 디렉터리 하나
+     python3 tools/a2arun.py ex/run/02/sse_py.run       여러 프로세스(서버·탭·클라이언트) 명세
      python3 tools/a2arun.py --all [--only ex/py/02]    전부(norun 빼고) / 그 아래만
      python3 tools/a2arun.py --check --all              다시 돌려 이미 있는 캡처와 글자까지 같은지
      python3 tools/a2arun.py --manifest-check           돌리지 않고 입력·캡처 해시만 장부와 대조
@@ -68,7 +68,9 @@ class RunError(Exception):
 
 
 def _read(p):
-    with io.open(p, encoding='utf-8') as f:
+    # newline='' — CR 을 그대로 둔다. curl -i 의 헤더처럼 CR 이 든 캡처를
+    # 보편 줄바꿈으로 읽으면 --check 가 영원히 '다르다' 고 한다.
+    with io.open(p, encoding='utf-8', newline='') as f:
         return f.read()
 
 

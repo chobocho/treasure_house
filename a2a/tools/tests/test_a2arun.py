@@ -515,3 +515,15 @@ class RealSpec(Tree):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ReadKeepsCarriageReturns(unittest.TestCase):
+    """curl -i 처럼 CR 이 든 캡처는 읽을 때도 CR 을 지켜야 --check 가
+    방금 돌린 출력과 글자까지 같다고 볼 수 있다."""
+
+    def test_crlf_survives_write_then_read(self):
+        d = tempfile.mkdtemp(prefix='a2arun-cr-')
+        self.addCleanup(shutil.rmtree, d, True)
+        p = os.path.join(d, 'out', 'x.txt')
+        a2arun._write(p, 'HTTP/1.1 200 OK\r\nA: b\r\n\r\nbody\n')
+        self.assertEqual(a2arun._read(p), 'HTTP/1.1 200 OK\r\nA: b\r\n\r\nbody\n')
