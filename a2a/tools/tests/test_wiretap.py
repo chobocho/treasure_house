@@ -59,6 +59,22 @@ class Format(unittest.TestCase):
         got = wiretap.format_body('{"b":1,"a":"숙소"}'.encode('utf-8'), 'application/json')
         self.assertEqual(got, ['  {', '    "b": 1,', '    "a": "숙소"', '  }'])
 
+    def test_struct_fields_are_sorted_deeply_maps_shallowly(self):
+        # 파이썬 SDK(upb)는 Struct·맵의 키 순서를 프로세스마다 바꾼다.
+        # JSON 객체에도 protobuf 맵에도 순서가 없으므로, data·metadata
+        # 아래는 깊이, scopes·securitySchemes·schemes 는 그 층만 정렬한다.
+        body = ('{"result": {"z": 1, "data": {"total": 2, "b": {"y": 1, "x": 2}},'
+                ' "metadata": {"k2": 1, "k1": 2},'
+                ' "scopes": {"w": "1", "a": {"q": 1, "p": 2}}}}')
+        lines = wiretap.format_body(body.encode(), 'application/json')
+        text = '\n'.join(lines)
+        self.assertLess(text.index('"z"'), text.index('"data"'))      # 바깥은 그대로
+        self.assertLess(text.index('"b"'), text.index('"total"'))     # data 는 정렬
+        self.assertLess(text.index('"x"'), text.index('"y"'))         # 깊이까지
+        self.assertLess(text.index('"k1"'), text.index('"k2"'))
+        self.assertLess(text.index('"a"'), text.index('"w"'))         # 맵의 키는 정렬
+        self.assertLess(text.index('"q"'), text.index('"p"'))         # 맵 값 안은 그대로
+
     def test_non_json_text_is_verbatim(self):
         got = wiretap.format_body(b'hello\nworld\n', 'text/plain')
         self.assertEqual(got, ['  hello', '  world'])

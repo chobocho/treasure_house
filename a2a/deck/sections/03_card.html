@@ -1,10 +1,524 @@
 <article class="card section" id="p03">
 <p class="chnum">3부</p>
 <h2>Agent Card와 발견</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">카드는 이력서 → well-known 경로 → supportedInterfaces → --url 과 프록시 → skills → capabilities → 카드 캐싱 → 카드 검증기</p>
 </article>
 
-<article class="card" id="p03-todo">
-<h3>Agent Card와 발견</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p03-intro">
+<h3>일을 맡기기 전에 카드 한 장을 읽는다</h3>
+<p class="lead">A2A 클라이언트가 처음 하는 일은 메시지 보내기가 아니라 에이전트 카드(Agent Card) 받기입니다. 누구인지, 어디로 어떤 바인딩으로 말을 걸지, 무엇을 할 줄 아는지가 다 거기 적혀 있습니다. 이 부는 그 카드 한 장을 처음부터 끝까지 읽습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th></tr>
+<tr><td><a href="#p03-ch1">1장</a></td><td>카드는 이력서 — 필수 필드, 숙소 에이전트 카드 해부</td></tr>
+<tr><td><a href="#p03-ch2">2장</a></td><td>well-known 경로 — 맨손 카드 서버 ×3, 완성 에이전트 셋의 카드 비교</td></tr>
+<tr><td><a href="#p03-ch3">3장</a></td><td>supportedInterfaces — url·protocolBinding·protocolVersion·tenant, 클라이언트의 선택</td></tr>
+<tr><td><a href="#p03-ch4">4장</a></td><td><code>--url</code> 과 프록시 — 카드의 url 은 바깥에서 닿는 주소</td></tr>
+<tr><td>5장</td><td>skills — id·tags·examples·입출력 모드, 스킬로 에이전트 고르기</td></tr>
+<tr><td>6장</td><td>capabilities — streaming·pushNotifications·extensions·extendedAgentCard</td></tr>
+<tr><td>7장</td><td>카드 캐싱 — Cache-Control 과 ETag</td></tr>
+<tr><td>8장</td><td>카드 검증기 만들기 — 필수 필드 검사, 흔한 실수</td></tr>
+</table>
+</div>
+<div class="key"><b>이 부의 방식</b> — 보물상사의 완성 에이전트(<code>agents/lodging.py</code>·<code>agents/lodging.ts</code>·<code>agents/lodging</code>)를 블랙박스로 띄우고, curl·와이어 탭·<code>ask</code> 로 바깥에서 읽습니다. 만드는 법은 6부(맨손)와 7~9부(SDK)가 맡습니다.</div>
+</article>
+
+<!-- ==== 1장 카드는 이력서 ==== -->
+
+<article class="card" id="p03-ch1">
+<p class="chnum">1장</p>
+<h2>카드는 이력서</h2>
+<p class="chsub">카드가 하는 일 → 숙소 에이전트의 카드 전체 → 필수 필드 → 누구 → 어디로 → 무엇을 할 수 있나 → 무엇을 주고받나 → 스킬 → 다섯 장의 카드</p>
+</article>
+
+<article class="card" id="p03-card-why">
+<h3>카드는 에이전트의 이력서 — 부르기 전에 읽는다</h3>
+<p class="lead">스펙 §8.1 은 첫 문장부터 의무입니다: "A2A Servers <b>MUST</b> make an Agent Card available." 카드는 "the server's identity, capabilities, skills, and interaction requirements" 를 적은 문서이고, 클라이언트는 그것으로 상대를 고르고 대화 방식을 정합니다.</p>
+<pre class="fig">
+ 클라이언트                                에이전트
+   │ ① 카드를 달라 (HTTP GET)                │
+   │ ──────────────────────────────────────→ │
+   │ ② 카드 한 장 (JSON)                     │  이력서
+   │ ←────────────────────────────────────── │
+   │ ③ 읽고 정한다: 어느 주소·어느 바인딩,   │
+   │    스트림을 써도 되나, 이 일을 하나     │
+   │ ④ 카드에 적힌 주소로 일을 맡긴다        │  SendMessage
+   │ ──────────────────────────────────────→ │
+</pre>
+<div class="note"><b>카드는 약속이다</b> — 카드에 적은 것은 지켜야 하고, 적지 않은 것은 클라이언트가 기대하지 않습니다. 이 부의 4장은 카드에 주소를 잘못 적었을 때, 이 부 후반의 6장은 없는 기능을 부를 때 무슨 일이 생기는지 봅니다.</div>
+</article>
+
+<article class="card" id="p03-card-wire">
+<h3>숙소 에이전트의 카드 — GET 한 번에 JSON 한 장</h3>
+<p class="lead">파이썬 숙소 에이전트(<code>agents/lodging.py --port 10310</code>) 앞에 와이어 탭을 세우고 curl 로 카드를 받았습니다(<code>card_agents</code> 명세). 이 장은 이 한 장을 위에서 아래로 읽습니다.</p>
+<!--OUT file=out/03/card_agents.txt wire=py-wire-->
+</article>
+
+<article class="card" id="p03-required">
+<h3>필수 필드는 여덟 — proto 의 REQUIRED 표시가 기준이다</h3>
+<p class="lead">스펙 §4.4.1 의 표는 <code>a2a.proto</code> 에서 만들어집니다. 그 proto 는 필드마다 <code>(google.api.field_behavior) = REQUIRED</code> 를 붙여 필수를 표시합니다. <code>AgentCard</code> 에서 그 표시가 붙은 필드를 모으면 이렇습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필수(REQUIRED)</th><th>선택</th></tr>
+<tr><td><code>name</code>·<code>description</code>·<code>version</code></td><td><code>provider</code>·<code>documentationUrl</code>·<code>iconUrl</code></td></tr>
+<tr><td><code>supportedInterfaces</code></td><td><code>securitySchemes</code>·<code>securityRequirements</code></td></tr>
+<tr><td><code>capabilities</code></td><td><code>signatures</code></td></tr>
+<tr><td><code>defaultInputModes</code>·<code>defaultOutputModes</code>·<code>skills</code></td><td></td></tr>
+</table>
+</div>
+<ul>
+<li>안쪽 객체에도 필수가 있습니다 — <code>AgentInterface</code> 는 <code>url</code>·<code>protocolBinding</code>·<code>protocolVersion</code>, <code>AgentSkill</code> 은 <code>id</code>·<code>name</code>·<code>description</code>·<code>tags</code>, <code>AgentProvider</code> 를 적는다면 <code>url</code>·<code>organization</code>.</li>
+<li>숙소 에이전트의 카드에는 여덟 개가 다 있고, 선택 필드는 <code>provider</code> 하나만 썼습니다. 보안 필드는 12부에서 정산 에이전트의 카드로 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p03-anatomy-who">
+<h3>누구인가 — name·description·version·provider</h3>
+<p class="lead">사람이 읽을 이름과 설명, 에이전트 자신의 판(version), 만든 곳(provider)입니다.</p>
+<!--OUT file=out/03/card_agents.txt wire=py-wire lines=5-7-->
+<!--OUT file=out/03/card_agents.txt wire=py-wire lines=15-19-->
+<ul>
+<li><code>description</code> 은 사람뿐 아니라 다른 에이전트도 읽습니다. proto 의 설명은 "assisting users and other agents in understanding its purpose" 입니다.</li>
+<li><code>version</code> 은 에이전트의 판입니다(proto 의 보기 <code>"1.0.0"</code>). 프로토콜 판은 여기가 아니라 인터페이스마다 따로 적습니다(<a href="#p03-iface-fields">3장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p03-anatomy-where">
+<h3>어디로 — supportedInterfaces 가 말을 걸 주소를 준다</h3>
+<p class="lead">"어느 URL 에서, 어느 바인딩으로, 프로토콜 몇 판을" 의 목록입니다. 숙소 에이전트는 하나만 적었습니다 — JSON-RPC, 판 1.0, 주소는 자기 포트.</p>
+<!--OUT file=out/03/card_agents.txt wire=py-wire lines=8-14-->
+<div class="warn"><b>카드를 받은 주소와 이 주소는 다르다</b> — 클라이언트는 이 url 로 갑니다. 카드를 받아 온 주소가 아닙니다. 그래서 주소를 잘못 적으면 카드는 받아지는데 대화가 안 됩니다. <a href="#p03-ch4">4장</a>에서 실제로 봅니다.</div>
+</article>
+
+<article class="card" id="p03-anatomy-can">
+<h3>무엇을 할 수 있나 — capabilities 는 켜진 것만 적혀 있다</h3>
+<p class="lead">숙소 에이전트의 <code>capabilities</code> 에는 <code>streaming</code> 하나만 있습니다. 스트리밍 응답(SSE)을 받을 수 있다는 뜻입니다.</p>
+<!--OUT file=out/03/card_agents.txt wire=py-wire lines=20-22-->
+<ul>
+<li>proto 의 <code>AgentCapabilities</code> 필드는 넷 — <code>streaming</code>·<code>pushNotifications</code>·<code>extensions</code>·<code>extendedAgentCard</code>. 넷 다 선택이지만 <code>capabilities</code> 자체는 필수입니다.</li>
+<li>푸시 알림이 빠졌다는 것은 "지원하지 않는다" 입니다. 세 언어의 카드(<a href="#p03-three-cards">2장</a>)를 보면 이 "빠짐" 을 적는 방식이 언어마다 다릅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p03-anatomy-modes">
+<h3>무엇을 주고받나 — 입출력 모드는 미디어 타입 목록이다</h3>
+<p class="lead"><code>defaultInputModes</code>·<code>defaultOutputModes</code> 는 MIME 타입(미디어 타입) 목록입니다. proto 의 설명: "The set of interaction modes that the agent supports across all skills. This can be overridden per skill."</p>
+<!--OUT file=out/03/card_agents.txt wire=py-wire lines=23-29-->
+<ul>
+<li>숙소 에이전트는 JSON(<code>{date, nights, headcount}</code> 같은 구조화 입력)과 글(<code>"30명"</code> 같은 대답)을 받고, JSON 견적을 돌려줍니다.</li>
+<li>모드가 실제 메시지의 어느 파트로 오가는지는 4부(Part 네 가지)에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p03-anatomy-skills">
+<h3>무엇을 하나 — skills 는 일의 목록이다</h3>
+<p class="lead">카드의 마지막 필수 필드입니다. 숙소 에이전트의 스킬은 하나, <code>find-lodging</code>(숙소 찾기)입니다.</p>
+<!--OUT file=out/03/card_agents.txt wire=py-wire lines=30-43-->
+<ul>
+<li><code>tags</code> 는 필수입니다. 기획 에이전트가 동료를 고를 때 보는 것이 이 태그(<code>lodging</code>)입니다 — 이 부 후반의 5장에서 봅니다.</li>
+<li><code>examples</code> 는 문자열 목록입니다. 여기에는 JSON 을 글자로 적었기 때문에 따옴표가 <code>\"</code> 로 한 번 더 감싸였습니다.</li>
+</ul>
+<div class="note"><b>스킬 이야기는 5장에서</b> — 스킬별 입출력 모드, 스킬로 에이전트 고르기는 이 부 후반의 5장이 다룹니다.</div>
+</article>
+
+<article class="card" id="p03-five-cards">
+<h3>다섯 에이전트, 다섯 장의 이력서</h3>
+<p class="lead">보물상사의 다섯 에이전트(파이썬판)를 띄우고, 카드에서 스킬·켜진 기능·보안 스킴·서명 개수만 뽑아 한 장에 두 줄로 줄였습니다. 요약기는 표준 라이브러리 <code>urllib</code> 하나로 카드를 받습니다.</p>
+<!--CODE file=ex/py/03/card_summary.py region=summary-->
+<!--OUT file=out/03/five_cards.txt part=터미널 6-->
+<div class="key"><b>카드만 보고도 다섯이 구별된다</b> — 교통은 푸시 알림(11부), 정산은 확장 카드·OAuth 보안 스킴·서명(12부)을 내세웁니다.</div>
+</article>
+
+<article class="card quiz" id="p03-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 숙소 에이전트 카드에서 <code>"provider"</code> 객체를 통째로 지워도 스펙상 올바른 카드입니까? <code>"skills"</code> 를 지우면 어떻습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>provider</code> 는 선택 필드라 지워도 올바릅니다(<a href="#p03-required">필수 필드 표</a>). <code>skills</code> 는 proto 에 REQUIRED 로 표시된 여덟 필드 중 하나라 지우면 틀린 카드가 됩니다. <a href="#p03-card-wire">숙소 카드</a>는 여덟을 다 갖추고 선택 필드는 <code>provider</code> 만 썼습니다.</div>
+</article>
+
+<!-- ==== 2장 well-known 경로 ==== -->
+
+<article class="card" id="p03-ch2">
+<p class="chnum">2장</p>
+<h2>well-known 경로 — 카드를 내주는 곳</h2>
+<p class="chsub">찾는 길 세 가지 → 맨손 카드 서버: 카드·파이썬 처리기·와이어 → TypeScript → Go → 세 서버 비교 → 완성 에이전트의 카드 py·ts·go → 세 카드의 와이어 → 차이 표 → 경로가 붙은 주소 → 세 SDK 의 규칙</p>
+</article>
+
+<article class="card" id="p03-wellknown">
+<h3>카드는 정해진 자리에 둔다 — /.well-known/agent-card.json</h3>
+<p class="lead">스펙 §8.2 는 클라이언트가 카드를 찾는 길을 셋 듭니다. 이 책의 에이전트는 모두 첫째 길로 카드를 내놓습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>길</th><th>§8.2 의 말</th><th>이 책에서</th></tr>
+<tr><td>잘 알려진 URI</td><td><code>https://{server_domain}/.well-known/agent-card.json</code></td><td>다섯 에이전트 모두</td></tr>
+<tr><td>등록소·카탈로그</td><td>"Querying curated catalogs of agents"</td><td>—</td></tr>
+<tr><td>직접 설정</td><td>"Pre-configured Agent Card URLs or content"</td><td>기획 에이전트가 받는 주소 목록(<code>--agents</code>, 15부)</td></tr>
+</table>
+</div>
+<ul>
+<li><code>/.well-known/</code> 은 HTTP 가 "이 사이트에 대한 정보"를 두는 공용 접두사입니다(RFC 8615). 주소만 알면 카드 자리를 따로 묻지 않아도 됩니다.</li>
+<li>파일 이름은 v0.3.0 에서 <code>agent.json</code> 에서 <code>agent-card.json</code> 으로 바뀌었습니다 — CHANGELOG 의 "Change Well-Known URI for Agent Card hosting from <code>agent.json</code> to <code>agent-card.json</code>"(<!--SRC key=a2a-changelog-->).</li>
+</ul>
+</article>
+
+<article class="card" id="p03-bare-card">
+<h3>맨손 카드 서버 — 카드는 dict 하나, 필수 필드만</h3>
+<p class="lead">SDK 없이 카드를 내주는 서버를 세 언어로 만듭니다(파이썬 <code>http.server</code>, Node <code>node:http</code>, Go <code>net/http</code>). 카드는 숙소 에이전트의 것에서 선택 필드(<code>provider</code>, 스킬의 <code>examples</code>)를 뺀 필수 여덟 필드입니다.</p>
+<!--CODE file=ex/py/03/card_server.py region=card-->
+<div class="note"><b>url 은 <code>--url</code> 로</b> — 카드에 적을 주소는 명령줄로 받고, 안 주면 붙은 주소(<code>http://127.0.0.1:포트/</code>)를 씁니다. 완성 에이전트 다섯도 똑같이 합니다. 왜 따로 받는지는 <a href="#p03-ch4">4장</a>의 주제입니다.</div>
+</article>
+
+<article class="card" id="p03-bare-py">
+<h3>처리기 — 경로 하나에 200, 나머지는 404</h3>
+<p class="lead">카드 서버가 할 일은 GET 하나뿐입니다. 경로가 정확히 <code>/.well-known/agent-card.json</code> 이면 카드를 <code>application/json</code> 으로, 아니면 404 입니다.</p>
+<!--CODE file=ex/py/03/card_server.py region=handler-->
+<div class="tip"><b><code>ensure_ascii=False</code></b> — <a href="#p02-json-py">2부</a>에서 본 대로, 빼면 한글이 <code>\uXXXX</code> 로 나갑니다. 뜻은 같지만 세 언어의 와이어를 글자까지 맞추려고 넣었습니다.</div>
+</article>
+
+<article class="card" id="p03-bare-wire">
+<h3>제 경로에는 카드, 옛 이름 agent.json 에는 404</h3>
+<p class="lead">세 서버 앞에 탭을 하나씩 세우고(<code>card_bare</code> 명세), 서버마다 제 경로와 v0.3 이전의 옛 이름으로 한 번씩 물었습니다. curl 은 첫 요청의 상태 코드만, 둘째 요청의 본문만 찍습니다.</p>
+<!--OUT file=out/03/card_bare.txt part=터미널 7 lines=2-7-->
+<!--OUT file=out/03/card_bare.txt wire=py-wire ex=2-->
+<div class="note"><b>옛 이름은 받지 않는다</b> — 이 책의 서버는 v1.0 의 이름 하나만 답합니다. 파이썬 탭에 남은 카드 전체는 <a href="#p03-bare-cmp">비교 슬라이드</a>에 실었습니다.</div>
+</article>
+
+<article class="card" id="p03-bare-ts">
+<h3>TypeScript — 메서드와 경로를 직접 본다</h3>
+<p class="lead"><code>node:http</code> 의 처리기는 메서드·경로를 가리지 않고 불립니다. <code>req.method</code> 와 <code>req.url</code> 을 둘 다 확인합니다. 카드 객체(<code>CARD</code>)는 파이썬 판과 같은 차례로 적었습니다.</p>
+<!--CODE file=ex/ts/03/card_server.ts region=handler-->
+</article>
+
+<article class="card" id="p03-bare-go">
+<h3>Go — 구조체 필드 순서가 곧 키 순서</h3>
+<p class="lead">Go 는 카드의 모양을 구조체로 정합니다. <a href="#p02-json-go">2부</a>에서 본 대로 <code>encoding/json</code> 은 구조체를 필드 순서대로 쓰므로, 필드를 파이썬·TS 판의 키 차례대로 놓았습니다.</p>
+<!--CODE file=ex/go/03/card_server region=types-->
+<!--CODE file=ex/go/03/card_server region=handler-->
+</article>
+
+<article class="card" id="p03-bare-cmp">
+<h3>세 서버 비교 — 와이어는 포트만 다르다</h3>
+<!--OUT file=out/03/card_bare.txt wire=py-wire ex=1-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>경로 가르기</td><td><code>self.path ==</code></td><td><code>req.method</code>·<code>req.url</code></td><td>패턴 <code>"GET /.well-known/…"</code></td></tr>
+<tr><td>카드의 꼴</td><td><code>dict</code></td><td>객체 리터럴</td><td>구조체(태그로 camelCase)</td></tr>
+<tr><td>키 순서</td><td>넣은 순서</td><td>넣은 순서</td><td>필드 순서</td></tr>
+</table>
+</div>
+<div class="key"><b>카드 서버는 정적 파일 서버와 같다</b> — 세 탭의 기록(<code>py-wire</code>·<code>ts-wire</code>·<code>go-wire</code>)은 카드 안 url 의 포트를 빼면 글자까지 같습니다. 카드는 언제 물어도 같은 문서라서, 엔진 없이도 내놓을 수 있습니다.</div>
+</article>
+
+<article class="card" id="p03-agent-card-py">
+<h3>완성 에이전트(파이썬) — 카드는 proto 메시지, 경로는 SDK 가 단다</h3>
+<p class="lead">이제 진짜 숙소 에이전트입니다. 파이썬 SDK 에서 카드는 <code>a2a.types.AgentCard</code>(protobuf 메시지)이고, 필드 이름은 파이썬 관례대로 snake_case(<code>supported_interfaces</code>)입니다.</p>
+<!--CODE file=ex/py/agents/lodging.py lines=36-57-->
+<ul>
+<li>와이어에 나갈 때는 camelCase(<code>supportedInterfaces</code>)가 됩니다 — <a href="#p03-card-wire">1장의 와이어</a>.</li>
+<li>카드 경로는 SDK 의 <code>create_agent_card_routes(card)</code> 가 답니다. 기본 경로가 <code>/.well-known/agent-card.json</code> 입니다(설치본 <code>a2a/server/routes/agent_card_routes.py</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p03-agent-card-ts">
+<h3>TypeScript — 카드는 proto JSON 모양의 객체</h3>
+<p class="lead">TS 판은 카드를 와이어와 같은 camelCase 객체로 적습니다. 서버를 띄우는 공용 코드(<code>agents/common.ts</code>)가 그것을 ts-proto 타입으로 읽었다가(<code>AgentCard.fromJSON</code>) 다시 JSON 모양으로 바꿔(<code>toJSON</code>) 카드 처리기에 넘깁니다.</p>
+<!--CODE file=ex/ts/agents/lodging.ts lines=40-60-->
+<!--CODE file=ex/ts/agents/common.ts lines=271-277-->
+<div class="note"><b>왜 한 번 더 바꾸나</b> — 주석이 말하듯 SDK 의 <code>agentCardHandler</code> 는 받은 객체를 그대로 직렬화합니다. ts-proto 객체를 넘기면 oneof 필드가 <code>{"$case":…}</code> 꼴로 나갑니다. 숙소 카드에는 oneof 가 없지만, 보안 스킴이 있는 정산 카드에는 있습니다(12부).</div>
+</article>
+
+<article class="card" id="p03-agent-card-go">
+<h3>Go — 카드는 a2a.AgentCard 구조체</h3>
+<p class="lead">Go 판은 SDK 의 구조체에 값을 채웁니다. 카드 경로는 SDK 상수 <code>a2asrv.WellKnownAgentCardPath</code> 에, 처리기는 <code>a2asrv.NewStaticAgentCardHandler(card)</code> 로 답니다.</p>
+<!--CODE file=ex/go/agents/lodging/main.go lines=29-52-->
+<!--CODE file=ex/go/agents/common/serve.go lines=51-56-->
+<div class="note"><b>정적 처리기</b> — 설치본 <code>a2asrv/agentcard.go</code> 의 <code>NewStaticAgentCardHandler</code> 는 처음 한 번 <code>json.Marshal(card)</code> 한 바이트를 요청마다 그대로 씁니다. 그래서 다음 슬라이드의 키 순서와 <code>false</code> 는 구조체 정의에서 옵니다.</div>
+</article>
+
+<article class="card" id="p03-three-cards">
+<h3>Go 의 카드 — 키 순서가 다르고 false 가 적혀 있다</h3>
+<p class="lead">세 언어의 숙소 에이전트를 함께 띄우고 탭을 하나씩 세워 같은 curl 을 보냈습니다(<code>card_agents</code> 명세). 파이썬 카드는 <a href="#p03-card-wire">1장</a>에서 봤습니다. Go 의 앞부분입니다.</p>
+<!--OUT file=out/03/card_agents.txt wire=go-wire lines=1-29-->
+<ul>
+<li>키 차례가 <code>supportedInterfaces</code>·<code>capabilities</code>·… 이고 <code>name</code> 은 한가운데입니다. SDK 구조체(<code>a2a/agent.go</code>)의 필드 순서 그대로입니다.</li>
+<li><code>"pushNotifications": false</code> 가 있습니다. 구조체 태그가 <code>json:"pushNotifications"</code> 로 <code>omitempty</code> 가 없어서, 안 켠 기능도 <code>false</code> 로 적힙니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p03-three-cards-ts">
+<h3>TypeScript 의 카드 — 파이썬과 Content-Type 하나만 다르다</h3>
+<p class="lead">TS 탭의 기록을 파이썬 탭과 <code>diff</code> 하면 두 줄만 다릅니다. 카드 속 포트(10310 과 10311)와, 아래의 <code>charset=utf-8</code> 입니다.</p>
+<!--OUT file=out/03/card_agents.txt wire=ts-wire lines=1-14-->
+<div class="note"><b>charset 은 어디서</b> — TS 판의 카드 처리기는 express 위에서 돕니다. 파이썬(Starlette)과 Go 는 <code>application/json</code> 만 적습니다. JSON 은 UTF-8 이 기본이라 둘 다 올바릅니다.</div>
+</article>
+
+<article class="card" id="p03-three-cards-cmp">
+<h3>세 카드 비교 — 뜻은 같고 바이트는 다르다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>키 순서</td><td>proto 필드 번호 순</td><td>proto 필드 번호 순</td><td>SDK 구조체 필드 순</td></tr>
+<tr><td>안 켠 기능</td><td>뺀다</td><td>뺀다</td><td><code>"pushNotifications": false</code></td></tr>
+<tr><td>Content-Type</td><td><code>application/json</code></td><td><code>…; charset=utf-8</code></td><td><code>application/json</code></td></tr>
+</table>
+</div>
+<ul>
+<li>proto 는 <code>streaming</code>·<code>pushNotifications</code> 를 <code>optional bool</code> 로 둡니다 — "안 적음" 과 "<code>false</code> 로 적음" 을 구별할 수 있는 꼴입니다. Go 구조체는 그냥 <code>bool</code> 이라 그 구별이 없습니다.</li>
+<li>JSON 객체의 키 순서는 뜻이 없고, 빠진 기능은 지원하지 않는 기능이므로 세 카드는 같은 말을 합니다. 파이썬 카드를 받은 세 <code>ask</code>(<a href="#p03-url-bypass">4장</a>)와 Go 카드를 받은 세 <code>ask</code>(<a href="#p03-url-fixed">4장</a>)는 같은 대화를 합니다.</li>
+</ul>
+<div class="warn"><b>바이트가 중요해지는 곳</b> — 카드에 서명할 때입니다. 서명은 바이트를 정규화(JCS)한 뒤 계산하므로, 한쪽은 <code>false</code> 를 적고 한쪽은 빼면 같은 카드가 다른 바이트가 됩니다. 이 책의 Go 정산 에이전트가 서명하는 카드만은 기본값을 빼고 내보내는 까닭입니다(12부).</div>
+</article>
+
+<article class="card" id="p03-base-path">
+<h3>주소에 경로가 붙으면 세 SDK 가 서로 다른 곳을 두드린다</h3>
+<p class="lead">카드 주소를 <code>http://127.0.0.1:10306/a2a/</code> 처럼 경로가 붙은 꼴로 주면 어떻게 될까요. 맨손 카드 서버(카드는 맨 위 <code>/.well-known/</code> 에만 있다) 앞의 탭에 세 언어의 <code>ask</code> 를 차례로 보냈습니다(<code>base_path</code> 명세).</p>
+<!--OUT file=out/03/base_path.txt wire=card-wire grep=^→-->
+<!--OUT file=out/03/base_path.txt part=터미널 3 grep=^\[터미널|^Error:|^오류:-->
+<div class="note"><b>세 갈래</b> — 파이썬과 TS 는 <code>/a2a/</code> 뒤에 well-known 경로를 이어 붙였고, Go 는 준 주소 <code>/a2a/</code> 를 그대로 카드 주소로 썼습니다. 셋 다 404 로 끝났습니다(파이썬의 긴 역추적은 <code>AgentCardResolutionError … (HTTP 404)</code> 로 끝납니다).</div>
+</article>
+
+<article class="card" id="p03-base-path-why">
+<h3>세 SDK 의 규칙 — 설치본 소스에서</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>SDK</th><th>카드 주소를 만드는 법</th><th>어디서</th></tr>
+<tr><td>파이썬</td><td>준 주소의 끝 <code>/</code> 를 떼고 <code>/.well-known/agent-card.json</code> 을 늘 이어 붙인다</td><td><code>A2ACardResolver</code> (<code>client/card_resolver.py</code>)</td></tr>
+<tr><td>TypeScript</td><td><code>new URL(".well-known/agent-card.json", 준 주소)</code> — 상대 경로 풀이라 끝 <code>/</code> 가 있으면 그 아래, 없으면 마지막 조각을 갈아 끼운다</td><td><code>DefaultAgentCardResolver</code> (<code>dist/client/index.js</code>)</td></tr>
+<tr><td>Go</td><td>경로가 비었거나 <code>/</code> 면 well-known 경로를 붙이고, 아니면 준 주소를 그대로 카드 주소로 쓴다</td><td><code>buildURL</code> (<code>a2aclient/agentcard/resolver.go</code>)</td></tr>
+</table>
+</div>
+<div class="key"><b>호스트 뿌리 주소를 주거나, 카드의 전체 주소를 준다</b> — 뿌리 주소(<code>http://호스트:포트/</code>)라면 세 SDK 가 같은 곳을 찾습니다. 이 책의 <code>ask</code> 와 기획 에이전트는 언제나 뿌리 주소를 받습니다. RFC 8615 도 well-known 경로를 호스트의 맨 위에 둡니다.</div>
+</article>
+
+<article class="card quiz" id="p03-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. Go 숙소 에이전트의 카드에서 <code>"pushNotifications": false</code> 를 지워 파이썬 카드처럼 만들면, 클라이언트가 알게 되는 것이 달라집니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 달라지지 않습니다. 파이썬·TS 카드는 그 키가 아예 없고(<a href="#p03-three-cards-ts">TS 와이어</a>), Go 카드는 <code>false</code> 로 적었을 뿐(<a href="#p03-three-cards">Go 와이어</a>) 둘 다 "푸시 알림을 지원하지 않는다" 는 뜻입니다. 바이트가 달라지므로 서명을 견줄 때만 문제가 됩니다.</div>
+</article>
+
+<!-- ==== 3장 supportedInterfaces ==== -->
+
+<article class="card" id="p03-ch3">
+<p class="chnum">3장</p>
+<h2>supportedInterfaces — 어느 문으로 들어갈까</h2>
+<p class="chsub">인터페이스의 네 필드 → §8.3 의 규칙 → 문 둘 달린 숙소 에이전트 → 세 클라이언트의 선택 → 와이어로 확인 → 왜 갈렸나 → 고르는 차례 → tenant 를 싣는다 → tenant 는 누가 읽나 → 세 언어 비교</p>
+</article>
+
+<article class="card" id="p03-iface-fields">
+<h3>인터페이스 하나 = 주소 + 바인딩 + 프로토콜 판 (+ tenant)</h3>
+<p class="lead"><code>supportedInterfaces</code> 의 원소는 <code>AgentInterface</code> 입니다. proto 의 정의와 주석을 옮기면 이렇습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드</th><th>필수</th><th>proto 주석의 요지</th></tr>
+<tr><td><code>url</code></td><td>예</td><td>이 인터페이스가 있는 URL. "Must be a valid absolute HTTPS URL in production"</td></tr>
+<tr><td><code>protocolBinding</code></td><td>예</td><td>열린 문자열. 공식은 <code>JSONRPC</code>·<code>GRPC</code>·<code>HTTP+JSON</code></td></tr>
+<tr><td><code>protocolVersion</code></td><td>예</td><td>이 인터페이스가 쓰는 A2A 판. 보기 <code>"0.3"</code>·<code>"1.0"</code></td></tr>
+<tr><td><code>tenant</code></td><td>아니오</td><td>한 끝점 뒤의 여러 에이전트(테넌트)를 가르는 불투명한 문자열</td></tr>
+</table>
+</div>
+<div class="note"><b>바인딩은 13부, 판은 14부</b> — 세 바인딩이 와이어에서 어떻게 다른지, <code>"0.3"</code> 인터페이스와 어떻게 공존하는지는 그 부들이 다룹니다. 이 장은 "카드에 여럿이 적혀 있을 때 클라이언트가 무엇을 고르나" 만 봅니다.</div>
+</article>
+
+<article class="card" id="p03-iface-rules">
+<h3>§8.3 — 서버는 선호 순으로 적고, 클라이언트는 앞에서부터 고른다</h3>
+<p class="lead">스펙 §8.3.1 은 서버 쪽, §8.3.2 는 클라이언트 쪽 규칙입니다.</p>
+<ul>
+<li><b>서버</b> — 목록은 "<b>SHOULD</b> declare all supported protocol combinations in preference order", "The first entry … represents the preferred interface", 그리고 "Each interface <b>MUST</b> accurately declare its transport protocol and URL".</li>
+<li><b>클라이언트</b>(<b>MUST</b>) — ① 목록을 읽어 "select the first supported transport" ② 여럿을 지원하면 앞의 것 ③ 고른 바인딩의 URL 을 쓴다 ④ 고른 인터페이스에 <code>tenant</code> 가 있으면 모든 요청에 그 값을 그대로 싣는다.</li>
+</ul>
+<div class="key"><b>"지원하는 것 중 첫째"</b> — 서버의 첫째가 아니라, 클라이언트가 지원하는 것 가운데 서버 목록에서 가장 앞의 것입니다. 그래서 같은 카드라도 클라이언트마다 다른 문으로 들어올 수 있습니다. 바로 실험합니다.</div>
+</article>
+
+<article class="card" id="p03-two-doors">
+<h3>실험 도구 — 문이 둘 달린 숙소 에이전트</h3>
+<p class="lead">숙소 에이전트의 카드 함수와 실행기(<code>agents/lodging.py</code>)를 그대로 빌려, HTTP+JSON 문(<code>/rest</code>)을 하나 더 열고 카드 목록의 <b>맨 앞</b>에 적었습니다. 목록은 <code>[HTTP+JSON, JSONRPC]</code> 이고, 둘 다 진짜로 열린 문입니다(§8.3.1 의 MUST).</p>
+<!--CODE file=ex/py/03/two_doors.py region=doors-->
+<div class="note"><b>REST 문은 SDK 가 단다</b> — <code>create_rest_routes(handler, path_prefix="/rest")</code> 한 줄입니다. 요청 처리기는 JSON-RPC 문과 같은 것을 씁니다. SDK 서버 조립은 7부, REST 바인딩은 13부의 몫입니다.</div>
+</article>
+
+<article class="card" id="p03-pick-binding">
+<h3>같은 카드, 세 클라이언트 — 모두 대답은 받았다</h3>
+<p class="lead">카드는 이렇게 생겼습니다. 인원을 빼고("2026-10-30 1박") 물어, 숙소 에이전트가 되묻는 첫 응답에서 멈추게 했습니다(<code>pick_binding</code> 명세).</p>
+<!--OUT file=out/03/pick_binding.txt wire=doors-wire ex=1 lines=9-20-->
+<!--OUT file=out/03/pick_binding.txt part=터미널 3-->
+<div class="note"><b>화면만 보면 똑같다</b> — 세 <code>ask</code> 의 출력은 한 글자도 다르지 않습니다. 어느 문으로 들어왔는지는 와이어가 알려 줍니다.</div>
+</article>
+
+<article class="card" id="p03-pick-binding-wire">
+<h3>와이어 — 파이썬은 JSON-RPC 문, TS·Go 는 HTTP+JSON 문</h3>
+<p class="lead">탭에 남은 요청 줄만 추렸습니다. 세 클라이언트 모두 먼저 카드를 받고, 그다음 문이 갈립니다.</p>
+<!--OUT file=out/03/pick_binding.txt wire=doors-wire grep=^→-->
+<ul>
+<li>파이썬 — <code>POST /</code>: JSON-RPC 봉투 안의 <code>"method": "SendStreamingMessage"</code>.</li>
+<li>TS·Go — <code>POST /rest/message:stream</code>: 메서드가 경로에 들어가는 REST 꼴입니다. 본문에는 JSON-RPC 봉투가 없습니다.</li>
+</ul>
+<!--OUT file=out/03/pick_binding.txt wire=doors-wire ex=4 lines=1-15 note=TS 의 요청 (주고받음 4) — 본문이 곧 SendMessageRequest-->
+</article>
+
+<article class="card" id="p03-pick-why">
+<h3>갈린 까닭 — 기본으로 아는 바인딩이 다르다</h3>
+<p class="lead">§8.3.2 의 "지원하는 것 중 첫째" 에서 "지원하는 것" 이 SDK 마다 다릅니다. 세 <code>ask</code> 는 SDK 기본값으로 클라이언트를 만듭니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>SDK</th><th>기본으로 아는 바인딩</th><th>근거(설치본)</th></tr>
+<tr><td>파이썬</td><td><code>JSONRPC</code> 만</td><td><code>ClientConfig.supported_protocol_bindings</code> 주석 "Empty implies JSONRPC only"</td></tr>
+<tr><td>TypeScript</td><td><code>JSONRPC</code>·<code>HTTP+JSON</code></td><td><code>ClientFactoryOptions.default.transports</code> = <code>[JsonRpcTransportFactory, RestTransportFactory]</code></td></tr>
+<tr><td>Go</td><td><code>JSONRPC</code>·<code>HTTP+JSON</code></td><td><code>a2aclient/factory.go</code> 의 <code>defaultOptions</code> = <code>WithJSONRPCTransport</code>·<code>WithRESTTransport</code></td></tr>
+</table>
+</div>
+<div class="key"><b>셋 다 규칙대로 했다</b> — 파이썬은 목록 첫째(HTTP+JSON)를 몰라 건너뛰고 둘째를, TS·Go 는 첫째를 알아서 첫째를 골랐습니다. TS·Go 는 첫째 문을 고르므로, 그 문이 실제로는 닫혀 있었다면 거기서 막힙니다. 그래서 §8.3.1 이 "accurately declare" 를 MUST 로 둡니다.</div>
+</article>
+
+<article class="card" id="p03-pick-order">
+<h3>고르는 차례 — 카드 순서, 클라이언트 선호, 그리고 판</h3>
+<p class="lead">기본값이 아니라 고르는 차례도 소스를 보면 조금씩 다릅니다. 이 장의 카드처럼 판이 모두 <code>1.0</code> 이고 클라이언트 선호를 따로 주지 않으면 셋 다 "카드 순서에서 아는 첫째" 가 됩니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>SDK</th><th>선호를 주는 옵션</th><th>차례</th></tr>
+<tr><td>파이썬</td><td><code>supported_protocol_bindings</code> + <code>use_client_preference</code>(기본 False)</td><td>기본은 카드 순서. 켜면 클라이언트 목록 순서</td></tr>
+<tr><td>TypeScript</td><td><code>preferredTransports</code></td><td>클라이언트 선호를 먼저, 그다음 카드 순서</td></tr>
+<tr><td>Go</td><td><code>Config.PreferredTransports</code></td><td>새 판이 먼저, 같은 판에서 클라이언트 선호, 그다음 카드 순서</td></tr>
+</table>
+</div>
+<div class="warn"><b>같은 바인딩이 판만 달리 둘이면</b> — 세 SDK 모두 <code>"1.0"</code> 인터페이스를 카드 순서보다 앞세웁니다(파이썬 <code>_find_best_interface</code>, TS <code>bestInterfacePerProtocol</code>, Go 의 판 정렬). §8.3.2 의 "Prefer earlier entries" 와 부딪칠 수 있는 자리라 14부(버전 협상)에서 실제로 시험합니다.</div>
+</article>
+
+<article class="card" id="p03-tenant">
+<h3>tenant — 카드에 적힌 값을 모든 요청에 싣는다</h3>
+<p class="lead">이번에는 문을 JSON-RPC 하나로 두고, 인터페이스에 <code>tenant: "bosang-hq"</code> 를 적었습니다(<code>tenant</code> 명세, <code>two_doors.py --tenant bosang-hq</code>).</p>
+<!--OUT file=out/03/tenant.txt wire=tenant-wire ex=1 lines=9-16-->
+<p>세 <code>ask</code> 가 보낸 요청에서 요청 줄과 <code>params</code> 의 <code>tenant</code> 줄만 추렸습니다.</p>
+<!--OUT file=out/03/tenant.txt wire=tenant-wire grep=^→ POST|^      "tenant"-->
+<div class="note"><b>§8.3.2 의 넷째 규칙 그대로</b> — 세 클라이언트 모두 <code>params.tenant</code> 에 카드의 값을 글자 그대로 실었습니다. 사용자 코드(<code>ask</code>)는 tenant 를 모릅니다. SDK 가 카드에서 읽어 채웠습니다.</div>
+</article>
+
+<article class="card" id="p03-tenant-what">
+<h3>tenant 를 읽는 것은 서버의 몫이다</h3>
+<p class="lead">proto 주석: "The server is responsible for interpreting the value and routing requests accordingly; the protocol does not define its format or semantics." 한 주소 뒤에 에이전트 여럿(예: 부서별)을 두고 이 값으로 가르는 용도입니다.</p>
+<!--OUT file=out/03/tenant.txt part=터미널 3-->
+<ul>
+<li>이 숙소 에이전트는 tenant 로 아무것도 가르지 않습니다. 세 <code>ask</code> 모두 tenant 가 없던 <a href="#p03-pick-binding">앞 실험</a>과 같은 되물음을 받았습니다.</li>
+<li>세 SDK 의 클라이언트는 모두 "tenant 를 채워 주는 장식(decorator)" 을 끼웁니다 — 파이썬 <code>TenantTransportDecorator</code>, TS <code>TenantTransportDecorator</code>, Go <code>tenantTransportDecorator</code>. 요청에 tenant 가 이미 있으면 그 값을, 비었으면 카드의 값을 씁니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p03-iface-cmp">
+<h3>세 언어 비교 — 인터페이스 고르기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>만드는 곳</td><td><code>create_client</code> → <code>ClientFactory.create</code></td><td><code>ClientFactory.createFromUrl</code></td><td><code>a2aclient.NewFromCard</code></td></tr>
+<tr><td>기본 바인딩</td><td>JSON-RPC</td><td>JSON-RPC·HTTP+JSON</td><td>JSON-RPC·HTTP+JSON</td></tr>
+<tr><td>이 장의 카드에서</td><td><code>POST /</code></td><td><code>POST /rest/message:stream</code></td><td><code>POST /rest/message:stream</code></td></tr>
+<tr><td>바인딩 이름 비교</td><td>글자 그대로</td><td>대소문자 무시</td><td>글자 그대로</td></tr>
+<tr><td>tenant</td><td colspan="3">셋 다 <code>params.tenant</code> 에 카드의 값</td></tr>
+</table>
+</div>
+<div class="tip"><b>클라이언트를 짤 때</b> — 상대가 어떤 문을 앞에 두든 받아들일 수 있게, 쓸 줄 아는 바인딩만 등록합니다. 이 책의 기획 에이전트는 세 언어 모두 JSON-RPC 로만 동료를 부릅니다(15부).</div>
+</article>
+
+<article class="card quiz" id="p03-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 문 둘 달린 숙소 에이전트의 카드 순서를 <code>[JSONRPC, HTTP+JSON]</code> 으로 뒤집으면, 세 <code>ask</code> 는 각각 어느 문으로 들어오겠습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 셋 다 JSON-RPC 문(<code>POST /</code>)입니다. 세 SDK 모두 JSON-RPC 를 알고(<a href="#p03-pick-why">기본 바인딩 표</a>), 클라이언트 선호를 주지 않았으므로 "카드 순서에서 아는 첫째" 를 고릅니다(<a href="#p03-pick-order">고르는 차례</a>). 지금 카드에서 TS·Go 가 HTTP+JSON 으로 간 것(<a href="#p03-pick-binding-wire">와이어</a>)은 그것이 첫째였기 때문입니다.</div>
+</article>
+
+<!-- ==== 4장 --url 과 프록시 ==== -->
+
+<article class="card" id="p03-ch4">
+<p class="chnum">4장</p>
+<h2>--url 과 프록시 — 카드의 url 은 바깥 주소</h2>
+<p class="chsub">붙는 주소와 바깥 주소 → 프록시 앞에서 카드 받기 → 탭이 본 것 → 바깥에서 닿지 않는 주소 → 세 언어의 오류 → --url 로 바로잡기 → 대화가 탭을 지난다 → --url 을 정하는 법</p>
+</article>
+
+<article class="card" id="p03-url-problem">
+<h3>에이전트가 아는 자기 주소는 바깥에서 쓰는 주소가 아니다</h3>
+<p class="lead">운영 환경에서 에이전트는 보통 프록시(리버스 프록시·부하 분산기·게이트웨이) 뒤에 섭니다. 바깥은 프록시의 주소로 오고, 에이전트는 안쪽 주소에 붙어 있습니다. 그런데 카드는 에이전트가 씁니다.</p>
+<pre class="fig">
+ 바깥 클라이언트 ──→ 프록시 (바깥 주소)  ──→ 에이전트 (안쪽 주소)
+                     TLS·인증·기록           127.0.0.1:포트 에 붙음
+
+ 카드의 url 에 무엇을 적나
+   안쪽 주소  → 클라이언트가 프록시를 건너뛰려 한다 (닿거나, 못 닿거나)
+   바깥 주소  → 모든 요청이 프록시를 지난다
+</pre>
+<div class="note"><b>이 책의 프록시는 와이어 탭</b> — 탭(<code>tools/wiretap.py</code>)도 요청을 받아 뒤로 넘기는 역방향 프록시입니다. 탭의 포트를 "바깥 주소", 에이전트의 포트를 "안쪽 주소" 로 놓고 세 경우를 차례로 돌려 봅니다.</div>
+</article>
+
+<article class="card" id="p03-url-bypass">
+<h3>--url 없이 띄우면 — 카드는 프록시로, 대화는 옆길로</h3>
+<p class="lead">파이썬 숙소 에이전트를 <code>--url</code> 없이 띄우고(카드의 url 은 <code>http://127.0.0.1:10320/</code>), 세 언어의 <code>ask</code> 에는 탭의 주소(10336)를 줬습니다(<code>url_bypass</code> 명세).</p>
+<!--OUT file=out/03/url_bypass.txt part=터미널 3 grep=^\[터미널|^task|^status|^\} \|-->
+<div class="note"><b>잘 된 것처럼 보인다</b> — 셋 다 견적을 받고 <code>COMPLETED</code> 로 끝났습니다. 문제는 화면이 아니라 와이어에 있습니다.</div>
+</article>
+
+<article class="card" id="p03-url-bypass-wire">
+<h3>탭은 카드 세 장만 봤다 — 대화는 10320 으로 곧장 갔다</h3>
+<p class="lead">탭의 기록에서 요청 줄만, 그리고 에이전트의 기록을 나란히 놓았습니다.</p>
+<!--OUT file=out/03/url_bypass.txt wire=proxy-wire grep=^→-->
+<!--OUT file=out/03/url_bypass.txt server=lodging-->
+<ul>
+<li>에이전트는 견적을 세 번 냈는데, 탭에는 <code>SendStreamingMessage</code> 가 한 번도 없습니다. 클라이언트는 §8.3.2 의 셋째 규칙("Use the correct URL for the selected transport")대로 카드의 url 로 갔습니다.</li>
+<li>이 기계에서는 안쪽 주소에도 닿아서 일이 됐을 뿐입니다. 진짜 프록시였다면 TLS·인증·기록을 모두 건너뛴 셈입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p03-url-dead">
+<h3>바깥에서 닿지 않는 주소를 적으면 — 카드는 오고 대화는 안 된다</h3>
+<p class="lead">컨테이너 안 주소처럼 바깥에서 닿지 않는 주소가 카드에 적힌 경우를 흉내 냈습니다. TS 숙소 에이전트를 <code>--url http://127.0.0.1:10349/</code>(아무도 듣지 않는 포트)로 띄우고 탭 주소로 물었습니다(<code>url_dead</code> 명세).</p>
+<!--OUT file=out/03/url_dead.txt wire=proxy-wire grep=^→|^←|"url": "http://127-->
+<div class="warn"><b>카드 받기는 성공한다</b> — 탭은 카드를 세 번 200 으로 넘겼고, 카드 안에는 <code>10349</code> 가 적혀 있습니다. 실패는 그다음, 클라이언트가 그 주소로 갈 때 납니다.</div>
+</article>
+
+<article class="card" id="p03-url-dead-errors">
+<h3>세 언어의 오류 — 무엇이 실패했는지 말하는 정도가 다르다</h3>
+<!--OUT file=out/03/url_dead.txt part=터미널 3 grep=^\[터미널|^a2a\.client\.errors|\[cause\]|^오류:|^\[종료-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>마지막 오류</th><th>주소가 나오나</th></tr>
+<tr><td>파이썬</td><td><code>A2AClientError: Network communication error</code></td><td>아니오 — "All connection attempts failed" 뿐</td></tr>
+<tr><td>TypeScript</td><td><code>TypeError: fetch failed</code>, 원인 <code>ECONNREFUSED</code></td><td>호스트·포트(<code>127.0.0.1:10349</code>)</td></tr>
+<tr><td>Go</td><td><code>failed to send HTTP request: Post "…"</code></td><td>전체 URL</td></tr>
+</table>
+</div>
+<div class="tip"><b>"카드는 받았는데 연결이 안 된다" 면 카드의 url 부터</b> — 오류에 나온 주소가 내가 준 주소(여기서는 탭의 10337)와 다르면 범인은 카드입니다. 파이썬처럼 주소가 안 나오면 카드를 curl 로 받아 <code>supportedInterfaces</code> 를 직접 봅니다.</div>
+</article>
+
+<article class="card" id="p03-url-fixed">
+<h3>--url 에 바깥 주소를 — 이제 모든 요청이 탭을 지난다</h3>
+<p class="lead">이번에는 Go 숙소 에이전트를 <code>--url http://127.0.0.1:10338/</code>(탭 주소)로 띄웠습니다(<code>url_fixed</code> 명세).</p>
+<!--SPEC file=ex/run/03/url_fixed.run-->
+<!--OUT file=out/03/url_fixed.txt wire=proxy-wire grep=^→|^←-->
+<!--OUT file=out/03/url_fixed.txt server=lodging-->
+<div class="key"><b>카드 한 장, 대화 한 번 — 둘 다 프록시를 지난다</b> — 클라이언트마다 <code>GET</code> 카드와 <code>POST /</code> 가 짝을 이루고, 에이전트의 기록에는 견적이 세 번 남았습니다. 옆길로 샌 요청이 없습니다.</div>
+</article>
+
+<article class="card" id="p03-url-fixed-wire">
+<h3>탭이 본 대화 — 상태가 SUBMITTED 에서 COMPLETED 로</h3>
+<p class="lead">파이썬 <code>ask</code> 의 대화(주고받음 2)에서 요청·응답 줄과 상태만 추렸습니다. 스트림 하나가 처음부터 끝까지 탭을 지났습니다.</p>
+<!--OUT file=out/03/url_fixed.txt wire=proxy-wire ex=2 grep=^→|^←|"method"|"state"|"name"-->
+<!--OUT file=out/03/url_fixed.txt part=터미널 3 lines=1-12-->
+<div class="note"><b>스트림 이벤트 해석은 뒤에서</b> — <code>task</code>·<code>artifactUpdate</code>·<code>statusUpdate</code> 이벤트와 Task 상태는 5부와 10부의 주제입니다. 여기서는 "프록시가 다 봤다" 만 확인합니다.</div>
+</article>
+
+<article class="card" id="p03-url-howto">
+<h3>--url 을 정하는 법 — 바깥 클라이언트가 칠 주소 그대로</h3>
+<p class="lead">다섯 에이전트는 세 언어 모두 같은 규칙으로 카드의 url 을 정합니다 — <code>--url</code> 이 있으면 그것, 없으면 붙는 주소. 파이썬 판입니다.</p>
+<!--CODE file=ex/py/agents/common.py lines=62-75-->
+<ul>
+<li><b>스킴</b> — 프록시가 TLS 를 끝내면 바깥은 <code>https</code> 입니다. proto 주석도 "Must be a valid absolute HTTPS URL in production".</li>
+<li><b>호스트·포트</b> — 바깥 클라이언트가 이름을 풀 수 있는 것. 안쪽 IP·<code>localhost</code> 는 안 됩니다.</li>
+<li><b>경로</b> — 프록시가 <code>/lodging/</code> 아래로 넘긴다면 그 경로까지 적습니다. 카드 자리는 <a href="#p03-base-path-why">2장</a>대로 호스트 뿌리에 따로 둡니다.</li>
+</ul>
+<div class="tip"><b>요청마다 바꾸는 길도 있다</b> — 파이썬 SDK 의 <code>create_agent_card_routes</code> 는 <code>card_modifier</code>("Optional callback to adjust the card per request")를 받습니다. 이 책은 쓰지 않고, 띄울 때 정한 카드 한 장을 씁니다.</div>
+</article>
+
+<article class="card quiz" id="p03-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. <code>--url</code> 없이 띄운 에이전트 앞에 프록시를 세웠더니, 프록시의 접속 기록에는 카드 요청만 남고 에이전트는 일을 잘 하고 있습니다. 무엇이 문제이고, 어떻게 고칩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 카드의 url 이 에이전트의 안쪽 주소라서, 클라이언트가 카드만 프록시에서 받고 대화는 안쪽 주소로 곧장 보냅니다(<a href="#p03-url-bypass-wire">탭이 카드 세 장만 본 와이어</a>). 프록시의 TLS·인증·기록이 모두 빠집니다. 에이전트를 <code>--url 바깥주소</code> 로 띄우면 카드와 대화가 둘 다 프록시를 지납니다(<a href="#p03-url-fixed">고친 뒤의 와이어</a>).</div>
 </article>

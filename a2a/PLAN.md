@@ -248,3 +248,16 @@ subagent task each.
 - Findings for later parts: spec never mentions batch, Python SDK rejects it (-32600
   "Batch requests are not supported", jsonrpc_dispatcher.py:246); §9.3 template still says
   `"method": "category/action"`; §9.5 message strings differ from JSON-RPC 2.0's.
+
+### Part 3 first half — 52 slides; wiretap sorts unordered maps (2026-10-16)
+- Subagent wrote `03_card.html` ch1–4 (52 slides, 9 specs, `--check` ×3); `03b_card.html`
+  added to order.txt for ch5–8 (ids must still start `p03-`).
+- Python SDK (upb) map/Struct key order changes per process even with PYTHONHASHSEED → wire
+  captures of Python artifacts were nondeterministic. Wiretap now sorts keys under
+  `data`/`metadata` (deep) and `scopes`/`securitySchemes`/`schemes` (one level), TDD
+  (wiretap tests 16). Part 0 must list this normalisation. AUTHORING updated.
+- Findings (3a): Go card key order = struct order, writes `pushNotifications:false`; TS
+  adds `charset=utf-8`; base URL with a path is resolved three different ways; Python
+  client knows only JSON-RPC by default (TS/Go also HTTP+JSON) so the same two-door card
+  leads to different doors; all three put card `tenant` into `params.tenant`; Go card fetch
+  sends no A2A-Version header; connection-refused messages differ in detail.

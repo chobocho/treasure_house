@@ -10,13 +10,13 @@
      → POST / HTTP/1.1
        Content-Type: application/json
        A2A-Version: 1.0
-       {보기 좋게 편 JSON — 2칸 들여쓰기, 키 순서는 원래대로}
+       {보기 좋게 편 JSON — 2칸 들여쓰기, 키 순서는 원래대로(Struct·맵만 정렬)}
      ← 200 OK
        Content-Type: application/json
        {…}
 
-   text/event-stream 응답은 모았다가 넘기지 않는다 — 사건(event) 하나가 끝날 때마다
-   곧바로 클라이언트에 흘려 보내고(flush), 기록에도 그 사건을 바로 적는다. 스트리밍을
+   text/event-stream 응답은 모았다가 넘기지 않는다 — 이벤트(event) 하나가 끝날 때마다
+   곧바로 클라이언트에 흘려 보내고(flush), 기록에도 그 이벤트를 바로 적는다. 스트리밍을
    가르치는 덱에서 탭이 스트림을 뭉쳐 버리면 보여 주려던 것이 사라진다.
 
    헤더는 HEADERS 의 허용 목록만, 그 순서로, 그 이름 꼴로 적는다. 같은 헤더라도 언어마다
@@ -24,7 +24,7 @@
    것이다. Authorization 값도 그대로 적는다 — 이 덱의 토큰은 전부 이 기계 안의 가짜다.
 
    --whole 이면 주고받음 하나를 다 모은 뒤 한 번에 적는다(동시에 오가는 요청을 a2arun 이
-   통째로 정렬할 수 있게 — order=sorted). 기본은 SSE 사건이 지나가는 대로 적는다.
+   통째로 정렬할 수 있게 — order=sorted). 기본은 SSE 이벤트가 지나가는 대로 적는다.
 """
 import argparse
 import http.client
@@ -55,8 +55,44 @@ def format_head(line, headers):
     return [line] + ['  %s: %s' % (h, got[h]) for h in HEADERS if h in got]
 
 
+# 순서가 없는 것들. 파이썬 SDK(upb)는 protobuf Struct·맵의 키 순서를
+# 프로세스마다 바꿔 내보내므로 그대로 적으면 캡처가 매번 달라진다.
+# JSON 객체에도 protobuf 맵에도 순서의 뜻이 없으니 여기서만 정렬한다:
+# Struct(data·metadata)는 그 아래 전부, 맵(scopes·securitySchemes·
+# schemes)은 그 층의 키만. 나머지 키는 보낸 순서 그대로다.
+STRUCT_KEYS = frozenset(('data', 'metadata'))
+MAP_KEYS = frozenset(('scopes', 'securitySchemes', 'schemes'))
+
+
+def _deep_sorted(v):
+    if isinstance(v, dict):
+        return {k: _deep_sorted(v[k]) for k in sorted(v)}
+    if isinstance(v, list):
+        return [_deep_sorted(x) for x in v]
+    return v
+
+
+def _unordered_sorted(v):
+    """STRUCT_KEYS·MAP_KEYS 아래만 정렬한 사본. O(값의 크기 × log 키 수)."""
+    if isinstance(v, list):
+        return [_unordered_sorted(x) for x in v]
+    if not isinstance(v, dict):
+        return v
+    out = {}
+    for k, x in v.items():
+        if k in STRUCT_KEYS:
+            out[k] = _deep_sorted(x)
+        elif k in MAP_KEYS and isinstance(x, dict):
+            out[k] = {m: _unordered_sorted(x[m]) for m in sorted(x)}
+        else:
+            out[k] = _unordered_sorted(x)
+    return out
+
+
 def _pretty(text):
-    """JSON 이면 2칸 들여 편 줄들, 아니면 None. 키 순서는 dict 가 지킨다."""
+    """JSON 이면 2칸 들여 편 줄들, 아니면 None.
+
+    키 순서는 보낸 그대로 두되, 순서가 없는 Struct·맵 아래만 정렬한다."""
     s = text.strip()
     if not s or s[0] not in '{[':
         return None
@@ -64,6 +100,7 @@ def _pretty(text):
         obj = json.loads(s)
     except ValueError:
         return None
+    obj = _unordered_sorted(obj)
     return json.dumps(obj, indent=2, ensure_ascii=False).split('\n')
 
 
@@ -84,7 +121,7 @@ def format_body(body, ctype):
 
 
 def format_event(lines):
-    """SSE 사건 하나(빈 줄 앞까지의 줄들) → 기록 줄들. data 가 JSON 이면 편다."""
+    """SSE 이벤트 하나(빈 줄 앞까지의 줄들) → 기록 줄들. data 가 JSON 이면 편다."""
     out, data = [], []
     for ln in lines:
         if ln.startswith(':'):
@@ -204,10 +241,10 @@ class Tap(http.server.BaseHTTPRequestHandler):
             up.close()
 
     def _stream(self, resp, first):
-        """SSE — 사건 하나(빈 줄까지)를 모아, 적고 나서 곧바로 넘기고 flush 한다.
+        """SSE — 이벤트 하나(빈 줄까지)를 모아, 적고 나서 곧바로 넘기고 flush 한다.
 
-           적는 것이 먼저인 까닭은 _relay 의 JSON 쪽과 같다. 사건 사이에서는 아무것도
-           붙들지 않으므로 클라이언트는 위쪽이 낸 사건을 그때그때 받는다.
+           적는 것이 먼저인 까닭은 _relay 의 JSON 쪽과 같다. 이벤트 사이에서는 아무것도
+           붙들지 않으므로 클라이언트는 위쪽이 낸 이벤트를 그때그때 받는다.
         """
         pending = list(first)
         if not self.whole:

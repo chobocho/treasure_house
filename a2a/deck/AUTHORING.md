@@ -47,7 +47,13 @@ capture. Never guess what an SDK does; read its installed source or run it.
   `ex/<lang>/NN/` when the part is about building (parts 2, 6–9).
 - **Determinism**: no wall-clock time, randomness, unsorted map iteration, racing output.
   IDs and timestamps are normalised by the runner (`<id1>`, `<시각>`) — nothing else is.
-  Concurrent requests in one tap need `order=sorted`. Run `a2arun --check` on every capture
+  Concurrent requests in one tap need `order=sorted`.
+- **Python servers scramble map order**: the Python SDK (upb) emits protobuf Struct/map keys
+  (`data`, `metadata`, `scopes`, …) in a different order in every process (PYTHONHASHSEED
+  does not help). The wire tap sorts keys under `data`/`metadata` (deeply) and
+  `scopes`/`securitySchemes`/`schemes` (one level) — declared in part 0. So show a Python
+  server's JSON **through the tap or the `ask` CLI** (which sorts), never as raw `curl`
+  stdout, or `--check` will fail. Run `a2arun --check` on every capture
   at least twice before you trust it.
 - Ports: 10000 + NN·100 + k. One runner at a time (it locks).
 - Trailing directives: Python `# @ key: value` (ruff rewrites `#@` to `# @`), TS/Go
