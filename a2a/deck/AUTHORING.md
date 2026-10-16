@@ -113,7 +113,8 @@ capture. Never guess what an SDK does; read its installed source or run it.
   request handler 요청 처리기, event queue 이벤트 큐, orchestrator 오케스트레이터,
   delegate 맡기다/위임, interop 상호운용, event 이벤트(SSE 이벤트·스트림 이벤트 —
   "사건" 은 쓰지 않는다), JSON-RPC notification JSON-RPC 알림(푸시 알림과 헷갈리지
-  않게 앞에 JSON-RPC 를 붙인다), batch 배치, wiretap 와이어 탭.
+  않게 앞에 JSON-RPC 를 붙인다), batch 배치, wiretap 와이어 탭, filter 필터("거르개"는
+  쓰지 않는다), body limit 본문 한도.
   Enum values and method names stay in English as on the wire (`TASK_STATE_WORKING`,
   `SendMessage`).
 

@@ -99,6 +99,11 @@ class Normalize(unittest.TestCase):
         s = 'task %s ctx %s again %s %s' % (a, b, a, b.lower())
         self.assertEqual(self.n(s), 'task <id1> ctx <id2> again <id1> <id2>')
 
+    def test_go_log_timestamps(self):
+        # Go 의 log·slog 기본 머리(2026/10/16 11:53:57)도 실행마다 다르다.
+        s = '2026/10/16 11:53:57 INFO x\n2026/10/16 11:53:57.123456 y ; 2026/10/16 stays'
+        self.assertEqual(self.n(s), '<시각> INFO x\n<시각> y ; 2026/10/16 stays')
+
     def test_timestamps(self):
         s = ('"timestamp": "2026-10-16T07:04:05.123456Z" at 2026-10-16T07:04:05+09:00 '
              'and 2026-10-16 07:04:05.5 ; date 2026-11-07 stays')

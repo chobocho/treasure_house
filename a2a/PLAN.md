@@ -287,3 +287,20 @@ subagent task each.
   with -32700 (wrong code — JSON is valid); two content fields: py -32602, ts keeps first
   silently, go -32700; TS client returns bare Message|Task; Go `%v` prints 2.1e+06; Go
   lists unknown part keys in random map order (avoid in captures).
+
+### Part 4 complete — 102 slides (2026-10-16)
+- `04b_message.html` ch5–8 (48 slides): FilePart/acceptedOutputModes/-32005 ×3 (new
+  "접수 에이전트" intake ×3), §3.4 contextId rules ×3, duplicate messageId, ProtoJSON input
+  tolerance ×3. Review fixes: intro wording (two experimental agents), "거르개" → "필터",
+  `protojson.py` timestamp precision now taken as the max over all answers (one stamp with
+  trailing zeros trimmed made a 0.1 % flake).
+- Tool fix (TDD): runner normalises Go log headers `2026/10/16 11:53:57` → `<시각>` (Go SDK
+  slog lines on stderr made Go-agent error captures flaky).
+- Findings: TS JSON-RPC body limit 100 KB (`express.json()` default) → bare 413 without a
+  JSON-RPC error; no server SDK reads acceptedOutputModes; -32005 only when py/ts input-
+  mode validation is switched on, Go executor must return `ErrUnsupportedContentType`;
+  duplicate messageId → all three run the executor twice; ProtoJSON input tolerance
+  differs widely (snake_case, `"role":"user"`, numeric enums); **Python ListTasks silently
+  ignores an unknown status filter and returns everything**; empty lists `[]` vs Go
+  `null`; timestamp precision ms (ts) / µs (py) / ns (go); Go SDK stamps local time
+  (`+09:00` on a KST host would violate §5.6.1 — this machine is UTC).

@@ -1,4 +1,531 @@
-<article class="card" id="p04-todo-b">
-<h3>Message·Part·Role·contextId (뒤 절반)</h3>
-<p class="lead">준비 중입니다</p>
+<!-- ==== 5장 FilePart ==== -->
+
+<article class="card" id="p04-ch5">
+<p class="chnum">5장</p>
+<h2>FilePart</h2>
+<p class="chsub">raw 와 url 두 길 → 식사 에이전트의 menu.md → 파일 파트 꺼내기 ×3 → 세 언어 비교 → 큰 raw 와 서버의 본문 한도 → url 을 받은 쪽의 일 → acceptedOutputModes ×3 → 거르지 않는 서버 → 입력 미디어 타입 거절(-32005) ×3 → 세 서버 비교</p>
+</article>
+
+<article class="card" id="p04-file-two">
+<h3>파일은 두 길로 간다 — 바이트를 싣거나(raw), 주소를 싣거나(url)</h3>
+<p class="lead">v1.0 에는 "파일 파트" 라는 타입이 따로 없습니다. <a href="#p04-part-kinds">2장</a>의 oneof 에서 <code>raw</code> 나 <code>url</code> 을 고르고, 옆에 <code>filename</code>·<code>mediaType</code> 을 붙이면 그것이 파일입니다. 두 길은 성격이 다릅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th><code>raw</code></th><th><code>url</code></th></tr>
+<tr><td>와이어에 실리는 것</td><td>파일 내용 — base64 문자열</td><td>주소 문자열 하나</td></tr>
+<tr><td>크기</td><td>파일의 약 4/3 (<a href="#p04-part-raw">28바이트 → 40글자</a>)</td><td>주소 길이뿐</td></tr>
+<tr><td>받는 쪽의 일</td><td>없음 — SDK 가 바이트로 풀어 준다</td><td>그 주소에서 직접 가져온다</td></tr>
+<tr><td>저장</td><td>작업의 이력·아티팩트에 그대로 남는다</td><td>주소만 남는다 — 내용은 그 서버에</td></tr>
+<tr><td>위험</td><td>본문이 커진다(이 장 뒤에서 잰다)</td><td>받은 주소를 그대로 가져오면 SSRF(§14.1.1)</td></tr>
+</table>
+</div>
+<div class="note"><b>스펙에는 크기 기준이 없다</b> — "몇 바이트부터 url 로" 같은 규칙은 스펙에도 proto 에도 없습니다. proto 는 <code>raw</code> 에 "In JSON serialization, this is encoded as a base64 string" 한 줄만 적습니다. 그래서 이 장은 세 SDK 서버가 큰 본문을 어떻게 받는지 재 보고, 그 숫자로 판단합니다.</div>
+</article>
+
+<article class="card" id="p04-file-menu">
+<h3>식사 에이전트는 식단표를 menu.md 파일 파트로 돌려준다</h3>
+<p class="lead">총무팀이 식사 에이전트에 막는 호출로 "1박, 30명, 채식 2명" 을 물었습니다(<code>files</code> 명세, 파이썬 쪽에만 탭). 답은 아티팩트 셋인데, 둘째가 파일입니다.</p>
+<!--SPEC file=ex/run/04/files.run-->
+<!--OUT file=out/04/files.txt wire=py-wire ex=2 lines=57-67 grep=^(?!\s*"raw") note=raw 값(260글자)은 한 줄이 너무 길어 화면에서 뺐습니다-->
+<ul>
+<li><code>raw</code> 옆에 <code>filename</code>(<code>menu.md</code>)과 <code>mediaType</code>(<code>text/markdown</code>)이 붙었습니다. 받는 쪽은 이 둘로 저장할 이름과 여는 방법을 정합니다.</li>
+<li>나머지 두 아티팩트는 <code>식단표</code>(글 파트 셋)와 <code>식사 견적</code>(데이터 파트)입니다. 식단표가 왜 글 파트 셋인지 — 스트림으로 한 줄씩 이어 붙인 청크(<code>append</code>·<code>lastChunk</code>) — 는 10부에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-file-py">
+<h3>파이썬 — p.raw 는 이미 bytes 다, 이름과 타입은 옆 필드에</h3>
+<p class="lead">세 언어의 클라이언트가 같은 언어의 식사 에이전트에 같은 것을 묻고, 아티팩트를 돌며 파일 파트를 꺼냅니다. 먼저 파이썬입니다.</p>
+<!--CODE file=ex/py/04/menu_file.py region=file-->
+<!--OUT file=out/04/files.txt part=터미널 5 lines=2-10-->
+<ul>
+<li>와이어의 base64 는 SDK(protobuf 의 JSON 해석기)가 이미 풀었습니다. <code>p.raw</code> 는 <code>bytes</code> 이고, 길이 195 는 파일의 바이트 수입니다.</li>
+<li>필드 이름이 proto 쪽 이름입니다 — 와이어의 <code>mediaType</code> 이 파이썬에서는 <code>media_type</code>. 두 이름의 관계는 8장에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-file-ts">
+<h3>TypeScript — $case 가 "raw" 면 value 는 Buffer 다</h3>
+<p class="lead">TS 는 <a href="#p04-part-read-ts">2장</a>처럼 <code>content?.$case</code> 로 가릅니다. <code>"raw"</code> 로 좁혀지면 <code>value</code> 의 타입이 <code>Buffer</code> 라서 <code>toString("utf-8")</code> 로 바로 글이 됩니다.</p>
+<!--CODE file=ex/ts/04/menu_file.ts region=file-->
+<!--OUT file=out/04/files.txt part=터미널 5 lines=12-20-->
+<div class="note"><b>빈 문자열이 "없음"</b> — ts-proto 의 <code>Part</code> 는 <code>filename</code>·<code>mediaType</code> 을 늘 <code>string</code> 으로 들고, 와이어에 없으면 <code>""</code> 입니다. "이름이 없는 파일" 은 <code>p.filename === ""</code> 로 가립니다.</div>
+</article>
+
+<article class="card" id="p04-file-go">
+<h3>Go — Content 가 a2a.Raw 인지 타입 단언으로 묻는다</h3>
+<p class="lead">Go 는 <code>p.Content.(a2a.Raw)</code> 로 묻고, 맞으면 <code>[]byte</code> 를 손에 쥡니다. <code>Filename</code>·<code>MediaType</code> 은 <code>Part</code> 구조체의 필드입니다.</p>
+<!--CODE file=ex/go/04/menu_file/main.go region=file-->
+<!--OUT file=out/04/files.txt part=터미널 5 lines=22-30-->
+<div class="note"><b>세 에이전트, 같은 파일</b> — 파이썬·TS·Go 식사 에이전트가 낸 <code>menu.md</code> 가 모두 195바이트, 내용도 한 글자까지 같습니다. 업무 규칙이 골든 벡터를 따르기 때문입니다(0부).</div>
+</article>
+
+<article class="card" id="p04-file-cmp">
+<h3>세 언어 비교 — 파일 파트를 꺼내는 세 가지 손</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>파일인지 묻기</td><td><code>WhichOneof("content") == "raw"</code></td><td><code>content?.$case === "raw"</code></td><td><code>p.Content.(a2a.Raw)</code></td></tr>
+<tr><td>내용의 타입</td><td><code>bytes</code></td><td><code>Buffer</code></td><td><code>a2a.Raw</code>(<code>[]byte</code>)</td></tr>
+<tr><td>파일 이름</td><td><code>p.filename</code></td><td><code>p.filename</code></td><td><code>p.Filename</code></td></tr>
+<tr><td>미디어 타입</td><td><code>p.media_type</code></td><td><code>p.mediaType</code></td><td><code>p.MediaType</code></td></tr>
+<tr><td>없으면</td><td><code>""</code></td><td><code>""</code></td><td><code>""</code></td></tr>
+<tr><td>base64 풀기</td><td>SDK</td><td>SDK</td><td>SDK</td></tr>
+</table>
+</div>
+<div class="key"><b>파일 파트를 읽는 코드에 base64 는 없다</b> — 세 SDK 모두 직렬화할 때 base64 로 적고, 읽을 때 바이트로 되돌립니다. 맨손으로 JSON 을 다룰 때만(6부) base64 를 직접 풉니다.</div>
+</article>
+
+<article class="card" id="p04-file-big">
+<h3>큰 raw 는 서버의 본문 한도에 걸린다 — TS 서버는 100KB 에서 413</h3>
+<p class="lead">0 바이트로 채운 파일 둘(70,000·80,000바이트)을 raw 파트에 실어, <a href="#p04-part-read-py">2장</a>의 파트 확인 에이전트 셋에 SDK 없이 보냈습니다(<code>big</code> 명세 — 포트 10454 파이썬, 10455 TS, 10456 Go). 본문이 커서 탭은 세우지 않았습니다.</p>
+<!--CODE file=ex/py/04/big.py region=body-->
+<!--OUT file=out/04/big.txt part=터미널 4 lines=2-9-->
+<!--OUT file=out/04/big.txt server=echo-ts grep=Error|limit|length-->
+<ul>
+<li>80,000바이트 파일은 base64 로 106,668글자가 되어 본문이 106,865바이트입니다. TS 서버의 로그에 한도가 적혀 있습니다 — <code>limit: 102400</code>(100KB). TS SDK 의 JSON-RPC 처리기가 express 의 <code>express.json()</code> 을 기본값 그대로 씁니다.</li>
+<li>413 은 HTTP 상태일 뿐, JSON-RPC 오류 객체가 없습니다. 클라이언트는 A2A 오류 코드를 받지 못합니다.</li>
+<li>파이썬·Go 서버는 두 크기를 다 받았습니다(서버 쪽 SDK 에 한도를 거는 설정이 없음).</li>
+</ul>
+</article>
+
+<article class="card" id="p04-file-url">
+<h3>url 파트를 받은 쪽은 주소 하나를 받는다 — 가져오기도, 그 위험도 받는 쪽 몫</h3>
+<p class="lead">세 SDK 는 url 파트의 주소를 가져오지 않습니다. 2장의 파트 확인 에이전트가 받은 것은 주소 문자열이었습니다(파이썬·TS·Go 차례).</p>
+<!--OUT file=out/04/parts.txt part=터미널 7 grep=url-->
+<ul>
+<li>내용이 필요하면 에이전트가 그 주소로 직접 요청합니다. 그 주소는 받는 쪽에서 닿아야 합니다 — 3부의 카드 <code>url</code> 처럼(<a href="#p03-url-problem">3부</a>) "보내는 쪽에서 보이는 주소" 와 "받는 쪽에서 닿는 주소" 는 다를 수 있습니다.</li>
+<li>스펙 §14.1.1: "File references within A2A messages <b>MUST</b> be validated to prevent server-side request forgery (SSRF)". 모르는 상대가 보낸 주소를 그대로 가져오면, 상대가 에이전트를 시켜 <code>127.0.0.1</code> 이나 사내망 주소를 대신 두드리게 할 수 있습니다. 푸시 알림의 웹훅 주소도 같은 문제를 갖습니다(11부).</li>
+</ul>
+<div class="key"><b>크면 url, 작으면 raw</b> — url 은 본문 한도와 무관하고 이력도 가볍지만, 받는 쪽이 가져와야 하고 주소를 검증해야 합니다. raw 는 받는 쪽이 할 일이 없지만 4/3 로 부풀어 한도에 걸립니다(<a href="#p04-file-big">TS 서버 100KB</a>).</div>
+</article>
+
+<article class="card" id="p04-file-accept">
+<h3>acceptedOutputModes — "이 미디어 타입만 받겠다" 를 요청에 적는다</h3>
+<p class="lead">proto 의 <code>SendMessageConfiguration.accepted_output_modes</code>: "A list of media types the client is prepared to accept for response parts. Agents <b>SHOULD</b> use this to tailor their output." 앞의 클라이언트 셋은 모두 <code>text/markdown</code> 하나만 적었습니다.</p>
+<!--CODE file=ex/py/04/menu_file.py region=modes note=파이썬 — ClientConfig 에 두면 모든 요청에 붙는다-->
+<!--CODE file=ex/ts/04/menu_file.ts region=modes note=TypeScript — 요청의 configuration-->
+<!--CODE file=ex/go/04/menu_file/main.go region=modes note=Go — SendMessageRequest.Config-->
+<p>와이어에서는 <code>params.configuration.acceptedOutputModes</code> 입니다(파이썬 클라이언트의 요청).</p>
+<!--OUT file=out/04/files.txt wire=py-wire ex=2 lines=21-25-->
+</article>
+
+<article class="card" id="p04-file-accept-ignored">
+<h3>세 서버 모두 걸러 내지 않았다 — JSON 견적까지 그대로 왔다</h3>
+<p class="lead">클라이언트는 <code>text/markdown</code> 만 받겠다고 했지만, 세 식사 에이전트 모두 글 파트와 데이터 파트(JSON 견적)까지 보냈습니다. 세 클라이언트의 첫·둘째·끝 줄입니다.</p>
+<!--OUT file=out/04/files.txt part=터미널 5 grep=^\[|: text|: raw|: data-->
+<ul>
+<li>세 SDK 의 요청 처리기는 이 값을 읽지 않습니다 — 설치본에서 <code>accepted_output_modes</code>·<code>acceptedOutputModes</code>·<code>AcceptedOutputModes</code> 를 쓰는 곳은 직렬화와 클라이언트 쪽뿐입니다. SHOULD 를 지키는 것은 실행기(에이전트)의 몫이고, 보물상사 식사 에이전트는 지키지 않습니다.</li>
+<li>오류도 없습니다. §3.3.2 의 <code>ContentTypeNotSupportedError</code> 설명에는 "or implied for an artifact" 도 들어 있지만, 어느 SDK 도 출력 쪽에서 이 오류를 스스로 내지 않았습니다.</li>
+</ul>
+<div class="warn"><b>받는 쪽이 모르는 파트를 견뎌야 한다</b> — <code>acceptedOutputModes</code> 를 적었다고 그 타입만 온다고 믿으면 안 됩니다. 클라이언트는 모르는 미디어 타입의 파트를 건너뛸 수 있어야 합니다.</div>
+</article>
+
+<article class="card" id="p04-file-ctype">
+<h3>입력 쪽은 거절할 수 있다 — -32005 ContentTypeNotSupportedError</h3>
+<p class="lead">§3.3.2: "A Media Type provided in the request's message parts … is not supported by the agent". <a href="#p03-skill-modes">3부</a>에서 본 대로 파이썬·TS 는 이 검사를 스위치로 켜고(기본 꺼짐) Go 는 검사가 없습니다. 그래서 검사를 켠 작은 <b>접수 에이전트</b>를 세 언어로 썼습니다 — 카드의 입력 모드는 <code>text/plain</code>·<code>application/json</code>, 인원("30명")을 받으면 접수증을 내고 없으면 되묻습니다(6·7·8장도 이 에이전트를 씁니다).</p>
+<!--SPEC file=ex/run/04/ctype.run-->
+<!--OUT file=out/04/ctype.txt wire=py-wire ex=1 lines=13-44 note=파이썬 접수 에이전트 — image/png 파트가 든 요청과 답-->
+</article>
+
+<article class="card" id="p04-file-ctype-code">
+<h3>세 접수 에이전트 — 스위치, 옵션, 그리고 실행기 안의 검사</h3>
+<!--CODE file=ex/py/04/intake.py region=strict note=파이썬 — DefaultRequestHandler(validate_input_modes=True)-->
+<!--CODE file=ex/ts/04/intake.ts region=strict note=TypeScript — 처리기의 마지막 인자 options-->
+<!--CODE file=ex/go/04/intake/main.go region=strict note=Go — 실행기가 직접 대 보고 오류를 돌려준다-->
+<p>TS·Go 서버의 답에서 오류만 골랐습니다.</p>
+<!--OUT file=out/04/ctype.txt wire=ts-wire ex=1 grep="code"|"message": "|"reason"-->
+<!--OUT file=out/04/ctype.txt wire=go-wire ex=1 grep="code"|"message": "|"reason"-->
+<div class="note"><b>Go 는 실행기에서 막는다</b> — <code>a2a.ErrUnsupportedContentType</code> 을 이벤트보다 먼저 돌려주면 작업이 만들어지지 않고, SDK 가 그 오류를 <code>-32005</code> 로 옮깁니다(<code>internal/jsonrpc</code> 의 대응표).</div>
+</article>
+
+<article class="card" id="p04-file-ctype-cmp">
+<h3>세 서버 비교 — mediaType 을 안 적은 파트는 아무도 막지 않는다</h3>
+<p class="lead">둘째 요청(<code>rpc/nomt.json</code>)은 같은 파트에서 <code>mediaType</code> 만 뺐습니다. 세 서버 모두 받아 접수했습니다(파이썬·TS·Go 차례).</p>
+<!--OUT file=out/04/ctype.txt wire=py-wire ex=2 grep="state"-->
+<!--OUT file=out/04/ctype.txt wire=ts-wire ex=2 grep="state"-->
+<!--OUT file=out/04/ctype.txt wire=go-wire ex=2 grep="state"-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>켜는 법</td><td><code>validate_input_modes=True</code></td><td><code>{validateInputModes: true}</code></td><td>실행기에서 직접</td></tr>
+<tr><td>허용 목록</td><td>카드 기본값 ∪ 스킬들의 <code>inputModes</code></td><td>카드 기본값만</td><td>우리가 정한 목록</td></tr>
+<tr><td>오류 문구</td><td><code>Media type image/png is not supported…</code></td><td><code>Media type 'image/png' is not supported…</code></td><td>우리 문구 + <code>incompatible content types</code></td></tr>
+<tr><td><code>data[].reason</code></td><td colspan="3"><code>CONTENT_TYPE_NOT_SUPPORTED</code> — 셋이 같다</td></tr>
+<tr><td><code>mediaType</code> 없는 파트</td><td colspan="3">검사하지 않고 받는다</td></tr>
+</table>
+</div>
+<div class="note"><b>파이썬 SDK 의 주석</b> — 빈 <code>mediaType</code> 을 넘기는 까닭은 "only a media type the client actually stated can contradict the card", 검사를 기본으로 끈 까닭은 "an agent whose declared modes do not spell the media types its clients really send would start refusing traffic it previously accepted" 입니다. 카드의 모드 목록이 실제로 오가는 타입과 어긋나 있으면, 켜는 순간 멀쩡하던 요청이 거절됩니다.</div>
+</article>
+
+<article class="card quiz" id="p04-ch5-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 총무팀이 숙소 안내 PDF(90,000바이트)를 raw 파트에 실어 TS 로 만든 에이전트에 보냅니다. 본문은 대략 몇 바이트가 되고, 어떤 답을 받습니까? 파이썬 서버라면 어떻습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> base64 로 약 4/3 이 되어 본문이 12만 바이트쯤입니다. TS SDK 의 JSON-RPC 처리기는 express 기본 한도 102,400바이트(<code>limit: 102400</code>)를 넘는 본문을 <code>413 Payload Too Large</code> 로 돌려보냅니다 — JSON-RPC 오류 객체도 없습니다(<a href="#p04-file-big">본문 한도</a>, 80,000바이트 파일이 이미 106,865바이트 본문으로 413). 파이썬 서버는 같은 실험에서 두 크기를 다 받았습니다. 이런 파일은 <code>url</code> 파트로 보내는 것이 맞습니다.</div>
+</article>
+
+<!-- ==== 6장 contextId 규칙 ==== -->
+
+<article class="card" id="p04-ch6">
+<p class="chnum">6장</p>
+<h2>contextId 규칙</h2>
+<p class="chsub">§3.4 의 규칙 여덟 → 여섯 번 두드리기 → 파이썬 → TypeScript → Go → 같은 맥락에 새 작업 → 어긋난 contextId 는 거절 → taskId 만 주면 맥락을 찾아 준다 → 없는 taskId 는 -32001 → 클라이언트가 지은 contextId → 세 서버 비교</p>
+</article>
+
+<article class="card" id="p04-ctx-rules">
+<h3>contextId 는 서버가 짓고, 지키고, 어긋나면 거절한다 — §3.4 의 규칙</h3>
+<p class="lead"><code>contextId</code> 는 "logically groups multiple related Task and Message objects"(§3.4.1) — 여러 작업과 메시지를 한 대화로 묶는 꼬리표입니다. <code>taskId</code> 는 그 안의 작업 하나입니다(<a href="#p04-msg-taskid">1장</a>). 이 장에서 시험할 규칙입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>규칙(스펙의 말)</th><th>절</th><th>시험</th></tr>
+<tr><td>contextId 없는 메시지면 에이전트가 새로 지을 수 있고(MAY), 지었으면 답에 넣어야 한다(MUST)</td><td>§3.4.1</td><td>①</td></tr>
+<tr><td>"Clients MAY use contextId without taskId to start a new task within an existing conversation context"</td><td>§3.4.3</td><td>②</td></tr>
+<tr><td>"Agents MUST reject messages containing mismatching contextId and taskId"</td><td>§3.4.3</td><td>③</td></tr>
+<tr><td>"Agents MUST infer contextId from the task if only taskId is provided"</td><td>§3.4.3</td><td>④</td></tr>
+<tr><td>없는 taskId 면 <code>TaskNotFoundError</code>(MUST), 클라이언트가 새 작업의 id 를 정하는 것은 "NOT supported"</td><td>§3.4.2</td><td>⑤</td></tr>
+<tr><td>클라이언트가 지은 contextId: 에이전트는 받아 지킬 수 있고(MAY), 못 받으면 거절하고 새로 짓지 말아야 한다(MUST NOT). 클라이언트는 서버가 어떻게 다룰지 모르면 보내지 말아야 한다(SHOULD NOT)</td><td>§3.4.1</td><td>⑥</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p04-ctx-plan">
+<h3>여섯 번 두드린다 — 같은 대본을 세 언어의 SDK 클라이언트로</h3>
+<p class="lead">세 언어의 클라이언트가 같은 언어의 접수 에이전트(<a href="#p04-file-ctype">5장</a>)에 같은 대본을 보냅니다. 파이썬 쪽 대본입니다. ①의 답(인원을 되묻는 작업 <code>t1</code>)을 뒤의 세 번이 다시 씁니다.</p>
+<!--SPEC file=ex/run/04/ctx.run-->
+<!--CODE file=ex/py/04/ctx_rules.py region=rules-->
+<div class="note"><b>순서가 뜻을 가진다</b> — ③(어긋난 맥락)은 ④보다 먼저입니다. ④에서 <code>t1</code> 이 접수를 마치면(COMPLETED) 그 뒤로는 종료된 작업이라, 어긋남이 아니라 "종료된 작업" 이라는 다른 오류가 납니다(5부).</div>
+</article>
+
+<article class="card" id="p04-ctx-py">
+<h3>파이썬 — Message 의 task_id·context_id 를 채우면 와이어에 실린다</h3>
+<p class="lead">빈 문자열이면 와이어에 나가지 않습니다(proto3 의 문자열은 "" 가 곧 없음 — 8장). 오류는 SDK 의 예외 클래스로 옵니다.</p>
+<!--CODE file=ex/py/04/ctx_rules.py region=send-->
+<!--OUT file=out/04/ctx.txt part=터미널 7 lines=2-7-->
+</article>
+
+<article class="card" id="p04-ctx-ts">
+<h3>TypeScript — 메시지 객체에 taskId·contextId 를 적는다</h3>
+<p class="lead">ts-proto 의 <code>Message</code> 는 두 필드를 늘 <code>string</code> 으로 들고, <code>""</code> 면 직렬화에서 뺍니다. 오류는 <code>JsonRpc…Error</code> 클래스로 옵니다.</p>
+<!--CODE file=ex/ts/04/ctx_rules.ts region=send-->
+<!--OUT file=out/04/ctx.txt part=터미널 7 lines=9-14-->
+</article>
+
+<article class="card" id="p04-ctx-go">
+<h3>Go — msg.TaskID·msg.ContextID 를 채운다, 오류는 문장 하나</h3>
+<p class="lead"><code>TaskID</code> 는 <code>a2a.TaskID</code> 타입, <code>ContextID</code> 는 <code>string</code> 입니다. 둘 다 <code>omitempty</code> 라 빈 값은 빠집니다.</p>
+<!--CODE file=ex/go/04/ctx_rules/main.go region=send-->
+<!--OUT file=out/04/ctx.txt part=터미널 7 lines=16-21-->
+<div class="note"><b>Go 클라이언트의 오류는 서버 문구 그대로</b> — <code>executor setup failed: failed to load exec ctx: …</code> 는 Go 서버가 와이어에 적은 <code>error.message</code> 입니다. 코드는 셋 다 같습니다 — 다음 슬라이드들.</div>
+</article>
+
+<article class="card" id="p04-ctx-same">
+<h3>② 같은 맥락에 새 작업 — contextId 만 주면 작업 id 는 새로 생긴다</h3>
+<p class="lead">②는 ①의 맥락(<code>&lt;id2&gt;</code>)을 달고 taskId 없이 보냈습니다. 파이썬 서버의 주고받음입니다.</p>
+<!--OUT file=out/04/ctx.txt wire=py-wire ex=3 lines=8-17-->
+<!--OUT file=out/04/ctx.txt wire=py-wire ex=3 lines=23-31-->
+<ul>
+<li>새 작업 <code>&lt;id3&gt;</code> 이 같은 맥락 <code>&lt;id2&gt;</code> 에 들어갔습니다. TS·Go 도 같았습니다(<a href="#p04-ctx-ts">TS</a>·<a href="#p04-ctx-go">Go</a> 의 ②줄).</li>
+<li>새 작업의 이력에는 이번 메시지만 있습니다. 같은 맥락의 앞 작업을 참고할지는 에이전트가 정합니다 — §3.4.1: "Agents <b>MAY</b> use the contextId to maintain internal state, conversational history, or LLM context". 기획 에이전트가 세 에이전트에 한 맥락으로 일을 나눠 주는 장면은 15부에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-ctx-mismatch">
+<h3>③ 어긋난 contextId 는 세 서버 모두 -32602 로 거절했다</h3>
+<p class="lead">③은 <code>t1</code> 의 taskId 에 엉뚱한 맥락 <code>ctx-다른-맥락</code> 을 붙였습니다. 세 서버의 답에서 오류만 골랐습니다(파이썬·TS·Go 차례).</p>
+<!--OUT file=out/04/ctx.txt wire=py-wire ex=4 grep="code"|"message": "-->
+<!--OUT file=out/04/ctx.txt wire=ts-wire ex=4 grep="code"|"message": "-->
+<!--OUT file=out/04/ctx.txt wire=go-wire ex=4 grep="code"|"message": "-->
+<ul>
+<li>§3.4.3 의 MUST 를 셋 다 지켰고, 코드도 같은 <code>-32602</code>(Invalid params) 입니다. 전용 A2A 오류 코드가 없어서 JSON-RPC 의 일반 코드를 씁니다.</li>
+<li>문구는 제각각입니다. 파이썬·TS 는 두 맥락 id 를 다 적고, Go 는 SDK 안쪽 단계 이름(<code>executor setup failed</code>)까지 드러냅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-ctx-infer">
+<h3>④ taskId 만 주면 서버가 그 작업의 맥락을 찾아 준다</h3>
+<p class="lead">④는 <code>t1</code> 의 taskId 만 달고 contextId 는 비웠습니다. 파이썬 서버의 요청과 답의 앞부분입니다.</p>
+<!--OUT file=out/04/ctx.txt wire=py-wire ex=5 lines=8-17-->
+<!--OUT file=out/04/ctx.txt wire=py-wire ex=5 lines=26-31-->
+<ul>
+<li>요청에 없던 <code>contextId</code> 가 답에는 ①의 <code>&lt;id2&gt;</code> 로 왔습니다 — "Agents <b>MUST</b> infer contextId from the task". 작업 <code>&lt;id1&gt;</code> 은 인원을 받아 COMPLETED 가 됐습니다.</li>
+<li>TS·Go 도 ④에서 ①의 맥락을 돌려줬습니다. 그래서 이어 말할 때 클라이언트가 contextId 를 꼭 들고 다닐 필요는 없습니다 — 다만 달았다면 맞아야 합니다(③).</li>
+</ul>
+</article>
+
+<article class="card" id="p04-ctx-notfound">
+<h3>⑤ 없는 taskId 는 -32001 TaskNotFoundError — 작업 id 는 클라이언트가 못 짓는다</h3>
+<p class="lead">⑤는 서버가 만든 적 없는 <code>t-없는-작업</code> 을 taskId 로 보냈습니다. 세 서버의 오류입니다(파이썬·TS·Go 차례).</p>
+<!--OUT file=out/04/ctx.txt wire=py-wire ex=6 grep="code"|"message": "-->
+<!--OUT file=out/04/ctx.txt wire=ts-wire ex=6 grep="code"|"message": "-->
+<!--OUT file=out/04/ctx.txt wire=go-wire ex=6 grep="code"|"message": "-->
+<ul>
+<li>셋 다 <code>-32001</code> 입니다. §3.4.2: "Agents <b>MUST</b> return a TaskNotFoundError if the provided taskId does not correspond to an existing task".</li>
+<li>"이 id 로 새 작업을 만들어 달라" 는 뜻으로 보낸 것이어도 같습니다 — "Client-provided taskId values for creating new tasks is <b>NOT</b> supported". 작업 id 는 서버가 짓습니다(§3.4.2 "server-generated").</li>
+</ul>
+</article>
+
+<article class="card" id="p04-ctx-client">
+<h3>⑥ 클라이언트가 지은 contextId — 세 서버 모두 받아서 그대로 썼다</h3>
+<p class="lead">⑥은 처음 보는 맥락 <code>ctx-워크숍</code> 을 클라이언트가 지어 보냈습니다. 세 언어 모두 <code>ctx=ctx-워크숍</code> 인 새 작업을 받았습니다. 아래는 Go 서버의 주고받음에서 id 들만 고른 것입니다.</p>
+<!--OUT file=out/04/ctx.txt wire=go-wire ex=7 grep="messageId"|"contextId"|^\s{8}"id"-->
+<ul>
+<li>§3.4.1 은 이것을 허락(MAY accept and preserve)하면서도, 클라이언트에게는 "<b>SHOULD NOT</b> provide a client-generated contextId to a server unless they understand how the server will process that contextId" 라고 적습니다. 세 SDK 의 기본 처리기는 모르는 맥락 id 도 새 맥락으로 받아들입니다.</li>
+<li>받지 않기로 한 서버라면 거절해야 하고, 그때 "<b>MUST NOT</b> generate a new contextId for the response" — 몰래 새 id 로 바꿔 답하면 안 됩니다.</li>
+</ul>
+<div class="warn"><b>맥락 id 는 이름표가 아니다</b> — 클라이언트가 <code>ctx-워크숍</code> 처럼 읽기 쉬운 이름을 지으면, 다른 클라이언트가 같은 이름을 지어 남의 맥락에 끼어들 수 있습니다. 서버가 지은 id 는 "opaque identifiers" 로 다루라는 것(§3.4.1)도 같은 까닭입니다.</div>
+</article>
+
+<article class="card" id="p04-ctx-cmp">
+<h3>세 서버 비교 — 규칙은 셋 다 지켰고, 말투만 다르다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>시험</th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>① 새 맥락</td><td colspan="3">서버가 지어 답의 <code>task.contextId</code> 에 넣음</td></tr>
+<tr><td>② 맥락만</td><td colspan="3">같은 맥락에 새 작업</td></tr>
+<tr><td>③ 어긋남</td><td><code>-32602</code> <code>Context … does not match …</code></td><td><code>-32602</code> <code>contextId mismatch: …</code></td><td><code>-32602</code> <code>executor setup failed: …</code></td></tr>
+<tr><td>④ 작업만</td><td colspan="3">작업의 맥락을 찾아 답에 넣음</td></tr>
+<tr><td>⑤ 없는 작업</td><td><code>-32001</code> <code>Task … not found</code></td><td><code>-32001</code> <code>Task not found: …</code></td><td><code>-32001</code> <code>… task not found</code></td></tr>
+<tr><td>⑥ 지은 맥락</td><td colspan="3">받아서 그대로 씀</td></tr>
+<tr><td>클라이언트 오류 타입</td><td><code>InvalidParamsError</code>·<code>TaskNotFoundError</code></td><td><code>JsonRpc…Error</code></td><td><code>error</code>(문장)</td></tr>
+</table>
+</div>
+<div class="key"><b>이어 말하기의 열쇠는 taskId</b> — 같은 작업에 이어 말할 때는 taskId 를, 같은 대화에서 새 일을 시킬 때는 contextId 만 답니다. 둘 다 달았다면 서로 맞아야 합니다.</div>
+</article>
+
+<article class="card quiz" id="p04-ch6-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. 인원을 되묻는 작업 <code>t1</code>(맥락 <code>c1</code>)이 있습니다. 클라이언트가 실수로 다른 대화의 맥락 <code>c2</code> 를 달고 <code>t1</code> 에 "30명" 이라고 보내면 어떻게 됩니까? contextId 를 아예 빼고 보내면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 세 서버 모두 <code>-32602</code> 로 거절합니다(<a href="#p04-ctx-mismatch">③</a>) — §3.4.3 의 "MUST reject messages containing mismatching contextId and taskId". contextId 를 빼면 서버가 <code>t1</code> 의 맥락 <code>c1</code> 을 찾아 쓰고, 작업은 접수를 마칩니다(<a href="#p04-ctx-infer">④</a>, 답의 <code>contextId</code> 가 ①의 것).</div>
+</article>
+
+<!-- ==== 7장 messageId 와 멱등성 ==== -->
+
+<article class="card" id="p04-ch7">
+<p class="chnum">7장</p>
+<h2>messageId 와 멱등성</h2>
+<p class="chsub">스펙은 MAY 한 줄 → 같은 messageId 로 새 메시지 두 번 ×3 → 이어 말하기에 같은 messageId → 실행기는 두 번 돌았다 → 세 서버 비교</p>
+</article>
+
+<article class="card" id="p04-dup-rule">
+<h3>같은 메시지가 두 번 올 수 있다 — 스펙은 "감지해도 된다(MAY)" 까지만 말한다</h3>
+<p class="lead">클라이언트가 보낸 뒤 답을 못 받으면(시간 초과, 연결 끊김) 같은 메시지를 다시 보냅니다. 서버는 첫 요청을 이미 처리했을 수도 있습니다.</p>
+<ul>
+<li>§3.3.1: "<b>Send Message</b> operations <b>MAY</b> be idempotent. Agents may utilize the messageId to detect duplicate messages." 반면 Get 계열은 "naturally idempotent", CancelTask 는 "idempotent" 라고 못 박습니다.</li>
+<li>proto 의 <code>message_id</code> 설명: "The unique identifier (e.g. UUID) of the message. This is created by the message creator." 같은 id 로 다시 보내는 것이 "같은 메시지" 라는 신호가 될 수 있는 까닭입니다.</li>
+<li>MAY 이므로 서버마다 다를 수 있습니다. 세 SDK 서버에 실제로 두 번 보내 봤습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-dup-new">
+<h3>새 메시지로 두 번 — 세 서버 모두 작업을 둘 만들었다</h3>
+<p class="lead">어느 SDK 의 클라이언트 손도 타지 않게, urllib 로 JSON-RPC 를 직접 보내는 <code>dup.py</code> 를 접수 에이전트 셋에 차례로 붙였습니다. ①②는 <code>m-dup</code> 을 새 메시지로 두 번 보냅니다.</p>
+<!--SPEC file=ex/run/04/dup.run-->
+<!--CODE file=ex/py/04/dup.py region=dup-->
+<!--OUT file=out/04/dup.txt part=터미널 4 grep=^\[|m-dup-->
+<div class="warn"><b>재시도가 일을 두 번 시킨다</b> — 세 서버 모두 둘째 <code>m-dup</code> 을 새 일로 받아 다른 작업 id 를 지었습니다. 숙소 예약처럼 두 번 하면 안 되는 일이라면, 같은 messageId 로 다시 보내는 것만으로는 막히지 않습니다.</div>
+</article>
+
+<article class="card" id="p04-dup-hist">
+<h3>이어 말하기에 같은 messageId — 이력에 다시 넣느냐가 SDK 마다 다르다</h3>
+<p class="lead">③은 인원 없이 보내 되묻는 작업을 만들고, ④는 그 작업에 <b>③과 같은 messageId</b>(<code>m-ask</code>)로 다시 말합니다. 끝에 <code>GetTask</code> 로 이력의 messageId 를 찍었습니다(파이썬·TS·Go 차례).</p>
+<!--OUT file=out/04/dup.txt part=터미널 4 grep=^\[|m-ask|history-->
+<ul>
+<li>파이썬: 이력에 <code>m-ask</code> 가 한 번 — 같은 id 의 메시지가 이미 있으면 다시 넣지 않습니다(<code>active_task.py</code> 의 <code>message_already_saved</code>). 뒤의 <code>&lt;id4&gt;</code> 는 에이전트가 되물은 말입니다(서버가 지은 id).</li>
+<li>TS: <code>m-ask</code> 가 두 번 — 요청 처리기가 이어 말하기 메시지를 이력 끝에 조건 없이 붙입니다(<code>_createRequestContext</code>). 되물은 말 둘도 함께 남았습니다.</li>
+<li>Go: <code>m-ask</code> 한 번 — "message will already be present if we're retrying execution" 이라는 주석과 함께 같은 id 를 건너뜁니다(<code>agentexec.go</code>). 에이전트의 말은 이력에 넣지 않습니다(<a href="#p04-msg-store-cmp">1장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p04-dup-work">
+<h3>이력은 걸러도 일은 다시 한다 — 세 실행기 모두 네 번 돌았다</h3>
+<p class="lead">접수 에이전트는 실행될 때마다 한 줄을 찍습니다. 세 서버의 로그입니다(파이썬·TS·Go 차례).</p>
+<!--OUT file=out/04/dup.txt server=intake-py-->
+<!--OUT file=out/04/dup.txt server=intake-ts-->
+<!--OUT file=out/04/dup.txt server=intake-go-->
+<ul>
+<li>네 번 보냈고 네 번 실행됐습니다. ②의 <code>m-dup</code> 도, ④의 <code>m-ask</code> 도 실행기까지 갔습니다.</li>
+<li>파이썬·Go 가 messageId 로 걸러 낸 것은 <b>이력에 넣는 일</b>뿐입니다. §3.3.1 의 "detect duplicate messages" — 중복이면 다시 처리하지 않는 것 — 은 세 SDK 모두 기본으로 하지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-dup-cmp">
+<h3>세 서버 비교 — 멱등성은 에이전트가 만들어야 한다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>같은 messageId</th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>새 메시지로 두 번</td><td colspan="3">작업 둘, 실행 두 번</td></tr>
+<tr><td>같은 작업에 두 번 — 이력</td><td>한 번만</td><td>두 번</td><td>한 번만</td></tr>
+<tr><td>같은 작업에 두 번 — 실행</td><td colspan="3">두 번</td></tr>
+</table>
+</div>
+<div class="key"><b>보내는 쪽은 메시지마다 새 messageId, 받는 쪽은 필요하면 직접 기억</b> — 클라이언트는 새 말마다 새 id 를 짓습니다(1장의 <code>ask-N</code>, 이 장의 <code>ctx-py-N</code>). "같은 요청의 재시도" 를 한 번만 처리하려면, 에이전트가 처리한 messageId 를 기억해 두고 이미 본 id 면 저장된 작업을 돌려주는 식으로 직접 만들어야 합니다. 시간 초과·재시도 전략은 17부에서 다룹니다.</div>
+</article>
+
+<article class="card quiz" id="p04-ch7-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. 클라이언트가 <code>SendMessage</code> 의 답을 기다리다 시간 초과로 같은 요청(같은 messageId)을 한 번 더 보냈습니다. 서버가 세 SDK 중 어느 것이든, 실행기는 몇 번 돌고 작업은 몇 개 생깁니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 첫 요청이 서버에 닿았다면 실행기는 두 번 돌고 작업도 둘 생깁니다. 세 SDK 모두 새 메시지의 messageId 로 중복을 거르지 않습니다(<a href="#p04-dup-new">①②</a>의 서로 다른 작업 id, <a href="#p04-dup-work">서버 로그</a>의 두 줄). §3.3.1 은 감지를 MAY 로만 둡니다.</div>
+</article>
+
+<!-- ==== 8장 ProtoJSON 규칙 ==== -->
+
+<article class="card" id="p04-ch8">
+<p class="chnum">8장</p>
+<h2>ProtoJSON 규칙</h2>
+<p class="chsub">camelCase·enum 이름·시각·빠진 필드 → 일곱 가지로 비튼 요청 → snake_case 필드 이름 → role 을 "user"·1 로 → 왜 그렇게 받았나 → TaskState 를 입력으로 → null·""·모르는 필드 → 시각의 자릿수 → Go 의 시간대 → 세 서버 비교</p>
+</article>
+
+<article class="card" id="p04-pj-rules">
+<h3>와이어 JSON 의 규칙은 ProtoJSON 이다 — 스펙 §5.5–5.7</h3>
+<p class="lead">A2A 의 JSON 은 proto 정의를 ProtoJSON(protobuf 의 JSON 표기 규칙)으로 적은 것입니다. 스펙이 따로 못 박은 것은 넷입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>규칙</th><th>스펙의 말</th><th>예</th></tr>
+<tr><td>필드 이름(§5.5)</td><td>"<b>MUST</b> use camelCase naming for field names, not the snake_case convention used in Protocol Buffer definitions"</td><td><code>context_id</code> → <code>contextId</code></td></tr>
+<tr><td>enum(§5.5)</td><td>"string names as defined in the Protocol Buffer definition"</td><td><code>"ROLE_USER"</code>, <code>"TASK_STATE_INPUT_REQUIRED"</code></td></tr>
+<tr><td>시각(§5.6.1)</td><td>"<b>MUST</b> be represented as ISO 8601 formatted strings in UTC", "Millisecond precision <b>SHOULD</b> be used", "<b>MUST NOT</b> include timezone offsets other than 'Z'"</td><td><code>YYYY-MM-DDTHH:mm:ss.sssZ</code></td></tr>
+<tr><td>빠진 필드(§5.7)</td><td>REQUIRED 는 "<b>MUST</b> be present", 모르는 필드는 "<b>SHOULD</b> ignore"</td><td>1장의 <a href="#p04-msg-required">필수 필드</a></td></tr>
+</table>
+</div>
+<div class="note"><b>쓰는 쪽 규칙이다</b> — 스펙은 "JSON serializations … MUST" 라고 쓰는 쪽을 묶습니다. 받는 쪽이 <code>snake_case</code> 나 v0.3 의 <code>"user"</code> 를 받아 줄지는 말하지 않습니다. 이 장은 그 빈자리에서 세 SDK 가 어떻게 다른지 봅니다. JSON 쪽 바탕은 <a href="#p02-json-camel">2부</a>에서 봤습니다.</div>
+</article>
+
+<article class="card" id="p04-pj-plan">
+<h3>일곱 가지로 비튼 요청 — 맨손 클라이언트가 받음·거절만 찍는다</h3>
+<p class="lead">본문은 모두 "30명" 한 마디(<a href="#p04-file-ctype">접수 에이전트</a>가 바로 접수)이고, 하나씩만 비틀었습니다. <code>protojson.py</code> 가 urllib 로 보내고, 받았으면 상태와 이력에 저장된 <code>role</code> 을, 거절이면 코드와 문구를 찍습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이름(<code>rpc/pj_*.json</code>)</th><th>비튼 곳</th></tr>
+<tr><td><code>camel</code></td><td>없음 — 기준</td></tr>
+<tr><td><code>snake</code></td><td><code>messageId</code> 대신 <code>message_id</code></td></tr>
+<tr><td><code>v03</code></td><td><code>"role": "user"</code> — v0.3 의 모양</td></tr>
+<tr><td><code>number</code></td><td><code>"role": 1</code> — enum 의 수</td></tr>
+<tr><td><code>null</code></td><td><code>"taskId": null</code>, <code>"metadata": null</code></td></tr>
+<tr><td><code>empty</code></td><td><code>"taskId": ""</code>, <code>"contextId": ""</code></td></tr>
+<tr><td><code>unknown</code></td><td>모르는 필드 <code>"priority": "high"</code></td></tr>
+</table>
+</div>
+<!--SPEC file=ex/run/04/protojson.run-->
+</article>
+
+<article class="card" id="p04-pj-snake">
+<h3>snake_case 필드 이름 — 파이썬·TS 는 받고, Go 는 "messageId 가 없다"</h3>
+<p class="lead">포트 10486 이 파이썬, 10487 이 TS, 10488 이 Go 입니다.</p>
+<!--OUT file=out/04/protojson.txt part=터미널 4 grep=^\[|^snake-->
+<ul>
+<li>파이썬은 protobuf 의 JSON 해석기가 proto 이름(<code>message_id</code>)과 JSON 이름(<code>messageId</code>)을 둘 다 받습니다. TS 의 ts-proto 생성 코드도 <code>object.messageId</code> 가 없으면 <code>object.message_id</code> 를 봅니다(<code>Message.fromJSON</code>).</li>
+<li>Go 의 구조체 태그는 <code>json:"messageId"</code> 하나뿐이라 <code>message_id</code> 는 모르는 필드로 버려지고, 필수 검사에서 걸립니다.</li>
+</ul>
+<div class="warn"><b>받아 준다고 써도 되는 것은 아니다</b> — §5.5 의 MUST 는 보내는 쪽 규칙입니다. snake_case 로 보내면 Go 서버에서 바로 깨집니다.</div>
+</article>
+
+<article class="card" id="p04-pj-role">
+<h3>role 을 "user"·1 로 — 세 서버가 세 가지로 받았다</h3>
+<p class="lead"><code>v03</code> 은 v0.3 의 <code>"role": "user"</code>, <code>number</code> 는 enum 의 수 <code>1</code>(<code>ROLE_USER</code>)입니다.</p>
+<!--OUT file=out/04/protojson.txt part=터미널 4 grep=^\[|^v03|^number|message\.role-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td><code>"user"</code></td><td>거절 — <code>message.role: Field is required.</code></td><td>받음 — 이력에 <code>UNRECOGNIZED</code></td><td>받음 — 이력에 <code>"user"</code> 그대로</td></tr>
+<tr><td><code>1</code></td><td>받음 — <code>ROLE_USER</code></td><td>받음 — <code>ROLE_USER</code></td><td>거절 — <code>cannot unmarshal number</code></td></tr>
+</table>
+</div>
+<div class="note"><b>수는 proto 에서 온 해석기만 읽었다</b> — proto 정의에서 만든 해석기(파이썬 protobuf, TS ts-proto)는 enum 을 이름으로도 수로도 받았습니다. enum 을 손으로 쓴 문자열 타입으로 둔 Go 만 수를 못 읽습니다.</div>
+</article>
+
+<article class="card" id="p04-pj-role-why">
+<h3>왜 그렇게 받았나 — 모르는 enum 값을 다루는 세 가지 방법</h3>
+<p class="lead">세 SDK 의 설치본에서 role 을 읽는 곳을 찾았습니다.</p>
+<ul>
+<li>파이썬: JSON-RPC 디스패처가 <code>ParseDict(…, ignore_unknown_fields=True)</code> 로 읽습니다. 이 설정은 모르는 enum 이름도 "모르는 것" 으로 버려서, <code>role</code> 이 빠진 메시지가 되고 필수 검사(<a href="#p04-msg-required">1장</a>)에 걸렸습니다.</li>
+<li>TS: <code>roleFromJSON</code> 의 <code>switch</code> 가 <code>0</code>·<code>1</code>·<code>2</code> 와 세 이름만 알고, 나머지는 <code>default</code> 로 <code>-1</code>(<code>UNRECOGNIZED</code>)을 돌려줍니다. 그 뒤로 role 을 검사하지 않아(<a href="#p04-msg-required-ts">1장</a>) 그대로 처리됐습니다.</li>
+<li>Go: <code>MessageRole</code> 은 <code>string</code> 타입이고 <code>UnmarshalJSON</code> 은 어떤 문자열이든 담습니다(<code>ROLE_UNSPECIFIED</code> 만 빈 값으로). 필수 검사는 빈 값만 보니 <code>"user"</code> 가 통과했고, 쓸 때도 그대로 씁니다.</li>
+</ul>
+<div class="key"><b>v0.3 클라이언트의 "user" 는 세 곳에서 세 결과</b> — 거절, 알 수 없는 role, 그대로 저장. v0.3 피어와 함께 사는 법(SDK 의 호환 계층)은 14부에서 봅니다.</div>
+</article>
+
+<article class="card" id="p04-pj-state">
+<h3>TaskState 를 입력으로 — 파이썬은 모르는 값을 "필터 없음" 으로 읽었다</h3>
+<p class="lead">클라이언트가 TaskState 를 <b>보내는</b> 곳은 <code>ListTasks</code> 의 <code>status</code> 필터입니다(목록 자체는 11부). 일곱 요청 뒤에 세 모양으로 "되묻는 중인 작업" 을 찾았습니다. 그때 서버에는 접수를 마친 작업만 있었으므로 맞는 답은 "없음" 입니다.</p>
+<!--CODE file=ex/py/04/protojson.py region=states-->
+<!--OUT file=out/04/protojson.txt part=터미널 4 grep=^\[|ListTasks-->
+<ul>
+<li>파이썬: v0.3 꼴 <code>"input-required"</code> 를 모르는 enum 으로 버리고 <b>필터 없이</b> 작업 여섯을 다 돌려줬습니다 — 오류도 없이 틀린 답입니다.</li>
+<li>TS: 같은 값을 <code>-32602 Invalid status filter: -1</code> 로 거절했습니다(<code>UNRECOGNIZED</code> = -1). Go: 아무 문자열이나 상태로 받아 맞는 작업이 없었고, 수 <code>6</code> 은 읽지 못했습니다.</li>
+<li>빈 목록도 셋이 다르게 적습니다 — 파이썬·TS 는 <code>[]</code>, Go 는 <code>null</code>. 빈 목록과 "없음" 을 가르지 않는 클라이언트라면 둘 다 견뎌야 합니다(<a href="#p02-null-cmp">2부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p04-pj-empty">
+<h3>null·빈 문자열·모르는 필드 — 셋 다 세 서버가 받았다</h3>
+<p class="lead"><code>null</code> 은 <code>taskId</code>·<code>metadata</code> 를 <code>null</code> 로, <code>empty</code> 는 <code>taskId</code>·<code>contextId</code> 를 <code>""</code> 로, <code>unknown</code> 은 모르는 필드 <code>priority</code> 를 넣었습니다.</p>
+<!--OUT file=out/04/protojson.txt part=터미널 4 grep=^\[|^null|^empty|^unknown-->
+<ul>
+<li><code>""</code> 인 <code>taskId</code> 를 셋 다 "없음" 으로 읽어 새 작업을 만들었습니다. proto3 의 문자열에는 "설정됨" 표시가 없어서(§5.7 의 <code>optional</code> 이 아닌 필드) 빈 값과 빠진 값이 같습니다 — <a href="#p04-ctx-py">6장</a>에서 <code>""</code> 를 "안 보냄" 으로 쓴 까닭입니다.</li>
+<li><code>null</code> 도 "없음" 이었습니다. 모르는 필드는 §5.7 의 "<b>SHOULD</b> ignore unrecognized fields" 대로 셋 다 넘겼습니다 — 다만 파트 안의 모르는 내용 필드는 Go 가 거절했었습니다(<a href="#p04-part-v03">2장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p04-pj-time">
+<h3>시각의 자릿수 — 밀리초·마이크로초·나노초, 셋이 다르다</h3>
+<p class="lead">캡처는 시각을 <code>&lt;시각&gt;</code> 으로 지우므로(0부), <code>protojson.py</code> 는 받은 답들의 <code>status.timestamp</code> 에서 꼴만 찍습니다(끝자리 0 을 지우는 SDK 가 있어 가장 긴 것을 봅니다) — 소수부를 몇 자리까지 적었나와 시간대.</p>
+<!--CODE file=ex/py/04/protojson.py region=shape-->
+<!--OUT file=out/04/protojson.txt part=터미널 4 grep=^\[|시각-->
+<ul>
+<li>셋 다 UTC 의 <code>Z</code> 입니다. 자릿수는 TS 가 스펙의 견본(<code>.sssZ</code>, "Millisecond precision <b>SHOULD</b> be used")과 같고, 파이썬은 <code>datetime</code> 의 마이크로초, Go 는 <code>time.Time</code> 의 나노초까지 적습니다.</li>
+<li>스펙은 받는 쪽에 "<b>MUST</b> parse and generate ISO 8601 timestamps correctly" 를 요구합니다. 자릿수가 다른 세 꼴을 모두 읽을 수 있어야 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-pj-tz">
+<h3>Go SDK 의 시각은 서버 기계의 시간대를 따른다 — 서울에 두면 +09:00</h3>
+<p class="lead">이 기계는 UTC 라 Go 서버도 <code>Z</code> 를 적었습니다. Go SDK 의 <code>NewStatusUpdateEvent</code> 는 <code>time.Now()</code> 를 그대로 담고(<code>a2a/core.go</code>), <code>encoding/json</code> 은 지역 시간대를 붙여 씁니다. 프로세스 안에서 <code>time.Local</code> 을 바꿔 봤습니다.</p>
+<!--RUN file=ex/go/04/stamp region=stamp-->
+<ul>
+<li>지역 시간대가 KST 인 기계에서는 <code>+09:00</code> 이 붙습니다. §5.6.1 의 "Timestamps <b>MUST NOT</b> include timezone offsets other than 'Z'" 를 어깁니다.</li>
+<li>파이썬 SDK 는 <code>datetime.now(timezone.utc)</code>, TS 는 <code>toISOString()</code> 이라 늘 <code>Z</code> 입니다. Go 서버는 UTC 로 두거나(<code>TZ=UTC</code>), 시각을 <code>.UTC()</code> 로 바꿔 담아야 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-pj-cmp">
+<h3>세 서버 비교 — 보낼 때는 엄격하게, 받을 때의 너그러움은 제각각</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>입력</th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td><code>message_id</code>(snake)</td><td>받음</td><td>받음</td><td><code>-32602</code></td></tr>
+<tr><td><code>"role": "user"</code></td><td><code>-32602</code></td><td><code>UNRECOGNIZED</code> 로 받음</td><td><code>"user"</code> 로 받음</td></tr>
+<tr><td><code>"role": 1</code></td><td>받음</td><td>받음</td><td><code>-32602</code></td></tr>
+<tr><td><code>status: "input-required"</code></td><td>필터 무시</td><td><code>-32602</code></td><td>맞는 것 없음</td></tr>
+<tr><td><code>null</code>·<code>""</code>·모르는 필드</td><td colspan="3">받음 — 없는 것으로 / 넘김</td></tr>
+<tr><td>빈 목록 쓰기</td><td><code>[]</code></td><td><code>[]</code></td><td><code>null</code></td></tr>
+<tr><td>시각 쓰기</td><td>마이크로초, <code>Z</code></td><td>밀리초, <code>Z</code></td><td>나노초, 지역 시간대</td></tr>
+</table>
+</div>
+<div class="key"><b>상호운용은 보내는 쪽의 규율에서 나온다</b> — 세 서버가 공통으로 받는 것은 스펙 그대로의 모양(camelCase, enum 이름 문자열, UTC 시각)뿐입니다. 어느 한 서버가 받아 준 꼴에 기대면, 다른 언어의 서버에서 거절되거나 — 더 나쁘게는 — 오류 없이 다르게 처리됩니다. 3×3 상호운용은 16부에서 전수로 봅니다.</div>
+</article>
+
+<article class="card quiz" id="p04-ch8-quiz" data-quiz>
+<h3>8장 퀴즈</h3>
+<p class="q">Q. v0.3 시절 코드를 고치다 만 클라이언트가 <code>"role": "user"</code> 로 메시지를 보냅니다. 파이썬·TS·Go 서버는 각각 어떻게 답합니까? 셋 중 오류 없이 지나가서 더 위험한 것은 어디입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 파이썬은 모르는 enum 이름을 버려 role 이 빠진 메시지가 되고 <code>-32602</code>(<code>message.role: Field is required.</code>)로 거절합니다. TS 는 <code>UNRECOGNIZED</code> 로, Go 는 <code>"user"</code> 그대로 받아 접수까지 마쳤습니다(<a href="#p04-pj-role">role 시험</a>). 오류 없이 지나간 TS·Go 쪽이 더 위험합니다 — 이력에 규칙 밖의 role 이 남고, 그 이력을 읽는 다른 언어의 클라이언트가 깨질 수 있습니다.</div>
+</article>
+
+<article class="card" id="p04-wrap">
+<h3>4부 정리</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>한 줄</th></tr>
+<tr><td><a href="#p04-ch1">1</a>·<a href="#p04-ch2">2</a></td><td>Message 는 필드 여덟·필수 셋, Part 는 내용 필드 넷 중 하나 — <code>kind</code> 없이 있는 필드가 종류다</td></tr>
+<tr><td><a href="#p04-ch3">3</a>·<a href="#p04-ch4">4</a></td><td>답은 Message 이거나 Task, 결과물은 아티팩트로. 데이터 파트의 수는 받는 쪽 언어가 타입을 정한다</td></tr>
+<tr><td><a href="#p04-ch5">5</a></td><td>파일은 raw(base64) 나 url. 큰 raw 는 TS 서버의 100KB 한도에 걸린다. acceptedOutputModes 는 아무도 거르지 않고, -32005 는 켜야 난다</td></tr>
+<tr><td><a href="#p04-ch6">6</a></td><td>contextId 는 서버가 짓고, taskId 만 주면 찾아 주고, 어긋나면 -32602, 없는 taskId 는 -32001 — 셋 다 같다</td></tr>
+<tr><td><a href="#p04-ch7">7</a></td><td>같은 messageId 를 다시 보내도 일은 다시 한다 — 이력만 거르는 SDK 가 있을 뿐</td></tr>
+<tr><td><a href="#p04-ch8">8</a></td><td>camelCase·enum 이름·UTC 시각으로 보낸다. 받는 쪽의 너그러움은 SDK 마다 달라 기댈 수 없다</td></tr>
+</table>
+</div>
+<div class="note"><b>다음</b> — 이 부는 메시지를 한 번 보내고 답 한 번을 읽었습니다. 그 답이 Task 일 때, 작업은 SUBMITTED 에서 COMPLETED 까지 상태를 거칩니다. <a href="#p05">5부</a>는 TaskState 아홉 가지와 상태 기계, 막는 호출과 <code>returnImmediately</code>, INPUT_REQUIRED 로 이어 말하기, 거절·실패·취소를 숙소 에이전트의 와이어로 읽습니다.</div>
 </article>
