@@ -276,3 +276,14 @@ subagent task each.
   no-cache to conditional requests so TS↔TS never gets 304; TS resolver returns raw JSON
   (omitted fields undefined despite types); input-mode validation differs (py defaults +
   skills, ts defaults only, go none).
+
+### Part 4 first half — 54 slides (2026-10-16)
+- `04_message.html` ch1–4 (Message anatomy, Part kinds ×3, Message vs Task replies ×3,
+  DataPart numbers 3×3). `04b_message.html` added to order for ch5–8.
+- Findings: required-field checks differ (py -32602 with proto field names, go -32602 per
+  case, ts checks only messageId — accepts no role / empty parts); history storage differs
+  (py/ts fill contextId/taskId, ts also appends the INPUT_REQUIRED agent message); unknown
+  extension URIs accepted by all; v0.3 `file` part: py/ts accept as empty part, Go rejects
+  with -32700 (wrong code — JSON is valid); two content fields: py -32602, ts keeps first
+  silently, go -32700; TS client returns bare Message|Task; Go `%v` prints 2.1e+06; Go
+  lists unknown part keys in random map order (avoid in captures).

@@ -1,10 +1,565 @@
 <article class="card section" id="p04">
 <p class="chnum">4부</p>
 <h2>Message·Part·Role·contextId</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">Message 해부 → Part 네 가지 → 메시지만 돌려주는 에이전트 → DataPart 로 구조화 입력 → FilePart → contextId 규칙 → messageId 와 멱등성 → ProtoJSON 규칙</p>
 </article>
 
-<article class="card" id="p04-todo">
-<h3>Message·Part·Role·contextId</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p04-intro">
+<h3>카드를 읽었으면 이제 말을 건다 — 그 말의 단위가 Message 다</h3>
+<p class="lead">3부의 카드는 "어디로, 어떤 바인딩으로" 를 알려 줬습니다. 이 부는 그 주소로 실제로 보내는 것, 곧 메시지(Message)와 그 안의 파트(Part)를 와이어에서 한 필드씩 읽습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th></tr>
+<tr><td><a href="#p04-ch1">1장</a></td><td>Message 해부 — 필드 여덟, 서버가 채우는 것, 필수 필드를 빼면</td></tr>
+<tr><td><a href="#p04-ch2">2장</a></td><td>Part 네 가지 — text·raw·url·data, <code>kind</code> 가 사라진 이유, 세 SDK 로 만들고 읽기</td></tr>
+<tr><td><a href="#p04-ch3">3장</a></td><td>메시지만 돌려주는 에이전트 — Message 응답과 Task 응답</td></tr>
+<tr><td><a href="#p04-ch4">4장</a></td><td>DataPart 로 구조화 입력 — 숙소 요청 ×3 과 <code>30.0</code></td></tr>
+<tr><td>5장</td><td>FilePart — raw 와 url, 큰 파일은 url 로, 미디어 타입 협상</td></tr>
+<tr><td>6장</td><td>contextId 규칙 — 서버가 만들고, 지키고, 어긋나면 거절한다</td></tr>
+<tr><td>7장</td><td>messageId 와 멱등성 — 같은 메시지가 두 번 오면</td></tr>
+<tr><td>8장</td><td>ProtoJSON 규칙 — camelCase, enum 문자열, 빠진 필드</td></tr>
+</table>
+</div>
+<div class="key"><b>이 부의 방식</b> — 3부처럼 완성 에이전트(숙소)를 블랙박스로 띄우고, 그 앞에 와이어 탭을 세웁니다. 파트를 보려고 만든 작은 실험용 에이전트 하나(파트 확인 에이전트)만 세 언어로 새로 씁니다.</div>
+</article>
+
+<!-- ==== 1장 Message 해부 ==== -->
+
+<article class="card" id="p04-ch1">
+<p class="chnum">1장</p>
+<h2>Message 해부</h2>
+<p class="chsub">필드 여덟 → 여섯을 채운 요청 → 서버가 저장한 사용자 메시지 → 에이전트의 메시지와 contextId → 둘째 턴의 taskId → referenceTaskIds → extensions·metadata → 세 서버의 저장 방식 → 필수 필드를 빼면 ×3</p>
+</article>
+
+<article class="card" id="p04-msg-fields">
+<h3>Message 의 필드는 여덟, 필수는 셋이다</h3>
+<p class="lead">proto 의 설명은 한 줄입니다: "`Message` is one unit of communication between client and server." 스펙 §4.1.4 의 표도 이 proto 에서 나옵니다. <code>(google.api.field_behavior) = REQUIRED</code> 가 붙은 것은 셋뿐입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드(와이어 이름)</th><th>필수</th><th>누가 채우나</th><th>이 장의 슬라이드</th></tr>
+<tr><td><code>messageId</code></td><td>예</td><td>보내는 쪽 — "created by the message creator"</td><td><a href="#p04-msg-request">요청</a></td></tr>
+<tr><td><code>role</code></td><td>예</td><td>보내는 쪽 — <code>ROLE_USER</code> 또는 <code>ROLE_AGENT</code></td><td><a href="#p04-msg-request">요청</a></td></tr>
+<tr><td><code>parts</code></td><td>예</td><td>보내는 쪽 — 내용(2장)</td><td><a href="#p04-msg-required">필수</a></td></tr>
+<tr><td><code>contextId</code></td><td></td><td>처음엔 비우고, 서버가 만든 것을 이어 쓴다</td><td><a href="#p04-msg-agent">에이전트 메시지</a></td></tr>
+<tr><td><code>taskId</code></td><td></td><td>이어 말할 때 — 서버가 만든 작업 id</td><td><a href="#p04-msg-taskid">둘째 턴</a></td></tr>
+<tr><td><code>referenceTaskIds</code></td><td></td><td>보내는 쪽 — 참고할 다른 작업</td><td><a href="#p04-msg-ref">참조</a></td></tr>
+<tr><td><code>extensions</code>·<code>metadata</code></td><td></td><td>보내는 쪽 — 확장의 URI 와 덧붙일 값</td><td><a href="#p04-msg-ext">확장·메타</a></td></tr>
+</table>
+</div>
+<div class="note"><b>role 은 enum</b> — proto 의 <code>Role</code> 은 <code>ROLE_UNSPECIFIED</code>(0)·<code>ROLE_USER</code>(1, "from the client to the server")·<code>ROLE_AGENT</code>(2, "from the server to the client") 셋입니다. 와이어에 이름 문자열로 적는 규칙은 8장(ProtoJSON)에서 봅니다.</div>
+</article>
+
+<article class="card" id="p04-msg-request">
+<h3>여섯 필드를 채운 요청 — 처음 말할 때는 contextId·taskId 가 없다</h3>
+<p class="lead">숙소 에이전트 셋(py·ts·go) 앞에 탭을 하나씩 세우고, 같은 본문(<code>rpc/full.json</code>)을 curl 로 보냈습니다. 인원을 일부러 빼서, 에이전트가 되묻게 했습니다.</p>
+<!--SPEC file=ex/run/04/anatomy.run-->
+<!--OUT file=out/04/anatomy.txt wire=py-wire ex=1 lines=1-29-->
+</article>
+
+<article class="card" id="p04-msg-stored">
+<h3>서버는 받은 메시지를 이력에 넣으며 contextId·taskId 를 채웠다</h3>
+<p class="lead">파이썬 서버의 답은 Task 였고(3장), 그 <code>history</code> 에 우리가 보낸 메시지가 들어 있습니다. 보낸 것과 견줘 보면 두 필드가 늘었습니다.</p>
+<!--OUT file=out/04/anatomy.txt wire=py-wire ex=1 lines=59-80-->
+<ul>
+<li><code>messageId</code> 는 우리가 정한 <code>m-1</code> 그대로입니다. 메시지 id 는 만든 쪽의 것이라 서버가 바꾸지 않습니다.</li>
+<li><code>contextId</code>·<code>taskId</code> 는 우리가 보내지 않았는데 들어 있습니다 — 서버가 새로 만든 작업(<code>&lt;id1&gt;</code>)과 맥락(<code>&lt;id2&gt;</code>)에 이 메시지를 묶은 것입니다.</li>
+<li><code>metadata</code>·<code>extensions</code>·<code>referenceTaskIds</code> 는 손대지 않고 보관했습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-msg-agent">
+<h3>에이전트의 메시지 — role 은 ROLE_AGENT, contextId 는 반드시 있다</h3>
+<p class="lead">되묻는 말은 작업의 상태(<code>status.message</code>)에 실려 왔습니다. 이것도 Message 이고, 이번에는 서버가 만든 메시지입니다.</p>
+<!--OUT file=out/04/anatomy.txt wire=py-wire ex=1 lines=33-58-->
+<ul>
+<li><code>messageId</code> 는 서버가 만든 값(<code>&lt;id3&gt;</code>), <code>role</code> 은 <code>ROLE_AGENT</code> 입니다.</li>
+<li>proto 의 Message 설명: "For server messages, <code>context_id</code> must be provided, and <code>task_id</code> only if a task was created." — 여기서는 작업을 만들었으므로 둘 다 있습니다.</li>
+<li>§3.4.1: 에이전트가 새 <code>contextId</code> 를 만들었다면 "it <b>MUST</b> be included in the response" — <code>result.task.contextId</code> 와 이 메시지의 <code>contextId</code> 가 같은 <code>&lt;id2&gt;</code> 입니다. 클라이언트가 contextId 를 정해 보내면 어떻게 되는지는 6장에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-msg-taskid">
+<h3>둘째 턴의 메시지는 taskId·contextId 를 단다</h3>
+<p class="lead">되물음에 답할 때는 같은 작업에 이어 말해야 합니다. 총무팀 CLI(<code>agents/ask.py</code>)가 Go 숙소 에이전트와 두 마디를 주고받았습니다.</p>
+<!--SPEC file=ex/run/04/turns.run-->
+<!--OUT file=out/04/turns.txt wire=turn-wire ex=3 lines=1-22-->
+<ul>
+<li>첫 답의 <code>result.task.id</code>(<code>&lt;id2&gt;</code>)가 <code>taskId</code> 로, <code>result.task.contextId</code>(<code>&lt;id3&gt;</code>)가 <code>contextId</code> 로 돌아갔습니다.</li>
+<li>§3.4.2: 클라이언트가 단 <code>taskId</code> 는 "<b>MUST</b> reference an existing task". 이 흐름(INPUT_REQUIRED 다중 턴) 자체는 5부의 몫입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-msg-ref">
+<h3>referenceTaskIds — 다른 작업을 "참고하라"고 가리킨다</h3>
+<p class="lead">§3.4.3: "Clients <b>SHOULD</b> use the <code>referenceTaskIds</code> field in Message to explicitly reference related tasks." <code>taskId</code> 가 "이 작업에 이어 말한다" 라면, 이것은 "저 작업들을 참고하라" 입니다.</p>
+<!--OUT file=out/04/anatomy.txt server=lodging-ts-->
+<ul>
+<li>요청에 넣은 <code>t-earlier</code> 는 없는 작업입니다. TS 서버만 위처럼 "not found" 를 찍었고, 세 서버 모두 오류 없이 처리를 이어 갔습니다 — 참조는 <code>taskId</code> 와 달리 존재가 의무가 아닙니다.</li>
+<li>파이썬 SDK 는 참조한 작업을 실행기에 넘겨 주는 기능을 꺼 둔 채로 시작합니다(<code>SimpleRequestContextBuilder(should_populate_referred_tasks=False)</code>). 기획 에이전트가 정산 에이전트에 세 견적의 작업을 가리키는 장면은 15부에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-msg-ext">
+<h3>extensions·metadata — 서버는 모르는 것도 그대로 보관했다</h3>
+<p class="lead"><code>extensions</code> 는 이 메시지에 쓰인 확장의 URI 목록, <code>metadata</code> 는 덧붙이는 키-값입니다. §3.2.5: "Metadata keys and are strings and values can be any valid value that can be represented in JSON."</p>
+<!--OUT file=out/04/anatomy.txt wire=go-wire ex=1 lines=39-58-->
+<ul>
+<li>숙소 에이전트의 카드에는 확장이 하나도 없는데(<a href="#p03-anatomy-can">3부</a>), 세 서버 모두 예산 확장 URI 를 거절하지 않고 이력에 넣었습니다. 확장을 선언하고 요구하는 규칙(<code>A2A-Extensions</code> 헤더, <code>required</code>)은 14부에서 봅니다.</li>
+<li>위는 Go 서버의 이력입니다. 키가 Go 구조체에 선언된 차례(<code>messageId</code>·<code>contextId</code> 다음은 알파벳 차례)이고, <code>contextId</code>·<code>taskId</code> 가 없습니다 — 다음 슬라이드.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-msg-store-cmp">
+<h3>세 서버 비교 — 같은 메시지를 이력에 넣는 방식이 다르다</h3>
+<p class="lead">세 와이어의 <code>result.task.history</code> 를 나란히 놓았습니다. 받은 필드는 셋 다 지켰지만, 덧붙이는 것이 다릅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>사용자 메시지에 <code>contextId</code>·<code>taskId</code></td><td>채움</td><td>채움</td><td>받은 그대로(없음)</td></tr>
+<tr><td>되묻는 에이전트 메시지</td><td><code>status.message</code> 에만</td><td><code>status.message</code> 와 <code>history</code> 둘 다</td><td><code>status.message</code> 에만</td></tr>
+<tr><td>키 순서</td><td>proto 필드 번호 차례</td><td>proto 필드 번호 차례</td><td>구조체 선언 차례</td></tr>
+<tr><td>없는 참조 작업</td><td>조용히 둔다</td><td>로그 한 줄</td><td>조용히 둔다</td></tr>
+</table>
+</div>
+<!--OUT file=out/04/anatomy.txt wire=ts-wire ex=1 lines=81-99-->
+<div class="note"><b>§3.7 이 허락한 차이</b> — "The agent is responsible to determine which Messages are persisted in the Task History." 이력에 무엇을 남길지는 에이전트(SDK)가 정합니다. 위는 TS 서버가 이력 끝에 덧붙인 되묻는 말입니다.</div>
+</article>
+
+<article class="card" id="p04-msg-required">
+<h3>필수 필드를 빼면 — 파이썬은 -32602 와 함께 빠진 필드를 적는다</h3>
+<p class="lead"><code>messageId</code>·<code>role</code>·<code>parts</code> 를 하나씩 뺀 본문 셋(<code>rpc/no_id.json</code>·<code>no_role.json</code>·<code>no_parts.json</code>, <code>parts</code> 는 빈 배열)을 세 숙소 에이전트에 보냈습니다. 아래는 파이썬 서버가 <code>messageId</code> 없는 요청에 준 답입니다.</p>
+<!--SPEC file=ex/run/04/required.run-->
+<!--OUT file=out/04/required.txt wire=py-wire ex=1 lines=20-53-->
+<p>나머지 둘(<code>role</code> 없음, 빈 <code>parts</code>)의 답에서 <code>fieldViolations</code> 만 골랐습니다.</p>
+<!--OUT file=out/04/required.txt wire=py-wire ex=2-3 grep="description"|"field": "[^"]*"$-->
+<ul>
+<li><code>-32602</code> 는 JSON-RPC 의 Invalid params(<a href="#p02-rpc-codes">2부</a>)입니다. 빈 배열도 "빠짐" 으로 봅니다 — "Field must contain at least one element."</li>
+<li>필드 이름이 와이어의 <code>messageId</code> 가 아니라 proto 의 <code>message.message_id</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-msg-required-go">
+<h3>Go 도 셋 다 -32602 로 거절한다</h3>
+<p class="lead">같은 세 본문에 대한 Go 서버의 답에서 오류 코드와 문구만 골랐습니다.</p>
+<!--OUT file=out/04/required.txt wire=go-wire ex=1-3 grep="code"|"message": "-->
+<div class="note"><b>문구는 SDK 마다 다르다</b> — 코드는 셋 다 <code>-32602</code> 이지만 파이썬은 <code>Validation failed</code> + 필드 목록, Go 는 <code>message role is required: invalid params</code> 처럼 문장 하나입니다. 클라이언트는 문구가 아니라 코드로 가려야 합니다.</div>
+</article>
+
+<article class="card" id="p04-msg-required-ts">
+<h3>TS 는 messageId 만 검사한다 — role·parts 가 없어도 받는다</h3>
+<p class="lead">TS 서버의 세 답에서 상태와 오류만 골랐습니다. <code>messageId</code> 없는 요청은 거절했지만, <code>role</code> 이 빠진 요청은 견적까지 냈고(<code>COMPLETED</code>), 빈 <code>parts</code> 에는 되물었습니다(<code>INPUT_REQUIRED</code>).</p>
+<!--OUT file=out/04/required.txt wire=ts-wire ex=1-3 grep=^←|"code"|"message": "|"state"-->
+<!--OUT file=out/04/required.txt wire=ts-wire ex=2 lines=55-66 note=role 이 빠진 요청 — TS 서버가 이력에 남긴 메시지-->
+<!--OUT file=out/04/required.txt server=lodging-ts-->
+<div class="warn"><b>받는 쪽이 느슨하면 보내는 쪽이 틀린 줄 모른다</b> — 이력의 메시지에는 <code>role</code> 이 아예 없습니다. 빈 <code>parts</code> 는 "날짜·박 수·인원이 다 빠졌다" 는 되물음이 됐습니다. 어느 서버에 보내도 통하도록, 보내는 쪽이 세 필수 필드를 지켜야 합니다.</div>
+</article>
+
+<article class="card quiz" id="p04-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. <a href="#p04-msg-request">요청</a>에 <code>contextId</code> 를 넣지 않았는데, 파이썬 서버가 돌려준 이력의 사용자 메시지에는 <code>contextId</code> 가 있습니다. 그 값은 어디서 왔고, 응답의 어느 필드와 같습니까? Go 서버의 이력은 어떻습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 서버가 새 작업을 만들며 지은 맥락 id 입니다. <a href="#p04-msg-stored">파이썬 이력</a>의 <code>contextId</code> 는 <code>&lt;id2&gt;</code> 로, <code>result.task.contextId</code> 와 되묻는 메시지의 <code>contextId</code>(<a href="#p04-msg-agent">에이전트 메시지</a>)와 같습니다. <a href="#p04-msg-ext">Go 서버의 이력</a>에는 받은 그대로 저장해 <code>contextId</code>·<code>taskId</code> 가 없습니다.</div>
+</article>
+
+<!-- ==== 2장 Part 네 가지 ==== -->
+
+<article class="card" id="p04-ch2">
+<p class="chnum">2장</p>
+<h2>Part 네 가지</h2>
+<p class="chsub">oneof 하나와 공통 필드 셋 → kind 가 사라진 v1.0 → 파트 만들기 ×3 → 와이어 → 세 와이어 비교 → raw 는 base64 → 파트 읽기 ×3 → v0.3 모양을 보내면 → 내용이 둘인 파트 → 세 SDK 비교</p>
+</article>
+
+<article class="card" id="p04-part-kinds">
+<h3>Part 는 내용 필드 넷 중 하나만 갖는다 — proto 의 oneof</h3>
+<p class="lead">proto 의 설명: "Parts can be purely textual, some sort of file (image, video, etc) or a structured data blob (i.e. JSON)." 내용은 <code>oneof content</code> 로 묶인 네 필드 중 <b>하나</b>이고, 나머지 셋은 어느 종류에나 붙습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드</th><th>proto 타입</th><th>뜻(proto 주석)</th></tr>
+<tr><td><code>text</code></td><td><code>string</code></td><td>글</td></tr>
+<tr><td><code>raw</code></td><td><code>bytes</code></td><td>파일 내용 바이트 — "In JSON serialization, this is encoded as a base64 string."</td></tr>
+<tr><td><code>url</code></td><td><code>string</code></td><td>"A url pointing to the file's content."</td></tr>
+<tr><td><code>data</code></td><td><code>google.protobuf.Value</code></td><td>"Arbitrary structured data as a JSON value (object, array, string, number, boolean, or null)."</td></tr>
+<tr><td><code>filename</code></td><td><code>string</code></td><td>파일 이름(선택)</td></tr>
+<tr><td><code>mediaType</code></td><td><code>string</code></td><td>MIME 타입 — "This field is available for all part types."</td></tr>
+<tr><td><code>metadata</code></td><td><code>Struct</code></td><td>덧붙이는 키-값(선택)</td></tr>
+</table>
+</div>
+<div class="note"><b>data 는 객체만이 아니다</b> — <code>Value</code> 라서 배열·문자열·수도 됩니다. 이 장의 예제는 일부러 배열을 보냅니다. <code>mediaType</code> 이 카드의 입출력 모드(<a href="#p03-anatomy-modes">3부</a>)와 어떻게 맞물리는지는 5장에서 봅니다.</div>
+</article>
+
+<article class="card" id="p04-part-nokind">
+<h3>v1.0 은 kind 를 버렸다 — 어느 필드가 있느냐가 곧 종류다</h3>
+<p class="lead"><code>whats-new-v1.md</code> 의 첫 항목 중 하나가 "Removal of discriminator <code>kind</code> fields in favor of JSON member-based polymorphism" 입니다. v0.3 에는 파트 타입이 셋 따로 있었고, 종류를 <code>kind</code> 값으로 적었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>종류</th><th>v0.3 (kind 로 가림)</th><th>v1.0 (있는 필드로 가림)</th></tr>
+<tr><td>글</td><td><code>kind</code> = <code>"text"</code> + <code>text</code></td><td><code>text</code></td></tr>
+<tr><td>파일(주소)</td><td><code>kind</code> = <code>"file"</code> + <code>file.fileWithUri</code>·<code>file.mimeType</code></td><td><code>url</code> + <code>mediaType</code></td></tr>
+<tr><td>파일(바이트)</td><td><code>kind</code> = <code>"file"</code> + <code>file.fileWithBytes</code></td><td><code>raw</code>(base64)</td></tr>
+<tr><td>데이터</td><td><code>kind</code> = <code>"data"</code> + <code>data</code></td><td><code>data</code></td></tr>
+</table>
+</div>
+<ul>
+<li>스펙 부록 A.2.1 이 든 까닭: protobuf 의 <code>oneof</code> 처럼 "the field name itself serves as the type discriminator" — 중복이 줄고, JSON-RPC 와 gRPC 의 모양이 가까워지고, 코드 생성이 쉬워지고, 강타입 언어에서 타입 안전성이 좋아진다.</li>
+<li>읽는 쪽 코드는 <code>part.kind === "text"</code> 대신 <code>"text" in part</code> 를 봅니다(같은 문서의 이행 예). 세 SDK 가 이것을 어떻게 타입으로 옮겼는지가 이 장의 나머지입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-part-py">
+<h3>파이썬 — Part(text=…) 처럼 oneof 의 필드 하나를 이름으로 준다</h3>
+<p class="lead">파이썬 SDK 의 타입은 protobuf 메시지입니다(<code>a2a.types.Part</code>). 생성자에 넣은 필드가 곧 oneof 의 선택이고, <code>new_*_part</code> 도우미는 같은 필드를 채워 줄 뿐입니다.</p>
+<!--CODE file=ex/py/04/parts.py region=parts-->
+<ul>
+<li><code>new_raw_part(raw, media_type, filename)</code>·<code>new_url_part(url, media_type, filename)</code> 은 순서가 같습니다(<code>a2a/helpers/proto_helpers.py</code>).</li>
+<li><code>new_data_part</code> 는 파이썬 값을 <code>ParseDict(data, struct_pb2.Value())</code> 로 <code>Value</code> 에 옮깁니다 — 4장의 <code>30.0</code> 이 여기서 시작됩니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-part-ts">
+<h3>TypeScript — content: {$case, value} 하나에 종류와 값을 담는다</h3>
+<p class="lead">TS SDK 의 타입은 ts-proto 가 proto 에서 만든 것입니다. oneof 는 <code>content</code> 필드 하나가 되고, 종류는 <code>$case</code> 문자열입니다. SDK 에 파트 도우미 함수는 없습니다.</p>
+<!--CODE file=ex/ts/04/parts.ts region=parts-->
+<ul>
+<li><code>Part</code> 인터페이스는 <code>filename: string</code>·<code>mediaType: string</code>·<code>metadata</code> 를 선택이 아닌 필드로 선언합니다. 그래서 빈 값(<code>none</code>)을 펼쳐 넣었습니다.</li>
+<li><code>raw</code> 의 값 타입은 <code>Buffer</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-part-go">
+<h3>Go — Content 필드에 Text·Raw·URL·Data 중 한 타입을 넣는다</h3>
+<p class="lead">Go SDK 의 <code>a2a.Part</code> 는 <code>Content PartContent</code> 를 가진 구조체이고, <code>PartContent</code> 는 네 타입(<code>a2a.Text</code>·<code>a2a.Raw</code>·<code>a2a.URL</code>·<code>a2a.Data</code>)만 들어가는 봉인된 인터페이스입니다.</p>
+<!--CODE file=ex/go/04/parts/main.go region=parts-->
+<ul>
+<li>생성 함수의 인자가 제각각입니다 — <code>NewRawPart(raw)</code> 는 바이트만, <code>NewFileURLPart(url, mimeType)</code> 는 미디어 타입까지 받습니다. 나머지는 필드에 직접 씁니다.</li>
+<li><code>NewDataPart</code> 는 <code>any</code> 를 받습니다. 4장에서는 여기에 구조체를 넣습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-part-wire">
+<h3>와이어 — 파트마다 내용 필드는 하나, kind 는 없다</h3>
+<p class="lead">세 언어의 클라이언트가 같은 언어의 파트 확인 에이전트(3장에서 만듭니다)에 파트 넷을 보냈습니다. 아래는 파이썬 클라이언트의 요청입니다.</p>
+<!--SPEC file=ex/run/04/parts.run-->
+<!--OUT file=out/04/parts.txt wire=py-wire ex=2 lines=1-38-->
+</article>
+
+<article class="card" id="p04-part-wire-cmp">
+<h3>세 와이어 비교 — parts 배열은 글자까지 같다</h3>
+<p class="lead">TS·Go 클라이언트의 요청에서 <code>parts</code> 배열은 파이썬 것과 한 글자도 다르지 않습니다. 다른 것은 봉투입니다. 아래는 Go 의 요청입니다.</p>
+<!--OUT file=out/04/parts.txt wire=go-wire ex=2 lines=1-36-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>메시지 키 순서</td><td>proto 차례(<code>role</code> 이 <code>parts</code> 앞)</td><td>proto 차례</td><td>구조체 선언 차례(<code>parts</code> 가 <code>role</code> 앞)</td></tr>
+<tr><td><code>configuration</code></td><td><code>{}</code></td><td><code>{}</code></td><td>없음</td></tr>
+<tr><td>JSON-RPC <code>id</code></td><td>문자열(<code>&lt;id1&gt;</code>)</td><td>수 <code>1</code></td><td>문자열</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p04-part-raw">
+<h3>raw 는 와이어에서 base64 다 — 28바이트가 40글자로</h3>
+<p class="lead"><code>menu.md</code> 의 내용 <code>"# 식단\n- 숯불 바비큐\n"</code> 은 한글 일곱 자(3바이트씩 21바이트)와 ASCII 일곱 자(<code>#</code>·<code>-</code>·빈칸 셋·줄바꿈 둘), 모두 28바이트입니다. JSON 문자열에는 아무 바이트나 넣을 수 없어서 base64 로 적습니다.</p>
+<!--OUT file=out/04/parts.txt wire=py-wire ex=2 lines=15-19-->
+<ul>
+<li>base64 는 3바이트를 4글자로 적습니다. 28바이트 → 40글자(끝의 <code>==</code> 는 모자란 자리 채움). 크기가 3분의 1쯤 늘어나는 셈이라, 큰 파일은 <code>url</code> 로 보내라는 이야기가 5장에서 나옵니다.</li>
+<li>세 언어 모두 프로그램 안에서는 바이트로 다룹니다 — 파이썬 <code>bytes</code>, TS <code>Buffer</code>, Go <code>a2a.Raw</code>(<code>[]byte</code>). base64 바꾸기는 SDK 가 직렬화할 때 합니다. 받는 쪽 세 에이전트가 모두 "28바이트" 로 셌습니다(<a href="#p04-part-read-py">다음 슬라이드들</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p04-part-read-py">
+<h3>파이썬에서 읽기 — WhichOneof("content") 가 종류를 알려 준다</h3>
+<p class="lead">파트 확인 에이전트는 받은 파트마다 종류와 값을 한 줄로 적어 돌려줍니다. 데이터 파트는 그 언어가 읽은 <b>타입 이름</b>까지 적습니다.</p>
+<!--CODE file=ex/py/04/parts_agent.py region=describe-->
+<!--OUT file=out/04/parts.txt part=터미널 7 lines=2-6-->
+</article>
+
+<article class="card" id="p04-part-read-ts">
+<h3>TypeScript 에서 읽기 — content?.$case 로 가르면 value 의 타입이 좁혀진다</h3>
+<p class="lead"><code>$case</code> 를 비교하면 TS 가 <code>value</code> 의 타입(<code>string</code>·<code>Buffer</code>·<code>any</code>)을 알아서 좁혀 줍니다.</p>
+<!--CODE file=ex/ts/04/parts_agent.ts region=describe-->
+<!--OUT file=out/04/parts.txt part=터미널 7 lines=9-12-->
+<div class="note"><b>배열의 typeof 는 object</b> — JS 에서 <code>typeof []</code> 는 <code>"object"</code> 입니다. 데이터가 배열인지 보려면 <code>Array.isArray</code> 를 씁니다.</div>
+</article>
+
+<article class="card" id="p04-part-read-go">
+<h3>Go 에서 읽기 — Content 를 타입 스위치로 가른다</h3>
+<p class="lead">Go 는 <code>p.Content.(type)</code> 로 가르거나, <code>p.Text()</code>·<code>p.Raw()</code>·<code>p.URL()</code>·<code>p.Data()</code> 접근자를 씁니다(종류가 다르면 빈 값을 돌려줍니다).</p>
+<!--CODE file=ex/go/04/parts_agent/main.go region=describe-->
+<!--OUT file=out/04/parts.txt part=터미널 7 lines=15-18-->
+</article>
+
+<article class="card" id="p04-part-v03">
+<h3>v0.3 모양을 보내면 — kind 는 무시되고, file 은 내용 없는 파트가 된다</h3>
+<p class="lead">세 파트 확인 에이전트에 v0.3 모양의 파트 둘을 curl 로 보냈습니다 — <code>kind</code> 를 붙인 글 파트(<code>rpc/v03_text.json</code>)와, v0.3 파일 파트의 내용인 <code>file</code> 객체(<code>rpc/v03_file.json</code>). 아래는 세 탭에서 파트와 답만 고른 줄입니다(파이썬·TS·Go 차례).</p>
+<!--SPEC file=ex/run/04/kind.run-->
+<!--OUT file=out/04/kind.txt wire=py-wire ex=1-2 grep=^←|"text": "\d|"code"|"message": "|"kind"|"file": \{-->
+<!--OUT file=out/04/kind.txt wire=ts-wire ex=1-2 grep=^←|"text": "\d|"code"|"message": "|"kind"|"file": \{-->
+<!--OUT file=out/04/kind.txt wire=go-wire ex=1-2 grep=^←|"text": "\d|"code"|"message": "|"kind"|"file": \{-->
+<ul>
+<li><code>kind: "text"</code> 는 셋 다 모르는 필드로 넘기고 <code>text</code> 를 읽었습니다.</li>
+<li><code>file</code> 객체는 v1.0 에 없는 필드라, 파이썬·TS 는 내용 필드가 하나도 없는 파트로 받았습니다. Go 만 거절했는데, 코드가 <code>-32700</code>(Parse error — JSON 자체가 틀렸다는 코드)입니다. JSON 은 멀쩡하므로 <code>-32602</code> 가 맞는 자리입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-part-two">
+<h3>내용 필드가 둘인 파트 — 파이썬·Go 는 거절, TS 는 앞의 것을 고른다</h3>
+<p class="lead"><code>text</code> 와 <code>data</code> 를 한 파트에 함께 넣었습니다(<code>rpc/two.json</code>). oneof 는 "하나만" 이라는 뜻이므로 틀린 파트입니다.</p>
+<!--OUT file=out/04/kind.txt wire=py-wire ex=3 grep=^←|"text": "\d|"code"|"message": "-->
+<!--OUT file=out/04/kind.txt wire=ts-wire ex=3 grep=^←|"text": "\d|"code"|"message": "-->
+<!--OUT file=out/04/kind.txt wire=go-wire ex=3 grep=^←|"text": "\d|"code"|"message": "-->
+<ul>
+<li>파이썬은 protobuf 의 JSON 해석기(<code>ParseDict</code>)가 막고 <code>-32602</code> 를 돌려줍니다. 서버 로그(터미널 1)에 남은 까닭은 <code>Message type "lf.a2a.v1.Part" should not have multiple "content" oneof fields</code> 입니다.</li>
+<li>TS 의 <code>Part.fromJSON</code> 은 <code>text</code>→<code>raw</code>→<code>url</code>→<code>data</code> 차례로 처음 보이는 것 하나만 집습니다 — <code>data</code> 는 소리 없이 버려졌습니다.</li>
+<li>Go 는 다시 <code>-32700</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-part-cmp">
+<h3>세 SDK 비교 — 같은 oneof, 세 가지 모양</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>Part 타입</td><td>protobuf 메시지</td><td>ts-proto 인터페이스</td><td>구조체 + 봉인된 인터페이스</td></tr>
+<tr><td>만들기</td><td><code>Part(text=…)</code>, <code>new_*_part</code></td><td><code>{content: {$case, value}, …}</code></td><td><code>a2a.NewTextPart</code> 등</td></tr>
+<tr><td>종류 읽기</td><td><code>WhichOneof("content")</code></td><td><code>content?.$case</code></td><td><code>Content.(type)</code>, 접근자</td></tr>
+<tr><td>raw 의 값</td><td><code>bytes</code></td><td><code>Buffer</code></td><td><code>a2a.Raw</code></td></tr>
+<tr><td>data 의 값</td><td><code>Value</code>(→ <code>MessageToDict</code>)</td><td><code>any</code></td><td><code>any</code></td></tr>
+<tr><td>내용 없는 파트</td><td>받는다</td><td>받는다</td><td><code>-32700</code></td></tr>
+<tr><td>내용이 둘인 파트</td><td><code>-32602</code></td><td>앞의 것만</td><td><code>-32700</code></td></tr>
+</table>
+</div>
+<div class="key"><b>와이어는 하나</b> — 프로그램 안의 모양은 셋이 다 달라도, 와이어에 적힌 <code>parts</code> 는 <a href="#p04-part-wire-cmp">글자까지 같았습니다</a>. 그래서 세 언어가 서로 말이 통합니다.</div>
+</article>
+
+<article class="card quiz" id="p04-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. v0.3 클라이언트가 <code>kind</code> 를 붙인 글 파트 <code>{kind: "text", text: "안녕하세요"}</code> 를 v1.0 서버 셋에 보냈습니다. 몇 곳이 받아들였고, 서버는 무엇을 읽었습니까? 내용이 <code>file</code> 객체에 든 v0.3 파일 파트라면 어떻습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 글 파트는 세 곳 모두 받아 <code>text</code> 를 읽었습니다 — <code>kind</code> 는 모르는 필드로 넘어갑니다(<a href="#p04-part-v03">v0.3 모양</a>). 파일 파트는 v1.0 에 없는 <code>file</code> 객체에 내용이 들어 있어, 파이썬·TS 는 "(내용 없음)" 파트로 받았고 Go 는 <code>-32700</code> 으로 거절했습니다. 어느 쪽이든 파일은 전달되지 않습니다.</div>
+</article>
+
+<!-- ==== 3장 메시지만 돌려주는 에이전트 ==== -->
+
+<article class="card" id="p04-ch3">
+<p class="chnum">3장</p>
+<h2>메시지만 돌려주는 에이전트</h2>
+<p class="chsub">답은 Task 이거나 Message → 즉답 에이전트 ×3 → Message 응답의 와이어 → 세 서버 비교 → 같은 말, 두 가지 답 → Task 가 더 가진 것과 §3.7 → 클라이언트가 가르는 법 ×3 → 언제 무엇을</p>
+</article>
+
+<article class="card" id="p04-reply-two">
+<h3>SendMessage 의 답은 Task 이거나 Message 다</h3>
+<p class="lead">§3.1.1 은 출력을 둘로 적습니다: "A task object representing the processing of the message, OR A direct response message (for simple interactions that don't require task tracking)".</p>
+<ul>
+<li>Behavior: "The agent <b>MAY</b> create a new <code>Task</code> to process the provided message asynchronously or <b>MAY</b> return a direct <code>Message</code> response for simple interactions." 어느 쪽이든 정하는 것은 에이전트입니다.</li>
+<li>와이어에서는 <code>result</code> 아래 키 하나로 갈립니다 — <code>result.task</code> 이거나 <code>result.message</code>. 1장의 숙소 에이전트는 늘 <code>task</code> 였습니다.</li>
+<li>스트림으로 물어도 같습니다. §3.1.2: Message 로 답하면 "the stream <b>MUST</b> contain exactly one <code>Message</code> object and then close immediately" — 스트림은 10부에서 봅니다.</li>
+</ul>
+<div class="note"><b>3부에서 이미 봤다</b> — 기능 없는 안내 에이전트(<a href="#p03-caps-agent">3부</a>)가 인사 한마디를 Message 로 돌려줬습니다. 이 장은 그 즉답형을 Task 응답과 나란히 놓고 읽습니다.</div>
+</article>
+
+<article class="card" id="p04-reply-py">
+<h3>파이썬 — Message 하나를 이벤트 큐에 넣고 끝낸다</h3>
+<p class="lead">2장에서 써 온 파트 확인 에이전트가 즉답형입니다. 실행기는 Task 를 만들지 않고, 에이전트 쪽 Message 하나를 큐에 넣습니다.</p>
+<!--CODE file=ex/py/04/parts_agent.py region=execute-->
+<ul>
+<li><code>new_message</code> 는 <code>message_id</code> 를 uuid4 로 짓고 <code>role</code> 기본값을 <code>ROLE_AGENT</code> 로 둡니다(<code>proto_helpers.py</code>).</li>
+<li><code>context_id=ctx.context_id</code> — 요청 맥락의 id 를 그대로 답에 답니다. 서버 메시지에는 contextId 가 있어야 합니다(<a href="#p04-msg-agent">1장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p04-reply-ts">
+<h3>TypeScript — AgentEvent.message 를 버스에 싣고 finished()</h3>
+<p class="lead">TS 의 실행기는 이벤트 버스에 싣습니다. Message 를 실은 뒤 <code>bus.finished()</code> 로 이 실행이 끝났다고 알립니다.</p>
+<!--CODE file=ex/ts/04/parts_agent.ts region=execute-->
+<ul>
+<li>Message 인터페이스의 필드는 모두 적어야 해서 <code>taskId: ""</code>·<code>extensions: []</code> 처럼 빈 값을 넣었습니다. 빈 값은 와이어에 나가지 않습니다(<code>Message.toJSON</code> 이 뺍니다).</li>
+<li><code>messageId</code> 는 직접 지었습니다(<code>randomUUID()</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p04-reply-go">
+<h3>Go — Message 하나를 yield 하고 반복자를 닫는다</h3>
+<p class="lead">Go 의 실행기는 이벤트를 내보내는 반복자(<code>iter.Seq2[a2a.Event, error]</code>)입니다. <code>*a2a.Message</code> 도 <code>a2a.Event</code> 이므로 그대로 내보냅니다.</p>
+<!--CODE file=ex/go/04/parts_agent/main.go region=execute-->
+<ul>
+<li><code>a2a.NewMessage</code> 가 <code>ID</code> 를 짓습니다(<code>NewMessageID()</code>, uuid). <code>ContextID</code> 는 실행 문맥(<code>ec.ContextID</code>)에서 옮겼습니다.</li>
+<li>작업에 묶인 메시지라면 <code>a2a.NewMessageForTask</code> 가 <code>TaskID</code>·<code>ContextID</code> 를 함께 채웁니다 — 숙소 에이전트의 되묻는 말이 그 길입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-reply-wire">
+<h3>Message 응답의 와이어 — result.message, 그리고 taskId 가 없다</h3>
+<p class="lead">총무팀 CLI 로 파트 확인 에이전트(py)와 숙소 에이전트(py)에 같은 말을 했습니다. 먼저 파트 확인 에이전트 쪽입니다.</p>
+<!--SPEC file=ex/run/04/reply.run-->
+<!--OUT file=out/04/reply.txt wire=echo-wire ex=2 lines=22-39-->
+<ul>
+<li><code>role</code> 은 <code>ROLE_AGENT</code>, <code>contextId</code> 는 서버가 지은 <code>&lt;id3&gt;</code> 입니다. <code>taskId</code> 는 없습니다 — 만든 작업이 없으니까요.</li>
+<li>남는 것이 없습니다. 이 답에는 나중에 <code>GetTask</code> 로 다시 물을 id 도, 상태도, 이력도 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-reply-cmp">
+<h3>세 서버 비교 — 같은 즉답, 실어 보내는 방법만 다르다</h3>
+<p class="lead">2장의 <code>parts</code> 명세에서 TS·Go 파트 확인 에이전트도 같은 모양의 <code>result.message</code> 를 돌려줬습니다. 아래는 Go 서버의 답입니다.</p>
+<!--OUT file=out/04/parts.txt wire=go-wire ex=2 lines=37-63-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>답 싣기</td><td><code>await queue.enqueue_event(msg)</code></td><td><code>bus.publish(AgentEvent.message(…))</code> + <code>bus.finished()</code></td><td><code>yield(m, nil)</code></td></tr>
+<tr><td>messageId</td><td><code>new_message</code> 가 지음</td><td>직접 지음</td><td><code>NewMessage</code> 가 지음</td></tr>
+<tr><td>와이어의 키</td><td><code>messageId</code>·<code>contextId</code>·<code>role</code>·<code>parts</code></td><td>같음</td><td>같음(순서만 구조체 차례)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p04-reply-vs">
+<h3>같은 말, 두 가지 답 — "message:" 와 "task COMPLETED"</h3>
+<p class="lead">총무팀 CLI 는 답의 종류에 따라 다르게 찍습니다. 같은 말 <code>2026-10-30 1박 30명</code> 에 파트 확인 에이전트는 Message 로, 숙소 에이전트는 Task 로 답했습니다.</p>
+<!--OUT file=out/04/reply.txt part=터미널 5-->
+<div class="note"><b>숙소는 왜 Task 인가</b> — 되물을 수도(INPUT_REQUIRED), 거절할 수도(REJECTED) 있고, 결과물(견적)이 있기 때문입니다. 상태가 바뀌는 일에는 상태를 담을 그릇이 필요합니다 — 그 그릇이 Task 이고, 5부의 주제입니다.</div>
+</article>
+
+<article class="card" id="p04-reply-task">
+<h3>Task 는 id·상태·아티팩트·이력을 가진다 — 결과는 아티팩트로</h3>
+<p class="lead">숙소 에이전트의 답입니다. 견적은 메시지가 아니라 <code>artifacts</code> 에 들어 있습니다.</p>
+<!--OUT file=out/04/reply.txt wire=lodging-wire ex=2 lines=24-54-->
+<ul>
+<li>§3.7: "Messages <b>SHOULD NOT</b> be used to deliver task outputs. Results <b>SHOULD BE</b> returned using Artifacts associated with a Task." 메시지는 소통(되묻기·진행 알림), 아티팩트는 결과물입니다.</li>
+<li>그래서 숙소 에이전트는 되물을 때는 <code>status.message</code> 에(<a href="#p04-msg-agent">1장</a>), 견적은 아티팩트 <code>숙소 견적</code> 에 넣습니다. 파트 확인 에이전트의 답은 결과물이 아니라 "받은 것을 말해 주는" 소통이라 Message 로 충분합니다.</li>
+<li>수가 <code>30.0</code>·<code>2100000.0</code> 으로 적혀 있습니다. 파이썬 서버의 데이터 파트입니다 — 4장의 주제입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-reply-client">
+<h3>클라이언트가 가르는 법 ×3 — oneof 이름, 필드 유무, 타입 스위치</h3>
+<p class="lead">4장의 숙소 요청 클라이언트는 답이 Task 면 견적을, Message 면 글을 찍습니다. 갈림길만 잘라 왔습니다.</p>
+<!--CODE file=ex/py/04/data.py region=dispatch note=파이썬 — StreamResponse 의 oneof payload-->
+<!--CODE file=ex/ts/04/data.ts region=dispatch note=TypeScript — 껍질 벗긴 Message | Task-->
+<!--CODE file=ex/go/04/data/main.go region=dispatch note=Go — a2a.SendMessageResult 인터페이스-->
+<ul>
+<li>파이썬의 <code>send_message</code> 는 막는 호출이어도 <code>StreamResponse</code> 를 하나 내주는 비동기 반복자입니다. 종류는 oneof 이름(<code>payload</code>)으로 묻습니다.</li>
+<li>TS 의 <code>sendMessage</code> 는 와이어의 <code>{task}</code>/<code>{message}</code> 껍질을 벗겨 <code>Message | Task</code> 를 줍니다(JSON-RPC 전송의 <code>sendMessage</code> 가 <code>response.payload.value</code> 를 돌려줌). 꼬리표가 남지 않아, Task 에만 있는 <code>status</code> 가 있는지로 가렸습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-reply-when">
+<h3>언제 Message 로, 언제 Task 로 답하나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>Message 로 답한다</th><th>Task 로 답한다</th></tr>
+<tr><td>일의 길이</td><td>한 번에 끝난다</td><td>오래 걸리거나, 기다릴 수 있다</td></tr>
+<tr><td>되묻기·거절</td><td>없다</td><td>INPUT_REQUIRED·REJECTED 같은 상태가 있다</td></tr>
+<tr><td>결과물</td><td>없다 — 소통뿐</td><td>아티팩트로 돌려준다(§3.7)</td></tr>
+<tr><td>나중에 다시 묻기</td><td>못 한다 — id 가 없다</td><td><code>GetTask</code>·재구독·푸시 알림</td></tr>
+<tr><td>보물상사에서</td><td>파트 확인·안내 에이전트</td><td>숙소·식사·교통·정산·기획</td></tr>
+</table>
+</div>
+<div class="key"><b>§3.7 의 메시지 역할 넷</b> — 작업 시작(Task Initiation), 작업 전 되묻기(Clarification), 진행 알림(Status), 진행 중 추가 입력(Task Interaction). 어느 것도 "결과 배달" 이 아닙니다.</div>
+</article>
+
+<article class="card quiz" id="p04-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 파트 확인 에이전트의 답을 받은 뒤, 그 일의 상태를 <code>GetTask</code> 로 다시 물을 수 있습니까? 와이어에서 무엇을 보면 알 수 있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 물을 수 없습니다. <a href="#p04-reply-wire">답</a>은 <code>result.message</code> 이고, 그 안에 <code>taskId</code> 가 없습니다 — 작업이 만들어지지 않았으니 물을 id 가 없습니다. 같은 말을 받은 숙소 에이전트는 <code>result.task.id</code>(<code>&lt;id5&gt;</code>)가 있는 <a href="#p04-reply-task">Task</a> 로 답했습니다.</div>
+</article>
+
+<!-- ==== 4장 DataPart 로 구조화 입력 ==== -->
+
+<article class="card" id="p04-ch4">
+<p class="chnum">4장</p>
+<h2>DataPart 로 구조화 입력</h2>
+<p class="chsub">글 대신 데이터 → 숙소 요청 보내기 ×3 → 와이어의 30 과 30.0 → 파이썬 서버가 돌려준 수 → 세 클라이언트가 읽은 수 → 3×3: 받는 쪽 언어가 타입을 정한다 → Go 의 정수 칸 → 세 언어 비교</p>
+</article>
+
+<article class="card" id="p04-data-py">
+<h3>숙소 요청을 데이터 파트로 — 파이썬은 dict 를 Value 로 옮긴다</h3>
+<p class="lead">숙소 에이전트의 카드는 <code>application/json</code> 입력을 받고, 스킬 예시로 <code>{date, nights, headcount}</code> 모양을 적어 두었습니다(<a href="#p03-anatomy-skills">3부</a>). 글(<code>"30명"</code>)은 에이전트가 정규식으로 뜯어야 하지만, 데이터 파트는 이름 붙은 값을 그대로 건넵니다.</p>
+<!--CODE file=ex/py/04/data.py region=send-->
+<p><code>new_data_part</code> 는 <code>ParseDict(data, struct_pb2.Value())</code> 입니다(<a href="#p04-part-py">2장</a>). protobuf 의 <code>Value</code> 에서 수는 <code>double number_value</code> 하나뿐이라(<code>struct.proto</code>: "Represents a JSON number"), 정수 <code>30</code> 도 실수로 들어갑니다.</p>
+</article>
+
+<article class="card" id="p04-data-ts">
+<h3>TypeScript — 객체를 value 에 그대로 넣는다</h3>
+<p class="lead">ts-proto 의 <code>data</code> 값 타입은 <code>any</code> 입니다. 우리가 넣은 객체가 거의 그대로 <code>JSON.stringify</code> 를 거쳐 와이어에 나갑니다.</p>
+<!--CODE file=ex/ts/04/data.ts region=send-->
+</article>
+
+<article class="card" id="p04-data-go">
+<h3>Go — 정수 칸을 가진 구조체를 그대로 넣는다</h3>
+<p class="lead"><code>a2a.NewDataPart</code> 는 <code>any</code> 를 받으므로 타입이 있는 구조체를 넣을 수 있습니다. 직렬화는 <code>encoding/json</code> 이 하고, <code>int</code> 칸은 <code>30</code> 으로 적힙니다.</p>
+<!--CODE file=ex/go/04/data/main.go region=send-->
+</article>
+
+<article class="card" id="p04-data-wire">
+<h3>와이어의 30 과 30.0 — 파이썬만 소수점을 붙인다</h3>
+<p class="lead">세 클라이언트가 파이썬 숙소 에이전트에 요청을 보냈습니다(<code>data</code> 명세). 세 요청의 데이터 파트만 잘라 차례로 놓았습니다.</p>
+<!--SPEC file=ex/run/04/data.run-->
+<!--OUT file=out/04/data.txt wire=data-wire ex=2 lines=11-19 note=파이썬 클라이언트-->
+<!--OUT file=out/04/data.txt wire=data-wire ex=4 lines=12-20 note=TypeScript 클라이언트-->
+<!--OUT file=out/04/data.txt wire=data-wire ex=6 lines=10-18 note=Go 클라이언트-->
+<div class="note"><b>JSON 쪽 이야기는 2부에서</b> — <code>30</code> 과 <code>30.0</code> 이 JSON 에서는 같은 수이고 읽는 언어가 대접을 정한다는 것은 <a href="#p02-numbers">2부</a>에서 봤습니다. 새로운 것은 A2A SDK 가 그 차이를 <b>만들어 낸다</b>는 점입니다 — 파이썬 SDK 는 데이터 파트를 protobuf <code>Value</code> 에 담고, <code>json_format</code> 이 그 double 을 파이썬 <code>float</code> 로 꺼내 <code>30.0</code> 으로 적습니다.</div>
+</article>
+
+<article class="card" id="p04-data-server">
+<h3>파이썬 서버는 받은 30 도 30.0 으로 돌려준다</h3>
+<p class="lead">TS 클라이언트는 <code>30</code> 을 보냈습니다. 파이썬 숙소 에이전트의 답을 보면 견적도, 이력에 저장된 TS 의 요청도 소수점이 붙어 있습니다.</p>
+<!--OUT file=out/04/data.txt wire=data-wire ex=4 lines=37-75-->
+<ul>
+<li>서버가 받은 요청을 <code>Message</code>(protobuf)로 읽는 순간 <code>30</code> 은 double 이 되고, 다시 JSON 으로 쓸 때 <code>30.0</code> 이 됩니다.</li>
+<li>견적의 <code>rooms</code>·<code>total</code> 은 업무 규칙(<code>workshop.domain</code>)이 파이썬 <code>int</code> 로 계산한 값인데도 <code>8.0</code>·<code>2100000.0</code> 입니다. 데이터 파트에 넣는 순간 같은 길을 지나기 때문입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-data-read">
+<h3>세 클라이언트가 읽은 수 — float·number·float64</h3>
+<p class="lead">같은 답(<code>2100000.0</code>)을 세 클라이언트가 각자의 타입으로 읽었습니다.</p>
+<!--OUT file=out/04/data.txt part=터미널 3-->
+<ul>
+<li>파이썬은 <code>float</code>, TS 는 <code>number</code>(정수·실수 구별 없음), Go 는 데이터 파트가 <code>any</code> 라서 <code>float64</code> 입니다.</li>
+<li>Go 의 <code>%v</code> 는 큰 <code>float64</code> 를 지수꼴로 찍습니다 — <code>2.1e+06</code>. 돈을 그대로 화면에 찍으면 이렇게 됩니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-data-matrix">
+<h3>3×3 — 수의 타입은 보낸 쪽이 아니라 받는 쪽 언어가 정한다</h3>
+<p class="lead">세 클라이언트가 세 파트 확인 에이전트에 같은 요청을 보냈습니다. 에이전트는 받은 값의 타입을 제 언어로 말합니다.</p>
+<!--SPEC file=ex/run/04/matrix.run-->
+<!--OUT file=out/04/matrix.txt part=터미널 4-->
+<ul>
+<li>파이썬 에이전트는 TS·Go 가 보낸 <code>30</code> 도 <code>float 30.0</code> 으로 읽었고, TS·Go 에이전트는 파이썬이 보낸 <code>30.0</code> 도 <code>number 30</code>·<code>float64 30</code> 으로 읽었습니다.</li>
+<li>세 줄씩 묶으면 보낸 언어가 바뀌어도 답이 똑같습니다. 와이어의 소수점은 받는 SDK 의 타입 변환에서 사라지거나 생깁니다 — 어느 SDK 도 정수 타입으로 넘겨주지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-data-go-int">
+<h3>Go 의 정수 칸 — 바이트를 곧장 풀면 30.0 에서 실패한다</h3>
+<p class="lead"><a href="#p02-numbers-go">2부</a>에서 Go 의 <code>int</code> 칸은 <code>30.0</code> 을 거절했습니다. 파이썬 SDK 가 실제로 그 <code>30.0</code> 을 보내므로, Go 쪽에서 언제 이 일이 생기는지 갈라 봤습니다.</p>
+<!--RUN file=ex/go/04/data_decode region=decode-->
+<ul>
+<li>①: 와이어의 바이트를 구조체로 곧장 풀면(맨손 구현이 하기 쉬운 일) 실패합니다.</li>
+<li>②·③: SDK 를 거치면 값은 이미 <code>float64 30</code> 이고, 다시 JSON 으로 쓰면 <code>30</code> 이 되어 정수 칸에 들어갑니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p04-data-cmp">
+<h3>세 언어 비교 — 그래서 에이전트는 받은 수를 정수로 되돌린다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>데이터 파트의 값</td><td>protobuf <code>Value</code></td><td><code>any</code></td><td><code>any</code></td></tr>
+<tr><td>정수 30 을 보낼 때 와이어</td><td><code>30.0</code></td><td><code>30</code></td><td><code>30</code></td></tr>
+<tr><td>받은 수의 타입</td><td><code>float</code></td><td><code>number</code></td><td><code>float64</code></td></tr>
+<tr><td>보물상사 에이전트의 처리</td><td><code>as_ints</code></td><td><code>asInts</code></td><td><code>common.Int</code></td></tr>
+</table>
+</div>
+<!--CODE file=ex/py/agents/common.py lines=94-99 note=파이썬 숙소 에이전트가 쓰는 as_ints (agents/common.py)-->
+<div class="key"><b>받는 쪽에서 정수로</b> — 세 언어가 섞이는 메시는 "정수가 정수로 온다" 를 기대할 수 없습니다. 업무 규칙이 정수를 요구하면 받는 쪽이 되돌립니다. 반대로 소수부가 있으면 안 되는 값(인원, 금액)을 검사하는 것도 받는 쪽의 몫입니다. 다섯 에이전트의 이런 손질은 15부에서 차례로 봅니다.</div>
+</article>
+
+<article class="card quiz" id="p04-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. Go 클라이언트가 <code>headcount</code> 를 <code>int</code> 칸 30 으로 보내고, 파이썬 숙소 에이전트가 답했습니다. 답의 견적에서 <code>total</code> 은 와이어에 어떻게 적혔고, Go 클라이언트는 그것을 어떤 타입·어떤 모양으로 찍었습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 파이썬 서버는 데이터 파트의 수를 protobuf double 로 담아 <code>"total": 2100000.0</code> 으로 적습니다(<a href="#p04-data-server">서버의 답</a>). Go 클라이언트의 데이터 파트는 <code>any</code> 라 <code>float64</code> 로 읽고, <code>%v</code> 로 찍으면 <code>2.1e+06</code> 입니다(<a href="#p04-data-read">클라이언트가 읽은 수</a>). 보낸 쪽이 정수였는지는 상관없습니다(<a href="#p04-data-matrix">3×3</a>).</div>
 </article>
