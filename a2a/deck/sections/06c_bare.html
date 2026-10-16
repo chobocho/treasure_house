@@ -1,4 +1,437 @@
-<article class="card" id="p06-todo-c">
-<h3>맨손 구현 (c)</h3>
-<p class="lead">준비 중입니다</p>
+<!-- ==== 6장 맨손 클라이언트 ==== -->
+
+<article class="card" id="p06-ch6">
+<p class="chnum">6장</p>
+<h2>맨손 클라이언트 — 카드 읽기 → 인터페이스 고르기 → 호출</h2>
+<p class="chsub">클라이언트가 할 일 → 카드와 인터페이스 → 봉투와 판 헤더 → 스트림 읽기 → StreamResponse 한 줄로 → 대본 넷 → TypeScript → Go 의 타입 → Go 의 메시지 → 세 언어 비교 → 여섯 서버에 → 와이어로 본 세 요청</p>
+</article>
+
+<article class="card" id="p06-cli-what">
+<h3>클라이언트가 할 일도 목록으로 남는다 — SDK 클라이언트가 숨겨 둔 여섯 가지</h3>
+<p class="lead">3~5부에서는 총무팀 CLI(<code>ask</code>)가 SDK 클라이언트로 이 일을 했습니다. 이 장은 같은 일을 <code>urllib</code>·<code>fetch</code>·<code>net/http</code> 로 합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>근거</th><th>구역</th></tr>
+<tr><td>정해진 경로에서 카드를 받는다</td><td>§8.2, <a href="#p03-wellknown">3부</a></td><td><code>card</code></td></tr>
+<tr><td>인터페이스를 고른다 — 아는 바인딩·판 가운데 앞의 것, 그 <code>url</code>·<code>tenant</code> 로</td><td>§8.3.2, <a href="#p03-pick-order">3부</a></td><td><code>card</code></td></tr>
+<tr><td>봉투를 싸고 <code>A2A-Version</code> 을 단다</td><td>§3.6.1</td><td><code>rpc</code></td></tr>
+<tr><td>답을 가른다 — <code>result</code>·<code>error</code>, 그 안의 <code>task</code>·<code>message</code></td><td><a href="#p04-reply-two">4부</a></td><td><code>rpc</code>·<code>show</code></td></tr>
+<tr><td>이어 말하기 — 받은 <code>taskId</code>·<code>contextId</code> 를 단다</td><td><a href="#p04-ctx-infer">4부</a></td><td><code>rpc</code></td></tr>
+<tr><td>스트림은 Content-Type 으로 가려 SSE 로 읽는다</td><td><a href="#p06-sse-err">5장</a></td><td><code>stream</code></td></tr>
+</table>
+</div>
+<div class="key"><b>프로그램 셋, 출력은 하나</b> — <code>06/client.py</code>·<code>06/client.ts</code>·<code>06/client/</code> 가 같은 대본을 말하고 같은 줄을 찍습니다. 파이썬으로 일을 보고, TS·Go 는 다른 곳만 봅니다.</div>
+</article>
+
+<article class="card" id="p06-cli-card-py">
+<h3>카드를 받아 고른다 — JSONRPC 이고 판이 1.0 인 첫 인터페이스</h3>
+<p class="lead">§8.3.2: "Parse <code>supportedInterfaces</code> if present, and select the first supported transport", "Prefer earlier entries". 이 클라이언트가 아는 것은 JSON-RPC 의 1.0 하나라, 그것과 맞는 첫 칸이 답입니다.</p>
+<!--CODE file=ex/py/06/client.py region=card-->
+<ul>
+<li><b>판은 Major.Minor 만</b> — §3.6 이 패치 번호를 "<b>MUST</b> not be considered" 라고 하니 <code>split(".")[:2]</code> 로 둘만 견줍니다. 서버 쪽의 <a href="#p06-rpc-version">판 검사</a>와 같은 규칙입니다.</li>
+<li><b>카드 경로</b> — 받은 주소 끝의 <code>/</code> 를 떼고 붙입니다. 주소에 경로가 있을 때 SDK 셋이 서로 달랐던 자리입니다(<a href="#p03-base-path">3부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p06-cli-rpc-py">
+<h3>봉투와 판 헤더 — 요청은 받은 주소가 아니라 고른 인터페이스의 url 로</h3>
+<p class="lead">§3.6.1: "Clients <b>MUST</b> send the <code>A2A-Version</code> header with each request". 헤더가 없으면 서버는 0.3 으로 읽습니다(<a href="#p06-rpc-wire-version">2장</a>).</p>
+<!--CODE file=ex/py/06/client.py region=rpc-->
+<ul>
+<li><b><code>iface["url"]</code></b> — 카드를 받은 주소와 같을 까닭이 없습니다(§8.3.2 "Use the correct URL for the selected transport"). 뒤의 시험은 이 점을 써서 요청을 와이어 탭으로 돌립니다(<a href="#p06-cli-wire">와이어</a>).</li>
+<li><b>tenant</b> — 고른 인터페이스에 있으면 <code>params.tenant</code> 에 그대로(§8.3.2 넷째 규칙, <a href="#p03-tenant">3부</a>). 숙소 카드에는 없어 실리지 않습니다.</li>
+<li><b>이어 말하기</b> — <code>message(text, ids)</code> 가 앞 답의 두 id 를 메시지에 붙입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-cli-stream-py">
+<h3>스트림 — Content-Type 이 갈림길, data 하나가 JSON-RPC 응답 하나</h3>
+<p class="lead">SSE 파서는 <a href="#p02-sse-client-py">2부</a>의 것에서 <code>data:</code> 줄만 남겼습니다. 새로운 것은 그 앞의 갈림길과, 이벤트마다 <code>result</code> 를 꺼내는 일입니다.</p>
+<!--CODE file=ex/py/06/client.py region=stream-->
+<ul>
+<li><b><code>get_content_type()</code></b> — 스트림을 청해도 첫 이벤트 전의 오류는 <code>application/json</code> 하나로 옵니다(<a href="#p06-sse-err">5장</a>, 파이썬·TS SDK 도 그랬다). 그때는 JSON 으로 읽어 <code>result</code> 가 오류를 알립니다.</li>
+<li><b>이벤트마다 봉투</b> — <code>data</code> 에는 <code>{"jsonrpc", "id", "result"}</code> 가 통째로 실립니다(<a href="#p06-sse-wire-new">5장</a>). 꺼낸 <code>result</code> 가 StreamResponse 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-cli-show-py">
+<h3>StreamResponse 는 키 하나짜리 객체 — 그 키가 곧 종류다</h3>
+<p class="lead">막는 호출의 <code>result</code>(<code>{"task": …}</code>)도, 스트림의 이벤트도 넷 가운데 하나만 가진 oneof 입니다. 그래서 같은 <code>show</code> 하나로 둘 다 읽습니다.</p>
+<!--CODE file=ex/py/06/client.py region=show-->
+<ul>
+<li><b>id 를 담은 필드가 다르다</b> — <code>task</code> 는 <code>id</code>, <code>statusUpdate</code>·<code>artifactUpdate</code> 는 <code>taskId</code>. 이어 말하려면 어느 이벤트에서든 두 id 를 주워야 합니다(<a href="#p06-ch6-quiz">퀴즈</a>).</li>
+<li><b>글 파트만</b> — 견적의 DataPart 는 건너뜁니다. 서버마다 수의 꼴이 달라(<a href="#p04-data-matrix">4부</a>) 세 언어의 출력이 갈리기 때문입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-cli-run-py">
+<h3>대본 넷 — 막는 호출로 한 작업, 스트림으로 또 한 작업</h3>
+<p class="lead">①② 는 <code>SendMessage</code> 로 되물음에 답해 끝내고, ③④ 는 <code>SendStreamingMessage</code> 로 날짜를 바꿔 같은 일을 합니다. 아래는 파이썬 SDK 판 완성 에이전트(탭 너머)에 붙인 결과입니다.</p>
+<!--CODE file=ex/py/06/client.py region=main-->
+<!--OUT file=out/06/client.txt part=터미널 8 lines=1-10 note=파이썬 SDK 서버-->
+<div class="note"><b>④ 에 task 줄이 없다</b> — 파이썬 SDK 판 에이전트는 이어 말하기의 스트림을 Task 없이 시작합니다(<a href="#p05-follow-why">5부</a>). 그래도 클라이언트는 <code>artifactUpdate</code> 의 <code>taskId</code> 로 같은 작업을 따라갑니다. 20명·11-06 은 양평이 가장 쌉니다.</div>
+</article>
+
+<article class="card" id="p06-cli-ts">
+<h3>TypeScript — fetch 의 본문은 ReadableStream, 글로 바꿔 줄을 자른다</h3>
+<p class="lead">구조는 파이썬과 같습니다(<code>card</code>·<code>rpc</code>·<code>show</code>·<code>main</code> 구역). 다른 곳이 몰린 <code>stream</code> 구역입니다.</p>
+<!--CODE file=ex/ts/06/client.ts region=stream-->
+<ul>
+<li><b><code>TextDecoderStream</code></b> — 바이트 조각을 UTF-8 글로 바꾸며 조각 경계에 걸린 한글을 이어 줍니다. 서버 쪽에서 <code>setEncoding</code> 으로 막았던 그 문제입니다(<a href="#p06-sse-ts">5장</a>).</li>
+<li><b>헤더 이름</b> — <code>res.headers.get("content-type")</code> 는 대소문자를 가리지 않고, 값에 <code>; charset=utf-8</code> 이 붙을 수 있어 <code>startsWith</code> 로 봅니다.</li>
+<li><b><code>...ids</code></b> — 새 작업이면 <code>ids</code> 가 <code>undefined</code> 이고, 펼침은 아무 키도 넣지 않습니다(<code>message</code>, <code>rpc</code> 구역).</li>
+</ul>
+</article>
+
+<article class="card" id="p06-cli-go-types">
+<h3>Go — 읽을 것만 구조체로, oneof 는 포인터 넷</h3>
+<p class="lead"><code>map[string]any</code> 로 읽으면 단언이 줄마다 붙습니다. 와이어에서 쓰는 필드만 구조체로 적고 나머지는 <code>Unmarshal</code> 이 버리게 둡니다.</p>
+<!--CODE file=ex/go/06/client/main.go region=types-->
+<ul>
+<li><b>oneof = nil 이 아닌 포인터 하나</b> — <code>show</code> 는 <code>switch</code> 로 <code>ev.Task != nil</code> 부터 차례로 묻습니다.</li>
+<li><b>묻어 넣은 <code>ids</code></b> — <code>statusUpdate</code>·<code>artifactUpdate</code> 의 <code>taskId</code>·<code>contextId</code> 가 바깥 구조체의 필드처럼 풀립니다.</li>
+<li><b><code>Text *string</code></b> — 글 파트가 아니면 <code>nil</code>. 빈 글(<code>""</code>)과 "글이 아님" 을 가릅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-cli-go-msg">
+<h3>Go 가 보내는 메시지 — 빈 id 는 omitempty 로 뺀다</h3>
+<p class="lead">새 작업에 <code>"taskId": ""</code> 를 보내도 세 SDK 서버는 "없음" 으로 읽었습니다(<a href="#p04-pj-empty">4부</a>). 그래도 보내지 않는 쪽이 깔끔합니다.</p>
+<!--CODE file=ex/go/06/client/main.go region=message-->
+<ul>
+<li>같은 <code>ids</code> 를 받을 때도, 보낼 때도 씁니다 — 태그의 <code>omitempty</code> 는 읽을 때는 아무 일도 하지 않습니다.</li>
+<li>키의 차례는 구조체 필드의 차례입니다(<code>messageId</code>·<code>role</code>·<code>taskId</code>·<code>contextId</code>·<code>parts</code>). 봉투는 맵이라 알파벳 차례가 됩니다(<a href="#p06-cli-wire">와이어</a>).</li>
+<li>스트림은 <a href="#p02-sse-client-go">2부</a>처럼 <code>iter.Seq</code> 로 내주고, 오류 응답이면 이벤트 하나를 내고 끝납니다(<code>stream</code> 구역).</li>
+</ul>
+</article>
+
+<article class="card" id="p06-cli-cmp">
+<h3>세 언어 비교 — 같은 여섯 가지, 다른 손잡이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>HTTP</td><td><code>urllib.request</code></td><td><code>fetch</code></td><td><code>net/http</code></td></tr>
+<tr><td>JSON 을 담는 그릇</td><td>dict</td><td>객체(<code>any</code>)</td><td>읽을 필드만 구조체</td></tr>
+<tr><td>Content-Type 보기</td><td><code>get_content_type()</code></td><td><code>headers.get(…).startsWith</code></td><td><code>Header.Get</code> + <code>HasPrefix</code></td></tr>
+<tr><td>스트림 읽기</td><td>응답을 줄로 돈다</td><td><code>TextDecoderStream</code> + 직접 자르기</td><td><code>bufio.Scanner</code></td></tr>
+<tr><td>oneof 가르기</td><td>첫 키</td><td><code>Object.entries(res)[0]</code></td><td>nil 이 아닌 포인터</td></tr>
+<tr><td>새 작업의 빈 id</td><td>키를 안 넣는다</td><td><code>undefined</code> 펼침</td><td><code>omitempty</code></td></tr>
+</table>
+</div>
+<div class="note"><b>세 프로그램 모두 표준만</b> — 파이썬은 <code>itertools</code>·<code>json</code>·<code>sys</code>·<code>urllib</code>, TS 는 import 가 없고(<code>fetch</code>·<code>TextDecoderStream</code> 이 Node 에 내장), Go 는 <code>bufio</code>·<code>bytes</code>·<code>encoding/json</code>·<code>fmt</code>·<code>io</code>·<code>iter</code>·<code>net/http</code>·<code>os</code>·<code>strings</code> 입니다.</div>
+</article>
+
+<article class="card" id="p06-cli-six">
+<h3>여섯 서버에 같은 대본 — SDK 셋, 맨손 셋, 다른 줄은 하나</h3>
+<p class="lead">파이썬 클라이언트를 완성 에이전트(SDK) 셋과 맨손 서버 셋에 차례로 붙였습니다. 포트 10686 은 파이썬 SDK 서버 앞의 탭, 10681·10682 는 TS·Go SDK, 10683~10685 는 맨손 파이썬·TS·Go 입니다. 머리줄과 <code>task WORKING</code> 줄만 골랐습니다.</p>
+<!--OUT file=out/06/client.txt part=터미널 8 lines=1-65 grep=^\[|^   task WORKING-->
+<ul>
+<li>나머지 줄(견적의 숙소·금액, 되물음의 글)은 여섯 번 모두 같았습니다. TS·Go 클라이언트의 열두 번도 같았습니다 — 셋을 다 펼친 표는 <a href="#p06-mx-bare">7장</a>.</li>
+<li><code>task WORKING</code> 이 없는 한 번이 파이썬 SDK 서버입니다. 맨손 서버 셋은 TS·Go SDK 서버와 같은 쪽입니다(<a href="#p06-goal-follow">1장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p06-cli-wire">
+<h3>와이어로 본 세 요청 — 뜻은 같고, 키 차례와 Accept 가 다르다</h3>
+<p class="lead">파이썬 SDK 서버는 카드에 탭의 주소(<code>--url http://127.0.0.1:10686/</code>)를 적었고, 세 클라이언트는 카드의 <code>url</code> 을 따랐으니 요청이 모두 탭을 지났습니다. 각 클라이언트의 첫 <code>SendMessage</code> 입니다.</p>
+<!--OUT file=out/06/client.txt wire=sdk-py-wire ex=2 lines=1-19 note=파이썬 클라이언트-->
+<!--OUT file=out/06/client.txt wire=sdk-py-wire ex=7 lines=1-7 note=TS 클라이언트 — 머리와 봉투 앞부분-->
+<!--OUT file=out/06/client.txt wire=sdk-py-wire ex=12 lines=1-7 note=Go 클라이언트 — 머리와 봉투 앞부분-->
+<ul>
+<li><b><code>Accept: */*</code></b> — 코드에 없는 헤더를 Node 의 <code>fetch</code> 가 붙였습니다. <code>urllib</code>·<code>net/http</code> 는 붙이지 않습니다.</li>
+<li><b>Go 의 봉투는 <code>id</code> 부터</b> — 맵이라 키가 알파벳 차례입니다. 메시지는 구조체라 적은 차례 그대로입니다.</li>
+</ul>
+</article>
+
+<article class="card quiz" id="p06-ch6-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. 파이썬 SDK 서버에 ④ 를 스트림으로 이어 말했더니 <code>task</code> 이벤트 없이 <code>artifactUpdate</code> 로 시작했습니다. 맨손 클라이언트가 Task 에서만 두 id 를 주웠다면 ④ 다음에 한 번 더 이어 말할 수 있었겠습니까? 실제 클라이언트는 어떻게 합니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> ④ 의 이벤트는 <code>artifactUpdate</code> 와 <code>statusUpdate</code> 뿐이었으니(<a href="#p06-cli-run-py">대본</a>) Task 에서만 주웠다면 ④ 에서는 새 id 를 하나도 얻지 못합니다 — 이번에는 ③ 의 id 가 남아 있어 같은 작업이지만, 첫 마디부터 스트림이 Task 없이 오는 서버라면 이어 말할 길이 없습니다. 그래서 <code>show</code> 는 갱신 이벤트의 <code>taskId</code>·<code>contextId</code> 에서도 id 를 줍습니다(<a href="#p06-cli-show-py">show 구역</a>) — Task 로 시작하지 않는 스트림(<a href="#p05-follow-rule">5부</a>)을 견디는 방법입니다.</div>
+</article>
+
+<!-- ==== 7장 교차 — SDK 클라이언트와 맨손 서버, 맨손 클라이언트와 SDK 서버 ==== -->
+
+<article class="card" id="p06-ch7">
+<p class="chnum">7장</p>
+<h2>맨손 구현을 SDK 로 두드려 보기 — 교차 3×3 두 벌</h2>
+<p class="chsub">무엇을 견주나 → SDK 클라이언트 × 여섯 서버 → 대본은 두 가지뿐 → 다른 한 줄의 까닭 → 맨손 클라이언트 × 여섯 서버 → SDK 클라이언트의 요청 셋 → 정리</p>
+</article>
+
+<article class="card" id="p06-mx-plan">
+<h3>두 벌의 교차표 — 클라이언트 셋 × 서버 여섯</h3>
+<p class="lead">맨손 서버가 "A2A 서버" 라면 어느 SDK 클라이언트가 붙어도 SDK 서버와 같은 대화가 나와야 하고, 맨손 클라이언트도 어느 SDK 서버와든 말이 통해야 합니다. 서버 여섯(SDK 셋 + 맨손 셋)을 띄워 두고 두 번 돌렸습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>벌</th><th>클라이언트</th><th>서버</th><th>명세</th></tr>
+<tr><td>가</td><td>총무팀 CLI <code>ask</code> — 파이썬·TS·Go SDK 클라이언트</td><td>SDK 셋 + 맨손 셋</td><td><code>06/matrix.run</code></td></tr>
+<tr><td>나</td><td>6장의 맨손 클라이언트 셋</td><td>SDK 셋 + 맨손 셋</td><td><code>06/client.run</code></td></tr>
+</table>
+</div>
+<ul>
+<li><b>가</b> 의 대본: 첫 마디 <code>'2026-10-30 1박'</code>, 되물음에 <code>'30명'</code>. 카드가 <code>streaming: true</code> 라 <code>ask</code> 는 둘 다 스트림으로 보냅니다(<a href="#p06-goal-run">1장</a>).</li>
+<li>포트 10680~10682 는 SDK 파이썬·TS·Go, 10683~10685 는 맨손 파이썬·TS·Go. 맨손 파이썬 서버는 카드에 탭의 주소 10686 을 적어 탭 너머에 두었습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-mx-out">
+<h3>가 — SDK 클라이언트 셋 × 서버 여섯, task WORKING 이 없는 칸은 셋</h3>
+<p class="lead">열여덟 번의 머리줄과, 이어 말한 뒤에 찍힌 <code>task WORKING</code> 줄만 골랐습니다. 나머지 줄은 아래 두 대본 가운데 하나와 같습니다.</p>
+<!--OUT file=out/06/matrix.txt part=터미널 8 grep=^\[|^task WORKING-->
+<div class="key"><b>빠진 칸은 모두 10680(파이썬 SDK 서버)</b> — 클라이언트의 언어와 상관없이 서버가 정합니다. 맨손 서버 셋(10686·10684·10685)은 세 SDK 클라이언트 모두에게 TS·Go SDK 서버와 같은 대본으로 답했습니다.</div>
+</article>
+
+<article class="card" id="p06-mx-two">
+<h3>대본은 두 가지뿐 — 열여덟 칸이 둘 가운데 하나와 글자까지 같다</h3>
+<p class="lead">파이썬 SDK 서버의 대본과 맨손 Go 서버의 대본입니다(둘 다 파이썬 <code>ask</code>). 다른 열여섯 칸은 서버에 따라 이 둘 가운데 하나와 같았습니다.</p>
+<!--OUT file=out/06/matrix.txt part=터미널 8 lines=1-14 note=파이썬 SDK 서버-->
+<!--OUT file=out/06/matrix.txt part=터미널 8 lines=75-89 note=맨손 Go 서버-->
+<div class="note"><b>1장의 합격선을 넘었다</b> — <a href="#p06-goal-target">목표 대본</a>은 파이썬 <code>ask</code> 하나와 맨손 서버 셋이었습니다. 이번에는 세 언어의 SDK 클라이언트 모두가 맨손 서버 셋과 같은 줄을 주고받았습니다. 숫자와 말이 같은 것은 업무를 <code>workshop</code> 모듈이 정하기 때문입니다.</div>
+</article>
+
+<article class="card" id="p06-mx-why">
+<h3>다른 한 줄 — 이어 말하기의 스트림을 Task 로 시작하느냐</h3>
+<p class="lead">"30명" 다음의 <code>task WORKING</code> 은 둘째 스트림의 첫 이벤트입니다. 서버 여섯이 두 쪽으로 갈립니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>서버</th><th>둘째 스트림의 첫 이벤트</th><th>까닭</th></tr>
+<tr><td>파이썬 SDK</td><td><code>artifactUpdate</code></td><td>Task 를 다시 실으면 SDK 가 사용자의 답을 이력에서 버린다(<a href="#p05-follow-why">5부</a>)</td></tr>
+<tr><td>TS·Go SDK</td><td><code>task</code>(WORKING)</td><td>§3.1.2 대로 다시 싣는다(<a href="#p05-follow-ts-go">5부</a>)</td></tr>
+<tr><td>맨손 셋</td><td><code>task</code>(WORKING)</td><td>SDK 사정이 없으니 스펙대로(<a href="#p06-goal-follow">1장</a>, <a href="#p06-sse-follow">5장</a>)</td></tr>
+</table>
+</div>
+<div class="key"><b>차이는 클라이언트가 아니라 서버의 선택</b> — 같은 서버 앞에서는 세 SDK 클라이언트의 대본이 글자까지 같았습니다. 그러니 이 한 줄은 상호운용의 문제가 아닙니다. §3.1.2 의 "<b>MUST</b> begin with the Task object" 를 지키는 쪽이 맨손 서버들입니다.</div>
+</article>
+
+<article class="card" id="p06-mx-bare">
+<h3>나 — 맨손 클라이언트 셋 × 서버 여섯, 같은 자리에 같은 빈칸</h3>
+<p class="lead">6장의 클라이언트 셋을 같은 서버 여섯에 붙였습니다. 여기서도 머리줄과 <code>task WORKING</code> 줄만 골랐습니다. 10686 은 파이썬 SDK 서버 앞의 탭입니다.</p>
+<!--OUT file=out/06/client.txt part=터미널 8 grep=^\[|^   task WORKING-->
+<div class="note"><b>SDK 없이도 SDK 서버 셋과 통했다</b> — 카드 읽기, 인터페이스 고르기, 막는 호출, 이어 말하기, 스트림 두 번이 열여덟 번 모두 끝까지 갔고, 빠진 줄은 파이썬 SDK 서버 앞에서만입니다(<a href="#p06-cli-run-py">6장의 대본</a>).</div>
+</article>
+
+<article class="card" id="p06-mx-wire">
+<h3>SDK 클라이언트 셋의 요청 — 맨손 서버는 셋 다 받았다</h3>
+<p class="lead">맨손 파이썬 서버 앞의 탭이 본 첫 스트림 요청입니다(파이썬·TS·Go <code>ask</code> 차례). 메서드·<code>configuration</code>·<code>id</code>·<code>role</code> 줄과 헤더만 골랐습니다.</p>
+<!--OUT file=out/06/matrix.txt wire=bare-py-wire ex=2 lines=1-21 grep=^→|^  [A-Z]|"method"|"configuration"|"id"|"role" note=파이썬 SDK-->
+<!--OUT file=out/06/matrix.txt wire=bare-py-wire ex=5 lines=1-21 grep=^→|^  [A-Z]|"method"|"configuration"|"id"|"role" note=TS SDK-->
+<!--OUT file=out/06/matrix.txt wire=bare-py-wire ex=8 lines=1-20 grep=^→|^  [A-Z]|"method"|"configuration"|"id"|"role" note=Go SDK-->
+<ul>
+<li><b>JSON-RPC <code>id</code></b> — 파이썬·Go SDK 는 UUID 문자열, TS 는 수 <code>1</code>. 맨손 서버는 둘 다 받아 그대로 돌려줍니다(<a href="#p06-rpc-go">2장</a>).</li>
+<li><b><code>"configuration": {}</code></b> — 파이썬·TS 는 빈 설정을 싣고 Go 는 뺍니다. 맨손 서버는 <code>historyLength</code> 하나만 읽으니 상관없습니다.</li>
+<li><b><code>Accept: text/event-stream</code></b> — 세 SDK 모두 스트림 요청에 붙였습니다. 6장의 맨손 클라이언트는 붙이지 않았고, 서버 여섯 모두 그래도 SSE 로 답했습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-mx-sum">
+<h3>7장 정리 — 서른여섯 칸, 대본은 두 가지</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>SDK 서버 셋</th><th>맨손 서버 셋</th></tr>
+<tr><td>SDK 클라이언트 셋</td><td>아홉 칸 — 파이썬 서버만 <code>task WORKING</code> 없음</td><td>아홉 칸 — 모두 TS·Go SDK 서버와 같은 대본</td></tr>
+<tr><td>맨손 클라이언트 셋</td><td>아홉 칸 — 파이썬 서버만 <code>task WORKING</code> 없음</td><td>아홉 칸 — 모두 같은 대본</td></tr>
+</table>
+</div>
+<ul>
+<li><b>견딘 차이들</b> — 수인 id 와 문자열 id, 빈 <code>configuration</code>, <code>Accept</code> 의 있고 없음, 봉투 키의 차례, Task 로 시작하지 않는 스트림. 받는 쪽이 이것들에 매이지 않았기에 서른여섯 칸이 모두 끝까지 갔습니다.</li>
+<li>다섯 에이전트 전부의 3×3 은 16부가 합니다. 이 장은 숙소 에이전트 하나와 맨손 구현의 몫입니다.</li>
+</ul>
+</article>
+
+<article class="card quiz" id="p06-ch7-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. Go <code>ask</code> 를 맨손 Go 서버에 붙인 칸에는 "30명" 다음에 <code>task WORKING</code> 이 찍혔고, 같은 Go <code>ask</code> 를 파이썬 SDK 서버에 붙인 칸에는 없었습니다. 이 차이를 만든 것은 클라이언트입니까, 서버입니까? 어떻게 알 수 있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 서버입니다. 파이썬 SDK 서버(10680) 앞에서는 파이썬·TS·Go <code>ask</code> 셋 모두 그 줄이 없었고, 다른 다섯 서버 앞에서는 셋 모두 있었습니다(<a href="#p06-mx-out">가 벌</a>). 맨손 클라이언트 셋으로 바꿔도 같은 자리만 비었습니다(<a href="#p06-mx-bare">나 벌</a>). 파이썬 SDK 서버가 이어 말하기의 스트림을 Task 없이 시작하기 때문입니다(<a href="#p05-follow-why">5부</a>).</div>
+</article>
+
+<!-- ==== 8장 맨손이 놓친 것 ==== -->
+
+<article class="card" id="p06-ch8">
+<p class="chnum">8장</p>
+<h2>맨손이 놓친 것 — SDK 가 대신 해 주던 일</h2>
+<p class="chsub">놓친 것 목록 → 없는 메서드 넷 → §3.3.4 가 정한 답 → 판을 알리는 네 길 → 판 검사가 갈린 까닭 → 느린 연결 하나 → 한 번에 하나의 값 → SDK 설치본에 있는 것 → ProtoJSON 의 정수 → 오류를 버린 Unmarshal → 고친 코드 → 고친 뒤 맨손 셋 → SDK 셋의 답</p>
+</article>
+
+<article class="card" id="p06-miss-list">
+<h3>놓친 것 목록 — 증거가 있는 것부터</h3>
+<p class="lead">맨손 서버는 숙소 에이전트 하나가 쓰는 만큼만 만들었습니다(<a href="#p06-goal-scope">1장</a>). 무엇이 빠졌는지를 SDK 서버 셋과 같은 요청으로 견줘 확인합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>놓친 것</th><th>맨손 서버</th><th>증거</th><th>자세히</th></tr>
+<tr><td>메서드 넷 — ListTasks·SubscribeToTask·푸시 설정·확장 카드</td><td><code>-32601</code></td><td><a href="#p06-miss-methods">없는 메서드</a></td><td>10·11·12부</td></tr>
+<tr><td>§3.3.4 의 기능 오류</td><td><code>-32601</code> 로 대신</td><td><a href="#p06-miss-caps">정한 답</a></td><td><a href="#p03-caps-rule">3부</a></td></tr>
+<tr><td>판 협상 — 헤더 말고 요청 인자로도</td><td>헤더의 1.0 하나</td><td><a href="#p06-miss-version">판 네 길</a></td><td>14부</td></tr>
+<tr><td>동시성</td><td>파이썬은 한 번에 한 연결</td><td><a href="#p06-miss-stall">느린 연결</a></td><td>17부</td></tr>
+<tr><td>영속 저장·푸시·인증·다른 바인딩</td><td>없다</td><td><a href="#p06-miss-sdk">설치본</a></td><td>11·12·13·17부</td></tr>
+<tr><td>입력 검사 — 손으로 쓴 만큼만</td><td>ProtoJSON 보다 좁고, Go 는 구멍</td><td><a href="#p06-miss-lax">Unmarshal</a></td><td>—</td></tr>
+</table>
+</div>
+<div class="note"><b>시험 프로그램 둘</b> — <code>06/gaps.py</code> 는 없는 메서드와 판을 알리는 다른 길을, <code>06/params_probe.py</code> 는 ProtoJSON 이 허락하는 다른 꼴의 인자를 보냅니다. 둘 다 <code>urllib</code> 만 쓰고, 서버 여섯(맨손 셋 + SDK 셋)에 차례로 보냅니다.</div>
+</article>
+
+<article class="card" id="p06-miss-methods">
+<h3>없는 메서드 넷 — 맨손 서버는 셋 다 -32601</h3>
+<p class="lead"><code>gaps.py</code> 는 끝난 숙소 작업 하나를 만든 뒤 메서드 넷을 부르고, 이어 GetTask 를 판만 바꿔 네 번 보냅니다. 답은 한 줄로 줄여 찍습니다(<code>rpc</code> 구역 — 오류면 code·message, 결과면 Task 의 상태나 키 이름).</p>
+<!--CODE file=ex/py/06/gaps.py region=probe-->
+<!--OUT file=out/06/gaps.txt part=터미널 7 lines=1-5 note=맨손 파이썬 서버 — TS·Go 도 같다-->
+<div class="note"><b>메서드 표에 없으니 -32601</b> — 맨손 서버는 처음부터 이 넷을 빼기로 했습니다(<a href="#p06-goal-scope">1장</a>). 문제는 이 답이 스펙이 정한 답이냐입니다 — 다음 장에서 SDK 셋과 견줍니다.</div>
+</article>
+
+<article class="card" id="p06-miss-caps">
+<h3>§3.3.4 가 정한 답 — "없는 메서드" 는 틀린 진단이다</h3>
+<p class="lead">§3.3.4: 카드가 선언하지 않은 기능을 쓰려 하면 "the agent <b>MUST</b> return an appropriate error response". 맨손 서버의 카드는 <code>streaming</code> 하나만 켰습니다.</p>
+<!--OUT file=out/06/gaps.txt part=터미널 7 lines=28-54 grep=^\[|ListTasks|SubscribeToTask|푸시|확장 note=SDK 서버 셋(파이썬·TS·Go) — 같은 카드의 숙소 에이전트-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>요청</th><th>스펙이 정한 답</th><th>SDK 셋</th><th>맨손</th></tr>
+<tr><td>푸시 설정(카드에 <code>pushNotifications</code> 없음)</td><td><code>PushNotificationNotSupportedError</code>(-32003)</td><td>-32003</td><td>-32601</td></tr>
+<tr><td>확장 카드(<code>extendedAgentCard</code> 없음)</td><td><code>UnsupportedOperationError</code>(-32004)</td><td>-32004</td><td>-32601</td></tr>
+<tr><td>SubscribeToTask(<code>streaming: true</code>)</td><td>기능을 선언했으니 메서드가 있어야 한다</td><td>끝난 작업이라 -32004</td><td>-32601</td></tr>
+</table>
+</div>
+<p>SDK 셋은 같은 줄에서 같은 코드를 냈고 문구만 제각각입니다. 목록의 키는 셋 모두 <code>tasks</code>·<code>nextPageToken</code>·<code>pageSize</code>·<code>totalSize</code> 였습니다(목록은 11부).</p>
+<div class="warn"><b>맨손 서버가 어기는 MUST</b> — 푸시 설정과 확장 카드는 메서드 표에 두 줄(처리 함수가 정한 오류를 던지는)만 더하면 맞출 수 있습니다. SubscribeToTask 는 작업이 끝나기 전에 붙는 구독자에게 이벤트를 흘려야 해서, 이벤트 목록을 다 만든 뒤 쓰는 지금 구조(<a href="#p06-sse-close">5장</a>)로는 모자랍니다 — 10부의 몫입니다.</div>
+</article>
+
+<article class="card" id="p06-miss-version">
+<h3>판을 알리는 네 길 — 1.0.1, 1.5, 헤더 없음, 요청 인자</h3>
+<p class="lead">같은 GetTask 를 <code>A2A-Version: 1.0.1</code>·<code>1.5</code> 로, 헤더 없이, 헤더 대신 <code>?A2A-Version=1.0</code> 을 붙여 보냈습니다. 서버 여섯의 답이 다섯 가지 꼴로 갈렸습니다.</p>
+<!--OUT file=out/06/gaps.txt part=터미널 7 grep=^\[|판|A2A-Version-->
+<div class="note"><b>§3.6.1</b> — "Clients <b>MAY</b> provide the <code>A2A-Version</code> as a request parameter instead of a header." 요청 인자로 알린 판을 읽은 서버는 여섯 가운데 없습니다(Go SDK 의 "받음" 은 읽어서가 아니다 — 다음 장).</div>
+</article>
+
+<article class="card" id="p06-miss-version-why">
+<h3>판 검사가 갈린 까닭 — 소스에서 찾은 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>서버</th><th>1.0.1</th><th>1.5</th><th>헤더 없음</th><th><code>?A2A-Version=1.0</code></th><th>까닭</th></tr>
+<tr><td>맨손 파이썬·TS</td><td>받음</td><td>-32009</td><td>-32009</td><td>404</td><td>경로를 <code>"/"</code> 와 통째로 견준다 — 물음표 뒤까지 경로로 봤다</td></tr>
+<tr><td>맨손 Go</td><td>받음</td><td>-32009</td><td>-32009</td><td>-32009</td><td><code>ServeMux</code> 는 경로만 맞추고, 헤더가 비어 0.3</td></tr>
+<tr><td>파이썬 SDK</td><td>받음</td><td>받음</td><td>-32009</td><td>-32009</td><td><code>utils/version_validator.py</code> 가 Major 만 견준다(<code>actual_v.major == expected_v.major</code>)</td></tr>
+<tr><td>TS SDK</td><td>-32009</td><td>-32009</td><td>-32009</td><td>-32009</td><td>카드의 <code>protocolVersion</code> 과 글자 그대로 견준다 — <code>validateVersion</code> 의 <code>supported.has(requestedVersion)</code>(<code>dist/server/express/index.js</code>)</td></tr>
+<tr><td>Go SDK</td><td>받음</td><td>받음</td><td>받음</td><td>받음</td><td>서버 쪽(<code>a2asrv</code>)에 <code>A2A-Version</code> 을 읽는 코드가 없다 — <code>SvcParamVersion</code> 을 쓰는 곳은 클라이언트(<code>a2aclient/client.go</code>)뿐</td></tr>
+</table>
+</div>
+<div class="key"><b>맨손의 판 검사가 스펙의 글자에 가장 가깝다</b> — §3.6 의 "Major.Minor" 와 패치 번호를 "<b>MUST</b> not be considered", §3.6.2 의 "<b>MUST</b> interpret empty value as 0.3". 1.0.1 을 거절한 TS SDK 는 앞의 것을, 1.5 를 받은 파이썬 SDK 는 Major.Minor 를 비켜 갑니다. 맨손이 놓친 것은 요청 인자 하나입니다. 판이 여럿인 서버와 v0.3 호환은 14부가 다룹니다.</div>
+</article>
+
+<article class="card" id="p06-miss-stall">
+<h3>느린 연결 하나 — 파이썬 맨손 서버는 그동안 아무에게도 답하지 않는다</h3>
+<p class="lead">연결 하나를 열어 요청 머리를 반만 보내 두고(끝의 빈 줄을 안 보냄), 그동안 다른 GetTask 를 보냈습니다. 기다리는 시간은 2초입니다.</p>
+<!--CODE file=ex/py/06/stall.py region=stall-->
+<!--OUT file=out/06/stall.txt part=터미널 4-->
+<div class="warn"><b>한 줄짜리 공격</b> — 머리를 끝까지 보내지 않는 클라이언트 하나로 파이썬 맨손 서버가 섰습니다. 일부러 그러지 않아도, 느린 망 저편의 클라이언트 하나가 같은 일을 합니다.</div>
+</article>
+
+<article class="card" id="p06-miss-stall-why">
+<h3>왜 파이썬만 — 연결을 받는 방식이 셋이 다르다</h3>
+<p class="lead"><a href="#p06-store-lock">3장</a>에서 본 "한 번에 하나" 의 값입니다. 자물쇠가 필요 없던 까닭이 곧 이 약점입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>서버</th><th>연결을 받는 방식</th><th>반쪽 머리 하나에</th></tr>
+<tr><td>파이썬 <code>HTTPServer</code></td><td>요청 하나를 끝까지 처리한 뒤 다음 연결을 받는다</td><td>머리를 다 읽을 때까지 멈춘다</td></tr>
+<tr><td>Node <code>node:http</code></td><td>스레드 하나지만 읽기를 기다리며 막히지 않는다</td><td>다른 연결을 그대로 처리</td></tr>
+<tr><td>Go <code>net/http</code></td><td>연결마다 고루틴</td><td>다른 고루틴이 처리</td></tr>
+</table>
+</div>
+<ul>
+<li><b>파이썬의 길</b> — 표준 라이브러리에 <code>ThreadingHTTPServer</code>(<code>socketserver.ThreadingMixIn</code> + <code>HTTPServer</code>)가 있습니다. 바꾸면 요청이 스레드마다 돌므로 저장소에 Go 의 <code>Mu</code> 같은 자물쇠가 필요해집니다.</li>
+<li>요청마다 시간 제한을 두는 일, 느린 클라이언트를 끊는 일은 17부(운영)에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-miss-sdk">
+<h3>SDK 설치본에 있는 것 — 맨손이 통째로 뺀 넷</h3>
+<p class="lead">영속 저장·푸시·다른 바인딩은 맨손 서버에 한 줄도 없습니다. 세 SDK 의 설치본에서 그 자리를 찾았습니다(파일·이름만 — 쓰는 법은 각 부에서).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬 SDK</th><th>TS SDK</th><th>Go SDK</th></tr>
+<tr><td>Task 저장소</td><td><code>server/tasks/</code> 의 <code>inmemory_task_store.py</code>·<code>database_task_store.py</code></td><td><code>InMemoryTaskStore</code>, <code>server/database</code> 의 <code>DatabaseTaskStore</code></td><td><code>a2asrv/taskstore/inmemory.go</code></td></tr>
+<tr><td>푸시</td><td><code>server/tasks/</code> 의 <code>base_push_notification_sender.py</code> 와 설정 저장소</td><td><code>server/database</code> 의 <code>DatabasePushNotificationStore</code></td><td><code>a2asrv/push/</code> 의 <code>sender.go</code>·<code>store.go</code></td></tr>
+<tr><td>HTTP+JSON</td><td><code>server/routes/rest_routes.py</code></td><td>express 의 <code>restHandler</code></td><td><code>a2asrv/rest.go</code></td></tr>
+<tr><td>gRPC</td><td><code>request_handlers/grpc_handler.py</code></td><td><code>dist/server/grpc</code></td><td><code>a2agrpc</code> 패키지</td></tr>
+</table>
+</div>
+<div class="note"><b>인증</b> — 맨손 서버의 카드에는 <code>securitySchemes</code> 가 없고, 서버는 <code>Authorization</code> 헤더를 읽지 않습니다. 카드에 스킴을 적고 토큰을 검사하는 일은 12부가 정산 에이전트로 합니다. 영속 저장소는 17부, 푸시는 11부, 바인딩은 13부입니다.</div>
+</article>
+
+<article class="card" id="p06-miss-pj">
+<h3>ProtoJSON 의 정수 — int32 는 "2" 도 받는다</h3>
+<p class="lead">A2A 의 JSON 은 ProtoJSON 입니다(<a href="#p04-pj-rules">4부</a>). <code>historyLength</code> 는 proto 에서 <code>optional int32 history_length = 3;</code>(<code>a2a.proto</code> 의 <code>GetTaskRequest</code>)이고, ProtoJSON 의 표는 int32 를 이렇게 적습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>proto 타입</th><th>JSON</th><th>protobuf.dev/programming-guides/json 의 설명</th></tr>
+<tr><td>int32, fixed32, uint32</td><td>number</td><td>"JSON value will be a number. Either numbers or strings are accepted. Empty strings are invalid. Exponent notation (such as 1e2) is accepted in both quoted and unquoted forms."</td></tr>
+</table>
+</div>
+<ul>
+<li><b>쓰는 쪽은 수, 읽는 쪽은 둘 다</b> — <code>"historyLength": "2"</code> 는 ProtoJSON 으로 맞는 입력입니다.</li>
+<li><b>맨손 셋은 받지 않는다</b> — 파이썬 <code>type(raw) is not int</code>, TS <code>Number.isInteger</code>(<a href="#p06-get-py">4장</a>), Go <code>*int</code> 로의 <code>Unmarshal</code>. 셋 다 ProtoJSON 보다 좁습니다. 그런데 Go 는 좁기만 한 것이 아니었습니다 — 다음 장.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-miss-lax">
+<h3>오류를 버린 Unmarshal — "2" 는 &amp;0 이 되고, 수 id 는 "" 가 됐다</h3>
+<p class="lead">고치기 전의 Go 맨손 서버는 <code>getTask</code>·<code>cancelTask</code> 에서 <code>json.Unmarshal(raw, &amp;p)</code> 의 오류를 버렸습니다. 그 구조체(<code>ID string</code>, <code>HistoryLength *int</code>)에 문제의 입력을 넣어 무엇이 남는지 봤습니다.</p>
+<!--RUN file=ex/go/06/lax_params region=lax-->
+<ul>
+<li><b>오류가 나도 끝까지 채운다</b> — <code>"historyLength":"2"</code> 뒤의 <code>id</code> 도 읽혔습니다. 그리고 <code>HistoryLength</code> 는 <code>nil</code> 이 아니라 <code>&amp;0</code> — 포인터를 먼저 만든 뒤 타입이 맞지 않음을 알았습니다.</li>
+<li><b>그래서 고치기 전 서버는</b> — "이력 2개" 를 청한 요청에 <code>View(t, 0)</code>, 곧 <code>history</code> 키가 없는 답(<a href="#p06-get-wire">4장</a>의 0 과 같은 꼴)을, <code>"id": 5</code> 에는 <code>find("")</code> 의 <code>-32001</code> 과 <code>taskId ""</code> 를 돌려줬습니다. 파이썬·TS 맨손은 같은 두 요청에 <code>-32602</code> 와, <code>taskId "5"</code> 를 실은 <code>-32001</code> 로 답했습니다(<a href="#p06-miss-params">고친 뒤</a>의 Go 와 같다). 이 부를 쓰며 찾은 결함입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-miss-fix">
+<h3>고친 코드 — 오류를 -32602 로, id 는 바이트로 받아 손으로</h3>
+<p class="lead">새 <code>params</code> 구역입니다. <code>getTask</code> 는 <code>readTask</code> 와 <code>findRaw</code> 를, <code>cancelTask</code> 는 <code>findRaw</code> 를 부릅니다(<a href="#p06-get-ts-go">4장의 get 구역</a>도 바뀌었다).</p>
+<!--CODE file=ex/go/06/bare_lodging/main.go region=params-->
+<ul>
+<li><b>id 를 <code>json.RawMessage</code> 로</b> — 그러면 <code>Unmarshal</code> 이 실패할 수 있는 필드는 <code>historyLength</code> 하나뿐이고, 오류의 뜻이 하나로 정해집니다.</li>
+<li><b>수 id 는 "없는 작업"</b> — 파이썬(<code>str(5)</code>)·TS(<code>String(5)</code>) 맨손과 같은 답을 고르려고, 받은 글자 <code>5</code> 를 그대로 <code>taskId</code> 로 알립니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-miss-params">
+<h3>고친 뒤 — 맨손 셋이 줄마다 같다</h3>
+<p class="lead">끝난 작업(이력 셋) 하나에 GetTask 를 <code>historyLength</code> 2 와 "2" 로, 그리고 GetTask·CancelTask 를 <code>"id": 5</code> 로 보냈습니다. 고친 뒤 Go 서버를 쓰는 6부의 캡처는 모두 다시 떠서 달라지지 않았음을 확인했습니다.</p>
+<!--CODE file=ex/py/06/params_probe.py region=probe-->
+<!--OUT file=out/06/params.txt part=터미널 7 lines=1-15 note=맨손 파이썬·TS·Go-->
+<div class="key"><b>오류는 버리지 않는다</b> — Go 의 <code>Unmarshal</code> 은 실패해도 구조체를 반쯤 채워 둡니다. 버린 오류 하나가 "이력 2개" 를 "이력 0개" 로 바꿨습니다.</div>
+</article>
+
+<article class="card" id="p06-miss-params-sdk">
+<h3>SDK 셋의 답 — "2" 를 받은 것은 proto 에서 만든 해석기</h3>
+<!--OUT file=out/06/params.txt part=터미널 7 lines=16-30 note=SDK 파이썬·TS·Go-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th><code>historyLength: "2"</code></th><th><code>id: 5</code></th><th>읽는 손</th></tr>
+<tr><td>파이썬 SDK</td><td>받음(이력 2개)</td><td><code>-32602</code></td><td>protobuf <code>ParseDict</code> — ProtoJSON 그대로, 문자열 필드의 수는 거절</td></tr>
+<tr><td>TS SDK</td><td>받음(이력 2개)</td><td><code>-32001</code> "Task not found: 5"</td><td>ts-proto <code>fromJSON</code> — <code>globalThis.Number(object.historyLength)</code>, <code>globalThis.String(object.id)</code>(<code>dist/server/index.js</code>)</td></tr>
+<tr><td>Go SDK</td><td><code>-32602</code></td><td><code>-32602</code></td><td><code>encoding/json</code> 으로 <code>HistoryLength *int</code>(<code>a2a/core.go</code>) — 오류를 돌려준다</td></tr>
+<tr><td>맨손 셋</td><td><code>-32602</code></td><td><code>-32001</code> <code>taskId "5"</code></td><td>손으로 쓴 검사</td></tr>
+</table>
+</div>
+<div class="note"><b>ProtoJSON 에 맞는 답은 "받음"</b> — 파이썬·TS SDK 가 그렇게 했습니다. 맨손 셋과 Go SDK 는 맞는 입력을 거절하는 쪽입니다(<a href="#p04-pj-role">4부</a>의 enum 수처럼, 손으로 쓴 해석기가 좁다). 거절은 적어도 틀린 답을 주지 않습니다 — 고치기 전의 Go 맨손처럼 받아 놓고 다르게 읽는 것이 가장 나쁩니다.</div>
+</article>
+
+<article class="card quiz" id="p06-ch8-quiz" data-quiz>
+<h3>8장 퀴즈</h3>
+<p class="q">Q. 고치기 전의 Go 맨손 서버에 <code>{"id": "…", "historyLength": "2"}</code> 로 GetTask 를 보내면 이력이 몇 개 왔겠습니까? 고친 뒤에는 무엇이 옵니까? ProtoJSON 으로 보면 어느 쪽도 맞는 답이 아닌 까닭은?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 0개(<code>history</code> 키 없음)입니다 — <code>Unmarshal</code> 이 오류를 내면서도 <code>HistoryLength</code> 를 <code>&amp;0</code> 으로 남겼고(<a href="#p06-miss-lax">lax_params</a>), 서버는 오류를 버리고 0 으로 잘랐습니다. 고친 뒤에는 <code>-32602</code> Invalid parameters(<code>historyLength</code>)입니다(<a href="#p06-miss-params">고친 뒤</a>). ProtoJSON 은 int32 에 "numbers or strings are accepted" 라고 하므로(<a href="#p06-miss-pj">표</a>) 맞는 답은 이력 2개 — 파이썬·TS SDK 의 답입니다(<a href="#p06-miss-params-sdk">SDK 셋</a>).</div>
+</article>
+
+<article class="card" id="p06-wrap">
+<h3>6부 정리 — 서버가 기계적으로 할 일, 그리고 SDK 가 덜어 주는 일</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>남은 것</th></tr>
+<tr><td><a href="#p06-ch1">1~3장</a></td><td>경로 둘, 문 여섯(JSON·봉투·판·메서드·인자·처리), 오류 아홉, 맵 하나의 저장소와 우리가 정한 전이 표</td></tr>
+<tr><td><a href="#p06-ch4">4~5장</a></td><td>begin 의 문 셋, 막는 호출은 Task 하나, 스트림은 Task 로 시작해 중단·종료 상태에서 닫는다</td></tr>
+<tr><td><a href="#p06-ch6">6장</a></td><td>클라이언트는 카드 → 인터페이스 → 판 헤더 → 응답의 oneof → 두 id 로 이어 말하기</td></tr>
+<tr><td><a href="#p06-ch7">7장</a></td><td>서른여섯 칸이 모두 통했고, 대본은 두 가지 — 갈린 한 줄은 서버의 선택</td></tr>
+<tr><td><a href="#p06-ch8">8장</a></td><td>빠진 메서드와 §3.3.4, 판을 알리는 다른 길, 한 번에 하나, 버린 오류 하나</td></tr>
+</table>
+</div>
+<div class="note"><b>다음</b> — 7부(<a href="#p07">공식 SDK — Python</a>)에서는 이 부에서 손으로 한 일을 파이썬 SDK 가 어디서 하는지 찾습니다. 메서드 표와 디스패치는 요청 처리기가, 저장소는 <code>TaskStore</code> 가, <code>lodging</code> 함수는 실행기(AgentExecutor)가, <code>show</code> 가 하던 oneof 가르기는 protobuf 타입이 맡습니다.</div>
 </article>

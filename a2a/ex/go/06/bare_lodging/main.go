@@ -347,19 +347,16 @@ func length(n *int) (int, error) {
 	return *n, nil
 }
 
-type taskParams struct {
-	ID            string `json:"id"`
-	HistoryLength *int   `json:"historyLength"`
-}
-
 func getTask(raw json.RawMessage) (any, error) {
-	var p taskParams
-	json.Unmarshal(raw, &p) // 틀린 모양이면 빈 id — 곧 -32001
+	p, err := readTask(raw) // 틀린 모양이면 -32602
+	if err != nil {
+		return nil, err
+	}
 	n, err := length(p.HistoryLength)
 	if err != nil {
 		return nil, err
 	}
-	t, err := find(p.ID)
+	t, err := findRaw(p.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -368,12 +365,46 @@ func getTask(raw json.RawMessage) (any, error) {
 
 // endregion
 
+// region: params
+// GetTask·CancelTask 의 인자. id 는 바이트로 들고 있다가 손으로 본다.
+type taskParams struct {
+	ID            json.RawMessage `json:"id"`
+	HistoryLength *int            `json:"historyLength"`
+}
+
+// readTask: Unmarshal 은 맞지 않는 필드를 만나도 끝까지 채운 뒤에야
+// 오류를 준다. 오류를 버리면 반쯤 읽은 값으로 일하게 된다(8장).
+// id 는 RawMessage 라 여기서 걸리는 것은 historyLength 뿐이다.
+func readTask(raw json.RawMessage) (taskParams, error) {
+	var p taskParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		why := "0 이상의 정수여야 합니다"
+		return p, badParams("historyLength", why)
+	}
+	return p, nil
+}
+
+// findRaw: 문자열 id 만 작업을 찾는다. 수 5 는 받은 글자("5") 그대로
+// 없는 작업으로 알린다 — 파이썬 str(5)·TS String(5) 와 같은 답.
+func findRaw(id json.RawMessage) (*bs.Task, error) {
+	var s string
+	if json.Unmarshal(id, &s) != nil {
+		return nil, a2aError("TaskNotFound", "taskId", string(id))
+	}
+	return find(s)
+}
+
+// endregion
+
 // region: cancel
 // cancelTask: 취소 — 이미 CANCELED 면 그대로 돌려준다(§3.3.1 멱등).
 func cancelTask(raw json.RawMessage) (any, error) {
-	var p taskParams
+	var p struct {
+		ID json.RawMessage `json:"id"`
+	}
+	// 어떤 값이든 바이트로 담기니 실패하지 않는다
 	json.Unmarshal(raw, &p)
-	t, err := find(p.ID)
+	t, err := findRaw(p.ID)
 	if err != nil {
 		return nil, err
 	}

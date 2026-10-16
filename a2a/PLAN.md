@@ -368,3 +368,16 @@ subagent task each.
   sends an SSE event, bare servers plain JSON). Open: Go bare ignores Unmarshal errors in
   getTask/cancelTask (`"historyLength":"2"` → full history; numeric id → taskId "") —
   handed to 06c ch8; ProtoJSON allows int32 as string, py/ts bare reject "2".
+
+### Part 6 complete — 131 slides (2026-10-16)
+- `06c_bare.html` ch6 bare client ×3 (14), ch7 interop matrices (9), ch8 what bare misses
+  (15) + wrap. Go bare server fixed (`params` region: historyLength "2" → -32602, numeric id
+  → taskId "5"); `lax_params` shows the old mechanism (Unmarshal allocates *int → &0).
+- Matrix A: ask py/ts/go × (3 SDK + 3 bare servers) = 18 cells → exactly 2 transcripts
+  (= scratch/ref for the Python SDK server, = ref-ts for the other five).
+- Findings: ProtoJSON allows int32 as string — py/ts SDK accept `"historyLength":"2"`, Go SDK
+  and bare servers reject; SDK client wire differences (JSON-RPC id UUID vs 1, `configuration:{}`,
+  Accept headers); bare servers answer push/extended card with -32601 (violates §3.3.4);
+  **version handling: TS SDK rejects "1.0.1" (exact match, violates §3.6), py accepts "1.5"
+  (major only), Go SDK server never reads A2A-Version; none supports `?A2A-Version=`**;
+  a half-sent request stalls the Python bare server (single-threaded).
