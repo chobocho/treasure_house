@@ -356,3 +356,15 @@ subagent task each.
   rewritten (INPUT_REQUIRED instead of COMPLETED).
 - Findings: Go 1.27 has a std `uuid` package; Python SDK version validator accepts any
   same-major version ("1.5") although §3.6 says match Major.Minor (part 14).
+
+### Part 6 second third — 45 slides (2026-10-16)
+- `06b_bare.html` ch4 (SendMessage/GetTask/CancelTask ×3, 28) and ch5 (SSE ×3, 17).
+  Writer fixed a real bug in the TS bare server: `body += chunk` split UTF-8 across chunk
+  boundaries (100k '가' → 8 U+FFFD) → `req.setEncoding("utf8")`.
+- Findings: Python bare SSE is HTTP/1.0, no length, ends by close (`wfile.flush()` is a
+  no-op, wbufsize=0); Node/Go send chunked HTTP/1.1, one chunk per event. **Spec tension:
+  §3.1.2 closes the stream at a terminal state, §11.7 at "terminal or interrupted"** (bare
+  servers follow §11.7). Error shape before the first stream event is unspecified (Go SDK
+  sends an SSE event, bare servers plain JSON). Open: Go bare ignores Unmarshal errors in
+  getTask/cancelTask (`"historyLength":"2"` → full history; numeric id → taskId "") —
+  handed to 06c ch8; ProtoJSON allows int32 as string, py/ts bare reject "2".

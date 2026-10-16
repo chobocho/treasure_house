@@ -406,6 +406,8 @@ const server = createServer(async (req, res) => {
   if (where === "GET /.well-known/agent-card.json")
     return reply(res, CARD);
   if (where !== "POST /") return res.writeHead(404).end();
+  // 조각 경계에서 한글이 깨지지 않게 문자열로 받는다
+  req.setEncoding("utf8");
   let body = "";
   for await (const chunk of req) body += chunk;
   const [resp, events] = dispatch(body, req.headers);

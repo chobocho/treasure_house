@@ -1,4 +1,497 @@
-<article class="card" id="p06-todo-b">
-<h3>맨손 구현 (b)</h3>
-<p class="lead">준비 중입니다</p>
+<!-- ==== 4장 SendMessage·GetTask·CancelTask ==== -->
+
+<article class="card" id="p06-ch4">
+<p class="chnum">4장</p>
+<h2>SendMessage·GetTask·CancelTask</h2>
+<p class="chsub">요청 하나의 길 → 업무(work) ×3 → 실행기와 견주기 → 메시지 검사 → begin 의 문 넷 → 막는 호출 → TypeScript → Go → 세 언어 비교 → 일곱 번 두드리기 → 와이어 → SDK 와 견주기 → GetTask 와 historyLength → CancelTask 와 두 번째 취소 → 정리</p>
+</article>
+
+<article class="card" id="p06-send-path">
+<h3>Send 두 메서드는 앞부분(begin)과 업무(work)를 함께 쓴다</h3>
+<p class="lead">막는 호출이든 스트림이든 "메시지를 받아 작업에 붙이고, 숙소 일을 한다" 는 같습니다. 다른 것은 끝에서 무엇을 돌려주느냐 하나입니다.</p>
+<pre class="fig">
+ params.message
+   │ check   필수 필드(§5.7)          틀리면 → -32602
+   ▼
+ begin       taskId 없음 → 새 Task(SUBMITTED)
+   │         taskId 있음 → 찾기·맥락·상태 검사 → WORKING
+   ▼
+ lodging     업무 — 되묻기·거절·견적, 이벤트 목록을 돌려준다
+   │
+   ├─ SendMessage           이벤트는 버리고 Task 하나 → JSON
+   └─ SendStreamingMessage  Task + 이벤트들 → SSE(5장)
+</pre>
+<div class="key"><b>상태는 저장소에, 이벤트는 소식일 뿐</b> — 업무 코드는 저장소의 Task 를 옮기면서(<a href="#p06-store-move">3장의 move</a>) 그 일을 알리는 이벤트를 하나씩 돌려받습니다. 막는 호출은 그 소식이 필요 없고, 끝난 Task 만 읽으면 됩니다.</div>
+</article>
+
+<article class="card" id="p06-work-py">
+<h3>업무는 이벤트 목록을 돌려주는 함수 하나 — 되묻기·거절·견적</h3>
+<p class="lead">완성 에이전트에서 실행기(AgentExecutor)가 하던 일입니다. 들은 것으로 요청을 맞춰 보고, 셋 가운데 하나로 끝냅니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=work-->
+<ul>
+<li><b>되묻기</b> — 빠진 첫 항목을 글로 묻고, 빠진 목록 전부를 DataPart 로 함께 싣습니다. 상태 메시지(<code>status.message</code>)로 갑니다.</li>
+<li><b>견적</b> — 아티팩트를 먼저 붙이고 COMPLETED 로 옮깁니다. 이벤트도 그 차례(<code>artifactUpdate</code> → <code>statusUpdate</code>)로 나갑니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-work-heard">
+<h3>들은 것은 사용자의 말만 — DataPart 먼저, 글이 덮는다</h3>
+<p class="lead">이어 말하기에서는 이력 전체가 "지금까지의 대화" 입니다. 그 안에는 에이전트 자신의 물음도 있습니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=lodging-->
+<ul>
+<li><b><code>ROLE_USER</code> 만</b> — 물음의 보기 "(예: 1박)" 을 정규식이 답으로 읽으면, 묻지도 않은 박 수를 들은 셈이 됩니다. 업무 코드가 이력을 읽을 때 role 을 거르는 까닭입니다.</li>
+<li><b>합치는 차례</b> — 모든 DataPart 를 먼저 합치고, 글에서 읽은 값이 그 위를 덮습니다. 정규식(<code>domain.DATE</code> 따위)은 완성 에이전트와 같은 <code>workshop</code> 의 것입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-work-ts">
+<h3>TypeScript — 서버 기록까지 파이썬과 같게 맞춘다</h3>
+<p class="lead">흐름은 같습니다. 다른 곳은 숫자를 다루는 법과, 파이썬이 저절로 해 주던 글꼴 맞추기입니다.</p>
+<!--CODE file=ex/ts/06/bare_lodging.ts region=work-->
+<ul>
+<li><b><code>Math.trunc(Number(…))</code></b> — DataPart 에서 온 <code>30</code> 도, 글에서 읽은 <code>"30"</code> 도 정수 30 이 됩니다.</li>
+<li><b><code>pyList</code>·<code>comma</code></b> — 파이썬의 <code>print(missing)</code> 이 찍는 <code>['headcount']</code> 꼴과 <code>{:,}</code> 의 천 단위 쉼표를 손으로 만듭니다. 세 서버의 기록 줄이 같아야 캡처를 견줄 수 있어서입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-work-go">
+<h3>Go — 옮기기가 실패할 수 있으니 이벤트와 오류를 함께 돌려준다</h3>
+<p class="lead"><code>bs.Move</code> 는 전이 표를 어기면 <code>IllegalMove</code> 를 값으로 돌려줍니다(<a href="#p06-store-cmp">3장</a>). 그래서 <code>lodging</code> 도 <code>([]bs.Event, error)</code> 입니다.</p>
+<!--CODE file=ex/go/06/bare_lodging/main.go region=work-->
+<ul>
+<li><b><code>toInt</code></b>(<code>helpers</code> 구역) — <code>encoding/json</code> 은 맵 속 수를 <code>float64</code> 로 읽고, 글에서 읽은 것은 문자열입니다. 둘 다 받아 <code>int</code> 로 바꿉니다.</li>
+<li><b>빠진 항목의 차례</b> — Go 의 맵은 도는 차례가 정해져 있지 않아, 묻는 차례를 <code>order</code> 슬라이스에 따로 적어 두고 그것으로 돕니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-work-sdk">
+<h3>SDK 판 실행기와 견주면 — 이벤트를 "넣느냐" "돌려주느냐"</h3>
+<p class="lead">완성 숙소 에이전트(<code>agents/lodging.*</code>)의 실행기도 같은 세 갈래로 끝납니다. 다른 것은 이벤트를 내보내는 손잡이입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>이벤트를 내는 법</th><th>되묻기</th><th>견적</th></tr>
+<tr><td>파이썬 SDK</td><td>이벤트 큐에 <code>await</code> 로 넣는다</td><td><code>up.requires_input(ask)</code></td><td><code>up.add_artifact(…)</code> → <code>up.complete()</code></td></tr>
+<tr><td>TS SDK</td><td>이벤트 버스에 싣는다</td><td><code>up.status(…INPUT_REQUIRED, ask)</code></td><td><code>up.artifact(…)</code> → <code>up.status(…COMPLETED)</code></td></tr>
+<tr><td>Go SDK</td><td><code>iter.Seq2</code> 의 <code>yield</code></td><td><code>up.Status(…InputRequired, …)</code></td><td><code>up.Artifact(…)</code> → <code>up.Status(…Completed)</code></td></tr>
+<tr><td>맨손</td><td>목록에 담아 <code>return</code></td><td><code>move(task, INPUT_REQUIRED, ask)</code></td><td><code>add_artifact</code> → <code>move(…COMPLETED)</code></td></tr>
+</table>
+</div>
+<div class="note"><b>SDK 는 이벤트로 저장소를 고친다</b> — SDK 판에서는 실행기가 낸 이벤트를 요청 처리기가 받아 저장된 Task 에 반영합니다. 맨손은 거꾸로, 저장소를 먼저 고치고 이벤트는 그 결과로 받습니다. (<code>up</code> 은 파이썬에서는 SDK 의 <code>TaskUpdater</code>, TS·Go 에서는 그 몫을 하는 우리 공용 코드의 <code>Updater</code> 입니다. 각 SDK 의 실행기·이벤트 큐는 7~9부에서 엽니다.)</div>
+</article>
+
+<article class="card" id="p06-check-py">
+<h3>메시지 검사 — 필수 넷과 Part 의 oneof, 틀리면 어느 필드인지 알린다</h3>
+<p class="lead">§5.7 의 필수 필드(messageId·role·parts)와, Part 에 내용 키가 꼭 하나만 있어야 한다는 규칙(<a href="#p04-part-kinds">4부</a>)을 봅니다. 그리고 작업을 찾는 <code>find</code> 입니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=check-->
+<ul>
+<li><b>사용자 메시지만</b> — 클라이언트가 보내는 메시지의 role 은 <code>ROLE_USER</code> 입니다. 비었거나 <code>ROLE_AGENT</code> 면 <code>message.role</code> 을 짚어 <code>-32602</code>.</li>
+<li><b><code>find</code></b> — 문자열이 아닌 id 도 "없는 작업" 으로 답합니다. §3.4.2: "Agents <b>MUST</b> return a <code>TaskNotFoundError</code> if the provided <code>taskId</code> does not correspond to an existing task".</li>
+</ul>
+</article>
+
+<article class="card" id="p06-begin-py">
+<h3>begin — taskId 가 없으면 새 작업, 있으면 문 셋을 지나 WORKING 으로</h3>
+<p class="lead">두 Send 메서드가 똑같이 부르는 앞부분입니다. 이어 말하기의 규칙이 모두 여기 모여 있습니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=begin-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>문</th><th>걸리면</th><th>근거</th></tr>
+<tr><td>그런 작업이 없다</td><td><code>-32001</code></td><td>§3.4.2</td></tr>
+<tr><td>contextId 가 작업의 것과 다르다</td><td><code>-32602</code> <code>message.contextId</code></td><td>§3.4.3 "<b>MUST</b> reject messages containing mismatching <code>contextId</code> and <code>taskId</code>"</td></tr>
+<tr><td>작업이 끝났다(WORKING 으로 못 간다)</td><td><code>-32004</code></td><td>§3.1.1 "cannot accept further messages"</td></tr>
+</table>
+</div>
+<ul>
+<li><b>contextId 를 안 주면</b> — <code>msg.get("contextId") or task["contextId"]</code> 가 작업의 맥락으로 채워 넣어 통과합니다. §3.4.3 "<b>MUST</b> infer <code>contextId</code> from the task if only <code>taskId</code> is provided".</li>
+<li><b>WORKING 으로 먼저, 메시지는 그다음</b> — 그래야 지난 물음이 이력에 먼저 내려가고 답이 그 뒤에 붙습니다(<a href="#p06-store-move">3장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p06-send-py">
+<h3>막는 호출 — 다 하고 나서 Task 하나를 {"task": …} 로 감싼다</h3>
+<p class="lead"><code>SendMessage</code> 의 처리 함수는 다섯 줄입니다. 업무가 기다릴 것이 없으니(<a href="#p05-mode-rule">5부</a>의 "끝나거나 멈출 때까지") 부르고 돌아오면 끝입니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=send-->
+<ul>
+<li><b>historyLength 를 먼저 본다</b> — 틀린 값이면 작업을 만들기 전에 <code>-32602</code> 로 돌려보냅니다. 거꾸로 하면 오류로 답하고도 저장소에는 작업이 하나 남습니다.</li>
+<li><b>결과는 <code>{"task": …}</code></b> — <code>SendMessageResponse</code> 는 task 와 message 가운데 하나를 고르는 oneof 이고, 이 서버는 늘 task 쪽입니다(<a href="#p04-reply-two">4부</a>).</li>
+<li><code>returnImmediately</code> 는 읽지 않습니다 — 기다릴 일이 없어 받자마자 끝난 Task 를 줄 수 있으니까요.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-begin-ts">
+<h3>TypeScript — 같은 begin, 빈 문자열도 "없음"</h3>
+<p class="lead">구조는 파이썬과 한 줄씩 짝이 맞습니다.</p>
+<!--CODE file=ex/ts/06/bare_lodging.ts region=begin-->
+<!--CODE file=ex/ts/06/bare_lodging.ts region=send-->
+<ul>
+<li><code>!msg.taskId</code>·<code>msg.contextId || task.contextId</code> — <code>""</code> 를 빠진 것과 같게 칩니다. 파이썬의 <code>or</code>·<code>not</code> 과 같은 판정입니다.</li>
+<li><code>params.configuration ?? {}</code> — <code>configuration</code> 이 없거나 <code>null</code> 이면 빈 객체로 읽습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-begin-go">
+<h3>Go — 메시지는 값으로 받고, 오류는 줄마다 확인한다</h3>
+<p class="lead">Go 의 <code>begin</code> 은 이미 풀어 둔 <code>bs.Message</code> 를 값으로 받습니다. 풀고 검사하는 일은 <code>readSend</code>(<code>check</code> 구역)가 먼저 합니다.</p>
+<!--CODE file=ex/go/06/bare_lodging/main.go region=begin-->
+<ul>
+<li><b>빈 문자열 = 없음</b> — 구조체 필드는 키가 없으면 <code>""</code> 입니다. <code>omitempty</code> 와 같은 이치로, Go 에서는 "없음" 과 "빈 값" 을 가르지 못하고 가를 필요도 없습니다.</li>
+<li><code>bs.Move(t, bs.Working)</code> 의 오류를 버리는 까닭 — 바로 위에서 <code>CanMove</code> 로 같은 것을 물었기 때문입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-send-go">
+<h3>Go 의 막는 호출 — historyLength 는 *int 로 "없음" 과 0 을 가른다</h3>
+<p class="lead">파이썬의 다섯 줄이 Go 에서는 오류 확인 셋을 더해 스무 줄 남짓입니다.</p>
+<!--CODE file=ex/go/06/bare_lodging/main.go region=send-->
+<ul>
+<li><b><code>sendParams</code></b>(<code>check</code> 구역) — <code>Configuration.HistoryLength *int</code>. 키가 없으면 <code>nil</code>, <code>0</code> 이면 0 을 가리키는 포인터입니다. <a href="#p05-hl-go">5부</a>에서 본 Go SDK 의 <code>HistoryLength</code> 와 같은 수입니다.</li>
+<li><b>결과는 맵</b> — <code>map[string]any{"task": …}</code>. 키가 하나라 차례 걱정이 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-send-cmp">
+<h3>세 언어 비교 — 같은 문, 같은 차례</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>업무의 결과</td><td>이벤트 list</td><td><code>StreamResponse[]</code></td><td><code>([]bs.Event, error)</code></td></tr>
+<tr><td>요청에서 수 읽기</td><td><code>int(…)</code></td><td><code>Math.trunc(Number(…))</code></td><td><code>toInt</code>(float64·string)</td></tr>
+<tr><td>메시지 검사</td><td>dict 를 직접</td><td>객체를 직접 + <code>Object.hasOwn</code></td><td><code>json.Unmarshal</code> 후 구조체 필드</td></tr>
+<tr><td>"없음" 의 뜻</td><td><code>None</code>·<code>""</code></td><td><code>undefined</code>·<code>null</code>·<code>""</code></td><td><code>""</code>, 포인터는 <code>nil</code></td></tr>
+<tr><td>오류 전하기</td><td><code>raise</code></td><td><code>throw</code></td><td><code>return nil, err</code></td></tr>
+</table>
+</div>
+<div class="note"><b>문의 차례가 같아야 답이 같다</b> — check → (historyLength) → 찾기 → 맥락 → 상태. 한 요청이 문 둘에 걸릴 때(없는 작업에 어긋난 맥락) 어느 오류가 나느냐는 이 차례가 정합니다. 세 서버가 차례를 맞췄기에 다음 슬라이드들의 답이 같습니다.</div>
+</article>
+
+<article class="card" id="p06-turns-plan">
+<h3>일곱 번 두드린다 — 새 작업, 이어 말하기, 그리고 begin 의 세 문</h3>
+<p class="lead">시험 쪽(<code>turns.py</code>)은 <code>urllib</code> 로 <code>SendMessage</code> 만 보냅니다. 세 맨손 서버 앞에 탭을 하나씩 두고 같은 프로그램을 차례로 돌렸습니다.</p>
+<!--CODE file=ex/py/06/turns.py region=turns-->
+<ul>
+<li>②·③ 은 ① 의 taskId·contextId 로, ⑤ 는 ④ 의 작업에 ① 의 맥락을 섞어서, ⑥ 은 taskId 만 달아 보냅니다.</li>
+<li><code>send</code>·<code>show</code>(<code>rpc</code> 구역)는 봉투를 싸고, 답을 "상태와 에이전트의 말" 또는 "code 와 이름" 한 줄로 줄입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-turns-out">
+<h3>세 서버의 일곱 줄이 같다</h3>
+<p class="lead">파이썬 서버(탭 너머)의 결과입니다. TS·Go 서버의 일곱 줄도 글자까지 같았습니다.</p>
+<!--OUT file=out/06/turns.txt part=터미널 7 lines=1-8-->
+<!--OUT file=out/06/turns.txt server=bare-go-->
+<ul>
+<li>⑥ 은 "2026-11-06 1박 30명" 한 마디로 빠진 셋을 다 채워 곧장 COMPLETED — 날짜를 바꾸니 춘천 호수 펜션촌이 가장 쌉니다.</li>
+<li>서버 기록(Go)에 오류 셋은 없습니다 — begin 에서 걸린 요청은 업무까지 가지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-turns-wire-follow">
+<h3>와이어 — 이어 말하기의 답에 이력이 물음 → 답 차례로</h3>
+<p class="lead">② 의 주고받음에서 id·상태·이력의 role 과 글만 골랐습니다.</p>
+<!--OUT file=out/06/turns.txt wire=py-wire ex=2 grep=^→|^←|"state"|"role"|"text"-->
+<div class="key"><b>이력 셋</b> — ① 의 사용자 메시지, 에이전트의 물음(<code>ROLE_AGENT</code>, "인원은 몇 명입니까?"), 그리고 방금 보낸 "30명". begin 이 WORKING 으로 옮기며 물음을 내리고(<a href="#p06-store-move">3장</a>) 그 뒤에 답을 붙였기 때문입니다. 물음이 내려가 <code>status</code> 에는 이제 <code>message</code> 가 없습니다.</div>
+</article>
+
+<article class="card" id="p06-turns-wire-doors">
+<h3>와이어 — 세 문의 답에는 무엇이 걸렸는지가 실린다</h3>
+<p class="lead">③(끝난 작업)·⑤(어긋난 맥락)·⑦(없는 작업)의 답에서 code 와 <code>data</code> 만 골랐습니다.</p>
+<!--OUT file=out/06/turns.txt wire=py-wire ex=3 grep=^←|"code"|"reason"|"taskId": note=③ 끝난 작업에 또-->
+<!--OUT file=out/06/turns.txt wire=py-wire ex=5 grep=^←|"code"|"field"|"description" note=⑤ 어긋난 contextId-->
+<!--OUT file=out/06/turns.txt wire=py-wire ex=7 grep=^←|"code"|"reason"|"taskId": note=⑦ 없는 taskId-->
+<ul>
+<li>③ 의 <code>"taskId"</code> 는 둘 — 요청 메시지의 것과, 답의 ErrorInfo <code>metadata.taskId</code>. ⑦ 은 물어본 <code>"nope"</code> 를 그대로 돌려줍니다(<a href="#p06-rpc-a2a-py">2장</a>).</li>
+<li>⑤ 는 A2A 오류가 아니라 틀린 인자라서 BadRequest — 어느 필드가 왜 틀렸는지를 싣습니다. (탭은 <code>data</code> 아래의 키를 정렬해 적으므로 <code>description</code> 이 <code>field</code> 보다 먼저 보입니다 — 0부.)</li>
+</ul>
+</article>
+
+<article class="card" id="p06-turns-sdk">
+<h3>SDK 판 서버와 견주면 — 코드는 같고, Go 의 봉투 차례가 다르다</h3>
+<p class="lead">4·5부에서 SDK 서버 셋에 같은 일을 시켰습니다. 맨손 서버의 답을 그 옆에 놓습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>경우</th><th>SDK 서버 셋</th><th>맨손 서버 셋</th></tr>
+<tr><td>끝난 작업에 이어 말하기</td><td><code>-32004</code>(<a href="#p05-err-terminal">5부</a>)</td><td><code>-32004</code>, metadata 에 taskId</td></tr>
+<tr><td>어긋난 contextId</td><td><code>-32602</code>(<a href="#p04-ctx-mismatch">4부</a>)</td><td><code>-32602</code> + BadRequest</td></tr>
+<tr><td>taskId 만</td><td>맥락을 찾아 준다(<a href="#p04-ctx-infer">4부</a>)</td><td>같다(⑥)</td></tr>
+<tr><td>없는 taskId</td><td><code>-32001</code>(<a href="#p04-ctx-notfound">4부</a>)</td><td><code>-32001</code></td></tr>
+<tr><td>물음이 이력에 내려가는 때</td><td>py·go 다음 상태에서, ts 곧바로(<a href="#p05-ir-hist-cmp">5부</a>)</td><td>다음 상태에서(셋 다)</td></tr>
+</table>
+</div>
+<!--OUT file=out/06/turns.txt wire=go-wire ex=3 lines=22-40 grep=^←|^    "(error|id|jsonrpc)" note=Go 맨손 서버 — ③ 의 답, 맨 바깥 키만-->
+<div class="note"><b>Go 의 봉투는 <code>error</code>·<code>id</code>·<code>jsonrpc</code> 차례</b> — 봉투를 맵으로 만들었고 <code>encoding/json</code> 은 맵 키를 정렬합니다(<a href="#p06-goal-card-same">1장의 카드</a>와 같은 까닭). JSON 객체의 키에는 차례의 뜻이 없으니 클라이언트에게는 같은 답입니다.</div>
+</article>
+
+<article class="card" id="p06-get-py">
+<h3>GetTask — 찾고, 이력을 잘라 뜬다</h3>
+<p class="lead"><code>historyLength</code> 의 세 경우(§3.2.4: 없음·0·N)를 실제로 가르는 곳은 저장소의 <code>view</code> 입니다. 처리 함수는 값을 검사해 넘기기만 합니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=get-->
+<!--CODE file=ex/py/06/bare_store.py region=view-->
+<ul>
+<li><b>없으면 전부</b> — §3.2.4 는 "server returns its default amount of history" 라고 서버에 맡깁니다. 이 서버의 기본은 전부입니다.</li>
+<li><b>0 이면 키째로 뺀다</b> — "the <code>history</code> field <b>SHOULD</b> be omitted". 빈 목록은 <code>if hist:</code> 에서 걸러집니다.</li>
+<li><b><code>type(raw) is not int</code></b> — <code>isinstance</code> 로 물으면 <code>True</code>(bool 은 int 의 하위 클래스)도 통과합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-get-ts-go">
+<h3>TypeScript 는 Number.isInteger, Go 는 -1 을 "전부" 의 표시로</h3>
+<p class="lead">값 검사와 자르기의 손잡이만 다릅니다.</p>
+<!--CODE file=ex/ts/06/bare_lodging.ts region=get-->
+<!--CODE file=ex/go/06/bare_lodging/main.go region=get-->
+<ul>
+<li><b>TS</b> — <code>slice(-n)</code> 은 n 이 0 이면 전부를 주므로, <code>view</code> 는 0 을 따로 빈 목록으로 다룹니다.</li>
+<li><b>Go</b> — <code>length</code> 가 <code>nil</code> 을 <code>-1</code> 로 바꿔 넘기고, <code>View(t, n)</code> 은 <code>n &lt; 0</code> 이면 자르지 않습니다(<a href="#p06-store-lock">3장</a>의 복사본 뜨기와 같은 함수).</li>
+</ul>
+</article>
+
+<article class="card" id="p06-get-out">
+<h3>historyLength 여섯 가지 — 세 서버의 답이 같다</h3>
+<p class="lead">시험 쪽(<code>get_cancel.py</code>)은 견적까지 끝낸 작업 하나(이력 셋)를 여섯 가지로 묻습니다.</p>
+<!--CODE file=ex/py/06/get_cancel.py region=get-->
+<!--OUT file=out/06/get_cancel.txt part=터미널 7 lines=1-8 note=파이썬 서버 — TS·Go 도 같다-->
+<ul>
+<li>1 은 가장 최근 하나(답 "30명"), 2 는 물음과 답, 5 는 있는 만큼(셋) — <a href="#p05-hl-out">5부</a>의 SDK 서버 셋과 같은 자르기입니다.</li>
+<li><b>음수는 셋 다 <code>-32602</code></b> — SDK 서버는 파이썬만 그랬고 TS·Go 는 0 처럼 다뤘습니다(<a href="#p05-hl-neg">5부</a>). 스펙은 음수를 말하지 않으니, 맨손 서버는 "틀린 인자" 쪽을 골랐습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-get-wire">
+<h3>와이어 — 0 이면 history 키가 없고, 1 이면 마지막 하나</h3>
+<p class="lead">historyLength 0 과 1 의 주고받음에서 요청의 값과 답의 이력만 골랐습니다.</p>
+<!--OUT file=out/06/get_cancel.txt wire=py-wire ex=4 grep="historyLength"|^←|"(history|artifacts)"|"state" note=historyLength 0-->
+<!--OUT file=out/06/get_cancel.txt wire=py-wire ex=5 grep="historyLength"|^←|"(history|artifacts)"|"role"|"text": "3 note=historyLength 1-->
+<div class="note"><b>GetTask 의 답은 Task 그 자체</b> — <code>result</code> 바로 아래가 <code>id</code> 입니다. <code>SendMessage</code> 처럼 <code>{"task": …}</code> 로 감싸지 않는 것은 SDK 서버도 같았습니다(<a href="#p05-cancel-twice">5부</a>).</div>
+</article>
+
+<article class="card" id="p06-cancel-py">
+<h3>CancelTask — 이미 CANCELED 면 그대로, 갈 수 없으면 -32002</h3>
+<p class="lead">취소는 상태 하나를 옮기는 일이라 짧습니다. 고민은 "두 번째 취소에 무엇을 답하나" 하나입니다.</p>
+<!--CODE file=ex/py/06/bare_lodging.py region=cancel-->
+<ul>
+<li><b>멈춰 있는 작업만 취소된다</b> — 숙소 일은 요청 안에서 끝나므로, 취소할 수 있는 때는 INPUT_REQUIRED 로 기다리는 동안뿐입니다. 진행 중인 일을 멈추는 취소는 11부의 교통 에이전트가 보여 줍니다.</li>
+<li><b>두 번째 취소</b> — §3.3.1 "Cancel Task operations are idempotent" 를 따라 같은 Task 를 줍니다. §3.1.5 는 "already … canceled" 를 <code>TaskNotCancelableError</code> 의 보기로 들어, 스펙 안에서 두 문장이 부딪칩니다(<a href="#p05-cancel-spec">5부</a>).</li>
+<li>TS(<code>cancelTask</code>)·Go(<code>cancelTask</code>)도 같은 모양입니다 — Go 는 <code>View(t, -1)</code> 로 전부를 뜹니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-cancel-out">
+<h3>취소 다섯 번 — 기다리는 작업, 한 번 더, 그 뒤의 말, 끝난 작업, 없는 작업</h3>
+<!--CODE file=ex/py/06/get_cancel.py region=cancel-->
+<!--OUT file=out/06/get_cancel.txt part=터미널 7 lines=9-14 note=파이썬 서버 — TS·Go 도 같다-->
+<ul>
+<li><b>"두 답이 같다: True"</b> — 두 번째 취소는 상태도, 시각도 바꾸지 않았습니다. <code>move</code> 를 부르지 않았으니까요.</li>
+<li><b>이력이 <code>USER AGENT</code></b> — CANCELED 로 옮길 때 기다리던 물음이 이력으로 내려갔습니다. 취소된 작업에 말을 걸면 끝난 작업이라 <code>-32004</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-cancel-wire">
+<h3>와이어 — 두 번째 취소의 답과 끝난 작업의 -32002</h3>
+<p class="lead">두 번째 CancelTask 와 COMPLETED 작업의 CancelTask 에서 메서드·상태·오류만 골랐습니다.</p>
+<!--OUT file=out/06/get_cancel.txt wire=py-wire ex=12 grep="method"|^←|"state"|"role" note=두 번째 취소-->
+<!--OUT file=out/06/get_cancel.txt wire=py-wire ex=14 grep="method"|^←|"code"|"message": "|"reason" note=끝난 작업의 취소-->
+<div class="key"><b>SDK 셋과 견주면</b> — 끝난 작업의 취소는 SDK 서버 셋도 <code>-32002</code>(<a href="#p05-err-cancel-done">5부</a>). 두 번째 취소는 TS·Go SDK 와 같고 파이썬 SDK(<code>-32002</code>)와 다릅니다. 둘 다 스펙의 한 문장을 따른 답입니다.</div>
+</article>
+
+<article class="card" id="p06-ch4-cmp">
+<h3>4장 정리 — 맨손이 정한 것과 SDK 들의 선택</h3>
+<p class="lead">스펙이 열어 둔 자리에서 맨손 서버가 고른 답을, 5부에서 본 SDK 서버들의 답과 함께 적습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>열린 자리</th><th>맨손 셋</th><th>파이썬 SDK</th><th>TS SDK</th><th>Go SDK</th></tr>
+<tr><td>historyLength 없음</td><td>전부</td><td>전부</td><td>전부</td><td>전부</td></tr>
+<tr><td>음수 historyLength</td><td><code>-32602</code></td><td><code>-32602</code></td><td>0 처럼</td><td>0 처럼</td></tr>
+<tr><td>두 번째 취소</td><td>같은 Task</td><td><code>-32002</code></td><td>같은 Task</td><td>같은 Task</td></tr>
+<tr><td>ErrorInfo <code>metadata</code></td><td><code>taskId</code></td><td><code>{}</code></td><td>없음</td><td><code>timestamp</code></td></tr>
+<tr><td>전이 검사</td><td>표로 막는다</td><td colspan="3">없다(<a href="#p05-stub-cmp">5부</a>)</td></tr>
+</table>
+</div>
+<p>SDK 쪽 칸의 근거: <a href="#p05-hl-out">historyLength</a>, <a href="#p05-hl-neg">음수</a>, <a href="#p05-cancel-spec">두 번째 취소</a>, <a href="#p05-err-cmp">ErrorInfo</a>.</p>
+</article>
+
+<article class="card quiz" id="p06-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. INPUT_REQUIRED 로 기다리는 작업에 <code>taskId</code> 는 맞게, <code>contextId</code> 는 다른 작업의 것으로 달아 "1박" 이라고 보냈습니다. 맨손 서버는 무엇으로 답하고, 그 작업의 상태는 어떻게 됩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>-32602</code> Invalid parameters 에 BadRequest(<code>message.contextId</code>, "작업의 contextId 와 다릅니다")로 답합니다 — <a href="#p06-turns-out">⑤ 줄</a>과 <a href="#p06-turns-wire-doors">와이어</a>. begin 은 맥락 검사에서 멈추므로 WORKING 으로 옮기지도, 메시지를 이력에 붙이지도 않습니다. 작업은 INPUT_REQUIRED 그대로였고, 그래서 이어진 ⑥ 이 같은 작업을 COMPLETED 로 끝낼 수 있었습니다.</div>
+</article>
+
+<!-- ==== 5장 SendStreamingMessage ==== -->
+
+<article class="card" id="p06-ch5">
+<p class="chnum">5장</p>
+<h2>SendStreamingMessage — SSE 를 손으로</h2>
+<p class="chsub">스트림 하나의 모양 → 첫 이벤트는 일하기 전의 Task → 이어 말하기도 Task 부터 → 와이어 → 파이썬: HTTP/1.0 과 닫힘 → TypeScript: res.write → Go: Flusher → 날 바이트로 보기 → 세 서버의 프레이밍 → 시험 쪽 → 네 번 열어 보기 → 언제 닫나 → 첫 이벤트 전의 오류 → 세 언어 비교</p>
+</article>
+
+<article class="card" id="p06-sse-shape">
+<h3>스트림은 JSON-RPC 응답 여러 개 — 모두 요청의 id 를 단다</h3>
+<p class="lead">SSE 의 바이트 규칙은 <a href="#p02-sse-rules">2부</a>에서 봤습니다. A2A 의 JSON-RPC 바인딩은 그 <code>data</code> 하나에 응답 하나를 싣고, <code>result</code> 에 StreamResponse 를 넣습니다(§9.4.2).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>보낸 것</th><th>이 서버의 스트림</th></tr>
+<tr><td>새 작업, 정보가 모자람</td><td><code>task</code>(SUBMITTED) → <code>statusUpdate</code>(INPUT_REQUIRED)</td></tr>
+<tr><td>이어 말하기, 정보가 다 참</td><td><code>task</code>(WORKING) → <code>artifactUpdate</code> → <code>statusUpdate</code>(COMPLETED)</td></tr>
+<tr><td>새 작업, 숙소가 없음</td><td><code>task</code>(SUBMITTED) → <code>statusUpdate</code>(REJECTED)</td></tr>
+<tr><td>begin 에서 걸림</td><td>스트림이 아니다 — JSON 응답 하나(<a href="#p06-sse-err">뒤에서</a>)</td></tr>
+</table>
+</div>
+<div class="note"><b>처리 함수는 목록만 만든다</b> — <code>send_streaming_message</code> 는 StreamResponse 의 목록을 돌려주고(<a href="#p06-goal-follow">1장의 stream 구역</a>), <code>dispatch</code> 가 각각을 같은 <code>id</code> 의 응답으로 쌉니다(<a href="#p06-rpc-dispatch-py">2장</a>). SSE 로 쓰는 것은 HTTP 쪽의 몫입니다. 스트림의 뜻(청크·재구독)은 10부가 다룹니다.</div>
+</article>
+
+<article class="card" id="p06-sse-first">
+<h3>첫 이벤트는 일하기 전에 떠 둔 Task — 다 쓴 뒤에도 SUBMITTED 그대로</h3>
+<p class="lead">숙소 일은 기다릴 것이 없어, 맨손 서버는 이벤트를 다 만든 뒤에 씁니다. 그때 저장소의 작업은 이미 끝나 있습니다. 그런데도 첫 이벤트는 처음 모습을 보여야 합니다.</p>
+<!--OUT file=out/06/stream.txt part=터미널 7 lines=1-3-->
+<!--OUT file=out/06/stream.txt part=터미널 7 lines=11-13-->
+<ul>
+<li><b>떠 두기</b> — <code>first = {"task": view(task)}</code> 를 업무보다 먼저 부릅니다. <code>view</code> 는 목록을 새로 담고, <code>move</code> 는 <code>status</code> 를 고치지 않고 갈아 끼웁니다(<a href="#p06-store-move">3장</a>). 그래서 뒤의 REJECTED 가 앞서 뜬 모습에 스며들지 않습니다.</li>
+<li>떠 두지 않고 마지막에 <code>view</code> 했다면 첫 이벤트부터 REJECTED 였을 것이고, "Task 다음에 상태 변화" 라는 이야기가 거꾸로 됩니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-sse-follow">
+<h3>이어 말하기의 스트림도 Task 부터 — 상태는 WORKING, 이력엔 물음과 답</h3>
+<p class="lead">§3.1.2: Task 스트림은 "<b>MUST</b> begin with the Task object". 이어 말하기라고 예외가 없습니다. 둘째 스트림의 와이어에서 이벤트 종류·상태·이력의 role 만 골랐습니다.</p>
+<!--OUT file=out/06/stream.txt wire=py-wire ex=2 lines=22-129 grep=^←|"(task|statusUpdate|artifactUpdate)"|"state"|"role"-->
+<ul>
+<li>첫 이벤트의 이력은 <code>USER</code>·<code>AGENT</code>·<code>USER</code> — begin 이 WORKING 으로 옮기며 물음을 내리고 "30명" 을 붙인 뒤에 떴습니다.</li>
+<li><b>SDK 판과 견주면</b> — 파이썬 SDK 판 완성 에이전트는 이어 말하기에서 Task 를 다시 싣지 않습니다. 실으면 SDK 가 사용자의 답을 이력에서 버리기 때문입니다(<a href="#p05-follow-rule">5부</a>, <a href="#p05-follow-why">까닭</a>). TS·Go 판은 맨손과 같이 WORKING Task 로 시작합니다(<a href="#p05-follow-ts-go">5부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p06-sse-wire-new">
+<h3>와이어 — data 하나에 응답 하나, id 는 모두 요청의 1</h3>
+<p class="lead">첫 스트림(새 작업)의 답입니다. 머리와 이벤트 경계(<code>data:</code>), id, 종류, 상태, 글만 골랐습니다.</p>
+<!--OUT file=out/06/stream.txt wire=py-wire ex=1 lines=26-92 grep=^←|^  Content-Type|^  data:|"id": 1|"(task|statusUpdate)"|"state"|"text"-->
+<div class="key"><b>JSON-RPC 의 "응답 하나" 규칙을 어긴 것이 아니다</b> — 요청 하나에 응답이 둘이지만, §9.4.2 가 SSE 위에서 그렇게 하라고 정했습니다(<a href="#p02-sse-end">2부</a>). 클라이언트는 같은 <code>id</code> 로 모두 한 요청의 것임을 압니다.</div>
+</article>
+
+<article class="card" id="p06-sse-py">
+<h3>파이썬 — HTTP/1.0, 길이 없음, 연결이 닫히는 곳이 스트림의 끝</h3>
+<p class="lead"><code>http</code> 구역(<a href="#p06-rpc-http-py">2장</a>)의 SSE 쪽은 머리에 <code>Content-Length</code> 를 달지 않고 이벤트마다 <code>data: …\n\n</code> 을 씁니다. 그 응답을 소켓에서 날 바이트로 받아 보면 이렇습니다.</p>
+<!--OUT file=out/06/frames.txt part=터미널 4 lines=1-8-->
+<ul>
+<li><b>상태 줄이 <code>HTTP/1.0</code></b> — <code>BaseHTTPRequestHandler.protocol_version</code> 의 기본값이 <code>"HTTP/1.0"</code> 입니다. 1.0 에는 청크가 없으니 길이 없는 본문의 끝은 연결을 닫는 것으로만 알립니다.</li>
+<li><b><code>flush()</code> 는 할 일이 없다</b> — <code>StreamRequestHandler.wbufsize = 0</code> 이라 <code>wfile</code> 은 <code>_SocketWriter</code> 이고, 그 설명이 "Does not hold data in a buffer, avoiding any need to call flush()" 입니다(설치된 <code>socketserver.py</code>). <code>write</code> 가 곧 <code>sendall</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-sse-ts">
+<h3>TypeScript — res.write 한 번이 청크 하나, res.end 가 끝</h3>
+<p class="lead">Node 의 SSE 쪽은 머리를 쓰고, 이벤트마다 <code>res.write</code>, 끝에 <code>res.end()</code> 입니다(<a href="#p02-sse-server-ts">2부</a>와 같은 손잡이). 처리 함수(<code>stream</code> 구역)는 파이썬과 같습니다.</p>
+<!--CODE file=ex/ts/06/bare_lodging.ts region=http-->
+<ul>
+<li><b>길이를 모르면 청크로</b> — HTTP/1.1 응답에 <code>Content-Length</code> 가 없으니 Node 가 <code>Transfer-Encoding: chunked</code> 를 붙입니다(<a href="#p06-sse-frames-out">날 바이트</a>).</li>
+<li><b><code>req.setEncoding("utf8")</code></b> — 요청 본문의 조각을 바이트(<code>Buffer</code>)로 받아 하나씩 문자열로 바꾸면, 조각 경계에 걸린 한글 한 글자가 깨집니다. 문자열로 받게 해 두면 Node 가 경계를 이어 붙여 읽습니다. (이 장을 쓰며 찾은 결함입니다 — 큰 한글 본문에서 U+FFFD 가 생겼습니다.)</li>
+</ul>
+</article>
+
+<article class="card" id="p06-sse-go">
+<h3>Go — 이벤트마다 Flush, 처리 함수가 돌아가면 끝</h3>
+<p class="lead">Go 의 <code>ResponseWriter</code> 는 버퍼를 둡니다(<a href="#p02-sse-server-go">2부</a>). 이벤트를 쓸 때마다 <code>http.Flusher</code> 로 밀어냅니다.</p>
+<!--CODE file=ex/go/06/bare_lodging/main.go region=http-->
+<!--CODE file=ex/go/06/bare_lodging/main.go region=stream-->
+<ul>
+<li><b><code>w.(http.Flusher)</code></b> — 값 하나짜리 타입 단언이라, 응답을 감싼 미들웨어가 <code>Flush</code> 를 숨기면 panic 입니다. 맨손 서버는 <code>net/http</code> 의 응답을 그대로 받아 단언만 했습니다. Go SDK 는 확인부터 합니다 — 설치본 <code>internal/sse/sse.go</code> 의 <code>NewWriter</code> 가 <code>flusher, ok := w.(http.Flusher)</code> 로 묻고, 안 되면 <code>"streaming not supported"</code> 오류를 돌려줍니다.</li>
+<li><b>자물쇠는 이미 놓였다</b> — 이벤트 목록은 <code>call</code> 이 잠근 동안 만들어졌고, 쓰기는 놓은 뒤입니다(<a href="#p06-store-lock">3장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p06-sse-frames">
+<h3>날 바이트로 보기 — 소켓을 열고, 닫힐 때까지 읽고, 청크를 손으로 푼다</h3>
+<p class="lead">와이어 탭은 HTTP 의 운반용 머리(<code>Transfer-Encoding</code> 따위)를 적지 않습니다(0부). 그래서 시험 쪽(<code>frames.py</code>)이 소켓으로 요청을 쓰고, <code>Connection: close</code> 로 "다 보내면 닫아 달라" 고 한 뒤 받은 바이트를 풉니다.</p>
+<!--CODE file=ex/py/06/frames.py region=frames-->
+<div class="note"><b>청크</b> — 16진수 길이 한 줄, 그 길이만큼의 바이트, CRLF. 길이 0 인 청크가 본문의 끝입니다(RFC 9112 §7.1). 각 청크·이벤트에 무엇이 실렸는지는 <code>result</code> 의 첫 키로 찍습니다.</div>
+</article>
+
+<article class="card" id="p06-sse-frames-out">
+<h3>TS·Go 는 HTTP/1.1 청크, 이벤트 하나가 청크 하나</h3>
+<p class="lead">같은 요청(30명, 2026-10-30, 1박)을 TS·Go 서버에 보냈습니다.</p>
+<!--OUT file=out/06/frames.txt part=터미널 4 lines=9-25-->
+<ul>
+<li><b>청크 경계 = 이벤트 경계</b> — Node 는 <code>res.write</code> 마다, Go 는 <code>Flush</code> 마다 청크 하나를 냈습니다. 이벤트 사이를 기다리는 서버라면 클라이언트가 이벤트를 그때그때 받는 이유가 이것입니다.</li>
+<li><b>두 서버의 청크 길이가 같다</b> — 둘 다 빈칸 없이 JSON 을 씁니다. Go 는 봉투의 키 차례(<code>id</code>·<code>jsonrpc</code>·<code>result</code>)가 다를 뿐 글자 수는 같습니다. 파이썬은 <code>", "</code>·<code>": "</code> 의 빈칸만큼 이벤트마다 14~32바이트 깁니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-sse-frames-cmp">
+<h3>세 서버의 프레이밍 — 끝을 알리는 방법이 둘</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬 <code>http.server</code></th><th>Node <code>node:http</code></th><th>Go <code>net/http</code></th></tr>
+<tr><td>상태 줄</td><td><code>HTTP/1.0</code></td><td><code>HTTP/1.1</code></td><td><code>HTTP/1.1</code></td></tr>
+<tr><td>본문 길이</td><td>없음</td><td><code>chunked</code></td><td><code>chunked</code></td></tr>
+<tr><td>이벤트 내보내기</td><td><code>wfile.write</code>(버퍼 없음)</td><td><code>res.write</code></td><td><code>Fprintf</code> + <code>Flush</code></td></tr>
+<tr><td>본문의 끝</td><td>연결을 닫는다</td><td><code>res.end()</code> → 길이 0 청크</td><td>처리 함수 반환 → 길이 0 청크</td></tr>
+<tr><td>연결을 다시 쓰나</td><td>못 쓴다(1.0)</td><td>쓸 수 있다(이번엔 클라이언트가 close)</td><td>같다</td></tr>
+</table>
+</div>
+<div class="key"><b>SSE 클라이언트에게는 같은 스트림</b> — HTTP 클라이언트 라이브러리가 청크를 풀어 주므로, 읽는 쪽은 줄과 빈 줄만 봅니다(<a href="#p02-sse-client-py">2부</a>). 세 서버에 같은 SDK 클라이언트가 붙었던 것(<a href="#p06-goal-run">1장</a>)도 그래서입니다.</div>
+</article>
+
+<article class="card" id="p06-sse-client">
+<h3>시험 쪽 — Content-Type 을 먼저 보고, 스트림이면 줄을 읽어 자른다</h3>
+<p class="lead"><code>stream_turns.py</code> 는 <code>urllib</code> 으로 <code>SendStreamingMessage</code> 를 보내고, 받은 응답 하나마다 한 줄을 찍습니다.</p>
+<!--CODE file=ex/py/06/stream_turns.py region=open-->
+<ul>
+<li><b>Content-Type 이 갈림길</b> — <code>text/event-stream</code> 이 아니면 JSON 하나로 읽습니다. 맨손 서버는 begin 에서 걸린 오류를 그렇게 보냅니다.</li>
+<li>읽는 규칙은 <a href="#p02-sse-client-py">2부의 파이썬 클라이언트</a>와 같습니다. 6장에서 세 언어의 맨손 클라이언트로 다시 짭니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-sse-out">
+<h3>네 번 열었다 — 세 서버의 스트림이 같다</h3>
+<p class="lead">새 작업, 이어 말하기, 끝난 작업에 또, 문 닫은 날(12-31) 입니다. 파이썬 서버(탭 너머)의 결과이고 TS·Go 서버도 글자까지 같았습니다.</p>
+<!--OUT file=out/06/stream.txt part=터미널 7 lines=1-14-->
+<!--OUT file=out/06/stream.txt server=bare-ts-->
+<div class="note"><b>응답 수가 곧 이벤트 수</b> — 2개·3개·1개·2개. ③ 만 <code>application/json</code> 이고, 그 요청은 업무까지 가지 않아 서버 기록에 줄이 없습니다(견적 하나, 되묻기 하나, 거절 하나).</div>
+</article>
+
+<article class="card" id="p06-sse-close">
+<h3>언제 닫나 — 끝난 상태뿐 아니라 INPUT_REQUIRED 에서도</h3>
+<p class="lead">①(INPUT_REQUIRED)·②(COMPLETED)·④(REJECTED) 모두 마지막 이벤트 뒤에 스트림이 닫혔습니다. 업무가 늘 종료 상태나 중단 상태로 끝나고, 이벤트 목록이 거기서 끝나기 때문입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>스펙의 문장</th><th>닫는 때</th></tr>
+<tr><td>§3.1.2</td><td>"The stream <b>MUST</b> close when the task reaches a terminal state" — 종료 넷</td></tr>
+<tr><td>§11.7</td><td>"until the task reaches a terminal or interrupted state, at which point the stream closes" — 종료 넷 + 중단 둘</td></tr>
+</table>
+</div>
+<ul>
+<li><b>INPUT_REQUIRED 에서 닫는 것은 §11.7 쪽</b> — §3.1.2 는 중단 상태를 말하지 않습니다. 사용자의 답은 새 요청(새 스트림)으로 오니, 열어 둘 까닭이 없습니다.</li>
+<li>기다리는 동안 이벤트를 흘려야 하는 에이전트(식사·교통)라면 목록을 다 만든 뒤 쓰는 이 구조로는 안 됩니다 — 이벤트가 생길 때마다 써야 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p06-sse-err">
+<h3>첫 이벤트 전의 오류는 JSON 하나로 — 머리를 쓰기 전이라 고를 수 있다</h3>
+<p class="lead">③ 의 와이어입니다. 스트림을 청했지만 답은 <code>application/json</code> 의 JSON-RPC 오류 하나입니다.</p>
+<!--OUT file=out/06/stream.txt wire=py-wire ex=3 grep=^→|^←|^  Content-Type|"method"|"code"|"reason"-->
+<ul>
+<li><b>왜 가능한가</b> — 맨손 서버는 처리 함수가 끝까지 돈 뒤에야 머리를 씁니다. begin 이 던지면 <code>dispatch</code> 가 "JSON 응답, 이벤트 없음" 을 돌려주고, HTTP 쪽은 보통 JSON 응답을 씁니다.</li>
+<li><b>스펙은 꼴을 정하지 않았다</b> — §9.4.2 는 성공한 스트림의 모양만 보입니다. SDK 서버도 갈렸습니다: 파이썬·TS 는 JSON, Go 는 SSE 이벤트 하나로 오류를 실었습니다(<a href="#p03-caps-stream">3부</a>). 그래서 클라이언트는 Content-Type 으로 가려 읽어야 합니다(<a href="#p06-sse-client">시험 쪽</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p06-sse-cmp">
+<h3>세 언어 비교 — 스트림 하나를 쓰는 손잡이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>처리 함수의 결과</td><td>StreamResponse list</td><td><code>StreamResponse[]</code></td><td><code>[]bs.Event</code>(셋 중 하나만 채운 구조체)</td></tr>
+<tr><td>첫 Task 떠 두기</td><td><code>view(task)</code></td><td><code>view(task)</code></td><td><code>bs.View(t, -1)</code>(구조체 복사)</td></tr>
+<tr><td>머리</td><td><code>send_response</code>·<code>send_header</code>·<code>end_headers</code></td><td><code>res.writeHead</code></td><td><code>w.Header().Set</code>, 첫 쓰기 때 나간다</td></tr>
+<tr><td>이벤트 한 개</td><td><code>wfile.write(f"data: {line}\n\n")</code></td><td><code>res.write(`data: …\n\n`)</code></td><td><code>Fprintf(w, "data: %s\n\n")</code> + <code>Flush</code></td></tr>
+<tr><td>스트림 끝</td><td>처리기 반환 → 연결 닫힘</td><td><code>res.end()</code></td><td>처리 함수 반환</td></tr>
+<tr><td>오류(첫 이벤트 전)</td><td colspan="3">셋 다 <code>application/json</code> 의 JSON-RPC 오류 하나</td></tr>
+</table>
+</div>
+<div class="note"><b>한글을 그대로</b> — 파이썬은 <code>ensure_ascii=False</code>, Node 와 Go 는 기본이 UTF-8 그대로라 <code>data</code> 줄에 "숙소 견적" 이 <code>숙…</code> 로 바뀌지 않습니다(<a href="#p02-json-py">2부</a>).</div>
+</article>
+
+<article class="card quiz" id="p06-ch5-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 끝난 작업에 <code>SendStreamingMessage</code> 로 이어 말하면 맨손 서버는 무엇을 돌려줍니까? 같은 일을 정상으로 이어 말한 스트림의 첫 이벤트는 무엇이었습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 스트림이 아니라 <code>Content-Type: application/json</code> 의 JSON-RPC 오류 하나, <code>-32004</code>(UNSUPPORTED_OPERATION)입니다 — <a href="#p06-sse-out">③ 줄</a>과 <a href="#p06-sse-err">와이어</a>. begin 이 머리를 쓰기 전에 걸렀기 때문입니다. 정상 이어 말하기(②)의 첫 이벤트는 상태가 <code>TASK_STATE_WORKING</code> 인 <code>task</code> 였습니다(<a href="#p06-sse-follow">와이어</a>) — §3.1.2 대로 이어 말하기도 Task 로 시작합니다.</div>
 </article>
