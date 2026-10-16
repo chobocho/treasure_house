@@ -314,6 +314,17 @@ class Manifest(Tree):
                                  'ex/py/workshop', 'ex/ts/workshop', 'ex/fixtures',
                                  'tools/wiretap.py'])
 
+    def test_spec_data_dirs_beside_the_spec_are_inputs(self):
+        # 명세가 curl -d @rpc/x.json 처럼 읽는 자료(명세 옆 하위 디렉터리)가
+        # 바뀌어도 캡처는 낡은 것이 되어야 한다.
+        self.put('ex/run/03/c.run', 'run cmd="sh:curl -s -d @rpc/a.json x"\n')
+        self.put('ex/run/03/rpc/a.json', '{}\n')
+        self.put('ex/run/03/cards/b.json', '{}\n')
+        self.put('ex/run/03/other.run', 'run cmd="sh:true"\n')
+        names = [p for p, _ in a2arun.inputs(self.root, 'ex/run/03/c.run')]
+        self.assertEqual(names, ['ex/run/03/c.run', 'ex/run/03/cards',
+                                 'ex/run/03/rpc', 'ex/fixtures'])
+
     def test_orphans_and_prune(self):
         self.put('out/02/gone.py.txt', 'x\n')
         self.assertEqual(a2arun.orphans(self.root), ['out/02/gone.py.txt'])

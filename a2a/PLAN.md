@@ -261,3 +261,18 @@ subagent task each.
   client knows only JSON-RPC by default (TS/Go also HTTP+JSON) so the same two-door card
   leads to different doors; all three put card `tenant` into `params.tenant`; Go card fetch
   sends no A2A-Version header; connection-refused messages differ in detail.
+
+### Part 3 complete — 103 slides (2026-10-16)
+- Subagent wrote `03b_card.html` ch5–8 (51 slides; skills/pick ×3, capabilities §3.3.4
+  errors provoked on a no-capability agent ×3 + client-side pre-checks, card caching /
+  conditional GET 3×3, card validator ×3). Tool fix (TDD): spec inputs now include the
+  data subdirectories beside the spec (`ex/run/NN/rpc/`, `cards/`).
+- Findings: all three servers answer §3.3.4 with -32004 (stream, extended card) and
+  -32003 (push) — extended card is not -32007; Go checks capabilities only with
+  `a2asrv.WithCapabilityChecks`; Go wraps the stream error in an SSE event; clients
+  pre-check the card differently (Python/TS return the public card for extended-card
+  without asking; Go answers -32007 locally; TS blocks push before sending); cache
+  headers: Python weak ETag only, TS weak ETag + max-age=3600, Go none; Node fetch adds
+  no-cache to conditional requests so TS↔TS never gets 304; TS resolver returns raw JSON
+  (omitted fields undefined despite types); input-mode validation differs (py defaults +
+  skills, ts defaults only, go none).

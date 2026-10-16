@@ -458,6 +458,11 @@ def inputs(root, rel):
                 if lang not in langs:
                     langs.append(lang)
         tap = any(s['verb'] == 'tap' for s in steps)
+        # 명세 옆 하위 디렉터리(rpc/·cards/ …)는 sh: 줄이 읽는 자료다.
+        here = os.path.dirname(rel)
+        full = os.path.join(root, here)
+        items += [os.path.join(here, d) for d in sorted(os.listdir(full))
+                  if os.path.isdir(os.path.join(full, d))]
     else:
         langs, tap = [kind_of(rel)], False
     for lang in ('py', 'ts', 'go'):
