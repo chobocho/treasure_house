@@ -218,3 +218,22 @@ subagent task each.
   `scopes` map order varies per process (JCS sorting keeps the signature stable).
 - Python regions split to ≤ 45 lines (settlement: tokens/bearer/card/sign/executor;
   planner: discover/delegate/token/plan/settle; common: begin).
+
+### Go port done — three languages interoperate (2026-10-16)
+- `ex/go/agents/` (7 programs + `common/` package, 2,207 lines) by subagent; go.mod now
+  requires a2a-go/v2 v2.6.0. Cross-checked 8 language mixes (sub-agents/planner/ask) and
+  6 push pairings; Go servers match `scratch/ref-ts/` (Go re-publishes the follow-up Task
+  as WORKING, like TS). Orchestrator re-ran go/go/py: identical to ref-ts.
+- Accepted decisions: (1) **AUTH_REQUIRED in Go**: the SDK treats only terminal +
+  INPUT_REQUIRED as final, keeps the run alive and refuses a new message on the task
+  ("execution is already in progress"; SDK test `TestRequestHandler_SendMessage_AuthRequired`).
+  `common/park.go` parks the executor and routes the follow-up message to it via a wrapper
+  around `InterceptedHandler.Handler` — part 9/12 must explain this model difference.
+  (2) Settlement card signed and served in the defaults-dropped form (the SDK's
+  `NewSignedCardProducer` signs `json.Marshal` incl. `false`, which py/ts canonical forms
+  drop → unverifiable cross-language); other Go cards keep `"pushNotifications":false`.
+- More findings: Go push sender uses `A2A-Notification-Token` (py/ts use
+  `X-A2A-Notification-Token`; spec names none), blocks private networks by default, and
+  fails the task when a push fails → custom sender; in-memory store refuses anonymous
+  ListTasks (-31401) → login hook "anonymous"; gob deep copy needs plain JSON values in
+  DataParts; UUIDv7 ids; `Www-Authenticate` header casing.
