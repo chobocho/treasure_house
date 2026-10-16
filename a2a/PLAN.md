@@ -304,3 +304,17 @@ subagent task each.
   ignores an unknown status filter and returns everything**; empty lists `[]` vs Go
   `null`; timestamp precision ms (ts) / µs (py) / ns (go); Go SDK stamps local time
   (`+09:00` on a KST host would violate §5.6.1 — this machine is UTC).
+
+### Part 5 first half — 61 slides (2026-10-16)
+- `05_task.html` ch1–5 (Task shape ×3, nine states / transitions ×3, blocking vs
+  returnImmediately ×3, reading a COMPLETED task ×3, INPUT_REQUIRED multi-turn ×3).
+  Orchestrator re-ran every part-5 capture 3× — all identical.
+- Findings: no SDK enforces transitions; a late update after COMPLETED: Python stores it if
+  a fresh TaskUpdater sends it (task "revives" as WORKING), TS ignores it (queue stopped),
+  Go cancels the executor ctx (yield result racy — example checks ctx.Err()); every server
+  returns SUBMITTED for returnImmediately; SUBMITTED Task has no status.timestamp; no
+  createdAt/lastModified anywhere (whats-new-v1 claims them — check in review!); history
+  of agent questions: py moves status.message into history on the next user message, ts
+  appends at once, go never (4 turns → 7/7/4 messages); TS enforces the first-event rule,
+  Go does not for stored tasks; §3.4.3 still says "input-required"; interrupted states
+  that end an execution: py both, ts/go INPUT_REQUIRED only.

@@ -1,3 +1,10 @@
+### [2026-10-16 13:07] A2A 덱 5부 앞 절반 — Task 모양·상태 기계·막는 호출·다중 턴(61장)
+- **기획:** Task 의 필드, 상태 아홉과 전이, blocking 과 returnImmediately, 완료 Task 읽기, INPUT_REQUIRED 다중 턴을 세 서버로 보인다.
+- **TC:** 정상 — 숙소 세 번 되묻기 ×3 클라이언트, 교통 즉시 반환과 폴링. 경계 — 끝난 작업에 늦은 갱신, 거꾸로 가는 전이, 이어 말하기에 Task 다시 싣기.
+- **개발:** a2a/deck/sections/05_task.html, 05b_task.html, a2a/ex/*/05/, a2a/ex/run/05/, a2a/deck/order.txt
+- **검증:** 05 캡처 --check 3회 일치, make all SKEL=1 rc=0
+- **비고:** 어느 SDK 도 전이를 막지 않는다. whats-new-v1 의 Task createdAt·lastModified 는 proto 에 없다.
+
 ### [2026-10-16 12:27] A2A 덱 4부 뒤 절반 — FilePart·contextId·멱등성·ProtoJSON(48장)
 - **기획:** 파일 파트와 출력 모드, contextId 규칙(§3.4), 같은 messageId, ProtoJSON 입력 허용 범위를 세 서버에 실제로 던져 본다.
 - **TC:** 정상 — menu.md 파일 파트, 맥락 규칙 여섯 탐침 ×3. 경계 — 100KB 넘는 본문, 지원 안 하는 미디어 타입, snake_case·소문자 enum·숫자 enum, 없는 status 필터.
