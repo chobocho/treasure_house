@@ -525,3 +525,31 @@ subagent task each.
   from source only); possible bug, source only: `handleCancelWithConcurrentRun` shadows err
   (`internal/taskexec/local_manager.go:369`). Go lodging transcript/log byte-identical to TS.
 - `make all SKEL=1` green (926 slides, 956 blocks, 0 mismatches); manifest 172, 0 stale.
+
+### Part 10 first half — 54 slides; part 10 split into 10_/10b_ (2026-10-17)
+- `deck/sections/10b_stream.html` + `order.txt` line added (placeholder). `10_stream.html`
+  cover+intro (2), ch1 wire (15), ch2 catering ×3 (15), ch3 closing rules (22). Examples
+  `ex/{py,ts,go}/10/` (events, closer ×3, closes, frames), specs
+  `ex/run/10/{wire,ask,closes,frames}.run`; ports 11001–11032. Region markers only in
+  catering ×3, `common.ts` (artifact), `common/begin.go` (artifact); 05b `p05-art-chunks`
+  lines= → region=chunk. 171 captures re-run byte-identical.
+- Findings: `whats-new-v1.md:458` says `taskStatusUpdate`, proto/§6.2/SDKs use
+  `statusUpdate`; §3.1.2 Outputs still lists "Final completion indicator" though `final` is
+  gone (no `reserved` in proto); v0.3 compat rebuilds `final` differently (py/ts terminal
+  only — `compat/v0_3/conversions.py:404`, `server/express/index.js:2825`; go also
+  INPUT_REQUIRED — `a2acompat/a2av0/conversions.go:487`); catering stream identical on all
+  three servers (10 events, no final Task snapshot, false chunk flags omitted); wire diffs
+  — py Content-Type has charset, Go writes `id: <uuid>` per event (`internal/sse/sse.go:77`),
+  py CRLF vs ts/go LF, all chunked HTTP/1.1 keep-alive; all clients send Accept
+  text/event-stream. Close criterion: py when the executor returns (`active_task.py:617`),
+  ts on Message/terminal/INPUT_REQUIRED else bus end unless `keepBusAliveStates` (default
+  both interrupted, `server/index.js:2720`), go on IsFinal = terminal or INPUT_REQUIRED
+  (`internal/taskupdate/final.go:37`). Observed: AUTH_REQUIRED + return → py closes, ts/go
+  stay open (contradicts §11.7); WORKING + return → py/ts close (py matches neither
+  §3.1.2 pattern), go stays open; events after INPUT_REQUIRED → py delivers and stores,
+  ts/go close and silently lose them; mid-stream exception → py `event: error` -32603, ts
+  synthesized FAILED statusUpdate, go FAILED task snapshot (shape unspecified).
+- Notes for later: py pings every 15 s (sse-starlette), Go keep-alive off, TS none; Go
+  catering ignores yield results (latent panic after false); Go yield after INPUT_REQUIRED
+  is racy (not printed), BOOM case uses a 0.3 s pause for determinism — watch in review.
+- `make all SKEL=1` green (979 slides, 995 blocks, 0 mismatches); --check ×4 green.

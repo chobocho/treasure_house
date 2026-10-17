@@ -79,6 +79,7 @@ func (e executor) Execute(
 		if !ok {
 			return
 		}
+		// region: parse
 		req := common.DataOf(ec.Message)
 		caps := map[string]int{}
 		if m, ok := req["caps"].(map[string]any); ok {
@@ -98,6 +99,8 @@ func (e executor) Execute(
 				common.TextPart(fail.Reason))
 			return
 		}
+		// endregion
+		// region: stream
 		rows := plan.Slots
 		for i, row := range rows {
 			if !common.Sleep(ctx, e.stepMs) {
@@ -112,6 +115,8 @@ func (e executor) Execute(
 				Last:   i == len(rows)-1,
 			}, common.TextPart(line(row)+"\n"))
 		}
+		// endregion
+		// region: finish
 		var menu strings.Builder
 		menu.WriteString("# 식단표\n\n")
 		for _, r := range rows {
@@ -127,6 +132,7 @@ func (e executor) Execute(
 			common.DataPart(plan))
 		common.Say("[식사] 견적: %s원", common.Comma(plan.Total))
 		up.Status(a2a.TaskStateCompleted)
+		// endregion
 	}
 }
 

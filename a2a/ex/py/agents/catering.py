@@ -77,6 +77,7 @@ def line(row):
     return f"{label(row['slot'])}: {', '.join(picks)}"
 
 
+# region: executor
 class CateringExecutor(AgentExecutor):
     def __init__(self, step_ms):
         self.step = step_ms / 1000  # 끼니 사이 쉬는 시간(보여 주기용)
@@ -94,6 +95,8 @@ class CateringExecutor(AgentExecutor):
                 up.new_agent_message([new_text_part(plan["reason"])])
             )
             return
+        # endregion
+        # region: stream
         rows = plan["slots"]
         for i, row in enumerate(rows, 1):
             await asyncio.sleep(self.step)
@@ -102,6 +105,7 @@ class CateringExecutor(AgentExecutor):
                 TaskState.TASK_STATE_WORKING,
                 up.new_agent_message([new_text_part(note)]),
             )
+            # region: chunk
             # 같은 artifactId 로 한 줄씩 이어 붙인다.
             await up.add_artifact(
                 [new_text_part(line(row) + "\n")],
@@ -110,6 +114,9 @@ class CateringExecutor(AgentExecutor):
                 append=i > 1,
                 last_chunk=i == len(rows),
             )
+            # endregion
+        # endregion
+        # region: finish
         menu = "# 식단표\n\n" + "".join(f"- {line(r)}\n" for r in rows)
         await up.add_artifact(
             [
@@ -129,6 +136,7 @@ class CateringExecutor(AgentExecutor):
         )
         print(f"[식사] 견적: {plan['total']:,}원", flush=True)
         await up.complete()
+        # endregion
 
     async def cancel(self, ctx: RequestContext, queue: EventQueue):
         task = ctx.current_task

@@ -164,6 +164,7 @@ export class Updater {
     if (TERMINAL.includes(state)) live.delete(taskId);
   }
 
+  // region: artifact
   artifact(parts: Part[], name: string, o: Chunk = {}) {
     const artifact = {
       artifactId: o.id ?? randomUUID(),
@@ -180,6 +181,7 @@ export class Updater {
       AgentEvent.artifactUpdate({ ...ev, metadata: undefined }),
     );
   }
+  // endregion
 
   // 쉬는 동안 취소되면 false — 실행 함수는 그 자리에서 끝낸다.
   async pause(ms: number): Promise<boolean> {

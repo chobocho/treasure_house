@@ -1,10 +1,598 @@
 <article class="card section" id="p10">
 <p class="chnum">10부</p>
 <h2>스트리밍·아티팩트 청크·재구독</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">SendStreamingMessage 의 와이어 → 식사 에이전트 ×3 → 스트림 종료 규칙 → 청크 다시 붙이기 → SubscribeToTask → FilePart·DataPart → 스트리밍 미지원 카드</p>
 </article>
 
-<article class="card" id="p10-todo">
-<h3>스트리밍·아티팩트 청크·재구독</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p10-intro">
+<h3>막는 호출은 끝난 뒤의 모습을, 스트림은 그 사이를 보여 준다</h3>
+<p class="lead">식사 에이전트는 끼니 하나를 정할 때마다 "식단 짜는 중 1/3" 을 알리고 식단표를 한 줄씩 보냅니다. 막는 호출로 받으면 그 조각들이 이미 합쳐진 Task 하나뿐이었습니다(<a href="#p05-art-chunks">5부</a>). 이 부는 그 사이에 오가는 이벤트를 하나씩 봅니다 — 무엇이 어떤 차례로 오고, 언제 끝나고, 끊기면 어떻게 다시 붙는지.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th></tr>
+<tr><td><a href="#p10-ch1">1장</a></td><td>SendStreamingMessage 의 와이어 — StreamResponse 넷, 세 SDK 서버가 내는 차례, 첫 이벤트, 사라진 <code>final</code></td></tr>
+<tr><td><a href="#p10-ch2">2장</a></td><td>식사 에이전트 ×3 — 끼니마다 상태, 식단표 조각(<code>append</code>·<code>lastChunk</code>), 세 서버의 스트림 견주기</td></tr>
+<tr><td><a href="#p10-ch3">3장</a></td><td>스트림 종료 규칙 — 종료 상태와 중단 상태, §3.1.2 와 §11.7, SDK 마다 닫는 때, 도중의 오류</td></tr>
+<tr><td>4장</td><td>클라이언트에서 청크 다시 붙이기 ×3</td></tr>
+<tr><td>5장</td><td>SubscribeToTask — 끊긴 뒤 다시 붙기, 여러 구독자(§3.5.2)</td></tr>
+<tr><td>6장</td><td>FilePart(menu.md) + DataPart 견적</td></tr>
+<tr><td>7장</td><td>스트리밍 미지원 카드에 스트림 요청 → UnsupportedOperation</td></tr>
+</table>
+</div>
+<div class="key"><b>이 부의 방식</b> — 3~5부처럼 완성 에이전트(식사)를 블랙박스로 띄우고 와이어를 읽습니다. 바이트 규칙(<a href="#p02-sse-rules">2부</a>)과 맨손 SSE 서버(<a href="#p06-sse-shape">6부</a>), 세 SDK 클라이언트의 스트림 손잡이(<a href="#p07-cl-stream">7부</a>·<a href="#p08-cl-stream">8부</a>·<a href="#p09-cl-stream">9부</a>)는 이미 봤으니, 여기서는 이벤트의 뜻과 차례만 다룹니다. 새로 쓰는 에이전트는 실험용 하나 — 고른 상태에서 실행을 끝내는 종료 실험 에이전트(<a href="#p10-close-agent">3장</a>, 세 언어)입니다.</div>
+</article>
+
+<!-- ==== 1장 SendStreamingMessage 의 와이어 ==== -->
+
+<article class="card" id="p10-ch1">
+<p class="chnum">1장</p>
+<h2>SendStreamingMessage 의 와이어</h2>
+<p class="chsub">StreamResponse 넷 → 두 이벤트의 필드 → 스트림의 두 꼴 → 사라진 final → 옛 클라이언트의 final → 요청 → SDK 없이 읽기 → 파이썬 서버 → TS·Go 서버 → 조각 하나를 통째로 → 첫 이벤트 → 세 서버 비교</p>
+</article>
+
+<article class="card" id="p10-wire-four">
+<h3>스트림의 이벤트 하나는 StreamResponse — 넷 중 하나만 채운 봉투</h3>
+<p class="lead">proto 의 <code>rpc SendStreamingMessage(SendMessageRequest) returns (stream StreamResponse)</code> 입니다. 요청은 SendMessage 와 같고(§9.4.2 "Same as <code>SendMessage</code>"), 답이 StreamResponse 의 흐름입니다. StreamResponse 는 <code>oneof payload</code> 하나뿐입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>proto 필드</th><th>와이어 이름</th><th>타입</th><th>proto 주석</th></tr>
+<tr><td><code>task</code> = 1</td><td><code>task</code></td><td><code>Task</code></td><td>"the current state of the task"</td></tr>
+<tr><td><code>message</code> = 2</td><td><code>message</code></td><td><code>Message</code></td><td>"a message from the agent"</td></tr>
+<tr><td><code>status_update</code> = 3</td><td><code>statusUpdate</code></td><td><code>TaskStatusUpdateEvent</code></td><td>"a task status update"</td></tr>
+<tr><td><code>artifact_update</code> = 4</td><td><code>artifactUpdate</code></td><td><code>TaskArtifactUpdateEvent</code></td><td>"a task artifact update"</td></tr>
+</table>
+</div>
+<ul>
+<li><b>종류를 가르는 것은 키 이름</b> — v0.3 의 <code>kind</code> 는 없어졌습니다. <code>result</code> 안의 유일한 키가 곧 종류입니다(<a href="#p06-sse-shape">6부</a>의 맨손 서버도 그렇게 썼습니다).</li>
+<li><b>안내 문서의 이름은 틀렸다</b> — <code>whats-new-v1.md</code> 의 v1.0 예시는 <code>"taskStatusUpdate"</code> 라고 적었지만<!--SRC key=a2a-whats-new-->, proto 의 필드 이름 <code>status_update</code> 에서 나오는 JSON 이름은 <code>statusUpdate</code> 이고, 스펙 §6.2 의 예시와 세 SDK 의 와이어(이 장 뒤쪽)도 <code>statusUpdate</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-wire-fields">
+<h3>상태 이벤트는 필드 넷, 아티팩트 이벤트는 여섯 — 조각 표시 둘이 여기 있다</h3>
+<p class="lead">§4.2.1·§4.2.2 의 표는 proto 의 두 메시지에서 만들어집니다. <code>REQUIRED</code> 는 둘 다 <code>taskId</code>·<code>contextId</code> 와 실은 것(<code>status</code> 또는 <code>artifact</code>)입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>TaskStatusUpdateEvent</th><th>TaskArtifactUpdateEvent</th><th>proto 주석(줄임)</th></tr>
+<tr><td><code>taskId</code> (필수)</td><td><code>taskId</code> (필수)</td><td>어느 작업의 일인가</td></tr>
+<tr><td><code>contextId</code> (필수)</td><td><code>contextId</code> (필수)</td><td>그 작업의 맥락</td></tr>
+<tr><td><code>status</code> (필수)</td><td><code>artifact</code> (필수)</td><td>"The new status" / "generated or updated"</td></tr>
+<tr><td>—</td><td><code>append</code></td><td>"appended to a previously sent artifact with the same ID"</td></tr>
+<tr><td>—</td><td><code>lastChunk</code></td><td>"this is the final chunk of the artifact"</td></tr>
+<tr><td><code>metadata</code></td><td><code>metadata</code></td><td>덧붙이는 키-값</td></tr>
+</table>
+</div>
+<div class="note"><b>상태 이벤트에는 "마지막" 표시가 없다</b> — 아티팩트에는 <code>lastChunk</code> 가 있지만, 상태 이벤트에는 "이것이 스트림의 끝" 이라는 필드가 없습니다. 그 자리에 있던 것이 다음다음 슬라이드의 <code>final</code> 입니다.</div>
+</article>
+
+<article class="card" id="p10-wire-patterns">
+<h3>스트림의 꼴은 둘 — Message 하나로 끝나거나, Task 로 시작하거나</h3>
+<p class="lead">§3.1.2 의 Behavior 는 스트림이 "MUST follow one of these patterns" 라며 둘을 듭니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>꼴</th><th>§3.1.2 의 말</th><th>이 부에서</th></tr>
+<tr><td>Message 하나</td><td>"exactly one <code>Message</code> object and then close immediately"</td><td><a href="#p10-close-run">3장</a>의 MESSAGE</td></tr>
+<tr><td>Task 생애</td><td>"MUST begin with the Task object, followed by zero or more" 상태·아티팩트 이벤트</td><td>식사 에이전트 전부</td></tr>
+</table>
+</div>
+<ul>
+<li>Task 꼴에서 <code>task</code> 는 첫 자리에만 옵니다. 그 뒤는 <code>statusUpdate</code>·<code>artifactUpdate</code> 의 섞임이고, 순서는 "the order they were generated" 그대로여야 합니다(§3.5.2 "MUST NOT be reordered").</li>
+<li>§11.7 은 하나를 더 허락합니다 — "MAY optionally resend a final <code>Task</code> snapshot before closing". 세 SDK 가 그렇게 하는지는 이 장의 캡처로 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-wire-final">
+<h3><code>final</code> 은 v1.0 에서 빠졌다 — 끝은 스트림이 닫히는 것으로 안다</h3>
+<p class="lead">v0.3 의 상태 이벤트에는 <code>"final": true</code> 가 있었습니다. CHANGELOG 는 "Remove redundant <code>final</code> field from <code>TaskStatusUpdateEvent</code> (#1308)" 이라고 적었고<!--SRC key=a2a-changelog-->, 안내 문서는 "Leverage protocol binding specific stream closure mechanism instead" 라고 합니다<!--SRC key=a2a-whats-new-->.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>곳</th><th>지금 남은 흔적</th></tr>
+<tr><td>proto</td><td><code>TaskStatusUpdateEvent</code> 필드 1~4 — <code>final</code> 도, <code>reserved</code> 표시도 없다</td></tr>
+<tr><td>§3.1.2 Outputs</td><td>여전히 "Final completion indicator" 라는 줄이 있다 — 그것이 무엇인지는 적지 않았다</td></tr>
+<tr><td>v0.3 호환 변환</td><td>세 SDK 가 옛 클라이언트에게는 <code>final</code> 을 다시 만들어 준다(다음 슬라이드)</td></tr>
+</table>
+</div>
+<div class="key"><b>그래서 닫힘이 신호다</b> — v1.0 클라이언트는 "마지막 이벤트" 를 필드로 알 수 없고, 연결이 닫히는 것(SSE 라면 응답 본문의 끝)으로 압니다. 그러니 서버가 <b>언제</b> 닫는지가 규칙의 전부가 되고, 그것이 <a href="#p10-ch3">3장</a>입니다.</div>
+</article>
+
+<article class="card" id="p10-wire-final-compat">
+<h3>옛 클라이언트에게 되살린 <code>final</code> — 무엇을 끝으로 볼지 SDK 마다 다르다</h3>
+<p class="lead">v0.3 클라이언트와 말하는 호환 계층(<a href="#p07-compat-what">7부</a>·<a href="#p08-compat-ts">8부</a>·<a href="#p09-compat-go">9부</a>)은 v1.0 상태 이벤트를 옛 모양으로 바꿀 때 <code>final</code> 을 계산해 넣습니다. 설치된 소스의 그 식입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>SDK</th><th>자리</th><th><code>final</code> 이 참인 상태</th></tr>
+<tr><td>파이썬 1.2.2</td><td><code>a2a/compat/v0_3/conversions.py:404</code></td><td>completed·canceled·failed·rejected</td></tr>
+<tr><td>TypeScript 1.3.0</td><td><code>server/express/index.js:2825</code> <code>FINAL_LEGACY_STATES</code></td><td>completed·canceled·failed·rejected</td></tr>
+<tr><td>Go v2.6.0</td><td><code>a2acompat/a2av0/conversions.go:487</code></td><td><code>Terminal()</code> + <code>TaskStateInputRequired</code></td></tr>
+</table>
+</div>
+<div class="warn"><b>INPUT_REQUIRED 에서 갈린다</b> — 같은 "되묻기" 상태가 파이썬·TS 를 거치면 <code>final: false</code>, Go 를 거치면 <code>final: true</code> 로 옛 클라이언트에 갑니다. 옛 클라이언트가 <code>final</code> 을 보고 읽기를 멈춘다면 두 서버에서 다르게 움직입니다. 이 어긋남은 v1.0 스펙의 두 문장(§3.1.2·§11.7)이 다른 데서 이미 시작됩니다(<a href="#p10-close-spec">3장</a>).</div>
+</article>
+
+<article class="card" id="p10-wire-req">
+<h3>요청은 SendMessage 와 같은 몸 — 다른 것은 <code>method</code> 와 <code>Accept</code> 뿐</h3>
+<p class="lead">총무팀 CLI(<code>ask</code>)를 세 언어로 같은 파이썬 식사 에이전트에 붙였습니다(<a href="#p10-cat-run">2장</a>의 실행). 서버 앞 탭에 남은 세 SDK 클라이언트의 요청 머리입니다.</p>
+<!--OUT file=out/10/ask.txt wire=py-wire grep=^→ POST|^  A2A-Version|^  Accept: text|"method" note=py·ts·go 클라이언트의 SendStreamingMessage 요청(차례대로)-->
+<ul>
+<li>세 SDK 모두 <code>Accept: text/event-stream</code> 을 답니다(파이썬은 <code>a2a/client/transports/http_helpers.py:179</code> 의 <code>setdefault</code>). 스펙은 §9.4.2 에서 응답의 Content-Type 만 정했고 이 머리를 요구하지는 않습니다.</li>
+<li>몸은 <a href="#p04-msg-request">4부</a>의 SendMessage 그대로입니다. JSON-RPC <code>id</code> 가 UUID(파이썬·Go)냐 1(TS)이냐, <code>configuration: {}</code> 이 붙느냐는 <a href="#p06-mx-wire">6부</a>에서 본 차이 그대로입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-wire-events">
+<h3>SDK 없이 읽어 보기 — 이벤트마다 종류와 조각 표시를 와이어 그대로 찍는다</h3>
+<p class="lead">SDK 클라이언트는 받은 JSON 을 타입으로 바꾸며 빠진 필드를 기본값으로 채웁니다. 서버가 <b>실제로 무엇을 썼는지</b> 보려고, 시험 쪽 <code>10/events.py</code> 는 urllib 으로 SSE 를 읽어(<a href="#p02-sse-client-py">2부</a>의 규칙) 와이어의 키를 그대로 봅니다.</p>
+<!--CODE file=ex/py/10/events.py region=show-->
+<div class="note"><b>없음과 false 는 다르다</b> — <code>flag</code> 는 키가 없으면 "없음", 있으면 JSON 값을 찍습니다. ProtoJSON 은 기본값(<code>false</code>)을 빼고 쓰는 것이 기본이라, 첫 조각의 <code>append</code> 는 "없음" 으로 나올 것입니다.</div>
+</article>
+
+<article class="card" id="p10-wire-run">
+<h3>파이썬 서버의 스트림 — 이벤트 열 개, 마지막 Task 는 다시 보내지 않는다</h3>
+<p class="lead">식사 에이전트 셋 앞에 탭을 하나씩 세우고 <code>events.py</code> 를 붙였습니다. 먼저 파이썬 서버입니다.</p>
+<!--SPEC file=ex/run/10/wire.run-->
+<!--OUT file=out/10/wire.txt part=터미널 7 lines=1-13-->
+<ul>
+<li><a href="#p10-cat-contract">2장의 약속</a>대로 <code>task</code> 하나, 끼니마다 <code>statusUpdate</code>·<code>artifactUpdate</code>, 파일·견적, 끝의 COMPLETED — 열 개입니다.</li>
+<li>COMPLETED 뒤에 Task 를 한 번 더 보내지 않았습니다. §11.7 의 "MAY optionally resend a final <code>Task</code> snapshot" 은 쓰지 않은 것입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-wire-run3">
+<h3>TypeScript·Go 서버도 같은 열 개, 같은 차례 — 다른 것은 Content-Type 한 줄</h3>
+<!--OUT file=out/10/wire.txt part=터미널 7 lines=14-39-->
+<ul>
+<li>세 서버의 이벤트 줄은 글자까지 같습니다. 세 언어의 실행기가 같은 차례로 싣고(<a href="#p10-cat-cmp">2장</a>), 세 SDK 가 그 차례를 바꾸지 않았습니다 — §3.5.2 "MUST NOT be reordered".</li>
+<li>파이썬만 <code>text/event-stream; charset=utf-8</code> 입니다. 클라이언트는 Content-Type 을 <code>==</code> 가 아니라 앞부분으로 견줘야 합니다(TS SDK 클라이언트는 <code>startsWith("text/event-stream")</code>, <code>client/index.js:2913</code>).</li>
+<li>첫 조각의 <code>append</code>·<code>lastChunk</code>, 파일·견적 조각의 둘은 세 서버 모두 <b>쓰지 않았습니다</b>(TS 의 <code>Updater</code> 는 <code>false</code> 를 채웠지만 직렬화가 기본값을 뺐습니다).</li>
+</ul>
+</article>
+
+<article class="card" id="p10-wire-one">
+<h3>조각 하나를 통째로 — 같은 이벤트, 다른 봉투</h3>
+<p class="lead">마지막 식단표 조각(<code>append</code>·<code>lastChunk</code> 둘 다 참)을 파이썬과 Go 의 탭에서 꺼냈습니다.</p>
+<!--OUT file=out/10/wire.txt wire=py-wire lines=177-197 note=파이썬 서버-->
+<!--OUT file=out/10/wire.txt wire=go-wire lines=181-202 note=Go 서버-->
+<ul>
+<li><b>Go 는 이벤트마다 <code>id:</code> 줄</b>을 붙입니다 — 새 UUID 하나씩(<code>internal/sse/sse.go:77</code> <code>WriteData</code>). 파이썬·TS 는 <code>data:</code> 만 씁니다. SSE 의 <code>id</code> 는 다시 붙을 때 <code>Last-Event-ID</code> 로 돌려보내라고 있는 필드지만(<a href="#p02-sse-rules">2부</a>), 매번 새로 지은 UUID 라 이어 받기의 표지로 쓰기는 어렵습니다(다시 붙기는 5장).</li>
+<li><b>키 차례는 서버마다</b> — 파이썬은 봉투가 <code>result</code>·<code>id</code>·<code>jsonrpc</code> 차례, Go 의 <code>artifactUpdate</code> 는 가나다(알파벳)순입니다. 읽는 쪽은 차례가 아니라 이름으로 읽습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-wire-first">
+<h3>첫 이벤트는 SUBMITTED Task — 아티팩트 0개, 이력에는 보낸 메시지 하나</h3>
+<p class="lead">§3.1.2 "MUST begin with the Task object". 세 서버 모두 <code>task SUBMITTED history 1 artifacts 0</code> 으로 시작했습니다. Go 서버의 첫 이벤트입니다.</p>
+<!--OUT file=out/10/wire.txt wire=go-wire lines=30-61 note=Go 서버의 첫 이벤트-->
+<ul>
+<li>첫 Task 는 "일을 받았다" 는 표지입니다. 이 뒤의 이벤트는 모두 이 <code>id</code> 를 <code>taskId</code> 로 답니다 — 받는 쪽은 첫 이벤트에서 손잡이를 쥡니다.</li>
+<li>이력의 메시지에 Go 는 <code>contextId</code>·<code>taskId</code> 를 채우지 않았고(파이썬·TS 는 채운다), 파이썬은 DataPart 수를 <code>30.0</code> 으로 냅니다(<a href="#p04-data-wire">4부</a>).</li>
+<li>이어 말하기 스트림의 첫 이벤트는 SDK 마다 다릅니다 — 파이썬 SDK 는 Task 를 다시 싣지 못하고, TS·Go 쪽 우리 에이전트는 WORKING Task 를 다시 싣습니다(<a href="#p06-sse-follow">6부</a>, 16부).</li>
+</ul>
+</article>
+
+<article class="card" id="p10-wire-cmp">
+<h3>세 서버 비교 — 같은 스트림, 다른 머리와 봉투</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬 SDK</th><th>TypeScript SDK</th><th>Go SDK</th></tr>
+<tr><td>Content-Type</td><td><code>text/event-stream; charset=utf-8</code></td><td><code>text/event-stream</code></td><td><code>text/event-stream</code></td></tr>
+<tr><td>SSE 필드</td><td><code>data:</code></td><td><code>data:</code></td><td><code>id:</code>(UUID) + <code>data:</code></td></tr>
+<tr><td>이벤트 수·차례</td><td colspan="3">열 개, 실행기가 실은 차례 그대로</td></tr>
+<tr><td>첫 이벤트</td><td colspan="3"><code>task</code> SUBMITTED, 아티팩트 0개</td></tr>
+<tr><td><code>false</code> 인 조각 표시</td><td colspan="3">쓰지 않는다(키가 없다)</td></tr>
+<tr><td>끝에 Task 다시 보내기</td><td colspan="3">없다 — 마지막은 <code>statusUpdate</code> COMPLETED</td></tr>
+<tr><td>봉투의 키 차례</td><td><code>result</code>·<code>id</code>·<code>jsonrpc</code></td><td><code>jsonrpc</code>·<code>id</code>·<code>result</code></td><td>같음(이벤트 안쪽은 가나다순)</td></tr>
+</table>
+</div>
+<div class="key"><b>클라이언트가 기댈 것</b> — 종류는 <code>result</code> 의 키 이름, 조각 표시는 "없으면 false", 끝은 스트림이 닫힘. 나머지(머리의 꼬리, <code>id:</code> 줄, 키 차례)는 서버마다 다르니 기대지 않습니다.</div>
+</article>
+
+<article class="card" id="p10-ch1-sum">
+<h3>1장 정리 — SendStreamingMessage 의 와이어</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>요청은?</td><td>SendMessage 와 같은 몸, <code>method</code> 만 다르다. 세 SDK 가 <code>Accept: text/event-stream</code></td><td>§9.4.2, <a href="#p10-wire-req">탭</a></td></tr>
+<tr><td>이벤트 하나는?</td><td>JSON-RPC 응답 하나, <code>result</code> 는 StreamResponse — <code>task</code>·<code>message</code>·<code>statusUpdate</code>·<code>artifactUpdate</code> 중 하나</td><td>proto, <a href="#p10-wire-four">넷</a></td></tr>
+<tr><td>꼴은?</td><td>Message 하나, 또는 Task 로 시작해 상태·아티팩트 이벤트</td><td>§3.1.2</td></tr>
+<tr><td>끝은?</td><td><code>final</code> 은 없다 — 스트림이 닫히는 것</td><td>CHANGELOG #1308</td></tr>
+<tr><td>세 SDK 서버는?</td><td>같은 열 개를 같은 차례로. 머리·<code>id:</code>·키 차례만 다르다</td><td><a href="#p10-wire-cmp">비교</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p10-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 어떤 클라이언트가 "<code>artifactUpdate</code> 에 <code>append</code> 키가 있으면 이어 붙이고, 없으면 오류" 로 짰습니다. 식사 에이전트의 첫 조각에서 무슨 일이 납니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 첫 조각(<code>meal-plan</code>)과 파일·견적 조각에서 오류가 납니다. 세 서버 모두 <code>append</code> 가 거짓인 조각에는 그 키를 아예 쓰지 않았습니다(<a href="#p10-wire-run">파이썬</a>·<a href="#p10-wire-run3">TS·Go</a> 의 <code>append=없음</code>). ProtoJSON 은 기본값을 빼고 쓰니, 받는 쪽은 "키가 없으면 false" 로 읽어야 합니다.</div>
+</article>
+
+<!-- ==== 2장 식사 에이전트 ×3 ==== -->
+
+<article class="card" id="p10-ch2">
+<p class="chnum">2장</p>
+<h2>식사 에이전트 ×3</h2>
+<p class="chsub">계약 → 파이썬 → TypeScript → TS 의 조각 하나 → Go → Go 의 조각 하나 → 세 언어 비교 → ask 로 받기 → 실행 명세 → 다섯 번의 대본 → 2박이면 → 거절 스트림</p>
+</article>
+
+<article class="card" id="p10-cat-contract">
+<h3>식사 에이전트의 약속 — 끼니마다 상태 하나와 식단표 한 줄</h3>
+<p class="lead"><code>deck/SCENARIO.md</code> 가 정한 식사 에이전트의 몫입니다. 끼니 수는 <code>2 × nights + 1</code>(1박이면 저녁·아침·점심 셋)이고, 메뉴를 고르는 규칙은 <code>workshop</code> 의 <code>plan_meals</code> 입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>차례</th><th>무엇을 싣나</th><th>A2A 로는</th></tr>
+<tr><td>처음</td><td>받은 일</td><td><code>task</code> — SUBMITTED</td></tr>
+<tr><td>끼니마다</td><td>"식단 짜는 중 i/n"</td><td><code>statusUpdate</code> — WORKING + 글 파트</td></tr>
+<tr><td>끼니마다</td><td>식단표 한 줄</td><td><code>artifactUpdate</code> — <code>meal-plan</code>, 둘째부터 <code>append</code>, 마지막에 <code>lastChunk</code></td></tr>
+<tr><td>다 짠 뒤</td><td>menu.md 파일</td><td><code>artifactUpdate</code> — <code>menu-file</code>(raw 파일 파트)</td></tr>
+<tr><td>다 짠 뒤</td><td>견적</td><td><code>artifactUpdate</code> — <code>meal-quote</code>(데이터 파트)</td></tr>
+<tr><td>끝</td><td>—</td><td><code>statusUpdate</code> — COMPLETED</td></tr>
+</table>
+</div>
+<div class="note"><b>1박이면 이벤트 열 개</b> — <code>task</code> 1 + 끼니 3 × 2 + 파일·견적 2 + 끝 1. 끼니 사이에는 <code>--step-ms</code>(기본 100ms)만큼 쉬어, 이벤트가 정말 하나씩 흘러나오게 합니다. 파일 파트와 데이터 파트의 속은 6장에서 다룹니다.</div>
+</article>
+
+<article class="card" id="p10-cat-py">
+<h3>파이썬 — TaskUpdater 의 두 손: <code>update_status</code> 와 <code>add_artifact</code></h3>
+<p class="lead"><code>agents/catering.py</code> 의 끼니 고리입니다. 앞부분(<code>begin</code> 으로 Task 를 싣고 요청을 읽는 곳)은 <a href="#p07-lg-final">7부의 숙소 에이전트</a>와 같은 모양입니다.</p>
+<!--CODE file=ex/py/agents/catering.py region=stream-->
+<ul>
+<li><code>append=i &gt; 1</code>·<code>last_chunk=i == len(rows)</code> — 첫 조각은 새 아티팩트, 둘째부터 "같은 id 에 이어 붙여라", 마지막 조각에 "이것으로 끝" 을 답니다. 세 조각 모두 같은 <code>artifact_id="meal-plan"</code> 입니다.</li>
+<li><code>add_artifact</code> 는 받은 그대로 <code>TaskArtifactUpdateEvent</code> 하나를 큐에 넣습니다(<code>a2a/server/tasks/task_updater.py:141</code>). 합치는 일은 하지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-cat-ts">
+<h3>TypeScript — 같은 고리, 조각 표시는 객체 하나로</h3>
+<p class="lead"><code>agents/catering.ts</code> 의 같은 자리입니다. TS SDK 에는 TaskUpdater 가 없어서(<a href="#p08-ex-noupdater">8부</a>) <code>agents/common.ts</code> 의 <code>Updater</code> 가 그 몫을 합니다.</p>
+<!--CODE file=ex/ts/agents/catering.ts region=stream-->
+<ul>
+<li><code>rows.entries()</code> 는 0 부터 세므로 <code>append: i &gt; 0</code>, <code>lastChunk: i === rows.length - 1</code> 입니다. 파이썬과 뜻은 같습니다.</li>
+<li><code>up.pause</code> 는 쉬는 동안 취소되면 <code>false</code> 를 돌려줍니다 — 취소는 11부입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-cat-ts-up">
+<h3>TS 의 조각 하나 — <code>artifactUpdate</code> 를 손으로 빚어 버스에 싣는다</h3>
+<p class="lead"><code>Updater.artifact</code> 입니다. <code>AgentEvent.artifactUpdate</code> 는 이벤트의 이름표만 붙이고, 필드는 우리가 다 채웁니다.</p>
+<!--CODE file=ex/ts/agents/common.ts region=artifact-->
+<div class="note"><b>빈 값도 채운다</b> — ts-proto 타입은 <code>description</code>·<code>extensions</code> 같은 필드를 빼 둘 수 없어서 <code>""</code>·<code>[]</code> 를 넣었습니다. <code>append</code>·<code>lastChunk</code> 도 <code>!!</code> 로 늘 <code>true</code>/<code>false</code> 가 됩니다. 와이어에 무엇이 나가는지는 <a href="#p10-wire-run3">1장</a>에서 봤습니다 — <code>false</code> 는 와이어에 나가지 않았습니다.</div>
+</article>
+
+<article class="card" id="p10-cat-go">
+<h3>Go — <code>yield</code> 로 하나씩, 조각 표시는 <code>common.Chunk</code></h3>
+<p class="lead"><code>agents/catering/main.go</code> 의 끼니 고리입니다. 실행기가 돌려준 반복자 안에서 이벤트마다 <code>yield</code> 합니다(<a href="#p09-ex-drive">9부</a>).</p>
+<!--CODE file=ex/go/agents/catering/main.go region=stream-->
+<ul>
+<li><code>common.Sleep</code> 은 쉬는 동안 <code>ctx</code> 가 취소되면 <code>false</code> — TS 의 <code>pause</code> 와 같은 자리입니다.</li>
+<li><code>up.Status</code>·<code>up.Artifact</code> 는 <code>yield</code> 의 결과를 돌려주지만, 이 고리는 그것을 보지 않고 <code>Sleep</code> 의 <code>ctx</code> 검사에 기댑니다. false 를 받은 뒤 또 <code>yield</code> 하면 panic 이니(<a href="#p09-ex-yield">9부</a>), 엄밀하게는 돌려받은 값을 보아야 할 자리입니다 — <a href="#p10-close-go">3장의 실험 에이전트</a>는 그렇게 짰습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-cat-go-up">
+<h3>Go 의 조각 하나 — SDK 의 <code>NewArtifactEvent</code> 에 id·이름·표시를 덧칠한다</h3>
+<p class="lead"><code>agents/common/begin.go</code> 의 <code>Chunk</code> 와 <code>Updater.Artifact</code> 입니다.</p>
+<!--CODE file=ex/go/agents/common/begin.go region=artifact-->
+<div class="note"><b>id 를 주지 않으면 새로 짓는다</b> — <code>a2a.NewArtifactEvent</code> 는 아티팩트 id 를 새로 만들어 넣습니다. 조각을 이어 붙이려면 같은 id 여야 하니, <code>Chunk.ID</code> 가 있으면 덮어씁니다. 파이썬은 <code>artifact_id</code> 인자, TS 는 <code>o.id ?? randomUUID()</code> 로 같은 일을 합니다.</div>
+</article>
+
+<article class="card" id="p10-cat-cmp">
+<h3>세 언어 비교 — 조각 하나를 싣는 손</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>상태 하나</td><td><code>up.update_status(TASK_STATE_WORKING, msg)</code></td><td><code>up.status(TASK_STATE_WORKING, parts)</code>(우리 <code>Updater</code>)</td><td><code>up.Status(a2a.TaskStateWorking, part)</code>(우리 <code>Updater</code>)</td></tr>
+<tr><td>조각 하나</td><td><code>up.add_artifact(parts, artifact_id=…, append=…, last_chunk=…)</code></td><td><code>up.artifact(parts, name, {id, append, lastChunk})</code></td><td><code>up.Artifact(name, common.Chunk{ID, Append, Last}, part)</code></td></tr>
+<tr><td>그 아래 SDK</td><td><code>TaskUpdater.add_artifact</code> → 큐</td><td><code>AgentEvent.artifactUpdate</code> → 버스</td><td><code>a2a.NewArtifactEvent</code> → <code>yield</code></td></tr>
+<tr><td>둘째 조각부터</td><td><code>i &gt; 1</code>(1부터 셈)</td><td><code>i &gt; 0</code></td><td><code>i &gt; 0</code></td></tr>
+<tr><td>끼니 사이 쉬기</td><td><code>asyncio.sleep</code>(취소 검사 없음)</td><td><code>up.pause</code> — 취소면 <code>false</code></td><td><code>common.Sleep(ctx, …)</code> — 취소면 <code>false</code></td></tr>
+</table>
+</div>
+<div class="key"><b>세 서버 모두 합치지 않는다</b> — 실행기는 조각을 따로따로 싣고, 합치는 것은 받는 쪽(저장소, 그리고 4장의 클라이언트)의 일입니다.</div>
+</article>
+
+<article class="card" id="p10-cat-run">
+<h3>ask 로 받기 — 조각 줄의 <code>+</code> 는 append, <code>(끝)</code> 은 lastChunk</h3>
+<p class="lead">총무팀 CLI(<code>ask</code>, 파이썬 SDK 클라이언트)로 파이썬 식사 에이전트에 1박·30명·채식 2명을 맡겼습니다. 카드에 <code>streaming</code> 이 있으니 스트림으로 받습니다(<a href="#p07-cl-stream">7부</a>).</p>
+<!--OUT file=out/10/ask.txt part=터미널 5 lines=1-61 grep=^[a-z\[]|"total" note=식사 견적의 DataPart 는 total 줄만 남겼다-->
+<!--CODE file=ex/py/agents/ask.py lines=92-99 note=agents/ask.py — 조각 줄을 찍는 곳-->
+<ul>
+<li>조각 셋이 저녁·아침·점심 한 줄씩입니다. 받은 쪽에서 셋을 이으면 식단표가 됩니다 — 잇는 코드는 4장의 몫입니다.</li>
+<li>견적 <code>total</code> 1542000 은 골든 벡터(<code>ex/fixtures/golden/domain.json</code>)의 이야기 숫자 1,542,000 과 같습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-cat-spec">
+<h3>세 서버 × 세 클라이언트 — 파이썬 ask 는 세 서버에, TS·Go ask 는 파이썬 서버에</h3>
+<p class="lead">이 장의 실행 명세입니다. 탭은 파이썬 서버 앞에 하나 — 세 SDK 클라이언트의 요청 머리를 한 곳에서 보려는 것입니다(<a href="#p10-wire-req">1장</a>에서 읽었습니다).</p>
+<!--SPEC file=ex/run/10/ask.run-->
+</article>
+
+<article class="card" id="p10-cat-run5">
+<h3>다섯 번의 대본, 조각 줄이 모두 같다 — 서버도 클라이언트도 갈리지 않는다</h3>
+<p class="lead">앞의 다섯 <code>run</code>(서버 py·ts·go × 파이썬 ask, 파이썬 서버 × TS·Go ask)에서 명령 줄과 식단표 조각 줄만 골랐습니다.</p>
+<!--OUT file=out/10/ask.txt part=터미널 5 lines=1-305 grep=^\[터미널|^artifact 식단표 note=명령 줄과 조각 줄(식단표 파일 줄 포함)-->
+<div class="note"><b>클라이언트 셋이 같은 줄을 찍는 까닭</b> — 세 언어의 <code>ask</code> 는 같은 출력 규칙으로 짜였고(SCENARIO §3), 세 SDK 클라이언트 모두 빠진 <code>append</code> 를 <code>false</code> 로 읽었습니다. 1장에서 본 "키가 없으면 false" 를 SDK 가 대신 해 준 것입니다.</div>
+</article>
+
+<article class="card" id="p10-cat-2n">
+<h3>2박이면 끼니 다섯, 조각도 다섯 — <code>lastChunk</code> 는 마지막 하나에만</h3>
+<p class="lead">같은 요청에 <code>nights: 2</code> 를 주어 Go 서버에 보냈습니다. 끼니는 <code>2 × 2 + 1 = 5</code> 입니다.</p>
+<!--OUT file=out/10/ask.txt part=터미널 5 lines=306-400 grep=^[a-z\[]|"total"-->
+<ul>
+<li>상태 글이 <code>1/5</code> … <code>5/5</code> 로 늘고, 조각 다섯 중 첫째만 <code>+</code> 가 없고 다섯째만 <code>(끝)</code> 입니다. 조각 수를 미리 알리는 필드는 없습니다 — 받는 쪽은 <code>lastChunk</code> 를 볼 때까지 기다립니다.</li>
+<li>menu.md 는 195바이트에서 310바이트로 늘었습니다. 파일은 조각으로 나누지 않고 한 번에 실었습니다(6장).</li>
+</ul>
+</article>
+
+<article class="card" id="p10-cat-reject">
+<h3>거절 스트림은 짧다 — Task 다음에 바로 REJECTED, 조각은 하나도 없다</h3>
+<p class="lead">저녁 상한을 20,000원으로 낮췄습니다(<code>caps</code>). 일반식 저녁 둘(32,000·28,000)이 모두 넘으니 <code>plan_meals</code> 가 거절합니다.</p>
+<!--OUT file=out/10/ask.txt part=터미널 5 lines=401-403-->
+<!--OUT file=out/10/ask.txt wire=py-wire ex=8 grep=^←|data:|"state"|"text" note=탭 — 이 스트림의 이벤트 둘-->
+<!--OUT file=out/10/ask.txt server=catering-py-->
+<ul>
+<li>실행기는 <code>begin</code> 으로 Task 를 먼저 실은 뒤 계획을 짜므로(<a href="#p10-cat-py">파이썬</a>), 거절도 Task 스트림의 꼴(<code>task</code> → <code>statusUpdate</code>)을 지킵니다. 거절 사유는 상태 메시지의 글 파트입니다.</li>
+<li>REJECTED 는 종료 상태라, 세 서버 모두 여기서 닫습니다(<a href="#p10-close-run">3장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p10-ch2-sum">
+<h3>2장 정리 — 식사 에이전트 ×3</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th></tr>
+<tr><td>끼니마다 무엇이 오나</td><td><code>statusUpdate</code> WORKING("식단 짜는 중 i/n") 하나, <code>artifactUpdate</code> <code>meal-plan</code> 조각 하나</td></tr>
+<tr><td>조각 표시는</td><td>첫 조각: 둘 다 없음 → 가운데: <code>append</code> → 마지막: <code>append</code>+<code>lastChunk</code>. 같은 <code>artifactId</code></td></tr>
+<tr><td>세 언어의 손</td><td><code>add_artifact(append=, last_chunk=)</code> · <code>up.artifact(…, {append, lastChunk})</code> · <code>common.Chunk{Append, Last}</code></td></tr>
+<tr><td>누가 합치나</td><td>실행기도 SDK 서버도 스트림에서는 합치지 않는다 — 받는 쪽(4장)</td></tr>
+<tr><td>세 서버·세 클라이언트</td><td>대본이 줄마다 같다. 1박 1,542,000원, 2박 2,640,000원</td></tr>
+<tr><td>거절이면</td><td><code>task</code> → <code>statusUpdate</code> REJECTED, 조각 없음</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p10-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 3박 워크숍이면 식사 에이전트의 스트림에 <code>artifactUpdate</code> 가 몇 개 오고, 그중 <code>lastChunk</code> 가 참인 것은 몇 개입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 끼니가 <code>2 × 3 + 1 = 7</code> 이니 식단표 조각 일곱에 파일·견적 둘을 더해 아홉 개, 그중 <code>lastChunk</code> 는 일곱째 식단표 조각 하나뿐입니다. 파일·견적 조각은 한 번에 실리고 <code>lastChunk</code> 를 쓰지 않았습니다(<a href="#p10-wire-run">1장</a>의 <code>menu-file</code>·<code>meal-quote</code> 줄, <a href="#p10-cat-2n">2박</a>에서 조각 다섯).</div>
+</article>
+
+<!-- ==== 3장 스트림 종료 규칙 ==== -->
+
+<article class="card" id="p10-ch3">
+<p class="chnum">3장</p>
+<h2>스트림 종료 규칙</h2>
+<p class="chsub">스펙의 두 문장 → 세 SDK 소스가 닫는 때 → 종료 실험 에이전트 ×3 → 시험 쪽 → 파이썬·TS·Go 서버의 일곱 가지 끝 → 늦게 실린 상태 → 완성 에이전트가 바꾼 기본값 → 열린 채인 스트림 → 도중의 오류 → HTTP 에서 본 끝 → 세 SDK 비교</p>
+</article>
+
+<article class="card" id="p10-close-spec">
+<h3>스펙은 닫는 때를 두 번 말한다 — 종료 상태에서, 또는 중단 상태에서도</h3>
+<p class="lead"><a href="#p06-sse-close">6부</a>에서 맨손 서버를 쓰며 만난 두 문장입니다. <code>final</code> 이 빠진 v1.0 에서는 이 문장이 곧 "끝" 의 정의입니다(<a href="#p10-wire-final">1장</a>).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>곳</th><th>문장</th><th>닫는 상태</th></tr>
+<tr><td>§3.1.2(연산 정의)</td><td>"The stream MUST close when the task reaches a terminal state"</td><td>COMPLETED·FAILED·CANCELED·REJECTED</td></tr>
+<tr><td>§11.7(HTTP+JSON 바인딩)</td><td>"until the task reaches a terminal or interrupted state, at which point the stream closes"</td><td>위 넷 + INPUT_REQUIRED·AUTH_REQUIRED</td></tr>
+</table>
+</div>
+<ul>
+<li><b>규범은 §3.1.2 쪽</b> — MUST 가 붙은 것은 이것이고, §11.7 은 REST 바인딩 절의 서술입니다. 그러나 §3.1.2 는 중단 상태에서 무엇을 하라고도, 하지 말라고도 하지 않습니다.</li>
+<li><b>proto 주석</b>이 상태를 "terminal state" 와 "interrupted state" 로 나눠 둔 것(<a href="#p05-state-nine">5부</a>)이 두 문장의 바탕입니다.</li>
+<li>스펙이 비워 둔 칸 — 중단 상태에서, 또는 아무 끝 상태 없이 실행기가 돌아가면? — 은 SDK 가 채웁니다. 다음 슬라이드부터 그것을 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-close-src">
+<h3>세 SDK 의 소스가 닫는 때 — 파이썬은 "실행기가 돌아갈 때", TS·Go 는 "상태를 보고"</h3>
+<p class="lead">설치된 SDK 의 스트림 고리가 언제 멈추는지 읽었습니다. 셋의 기준이 다릅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>SDK</th><th>스트림이 멈추는 조건</th><th>자리</th></tr>
+<tr><td>파이썬 1.2.2</td><td>이번 요청의 <code>_RequestCompleted</code> 를 만나면 — 실행기의 <code>execute</code> 가 돌아간 뒤에 큐에 들어간다. 상태는 보지 않는다</td><td><code>a2a/server/agent_execution/active_task.py:617</code>·<code>:750</code></td></tr>
+<tr><td>TS 1.3.0</td><td>Message, 종료 상태, INPUT_REQUIRED 의 <code>statusUpdate</code> 를 낸 직후. 아니면 버스가 끝날 때 — 실행기가 돌아갔고 마지막 상태가 <code>keepBusAliveStates</code>(기본: 중단 둘)에 없을 때</td><td><code>server/index.js:2181</code>·<code>:2720</code>·<code>:2982</code></td></tr>
+<tr><td>Go v2.6.0</td><td><code>taskupdate.IsFinal</code> 인 이벤트(Message, 종료 상태, INPUT_REQUIRED — Task 든 상태 갱신이든)를 낸 직후. 그 밖에는 실행의 결과를 기다린다</td><td><code>internal/taskupdate/final.go:37</code>, <code>internal/taskexec/subscription.go:107</code></td></tr>
+</table>
+</div>
+<div class="note"><b>AUTH_REQUIRED 는 셋 다 "끝" 으로 치지 않는다</b> — TS 의 주석은 일부러라고 밝힙니다: "AUTH_REQUIRED is deliberately NOT in the stop set: the executor resumes publishing on the same bus after the out-of-band credential injection"(<code>server/index.js:2169</code>). Go 도 같은 생각입니다(<a href="#p09-rh-when">9부</a>, 12부). 소스로 읽은 것이 실제로 그런지, 일곱 가지 끝으로 시험합니다.</div>
+</article>
+
+<article class="card" id="p10-close-agent">
+<h3>종료 실험 에이전트 — 첫 글 파트 한 낱말로 끝을 고른다</h3>
+<p class="lead">식사 에이전트는 늘 COMPLETED 나 REJECTED 로 끝나서 다른 끝을 보여 주지 못합니다. 그래서 세 언어로 실험용 에이전트를 하나 썼습니다. 낱말마다 실을 상태의 차례가 정해져 있습니다.</p>
+<!--CODE file=ex/py/10/closer.py region=plans note=10/closer.py — TS·Go 도 같은 표-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>낱말</th><th>무엇을 보려고</th></tr>
+<tr><td>COMPLETED·INPUT_REQUIRED·AUTH_REQUIRED</td><td>종료 하나, 중단 둘에서 닫히는가</td></tr>
+<tr><td>WORKING</td><td>끝 상태 없이 실행기가 돌아가면</td></tr>
+<tr><td>LATE</td><td>INPUT_REQUIRED 를 낸 뒤에도 실행기가 더 싣으면</td></tr>
+<tr><td>BOOM·MESSAGE</td><td>도중의 예외, Message 하나짜리 꼴</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p10-close-py">
+<h3>파이썬 — <code>begin</code> 으로 Task 를 먼저, 그다음 고른 상태들, 그리고 돌아간다</h3>
+<!--CODE file=ex/py/10/closer.py region=execute-->
+<ul>
+<li>서버는 <code>agents.common.serve</code> 그대로입니다 — 파이썬 쪽에서는 그것이 SDK 기본값입니다(<code>DefaultRequestHandler</code> 에 옵션을 주지 않는다).</li>
+<li>"실행기가 돌아갔다" 를 서버 출력에 찍어, 스트림이 닫힌 때와 실행이 끝난 때를 견줄 수 있게 했습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-close-ts">
+<h3>TypeScript — 같은 실행기, 상태 이름은 <code>TaskState</code> 의 키로</h3>
+<!--CODE file=ex/ts/10/closer.ts region=execute-->
+<div class="note"><b>Message 는 손으로</b> — TS 에는 <code>new_text_message</code> 같은 도우미가 없어, <code>AgentEvent.message</code> 에 넣을 Message 의 필드를 다 채웁니다. <code>BOOM</code> 은 <code>throw</code> 입니다.</div>
+</article>
+
+<article class="card" id="p10-close-ts-serve">
+<h3>TS 서버는 SDK 기본값으로 — 완성 에이전트의 <code>serve</code> 를 쓰지 않는 까닭</h3>
+<p class="lead">완성 에이전트가 쓰는 <code>agents/common.ts</code> 의 <code>serve</code> 는 처리기의 아홉째 인자로 <code>keepBusAliveStates: [INPUT_REQUIRED]</code> 를 줍니다(<a href="#p08-rh-options">8부</a>). 그 옵션이 바로 닫는 때를 바꾸므로, 실험 에이전트는 처리기를 직접 만듭니다.</p>
+<!--CODE file=ex/ts/10/closer.ts region=serve-->
+</article>
+
+<article class="card" id="p10-close-go">
+<h3>Go — <code>yield</code> 가 false 면 멈춘다, 오류는 둘째 값으로</h3>
+<!--CODE file=ex/go/10/closer/main.go region=execute-->
+<ul>
+<li><code>BOOM</code> 은 <code>yield(nil, err)</code> — Go 실행기가 오류를 내는 길입니다(<a href="#p09-ex-drive">9부</a>).</li>
+<li>서버는 <code>a2asrv.NewHandler(closer{})</code> 에 옵션 없이 — <code>agents/common</code> 의 <code>Serve</code> 는 처리기를 <code>waiter</code> 로 감싸 AUTH_REQUIRED 에서 스트림을 닫으므로(<code>agents/common/park.go</code>) 쓰지 않았습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-close-client">
+<h3>시험 쪽 — 2초 동안 아무것도 안 오면 "열린 채" 로 적고 끊는다</h3>
+<p class="lead"><code>10/closes.py</code> 의 한 번 읽기입니다. 소켓 읽기 시간 제한(<code>timeout=2</code>)이 걸리면 서버가 아직 닫지 않은 것입니다.</p>
+<!--CODE file=ex/py/10/closes.py region=read-->
+<div class="note"><b>그다음 GetTask</b> — 스트림이 끝나면 1초 기다렸다가(늦게 실리는 상태가 저장될 틈) <code>GetTask</code> 로 저장된 상태를 묻습니다. 스트림이 본 끝과 저장소가 본 끝이 같은지 견주려는 것입니다.</div>
+</article>
+
+<article class="card" id="p10-close-run">
+<h3>파이썬 서버 — 일곱 번 모두 닫았다, 실행기가 돌아갈 때</h3>
+<!--SPEC file=ex/run/10/closes.run-->
+<!--OUT file=out/10/closes.txt part=터미널 7 lines=1-15-->
+<ul>
+<li>AUTH_REQUIRED 도, 끝 상태 없는 WORKING 도 닫혔습니다. 실행기가 돌아갔기 때문입니다 — 상태가 아니라 실행이 기준이라는 <a href="#p10-close-src">소스</a> 그대로입니다. WORKING 에서 닫힌 스트림은 §3.1.2 의 어느 꼴에도 맞지 않는 끝입니다.</li>
+<li>LATE 는 INPUT_REQUIRED 뒤의 WORKING·COMPLETED 까지 받았고, 저장된 상태도 COMPLETED 입니다. 중단 상태에서도 닫지 않은 것이니 §11.7 과 어긋납니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-close-run-ts">
+<h3>TS 서버 — AUTH_REQUIRED 에서 열린 채, INPUT_REQUIRED 에서는 칼같이 닫는다</h3>
+<!--OUT file=out/10/closes.txt part=터미널 7 lines=16-30-->
+<ul>
+<li><b>AUTH_REQUIRED</b> — 실행기는 돌아갔는데 스트림은 2초 동안 열려 있었습니다. 기본 <code>keepBusAliveStates</code> 가 버스를 살려 두어, 같은 실행이 더 싣기를 기다립니다.</li>
+<li><b>WORKING</b> — 실행기가 돌아가자 버스가 끝나 닫혔습니다(마지막 상태가 살려 둘 목록에 없다).</li>
+<li><b>LATE</b> — INPUT_REQUIRED 에서 닫혔고, 저장된 상태도 INPUT_REQUIRED 입니다. 실행기는 끝까지 돌았는데(다음 슬라이드) 뒤의 둘은 어디에도 남지 않았습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-close-run-go">
+<h3>Go 서버 — 끝 상태 없이 돌아간 실행기도 스트림을 붙든다</h3>
+<!--OUT file=out/10/closes.txt part=터미널 7 lines=31-45-->
+<ul>
+<li><b>AUTH_REQUIRED·WORKING</b> 둘 다 열린 채였습니다. <code>IsFinal</code> 이 아닌 이벤트 뒤에 실행기가 돌아가면, 구독은 실행의 결과를 기다리는데, 이 실험의 2초 안에는 오지 않았습니다 — <a href="#p09-rh-cmp">9부</a>의 "Silent" 실행기와 같은 자리입니다.</li>
+<li><b>LATE</b> 는 TS 와 같이 INPUT_REQUIRED 에서 닫히고 그 상태로 저장되었습니다.</li>
+<li><b>BOOM</b> 의 마지막은 <code>statusUpdate</code> 가 아니라 FAILED <code>task</code> 입니다 — §11.7 이 말한 "final <code>Task</code> snapshot" 을 Go 만, 오류 때에만 보낸 셈입니다(<a href="#p10-close-err">뒤에서</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p10-close-late">
+<h3>INPUT_REQUIRED 뒤에 실은 것은 TS·Go 에서 사라진다 — 실행기는 그것을 모른다</h3>
+<p class="lead">LATE 의 실행기는 세 서버 모두에서 끝까지 돌았습니다. 서버 출력입니다.</p>
+<!--OUT file=out/10/closes.txt server=closer-ts lines=5-5 note=TS 서버-->
+<!--OUT file=out/10/closes.txt server=closer-go lines=5-5 note=Go 서버-->
+<ul>
+<li>TS·Go 는 INPUT_REQUIRED 에서 "이 실행은 끝났다" 로 보고, 그 뒤의 WORKING·COMPLETED 를 스트림에도 저장소에도 싣지 않았습니다(GetTask → INPUT_REQUIRED). TS 버스의 <code>publish</code> 는 아무 말이 없고, Go 의 <code>yield</code> 는 false 를 돌려줄 수도 있지만 그때그때 달라 이 실험은 그것에 기대지 않았습니다.</li>
+<li>파이썬은 같은 실행기의 늦은 상태를 다 받았습니다. 그래서 <b>중단 상태를 낸 실행기는 곧 돌아가야</b> 세 SDK 에서 같은 결과가 납니다. 완성 에이전트들이 되묻고 나서 바로 <code>return</code> 하는 것이 그 모양입니다(<a href="#p07-lg-final">7부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p10-close-ours">
+<h3>완성 에이전트는 기본값을 바꿔 셋을 맞췄다 — AUTH_REQUIRED 에서도 닫는다</h3>
+<p class="lead">정산 에이전트는 AUTH_REQUIRED 로 결재를 묻고, 결재 토큰은 같은 taskId 의 <b>새 메시지</b>로 옵니다(12부). 스트림이 열린 채면 기획 에이전트가 기다리기만 하므로, 세 언어의 완성 에이전트는 AUTH_REQUIRED 에서도 닫히도록 맞췄습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>언어</th><th>SDK 기본(이 장의 실험)</th><th>완성 에이전트</th><th>어디서</th></tr>
+<tr><td>파이썬</td><td>실행기가 돌아가면 닫힘</td><td>그대로 — 되물은 뒤 돌아간다</td><td>—</td></tr>
+<tr><td>TS</td><td>AUTH_REQUIRED 에서 열린 채</td><td><code>keepBusAliveStates: [INPUT_REQUIRED]</code> 로 닫힘</td><td><code>agents/common.ts</code> 의 <code>serve</code></td></tr>
+<tr><td>Go</td><td>AUTH_REQUIRED 에서 열린 채</td><td>처리기를 <code>waiter</code> 로 감싸 AUTH_REQUIRED 이벤트 뒤에 멈춤</td><td><code>agents/common/park.go</code></td></tr>
+</table>
+</div>
+<div class="warn"><b>스펙 탓이기도 하다</b> — §3.1.2 는 중단 상태를 말하지 않고, §11.7 은 "terminal or interrupted" 에서 닫는다고 합니다. TS·Go 기본값은 AUTH_REQUIRED 에서 둘 중 어느 쪽과도 맞지 않습니다(종료가 아니니 §3.1.2 는 닫으라고 하지 않았지만, §11.7 은 닫으라고 합니다). 같은 카드, 같은 실행기라도 SDK 를 바꾸면 클라이언트가 기다리는 시간이 달라집니다.</div>
+</article>
+
+<article class="card" id="p10-close-hang">
+<h3>열린 채인 스트림 — 클라이언트는 시간 제한을 스스로 둬야 한다</h3>
+<p class="lead">TS·Go 의 AUTH_REQUIRED, Go 의 WORKING 은 서버가 닫지 않았습니다. 이벤트도 오지 않고 끝도 오지 않으니, 끊는 것은 클라이언트 몫입니다.</p>
+<ul>
+<li>이 장의 시험 쪽은 2초에 끊었습니다. 세 SDK 클라이언트의 기본은 다릅니다 — Go SDK 의 HTTP 클라이언트는 3분이면 스트림도 끊고(<a href="#p09-cl-planner">9부</a>), 총무팀 CLI 는 httpx 에 <code>timeout=30</code> 을 주었습니다(<code>agents/ask.py:113</code>).</li>
+<li>끊는 기준은 "마지막 이벤트 뒤로 얼마나 조용했나" 가 맞습니다. 식사 에이전트처럼 끼니마다 이벤트가 오는 스트림은 길어도 끊을 까닭이 없습니다.</li>
+<li>끊은 뒤에도 작업은 서버에 그대로 있습니다(GetTask → AUTH_REQUIRED·WORKING). 다시 붙는 길이 <code>SubscribeToTask</code> 입니다 — 5장.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-close-err">
+<h3>도중의 오류 — 파이썬은 <code>event: error</code>, TS 는 FAILED 상태, Go 는 FAILED Task</h3>
+<p class="lead">BOOM 은 Task·WORKING 을 낸 뒤 실행기가 넘어집니다. 세 서버의 그 스트림에서 상태·오류 줄만 골랐습니다.</p>
+<!--OUT file=out/10/closes.txt wire=py-wire ex=11 grep=^←|event:|"state"|"code"|"message": " note=파이썬 서버-->
+<!--OUT file=out/10/closes.txt wire=ts-wire ex=11 grep=^←|event:|"state"|Agent execution note=TS 서버-->
+<!--OUT file=out/10/closes.txt wire=go-wire ex=11 grep=^←|event:|"state"|"text": "실행 note=Go 서버-->
+<ul>
+<li><b>파이썬</b>: JSON-RPC 오류 <code>-32603</code> 을 <code>event: error</code> 이벤트에 싣고 닫습니다(<code>a2a/server/routes/jsonrpc_dispatcher.py:601</code>). 저장된 작업은 FAILED(앞 캡처의 GetTask).</li>
+<li><b>TS</b>: 오류 대신 <code>statusUpdate</code> FAILED 를 지어 보냅니다 — 메시지 "Agent execution error: 실행기가 넘어졌다". 클라이언트에게는 정상적인 Task 스트림의 끝입니다.</li>
+<li><b>Go</b>: FAILED 상태의 <code>task</code> 하나를 보냅니다. 상태 메시지도 오류 글도 없습니다 — 서버 기록(WARN)에만 남습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-close-err-why">
+<h3>오류의 꼴이 셋이면, 클라이언트는 셋을 다 끝으로 읽어야 한다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>받는 것</th><th>보낸 서버</th><th>클라이언트가 할 일</th></tr>
+<tr><td><code>event: error</code> + JSON-RPC <code>error</code></td><td>파이썬(도중), TS(첫 이벤트 뒤 처리기 오류 — <a href="#p08-cl-stream-err">8부</a>)</td><td>오류로 끝냄. TS SDK 클라이언트는 <code>Error</code> 로 감싸고 진짜 오류는 <code>cause</code></td></tr>
+<tr><td><code>data:</code> 만 있는 JSON-RPC <code>error</code></td><td>Go(첫 이벤트 전 — <a href="#p03-caps-stream">3부</a>)</td><td>같은 오류. <code>event</code> 이름에 기대지 말고 <code>error</code> 키를 본다</td></tr>
+<tr><td><code>statusUpdate</code>/<code>task</code> FAILED</td><td>TS·Go(실행기 예외)</td><td>종료 상태로 끝냄 — 이유는 상태 메시지에 있을 수도, 없을 수도</td></tr>
+<tr><td>스트림이 아닌 JSON 하나</td><td>파이썬·TS(첫 이벤트 전 — <a href="#p06-sse-err">6부</a>)</td><td>Content-Type 으로 먼저 가른다</td></tr>
+</table>
+</div>
+<div class="note"><b>스펙은 도중의 오류를 정하지 않았다</b> — §9.4.2 는 성공한 스트림의 꼴만 보여 주고, SSE 의 <code>event</code> 필드를 A2A 가 쓰는지도 말하지 않습니다. 세 SDK 가 셋으로 갈린 까닭입니다.</div>
+</article>
+
+<article class="card" id="p10-close-frames">
+<h3>HTTP 에서 본 끝 — 길이 0 청크, 연결은 남는다</h3>
+<p class="lead">"스트림이 닫힌다" 는 TCP 연결이 끊긴다는 뜻이 아닙니다. 시험 쪽 <code>10/frames.py</code> 는 탭 없이 소켓으로 COMPLETED 를 청하고, <a href="#p06-sse-frames">6부</a>처럼 청크를 손으로 풉니다. 다만 이번에는 <code>Connection: close</code> 를 보내지 않습니다.</p>
+<!--CODE file=ex/py/10/frames.py region=frames-->
+</article>
+
+<article class="card" id="p10-close-frames-out">
+<h3>세 SDK 서버 모두 청크 하나에 이벤트 하나, 끝은 길이 0 청크</h3>
+<!--SPEC file=ex/run/10/frames.run-->
+<!--OUT file=out/10/frames.txt part=터미널 4-->
+<ul>
+<li>세 서버 모두 HTTP/1.1 <code>chunked</code>, <code>keep-alive</code> 이고, 응답 본문이 끝난 뒤에도 연결을 닫지 않았습니다. 클라이언트에게 "스트림의 끝" 은 <b>길이 0 청크</b>(응답의 끝)입니다. HTTP/1.0 으로 닫아 끝을 알린 <a href="#p06-sse-frames-cmp">맨손 파이썬 서버</a>와 다릅니다.</li>
+<li>줄 끝도 다릅니다 — 파이썬(<code>sse-starlette</code>)은 CRLF, TS·Go 는 LF. SSE 는 둘 다 허락하므로(<a href="#p02-sse-rules">2부</a>) 손으로 읽는 클라이언트는 <code>\r</code> 을 떼야 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p10-close-cmp">
+<h3>세 SDK 비교 — 스트림은 언제, 어떻게 끝나나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>끝</th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>COMPLETED·REJECTED 등 종료</td><td colspan="3">닫는다(§3.1.2 MUST)</td></tr>
+<tr><td>INPUT_REQUIRED</td><td colspan="3">닫는다(§11.7)</td></tr>
+<tr><td>AUTH_REQUIRED + 실행기 반환</td><td>닫는다</td><td>열린 채(기본값)</td><td>열린 채</td></tr>
+<tr><td>끝 상태 없이 실행기 반환</td><td>닫는다</td><td>닫는다</td><td>열린 채</td></tr>
+<tr><td>중단 상태 뒤에 더 실음</td><td>스트림·저장소에 실린다</td><td colspan="2">어디에도 남지 않는다</td></tr>
+<tr><td>실행기 예외</td><td><code>event: error</code> -32603</td><td><code>statusUpdate</code> FAILED + 글</td><td><code>task</code> FAILED, 글 없음</td></tr>
+<tr><td>Message 하나</td><td colspan="3">하나 보내고 닫는다</td></tr>
+<tr><td>HTTP 에서의 끝</td><td colspan="3">길이 0 청크, 연결은 keep-alive 로 남는다</td></tr>
+</table>
+</div>
+<div class="key"><b>이식되는 실행기의 규칙</b> — 종료 상태나 INPUT_REQUIRED 를 낸 뒤 곧 돌아간다. AUTH_REQUIRED 를 쓰려면 서버 쪽 설정을 맞춘다(<a href="#p10-close-ours">완성 에이전트</a>). 실패는 예외가 아니라 FAILED 상태 갱신으로 낸다. 그러면 세 SDK 의 스트림이 같은 곳에서 같은 모습으로 끝납니다.</div>
+</article>
+
+<article class="card" id="p10-ch3-sum">
+<h3>3장 정리 — 스트림 종료 규칙</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th></tr>
+<tr><td>스펙은?</td><td>§3.1.2 — 종료 상태에서 MUST 닫는다. §11.7 — 종료 또는 중단 상태에서 닫는다. 두 문장이 중단 상태에서 갈린다</td></tr>
+<tr><td>SDK 의 기준은?</td><td>파이썬: 실행기가 돌아갈 때. TS: 종료·INPUT_REQUIRED, 아니면 버스가 끝날 때. Go: 종료·INPUT_REQUIRED 이벤트</td></tr>
+<tr><td>어디서 갈렸나?</td><td>AUTH_REQUIRED(TS·Go 열린 채), 끝 없는 반환(Go 열린 채), 중단 뒤의 늦은 상태(TS·Go 버림), 예외의 꼴(셋 다름)</td></tr>
+<tr><td>클라이언트가 보는 끝은?</td><td>길이 0 청크 — 연결은 남는다. 끝 전의 마지막 상태로 "제대로 끝났나" 를 가린다</td></tr>
+<tr><td>열린 채면?</td><td>클라이언트가 시간 제한으로 끊고, GetTask 나 SubscribeToTask(5장)로 이어 본다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p10-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 어떤 실행기가 "INPUT_REQUIRED 로 되묻고, 답을 기다리지 않은 채 0.3초 뒤 기본값으로 COMPLETED" 를 냅니다. 클라이언트가 스트림으로 받는다면 세 SDK 서버에서 각각 무엇을 보고, 저장소에는 무엇이 남습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 실험의 LATE 가 바로 그것입니다. 파이썬 서버는 INPUT_REQUIRED 뒤에도 스트림을 열어 두어 WORKING·COMPLETED 까지 보내고 COMPLETED 로 저장합니다. TS·Go 서버는 INPUT_REQUIRED 에서 스트림을 닫고, 뒤의 둘은 버려져 저장소에도 INPUT_REQUIRED 가 남습니다(<a href="#p10-close-run">파이썬</a>·<a href="#p10-close-run-ts">TS</a>·<a href="#p10-close-run-go">Go</a>). 그런 실행기는 세 SDK 에서 다른 작업을 만듭니다 — 중단 상태를 냈으면 곧 돌아가야 합니다.</div>
 </article>

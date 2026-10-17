@@ -37,6 +37,7 @@ func (u *Updater) Status(state a2a.TaskState, parts ...*a2a.Part) bool {
 	return u.yield(a2a.NewStatusUpdateEvent(u.ec, state, msg), nil)
 }
 
+// region: artifact
 // Chunk 는 아티팩트 한 조각의 자리: id(빈 값이면 새로), 이어 붙이기,
 // 마지막 조각.
 type Chunk struct {
@@ -56,6 +57,8 @@ func (u *Updater) Artifact(
 	ev.Append, ev.LastChunk = c.Append, c.Last
 	return u.yield(ev, nil)
 }
+
+// endregion
 
 // region: begin
 // Begin 은 실행을 시작한다: 첫 메시지면 SUBMITTED Task 를 싣는다.

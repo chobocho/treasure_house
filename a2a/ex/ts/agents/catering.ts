@@ -78,6 +78,7 @@ class CateringExecutor implements AgentExecutor {
     this.stepMs = stepMs;
   }
 
+  // region: execute
   async execute(ctx: RequestContext, bus: ExecutionEventBus) {
     const { up } = begin(ctx, bus);
     const req = asInts(
@@ -91,6 +92,7 @@ class CateringExecutor implements AgentExecutor {
       up.status(TaskState.TASK_STATE_REJECTED, [textPart(plan.reason)]);
       return;
     }
+    // region: stream
     const rows = plan.slots;
     for (const [i, row] of rows.entries()) {
       if (!(await up.pause(this.stepMs))) return; // 취소됨
@@ -103,6 +105,8 @@ class CateringExecutor implements AgentExecutor {
         lastChunk: i === rows.length - 1,
       });
     }
+    // endregion
+    // region: finish
     const menu =
       "# 식단표\n\n" + rows.map((r) => `- ${line(r)}\n`).join("");
     const file = rawPart(Buffer.from(menu), "text/markdown", "menu.md");
@@ -110,7 +114,9 @@ class CateringExecutor implements AgentExecutor {
     up.artifact([dataPart(plan)], "식사 견적", { id: "meal-quote" });
     console.log(`[식사] 견적: ${comma(plan.total)}원`);
     up.status(TaskState.TASK_STATE_COMPLETED);
+    // endregion
   }
+  // endregion
 
   async cancelTask(taskId: string, bus: ExecutionEventBus) {
     cancel(taskId, bus);
