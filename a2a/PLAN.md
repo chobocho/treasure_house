@@ -553,3 +553,28 @@ subagent task each.
   catering ignores yield results (latent panic after false); Go yield after INPUT_REQUIRED
   is racy (not printed), BOOM case uses a 0.3 s pause for determinism — watch in review.
 - `make all SKEL=1` green (979 slides, 995 blocks, 0 mismatches); --check ×4 green.
+
+### Part 10 complete — 113 slides (2026-10-17)
+- `10b_stream.html` ch4 fold ×3 (14), ch5 SubscribeToTask (17), ch6 FilePart+DataPart (15),
+  ch7 no-streaming card (12), `p10-wrap` → #p11; 10_stream ch4–7 mentions linked. Examples
+  `ex/{py,ts,go}/10/` fold/resub/paused/nosub, specs `ex/run/10/{fold,resume,resub,paused,
+  nostream}.run`; ports 11050–11077. No final agent changed.
+- Findings: spec has no fold rule beyond proto comments, `append` to an unknown artifactId
+  unspecified — py raises InvalidAgentResponseError (`server/tasks/task_manager.py:92`), ts
+  adds a new artifact (`server/index.js:2411`), go errors (`a2aevent/event.go:95`); client
+  fold helpers: py `append_artifact_to_task`, go `a2aevent.ApplyUpdate` (needs the client to
+  `gob.Register(map[string]any{})` — only `taskstore/inmemory.go:60` registers it), ts none;
+  §3.5.2 holds on all three (same events/order for two subscribers, task survives cuts);
+  SubscribeToTask terminal → -32004, unknown → -32001 everywhere (ts prints state as number,
+  go leaks "no active execution" `a2asrv/handler.go:375`, go errors as SSE, py/ts plain
+  JSON); resubscribe to a paused task after executor return — py keeps all open
+  (`default_request_handler_v2.py:569`), ts keeps interrupted open while bus alive, WORKING
+  closes, go closes INPUT_REQUIRED, keeps AUTH_REQUIRED/WORKING (`handler.go:371,382`);
+  no-streaming card: capability check precedes lookup (-32004); py client refuses locally
+  (`client/base_client.py:322`), ts/go send it; **bug: Go client stream path ignores
+  Content-Type (`a2aclient/jsonrpc.go:213`) and SSE parser skips non-`data:` lines
+  (`internal/sse/sse.go:120`) → a JSON error from py/ts servers becomes an empty stream**;
+  Go SSE line cap 10 MB (`sse.go:39`, source only); TS client method still `resubscribeTask`.
+- Timing: `resub.run`/`resume.run` run catering with `--step-ms 3000` (1000 flaked ~1/7);
+  `paused.run` uses 2 s socket timeouts like `closes.run`. Revisit in review.
+- `make all SKEL=1` green (1037 slides, 1050 blocks, 0 mismatches); --check ×5 green.
