@@ -440,3 +440,29 @@ subagent task each.
 - Spec tension: stream ordering violation → -32004 (py -32006 InvalidAgentResponse fits
   §3.3.2 better); wrong HTTP Content-Type → -32005 (meant for part media types).
 - `make all SKEL=1` green (744 slides, 736 blocks, 0 mismatches); --check ×4 green.
+
+### Part 8 complete — 126 slides (2026-10-17)
+- `08b_ts.html` ch6 client (18), ch7 lodging (13), ch8 tests (14), ch9 TS-only + wrap (14);
+  08_ts intro/prose ch6–9 mentions turned into links. `agents/lodging.ts` got one
+  `region: execute` around the whole class (builder's brace check rejects TS regions that
+  split a method — old `executor`/`quote` regions remain, candidates for removal in review);
+  85 TS captures re-run, contents byte-identical. Ports 10850–10866.
+- Findings (`node_modules/@a2a-js/sdk/dist`): Client has sendMessage/sendMessageStream, no
+  close, returns bare Task|Message (`client/index.js:5882`); stream falls back to
+  SendMessage without card `streaming` (`:5480`); caller's A2A-Version in serviceParameters
+  is overwritten with 1.0 (`:5657`), interceptor headers survive (`:5701`);
+  `returnImmediately ??= polling` (py `|=`) and always a `configuration` object (`:5623`);
+  card resolver returns raw JSON; only JSON-RPC error bodies become A2AError (`:1899`) —
+  card fetch failure plain Error, ECONNREFUSED TypeError, HTML 404 Error(cause SyntaxError);
+  TS client ignores unknown response fields (follows §5.7, py violates), unknown enum → -1;
+  mid-stream error wrapped as Error("SSE event contained an error…", {cause}) (`:6094`) so
+  instanceof fails; step-3 history bug shows at turn 2 in TS (handler stores the question
+  immediately); lodging.ts runs serve at top level → tests need `mock.module` +
+  `--experimental-test-module-mocks` (not allowed in NODE_OPTIONS); express.json({limit})
+  before the router lifts 100 KB but turns bad JSON into HTML 400 instead of -32700;
+  `createAuthenticatingFetchWithRetry` retries once on 401 (py/go have none); legacyCompat
+  routes empty/0.3 A2A-Version to v0.3 (§3.6.2) but validateVersion (`server/express:2164`)
+  also needs a 0.3 interface on the card, and a v1.0 SendMessage without the header then
+  gets -32601; ESM+CJS builds, instanceof survives via Symbol.for brand; no OpenTelemetry;
+  `deleteTaskPushNotificationConfig` skips the card pushNotifications check (not on a slide).
+- `make all SKEL=1` green (802 slides, 805 blocks, 0 mismatches); manifest 144, 0 stale.

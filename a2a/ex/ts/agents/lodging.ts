@@ -81,6 +81,7 @@ function fromText(text: string) {
 const pyList = (xs: string[]) =>
   `[${xs.map((x) => `'${x}'`).join(", ")}]`;
 
+// region: execute
 // region: executor
 class LodgingExecutor implements AgentExecutor {
   async execute(ctx: RequestContext, bus: ExecutionEventBus) {
@@ -128,6 +129,7 @@ class LodgingExecutor implements AgentExecutor {
     cancel(taskId, bus);
   }
 }
+// endregion
 
 const args = parseCli();
 serve(card(args.url), new LodgingExecutor(), args.port);
