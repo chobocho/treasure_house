@@ -415,3 +415,28 @@ subagent task each.
   is SDK 1.2.2 dropping `EventQueueSource._dispatch_loop` when refusing a finished task.
 - Region markers changed agent hashes → 23 stale captures re-run, contents byte-identical.
   `make all SKEL=1` green (679 slides, 654 blocks, 0 mismatches).
+
+### Part 8 first half — 67 slides (2026-10-17)
+- `08_ts.html` cover+intro (2), ch1 package map (11), ch2 types (15), ch3 executor (13),
+  ch4 handler/store (13), ch5 serving (13), "N장 정리" left columns match part 7. Examples
+  `ex/ts/08/` (23 files), specs `ex/run/08/{drive,serve}.run`; ports 10801–10815. No final
+  agent excerpted, no region added. Builder rejects dangling anchors → intro names ch6–9
+  as plain text (08b should turn them into links).
+- Findings (paths under `node_modules/@a2a-js/sdk/dist`): 15 self-contained bundles, classes
+  copied per bundle — A2AError keeps instanceof via Symbol.for brand (`errors/index.js:4`),
+  a same-named class of ours maps to -32603; types are interfaces + fromJSON/toJSON only,
+  no Task helpers, no TaskUpdater; structuredClone (RequestContext, InMemoryTaskStore.load)
+  turns raw Buffer into Uint8Array while the type says Buffer; `Part.fromJSON` text wins
+  over other content keys, `{data:null}` → content undefined, unknown enum → -1; follow-up
+  message is already in `ctx.task.history` before execute (py: opposite); ordering checks
+  only on streams (`_advanceStreamPattern`) — blocking SendMessage accepts two Messages,
+  Message after Task (stored task stays SUBMITTED), Task with a different id; silent
+  executor → immediate -32603 (py hangs); any throw in execute → FAILED Task, never an
+  error code; store owner = `userName || "unknown"` (`server/index.js:308`) — a user named
+  "unknown" shares anonymous tasks, no delete; card handler JSON.stringify's what it gets
+  (handler-as-provider leaks `"tenant":""`); off-path → express HTML 404; missing
+  A2A-Version → -32009 plus an "Unhandled error" stack on stderr; requestedExtensions
+  filtered to card-declared ones (py passes all).
+- Spec tension: stream ordering violation → -32004 (py -32006 InvalidAgentResponse fits
+  §3.3.2 better); wrong HTTP Content-Type → -32005 (meant for part media types).
+- `make all SKEL=1` green (744 slides, 736 blocks, 0 mismatches); --check ×4 green.

@@ -1,10 +1,735 @@
 <article class="card section" id="p08">
 <p class="chnum">8부</p>
 <h2>공식 SDK — TypeScript</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">패키지 지도 → 타입 → 실행기(AgentExecutor) → 요청 처리기와 Task 저장소 → 서버 띄우기 → 클라이언트 → 숙소 에이전트 완성판 → 시험 → 이 SDK 만의 것</p>
 </article>
 
-<article class="card" id="p08-todo">
-<h3>공식 SDK — TypeScript</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p08-intro">
+<h3>7부를 TypeScript 로 — @a2a-js/sdk 1.3.0 으로 같은 에이전트를 짓는다</h3>
+<p class="lead"><a href="#p07">7부</a>가 파이썬 SDK 로 한 일을 이 부는 <code>@a2a-js/sdk</code> 1.3.0 으로 합니다. 설치본(<code>ex/ts/node_modules/@a2a-js/sdk/dist</code>)을 열어 가며 메아리 에이전트에서 시작해 숙소 에이전트 완성판까지 쌓아 올립니다. 장 번호와 장 제목은 7부와 같습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th><th>7부의 같은 장</th></tr>
+<tr><td><a href="#p08-ch1">1장</a></td><td>패키지 지도 — 진입점 열다섯, 번들, 이름에서 파일 찾기</td><td><a href="#p07-ch1">7부 1장</a></td></tr>
+<tr><td><a href="#p08-ch2">2장</a></td><td>타입 — ts-proto 의 <code>$case</code>, <code>fromJSON</code>·<code>toJSON</code></td><td><a href="#p07-ch2">7부 2장</a></td></tr>
+<tr><td><a href="#p08-ch3">3장</a></td><td>실행기(AgentExecutor) — 이벤트 버스에 싣는 일</td><td><a href="#p07-ch3">7부 3장</a></td></tr>
+<tr><td><a href="#p08-ch4">4장</a></td><td>요청 처리기와 Task 저장소 — DefaultRequestHandler, InMemoryTaskStore</td><td><a href="#p07-ch4">7부 4장</a></td></tr>
+<tr><td><a href="#p08-ch5">5장</a></td><td>서버 띄우기 — express 처리기 셋, 카드, 사용자를 세우는 자리</td><td><a href="#p07-ch5">7부 5장</a></td></tr>
+<tr><td>6장</td><td>클라이언트 — <code>ClientFactory</code>, 막는 호출과 스트림, 답 읽기</td><td><a href="#p07-ch6">7부 6장</a></td></tr>
+<tr><td>7장</td><td>숙소 에이전트 완성판 — INPUT_REQUIRED·REJECTED, 골든 대조</td><td><a href="#p07-ch7">7부 7장</a></td></tr>
+<tr><td>8장</td><td>시험 — SDK 서버를 네트워크 없이 프로세스 안에서</td><td><a href="#p07-ch8">7부 8장</a></td></tr>
+<tr><td>9장</td><td>이 SDK 만의 것 — 여러 전송, express 미들웨어, UserBuilder</td><td><a href="#p07-ch9">7부 9장</a></td></tr>
+</table>
+</div>
+<div class="key"><b>파이썬과 다른 점만 길게</b> — 개념은 7부에서 설명했으니, 이 부의 슬라이드는 TypeScript SDK 에서 달라지는 것에 시간을 씁니다. 장마다 끝의 "정리" 표는 왼쪽 열이 7부와 같습니다. 예제는 <code>ex/ts/08/</code> 에 있고, 단계 파일(<code>step1_echo.ts</code>, <code>step2_task.ts</code>, …)이 완성 에이전트(<code>ex/ts/agents/</code>)로 수렴합니다. Node 24 가 <code>.ts</code> 를 타입만 지우고 바로 돌리므로 빌드 단계는 없고, <code>tsc</code> 는 타입 검사만 합니다.</div>
+</article>
+
+<!-- ==== 1장 패키지 지도 ==== -->
+
+<article class="card" id="p08-ch1">
+<p class="chnum">1장</p>
+<h2>패키지 지도 — 설치본에서 읽는다</h2>
+<p class="chsub">진입점 열다섯과 선택 peer → 번들 열다섯에 원본 97개 → 번들마다 다른 사본 → 서버 쪽 칸 → 요청 하나가 지나는 길 → 완성 에이전트가 쓰는 이름 28개 → 이름에서 파일·줄 찾기 → 정리</p>
+</article>
+
+<article class="card" id="p08-map-pkg">
+<h3>@a2a-js/sdk 는 진입점 열다섯 — 늘 깔리는 의존은 jose 하나다</h3>
+<p class="lead">파이썬 SDK 가 extra(선택 설치 묶음)로 나눈 것(<a href="#p07-map-pkg">7부</a>)을 이 SDK 는 <code>package.json</code> 의 <code>exports</code> 진입점(subpath)으로 나눕니다. 진입점마다 번들 파일이 <code>import</code> 하는 바깥 패키지를 모으고, 이 <code>node_modules</code> 에 있는지 표시했습니다(<code>O</code> 있음, <code>.</code> 없음).</p>
+<!--CODE file=ex/ts/08/sdk_exports.ts region=exports-->
+<!--OUT file=out/08/sdk_exports.ts.txt-->
+<ul>
+<li>express·gRPC·DB 드라이버는 모두 선택 peer 입니다. 이 책은 <code>express</code> 만 깔았고(<code>ex/ts/package.json</code>), 그래서 <code>./server/express</code> 만 씁니다. gRPC 는 13부입니다.</li>
+<li><code>jose</code> 는 카드 서명(12부) 때문에 들어 있습니다. 몸통(<code>.</code>)에 <code>generateAgentCardSignature</code> 가 있어서입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-map-tree">
+<h3>dist 는 번들 열다섯 — 원본 97개를 진입점마다 한 파일에 담았다</h3>
+<p class="lead">설치본에는 <code>src/</code> 가 없고 <code>dist/</code> 의 번들만 있습니다. 번들 도구(tsup)가 원본 파일마다 남긴 <code>// src/…</code> 머리 줄로 어느 원본이 어느 번들에 들었는지 셌습니다.</p>
+<!--CODE file=ex/ts/08/sdk_map.ts region=map-->
+<!--OUT file=out/08/sdk_map.ts.txt lines=1-18-->
+<ul>
+<li>서버를 세우는 데 드는 것은 <code>./server</code>(3,885줄)와 <code>./server/express</code>(6,342줄)입니다. 이 부 3~5장이 여기서 삽니다.</li>
+<li><code>compat/v0_3</code> 무리 여섯이 v0.3 피어와 말하기 위한 계층입니다(9장, 14부). 파이썬 SDK 의 <code>compat/</code>(<a href="#p07-map-tree">7부</a>)와 같은 몫입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-map-copies">
+<h3>번들마다 클래스의 사본이 따로 있다 — 오류만은 표식으로 instanceof 를 지킨다</h3>
+<p class="lead">번들은 서로를 <code>import</code> 하지 않습니다(<a href="#p08-map-pkg">앞의 표</a>에 <code>@a2a-js/sdk/…</code> 가 하나도 없습니다). 그래서 오류 클래스는 몇 벌씩 들어 있습니다 — <code>src/errors/base.ts</code> 는 번들 14개에 있습니다.</p>
+<!--OUT file=out/08/sdk_map.ts.txt lines=19-24-->
+<!--CODE file=ex/ts/08/bundles.ts region=catch-->
+<!--OUT file=out/08/bundles.ts.txt lines=1-5-->
+<div class="note"><b>클래스는 달라도 instanceof 는 참</b> — 처리기(<code>./server</code> 번들)가 던진 <code>TaskNotFoundError</code> 와 <code>./errors</code> 에서 가져온 것은 다른 클래스입니다. 그래도 <code>instanceof</code> 가 맞는 것은 <code>A2AError</code> 가 <code>Symbol.for("@a2a-js/sdk.A2AError")</code> 표식과 <code>Symbol.hasInstance</code> 로 이름을 견주기 때문입니다(<code>dist/errors/index.js:4</code>, 주석: "immune to this module being duplicated across entry-point bundles"). <code>err.constructor ===</code> 로 견주는 코드는 틀립니다.</div>
+</article>
+
+<article class="card" id="p08-map-brand">
+<h3>이름만 같은 우리 클래스는 SDK 오류가 아니다 — -32603 이 된다</h3>
+<p class="lead">표식이 하는 일을 거꾸로 확인했습니다. SDK 의 <code>TaskNotFoundError</code> 와, <code>name</code> 만 같게 지은 우리 클래스를 JSON-RPC 오류로 옮기는 함수(<code>JsonRpcTransportHandler.mapToJSONRPCError</code>)에 넣었습니다.</p>
+<!--CODE file=ex/ts/08/bundles.ts region=brand-->
+<!--OUT file=out/08/bundles.ts.txt lines=6-7-->
+<div class="key"><b>오류는 SDK 에서 가져와 던진다</b> — 실행기에서 A2A 오류를 내려면 <code>@a2a-js/sdk/errors</code> 의 클래스를 씁니다. 표식이 없는 예외는 모두 <code>-32603</code> Internal error 입니다. 오류 클래스와 코드 표는 <a href="#p08-rh-codes">4장</a>에서 폅니다.</div>
+</article>
+
+<article class="card" id="p08-map-server">
+<h3>서버 쪽 칸 — 우리가 채우는 칸은 실행기 하나다</h3>
+<p class="lead"><code>./server</code> 와 <code>./server/express</code> 번들의 <code>// src/server/…</code> 머리 줄을 하는 일로 묶어, 이 부의 장과 짝지었습니다. 파이썬 SDK 의 여섯 칸(<a href="#p07-map-server">7부</a>)과 거의 같은 나눔입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>원본(<code>src/server/</code> 아래)</th><th>대표 이름</th><th>하는 일</th><th>어디서</th></tr>
+<tr><td><code>agent_execution/</code></td><td><code>AgentExecutor</code>·<code>RequestContext</code></td><td>에이전트의 두뇌 — 우리가 구현한다</td><td><a href="#p08-ch3">3장</a></td></tr>
+<tr><td><code>events/</code></td><td><code>ExecutionEventBus</code>·<code>AgentEvent</code></td><td>실행기가 이벤트를 싣는 버스, 버스 관리자, 큐</td><td><a href="#p08-ch3">3장</a></td></tr>
+<tr><td><code>request_handler/</code>·<code>result_manager.ts</code></td><td><code>DefaultRequestHandler</code>·<code>ResultManager</code></td><td>A2A 메서드를 받아 실행기를 부리고, 이벤트로 Task 를 고쳐 저장한다</td><td><a href="#p08-ch4">4장</a></td></tr>
+<tr><td><code>store.ts</code>·<code>owner_resolver.ts</code></td><td><code>InMemoryTaskStore</code></td><td>Task 저장 — 테넌트·소유자별로 나눈다</td><td><a href="#p08-ch4">4장</a></td></tr>
+<tr><td><code>transports/</code>·<code>express/</code></td><td><code>jsonRpcHandler</code>·<code>restHandler</code>·<code>agentCardHandler</code></td><td>HTTP 경로 ↔ 처리기 (JSON-RPC·REST·카드)</td><td><a href="#p08-ch5">5장</a></td></tr>
+<tr><td><code>context.ts</code>·<code>authentication/</code></td><td><code>ServerCallContext</code>·<code>User</code></td><td>"누가, 어떤 요청으로" — 사용자·헤더·테넌트</td><td><a href="#p08-srv-who">5장</a>, 12부</td></tr>
+<tr><td><code>push_notification/</code></td><td><code>DefaultPushNotificationSender</code></td><td>푸시 설정 저장과 보내기</td><td>11부</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p08-map-flow">
+<h3>요청 하나가 지나는 길 — express → 처리기 → 실행기 → 버스 → 저장소</h3>
+<p class="lead">SendMessage 한 번이 TS 서버 안에서 거치는 자리를 위에서 아래로 그렸습니다. <a href="#p07-map-flow">7부</a>의 그림과 칸은 같고, 큐 대신 버스(EventTarget)가 있습니다.</p>
+<pre class="fig">
+  HTTP POST /
+    │
+    ▼  express/ · jsonRpcHandler            본문 읽기, 판 검사
+  transports/ · JsonRpcTransportHandler     메서드 고르기, fromJSON
+    │
+    ▼  request_handler/ · DefaultRequestHandler
+    │  sendMessage(params, context)         Task 찾기, RequestContext
+    ▼
+  AgentExecutor.execute(ctx, bus)           우리가 쓴 코드
+    │  bus.publish(AgentEvent.task(…))
+    ▼  events/ · ExecutionEventQueue        버스의 이벤트를 차례로
+  result_manager · ResultManager            이벤트로 Task 를 고쳐
+    │                                       TaskStore.save
+    ▼
+  처리기가 답을 골라 toJSON 으로 응답
+</pre>
+<div class="note"><b>실행기는 저장소를 모른다</b> — 파이썬 SDK 와 같이 실행기는 이벤트만 싣고, <code>ResultManager</code>(<code>dist/server/index.js:2222</code>)가 그것을 받아 Task 를 고치고 저장합니다. 4장에서 이 길을 HTTP 없이 직접 불러 봅니다.</div>
+</article>
+
+<article class="card" id="p08-map-used">
+<h3>완성 에이전트가 쓰는 SDK 이름은 28개뿐이다</h3>
+<p class="lead">완성 에이전트(<code>agents/*.ts</code>)의 <code>import { … } from "@a2a-js/…"</code> 를 모아, 이름마다 몇 파일이 쓰는지 셌습니다(파이썬은 37개 — <a href="#p07-map-used">7부</a>).</p>
+<!--OUT file=out/08/used_names.ts.txt-->
+<ul>
+<li>타입 쪽은 몸통(<code>@a2a-js/sdk</code>)에서, 서버 쪽은 <code>./server</code> 와 <code>./server/express</code> 에서 가져옵니다. 파이썬 SDK 의 <code>TaskUpdater</code>·<code>new_*</code> 도우미에 해당하는 이름이 없습니다 — 그 몫은 우리 <code>agents/common.ts</code> 가 짊어집니다(<a href="#p08-ex-noupdater">3장</a>).</li>
+<li><code>./client</code> 넷은 기획 에이전트와 <code>ask</code> CLI 가 씁니다(6장).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-map-where">
+<h3>이름에서 파일과 줄로 — 번들의 줄과, 그 위의 원본 이름</h3>
+<p class="lead">편집기의 "정의로 가기" 는 <code>a2a-CJdXl9vi.d.ts</code> 같은 해시 이름의 타입 파일로 갑니다. 동작을 읽으려면 번들(<code>.js</code>)에서 정의 줄을 찾고, 그 위의 <code>// src/…</code> 머리 줄로 원본 파일 이름을 압니다.</p>
+<!--CODE file=ex/ts/08/where.ts region=where-->
+<!--OUT file=out/08/where.ts.txt-->
+<div class="note"><b>인터페이스는 .js 에 없다</b> — <code>AgentExecutor</code> 처럼 타입만 있는 이름은 번들에 흔적이 없어 <code>.d.ts</code> 에서 찾았습니다. 이 부가 인용하는 줄 번호(<code>dist/server/index.js:2702</code> 같은)는 모두 이 방법으로 찾은 것입니다.</div>
+</article>
+
+<article class="card" id="p08-ch1-sum">
+<h3>1장 정리 — 할 일마다 TypeScript SDK 의 이름</h3>
+<p class="lead">왼쪽 열은 <a href="#p07-ch1-sum">7부</a>와 같습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>TypeScript SDK</th><th>설치본(<code>dist/</code> 아래)</th><th>장</th></tr>
+<tr><td>설치</td><td><code>npm install @a2a-js/sdk express</code></td><td>진입점 열다섯, peer 는 모두 선택</td><td><a href="#p08-map-pkg">1장</a></td></tr>
+<tr><td>프로토콜 타입</td><td><code>@a2a-js/sdk</code> (인터페이스 + <code>fromJSON</code>·<code>toJSON</code>)</td><td><code>index.js</code> (<code>src/types/protojson.ts</code>)</td><td><a href="#p08-ch2">2장</a></td></tr>
+<tr><td>타입 도우미</td><td>없음 — 객체 글자나 <code>X.fromJSON(…)</code></td><td>—</td><td><a href="#p08-ch2">2장</a></td></tr>
+<tr><td>에이전트의 두뇌</td><td><code>AgentExecutor</code> (인터페이스)</td><td><code>server/index.d.ts</code></td><td><a href="#p08-ch3">3장</a></td></tr>
+<tr><td>이벤트 내보내기</td><td><code>ExecutionEventBus</code>·<code>AgentEvent</code></td><td><code>server/index.js</code></td><td><a href="#p08-ch3">3장</a></td></tr>
+<tr><td>메서드 처리</td><td><code>DefaultRequestHandler</code></td><td><code>server/index.js</code></td><td><a href="#p08-ch4">4장</a></td></tr>
+<tr><td>Task 저장</td><td><code>InMemoryTaskStore</code></td><td><code>server/index.js</code></td><td><a href="#p08-ch4">4장</a></td></tr>
+<tr><td>HTTP 에 달기</td><td><code>jsonRpcHandler</code>·<code>agentCardHandler</code> + express</td><td><code>server/express/index.js</code></td><td><a href="#p08-ch5">5장</a></td></tr>
+<tr><td>다른 에이전트 부르기</td><td><code>ClientFactory</code></td><td><code>client/index.js</code></td><td>6장</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p08-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 클라이언트 코드에서 SDK 가 던진 오류를 <code>if (err.constructor === TaskNotFoundError)</code> 로 가르려고 <code>TaskNotFoundError</code> 를 <code>@a2a-js/sdk/errors</code> 에서 가져왔습니다. 이 검사는 맞게 동작합니까? 맞게 고치면 어떻게 씁니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 동작하지 않습니다. 오류를 던진 번들(<code>./client</code>, 서버라면 <code>./server</code>)은 제 사본의 클래스를 쓰므로 <code>constructor</code> 가 다릅니다 — <a href="#p08-map-copies">bundles.ts</a> 의 "같은 클래스인가: false" 가 그것입니다. <code>err instanceof TaskNotFoundError</code> 로 쓰면 SDK 의 표식(<code>Symbol.hasInstance</code>)이 이름으로 견줘 참이 됩니다.</div>
+</article>
+
+<!-- ==== 2장 타입 ==== -->
+
+<article class="card" id="p08-ch2">
+<p class="chnum">2장</p>
+<h2>타입 — ts-proto 의 인터페이스와 fromJSON·toJSON</h2>
+<p class="chsub">이름 71개의 다섯 무리 → enum 은 TS enum → 객체 글자와 fromJSON → 와이어 모양은 toJSON → 대입은 되고, 넣으면 참조 → 깊은 사본의 Buffer → "" 와 undefined → oneof 와 enum 의 너그러움 → DataPart 의 value → Task 짓기 → Task 읽기 → SDK 안의 모양과 와이어 → 정리</p>
+</article>
+
+<article class="card" id="p08-ty-kinds">
+<h3>타입은 인터페이스, 값은 fromJSON·toJSON 두 함수짜리 객체다</h3>
+<p class="lead">몸통 <code>@a2a-js/sdk</code> 가 내보내는 이름을 값의 종류로 나눴습니다. <code>Message</code> 같은 이름 하나가 타입(interface)이면서 같은 이름의 값(객체)이기도 합니다.</p>
+<!--CODE file=ex/ts/08/types_list.ts region=kinds-->
+<!--OUT file=out/08/types_list.ts.txt lines=1-13-->
+<ul>
+<li>proto 에서 생성한 타입이지만 손잡이는 <code>fromJSON</code>·<code>toJSON</code> 둘뿐입니다. 이진 인코딩(<code>encode</code>·<code>decode</code>)도, 기본값을 채워 주는 <code>create</code> 도 없습니다 — 원본 파일 이름부터 <code>src/types/protojson.ts</code> 입니다(<a href="#p08-map-where">1장</a>).</li>
+<li>파이썬 SDK 의 protobuf 메시지(<a href="#p07-ty-kinds">7부</a>)와 달리 이 값들은 <b>보통 JavaScript 객체</b>입니다. 클래스도, 메서드도, 필드 검사도 없습니다. 이 장의 나머지가 모두 그 결과입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ty-enum">
+<h3>enum 은 TS enum — 수가 값이고, 와이어의 이름은 xxxToJSON 이 만든다</h3>
+<p class="lead"><code>TaskState</code>·<code>Role</code> 은 SDK 쪽에서 컴파일된 TS enum 객체입니다. 이름과 수를 오가는 길을 모두 찍었습니다.</p>
+<!--CODE file=ex/ts/08/types_list.ts region=enums-->
+<!--OUT file=out/08/types_list.ts.txt lines=14-22-->
+<ul>
+<li>객체에 이름 → 수와 수 → 이름이 함께 들어 있어 키가 20개입니다(값 9개 + <code>UNRECOGNIZED</code>, 두 방향). <code>Object.keys(TaskState)</code> 로 상태 목록을 만들면 <code>"0"</code>~<code>"8"</code> 이 섞입니다.</li>
+<li>모르는 이름·수는 오류가 아니라 <code>-1</code>(<code>UNRECOGNIZED</code>)입니다. 우리 코드는 enum 을 새로 선언할 수 없지만(<code>tsconfig.json</code> 의 <code>erasableSyntaxOnly</code> — Node 가 타입만 지우고 돌리므로), SDK 의 enum 은 이미 JavaScript 객체라 그대로 씁니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ty-build">
+<h3>메시지는 객체 글자로 — 타입이 필드 여덟을 모두 요구한다</h3>
+<p class="lead">같은 사용자 메시지를 두 길로 만들었습니다. 타입을 단 객체 글자(literal)와, 와이어 모양 JSON 을 <code>Message.fromJSON</code> 에 넣는 길입니다.</p>
+<!--CODE file=ex/ts/08/types_build.ts region=build-->
+<!--OUT file=out/08/types_build.ts.txt lines=1-3-->
+<ul>
+<li>ts-proto 의 인터페이스는 선택 필드도 "있어야 하는" 필드로 적습니다(<code>contextId: string</code>, <code>metadata: … | undefined</code>). 그래서 객체 글자에는 <code>""</code>·<code>[]</code>·<code>undefined</code> 를 하나하나 적어야 <code>tsc</code> 를 통과합니다 — 완성 에이전트의 <code>textPart</code>·<code>dataPart</code>(<code>agents/common.ts</code>)가 그 일을 맡습니다.</li>
+<li><code>fromJSON</code> 은 빠진 필드를 기본값으로 채워, 두 결과가 깊이 같습니다(<code>isDeepStrictEqual</code>). <code>role</code> 은 수 <code>1</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ty-wire">
+<h3>JSON.stringify 는 SDK 안의 모양을, toJSON 은 와이어 모양을 낸다</h3>
+<p class="lead">파이썬의 <code>json_format</code>(<a href="#p07-ty-wire">7부</a>) 자리에 있는 것이 <code>Message.toJSON</code> 입니다. 같은 객체를 두 길로 찍었습니다.</p>
+<!--CODE file=ex/ts/08/types_build.ts region=wire-->
+<!--OUT file=out/08/types_build.ts.txt lines=4-32-->
+<div class="warn"><b>그대로 내보내면 $case 가 샌다</b> — <code>JSON.stringify</code> 는 <code>content: {"$case", "value"}</code> 와 수 <code>role: 1</code>, 빈 필드를 그대로 씁니다. 와이어에 내기 전에는 반드시 <code>toJSON</code> 을 거칩니다. SDK 의 처리기는 그렇게 하지만, 카드 처리기는 받은 객체를 <code>JSON.stringify</code> 할 뿐입니다 — <a href="#p08-srv-card">5장</a>에서 그 결과를 봅니다.</div>
+</article>
+
+<article class="card" id="p08-ty-copy">
+<h3>= 로 넣을 수 있고, 넣은 것은 참조다 — 파이썬과 거꾸로</h3>
+<p class="lead">파이썬 protobuf 는 하위 메시지에 대입을 막고 반복 필드에 넣을 때 복사했습니다(<a href="#p07-ty-assign">7부</a>). 보통 객체인 TS 타입에서는 둘 다 반대입니다.</p>
+<!--CODE file=ex/ts/08/types_fields.ts region=assign-->
+<!--CODE file=ex/ts/08/types_fields.ts region=copy-->
+<!--OUT file=out/08/types_fields.ts.txt lines=1-5-->
+<ul>
+<li><code>history.push(msg)</code> 는 그 객체를 넣습니다 — 넣은 뒤 <code>msg</code> 를 "40명" 으로 고치면 이력도 바뀝니다.</li>
+<li>펼치기(<code>{ ...task }</code>)는 겉만 복사해 <code>history</code> 배열을 함께 씁니다. 따로 두려면 <code>structuredClone</code> 입니다. 완성 에이전트의 <code>begin</code> 이 <code>{ ...ctx.task, status: working }</code> 로 겉만 바꾸는 것은 <code>status</code> 하나만 새로 끼우기 때문입니다(<a href="#p08-ex-follow">3장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ty-buffer">
+<h3>structuredClone 은 Buffer 를 Uint8Array 로 바꾼다 — 타입은 여전히 Buffer 라고 한다</h3>
+<p class="lead">raw 파트의 <code>value</code> 는 타입으로는 <code>Buffer</code> 입니다(<a href="#p04-file-ts">4부</a>). 그것을 깊은 사본으로 떠 봤습니다.</p>
+<!--CODE file=ex/ts/08/types_fields.ts region=buffer-->
+<!--OUT file=out/08/types_fields.ts.txt lines=6-8-->
+<div class="warn"><b>SDK 가 곳곳에서 structuredClone 을 쓴다</b> — <code>RequestContext</code> 생성자, <code>ResultManager</code>, <code>InMemoryTaskStore</code> 의 <code>load</code>·<code>save</code> 가 모두 그렇습니다(<code>dist/server/index.js:13</code>·<code>:3562</code>). 그래서 저장소를 거친 raw 파트는 <code>Uint8Array</code> 이고, <code>value.toString("utf8")</code> 은 글이 아니라 수 목록을 냅니다. 읽을 때는 <code>Buffer.from(value)</code> 로 감쌉니다. 와이어로 나갈 때는 <code>Part.toJSON</code> 이 <code>Buffer.from</code> 을 거치므로 문제가 없습니다. 저장소에서 확인하는 것은 <a href="#p08-store-copy">4장</a>입니다.</div>
+</article>
+
+<article class="card" id="p08-ty-presence">
+<h3>"없음" 은 두 가지 — 문자열·배열은 빈 값, 하위 메시지·선택 필드는 undefined</h3>
+<p class="lead">contextId 없이 온 메시지, status 없는 Task, historyLength 가 있고 없는 GetTask 요청을 <code>fromJSON</code> 으로 읽었습니다.</p>
+<!--CODE file=ex/ts/08/types_presence.ts region=presence-->
+<!--OUT file=out/08/types_presence.ts.txt lines=1-8-->
+<ul>
+<li>"안 보냄" 이 <code>""</code> 로 오므로 <code>??</code> 는 기본값을 넣지 못합니다. 검사는 <code>if (!msg.contextId)</code>, 기본값은 <code>||</code> 입니다 — SDK 도 <code>incomingMessage.contextId || task?.contextId || crypto.randomUUID()</code> 로 씁니다(<code>dist/server/index.js</code> 의 <code>_createRequestContext</code>).</li>
+<li><code>historyLength</code> 처럼 proto 에서 <code>optional</code> 인 필드만 <code>?: number</code> 이고, "없음" 과 <code>0</code> 이 갈립니다(<a href="#p05-hl-ts">5부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ty-loose">
+<h3>fromJSON 은 너그럽다 — 내용 둘은 text 가 이기고, 모르는 enum 은 -1 이 된다</h3>
+<p class="lead">와이어에서 TS 서버가 "앞의 것" 을 골랐던 일(<a href="#p04-part-two">4부</a>)과 ProtoJSON 의 너그러움(<a href="#p04-pj-cmp">4부</a>)이 타입 층에서는 이렇게 생깁니다.</p>
+<!--CODE file=ex/ts/08/types_presence.ts region=oneof-->
+<!--CODE file=ex/ts/08/types_presence.ts region=enum-->
+<!--OUT file=out/08/types_presence.ts.txt lines=9-16-->
+<ul>
+<li>"앞" 은 JSON 의 키 차례가 아니라 <code>Part.fromJSON</code> 이 묻는 차례 — <code>text</code>, <code>raw</code>, <code>url</code>, <code>data</code> — 입니다(<code>dist/index.js:202</code>). <code>url</code> 을 먼저 적어도 <code>text</code> 가 남았습니다.</li>
+<li><code>"user"</code> 같은 v0.3 의 역할 이름은 오류 없이 <code>UNRECOGNIZED</code> 가 됩니다. 사용자 말만 듣는 숙소 에이전트에는 그런 메시지가 "들리지 않습니다"(<a href="#p04-msg-required-ts">4부</a>). snake_case 키는 받고, 모르는 키는 소리 없이 버립니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ty-data">
+<h3>DataPart 의 value 는 넣은 JS 값 그대로 — 30 은 30, null 은 사라진다</h3>
+<p class="lead">숙소 요청을 data 파트에 넣어 와이어로 바꾸고 다시 읽었습니다. 파이썬에서 <code>30.0</code> 이 되던 자리(<a href="#p07-ty-data">7부</a>)입니다.</p>
+<!--CODE file=ex/ts/08/types_data.ts region=data-->
+<!--CODE file=ex/ts/08/types_data.ts region=kinds-->
+<!--OUT file=out/08/types_data.ts.txt-->
+<ul>
+<li>Value 를 거치지 않으니 수는 정수 그대로, 키 차례는 넣은 차례 그대로입니다(<a href="#p04-data-ts">4부</a>). 대신 <code>value</code> 의 타입이 <code>any</code> 라서 모양 검사는 우리 몫입니다 — 완성 에이전트의 <code>dataOf</code> 가 객체인지부터 봅니다.</li>
+<li>proto 의 <code>google.protobuf.Value data = 4</code>(<code>a2a.proto:233</code>)는 null 도 담을 수 있는 자리인데, <code>fromJSON</code> 은 <code>isSet(null)</code> 이 거짓이라 내용 없는 파트로 읽습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ty-task-make">
+<h3>Task 를 짓는 도우미는 없다 — 객체 글자 하나를 함수로 감싼다</h3>
+<p class="lead">파이썬의 <code>new_task_from_user_message</code>(<a href="#p07-ty-task-make">7부</a>) 같은 것이 TS SDK 에는 없습니다. 아홉 필드를 직접 채웁니다.</p>
+<!--CODE file=ex/ts/08/types_task.ts region=make-->
+<!--OUT file=out/08/types_task.ts.txt lines=1-2-->
+<div class="note"><b>검사도 없다</b> — 파이썬 도우미는 역할이 사용자가 아니거나 파트가 비면 <code>ValueError</code> 를 냈지만, 이 함수는 무엇이든 받습니다. id 는 처리기가 지어 <code>ctx.taskId</code> 로 넘겨 주므로(<a href="#p08-ex-ctx">3장</a>) 실행기는 그 값을 씁니다. 완성 에이전트에서는 <code>begin</code> 이 이 일을 합니다.</div>
+</article>
+
+<article class="card" id="p08-ty-task-read">
+<h3>받은 JSON 은 Task.fromJSON 으로 — 모르는 필드는 오류 없이 버린다</h3>
+<p class="lead">클라이언트 쪽 일입니다. 스펙에 없는 <code>createdAt</code>(<a href="#p05-task-time">5부</a>)과 base64 raw 파트가 든 Task JSON 을 읽었습니다.</p>
+<!--CODE file=ex/ts/08/types_task.ts region=read-->
+<!--OUT file=out/08/types_task.ts.txt lines=3-5-->
+<div class="note"><b>파이썬과 반대</b> — 파이썬 <code>ParseDict</code> 는 옵션 없이는 모르는 필드에서 오류였습니다(<a href="#p07-ty-task-read">7부</a>). TS 의 <code>fromJSON</code> 은 언제나 너그럽고, 대신 아무것도 검사하지 않습니다 — 빈 JSON 도 기본값이 가득한 Task 가 됩니다(<a href="#p05-task-ts">5부</a>). raw 는 base64 를 풀어 <code>Buffer</code> 로 줍니다.</div>
+</article>
+
+<article class="card" id="p08-ty-shapes">
+<h3>SDK 안의 모양과 와이어 모양 — 다섯 군데가 다르다</h3>
+<p class="lead">TS 코드에서 만지는 객체와 와이어의 JSON 이 다른 자리를 모았습니다. 오른쪽으로 바꾸는 것은 언제나 <code>toJSON</code>, 왼쪽으로는 <code>fromJSON</code> 입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>무엇</th><th>SDK 안 (TS 객체)</th><th>와이어 (JSON)</th><th>증거</th></tr>
+<tr><td>Part 의 내용</td><td><code>content: {$case: "text", value}</code></td><td><code>"text": …</code></td><td><a href="#p08-ty-wire">types_build</a></td></tr>
+<tr><td>enum</td><td>수 — <code>role: 1</code></td><td>이름 — <code>"ROLE_USER"</code></td><td><a href="#p08-ty-enum">types_list</a></td></tr>
+<tr><td>raw 파트</td><td><code>Buffer</code> (저장소를 거치면 <code>Uint8Array</code>)</td><td>base64 문자열</td><td><a href="#p08-ty-buffer">types_fields</a></td></tr>
+<tr><td>빈 필드</td><td><code>""</code>·<code>[]</code>·<code>undefined</code> 가 다 있다</td><td>뺀다</td><td><a href="#p08-ty-wire">types_build</a></td></tr>
+<tr><td>스트림 한 칸</td><td>실행기: <code>{kind: "task", data}</code> (<code>AgentEvent</code>)<br>처리기: <code>{payload: {$case: "task", value}}</code></td><td><code>{"task": …}</code></td><td><a href="#p08-ty-task-read">types_task</a>, <a href="#p08-ex-events">3장</a></td></tr>
+</table>
+</div>
+<!--OUT file=out/08/types_task.ts.txt lines=6-6 note=StreamResponse.toJSON 의 키 — payload 와 $case 가 사라지고 "task" 하나-->
+</article>
+
+<article class="card" id="p08-ch2-sum">
+<h3>2장 정리 — 타입을 다루는 손잡이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>TypeScript SDK</th></tr>
+<tr><td>타입의 정체</td><td>ts-proto 가 만든 인터페이스 + 같은 이름의 <code>{fromJSON, toJSON}</code> 객체 — 값은 보통 객체</td></tr>
+<tr><td>메시지 만들기</td><td>필드를 다 적은 객체 글자, 또는 <code>Message.fromJSON({…})</code></td></tr>
+<tr><td>Part 만들기</td><td><code>{content: {$case: "text", value}, mediaType: "", filename: "", metadata: undefined}</code></td></tr>
+<tr><td>Part 종류 알기</td><td><code>switch (part.content?.$case)</code> — 갈래 안에서 <code>value</code> 의 타입이 좁혀진다</td></tr>
+<tr><td>DataPart 꺼내기</td><td><code>content.value</code> (타입 <code>any</code>), 수는 정수 그대로</td></tr>
+<tr><td>enum ↔ 이름</td><td><code>TaskState[n]</code>, <code>taskStateToJSON(n)</code>·<code>taskStateFromJSON("…")</code></td></tr>
+<tr><td>하위 메시지 바꾸기</td><td><code>task.status = {…}</code> 대입</td></tr>
+<tr><td>사본 뜨기</td><td><code>structuredClone(task)</code> (Buffer 는 Uint8Array 가 된다), 겉만이면 <code>{...task}</code></td></tr>
+<tr><td>"없음" 묻기</td><td>문자열은 <code>!s</code>·<code>||</code>, 하위 메시지·optional 은 <code>=== undefined</code></td></tr>
+<tr><td>Task 만들기</td><td>도우미 없음 — 객체 글자(<code>agents/common.ts</code> 의 <code>begin</code>)</td></tr>
+<tr><td>JSON ↔ 객체</td><td><code>Task.toJSON(t)</code>·<code>Task.fromJSON(j)</code> (모르는 필드는 버린다)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p08-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 실행기에서 <code>const ask = up.message([textPart("인원은?")])</code>(<code>agents/common.ts</code> 의 <code>Updater</code>)로 에이전트 말을 만들어 <code>task.history.push(ask)</code> 한 뒤, 깜빡한 말을 보태려고 <code>ask.parts.push(textPart("예: 30명"))</code> 을 했습니다. <code>task.history</code> 의 마지막 메시지에는 파트가 몇 개 있습니까? <a href="#p07-ch2-quiz">7부의 같은 퀴즈</a>와 답이 같습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 둘입니다. TS 의 <code>push</code> 는 객체 그 자체를 넣으므로, 넣은 뒤 <code>ask</code> 를 고치면 이력의 메시지도 바뀝니다 — <a href="#p08-ty-copy">types_fields.ts</a> 에서 넣은 뒤 "40명" 으로 고치자 이력도 "40명" 이었습니다. 파이썬은 넣을 때 복사해 처음 그대로(하나)였으니 답이 거꾸로입니다.</div>
+</article>
+
+<!-- ==== 3장 실행기 ==== -->
+
+<article class="card" id="p08-ch3">
+<p class="chnum">3장</p>
+<h2>실행기(AgentExecutor) — 이벤트를 버스에 싣는 일</h2>
+<p class="chsub">채울 함수 둘과 버스 → 타입 파일의 약속 → RequestContext 에서 읽는 것 → 메아리 실행기 → 서버 없이 돌리는 버스 → 실을 수 있는 이벤트 넷 → 견적 실행기 → 견적이 낸 이벤트 → 갱신기가 없는 자리 → 이어 말하기의 ctx.task → 정리</p>
+</article>
+
+<article class="card" id="p08-ex-api">
+<h3>실행기는 함수 둘 — execute 와 cancelTask, 결과는 버스에 싣는다</h3>
+<p class="lead">TS SDK 에서 "에이전트를 만든다" 는 것은 <code>AgentExecutor</code> 인터페이스를 구현하는 것입니다. 파이썬처럼 상속할 추상 클래스는 없습니다. 설치본의 타입 파일에서 두 인터페이스를 읽었습니다(문서 주석은 뺐습니다).</p>
+<!--OUT file=out/08/executor_api.ts.txt-->
+<ul>
+<li><code>cancelTask</code> 는 <code>ctx</code> 가 아니라 <b>taskId 하나</b>만 받습니다. 돌고 있는 <code>execute</code> 를 멈추려면 실행기가 taskId → 멈춤 신호를 따로 쥐고 있어야 합니다 — 완성 에이전트의 <code>live</code> 맵(<code>agents/common.ts</code>)이 그 일을 합니다.</li>
+<li>버스에서 실행기가 쓰는 것은 <code>publish</code> 하나입니다. <code>on</code>·<code>off</code>·<code>once</code> 는 처리기 쪽이 듣는 손잡이입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ex-contract">
+<h3>execute 의 약속 — 타입 파일의 문서 주석이 정한 것</h3>
+<p class="lead">파이썬은 <code>execute</code> 의 문서 문자열에 계약을 적었습니다(<a href="#p07-ex-contract">7부</a>). TS SDK 는 그것을 <code>dist/server/index.d.ts</code> 의 주석 여러 곳에 나눠 적었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>줄</th><th>약속</th><th>이 책에서</th></tr>
+<tr><td>131–134</td><td>매 호출의 첫 이벤트는 <code>task</code> 나 <code>message</code> — <code>ctx.task</code> 가 있는 이어 말하기에서도. 서버가 그 차례를 강제하고 <code>statusUpdate</code>·<code>artifactUpdate</code> 로 시작하는 스트림을 거절한다</td><td><a href="#p08-ex-follow">이 장</a>, <a href="#p08-rh-rules-out">4장</a></td></tr>
+<tr><td>136–137</td><td>테넌트는 <code>requestContext.context.tenant</code> 에서 읽는다</td><td>13부</td></tr>
+<tr><td>141–142</td><td><code>cancelTask</code> 는 실행을 멈추고 마지막 <code>canceled</code> 상태를 버스에 싣는다</td><td><a href="#p08-ex-api">앞 슬라이드</a>, 11부</td></tr>
+<tr><td>255–257</td><td>처리기의 큐는 Message, 종료 상태, INPUT_REQUIRED 에서 멈춘다. AUTH_REQUIRED 에서는 멈추지 않는다 — 같은 실행이 이어지기를 기다린다</td><td><a href="#p08-rh-when">4장</a>, 12부</td></tr>
+<tr><td>270</td><td>실행기가 돌아간 뒤에도 버스를 살려 두는 상태 — 기본 INPUT_REQUIRED·AUTH_REQUIRED</td><td><a href="#p08-rh-options">4장</a></td></tr>
+<tr><td>328–329</td><td>실행기가 예외로 끝나면 처리기가 Task 와 FAILED 상태를 대신 지어 싣는다</td><td><a href="#p05-fail-ts">5부</a>, <a href="#p08-rh-silent">4장</a></td></tr>
+</table>
+</div>
+<div class="note"><b>돌려주는 값도, 끝내는 신호도 처리기가 챙긴다</b> — <code>execute</code> 가 돌려주는 Promise 가 풀리면 처리기가 버스를 정리합니다(<code>_settleBus</code>, <code>dist/server/index.js:2978</code>). 실행기가 <code>bus.finished()</code> 를 부르지 않아도 된다는 뜻입니다 — <a href="#p04-reply-ts">4부</a>의 예제는 불렀고, 이 부의 예제는 부르지 않습니다.</div>
+</article>
+
+<article class="card" id="p08-ex-ctx">
+<h3>RequestContext — 처리기가 다 채워 넘기는 요청 한 건</h3>
+<p class="lead">실행기가 읽는 것은 <code>ctx</code> 에 있습니다(<code>src/server/agent_execution/request_context.ts</code>, <code>dist/server/index.js:2</code>). 파이썬의 <code>RequestContext</code>(<a href="#p07-ex-ctx">7부</a>)와 달리 이 클래스는 아무것도 짓지 않고 받은 대로 담기만 합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>속성</th><th>무엇</th><th>누가 채우나</th></tr>
+<tr><td><code>userMessage</code></td><td>이번에 받은 Message (<code>request.message</code> 의 별명)</td><td>처리기가 taskId·contextId 를 써 넣은 사본</td></tr>
+<tr><td><code>taskId</code>, <code>contextId</code></td><td>이번 요청의 id</td><td>처리기 — 없으면 <code>crypto.randomUUID()</code></td></tr>
+<tr><td><code>task</code></td><td>저장소에 있던 Task, 첫 마디면 <code>undefined</code></td><td>처리기 — <b>이번 메시지를 이력에 붙여 저장한 뒤</b>(<a href="#p08-ex-follow">이 장 끝</a>)</td></tr>
+<tr><td><code>referenceTasks</code></td><td>referenceTaskIds 의 작업들</td><td>처리기 — <b>채운다</b>(없는 id 는 <code>console.warn</code>). 파이썬 기본 처리기는 비워 둔다 — 15부</td></tr>
+<tr><td><code>request</code></td><td>요청 전체 — <code>configuration</code>·<code>metadata</code>·<code>tenant</code></td><td>생성자가 <code>structuredClone</code></td></tr>
+<tr><td><code>context</code></td><td><code>ServerCallContext</code> — 사용자·헤더·확장·테넌트</td><td>express 처리기(<a href="#p08-srv-who">5장</a>)</td></tr>
+</table>
+</div>
+<!--OUT file=out/08/drive.txt lines=1-5 note=손으로 만든 RequestContext — id 는 우리가 지어 넘겼고, 메시지의 taskId 는 비어 있다-->
+</article>
+
+<article class="card" id="p08-ex-echo">
+<h3>메아리 실행기 — Message 하나를 실으면 그것이 답이다</h3>
+<p class="lead">1단계 에이전트입니다. 받은 글 앞에 "받은 말:" 을 붙여 에이전트 Message 하나를 버스에 싣고 끝냅니다. <a href="#p07-ex-echo">7부</a>의 메아리와 하는 일이 같습니다.</p>
+<!--CODE file=ex/ts/08/step1_echo.ts region=executor-->
+<ul>
+<li>도우미가 없어 Message 의 여덟 필드를 다 적습니다(<a href="#p08-ty-build">2장</a>). <code>messageId</code> 는 <code>randomUUID()</code>, <code>contextId</code> 는 처리기가 넘긴 것입니다.</li>
+<li>취소할 작업이 없으니 <code>cancelTask</code> 는 <code>@a2a-js/sdk/errors</code> 의 <code>UnsupportedOperationError</code> 를 던집니다(<a href="#p08-map-brand">1장</a>: SDK 의 오류 클래스여야 코드가 맞게 나갑니다).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ex-drive">
+<h3>서버 없이 실행기 돌리기 — 버스에 듣는 쪽 하나를 달면 된다</h3>
+<p class="lead">실행기는 보통의 비동기 함수입니다. SDK 가 내보내는 <code>DefaultExecutionEventBus</code>(EventTarget)에 <code>'event'</code> 를 듣는 함수를 달고, <code>RequestContext</code> 를 손으로 지어 넘깁니다.</p>
+<!--CODE file=ex/ts/08/drive.ts region=bus-->
+<!--CODE file=ex/ts/08/drive.ts region=context-->
+<div class="note"><b>하위 클래스가 필요 없다</b> — 파이썬은 <code>EventQueue</code> 를 상속해 <code>enqueue_event</code> 를 채웠습니다(<a href="#p07-ex-drive">7부</a>). TS 의 버스는 이미 쓸 수 있는 클래스라서 듣는 함수만 답니다. 대신 <code>RequestContext</code> 가 id 를 짓지 않으므로 <code>randomUUID()</code> 둘을 직접 넘깁니다. SDK 서버를 통째로 프로세스 안에서 시험하는 법은 8장입니다.</div>
+</article>
+
+<article class="card" id="p08-ex-events">
+<h3>실을 수 있는 것은 넷 — AgentEvent 의 함수 넷이 kind 를 붙인다</h3>
+<p class="lead">버스에 싣는 값은 <code>{kind, data}</code> 꾸러미입니다(<code>AgentExecutionEvent</code>). 손으로 짓지 말고 <code>AgentEvent.message(…)</code> 처럼 씁니다(타입 파일의 권고: "Prefer these over constructing the wrapper object literals directly").</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>흐름</th><th>싣는 것</th><th>클라이언트가 받는 것</th></tr>
+<tr><td>즉답</td><td><code>AgentEvent.message(m)</code> 하나</td><td><code>result.message</code></td></tr>
+<tr><td>작업</td><td><code>AgentEvent.task(t)</code> 먼저, 그다음 <code>statusUpdate</code>·<code>artifactUpdate</code> 여럿</td><td><code>result.task</code>(막는 호출) 또는 이벤트 스트림(10부)</td></tr>
+</table>
+</div>
+<!--OUT file=out/08/drive.txt lines=1-6 note=메아리 — 이벤트는 Message 하나-->
+<div class="key"><b>차례 검사는 처리기가, 그것도 스트림에서만</b> — 이 버스는 무엇이든 받습니다(<a href="#p05-stub-ts">5부</a>). 진짜 처리기가 차례를 어떻게 다루는지는 <a href="#p08-rh-rules">4장</a>에서 봅니다 — 막는 호출과 스트림의 답이 다릅니다.</div>
+</article>
+
+<article class="card" id="p08-ex-quote">
+<h3>견적 실행기 — Task 를 먼저 싣고, 상태·아티팩트 갱신을 잇는다</h3>
+<p class="lead">2단계 에이전트는 DataPart 로 날짜·박 수·인원을 받아 업무 규칙 <code>chooseLodging</code> 을 부릅니다. 결과에 따라 아티팩트를 내고 끝내거나, 까닭을 달아 거절합니다. 흐름은 <a href="#p07-ex-quote">7부</a>와 한 줄씩 같습니다.</p>
+<!--CODE file=ex/ts/08/step2_task.ts region=executor-->
+<ul>
+<li><code>newTask</code>·<code>update</code>·<code>agentSays</code> 는 이 파일의 작은 함수입니다(<a href="#p08-ex-noupdater">조금 뒤</a>). 파이썬의 <code>TaskUpdater</code> 자리를 채웁니다.</li>
+<li><code>requestOf</code> 는 DataPart 를 합치기만 합니다. 수가 정수 그대로 오므로(<a href="#p08-ty-data">2장</a>) 파이썬처럼 <code>int</code> 로 되돌릴 일이 없습니다. 빠진 항목을 되묻는 일은 7장의 완성판이 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ex-quote-out">
+<h3>견적이 낸 이벤트 — Task, WORKING, 아티팩트, COMPLETED</h3>
+<p class="lead">같은 버스로 견적 실행기를 두 번 돌렸습니다. 10월 30일 30명과, 세 숙소가 모두 쉬는 12월 31일입니다.</p>
+<!--SPEC file=ex/run/08/drive.run-->
+<!--OUT file=out/08/drive.txt lines=7-23-->
+<ul>
+<li>Task 의 id(<code>&lt;id3&gt;</code>)가 <code>ctx.taskId</code> 와 같습니다. <code>newTask</code> 가 <code>ctx.taskId</code> 를 그대로 썼기 때문입니다 — 파이썬처럼 메시지에서 꺼내 오는 길은 없습니다(메시지의 taskId 는 <code>""</code>).</li>
+<li>거절은 아티팩트 없이 REJECTED 하나로 끝나고, 까닭은 상태 메시지에 실렸습니다. 출력이 <a href="#p07-ex-quote-out">7부</a>와 글자까지 같습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ex-noupdater">
+<h3>TaskUpdater 가 없다 — 이벤트 객체를 짓는 함수를 우리가 둔다</h3>
+<p class="lead">TS SDK 에는 상태·아티팩트 이벤트를 지어 주는 갱신기가 없습니다(<a href="#p08-map-used">1장</a>의 이름 목록). 견적 에이전트는 함수 셋으로 그 자리를 채웠습니다.</p>
+<!--CODE file=ex/ts/08/step2_task.ts region=events-->
+<div class="note"><b>완성 에이전트는 클래스 하나로</b> — <code>agents/common.ts</code> 의 <code>Updater</code> 가 <code>message</code>·<code>status</code>·<code>artifact</code>·<code>pause</code> 를 한데 묶고, 종료 상태가 되면 <code>live</code> 맵에서 자신을 지웁니다. 파이썬 갱신기처럼 "종료 뒤 갱신" 을 막는 장치는 없습니다. 대신 처리기의 큐가 종료 상태에서 멈추고(<a href="#p05-stub-ts">5부</a>), 저장 쪽(<code>ResultManager</code>)도 종료된 작업에 온 다른 상태를 경고만 남기고 버립니다(<code>dist/server/index.js:2355</code>).</div>
+</article>
+
+<article class="card" id="p08-ex-follow">
+<h3>이어 말하기 — ctx.task 에는 이번 메시지가 이미 들어 있다</h3>
+<p class="lead">같은 taskId 로 두 번째 메시지가 오면 처리기는 저장된 Task 를 <code>ctx.task</code> 로 넘깁니다. 첫 마디에 되묻고 둘째 마디에 끝내는 실행기로, 둘째 <code>execute</code> 가 받은 <code>ctx.task</code> 를 찍었습니다(처리기를 직접 부르는 법은 <a href="#p08-rh-direct">4장</a>).</p>
+<!--CODE file=ex/ts/08/follow.ts region=executor-->
+<!--OUT file=out/08/follow.ts.txt-->
+<ul>
+<li>처리기는 <code>execute</code> 를 부르기 <b>전에</b> 이번 메시지를 이력에 붙여 저장합니다(<code>dist/server/index.js:2799</code>). 파이썬은 그 반대였습니다(<a href="#p07-ex-follow">7부</a>: 첫 갱신 때 저장). 에이전트의 질문(<code>q-1</code>)도 상태를 낼 때 바로 이력에 들어갔습니다(<a href="#p05-ir-hist-cmp">5부</a>).</li>
+<li>완성 에이전트의 <code>begin</code> 은 이어 말하기에도 Task 를 WORKING 으로 다시 싣습니다(<a href="#p05-follow-ts-go">5부</a>). 숙소 실행기는 <code>[...task.history, ctx.userMessage]</code> 로 이번 메시지를 한 번 더 붙여 읽는데, 같은 DataPart 를 두 번 합칠 뿐이라 결과는 같습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ch3-sum">
+<h3>3장 정리 — 실행기를 쓰는 손잡이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>TypeScript SDK</th></tr>
+<tr><td>실행기 모양</td><td><code>class X implements AgentExecutor</code> — <code>execute(ctx, bus)</code>, <code>cancelTask(taskId, bus)</code></td></tr>
+<tr><td>이벤트 내보내기</td><td><code>bus.publish(AgentEvent.task(t))</code> 등 — 돌려주는 값 없음, <code>finished()</code> 는 처리기가</td></tr>
+<tr><td>요청 읽기</td><td><code>ctx.userMessage</code>, <code>ctx.taskId</code>·<code>ctx.contextId</code>, <code>ctx.request.configuration</code></td></tr>
+<tr><td>이어 말하기 알기</td><td><code>ctx.task !== undefined</code> (이번 메시지는 이미 이력에 있음)</td></tr>
+<tr><td>즉답</td><td><code>AgentEvent.message({…, contextId: ctx.contextId})</code> 하나</td></tr>
+<tr><td>작업 시작</td><td><code>AgentEvent.task({id: ctx.taskId, …})</code> 를 먼저 — 이어 말하기에도</td></tr>
+<tr><td>상태·아티팩트</td><td><code>AgentEvent.statusUpdate({…})</code>·<code>AgentEvent.artifactUpdate({…})</code> — 갱신기 없음</td></tr>
+<tr><td>에이전트 말 짓기</td><td>Message 객체 글자(taskId·contextId 를 달아)</td></tr>
+<tr><td>취소</td><td><code>cancelTask(taskId, bus)</code> 가 CANCELED 를 싣는다 — 멈추는 일은 실행기가 따로</td></tr>
+<tr><td>서버 없이 돌리기</td><td><code>new DefaultExecutionEventBus()</code> + <code>bus.on("event", …)</code> + <code>new RequestContext(req, taskId, contextId, new ServerCallContext())</code></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p08-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 되묻기 에이전트의 둘째 마디에서 "사용자가 지금까지 한 말" 을 모으려고 <code>[...ctx.task.history, ctx.userMessage]</code> 의 사용자 메시지를 셌더니, 사용자가 두 번 말했는데 셋이 나왔습니다. 왜 그렇고, 파이썬 SDK(<a href="#p07-ex-follow">7부</a>)에서도 셋입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> TS 처리기는 <code>execute</code> 를 부르기 전에 이번 메시지를 이력에 붙여 저장하므로, <code>ctx.task.history</code> 에 이미 둘째 말(<code>m-2</code>)이 있습니다 — <a href="#p08-ex-follow">follow.ts</a> 의 "이번 메시지가 이미 있나: true" 입니다. 여기에 <code>ctx.userMessage</code> 를 또 붙이면 둘째 말이 두 번 셉니다. 파이썬의 <code>current_task</code> 에는 이번 메시지가 아직 없으니 둘입니다.</div>
+</article>
+
+<!-- ==== 4장 요청 처리기와 Task 저장소 ==== -->
+
+<article class="card" id="p08-ch4">
+<p class="chnum">4장</p>
+<h2>요청 처리기와 Task 저장소</h2>
+<p class="chsub">메서드 열하나 → 위치 인자 아홉 → HTTP 없이 처리기 부르기 → 막는 호출은 언제 돌아오나 → 반칙하는 실행기 일곱 → 차례 반칙의 결과 → 침묵과 예외 → A2A 오류 열 → 테넌트·소유자별 저장소 → 꺼내면 사본 → 정리</p>
+</article>
+
+<article class="card" id="p08-rh-methods">
+<h3>요청 처리기는 A2A 메서드 열하나를 메서드 열하나로 받는다</h3>
+<p class="lead">JSON-RPC 전송 처리기(<code>JsonRpcTransportHandler</code>)의 <code>switch</code> 를 읽어, 메서드 이름마다 처리기의 어느 메서드를 부르는지 짝지었습니다.</p>
+<!--CODE file=ex/ts/08/handler_api.ts region=methods-->
+<!--OUT file=out/08/handler_api.ts.txt lines=1-14-->
+<ul>
+<li>이름이 늘 짝이 맞지는 않습니다 — <code>SubscribeToTask</code> 는 <code>resubscribe</code>, <code>GetExtendedAgentCard</code> 는 <code>getAuthenticatedExtendedAgentCard</code> 입니다. 파이썬의 <code>on_*</code> 열하나(<a href="#p07-rh-methods">7부</a>)와 같은 몫입니다.</li>
+<li>전송 처리기가 params 를 <code>XxxRequest.fromJSON</code> 으로 읽어 넘기고, 답은 <code>toJSON</code> 으로 바꿉니다(<a href="#p08-ty-wire">2장</a>). REST 처리기도 같은 객체의 같은 메서드를 부릅니다(13부).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-rh-options">
+<h3>생성자는 위치 인자 아홉 — 필수는 앞의 셋, 옵션은 맨 끝 객체에</h3>
+<!--CODE file=ex/ts/08/handler_api.ts region=options-->
+<!--OUT file=out/08/handler_api.ts.txt lines=15-25-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>인자</th><th>쓰임</th><th>어디서</th></tr>
+<tr><td>1–3 <code>agentCard</code>·<code>taskStore</code>·<code>agentExecutor</code></td><td>필수. 카드는 기능 검사(스트림·푸시·확장 카드)와 판 검사의 근거</td><td><a href="#p03-caps-server-cmp">3부</a>, <a href="#p06-miss-version-why">6부</a></td></tr>
+<tr><td>4 <code>eventBusManager</code></td><td>taskId 마다 버스 하나 — 기본은 메모리 <code>Map</code></td><td>17부</td></tr>
+<tr><td>5–6 푸시 저장소·보내는 것</td><td>카드에 <code>pushNotifications</code> 가 켜져 있으면 안 줘도 메모리 판을 만든다(<code>dist/server/index.js:2722</code>)</td><td>11부</td></tr>
+<tr><td>7 <code>extendedAgentCardProvider</code></td><td>카드 하나(로그인한 사용자에게만) 또는 <code>(context) =&gt; Promise&lt;AgentCard&gt;</code></td><td><a href="#p03-caps-xcard">3부</a>, 12부</td></tr>
+<tr><td>8 <code>agentCardSignatureGenerator</code></td><td>카드를 낼 때마다 서명</td><td>12부</td></tr>
+<tr><td>9 <code>options</code></td><td><code>keepBusAliveStates</code>(기본 INPUT·AUTH_REQUIRED), <code>validateInputModes</code>(기본 끔 — <a href="#p04-file-ctype">4부</a>)</td><td><a href="#p08-rh-when">다음</a></td></tr>
+</table>
+</div>
+<div class="note"><b>옵션 하나를 주려고 undefined 다섯</b> — 위치 인자라서, 완성 에이전트의 <code>serve</code> 는 <code>keepBusAliveStates</code> 하나를 주려고 앞의 빈자리를 <code>undefined</code> 로 채웁니다(<code>agents/common.ts</code> 의 <code>serve</code>). 파이썬의 <code>handler.aclose()</code> 같은 끄는 메서드는 없습니다.</div>
+</article>
+
+<article class="card" id="p08-rh-direct">
+<h3>HTTP 없이 처리기 부르기 — ServerCallContext 하나면 된다</h3>
+<p class="lead">2단계 견적 실행기로 처리기를 만들고, SendMessage·GetTask·ListTasks 와 스트림을 직접 불렀습니다. <a href="#p07-rh-direct">7부</a>의 <code>direct.py</code> 와 한 줄씩 같은 일입니다.</p>
+<!--CODE file=ex/ts/08/direct.ts region=handler-->
+<!--CODE file=ex/ts/08/direct.ts region=calls-->
+<div class="note"><b><code>ServerCallContext</code></b> — "누가, 어떤 요청으로" 를 담는 클래스입니다(<code>src/server/context.ts</code>: <code>user</code>·<code>tenant</code>·<code>state</code>·<code>requestedExtensions</code>·<code>requestedVersion</code>). express 처리기가 HTTP 요청마다 지어 넘기고(<a href="#p08-srv-who">5장</a>), 여기서는 빈 것(익명)을 씁니다.</div>
+</article>
+
+<article class="card" id="p08-rh-when">
+<h3>막는 호출은 큐가 멈출 때 돌아온다 — returnImmediately 면 첫 Task 에서</h3>
+<!--OUT file=out/08/direct.ts.txt-->
+<ul>
+<li><code>sendMessage</code> 는 버스의 이벤트를 큐로 따라가다가 큐가 멈추면 그때의 Task 를 답으로 줍니다. 큐는 Message, 종료 상태, INPUT_REQUIRED 에서 멈춥니다(<a href="#p08-ex-contract">3장</a>의 약속 표). AUTH_REQUIRED 는 그 자리의 사본(snapshot)을 먼저 돌려주고 큐는 뒤에서 계속 비웁니다(<code>dist/server/index.js:3096</code>).</li>
+<li><code>returnImmediately</code> 면 첫 Task(SUBMITTED)에서 답하고 실행기는 뒤에서 마저 돕니다 — 결과가 <a href="#p07-rh-when">파이썬</a>과 같습니다. 와이어에서 본 모습은 <a href="#p05-mode-ts">5부</a>입니다.</li>
+<li>스트림은 카드의 <code>capabilities.streaming</code> 이 꺼져 있어 막혔습니다(<code>:3141</code>). 파이썬과 달리 기록(log)은 남기지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-rh-rules">
+<h3>반칙하는 실행기 일곱 — 차례 넷, 침묵 하나, 예외 둘</h3>
+<p class="lead"><a href="#p07-rh-rules">7부</a>와 같은 일곱을 TS 로 썼습니다. 각각을 새 처리기에 물려 막는 SendMessage 와 스트림을 2초까지 기다리고, 답과 저장소에 남은 작업과 스트림이 낸 이벤트를 찍습니다.</p>
+<!--CODE file=ex/ts/08/rules.ts region=bad-->
+</article>
+
+<article class="card" id="p08-rh-rules-out">
+<h3>차례 검사는 스트림에만 있다 — 막는 호출은 반칙을 소리 없이 넘긴다</h3>
+<!--OUT file=out/08/rules.ts.txt lines=1-17-->
+<ul>
+<li>차례 검사(<code>_advanceStreamPattern</code>)는 <code>sendMessageStream</code> 안에서만 불립니다(<code>dist/server/index.js:3162</code>). 그래서 스트림은 반칙을 <code>-32004</code> 로 끊고, 막는 호출은 그냥 지나갑니다 — Message 둘이면 앞의 것, Task 뒤의 Message 면 그 Message 가 답이 되고 저장소에는 SUBMITTED 작업이 영영 남습니다.</li>
+<li>스트림이 쓰는 코드는 <code>-32004</code> UnsupportedOperation 입니다. 파이썬은 같은 반칙에 <code>-32006</code> InvalidAgentResponse 였습니다(<a href="#p07-rh-rules-out">7부</a>) — §3.3.2 의 표는 <code>InvalidAgentResponseError</code> 를 "An agent returned a response that does not conform to the specification" 이라 적으니 후자가 맞는 코드입니다.</li>
+<li><code>OtherId</code> 는 TS 에서 반칙이 아닙니다 — 실행기가 지은 id 그대로 저장되고 답에 나갑니다(파이썬은 <code>-32602</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-rh-silent">
+<h3>침묵은 곧바로 -32603, 예외는 오류가 아니라 FAILED Task 가 된다</h3>
+<!--OUT file=out/08/rules.ts.txt lines=18-29-->
+<ul>
+<li><b>Silent</b> — 실행기가 돌아가면 처리기가 버스를 닫고(<a href="#p08-ex-contract">3장</a>), 결과가 없으니 "Agent execution finished without a result" 로 끝냅니다. 파이썬처럼 끝없이 붙잡지 않습니다(<a href="#p07-rh-silent">7부</a>). 오류 이름 <code>_A2AError</code> 는 번들 도구가 바꾼 기반 클래스 이름입니다(<code>dist/errors/index.js:5</code>, <code>class _A2AError</code>).</li>
+<li><b>Refuses</b>·<b>Crashes</b> — A2A 오류든 아무 예외든, <code>execute</code> 가 던지면 처리기가 FAILED Task 를 지어 답합니다(<a href="#p05-fail-ts">5부</a>). 실행기에서 던진 <code>RequestMalformedError</code> 는 <code>-32602</code> 가 되지 <b>않습니다</b>. 거절이 목적이면 REJECTED 상태를 싣습니다(<a href="#p08-ex-quote">3장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-rh-codes">
+<h3>A2A 오류 클래스는 열 — 처리기가 던지는 것이 코드가 된다</h3>
+<p class="lead"><code>@a2a-js/sdk/errors</code> 의 클래스마다 JSON-RPC 코드와 HTTP+JSON 바인딩의 상태를 SDK 의 변환 함수(<code>toJsonRpcError</code>·<code>restStatusFor</code>)에 물었습니다.</p>
+<!--CODE file=ex/ts/08/error_codes.ts region=codes-->
+<!--OUT file=out/08/error_codes.ts.txt-->
+<div class="note"><b>파이썬보다 셋 적다</b> — JSON-RPC 의 -32600·-32601·-32603·-32700 은 클래스가 아니라 전송 처리기가 직접 짓는 코드입니다. -32602 는 <code>RequestMalformedError</code>(reason <code>INVALID_PARAMS</code>) 하나가 맡습니다. 이 표가 쓰이는 곳은 처리기가 스스로 던지는 오류(작업 없음 <code>-32001</code>, 스트림 미지원 <code>-32004</code>, 판 불일치 <code>-32009</code>)이고, <code>execute</code> 가 던진 것은 <a href="#p08-rh-silent">앞 슬라이드</a>처럼 FAILED Task 가 됩니다.</div>
+</article>
+
+<article class="card" id="p08-store-owner">
+<h3>InMemoryTaskStore 는 테넌트 → 소유자 → taskId 로 나뉜다 — 익명은 "unknown"</h3>
+<p class="lead">저장소 인터페이스(<code>TaskStore</code>)는 <code>save</code>·<code>load</code>·<code>list</code> 셋이고, 모두 호출자(<code>ServerCallContext</code>)를 받습니다. 직원 둘, 익명, 이름이 <code>unknown</code> 인 사용자, 다른 테넌트의 kim 으로 찾아봤습니다.</p>
+<!--CODE file=ex/ts/08/store.ts region=owner-->
+<!--OUT file=out/08/store.ts.txt lines=1-6-->
+<ul>
+<li>칸은 <code>tenant</code> 다음 <code>owner</code> 입니다(<code>ScopedStore</code>, <code>dist/server/index.js:2090</code>). 같은 kim 이라도 테넌트 <code>b</code> 에서는 작업이 없습니다.</li>
+<li>소유자 이름은 <code>context.user?.userName || "unknown"</code> 입니다(<code>resolveUserScope</code>, <code>:307</code>). 익명의 <code>userName</code> 은 <code>""</code> 이라 <code>"unknown"</code> 칸에 들어가고, 그래서 <b>이름이 unknown 인 사용자는 익명의 작업을 봅니다</b>. 파이썬은 익명 칸이 <code>""</code> 였습니다(<a href="#p07-store-owner">7부</a>). 사용자를 세우는 일은 12부입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-store-copy">
+<h3>꺼낸 Task 는 structuredClone 사본이다 — 끄는 스위치도, delete 도 없다</h3>
+<p class="lead">꺼낸 Task 를 save 없이 고친 뒤 다시 꺼냈고, raw 파트가 든 Task 를 넣었다 꺼냈습니다.</p>
+<!--CODE file=ex/ts/08/store.ts region=copy-->
+<!--CODE file=ex/ts/08/store.ts region=raw-->
+<!--OUT file=out/08/store.ts.txt lines=7-10-->
+<ul>
+<li><code>load</code>·<code>save</code> 가 늘 <code>structuredClone</code> 을 거쳐, 고친 것은 save 해야 남습니다. 파이썬의 <code>use_copying=False</code>(<a href="#p07-store-copy">7부</a>) 같은 스위치는 없고, 메서드는 <code>load</code>·<code>save</code>·<code>list</code> 뿐 지우는 것이 없습니다.</li>
+<li>저장소를 거친 raw 는 <code>Uint8Array</code> 입니다(<a href="#p08-ty-buffer">2장</a>). <code>ctx.task</code> 도 이 저장소에서 꺼낸 것이라, 이어 말하기에서 이전 파일을 읽을 때는 <code>Buffer.from(value)</code> 로 감쌉니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ch4-sum">
+<h3>4장 정리 — 처리기와 저장소의 손잡이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>TypeScript SDK</th></tr>
+<tr><td>처리기 만들기</td><td><code>new DefaultRequestHandler(card, store, executor, …여섯, options)</code></td></tr>
+<tr><td>메서드 ↔ 처리기</td><td><code>SendMessage</code> → <code>sendMessage(params, context)</code> 등 열하나 (<code>SubscribeToTask</code> → <code>resubscribe</code>)</td></tr>
+<tr><td>HTTP 없이 부르기</td><td><code>await handler.sendMessage(SendMessageRequest.fromJSON({…}), new ServerCallContext())</code></td></tr>
+<tr><td>막는 호출의 끝</td><td>큐가 멈출 때 — Message, 종료 상태, INPUT_REQUIRED (AUTH_REQUIRED 는 사본) — <code>returnImmediately</code> 면 첫 Task</td></tr>
+<tr><td>실행기 반칙 검사</td><td>스트림에서만 — <code>UnsupportedOperationError</code>(<code>-32004</code>)</td></tr>
+<tr><td>실행기에서 오류 내기</td><td>던지면 FAILED Task 가 답이 된다 — 거절은 REJECTED 상태로</td></tr>
+<tr><td>오류 ↔ 코드</td><td><code>toJsonRpcError</code>·<code>restStatusFor</code> (<code>@a2a-js/sdk/errors</code>)</td></tr>
+<tr><td>저장소</td><td><code>new InMemoryTaskStore(ownerResolver?)</code> — 테넌트·소유자별, 늘 사본</td></tr>
+<tr><td>저장소 인터페이스</td><td><code>TaskStore</code> — <code>save</code>·<code>load</code>·<code>list</code>, 모두 <code>context</code> 를 받는다</td></tr>
+<tr><td>기능 검사</td><td>카드의 <code>capabilities</code> 로 처리기가 — 스트림·푸시·확장 카드</td></tr>
+<tr><td>끄기</td><td>처리기에는 없다 — HTTP 서버를 닫는다(<a href="#p08-ch5">5장</a>)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p08-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 숙소 실행기의 한 갈래에서 실수로 Task 를 실은 뒤 상태 대신 Message 를 실었습니다. 막는 SendMessage 를 보낸 클라이언트는 무엇을 받고, 나중에 GetTask 하면 작업은 어떤 상태입니까? 같은 요청을 SendStreamingMessage 로 보내면 어떻게 됩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 막는 호출은 그 Message 를 답으로 받습니다. 저장소의 작업은 SUBMITTED 로 남아 끝나지 않습니다 — <a href="#p08-rh-rules-out">rules.ts</a> 의 <code>MessageAfterTask</code> 가 "막는 호출 Message", "저장 [TASK_STATE_SUBMITTED]" 였습니다. 스트림은 <code>task</code> 하나를 낸 뒤 <code>UnsupportedOperationError(-32004)</code> "Stream ordering violation" 으로 끊깁니다. 막는 호출에는 차례 검사가 없기 때문입니다.</div>
+</article>
+
+<!-- ==== 5장 서버 띄우기 ==== -->
+
+<article class="card" id="p08-ch5">
+<p class="chnum">5장</p>
+<h2>서버 띄우기 — express 처리기 셋과 카드</h2>
+<p class="chsub">처리기 셋은 express Router → 앱은 express(), 띄우는 것은 listen → 서버 셋을 탭 뒤에 → 처리기를 카드 공급자로 주면 → toJSON 으로 준 카드 → 메아리의 답 → 견적의 답 → 경로 밖의 요청 → 판 머리글과 Content-Type → 사용자와 헤더가 실행기에 닿는 길 → 정리</p>
+</article>
+
+<article class="card" id="p08-srv-routes">
+<h3>express 처리기 셋은 Router 를 돌려줄 뿐이다 — 앱과 포트는 우리 몫</h3>
+<p class="lead"><code>./server/express</code> 의 <code>jsonRpcHandler</code>·<code>agentCardHandler</code>·<code>restHandler</code> 는 express <code>Router</code> 를 만들어 돌려줍니다. 그 안의 층(layer)을 펴 봤습니다.</p>
+<!--CODE file=ex/ts/08/routes.ts region=routes-->
+<!--OUT file=out/08/routes.ts.txt-->
+<ul>
+<li>JSON-RPC 는 <code>POST /</code> 하나 앞에 미들웨어 셋 — Content-Type 검사, <code>express.json()</code>(본문 한도 100 KB — <a href="#p04-file-big">4부</a>), JSON 깨짐 처리 — 이 있습니다. 카드는 <code>GET /</code> 하나라, 어느 경로에 달지는 <code>app.use</code> 가 정합니다.</li>
+<li>REST 는 열두 경로에 같은 열둘을 <code>/:tenant/…</code> 아래에 한 번 더 답니다. <code>:subscribe</code> 를 GET 과 POST 둘 다 받는 것도 파이썬과 같습니다(<a href="#p07-srv-routes">7부</a>) — 13부의 몫입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-srv-app">
+<h3>앱은 express() 하나 — Router 를 경로에 달고 listen</h3>
+<p class="lead">1단계 메아리 에이전트의 <code>main</code> 입니다. 카드·저장소·실행기로 처리기를 짓고(<a href="#p08-ch4">4장</a>), 카드 경로와 JSON-RPC 경로를 express 앱에 달아 띄웁니다.</p>
+<!--CODE file=ex/ts/08/step1_echo.ts region=serve-->
+<ul>
+<li>카드의 url 은 바깥에서 닿는 주소라서(<a href="#p03-url-problem">3부</a>) <code>--url</code> 을 따로 받습니다. 다음 슬라이드에서 탭의 주소를 넣습니다.</li>
+<li><code>userBuilder</code> 는 필수 옵션입니다. 로그인이 없으면 <code>UserBuilder.noAuthentication</code> 을 줍니다(<a href="#p08-srv-who">조금 뒤</a>). 끌 때는 <code>app.listen</code> 이 돌려주는 HTTP 서버를 <code>close()</code> 합니다 — 처리기에는 끄는 메서드가 없습니다(<a href="#p08-rh-options">4장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-srv-spec">
+<h3>서버 셋을 탭 뒤에 — 메아리는 /, 견적은 /a2a</h3>
+<p class="lead"><a href="#p07-srv-spec">7부</a>와 같은 짜임입니다. 1단계 메아리, 2단계 견적(JSON-RPC 를 <code>/a2a</code> 에), 헤더를 되돌려 주는 실험 서버를 띄우고 각각 앞에 와이어 탭을 세웠습니다. 요청 본문은 <code>ex/run/08/rpc/*.json</code> 입니다.</p>
+<!--SPEC file=ex/run/08/serve.run-->
+<div class="note"><b>견적 서버만 다르게 한 것</b> — 카드를 <code>AgentCard.toJSON</code> 으로 바꿔 주고, JSON-RPC 를 <code>--path</code> 에 답니다(<a href="#p08-srv-path">조금 뒤</a>). 넷째 줄의 두 요청은 일부러 틀리게 보냅니다 — 판 머리글 없이, 그리고 <code>text/plain</code> 으로.</div>
+</article>
+
+<article class="card" id="p08-srv-card">
+<h3>처리기를 카드 공급자로 주면 빈 필드까지 나간다</h3>
+<p class="lead">SDK 설명서의 예(<code>agentCardProvider: a2aRequestHandler</code>, <code>dist/agent_card_handler-DdsMrp1N.d.ts</code>)대로 단 메아리 서버의 카드입니다.</p>
+<!--OUT file=out/08/serve.txt wire=echo-wire ex=1-->
+<ul>
+<li><code>agentCardHandler</code> 는 받은 객체를 <code>JSON.stringify</code> 할 뿐입니다(<code>dist/server/express/index.js:5888</code>). 처리기가 주는 것은 <code>fromJSON</code> 이 지은 TS 객체라서 <code>"tenant": ""</code>, <code>"extensions": []</code>, <code>"signatures": []</code> 같은 기본값이 그대로 나갑니다(<a href="#p08-ty-wire">2장</a>, <a href="#p03-agent-card-ts">3부</a>).</li>
+<li>oneof 가 있는 카드(보안 스킴)라면 <code>{"$case": …}</code> 까지 샙니다 — 그래서 완성 에이전트는 카드를 <code>toJSON</code> 해서 줍니다(<code>agents/common.ts</code> 의 <code>serve</code>). 이 경로는 약한 ETag 와 <code>Cache-Control: public, max-age=3600</code> 을 답니다(<a href="#p03-cache-ts">3부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-srv-card-json">
+<h3>toJSON 한 카드를 주면 와이어 모양 그대로다</h3>
+<p class="lead">2단계 견적 서버는 <code>AgentCard.toJSON(agentCard)</code> 를 돌려주는 함수를 공급자로 줍니다(<a href="#p08-srv-path">다음 슬라이드</a>의 코드).</p>
+<!--OUT file=out/08/serve.txt wire=quote-wire ex=1-->
+<div class="key"><b>카드는 언제나 toJSON 을 거쳐 준다</b> — 기본값이 빠져 파이썬·Go 서버의 카드와 같은 모양이 됩니다. 서명할 카드도 이 모양 위에서 서명합니다 — 완성 에이전트가 왜 그렇게 하는지는 12부에서 봅니다.</div>
+</article>
+
+<article class="card" id="p08-srv-echo">
+<h3>메아리의 답은 result.message — 실행기가 실은 Message 그대로</h3>
+<!--OUT file=out/08/serve.txt wire=echo-wire ex=2-->
+<ul>
+<li>전송 처리기가 Message 와 Task 를 <code>"messageId" in result</code> 로 갈라 <code>{"message": …}</code> 로 감쌌습니다(<code>JsonRpcTransportHandler</code>). 빈 <code>taskId: ""</code> 는 <code>toJSON</code> 이 뺐습니다.</li>
+<li><code>contextId</code> 는 처리기가 지어 <code>ctx.contextId</code> 로 넘긴 것입니다(<a href="#p08-ex-echo">3장</a>). Task 가 없으니 이 서버에 GetTask 해도 찾을 작업이 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-srv-quote">
+<h3>견적의 답은 result.task — 이벤트 넷이 Task 하나로 접혔다</h3>
+<p class="lead">2단계 서버에 같은 DataPart 요청을 보냈습니다. 응답 쪽만 잘랐습니다.</p>
+<!--OUT file=out/08/serve.txt wire=quote-wire ex=2 lines=25-62-->
+<ul>
+<li><a href="#p08-ex-quote-out">3장</a>에서 실행기가 낸 이벤트는 넷이었지만 막는 호출의 답은 마지막 상태의 Task 하나입니다. 이벤트를 하나하나 받으려면 스트림(10부)입니다.</li>
+<li>수는 <code>30</code>·<code>2100000</code> 정수 그대로이고(<a href="#p08-ty-data">2장</a>), 이력의 사용자 메시지에는 처리기가 채운 <code>contextId</code>·<code>taskId</code> 가 붙었습니다(<a href="#p08-ex-ctx">3장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-srv-path">
+<h3>JSON-RPC 경로는 app.use 의 첫 인자 — 경로 밖의 요청은 express 의 HTML 404</h3>
+<p class="lead">2단계는 <code>--path /a2a</code> 로 Router 를 <code>/a2a</code> 에 달고, 카드의 url 도 같은 경로로 적습니다. 경로를 벗어난 요청 둘(<code>POST /</code>, <code>GET /a2a</code>)의 답입니다.</p>
+<!--CODE file=ex/ts/08/step2_task.ts region=serve-->
+<!--OUT file=out/08/serve.txt lines=9-31 note=POST / 와 GET /a2a 에 대한 답-->
+<div class="warn"><b>JSON-RPC 오류가 아니다</b> — 경로가 없는 요청은 express 의 기본 처리가 <code>404</code> 와 HTML 한 쪽으로 돌려보냅니다. Router 에 <code>POST /</code> 만 있어 <code>GET /a2a</code> 도 405 가 아니라 404 입니다(파이썬 Starlette 는 405 — <a href="#p07-srv-path">7부</a>). 카드의 url 을 잘못 적으면 클라이언트가 받는 것이 이것입니다(<a href="#p03-url-dead-errors">3부</a>).</div>
+</article>
+
+<article class="card" id="p08-srv-guard">
+<h3>판 머리글이 없으면 -32009, JSON 이 아니면 -32005 — 처리기에 닿기 전에</h3>
+<p class="lead">같은 요청을 <code>A2A-Version</code> 머리글 없이, 그리고 <code>Content-Type: text/plain</code> 으로 보냈습니다. 손으로 <code>curl</code> 을 칠 때 가장 먼저 만나는 두 오류입니다.</p>
+<!--OUT file=out/08/serve.txt wire=quote-wire ex=5-6 grep=^→|^←|Content-Type|A2A-Version|"code"|"message":\s"|"reason" note=머리글 없이, 그리고 text/plain 으로 보낸 POST /a2a — 요청 머리글과 오류만 골랐다-->
+<!--OUT file=out/08/serve.txt server=quote note=견적 서버의 stderr-->
+<ul>
+<li>머리글이 없으면 판을 <code>'0.3'</code> 으로 보고(<code>ABSENT_HEADER_VERSION</code>, <code>src/server/context.ts</code>) 카드의 <code>protocolVersion</code> 과 글자 그대로 견줍니다 — 판 검사의 세 SDK 비교는 <a href="#p06-miss-version-why">6부</a>입니다. 이 흔한 클라이언트 실수에 서버는 stderr 로 "Unhandled error" 와 추적 정보를 남깁니다(<code>dist/server/express/index.js:3510</code>).</li>
+<li>Content-Type 검사(<code>contentTypeGuard</code>)는 HTTP 머리글의 잘못에 <code>-32005</code> ContentTypeNotSupported 를 씁니다. 스펙의 <code>-32005</code> 는 메시지 파트의 미디어 형식을 위한 코드입니다(§3.3.2, <a href="#p04-file-ctype">4부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p08-srv-who">
+<h3>사용자는 userBuilder 가, 헤더는 context.state 가 실행기까지 나른다</h3>
+<p class="lead">express 처리기는 HTTP 요청마다 <code>userBuilder(req)</code> 로 사용자를 세우고, <code>ServerCallContext</code> 를 지어 처리기에 넘깁니다. 그것이 <code>ctx.context</code> 로 실행기까지 옵니다. 받은 것을 파트 다섯으로 돌려주는 실행기에, 머리글로 사용자를 세우는 실험용 <code>userBuilder</code> 를 달았습니다.</p>
+<!--CODE file=ex/ts/08/headers.ts region=executor-->
+<!--CODE file=ex/ts/08/headers.ts region=user-->
+<!--OUT file=out/08/serve.txt wire=who-wire ex=1-2 grep=text.:\s.[^누] note=답의 파트 — 둘째 요청에만 X-Demo-User: kim (탭은 정해 둔 헤더만 적어 이 머리글은 안 보인다)-->
+<ul>
+<li>기본 빌더(<code>defaultServerCallContextBuilder</code>)는 express 의 <code>req.headers</code>(소문자 키)를 <code>state.get("headers")</code> 에 담습니다. 바꾸려면 <code>jsonRpcHandler({…, contextBuilder})</code> 입니다. 저장소의 소유자 칸도 이 사용자 이름으로 갈립니다(<a href="#p08-store-owner">4장</a>).</li>
+<li><b>확장이 비었습니다</b> — <code>A2A-Extensions</code> 머리글을 보냈는데도 <code>[]</code> 입니다. 처리기가 카드의 <code>capabilities.extensions</code> 에 없는 것을 걸러 냅니다(<code>dist/server/index.js:2818</code>). 파이썬은 받은 그대로 넘겼습니다(<a href="#p07-srv-who">7부</a>). 확장은 14부입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p08-ch5-sum">
+<h3>5장 정리 — 서버를 세우는 손잡이</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>TypeScript SDK</th></tr>
+<tr><td>카드 서빙</td><td><code>agentCardHandler({agentCardProvider, cache: {maxAge}})</code> — 공급자는 <code>toJSON</code> 한 카드를 돌려주게</td></tr>
+<tr><td>JSON-RPC 달기</td><td><code>app.use(path, jsonRpcHandler({requestHandler, userBuilder, contextBuilder?, legacyCompat?}))</code></td></tr>
+<tr><td>HTTP+JSON 달기</td><td><code>restHandler({requestHandler, userBuilder})</code> — 13부</td></tr>
+<tr><td>앱</td><td><code>express()</code> (express 는 선택 peer — 따로 깐다)</td></tr>
+<tr><td>띄우기</td><td><code>app.listen(port, host)</code> — 끄기는 그 서버의 <code>close()</code></td></tr>
+<tr><td>바깥 주소</td><td>카드 <code>supportedInterfaces[].url</code> 에 — 경로까지 <code>app.use</code> 의 경로와 같게</td></tr>
+<tr><td>사용자 세우기</td><td><code>userBuilder: (req) =&gt; Promise&lt;User&gt;</code> — 없으면 <code>UserBuilder.noAuthentication</code></td></tr>
+<tr><td>요청 정보 → 실행기</td><td><code>ctx.context</code> — <code>user</code>·<code>state.get("headers")</code>·<code>requestedExtensions</code>(카드에 있는 것만)·<code>requestedVersion</code>·<code>tenant</code></td></tr>
+<tr><td>경로 밖의 요청</td><td>express 의 <code>404</code> HTML (JSON-RPC 오류 아님)</td></tr>
+<tr><td>머리글 검사</td><td><code>A2A-Version</code> 없으면 <code>-32009</code>, JSON 이 아니면 <code>-32005</code></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p08-ch5-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 견적 서버를 띄운 뒤 동료가 <code>curl --json @quote.json http://127.0.0.1:10812/a2a</code> 로 시험했더니 오류가 왔다고 합니다. 경로도 본문도 맞습니다. 무엇이 빠졌고, 답은 어떤 코드입니까? 파이썬 SDK 서버(<a href="#p07-ch5">7부</a>)였다면 같습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>A2A-Version: 1.0</code> 머리글이 빠졌습니다. 머리글이 없으면 판을 0.3 으로 보므로 <code>-32009</code> "The requested A2A protocol version '0.3' is not supported" 가 옵니다 — <a href="#p08-srv-guard">serve 캡처</a>의 첫 줄입니다. 파이썬 SDK 서버도 머리글이 없으면 <code>-32009</code> 입니다(<a href="#p06-miss-version-why">6부</a>의 표, "헤더 없음" 열).</div>
 </article>
