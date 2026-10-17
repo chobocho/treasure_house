@@ -466,3 +466,34 @@ subagent task each.
   gets -32601; ESM+CJS builds, instanceof survives via Symbol.for brand; no OpenTelemetry;
   `deleteTaskPushNotificationConfig` skips the card pushNotifications check (not on a slide).
 - `make all SKEL=1` green (802 slides, 805 blocks, 0 mismatches); manifest 144, 0 stale.
+
+### Part 9 first half — 67 slides (2026-10-17)
+- `09_go.html` cover+intro (2), ch1 package map (10), ch2 types (15), ch3 executor (14),
+  ch4 handler/store (15), ch5 serving (11); summaries carry py/ts/go columns. Examples
+  `ex/go/09/` (helper pkgs `sdksrc`, `steps`; 18 single + 4 norun), specs
+  `ex/run/09/{drive,serve}.run`; ports 10901–10915. No final agent changed.
+- Findings (a2a-go@v2.6.0): 33 packages (12 internal), only imported modules downloaded;
+  `a2acompat/a2av0` pulls old module a2a-go v0.3.15; hand-written structs (proto only in
+  `a2apb/v1`), string enums accept unknown values, no-omitempty fields emit `"parts":null`,
+  `NewDataPart(nil)` writes `{"data":null}` that `Part.UnmarshalJSON` rejects
+  (`a2a/core.go:694/717`); doc drift — UUIDv7 ids vs "UUIDv4" (`a2asrv/exectx.go:43`), the
+  executor doc template doesn't compile (`agentexec.go:39,58`), `doc.go` names
+  `task.WithTaskStore`/`WithCallInterceptor`; yield after false panics; incoming message
+  appended before Execute, status message moved to history only on the next status update
+  (`a2aevent/event.go:121`) → stored order m-1·m-2·q-1; ordering checked for blocking and
+  streaming (`taskupdate.Manager`); silent executor hangs unless
+  `WithAgentInactivityTimeout`; OtherId → -32603 leaking SDK-internal text; plain error →
+  -32603 raw text, nothing stored; store keyed TaskID+owner, tenant ignored
+  (`taskstore/inmemory.go:52`), anonymous ListTasks unauthenticated (`:192`), gob copies
+  (struct in DataPart → "type not registered" → FAILED), task versions + 
+  ErrConcurrentModification (Go only); **bug: `ToJSONRPCError` iterates a map
+  (`internal/jsonrpc/jsonrpc.go:163`) → two wrapped sentinels give -32602 or -32001 at
+  random** (REST mapping is a slice, stable); JSON-RPC handler ignores path, GET → HTTP 200
+  -32600 (`a2asrv/jsonrpc.go:52`); no A2A-Version and text/plain both accepted (§3.6.1
+  says empty = 0.3); requested extensions unfiltered (as py); no capability checks without
+  `WithCapabilityChecks`; default slog to stderr. Three-SDK rogue-executor table on
+  `p09-rh-cmp`.
+- Open for 09b: builder brace-checks Go regions too — lodging `executor` (+2) / `quote`
+  (−2) are unusable, a whole-Execute region is ~61 lines (> 45); needs a split of
+  `Execute` into helpers (agent change, verify golden) or another excerpt plan.
+- `make all SKEL=1` green (867 slides, 884 blocks, 0 mismatches); manifest 164, 0 stale.
