@@ -400,3 +400,18 @@ subagent task each.
   (`should_populate_referred_tasks=False`, part 15); InMemoryTaskStore scoped by
   `user.user_name` (anonymous share ""); REST SubscribeToTask registered for GET and POST;
   `A2ARequest` union lacks ListTasksRequest; uvicorn is in no extra.
+
+### Part 7 complete — 121 slides (2026-10-17)
+- `07b_py.html` ch6 client (17), ch7 finished lodging agent (13), ch8 in-process tests (13),
+  ch9 SDK-only features (16) + part wrap. Examples in `ex/py/07/` + `ex/run/07/`
+  (client, strict, lodging, compat, otel). Lodging agents ×3 got `region:` markers; deck
+  cites `region=` instead of `lines=` (03_card too); 07a chapter refs became links.
+- Findings: `Client.send_message` docstring says it aggregates updates — it doesn't (first
+  task stays SUBMITTED, re-read with get_task); py client transport raises ParseError on
+  unknown response fields (violates §5.7 SHOULD) while server and card resolver ignore them;
+  v0.3 compat is one switch (`enable_v0_3_compat=True`), off → -32601; DatabaseTaskStore
+  imports but needs the sql extra, a2a-db needs Alembic; telemetry decorators are on but
+  record nothing without a provider. Part 5's "Task was destroyed but it is pending!" noise
+  is SDK 1.2.2 dropping `EventQueueSource._dispatch_loop` when refusing a finished task.
+- Region markers changed agent hashes → 23 stale captures re-run, contents byte-identical.
+  `make all SKEL=1` green (679 slides, 654 blocks, 0 mismatches).

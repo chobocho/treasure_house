@@ -18,6 +18,7 @@ import (
 	"example.com/workshop/workshop"
 )
 
+// region: questions
 // 빠진 항목을 하나씩 되묻는다. 순서가 곧 묻는 순서다.
 var order = []string{"date", "nights", "headcount"}
 var questions = map[string]string{
@@ -26,6 +27,9 @@ var questions = map[string]string{
 	"headcount": "인원은 몇 명입니까?",
 }
 
+// endregion
+
+// region: card
 func card(url string) *a2a.AgentCard {
 	return &a2a.AgentCard{
 		Name:        "보물상사 숙소 에이전트",
@@ -51,6 +55,9 @@ func card(url string) *a2a.AgentCard {
 	}
 }
 
+// endregion
+
+// region: from_text
 // fromText 는 되물음에 글로 답한 경우('30명')를 DataPart 처럼 바꾼다.
 func fromText(text string) map[string]any {
 	found := map[string]any{}
@@ -66,6 +73,9 @@ func fromText(text string) map[string]any {
 	return found
 }
 
+// endregion
+
+// region: executor
 type executor struct{}
 
 func (executor) Execute(
@@ -76,7 +86,6 @@ func (executor) Execute(
 		if !ok {
 			return
 		}
-		// 지금까지 들은 것 전부(이력 + 이번 메시지)를 합친다.
 		// 사용자가 한 말만 듣는다 — 이력에는 에이전트가 되물은 말도
 		// 있고, 그 예시("예: 2026-10-30")를 답으로 읽으면 안 된다.
 		// Begin 이 이번 메시지까지 이력에 넣어 둔다.
@@ -103,6 +112,9 @@ func (executor) Execute(
 				common.DataPart(map[string]any{"missing": missing}))
 			return
 		}
+		// endregion
+
+		// region: quote
 		date, _ := req["date"].(string)
 		quote, fail := workshop.ChooseLodging(workshop.LodgingRequest{
 			Date:      date,
@@ -123,6 +135,8 @@ func (executor) Execute(
 		up.Status(a2a.TaskStateCompleted)
 	}
 }
+
+// endregion
 
 func (executor) Cancel(
 	ctx context.Context, ec *a2asrv.ExecutorContext,

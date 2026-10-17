@@ -30,13 +30,16 @@ import {
   textPart,
 } from "./common.ts";
 
+// region: questions
 // 빠진 항목을 하나씩 되묻는다. 순서가 곧 묻는 순서다.
 const QUESTIONS: Record<string, string> = {
   date: "날짜는 언제입니까? (예: 2026-10-30)",
   nights: "며칠 묵습니까? (예: 1박)",
   headcount: "인원은 몇 명입니까?",
 };
+// endregion
 
+// region: card
 function card(url: string) {
   return {
     name: "보물상사 숙소 에이전트",
@@ -59,6 +62,9 @@ function card(url: string) {
   };
 }
 
+// endregion
+
+// region: from_text
 // 되물음에 글로 답한 경우('30명')를 DataPart 처럼 바꾼다.
 function fromText(text: string) {
   const found: Record<string, string> = {};
@@ -69,15 +75,16 @@ function fromText(text: string) {
   }
   return found;
 }
+// endregion
 
 // ['headcount'] — 파이썬이 리스트를 찍는 모양 그대로
 const pyList = (xs: string[]) =>
   `[${xs.map((x) => `'${x}'`).join(", ")}]`;
 
+// region: executor
 class LodgingExecutor implements AgentExecutor {
   async execute(ctx: RequestContext, bus: ExecutionEventBus) {
     const { task, up } = begin(ctx, bus);
-    // 지금까지 들은 것 전부(이력 + 이번 메시지)를 합친다.
     // 사용자가 한 말만 듣는다 — 이력에는 에이전트가 되물은 말도
     // 있고, 그 예시("예: 2026-10-30")를 답으로 읽으면 안 된다.
     const heard = [...task.history, ctx.userMessage].filter(
@@ -95,6 +102,9 @@ class LodgingExecutor implements AgentExecutor {
       up.status(TaskState.TASK_STATE_INPUT_REQUIRED, ask);
       return;
     }
+    // endregion
+
+    // region: quote
     const quote = chooseLodging(
       asInts(req, "nights", "headcount") as LodgingRequest,
     );
@@ -112,6 +122,7 @@ class LodgingExecutor implements AgentExecutor {
     up.artifact([dataPart(quote), textPart(summary)], "숙소 견적");
     up.status(TaskState.TASK_STATE_COMPLETED);
   }
+  // endregion
 
   async cancelTask(taskId: string, bus: ExecutionEventBus) {
     cancel(taskId, bus);
