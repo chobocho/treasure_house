@@ -497,3 +497,31 @@ subagent task each.
   (−2) are unusable, a whole-Execute region is ~61 lines (> 45); needs a split of
   `Execute` into helpers (agent change, verify golden) or another excerpt plan.
 - `make all SKEL=1` green (867 slides, 884 blocks, 0 mismatches); manifest 164, 0 stale.
+
+### Part 9 complete — 127 slides; SDK trilogy done (2026-10-17)
+- `09b_go.html` ch6 client (17), ch7 lodging (14), ch8 tests (15), ch9 Go-only (12) +
+  `p09-sdk3` three-SDK table + `p09-wrap` → #p10. 09_go / 07b / 08b plain ch mentions
+  linked. Ports 10950–10981.
+- `agents/lodging/main.go` refactored behaviour-preserving: Execute = Begin → `hear` →
+  `missingOf`/`ask` → `quote`; balanced regions executor/hear/ask/quote (old unbalanced ones
+  gone). 81 Go captures re-run byte-identical, golden green. TS `lodging.ts` still has the
+  old unbalanced executor/quote regions (unused) — tidy in review.
+- ch8 tests the final agent (package main) with `go test -overlay` from `09/testdata/`;
+  `run_tests` prints `go test -json` without timings.
+- Findings (a2a-go@v2.6.0): **manual A2A-Version is duplicated** — SDK key mixed-case
+  (`a2aclient/client.go:270`) vs lowercased caller key → both "0.3" and "1.0" sent;
+  **comma-separated A2A-Extensions never split** (`a2asrv/extensions.go:64`, §9.2/§14.2.2;
+  py splits), two header lines work; **executor panic → -32603 with a 21-line goroutine
+  stack in the message** unless `WithExecutionPanicHandler`
+  (`internal/taskexec/execution_handler.go:199`); doc drift `a2aclient/doc.go:22-55`,
+  `factory.go:274`, `exectx.go:32` (appends, doc says overrides); default JSON-RPC
+  http.Client Timeout 3 min also cuts SSE (`a2aclient/transport.go:26`); card resolver sends
+  no A2A-Version/Accept, base URL with a path is used as the card URL (`resolver.go:127`),
+  reads file:// (`:106`); client drops unknown fields, unknown enum stays a string, stream
+  errors are plain *a2a.Error (errors.Is works, unlike TS); stream falls back to
+  SendMessage without card streaming (`client.go:110`); server interceptors Before in
+  order / After reversed, early result still runs After (`intercepted_handler.go:231`);
+  `a2acompat/a2av0` = separate handlers + migration adapters (needs module v0.3.15, read
+  from source only); possible bug, source only: `handleCancelWithConcurrentRun` shadows err
+  (`internal/taskexec/local_manager.go:369`). Go lodging transcript/log byte-identical to TS.
+- `make all SKEL=1` green (926 slides, 956 blocks, 0 mismatches); manifest 172, 0 stale.

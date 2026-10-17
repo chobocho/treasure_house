@@ -86,63 +86,91 @@ func (executor) Execute(
 		if !ok {
 			return
 		}
-		// 사용자가 한 말만 듣는다 — 이력에는 에이전트가 되물은 말도
-		// 있고, 그 예시("예: 2026-10-30")를 답으로 읽으면 안 된다.
-		// Begin 이 이번 메시지까지 이력에 넣어 둔다.
-		var heard []*a2a.Message
-		for _, m := range task.History {
-			if m.Role == a2a.MessageRoleUser {
-				heard = append(heard, m)
-			}
-		}
-		req := common.DataOf(heard...)
-		for _, m := range heard {
-			maps.Copy(req, fromText(common.TextOf(m)))
-		}
-		var missing []string
-		for _, k := range order {
-			if _, ok := req[k]; !ok {
-				missing = append(missing, k)
-			}
-		}
-		if len(missing) > 0 {
-			common.Say("[숙소] 되묻기: %s", common.PyList(missing))
-			up.Status(a2a.TaskStateInputRequired,
-				common.TextPart(questions[missing[0]]),
-				common.DataPart(map[string]any{"missing": missing}))
+		req := hear(task.History)
+		if missing := missingOf(req); len(missing) > 0 {
+			ask(up, missing)
 			return
 		}
-		// endregion
-
-		// region: quote
-		date, _ := req["date"].(string)
-		quote, fail := workshop.ChooseLodging(workshop.LodgingRequest{
-			Date:      date,
-			Nights:    common.Int(req["nights"]),
-			Headcount: common.Int(req["headcount"]),
-		})
-		if fail != nil {
-			common.Say("[숙소] 거절: %s", fail.Reason)
-			up.Status(a2a.TaskStateRejected,
-				common.TextPart(fail.Reason))
-			return
-		}
-		summary := fmt.Sprintf("%s %d실, %s원",
-			quote.VenueName, quote.Rooms, common.Comma(quote.Total))
-		common.Say("[숙소] 견적: %s", summary)
-		up.Artifact("숙소 견적", common.Chunk{},
-			common.DataPart(quote), common.TextPart(summary))
-		up.Status(a2a.TaskStateCompleted)
+		quote(up, req)
 	}
 }
-
-// endregion
 
 func (executor) Cancel(
 	ctx context.Context, ec *a2asrv.ExecutorContext,
 ) iter.Seq2[a2a.Event, error] {
 	return common.Cancel(ec)
 }
+
+// endregion
+
+// region: hear
+// hear 는 사용자가 한 말만 듣는다 — 이력에는 에이전트가 되물은 말도
+// 있고, 그 예시("예: 2026-10-30")를 답으로 읽으면 안 된다.
+// Begin 이 이번 메시지까지 이력에 넣어 둔다.
+func hear(history []*a2a.Message) map[string]any {
+	var heard []*a2a.Message
+	for _, m := range history {
+		if m.Role == a2a.MessageRoleUser {
+			heard = append(heard, m)
+		}
+	}
+	req := common.DataOf(heard...)
+	for _, m := range heard {
+		maps.Copy(req, fromText(common.TextOf(m)))
+	}
+	return req
+}
+
+// endregion
+
+// region: ask
+// missingOf 는 아직 못 들은 항목을 묻는 순서대로 고른다.
+func missingOf(req map[string]any) []string {
+	var missing []string
+	for _, k := range order {
+		if _, ok := req[k]; !ok {
+			missing = append(missing, k)
+		}
+	}
+	return missing
+}
+
+// ask 는 첫째 빠진 항목을 글로 묻고, 빠진 목록 전부를 DataPart 로
+// 함께 실어 INPUT_REQUIRED 로 멈춘다.
+func ask(up *common.Updater, missing []string) {
+	common.Say("[숙소] 되묻기: %s", common.PyList(missing))
+	up.Status(a2a.TaskStateInputRequired,
+		common.TextPart(questions[missing[0]]),
+		common.DataPart(map[string]any{"missing": missing}))
+}
+
+// endregion
+
+// region: quote
+// quote 는 업무 규칙으로 고른 숙소를 아티팩트로 내고 끝내거나,
+// 고를 수 없으면 까닭을 실어 거절한다.
+func quote(up *common.Updater, req map[string]any) {
+	date, _ := req["date"].(string)
+	q, fail := workshop.ChooseLodging(workshop.LodgingRequest{
+		Date:      date,
+		Nights:    common.Int(req["nights"]),
+		Headcount: common.Int(req["headcount"]),
+	})
+	if fail != nil {
+		common.Say("[숙소] 거절: %s", fail.Reason)
+		up.Status(a2a.TaskStateRejected,
+			common.TextPart(fail.Reason))
+		return
+	}
+	summary := fmt.Sprintf("%s %d실, %s원",
+		q.VenueName, q.Rooms, common.Comma(q.Total))
+	common.Say("[숙소] 견적: %s", summary)
+	up.Artifact("숙소 견적", common.Chunk{},
+		common.DataPart(q), common.TextPart(summary))
+	up.Status(a2a.TaskStateCompleted)
+}
+
+// endregion
 
 func main() {
 	args := common.ParseArgs("보물상사 숙소 에이전트")

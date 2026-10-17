@@ -1,0 +1,704 @@
+[터미널 1] $ go run ./agents/lodging --port 10950 --url http://127.0.0.1:10960/
+[터미널 2] $ go run ./09/step2_task --port 10951 --url http://127.0.0.1:10961/
+[터미널 3] $ go run ./09/headers --port 10952
+[터미널 4] $ python tools/wiretap.py 10960 10950
+[터미널 5] $ python tools/wiretap.py 10961 10951
+[터미널 6] $ go run ./09/client_send -no-stream http://127.0.0.1:10960/
+막는 호출
+  *a2a.Task COMPLETED 아티팩트 1
+GetTask: COMPLETED 아티팩트 1 이력 1
+[터미널 6] $ go run ./09/client_send http://127.0.0.1:10960/
+스트림
+  *a2a.Task SUBMITTED 아티팩트 0
+  *a2a.TaskArtifactUpdateEvent 숙소 견적
+  *a2a.TaskStatusUpdateEvent COMPLETED
+GetTask: COMPLETED 아티팩트 1 이력 1
+[터미널 6] $ go run ./09/client_send http://127.0.0.1:10961/
+스트림
+  *a2a.Task COMPLETED 아티팩트 1
+GetTask: COMPLETED 아티팩트 1 이력 1
+[터미널 6] $ go run ./09/client_hooks http://127.0.0.1:10952/
+  before SendMessage 판=["0.3"]
+  http A2A-Version=["0.3" "1.0"] X-Workshop-Team="general-affairs"
+  after  SendMessage → *a2a.Message
+  답: User.Name=""
+  답: 인증됨=false
+  답: x-workshop-team=[general-affairs]
+  답: 확장=[]
+[터미널 6] $ go run ./09/client_errors http://127.0.0.1:10960/ http://127.0.0.1:10959/
+① 닿지 않는 카드: *fmt.wrapError
+    errors.Is syscall.ECONNREFUSED
+    card request failed: Get "http://127.0.0.1:10959/.well-known/agent-card.json": dial tcp 12…
+② 없는 카드: *agentcard.ErrStatusNotOK
+    errors.As *agentcard.ErrStatusNotOK 404
+    card request failed, status: 404 Not Found
+③ 없는 작업: *a2a.Error
+    errors.Is a2a.ErrTaskNotFound — task not found
+    failed to get task: task not found
+④ 틀린 url: *errors.errorString
+    가를 것 없음 — 글뿐
+    unexpected HTTP status: 404 Not Found
+── 터미널 1 (lodging) 출력 ──
+[숙소] 견적: 가평 솔숲 리조트 8실, 2,100,000원
+[숙소] 견적: 가평 솔숲 리조트 8실, 2,100,000원
+── 터미널 2 (quote) 출력 ──
+── 터미널 3 (who) 출력 ──
+── 와이어 (lodging-wire) ──
+→ GET /.well-known/agent-card.json HTTP/1.1
+← 200 OK
+  Content-Type: application/json
+  {
+    "supportedInterfaces": [
+      {
+        "url": "http://127.0.0.1:10960/",
+        "protocolBinding": "JSONRPC",
+        "protocolVersion": "1.0"
+      }
+    ],
+    "capabilities": {
+      "pushNotifications": false,
+      "streaming": true
+    },
+    "defaultInputModes": [
+      "application/json",
+      "text/plain"
+    ],
+    "defaultOutputModes": [
+      "application/json"
+    ],
+    "description": "날짜·박 수·인원으로 가장 싼 숙소를 고릅니다.",
+    "name": "보물상사 숙소 에이전트",
+    "provider": {
+      "organization": "보물상사",
+      "url": "https://treasure-house.example"
+    },
+    "skills": [
+      {
+        "description": "워크숍 숙소를 고르고 견적을 냅니다.",
+        "examples": [
+          "{\"date\":\"2026-10-30\",\"nights\":1,\"headcount\":30}"
+        ],
+        "id": "find-lodging",
+        "name": "숙소 찾기",
+        "tags": [
+          "lodging",
+          "workshop"
+        ]
+      }
+    ],
+    "version": "1.0.0"
+  }
+→ POST / HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+  {
+    "jsonrpc": "2.0",
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "c-1",
+        "parts": [
+          {
+            "data": {
+              "date": "2026-10-30",
+              "headcount": 30,
+              "nights": 1
+            }
+          }
+        ],
+        "role": "ROLE_USER"
+      }
+    },
+    "id": "<id1>"
+  }
+← 200 OK
+  Content-Type: application/json
+  {
+    "jsonrpc": "2.0",
+    "id": "<id1>",
+    "result": {
+      "task": {
+        "id": "<id2>",
+        "artifacts": [
+          {
+            "artifactId": "<id3>",
+            "name": "숙소 견적",
+            "parts": [
+              {
+                "data": {
+                  "headcount": 30,
+                  "nights": 1,
+                  "ok": true,
+                  "rooms": 8,
+                  "total": 2100000,
+                  "venueId": "gapyeong-solsup",
+                  "venueName": "가평 솔숲 리조트"
+                }
+              },
+              {
+                "text": "가평 솔숲 리조트 8실, 2,100,000원"
+              }
+            ]
+          }
+        ],
+        "contextId": "<id4>",
+        "history": [
+          {
+            "messageId": "c-1",
+            "parts": [
+              {
+                "data": {
+                  "date": "2026-10-30",
+                  "headcount": 30,
+                  "nights": 1
+                }
+              }
+            ],
+            "role": "ROLE_USER"
+          }
+        ],
+        "status": {
+          "state": "TASK_STATE_COMPLETED",
+          "timestamp": "<시각>"
+        }
+      }
+    }
+  }
+→ POST / HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+  {
+    "jsonrpc": "2.0",
+    "method": "GetTask",
+    "params": {
+      "id": "<id2>"
+    },
+    "id": "<id5>"
+  }
+← 200 OK
+  Content-Type: application/json
+  {
+    "jsonrpc": "2.0",
+    "id": "<id5>",
+    "result": {
+      "id": "<id2>",
+      "artifacts": [
+        {
+          "artifactId": "<id3>",
+          "name": "숙소 견적",
+          "parts": [
+            {
+              "data": {
+                "headcount": 30,
+                "nights": 1,
+                "ok": true,
+                "rooms": 8,
+                "total": 2100000,
+                "venueId": "gapyeong-solsup",
+                "venueName": "가평 솔숲 리조트"
+              }
+            },
+            {
+              "text": "가평 솔숲 리조트 8실, 2,100,000원"
+            }
+          ]
+        }
+      ],
+      "contextId": "<id4>",
+      "history": [
+        {
+          "messageId": "c-1",
+          "parts": [
+            {
+              "data": {
+                "date": "2026-10-30",
+                "headcount": 30,
+                "nights": 1
+              }
+            }
+          ],
+          "role": "ROLE_USER"
+        }
+      ],
+      "status": {
+        "state": "TASK_STATE_COMPLETED",
+        "timestamp": "<시각>"
+      }
+    }
+  }
+→ GET /.well-known/agent-card.json HTTP/1.1
+← 200 OK
+  Content-Type: application/json
+  {
+    "supportedInterfaces": [
+      {
+        "url": "http://127.0.0.1:10960/",
+        "protocolBinding": "JSONRPC",
+        "protocolVersion": "1.0"
+      }
+    ],
+    "capabilities": {
+      "pushNotifications": false,
+      "streaming": true
+    },
+    "defaultInputModes": [
+      "application/json",
+      "text/plain"
+    ],
+    "defaultOutputModes": [
+      "application/json"
+    ],
+    "description": "날짜·박 수·인원으로 가장 싼 숙소를 고릅니다.",
+    "name": "보물상사 숙소 에이전트",
+    "provider": {
+      "organization": "보물상사",
+      "url": "https://treasure-house.example"
+    },
+    "skills": [
+      {
+        "description": "워크숍 숙소를 고르고 견적을 냅니다.",
+        "examples": [
+          "{\"date\":\"2026-10-30\",\"nights\":1,\"headcount\":30}"
+        ],
+        "id": "find-lodging",
+        "name": "숙소 찾기",
+        "tags": [
+          "lodging",
+          "workshop"
+        ]
+      }
+    ],
+    "version": "1.0.0"
+  }
+→ POST / HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+  Accept: text/event-stream
+  {
+    "jsonrpc": "2.0",
+    "method": "SendStreamingMessage",
+    "params": {
+      "message": {
+        "messageId": "c-1",
+        "parts": [
+          {
+            "data": {
+              "date": "2026-10-30",
+              "headcount": 30,
+              "nights": 1
+            }
+          }
+        ],
+        "role": "ROLE_USER"
+      }
+    },
+    "id": "<id6>"
+  }
+← 200 OK
+  Content-Type: text/event-stream
+  id: <id7>
+  data: {
+    "jsonrpc": "2.0",
+    "id": "<id6>",
+    "result": {
+      "task": {
+        "id": "<id8>",
+        "contextId": "<id9>",
+        "history": [
+          {
+            "messageId": "c-1",
+            "parts": [
+              {
+                "data": {
+                  "date": "2026-10-30",
+                  "headcount": 30,
+                  "nights": 1
+                }
+              }
+            ],
+            "role": "ROLE_USER"
+          }
+        ],
+        "status": {
+          "state": "TASK_STATE_SUBMITTED"
+        }
+      }
+    }
+  }
+  id: <id10>
+  data: {
+    "jsonrpc": "2.0",
+    "id": "<id6>",
+    "result": {
+      "artifactUpdate": {
+        "artifact": {
+          "artifactId": "<id11>",
+          "name": "숙소 견적",
+          "parts": [
+            {
+              "data": {
+                "headcount": 30,
+                "nights": 1,
+                "ok": true,
+                "rooms": 8,
+                "total": 2100000,
+                "venueId": "gapyeong-solsup",
+                "venueName": "가평 솔숲 리조트"
+              }
+            },
+            {
+              "text": "가평 솔숲 리조트 8실, 2,100,000원"
+            }
+          ]
+        },
+        "contextId": "<id9>",
+        "taskId": "<id8>"
+      }
+    }
+  }
+  id: <id12>
+  data: {
+    "jsonrpc": "2.0",
+    "id": "<id6>",
+    "result": {
+      "statusUpdate": {
+        "contextId": "<id9>",
+        "status": {
+          "state": "TASK_STATE_COMPLETED",
+          "timestamp": "<시각>"
+        },
+        "taskId": "<id8>"
+      }
+    }
+  }
+→ POST / HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+  {
+    "jsonrpc": "2.0",
+    "method": "GetTask",
+    "params": {
+      "id": "<id8>"
+    },
+    "id": "<id13>"
+  }
+← 200 OK
+  Content-Type: application/json
+  {
+    "jsonrpc": "2.0",
+    "id": "<id13>",
+    "result": {
+      "id": "<id8>",
+      "artifacts": [
+        {
+          "artifactId": "<id11>",
+          "name": "숙소 견적",
+          "parts": [
+            {
+              "data": {
+                "headcount": 30,
+                "nights": 1,
+                "ok": true,
+                "rooms": 8,
+                "total": 2100000,
+                "venueId": "gapyeong-solsup",
+                "venueName": "가평 솔숲 리조트"
+              }
+            },
+            {
+              "text": "가평 솔숲 리조트 8실, 2,100,000원"
+            }
+          ]
+        }
+      ],
+      "contextId": "<id9>",
+      "history": [
+        {
+          "messageId": "c-1",
+          "parts": [
+            {
+              "data": {
+                "date": "2026-10-30",
+                "headcount": 30,
+                "nights": 1
+              }
+            }
+          ],
+          "role": "ROLE_USER"
+        }
+      ],
+      "status": {
+        "state": "TASK_STATE_COMPLETED",
+        "timestamp": "<시각>"
+      }
+    }
+  }
+→ GET /nothing/ HTTP/1.1
+← 404 Not Found
+  Content-Type: text/plain; charset=utf-8
+  404 page not found
+→ GET /.well-known/agent-card.json HTTP/1.1
+← 200 OK
+  Content-Type: application/json
+  {
+    "supportedInterfaces": [
+      {
+        "url": "http://127.0.0.1:10960/",
+        "protocolBinding": "JSONRPC",
+        "protocolVersion": "1.0"
+      }
+    ],
+    "capabilities": {
+      "pushNotifications": false,
+      "streaming": true
+    },
+    "defaultInputModes": [
+      "application/json",
+      "text/plain"
+    ],
+    "defaultOutputModes": [
+      "application/json"
+    ],
+    "description": "날짜·박 수·인원으로 가장 싼 숙소를 고릅니다.",
+    "name": "보물상사 숙소 에이전트",
+    "provider": {
+      "organization": "보물상사",
+      "url": "https://treasure-house.example"
+    },
+    "skills": [
+      {
+        "description": "워크숍 숙소를 고르고 견적을 냅니다.",
+        "examples": [
+          "{\"date\":\"2026-10-30\",\"nights\":1,\"headcount\":30}"
+        ],
+        "id": "find-lodging",
+        "name": "숙소 찾기",
+        "tags": [
+          "lodging",
+          "workshop"
+        ]
+      }
+    ],
+    "version": "1.0.0"
+  }
+→ POST / HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+  {
+    "jsonrpc": "2.0",
+    "method": "GetTask",
+    "params": {
+      "id": "t-없음"
+    },
+    "id": "<id14>"
+  }
+← 200 OK
+  Content-Type: application/json
+  {
+    "jsonrpc": "2.0",
+    "id": "<id14>",
+    "error": {
+      "code": -32001,
+      "message": "failed to get task: task not found",
+      "data": [
+        {
+          "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+          "domain": "a2a-protocol.org",
+          "metadata": {
+            "timestamp": "<시각>"
+          },
+          "reason": "TASK_NOT_FOUND"
+        }
+      ]
+    }
+  }
+→ POST /rpc HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+  {
+    "jsonrpc": "2.0",
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "<id15>",
+        "parts": [
+          {
+            "text": "숙소"
+          }
+        ],
+        "role": "ROLE_USER"
+      }
+    },
+    "id": "<id16>"
+  }
+← 404 Not Found
+  Content-Type: text/plain; charset=utf-8
+  404 page not found
+── 와이어 (quote-wire) ──
+→ GET /.well-known/agent-card.json HTTP/1.1
+← 200 OK
+  Content-Type: application/json
+  {
+    "supportedInterfaces": [
+      {
+        "url": "http://127.0.0.1:10961/",
+        "protocolBinding": "JSONRPC",
+        "protocolVersion": "1.0"
+      }
+    ],
+    "capabilities": {
+      "pushNotifications": false,
+      "streaming": false
+    },
+    "defaultInputModes": [
+      "application/json"
+    ],
+    "defaultOutputModes": [
+      "application/json"
+    ],
+    "description": "날짜·박 수·인원으로 숙소 견적을 냅니다.",
+    "name": "보물상사 견적 에이전트",
+    "skills": [
+      {
+        "description": "DataPart 의 조건에 맞는 숙소를 고릅니다.",
+        "id": "quote-lodging",
+        "name": "숙소 견적",
+        "tags": [
+          "lodging"
+        ]
+      }
+    ],
+    "version": "0.2.0"
+  }
+→ POST / HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+  {
+    "jsonrpc": "2.0",
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "c-1",
+        "parts": [
+          {
+            "data": {
+              "date": "2026-10-30",
+              "headcount": 30,
+              "nights": 1
+            }
+          }
+        ],
+        "role": "ROLE_USER"
+      }
+    },
+    "id": "<id17>"
+  }
+← 200 OK
+  Content-Type: application/json
+  {
+    "jsonrpc": "2.0",
+    "id": "<id17>",
+    "result": {
+      "task": {
+        "id": "<id18>",
+        "artifacts": [
+          {
+            "artifactId": "<id19>",
+            "name": "숙소 견적",
+            "parts": [
+              {
+                "data": {
+                  "headcount": 30,
+                  "nights": 1,
+                  "ok": true,
+                  "rooms": 8,
+                  "total": 2100000,
+                  "venueId": "gapyeong-solsup",
+                  "venueName": "가평 솔숲 리조트"
+                }
+              }
+            ]
+          }
+        ],
+        "contextId": "<id20>",
+        "history": [
+          {
+            "messageId": "c-1",
+            "parts": [
+              {
+                "data": {
+                  "date": "2026-10-30",
+                  "headcount": 30,
+                  "nights": 1
+                }
+              }
+            ],
+            "role": "ROLE_USER"
+          }
+        ],
+        "status": {
+          "state": "TASK_STATE_COMPLETED",
+          "timestamp": "<시각>"
+        }
+      }
+    }
+  }
+→ POST / HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+  {
+    "jsonrpc": "2.0",
+    "method": "GetTask",
+    "params": {
+      "id": "<id18>"
+    },
+    "id": "<id21>"
+  }
+← 200 OK
+  Content-Type: application/json
+  {
+    "jsonrpc": "2.0",
+    "id": "<id21>",
+    "result": {
+      "id": "<id18>",
+      "artifacts": [
+        {
+          "artifactId": "<id19>",
+          "name": "숙소 견적",
+          "parts": [
+            {
+              "data": {
+                "headcount": 30,
+                "nights": 1,
+                "ok": true,
+                "rooms": 8,
+                "total": 2100000,
+                "venueId": "gapyeong-solsup",
+                "venueName": "가평 솔숲 리조트"
+              }
+            }
+          ]
+        }
+      ],
+      "contextId": "<id20>",
+      "history": [
+        {
+          "messageId": "c-1",
+          "parts": [
+            {
+              "data": {
+                "date": "2026-10-30",
+                "headcount": 30,
+                "nights": 1
+              }
+            }
+          ],
+          "role": "ROLE_USER"
+        }
+      ],
+      "status": {
+        "state": "TASK_STATE_COMPLETED",
+        "timestamp": "<시각>"
+      }
+    }
+  }
