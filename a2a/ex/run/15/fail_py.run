@@ -1,0 +1,39 @@
+# 7장 — 실패 경로, 파이썬 메시. 이야기 문장을 하나씩 비틀어 기획
+# 에이전트에 보낸다: 숙소가 없는 날, 숙소가 없는 인원(70명), 인원보다
+# 많은 채식, 모자란 예산, 결재 반려(뒤에 정산에 남은 작업을 센다),
+# 달리는 배차의 취소.
+# 숙소·정산 앞에 탭을 둔다(교통 앞에 두면 취소하는 쪽의 ListTasks
+# 폴링이 매번 다른 횟수로 찍힌다). 교통은 단계마다 2초 — 취소가 첫
+# 단계 뒤, 둘째 단계 전에 닿게.
+serve name=lodging ready=tcp:11570 \
+      cmd="py:agents/lodging.py --port 11570 \
+      --url http://127.0.0.1:11575/"
+serve name=catering ready=tcp:11571 \
+      cmd="py:agents/catering.py --port 11571"
+serve name=bus ready=tcp:11572 \
+      cmd="py:agents/bus.py --port 11572 --step-ms 2000"
+serve name=settlement ready=tcp:11573 \
+      cmd="py:agents/settlement.py --port 11573 \
+      --url http://127.0.0.1:11578/"
+tap   name=lodging-wire listen=11575 target=11570
+tap   name=settle-wire listen=11578 target=11573
+serve name=planner ready=tcp:11574 \
+      cmd="py:12/planner_at.py 11574 11575 11571 11572 11578"
+run   cmd="py:agents/ask.py http://127.0.0.1:11574/ \
+      '2026-12-31부터 1박 2일, 30명(채식 2명), \
+      예산 6,000,000원, 출발 강남역'"
+run   cmd="py:agents/ask.py http://127.0.0.1:11574/ \
+      '2026-10-30부터 1박 2일, 70명(채식 2명), \
+      예산 6,000,000원, 출발 강남역'"
+run   cmd="py:agents/ask.py http://127.0.0.1:11574/ \
+      '2026-10-30부터 1박 2일, 30명(채식 40명), \
+      예산 6,000,000원, 출발 강남역'"
+run   cmd="py:agents/ask.py http://127.0.0.1:11574/ \
+      '2026-10-30부터 1박 2일, 30명(채식 2명), \
+      예산 4,000,000원, 출발 강남역'"
+run   cmd="py:agents/ask.py http://127.0.0.1:11574/ \
+      '2026-10-30부터 1박 2일, 30명(채식 2명), \
+      예산 6,000,000원, 출발 강남역' '안 됩니다'"
+run   cmd="py:15/settle_left.py http://127.0.0.1:11573/"
+run   cmd="py:15/cancel_bus.py http://127.0.0.1:11574/ \
+      http://127.0.0.1:11572/" timeout=60

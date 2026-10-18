@@ -932,3 +932,35 @@ subagent task each.
   cleaned up (py/ts `waiting` map forever, Go parked goroutine until ctx ends) and on a
   non-"승인" answer the AUTH_REQUIRED settlement task is never cancelled → 15c ch7.
 - `make all SKEL=1` green (1519 slides, 1614 blocks, 0 mismatches, 0 notices).
+
+### Part 15 complete — 133 slides; approval denial now cancels settlement (2026-10-18)
+- `15c_scenario.html` ch7 failure paths (28) + `p15-defects` + `p15-wrap` → #p16; 15_/15b_ ch7
+  mentions linked, line ranges re-pointed after the fix. Specs `ex/run/15/{fail_py,fail_ts,
+  fail_go,deny_old}.run` (six sentences each, taps on lodging + settlement only),
+  `ex/py/15/{cancel_bus,settle_left}.py`.
+- Outcomes identical ×3: lodging rejected (2026-12-31, 70명) → `REJECTED 숙소: …` (siblings
+  still finish — 70명 books a 45+25 bus that is never used); meals rejected (`채식 40명`)
+  → `REJECTED 식사: …` (caps case unreachable via the parser → `p10-cat-reject`); over
+  budget → `REJECTED 정산: 예산을 초과합니다 (842,000원)`, no AUTH_REQUIRED; approval denied
+  → `REJECTED 결재가 반려되어 멈춥니다`; bus cancelled mid-run → `REJECTED 교통: 배차를
+  취소했습니다`. Tables `p15-fail-cmp`, `p15-fail-map`.
+- **Fix:** planner ×3 region `withdraw` — on denial get a `payment:read` token and CancelTask
+  the settlement task before REJECTED (planner stays REJECTED per `p15-fix-state`;
+  `p15-deny-state`), settlement ends CANCELED; wait state was already dropped. Tests RED→GREEN
+  ×3 with a fake settlement server (Go via `common.Serve` on 11566, `waiter` unexported).
+  Before/after: `deny_old.run` AUTH_REQUIRED 1 → CANCELED 1 everywhere. Captures changed:
+  `out/15/tests.txt`, `out/07/used_names.py.txt` (+CancelTaskRequest, 37→38),
+  `out/09/used_names.go.txt` (82→83) — counts updated on `p07-map-used`, 08_ts lead,
+  `p09-map-used`. Everything else (incl. the six meshes) byte-identical.
+- Findings: TS `cancelTask` without a live execution writes CANCELED itself with "Task
+  cancellation requested by user." into history (`server/index.js:3225`); py runs the
+  executor's cancel if active else writes CANCELED (`default_request_handler_v2.py:240`); Go
+  cancels via the live queue (`internal/taskexec/local_manager.go:397`); CancelTask returns
+  the Task as `result` (not `result.task`); §7.6.2 lets a client reject authorization by a
+  message, our settlement executors treat any follow-up as an approval attempt.
+- Open (not fixed): peer CANCELED → planner REJECTED with the peer text verbatim (by the
+  book's rule FAILED; a peer SDK's English cancel text would leak); siblings keep running after
+  a failure; Go `say` bool ignored; no timeout on approval waits; py `withdraw` creates an
+  `httpx.AsyncClient` it never closes explicitly. Timing: `fail_*.run` canceller polls
+  ListTasks every 0.05 s, assumes CancelTask lands within the second 2 s bus step.
+- `make all SKEL=1` green (1548 slides, 1652 blocks, 0 mismatches, 0 notices).

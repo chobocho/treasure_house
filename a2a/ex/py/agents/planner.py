@@ -25,6 +25,7 @@ from a2a.types import (
     AgentCapabilities,
     AgentCard,
     AgentSkill,
+    CancelTaskRequest,
     Message,
     Role,
     SendMessageRequest,
@@ -218,6 +219,33 @@ async def get_token(c, scope, client_id, secret):
 # endregion
 
 
+# region: withdraw
+async def withdraw(c, settle, client_id, secret):
+    """결재를 받지 못한 정산 작업을 거둔다(CancelTask).
+
+    거두지 않으면 정산 쪽의 작업은 AUTH_REQUIRED 로 영원히 남는다.
+    거두지 못해도 반려는 반려다 — 서버 기록에만 남긴다.
+    """
+    try:
+        token = await get_token(c, "payment:read", client_id, secret)
+        http = httpx.AsyncClient(
+            headers={"Authorization": f"Bearer {token}"}, timeout=30
+        )
+        client = await create_client(
+            c, ClientConfig(streaming=False, httpx_client=http)
+        )
+        done = await client.cancel_task(CancelTaskRequest(id=settle.id))
+        await client.close()
+    except Exception:  # noqa: BLE001 — 닿지 않음·오류 모두
+        print("[기획] 정산 작업을 거두지 못했습니다", flush=True)
+        return
+    state = TaskState.Name(done.status.state)
+    print(f"[기획] 정산 작업을 거뒀습니다: {state}", flush=True)
+
+
+# endregion
+
+
 def quote_of(task):
     """완료된 Task 의 첫 DataPart(견적)를 꺼낸다."""
     for a in task.artifacts:
@@ -396,6 +424,10 @@ class PlannerExecutor(AgentExecutor):
     async def resume(self, ctx, up, task):
         cards, req, quotes, settle = self.waiting.pop(task.id)
         if "승인" not in get_message_text(ctx.message):
+            # 정산 쪽에서 기다리던 작업도 거둔다 — 반려를 알리기 전에
+            await withdraw(
+                cards["settle"], settle, self.client_id, self.secret
+            )
             await self.say(
                 up,
                 "결재가 반려되어 멈춥니다",

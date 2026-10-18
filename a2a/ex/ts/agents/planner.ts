@@ -225,6 +225,29 @@ async function getToken(c: AgentCard, scope: string, who: Client) {
 }
 // endregion
 
+// region: withdraw
+// 결재를 받지 못한 정산 작업을 거둔다(CancelTask). 거두지 않으면 정산
+// 쪽의 작업은 AUTH_REQUIRED 로 영원히 남는다. 거두지 못해도 반려는
+// 반려다 — 서버 기록에만 남긴다.
+async function withdraw(c: AgentCard, settle: Task, who: Client) {
+  try {
+    const token = await getToken(c, "payment:read", who);
+    const client = await new ClientFactory().createFromAgentCard(c);
+    const done = await client.cancelTask(
+      { tenant: "", id: settle.id, metadata: undefined },
+      {
+        serviceParameters: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    const state = TaskState[done.status?.state ?? 0];
+    console.log(`[기획] 정산 작업을 거뒀습니다: ${state}`);
+  } catch {
+    console.log("[기획] 정산 작업을 거두지 못했습니다");
+  }
+}
+// endregion
+
 // 완료된 Task 의 첫 DataPart(견적)를 꺼낸다.
 function quoteOf(task: Task): Json {
   for (const a of task.artifacts) {
@@ -396,12 +419,14 @@ class PlannerExecutor implements AgentExecutor {
   async resume(ctx: RequestContext, up: Updater, task: Task) {
     const { cards, req, quotes, settle } = this.waiting.get(task.id)!;
     this.waiting.delete(task.id);
+    const c = cards.get("settle")!;
     if (!textOf(ctx.userMessage).includes("승인")) {
+      // 정산 쪽에서 기다리던 작업도 거둔다 — 반려를 알리기 전에
+      await withdraw(c, settle, this.client);
       const no = "결재가 반려되어 멈춥니다";
       this.say(up, no, TaskState.TASK_STATE_REJECTED);
       return;
     }
-    const c = cards.get("settle")!;
     // 결재 토큰도 문지기를 지나니 payment:read 도 받는다
     const both = "payment:read payment:approve";
     let done: Task;

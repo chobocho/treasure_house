@@ -237,6 +237,33 @@ func (e *executor) getToken(c *a2a.AgentCard, scope string) (
 
 // endregion
 
+// region: withdraw
+// withdraw 는 결재를 받지 못한 정산 작업을 거둔다(CancelTask).
+// 거두지 않으면 정산 쪽의 작업은 AUTH_REQUIRED 로 영원히 남는다.
+// 거두지 못해도 반려는 반려다 — 서버 기록에만 남긴다.
+func (e *executor) withdraw(ctx context.Context, c *a2a.AgentCard,
+	settle *a2a.Task) {
+	token, err := e.getToken(c, "payment:read")
+	var client *a2aclient.Client
+	if err == nil {
+		client, err = a2aclient.NewFromCard(ctx, c,
+			a2aclient.WithJSONRPCTransport(common.HTTPClient(token)))
+	}
+	var done *a2a.Task
+	if err == nil {
+		defer client.Destroy()
+		done, err = client.CancelTask(ctx,
+			&a2a.CancelTaskRequest{ID: settle.ID})
+	}
+	if err != nil {
+		common.Say("[기획] 정산 작업을 거두지 못했습니다")
+		return
+	}
+	common.Say("[기획] 정산 작업을 거뒀습니다: %s", done.Status.State)
+}
+
+// endregion
+
 // quoteOf 는 완료된 Task 의 첫 DataPart(견적)를 꺼낸다.
 func quoteOf(t *a2a.Task) map[string]any {
 	for _, a := range t.Artifacts {
@@ -440,6 +467,8 @@ func (e *executor) settle(ctx context.Context, up *common.Updater,
 			return
 		}
 		if !strings.Contains(common.TextOf(r.Msg), "승인") {
+			// 정산 쪽에서 기다리던 작업도 거둔다 — 반려를 알리기 전에
+			e.withdraw(ctx, c, settle)
 			e.say(up, a2a.TaskStateRejected, "결재가 반려되어 멈춥니다")
 			return
 		}

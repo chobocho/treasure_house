@@ -1,4 +1,380 @@
-<article class="card" id="p15-todo-c">
-<h3>시나리오 완성 (c)</h3>
-<p class="lead">준비 중입니다</p>
+<!-- ==== 7장 실패 경로 ==== -->
+
+<article class="card" id="p15-ch7">
+<p class="chnum">7장</p>
+<h2>실패 경로 — 거절·예산 초과·취소·반려</h2>
+<p class="chsub">여섯 문장 → 실패를 잡는 자리 → 숙소 거절 → 거절의 와이어 → 거절이 넘어가는 길 → 거절 뒤에도 끝난 배차 → 식사 거절 → 예산 초과 → 예산 초과의 와이어 → 달리는 배차 취소하기 → 취소의 실행 → 취소가 거절로(남은 결함) → 결재 반려 — 이 결함은 실제로 있었다 → 왜 거둬야 하나 → 두 작업의 끝 상태 → 고친 코드 ×3 → 고친 뒤의 실행 → CancelTask 의 와이어 → 세 정산 서버 비교 → 시험 ×3 → Go 의 시험 → 세 언어가 본 실패 → 세 언어 비교 → 상태 고르기 → 정리</p>
+</article>
+
+<article class="card" id="p15-fail-plan">
+<h3>여섯 문장 — 이야기의 한 곳씩 비틀어, 동료 하나씩 실패하게 한다</h3>
+<p class="lead">6장의 메시를 그대로 세우고, 이야기 문장의 한 곳만 바꿔 기획 에이전트에 보냅니다. 언어마다 명세 하나(<code>fail_py</code>·<code>fail_ts</code>·<code>fail_go</code>)에 같은 차례로 담았습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>#</th><th>바꾼 곳</th><th>실패하는 쪽</th><th>근거(SCENARIO)</th></tr>
+<tr><td>1</td><td><code>2026-12-31부터</code></td><td>숙소 — 세 곳 모두 쉬는 날</td><td>§2.1 closed</td></tr>
+<tr><td>2</td><td><code>70명</code></td><td>숙소 — 60명이 넘는 곳이 없다</td><td>§2.1 capacity</td></tr>
+<tr><td>3</td><td><code>30명(채식 40명)</code></td><td>식사 — 채식이 전체보다 많다</td><td>§2.7</td></tr>
+<tr><td>4</td><td><code>예산 4,000,000원</code></td><td>정산 — 합계 4,842,000원이 넘는다</td><td>§2.4</td></tr>
+<tr><td>5</td><td>결재에 <code>안 됩니다</code></td><td>사람 — 결재 반려</td><td>§2.4 AUTH_REQUIRED</td></tr>
+<tr><td>6</td><td>(문장은 그대로) 배차 도중 CancelTask</td><td>교통 — 남이 취소</td><td>§2.3</td></tr>
+</table>
+</div>
+<!--SPEC file=ex/run/15/fail_py.run-->
+<div class="note"><b>탭은 숙소·정산 앞에만</b> — 6번에서 취소하는 쪽이 교통 에이전트의 ListTasks 를 여러 번 묻습니다. 그 횟수는 실행마다 달라, 교통 앞에 탭을 두면 캡처가 흔들립니다. 5번 뒤의 <code>settle_left.py</code> 는 정산에 남은 작업을 상태별로 셉니다(<a href="#p15-deny-before">반려</a>).</div>
+</article>
+
+<article class="card" id="p15-fail-where">
+<h3>실패를 잡는 자리는 셋 — 견적 셋을 알릴 때, 정산이 끝났을 때, 결재 답을 읽을 때</h3>
+<p class="lead">기획 에이전트의 코드는 앞 장들에서 구역으로 읽었습니다. 동료의 실패가 어느 구역에서 기획 작업의 상태가 되는지만 모읍니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리(구역)</th><th>무엇을 보나</th><th>기획 작업의 끝</th><th>문장</th></tr>
+<tr><td><code>plan</code> 의 알림 고리(<a href="#p15-fan-py">3장</a>)</td><td>숙소·식사·교통 작업이 COMPLETED 인가 — 정한 차례로</td><td>REJECTED <code>&lt;역할&gt;: &lt;동료의 까닭&gt;</code></td><td>1·2·3·6</td></tr>
+<tr><td><code>finish</code>(<a href="#p15-finish-py">5장</a>)</td><td>정산 작업이 COMPLETED 인가</td><td>REJECTED <code>정산: &lt;까닭&gt;</code></td><td>4</td></tr>
+<tr><td><code>resume</code>(<a href="#p15-res-py">4장</a>)</td><td>사람의 답에 "승인" 이 있나</td><td>REJECTED <code>결재가 반려되어 멈춥니다</code></td><td>5</td></tr>
+<tr><td><code>cannot</code>(<a href="#p15-fix-code">2장</a>)</td><td>예외·오류(닿지 않음)</td><td>FAILED <code>&lt;역할&gt; 에이전트에게 맡기지 못했습니다</code></td><td>(2장에서 봄)</td></tr>
+</table>
+</div>
+<div class="key"><b>동료의 상태는 넷 중 하나로 읽힌다</b> — COMPLETED 면 다음으로, AUTH_REQUIRED(정산)면 사람에게 넘기고, 그 밖의 상태는 모두 같은 가지(<code>!= COMPLETED</code>)로 갑니다. 그 가지가 REJECTED 하나뿐이라는 것이 이 장 뒤쪽의 결함으로 이어집니다(<a href="#p15-cancel-state">취소</a>).</div>
+</article>
+
+<article class="card" id="p15-lodging-run">
+<h3>숙소가 거절하면 — 기획 작업도 REJECTED, 까닭은 "숙소: " 를 붙인 동료의 글</h3>
+<p class="lead">1·2번 문장입니다. 파이썬 메시의 <code>ask</code> 화면과 숙소 서버의 기록입니다.</p>
+<!--OUT file=out/15/fail_py.txt part=터미널 8 lines=1-10 note=ask — 12월 31일, 그리고 70명-->
+<!--OUT file=out/15/fail_py.txt server=lodging lines=1-2 note=숙소 서버 — 거절 두 번-->
+<ul>
+<li>발견까지는 6장과 같고, 견적 알림이 하나도 없이 끝납니다. 알리는 차례의 맨 앞이 숙소라 첫 결과에서 멈춥니다.</li>
+<li>두 문장의 까닭이 같습니다 — 숙소 에이전트는 "쉬는 날" 과 "자리가 모자람" 을 가르지 않고 <code>가능한 숙소가 없습니다</code> 하나로 답합니다(SCENARIO §2.1). 기획 에이전트도 더 말할 것이 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-lodging-wire">
+<h3>거절의 와이어 — 숙소의 답은 <code>result.task</code>, 상태 REJECTED 에 글 파트 하나</h3>
+<p class="lead">숙소 탭의 둘째 주고받음(1번 문장의 SendMessage)에서 상태와 글만 골랐습니다.</p>
+<!--OUT file=out/15/fail_py.txt wire=lodging-wire ex=2 grep=^→|^←|"date"|"state"|"text"|"role" note=기획(파이썬) → 숙소(파이썬)-->
+<ul>
+<li>막는 SendMessage 라 숙소는 끝난 Task 를 돌려줍니다 — §3.2.2 는 막는 호출이 "terminal state … or an interrupted state" 까지 기다린다고 합니다. 거절은 오류(JSON-RPC <code>error</code>)가 아니라 정상 응답 안의 상태입니다(<a href="#p05-ch6">5부</a>).</li>
+<li>까닭은 <code>status.message</code> 의 TextPart 입니다. 아티팩트는 없습니다 — 기획 에이전트는 견적을 꺼내기 전에 상태부터 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-lodging-relay">
+<h3>거절이 넘어가는 길 — 동료의 메시지를 옮기지 않고, 글만 꺼내 새 메시지를 짓는다</h3>
+<p class="lead">기획 에이전트는 동료의 Task 를 자기 사용자에게 그대로 넘기지 않습니다. 두 작업은 서로 다른 서버의 다른 작업입니다.</p>
+<pre class="fig">
+ 숙소 작업(숙소 서버)              기획 작업(기획 서버)
+ state  REJECTED          ──→  state  REJECTED       같은 상태
+ message 의 글            ──→  "숙소: " + 그 글       새 메시지
+ message.messageId·taskId  ✗    기획 쪽의 id          옮기지 않음
+</pre>
+<!--OUT file=out/15/fail_py.txt server=planner lines=1-3 note=기획 서버의 기록 — 거절을 받은 자리-->
+<ul>
+<li>상태는 같은 REJECTED 로 잇고, 글은 <code>get_message_text</code>·<code>textOf</code>·<code>TextOf</code> 로 꺼내 역할 이름을 앞에 붙입니다(<a href="#p15-fan-py">3장의 plan 구역</a>). 동료의 messageId·taskId 는 기획 작업의 이력에 들어가지 않습니다.</li>
+<li>사용자는 숙소 작업의 id 를 받지 못합니다. 숙소 작업을 따로 들여다볼 길은 기획 에이전트의 기록뿐입니다 — 이 이야기의 사용자에게는 그것으로 충분하다고 본 설계입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-lodging-siblings">
+<h3>숙소가 거절한 뒤에도 — 식사는 견적을 냈고 교통은 배차까지 확정했다</h3>
+<p class="lead">셋에 동시에 맡기고 셋이 다 끝나길 기다리므로(<a href="#p15-fan-cmp">3장</a>), 숙소의 거절은 나머지 둘을 멈추지 않습니다.</p>
+<!--OUT file=out/15/fail_py.txt server=catering lines=1-2 note=식사 서버 — 1·2번 문장에서도 견적-->
+<!--OUT file=out/15/fail_py.txt server=bus lines=1-8 note=교통 서버 — 1·2번 문장에서도 끝까지-->
+<ul>
+<li>2번 문장(70명)에서 교통은 45인승과 25인승을 한 대씩, 이틀에 2,100,000원으로 확정했습니다(SCENARIO §2.3, 골든의 70명 경우). 숙소가 없으니 쓰지 못할 배차입니다.</li>
+<li>기획 에이전트는 이 두 작업을 CancelTask 로 거두지 않습니다. 숙소의 거절을 받은 때에는 교통이 이미 끝나 있었으니 거둘 수도 없었습니다 — 셋을 함께 기다리는 설계의 값입니다. 첫 실패에서 나머지를 거두려면 기다리는 방식부터 바꿔야 합니다(고치지 않았다).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-meals-run">
+<h3>식사가 거절하면 — 숙소 견적까지 알리고 멈춘다, 교통 견적은 알려지지 않는다</h3>
+<p class="lead">3번 문장(<code>30명(채식 40명)</code>)입니다.</p>
+<!--OUT file=out/15/fail_py.txt part=터미널 8 lines=11-16 note=ask-->
+<!--OUT file=out/15/fail_py.txt server=catering lines=3-3 note=식사 서버-->
+<ul>
+<li>알림은 숙소 → 식사 → 교통의 차례라, 숙소 견적 한 줄이 먼저 나가고 식사에서 멈춥니다. 교통은 이번에도 끝까지 일했지만(<a href="#p15-lodging-siblings">앞 슬라이드</a>의 교통 기록) 사용자는 그 견적을 보지 못합니다.</li>
+<li>골든의 다른 식사 거절 — 상한(<code>caps</code>)이 채식 메뉴를 모두 막는 경우 — 은 기획 에이전트로는 일으킬 수 없습니다. 한 문장 풀이에 상한이 없기 때문입니다(<a href="#p15-parse-code">1장의 풀이</a>). 그 거절은 식사 에이전트를 바로 부른 10부에서 보았습니다(<a href="#p10-cat-reject">10부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-over-run">
+<h3>예산이 모자라면 — 결재를 묻지 않고 곧바로 REJECTED "정산: 예산을 초과합니다"</h3>
+<p class="lead">4번 문장(<code>예산 4,000,000원</code>)입니다. 견적 셋은 이야기와 같고 합계는 4,842,000원입니다.</p>
+<!--OUT file=out/15/fail_py.txt part=터미널 8 lines=17-24 note=ask-->
+<!--OUT file=out/15/fail_py.txt server=settlement lines=1-2 note=정산 서버-->
+<ul>
+<li>합계가 결재 기준(3,000,000원)을 넘는데도 AUTH_REQUIRED 가 오지 않았습니다. 정산은 예산 초과를 결재보다 먼저 봅니다(SCENARIO §2.7 "settle checks over-budget before approval") — 사람에게 묻기 전에 끝나는 실패입니다.</li>
+<li>기획 에이전트의 <code>finish</code> 가 정산의 까닭(<code>예산을 초과합니다 (842,000원)</code>)에 <code>정산: </code> 을 붙였습니다(<a href="#p15-finish-py">5장</a>). 넘친 금액이 까닭 안에 있어, 사용자는 얼마를 줄여야 하는지 압니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-over-wire">
+<h3>예산 초과의 와이어 — 토큰은 하나(<code>payment:read</code>), 정산 작업은 REJECTED 로 끝</h3>
+<p class="lead">정산 탭에서 4번 문장의 토큰 요청과 SendMessage 입니다.</p>
+<!--OUT file=out/15/fail_py.txt wire=settle-wire ex=5-6 grep=^→|^←|Authorization|grant_type|access_token|"budget"|"state"|"text" note=기획(파이썬) → 정산(파이썬)-->
+<ul>
+<li>결재 토큰(<code>payment:approve</code>)을 받을 일이 없었습니다. 정산의 답은 끝 상태(REJECTED)라 이어 말할 작업도 남지 않습니다.</li>
+<li>요청의 숫자는 파이썬 Struct 의 double(<code>4000000.0</code>)입니다(<a href="#p15-mix-wire">6장</a>). 정산은 정수로 바꿔 계산합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-cancel-how">
+<h3>달리는 배차를 남이 취소하기 — 시간이 아니라 "첫 단계를 알렸다" 는 상태를 기다린다</h3>
+<p class="lead">6번입니다. 문장은 이야기 그대로이고, 기획 에이전트가 교통에 맡긴 배차를 다른 클라이언트가 도중에 취소합니다. 취소하는 쪽은 교통 서버에 곧장 묻습니다 — 교통에는 <code>--url</code> 을 주지 않아 카드의 <code>url</code> 이 서버 포트 그대로입니다.</p>
+<!--CODE file=ex/py/15/cancel_bus.py region=cancel-->
+<ul>
+<li><code>cancel_first_step</code> 은 WORKING 작업의 상태 메시지가 <code>배차 요청 접수</code> 가 될 때까지 ListTasks 를 0.05초마다 다시 묻습니다. 묻는 횟수는 매번 다르지만 출력에 나오지 않습니다.</li>
+<li>남는 가정은 하나 — 첫 단계를 본 뒤 둘째 단계(2초, <code>--step-ms 2000</code>)가 끝나기 전에 CancelTask 가 닿는다는 것입니다. 11부의 취소(<a href="#p11-ch6">11부</a>)와 같은 수법입니다.</li>
+<li>두 흐름의 출력은 섞이지 않게 모았다가, 둘 다 끝난 뒤 정한 차례(취소 → 기획의 스트림)로 찍습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-cancel-run">
+<h3>취소의 실행 — 교통은 CANCELED, 기획 작업은 REJECTED "교통: 배차를 취소했습니다"</h3>
+<!--OUT file=out/15/fail_py.txt part=터미널 8 lines=40-47 note=cancel_bus.py — 취소, 그다음 기획 에이전트의 스트림-->
+<!--OUT file=out/15/fail_py.txt server=bus lines=21-22 note=교통 서버 — 첫 단계 뒤에 취소-->
+<!--OUT file=out/15/fail_py.txt server=planner grep=교통 실패 note=기획 서버-->
+<ul>
+<li>교통의 막는 SendMessage 는 CANCELED 가 된 Task 를 들고 돌아왔습니다 — §3.2.2 의 "terminal state" 하나입니다. 기획 에이전트는 그 상태 메시지(<code>배차를 취소했습니다</code>, 교통 실행기의 <code>cancel</code> 이 실은 글)를 까닭으로 옮겼습니다.</li>
+<li>숙소·식사 견적은 알렸고, 교통 자리에서 멈췄습니다. 정산까지 가지 않으니 정산 서버에는 이 문장의 작업이 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-cancel-state">
+<h3>남은 결함 — 동료의 CANCELED 가 기획 작업의 REJECTED 가 된다</h3>
+<p class="lead">알림 고리는 COMPLETED 가 아닌 것을 모두 거절로 바꿉니다(<a href="#p15-fail-where">실패를 잡는 자리</a>). 이 책이 2장에서 정한 기준(<a href="#p15-fix-state">2장</a>)으로 보면 이 경우는 맞지 않습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>숙소 거절(1번)</th><th>배차 취소(6번)</th></tr>
+<tr><td>동료의 끝</td><td>REJECTED — 요청을 보고 판단했다</td><td>CANCELED — 남이 도중에 멈췄다</td></tr>
+<tr><td>같은 문장을 다시 보내면</td><td>같은 답(같은 날, 같은 인원)</td><td>될 수 있다(이번엔 아무도 취소하지 않으면)</td></tr>
+<tr><td>2장의 기준</td><td>REJECTED</td><td>REJECTED 가 아니다 — FAILED 쪽</td></tr>
+<tr><td>지금의 기획 작업</td><td colspan="2">REJECTED <code>&lt;역할&gt;: &lt;동료의 글&gt;</code></td></tr>
+</table>
+</div>
+<ul>
+<li>까닭의 글도 동료가 지은 그대로 넘어갑니다. 이번에는 우리 교통 실행기가 한국어로 실었지만, 실행기 없이 SDK 가 취소를 적는 서버라면 SDK 의 영어 글이 사용자에게 갑니다(<a href="#p15-deny-cmp">이 장의 TS 정산</a>).</li>
+<li>세 언어가 모두 같은 모양이라 상호운용 문제는 아니고, 우리 기획 에이전트의 상태 고르기 문제입니다. 고치지 않고 기록해 둡니다 — 고친다면 CANCELED 를 따로 받아 FAILED <code>교통 작업이 도중에 취소되었습니다</code> 처럼 짓는 자리입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-deny-before">
+<h3>결재 반려 — 이 결함은 실제로 있었다: 반려 뒤에도 정산 작업이 AUTH_REQUIRED 로 남았다</h3>
+<p class="lead">5번입니다. 고치기 전의 사본(<code>15/planner_old.py</code>, <a href="#p15-reg-before">2장</a>)으로 이야기를 돌리고 "안 됩니다" 라고 답한 뒤, 정산 에이전트에 남은 작업을 상태별로 셉니다.</p>
+<!--SPEC file=ex/run/15/deny_old.run-->
+<!--OUT file=out/15/deny_old.txt part=터미널 6 lines=8-15 note=고치기 전 — 반려, 그다음 정산에 남은 작업-->
+<!--CODE file=ex/py/15/planner_old.py lines=339-347 note=고치기 전의 resume(15/planner_old.py) — 반려하면 멈출 뿐-->
+<div class="key"><b>기획 작업은 끝났는데 정산 작업은 끝나지 않았다</b> — 사용자는 REJECTED 를 받았지만, 기획 에이전트가 정산에 맡긴 작업은 결재를 기다리는 채로 남았습니다. 기획 쪽의 기다림(<code>waiting</code> 항목)은 <code>pop</code> 으로 지웠으니, 그 정산 작업을 다시 가리킬 것은 기획 에이전트 어디에도 없습니다.</div>
+</article>
+
+<article class="card" id="p15-deny-why">
+<h3>왜 거둬야 하나 — 결재 대기는 끝 상태가 아니라서, 아무도 닫지 않으면 영원히 열려 있다</h3>
+<p class="lead">AUTH_REQUIRED 는 "interrupted state" 입니다(<a href="#p05-state-nine">5부</a>). 정산 에이전트는 같은 작업으로 올 다음 메시지를 기다립니다.</p>
+<!--CODE file=ex/py/15/settle_left.py note=15/settle_left.py — 앞 슬라이드에서 남은 작업을 센 대조기(상태마다 ListTasks)-->
+<ul>
+<li>정산 서버 쪽에서는 그 작업이 목록(<code>ListTasks</code>)에 영원히 "결재 대기" 로 남고, Go 정산은 그 작업의 실행 하나가 <code>AwaitReply</code> 에서 기다립니다(<a href="#p12-ar-exec-go">12부</a>).</li>
+<li>§7.6.2 는 AUTH_REQUIRED 를 받은 클라이언트가 할 수 있는 일로 "Send a response message to the Task to negotiate, correct, or <b>reject</b> the authorization request" 를 듭니다. 우리 정산 실행기는 이어 온 메시지를 모두 결재 시도로 읽어(<a href="#p12-ar-exec-py">12부의 실행기</a>) "반려" 라는 말을 알아듣지 못합니다.</li>
+<li>그래서 어느 서버나 아는 방법, CancelTask(§3.1.5)로 거둡니다. 동료의 말뜻에 기대지 않고 작업의 생애주기로 끝내는 길입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-deny-state">
+<h3>두 작업의 끝 상태 — 기획은 REJECTED, 정산은 CANCELED</h3>
+<p class="lead">한 번의 반려로 두 서버의 작업 둘이 끝납니다. 끝 상태가 다른 것은 끝낸 쪽이 다르기 때문입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>작업</th><th>끝 상태</th><th>proto 의 설명</th><th>까닭</th></tr>
+<tr><td>정산 작업(정산 서버)</td><td><code>TASK_STATE_CANCELED</code></td><td>"a task was canceled before completion"</td><td>그 작업의 클라이언트(기획 에이전트)가 CancelTask 로 멈췄다 — 정산이 판단한 것이 아니다</td></tr>
+<tr><td>기획 작업(기획 서버)</td><td><code>TASK_STATE_REJECTED</code></td><td>"the agent has decided to not perform the task"</td><td>이 요청(이 금액)에 대한 결재권자의 판단 — 2장의 표에 이미 "결재 반려" 로 적었다(<a href="#p15-fix-state">2장</a>)</td></tr>
+</table>
+</div>
+<ul>
+<li>기획 작업을 CANCELED 로 하지 않은 까닭: 사용자는 CancelTask 를 부르지 않았고 대화 안에서 "안 됩니다" 라고 답했습니다. FAILED 도 아닙니다 — 고칠 것이 기획 에이전트 쪽 환경(명단·연결)이 아니라 요청(금액)이고, 2장의 기준에서 요청에 대한 판단은 REJECTED 입니다.</li>
+<li>그래서 기획 작업의 상태와 글은 고치기 전과 같습니다. 바뀐 것은 정산 작업을 거두는 한 걸음뿐입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-deny-py">
+<h3>고친 코드 — 파이썬: <code>withdraw</code> 가 토큰을 받아 CancelTask, 반려를 알리기 전에 부른다</h3>
+<!--CODE file=ex/py/agents/planner.py region=withdraw note=agents/planner.py — 새 함수-->
+<!--CODE file=ex/py/agents/planner.py region=resume note=agents/planner.py — 반려 가지에 한 줄-->
+<ul>
+<li>정산의 문지기는 모든 JSON-RPC 요청에 <code>payment:read</code> 를 요구하므로(<a href="#p12-ch5">12부</a>) 취소에도 새 토큰을 받습니다. 기다림에는 토큰을 넣어 두지 않습니다 — 결재가 언제 올지 몰라, 받아 둔 토큰(<code>expires_in</code> 이 있다)이 그때까지 살아 있다고 기댈 수 없습니다.</li>
+<li>거두지 못해도(닿지 않음·오류) 반려는 반려입니다. 까닭은 서버 기록에만 남기고 사용자에게는 같은 REJECTED 를 냅니다 — 사용자가 고칠 수 있는 일이 아니라서입니다(<a href="#p15-fix-state">2장의 규칙</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-deny-ts-go">
+<h3>TypeScript·Go — 같은 이름, 같은 차례(토큰 → CancelTask → 기록)</h3>
+<!--CODE file=ex/ts/agents/planner.ts region=withdraw note=agents/planner.ts-->
+<!--CODE file=ex/go/agents/planner/main.go region=withdraw note=agents/planner/main.go-->
+<ul>
+<li>부르는 자리는 셋 다 반려 가지의 첫 줄입니다 — TypeScript 는 <code>resume</code>(<a href="#p15-res-ts">4장</a>), Go 는 <code>settle</code> 안의 <code>AwaitReply</code> 다음(<a href="#p15-res-go">4장</a>).</li>
+<li>TS 클라이언트의 메서드는 <code>cancelTask(params, options)</code> 이고 헤더는 <code>serviceParameters</code> 로 답니다(<code>send</code> 와 같다). Go 는 <code>a2aclient.Client.CancelTask</code> 에 토큰을 실은 <code>HTTPClient</code> 를 씁니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-deny-after">
+<h3>고친 뒤의 실행 — 같은 반려, 이제 정산에 남은 AUTH_REQUIRED 는 0, CANCELED 1</h3>
+<p class="lead">세 메시의 5번 문장과 그 뒤의 <code>settle_left.py</code> 입니다. 파이썬 메시를 통째로, TS·Go 메시는 끝 줄만 실었습니다.</p>
+<!--OUT file=out/15/fail_py.txt part=터미널 8 lines=25-39 note=파이썬 메시-->
+<!--OUT file=out/15/fail_ts.txt part=터미널 8 lines=33-40 note=TypeScript 메시 — 답 뒤에 task WORKING 한 줄이 더 있다-->
+<!--OUT file=out/15/fail_go.txt part=터미널 8 lines=33-40 note=Go 메시-->
+<!--OUT file=out/15/fail_py.txt server=planner grep=결재|거뒀 note=파이썬 기획 서버의 기록(TS·Go 도 같은 세 줄)-->
+<ul>
+<li>사용자가 보는 것은 고치기 전과 같습니다(<a href="#p15-deny-before">전</a>). 다른 것은 정산 쪽 — AUTH_REQUIRED 0, CANCELED 1 입니다. REJECTED 1 은 4번 문장(예산 초과)의 정산 작업입니다.</li>
+<li><code>&gt; 안 됩니다</code> 뒤의 <code>task WORKING</code> 은 TS·Go 기획 에이전트가 이어 말하기의 스트림을 작업 전체로 시작한 줄입니다(<a href="#p15-say-second">5장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-deny-wire">
+<h3>CancelTask 의 와이어 — 새 토큰, <code>params.id</code> 는 정산 작업, 답은 CANCELED 가 된 Task</h3>
+<p class="lead">정산 탭에서 5번 문장의 마지막 두 주고받음(취소용 토큰, CancelTask)입니다.</p>
+<!--OUT file=out/15/fail_py.txt wire=settle-wire ex=10-11 grep=^→|^←|Authorization|"method"|"id": "<|"state"|"text"|access_token note=파이썬 기획 → 파이썬 정산-->
+<!--OUT file=out/15/fail_ts.txt wire=settle-wire ex=11 grep=^→|^←|Authorization|"method"|"state"|"text" note=TypeScript 기획 → TypeScript 정산-->
+<!--OUT file=out/15/fail_go.txt wire=settle-wire ex=11 grep=^→|^←|Authorization|"method"|"state"|"text" note=Go 기획 → Go 정산-->
+<ul>
+<li>CancelTask 의 결과는 Task 그 자체입니다(<code>result.task</code> 가 아니라 <code>result</code> — §3.1.5 "Updated Task"). 이력에는 기획 에이전트가 보낸 견적 셋과 정산의 결재 요청이 그대로 남아 있습니다.</li>
+<li>세 정산 서버 모두 CANCELED 로 답했고, 상태 메시지는 TypeScript 만 달았습니다 — 다음 슬라이드.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-deny-cmp">
+<h3>세 정산 서버 비교 — 결재를 기다리던 작업의 취소, CANCELED 를 누가 쓰나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>답의 상태</td><td colspan="3"><code>TASK_STATE_CANCELED</code>, 이력 그대로(<a href="#p15-deny-wire">와이어</a>)</td></tr>
+<tr><td>상태 메시지</td><td>없음</td><td><code>Task cancellation requested by user.</code> — 이력 끝에도 붙는다</td><td>없음</td></tr>
+<tr><td>CANCELED 를 쓴 쪽</td><td>활성 작업이면 실행기의 <code>cancel</code>(우리 것은 글 없는 <code>TaskUpdater.cancel()</code>), 아니면 SDK 가 저장소에 직접(<code>request_handlers/default_request_handler_v2.py:240</code>–<code>245</code>) — 어느 쪽이든 글은 없다</td><td><b>SDK 자신</b> — 그 작업의 이벤트 버스가 없으면 실행기를 부르지 않고 이 글로 CANCELED 를 적는다(<code>server/index.js:3225</code>–<code>3241</code>)</td><td>실행기의 <code>Cancel</code>(우리 것은 글 없는 <code>common.Cancel</code>). 결재를 기다리는 실행이 살아 있으면 그 실행의 이벤트 큐에 싣는다(<code>internal/taskexec/local_manager.go:397</code>)</td></tr>
+<tr><td>정산 서버의 기록</td><td colspan="3">취소용 토큰 발급 한 줄뿐 — 취소는 실행기 기록을 남기지 않는다</td></tr>
+</table>
+</div>
+<div class="note"><b>TS 정산은 AUTH_REQUIRED 에서 버스를 닫는다</b> — 완성 에이전트는 AUTH_REQUIRED 에서 스트림이 닫히게 맞춰 두었습니다(<code>keepBusAliveStates</code>, <a href="#p10-close-ours">10부</a>·<a href="#p15-say-close">5장</a>). 그래서 취소가 올 때 TS SDK 에는 그 작업의 이벤트 버스가 없고, SDK 가 영어 글로 대신 끝냅니다. 같은 일이 교통에서 일어났다면 기획 에이전트는 그 영어 글을 그대로 사용자에게 옮겼을 것입니다(<a href="#p15-cancel-state">남은 결함</a>).</div>
+</article>
+
+<article class="card" id="p15-deny-tests">
+<h3>시험 ×3 — "반려하면 정산이 CancelTask 를 받는다", 고치기 전에 먼저 써서 셋 다 실패했다</h3>
+<p class="lead">가짜 정산(토큰을 주고, 받은 JSON-RPC 메서드를 적어 두는 작은 HTTP 서버)을 세우고 반려를 보냅니다. TypeScript 판입니다.</p>
+<!--CODE file=ex/ts/15/test_planner.ts region=denial-->
+<!--OUT file=out/15/tests.txt-->
+<ul>
+<li>고치기 전에는 세 언어 모두 상태(REJECTED)는 맞고, 가짜 정산이 받은 것을 보는 단언에서 실패했습니다 — 가짜 정산이 받은 것이 비어 있었습니다(파이썬 <code>[] != [('CancelTask', 'settle-1')]</code>, Go <code>["SendMessage "]</code>). <code>withdraw</code> 를 넣은 뒤 셋 다 통과합니다.</li>
+<li><code>waiting.size</code> 가 0 인지도 봅니다 — 이것은 고치기 전에도 통과했습니다. 파이썬·TS 는 답을 받는 첫 줄에서 기다림을 꺼내 지웠습니다(<a href="#p15-res-py">4장</a>). 남겨진 것은 기획 쪽이 아니라 정산 쪽이었습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-deny-go-test">
+<h3>Go 의 시험만 서버를 띄운다 — 결재 대기가 실행 안에 있어서</h3>
+<p class="lead">파이썬·TS 는 <code>waiting</code> 에 항목 하나를 넣고 답만 보내면 됩니다. Go 는 기다림이 <code>settle</code> 의 지역 변수와 멈춘 실행이라(<a href="#p15-res-go">4장</a>), 시험도 실행을 거기까지 데려가야 합니다.</p>
+<!--CODE file=ex/go/15/plantest/planner_test.go region=settle-only note=15/plantest/planner_test.go — 견적 셋을 받은 셈 치고 settle 부터-->
+<!--CODE file=ex/py/15/test_planner.py lines=119-130 note=파이썬판(15/test_planner.py) — waiting 에 바로 넣는다-->
+<ul>
+<li>Go 시험은 이 실행기를 <code>common.Serve</code> 로 포트 11566 에 띄우고, 스트림으로 AUTH_REQUIRED 까지 간 뒤 같은 taskId 로 "안 됩니다" 를 보냅니다 — 답을 멈춘 실행에 넘기는 <code>waiter</code> 가 <code>Serve</code> 안에만 있기 때문입니다(<code>agents/common/park.go</code>).</li>
+<li>가짜 정산은 첫 SendMessage 에 AUTH_REQUIRED 로 답하고, 받은 차례를 <code>["SendMessage ", "CancelTask settle-1"]</code> 로 남깁니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-fail-x3">
+<h3>세 언어가 본 실패 — 여섯 문장의 끝 줄이 글자까지 같다</h3>
+<p class="lead">세 메시의 <code>ask</code>·<code>settle_left</code>·<code>cancel_bus</code> 화면에서 끝을 알리는 줄만 골랐습니다.</p>
+<!--OUT file=out/15/fail_py.txt part=터미널 8 grep=REJECTED|^CancelTask|^AUTH_REQUIRED|^CANCELED note=파이썬 메시-->
+<!--OUT file=out/15/fail_ts.txt part=터미널 8 grep=REJECTED|^CancelTask|^AUTH_REQUIRED|^CANCELED note=TypeScript 메시-->
+<!--OUT file=out/15/fail_go.txt part=터미널 8 grep=REJECTED|^CancelTask|^AUTH_REQUIRED|^CANCELED note=Go 메시-->
+<div class="note"><b>다른 곳은 앞 장에서 본 것뿐</b> — 반려 뒤의 <code>task WORKING</code>(TS·Go), 와이어의 숫자 차림(<code>30.0</code>), TS 정산의 근거 경고(<a href="#p15-mesh-cmp">6장</a>), 그리고 정산 취소의 상태 메시지(<a href="#p15-deny-cmp">TS</a>)입니다. 사용자에게 닿는 상태와 글에는 언어 차이가 없습니다.</div>
+</article>
+
+<article class="card" id="p15-fail-cmp">
+<h3>실패마다 어디서 드러나나 — 세 언어 비교</h3>
+<p class="lead">여섯 문장이 사용자 화면·와이어·서버 기록에 남긴 것입니다. 세 언어의 칸이 같은 줄은 한 칸으로 합쳤습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>#</th><th>사용자(기획 작업의 끝)</th><th>동료의 끝(와이어)</th><th>서버 기록</th><th>언어 차이</th></tr>
+<tr><td>1·2</td><td>REJECTED <code>숙소: 가능한 숙소가 없습니다</code></td><td>숙소 Task REJECTED + 글(<a href="#p15-lodging-wire">와이어</a>)</td><td>숙소 거절, 식사·교통은 끝까지(<a href="#p15-lodging-siblings">기록</a>)</td><td>없음</td></tr>
+<tr><td>3</td><td>숙소 견적 뒤 REJECTED <code>식사: 채식 인원은 …</code></td><td>식사 Task REJECTED(탭 없음)</td><td>식사 거절, 교통은 끝까지</td><td>없음</td></tr>
+<tr><td>4</td><td>견적 셋 뒤 REJECTED <code>정산: 예산을 초과합니다 (842,000원)</code></td><td>정산 Task REJECTED, 토큰 하나(<a href="#p15-over-wire">와이어</a>)</td><td>정산 거절</td><td>요청 숫자 차림(<code>4000000.0</code>)</td></tr>
+<tr><td>5</td><td>AUTH_REQUIRED → REJECTED <code>결재가 반려되어 멈춥니다</code></td><td>CancelTask → 정산 Task CANCELED(<a href="#p15-deny-wire">와이어</a>)</td><td>기획 <code>정산 작업을 거뒀습니다</code></td><td>TS·Go <code>task WORKING</code>, TS 정산만 취소 글</td></tr>
+<tr><td>6</td><td>숙소·식사 견적 뒤 REJECTED <code>교통: 배차를 취소했습니다</code></td><td>교통 Task CANCELED + 글(취소하는 쪽이 받음)</td><td>교통 <code>취소</code>, 기획 <code>교통 실패</code></td><td>없음</td></tr>
+</table>
+</div>
+<div class="key"><b>세 기획 에이전트는 같은 규칙의 세 번역이다</b> — 실패의 차례(숙소 → 식사 → 교통 → 정산), 상태, 글이 모두 같았습니다(<a href="#p15-fail-x3">끝 줄</a>). 다른 것은 SDK 가 정하는 와이어의 모양뿐입니다.</div>
+</article>
+
+<article class="card" id="p15-fail-map">
+<h3>기획 에이전트의 상태 고르기 — 동료의 끝 → 기획 작업의 끝</h3>
+<p class="lead">2장과 이 장에서 돌려 본 것을 한 표로 모읍니다. 오른쪽 칸이 2장의 기준(<a href="#p15-fix-state">같은 요청이 나중에 될 수 있는가</a>)과 맞는지입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>동료에게서 온 것</th><th>기획 작업</th><th>본 곳</th><th>기준과</th></tr>
+<tr><td>COMPLETED</td><td>다음 걸음(알림·정산·계획서)</td><td><a href="#p15-mesh-py">6장</a></td><td>—</td></tr>
+<tr><td>REJECTED(숙소·식사·정산)</td><td>REJECTED <code>&lt;역할&gt;: 글</code></td><td><a href="#p15-lodging-run">1·2</a>·<a href="#p15-meals-run">3</a>·<a href="#p15-over-run">4</a></td><td>맞다</td></tr>
+<tr><td>AUTH_REQUIRED(정산)</td><td>AUTH_REQUIRED — 사람에게 넘김</td><td><a href="#p15-res-py">4장</a></td><td>—</td></tr>
+<tr><td>사람의 반려</td><td>REJECTED, 정산 작업은 CancelTask</td><td><a href="#p15-deny-after">5</a></td><td>맞다(고쳤다)</td></tr>
+<tr><td>CANCELED(교통)</td><td>REJECTED <code>교통: 글</code></td><td><a href="#p15-cancel-run">6</a></td><td><b>맞지 않다</b> — FAILED 쪽(<a href="#p15-cancel-state">남은 결함</a>)</td></tr>
+<tr><td>예외·닿지 않음</td><td>FAILED <code>&lt;역할&gt; 에이전트에게 맡기지 못했습니다</code></td><td><a href="#p15-fix-run">2장</a></td><td>맞다</td></tr>
+<tr><td>빠진 역할</td><td>FAILED <code>동료를 찾지 못했습니다: …</code></td><td><a href="#p15-fix-run">2장</a></td><td>맞다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p15-ch7-sum">
+<h3>7장 정리 — 실패 경로</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>동료의 거절은 어떻게 넘어가나?</td><td>상태는 REJECTED 그대로, 글은 꺼내 역할 이름을 붙인 새 메시지로</td><td><a href="#p15-lodging-relay">길</a></td></tr>
+<tr><td>하나가 실패하면 나머지는?</td><td>끝까지 일한다 — 교통은 쓰지 못할 배차까지 확정했다</td><td><a href="#p15-lodging-siblings">기록</a></td></tr>
+<tr><td>예산 초과는?</td><td>결재를 묻기 전에 정산이 거절, 토큰은 하나</td><td><a href="#p15-over-wire">와이어</a></td></tr>
+<tr><td>교통을 남이 취소하면?</td><td>CANCELED 가 REJECTED 로 바뀐다 — 기준과 어긋나는 남은 결함</td><td><a href="#p15-cancel-state">결함</a></td></tr>
+<tr><td>결재를 반려하면?</td><td>고치기 전에는 정산 작업이 AUTH_REQUIRED 로 남았다. 이제 CancelTask 로 거두고(정산 CANCELED) 기획은 REJECTED</td><td><a href="#p15-deny-before">전</a>·<a href="#p15-deny-after">뒤</a></td></tr>
+<tr><td>세 언어는?</td><td>사용자에게 닿는 상태와 글이 같다. TS 정산만 취소에 SDK 의 영어 글을 단다</td><td><a href="#p15-fail-x3">끝 줄</a>·<a href="#p15-deny-cmp">비교</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p15-ch7-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. 결재 반려를 고치기 전에도 기획 에이전트의 <code>waiting</code> 은 비었습니다. 그런데도 무엇이 남았고, 그것을 어떻게 셌습니까? 고친 뒤 TypeScript 메시에서 정산 작업의 상태 메시지는 무엇이었고, 누가 썼습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 정산 서버의 작업이 AUTH_REQUIRED 로 남았습니다 — <code>settle_left.py</code> 가 정산 에이전트에 상태별 ListTasks 를 보내 <code>AUTH_REQUIRED 1</code> 을 셌습니다(<a href="#p15-deny-before">전</a>). 고친 뒤에는 <code>AUTH_REQUIRED 0</code>·<code>CANCELED 1</code> 입니다(<a href="#p15-deny-after">뒤</a>). TS 정산 작업의 글은 <code>Task cancellation requested by user.</code> 이고, 우리 실행기가 아니라 TS SDK 가 썼습니다 — 실행이 이미 끝나 이벤트 버스가 없었기 때문입니다(<a href="#p15-deny-cmp">비교</a>).</div>
+</article>
+
+<!-- ==== 15부 정리 ==== -->
+
+<article class="card" id="p15-defects">
+<h3>15부에서 찾은 결함 — 고친 다섯, 기록만 한 것</h3>
+<p class="lead">완성 기획 에이전트 셋을 읽고 돌리며 찾은 것입니다. 고친 것은 고치기 전의 사본과 시험으로, 고치지 않은 것은 그 자리의 슬라이드로 남겼습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>결함</th><th>언어</th><th>처리</th><th>슬라이드</th></tr>
+<tr><td>이번 메시지를 두 번 들음</td><td>TS</td><td>고침</td><td><a href="#p15-twice-fixed">1장</a></td></tr>
+<tr><td>전각 숫자를 인원으로 읽음</td><td>파이썬(도메인)</td><td>고침, 골든 추가</td><td><a href="#p15-parse-x3">1장</a></td></tr>
+<tr><td>빠진 역할에서 오류·패닉</td><td>셋</td><td>고침(FAILED)</td><td><a href="#p15-fix-code">2장</a></td></tr>
+<tr><td>안쪽 주소가 사용자에게 샘</td><td>파이썬</td><td>고침</td><td><a href="#p15-fix-run">2장</a></td></tr>
+<tr><td>반려 뒤 정산 작업이 남음</td><td>셋</td><td>고침(CancelTask)</td><td><a href="#p15-deny-before">7장</a></td></tr>
+<tr><td>동료의 CANCELED → REJECTED</td><td>셋</td><td>기록</td><td><a href="#p15-cancel-state">7장</a></td></tr>
+<tr><td>실패한 뒤 나머지 위임을 거두지 않음</td><td>셋</td><td>기록</td><td><a href="#p15-fan-cmp">3장</a>·<a href="#p15-lodging-siblings">7장</a></td></tr>
+<tr><td>자기 contextId 를 동료에게 보냄</td><td>셋</td><td>기록</td><td><a href="#p15-fan-ctx-spec">3장</a></td></tr>
+<tr><td><code>say</code> 의 결과(받는 쪽이 끝났나)를 버림</td><td>Go</td><td>기록</td><td><a href="#p15-say-code">5장</a></td></tr>
+<tr><td>이어 말하기 스트림이 아티팩트로 시작</td><td>파이썬</td><td>기록(SDK 의 한계)</td><td><a href="#p15-say-second">5장</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p15-wrap">
+<h3>15부 정리 — 다섯 에이전트, 세 언어, 한 이야기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>한 줄</th></tr>
+<tr><td><a href="#p15-ch1-sum">1</a></td><td>기획 에이전트는 서버이자 클라이언트 — 한 문장을 규칙으로 풀고, 모자라면 INPUT_REQUIRED</td></tr>
+<tr><td><a href="#p15-ch2-sum">2</a></td><td>명단의 카드를 스킬 태그로 역할에 맞추고, 못 찾거나 닿지 않으면 맡기기 전에 FAILED</td></tr>
+<tr><td><a href="#p15-ch3-sum">3</a></td><td>셋에 동시에 맡기고 셋 다 기다린 뒤, 정한 차례로 알린다</td></tr>
+<tr><td><a href="#p15-ch4-sum">4</a></td><td>정산에는 금액과 함께 referenceTaskIds — 추적용 표지일 뿐, 서버를 넘어 풀어 주는 SDK 는 없다</td></tr>
+<tr><td><a href="#p15-ch5-sum">5</a></td><td>기획 에이전트 자신의 SSE 로 진행을 알리고, AUTH_REQUIRED 는 사람에게 넘긴다</td></tr>
+<tr><td><a href="#p15-ch6-sum">6</a></td><td>단일 메시 셋과 섞인 메시 셋, 여섯 판 모두 SCENARIO §2.6 의 숫자</td></tr>
+<tr><td><a href="#p15-ch7-sum">7</a></td><td>여섯 실패가 세 언어에서 같은 상태·같은 글로 끝난다. 반려의 뒤처리는 고쳤고, 취소의 상태는 남았다</td></tr>
+</table>
+</div>
+<div class="note"><b>다음</b> — 이 부의 메시는 "같은 역할을 다른 언어가 맡아도 이야기가 같다" 를 보였습니다. <a href="#p16">16부</a>는 그 말을 역할 하나하나로 쪼개, 다섯 에이전트를 세 언어의 클라이언트가 모두 불러 보는 3×3 매트릭스와 오류 코드 전수로 확인합니다.</div>
 </article>
