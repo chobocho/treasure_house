@@ -32,6 +32,7 @@ import (
 	"example.com/workshop/workshop"
 )
 
+// region: roles
 // 맡길 일 → 그 일을 하는 에이전트의 스킬 태그(순서가 곧 찾는 순서)
 var roles = [][2]string{
 	{"lodging", "lodging"},
@@ -39,6 +40,8 @@ var roles = [][2]string{
 	{"bus", "transport"},
 	{"settle", "budget"},
 }
+
+// endregion
 
 const working = a2a.TaskStateWorking
 
@@ -258,12 +261,16 @@ type executor struct {
 	// 한 것은 모두 이 실행의 지역 변수에 그대로 남아 있다.
 }
 
+// region: say
 func (e *executor) say(up *common.Updater, state a2a.TaskState,
 	text string) bool {
 	common.Say("[기획] %s", text)
 	return up.Status(state, common.TextPart(text))
 }
 
+// endregion
+
+// region: parse
 func (e *executor) Execute(
 	ctx context.Context, ec *a2asrv.ExecutorContext,
 ) iter.Seq2[a2a.Event, error] {
@@ -301,6 +308,8 @@ func (e *executor) Execute(
 		}
 	}
 }
+
+// endregion
 
 // region: plan
 func (e *executor) plan(ctx context.Context, up *common.Updater,
@@ -397,6 +406,7 @@ func (e *executor) settle(ctx context.Context, up *common.Updater,
 
 // endregion
 
+// region: finish
 func (e *executor) finish(up *common.Updater, req workshop.Parsed,
 	quotes []map[string]any, settle *a2a.Task) {
 	if settle.Status.State != a2a.TaskStateCompleted {
@@ -417,6 +427,8 @@ func (e *executor) finish(up *common.Updater, req workshop.Parsed,
 	e.say(up, a2a.TaskStateWorking, "계획서를 완성했습니다")
 	up.Status(a2a.TaskStateCompleted)
 }
+
+// endregion
 
 func (e *executor) Cancel(
 	ctx context.Context, ec *a2asrv.ExecutorContext,

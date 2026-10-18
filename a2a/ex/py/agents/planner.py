@@ -43,6 +43,7 @@ from agents.common import (
 from workshop import domain
 from workshop.fixtures import FIXTURES
 
+# region: roles
 # 맡길 일 → 그 일을 하는 에이전트의 스킬 태그
 ROLES = {
     "lodging": "lodging",
@@ -50,6 +51,7 @@ ROLES = {
     "bus": "transport",
     "settle": "budget",
 }
+# endregion
 ASK = {
     "date": "날짜(예: 2026-10-30)",
     "nights": "박 수(예: 1박)",
@@ -229,12 +231,16 @@ class PlannerExecutor(AgentExecutor):
         # 결재를 기다리는 기획 작업 → 이어 가는 데 필요한 것들
         self.waiting = {}
 
+    # region: say
     async def say(self, up, text, state=TaskState.TASK_STATE_WORKING):
         print(f"[기획] {text}", flush=True)
         await up.update_status(
             state, up.new_agent_message([new_text_part(text)])
         )
 
+    # endregion
+
+    # region: parse
     async def execute(self, ctx: RequestContext, queue: EventQueue):
         task, up = await begin(ctx, queue)
         if task.id in self.waiting:
@@ -262,6 +268,8 @@ class PlannerExecutor(AgentExecutor):
             )
             return
         await self.plan(up, task, req)
+
+    # endregion
 
     # region: plan
     async def plan(self, up, task, req):
@@ -325,6 +333,7 @@ class PlannerExecutor(AgentExecutor):
 
     # endregion
 
+    # region: resume
     async def resume(self, ctx, up, task):
         cards, req, quotes, settle = self.waiting.pop(task.id)
         if "승인" not in get_message_text(ctx.message):
@@ -346,6 +355,9 @@ class PlannerExecutor(AgentExecutor):
         )
         await self.finish(up, req, quotes, settle)
 
+    # endregion
+
+    # region: finish
     async def finish(self, up, req, quotes, settle):
         if settle.status.state != TaskState.TASK_STATE_COMPLETED:
             why = get_message_text(settle.status.message)
@@ -365,6 +377,8 @@ class PlannerExecutor(AgentExecutor):
         )
         await self.say(up, "계획서를 완성했습니다")
         await up.complete()
+
+    # endregion
 
     async def cancel(self, ctx: RequestContext, queue: EventQueue):
         task = ctx.current_task

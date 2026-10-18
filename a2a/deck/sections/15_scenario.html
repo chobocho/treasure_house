@@ -1,10 +1,565 @@
 <article class="card section" id="p15">
 <p class="chnum">15부</p>
 <h2>시나리오 완성 — 다언어 에이전트 메시</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">기획 에이전트 설계 → 레지스트리와 스킬 매칭 ×3 → 동시 위임 ×3 → referenceTaskIds 로 정산 → 진행 상황 스트리밍 → 전 과정 실행 → 실패 경로</p>
 </article>
 
-<article class="card" id="p15-todo">
-<h3>시나리오 완성 — 다언어 에이전트 메시</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p15-intro">
+<h3>다섯 에이전트를 기획 에이전트 하나가 엮는다 — 이 부는 그 엮는 쪽을 읽는다</h3>
+<p class="lead">14부까지는 동료 넷(숙소·식사·교통·정산)을 하나씩 두드렸습니다. 이 부의 주인공은 그 넷을 부리는 <b>기획 에이전트</b>(planner)입니다. 서버이면서 클라이언트이고, 오케스트레이터(orchestrator)로서 남의 카드를 읽고 일을 나눠 맡깁니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th></tr>
+<tr><td><a href="#p15-ch1">1장</a></td><td>기획 에이전트 설계 — 전체 흐름, 카드와 스킬, 한 문장 풀이(§2.5), 모자라면 INPUT_REQUIRED</td></tr>
+<tr><td><a href="#p15-ch2">2장</a></td><td>레지스트리와 스킬 매칭 ×3 — 명단의 카드 넷, 태그로 역할 고르기, 모르는 카드·빠진 역할·죽은 주소</td></tr>
+<tr><td><a href="#p15-ch3">3장</a></td><td>동시 위임 ×3 — 같은 contextId, <code>asyncio.gather</code>·<code>Promise.all</code>·<code>WaitGroup.Go</code>, 관문으로 동시성과 차례를 확인</td></tr>
+<tr><td>4장</td><td>referenceTaskIds 로 정산 요청</td></tr>
+<tr><td>5장</td><td>진행 상황 스트리밍 — 기획 에이전트 자신의 SSE</td></tr>
+<tr><td>6장</td><td>전 과정 실행 — 언어별 단일 메시 ×3, 그다음 섞인 메시</td></tr>
+<tr><td>7장</td><td>실패 경로 — 숙소 거절, 예산 초과, 교통 취소</td></tr>
+</table>
+</div>
+<div class="key"><b>이 부의 방식</b> — 완성 기획 에이전트 셋(<code>agents/planner.py</code>·<code>planner.ts</code>·<code>planner/main.go</code>)을 구역(region)으로 잘라 읽고, 동작은 고치지 않습니다. 1~3장의 실행은 이야기의 앞부분만 돌립니다 — 처음부터 끝까지는 6장의 몫입니다.</div>
+</article>
+
+<!-- ==== 1장 기획 에이전트 설계 ==== -->
+
+<article class="card" id="p15-ch1">
+<p class="chnum">1장</p>
+<h2>기획 에이전트 설계</h2>
+<p class="chsub">다섯 걸음 → 걸음과 구역 → 카드 → 세 카드 비교 → 한 문장 풀이 → 일곱 문장 ×3 → 실행기의 첫머리 ×3 → 되묻기 실행 → 되묻기의 와이어 → 세 서버 비교 → 이번 메시지가 두 번</p>
+</article>
+
+<article class="card" id="p15-flow">
+<h3>기획 에이전트의 일은 다섯 걸음 — 풀이, 발견, 위임, 정산, 계획서</h3>
+<p class="lead">총무팀은 <code>ask</code> 로 한 문장만 보냅니다. 기획 에이전트는 그 문장을 풀고, 동료를 찾아 맡기고, 견적을 모아 결재를 받은 뒤 계획서를 돌려줍니다. 사람에게 되묻는 자리가 두 군데 있습니다.</p>
+<pre class="fig">
+ ask(총무팀)          기획 에이전트             동료
+   │ 한 문장             │
+   │──────────────────→ │ ① 풀이 — 빠지면 되묻는다
+   │←─ INPUT_REQUIRED ─ │
+   │                    │ ② 발견 — 카드 GET ─→ 넷
+   │                    │ ③ 위임 — 동시에 ───→ 숙소·식사·교통
+   │                    │ ④ 정산 — 견적 셋 ──→ 정산
+   │←─ AUTH_REQUIRED ── │    결재가 필요하면 되묻는다
+   │ 승인               │
+   │──────────────────→ │ ⑤ 계획서 — 아티팩트
+   │←─ COMPLETED ────── │
+</pre>
+<div class="key"><b>되묻기 둘</b> — ① 의 INPUT_REQUIRED 는 기획 에이전트 자신의 판단이고, ④ 의 AUTH_REQUIRED 는 정산 에이전트의 요구를 사람에게 넘기는 것입니다(<a href="#p12-ar-chain">12부의 AUTH_REQUIRED 사슬</a>). 이 장은 ①, 2장은 ②, 3장은 ③ 입니다.</div>
+</article>
+
+<article class="card" id="p15-map">
+<h3>걸음마다 구역이 하나 — 세 언어가 같은 이름으로 잘려 있다</h3>
+<p class="lead">세 기획 에이전트 파일에는 같은 이름의 구역 표시가 있습니다. 이 부는 그 이름으로 코드를 불러옵니다. A2A 의 기능 자체는 앞 부들이 가르쳤으니, 여기서는 엮는 법만 봅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>걸음</th><th>구역</th><th>쓰는 A2A 기능</th><th>처음 본 곳</th></tr>
+<tr><td>① 풀이</td><td><code>parse</code></td><td>INPUT_REQUIRED 다중 턴</td><td><a href="#p05-ch5">5부 5장</a></td></tr>
+<tr><td>② 발견</td><td><code>roles</code>·<code>discover</code></td><td>카드, 스킬 태그, 카드 서명 검증</td><td><a href="#p03-pick-py">3부 5장</a>·<a href="#p12-ch8">12부 8장</a></td></tr>
+<tr><td>③ 위임</td><td><code>plan</code>·<code>delegate</code></td><td>막는 SendMessage, contextId</td><td><a href="#p07-cl-planner">7부</a>·<a href="#p04-ctx-rules">4부 6장</a></td></tr>
+<tr><td>④ 정산</td><td><code>token</code>·<code>settle</code>·<code>resume</code></td><td>OAuth2 토큰, referenceTaskIds, AUTH_REQUIRED</td><td><a href="#p12-ch3">12부</a></td></tr>
+<tr><td>진행 알림</td><td><code>say</code></td><td>자기 작업의 상태 갱신(SSE)</td><td><a href="#p10-ch1">10부</a></td></tr>
+<tr><td>⑤ 계획서</td><td><code>finish</code></td><td>아티팩트 — 마크다운 TextPart + DataPart</td><td><a href="#p05-ch8">5부 8장</a></td></tr>
+</table>
+</div>
+<div class="note"><b>빠진 구역 둘</b> — Go 에는 <code>resume</code> 이 없습니다. Go SDK 는 AUTH_REQUIRED 에서 실행을 멈춘 채 기다리므로 결재의 답을 <code>settle</code> 구역 안에서 받습니다(<a href="#p12-ar-exec-go">12부</a>에서 본 모형 차이). TypeScript 에는 <code>settle</code> 이 없고, 정산까지 <code>plan</code> 구역 하나에 들어 있습니다. 4장에서 봅니다.</div>
+</article>
+
+<article class="card" id="p15-card">
+<h3>기획 에이전트의 카드 — 글 한 문장을 받고, 마크다운과 JSON 을 낸다</h3>
+<p class="lead">기획 에이전트도 에이전트 하나입니다. <code>ask</code> 가 먼저 하는 일은 다른 에이전트 때와 같이 카드를 받는 것입니다. 파이썬 기획 에이전트 앞의 탭입니다.</p>
+<!--OUT file=out/15/intake.txt wire=py-wire ex=1-->
+<ul>
+<li><code>defaultInputModes</code> 가 <code>text/plain</code> 하나 — 사람의 문장을 받습니다. <code>defaultOutputModes</code> 는 계획서(<code>text/markdown</code>)와 요약(<code>application/json</code>)입니다.</li>
+<li><code>capabilities.streaming</code> 이 참이라 <code>ask</code> 는 <code>SendStreamingMessage</code> 로 말을 겁니다. 진행 상황을 흘리는 법은 5장입니다.</li>
+<li>스킬 <code>plan-workshop</code> 의 <code>examples</code> 에 이야기의 한 문장을 그대로 실었습니다. 요청에는 스킬을 고르는 자리가 없으니(<a href="#p03-skill-no-select">3부</a>), 견본이 보낼 메시지의 꼴을 알려 줍니다.</li>
+<li><code>securitySchemes</code> 가 없습니다. 정산에 내는 토큰은 기획 에이전트가 <b>자기 이름</b>(<code>planner</code>)으로 받습니다 — 사용자의 자격이 아닙니다(4장).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-card-cmp">
+<h3>세 기획 에이전트의 카드는 내용이 같고 차림이 다르다</h3>
+<p class="lead">같은 명세에서 TypeScript·Go 기획 에이전트의 카드도 탭 너머로 받았습니다. Go 의 카드 앞부분입니다.</p>
+<!--OUT file=out/15/intake.txt wire=go-wire ex=1 lines=1-17-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>키 차례</td><td colspan="2"><code>name</code>·<code>description</code> 부터, 둘이 같은 차례</td><td><code>supportedInterfaces</code> 다음은 알파벳 차례</td></tr>
+<tr><td><code>capabilities</code></td><td colspan="2"><code>streaming</code> 하나</td><td><code>"pushNotifications": false</code> 도 적는다</td></tr>
+<tr><td>Content-Type</td><td><code>application/json</code></td><td><code>application/json; charset=utf-8</code></td><td><code>application/json</code></td></tr>
+</table>
+</div>
+<div class="note"><b>클라이언트에게는 같은 카드</b> — 기본값 <code>false</code> 를 적든 빼든 proto3 에서는 같은 값입니다. 3부에서 본 차림의 차이(<a href="#p03-check-what">3부 8장</a>)가 기획 에이전트에도 그대로 있을 뿐, 이 부의 흐름에는 영향이 없습니다.</div>
+</article>
+
+<article class="card" id="p15-parse-code">
+<h3>한 문장 풀이는 정규식 여섯 개 — 채식 인원을 먼저 찾아 지운다</h3>
+<p class="lead">기획 에이전트는 LLM 이 아니라 규칙으로 문장을 풉니다(SCENARIO §2.5). 풀이는 기획 에이전트가 아니라 공용 도메인 모듈 <code>workshop</code> 에 있고, 세 언어가 같은 정규식을 씁니다. 파이썬판입니다.</p>
+<!--CODE file=ex/py/workshop/domain.py region=parse-->
+<ul>
+<li><code>(\d+)명</code> 이 <code>채식 2명</code> 의 2 를 먼저 잡지 않도록, 채식 인원을 찾은 뒤 그 <b>첫 번째</b>를 지우고 전체 인원을 찾습니다. Go 의 RE2 에 뒤보기(lookbehind)가 없어서 고른 길이라고 주석이 말합니다.</li>
+<li>필수 셋(<code>date</code>·<code>nights</code>·<code>headcount</code>)이 없으면 <code>{"ok": false, "missing": […]}</code> 를 이 차례로 돌려줍니다. 예산·출발지는 없으면 <code>null</code> 입니다.</li>
+<li>LLM 을 붙인다면 이 함수 자리입니다 — 문장을 받아 같은 모양의 dict 를 내면 나머지는 그대로 돕니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-parse-run">
+<h3>일곱 문장을 풀어 보면 — 언제나 첫 번째로 맞는 것이 이긴다</h3>
+<p class="lead">골든 벡터(<code>ex/fixtures/golden/domain.json</code> 의 <code>parseRequest</code> 여섯 경우)가 세 언어의 답을 묶어 둡니다. 여기서는 골든에 없는 문장도 섞었습니다.</p>
+<!--RUN file=ex/py/15/parse.py-->
+<ul>
+<li><code>1박 2일</code> 의 <code>2일</code> 은 어느 정규식에도 맞지 않아 박 수는 1 입니다. <code>채식 2명 포함 30명</code> 은 30명입니다.</li>
+<li><code>30명, 아니 40명</code> 은 <b>30명</b>입니다 — 첫 번째 <code>(\d+)명</code> 이 이깁니다. 사람이 고쳐 말해도 풀이는 그 말을 듣지 않습니다. 기획 에이전트가 대화 전체를 이어 붙여 다시 풀기 때문에(뒤의 실행기), 다중 턴에서도 마찬가지입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-parse-x3">
+<h3>세 언어가 한 줄에서 갈렸다 — 전각 숫자 <code>３０명</code> 은 파이썬만 30명으로 읽는다</h3>
+<p class="lead">같은 일곱 문장을 TypeScript·Go 의 <code>workshop</code> 에 넣었습니다. 열세 줄 가운데 한 줄만 다릅니다.</p>
+<!--OUT file=out/15/parse.ts.txt grep=３０|"missing":\["headcount"\]-->
+<!--OUT file=out/15/parse.go.txt grep=３０|"missing":\["headcount"\]-->
+<ul>
+<li>파이썬은 <code>{"headcount":30,…}</code>(<a href="#p15-parse-run">앞 슬라이드</a>), TypeScript·Go 는 <code>{"missing":["headcount"],"ok":false}</code> 입니다.</li>
+<li>파이썬 <code>re</code> 의 <code>\d</code> 는 str 패턴에서 "the whole range of Unicode digits" 를 받습니다(<code>/usr/lib/python3.14/re/__init__.py</code> 의 설명). Go RE2 의 <code>\d</code> 는 <code>[0-9]</code> 이고(<code>regexp/syntax/doc.go</code>), JavaScript 도 <code>[0-9]</code> 만 받았습니다.</li>
+</ul>
+<div class="warn"><b>골든이 막지 못한 차이</b> — 골든 여섯 경우는 모두 아스키 숫자라 세 구현이 골든을 다 통과하면서도 이 문장에서 갈립니다. 맞추려면 파이썬 쪽에 <code>re.ASCII</code> 를 주어야 합니다. 이 책은 완성 에이전트를 고치지 않고, 결함으로 적어 둡니다.</div>
+</article>
+
+<article class="card" id="p15-exec-py">
+<h3>실행기의 첫머리 — 이력 속 사용자의 말을 전부 이어 붙여 다시 푼다</h3>
+<p class="lead">기획 에이전트의 <code>execute</code> 는 메시지 하나가 아니라 <b>작업 전체의 대화</b>를 풉니다. 되물어서 받은 답이 앞 문장에 덧붙어, 필수 항목이 다 찰 때까지 같은 작업이 이어집니다. 파이썬판입니다.</p>
+<!--CODE file=ex/py/agents/planner.py region=parse-->
+<ul>
+<li><code>task.history</code> 에서 <code>ROLE_USER</code> 메시지의 글만 모아 빈칸으로 잇습니다. 주석대로 <code>begin()</code> 이 이번 메시지까지 이력에 넣어 두었습니다.</li>
+<li>풀이는 예산을 필수로 보지 않지만, 기획 에이전트는 예산이 없어도 되묻습니다 — 4장의 정산에 예산이 들어가기 때문입니다.</li>
+<li>되묻는 메시지는 파트 둘입니다. 사람이 읽을 글, 그리고 프로그램이 읽을 DataPart <code>{"missing": […]}</code>. 상태는 <code>requires_input</code> 로 <code>INPUT_REQUIRED</code> 가 됩니다(<a href="#p05-ir-rule">5부</a>).</li>
+<li>맨 앞의 <code>waiting</code> 검사는 결재를 기다리던 작업의 이어 말하기입니다(4장).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-exec-ts">
+<h3>TypeScript — 이력에 이번 메시지를 한 번 더 붙인다</h3>
+<p class="lead">모양은 파이썬과 같습니다. 다른 곳은 대화를 모으는 첫 줄입니다.</p>
+<!--CODE file=ex/ts/agents/planner.ts region=parse-->
+<ul>
+<li><code>[...task.history, ctx.userMessage]</code> — 이력 뒤에 이번 메시지를 따로 붙입니다. 그런데 첫 턴에는 <code>begin()</code> 이 새 Task 의 <code>history</code> 를 <code>[ctx.userMessage]</code> 로 짓고(<code>agents/common.ts</code>), 이어지는 턴에는 SDK 가 저장된 작업의 이력에 이번 메시지를 이미 붙여 둡니다(<code>server/index.js:2799</code> 의 <code>task.history = [...task.history || [], incomingMessage]</code>). 그래서 이번 메시지가 <b>두 번</b> 들어갑니다. 이 장의 끝에서 그 결과를 봅니다.</li>
+<li><code>parseRequest</code> 의 답은 <code>ok</code> 로 갈리는 합집합 타입이라, <code>req.ok</code> 를 검사한 뒤에야 <code>req.budget</code> 을 읽을 수 있습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-exec-go">
+<h3>Go — 같은 흐름에, 실패를 이벤트 시퀀스의 오류로 돌려준다</h3>
+<p class="lead">Go 의 실행기는 <code>iter.Seq2[a2a.Event, error]</code> 입니다(<a href="#p09-cl-planner">9부</a>). 풀이와 되묻기는 같고, 끝이 다릅니다.</p>
+<!--CODE file=ex/go/agents/planner/main.go region=parse-->
+<ul>
+<li><code>common.Begin</code> 이 이력의 차례를 맞춰 두므로(이전 질문 → 이번 답) <code>task.History</code> 만 읽습니다. 이번 메시지를 따로 붙이지 않습니다.</li>
+<li><code>ParseRequest</code> 는 값 둘을 돌려줍니다 — 풀린 결과와, 모자라면 <code>*Missing</code>.</li>
+<li><code>plan</code> 이 오류를 돌려주면 <code>yield(nil, err)</code> 로 넘기고, SDK 가 작업을 FAILED 로 바꿉니다. 2장에서 그 모양을 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-ask-run">
+<h3>모자란 문장으로 말을 걸면 — 두 번 되묻고, 셋째 답에서 일을 시작한다</h3>
+<p class="lead">세 기획 에이전트에 같은 대본을 보냈습니다. 첫말 <code>1박 2일, 30명(채식 2명)</code> 에는 날짜와 예산이 없습니다. 명단(<code>--agents</code>)에는 아무도 없는 주소 하나만 주었습니다 — 셋째 답 뒤의 일은 2장에서 봅니다.</p>
+<!--OUT file=out/15/intake.txt part=터미널 7 lines=1-7 note=파이썬 기획 에이전트-->
+<ul>
+<li>첫 되묻기는 날짜만입니다 — 필수 셋 가운데 빠진 것이 날짜뿐이기 때문입니다. 예산은 필수 셋이 다 찬 뒤에 따로 묻습니다(<a href="#p15-exec-py">실행기</a>의 두 단계).</li>
+<li><code>2026-10-30부터</code> 라는 짧은 답이 통하는 것은 기획 에이전트가 앞 문장과 이어 붙여 다시 풀기 때문입니다.</li>
+<li>셋째 답으로 문장이 다 차자 상태가 <code>WORKING</code> 으로 바뀌고 <code>동료 에이전트를 찾는 중</code> 이 옵니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-ask-wire">
+<h3>되묻기의 와이어 — 글 파트는 사람에게, DataPart 는 프로그램에게</h3>
+<p class="lead">첫말에 대한 파이썬 기획 에이전트의 SSE 응답에서 둘째 이벤트입니다.</p>
+<!--OUT file=out/15/intake.txt wire=py-wire ex=2 lines=50-81-->
+<div class="key"><b>왜 둘인가</b> — <code>ask</code> 같은 사람용 클라이언트는 글을 보여 주면 되지만, 기획 에이전트를 부르는 다른 에이전트(또는 화면)는 <code>missing</code> 목록을 읽어 입력 칸을 띄울 수 있습니다. 같은 <code>taskId</code>·<code>contextId</code> 로 답하면 이어집니다 — 다음 요청의 <code>message</code> 에 둘이 다 실려 있습니다(<a href="#p05-ch5">5부 5장</a>의 규칙).</div>
+</article>
+
+<article class="card" id="p15-ask-cmp">
+<h3>세 서버 비교 — 같은 질문, TypeScript·Go 만 답마다 <code>task WORKING</code> 한 줄</h3>
+<p class="lead">TypeScript·Go 기획 에이전트의 같은 대화입니다(명령 줄은 앞 슬라이드와 같아 뺐습니다).</p>
+<!--OUT file=out/15/intake.txt part=터미널 7 lines=54-61 note=TypeScript 기획 에이전트-->
+<!--OUT file=out/15/intake.txt part=터미널 7 lines=64-71 note=Go 기획 에이전트-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>되묻는 글·DataPart</td><td colspan="3">같다 — 날짜, 그다음 예산</td></tr>
+<tr><td>답 뒤의 첫 이벤트</td><td>바로 다음 상태 갱신</td><td colspan="2">작업을 <code>WORKING</code> 으로 다시 보낸 <code>task</code> 이벤트</td></tr>
+</table>
+</div>
+<div class="note"><b>낯익은 한 줄</b> — 이어 말하기에서 TS·Go 의 <code>begin()</code> 이 Task 를 WORKING 으로 다시 내보내는 것은 5부에서 본 차이입니다(<a href="#p05-follow-ts-go">5부</a>). 되묻는 내용은 세 서버가 글자까지 같습니다.</div>
+</article>
+
+<article class="card" id="p15-twice">
+<h3>이번 메시지가 두 번이면 — TypeScript 기획 에이전트만 인원을 되묻지 않았다</h3>
+<p class="lead">인원 없이 <code>2026-10-30 1박, 채식 2명, 예산 6,000,000원</code> 한 문장을 세 기획 에이전트에 보냈습니다.</p>
+<!--OUT file=out/15/intake.txt part=터미널 7 lines=73-82-->
+<ul>
+<li>파이썬·Go 는 <code>{"missing": ["headcount"]}</code> 로 되묻고, TypeScript 는 되묻지 않고 일을 시작했습니다.</li>
+<li>TypeScript 가 푸는 글은 같은 문장이 빈칸을 사이에 두고 두 번 이어진 것입니다(<a href="#p15-exec-ts">앞에서 본 첫 줄</a>). 풀이는 첫 <code>채식 2명</code> 만 지우니, 둘째 <code>채식 2명</code> 의 <code>2명</code> 이 전체 인원이 됩니다 — <a href="#p15-parse-run">풀이 실행</a>의 마지막 줄(예산을 뺀 같은 꼴)이 <code>"headcount":2</code> 입니다.</li>
+</ul>
+<div class="warn"><b>완성 에이전트의 결함</b> — 보통 문장에서는 두 번 들어가도 첫 번째가 이겨 티가 나지 않아, 이야기의 한 문장으로는 세 언어가 같은 답을 냈습니다. 고치려면 TypeScript 쪽에서 <code>ctx.userMessage</code> 를 덧붙이지 않으면 됩니다. 이 부는 동작을 고치지 않고 결함으로 적어 둡니다.</div>
+</article>
+
+<article class="card" id="p15-ch1-sum">
+<h3>1장 정리 — 기획 에이전트 설계</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>기획 에이전트의 일은?</td><td>풀이 → 발견 → 위임 → 정산 → 계획서. 되묻기는 INPUT_REQUIRED 와 AUTH_REQUIRED 둘</td><td><a href="#p15-flow">흐름</a></td></tr>
+<tr><td>카드는?</td><td><code>text/plain</code> 을 받고 마크다운·JSON 을 내는 스트리밍 에이전트, 스킬 <code>plan-workshop</code></td><td><a href="#p15-card">카드</a></td></tr>
+<tr><td>문장은 어떻게 푸나?</td><td>정규식 여섯, 채식 먼저 지우기, 첫 번째가 이긴다</td><td><a href="#p15-parse-run">일곱 문장</a></td></tr>
+<tr><td>모자라면?</td><td>글 + <code>{"missing"}</code> DataPart 로 INPUT_REQUIRED, 대화 전체를 다시 푼다</td><td><a href="#p15-ask-run">실행</a></td></tr>
+<tr><td>세 언어가 갈린 곳은?</td><td>전각 숫자(파이썬 <code>\d</code>), 이번 메시지가 두 번(TypeScript)</td><td><a href="#p15-parse-x3">숫자</a>·<a href="#p15-twice">두 번</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p15-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 첫말 <code>1박 2일, 30명(채식 2명)</code> 에 기획 에이전트는 날짜만 물었습니다. 예산도 없는데 왜 한꺼번에 묻지 않았고, 날짜를 받은 뒤 무엇을 물었습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 실행기는 먼저 풀이의 필수 셋(<code>date</code>·<code>nights</code>·<code>headcount</code>)만 봅니다. 그때 빠진 것은 날짜 하나라 <code>{"missing": ["date"]}</code> 였습니다. <code>2026-10-30부터</code> 를 받아 대화를 이어 붙여 다시 풀자 필수 셋은 찼지만 예산이 <code>null</code> 이라, 둘째로 <code>{"missing": ["budget"]}</code> 를 물었습니다(<a href="#p15-ask-run">실행</a>).</div>
+</article>
+
+<!-- ==== 2장 에이전트 레지스트리와 스킬 매칭 ×3 ==== -->
+
+<article class="card" id="p15-ch2">
+<p class="chnum">2장</p>
+<h2>에이전트 레지스트리와 스킬 매칭 ×3</h2>
+<p class="chsub">세 가지 찾는 법 → 명단을 주는 겉층 → 다섯 카드의 스킬 → 역할표 → 파이썬 → TypeScript → Go → 세 언어 비교 → 발견의 와이어 → 모르는 카드 → 빠진 역할 → nil 카드 → 죽은 주소 → 실패의 세 모양</p>
+</article>
+
+<article class="card" id="p15-reg-spec">
+<h3>카드를 찾는 길은 셋 — 기획 에이전트는 "직접 설정" 에 태그 고르기를 얹었다</h3>
+<p class="lead">§8.2 는 클라이언트가 카드를 찾는 길로 셋을 꼽습니다. 스펙 저장소의 <code>topics/agent-discovery.md</code> 가 각각을 풀어 씁니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>길(§8.2)</th><th>topics/agent-discovery.md 의 설명</th></tr>
+<tr><td>Well-Known URI</td><td>도메인을 알면 <code>/.well-known/agent-card.json</code> 을 받는다(<a href="#p03-ch7">3부 7장</a>의 캐시 규칙 §8.6)</td></tr>
+<tr><td>Registries/Catalogs</td><td>중앙 레지스트리가 카드를 모아 두고, 클라이언트가 "skills" 나 "tags" 같은 기준으로 묻는다</td></tr>
+<tr><td>Direct Configuration</td><td>설정 파일·환경 변수 따위로 카드 URL 을 미리 준다. 정적인 관계에 쉽고, 바뀌면 다시 설정해야 한다</td></tr>
+</table>
+</div>
+<div class="key"><b>기획 에이전트의 자리</b> — URL 목록은 명령줄 <code>--agents</code> 로 받으니 <b>직접 설정</b>이고, 그 카드들을 태그로 거르는 일은 레지스트리가 할 일을 클라이언트 안에서 하는 셈입니다. 레지스트리의 API 는 스펙이 정하지 않습니다 — 같은 문서가 "explores standardizing registry interactions" 라고 적어 둔 자리입니다.</div>
+</article>
+
+<article class="card" id="p15-reg-at">
+<h3>명단은 명령줄 한 줄 — 이 부의 명세는 포트만 받는 겉층으로 띄운다</h3>
+<p class="lead">세 기획 에이전트는 <code>--agents</code> 에 쉼표로 이은 URL 을 받습니다. 주소 넷을 이으면 명세 한 줄(72칸)을 넘으므로, 포트만 받아 그 꼴로 바꿔 주는 겉층을 씁니다. 파이썬판은 12부의 <code>12/planner_at.py</code> 입니다(<a href="#p12-ar-chain">12부</a>).</p>
+<!--CODE file=ex/ts/15/planner_at.ts-->
+<!--CODE file=ex/go/15/planner_at/main.go-->
+<div class="note"><b>완성 에이전트는 그대로</b> — TypeScript 는 <code>process.argv</code> 를 바꾼 뒤 <code>agents/planner.ts</code> 를 import 하고, Go 는 완성 파일의 심볼릭 링크(<code>agent.go</code>)와 같은 package 에 <code>init()</code> 을 더해 <code>main()</code> 보다 먼저 <code>os.Args</code> 를 고칩니다 — 13부의 HTTP+JSON 겉층(<a href="#p13-ch2">13부</a>)과 같은 수법입니다.</div>
+</article>
+
+<article class="card" id="p15-reg-skills">
+<h3>다섯 카드의 스킬 — 모두 <code>workshop</code> 을 달고, 하는 일은 둘째 태그가 말한다</h3>
+<p class="lead">기획 에이전트가 고를 때 보는 것은 스킬의 <code>id</code> 와 <code>tags</code> 입니다. 다섯 에이전트(파이썬)의 카드를 받아 늘어놓았습니다.</p>
+<!--CODE file=ex/py/15/skills.py-->
+<!--OUT file=out/15/missing.txt part=터미널 8 lines=1-6-->
+<div class="note"><b>정산의 스킬은 <code>check-budget</code></b> — 공개 카드에는 조회 스킬만 있고, 실제 정산 스킬 <code>settle-budget</code> 은 확장 카드에만 있습니다(<a href="#p12-ch6">12부 6장</a>). 기획 에이전트는 공개 카드만 읽으므로 둘 다에 붙은 태그 <code>budget</code> 으로 찾아야 합니다.</div>
+</article>
+
+<article class="card" id="p15-reg-roles">
+<h3>역할표 — 맡길 일마다 스킬 id 가 아니라 태그 하나</h3>
+<p class="lead">기획 에이전트가 아는 것은 "숙소를 맡을 곳이 필요하다" 까지입니다. 그 역할을 태그로 적은 표가 고르기의 전부입니다.</p>
+<!--CODE file=ex/py/agents/planner.py region=roles-->
+<ul>
+<li>proto 는 <code>tags</code> 를 "A set of keywords describing the skill's capabilities" 라고 하고 필수(REQUIRED)로 둡니다. <code>id</code> 는 그 에이전트 안의 이름일 뿐이라, 다른 회사의 숙소 에이전트는 <code>find-lodging</code> 이 아닌 이름을 쓸 수 있습니다.</li>
+<li>태그 <code>workshop</code> 은 다섯 카드 모두에 있어 아무것도 가르지 못합니다. 그래서 역할표는 둘째 태그만 씁니다.</li>
+<li>태그는 약속된 어휘가 아닙니다 — 스펙에 태그 목록은 없고, 이 표는 보물상사 안의 약속입니다. 다른 곳의 에이전트를 섞으려면 이 약속부터 맞춰야 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-disc-py">
+<h3>파이썬 — 카드를 차례로 받아, 서명이 있으면 검증하고, 역할마다 처음 맞는 카드</h3>
+<!--CODE file=ex/py/agents/planner.py region=discover-->
+<ul>
+<li><code>A2ACardResolver(http, url).get_agent_card()</code> 로 카드를 하나씩 받습니다(<a href="#p07-cl-resolver">7부</a>). <code>for</code> 안의 <code>await</code> 라 차례대로입니다.</li>
+<li><code>c.signatures</code> 가 있을 때만 미리 받아 둔 공개 키로 검증합니다 — 카드 속 <code>jku</code> 는 믿지 않습니다(<a href="#p12-sig-jku">12부</a>). 서명 없는 카드는 그냥 씁니다.</li>
+<li><code>role not in found</code> — 같은 태그의 카드가 둘이면 목록에서 앞선 것이 이깁니다. 돌려주는 것은 역할 → 카드의 dict 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-disc-ts">
+<h3>TypeScript — 같은 순서, 검증 전에 카드를 JSON 모양으로 되돌린다</h3>
+<!--CODE file=ex/ts/agents/planner.ts region=discover-->
+<ul>
+<li><code>DefaultAgentCardResolver</code> 하나로 URL 마다 <code>resolve(url)</code> 합니다(<a href="#p08-cl-resolver">8부</a>).</li>
+<li>검증기에 <code>AgentCard.toJSON(c)</code> 를 넘깁니다. 주석대로 SDK 의 정규화가 JSON 모양 카드만 제대로 읽기 때문입니다(<a href="#p12-sig-vts">12부</a>).</li>
+<li>모르는 <code>kid</code> 면 키 찾기에서 예외를 던집니다. 역할표는 <code>Object.entries(ROLES)</code> 의 차례로 훑습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-disc-go">
+<h3>Go — 리졸버에 검증기를 달아 두면, 받은 바이트 그대로 검증한다</h3>
+<!--CODE file=ex/go/agents/planner/main.go region=discover-->
+<ul>
+<li><code>r.Verifier</code> 를 단 리졸버는 서명된 카드를 받을 때 검증까지 합니다 — 따로 부르지 않습니다(<a href="#p12-sig-vgo">12부</a>).</li>
+<li>역할표 <code>roles</code> 는 맵이 아니라 쌍의 슬라이스입니다. Go 의 맵은 차례가 없으니, 주석의 말대로 "순서가 곧 찾는 순서" 가 되게 한 것입니다.</li>
+<li>카드를 못 받으면 <code>return nil, err</code> — 예외 대신 오류 값입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-disc-cmp">
+<h3>세 언어 비교 — 하는 일은 같고, 세 군데가 다르다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>카드 받기</td><td><code>A2ACardResolver</code></td><td><code>DefaultAgentCardResolver</code></td><td><code>agentcard.NewResolver</code></td></tr>
+<tr><td>차례</td><td colspan="3">URL 하나씩 차례로 — 동시에 받지 않는다</td></tr>
+<tr><td>서명 검증</td><td>직접 <code>verify(c)</code></td><td>직접 <code>verify(toJSON)</code></td><td>리졸버의 <code>Verifier</code></td></tr>
+<tr><td>역할표</td><td>dict(넣은 차례)</td><td>객체(넣은 차례)</td><td>쌍의 슬라이스</td></tr>
+<tr><td>못 받으면</td><td>예외</td><td>예외(reject)</td><td>오류 값</td></tr>
+<tr><td>찾은 역할 수 검사</td><td colspan="3">없음 — 몇 개를 찾았든 다음 걸음으로 간다(뒤에서 봅니다)</td></tr>
+</table>
+</div>
+<div class="note"><b>요청마다 다시 찾는다</b> — 세 언어 모두 <code>plan</code> 의 첫머리에서 <code>discover</code> 를 부릅니다(<a href="#p15-fan-py">3장의 plan 구역</a>). 카드를 들고 있지 않으니 요청마다 카드 GET 이 넷 나가고, 조건부 GET 도 쓰지 않습니다. 3부가 캐시의 몫을 SDK 를 쓰는 쪽에 넘겼는데(<a href="#p03-cache-clients">3부</a>), 이 기획 에이전트는 그 몫을 아직 하지 않습니다.</div>
+</article>
+
+<article class="card" id="p15-reg-wire">
+<h3>발견의 와이어 — 숙소 에이전트가 받은 카드 GET 셋, 머리글만 다르다</h3>
+<p class="lead">3장의 명세에서 숙소 에이전트 앞의 탭이 본 것 가운데 카드 GET 만 골랐습니다. 파이썬·TypeScript·Go 기획 에이전트가 차례로 보낸 것입니다.</p>
+<!--OUT file=out/15/fan.txt wire=lodging-wire ex=1 lines=1-4 note=파이썬 기획 에이전트-->
+<!--OUT file=out/15/fan.txt wire=lodging-wire ex=3 lines=1-5 note=TypeScript 기획 에이전트-->
+<!--OUT file=out/15/fan.txt wire=lodging-wire ex=5 lines=1-3 note=Go 기획 에이전트-->
+<div class="note"><b>카드 GET 의 <code>A2A-Version</code></b> — 세 기획 에이전트 가운데 TypeScript 만 붙였습니다. §3.6.1 은 "Clients MUST send the A2A-Version header with each request" 라고만 하고, 카드 GET 이 그 요청에 드는지는 말하지 않습니다. 숙소 에이전트(파이썬)는 머리글이 없어도 카드를 주었습니다. 같은 파이썬 SDK 라도 <code>create_client(url)</code> 로 카드를 받은 <code>ask</code> 는 붙였고(<a href="#p15-card">1장의 카드</a>), <code>A2ACardResolver</code> 를 직접 쓴 기획 에이전트는 붙이지 않았습니다.</div>
+</article>
+
+<article class="card" id="p15-reg-unknown">
+<h3>역할에 맞지 않는 카드는 조용히 건너뛴다 — 주소 넷에서 "3곳"</h3>
+<p class="lead">명단에서 정산 에이전트를 빼고, 대신 기획 에이전트 자기 주소를 넣었습니다. 정산 에이전트(11516)는 떠 있지만 명단에 없습니다. 세 기획 에이전트에 이야기의 한 문장을 막는 호출(<code>--no-stream</code>)로 보냈습니다.</p>
+<!--SPEC file=ex/run/15/missing.run-->
+<!--OUT file=out/15/missing.txt server=py lines=1-5 note=파이썬 기획 에이전트의 출력-->
+<div class="note"><b>자기 카드도 받는다</b> — 기획 에이전트는 자기 카드(<code>workshop</code>·<code>orchestration</code>)도 남의 카드처럼 받아 보고, 역할표에 맞는 태그가 없어 버렸습니다. "에이전트 3곳" 은 받은 카드 수가 아니라 <b>찾은 역할 수</b>입니다(<code>len(cards)</code>). 오류도 경고도 없습니다.</div>
+</article>
+
+<article class="card" id="p15-reg-missing">
+<h3>빠진 역할은 쓸 때 터진다 — 견적 셋을 다 받은 뒤에</h3>
+<p class="lead">정산 역할이 없는데도 세 기획 에이전트는 숙소·식사·교통에 일을 맡기고 견적을 받았습니다. 정산 카드를 꺼내는 순간 실패합니다.</p>
+<!--OUT file=out/15/missing.txt part=터미널 8 lines=7-44 grep=^\[터미널|Error:|task FAILED|종료 코드-->
+<!--OUT file=out/15/missing.txt lines=52-74 note=동료의 출력 — 정산 칸만 비었다-->
+<ul>
+<li>숙소·식사·교통은 기획 에이전트 셋에게서 한 번씩, 세 번 일했습니다. 정산 에이전트에는 아무것도 오지 않았습니다.</li>
+<li>사용자가 받은 까닭은 파이썬 <code>'settle'</code>(dict 의 <code>KeyError</code>), TypeScript <code>Cannot read properties of undefined (reading 'securitySchemes')</code>, Go 는 까닭 없는 <code>task FAILED</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-reg-nil">
+<h3>Go 에서는 nil 카드 — 정산 자리에서는 SDK 가 패닉을 받아 주지만, 위임 자리에서는 아니다</h3>
+<p class="lead">Go 의 맵은 없는 열쇠에 zero 값(<code>nil</code>)을 돌려줍니다. 기획 에이전트의 함수에 그 nil 카드를 넣어 보는 예제입니다. <code>agent.go</code> 는 완성 기획 에이전트 파일의 링크라 <code>getToken</code>·<code>delegate</code> 는 진짜입니다.</p>
+<!--RUN file=ex/go/15/nilcard region=nil-->
+<ul>
+<li><b>정산 자리</b>(<a href="#p15-reg-missing">앞 슬라이드</a>) — <code>getToken</code> 의 패닉은 실행기 고루틴에서 납니다. Go SDK 는 그 고루틴을 <code>recover()</code> 로 감싸 "event producer panic" 을 오류로 바꾸고(<code>internal/taskexec/execution_handler.go:198</code>), 작업은 FAILED 가 됩니다.</li>
+<li><b>위임 자리</b> — 숙소가 빠지면 nil 카드는 <code>wg.Go</code> 로 띄운 <b>다른 고루틴</b>의 <code>delegate</code> 로 들어갑니다(3장). <code>WaitGroup.Go</code> 의 문서는 "The function f must not panic" 이고(<code>src/sync/waitgroup.go:223</code>), 그 고루틴 안에서 아무도 되살리지 않은 패닉은 "the program is terminated with a non-zero exit code"(<code>src/builtin/builtin.go:281</code>) — 기획 에이전트 프로세스가 통째로 끝납니다.</li>
+</ul>
+<div class="warn"><b>완성 에이전트의 결함</b> — 세 언어 모두 <code>discover</code> 뒤에 역할 넷이 다 찼는지 보지 않습니다. 맞는 자리는 발견 직후입니다: 빠진 역할을 이름으로 알리고 일을 맡기기 <b>전에</b> 끝내는 것입니다. 이 부는 고치지 않고 적어 둡니다.</div>
+</article>
+
+<article class="card" id="p15-reg-down">
+<h3>명단의 주소가 죽어 있으면 — 발견에서 멈추고, 세 서버가 세 모양으로 알린다</h3>
+<p class="lead">1장의 대본에서 셋째 답으로 문장이 다 찬 뒤입니다. 명단의 유일한 주소 11509 에는 아무도 없었습니다.</p>
+<!--OUT file=out/15/intake.txt wire=py-wire ex=4 lines=51-67 note=파이썬 — 스트림 안의 JSON-RPC 오류-->
+<!--OUT file=out/15/intake.txt part=터미널 7 lines=51-52 note=파이썬 서버에 붙은 ask 의 끝-->
+<!--OUT file=out/15/intake.txt part=터미널 7 lines=53-72 grep=^\[터미널|^status FAILED|^task FAILED note=TypeScript·Go — FAILED 상태-->
+<ul>
+<li>파이썬은 SSE 스트림 안에 <code>event: error</code> 로 <code>-32603</code> 을 보냈고, <code>message</code> 에 카드 주소 <code>http://127.0.0.1:11509/…</code> 가 그대로 들었습니다 — 사용자에게 안쪽 명단의 주소가 새어 나갑니다. <code>ask</code> 는 이 오류를 예외로 받아 끝났습니다(종료 코드 1).</li>
+<li>TypeScript 는 <code>Agent execution error: fetch failed</code> 를 단 FAILED 상태 갱신, Go 는 까닭 없는 FAILED Task 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-reg-fail-cmp">
+<h3>실패의 세 모양 — 예외를 흘려보낸 대가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>빠진 역할(정산)</td><td><code>-32603</code> <code>'settle'</code></td><td>FAILED <code>Agent execution error: Cannot read …</code></td><td>FAILED(까닭 없음)</td></tr>
+<tr><td>빠진 역할(위임)</td><td>(정산과 같은 <code>KeyError</code>)</td><td>(<code>TypeError</code>)</td><td>프로세스가 끝난다</td></tr>
+<tr><td>죽은 주소</td><td>스트림 안 <code>-32603</code> + 주소</td><td>FAILED <code>… fetch failed</code></td><td>FAILED(까닭 없음)</td></tr>
+</table>
+</div>
+<div class="key"><b>5부의 규칙 그대로</b> — 실행기가 예외로 끝나면 세 SDK 가 서로 다른 답을 냅니다(<a href="#p05-fail-cmp">5부의 비교</a>). 같은 답을 내려면 기획 에이전트가 실패를 잡아 FAILED(또는 REJECTED) 상태와 까닭 메시지를 직접 실어야 합니다 — 숙소·식사의 거절은 이미 그렇게 합니다(7장). 표의 괄호 칸은 코드에서 읽은 것입니다.</div>
+</article>
+
+<article class="card" id="p15-ch2-sum">
+<h3>2장 정리 — 에이전트 레지스트리와 스킬 매칭</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>카드는 어디서?</td><td>직접 설정(<code>--agents</code>) — §8.2 의 셋째 길</td><td><a href="#p15-reg-spec">§8.2</a></td></tr>
+<tr><td>무엇으로 고르나?</td><td>스킬의 둘째 태그(lodging·meals·transport·budget), id 는 보지 않는다</td><td><a href="#p15-reg-roles">역할표</a></td></tr>
+<tr><td>세 언어의 차이는?</td><td>리졸버 이름, 서명 검증을 부르는 자리, 역할표의 자료형</td><td><a href="#p15-disc-cmp">비교</a></td></tr>
+<tr><td>모르는 카드는?</td><td>조용히 건너뛴다</td><td><a href="#p15-reg-unknown">3곳</a></td></tr>
+<tr><td>빠진 역할은?</td><td>쓸 때 터진다 — 견적을 다 받은 뒤, Go 위임 자리면 프로세스째</td><td><a href="#p15-reg-missing">실행</a>·<a href="#p15-reg-nil">nil</a></td></tr>
+<tr><td>죽은 주소는?</td><td>발견에서 멈춘다, 알리는 모양은 셋</td><td><a href="#p15-reg-down">실행</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p15-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 명단에 정산 에이전트를 빠뜨린 채 이야기의 한 문장을 보냈습니다. 정산 에이전트는 떠 있었습니다. 숙소·식사·교통 에이전트는 일을 했습니까? 파이썬 기획 에이전트의 사용자는 어떤 까닭을 받았습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 했습니다 — 세 동료의 출력에 기획 에이전트마다 한 번씩 견적이 찍혔고, 정산 칸만 비었습니다(<a href="#p15-reg-missing">실행</a>). 발견은 찾은 역할 수를 검사하지 않아 위임까지 갔다가, 정산 카드를 꺼내는 <code>cards["settle"]</code> 에서 <code>KeyError</code> 가 났습니다. 사용자는 <code>-32603</code> 과 까닭 <code>'settle'</code> 을 받았습니다.</div>
+</article>
+
+<!-- ==== 3장 동시 위임 ×3 ==== -->
+
+<article class="card" id="p15-ch3">
+<p class="chnum">3장</p>
+<h2>동시 위임 ×3</h2>
+<p class="chsub">무엇을 동시에 → 파이썬 gather → TypeScript Promise.all → Go WaitGroup.Go → 세 언어 비교 → 관문 → 관문으로 돌리기 → 도착 순서와 알리는 순서 → 같은 contextId → 남이 지은 맥락 → 무엇을 넘기나 → 정리</p>
+</article>
+
+<article class="card" id="p15-fan-why">
+<h3>숙소·식사·교통은 서로 기다릴 까닭이 없다 — 셋을 한꺼번에, 한 맥락으로</h3>
+<p class="lead">세 견적은 서로의 결과를 쓰지 않습니다. 차례로 맡기면 셋의 시간을 더한 만큼, 동시에 맡기면 가장 느린 하나만큼 기다립니다. 정산은 세 견적이 다 있어야 하니 그 뒤입니다.</p>
+<pre class="fig">
+ 기획 에이전트 — 작업 T, 맥락 C
+   ├── 막는 SendMessage(맥락 C) ──→ 숙소 ─┐
+   ├── 막는 SendMessage(맥락 C) ──→ 식사 ─┼─ 셋이 다 올 때까지
+   ├── 막는 SendMessage(맥락 C) ──→ 교통 ─┘  기다린다
+   │   견적 셋을 정한 차례(숙소·식사·교통)로 알린다
+   └── SendMessage(맥락 C, 근거 = 작업 셋) → 정산   4장
+</pre>
+<ul>
+<li>셋 다 <b>막는 호출</b>입니다 — 끝났거나 멈춘 Task 하나씩을 받습니다(<a href="#p07-cl-planner">7부</a>). 교통 에이전트도 오래 걸리는 일이지만 기획 에이전트는 기다립니다.</li>
+<li>세 요청 모두 기획 에이전트 <b>자기 작업의 contextId</b> 를 답니다. 뒤에서 와이어로 확인하고, 그것이 스펙의 어느 문장과 부딪히는지 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-fan-py">
+<h3>파이썬 — <code>asyncio.gather</code> 로 셋을 띄우고, 결과는 넣은 차례로 받는다</h3>
+<!--CODE file=ex/py/agents/planner.py region=plan-->
+<ul>
+<li><code>gather</code> 는 "results (in the order of the original sequence, not necessarily the order of results arrival)" 를 돌려줍니다(<code>/usr/lib/python3.14/asyncio/tasks.py:777</code>). 그래서 <code>lodging, meals, bus</code> 로 바로 풀어 받습니다.</li>
+<li>견적을 알리는 <code>for</code> 는 정한 차례 — 주석이 말하는 "알릴 때는 정한 순서대로" 입니다. 처음으로 COMPLETED 가 아닌 것을 만나면 그 까닭으로 거절(REJECTED)합니다(7장).</li>
+<li><code>return_exceptions</code> 를 주지 않았으니, 셋 가운데 하나가 예외를 내면 그 예외가 곧바로 올라오고 나머지는 취소되지 않고 계속 돕니다(같은 파일 <code>:781</code>·<code>:791</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-fan-ts">
+<h3>TypeScript — <code>Promise.all</code>, 배열의 차례가 곧 결과의 차례</h3>
+<!--CODE file=ex/ts/agents/planner.ts region=plan-->
+<ul>
+<li><code>Promise.all([…])</code> 은 넣은 배열과 같은 차례의 배열로 풀립니다. <code>done.entries()</code> 의 <code>i</code> 로 <code>labels[i]</code> 를 붙여 정한 차례로 알립니다.</li>
+<li>타입 정의의 설명은 "resolved with an array of results when all of the provided Promises resolve, or rejected when any Promise is rejected"(<code>lib.es2015.promise.d.ts:32</code>) — 하나가 거부되면 곧바로 거부되고, 나머지 위임은 그대로 진행됩니다.</li>
+<li><code>need(role)</code> 의 <code>!</code> 는 "있다고 믿겠다" 는 표시일 뿐 검사가 아닙니다(<a href="#p15-reg-missing">2장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-fan-go">
+<h3>Go — <code>sync.WaitGroup.Go</code> 와 자리를 정한 슬라이스, 오류도 자리마다</h3>
+<!--CODE file=ex/go/agents/planner/main.go region=plan-->
+<ul>
+<li><code>errgroup</code> 이 아니라 표준 라이브러리의 <code>WaitGroup.Go</code> 입니다. 결과와 오류를 <code>tasks[i]</code>·<code>errs[i]</code> — 미리 정한 자리에 넣으니 도착 순서와 상관없이 차례가 정해집니다.</li>
+<li><code>wg.Wait()</code> 는 셋이 <b>다</b> 끝나야 돌아옵니다. 그다음 정한 차례로 훑어 첫 오류를 돌려줍니다 — 하나가 먼저 실패해도 나머지를 기다리는 점이 파이썬·TypeScript 와 다릅니다.</li>
+<li>Go 1.22 부터 <code>for</code> 의 <code>i</code>·<code>role</code> 은 반복마다 새 변수라(<code>go.mod</code> 는 <code>go 1.27.1</code>), 고루틴이 그대로 잡아도 됩니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-fan-cmp">
+<h3>세 언어 비교 — 결과의 차례는 셋 다 정해져 있고, 실패의 시점이 다르다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>동시에 띄우기</td><td><code>asyncio.gather</code></td><td><code>Promise.all</code></td><td><code>sync.WaitGroup.Go</code></td></tr>
+<tr><td>결과의 차례</td><td>넣은 차례</td><td>배열 차례</td><td>미리 정한 자리</td></tr>
+<tr><td>하나가 예외·오류면</td><td>곧바로 올라온다, 나머지는 계속</td><td>곧바로 거부된다, 나머지는 계속</td><td>셋 다 끝난 뒤 정한 차례의 첫 오류</td></tr>
+<tr><td>하나가 패닉이면</td><td colspan="2">(해당 없음 — 예외)</td><td>프로세스가 끝난다(<a href="#p15-reg-nil">2장</a>)</td></tr>
+<tr><td>알리는 차례</td><td colspan="3">숙소·식사·교통 — 코드에 박힌 차례</td></tr>
+</table>
+</div>
+<div class="note"><b>나머지는 계속</b> — 파이썬·TypeScript 에서 하나가 먼저 실패하면 기획 에이전트는 실패를 알리지만, 나머지 동료는 그 사실을 모른 채 일을 끝냅니다. 기획 에이전트가 그 작업들을 CancelTask 로 거두지도 않습니다. 11부의 취소(<a href="#p11-ch1">11부</a>)를 여기 쓸 수 있는 자리입니다.</div>
+</article>
+
+<article class="card" id="p15-fan-gate">
+<h3>정말 동시인가 — 셋이 모여야 문을 여는 관문을 세운다</h3>
+<p class="lead">"동시에 보냈다" 를 시간으로 재면 기계마다 결과가 다릅니다. 대신 <b>셋이 다 들어와야만</b> 넘겨 주는 관문(<code>15/gate.py</code>)을 동료 앞에 세웠습니다. 차례로 맡기는 클라이언트라면 둘째 요청이 오지 않으니 첫 요청이 10초 뒤 <code>504</code> 로 끝납니다.</p>
+<!--CODE file=ex/py/15/gate.py region=hold-->
+<ul>
+<li>셋이 모이면 <code>release</code> 가 정한 차례(이 실험은 <b>교통 → 식사 → 숙소</b>, 알리는 차례의 거꾸로)로 하나씩 놓습니다. 앞의 응답이 다 나간 뒤에 다음 것을 놓으므로(이 구역 아래, 응답에 단 <code>BackgroundTask(done.set)</code>), 기획 에이전트가 응답을 받는 차례도 이쪽이 정합니다.</li>
+<li>카드 GET 은 붙잡지 않습니다. 시험 도구라 셋 이외의 수나 시간 초과 뒤의 정리는 하지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-fan-run">
+<h3>관문을 지나 — 세 기획 에이전트 모두 "3건이 동시에 열렸습니다"</h3>
+<p class="lead">동료(파이썬) 넷, 관문, 탭 셋, 기획 에이전트 셋을 띄우고 기획 에이전트마다 이야기의 한 문장을 보냈습니다. 결재에는 답하지 않아 대화는 AUTH_REQUIRED 에서 멈춥니다.</p>
+<!--SPEC file=ex/run/15/fan.run-->
+<!--OUT file=out/15/fan.txt server=gate-->
+<ul>
+<li>세 판 모두 SendMessage 셋이 한꺼번에 관문에 붙잡혔다가 교통·식사·숙소 차례로 넘어갔습니다 — 셋 다 정말로 동시에 맡깁니다.</li>
+<li>마지막 줄은 대조군입니다. 명세 끝의 <code>curl</code> 이 혼자 보낸 POST 는 10초 동안 짝이 없어 <code>504</code> 를 받았습니다(그 10초는 이 명세에서 일부러 기다리는 시간입니다).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-fan-order">
+<h3>응답은 교통부터 왔는데, 셋 다 숙소부터 알렸다</h3>
+<p class="lead">관문이 정한 도착 차례는 교통 → 식사 → 숙소였습니다. 세 기획 에이전트가 사용자에게 흘린 진행 상황입니다.</p>
+<!--OUT file=out/15/fan.txt part=터미널 12 lines=1-24-->
+<div class="key"><b>차례는 코드가 정한다</b> — 세 기획 에이전트 모두 도착 차례와 상관없이 숙소 → 식사 → 교통으로 알렸습니다. 결과를 넣은 차례(gather·Promise.all)나 정한 자리(Go)로 받기 때문입니다. 그래서 동시 위임을 해도 이 캡처는 매번 같고, 세 언어가 같은 줄을 냅니다. 견적 셋을 합친 <code>합계 4,842,000원</code> 이 SCENARIO §2.6 의 값입니다.</div>
+</article>
+
+<article class="card" id="p15-fan-ctx">
+<h3>세 동료가 받은 contextId 가 하나다 — 기획 에이전트 자기 작업의 맥락</h3>
+<p class="lead">파이썬 기획 에이전트가 보낸 SendMessage 셋을 세 탭에서 하나씩 골랐습니다. 캡처의 <code>&lt;idN&gt;</code> 은 한 파일 안에서 같은 값이면 같은 번호입니다.</p>
+<!--OUT file=out/15/fan.txt wire=lodging-wire ex=2 lines=1-37 grep=^→|^←|messageId|contextId|^\s{8}"id" note=숙소-->
+<!--OUT file=out/15/fan.txt wire=catering-wire ex=2 lines=1-37 grep=^→|^←|messageId|contextId|^\s{8}"id" note=식사-->
+<!--OUT file=out/15/fan.txt wire=bus-wire ex=2 lines=1-37 grep=^→|^←|messageId|contextId|^\s{8}"id" note=교통-->
+<ul>
+<li><code>messageId</code> 는 셋이 다르고(<code>ask_message</code> 가 매번 새로 짓는다) <code>contextId</code> 는 셋 다 <code>&lt;id2&gt;</code> 입니다. 세 동료는 그 맥락을 그대로 받아 각자의 새 작업(<code>id</code> 셋이 다르다)에 붙였습니다.</li>
+<li>값은 <code>plan</code> 의 <code>ctx_id = task.context_id</code> — 사용자와 기획 에이전트 사이의 대화 맥락입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-fan-ctx-spec">
+<h3>동료에게 그 맥락은 "남이 지은 contextId" — 스펙은 SHOULD NOT 이라 한다</h3>
+<p class="lead">세 동료 서버 입장에서 <code>&lt;id2&gt;</code> 는 자기가 지은 적 없는 값입니다. §3.4.1 이 바로 이 경우를 다룹니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>§3.4.1 의 문장</th><th>이 장의 실행</th></tr>
+<tr><td>"Agents MAY accept and preserve client-provided contextId values"</td><td>세 동료 모두 받아서 썼다(<a href="#p04-ctx-client">4부에서 본 세 SDK 의 처리</a>)</td></tr>
+<tr><td>"Clients SHOULD NOT provide a client-generated contextId to a server unless they understand how the server will process that contextId"</td><td>기획 에이전트는 동료가 어떻게 다룰지 카드로 알 길이 없는데 보낸다</td></tr>
+<tr><td>"All tasks and messages with the same contextId SHOULD be treated as part of the same conversational session"</td><td>세 동료는 서로 다른 서버라, 같은 값이어도 각자의 저장소 안에서만 묶인다</td></tr>
+</table>
+</div>
+<div class="note"><b>무엇을 얻고 무엇을 내주나</b> — 얻는 것은 상관관계입니다: 동료의 로그·작업 목록에서 "한 워크숍 대화" 를 같은 값으로 찾을 수 있고, 4장의 정산 요청도 같은 맥락에 들어갑니다. 내주는 것은 사용자 대화의 식별자입니다 — 동료 넷이 같은 사용자의 일을 서로 이을 수 있게 됩니다. 스펙의 SHOULD NOT 을 따르려면 동료마다 contextId 없이 보내고, 동료가 지은 값을 받아 적어 두면 됩니다.</div>
+</article>
+
+<article class="card" id="p15-fan-data">
+<h3>세 동료가 받은 DataPart 는 풀이 결과 통째로 — 예산까지 간다</h3>
+<p class="lead">같은 요청의 본문입니다. 기획 에이전트는 동료마다 따로 고르지 않고 <code>parse_request</code> 의 답(<code>req</code>)을 그대로 실었습니다.</p>
+<!--OUT file=out/15/fan.txt wire=lodging-wire ex=2 lines=12-24 note=파이썬 기획 에이전트 → 숙소-->
+<!--OUT file=out/15/fan.txt wire=lodging-wire ex=6 lines=11-23 note=Go 기획 에이전트 → 숙소-->
+<!--OUT file=out/15/fan.txt server=lodging-->
+<ul>
+<li>파이썬이 보낸 숫자는 <code>30.0</code>·<code>6000000.0</code> 입니다 — 4부에서 본 Struct 의 double(<a href="#p04-data-cmp">4부</a>). TypeScript·Go 는 <code>30</code> 입니다. 어느 쪽이든 동료는 같은 견적을 냈습니다 — 숙소 에이전트의 출력이 세 판 모두 <code>8실, 2,100,000원</code> 입니다.</li>
+<li>숙소에는 <code>budget</code>·<code>vegetarians</code>·<code>depart</code>·<code>ok</code> 가, 교통에는 <code>budget</code> 이 쓸모없이 갑니다. 동료는 모르는 키를 무시하지만, 예산은 정산만 알면 되는 값입니다.</li>
+</ul>
+<div class="note"><b>예산 확장은 쓰지 않는다</b> — 14부의 예산 확장(<a href="#p14-bud-contract">14부</a>)은 상한을 메시지 metadata 에 싣는 계약입니다. 완성 기획 에이전트는 그 확장을 켜지 않고, 이 부도 그것을 요구하지 않습니다. 쓴다면 숙소 위임에만 <code>A2A-Extensions</code> 머리글과 metadata 를 함께 달아야 합니다 — Go 의 <code>a2aext</code> 전파기가 옮기는 것은 요청의 <code>params.metadata</code> 이지 메시지 metadata 가 아닙니다(<a href="#p09-ext-relay">9부</a>).</div>
+</article>
+
+<article class="card" id="p15-ch3-sum">
+<h3>3장 정리 — 동시 위임</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>무엇을 동시에?</td><td>숙소·식사·교통 — 서로의 결과를 쓰지 않는 셋. 정산은 그 뒤</td><td><a href="#p15-fan-why">흐름</a></td></tr>
+<tr><td>어떻게?</td><td><code>gather</code>·<code>Promise.all</code>·<code>WaitGroup.Go</code></td><td><a href="#p15-fan-cmp">비교</a></td></tr>
+<tr><td>정말 동시인가?</td><td>셋이 모여야 여는 관문을 세 기획 에이전트 모두 통과했다. 혼자 온 요청은 504</td><td><a href="#p15-fan-run">관문</a></td></tr>
+<tr><td>결과의 차례는?</td><td>도착과 상관없이 숙소·식사·교통 — 캡처가 매번 같은 까닭</td><td><a href="#p15-fan-order">차례</a></td></tr>
+<tr><td>contextId 는?</td><td>기획 작업의 맥락 하나를 셋에 — §3.4.1 의 SHOULD NOT 과 부딪힌다</td><td><a href="#p15-fan-ctx">와이어</a>·<a href="#p15-fan-ctx-spec">스펙</a></td></tr>
+<tr><td>무엇을 넘기나?</td><td>풀이 결과 통째로 — 예산까지</td><td><a href="#p15-fan-data">본문</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p15-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 관문은 응답을 교통 → 식사 → 숙소 차례로 돌려주었습니다. 그런데 세 기획 에이전트가 흘린 진행 상황은 어떤 차례였고, 왜 그렇습니까? 기획 에이전트가 셋을 차례로 맡겼다면 관문에서는 무슨 일이 났겠습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 셋 다 숙소 → 식사 → 교통이었습니다(<a href="#p15-fan-order">차례</a>). 결과를 도착 차례가 아니라 넣은 차례(<code>gather</code>·<code>Promise.all</code>)나 미리 정한 자리(Go 의 <code>tasks[i]</code>)로 받고, 알리는 <code>for</code> 가 그 차례로 돌기 때문입니다. 차례로 맡겼다면 첫 요청이 관문에서 짝 없이 10초를 기다리다 <code>504</code> 를 받았을 것입니다 — 명세 끝의 <code>curl</code> 이 받은 그대로입니다(<a href="#p15-fan-run">관문</a>).</div>
 </article>

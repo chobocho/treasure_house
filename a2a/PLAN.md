@@ -845,3 +845,35 @@ subagent task each.
   contradicts §11.6; topics lists "State Machine Extensions" but forbids new enum values;
   py "1.1" violates §3.6.2 Major.Minor, TS rejecting "1.0.1" violates §3.6 patch rule.
 - `make all SKEL=1` green (1417 slides, 1468 blocks, 0 mismatches, 0 notices).
+
+### Part 15 first third — 50 slides; part 15 split into 15_/15b_/15c_ (2026-10-18)
+- `15b_scenario.html`, `15c_scenario.html` + `order.txt` lines added (placeholders).
+  `15_scenario.html` cover+intro (2), ch1 planner design (15), ch2 registry/skill matching
+  (17), ch3 concurrent delegation (16). Region markers only: planner py/ts (roles, say,
+  parse, resume, finish), go (roles, say, parse, finish), `workshop/domain.py` (parse).
+  Examples `ex/{py,ts,go}/15/parse`, `ex/py/15/{skills,gate}.py` (gate = barrier proxy that
+  releases the three SendMessages in a fixed order), `ex/ts/15/planner_at.ts`,
+  `ex/go/15/{planner_at,nilcard}`; specs `ex/run/15/{intake,missing,fan}.run`; ports
+  11500–11532. Pre-existing captures byte-identical (3 ready-timeout flakes under swap
+  re-ran identical).
+- **Defects in our final planners (not yet fixed → next commit):** (1) TS planner builds
+  `[...task.history, ctx.userMessage]` though begin()/the SDK already put the message in
+  history → "…채식 2명…" without headcount proceeds with headcount 2 (py/go ask);
+  (2) py `\d` matches full-width digits (`re` Unicode) → "３０명" = 30 in py, missing in
+  ts/go (RE2 ASCII) — golden lacks the case; (3) no planner checks that all four roles were
+  found — py -32603 `'settle'`, ts FAILED "Cannot read properties of undefined", go nil-card
+  panic recovered by the SDK → FAILED without reason, or **process crash** when the panic
+  is inside a `wg.Go` fan-out goroutine; (4) py planner streams -32603 containing the
+  internal registry/card URL when a peer is unreachable. Also `p03-cache-clients` claims the
+  part-15 planner uses conditional GET — it re-runs discovery every request, no cache.
+- Findings: py SDK sends A2A-Version on the card GET via `create_client` but not via
+  `A2ACardResolver`; ts sends it, go sends no headers; dead peer → py JSON-RPC error inside
+  SSE, ts FAILED "fetch failed", go FAILED without message; planner sends its own contextId
+  to the peers (§3.4.1 SHOULD NOT; all accept); fan-out DataPart is the whole parsed
+  request; Go fans out with `sync.WaitGroup.Go` and waits for all, py gather / ts Promise.all
+  fail fast and leave other delegations running; the final planner does not use the budget
+  extension.
+- Timing: `fan.run` has a deliberate 10 s gate timeout (lone request → 504); gate fixes the
+  order by construction; Go planner stderr dropped in `missing.run` (goroutine ids vary),
+  `--no-stream` there (streaming lost yielded WORKING updates).
+- `make all SKEL=1` green (1467 slides, 1516 blocks, 0 mismatches, 0 notices).

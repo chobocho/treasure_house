@@ -1,0 +1,39 @@
+# 3장 — 동시 위임. 기획 에이전트 셋(py·ts·go)이 차례로 같은 동료에게
+# 일을 맡긴다. 기획 → 탭 → 관문(15/gate.py) → 동료. 관문은 SendMessage
+# 셋이 다 모여야 놓고, 교통·식사·숙소 차례로 하나씩 돌려준다. 결재
+# 답은 주지 않는다 — 대화는 AUTH_REQUIRED 에서 멈춘다(정산은 4장).
+# 마지막 curl 은 관문에 혼자 온 요청 — 10초를 기다려 504 를 받는다.
+serve name=lodging ready=tcp:11520 \
+      cmd="py:agents/lodging.py --port 11520 \
+      --url http://127.0.0.1:11527/"
+serve name=catering ready=tcp:11521 \
+      cmd="py:agents/catering.py --port 11521 \
+      --url http://127.0.0.1:11528/"
+serve name=bus ready=tcp:11522 \
+      cmd="py:agents/bus.py --port 11522 --step-ms 100 \
+      --url http://127.0.0.1:11529/"
+serve name=settlement ready=tcp:11523 \
+      cmd="py:agents/settlement.py --port 11523"
+serve name=gate ready=tcp:11524 \
+      cmd="py:15/gate.py 교통=11526:11522 식사=11525:11521 \
+      숙소=11524:11520"
+tap   name=lodging-wire listen=11527 target=11524
+tap   name=catering-wire listen=11528 target=11525
+tap   name=bus-wire listen=11529 target=11526
+serve name=py ready=tcp:11530 \
+      cmd="py:12/planner_at.py 11530 11527 11528 11529 11523"
+serve name=ts ready=tcp:11531 \
+      cmd="ts:15/planner_at.ts 11531 11527 11528 11529 11523"
+serve name=go ready=tcp:11532 \
+      cmd="go:15/planner_at 11532 11527 11528 11529 11523"
+run   cmd="py:agents/ask.py http://127.0.0.1:11530/ \
+      '2026-10-30부터 1박 2일, 30명(채식 2명), \
+      예산 6,000,000원, 출발 강남역'"
+run   cmd="py:agents/ask.py http://127.0.0.1:11531/ \
+      '2026-10-30부터 1박 2일, 30명(채식 2명), \
+      예산 6,000,000원, 출발 강남역'"
+run   cmd="py:agents/ask.py http://127.0.0.1:11532/ \
+      '2026-10-30부터 1박 2일, 30명(채식 2명), \
+      예산 6,000,000원, 출발 강남역'"
+run   cmd="sh:curl -s -o /dev/null -w '%{http_code}\\n' \
+      -X POST http://127.0.0.1:11524/"

@@ -165,6 +165,7 @@ def settle(req):
     }
 
 
+# region: parse
 # Go 의 RE2 에는 뒤보기(lookbehind)가 없다. 세 언어가 같은 정규식을
 # 쓰려고, 채식 인원을 먼저 찾아 지운 다음 전체 인원을 찾는다.
 VEG = re.compile(r"채식\s*(\d+)명")
@@ -200,3 +201,6 @@ def parse_request(text):
         else None,
         "depart": depart.group(1) if depart else None,
     }
+
+
+# endregion

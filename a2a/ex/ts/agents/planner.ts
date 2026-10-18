@@ -42,6 +42,7 @@ import {
   type Updater,
 } from "./common.ts";
 
+// region: roles
 // 맡길 일 → 그 일을 하는 에이전트의 스킬 태그
 const ROLES = {
   lodging: "lodging",
@@ -49,6 +50,7 @@ const ROLES = {
   bus: "transport",
   settle: "budget",
 };
+// endregion
 const ASK: Record<string, string> = {
   date: "날짜(예: 2026-10-30)",
   nights: "박 수(예: 1박)",
@@ -237,11 +239,14 @@ class PlannerExecutor implements AgentExecutor {
     this.client = { id: clientId, secret };
   }
 
+  // region: say
   say(up: Updater, text: string, state = TaskState.TASK_STATE_WORKING) {
     console.log(`[기획] ${text}`);
     up.status(state, [textPart(text)]);
   }
+  // endregion
 
+  // region: parse
   async execute(ctx: RequestContext, bus: ExecutionEventBus) {
     const { task, up } = begin(ctx, bus);
     if (this.waiting.has(task.id)) {
@@ -266,6 +271,7 @@ class PlannerExecutor implements AgentExecutor {
     }
     await this.plan(up, task, req);
   }
+  // endregion
 
   // region: plan
   async plan(up: Updater, task: Task, req: Req) {
@@ -315,6 +321,7 @@ class PlannerExecutor implements AgentExecutor {
   }
   // endregion
 
+  // region: resume
   async resume(ctx: RequestContext, up: Updater, task: Task) {
     const { cards, req, quotes, settle } = this.waiting.get(task.id)!;
     this.waiting.delete(task.id);
@@ -330,7 +337,9 @@ class PlannerExecutor implements AgentExecutor {
     const done = await followUp(c, settle, "결재합니다", token);
     this.finish(up, req, quotes, done);
   }
+  // endregion
 
+  // region: finish
   finish(up: Updater, req: Req, quotes: Json[], settle: Task) {
     if (settle.status?.state !== TaskState.TASK_STATE_COMPLETED) {
       const why = textOf(settle.status?.message);
@@ -349,6 +358,7 @@ class PlannerExecutor implements AgentExecutor {
     this.say(up, "계획서를 완성했습니다");
     up.status(TaskState.TASK_STATE_COMPLETED);
   }
+  // endregion
 
   async cancelTask(taskId: string, bus: ExecutionEventBus) {
     cancel(taskId, bus);
