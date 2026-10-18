@@ -756,3 +756,44 @@ subagent task each.
 - Runner: one `--check` pass failed with "go 가 60초 안에 준비되지 않았다" on a prebuilt binary
   while swap was 13.3 GB; four isolated reruns ~5 s each, never a content diff. Watch it.
 - `make all SKEL=1` green (1313 slides, 1346 blocks, 0 mismatches, 0 notices).
+
+### Part 13 complete — 92 slides; gRPC deps added (2026-10-18)
+- `13b_binding.html` ch3 gRPC ×3 (26), ch4 one server three bindings (12), ch5 spec skew (7),
+  `p13-wrap` → #p14; 13_binding ch3–5 refs linked. Examples `ex/py/13/{grpc_*,doors,one_task,
+  pick,rest_sub}.py`, `ex/ts/13/{grpc_common,bind_agent,grpc_client,doors_common,pick,
+  rest_sub}.ts`, `ex/go/13/{grpcmount,grpc_lodging,grpc_catering,doors_lodging,grpc_client,
+  pick,rest_sub}`, specs `ex/run/13/{grpc,gstream,gmatrix,doors,pick,verbs,gurl}.run`;
+  ports 11350–11399. gRPC traffic shown by `13/grpc_tap.py` (gRPC relay decoding with
+  a2a_pb2; drops grpc-js `date`) — the wiretap is HTTP/1.1 only.
+- **Deps:** TS `@grpc/grpc-js` 1.14.5, `@bufbuild/protobuf` 2.16.0 (+32 lock packages); Go
+  `google.golang.org/grpc` v1.83.2 direct + protobuf v1.36.11, genproto api/rpc
+  v0.0.0-20260526163538-3dc84a4a5aaa, x/net v0.58.0, x/sys v0.47.0, x/text v0.41.0 indirect
+  (go.sum +14, no `go mod tidy`). **Capture hashes don't cover go.mod/go.sum/package.json** —
+  a full `--check --all` found 3 environment-snapshot captures changed truthfully
+  (`out/08/sdk_exports.ts.txt`, `out/09/sdk_map.go.txt`, `out/09/test_tools.go.txt`):
+  re-captured, prose fixed on `p09-map-deps` (title now "옛 v0.3 모듈은 우리 go.sum 에 없다",
+  link to `p13-grpc-deps`) and `p08-map-pkg`. After any dependency change run the full check.
+- The same full check exposed a race in **our** `ex/py/11/crud.py`: `arrivals` waited only
+  for tok-2's end and then counted tok-1 (TS sends both concurrently → 5 vs 6). Now waits for
+  one end per remaining config (`/wait?n=<List count>`); not on a slide; `crud.txt` gains the
+  extra List exchange (appended after the cited `ex=5/6`); other part-11 captures re-run
+  byte-identical.
+- Findings: gRPC 3×3 consistent in all 9 cells (unlike REST's 3 broken pairs); A2A errors →
+  FAILED_PRECONDITION / NOT_FOUND with ErrorInfo in trailers on all three (no ErrorInfo
+  metadata); corrupt message → py UNKNOWN, ts/go INTERNAL; unknown method UNIMPLEMENTED;
+  **version check differs** — TS rejects missing (read as 0.3) or 9.9 with
+  VERSION_NOT_SUPPORTED, checked only against the card's GRPC interfaces
+  (`server/grpc/index.js:952`), py GrpcHandler lacks `@validate_version` (REST/JSON-RPC have
+  it, `rest_dispatcher.py:177`), Go never produces ErrVersionNotSupported (§3.6.2 MUST);
+  activated extensions: TS header metadata (`:955`), Go trailer (`a2agrpc/v1/handler.go:313`),
+  py none; gRPC opt-in py `grpc_channel_factory` (else ValueError, `client/transports/
+  grpc.py:132`), TS `GrpcTransportFactory`, Go `WithGRPCTransport`; transport selection
+  identical across SDKs (default JSONRPC, card order otherwise, py needs
+  `use_client_preference`, `client.py:61`); **no client falls back** (§5.2 SHOULD) — Go
+  `factory.go:154` skips only creation errors, `grpc.NewClient` is lazy; SubscribeToTask REST
+  GET and POST accepted by all servers, PUT → py 404 text / ts 404 HTML / go 405, all
+  clients POST (`rest.py:306`, `client/index.js:6378`, `a2aclient/rest.go:320`); gRPC URL
+  must be `host:port` — `http://127.0.0.1:P` fails in all three clients although the proto
+  comment and §8.5 sample use `https://…`; §10.2 metadata example says `a2a-version 0.3`.
+- `make all SKEL=1` green (1358 slides, 1405 blocks, 0 mismatches, 0 notices); full
+  `--check --all` (224) then re-checks green.

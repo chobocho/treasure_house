@@ -91,9 +91,13 @@ async def crud(client, tid):
 # endregion
 
 
-def arrivals(tid):
-    """tok-2 의 끝 알림을 기다린 뒤, 토큰마다 받은 것을 센다."""
-    url = f"{RELAY}wait?task={tid}&token=tok-2"
+def arrivals(tid, left):
+    """남은 설정 left 개의 끝 알림이 다 온 뒤, 토큰마다 받은 것을 센다.
+
+    tok-2 의 끝만 기다리면, 함께 남은 tok-1 의 마지막 알림이 아직
+    오는 중일 수 있다(TS 는 둘을 동시에 보낸다).
+    """
+    url = f"{RELAY}wait?task={tid}&n={left}"
     seen = {}
     for r in json.loads(urllib.request.urlopen(url).read()):
         seen.setdefault(r["token"], []).append(r["what"])
@@ -109,7 +113,10 @@ async def main():
         await show(client, tid)
     else:
         await crud(client, tid)
-    arrivals(tid)
+    res = await client.list_task_push_notification_configs(
+        ListTaskPushNotificationConfigsRequest(task_id=tid)
+    )
+    arrivals(tid, len(res.configs))
     await client.close()
 
 
