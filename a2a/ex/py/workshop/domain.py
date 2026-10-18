@@ -168,12 +168,15 @@ def settle(req):
 # region: parse
 # Go 의 RE2 에는 뒤보기(lookbehind)가 없다. 세 언어가 같은 정규식을
 # 쓰려고, 채식 인원을 먼저 찾아 지운 다음 전체 인원을 찾는다.
-VEG = re.compile(r"채식\s*(\d+)명")
-DATE = re.compile(r"(\d{4}-\d{2}-\d{2})")
-NIGHTS = re.compile(r"(\d+)박")
-HEADCOUNT = re.compile(r"(\d+)명")
-BUDGET = re.compile(r"예산\s*([\d,]+)원")
-DEPART = re.compile(r"출발\s*(\S+)")
+# re.ASCII — str 패턴의 \d 는 전각 숫자(３０)까지 받는다. RE2·JS 처럼
+# [0-9] 만 받게 해 세 언어가 같은 답을 낸다(골든 fullwidth-digits).
+ASCII = re.ASCII
+VEG = re.compile(r"채식\s*(\d+)명", ASCII)
+DATE = re.compile(r"(\d{4}-\d{2}-\d{2})", ASCII)
+NIGHTS = re.compile(r"(\d+)박", ASCII)
+HEADCOUNT = re.compile(r"(\d+)명", ASCII)
+BUDGET = re.compile(r"예산\s*([\d,]+)원", ASCII)
+DEPART = re.compile(r"출발\s*(\S+)", ASCII)
 
 
 def parse_request(text):

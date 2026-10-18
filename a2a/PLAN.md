@@ -877,3 +877,30 @@ subagent task each.
   order by construction; Go planner stderr dropped in `missing.run` (goroutine ids vary),
   `--no-stream` there (streaming lost yielded WORKING updates).
 - `make all SKEL=1` green (1467 slides, 1516 blocks, 0 mismatches, 0 notices).
+
+### Planner defects fixed ×3; part 15 first third now 56 slides (2026-10-18)
+- (1) TS planner reads `task.history` only (message no longer counted twice). (2) py
+  `workshop/domain.py` regexes `re.ASCII`; golden case `fullwidth-digits` ("…３０명" →
+  missing headcount) went RED in py only. (3) all three check discovery up front (region
+  `lost`): missing role → `TASK_STATE_FAILED` "동료를 찾지 못했습니다: <역할>" before any
+  delegation (FAILED not REJECTED: the same request can succeed once the planner side is
+  fixed — `p15-fix-state`); Go fan-out moved to `fanOut` (region `fan`) with `recover()` in
+  each `wg.Go`; py `gather(return_exceptions=True)`, ts `Promise.allSettled` — all wait for
+  all three, first failure reported in fixed order. (4) unusable cards are skipped (URL only
+  in the server log); delegation/token/settle failures → FAILED "<역할> 에이전트에게 맡기지
+  못했습니다" (region `cannot`), no URL/exception text.
+- Tests: `ex/py/15/test_planner.py`, `ex/ts/15/test_planner.ts` (+ `15/run_tests.ts`),
+  `ex/go/15/plantest/` (+ `15/run_tests`), run by `ex/run/15/tests.run` (kept out of the
+  agent dirs so 7–9 `used_names` captures don't change). Before-copies
+  `ex/{py,ts}/15/planner_old.*`, `ex/go/15/old_at/` + `ex/run/15/before.run`; new
+  `ex/run/15/down.run`, `ex/py/15/digits.py`; ports 11550–11569.
+- Captures changed (intended): `out/15/{intake,missing,parse.py}.txt`, and
+  `out/09/used_names.go.txt` (Go planner now uses `a2a.TaskStateFailed`, 81 → 82 names;
+  `p09-map-used` title updated). `p03-cache-clients` corrected (no conditional GET, discovery
+  every request). Slides +6 (`p15-twice-fixed`, `p15-reg-before`, `p15-fix-state`,
+  `p15-fix-code`, `p15-fix-run`, `p15-fix-tests`).
+- Not fixed: JS `\s` still matches U+3000 (only `출발\s*(\S+)`); planner still sends its own
+  contextId and does not cancel sibling delegations on failure (on slides).
+- Watch: `out/09/direct.go.txt` (returnImmediately) flipped SUBMITTED→COMPLETED once under
+  swap; 3 isolated reruns identical — a latent race for review.
+- `make all SKEL=1` green (1473 slides, 1543 blocks, 0 mismatches, 0 notices).

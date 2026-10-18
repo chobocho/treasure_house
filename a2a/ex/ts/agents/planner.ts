@@ -51,6 +51,8 @@ const ROLES = {
   settle: "budget",
 };
 // endregion
+const FAILED = TaskState.TASK_STATE_FAILED;
+const JOBS = ["숙소", "식사", "교통"]; // 동시에 맡기는 셋(알리는 차례)
 const ASK: Record<string, string> = {
   date: "날짜(예: 2026-10-30)",
   nights: "박 수(예: 1박)",
@@ -89,7 +91,6 @@ function card(url: string) {
   };
 }
 
-// region: discover
 // 카드 서명은 미리 받아 둔 공개 키로만 검증한다.
 // 카드 안의 jku 를 따라가 키를 받으면, 카드를 위조한 쪽이 자기 키를
 // 가리키게 할 수 있다 — 그래서 jku 는 믿지 않는다.
@@ -112,17 +113,26 @@ function pinnedVerifier() {
   });
 }
 
+// region: discover
 // 카드를 읽어 역할별로 하나씩 고른다. 서명이 있으면 검증한다.
+// 카드를 못 받거나 서명이 틀린 주소는 건너뛴다 — 그 역할이 비면
+// plan 이 맡기기 전에 알린다. 주소는 서버 기록에만 남긴다.
 async function discover(urls: string[]): Promise<Cards> {
   const verify = pinnedVerifier();
   const resolver = new DefaultAgentCardResolver();
   const found: Cards = new Map();
   for (const url of urls) {
-    const c = await resolver.resolve(url);
-    if (c.signatures?.length) {
-      // 틀리면 예외 — 위조 카드는 쓰지 않는다. SDK 의 정규화는
-      // JSON 모양 카드만 제대로 읽으므로 toJSON 으로 바꿔 넘긴다.
-      await verify(AgentCard.toJSON(c) as AgentCard);
+    let c: AgentCard;
+    try {
+      c = await resolver.resolve(url);
+      if (c.signatures?.length) {
+        // 틀리면 예외 — 위조 카드는 쓰지 않는다. SDK 의 정규화는
+        // JSON 모양 카드만 제대로 읽으므로 toJSON 으로 바꿔 넘긴다.
+        await verify(AgentCard.toJSON(c) as AgentCard);
+      }
+    } catch {
+      console.log(`[기획] 카드를 쓸 수 없어 건너뜁니다: ${url}`);
+      continue;
     }
     const tags = new Set(c.skills.flatMap((s) => s.tags));
     for (const [role, tag] of Object.entries(ROLES)) {
@@ -130,6 +140,23 @@ async function discover(urls: string[]): Promise<Cards> {
     }
   }
   return found;
+}
+// endregion
+
+// region: lost
+// 사용자에게 알릴 때 쓰는 역할 이름
+const LABELS: Record<string, string> = {
+  lodging: "숙소",
+  meals: "식사",
+  bus: "교통",
+  settle: "정산",
+};
+
+// 찾지 못한 역할의 이름들(역할표 차례). 비었으면 넷 다 찾았다.
+function lostRoles(cards: Cards) {
+  return Object.keys(ROLES)
+    .filter((r) => !cards.has(r))
+    .map((r) => LABELS[r]!);
 }
 // endregion
 
@@ -246,6 +273,14 @@ class PlannerExecutor implements AgentExecutor {
   }
   // endregion
 
+  // region: cannot
+  // 동료에게 맡기지 못한 일을 FAILED 로 끝낸다. 까닭은 역할 이름까지만
+  // 싣는다 — 예외의 글에는 안쪽 명단·카드의 주소가 들 수 있어서.
+  cannot(up: Updater, label: string) {
+    this.say(up, `${label} 에이전트에게 맡기지 못했습니다`, FAILED);
+  }
+  // endregion
+
   // region: parse
   async execute(ctx: RequestContext, bus: ExecutionEventBus) {
     const { task, up } = begin(ctx, bus);
@@ -253,7 +288,9 @@ class PlannerExecutor implements AgentExecutor {
       await this.resume(ctx, up, task);
       return;
     }
-    const heard = [...task.history, ctx.userMessage];
+    // 이번 메시지는 이미 이력에 있다 — 첫 턴은 begin() 이, 이어지는
+    // 턴은 SDK 가 넣어 둔다. 따로 붙이면 두 번 듣는다.
+    const heard = task.history;
     const text = heard
       .filter((m) => m.role === Role.ROLE_USER)
       .map(textOf)
@@ -278,36 +315,70 @@ class PlannerExecutor implements AgentExecutor {
     this.say(up, "동료 에이전트를 찾는 중");
     const cards = await discover(this.urls);
     this.say(up, `에이전트 ${cards.size}곳을 찾았습니다`);
+    const lost = lostRoles(cards); // 맡기기 전에 넷 다 있는지
+    if (lost.length > 0) {
+      const why = `동료를 찾지 못했습니다: ${lost.join(", ")}`;
+      this.say(up, why, FAILED);
+      return;
+    }
     const ctxId = task.contextId;
-    const need = (role: string) => cards.get(role)!;
-    const done = await Promise.all([
+    const need = (role: string) => cards.get(role)!; // 위에서 확인
+    // 하나가 실패해도 셋이 다 끝날 때까지 기다린다 — 실패도 정한
+    // 차례로 알리려고(allSettled: 거부도 결과 자리에 둔다).
+    const settled = await Promise.allSettled([
       delegate(need("lodging"), req, ctxId),
       delegate(need("meals"), req, ctxId),
       delegate(need("bus"), req, ctxId),
     ]);
-    const labels = ["숙소", "식사", "교통"];
+    const done: Task[] = [];
     // 도착 순서는 매번 다를 수 있다 — 알릴 때는 정한 순서대로.
-    for (const [i, t] of done.entries()) {
+    for (const [i, s] of settled.entries()) {
+      if (s.status === "rejected") {
+        this.cannot(up, JOBS[i]!);
+        return;
+      }
+      const t = s.value;
       if (t.status?.state !== TaskState.TASK_STATE_COMPLETED) {
         const why = textOf(t.status?.message);
-        console.log(`[기획] ${labels[i]} 실패: ${why}`);
-        const parts = [textPart(`${labels[i]}: ${why}`)];
+        console.log(`[기획] ${JOBS[i]} 실패: ${why}`);
+        const parts = [textPart(`${JOBS[i]}: ${why}`)];
         up.status(TaskState.TASK_STATE_REJECTED, parts);
         return;
       }
       const total = Math.trunc(quoteOf(t).total);
-      this.say(up, `${labels[i]} 견적 ${comma(total)}원`);
+      this.say(up, `${JOBS[i]} 견적 ${comma(total)}원`);
+      done.push(t);
     }
+    await this.settle(up, task, req, cards, done);
+  }
+  // endregion
+
+  // region: settle
+  // 견적 셋을 정산에 맡긴다 — 근거(refs)는 위임한 작업 셋이다.
+  async settle(
+    up: Updater,
+    task: Task,
+    req: Req,
+    cards: Cards,
+    done: Task[],
+  ) {
     const quotes = done.map(quoteOf);
     const items = quotes.map((q, i) => ({
-      name: labels[i]!,
+      name: JOBS[i]!,
       amount: Math.trunc(q.total),
     }));
-    const sc = need("settle");
-    const token = await getToken(sc, "payment:read", this.client);
+    const sc = cards.get("settle")!;
+    const ctxId = task.contextId;
     const refs = done.map((t) => t.id);
     const data = { items, budget: req.budget };
-    const settle = await delegate(sc, data, ctxId, { token, refs });
+    let settle: Task;
+    try {
+      const token = await getToken(sc, "payment:read", this.client);
+      settle = await delegate(sc, data, ctxId, { token, refs });
+    } catch {
+      this.cannot(up, "정산");
+      return;
+    }
     if (settle.status?.state === TaskState.TASK_STATE_AUTH_REQUIRED) {
       this.waiting.set(task.id, { cards, req, quotes, settle });
       const sum = items.reduce((s, i) => s + i.amount, 0);
@@ -333,8 +404,14 @@ class PlannerExecutor implements AgentExecutor {
     const c = cards.get("settle")!;
     // 결재 토큰도 문지기를 지나니 payment:read 도 받는다
     const both = "payment:read payment:approve";
-    const token = await getToken(c, both, this.client);
-    const done = await followUp(c, settle, "결재합니다", token);
+    let done: Task;
+    try {
+      const token = await getToken(c, both, this.client);
+      done = await followUp(c, settle, "결재합니다", token);
+    } catch {
+      this.cannot(up, "정산");
+      return;
+    }
     this.finish(up, req, quotes, done);
   }
   // endregion

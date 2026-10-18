@@ -52,6 +52,7 @@ ROLES = {
     "settle": "budget",
 }
 # endregion
+FAILED = TaskState.TASK_STATE_FAILED
 ASK = {
     "date": "날짜(예: 2026-10-30)",
     "nights": "박 수(예: 1박)",
@@ -104,19 +105,48 @@ def pinned_verifier():
 
 
 async def discover(urls):
-    """카드를 읽어 역할별로 하나씩 고른다. 서명이 있으면 검증한다."""
+    """카드를 읽어 역할별로 하나씩 고른다. 서명이 있으면 검증한다.
+
+    카드를 못 받거나 서명이 틀린 주소는 건너뛴다 — 그 역할이 비면
+    plan 이 맡기기 전에 알린다. 주소는 서버 기록에만 남긴다.
+    """
     verify = pinned_verifier()
     found = {}
     async with httpx.AsyncClient() as http:
         for url in urls:
-            c = await A2ACardResolver(http, url).get_agent_card()
-            if c.signatures:
-                verify(c)  # 틀리면 예외 — 위조 카드는 쓰지 않는다
+            try:
+                c = await A2ACardResolver(http, url).get_agent_card()
+                if c.signatures:
+                    verify(c)  # 틀리면 예외 — 위조 카드는 쓰지 않는다
+            except Exception:  # noqa: BLE001 — 못 쓰면 다 건너뛴다
+                print(
+                    f"[기획] 카드를 쓸 수 없어 건너뜁니다: {url}",
+                    flush=True,
+                )
+                continue
             tags = {t for s in c.skills for t in s.tags}
             for role, tag in ROLES.items():
                 if tag in tags and role not in found:
                     found[role] = c
     return found
+
+
+# endregion
+
+
+# region: lost
+# 사용자에게 알릴 때 쓰는 역할 이름
+LABELS = {
+    "lodging": "숙소",
+    "meals": "식사",
+    "bus": "교통",
+    "settle": "정산",
+}
+
+
+def lost_roles(cards):
+    """찾지 못한 역할의 이름들(역할표 차례). 비었으면 넷 다 찾았다."""
+    return [LABELS[r] for r in ROLES if r not in cards]
 
 
 # endregion
@@ -240,6 +270,19 @@ class PlannerExecutor(AgentExecutor):
 
     # endregion
 
+    # region: cannot
+    async def cannot(self, up, label):
+        """동료에게 맡기지 못한 일을 FAILED 로 끝낸다.
+
+        까닭은 역할 이름까지만 싣는다 — 예외의 글에는 안쪽 명단·카드의
+        주소가 들어 있어(2장) 사용자에게 내보내지 않는다.
+        """
+        await self.say(
+            up, f"{label} 에이전트에게 맡기지 못했습니다", FAILED
+        )
+
+    # endregion
+
     # region: parse
     async def execute(self, ctx: RequestContext, queue: EventQueue):
         task, up = await begin(ctx, queue)
@@ -276,18 +319,26 @@ class PlannerExecutor(AgentExecutor):
         await self.say(up, "동료 에이전트를 찾는 중")
         cards = await discover(self.urls)
         await self.say(up, f"에이전트 {len(cards)}곳을 찾았습니다")
+        if lost := lost_roles(cards):  # 맡기기 전에 넷 다 있는지
+            why = f"동료를 찾지 못했습니다: {', '.join(lost)}"
+            await self.say(up, why, FAILED)
+            return
         ctx_id = task.context_id
-        lodging, meals, bus = await asyncio.gather(
+        # 하나가 실패해도 셋이 다 끝날 때까지 기다린다 — 실패도 정한
+        # 차례로 알리려고(return_exceptions: 예외를 결과 자리에 둔다).
+        done = await asyncio.gather(
             delegate(cards["lodging"], req, ctx_id),
             delegate(cards["meals"], req, ctx_id),
             delegate(cards["bus"], req, ctx_id),
+            return_exceptions=True,
         )
         # 도착 순서는 매번 다를 수 있다 — 알릴 때는 정한 순서대로.
-        for label, t in (
-            ("숙소", lodging),
-            ("식사", meals),
-            ("교통", bus),
+        for label, t in zip(
+            ("숙소", "식사", "교통"), done, strict=True
         ):
+            if isinstance(t, BaseException):
+                await self.cannot(up, label)
+                return
             if t.status.state != TaskState.TASK_STATE_COMPLETED:
                 why = get_message_text(t.status.message)
                 print(f"[기획] {label} 실패: {why}", flush=True)
@@ -299,7 +350,8 @@ class PlannerExecutor(AgentExecutor):
                 return
             total = int(quote_of(t)["total"])
             await self.say(up, f"{label} 견적 {total:,}원")
-        quotes = [quote_of(t) for t in (lodging, meals, bus)]
+        lodging, meals, bus = done
+        quotes = [quote_of(t) for t in done]
         items = [
             {"name": n, "amount": int(q["total"])}
             for n, q in zip(
@@ -308,16 +360,23 @@ class PlannerExecutor(AgentExecutor):
         ]
         # endregion
         # region: settle
-        token = await get_token(
-            cards["settle"], "payment:read", self.client_id, self.secret
-        )
-        settle = await delegate(
-            cards["settle"],
-            {"items": items, "budget": req["budget"]},
-            ctx_id,
-            token=token,
-            refs=[lodging.id, meals.id, bus.id],
-        )
+        try:
+            token = await get_token(
+                cards["settle"],
+                "payment:read",
+                self.client_id,
+                self.secret,
+            )
+            settle = await delegate(
+                cards["settle"],
+                {"items": items, "budget": req["budget"]},
+                ctx_id,
+                token=token,
+                refs=[lodging.id, meals.id, bus.id],
+            )
+        except Exception:  # noqa: BLE001 — 닿지 않음·오류 모두
+            await self.cannot(up, "정산")
+            return
         state = settle.status.state
         if state == TaskState.TASK_STATE_AUTH_REQUIRED:
             self.waiting[task.id] = (cards, req, quotes, settle)
@@ -343,16 +402,20 @@ class PlannerExecutor(AgentExecutor):
                 TaskState.TASK_STATE_REJECTED,
             )
             return
-        # 결재 토큰도 문지기를 지나니 payment:read 도 받는다
-        token = await get_token(
-            cards["settle"],
-            "payment:read payment:approve",
-            self.client_id,
-            self.secret,
-        )
-        settle = await follow_up(
-            cards["settle"], settle, "결재합니다", token
-        )
+        try:
+            # 결재 토큰도 문지기를 지나니 payment:read 도 받는다
+            token = await get_token(
+                cards["settle"],
+                "payment:read payment:approve",
+                self.client_id,
+                self.secret,
+            )
+            settle = await follow_up(
+                cards["settle"], settle, "결재합니다", token
+            )
+        except Exception:  # noqa: BLE001 — 닿지 않음·오류 모두
+            await self.cannot(up, "정산")
+            return
         await self.finish(up, req, quotes, settle)
 
     # endregion

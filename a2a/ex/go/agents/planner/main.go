@@ -116,9 +116,10 @@ func pinnedKeys() a2acrypto.KeyResolverFunc {
 
 // discover 는 카드를 읽어 역할별로 하나씩 고른다. 서명이 있으면
 // 리졸버가 받은 바이트 그대로 검증한다 — 틀리면 오류, 위조 카드는
-// 쓰지 않는다.
-func discover(ctx context.Context, urls []string) (
-	map[string]*a2a.AgentCard, error) {
+// 쓰지 않는다. 카드를 못 받거나 서명이 틀린 주소는 건너뛴다 — 그
+// 역할이 비면 plan 이 맡기기 전에 알린다. 주소는 서버 기록에만.
+func discover(ctx context.Context,
+	urls []string) map[string]*a2a.AgentCard {
 	r := agentcard.NewResolver(common.HTTPClient(""))
 	r.Verifier = a2acrypto.NewVerifier(
 		a2acrypto.VerifierConfig{KeyResolver: pinnedKeys()})
@@ -126,7 +127,8 @@ func discover(ctx context.Context, urls []string) (
 	for _, u := range urls {
 		c, err := r.Resolve(ctx, u)
 		if err != nil {
-			return nil, err
+			common.Say("[기획] 카드를 쓸 수 없어 건너뜁니다: %s", u)
+			continue
 		}
 		var tags []string
 		for _, s := range c.Skills {
@@ -139,7 +141,27 @@ func discover(ctx context.Context, urls []string) (
 			}
 		}
 	}
-	return found, nil
+	return found
+}
+
+// endregion
+
+// region: lost
+// 사용자에게 알릴 때 쓰는 역할 이름
+var labelOf = map[string]string{
+	"lodging": "숙소", "meals": "식사", "bus": "교통", "settle": "정산",
+}
+
+// lostRoles 는 찾지 못한 역할의 이름들이다(역할표 차례). 비었으면
+// 넷 다 찾았다 — 이 검사 뒤로는 cards[역할] 이 nil 일 수 없다.
+func lostRoles(cards map[string]*a2a.AgentCard) []string {
+	var lost []string
+	for _, rt := range roles {
+		if cards[rt[0]] == nil {
+			lost = append(lost, labelOf[rt[0]])
+		}
+	}
+	return lost
 }
 
 // endregion
@@ -270,6 +292,16 @@ func (e *executor) say(up *common.Updater, state a2a.TaskState,
 
 // endregion
 
+// region: cannot
+// cannot 은 동료에게 맡기지 못한 일을 FAILED 로 끝낸다. 까닭은 역할
+// 이름까지만 싣는다 — 오류 글에는 안쪽 명단·카드의 주소가 들어 있다.
+func (e *executor) cannot(up *common.Updater, label string) {
+	e.say(up, a2a.TaskStateFailed,
+		label+" 에이전트에게 맡기지 못했습니다")
+}
+
+// endregion
+
 // region: parse
 func (e *executor) Execute(
 	ctx context.Context, ec *a2asrv.ExecutorContext,
@@ -303,47 +335,66 @@ func (e *executor) Execute(
 				common.DataPart(map[string]any{"missing": missing}))
 			return
 		}
-		if err := e.plan(ctx, up, task, req); err != nil {
-			yield(nil, err) // SDK 가 작업을 FAILED 로 바꾼다
-		}
+		e.plan(ctx, up, task, req) // 실패도 plan 이 상태로 알린다
 	}
+}
+
+// endregion
+
+// region: fan
+// fanOut 은 숙소·식사·교통에 동시에 맡기고 셋이 다 끝나길 기다린다.
+// 결과와 오류는 미리 정한 자리(i)에 넣는다 — 도착 순서와 상관없이.
+func fanOut(ctx context.Context, cards map[string]*a2a.AgentCard,
+	req workshop.Parsed, contextID string) ([]*a2a.Task, []error) {
+	tasks, errs := make([]*a2a.Task, 3), make([]error, 3)
+	var wg sync.WaitGroup
+	for i, role := range []string{"lodging", "meals", "bus"} {
+		wg.Go(func() {
+			// wg.Go 의 함수는 패닉하면 안 된다 — 아무도 받지 않아
+			// 프로세스가 통째로 끝난다. 패닉도 그 자리의 오류로.
+			defer func() {
+				if r := recover(); r != nil {
+					errs[i] = fmt.Errorf("패닉: %v", r)
+				}
+			}()
+			tasks[i], errs[i] = delegate(ctx, cards[role], req,
+				contextID, "")
+		})
+	}
+	wg.Wait()
+	return tasks, errs
 }
 
 // endregion
 
 // region: plan
 func (e *executor) plan(ctx context.Context, up *common.Updater,
-	task *a2a.Task, req workshop.Parsed) error {
+	task *a2a.Task, req workshop.Parsed) {
 	e.say(up, working, "동료 에이전트를 찾는 중")
-	cards, err := discover(ctx, e.urls)
-	if err != nil {
-		return err
-	}
+	cards := discover(ctx, e.urls)
 	e.say(up, working, fmt.Sprintf("에이전트 %d곳을 찾았습니다",
 		len(cards)))
-	// 세 곳에 동시에 맡긴다. 도착 순서는 매번 다를 수 있으므로
-	// 결과는 정한 자리에 넣고, 알릴 때도 정한 순서대로 알린다.
-	labels := []string{"숙소", "식사", "교통"}
-	tasks, errs := make([]*a2a.Task, 3), make([]error, 3)
-	var wg sync.WaitGroup
-	for i, role := range []string{"lodging", "meals", "bus"} {
-		wg.Go(func() {
-			tasks[i], errs[i] = delegate(ctx, cards[role], req,
-				task.ContextID, "")
-		})
+	if lost := lostRoles(cards); len(lost) > 0 { // 맡기기 전에
+		e.say(up, a2a.TaskStateFailed,
+			"동료를 찾지 못했습니다: "+strings.Join(lost, ", "))
+		return
 	}
-	wg.Wait()
+	// 세 곳에 동시에 맡긴다. 도착 순서는 매번 다를 수 있으므로
+	// 알릴 때는 정한 순서대로 알린다.
+	labels := []string{"숙소", "식사", "교통"}
+	tasks, errs := fanOut(ctx, cards, req, task.ContextID)
 	var quotes, items []map[string]any
 	for i, t := range tasks {
 		if errs[i] != nil {
-			return errs[i]
+			e.cannot(up, labels[i])
+			return
 		}
 		if t.Status.State != a2a.TaskStateCompleted {
 			why := common.TextOf(t.Status.Message)
 			common.Say("[기획] %s 실패: %s", labels[i], why)
 			up.Status(a2a.TaskStateRejected,
 				common.TextPart(labels[i]+": "+why))
-			return nil
+			return
 		}
 		q := quoteOf(t)
 		e.say(up, working, fmt.Sprintf("%s 견적 %s",
@@ -353,8 +404,8 @@ func (e *executor) plan(ctx context.Context, up *common.Updater,
 			"name": labels[i], "amount": common.Int(q["total"]),
 		})
 	}
-	return e.settle(ctx, up, task, req, cards["settle"], tasks,
-		quotes, items)
+	e.settle(ctx, up, task, req, cards["settle"], tasks, quotes,
+		items)
 }
 
 // endregion
@@ -362,16 +413,18 @@ func (e *executor) plan(ctx context.Context, up *common.Updater,
 // region: settle
 func (e *executor) settle(ctx context.Context, up *common.Updater,
 	task *a2a.Task, req workshop.Parsed, c *a2a.AgentCard,
-	refs []*a2a.Task, quotes, items []map[string]any) error {
+	refs []*a2a.Task, quotes, items []map[string]any) {
 	token, err := e.getToken(c, "payment:read")
 	if err != nil {
-		return err
+		e.cannot(up, "정산")
+		return
 	}
 	data := map[string]any{"items": items, "budget": *req.Budget}
 	settle, err := delegate(ctx, c, data, task.ContextID, token,
 		refs[0].ID, refs[1].ID, refs[2].ID)
 	if err != nil {
-		return err
+		e.cannot(up, "정산")
+		return
 	}
 	if settle.Status.State == a2a.TaskStateAuthRequired {
 		total := 0
@@ -384,24 +437,25 @@ func (e *executor) settle(ctx context.Context, up *common.Updater,
 		common.Say("[기획] %s", note)
 		r, ok := up.AwaitReply(ctx, common.TextPart(note))
 		if !ok {
-			return nil
+			return
 		}
 		if !strings.Contains(common.TextOf(r.Msg), "승인") {
 			e.say(up, a2a.TaskStateRejected, "결재가 반려되어 멈춥니다")
-			return nil
+			return
 		}
 		// 결재 토큰도 문지기를 지나니 payment:read 도 받는다
 		token, err := e.getToken(c, "payment:read payment:approve")
 		if err != nil {
-			return err
+			e.cannot(up, "정산")
+			return
 		}
 		settle, err = followUp(ctx, c, settle, "결재합니다", token)
 		if err != nil {
-			return err
+			e.cannot(up, "정산")
+			return
 		}
 	}
 	e.finish(up, req, quotes, settle)
-	return nil
 }
 
 // endregion
