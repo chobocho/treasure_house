@@ -1,0 +1,27 @@
+# 2장 — 예산 확장을 씌운 숙소 에이전트 셋(14/budget_*). 카드를 읽고,
+# 같은 메시지(metadata 에 limit)를 확장 머리글 없이 한 번, 머리글을
+# 달고 한 번 보낸다. 마지막은 머리글은 달았는데 limit 이 없는 메시지.
+serve name=py ready=tcp:11401 \
+      cmd="py:14/budget_agent.py --port 11401 \
+      --url http://127.0.0.1:11411/"
+tap   name=py-wire listen=11411 target=11401
+serve name=ts ready=tcp:11402 \
+      cmd="ts:14/budget_agent.ts --port 11402 \
+      --url http://127.0.0.1:11412/"
+tap   name=ts-wire listen=11412 target=11402
+serve name=go ready=tcp:11403 \
+      cmd="go:14/budget_lodging --port 11403 \
+      --url http://127.0.0.1:11413/"
+tap   name=go-wire listen=11413 target=11403
+run   cmd="sh:for p in 11411 11412 11413; do \
+      curl -s -o /dev/null \
+      http://127.0.0.1:$p/.well-known/agent-card.json; done"
+run   cmd="sh:for p in 11411 11412 11413; do \
+      curl -s -o /dev/null -H 'A2A-Version: 1.0' \
+      --json @run/14/rpc/budget.json http://127.0.0.1:$p/; done"
+run   cmd="sh:for p in 11411 11412 11413; do \
+      curl -s -o /dev/null -H @run/14/rpc/budget.headers \
+      --json @run/14/rpc/budget.json http://127.0.0.1:$p/; done"
+run   cmd="sh:for p in 11411 11412 11413; do \
+      curl -s -o /dev/null -H @run/14/rpc/budget.headers \
+      --json @run/14/rpc/nolimit.json http://127.0.0.1:$p/; done"

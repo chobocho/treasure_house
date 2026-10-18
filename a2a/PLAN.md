@@ -797,3 +797,51 @@ subagent task each.
   comment and §8.5 sample use `https://…`; §10.2 metadata example says `a2a-version 0.3`.
 - `make all SKEL=1` green (1358 slides, 1405 blocks, 0 mismatches, 0 notices); full
   `--check --all` (224) then re-checks green.
+
+### Part 14 complete — 61 slides; Go build-cache bug fixed (2026-10-18)
+- `14_ext.html` cover+intro (2), ch1 declaration/activation (12), ch2 budget extension ×3
+  (22), ch3 versions (10), ch4 v0.3 coexistence (14), `p14-wrap` → #p15. Examples
+  `ex/py/14/{budget_agent,budget_client,versions,old_agent,old_client}.py`,
+  `ex/ts/14/{budget_agent,budget_common,budget_client,old_agent,old_common,old_client}.ts`,
+  `ex/go/14/{budget,budget_lodging,budget_client,v03mount,old_lodging,old_client}`, specs
+  `ex/run/14/{unknown,budget,required,clients,versions,old}.run`; ports 11401–11496.
+- **Budget extension contract** (`https://treasure-house.example/a2a/ext/budget/v1`): card
+  `capabilities.extensions` with `params {"currency":"KRW"}` (`--required` makes it
+  required); client activates via `A2A-Extensions`, lists the URI in `message.extensions`,
+  puts `metadata[URI] = {"limit": KRW}` on the message (§4.6.1); agent leaves the quote,
+  adds `extensions:[URI]` + `metadata[URI] = {"limit","within"}` to the quote artifact; on
+  without limit → -32602; required but not activated → -32008; echo `A2A-Extensions` where
+  the SDK can; metadata without the header is ignored. Wrapper around the final lodging
+  executors only — final agents unchanged. Part 15 can forward header+metadata in the
+  planner; note Go `a2aext` propagator relays request `params.metadata`, not message
+  metadata (topics/extensions.md also uses params.metadata) — decide in part 15.
+- **Dep:** `github.com/a2aproject/a2a-go v0.3.15 // indirect` (go.sum +2). Full
+  `--check --all`: `out/09/sdk_map.go.txt` (no ✗ left) and `out/09/test_tools.go.txt`
+  changed truthfully → re-captured, prose on `p09-map-deps`, `p09-compat-go` updated.
+- **Runner bug fixed (2f98d15c):** `_go_build` keyed the binary cache only on the example
+  dir, so editing a sibling helper package (`13/restmount`, `14/budget`) reused a stale
+  binary while the manifest said fresh. Key is now the whole `ex/go/NN`. Then `scratch/bin`
+  cleared and full `--check --all` (230, 27 min) green — no committed capture came from a
+  stale binary.
+- Findings: py 1.2.2 server cannot report activated extensions (`ServerCallContext` only
+  `requested_extensions`, `server/context.py:25`) nor check required ones — -32008 from the
+  executor leaves a FAILED task + two tracebacks; TS checks required only in
+  `_createRequestContext` (`server/index.js:2776`), echoes `addActivatedExtension` as a
+  header (`server/express/index.js:3428`); Go with `WithCapabilityChecks` checks required on
+  **every** method (`a2asrv/intercepted_handler.go:93`) → GetTask without header -32008
+  (py/ts -32001); Go `Extensions.Activate` only read by gRPC handlers
+  (`a2agrpc/v1/handler.go:314`) — JSON-RPC/REST never echo; `a2aext.NewActivator` only for
+  card-declared extensions (`a2aext/activator.go:37`); TS executor throw → FAILED task, py/go
+  -32602; py Struct shows `2000000.0`; budget 3×3 verdicts 9/9 identical. Versions: py any
+  1.x (rejects 2.0, 0.3, empty), TS only exact "1.0", Go everything; JSON-RPC and REST same;
+  `?A2A-Version=` read by none; REST version error 400 FAILED_PRECONDITION with supported
+  versions only in the text. v0.3: TS `legacyAgentCardRouter` picks card shape by header,
+  py/go always serve a mixed v1.0+v0.3 card; py dispatches by method name, TS by header, Go
+  we split ourselves; v0.3 3×3 9/9 `message/send` with `A2A-Version: 0.3`; v0.3 extension
+  header `X-A2A-Extensions` (`compat/v0_3/extension_headers.py:12`), not in the v1.0 docs.
+- Spec: §14.2.1/§14.2.2 cite "Section 3.2.5" (service parameters are §3.2.6); response
+  `A2A-Extensions` echo only in topics/extensions.md; data location §4.6.1 message.metadata
+  vs topics params.metadata; §6.4 version-error example `application/problem+json`
+  contradicts §11.6; topics lists "State Machine Extensions" but forbids new enum values;
+  py "1.1" violates §3.6.2 Major.Minor, TS rejecting "1.0.1" violates §3.6 patch rule.
+- `make all SKEL=1` green (1417 slides, 1468 blocks, 0 mismatches, 0 notices).

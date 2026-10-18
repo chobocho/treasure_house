@@ -1,10 +1,667 @@
 <article class="card section" id="p14">
 <p class="chnum">14부</p>
 <h2>확장과 버전 협상 (v0.3 호환 포함)</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">확장 선언과 활성화 → 예산 확장 ×3 → A2A-Version 협상 → v0.3 피어와 공존</p>
 </article>
 
-<article class="card" id="p14-todo">
-<h3>확장과 버전 협상 (v0.3 호환 포함)</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p14-intro">
+<h3>스펙이 정하지 않은 것을 싣는 길과, 스펙의 판이 다른 상대와 말하는 길</h3>
+<p class="lead">13부까지는 v1.0 스펙 안의 것만 주고받았습니다. 이 부는 그 바깥 두 가지입니다 — 스펙에 없는 데이터·규칙을 <b>확장</b>(extension)으로 얹는 법(§4.6), 그리고 판(version)이 다른 상대와 <code>A2A-Version</code> 으로 말을 맞추는 법(§3.6)입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th></tr>
+<tr><td><a href="#p14-ch1">1장</a></td><td>확장 선언·활성화 — <code>AgentExtension</code>, <code>A2A-Extensions</code> 머리글, <code>required</code>, 세 SDK 의 손잡이</td></tr>
+<tr><td><a href="#p14-ch2">2장</a></td><td>예산 확장 ×3 — 이 책의 확장 <code>budget/v1</code> 을 완성 숙소 에이전트에 씌우고, 와이어·필수 확장(-32008)·3×3</td></tr>
+<tr><td><a href="#p14-ch3">3장</a></td><td>버전 — <code>A2A-Version</code>, 빈 값 = 0.3, VersionNotSupported(-32009), 세 SDK 의 서버·클라이언트 표</td></tr>
+<tr><td><a href="#p14-ch4">4장</a></td><td>v0.3 피어와 공존 — 세 SDK 의 호환 계층, 옛 카드·옛 요청, v0.3 전송 3×3</td></tr>
+</table>
+</div>
+<div class="key"><b>이 부의 방식</b> — 13부처럼 완성 에이전트(<code>agents/</code>)의 카드와 실행기를 <b>고치지 않고</b> 빌립니다. 확장은 실행기를 감싸는 겉층으로, v0.3 호환은 서버를 띄우는 겉층으로 얹습니다.</div>
+</article>
+
+<!-- ==== 1장 확장 선언·활성화 ==== -->
+
+<article class="card" id="p14-ch1">
+<p class="chnum">1장</p>
+<h2>확장 선언·활성화</h2>
+<p class="chsub">확장이 할 수 있는 것 → 카드의 AgentExtension → 데이터를 싣는 자리 → 활성화 세 걸음 → 바인딩별 전달 → 모르는 확장 ×3 → required 와 판 → SDK 의 서버 쪽 → 클라이언트 쪽</p>
+</article>
+
+<article class="card" id="p14-ext-what">
+<h3>확장은 새 필드를 만들지 않는다 — URI 로 이름 붙인 metadata 와 규칙이다</h3>
+<p class="lead">§4.6 은 확장을 "핵심 스펙을 고치지 않고 기능이나 데이터를 더하는 길" 로 둡니다. 스펙 저장소의 <code>topics/extensions.md</code> 가 그 범위와 한계를 적었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>종류(topics/extensions.md)</th><th>하는 일</th></tr>
+<tr><td>데이터만 더하는 확장(data-only)</td><td>카드에 구조화된 정보를 더한다 — 요청·응답의 흐름은 그대로</td></tr>
+<tr><td>프로필 확장(profile)</td><td>핵심 메시지 위에 구조와 상태 규칙을 덧씌운다 — 예: 정해진 꼴의 DataPart 만 받기, 상태 메시지의 metadata 로 하위 상태</td></tr>
+<tr><td>메서드 확장(extended skills)</td><td>새 RPC 메서드를 더한다</td></tr>
+<tr><td>상태 기계 확장</td><td>작업 상태 기계에 상태나 전이를 더한다</td></tr>
+</table>
+</div>
+<div class="note"><b>한계</b> — 같은 문서의 "Limitations": 핵심 데이터 구조에 필드를 더하거나 필수 필드를 빼는 일은 확장이 할 수 없고, 사용자 정의 속성은 <code>metadata</code> 에 둡니다. 그래서 확장의 실체는 <b>URI 하나</b>와, 그 URI 를 열쇠로 한 metadata 의 모양, 그리고 그 둘을 어떻게 다루는지의 규칙입니다. 같은 문서가 "열거형에 새 값을 더하지 말라" 고 하면서 상태 기계 확장(새 상태)을 꼽는 것은 문서 안의 긴장입니다. 이 장은 그 URI 가 카드와 요청에서 어떻게 오가는지를 봅니다.</div>
+</article>
+
+<article class="card" id="p14-ext-card">
+<h3>에이전트는 카드의 <code>capabilities.extensions</code> 에 확장을 적는다 — 필드는 넷</h3>
+<p class="lead">proto 의 <code>AgentExtension</code>(§4.4.4)은 <code>uri</code>·<code>description</code>·<code>required</code>·<code>params</code> 넷뿐입니다. 2장에서 띄울 예산 확장 에이전트(파이썬)의 카드를 탭 너머로 받았습니다.</p>
+<!--OUT file=out/14/budget.txt wire=py-wire ex=1 lines=20-31 note=카드의 capabilities — 예산 확장 하나-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드</th><th>proto 의 설명</th></tr>
+<tr><td><code>uri</code></td><td>확장을 가리키는 유일한 URI</td></tr>
+<tr><td><code>description</code></td><td>이 에이전트가 그 확장을 <b>어떻게 쓰는지</b>(확장 자체의 설명이 아니다)</td></tr>
+<tr><td><code>required</code></td><td>참이면 클라이언트가 그 확장을 이해하고 따라야 한다</td></tr>
+<tr><td><code>params</code></td><td>확장마다 정하는 설정값(<code>Struct</code>)</td></tr>
+</table>
+</div>
+<div class="note"><b><code>required</code> 가 안 보인다</b> — 거짓이라 세 서버 모두 생략했습니다(proto3 의 기본값). Go 서버의 카드는 키가 알파벳 차례(<code>description</code>·<code>params</code>·<code>uri</code>)였습니다. 확장의 버전은 URI 에 넣으라는 것이 §4.6.3 의 SHOULD 이고, 그래서 이 책의 URI 끝이 <code>/v1</code> 입니다.</div>
+</article>
+
+<article class="card" id="p14-ext-points">
+<h3>확장의 데이터는 Message·Artifact 에 — <code>extensions</code> 에 URI, <code>metadata</code> 에 URI 를 열쇠로</h3>
+<p class="lead">§4.6.2 가 꼽는 자리(extension point)는 둘입니다. 둘 다 proto 에 같은 꼴의 두 필드가 있습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>proto 필드</th><th>§4.6.2 의 쓰임</th></tr>
+<tr><td>Message</td><td><code>repeated string extensions = 7</code> + <code>metadata</code></td><td>클라이언트가 요청에 강하게 형이 정해진 맥락을 더한다. 상태 메시지에 진행 정보를 더할 수도 있다</td></tr>
+<tr><td>Artifact</td><td><code>repeated string extensions = 6</code> + <code>metadata</code></td><td>만든 결과에 대한 정보를 더한다(예: 인용 출처)</td></tr>
+</table>
+</div>
+<ul>
+<li>proto 의 주석은 <code>extensions</code> 를 "이 메시지에 들어 있거나 기여한 확장의 URI" 라고 합니다. 켜 달라는 요청이 아니라 <b>표시</b>입니다. 켜 달라는 요청은 다음 슬라이드의 머리글이 합니다.</li>
+<li><b>두 문서의 자리가 다르다</b> — §4.6.1·§4.6.2 의 예는 <code>message.metadata["…/geolocation/v1"]</code> 에 값을 두고, <code>topics/extensions.md</code> 의 활성화 예는 요청의 <code>params.metadata["…/konami-code/v1/code"]</code> 에 둡니다. 9부에서 본 Go 의 전파기(<a href="#p09-ext-relay">9부</a>)도 요청 쪽 metadata 를 옮깁니다. 이 책의 예산 확장은 스펙 본문(§4.6.1)을 따라 메시지 쪽에 둡니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p14-ext-activate">
+<h3>활성화는 요청마다 세 걸음 — 요청 머리글, 에이전트의 판단, 응답 머리글</h3>
+<p class="lead">"Extensions default to being inactive" — 확장은 꺼진 채로 시작하고, 요청 하나마다 켜집니다(<code>topics/extensions.md</code>, Extension Activation).</p>
+<pre class="fig">
+ 클라이언트                                에이전트
+   │ ① A2A-Extensions: URI1,URI2           │  켜 달라는 목록
+   │ ─────────────────────────────────────→ │
+   │                ② 아는 것만 켜고 모르는 것은 무시
+   │ ③ A2A-Extensions: URI1 (SHOULD)       │  켜진 목록
+   │ ←───────────────────────────────────── │
+</pre>
+<ul>
+<li>스펙 본문(<code>specification.md</code>)이 정하는 것은 ① 뿐입니다 — <code>A2A-Extensions</code> 는 "클라이언트가 이 요청에 쓰고 싶은 확장 URI 의 쉼표 목록"(§3.2.6, §14.2.2). ② 와 ③ 의 응답 머리글(SHOULD)은 <code>topics/extensions.md</code> 에만 있습니다.</li>
+<li>모르는 확장을 청하면 "SHOULD ignore the extension … and proceed without it" 입니다(§4.6.3). 예외가 <code>required</code> — 이 장의 끝에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p14-ext-bind">
+<h3>머리글은 바인딩마다 같은 이름 — HTTP 머리글 또는 gRPC 메타데이터, 여러 값은 쉼표 한 줄</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>바인딩</th><th>실리는 곳</th><th>여러 값</th></tr>
+<tr><td>JSON-RPC(§9.2)</td><td>HTTP 머리글 <code>A2A-Extensions</code>(MUST)</td><td>"SHOULD be comma-separated in a single header field"</td></tr>
+<tr><td>gRPC(§10.2)</td><td>메타데이터 <code>a2a-extensions</code>(gRPC 가 소문자로 바꾼다)</td><td>쉼표로 한 항목에(SHOULD)</td></tr>
+<tr><td>HTTP+JSON(§11.2)</td><td>HTTP 머리글</td><td>쉼표로 한 줄에(SHOULD)</td></tr>
+</table>
+</div>
+<ul>
+<li>§3.2.6 은 서비스 매개변수(service parameter)의 이름에 모두 <code>a2a-</code> 를 붙인다고 합니다 — 다른 계층의 머리글과 섞여도 겹치지 않게입니다. 13부의 gRPC 3장에서 응답 쪽(켜진 확장)은 TS 가 머리 메타데이터, Go 가 꼬리 메타데이터에 실었습니다(<a href="#p13-grpc-md">13부</a>).</li>
+<li><b>스펙의 작은 어긋남</b> — §14.2.1·§14.2.2 의 등록 항목은 근거를 "Section 3.2.5" 로 적었지만, 서비스 매개변수는 §3.2.6 입니다(§3.2.5 는 Metadata).</li>
+</ul>
+</article>
+
+<article class="card" id="p14-ext-unknown">
+<h3>모르는 확장을 청해도 세 서버는 그냥 일한다 — 응답에 켜진 확장도 없다</h3>
+<p class="lead">확장을 하나도 적지 않은 완성 숙소 에이전트 셋에 <code>A2A-Extensions: https://other.example/ext/x/v1</code> 을 달고, 예산 metadata 가 든 메시지(2장의 것)를 보냈습니다.</p>
+<!--SPEC file=ex/run/14/unknown.run-->
+<!--OUT file=out/14/unknown.txt wire=py-wire ex=1 grep=^→|^←|A2A-Extensions|"state" note=파이썬 서버-->
+<!--OUT file=out/14/unknown.txt wire=ts-wire ex=1 grep=^→|^←|A2A-Extensions|"state" note=TypeScript 서버-->
+<!--OUT file=out/14/unknown.txt wire=go-wire ex=1 grep=^→|^←|A2A-Extensions|"state" note=Go 서버-->
+<div class="note"><b>§4.6.3 의 SHOULD 그대로</b> — 셋 다 <code>TASK_STATE_COMPLETED</code> 이고 응답에 <code>A2A-Extensions</code> 가 없습니다. 메시지의 <code>extensions</code>·<code>metadata</code> 도 거절하지 않고 이력에 그대로 두었습니다(4부에서 본 것, <a href="#p04-msg-ext">4부</a>). 확장을 모르는 에이전트에게 확장 데이터는 그저 짐입니다.</div>
+</article>
+
+<article class="card" id="p14-ext-required">
+<h3><code>required: true</code> 면 켜지 않은 요청을 거절해야 한다 — ExtensionSupportRequiredError(-32008)</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>스펙의 말</th><th>세기</th></tr>
+<tr><td>§3.3.4</td><td>카드에 <code>required: true</code> 로 적은 확장을 클라이언트가 청하지 않으면 <code>ExtensionSupportRequiredError</code></td><td>MUST</td></tr>
+<tr><td>§5.4</td><td>JSON-RPC <code>-32008</code> · gRPC <code>FAILED_PRECONDITION</code> · HTTP <code>400 Bad Request</code></td><td>(대응표)</td></tr>
+<tr><td>§4.6.3</td><td>지원하지 않는 판의 확장은 무시하되, <code>required</code> 면 오류. 옛 판으로 저절로 물러서지 않는다</td><td>SHOULD / MUST / MUST NOT</td></tr>
+<tr><td>§4.6.3</td><td>깨는 변경(breaking change)에는 새 URI</td><td>MUST</td></tr>
+</table>
+</div>
+<div class="note"><b>무엇을 required 로 두나</b> — <code>topics/extensions.md</code> 는 "Agents shouldn't mark data-only extensions as required" 라고 합니다. 요청의 짜임이나 처리 방식이 바뀌어 클라이언트가 반드시 따라야 할 때만 필수로 둡니다. 2장의 예산 확장은 메시지와 아티팩트에 꼴을 더하는 프로필 쪽이지만, 몰라도 견적은 나오므로 선택이 맞습니다. 필수로 띄운 판은 이 오류를 보려는 실험입니다.</div>
+</article>
+
+<article class="card" id="p14-ext-sdk-srv">
+<h3>서버 쪽 손잡이 — 셋 다 머리글을 읽어 주지만, 필수 검사와 응답 머리글은 갈린다</h3>
+<p class="lead">설치된 소스에서 확장에 관한 곳을 모았습니다. 와이어로 확인한 것은 2장의 링크로 둡니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>청한 확장 읽기</td><td><code>ctx.requested_extensions</code>(<code>set</code>)</td><td><code>ctx.context.requestedExtensions</code></td><td><code>a2asrv.ExtensionsFrom(ctx).RequestedURIs()</code></td></tr>
+<tr><td>쉼표 나누기</td><td>한다(<code>extensions/common.py:7</code>)</td><td>한다(<code>parseServiceParameter</code>)</td><td>안 한다(<a href="#p09-ext-comma">9부</a>)</td></tr>
+<tr><td>카드에 없는 것</td><td>그대로 둔다</td><td>걸러 낸다(<code>server/index.js:2816</code>)</td><td>그대로 둔다</td></tr>
+<tr><td><code>required</code> 검사</td><td>없다 — 우리가 한다</td><td>SendMessage·스트림에서(<code>:2776</code>)</td><td>모든 메서드에서, <code>WithCapabilityChecks</code> 일 때(<code>intercepted_handler.go:328</code>)</td></tr>
+<tr><td>켰다고 알리기</td><td>길이 없다</td><td><code>addActivatedExtension(uri)</code> → 응답 머리글</td><td><code>Activate(ext)</code> → gRPC 에서만 실린다</td></tr>
+</table>
+</div>
+<div class="note"><b>Go 의 <code>Activate</code></b> — 켜진 목록(<code>ActivatedURIs</code>)을 읽는 곳은 <code>a2agrpc/v0·v1/handler.go</code> 뿐입니다. JSON-RPC·REST 처리기는 읽지 않으니, HTTP 응답 머리글로는 나가지 않습니다. 파이썬 1.2.2 에는 켜진 확장을 담는 자리 자체가 없습니다(<code>ServerCallContext</code> 에 <code>requested_extensions</code> 만).</div>
+</article>
+
+<article class="card" id="p14-ext-sdk-cl">
+<h3>클라이언트 쪽 손잡이 — 서비스 매개변수로 싣는다, Go 는 카드가 적은 것만</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>머리글 싣기</td><td><code>ClientCallContext(service_parameters=…)</code> + <code>with_a2a_extensions([…])</code></td><td><code>{ serviceParameters }</code> + <code>withA2AExtensions(…)</code></td><td><code>a2aext.NewActivator(…)</code> 가로채기</td></tr>
+<tr><td>카드 보기</td><td>안 본다 — 준 것을 싣는다</td><td>안 본다</td><td>카드가 적은 확장만 싣는다(<code>a2aext/activator.go:37</code>)</td></tr>
+<tr><td>여러 값</td><td>정렬해 쉼표 한 줄(<code>service_parameters.py:61</code>)</td><td>쉼표 한 줄</td><td>값마다 머리글 한 줄(<a href="#p09-ext-comma">9부</a>)</td></tr>
+<tr><td>아래로 넘기기</td><td>—</td><td>—</td><td><code>a2aext</code> 전파기 짝(<a href="#p09-ext-relay">9부</a>)</td></tr>
+</table>
+</div>
+<div class="note"><b>Go 활성기의 뜻</b> — 카드가 모르는 확장은 머리글에 싣지 않으니, §4.6.3 에서 서버가 "무시" 할 것을 클라이언트가 미리 덜어 냅니다. 그 대신 카드를 낡게 쥐고 있으면(3부의 카드 캐시) 서버가 새로 단 확장을 청하지 못합니다.</div>
+</article>
+
+<article class="card" id="p14-ch1-sum">
+<h3>1장 정리 — 확장 선언·활성화</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>확장의 실체는?</td><td>URI 하나 + 그 URI 를 열쇠로 한 metadata + 규칙</td><td><a href="#p14-ext-what">범위</a></td></tr>
+<tr><td>어디에 선언?</td><td>카드의 <code>capabilities.extensions</code> — uri·description·required·params</td><td><a href="#p14-ext-card">카드</a></td></tr>
+<tr><td>데이터는?</td><td>Message·Artifact 의 <code>extensions</code>(표시)와 <code>metadata</code></td><td><a href="#p14-ext-points">자리</a></td></tr>
+<tr><td>누가 켜나?</td><td>요청 머리글 <code>A2A-Extensions</code>. 응답 머리글은 topics 문서의 SHOULD</td><td><a href="#p14-ext-activate">세 걸음</a></td></tr>
+<tr><td>모르는 확장은?</td><td>무시하고 일한다 — 세 서버 모두</td><td><a href="#p14-ext-unknown">실험</a></td></tr>
+<tr><td>필수 확장은?</td><td>청하지 않으면 -32008. 검사하는 곳이 SDK 마다 다르다</td><td><a href="#p14-ext-required">규칙</a>·<a href="#p14-ext-sdk-srv">SDK</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p14-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 확장을 하나도 적지 않은 세 서버에 <code>A2A-Extensions</code> 머리글로 모르는 확장을 청했습니다. 세 서버는 무엇을 돌려주었고, 응답에 <code>A2A-Extensions</code> 머리글이 있었습니까? 그것이 스펙의 어느 문장과 맞습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 셋 다 <code>TASK_STATE_COMPLETED</code> 인 Task 를 돌려주었고, 응답에는 <code>A2A-Extensions</code> 가 없었습니다(<a href="#p14-ext-unknown">실험</a>). 지원하지 않는 확장은 "SHOULD ignore the extension for that interaction and proceed without it"(§4.6.3)이고, 켠 것이 없으니 켜진 목록을 알릴 것도 없습니다.</div>
+</article>
+
+<!-- ==== 2장 예산 확장 ×3 ==== -->
+
+<article class="card" id="p14-ch2">
+<p class="chnum">2장</p>
+<h2>예산 확장 ×3</h2>
+<p class="chsub">계약 → 씌우는 법 → 파이썬 → TypeScript → Go → 머리글 없이 → 머리글 달고 → limit 이 없으면 → 필수로 띄우면 → 다른 메서드도 막나 → 클라이언트 셋 → 3×3 → 세 SDK 비교</p>
+</article>
+
+<article class="card" id="p14-bud-contract">
+<h3>예산 확장 <code>budget/v1</code> 의 계약 — 메시지에 상한을 싣고, 견적에 판정을 받는다</h3>
+<p class="lead">확장의 명세는 확장을 만든 쪽이 씁니다(<code>topics/extensions.md</code> 의 Extension Specification — URI, <code>params</code> 의 뜻, 오가는 데이터의 모양, 흐름). 이 책의 것은 이렇습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>계약</th></tr>
+<tr><td>URI</td><td><code>https://treasure-house.example/a2a/ext/budget/v1</code></td></tr>
+<tr><td>카드</td><td><code>capabilities.extensions</code> 에 이 URI, <code>params: {"currency": "KRW"}</code>, <code>required</code> 는 기본 거짓</td></tr>
+<tr><td>켜기</td><td>요청 머리글 <code>A2A-Extensions</code> 에 이 URI</td></tr>
+<tr><td>요청 데이터</td><td>메시지의 <code>extensions</code> 에 URI, <code>metadata[URI] = {"limit": 원}</code></td></tr>
+<tr><td>에이전트</td><td>켜졌으면 견적 아티팩트의 <code>extensions</code> 에 URI, <code>metadata[URI] = {"limit", "within"}</code> — <code>within</code> 은 견적 총액 ≤ 상한. 견적 자체는 바꾸지 않는다</td></tr>
+<tr><td>오류</td><td>켰는데 <code>limit</code> 이 없으면 InvalidParams(-32602). <code>required</code> 인데 켜지 않으면 -32008</td></tr>
+<tr><td>응답</td><td>켰으면 <code>A2A-Extensions: URI</code> — SDK 가 해 줄 수 있을 때</td></tr>
+</table>
+</div>
+<div class="note"><b>머리글과 metadata 는 따로 논다</b> — metadata 에 상한이 있어도 머리글이 없으면 켜지지 않습니다. 켜는 것은 클라이언트의 "이 요청에 쓰겠다" 는 뜻(<a href="#p14-ext-activate">1장</a>)이고, metadata 는 그때 읽을 짐입니다.</div>
+</article>
+
+<article class="card" id="p14-bud-wrap">
+<h3>에이전트는 고치지 않는다 — 카드에 한 줄 적고, 실행기를 한 겹 감싼다</h3>
+<pre class="fig">
+ 요청 ─→ [SDK 요청 처리기] ─→ [예산 겉층] ─→ [숙소 실행기]   그대로
+                                  │ ① 켜졌나? 아니면 그냥 넘긴다
+                                  │ ② metadata 의 limit 을 읽는다
+                                  │ ③ 이벤트 통로를 감싸 넘긴다
+ 응답 ←─ [SDK] ←─ 아티팩트에 판정 ←─┘ ④ 견적이 지나갈 때 덧붙인다
+</pre>
+<ul>
+<li>감쌀 통로는 SDK 마다 다릅니다 — 파이썬은 <code>EventQueue</code>(<code>enqueue_event</code> 하나뿐인 추상 클래스), TS 는 <code>ExecutionEventBus</code>(<code>publish</code>), Go 는 실행기가 돌려주는 <code>iter.Seq2</code> 입니다(7~9부의 실행기 모양 그대로).</li>
+<li>띄우는 수는 13부와 같습니다 — 파이썬은 <code>agents.lodging</code> 을 import, TS 는 해석 훅으로 <code>./common.ts</code> 를 바꿔 끼우기, Go 는 <code>agent.go</code> 심볼릭 링크와 <code>init()</code>(<a href="#p13-rest-srv-py">13부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p14-bud-py">
+<h3>파이썬 — 카드에 <code>AgentExtension</code>, 큐를 감싸 아티팩트에 판정</h3>
+<!--CODE file=ex/py/14/budget_agent.py region=declare-->
+<!--CODE file=ex/py/14/budget_agent.py region=queue note=EventQueue 를 물려받아 enqueue_event 만 쓴다-->
+<div class="note"><b>Struct 에 dict 를</b> — <code>params={"currency": "KRW"}</code> 와 <code>metadata.update({URI: {…}})</code> 는 protobuf <code>Struct</code> 에 파이썬 dict 를 넣는 길입니다. 그래서 상한도 와이어에서 실수(<code>2000000.0</code>)가 됩니다(4부의 DataPart 숫자와 같은 까닭, <a href="#p04-data-matrix">4부</a>).</div>
+</article>
+
+<article class="card" id="p14-bud-py-exec">
+<h3>파이썬 — 켜졌는지는 <code>ctx.requested_extensions</code>, 필수 검사는 우리 몫</h3>
+<!--CODE file=ex/py/14/budget_agent.py region=executor-->
+<!--CODE file=ex/py/14/budget_agent.py region=serve note=완성 숙소 에이전트의 카드·실행기를 빌려 agents/common 의 serve 로-->
+<div class="note"><b>실행기에서 올린 A2A 오류</b> — <code>ExtensionSupportRequiredError</code>·<code>InvalidParamsError</code> 는 그대로 JSON-RPC 오류가 되어 클라이언트에 가지만, 저장소에는 그 요청의 작업이 FAILED 로 남습니다(<a href="#p07-rh-silent">7부</a>). 서버 stderr 에는 생산자·소비자의 추적 정보(traceback)가 두 벌 찍힙니다. TS·Go 는 이 검사를 실행기 앞에서 합니다.</div>
+</article>
+
+<article class="card" id="p14-bud-ts">
+<h3>TypeScript — 카드는 JSON 그대로, 아티팩트는 ts-proto 객체로 고친다</h3>
+<!--CODE file=ex/ts/14/budget_common.ts region=declare-->
+<!--CODE file=ex/ts/14/budget_common.ts region=mark-->
+<!--CODE file=ex/ts/14/budget_agent.ts region=hook note=14/budget_agent.ts — 13부의 해석 훅, --required 는 먼저 떼어 낸다-->
+<div class="note"><b>바꿔 끼우는 모듈</b> — <code>14/budget_common.ts</code> 는 진짜 <code>agents/common.ts</code> 를 모두 다시 내보내고 <code>serve</code> 만 바꿉니다. 그 <code>serve</code> 가 <code>declare(card)</code> 뒤 실행기를 <code>Budget</code> 으로 감싸 진짜 <code>serve</code> 에 넘깁니다. 해석 훅은 13부의 것과 같습니다(<a href="#p13-grpc-borrow">13부</a>).</div>
+</article>
+
+<article class="card" id="p14-bud-ts-exec">
+<h3>TypeScript — 버스를 Proxy 로 감싸고, <code>addActivatedExtension</code> 으로 켰다고 알린다</h3>
+<!--CODE file=ex/ts/14/budget_common.ts region=executor-->
+<div class="note"><b>SDK 가 먼저 한 일</b> — <code>requestedExtensions</code> 에는 카드에 적은 것만 남아 있고(<code>server/index.js:2816</code>), 필수 확장을 청하지 않은 요청은 실행기에 오기 전에 -32008 로 돌아갔습니다(<code>:2776</code>). <code>addActivatedExtension</code> 은 express 처리기가 응답 머리글로 옮깁니다(<code>server/express/index.js:3428</code>).</div>
+</article>
+
+<article class="card" id="p14-bud-go">
+<h3>Go — <code>a2a.AgentExtension</code> 을 카드에, 이벤트 타입 스위치로 아티팩트에</h3>
+<!--CODE file=ex/go/14/budget/budget.go region=declare-->
+<!--CODE file=ex/go/14/budget/budget.go region=mark-->
+<div class="note"><b><code>map[string]any</code> 만</b> — 작업 저장소가 gob 으로 깊은 복사를 하므로 metadata 에는 JSON 그대로의 값(맵·<code>float64</code>·<code>bool</code>)만 넣습니다(<a href="#p09-store-copy">9부</a>). 상한은 요청 JSON 에서 온 <code>float64</code> 그대로입니다.</div>
+</article>
+
+<article class="card" id="p14-bud-go-exec">
+<h3>Go — 실행기의 이벤트 열(<code>iter.Seq2</code>)을 한 겹 감싼다</h3>
+<!--CODE file=ex/go/14/budget/budget.go region=executor-->
+<!--CODE file=ex/go/14/budget_lodging/main.go region=init note=agent.go 는 agents/lodging/main.go 링크 — common.Serve 가 WithCapabilityChecks(&card.Capabilities) 를 건다-->
+<div class="note"><b>필수 검사는 SDK 가</b> — <code>common.Serve</code> 가 카드의 <code>Capabilities</code> 를 <code>WithCapabilityChecks</code> 로 넘기므로, <code>Declare</code> 가 적은 <code>Required</code> 를 SDK 가 봅니다(<code>a2asrv/intercepted_handler.go:328</code>). <code>Activate</code> 는 JSON-RPC 에서는 아무 데도 나가지 않습니다(<a href="#p14-ext-sdk-srv">1장</a>) — 그래도 부르는 것은 gRPC 로 띄우면 꼬리 메타데이터가 되기 때문입니다.</div>
+</article>
+
+<article class="card" id="p14-bud-off">
+<h3>머리글 없이 보내면 셋 다 판정하지 않는다 — metadata 는 이력에만 남는다</h3>
+<p class="lead">세 서버를 띄우고 카드를 읽은 뒤, 같은 메시지(<code>rpc/budget.json</code> — 상한 2,000,000원)를 <code>A2A-Extensions</code> 없이 한 번, 달고 한 번, 마지막으로 머리글은 달았는데 <code>limit</code> 이 없는 메시지(<code>rpc/nolimit.json</code>)를 보냈습니다.</p>
+<!--SPEC file=ex/run/14/budget.run-->
+<!--OUT file=out/14/budget.txt wire=go-wire ex=2 grep=^→|^←|A2A-Extensions|"state"|"limit"|"within"|"name" note=Go 서버, 머리글 없이 — limit 은 요청과 이력에만-->
+<!--OUT file=out/14/budget.txt wire=py-wire ex=2 grep=^←|"within"|"name" note=파이썬 서버 — 견적에 판정이 없다-->
+<!--OUT file=out/14/budget.txt wire=ts-wire ex=2 grep=^←|"within"|"name" note=TypeScript 서버 — 같다-->
+<div class="note"><b>켜지 않은 확장은 없는 확장</b> — 셋 다 견적 아티팩트(<code>"name": "숙소 견적"</code>)에 <code>within</code> 이 없습니다. 실행기의 첫 갈림(<code>requested_extensions</code> 등)이 머리글만 보았기 때문입니다. 메시지의 <code>extensions</code> 와 <code>metadata</code> 는 이력에 그대로 남았습니다.</div>
+</article>
+
+<article class="card" id="p14-bud-on">
+<h3>머리글을 달면 견적에 판정이 붙는다 — 2,100,000원은 상한 2,000,000원을 넘는다</h3>
+<p class="lead">같은 메시지에 <code>A2A-Extensions: …/budget/v1</code> 를 달았습니다(<code>rpc/budget.headers</code>). 파이썬 서버의 주고받음에서 머리글·상태·견적 아티팩트의 확장 칸만 골랐습니다.</p>
+<!--OUT file=out/14/budget.txt wire=py-wire ex=3 lines=1-75 grep=^→|^←|A2A-|"state"|"name"|"total"|"metadata"|"extensions"|budget/v1"|"limit"|"within" note=파이썬 서버 — 요청 머리글, 응답의 견적 아티팩트-->
+<ul>
+<li>아티팩트에 <code>"extensions": [URI]</code> 와 <code>metadata[URI] = {"limit": 2000000.0, "within": false}</code> 가 붙었습니다. 견적의 <code>total</code>(2,100,000)은 실행기가 낸 그대로입니다 — 확장은 견적을 바꾸지 않고 판정만 더했습니다.</li>
+<li>응답에 <code>A2A-Extensions</code> 머리글이 <b>없습니다</b>. 파이썬 SDK 에는 켰다고 알릴 길이 없기 때문입니다(<a href="#p14-ext-sdk-srv">1장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p14-bud-on-cmp">
+<h3>TS 서버만 응답 머리글로 켜진 확장을 알렸다 — 판정은 셋이 같다</h3>
+<!--OUT file=out/14/budget.txt wire=ts-wire ex=3 lines=34-80 grep=^←|A2A-Extensions|"state"|"limit"|"within" note=TypeScript 서버-->
+<!--OUT file=out/14/budget.txt wire=go-wire ex=3 lines=34-100 grep=^←|A2A-Extensions|"state"|"limit"|"within" note=Go 서버 — 상태가 아티팩트 뒤에 온다(구조체 차례)-->
+<ul>
+<li>TS 는 <code>addActivatedExtension</code> 이 응답 머리글 <code>A2A-Extensions: …/budget/v1</code> 이 되었습니다(<code>topics/extensions.md</code> 의 SHOULD). Go 의 <code>Activate</code> 는 JSON-RPC 응답에 나가지 않았습니다.</li>
+<li>상한은 TS·Go 가 <code>2000000</code>, 파이썬이 <code>2000000.0</code> 입니다 — 확장의 데이터도 <code>Struct</code> 를 거치면 숫자가 실수가 됩니다. 계약에 "정수" 라고 적었다면 받는 쪽은 <code>2000000.0</code> 도 정수로 읽어야 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p14-bud-nolimit">
+<h3>켰는데 상한이 없으면 — 파이썬·Go 는 -32602, TS 는 FAILED 작업</h3>
+<p class="lead">셋째 요청은 머리글로 확장을 켰지만 <code>metadata</code> 가 없습니다. 세 겉층 모두 같은 자리(<code>limit</code> 검사)에서 같은 뜻의 오류를 냈는데, 와이어에 나간 모양이 갈렸습니다.</p>
+<!--OUT file=out/14/budget.txt wire=py-wire ex=4 grep=^←|"code"|"message":\s"|"reason" note=파이썬 — InvalidParamsError-->
+<!--OUT file=out/14/budget.txt wire=ts-wire ex=4 grep=^←|"state"|"text":\s"Agent note=TypeScript — RequestMalformedError 를 던졌다-->
+<!--OUT file=out/14/budget.txt wire=go-wire ex=4 grep=^←|"code"|"message":\s"|"reason" note=Go — fmt.Errorf(… %w, a2a.ErrInvalidParams)-->
+<div class="note"><b>TS 실행기는 오류 코드를 낼 수 없다</b> — TS SDK 는 <code>execute</code> 안의 어떤 throw 도 FAILED Task 로 바꿉니다(<a href="#p08-rh-silent">8부</a>). 확장의 규칙을 어긴 요청을 JSON-RPC 오류로 거절하려면, TS 에서는 실행기보다 앞(express 미들웨어나 요청 처리기)에서 막아야 합니다. Go 는 감싼 오류의 글(<code>err.Error()</code>)을 그대로 <code>message</code> 에 실었습니다.</div>
+</article>
+
+<article class="card" id="p14-req-miss">
+<h3>필수로 띄우고 머리글 없이 보내면 셋 다 -32008 — 막은 자리와 글이 다르다</h3>
+<p class="lead">같은 세 서버를 <code>--required</code> 로 띄워 카드에 <code>"required": true</code> 를 적었습니다. 머리글 없는 SendMessage, 머리글을 단 SendMessage, 머리글 없는 GetTask 를 보냈습니다.</p>
+<!--SPEC file=ex/run/14/required.run-->
+<!--OUT file=out/14/required.txt wire=py-wire ex=1 grep=^←|"code"|"message":\s" note=파이썬 — 우리 실행기가 막았다-->
+<!--OUT file=out/14/required.txt wire=ts-wire ex=1 grep=^←|"code"|"message":\s" note=TypeScript — SDK 가 막았다-->
+<!--OUT file=out/14/required.txt wire=go-wire ex=1 grep=^←|"code"|"message":\s" note=Go — SDK 가 막았다-->
+<!--OUT file=out/14/required.txt wire=ts-wire ex=2 grep=^←|A2A-Extensions|"state"|"within" note=TypeScript — 머리글을 단 둘째 요청은 통과-->
+<div class="note"><b>§3.3.4 의 MUST 는 셋 다 지켰다</b> — 다만 파이썬은 SDK 가 아니라 우리 겉층의 <code>raise</code> 입니다. 머리글을 달면 필수 확장도 선택일 때와 똑같이 판정이 붙습니다.</div>
+</article>
+
+<article class="card" id="p14-req-get">
+<h3>필수 확장은 어느 메서드까지 막나 — Go 는 GetTask 도 막았다</h3>
+<p class="lead">셋째 요청은 없는 작업을 묻는 GetTask 입니다. 확장과 아무 상관 없는 조회인데, 답이 갈렸습니다.</p>
+<!--OUT file=out/14/required.txt wire=py-wire ex=3 grep="method"|"code"|"message":\s" note=파이썬-->
+<!--OUT file=out/14/required.txt wire=ts-wire ex=3 grep="method"|"code"|"message":\s" note=TypeScript-->
+<!--OUT file=out/14/required.txt wire=go-wire ex=3 grep="method"|"code"|"message":\s" note=Go-->
+<ul>
+<li>파이썬·TS 는 <code>-32001</code>(작업 없음) — 필수 검사가 메시지를 받는 길에만 있어(파이썬은 우리 실행기, TS 는 <code>_createRequestContext</code>) 다른 메서드는 막지 않습니다. Go 는 <code>-32008</code> — <code>checkRequiredExtensions</code> 가 처리기의 모든 메서드에 걸려 있습니다(<code>intercepted_handler.go:93·134·193·320</code>).</li>
+<li>스펙(§3.3.4)은 "client does not declare support for it" 일 때라고만 하고 메서드를 가리지 않습니다. 필수 확장을 단 Go 에이전트에게는 GetTask·CancelTask·ListTasks 에도 머리글을 실어야 합니다 — 클라이언트 쪽 활성기(<code>a2aext.NewActivator</code>)는 호출마다 싣습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p14-bud-cl-py">
+<h3>클라이언트 — 파이썬: 카드를 보고, metadata 를 싣고, 머리글은 호출 맥락으로</h3>
+<!--CODE file=ex/py/14/budget_client.py region=send-->
+<div class="note"><b>켜는 일은 호출마다</b> — <code>with_a2a_extensions</code> 가 서비스 매개변수(<code>A2A-Extensions</code>)를 만들고, <code>ClientCallContext</code> 에 담아 <code>send_message(…, context=…)</code> 로 넘깁니다. 클라이언트를 만들 때 한 번 정해 두는 자리는 없습니다. 판정을 읽는 <code>show</code> 는 세 언어가 같은 줄을 찍도록 짰습니다.</div>
+</article>
+
+<article class="card" id="p14-bud-cl-ts">
+<h3>TypeScript — <code>serviceParameters</code> 에 <code>withA2AExtensions</code></h3>
+<!--CODE file=ex/ts/14/budget_client.ts region=send-->
+<!--CODE file=ex/ts/14/budget_client.ts region=show-->
+</article>
+
+<article class="card" id="p14-bud-cl-go">
+<h3>Go — 활성기 가로채기를 공장에 단다</h3>
+<!--CODE file=ex/go/14/budget_client/main.go region=send-->
+<div class="note"><b>카드가 적었을 때만</b> — <code>a2aext.NewActivator(URI)</code> 는 호출 때마다 상대 카드의 <code>Capabilities.Extensions</code> 를 보고, 적힌 확장만 <code>A2A-Extensions</code> 에 덧붙입니다(<code>a2aext/activator.go:37</code>). 파이썬·TS 는 준 것을 그대로 싣습니다.</div>
+</article>
+
+<article class="card" id="p14-bud-matrix">
+<h3>3×3 — 세 클라이언트가 세 서버에서 같은 판정을 읽었다</h3>
+<!--SPEC file=ex/run/14/clients.run-->
+<!--OUT file=out/14/clients.txt part=터미널 7 note=클라이언트 셋 × 서버 셋-->
+<!--OUT file=out/14/clients.txt wire=go-wire grep=^→ POST|A2A-Extensions note=Go 서버가 받은 요청 셋(파이썬·TS·Go 클라이언트) — 셋 다 머리글 한 줄-->
+<div class="note"><b>아홉 칸이 같은 줄</b> — 파이썬 서버의 상한 <code>2000000.0</code> 도 세 클라이언트가 같은 수로 읽었습니다. 응답의 <code>A2A-Extensions</code> 는 TS 서버에서만 왔고(탭 <code>ts-wire</code>), 우리 클라이언트는 그 머리글이 아니라 아티팩트의 metadata 로 판정을 읽었습니다 — 그래서 아홉 칸이 같습니다.</div>
+</article>
+
+<article class="card" id="p14-bud-cmp">
+<h3>세 SDK 비교 — 예산 확장을 얹으며 갈린 자리</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>감싼 통로</td><td><code>EventQueue</code> 하위 클래스</td><td><code>ExecutionEventBus</code> 를 <code>Proxy</code></td><td><code>iter.Seq2</code> 를 다시 감싼 함수</td></tr>
+<tr><td>필수 검사</td><td>우리 실행기(작업은 FAILED 로 남는다)</td><td>SDK, 메시지 메서드만</td><td>SDK, 모든 메서드</td></tr>
+<tr><td>규칙 위반의 답</td><td>-32602 + 우리 글</td><td>FAILED Task</td><td>-32602 + 우리 글</td></tr>
+<tr><td>응답 머리글</td><td>없다</td><td>있다</td><td>없다(gRPC 꼬리에만)</td></tr>
+<tr><td>metadata 의 수</td><td><code>2000000.0</code></td><td><code>2000000</code></td><td><code>2000000</code></td></tr>
+<tr><td>클라이언트</td><td>호출 맥락의 서비스 매개변수</td><td>호출 옵션의 서비스 매개변수</td><td>활성기 — 카드가 적은 것만</td></tr>
+</table>
+</div>
+<div class="key"><b>확장은 SDK 의 바깥에서도 얹힌다</b> — 세 겉층 모두 에이전트의 업무 코드를 건드리지 않았고, 와이어의 판정은 3×3 아홉 칸이 같았습니다. SDK 가 해 주는 일(필수 검사, 응답 머리글)의 폭이 달라, 겉층이 맡을 몫이 언어마다 다를 뿐입니다.</div>
+</article>
+
+<article class="card" id="p14-ch2-sum">
+<h3>2장 정리 — 예산 확장 ×3</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>계약은?</td><td>머리글로 켜고, 메시지 metadata 에 상한, 견적 아티팩트에 판정</td><td><a href="#p14-bud-contract">계약</a></td></tr>
+<tr><td>어떻게 얹나?</td><td>카드에 한 줄, 실행기를 한 겹 — 에이전트는 그대로</td><td><a href="#p14-bud-wrap">겉층</a></td></tr>
+<tr><td>머리글이 없으면?</td><td>metadata 가 있어도 판정하지 않는다</td><td><a href="#p14-bud-off">머리글 없이</a></td></tr>
+<tr><td>머리글이 있으면?</td><td>판정이 붙는다. 응답 머리글은 TS 만</td><td><a href="#p14-bud-on">파이썬</a>·<a href="#p14-bud-on-cmp">TS·Go</a></td></tr>
+<tr><td>필수로 띄우면?</td><td>셋 다 -32008. Go 는 GetTask 도 막는다</td><td><a href="#p14-req-miss">필수</a>·<a href="#p14-req-get">GetTask</a></td></tr>
+<tr><td>3×3 은?</td><td>아홉 칸 같은 판정</td><td><a href="#p14-bud-matrix">3×3</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p14-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 예산 확장을 <code>required: true</code> 로 적은 Go 에이전트에게 파이썬 SDK 클라이언트가 SendMessage 는 머리글을 달아 보내고, 이어서 그 작업을 GetTask 로 물을 때는 <code>ClientCallContext</code> 를 넘기지 않았다고 합시다. 둘째 호출은 어떻게 됩니까? TS 에이전트였다면?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> Go 에이전트는 GetTask 에도 필수 확장 검사를 하므로 <code>-32008</code> "extension support required" 로 거절합니다. TS 에이전트는 메시지 메서드에서만 검사하므로 작업을 돌려줍니다(없는 작업이면 <code>-32001</code>) — <a href="#p14-req-get">GetTask 실험</a>에서 Go 만 -32008 이었고 파이썬·TS 는 -32001 이었습니다. 파이썬 클라이언트는 머리글을 호출마다 넘겨야 하니, Go 의 활성기처럼 모든 호출에 싣는 쪽이 안전합니다.</div>
+</article>
+
+<!-- ==== 3장 버전 ==== -->
+
+<article class="card" id="p14-ch3">
+<p class="chnum">3장</p>
+<h2>버전 — A2A-Version 협상</h2>
+<p class="chsub">§3.6 의 규칙 → 판이 사는 곳과 거절의 꼴 → 실험: 판 여덟 × 서버 여섯 → 결과 → REST 의 거절 → 서버 표(바인딩 셋) → 클라이언트 표</p>
+</article>
+
+<article class="card" id="p14-ver-rule">
+<h3>판은 Major.Minor 둘 — 클라이언트는 요청마다 알리고, 서버는 빈 값을 0.3 으로 읽는다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>스펙의 말</th><th>세기</th></tr>
+<tr><td>§3.6</td><td>판은 <code>Major.Minor</code>. 패치 번호는 요청·응답·카드에 쓰지 않고, 협상에서 따지지 않는다</td><td>SHOULD NOT / MUST not</td></tr>
+<tr><td>§3.6.1</td><td>클라이언트는 요청마다 <code>A2A-Version</code> 을 보낸다(0.3 클라이언트는 빼고 — 빈 머리글이면 0.3)</td><td>MUST</td></tr>
+<tr><td>§3.6.1</td><td>머리글 대신 요청 인자(<code>?A2A-Version=1.0</code>)로 알려도 된다</td><td>MAY</td></tr>
+<tr><td>§3.6.2</td><td>서버는 청한 판의 뜻으로 처리하고, 그 인터페이스가 지원하지 않는 판이면 VersionNotSupportedError</td><td>MUST</td></tr>
+<tr><td>§3.6.2</td><td>빈 값은 0.3 으로 읽는다</td><td>MUST</td></tr>
+<tr><td>§3.6.2</td><td>같은 전송에 판이 다른 인터페이스를 여럿 둘 수 있다(같은 URL 이든 다른 URL 이든)</td><td>CAN</td></tr>
+<tr><td>§3.6.3</td><td>SDK 는 판 협상을 돕는 장치를 주어야 한다. 최신 기능이 필요한 클라이언트는 옛 판으로 저절로 물러서지 않게 설정한다</td><td>MUST / should</td></tr>
+</table>
+</div>
+<div class="note"><b>버전을 고르는 것은 카드</b> — 판은 카드의 인터페이스마다 <code>protocolVersion</code> 으로 적힙니다(v1.0 에서 카드 꼭대기에서 인터페이스로 옮겨 왔다 — <code>whats-new-v1.md</code>). 클라이언트는 그 가운데 하나를 고르고, 고른 판을 머리글로 알립니다.</div>
+</article>
+
+<article class="card" id="p14-ver-err">
+<h3>거절은 VersionNotSupportedError — -32009 · FAILED_PRECONDITION · 400</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>바인딩</th><th>모양(§5.4)</th></tr>
+<tr><td>JSON-RPC</td><td><code>error.code: -32009</code>, ErrorInfo <code>reason: VERSION_NOT_SUPPORTED</code></td></tr>
+<tr><td>gRPC</td><td><code>FAILED_PRECONDITION</code> + ErrorInfo</td></tr>
+<tr><td>HTTP+JSON</td><td><code>400 Bad Request</code> + <code>google.rpc.Status</code>(§11.6)</td></tr>
+</table>
+</div>
+<div class="note"><b>§6.4 의 예는 다른 꼴이다</b> — 판 협상 오류의 예(§6.4)는 <code>A2A-Version: 0.5</code> 에 <code>Content-Type: application/problem+json</code> 과 <code>"supportedVersions": ["0.3"]</code> 를 담은 본문으로 답합니다. 같은 스펙의 §11.6 은 REST 오류를 <code>google.rpc.Status</code> 로 정했고, 지원하는 판의 목록을 실을 자리는 없습니다. 아래 실험의 두 SDK 는 §11.6 쪽을 따랐습니다.</div>
+</article>
+
+<article class="card" id="p14-ver-run">
+<h3>실험 — 판 여덟 가지로 없는 작업을 묻는다, JSON-RPC 셋과 HTTP+JSON 셋에</h3>
+<p class="lead">6부는 JSON-RPC 에 네 가지를 물었습니다(<a href="#p06-miss-version">6부</a>). 표를 채우려고 <code>1.1</code>·<code>2.0</code>·<code>0.3</code> 을 더하고, 13부의 REST 판 서버 셋(<a href="#p13-rest-srv-py">13부</a>)에도 같이 물었습니다. 판을 받으면 작업 조회까지 가서 "작업 없음", 아니면 판 거절입니다.</p>
+<!--SPEC file=ex/run/14/versions.run-->
+<!--CODE file=ex/py/14/versions.py region=ask-->
+</article>
+
+<article class="card" id="p14-ver-out">
+<h3>결과 — 파이썬은 Major 만, TS 는 글자 그대로, Go 는 읽지 않는다 · 바인딩이 바뀌어도 같다</h3>
+<!--OUT file=out/14/versions.txt part=터미널 10 lines=2-11 note=통과 = 판을 받아 작업 조회까지 갔다, 거절 = VersionNotSupported-->
+<ul>
+<li><b>파이썬</b> — <code>1.0.1</code>·<code>1.1</code>·<code>1.5</code> 를 받고 <code>2.0</code>·<code>0.3</code> 을 거절했습니다. Major 하나만 견주는 <code>version_validator.py</code>(<a href="#p06-miss-version-why">6부</a>)가 REST 에도 같이 걸려 있습니다(<code>rest_dispatcher.py:177</code>). <code>1.1</code> 을 받은 것은 §3.6.2 의 "matching Major.Minor" 와 어긋납니다.</li>
+<li><b>TS</b> — 카드의 <code>protocolVersion</code> 과 글자가 같은 <code>1.0</code> 만 받았습니다. 패치 번호를 따지지 말라는 §3.6 과 어긋나는 쪽은 <code>1.0.1</code> 거절입니다.</li>
+<li><b>Go</b> — 여덟 가지 모두 통과입니다. 서버가 판을 읽지 않으니 머리글이 없어도(=0.3) v1.0 의 뜻으로 처리했습니다(§3.6.2 의 두 MUST).</li>
+<li><b>요청 인자</b>(<code>?인자</code>)는 셋 다 읽지 않았습니다 — 파이썬·TS 는 머리글이 빈 것으로 보아 0.3 으로 거절, Go 는 늘 통과. 6부의 결과와 같습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p14-ver-rest">
+<h3>REST 의 판 거절 — 400 과 FAILED_PRECONDITION, 지원 판은 글로만</h3>
+<!--OUT file=out/14/versions.txt wire=py-wire ex=5 grep=^→|^←|A2A-Version|Content-Type|"code"|"status"|"message"|"reason" note=파이썬 REST — A2A-Version: 2.0-->
+<!--OUT file=out/14/versions.txt wire=ts-wire ex=2 grep=^→|^←|A2A-Version|Content-Type|"code"|"status"|"message"|"reason" note=TypeScript REST — A2A-Version: 1.0.1-->
+<ul>
+<li>둘 다 §5.4·§11.6 의 꼴(<code>400</code>, <code>FAILED_PRECONDITION</code>, <code>reason: VERSION_NOT_SUPPORTED</code>)입니다. 지원하는 판은 <code>message</code> 의 글 속에만 있습니다(파이썬 "Expected version '1.0'", TS "Supported versions: 1.0").</li>
+<li>JSON-RPC 쪽에서 TS 서버는 거절마다 stderr 에 "Unhandled error" 와 추적 정보를 남겼고(<a href="#p08-srv-guard">8부</a>와 같다), REST 쪽은 아무것도 찍지 않았습니다. 파이썬은 거절마다 "Version mismatch" 한 줄을, REST 쪽은 거기에 "Request error: …" 한 줄을 더 찍었습니다(<code>out/14/versions.txt</code> 의 서버 출력).</li>
+</ul>
+</article>
+
+<article class="card" id="p14-ver-srv">
+<h3>서버의 판 검사 — 세 SDK × 세 바인딩을 한 표로</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th><th>근거</th></tr>
+<tr><td>JSON-RPC</td><td>Major 만(1.x 통과)</td><td>카드의 판과 글자 그대로</td><td>읽지 않는다</td><td><a href="#p14-ver-out">이 장</a>·<a href="#p06-miss-version">6부</a></td></tr>
+<tr><td>HTTP+JSON</td><td>Major 만</td><td>글자 그대로</td><td>읽지 않는다</td><td><a href="#p14-ver-out">이 장</a></td></tr>
+<tr><td>gRPC</td><td>검사 없음</td><td>GRPC 인터페이스의 판과</td><td>검사 없음</td><td><a href="#p13-grpc-md">13부</a></td></tr>
+<tr><td>빈 머리글</td><td>0.3 → 거절</td><td>0.3 → 거절(호환을 켜면 옛 처리기로)</td><td>v1.0 으로 처리</td><td><a href="#p08-compat-ts-out">8부</a></td></tr>
+<tr><td><code>?A2A-Version=</code></td><td>읽지 않는다</td><td>읽지 않는다</td><td>읽지 않는다</td><td><a href="#p14-ver-out">이 장</a></td></tr>
+<tr><td>판이 여럿인 서버</td><td>메서드 이름으로 v0.3 을 가른다</td><td>판 머리글로 가른다</td><td>경로를 따로 — 가르는 일은 우리 몫</td><td><a href="#p14-ch4">4장</a></td></tr>
+</table>
+</div>
+<div class="key"><b>§3.6.2 를 글자대로 지킨 SDK 는 없다</b> — 패치 번호를 무시하고 Major.Minor 를 견주며 빈 값을 0.3 으로 읽는 것, 셋을 함께 한 것은 6부의 맨손 서버뿐이었습니다(<a href="#p06-miss-version-why">6부</a>). 섞인 메시에서 판 머리글이 어긋나도 Go 서버는 조용히 받고, TS 서버는 <code>1.0.1</code> 같은 사소한 차이에도 거절합니다.</div>
+</article>
+
+<article class="card" id="p14-ver-cl">
+<h3>클라이언트의 판 — 셋 다 1.0 을 싣는다, 손으로 바꾸면 TS 는 덮고 Go 는 둘을 싣는다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>요청의 판</td><td>공장이 httpx 연결에 <code>1.0</code>(<a href="#p07-cl-http">7부</a>)</td><td>전송의 판 <code>1.0</code></td><td>고른 인터페이스의 판</td></tr>
+<tr><td>손으로 단 판</td><td>—</td><td>1.0 으로 덮인다(<a href="#p08-cl-hooks-out">8부</a>)</td><td>둘 다 실린다(<a href="#p09-cl-hooks-out">9부</a>)</td></tr>
+<tr><td>카드를 받을 때</td><td><code>A2A-Version: 1.0</code></td><td><code>A2A-Version: 1.0</code></td><td>싣지 않는다(<a href="#p09-cl-resolver">9부</a>)</td></tr>
+<tr><td>gRPC 메타데이터</td><td colspan="3"><code>a2a-version: 1.0</code> — 셋이 같다(<a href="#p13-grpc-cl-wire">13부</a>)</td></tr>
+<tr><td>판이 둘인 카드에서</td><td>1.0 을 먼저 고른다(<code>client_factory.py:234</code>)</td><td>바인딩으로 고른 뒤, 그 URL 의 인터페이스 판으로 전송을 정한다</td><td>카드 차례대로, 같은 Major 면 받는다(<code>factory.go:179</code>)</td></tr>
+<tr><td>v0.3 전송</td><td>카드가 0.3 이면 저절로(<a href="#p07-compat-client-wire">7부</a>)</td><td><code>legacyCompat</code> 을 켜야</td><td><code>a2av0</code> 옵션을 달아야</td></tr>
+</table>
+</div>
+<div class="note"><b>§3.6.3 의 "저절로 물러서지 않게"</b> — 파이썬은 v0.3 전송이 늘 켜져 있어, 카드가 0.3 만 적으면 묻지 않고 옛 판으로 말합니다. TS·Go 는 켜야만 그렇게 합니다. 판이 둘인 카드의 선택은 소스로 읽은 것이고, 옛 판 하나뿐인 카드는 4장에서 와이어로 봅니다.</div>
+</article>
+
+<article class="card" id="p14-ch3-sum">
+<h3>3장 정리 — 버전</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>스펙의 규칙은?</td><td>Major.Minor, 요청마다 머리글, 빈 값 = 0.3, 안 되면 -32009</td><td><a href="#p14-ver-rule">규칙</a>·<a href="#p14-ver-err">오류</a></td></tr>
+<tr><td>파이썬 서버는?</td><td>Major 만 본다 — 1.1·1.5 를 받는다</td><td><a href="#p14-ver-out">결과</a></td></tr>
+<tr><td>TS 서버는?</td><td>카드의 판과 글자 그대로 — 1.0.1 을 거절한다</td><td><a href="#p14-ver-out">결과</a></td></tr>
+<tr><td>Go 서버는?</td><td>판을 읽지 않는다 — 무엇이든 v1.0 으로</td><td><a href="#p14-ver-out">결과</a></td></tr>
+<tr><td>바인딩 따라 다른가?</td><td>JSON-RPC·REST 는 같고, gRPC 에서는 TS 만 검사</td><td><a href="#p14-ver-srv">서버 표</a></td></tr>
+<tr><td>클라이언트는?</td><td>셋 다 1.0 을 싣는다. v0.3 전송은 파이썬만 저절로</td><td><a href="#p14-ver-cl">클라이언트 표</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p14-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 어떤 클라이언트가 패치 번호까지 붙여 <code>A2A-Version: 1.0.1</code> 을 보낸다고 합시다. 이 장의 여섯 서버 가운데 어느 것이 거절했고, 그 거절은 스펙의 어느 문장과 어긋납니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> TS 서버 둘(JSON-RPC·HTTP+JSON)만 거절했습니다(<a href="#p14-ver-out">결과</a>의 <code>1.0.1</code> 줄 — REST 는 <code>400</code>·<code>VERSION_NOT_SUPPORTED</code>, <a href="#p14-ver-rest">REST 의 거절</a>). §3.6 은 패치 번호를 "MUST not be considered when clients and servers negotiate protocol versions" 라고 합니다. 파이썬·Go 는 통과시켰습니다.</div>
+</article>
+
+<!-- ==== 4장 v0.3 피어와 공존 ==== -->
+
+<article class="card" id="p14-ch4">
+<p class="chnum">4장</p>
+<h2>v0.3 피어와 공존</h2>
+<p class="chsub">v0.3 와 v1.0 의 와이어 차이 → 세 SDK 의 호환 계층 → 옛 판 에이전트 흉내: 파이썬 → TypeScript → Go → 카드 → 옛 요청 → 클라이언트 셋 → 3×3 → 세 SDK 비교</p>
+</article>
+
+<article class="card" id="p14-v03-diff">
+<h3>v0.3 피어와는 메서드 이름부터 다르다 — 와이어에서 갈리는 자리</h3>
+<p class="lead">스펙 저장소의 <code>whats-new-v1.md</code> 가 v0.3 → v1.0 의 깨는 변경을 모았습니다. 이 장의 실험에 나오는 것만 추렸습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>v0.3</th><th>v1.0</th></tr>
+<tr><td>JSON-RPC 메서드</td><td><code>message/send</code>·<code>tasks/get</code> …</td><td><code>SendMessage</code>·<code>GetTask</code> …</td></tr>
+<tr><td>모양 가르기</td><td><code>"kind": "message" | "task" | "data"</code> …</td><td><code>kind</code> 없음 — 들어 있는 필드로</td></tr>
+<tr><td>열거값</td><td><code>"user"</code>, <code>"completed"</code></td><td><code>ROLE_USER</code>, <code>TASK_STATE_COMPLETED</code></td></tr>
+<tr><td>카드의 주소와 판</td><td>꼭대기의 <code>url</code>·<code>preferredTransport</code>·<code>protocolVersion</code>, <code>additionalInterfaces</code></td><td><code>supportedInterfaces[]</code> 에 인터페이스마다</td></tr>
+<tr><td>판 머리글</td><td>없음(빈 값 = 0.3, §3.6.1)</td><td><code>A2A-Version: 1.0</code></td></tr>
+<tr><td>스트림의 끝</td><td><code>final</code> 깃발</td><td>없음 — 상태로 안다(<a href="#p10-wire-final-compat">10부</a>)</td></tr>
+</table>
+</div>
+<div class="note"><b>확장 머리글의 옛 이름</b> — 파이썬·TS SDK 의 호환 계층은 v0.3 의 확장 머리글을 <code>X-A2A-Extensions</code> 로 둡니다(<code>compat/v0_3/extension_headers.py:12</code>, TS <code>LEGACY_HTTP_EXTENSION_HEADER</code>). v1.0 스펙 문서에는 이 이름이 없어 SDK 소스로만 확인했습니다. 이 책의 와이어 탭은 그 머리글을 적지 않습니다.</div>
+</article>
+
+<article class="card" id="p14-v03-layers">
+<h3>세 SDK 의 호환 계층 — 켜는 법도, 판을 가르는 기준도 다르다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>서버에서 켜기</td><td><code>enable_v0_3_compat=True</code>(<a href="#p07-compat-server">7부</a>)</td><td><code>legacyCompat: {enabled: true}</code>(<a href="#p08-compat-ts">8부</a>)</td><td><code>a2av0.NewJSONRPCHandler(h)</code> 를 따로 단다(<a href="#p09-compat-go">9부</a>)</td></tr>
+<tr><td>판을 가르는 것</td><td>메서드 이름</td><td>판 머리글(없거나 0.3)</td><td>경로 — 한 경로라면 우리가 가른다</td></tr>
+<tr><td>카드</td><td>0.3 인터페이스가 있으면 v0.3 칸을 섞는다(<code>response_helpers.py:87</code>)</td><td><code>legacyAgentCardRouter</code> — 판 머리글로 카드 모양을 고른다</td><td><code>a2av0.NewStaticAgentCardProducer</code> — 늘 섞는다</td></tr>
+<tr><td>클라이언트</td><td>카드의 판이 0.3 이면 저절로</td><td>해석기·전송에 <code>legacyCompat</code></td><td><code>a2av0.WithJSONRPCTransport</code></td></tr>
+<tr><td>옛 코드 옮기기</td><td>—</td><td>—</td><td><code>migration.go</code> 의 감싸개 넷(<a href="#p09-compat-go">9부</a>)</td></tr>
+</table>
+</div>
+<div class="note"><b>Go 는 옛 모듈을 받아야 쓴다</b> — <code>a2acompat/a2av0</code> 는 v0.3 시절의 모듈 <code>github.com/a2aproject/a2a-go</code> 를 import 합니다. 9부에서는 소스로만 읽었지만, 이 장에서는 <code>go get github.com/a2aproject/a2a-go@v0.3.15</code> 로 받아 돌렸습니다 — <code>go.mod</code> 에 간접 의존 한 줄, <code>go.sum</code> 에 두 줄이 늘었습니다(<a href="#p09-map-deps">9부의 지도</a>).</div>
+</article>
+
+<article class="card" id="p14-v03-py">
+<h3>옛 판 에이전트 흉내 ① 파이썬 — 카드에 0.3 문 하나, 라우트에 호환 스위치</h3>
+<p class="lead">세 서버 모두 완성 숙소 에이전트의 카드와 실행기를 빌려, 카드에는 같은 주소의 <b>판 0.3 JSON-RPC 문 하나만</b> 적습니다. v0.3 만 아는 옛 에이전트처럼 보이게 하되, 뒤의 처리기는 v1.0 그대로입니다.</p>
+<!--CODE file=ex/py/14/old_agent.py region=serve-->
+<div class="note"><b>카드 경로는 그대로</b> — <code>create_agent_card_routes</code> 가 카드를 내보낼 때 0.3 인터페이스를 찾아 v0.3 의 꼭대기 칸(<code>url</code>·<code>preferredTransport</code>·<code>protocolVersion</code>)을 섞어 넣습니다(<code>agent_card_to_dict</code>). 우리가 따로 할 일이 없습니다.</div>
+</article>
+
+<article class="card" id="p14-v03-ts">
+<h3>② TypeScript — 카드 경로에 옛 카드 라우터를 먼저, JSON-RPC 에 <code>legacyCompat</code></h3>
+<!--CODE file=ex/ts/14/old_common.ts region=serve-->
+<!--CODE file=ex/ts/14/old_agent.ts region=hook note=14/old_agent.ts-->
+<div class="note"><b>8부의 교훈</b> — 스위치만 켜고 카드에 0.3 인터페이스가 없으면 옛 요청이 판 검사에서 -32009 로 막혔습니다(<a href="#p08-compat-ts-out">8부</a>). 여기서는 카드의 문이 0.3 하나뿐이라, 거꾸로 <code>A2A-Version: 1.0</code> 요청이 막힙니다 — <code>validateVersion</code> 이 카드의 판과 견주기 때문입니다(<code>server/express/index.js:2164</code>, 소스로 읽은 것 — 이 장에서는 보내지 않았다). 띄우는 것은 13부와 같은 해석 훅입니다.</div>
+</article>
+
+<article class="card" id="p14-v03-go">
+<h3>③ Go — 처리기 하나에 두 문, 판 머리글로 가르는 것은 우리가</h3>
+<!--CODE file=ex/go/14/v03mount/mount.go region=mount-->
+<!--CODE file=ex/go/14/old_lodging/main.go region=init note=agent.go 는 agents/lodging/main.go 링크-->
+<div class="note"><b>SDK 는 문을 둘 줄 뿐</b> — <code>a2asrv.NewJSONRPCHandler</code> 와 <code>a2av0.NewJSONRPCHandler</code> 는 같은 요청 처리기를 받는 서로 다른 <code>http.Handler</code> 입니다. 9부의 소스 읽기처럼 경로를 나눠 달면 되지만, 파이썬·TS 처럼 한 주소로 받으려고 판 머리글로 가르는 함수를 우리가 썼습니다(빈 값이나 <code>0.3</code> 이면 옛 처리기 — §3.6.2).</div>
+</article>
+
+<article class="card" id="p14-v03-card">
+<h3>옛 카드 — 파이썬·Go 는 늘 두 판을 섞고, TS 는 판 머리글에 따라 바꾼다</h3>
+<p class="lead">세 서버의 카드를 판 머리글 없이(v0.3 클라이언트처럼) 한 번, <code>A2A-Version: 1.0</code> 으로 한 번 받았습니다. 주소와 판에 관한 칸만 골랐습니다.</p>
+<!--SPEC file=ex/run/14/old.run-->
+<!--OUT file=out/14/old.txt wire=ts-wire ex=1-2 grep=^→|^←|A2A-Version|"url":\s"http|"preferredTransport"|"protocolVersion"|"supportedInterfaces" note=TS 서버 — 머리글 없이, 그리고 1.0 으로-->
+<!--OUT file=out/14/old.txt wire=py-wire ex=1 grep=^→|^←|"url":\s"http|"preferredTransport"|"protocolVersion"|"supportedInterfaces" note=파이썬 서버 — 머리글 없이(1.0 으로 받아도 같다)-->
+<ul>
+<li>TS 는 머리글이 없으면 v0.3 모양(꼭대기에 <code>url</code>·<code>preferredTransport</code>·<code>protocolVersion</code>, 그 뒤에 <code>supportedInterfaces</code> 도 함께 — <code>embedV1Interfaces</code>), <code>1.0</code> 이면 v1.0 카드만 냈습니다. 판 머리글이 카드의 모양까지 고르는 것은 TS 뿐입니다.</li>
+<li>파이썬과 Go(<code>go-wire</code>)는 두 번 모두 같은 섞인 카드 — v1.0 의 <code>supportedInterfaces</code> 와 v0.3 의 꼭대기 칸이 한 JSON 에 있습니다. v0.3 클라이언트는 모르는 칸을 버리고, v1.0 클라이언트는 <code>supportedInterfaces</code> 를 읽습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p14-v03-req">
+<h3>맨손 v0.3 요청 — 세 서버 모두 v0.3 의 말로 답했다</h3>
+<p class="lead">v0.3 꼴 요청(<code>rpc/v03_send.json</code> — <code>message/send</code>, <code>kind</code>, <code>"role": "user"</code>)을 판 머리글 없이 보냈습니다.</p>
+<!--OUT file=out/14/old.txt wire=py-wire ex=3 grep=^→|^←|"method"|"kind":\s"task"|"state" note=파이썬-->
+<!--OUT file=out/14/old.txt wire=ts-wire ex=3 grep=^→|^←|"method"|"kind":\s"task"|"state" note=TypeScript-->
+<!--OUT file=out/14/old.txt wire=go-wire ex=3 grep=^→|^←|"method"|"kind":\s"task"|"state" note=Go — 우리가 단 갈림 함수가 옛 처리기로 보냈다-->
+<div class="note"><b>실행기는 v1.0 그대로</b> — 숙소 실행기는 세 서버 모두 v1.0 객체만 받았고(서버 출력의 <code>[숙소] 견적</code> 줄), 번역은 처리기 바깥의 호환 계층이 했습니다(<a href="#p07-compat-what">7부</a>). 답은 <code>"kind": "task"</code>, <code>"state": "completed"</code> — v0.3 의 모양입니다.</div>
+</article>
+
+<article class="card" id="p14-v03-cl">
+<h3>v1.0 SDK 클라이언트로 옛 피어에게 — 파이썬은 그대로, TS 는 두 곳에 <code>legacyCompat</code></h3>
+<!--CODE file=ex/py/14/old_client.py region=send note=파이썬 — 2장의 클라이언트와 다를 것이 없다-->
+<!--CODE file=ex/ts/14/old_client.ts region=send note=TypeScript — 카드 해석기와 JSON-RPC 전송에 각각-->
+</article>
+
+<article class="card" id="p14-v03-cl-go">
+<h3>Go — 공장에 <code>a2av0.WithJSONRPCTransport</code> 를 끼운다</h3>
+<!--CODE file=ex/go/14/old_client/main.go region=send-->
+<div class="note"><b>판 0.3 짝의 전송</b> — 이 옵션은 <code>WithCompatTransport("0.3", JSONRPC, …)</code> 로 공장의 전송 표에 (판, 바인딩) 짝 하나를 더합니다(<code>a2acompat/a2av0/jsonrpc_client.go:37</code>). 공장은 카드 인터페이스의 판·바인딩으로 이 표를 찾고, 정확한 짝이 없으면 같은 Major 의 전송을 씁니다(<code>a2aclient/factory.go:179</code>).</div>
+</article>
+
+<article class="card" id="p14-v03-matrix">
+<h3>3×3 — 아홉 칸 모두 v0.3 으로 말해 같은 견적을 받았다</h3>
+<!--OUT file=out/14/old.txt part=터미널 7 grep=^\[터미널 7\] \$ (python|node|go)|^TASK_STATE note=클라이언트 셋 × 옛 판 서버 셋-->
+<!--OUT file=out/14/old.txt wire=py-wire ex=4-9 grep=^→|A2A-Version|"method" note=파이썬 서버가 받은 것 — 클라이언트마다 카드 한 번, 요청 한 번-->
+<ul>
+<li>세 클라이언트 모두 <code>"method": "message/send"</code> 와 <code>A2A-Version: 0.3</code> 을 보냈습니다. 파이썬은 설정 없이, TS·Go 는 켠 호환 전송으로 — 카드의 판이 0.3 하나뿐이라 셋 다 그것을 골랐습니다.</li>
+<li>카드를 받을 때는 파이썬·TS 가 <code>A2A-Version: 1.0</code> 을, Go 는 아무 판도 싣지 않았습니다(<a href="#p09-cl-resolver">9부</a>). 그래서 TS 서버는 Go 클라이언트에게 v0.3 모양의 카드를 주었고(<code>ts-wire</code>), Go 의 해석기는 그 안의 <code>supportedInterfaces</code> 를 읽어 문제없이 이어 갔습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p14-v03-cmp">
+<h3>세 SDK 비교 — v0.3 피어와 공존</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>한 주소에 두 판</td><td>스위치 하나 — 메서드 이름으로</td><td>스위치 + 카드 라우터 — 판 머리글로</td><td>처리기 둘 + 우리가 쓴 갈림</td></tr>
+<tr><td>카드</td><td>섞인 카드</td><td>판 머리글에 따라 두 모양</td><td>섞인 카드</td></tr>
+<tr><td>옛 피어에게 말하기</td><td>저절로(카드의 판)</td><td>해석기·전송에 켜기</td><td>공장 옵션</td></tr>
+<tr><td>필요한 것</td><td>SDK 만</td><td>SDK 만(<code>compat/v0_3</code> 하위 경로)</td><td>옛 모듈 v0.3.15</td></tr>
+<tr><td>3×3</td><td colspan="3">아홉 칸 모두 v0.3 와이어로 같은 견적</td></tr>
+</table>
+</div>
+<div class="key"><b>공존은 겉층의 일</b> — 셋 다 실행기와 저장소를 한 벌로 두고 와이어의 판만 번역합니다. 그래서 같은 작업을 v1.0 과 v0.3 클라이언트가 함께 볼 수 있습니다. 갈린 것은 "언제 옛 판으로 말하나" — 파이썬 클라이언트는 설정 없이 옛 판으로 말하고, TS·Go 는 켜야만 그렇게 합니다. §3.6.3 은 최신 기능이 필요한 클라이언트라면 저절로 물러서지 않게 설정하라고 합니다.</div>
+</article>
+
+<article class="card" id="p14-ch4-sum">
+<h3>4장 정리 — v0.3 피어와 공존</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>무엇이 다른가?</td><td>메서드 이름, <code>kind</code>, 열거값, 카드의 주소·판 자리</td><td><a href="#p14-v03-diff">차이</a></td></tr>
+<tr><td>서버는?</td><td>파이썬 스위치, TS 스위치 + 카드 라우터, Go 처리기 둘</td><td><a href="#p14-v03-py">파이썬</a>·<a href="#p14-v03-ts">TS</a>·<a href="#p14-v03-go">Go</a></td></tr>
+<tr><td>카드는?</td><td>파이썬·Go 는 섞고, TS 는 판 머리글로 고른다</td><td><a href="#p14-v03-card">카드</a></td></tr>
+<tr><td>옛 요청은?</td><td>세 서버 모두 v0.3 의 말로 답한다</td><td><a href="#p14-v03-req">옛 요청</a></td></tr>
+<tr><td>클라이언트는?</td><td>파이썬은 저절로, TS·Go 는 켜서. 3×3 모두 맞는다</td><td><a href="#p14-v03-matrix">3×3</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p14-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 이 장의 TS 서버에서 카드를 <code>curl</code> 로 받는데, 한 번은 머리글 없이, 한 번은 <code>-H 'A2A-Version: 1.0'</code> 을 달았습니다. 두 응답에서 카드 꼭대기의 <code>url</code> 칸은 어떻게 달랐고, 왜 그렇습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 머리글이 없을 때만 꼭대기에 <code>"url"</code>·<code>"preferredTransport"</code>·<code>"protocolVersion": "0.3"</code> 이 있었고, <code>1.0</code> 일 때는 <code>supportedInterfaces</code> 뿐이었습니다(<a href="#p14-v03-card">카드</a>). TS 의 <code>legacyAgentCardRouter</code> 가 판 머리글이 없거나 0.3 이면 v0.3 모양의 카드를 내고, 아니면 다음 처리기(v1.0 카드)로 넘기기 때문입니다 — 빈 머리글을 0.3 으로 읽는 §3.6.2 를 카드 경로에도 적용한 셈입니다.</div>
+</article>
+
+<article class="card" id="p14-wrap">
+<h3>14부 정리 — 스펙 바깥을 싣는 길, 판이 다른 상대와 말하는 길</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>한 줄</th></tr>
+<tr><td><a href="#p14-ch1-sum">1</a></td><td>확장은 URI + metadata + 규칙. 머리글로 요청마다 켜고, 모르는 것은 무시, 필수는 -32008</td></tr>
+<tr><td><a href="#p14-ch2-sum">2</a></td><td>예산 확장을 실행기 겉층으로 얹었다 — 3×3 같은 판정, 필수 검사·응답 머리글은 SDK 마다</td></tr>
+<tr><td><a href="#p14-ch3-sum">3</a></td><td>판 검사는 파이썬 Major 만, TS 글자 그대로, Go 없음. 요청 인자는 아무도 읽지 않는다</td></tr>
+<tr><td><a href="#p14-ch4-sum">4</a></td><td>v0.3 공존은 번역 겉층 — 카드·요청·클라이언트 3×3 이 모두 맞았다</td></tr>
+</table>
+</div>
+<div class="note"><b>다음</b> — <a href="#p15">15부</a>는 다섯 에이전트를 한 메시로 엮습니다. 예산 확장은 이 부에서 숙소 에이전트의 겉층으로만 썼습니다 — 기획 에이전트가 사용자의 예산을 아래 에이전트에 넘길 때 어떻게 쓸지(머리글과 metadata 를 함께 넘기기)는 15부의 설계에서 정합니다.</div>
 </article>
