@@ -1,0 +1,34 @@
+# 4장 — Bearer 검사 ×3. 정산 에이전트 셋은 카드에 탭의 주소를 알린다
+# (--url) — 카드·토큰 발급·JSON-RPC 가 모두 탭을 지난다.
+# (1) curl 로 네 가지 머리(없음·Basic·빈 Bearer·모르는 토큰)를 보낸다.
+# (2) 탭을 거치지 않고 401 응답 머리의 글자 모양을 본다.
+# (3) 같은 언어의 SDK 클라이언트가 401 을 만난 뒤 토큰을 받아 부른다.
+serve name=settle-py ready=tcp:11230 \
+      cmd="py:agents/settlement.py --port 11230 \
+      --url http://127.0.0.1:11233/"
+serve name=settle-ts ready=tcp:11231 \
+      cmd="ts:agents/settlement.ts --port 11231 \
+      --url http://127.0.0.1:11234/"
+serve name=settle-go ready=tcp:11232 \
+      cmd="go:agents/settlement --port 11232 \
+      --url http://127.0.0.1:11235/"
+tap   name=py-wire listen=11233 target=11230
+tap   name=ts-wire listen=11234 target=11231
+tap   name=go-wire listen=11235 target=11232
+run   cmd="sh:for p in 11233 11234 11235; do \
+      for h in 'X-Nothing: 1' 'Authorization: Basic cGxhbm5lcjpw' \
+      'Authorization: Bearer' \
+      'Authorization: Bearer tok-planner-9'; do \
+      curl -s -o /dev/null -H 'Content-Type: application/json' \
+      -H 'A2A-Version: 1.0' -H \"$h\" \
+      -d @run/12/rpc/settle_small.json http://127.0.0.1:$p/; \
+      done; done"
+run   cmd="sh:for p in 11230 11231 11232; do \
+      curl -s -D - -o /dev/null -d '{}' http://127.0.0.1:$p/ \
+      | grep -i '^www-authenticate'; done"
+run   cmd="py:12/settle_client.py http://127.0.0.1:11233/ \
+      planner planner-secret"
+run   cmd="ts:12/settle_client.ts http://127.0.0.1:11234/ \
+      planner planner-secret"
+run   cmd="go:12/settle_client http://127.0.0.1:11235/ \
+      planner planner-secret"

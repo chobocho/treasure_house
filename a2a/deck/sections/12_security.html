@@ -1,10 +1,689 @@
 <article class="card section" id="p12">
 <p class="chnum">12부</p>
 <h2>보안 — 인증 스킴·OAuth2·확장 카드·서명</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">전송 보안 → 보안 스킴과 요구 → 토큰 발급기 ×3 → Bearer 검사 ×3 → 스코프 → 확장 카드 → AUTH_REQUIRED → 서명된 카드</p>
 </article>
 
-<article class="card" id="p12-todo">
-<h3>보안 — 인증 스킴·OAuth2·확장 카드·서명</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p12-intro">
+<h3>정산 에이전트는 아무에게나 결재해 주지 않는다 — 이 부는 "누구냐" 와 "믿을 만하냐" 다</h3>
+<p class="lead">지금까지의 에이전트는 묻는 사람이 누구든 답했습니다. 정산 에이전트는 다릅니다. 카드에 "OAuth2 토큰을 가져오라" 고 적고(보안 스킴), 같은 서버의 토큰 발급기가 토큰을 내주고, 토큰이 없으면 401 로 돌려보내고, 큰 돈은 결재 스코프가 있어야 처리합니다. 카드에는 서명까지 붙습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th></tr>
+<tr><td><a href="#p12-ch1">1장</a></td><td>전송 보안 — HTTPS 요구(§7.1), 이 책이 로컬 http 를 쓰는 까닭, TLS 앞단과 세 SDK 클라이언트의 인증서 검사</td></tr>
+<tr><td><a href="#p12-ch2">2장</a></td><td><code>securitySchemes</code>·<code>securityRequirements</code> — 다섯 스킴, 정산 카드 ×3, 요구의 AND·OR</td></tr>
+<tr><td><a href="#p12-ch3">3장</a></td><td>로컬 OAuth2 토큰 발급기 ×3 — client_credentials, 클라이언트 인증, 스코프, 오류 응답, 결정적 토큰</td></tr>
+<tr><td><a href="#p12-ch4">4장</a></td><td>정산 에이전트의 Bearer 검사 ×3 — 401 과 <code>WWW-Authenticate</code>, 사용자를 실행기에 넘기는 자리, 카드와 서버의 몫</td></tr>
+<tr><td>5장</td><td>스코프 — intern 은 조회만, planner 는 결재까지</td></tr>
+<tr><td>6장</td><td>확장 카드 — GetExtendedAgentCard, <code>capabilities.extendedAgentCard</code></td></tr>
+<tr><td>7장</td><td>AUTH_REQUIRED — 작업 중 권한(§7.6), 결재 토큰으로 이어 가기</td></tr>
+<tr><td>8장</td><td>서명된 카드 — JCS 정규화 + JWS 서명, 서명·검증 ×3, 위조 카드 알아채기</td></tr>
+</table>
+</div>
+<div class="key"><b>이 부의 방식</b> — 완성 정산 에이전트 셋(파이썬·TS·Go)을 띄우고 와이어를 읽습니다. 새로 쓰는 것은 시험 쪽 — TLS 앞단과 카드를 읽는 클라이언트 ×3(1장), 카드를 푸는 프로그램 ×3(2장), 토큰을 받아 정산을 맡기는 클라이언트 ×3(4장)입니다.</div>
+</article>
+
+<!-- ==== 1장 전송 보안 ==== -->
+
+<article class="card" id="p12-ch1">
+<p class="chnum">1장</p>
+<h2>전송 보안 — HTTPS 와 이 책의 http</h2>
+<p class="chsub">스펙의 요구 → 이 책이 http 인 까닭 → TLS 앞단 → 앞단의 TLS 설정 → 실행 명세 → 파이썬 → TypeScript → Go → 세 언어 비교 → SDK 가 검사하지 않는 것</p>
+</article>
+
+<article class="card" id="p12-tls-rule">
+<h3>운영에서는 HTTPS 가 MUST — 서버의 인증서는 클라이언트가 확인한다(SHOULD)</h3>
+<p class="lead">A2A 는 인증을 프로토콜 안에 새로 만들지 않습니다. §7 의 첫 문장이 "relying on established web security practices" 이고, 그 바탕이 암호화된 연결입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>스펙의 말</th><th>세기</th></tr>
+<tr><td>§7.1</td><td>"Production deployments MUST use encrypted communication (HTTPS for HTTP-based bindings, TLS for gRPC)"</td><td>MUST</td></tr>
+<tr><td>§7.1</td><td>"modern TLS configurations (TLS 1.3+ recommended) with strong cipher suites"</td><td>SHOULD</td></tr>
+<tr><td>§7.2</td><td>클라이언트는 "validating its TLS certificate against trusted certificate authorities" 로 서버가 누구인지 확인</td><td>SHOULD</td></tr>
+<tr><td>§13.4</td><td>HSTS 헤더, SSLv3·TLS 1.0·1.1 끄기</td><td>SHOULD</td></tr>
+<tr><td>§13.4</td><td>"Credentials SHOULD be transmitted only over encrypted connections"</td><td>SHOULD</td></tr>
+</table>
+</div>
+<div class="note"><b>§7.1 과 §13.4 가 같은 말을 두 번</b> — 13.4 의 "Transport Security" 첫 두 줄은 7.1 의 두 문장을 그대로 되풀이합니다. 새로 보태는 것은 HSTS 와 낡은 판 끄기입니다.</div>
+</article>
+
+<article class="card" id="p12-tls-local">
+<h3>이 책이 http 인 까닭 — 루프백 안에서만 돌고, 와이어 탭이 평문을 읽어야 해서</h3>
+<p class="lead">이 책의 서버는 모두 <code>127.0.0.1</code> 에만 귀를 엽니다(SCENARIO §3). 바깥에서 닿지 않는 시험 무대라서 "Production deployments" 가 아닙니다. 그리고 와이어 탭(<a href="#p02-wiretap">2부</a>)은 바이트를 읽어 적는 프록시라, TLS 를 쓰면 탭이 볼 것이 암호문뿐입니다.</p>
+<ul>
+<li><b>그 대가</b> — http 위의 토큰과 비밀번호는 누구나 읽습니다. 탭이 읽는 그대로입니다. <a href="#p12-iss-wire">3장</a>의 토큰 요청에는 <code>client_secret=planner-secret</code> 이, <a href="#p12-bearer-wire">4장</a>의 요청에는 <code>Authorization: Bearer tok-…</code> 가 글자 그대로 보입니다.</li>
+<li><b>Bearer 토큰은 가진 사람이 주인</b> — 엿본 토큰을 그대로 붙이면 그 사람이 됩니다. 이 위험이 실제로 어떻게 생겼는지는 <a href="#p12-iss-guess">3장</a>에서 봅니다.</li>
+<li>그래서 이 장은 한 번만 진짜 TLS 를 세웁니다 — 에이전트 앞에 TLS 앞단을 두고, 세 SDK 클라이언트가 인증서를 어떻게 다루는지 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-tls-front">
+<h3>TLS 앞단 — HTTPS 를 받아 풀고 뒤의 http 에이전트에 넘긴다</h3>
+<p class="lead">운영에서도 흔한 모양입니다 — TLS 는 리버스 프록시가 끝내고, 에이전트는 안쪽에서 http 로 돕니다. <code>12/tls_front.py</code> 는 표준 라이브러리만 쓴 그 축소판입니다. 받은 요청을 그대로 넘기는 부분입니다.</p>
+<!--CODE file=ex/py/12/tls_front.py region=relay-->
+<div class="note"><b>안쪽은 다시 평문</b> — 앞단 뒤의 구간(여기서는 같은 기계의 루프백)은 암호화되지 않습니다. §7.1 은 "encrypted communication" 을 요구할 뿐 앞단 뒤의 구간을 따로 말하지 않으니, 그 구간을 어떻게 지킬지는 운영의 몫입니다. 스트림(SSE)은 이 앞단이 넘기지 않습니다 — 몸통을 다 읽고 넘기기 때문입니다.</div>
+</article>
+
+<article class="card" id="p12-tls-front-tls">
+<h3>앞단의 TLS 설정 — 인증서·개인키 한 쌍, 최소 판 TLS 1.3</h3>
+<p class="lead">§7.1 이 권하는 TLS 1.3 을 바닥으로 정했습니다. 인증서는 <code>ex/run/12/tls/</code> 의 시험용입니다 — 시험 CA 가 <code>127.0.0.1</code> 에 서명한 것으로, CA 의 개인키는 만들고 곧 지웠습니다.</p>
+<!--CODE file=ex/py/12/tls_front.py region=tls-->
+<div class="warn"><b>저장소에 든 개인키</b> — <code>server-key.pem</code> 은 누구나 읽을 수 있으니, 이 인증서가 지키는 것은 없습니다. 이 기계의 루프백에서 TLS 의 모양을 보려는 것뿐입니다. 운영의 키는 저장소에 두지 않습니다(§13.4 "MUST be treated as secrets").</div>
+</article>
+
+<article class="card" id="p12-tls-spec">
+<h3>실행 명세 — 카드의 주소를 https 로 알리고, 앞단 뒤에 정산 에이전트</h3>
+<p class="lead">정산 에이전트에 <code>--url https://127.0.0.1:11201/</code> 을 주면 카드의 인터페이스 주소와 토큰 주소가 앞단의 https 주소가 됩니다. 클라이언트 셋은 같은 일을 합니다 — 기본 신뢰 목록으로 카드를 한 번, 시험 CA 를 믿게 하고 한 번 읽습니다.</p>
+<!--SPEC file=ex/run/12/tls.run-->
+<!--OUT file=out/12/tls.txt server=front note=앞단의 출력 — 요청 줄은 셋뿐이다-->
+<div class="note"><b>요청 줄이 셋인 까닭</b> — 클라이언트는 여섯 번 붙었지만, 기본 신뢰 목록으로 붙은 세 번은 TLS 악수(handshake)에서 클라이언트가 끊었습니다. HTTP 요청은 한 줄도 오가지 않았습니다.</div>
+</article>
+
+<article class="card" id="p12-tls-py">
+<h3>파이썬 — 인증서 검사는 httpx 가, 신뢰 목록은 certifi 가 정한다</h3>
+<p class="lead">SDK 의 <code>A2ACardResolver</code> 는 받은 httpx 클라이언트로 GET 할 뿐입니다. 검사의 손잡이는 httpx 의 <code>verify</code> 입니다.</p>
+<!--CODE file=ex/py/12/tls_card.py region=main-->
+<!--OUT file=out/12/tls.txt part=터미널 3 lines=1-6-->
+<ul>
+<li><code>verify=True</code> 는 httpx 가 certifi 의 공인 CA 목록으로 만든 설정입니다(<code>httpx/_config.py:40</code>). 시험 CA 가 없으니 <code>CERTIFICATE_VERIFY_FAILED</code> — SDK 는 이것을 <code>AgentCardResolutionError</code> 로 감쌉니다.</li>
+<li><code>ssl.create_default_context(cafile=…)</code> 는 이름 확인(<code>check_hostname</code>)도 켭니다. 인증서의 이름이 <code>IP:127.0.0.1</code> 이라 주소와 맞습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-tls-ts">
+<h3>TypeScript — 검사는 Node 의 fetch 가, 신뢰 목록은 Node 에 든 것</h3>
+<p class="lead"><code>DefaultAgentCardResolver</code> 는 전역 <code>fetch</code> 를 씁니다. 시험 CA 를 믿게 하려고 Node 24 의 <code>tls.setDefaultCACertificates</code> 로 이 프로세스의 기본 CA 를 바꿨습니다.</p>
+<!--CODE file=ex/ts/12/tls_card.ts region=main-->
+<!--OUT file=out/12/tls.txt part=터미널 3 lines=7-12-->
+<ul>
+<li>실패는 <code>TypeError: fetch failed</code> 하나이고, 까닭은 <code>cause.code</code> 의 <code>UNABLE_TO_VERIFY_LEAF_SIGNATURE</code> 에 있습니다. SDK 는 이 오류를 감싸지 않고 그대로 던집니다.</li>
+<li>리졸버는 proto 꼴 보안 스킴이 든 카드만 <code>AgentCard.fromJSON</code> 을 거쳐 돌려줍니다(<a href="#p03-pick-ts">3부</a>·<a href="#p08-cl-resolver">8부</a>). 정산 카드가 바로 그 경우라 oneof 를 <code>$case</code> 로 읽습니다. 그 객체를 한 번 더 <code>fromJSON</code> 하면 스킴이 사라집니다 — <code>fromJSON</code> 은 JSON 의 키(<code>oauth2SecurityScheme</code>)만 찾기 때문입니다(<code>dist/index.js:760</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p12-tls-go">
+<h3>Go — 검사는 net/http 가, 신뢰 목록은 http.Client 의 RootCAs</h3>
+<p class="lead"><code>agentcard.NewResolver</code> 는 받은 <code>*http.Client</code> 로 GET 합니다. 시험 CA 는 <code>tls.Config{RootCAs: pool}</code> 로 넣습니다.</p>
+<!--CODE file=ex/go/12/tls_card region=main-->
+<!--OUT file=out/12/tls.txt part=터미널 3 lines=13-18-->
+<ul>
+<li>오류는 <code>errors.As</code> 로 <code>x509.UnknownAuthorityError</code> 까지 풀립니다 — 리졸버가 돌려준 오류의 사슬 안에 그대로 있습니다.</li>
+<li>보안 스킴은 Go 의 인터페이스 값입니다. <code>SecuritySchemes["oauth"].(a2a.OAuth2SecurityScheme)</code>, 그 안의 흐름도 <code>.(a2a.ClientCredentialsOAuthFlow)</code> 로 꺼냅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-tls-cmp">
+<h3>세 언어 비교 — SDK 는 인증서를 보지 않는다, HTTP 라이브러리가 본다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>검사하는 것</td><td>httpx(<code>ssl</code>)</td><td>Node <code>fetch</code>(undici)</td><td><code>net/http</code>(<code>crypto/tls</code>)</td></tr>
+<tr><td>기본 신뢰 목록</td><td>certifi</td><td>Node 에 든 목록</td><td>운영체제의 목록</td></tr>
+<tr><td>시험 CA 넣기</td><td><code>verify=ssl.create_default_context(cafile=…)</code></td><td><code>tls.setDefaultCACertificates([…])</code></td><td><code>http.Client</code> + <code>RootCAs</code></td></tr>
+<tr><td>SDK 에 넘기는 자리</td><td>httpx 클라이언트</td><td>(전역 fetch — <code>fetchImpl</code> 도 된다)</td><td><code>*http.Client</code></td></tr>
+<tr><td>실패의 모양</td><td><code>AgentCardResolutionError</code> ← <code>CERTIFICATE_VERIFY_FAILED</code></td><td><code>TypeError</code>, <code>cause.code</code></td><td>감싼 오류, <code>errors.As</code> 로 x509 오류</td></tr>
+</table>
+</div>
+<div class="key"><b>§7.2 의 "SHOULD verify" 는 기본으로 지켜진다</b> — 세 클라이언트 모두 아무 설정 없이도 모르는 CA 의 인증서를 거절했습니다. 끄는 손잡이(httpx <code>verify=False</code>, Go <code>InsecureSkipVerify</code> 따위)를 건드리지 않는 한 그렇습니다.</div>
+</article>
+
+<article class="card" id="p12-tls-sdk">
+<h3>SDK 가 보지 않는 것 — https 인지, HSTS 인지</h3>
+<p class="lead">인증서 검사는 https 주소에서만 일어납니다. http 주소를 주면 세 SDK 모두 군말 없이 평문으로 보냅니다 — 이 책의 11부까지가 모두 그 증거입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>세 SDK</th><th>근거</th></tr>
+<tr><td>카드·토큰 주소가 http 면 거절?</td><td>아니다 — 스킴을 보는 곳은 파이썬의 웹훅 주소 검사 하나인데, 그것도 http 를 받는다</td><td><code>utils/push_url_validator.py:55</code>(<a href="#p11-sec-pycheck">11부</a>). Go 리졸버는 <code>file://</code> 까지 읽는다(<a href="#p09-cl-resolver">9부</a>)</td></tr>
+<tr><td>proto 의 "TLS is required"</td><td>검사하지 않는다</td><td><code>oauth2_metadata_url</code> 의 주석(a2a.proto <code>OAuth2SecurityScheme</code>)</td></tr>
+<tr><td>HSTS 헤더(§13.4 SHOULD)</td><td>어느 서버 SDK 도 달지 않는다</td><td>세 SDK 소스에 <code>Strict-Transport-Security</code> 없음</td></tr>
+<tr><td>서버의 TLS</td><td>SDK 밖의 일</td><td>소켓을 여는 것은 uvicorn·express(<code>node:https</code>)·<code>net/http</code></td></tr>
+</table>
+</div>
+<div class="note"><b>운영에 옮길 때</b> — 카드의 <code>supportedInterfaces[].url</code> 과 토큰 주소를 https 로 적고, 서버 앞(또는 안)에 TLS 를 세우는 일은 배포하는 사람의 몫입니다. SDK 가 대신 막아 주지 않습니다.</div>
+</article>
+
+<article class="card" id="p12-ch1-sum">
+<h3>1장 정리 — 전송 보안</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>스펙이 요구하는 것?</td><td>운영은 HTTPS/TLS(MUST), TLS 1.3 과 인증서 확인(SHOULD)</td><td><a href="#p12-tls-rule">§7.1·§7.2</a></td></tr>
+<tr><td>이 책은 왜 http?</td><td>루프백 안의 시험 무대, 탭이 평문을 읽어야 한다 — 대신 비밀이 보인다</td><td><a href="#p12-tls-local">까닭</a></td></tr>
+<tr><td>인증서는 누가 보나?</td><td>SDK 가 아니라 httpx·Node fetch·net/http. 셋 다 기본으로 거절</td><td><a href="#p12-tls-cmp">비교</a></td></tr>
+<tr><td>SDK 가 막아 주나?</td><td>http 주소도, HSTS 없음도 그냥 둔다</td><td><a href="#p12-tls-sdk">표</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p12-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 1장의 명세에서 클라이언트는 앞단에 여섯 번 붙었는데, 앞단의 출력에는 <code>GET /.well-known/agent-card.json</code> 이 세 줄뿐입니다. 나머지 세 번은 어디서 끝났고, 왜 서버 쪽에는 흔적이 없습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> TLS 악수에서 끝났습니다. 기본 신뢰 목록에는 시험 CA 가 없어 세 클라이언트가 서버의 인증서를 거절하고 끊었습니다(<a href="#p12-tls-py">파이썬</a>의 <code>CERTIFICATE_VERIFY_FAILED</code>, <a href="#p12-tls-ts">TS</a>의 <code>UNABLE_TO_VERIFY_LEAF_SIGNATURE</code>, <a href="#p12-tls-go">Go</a>의 <code>unknown authority</code>). HTTP 요청은 암호화된 연결이 선 뒤에야 오가므로, 앞단의 요청 기록(<code>log_message</code>)까지 닿지 않았습니다(<a href="#p12-tls-spec">앞단의 출력</a>).</div>
+</article>
+
+<!-- ==== 2장 securitySchemes·securityRequirements ==== -->
+
+<article class="card" id="p12-ch2">
+<p class="chnum">2장</p>
+<h2>securitySchemes·securityRequirements</h2>
+<p class="chsub">다섯 스킴 → OAuth2 의 다섯 흐름 → 정산 카드의 와이어 → 파이썬 → TypeScript → $case 가 새는 자리 → Go → 세 서버 비교 → 요구의 모양 → 세 가지 꼴 풀기 ×3 → AND 와 OR → 인터셉터로 재 보기 → 클라이언트가 스킴을 읽는 법</p>
+</article>
+
+<article class="card" id="p12-sch-five">
+<h3>보안 스킴(security scheme)은 다섯 가지 — proto 의 oneof 하나에 하나씩</h3>
+<p class="lead">카드의 <code>securitySchemes</code> 는 "이름 → 스킴" 의 맵입니다(<code>map&lt;string, SecurityScheme&gt; security_schemes = 8</code>). 스킴 하나는 다섯 가운데 하나만 고르는 oneof 이고, proto 주석은 "based on the OpenAPI 3.2 Security Scheme Object" 라고 밝힙니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>JSON 키</th><th>무엇</th><th>필수 필드(REQUIRED)</th><th>그 밖</th></tr>
+<tr><td><code>apiKeySecurityScheme</code></td><td>API 키</td><td><code>location</code>("query"·"header"·"cookie"), <code>name</code></td><td><code>description</code></td></tr>
+<tr><td><code>httpAuthSecurityScheme</code></td><td>HTTP 인증(Basic, Bearer…)</td><td><code>scheme</code>(RFC 7235 의 이름)</td><td><code>bearerFormat</code>("JWT" 같은 귀띔)</td></tr>
+<tr><td><code>oauth2SecurityScheme</code></td><td>OAuth 2.0</td><td><code>flows</code></td><td><code>oauth2MetadataUrl</code>(RFC 8414, "TLS is required")</td></tr>
+<tr><td><code>openIdConnectSecurityScheme</code></td><td>OpenID Connect</td><td><code>openIdConnectUrl</code>(발견 문서 주소)</td><td><code>description</code></td></tr>
+<tr><td><code>mtlsSecurityScheme</code></td><td>상호 TLS</td><td>없음</td><td><code>description</code> 뿐</td></tr>
+</table>
+</div>
+<div class="note"><b>v0.3 의 꼴과 다르다</b> — 예전 카드는 <code>{"type": "oauth2", …}</code> 처럼 <code>type</code> 으로 갈랐습니다. 파이썬 클라이언트는 그 꼴을 v1.0 꼴로 바꿔 읽고(<code>client/card_resolver.py</code> 의 <code>_handle_security_compatibility</code>), TS 리졸버는 <code>"type"</code> 이 있는지로 둘을 가립니다(<a href="#p03-pick-ts">3부</a>).</div>
+</article>
+
+<article class="card" id="p12-sch-flows">
+<h3>OAuth2 스킴은 흐름(flow)을 하나 고른다 — 정산 에이전트는 client_credentials</h3>
+<p class="lead"><code>OAuthFlows</code> 도 oneof 입니다. 사람이 로그인하는 흐름과 프로그램끼리 쓰는 흐름이 함께 있고, 둘은 proto 에서 <code>deprecated = true</code> 입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>JSON 키</th><th>누가 쓰나</th><th>필수 필드</th></tr>
+<tr><td><code>authorizationCode</code></td><td>사람이 브라우저로 로그인</td><td><code>authorizationUrl</code>·<code>tokenUrl</code>·<code>scopes</code>, PKCE 는 <code>pkceRequired</code></td></tr>
+<tr><td><code>clientCredentials</code></td><td>프로그램이 제 이름으로</td><td><code>tokenUrl</code>·<code>scopes</code></td></tr>
+<tr><td><code>deviceCode</code></td><td>입력이 불편한 기기·CLI</td><td><code>deviceAuthorizationUrl</code>·<code>tokenUrl</code>·<code>scopes</code></td></tr>
+<tr><td><code>implicit</code></td><td>(쓰지 말 것) "Use Authorization Code + PKCE instead"</td><td>—</td></tr>
+<tr><td><code>password</code></td><td>(쓰지 말 것) "Use Authorization Code + PKCE or Device Code"</td><td>—</td></tr>
+</table>
+</div>
+<div class="key"><b>에이전트끼리는 clientCredentials</b> — 기획 에이전트가 정산 에이전트를 부를 때 그 자리에 사람이 없습니다. 기획 에이전트가 제 클라이언트 id 와 비밀로 토큰을 받습니다(RFC 6749 §4.4, <a href="#p12-ch3">3장</a>). <code>scopes</code> 는 "스코프 이름 → 설명" 의 맵입니다.</div>
+</article>
+
+<article class="card" id="p12-sch-wire">
+<h3>정산 카드의 와이어 — 스킴 이름은 <code>oauth</code>, 요구는 <code>payment:read</code></h3>
+<p class="lead">세 정산 에이전트의 공개 카드를 탭 너머로 읽었습니다. 파이썬 서버의 카드에서 보안 두 필드만 잘랐습니다.</p>
+<!--SPEC file=ex/run/12/card.run-->
+<!--OUT file=out/12/card.txt wire=py-card lines=24-49 note=파이썬 서버 — securitySchemes 와 securityRequirements-->
+<ul>
+<li><code>securitySchemes.oauth</code> — "이 에이전트는 <code>oauth</code> 라는 이름의 OAuth2 스킴을 안다". 토큰은 <code>tokenUrl</code> 에서, 스코프는 둘(<code>payment:read</code> 정산 조회, <code>payment:approve</code> 결재 승인).</li>
+<li><code>securityRequirements</code> — "부르려면 <code>oauth</code> 스킴으로, <code>payment:read</code> 스코프를 가지고 오라". 결재 스코프는 요구에 없습니다 — 큰 돈을 처리할 때만 작업 안에서 따로 묻습니다(7장).</li>
+</ul>
+</article>
+
+<article class="card" id="p12-sch-py">
+<h3>파이썬 — <code>SecurityScheme(oauth2_security_scheme=…)</code>, 요구는 <code>StringList</code></h3>
+<p class="lead"><code>agents/settlement.py</code> 의 카드입니다. protobuf 메시지를 그대로 짓습니다 — oneof 는 고른 필드 하나에 값을 주는 것으로 정해집니다.</p>
+<!--CODE file=ex/py/agents/settlement.py region=card-->
+<div class="note"><b>토큰 주소는 카드의 주소에서</b> — <code>url + "oauth/token"</code>. 1장에서 <code>--url https://…</code> 를 주었더니 토큰 주소도 https 가 된 까닭입니다(<a href="#p12-tls-py">1장</a>).</div>
+</article>
+
+<article class="card" id="p12-sch-ts">
+<h3>TypeScript — 카드는 와이어 모양 객체, 보안 스킴도 JSON 의 키 그대로</h3>
+<p class="lead"><code>agents/settlement.ts</code> 의 카드입니다. 숙소 카드처럼(<a href="#p03-agent-card-ts">3부</a>) ts-proto 타입이 아니라 camelCase JSON 모양으로 적습니다 — <code>oauth2SecurityScheme: {flows: {clientCredentials: …}}</code>.</p>
+<!--CODE file=ex/ts/agents/settlement.ts region=card-->
+<div class="note"><b>요구의 <code>{list: [...]}</code></b> — JSON 모양이라 <code>StringList</code> 의 감싸개도 손으로 적습니다. 서버를 띄우는 <code>common.ts</code> 가 이 객체를 <code>AgentCard.fromJSON</code> 으로 읽고 <code>toJSON</code> 으로 되돌려 내보냅니다(<a href="#p03-agent-card-ts">3부</a>). 그렇게 하지 않으면 어떻게 되는지가 다음 슬라이드입니다.</div>
+</article>
+
+<article class="card" id="p12-sch-ts-case">
+<h3>ts-proto 객체를 그대로 내보내면 <code>$case</code> 가 와이어에 샌다</h3>
+<p class="lead">3부에서 미뤄 둔 이야기입니다 — SDK 의 카드 처리기는 받은 객체를 <code>JSON.stringify</code> 할 뿐이라(<a href="#p03-agent-card-ts">3부</a>), oneof 가 있는 카드를 ts-proto 객체로 주면 이렇게 나갑니다.</p>
+<!--RUN file=ex/ts/12/case_leak.ts-->
+<ul>
+<li>oneof 가 <code>{"scheme": {"$case": …, "value": …}}</code> 로, 빈 기본값이 <code>"description": ""</code>·<code>"refreshUrl": ""</code> 로 나갑니다. 이 카드를 받은 파이썬·Go 클라이언트는 <code>oauth</code> 스킴의 종류를 알 수 없습니다.</li>
+<li><code>AgentCard.toJSON</code> 을 거치면 와이어 모양으로 돌아옵니다. 그래서 <code>common.ts</code> 는 늘 <code>toJSON</code> 한 것을 처리기에 줍니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-sch-go">
+<h3>Go — 스킴은 인터페이스 값, 요구는 <code>{"oauth": {"payment:read"}}</code></h3>
+<p class="lead"><code>agents/settlement/main.go</code> 의 카드입니다. <code>a2a.SecurityScheme</code> 와 <code>a2a.OAuthFlows</code> 는 봉인된 인터페이스라, 구조체 값 하나를 넣는 것으로 oneof 를 고릅니다(<code>a2a/auth.go:212</code>).</p>
+<!--CODE file=ex/go/agents/settlement/main.go region=card-->
+<div class="note"><b>Go 타입에는 <code>list</code> 가 없다</b> — <code>SecurityRequirements</code> 는 <code>map[이름][]string</code> 입니다. 와이어의 <code>{"list": [...]}</code> 는 직렬화할 때 SDK 가 감쌉니다(<code>securityScopeList.MarshalJSON</code>, <code>a2a/auth.go:63</code>).</div>
+</article>
+
+<article class="card" id="p12-sch-cmp">
+<h3>세 서버 비교 — 같은 보안 필드, Go 만 키가 가나다순</h3>
+<p class="lead">TS 서버의 카드는 파이썬 서버의 것과 포트·서명값·Content-Type 의 <code>charset</code> 만 다릅니다. Go 서버의 같은 자리입니다.</p>
+<!--OUT file=out/12/card.txt wire=go-card lines=22-47 note=Go 서버 — securityRequirements 가 securitySchemes 앞에 온다-->
+<ul>
+<li>Go 정산 에이전트는 서명한 바이트를 그대로 내보냅니다. 그 바이트는 카드를 맵으로 한 번 풀었다가 다시 쓴 것이라(<code>common.ProtoJSON</code>) 키가 알파벳순입니다 — 숙소 카드의 "구조체 필드 순"(<a href="#p03-three-cards-cmp">3부</a>)과 다릅니다. 까닭은 서명을 다루는 8장의 몫입니다.</li>
+<li>JSON 객체의 키 순서에는 뜻이 없으니, 세 카드가 말하는 보안은 같습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-req-shape">
+<h3>요구의 모양 — proto 는 <code>{"schemes": {이름: {"list": [...]}}}</code>, 스펙 본문은 아직 옛 꼴</h3>
+<p class="lead">v1.0.1 proto 의 <code>SecurityRequirement</code> 는 "A map of security schemes to the required scopes" — 맵의 값이 문자열 목록이 아니라 <code>StringList</code> 메시지라서 <code>list</code> 한 겹이 더 있습니다. 그런데 스펙 본문 몇 곳은 v0.3 의 이름과 모양을 그대로 씁니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>필드 이름</th><th>모양</th></tr>
+<tr><td>a2a.proto <code>AgentCard</code> 9번</td><td><code>securityRequirements</code></td><td><code>[{"schemes": {"oauth": {"list": ["payment:read"]}}}]</code></td></tr>
+<tr><td>§3.1.11 GetExtendedAgentCard, §13.3</td><td>"<code>AgentCard.security</code> fields"</td><td>—</td></tr>
+<tr><td>§8.5 Sample Agent Card</td><td><code>security</code></td><td><code>[{ "google": ["openid", "profile", "email"] }]</code> — OpenAPI 의 꼴</td></tr>
+</table>
+</div>
+<div class="warn"><b>스펙 안의 어긋남</b> — proto 가 "the single authoritative normative definition" 이라고 스펙 스스로 말하므로(§1.4) 기준은 proto 입니다. 그러면 §8.5 의 예시를 베껴 쓴 카드는 SDK 가 어떻게 읽을까요? 세 가지 꼴을 세 SDK 에 넣어 봤습니다.</div>
+</article>
+
+<article class="card" id="p12-req-parse">
+<h3>세 가지 꼴 풀기 — 파이썬은 옛 <code>security</code> 를 고쳐 읽고, 감싸개 없는 목록은 버린다</h3>
+<p class="lead"><code>12/card_parse.py</code> 는 ① proto 꼴, ② <code>list</code> 감싸개 없는 꼴, ③ §8.5 의 꼴을 SDK 클라이언트의 카드 해석 함수에 넣습니다. <code>A2ACardResolver</code> 가 받은 JSON 에 쓰는 바로 그 함수입니다.</p>
+<!--CODE file=ex/py/12/card_parse.py region=parse-->
+<!--OUT file=out/12/card_parse.py.txt-->
+<ul>
+<li>③ 은 살아남습니다 — <code>parse_agent_card</code> 가 <code>security</code> 를 꺼내 <code>{"schemes": {이름: {"list": …}}}</code> 로 바꿔 넣습니다(<code>_map_legacy_security</code>).</li>
+<li>② 는 오류 없이 스코프가 사라집니다. protobuf 의 JSON 해석이 목록의 원소 <code>"payment:read"</code> 를 <code>StringList</code> 의 필드 이름으로 보고, 그런 필드가 없으니 버렸습니다 — <code>parse_agent_card</code> 가 <code>ignore_unknown_fields=True</code> 로 부르기 때문입니다(<code>client/card_resolver.py:27</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p12-req-parse3">
+<h3>TS·Go 의 같은 실험 — 세 SDK 가 세 가지로 갈린다</h3>
+<p class="lead">같은 세 꼴을 TS 리졸버(<code>fetchImpl</code> 로 받은 셈 친 JSON)와 Go 의 <code>json.Unmarshal</code>(리졸버가 쓰는 것)에 넣었습니다(<code>12/card_parse.ts</code>, <code>12/card_parse/</code>).</p>
+<!--OUT file=out/12/card_parse.ts.txt note=TypeScript-->
+<!--OUT file=out/12/card_parse.go.txt note=Go-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>꼴</th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>① proto</td><td>그대로</td><td>그대로</td><td>그대로</td></tr>
+<tr><td>② 감싸개 없음</td><td>스코프가 사라진다</td><td>스코프가 사라진다</td><td>읽는다 — 옛 꼴을 일부러 받는다(<code>a2a/auth.go:53</code> "legacy array input")</td></tr>
+<tr><td>③ §8.5 의 <code>security</code></td><td>고쳐 읽는다</td><td>요구가 통째로 사라진다</td><td>요구가 통째로 사라진다</td></tr>
+</table>
+</div>
+<div class="key"><b>잃어도 말이 없다</b> — 어느 경우에도 오류는 나지 않았습니다. 요구를 잃은 클라이언트는 "토큰 없이 불러도 된다" 고 읽고 부른 뒤 401 을 받습니다(<a href="#p12-ch4">4장</a>). 카드는 proto 꼴로 쓰는 것이 유일하게 안전합니다.</div>
+</article>
+
+<article class="card" id="p12-req-andor">
+<h3>요구 목록은 OR, 요구 하나 안의 스킴은 AND — 스펙이 아니라 OpenAPI 와 Go SDK 가 말한다</h3>
+<p class="lead">v1.0.1 의 스펙 본문과 proto 주석은 목록 여러 개, 스킴 여러 개를 어떻게 엮는지 말하지 않습니다. 근거는 proto 가 기대는 OpenAPI 의 뜻과, 그것을 적어 둔 Go SDK 의 주석입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>카드의 요구</th><th>뜻</th></tr>
+<tr><td><code>[{"schemes": {"oauth": …}}]</code></td><td>oauth 토큰 하나 — 정산 에이전트</td></tr>
+<tr><td><code>[{"schemes": {"oauth": …}}, {"schemes": {"key": …}}]</code></td><td>oauth <b>또는</b> API 키</td></tr>
+<tr><td><code>[{"schemes": {"oauth": …, "key": …}}]</code></td><td>oauth <b>그리고</b> API 키를 함께</td></tr>
+<tr><td><code>[]</code> 또는 없음</td><td>요구 없음</td></tr>
+</table>
+</div>
+<ul>
+<li>Go <code>a2a/agent.go:176-178</code>: "this list represents a logical OR of security requirement objects. Each object is a set of security schemes that must be used together (a logical AND)."</li>
+<li>같은 SDK 의 <code>a2a/auth.go:39-46</code> 은 "OAuth OR an API Key AND mTLS" 라 적고, 예시로는 apiKey 와 oauth2 를 <b>한 요구 안에</b> 넣었습니다 — 글로는 OR, 코드로는 AND 인 주석입니다.</li>
+<li>스펙 §3.1.11·§13.3 은 클라이언트가 "one of the schemes declared" 로 인증한다고만 적습니다 — 한 요구 안의 AND 와는 맞지 않는 말입니다(게다가 필드 이름은 옛 <code>security</code>, <a href="#p12-req-shape">앞</a>).</li>
+<li>스킬마다 따로 요구를 둘 수도 있습니다(<code>AgentSkill.security_requirements</code>, 8번). 정산 카드는 쓰지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-req-and-run">
+<h3>인터셉터로 재 보기 — AND 를 요구해도 SDK 는 헤더를 하나만 단다</h3>
+<p class="lead">파이썬·Go SDK 에는 카드의 요구를 읽어 헤더를 다는 <code>AuthInterceptor</code> 가 있습니다(TS 에는 없다). 두 자격 증명을 다 쥐여 주고 <code>before</code> 만 불렀습니다.</p>
+<!--CODE file=ex/py/12/auth_and.py region=main-->
+<!--OUT file=out/12/auth_and.py.txt note=파이썬-->
+<!--OUT file=out/12/auth_and.go.txt note=Go — 200번씩 불러 나온 결과를 모았다-->
+<ul>
+<li>두 SDK 모두 첫 자격 증명을 찾는 순간 <code>return</code> 합니다(파이썬 <code>client/auth/interceptor.py:63</code>, Go <code>a2aclient/auth.go:94</code>). 그래서 AND 요구에는 언제나 하나뿐이고, 무엇이 붙을지는 맵(<code>schemes</code>)을 도는 차례에 달렸습니다. Go 는 같은 프로세스 안에서도 부를 때마다 달라졌습니다. 파이썬은 protobuf 맵의 차례를 따르는데, 그 차례가 프로세스마다 바뀔 수 있어 수만 찍었습니다.</li>
+<li>OR 요구에서는 목록의 앞쪽(<code>oauth</code>)이 이깁니다. 클라이언트의 선택이 아니라 카드의 차례입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-req-client">
+<h3>클라이언트 SDK 가 스킴을 읽는 법 — 결국 헤더 하나</h3>
+<p class="lead"><code>AuthInterceptor</code> 가 스킴의 종류마다 하는 일입니다(설치본 소스). 토큰을 <b>받아 오는</b> 일은 어느 SDK 도 하지 않습니다 — 그것은 3장의 토큰 발급기와 클라이언트의 몫입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>스킴</th><th>파이썬(<code>interceptor.py</code>)</th><th>Go(<code>a2aclient/auth.go</code>)</th><th>TypeScript</th></tr>
+<tr><td>http</td><td><code>scheme</code> 이 bearer 일 때만 <code>Authorization: Bearer …</code></td><td><code>scheme</code> 을 보지 않고 늘 <code>Bearer …</code>(Basic 이라도)</td><td rowspan="5">카드를 읽는 인터셉터가 없다. <code>createAuthenticatingFetchWithRetry</code> 로 헤더를 손수 단다(<a href="#p08-auth-retry">8부</a>)</td></tr>
+<tr><td>oauth2</td><td><code>Bearer …</code></td><td><code>Bearer …</code></td></tr>
+<tr><td>openIdConnect</td><td><code>Bearer …</code></td><td>건너뛴다</td></tr>
+<tr><td>apiKey</td><td><code>location</code> 이 header 일 때만, 그 이름의 헤더</td><td><code>location</code> 을 보지 않고 늘 헤더로</td></tr>
+<tr><td>mtls</td><td>건너뛴다</td><td>건너뛴다</td></tr>
+</table>
+</div>
+<div class="note"><b>자격 증명은 세션 단위</b> — 파이썬은 <code>ClientCallContext.state["sessionId"]</code>, Go 는 <code>AttachSessionID(ctx, …)</code> 로 고른 세션의 저장소에서 스킴 이름으로 찾습니다. 앞 슬라이드의 <code>s1</code> 이 그것입니다.</div>
+</article>
+
+<article class="card" id="p12-ch2-sum">
+<h3>2장 정리 — securitySchemes·securityRequirements</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>스킴은 몇 가지?</td><td>다섯 — apiKey·httpAuth·oauth2·openIdConnect·mtls. OAuth2 흐름도 다섯(둘은 deprecated)</td><td><a href="#p12-sch-five">스킴</a>·<a href="#p12-sch-flows">흐름</a></td></tr>
+<tr><td>정산 카드는?</td><td><code>oauth</code> = client_credentials, 요구 <code>payment:read</code>. 세 서버의 뜻이 같다</td><td><a href="#p12-sch-wire">와이어</a>·<a href="#p12-sch-cmp">비교</a></td></tr>
+<tr><td>TS 에서 조심할 것?</td><td>ts-proto 객체를 그대로 내보내면 <code>$case</code> 가 샌다</td><td><a href="#p12-sch-ts-case">실험</a></td></tr>
+<tr><td>요구의 꼴?</td><td>proto 꼴만 세 SDK 가 같게 읽는다. 옛 꼴은 말없이 잃는다</td><td><a href="#p12-req-parse3">세 SDK</a></td></tr>
+<tr><td>AND·OR?</td><td>목록은 OR, 한 요구 안은 AND(OpenAPI·Go 주석). SDK 인터셉터는 AND 를 채우지 못한다</td><td><a href="#p12-req-and-run">재 보기</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p12-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 스펙 §8.5 의 예시를 본떠 카드에 <code>"security": [{"oauth": ["payment:read"]}]</code> 라고 적었습니다. 파이썬·TS·Go 클라이언트는 이 카드에서 보안 요구를 몇 개씩 읽습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 파이썬 1개, TS 0개, Go 0개입니다(<a href="#p12-req-parse">파이썬</a>·<a href="#p12-req-parse3">TS·Go</a>의 ③). 파이썬 클라이언트만 옛 <code>security</code> 필드를 v1.0 의 <code>securityRequirements</code> 로 고쳐 읽습니다. TS·Go 는 모르는 필드로 보고 버리며, 오류도 내지 않습니다. v1.0.1 의 기준인 proto 꼴(<code>securityRequirements</code> + <code>{"list": […]}</code>)로 적어야 세 SDK 가 같게 읽습니다.</div>
+</article>
+
+<!-- ==== 3장 로컬 OAuth2 토큰 발급기 ×3 ==== -->
+
+<article class="card" id="p12-ch3">
+<p class="chnum">3장</p>
+<h2>로컬 OAuth2 토큰 발급기 ×3</h2>
+<p class="chsub">client_credentials 의 흐름 → 클라이언트 둘 → 파이썬 → TypeScript → Go → 와이어 → 세 서버 비교 → 맞는 요청·틀린 요청 → RFC·§13.4 와 견주기 → 맞힌 토큰 → 진짜 토큰 ×3</p>
+</article>
+
+<article class="card" id="p12-iss-flow">
+<h3>client_credentials — 프로그램이 제 이름과 비밀로 토큰을 받는다</h3>
+<p class="lead">기획 에이전트가 정산 에이전트를 부르기 전의 한 걸음입니다(RFC 6749 §4.4). 토큰을 어디서 받을지는 카드가 알려 줍니다 — <code>flows.clientCredentials.tokenUrl</code>(<a href="#p12-sch-wire">2장</a>).</p>
+<pre class="fig">
+ 기획(클라이언트)                     정산 에이전트(같은 서버)
+   │ ① GET /.well-known/agent-card.json ─▶ │  카드: tokenUrl, 스코프
+   │ ② POST /oauth/token                   │
+   │    grant_type=client_credentials      │
+   │    client_id·client_secret·scope ───▶ │  토큰 발급기
+   │ ◀── 토큰 tok-… 와 스코프               │
+   │ ③ POST /  Authorization: Bearer tok-… │
+   │    SendMessage ─────────────────────▶ │  Bearer 검사 → 실행기
+</pre>
+<div class="note"><b>발급기가 같은 서버에 있는 까닭</b> — 시험 무대를 하나로 줄이려는 것입니다(SCENARIO §3). 운영에서는 따로 선 인가 서버(authorization server)가 토큰을 내고, 에이전트는 그 토큰을 검사만 합니다. 스펙도 자격 증명을 얻는 일을 "out-of-band" 라고만 합니다(§7.3).</div>
+</article>
+
+<article class="card" id="p12-iss-clients">
+<h3>클라이언트는 둘 — planner 는 조회·결재, intern 은 조회만</h3>
+<p class="lead">발급기가 아는 클라이언트는 <code>ex/fixtures/clients.json</code> 에 있습니다. 세 언어가 같은 파일을 읽습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>client_id</th><th>client_secret</th><th>받을 수 있는 스코프</th></tr>
+<tr><td><code>planner</code></td><td><code>planner-secret</code></td><td><code>payment:read</code> <code>payment:approve</code></td></tr>
+<tr><td><code>intern</code></td><td><code>intern-secret</code></td><td><code>payment:read</code></td></tr>
+</table>
+</div>
+<ul>
+<li>폼에 <code>scope</code> 가 없으면 그 클라이언트의 스코프 전부, 있으면 그 가운데 고른 것만 줍니다. 가진 적 없는 스코프를 달라면 <code>invalid_scope</code> 입니다.</li>
+<li>발급기는 스코프를 <b>주기만</b> 합니다. 받은 스코프로 무엇을 할 수 있는지는 정산 에이전트가 정하고, 그것은 5장의 몫입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-iss-py">
+<h3>파이썬 — Starlette 경로 하나, 폼은 <code>urllib.parse</code> 로 푼다</h3>
+<p class="lead"><code>agents/settlement.py</code> 의 발급기입니다. <code>serve(…, routes=[Route("/oauth/token", …, methods=["POST"])])</code> 로 SDK 의 경로 옆에 붙습니다.</p>
+<!--CODE file=ex/py/agents/settlement.py region=tokens-->
+<div class="note"><b>폼을 손으로 푸는 까닭</b> — Starlette 의 <code>request.form()</code> 은 python-multipart 패키지가 있어야 하는데, 이 venv 에는 깔려 있지 않습니다(SDK 의 extra 가 끌어오지 않는다). 그래서 몸통을 읽어 <code>parse_qs</code> 합니다.</div>
+</article>
+
+<article class="card" id="p12-iss-ts">
+<h3>TypeScript — express 경로 하나, 폼은 <code>URLSearchParams</code></h3>
+<p class="lead"><code>agents/settlement.ts</code> 의 같은 자리입니다. 경로를 다는 곳에서 몸통을 글 그대로 받게 했습니다(<code>express.text({type: () =&gt; true})</code>).</p>
+<!--CODE file=ex/ts/agents/settlement.ts region=tokens-->
+<div class="note"><b>스코프 쪼개기</b> — <code>split(/\s+/).filter(Boolean)</code>. 파이썬의 <code>str.split()</code>, Go 의 <code>strings.Fields</code> 처럼 빈칸 여러 개와 빈 문자열을 같은 뜻으로 다룹니다. OAuth 의 <code>scope</code> 는 빈칸으로 가른 목록입니다.</div>
+</article>
+
+<article class="card" id="p12-iss-go">
+<h3>Go — <code>r.ParseForm</code>, 맵은 뮤텍스 안에서, 응답은 구조체로</h3>
+<p class="lead"><code>agents/settlement/main.go</code> 의 같은 자리입니다. <code>net/http</code> 의 핸들러는 요청마다 따로 도니 발급 기록을 <code>sync.Mutex</code> 로 지킵니다.</p>
+<!--CODE file=ex/go/agents/settlement/main.go region=tokens-->
+<div class="note"><b>왜 구조체(<code>tokenJSON</code>)인가</b> — Go 의 <code>map</code> 을 직렬화하면 키가 정렬됩니다. 구조체로 써야 필드가 <code>access_token</code>·<code>token_type</code>·<code>expires_in</code>·<code>scope</code> 차례로 나가, 파이썬·TS 의 응답과 바이트까지 같습니다(다음 슬라이드).</div>
+</article>
+
+<article class="card" id="p12-iss-wire">
+<h3>와이어 — 폼 한 줄이 가고, JSON 넷이 온다. 비밀은 평문 그대로</h3>
+<p class="lead">세 정산 에이전트 앞에 탭을 두고 planner 의 토큰을 받았습니다. 파이썬 서버의 주고받음입니다.</p>
+<!--SPEC file=ex/run/12/issuer.run-->
+<!--OUT file=out/12/issuer.txt wire=py-token ex=1-->
+<ul>
+<li><code>access_token</code> 과 <code>token_type</code>(<code>Bearer</code>)이 핵심이고, <code>expires_in</code>(초)과 <code>scope</code>(받은 스코프)가 곁들여집니다(RFC 6749 §5.1).</li>
+<li><code>client_secret=planner-secret</code> 이 탭에 글자 그대로 찍혔습니다. 1장이 말한 http 의 대가입니다(<a href="#p12-tls-local">1장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p12-iss-cmp">
+<h3>세 서버 비교 — 같은 몸통, 다른 것은 TS 의 <code>charset</code> 뿐</h3>
+<!--OUT file=out/12/issuer.txt wire=ts-token grep=^←|Content-Type: application/json|access_token note=TypeScript 서버-->
+<!--OUT file=out/12/issuer.txt wire=go-token grep=^←|Content-Type: application/json|access_token note=Go 서버-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>폼 풀기</td><td><code>parse_qs</code>(손으로)</td><td><code>URLSearchParams</code>(몸통을 글로)</td><td><code>r.ParseForm</code> → <code>r.PostForm</code></td></tr>
+<tr><td>발급 기록</td><td><code>dict</code> 둘</td><td><code>Map</code> 둘</td><td><code>map</code> 둘 + <code>sync.Mutex</code></td></tr>
+<tr><td>응답</td><td><code>JSONResponse</code>(빈칸 없는 JSON)</td><td><code>res.json</code></td><td>구조체 + <code>json.Marshal</code></td></tr>
+<tr><td>Content-Type</td><td><code>application/json</code></td><td><code>…; charset=utf-8</code></td><td><code>application/json</code></td></tr>
+</table>
+</div>
+<div class="note"><b>순번은 서버마다</b> — 세 서버 모두 첫 토큰이 <code>tok-planner-1</code> 입니다. 발급 기록은 서버 프로세스의 메모리에 있고, 서로 나누지 않습니다.</div>
+</article>
+
+<article class="card" id="p12-iss-try">
+<h3>맞는 요청 둘, 틀린 요청 다섯 — 세 발급기의 답이 글자까지 같다</h3>
+<p class="lead"><code>12/token_try.py</code> 가 세 발급기에 일곱 가지 폼을 보냅니다. ⑦ 만 비밀을 폼이 아니라 HTTP Basic 머리(<code>Authorization: Basic …</code>)로 보냅니다.</p>
+<!--CODE file=ex/py/12/token_try.py region=ask-->
+<!--OUT file=out/12/issuer.txt part=터미널 7 lines=2-11 note=파이썬 발급기-->
+<!--OUT file=out/12/issuer.txt part=터미널 7 lines=12-29 note=TS·Go 발급기 — 주소 줄 말고는 같다-->
+<div class="note"><b>①②의 토큰이 2·3번</b> — 앞의 curl 이 1번을 가져갔기 때문입니다. ② 처럼 스코프를 좁혀 받은 토큰은 <code>"scope": "payment:read"</code> 만 가집니다 — 결재가 필요 없는 일에는 좁은 토큰을 쓰라는 것이 최소 권한의 원칙입니다.</div>
+</article>
+
+<article class="card" id="p12-iss-rfc">
+<h3>RFC 6749 와 §13.4 에 견주면 — 오류의 모양은 맞고, 줄인 것이 여럿</h3>
+<p class="lead">오류 응답은 <code>{"error": "…"}</code> 하나, 코드는 RFC 6749 §5.2 의 이름입니다. 그러나 이 발급기는 시험용이라 RFC 와 스펙이 요구하는 몇 가지를 빼먹었습니다. 앞 슬라이드의 답과 세 언어의 <code>tokens</code> 구역이 그 증거입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>기준</th><th>요구</th><th>이 발급기(세 언어 같음)</th></tr>
+<tr><td>RFC 6749 §5.2</td><td>빠진 매개변수는 <code>invalid_request</code></td><td>⑥ <code>grant_type</code> 이 없어도 <code>unsupported_grant_type</code></td></tr>
+<tr><td>RFC 6749 §2.3.1</td><td>비밀번호를 쓰는 클라이언트에 HTTP Basic 을 반드시 받을 것, 몸통에 싣는 것은 권하지 않음</td><td>⑦ Basic 은 <code>invalid_client</code> — 몸통만 받는다</td></tr>
+<tr><td>RFC 6749 §5.1</td><td>토큰이 든 응답에 <code>Cache-Control: no-store</code></td><td>① 의 응답에 <code>Cache-Control</code> 이 없다</td></tr>
+<tr><td>RFC 6749 §5.2</td><td><code>error_description</code>·<code>error_uri</code> 는 골라 넣는 것</td><td>넣지 않는다</td></tr>
+<tr><td>RFC 6749 §5.1</td><td><code>expires_in</code> — 토큰의 수명(초)</td><td><code>3600</code> 이라 말하지만 발급 기록(<code>TOKENS</code>·<code>tokens</code>)에 시각이 없어 영영 산다</td></tr>
+<tr><td>A2A §13.4</td><td>"SHOULD implement credential revocation mechanisms"</td><td>취소가 없다. 서버를 다시 띄우면 모두 사라진다(메모리)</td></tr>
+<tr><td>A2A §13.4</td><td>"SHOULD log authentication failures and implement rate limiting"</td><td>④ 처럼 틀린 비밀을 몇 번이고 받아 준다</td></tr>
+</table>
+</div>
+<div class="warn"><b>운영이라면 직접 짜지 않는다</b> — 위의 셋은 모두 고칠 수 있지만, 토큰 발급은 이미 검증된 인가 서버에 맡기는 것이 옳습니다. 이 발급기의 몫은 "카드의 <code>tokenUrl</code> 너머에서 무슨 일이 일어나나" 를 와이어로 보이는 것까지입니다.</div>
+</article>
+
+<article class="card" id="p12-iss-guess">
+<h3>순번 토큰은 맞힐 수 있다 — 비밀 없이 <code>tok-planner-1</code> 을 붙였더니 planner 의 정산서</h3>
+<p class="lead">토큰 이름이 <code>tok-&lt;client_id&gt;-&lt;n&gt;</code> 이라는 것만 알면 비밀번호가 필요 없습니다. 명세의 마지막 curl 은 토큰을 받은 적 없이 <code>Authorization: Bearer tok-planner-1</code> 만 달았습니다.</p>
+<!--OUT file=out/12/issuer.txt wire=py-token ex=2 grep=^→|^←|Authorization|"state"|"approvedBy" note=맞힌 토큰으로 보낸 SendMessage-->
+<!--OUT file=out/12/issuer.txt server=settle-py lines=4-4 note=파이썬 정산 에이전트의 출력-->
+<ul>
+<li>정산 에이전트는 토큰이 발급 기록에 있는지만 봅니다(<a href="#p12-ch4">4장</a>). 그러니 이 요청은 planner 의 이름으로 처리되어 <code>approvedBy: planner</code> 가 찍혔습니다.</li>
+<li>세 언어의 발급기가 모두 일부러 이렇게 짰습니다 — 주석의 "캡처가 매번 같도록". 덕분에 이 책의 캡처는 돌릴 때마다 같지만, 같은 까닭으로 남도 토큰을 맞힙니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-iss-rand">
+<h3>진짜 토큰 ×3 — 운영체제의 난수 256비트, URL 에 안전한 43글자</h3>
+<p class="lead">RFC 6749 §10.10 은 토큰을 맞힐 확률을 아주 작게(2<sup>-128</sup> 이하) 만들라고 합니다. 세 언어 모두 표준 라이브러리 한 줄입니다. 값은 실행마다 달라 모양만 찍었습니다.</p>
+<!--RUN file=ex/py/12/token_rand.py-->
+<!--RUN file=ex/ts/12/token_rand.ts-->
+<!--RUN file=ex/go/12/token_rand-->
+<div class="note"><b>난수만으로는 모자라다</b> — 토큰은 맞히기 어려워야 하고, 또 엿보이지 않아야 합니다(HTTPS, <a href="#p12-ch1">1장</a>). 서명된 토큰(JWT)을 쓰면 발급 기록 없이도 검사할 수 있지만, 그것은 이 책의 범위 밖입니다.</div>
+</article>
+
+<article class="card" id="p12-ch3-sum">
+<h3>3장 정리 — 토큰 발급기 ×3</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>무엇을 보내나?</td><td>폼: <code>grant_type=client_credentials</code>, <code>client_id</code>, <code>client_secret</code>, (<code>scope</code>)</td><td><a href="#p12-iss-wire">와이어</a></td></tr>
+<tr><td>무엇을 받나?</td><td><code>access_token</code>·<code>token_type</code>·<code>expires_in</code>·<code>scope</code>. 세 서버가 같은 바이트</td><td><a href="#p12-iss-cmp">비교</a></td></tr>
+<tr><td>틀리면?</td><td><code>invalid_scope</code>(400)·<code>invalid_client</code>(401)·<code>unsupported_grant_type</code>(400)</td><td><a href="#p12-iss-try">일곱 가지</a></td></tr>
+<tr><td>RFC 와 다른 점?</td><td>빠진 매개변수의 코드, HTTP Basic, <code>Cache-Control</code></td><td><a href="#p12-iss-rfc">표</a></td></tr>
+<tr><td>순번 토큰의 값?</td><td>맞힐 수 있다 — 진짜는 256비트 난수</td><td><a href="#p12-iss-guess">맞힌 토큰</a>·<a href="#p12-iss-rand">×3</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p12-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. intern 이 <code>scope=payment:approve</code> 로 토큰을 달라고 하면 무엇을 받습니까? 그리고 planner 가 <code>scope</code> 를 아예 빼고 달라고 하면 받은 토큰의 <code>scope</code> 는 무엇입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 첫째는 HTTP 400 <code>{"error":"invalid_scope"}</code> 입니다 — intern 이 가진 스코프는 <code>payment:read</code> 뿐입니다(<a href="#p12-iss-try">③</a>, 세 발급기 같음). 둘째는 <code>payment:read payment:approve</code> 입니다 — 스코프를 적지 않으면 그 클라이언트의 스코프 전부를 줍니다(<a href="#p12-iss-try">①</a>, <a href="#p12-iss-py">파이썬</a>의 <code>or who["scopes"]</code>).</div>
+</article>
+
+<!-- ==== 4장 정산 에이전트 Bearer 검사 ×3 ==== -->
+
+<article class="card" id="p12-ch4">
+<p class="chnum">4장</p>
+<h2>정산 에이전트의 Bearer 검사 ×3</h2>
+<p class="chsub">스펙의 요구 → 문지기의 자리 → 파이썬 → TypeScript → Go → 네 가지 머리 → 세 서버 비교 → 사용자를 실행기까지 → SDK 클라이언트 ×3 → 세 클라이언트 비교 → 카드만으로는 막지 못한다</p>
+</article>
+
+<article class="card" id="p12-bearer-rule">
+<h3>모든 요청을 인증하라(MUST) — 거절할 때는 무엇이 필요한지 알려 주라(SHOULD)</h3>
+<p class="lead">카드가 말한 요구(<a href="#p12-sch-wire">2장</a>)를 실제로 지키게 하는 것은 서버입니다. 스펙은 서버의 몫을 두 곳에 적었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>스펙의 말</th></tr>
+<tr><td>§7.4</td><td>"MUST authenticate every incoming request based on the provided credentials and its declared authentication requirements"</td></tr>
+<tr><td>§7.4</td><td>"SHOULD use appropriate binding-specific error codes", "SHOULD provide relevant authentication challenge information"</td></tr>
+<tr><td>§3.3.2</td><td>Authentication Errors — "MUST reject requests with invalid or missing authentication credentials", 예: "HTTP <code>401 Unauthorized</code>, gRPC <code>UNAUTHENTICATED</code>, JSON-RPC custom error"</td></tr>
+</table>
+</div>
+<div class="note"><b>도전(challenge)은 <code>WWW-Authenticate</code></b> — HTTP 의 401 은 이 머리로 "이 방식으로 다시 오라" 를 알립니다. Bearer 토큰의 머리 모양(<code>realm</code>, <code>error="invalid_token"</code>)은 RFC 6750 §3 이 정합니다. 정산 에이전트는 JSON-RPC 오류가 아니라 이 HTTP 의 길을 씁니다.</div>
+</article>
+
+<article class="card" id="p12-bearer-where">
+<h3>문지기는 HTTP 층에, 경로 <code>/</code> 하나만 — 카드·JWKS·토큰 발급은 열어 둔다</h3>
+<p class="lead">세 언어 모두 SDK 의 JSON-RPC 처리기 앞에 우리 코드 한 겹을 둡니다. 토큰이 없으면 SDK 까지 가지 않고 401 로 끝납니다.</p>
+<pre class="fig">
+ 요청 ─▶ POST /  ─▶ [문지기: 토큰 확인] ─없다▶ 401 + WWW-Authenticate
+                         │ 있다
+                         ▼
+                   SDK JSON-RPC 처리기 ─▶ [사용자 세우기] ─▶ 실행기
+ 요청 ─▶ GET /.well-known/agent-card.json ─▶ 카드      (누구나)
+ 요청 ─▶ GET /.well-known/jwks.json       ─▶ 공개 키   (누구나, 8장)
+ 요청 ─▶ POST /oauth/token               ─▶ 토큰 발급 (누구나, 3장)
+</pre>
+<div class="key"><b>카드를 막으면 아무도 못 들어온다</b> — 토큰을 어디서 받는지가 카드에 있으니, 카드와 토큰 발급은 토큰 없이 닿아야 합니다. 로그인한 사람만 보는 카드는 따로 있습니다(6장, GetExtendedAgentCard — 경로 <code>/</code> 의 JSON-RPC 메서드라 문지기를 지난다).</div>
+</article>
+
+<article class="card" id="p12-bearer-py">
+<h3>파이썬 — Starlette 의 AuthenticationMiddleware 와 우리 RequireBearer</h3>
+<p class="lead">두 겹입니다. <code>BearerBackend</code> 가 토큰으로 사용자와 스코프를 붙이고(익명이면 <code>None</code>), <code>RequireBearer</code> 가 경로 <code>/</code> 에서 익명을 401 로 돌려보냅니다.</p>
+<!--CODE file=ex/py/agents/settlement.py region=bearer-->
+<ul>
+<li>미들웨어는 <code>serve(…, middleware=[Middleware(AuthenticationMiddleware, backend=BearerBackend()), Middleware(RequireBearer)])</code> 로 겁니다 — 앞의 것이 먼저 돕니다.</li>
+<li>토큰이 아예 없으면 <code>error</code> 를 붙이지 않습니다. 주석이 말하는 RFC 6750 의 규칙입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-bearer-ts">
+<h3>TypeScript — express 미들웨어 하나, 같은 <code>bearer(req)</code> 를 두 번 부른다</h3>
+<p class="lead"><code>app.all("/", requireBearer)</code> 가 SDK 의 <code>jsonRpcHandler</code> 보다 먼저 걸립니다. 통과한 요청에서는 <code>userBuilder</code> 가 같은 <code>bearer(req)</code> 로 사용자를 다시 세웁니다.</p>
+<!--CODE file=ex/ts/agents/settlement.ts region=bearer-->
+<div class="note"><b>사용자 클래스를 우리가</b> — SDK 의 <code>User</code> 인터페이스는 <code>userName</code> 과 <code>isAuthenticated</code> 뿐이라, 스코프를 실어 나르려고 <code>BearerUser</code> 를 만들었습니다. 실행기는 <code>user instanceof BearerUser</code> 로 꺼냅니다.</div>
+</article>
+
+<article class="card" id="p12-bearer-go">
+<h3>Go — <code>http.Handler</code> 를 감싸는 문지기와 SDK 의 호출 가로채기</h3>
+<p class="lead"><code>requireBearer</code> 는 JSON-RPC 처리기를 감싸는 보통의 Go 미들웨어입니다(<code>common.Options.Guard</code> — <code>mux.Handle("/{$}", …)</code> 의 앞). 통과한 요청에서는 <code>bearerUser.Before</code> 가 <code>CallContext.User</code> 를 바꿉니다.</p>
+<!--CODE file=ex/go/agents/settlement/main.go region=bearer-->
+<div class="note"><b>머리글은 <code>ServiceParams</code> 에서</b> — 가로채기는 <code>*http.Request</code> 를 받지 않습니다. JSON-RPC 처리기가 HTTP 머리를 <code>ServiceParams</code> 에 옮겨 담아 주므로(<a href="#p09-srv-who">9부</a>) 거기서 <code>authorization</code> 을 읽습니다.</div>
+</article>
+
+<article class="card" id="p12-bearer-wire">
+<h3>네 가지 머리 — 없으면 <code>realm</code> 만, 있는데 틀리면 <code>error="invalid_token"</code></h3>
+<p class="lead">세 정산 에이전트에 같은 SendMessage 를 머리 네 가지로 보냈습니다 — 인증 머리 없음, <code>Basic</code>, 토큰 없는 <code>Bearer</code>, 발급한 적 없는 <code>tok-planner-9</code>. 파이썬 서버의 탭입니다.</p>
+<!--SPEC file=ex/run/12/bearer.run-->
+<!--OUT file=out/12/bearer.txt wire=py-wire ex=1-4 grep=^→|^←|Authorization|WWW-Authenticate|"error" note=파이썬 서버 — 요청 줄·인증 머리·답만-->
+<div class="warn"><b>Basic 에도 <code>invalid_token</code></b> — 세 언어의 문지기는 <code>Authorization</code> 머리가 <b>있으면</b> 무엇이든 <code>error="invalid_token"</code> 을 답니다. RFC 6750 §3.1 은 지원하지 않는 방식으로 온 요청도 "인증 정보가 없는" 경우로 보아 <code>error</code> 를 붙이지 말라고 합니다(SHOULD NOT). 이 책의 에이전트가 줄인 자리입니다.</div>
+</article>
+
+<article class="card" id="p12-bearer-cmp">
+<h3>세 서버 비교 — 같은 401 과 같은 몸통, 머리 이름의 글자 모양만 셋</h3>
+<p class="lead">TS·Go 서버의 탭도 같은 네 답을 남겼습니다. 탭은 머리 이름을 한 가지 모양으로 적으므로, 마지막 차이는 탭을 거치지 않은 curl 로 봤습니다.</p>
+<!--OUT file=out/12/bearer.txt wire=go-wire ex=1-4 grep=^←|WWW-Authenticate note=Go 서버 — TS 도 같다-->
+<!--OUT file=out/12/bearer.txt part=터미널 7 lines=2-5 note=파이썬 → TS → Go 서버, 응답 머리 그대로-->
+<ul>
+<li>파이썬(uvicorn)은 머리 이름을 소문자로, TS(Node)는 우리가 쓴 그대로, Go 는 <code>Www-Authenticate</code> 로 바꿔 보냅니다(<code>net/http</code> 의 정규 모양). HTTP 머리 이름은 대소문자를 가리지 않으니 뜻은 같습니다.</li>
+<li>401 의 몸통은 <code>{"error": "unauthorized"}</code> 또는 <code>{"error": "invalid_token"}</code> — JSON-RPC 의 <code>error</code> 객체가 아닙니다. JSON-RPC 처리기에 닿기 전에 끝났기 때문입니다. 클라이언트가 이것을 어떻게 받는지가 다음 슬라이드들입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-bearer-user">
+<h3>사용자를 실행기까지 — 세 SDK 의 갈고리에 토큰의 주인을 싣는다</h3>
+<p class="lead">문지기를 지난 요청의 "누구" 는 SDK 가 정한 자리로 실행기에 갑니다. 그 자리는 7~9부 5장에서 봤고(<a href="#p07-srv-who">7부</a>·<a href="#p08-srv-who">8부</a>·<a href="#p09-srv-who">9부</a>), 정산 에이전트는 거기에 토큰의 클라이언트와 스코프를 싣습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>싣는 자리</th><th>실행기가 읽는 곳</th></tr>
+<tr><td>파이썬</td><td>Starlette 의 <code>request.user</code>·<code>request.auth</code> → SDK 의 <code>DefaultServerCallContextBuilder</code> 가 옮긴다(<code>server/routes/common.py:114,134</code>)</td><td><code>ctx.call_context.user.user_name</code>, <code>ctx.call_context.state["auth"].scopes</code></td></tr>
+<tr><td>TypeScript</td><td><code>userBuilder: (req) =&gt; bearer(req) ?? new UnauthenticatedUser()</code></td><td><code>ctx.context.user</code>(<code>BearerUser</code>)</td></tr>
+<tr><td>Go</td><td><code>WithCallInterceptors(bearerUser{})</code> → <code>cc.User = NewAuthenticatedUser(…)</code></td><td><code>ec.User.Name</code>, <code>ec.User.Attributes["scopes"]</code></td></tr>
+</table>
+</div>
+<!--OUT file=out/12/bearer.txt server=settle-go lines=2-2 note=Go 정산 에이전트 — 실행기가 찍은 사용자 이름(파이썬·TS 도 같다)-->
+<div class="note"><b>왜 두 겹인가</b> — SDK 의 갈고리는 사용자를 <b>세우는</b> 자리라, HTTP 401 과 <code>WWW-Authenticate</code> 를 쓸 수 없습니다(파이썬 빌더는 맥락을 지어 돌려줄 뿐, Go 가로채기의 오류는 JSON-RPC 오류가 된다 — <code>a2a.ErrUnauthenticated</code> 는 <code>-31401</code>, <code>internal/jsonrpc/jsonrpc.go:84</code>). 그래서 거절은 HTTP 층의 문지기가, 사용자를 세우는 일은 SDK 의 갈고리가 맡습니다.</div>
+</article>
+
+<article class="card" id="p12-cl-py">
+<h3>파이썬 클라이언트 — 401 은 <code>A2AClientError</code>, 토큰은 AuthInterceptor 가 단다</h3>
+<p class="lead"><code>12/settle_client.py</code> 는 카드를 읽고, 빈 자격 증명 저장소로 한 번 보내고, 카드의 <code>tokenUrl</code> 에서 받은 토큰을 저장소에 넣고 다시 보냅니다.</p>
+<!--CODE file=ex/py/12/settle_client.py region=main-->
+<!--OUT file=out/12/bearer.txt part=터미널 7 lines=6-10-->
+<div class="note"><b>WWW-Authenticate 는 클라이언트에 닿지 않는다</b> — 오류 문구는 httpx 의 것이고(<code>401 Unauthorized</code> 와 MDN 주소), 서버가 보낸 <code>realm</code> 은 예외에 없습니다. 토큰을 받는 <code>get_token</code> 은 3장의 폼을 httpx 로 보내는 열 줄입니다(같은 파일의 <code>token</code> 구역).</div>
+</article>
+
+<article class="card" id="p12-cl-ts">
+<h3>TypeScript 클라이언트 — 401 을 본 뒤에야 토큰을 받으러 간다</h3>
+<p class="lead">TS SDK 에는 카드를 읽는 인터셉터가 없으니, <code>createAuthenticatingFetchWithRetry</code>(<a href="#p08-auth-retry">8부</a>)의 <code>shouldRetryWithHeaders</code> 안에서 토큰을 받습니다.</p>
+<!--CODE file=ex/ts/12/settle_client.ts region=token-->
+<!--OUT file=out/12/bearer.txt part=터미널 7 lines=11-14-->
+<!--OUT file=out/12/bearer.txt wire=ts-wire ex=7-9 grep=^→|^←|Authorization|WWW-Authenticate note=③ 의 와이어 — 401, 토큰, 다시-->
+<div class="note"><b>401 이 한 번 더</b> — 감싼 fetch 는 처음에 토큰이 없으니 한 번 401 을 맞고, 그다음 토큰을 받아 다시 보냅니다. 첫 실패를 아끼려면 카드의 요구를 보고 미리 받아 두면 됩니다 — 파이썬·Go 처럼.</div>
+</article>
+
+<article class="card" id="p12-cl-go">
+<h3>Go 클라이언트 — 401 은 "unexpected HTTP status", 토큰은 세션에 넣는다</h3>
+<p class="lead"><code>a2aclient.AuthInterceptor</code> 는 <code>ctx</code> 에 붙은 세션 id 로 저장소를 찾습니다(<a href="#p12-req-client">2장</a>). 같은 클라이언트도 세션 없는 <code>ctx</code> 로 부르면 토큰을 달지 않습니다.</p>
+<!--CODE file=ex/go/12/settle_client region=main-->
+<!--OUT file=out/12/bearer.txt part=터미널 7 lines=15-18-->
+<div class="note"><b>상태 코드만 남는다</b> — 오류는 <code>unexpected HTTP status: 401 Unauthorized</code> 한 줄입니다. 몸통(<code>{"error":"unauthorized"}</code>)도 <code>WWW-Authenticate</code> 도 오류에 없습니다.</div>
+</article>
+
+<article class="card" id="p12-cl-cmp">
+<h3>세 클라이언트 비교 — 401 은 셋 다 그냥 HTTP 오류, 토큰을 받는 것은 우리 코드</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>401 의 모양</td><td><code>A2AClientError</code>(httpx 문구)</td><td><code>Error</code> — 몸통까지 문구에</td><td><code>unexpected HTTP status: 401</code></td></tr>
+<tr><td><code>WWW-Authenticate</code></td><td>오류에 없다</td><td>오류에 없다(<code>shouldRetryWithHeaders</code> 의 <code>res</code> 로는 읽힌다)</td><td>오류에 없다</td></tr>
+<tr><td>토큰을 다는 것</td><td><code>AuthInterceptor</code> + <code>InMemoryContextCredentialStore</code></td><td>감싼 fetch 의 <code>headers()</code></td><td><code>AuthInterceptor</code> + <code>InMemoryCredentialsStore</code></td></tr>
+<tr><td>토큰을 받는 것</td><td>우리 <code>get_token</code></td><td>우리 <code>getToken</code>(401 뒤)</td><td>우리 <code>getToken</code></td></tr>
+<tr><td>와이어의 401</td><td>한 번(①)</td><td>두 번(①, ③ 의 첫 시도)</td><td>한 번(①)</td></tr>
+</table>
+</div>
+<div class="key"><b>세 서버 모두 <code>approvedBy planner</code></b> — 토큰의 주인이 실행기까지 갔습니다. 다만 이 정산(2,100,000원)은 결재 문턱(3,000,000원) 아래라 스코프를 따질 일이 없었습니다. 스코프가 갈림길이 되는 것은 5장입니다.</div>
+</article>
+
+<article class="card" id="p12-bearer-card">
+<h3>카드만으로는 막지 못한다 — 문지기를 빼면 토큰 없이도 정산서가 나온다</h3>
+<p class="lead"><code>12/card_only.py</code> 는 완성 정산 에이전트의 카드와 실행기를 그대로 가져다 쓰고 미들웨어만 뺐습니다. 카드는 여전히 <code>oauth</code>·<code>payment:read</code> 를 요구합니다.</p>
+<!--CODE file=ex/py/12/card_only.py region=main-->
+<!--OUT file=out/12/cardonly.txt wire=only-wire ex=2 grep=^→|^←|Authorization|"state"|"approvedBy" note=토큰 없이 보낸 SendMessage-->
+<!--OUT file=out/12/cardonly.txt server=card-only-->
+<ul>
+<li>요청에는 <code>Authorization</code> 이 없는데 COMPLETED 가 왔고, 결재자는 빈 이름입니다. 서버 SDK 는 카드의 <code>securitySchemes</code>·<code>securityRequirements</code> 를 읽어 요청을 막지 않습니다 — 파이썬 <code>a2a/server/</code> 와 Go <code>a2asrv/</code> 에는 그 낱말이 없고, TS 서버 묶음은 카드를 JSON 으로 바꿀 때만 씁니다.</li>
+<li>카드의 보안 필드는 <b>클라이언트에게 하는 안내</b>입니다. 지키게 하는 것은 서버를 짠 사람의 몫입니다(§7.4 의 MUST).</li>
+</ul>
+</article>
+
+<article class="card" id="p12-ch4-sum">
+<h3>4장 정리 — Bearer 검사 ×3</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>어디서 막나?</td><td>HTTP 층의 문지기(경로 <code>/</code>), SDK 처리기 앞. 카드·JWKS·토큰 발급은 열어 둔다</td><td><a href="#p12-bearer-where">자리</a></td></tr>
+<tr><td>무엇을 돌려주나?</td><td>401 + <code>WWW-Authenticate: Bearer realm="settlement"</code>(머리가 있으면 <code>error="invalid_token"</code>)</td><td><a href="#p12-bearer-wire">네 가지</a>·<a href="#p12-bearer-cmp">비교</a></td></tr>
+<tr><td>누구인지는?</td><td>SDK 의 갈고리(Starlette 사용자·<code>userBuilder</code>·<code>CallInterceptor</code>)에 싣는다</td><td><a href="#p12-bearer-user">표</a></td></tr>
+<tr><td>클라이언트는?</td><td>401 은 그냥 HTTP 오류. 토큰은 우리가 받아 인터셉터·fetch 로 단다</td><td><a href="#p12-cl-cmp">비교</a></td></tr>
+<tr><td>카드만 있으면?</td><td>아무것도 막지 않는다 — 서버 SDK 는 보안 필드를 읽지 않는다</td><td><a href="#p12-bearer-card">실험</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p12-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. TS 클라이언트로 정산을 맡겼더니 탭에 401 이 두 번 찍혔습니다. 파이썬·Go 클라이언트는 한 번인데 왜 TS 만 두 번이고, 두 번째 401 은 어느 요청의 것입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 첫 401 은 세 언어 공통의 ① — 일부러 토큰 없이 보낸 요청입니다. TS 의 두 번째 401 은 ③ 의 첫 시도입니다. TS 클라이언트는 카드의 요구를 미리 읽어 토큰을 받는 대신, 감싼 fetch 가 401 을 본 <b>뒤에</b> <code>shouldRetryWithHeaders</code> 에서 토큰을 받아 다시 보내기 때문입니다(<a href="#p12-cl-ts">TS 클라이언트의 와이어</a>: 401 → <code>POST /oauth/token</code> → <code>Authorization: Bearer tok-planner-1</code> 로 200). 파이썬·Go 는 토큰을 먼저 저장소에 넣고 보냈습니다(<a href="#p12-cl-cmp">비교</a>).</div>
 </article>

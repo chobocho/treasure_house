@@ -651,3 +651,39 @@ subagent task each.
   after "완료" race held so far — revisit with hooks.run 1.5 s in review.
 - `make all SKEL=1` green (1151 slides, 1177 blocks, 0 mismatches); --check ×3 green after
   the auth.run change; manifest 192, 0 stale.
+
+### Part 12 first half — 62 slides (2026-10-18)
+- `12b_security.html` + `order.txt` line added (placeholder). `12_security.html` cover+intro
+  (2), ch1 transport security (13), ch2 securitySchemes/requirements (17), ch3 local OAuth2
+  issuer ×3 (14), ch4 Bearer check ×3 (16). Examples `ex/{py,ts,go}/12/` (tls_card,
+  card_parse, auth_and, token_rand, settle_client, …), specs `ex/run/12/{tls,card,issuer,
+  bearer,cardonly}.run`, test TLS fixtures `ex/run/12/tls/` (127.0.0.1 cert, 100 years,
+  CA key deleted — untrusted outside these captures); ports 11201–11241. No final agent
+  changed. Forward refs to 5–8장 left as plain text (`p12-iss-clients`, `p12-cl-cmp`,
+  `p12-bearer-where`, `p12-sch-wire`, `p12-sch-cmp`) for 12b to link.
+- Our settlement agents ×3 — teaching shortcuts disclosed on slides (`p12-iss-rfc`,
+  `p12-bearer-wire`), kept: missing grant_type → unsupported_grant_type (RFC 6749 §5.2 says
+  invalid_request), no HTTP Basic client auth (§2.3.1 MUST), no `Cache-Control: no-store`
+  (§5.1 MUST), `expires_in: 3600` never enforced, `error="invalid_token"` even for a Basic
+  header (RFC 6750 §3.1 SHOULD NOT). **Real defect → fix in 12b ch5:** the Bearer check never
+  verifies the card's required scope `payment:read` (only the executor checks
+  `payment:approve`).
+- Findings: §3.1.11/§13.3 say `AgentCard.security` and the §8.5 sample uses the v0.3 shape;
+  proto v1.0.1 has `securityRequirements {schemes:{n:{list:[…]}}}`; AND/OR semantics stated
+  in neither (Go doc `a2a/agent.go:176` "OR of ANDs"; `a2a/auth.go:39` example contradicts
+  its comment); requirement parsing differs — py maps legacy `security`
+  (`_map_legacy_security`) but drops unwrapped scope arrays (`card_resolver.py:27`), ts drops
+  both, go accepts unwrapped (`a2a/auth.go:53`) and drops `security`, none errors; client
+  AuthInterceptors attach at most one credential (py `client/auth/interceptor.py:63`, go
+  `a2aclient/auth.go:94`) → AND never met; go sends Bearer for any http scheme, py only
+  bearer; ts has no card-driven interceptor; ts resolver returns ts-proto only for
+  proto-shaped security (`client/index.js:5338`), JSON.stringify leaks `$case` (closes the
+  `p03-agent-card-ts` promise); **no server SDK enforces the card's security** (card-only
+  server COMPLETED a token-less request); no SDK checks https or sets HSTS, all three
+  clients reject an unknown CA; Go ErrUnauthenticated/ErrUnauthorized → -31401/-31403,
+  REST 401/403; a 401 reaches every SDK client as a plain HTTP error, none exposes
+  WWW-Authenticate; TS auth-retry fetch costs one extra 401; Go sends `Www-Authenticate`.
+- `auth_and.go` capture uses the 200-try set trick (false failure ≈ 2^-199). One
+  `test_wiretap ... test_upstream_down_gives_502` flake in `make all` (rerun green) — the
+  port-timing flake noted in part 7.
+- `make all SKEL=1` green (1212 slides, 1238 blocks, 0 mismatches); --check ×4 green.

@@ -1,0 +1,23 @@
+# 3장 — 토큰 발급기 ×3. 정산 에이전트 셋(py·ts·go) 앞에 탭을 두고
+# (1) planner 가 client_credentials 로 토큰을 받는다(탭이 본다).
+# (2) 맞는 요청 둘·틀린 요청 다섯을 세 발급기에 바로 묻는다.
+# (3) 비밀 없이 토큰 이름만 맞혀 파이썬 정산 에이전트를 부른다.
+serve name=settle-py ready=tcp:11220 \
+      cmd="py:agents/settlement.py --port 11220"
+serve name=settle-ts ready=tcp:11221 \
+      cmd="ts:agents/settlement.ts --port 11221"
+serve name=settle-go ready=tcp:11222 \
+      cmd="go:agents/settlement --port 11222"
+tap   name=py-token listen=11223 target=11220
+tap   name=ts-token listen=11224 target=11221
+tap   name=go-token listen=11225 target=11222
+run   cmd="sh:for p in 11223 11224 11225; do curl -s -o /dev/null \
+      -d grant_type=client_credentials -d client_id=planner \
+      -d client_secret=planner-secret http://127.0.0.1:$p/oauth/token; \
+      done"
+run   cmd="py:12/token_try.py http://127.0.0.1:11220/oauth/token \
+      http://127.0.0.1:11221/oauth/token \
+      http://127.0.0.1:11222/oauth/token"
+run   cmd="sh:curl -s -o /dev/null -H 'Content-Type: application/json' \
+      -H 'A2A-Version: 1.0' -H 'Authorization: Bearer tok-planner-1' \
+      -d @run/12/rpc/settle_small.json http://127.0.0.1:11223/"

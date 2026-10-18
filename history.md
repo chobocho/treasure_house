@@ -1,3 +1,10 @@
+### [2026-10-18 04:26] A2A 덱 12부 앞 절반 — 전송 보안·보안 스킴·토큰 발급기·Bearer 검사(62장)
+- **기획:** HTTPS 요구와 로컬 http 의 까닭, 카드의 securitySchemes·Requirements, 정산 에이전트 안의 OAuth2 발급기 ×3 과 Bearer 검사 ×3 을 캡처로 보인다. 12부를 두 파일로 나눴다.
+- **TC:** 정상 — client_credentials 발급, 맞는 토큰. 경계 — 모르는 CA, grant_type 없음, Basic 인증, 토큰 없음·깨짐·모름, 카드만 있고 검사 없는 서버.
+- **개발:** a2a/deck/sections/12_security.html, 12b_security.html, a2a/deck/order.txt, a2a/ex/*/12/, a2a/ex/run/12/
+- **검증:** 12 캡처 --check 4회 일치, make all SKEL=1 rc=0 (1212장, 어긋남 0건)
+- **비고:** 어느 SDK 서버도 카드의 보안 요구를 스스로 지키지 않는다. 우리 Bearer 검사가 payment:read 스코프를 안 보는 결함은 뒤 절반 5장에서 고친다.
+
 ### [2026-10-18 03:27] A2A 덱 11부 뒤 절반 — 푸시 설정 CRUD·취소·목록·웹훅 보안(53장), Go 교통 에이전트 푸시 인증 수정
 - **기획:** 푸시 설정 조회·목록·삭제, CancelTask, ListTasks 필터·쪽, 웹훅 보안(SSRF·토큰·재전송)을 세 서버로 보이고, 우리 Go 에이전트의 §4.3.3 위반을 고친다.
 - **TC:** 정상 — 설정 CRUD ×3, 진행 중 취소, 목록 필터. 경계 — 없는 설정·Task, 끝난 뒤 취소, pageSize 0·101, 사설 주소 웹훅, 같은 POST 재전송.
