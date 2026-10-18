@@ -1,0 +1,35 @@
+# 5장 — 푸시 설정 CRUD. 교통 에이전트 셋(단계 하나 2초)에 제 언어의
+# 클라이언트(crud)가 설정 둘을 달고 Get·List·Delete 를 한다. 웹훅
+# 자리에는 중계기. 파이썬·TS 는 카드의 url 이 탭이라 탭을 지나고, Go 는
+# 곧장 — Go 서버의 List 답은 설정의 차례가 실행마다 달라서다.
+# 단계 2초는 Delete 가 첫 단계보다 먼저 닿게 하는 여유다.
+serve name=bus-py ready=tcp:11150 \
+      cmd="py:agents/bus.py --port 11150 --step-ms 2000 \
+      --url http://127.0.0.1:11153/"
+serve name=bus-ts ready=tcp:11151 \
+      cmd="ts:agents/bus.ts --port 11151 --step-ms 2000 \
+      --url http://127.0.0.1:11154/"
+serve name=bus-go ready=tcp:11152 \
+      cmd="go:agents/bus --port 11152 --step-ms 2000"
+serve name=relay ready=tcp:11156 cmd="py:11/relay.py --port 11156"
+tap   name=py-wire listen=11153 target=11150
+tap   name=ts-wire listen=11154 target=11151
+tap   name=go-wire listen=11155 target=11152
+run   cmd="py:11/crud.py http://127.0.0.1:11153/ \
+      http://127.0.0.1:11156/ http://127.0.0.1:11156/"
+run   cmd="ts:11/crud.ts http://127.0.0.1:11154/ \
+      http://127.0.0.1:11156/ http://127.0.0.1:11156/"
+run   cmd="go:11/crud http://127.0.0.1:11152/ \
+      http://127.0.0.1:11156/ http://127.0.0.1:11156/"
+# 설정에 id 를 주지 않으면 — 파이썬 클라이언트로 세 서버에
+run   cmd="py:11/crud.py http://127.0.0.1:11150/ \
+      http://127.0.0.1:11156/ http://127.0.0.1:11156/ --no-id"
+run   cmd="py:11/crud.py http://127.0.0.1:11151/ \
+      http://127.0.0.1:11156/ http://127.0.0.1:11156/ --no-id"
+run   cmd="py:11/crud.py http://127.0.0.1:11152/ \
+      http://127.0.0.1:11156/ http://127.0.0.1:11156/ --no-id"
+# 없는 작업 t-404 에 Get·List·Delete — 세 서버 앞 탭으로
+run   cmd="sh:for p in 11153 11154 11155; do for m in get list delete; \
+      do curl -s -o /dev/null -H 'Content-Type: application/json' \
+      -H 'A2A-Version: 1.0' -d @run/11/rpc/${m}_404.json \
+      http://127.0.0.1:$p/; done; done"

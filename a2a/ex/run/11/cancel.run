@@ -1,0 +1,26 @@
+# 6장 — 달리는 배차의 취소를 구독자와 웹훅이 어떻게 보나. 교통 에이전트
+# 셋(단계 하나 2초)에 cancel_watch.py 가 설정을 실어 맡기고 구독한다.
+# 첫 WORKING 이 스트림에 오면 CancelTask. 탭은 SendMessage·CancelTask·
+# GetTask 만 지나고, 구독 스트림은 서버에 곧장 연다. 웹훅은 탭(push)을
+# 지나 중계기로 — 세 서버가 보낸 POST 를 차례로 남긴다.
+serve name=bus-py ready=tcp:11160 \
+      cmd="py:agents/bus.py --port 11160 --step-ms 2000"
+serve name=bus-ts ready=tcp:11161 \
+      cmd="ts:agents/bus.ts --port 11161 --step-ms 2000"
+serve name=bus-go ready=tcp:11162 \
+      cmd="go:agents/bus --port 11162 --step-ms 2000"
+serve name=relay ready=tcp:11166 cmd="py:11/relay.py --port 11166"
+tap   name=py-wire listen=11163 target=11160
+tap   name=ts-wire listen=11164 target=11161
+tap   name=go-wire listen=11165 target=11162
+tap   name=push listen=11167 target=11166
+run   cmd="py:11/cancel_watch.py http://127.0.0.1:11163/ \
+      http://127.0.0.1:11160/ http://127.0.0.1:11167/ \
+      http://127.0.0.1:11166/" timeout=40
+# TS 서버는 CANCELED 푸시를 두 번 보낸다 — 끝 알림 둘을 기다린다
+run   cmd="py:11/cancel_watch.py http://127.0.0.1:11164/ \
+      http://127.0.0.1:11161/ http://127.0.0.1:11167/ \
+      http://127.0.0.1:11166/ 2" timeout=40
+run   cmd="py:11/cancel_watch.py http://127.0.0.1:11165/ \
+      http://127.0.0.1:11162/ http://127.0.0.1:11167/ \
+      http://127.0.0.1:11166/" timeout=40

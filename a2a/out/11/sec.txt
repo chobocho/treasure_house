@@ -1,0 +1,140 @@
+[터미널 1] $ python 11/guarded.py --port 11180
+[터미널 2] $ python 11/hook_check.py --port 11183 --token tok-ok
+[터미널 3] $ python 11/relay.py --port 11181
+[터미널 4] $ python tools/wiretap.py 11184 11180
+[터미널 5] $ python tools/wiretap.py 11182 11181
+[터미널 6] $ curl -s -o /dev/null -H 'Content-Type: application/json' -H 'A2A-Version: 1.0' -d @run/11/rpc/send_loopback.json http://127.0.0.1:11184/
+[터미널 6] $ go run ./11/guard http://127.0.0.1:11182/ http://127.0.0.1:11183/
+① 기본값 → …dial tcp 127.0.0.1:11182: push notification target resolves to a blocked address range: 127.0.0.1
+② 허용, Bearer → <nil>
+③ 허용, Digest → <nil>
+④ 수신기에 → push notification endpoint returned non-success status: 401 Unauthorized
+[터미널 6] $ go run ./11/hookold http://127.0.0.1:11182/11183
+SendPush → <nil>
+[터미널 6] $ for n in 1 2; do curl -s -o /dev/null -w '%{http_code}\n' -H 'Content-Type: application/json' -H 'X-A2A-Notification-Token: tok-ok' -d @run/11/rpc/push_replay.json http://127.0.0.1:11182/11183; done
+204
+204
+── 터미널 1 (guarded) 출력 ──
+Push-notification host '127.0.0.1' resolves to a non-public address: http://127.0.0.1:11181/
+── 터미널 2 (check-py) 출력 ──
+거절 401: token=-
+거절 401: token=tok-bad
+통과 204: statusUpdate
+통과 204: statusUpdate
+── 터미널 3 (relay) 출력 ──
+── 와이어 (guard-wire) ──
+→ POST / HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+  Accept: */*
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "ssrf-1",
+        "role": "ROLE_USER",
+        "parts": [
+          {
+            "data": {
+              "headcount": 30,
+              "nights": 1
+            }
+          }
+        ]
+      },
+      "configuration": {
+        "returnImmediately": true,
+        "taskPushNotificationConfig": {
+          "url": "http://127.0.0.1:11181/",
+          "token": "tok-ssrf"
+        }
+      }
+    }
+  }
+← 200 OK
+  Content-Type: application/json
+  {
+    "error": {
+      "code": -32602,
+      "message": "Invalid push notification URL",
+      "data": [
+        {
+          "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+          "domain": "a2a-protocol.org",
+          "metadata": {},
+          "reason": "INVALID_PARAMS"
+        }
+      ]
+    },
+    "id": 1,
+    "jsonrpc": "2.0"
+  }
+── 와이어 (hook-wire) ──
+→ POST / HTTP/1.1
+  Content-Type: application/json
+  Authorization: Bearer hook-secret
+  {
+    "task": {
+      "id": "t-guard",
+      "contextId": "c-guard",
+      "status": {
+        "state": "TASK_STATE_WORKING"
+      }
+    }
+  }
+← 204 No Content
+→ POST / HTTP/1.1
+  Content-Type: application/json
+  {
+    "task": {
+      "id": "t-guard",
+      "contextId": "c-guard",
+      "status": {
+        "state": "TASK_STATE_WORKING"
+      }
+    }
+  }
+← 204 No Content
+→ POST /11183 HTTP/1.1
+  Content-Type: application/json
+  X-A2A-Notification-Token: tok-bad
+  {
+    "task": {
+      "id": "t-old",
+      "contextId": "c-old",
+      "status": {
+        "state": "TASK_STATE_WORKING"
+      }
+    }
+  }
+← 401 Unauthorized
+→ POST /11183 HTTP/1.1
+  Content-Type: application/json
+  Accept: */*
+  X-A2A-Notification-Token: tok-ok
+  {
+    "statusUpdate": {
+      "taskId": "t-replay",
+      "contextId": "c-replay",
+      "status": {
+        "state": "TASK_STATE_COMPLETED"
+      }
+    }
+  }
+← 204 No Content
+→ POST /11183 HTTP/1.1
+  Content-Type: application/json
+  Accept: */*
+  X-A2A-Notification-Token: tok-ok
+  {
+    "statusUpdate": {
+      "taskId": "t-replay",
+      "contextId": "c-replay",
+      "status": {
+        "state": "TASK_STATE_COMPLETED"
+      }
+    }
+  }
+← 204 No Content

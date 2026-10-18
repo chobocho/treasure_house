@@ -1,0 +1,24 @@
+# 8장 — 웹훅 보안. (1) SSRF 검사를 켠 파이썬 교통 에이전트(guarded)에
+# 루프백 웹훅을 단 SendMessage. (2) Go SDK 의 보내기(guard) — 기본값과
+# 사설망 허용. (3) 고치기 전의 우리 Go 보내기(hookold) — 틀린 토큰과
+# authentication. (4) 같은 알림을 두 번 — 토큰은 다시 보내기를 막지
+# 못한다. 웹훅 쪽은 모두 탭 → 중계기(→ /11183 이면 토큰 검사 수신기).
+serve name=guarded ready=tcp:11180 \
+      cmd="py:11/guarded.py --port 11180"
+serve name=check-py ready=tcp:11183 \
+      cmd="py:11/hook_check.py --port 11183 --token tok-ok"
+serve name=relay ready=tcp:11181 cmd="py:11/relay.py --port 11181"
+tap   name=guard-wire listen=11184 target=11180
+tap   name=hook-wire listen=11182 target=11181
+run   cmd="sh:curl -s -o /dev/null \
+      -H 'Content-Type: application/json' -H 'A2A-Version: 1.0' \
+      -d @run/11/rpc/send_loopback.json http://127.0.0.1:11184/"
+run   cmd="go:11/guard http://127.0.0.1:11182/ \
+      http://127.0.0.1:11183/"
+run   cmd="go:11/hookold http://127.0.0.1:11182/11183"
+run   cmd="sh:for n in 1 2; do \
+      curl -s -o /dev/null -w '%{http_code}\n' \
+      -H 'Content-Type: application/json' \
+      -H 'X-A2A-Notification-Token: tok-ok' \
+      -d @run/11/rpc/push_replay.json \
+      http://127.0.0.1:11182/11183; done"

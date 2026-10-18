@@ -612,3 +612,42 @@ subagent task each.
 - Timing: poll.run 1 s margin (500 ms flaked once), setup 2 s steps, hooks/auth 1.5 s steps;
   push completion waits on relay `/wait` (event-based).
 - `make all SKEL=1` green (1099 slides, 1124 blocks, 0 mismatches); --check ×5 green.
+
+### Part 11 complete — 116 slides; Go bus push auth fixed (2026-10-18)
+- `11b_push.html` ch5 config CRUD (13), ch6 CancelTask (10), ch7 ListTasks (13), ch8 webhook
+  security (16), `p11-wrap` → #p12; 11_push ch5–8 links + defect prose (`p11-hook-auth`,
+  `p11-hook-401`, `p11-ch4-sum`). Examples `ex/py/11/{crud,cancel_watch,listing,url_check,
+  guarded}.py`, `ex/ts/11/{crud,listing}.ts`, `ex/go/11/{crud,listing,guard,hookold}`
+  (hookold = verbatim old hookSender for the before slide), specs
+  `ex/run/11/{crud,cancel,list,sec}.run`; ports 11150–11184.
+- **Fix:** `agents/bus/main.go` hookSender sends `Authorization: <scheme> <credentials>`
+  when AuthenticationInfo has both (§4.3.3 MUST; scheme as given, py SDK skips empty
+  credentials too) and logs `WARN push rejected` on non-2xx. Only `out/11/auth.txt` changed
+  (Go POSTs gain Authorization; 6 WARN lines). `auth.run` step 1500 → 3000 ms after a
+  traceback/step-line swap flaked once (slides use grep-filtered server output only).
+- Findings: Go Get on unknown push config → -32603 (`push.ErrPushConfigNotFound` plain
+  errors.New, `a2asrv/push/store.go:30`; §3.1.8 wants TaskNotFound; py/ts -32001); Go client
+  `ListTaskPushConfigs` drops nextPageToken (`a2aclient/client.go:181`); no server paginates
+  config lists (MAY); Delete → `result: null`, second Delete no error; TS client
+  `listTaskPushNotificationConfig` (no s); **TS sends the CANCELED push twice** (two
+  `_processEvents` loops on one bus, `server/index.js:2833`/`:3227`); cancel during a
+  subscription delivers CANCELED then closes on all three; py ListTasks serialises with
+  `always_print_fields_with_no_presence` (`server/routes/common.py:39`) → extra empty
+  fields; pageSize 0 → py/ts -32602, go default 50 (`inmemory.go:197`), 101 → py/ts -32602,
+  go -32600; Go orders ListTasks by store write time (`inmemory.go:208`); TS
+  `statusTimestampAfter` uses `>` (proto says >=, `server/index.js:3587`); page tokens are
+  unsigned base64(timestamp,id); SSRF — py `push_url_validator` default None (validator
+  resolves, fails closed, rejects loopback/private/metadata/IPv4-mapped), TS none, Go blocks
+  at dial (`sender.go:97`) and drops the token on cross-host redirect (`:152`), Go
+  Authorization only Bearer/Basic (`:175`), token header `A2A-Notification-Token` → our
+  `X-A2A-Notification-Token` receivers 401 the correct token; wiretap HEADERS list lacks
+  `A2A-Notification-Token` (`tools/wiretap.py`); spec defines no webhook signature/replay
+  protection (only `topics/streaming-and-async.md` recommends JWT/HMAC/jti) — replayed POST
+  accepted twice.
+- Spec tension: §4.3.3 "Clients MUST validate the task ID" vs §13.2 SHOULD; retry MAY vs
+  SHOULD (`p11-sec-duties`).
+- Open: our Go hookSender has no SSRF guard and forwards custom headers on redirect (slide
+  defers to part 17). Timing: crud.run 2 s steps; cancel.run event-synchronised; Go WARN
+  after "완료" race held so far — revisit with hooks.run 1.5 s in review.
+- `make all SKEL=1` green (1151 slides, 1177 blocks, 0 mismatches); --check ×3 green after
+  the auth.run change; manifest 192, 0 stale.

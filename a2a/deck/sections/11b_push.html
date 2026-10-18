@@ -1,4 +1,579 @@
-<article class="card" id="p11-todo-b">
-<h3>푸시 알림 (뒤 절반)</h3>
-<p class="lead">준비 중입니다</p>
+<!-- ==== 5장 푸시 설정 CRUD ==== -->
+
+<article class="card" id="p11-ch5">
+<p class="chnum">5장</p>
+<h2>푸시 설정 CRUD — Get·List·Delete</h2>
+<p class="chsub">메서드 넷 → 파이썬 → TypeScript → Go → 실행과 지운 뒤 → 세 서버 → 와이어의 List·Delete → 페이지 → 없는 설정·없는 작업 → id 없는 설정의 목록</p>
+</article>
+
+<article class="card" id="p11-crud-four">
+<h3>설정을 다루는 메서드는 넷 — 만들고, 하나 보고, 다 보고, 지운다</h3>
+<p class="lead">Create 는 <a href="#p11-cfg-two">3장</a>에서 했습니다. 나머지 셋은 모두 작업 id(<code>taskId</code>)를 먼저 받습니다 — 설정은 작업에 딸린 것이기 때문입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>메서드(§)</th><th>요청</th><th>답</th><th>스펙의 행동</th></tr>
+<tr><td><code>GetTaskPushNotificationConfig</code>(§3.1.8)</td><td><code>taskId</code>·<code>id</code>(둘 다 REQUIRED)</td><td>설정 하나</td><td>"<b>MUST</b> fail if the configuration does not exist" — 오류는 <code>TaskNotFoundError</code></td></tr>
+<tr><td><code>ListTaskPushNotificationConfigs</code>(§3.1.9)</td><td><code>taskId</code>, <code>pageSize</code>·<code>pageToken</code></td><td><code>configs</code>·<code>nextPageToken</code></td><td>"<b>MUST</b> return all active … configurations", 페이지는 MAY</td></tr>
+<tr><td><code>DeleteTaskPushNotificationConfig</code>(§3.1.10)</td><td><code>taskId</code>·<code>id</code></td><td>"Confirmation of deletion (implementation-specific)"</td><td>"No further notifications will be sent", "<b>MUST</b> be idempotent"</td></tr>
+</table>
+</div>
+<div class="note"><b>네 메서드 모두 기능 검사</b> — 카드에 <code>pushNotifications</code> 가 없으면 넷 다 "<b>MUST</b> return <code>PushNotificationNotSupportedError</code>"(§3.3.4) 입니다. 교통 에이전트는 기능이 있으니 이 장의 요청은 모두 작업을 찾는 데까지 갑니다.</div>
+</article>
+
+<article class="card" id="p11-crud-py">
+<h3>파이썬 — 요청마다 제 타입, Delete 를 두 번</h3>
+<p class="lead"><code>11/crud.py</code> 는 설정 둘(요청에 실은 <code>hook-1</code>·<code>tok-1</code>, Create 한 <code>hook-2</code>·<code>tok-2</code>)을 단 작업에 아래를 차례로 합니다. 끝에는 중계기(<a href="#p11-hook-relay">4장</a>)가 받은 것을 토큰마다 셉니다.</p>
+<!--CODE file=ex/py/11/crud.py region=crud-->
+<!--CODE file=ex/py/11/crud.py region=list note=show — 받은 목록을 토큰으로 줄 세워 찍는다-->
+<div class="note"><b>줄 세우는 까닭</b> — §3.1.9 는 목록의 차례를 정하지 않습니다. Go 서버는 설정을 맵에서 꺼내 실행마다 차례가 다르므로(<a href="#p11-cfg-out">3장</a>), 세 클라이언트 모두 찍기 전에 토큰으로 줄 세웁니다. 캡처가 실행마다 같게 하려는 것이고, 서버가 준 차례는 아닙니다.</div>
+</article>
+
+<article class="card" id="p11-crud-ts">
+<h3>TypeScript — List 만 이름이 홑수, <code>listTaskPushNotificationConfig</code></h3>
+<!--CODE file=ex/ts/11/crud.ts region=crud-->
+<!--CODE file=ex/ts/11/crud.ts region=list note=show-->
+<ul>
+<li>TS 클라이언트의 메서드 이름은 <code>listTaskPushNotificationConfig</code> — 스펙의 메서드 이름(<code>…Configs</code>)과 달리 끝에 s 가 없습니다(<code>client/index.d.ts:123</code>). 요청 타입은 <code>ListTaskPushNotificationConfigsRequest</code> 입니다.</li>
+<li>요청 타입의 <code>pageSize</code>·<code>pageToken</code> 은 선택 필드가 아니라 <code>0</code>·<code>""</code> 까지 적어야 타입 검사를 지납니다. 서버가 그 둘로 무엇을 하는지는 <a href="#p11-crud-page">뒤에서</a> 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-crud-go">
+<h3>Go — <code>ListTaskPushConfigs</code> 는 설정 조각만 돌려준다</h3>
+<!--CODE file=ex/go/11/crud/main.go region=crud-->
+<!--CODE file=ex/go/11/crud/main.go region=list note=show-->
+<ul>
+<li>Go 클라이언트의 <code>ListTaskPushConfigs</code> 는 <code>[]*a2a.PushConfig</code> 를 돌려줍니다(<code>a2aclient/client.go:181</code>). 응답의 <code>nextPageToken</code> 은 호출하는 쪽에 닿지 않습니다 — 서버가 페이지를 나눠도 다음 장을 청할 길이 없습니다.</li>
+<li>오류는 <code>errors.Is</code> 로 갈라 봅니다(<a href="#p09-cl-errors">9부</a>) — 마지막 Get 이 어느 오류로 돌아왔는지가 <a href="#p11-crud-unknown">뒤의 슬라이드</a>입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-crud-run">
+<h3>지운 설정에는 알림이 가지 않고, 두 번 지워도 오류가 없다</h3>
+<p class="lead">교통 에이전트 셋(단계 하나 2초)에 제 언어의 클라이언트를 붙였습니다. 파이썬 클라이언트 → 파이썬 서버의 출력입니다.</p>
+<!--SPEC file=ex/run/11/crud.run-->
+<!--OUT file=out/11/crud.txt part=터미널 8 lines=1-10 note=파이썬 클라이언트 → 파이썬 서버-->
+<ul>
+<li><code>tok-1</code> 은 SUBMITTED Task 한 건만 받았습니다 — 요청에 실은 설정이라 첫 Task 는 받았고(<a href="#p11-cfg-out">3장</a>), 첫 단계(2초 뒤) 전에 지워져 그 뒤로는 받지 못했습니다. §3.1.10 의 "No further notifications" 그대로입니다.</li>
+<li>둘째 Delete 도 오류 없이 지나갔습니다 — "<b>MUST</b> be idempotent". 지운 뒤의 Get 은 <code>TaskNotFoundError</code> 입니다.</li>
+</ul>
+<div class="note"><b>2초는 여유다</b> — Delete 가 첫 단계보다 먼저 닿는다는 것은 이벤트로 맞춘 것이 아니라 단계 사이 2초에 기댄 것입니다(<a href="#p11-cfg-run">3장</a>과 같은 여유). 기계가 2초 넘게 멈추면 <code>tok-1</code> 이 한 건 더 받습니다.</div>
+</article>
+
+<article class="card" id="p11-crud-out3">
+<h3>세 서버가 같다 — 다른 것은 지운 설정을 다시 Get 했을 때의 답</h3>
+<!--OUT file=out/11/crud.txt part=터미널 8 lines=11-31 note=TS 클라이언트 → TS 서버, Go → Go-->
+<ul>
+<li>목록 둘 → 지우기 둘 → 목록 하나, 지운 <code>tok-1</code> 은 한 건 — 세 서버의 줄이 같습니다.</li>
+<li>지운 설정의 Get 만 갈렸습니다. TS 는 어느 설정이 없는지까지 적고, Go 는 <code>push config not found</code> 를 <b>내부 오류</b>로 돌려줬습니다(<code>ErrInternalError: true</code>) — 까닭은 <a href="#p11-crud-unknown">뒤에서</a>.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-crud-wire">
+<h3>와이어의 List 와 Delete — 목록에 <code>nextPageToken</code> 이 없고, 지우기의 답은 <code>null</code></h3>
+<p class="lead">파이썬 서버 앞 탭의 첫 List 와 첫 Delete 입니다.</p>
+<!--OUT file=out/11/crud.txt wire=py-wire ex=5 lines=13-34 note=List 의 답-->
+<!--OUT file=out/11/crud.txt wire=py-wire ex=6 grep=^←|"result" note=Delete 의 답-->
+<ul>
+<li>답은 <code>configs</code> 하나뿐 — TS 서버도 같은 모양입니다. 파이썬은 토큰을 채우지 않고, TS 는 <code>nextPageToken: ""</code> 를 채우지만(<code>server/index.js:3320</code>) 빈 문자열은 ProtoJSON 에서 빠집니다.</li>
+<li>Delete 의 답 <code>"result": null</code> 은 세 서버가 같습니다. §3.1.10 이 "implementation-specific" 이라 한 자리를 셋 다 비워 뒀습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-crud-page">
+<h3>설정 목록의 페이지는 아무도 나누지 않는다 — 스펙의 MAY</h3>
+<p class="lead">요청에는 <code>pageSize</code>·<code>pageToken</code> 이 있습니다(proto <code>ListTaskPushNotificationConfigsRequest</code>). 세 SDK 서버가 그것으로 무엇을 하는지는 설치본에서 읽었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>서버가 하는 일</th><th>설치본</th></tr>
+<tr><td>파이썬</td><td>저장소의 목록 전부, 토큰 없음</td><td><code>default_request_handler_v2.py:634</code>–<code>:640</code></td></tr>
+<tr><td>TS</td><td>전부, <code>nextPageToken: ""</code></td><td><code>server/index.js:3318</code>–<code>:3321</code></td></tr>
+<tr><td>Go</td><td>전부 — 요청의 <code>PageSize</code> 를 읽지 않는다</td><td><code>a2asrv/handler.go:430</code>–<code>:445</code></td></tr>
+</table>
+</div>
+<div class="key"><b>설정은 작업마다 몇 개</b> — §3.1.9 의 "MAY support pagination for tasks with many configurations" 는 쓰지 않아도 됩니다. 셋 다 쓰지 않았으니, 클라이언트는 첫 답을 전부로 읽습니다. 작업 목록(ListTasks)은 사정이 다릅니다 — 거기서는 페이지가 MUST 입니다(<a href="#p11-list-rule">7장</a>).</div>
+</article>
+
+<article class="card" id="p11-crud-unknown">
+<h3>없는 작업에는 셋 다 -32001 — 없는 설정에는 Go 만 -32603</h3>
+<p class="lead">끝의 curl 은 없는 작업 <code>t-404</code> 에 Get·List·Delete 를 세 서버에 보냈습니다(<code>rpc/{get,list,delete}_404.json</code>). Go 서버 앞 탭의 세 답입니다.</p>
+<!--OUT file=out/11/crud.txt wire=go-wire grep="method"|"code"|"message" note=Go 서버 — 파이썬·TS 도 -32001(문구만 다르다)-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>없는 것</th><th>파이썬</th><th>TS</th><th>Go</th></tr>
+<tr><td>작업(셋 다)</td><td colspan="3"><code>-32001</code> — 설정보다 작업을 먼저 찾는다(Get 의 자리: 파이썬 <code>default_request_handler_v2.py:529</code>, TS <code>server/index.js:3292</code>, Go <code>a2asrv/handler.go:416</code>)</td></tr>
+<tr><td>설정(Get)</td><td><code>TaskNotFoundError</code></td><td><code>TaskNotFoundError</code></td><td><code>push.ErrPushConfigNotFound</code> — A2A 오류가 아니라 <code>-32603</code></td></tr>
+</table>
+</div>
+<div class="warn"><b>Go SDK 는 §3.1.8 을 어긴다</b> — 스펙은 없는 설정에 "<code>TaskNotFoundError</code>: The push notification configuration does not exist" 라 적었습니다. Go 의 <code>ErrPushConfigNotFound</code> 는 <code>errors.New</code> 로 만든 보통 오류라(<code>a2asrv/push/store.go:30</code>), JSON-RPC 로 옮길 때 짝이 없어 내부 오류가 됩니다(<a href="#p11-crud-out3">앞 슬라이드</a>의 <code>ErrInternalError: true</code>).</div>
+</article>
+
+<article class="card" id="p11-crud-noid">
+<h3>id 없는 설정 둘 — 파이썬 서버의 목록에는 하나만 남는다</h3>
+<p class="lead">두 설정 모두 <code>id</code> 를 주지 않고(<code>--no-id</code>) 목록만 봤습니다. 파이썬 클라이언트로 세 서버에 차례로 보냈습니다.</p>
+<!--OUT file=out/11/crud.txt part=터미널 8 lines=32-46 note=파이썬 서버 → TS → Go-->
+<ul>
+<li>파이썬 서버의 목록은 하나, 그 id 는 작업 id(<code>&lt;id4&gt;</code>)와 같습니다. 3장에서 도착으로 본 "둘째가 첫째를 덮는다"(<a href="#p11-cfg-noid">3장</a>)가 목록에서도 그대로입니다 — <code>tok-1</code> 은 첫 Task 한 건뿐.</li>
+<li>TS·Go 는 둘 다 남고 id 는 서버가 만든 UUID 입니다. 둘 다 여섯·다섯 건을 받았습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-ch5-sum">
+<h3>5장 정리 — 푸시 설정 CRUD</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TS</th><th>Go</th></tr>
+<tr><td>클라이언트 메서드</td><td><code>get_/list_/delete_task_push_notification_config(s)</code></td><td><code>get…Config</code>·<code>listTaskPushNotificationConfig</code>·<code>delete…Config</code></td><td><code>GetTaskPushConfig</code>·<code>ListTaskPushConfigs</code>(조각만)·<code>DeleteTaskPushConfig</code></td></tr>
+<tr><td>지운 뒤의 알림</td><td colspan="3">없다 — 지운 설정은 첫 Task 한 건만 받았다</td></tr>
+<tr><td>두 번 지우기</td><td colspan="3">오류 없음, 답은 <code>null</code></td></tr>
+<tr><td>목록의 페이지</td><td colspan="3">나누지 않는다(MAY)</td></tr>
+<tr><td>없는 작업</td><td colspan="3"><code>-32001</code></td></tr>
+<tr><td>없는 설정</td><td><code>-32001</code></td><td><code>-32001</code></td><td><code>-32603</code> — §3.1.8 위반</td></tr>
+<tr><td>id 없는 설정 둘</td><td>하나만 남는다(작업 id)</td><td>둘(UUID)</td><td>둘(UUID)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p11-ch5-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 웹훅을 바꾸려는 클라이언트가 옛 설정을 Delete 하고, 응답을 못 받아 같은 Delete 를 한 번 더 보냈습니다. 둘째 Delete 의 답은 무엇이고, 옛 웹훅은 그 뒤에 알림을 받습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 세 서버 모두 둘째 Delete 에도 오류 없이 <code>"result": null</code> 을 줍니다 — §3.1.10 의 "MUST be idempotent"(<a href="#p11-crud-run">실행</a>의 <code>Delete hook-1 (2) → 오류 없음</code>). 옛 웹훅은 지운 뒤로 아무것도 받지 않습니다 — 지운 <code>tok-1</code> 은 세 서버 모두 지우기 전의 SUBMITTED Task 한 건뿐이었습니다(<a href="#p11-crud-out3">세 서버</a>).</div>
+</article>
+
+<!-- ==== 6장 CancelTask ==== -->
+
+<article class="card" id="p11-ch6">
+<p class="chnum">6장</p>
+<h2>CancelTask — 달리는 작업 멈추기</h2>
+<p class="chsub">5부에서 본 것 → 세 취소 처리기 → SDK 가 실행기를 멈추는 길 → 이벤트에 맞춘 실험 → 파이썬 → TS·Go → 같은 CANCELED 두 번 → 정리</p>
+</article>
+
+<article class="card" id="p11-cnl-recap">
+<h3>취소의 답은 5부에서 다 봤다 — 이 장은 그 뒤에서 누가 무엇을 보나</h3>
+<p class="lead">§3.1.5 Cancel Task 의 답과 오류는 <a href="#p05-cancel-plan">5부</a>가 교통 에이전트로 셋 다 확인했습니다. 여기서는 표로만 줄이고, 그때 보지 않은 자리로 갑니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>세 서버의 답</th><th>근거</th></tr>
+<tr><td>달리는 작업을 취소하면?</td><td>CANCELED Task, 실행기는 쉬던 자리에서 멈춤</td><td><a href="#p05-cancel-out">5부</a></td></tr>
+<tr><td>이미 CANCELED 를 또?</td><td>파이썬 <code>-32002</code>, TS·Go 같은 Task — §3.1.5 와 §3.3.1 이 당긴다</td><td><a href="#p05-cancel-twice">5부</a>·<a href="#p05-cancel-spec">스펙</a></td></tr>
+<tr><td>COMPLETED 를?</td><td>셋 다 <code>-32002</code>(TaskNotCancelableError)</td><td><a href="#p05-err-cancel-done">5부</a></td></tr>
+<tr><td>없는 작업을?</td><td>셋 다 <code>-32001</code></td><td><a href="#p05-err-notfound">5부</a></td></tr>
+<tr><td><b>구독 중인 스트림은?</b></td><td colspan="2">이 장 — <a href="#p11-cnl-out">실험</a></td></tr>
+<tr><td><b>웹훅은?</b></td><td colspan="2">이 장 — <a href="#p11-cnl-twice">CANCELED 두 번</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p11-cnl-handlers">
+<h3>세 취소 처리기 — 하는 일은 CANCELED 를 싣는 것 하나</h3>
+<p class="lead">교통 에이전트의 취소 처리기입니다. 1장에서 미뤄 둔 자리(<a href="#p11-bus-ts">1장</a>)입니다.</p>
+<!--CODE file=ex/py/agents/bus.py region=cancel note=파이썬 — 새 TaskUpdater 로 cancel-->
+<!--CODE file=ex/ts/agents/bus.ts region=cancel note=TypeScript — common.ts 의 cancel 이 멈춤 신호까지-->
+<!--CODE file=ex/go/agents/bus/main.go region=cancel note=Go — Cancel 도 반복자-->
+<div class="note"><b>멈추게 하는 것은 셋이 다르다</b> — 파이썬·Go 의 처리기는 상태만 싣고, 달리던 <code>execute</code> 를 멈추는 것은 SDK 입니다(다음 슬라이드). TS 만 우리 손으로 멈춥니다 — <code>common.ts</code> 의 <code>cancel</code> 이 <code>up.stop.abort()</code> 를 부르면 <code>pause</code> 가 <code>false</code> 를 돌려줍니다(<a href="#p11-bus-ts">1장</a>).</div>
+</article>
+
+<article class="card" id="p11-cnl-sdk">
+<h3>SDK 가 실행기를 멈추는 길 — 파이썬은 작업을 취소하고, Go 는 ctx 를 닫는다</h3>
+<p class="lead">CancelTask 를 받은 세 요청 처리기가 하는 일을 설치본에서 따라갔습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>차례</th><th>설치본</th></tr>
+<tr><td>파이썬</td><td>끝난 작업이면 <code>-32002</code> → 실행기의 <code>cancel</code> 을 먼저 기다리고 → <code>execute</code> 를 돌리던 asyncio 작업을 <code>cancel()</code>(쉬던 <code>asyncio.sleep</code> 에서 <code>CancelledError</code>) → 그래도 끝 상태가 아니면 SDK 가 CANCELED 를 직접 쓴다</td><td><code>default_request_handler_v2.py:236</code>, <code>active_task.py:834</code>·<code>:844</code>·<code>:875</code></td></tr>
+<tr><td>TS</td><td>CANCELED 면 그대로, 다른 끝 상태면 <code>-32002</code> → 실행 중인 버스가 있으면 <code>cancelTask(taskId, bus)</code> 를 부르고 그 버스의 이벤트를 다시 처리 → 버스가 없으면 SDK 가 "Task cancellation requested by user." 로 CANCELED 를 쓴다</td><td><code>server/index.js:3217</code>·<code>:3226</code>·<code>:3241</code></td></tr>
+<tr><td>Go</td><td>CANCELED 아닌 끝 상태면 <code>-32002</code> → 실행기의 <code>Cancel</code> 이 낸 이벤트를 달리던 실행의 같은 관(pipe)에 넣는다 → 끝 상태가 처리되면 실행 묶음(errgroup)의 ctx 가 닫혀 <code>Sleep(ctx)</code> 이 <code>false</code></td><td><code>a2asrv/agentexec.go:288</code>, <code>internal/taskexec/local_manager.go:397</code>, <code>execution_handler.go:161</code>·<code>:215</code></td></tr>
+</table>
+</div>
+<div class="note"><b>파이썬 SDK 가 스스로 적어 둔 단서</b> — <code>ActiveTask.cancel</code> 의 설명은 끝 상태의 쓰기가 "is not guaranteed to reach an active subscriber stream" 이라 합니다(<code>active_task.py:784</code>). 정말 그런지 다음 실험이 구독자를 붙여 봅니다.</div>
+</article>
+
+<article class="card" id="p11-cnl-plan">
+<h3>실험 — 구독 스트림에 첫 WORKING 이 오면 취소한다</h3>
+<p class="lead"><code>11/cancel_watch.py</code> 는 SDK 없이, 웹훅 설정을 실어 배차를 맡기고 SubscribeToTask 스트림을 엽니다. 스트림을 읽는 스레드입니다.</p>
+<!--SPEC file=ex/run/11/cancel.run-->
+<!--CODE file=ex/py/11/cancel_watch.py region=watch-->
+<div class="note"><b>시간이 아니라 이벤트</b> — 취소하는 때는 "첫 WORKING 이 스트림에 왔다" 입니다(<code>working.set()</code>). 몇 초 쉬어 보는 대신이고, 5부의 GetTask 엿보기(<a href="#p05-cancel-plan">5부</a>)보다 물음도 없습니다. 끝은 스트림이 닫히는 것과 중계기의 <code>/wait</code> 로 맞춥니다. <code>timeout=8</code> 은 스트림이 닫히지 않을 때를 위한 안전판일 뿐입니다. 하나 더 — 취소 전에 첫 WORKING 푸시가 중계기에 닿았는지도 봅니다(<code>hooked</code>, 중계기의 <code>/seen</code> 을 0.05초마다). TS 서버가 푸시를 보낸 뒤 찍는 줄이 <code>[교통] 취소</code> 와 자리를 바꾸지 않게 하려는, 이 장에서 하나뿐인 짧은 쉼입니다.</div>
+</article>
+
+<article class="card" id="p11-cnl-out">
+<h3>파이썬 서버 — 구독자도 웹훅도 CANCELED 를 받았고, 스트림은 닫혔다</h3>
+<!--CODE file=ex/py/11/cancel_watch.py region=main note=main — 맡기고, 구독하고, 기다렸다가 취소-->
+<!--OUT file=out/11/cancel.txt part=터미널 9 lines=1-12 note=파이썬 서버-->
+<!--OUT file=out/11/cancel.txt server=bus-py note=파이썬 교통 에이전트의 출력-->
+<ul>
+<li>스트림은 <code>task SUBMITTED</code> → 첫 단계 → <code>statusUpdate CANCELED 배차를 취소했습니다</code> 로 끝나고 닫혔습니다. SDK 설명의 "not guaranteed" 는 이 실행에서는 일어나지 않았습니다. SDK 는 실행기의 <code>cancel</code> 을 먼저 기다려 "the still-open event queue" 에 끝 상태가 실리게 한다고 적었습니다(<code>active_task.py:813</code> 의 주석, <a href="#p11-cnl-sdk">앞</a>). 그래도 구독자는 CANCELED 가 안 올 수 있다고 보고, 스트림이 닫히면 GetTask 로 확인합니다.</li>
+<li>웹훅도 같은 세 이벤트를 받았습니다. 서버 출력에는 둘째 단계가 없습니다 — 실행기가 첫 쉼에서 멈췄습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-cnl-out3">
+<h3>TS·Go 서버 — 스트림은 같고, TS 의 웹훅만 CANCELED 를 두 번 받았다</h3>
+<!--OUT file=out/11/cancel.txt part=터미널 9 lines=13-37 note=TS 서버(끝 알림 둘을 기다린다) → Go 서버-->
+<ul>
+<li>세 서버의 구독 스트림이 줄까지 같습니다 — 취소도 스트림에서는 상태 이벤트 하나입니다(<a href="#p10-ch3">10부</a>의 닫힘 규칙 그대로).</li>
+<li>TS 서버만 웹훅에 <code>statusUpdate CANCELED</code> 를 두 번 보냈습니다. 그래서 이 실행만 끝 알림 둘을 기다리게 했습니다(명령 끝의 <code>2</code>) — 한 건만 기다리면 둘째가 클라이언트가 묻는 때에 따라 보이기도 하고 안 보이기도 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-cnl-twice">
+<h3>같은 CANCELED 두 번 — TS SDK 는 한 이벤트를 두 고리가 처리한다</h3>
+<p class="lead">중계기 앞 탭에 남은 TS 서버의 마지막 두 POST 입니다.</p>
+<!--OUT file=out/11/cancel.txt wire=push ex=6-7 grep=^→|^←|Token|"state"|"messageId"|"text" note=TS 서버가 보낸 끝의 두 POST-->
+<!--OUT file=out/11/cancel.txt server=bus-ts note=TS 교통 에이전트의 출력 — "보냈다" 넷-->
+<ul>
+<li>두 몸통의 <code>messageId</code>(<code>&lt;id7&gt;</code>)까지 같습니다 — 같은 이벤트를 두 번 보낸 것입니다. 실행을 처리하던 고리(<code>_processEvents</code>, <code>server/index.js:2833</code>)와, <code>cancelTask</code> 가 같은 버스에 새로 붙인 고리(<code>:3227</code>)가 이벤트마다 푸시를 보내기 때문입니다.</li>
+<li>스펙은 이것을 미리 말해 둡니다 — 수신기는 "<b>SHOULD</b> process notifications idempotently, as duplicate deliveries may occur"(§4.3.3). 상태 메시지의 <code>messageId</code> 가 같으면 같은 알림으로 볼 수 있습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-ch6-sum">
+<h3>6장 정리 — 달리는 작업의 취소</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TS</th><th>Go</th></tr>
+<tr><td>실행기를 멈추는 것</td><td>SDK — asyncio 작업 취소</td><td>우리 <code>cancel</code> — <code>AbortController</code></td><td>SDK — 실행의 ctx</td></tr>
+<tr><td>처리기가 끝 상태를 안 쓰면</td><td>SDK 가 CANCELED 를 쓴다</td><td>버스가 없을 때만 SDK 가 쓴다</td><td>—(이 덱의 처리기는 늘 쓴다)</td></tr>
+<tr><td>구독 스트림</td><td colspan="3"><code>statusUpdate CANCELED</code> 다음 닫힘 — 셋이 같다</td></tr>
+<tr><td>웹훅</td><td>CANCELED 한 번</td><td><b>두 번</b>(같은 messageId)</td><td>한 번</td></tr>
+<tr><td>답·오류</td><td colspan="3"><a href="#p11-cnl-recap">5부의 표</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p11-ch6-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. 웹훅으로 받은 CANCELED 마다 "취소 안내 메일" 을 보내는 수신기가 있습니다. TS 교통 에이전트의 작업을 하나 취소하면 메일은 몇 통 나가고, 어떻게 막습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 두 통입니다 — TS SDK 서버는 같은 <code>statusUpdate CANCELED</code> 를 두 번 POST 했습니다(<a href="#p11-cnl-twice">탭</a>, 두 몸통의 <code>messageId</code> 가 같다). §4.3.3 대로 수신기를 멱등으로 만들어야 합니다 — 작업 id 와 상태(또는 상태 메시지의 <code>messageId</code>)를 기억해 두고, 이미 처리한 알림이면 2xx 만 돌려주고 메일은 보내지 않습니다.</div>
+</article>
+
+<!-- ==== 7장 ListTasks ==== -->
+
+<article class="card" id="p11-ch7">
+<p class="chnum">7장</p>
+<h2>ListTasks — 필터와 페이지 토큰</h2>
+<p class="chsub">요청과 MUST → 파이썬 → TypeScript → Go → 실행과 차례 → 세 서버 → 와이어의 목록 → pageSize 0·101 → 줄 세우기·시각 필터·커서 → 누구의 작업인가 → 정리</p>
+</article>
+
+<article class="card" id="p11-list-rule">
+<h3>ListTasks 는 걸러서, 새것부터, 페이지로 — 스펙이 MUST 로 못 박은 것이 많다</h3>
+<p class="lead">작업 id 를 잃은 클라이언트가 작업을 되찾는 길입니다(<a href="#p05-fail-plan">5부</a>에서 맥락으로 찾았던 것). proto 의 <code>ListTasksRequest</code> 와 §3.1.4 입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드·규칙</th><th>스펙</th></tr>
+<tr><td><code>contextId</code>·<code>status</code></td><td>그 맥락의, 그 상태의 작업만</td></tr>
+<tr><td><code>pageSize</code></td><td>"If unspecified, at most 50", "minimum value is 1", "maximum value is 100"</td></tr>
+<tr><td><code>pageToken</code> → <code>nextPageToken</code></td><td>커서 방식(MUST). <code>nextPageToken</code> 은 "<b>MUST</b> always be present", 마지막 장이면 <code>""</code></td></tr>
+<tr><td><code>historyLength</code>·<code>includeArtifacts</code></td><td>작업마다 이력 길이. 아티팩트는 기본 false — 그러면 <code>artifacts</code> 를 "<b>MUST</b> be omitted entirely"</td></tr>
+<tr><td><code>statusTimestampAfter</code></td><td>상태 시각이 그 값 "greater than or equal" 인 작업만</td></tr>
+<tr><td>차례</td><td>"<b>MUST</b> return tasks sorted by their status timestamp time in descending order"</td></tr>
+<tr><td>범위</td><td>"<b>MUST</b> return only tasks visible to the authenticated client"(§13.1)</td></tr>
+</table>
+</div>
+<div class="note"><b>답의 넷</b> — <code>ListTasksResponse</code> 는 <code>tasks</code>·<code>nextPageToken</code>·<code>pageSize</code>·<code>totalSize</code> 넷이 모두 REQUIRED 입니다. <code>totalSize</code> 는 "before pagination" 의 수입니다.</div>
+</article>
+
+<article class="card" id="p11-list-py">
+<h3>파이썬 — <code>list_tasks(ListTasksRequest(**kw))</code>, 토큰이 빌 때까지 돈다</h3>
+<p class="lead"><code>11/listing.py</code> 는 먼저 막는 SendMessage 로 작업 셋을 만듭니다 — 맥락 <code>ctx-a</code> 에 30명(<code>list-a</code>)과 0명(<code>list-b</code>, 거절), <code>ctx-b</code> 에 70명(<code>list-c</code>). 그다음 목록을 다섯 가지로 받습니다.</p>
+<!--CODE file=ex/py/11/listing.py region=list-->
+</article>
+
+<article class="card" id="p11-list-ts">
+<h3>TypeScript — 빈 필터를 다 적은 <code>ALL</code> 위에 덮어쓴다</h3>
+<!--CODE file=ex/ts/11/listing.ts region=list-->
+<div class="note"><b>필수 필드가 많다</b> — ts-proto 의 <code>ListTasksRequest</code> 는 <code>tenant</code>·<code>contextId</code>·<code>status</code>·<code>pageToken</code>·<code>statusTimestampAfter</code> 가 선택이 아닙니다. "필터 없음" 도 빈 값으로 적어야 합니다 — 그래서 <code>ALL</code> 을 하나 두었습니다.</div>
+</article>
+
+<article class="card" id="p11-list-go">
+<h3>Go — <code>ListTasks(ctx, &amp;a2a.ListTasksRequest{…})</code>, 이력 길이만 포인터</h3>
+<!--CODE file=ex/go/11/listing/main.go region=list-->
+<div class="note"><b><code>HistoryLength *int</code></b> — "주지 않음" 과 "0" 을 가르려고 포인터입니다(<code>a2a/core.go:858</code>). <code>PageSize</code> 는 그냥 <code>int</code> 라 0 을 보내면 "주지 않음" 이 됩니다 — 그 대가는 <a href="#p11-list-size">뒤에서</a>.</div>
+</article>
+
+<article class="card" id="p11-list-run">
+<h3>새것부터 셋 — 걸러도, 한 장씩 넘겨도 차례가 같다</h3>
+<p class="lead">단계 0.1초의 교통 에이전트 셋에 제 언어의 클라이언트를 붙였습니다. 파이썬 서버입니다.</p>
+<!--SPEC file=ex/run/11/list.run-->
+<!--OUT file=out/11/list.txt part=터미널 7 lines=1-21 note=파이썬 클라이언트 → 파이썬 서버-->
+<ul>
+<li>차례는 <code>list-c</code> → <code>list-b</code> → <code>list-a</code>, 마지막에 만든 것부터입니다. <code>pageSize=1</code> 로 넘겨도 같은 차례이고, 셋째 장에서 <code>next ""</code> — §3.1.4 의 "empty string" 이 끝 표시입니다.</li>
+<li>아티팩트는 청하지 않으면 0, <code>includeArtifacts</code> 를 켜면 배차 확인서 하나씩(거절한 <code>list-b</code> 는 0). <code>historyLength=0</code> 이면 이력이 비어 첫 메시지 자리가 <code>-</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-list-out3">
+<h3>세 서버가 같은 목록 — 다른 것은 거절한 작업의 이력 수 하나</h3>
+<!--OUT file=out/11/list.txt part=터미널 7 lines=22-63 grep=^\[|: total|REJECTED note=TS 서버 → Go 서버(제목 줄과 거절한 작업만)-->
+<ul>
+<li>필터·차례·페이지·<code>totalSize</code> 가 세 서버에서 같습니다.</li>
+<li>거절한 <code>list-b</code> 의 이력이 TS 만 둘입니다 — TS 는 거절 메시지를 받자마자 이력에도 붙입니다(<a href="#p05-ir-hist-cmp">5부</a>). 파이썬·Go 는 사용자 메시지 하나뿐입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-list-wire">
+<h3>와이어의 목록 — <code>nextPageToken: ""</code> 은 셋 다 싣고, <code>artifacts</code> 는 셋 다 뺀다</h3>
+<p class="lead">끝의 curl 이 <code>{"contextId": "ctx-b", "historyLength": 1}</code> 로 물은 답입니다.</p>
+<!--OUT file=out/11/list.txt wire=py-wire ex=1 lines=15-47 note=파이썬 서버-->
+<!--OUT file=out/11/list.txt wire=go-wire ex=1 grep="tasks"|"text"|"totalSize"|"pageSize"|"nextPageToken" note=Go 서버 — TS 도 같은 넷-->
+<ul>
+<li>"MUST always be present" 를 셋 다 지켰습니다. ProtoJSON 은 빈 문자열을 빼는데, 파이썬은 목록에서만 기본값까지 다 찍게 바꿔 이것을 지킵니다(<code>always_print_fields_with_no_presence=True</code>, <code>server/routes/common.py:39</code>).</li>
+<li>그 대가로 파이썬의 목록 속 메시지에만 <code>"filename": ""</code>·<code>"mediaType": ""</code>·<code>"extensions": []</code> 가 붙었습니다 — GetTask 로 받은 같은 메시지(<a href="#p11-bus-stored">1장</a>)에는 없던 것입니다. <code>artifacts</code> 는 그 뒤에 따로 지웁니다(<code>:43</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p11-list-size">
+<h3>pageSize 0 과 101 — 파이썬·TS 는 -32602, Go 는 0 을 "50" 으로, 101 은 -32600</h3>
+<p class="lead">같은 curl 의 둘째·셋째(<code>"pageSize": 0</code>·<code>101</code>)입니다.</p>
+<!--OUT file=out/11/list.txt wire=py-wire ex=2-3 grep="pageSize"|"code"|"message" note=파이썬 서버-->
+<!--OUT file=out/11/list.txt wire=ts-wire ex=2-3 grep="pageSize"|"code"|"message" note=TS 서버-->
+<!--OUT file=out/11/list.txt wire=go-wire ex=2-3 grep="pageSize"|"totalSize"|"code"|"message": " note=Go 서버-->
+<ul>
+<li>proto 는 <code>optional int32 page_size</code> 에 "The minimum value is 1" 이라 적었습니다. 0 을 보낸 것은 "주지 않음" 과 다릅니다 — 파이썬·TS 는 그렇게 읽어 거절했고, Go 는 필드가 <code>int</code> 라 0 과 없음을 가르지 못해 기본 50 으로 셋을 다 줬습니다(<code>taskstore/inmemory.go:197</code>).</li>
+<li>101 은 셋 다 거절했지만 코드가 갈립니다 — Go 는 <code>a2a.ErrInvalidRequest</code>(<code>-32600</code>), 둘은 <code>-32602</code>. 요청 모양은 맞고 값이 틀렸으니 JSON-RPC 의 뜻으로는 -32602 가 맞습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-list-order">
+<h3>줄 세우기·시각 필터·커서 — 같은 답 뒤의 세 구현</h3>
+<p class="lead">이 장의 작업 셋은 하나씩 끝나서 세 서버가 같은 답을 냈습니다. 설치본은 자리마다 조금씩 다르게 했습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TS</th><th>Go</th></tr>
+<tr><td>줄 세우는 열쇠</td><td>상태 시각(없으면 맨 뒤) → id</td><td>상태 시각 문자열 → id</td><td>저장소에 쓴 시각 <code>lastUpdated</code> → id — 상태 시각이 아니다</td></tr>
+<tr><td><code>statusTimestampAfter</code></td><td><code>&gt;=</code></td><td><code>&gt;</code> — 같은 시각은 빠진다</td><td>"앞이 아니면"(<code>&gt;=</code>), 시각 없는 작업도 통과</td></tr>
+<tr><td>페이지 토큰</td><td colspan="3">셋 다 "시각 + 작업 id" 를 base64 로 싼 것 — 서명은 없다. 실행마다 달라 이 장의 캡처에는 싣지 않았다</td></tr>
+<tr><td>설치본</td><td><code>inmemory_task_store.py:25</code>·<code>:132</code>, <code>utils/task.py:149</code></td><td><code>server/index.js:3587</code>·<code>:3590</code>·<code>:2075</code></td><td><code>taskstore/inmemory.go:208</code>·<code>:245</code>·<code>:320</code></td></tr>
+</table>
+</div>
+<div class="note"><b>TS 의 <code>&gt;</code> 는 스펙과 다르다</b> — proto 는 "greater than or equal" 이라 했습니다. 받은 목록의 가장 새 시각을 다음 물음의 <code>statusTimestampAfter</code> 로 쓰는 클라이언트는, TS 서버에서는 같은 시각에 바뀐 작업을 놓칩니다(파이썬·Go 서버에서는 하나를 다시 받습니다).</div>
+</article>
+
+<article class="card" id="p11-list-owner">
+<h3>누구의 작업인가 — 목록은 저장소가 나눈 칸 안에서만 나온다</h3>
+<p class="lead">§13.1 은 "Even when <code>contextId</code> or other filter parameters are not specified … <b>MUST</b> scope results to the caller's authorized access boundaries" 라 합니다. 세 저장소의 칸은 SDK 부에서 봤습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>칸</th><th>익명 호출자</th><th>근거</th></tr>
+<tr><td>파이썬</td><td><code>user_name</code></td><td><code>""</code> 칸 — 익명끼리 서로의 목록을 본다</td><td><a href="#p07-store-owner">7부</a></td></tr>
+<tr><td>TS</td><td>테넌트 → 소유자</td><td><code>"unknown"</code> 칸 — 이름이 unknown 인 사용자와 섞인다</td><td><a href="#p08-store-owner">8부</a></td></tr>
+<tr><td>Go</td><td>작업 id + 소유자(테넌트는 보지 않는다)</td><td>목록을 주지 않는다(<code>unauthenticated</code>) — 그래서 완성 에이전트는 익명을 <code>"anonymous"</code> 로 세운다</td><td><a href="#p09-store-owner">9부</a>·<a href="#p09-rh-direct">9부</a></td></tr>
+</table>
+</div>
+<div class="key"><b>이 장의 목록이 셋씩 나온 까닭</b> — 클라이언트가 모두 익명이라 한 칸을 썼기 때문입니다. 실제 배포에서는 인증된 사용자마다 칸이 갈려야 §13.1 을 지킵니다. 사용자를 세우는 일은 12부입니다.</div>
+</article>
+
+<article class="card" id="p11-ch7-sum">
+<h3>7장 정리 — ListTasks</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TS</th><th>Go</th></tr>
+<tr><td>필터·차례·페이지</td><td colspan="3">같은 답 — 새것부터, <code>pageSize=1</code> 로 셋째 장에 <code>next ""</code></td></tr>
+<tr><td><code>nextPageToken: ""</code></td><td colspan="3">싣는다(MUST). 파이썬은 기본값을 다 찍어서 — 메시지에 빈 필드가 붙는다</td></tr>
+<tr><td><code>artifacts</code>(기본)</td><td colspan="3">뺀다(MUST)</td></tr>
+<tr><td><code>pageSize: 0</code></td><td><code>-32602</code></td><td><code>-32602</code></td><td>기본 50</td></tr>
+<tr><td><code>pageSize: 101</code></td><td><code>-32602</code></td><td><code>-32602</code></td><td><code>-32600</code></td></tr>
+<tr><td>시각 필터</td><td><code>&gt;=</code></td><td><code>&gt;</code>(스펙과 다름)</td><td><code>&gt;=</code></td></tr>
+<tr><td>익명</td><td><code>""</code> 칸</td><td><code>"unknown"</code> 칸</td><td>거절(우리 에이전트는 <code>"anonymous"</code>)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p11-ch7-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. 클라이언트가 <code>pageSize</code> 를 정하지 않으려고 0 을 보냈습니다. 세 서버의 답은 어떻게 다르고, 클라이언트는 어떻게 보내야 합니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 파이썬·TS 서버는 <code>-32602</code>("minimum page size is 1", "pageSize must be between 1 and 100")로 거절하고, Go 서버만 기본 50 으로 목록을 줍니다(<a href="#p11-list-size">pageSize 0·101</a>). "정하지 않음" 은 0 이 아니라 필드를 아예 빼는 것입니다 — <code>optional int32</code> 이고, 빼면 "at most 50"(§3.1.4) 입니다.</div>
+</article>
+
+<!-- ==== 8장 웹훅 보안 ==== -->
+
+<article class="card" id="p11-ch8">
+<p class="chnum">8장</p>
+<h2>웹훅 보안</h2>
+<p class="chsub">양쪽의 의무 → SSRF → 파이썬의 검사기 → 검사를 켠 에이전트 → Go SDK 의 보내기 → 세 SDK 의 SSRF → 토큰과 Authorization → 서명 → 다시 보내기 → 우리 Go 보내기의 결함 → 고친 코드 → 고친 뒤의 와이어 → 정리</p>
+</article>
+
+<article class="card" id="p11-sec-duties">
+<h3>웹훅은 양쪽이 서로를 의심해야 한다 — §13.2 의 두 목록</h3>
+<p class="lead">푸시에서는 에이전트가 클라이언트가 준 주소로 먼저 연결합니다. 보내는 쪽은 주소를 믿을 수 없고, 받는 쪽은 보낸 이를 믿을 수 없습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>에이전트(보내는 쪽)</th><th>클라이언트(받는 쪽)</th></tr>
+<tr><td>"<b>MUST</b> include authentication credentials … as specified in <code>PushNotificationConfig.authentication</code>"</td><td>"<b>MUST</b> validate webhook authenticity using the provided authentication credentials"</td></tr>
+<tr><td>"<b>SHOULD</b> validate webhook URLs to prevent SSRF" — 사설 대역·localhost·링크 로컬 거절, 허용 목록</td><td>"<b>SHOULD</b> verify the task ID in the payload matches an expected task"</td></tr>
+<tr><td>시간 제한 SHOULD(10~30초), 지수 백오프 재시도 SHOULD</td><td>2xx MUST, 멱등 SHOULD, 속도 제한 SHOULD, HTTPS SHOULD</td></tr>
+</table>
+</div>
+<div class="note"><b>§4.3.3 과 조금 다르다</b> — 같은 일을 §4.3.3 은 "Clients <b>MUST</b> validate the task ID"(<a href="#p11-hook-payload">4장</a>), §13.2 는 SHOULD 로 적었습니다. 재시도도 §4.3.3 은 MAY, §13.2 는 SHOULD 입니다. 이 장은 둘 중 엄한 쪽을 기준으로 봅니다.</div>
+</article>
+
+<article class="card" id="p11-sec-ssrf">
+<h3>SSRF — 에이전트가 제 안쪽 망으로 POST 하게 만드는 웹훅 주소</h3>
+<p class="lead">서버 쪽 요청 위조(Server-Side Request Forgery)입니다. 웹훅 주소는 클라이언트가 마음대로 적습니다. 그 주소가 <code>http://169.254.169.254/…</code>(클라우드 메타데이터)나 사내 관리 화면이면, 바깥에서는 닿지 못할 곳에 에이전트가 대신 요청을 보냅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>기본값</th><th>설치본</th></tr>
+<tr><td>파이썬 SDK</td><td><b>검사하지 않는다</b> — <code>push_url_validator=None</code>. 검사 함수 <code>validate_push_notification_url</code> 은 들어 있고, 켜는 것은 우리 몫</td><td><code>utils/push_url_validator.py:46</code></td></tr>
+<tr><td>TS SDK</td><td>검사가 없다 — 보내기는 받은 주소로 곧장 <code>fetch</code> 한다</td><td><code>server/index.js:2682</code>, <code>dist/</code> 에 사설 대역 검사 없음(grep)</td></tr>
+<tr><td>Go SDK</td><td><b>막는다</b> — <code>HTTPPushSender</code> 의 <code>AllowPrivateNetworks</code> 기본 false</td><td><code>a2asrv/push/sender.go:60</code></td></tr>
+</table>
+</div>
+<div class="warn"><b>이 덱의 에이전트는 모두 루프백 웹훅에 보낸다</b> — 한 기계에서 돌리기 때문입니다. 파이썬·TS 는 기본값이 그것을 허락했고, Go 는 SDK 의 보내기를 쓰지 않아(<a href="#p11-hook-wire-go">4장</a>) 검사를 건너뛰었습니다. 바깥에 내놓는 에이전트라면 셋 다 검사를 켜야 합니다.</div>
+</article>
+
+<article class="card" id="p11-sec-pycheck">
+<h3>파이썬의 검사기 — 이름을 풀어 사설·루프백·메타데이터 주소를 거절한다</h3>
+<!--RUN file=ex/py/11/url_check.py-->
+<ul>
+<li>이름(<code>localhost</code>)은 풀어 본 주소로 가립니다. 풀리지 않는 이름도 거절합니다 — "failing closed"(같은 파일의 설명).</li>
+<li><code>[::ffff:127.0.0.1]</code> 처럼 IPv6 에 싼 루프백도 걸렀습니다. http·https 가 아닌 주소도 거절, 공인 주소만 받았습니다. 연결은 한 번도 하지 않았습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-sec-pyguard">
+<h3>검사를 켠 교통 에이전트 — 루프백 웹훅을 단 SendMessage 는 -32602</h3>
+<p class="lead"><code>11/guarded.py</code> 는 완성 교통 에이전트의 실행기와 카드를 그대로 쓰고, 검사기를 두 자리에 답니다.</p>
+<!--CODE file=ex/py/11/guarded.py region=guard-->
+<!--SPEC file=ex/run/11/sec.run-->
+<!--OUT file=out/11/sec.txt wire=guard-wire ex=1 grep=^←|"code"|"message": " note=루프백 웹훅을 단 SendMessage 의 답-->
+<!--OUT file=out/11/sec.txt server=guarded-->
+<div class="note"><b>받을 때와 보낼 때 두 번</b> — 처리기의 검사기는 SendMessage·Create 에서 설정을 저장하기 전에(<code>default_request_handler_v2.py:367</code>·<code>:501</code>), 보내는 것의 검사기는 POST 하기 직전에(<code>base_push_notification_sender.py:95</code>) 봅니다. 저장할 때 공인 주소로 풀리던 이름이 나중에 사설 주소로 바뀌어도(DNS 다시 묶기) 보낼 때 다시 걸립니다. 다만 검사한 뒤 httpx 가 이름을 한 번 더 풀어 연결하므로, 그 사이의 틈까지 막지는 못합니다 — Go SDK 와 다른 점입니다(<a href="#p11-sec-gosender-read">뒤에서</a>).</div>
+</article>
+
+<article class="card" id="p11-sec-gosender">
+<h3>Go SDK 의 보내기 — 기본값은 막고, 열면 Bearer·Basic 만 싣는다</h3>
+<p class="lead"><code>11/guard</code> 는 <code>push.HTTPPushSender</code> 를 직접 불러 넷을 보냅니다(설정의 토큰은 <code>tok-ok</code>, 인증은 Bearer).</p>
+<!--CODE file=ex/go/11/guard/main.go region=guard-->
+<!--OUT file=out/11/sec.txt part=터미널 6 lines=2-6-->
+<!--OUT file=out/11/sec.txt wire=hook-wire ex=1-2 grep=^→|^←|^  [A-Z] note=②·③ 이 중계기에 남긴 머리-->
+</article>
+
+<article class="card" id="p11-sec-gosender-read">
+<h3>막는 자리는 연결하는 순간 — 그리고 토큰 머리는 X- 없이</h3>
+<ul>
+<li>①은 연결하기 전에 막혔습니다(<code>dial tcp … blocked address range</code>). 주소를 문자열로 보지 않고, 연결할 때 실제로 고른 IP 를 봅니다(<code>sender.go:97</code>·<code>:99</code>) — 이름을 다시 묶거나 다른 곳으로 넘겨도(redirect) 넘어갈 때마다 다시 봅니다.</li>
+<li>②의 <code>Authorization: Bearer hook-secret</code>, ③(<code>Digest</code>)에는 Authorization 이 없습니다 — <code>switch strings.ToLower(config.Auth.Scheme)</code> 가 <code>bearer</code>·<code>basic</code> 만 압니다(<code>sender.go:175</code>).</li>
+<li>②·③에 토큰 머리가 안 보이는 것은 SDK 가 <code>A2A-Notification-Token</code> 에 싣기 때문입니다(<code>sender.go:40</code>) — 와이어 탭은 정해 둔 머리만 찍고 그 이름은 목록에 없습니다. 대신 ④가 증거입니다: 맞는 토큰을 실었는데도 <code>X-A2A-Notification-Token</code> 을 보는 수신기가 401 을 줬습니다.</li>
+</ul>
+<!--OUT file=out/11/sec.txt server=check-py lines=1-1 note=④ 를 받은 수신기-->
+</article>
+
+<article class="card" id="p11-sec-ssrf-cmp">
+<h3>세 SDK 의 SSRF 막기 — 켜는 법도, 보는 때도 다르다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TS</th><th>Go</th></tr>
+<tr><td>기본</td><td>꺼짐</td><td>없음</td><td>켜짐</td></tr>
+<tr><td>켜고 끄기</td><td><code>push_url_validator=</code>(처리기·보내는 것)</td><td>—</td><td><code>AllowPrivateNetworks: true</code> 로 끈다</td></tr>
+<tr><td>보는 때</td><td>설정 저장 때 + 보내기 직전(이름을 풀어서)</td><td>—</td><td>연결하는 순간(고른 IP) — redirect 마다</td></tr>
+<tr><td>막는 대역</td><td>사설·루프백·링크 로컬·멀티캐스트·예약·미지정</td><td>—</td><td>사설·루프백·링크 로컬·미지정·멀티캐스트(<code>:134</code>)</td></tr>
+<tr><td>막았을 때</td><td>저장 때 <code>-32602</code>, 보낼 때는 건너뛰고 경고만</td><td>—</td><td>기록(또는 <code>FailOnError</code> 면 작업 FAILED)</td></tr>
+<tr><td>redirect 의 토큰</td><td>httpx 는 redirect 를 따르지 않는다</td><td>fetch 는 따른다</td><td>다른 호스트로 넘어가면 토큰 머리를 지운다(<code>:152</code>)</td></tr>
+</table>
+</div>
+<div class="note"><b>우리 Go <code>hookSender</code> 에는 아직 없다</b> — 검사도, redirect 의 토큰 지우기도 없습니다. Go 의 <code>http.Client</code> 는 다른 호스트로 넘어갈 때 <code>Authorization</code> 은 지우지만 <code>X-A2A-Notification-Token</code> 같은 다른 머리는 그대로 넘깁니다(SDK 가 <code>:147</code> 에 적어 둔 까닭). 이 덱의 시험이 루프백을 써야 해서 그대로 두었고, 17부(운영)의 몫입니다.</div>
+</article>
+
+<article class="card" id="p11-sec-token">
+<h3>토큰과 Authorization 은 다른 물건이다 — 하나는 클라이언트의 표, 하나는 HTTP 인증</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th><code>token</code></th><th><code>authentication</code>(AuthenticationInfo)</th></tr>
+<tr><td>스펙</td><td>"A token unique for this task or session" — 실을 머리는 정하지 않았다</td><td><code>scheme</code>(REQUIRED)·<code>credentials</code>, "<b>MUST</b> include … in the request headers" — 견본은 <code>Authorization: {scheme} {credentials}</code></td></tr>
+<tr><td>무엇에</td><td>이 알림이 내가 건 설정의 것인지 가린다</td><td>수신기 앞의 HTTP 인증(게이트웨이·프록시)을 지난다</td></tr>
+<tr><td>파이썬 SDK</td><td><code>X-A2A-Notification-Token</code></td><td>스킴과 자격 증명이 다 있으면 무엇이든(<code>base_push_notification_sender.py:105</code>)</td></tr>
+<tr><td>TS SDK</td><td>authentication 이 있으면 <b>버린다</b></td><td>스킴과 자격 증명이 다 있으면(<a href="#p11-hook-auth">4장</a>)</td></tr>
+<tr><td>Go SDK</td><td><code>A2A-Notification-Token</code></td><td>Bearer·Basic 만</td></tr>
+<tr><td>우리 Go(고친 뒤)</td><td><code>X-A2A-Notification-Token</code></td><td>스킴과 자격 증명이 다 있으면, 스킴은 받은 그대로(<a href="#p11-sec-fixed">뒤에서</a>)</td></tr>
+</table>
+</div>
+<div class="key"><b>둘 다 보내는 것이 스펙에 맞다</b> — 스펙 어디에도 "authentication 이 있으면 token 을 빼라" 는 말이 없고, 스킴을 bearer·basic 으로 좁히라는 말도 없습니다(proto 주석은 IANA 등록부의 스킴, "case-insensitive"). 그래서 우리 Go 보내기는 파이썬 SDK 와 같은 모양을 골랐습니다.</div>
+</article>
+
+<article class="card" id="p11-sec-sign">
+<h3>서명은 스펙에 없다 — 주제 문서의 JWT + JWKS 는 권고일 뿐이고, 세 SDK 모두 하지 않는다</h3>
+<p class="lead"><code>specification.md</code> 에서 웹훅 몸통의 서명을 찾으면 없습니다. 서명(§8.4)은 에이전트 카드의 것입니다.</p>
+<ul>
+<li>주제 문서 "Streaming &amp; Asynchronous Operations"(<code>docs/topics/streaming-and-async.md</code>)가 "Example Asymmetric Key Flow (JWT + JWKS)" 를 듭니다 — 에이전트가 알림마다 <code>iss</code>·<code>aud</code>·<code>iat</code>·<code>exp</code>·<code>jti</code>·<code>taskId</code> 를 담은 JWT 를 서명해 <code>Authorization</code> 에 싣고, 수신기는 JWKS 로 검증합니다. HMAC 서명도 예로 듭니다.</li>
+<li>세 SDK 의 보내기는 설정에 받은 문자열을 그대로 싣기만 합니다(파이썬 <code>base_push_notification_sender.py</code>, TS <code>_buildAuthHeaders</code>, Go <code>sender.go</code> — 어디에도 jwt·jwks·hmac 이 없다).</li>
+<li>그래서 지금의 Authorization 은 클라이언트가 정해 준 <b>고정된 비밀</b>입니다. 새면 누구나 같은 머리로 알림을 위조할 수 있고, 몸통이 바뀌어도 알 수 없습니다. 서명하는 보내기는 12부의 JWS 를 쓰면 짤 수 있지만, 수신기와 약속을 따로 해야 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-sec-replay">
+<h3>다시 보내기 — 같은 알림을 두 번 보내도 토큰 검사는 둘 다 통과시킨다</h3>
+<p class="lead">명세 끝의 curl 은 토큰 <code>tok-ok</code> 를 단 같은 몸통(<code>rpc/push_replay.json</code>)을 두 번 보냈습니다.</p>
+<!--OUT file=out/11/sec.txt part=터미널 6 lines=10-11 note=명세 끝의 curl 두 번 — 받은 HTTP 상태-->
+<!--OUT file=out/11/sec.txt server=check-py lines=3-4-->
+<ul>
+<li>토큰은 "누가" 만 증명합니다. 엿들은 알림을 그대로 다시 보내면 수신기는 가려내지 못합니다. 주제 문서는 "Notifications <b>SHOULD</b> include a timestamp. The webhook <b>SHOULD</b> reject notifications that are too old" 와 일회용 id(<code>jti</code>)를 권합니다.</li>
+<li>몸통에 쓸 만한 것은 <code>statusUpdate.status.timestamp</code> 정도입니다 — 막 만든 SUBMITTED Task 에는 시각이 없었고(<a href="#p05-task-time">5부</a>), <code>TaskArtifactUpdateEvent</code> 에는 시각 필드가 아예 없습니다(proto). 멱등 처리(<a href="#p11-cnl-twice">6장</a>)가 다시 보내기의 피해도 줄입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-sec-heard">
+<h3>우리 Go 보내기의 결함 — authentication 을 버리고, 401 에도 말이 없었다</h3>
+<p class="lead">4장에서 탭으로 드러난 두 가지(<a href="#p11-hook-auth">AuthenticationInfo</a>·<a href="#p11-hook-401">401</a>)입니다. 고치기 전의 <code>hookSender</code> 를 그대로 옮겨 둔 <code>11/hookold</code> 로 다시 봅니다 — 설정에 Bearer 와 틀린 토큰을 함께 실었습니다.</p>
+<!--CODE file=ex/go/11/hookold/main.go region=push note=고치기 전 — cfg.Auth 를 읽지 않고, resp.StatusCode 를 보지 않는다-->
+<!--OUT file=out/11/sec.txt part=터미널 6 lines=7-8-->
+<!--OUT file=out/11/sec.txt wire=hook-wire ex=3 grep=^→|^←|^  [A-Z] note=Authorization 이 없다 — 401 이 돌아왔다-->
+<div class="warn"><b>이 결함은 실제로 있었다</b> — 완성 Go 교통 에이전트가 처음에는 이 코드였습니다. §4.3.3 의 MUST 를 어겼고(Authorization 없음), 수신기가 401 을 줘도 <code>SendPush → &lt;nil&gt;</code> 에 기록 한 줄 없었습니다. 4장을 쓰며 세 SDK 서버의 POST 를 탭으로 견주다 발견해 이 장에서 고쳤습니다. 보내기를 직접 짜면 SDK 가 해 주던 일을 다 떠안는다는 뜻입니다.</div>
+</article>
+
+<article class="card" id="p11-sec-fixed">
+<h3>고친 hookSender — Authorization 을 싣고, 2xx 가 아니면 적는다</h3>
+<!--CODE file=ex/go/agents/bus/main.go region=push note=agents/bus/main.go — 고친 뒤-->
+<ul>
+<li>더한 것은 두 토막입니다. <code>cfg.Auth</code> 에 스킴과 자격 증명이 다 있으면 <code>Authorization: {scheme} {credentials}</code>(§4.3.3 의 견본), 스킴만 있으면 싣지 않습니다 — 파이썬 SDK 도 싣지 않고 경고만 남깁니다(<code>base_push_notification_sender.py:109</code>).</li>
+<li>2xx 가 아니면 <code>slog.Warn("push rejected", …)</code> — 그래도 <code>nil</code> 을 돌려줘 작업은 계속합니다. 오류를 돌려주면 SDK 가 작업을 FAILED 로 바꾸기 때문이고(<a href="#p11-hook-401">4장</a>), 파이썬·TS 도 적기만 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-sec-fixed-run">
+<h3>고친 뒤 — 4장의 같은 실행에 Authorization 이 실리고, 401 마다 한 줄씩</h3>
+<p class="lead">고친 에이전트로 4장의 <code>auth.run</code> 을 다시 돌렸습니다. 다시 돌린 11부의 캡처 가운데 바뀐 것은 이 실행의 Go 쪽 두 자리뿐입니다.</p>
+<!--OUT file=out/11/auth.txt wire=auth-wire ex=13 lines=1-4 note=Go 에이전트의 첫 POST — Authorization 과 토큰 둘 다-->
+<!--OUT file=out/11/auth.txt server=bus-go grep=WARN note=Go 에이전트 → 파이썬 수신기(tok-bad) — 여섯 번 다 적었다-->
+<div class="key"><b>이제 셋이 같은 자리에 섰다</b> — 파이썬 SDK·우리 Go 는 토큰과 Authorization 을 둘 다 싣고, 거절당하면 적습니다. TS SDK 만 authentication 이 있으면 토큰을 버립니다(<a href="#p11-hook-auth">4장</a>). 수신기는 둘 중 하나만 믿지 말고, 받기로 한 쪽을 둘 다 볼 줄 알아야 합니다.</div>
+</article>
+
+<article class="card" id="p11-ch8-sum">
+<h3>8장 정리 — 웹훅 보안</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬 SDK</th><th>TS SDK</th><th>Go SDK</th><th>우리 Go(고친 뒤)</th></tr>
+<tr><td>SSRF</td><td>검사기 있음, 기본 꺼짐</td><td>없음</td><td>기본 막음(연결 순간)</td><td>없음 — 시험이 루프백</td></tr>
+<tr><td>토큰 머리</td><td><code>X-A2A-…</code></td><td><code>X-A2A-…</code>(auth 있으면 버림)</td><td><code>A2A-…</code></td><td><code>X-A2A-…</code></td></tr>
+<tr><td>Authorization</td><td>무슨 스킴이든</td><td>무슨 스킴이든</td><td>Bearer·Basic 만</td><td>무슨 스킴이든</td></tr>
+<tr><td>2xx 가 아니면</td><td>기록</td><td>기록</td><td>기록(또는 FAILED)</td><td>기록</td></tr>
+<tr><td>서명·다시 보내기 막기</td><td colspan="4">없음 — 스펙 본문에 없고, 주제 문서의 권고(JWT·시각·jti)뿐</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p11-ch8-quiz" data-quiz>
+<h3>8장 퀴즈</h3>
+<p class="q">Q. 클라이언트가 웹훅 주소로 <code>http://169.254.169.254/latest/meta-data/</code> 를 적어 보냈습니다. 파이썬 SDK 의 기본 설정과, 검사기를 켠 판(<code>guarded.py</code>), Go SDK 의 <code>HTTPPushSender</code> 기본값은 각각 어떻게 합니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 파이썬 SDK 의 기본값(<code>push_url_validator=None</code>)은 검사하지 않고 그 주소로 POST 합니다(<a href="#p11-sec-ssrf">SSRF</a>). 검사기를 켜면 그 주소는 거절되고(<a href="#p11-sec-pycheck">검사기</a>의 <code>거절 http://169.254.169.254/…</code>), SendMessage 는 <code>-32602 Invalid push notification URL</code> 로 돌아옵니다(<a href="#p11-sec-pyguard">켠 판</a>). Go SDK 의 기본값은 연결하는 순간 링크 로컬 주소를 막습니다(<a href="#p11-sec-gosender">①</a>, <code>isBlockedIP</code>).</div>
+</article>
+
+<article class="card" id="p11-wrap">
+<h3>11부 정리 — 연결 없이 소식을 받는 두 길과, 그 길을 다루는 메서드</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>한 줄</th></tr>
+<tr><td><a href="#p11-ch1-sum">1</a></td><td>교통 에이전트 ×3 — SUBMITTED → WORKING 셋 → 배차 확인서 → COMPLETED. 푸시는 실행기 밖, 서버를 띄우는 자리의 일</td></tr>
+<tr><td><a href="#p11-ch2-sum">2</a></td><td>폴링은 쉽지만 헛물음과 늦음 사이에서 고를 뿐이고, 지나간 상태는 못 본다. 줄이는 것은 이력뿐</td></tr>
+<tr><td><a href="#p11-ch3-sum">3</a></td><td>설정은 요청에 싣거나 Create — 첫 Task 까지 받으려면 요청에. 빈 id 는 파이썬에서 덮인다</td></tr>
+<tr><td><a href="#p11-ch4-sum">4</a></td><td>웹훅의 몸통은 StreamResponse 하나. 토큰 머리는 스펙에 없고, authentication 은 SDK 마다 다르게 실렸다</td></tr>
+<tr><td><a href="#p11-ch5-sum">5</a></td><td>Get·List·Delete — 지우면 끝, 두 번 지워도 오류 없음. 없는 설정에 Go 만 -32603</td></tr>
+<tr><td><a href="#p11-ch6-sum">6</a></td><td>달리는 작업의 취소는 구독자에게도 웹훅에게도 CANCELED 하나 — TS 웹훅만 두 번</td></tr>
+<tr><td><a href="#p11-ch7-sum">7</a></td><td>ListTasks 는 새것부터, 커서로. pageSize 0·101 과 시각 필터에서 셋이 갈린다. 칸은 저장소의 소유자</td></tr>
+<tr><td><a href="#p11-ch8-sum">8</a></td><td>SSRF 는 Go SDK 만 기본으로 막는다. 서명·다시 보내기 막기는 아무도 안 한다. 우리 Go 보내기는 Authorization 을 버리던 결함을 고쳤다</td></tr>
+</table>
+</div>
+<div class="note"><b>다음</b> — 이 부의 Authorization 은 클라이언트가 건넨 고정 비밀이었고, 모든 요청은 익명이었습니다(<a href="#p11-list-owner">7장</a>). <a href="#p12">12부</a>는 보안입니다 — 카드의 보안 스킴, 로컬 OAuth2 토큰 발급기, 정산 에이전트의 Bearer 검사, 사용자마다 갈리는 작업 칸, 확장 카드와 서명된 카드를 봅니다.</div>
 </article>

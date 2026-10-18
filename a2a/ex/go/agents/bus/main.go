@@ -144,12 +144,22 @@ func (s hookSender) SendPush(
 	if cfg.Token != "" {
 		req.Header.Set("X-A2A-Notification-Token", cfg.Token)
 	}
+	// 명세 4.3.3 — authentication 이 있으면 그 스킴과 자격 증명을
+	// Authorization 에 실어야 한다(MUST). 스킴은 받은 그대로.
+	if a := cfg.Auth; a != nil && a.Scheme != "" &&
+		a.Credentials != "" {
+		req.Header.Set("Authorization", a.Scheme+" "+a.Credentials)
+	}
 	resp, err := s.client.Do(req)
 	if err != nil {
 		// 웹훅이 죽어도 작업은 계속한다(오류를 돌려주면 SDK 가
 		// 작업을 FAILED 로 바꾼다). 파이썬 SDK 도 기록만 남긴다.
 		slog.Warn("push failed", "url", cfg.URL, "error", err)
 		return nil
+	}
+	if resp.StatusCode/100 != 2 { // 수신기가 거절해도 기록만
+		slog.Warn("push rejected", "url", cfg.URL,
+			"status", resp.Status)
 	}
 	return resp.Body.Close()
 }
