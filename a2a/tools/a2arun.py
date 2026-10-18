@@ -689,9 +689,11 @@ def _go_build(root, scratch, rel, env):
     """ex/go/NN/name → scratch/bin/NN_name. 입력 해시가 같으면 다시 짓지 않는다."""
     nn, name = rel.split('/')[2:4]
     out = os.path.join(scratch, 'bin', '%s_%s' % (nn, name))
+    # 예제 디렉터리만이 아니라 부 디렉터리(ex/go/NN) 전체를 본다 — 같은 부의
+    # 도우미 패키지(13/restmount 따위)를 고쳐도 다시 지어야 한다. 장부(inputs)도 같다.
     key = ' '.join('%s=%s' % kv for kv in
                    [(i, _sha_tree(os.path.join(root, i))) for i in
-                    [rel] + shared(root, 'go') + ['ex/go/go.mod', 'ex/go/go.sum']])
+                    ['ex/go/' + nn] + shared(root, 'go') + ['ex/go/go.mod', 'ex/go/go.sum']])
     stamp = out + '.sha'
     if os.path.isfile(out) and os.path.isfile(stamp) and _read(stamp) == key:
         return out

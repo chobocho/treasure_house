@@ -428,6 +428,18 @@ class RealGo(Tree):
         self.assertEqual(self.run_ex('ex/go/02/hello/main.go'), '$ go run ./02/hello x\n안녕\n')
         self.assertEqual(os.path.getmtime(binp), t0)            # 소스가 같으면 다시 짓지 않는다
 
+    def test_sibling_package_change_rebuilds(self):
+        # 13/restmount·14/budget 처럼 같은 부 디렉터리의 도우미 패키지를 고치면
+        # 낡은 바이너리를 다시 쓰면 안 된다(14부에서 실제로 걸렸다).
+        self.put('ex/go/go.mod', 'module example.com/t\n\ngo 1.27.1\n')
+        self.put('ex/go/02/helper/h.go', 'package helper\n\nconst Word = "하나"\n')
+        self.put('ex/go/02/hello/main.go',
+                 'package main\n\nimport (\n\t"fmt"\n\n\t"example.com/t/02/helper"\n)\n\n'
+                 'func main() {\n\tfmt.Println(helper.Word)\n}\n')
+        self.assertEqual(self.run_ex('ex/go/02/hello'), '$ go run ./02/hello\n하나\n')
+        self.put('ex/go/02/helper/h.go', 'package helper\n\nconst Word = "둘"\n')
+        self.assertEqual(self.run_ex('ex/go/02/hello'), '$ go run ./02/hello\n둘\n')
+
 
 SERVER = '''import http.server, os, subprocess, sys
 port = int(sys.argv[1])
