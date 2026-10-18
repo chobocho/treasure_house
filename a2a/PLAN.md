@@ -687,3 +687,42 @@ subagent task each.
   `test_wiretap ... test_upstream_down_gives_502` flake in `make all` (rerun green) — the
   port-timing flake noted in part 7.
 - `make all SKEL=1` green (1212 slides, 1238 blocks, 0 mismatches); --check ×4 green.
+
+### Part 12 complete — 119 slides; settlement scope check fixed (2026-10-18)
+- `12b_security.html` ch5 scopes + fix (13), ch6 extended card (11), ch7 AUTH_REQUIRED (15),
+  ch8 signed card (17), `p12-wrap` → #p13; 12_security forward refs linked and prose
+  (`p12-iss-guess`, `p12-bearer-*`, `p12-ch4-sum`, `p12-sch-*`) updated for the fix.
+  Examples `ex/py/12/{scope_try,bearer_old,xcard,approve,auth_watch,planner_at,impostor,
+  jcs,verify}.py`, `ex/{ts,go}/12/{xcard,approve,verify}`, specs `ex/run/12/{scope,xcard,
+  auth,chain,sign}.run`; ports 11250–11295.
+- **Fix:** settlement ×3 — constant `NEEDED`/`needed = ["payment:read"]` feeds both the card's
+  securityRequirements (card bytes unchanged) and the Bearer check; lacking it → 403
+  `WWW-Authenticate: Bearer realm="settlement", error="insufficient_scope",
+  scope="payment:read"` (region `scope`); executor's payment:approve check kept. Planner ×3
+  now requests `"payment:read payment:approve"` for the approval token (otherwise the story's
+  approval would 403). 0 existing captures changed. Before copy `ex/py/12/bearer_old.py`.
+- `planner_at.py` (runpy wrapper so `--agents` fits a 72-col spec line) was shown on no
+  slide → builder error without SKEL; now shown on `p12-ar-chain`. **Check `알림 0건`
+  after every half — unused examples are errors in the final build.**
+- Findings: AUTH_REQUIRED subscriber — py streams artifact+COMPLETED, go WORKING→artifact→
+  COMPLETED, ts one Task snapshot then closes (bus closed), first stream closes at
+  AUTH_REQUIRED everywhere; Go `GetExtendedAgentCard` doesn't replace the client's card
+  (`a2aclient/client.go:209`), py does (`base_client.py:368`), ts via `getAgentCard()`
+  (`client/index.js:5428`), ts has no dedicated method; extended card served unsigned
+  everywhere, Go in struct order with `"pushNotifications": false`; no server SDK checks
+  auth for it, TS static provider returns the *public* card to anonymous users
+  (`server/index.js:2744`); hooks py `extended_card_modifier`, ts provider fn, go
+  `WithExtendedAgentCardProducer`; py/ts/go produce byte-identical Ed25519 signatures; an
+  unknown field still verifies in py/ts (parsed first), not in Go (raw bytes,
+  `a2acrypto/canonical.go:31`); following a forged card's `jku` verifies everywhere, pinned
+  keys reject; alg allow-list only in py; TS verifier console.debug's failures
+  (`dist/index.js:1617`) and requires kid/typ/alg; Go KeyResolver docs say jku MUST NOT
+  establish trust (`keyresolver.go:30`), resolver verifies only signed cards
+  (`resolver.go:210`); only Go has auth error codes (-31401/-31403); proto comment calls
+  AUTH_REQUIRED authentication, §7.6 uses it for authorization; §8.4.2 lists ES256/RS256
+  only as examples (EdDSA kept per SCENARIO); §8.4.3 never says not to trust jku.
+- Open: Go settlement `sign` comment claims SDK `NewSignedCardProducer` output is
+  unverifiable by py/ts because of `"pushNotifications": false` — source suggests otherwise,
+  not measured; `p12-sig-go` attributes it to the comment. Verify in review.
+- Timing: `auth_watch.py` 3 s socket timeout (never fired), `chain.run` bus step 100 ms.
+- `make all SKEL=1` green (1268 slides, 1292 blocks, 0 mismatches, 0 notices); --check ×4.

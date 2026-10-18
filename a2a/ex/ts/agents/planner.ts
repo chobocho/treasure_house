@@ -324,7 +324,9 @@ class PlannerExecutor implements AgentExecutor {
       return;
     }
     const c = cards.get("settle")!;
-    const token = await getToken(c, "payment:approve", this.client);
+    // 결재 토큰도 문지기를 지나니 payment:read 도 받는다
+    const both = "payment:read payment:approve";
+    const token = await getToken(c, both, this.client);
     const done = await followUp(c, settle, "결재합니다", token);
     this.finish(up, req, quotes, done);
   }

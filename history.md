@@ -1,3 +1,10 @@
+### [2026-10-18 06:16] A2A 덱 12부 뒤 절반 — 스코프·확장 카드·AUTH_REQUIRED·서명된 카드(58장), 정산 스코프 검사 수정
+- **기획:** 스코프, GetExtendedAgentCard, 작업 중 권한(AUTH_REQUIRED), JCS+JWS 서명 카드를 세 언어로 보이고, 우리 Bearer 검사가 카드의 payment:read 를 안 보던 결함을 고친다.
+- **TC:** 정상 — 기획 에이전트의 결재 사슬, 서명·검증 ×3. 경계 — 스코프 모자란 토큰(403), 익명 확장 카드, 위조 카드와 jku, 모르는 필드를 더한 카드.
+- **개발:** a2a/deck/sections/12b_security.html, 12_security.html, a2a/ex/*/12/, a2a/ex/run/12/, a2a/ex/*/agents/settlement* 외 3개 파일
+- **검증:** 12 캡처 --check 4회 일치(기존 캡처 변화 0), make all SKEL=1 rc=0 (1268장, 어긋남 0건, 알림 0건)
+- **비고:** 12부 119장. 결재 토큰이 문지기를 지나도록 기획 에이전트 ×3 도 payment:read 를 함께 청하게 바꿨다.
+
 ### [2026-10-18 04:26] A2A 덱 12부 앞 절반 — 전송 보안·보안 스킴·토큰 발급기·Bearer 검사(62장)
 - **기획:** HTTPS 요구와 로컬 http 의 까닭, 카드의 securitySchemes·Requirements, 정산 에이전트 안의 OAuth2 발급기 ×3 과 Bearer 검사 ×3 을 캡처로 보인다. 12부를 두 파일로 나눴다.
 - **TC:** 정상 — client_credentials 발급, 맞는 토큰. 경계 — 모르는 CA, grant_type 없음, Basic 인증, 토큰 없음·깨짐·모름, 카드만 있고 검사 없는 서버.

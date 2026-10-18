@@ -1,0 +1,32 @@
+# 6장 — 확장 카드. 정산 에이전트 셋 앞에 탭을 두고
+# (1) curl 로 GetExtendedAgentCard 를 토큰 없이·intern 토큰으로·
+#     결재 스코프만 든 토큰으로 부른다(파이썬 서버).
+# (2) 같은 언어의 SDK 클라이언트가 공개 카드와 확장 카드를 견준다.
+serve name=settle-py ready=tcp:11260 \
+      cmd="py:agents/settlement.py --port 11260 \
+      --url http://127.0.0.1:11263/"
+serve name=settle-ts ready=tcp:11261 \
+      cmd="ts:agents/settlement.ts --port 11261 \
+      --url http://127.0.0.1:11264/"
+serve name=settle-go ready=tcp:11262 \
+      cmd="go:agents/settlement --port 11262 \
+      --url http://127.0.0.1:11265/"
+tap   name=py-wire listen=11263 target=11260
+tap   name=ts-wire listen=11264 target=11261
+tap   name=go-wire listen=11265 target=11262
+run   cmd="sh:curl -s -o /dev/null -H 'Content-Type: application/json' \
+      -H 'A2A-Version: 1.0' \
+      -d @run/12/rpc/xcard.json http://127.0.0.1:11263/"
+run   cmd="sh:curl -s -o /dev/null -d grant_type=client_credentials \
+      -d client_id=intern -d client_secret=intern-secret \
+      http://127.0.0.1:11263/oauth/token; \
+      curl -s -o /dev/null -d grant_type=client_credentials \
+      -d client_id=planner -d client_secret=planner-secret \
+      -d scope=payment:approve http://127.0.0.1:11263/oauth/token"
+run   cmd="sh:for t in tok-intern-1 tok-planner-1; do \
+      curl -s -o /dev/null -H 'Content-Type: application/json' \
+      -H 'A2A-Version: 1.0' -H \"Authorization: Bearer $t\" \
+      -d @run/12/rpc/xcard.json http://127.0.0.1:11263/; done"
+run   cmd="py:12/xcard.py http://127.0.0.1:11263/"
+run   cmd="ts:12/xcard.ts http://127.0.0.1:11264/"
+run   cmd="go:12/xcard http://127.0.0.1:11265/"

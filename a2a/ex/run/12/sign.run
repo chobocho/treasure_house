@@ -1,0 +1,27 @@
+# 8장 — 서명된 카드. 정산 에이전트 셋이 모두 같은 바깥 주소(--url,
+# 파이썬 서버의 것)를 카드에 적게 해, 서명이 같은지 본다. 옆에는 같은
+# 이름의 카드를 다른 키로 서명한 가짜 정산 에이전트(impostor).
+# (1) 세 카드의 서명값, (2) 서명을 손으로 풀기, (3) 검증 ×3.
+serve name=settle-py ready=tcp:11280 \
+      cmd="py:agents/settlement.py --port 11280"
+serve name=settle-ts ready=tcp:11281 \
+      cmd="ts:agents/settlement.ts --port 11281 \
+      --url http://127.0.0.1:11280/"
+serve name=settle-go ready=tcp:11282 \
+      cmd="go:agents/settlement --port 11282 \
+      --url http://127.0.0.1:11280/"
+serve name=impostor ready=tcp:11283 \
+      cmd="py:12/impostor.py --port 11283"
+tap   name=fake-wire listen=11284 target=11283
+run   cmd="sh:for p in 11280 11281 11282; do curl -s \
+      http://127.0.0.1:$p/.well-known/agent-card.json \
+      | grep -o '\"signature\": *\"[^\"]*\"'; done"
+run   cmd="py:12/jcs.py http://127.0.0.1:11280/"
+run   cmd="sh:curl -s -o /dev/null \
+      http://127.0.0.1:11284/.well-known/agent-card.json"
+run   cmd="py:12/verify.py http://127.0.0.1:11280/ \
+      http://127.0.0.1:11283/"
+run   cmd="ts:12/verify.ts http://127.0.0.1:11281/ \
+      http://127.0.0.1:11283/"
+run   cmd="go:12/verify http://127.0.0.1:11282/ \
+      http://127.0.0.1:11283/"

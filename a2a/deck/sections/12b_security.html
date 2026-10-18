@@ -1,4 +1,608 @@
-<article class="card" id="p12-todo-b">
-<h3>보안 (뒤 절반)</h3>
-<p class="lead">준비 중입니다</p>
+<!-- ==== 5장 스코프 ==== -->
+
+<article class="card" id="p12-ch5">
+<p class="chnum">5장</p>
+<h2>스코프 — 조회와 결재</h2>
+<p class="chsub">두 스코프, 두 자리 → 다섯 가지 토큰 → 결재 스코프만 든 토큰 → 결함의 까닭 → 고친 문지기 ×3 → 고친 뒤 → 기획 에이전트의 결재 토큰 → 401·403·AUTH_REQUIRED</p>
+</article>
+
+<article class="card" id="p12-scope-two">
+<h3>스코프는 두 자리에서 본다 — <code>payment:read</code> 는 문지기가, <code>payment:approve</code> 는 실행기가</h3>
+<p class="lead">카드의 <code>securityRequirements</code> 는 "모든 요청에 <code>payment:read</code>" 를 요구합니다(<a href="#p12-sch-wire">2장</a>). 결재 스코프는 요구에 없습니다 — 3,000,000원이 넘는 정산에만 필요하고, 그 판단은 견적을 읽은 실행기만 할 수 있기 때문입니다(SCENARIO §2.4).</p>
+<pre class="fig">
+ 요청 POST /  Authorization: Bearer tok-…
+   │
+   ▼  문지기(HTTP 층)          토큰이 없거나 모른다  ─▶ 401
+   │  카드의 요구를 본다       payment:read 가 없다  ─▶ 403
+   ▼
+ SDK JSON-RPC 처리기 ─▶ 실행기
+   │  합계 > 3,000,000원 이고 payment:approve 가 없다
+   └──────────────────▶ 작업을 AUTH_REQUIRED 로(7장)
+</pre>
+<div class="key"><b>§7.5 는 정책을 서버에 맡긴다</b> — 인가는 "implementation-specific" 이고, 고려해도 되는 것(MAY)으로 요청한 스킬, 작업 안의 동작, 데이터 정책, "OAuth scopes" 를 듭니다. 문지기는 카드가 약속한 것을, 실행기는 그 일의 내용이 요구하는 것을 봅니다.</div>
+</article>
+
+<article class="card" id="p12-scope-run">
+<h3>다섯 가지 토큰 가운데 넷 — intern 은 조회까지, planner 는 결재 스코프를 가져와야 결재까지</h3>
+<p class="lead"><code>12/scope_try.py</code> 는 토큰을 스코프를 골라 받은 뒤(<a href="#p12-iss-try">3장</a>) 정산을 하나 맡기고, HTTP 상태와 작업 상태를 찍습니다. 작은 정산은 2,100,000원, 큰 정산은 이야기의 합계 4,842,000원입니다.</p>
+<!--SPEC file=ex/run/12/scope.run-->
+<!--CODE file=ex/py/12/scope_try.py region=main-->
+<!--OUT file=out/12/scope.txt part=터미널 6 lines=8-12 note=고친 파이썬 정산 에이전트 — ①~④-->
+<ul>
+<li>①② intern — 작은 돈은 <code>approvedBy=intern</code> 으로 끝나고, 큰 돈은 <code>AUTH_REQUIRED</code> 에서 멈춥니다. ③ planner 도 조회 스코프만 받아 왔으면 같습니다. 스코프는 사람이 아니라 토큰에 붙습니다.</li>
+<li>④ 두 스코프를 다 받은 토큰만 큰 돈을 끝냅니다. TS·Go 서버의 ①~④ 도 글자까지 같습니다(같은 캡처의 다른 두 구역).</li>
+</ul>
+</article>
+
+<article class="card" id="p12-scope-hole">
+<h3>결재 스코프만 든 토큰은? — 고치기 전의 정산 에이전트는 4,842,000원을 결재해 주었다</h3>
+<p class="lead">⑤ 는 planner 가 <code>scope=payment:approve</code> 하나만 달라고 해서 받은 토큰입니다. 카드는 모든 요청에 <code>payment:read</code> 를 요구하는데(<a href="#p12-sch-wire">2장</a>), 이 토큰에는 그 스코프가 없습니다. 고치기 전의 문지기를 그대로 옮겨 둔 <code>12/bearer_old.py</code> 에 보냈습니다.</p>
+<!--CODE file=ex/py/12/bearer_old.py region=before note=고치기 전 — 토큰이 발급 기록에 있는지만 본다-->
+<!--OUT file=out/12/scope.txt part=터미널 6 lines=2-7 note=고치기 전의 문지기(bearer_old) — ⑤ 도 COMPLETED-->
+<div class="warn"><b>이 결함은 실제로 있었다</b> — 세 언어의 완성 정산 에이전트가 처음에는 이 문지기였습니다. <code>RequireBearer</code> 는 "토큰이 있느냐"(인증)만 묻고, "카드가 요구한 스코프가 있느냐" 는 묻지 않았습니다. 그래서 ⑤ 는 문지기를 지났고, 실행기는 <code>payment:approve</code> 를 보고 결재했습니다. 4장을 쓰며 세 언어의 문지기를 읽다가 발견했고, 이 장에서 고쳤습니다.</div>
+</article>
+
+<article class="card" id="p12-scope-why">
+<h3>무엇을 어겼나 — 카드가 선언한 요구는 서버가 지켜야 하는 약속이다</h3>
+<p class="lead">§7.4 는 서버가 모든 요청을 "its declared authentication requirements" 에 비추어 인증하라고 합니다(MUST). 정산 카드가 선언한 요구는 "oauth 스킴, <code>payment:read</code> 스코프" 였습니다. 토큰이 진짜라는 것만으로는 그 요구를 채우지 못합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>고치기 전</th><th>고친 뒤</th></tr>
+<tr><td>토큰이 발급 기록에 있나</td><td>본다 → 없으면 401</td><td>본다 → 없으면 401</td></tr>
+<tr><td>카드가 요구한 스코프가 토큰에 있나</td><td>보지 않는다</td><td>본다 → 없으면 403</td></tr>
+<tr><td>결재 스코프가 있나(큰 돈)</td><td>실행기가 본다</td><td>실행기가 본다(그대로)</td></tr>
+</table>
+</div>
+<div class="note"><b>요구와 검사를 한 곳에서</b> — 고친 세 언어는 요구 스코프를 상수 하나(<code>NEEDED</code>·<code>needed</code>)로 두고, 카드의 <code>securityRequirements</code> 와 문지기가 그 상수를 함께 씁니다. 카드에 스코프를 더하면 검사도 따라 바뀝니다. SDK 가 카드를 읽어 막아 주지 않으므로(<a href="#p12-bearer-card">4장</a>) 이렇게 묶어 두는 것이 우리 몫입니다.</div>
+</article>
+
+<article class="card" id="p12-scope-fix-py">
+<h3>고친 문지기 — 파이썬: 인증한 사용자의 스코프에 <code>NEEDED</code> 가 없으면 403</h3>
+<p class="lead"><code>RequireBearer</code> 의 401 다음에 세 줄을 더했습니다 — <code>if rpc and not set(NEEDED) &lt;= set(scope["auth"].scopes)</code> 이면 아래 <code>insufficient</code> 로 답합니다(4장 <a href="#p12-bearer-py">bearer 구역</a>). <code>scope["auth"]</code> 는 <code>BearerBackend</code> 가 붙인 <code>AuthCredentials</code> 입니다.</p>
+<!--CODE file=ex/py/agents/settlement.py region=scope note=agents/settlement.py — 고친 뒤 더한 구역-->
+<ul>
+<li>RFC 6750 §3.1 의 <code>insufficient_scope</code> 는 403 이고, 모자란 스코프를 <code>scope</code> 속성으로 알릴 수 있습니다(§3). §3.3.2 의 "SHOULD indicate what permission or scope is missing" 과 같은 말입니다.</li>
+<li>몸통은 401 때와 같은 모양 <code>{"error": …}</code> — JSON-RPC 처리기에 닿기 전에 끝나므로 JSON-RPC 오류가 아닙니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-scope-fix-ts">
+<h3>TypeScript — <code>lacks(user.scopes)</code> 면 <code>insufficient(res)</code></h3>
+<p class="lead"><code>requireBearer</code> 의 첫 줄이 <code>bearer(req)</code> 를 한 번 부르고, 사용자가 있는데 스코프가 모자라면 403, 있으면 <code>next()</code> 로 바뀌었습니다(4장 <a href="#p12-bearer-ts">bearer 구역</a>).</p>
+<!--CODE file=ex/ts/agents/settlement.ts region=scope note=agents/settlement.ts — 고친 뒤 더한 구역-->
+<div class="note"><b>카드도 같은 상수</b> — <code>securityRequirements: [{ schemes: { oauth: { list: NEEDED } } }]</code>(<a href="#p12-sch-ts">2장</a>). 카드의 바이트는 고치기 전과 같습니다 — 같은 값이 들어가니까요.</div>
+</article>
+
+<article class="card" id="p12-scope-fix-go">
+<h3>Go — <code>lookup</code> 이 찾은 <code>grant</code> 의 스코프로 <code>lacks</code></h3>
+<p class="lead"><code>requireBearer</code> 가 <code>if g, ok := lookup(…); ok</code> 안에서 <code>lacks(g.scopes)</code> 를 먼저 봅니다(4장 <a href="#p12-bearer-go">bearer 구역</a>). 실행기에 사용자를 싣는 <code>bearerUser</code> 는 그대로입니다 — 403 이면 요청이 SDK 에 닿지 않으니까요.</p>
+<!--CODE file=ex/go/agents/settlement/main.go region=scope note=agents/settlement/main.go — 고친 뒤 더한 구역-->
+<div class="note"><b>머리 이름은 여전히 <code>Www-Authenticate</code></b> — <code>w.Header().Set</code> 이 이름을 정규 모양으로 바꾸는 것은 401 때와 같습니다(<a href="#p12-bearer-cmp">4장</a>).</div>
+</article>
+
+<article class="card" id="p12-scope-after">
+<h3>고친 뒤 — ⑤ 만 403 으로 바뀌었다, 세 서버 모두</h3>
+<p class="lead">같은 다섯 가지 토큰을 고친 세 정산 에이전트에 보냈습니다. ①~④ 는 고치기 전과 같고, ⑤ 만 실행기에 닿지 않습니다.</p>
+<!--OUT file=out/12/scope.txt part=터미널 6 lines=8-28 grep=^==|⑤|WWW note=파이썬 → TS → Go 서버의 ⑤-->
+<!--OUT file=out/12/scope.txt wire=py-wire ex=10 grep=^→|^←|Authorization|WWW-Authenticate|"error" note=파이썬 서버의 ⑤ — 요청 줄·인증 머리·답-->
+<div class="key"><b>바뀐 캡처는 이 실행뿐</b> — 세 에이전트를 고친 뒤 이 책의 캡처 205개를 모두 다시 돌렸고, 내용이 바뀐 것은 하나도 없었습니다. 결재 스코프만 든 토큰을 보내는 실행이 이 장 전에는 없었기 때문입니다. 정산 에이전트의 서버 출력에도 ⑤ 는 <code>토큰 발급</code> 한 줄만 남습니다 — 결재도, 결재 요청도 찍히지 않았습니다.</div>
+</article>
+
+<article class="card" id="p12-scope-planner">
+<h3>결함의 다른 반쪽 — 기획 에이전트도 결재 토큰에 <code>payment:approve</code> 하나만 달라고 했다</h3>
+<p class="lead">기획 에이전트는 결재할 때 새 토큰을 받습니다(7장). 처음에는 <code>scope=payment:approve</code> 하나만 달라고 했습니다 — 바로 ⑤ 의 토큰입니다. 문지기만 고쳤다면 이야기의 마지막 결재가 403 으로 막혔을 것입니다. 세 언어의 기획 에이전트가 이제 두 스코프를 함께 받습니다.</p>
+<!--OUT file=out/12/chain.txt wire=settle-wire grep=^→ POST /oauth|scope=|"scope" note=기획 에이전트 → 정산 에이전트, 토큰 두 번(7장의 실행)-->
+<div class="note"><b>두 쪽이 서로를 가렸다</b> — 문지기가 스코프를 보지 않았으니 기획 에이전트의 좁은 토큰이 통했고, 그 토큰이 통했으니 아무도 문지기를 의심하지 않았습니다. 카드의 요구를 읽는 쪽(클라이언트)과 지키는 쪽(서버)이 둘 다 카드를 보지 않으면 이렇게 됩니다.</div>
+</article>
+
+<article class="card" id="p12-scope-codes">
+<h3>401·403·AUTH_REQUIRED — 무엇이 모자란지에 따라 답이 셋</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>모자란 것</th><th>정산 에이전트의 답</th><th>스펙의 자리</th></tr>
+<tr><td>자격 증명(토큰이 없거나 모른다)</td><td>HTTP 401 + <code>WWW-Authenticate: Bearer realm=…</code></td><td>§3.3.2 Authentication Errors — "HTTP <code>401</code>, gRPC <code>UNAUTHENTICATED</code>, JSON-RPC custom error"</td></tr>
+<tr><td>카드가 요구한 스코프</td><td>HTTP 403 + <code>error="insufficient_scope"</code></td><td>§3.3.2 Authorization Errors — "HTTP <code>403</code>, gRPC <code>PERMISSION_DENIED</code>, JSON-RPC custom error", 예: "insufficient OAuth scopes"</td></tr>
+<tr><td>이 일에만 필요한 권한(큰 돈)</td><td>HTTP 200, 작업 상태 <code>AUTH_REQUIRED</code></td><td>§7.6 In-Task Authorization(7장)</td></tr>
+</table>
+</div>
+<ul>
+<li>"JSON-RPC custom error" 의 코드를 스펙은 정하지 않습니다. 세 SDK 가운데 Go 만 정해 두었습니다 — <code>a2a.ErrUnauthenticated</code> → <code>-31401</code>, <code>a2a.ErrUnauthorized</code> → <code>-31403</code>(<code>internal/jsonrpc/jsonrpc.go:84-85</code>). 파이썬·TS SDK 의 오류 목록에는 인증·인가 오류가 없습니다(<code>a2a/utils/errors.py</code>, TS <code>A2A_ERROR_SPECS</code>).</li>
+<li>403 과 AUTH_REQUIRED 의 갈림 — 403 은 요청을 받지 않고 작업도 만들지 않습니다. AUTH_REQUIRED 는 작업을 만들어 두고 이어 말하기를 기다립니다. 결재처럼 "받을 수 있는 권한" 이면 뒤의 것이 클라이언트에게 길을 열어 줍니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-ch5-sum">
+<h3>5장 정리 — 스코프</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>어디서 보나?</td><td>카드의 요구(<code>payment:read</code>)는 문지기가, 결재(<code>payment:approve</code>)는 실행기가</td><td><a href="#p12-scope-two">두 자리</a></td></tr>
+<tr><td>intern 과 planner?</td><td>intern 은 조회와 작은 정산까지, 큰 돈은 결재 스코프 토큰만</td><td><a href="#p12-scope-run">①~④</a></td></tr>
+<tr><td>무엇이 틀렸었나?</td><td>문지기가 카드의 스코프를 보지 않아 결재 스코프만 든 토큰이 통했다. 기획 에이전트가 그런 토큰을 받고 있었다</td><td><a href="#p12-scope-hole">고치기 전</a>·<a href="#p12-scope-planner">반쪽</a></td></tr>
+<tr><td>고친 뒤?</td><td>403 + <code>error="insufficient_scope"</code>, <code>scope="payment:read"</code>. 바뀐 캡처는 없었다</td><td><a href="#p12-scope-after">고친 뒤</a></td></tr>
+<tr><td>401·403·AUTH_REQUIRED?</td><td>자격 증명·카드의 스코프·이 일의 권한</td><td><a href="#p12-scope-codes">표</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p12-ch5-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 고친 정산 에이전트에 intern 의 토큰(<code>payment:read</code>)으로 4,842,000원 정산을 보내면 HTTP 상태와 작업 상태는 무엇입니까? 같은 요청을 planner 가 <code>scope=payment:approve</code> 로 받은 토큰으로 보내면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> intern 은 HTTP 200 에 작업 <code>AUTH_REQUIRED</code> 입니다 — 카드의 요구(<code>payment:read</code>)는 채워 문지기를 지났고, 실행기가 결재 스코프가 없어 멈췄습니다(<a href="#p12-scope-run">②</a>). planner 의 결재 전용 토큰은 HTTP 403 입니다 — 카드가 요구한 <code>payment:read</code> 가 없어 실행기에 닿지 않습니다(<a href="#p12-scope-after">⑤</a>, <code>error="insufficient_scope", scope="payment:read"</code>). 고치기 전에는 이 요청이 COMPLETED 였습니다(<a href="#p12-scope-hole">결함</a>).</div>
+</article>
+
+<!-- ==== 6장 확장 카드 ==== -->
+
+<article class="card" id="p12-ch6">
+<p class="chnum">6장</p>
+<h2>확장 카드 — GetExtendedAgentCard</h2>
+<p class="chsub">스펙의 요구 → 공개 카드와 확장 카드 → 와이어 → 문지기를 지난다 → 파이썬 → TypeScript → Go → 세 클라이언트 비교 → 사람마다 다른 카드</p>
+</article>
+
+<article class="card" id="p12-xc-spec">
+<h3>로그인한 클라이언트에게만 더 보여 주는 카드 — 카드에 <code>extendedAgentCard: true</code> 를 적는다</h3>
+<p class="lead">공개 카드는 누구나 읽으니(<a href="#p12-bearer-where">4장</a>) 숨길 것을 적을 수 없습니다. 인증한 클라이언트에게만 보여 줄 것은 JSON-RPC 메서드 <code>GetExtendedAgentCard</code> 로 따로 줍니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>스펙의 말</th></tr>
+<tr><td>§3.1.11</td><td>"available only if <code>AgentCard.capabilities.extendedAgentCard</code> is <code>true</code>". 돌려주는 것은 "additional details or skills not present in the public card" 를 담을 수 있는 카드 전체</td></tr>
+<tr><td>§13.3</td><td>"MUST require authentication", 공개 카드의 스킴으로 인증(MUST), 클라이언트에 따라 다른 내용(MAY), 새어도 되는 것만 담을 것(SHOULD NOT … sensitive information)</td></tr>
+<tr><td>§3.1.11·§13.3</td><td>클라이언트는 인증한 세션 동안 가진 공개 카드를 확장 카드로 바꿔 쓴다(SHOULD)</td></tr>
+<tr><td>§3.3.4·§13.3</td><td>기능이 없으면 <code>UnsupportedOperationError</code>, 기능은 있는데 확장 카드가 없으면 <code>ExtendedAgentCardNotConfiguredError</code>(<a href="#p03-caps-xcard">3부</a>)</td></tr>
+</table>
+</div>
+<div class="note"><b>요청에는 몸통이 거의 없다</b> — <code>GetExtendedAgentCardRequest</code> 의 필드는 <code>tenant</code> 하나뿐입니다(a2a.proto). §9.4.8 의 예시는 <code>params</code> 도 없이 <code>{"method": "GetExtendedAgentCard"}</code> 입니다. 누구에게 무엇을 보여 줄지는 오직 요청의 자격 증명이 정합니다.</div>
+</article>
+
+<article class="card" id="p12-xc-wire">
+<h3>공개 카드의 스킬은 하나, 확장 카드는 둘 — <code>settle-budget</code> 은 로그인한 클라이언트에게만</h3>
+<p class="lead">정산 에이전트는 같은 <code>card()</code> 함수로 두 카드를 짓습니다. <code>extended=True</code> 면 스킬 <code>settle-budget</code> 을 더할 뿐입니다(<a href="#p12-sch-py">2장의 card 구역</a>). 탭 너머로 intern 의 토큰을 달아 <code>GetExtendedAgentCard</code> 를 불렀습니다.</p>
+<!--SPEC file=ex/run/12/xcard.run-->
+<!--OUT file=out/12/xcard.txt wire=py-wire ex=4 grep=^→|^←|Authorization|"method"|"skills"|"id": "|"signatures" note=파이썬 서버 — 요청과 확장 카드의 스킬-->
+<ul>
+<li>요청은 <code>"params": {}</code> 뿐이고, 응답의 <code>result</code> 가 카드 그 자체입니다. 공개 카드와 같은 이름·주소·보안 필드에 스킬이 하나 더 있습니다.</li>
+<li>확장 카드에는 <code>signatures</code> 가 없습니다. 세 언어 모두 공개 카드에만 서명합니다(8장). §13.3 은 확장 카드의 서명을 말하지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-xc-gate">
+<h3>확장 카드도 문지기를 지난다 — 토큰 없으면 401, 카드의 스코프가 없으면 403</h3>
+<p class="lead"><code>GetExtendedAgentCard</code> 는 경로 <code>/</code> 의 JSON-RPC 메서드라, 4장의 문지기와 5장에서 고친 스코프 검사를 그대로 지납니다. 같은 실행의 첫 요청(토큰 없음)과 마지막 curl(결재 스코프만 든 <code>tok-planner-1</code>)입니다.</p>
+<!--OUT file=out/12/xcard.txt wire=py-wire ex=1 grep=^→|^←|Authorization|WWW-Authenticate|"error"|"method" note=토큰 없이-->
+<!--OUT file=out/12/xcard.txt wire=py-wire ex=5 grep=^→|^←|Authorization|WWW-Authenticate|"error"|"method" note=결재 스코프만 든 토큰-->
+<div class="key"><b>§13.3 의 MUST 를 문지기가 채운다</b> — "MUST require authentication", 그것도 공개 카드에 선언한 스킴 가운데 하나로(MUST). 서버 SDK 는 확장 카드를 달라는 요청의 인증을 보지 않으니(<a href="#p12-xc-server">뒤</a>) 이 검사가 없으면 누구나 확장 카드를 받습니다.</div>
+</article>
+
+<article class="card" id="p12-xc-py">
+<h3>파이썬 클라이언트 — <code>get_extended_agent_card</code>, 받은 카드로 갈아 낀다</h3>
+<p class="lead">토큰은 5장처럼 <code>AuthInterceptor</code> 가 답니다. 메서드는 <code>Client.get_extended_agent_card(GetExtendedAgentCardRequest(), context=…)</code> 입니다.</p>
+<!--CODE file=ex/py/12/xcard.py region=main-->
+<!--OUT file=out/12/xcard.txt part=터미널 7 lines=4-7-->
+<ul>
+<li>③ — 클라이언트가 들고 있던 카드가 확장 카드로 바뀌었습니다(<code>client/base_client.py:368</code> 의 <code>self._card = card</code>). §3.1.11 의 "SHOULD replace their cached public Agent Card" 를 SDK 가 해 줍니다.</li>
+<li>카드에 <code>extendedAgentCard</code> 가 없으면 JSON-RPC 전송은 묻지 않고 가진 카드를 돌려줍니다(<code>client/transports/jsonrpc.py:288</code>, <a href="#p03-caps-client">3부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p12-xc-ts">
+<h3>TypeScript 클라이언트 — 따로 부르는 메서드가 없다, <code>getAgentCard()</code> 가 알아서</h3>
+<p class="lead"><code>Client.getAgentCard()</code> 는 가진 카드에 <code>extendedAgentCard</code> 가 켜져 있으면 <code>GetExtendedAgentCard</code> 를 부르고, 아니면 가진 카드를 돌려줍니다(<code>client/index.js:5428</code>).</p>
+<!--CODE file=ex/ts/12/xcard.ts region=main-->
+<!--OUT file=out/12/xcard.txt part=터미널 7 lines=8-11-->
+<div class="note"><b>받은 카드로 갈아 낀다</b> — 파이썬처럼 <code>this.agentCard = agentCard</code> 입니다. 두 번째 인자로 서명 검증 함수를 받을 수도 있습니다(<code>getAgentCard(options, verifySignature)</code>) — 서명이 없는 확장 카드에 주면 검증이 실패하니 주지 않았습니다.</div>
+</article>
+
+<article class="card" id="p12-xc-go">
+<h3>Go 클라이언트 — <code>GetExtendedAgentCard</code> 는 돌려줄 뿐, 가진 카드는 그대로</h3>
+<p class="lead">메서드 이름은 스펙 그대로이고, 세션 id 를 붙인 <code>ctx</code> 로 부르면 <code>AuthInterceptor</code> 가 토큰을 답니다(<a href="#p12-cl-go">4장</a>).</p>
+<!--CODE file=ex/go/12/xcard region=main-->
+<!--OUT file=out/12/xcard.txt part=터미널 7 lines=12-15-->
+<div class="warn"><b>③ 이 공개 카드 그대로</b> — <code>Client.GetExtendedAgentCard</code> 는 받은 카드를 돌려줄 뿐 <code>c.card</code> 를 바꾸지 않습니다(<code>a2aclient/client.go:209-215</code>). §3.1.11 의 SHOULD 를 따르려면 받은 카드로 <code>client.UpdateCard(extended)</code> 를 직접 불러야 합니다.</div>
+</article>
+
+<article class="card" id="p12-xc-cmp">
+<h3>세 언어 비교 — 메서드 이름부터 갈아 끼우기까지</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>클라이언트 메서드</td><td><code>get_extended_agent_card</code></td><td><code>getAgentCard()</code>(이름에 extended 가 없다)</td><td><code>GetExtendedAgentCard</code></td></tr>
+<tr><td>가진 카드를 바꾸나</td><td>바꾼다</td><td>바꾼다</td><td>안 바꾼다 — <code>UpdateCard</code></td></tr>
+<tr><td>서명 검증 손잡이</td><td><code>signature_verifier=</code></td><td><code>verifySignature</code> 인자</td><td>없다(리졸버의 <code>Verifier</code> 는 공개 카드용)</td></tr>
+<tr><td>서버가 받는 것</td><td><code>extended_agent_card=</code></td><td>처리기의 일곱째 인자</td><td><code>WithExtendedAgentCard</code></td></tr>
+<tr><td>서버가 내는 꼴</td><td>공개 카드와 같은 ProtoJSON</td><td>같은 ProtoJSON(<code>toJSON</code>)</td><td>구조체 차례, <code>"pushNotifications": false</code> 까지</td></tr>
+</table>
+</div>
+<!--OUT file=out/12/xcard.txt wire=go-wire ex=3 lines=12-27 note=Go 서버의 확장 카드 — 공개 카드(가나다순, 기본값 뺌)와 모양이 다르다-->
+<div class="note"><b>Go 의 두 카드가 다른 모양인 까닭</b> — 공개 카드는 미리 서명해 둔 바이트를 그대로 내고(<a href="#p12-sig-go">8장</a>), 확장 카드는 SDK 가 <code>*a2a.AgentCard</code> 를 <code>json.Marshal</code> 합니다. 뜻은 같지만, 바이트를 견주는 도구(캐시·서명 검증)에는 다른 카드입니다.</div>
+</article>
+
+<article class="card" id="p12-xc-server">
+<h3>사람마다 다른 확장 카드 — 세 서버 SDK 모두 함수 자리를 둔다, 인증은 보지 않는다</h3>
+<p class="lead">§13.3 은 "different extended card content based on the authenticated client's identity" 를 허락합니다(MAY). 정산 에이전트는 고정된 카드 하나를 주지만, 세 SDK 에는 요청마다 카드를 짓는 자리가 있습니다(설치본 소스).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>요청마다 짓는 자리</th><th>인증을 보나</th></tr>
+<tr><td>파이썬</td><td><code>DefaultRequestHandler(extended_card_modifier=…)</code> — <code>(card, context)</code> 를 받아 고친 카드를 돌려준다(<code>default_request_handler_v2.py:681</code>)</td><td>보지 않는다 — 카드가 있으면 준다</td></tr>
+<tr><td>TypeScript</td><td>확장 카드 자리에 함수 <code>(context) =&gt; card</code> 를 준다(<code>server/index.js:2741</code>)</td><td>고정 카드일 때만 — <code>context.user?.isAuthenticated</code> 가 아니면 <b>공개 카드</b>를 준다(<code>:2744</code>)</td></tr>
+<tr><td>Go</td><td><code>WithExtendedAgentCardProducer</code>(<code>a2asrv/agentcard.go:77</code>)</td><td>보지 않는다(<code>handler.go:480</code>)</td></tr>
+</table>
+</div>
+<div class="key"><b>인증은 여전히 서버를 짠 사람의 몫</b> — TS 만 고정 카드를 익명에게 숨기는데, 그것도 거절이 아니라 공개 카드로 바꿔 주는 것이라 §13.3 의 "MUST require authentication" 과는 다릅니다. 정산 에이전트는 세 언어 모두 문지기가 401·403 으로 막습니다(<a href="#p12-xc-gate">앞</a>).</div>
+</article>
+
+<article class="card" id="p12-ch6-sum">
+<h3>6장 정리 — 확장 카드</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>무엇이 다른가?</td><td>스킬 <code>settle-budget</code> 이 더 있다. 서명은 없다</td><td><a href="#p12-xc-wire">와이어</a></td></tr>
+<tr><td>누가 받나?</td><td>문지기를 지난 클라이언트 — 401·403 은 다른 요청과 같다</td><td><a href="#p12-xc-gate">문지기</a></td></tr>
+<tr><td>클라이언트는?</td><td>py·ts 는 받은 카드로 갈아 끼우고, Go 는 <code>UpdateCard</code> 를 손수</td><td><a href="#p12-xc-cmp">비교</a></td></tr>
+<tr><td>사람마다 다르게?</td><td>세 SDK 모두 함수 자리가 있다. 인증 검사는 우리 몫</td><td><a href="#p12-xc-server">표</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p12-ch6-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. Go 클라이언트로 확장 카드를 받은 뒤 <code>client.Card()</code> 의 스킬을 찍으면 몇 개가 나옵니까? 같은 일을 파이썬 클라이언트로 하면요?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> Go 는 하나(<code>check-budget</code>)입니다 — <code>GetExtendedAgentCard</code> 는 카드를 돌려줄 뿐 클라이언트의 카드를 바꾸지 않습니다(<a href="#p12-xc-go">③</a>). 파이썬은 둘(<code>check-budget, settle-budget</code>)입니다 — <code>get_extended_agent_card</code> 가 받은 카드로 갈아 끼웁니다(<a href="#p12-xc-py">③</a>). §3.1.11 은 갈아 끼우라고 권합니다(SHOULD).</div>
+</article>
+
+<!-- ==== 7장 AUTH_REQUIRED ==== -->
+
+<article class="card" id="p12-ch7">
+<p class="chnum">7장</p>
+<h2>AUTH_REQUIRED — 작업 중의 권한</h2>
+<p class="chsub">스펙의 요구 → 실행기 ×3 → 결재 토큰으로 이어 말하기 ×3 → 와이어 → 스트림과 구독 → 세 서버 비교 → 사슬 — 기획 에이전트가 넘겨받아 묻는다 → 자격 증명은 어느 길로</p>
+</article>
+
+<article class="card" id="p12-ar-spec">
+<h3>권한이 모자라면 작업을 멈추고 묻는다 — §7.6 In-Task Authorization</h3>
+<p class="lead">문지기를 지난 요청이라도, 일을 하다 보니 더 큰 권한이 필요할 수 있습니다. 거절(403)하는 대신 작업을 <code>TASK_STATE_AUTH_REQUIRED</code> 로 두고 클라이언트에게 해결을 맡기는 길이 §7.6 입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>스펙의 말</th></tr>
+<tr><td>§7.6.1</td><td>에이전트는 Task 로 일을 추적하고(MUST), 상태를 AUTH_REQUIRED 로 바꾸고(MUST), 무엇이 필요한지 상태 메시지로 알린다(MUST — 다른 길로 합의했다면 예외)</td></tr>
+<tr><td>§7.6.1</td><td>자격 증명은 "out-of-band" 로 받을 준비를 한다(MUST — 합의된 다른 길이 없다면). 그 경우 열린 스트림을 유지하고(SHOULD), 받으면 후속 메시지 없이 이어 가도 된다(MAY)</td></tr>
+<tr><td>§7.6.1</td><td>AUTH_REQUIRED 인 작업으로 오는 메시지를 받을 것(SHOULD) — 협상·정정·거절을 위해</td></tr>
+<tr><td>§7.6.2</td><td>클라이언트가 스스로 A2A 에이전트면 제 작업도 AUTH_REQUIRED 로 바꿔 위로 넘길 수 있다 — "a chain of Tasks"</td></tr>
+<tr><td>§7.6.2</td><td>스트림이 없으면 구독·웹훅·폴링 가운데 하나로 지켜볼 것(SHOULD)</td></tr>
+</table>
+</div>
+<div class="note"><b>AUTH_REQUIRED 는 "중단" 상태</b> — proto 의 주석은 "Indicates that authentication is required to proceed. This is an interrupted state." 입니다. §7.6 은 같은 상태를 인가(authorization)의 뜻으로 씁니다 — 정산 에이전트의 경우도 토큰은 이미 있고, 모자란 것은 결재 권한입니다.</div>
+</article>
+
+<article class="card" id="p12-ar-exec-py">
+<h3>파이썬 실행기 — 결재가 필요하면 <code>requires_auth</code> 하고 돌아간다</h3>
+<p class="lead"><code>agents/settlement.py</code> 의 실행기입니다. 스코프는 문지기가 붙인 <code>call_context.state["auth"]</code> 에서 읽고(<a href="#p12-bearer-user">4장</a>), 도메인 규칙 <code>settle</code> 이 <code>"auth-required"</code> 를 내면 무엇이 필요한지 글과 데이터로 알립니다(§7.6.1 의 세 번째 MUST).</p>
+<!--CODE file=ex/py/agents/settlement.py region=executor-->
+<div class="note"><b>이어 말하기는 새 실행</b> — 실행기는 AUTH_REQUIRED 를 알리고 끝납니다. 결재 토큰을 단 다음 메시지가 오면 SDK 가 같은 작업으로 실행기를 다시 부르고, <code>task.history</code> 에서 처음 보낸 견적(<code>data_of</code>)을, 새 요청의 토큰에서 결재 스코프를 읽습니다. 그래서 <code>approvedBy</code> 는 결재 토큰의 주인입니다.</div>
+</article>
+
+<article class="card" id="p12-ar-exec-ts">
+<h3>TypeScript 실행기 — 같은 흐름, 상태는 <code>up.status(AUTH_REQUIRED, parts)</code></h3>
+<p class="lead">스코프는 <code>userBuilder</code> 가 세운 <code>BearerUser</code> 에서 읽습니다(<a href="#p12-bearer-ts">4장</a>). 견적은 작업의 <code>history</code> 와 이번 메시지(<code>ctx.userMessage</code>)를 함께 훑어 찾습니다.</p>
+<!--CODE file=ex/ts/agents/settlement.ts region=executor-->
+<div class="note"><b>버스는 닫는다</b> — TS SDK 는 기본값으로 AUTH_REQUIRED 에서 이벤트 버스를 살려 두어 스트림이 열린 채입니다(<a href="#p10-close-ts">10부</a>). 결재 토큰은 새 메시지로 오므로, 완성 에이전트의 <code>serve</code> 가 <code>keepBusAliveStates: [INPUT_REQUIRED]</code> 로 바꿔 AUTH_REQUIRED 에서도 닫습니다(<a href="#p10-close-ours">10부</a>).</div>
+</article>
+
+<article class="card" id="p12-ar-exec-go">
+<h3>Go 실행기 — 돌아가지 않고 <code>AwaitReply</code> 로 기다린다</h3>
+<p class="lead">Go SDK 는 AUTH_REQUIRED 를 "실행이 살아서 기다리는 상태" 로 보고, 그 작업으로 온 새 메시지를 "execution is already in progress" 로 거절합니다(<a href="#p10-close-ours">10부</a>). 그래서 Go 정산 에이전트는 실행기를 멈춰 세워 두고(<code>common/park.go</code>), 새 메시지가 오면 그 실행기에 넘깁니다.</p>
+<!--CODE file=ex/go/agents/settlement/main.go region=executor-->
+<div class="note"><b>멈춘 실행에 넘긴다</b> — 첫 스트림은 <code>park.go</code> 의 <code>waiter</code> 가 AUTH_REQUIRED 뒤에 닫고(<a href="#p10-close-ours">10부</a>), 결재 토큰은 파이썬·TS 와 같은 "작업으로 보낸 새 메시지" 로 옵니다. 실행기는 <code>for</code> 를 한 바퀴 더 돌며 그 요청의 사용자(<code>r.User</code>)에서 스코프를 다시 읽습니다.</div>
+</article>
+
+<article class="card" id="p12-ar-py">
+<h3>결재 토큰으로 이어 말하기 — 파이썬 클라이언트: 저장소의 토큰만 바꾼다</h3>
+<p class="lead"><code>12/approve.py</code> 는 조회 토큰으로 큰 정산을 맡겨 AUTH_REQUIRED 를 받고, 두 스코프를 다 받은 새 토큰을 같은 세션에 넣은 뒤 같은 <code>taskId</code>·<code>contextId</code> 로 "결재합니다" 를 보냅니다.</p>
+<!--SPEC file=ex/run/12/auth.run-->
+<!--CODE file=ex/py/12/approve.py region=main-->
+<!--OUT file=out/12/auth.txt part=터미널 5 lines=1-4-->
+<div class="note"><b>자격 증명은 메시지가 아니라 HTTP 머리로</b> — 결재의 증거는 메시지 내용이 아니라 이 요청의 <code>Authorization</code> 입니다. <code>set_credentials</code> 를 다시 부르면 같은 세션·스킴의 토큰이 바뀌고, 클라이언트 객체는 그대로 씁니다.</div>
+</article>
+
+<article class="card" id="p12-ar-ts">
+<h3>TypeScript 클라이언트 — fetch 가 다는 토큰을 바꾼다</h3>
+<p class="lead">TS 에는 자격 증명 저장소가 없으니, 감싼 fetch 의 <code>headers()</code> 가 매번 읽는 변수 <code>current</code> 를 바꿉니다(<a href="#p08-auth-retry">8부</a>).</p>
+<!--CODE file=ex/ts/12/approve.ts region=main-->
+<!--OUT file=out/12/auth.txt part=터미널 5 lines=5-8-->
+</article>
+
+<article class="card" id="p12-ar-go">
+<h3>Go 클라이언트 — <code>store.Set</code> 으로 같은 세션의 토큰을 덮어쓴다</h3>
+<p class="lead">이어 말할 메시지는 <code>a2a.NewMessageForTask(role, task, …)</code> 가 받은 작업의 <code>taskId</code>·<code>contextId</code> 를 채워 줍니다.</p>
+<!--CODE file=ex/go/12/approve region=main-->
+<!--OUT file=out/12/auth.txt part=터미널 5 lines=9-12-->
+<div class="key"><b>세 서버·세 클라이언트가 같은 두 줄</b> — 토큰 번호까지 같습니다. 서버마다 발급 기록이 따로라 각자 <code>tok-planner-1</code> 에서 시작하기 때문입니다(<a href="#p12-iss-cmp">3장</a>).</div>
+</article>
+
+<article class="card" id="p12-ar-wire">
+<h3>와이어 — 멈춘 작업의 상태 메시지와, 토큰만 바뀐 이어 말하기</h3>
+<p class="lead">파이썬 클라이언트 → 파이썬 서버의 탭입니다. 첫 SendMessage 의 답과 둘째 SendMessage 의 요청·상태만 골랐습니다.</p>
+<!--OUT file=out/12/auth.txt wire=py-wire ex=3 grep=^→|^←|Authorization|"state"|"text"|"total" note=① 조회 토큰 — AUTH_REQUIRED, 글 파트와 데이터 파트-->
+<!--OUT file=out/12/auth.txt wire=py-wire ex=5 lines=1-35 grep=^→|^←|Authorization|"(messageId|contextId|taskId|text|state)" note=② 결재 토큰 — 같은 taskId·contextId 로-->
+<ul>
+<li>상태 메시지에는 글("결재가 필요합니다…")과 도메인 결과(<code>total</code> 등)가 함께 실립니다. 파이썬 서버라 숫자가 <code>4842000.0</code> 으로 나갑니다(<a href="#p04-data-server">4부</a>).</li>
+<li>둘째 요청의 다른 점은 <code>Authorization</code> 의 토큰과 메시지 내용뿐입니다. 같은 작업이 <code>TASK_STATE_COMPLETED</code> 로 끝났습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-ar-watch">
+<h3>스트림과 구독 — AUTH_REQUIRED 에서 스트림은 셋 다 닫혔고, 구독은 셋이 다 달랐다</h3>
+<p class="lead"><code>12/auth_watch.py</code> 는 ① SendStreamingMessage 로 AUTH_REQUIRED 를 받고, 그 작업에 SubscribeToTask 를 열어 첫 이벤트를 받은 다음 ② 결재 토큰으로 이어 말하고, ③ 구독이 본 것을 찍습니다. 3초 동안 아무것도 오지 않으면 끊습니다.</p>
+<!--CODE file=ex/py/12/auth_watch.py region=main-->
+<!--OUT file=out/12/auth.txt part=터미널 5 lines=13-24 note=파이썬 → TS → Go 서버-->
+<ul>
+<li>① 세 서버 모두 <code>statusUpdate AUTH_REQUIRED</code> 를 보내고 닫았습니다 — 완성 에이전트가 맞춘 대로입니다(<a href="#p10-close-ours">10부</a>). SDK 기본값이었다면 TS·Go 는 열린 채였습니다(<a href="#p10-close-cmp">10부</a>).</li>
+<li>③ 파이썬은 구독에 결재 뒤의 아티팩트와 COMPLETED 를 흘렸고, Go 는 다시 WORKING 이 된 작업까지 흘렸습니다. TS 는 작업 하나를 주고 곧 닫았습니다 — TS 서버는 멈춘 작업의 구독을 버스가 살아 있는 동안만 열어 두는데(<a href="#p10-sub-paused">10부</a>), 이 에이전트는 AUTH_REQUIRED 에서 버스를 닫았습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-ar-cmp">
+<h3>세 서버 비교 — §7.6.2 의 "구독해 지켜보라" 는 TS 서버에서 통하지 않는다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>AUTH_REQUIRED 에서 실행기</td><td>돌아간다</td><td>돌아간다(버스도 닫는다)</td><td>멈춰 기다린다(<code>AwaitReply</code>)</td></tr>
+<tr><td>첫 스트림</td><td colspan="3">AUTH_REQUIRED 를 보내고 닫는다(완성 에이전트의 설정)</td></tr>
+<tr><td>멈춘 작업을 구독하면</td><td>열린 채 — 결재 뒤의 이벤트가 온다</td><td>작업 하나 주고 닫는다</td><td>열린 채 — WORKING 부터 온다</td></tr>
+<tr><td>결재는</td><td colspan="2">같은 작업의 새 실행</td><td>멈춘 실행에 넘겨 이어 간다</td></tr>
+</table>
+</div>
+<div class="warn"><b>TS 서버의 구독자는 끝을 못 본다</b> — §7.6.2 는 스트림이 없는 클라이언트에게 구독·웹훅·폴링 가운데 하나로 지켜보라고 합니다(SHOULD). 이 설정의 TS 서버에서는 구독이 곧 닫히므로, 결재를 다른 클라이언트가 했다면 GetTask 로 다시 묻거나 웹훅을 걸어야 합니다. 구독을 살리려고 버스를 열어 두면 첫 스트림도 열린 채가 됩니다(<a href="#p12-ar-exec-ts">앞</a>) — 한 설정이 둘을 함께 정합니다.</div>
+</article>
+
+<article class="card" id="p12-ar-chain">
+<h3>AUTH_REQUIRED 의 사슬 — 기획 에이전트가 제 작업도 AUTH_REQUIRED 로 바꿔 사람에게 묻는다</h3>
+<p class="lead">§7.6.2: 클라이언트가 A2A 에이전트라면 받은 AUTH_REQUIRED 를 제 클라이언트에게 넘길 수 있습니다 — "a chain of Tasks". 파이썬 에이전트 다섯을 띄우고 <code>ask</code> 로 워크숍을 맡긴 뒤 "승인" 으로 답했습니다.</p>
+<!--OUT file=out/12/chain.txt part=터미널 7 lines=1-9 note=ask → 기획 에이전트 — 정산의 AUTH_REQUIRED 가 기획 에이전트의 AUTH_REQUIRED 로-->
+<!--OUT file=out/12/chain.txt server=settlement note=정산 에이전트 — 결재 요청과 결재 토큰-->
+<ul>
+<li>사람(ask)은 정산 에이전트를 모릅니다. 기획 에이전트가 정산의 AUTH_REQUIRED 를 받아 제 작업을 AUTH_REQUIRED 로 바꾸고, "승인" 을 받자 결재 토큰을 새로 받아 정산 작업에 이어 말했습니다(<a href="#p12-scope-planner">5장의 토큰 두 번</a>).</li>
+<li>자격 증명은 사슬을 타고 내려가지 않았습니다 — 사람은 "승인" 이라는 말만, 결재 토큰은 기획 에이전트가 발급기에서 직접 받았습니다. 기획 에이전트가 어떻게 계획을 짜는지는 15부의 몫입니다.</li>
+</ul>
+<div class="note"><b>다섯을 띄운 법</b> — 기획 에이전트의 <code>--agents</code> 는 동료 주소 넷을 쉼표로 잇는데, 명세 한 줄(72칸)에 들어가지 않습니다. 그래서 포트만 받아 기획 에이전트를 그대로 띄우는 감싸개를 썼습니다.</div>
+<!--CODE file=ex/py/12/planner_at.py note=명세의 py:12/planner_at.py 11294 11290 11291 11292 11295-->
+</article>
+
+<article class="card" id="p12-ar-band">
+<h3>자격 증명은 어느 길로 — 이 책은 "작업으로 보낸 새 요청의 Bearer 토큰"</h3>
+<p class="lead">§7.6.1 은 자격 증명을 "out-of-band" 로 받으라고 하고(MUST — 다른 길을 합의하지 않았다면), §7.6.3 은 메시지 안에 실어 나르는 "in-band" 교환이 사슬의 모든 에이전트에게 자격 증명을 드러낸다고 경고합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>길</th><th>모양</th><th>이 책에서</th></tr>
+<tr><td>out-of-band</td><td>에이전트가 따로 받는다(사람의 승인 화면, 인가 서버 콜백…). 받으면 스트림을 유지한 채 이어 가도 된다(MAY)</td><td>쓰지 않았다</td></tr>
+<tr><td>in-band</td><td>메시지·확장으로 자격 증명을 싣는다 — 원래 요청한 에이전트에만 묶고(SHOULD), 그 에이전트만 읽게 암호화(SHOULD)</td><td>쓰지 않았다</td></tr>
+<tr><td>이 책</td><td>메시지 내용은 "결재합니다" 뿐, 결재 권한은 그 요청의 <code>Authorization</code> 토큰 — 4장의 문지기가 검사하는 같은 길</td><td>정산 에이전트 ×3</td></tr>
+</table>
+</div>
+<div class="note"><b>세 번째 길의 값</b> — 토큰이 메시지 기록(<code>history</code>)에 남지 않고, 사슬의 위쪽 에이전트에게도 보이지 않습니다(<a href="#p12-ar-chain">사슬</a>). 대신 결재 토큰은 정산 에이전트를 부르는 클라이언트(기획 에이전트)가 직접 받을 수 있어야 합니다. 이 책은 그 둘을 같은 발급기에서 해결했습니다.</div>
+</article>
+
+<article class="card" id="p12-ch7-sum">
+<h3>7장 정리 — AUTH_REQUIRED</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>에이전트가 할 일?</td><td>Task 로, AUTH_REQUIRED 로, 무엇이 필요한지 상태 메시지로(§7.6.1 MUST)</td><td><a href="#p12-ar-spec">스펙</a>·<a href="#p12-ar-exec-py">실행기</a></td></tr>
+<tr><td>클라이언트는?</td><td>결재 스코프 토큰으로 바꿔 같은 taskId 에 이어 말한다 — 세 SDK 모두 COMPLETED</td><td><a href="#p12-ar-py">×3</a>·<a href="#p12-ar-wire">와이어</a></td></tr>
+<tr><td>스트림·구독은?</td><td>스트림은 셋 다 닫힌다(우리 설정). 구독은 py·go 가 끝까지, ts 는 곧 닫힌다</td><td><a href="#p12-ar-watch">실험</a>·<a href="#p12-ar-cmp">비교</a></td></tr>
+<tr><td>사슬은?</td><td>기획 에이전트가 제 작업을 AUTH_REQUIRED 로 바꿔 사람에게 묻는다</td><td><a href="#p12-ar-chain">ask</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p12-ch7-quiz" data-quiz>
+<h3>7장 퀴즈</h3>
+<p class="q">Q. 정산 작업이 AUTH_REQUIRED 일 때 SubscribeToTask 로 구독을 열어 두고, 다른 연결에서 결재 토큰으로 이어 말했습니다. 파이썬·TS·Go 서버의 구독자는 각각 COMPLETED 를 봅니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 파이썬·Go 는 봅니다. 파이썬은 아티팩트와 <code>statusUpdate COMPLETED</code> 를, Go 는 다시 WORKING 이 된 작업부터 흘리고 닫습니다. TS 는 보지 못합니다 — 구독은 멈춘 작업 하나를 주고 곧 닫혔습니다(<a href="#p12-ar-watch">③</a>). 완성 TS 에이전트는 AUTH_REQUIRED 에서 이벤트 버스를 닫도록 설정해, 지켜볼 실행이 남지 않기 때문입니다(<a href="#p12-ar-cmp">비교</a>).</div>
+</article>
+
+<!-- ==== 8장 서명된 카드 ==== -->
+
+<article class="card" id="p12-ch8">
+<p class="chnum">8장</p>
+<h2>서명된 카드 — JCS + JWS</h2>
+<p class="chsub">왜 서명하나 → 서명의 모양 → 손으로 풀기 → 파이썬 → TypeScript → Go 와 가나다순 키 → 세 서버의 같은 서명 → 가짜 카드 → 검증 ×3 → 세 검증기 비교 → SDK 가 주는 것</p>
+</article>
+
+<article class="card" id="p12-sig-why">
+<h3>카드에 서명하는 까닭 — 카드는 토큰을 어디로 보낼지까지 정한다</h3>
+<p class="lead">클라이언트는 카드의 <code>tokenUrl</code> 로 비밀을 보내고(<a href="#p12-iss-flow">3장</a>), 카드의 인터페이스 주소로 일을 맡깁니다. 카드를 바꿔치기한 쪽은 비밀과 일을 함께 받습니다. HTTPS 는 "이 서버가 보냈다" 까지만 보증하므로(<a href="#p12-ch1">1장</a>), 카드를 옮겨 싣는 레지스트리나 캐시를 거치면 그 보증이 끊깁니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>스펙의 말</th></tr>
+<tr><td>§8.4</td><td>카드는 JWS(RFC 7515)로 서명할 수 있다(MAY) — "authenticity and integrity"</td></tr>
+<tr><td>§8.4.1</td><td>서명하기 전에 JCS(RFC 8785)로 정규화(MUST). 기본값인 필드는 빼고, <code>signatures</code> 는 서명 대상에서 뺀다(MUST)</td></tr>
+<tr><td>§8.4.2</td><td>보호 헤더에 <code>alg</code>·<code>typ</code>·<code>kid</code>(MUST — <code>typ</code> 은 "JOSE" 를 SHOULD), <code>jku</code>(MAY)</td></tr>
+<tr><td>§8.4.3</td><td>클라이언트는 신뢰하기 전에 서명 하나 이상을 확인(SHOULD), 공개 키는 안전한 길로(SHOULD), "trusted key store" 를 둘 수 있다(MAY)</td></tr>
+</table>
+</div>
+<div class="note"><b>ES256 이 아니라 EdDSA</b> — §8.4.2 는 <code>alg</code> 의 예로 "ES256", "RS256" 을 들 뿐 정하지 않습니다. 이 책은 Ed25519(RFC 8037 의 <code>EdDSA</code>)를 씁니다. Ed25519 서명은 결정적이라 같은 카드·같은 키면 언제나 같은 바이트가 나오고, 그래서 캡처가 흔들리지 않습니다. ES256(ECDSA)은 서명할 때 난수를 쓰므로(Go 서명기는 <code>rand.Reader</code> 를 넘긴다, <code>a2acrypto/sign.go:110</code>) 같은 카드라도 값이 달라집니다. 세 SDK 모두 Ed25519 를 받습니다(<a href="#p12-sig-sdk">SDK 표</a>).</div>
+</article>
+
+<article class="card" id="p12-sig-hand">
+<h3>서명을 손으로 풀기 — 보호 헤더, JCS 로 편 카드, 서명할 입력, Ed25519 로 확인</h3>
+<p class="lead"><code>12/jcs.py</code> 는 파이썬 정산 에이전트의 카드에서 서명 하나를 꺼내 §8.4.2 의 순서를 거꾸로 밟습니다. 정규화는 SDK 의 서명기·검증기가 쓰는 비공개 함수를 그대로 불렀습니다.</p>
+<!--CODE file=ex/py/12/jcs.py region=main-->
+<!--OUT file=out/12/sign.txt part=터미널 6 lines=5-13-->
+<ul>
+<li>② JCS 로 편 카드는 빈칸 없이, 키가 가나다(코드 단위)순입니다. <code>signatures</code> 는 없습니다 — 서명이 제 자신을 덮을 수는 없으니까요(§8.4.1).</li>
+<li>③ 서명하는 것은 카드 JSON 이 아니라 <code>BASE64URL(보호 헤더) . BASE64URL(카드)</code> 라는 글자열입니다(RFC 7515 §5.1). 카드 쪽 절반은 카드에 싣지 않습니다 — 받는 쪽이 받은 카드로 다시 만듭니다.</li>
+<li>④ Ed25519 서명은 늘 64바이트이고, <code>jwks.json</code> 의 공개 키 32바이트로 SDK 없이도 확인됩니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-sig-rules">
+<h3>JCS 앞의 한 걸음 — "기본값을 뺀다" 를 세 SDK 가 각자 한다</h3>
+<p class="lead">RFC 8785 는 키 차례·숫자·글자의 쓰는 법을 정할 뿐, 어떤 필드를 넣을지는 정하지 않습니다. 그것은 §8.4.1 의 몫인데, 세 SDK 가 하는 일이 같지 않습니다(설치본 소스).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>무엇을 정규화하나</th><th>빼는 것</th><th>JCS</th></tr>
+<tr><td>파이썬</td><td>파싱한 protobuf 를 <code>MessageToDict</code> 한 것</td><td>빈 글자·빈 목록·빈 객체(<code>_clean_empty</code>, <code>utils/signing.py:167</code>), <code>signatures</code></td><td><code>utils/_jcs.py</code> — 숫자까지 RFC 8785 대로</td></tr>
+<tr><td>TypeScript</td><td><code>AgentCard.toJSON(AgentCard.fromJSON(card))</code></td><td>같은 셋(<code>cleanEmpty</code>, <code>dist/index.js:1623</code>), <code>signatures</code></td><td><code>JSON.stringify</code> + <code>Object.keys().sort()</code>(<code>:1644</code>)</td></tr>
+<tr><td>Go</td><td><b>받은 바이트 그대로</b></td><td><code>signatures</code> 만(<code>a2acrypto/canonical.go:263</code>)</td><td><code>canonical.go</code> — UTF-16 코드 단위 정렬</td></tr>
+</table>
+</div>
+<div class="warn"><b>§8.4.1 의 규칙은 proto 의 <code>optional</code> 을 따진다</b> — <code>optional</code> 필드는 명시한 기본값도 남기고, 아닌 필드는 기본값을 뺍니다. 파이썬·TS 의 정리 함수는 그것을 묻지 않고 빈 글자·목록·객체만 빼며 <code>false</code>·<code>0</code> 은 남깁니다. Go 는 아무것도 빼지 않으니, Go 로 서명할 카드는 우리가 기본값을 빼 둔 바이트로 만들었습니다(<a href="#p12-sig-go">Go 서명</a>).</div>
+</article>
+
+<article class="card" id="p12-sig-py">
+<h3>파이썬 서명 — <code>create_agent_card_signer</code>, 보호 헤더는 우리가 적는다</h3>
+<p class="lead"><code>agents/settlement.py</code> 의 <code>sign</code> 구역입니다. 개인 키 PEM 과 보호 헤더를 주면, 카드를 받아 <code>signatures</code> 에 하나를 더해 돌려주는 함수가 나옵니다. <code>signing</code> extra(선택 설치 묶음)가 PyJWT 를 끌어옵니다.</p>
+<!--CODE file=ex/py/agents/settlement.py region=sign-->
+<ul>
+<li><code>jku</code> 는 이 서버의 <code>/.well-known/jwks.json</code> — 문지기가 열어 두는 경로입니다(<a href="#p12-bearer-where">4장</a>). 내보내는 키는 <code>ex/fixtures/keys/jwks.json</code> 그대로입니다.</li>
+<li>PyJWT 는 보호 헤더의 키를 정렬해 씁니다 — <code>alg, jku, kid, typ</code>. 손으로 푼 헤더(<a href="#p12-sig-hand">①</a>)가 그 차례입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-sig-ts">
+<h3>TypeScript 서명 — <code>generateAgentCardSignature</code>, 헤더는 넣은 차례대로</h3>
+<p class="lead">jose 의 <code>FlattenedSign</code> 으로 서명합니다(<code>dist/index.js:1572</code>). 키는 <code>node:crypto</code> 의 <code>createPrivateKey</code> 로 읽은 <code>KeyObject</code> 입니다.</p>
+<!--CODE file=ex/ts/agents/settlement.ts region=sign-->
+<div class="note"><b>헤더의 차례를 맞춘 까닭</b> — jose 는 보호 헤더를 넣은 차례대로 직렬화합니다. 보호 헤더는 그 바이트가 서명 입력이 되므로, 파이썬과 같은 서명값을 내려면 같은 차례(<code>alg, jku, kid, typ</code>)로 넣어야 합니다. 차례가 달라도 서명은 유효합니다 — 값이 다를 뿐.</div>
+</article>
+
+<article class="card" id="p12-sig-go">
+<h3>Go 서명 — <code>a2acrypto.Signer</code>, 그리고 카드의 키가 가나다순인 까닭</h3>
+<p class="lead"><code>a2acrypto.NewSigner</code> 로 서명기를 만들고 <code>Sign(ctx, 바이트)</code> 에 카드 JSON 을 줍니다. 2장에서 미뤄 둔 물음의 답이 이 구역에 있습니다(<a href="#p12-sch-cmp">2장</a>).</p>
+<!--CODE file=ex/go/agents/settlement/main.go region=sign-->
+<ul>
+<li>Go 검증기는 받은 바이트를 기본값 빼기 없이 정규화합니다(<a href="#p12-sig-rules">앞</a>). 그래서 서명한 바이트와 <b>내보내는 바이트가 같아야</b> 하고, 그 바이트에서 파이썬·TS 처럼 기본값이 빠져 있어야 세 언어의 검증기가 같은 정규형을 봅니다.</li>
+<li>기본값을 빼는 <code>common.ProtoJSON</code> 은 카드를 <code>map[string]any</code> 로 풀어 빈 값을 지우고 다시 씁니다. Go 의 <code>encoding/json</code> 은 맵의 키를 정렬해 쓰므로, 그 바이트의 키가 가나다순이 됩니다. 정렬은 목적이 아니라 맵을 거친 흔적입니다.</li>
+<li>SDK 의 <code>a2asrv.NewSignedCardProducer</code> 는 SDK 가 <code>json.Marshal</code> 한 카드 — <code>"pushNotifications": false</code> 까지 든(<a href="#p12-xc-cmp">6장</a>) — 에 서명합니다(<code>a2asrv/signed_card.go:50</code>). 코드의 주석은 그 모양이 파이썬·TS 검증기와 맞지 않아 쓰지 않았다고 적었습니다(포트 때 확인한 것으로, 이 장에서 다시 재지는 않았습니다).</li>
+</ul>
+</article>
+
+<article class="card" id="p12-sig-same">
+<h3>세 서버의 서명이 한 글자도 다르지 않다 — 같은 정규형, 같은 헤더, 결정적인 Ed25519</h3>
+<p class="lead">세 정산 에이전트에게 같은 바깥 주소(<code>--url http://127.0.0.1:11280/</code>)를 주어 카드 내용과 <code>jku</code> 를 같게 했습니다. 각 서버의 카드에서 서명값만 뽑았습니다.</p>
+<!--SPEC file=ex/run/12/sign.run-->
+<!--OUT file=out/12/sign.txt part=터미널 6 lines=1-4-->
+<div class="key"><b>세 SDK 의 정규화가 같은 바이트를 냈다는 증거</b> — 서명 입력의 한 글자만 달라도 Ed25519 서명은 전혀 다른 값이 됩니다. 2장의 카드 실행에서 세 서명이 달랐던 것은 서버마다 카드의 주소(인터페이스·<code>tokenUrl</code>·<code>jku</code>)가 달랐기 때문입니다(<a href="#p12-sch-cmp">2장</a>).</div>
+</article>
+
+<article class="card" id="p12-sig-fake">
+<h3>가짜 정산 에이전트 — 같은 이름·스킬, 토큰 주소는 자기, 서명은 다른 키로</h3>
+<p class="lead"><code>12/impostor.py</code> 는 진짜와 같은 <code>card()</code> 로 카드를 짓되 주소를 자기로, 서명 키를 <code>impostor-ed25519.pem</code> 으로 바꿨습니다. <code>kid</code> 는 진짜 키의 이름 <code>settlement-2026</code> 을 사칭하고, <code>jku</code> 는 가짜 키를 내주는 자기 JWKS 입니다.</p>
+<!--CODE file=ex/py/12/impostor.py region=forge-->
+<!--OUT file=out/12/sign.txt wire=fake-wire grep=^→|^←|"name": "보물|"url": "http://|tokenUrl|"protected" note=가짜 카드 — 이름은 같고, 주소와 tokenUrl 이 가짜를 가리킨다-->
+<div class="warn"><b>이 카드를 믿은 클라이언트</b> — 3장의 흐름대로 <code>tokenUrl</code> 에 <code>client_secret</code> 을 보내고(<a href="#p12-iss-flow">3장</a>), 정산을 가짜에게 맡깁니다. 서명이 있다는 것만으로는 아무것도 증명되지 않습니다 — 누구의 키로 검증하느냐가 전부입니다.</div>
+</article>
+
+<article class="card" id="p12-sig-vpy">
+<h3>파이썬 검증 — <code>create_signature_verifier</code>, 키는 <code>key_provider(kid, jku)</code> 가 고른다</h3>
+<p class="lead"><code>12/verify.py</code> 는 검증기를 둘 만듭니다. <code>pinned</code> 는 미리 받아 둔 <code>jwks.json</code> 의 키만, <code>trusting</code> 은 카드가 가리키는 <code>jku</code> 의 키를 씁니다. 다섯 가지 카드를 넣었습니다.</p>
+<!--CODE file=ex/py/12/verify.py region=verifiers-->
+<!--OUT file=out/12/sign.txt part=터미널 6 lines=15-20-->
+<ul>
+<li><code>algorithms=["EdDSA"]</code> 는 반드시 줘야 합니다 — 헤더의 <code>alg</code> 를 믿지 않으려는 PyJWT 의 장치입니다(<code>utils/signing.py:112</code> "prevent algorithm confusion attacks").</li>
+<li>② 는 <code>tokenUrl</code> 하나를 바꾼 진짜 카드, ③ 은 모르는 필드 <code>note</code> 를 더한 진짜 카드입니다(같은 파일의 <code>main</code> 구역).</li>
+</ul>
+</article>
+
+<article class="card" id="p12-sig-vts">
+<h3>TypeScript 검증 — <code>verifyAgentCardSignature</code>, 키는 <code>(kid, jku)</code> 콜백</h3>
+<p class="lead">공개 키는 JWK 를 <code>createPublicKey({key, format: "jwk"})</code> 로 읽은 <code>KeyObject</code> 입니다. 카드는 받은 JSON 객체를 그대로 넘깁니다 — SDK 가 <code>fromJSON</code> 을 거쳐 정규화합니다.</p>
+<!--CODE file=ex/ts/12/verify.ts region=verifiers-->
+<!--OUT file=out/12/sign.txt part=터미널 6 lines=21-26-->
+<div class="note"><b>틀린 서명마다 <code>console.debug</code></b> — SDK 는 실패한 서명 하나마다 그 서명과 오류를 통째로 <code>console.debug</code> 로 찍습니다(<code>dist/index.js:1617</code>). 표준 출력이 넘쳐 예제는 꺼 두었습니다. 헤더에 <code>kid</code>·<code>typ</code>·<code>alg</code> 가 다 있어야 한다는 검사도 TS 에만 있습니다(<code>:1604</code>).</div>
+</article>
+
+<article class="card" id="p12-sig-vgo">
+<h3>Go 검증 — <code>a2acrypto.Verifier</code>, 받은 바이트와 <code>KeyResolver</code></h3>
+<p class="lead"><code>Verify(ctx, 바이트, 서명)</code> 은 카드 바이트를 그대로 받습니다. 키는 <code>KeyResolver</code> 가 고르는데, <code>KeyResolverFunc</code> 은 <code>kid</code> 만 받아 <code>jku</code> 를 볼 수조차 없습니다.</p>
+<!--CODE file=ex/go/12/verify region=verifiers-->
+<!--OUT file=out/12/sign.txt part=터미널 6 lines=27-32-->
+<div class="note"><b><code>trusting</code> 은 SDK 의 허용 목록을 일부러 무른 것</b> — <code>NewJWKSKeyResolver</code> 는 검증하는 쪽이 정한 JWKS 주소 목록에 든 <code>jku</code> 만 받습니다(<code>a2acrypto/keyresolver.go:87</code>). 카드가 대는 <code>jku</code> 를 그 목록에 넣으면 아무 <code>jku</code> 나 믿는 셈이 됩니다.</div>
+</article>
+
+<article class="card" id="p12-sig-cmp">
+<h3>세 검증기 비교 — 모르는 필드를 더한 카드(③)에서만 갈렸다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>카드</th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>① 진짜</td><td colspan="3">맞음</td></tr>
+<tr><td>② <code>tokenUrl</code> 을 바꾼 진짜</td><td colspan="3">틀림</td></tr>
+<tr><td>③ 모르는 필드를 더한 진짜</td><td>맞음</td><td>맞음</td><td>틀림</td></tr>
+<tr><td>④ 가짜(미리 받은 키로)</td><td colspan="3">틀림</td></tr>
+<tr><td>⑤ 가짜(<code>jku</code> 를 따라가)</td><td colspan="3"><b>맞음</b></td></tr>
+<tr><td>오류의 모양</td><td><code>InvalidSignaturesError</code></td><td><code>Error</code>("No valid signatures…")</td><td><code>ErrVerificationFailed</code></td></tr>
+</table>
+</div>
+<ul>
+<li>③ — 파이썬·TS 는 카드를 SDK 의 타입으로 읽은 뒤 정규화하므로(<a href="#p12-sig-rules">앞</a>), 타입에 없는 필드는 정규형에 들어가지 않습니다. 서명이 덮는 것은 "SDK 가 아는 필드" 뿐입니다. 같은 까닭으로, 새 판의 서버가 서명한 새 필드가 있으면 그 필드를 모르는 파이썬·TS 검증기는 서명이 틀렸다고 할 것입니다. Go 는 받은 바이트를 다 덮습니다.</li>
+<li>더한 필드를 믿고 쓰는 쪽(원시 JSON 을 읽는 앱)이 있다면, 파이썬·TS 의 "맞음" 은 그 필드를 보증하지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-sig-jku">
+<h3>⑤ 가 맞음인 까닭 — 서명은 "이 키의 주인이 썼다" 일 뿐, 키를 고르는 것은 검증하는 쪽이다</h3>
+<p class="lead">가짜 카드의 서명은 가짜 키로 올바르게 만든 것입니다. <code>jku</code> 를 따라가면 그 가짜 키가 나오니 수학적으로는 맞습니다. 막는 것은 오직 "어느 키를 믿을지" 를 카드 밖에서 정해 두는 일입니다.</p>
+<ul>
+<li>§8.4.3 — 공개 키는 "using the <code>kid</code> and <code>jku</code> (or from a trusted key store)" 로 얻는다고만 하고, <code>jku</code> 를 믿지 말라는 말은 없습니다. 클라이언트는 "MAY maintain a trusted key store" 입니다.</li>
+<li>Go SDK 의 주석은 더 단호합니다 — <code>kid</code>·<code>jku</code> 는 "attacker-controlled", <code>jku</code> 로 키를 받아 신뢰를 세우면 "MUST NOT"(<code>a2acrypto/keyresolver.go:30-43</code>). 파이썬·TS SDK 는 콜백에 <code>jku</code> 를 그대로 건넵니다.</li>
+<li>완성 기획 에이전트는 세 언어 모두 미리 받아 둔 키(<code>pinned</code>)로만 검증합니다(15부). HTTPS 로 <code>jku</code> 를 받아도 소용없습니다 — 가짜 서버도 제 인증서를 가질 수 있습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p12-sig-sdk">
+<h3>세 SDK 가 주는 것 — 서명·검증 함수, 그리고 각자의 기본값</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬(<code>a2a.utils.signing</code>)</th><th>TypeScript(<code>@a2a-js/sdk</code>)</th><th>Go(<code>a2acrypto</code>)</th></tr>
+<tr><td>서명</td><td><code>create_agent_card_signer</code>(PyJWT, <code>signing</code> extra)</td><td><code>generateAgentCardSignature</code>(jose)</td><td><code>NewSigner</code>·<code>Sign</code>, 서버용 <code>a2asrv.NewSignedCardProducer</code></td></tr>
+<tr><td>검증</td><td><code>create_signature_verifier</code></td><td><code>verifyAgentCardSignature</code></td><td><code>NewVerifier</code>·<code>Verify</code></td></tr>
+<tr><td>키 고르기</td><td><code>key_provider(kid, jku)</code></td><td><code>retrievePublicKey(kid, jku)</code></td><td><code>KeyResolverFunc(kid)</code>·<code>JWKSKeyResolver</code>(허용 목록)</td></tr>
+<tr><td>알고리즘 제한</td><td><code>algorithms=</code> 필수</td><td>없다 — 헤더의 <code>alg</code> 와 키</td><td>없다 — 키의 종류가 정하고 <code>alg</code> 는 해시만 고른다(<code>alg.go:45</code>)</td></tr>
+<tr><td>카드를 받을 때 자동 검증</td><td><code>A2ACardResolver.get_agent_card(signature_verifier=)</code> 를 줄 때만</td><td><code>client.getAgentCard(…, verifySignature)</code> 를 줄 때만</td><td><code>agentcard.Resolver.Verifier</code> 를 둘 때만</td></tr>
+<tr><td>Ed25519</td><td colspan="3">받는다 — 이 장의 캡처가 그 증거. ES256·RS256 도 세 SDK 모두 받는다(Go <code>alg.go:26</code>)</td></tr>
+</table>
+</div>
+<div class="note"><b>서명이 없는 카드는 그냥 통과</b> — 세 SDK 모두 검증 함수를 <b>주었을 때만</b> 검증하고, Go 리졸버는 서명이 있는 카드만 검증합니다(<code>agentcard/resolver.go:210</code> <code>len(card.Signatures) &gt; 0</code>). "서명 없는 카드는 받지 않는다" 는 정책은 클라이언트가 세웁니다.</div>
+</article>
+
+<article class="card" id="p12-ch8-sum">
+<h3>8장 정리 — 서명된 카드</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>무엇에 서명하나?</td><td><code>BASE64URL(헤더) . BASE64URL(JCS 카드)</code>. 카드에는 헤더와 서명만 싣는다</td><td><a href="#p12-sig-hand">손으로</a></td></tr>
+<tr><td>세 SDK 가 같은 서명을?</td><td>낸다 — 같은 정규형·같은 헤더 차례·Ed25519</td><td><a href="#p12-sig-same">세 서명</a></td></tr>
+<tr><td>Go 카드가 가나다순인 까닭?</td><td>기본값을 빼려 맵을 거친 바이트에 서명하고, 그 바이트를 그대로 내기 때문</td><td><a href="#p12-sig-go">Go</a></td></tr>
+<tr><td>가짜는 잡히나?</td><td>미리 받은 키로는 잡힌다. <code>jku</code> 를 따라가면 못 잡는다</td><td><a href="#p12-sig-cmp">비교</a>·<a href="#p12-sig-jku">까닭</a></td></tr>
+<tr><td>세 SDK 의 차이?</td><td>정규화 대상(타입 대 바이트), 알고리즘 제한, 키 고르기</td><td><a href="#p12-sig-sdk">표</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p12-ch8-quiz" data-quiz>
+<h3>8장 퀴즈</h3>
+<p class="q">Q. 진짜 정산 카드에 <code>"note": "덧붙임"</code> 을 더해 검증했더니 파이썬·TS 는 "맞음", Go 는 "틀림" 이었습니다. 무엇이 둘을 가릅니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 정규화하는 대상입니다. 파이썬은 카드를 protobuf 로, TS 는 <code>AgentCard.fromJSON</code> 으로 읽은 뒤 정규화하므로 타입에 없는 <code>note</code> 가 빠지고, 남은 정규형은 서명할 때와 같습니다. Go 의 <code>Verifier.Verify</code> 는 받은 바이트를 그대로 정규화하므로 <code>note</code> 가 들어가 서명 입력이 달라집니다(<a href="#p12-sig-cmp">③</a>, <a href="#p12-sig-rules">정규화 표</a>).</div>
+</article>
+
+<article class="card" id="p12-wrap">
+<h3>12부 정리 — 누구냐(인증), 무엇까지냐(인가), 믿을 만하냐(서명)</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>한 줄</th></tr>
+<tr><td><a href="#p12-ch1-sum">1</a></td><td>운영은 HTTPS(MUST). 인증서는 SDK 가 아니라 HTTP 라이브러리가 보고, 셋 다 기본으로 거절한다</td></tr>
+<tr><td><a href="#p12-ch2-sum">2</a></td><td>보안 스킴 다섯과 요구의 proto 꼴. 옛 꼴은 SDK 마다 말없이 잃는다</td></tr>
+<tr><td><a href="#p12-ch3-sum">3</a></td><td>client_credentials 발급기 ×3 — 같은 바이트, RFC 에서 줄인 것 셋, 맞힐 수 있는 순번 토큰</td></tr>
+<tr><td><a href="#p12-ch4-sum">4</a></td><td>문지기는 HTTP 층에서 401 + <code>WWW-Authenticate</code>. 서버 SDK 는 카드의 보안 필드를 읽지 않는다</td></tr>
+<tr><td><a href="#p12-ch5-sum">5</a></td><td>카드의 스코프는 문지기가(403), 결재는 실행기가. 스코프를 보지 않던 결함을 세 언어에서 고쳤다</td></tr>
+<tr><td><a href="#p12-ch6-sum">6</a></td><td>확장 카드는 문지기를 지난 클라이언트에게. Go 클라이언트만 받은 카드로 갈아 끼우지 않는다</td></tr>
+<tr><td><a href="#p12-ch7-sum">7</a></td><td>AUTH_REQUIRED 는 결재 토큰을 단 이어 말하기로 풀린다. 구독자가 끝을 보는지는 서버마다 다르다</td></tr>
+<tr><td><a href="#p12-ch8-sum">8</a></td><td>JCS + Ed25519 서명은 세 SDK 가 바이트까지 같다. 가짜를 잡는 것은 미리 받아 둔 키뿐</td></tr>
+</table>
+</div>
+<div class="note"><b>다음</b> — 이 부의 모든 요청은 JSON-RPC 였고, 문지기도 경로 <code>/</code> 하나만 지켰습니다. <a href="#p13">13부</a>는 전송 바인딩입니다 — 같은 메서드를 HTTP+JSON(REST)과 gRPC 로 보내고, 오류가 HTTP 상태와 gRPC status 로 어떻게 옮겨 가는지 봅니다. 바인딩이 셋이면 지켜야 할 문도 셋입니다.</div>
 </article>

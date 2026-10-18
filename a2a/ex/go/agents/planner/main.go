@@ -381,7 +381,8 @@ func (e *executor) settle(ctx context.Context, up *common.Updater,
 			e.say(up, a2a.TaskStateRejected, "결재가 반려되어 멈춥니다")
 			return nil
 		}
-		token, err := e.getToken(c, "payment:approve")
+		// 결재 토큰도 문지기를 지나니 payment:read 도 받는다
+		token, err := e.getToken(c, "payment:read payment:approve")
 		if err != nil {
 			return err
 		}

@@ -334,9 +334,10 @@ class PlannerExecutor(AgentExecutor):
                 TaskState.TASK_STATE_REJECTED,
             )
             return
+        # 결재 토큰도 문지기를 지나니 payment:read 도 받는다
         token = await get_token(
             cards["settle"],
-            "payment:approve",
+            "payment:read payment:approve",
             self.client_id,
             self.secret,
         )

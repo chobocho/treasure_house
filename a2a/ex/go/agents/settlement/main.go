@@ -35,6 +35,10 @@ var scopes = map[string]string{
 	"payment:read": "정산 조회", approve: "결재 승인",
 }
 
+// needed 는 카드의 SecurityRequirements 가 요구하는 스코프 — 문지기도
+// 이것을 본다.
+var needed = []string{"payment:read"}
+
 // grant 는 토큰 하나로 받은 것: 클라이언트와 스코프.
 type grant struct {
 	client string
@@ -137,7 +141,11 @@ func requireBearer(next http.Handler) http.Handler {
 		w http.ResponseWriter, r *http.Request,
 	) {
 		header, sent := r.Header["Authorization"]
-		if _, ok := lookup(strings.Join(header, "")); ok {
+		if g, ok := lookup(strings.Join(header, "")); ok {
+			if lacks(g.scopes) {
+				insufficient(w)
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -167,6 +175,28 @@ func (bearerUser) Before(
 		cc.User = a2asrv.NewAuthenticatedUser(g.client, attrs)
 	}
 	return ctx, nil, nil
+}
+
+// endregion
+
+// region: scope
+func lacks(granted []string) bool {
+	for _, s := range needed {
+		if !slices.Contains(granted, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// insufficient: 토큰은 맞는데 카드가 요구하는 스코프가 없다 → 403.
+// RFC 6750 3.1절: insufficient_scope 는 403, 모자란 스코프는
+// scope 속성으로 알린다.
+func insufficient(w http.ResponseWriter) {
+	w.Header().Set("WWW-Authenticate", `Bearer realm="settlement", `+
+		`error="insufficient_scope", `+
+		`scope="`+strings.Join(needed, " ")+`"`)
+	oops(w, 403, "insufficient_scope")
 }
 
 // endregion
@@ -203,7 +233,7 @@ func card(url string, extended bool) *a2a.AgentCard {
 		},
 		SecuritySchemes: a2a.NamedSecuritySchemes{"oauth": oauth},
 		SecurityRequirements: a2a.SecurityRequirementsOptions{
-			{"oauth": {"payment:read"}},
+			{"oauth": needed},
 		},
 		DefaultInputModes:  []string{"application/json"},
 		DefaultOutputModes: []string{"application/json"},

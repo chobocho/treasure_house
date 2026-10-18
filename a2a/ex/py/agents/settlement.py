@@ -53,6 +53,8 @@ from workshop.fixtures import FIXTURES, clients
 KEYS = FIXTURES / "keys"
 APPROVE = "payment:approve"
 SCOPES = {"payment:read": "정산 조회", APPROVE: "결재 승인"}
+# 카드의 securityRequirements 가 요구하는 스코프 — 문지기도 이것을 본다
+NEEDED = ["payment:read"]
 
 # region: tokens
 # 발급한 토큰 → (클라이언트, 스코프). 시험용이라 메모리에만 둔다.
@@ -141,7 +143,32 @@ class RequireBearer:
             )
             await resp(scope, receive, send)
             return
+        if rpc and not set(NEEDED) <= set(scope["auth"].scopes):
+            await insufficient(scope, receive, send)
+            return
         await self.app(scope, receive, send)
+
+
+# endregion
+
+
+# region: scope
+async def insufficient(scope, receive, send):
+    """토큰은 맞는데 카드가 요구하는 스코프가 없다 → 403.
+
+    RFC 6750 3.1절: insufficient_scope 는 403, 모자란 스코프는
+    scope 속성으로 알린다.
+    """
+    challenge = (
+        'Bearer realm="settlement", error="insufficient_scope", '
+        f'scope="{" ".join(NEEDED)}"'
+    )
+    resp = JSONResponse(
+        {"error": "insufficient_scope"},
+        403,
+        headers={"WWW-Authenticate": challenge},
+    )
+    await resp(scope, receive, send)
 
 
 # endregion
@@ -189,7 +216,7 @@ def card(url, extended=False):
         security_schemes={"oauth": oauth},
         security_requirements=[
             SecurityRequirement(
-                schemes={"oauth": StringList(list=["payment:read"])}
+                schemes={"oauth": StringList(list=NEEDED)}
             )
         ],
         default_input_modes=["application/json"],

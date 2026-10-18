@@ -42,6 +42,8 @@ import {
 const KEYS = new URL("../../fixtures/keys/", import.meta.url);
 const APPROVE = "payment:approve";
 const SCOPES = { "payment:read": "정산 조회", [APPROVE]: "결재 승인" };
+// 카드의 securityRequirements 가 요구하는 스코프 — 문지기도 이것을 본다
+const NEEDED = ["payment:read"];
 
 // region: tokens
 // 발급한 토큰 → [클라이언트, 스코프]. 시험용이라 메모리에만 둔다.
@@ -120,13 +122,34 @@ function requireBearer(
   res: Response,
   next: NextFunction,
 ) {
-  if (bearer(req) !== null) return next();
+  const user = bearer(req);
+  if (user !== null && lacks(user.scopes)) return insufficient(res);
+  if (user !== null) return next();
   const sent = req.headers.authorization !== undefined;
   // RFC 6750: 토큰이 아예 없으면 error 를 붙이지 않는다.
   let challenge = 'Bearer realm="settlement"';
   if (sent) challenge += ', error="invalid_token"';
   const body = { error: sent ? "invalid_token" : "unauthorized" };
   res.status(401).set("WWW-Authenticate", challenge).json(body);
+}
+// endregion
+
+// region: scope
+function lacks(scopes: string[]) {
+  return !NEEDED.every((s) => scopes.includes(s));
+}
+
+// 토큰은 맞는데 카드가 요구하는 스코프가 없다 → 403.
+// RFC 6750 3.1절: insufficient_scope 는 403, 모자란 스코프는
+// scope 속성으로 알린다.
+function insufficient(res: Response) {
+  const challenge =
+    'Bearer realm="settlement", error="insufficient_scope", ' +
+    `scope="${NEEDED.join(" ")}"`;
+  res
+    .status(403)
+    .set("WWW-Authenticate", challenge)
+    .json({ error: "insufficient_scope" });
 }
 // endregion
 
@@ -161,9 +184,7 @@ function card(url: string, extended = false) {
     supportedInterfaces: [jsonrpcInterface(url)],
     capabilities: { streaming: true, extendedAgentCard: true },
     securitySchemes: { oauth },
-    securityRequirements: [
-      { schemes: { oauth: { list: ["payment:read"] } } },
-    ],
+    securityRequirements: [{ schemes: { oauth: { list: NEEDED } } }],
     defaultInputModes: ["application/json"],
     defaultOutputModes: ["application/json"],
     skills,
