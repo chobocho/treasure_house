@@ -904,3 +904,31 @@ subagent task each.
 - Watch: `out/09/direct.go.txt` (returnImmediately) flipped SUBMITTED→COMPLETED once under
   swap; 3 isolated reruns identical — a latent race for review.
 - `make all SKEL=1` green (1473 slides, 1543 blocks, 0 mismatches, 0 notices).
+
+### Part 15 second third — 47 slides; six full meshes match §2.6 (2026-10-18)
+- `15b_scenario.html` ch4 referenceTaskIds → settlement (19), ch5 planner progress
+  streaming (12), ch6 full runs (16); 15_scenario ch4–6 linked (ch7 still plain text).
+  Examples `ex/{py,ts,go}/15/refs`, `ex/py/15/check.py` (ListTasks COMPLETED +
+  include_artifacts → compares the plan markdown and DataPart summary with golden, numbers by
+  value), `planner_via` ×3 (planner_at + tap/card port); specs `ex/run/15/{mesh_py,mesh_ts,
+  mesh_go,mix_py,mix_ts,mix_go}.run` — mixed meshes are a Latin square (every language plays
+  every role once); all six runs: 2,100,000 / 1,542,000 / 1,200,000 / total 4,842,000 /
+  remaining 1,158,000, summary 8/8 keys. **a2arun only accepts ports 11500–11599 for part 15**
+  — the mixed meshes reuse 11580–11597 of the single meshes; 15c must reuse ports too.
+- Findings: referenceTaskIds resolution is per server — TS looks them up in its own store and
+  console.warn's "Reference task X not found." (`server/index.js:2803`), py needs a custom
+  `SimpleRequestContextBuilder(should_populate_referred_tasks=True, task_store=…)` and drops
+  misses silently (`simple_request_context_builder.py:63`), Go only via
+  `ReferencedTasksLoader` + `WithExecutorContextInterceptor` (`a2asrv/exectx.go:78`); no SDK
+  can resolve cross-server refs (§3.4.3 SHOULD vs server-generated ids §3.4.2); settle
+  request wire — py `2100000.0`, Accept py `*/*` / ts `application/json` / go none, TS
+  JSON-RPC `"id": 1` always, Go omits `configuration`; **py planner's follow-up stream starts
+  with artifactUpdate (§3.1.2 Task-first violated; known py limitation in `common.py`
+  begin)**; status messages into history: TS on arrival, Go on the next update; our agents
+  close the stream at AUTH_REQUIRED (SDK defaults would hang `ask` on TS/Go); one story run
+  = 14 HTTP requests (5 card GETs, 2 tokens, 5 SendMessage, 2 streams).
+- Defects (not fixed): Go planner ignores `say`/`up.Status` bool in `plan`
+  (`agents/planner/main.go:372`, latent, like part 10's Go catering); approval waits never
+  cleaned up (py/ts `waiting` map forever, Go parked goroutine until ctx ends) and on a
+  non-"승인" answer the AUTH_REQUIRED settlement task is never cancelled → 15c ch7.
+- `make all SKEL=1` green (1519 slides, 1614 blocks, 0 mismatches, 0 notices).

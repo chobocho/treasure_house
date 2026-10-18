@@ -1,4 +1,526 @@
-<article class="card" id="p15-todo-b">
-<h3>시나리오 완성 (b)</h3>
-<p class="lead">준비 중입니다</p>
+<!-- ==== 4장 referenceTaskIds 로 정산 요청 ==== -->
+
+<article class="card" id="p15-ch4">
+<p class="chnum">4장</p>
+<h2>referenceTaskIds 로 정산 요청</h2>
+<p class="chsub">정산에 가는 것 → 파이썬 → TypeScript → Go → 세 언어 비교 → 근거는 동료의 작업 id → 세 요청의 차림 → 정산 서버가 한 일 → SDK 는 풀어 주나 ×3 → 남의 서버의 작업 → 결재 뒤 이어 가기 ×3 → 이어 말하기의 와이어 → 정리</p>
+</article>
+
+<article class="card" id="p15-ref-what">
+<h3>정산에 가는 것 — 견적 셋은 본문으로, 그 견적을 낸 작업 셋은 referenceTaskIds 로</h3>
+<p class="lead">3장의 위임이 끝나면 기획 에이전트에는 동료의 작업(Task) 셋이 남습니다. 정산 요청은 그 작업들에서 꺼낸 금액을 본문에 싣고, 작업 자체는 id 로 가리킵니다.</p>
+<pre class="fig">
+ 기획 에이전트 — 작업 T, 맥락 C
+   │ ① 토큰 받기  scope=payment:read
+   │ ② SendMessage(맥락 C) ─────────────→ 정산
+   │      parts            [DataPart {items 셋, budget}]
+   │      referenceTaskIds [숙소의 작업, 식사의 작업, 교통의 작업]
+   │      Authorization    Bearer (①의 토큰)
+   │←── AUTH_REQUIRED ── 결재가 필요하다
+</pre>
+<ul>
+<li>§3.4.3: "Clients <b>SHOULD</b> use the <code>referenceTaskIds</code> field in Message to explicitly reference related tasks", 그리고 "Agents <b>SHOULD</b> use referenced tasks to understand the context and intent of follow-up requests". proto 의 설명은 "A list of task IDs that this message references for additional context" 입니다(<a href="#p04-msg-ref">4부</a>).</li>
+<li>맥락은 3장과 같은 기획 작업의 contextId 이고, 토큰은 기획 에이전트 자신의 이름(<code>planner</code>)으로 받습니다(<a href="#p12-scope-planner">12부</a>). 결재가 필요하다는 답(AUTH_REQUIRED)부터는 이 장의 뒤쪽입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-ref-py">
+<h3>파이썬 — <code>plan</code> 의 뒤쪽, 토큰을 받아 작업 셋의 id 를 <code>refs</code> 로</h3>
+<!--CODE file=ex/py/agents/planner.py region=settle-->
+<ul>
+<li><code>refs=[lodging.id, meals.id, bus.id]</code> — <code>gather</code> 가 돌려준 작업 셋의 id 입니다. <code>delegate</code> 가 그것을 <code>ask_message</code> 에 넘기고, 거기서 <code>m.reference_task_ids.extend(refs)</code> 로 메시지에 붙습니다(<code>delegate</code> 구역, <a href="#p07-cl-planner">7부</a>).</li>
+<li>토큰 받기와 정산 위임을 한 <code>try</code> 로 감쌌습니다. 어느 쪽이 실패해도 <code>cannot</code> 으로 FAILED "정산 에이전트에게 맡기지 못했습니다" 입니다(<a href="#p15-fix-code">2장</a>).</li>
+<li>AUTH_REQUIRED 면 이어 가는 데 필요한 넷(카드·풀이·견적·정산 작업)을 <code>self.waiting[task.id]</code> 에 적고, 자기 작업도 AUTH_REQUIRED 로 바꾼 뒤 <b>실행기를 끝냅니다</b>. 사람의 답은 새 실행으로 옵니다(<a href="#p15-res-py">뒤에서</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-ref-ts">
+<h3>TypeScript — 따로 된 <code>settle</code> 메서드, <code>done.map(t =&gt; t.id)</code></h3>
+<!--CODE file=ex/ts/agents/planner.ts region=settle-->
+<ul>
+<li><code>refs</code> 는 <code>delegate</code> 의 선택 인자 <code>{ token, refs }</code> 로 넘어가, <code>Message.fromJSON</code> 에 들어갈 <code>referenceTaskIds</code> 가 됩니다(<code>delegate</code> 구역). 동료 셋에게 맡길 때는 <code>refs</code> 가 없어 빈 배열입니다.</li>
+<li>견적은 <code>quoteOf</code> 로 아티팩트의 첫 DataPart 에서 꺼내고 <code>Math.trunc</code> 로 정수를 만듭니다. 기다림은 <code>this.waiting</code>(Map)에 적고 실행기가 돌아갑니다 — 파이썬과 같은 모양입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-ref-go">
+<h3>Go — 가변 인자 <code>refs ...a2a.TaskID</code>, 필드 이름은 <code>ReferenceTasks</code></h3>
+<p class="lead">Go 의 <code>settle</code> 은 구역이 한 화면을 넘어 둘로 잘랐습니다. 앞쪽 — 토큰을 받고 정산에 맡기는 데까지입니다.</p>
+<!--CODE file=ex/go/agents/planner/main.go lines=417-428 note=settle 의 앞쪽 — 토큰을 받고 근거 셋을 달아 맡긴다-->
+<!--CODE file=ex/go/agents/planner/main.go lines=190-196 note=delegate — refs 를 메시지에 단다-->
+<ul>
+<li>Go 이름 <code>ReferenceTasks</code> 가 와이어의 <code>referenceTaskIds</code> 입니다(<a href="#p09-ty-build">9부</a>에서 본 이름 차이). <code>refs[0].ID, refs[1].ID, refs[2].ID</code> 의 차례는 <code>fanOut</code> 이 정한 자리의 차례입니다.</li>
+<li>Go 에는 <code>waiting</code> 이 없습니다 — AUTH_REQUIRED 를 받으면 이 함수 안에서 그대로 기다립니다(<a href="#p15-res-go">뒤에서</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-ref-cmp">
+<h3>세 언어 비교 — 보내는 것은 같고, 기다리는 자리가 다르다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>근거를 다는 곳</td><td><code>m.reference_task_ids.extend</code></td><td><code>referenceTaskIds</code>(fromJSON)</td><td><code>m.ReferenceTasks</code></td></tr>
+<tr><td>본문</td><td colspan="3"><code>{"items": [{name, amount}×3], "budget": …}</code> — 견적의 <code>total</code> 을 정수로</td></tr>
+<tr><td>맥락</td><td colspan="3">기획 작업의 contextId(3장과 같다)</td></tr>
+<tr><td>첫 토큰</td><td colspan="3"><code>payment:read</code> — 카드의 <code>securityRequirements</code> 가 요구하는 것</td></tr>
+<tr><td>AUTH_REQUIRED 를 받으면</td><td colspan="2"><code>waiting</code> 에 적고 실행기가 돌아간다</td><td>실행기가 멈춘 채 답을 기다린다</td></tr>
+</table>
+</div>
+<div class="note"><b>모양이 갈린 까닭</b> — 파이썬·TS SDK 는 AUTH_REQUIRED 뒤의 새 메시지를 새 실행으로 넘기고, Go SDK 는 같은 실행이 이어지기를 기다립니다(<a href="#p12-ar-exec-go">12부</a>). 기획 에이전트는 그 모델을 정산 쪽에서도, 자기 쪽에서도 그대로 따릅니다.</div>
+</article>
+
+<article class="card" id="p15-ref-wire">
+<h3>와이어 — 정산이 받은 <code>referenceTaskIds</code> 셋은 동료 셋이 지은 작업 id 다</h3>
+<p class="lead">6장의 파이썬 메시(<code>15/mesh_py.run</code>)는 다섯 에이전트 앞에 모두 탭을 두었습니다. 같은 캡처 안에서 같은 값은 같은 <code>&lt;idN&gt;</code> 입니다. 동료 셋의 답에서 작업 id 만, 정산 요청에서 근거와 맥락만 골랐습니다.</p>
+<!--OUT file=out/15/mesh_py.txt wire=lodging-wire ex=2 grep=^→|^←|^\s{8}"id" note=숙소의 답-->
+<!--OUT file=out/15/mesh_py.txt wire=catering-wire ex=2 grep=^→|^←|^\s{8}"id" note=식사의 답-->
+<!--OUT file=out/15/mesh_py.txt wire=bus-wire ex=2 grep=^→|^←|^\s{8}"id" note=교통의 답-->
+<!--OUT file=out/15/mesh_py.txt wire=settle-wire ex=3 lines=1-44 grep=^→|Authorization|"contextId"|referenceTaskIds|^\s{10}"<id note=정산 요청-->
+<ul>
+<li>숙소 <code>&lt;id4&gt;</code>, 식사 <code>&lt;id8&gt;</code>, 교통 <code>&lt;id14&gt;</code> 이 그대로 정산 요청의 <code>referenceTaskIds</code> 에 정한 차례로 들어갔습니다. 맥락 <code>&lt;id2&gt;</code> 는 동료 셋이 받은 것과 같습니다(<a href="#p15-fan-ctx">3장</a>).</li>
+<li>근거는 id 뿐입니다. 정산이 계산하는 금액은 본문의 <code>items</code> 에 따로 실려 갑니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-ref-wire-cmp">
+<h3>세 기획 에이전트의 정산 요청 — 근거와 본문은 같고, 차림이 다르다</h3>
+<p class="lead">6장의 TypeScript·Go 메시에서 같은 요청을 골랐습니다. 차림이 갈리는 줄만 남겼습니다.</p>
+<!--OUT file=out/15/mesh_py.txt wire=settle-wire ex=3 lines=1-44 grep=^→|Accept|"jsonrpc"|^\s{4}"id"|"amount"|configuration note=파이썬 기획 에이전트-->
+<!--OUT file=out/15/mesh_ts.txt wire=settle-wire ex=3 lines=1-44 grep=^→|Accept|"jsonrpc"|^\s{4}"id"|"amount"|configuration note=TypeScript 기획 에이전트-->
+<!--OUT file=out/15/mesh_go.txt wire=settle-wire ex=3 lines=1-42 grep=^→|Accept|"jsonrpc"|^\s{4}"id"|"amount"|configuration|"role" note=Go 기획 에이전트-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>금액</td><td><code>2100000.0</code>(Struct 의 double)</td><td colspan="2"><code>2100000</code></td></tr>
+<tr><td><code>Accept</code></td><td><code>*/*</code></td><td><code>application/json</code></td><td>없음</td></tr>
+<tr><td>JSON-RPC <code>id</code></td><td>UUID</td><td><code>1</code>(두 요청 모두)</td><td>UUID</td></tr>
+<tr><td><code>configuration</code></td><td colspan="2"><code>{}</code></td><td>없음</td></tr>
+</table>
+</div>
+<div class="note"><b>정산은 셋 다 받았다</b> — 세 메시 모두 같은 AUTH_REQUIRED 를 돌려받았습니다(<a href="#p15-mesh-cmp">6장</a>). 실수로 온 금액은 정산 에이전트가 정수로 되돌립니다(<a href="#p04-data-cmp">4부</a>). TS 의 <code>"id": 1</code> 은 JSON-RPC 요청마다 같은 값인데, 요청이 HTTP 하나에 하나뿐이라 답을 짝짓는 데 문제가 없습니다.</div>
+</article>
+
+<article class="card" id="p15-ref-server">
+<h3>정산 서버는 근거로 무엇을 했나 — TypeScript 만 찾아보고 "not found", 셋 다 이력에 남겼다</h3>
+<p class="lead">세 메시의 정산 에이전트 출력입니다. 정산 실행기는 근거를 읽지 않습니다 — 금액은 본문에 있으니까요. 그래도 SDK 가 하는 일이 있습니다.</p>
+<!--OUT file=out/15/mesh_py.txt server=settlement note=파이썬 정산 에이전트-->
+<!--OUT file=out/15/mesh_ts.txt server=settlement note=TypeScript 정산 에이전트-->
+<!--OUT file=out/15/mesh_go.txt server=settlement note=Go 정산 에이전트-->
+<ul>
+<li>TS 의 요청 처리기는 <code>referenceTaskIds</code> 의 id 마다 <b>자기 작업 저장소</b>를 뒤지고, 없으면 <code>console.warn(`Reference task ${refId} not found.`)</code> 을 남깁니다(<code>server/index.js:2803</code>–<code>2812</code>). 세 id 는 숙소·식사·교통 서버에서 지어졌으니 정산 서버의 저장소에는 없습니다.</li>
+<li>파이썬·Go 는 조용합니다 — 기본 처리기가 근거를 찾아보지 않기 때문입니다(다음 슬라이드).</li>
+</ul>
+<!--OUT file=out/15/mesh_py.txt wire=settle-wire ex=5 grep=^←|"state"|referenceTaskIds|^\s{14}"<id note=정산을 마친 작업의 이력(파이썬 정산)-->
+<div class="note"><b>근거는 이력에 남는다</b> — 끝난 정산 작업의 <code>history</code> 첫 메시지에 <code>referenceTaskIds</code> 셋이 그대로 있습니다(TS·Go 정산의 답도 같습니다). 정산 작업을 나중에 GetTask 로 읽는 쪽은 "이 정산이 어느 견적들에서 왔는가" 를 id 로 압니다.</div>
+</article>
+
+<article class="card" id="p15-refs-py">
+<h3>SDK 는 근거를 작업으로 풀어 주나 — 파이썬은 켜야 하고, 켜도 자기 저장소만 본다</h3>
+<p class="lead">7부에서 본 <code>related_tasks</code>(<a href="#p07-ex-ctx">7부</a>)를 직접 시험합니다. 처리기를 HTTP 없이 부르고, 다른 처리기(다른 서버 몫)의 작업 하나와 같은 처리기의 작업 하나를 근거로 보냅니다.</p>
+<!--CODE file=ex/py/15/refs.py region=seen-->
+<!--RUN file=ex/py/15/refs.py region=main-->
+<ul>
+<li>기본 처리기는 <code>SimpleRequestContextBuilder(should_populate_referred_tasks=False, task_store=None)</code> 을 씁니다(<code>default_request_handler_v2.py:155</code>). 저장소조차 넘기지 않으니, 켜려면 이 예제처럼 빌더를 직접 만들어 <code>request_context_builder</code> 로 줘야 합니다.</li>
+<li>켜면 id 마다 <code>task_store.get</code> 을 부르고 없는 것은 빼 버립니다(<code>simple_request_context_builder.py:63</code>–<code>75</code>) — 다른 서버의 <code>&lt;id1&gt;</code> 은 조용히 사라지고 <code>&lt;id3&gt;</code> 하나만 남았습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-refs-ts">
+<h3>TypeScript — 늘 채운다, 스위치가 없다, 못 찾으면 경고 한 줄</h3>
+<!--CODE file=ex/ts/15/refs.ts region=seen-->
+<!--RUN file=ex/ts/15/refs.ts region=main-->
+<ul>
+<li>같은 실험을 TS 의 기본 처리기로 — 처리기에 넘긴 저장소에서 찾아 <code>ctx.referenceTasks</code> 에 넣습니다. 끄는 옵션은 없습니다.</li>
+<li>다른 서버의 <code>&lt;id1&gt;</code> 에 대해 정산 서버와 똑같은 경고가 나왔습니다. 찾은 것만 들어가는 것은 파이썬과 같습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-refs-go">
+<h3>Go — 가로채기 <code>ReferencedTasksLoader</code> 를 달아야 채운다</h3>
+<!--CODE file=ex/go/15/refs region=seen-->
+<!--RUN file=ex/go/15/refs region=main-->
+<ul>
+<li><code>a2asrv.ReferencedTasksLoader{Store: store}</code> 는 실행기 맥락 가로채기(<code>ExecutorContextInterceptor</code>)입니다. id 마다 <code>Store.Get</code> 하고, 실패하면 <code>log.Info(… "failed to get a referenced task" …)</code> 를 남기고 넘어갑니다(<code>a2asrv/exectx.go:78</code>–<code>100</code>) — 출력의 <code>INFO</code> 줄입니다.</li>
+<li><code>WithExecutorContextInterceptor</code> 의 문서는 "overrides the default ExecutorContextInterceptor" 라고 하지만, 코드는 목록에 <b>덧붙입니다</b>(<code>exectx.go:32</code>–<code>35</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-refs-cmp">
+<h3>세 SDK 비교 — 풀어 주더라도 "이 서버의 작업" 뿐이다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>실행기가 받는 곳</td><td><code>ctx.related_tasks</code></td><td><code>ctx.referenceTasks</code></td><td><code>ec.RelatedTasks</code></td></tr>
+<tr><td>기본</td><td>채우지 않는다</td><td>채운다</td><td>채우지 않는다</td></tr>
+<tr><td>켜는 법</td><td>빌더를 직접(<code>should_populate_referred_tasks=True</code> + 저장소)</td><td>—</td><td><code>WithExecutorContextInterceptor(&amp;ReferencedTasksLoader{…})</code></td></tr>
+<tr><td>없는 id</td><td>조용히 뺀다</td><td><code>console.warn</code></td><td><code>log.Info</code></td></tr>
+<tr><td>찾는 곳</td><td colspan="3">그 처리기의 작업 저장소 — 다른 서버의 작업은 언제나 "없다"</td></tr>
+</table>
+</div>
+<div class="key"><b>이 이야기에서 근거의 뜻</b> — 작업 id 는 서버가 짓고(§3.4.2 "server-generated") 그 서버 안에서만 뜻이 있습니다. 스펙은 근거가 같은 서버의 작업이어야 한다고도, 다른 서버의 작업을 어떻게 찾으라고도 하지 않습니다. 그래서 기획 에이전트의 근거는 <b>추적용 표지</b>이고, 정산이 계산에 쓰는 것은 본문의 <code>items</code> 입니다. 정산이 견적을 직접 확인하게 하려면 근거와 함께 <b>그 작업이 있는 서버</b>를 알려 줄 약속(예: 메시지 metadata)이 따로 필요합니다.</div>
+</article>
+
+<article class="card" id="p15-res-py">
+<h3>결재 뒤 이어 가기 — 파이썬은 새 실행이 <code>waiting</code> 에서 꺼내 정산 작업에 이어 말한다</h3>
+<p class="lead">사람이 "승인" 이라고 답하면, 그 답은 기획 작업(같은 taskId)으로 온 새 메시지입니다. 실행기의 첫머리가 <code>task.id in self.waiting</code> 을 보고 여기로 보냅니다(<a href="#p15-exec-py">1장</a>). 사슬 전체는 12부에서 보았으니(<a href="#p12-ar-chain">12부</a>), 기획 에이전트의 코드만 봅니다.</p>
+<!--CODE file=ex/py/agents/planner.py region=resume-->
+<ul>
+<li><code>pop</code> 으로 꺼내므로 같은 작업의 두 번째 답은 다시 처음부터(풀이) 갑니다. 기다림은 <b>프로세스의 메모리</b>에만 있습니다 — 기획 에이전트가 다시 뜨면 결재 대기는 사라집니다.</li>
+<li>"승인" 이 없으면 REJECTED "결재가 반려되어 멈춥니다" 입니다. 정산 작업은 AUTH_REQUIRED 로 남고, 기획 에이전트는 그 작업을 취소하지 않습니다(실패 경로는 7장).</li>
+<li>결재 토큰은 <code>payment:read payment:approve</code> 두 스코프로 새로 받습니다(<a href="#p12-scope-planner">12부의 결함</a>). 이어 말하는 <code>follow_up</code> 은 정산 작업의 taskId·contextId 를 답니다 — 근거(<code>refs</code>)는 다시 싣지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-res-ts">
+<h3>TypeScript — 같은 모양, <code>Map</code> 에서 꺼내고 지운다</h3>
+<!--CODE file=ex/ts/agents/planner.ts region=resume-->
+<ul>
+<li><code>get</code> 다음 <code>delete</code> — 파이썬의 <code>pop</code> 과 같습니다. 답은 <code>ctx.userMessage</code>, 곧 이번 메시지에서 읽습니다.</li>
+<li>이 실행은 새 실행이라 <code>begin()</code> 이 작업을 WORKING 으로 다시 싣고 시작합니다(<a href="#p15-ask-cmp">1장</a>의 <code>task WORKING</code> 한 줄). 5장의 스트림에서 그 이벤트를 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-res-go">
+<h3>Go — 멈춘 실행이 <code>AwaitReply</code> 에서 답을 받아, 같은 함수 안에서 이어 간다</h3>
+<!--CODE file=ex/go/agents/planner/main.go lines=429-457 note=settle 의 뒤쪽 — 결재를 기다리고 이어 말한다-->
+<ul>
+<li><code>up.AwaitReply</code> 는 상태를 AUTH_REQUIRED 로 알리고, 같은 작업으로 올 다음 메시지를 채널에서 기다립니다(<code>agents/common/park.go</code>, <a href="#p12-ar-exec-go">12부</a>). 그래서 <code>c</code>·<code>req</code>·<code>quotes</code>·<code>settle</code> 은 지역 변수 그대로 남아 있고, <code>waiting</code> 이 없습니다.</li>
+<li>기다리는 동안 고루틴 하나가 살아 있습니다. 사람이 끝내 답하지 않으면 <code>ctx</code> 가 끝날 때까지입니다 — 파이썬·TS 의 <code>waiting</code> 항목이 영원히 남는 것과 같은 문제의 다른 모양입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-res-wire">
+<h3>이어 말하기의 와이어 — 결재 토큰, 정산 작업의 taskId, 근거는 없다</h3>
+<p class="lead">세 메시의 정산 탭에서 다섯째 주고받음(결재 토큰을 단 SendMessage)입니다. 파이썬 기획 에이전트의 것은 12부에서 보았으니(<a href="#p12-ar-chain">12부</a>) TypeScript·Go 의 것만 싣습니다.</p>
+<!--OUT file=out/15/mesh_ts.txt wire=settle-wire ex=5 lines=1-35 grep=^→|^←|Authorization|"taskId"|"contextId"|"text"|"state" note=TypeScript 기획 에이전트 → 정산-->
+<!--OUT file=out/15/mesh_go.txt wire=settle-wire ex=5 lines=1-60 grep=^→|^←|Authorization|"taskId"|"contextId"|"text"|"remaining" note=Go 기획 에이전트 → 정산-->
+<ul>
+<li>두 기획 에이전트 모두 <code>tok-planner-2</code>(두 스코프) 를 달고, 정산 작업의 taskId 와 같은 맥락으로 <code>결재합니다</code> 한마디를 보냈습니다. 정산은 COMPLETED 와 <code>remaining</code> 1,158,000 을 담은 정산서로 답했습니다.</li>
+<li>근거(<code>referenceTaskIds</code>)는 첫 요청에만 있습니다. 이어 말하기는 taskId 가 이미 그 작업을 가리키니 따로 달 까닭이 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-ch4-sum">
+<h3>4장 정리 — referenceTaskIds 로 정산 요청</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>정산에 무엇을 보내나?</td><td>본문에 금액 셋과 예산, <code>referenceTaskIds</code> 에 견적을 낸 작업 셋, 같은 contextId, <code>payment:read</code> 토큰</td><td><a href="#p15-ref-what">그림</a>·<a href="#p15-ref-wire">와이어</a></td></tr>
+<tr><td>세 언어의 차이는?</td><td>필드 이름, 숫자의 차림(파이썬 double), AUTH_REQUIRED 뒤의 기다림(<code>waiting</code> 대 멈춘 실행)</td><td><a href="#p15-ref-cmp">비교</a>·<a href="#p15-ref-wire-cmp">차림</a></td></tr>
+<tr><td>정산 서버는 근거로 무엇을?</td><td>실행기는 쓰지 않는다. TS 처리기만 찾아보고 "not found", 셋 다 이력에 남긴다</td><td><a href="#p15-ref-server">출력</a></td></tr>
+<tr><td>SDK 가 풀어 주나?</td><td>TS 는 늘, 파이썬·Go 는 켜야 — 셋 다 자기 저장소만 본다</td><td><a href="#p15-refs-cmp">비교</a></td></tr>
+<tr><td>결재 뒤에는?</td><td>두 스코프의 새 토큰으로 정산 작업에 이어 말한다. 파이썬·TS 는 새 실행이 <code>waiting</code> 에서, Go 는 멈춘 실행이 그대로</td><td><a href="#p15-res-py">파이썬</a>·<a href="#p15-res-go">Go</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p15-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. TypeScript 메시의 정산 에이전트는 "Reference task … not found." 를 세 번 찍었습니다. 정산 서버의 처리기가 이 id 들을 찾지 못한 까닭은 무엇이고, 파이썬 정산 서버에서 <code>should_populate_referred_tasks</code> 를 켰다면 실행기는 몇 개의 작업을 받았겠습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 세 id 는 숙소·식사·교통 서버가 지은 작업이라(<a href="#p15-ref-wire">와이어</a>) 정산 서버의 저장소에는 없습니다. TS 처리기는 자기 저장소만 뒤지고 없으면 경고합니다(<a href="#p15-ref-server">출력</a>). 파이썬도 켜면 자기 저장소에서 <code>get</code> 하고 없는 것은 빼므로 0개입니다 — <code>15/refs.py</code> 에서 다른 처리기의 작업이 조용히 빠진 것과 같습니다(<a href="#p15-refs-py">파이썬</a>).</div>
+</article>
+
+<!-- ==== 5장 진행 상황 스트리밍 ==== -->
+
+<article class="card" id="p15-ch5">
+<p class="chnum">5장</p>
+<h2>진행 상황 스트리밍 — 기획 에이전트 자신의 SSE</h2>
+<p class="chsub">스트림 둘의 이벤트 → say ×3 → 상태 갱신 하나의 와이어 → ask 가 보이는 것 ×3 → AUTH_REQUIRED 에서 닫힌다 → 둘째 스트림의 첫 이벤트 → 계획서 ×3 → 계획서의 와이어 → 정리</p>
+</article>
+
+<article class="card" id="p15-say-flow">
+<h3>사용자가 받는 스트림은 둘 — 결재에서 한 번 닫히고, "승인" 으로 다시 열린다</h3>
+<p class="lead">6장의 파이썬 메시에서 <code>ask</code> 와 기획 에이전트 사이의 탭입니다. 두 SendStreamingMessage 의 이벤트 종류와 상태만 골랐습니다.</p>
+<!--OUT file=out/15/mesh_py.txt wire=planner-wire ex=2-3 grep=^→|"method"|"(task|statusUpdate|artifactUpdate)": \{|"state" note=파이썬 기획 에이전트 — 첫 스트림과 둘째 스트림-->
+<ul>
+<li>첫 스트림: <code>task</code>(SUBMITTED) 하나, 걸음마다 <code>statusUpdate</code> WORKING 다섯, 결재를 묻는 <code>statusUpdate</code> AUTH_REQUIRED 로 끝납니다. 걸음 사이의 동료 호출은 사용자에게 보이지 않습니다 — 보이는 것은 기획 에이전트가 고른 문장뿐입니다.</li>
+<li>둘째 스트림: 계획서 <code>artifactUpdate</code>, WORKING 한 번, COMPLETED. 같은 작업 id 의 두 스트림입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-say-code">
+<h3><code>say</code> ×3 — 서버 기록에 한 줄, 스트림에 상태 갱신 하나</h3>
+<p class="lead">진행 알림은 세 언어 모두 한 메서드입니다. 걸음마다 부르고, 끝맺는 상태(FAILED·AUTH_REQUIRED)도 이것으로 냅니다.</p>
+<!--CODE file=ex/py/agents/planner.py region=say note=파이썬-->
+<!--CODE file=ex/ts/agents/planner.ts region=say note=TypeScript-->
+<!--CODE file=ex/go/agents/planner/main.go region=say note=Go-->
+<ul>
+<li>파이썬은 SDK 의 <code>TaskUpdater.update_status</code>, TypeScript·Go 는 완성 에이전트의 공용 <code>Updater.status</code>·<code>Status</code> 가 <code>statusUpdate</code> 이벤트를 짓습니다(<a href="#p10-ch2">10부</a>의 식사 에이전트와 같은 부품).</li>
+<li>Go 의 <code>say</code> 는 yield 의 결과(<code>bool</code>)를 돌려주지만 <code>plan</code> 은 그 값을 보지 않고 다음 걸음으로 갑니다(<a href="#p15-fan-go">3장의 plan</a>). 공용 <code>Updater</code> 의 주석은 "메서드가 false 를 돌려주면 받는 쪽이 끝난 것이니 실행을 멈춘다" 인데(<code>agents/common/begin.go</code>), 기획 에이전트는 그 약속을 지키지 않는 셈입니다. 이 장의 실행에서는 받는 쪽이 먼저 끝나지 않아 드러나지 않았습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-say-wire">
+<h3>상태 갱신 하나 — 에이전트 메시지에 새 messageId, 맥락은 동료가 받은 것과 같다</h3>
+<p class="lead">첫 스트림의 넷째 이벤트(<code>숙소 견적</code>)입니다.</p>
+<!--OUT file=out/15/mesh_py.txt wire=planner-wire ex=2 lines=100-124-->
+<ul>
+<li><code>status.message</code> 는 <code>ROLE_AGENT</code> 메시지 하나이고, <code>say</code> 를 부를 때마다 새 <code>messageId</code> 입니다. <code>taskId</code> 는 기획 작업, <code>contextId</code> <code>&lt;id2&gt;</code> 는 3장에서 동료 셋이 받은 맥락 그 값입니다.</li>
+<li>견적은 글 한 줄로만 갑니다. 견적의 DataPart 를 사용자에게 흘리지 않고, 끝의 계획서에 모읍니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-say-ask">
+<h3><code>ask</code> 가 보인 것 ×3 — 첫 스트림은 글자까지 같고, 둘째 스트림의 첫 줄만 다르다</h3>
+<p class="lead">세 메시의 <code>ask</code> 화면입니다. 파이썬은 통째로, TypeScript·Go 는 다른 줄이 드러나게 앞뒤만 골랐습니다.</p>
+<!--OUT file=out/15/mesh_py.txt part=터미널 11 lines=1-29 note=파이썬 기획 에이전트-->
+<!--OUT file=out/15/mesh_ts.txt part=터미널 11 lines=1-30 grep=^\[터미널|^status|^>|^task|^artifact note=TypeScript 기획 에이전트-->
+<!--OUT file=out/15/mesh_go.txt part=터미널 11 lines=1-30 grep=^\[터미널|^status|^>|^task|^artifact note=Go 기획 에이전트-->
+<div class="note"><b>낯익은 한 줄</b> — <code>&gt; 승인</code> 뒤의 <code>task WORKING</code> 은 1장의 되묻기에서 본 그 줄입니다(<a href="#p15-ask-cmp">1장</a>). TS·Go 의 <code>begin()</code> 이 이어 말하기마다 작업을 다시 싣기 때문입니다. <code>ask</code> 는 DataPart 의 실수를 정수로 보이므로(<code>tidy</code>) 파이썬 요약의 <code>30.0</code> 도 <code>30</code> 으로 찍혔습니다.</div>
+</article>
+
+<article class="card" id="p15-say-close">
+<h3>AUTH_REQUIRED 에서 스트림이 닫혀야 <code>ask</code> 가 "승인" 을 보낸다</h3>
+<p class="lead"><code>ask</code> 는 스트림이 끝나야 다음 답을 보냅니다. 마지막 상태가 멈춤(INPUT_REQUIRED·AUTH_REQUIRED)이면 남은 답을 같은 taskId·contextId 의 <b>새</b> 메시지로 보냅니다.</p>
+<!--CODE file=ex/py/agents/ask.py lines=122-139 note=agents/ask.py 의 대화 고리-->
+<!--OUT file=out/15/mesh_go.txt wire=planner-wire ex=2-3 lines=1-228 grep=^→|^←|"method"|AUTH_REQUIRED|"text": "승인" note=Go 기획 에이전트 — 첫 스트림의 끝과 둘째 요청-->
+<ul>
+<li>SDK 의 기본값이라면 TypeScript·Go 서버는 AUTH_REQUIRED 뒤에도 스트림을 열어 둡니다(<a href="#p10-close-ts">10부</a>). 그러면 <code>async for</code> 가 끝나지 않아 <code>ask</code> 는 "승인" 을 보내지 못한 채 기다립니다.</li>
+<li>완성 에이전트는 셋 다 AUTH_REQUIRED 에서 닫히게 맞춰 두었고(<a href="#p10-close-ours">10부</a> — TS <code>keepBusAliveStates</code>, Go <code>waiter</code>), 기획 에이전트도 그 <code>serve</code>·<code>Serve</code> 로 뜹니다. 그래서 세 메시 모두 AUTH_REQUIRED 이벤트 다음이 곧 둘째 <code>POST</code> 입니다.</li>
+<li>Go 는 실행기가 <code>AwaitReply</code> 에 멈춘 채 첫 스트림만 닫힙니다. 둘째 요청은 <code>waiter</code> 가 받아 그 실행기에 넘기고, 이어지는 이벤트를 새 스트림으로 흘립니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-say-second">
+<h3>둘째 스트림의 첫 이벤트 — 파이썬은 아티팩트, TypeScript·Go 는 작업 전체</h3>
+<!--OUT file=out/15/mesh_py.txt wire=planner-wire ex=3 lines=24-33 note=파이썬-->
+<!--OUT file=out/15/mesh_go.txt wire=planner-wire ex=3 grep=^←|^\s{6}"(task|artifactUpdate)"|"role"|"state" lines=24-134 note=Go — 작업 하나에 이력 여덟(사용자 둘, 에이전트 여섯)-->
+<ul>
+<li>§3.1.2: 작업 스트림은 "the stream <b>MUST</b> begin with the Task object" 입니다. TS·Go 는 이어 말하기에서도 지금의 작업(WORKING, 이력 포함)을 먼저 싣고, 파이썬은 싣지 않습니다 — 파이썬 SDK 1.2.2 가 이어 말하기에서 다시 실은 Task 를 받으면 이번 사용자 메시지를 이력에서 버리기 때문입니다(<code>agents/common.py</code> 의 <code>begin</code> 주석, <a href="#p05-follow-ts-go">5부</a>).</li>
+<li>Go·TS 의 이력에는 사용자의 두 말 사이에 <code>say</code> 가 낸 에이전트 메시지 여섯이 들었습니다. 넣는 때는 다릅니다 — TS SDK 는 상태 갱신이 올 때 그 메시지를 곧바로 덧붙이고(<code>server/index.js:2368</code>–<code>2373</code>), Go SDK 는 다음 상태 갱신이 올 때 <b>앞의</b> 메시지를 옮깁니다(<code>a2aevent/event.go:119</code>). 마지막 AUTH_REQUIRED 메시지는 완성 에이전트의 <code>working</code> 이 옮겼습니다(<code>agents/common/begin.go</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-finish-py">
+<h3>계획서 — 아티팩트 하나에 파트 둘, 사람이 읽을 마크다운과 프로그램이 읽을 요약</h3>
+<p class="lead">정산이 COMPLETED 면 <code>finish</code> 가 계획서를 짓습니다. 카드의 <code>defaultOutputModes</code>(<code>text/markdown</code>·<code>application/json</code>, <a href="#p15-card">1장</a>)가 바로 이 두 파트입니다. 파이썬판입니다.</p>
+<!--CODE file=ex/py/agents/planner.py region=finish-->
+<ul>
+<li>정산이 COMPLETED 가 아니면(반려·예산 초과) 정산의 까닭을 붙여 REJECTED 입니다 — 7장의 몫입니다.</li>
+<li>마크다운은 <code>plan_markdown</code> 이 견적 셋과 정산서로 씁니다. TextPart 에 <code>media_type="text/markdown"</code> 을 달아 "글이지만 마크다운" 임을 알립니다.</li>
+<li>요약 DataPart 는 풀이 결과(<code>req</code>)에 정산서의 <code>total</code> 하나를 더한 것입니다. 숙소·식사·교통의 금액은 요약에 없고 마크다운에만 있습니다.</li>
+<li>아티팩트 id 는 정해진 <code>workshop-plan</code> 입니다. 한 작업에 계획서는 하나뿐이라 겹칠 일이 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-finish-ts-go">
+<h3>TypeScript·Go — 같은 두 파트, Go 는 요약을 구조체에서 map 으로 바꿔 싣는다</h3>
+<!--CODE file=ex/ts/agents/planner.ts region=finish note=TypeScript-->
+<!--CODE file=ex/go/agents/planner/main.go region=finish note=Go-->
+<ul>
+<li>TypeScript 는 <code>{ ...req, total }</code> 로 파이썬과 같은 꼴을, Go 는 <code>common.Plain(req)</code> 로 <code>workshop.Parsed</code> 구조체를 JSON 꼴의 map 으로 바꾼 뒤 <code>total</code> 을 더합니다.</li>
+<li>세 언어 모두 아티팩트 다음에 WORKING "계획서를 완성했습니다", 그다음 COMPLETED 를 냅니다 — <a href="#p15-say-flow">스트림 둘</a>의 끝 세 이벤트입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-finish-wire">
+<h3>계획서의 와이어 — <code>mediaType</code> 이 달린 글 파트와, 언어마다 숫자가 다른 요약</h3>
+<p class="lead">둘째 스트림의 <code>artifactUpdate</code> 입니다. 마크다운 글은 한 줄이 너무 길어 뺐습니다(<a href="#p15-say-ask">ask 의 화면</a>에 그대로 있습니다).</p>
+<!--OUT file=out/15/mesh_py.txt wire=planner-wire ex=3 lines=26-53 grep=^(?!.*"text": "# ) note=파이썬-->
+<!--OUT file=out/15/mesh_go.txt wire=planner-wire ex=3 lines=128-160 grep=^(?!.*"text": "# ) note=Go-->
+<ul>
+<li>파이썬의 요약은 <code>30.0</code>·<code>4842000.0</code> 입니다 — 기획 에이전트가 <code>int(sheet["total"])</code> 로 정수를 넣어도 Struct 를 지나며 double 이 됩니다(<a href="#p04-data-cmp">4부</a>). Go·TS 는 <code>30</code>·<code>4842000</code> 입니다. 6장의 대조기는 그래서 수의 값으로 견줍니다.</li>
+<li><code>append</code>·<code>lastChunk</code> 가 없습니다 — 한 번에 다 보낸 아티팩트라 둘 다 기본값(false)이고, 세 SDK 모두 기본값을 적지 않습니다(<a href="#p10-ch1">10부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-ch5-sum">
+<h3>5장 정리 — 진행 상황 스트리밍</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>사용자가 받는 것은?</td><td>스트림 둘 — 걸음마다 WORKING 다섯 + AUTH_REQUIRED, 그다음 계획서 + WORKING + COMPLETED</td><td><a href="#p15-say-flow">이벤트</a></td></tr>
+<tr><td>어떻게 흘리나?</td><td><code>say</code> 하나 — 서버 기록 한 줄과 <code>statusUpdate</code> 하나</td><td><a href="#p15-say-code">say ×3</a></td></tr>
+<tr><td>결재에서 왜 끊기나?</td><td>완성 에이전트가 AUTH_REQUIRED 에서 스트림을 닫게 맞춰 두었고, <code>ask</code> 는 닫혀야 "승인" 을 새 메시지로 보낸다</td><td><a href="#p15-say-close">닫힘</a></td></tr>
+<tr><td>둘째 스트림의 차이는?</td><td>TS·Go 는 작업 전체로 시작(§3.1.2), 파이썬은 아티팩트부터</td><td><a href="#p15-say-second">첫 이벤트</a></td></tr>
+<tr><td>계획서는?</td><td>아티팩트 <code>workshop-plan</code> — 마크다운 TextPart + 요약 DataPart(풀이 + <code>total</code>), 파이썬 요약은 double</td><td><a href="#p15-finish-py">코드</a>·<a href="#p15-finish-wire">와이어</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p15-ch5-quiz" data-quiz>
+<h3>5장 퀴즈</h3>
+<p class="q">Q. 기획 에이전트가 TypeScript SDK 의 기본 처리기 설정(<code>keepBusAliveStates</code> 를 주지 않음)으로 떴다면, <code>ask</code> 의 이야기 대본("…출발 강남역" 다음 "승인")은 어디서 멈췄겠습니까? 무엇을 보면 압니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> AUTH_REQUIRED 줄을 찍은 뒤 멈춥니다. 기본값은 AUTH_REQUIRED 에서 이벤트 버스를 살려 두어 스트림이 닫히지 않고(<a href="#p10-close-ts">10부</a>), <code>ask</code> 의 대화 고리는 <code>async for</code> 가 끝나야 다음 답을 보내기 때문입니다(<a href="#p15-say-close">닫힘</a>). 완성 에이전트로 돌린 6장의 메시에서는 AUTH_REQUIRED 이벤트 바로 다음에 둘째 <code>POST</code> 가 왔습니다.</div>
+</article>
+
+<!-- ==== 6장 전 과정 실행 ==== -->
+
+<article class="card" id="p15-ch6">
+<p class="chnum">6장</p>
+<h2>전 과정 실행 — 단일 메시 ×3, 섞인 메시 ×3</h2>
+<p class="chsub">여섯 판 → 대조기의 기댓값 → 대조기 → 파이썬 메시 → TypeScript 메시 → Go 메시 → 단일 메시 비교 → 섞인 메시 셋 → 언어가 갈리는 정산 요청 → 여섯 판의 숫자 → 와이어 요약 → 정리</p>
+</article>
+
+<article class="card" id="p15-run-plan">
+<h3>여섯 판 — 한 언어로 셋, 그다음 다섯 자리마다 세 언어가 한 번씩 오도록 셋</h3>
+<p class="lead">이야기 한 문장과 "승인" 을 처음부터 끝까지 돌립니다. 섞인 메시는 어느 자리(역할)에서나 세 언어가 한 번씩 나오도록 짰습니다 — 단일 메시와 합치면 역할마다 언어마다 두 번씩입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명세</th><th>기획</th><th>숙소</th><th>식사</th><th>교통</th><th>정산</th><th>탭</th></tr>
+<tr><td><a href="#p15-mesh-py"><code>mesh_py</code></a></td><td colspan="5">파이썬</td><td>다섯 모두 앞에</td></tr>
+<tr><td><a href="#p15-mesh-ts"><code>mesh_ts</code></a></td><td colspan="5">TypeScript</td><td>다섯 모두 앞에</td></tr>
+<tr><td><a href="#p15-mesh-go"><code>mesh_go</code></a></td><td colspan="5">Go</td><td>다섯 모두 앞에</td></tr>
+<tr><td><a href="#p15-mix-py"><code>mix_py</code></a></td><td>파이썬</td><td>Go</td><td>TypeScript</td><td>파이썬</td><td>Go</td><td>정산 앞에만</td></tr>
+<tr><td><a href="#p15-mix-ts"><code>mix_ts</code></a></td><td>TypeScript</td><td>파이썬</td><td>Go</td><td>TypeScript</td><td>파이썬</td><td>정산 앞에만</td></tr>
+<tr><td><a href="#p15-mix-go"><code>mix_go</code></a></td><td>Go</td><td>TypeScript</td><td>파이썬</td><td>Go</td><td>TypeScript</td><td>정산 앞에만</td></tr>
+</table>
+</div>
+<div class="note"><b>판마다 같은 끝맺음</b> — <code>ask</code> 가 대본을 돌린 뒤, 대조기 <code>15/check.py</code> 가 기획 에이전트에 남은 끝난 작업을 읽어 SCENARIO §2.6 의 숫자와 맞춥니다. 교통은 단계마다 0.1초(<code>--step-ms 100</code>)로 줄였습니다. 동료의 차례는 3장대로 코드가 정하니 여섯 판 모두 캡처가 매번 같습니다.</div>
+</article>
+
+<article class="card" id="p15-check-golden">
+<h3>대조기의 기댓값은 골든 파일에서 — 손으로 적은 숫자가 없다</h3>
+<p class="lead">세 언어의 <code>workshop</code> 이 지키는 골든 벡터(<code>ex/fixtures/golden/domain.json</code>)에서 이야기 한 문장의 경우를 꺼내, 계획서에 있어야 할 글로 바꿉니다.</p>
+<!--CODE file=ex/py/15/check.py region=golden-->
+<ul>
+<li>숙소·식사·교통은 <code>story</code>, 정산은 결재가 끝난 경우 <code>story-approved</code> 입니다 — 2,100,000 · 1,542,000 · 1,200,000, 합계 4,842,000, 남음 1,158,000(SCENARIO §2.6).</li>
+<li>요약 DataPart 의 기댓값은 풀이의 골든(<code>parseRequest</code> 의 <code>story</code>) 여덟 키에 <code>total</code> 을 더한 것입니다(<a href="#p15-finish-py">5장의 finish</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-check-code">
+<h3>대조기 — 이야기를 다시 돌리지 않고, ListTasks 로 끝난 작업의 계획서를 읽는다</h3>
+<!--CODE file=ex/py/15/check.py region=check-->
+<ul>
+<li><code>status=TASK_STATE_COMPLETED</code> 로 거르고 <code>include_artifacts=True</code> 를 줍니다 — 주지 않으면 서버는 <code>artifacts</code> 를 빼야 합니다(<a href="#p11-list-rule">11부</a>). 대본 하나를 끝낸 기획 에이전트에는 끝난 작업이 하나뿐이라 <code>[task] =</code> 로 받습니다.</li>
+<li>마크다운은 줄 머리(<code>- 숙소:</code> …)마다 기댓값의 글이 다 들었는지, 요약은 키마다 같은 값인지 봅니다. 하나라도 틀리면 종료 코드 1 이라 명세가 실패합니다.</li>
+<li>ListTasks 도 카드의 주소로 갑니다. 기획 에이전트 앞에 탭이 있는 단일 메시에서는 탭에 이 요청이 하나 더 찍힙니다(<a href="#p15-run-wire">와이어 요약</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p15-mesh-py">
+<h3>파이썬 메시 — 다섯 에이전트 앞에 탭 다섯, 대조기는 여섯 줄 모두 ✓</h3>
+<p class="lead">4·5장의 와이어가 모두 이 명세에서 나왔습니다. 동료는 카드의 <code>url</code> 을 탭으로 알리고, 기획 에이전트는 탭 포트만 받는 겉층(<code>15/planner_via.py</code>)으로 띄웁니다.</p>
+<!--SPEC file=ex/run/15/mesh_py.run-->
+<!--CODE file=ex/py/15/planner_via.py note=12/planner_at.py 에 탭 포트 하나를 더 받는 겉층-->
+<!--OUT file=out/15/mesh_py.txt part=터미널 11 lines=30-36 note=대조기-->
+<div class="note"><b>ask 의 화면</b>은 <a href="#p15-say-ask">5장</a>에 통째로 있습니다. 계획서의 마크다운 네 줄과 요약 여덟 키가 골든과 맞았습니다.</div>
+</article>
+
+<article class="card" id="p15-mesh-ts">
+<h3>TypeScript 메시 — 같은 명세에 언어만 바꿔, 대조기는 같은 여섯 줄</h3>
+<!--SPEC file=ex/run/15/mesh_ts.run-->
+<!--CODE file=ex/ts/15/planner_via.ts-->
+<!--OUT file=out/15/mesh_ts.txt part=터미널 11 lines=31-37 note=대조기-->
+<ul>
+<li>명세는 파이썬 메시에서 포트와 언어 머리(<code>ts:</code>)만 바꾼 꼴입니다. 대조기는 언제나 파이썬입니다 — 기획 에이전트가 어느 언어든 같은 A2A 로 묻습니다.</li>
+<li>TS 요약의 숫자는 <code>30</code>, 파이썬 요약은 <code>30.0</code> 이었지만(<a href="#p15-finish-wire">5장</a>) 둘 다 같은 값으로 맞았습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-mesh-go">
+<h3>Go 메시 — 다섯 Go 프로그램과 겉층 하나, 역시 여섯 줄</h3>
+<!--SPEC file=ex/run/15/mesh_go.run-->
+<!--CODE file=ex/go/15/planner_via/main.go-->
+<!--OUT file=out/15/mesh_go.txt part=터미널 11 lines=31-37 note=대조기-->
+<div class="note"><b>겉층의 수법</b> — 2장의 <code>15/planner_at</code> 과 같이, 완성 기획 에이전트 파일의 심볼릭 링크(<code>agent.go</code>)와 같은 package 에서 <code>init()</code> 이 <code>os.Args</code> 를 바꿉니다(<a href="#p15-reg-at">2장</a>).</div>
+</article>
+
+<article class="card" id="p15-mesh-cmp">
+<h3>단일 메시 비교 — 동료의 출력은 글자까지 같고, 다른 곳은 앞 장에서 본 셋</h3>
+<p class="lead">세 메시의 동료 넷이 서버 기록에 남긴 줄입니다. 파이썬 메시의 것을 싣고, TS·Go 메시는 다른 줄만 골랐습니다.</p>
+<!--OUT file=out/15/mesh_py.txt server=settlement note=파이썬 메시의 정산-->
+<!--OUT file=out/15/mesh_ts.txt server=settlement grep=Reference note=TypeScript 메시의 정산 — 더해진 줄-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>숙소·식사·교통의 출력</td><td colspan="3">같다 — <code>8실, 2,100,000원</code> · <code>1,542,000원</code> · 배차 세 단계와 <code>1,200,000원</code></td></tr>
+<tr><td>정산의 출력</td><td>토큰 둘, 결재 요청, 완료</td><td>+ <code>Reference task … not found.</code> 셋</td><td>파이썬과 같다</td></tr>
+<tr><td>ask 의 화면</td><td>—</td><td colspan="2"><code>&gt; 승인</code> 뒤에 <code>task WORKING</code></td></tr>
+<tr><td>요약의 숫자</td><td><code>30.0</code></td><td colspan="2"><code>30</code></td></tr>
+<tr><td>대조기</td><td colspan="3">여섯 줄 ✓, 종료 코드 0</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p15-mix-py">
+<h3>섞인 메시 ① 기획 파이썬 → 숙소 Go · 식사 TypeScript · 교통 파이썬 · 정산 Go</h3>
+<p class="lead">기획 에이전트가 동료의 언어를 알 길은 없습니다 — 카드와 와이어만 봅니다. 탭은 정산 앞에만 두고, <code>ask</code> 는 기획 에이전트에 바로 말합니다.</p>
+<!--SPEC file=ex/run/15/mix_py.run-->
+<!--OUT file=out/15/mix_py.txt part=터미널 7 grep=^\[터미널|AUTH_REQUIRED|^>|^task|COMPLETED|^✓|^✗ note=ask 와 대조기-->
+<div class="note"><b>파이썬 메시와 같은 화면</b> — 기획 에이전트가 파이썬이니 <code>&gt; 승인</code> 뒤에 <code>task WORKING</code> 이 없고, 대조기 여섯 줄이 모두 ✓ 입니다. 동료가 Go·TS 로 바뀐 것은 화면 어디에도 드러나지 않습니다.</div>
+</article>
+
+<article class="card" id="p15-mix-ts">
+<h3>섞인 메시 ② 기획 TypeScript → 숙소 파이썬 · 식사 Go · 교통 TypeScript · 정산 파이썬</h3>
+<!--SPEC file=ex/run/15/mix_ts.run lines=1-16-->
+<!--OUT file=out/15/mix_ts.txt part=터미널 7 grep=^\[터미널|AUTH_REQUIRED|^>|^task|COMPLETED|^✓|^✗ note=ask 와 대조기-->
+<!--OUT file=out/15/mix_ts.txt server=settlement note=파이썬 정산 — 근거를 찾아보지 않아 경고가 없다-->
+<div class="note"><b>근거 경고는 정산 서버의 것</b> — TS 기획 에이전트가 근거 셋을 보냈지만 정산이 파이썬이라 "not found" 가 없습니다. 경고를 내는 것은 보내는 쪽이 아니라 <b>받는</b> TS 처리기입니다(<a href="#p15-ref-server">4장</a>). 명세의 끝 네 줄(ask·대조기)은 ① 과 같은 꼴이라 뺐습니다.</div>
+</article>
+
+<article class="card" id="p15-mix-go">
+<h3>섞인 메시 ③ 기획 Go → 숙소 TypeScript · 식사 파이썬 · 교통 Go · 정산 TypeScript</h3>
+<!--SPEC file=ex/run/15/mix_go.run lines=1-16-->
+<!--OUT file=out/15/mix_go.txt part=터미널 7 grep=^\[터미널|AUTH_REQUIRED|^>|^task|COMPLETED|^✓|^✗ note=ask 와 대조기-->
+<!--OUT file=out/15/mix_go.txt server=settlement note=TypeScript 정산 — Go 기획 에이전트가 보낸 근거에도 경고 셋-->
+<div class="note"><b>세 언어 모두 기획을 맡았다</b> — ①②③ 의 기획 에이전트가 파이썬·TypeScript·Go 하나씩이고, 셋 다 같은 계획서를 냈습니다. 정산이 TS 인 판(<code>mesh_ts</code>, ③)에서만 근거 경고가 찍혔습니다.</div>
+</article>
+
+<article class="card" id="p15-mix-wire">
+<h3>언어가 갈리는 정산 요청 — 파이썬의 <code>2100000.0</code> 을 Go 정산이 <code>2100000</code> 으로 저장했다</h3>
+<p class="lead">① 의 정산 탭입니다. 파이썬 기획 에이전트가 보낸 금액과, Go 정산 에이전트가 답에 실은 이력의 같은 금액을 골랐습니다.</p>
+<!--OUT file=out/15/mix_py.txt wire=settle-wire ex=3 grep=^→|^←|"amount"|"budget"|"state"-->
+<ul>
+<li>요청의 숫자는 파이썬 Struct 의 double 이고, Go 정산이 저장해 되돌려 준 이력에는 정수 꼴입니다 — Go 는 JSON 수를 <code>float64</code> 로 읽고, 소수부가 없는 값을 다시 쓸 때 <code>.0</code> 을 붙이지 않습니다. 둘은 JSON 으로 같은 수입니다.</li>
+<li>Go 정산은 <code>itemsOf</code> 의 주석대로 "amount 는 30.0 꼴일 수 있다" 를 알고 정수로 바꿔 계산합니다. 그래서 AUTH_REQUIRED 의 합계가 같은 4,842,000 이었습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p15-run-numbers">
+<h3>여섯 판의 숫자 — 모두 SCENARIO §2.6 과 같다</h3>
+<p class="lead">대조기가 판마다 확인한 것입니다(✓ 는 그 판의 대조기 출력, 링크는 그 슬라이드).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>판</th><th>숙소 8실 2,100,000</th><th>식사 3끼 1,542,000</th><th>교통 2일 1,200,000</th><th>합계 4,842,000 · 예산 6,000,000 · 남음 1,158,000</th><th>요약 8키</th></tr>
+<tr><td><a href="#p15-mesh-py">파이썬</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>8/8</td></tr>
+<tr><td><a href="#p15-mesh-ts">TypeScript</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>8/8</td></tr>
+<tr><td><a href="#p15-mesh-go">Go</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>8/8</td></tr>
+<tr><td><a href="#p15-mix-py">①</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>8/8</td></tr>
+<tr><td><a href="#p15-mix-ts">②</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>8/8</td></tr>
+<tr><td><a href="#p15-mix-go">③</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>8/8</td></tr>
+</table>
+</div>
+<div class="key"><b>왜 같은가</b> — 업무 규칙은 세 언어의 <code>workshop</code> 이 같은 골든 벡터로 묶여 있고, 그 사이의 A2A 는 숫자의 차림(<code>30.0</code>·<code>30</code>)만 다를 뿐 값은 같습니다. 결재가 필요하다는 판단(합계 &gt; 3,000,000)도 여섯 판의 정산 셋이 모두 같았습니다.</div>
+</article>
+
+<article class="card" id="p15-run-wire">
+<h3>와이어 요약 — 이야기 한 번에 HTTP 요청 열넷</h3>
+<p class="lead">파이썬 메시의 탭 다섯에서 요청 줄과 메서드만 골랐습니다. 다른 다섯 판도 탭을 둔 자리에서 같은 수였습니다.</p>
+<!--OUT file=out/15/mesh_py.txt wire=planner-wire grep=^→|"method" note=ask·대조기 → 기획-->
+<!--OUT file=out/15/mesh_py.txt wire=lodging-wire grep=^→|"method" note=기획 → 숙소(식사·교통도 같다)-->
+<!--OUT file=out/15/mesh_py.txt wire=settle-wire grep=^→|"method" note=기획 → 정산-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>누가 → 누구</th><th>카드 GET</th><th>토큰</th><th>SendMessage</th><th>스트림</th><th>ListTasks</th></tr>
+<tr><td>ask·대조기 → 기획</td><td>1(+ 대조기의 1, 탭 밖)</td><td>—</td><td>—</td><td>2</td><td>1</td></tr>
+<tr><td>기획 → 숙소·식사·교통</td><td>3</td><td>—</td><td>3</td><td>—</td><td>—</td></tr>
+<tr><td>기획 → 정산</td><td>1</td><td>2</td><td>2</td><td>—</td><td>—</td></tr>
+</table>
+</div>
+<div class="note"><b>세지 않은 것</b> — 대조기는 카드를 탭이 아닌 포트로 받아 탭에는 ListTasks 만 찍혔습니다. 동료끼리는 서로 말하지 않습니다 — 모든 요청이 기획 에이전트에서 나가거나 기획 에이전트로 들어옵니다.</div>
+</article>
+
+<article class="card" id="p15-ch6-sum">
+<h3>6장 정리 — 전 과정 실행</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>무엇을 돌렸나?</td><td>단일 메시 셋, 섞인 메시 셋 — 다섯 역할 모두 세 언어가 맡아 봤다</td><td><a href="#p15-run-plan">여섯 판</a></td></tr>
+<tr><td>어떻게 맞췄나?</td><td>대조기가 ListTasks 로 끝난 작업의 계획서를 읽어 골든 파일의 숫자와 견줬다</td><td><a href="#p15-check-code">대조기</a></td></tr>
+<tr><td>결과는?</td><td>여섯 판 모두 §2.6 과 같다</td><td><a href="#p15-run-numbers">숫자</a></td></tr>
+<tr><td>다른 곳은?</td><td>숫자의 차림, TS 정산의 근거 경고, TS·Go 기획의 <code>task WORKING</code> — 값과 흐름은 같다</td><td><a href="#p15-mesh-cmp">비교</a>·<a href="#p15-mix-wire">정산 요청</a></td></tr>
+<tr><td>와이어는?</td><td>이야기 한 번에 요청 열넷(카드 5, 토큰 2, SendMessage 5, 스트림 2) + 대조기의 ListTasks</td><td><a href="#p15-run-wire">요약</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p15-ch6-quiz" data-quiz>
+<h3>6장 퀴즈</h3>
+<p class="q">Q. 섞인 메시 ② 에서 TS 기획 에이전트는 정산에 근거 셋을 보냈는데 "Reference task … not found." 가 찍히지 않았고, ③ 에서는 찍혔습니다. 무엇이 갈랐습니까? 대조기의 결과는 두 판에서 어땠습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 정산 에이전트의 언어입니다. 경고는 근거를 자기 저장소에서 찾아보는 <b>TS 요청 처리기</b>가 받는 쪽에서 냅니다 — ② 의 정산은 파이썬, ③ 의 정산은 TS 였습니다(<a href="#p15-mix-ts">②</a>·<a href="#p15-mix-go">③</a>). 대조기는 두 판 모두 여섯 줄 ✓ 였습니다 — 근거는 정산의 계산에 쓰이지 않습니다(<a href="#p15-refs-cmp">4장</a>).</div>
 </article>
