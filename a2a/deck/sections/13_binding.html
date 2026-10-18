@@ -1,10 +1,526 @@
 <article class="card section" id="p13">
 <p class="chnum">13부</p>
 <h2>전송 바인딩 — JSON-RPC·HTTP+JSON·gRPC</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">세 바인딩의 동등성과 메서드 대응표 → HTTP+JSON(REST) ×3 → gRPC ×3 → 한 서버 세 바인딩 → 스펙의 어긋남</p>
 </article>
 
-<article class="card" id="p13-todo">
-<h3>전송 바인딩 — JSON-RPC·HTTP+JSON·gRPC</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p13-intro">
+<h3>같은 작업, 다른 겉옷 — 이 부는 메서드가 와이어에 실리는 세 가지 방식이다</h3>
+<p class="lead">12부까지의 요청은 모두 JSON-RPC 였습니다. A2A 의 연산(§3)과 데이터 모델(§4)은 바인딩과 따로 정의되어 있고, 스펙은 그것을 와이어에 싣는 표준 바인딩(binding)을 셋 둡니다 — JSON-RPC(§9), gRPC(§10), HTTP+JSON/REST(§11). 이 부는 나머지 둘을 세 SDK 로 돌려 봅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th></tr>
+<tr><td><a href="#p13-ch1">1장</a></td><td>세 바인딩의 동등성(§5.1)과 메서드 대응표(§5.3) — proto 의 HTTP 주석, 같은 요청을 두 바인딩으로</td></tr>
+<tr><td><a href="#p13-ch2">2장</a></td><td>HTTP+JSON(REST) ×3 — 서버 셋·경로와 동사·응답 모양·오류 → HTTP 상태·SSE 스트림·클라이언트 셋과 3×3</td></tr>
+<tr><td>3장</td><td>gRPC ×3 — proto, 서버·클라이언트, 스트리밍, 오류 → gRPC status</td></tr>
+<tr><td>4장</td><td>한 서버 세 바인딩 — <code>supportedInterfaces</code> 여러 개, 클라이언트의 선택</td></tr>
+<tr><td>5장</td><td>스펙의 어긋남 — <code>SubscribeToTask</code> 의 REST 동사(proto GET, §5.3 POST)와 SDK 의 실제 동작</td></tr>
+</table>
+</div>
+<div class="key"><b>이 부의 방식</b> — 완성 에이전트의 카드와 실행기를 <b>고치지 않고</b> 빌려, 바인딩만 바꿔 띄웁니다. 실행기가 같으니 와이어에서 달라지는 것은 모두 바인딩의 몫입니다.</div>
+</article>
+
+<!-- ==== 1장 동등성과 대응표 ==== -->
+
+<article class="card" id="p13-ch1">
+<p class="chnum">1장</p>
+<h2>세 바인딩의 동등성과 메서드 대응표</h2>
+<p class="chsub">동등성의 네 가지 MUST → 바인딩이 정하는 것 → §5.3 대응표 → proto 의 HTTP 주석 → 본문·쿼리·tenant 짝 → 같은 요청 두 바인딩: 명세 → 요청 → 응답 → 오류 → 같은 것과 다른 것</p>
+</article>
+
+<article class="card" id="p13-eq-rule">
+<h3>여러 바인딩을 열면 넷이 같아야 한다 — 기능·동작·오류·인증 (§5.1 MUST)</h3>
+<p class="lead">바인딩은 고를 수 있는 겉옷입니다. 그래서 스펙은 한 에이전트가 여러 바인딩을 열 때 "어느 문으로 들어와도 같은 에이전트" 이기를 요구합니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>스펙의 말</th><th>세기</th></tr>
+<tr><td>§5.1</td><td><b>Identical Functionality</b> — "the same set of operations and capabilities"</td><td>MUST</td></tr>
+<tr><td>§5.1</td><td><b>Consistent Behavior</b> — "semantically equivalent results for the same requests"</td><td>MUST</td></tr>
+<tr><td>§5.1</td><td><b>Same Error Handling</b> — "Map errors consistently using appropriate protocol-specific codes"</td><td>MUST</td></tr>
+<tr><td>§5.1</td><td><b>Equivalent Authentication</b> — 카드에 적은 같은 인증 스킴</td><td>MUST</td></tr>
+<tr><td>§5.2</td><td>지원하는 프로토콜은 모두 카드에 적는다 / 클라이언트는 그 가운데 아무것이나 / 대체(fallback) 논리</td><td>MUST / MAY / SHOULD</td></tr>
+</table>
+</div>
+<div class="note"><b>"semantically equivalent"</b> — 바이트가 같으라는 말이 아닙니다. 봉투와 오류 표현은 바인딩마다 다르고(§5.4), 그 안의 작업·메시지·오류의 뜻이 같아야 합니다. 이 장의 끝에서 같은 요청을 두 바인딩으로 보내 그 선을 눈으로 긋습니다. 카드에 여럿을 적고 고르는 §5.2 는 4장의 몫입니다.</div>
+</article>
+
+<article class="card" id="p13-eq-parts">
+<h3>바인딩이 정하는 것은 다섯 자리 — 메서드 이름, 매개변수, 서비스 매개변수, 오류, 스트림</h3>
+<p class="lead">연산(SendMessage …)과 메시지 모양(Task …)은 셋이 같습니다. 바인딩 절(§9–§11)이 따로 정하는 자리만 모으면 이렇습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>JSON-RPC(§9)</th><th>gRPC(§10)</th><th>HTTP+JSON(§11)</th></tr>
+<tr><td>메서드를 고르는 곳</td><td>본문의 <code>"method"</code></td><td>서비스 경로(<code>A2AService</code> 의 rpc)</td><td>HTTP 동사 + URL</td></tr>
+<tr><td>매개변수</td><td><code>"params"</code> 객체</td><td>proto 메시지(이진)</td><td>본문, 또는 경로·쿼리(§11.5)</td></tr>
+<tr><td>A2A-Version 같은 서비스 매개변수</td><td>HTTP 머리글(§9.2 MUST)</td><td>gRPC 메타데이터(§10.2 MUST)</td><td>HTTP 머리글(§11.2 MUST)</td></tr>
+<tr><td>오류</td><td><code>error.code</code>(-32001 …)(§9.5)</td><td>gRPC status + details(§10.6)</td><td>HTTP 상태 + <code>google.rpc.Status</code>(§11.6)</td></tr>
+<tr><td>스트림</td><td>SSE(§9.1)</td><td>서버 스트리밍 rpc(§10.7)</td><td>SSE(§11.7)</td></tr>
+<tr><td>Content-Type</td><td><code>application/json</code>(§9.1)</td><td>—</td><td><code>application/a2a+json</code> SHOULD(§11.1)</td></tr>
+</table>
+</div>
+<div class="key"><b>JSON 은 둘이 같은 ProtoJSON</b> — JSON-RPC 의 <code>params</code> 와 REST 의 본문은 모두 같은 proto 메시지를 ProtoJSON 으로 쓴 것입니다(§5.5, camelCase·열거값 이름). 그래서 두 JSON 바인딩 사이의 차이는 대개 봉투에만 있습니다.</div>
+</article>
+
+<article class="card" id="p13-map-spec">
+<h3>§5.3 대응표 — 열한 연산이 바인딩마다 어떤 이름인가</h3>
+<p class="lead">JSON-RPC 메서드와 gRPC 메서드는 이름이 같습니다(§9.1 "PascalCase method names matching gRPC conventions"). REST 는 동사와 경로로 같은 연산을 고릅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>JSON-RPC · gRPC</th><th>REST(§5.3 의 표)</th></tr>
+<tr><td><code>SendMessage</code></td><td><code>POST /message:send</code></td></tr>
+<tr><td><code>SendStreamingMessage</code></td><td><code>POST /message:stream</code></td></tr>
+<tr><td><code>GetTask</code></td><td><code>GET /tasks/{id}</code></td></tr>
+<tr><td><code>ListTasks</code></td><td><code>GET /tasks</code></td></tr>
+<tr><td><code>CancelTask</code></td><td><code>POST /tasks/{id}:cancel</code></td></tr>
+<tr><td><code>SubscribeToTask</code></td><td><code>POST /tasks/{id}:subscribe</code></td></tr>
+<tr><td><code>CreateTaskPushNotificationConfig</code></td><td><code>POST /tasks/{id}/pushNotificationConfigs</code></td></tr>
+<tr><td><code>GetTaskPushNotificationConfig</code></td><td><code>GET /tasks/{id}/pushNotificationConfigs/{configId}</code></td></tr>
+<tr><td><code>ListTaskPushNotificationConfigs</code></td><td><code>GET /tasks/{id}/pushNotificationConfigs</code></td></tr>
+<tr><td><code>DeleteTaskPushNotificationConfig</code></td><td><code>DELETE /tasks/{id}/pushNotificationConfigs/{configId}</code></td></tr>
+<tr><td><code>GetExtendedAgentCard</code></td><td><code>GET /extendedAgentCard</code></td></tr>
+</table>
+</div>
+<div class="note"><b>콜론 뒤의 낱말</b> — <code>/tasks/{id}:cancel</code> 처럼 자원 경로 끝의 <code>:낱말</code> 이 연산을 고릅니다. §10 첫머리는 gRPC 와 HTTP 사이의 대응에 Google 의 API 지침(API guidelines)을 쓴다고 밝히는데, 이 경로 꼴이 그 대응에서 나옵니다.</div>
+</article>
+
+<article class="card" id="p13-map-proto">
+<h3>proto 에도 대응표가 있다 — 각 rpc 에 붙은 HTTP 주석을 SDK 에서 읽는다</h3>
+<p class="lead">규범인 proto(§10.1)의 rpc 마다 <code>google.api.http</code> 주석이 붙어 있습니다. 파이썬 SDK 의 <code>a2a_pb2</code> 는 그 proto 를 컴파일한 것이라 주석까지 들고 있으므로, 표를 손으로 옮기지 않고 SDK 에서 뽑았습니다.</p>
+<!--RUN file=ex/py/13/http_rules.py-->
+<ul>
+<li>§5.3 의 표와 열한 줄 가운데 열 줄이 같습니다. 하나 다른 것이 <code>SubscribeToTask</code> — proto 는 <code>GET</code>, §5.3·§11.3.2 는 <code>POST</code> 입니다. 세 SDK 가 이 어긋남을 어떻게 받는지는 5장에서 봅니다.</li>
+<li>gRPC 의 메서드 경로는 패키지와 서비스 이름이 붙은 <code>/lf.a2a.v1.A2AService/SendMessage</code> 꼴입니다(3장).</li>
+</ul>
+</article>
+
+<article class="card" id="p13-map-query">
+<h3>본문이 없는 동사는 경로와 쿼리로 — 그리고 모든 경로에 <code>/{tenant}</code> 짝이 있다</h3>
+<p class="lead">주석의 <code>body: "*"</code> 는 "요청 메시지 전체가 본문" 이라는 뜻입니다(위 출력의 <code>[본문]</code>). GET·DELETE 에는 본문이 없으니 경로에 넣은 필드(<code>{id}</code>) 밖의 필드는 쿼리로 갑니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>§11.5 의 규칙</th><th>세기</th></tr>
+<tr><td>GET·DELETE 의 매개변수는 경로나 쿼리로</td><td>MUST</td></tr>
+<tr><td>쿼리 이름은 JSON 과 같은 camelCase(<code>contextId</code>, <code>historyLength</code>)</td><td>MUST</td></tr>
+<tr><td>열거값은 이름(<code>status=TASK_STATE_WORKING</code>), 불은 <code>true</code>/<code>false</code></td><td>(규칙)</td></tr>
+<tr><td>중첩 객체는 쿼리에 못 싣는다 — 그런 연산은 POST 와 본문</td><td>MUST</td></tr>
+</table>
+</div>
+<div class="note"><b>스펙의 표에 없는 짝</b> — proto 의 열한 규칙은 모두 같은 경로를 <code>/{tenant}</code> 아래에 한 번 더 둡니다(<code>additional_bindings</code>, 위 출력의 "11/11"). §5.3 과 §11.3 의 표에는 이 꼴이 없습니다. 카드의 인터페이스에 적는 <code>tenant</code>(<a href="#p03-tenant">3부</a>)가 REST 에서는 경로의 첫 마디가 되는 자리입니다. 세 서버가 이 짝을 실제로 받는지는 <a href="#p13-rest-tenant">2장</a>에서 봅니다.</div>
+</article>
+
+<article class="card" id="p13-eq-spec">
+<h3>같은 실행기, 두 바인딩 — 완성 숙소 에이전트와 그 REST 판을 나란히 띄운다</h3>
+<p class="lead"><code>rpc</code> 는 완성 숙소 에이전트 그대로입니다. <code>rest</code> 는 그 카드와 실행기를 빌려 HTTP+JSON 문 하나로 띄운 <code>13/rest_agent.py</code> 입니다(<a href="#p13-rest-srv-py">2장</a>). 둘 다 탭 뒤에 두고, 같은 메시지와 없는 작업 조회를 보냅니다.</p>
+<!--SPEC file=ex/run/13/same.run-->
+<!--OUT file=out/13/same.txt server=rpc-->
+<!--OUT file=out/13/same.txt server=rest-->
+<div class="note"><b>견적 줄은 같다</b> — 실행기가 찍는 줄은 바인딩과 상관없이 같습니다. REST 판에만 있는 <code>Request error: …</code> 줄은 SDK 의 REST 오류 처리기가 남기는 기록입니다(<code>utils/error_handlers.py:142</code>). JSON-RPC 쪽은 같은 "없는 작업" 에 아무것도 찍지 않았습니다.</div>
+</article>
+
+<article class="card" id="p13-eq-req">
+<h3>요청 — JSON-RPC 의 <code>params</code> 가 REST 에서는 본문 전체가 된다</h3>
+<p class="lead">메시지 부분은 글자까지 같습니다. JSON-RPC 는 봉투(<code>jsonrpc</code>·<code>id</code>·<code>method</code>)로 연산을 고르고, REST 는 <code>POST /message:send</code> 로 고릅니다.</p>
+<!--OUT file=out/13/same.txt wire=rpc-wire ex=1 lines=1-20 note=JSON-RPC — POST / 의 봉투 안에 params-->
+<!--OUT file=out/13/same.txt wire=rest-wire ex=1 lines=1-15 note=HTTP+JSON — 본문이 곧 SendMessageRequest-->
+<div class="key"><b>REST 본문 = <code>SendMessageRequest</code></b> — §11.4 "structurally equivalent to the Protocol Buffer definitions". JSON-RPC 의 <code>params</code> 도 같은 메시지입니다(§9.4.1). REST 에는 <code>id</code> 가 없으니, 요청과 응답을 잇는 것은 HTTP 연결 그 자체입니다.</div>
+</article>
+
+<article class="card" id="p13-eq-res">
+<h3>응답 — JSON-RPC 의 <code>result</code> 가 REST 에서는 본문 전체가 된다</h3>
+<p class="lead">두 응답 모두 <code>SendMessageResponse</code>(<code>{"task": …}</code>)입니다. 다른 것은 바깥 한 겹과 Content-Type 뿐입니다.</p>
+<!--OUT file=out/13/same.txt wire=rpc-wire ex=1 lines=21-31 note=JSON-RPC — result 안에 task-->
+<!--OUT file=out/13/same.txt wire=rest-wire ex=1 lines=16-25 note=HTTP+JSON — 본문 맨 위가 task-->
+<ul>
+<li>REST 판은 <code>Content-Type: application/a2a+json</code> 으로 답했습니다(§11.1 SHOULD). JSON-RPC 쪽은 §9.1 대로 <code>application/json</code> 입니다.</li>
+<li>그 아래 아티팩트·이력은 두 와이어에서 id 만 빼고 같습니다 — DataPart 의 <code>30.0</code> 까지(<a href="#p04-data-wire">4부</a>). 같은 SDK 의 같은 직렬화기를 지나기 때문입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-eq-err">
+<h3>오류 — 같은 ErrorInfo, 다른 그릇: <code>-32001</code> 과 <code>404</code></h3>
+<p class="lead">없는 작업을 물었습니다. §5.4 의 표에서 <code>TaskNotFoundError</code> 는 JSON-RPC <code>-32001</code>, gRPC <code>NOT_FOUND</code>, HTTP <code>404 Not Found</code> 입니다.</p>
+<!--OUT file=out/13/same.txt wire=rpc-wire ex=2 lines=13-30 note=JSON-RPC — HTTP 는 200, 오류는 본문 안-->
+<!--OUT file=out/13/same.txt wire=rest-wire ex=2 note=HTTP+JSON — 상태 줄이 404, 본문은 google.rpc.Status-->
+<ul>
+<li>JSON-RPC 는 HTTP 로는 성공(<code>200 OK</code>)이고 오류는 <code>error.code</code> 에 있습니다. REST 는 HTTP 상태 자체가 오류이고, 본문의 <code>error.code</code> 는 그 상태 번호(404)를, <code>error.status</code> 는 gRPC 의 이름(<code>NOT_FOUND</code>)을 되풀이합니다.</li>
+<li>뜻을 실은 <code>ErrorInfo</code>(<code>reason: TASK_NOT_FOUND</code>, <code>domain: a2a-protocol.org</code>)는 같습니다 — JSON-RPC 는 <code>data</code> 배열에, REST 는 <code>details</code> 배열에 둡니다(§9.5·§11.6).</li>
+</ul>
+</article>
+
+<article class="card" id="p13-eq-same">
+<h3>같은 것과 다른 것 — "semantically equivalent" 의 선</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>JSON-RPC</th><th>HTTP+JSON</th><th>같은가</th></tr>
+<tr><td>연산 고르기</td><td><code>"method": "SendMessage"</code></td><td><code>POST /message:send</code></td><td>다르다</td></tr>
+<tr><td>요청 메시지</td><td><code>params</code></td><td>본문</td><td>같다(<code>SendMessageRequest</code>)</td></tr>
+<tr><td>응답 메시지</td><td><code>result</code></td><td>본문</td><td>같다(<code>SendMessageResponse</code>)</td></tr>
+<tr><td>Task·아티팩트 JSON</td><td colspan="2">id 만 빼고 글자까지 같다(같은 파이썬 SDK)</td><td>같다</td></tr>
+<tr><td>오류의 종류</td><td><code>-32001</code></td><td><code>404</code> + <code>NOT_FOUND</code></td><td>그릇이 다르다</td></tr>
+<tr><td>오류의 뜻</td><td colspan="2"><code>ErrorInfo.reason = TASK_NOT_FOUND</code></td><td>같다</td></tr>
+<tr><td>Content-Type</td><td><code>application/json</code></td><td><code>application/a2a+json</code></td><td>다르다</td></tr>
+</table>
+</div>
+<div class="key"><b>바인딩을 바꾸려면 봉투만 바꾸면 된다</b> — 이 덕에 SDK 의 요청 처리기 하나에 전송 처리기를 여럿 달 수 있습니다(<a href="#p07-srv-routes">7부</a>·<a href="#p08-srv-routes">8부</a>·<a href="#p09-srv-routes">9부</a>). 다음 장에서 세 SDK 의 REST 처리기를 차례로 답니다.</div>
+</article>
+
+<article class="card" id="p13-ch1-sum">
+<h3>1장 정리 — 동등성과 대응표</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>여러 바인딩을 열면?</td><td>기능·동작·오류·인증이 같아야 한다(MUST)</td><td><a href="#p13-eq-rule">§5.1</a></td></tr>
+<tr><td>바인딩이 정하는 것?</td><td>메서드 이름, 매개변수 자리, 서비스 매개변수, 오류 그릇, 스트림</td><td><a href="#p13-eq-parts">표</a></td></tr>
+<tr><td>REST 경로는 어디에?</td><td>§5.3 의 표, 그리고 proto 의 <code>google.api.http</code> 주석 — 하나(<code>SubscribeToTask</code>)가 다르다</td><td><a href="#p13-map-proto">SDK 에서 뽑은 표</a></td></tr>
+<tr><td>GET 의 매개변수는?</td><td>경로와 camelCase 쿼리. 모든 경로에 <code>/{tenant}</code> 짝</td><td><a href="#p13-map-query">§11.5</a></td></tr>
+<tr><td>두 바인딩의 같은 답?</td><td>본문은 같은 메시지, 다른 것은 봉투·상태·Content-Type</td><td><a href="#p13-eq-same">비교</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p13-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 1장의 실험에서 없는 작업을 물었을 때, JSON-RPC 쪽 HTTP 상태 줄은 무엇이었고 REST 쪽은 무엇이었습니까? 클라이언트가 "작업이 없다" 는 뜻을 바인딩과 상관없이 같은 방법으로 읽으려면 어디를 보면 됩니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> JSON-RPC 는 <code>200 OK</code>(오류는 본문의 <code>error.code: -32001</code>), REST 는 <code>404 Not Found</code> 였습니다(<a href="#p13-eq-err">오류 슬라이드</a>). 두 쪽 모두 <code>google.rpc.ErrorInfo</code> 를 실었고 그 <code>reason</code> 이 <code>TASK_NOT_FOUND</code> 입니다 — JSON-RPC 는 <code>error.data</code>, REST 는 <code>error.details</code> 배열 안입니다.</div>
+</article>
+
+<!-- ==== 2장 HTTP+JSON(REST) ×3 ==== -->
+
+<article class="card" id="p13-ch2">
+<p class="chnum">2장</p>
+<h2>HTTP+JSON(REST) ×3</h2>
+<p class="chsub">§11 의 요구 → 파이썬 서버 → TypeScript 서버 → Go 서버 → 완성 에이전트를 빌린 방법 → 세 서버의 경로 표 → 맨손 요청 여덟 → 보내기 → 세 서버의 응답 → 읽기 → 목록 → 취소 오류 → 오류 본문 → 깨진 JSON → 없는 경로 → tenant 경로 → 스트림 명세 → SSE → 세 서버의 SSE → 스트림 오류 → 클라이언트 ×3 → 클라이언트의 머리글 → 3×3 → Go 클라이언트의 server error → 사라지는 스트림 오류 → 세 SDK 비교</p>
+</article>
+
+<article class="card" id="p13-rest-rules">
+<h3>HTTP+JSON 바인딩의 약속 — 동사와 경로, a2a+json, 머리글, SSE (§11)</h3>
+<p class="lead">REST 바인딩의 절(§11)은 짧습니다. 메시지 모양은 proto 에 맡기고, HTTP 쪽 약속만 적습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>자리</th><th>스펙의 말</th><th>세기</th></tr>
+<tr><td>§11.1</td><td>요청·응답의 Content-Type 은 <code>application/a2a+json</code></td><td>SHOULD</td></tr>
+<tr><td>§11.1</td><td>"Standard HTTP verbs (GET, POST, PUT, DELETE)", 자원 꼴 URL, 스트림은 SSE</td><td>—</td></tr>
+<tr><td>§11.2</td><td>서비스 매개변수(<code>A2A-Version</code>·<code>A2A-Extensions</code>)는 HTTP 머리글로</td><td>MUST</td></tr>
+<tr><td>§11.4</td><td>요청·응답은 "structurally equivalent to the Protocol Buffer definitions"</td><td>—</td></tr>
+<tr><td>§11.6</td><td>오류는 <code>google.rpc.Status</code> JSON, A2A 오류는 <code>details</code> 에 <code>ErrorInfo</code></td><td>MUST</td></tr>
+<tr><td>§11.7</td><td>스트림은 SSE, <code>data</code> 하나에 <code>StreamResponse</code> 하나</td><td>—</td></tr>
+</table>
+</div>
+<div class="note"><b>PUT 은 쓰지 않는다</b> — §11.1 이 PUT 을 꼽지만, 대응표(<a href="#p13-map-spec">1장</a>)의 열한 연산에는 PUT 이 없습니다. 실제로 쓰는 동사는 GET·POST·DELETE 셋입니다.</div>
+</article>
+
+<article class="card" id="p13-rest-srv-py">
+<h3>파이썬 서버 — <code>create_jsonrpc_routes</code> 자리에 <code>create_rest_routes</code> 한 줄</h3>
+<p class="lead"><code>13/rest_agent.py</code> 는 완성 숙소·식사 에이전트 모듈에서 <code>card(url)</code> 과 실행기 클래스를 가져와(<a href="#p03-two-doors">3부</a>의 <code>two_doors.py</code> 와 같은 방법) 바인딩만 바꿔 띄웁니다.</p>
+<!--CODE file=ex/py/13/rest_agent.py region=mount-->
+<ul>
+<li>요청 처리기(<code>DefaultRequestHandler</code>)는 JSON-RPC 판과 같습니다. 바뀐 것은 경로 목록과 카드의 <code>protocolBinding</code> 하나입니다.</li>
+<li><code>create_rest_routes(handler)</code> 는 <code>path_prefix</code> 를 주지 않으면 뿌리(<code>/message:send</code> …)에 답니다. 그래서 카드의 주소 <code>http://…/</code> 뒤에 §5.3 의 경로가 그대로 붙습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-srv-ts">
+<h3>TypeScript 서버 — <code>jsonRpcHandler</code> 자리에 <code>restHandler</code></h3>
+<p class="lead">TS 의 완성 에이전트는 공용 모듈의 <code>serve(card, executor, port)</code> 를 부릅니다. <code>13/rest_common.ts</code> 는 그 <code>serve</code> 의 REST 판입니다.</p>
+<!--CODE file=ex/ts/13/rest_common.ts region=mount-->
+<div class="note"><b>express Router 하나</b> — <code>restHandler</code> 는 Router 를 돌려주고, 그 안에서 본문 파서(<code>express.json</code>)와 Content-Type 검사까지 직접 답니다(<code>server/express/index.js:6079</code>). JSON-RPC 처리기와 마찬가지로 앞에 따로 파서를 두지 않아도 됩니다.</div>
+</article>
+
+<article class="card" id="p13-rest-srv-go">
+<h3>Go 서버 — <code>NewJSONRPCHandler</code> 자리에 <code>NewRESTHandler</code></h3>
+<p class="lead"><code>13/restmount</code> 는 완성 에이전트의 <code>common.Serve</code> 의 REST 판입니다. Go 의 전송 처리기는 그냥 <code>http.Handler</code> 라서, 표준 <code>ServeMux</code> 에 꽂습니다(<a href="#p09-srv-routes">9부</a>).</p>
+<!--CODE file=ex/go/13/restmount/mount.go region=mount-->
+<div class="note"><b>뿌리 <code>/</code> 에 통째로</b> — REST 처리기는 안에 제 <code>ServeMux</code> 를 두고 경로를 가립니다(<code>a2asrv/rest.go:48</code>). 그래서 바깥 mux 에는 <code>"/"</code> 하나만 걸고, 카드 경로는 더 긴 패턴이라 먼저 잡힙니다.</div>
+</article>
+
+<article class="card" id="p13-rest-borrow">
+<h3>완성 에이전트를 고치지 않고 빌린 방법 — TS 는 해석 훅, Go 는 같은 패키지</h3>
+<p class="lead">파이썬 에이전트는 import 할 수 있지만, TS 의 에이전트 파일은 아무것도 내보내지 않고 모듈 맨 위에서 곧장 서버를 띄우고, Go 의 에이전트는 <code>package main</code> 이라 import 할 수 없습니다. 두 언어에서 실행기를 그대로 쓰려고 고른 방법입니다.</p>
+<!--CODE file=ex/ts/13/rest_agent.ts region=hook note=TS — 에이전트가 가져가는 ./common.ts 를 13/rest_common.ts 로 바꿔 끼운다-->
+<!--CODE file=ex/go/13/rest_lodging/main.go region=init note=Go — agent.go(→ agents/lodging/main.go 링크)와 같은 package main-->
+<ul>
+<li>TS — <code>module.registerHooks</code>(Node 24)의 해석 훅이 에이전트 파일의 <code>import … from "./common.ts"</code> 만 가로챕니다. <code>rest_common.ts</code> 는 진짜 <code>common.ts</code> 를 <code>export *</code> 하고 <code>serve</code> 하나만 덮습니다(<a href="#p08-test-load">8부</a>의 <code>mock.module</code> 과 같은 생각인데, 실험 플래그가 필요 없다).</li>
+<li>Go — <code>13/rest_lodging/agent.go</code> 는 <code>agents/lodging/main.go</code> 를 가리키는 심볼릭 링크입니다. 같은 디렉터리라 같은 패키지가 되어 소문자 <code>card</code>·<code>executor</code> 가 보이고, <code>init()</code> 이 서버를 띄운 채 돌아오지 않으니 그 파일의 <code>main()</code> 은 불리지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-routes">
+<h3>세 서버의 경로 표 — 열한 연산은 같고, tenant 짝과 Content-Type 이 다르다</h3>
+<p class="lead">설치된 SDK 소스에서 각 REST 처리기가 다는 경로를 읽었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>경로 등록</td><td>Starlette <code>Route</code> 열둘(<code>rest_routes.py:83</code>)</td><td><code>registerRoute</code> 열둘(<code>index.js:6209</code>)</td><td><code>ServeMux</code> 패턴 열(<code>rest.go:51</code>) — <code>/tasks/{idAndAction}</code> 에서 <code>:cancel</code>·<code>:subscribe</code> 를 글자로 가른다</td></tr>
+<tr><td><code>/{tenant}</code> 짝</td><td>같은 열둘을 <code>Mount('/{tenant}')</code>(<code>:123</code>)</td><td><code>/:tenant…</code> 로 한 번 더 + 경로의 값을 본문·쿼리의 tenant 에 덮어씀(<code>:6185</code>)</td><td>없다 — <code>// TODO: handle tenant</code>(<code>rest.go:50</code>). 따로 <code>NewTenantRESTHandler(틀, …)</code>(<code>:76</code>)</td></tr>
+<tr><td><code>:subscribe</code> 동사</td><td colspan="3">GET 과 POST 둘 다 — 5장의 주제</td></tr>
+<tr><td>성공 응답 Content-Type</td><td><code>application/a2a+json</code></td><td><code>application/a2a+json; charset=utf-8</code></td><td><code>application/json</code>(<code>rest.go:63</code>)</td></tr>
+<tr><td>오류 응답 Content-Type</td><td><code>application/json</code>(<code>error_handlers.py:160</code>)</td><td><code>application/a2a+json; charset=utf-8</code>(<code>index.js:6087</code>)</td><td><code>application/json</code>(<code>rest.go:493</code>)</td></tr>
+</table>
+</div>
+<div class="note"><b>열둘인데 연산은 열하나</b> — 파이썬·TS 의 열둘째는 <code>:subscribe</code> 를 GET·POST 로 두 번 단 것입니다. 이 표의 Content-Type 줄들이 와이어에서 그대로 보이는지는 바로 다음 실험에서 확인합니다.</div>
+</article>
+
+<article class="card" id="p13-rest-spec">
+<h3>실험 — 세 서버에 SDK 없이 같은 요청 여덟 개</h3>
+<p class="lead">세 언어의 REST 숙소 에이전트를 탭 뒤에 두고, <code>13/rest_raw.py</code> 가 httpx 로 맨 HTTP 요청을 보냅니다. 화면에는 요청마다 한 줄 요약만 찍고, 몸통은 탭이 적습니다.</p>
+<!--SPEC file=ex/run/13/rest.run-->
+<!--CODE file=ex/py/13/rest_raw.py region=calls-->
+<div class="note"><b>tenant 경로</b> — 마지막 요청의 <code>/bosang-hq/…</code> 는 이 카드에 없는 경로입니다. proto 의 <code>/{tenant}</code> 짝(<a href="#p13-map-query">1장</a>)을 서버가 받는지 보려고 일부러 보냅니다.</div>
+</article>
+
+<article class="card" id="p13-rest-raw">
+<h3>여덟 요청의 요약 — 앞의 다섯은 상태와 reason 이 같고, 뒤의 셋에서 서버가 갈린다</h3>
+<!--OUT file=out/13/rest.txt part=터미널 7-->
+<ul>
+<li><b>같은 것</b> — 보내기·읽기·목록은 200, COMPLETED 취소는 <code>400 FAILED_PRECONDITION</code> + <code>TASK_NOT_CANCELABLE</code>, 없는 작업은 <code>404 NOT_FOUND</code> + <code>TASK_NOT_FOUND</code>. §5.4 의 표 그대로입니다.</li>
+<li><b>다른 것</b> — Content-Type(Go 는 늘 <code>application/json</code>, 파이썬은 오류만 <code>application/json</code>), 깨진 JSON 의 <code>reason</code> 셋, 없는 경로(파이썬은 <b>307</b>), tenant 경로(Go 만 404). 아래에서 하나씩 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-send">
+<h3>보내기 — <code>POST /message:send</code>, 본문은 메시지, 답은 <code>{"task": …}</code></h3>
+<p class="lead">파이썬 서버와 주고받은 첫 요청입니다. <a href="#p13-eq-req">1장</a>의 REST 판과 같은 모양을 이번에는 세 서버에 견줍니다.</p>
+<!--OUT file=out/13/rest.txt wire=py-wire ex=1 lines=1-25-->
+<div class="note"><b>요청에는 <code>A2A-Version</code> 만 붙였다</b> — §11.2 의 서비스 매개변수는 머리글로 갑니다. 이 실험은 Content-Type 을 <code>application/json</code>(httpx 의 기본)으로 보냈는데, 세 서버 모두 받아 줬습니다. §11.1 의 <code>application/a2a+json</code> 은 SHOULD 입니다.</div>
+</article>
+
+<article class="card" id="p13-rest-send-cmp">
+<h3>세 서버의 응답 — 같은 Task, 다른 Content-Type·숫자·키 차례</h3>
+<!--OUT file=out/13/rest.txt wire=ts-wire ex=1 lines=16-17 note=TypeScript 서버-->
+<!--OUT file=out/13/rest.txt wire=go-wire ex=1 lines=16-58 note=Go 서버 — 본문 전체-->
+<ul>
+<li>Go 서버만 <code>application/json</code> 입니다(<code>rest.go:63</code>). 파이썬과 TS 는 a2a+json 이고, TS 는 <code>charset=utf-8</code> 을 붙입니다.</li>
+<li>DataPart 의 수는 파이썬만 <code>30.0</code>(<a href="#p04-data-wire">4부</a>), TS·Go 는 <code>30</code> 입니다. Go 는 키를 <code>id</code> 다음 가나다순으로 쓰고, 이력의 사용자 메시지에 <code>contextId</code>·<code>taskId</code> 를 채우지 않습니다 — 받은 메시지를 그대로 저장하기 때문입니다(4부의 이력 저장 비교).</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-get">
+<h3>읽기와 목록 — GET 의 매개변수는 쿼리로, 답은 Task 그 자체</h3>
+<p class="lead"><code>GetTask</code> 의 <code>historyLength</code> 와 <code>ListTasks</code> 의 <code>contextId</code> 는 본문이 아니라 쿼리입니다(§11.5). 경로의 <code>{id}</code> 가 <code>GetTaskRequest.id</code> 입니다.</p>
+<!--OUT file=out/13/rest.txt wire=py-wire ex=2 lines=1-13-->
+<!--OUT file=out/13/rest.txt wire=py-wire ex=3 lines=1-8-->
+<ul>
+<li><code>GET /tasks/{id}</code> 의 답은 <code>{"task": …}</code> 로 감싸지 않은 Task 입니다 — proto 의 <code>rpc GetTask(GetTaskRequest) returns (Task)</code> 그대로입니다. JSON-RPC 의 <code>result</code> 도 같은 반환형이라 Task 그 자체입니다.</li>
+<li><code>historyLength=0</code> 에 세 서버 모두 이력 없이 답했습니다(요약의 <code>history: 0</code>). 목록의 본문은 JSON-RPC 때와 같습니다 — 파이썬 목록에만 기본값 필드가 붙는 것까지(<a href="#p11-list-wire">11부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-cancel">
+<h3>끝난 작업 취소 — 셋 다 400 과 <code>TASK_NOT_CANCELABLE</code>, 말과 metadata 는 제각각</h3>
+<!--OUT file=out/13/rest.txt wire=py-wire ex=4 lines=4-20 note=파이썬 서버-->
+<!--OUT file=out/13/rest.txt wire=ts-wire ex=4 grep=^←|Content-Type|"message"|"reason"|metadata note=TypeScript 서버-->
+<!--OUT file=out/13/rest.txt wire=go-wire ex=4 grep=^←|Content-Type|"message"|"reason"|metadata|"taskId"|"timestamp" note=Go 서버-->
+<ul>
+<li><code>error.code</code>(400)·<code>error.status</code>(<code>FAILED_PRECONDITION</code>)·<code>reason</code> 은 셋이 같습니다 — 클라이언트가 기댈 자리는 여기입니다.</li>
+<li><code>message</code> 는 사람이 읽는 글이라 셋이 다릅니다. Go 는 SDK 안의 감싼 오류 사슬을 그대로 내보냅니다. <code>metadata</code> 는 파이썬 <code>{}</code>, TS 없음, Go <code>taskId</code>·<code>timestamp</code> — JSON-RPC 때(<a href="#p05-err-cmp">5부</a>)와 같은 버릇입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-err-body">
+<h3>오류 본문은 <code>google.rpc.Status</code> — <code>details</code> 의 ErrorInfo 가 A2A 오류의 이름표다</h3>
+<p class="lead">§11.6 은 HTTP 상태만으로는 모자란다고 말합니다. <code>TaskNotCancelableError</code> 와 <code>PushNotificationNotSupportedError</code> 가 둘 다 400 이기 때문입니다. 그래서 A2A 오류에는 <code>ErrorInfo</code> 를 반드시(MUST) 싣습니다.</p>
+<!--OUT file=out/13/rest.txt wire=go-wire ex=5 lines=4-23 note=Go 서버의 없는 작업 — §11.6 의 예와 가장 닮았다-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>§11.6</th><th>파이썬</th><th>TS</th><th>Go</th></tr>
+<tr><td><code>code</code> = HTTP 상태, <code>status</code>, <code>message</code></td><td colspan="3">셋 다 있다</td></tr>
+<tr><td>ErrorInfo <code>reason</code>·<code>domain</code>(MUST)</td><td colspan="3">셋 다 <code>TASK_NOT_FOUND</code>·<code>a2a-protocol.org</code></td></tr>
+<tr><td>예의 <code>metadata.taskId</code>·<code>timestamp</code>(선택)</td><td><code>{}</code></td><td>없음</td><td>둘 다</td></tr>
+<tr><td>예의 Content-Type <code>application/a2a+json</code></td><td><code>application/json</code></td><td>a2a+json</td><td><code>application/json</code></td></tr>
+</table>
+</div>
+<div class="note"><b>"Error Code" 가 두 번</b> — §11.6 은 A2A 의 오류 코드를 "HTTP status code and the <code>error.code</code> field" 로 옮기라고 합니다. 그래서 404 가 상태 줄과 본문에 두 번 나옵니다. 오류의 종류를 가르는 것은 숫자가 아니라 <code>reason</code> 입니다.</div>
+</article>
+
+<article class="card" id="p13-rest-badjson">
+<h3>깨진 JSON — 400 은 같고, <code>reason</code> 은 셋이 다 다르다</h3>
+<p class="lead">닫히지 않은 JSON 을 보냈습니다. 이것은 A2A 오류(§3.3.2 의 표)가 아니라 JSON-RPC 라면 <code>-32700</code> 인 일반 오류입니다. §5.4 와 §11.6 은 A2A 오류의 reason 만 정하고, 이런 오류의 reason 은 정하지 않습니다.</p>
+<!--OUT file=out/13/rest.txt wire=py-wire ex=6 grep=^←|^\s+"(status|message|reason)" note=파이썬 서버-->
+<!--OUT file=out/13/rest.txt wire=ts-wire ex=6 grep=^←|^\s+"(status|message|reason)" note=TypeScript 서버-->
+<!--OUT file=out/13/rest.txt wire=go-wire ex=6 grep=^←|^\s+"(status|message|reason)" note=Go 서버-->
+<ul>
+<li>파이썬은 protobuf 의 파서 오류를 <code>INVALID_REQUEST</code> 로(<code>error_handlers.py:120</code>), TS 는 <code>RequestMalformedError</code> 의 <code>INVALID_PARAMS</code> 로, Go 는 <code>ErrParseError</code> 의 <code>PARSE_ERROR</code> 로 답했습니다.</li>
+<li>세 이름 모두 JSON-RPC 표준 오류의 이름을 빌린 것이지만 고른 것이 다릅니다. §3.3.2 는 검증 오류의 예로 "HTTP <code>400 Bad Request</code>, gRPC <code>INVALID_ARGUMENT</code>" 만 들므로, 클라이언트는 <code>status</code> 까지만 기댈 수 있습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-nopath">
+<h3>없는 경로 — 셋 다 <code>google.rpc.Status</code> 가 아니고, 파이썬은 307 로 돌려보낸다</h3>
+<p class="lead">REST 처리기는 경로가 맞아야 불립니다. 맞는 경로가 없으면 그 밑의 웹 틀(Starlette·express·<code>net/http</code>)이 답합니다.</p>
+<!--OUT file=out/13/rest.txt wire=py-wire ex=7 note=파이썬 서버-->
+<!--OUT file=out/13/rest.txt wire=ts-wire ex=7 grep=^←|Content-Type|Cannot note=TypeScript 서버-->
+<!--OUT file=out/13/rest.txt wire=go-wire ex=7 grep=^←|Content-Type|page note=Go 서버-->
+<div class="note"><b>307 의 까닭</b> — 파이썬 경로 목록 끝의 <code>Mount('/{tenant}')</code> 가 <code>/nope/</code> 와는 맞습니다. Starlette 는 맞는 경로가 없을 때 끝에 <code>/</code> 를 붙여 맞으면 그리로 돌려보냅니다(<code>redirect_slashes</code>, <code>starlette/routing.py:713</code>). 오타 난 경로가 "없다" 대신 "저리로 가라" 를 받는 셈입니다.</div>
+</article>
+
+<article class="card" id="p13-rest-tenant">
+<h3>tenant 경로 — 파이썬·TS 는 받고, Go 의 <code>NewRESTHandler</code> 는 모른다</h3>
+<p class="lead">proto 의 <code>/{tenant}/message:send</code> 짝(<a href="#p13-map-query">1장</a>)으로 보냈습니다. 카드에는 tenant 가 없는데도 파이썬·TS 는 견적을 냈습니다.</p>
+<!--OUT file=out/13/rest.txt wire=py-wire ex=8 grep=^→|^← note=파이썬 서버-->
+<!--OUT file=out/13/rest.txt wire=ts-wire ex=8 grep=^→|^← note=TypeScript 서버-->
+<!--OUT file=out/13/rest.txt wire=go-wire ex=8 grep=^→|^←|page note=Go 서버-->
+<ul>
+<li>파이썬은 경로의 값을 호출 맥락의 <code>tenant</code> 로(<code>rest_dispatcher.py:109</code>), TS 는 본문·쿼리의 <code>tenant</code> 에 덮어써서(<code>index.js:6185</code>) 넘깁니다. 어느 쪽도 카드에 적은 tenant 와 견주지 않았습니다.</li>
+<li>Go 는 <code>NewRESTHandler</code> 에 tenant 경로가 없고(<code>// TODO: handle tenant</code>, <code>rest.go:50</code>), 경로 틀을 받는 <code>NewTenantRESTHandler("/{*}", …)</code> 를 따로 둡니다(<code>rest.go:76</code>). tenant 를 쓰는 Go 에이전트는 그것을 골라 달아야 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-stream-spec">
+<h3>REST 의 스트림 — 식사 에이전트 셋에 <code>POST /message:stream</code></h3>
+<p class="lead">스트림은 완성 식사 에이전트(<a href="#p10-ch2">10부</a>)를 같은 방법으로 REST 문에 올려 봅니다. 정상 요청 하나, 그리고 없는 작업(<code>taskId: t-nope</code>)에 잇는 요청 하나를 세 서버에 차례로 보냅니다.</p>
+<!--SPEC file=ex/run/13/stream.run-->
+<!--CODE file=ex/go/13/rest_catering/main.go region=init note=Go 식사판 — 에이전트의 main 이 등록하던 --step-ms 를 init 이 직접 등록한다-->
+<!--OUT file=out/13/stream.txt server=go note=Go 서버의 기록 — 둘째 요청에서 실행 준비가 실패했다-->
+</article>
+
+<article class="card" id="p13-rest-sse">
+<h3>SSE 의 <code>data</code> 하나에 StreamResponse 하나 — JSON-RPC 봉투가 없다</h3>
+<p class="lead">파이썬 서버의 스트림에서 이벤트마다 첫 키만 골라 냈습니다. 순서와 종류는 <a href="#p10-wire-run">10부</a>의 JSON-RPC 스트림과 같습니다.</p>
+<!--OUT file=out/13/stream.txt wire=py-wire ex=1 grep=^←|Content-Type: text|^  data:|^    "(task|statusUpdate|artifactUpdate)" note=파이썬 서버 — 이벤트 열 개의 종류-->
+<ul>
+<li>JSON-RPC 의 SSE 는 <code>data</code> 마다 <code>{"jsonrpc": "2.0", "id": …, "result": {…}}</code> 였습니다. REST 는 그 <code>result</code> 자리의 <code>StreamResponse</code>(<code>task</code>·<code>statusUpdate</code>·<code>artifactUpdate</code> 가운데 하나)만 씁니다(§11.7).</li>
+<li>첫 이벤트는 SUBMITTED 의 Task, 마지막은 COMPLETED 의 <code>statusUpdate</code> — §11.7 의 "first a Task …, then zero or more status or artifact update events" 그대로입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-sse-cmp">
+<h3>세 서버의 SSE — 머리와 <code>id:</code> 줄만 다르다</h3>
+<!--OUT file=out/13/stream.txt wire=go-wire ex=1 lines=20-26 note=Go 서버 — 이벤트마다 id: 줄-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>Content-Type</td><td><code>text/event-stream; charset=utf-8</code></td><td><code>text/event-stream</code></td><td><code>text/event-stream</code></td></tr>
+<tr><td>SSE 필드</td><td><code>data:</code></td><td><code>data:</code></td><td><code>id:</code>(UUID) + <code>data:</code></td></tr>
+<tr><td>이벤트</td><td colspan="3">열 개, 같은 차례(task → statusUpdate·artifactUpdate … → statusUpdate COMPLETED)</td></tr>
+</table>
+</div>
+<div class="note"><b>JSON-RPC 때와 같은 표</b> — 머리와 <code>id:</code> 의 차이는 <a href="#p10-wire-cmp">10부</a>의 세 서버 비교와 같습니다. SSE 를 쓰는 코드는 바인딩과 상관없이 같은 것을 씁니다. 다른 것은 오류가 날 때입니다 — 다음 슬라이드.</div>
+</article>
+
+<article class="card" id="p13-rest-sse-err">
+<h3>스트림 오류 — 파이썬·TS 는 404 JSON, Go 는 200 SSE 안의 <code>{"error": …}</code></h3>
+<p class="lead">없는 작업에 잇는 스트림 요청입니다. 오류는 첫 이벤트보다 먼저 났습니다.</p>
+<!--OUT file=out/13/stream.txt wire=py-wire ex=2 lines=21-36 grep=^←|Content-Type|"reason" note=파이썬 서버-->
+<!--OUT file=out/13/stream.txt wire=ts-wire ex=2 lines=21-36 grep=^←|Content-Type|"reason" note=TypeScript 서버-->
+<!--OUT file=out/13/stream.txt wire=go-wire ex=2 lines=21-40 note=Go 서버-->
+<ul>
+<li>파이썬·TS 는 첫 이벤트를 먼저 꺼내 본 뒤에야 SSE 머리를 씁니다(<code>rest_dispatcher.py:147</code>, TS 의 <code>sendStreamResponse</code>). 그래서 시작 전 오류는 보통의 404 오류 응답이 됩니다.</li>
+<li>Go 는 머리부터 씁니다(<code>sseWriter.WriteHeaders()</code>, <code>rest.go:277</code>). 그 뒤의 오류는 <code>data</code> 에 <code>{"error": …}</code> 를 실어 보낼 수밖에 없고, <code>event: error</code> 표시도 붙이지 않습니다. 파이썬·TS 서버는 <b>도중의</b> 오류에 <code>event: error</code> 를 붙입니다(<code>rest_dispatcher.py:163</code>, <code>formatSSEErrorEvent</code>). §11.7 은 스트림 속 오류의 모양을 정하지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-cl-py">
+<h3>파이썬 클라이언트 — HTTP+JSON 을 쓰겠다고 말해야 한다</h3>
+<p class="lead">이제 SDK 클라이언트로 같은 REST 서버들을 부릅니다. 세 클라이언트는 같은 세 가지를 합니다 — 막는 SendMessage, 없는 작업 GetTask, 없는 작업에 잇는 스트림.</p>
+<!--CODE file=ex/py/13/rest_client.py region=client-->
+<ul>
+<li><code>supported_protocol_bindings</code> 가 비면 JSON-RPC 만 압니다(<code>client/client.py:56</code> 의 주석 "Empty implies JSONRPC only"). 카드에 HTTP+JSON 문만 있으니 이 줄이 없으면 맞는 전송을 못 찾습니다(<a href="#p03-pick-why">3부</a>).</li>
+<li>막는 호출과 스트림을 가르는 것은 <code>streaming</code> 설정이라, 클라이언트를 둘 지었습니다(<a href="#p07-cl-blocking">7부</a>). 그래서 탭에는 카드 요청이 두 번 찍힙니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-cl-ts">
+<h3>TypeScript 클라이언트 — 공장이 기본으로 REST 를 안다</h3>
+<!--CODE file=ex/ts/13/rest_client.ts region=client-->
+<div class="note"><b>바뀐 것이 없다</b> — <code>ClientFactory</code> 의 기본 전송은 <code>[JsonRpcTransportFactory, RestTransportFactory]</code> 입니다(<a href="#p03-pick-why">3부</a>). 카드가 HTTP+JSON 문만 적었으니 공장이 <code>RestTransport</code> 를 짓고, 코드는 JSON-RPC 때와 한 글자도 다르지 않습니다.</div>
+</article>
+
+<article class="card" id="p13-rest-cl-go">
+<h3>Go 클라이언트 — 해석기와 공장, 그리고 표지 오류로 가르기</h3>
+<!--CODE file=ex/go/13/rest_client/main.go region=client-->
+<div class="note"><b>오류는 <code>errors.Is</code> 로</b> — Go 의 REST 전송은 받은 <code>ErrorInfo.reason</code> 을 표지 오류로 되돌립니다(<code>internal/rest/rest.go</code> 의 <code>ConvertErrorBody</code>). <code>kindOf</code> 는 그 표지 가운데 무엇에 걸리는지 찍습니다.</div>
+</article>
+
+<article class="card" id="p13-rest-cl-wire">
+<h3>세 클라이언트의 머리글 — 셋 다 <code>application/json</code> 으로 보낸다</h3>
+<p class="lead">파이썬 서버 앞의 탭이 본 보내기 요청의 머리입니다(파이썬 → TS → Go 차례).</p>
+<!--OUT file=out/13/matrix.txt wire=py-wire ex=3 lines=1-4 note=파이썬 클라이언트-->
+<!--OUT file=out/13/matrix.txt wire=py-wire ex=7 lines=1-4 note=TypeScript 클라이언트-->
+<!--OUT file=out/13/matrix.txt wire=py-wire ex=8 lines=1-4 note=TypeScript 클라이언트 — 본문 없는 GET-->
+<!--OUT file=out/13/matrix.txt wire=py-wire ex=11 lines=1-4 note=Go 클라이언트-->
+<ul>
+<li>§11.1 의 <code>application/a2a+json</code>(SHOULD)으로 보내는 클라이언트는 없습니다. <code>Accept</code> 는 파이썬 <code>*/*</code>, TS 둘 다, Go <code>application/json</code> 만입니다.</li>
+<li>TS 는 본문이 없는 GET 에도 <code>Content-Type</code> 을 붙입니다(<code>_buildHeaders</code>, <code>client/index.js:6311</code>). 서버 셋 모두 문제 삼지 않았습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-matrix">
+<h3>3×3 — 보내기는 아홉 칸 모두 되고, 오류는 세 짝에서 어긋난다</h3>
+<p class="lead">세 클라이언트가 세 REST 서버를 차례로 부릅니다. 탭은 파이썬 서버 앞에만 두었습니다.</p>
+<!--SPEC file=ex/run/13/matrix.run-->
+<!--OUT file=out/13/matrix.txt part=터미널 5 note=줄 머리 = 서버, 명령 = 클라이언트-->
+<ul>
+<li><b>Go 클라이언트 × TS 서버</b> — 없는 작업도, 스트림 잇기도 <code>"task not found"</code> 가 아니라 <code>"server error"</code> 로 왔습니다(다음 슬라이드).</li>
+<li><b>파이썬·TS 클라이언트 × Go 서버의 스트림</b> — 파이썬은 <code>ParseError</code>, TS 는 오류 없이 끝났습니다(그다음 슬라이드). 같은 오류가 다른 칸에서는 <code>TaskNotFoundError</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p13-rest-matrix-go">
+<h3>Go 클라이언트는 <code>application/json</code> 오류만 읽는다 — TS 서버의 a2a+json 오류는 "server error"</h3>
+<p class="lead">TS 서버는 오류도 <code>application/a2a+json</code> 으로 보냅니다(<a href="#p13-rest-routes">경로 표</a>). §11.1 대로입니다. 그런데 Go 의 REST 전송은 오류 본문을 읽기 전에 Content-Type 부터 봅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>Go 클라이언트(<code>a2aclient/rest.go</code>·<code>internal/rest/rest.go</code>)</th><th>결과</th></tr>
+<tr><td>상태가 <code>200</code> 이 아니면 오류로 본다(<code>a2aclient/rest.go:131</code>)</td><td>404 → 오류 경로</td></tr>
+<tr><td>Content-Type 이 <code>application/json</code> 으로 시작하지 않으면 본문을 보지 않고 <code>ErrServerError</code>(<code>internal/rest/rest.go:277</code>)</td><td><code>application/a2a+json</code> → <code>"server error"</code></td></tr>
+<tr><td>그 밖에는 <code>details</code> 의 ErrorInfo <code>reason</code> 으로 표지 오류를 고른다</td><td>파이썬·Go 서버 → <code>"task not found"</code></td></tr>
+</table>
+</div>
+<div class="warn"><b>Go SDK 클라이언트의 결함</b> — §11.1 이 권하는 Content-Type 으로 답한 서버의 오류를 읽지 못합니다. 소스로 보면 <code>201 Created</code> 같은 200 아닌 성공도 오류 경로로 갑니다(<code>!= http.StatusOK</code>, 이 장에서는 재 보지 않았다). 우리는 SDK 를 고치지 않고 적어 둡니다.</div>
+</article>
+
+<article class="card" id="p13-rest-matrix-sse">
+<h3>Go 서버의 스트림 오류 — 파이썬은 깨진 이벤트로, TS 는 아무 일도 없던 것으로 읽는다</h3>
+<p class="lead">Go 서버는 시작 전 오류도 200 SSE 의 <code>data: {"error": …}</code> 로 보냈습니다(<a href="#p13-rest-sse-err">스트림 오류</a>). 두 클라이언트는 <code>event: error</code> 가 붙은 이벤트만 오류로 봅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>클라이언트</th><th>오류로 보는 것</th><th>Go 서버의 <code>{"error": …}</code> 를 받으면</th></tr>
+<tr><td>파이썬</td><td><code>event_name == 'error'</code>(<code>client/transports/http_helpers.py:151</code>)</td><td>보통 이벤트로 보고 <code>Parse(sse_data, StreamResponse())</code>(<code>rest.py:387</code>) — 모르는 키 <code>error</code> 에서 protobuf 의 <code>ParseError</code></td></tr>
+<tr><td>TypeScript</td><td><code>event.type === "error"</code>(<code>client/index.js:6400</code>)</td><td><code>StreamResponse.fromJSON</code> 이 모르는 키를 버려 payload 가 빈 이벤트 하나 — 예외 없이 끝난다(<code>:1363</code>)</td></tr>
+<tr><td>Go</td><td><code>data</code> 안의 <code>error</code> 키(<code>internal/rest/rest.go</code> 의 <code>ParseStreamResponse</code>)</td><td><code>"task not found"</code> — Go 끼리는 맞는다</td></tr>
+</table>
+</div>
+<div class="warn"><b>TS 의 칸이 가장 위험하다</b> — 실패한 요청이 "빈 스트림" 으로 끝나 호출한 쪽은 실패를 모릅니다. 스펙(§11.7)이 스트림 속 오류의 꼴을 정하지 않은 빈자리에서 세 SDK 가 서로 다른 약속을 했습니다. 이런 어긋남을 모아 맞춰 보는 것은 16부입니다.</div>
+</article>
+
+<article class="card" id="p13-rest-cmp">
+<h3>세 SDK 비교 — HTTP+JSON 바인딩</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>서버에 달기</td><td><code>create_rest_routes(handler)</code></td><td><code>restHandler({requestHandler, userBuilder})</code></td><td><code>a2asrv.NewRESTHandler(h)</code></td></tr>
+<tr><td><code>/{tenant}</code> 경로</td><td>받는다</td><td>받는다</td><td>따로 <code>NewTenantRESTHandler</code></td></tr>
+<tr><td>응답 Content-Type</td><td>성공 a2a+json, 오류 json</td><td>둘 다 a2a+json</td><td>둘 다 json</td></tr>
+<tr><td>ErrorInfo <code>metadata</code></td><td><code>{}</code></td><td>없음</td><td><code>taskId</code>·<code>timestamp</code></td></tr>
+<tr><td>깨진 JSON 의 reason</td><td><code>INVALID_REQUEST</code></td><td><code>INVALID_PARAMS</code></td><td><code>PARSE_ERROR</code></td></tr>
+<tr><td>없는 경로</td><td>307(끝에 <code>/</code>)</td><td>404 HTML</td><td>404 글</td></tr>
+<tr><td>스트림 시작 전 오류</td><td>4xx JSON</td><td>4xx JSON</td><td>200 SSE + <code>data: {"error"}</code></td></tr>
+<tr><td>클라이언트에서 REST 켜기</td><td><code>supported_protocol_bindings</code></td><td>기본</td><td>기본</td></tr>
+<tr><td>클라이언트가 보내는 Content-Type</td><td colspan="3"><code>application/json</code></td></tr>
+<tr><td>클라이언트가 읽는 스트림 오류</td><td><code>event: error</code></td><td><code>event: error</code></td><td><code>data</code> 의 <code>error</code></td></tr>
+</table>
+</div>
+<div class="key"><b>본문은 같고 가장자리가 다르다</b> — 보내기·읽기·목록과 A2A 오류(§5.4)는 아홉 칸이 모두 맞았습니다. 어긋난 것은 스펙이 SHOULD 로 두거나(Content-Type) 아무 말도 하지 않은(일반 오류의 reason, 스트림 속 오류) 자리입니다.</div>
+</article>
+
+<article class="card" id="p13-ch2-sum">
+<h3>2장 정리 — HTTP+JSON(REST) ×3</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>서버에 다는 법?</td><td>JSON-RPC 처리기 자리에 REST 처리기 하나 — 요청 처리기는 그대로</td><td><a href="#p13-rest-srv-py">파이썬</a>·<a href="#p13-rest-srv-ts">TS</a>·<a href="#p13-rest-srv-go">Go</a></td></tr>
+<tr><td>본문과 답?</td><td>본문 = 요청 메시지, 답 = 응답 메시지(<code>{"task"}</code>, GetTask 는 Task 그대로)</td><td><a href="#p13-rest-send">보내기</a>·<a href="#p13-rest-get">읽기</a></td></tr>
+<tr><td>오류?</td><td>HTTP 상태 + <code>google.rpc.Status</code>, 뜻은 ErrorInfo 의 <code>reason</code></td><td><a href="#p13-rest-err-body">오류 본문</a></td></tr>
+<tr><td>세 서버가 다른 곳?</td><td>Content-Type, 일반 오류의 reason, 없는 경로, tenant 경로, 스트림 시작 전 오류</td><td><a href="#p13-rest-cmp">비교</a></td></tr>
+<tr><td>3×3 에서 깨진 칸?</td><td>Go 클라이언트 × TS 서버의 오류, 파이썬·TS 클라이언트 × Go 서버의 스트림 오류</td><td><a href="#p13-rest-matrix">3×3</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p13-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. TS 클라이언트로 Go REST 서버에 "없는 작업에 잇는 스트림" 을 보냈더니 <code>성공</code> 이 찍혔습니다. 서버는 무엇을 보냈고, 왜 TS 클라이언트는 그것을 오류로 알아보지 못했습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> Go 서버는 SSE 머리를 먼저 써서 <code>200 OK</code> + <code>text/event-stream</code> 으로 답하고, 오류를 <code>data: {"error": {… "reason": "TASK_NOT_FOUND"}}</code> 로 실었습니다 — <code>event: error</code> 줄 없이(<a href="#p13-rest-sse-err">스트림 오류</a>). TS 클라이언트는 <code>event: error</code> 인 이벤트만 오류로 보므로 이것을 보통 이벤트로 읽었고, <code>StreamResponse.fromJSON</code> 이 모르는 키 <code>error</code> 를 버려 빈 이벤트가 되었습니다(<a href="#p13-rest-matrix-sse">어긋남 표</a>).</div>
 </article>

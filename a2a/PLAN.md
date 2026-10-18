@@ -726,3 +726,33 @@ subagent task each.
   not measured; `p12-sig-go` attributes it to the comment. Verify in review.
 - Timing: `auth_watch.py` 3 s socket timeout (never fired), `chain.run` bus step 100 ms.
 - `make all SKEL=1` green (1268 slides, 1292 blocks, 0 mismatches, 0 notices); --check ×4.
+
+### Part 13 first half — 46 slides; part 13 split into 13_/13b_ (2026-10-18)
+- `13b_binding.html` + `order.txt` line added (placeholder). `13_binding.html` cover+intro
+  (2), ch1 equivalence + method table (13), ch2 HTTP+JSON ×3 (31). Examples
+  `ex/py/13/{http_rules,rest_agent,rest_raw,rest_client}.py`, `ex/ts/13/{rest_common,
+  rest_agent,rest_client}.ts` (registerHooks swaps `./common.ts` for agents/), `ex/go/13/
+  {restmount,rest_lodging,rest_catering,rest_client}` (`agent.go` symlink to the final
+  agent + `init()` that serves REST — input hashes still cover `ex/go/agents`), specs
+  `ex/run/13/{same,rest,stream,matrix}.run`; ports 11301–11346. No final agent changed.
+- Findings: **Go client can't read TS REST errors** — TS sends `application/a2a+json`, Go
+  `FromRESTError` only parses `application/json` (`internal/rest/rest.go:277`) → generic
+  ErrServerError; Go client treats any non-200 as error (`a2aclient/rest.go:131`) — TS 201/204
+  on push-config create/delete should fail (source only); **Go server sends stream-start
+  errors inside a 200 SSE** (`a2asrv/rest.go:277`) as `data: {"error":…}` without `event:
+  error` → py client protobuf ParseError (`client/transports/http_helpers.py:151`), TS client
+  silently ends with an empty event (`client/index.js:6400`); py/ts answer plain 4xx JSON;
+  Content-Type py success a2a+json / errors application/json, ts a2a+json;charset both, go
+  application/json always, no client sends a2a+json, TS sends Content-Type on bodiless GETs;
+  malformed JSON → 400 INVALID_ARGUMENT with reasons py INVALID_REQUEST / ts INVALID_PARAMS /
+  go PARSE_ERROR; unknown path → py 307 (`Mount('/{tenant}')` + redirect_slashes), ts express
+  HTML 404, go text 404; tenant path accepted by py/ts though the card declares none, Go
+  `NewRESTHandler` 404 (`// TODO: handle tenant`, `rest.go:50`, `NewTenantRESTHandler`
+  separate); proto `additional_bindings` give all 11 rules a `/{tenant}` twin absent from
+  §5.3/§11.3; REST error metadata py `{}`, ts none, go taskId+timestamp (closest to §11.6) but
+  leaks its error chain; py REST logs `Request error:` to stderr.
+- Spec: §11.1 SHOULD a2a+json (Go ignores it and its client breaks on it); no REST reasons
+  for non-A2A errors (§5.4/§11.6); error shape inside a stream undefined (§11.7).
+- Runner: one `--check` pass failed with "go 가 60초 안에 준비되지 않았다" on a prebuilt binary
+  while swap was 13.3 GB; four isolated reruns ~5 s each, never a content diff. Watch it.
+- `make all SKEL=1` green (1313 slides, 1346 blocks, 0 mismatches, 0 notices).
