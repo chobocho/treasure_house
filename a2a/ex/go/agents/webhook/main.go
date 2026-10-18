@@ -33,6 +33,7 @@ type event struct {
 	} `json:"artifact"`
 }
 
+// region: summary
 // summary: {"statusUpdate": {...}}
 // → "statusUpdate TASK_STATE_WORKING …"
 func summary(body map[string]event) string {
@@ -58,6 +59,9 @@ func summary(body map[string]event) string {
 	return ""
 }
 
+// endregion
+
+// region: hook
 func hook(w http.ResponseWriter, r *http.Request) {
 	var body map[string]event
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -74,6 +78,8 @@ func hook(w http.ResponseWriter, r *http.Request) {
 	mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// endregion
 
 func main() {
 	port := flag.Int("port", 0, "붙을 포트(필수)")

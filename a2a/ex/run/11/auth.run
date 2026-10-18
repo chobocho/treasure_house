@@ -1,0 +1,41 @@
+# 4장 — (1) authentication 을 단 설정: 세 SDK 서버가 웹훅에 무슨 머리를
+# 붙이는지 탭(11147)으로 본다. 중계기는 받기만 한다. (2) 토큰을 확인하는
+# 수신기 셋(hook_check, 토큰 tok-ok)에 맞는 토큰과 틀린 토큰을 보낸다.
+# 틀리면 401 — 그래도 작업은 끝까지 간다(GetTask).
+serve name=bus-py ready=tcp:11144 \
+      cmd="py:agents/bus.py --port 11144 --step-ms 1500"
+serve name=bus-ts ready=tcp:11145 \
+      cmd="ts:agents/bus.ts --port 11145 --step-ms 1500"
+serve name=bus-go ready=tcp:11146 \
+      cmd="go:agents/bus --port 11146 --step-ms 1500"
+serve name=check-py ready=tcp:11139 \
+      cmd="py:11/hook_check.py --port 11139 --token tok-ok"
+serve name=check-ts ready=tcp:11140 \
+      cmd="ts:11/hook_check.ts --port 11140 --token tok-ok"
+serve name=check-go ready=tcp:11149 \
+      cmd="go:11/hook_check --port 11149 --token tok-ok"
+serve name=relay ready=tcp:11148 cmd="py:11/relay.py --port 11148"
+tap   name=auth-wire listen=11147 target=11148
+run   cmd="py:11/notify.py http://127.0.0.1:11144/ \
+      http://127.0.0.1:11147/ http://127.0.0.1:11148/ tok-py \
+      --auth Bearer:hook-secret"
+run   cmd="py:11/notify.py http://127.0.0.1:11145/ \
+      http://127.0.0.1:11147/ http://127.0.0.1:11148/ tok-ts \
+      --auth Bearer:hook-secret"
+run   cmd="py:11/notify.py http://127.0.0.1:11146/ \
+      http://127.0.0.1:11147/ http://127.0.0.1:11148/ tok-go \
+      --auth Bearer:hook-secret"
+# 맞는 토큰 — 에이전트와 같은 언어의 수신기
+run   cmd="py:11/notify.py http://127.0.0.1:11144/ \
+      http://127.0.0.1:11148/11139 http://127.0.0.1:11148/ tok-ok"
+run   cmd="py:11/notify.py http://127.0.0.1:11145/ \
+      http://127.0.0.1:11148/11140 http://127.0.0.1:11148/ tok-ok"
+run   cmd="py:11/notify.py http://127.0.0.1:11146/ \
+      http://127.0.0.1:11148/11149 http://127.0.0.1:11148/ tok-ok"
+# 틀린 토큰 — 수신기를 하나씩 돌려 짝짓는다
+run   cmd="py:11/notify.py http://127.0.0.1:11144/ \
+      http://127.0.0.1:11148/11140 http://127.0.0.1:11148/ tok-bad"
+run   cmd="py:11/notify.py http://127.0.0.1:11145/ \
+      http://127.0.0.1:11148/11149 http://127.0.0.1:11148/ tok-bad"
+run   cmd="py:11/notify.py http://127.0.0.1:11146/ \
+      http://127.0.0.1:11148/11139 http://127.0.0.1:11148/ tok-bad"

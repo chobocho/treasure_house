@@ -578,3 +578,37 @@ subagent task each.
 - Timing: `resub.run`/`resume.run` run catering with `--step-ms 3000` (1000 flaked ~1/7);
   `paused.run` uses 2 s socket timeouts like `closes.run`. Revisit in review.
 - `make all SKEL=1` green (1037 slides, 1050 blocks, 0 mismatches); --check ×5 green.
+
+### Part 11 first half — 63 slides; runner ready timeout 60 s (2026-10-18)
+- `11b_push.html` + `order.txt` line added (placeholder). `11_push.html` cover+intro (2),
+  ch1 bus ×3 (13), ch2 polling (13), ch3 push config (16), ch4 webhook receivers ×3 (19).
+  Examples `ex/py/11/{poll,setup,relay,notify,hook_check}.py`, `ex/{ts,go}/11/{setup,
+  hook_check}`, specs `ex/run/11/{bus,poll,setup,cfgerr,hooks,auth}.run`; ports
+  11100–11149. Region markers only in bus ×3 (execute, cancel, main; go push existed) and
+  webhook ×3 (summary, hook/server). 185 captures re-run byte-identical.
+- Runner: `--check` failed 2 of 3 passes with "bus-py 가 15초 안에 준비되지 않았다" (swap;
+  no content diff) → `READY_TIMEOUT` 15 → 60 with a test (commit 66f04f11).
+- Findings: py stores an id-less push config under the task id and replaces same-id
+  configs (`push_notification_config_store.py:19`, `inmemory_…_store.py:56`) → inline +
+  id-less Create leaves one; ts randomUUID, go new UUID; inline config to a no-push agent —
+  py/ts silently drop (`default_request_handler_v2.py:364`, `server/index.js:3084`), go
+  -32003 with leaked "bug: …" text (`a2asrv/agentexec.go:174`); Create on unknown task
+  -32001 everywhere; config created after the task misses the SUBMITTED push (all three);
+  multi-config dispatch concurrent in py/ts, sequential map order in go
+  (`agentexec.go:513`); Content-Type py/go `application/json`, ts `application/a2a+json`
+  (§4.3.3); token header `X-A2A-Notification-Token` (Go SDK default
+  `A2A-Notification-Token`, `push/sender.go:40`; spec names none); AuthenticationInfo — py
+  sends token + Authorization, ts drops the token (`server/index.js:2665`); webhook 401 →
+  task still COMPLETED, no retry; py/go push after store update and wait for the webhook
+  (py before enqueuing to subscribers, `active_task.py:235`), ts fire-and-forget per-task
+  chain; Go `HTTPPushSender` blocks private networks by default (`sender.go:60`),
+  `FailOnError` → FAILED; client push defaults py `push_notification_config`, ts
+  `pushNotificationConfig` only with a taskId key (`client/index.js:5632`), go
+  `Config.PushConfig`; polling every 2 s = 7 GetTasks (3 wasted), 8 s misses 2 steps, TS
+  GetTask repeats the status message in history, historyLength 0 halves bytes.
+- Spec: §4.3.1/§3.1.7 name `PushNotificationConfig`, absent from v1.0.1 proto.
+- **Defect in our final Go bus agent:** `hookSender` ignores `cfg.Auth` (violates §4.3.3
+  MUST) and does not check the webhook status code → to be fixed in 11b ch8.
+- Timing: poll.run 1 s margin (500 ms flaked once), setup 2 s steps, hooks/auth 1.5 s steps;
+  push completion waits on relay `/wait` (event-based).
+- `make all SKEL=1` green (1099 slides, 1124 blocks, 0 mismatches); --check ×5 green.

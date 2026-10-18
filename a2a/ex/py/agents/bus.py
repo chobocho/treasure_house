@@ -77,6 +77,7 @@ class BusExecutor(AgentExecutor):
     def __init__(self, step_ms):
         self.step = step_ms / 1000  # 배차 단계 하나에 걸리는 시간
 
+    # region: execute
     async def execute(self, ctx: RequestContext, queue: EventQueue):
         _, up = await begin(ctx, queue)
         req = as_ints(data_of(ctx.message), "headcount", "nights")
@@ -107,6 +108,9 @@ class BusExecutor(AgentExecutor):
         print(f"[교통] 완료: {summary}", flush=True)
         await up.complete()
 
+    # endregion
+
+    # region: cancel
     async def cancel(self, ctx: RequestContext, queue: EventQueue):
         task = ctx.current_task
         print("[교통] 취소", flush=True)
@@ -115,12 +119,15 @@ class BusExecutor(AgentExecutor):
             up.new_agent_message([new_text_part("배차를 취소했습니다")])
         )
 
+    # endregion
+
 
 if __name__ == "__main__":
     args = parse_args(
         "보물상사 교통 에이전트",
         step_ms=("배차 단계 하나의 시간(ms)", 300),
     )
+    # region: main
     store = InMemoryPushNotificationConfigStore()
     serve(
         card(args.url),
@@ -131,3 +138,4 @@ if __name__ == "__main__":
             httpx.AsyncClient(), store
         ),
     )
+    # endregion

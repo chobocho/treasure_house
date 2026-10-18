@@ -1,0 +1,28 @@
+# 4장 — 교통 에이전트 셋이 푸시를 보내고 웹훅 수신기 셋(py·ts·go)이
+# 받는다. 에이전트 → 탭 → 시험 쪽 중계기 → 수신기 차례로 지나간다.
+# 탭은 SDK 서버가 보낸 POST 그대로를, 중계기는 끝 알림이 지나갔음을
+# 알려 준다(notify.py 가 그것을 기다린다). 경로의 /1114N 은 중계기가
+# 넘길 수신기의 포트다. 단계 하나 1.5초 — TS 서버가 찍는 "보냈다" 줄이
+# 단계 줄 사이에 늘 같은 자리에 오게 하는 여유다.
+serve name=bus-py ready=tcp:11132 \
+      cmd="py:agents/bus.py --port 11132 --step-ms 1500"
+serve name=bus-ts ready=tcp:11133 \
+      cmd="ts:agents/bus.ts --port 11133 --step-ms 1500"
+serve name=bus-go ready=tcp:11134 \
+      cmd="go:agents/bus --port 11134 --step-ms 1500"
+serve name=hook-py ready=tcp:11141 \
+      cmd="py:agents/webhook.py --port 11141"
+serve name=hook-ts ready=tcp:11142 \
+      cmd="ts:agents/webhook.ts --port 11142"
+serve name=hook-go ready=tcp:11143 \
+      cmd="go:agents/webhook --port 11143"
+serve name=relay ready=tcp:11138 cmd="py:11/relay.py --port 11138"
+tap   name=py-push listen=11135 target=11138
+tap   name=ts-push listen=11136 target=11138
+tap   name=go-push listen=11137 target=11138
+run   cmd="py:11/notify.py http://127.0.0.1:11132/ \
+      http://127.0.0.1:11135/11141 http://127.0.0.1:11138/ tok-py"
+run   cmd="py:11/notify.py http://127.0.0.1:11133/ \
+      http://127.0.0.1:11136/11142 http://127.0.0.1:11138/ tok-ts"
+run   cmd="py:11/notify.py http://127.0.0.1:11134/ \
+      http://127.0.0.1:11137/11143 http://127.0.0.1:11138/ tok-go"

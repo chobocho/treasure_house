@@ -1,10 +1,663 @@
 <article class="card section" id="p11">
 <p class="chnum">11부</p>
 <h2>푸시 알림·장기 작업·취소·목록</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">교통 에이전트 ×3 → GetTask 폴링의 값 → 푸시 설정 → 웹훅 수신기 ×3 → 설정 CRUD → CancelTask → ListTasks → 웹훅 보안</p>
 </article>
 
-<article class="card" id="p11-todo">
-<h3>푸시 알림·장기 작업·취소·목록</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p11-intro">
+<h3>스트림은 연결을 붙든 동안만 소식을 준다 — 이 부는 연결 없이 받는 두 길이다</h3>
+<p class="lead">교통 에이전트는 배차에 세 단계를 거칩니다. 클라이언트는 <code>returnImmediately</code> 로 작업 id 만 받아 두고(<a href="#p05-mode-rule">5부</a>) 자리를 뜹니다. 그 뒤의 소식을 받는 길은 둘 — 클라이언트가 묻거나(GetTask 폴링), 에이전트가 알려 주거나(푸시 알림, 웹훅)입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th></tr>
+<tr><td><a href="#p11-ch1">1장</a></td><td>교통 에이전트 ×3 — 바로 돌려주는 SUBMITTED Task, 3단계 배차, 아티팩트 <code>배차 확인서</code>, 세 서버 견주기</td></tr>
+<tr><td><a href="#p11-ch2">2장</a></td><td>폴링 — GetTask 를 되풀이해 묻는 값(물음 수, 늦음, 이력의 무게)</td></tr>
+<tr><td><a href="#p11-ch3">3장</a></td><td>푸시 설정 — <code>taskPushNotificationConfig</code> 와 CreateTaskPushNotificationConfig, 토큰, 세 SDK 서버가 설정으로 하는 일</td></tr>
+<tr><td><a href="#p11-ch4">4장</a></td><td>웹훅 수신기 ×3 — StreamResponse 몸통, 세 SDK 서버가 실제로 보내는 POST, 토큰 검사, AuthenticationInfo</td></tr>
+<tr><td>5장</td><td>푸시 설정 CRUD — Get·List·Delete</td></tr>
+<tr><td>6장</td><td>CancelTask — 진행 중 취소, 끝난 뒤 취소(-32002)</td></tr>
+<tr><td>7장</td><td>ListTasks — 필터와 페이지 토큰</td></tr>
+<tr><td>8장</td><td>웹훅 보안 — SSRF, 파이썬 SDK 의 <code>push_url_validator</code>, 서명과 토큰</td></tr>
+</table>
+</div>
+<div class="key"><b>이 부의 방식</b> — 완성 교통 에이전트 셋(파이썬·TS·Go)을 띄우고 와이어를 읽습니다. 새로 쓰는 것은 시험 쪽 도구 — SDK 없이 묻는 폴러(<a href="#p11-poll-code">2장</a>), 세 언어의 설정 클라이언트(<a href="#p11-cfg-py">3장</a>), 푸시가 지나간 것을 알려 주는 중계기(<a href="#p11-hook-relay">4장</a>), 토큰을 확인하는 수신기 ×3(<a href="#p11-hook-check">4장</a>)입니다.</div>
+</article>
+
+<!-- ==== 1장 교통 에이전트 ×3 ==== -->
+
+<article class="card" id="p11-ch1">
+<p class="chnum">1장</p>
+<h2>교통 에이전트 ×3</h2>
+<p class="chsub">약속 → 파이썬 → TypeScript → Go → 푸시 배선 → 세 언어 비교 → ask 로 받기 → 세 서버의 대본 → 다른 요청 둘 → 저장된 Task 셋</p>
+</article>
+
+<article class="card" id="p11-bus-contract">
+<h3>교통 에이전트의 약속 — 받자마자 SUBMITTED, 단계마다 WORKING, 끝에 배차 확인서</h3>
+<p class="lead"><code>deck/SCENARIO.md</code> 가 정한 몫입니다. 버스를 고르는 규칙은 <code>workshop</code> 의 <code>choose_buses</code> 이고, 오래 걸리는 일을 흉내 내려고 단계 사이를 <code>--step-ms</code>(기본 300ms)만큼 쉽니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>차례</th><th>무엇을 싣나</th><th>A2A 로는</th></tr>
+<tr><td>처음</td><td>받은 일</td><td><code>task</code> — SUBMITTED. <code>returnImmediately</code> 면 여기서 답이 나간다</td></tr>
+<tr><td>단계마다(셋)</td><td><code>배차 요청 접수</code> → <code>기사 배정</code> → <code>차량 확정</code></td><td><code>statusUpdate</code> — WORKING + 글 파트</td></tr>
+<tr><td>다 끝나면</td><td>고른 버스와 요약</td><td><code>artifactUpdate</code> — <code>bus-booking</code> <code>배차 확인서</code>(데이터 파트 + 글 파트)</td></tr>
+<tr><td>끝</td><td>—</td><td><code>statusUpdate</code> — COMPLETED</td></tr>
+<tr><td>못 하면</td><td>까닭</td><td><code>statusUpdate</code> — REJECTED</td></tr>
+</table>
+</div>
+<div class="note"><b>카드에 두 기능</b> — 교통 에이전트의 카드만 <code>capabilities</code> 에 <code>streaming</code> 과 <code>pushNotifications</code> 를 둘 다 켭니다. 푸시 기능이 없는 카드에 설정을 만들면 -32003 이라는 것은 <a href="#p03-caps-push">3부</a>에서 봤습니다. 취소(CANCELED)는 6장입니다.</div>
+</article>
+
+<article class="card" id="p11-bus-py">
+<h3>파이썬 — 단계마다 <code>asyncio.sleep</code> 한 번, <code>update_status</code> 한 번</h3>
+<p class="lead"><code>agents/bus.py</code> 의 실행기입니다. <code>begin</code> 이 SUBMITTED Task 를 싣는 것은 다른 완성 에이전트와 같습니다(<a href="#p07-lg-final">7부</a>).</p>
+<!--CODE file=ex/py/agents/bus.py region=execute-->
+<ul>
+<li>단계 이름은 코드에 없습니다 — <code>workshop()["busSteps"]</code>, 곧 <code>ex/fixtures/workshop.json</code> 에서 읽습니다. 세 언어가 같은 낱말을 찍는 까닭입니다.</li>
+<li>아티팩트 하나에 파트 둘 — 프로그램이 읽을 <code>new_data_part(plan)</code> 과 사람이 읽을 요약 글입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-bus-ts">
+<h3>TypeScript — <code>up.pause</code> 가 false 면 그대로 돌아간다</h3>
+<p class="lead"><code>agents/bus.ts</code> 의 같은 자리입니다. <code>Updater</code>(<a href="#p10-cat-ts-up">10부</a>)의 <code>status</code>·<code>artifact</code> 는 버스에 싣고 곧 돌아옵니다.</p>
+<!--CODE file=ex/ts/agents/bus.ts region=execute-->
+<div class="note"><b>쉬는 자리가 취소를 듣는 자리</b> — 파이썬은 <code>asyncio.sleep</code> 이 취소되며 끊기고, TS 는 <code>pause</code> 가 <code>false</code> 를 돌려주면 실행기가 스스로 돌아갑니다. 취소가 실제로 어떻게 닿는지는 6장의 몫입니다.</div>
+</article>
+
+<article class="card" id="p11-bus-go">
+<h3>Go — <code>common.Sleep(ctx, …)</code> 이 false 면 멈춘다</h3>
+<p class="lead"><code>agents/bus/main.go</code> 의 <code>Execute</code> 입니다. 반복자 안에서 단계마다 <code>up.Status</code> 로 이벤트를 <code>yield</code> 합니다(<a href="#p09-ex-drive">9부</a>).</p>
+<!--CODE file=ex/go/agents/bus/main.go region=execute-->
+<ul>
+<li>요청의 <code>depart</code> 는 <code>req["depart"].(string)</code> — 없거나 <code>null</code> 이면 빈 문자열이 되어 <code>미정</code> 으로 바뀝니다. 파이썬·TS 는 <code>or</code>·<code>||</code> 한 번입니다.</li>
+<li>세 언어 모두 단계 줄을 <b>상태를 싣기 전에</b> 서버 출력에 찍습니다. 출력 줄이 곧 "이 단계에 들어섰다" 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-bus-wiring">
+<h3>푸시 배선은 서버를 띄우는 자리에 — 설정 저장소 하나와 보내는 것 하나</h3>
+<p class="lead">실행기는 푸시를 모릅니다. 실행기가 실은 이벤트를 요청 처리기가 저장하고, 설정이 있으면 웹훅에 보냅니다. 세 언어의 <code>main</code> 입니다.</p>
+<!--CODE file=ex/py/agents/bus.py region=main note=파이썬 — 저장소와 보내는 것을 serve 에 넘긴다-->
+<!--CODE file=ex/ts/agents/bus.ts region=main note=TypeScript — push 에 두 개짜리 배열-->
+<!--CODE file=ex/go/agents/bus/main.go region=main note=Go — 처리기 옵션 WithPushNotifications-->
+<div class="note"><b>Go 만 보내는 것이 우리 코드</b> — 파이썬·TS 는 SDK 의 기본 보내기(<code>BasePushNotificationSender</code>·<code>DefaultPushNotificationSender</code>)를 쓰고, Go 는 SDK 의 <code>HTTPPushSender</code> 대신 직접 짠 <code>hookSender</code> 를 씁니다. 까닭과 그 대가는 <a href="#p11-hook-wire-go">4장</a>에서 봅니다.</div>
+</article>
+
+<article class="card" id="p11-bus-code-cmp">
+<h3>세 언어 비교 — 같은 세 단계, 쉬기와 푸시 배선이 다르다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>단계 사이 쉬기</td><td><code>await asyncio.sleep(self.step)</code></td><td><code>await up.pause(this.stepMs)</code> — 취소면 <code>false</code></td><td><code>common.Sleep(ctx, e.stepMs)</code> — 취소면 <code>false</code></td></tr>
+<tr><td>단계 하나</td><td><code>up.update_status(WORKING, msg)</code></td><td><code>up.status(WORKING, [part])</code></td><td><code>up.Status(a2a.TaskStateWorking, part)</code></td></tr>
+<tr><td>배차 확인서</td><td><code>add_artifact(…, artifact_id="bus-booking")</code></td><td><code>up.artifact(…, {id: "bus-booking"})</code></td><td><code>up.Artifact(…, common.Chunk{ID: "bus-booking"}, …)</code></td></tr>
+<tr><td>설정 저장소</td><td><code>InMemoryPushNotificationConfigStore</code></td><td><code>InMemoryPushNotificationStore</code></td><td><code>push.NewInMemoryStore()</code></td></tr>
+<tr><td>보내는 것</td><td>SDK <code>BasePushNotificationSender</code>(httpx)</td><td>SDK <code>DefaultPushNotificationSender</code>(fetch)</td><td>우리 <code>hookSender</code>(<code>net/http</code>)</td></tr>
+</table>
+</div>
+<div class="key"><b>푸시는 실행기 밖의 일</b> — 세 실행기 어디에도 웹훅 주소가 없습니다. 같은 실행기가 폴링하는 클라이언트에게도, 스트림 클라이언트에게도, 웹훅에게도 그대로 쓰입니다.</div>
+</article>
+
+<article class="card" id="p11-bus-run">
+<h3>ask 로 받기 — 카드에 streaming 이 있으니 세 단계가 하나씩 흘러온다</h3>
+<p class="lead">총무팀 CLI(<code>ask</code>, 파이썬 SDK 클라이언트)로 세 서버에 30명·1박·강남역 출발을 맡겼습니다. 스트림의 읽기는 <a href="#p10-ch1">10부</a>에서 했으니, 여기서는 줄만 봅니다.</p>
+<!--SPEC file=ex/run/11/bus.run-->
+<!--OUT file=out/11/bus.txt part=터미널 4 lines=1-18 note=파이썬 서버-->
+</article>
+
+<article class="card" id="p11-bus-run3">
+<h3>세 서버의 대본이 글자까지 같다 — 서버 출력의 단계 줄도 같다</h3>
+<p class="lead">TS·Go 서버에 보낸 같은 요청의 줄입니다. 데이터 파트의 여러 줄은 빼고, 명령·상태·아티팩트 요약 줄만 골랐습니다.</p>
+<!--OUT file=out/11/bus.txt part=터미널 4 lines=19-54 grep=^\[|^task|^status|^artifact|^\} note=TypeScript·Go 서버-->
+<!--OUT file=out/11/bus.txt server=bus-ts note=TS 서버의 출력-->
+<ul>
+<li><code>45인승 1대, 2일, 1,200,000원</code> 은 골든 벡터(<code>ex/fixtures/golden/domain.json</code>)의 이야기 숫자 1,200,000 과 같습니다.</li>
+<li>스트림이 아니라 푸시로 받아도 같은 여섯 이벤트가 오는지는 <a href="#p11-hook-out">4장</a>에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-bus-more">
+<h3>다른 요청 둘 — 70명이면 두 대·사흘, 0명이면 Task 다음에 바로 REJECTED</h3>
+<p class="lead">Go 서버에 70명·2박(출발지 없음)을, 파이썬 서버에 0명을 보냈습니다.</p>
+<!--OUT file=out/11/bus.txt part=터미널 4 lines=55-79 grep=^\[|^task|^status|^artifact|"costPerDay"|"days"|^\}-->
+<ul>
+<li>70명은 45인승과 25인승 한 대씩(하루 1,050,000원 × 3일) — <code>vehicles</code> 는 45인승을 앞에 둡니다(SCENARIO §2.7). 출발지가 없으면 <code>출발 미정</code>.</li>
+<li>0명은 단계를 하나도 밟지 않았습니다. <code>choose_buses</code> 가 먼저 거절하니, 실행기가 쉬지도 않고 REJECTED 를 싣습니다 — 거절은 오래 걸리지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-bus-stored">
+<h3>저장된 Task 셋 — 같은 COMPLETED, 이력 넷, 다른 것은 수의 모양</h3>
+<p class="lead"><a href="#p11-ch2">2장</a>의 폴러가 마지막에 받은 GetTask 답(이력 제한 없음)입니다. 파이썬 서버의 아티팩트와, Go 서버의 같은 자리입니다.</p>
+<!--OUT file=out/11/poll.txt wire=py-wire ex=5 lines=14-46 note=파이썬 서버 — 아티팩트-->
+<!--OUT file=out/11/poll.txt wire=go-wire ex=5 grep="costPerDay"|"days"|"total"|"count" note=Go 서버 — 같은 수-->
+<ul>
+<li>파이썬 서버는 데이터 파트의 수를 <code>600000.0</code>·<code>2.0</code> 으로 냅니다 — protobuf <code>Struct</code> 의 수는 double 입니다(<a href="#p04-data-wire">4부</a>). TS·Go 는 <code>600000</code>.</li>
+<li>이력은 셋 다 넷 — 사용자 메시지 하나와 단계 글 셋입니다. 단계 글을 이력에 언제 옮기는지는 서버마다 달라(<a href="#p05-ir-hist-cmp">5부</a>), 도중에 물으면 이력의 길이가 다릅니다(<a href="#p11-poll-three">2장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p11-ch1-sum">
+<h3>1장 정리 — 교통 에이전트 ×3</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>무엇을 싣나?</td><td>SUBMITTED Task → WORKING 셋(<code>배차 요청 접수</code>·<code>기사 배정</code>·<code>차량 확정</code>) → <code>배차 확인서</code> → COMPLETED</td><td><a href="#p11-bus-contract">약속</a></td></tr>
+<tr><td>세 실행기의 차이?</td><td>쉬는 손(<code>sleep</code>·<code>pause</code>·<code>Sleep(ctx)</code>)과 이벤트를 싣는 손뿐</td><td><a href="#p11-bus-code-cmp">비교</a></td></tr>
+<tr><td>푸시는 어디서?</td><td>서버를 띄우는 자리 — 설정 저장소 + 보내는 것. Go 의 보내는 것만 우리 코드</td><td><a href="#p11-bus-wiring">배선</a></td></tr>
+<tr><td>세 서버의 답은?</td><td>같은 여섯 이벤트, 같은 대본. 저장된 Task 의 수 모양만 파이썬이 double</td><td><a href="#p11-bus-run3">대본</a>·<a href="#p11-bus-stored">Task</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p11-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 교통 에이전트에 0명을 맡기면서 <code>returnImmediately</code> 를 켜면, 클라이언트가 받는 Task 의 상태는 무엇이고 그 뒤에 무엇이 일어납니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 받는 것은 SUBMITTED 입니다 — 세 서버 모두 실행기의 첫 Task 에서 답을 냅니다(<a href="#p05-mode-wire-cmp">5부</a>). 그 직후 실행기가 쉬지 않고 REJECTED 를 싣습니다(<a href="#p11-bus-more">0명의 대본</a>에서 <code>task SUBMITTED</code> 바로 다음이 <code>status REJECTED</code>). 그러니 클라이언트는 다음에 물을 때 이미 끝난 작업을 보게 됩니다.</div>
+</article>
+
+<!-- ==== 2장 폴링 ==== -->
+
+<article class="card" id="p11-ch2">
+<p class="chnum">2장</p>
+<h2>폴링 — GetTask 반복과 그 비용</h2>
+<p class="chsub">스펙의 폴링 → 계획표로 묻는 폴러 → 실행 명세 → 2초마다 → 못 본 단계 → 세 서버 → 8초마다 → 탭의 한 번 → historyLength 0 → 값의 표</p>
+</article>
+
+<article class="card" id="p11-poll-rule">
+<h3>폴링은 가장 쉬운 길이고, 스펙도 그 값을 적어 두었다 — 늦고, 헛물음이 생긴다</h3>
+<p class="lead">§3.1.3 은 GetTask 를 "typically used for polling the status of a task initiated with Send Message" 라고 소개합니다. §3.5.1 은 세 전달 방식을 나란히 놓고 폴링을 이렇게 적습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>§3.5.1 Polling (Get Task)</th><th>이 장에서 재는 것</th></tr>
+<tr><td>"Client periodically calls Get Task"</td><td>물음의 간격 — 2초와 8초</td></tr>
+<tr><td>"Simple to implement, works with all protocol bindings"</td><td>폴러는 JSON-RPC 요청 두 가지(SendMessage·GetTask)뿐</td></tr>
+<tr><td>"Higher latency, potential for unnecessary requests"</td><td>단계를 늦게 보거나 아예 못 보는 것, 바뀐 것 없는 답</td></tr>
+<tr><td>"Best for: Simple integrations, infrequent updates, clients behind restrictive firewalls"</td><td>들어오는 연결을 받을 수 없는 클라이언트 — 웹훅과의 차이(<a href="#p11-ch4">4장</a>)</td></tr>
+</table>
+</div>
+<div class="note"><b>시계로 재지 않는다</b> — "얼마나 늦나" 를 밀리초로 찍으면 이 기계에서는 실행마다 달라집니다. 이 장은 <b>몇 번 물었고, 그중 몇 번이 새 소식이었고, 몇 바이트를 받았나</b>를 셉니다. 그 수가 실행마다 같도록 묻는 때를 계획표로 정합니다(다음 슬라이드).</div>
+</article>
+
+<article class="card" id="p11-poll-code">
+<h3>계획표로 묻는 폴러 — n 번째 물음은 받은 뒤 1초 + n × 간격</h3>
+<p class="lead"><code>11/poll.py</code> 는 SDK 없이 urllib 으로 SendMessage(<code>returnImmediately</code>) 한 번, 그다음 GetTask 를 되풀이합니다. 묻는 고리입니다.</p>
+<!--CODE file=ex/py/11/poll.py region=poll-->
+<ul>
+<li>교통 에이전트는 단계 하나에 4초(<code>--step-ms 4000</code>), 물음은 받은 뒤 1초부터 2초의 배수마다 — 물음과 단계 경계가 늘 1초 떨어집니다. 이 기계가 잠깐 느려져도 어느 물음이 어느 단계를 보는지가 바뀌지 않게 하려는 것입니다.</li>
+<li>몸통의 바이트 수는 <code>"timestamp"</code> 를 빼고 셉니다 — 시각 문자열은 끝의 0 을 줄여 써서(<a href="#p04-pj-time">4부</a>) 순간마다 길이가 다릅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-poll-spec">
+<h3>실행 명세 — 서버 셋에 세 가지로 묻는다</h3>
+<p class="lead">2초마다·8초마다·historyLength 0 으로 2초마다. 8초마다 묻는 것만 탭을 지나 와이어를 남깁니다.</p>
+<!--SPEC file=ex/run/11/poll.run-->
+<div class="note"><b>먼저 한 번 데운다</b> — 서버의 첫 작업은 답이 늦게 나와(처음 쓰는 길을 데우는 중) 계획표가 밀릴 수 있습니다. 그래서 폴러는 시작하자마자 곧장 거절될 0명 요청을 한 번 보냅니다. 서버 출력의 <code>[교통] 거절</code> 줄이 그것입니다.</div>
+</article>
+
+<article class="card" id="p11-poll-fast">
+<h3>2초마다 물으면 일곱 번 — 그중 셋은 바뀐 것 없는 답이다</h3>
+<p class="lead">파이썬 서버에 2초 간격으로 물은 결과입니다. 줄마다 물음 번호, 받은 몸통 바이트, 이력의 메시지 수, 새 소식인지, 상태와 글입니다.</p>
+<!--OUT file=out/11/poll.txt part=터미널 7 lines=1-10-->
+<ul>
+<li>1·2번은 SUBMITTED, 3·4번은 <code>배차 요청 접수</code>, 5·6번은 <code>기사 배정</code> — 짝수 번째 물음은 모두 <code>그대로</code> 입니다. 단계 하나(4초)에 두 번 물으니 하나는 헛물음입니다.</li>
+<li>답은 물을수록 무거워집니다 — 397B 에서 1280B. 끝의 GetTask 는 아티팩트와 이력 넷을 통째로 싣습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-poll-miss">
+<h3><code>차량 확정</code> 은 한 번도 보지 못했다 — 폴링은 지나간 상태를 놓친다</h3>
+<p class="lead">세 번째 단계 글은 1장의 스트림에는 있었는데(<a href="#p11-bus-run">ask</a>) 폴러의 일곱 줄에는 없습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>받은 뒤</th><th>서버에서 일어난 일</th><th>폴러가 본 것</th></tr>
+<tr><td>0초</td><td>SUBMITTED</td><td>(1초·3초) SUBMITTED</td></tr>
+<tr><td>4초</td><td>WORKING <code>배차 요청 접수</code></td><td>(5초·7초) 그것</td></tr>
+<tr><td>8초</td><td>WORKING <code>기사 배정</code></td><td>(9초·11초) 그것</td></tr>
+<tr><td>12초</td><td>WORKING <code>차량 확정</code> → 배차 확인서 → COMPLETED — 한꺼번에</td><td>(13초) COMPLETED</td></tr>
+</table>
+</div>
+<div class="key"><b>GetTask 는 "지금" 만 준다</b> — 마지막 단계는 실행기가 쉬지 않고 아티팩트와 COMPLETED 를 이어 싣기 때문에 1밀리초도 "지금" 이었던 적이 없습니다. 폴러가 아무리 자주 물어도 그 사이에 끼어들 수 없습니다. 지나간 단계 글은 이력에 남아 있을 뿐입니다(13초의 <code>history 4</code>).</div>
+</article>
+
+<article class="card" id="p11-poll-three">
+<h3>세 서버 — 같은 일곱 번, 이력의 길이와 바이트는 서버마다</h3>
+<p class="lead">TS·Go 서버에 같은 계획표로 물었습니다.</p>
+<!--OUT file=out/11/poll.txt part=터미널 7 lines=11-30-->
+<ul>
+<li><b>TS 는 3번(첫 WORKING)부터 이력이 둘</b> — 상태 글을 받는 즉시 이력에도 붙이기 때문입니다(<a href="#p05-ir-hist-cmp">5부</a>). 그래서 TS 의 GetTask 는 지금의 단계 글을 <code>status.message</code> 와 <code>history</code> 에 두 번 싣습니다(<a href="#p11-poll-wire">탭</a>). 파이썬·Go 는 다음 상태가 올 때 옮깁니다.</li>
+<li>Go 가 가장 가볍습니다(합계 4246B). 같은 3번 답이 파이썬 620B, Go 518B — 차이의 대부분은 Go 가 이력의 사용자 메시지에 <code>contextId</code>·<code>taskId</code> 를 채우지 않는 것(<a href="#p10-wire-first">10부</a>)과 파이썬의 <code>30.0</code> 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-poll-slow">
+<h3>8초마다 물으면 세 번 — 물음은 줄지만 단계 둘을 놓치고, 끝도 늦게 안다</h3>
+<p class="lead">간격만 8초로 바꿨습니다(탭을 지나는 판).</p>
+<!--OUT file=out/11/poll.txt part=터미널 7 lines=31-48-->
+<ul>
+<li>세 서버 모두 SUBMITTED → <code>기사 배정</code> → COMPLETED. <code>배차 요청 접수</code> 와 <code>차량 확정</code> 은 못 봤습니다.</li>
+<li>헛물음은 없어졌지만, 작업은 12초에 끝났는데 폴러는 17초에야 압니다. 간격이 길수록 끝을 아는 것이 최대 그 간격만큼 늦습니다 — §3.5.1 의 "Higher latency" 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-poll-wire">
+<h3>탭에 남은 GetTask 한 번 — 요청은 id 하나, 답은 Task 통째</h3>
+<p class="lead">TS 서버에 둘째로 물은 GetTask(<code>기사 배정</code>)입니다.</p>
+<!--OUT file=out/11/poll.txt wire=ts-wire ex=4 lines=1-34 note=요청과 답의 앞부분-->
+<!--OUT file=out/11/poll.txt wire=ts-wire ex=4 grep="state"|"history"|"messageId"|"text" note=같은 답에서 messageId 와 글만 — status 의 &lt;id14&gt; 가 history 에도-->
+<div class="note"><b>바뀐 것이 없어도 통째로</b> — GetTask 에는 "지난번 이후로 바뀐 것만" 을 청하는 필드가 없습니다(<code>GetTaskRequest</code> 는 <code>tenant</code>·<code>id</code>·<code>history_length</code> 셋). 줄일 수 있는 것은 이력뿐이고, 그것이 다음 슬라이드입니다.</div>
+</article>
+
+<article class="card" id="p11-poll-hl">
+<h3><code>historyLength: 0</code> 이면 몸통이 절반 아래로 — 줄이는 것은 이력뿐</h3>
+<p class="lead">같은 2초 계획표에 <code>"historyLength": 0</code> 을 붙였습니다. §3.2.4 "0: No history should be returned" — 세 서버의 그 뜻은 <a href="#p05-hl-cmp">5부</a>에서 봤습니다.</p>
+<!--OUT file=out/11/poll.txt part=터미널 7 lines=49-78 grep=^\[|^ 7|^GetTask-->
+<ul>
+<li>세 서버 모두 <code>history 0</code>, 합계는 4968·5774·4246B 에서 2337·2329·2336B 로 — 서버마다 달랐던 무게가 거의 같아졌습니다. 이력의 모양 차이가 사라졌기 때문입니다.</li>
+<li>남는 차이는 마지막 답의 아티팩트(427·419·420B)뿐 — 파이썬의 <code>600000.0</code> 같은 수 모양입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-poll-cost">
+<h3>폴링의 값 — 자주 물으면 헛물음, 드물게 물으면 늦음과 놓침</h3>
+<p class="lead">파이썬 서버에서 센 수입니다(한 작업, 단계 넷의 변화).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>묻는 법</th><th>물음</th><th>새 소식</th><th>헛물음</th><th>못 본 단계 글</th><th>받은 몸통</th></tr>
+<tr><td>2초마다</td><td>7</td><td>4</td><td>3</td><td><code>차량 확정</code></td><td>4968B</td></tr>
+<tr><td>8초마다</td><td>3</td><td>3</td><td>0</td><td><code>배차 요청 접수</code>·<code>차량 확정</code></td><td>2504B</td></tr>
+<tr><td>2초마다 + historyLength 0</td><td>7</td><td>4</td><td>3</td><td><code>차량 확정</code></td><td>2337B</td></tr>
+</table>
+</div>
+<div class="key"><b>간격으로는 둘 다 잡을 수 없다</b> — 헛물음을 줄이면 늦어지고, 늦음을 줄이면 헛물음이 늡니다. 무엇을 골라도 "마지막 순간의 상태" 는 볼 수 없습니다. 변화가 있을 때만, 변화마다 한 번 오게 하려면 방향을 뒤집어야 합니다 — 에이전트가 알려 주는 푸시입니다(<a href="#p11-ch3">3장</a>). 스트림(<a href="#p10-ch5">10부</a>)도 변화마다 오지만 연결을 붙들고 있어야 합니다.</div>
+</article>
+
+<article class="card" id="p11-ch2-sum">
+<h3>2장 정리 — 폴링</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>폴링이란?</td><td><code>returnImmediately</code> 로 id 를 받고 GetTask 를 되풀이 — 어느 바인딩에서도 된다</td><td>§3.1.3·§3.5.1</td></tr>
+<tr><td>값은?</td><td>간격의 절반쯤은 헛물음이거나, 그만큼 늦게 안다. 바로 지나간 상태는 못 본다</td><td><a href="#p11-poll-fast">2초</a>·<a href="#p11-poll-slow">8초</a>·<a href="#p11-poll-miss">놓침</a></td></tr>
+<tr><td>무게는?</td><td>답마다 Task 통째 — 이력이 늘수록 무겁다. TS 는 지금 글을 두 번 싣는다</td><td><a href="#p11-poll-three">세 서버</a></td></tr>
+<tr><td>줄이려면?</td><td><code>historyLength: 0</code> — 세 서버 모두 이력을 빼고, 몸통이 절반 아래로</td><td><a href="#p11-poll-hl">hl 0</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p11-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. "0.1초마다 물으면 <code>차량 확정</code> 도 보일 것" 이라고 생각한 동료가 있습니다. 맞습니까? 놓친 단계 글을 폴링으로 되찾을 길은 있습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 맞지 않습니다. <code>차량 확정</code> 뒤에 실행기가 쉬지 않고 아티팩트와 COMPLETED 를 실으므로, 그 상태가 GetTask 의 "지금" 이었던 순간이 없습니다(<a href="#p11-poll-miss">못 본 단계</a>). 되찾는 길은 이력입니다 — 끝난 뒤의 GetTask 는 세 서버 모두 이력에 단계 글 셋을 다 담았습니다(<a href="#p11-poll-fast">13초의 <code>history 4</code></a>, <a href="#p11-bus-stored">저장된 Task</a>). 다만 이력에 무엇을 남길지는 에이전트가 정합니다(§3.7).</div>
+</article>
+
+<!-- ==== 3장 푸시 설정 ==== -->
+
+<article class="card" id="p11-ch3">
+<p class="chnum">3장</p>
+<h2>푸시 설정</h2>
+<p class="chsub">설정의 모양 → 다는 길 둘 → 파이썬 → TypeScript → Go → 클라이언트 비교 → 실행과 도착 → 세 클라이언트 → 와이어의 설정 → Create 의 답 → id 를 안 주면 → 없는 작업 → 기능 없는 카드</p>
+</article>
+
+<article class="card" id="p11-cfg-shape">
+<h3>푸시 설정은 주소 하나와 그것을 지킬 값 — <code>TaskPushNotificationConfig</code></h3>
+<p class="lead">proto 의 메시지입니다. 필수는 <code>url</code> 하나(<code>REQUIRED</code>)뿐입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드</th><th>proto 주석(줄임)</th><th>누가 채우나</th></tr>
+<tr><td><code>tenant</code></td><td>카드 인터페이스의 tenant 와 같아야 한다</td><td>클라이언트(이 덱은 비움)</td></tr>
+<tr><td><code>id</code></td><td>"A unique identifier (e.g. UUID) for this push notification configuration"</td><td>클라이언트가 줄 수 있고, 없으면 서버가(<a href="#p11-cfg-noid">뒤에서</a>)</td></tr>
+<tr><td><code>taskId</code></td><td>이 설정이 붙은 작업</td><td>Create 는 클라이언트, SendMessage 에 실을 때는 비운다</td></tr>
+<tr><td><code>url</code> (필수)</td><td>"The URL where the notification should be sent"</td><td>클라이언트 — 웹훅 주소</td></tr>
+<tr><td><code>token</code></td><td>"A token unique for this task or session"</td><td>클라이언트 — 웹훅이 알아볼 표</td></tr>
+<tr><td><code>authentication</code></td><td><code>AuthenticationInfo</code> — <code>scheme</code>(필수)·<code>credentials</code></td><td>클라이언트 — 웹훅이 요구하는 HTTP 인증(<a href="#p11-hook-auth">4장</a>)</td></tr>
+</table>
+</div>
+<div class="warn"><b>스펙 본문의 이름은 proto 에 없다</b> — §4.3.1 의 제목과 표는 <code>PushNotificationConfig</code> 이고(<code>proto_to_table("PushNotificationConfig")</code>), §3.1.7·§3.1.8 의 Outputs 도 그 이름을 씁니다. 그러나 v1.0.1 의 <code>a2a.proto</code> 에는 그런 메시지가 없고 <code>TaskPushNotificationConfig</code> 하나뿐입니다. 세 SDK 도 그 이름(Go 는 <code>a2a.PushConfig</code>)을 씁니다.</div>
+</article>
+
+<article class="card" id="p11-cfg-two">
+<h3>다는 길은 둘 — 보내는 요청에 싣거나, 받은 작업에 Create 로</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>요청에 싣기</th><th>CreateTaskPushNotificationConfig</th></tr>
+<tr><td>자리</td><td><code>SendMessageConfiguration.taskPushNotificationConfig</code>(§3.2.2)</td><td>별도 메서드(§3.1.7) — 몸이 곧 <code>TaskPushNotificationConfig</code></td></tr>
+<tr><td>작업 id</td><td>아직 없다 — proto: "Task id should be empty when sending this configuration in a <code>SendMessage</code> request"</td><td>필요하다 — "<code>TaskNotFoundError</code>: The task ID does not exist"</td></tr>
+<tr><td>언제부터 받나</td><td>첫 이벤트(SUBMITTED Task)부터</td><td>설정이 생긴 뒤의 이벤트부터</td></tr>
+<tr><td>기능 검사</td><td>§3.3.4 의 목록에 없다</td><td>"<b>MUST</b> return <code>PushNotificationNotSupportedError</code>"(Create·Get·List·Delete)</td></tr>
+</table>
+</div>
+<ul>
+<li>§3.1.7 Behavior: "The configuration <b>MUST</b> persist until task completion or explicit deletion." 지우기는 5장입니다.</li>
+<li>§3.2.2 는 <code>returnImmediately</code> 가 푸시 설정에는 아무 일도 하지 않는다고 적습니다 — 막는 호출이어도 푸시는 갑니다. 이 장은 둘을 함께 씁니다: id 를 곧장 받아 Create 를 하려고.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-cfg-py">
+<h3>파이썬 — 설정은 <code>TaskPushNotificationConfig</code>, Create 는 클라이언트 메서드 하나</h3>
+<p class="lead"><code>11/setup.py</code> 는 교통 에이전트에 설정 하나(토큰 <code>tok-inline</code>)를 실어 배차를 맡기고, 돌려받은 작업 id 로 설정 하나(<code>hook-2</code>, 토큰 <code>tok-create</code>)를 더 만듭니다.</p>
+<!--CODE file=ex/py/11/setup.py region=inline-->
+<!--CODE file=ex/py/11/setup.py region=create-->
+<div class="note"><b>같은 타입, 다른 자리</b> — 요청에 실을 때도, Create 의 몸에도 <code>TaskPushNotificationConfig</code> 를 씁니다. Create 쪽에만 <code>task_id</code> 가 있습니다.</div>
+</article>
+
+<article class="card" id="p11-cfg-ts">
+<h3>TypeScript — 여섯 필드를 다 적고, <code>createTaskPushNotificationConfig</code></h3>
+<p class="lead">ts-proto 타입이라 <code>authentication: undefined</code> 까지 적어야 타입 검사를 지납니다.</p>
+<!--CODE file=ex/ts/11/setup.ts region=inline-->
+<!--CODE file=ex/ts/11/setup.ts region=create-->
+<div class="note"><b>카드를 먼저 본다</b> — TS 클라이언트의 <code>createTaskPushNotificationConfig</code> 는 카드에 <code>pushNotifications</code> 가 없으면 보내지도 않고 오류를 냅니다(<a href="#p03-caps-client-ts">3부</a>). 교통 에이전트의 카드에는 있으니 보냅니다.</div>
+</article>
+
+<article class="card" id="p11-cfg-go">
+<h3>Go — <code>a2a.PushConfig</code> 하나로 두 자리, <code>CreateTaskPushConfig</code></h3>
+<!--CODE file=ex/go/11/setup/main.go region=inline-->
+<!--CODE file=ex/go/11/setup/main.go region=create-->
+<ul>
+<li>Go 의 요청 필드 이름은 <code>Config.PushConfig</code>, JSON 이름은 <code>taskPushNotificationConfig</code> 입니다(<code>a2a/core.go:780</code>).</li>
+<li><code>PushConfig.TaskID</code> 의 태그에 <code>omitempty</code> 가 없어, 요청에 실을 때 <code>"taskId": ""</code> 가 와이어에 나갑니다(<a href="#p11-cfg-wire">뒤에서</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p11-cfg-api">
+<h3>세 클라이언트 비교 — 이름은 셋, 하는 일은 하나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>설정 타입</td><td><code>TaskPushNotificationConfig</code></td><td><code>TaskPushNotificationConfig</code></td><td><code>a2a.PushConfig</code></td></tr>
+<tr><td>요청에 싣기</td><td><code>SendMessageConfiguration(task_push_notification_config=)</code></td><td><code>configuration.taskPushNotificationConfig</code></td><td><code>SendMessageConfig{PushConfig:}</code></td></tr>
+<tr><td>Create</td><td><code>create_task_push_notification_config(cfg)</code></td><td><code>createTaskPushNotificationConfig(cfg)</code></td><td><code>CreateTaskPushConfig(ctx, cfg)</code></td></tr>
+<tr><td>클라이언트 전체 기본값</td><td><code>ClientConfig.push_notification_config</code> — 요청에 설정이 없으면 채운다(<code>client/base_client.py:106</code>)</td><td><code>ClientConfig.pushNotificationConfig</code> — 다만 메시지에 <code>taskId</code> 키가 있을 때만(<code>client/index.js:5632</code>)</td><td><code>a2aclient.Config.PushConfig</code> — "to apply for every Task"(<code>a2aclient/client.go:30</code>)</td></tr>
+</table>
+</div>
+<div class="note"><b>기본값은 조심해서</b> — 클라이언트 전체에 웹훅을 걸어 두면 그 클라이언트가 보내는 모든 요청이 푸시를 청합니다. 푸시 기능이 없는 에이전트에 그런 요청이 가면 무슨 일이 나는지가 <a href="#p11-cfg-nocap">이 장 끝</a>입니다.</div>
+</article>
+
+<article class="card" id="p11-cfg-run">
+<h3>실행과 도착 — 요청에 실은 설정은 여섯 건, Create 한 설정은 다섯 건</h3>
+<p class="lead">웹훅 자리에는 시험 쪽 중계기(<code>11/relay.py</code>, <a href="#p11-hook-relay">4장</a>)를 두고, 클라이언트는 두 설정의 끝 알림이 다 지나간 뒤 중계기가 받은 것을 토큰별로 찍습니다. 단계 하나는 2초 — Create 가 첫 단계보다 먼저 닿게 하는 여유입니다.</p>
+<!--SPEC file=ex/run/11/setup.run-->
+<!--OUT file=out/11/setup.txt part=터미널 8 lines=1-15 note=파이썬 클라이언트 → 파이썬 서버-->
+</article>
+
+<article class="card" id="p11-cfg-out">
+<h3>세 서버가 같다 — Create 한 설정은 SUBMITTED Task 를 받지 못한다</h3>
+<!--OUT file=out/11/setup.txt part=터미널 8 lines=16-45 note=TS 클라이언트 → TS 서버, Go → Go-->
+<ul>
+<li><code>tok-inline</code> 은 <code>task SUBMITTED</code> 부터 여섯 건, <code>tok-create</code> 는 WORKING 부터 다섯 건 — 설정이 생기기 전의 이벤트는 다시 보내 주지 않습니다. 첫 Task 를 놓치지 않으려면 요청에 실어야 합니다.</li>
+<li>두 설정이 있으면 이벤트마다 두 번 POST 합니다. 클라이언트가 토큰으로 모아 찍은 까닭은 두 설정 사이의 도착 차례가 섞이기 때문입니다 — 파이썬은 <code>asyncio.gather</code>, TS 는 <code>Promise.all</code> 로 동시에 보내고(<code>base_push_notification_sender.py:80</code>, <code>server/index.js:2591</code>), Go 는 하나씩 보내되 설정을 맵에서 꺼내는 차례가 그때그때입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-cfg-wire">
+<h3>와이어의 설정 — <code>configuration</code> 안에 <code>returnImmediately</code> 와 나란히</h3>
+<p class="lead">세 클라이언트가 보낸 SendMessage 의 <code>configuration</code> 입니다.</p>
+<!--OUT file=out/11/setup.txt wire=py-wire ex=2 lines=21-28 note=파이썬-->
+<!--OUT file=out/11/setup.txt wire=ts-wire ex=2 lines=22-29 note=TypeScript-->
+<!--OUT file=out/11/setup.txt wire=go-wire ex=2 lines=8-15 note=Go-->
+<ul>
+<li>세 클라이언트 모두 같은 두 필드(<code>url</code>·<code>token</code>)를 보냈습니다. 빈 값을 쓰는지만 다릅니다 — Go 는 <code>"taskId": ""</code> 를 내보냅니다. 서버는 어차피 그 자리를 새 작업 id 로 채웁니다(TS 는 <code>pushConfig.taskId = taskId</code>, <code>server/index.js:3086</code>).</li>
+<li>답은 <a href="#p05-mode-wire">5부</a>와 같은 SUBMITTED Task 입니다. 설정을 받았다는 표시는 답에 없습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-cfg-create">
+<h3>Create 의 답은 저장된 설정 그대로 — 세 서버 모두 클라이언트가 준 id 를 지켰다</h3>
+<!--OUT file=out/11/setup.txt wire=py-wire ex=3 note=파이썬 서버-->
+<!--OUT file=out/11/setup.txt wire=go-wire ex=3 lines=15-26 note=Go 서버의 답(TS 도 같은 네 필드)-->
+<ul>
+<li>§3.1.7 Outputs: "Created configuration with assigned ID". <code>id</code> 를 준 요청에는 세 서버 모두 그 <code>hook-2</code> 를 그대로 돌려줬습니다.</li>
+<li>Go 의 답만 키 차례가 <code>taskId</code>·<code>id</code>·<code>token</code>·<code>url</code> — 구조체 필드 차례입니다(<a href="#p03-three-cards">3부</a>에서 본 Go 카드와 같은 까닭).</li>
+</ul>
+</article>
+
+<article class="card" id="p11-cfg-noid">
+<h3>id 를 주지 않으면 — 파이썬 서버는 작업 id 를 붙여, 둘째 설정이 첫째를 덮는다</h3>
+<p class="lead">Create 에도 <code>id</code> 를 주지 않고(<code>--no-id</code>) 파이썬 서버에 같은 일을 했습니다.</p>
+<!--OUT file=out/11/setup.txt part=터미널 8 lines=46-55-->
+<ul>
+<li>답의 <code>id</code> 가 작업 id 와 같습니다. 파이썬 SDK 는 빈 id 를 작업 id 로 채웁니다(<code>server/tasks/push_notification_config_store.py:19</code>) — 요청에 실은 첫 설정도 같은 id 를 받았고, 저장소는 "같은 id 면 지우고 새로" 둡니다(<code>inmemory_push_notification_config_store.py:56</code>).</li>
+<li>그래서 <code>tok-inline</code> 은 첫 Task 하나만 받고 끊겼습니다. TS 는 <code>crypto.randomUUID()</code>(<code>server/index.js:2488</code>), Go 는 새 UUID(<code>a2asrv/push/store.go:80</code>)를 붙이므로 둘 다 남습니다.</li>
+</ul>
+<div class="warn"><b>설정 id 는 클라이언트가 정해 두자</b> — 스펙은 빈 id 를 어떻게 채울지 정하지 않았습니다. 한 작업에 설정을 여럿 단다면 id 를 직접 주어야 서버에 따라 하나가 사라지지 않습니다. 설정 목록으로 이것을 다시 보는 것은 5장입니다.</div>
+</article>
+
+<article class="card" id="p11-cfg-unknown">
+<h3>없는 작업에 Create — 세 서버 모두 -32001, 문구만 셋</h3>
+<p class="lead">작업 <code>t-404</code> 에 설정을 만들라고 curl 로 보냈습니다(<code>rpc/create_unknown.json</code>). 교통 에이전트는 푸시 기능이 있으니, 이번에는 기능 검사를 지나 작업을 찾습니다.</p>
+<!--SPEC file=ex/run/11/cfgerr.run-->
+<!--OUT file=out/11/cfgerr.txt wire=bus-py-wire grep=^←|"code"|"message" note=파이썬-->
+<!--OUT file=out/11/cfgerr.txt wire=bus-ts-wire grep=^←|"code"|"message" note=TypeScript-->
+<!--OUT file=out/11/cfgerr.txt wire=bus-go-wire grep=^←|"code"|"message" note=Go-->
+</article>
+
+<article class="card" id="p11-cfg-nocap">
+<h3>기능 없는 카드에 설정을 단 SendMessage — 파이썬·TS 는 조용히 버리고, Go 는 -32003</h3>
+<p class="lead">푸시 기능이 없는 숙소 에이전트 셋에 설정을 단 막는 SendMessage 를 보냈습니다(<code>rpc/inline_lodging.json</code>). 마지막 줄은 그 뒤 중계기가 받은 것 전부입니다.</p>
+<!--OUT file=out/11/cfgerr.txt part=터미널 14 lines=3-4-->
+<!--OUT file=out/11/cfgerr.txt wire=lodging-py-wire grep=^←|"state" note=파이썬 — 일은 끝까지-->
+<!--OUT file=out/11/cfgerr.txt wire=lodging-ts-wire grep=^←|"state" note=TypeScript — 같다-->
+<!--OUT file=out/11/cfgerr.txt wire=lodging-go-wire grep=^←|"code"|"message": "e note=Go — 일을 시작도 안 했다-->
+<ul>
+<li>파이썬·TS 는 COMPLETED 를 돌려주고 푸시는 하나도 보내지 않았습니다(중계기 <code>{}</code>). 파이썬은 설정 저장소가 없으면, TS 는 카드에 기능이 없으면 설정을 건너뜁니다(<code>default_request_handler_v2.py:364</code>, <code>server/index.js:3084</code>). 클라이언트는 알 길이 없습니다.</li>
+<li>Go 는 실행기를 만들기 전에 막고 -32003 — 문구에 SDK 안쪽 말 <code>bug: message with push config received …</code> 이 새어 나옵니다(<code>a2asrv/agentexec.go:174</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p11-ch3-sum">
+<h3>3장 정리 — 푸시 설정, 세 SDK 서버가 하는 일</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬 SDK</th><th>TS SDK</th><th>Go SDK</th></tr>
+<tr><td>요청에 실은 설정</td><td>실행 전에 저장, 첫 Task 부터 보냄</td><td>같음</td><td>같음</td></tr>
+<tr><td>Create 의 답</td><td colspan="3">저장된 설정 그대로, 준 id 를 지킴. 그 뒤의 이벤트만 보냄</td></tr>
+<tr><td>빈 id</td><td>작업 id — 둘째가 첫째를 덮는다</td><td>무작위 UUID</td><td>새 UUID</td></tr>
+<tr><td>없는 작업에 Create</td><td colspan="3">-32001</td></tr>
+<tr><td>기능 없는 에이전트에 실은 설정</td><td>조용히 버림</td><td>조용히 버림</td><td>-32003(SDK 안쪽 문구)</td></tr>
+<tr><td>설정이 둘이면</td><td>동시에(<code>gather</code>)</td><td>동시에(<code>Promise.all</code>)</td><td>하나씩 차례로(<code>agentexec.go:513</code>) — 그 차례는 맵을 도는 차례라 그때그때(<code>push/store.go:122</code>)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p11-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 클라이언트가 <code>returnImmediately</code> 로 작업 id 를 받자마자 Create 로 웹훅을 걸었습니다. 웹훅이 받는 첫 알림은 무엇이고, SUBMITTED 를 받으려면 어떻게 해야 합니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 첫 알림은 첫 단계의 <code>statusUpdate WORKING</code> 입니다 — Create 한 설정 <code>tok-create</code> 는 세 서버 모두 WORKING 부터 다섯 건을 받았습니다(<a href="#p11-cfg-out">도착</a>). 서버는 설정이 생기기 전의 이벤트를 다시 보내지 않습니다. SUBMITTED Task 까지 받으려면 설정을 SendMessage 의 <code>configuration.taskPushNotificationConfig</code> 에 실어야 합니다(<code>tok-inline</code> 은 <code>task SUBMITTED</code> 부터 여섯 건).</div>
+</article>
+
+<!-- ==== 4장 웹훅 수신기 ×3 ==== -->
+
+<article class="card" id="p11-ch4">
+<p class="chnum">4장</p>
+<h2>웹훅 수신기 ×3</h2>
+<p class="chsub">스펙의 몸통과 머리 → 파이썬 → TypeScript → Go → 세 수신기 비교 → 시험 쪽 중계기 → 실행과 여섯 건 → 파이썬이 보낸 POST → TS → Go → 머리 비교 → AuthenticationInfo → 토큰 검사 ×3 → 401 을 받은 서버</p>
+</article>
+
+<article class="card" id="p11-hook-payload">
+<h3>웹훅이 받는 몸통은 스트림의 이벤트 하나 — StreamResponse</h3>
+<p class="lead">§4.3.3 "The payload uses the same <code>StreamResponse</code> format as streaming operations". <a href="#p10-wire-four">10부</a>의 넷 중 하나를 키 이름으로 가립니다. 같은 절이 받는 쪽과 보내는 쪽에 거는 약속입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>누가</th><th>§4.3.3</th></tr>
+<tr><td>에이전트</td><td>"<b>MUST</b> include authentication credentials in the request headers as specified in the <code>PushNotificationConfig.authentication</code> field"</td></tr>
+<tr><td>에이전트</td><td>"<b>MUST</b> attempt delivery at least once for each configured webhook" — 재시도는 MAY, 시간 제한은 SHOULD(10~30초)</td></tr>
+<tr><td>수신기</td><td>"<b>MUST</b> respond with HTTP 2xx status codes to acknowledge successful receipt"</td></tr>
+<tr><td>수신기</td><td>"<b>SHOULD</b> process notifications idempotently, as duplicate deliveries may occur"</td></tr>
+<tr><td>수신기</td><td>"<b>MUST</b> validate the task ID matches an expected task", "<b>SHOULD</b> implement appropriate security measures to verify the notification source"</td></tr>
+</table>
+</div>
+<div class="note"><b>머리 견본</b> — §4.3.3 의 견본 요청은 <code>Authorization: {authentication_scheme} {credentials}</code> 과 <code>Content-Type: application/a2a+json</code> 입니다. <code>token</code> 을 어느 머리에 실을지는 스펙 어디에도 없습니다. 세 SDK 서버가 실제로 무엇을 붙이는지가 이 장의 뒤쪽입니다.</div>
+</article>
+
+<article class="card" id="p11-hook-py">
+<h3>파이썬 수신기 — 표준 라이브러리 HTTP 서버, 받은 것을 한 줄로 찍고 204</h3>
+<p class="lead"><code>agents/webhook.py</code> 입니다. 완성 수신기는 토큰을 <b>찍기만</b> 합니다 — 검사하는 판은 <a href="#p11-hook-check">뒤에서</a> 따로 씁니다.</p>
+<!--CODE file=ex/py/agents/webhook.py region=hook-->
+<!--CODE file=ex/py/agents/webhook.py region=summary-->
+<div class="note"><b>한 키짜리 객체</b> — <code>(kind, event), *_ = body.items()</code> 가 StreamResponse 를 푸는 한 줄입니다. 받은 차례대로 번호를 매기려고 <code>Lock</code> 을 씁니다(<code>ThreadingHTTPServer</code> 는 요청마다 스레드).</div>
+</article>
+
+<article class="card" id="p11-hook-ts">
+<h3>TypeScript 수신기 — <code>node:http</code> 하나, POST 가 아니면 501</h3>
+<!--CODE file=ex/ts/agents/webhook.ts region=server-->
+<!--CODE file=ex/ts/agents/webhook.ts region=summary-->
+<div class="note"><b>본문은 조각을 모아 한 번에 푼다</b> — <code>Buffer.concat</code> 뒤에 UTF-8 로 풉니다. 조각마다 문자열로 이으면 한글이 조각 경계에서 깨집니다(<a href="#p06-sse-ts">6부</a>에서 맨손 서버가 겪은 일).</div>
+</article>
+
+<article class="card" id="p11-hook-go">
+<h3>Go 수신기 — <code>POST /</code> 경로 패턴, 몸통은 맵으로 받는다</h3>
+<!--CODE file=ex/go/agents/webhook/main.go region=hook-->
+<!--CODE file=ex/go/agents/webhook/main.go region=summary-->
+<div class="note"><b>맵을 돌아도 괜찮은 자리</b> — 맵을 도는 차례는 그때그때지만(<a href="#p06-work-go">6부</a>), StreamResponse 의 키는 하나뿐이라 첫 키에서 돌아갑니다. Go 1.22 의 <code>"POST /"</code> 패턴이 다른 메서드에 405 를 답합니다.</div>
+</article>
+
+<article class="card" id="p11-hook-cmp">
+<h3>세 수신기 비교 — 하는 일은 같고, 받는 문의 모양만 다르다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>서버</td><td><code>ThreadingHTTPServer</code></td><td><code>node:http</code> <code>createServer</code></td><td><code>net/http</code> + <code>"POST /"</code></td></tr>
+<tr><td>POST 아닌 요청</td><td>501(<code>do_GET</code> 이 없다)</td><td>501(직접)</td><td>405(패턴)</td></tr>
+<tr><td>토큰 머리</td><td colspan="3"><code>X-A2A-Notification-Token</code> 을 읽어 찍기만(없으면 <code>-</code>)</td></tr>
+<tr><td>StreamResponse 풀기</td><td><code>body.items()</code> 의 첫 쌍</td><td><code>Object.entries(body)[0]</code></td><td><code>map[string]event</code> 를 돌아 첫 키</td></tr>
+<tr><td>답</td><td colspan="3">204 No Content — §4.3.3 의 "2xx"</td></tr>
+</table>
+</div>
+<div class="key"><b>수신기는 A2A SDK 가 필요 없다</b> — 웹훅은 "plain HTTP and the JSON payloads as defined in the HTTP protocol binding"(§3.5.1)입니다. 세 수신기 모두 표준 라이브러리만 씁니다.</div>
+</article>
+
+<article class="card" id="p11-hook-relay">
+<h3>시험 쪽 중계기 — 수신기 앞에서 "끝 알림이 지나갔다" 를 알려 준다</h3>
+<p class="lead">푸시는 작업이 저장된 <b>뒤</b>에 갑니다(파이썬 <code>active_task.py:231</code>→<code>:235</code>, Go <code>agentexec.go:427</code>→<code>:461</code>). 그래서 GetTask 가 COMPLETED 를 봤을 때 마지막 푸시는 아직 날아가는 중일 수 있습니다. 몇 초 쉬어 보는 대신, 수신기 앞에 둔 중계기에 묻습니다.</p>
+<!--CODE file=ex/py/11/relay.py region=relay-->
+<div class="note"><b>넘기고 나서 적는다</b> — <code>forward</code> 가 수신기의 답을 받은 뒤에야 기록하고 깨우므로, <code>/wait</code> 가 돌아왔다면 수신기는 이미 그 줄을 찍었습니다. 경로 <code>/11141</code> 처럼 포트를 적으면 그 수신기로 넘깁니다. 이 장의 실행은 모두 이 장치로 끝을 맞춥니다.</div>
+</article>
+
+<article class="card" id="p11-hook-spec">
+<h3>실행 — 에이전트 셋, 탭 셋, 중계기 하나, 수신기 셋</h3>
+<p class="lead">교통 에이전트는 같은 언어의 수신기에 보냅니다. 시험 쪽(<code>11/notify.py</code>)은 SDK 없이 설정을 실은 SendMessage 를 보내고, 중계기에서 끝 알림을 기다린 뒤 GetTask 로 작업의 끝을 봅니다.</p>
+<!--SPEC file=ex/run/11/hooks.run-->
+<!--CODE file=ex/py/11/notify.py region=config note=11/notify.py — 설정 만들기(authentication 은 뒤에서)-->
+</article>
+
+<article class="card" id="p11-hook-out">
+<h3>수신기 셋이 같은 여섯 줄 — 스트림과 같은 이벤트, 같은 차례</h3>
+<!--OUT file=out/11/hooks.txt server=hook-py note=파이썬 수신기(파이썬 에이전트에서)-->
+<!--OUT file=out/11/hooks.txt server=hook-go note=Go 수신기(Go 에이전트에서) — TS 도 같다-->
+<!--OUT file=out/11/hooks.txt part=터미널 11 lines=1-9 note=notify.py — 중계기가 본 것-->
+<ul>
+<li>여섯 줄은 <a href="#p11-bus-run">1장</a>의 스트림 대본과 같은 이벤트, 같은 차례입니다 — §4.3.3 "allowing push notifications to deliver the same event types as real-time streams". 폴링이 놓친 <code>차량 확정</code> 도 왔습니다(<a href="#p11-poll-miss">2장</a>).</li>
+<li>변화 하나에 POST 하나 — 헛물음이 없습니다. 대신 클라이언트가 HTTP 서버를 열어 두고, 에이전트가 거기에 닿을 수 있어야 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-hook-wire-py">
+<h3>파이썬 SDK 서버가 보낸 POST — <code>application/json</code>, 토큰은 <code>X-A2A-Notification-Token</code></h3>
+<p class="lead">파이썬 에이전트 앞 탭에 남은 둘째 POST(첫 단계)입니다. 첫 POST 의 Task 는 <a href="#p11-hook-wire-cmp">뒤에서</a> 견줍니다.</p>
+<!--OUT file=out/11/hooks.txt wire=py-push ex=2-->
+<ul>
+<li>몸통은 <code>{"statusUpdate": …}</code> — JSON-RPC 봉투(<code>jsonrpc</code>·<code>id</code>·<code>result</code>)가 없습니다. 스트림의 <code>result</code> 안쪽만 옵니다.</li>
+<li>머리의 이름은 SDK 의 것입니다(<code>base_push_notification_sender.py:102</code>). <code>Content-Type</code> 은 httpx 의 <code>json=</code> 이 붙인 <code>application/json</code> — §4.3.3 견본의 <code>application/a2a+json</code> 이 아닙니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-hook-wire-ts">
+<h3>TS SDK 서버 — <code>application/a2a+json</code>, 보낼 때마다 "보냈다" 한 줄</h3>
+<!--OUT file=out/11/hooks.txt wire=ts-push ex=2 lines=1-6-->
+<!--OUT file=out/11/hooks.txt server=bus-ts note=TS 교통 에이전트의 출력-->
+<ul>
+<li>Content-Type 은 SDK 상수 <code>A2A_CONTENT_TYPE</code>(<code>server/index.js:2036</code>)이고, 토큰 머리 이름은 바꿀 수 있는 옵션 <code>tokenHeaderName</code> 의 기본값입니다(<code>:2554</code>).</li>
+<li>TS 는 푸시를 "보내고 잊는다" — 응답을 기다리지 않고 다음 이벤트로 갑니다(<code>_sendPushNotificationIfNeeded</code>, <code>:3415</code>). 한 작업 안의 차례는 작업마다 이은 약속 사슬(<code>notificationChain</code>)이 지킵니다. 마지막 셋의 "보냈다" 가 <code>[교통] 완료</code> 뒤에 몰린 까닭입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-hook-wire-go">
+<h3>Go — SDK 의 보내기를 쓰지 않았다, 우리 <code>hookSender</code> 가 보낸다</h3>
+<p class="lead">Go SDK 의 <code>push.HTTPPushSender</code> 는 토큰을 <code>A2A-Notification-Token</code>(X- 없이)에 싣고, 기본값으로 루프백·사설망 주소를 막습니다(<code>a2asrv/push/sender.go:40</code>·<code>:60</code>). 이 덱의 웹훅은 127.0.0.1 이니 그대로는 닿지 않습니다. 그래서 교통 에이전트는 직접 짠 보내기를 씁니다.</p>
+<!--CODE file=ex/go/agents/bus/main.go region=push-->
+<!--OUT file=out/11/hooks.txt wire=go-push ex=2 lines=1-3-->
+</article>
+
+<article class="card" id="p11-hook-wire-cmp">
+<h3>세 서버의 POST 비교 — 몸통은 같은 이벤트, 머리와 키 차례가 다르다</h3>
+<p class="lead">첫 POST(SUBMITTED Task)의 머리와 맨 윗단 키입니다.</p>
+<!--OUT file=out/11/hooks.txt wire=py-push ex=1 grep=^→|^  [A-Z]|^      "[a-z]+"|"headcount" note=파이썬-->
+<!--OUT file=out/11/hooks.txt wire=go-push ex=1 grep=^→|^  [A-Z]|^      "[a-z]+"|"headcount" note=Go-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬 SDK</th><th>TS SDK</th><th>Go(우리 <code>hookSender</code>)</th></tr>
+<tr><td>Content-Type</td><td><code>application/json</code></td><td><code>application/a2a+json</code></td><td><code>application/json</code></td></tr>
+<tr><td>토큰 머리</td><td colspan="2"><code>X-A2A-Notification-Token</code></td><td><code>X-A2A-Notification-Token</code>(SDK 기본은 <code>A2A-Notification-Token</code>)</td></tr>
+<tr><td>보내는 이벤트</td><td colspan="3">Task·statusUpdate·artifactUpdate 전부 — SUBMITTED Task 부터</td></tr>
+<tr><td>수의 모양</td><td><code>30.0</code></td><td><code>30</code></td><td><code>30</code></td></tr>
+<tr><td>웹훅의 답을 기다리나</td><td>기다린다 — 스트림 구독자에게 넘기기 전에(<code>active_task.py:235</code>·<code>:238</code>)</td><td>기다리지 않는다</td><td>기다린다 — 이벤트 처리 안에서(<code>agentexec.go:461</code>)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p11-hook-auth">
+<h3>AuthenticationInfo 를 주면 — 파이썬은 둘 다, TS 는 Authorization 만, 우리 Go 는 토큰만</h3>
+<p class="lead">설정에 <code>"authentication": {"scheme": "Bearer", "credentials": "hook-secret"}</code> 과 토큰을 함께 실었습니다(<code>--auth Bearer:hook-secret</code>). 받는 쪽은 기록만 하는 중계기, 앞에 탭 하나입니다.</p>
+<!--SPEC file=ex/run/11/auth.run-->
+<!--OUT file=out/11/auth.txt wire=auth-wire ex=1 lines=1-5 note=파이썬 에이전트-->
+<!--OUT file=out/11/auth.txt wire=auth-wire ex=7 lines=1-4 note=TS 에이전트-->
+<!--OUT file=out/11/auth.txt wire=auth-wire ex=13 lines=1-3 note=Go 에이전트-->
+<ul>
+<li><b>TS 는 토큰을 버렸다</b> — <code>authentication</code> 이 있으면 <code>Authorization</code> 을 붙이고 토큰 머리는 붙이지 않습니다(<code>_buildAuthHeaders</code>, <code>server/index.js:2665</code>). 토큰으로 문을 지키는 수신기는 TS 에이전트의 알림을 모두 거절하게 됩니다.</li>
+<li><b>우리 Go 보내기는 §4.3.3 의 MUST 를 어긴다</b> — <code>hookSender</code> 는 <code>cfg.Auth</code> 를 읽지 않습니다(<a href="#p11-hook-wire-go">위 코드</a>). SDK 의 <code>HTTPPushSender</code> 는 scheme 이 <code>bearer</code>·<code>basic</code> 일 때만 붙입니다(<code>sender.go:175</code>). 파이썬은 scheme 과 credentials 가 다 있으면 무엇이든 붙입니다(<code>base_push_notification_sender.py:104</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p11-hook-check">
+<h3>토큰을 확인하는 수신기 — 다르면 401, 견주기는 걸린 시간이 새지 않게</h3>
+<p class="lead">완성 수신기는 찍기만 했습니다. <code>11/hook_check</code> 는 시작할 때 받은 토큰(<code>--token tok-ok</code>)과 머리의 토큰을 견줘, 다르면 401 로 돌려보냅니다. 파이썬과 TS 입니다.</p>
+<!--CODE file=ex/py/11/hook_check.py region=check-->
+<!--CODE file=ex/ts/11/hook_check.ts region=check-->
+</article>
+
+<article class="card" id="p11-hook-check-go">
+<h3>Go 판과 실행 — 맞는 토큰은 204 여섯, 틀린 토큰은 401 여섯</h3>
+<!--CODE file=ex/go/11/hook_check/main.go region=check-->
+<!--OUT file=out/11/auth.txt server=check-py note=파이썬 수신기 — 파이썬 에이전트(tok-ok), Go 에이전트(tok-bad)-->
+<ul>
+<li>세 판 모두 일정 시간 견주기(<code>hmac.compare_digest</code>·<code>timingSafeEqual</code>·<code>subtle.ConstantTimeCompare</code>)를 씁니다. <code>==</code> 는 다른 글자를 만나는 즉시 멈춰, 걸린 시간으로 앞 글자부터 맞혀 볼 틈을 줍니다.</li>
+<li>§4.3.3 의 다른 MUST — "validate the task ID matches an expected task" — 는 이 수신기가 하지 않습니다. 토큰만으로는 어느 작업의 알림인지 가리지 못하니, 작업마다 다른 토큰을 주는 것이 첫걸음입니다(proto: "A token unique for this task or session"). 서명까지는 8장입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p11-hook-401">
+<h3>401 을 받은 에이전트 — 셋 다 작업은 끝까지, 다시 보내지도 않는다</h3>
+<p class="lead">틀린 토큰의 세 실행(파이썬 → TS 수신기, TS → Go, Go → 파이썬)입니다.</p>
+<!--OUT file=out/11/auth.txt part=터미널 9 lines=55-63 note=파이썬 에이전트 → TS 수신기(나머지 둘도 같은 줄)-->
+<!--OUT file=out/11/auth.txt server=bus-py grep=^Error|^httpx|^Some note=파이썬 에이전트의 출력(줄임)-->
+<!--OUT file=out/11/auth.txt server=bus-ts grep=^Error lines=1-60 note=TS 에이전트의 출력(줄임)-->
+<ul>
+<li>여섯 번 모두 401 이어도 GetTask 는 COMPLETED — 푸시가 실패해도 작업은 실패하지 않습니다. 셋 다 재시도하지 않습니다(§4.3.3 의 MAY).</li>
+<li>파이썬·TS 는 실패를 서버 출력에 적고(스택까지), 우리 Go <code>hookSender</code> 는 상태 코드를 보지 않아 아무것도 적지 않습니다(<code>bus-go</code> 출력에는 단계 줄뿐). Go SDK 의 <code>HTTPPushSender</code> 는 2xx 가 아니면 기록하고, <code>FailOnError</code> 를 켜면 오류를 돌려줘 처리기가 작업을 FAILED 로 바꿉니다(<code>sender.go:193</code>·<code>:201</code>, <code>agentexec.go:462</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p11-ch4-sum">
+<h3>4장 정리 — 웹훅 수신기 ×3 과 세 SDK 서버의 POST</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>물음</th><th>답</th><th>근거</th></tr>
+<tr><td>몸통은?</td><td>StreamResponse 하나 — 봉투 없이 <code>task</code>·<code>statusUpdate</code>·<code>artifactUpdate</code></td><td>§4.3.3, <a href="#p11-hook-wire-py">탭</a></td></tr>
+<tr><td>무엇이 오나?</td><td>스트림과 같은 여섯 이벤트, 같은 차례 — 지나간 단계도</td><td><a href="#p11-hook-out">수신기 셋</a></td></tr>
+<tr><td>토큰 머리는?</td><td>스펙에 없다. 세 서버 모두 <code>X-A2A-Notification-Token</code>(Go SDK 기본은 X- 없이)</td><td><a href="#p11-hook-wire-cmp">비교</a></td></tr>
+<tr><td>authentication 은?</td><td>파이썬 둘 다, TS Authorization 만(토큰 버림), 우리 Go 무시 — MUST 위반</td><td><a href="#p11-hook-auth">AuthenticationInfo</a></td></tr>
+<tr><td>수신기가 거절하면?</td><td>작업은 COMPLETED, 재시도 없음. 기록은 파이썬·TS 만</td><td><a href="#p11-hook-401">401</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p11-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 토큰으로 문을 지키는 <code>hook_check</code> 앞에 TS 교통 에이전트를 붙이고, 설정에 토큰 <code>tok-ok</code> 와 <code>authentication</code>(Bearer) 을 둘 다 실었습니다. 수신기는 무엇을 찍고, 작업은 어떻게 끝납니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 여섯 번 모두 <code>거절 401: token=-</code> 을 찍습니다. TS SDK 서버는 <code>authentication</code> 이 있으면 <code>Authorization</code> 만 붙이고 토큰 머리를 붙이지 않기 때문입니다(<a href="#p11-hook-auth">탭</a>의 TS 요청에 <code>X-A2A-Notification-Token</code> 이 없다). 작업은 그래도 COMPLETED 로 끝납니다 — 401 은 작업을 멈추지 않습니다(<a href="#p11-hook-401">401 을 받은 에이전트</a>). 이런 수신기는 <code>Authorization</code> 도 볼 줄 알아야 합니다.</div>
 </article>

@@ -13,6 +13,7 @@ COUNT = 0
 LOCK = Lock()
 
 
+# region: summary
 def summary(body):
     """{'statusUpdate': {...}} → 'statusUpdate TASK_STATE_WORKING …'"""
     (kind, event), *_ = body.items()
@@ -28,6 +29,10 @@ def summary(body):
     return kind
 
 
+# endregion
+
+
+# region: hook
 class Hook(BaseHTTPRequestHandler):
     def do_POST(self):
         global COUNT
@@ -42,6 +47,9 @@ class Hook(BaseHTTPRequestHandler):
 
     def log_message(self, *args):  # 접속 기록은 끈다
         pass
+
+
+# endregion
 
 
 if __name__ == "__main__":

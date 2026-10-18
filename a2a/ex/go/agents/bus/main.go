@@ -68,6 +68,7 @@ type executor struct {
 	stepMs int // 배차 단계 하나에 걸리는 시간
 }
 
+// region: execute
 func (e executor) Execute(
 	ctx context.Context, ec *a2asrv.ExecutorContext,
 ) iter.Seq2[a2a.Event, error] {
@@ -108,12 +109,17 @@ func (e executor) Execute(
 	}
 }
 
+// endregion
+
+// region: cancel
 func (executor) Cancel(
 	ctx context.Context, ec *a2asrv.ExecutorContext,
 ) iter.Seq2[a2a.Event, error] {
 	common.Say("[교통] 취소")
 	return common.Cancel(ec, common.TextPart("배차를 취소했습니다"))
 }
+
+// endregion
 
 // region: push
 // hookSender 는 푸시 알림을 웹훅에 POST 한다. SDK 의 HTTPPushSender
@@ -150,6 +156,7 @@ func (s hookSender) SendPush(
 
 // endregion
 
+// region: main
 func main() {
 	step := flag.Int("step-ms", 300, "배차 단계 하나의 시간(ms)")
 	args := common.ParseArgs("보물상사 교통 에이전트")
@@ -160,3 +167,5 @@ func main() {
 				sender),
 		}})
 }
+
+// endregion

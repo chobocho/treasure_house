@@ -13,6 +13,7 @@ type Event = { status?: Status; artifact?: { name?: string } };
 
 let count = 0;
 
+// region: summary
 // {"statusUpdate": {...}} → "statusUpdate TASK_STATE_WORKING …"
 function summary(body: Record<string, Event>): string {
   const [kind, event] = Object.entries(body)[0]!;
@@ -31,8 +32,10 @@ function summary(body: Record<string, Event>): string {
   if (kind === "task") return `${kind} ${event.status!.state}`;
   return kind;
 }
+// endregion
 
 const { values } = parseArgs({ options: { port: { type: "string" } } });
+// region: server
 const server = createServer((req, res) => {
   if (req.method !== "POST") {
     res.writeHead(501).end();
@@ -48,4 +51,5 @@ const server = createServer((req, res) => {
     res.writeHead(204).end();
   });
 });
+// endregion
 server.listen(Number(values.port), "127.0.0.1");

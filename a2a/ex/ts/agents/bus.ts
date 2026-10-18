@@ -67,6 +67,7 @@ class BusExecutor implements AgentExecutor {
     this.stepMs = stepMs;
   }
 
+  // region: execute
   async execute(ctx: RequestContext, bus: ExecutionEventBus) {
     const { up } = begin(ctx, bus);
     const req = asInts(dataOf(ctx.userMessage), "headcount", "nights");
@@ -92,15 +93,20 @@ class BusExecutor implements AgentExecutor {
     console.log(`[교통] 완료: ${summary}`);
     up.status(TaskState.TASK_STATE_COMPLETED);
   }
+  // endregion
 
+  // region: cancel
   async cancelTask(taskId: string, bus: ExecutionEventBus) {
     console.log("[교통] 취소");
     cancel(taskId, bus, textPart("배차를 취소했습니다"));
   }
+  // endregion
 }
 
+// region: main
 const { port, url, opts } = parseCli({ "step-ms": "300" });
 const store = new InMemoryPushNotificationStore();
 serve(card(url), new BusExecutor(Number(opts["step-ms"])), port, {
   push: [store, new DefaultPushNotificationSender(store)],
 });
+// endregion
