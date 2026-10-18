@@ -517,6 +517,10 @@ class RealSpec(Tree):
         self.assertLess(time.time() - t0, 10)
         self.assertIn('m', str(e.exception))
 
+    def test_default_ready_timeout_survives_swap(self):
+        # 스왑이 찬 이 기계에서는 파이썬 SDK 서버가 15초 넘게 걸려 뜨기도 했다(11부 --check).
+        self.assertGreaterEqual(a2arun.READY_TIMEOUT, 60)
+
     def test_busy_port_fails_before_anything_starts(self):
         s = socket.socket()
         self.addCleanup(s.close)

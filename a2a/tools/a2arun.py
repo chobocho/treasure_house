@@ -57,7 +57,8 @@ LANGS = {'py': ('ex/py', '.py', r'#\s?@'), 'ts': ('ex/ts', '.ts', '//@'), 'go': 
 NOT_SHARED = ('gate', 'node_modules', '__pycache__', '.ruff_cache')
 KEYS = ('args', 'stdin', 'exit', 'timeout', 'norun', 'env')
 DEFAULT_TIMEOUT = 20
-READY_TIMEOUT = 15
+# 스왑이 차면 파이썬 SDK 서버가 15초 넘게 걸려 뜬다. 늘려도 출력은 같고 기다림만 는다.
+READY_TIMEOUT = 60
 BUILD_TIMEOUT = 600          # 이 기계에서 첫 go build 는 몇 분 걸리기도 한다
 TERM_GRACE = 3
 PART = re.compile(r'^\d\d$')
