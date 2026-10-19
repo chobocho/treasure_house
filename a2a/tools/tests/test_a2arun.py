@@ -246,6 +246,21 @@ class Spec(unittest.TestCase):
             with self.assertRaises(a2arun.RunError, msg=bad):
                 a2arun.parse_spec(bad)
 
+    def test_restart_names_an_earlier_server(self):
+        # 17부 — 서버를 SIGKILL 로 죽이고 같은 명령으로 다시 띄운다(영속 저장소 실험).
+        steps = a2arun.parse_spec('serve name=bus cmd="sh:x" ready=tcp:10251\n'
+                                  'run cmd="sh:true"\n'
+                                  'restart name=bus\n'
+                                  'run cmd="sh:true"\n')
+        self.assertEqual([s['verb'] for s in steps], ['serve', 'run', 'restart', 'run'])
+        self.assertEqual(steps[2]['name'], 'bus')
+        for bad in ('serve name=a cmd="sh:x" ready=tcp:10251\nrestart name=b\nrun cmd="sh:true"\n',
+                    'tap name=t listen=10201 target=10251\nrestart name=t\nrun cmd="sh:true"\n',
+                    'restart name=a\nserve name=a cmd="sh:x" ready=tcp:10251\nrun cmd="sh:true"\n',
+                    'serve name=a cmd="sh:x" ready=tcp:10251\nrestart\nrun cmd="sh:true"\n'):
+            with self.assertRaises(a2arun.RunError, msg=bad):
+                a2arun.parse_spec(bad)
+
     def test_ports_must_be_in_the_part_range(self):
         text = 'serve name=a cmd="py:05/s.py --port 10501" ready=tcp:10501\nrun cmd="sh:curl http://127.0.0.1:10601/"\n'
         with self.assertRaises(a2arun.RunError) as e:
@@ -567,6 +582,50 @@ class RealSpec(Tree):
         with self.assertRaises(a2arun.RunError):
             a2arun.parse_spec('serve name=a cmd="py:x.py" ready=tcp:10201 stderr=keep\n'
                               'run cmd="sh:true"\n')
+
+    def test_restart_kills_the_group_and_starts_the_same_command(self):
+        # 손자까지 SIGKILL — 우아한 종료 없이 "넘어진" 서버. 같은 명령을 다시 띄우고
+        # 준비를 기다린 뒤 다음 run 으로 간다. 출력은 한 구역에 이어 붙는다.
+        self.put('ex/py/02/srv2.py', SERVER.replace('open(sys.argv[2], "w")', 'open(sys.argv[2], "a")')
+                 .replace('f.write("%d %d" % (os.getpid(), kid.pid))',
+                          'f.write("%d %d\\n" % (os.getpid(), kid.pid))'))
+        url = 'http://127.0.0.1:%d/x' % (self.P + 4)
+        rel = self.spec('serve name=card cmd="py:02/srv2.py %d %s" ready=tcp:%d\n'
+                        'run cmd="sh:curl -s %s"\n'
+                        'restart name=card\n'
+                        'run cmd="sh:curl -s %s"\n'
+                        % (self.P + 4, self.pids, self.P + 4, url, url))
+        cap = self.run_ex(rel)
+        shown = 'python 02/srv2.py %d pids' % (self.P + 4)
+        body = '{"name": "card", "id": "<id1>"}\n'
+        self.assertEqual(cap,
+                         '[터미널 1] $ %s\n' % shown
+                         + '[터미널 2] $ curl -s %s\n' % url + body
+                         + '[터미널 1] (SIGKILL 로 죽이고 다시 띄움) $ %s\n' % shown
+                         + '[터미널 2] $ curl -s %s\n' % url + body
+                         + '── 터미널 1 (card) 출력 ──\n'
+                         'listening %d\n' % (self.P + 4)
+                         + '(SIGKILL 로 죽이고 다시 띄움)\n'
+                         'listening %d\n' % (self.P + 4))
+        with open(self.pids) as f:
+            pids = [int(x) for x in f.read().split()]
+        self.assertEqual(len(pids), 4)                          # 두 번 떴다, 손자와 함께
+        self.assert_all_dead()
+
+    def test_each_spec_run_gets_a_fresh_tmpdir(self):
+        # 파일 저장소 실험이 앞 실행의 찌꺼기를 보지 않게 — 명세마다 새 TMPDIR.
+        # 같은 명세 안에서는(재시작을 넘어) 같은 TMPDIR 이다.
+        self.put('ex/py/02/mark.py', 'import os, tempfile\n'
+                 'p = os.path.join(tempfile.gettempdir(), "mark")\n'
+                 'print("있었다" if os.path.exists(p) else "없었다")\n'
+                 'open(p, "w").close()\n#@ norun\n')
+        rel = self.spec('serve name=card cmd="py:02/srv.py %d %s" ready=tcp:%d\n'
+                        'run cmd="py:02/mark.py"\nrun cmd="py:02/mark.py"\n'
+                        % (self.P + 5, self.pids, self.P + 5))
+        for _ in range(2):
+            cap = self.run_ex(rel)
+            self.assertIn('[터미널 2] $ python 02/mark.py\n없었다\n'
+                          '[터미널 2] $ python 02/mark.py\n있었다\n', cap)
 
     def test_server_dying_early_is_an_error(self):
         self.put('ex/py/02/quit.py', 'import socket, sys\ns = socket.socket()\n'

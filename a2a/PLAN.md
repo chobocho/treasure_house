@@ -1011,3 +1011,33 @@ subagent task each.
 - Risk: py TCK has 3 skips depending on a 10 s subscribe timeout — stable twice, may flip under swap.
 - New terms: TCK/적합성 시험, SUT 대본, 시험대 에이전트.
 - `make all SKEL=1` green (1636 slides, 0 errors, 0 notices); manifest 276 examples, 0 stale.
+
+### Part 17 first half — 38 slides; a2arun `restart` verb; part 17 split into 17_/17b_ (2026-10-19)
+- `17_ops.html`: cover + intro, ch1 timeouts/retry/idempotency (21), ch2 file TaskStore (15).
+  `17b_ops.html` placeholder `p17-todo-b`, in order.txt. Specs `ex/run/17/{defaults,resend,
+  stream_to,retry,safe,store_py,store_ts,store_go,recover}` (ports 11701–11762, 11799 = dead
+  port); 11763–11798 free for 17b. No subdirs under `ex/run/17/`.
+- **Tool:** a2arun verb `restart name=N` (SIGKILL process group, same cmd, wait ready; one server
+  header with a marker line) and a fresh `TMPDIR` per spec run (kept across restarts). RED→GREEN in
+  `tools/tests/test_a2arun.py` (150 tests). Manifest showed nothing stale from the env change.
+- Findings: default client timeouts py 5 s per read (httpx), TS none (per-call signal only), Go
+  3 min whole call incl. body (`a2aclient/transport.go:26`) → the same 1.5 s cuts a 3 s stream
+  on ts/go but not py. No SDK reads `Retry-After`. All three servers keep executing after the
+  client gives up (py `active_task.py:548`, ts `index.js:2916`, go `local_manager.go:182`
+  WithoutCancel) → resend with same messageId = 2 COMPLETED tasks everywhere (links p04-dup-*).
+  Safe pattern: client-chosen contextId → ListTasks → SubscribeToTask (one task) ×3.
+- Store: py save/get/list/delete (handler strips artifacts, `default_request_handler_v2.py:212`),
+  ts save/load/list (store strips), go Create/Update/Get/List with version (`taskstore/api.go`).
+  After SIGKILL+restart: finished tasks back with artifacts, push configs 1→0 (in-memory store),
+  WORKING task orphaned forever; subscribe py silent / ts,go close; CancelTask works ×3 (TS
+  writes English "Task cancellation requested by user."). `--recover` rule ×3: SUBMITTED/
+  WORKING → FAILED at startup.
+- Orchestrator edits: crash wording "넘어지다/넘어뜨리다" → "죽다/죽이다" (17_ops + 4 spec
+  comments), "무작위 흔들기" → "지터" (slide + retry ×3 comments); terms added to AUTHORING's
+  fixed list. Re-captured store/recover/defaults/resend/retry/safe/stream_to, `--check` green.
+  One transient store_py run failure on first re-run (passed on retry + check) — watch for flake.
+- Forward refs that could now become links (for the wrap-up): p06-store-what→#p17-ch2,
+  06c:340 & 04b:363→#p17-ch1, 07_py:68/481·08_ts:497·09_go:513→#p17-st-prod,
+  09b:584→#p17-st-go, 07b:550→#p17-st-py. 03b:410 (ETag/Cache-Control), 16b:507 (key
+  rotation) belong to 17b ch4.
+- `make all SKEL=1` green (1673 slides, 0 errors, 0 notices); manifest 285 examples, 0 stale.

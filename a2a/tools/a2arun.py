@@ -22,9 +22,11 @@
    끝에 두는 까닭: 오류 메시지의 줄 번호가 슬라이드의 줄 번호와 같아야 해서다.
    args · stdin(\\n 이스케이프) · exit · timeout(기본 20초) · norun(컴파일만) · env: K=V
 
-   명세(.run)는 줄마다 동사 하나 — serve · tap · run · wait (parse_spec 참고).
+   명세(.run)는 줄마다 동사 하나 — serve · tap · run · wait · restart (parse_spec 참고).
    서버는 차례로 띄워 ready 를 기다리고, run 을 차례로 돌리고, 끝나면 성공이든 실패든
    모든 서버의 프로세스 그룹에 SIGTERM(3초 뒤 SIGKILL)을 보낸다. 고아는 남기지 않는다.
+   restart 는 run 사이에서 서버 하나를 SIGKILL 로 "넘어뜨리고" 같은 명령으로 다시 띄운다.
+   명세마다 TMPDIR 이 새로 비어 있다(재시작을 넘어서는 같다) — 파일 저장소 실험용.
 
    캡처에 손대는 곳은 RULES 표의 다섯 가지뿐이다. 그 밖의 글자는 그대로 둔다.
    포트: NN부는 10000 + NN*100 + k (k = 0..99). 범위를 벗어난 포트는 거부한다.
@@ -276,7 +278,8 @@ def examples(root):
 VERBS = {'serve': (('name', 'cmd', 'ready'), ('stderr',)),
          'tap': (('name', 'listen', 'target'), ('order',)),
          'run': (('cmd',), ('exit', 'timeout')),
-         'wait': (('ms',), ())}
+         'wait': (('ms',), ()),
+         'restart': (('name',), ())}
 _INTS = ('listen', 'target', 'exit', 'timeout', 'ms')
 
 
@@ -289,9 +292,11 @@ def parse_spec(text):
        tap   name=N listen=P target=P [order=sorted]
        run   cmd="LANG:..." [exit=N] [timeout=S]
        wait  ms=N
+       restart name=N   앞서 띄운 서버 N 의 프로세스 그룹을 SIGKILL 로 죽이고(우아한 종료 없이 —
+             넘어진 서버) 같은 명령으로 다시 띄워 ready 를 기다린다. run 과 같은 차례에 선다.
        LANG = py | ts | go | sh      — 긴 줄은 끝에 \\ 를 달아 다음 줄과 잇는다.
     """
-    steps, names = [], set()
+    steps, names, serves = [], set(), set()
     logical, buf, first = [], '', 0
     for no, ln in enumerate(text.split('\n'), 1):
         # 줄 끝의 \ 는 다음 줄과 잇는다(슬라이드 72칸). 이은 자리는 빈칸 하나 —
@@ -339,10 +344,15 @@ def parse_spec(text):
             raise RunError('%d번 줄: stderr 는 drop 만 받는다' % no)
         if s.get('order', 'sorted') != 'sorted':
             raise RunError('%d번 줄: order 는 sorted 만 받는다' % no)
-        if 'name' in s:
+        if verb == 'restart':
+            if s['name'] not in serves:
+                raise RunError('%d번 줄: restart 할 서버가 앞에 없다: %s' % (no, s['name']))
+        elif 'name' in s:
             if s['name'] in names:
                 raise RunError('%d번 줄: 이름이 겹친다: %s' % (no, s['name']))
             names.add(s['name'])
+            if verb == 'serve':
+                serves.add(s['name'])
         if verb == 'serve' and not re.match(r'^(?:tcp:\d+|http://127\.0\.0\.1:\d+/\S*)$', s['ready']):
             raise RunError('%d번 줄: ready 는 tcp:PORT 나 http://127.0.0.1:PORT/… 다' % no)
         steps.append(s)
@@ -802,6 +812,9 @@ def run_spec(root, rel, scratch, ready_timeout=READY_TIMEOUT):
     shutil.rmtree(work, True)
     os.makedirs(work)
     env = _env(root, scratch)
+    # 명세마다 새 TMPDIR — 앞 실행이 남긴 파일(17부의 파일 저장소)이 캡처를 흔들지 않게.
+    env['TMPDIR'] = os.path.join(work, 'tmp')
+    os.makedirs(env['TMPDIR'])
     plan = []                                # 띄우기 전에 전부 푼다(go build 포함)
     for s in steps:
         if s['verb'] in ('serve', 'run'):
@@ -816,6 +829,13 @@ def run_spec(root, rel, scratch, ready_timeout=READY_TIMEOUT):
             plan.append((s, None))
     procs = []                               # (step, Popen, 출력 파일)
     head, client, term = [], [], 0
+
+    def start(s, argv, cwd, outfile, mode):
+        drop = s.get('stderr') == 'drop'
+        with open(outfile, mode) as f:
+            return subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                                    stdout=f, start_new_session=True,
+                                    stderr=subprocess.DEVNULL if drop else subprocess.STDOUT)
     try:
         for s, r in plan:
             if s['verb'] in ('serve', 'tap'):
@@ -823,13 +843,10 @@ def run_spec(root, rel, scratch, ready_timeout=READY_TIMEOUT):
                 argv, cwd, shown = r
                 s['term'] = term
                 outfile = os.path.join(work, s['name'] + '.out')
-                drop = s.get('stderr') == 'drop'
-                if drop:
+                if s.get('stderr') == 'drop':
                     shown += ' 2>/dev/null'
-                with open(outfile, 'wb') as f:
-                    p = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                                         stdout=f, start_new_session=True,
-                                         stderr=subprocess.DEVNULL if drop else subprocess.STDOUT)
+                s['shown'] = shown
+                p = start(s, argv, cwd, outfile, 'wb')
                 procs.append((s, p, outfile))
                 head.append('[터미널 %d] $ %s' % (term, shown))
                 _wait_ready(s if s['verb'] == 'serve' else dict(s, ready='tcp:%d' % s['listen']),
@@ -838,6 +855,24 @@ def run_spec(root, rel, scratch, ready_timeout=READY_TIMEOUT):
         for s, r in plan:
             if s['verb'] == 'wait':
                 time.sleep(s['ms'] / 1000.0)
+            elif s['verb'] == 'restart':
+                # 넘어진 서버 — SIGTERM 의 정리 없이 그룹째 SIGKILL, 그다음 같은 명령.
+                i = next(i for i, (t, _, _) in enumerate(procs)
+                         if t['verb'] == 'serve' and t['name'] == s['name'])
+                t, old, outfile = procs[i]
+                try:
+                    os.killpg(old.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                old.wait()
+                mark = '(SIGKILL 로 죽이고 다시 띄움)'
+                with open(outfile, 'ab') as f:
+                    f.write((mark + '\n').encode('utf-8'))
+                argv, cwd, _ = next(r2 for s2, r2 in plan if s2 is t)
+                p = start(t, argv, cwd, outfile, 'ab')
+                procs[i] = (t, p, outfile)
+                client.append('[터미널 %d] %s $ %s' % (t['term'], mark, t['shown']))
+                _wait_ready(t, p, ready_timeout, outfile)
             elif s['verb'] == 'run':
                 argv, cwd, shown = r
                 text, rc = _call(argv, cwd, env, s.get('timeout', DEFAULT_TIMEOUT))

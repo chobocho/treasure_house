@@ -129,7 +129,9 @@ capture. Never guess what an SDK does; read its installed source or run it.
   delegate 맡기다/위임, interop 상호운용, event 이벤트(SSE 이벤트·스트림 이벤트 —
   "사건" 은 쓰지 않는다), JSON-RPC notification JSON-RPC 알림(푸시 알림과 헷갈리지
   않게 앞에 JSON-RPC 를 붙인다), batch 배치, wiretap 와이어 탭, filter 필터("거르개"는
-  쓰지 않는다), body limit 본문 한도.
+  쓰지 않는다), body limit 본문 한도, exponential backoff 지수 백오프, jitter 지터,
+  crashed server 죽은 서버(죽이다·죽다 — "넘어지다" 는 쓰지 않는다), orphaned task
+  주인 없는 작업, recovery rule 복구 규칙, ActiveTask 활성 작업, TCK 적합성 시험(TCK).
   Python extra → "extra(선택 설치 묶음)", route factory 라우트 팩토리, owner-scoped
   store 소유자별 저장소(분리). Never coin playful new words ("덤", "공장", "칸막이").
   Enum values and method names stay in English as on the wire (`TASK_STATE_WORKING`,

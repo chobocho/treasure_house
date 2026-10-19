@@ -1,10 +1,418 @@
 <article class="card section" id="p17">
 <p class="chnum">17부</p>
 <h2>운영 — 타임아웃·재시도·영속 저장소·로깅</h2>
-<p class="chsub">준비 중입니다</p>
+<p class="chsub">답이 늦게 오거나 오지 않을 때, 서버가 죽었다 다시 뜰 때 — 프로토콜 밖에서 일어나는 일을 세 SDK 로 재 봅니다</p>
 </article>
 
-<article class="card" id="p17-todo">
-<h3>운영 — 타임아웃·재시도·영속 저장소·로깅</h3>
-<p class="lead">준비 중입니다</p>
+<article class="card" id="p17-intro">
+<h3>16부까지는 "잘 될 때" 를 보였다 — 이 부는 끊기고, 늦고, 죽을 때다</h3>
+<p class="lead">스펙은 와이어의 모양을 정할 뿐, 클라이언트가 얼마나 기다릴지, 실패하면 다시 보낼지, 서버가 Task 를 어디에 둘지는 말하지 않습니다. 그 빈자리를 세 SDK 가 어떤 기본값으로 채웠는지 재고, 우리 손으로 채우는 법을 봅니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>무엇을</th><th>증거</th></tr>
+<tr><td><a href="#p17-ch1">1장</a></td><td>타임아웃·재시도·멱등성 — 끊긴 뒤 서버에서 일어나는 일, 다시 해도 되는 실패, 다시 보내지 않고 이어 받기</td><td>실행 명세 다섯(<code>17/*.run</code>), 예제 다섯 ×3</td></tr>
+<tr><td><a href="#p17-ch2">2장</a></td><td>영속 Task 저장소 — SDK 의 저장소 인터페이스로 파일 저장소, 서버를 죽이고 다시 띄운 뒤 GetTask</td><td>파일 저장소 ×3, 재시작 명세 넷</td></tr>
+<tr><td>3장</td><td>로깅·추적 — 요청 id, contextId 로 흐름 잇기</td><td>(이 부의 뒤 절반)</td></tr>
+<tr><td>4장</td><td>배포 체크리스트 — HTTPS, 카드 url, 캐시, 키 교체</td><td>(이 부의 뒤 절반)</td></tr>
+</table>
+</div>
+<div class="key"><b>과녁은 교통 에이전트</b> — 배차 세 단계마다 쉬는 교통 에이전트(<a href="#p11-bus-contract">11부</a>)를 <code>--step-ms</code> 로 느리게 띄워 씁니다. 한 단계 1초면 막는 호출 하나가 3초 걸립니다.</div>
+</article>
+
+<!-- ==== 1장 타임아웃·재시도·멱등성 ==== -->
+
+<article class="card" id="p17-ch1">
+<p class="chnum">1장</p>
+<h2>타임아웃·재시도·멱등성 ×3</h2>
+<p class="chsub">SDK 기본값 → 파이썬 → TypeScript → Go → 끊고 다시 보내기 → 서버는 계속한다 → 스트림의 시간 제한 → 세 언어 비교 → 다시 해도 되는 실패 → 재시도 ×3 → 실행 → 다시 보내지 않고 이어 받기</p>
+</article>
+
+<article class="card" id="p17-to-defaults-code">
+<h3>시간 제한을 주지 않으면 SDK 가 HTTP 클라이언트를 대신 짓는다 — 그 기본값이 셋 다 다르다</h3>
+<p class="lead">스펙이 숫자로 적은 시간 제한은 에이전트가 웹훅에 POST 할 때의 "recommended: 10-30 seconds"(§4.3.3, §13.2) 하나뿐입니다. 클라이언트가 에이전트를 얼마나 기다릴지는 SDK 의 기본값이 정합니다. 세 언어의 <code>17/defaults</code> 는 클라이언트를 가장 짧게 짓습니다.</p>
+<!--CODE file=ex/py/17/defaults.py region=make-->
+<!--CODE file=ex/ts/17/defaults.ts region=make-->
+<!--CODE file=ex/go/17/defaults/main.go region=make-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>SDK 가 짓는 것</th><th>그 기본 제한</th></tr>
+<tr><td>파이썬</td><td><code>httpx.AsyncClient()</code>(<code>client_factory.py:81</code>)</td><td>httpx 의 5초(<code>httpx/_config.py:246</code>)</td></tr>
+<tr><td>TS</td><td>전역 <code>fetch</code>, <code>signal</code> 은 호출이 준 것만(<code>client/index.js:6021</code>)</td><td>SDK 는 걸지 않는다</td></tr>
+<tr><td>Go</td><td><code>http.Client{Timeout: defaultRequestTimeout}</code>(<code>jsonrpc.go:64</code>)</td><td>3분(<code>a2aclient/transport.go:26</code>), 본문 읽기까지</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p17-to-defaults">
+<h3>SDK 기본값 그대로 6초짜리 일을 맡기면 — 파이썬만 5초에 끊는다</h3>
+<p class="lead">교통 에이전트를 단계 2초(합 6초)로 띄우고, 세 언어 클라이언트가 시간 제한을 하나도 주지 않은 막는 SendMessage 를 보냈습니다(<code>17/defaults</code> ×3).</p>
+<!--OUT file=out/17/defaults.txt part=터미널 4-->
+<div class="warn"><b>파이썬은 5초가 넘는 막는 호출을 기본으로는 받지 못한다</b> — 원인이 <code>ReadTimeout</code> 입니다. 서버는 그 사이에도 배차를 끝까지 했습니다(같은 캡처의 서버 출력 <code>[교통] 완료</code>). 총무팀 CLI 와 기획 에이전트가 httpx 에 <code>timeout=30</code> 을 준 까닭입니다(<code>agents/ask.py:113</code>, <code>agents/planner.py:169</code>).</div>
+</article>
+
+<article class="card" id="p17-to-py">
+<h3>파이썬 — 클라이언트 전체는 httpx 에, 호출 하나는 <code>ClientCallContext(timeout=)</code> 에</h3>
+<p class="lead">손잡이가 둘입니다. 클라이언트를 지을 때 <code>ClientConfig(httpx_client=httpx.AsyncClient(timeout=…))</code> 를 넘기거나, 호출마다 <code>context=</code> 로 제한을 줍니다.</p>
+<!--CODE file=ex/py/17/resend.py region=send-->
+<ul>
+<li>호출의 <code>timeout</code> 은 전송이 <code>httpx.Timeout(context.timeout)</code> 으로 바꿔 그 요청에만 겁니다(<code>transports/http_helpers.py:48</code>).</li>
+<li>httpx 의 <code>Timeout</code> 은 연결·읽기·쓰기·풀(pool) 네 가지를 따로 잽니다(<code>httpx/_config.py</code> 의 <code>Timeout</code>). 읽기 제한은 "소켓에서 한 번 읽을 때" 의 기다림입니다 — 스트림에서 이 차이가 드러납니다(<a href="#p17-to-stream">뒤</a>).</li>
+<li>넘으면 <code>httpx.TimeoutException</code> 이 <code>A2AClientTimeoutError("Client Request timed out")</code> 로 바뀝니다(<code>http_helpers.py:31</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-to-ts">
+<h3>TypeScript — 클라이언트 단위의 손잡이는 없다, 호출마다 <code>signal</code></h3>
+<p class="lead">TS SDK 의 호출은 모두 둘째 인자로 <code>RequestOptions</code> 를 받고, 그 안의 <code>signal?: AbortSignal</code> 을 <code>fetch</code> 에 그대로 넘깁니다. <code>ClientConfig</code> 에는 시간 제한이 없습니다.</p>
+<!--CODE file=ex/ts/17/resend.ts region=send-->
+<ul>
+<li><code>AbortSignal.timeout(ms)</code> 는 그 시각에 스스로 끊기는 신호입니다. 한 번 끊긴 신호는 다시 쓸 수 없어, 재시도할 때는 <b>시도마다 새로</b> 만들어야 합니다(<a href="#p17-rt-ts">재시도</a>).</li>
+<li>끊기면 <code>fetch</code> 가 던진 <code>DOMException</code>(이름 <code>TimeoutError</code>)이 SDK 를 그대로 지나 나옵니다 — SDK 는 전송 오류를 감싸지 않습니다.</li>
+<li>모든 호출에 같은 제한을 걸 자리는 <code>ClientConfig</code> 에 없습니다. 전송 옵션의 <code>fetchImpl</code> 을 감싸 넘기는 길이 남습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-to-go">
+<h3>Go — 호출 하나는 <code>context.WithTimeout</code>, 클라이언트 전체는 <code>http.Client.Timeout</code></h3>
+<p class="lead">Go 의 모든 호출은 <code>ctx</code> 를 받습니다. 그 ctx 의 기한이 지나면 HTTP 요청도 끊깁니다. 클라이언트 전체의 제한은 <code>WithJSONRPCTransport(&amp;http.Client{Timeout: …})</code> 로 줍니다.</p>
+<!--CODE file=ex/go/17/resend/main.go region=send-->
+<ul>
+<li>전송을 고르지 않으면 SDK 가 <code>WithJSONRPCTransport(nil)</code> 로 시작하고(<code>factory.go:64</code>), nil 이면 <code>http.Client{Timeout: defaultRequestTimeout}</code>, 곧 3분을 짓습니다(<code>jsonrpc.go:64</code>).</li>
+<li>오류는 감싼 문장 하나입니다 — <code>errors.Is(err, context.DeadlineExceeded)</code> 로 알아봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-to-resend-run">
+<h3>1.5초에 끊고 같은 messageId 로 다시 — 세 서버 모두 작업이 둘이 됐다</h3>
+<p class="lead"><code>17/resend</code> ×3 입니다. ① 단계 1초(합 3초)인 교통 에이전트에 1.5초 제한으로 보내 끊기고, ② <b>같은 messageId</b> <code>m-resend</code> 로 10초 제한을 주어 다시 보내고, ③ 그 맥락의 작업을 ListTasks 로 셉니다.</p>
+<!--OUT file=out/17/resend.txt part=터미널 4-->
+<ul>
+<li>① 의 오류는 셋이 셋입니다 — <code>A2AClientTimeoutError</code>, <code>TimeoutError</code>, <code>context deadline exceeded</code>. 어느 것도 "요청이 서버에 닿았는지" 는 알려 주지 않습니다.</li>
+<li>③ 은 셋 다 2건, 둘 다 COMPLETED, 둘 다 첫 메시지가 <code>m-resend</code> 입니다. 같은 messageId 를 새 메시지로 두 번 보내면 작업이 둘 생긴다는 <a href="#p04-dup-new">4부</a>의 결과가 시간 초과에서 그대로 일어났습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-to-server-kept">
+<h3>클라이언트가 떠나도 서버는 끝까지 한다 — 배차가 두 번 끝났다</h3>
+<p class="lead">같은 실행의 서버 출력입니다(파이썬 서버). TS·Go 서버의 출력도 줄마다 같습니다.</p>
+<!--OUT file=out/17/resend.txt server=bus-py-->
+<ul>
+<li><code>[교통] 완료</code> 가 두 줄 — 버스 두 대를 잡았습니다. 첫 작업의 단계가 1·2·3초, 다시 보낸 작업의 단계가 그 0.5초 뒤마다 섞여 찍혔습니다.</li>
+<li>세 SDK 모두 실행기를 요청과 떼어 돌립니다. 파이썬은 생산자를 따로 <code>asyncio.create_task</code> 로(<code>active_task.py:548</code>), TS 는 <code>execute()</code> 를 기다리지 않고(<code>server/index.js:2916</code>), Go 는 <code>context.WithoutCancel(ctx)</code> 로 요청의 취소를 끊어 냅니다(<code>internal/taskexec/local_manager.go:182</code>).</li>
+</ul>
+<div class="warn"><b>시간 초과는 "실패" 가 아니라 "모름" 이다</b> — 클라이언트가 포기한 순간에도 일은 서버에서 계속됩니다. 그 상태에서 같은 요청을 다시 보내는 것이 이 실행의 이중 배차입니다.</div>
+</article>
+
+<article class="card" id="p17-to-stream-code">
+<h3>스트림에 거는 1.5초 — 파이썬·Go 는 클라이언트에, TS 는 그 호출에</h3>
+<p class="lead"><code>17/stream_to</code> ×3 에서 제한을 거는 자리만 잘랐습니다. 나머지는 이벤트를 한 줄씩 찍고, 끊기면 3초 뒤 GetTask 로 작업을 보는 같은 코드입니다.</p>
+<!--CODE file=ex/py/17/stream_to.py region=limit-->
+<!--CODE file=ex/ts/17/stream_to.ts region=limit-->
+<!--CODE file=ex/go/17/stream_to/main.go region=limit-->
+<div class="note"><b>같은 숫자, 같은 과녁</b> — 셋 다 1.5초이고, 교통 에이전트(단계 1초)는 이벤트를 1초마다 하나씩, 3초 동안 보냅니다. 다른 것은 "무엇의 1.5초인가" 하나뿐입니다.</div>
+</article>
+
+<article class="card" id="p17-to-stream">
+<h3>스트림에 1.5초 제한 — 파이썬은 끝까지 받고, TS·Go 는 1.5초에 끊는다</h3>
+<p class="lead">같은 교통 에이전트(단계 1초)에 SendStreamingMessage 를 열었습니다. 클라이언트는 서버와 같은 언어입니다.</p>
+<!--OUT file=out/17/stream_to.txt part=터미널 4-->
+<ul>
+<li>파이썬의 <code>httpx.AsyncClient(timeout=1.5)</code> 는 읽기 한 번마다 1.5초입니다. 이벤트가 1초마다 오니 한 번도 넘지 않았고, 3초짜리 스트림을 끝까지 받았습니다.</li>
+<li>TS 의 <code>AbortSignal.timeout(1500)</code> 과 Go 의 <code>http.Client{Timeout: 1.5초}</code> 는 호출 전체의 시간입니다. 둘째 이벤트 뒤에서 끊겼고, Go 의 오류 글이 그것을 말합니다 — "Client.Timeout … while reading body".</li>
+<li>세 서버 모두 끊긴 뒤에도 배차를 끝냈습니다(3초 뒤 GetTask → <code>COMPLETED</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-to-cmp">
+<h3>세 언어 비교 — 같은 "1.5초" 가 SDK 마다 다른 것을 잰다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>기본값</td><td>5초(httpx)</td><td>SDK 는 없음</td><td>3분(<a href="#p09-cl-planner">9부</a>)</td></tr>
+<tr><td>클라이언트 전체</td><td><code>ClientConfig(httpx_client=…)</code></td><td>없음(<code>fetchImpl</code> 을 감싼다)</td><td><code>WithJSONRPCTransport(&amp;http.Client{…})</code></td></tr>
+<tr><td>호출 하나</td><td><code>context=ClientCallContext(timeout=)</code></td><td><code>{ signal: AbortSignal.timeout() }</code></td><td><code>context.WithTimeout</code></td></tr>
+<tr><td>무엇을 재나</td><td>연결·읽기 한 번·쓰기 따로</td><td>호출 전체</td><td>호출 전체(본문 읽기까지)</td></tr>
+<tr><td>스트림에서의 뜻</td><td>이벤트 사이의 침묵</td><td>스트림 전체의 길이</td><td>스트림 전체의 길이</td></tr>
+<tr><td>넘었을 때</td><td><code>A2AClientTimeoutError</code></td><td><code>DOMException</code> <code>TimeoutError</code></td><td><code>context.DeadlineExceeded</code> 를 감싼 오류</td></tr>
+</table>
+</div>
+<div class="key"><b>막는 호출엔 짧게, 스트림엔 "침묵" 으로</b> — 스트림에 호출 전체의 제한을 걸면 오래 일하는 정상 작업도 끊습니다. Go 의 우리 클라이언트가 <code>Timeout</code> 대신 응답 머리까지만 30초를 기다리는 까닭입니다(<code>agents/common/client.go</code>). TS·Go 에서 "마지막 이벤트 뒤 N초" 를 재려면 이벤트마다 타이머를 다시 거는 코드를 직접 써야 합니다.</div>
+</article>
+
+<article class="card" id="p17-rt-rule">
+<h3>다시 해도 되는 실패는 둘 — 요청이 떠나지 못했거나, 두 번 해도 같은 호출이거나</h3>
+<p class="lead">§3.3.1 은 "Get operations … are naturally idempotent", "Cancel Task operations are idempotent" 라 못 박고, Send Message 는 "MAY be idempotent" 로만 둡니다. 세 SDK 서버 모두 SendMessage 를 멱등으로 만들지 않았습니다(<a href="#p04-dup-cmp">4부</a>).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>실패</th><th>요청은 서버에 갔나</th><th>GetTask·ListTasks·CancelTask</th><th>SendMessage</th></tr>
+<tr><td>연결 거절(서버 없음)</td><td>안 갔다</td><td>다시</td><td>다시</td></tr>
+<tr><td>시간 초과·연결 끊김</td><td>모른다</td><td>다시</td><td><b>다시 보내지 않는다</b> — 찾아서 이어 받는다(<a href="#p17-safe-why">뒤</a>)</td></tr>
+<tr><td>A2A 오류(-32001 따위)</td><td>갔고, 답했다</td><td colspan="2">다시 하지 않는다 — 같은 답이 온다</td></tr>
+</table>
+</div>
+<div class="note"><b>서버가 줄 수 있는 귀띔</b> — §3.3.2 는 서버에 "temporary failures vs. permanent errors" 를 가르라는 SHOULD 와 "Retry-After" 를 실어도 된다는 MAY 를 둡니다. 세 SDK 설치본 어디에도 <code>Retry-After</code> 를 읽는 코드가 없으니(낱말로 찾아 0건), 쓰려면 재시도 함수가 직접 읽어야 합니다.</div>
+<div class="note"><b>간격은 늘려 가며</b> — 0.1초, 0.2초, 0.4초처럼 두 배씩(지수 백오프) 늘리면 죽은 서버에 요청이 몰리지 않습니다. 실제로는 여기에 지터(jitter, 무작위로 조금씩 어긋나게 하는 값)를 더해 여러 클라이언트가 같은 박자로 두드리지 않게 합니다. 캡처를 고정하려고 이 장의 예제에서는 뺐습니다.</div>
+</article>
+
+<article class="card" id="p17-rt-py">
+<h3>파이썬 — 오류의 클래스만으로는 모른다, <code>__cause__</code> 의 httpx 예외를 본다</h3>
+<p class="lead"><code>retry</code> 는 호출 하나와 "두 번 해도 같은가(<code>safe</code>)" 를 받습니다. 연결 실패는 늘, 그 밖의 전송 실패는 <code>safe</code> 일 때만 다시 합니다.</p>
+<!--CODE file=ex/py/17/retry.py region=retry-->
+<ul>
+<li>전송 오류는 모두 <code>A2AClientError</code> 로 바뀌어 나오지만, 그 클래스는 HTTP 상태 오류와 모르는 JSON-RPC 코드에도 쓰입니다(<code>transports/jsonrpc.py:337</code>). 그래서 클래스가 아니라 감싼 원인(<code>__cause__</code>)이 <code>httpx.ConnectError</code> 인지, <code>httpx.TransportError</code> 인지를 봅니다.</li>
+<li>서버의 A2A 오류는 <code>TaskNotFoundError</code> 처럼 제 클래스로 오고 원인이 없습니다 — 다시 하지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-rt-ts">
+<h3>TypeScript — 전송 오류는 <code>fetch</code> 의 것 그대로, 원인의 <code>code</code> 로 가른다</h3>
+<p class="lead">TS SDK 는 <code>fetch</code> 의 실패를 감싸지 않습니다. 연결 거절은 <code>fetch</code> 가 던진 오류의 <code>cause.code</code> 가 <code>ECONNREFUSED</code> 인 것으로 알아봅니다.</p>
+<!--CODE file=ex/ts/17/retry.ts region=retry-->
+<ul>
+<li>시간 초과는 이름이 <code>TimeoutError</code> 인 오류, 서버의 A2A 오류는 SDK 의 오류 클래스(<code>TaskNotFoundError</code>)로 옵니다.</li>
+<li>재시도하는 호출은 함수로 받습니다. 그래야 시도마다 <code>AbortSignal.timeout()</code> 을 새로 지을 수 있습니다(<code>retry.ts</code> 의 <code>first</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-rt-go">
+<h3>Go — <code>errors.As</code> 로 <code>*net.OpError</code> 의 dial, <code>errors.Is</code> 로 기한 초과</h3>
+<p class="lead">Go SDK 는 전송 오류를 <code>%w</code> 로 감싸 돌려줍니다. 감싼 사슬에서 연결 단계(<code>Op == "dial"</code>)의 실패인지, ctx 기한이 지난 것인지를 꺼내 봅니다.</p>
+<!--CODE file=ex/go/17/retry/main.go region=retry-->
+<ul>
+<li>서버의 A2A 오류는 <code>a2a.ErrTaskNotFound</code> 같은 표지 오류로 옵니다(<a href="#p09-ch4">9부</a>의 표지 오류). 이 함수는 그것을 "전송이 아니다" 로만 보고 그만둡니다.</li>
+<li>재시도 함수가 호출을 클로저로 받는 것은 TS 와 같은 까닭입니다 — 시도마다 새 <code>context.WithTimeout</code>.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-rt-run">
+<h3>실행 — 없는 작업도, 끊긴 SendMessage 도 한 번에 그만, 죽은 주소만 네 번</h3>
+<p class="lead"><code>17/retry</code> ×3 을 교통 에이전트 셋(단계 1초)에 붙였습니다. ③ 은 카드를 받은 뒤 그 주소만 아무도 듣지 않는 <code>11799</code> 로 바꿔 끼운 클라이언트입니다.</p>
+<!--OUT file=out/17/retry.txt part=터미널 4-->
+<ul>
+<li>① 서버가 "없다" 고 답한 것은 다시 물어도 같습니다. ② 1.5초에 끊긴 SendMessage 는 <code>safe=False</code> 라 다시 보내지 않았습니다 — <a href="#p17-to-resend-run">앞</a>의 이중 배차를 막는 자리입니다.</li>
+<li>③ 은 0.1·0.2·0.4초를 쉬며 네 번 두드리고 그만뒀습니다. 세 언어가 같은 박자입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-safe-why">
+<h3>끊긴 SendMessage 는 다시 보내지 말고 찾는다 — 열쇠는 클라이언트가 정한 contextId</h3>
+<p class="lead">시간 초과 뒤 클라이언트가 모르는 것은 "작업이 생겼나" 하나입니다. 보내기 전에 열쇠를 정해 두면 서버에 물어 확인할 수 있습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>때</th><th>할 일</th></tr>
+<tr><td>보내기 전</td><td>contextId 를 클라이언트가 짓는다(<a href="#p04-ctx-client">4부</a>: 세 서버 모두 그대로 받는다)</td></tr>
+<tr><td>끊기면</td><td><code>ListTasks(contextId)</code> 로 찾는다. 있으면 다시 보내지 않는다</td></tr>
+<tr><td>찾았으면</td><td>그 taskId 에 <code>SubscribeToTask</code>(<a href="#p10-sub-spec">10부</a>)나 GetTask 폴링(<a href="#p11-poll-rule">11부</a>)</td></tr>
+<tr><td>없으면</td><td>그때 처음으로 다시 보낸다 — 요청이 서버에 닿지 않았다</td></tr>
+</table>
+</div>
+<div class="tip"><b>처음부터 막지 않는 길</b> — <code>returnImmediately: true</code>(<a href="#p05-mode-rule">5부</a>)면 서버가 Task 를 만들자마자 taskId 를 돌려줍니다. 긴 일을 막는 호출로 기다리지 않으니 끊길 일이 줄고, 끊겨도 이미 taskId 가 손에 있습니다.</div>
+</article>
+
+<article class="card" id="p17-safe-code">
+<h3>파이썬 — 끊기면 ListTasks 로 찾고, 찾은 작업에 다시 붙는다</h3>
+<p class="lead"><code>17/safe.py</code> 입니다. 맥락 <code>ctx-safe</code> 를 메시지에 실어 1.5초 제한으로 보내고, 끊긴 뒤에는 다시 보내지 않습니다.</p>
+<!--CODE file=ex/py/17/safe.py region=main-->
+<div class="note"><b>클라이언트가 둘</b> — 파이썬 SDK 의 <code>subscribe</code> 는 <code>ClientConfig(streaming=True)</code> 인 클라이언트에서만 됩니다(<code>base_client.py:322</code>). 그런데 그 클라이언트는 <code>send_message</code> 도 스트림으로 보내 버려, 막는 호출용 <code>once</code> 와 구독용 <code>sub</code> 을 따로 지었습니다. TS(<code>resubscribeTask</code>)·Go(<code>SubscribeToTask</code>)는 클라이언트 하나로 됩니다.</div>
+</article>
+
+<article class="card" id="p17-safe-run">
+<h3>세 언어 모두 작업은 하나 — 끊긴 뒤 WORKING 을 찾아 붙고, COMPLETED 까지 받았다</h3>
+<p class="lead"><code>17/safe</code> ×3 을 교통 에이전트 셋(단계 1초)에 붙였습니다. 클라이언트는 서버와 같은 언어이고, TS·Go 의 다시 붙는 자리는 아래 두 토막입니다.</p>
+<!--OUT file=out/17/safe.txt part=터미널 4-->
+<!--CODE file=ex/ts/17/safe.ts region=sub-->
+<!--CODE file=ex/go/17/safe/main.go region=sub-->
+<ul>
+<li>② 1.5초에 끊긴 순간 작업은 첫 단계(<code>배차 요청 접수</code>)를 지나 WORKING 이었습니다. ④ 끝난 뒤에도 그 맥락의 작업은 1건 — <a href="#p17-to-resend-run">다시 보낸 실행</a>의 2건과 견줘 보십시오.</li>
+<li>구독의 첫 이벤트는 그때까지의 Task(WORKING), 마지막은 COMPLETED 입니다(<a href="#p10-sub-spec">10부</a>의 규칙 그대로). 서버 출력의 <code>[교통] 완료</code> 도 서버마다 한 줄입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-ch1-sum">
+<h3>1장 정리 — 시간 초과는 "모름", SendMessage 는 다시 보내지 말고 찾는다</h3>
+<ul>
+<li>SDK 기본 제한은 파이썬 5초(httpx), TS 없음, Go 3분입니다. 파이썬은 기본값으로 5초 넘는 막는 호출을 받지 못합니다.</li>
+<li>같은 "1.5초" 가 파이썬에서는 읽기 한 번, TS·Go 에서는 호출 전체입니다. 스트림에서는 이 차이가 "끝까지 받음" 과 "1.5초에 끊김" 으로 갈립니다.</li>
+<li>클라이언트가 끊어도 세 서버 모두 실행기를 끝까지 돌립니다. 그래서 같은 messageId 로 다시 보내면 작업이 둘, 배차가 두 번입니다.</li>
+<li>다시 하는 것은 연결 실패와 멱등 호출(Get·List·Cancel)의 전송 실패뿐, 간격은 두 배씩. 끊긴 SendMessage 는 클라이언트가 정한 contextId 로 찾아 구독하거나, 처음부터 returnImmediately 로 taskId 를 받습니다.</li>
+</ul>
+</article>
+
+<article class="card quiz" id="p17-ch1-quiz" data-quiz>
+<h3>1장 퀴즈</h3>
+<p class="q">Q. 이벤트가 1초마다 오는 3초짜리 스트림에 파이썬은 <code>httpx.AsyncClient(timeout=1.5)</code>, Go 는 <code>http.Client{Timeout: 1.5초}</code> 를 걸었습니다. 각각 스트림을 어디까지 받았고, 서버의 작업은 어떻게 됐습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 파이썬은 끝까지 받았습니다 — httpx 의 읽기 제한은 읽기 한 번마다라 1초 간격을 넘지 않습니다. Go 는 <code>Task SUBMITTED</code> 와 첫 WORKING 뒤에 "Client.Timeout … while reading body" 로 끊겼습니다 — 본문 읽기까지 잰 호출 전체의 제한입니다. 서버의 작업은 두 경우 모두 끝까지 가서 3초 뒤 GetTask 가 <code>COMPLETED</code> 였습니다(<a href="#p17-to-stream">스트림 실험</a>).</div>
+</article>
+
+<!-- ==== 2장 영속 Task 저장소 ==== -->
+
+<article class="card" id="p17-ch2">
+<p class="chnum">2장</p>
+<h2>영속 Task 저장소 ×3</h2>
+<p class="chsub">메모리 저장소가 잃는 것 → 파이썬 → TypeScript → Go → 죽이고 다시 띄우는 명세 → 남은 것과 사라진 것 → 주인 없는 WORKING → 구독과 취소 → 복구 규칙 → 실행 → 이것으로 모자란 것 → 세 언어 비교</p>
+</article>
+
+<article class="card" id="p17-st-why">
+<h3>세 SDK 의 기본 저장소는 메모리다 — 서버를 다시 띄우면 Task 가 모두 사라진다</h3>
+<p class="lead">맨손 서버의 저장소가 "프로세스의 메모리에만" 산다는 것은 <a href="#p06-store-what">6부</a>에서 봤습니다. SDK 의 <code>InMemoryTaskStore</code>·<code>taskstore.InMemory</code>(<a href="#p07-store-owner">7</a>·<a href="#p08-store-owner">8</a>·<a href="#p09-store-owner">9부</a>)도 같습니다. 대신 셋 다 저장소를 인터페이스로 열어 두었습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>인터페이스</th><th>메서드</th><th>ListTasks 의 아티팩트 빼기</th></tr>
+<tr><td>파이썬</td><td><code>TaskStore</code>(<code>server/tasks/task_store.py</code>)</td><td><code>save</code>·<code>get</code>·<code>list</code>·<code>delete</code></td><td>처리기가(<code>default_request_handler_v2.py:212</code>)</td></tr>
+<tr><td>TS</td><td><code>TaskStore</code>(<code>server</code> 의 타입)</td><td><code>save</code>·<code>load</code>·<code>list</code></td><td>저장소가(<code>InMemoryTaskStore.list</code>, <code>server/index.js:3613</code>)</td></tr>
+<tr><td>Go</td><td><code>taskstore.Store</code>(<code>taskstore/api.go:79</code>)</td><td><code>Create</code>·<code>Update</code>·<code>Get</code>·<code>List</code>, 판 번호</td><td>저장소가(처리기는 그대로 돌려준다, <code>handler.go:280</code>)</td></tr>
+</table>
+</div>
+<div class="key"><b>이 장의 저장소</b> — 작업 하나를 JSON 파일 하나로, 쓸 때는 임시 파일에 쓰고 이름을 바꿔 끼웁니다(쓰다 만 파일이 남지 않게). 세 SDK 인터페이스에 맞춘 같은 모양 셋을 짓고, 교통 에이전트에 끼워 죽여 봅니다.</div>
+</article>
+
+<article class="card" id="p17-st-py">
+<h3>파이썬 — <code>TaskStore</code> 를 이어받아 넷을 채우고, 처리기에 <code>task_store=</code> 로 넘긴다</h3>
+<p class="lead"><code>17/filestore.py</code> 의 저장과 꺼내기, 그리고 그것을 끼운 <code>17/bus_store.py</code> 입니다. 실행기와 카드는 <code>agents/bus.py</code> 에서 그대로 가져옵니다.</p>
+<!--CODE file=ex/py/17/filestore.py region=save-->
+<!--CODE file=ex/py/17/bus_store.py region=wire-->
+<ul>
+<li>Task 는 protobuf 메시지라 <code>json_format.MessageToJson</code>·<code>Parse</code> 로 와이어와 같은 JSON 이 됩니다. <code>os.replace</code> 는 같은 파일 시스템 안에서 원자적입니다.</li>
+<li>없는 작업이면 <code>None</code> — 처리기가 <code>TaskNotFoundError</code> 로 바꿉니다. 판 번호는 없습니다. 처리기가 <code>LegacyTaskStoreAdapter</code> 로 감싸 판 검사 없이 씁니다(<code>default_request_handler_v2.py:137</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-st-ts">
+<h3>TypeScript — <code>load</code> 가 <code>undefined</code> 면 없는 작업, 아티팩트 빼기는 저장소가 한다</h3>
+<p class="lead"><code>17/filestore.ts</code> 의 목록과, 처리기 생성자의 둘째 인자로 그것을 넘기는 <code>17/bus_store.ts</code> 입니다.</p>
+<!--CODE file=ex/ts/17/filestore.ts region=list-->
+<!--CODE file=ex/ts/17/bus_store.ts region=wire-->
+<ul>
+<li>Task 는 ts-proto 객체라 <code>Task.toJSON</code>·<code>Task.fromJSON</code> 으로 파일과 오갑니다(<code>region=save</code>). 파트의 <code>{$case, value}</code> 가 와이어 모양으로 바뀝니다.</li>
+<li><code>agents/bus.ts</code> 는 불러오면 곧바로 서버를 띄우는 파일이라, 실행기와 카드를 <code>bus_store.ts</code> 로 옮겨 적었습니다(같은 세 단계).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-st-go">
+<h3>Go — 판 번호를 파일에 함께 적고, 앞 판이 다르면 <code>ErrConcurrentModification</code></h3>
+<p class="lead"><code>17/filestore</code> 패키지의 <code>Update</code> 와, 공용 <code>common.Serve</code> 에 처리기 옵션으로 끼우는 <code>17/busstore</code> 입니다.</p>
+<!--CODE file=ex/go/17/filestore/store.go region=update-->
+<!--CODE file=ex/go/17/busstore/main.go region=wire-->
+<ul>
+<li>파일 하나는 <code>{"version": N, "task": {…}}</code> 입니다. SDK 는 Update 마다 앞 판(<code>PrevVersion</code>)을 주고, 맞지 않으면 이 오류를 돌려주라고 MUST 로 적었습니다(<code>taskstore/api.go:28</code>, <a href="#p09-store-version">9부</a>).</li>
+<li>옵션은 붙인 차례로 덮어씁니다 — <code>common.Serve</code> 가 먼저 넣은 메모리 저장소를 뒤의 <code>WithTaskStore</code> 가 바꿉니다(<code>a2asrv/handler.go:169</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-st-spec">
+<h3>죽이는 명세 — <code>restart</code> 는 SIGKILL 뒤 같은 명령으로 다시 띄운다</h3>
+<p class="lead">이 장을 위해 러너에 동사 하나를 더했습니다. 우아한 종료(SIGTERM) 없이 프로세스 그룹째 SIGKILL 하고, 같은 명령으로 다시 띄워 준비를 기다립니다. 정전이나 OOM 으로 죽은 서버와 같습니다.</p>
+<!--SPEC file=ex/run/17/store_py.run-->
+<!--CODE file=ex/py/17/store_check.py region=look-->
+<ul>
+<li><code>look</code> 은 ListTasks 한 번과, 작업마다 ListTaskPushNotificationConfigs 한 번입니다. 클라이언트는 넷 다 파이썬 SDK 의 <code>store_check.py</code> 하나 — 이 장에서 ×3 인 것은 서버의 저장소입니다.</li>
+<li><code>start</code> 는 returnImmediately 로 맡기고 첫 단계(WORKING)를 본 순간 나옵니다. 둘째 단계(1초 뒤)가 오기 전에 죽입니다.</li>
+<li><code>--dir</code> 를 주지 않으면 <code>$TMPDIR/tasks-포트</code> 입니다. 러너는 명세마다 TMPDIR 을 새로 비워 주므로(재시작 전후로는 같다) 앞 실행의 파일이 섞이지 않습니다. TS·Go 명세도 서버 줄만 다릅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-st-run">
+<h3>다시 띄운 뒤 — Task 는 둘 다 남았고, 푸시 설정은 사라졌다</h3>
+<p class="lead">파이썬 서버의 실행입니다. 다시 띄운 뒤 3초를 기다렸다 ListTasks 로 봤습니다.</p>
+<!--OUT file=out/17/store_py.txt lines=1-17-->
+<ul>
+<li>끝난 작업 <code>m-keep</code> 은 상태·아티팩트까지 그대로입니다 — 파일에서 읽었습니다.</li>
+<li>그 작업의 푸시 설정은 1개 → 0개. 저장소를 바꾼 것은 Task 뿐이고, 푸시 설정 저장소는 메모리 그대로였기 때문입니다. 푸시 설정까지 남기려면 그것도 바꿔야 합니다(파이썬 <code>PushNotificationConfigStore</code>, TS <code>PushNotificationStore</code>, Go <code>push.ConfigStore</code>).</li>
+<li>TS·Go 서버의 같은 대본도 이 17줄이 서버 명령과 포트 말고는 글자까지 같았습니다(<code>out/17/store_ts.txt</code>·<code>store_go.txt</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-st-orphan">
+<h3>죽을 때 WORKING 이던 작업은 영원히 WORKING — 그것을 끝낼 실행기가 없다</h3>
+<p class="lead"><code>m-cut</code> 은 죽기 전 첫 단계였고, 다시 띄운 뒤 3초(세 단계가 다 끝났을 시간)가 지나도 <code>WORKING '배차 요청 접수'</code> 입니다. 디스크에는 Task 가 있지만, 그것을 움직이던 실행기와 이벤트 큐는 메모리에 있다가 프로세스와 함께 사라졌습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>누가</th><th>무엇을 보나</th></tr>
+<tr><td>폴링하던 클라이언트</td><td>WORKING 을 끝없이 받는다 — 끝 상태가 오지 않는다</td></tr>
+<tr><td>푸시를 기다리던 웹훅</td><td>설정이 사라져 아무것도 오지 않는다</td></tr>
+<tr><td>다시 붙으려는 클라이언트</td><td>구독해도 이벤트가 오지 않는다(<a href="#p17-st-poke">다음 슬라이드</a>)</td></tr>
+</table>
+</div>
+<div class="warn"><b>"남았다" 가 "이어진다" 는 아니다</b> — 영속 저장소가 지켜 주는 것은 끝난 작업의 기록과 멈춘(INPUT_REQUIRED) 작업의 대화입니다. 달리던 일은 저장소만으로는 되살아나지 않습니다.</div>
+</article>
+
+<article class="card" id="p17-st-poke">
+<h3>주인 없는 작업에 구독하면 — 파이썬은 Task 하나 뒤로 침묵, TS·Go 는 바로 닫는다</h3>
+<p class="lead"><code>poke</code> 는 WORKING 작업에 SubscribeToTask 를 열어 2초를 듣고, CancelTask 를 보냅니다. 파이썬·TS·Go 서버 차례입니다.</p>
+<!--OUT file=out/17/store_py.txt lines=18-21-->
+<!--OUT file=out/17/store_ts.txt lines=18-21-->
+<!--OUT file=out/17/store_go.txt lines=18-21-->
+<ul>
+<li>구독: 파이썬은 활성 작업을 새로 지어 거기서 이벤트를 기다립니다(<code>default_request_handler_v2.py:568</code>) — 생산자가 없으니 영원히 옵니다. TS 는 이벤트 버스가 없으면 Task 하나만 주고 닫고(<code>server/index.js:3354</code>), Go 는 실행이 없으면 저장된 Task 를 주고 닫습니다(<code>a2asrv/handler.go:371</code>).</li>
+<li>취소: 셋 다 CANCELED 가 됐습니다. 파이썬은 구독이 남긴 활성 작업을 통해, Go 는 실행이 없을 때의 취소 길(<code>handleCancel</code>)로 우리 실행기의 cancel 을 불렀고(서버 출력 <code>[교통] 취소</code>), TS 는 실행기를 부르지 않고 SDK 의 영어 문장을 직접 적었습니다(<code>server/index.js:3241</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-st-rule">
+<h3>복구 규칙 — 다시 뜰 때 SUBMITTED·WORKING 을 FAILED 로 닫는다</h3>
+<p class="lead">실행기가 없는 달리던 작업은 둘 중 하나입니다 — 다시 돌리거나, 끝났다고 알리거나. 교통 에이전트의 배차는 두 번 하면 안 되는 일이라(1장) 다시 돌리지 않고 닫습니다.</p>
+<!--CODE file=ex/py/17/filestore.py region=recover-->
+<ul>
+<li>INPUT_REQUIRED·AUTH_REQUIRED 는 닫지 않습니다. 클라이언트의 다음 메시지를 기다리는 상태이고, 그 메시지가 오면 처리기가 저장소의 Task 로 실행기를 새로 부릅니다(<a href="#p05-ir-rule">5부</a>). 다만 15부의 결재 대기처럼 실행기가 기다림을 메모리에 잡아 두는 에이전트라면 그것도 잃습니다(<a href="#p15-deny-why">15부</a>).</li>
+<li>CANCELED 가 아니라 FAILED 입니다 — 아무도 취소를 청하지 않았고, 일을 마치지 못한 것은 서버의 탓입니다. 상태 메시지에 까닭을 적어 클라이언트가 다시 맡길지 정하게 합니다.</li>
+<li>다시 돌려도 되는 일(멱등인 실행기)이라면 FAILED 대신 같은 메시지로 실행기를 다시 부르는 규칙도 됩니다. 어느 쪽이든 서버를 띄울 때 한 번, 요청을 받기 전에 합니다. TS·Go 의 <code>recover</code>·<code>Recover</code> 도 같은 일을 합니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-st-recover-run">
+<h3>세 언어 모두 — 죽은 뒤의 WORKING 이 다시 뜨자마자 FAILED 가 됐다</h3>
+<p class="lead"><code>17/recover.run</code> 은 세 서버를 <code>--recover</code> 로 띄우고(처음엔 빈 디렉터리라 할 일이 없다), 서버마다 첫 단계의 작업을 남긴 채 죽입니다. 아래는 다시 띄운 뒤의 ListTasks 셋입니다(파이썬·TS·Go 서버 차례).</p>
+<!--OUT file=out/17/recover.txt lines=13-24-->
+<!--OUT file=out/17/recover.txt server=bus-py-->
+<div class="note"><b>클라이언트가 할 일도 생긴다</b> — FAILED 와 그 문장을 본 클라이언트는 이것이 "업무의 거절"(REJECTED)이 아니라 "서버의 사고" 라는 것을 압니다. 같은 요청을 다시 맡길지는 클라이언트가 정합니다. 그 작업이 끝까지 가지 못했다는 것은 이제 확실하니, 1장의 "모름" 과는 다릅니다.</div>
+</article>
+
+<article class="card" id="p17-st-prod">
+<h3>이 저장소로 모자란 것 — 덱에는 충분하고, 운영에는 모자라다</h3>
+<p class="lead">작업 몇 개, 프로세스 하나, 클라이언트 하나인 이 장의 실험에는 넘칩니다. 실제 서버라면 다음이 걸립니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>빈 곳</th><th>왜 문제인가</th><th>SDK 에 있는 것</th></tr>
+<tr><td>소유자 구분 없음</td><td>누구든 남의 작업을 목록에서 본다 — §3.3.2 "MUST NOT reveal the existence of resources"</td><td>세 InMemory 저장소의 소유자별 칸(<a href="#p11-list-owner">11부</a>)</td></tr>
+<tr><td>목록이 파일을 다 읽는다</td><td>작업 수에 비례해 느려진다, 페이지 토큰도 없다</td><td>파이썬 <code>DatabaseTaskStore</code>(<a href="#p07-db-schema">7부</a>)</td></tr>
+<tr><td>fsync 없음</td><td>프로세스가 죽는 것은 견디지만, 전원이 나가면 이름 바꾸기가 디스크에 닿기 전일 수 있다</td><td>—</td></tr>
+<tr><td>잠금이 프로세스 안</td><td>서버 둘이 같은 디렉터리를 쓰면 판 검사가 뚫린다</td><td>파이썬 <code>VersionedTaskStore</code>·<code>TaskEventStream</code>(<code>server/cluster/</code>), Go <code>WithClusterMode</code>(실험적)</td></tr>
+<tr><td>파이썬의 동기 파일 읽기·쓰기</td><td>쓰는 동안 이벤트 루프가 멈춘다</td><td>—</td></tr>
+<tr><td>이벤트 큐·푸시 설정은 메모리</td><td>재시작하면 구독·푸시가 끊긴다(앞 슬라이드들)</td><td>푸시 설정 저장소 인터페이스, TS <code>eventBusManager</code> 인자</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p17-st-cmp">
+<h3>세 언어 비교 — 같은 파일 저장소, 다른 계약</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>Task ↔ JSON</td><td><code>json_format</code></td><td><code>Task.toJSON</code>·<code>fromJSON</code></td><td><code>encoding/json</code></td></tr>
+<tr><td>없는 작업</td><td><code>None</code></td><td><code>undefined</code></td><td><code>a2a.ErrTaskNotFound</code></td></tr>
+<tr><td>판 번호</td><td>없음(다른 인터페이스 <code>VersionedTaskStore</code>)</td><td>없음</td><td>필수 — <code>Create</code> 는 1, <code>Update</code> 마다 +1</td></tr>
+<tr><td>목록에서 아티팩트 빼기</td><td>처리기</td><td>저장소</td><td>저장소</td></tr>
+<tr><td>끼우는 곳</td><td><code>DefaultRequestHandler(task_store=)</code></td><td>생성자 둘째 인자</td><td><code>a2asrv.WithTaskStore</code></td></tr>
+<tr><td>주인 없는 작업에 구독</td><td>Task 뒤로 침묵</td><td>Task 하나, 닫힘</td><td>Task 하나, 닫힘</td></tr>
+<tr><td>주인 없는 작업에 취소</td><td>CANCELED(실행기의 cancel)</td><td>CANCELED(SDK 의 영어 문장)</td><td>CANCELED(실행기의 cancel)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p17-ch2-sum">
+<h3>2장 정리 — Task 는 디스크에 남지만, 달리던 일은 남지 않는다</h3>
+<ul>
+<li>세 SDK 모두 저장소를 인터페이스로 열어 둡니다. 파일 하나에 작업 하나, 임시 파일 + 이름 바꾸기면 프로세스가 죽어도 반쯤 쓴 기록이 없습니다.</li>
+<li>SIGKILL 로 죽이고 다시 띄우자 끝난 작업은 상태·아티팩트까지 GetTask·ListTasks 로 돌아왔고, 메모리에 둔 푸시 설정은 사라졌습니다 — 세 언어 같은 대본.</li>
+<li>죽을 때 WORKING 이던 작업은 실행기도 이벤트 큐도 없이 WORKING 으로 남습니다. 구독은 파이썬에서 침묵, TS·Go 에서 바로 닫힘이고, 취소는 셋 다 됩니다.</li>
+<li>복구 규칙: 띄울 때 SUBMITTED·WORKING 을 FAILED 로, 까닭을 상태 메시지에. 멈춘 작업(INPUT_REQUIRED·AUTH_REQUIRED)은 그대로 둡니다.</li>
+</ul>
+</article>
+
+<article class="card quiz" id="p17-ch2-quiz" data-quiz>
+<h3>2장 퀴즈</h3>
+<p class="q">Q. 파일 저장소를 끼운 교통 에이전트가 배차 첫 단계에서 죽었다 다시 떴습니다(복구 규칙 없음). 3초 뒤 GetTask 의 상태는 무엇이고, 그 작업에 SubscribeToTask 를 열면 파이썬 서버와 Go 서버는 각각 무엇을 돌려줍니까? 죽기 전에 달아 둔 푸시 설정은 어떻게 됐습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 상태는 그대로 <code>WORKING</code>, 메시지는 <code>배차 요청 접수</code> 입니다 — 끝낼 실행기가 없습니다(<a href="#p17-st-run">실행</a>). 구독하면 파이썬은 Task 하나 뒤로 아무것도 보내지 않고(2초 동안 더 오지 않음), Go 는 저장된 Task 하나를 주고 스트림을 닫습니다(<a href="#p17-st-poke">구독과 취소</a>). 푸시 설정은 메모리 저장소에 있었으므로 1개에서 0개가 됐습니다.</div>
 </article>
