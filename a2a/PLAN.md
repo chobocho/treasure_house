@@ -964,3 +964,22 @@ subagent task each.
   `httpx.AsyncClient` it never closes explicitly. Timing: `fail_*.run` canceller polls
   ListTasks every 0.05 s, assumes CancelTask lands within the second 2 s bus step.
 - `make all SKEL=1` green (1548 slides, 1652 blocks, 0 mismatches, 0 notices).
+
+### Part 16 first half — 42 slides; 45-cell matrix all pass; part 16 split into 16_/16b_ (2026-10-19)
+- `16_interop.html`: cover + intro, ch1 3×3 matrix (24), ch2 wire differences (16). `16b_interop.html`
+  placeholder (`p16-todo-b`, builder needs `^p16(-|$)`), added to order.txt.
+- Specs `ex/run/16/` (ports 11600–11692): lodging/catering/push (taps, 9 clients), bus/cancel
+  (no tap, polling count varies), `settle_{py,ts,go}` (token numbers per client language),
+  `planner_{py,ts,go}` (single-language meshes, 3 `ask` runs), `raw.run` (curl, header casing).
+  New example `16/cancel` ×3 (returnImmediately → poll WORKING → CancelTask → GetTask after 2.5 s).
+- Matrix: 45 cells / 81 client runs pass; differences only along whole rows/columns — Go client
+  keeps the public card and its verify rejects the card with an added unknown field (row); py
+  planner server has no `task WORKING` after "승인" (column, `p15-say-second`). No agent fix.
+- Wire findings (new): Go client sends `"taskId": ""` in inline push config (`a2a/push.go:71`,
+  no omitempty); py ErrorInfo carries empty `"metadata": {}`, TS none, Go adds a timestamp;
+  Accept `*/*` py / `application/json` ts / none go; Go card GET lacks A2A-Version (§3.6.1
+  MUST); TS JSON-RPC id always `1`; Go SSE adds `id:` lines; Go history messages lack ids.
+- Notes for 16b: do NOT add a subdirectory under `ex/run/16/` (every part-16 spec would go
+  stale, ~6 min recheck) — inline JSON or another place. `p16-mx-same` cuts ask.py by
+  `lines=28-47` (no region). Timestamp precision not capturable (normalised) → link only.
+- `make all SKEL=1` green (1589 slides, 0 errors, 0 notices).
