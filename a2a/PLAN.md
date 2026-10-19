@@ -1069,3 +1069,21 @@ subagent task each.
   06c:265, 06c:266 (no matching part-17 slide).
 - `make all SKEL=1` green (1703 slides, 0 errors, 0 notices); manifest 290 examples, 0 stale.
 - Next per §5: part 1, then 0, then 18; then wrap-up.
+
+### Part 1 complete — 60 slides; 61 facts, 3 sources added (2026-10-19)
+- `01_why.html`: cover + intro, ch1 problem (8), ch2 principles (11), ch3 MCP (8, sources only),
+  ch4 history (11), ch5 v0.3→v1.0 (10), ch6 spec structure (8); `p01-wrap` → #p02. 22 cross-part
+  `OUT` cites (parts 2–5, 10–16), 124 links (83 ids). No new examples.
+- Sources `a2a-spec`, `a2a-what-is`, `a2a-and-mcp` (v1.0.1 raw); facts 74 total, data-check green.
+- Inconsistencies (slides): v0.1.0/v0.2.0 GitHub dates back-filled (after v0.2.1); CHANGELOG
+  1.0.1 = 2026-05-26 vs release 2026-05-28; spec header says "Latest Released Version 1.0.0";
+  §1.4 path `spec/a2a.proto` (real: `specification/`); §1.4 MUST regenerate types vs Go
+  hand-written `a2a` types; §2.2 role "user"/"agent" vs wire `ROLE_*`; Appendix A "≥0.5.0" with
+  no 0.4/0.5; whats-new pagination `cursor/limit/nextCursor` vs proto `pageToken/pageSize/
+  nextPageToken`, v0.3 `"taskStatusUpdate"` vs py compat `'status-update'`, push config
+  `configId/createdAt` vs proto `id`; what-is-a2a expands MCP as "Multi-agent Control Platform
+  (Model Context Protocol)" (verified in cached text) and uses `POST /sendMessage`.
+- Orchestrator edits: "짝마다 통합" → "점대점 통합"; terms 불투명 실행, 점대점 통합, 기술 운영
+  위원회(TSC) added to AUTHORING. Fact `v1-tsc` unused (duplicate of `v1-tsc-list`) — drop at
+  review. `p01-mcp-here` links only `#p00` cover until part 0 exists.
+- `make all SKEL=1` green (1761 slides, 0 errors, 0 notices).

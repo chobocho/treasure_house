@@ -131,7 +131,9 @@ capture. Never guess what an SDK does; read its installed source or run it.
   않게 앞에 JSON-RPC 를 붙인다), batch 배치, wiretap 와이어 탭, filter 필터("거르개"는
   쓰지 않는다), body limit 본문 한도, exponential backoff 지수 백오프, jitter 지터,
   crashed server 죽은 서버(죽이다·죽다 — "넘어지다" 는 쓰지 않는다), orphaned task
-  주인 없는 작업, recovery rule 복구 규칙, ActiveTask 활성 작업, TCK 적합성 시험(TCK).
+  주인 없는 작업, recovery rule 복구 규칙, ActiveTask 활성 작업, TCK 적합성 시험(TCK),
+  opaque execution 불투명 실행, point-to-point integration 점대점 통합("짝마다 통합" 은
+  쓰지 않는다), Technical Steering Committee 기술 운영 위원회(TSC).
   Python extra → "extra(선택 설치 묶음)", route factory 라우트 팩토리, owner-scoped
   store 소유자별 저장소(분리). Never coin playful new words ("덤", "공장", "칸막이").
   Enum values and method names stay in English as on the wire (`TASK_STATE_WORKING`,
