@@ -96,7 +96,23 @@ def as_ints(d: dict, *keys) -> dict:
 
     업무 규칙은 정수를 기대하므로 여기서 되돌린다.
     """
-    return {k: int(v) if k in keys else v for k, v in d.items()}
+    return {k: _int(v) if k in keys else v for k, v in d.items()}
+
+
+# region: int
+def _int(v) -> int:
+    """정수로 읽을 수 없는 값('서른')은 0 — 업무 규칙이 거절한다.
+
+    Go 의 common.Int 와 같은 약속이다. 여기서 예외가 나면 SDK 가
+    -32603 에 예외 글을 실어 내보낸다(16부에서 찾은 결함).
+    """
+    try:
+        return int(v)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+# endregion
 
 
 def serve(

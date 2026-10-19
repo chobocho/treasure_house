@@ -111,11 +111,11 @@ export function dataOf(...messages: (Message | undefined)[]) {
 }
 
 // JSON 에는 30 과 30.0 의 구별이 없어 TS 에서는 둘 다 30 이다.
-// 그래도 되물음의 글('30명')에서 온 "30" 은 수로 바꿔야 한다.
+// 되물음의 글('30명')에서 온 "30" 도 수로, 수가 아니면(NaN) 0 이다.
 export function asInts(d: Record<string, unknown>, ...keys: string[]) {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(d)) {
-    out[k] = keys.includes(k) ? Math.trunc(Number(v)) : v;
+    out[k] = keys.includes(k) ? Math.trunc(Number(v)) || 0 : v;
   }
   return out;
 }

@@ -983,3 +983,31 @@ subagent task each.
   stale, ~6 min recheck) — inline JSON or another place. `p16-mx-same` cuts ask.py by
   `lines=28-47` (no region). Timestamp precision not capturable (normalised) → link only.
 - `make all SKEL=1` green (1589 slides, 0 errors, 0 notices).
+
+### Part 16 complete — 90 slides; agent int parsing fixed; official TCK run ×3 (2026-10-19)
+- `16b_interop.html` (48): ch3 error table (32, `p16-ch3`…`p16-ch3-quiz`), ch4 conformance (16,
+  `p16-ch4`…`p16-wrap` → part 17 in plain text). 16_ intro links ch3/ch4; `p16-wd-num-why` fixed
+  (as_ints/asInts/common.Int truncate, not reject).
+- Specs `ex/run/16/{errs,bench,borrow,rest_errs,tests,tck_py,tck_ts,tck_go,tck_why,tck_spec}`;
+  ports filled in gaps 11606–08, 11616–18, 11633–38, 11667–69, 11676–79, 11686–89, 11693
+  (a2arun rejects 11700+ for part 16). Bench agent and integer tests ×3.
+- **Fix:** DataPart `{"headcount":"서른"}` → py -32603 leaking `int()` text, TS COMPLETED "NaN원",
+  Go REJECTED. py `_int` (region `int`, common.py) and TS `asInts … || 0` now give 0 → business
+  rule rejects, like Go. TS line count unchanged (part 3 `lines=271-277` still aligned). RED kept
+  in `tests.run` via `16/ints_old.*`. All 227 stale captures re-run byte-identical.
+- Error deviations: `[]` body py -32600 / ts,go -32602; TS -32602 for malformed requests
+  (`server/express/index.js:1908`) and no params type check (§3.3.2 MUST); `"id": 5` TS -32001;
+  `pageSize` 1000 Go -32600; executor exception TS → FAILED task; TS never sends -32006
+  (`server/index.js:3114/:3481`); Go never sends -32009 (`a2a/errors.go:74` defined only); Go
+  -32005 only from our executor; py -32008 from the part-14 wrapper; stream-request errors: Go
+  200 + SSE event, py/ts JSON body (§9.4.2 silent). HTTP+JSON statuses per §5.4 except Go 9.9 → 404.
+- TCK: a2a-tck 263b9cf (targets spec v1.0.0) in `scratch/tck/{src,venv}` — new `make tck`
+  target pins it. Against part-13 three-door lodging: MUST/SHOULD/MAY failures py 4/1/1, ts 7/0/1,
+  go 13/3/1. Causes: SUT script prefixes (`tck-*`), v1.0.0 vs v1.0.1 table (§5.4 gRPC/HTTP codes,
+  `application/json`), real SDK gaps (Go `"tasks": null` core.go:870, Go SendMessage ignores
+  historyLength handler.go:265, no ETag/Cache-Control Go, no Cache-Control py, version unchecked
+  Go and py/go gRPC, Go subscribe unknown → 200 SSE). No agent bug from the TCK. Checklist slides
+  map MUST clauses the TCK does not test (signing, auth, TLS, binding equivalence) to captures.
+- Risk: py TCK has 3 skips depending on a 10 s subscribe timeout — stable twice, may flip under swap.
+- New terms: TCK/적합성 시험, SUT 대본, 시험대 에이전트.
+- `make all SKEL=1` green (1636 slides, 0 errors, 0 notices); manifest 276 examples, 0 stale.

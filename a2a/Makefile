@@ -29,7 +29,7 @@ export GOTOOLCHAIN := local
 export GOFLAGS :=
 
 .DEFAULT_GOAL := help
-.PHONY: help deps docs sources data data-check test fmt lint ts-check golden run run-check \
+.PHONY: help deps docs tck sources data data-check test fmt lint ts-check golden run run-check \
         manifest-check deck deck-verify deck-check font font-check all clean
 
 help:                   ## 이 목록
@@ -57,6 +57,17 @@ docs:                   ## A2A 스펙 v1.0.1 → docs/spec/ (+ docs/FETCHED.txt)
 	  printf 'fetched\t%s\n' "$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } >> $(DOCS)/FETCHED.txt
 	rm -f scratch/a2a-spec.tar.gz
 	@cat $(DOCS)/FETCHED.txt
+
+# 16부 4장의 TCK 명세(ex/run/16/tck_*.run)는 저장소 밖 scratch/tck 에 깐 것을 부른다.
+# 캡처를 찍은 판(263b9cf, 2026-09-01, 스펙 v1.0.0 대상)에 고정해야 같은 결과가 난다.
+TCK_URL := https://github.com/a2aproject/a2a-tck
+TCK_REV := 263b9cf
+tck:                    ## 공식 TCK(a2a-tck 263b9cf) → scratch/tck/{src,venv}
+	mkdir -p scratch/tck
+	test -d scratch/tck/src || git clone -q $(TCK_URL) scratch/tck/src
+	git -C scratch/tck/src checkout -q $(TCK_REV)
+	test -x scratch/tck/venv/bin/python || /usr/bin/python3 -m venv scratch/tck/venv
+	scratch/tck/venv/bin/pip install -q -e scratch/tck/src
 
 # 1부(역사)의 출처 글. 주장은 data/facts.tsv, 맞은 근거는 data/evidence.tsv.
 sources:                ## data/sources.tsv 의 출처 → docs/<key>.txt (없는 것만)

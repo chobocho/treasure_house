@@ -1,4 +1,565 @@
-<article class="card" id="p16-todo-b">
-<h3>3×3 상호운용·적합성·오류 처리 (b)</h3>
-<p class="lead">준비 중입니다</p>
+<!-- ==== 3장 오류 표 전수 ==== -->
+<article class="card" id="p16-ch3">
+<p class="chnum">3장</p>
+<h2>오류 표 전수 — 열네 코드를 세 서버에서 일으키기</h2>
+<p class="chsub">지도 → 탐침과 명세 → -32700 → -32600 → -32601 → -32602 → -32001·-32002·-32003 → -32004 → -32005 → 시험대 → -32006 → -32007 → -32008 → -32009 → -32603 → 틀린 DataPart 와 고친 것 → HTTP+JSON → 스트림의 그릇 → 전수 표 → 스펙과 다른 칸</p>
+</article>
+
+<article class="card" id="p16-er-map">
+<h3>코드는 열넷 — 대부분은 앞 부에서 한 번씩 봤다</h3>
+<p class="lead">§9.5 의 JSON-RPC 표준 다섯과 §5.4 의 A2A 아홉입니다. 처음 본 자리를 적었습니다. 이 장은 같은 탐침으로 세 서버를 한 줄씩 두드려 빈칸을 채우고, 한 표로 모읍니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>code</th><th>이름</th><th>처음 본 곳</th></tr>
+<tr><td><code>-32700</code></td><td>JSONParseError</td><td><a href="#p02-rpc-codes">2부</a>, <a href="#p13-rest-badjson">13부(REST)</a></td></tr>
+<tr><td><code>-32600</code></td><td>InvalidRequestError</td><td><a href="#p02-rpc-batch-reply">2부</a>, <a href="#p11-list-size">11부</a></td></tr>
+<tr><td><code>-32601</code></td><td>MethodNotFoundError</td><td><a href="#p02-rpc-error">2부</a></td></tr>
+<tr><td><code>-32602</code></td><td>InvalidParamsError</td><td><a href="#p04-msg-required">4부</a>, <a href="#p11-list-size">11부</a></td></tr>
+<tr><td><code>-32603</code></td><td>InternalError</td><td><a href="#p05-fail-cmp">5부</a></td></tr>
+<tr><td><code>-32001</code></td><td>TaskNotFoundError</td><td><a href="#p05-err-notfound">5부</a></td></tr>
+<tr><td><code>-32002</code></td><td>TaskNotCancelableError</td><td><a href="#p05-err-cancel-done">5부</a></td></tr>
+<tr><td><code>-32003</code></td><td>PushNotificationNotSupportedError</td><td><a href="#p03-caps-push">3부</a>, <a href="#p11-cfg-nocap">11부</a></td></tr>
+<tr><td><code>-32004</code></td><td>UnsupportedOperationError</td><td><a href="#p03-caps-stream">3부</a>, <a href="#p05-err-terminal">5부</a>, <a href="#p10-sub-terminal">10부</a></td></tr>
+<tr><td><code>-32005</code></td><td>ContentTypeNotSupportedError</td><td><a href="#p04-file-ctype">4부</a></td></tr>
+<tr><td><code>-32006</code></td><td>InvalidAgentResponseError</td><td><a href="#p07-rh-rules-out">7부</a>(프로세스 안에서만)</td></tr>
+<tr><td><code>-32007</code></td><td>ExtendedAgentCardNotConfiguredError</td><td><a href="#p03-caps-go-wire">3부</a>(검사를 끈 Go 서버만)</td></tr>
+<tr><td><code>-32008</code></td><td>ExtensionSupportRequiredError</td><td><a href="#p14-req-miss">14부</a></td></tr>
+<tr><td><code>-32009</code></td><td>VersionNotSupportedError</td><td><a href="#p14-ver-out">14부</a></td></tr>
+</table>
+</div>
+<div class="key"><b>이 장이 더하는 것</b> — 같은 요청을 세 서버에 보내 코드·HTTP 상태·reason·message 넷을 한 줄씩 받고, 와이어에서 처음 보는 칸(<code>-32006</code>, 기능을 켠 카드의 <code>-32007</code>)을 채웁니다. 마지막에 스펙과 다른 칸을 출처와 함께 셉니다.</div>
+</article>
+
+<article class="card" id="p16-er-probe">
+<h3>탐침 한 줄 = 서버 · 경우 · HTTP 상태 · 꼴 · code · reason · message</h3>
+<p class="lead">SDK 클라이언트는 오류를 예외로 바꾸며 와이어의 일부를 감춥니다(<a href="#p07-cl-errors-out">7부</a>). 그래서 맨손 httpx 로 보내고 답에서 네 자리만 찍습니다.</p>
+<!--CODE file=ex/py/16/errs.py region=show-->
+<ul>
+<li>스트림 메서드의 답이 <code>text/event-stream</code> 이면 첫 <code>data:</code> 줄 하나만 읽습니다 — Go 는 스트림 요청의 오류를 SSE 이벤트에 싣습니다(<a href="#p10-sub-terminal">10부</a>).</li>
+<li>reason 은 <code>data</code> 배열에서 <code>reason</code> 을 가진 첫 객체(ErrorInfo)의 것, 없으면 <code>-</code> 입니다. 오류가 아니면 <code>result</code> 와 작업 상태를 찍습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-spec">
+<h3>명세 다섯 — 완성 숙소 셋, 시험대 셋, 빌려 온 여섯, REST 셋, 그리고 시험</h3>
+<p class="lead">완성 에이전트로 일으킬 수 있는 것은 숙소 에이전트 셋에 보냅니다. 경우의 묶음(<code>std</code>·<code>data</code>·<code>a2a</code>)은 탐침의 인자입니다.</p>
+<!--SPEC file=ex/run/16/errs.run-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>명세</th><th>서버</th><th>맡은 코드</th></tr>
+<tr><td><code>16/errs.run</code></td><td>완성 숙소 ×3</td><td>JSON-RPC 다섯, <code>-32001</code>~<code>-32004</code>, <code>-32009</code>, 틀린 DataPart</td></tr>
+<tr><td><code>16/bench.run</code></td><td>시험대 ×3(<code>16/bench</code>)</td><td><code>-32006</code>·<code>-32007</code>·<code>-32603</code></td></tr>
+<tr><td><code>16/borrow.run</code></td><td>4부 접수 ×3, 14부 예산(required) ×3</td><td><code>-32005</code>·<code>-32008</code></td></tr>
+<tr><td><code>16/rest_errs.run</code></td><td>13부 REST 숙소 ×3</td><td>HTTP+JSON 상태</td></tr>
+<tr><td><code>16/tests.run</code></td><td>없음</td><td>이 장에서 고친 결함의 시험</td></tr>
+</table>
+</div>
+<div class="note"><b>서버의 stderr 는 모두 버렸습니다</b>(<code>2&gt;/dev/null</code>) — TS 는 오류마다 역추적을, Go 는 시각이 든 로그를 남겨 캡처가 실행마다 달라집니다. 그 기록이 무엇인지는 <a href="#p08-srv-guard">8부</a>에서 봤습니다. 포트는 11606~11669 의 빈자리입니다.</div>
+</article>
+
+<article class="card" id="p16-er-parse">
+<h3>-32700 — 코드는 같고, 글은 파서의 말 그대로, ErrorInfo 는 Go 만</h3>
+<p class="lead">닫히지 않은 JSON(<code>{"jsonrpc": "2.0", "id": 1, "method": </code>)을 보냈습니다.</p>
+<!--OUT file=out/16/errs.txt grep=^(py|ts|go) parse -->
+<ul>
+<li>§9.5 표의 "Standard Message" 는 <code>Invalid JSON payload</code> 입니다. TS 만 그 글(끝에 마침표)이고, 파이썬은 <code>json</code> 모듈의 글, Go 는 <code>encoding/json</code> 의 글입니다.</li>
+<li><code>data</code> 는 Go 만 실었습니다(<code>PARSE_ERROR</code>). §3.3.2 에서 Error Details 는 "(optional)" 이라 셋 다 스펙 안입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-invalid">
+<h3>-32600 — 파이썬은 셋 다 -32600, TS 는 셋 다 -32602, Go 는 둘만</h3>
+<p class="lead">객체가 아닌 본문(<code>[]</code>), <code>"jsonrpc": "1.0"</code>, <code>method</code> 없음 — JSON-RPC 2.0 이 "Invalid Request" 로 정한 경우들입니다(<a href="#p02-rpc-codes">2부</a>).</p>
+<!--OUT file=out/16/errs.txt grep=^(py|ts|go) (array|jsonrpc1.0|no-method) -->
+<ul>
+<li><b>TS</b> — v1.0 처리기는 모양이 틀린 요청에 <code>RequestMalformedError</code> 를 던지고, 이것이 <code>-32602 INVALID_PARAMS</code> 가 됩니다(<code>server/express/index.js:1908</code>). 같은 파일의 v0.3 처리기는 같은 자리에서 <code>invalidRequest</code>(<code>-32600</code>)를 씁니다(<code>:2997</code>). 이 SDK 의 v1.0 경로에서 <code>-32600</code> 은 나오지 않습니다.</li>
+<li><b>Go</b> — 본문을 요청 구조체로 풀 때의 타입 오류를 모두 <code>ErrInvalidParams</code> 로 옮깁니다(<code>a2asrv/jsonrpc.go:371</code>). 그래서 <code>[]</code> 만 <code>-32602</code> 이고, 글에 Go 의 타입 이름(<code>jsonrpc.ServerRequest</code>)이 나옵니다.</li>
+</ul>
+<div class="key"><b>받는 쪽</b> — "요청이 틀렸다" 를 <code>-32600</code> 과 <code>-32602</code> 로 나눠 다르게 다루지 않습니다. 둘 다 "고쳐서 다시" 이고, 어느 쪽이 올지는 서버의 SDK 가 정합니다.</div>
+</article>
+
+<article class="card" id="p16-er-method">
+<h3>-32601 — 코드는 셋이 같고, 표준 글은 파이썬만</h3>
+<p class="lead">메서드 표에 없는 이름 <code>NoSuchMethod</code> 입니다.</p>
+<!--OUT file=out/16/errs.txt grep=^(py|ts|go) method -->
+<ul>
+<li>파이썬의 <code>Method not found</code> 가 §9.5 의 Standard Message 그대로입니다. TS 는 <code>Invalid method.</code>(<code>server/express/index.js:2017</code>), Go 는 소문자 글에 ErrorInfo <code>METHOD_NOT_FOUND</code> 까지 답니다.</li>
+<li>v0.3 의 메서드 이름(<code>message/send</code>)이 v1.0 서버에서 어떻게 되는지는 <a href="#p14-v03-req">14부</a>가 봤습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-params">
+<h3>-32602 — 빠진 id 는 셋이 같고, 수 id 와 큰 pageSize 에서 갈린다</h3>
+<p class="lead"><code>GetTask</code> 에 <code>params: {}</code>, <code>"id": 5</code>, 그리고 <code>ListTasks</code> 에 <code>"pageSize": 1000</code> 입니다.</p>
+<!--OUT file=out/16/errs.txt grep=^(py|ts|go) (no-id|id-number|page-size) -->
+<ul>
+<li><b>수 id</b> — 파이썬·Go 는 타입을 따져 <code>-32602</code>, TS 는 따지지 않고 <code>5</code> 를 id 로 찾아 <code>-32001 Task not found: 5</code>. 맨손 Go 서버가 고치기 전에 같은 자리에서 미끄러졌습니다(<a href="#p06-miss-lax">6부</a>).</li>
+<li><b>pageSize</b> — Go 만 <code>-32600 INVALID_REQUEST</code>. 11부의 101 과 같은 갈림입니다(<a href="#p11-list-size">11부</a>). 모양은 맞고 값이 틀렸으니 JSON-RPC 의 뜻으로는 <code>-32602</code> 입니다.</li>
+<li>파이썬의 <code>Validation failed</code> 는 무엇이 빠졌는지를 <code>data</code> 의 BadRequest 에 적습니다(<a href="#p04-msg-required">4부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-a2a">
+<h3>-32001·-32002·-32003 — 네 요청, 열두 칸의 코드와 reason 이 같다</h3>
+<p class="lead">없는 작업에 <code>GetTask</code>·<code>CancelTask</code>, 끝난 작업(<code>setup</code> 줄이 만든 COMPLETED)에 <code>CancelTask</code>, 푸시 기능이 없는 카드에 <code>CreateTaskPushNotificationConfig</code> 입니다.</p>
+<!--OUT file=out/16/errs.txt grep=^(py|ts|go) (not-found|cancel-nf|setup|cancel-done|push) -->
+<ul>
+<li>코드·reason 은 5부·3부에서 본 그대로입니다(<a href="#p05-err-notfound">5부</a>, <a href="#p05-err-cancel-done">5부</a>, <a href="#p03-caps-push">3부</a>). 푸시 설정은 작업이 있어도 기능 검사가 먼저입니다.</li>
+<li>글의 버릇도 그대로 — 파이썬은 작업 id 를 붙이지 않고, TS 는 붙이고, Go 는 SDK 안쪽 단계를 겹겹이 적습니다(<code>failed to cancel: cancelation failed: …</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-unsup">
+<h3>-32004 — 확장 카드·끝난 작업에 이어 말하기·구독, 열두 칸이 같은 코드</h3>
+<p class="lead">확장 카드 기능이 없는 숙소 카드에 <code>GetExtendedAgentCard</code>, 끝난 작업에 <code>SendMessage</code>·<code>SendStreamingMessage</code>·<code>SubscribeToTask</code> 입니다.</p>
+<!--OUT file=out/16/errs.txt grep=^(py|ts|go) (xcard|send-done|stream-done|sub-done) -->
+<ul>
+<li>확장 카드는 §3.3.4 대로 UnsupportedOperationError(<a href="#p03-caps-xcard">3부</a>), 끝난 작업은 §3.1.1·§3.1.6 대로입니다(<a href="#p05-err-terminal">5부</a>, <a href="#p10-sub-terminal">10부</a>).</li>
+<li>꼴이 갈립니다 — Go 는 스트림 요청 둘을 <code>sse</code>(200 <code>text/event-stream</code> 안의 오류 이벤트)로 답했습니다. <a href="#p16-er-stream">뒤 슬라이드</a>에서 모아 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-ctype">
+<h3>-32005 — 4부의 접수 에이전트 셋: 코드는 같고, 막은 자리가 다르다</h3>
+<p class="lead">카드의 입력 모드(text/plain·application/json)에 없는 <code>image/png</code> 파트입니다. 완성 에이전트는 이 검사를 켜지 않아서 4부의 접수 에이전트를 빌렸습니다(<code>16/borrow.run</code>).</p>
+<!--OUT file=out/16/borrow.txt grep=^(py|ts|go) ctype -->
+<ul>
+<li>파이썬(<code>validate_input_modes=True</code>)과 TS(<code>validateInputModes: true</code>)는 SDK 가 막고, Go 는 우리 실행기가 <code>a2a.ErrUnsupportedContentType</code> 을 돌려줍니다(<a href="#p04-file-ctype-code">4부</a>).</li>
+<li>Go SDK 의 서버 쪽(<code>a2asrv</code>)에는 입력 모드를 보는 코드가 없습니다 — 그 패키지에 <code>InputModes</code> 를 읽는 파일이 하나도 없습니다. 실행기가 하지 않으면 <code>-32005</code> 는 나오지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-bench-py">
+<h3>시험대 에이전트 — 확장 카드를 "준다" 고만 적고, 받은 글로 규칙을 어긴다</h3>
+<p class="lead">남은 세 코드는 완성 에이전트로 일으킬 수 없습니다 — 우리 실행기는 차례를 지키고, 확장 카드 기능을 켠 정산 에이전트는 카드도 둡니다. 그래서 작은 서버를 세 언어로 썼습니다. 카드에는 <code>AgentCapabilities(streaming=True, extended_agent_card=True)</code> 를 적고 처리기에는 확장 카드를 넘기지 않습니다.</p>
+<!--CODE file=ex/py/16/bench.py region=execute-->
+<ul>
+<li>"차례 위반" — Task 를 싣기 전에 <code>start_work()</code>(WORKING 상태 갱신)부터. 7부의 <code>StatusFirst</code> 와 같은 반칙입니다(<a href="#p07-rh-rules-out">7부</a>).</li>
+<li>"고장" — 실행기가 예외를 던집니다. 그 밖의 글은 그대로 Message 로 돌려줍니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-bench-ts-go">
+<h3>TypeScript·Go — 같은 세 갈래, 다른 것은 "고장" 을 알리는 법</h3>
+<!--CODE file=ex/ts/16/bench.ts region=execute note=TypeScript — 버스에 상태 갱신부터 싣는다-->
+<!--CODE file=ex/go/16/bench/main.go region=execute note=Go — 오류는 이벤트 자리로 돌려준다-->
+<div class="note"><b>Go 에는 던질 예외가 없다</b> — 실행기는 <code>iter.Seq2[a2a.Event, error]</code> 이므로 "고장" 은 <code>yield(nil, err)</code> 입니다(<a href="#p09-sdk3">9부</a>). TS 는 <code>throw</code>, 파이썬은 <code>raise</code>. 세 SDK 가 이것을 와이어에서 어떻게 보이는지가 <a href="#p16-er-internal">-32603</a> 슬라이드입니다.</div>
+</article>
+
+<article class="card" id="p16-er-order">
+<h3>-32006 — 파이썬·Go 는 스펙대로, TS 는 막는 호출 -32603 · 스트림 -32004</h3>
+<p class="lead">"차례 위반" 을 막는 호출(<code>order</code>)과 스트림(<code>order-sse</code>)으로 보냈습니다. §3.3.2 의 InvalidAgentResponseError 는 "An agent returned a response that does not conform to the specification for the current method" 입니다.</p>
+<!--OUT file=out/16/bench.txt grep=^(py|ts|go) order -->
+<ul>
+<li>파이썬·Go — <code>-32006 INVALID_AGENT_RESPONSE</code>. 7·9부에서 프로세스 안에서 본 차례 검사(<a href="#p07-rh-rules-out">7부</a>, <a href="#p09-rh-rules-out">9부</a>)가 와이어에 그대로 나왔습니다. 파이썬은 스트림 요청에도 <code>json</code> 한 덩이 — 첫 이벤트 전에 실패해 스트림을 열지 않았습니다.</li>
+<li>TS — 막는 호출은 <code>-32603</code> "Agent execution finished without a result"(<code>server/index.js:3114</code>), 스트림은 <code>-32004</code> "Received statusUpdate before initial…"(<code>:3481</code>). 서버 번들에 InvalidAgentResponseError 는 정의와 코드 표(<code>:439</code>·<code>:593</code>)에만 있고 그것을 던지는 곳이 없습니다 — TS 서버에서 <code>-32006</code> 은 나오지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-xcard">
+<h3>-32007 — 기능은 켜고 카드는 없다: 세 서버 모두 스펙대로</h3>
+<p class="lead">시험대의 카드는 <code>extendedAgentCard: true</code> 인데 처리기에 확장 카드가 없습니다. §3.3.4: "If the agent declares support but has not configured an extended card, it <b>MUST</b> return ExtendedAgentCardNotConfiguredError".</p>
+<!--OUT file=out/16/bench.txt grep=^(py|ts|go) xcard -->
+<ul>
+<li>검사하는 곳 — 파이썬 <code>default_request_handler_v2.py:679</code>, TS <code>server/index.js:2738</code>, Go <code>a2asrv/handler.go:485</code>. 셋 다 먼저 기능을 보고(없으면 <code>-32004</code>), 그다음 카드를 봅니다.</li>
+<li>3부에서 본 <code>-32007</code> 은 기능 검사를 끈 Go 서버가 기능 없는 카드로 낸 것이었습니다(<a href="#p03-caps-go-wire">3부</a>) — 그 카드라면 §3.3.4 의 답은 <code>-32004</code> 입니다. 기능을 켠 카드로 낸 <code>-32007</code> 은 여기가 처음입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-ext">
+<h3>-32008 — 14부의 예산 확장을 required 로 띄우고 머리글 없이 보낸다</h3>
+<p class="lead">14부의 숙소 에이전트를 <code>--required</code> 로 빌렸습니다(<code>16/borrow.run</code>). 요청은 보통 견적 요청 그대로, <code>A2A-Extensions</code> 머리글이 없습니다.</p>
+<!--OUT file=out/16/borrow.txt grep=^(py|ts|go) ext -->
+<ul>
+<li>파이썬의 글 "… 필요" 는 SDK 가 아니라 14부의 겉층이 던진 것입니다 — 파이썬 SDK 1.2.2 는 required 확장을 검사하지 못합니다(<a href="#p14-req-miss">14부</a>). TS·Go 는 SDK 가 막습니다.</li>
+<li>Go 는 <code>WithCapabilityChecks</code> 를 켜면 이 검사를 모든 메서드에 겁니다 — 머리글 없는 <code>GetTask</code> 도 <code>-32008</code> 입니다(<a href="#p14-req-get">14부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-version">
+<h3>-32009 — 파이썬·TS 는 9.9 도 빈 머리글도 거절, Go 는 둘 다 처리했다</h3>
+<p class="lead">없는 작업을 <code>A2A-Version: 9.9</code> 로, 그리고 머리글 없이 물었습니다. 머리글이 비면 0.3 으로 봅니다(§3.6.1).</p>
+<!--OUT file=out/16/errs.txt grep=^(py|ts|go) ver- -->
+<ul>
+<li>파이썬·TS 의 글에 <code>'0.3'</code> 이 보입니다 — 빈 머리글을 스펙대로 0.3 으로 읽고, 지원하지 않는 판으로 거절했습니다.</li>
+<li>Go 는 판을 보지 않고 GetTask 를 처리해 <code>-32001</code> 입니다. <code>a2a.ErrVersionNotSupported</code> 는 정의(<code>a2a/errors.go:74</code>)와 코드 표(<code>internal/jsonrpc/jsonrpc.go:83</code>)에만 있고, 서버(<code>a2asrv</code>)에는 그것을 돌려주는 코드가 없습니다. §3.6.2 의 MUST 를 지키려면 우리가 앞에 검사를 세워야 합니다(<a href="#p09-srv-guard">9부</a>, <a href="#p14-ver-out">14부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-internal">
+<h3>-32603 — 실행기가 넘어지면 파이썬·Go 는 오류, TS 는 FAILED 작업</h3>
+<p class="lead">"고장" 을 막는 호출(<code>crash</code>)과 스트림(<code>crash-sse</code>)으로 보냈습니다.</p>
+<!--OUT file=out/16/bench.txt grep=^(py|ts|go) crash -->
+<ul>
+<li>파이썬·Go 의 <code>message</code> 는 실행기의 예외 글 그대로("시험대가 고장 났습니다")입니다. 실행기 안의 문장이 그대로 클라이언트에게 갑니다 — 진짜 에이전트라면 파일 경로나 내부 주소가 섞일 수 있는 자리입니다(15부에서 기획 에이전트가 그랬습니다, <a href="#p15-reg-down">15부</a>).</li>
+<li>TS 는 오류 대신 <code>TASK_STATE_FAILED</code> 작업을 돌려줍니다 — 상태 메시지 "Agent execution error: …"(<code>server/index.js:2931</code>, <a href="#p05-fail-cmp">5부</a>). TS 에서 <code>-32603</code> 은 실행기가 아무것도 싣지 않고 끝났을 때 나옵니다(<a href="#p16-er-order">앞의 order</a>, <a href="#p08-rh-rules-out">8부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-data">
+<h3>틀린 DataPart — 파이썬은 -32603 에 int() 의 글을, TS 는 "NaN원" 견적을 냈다</h3>
+<p class="lead">탐침의 <code>data</code> 경우는 숙소 에이전트에 <code>{"headcount": "서른"}</code> 을 보냅니다. 처음 돌렸을 때 세 언어의 답이 셋으로 갈렸습니다 — 파이썬 <code>-32603</code>, TS <code>COMPLETED</code>, Go <code>REJECTED</code>. 고치기 전 손질 함수를 <code>16/ints_old.{py,ts}</code> 로 옮겨 같은 시험을 돌린 결과입니다.</p>
+<!--OUT file=out/16/tests.txt grep=ERROR$|^ValueError|^✖|실제 note=고치기 전 판 — 파이썬(위)과 TS(아래)-->
+<ul>
+<li><b>파이썬</b> — <code>as_ints</code> 의 <code>int("서른")</code> 이 ValueError 를 내고, SDK 는 실행기의 예외를 <code>-32603</code> 으로 옮기며 그 글을 <code>message</code> 에 싣습니다(<a href="#p16-er-internal">앞 슬라이드</a>와 같은 길).</li>
+<li><b>TS</b> — <code>Number("서른")</code> 은 NaN, <code>Math.trunc(NaN)</code> 도 NaN 이고, <code>NaN &lt; 1</code> 은 거짓이라 인원 검사를 지나 "NaN원" 견적이 나옵니다. 둘째 시험의 <code>null</code> 은 보고기가 NaN 을 JSON 으로 적은 것입니다.</li>
+<li><b>Go</b> — <code>common.Int</code> 는 처음부터 수가 아니면 0 이라, 업무 규칙이 "인원과 박 수는 1 이상이어야 합니다" 로 거절했습니다.</li>
+</ul>
+<div class="warn"><b>우리 결함</b> — 같은 요청에 세 언어가 세 답을 냈고, 그중 둘이 틀렸습니다. 하나는 내부 글을 흘렸고, 하나는 말이 안 되는 견적을 "완료" 했습니다. 3×3 매트릭스(<a href="#p16-mx-result">1장</a>)는 올바른 요청만 보내서 이것을 보지 못했습니다.</div>
+</article>
+
+<article class="card" id="p16-er-fix">
+<h3>고친 것 — 수로 읽을 수 없으면 0, 거절은 업무 규칙이 한다(Go 와 같은 약속)</h3>
+<!--CODE file=ex/py/agents/common.py region=int note=파이썬 — as_ints 가 부르는 _int (agents/common.py)-->
+<!--CODE file=ex/ts/agents/common.ts lines=113-121 note=TypeScript — asInts 의 한 줄에 || 0 (agents/common.ts)-->
+<ul>
+<li>Go 의 <code>common.Int</code>(<code>agents/common/common.go:122</code>)는 고치지 않았습니다. 문자열은 <code>strconv.Atoi</code>, 그 밖의 꼴은 0 입니다.</li>
+<li>시험은 다음 두 슬라이드 — 세 언어가 같은 세 줄을 시험하고, 고치기 전 판을 남겨 RED 를 캡처에 둡니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-tests">
+<h3>시험 셋 — "수는 정수로", "수가 아니면 0", "숙소 규칙이 거절한다"</h3>
+<p class="lead">파이썬·TS 의 같은 세 시험입니다. Go 는 같은 세 줄을 <code>16/intstest/ints_test.go</code> 에 두었습니다(<code>common.Int</code> 와 <code>workshop.ChooseLodging</code>).</p>
+<!--CODE file=ex/py/16/test_ints.py region=tests note=파이썬 — 16/test_ints.py-->
+<!--CODE file=ex/ts/16/ints_cases.ts region=tests note=TypeScript — 16/ints_cases.ts(고친 판·고치기 전 판이 함께 쓴다)-->
+<div class="note"><b>견적이 나오면 총액을 적는다</b> — TS 의 셋째 시험은 견적 전체 대신 <code>"NaN원 견적"</code> 같은 한 줄을 견줍니다. 실패 글이 짧아져 RED 캡처에서 NaN 이 그대로 보입니다.</div>
+</article>
+
+<article class="card" id="p16-er-old">
+<h3>고치기 전 판을 남겨 둔다 — 같은 시험을 두 판에 돌려 RED 와 GREEN 을 한 캡처에</h3>
+<p class="lead">고친 뒤에는 RED 를 다시 볼 수 없으니, 고치기 전 함수를 옮겨 두고 같은 시험이 그것을 부르게 했습니다(15부의 <code>planner_old</code> 와 같은 방법, <a href="#p15-fix-tests">15부</a>).</p>
+<!--CODE file=ex/py/16/ints_old.py lines=1-4 note=파이썬 — 16/ints_old.py(test_ints.py 가 old 인자로 부른다)-->
+<!--CODE file=ex/ts/16/ints_old.ts lines=1-9 note=TypeScript — 16/ints_old.ts-->
+<!--CODE file=ex/ts/16/test_ints_old.ts lines=1-6 note=16/test_ints_old.ts — 옛 판에 같은 시험-->
+<!--CODE file=ex/ts/16/test_ints.ts lines=1-6 note=16/test_ints.ts — 고친 판에 같은 시험-->
+<!--CODE file=ex/ts/16/run_tests.ts lines=5-8 note=16/run_tests.ts — 8부의 보고기로 돌린다-->
+<!--CODE file=ex/go/16/run_tests/main.go lines=12-18 note=Go — 16/run_tests 는 9부의 시험 도구로 16/intstest 를 돌린다-->
+</article>
+
+<article class="card" id="p16-er-fix-run">
+<h3>RED → GREEN — 고치기 전 판은 둘씩 실패, 고친 판과 Go 는 셋 다 통과</h3>
+<!--OUT file=out/16/tests.txt grep=^\[터미널|\.\.\. (ok|ERROR)$|^(OK|FAILED)|^[✔✖]|^시험 note=16/tests.run — 파이썬 old·고친 판, TS old·고친 판, Go-->
+<!--OUT file=out/16/errs.txt grep=^(py|ts|go) bad-data|거절 note=고친 뒤의 탐침(16/errs.run) — 셋 다 REJECTED, 서버 출력은 거절 사유-->
+<div class="note"><b>바뀐 캡처</b> — 이 수정은 <code>agents/common.{py,ts}</code> 를 고쳤으므로 그것을 쓰는 모든 캡처를 다시 돌려 보았고, 이 장의 것 말고는 글자까지 같았습니다. TS 파일은 줄 수를 그대로 두어(주석 한 줄을 고쳐 씀) 다른 부가 줄 번호로 자른 곳이 밀리지 않습니다.</div>
+</article>
+
+<article class="card" id="p16-er-rest">
+<h3>HTTP+JSON 문 — 상태는 §5.4 그대로, 갈린 것은 Go 의 판 검사 하나</h3>
+<p class="lead">13부의 REST 숙소 서버 셋(<code>13/rest_*</code>)에 같은 경우를 HTTP+JSON 으로 보냈습니다(<code>16/rest_errs.run</code>). 바인딩 자체는 <a href="#p13-rest-raw">13부</a>의 몫이고, 여기서는 상태만 봅니다. 줄 = 서버 · 경우 · HTTP 상태 · <code>error.status</code> · reason · message.</p>
+<!--CODE file=ex/py/16/rest_errs.py region=calls note=16/rest_errs.py — 경우마다 경로·동사 하나-->
+<!--OUT file=out/16/rest_errs.txt grep=^(py|ts|go) (not-found|cancel-done|push|xcard|send-done|page-size|ver-9.9) -->
+<ul>
+<li>404 <code>NOT_FOUND</code>(작업 없음), 400 <code>FAILED_PRECONDITION</code>(취소 불가·푸시·미지원·판) — §5.4 의 HTTP 열과 gRPC 이름 그대로이고 셋이 같습니다.</li>
+<li>pageSize 는 400 <code>INVALID_ARGUMENT</code> 로 같지만 reason 은 JSON-RPC 쪽 버릇을 따라 Go 만 <code>INVALID_REQUEST</code>. 판 9.9 는 Go 가 처리해 404 입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-er-stream">
+<h3>스트림 요청의 오류 — 파이썬·TS 는 JSON 한 덩이, Go 는 200 SSE 안의 이벤트</h3>
+<p class="lead">이 장의 스트림 메서드(<code>SendStreamingMessage</code>·<code>SubscribeToTask</code>) 줄만 모았습니다.</p>
+<!--OUT file=out/16/errs.txt grep=^(py|ts|go) (stream-done|sub-done) note=끝난 작업에 이어 말하기·구독(16/errs.run)-->
+<!--OUT file=out/16/bench.txt grep=^(py|ts|go) (order|crash)-sse note=차례 위반·고장(16/bench.run)-->
+<ul>
+<li>§9.4.2 는 스트림의 답을 "HTTP 200 with <code>Content-Type: text/event-stream</code>" 과 <code>result</code> 이벤트로만 보여 주고, 오류의 꼴은 적지 않았습니다. REST 쪽의 같은 빈자리를 <a href="#p13-rest-sse-err">13부</a>에서 봤습니다.</li>
+<li>그래서 같은 오류가 Go 에서는 "성공한 HTTP 응답 속의 오류 이벤트" 입니다. TS 의 <code>crash-sse</code> 는 오류가 아니라 FAILED 작업 이벤트입니다.</li>
+</ul>
+<div class="key"><b>받는 쪽이 견딜 것</b> — 스트림을 청했어도 <code>Content-Type</code> 을 먼저 봅니다. <code>application/json</code> 이면 오류 한 덩이, <code>text/event-stream</code> 이면 첫 이벤트가 <code>error</code> 일 수 있습니다(<a href="#p16-wd-sse">2장</a>).</div>
+</article>
+
+<article class="card" id="p16-er-table-std">
+<h3>전수 표 ① JSON-RPC 표준 — 아홉 경우 중 셋만 코드가 같다</h3>
+<p class="lead">칸 = <code>code</code> · ErrorInfo 의 reason(없으면 —). 증거는 <code>16/errs.txt</code>(앞의 경우들)와 <code>16/bench.txt</code>(실행기 예외)입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>경우</th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>깨진 JSON</td><td><code>-32700</code> —</td><td><code>-32700</code> —</td><td><code>-32700</code> PARSE_ERROR</td></tr>
+<tr><td>본문 <code>[]</code></td><td><code>-32600</code> INVALID_REQUEST</td><td><code>-32602</code> INVALID_PARAMS</td><td><code>-32602</code> INVALID_PARAMS</td></tr>
+<tr><td><code>"jsonrpc": "1.0"</code></td><td><code>-32600</code> INVALID_REQUEST</td><td><code>-32602</code> INVALID_PARAMS</td><td><code>-32600</code> INVALID_REQUEST</td></tr>
+<tr><td><code>method</code> 없음</td><td><code>-32600</code> INVALID_REQUEST</td><td><code>-32602</code> INVALID_PARAMS</td><td><code>-32600</code> INVALID_REQUEST</td></tr>
+<tr><td>모르는 메서드</td><td><code>-32601</code> —</td><td><code>-32601</code> —</td><td><code>-32601</code> METHOD_NOT_FOUND</td></tr>
+<tr><td><code>id</code> 없음</td><td><code>-32602</code> INVALID_PARAMS</td><td><code>-32602</code> INVALID_PARAMS</td><td><code>-32602</code> INVALID_PARAMS</td></tr>
+<tr><td><code>"id": 5</code></td><td><code>-32602</code> INVALID_PARAMS</td><td><code>-32001</code> TASK_NOT_FOUND</td><td><code>-32602</code> INVALID_PARAMS</td></tr>
+<tr><td><code>pageSize</code> 1000</td><td><code>-32602</code> INVALID_PARAMS</td><td><code>-32602</code> INVALID_PARAMS</td><td><code>-32600</code> INVALID_REQUEST</td></tr>
+<tr><td>실행기 예외</td><td><code>-32603</code> —</td><td>FAILED 작업</td><td><code>-32603</code> INTERNAL_ERROR</td></tr>
+</table>
+</div>
+<div class="note"><b>HTTP 는 늘 200</b> — JSON-RPC 의 오류는 셋 다 HTTP 200 에 실립니다(탐침의 셋째 칸). HTTP 상태로 오류를 가르는 것은 REST 문뿐입니다(<a href="#p13-eq-err">13부</a>).</div>
+</article>
+
+<article class="card" id="p16-er-table-a2a">
+<h3>전수 표 ② A2A 아홉 — 스물일곱 칸 중 둘이 스펙의 코드를 내지 못했다</h3>
+<p class="lead">✓ = 그 코드와 reason 을 와이어에서 받았다. 증거는 <code>16/errs.txt</code>·<code>bench.txt</code>·<code>borrow.txt</code>·<code>rest_errs.txt</code> 입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>code</th><th>일으킨 요청</th><th>파이썬</th><th>TS</th><th>Go</th><th>HTTP+JSON</th></tr>
+<tr><td><code>-32001</code></td><td>없는 작업</td><td>✓</td><td>✓</td><td>✓</td><td>404 ×3</td></tr>
+<tr><td><code>-32002</code></td><td>끝난 작업 취소</td><td>✓</td><td>✓</td><td>✓</td><td>400 ×3</td></tr>
+<tr><td><code>-32003</code></td><td>푸시 기능 없는 카드</td><td>✓</td><td>✓</td><td>✓</td><td>400 ×3</td></tr>
+<tr><td><code>-32004</code></td><td>확장 카드 기능 없음·끝난 작업</td><td>✓</td><td>✓</td><td>✓(스트림은 SSE)</td><td>400 ×3</td></tr>
+<tr><td><code>-32005</code></td><td>입력 모드 밖 파트</td><td>✓ SDK 스위치</td><td>✓ SDK 옵션</td><td>✓ 실행기</td><td>—</td></tr>
+<tr><td><code>-32006</code></td><td>Task 전에 상태</td><td>✓</td><td><b>-32603 / -32004</b></td><td>✓</td><td>—</td></tr>
+<tr><td><code>-32007</code></td><td>기능만 켠 카드</td><td>✓</td><td>✓</td><td>✓</td><td>—</td></tr>
+<tr><td><code>-32008</code></td><td>required 확장, 머리글 없음</td><td>✓ 우리 겉층</td><td>✓</td><td>✓</td><td>—</td></tr>
+<tr><td><code>-32009</code></td><td>판 9.9·빈 머리글</td><td>✓</td><td>✓</td><td><b>처리함(-32001)</b></td><td>400·400·<b>404</b></td></tr>
+</table>
+</div>
+<div class="key"><b>SDK 만으로 지키지 못하는 MUST 셋</b> — Go 의 판 검사(§3.6.2), 파이썬의 required 확장(§3.3.4), Go 의 입력 모드(§3.3.2 의 ContentTypeNotSupported)는 우리 코드가 앞에 서야 나옵니다. "—" 칸은 REST 로 재지 않은 것입니다.</div>
+</article>
+
+<article class="card" id="p16-er-dev">
+<h3>스펙과 다른 칸 — 일곱 가지, 출처와 함께</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>SDK</th><th>무엇이</th><th>스펙</th><th>출처</th></tr>
+<tr><td>TS</td><td>모양이 틀린 요청을 <code>-32600</code> 이 아니라 <code>-32602</code></td><td>§9.5 표준 코드</td><td><code>server/express/index.js:1908</code></td></tr>
+<tr><td>Go</td><td>본문 타입 오류(<code>[]</code>)를 <code>-32602</code></td><td>§9.5</td><td><code>a2asrv/jsonrpc.go:371</code></td></tr>
+<tr><td>Go</td><td>범위 밖 pageSize 를 <code>-32600</code></td><td>§9.5</td><td><a href="#p11-list-size">11부</a></td></tr>
+<tr><td>TS</td><td>params 의 타입을 보지 않는다(<code>"id": 5</code> → <code>-32001</code>)</td><td>§3.3.2 "<b>MUST</b> validate all input parameters"</td><td><a href="#p16-er-params">이 장</a></td></tr>
+<tr><td>TS</td><td>차례 위반에 <code>-32006</code> 대신 <code>-32603</code>·<code>-32004</code></td><td>§3.3.2 표</td><td><code>server/index.js:3114</code>·<code>:3481</code></td></tr>
+<tr><td>Go</td><td><code>A2A-Version</code> 을 읽지 않아 <code>-32009</code> 가 없다</td><td>§3.6.2 <b>MUST</b></td><td><code>a2a/errors.go:74</code>(정의뿐)</td></tr>
+<tr><td>Go</td><td>스트림 요청의 오류를 200 SSE 이벤트로</td><td>정하지 않음(§9.4.2)</td><td><a href="#p16-er-stream">이 장</a></td></tr>
+</table>
+</div>
+<div class="note"><b>마지막 줄은 위반이 아니다</b> — 스펙이 꼴을 정하지 않은 자리입니다. 그러나 4장의 공식 시험(TCK)은 이것을 실패로 셉니다(<a href="#p16-tck-src">4장</a>).</div>
+</article>
+
+<article class="card" id="p16-ch3-sum">
+<h3>3장 정리 — 열네 코드, 세 서버, 빈칸은 둘</h3>
+<ul>
+<li>A2A 아홉 코드는 스물일곱 칸 중 스물다섯에서 스펙의 코드가 나왔습니다. 빈 둘은 TS 의 <code>-32006</code>, Go 의 <code>-32009</code> 입니다. HTTP+JSON 의 상태는 §5.4 그대로였습니다.</li>
+<li>JSON-RPC 표준 다섯은 덜 고릅니다 — 아홉 경우 중 셋만 세 서버의 코드가 같았습니다. 글(<code>message</code>)과 ErrorInfo 의 유무는 거의 모든 줄에서 갈립니다.</li>
+<li>틀린 DataPart 하나가 우리 결함을 드러냈습니다 — 파이썬 <code>-32603</code>, TS NaN 견적. 정수 손질을 Go 와 같은 약속(수가 아니면 0)으로 고쳐 세 언어가 REJECTED 로 맞았습니다.</li>
+</ul>
+</article>
+
+<article class="card quiz" id="p16-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. <code>"jsonrpc": "1.0"</code> 인 요청을 TS 서버에 보내면 어떤 코드가 옵니까? 그리고 Go 서버에 <code>A2A-Version: 9.9</code> 머리글로 없는 작업을 물으면 무엇이 옵니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> TS 는 <code>-32602</code>(reason <code>INVALID_PARAMS</code>, "Invalid JSON-RPC Request.")입니다 — v1.0 처리기가 모양 오류를 RequestMalformedError 로 던지기 때문입니다(<a href="#p16-er-invalid">-32600</a>). Go 는 판을 읽지 않으므로 요청을 그대로 처리해 <code>-32001 TASK_NOT_FOUND</code> 를 돌려줍니다(<a href="#p16-er-version">-32009</a>).</div>
+</article>
+
+<!-- ==== 4장 적합성 시험 ==== -->
+<article class="card" id="p16-ch4">
+<p class="chnum">4장</p>
+<h2>적합성 시험 — 공식 TCK 를 세 서버에, 그리고 TCK 가 보지 않는 것</h2>
+<p class="chsub">TCK 란 → 설치한 판과 스펙 사본 → 명세 → 파이썬 → TypeScript → Go → 세 언어 비교 → 갈래 ① 대본 → 갈래 ② 스펙 판 → 갈래 ③ SDK → 출처 → TCK 가 시험하지 않는 것 → 우리 점검표 둘</p>
+</article>
+
+<article class="card" id="p16-tck-what">
+<h3>공식 TCK — 요구사항마다 id 와 수준을 단 pytest 묶음, 세 바인딩을 한꺼번에</h3>
+<p class="lead">A2A 프로젝트의 적합성 시험(Technology Compatibility Kit, <code>github.com/a2aproject/a2a-tck</code>)입니다. 카드를 받아 <code>supportedInterfaces</code> 에 적힌 바인딩마다 같은 시험을 돌리고, 요구사항마다 판정을 매깁니다(TCK 의 <code>README.md</code>).</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>말</th><th>뜻</th></tr>
+<tr><td>요구사항 id</td><td><code>CARD-CACHE-001</code>, <code>CORE-SEND-001</code>, <code>GRPC-ERR-002</code> … 스펙의 절(§)과 묶인 이름</td></tr>
+<tr><td>수준</td><td>MUST(못 지키면 실패), SHOULD(xfail — 기대된 실패), MAY(카드에 없으면 건너뜀)</td></tr>
+<tr><td>판정</td><td>PASS · FAIL · SKIPPED · NOT TESTED(시험이 아직 없는 요구사항)</td></tr>
+<tr><td>SUT 대본</td><td>시험 대상(SUT)의 실행기가 <code>messageId</code> 의 접두사로 할 일을 고른다 — <code>tck-complete-task</code> 면 "완료", <code>tck-input-required</code> 면 되묻기(<code>scenarios/core_operations.feature:9</code>·<code>:23</code>·<code>:70</code>)</td></tr>
+<tr><td>보고서</td><td><code>reports/compatibility.json</code>(요구사항별), <code>junitreport.xml</code>(시험별)</td></tr>
+</table>
+</div>
+<div class="key"><b>대본을 아는 SUT 를 전제한다</b> — TCK 는 접두사대로 움직이는 에이전트를 기대합니다. 그런 SUT 를 만드는 생성기는 a2a-java·a2a-python 용뿐이고(README 의 SUT Code Generation), 우리 숙소 에이전트는 그 대본을 모릅니다. 결과를 읽을 때 이것부터 가려냅니다.</div>
+</article>
+
+<article class="card" id="p16-tck-ver">
+<h3>설치한 TCK — 2026-09-01 의 main, 그 안의 스펙 사본은 v1.0.0 가지</h3>
+<p class="lead">이 기계에서 GitHub 에 닿아 <code>git clone --depth 1</code> 로 받고, 저장소 밖(<code>scratch/tck</code>, 커밋하지 않는다)에 따로 만든 venv 에 <code>pip install -e</code> 로 설치했습니다. SDK 의 venv(<code>.venv</code>)는 건드리지 않았습니다.</p>
+<!--OUT file=out/16/tck_spec.txt lines=1-4-->
+<ul>
+<li>TCK 는 스펙 파일을 사본으로 싣고 다니며, 그 출처를 <code>specification/version.json</code> 에 적어 둡니다 — A2A 저장소의 <code>v1.0.0</code> 가지, 커밋 <code>1736957…</code>.</li>
+<li>이 책의 스펙은 <code>v1.0.1</code> 태그입니다(0부). 둘의 차이가 결과에 드러나는지는 <a href="#p16-tck-v100">갈래 ②</a>에서 봅니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-tck-spec">
+<h3>명세 — 13부의 세 문 서버에 TCK 한 판, 보고서는 우리 요약기로</h3>
+<p class="lead">서버는 13부 4장의 "한 서버 세 바인딩" 숙소 에이전트입니다(<a href="#p13-doors-py">13부</a>). 카드에 JSONRPC·HTTP+JSON·GRPC 를 모두 적었으니 TCK 가 세 바인딩을 다 시험합니다. TS·Go 명세(<code>16/tck_ts.run</code>·<code>tck_go.run</code>)는 서버 줄만 다릅니다.</p>
+<!--SPEC file=ex/run/16/tck_py.run-->
+<!--CODE file=ex/py/16/tck_fixed.py lines=7-15 note=16/tck_fixed.py — TCK 의 세션 표지를 고정하는 pytest 플러그인-->
+<div class="note"><b>왜 플러그인이 필요한가</b> — TCK 는 id 끝에 실행마다 다른 여덟 자리(<code>uuid4</code> 의 앞부분)를 붙이고, 세 문 서버는 받은 경로를 찍습니다. 그 여덟 자리만 고정했습니다(시험의 내용은 같습니다). 요약기 <code>16/tck_sum.py</code> 는 보고서 둘에서 판정 × 수준, 시험 수, 건너뜀 사유, FAIL 목록을 뽑습니다.</div>
+</article>
+
+<article class="card" id="p16-tck-py">
+<h3>파이썬 서버 — MUST 실패 넷, 그중 둘은 대본·둘은 스펙 판</h3>
+<p class="lead"><code>16/tck_py.run</code> 의 요약입니다. 위는 129개 요구사항의 판정 × 수준, 아래는 FAIL 인 요구사항과 실패한 시험의 바인딩입니다.</p>
+<!--OUT file=out/16/tck_py.txt lines=5-11-->
+<!--OUT file=out/16/tck_py.txt grep=^[A-Z_]+-[A-Z]+-\d+[a-z]? (MUST|SHOULD|MAY) note=FAIL 목록(오류 글은 갈래 슬라이드에서)-->
+<ul>
+<li>NOT TESTED 서른여섯은 TCK 에 아직 시험이 없는 요구사항입니다(<a href="#p16-tck-not">뒤</a>). SKIPPED 열넷은 카드에 없는 기능(푸시·확장 카드)과 대본 때문입니다.</li>
+<li>STREAM-SUB-002 는 파이썬에서 판정이 나지 않았습니다 — 되묻는 작업에 붙은 구독이 10초 안에 닫히지 않아 TCK 가 건너뛰었습니다(<code>SubscribeToTask timed out</code>, <a href="#p10-sub-paused">10부</a>에서 본 "열린 채").</li>
+</ul>
+</article>
+
+<article class="card" id="p16-tck-ts">
+<h3>TypeScript 서버 — MUST 실패 일곱, 넷이 스펙 판(Content-Type·gRPC·415)</h3>
+<!--OUT file=out/16/tck_ts.txt lines=5-11-->
+<!--OUT file=out/16/tck_ts.txt grep=^[A-Z_]+-[A-Z]+-\d+[a-z]? (MUST|SHOULD|MAY) note=FAIL 목록-->
+<ul>
+<li>카드 캐시는 셋 가운데 TS 만 <code>Cache-Control</code>·<code>ETag</code> 를 모두 달아(<a href="#p03-cache-headers">3부</a>) CARD-CACHE-001·002 를 지났습니다. Last-Modified(MAY)는 셋 다 없습니다.</li>
+<li>HTTP+JSON 의 Content-Type 두 줄(SVC-001·ERR-001)과 STATUS-001(415 를 기대)이 이 서버에서만 셋입니다 — 이유는 <a href="#p16-tck-v100">갈래 ②</a>.</li>
+</ul>
+</article>
+
+<article class="card" id="p16-tck-go">
+<h3>Go 서버 — MUST 실패 열셋, 판 검사·빈 목록·SSE 오류가 SDK 쪽</h3>
+<!--OUT file=out/16/tck_go.txt lines=5-11-->
+<!--OUT file=out/16/tck_go.txt grep=^[A-Z_]+-[A-Z]+-\d+[a-z]? (MUST|SHOULD|MAY) note=FAIL 목록-->
+<ul>
+<li>VER-SERVER-002·JSONRPC-SSE-002·HTTP_JSON-STATUS-001 은 한 가지 — 판을 읽지 않는다(<a href="#p16-er-version">3장</a>). CORE-LIST 다섯도 한 가지 — 빈 목록이 <code>null</code>(<a href="#p16-tck-sdk">갈래 ③</a>).</li>
+<li>CORE-HIST-003(SHOULD)은 SendMessage 의 <code>historyLength: 0</code> 에 이력 셋을 돌려준 것, STREAM-SUB-004 는 없는 작업의 구독이 200 SSE 로 "성공" 한 것입니다(<a href="#p16-er-stream">3장</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p16-tck-cmp">
+<h3>세 언어 비교 — FAIL 인 요구사항 열아홉을 세 갈래로 나누면, SDK 몫은 Go 에 몰린다</h3>
+<p class="lead">칸은 그 서버에서 FAIL 이면 FAIL, 아니면 —(통과·건너뜀·시험 없음)입니다. 앞 세 슬라이드의 FAIL 목록을 모았습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>요구사항</th><th>파이썬</th><th>TS</th><th>Go</th><th>갈래</th></tr>
+<tr><td>DM-ART-001·DM-MSG-001</td><td>FAIL</td><td>FAIL</td><td>FAIL</td><td>① 대본</td></tr>
+<tr><td>STREAM-SUB-002</td><td>건너뜀</td><td>FAIL</td><td>FAIL</td><td>① 대본</td></tr>
+<tr><td>GRPC-ERR-002(-32003 → UNIMPLEMENTED?)</td><td>FAIL</td><td>FAIL</td><td>FAIL</td><td>② 판</td></tr>
+<tr><td>HTTP_JSON-SVC-001·ERR-001(application/json?)</td><td>SVC-001</td><td>둘 다</td><td>—</td><td>② 판</td></tr>
+<tr><td>HTTP_JSON-STATUS-001</td><td>—</td><td>FAIL(415?)</td><td>FAIL(판 검사)</td><td>② / ③</td></tr>
+<tr><td>CARD-CACHE-001·002(SHOULD)</td><td>001</td><td>—</td><td>001·002</td><td>③ SDK</td></tr>
+<tr><td>CARD-CACHE-003(MAY)</td><td>FAIL</td><td>FAIL</td><td>FAIL</td><td>③(MAY)</td></tr>
+<tr><td>GRPC-ERR-002 의 판 검사</td><td>FAIL</td><td>—</td><td>FAIL</td><td>③ SDK</td></tr>
+<tr><td>VER-SERVER-002·JSONRPC-SSE-002</td><td>—</td><td>—</td><td>FAIL</td><td>③ SDK</td></tr>
+<tr><td>CORE-LIST-001~005</td><td>—</td><td>—</td><td>FAIL</td><td>③ SDK</td></tr>
+<tr><td>STREAM-SUB-004</td><td>—</td><td>—</td><td>FAIL</td><td>③ 스펙의 빈자리</td></tr>
+<tr><td>CORE-HIST-003(SHOULD)</td><td>—</td><td>—</td><td>FAIL</td><td>③ SDK</td></tr>
+</table>
+</div>
+<div class="key"><b>우리 에이전트의 결함은 0</b> — 갈래 ①은 우리 숙소 에이전트가 TCK 의 대본을 모르는 데서, ②는 TCK 의 스펙 사본이 v1.0.0 인 데서 왔습니다. 남는 ③이 세 SDK 의 진짜 어긋남이고, 그 대부분이 Go 입니다.</div>
+</article>
+
+<article class="card" id="p16-tck-sut">
+<h3>갈래 ① 대본 — 우리 숙소 에이전트는 "tck-complete-task" 에도 되묻는다</h3>
+<p class="lead">TCK 는 messageId 의 접두사로 SUT 의 행동을 고르지만(<a href="#p16-tck-what">앞</a>), 우리 실행기는 messageId 를 보지 않고 날짜·박·인원을 찾습니다. TCK 의 글("TCK prerequisite task creation" 따위)에는 그것이 없으니 늘 INPUT_REQUIRED 로 되묻습니다. TS 서버 판의 줄입니다.</p>
+<!--OUT file=out/16/tck_ts.txt grep=Expected task state|^(DM-ART|DM-MSG|STREAM-SUB-002)|no artifacts|Message response|terminal state-->
+<ul>
+<li>완료된 작업을 전제로 하는 시험 서른 개가 "Expected task state 'TASK_STATE_COMPLETED' but got 'TASK_STATE_INPUT_REQUIRED'" 로 건너뛰어졌습니다(세 서버 모두).</li>
+<li>DM-ART-001 은 <code>tck-artifact-*</code> 에 아티팩트를, DM-MSG-001 은 <code>tck-message-response</code> 에 Message 를 기대합니다(<code>scenarios/core_operations.feature:34</code>~<code>:61</code>).</li>
+<li>STREAM-SUB-002 는 되묻는 작업에 구독한 뒤 "Complete" 를 보냅니다(<code>tests/compatibility/core_operations/test_task_lifecycle.py:367</code>). 우리 에이전트는 "Complete" 에도 또 되물어 작업이 끝나지 않고, TS·Go 서버의 구독은 종료 상태 없이 닫혔습니다(TCK 의 글).</li>
+</ul>
+<div class="key"><b>SDK 의 결함이 아니다</b> — 이 갈래의 줄은 대본을 아는 SUT 로 돌려야 뜻이 있습니다. 대본을 실행기에 넣으면 업무 규칙과 시험용 분기가 섞이므로 시나리오 에이전트에는 넣지 않았습니다.</div>
+</article>
+
+<article class="card" id="p16-tck-v100">
+<h3>갈래 ② 스펙 판 — TCK 의 사본(v1.0.0)과 v1.0.1 은 오류 표 여섯 줄과 Content-Type 이 다르다</h3>
+<p class="lead"><code>16/tck_spec.run</code> 의 둘째 명령입니다. 위가 TCK 의 사본, 아래가 이 책의 v1.0.1 입니다(§5.4 의 여섯 줄과 Content-Type 을 정한 두 줄, 줄 번호는 §9.1·§11.1).</p>
+<!--OUT file=out/16/tck_spec.txt grep=^==|^\||^\d+:-\s-->
+<ul>
+<li>v1.0.1 은 gRPC 이름 셋(<code>UNIMPLEMENTED</code> → <code>FAILED_PRECONDITION</code>)과 HTTP 상태 셋(409·415·502 → 400·400·500), REST 의 Content-Type(<code>application/json</code> → <code>application/a2a+json</code> SHOULD)을 바꿨습니다. 세 SDK 는 모두 v1.0.1 쪽을 따랐고, TCK 는 사본으로 채점해 GRPC-ERR-002·HTTP_JSON-SVC-001·ERR-001·STATUS-001 을 FAIL 로 적었습니다.</li>
+<li>Go 가 Content-Type 두 줄을 지난 것은 그 REST 문이 늘 <code>application/json</code> 이기 때문입니다(<a href="#p13-rest-raw">13부</a>) — v1.0.1 의 SHOULD 와는 어긋나는 쪽입니다.</li>
+</ul>
+<div class="warn"><b>판정을 옮기기 전에 판을 본다</b> — TCK 의 FAIL 을 그대로 "비호환" 으로 적으면 스펙을 따른 SDK 를 탓하게 됩니다. 요구사항 id 옆의 §가 어느 판의 문장인지부터 맞춥니다.</div>
+</article>
+
+<article class="card" id="p16-tck-sdk">
+<h3>갈래 ③ SDK — TCK 가 잡은 셋을 맨손으로 다시: 캐시 머리, 빈 목록, historyLength</h3>
+<p class="lead">완성 숙소 에이전트 셋에 카드 GET, 결과가 없는 <code>ListTasks</code>, <code>configuration.historyLength: 0</code> 을 단 <code>SendMessage</code> 를 보냈습니다(<code>16/tck_why.run</code>).</p>
+<!--CODE file=ex/py/16/tck_why.py region=history note=16/tck_why.py — 셋째 물음(앞의 둘은 카드 GET 과 ListTasks)-->
+<!--OUT file=out/16/tck_why.txt grep=^(py|ts|go) -->
+<ul>
+<li><b>카드 캐시</b>(§8.6.1, SHOULD) — Cache-Control 은 TS 만, ETag 은 파이썬·TS. 3부에서 본 그대로입니다(<a href="#p03-cache-cmp">3부</a>).</li>
+<li><b>빈 목록</b> — Go 만 <code>"tasks": null</code>. proto 는 <code>repeated Task tasks = 1 [(google.api.field_behavior) = REQUIRED]</code> 이고, ProtoJSON 에서 repeated 필드는 배열이지 <code>null</code> 이 아닙니다. 받는 쪽은 <code>null</code> 도 빈 목록으로 읽어야 합니다.</li>
+<li><b>historyLength 0</b>(§3.2.4) — 파이썬·TS 는 이력 없이, Go 는 이력 하나를 실어 답했습니다(TCK 의 작업은 이력이 셋이었습니다).</li>
+</ul>
+</article>
+
+<article class="card" id="p16-tck-src">
+<h3>출처 — 갈래 ③ 의 다섯 가지를 설치본에서 찾았다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>증상(TCK id)</th><th>SDK</th><th>까닭(설치본)</th></tr>
+<tr><td>빈 목록이 <code>null</code>(CORE-LIST-001~005)</td><td>Go</td><td><code>a2a/core.go:870</code> 의 <code>Tasks []*Task `json:"tasks"`</code> — 결과가 없을 때의 nil 슬라이스를 <code>encoding/json</code> 이 <code>null</code> 로 쓴다</td></tr>
+<tr><td>SendMessage 의 historyLength 무시(CORE-HIST-003)</td><td>Go</td><td><code>a2asrv/handler.go:265</code> — <code>HistoryLength</code> 를 읽는 곳은 GetTask 뿐. SendMessage 설정의 필드(<code>a2a/core.go:777</code>)는 받아만 둔다</td></tr>
+<tr><td>판 검사 없음(VER-SERVER-002 등)</td><td>Go</td><td><code>a2a/errors.go:74</code> — 정의와 대응표뿐(<a href="#p16-er-version">3장</a>)</td></tr>
+<tr><td>gRPC 의 판 검사 없음(GRPC-ERR-002 의 둘째 줄)</td><td>파이썬·Go</td><td>파이썬 <code>GrpcHandler</code> 에 <code>@validate_version</code> 이 없다(<a href="#p13-grpc-md">13부</a>)</td></tr>
+<tr><td>없는 작업의 구독이 200(STREAM-SUB-004)</td><td>Go</td><td>오류를 SSE 이벤트로 싣는다 — 스펙이 꼴을 정하지 않은 자리(<a href="#p16-er-stream">3장</a>)</td></tr>
+</table>
+</div>
+<div class="note"><b>Go 의 historyLength</b> — 5부의 GetTask 실험(<a href="#p05-hl-cmp">5부</a>)에서는 Go 도 규칙대로 잘랐습니다. 같은 필드가 SendMessage 에서는 읽히지 않는다는 것은 TCK 가 처음 짚었습니다.</div>
+</article>
+
+<article class="card" id="p16-tck-not">
+<h3>TCK 가 시험하지 않는 것 — 표에는 있고 시험 파일은 부르지 않는 요구사항</h3>
+<p class="lead">NOT TESTED 를 둘로 나눴습니다. TCK 의 시험 파일이 그 id 를 부르지 않으면 "시험이 없다", 부르는데 판정이 없으면 앞 단계에서 건너뛴 것입니다. Go 서버 판의 줄입니다.</p>
+<!--CODE file=ex/py/16/tck_sum.py region=untested note=16/tck_sum.py — 시험 파일이 id 를 부르는지로 가른다-->
+<!--OUT file=out/16/tck_go.txt grep=^NOT TESTED —|^  [A-Z]+-[A-Z]+ -->
+<ul>
+<li><b>시험이 없다</b> — 카드 서명(CARD-SIGN), 인증·인가(AUTH-*), TLS(AUTH-TLS, GRPC-SVC-003), 판 협상의 일부(VER-CLIENT, VER-SERVER-001), 바인딩 동등성(BIND-EQUIV). 이 책이 12·13·14부에서 공들인 자리가 모두 여기 있습니다.</li>
+<li><b>앞 단계에서 멈췄다</b> — 완료된 작업을 먼저 만들어야 하는 시험들입니다. 갈래 ①의 "되묻기" 때문에 시작하지 못했습니다.</li>
+</ul>
+<div class="key"><b>TCK 의 PASS 는 "시험한 것" 의 PASS</b> — 통과한 줄만 세면 서명·인증이 빠진 채 높은 점수가 나옵니다. 빈 자리는 우리 점검표로 메웁니다(다음 두 슬라이드).</div>
+</article>
+
+<article class="card" id="p16-chk-auth">
+<h3>우리 점검표 ① — TCK 가 시험하지 않는 서명·인증을 앞 부의 캡처로 채운다</h3>
+<p class="lead">NOT TESTED 인 MUST 가운데 카드 서명(§8.4)과 인증·인가(§7, §13)입니다. 칸 = 이 책에서 그 언어의 서버로 확인했는가, 증거는 링크한 슬라이드의 캡처입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>요구(TCK id)</th><th>§</th><th>파이썬</th><th>TS</th><th>Go</th><th>증거</th></tr>
+<tr><td>JCS 정규화·<code>signatures</code> 제외·보호 헤더(CARD-SIGN-001~003)</td><td>8.4</td><td>✓</td><td>✓</td><td>✓</td><td><a href="#p12-sig-same">12부</a>, <a href="#p16-set-verify">3×3</a></td></tr>
+<tr><td>만료·폐기된 키로 검증하지 않기(CARD-SIGN-004)</td><td>8.4.3</td><td>—</td><td>—</td><td>—</td><td>키를 바꾸지 않았다 — 17부의 배포 점검</td></tr>
+<tr><td>운영은 암호화된 통신(AUTH-TLS-001, GRPC-SVC-003)</td><td>7.1·10.1</td><td colspan="3">루프백 http — 앞단 TLS 로</td><td><a href="#p12-tls-local">12부</a>, <a href="#p12-tls-front">12부</a></td></tr>
+<tr><td>모든 요청을 인증(AUTH-SERVER-002)</td><td>7.4</td><td>✓</td><td>✓</td><td>✓</td><td><a href="#p12-bearer-cmp">12부</a>(정산의 401)</td></tr>
+<tr><td>Task·AUTH_REQUIRED·까닭의 상태 메시지(AUTH-INTASK-001~003)</td><td>7.6.1</td><td>✓</td><td>✓</td><td>✓</td><td><a href="#p12-ar-wire">12부</a>, <a href="#p16-set-approve">3×3</a></td></tr>
+<tr><td>자격 증명은 대역 밖으로(AUTH-INTASK-004)</td><td>7.6.1</td><td colspan="3">결재 토큰은 토큰 발급처에서 받고, 같은 작업에 Authorization 만 바꿔 이어 말한다</td><td><a href="#p12-ar-wire">12부</a></td></tr>
+<tr><td>연산마다 인가, 결과는 권한 안에서(AUTH-SCOPE-001·002)</td><td>13.1</td><td>✓</td><td>✓</td><td>✓</td><td><a href="#p12-scope-after">12부</a>(고친 뒤)</td></tr>
+<tr><td>권한 없는 자원의 존재를 숨기기(AUTH-SCOPE-003)</td><td>3.3.2</td><td>✓</td><td>—</td><td>—</td><td><a href="#p07-store-owner">7부</a>(남의 작업은 -32001)</td></tr>
+</table>
+</div>
+<div class="note"><b>— 는 "어긋났다" 가 아니라 "이 책에서 재지 않았다"</b> 입니다. 스코프 구멍은 12부에서 실제로 찾아 고쳤습니다(<a href="#p12-scope-hole">고치기 전</a>) — TCK 가 이 줄을 시험했다면 잡았을 결함입니다.</div>
+</article>
+
+<article class="card" id="p16-chk-rest">
+<h3>우리 점검표 ② — 판·바인딩·스트림·오류: 이 책이 찾은 어긋남이 모인다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>요구(TCK id)</th><th>§</th><th>파이썬</th><th>TS</th><th>Go</th><th>증거</th></tr>
+<tr><td>클라이언트는 요청마다 A2A-Version(VER-CLIENT-001)</td><td>3.6.1</td><td>✓</td><td>✓</td><td>✗ 카드 GET</td><td><a href="#p16-wd-req">2장</a>, <a href="#p14-ver-cl">14부</a></td></tr>
+<tr><td>패치 번호는 협상에 무관(VER-CLIENT-002)</td><td>3.6</td><td>✓</td><td>✗ 1.0.1 거절</td><td>✓(읽지 않음)</td><td><a href="#p14-ver-out">14부</a></td></tr>
+<tr><td>요청한 판의 뜻대로·없는 판은 -32009(VER-SERVER-001·002)</td><td>3.6.2</td><td>△ 1.1 도 받음</td><td>✓</td><td>✗</td><td><a href="#p14-ver-out">14부</a>, <a href="#p16-er-version">3장</a></td></tr>
+<tr><td>바인딩끼리 같은 기능·결과·오류(BIND-EQUIV-001~003)</td><td>5.1</td><td colspan="3">gRPC 9칸 ✓, REST 오류 3짝 ✗</td><td><a href="#p13-grpc-matrix">13부</a>, <a href="#p13-rest-matrix">13부</a></td></tr>
+<tr><td>이어 말하기의 스트림도 Task 로 시작(TCK 의 CORE-STREAM-003 은 새 메시지의 스트림만 본다)</td><td>3.1.2</td><td>✗ 이어 말하기</td><td>✓</td><td>✓</td><td><a href="#p05-follow-wire">5부</a></td></tr>
+<tr><td>기능 검사의 오류(§3.3.4)</td><td>3.3.4</td><td>✓</td><td>✓</td><td>✓</td><td><a href="#p03-caps-server-cmp">3부</a>, <a href="#p16-er-xcard">3장</a></td></tr>
+<tr><td>A2A 오류 아홉의 코드(§5.4)</td><td>5.4</td><td>✓</td><td>✗ -32006</td><td>✗ -32009</td><td><a href="#p16-er-table-a2a">3장</a></td></tr>
+</table>
+</div>
+<div class="key"><b>TCK 와 점검표는 서로를 메운다</b> — TCK 는 사람이 놓치는 작은 것(빈 목록의 <code>null</code>, SendMessage 의 historyLength)을 기계적으로 잡고, 점검표는 TCK 가 아직 시험이 없는 서명·인증·판 협상·바인딩 동등성을 덮습니다. 둘 다 "어느 스펙 판으로 읽었나" 를 먼저 적습니다.</div>
+</article>
+
+<article class="card" id="p16-ch4-sum">
+<h3>4장 정리 — TCK 는 돌았고, FAIL 은 대본·스펙 판·SDK 셋으로 갈렸다</h3>
+<ul>
+<li>공식 TCK(2026-09-01 의 main)는 이 기계에 설치되어 세 서버의 세 바인딩을 모두 시험했습니다. 다만 그 안의 스펙 사본은 v1.0.0 가지입니다.</li>
+<li>FAIL 인 요구사항 열아홉 가운데 대본(우리 에이전트는 TCK 의 접두사를 모른다)과 스펙 판(v1.0.0 의 오류 표·Content-Type)을 빼면, 남는 것은 SDK 의 어긋남입니다 — Go 의 판 검사·빈 목록 <code>null</code>·SendMessage 의 historyLength, 파이썬·Go 의 gRPC 판 검사, 카드 캐시 머리.</li>
+<li>우리 에이전트의 결함은 TCK 에서 나오지 않았습니다. 3장의 틀린 DataPart 처럼 업무 데이터의 결함은 TCK 가 보내지 않는 요청에서만 드러납니다.</li>
+<li>TCK 에 시험이 없는 서명·인증·판·바인딩 동등성은 앞 부의 캡처로 점검표를 만들었습니다.</li>
+</ul>
+</article>
+
+<article class="card quiz" id="p16-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. TCK 는 세 서버 모두에서 GRPC-ERR-002 를 FAIL 로 적었습니다. 푸시 기능이 없는 서버에 푸시 설정을 만들면 세 서버는 gRPC 로 무엇을 답했고, 그것은 왜 FAIL 이 됐습니까? 이 FAIL 은 SDK 의 결함입니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 셋 다 <code>FAILED_PRECONDITION</code> 입니다(<a href="#p16-tck-py">파이썬</a>·<a href="#p16-tck-ts">TS</a>·<a href="#p16-tck-go">Go</a> 의 오류 글). v1.0.1 의 §5.4 가 정한 그대로입니다. TCK 는 제가 싣고 다니는 v1.0.0 가지의 사본으로 채점하는데, 그 표는 <code>UNIMPLEMENTED</code> 였습니다(<a href="#p16-tck-v100">갈래 ②</a>). 그러니 SDK 의 결함이 아니라 스펙 판의 차이입니다. 다만 같은 요구사항의 둘째 줄 — 파이썬·Go 의 gRPC 가 판을 검사하지 않는 것 — 은 SDK 쪽입니다.</div>
+</article>
+
+<article class="card" id="p16-wrap">
+<h3>16부 정리 — 45칸은 통하고, 오류 열넷 중 둘이 비고, TCK 의 FAIL 은 세 갈래</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>한 줄</th></tr>
+<tr><td><a href="#p16-ch1-sum">1</a></td><td>다섯 에이전트 × 클라이언트 셋 × 서버 셋 = 45칸, 깨진 짝 0</td></tr>
+<tr><td><a href="#p16-ch2-sum">2</a></td><td>와이어 차이 여덟 가지는 모두 스펙이 정하지 않았거나 "같은 뜻" 으로 둔 자리</td></tr>
+<tr><td><a href="#p16-ch3-sum">3</a></td><td>A2A 오류 아홉은 27칸 중 25칸이 스펙의 코드 — TS 의 -32006, Go 의 -32009 가 빈다. 틀린 DataPart 로 찾은 우리 결함을 고쳤다</td></tr>
+<tr><td><a href="#p16-ch4-sum">4</a></td><td>공식 TCK 의 FAIL 은 대본·스펙 판(v1.0.0)·SDK 로 갈리고, TCK 가 시험하지 않는 서명·인증은 점검표로</td></tr>
+</table>
+</div>
+<div class="note"><b>다음</b> — 17부 운영에서는 타임아웃·재시도·멱등성, SDK 의 작업 저장소를 파일로 바꿔 재시작 뒤에도 GetTask 가 되게 하는 영속 저장소, 요청 id 와 contextId 로 흐름을 잇는 로깅, 그리고 이 부에서 비어 있던 TLS·카드 캐시·키 교체를 배포 점검표로 다룹니다.</div>
 </article>
