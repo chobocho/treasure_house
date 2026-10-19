@@ -1,4 +1,367 @@
-<article class="card" id="p17-todo-b">
-<h3>로깅·추적과 배포 체크리스트</h3>
-<p class="lead">준비 중입니다</p>
+<!-- ==== 3장 로깅·추적 ==== -->
+
+<article class="card" id="p17-ch3">
+<p class="chnum">3장</p>
+<h2>로깅·추적 — 요청 id, contextId 로 흐름 잇기</h2>
+<p class="chsub">잇는 열쇠 넷 → SDK 가 스스로 적는 것 → 그 기록의 빈 곳 → 우리 한 줄 → 파이썬 → TypeScript → Go → 세 언어 비교 → 섞인 메시에 달기 → contextId 하나로 다섯 로그 → 트레이스 문맥</p>
+</article>
+
+<article class="card" id="p17-log-ids">
+<h3>로그를 잇는 열쇠는 넷 — 가리키는 범위가 저마다 다르다</h3>
+<p class="lead">워크숍 이야기 한 문장은 HTTP 요청 열넷이 됩니다(<a href="#p15-run-wire">15부</a>). 어느 에이전트에서 무엇이 잘못됐는지 찾으려면 다섯 에이전트의 로그를 이어 읽어야 하고, 이을 열쇠는 와이어에 이미 있습니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>열쇠</th><th>누가 짓나</th><th>하나가 가리키는 것</th><th>다섯 에이전트를 잇나</th></tr>
+<tr><td>JSON-RPC <code>id</code></td><td>요청을 보내는 쪽</td><td>HTTP 요청 하나(응답과 짝짓기)</td><td>못 한다 — 짓는 쪽마다 따로, TS 클라이언트는 늘 <code>1</code>(<a href="#p16-wd-req">16부</a>)</td></tr>
+<tr><td><code>messageId</code></td><td>메시지를 보내는 쪽</td><td>메시지 하나(<a href="#p04-dup-rule">4부</a>)</td><td>못 한다 — 기획 에이전트가 맡길 때마다 새로 짓는다</td></tr>
+<tr><td><code>taskId</code></td><td>서버</td><td>그 서버의 작업 하나</td><td>못 한다 — 에이전트마다 제 작업</td></tr>
+<tr><td><code>contextId</code></td><td>첫 서버(또는 클라이언트)</td><td>대화 하나</td><td>잇는다 — 기획 에이전트가 제 맥락을 넷에게 그대로 넘긴다(<a href="#p15-fan-ctx">15부</a>)</td></tr>
+</table>
+</div>
+<div class="key"><b>contextId 가 열쇠가 된 것은 우리 기획 에이전트의 선택이다</b> — 맡기는 쪽이 맥락을 넘기지 않으면 동료마다 새 contextId 를 짓습니다(<a href="#p15-fan-ctx-spec">15부</a>). 그때는 맡긴 쪽의 로그에 상대의 taskId 를 함께 적어 두어야 이어집니다.</div>
+</article>
+
+<article class="card" id="p17-log-sdk">
+<h3>SDK 가 스스로 적는 것 — 파이썬은 받은 본문, TS 는 없음, Go 는 가로채기를 달아야 두 줄</h3>
+<p class="lead">교통 에이전트 셋에 막는 SendMessage 를 하나씩 보냈습니다(<code>17/sdklog</code> 명세). 파이썬은 <code>logging</code> 을 INFO 로 켜고 JSON-RPC 를 받는 모듈 하나만 DEBUG 로, TS 는 완성 에이전트 그대로, Go 는 SDK 의 로깅 가로채기와 slog JSON 기록기를 달았습니다.</p>
+<!--CODE file=ex/py/17/logged.py region=sdk-->
+<!--CODE file=ex/go/17/busops/main.go region=sdk-->
+<!--OUT file=out/17/sdklog.txt server=bus-py-->
+<!--OUT file=out/17/sdklog.txt server=bus-go-->
+<ul>
+<li><b>파이썬</b> — 모듈마다 <code>logging.getLogger(__name__)</code> 입니다. INFO 로는 한 요청에 한 줄도 나오지 않았고, <code>jsonrpc_dispatcher</code> 를 DEBUG 로 켜자 받은 본문이 파트의 데이터까지 통째로 찍혔습니다(<code>routes/jsonrpc_dispatcher.py:241</code> — 화면 폭 때문에 우리 형식이 170자에서 잘랐다).</li>
+<li><b>TS</b> — 로거가 없습니다. <code>console.warn</code>·<code>console.error</code> 가 경고·오류 길에 있고(<a href="#p15-ref-server">15부</a>의 "Reference task … not found." 따위), 성공 길에서는 푸시를 보낸 뒤의 <code>console.info</code> 하나뿐입니다(<code>server/index.js:2694</code>). 켤 스위치도 없습니다. 서버 출력은 우리 <code>[교통]</code> 줄뿐입니다.</li>
+<li><b>Go</b> — <code>a2asrv.NewLoggingInterceptor</code>(<code>a2asrv/logging.go:43</code>)가 <code>a2a call started</code>·<code>finished</code> 두 줄을 씁니다. 달지 않으면 오류 때만 적습니다(<a href="#p09-rh-options">9부</a>).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-log-sdk-gap">
+<h3>SDK 기록의 빈 곳 — Go 의 request_id 는 새 UUID, task_id 는 비었고, 파이썬 DEBUG 는 토큰까지 적는다</h3>
+<p class="lead">앞 슬라이드의 Go 두 줄과 파이썬 한 줄을 "다른 에이전트의 로그와 이을 수 있는가" 로 읽었습니다.</p>
+<ul>
+<li><code>request_id</code> 는 클라이언트가 보낸 JSON-RPC <code>id</code> 가 아니라 Go SDK 가 호출마다 새로 짓는 UUID 입니다(<code>a2asrv/intercepted_handler.go:283</code>). 같은 요청을 보낸 클라이언트의 로그에는 이 값이 없습니다.</li>
+<li><code>task_id</code>·<code>context_id</code> 가 빈 문자열입니다. SDK 는 클라이언트가 보낸 메시지의 값을 적을 뿐이라(<code>intercepted_handler.go:77-82</code>), 새 작업이면 비고, 서버가 지은 taskId 는 이 기록에 오지 않습니다. 걸린 시간은 나노초 정수(<code>duration_ns</code>)로 적혀서, 캡처가 흔들리지 않게 <code>ReplaceAttr</code> 로 <code>"…ms"</code> 글자로 바꿨습니다(<code>17/busops</code>).</li>
+<li>파이썬의 <code>active_task</code> 모듈은 DEBUG 에서 호출 맥락을 통째로 적고(<code>agent_execution/active_task.py:517</code>), 그 맥락의 <code>state["headers"]</code> 에는 요청 헤더가 전부 있습니다(<code>routes/common.py:115</code>). 정산 에이전트라면 <code>Authorization: Bearer …</code> 가 로그에 남습니다.</li>
+</ul>
+<div class="warn"><b>§13.4 "Logs MUST NOT include sensitive information (credentials, personal data)"</b> — SDK 의 DEBUG 기록은 받은 본문과 헤더를 그대로 적습니다. 운영에서는 <code>a2a</code> 로거를 DEBUG 로 켜지 않습니다. 메시지 내용도 "SHOULD minimize logging of sensitive or personal information" 입니다.</div>
+</article>
+
+<article class="card" id="p17-log-line">
+<h3>우리 한 줄 — 요청 하나에 JSON 객체 하나, 요청이 끝날 때 적는다</h3>
+<p class="lead">세 SDK 의 기록은 모양도 담는 것도 다릅니다. 잇는 데 필요한 것만 세 언어가 같은 모양으로 적게 합니다. 아래는 파이썬 판의 두 함수 — 요청에서 열쇠를 꺼내고, 응답으로 채웁니다.</p>
+<!--CODE file=ex/py/17/jsonlog.py region=line-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>키</th><th>값</th></tr>
+<tr><td><code>t</code>·<code>took</code></td><td>요청이 들어온 시각(UTC), 걸린 시간 — 캡처에서는 <code>&lt;시각&gt;</code>·<code>&lt;ms&gt;</code></td></tr>
+<tr><td><code>agent</code>·<code>rpc</code>·<code>method</code></td><td>누가, JSON-RPC <code>id</code>, 메서드</td></tr>
+<tr><td><code>msg</code>·<code>ctx</code>·<code>task</code></td><td>요청의 messageId, 그리고 응답까지 본 contextId·taskId</td></tr>
+<tr><td><code>state</code></td><td>마지막으로 본 상태(스트림이면 마지막 이벤트), 오류면 <code>error</code> 와 코드</td></tr>
+</table>
+</div>
+<div class="note"><b>파트의 내용은 적지 않는다</b> — 인원·예산·결재 문장은 로그에 남기지 않고 열쇠만 남깁니다. 줄은 에이전트마다 <code>&lt;이름&gt;.jsonl</code> 파일에 붙입니다. 여러 기계의 파일을 한곳에 모으는 일은 로그 수집기의 몫이고, 이 장에서는 디렉터리 하나(<code>$TMPDIR/a2a-log</code>)가 그 일을 합니다.</div>
+</article>
+
+<article class="card" id="p17-log-py">
+<h3>파이썬 — 앱 바깥에 ASGI 미들웨어, 받는 본문과 내보내는 본문을 흘려 보내며 베낀다</h3>
+<p class="lead">ASGI 앱은 <code>(scope, receive, send)</code> 를 받는 함수입니다. <code>receive</code> 와 <code>send</code> 를 감싸면 SDK 를 건드리지 않고 오가는 바이트를 봅니다.</p>
+<!--CODE file=ex/py/17/jsonlog.py region=middleware-->
+<!--CODE file=ex/py/17/logged.py region=wrap-->
+<ul>
+<li>경로가 <code>/</code> 인 POST 만 적습니다 — 카드 GET 과 정산의 <code>/oauth/token</code> 은 지나갑니다.</li>
+<li><code>finally</code> 에서 적으므로 클라이언트가 끊어도(<a href="#p17-to-server-kept">1장</a>) 줄은 남습니다. 스트림이면 마지막 이벤트까지 받은 뒤 한 줄입니다.</li>
+<li>완성 에이전트를 고치지 않으려고 <code>uvicorn.run</code> 을 바꿔 끼웠습니다. 제 서버라면 <code>serve(…, middleware=…)</code>(<code>agents/common.py</code>)나 Starlette 의 <code>middleware=</code> 로 넘기면 됩니다. SDK 쪽에서는 JSON-RPC <code>id</code> 가 <code>ServerCallContext.state["request_id"]</code> 에 들어 있습니다(<code>jsonrpc_dispatcher.py:313</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-log-ts">
+<h3>TypeScript — express 미들웨어, 응답은 <code>res.write</code>·<code>end</code> 를 감싸 베낀다</h3>
+<p class="lead">8부에서 본 미들웨어 사슬(<a href="#p08-mw-chain">8부</a>)의 맨 앞에 섭니다. 요청 본문은 직접 읽지 않고, 응답이 닫힐 때(<code>close</code>) SDK 가 읽어 둔 <code>req.body</code> 를 씁니다.</p>
+<!--CODE file=ex/ts/17/jsonlog.ts region=middleware-->
+<!--CODE file=ex/ts/17/logged.ts region=wrap-->
+<ul>
+<li><code>req.body</code> 는 SDK 의 JSON-RPC 라우터가 <code>express.json()</code> 으로 채웁니다(<code>server/express/index.js:3409</code>).</li>
+<li>express 의 <code>req.path</code>·<code>res.get</code> 대신 Node 의 <code>req.url</code>·<code>res.getHeader</code> 를 씁니다. 완성 에이전트를 감싸려고 이 미들웨어를 앱의 입구(<code>app.handle</code>)에 끼웠는데, 그 자리에서는 express 가 요청·응답에 제 메서드를 아직 붙이기 전이기 때문입니다(<code>express/lib/application.js</code> 의 <code>handle</code> 이 <code>setPrototypeOf</code> 로 붙인다).</li>
+<li>입구를 바꿔 끼운 것이 둘째 코드(<code>17/logged.ts</code>)입니다. 제 서버라면 <code>app.use(jsonLog("이름"))</code> 를 JSON-RPC 처리기보다 먼저 부르면 됩니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-log-go">
+<h3>Go — HTTP 미들웨어가 줄을 열고 닫고, CallInterceptor 가 형 있는 값으로 채운다</h3>
+<p class="lead">Go SDK 의 가로채기(<a href="#p09-ic-out">9부</a>)는 요청·응답을 <code>a2a</code> 패키지의 형으로 받습니다. 바이트를 파싱할 필요가 없는 대신, JSON-RPC <code>id</code> 는 거기까지 오지 않습니다. 그래서 두 층에 하나씩 둡니다.</p>
+<!--CODE file=ex/go/17/jsonlog/log.go region=before-->
+<!--CODE file=ex/go/17/jsonlog/log.go region=after-->
+<ul>
+<li>줄을 여는 것은 같은 파일의 <code>Middleware</code> 입니다 — 본문에서 <code>id</code> 만 읽고 본문을 되돌려 놓은 뒤, 줄을 <code>context</code> 에 실어 보냅니다. 처리기가 끝나면 적습니다.</li>
+<li>스트림이면 <code>After</code> 가 이벤트마다 불립니다(<code>a2asrv/intercepted_handler.go:118</code>). 마지막 이벤트의 상태가 남습니다.</li>
+<li>오류는 Go 의 <code>error</code> 로 와서 JSON-RPC 코드가 아니라 오류 글을 적습니다. 코드로 바꾸는 함수(<code>ToJSONRPCError</code>)는 SDK 의 <code>internal/jsonrpc/jsonrpc.go:145</code> 에 있어 가져다 쓸 수 없습니다.</li>
+<li>완성 에이전트는 <code>main</code> 패키지라 감쌀 수 없어서, 교통 실행기를 옮겨 온 <code>17/busops</code> 에 달았습니다. <code>common.Serve</code> 의 <code>Guard</code>(JSON-RPC 앞 HTTP 층)와 <code>Handler</code>(SDK 옵션) 자리입니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-log-go-wire">
+<h3>Go 의 두 자리 — <code>Guard</code> 에 미들웨어, <code>WithCallInterceptors</code> 에 가로채기</h3>
+<!--CODE file=ex/go/17/busops/main.go region=wire-->
+<div class="note"><b>카드 경로는 빠진다</b> — <code>Guard</code> 는 <code>common.Serve</code> 가 JSON-RPC 처리기에만 씌우는 자리라(<a href="#p12-bearer-go">12부</a>의 Bearer 검사와 같은 자리) 카드 GET 은 적지 않습니다. 파이썬·TS 미들웨어가 경로로 거른 것과 같은 결과입니다.</div>
+</article>
+
+<article class="card" id="p17-log-cmp">
+<h3>세 언어 비교 — 같은 한 줄, 끼우는 층이 다르다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
+<tr><td>끼우는 곳</td><td>ASGI 미들웨어</td><td>express 미들웨어</td><td>HTTP 미들웨어 + <code>CallInterceptor</code></td></tr>
+<tr><td>보는 값</td><td>요청·응답 바이트</td><td>SDK 가 읽은 <code>req.body</code> + 응답 바이트</td><td>형 있는 요청·응답·이벤트</td></tr>
+<tr><td>JSON-RPC <code>id</code></td><td>본문에서(SDK 안에서는 <code>state["request_id"]</code>)</td><td>본문에서</td><td>미들웨어에서만</td></tr>
+<tr><td>스트림</td><td>SSE <code>data:</code> 줄을 차례로</td><td>같다</td><td>이벤트마다 <code>After</code></td></tr>
+<tr><td>오류</td><td><code>error</code> + 코드</td><td><code>error</code> + 코드</td><td>오류 글</td></tr>
+<tr><td>완성 에이전트에 달기</td><td><code>uvicorn.run</code> 바꿔 끼우기</td><td><code>express.application.handle</code> 바꿔 끼우기</td><td>불가 — 실행기 사본(<code>17/busops</code>)</td></tr>
+<tr><td>SDK 의 기본 기록</td><td><code>logging</code>, 요청마다는 DEBUG 에만</td><td>오류 때 <code>console</code></td><td><code>slog</code>, 요청마다는 가로채기를 달아야</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p17-log-mesh">
+<h3>섞인 메시 다섯 모두에 로그를 달고 — 이야기 한 문장, 그리고 "승인"</h3>
+<p class="lead">기획 TS · 숙소 파이썬 · 식사 TS · 교통 Go(<code>17/busops</code>) · 정산 파이썬입니다. 완성 에이전트 넷은 파일 그대로 <code>17/logged</code> 가 감쌌습니다. 탭은 세우지 않았습니다 — 이번 증거는 와이어가 아니라 로그입니다.</p>
+<!--SPEC file=ex/run/17/trace.run-->
+<!--CODE file=ex/py/17/follow.py region=follow-->
+<div class="note"><b>결과는 15부와 같다</b> — 합계 4,842,000원, 남은 예산 1,158,000원, <code>COMPLETED</code> 입니다(캡처의 <code>ask</code> 출력). 로그를 단 것이 결과를 바꾸지 않았습니다.</div>
+</article>
+
+<article class="card" id="p17-log-follow">
+<h3>contextId 하나로 다섯 로그를 훑었다 — 일곱 줄, 에이전트마다 다른 task</h3>
+<p class="lead"><code>follow</code> 는 기획 에이전트 로그의 첫 줄(바깥에서 들어온 요청)의 <code>ctx</code> 를 열쇠로 다섯 파일을 차례로 훑습니다. <code>grep</code> 한 번과 같은 일입니다.</p>
+<!--OUT file=out/17/trace.txt lines=36-47-->
+<ul>
+<li><code>ctx</code> <code>&lt;id2&gt;</code> 하나가 다섯 파일 모두에 있습니다. 다른 맥락의 줄은 없었습니다.</li>
+<li><code>task</code> 는 에이전트마다 다릅니다(<code>&lt;id3&gt;</code>, <code>&lt;id5&gt;</code>…). 기획의 두 줄과 정산의 두 줄은 각각 같은 작업에 이어 말한 것입니다 — <code>AUTH_REQUIRED</code> 뒤 <code>COMPLETED</code>.</li>
+<li><code>rpc</code> 열: 바깥의 <code>ask</code>(파이썬)가 보낸 두 요청은 UUID 둘, 기획 에이전트(TS)가 동료에게 보낸 다섯 요청은 모두 <code>1</code> 입니다. JSON-RPC <code>id</code> 는 요청과 응답을 짝짓는 값이지 에이전트를 가로질러 잇는 값이 아닙니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-log-trace">
+<h3>트레이스 문맥(W3C Trace Context)은 세 SDK 어디에서도 실려 가지 않는다</h3>
+<p class="lead">A2A 문서의 기업 운영 안내(<code>topics/enterprise-ready.md</code>)는 "A2A Clients and Servers should participate in distributed tracing systems. For example, use OpenTelemetry to propagate trace context … such as W3C Trace Context headers" 라고 씁니다. 스펙 본문에는 §1 의 원칙 한 줄("tracing, and monitoring")뿐입니다. 설치된 세 SDK 의 소스에서 낱말을 셌습니다.</p>
+<!--RUN file=ex/py/17/otel_grep.py region=count-->
+<ul>
+<li>파이썬만 OpenTelemetry 를 씁니다 — <code>utils/telemetry.py</code> 한 파일의 장식자가 처리기·전송·큐에 span 을 엽니다(<a href="#p07-tel-map">7부</a>). 이 venv 에는 OpenTelemetry SDK 가 없어 기록하지 않는 span 입니다.</li>
+<li>세 SDK 모두 <code>traceparent</code>·<code>tracestate</code> 헤더를 보내지도 읽지도 않습니다. 파이썬 span 도 프로세스를 넘어 이어지지 않으니, 에이전트마다 따로 떨어진 트레이스가 됩니다.</li>
+<li>Go 의 확장 전파 짝(<a href="#p09-ext-relay">9부</a>)은 <code>HeaderPredicate</code> 로 넘길 헤더를 고르게 해 둡니다(<code>a2aext/propagator.go:46</code>). 트레이스 헤더를 아래로 넘기는 문은 되지만, 이 책은 시험하지 않았습니다.</li>
+</ul>
+<div class="key"><b>그때까지는 contextId 가 가난한 사람의 트레이스다</b> — 맡기는 쪽이 맥락을 넘기는 한, 이 장의 한 줄과 grep 으로 다섯 에이전트를 잇습니다. 걸린 시간의 부모·자식 관계(어느 호출이 어느 호출 안에 있었나)는 트레이스만 줍니다.</div>
+</article>
+
+<article class="card" id="p17-ch3-sum">
+<h3>3장 정리 — 잇는 열쇠는 contextId, SDK 기록은 그것을 잇지 못한다</h3>
+<ul>
+<li>JSON-RPC <code>id</code>·<code>messageId</code>·<code>taskId</code> 는 한 구간만 가리킵니다. 다섯 에이전트를 잇는 것은 기획 에이전트가 넘긴 <code>contextId</code> 입니다.</li>
+<li>SDK 의 기본 기록: 파이썬은 DEBUG 에서만 요청마다(본문과 헤더까지 — §13.4 위반이 되기 쉽다), TS 는 오류 때만, Go 는 로깅 가로채기를 달면 두 줄이지만 서버가 지은 taskId 가 없고 <code>request_id</code> 는 새 UUID 입니다.</li>
+<li>우리 한 줄 ×3: 파이썬·TS 는 HTTP 미들웨어, Go 는 미들웨어 + <code>CallInterceptor</code>. 섞인 메시에서 ctx 하나로 일곱 줄을 이었습니다.</li>
+<li>W3C 트레이스 헤더는 세 SDK 모두 다루지 않습니다.</li>
+</ul>
+</article>
+
+<article class="card quiz" id="p17-ch3-quiz" data-quiz>
+<h3>3장 퀴즈</h3>
+<p class="q">Q. 기획 에이전트의 로그에서 바깥 요청의 줄(<code>rpc</code> <code>&lt;id1&gt;</code>, <code>task</code> <code>&lt;id3&gt;</code>)을 찾았습니다. 숙소 에이전트의 로그에서 그 요청 때문에 생긴 줄을 찾으려면 어느 키로 찾아야 합니까? <code>rpc</code> 나 <code>task</code> 로는 왜 찾지 못합니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> <code>ctx</code> 로 찾습니다 — 숙소의 줄도 <code>&lt;id2&gt;</code> 입니다(<a href="#p17-log-follow">follow 의 출력</a>). <code>rpc</code> 는 요청을 보낸 쪽이 짓는 값이라 숙소의 줄에는 기획 에이전트(TS)가 지은 <code>1</code> 이 있고, <code>task</code> 는 숙소 에이전트가 제 작업으로 새로 지은 <code>&lt;id5&gt;</code> 입니다.</div>
+</article>
+
+<!-- ==== 4장 배포 체크리스트 ==== -->
+
+<article class="card" id="p17-ch4">
+<p class="chnum">4장</p>
+<h2>배포 체크리스트 — HTTPS, 카드 url, 캐시, 키 교체</h2>
+<p class="chsub">HTTPS → 카드의 url → 카드 캐시 머리글 달기 → 조건부 GET 실행 → ETag 과 서명 → 키 교체의 순서 → 겹침 실행 → 키 공급자의 함정 → 본문 한도 달기 → 큰 본문 실행 → 서버 점검표 → 클라이언트 점검표</p>
+</article>
+
+<article class="card" id="p17-dp-https">
+<h3>운영은 HTTPS — 이 책의 루프백 http 는 앞단 TLS 로 바꾼다</h3>
+<p class="lead">이 책의 에이전트는 모두 <code>127.0.0.1</code> 에 http 로 붙었습니다. 바깥에 내놓을 때 지켜야 할 것은 §13.4 의 "Transport Security" 넷입니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>§13.4</th><th>세기</th><th>이 책에서</th></tr>
+<tr><td>HTTPS(gRPC 는 TLS)로만</td><td>MUST</td><td>앞단 프록시가 TLS 를 끝내고 루프백으로 넘기는 그림(<a href="#p12-tls-front">12부</a>)</td></tr>
+<tr><td>TLS 1.3 이상 권장, 강한 암호 묶음</td><td>SHOULD</td><td>서버의 TLS 는 SDK 밖 — uvicorn·express·<code>net/http</code>, 또는 앞단의 설정(<a href="#p12-tls-sdk">12부</a>)</td></tr>
+<tr><td>HSTS(<code>Strict-Transport-Security</code>) 머리글</td><td>SHOULD</td><td>어느 서버 SDK 도 달지 않는다(<a href="#p12-tls-sdk">12부</a>) — 앞단이 단다</td></tr>
+<tr><td>SSLv3·TLS 1.0·1.1 끄기</td><td>SHOULD</td><td>앞단의 설정</td></tr>
+</table>
+</div>
+<div class="note"><b>키·토큰도 HTTPS 를 전제한다</b> — Bearer 토큰(<a href="#p12-bearer-rule">12부</a>), 서명 검증용 공개 키(§8.4.3 "SHOULD be retrieved over secure channels"), 웹훅의 토큰(<a href="#p11-hook-401">11부</a>)이 모두 평문 http 에서는 지켜지지 않습니다.</div>
+</article>
+
+<article class="card" id="p17-dp-url">
+<h3>카드의 url 은 바깥에서 닿는 주소 — 3부의 세 실험이 그 까닭이다</h3>
+<p class="lead">에이전트가 아는 자기 주소(<code>127.0.0.1:포트</code>)를 카드에 적으면, 클라이언트는 카드를 프록시에서 받고도 대화는 카드의 주소로 갑니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>카드의 url</th><th>무슨 일이</th><th>증거</th></tr>
+<tr><td>안쪽 주소인데 닿는다</td><td>요청이 프록시를 건너뛴다 — TLS·인증·로그가 빠진다</td><td><a href="#p03-url-bypass-wire">3부</a></td></tr>
+<tr><td>안쪽 주소인데 닿지 않는다</td><td>카드는 오고 대화는 연결 실패</td><td><a href="#p03-url-dead">3부</a></td></tr>
+<tr><td>바깥 주소(<code>--url</code>)</td><td>모든 요청이 프록시를 지난다</td><td><a href="#p03-url-fixed-wire">3부</a></td></tr>
+</table>
+</div>
+<div class="key"><b>배포 때 바꿀 곳</b> — <code>supportedInterfaces[].url</code> 을 바깥의 <code>https://</code> 주소로, 서명한 카드라면 그 주소로 다시 서명합니다(<a href="#p12-sig-rules">12부</a>). 이 책의 메시가 모두 <code>--url</code> 로 탭의 주소를 적은 것도 같은 까닭입니다(<a href="#p03-url-howto">3부</a>).</div>
+</article>
+
+<article class="card" id="p17-dp-cache">
+<h3>카드 캐시 머리글 — 파이썬은 인자 하나, TS 는 이미 있고, Go 는 처리기를 감싼다</h3>
+<p class="lead">§8.6.1 은 카드 응답에 <code>Cache-Control</code>(<code>max-age</code>)과 <code>ETag</code> 을 SHOULD 로 둡니다. 3부에서 잰 대로 둘 다 다는 것은 TS 뿐이었고(<a href="#p03-cache-headers">3부</a>), TCK 도 같은 자리를 짚었습니다(<a href="#p16-tck-sdk">16부</a>).</p>
+<!--CODE file=ex/py/17/bus_ops.py region=card-->
+<!--CODE file=ex/go/17/deploy/deploy.go region=cache-->
+<ul>
+<li><b>파이썬</b> — <code>create_agent_card_routes(…, cache_control=)</code> 입니다. 문서 문자열의 말로는 max-age 는 "only the deployment knows" 라 기본값이 없고, ETag 은 늘 답니다(<code>routes/agent_card_routes.py:87</code>).</li>
+<li><b>TS</b> — <code>agentCardHandler({…, cache: {maxAge}})</code>, 주지 않으면 3600초입니다(<code>server/express/index.js:5880</code>). 고칠 것이 없어 완성 에이전트 그대로 씁니다.</li>
+<li><b>Go</b> — SDK 의 카드 처리기에는 둘 다 없어, 응답을 받아 두고 본문 해시로 ETag 을 짓는 미들웨어로 감쌌습니다(<code>17/busops</code> 의 <code>--cache-age</code>).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-dp-cache-run">
+<h3>다섯 서버에 카드를 두 번 — 머리글을 단 파이썬·Go 도 304 를 돌려준다</h3>
+<p class="lead">완성 교통 에이전트 셋(그대로)과, max-age 600초를 단 파이썬·Go 둘입니다(<code>17/edge</code> 명세). 카드를 받고, 받은 <code>ETag</code> 을 <code>If-None-Match</code> 에 실어 다시 물었습니다.</p>
+<!--CODE file=ex/py/17/edge_check.py region=check-->
+<!--OUT file=out/17/edge.txt part=터미널 6 grep=카드|Cache-Control-->
+<ul>
+<li>완성 Go 에이전트(<code>bus-go</code>)는 <code>ETag</code> 이 없어 조건부로 물을 수조차 없습니다. 감싼 뒤(<code>ops-go</code>)에는 304 입니다.</li>
+<li><code>ETag</code> 의 길이가 다릅니다 — 파이썬은 SHA-256 전체, TS 와 우리 Go 는 앞 16글자입니다. <code>ETag</code> 은 그 서버만 대 보는 값이라 모양은 상관없습니다.</li>
+<li><code>max-age</code> 는 클라이언트가 묻지도 않고 카드를 쓰는 시간입니다. 카드를 바꾸면(키 교체 포함) 그만큼 늦게 퍼집니다 — 다음 슬라이드들의 겹침 기간을 이보다 길게 잡습니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-dp-etag-sig">
+<h3>파이썬의 ETag 은 서명을 빼고 짓는다 — 서명만 바꾼 카드는 304 로 끝난다</h3>
+<p class="lead">세 ETag 이 카드의 어느 부분으로 지어지는지는 키 교체 때 갈립니다.</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>무엇의 해시</th><th>서명만 바뀌면</th></tr>
+<tr><td>파이썬</td><td><code>signatures</code> 를 뺀 카드(<code>routes/agent_card_routes.py:57-59</code>)</td><td>ETag 그대로 → 304 → 클라이언트는 옛 서명을 쥔다</td></tr>
+<tr><td>TS</td><td>보낼 JSON 본문 전체(<code>server/express/index.js:5875</code>)</td><td>ETag 바뀜 → 200, 새 서명</td></tr>
+<tr><td>우리 Go</td><td>보낼 본문 전체(<code>17/deploy</code>)</td><td>ETag 바뀜 → 200, 새 서명</td></tr>
+</table>
+</div>
+<div class="warn"><b>파이썬은 일부러 그랬다</b> — 문서 문자열은 ES256 처럼 서명마다 값이 달라지는 알고리즘에서도 304 가 되게 하려고 서명을 뺐고, 그 대가로 "a 304 leaves the client on the signature it already holds" 라고 적습니다(<code>agent_card_routes.py:40-50</code>). 키를 바꿀 때는 카드의 <code>version</code> 도 함께 올려 ETag 을 바꿉니다. 그래야 옛 키를 거둘 때 옛 서명만 쥔 클라이언트가 남지 않습니다.</div>
+</article>
+
+<article class="card" id="p17-dp-key-why">
+<h3>서명 키 교체 — 새 키로 서명을 더하고, 키 저장소가 퍼진 뒤에 옛 키를 거둔다</h3>
+<p class="lead">16부의 점검표에서 비워 둔 줄입니다 — "만료·폐기된 키로 검증하지 않기"(<a href="#p16-chk-auth">16부</a>). §8.4.3 은 "Expired or revoked keys <b>MUST NOT</b> be used for verification" 과 함께 "Multiple signatures <b>MAY</b> be present to support key rotation" 이라고 씁니다.</p>
+<pre class="fig">
+ ① 지금      카드 서명: 옛 키            클라이언트 키 저장소: 옛
+ ② 겹침      카드 서명: 옛 키 + 새 키     저장소: 옛 (아직) / 옛+새
+ ③ 겹침 뒤   카드 서명: 새 키            저장소: 새 (옛 키는 거둔다)
+ ④ 폐기 뒤   누가 ① 의 카드를 다시 내밀어도 → 옛 키가 없으니 틀림
+
+ 겹침 기간 ≥ 카드의 max-age + 클라이언트가 키 저장소를 새로 받는 주기
+</pre>
+<div class="note"><b>키를 고르는 것은 검증하는 쪽</b> — 12부에서 본 대로 우리 클라이언트는 <code>jku</code> 를 따라가지 않고 미리 받아 둔 키만 믿습니다(<a href="#p12-sig-jku">12부</a>). 그러니 교체는 "그 저장소에 새 키를 먼저 넣고, 옛 키를 나중에 뺀다" 의 차례입니다.</div>
+</article>
+
+<article class="card" id="p17-dp-key-code">
+<h3>같은 카드에 kid 마다 서명 하나 — 서명기를 두 번 부르면 서명 둘</h3>
+<p class="lead">파이썬 SDK 의 서명기는 카드의 <code>signatures</code> 에 서명을 하나 덧붙입니다(<code>utils/signing.py:95</code>). 정산 에이전트의 키(<code>settlement-2026</code>)와 이 장의 시험용 새 키(<code>settlement-2027</code>)로 두 번 부릅니다.</p>
+<!--CODE file=ex/py/17/rotate.py region=sign-->
+<ul>
+<li>검증기는 서명을 차례로 대 보고 <b>하나라도</b> 맞으면 통과입니다(<code>utils/signing.py:139-160</code>). 그래서 겹침 동안 옛 키만 아는 클라이언트도 통과합니다.</li>
+<li>키 공급자가 모르는 kid 에 <code>PyJWKError</code> 를 던지면 검증기는 "이 서명은 틀림" 으로 보고 다음 서명으로 넘어갑니다.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-dp-key-run">
+<h3>네 단계를 돌렸다 — 겹침 동안엔 누구나 맞음, 겹침 뒤엔 옛 키만 아는 쪽이 틀림</h3>
+<!--RUN file=ex/py/17/rotate.py region=main-->
+<ul>
+<li>② 서명 둘인 카드는 옛 키만 아는 쪽과 둘을 받은 쪽 모두에게 맞음 — 이 기간에 클라이언트들이 새 키를 받습니다.</li>
+<li>③ 옛 서명을 거둔 뒤에도 옛 키만 쥔 클라이언트는 틀림입니다. 겹침이 짧으면 생기는 일이고, 그 클라이언트는 카드를 믿지 못합니다(<a href="#p12-sig-fake">12부</a>의 가짜 카드와 같은 판정).</li>
+<li>④ 옛 키를 저장소에서 뺀 클라이언트에게는 ① 의 카드를 다시 내밀어도 틀림입니다. 이것이 §8.4.3 의 "revoked keys MUST NOT be used" 를 지키는 방법입니다 — 검증기가 아니라 키 저장소에서.</li>
+</ul>
+</article>
+
+<article class="card" id="p17-dp-key-trap">
+<h3>⑤ 모르는 kid 에 KeyError 를 내는 키 공급자 — 검증기 밖으로 새어 나온다</h3>
+<p class="lead">⑤ 는 ③ 과 같은 카드·같은 저장소인데, 키 공급자가 <code>keys[kid]</code> 로만 찾습니다. 결과는 "틀림" 이 아니라 <code>KeyError</code> 입니다.</p>
+<ul>
+<li>파이썬 검증기의 고리는 <code>PyJWTError</code> 만 잡습니다(<code>utils/signing.py:158</code>). 그 밖의 예외는 <code>SignatureVerificationError</code> 로 바뀌지 않고 그대로 올라옵니다. <code>SignatureVerificationError</code> 만 잡는 호출자는 그 자리에서 깨집니다.</li>
+<li>12부의 <code>verify.py</code> 와 완성 기획 에이전트(파이썬)의 키 공급자가 이 모양입니다(<code>agents/planner.py:104</code>). 지금은 kid 가 하나뿐이라 드러나지 않았고, 정산 에이전트가 새 키로만 서명하는 날 드러납니다. 이 책은 완성 에이전트를 고치지 않고 이 자리에 적어 둡니다.</li>
+</ul>
+<div class="key"><b>모르는 kid 는 "틀림" 으로</b> — 키 공급자는 모르는 kid 에 <code>PyJWKError</code>(또는 그 하위 예외)를 던집니다. 그래야 서명이 여럿인 카드에서 다음 서명으로 넘어가고, 모두 틀리면 <code>InvalidSignaturesError</code> 하나로 끝납니다.</div>
+</article>
+
+<article class="card" id="p17-dp-body">
+<h3>본문 한도 — TS 만 100KB 가 있고, 파이썬·Go 는 우리가 단다</h3>
+<p class="lead">§13.4 "Agents <b>SHOULD</b> implement appropriate limits on message sizes, file sizes, and request complexity". 4부에서 TS 서버만 102,400바이트에서 413 을 냈습니다(<a href="#p04-file-big">4부</a>). 파이썬·Go 에는 SDK 앞에 미들웨어를 하나씩 세웁니다(한도 100,000바이트).</p>
+<!--CODE file=ex/py/17/bus_ops.py region=limit-->
+<!--CODE file=ex/go/17/deploy/deploy.go region=limit-->
+<div class="note"><b>스펙에 "너무 크다" 는 오류가 없다</b> — 둘 다 HTTP 413 에 JSON-RPC 의 Invalid Request(<code>-32600</code>)를 실었습니다. 우리가 고른 것입니다. TS 의 413 에는 JSON-RPC 객체가 없습니다.</div>
+</article>
+
+<article class="card" id="p17-dp-body-run">
+<h3>150KB 를 두 가지로 — 길이를 밝히면 셋 다 413, chunked 면 파이썬은 지나가고 Go 는 "parse error"</h3>
+<p class="lead">같은 다섯 서버에 150,238바이트 SendMessage 를 두 번 보냈습니다 — <code>Content-Length</code> 를 밝혀서 한 번, <code>Transfer-Encoding: chunked</code> 로 한 번.</p>
+<!--OUT file=out/17/edge.txt part=터미널 6 grep=본문|카드|큰 요청|chunked-->
+<ul>
+<li>한도가 없는 완성 파이썬·Go 는 둘 다 받아 배차까지 끝냈습니다(<code>COMPLETED</code>).</li>
+<li><b>파이썬</b> — 우리 <code>BodyLimit</code> 는 <code>Content-Length</code> 만 봐서 chunked 는 지나갔습니다. 문서 문자열에 적은 그 빈틈입니다. 막으려면 <code>receive</code> 를 감싸 받은 바이트를 셉니다.</li>
+<li><b>Go</b> — chunked 는 <code>MaxBytesReader</code> 가 100,000바이트에서 읽기를 끊었고, SDK 는 그 오류를 해독 실패로 보아 <code>-32700 parse error</code> 를 HTTP 200 으로 돌려줬습니다(<code>a2asrv/jsonrpc.go:373</code>). 클라이언트는 제 JSON 이 깨진 줄 압니다.</li>
+<li><b>TS</b> — express 의 본문 읽기가 길이를 세므로 두 방식 모두 413 입니다(본문은 HTML).</li>
+</ul>
+</article>
+
+<article class="card" id="p17-dp-check-srv">
+<h3>서버 점검표 — 줄마다 그것을 보인 슬라이드로</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>점검</th><th>근거</th><th>증거</th></tr>
+<tr><td>HTTPS 로만, 앞단 TLS·HSTS</td><td>§13.4</td><td><a href="#p12-tls-front">12부</a>, <a href="#p17-dp-https">이 장</a></td></tr>
+<tr><td>카드의 url = 바깥 https 주소</td><td>§8.3.2</td><td><a href="#p03-url-fixed-wire">3부</a>, <a href="#p17-dp-url">이 장</a></td></tr>
+<tr><td>카드에 Cache-Control·ETag, 304</td><td>§8.6.1</td><td><a href="#p17-dp-cache-run">이 장</a></td></tr>
+<tr><td>키를 바꿀 땐 서명 둘로 겹치고 version 을 올린다</td><td>§8.4.3</td><td><a href="#p17-dp-key-run">이 장</a>, <a href="#p17-dp-etag-sig">ETag</a></td></tr>
+<tr><td>요청마다 인증, 권한 안에서만</td><td>§7.4·§13.1</td><td><a href="#p12-bearer-cmp">12부</a>, <a href="#p12-scope-after">12부</a></td></tr>
+<tr><td>본문 한도(chunked 포함), 413</td><td>§13.4</td><td><a href="#p17-dp-body-run">이 장</a></td></tr>
+<tr><td>A2A-Version 을 읽고 모르는 판은 -32009</td><td>§3.6.2</td><td><a href="#p14-ver-srv">14부</a>, <a href="#p16-er-version">16부</a>(Go 는 읽지 않는다)</td></tr>
+<tr><td>요청마다 ctx·task·state 한 줄, 비밀은 적지 않는다</td><td>§13.4</td><td><a href="#p17-log-follow">이 부 3장</a>, <a href="#p17-log-sdk-gap">SDK DEBUG</a></td></tr>
+<tr><td>클라이언트가 떠나도 일은 계속된다 — 그것을 전제로</td><td>—</td><td><a href="#p17-to-server-kept">이 부 1장</a></td></tr>
+<tr><td>Task 는 영속 저장소에, 띄울 때 복구 규칙</td><td>—</td><td><a href="#p17-st-recover-run">이 부 2장</a></td></tr>
+<tr><td>웹훅 주소 검사(우리 Go <code>hookSender</code> 에는 없다)·푸시 설정도 영속</td><td>§13.2</td><td><a href="#p11-sec-ssrf-cmp">11부</a>, <a href="#p17-st-run">이 부 2장</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="p17-dp-check-cl">
+<h3>클라이언트 점검표 — 기획 에이전트가 동료를 부를 때</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>점검</th><th>근거</th><th>증거</th></tr>
+<tr><td>호출마다 시간 제한(SDK 기본값을 믿지 않는다)</td><td>—</td><td><a href="#p17-to-defaults">이 부 1장</a></td></tr>
+<tr><td>끊긴 SendMessage 는 다시 보내지 말고 찾아 붙는다</td><td>—</td><td><a href="#p17-safe-run">이 부 1장</a></td></tr>
+<tr><td>다시 해도 되는 실패만 지수 백오프·지터로 재시도</td><td>—</td><td><a href="#p17-rt-run">이 부 1장</a></td></tr>
+<tr><td>카드 서명은 미리 받아 둔 키로, 모르는 kid 는 "틀림"</td><td>§8.4.3</td><td><a href="#p12-sig-jku">12부</a>, <a href="#p17-dp-key-trap">이 장</a></td></tr>
+<tr><td>키 저장소를 겹침 기간 안에 새로 받는다</td><td>§8.4.3</td><td><a href="#p17-dp-key-run">이 장</a></td></tr>
+<tr><td>카드는 조건부 GET 으로 다시 받는다</td><td>§8.6.2</td><td><a href="#p03-cache-fetch">3부</a>(SDK 는 하지 않는다)</td></tr>
+<tr><td>요청마다 <code>A2A-Version</code></td><td>§3.6.1</td><td><a href="#p14-ver-cl">14부</a>, <a href="#p16-wd-req">16부</a>(Go 의 카드 GET 은 빠진다)</td></tr>
+<tr><td>맡길 때 contextId 를 넘긴다 — 로그를 잇는 열쇠</td><td>§3.4</td><td><a href="#p17-log-ids">이 부 3장</a></td></tr>
+</table>
+</div>
+</article>
+
+<article class="card quiz" id="p17-ch4-quiz" data-quiz>
+<h3>4장 퀴즈</h3>
+<p class="q">Q. 본문 한도 100,000바이트를 단 Go 교통 에이전트에 150KB 요청을 chunked 로 보낸 클라이언트가 <code>-32700 parse error: unexpected EOF</code> 를 받았습니다. 클라이언트의 JSON 이 깨졌던 것입니까? 같은 본문을 <code>Content-Length</code> 를 밝혀 보내면 무엇을 받습니까?</p>
+<button>답 보기</button>
+<div class="a"><b>A.</b> 아닙니다. 같은 본문을 한도가 없는 Go 서버는 받아 <code>COMPLETED</code> 까지 갔습니다. <code>MaxBytesReader</code> 가 100,000바이트에서 읽기를 끊었고 SDK 가 그 오류를 해독 실패로 보아 <code>-32700</code> 을 HTTP 200 으로 돌려준 것입니다. 길이를 밝히면 우리 미들웨어가 읽기 전에 <code>413</code> 과 <code>-32600 요청 본문이 너무 큽니다</code> 를 돌려줍니다(<a href="#p17-dp-body-run">실행</a>).</div>
+</article>
+
+<article class="card" id="p17-wrap">
+<h3>17부 정리 — 와이어 밖의 일들</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>하나만 기억한다면</th></tr>
+<tr><td><a href="#p17-ch1">1</a></td><td>시간 초과는 "모름" — SendMessage 는 다시 보내지 말고, 클라이언트가 정한 contextId 로 찾아 붙는다</td></tr>
+<tr><td><a href="#p17-ch2">2</a></td><td>저장소를 바꾸면 Task 는 남지만 달리던 일은 남지 않는다 — 띄울 때 복구 규칙</td></tr>
+<tr><td><a href="#p17-ch3">3</a></td><td>다섯 에이전트를 잇는 열쇠는 contextId — 요청마다 JSON 한 줄, 비밀은 적지 않는다</td></tr>
+<tr><td><a href="#p17-ch4">4</a></td><td>HTTPS·바깥 url·캐시 머리글·본문 한도는 SDK 밖에서 단다, 키 교체는 서명 둘로 겹친다</td></tr>
+</table>
+</div>
+<div class="note"><b>다음</b> — 18부 부록은 이 책 전체를 찾아보는 곳입니다. 오류 코드표, 메서드 대응표, proto 에서 뽑은 필드 사전, 용어집과 찾아보기, 출처 목록, 장마다 있던 퀴즈의 모음을 싣습니다.</div>
 </article>

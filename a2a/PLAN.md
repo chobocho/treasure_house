@@ -1041,3 +1041,31 @@ subagent task each.
   09b:584→#p17-st-go, 07b:550→#p17-st-py. 03b:410 (ETag/Cache-Control), 16b:507 (key
   rotation) belong to 17b ch4.
 - `make all SKEL=1` green (1673 slides, 0 errors, 0 notices); manifest 285 examples, 0 stale.
+
+### Part 17 complete — 69 slides; 20 forward refs to part 17 linked (2026-10-19)
+- `17b_ops.html` (31): ch3 logging/tracing (15, `p17-ch3`…`p17-ch3-quiz`), ch4 deploy checklist
+  (16, `p17-ch4`…`p17-wrap` → part 18 plain text). 17_ intro links ch3/ch4.
+- Examples: py `17/{jsonlog,logged,follow,otel_grep,rotate,bus_ops,edge_check}.py` + test-only
+  key `17/next-ed25519.pem`; ts `17/{jsonlog,logged}.ts`; go `17/{jsonlog,deploy,busops}`.
+  Final agents untouched (py wrapped via runpy, ts by patching express, Go bus copied). Specs
+  `ex/run/17/{trace,sdklog,edge}.run` (11763–65, 11770–74, 11780–84); first-half specs re-run
+  byte-identical.
+- Findings: py logs nothing per request at INFO; at DEBUG the request body
+  (`jsonrpc_dispatcher.py:241`) and the call context incl. all headers (`active_task.py:517`,
+  `routes/common.py:115`) → Bearer token in logs (§13.4 MUST NOT) — source only, not capturable.
+  Go `NewLoggingInterceptor` (`a2asrv/logging.go:43`) request_id = fresh UUID, not the JSON-RPC
+  id; task/context ids only as sent; `After` per stream event; JSON-RPC code mapping internal.
+  TS no logger; card `cache.maxAge` default 3600. No SDK sends/reads `traceparent`; only py has
+  OTel (`utils/telemetry.py`). py ETag excludes `signatures` (`agent_card_routes.py:40-59`) →
+  bump card `version` on key rotation. Body limit 150 KB: TS 413 HTML; final py/go agents accept;
+  Go MaxBytesReader on chunked → 200 + -32700 "unexpected EOF" (`a2asrv/jsonrpc.go:373`).
+- **Open (not fixed):** py verifier catches only `PyJWTError` (`utils/signing.py:158`); a key
+  provider raising `KeyError` on an unknown kid escapes — final py planner
+  (`agents/planner.py:104`) and part 12 `verify.py` have it; surfaces once settlement signs
+  only with a new key. Fixing touches agents → all captures stale. Decide at review.
+- Not done: key rotation py only; Go traceparent propagator untested; Go final agents not
+  wrappable (mesh uses copied Go bus).
+- Links converted (20) in 03b/04b/06/06c/07/07b/08/09/09b/11b/16b; left plain: 06:445,
+  06c:265, 06c:266 (no matching part-17 slide).
+- `make all SKEL=1` green (1703 slides, 0 errors, 0 notices); manifest 290 examples, 0 stale.
+- Next per §5: part 1, then 0, then 18; then wrap-up.
