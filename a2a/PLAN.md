@@ -1135,3 +1135,4 @@ subagent task each.
 - Batch A (0–2) done: 사실오류 5 · 증거불일치 1 · 근거없음 4 · 순서 5 · 표기 3 (+8 SRC links on part 2
   quotes; fact `v1-tsc` dropped, `rel-v0-2-1` added). For batch L: p15-reg-roles says the role
   table uses "둘째 태그" — tags put the role first and planner.py:128-130 matches any tag.
+- Batch B (3~4부) done: 사실오류 3 · 절단 1 · 순서 1 (p03-iface-cmp TS/Go planners register HTTP+JSON too; p03-skill-five role tag first; p04-ctx-plan py/go check context before terminal, ts terminal first). Review 2: p04-part-wire '3장' vs p04-intro '(2장)'.
