@@ -1136,3 +1136,4 @@ subagent task each.
   quotes; fact `v1-tsc` dropped, `rel-v0-2-1` added). For batch L: p15-reg-roles says the role
   table uses "둘째 태그" — tags put the role first and planner.py:128-130 matches any tag.
 - Batch B (3~4부) done: 사실오류 3 · 절단 1 · 순서 1 (p03-iface-cmp TS/Go planners register HTTP+JSON too; p03-skill-five role tag first; p04-ctx-plan py/go check context before terminal, ts terminal first). Review 2: p04-part-wire '3장' vs p04-intro '(2장)'.
+- Batch C (5부) done: 사실오류 3 · 증거불일치 3 · 근거없음 3 · 순서 2 · 절단 1 · 퀴즈 1 · 표기 1 (TS ClientConfig.polling; Go history now moved on next reply; ch9 quiz answer from capture). Review 2: spec §5.6.1 example uses createdAt/lastModified (add to p05-task-fields); p05-cancel-plan unverifiable authoring note '이 기계에서 한 번 어긋났습니다'.
