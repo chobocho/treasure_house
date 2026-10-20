@@ -15,7 +15,7 @@
 <tr><td><a href="#p07-ch3">3장</a></td><td>실행기(AgentExecutor) — 이벤트 큐에 넣는 일, TaskUpdater</td></tr>
 <tr><td><a href="#p07-ch4">4장</a></td><td>요청 처리기와 Task 저장소 — DefaultRequestHandler, InMemoryTaskStore</td></tr>
 <tr><td><a href="#p07-ch5">5장</a></td><td>서버 띄우기 — 라우트 팩토리, Starlette 와 uvicorn, 카드</td></tr>
-<tr><td><a href="#p07-ch6">6장</a></td><td>클라이언트 — <code>create_client</code>, 막는 호출과 스트림, 답 읽기</td></tr>
+<tr><td><a href="#p07-ch6">6장</a></td><td>클라이언트 — <code>create_client</code>, 막는 호출과 스트림, 가로채기, 오류 두 갈래</td></tr>
 <tr><td><a href="#p07-ch7">7장</a></td><td>숙소 에이전트 완성판 — INPUT_REQUIRED·REJECTED, 골든 대조</td></tr>
 <tr><td><a href="#p07-ch8">8장</a></td><td>시험 — SDK 서버를 네트워크 없이 프로세스 안에서</td></tr>
 <tr><td><a href="#p07-ch9">9장</a></td><td>이 SDK 만의 것 — v0.3 호환, DB 저장소, 원격 측정</td></tr>
@@ -88,7 +88,7 @@
     ▼
   처리기가 답을 골라 JSON-RPC 응답으로
 </pre>
-<div class="note"><b>이벤트가 저장소를 고친다</b> — <a href="#p06-work-sdk">6부</a>에서 본 대로 SDK 판에서는 실행기가 Task 를 직접 저장하지 않습니다. 이벤트를 큐에 넣으면 처리기 쪽(<code>server/agent_execution/active_task.py</code>)이 그것을 받아 저장된 Task 에 반영합니다. 4장에서 이 길을 HTTP 없이 직접 불러 봅니다.</div>
+<div class="note"><b>이벤트가 저장소를 고친다</b> — <a href="#p06-work-sdk">6부</a>에서 본 대로 SDK 판에서는 실행기가 Task 를 직접 저장하지 않습니다. 이벤트를 큐에 넣으면 처리기 쪽(<code>server/agent_execution/active_task.py</code>)이 그것을 받아 저장된 Task 에 반영합니다. <a href="#p07-rh-direct">4장</a>에서 이 길을 HTTP 없이 직접 불러 봅니다.</div>
 </article>
 
 <article class="card" id="p07-map-used">
@@ -238,7 +238,7 @@
 <!--OUT file=out/07/types_data.py.txt-->
 <ul>
 <li>안쪽은 <code>struct_value.fields</code> 라는 map 이고 수는 <code>number_value</code>(double) 하나뿐입니다. 꺼내면 <code>float</code> 입니다.</li>
-<li><code>back == req</code> 가 참이라 놓치기 쉽습니다 — 파이썬에서 <code>30.0 == 30</code> 이니까요. 그러나 <code>range(30.0)</code> 은 <code>TypeError</code> 이고, 업무 규칙 <code>choose_lodging</code> 도 그래서 정수를 요구합니다. 견적 실행기(<a href="#p07-ex-quote">3장</a>)와 완성 에이전트의 <code>as_ints</code> 가 정수로 되돌립니다.</li>
+<li><code>back == req</code> 가 참이라 놓치기 쉽습니다 — 파이썬에서는 <code>30.0 == 30</code> 이기 때문입니다. 그러나 <code>range(30.0)</code> 은 <code>TypeError</code> 이고, 업무 규칙 <code>choose_lodging</code> 도 그래서 정수를 요구합니다. 견적 실행기(<a href="#p07-ex-quote">3장</a>)와 완성 에이전트의 <code>as_ints</code> 가 정수로 되돌립니다.</li>
 <li>Struct 의 키 차례는 프로세스마다 다를 수 있어 <code>sort_keys=True</code> 로 찍었습니다. 와이어 탭이 <code>data</code>·<code>metadata</code> 아래 키를 정렬해 적는 것도 같은 까닭입니다(<a href="#p00-tap-sort">0부의 정규화 표</a>).</li>
 </ul>
 </article>
@@ -262,6 +262,7 @@
 
 <article class="card" id="p07-ch2-sum">
 <h3>2장 정리 — 타입을 다루는 손잡이</h3>
+<p class="lead">하위 메시지 바꾸기·사본 뜨기·"없음" 묻기 세 줄이 파이썬 객체와 다르게 움직이는 protobuf 의 성질입니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>할 일</th><th>파이썬 SDK</th></tr>
@@ -335,7 +336,7 @@
 <tr><td><code>current_task</code></td><td>저장소에 있던 Task, 첫 마디면 <code>None</code></td><td><code>execute</code> 바로 앞(<code>active_task.py:595</code>)</td></tr>
 <tr><td><code>configuration</code>, <code>metadata</code></td><td>요청의 설정, 메타데이터(dict 로)</td><td>늘</td></tr>
 <tr><td><code>related_tasks</code></td><td>referenceTaskIds 의 작업들</td><td>기본 처리기는 <b>채우지 않는다</b>(<code>should_populate_referred_tasks=False</code>) — 15부</td></tr>
-<tr><td><code>call_context</code>, <code>tenant</code>, <code>requested_extensions</code></td><td>HTTP 쪽 정보 — 사용자·헤더·확장</td><td><a href="#p07-srv-who">5장</a>, 14부</td></tr>
+<tr><td><code>call_context</code>, <code>tenant</code>, <code>requested_extensions</code></td><td>HTTP 쪽 정보 — 사용자·머리글·확장</td><td><a href="#p07-srv-who">5장</a>, 14부</td></tr>
 </table>
 </div>
 <!--OUT file=out/07/drive.txt lines=1-4 note=서버 없이 만든 RequestContext — 메아리 실행기에도 task_id 가 있다-->
@@ -404,7 +405,7 @@
 <tr><td><code>requires_input</code>·<code>requires_auth</code></td><td>INPUT_REQUIRED·AUTH_REQUIRED (중단 상태 — <a href="#p07-lg-step3">7장</a>, 12부)</td></tr>
 <tr><td><code>complete</code>·<code>failed</code>·<code>reject</code>·<code>cancel</code></td><td>종료 상태 넷</td></tr>
 <tr><td><code>update_status(state, message, timestamp, metadata)</code></td><td>아무 상태나 — 시각을 안 주면 지금(UTC)</td></tr>
-<tr><td><code>add_artifact(parts, artifact_id, name, metadata, append, last_chunk, extensions)</code></td><td>아티팩트 갱신 — id 를 안 주면 uuid, 청크는 10부</td></tr>
+<tr><td><code>add_artifact(parts, artifact_id, name, metadata, append, last_chunk, extensions)</code></td><td>아티팩트 갱신 — id 를 안 주면 uuid, 조각은 10부</td></tr>
 <tr><td><code>new_agent_message(parts, metadata)</code></td><td>이벤트 아님 — taskId·contextId 를 단 에이전트 Message 를 지어 돌려줄 뿐</td></tr>
 </table>
 </div>
@@ -423,6 +424,7 @@
 
 <article class="card" id="p07-ch3-sum">
 <h3>3장 정리 — 실행기를 쓰는 손잡이</h3>
+<p class="lead">첫 줄의 메서드 둘을 채우는 것이 실행기의 전부입니다. 나머지 줄은 그 안에서 쓰는 이름과, 서버 없이 돌려 보는 법입니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>할 일</th><th>파이썬 SDK</th></tr>
@@ -468,6 +470,7 @@
 
 <article class="card" id="p07-rh-options">
 <h3>필수는 셋 — 실행기, 저장소, 카드. 나머지는 각 부의 손잡이다</h3>
+<p class="lead">생성자의 인자와 기본값을 찍었습니다. 표는 인자를 쓰임새로 묶고, 오른쪽 열에 그것을 다루는 곳을 적었습니다.</p>
 <!--CODE file=ex/py/07/handler_api.py region=options-->
 <!--OUT file=out/07/handler_api.py.txt lines=26-38-->
 <div class="tblwrap">
@@ -531,7 +534,7 @@
 <h3>던질 수 있는 A2A 오류 열셋 — 클래스가 곧 와이어의 코드다</h3>
 <p class="lead">SDK 는 오류 클래스마다 JSON-RPC 코드와, HTTP+JSON 바인딩의 상태·이유(reason)를 표로 둡니다(<code>a2a/utils/errors.py</code> 의 <code>JSON_RPC_ERROR_CODE_MAP</code>·<code>A2A_ERROR_MAPPING</code>).</p>
 <!--OUT file=out/07/error_codes.py.txt-->
-<div class="note"><b>실행기와 처리기 모두 같은 표를 쓴다</b> — 처리기가 스스로 던지는 것(작업 없음 <code>-32001</code>, 스트림 미지원 <code>-32004</code>)도, 실행기가 던진 것도 이 표로 옮겨집니다. 표에 없는 예외는 <code>-32603</code> 입니다. 표 끝의 <code>JSONParseError</code>(<code>-32700</code>)는 <code>a2a.types</code> 가 내보내는 열셋에 들지 않고 HTTP 짝도 없습니다(<code>—</code>) — 본문을 JSON 으로 읽지 못했을 때의 코드라 실행기가 던질 것이 아닙니다. 코드 하나하나를 일부러 일으키는 것은 16부입니다.</div>
+<div class="note"><b>실행기와 처리기 모두 같은 표를 쓴다</b> — 처리기가 스스로 던지는 것(작업 없음 <code>-32001</code>, 스트림 미지원 <code>-32004</code>)도, 실행기가 던진 것도 이 표로 옮겨집니다. 표에 없는 예외는 <code>-32603</code> 입니다. 표 끝의 <code>JSONParseError</code>(<code>-32700</code>)는 <code>a2a.types</code> 가 내보내는 열셋에 들지 않고 HTTP 짝도 없습니다(<code>—</code>). 본문을 JSON 으로 읽지 못했을 때의 코드라 실행기가 던질 것이 아닙니다. 코드 하나하나를 일부러 일으키는 것은 16부입니다.</div>
 </article>
 
 <article class="card" id="p07-store-owner">
@@ -550,11 +553,12 @@
 <p class="lead">꺼낸 Task 를 save 없이 COMPLETED 로 고친 뒤 다시 꺼냈습니다. 기본값(<code>use_copying=True</code>)과 끈 경우입니다.</p>
 <!--CODE file=ex/py/07/store.py region=copy-->
 <!--OUT file=out/07/store.py.txt lines=5-6-->
-<div class="key"><b>기본은 사본</b> — <code>CopyingTaskStoreAdapter</code> 가 넣을 때와 꺼낼 때 <code>CopyFrom</code> 으로 사본을 뜹니다. 문서 문자열의 말로는 "hides missing save calls" 를 막으려는 것이고(<code>copying_task_store.py</code>), DB 저장소와 같은 동작이 되게 하려는 것입니다(<code>inmemory_task_store.py</code>: "consistent with database task stores"). 우리 저장소를 쓸 때(<a href="#p17-st-py">17부</a>)도 이 성질을 지켜야 메모리 저장소에서 통과한 코드가 DB 에서도 돕니다.</div>
+<div class="key"><b>기본은 사본</b> — <code>CopyingTaskStoreAdapter</code> 가 넣을 때와 꺼낼 때 <code>CopyFrom</code> 으로 사본을 뜹니다. 사본이 없으면 save 를 빠뜨린 코드도 저장소의 객체를 바로 고쳐 잘 도는 듯 보입니다("hides missing save calls", <code>copying_task_store.py</code>). 사본을 주는 기본값은 DB 저장소와 같은 동작입니다("consistent with database task stores", <code>inmemory_task_store.py</code>). <a href="#p17-st-py">17부</a>에서 저장소를 직접 지을 때도 꺼낼 때마다 새 객체를 돌려줍니다 — 그래야 메모리 저장소에서 통과한 코드가 다른 저장소에서도 같게 돕니다.</div>
 </article>
 
 <article class="card" id="p07-ch4-sum">
 <h3>4장 정리 — 처리기와 저장소의 손잡이</h3>
+<p class="lead">실행기 반칙 검사·실행기에서 오류 내기·오류 ↔ 코드 세 줄이 실행기의 잘못이 와이어로 나가는 길입니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>할 일</th><th>파이썬 SDK</th></tr>
@@ -585,7 +589,7 @@
 <article class="card" id="p07-ch5">
 <p class="chnum">5장</p>
 <h2>서버 띄우기 — 라우트 팩토리, Starlette, uvicorn</h2>
-<p class="chsub">라우트 팩토리 셋 → 앱은 경로 목록, 띄우는 것은 uvicorn → 서버 셋을 탭 뒤에 → 카드 경로 → 메아리의 답 → 견적의 답 → JSON-RPC 경로 옮기기 → 헤더가 실행기에 닿는 길 → 정리</p>
+<p class="chsub">라우트 팩토리 셋 → 앱은 경로 목록, 띄우는 것은 uvicorn → 서버 셋을 탭 뒤에 → 카드 경로 → 메아리의 답 → 견적의 답 → JSON-RPC 경로 옮기기 → 머리글이 실행기에 닿는 길 → 정리</p>
 </article>
 
 <article class="card" id="p07-srv-routes">
@@ -611,9 +615,9 @@
 
 <article class="card" id="p07-srv-spec">
 <h3>서버 셋을 탭 뒤에 — 메아리는 /, 견적은 /a2a</h3>
-<p class="lead">1단계 메아리, 2단계 견적(JSON-RPC 를 <code>/a2a</code> 에), 그리고 헤더를 되돌려 주는 실험 서버를 띄우고 각각 앞에 와이어 탭을 세웠습니다. 요청 본문은 <code>ex/run/07/rpc/*.json</code> 입니다.</p>
+<p class="lead">1단계 메아리, 2단계 견적(JSON-RPC 를 <code>/a2a</code> 에), 그리고 머리글을 되돌려 주는 실험 서버를 띄우고 각각 앞에 와이어 탭을 세웠습니다. 요청 본문은 <code>ex/run/07/rpc/*.json</code> 입니다.</p>
 <!--SPEC file=ex/run/07/serve.run-->
-<div class="note"><b>세 서버 모두 <code>uvicorn.run</code> 하나</b> — 2단계가 1단계와 다른 것은 실행기와 카드, 그리고 <code>create_jsonrpc_routes(handler, args.path)</code> 의 경로 인자뿐입니다(<a href="#p07-srv-path">조금 뒤</a>).</div>
+<div class="note"><b>세 서버 모두 <code>uvicorn.run</code> 하나</b> — 2단계가 1단계와 다른 것은 실행기와 카드, 그리고 <code>create_jsonrpc_routes(handler, args.path)</code> 의 경로 인자뿐입니다(<a href="#p07-srv-path">JSON-RPC 경로 옮기기</a>).</div>
 </article>
 
 <article class="card" id="p07-srv-card">
@@ -653,19 +657,20 @@
 </article>
 
 <article class="card" id="p07-srv-who">
-<h3>HTTP 헤더는 call_context.state 로 실행기에 닿는다</h3>
-<p class="lead">경로는 HTTP 요청마다 <code>ServerCallContext</code> 를 지어 처리기에 넘기고, 그것이 <code>ctx.call_context</code> 로 실행기까지 옵니다. 받은 것을 파트 다섯으로 돌려주는 실행기를 띄우고, 헤더 셋을 달아 불렀습니다.</p>
+<h3>HTTP 머리글은 call_context.state 로 실행기에 닿는다</h3>
+<p class="lead">경로는 HTTP 요청마다 <code>ServerCallContext</code> 를 지어 처리기에 넘기고, 그것이 <code>ctx.call_context</code> 로 실행기까지 옵니다. 받은 것을 파트 다섯으로 돌려주는 실행기를 띄우고, 머리글 셋을 달아 불렀습니다.</p>
 <!--CODE file=ex/py/07/headers.py region=executor-->
-<!--OUT file=out/07/serve.txt wire=who-wire ex=1 lines=1-5 note=요청 — 탭은 정해 둔 헤더만 적어 X-Workshop-Team 은 여기 없다-->
+<!--OUT file=out/07/serve.txt wire=who-wire ex=1 lines=1-5 note=요청 — 탭은 정해 둔 머리글만 적어 X-Workshop-Team 은 여기 없다-->
 <!--OUT file=out/07/serve.txt wire=who-wire ex=1 lines=30-46 note=답의 파트 다섯-->
 <ul>
-<li>기본 빌더(<code>server/routes/common.py</code> 의 <code>DefaultServerCallContextBuilder</code>)는 헤더 전부를 소문자 키의 dict 로 <code>state["headers"]</code> 에 담고, <code>A2A-Extensions</code> 헤더를 풀어 <code>requested_extensions</code> 에 넣습니다(14부).</li>
+<li>기본 빌더(<code>server/routes/common.py</code> 의 <code>DefaultServerCallContextBuilder</code>)는 머리글 전부를 소문자 키의 dict 로 <code>state["headers"]</code> 에 담고, <code>A2A-Extensions</code> 머리글을 풀어 <code>requested_extensions</code> 에 넣습니다(14부).</li>
 <li>사용자는 Starlette 의 <code>request.user</code> 가 있을 때만 세웁니다. 인증 미들웨어가 없으니 익명(<code>''</code>, <code>False</code>)입니다 — 미들웨어로 사용자를 세우는 것은 12부입니다. 빌더를 바꾸려면 <code>create_jsonrpc_routes(…, context_builder=…)</code> 입니다.</li>
 </ul>
 </article>
 
 <article class="card" id="p07-ch5-sum">
 <h3>5장 정리 — 서버를 세우는 손잡이</h3>
+<p class="lead">SDK 가 주는 것은 위의 라우트 팩토리 셋까지이고, 앱과 띄우기는 Starlette·uvicorn 의 몫입니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>할 일</th><th>파이썬 SDK</th></tr>

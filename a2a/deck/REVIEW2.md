@@ -127,6 +127,22 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
   together), "판 헤더는 늘" in `ex/py/06/client.py:31`, `ex/ts/06/client.ts:27`,
   `ex/go/06/client/main.go:100`, `ex/py/06/frames.py:1` "머리와", `ex/py/06/stall.py:2` "요청의 머리".
 
+**Decisions added after batch E (part 7):**
+- "판 헤더" (`A2A-Version`) → "판 머리글" deck-wide.
+- 머리 for the top of a source file ("모듈 머리에서 import") stays (like the top of a document).
+- "-십시오" (보십시오) is the 합니다체 imperative and is allowed; use it sparingly — a statement
+  ("…부터 봅니다") is preferred.
+- Chapter "N장 정리" tables get a one-sentence lead (they are table slides); part-wrap slides
+  don't.
+- In-part link text "조금 뒤" / "앞에서" for a slide two or more away → a title phrase.
+- A title naming one key difference while the lead lists several → "핵심 차이는 …" pattern.
+  p07-lg-final uses "핵심 차이는 heard 를 고르는 한 줄이다"; its siblings p08-lg-final and the
+  matching part-9 slide should be parallel. p07-intro/p07-wrap say the "정리" tables of parts
+  8 and 9 share the same left column — batches F and G confirm or adjust.
+- Sweep list adds: `ex/py/07/headers.py:22`, `ex/py/07/client_hooks.py:1-2,22,29`,
+  `ex/run/07/serve.run:3`, `ex/run/07/client.run:2` (헤더/인터셉터), `ex/py/07/types_fields.py:1`
+  "걸려 넘어지는" (stumble — optional).
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
