@@ -191,6 +191,25 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
   `ex/go/11/hookold/main.go:23` (토큰 헤더); agent files `ex/py/agents/webhook.py:4`,
   `ex/ts/agents/webhook.ts:4` (헤더).
 
+**Decisions added after batch J (part 12):**
+- A before/after defect narrative backed by a before-copy file shown on the slide
+  (`bearer_old.py`) stays; only how/when it was found ("~를 쓰며 발견", "캡처를 다시 돌렸더니")
+  is removed or turned into a statement.
+- Korean words inside code font that are terms, not names (`BASE64URL(보호 머리글)`), follow the
+  fixed terms.
+- JCS / UTF-16 key order → "알파벳순(코드 단위 차례)".
+- 그냥 by meaning: "보통의 …" / "그대로" / "막지 않는다" (supersedes batch G's "바로 둔다" where
+  that reads oddly).
+- Callout head "X 는 메시지가 아니라 Y 로" → "X 는 Y 로" when the sentence after " — " states
+  the contrast.
+- Handed over: `15_scenario.html:297` "그냥 씁니다" → batch L; `17b_ops.html:278` link text
+  "다음 장" for a slide → batch M.
+- Sweep list adds: `ex/py/12/tls_front.py:16`; `ex/py/12/auth_and.py:1,3,50` and
+  `ex/go/12/auth_and/main.go:1,3,58` (prints "헤더 N개" into out/12/auth_and.*.txt);
+  `ex/py/12/token_try.py:14,47`; `ex/py/12/jcs.py:1,24,33` "보호 헤더" (→ out/12/sign.txt);
+  `ex/run/12/bearer.run:3-4`; agent files `ex/ts/agents/settlement.ts:202`,
+  `ex/go/agents/common/client.go:11`.
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
