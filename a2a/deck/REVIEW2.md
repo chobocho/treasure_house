@@ -233,6 +233,17 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
 - Sweep list adds: `ex/py/15/check.py:29` "줄 머리", `ex/run/15/fail_ts.run:2`,
   `ex/run/15/fail_go.run:2` "언어 머리", `ex/ts/15/planner_old.ts:150` "HTTP 헤더".
 
+**Decisions added after batch M (parts 16–17):**
+- A capture's command line ("[터미널 N] $ …") is "명령 줄", not "명령 머리".
+- Where a cell or lead must agree with a capture's verdict, use the capture's labels
+  (PASS·SKIPPED·NOT TESTED), not Korean glosses. NOT TESTED = "등록됐지만 한 번도 돌지 않은
+  요구사항" (`tck/reporting/aggregator.py:69`).
+- Circled-label ranges as link text in prose ("⑤~⑦") → a title phrase.
+- A spec quote as callout head → a short label ("§13.4 의 MUST NOT"), the quote after " — ".
+- Calques like "가난한 사람의 X" (poor man's X) → plain wording.
+- Sweep list adds: `ex/run/16/raw.run:1,2,13` (머리, shown via SPEC on p16-wd-raw),
+  `ex/py/17/rotate.py:62` "보호 헤더".
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
