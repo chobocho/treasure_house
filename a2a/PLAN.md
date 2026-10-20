@@ -1119,3 +1119,12 @@ subagent task each.
 - `make all` (no SKEL) green: 1857 slides, 0 placeholders, 1856 blocks 0 mismatches, 179 tests.
 - Next: wrap-up (font is in make all; index.html card, README, history.md, commit deck HTML),
   then review 1 and 2.
+
+### Wrap-up (step 6) — deck published in index/README (2026-10-20)
+- `make all` (no SKEL) green; deck HTML committed for the first time (3.4 MB, font embedded).
+- index.html card (🧠 AI & 머신러닝, after the transformer card) and README line: 19부(0~17+부록)
+  1,857 slides, examples 490 files, captures 295, quizzes 123, glossary 105, facts 74.
+- history.md rotated (20 oldest → archive, eee4b897) and back-filled with one entry per part
+  commit of this session (16a…18) plus this wrap-up.
+- Next: step 7 — review 1 (facts & evidence), review 2 (flow & style), `a2arun --check --all` ×2.
+  Open decisions for review: py planner KeyError on unknown kid (part 17b), unused fact `v1-tsc`.
