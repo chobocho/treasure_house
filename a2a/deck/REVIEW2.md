@@ -221,6 +221,18 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
 - Sweep list adds: `ex/py/13/grpc_tap.py:109` label "← 머리" (not printed by any current capture,
   but the edit stales every part-13 capture).
 
+**Decisions added after batch L (part 15):**
+- A callout head "이 결함은 실제로 있었다" (anecdote) → a 2–4 word label naming the lesson
+  ("골든이 놓친 결함").
+- "처음에는 …였습니다" about earlier code not shown on the slide stays only when a before-copy
+  file exists, cited in code font ("고치기 전의 사본(`15/planner_old.py`)은 …").
+- A test's pre-fix output with no capture is removed together with the narrative; the slide
+  describes what the assertion checks instead.
+- 첫머리 of a function/executor/goroutine → 앞부분. Cell label "닿지 않음" → "닿지 않는 동료".
+  A `.run` line's language prefix (`ts:`) is "줄 앞의 언어 이름".
+- Sweep list adds: `ex/py/15/check.py:29` "줄 머리", `ex/run/15/fail_ts.run:2`,
+  `ex/run/15/fail_go.run:2` "언어 머리", `ex/ts/15/planner_old.ts:150` "HTTP 헤더".
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
