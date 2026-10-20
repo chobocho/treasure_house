@@ -47,7 +47,7 @@ for (const name of names.filter((n) => n !== "constructor")) {
 // endregion
 const kinds = ClientFactoryOptions.default.transports;
 console.log(
-  "기본 공장의 전송:",
+  "기본 팩토리의 전송:",
   kinds.map((t) => t.protocolName),
 );
 console.log("client.protocolVersion:", client.protocolVersion);
