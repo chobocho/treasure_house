@@ -177,6 +177,20 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
 - Sweep list adds: `ex/run/10/ask.run:3` 머리 (shown via SPEC on p10-cat-spec); agent files
   `ex/py/agents/catering.py:4`, `ex/ts/agents/catering.ts:4` "청크로 이어 붙이기".
 
+**Decisions added after batch I (part 11):**
+- Go slice → **슬라이스** (never 조각). A page of a paginated result → **페이지**.
+- Summary tables with SDK columns (neither 물음/답 nor part 7's left column) get the lead
+  "세 서버가 같은 줄은 한 칸으로 합쳤습니다. 갈리는 것은 … 줄입니다."
+- No space between ")" and 입니다 ("(§3.3.4)입니다") — majority form.
+- Push sender (the component) → "보내기" (noun), not "보내는 것".
+- "칸" for an owner-scoped partition of a store is a plain word and may stay (unlike the
+  banned "칸막이"); the fixed term for the design remains 소유자별 저장소(분리).
+- "세 SDK 서버" only where all three servers use the SDK for that thing — the Go webhook POST
+  comes from our own `hookSender`, so there it is "세 서버".
+- Sweep list adds: `ex/run/11/auth.run:1`, `ex/go/11/guard/main.go:2,41` (머리),
+  `ex/go/11/hookold/main.go:23` (토큰 헤더); agent files `ex/py/agents/webhook.py:4`,
+  `ex/ts/agents/webhook.ts:4` (헤더).
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
