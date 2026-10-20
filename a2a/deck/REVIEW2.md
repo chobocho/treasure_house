@@ -143,6 +143,17 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
   `ex/run/07/serve.run:3`, `ex/run/07/client.run:2` (헤더/인터셉터), `ex/py/07/types_fields.py:1`
   "걸려 넘어지는" (stumble — optional).
 
+**Decisions added after batch F (part 8):**
+- Chapter-summary tables of parts 8 and 9 share part 7's left column, in part 7's row order;
+  rows only that part has go at the bottom. Their lead is one sentence starting "왼쪽 열은
+  <a href="#p07-chN-sum">7부</a>와 같고, …" (with extra rows: "위 N줄은 …, 아래 M줄은 …").
+  Part 8 now holds this; batch G checks part 9 the same way (p08-wrap says so).
+- Repeated "이 장" link text inside a "어디서" column (p07/p08-only-list) stays.
+- "`// src/…` 머리 줄" (per-source comment in a bundle) falls under the 머리줄 exception.
+- Sweep list adds: `ex/ts/08/client_hooks.ts:1-2,17,28,34,62`, `ex/ts/08/auth_retry.ts:1`,
+  `ex/run/08/serve.run:3`, `ex/run/08/client.run:3`, `ex/ts/agents/planner.ts:174` (agent file —
+  changing it stales every TS capture; leave unless the sweep re-runs all anyway).
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
