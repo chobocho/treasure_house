@@ -54,7 +54,7 @@ func (closer) Execute(
 				time.Sleep(300 * time.Millisecond)
 			case "BOOM":
 				common.Say("[종료] %s: 오류를 낸다", word)
-				yield(nil, errors.New("실행기가 넘어졌다"))
+				yield(nil, errors.New("실행기가 죽었다"))
 				return
 			default:
 				state := a2a.TaskState("TASK_STATE_" + step)

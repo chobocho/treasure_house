@@ -59,7 +59,7 @@ class Closer implements AgentExecutor {
         await sleep(300);
       } else if (step === "BOOM") {
         console.log(`[종료] ${word}: 예외를 던진다`);
-        throw new Error("실행기가 넘어졌다");
+        throw new Error("실행기가 죽었다");
       } else {
         const name = `TASK_STATE_${step}` as keyof typeof TaskState;
         up.status(TaskState[name]);

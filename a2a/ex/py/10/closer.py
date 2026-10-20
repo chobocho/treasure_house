@@ -65,7 +65,7 @@ class Closer(AgentExecutor):
                 await asyncio.sleep(0.3)
             elif step == "BOOM":
                 print(f"[종료] {word}: 예외를 던진다", flush=True)
-                raise RuntimeError("실행기가 넘어졌다")
+                raise RuntimeError("실행기가 죽었다")
             else:
                 await up.update_status(
                     TaskState.Value("TASK_STATE_" + step)
