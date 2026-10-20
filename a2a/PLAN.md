@@ -1160,3 +1160,4 @@ subagent task each.
   p17-dp-key-trap/-run/-code now read the capture (lines 9-12). 13 other part-17 captures re-run byte-identical.
   Flake: `recover.run` twice gained an extra "[교통] 기사 배정" line (py step at 1000 ms beat the SIGKILL); 3rd run
   and two later `--check` passes identical — watch it under load.
+- R2 batch A (0~2부) done: 용어 29 (21 헤더/머리→머리글, 2 가나다순→알파벳순, 5 이 덱→이 책) · 문체 28 · 링크·시제 16 · 흐름 12 (chsub order, table leads) · 중복 7 (re-taught 0부 capture rules → back-links) · 제목 4 · 콜아웃 4. 7 style decisions added to REVIEW2 §B. Example comment for the final sweep: ex/py/02/raw_http.py:19 헤더.

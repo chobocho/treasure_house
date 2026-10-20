@@ -74,6 +74,24 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
 - order of Latin strings (JSON keys, names) → **알파벳순**; "가나다순" only for Korean words.
 - crash → 죽다 / 죽이다 (never 넘어지다); no playful coinages ("덤", "칸막이", "거르개").
 
+**Decisions added after batch A (parts 0–2):**
+- "this book" is **이 책** (136 uses), not 이 덱; "덱 다루기" (the UI) stays. Remaining 이 덱
+  are in 09b, 10b, 11, 11b, 13b, 16.
+- A space between a closing Korean quote and its particle ("…" 를, "…" 는) — the deck's
+  majority form; fix the forms without it.
+- 장 only for chapters — also not as a counter for files or sheets ("명세 한 장" → "명세
+  하나", "한 장 요약" → "요약").
+- 머리 that is not a header stays: 머리줄 (heading lines in a capture, the top bar) and 머리
+  for the top of a document ("specification.md 머리에는"). 머리 meaning the front part of
+  something ("와이어의 머리") → 앞부분.
+- Part-wrap slides (`pNN-wrap` / `pNN-next`) need no lead — the title is the caption.
+- A comparison or table slide without a lead gets one sentence saying which row/column to
+  read, using only what the table already shows.
+- A callout head that is a full sentence → a 2–4 word label, the sentence after " — ".
+- Term defects found in example comments or captures are listed in the report; the
+  orchestrator fixes them in one sweep after review 2 (known: `ex/py/02/raw_http.py:19`
+  "헤더 끝").
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
