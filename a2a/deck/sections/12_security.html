@@ -192,14 +192,14 @@
 <div class="tblwrap">
 <table class="kv">
 <tr><th>JSON 키</th><th>누가 쓰나</th><th>필수 필드</th></tr>
-<tr><td><code>authorizationCode</code></td><td>사람이 브라우저로 로그인</td><td><code>authorizationUrl</code>·<code>tokenUrl</code>·<code>scopes</code>, PKCE 는 <code>pkceRequired</code></td></tr>
+<tr><td><code>authorizationCode</code></td><td>사람이 브라우저로 로그인</td><td><code>authorizationUrl</code>·<code>tokenUrl</code>·<code>scopes</code>(PKCE 를 요구하는 <code>pkceRequired</code> 는 골라 넣는 필드)</td></tr>
 <tr><td><code>clientCredentials</code></td><td>프로그램이 제 이름으로</td><td><code>tokenUrl</code>·<code>scopes</code></td></tr>
 <tr><td><code>deviceCode</code></td><td>입력이 불편한 기기·CLI</td><td><code>deviceAuthorizationUrl</code>·<code>tokenUrl</code>·<code>scopes</code></td></tr>
 <tr><td><code>implicit</code></td><td>(쓰지 말 것) "Use Authorization Code + PKCE instead"</td><td>—</td></tr>
 <tr><td><code>password</code></td><td>(쓰지 말 것) "Use Authorization Code + PKCE or Device Code"</td><td>—</td></tr>
 </table>
 </div>
-<div class="key"><b>에이전트끼리는 clientCredentials</b> — 기획 에이전트가 정산 에이전트를 부를 때 그 자리에 사람이 없습니다. 기획 에이전트가 제 클라이언트 id 와 비밀로 토큰을 받습니다(RFC 6749 §4.4, <a href="#p12-ch3">3장</a>). <code>scopes</code> 는 "스코프 이름 → 설명" 의 맵입니다.</div>
+<div class="key"><b>에이전트끼리는 clientCredentials</b> — 기획 에이전트가 정산 에이전트를 부를 때 그 자리에 사람이 없습니다. 기획 에이전트가 제 클라이언트 id 와 비밀로 토큰을 받습니다(RFC 6749 §4.4<!--SRC key=rfc6749-->, <a href="#p12-ch3">3장</a>). <code>scopes</code> 는 "스코프 이름 → 설명" 의 맵입니다.</div>
 </article>
 
 <article class="card" id="p12-sch-wire">
@@ -232,7 +232,7 @@
 <p class="lead">3부에서 미뤄 둔 이야기입니다 — SDK 의 카드 처리기는 받은 객체를 <code>JSON.stringify</code> 할 뿐이라(<a href="#p03-agent-card-ts">3부</a>), oneof 가 있는 카드를 ts-proto 객체로 주면 이렇게 나갑니다.</p>
 <!--RUN file=ex/ts/12/case_leak.ts-->
 <ul>
-<li>oneof 가 <code>{"scheme": {"$case": …, "value": …}}</code> 로, 빈 기본값이 <code>"description": ""</code>·<code>"refreshUrl": ""</code> 로 나갑니다. 이 카드를 받은 파이썬·Go 클라이언트는 <code>oauth</code> 스킴의 종류를 알 수 없습니다.</li>
+<li>oneof 가 <code>{"scheme": {"$case": …, "value": …}}</code> 로, 빈 기본값이 <code>"description": ""</code>·<code>"refreshUrl": ""</code> 로 나갑니다. 이 카드를 받은 파이썬 클라이언트는 모르는 키 <code>scheme</code> 을 버려(<code>ignore_unknown_fields=True</code>, <code>client/card_resolver.py:27</code>) <code>oauth</code> 스킴의 종류를 잃고, Go 클라이언트는 카드 해석부터 실패합니다(<code>a2a/auth.go:200</code> "unknown security scheme type").</li>
 <li><code>AgentCard.toJSON</code> 을 거치면 와이어 모양으로 돌아옵니다. 그래서 <code>common.ts</code> 는 늘 <code>toJSON</code> 한 것을 처리기에 줍니다.</li>
 </ul>
 </article>
@@ -288,7 +288,7 @@
 <table class="kv">
 <tr><th>꼴</th><th>파이썬</th><th>TypeScript</th><th>Go</th></tr>
 <tr><td>① proto</td><td>그대로</td><td>그대로</td><td>그대로</td></tr>
-<tr><td>② 감싸개 없음</td><td>스코프가 사라진다</td><td>스코프가 사라진다</td><td>읽는다 — 옛 꼴을 일부러 받는다(<code>a2a/auth.go:53</code> "legacy array input")</td></tr>
+<tr><td>② 감싸개 없음</td><td>스코프가 사라진다</td><td>스코프가 사라진다</td><td>읽는다 — 옛 꼴을 일부러 받는다(<code>a2a/auth.go:55</code> "legacy array input")</td></tr>
 <tr><td>③ §8.5 의 <code>security</code></td><td>고쳐 읽는다</td><td>요구가 통째로 사라진다</td><td>요구가 통째로 사라진다</td></tr>
 </table>
 </div>
@@ -422,7 +422,7 @@
 <h3>Go — <code>r.ParseForm</code>, 맵은 뮤텍스 안에서, 응답은 구조체로</h3>
 <p class="lead"><code>agents/settlement/main.go</code> 의 같은 자리입니다. <code>net/http</code> 의 핸들러는 요청마다 따로 도니 발급 기록을 <code>sync.Mutex</code> 로 지킵니다.</p>
 <!--CODE file=ex/go/agents/settlement/main.go region=tokens-->
-<div class="note"><b>왜 구조체(<code>tokenJSON</code>)인가</b> — Go 의 <code>map</code> 을 직렬화하면 키가 정렬됩니다. 구조체로 써야 필드가 <code>access_token</code>·<code>token_type</code>·<code>expires_in</code>·<code>scope</code> 차례로 나가, 파이썬·TS 의 응답과 바이트까지 같습니다(다음 슬라이드).</div>
+<div class="note"><b>왜 구조체(<code>tokenJSON</code>)인가</b> — Go 의 <code>map</code> 을 직렬화하면 키가 정렬됩니다. 구조체로 써야 필드가 <code>access_token</code>·<code>token_type</code>·<code>expires_in</code>·<code>scope</code> 차례로 나가, 파이썬·TS 의 응답과 바이트까지 같습니다(<a href="#p12-iss-cmp">세 서버 비교</a>).</div>
 </article>
 
 <article class="card" id="p12-iss-wire">
@@ -431,7 +431,7 @@
 <!--SPEC file=ex/run/12/issuer.run-->
 <!--OUT file=out/12/issuer.txt wire=py-token ex=1-->
 <ul>
-<li><code>access_token</code> 과 <code>token_type</code>(<code>Bearer</code>)이 핵심이고, <code>expires_in</code>(초)과 <code>scope</code>(받은 스코프)가 곁들여집니다(RFC 6749 §5.1).</li>
+<li><code>access_token</code> 과 <code>token_type</code>(<code>Bearer</code>)이 핵심이고, <code>expires_in</code>(초)과 <code>scope</code>(받은 스코프)가 곁들여집니다(RFC 6749 §5.1<!--SRC key=rfc6749-->).</li>
 <li><code>client_secret=planner-secret</code> 이 탭에 글자 그대로 찍혔습니다. 1장이 말한 http 의 대가입니다(<a href="#p12-tls-local">1장</a>).</li>
 </ul>
 </article>
@@ -463,7 +463,7 @@
 
 <article class="card" id="p12-iss-rfc">
 <h3>RFC 6749 와 §13.4 에 견주면 — 오류의 모양은 맞고, 줄인 것이 여럿</h3>
-<p class="lead">오류 응답은 <code>{"error": "…"}</code> 하나, 코드는 RFC 6749 §5.2 의 이름입니다. 그러나 이 발급기는 시험용이라 RFC 와 스펙이 요구하는 몇 가지를 빼먹었습니다. 앞 슬라이드의 답과 세 언어의 <code>tokens</code> 구역이 그 증거입니다.</p>
+<p class="lead">오류 응답은 <code>{"error": "…"}</code> 하나, 코드는 RFC 6749 §5.2 의 이름입니다<!--SRC key=rfc6749-->. 그러나 이 발급기는 시험용이라 RFC 와 스펙이 요구하는 몇 가지를 빼먹었습니다. 앞 슬라이드의 답과 세 언어의 <code>tokens</code> 구역이 그 증거입니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>기준</th><th>요구</th><th>이 발급기(세 언어 같음)</th></tr>
@@ -492,7 +492,7 @@
 
 <article class="card" id="p12-iss-rand">
 <h3>진짜 토큰 ×3 — 운영체제의 난수 256비트, URL 에 안전한 43글자</h3>
-<p class="lead">RFC 6749 §10.10 은 토큰을 맞힐 확률을 아주 작게(2<sup>-128</sup> 이하) 만들라고 합니다. 세 언어 모두 표준 라이브러리 한 줄입니다. 값은 실행마다 달라 모양만 찍었습니다.</p>
+<p class="lead">RFC 6749 §10.10 은 토큰을 맞힐 확률을 아주 작게(2<sup>-128</sup> 이하) 만들라고 합니다<!--SRC key=rfc6749-->. 세 언어 모두 표준 라이브러리 한 줄입니다. 값은 실행마다 달라 모양만 찍었습니다.</p>
 <!--RUN file=ex/py/12/token_rand.py-->
 <!--RUN file=ex/ts/12/token_rand.ts-->
 <!--RUN file=ex/go/12/token_rand-->
@@ -539,7 +539,7 @@
 <tr><td>§3.3.2</td><td>Authentication Errors — "MUST reject requests with invalid or missing authentication credentials", 예: "HTTP <code>401 Unauthorized</code>, gRPC <code>UNAUTHENTICATED</code>, JSON-RPC custom error"</td></tr>
 </table>
 </div>
-<div class="note"><b>도전(challenge)은 <code>WWW-Authenticate</code></b> — HTTP 의 401 은 이 머리로 "이 방식으로 다시 오라" 를 알립니다. Bearer 토큰의 머리 모양(<code>realm</code>, <code>error="invalid_token"</code>)은 RFC 6750 §3 이 정합니다. 정산 에이전트는 JSON-RPC 오류가 아니라 이 HTTP 의 길을 씁니다.</div>
+<div class="note"><b>도전(challenge)은 <code>WWW-Authenticate</code></b> — HTTP 의 401 은 이 머리로 "이 방식으로 다시 오라" 를 알립니다. Bearer 토큰의 머리 모양(<code>realm</code>, <code>error="invalid_token"</code>)은 RFC 6750 §3 이 정합니다<!--SRC key=rfc6750-->. 정산 에이전트는 JSON-RPC 오류가 아니라 이 HTTP 의 길을 씁니다.</div>
 </article>
 
 <article class="card" id="p12-bearer-where">
@@ -586,7 +586,7 @@
 <p class="lead">세 정산 에이전트에 같은 SendMessage 를 머리 네 가지로 보냈습니다 — 인증 머리 없음, <code>Basic</code>, 토큰 없는 <code>Bearer</code>, 발급한 적 없는 <code>tok-planner-9</code>. 파이썬 서버의 탭입니다.</p>
 <!--SPEC file=ex/run/12/bearer.run-->
 <!--OUT file=out/12/bearer.txt wire=py-wire ex=1-4 grep=^→|^←|Authorization|WWW-Authenticate|"error" note=파이썬 서버 — 요청 줄·인증 머리·답만-->
-<div class="warn"><b>Basic 에도 <code>invalid_token</code></b> — 세 언어의 문지기는 <code>Authorization</code> 머리가 <b>있으면</b> 무엇이든 <code>error="invalid_token"</code> 을 답니다. RFC 6750 §3.1 은 지원하지 않는 방식으로 온 요청도 "인증 정보가 없는" 경우로 보아 <code>error</code> 를 붙이지 말라고 합니다(SHOULD NOT). 이 책의 에이전트가 줄인 자리입니다.</div>
+<div class="warn"><b>Basic 에도 <code>invalid_token</code></b> — 세 언어의 문지기는 <code>Authorization</code> 머리가 <b>있으면</b> 무엇이든 <code>error="invalid_token"</code> 을 답니다. RFC 6750 §3.1 은 지원하지 않는 방식으로 온 요청도 "인증 정보가 없는" 경우로 보아 <code>error</code> 를 붙이지 말라고 합니다(SHOULD NOT<!--SRC key=rfc6750-->). 이 책의 에이전트가 줄인 자리입니다.</div>
 </article>
 
 <article class="card" id="p12-bearer-cmp">
@@ -596,7 +596,7 @@
 <!--OUT file=out/12/bearer.txt part=터미널 7 lines=2-5 note=파이썬 → TS → Go 서버, 응답 머리 그대로-->
 <ul>
 <li>파이썬(uvicorn)은 머리 이름을 소문자로, TS(Node)는 우리가 쓴 그대로, Go 는 <code>Www-Authenticate</code> 로 바꿔 보냅니다(<code>net/http</code> 의 정규 모양). HTTP 머리 이름은 대소문자를 가리지 않으니 뜻은 같습니다.</li>
-<li>401 의 몸통은 <code>{"error": "unauthorized"}</code> 또는 <code>{"error": "invalid_token"}</code> — JSON-RPC 의 <code>error</code> 객체가 아닙니다. JSON-RPC 처리기에 닿기 전에 끝났기 때문입니다. 클라이언트가 이것을 어떻게 받는지가 다음 슬라이드들입니다.</li>
+<li>401 의 몸통은 <code>{"error": "unauthorized"}</code> 또는 <code>{"error": "invalid_token"}</code> — JSON-RPC 의 <code>error</code> 객체가 아닙니다. JSON-RPC 처리기에 닿기 전에 끝났기 때문입니다. 클라이언트가 이것을 어떻게 받는지는 <a href="#p12-cl-py">SDK 클라이언트 ×3</a>에서 봅니다.</li>
 </ul>
 </article>
 
