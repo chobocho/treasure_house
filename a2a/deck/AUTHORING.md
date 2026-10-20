@@ -136,6 +136,8 @@ capture. Never guess what an SDK does; read its installed source or run it.
   쓰지 않는다), Technical Steering Committee 기술 운영 위원회(TSC),
   capture normalisation 캡처 정규화(러너가 id·시각을 바꾸는 일 — JCS 정규화와 헷갈릴 자리
   에서는 앞에 "캡처" 를 붙인다).
+  factory 팩토리, header 머리글(머리·헤더 는 쓰지 않는다; gRPC trailer 꼬리 메타데이터),
+  interceptor 가로채기, Latin 문자열 순서 알파벳순(가나다순은 한글에만).
   Python extra → "extra(선택 설치 묶음)", route factory 라우트 팩토리, owner-scoped
   store 소유자별 저장소(분리). Never coin playful new words ("덤", "공장", "칸막이").
   Enum values and method names stay in English as on the wire (`TASK_STATE_WORKING`,
