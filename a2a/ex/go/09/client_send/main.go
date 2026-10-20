@@ -40,7 +40,7 @@ func show(ev a2a.Event) {
 // endregion
 
 // region: connect
-// 카드를 받아(해석기) 클라이언트를 짓는다(공장) — 두 단계다
+// 카드를 받아(해석기) 클라이언트를 짓는다(팩토리) — 두 단계다
 func connect(
 	ctx context.Context, url string,
 ) (*a2aclient.Client, error) {

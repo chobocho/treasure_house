@@ -1,4 +1,4 @@
-// Client 의 메서드 ↔ JSON-RPC 메서드, 그리고 공장의 옵션.
+// Client 의 메서드 ↔ JSON-RPC 메서드, 그리고 팩토리의 옵션.
 //
 //	go run ./09/client_api
 package main
