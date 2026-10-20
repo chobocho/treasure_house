@@ -95,11 +95,11 @@ Same chapter shape in each (parallel structure on purpose):
 9. 이 SDK 만의 것 — (py) compat v0.3·db 저장소 / (ts) 다중 전송·express 미들웨어 / (go) 미들웨어·interceptor·a2aext
 Owns: each SDK's API. Domain module `workshop` introduced in 7부 (py), mirrored in 8·9.
 
-## 10부 스트리밍·아티팩트 청크·재구독 (10_stream, 120)
+## 10부 스트리밍·아티팩트 조각·재구독 (10_stream, 120)
 1. SendStreamingMessage 의 와이어 — SSE 이벤트 = StreamResponse(task/message/statusUpdate/artifactUpdate)
-2. 식사 에이전트 ×3 — 끼니마다 상태 갱신, 식단표 청크(append·lastChunk)
+2. 식사 에이전트 ×3 — 끼니마다 상태 갱신, 식단표 조각(append·lastChunk)
 3. 스트림 종료 규칙 — `final` 이 사라진 v1.0, 종료 상태에서 닫힘
-4. 클라이언트에서 청크 다시 붙이기 ×3
+4. 클라이언트에서 조각 다시 붙이기 ×3
 5. SubscribeToTask — 끊긴 뒤 다시 붙기, 여러 구독자(§3.5.2)
 6. FilePart(menu.md) + DataPart 견적
 7. 스트리밍 미지원 카드에 스트림 요청 → UnsupportedOperation

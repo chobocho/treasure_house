@@ -166,6 +166,17 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
   (stale everything): `ex/go/agents/catering/main.go:4` 청크, `bus/main.go:126` "토큰 헤더",
   `webhook/main.go:4` 헤더, `settlement/main.go:262` "보호 헤더".
 
+**Decisions added after batch H (part 10):**
+- "N장 정리" tables in 물음/답 form (not part 7's left column) get the lead "물음마다 이 장의
+  답을 한 줄로 줄였습니다", plus at most one clause naming the row where the SDKs differ.
+- "닫힘" as a real noun ("닫힘이 신호다") stays; as a cell predicate ("…면 닫힘") → "닫힌다".
+- Spelling: 싣다 → 실으면 / 실어 ("싣으면" is a defect).
+- "(이 장 뒤쪽)" is positional → title-phrase link.
+- A particle right after a closing parenthesis with Latin inside ("`Buffer.from(menu)`(UTF-8)를")
+  needs no space — leave either form.
+- Sweep list adds: `ex/run/10/ask.run:3` 머리 (shown via SPEC on p10-cat-spec); agent files
+  `ex/py/agents/catering.py:4`, `ex/ts/agents/catering.ts:4` "청크로 이어 붙이기".
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
