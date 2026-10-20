@@ -84,4 +84,9 @@ check("③ 겹침 뒤 — 새 서명, 옛 키만 아는 쪽", after, store(OLD))
 check("③ 겹침 뒤 — 새 서명, 새 키", after, store(NEW))
 check("④ 폐기 뒤 — 옛 카드를 다시 내밀면", now, store(NEW))
 check("⑤ 키 공급자가 KeyError 를 내면", after, store(OLD, strict=False))
+# 새 키부터 서명한 겹침 카드 — 고리는 서명을 적힌 차례로 대 본다
+swapped = card(NEW, OLD)
+print("새 키부터 서명한 카드:", [kid_of(s) for s in swapped.signatures])
+check("⑥ 새 키 먼저, KeyError", swapped, store(OLD, strict=False))
+check("⑦ 새 키 먼저, PyJWKError", swapped, store(OLD))
 # endregion

@@ -1148,3 +1148,15 @@ subagent task each.
 - Batch L (15부) done: 사실오류 5 (role tag is first, matched at any position — planner.py:128-130; optional bool in card-cmp) · 증거불일치 5 · 근거없음 4 · 순서 3 · 절단 1 (before.run 1-26). mesh_py re-run byte-identical. For 17부: py planner skips a card whose first signature has an unknown kid even if the 2nd is valid. Review 2: RED-run claims in p15-twice-fixed/fix-tests/deny-tests have no capture; p15-fail-cmp row 6 ambiguous.
 - Batch M (16~17부) done: 사실오류 8 (optional bool false survives signing §8.4.1; TCK SUT generators incl. a2a-jakarta; §13.4 quote completed; card url §4.4.6) · 증거불일치 4 (restart shows ListTasks only) · 근거없음 3 · 순서 1 · 퀴즈 1. KeyError: part 17 scenario signs card(OLD, NEW) so it never triggers; only a new-first overlap card would be wrongly skipped (source-read, uncaptured). Decide: agent fix (all captures stale) vs a card(NEW, OLD) case in ex/py/17/rotate.py.
 - Batch N (18부) done: 순서 15 (error-table first sightings, glossary where ids, OAuthFlow rows in proto_where → index 221, INDEX per=23 keeps 60 slides) · 사실오류 4 (TS names differ in 4 places; py 10 abstract methods) · 표기 4 (+orchestrator: last 공장 in ex/py/07/client_v03.py, 30 part-7 captures re-run byte-identical). REVIEW 1 COMPLETE (A–N). Open: py planner KeyError decision; 9 vocab names lack index entries (only inside longer code). Review 2 notes: 가로채기/인터셉터 mix, 머리/머리글/헤더 mix.
+
+### Review 1 complete (A–N) — decisions for what follows (2026-10-20)
+- Batch N (18부) committed c33ba8c5; review 1 finished for all 19 parts.
+- User decisions: (1) py planner KeyError — do NOT change the agent; add a `card(NEW, OLD)` case to
+  `ex/py/17/rotate.py` so the trap is shown by a capture (part 17 only). (2) Review 2 fixed terms:
+  header → **머리글** (not 머리/헤더; code names unchanged), interceptor → **가로채기** (SDK class
+  names like ClientCallInterceptor stay as code).
+- KeyError case added (decision 1): `ex/py/17/rotate.py` ⑥ `card(NEW, OLD)` + KeyError provider → KeyError escapes on
+  'settlement-2027'; ⑦ same card + PyJWKError provider → 맞음 (signing.py:158 catches only PyJWTError).
+  p17-dp-key-trap/-run/-code now read the capture (lines 9-12). 13 other part-17 captures re-run byte-identical.
+  Flake: `recover.run` twice gained an extra "[교통] 기사 배정" line (py step at 1000 ms beat the SIGKILL); 3rd run
+  and two later `--check` passes identical — watch it under load.
