@@ -16,7 +16,7 @@ async def main(url):
         card = await A2ACardResolver(http, url).get_agent_card()
     card.supported_interfaces[0].protocol_version = "0.3"
     config = ClientConfig(streaming=False)
-    client = await create_client(card, config)  # 공장이 전송을 고른다
+    client = await create_client(card, config)  # 팩토리가 전송을 고른다
     req = {"date": "2026-10-30", "nights": 1, "headcount": 30}
     msg = Message(
         message_id="v03-2",
