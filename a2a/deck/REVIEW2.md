@@ -154,6 +154,18 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
   `ex/run/08/serve.run:3`, `ex/run/08/client.run:3`, `ex/ts/agents/planner.ts:174` (agent file —
   changing it stales every TS capture; leave unless the sweep re-runs all anyway).
 
+**Decisions added after batch G (part 9):**
+- Capture/file names as link text (types_build, rules) only in an "증거/근거" table column; in
+  prose and quizzes use a title phrase. "이 장 끝" is positional like "조금 뒤".
+- A "N장 정리" row may be filled by moving content out of another cell of the same table when
+  a slide in the chapter backs it.
+- "멈춤" (hang) in cells → "끝없이 기다린다"; "멈춤 막기" stays (part 7's left-column label).
+  "같음" → "같다". "그냥 둔다" → "바로 둔다".
+- JWS protected header → **보호 머리글** (12b has "보호 헤더" ×8 — batch J).
+- Sweep list adds: `ex/run/09/serve.run:3`, `ex/run/09/client.run:3` (헤더); agent files
+  (stale everything): `ex/go/agents/catering/main.go:4` 청크, `bus/main.go:126` "토큰 헤더",
+  `webhook/main.go:4` 헤더, `settlement/main.go:262` "보호 헤더".
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does

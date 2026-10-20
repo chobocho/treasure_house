@@ -18,10 +18,10 @@
 <tr><td><a href="#p09-ch6">6장</a></td><td>클라이언트 — <code>a2aclient.NewFromCard</code>, 막는 호출과 스트림, 답 읽기</td><td><a href="#p07-ch6">7부</a>·<a href="#p08-ch6">8부</a></td></tr>
 <tr><td><a href="#p09-ch7">7장</a></td><td>숙소 에이전트 완성판 — INPUT_REQUIRED·REJECTED, 골든 대조</td><td><a href="#p07-ch7">7부</a>·<a href="#p08-ch7">8부</a></td></tr>
 <tr><td><a href="#p09-ch8">8장</a></td><td>시험 — SDK 서버를 네트워크 없이 <code>go test</code> 로</td><td><a href="#p07-ch8">7부</a>·<a href="#p08-ch8">8부</a></td></tr>
-<tr><td><a href="#p09-ch9">9장</a></td><td>이 SDK 만의 것 — 호출 가로채기, a2aext, 기능 검사 스위치</td><td><a href="#p07-ch9">7부</a>·<a href="#p08-ch9">8부</a></td></tr>
+<tr><td><a href="#p09-ch9">9장</a></td><td>이 SDK 만의 것 — 서버 가로채기, panic 처리기, 확장 전파(a2aext), v0.3 옮기기</td><td><a href="#p07-ch9">7부</a>·<a href="#p08-ch9">8부</a></td></tr>
 </table>
 </div>
-<div class="key"><b>세 SDK 를 나란히</b> — 이 부는 세 SDK 가운데 마지막이라, 장마다 끝의 "정리" 표에 파이썬·TypeScript 열을 함께 둡니다(왼쪽 열은 7·8부와 같습니다). 4장의 반칙 실행기·저장소 실험도 두 부와 같은 일곱 가지로 돌려 세 SDK 를 견줍니다. 예제는 <code>ex/go/09/</code> 에 있고, 단계 파일(<code>step1_echo</code>, <code>step2_task</code>, …)이 완성 에이전트(<code>ex/go/agents/</code>)로 수렴합니다. 빌드는 <code>go build -p 1</code> 입니다.</div>
+<div class="key"><b>세 SDK 를 나란히</b> — 이 부는 세 SDK 가운데 마지막이라, 장마다 끝의 "정리" 표에 파이썬·TypeScript 열을 함께 둡니다. 표의 왼쪽 열은 7부와 같고, 5·9장 표에는 더한 줄이 아래에 있습니다. 4장의 반칙 실행기도 두 부와 같은 일곱 가지로 돌려 세 SDK 를 견줍니다. 예제는 <code>ex/go/09/</code> 에 있고, 단계 파일(<code>step1_echo</code>, <code>step2_task</code>, …)이 완성 에이전트(<code>ex/go/agents/</code>)로 수렴합니다. 빌드는 <code>go build -p 1</code> 입니다.</div>
 </article>
 
 <!-- ==== 1장 패키지 지도 ==== -->
@@ -45,11 +45,11 @@
 
 <article class="card" id="p09-map-deps">
 <h3>쓰지 않는 패키지의 의존은 받지도 않는다 — import 하는 예제가 생길 때 go.sum 에 들어온다</h3>
-<p class="lead">앞 표의 <code>✗</code> 는 우리 모듈(<code>ex/go</code>)의 <code>go.sum</code> 에 내용 해시가 없는 모듈입니다. SDK 의 <code>go.mod</code> 는 grpc·protobuf·genproto 와 옛 SDK 를 요구하지만, 우리는 쓰는 것만 받았습니다. 이 캡처는 13부에서 gRPC 바인딩을 쓰려고 grpc 를(<a href="#p13-grpc-deps">13부</a>), 14부에서 v0.3 호환을 돌리려고 옛 SDK 를(<a href="#p14-v03-layers">14부</a>) 받은 <b>뒤</b>의 것이라 <code>✗</code> 가 하나도 남지 않았습니다.</p>
+<p class="lead">앞 표의 <code>✗</code> 는 우리 모듈(<code>ex/go</code>)의 <code>go.sum</code> 에 내용 해시가 없는 모듈입니다. SDK 의 <code>go.mod</code> 는 grpc·protobuf·genproto 와 옛 SDK 를 요구하지만, 우리는 쓰는 것만 받았습니다. 이 캡처는 gRPC 바인딩용 grpc(<a href="#p13-grpc-deps">13부</a>)와 v0.3 호환용 옛 SDK(<a href="#p14-v03-layers">14부</a>)를 받은 <b>뒤</b>의 것이라 <code>✗</code> 가 하나도 없습니다.</p>
 <!--OUT file=out/09/sdk_map.go.txt lines=6-15 note=옛 SDK·gRPC·protobuf 를 쓰는 패키지 — 이제 모두 받아 두었다-->
 <ul>
 <li>Go 는 <b>import 한 패키지</b>가 닿는 모듈만 내려받습니다. 7~12부의 에이전트는 <code>a2agrpc</code>·<code>a2apb</code> 를 가져오지 않아서 의존이 uuid·x/mod·x/sync 셋이었고, 13부의 gRPC 예제가 <code>a2agrpc/v1</code> 을 import 하자 grpc·protobuf·genproto 가 <code>go.mod</code> 에 들어왔습니다.</li>
-<li>파이썬의 extra 와 TS 의 선택 peer 가 사람이 고르는 것이라면, Go 에서는 import 문이 고릅니다. <code>a2acompat/a2av0</code> 도 같아서, v0.3 호환을 쓰려면 옛 모듈(<code>a2aproject/a2a-go</code>)을 따로 받아야 합니다 — 14부가 <code>go get …@v0.3.15</code> 로 받기 전에는 이 줄에 <code>✗</code> 가 붙어 있었습니다.</li>
+<li>파이썬의 extra 와 TS 의 선택 peer 가 사람이 고르는 것이라면, Go 에서는 import 문이 고릅니다. <code>a2acompat/a2av0</code> 도 같아서, v0.3 호환을 쓰려면 옛 모듈(<code>a2aproject/a2a-go</code>)을 따로 받아야 하고, 받기 전에는 이 줄에 <code>✗</code> 가 붙습니다. 14부가 <code>go get …@v0.3.15</code> 로 받습니다.</li>
 </ul>
 </article>
 
@@ -74,7 +74,7 @@
 <tr><td><code>taskstore/</code></td><td><code>Store</code>·<code>InMemory</code></td><td>Task 저장 — 판(version)으로 동시 수정을 막는다</td><td><a href="#p09-ch4">4장</a></td></tr>
 <tr><td><code>eventqueue/</code>·<code>workqueue/</code>·<code>limiter/</code></td><td><code>Manager</code>·<code>Queue</code>·<code>ConcurrencyConfig</code></td><td>이벤트 큐, 여러 서버에 일을 나누는 큐(실험 기능), 동시 실행 한도</td><td><a href="#p17-st-prod">17부</a>(클러스터 모드만 이름으로)</td></tr>
 <tr><td><code>jsonrpc.go</code>·<code>rest.go</code>·<code>agentcard.go</code></td><td><code>NewJSONRPCHandler</code>·<code>NewRESTHandler</code>·<code>NewStaticAgentCardHandler</code></td><td>모두 <code>http.Handler</code> — <code>net/http</code> 에 단다</td><td><a href="#p09-ch5">5장</a>, 13부</td></tr>
-<tr><td><code>middleware.go</code>·<code>intercepted_handler.go</code>·<code>auth.go</code></td><td><code>CallContext</code>·<code>CallInterceptor</code>·<code>User</code></td><td>"누가, 어떤 요청으로" — 사용자·헤더·테넌트, 앞뒤 가로채기</td><td><a href="#p09-srv-who">5장</a>, 12부</td></tr>
+<tr><td><code>middleware.go</code>·<code>intercepted_handler.go</code>·<code>auth.go</code></td><td><code>CallContext</code>·<code>CallInterceptor</code>·<code>User</code></td><td>"누가, 어떤 요청으로" — 사용자·머리글·테넌트, 앞뒤 가로채기</td><td><a href="#p09-srv-who">5장</a>, 12부</td></tr>
 <tr><td><code>push/</code></td><td><code>NewInMemoryStore</code>·<code>NewHTTPPushSender</code></td><td>푸시 설정 저장과 보내기</td><td>11부</td></tr>
 </table>
 </div>
@@ -122,7 +122,7 @@
 
 <article class="card" id="p09-ch1-sum">
 <h3>1장 정리 — 할 일마다 세 SDK 의 이름</h3>
-<p class="lead">왼쪽 열은 <a href="#p07-ch1-sum">7부</a>·<a href="#p08-ch1-sum">8부</a>와 같습니다. Go 열의 경로는 모듈 안의 패키지입니다.</p>
+<p class="lead">왼쪽 열은 <a href="#p07-ch1-sum">7부</a>와 같고, Go 열의 경로는 모듈 안의 패키지입니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>할 일</th><th>Go SDK</th><th>파이썬</th><th>TypeScript</th></tr>
@@ -143,7 +143,7 @@
 <h3>1장 퀴즈</h3>
 <p class="q">Q. 동료가 "실행기가 내놓은 이벤트를 저장되기 전에 하나씩 들여다보고 싶다" 며 <code>import "github.com/a2aproject/a2a-go/v2/internal/taskupdate"</code> 를 적었습니다. 빌드가 됩니까? 안 된다면 어디서 끼어들어야 합니까?</p>
 <button>답 보기</button>
-<div class="a"><b>A.</b> 안 됩니다. <a href="#p09-map-internal">sdk_map</a> 이 보여 준 <code>internal/</code> 아래 패키지는 그 모듈(<code>a2a-go/v2</code>) 밖에서 import 할 수 없고, 컴파일러가 막습니다. 끼어들 자리는 SDK 가 열어 둔 인터페이스입니다. 이벤트라면 실행기를 감싸는 실행기를 하나 더 두어 안쪽 <code>Execute</code> 의 반복자를 돌며 보고 다시 내놓으면 되고(<a href="#p09-ex-drive">3장</a>의 range), 요청·응답이라면 <code>a2asrv.WithCallInterceptors</code> 입니다(<a href="#p09-map-server">서버 쪽 칸</a>의 <code>middleware.go</code>).</div>
+<div class="a"><b>A.</b> 안 됩니다. <a href="#p09-map-internal">internal 열두 패키지</a>에서 본 대로 <code>internal/</code> 아래 패키지는 그 모듈(<code>a2a-go/v2</code>) 밖에서 import 할 수 없고, 컴파일러가 막습니다. 끼어들 자리는 SDK 가 열어 둔 인터페이스입니다. 이벤트라면 실행기를 감싸는 실행기를 하나 더 두어 안쪽 <code>Execute</code> 의 반복자를 돌며 보고 다시 내놓으면 되고(<a href="#p09-ex-drive">3장</a>의 range), 요청·응답이라면 <code>a2asrv.WithCallInterceptors</code> 입니다(<a href="#p09-map-server">서버 쪽 칸</a>의 <code>middleware.go</code>).</div>
 </article>
 
 <!-- ==== 2장 타입 ==== -->
@@ -183,7 +183,7 @@
 <!--OUT file=out/09/types_build.go.txt lines=1-3-->
 <ul>
 <li>구조체 글자는 필요한 필드만 적습니다 — 안 적은 것은 영값(<code>""</code>, <code>nil</code>)입니다. TS 처럼 여덟 필드를 다 적을 일(<a href="#p08-ty-build">8부</a>)이 없습니다. 대신 Go 이름이 와이어 이름과 다른 곳이 있습니다: <code>ID</code>(messageId), <code>ReferenceTasks</code>(referenceTaskIds).</li>
-<li>Part 를 짓는 생성 함수는 넷입니다 — <code>NewTextPart</code>·<code>NewDataPart</code>·<code>NewRawPart</code>·<code>NewFileURLPart</code>(<a href="#p09-ty-part">조금 뒤</a>).</li>
+<li>Part 를 짓는 생성 함수는 넷입니다 — <code>NewTextPart</code>·<code>NewDataPart</code>·<code>NewRawPart</code>·<code>NewFileURLPart</code>(<a href="#p09-ty-part">Part 의 메서드 넷</a>).</li>
 </ul>
 </article>
 
@@ -193,7 +193,7 @@
 <!--CODE file=ex/go/09/types_build region=wire-->
 <!--OUT file=out/09/types_build.go.txt lines=4-15-->
 <ul>
-<li>키 차례는 구조체 필드 차례입니다 — <code>messageId</code> 다음 알파벳 차례(<code>parts</code>, <code>role</code>)라 <a href="#p05-task-go">5부</a>에서 본 Go 서버의 키 차례가 여기서 나옵니다. 빈 필드는 <code>omitempty</code> 태그로 빠집니다.</li>
+<li>키 차례는 구조체 필드 차례입니다 — <code>messageId</code> 다음은 알파벳순(<code>parts</code>, <code>role</code>)이라 <a href="#p05-task-go">5부</a>에서 본 Go 서버의 키 차례가 여기서 나옵니다. 빈 필드는 <code>omitempty</code> 태그로 빠집니다.</li>
 <li>SDK 안의 <code>Part</code> 는 <code>Content</code> 하나에 <code>a2a.Text</code> 같은 타입을 담습니다. 와이어의 <code>"text": …</code> 로 펼치는 일은 <code>Part.MarshalJSON</code>(<code>a2a/core.go:694</code>)이 손으로 합니다. TS 의 <code>$case</code> 가 새던 일(<a href="#p08-ty-wire">8부</a>)은 생기지 않습니다.</li>
 </ul>
 </article>
@@ -236,7 +236,7 @@
 <!--CODE file=ex/go/09/types_presence region=enum-->
 <!--OUT file=out/09/types_presence.go.txt lines=7-13-->
 <ul>
-<li><code>Part.UnmarshalJSON</code> 은 내용이 정확히 하나여야 합니다(<code>a2a/core.go:717</code>). <code>{"data":null}</code> 과 빈 <code>url</code> 도 "내용 없음" 이라 오류인데, <code>NewDataPart(nil)</code> 은 <code>{"data":null}</code> 을 <b>써 냅니다</b>(<a href="#p09-ty-data">다음</a>) — 제가 쓴 것을 제가 못 읽습니다. 오류는 <code>json.Unmarshal</code> 이 내므로 서버에서는 <code>-32700</code> 이 됩니다(<a href="#p04-part-two">4부</a>).</li>
+<li><code>Part.UnmarshalJSON</code> 은 내용이 정확히 하나여야 합니다(<code>a2a/core.go:717</code>). <code>{"data":null}</code> 과 빈 <code>url</code> 도 "내용 없음" 이라 오류인데, <code>NewDataPart(nil)</code> 은 <code>{"data":null}</code> 을 <b>써 냅니다</b>(<a href="#p09-ty-data">다음</a>) — 자기가 쓴 것을 자기가 읽지 못합니다. 오류는 <code>json.Unmarshal</code> 이 내므로 서버에서는 <code>-32700</code> 이 됩니다(<a href="#p04-part-two">4부</a>).</li>
 <li>모르는 상태 이름은 그대로 받아 둡니다. 키 맞추기는 <code>encoding/json</code> 의 규칙대로 대소문자를 가리지 않아 <code>MESSAGEID</code> 가 맞고, snake_case 는 맞지 않습니다. 모르는 키는 버리되, <code>Decoder.DisallowUnknownFields</code> 로 오류로 바꿀 수 있습니다.</li>
 </ul>
 </article>
@@ -269,7 +269,7 @@
 <p class="lead">클라이언트 쪽 일입니다. 스펙에 없는 <code>createdAt</code>(<a href="#p05-task-time">5부</a>)과 base64 raw 파트가 든 Task JSON 을 읽었습니다. <a href="#p08-ty-task-read">8부</a>와 같은 입력입니다.</p>
 <!--CODE file=ex/go/09/types_task region=read-->
 <!--OUT file=out/09/types_task.go.txt lines=4-5-->
-<div class="note"><b>TS 쪽, 그러나 스위치가 있다</b> — 파이썬 <code>ParseDict</code> 는 모르는 필드에서 오류였고(<a href="#p07-ty-task-read">7부</a>), TS·Go 는 버립니다. Go 는 <code>DisallowUnknownFields</code> 로 엄격하게도 읽을 수 있습니다(<a href="#p09-ty-loose">types_presence</a>). <code>a2a.Raw</code> 는 <code>[]byte</code> 라, <code>encoding/json</code> 이 base64 를 풀고 쌉니다.</div>
+<div class="note"><b>TS 처럼 버리되 스위치가 있다</b> — 파이썬 <code>ParseDict</code> 는 모르는 필드에서 오류였고(<a href="#p07-ty-task-read">7부</a>), TS·Go 는 버립니다. Go 는 <code>DisallowUnknownFields</code> 로 엄격하게도 읽을 수 있습니다(<a href="#p09-ty-loose">Part 는 엄격하고 키는 너그럽다</a>). <code>a2a.Raw</code> 는 <code>[]byte</code> 라, <code>encoding/json</code> 이 base64 를 풀고 쌉니다.</div>
 </article>
 
 <article class="card" id="p09-ty-shapes">
@@ -290,6 +290,7 @@
 
 <article class="card" id="p09-ch2-sum">
 <h3>2장 정리 — 타입을 다루는 손잡이, 세 SDK</h3>
+<p class="lead">왼쪽 열은 <a href="#p07-ch2-sum">7부</a>와 같고, Go 열은 enum ↔ 이름·JSON ↔ 객체 두 줄에서 따로 바꾸는 층이 없습니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>할 일</th><th>Go SDK</th><th>파이썬 · TypeScript</th></tr>
@@ -312,7 +313,7 @@
 <h3>2장 퀴즈</h3>
 <p class="q">Q. 실행기에서 <code>ask := a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart("인원은?"))</code> 을 <code>task.History = append(task.History, ask)</code> 로 넣은 뒤, 깜빡한 말을 보태려고 <code>ask.Parts = append(ask.Parts, a2a.NewTextPart("예: 30명"))</code> 을 했습니다. <code>task.History</code> 의 마지막 메시지에는 파트가 몇 개 있습니까? <a href="#p07-ch2-quiz">7부</a>·<a href="#p08-ch2-quiz">8부</a>의 같은 퀴즈와 견주면?</p>
 <button>답 보기</button>
-<div class="a"><b>A.</b> 둘입니다. 이력에 들어간 것은 <code>ask</code> 라는 포인터이므로, 넣은 뒤 그 메시지를 고치면 이력의 메시지도 바뀝니다 — <a href="#p09-ty-copy">types_fields</a> 에서 넣은 뒤 "40명" 으로 고치자 "이력의 말: 40명" 이었습니다. TS 도 둘, 넣을 때 복사하는 파이썬만 하나입니다.</div>
+<div class="a"><b>A.</b> 둘입니다. 이력에 들어간 것은 <code>ask</code> 라는 포인터이므로, 넣은 뒤 그 메시지를 고치면 이력의 메시지도 바뀝니다 — <a href="#p09-ty-copy">이력에는 포인터가 들어간다</a>에서 넣은 뒤 "40명" 으로 고치자 "이력의 말: 40명" 이었습니다. TS 도 둘, 넣을 때 복사하는 파이썬만 하나입니다.</div>
 </article>
 
 <!-- ==== 3장 실행기 ==== -->
@@ -358,7 +359,7 @@
 <tr><th>필드</th><th>무엇</th><th>누가 채우나</th></tr>
 <tr><td><code>Message</code></td><td>이번에 받은 Message (취소 요청이면 <code>nil</code>)</td><td>처리기 — 받은 그대로(<code>TaskID</code> 는 비어 있을 수 있다)</td></tr>
 <tr><td><code>TaskID</code>, <code>ContextID</code></td><td>이번 요청의 id</td><td>처리기 — 없으면 새로 짓는다(UUIDv7)</td></tr>
-<tr><td><code>StoredTask</code></td><td>저장소에 있던 Task, 첫 마디면 <code>nil</code></td><td>처리기 — <b>이번 메시지를 이력에 붙여 저장한 뒤</b>(<a href="#p09-ex-follow">이 장 끝</a>)</td></tr>
+<tr><td><code>StoredTask</code></td><td>저장소에 있던 Task, 첫 마디면 <code>nil</code></td><td>처리기 — <b>이번 메시지를 이력에 붙여 저장한 뒤</b>(<a href="#p09-ex-follow">이어 말하기</a>)</td></tr>
 <tr><td><code>RelatedTasks</code></td><td>referenceTaskIds 의 작업들</td><td><code>ReferencedTasksLoader</code> 를 가로채기로 달았을 때만 — 기본은 비어 있다(15부)</td></tr>
 <tr><td><code>Metadata</code>, <code>Tenant</code></td><td>요청의 metadata, 테넌트</td><td>처리기</td></tr>
 <tr><td><code>User</code>, <code>ServiceParams</code></td><td>사용자, 요청 머리글</td><td>호출 맥락(<code>CallContext</code>)에서 — <a href="#p09-srv-who">5장</a></td></tr>
@@ -453,13 +454,14 @@
 
 <article class="card" id="p09-ch3-sum">
 <h3>3장 정리 — 실행기를 쓰는 손잡이, 세 SDK</h3>
+<p class="lead">왼쪽 열은 <a href="#p07-ch3-sum">7부</a>와 같고, 이벤트 내보내기 줄의 <code>yield</code> 가 Go 에서 큐와 버스를 대신합니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>할 일</th><th>Go SDK</th><th>파이썬 · TypeScript</th></tr>
 <tr><td>실행기 모양</td><td><code>Execute(ctx, ec)</code>·<code>Cancel(ctx, ec)</code> → <code>iter.Seq2[a2a.Event, error]</code>, 또는 <code>AgentExecutorFunc</code></td><td><code>execute(ctx, queue)</code> · <code>execute(ctx, bus)</code></td></tr>
 <tr><td>이벤트 내보내기</td><td><code>if !yield(ev, nil) { return }</code></td><td><code>enqueue_event</code> · <code>bus.publish</code></td></tr>
 <tr><td>요청 읽기</td><td><code>ec.Message</code>, <code>ec.TaskID</code>·<code>ec.ContextID</code>, <code>ec.Metadata</code></td><td><code>ctx.message</code> · <code>ctx.userMessage</code></td></tr>
-<tr><td>이어 말하기 알기</td><td><code>ec.StoredTask != nil</code> (이번 메시지는 이미 이력에 있음)</td><td><code>current_task</code>(아직 없음) · <code>ctx.task</code>(있음)</td></tr>
+<tr><td>이어 말하기 알기</td><td><code>ec.StoredTask != nil</code> (이번 메시지는 이미 이력에 있다)</td><td><code>current_task</code>(아직 없다) · <code>ctx.task</code>(있다)</td></tr>
 <tr><td>즉답</td><td><code>a2a.NewMessage(…)</code> 하나, <code>ContextID</code> 를 달아</td><td><code>new_text_message</code> · <code>AgentEvent.message</code></td></tr>
 <tr><td>작업 시작</td><td><code>a2a.NewSubmittedTask(ec, ec.Message)</code> — 이어 말하기엔 생략 가능(완성판은 다시 싣는다)</td><td>첫 마디만 · 이어 말하기에도</td></tr>
 <tr><td>상태·아티팩트</td><td><code>a2a.NewStatusUpdateEvent(ec, state, msg)</code>·<code>NewArtifactEvent(ec, parts…)</code></td><td><code>TaskUpdater</code> · 갱신기 없음</td></tr>
@@ -474,7 +476,7 @@
 <h3>3장 퀴즈</h3>
 <p class="q">Q. 되묻기 에이전트의 둘째 마디에서 "사용자가 지금까지 한 말" 을 모으려고 <code>append(ec.StoredTask.History, ec.Message)</code> 의 사용자 메시지를 셌더니, 사용자는 두 번 말했는데 셋이 나왔습니다. 왜 그렇습니까? <a href="#p08-ch3-quiz">8부의 같은 퀴즈</a>와 답이 같습니까?</p>
 <button>답 보기</button>
-<div class="a"><b>A.</b> Go 처리기는 <code>Execute</code> 를 부르기 전에 이번 메시지를 이력에 붙여 저장하므로, <code>StoredTask.History</code> 에 이미 둘째 말(<code>m-2</code>)이 있습니다 — <a href="#p09-ex-follow">follow</a> 의 "이번 메시지가 이미 있나: true" 입니다. 여기에 <code>ec.Message</code> 를 또 붙이면 둘째 말을 두 번 셉니다. TS 와 같은 답이고, 파이썬만 둘입니다. 완성 에이전트의 <code>Begin</code> 주석도 "이번 메시지까지 들어 있다" 고 적었습니다.</div>
+<div class="a"><b>A.</b> Go 처리기는 <code>Execute</code> 를 부르기 전에 이번 메시지를 이력에 붙여 저장하므로, <code>StoredTask.History</code> 에 이미 둘째 말(<code>m-2</code>)이 있습니다 — <a href="#p09-ex-follow">이어 말하기</a>의 "이번 메시지가 이미 있나: true" 입니다. 여기에 <code>ec.Message</code> 를 또 붙이면 둘째 말을 두 번 셉니다. TS 와 같은 답이고, 파이썬만 둘입니다. 완성 에이전트의 <code>Begin</code> 주석도 "이번 메시지까지 들어 있다" 고 적었습니다.</div>
 </article>
 
 <!-- ==== 4장 요청 처리기와 Task 저장소 ==== -->
@@ -597,7 +599,7 @@
 <!--CODE file=ex/go/09/store region=tenant-->
 <!--OUT file=out/09/store.go.txt lines=1-5-->
 <ul>
-<li>남의 작업은 <code>task not found</code> 입니다 — "Mask ownership mismatch as ErrTaskNotFound per A2A spec §3.3.2"(<code>inmemory.go:171</code>). 익명(<code>""</code>)도 제 작업은 찾지만 목록은 <code>unauthenticated</code> 입니다(<a href="#p09-rh-when">direct</a>).</li>
+<li>남의 작업은 <code>task not found</code> 입니다 — "Mask ownership mismatch as ErrTaskNotFound per A2A spec §3.3.2"(<code>inmemory.go:171</code>). 익명(<code>""</code>)도 제 작업은 찾지만 목록은 <code>unauthenticated</code> 입니다(<a href="#p09-rh-when">익명은 목록을 못 본다</a>).</li>
 <li>테넌트 <code>b</code> 를 달아도 kim 의 작업이 나왔습니다. 맵의 열쇠가 <code>a2a.TaskID</code> 하나라(<code>inmemory.go:52</code>) 테넌트는 칸을 나누지 않습니다 — TS 는 테넌트 → 주인 차례로 나눴고(<a href="#p08-store-owner">8부</a>), 파이썬은 주인만 봤습니다(<a href="#p07-store-owner">7부</a>). 테넌트는 13부입니다.</li>
 </ul>
 </article>
@@ -609,13 +611,13 @@
 <!--OUT file=out/09/store.go.txt lines=6-8-->
 <ul>
 <li>저장소는 넣을 때와 꺼낼 때 모두 <code>encoding/gob</code> 으로 깊은 사본을 뜹니다(<code>internal/utils.DeepCopy</code>). 고친 것은 <code>Update</code> 해야 남습니다 — 파이썬의 <code>use_copying=False</code> 같은 스위치는 없습니다(<a href="#p07-store-copy">7부</a>).</li>
-<li>gob 은 <code>any</code> 칸에 든 타입을 미리 등록해야 하는데, SDK 는 <code>map[string]any</code>·<code>[]any</code> 만 등록합니다(<code>inmemory.go</code> 의 <code>init</code>). 그래서 <code>NewDataPart(구조체)</code> 는 저장에서 실패하고, 처리기를 거치면 작업이 FAILED 가 됩니다 — 3장의 견적 실행기가 <code>Plain</code> 으로 바꿔 넣은 까닭이고(<a href="#p09-ex-quote">3장</a>), 완성 에이전트의 <code>common.DataPart</code> 도 같습니다. gob 을 거친 <code>1</code> 은 <code>int</code> 그대로이고, raw 바이트도 그대로입니다.</li>
+<li>gob 은 <code>any</code> 칸에 든 타입을 미리 등록해야 하는데, SDK 는 <code>map[string]any</code>·<code>[]any</code> 만 등록합니다(<code>inmemory.go</code> 의 <code>init</code>). 그래서 <code>NewDataPart(구조체)</code> 는 저장에서 실패하고, 처리기를 거치면 작업이 FAILED 가 됩니다 — 견적 실행기가 <code>Plain</code> 으로 바꿔 넣은 까닭이고(<a href="#p09-ex-quote">3장</a>), 완성 에이전트의 <code>common.DataPart</code> 도 같습니다. gob 을 거친 <code>1</code> 은 <code>int</code> 그대로이고, raw 바이트도 그대로입니다.</li>
 </ul>
 </article>
 
 <article class="card" id="p09-store-version">
 <h3>저장소에는 판 번호가 있다 — 앞 판이 맞아야 고쳐 쓴다</h3>
-<p class="lead">세 SDK 가운데 Go 저장소만 Task 마다 판(<code>TaskVersion</code>)을 셉니다. 3장 약속 표의 "낙관적 동시성 제어"(<a href="#p09-ex-contract">3장</a>)가 이것입니다. 같은 앞 판으로 두 번 고쳐 썼습니다.</p>
+<p class="lead">세 SDK 가운데 Go 저장소만 Task 마다 판(<code>TaskVersion</code>)을 셉니다. 실행기 약속 표의 "낙관적 동시성 제어"(<a href="#p09-ex-contract">3장</a>)가 이것입니다. 같은 앞 판으로 두 번 고쳐 썼습니다.</p>
 <!--CODE file=ex/go/09/store region=version-->
 <!--OUT file=out/09/store.go.txt lines=9-10-->
 <div class="note"><b>왜 있나</b> — 실행과 취소가 서로 다른 고루틴(클러스터라면 다른 서버)에서 같은 Task 를 고칠 수 있기 때문입니다. 늦게 온 쪽은 <code>ErrConcurrentModification</code> 을 받고, SDK 는 저장소에서 다시 읽어 종료 상태면 그것을 답으로 씁니다(<code>agentexec.go</code> 의 <code>processor.Process</code>). 저장소를 직접 구현한다면(<a href="#p17-st-go">17부</a>) 이 계약을 지켜야 합니다 — 인터페이스 주석이 MUST 로 적었습니다(<code>taskstore/api.go</code> 의 <code>ErrConcurrentModification</code>).</div>
@@ -623,19 +625,20 @@
 
 <article class="card" id="p09-ch4-sum">
 <h3>4장 정리 — 처리기와 저장소의 손잡이, 세 SDK</h3>
+<p class="lead">왼쪽 열은 <a href="#p07-ch4-sum">7부</a>와 같고, 실행기 반칙 검사·실행기에서 오류 내기·오류 ↔ 코드 세 줄이 실행기의 잘못이 와이어로 나가는 길입니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>할 일</th><th>Go SDK</th><th>파이썬 · TypeScript</th></tr>
 <tr><td>처리기 만들기</td><td><code>a2asrv.NewHandler(exec, a2asrv.With…(…)…)</code></td><td>키워드 인자 · 위치 인자 아홉</td></tr>
 <tr><td>메서드 ↔ 처리기</td><td><code>SendMessage</code> → <code>SendMessage(ctx, req)</code> 등 열하나 (푸시 넷은 <code>…PushConfig</code>)</td><td><code>on_message_send</code> · <code>sendMessage</code></td></tr>
-<tr><td>HTTP 없이 부르기</td><td><code>h.SendMessage(context.Background(), &amp;a2a.SendMessageRequest{…})</code></td><td><code>ServerCallContext()</code> 를 넘긴다 · 같음</td></tr>
-<tr><td>막는 호출의 끝</td><td>Message, 종료 상태, INPUT_REQUIRED — AUTH_REQUIRED 는 곧바로(실행은 이어짐) — <code>ReturnImmediately</code> 면 첫 Task</td><td>종료·중단 상태 · 큐가 멈출 때</td></tr>
+<tr><td>HTTP 없이 부르기</td><td><code>h.SendMessage(context.Background(), &amp;a2a.SendMessageRequest{…})</code></td><td><code>ServerCallContext()</code> 를 넘긴다 · 같다</td></tr>
+<tr><td>막는 호출의 끝</td><td>Message, 종료 상태, INPUT_REQUIRED — AUTH_REQUIRED 는 곧바로(실행은 이어진다) — <code>ReturnImmediately</code> 면 첫 Task</td><td>종료·중단 상태 · 큐가 멈출 때</td></tr>
 <tr><td>실행기 반칙 검사</td><td>저장 쪽이, 두 길 모두 — <code>-32006</code> 또는 FAILED</td><td><code>-32006</code> · 스트림만 <code>-32004</code></td></tr>
-<tr><td>실행기에서 오류 내기</td><td>Task 전에는 <code>yield(nil, fmt.Errorf("…: %w", a2a.Err…))</code> — 코드가 나간다, 뒤에는 FAILED 상태</td><td>raise (FAILED 남음) · 던지면 FAILED Task</td></tr>
+<tr><td>실행기에서 오류 내기</td><td>Task 전에는 <code>yield(nil, fmt.Errorf("…: %w", a2a.Err…))</code> — 코드가 나간다, 뒤에는 FAILED 상태</td><td>raise (FAILED 가 남는다) · 던지면 FAILED Task</td></tr>
 <tr><td>오류 ↔ 코드</td><td><code>errors.Is</code> 로 표지 오류 — 표지는 하나만 감싼다</td><td><code>JSON_RPC_ERROR_CODE_MAP</code> · <code>toJsonRpcError</code></td></tr>
 <tr><td>저장소</td><td><code>taskstore.NewInMemory(&amp;InMemoryStoreConfig{Authenticator})</code> — taskId·주인, gob 사본, 판 번호</td><td>주인별, 사본 스위치 · 테넌트→주인, 늘 사본</td></tr>
 <tr><td>저장소 인터페이스</td><td><code>taskstore.Store</code> — <code>Create</code>·<code>Update</code>(앞 판)·<code>Get</code>·<code>List</code>, 주인은 <code>ctx</code> 에서</td><td><code>save</code>·<code>get</code>·<code>list</code>·<code>delete</code> · <code>save</code>·<code>load</code>·<code>list</code></td></tr>
-<tr><td>기능 검사</td><td><code>WithCapabilityChecks(&amp;card.Capabilities)</code> 를 줄 때만</td><td>카드로 처리기가 · 같음</td></tr>
+<tr><td>기능 검사</td><td><code>WithCapabilityChecks(&amp;card.Capabilities)</code> 를 줄 때만</td><td>카드로 처리기가 · 같다</td></tr>
 <tr><td>끄기</td><td>처리기에는 없다 — HTTP 서버를 닫는다(<a href="#p09-ch5">5장</a>)</td><td><code>aclose()</code> · 없음</td></tr>
 </table>
 </div>
@@ -645,7 +648,7 @@
 <h3>4장 퀴즈</h3>
 <p class="q">Q. 숙소 실행기의 한 갈래에서 실수로 Task 를 낸 뒤 상태 대신 Message 를 냈습니다. Go 서버에 막는 SendMessage 를 보낸 클라이언트는 무엇을 받고, 나중에 GetTask 하면 작업은 어떤 상태입니까? <a href="#p08-ch4-quiz">8부</a>의 TS 서버와 견주면?</p>
 <button>답 보기</button>
-<div class="a"><b>A.</b> FAILED 상태의 Task 를 받고, 저장된 작업도 FAILED 입니다 — <a href="#p09-rh-rules-out">rules</a> 의 <code>MessageAfterTask</code> 가 "막는 호출 task TASK_STATE_FAILED", "저장 [TASK_STATE_FAILED]" 였습니다. 스트림이면 <code>task</code> 둘(SUBMITTED, FAILED)을 받습니다. TS 서버는 막는 호출에 그 Message 를 답하고 작업을 SUBMITTED 로 남겼으며, 스트림만 <code>-32004</code> 로 끊었습니다.</div>
+<div class="a"><b>A.</b> FAILED 상태의 Task 를 받고, 저장된 작업도 FAILED 입니다 — <a href="#p09-rh-rules-out">차례 검사는 두 길 모두에</a>의 <code>MessageAfterTask</code> 가 "막는 호출 task TASK_STATE_FAILED", "저장 [TASK_STATE_FAILED]" 였습니다. 스트림이면 <code>task</code> 둘(SUBMITTED, FAILED)을 받습니다. TS 서버는 막는 호출에 그 Message 를 답하고 작업을 SUBMITTED 로 남겼으며, 스트림만 <code>-32004</code> 로 끊었습니다.</div>
 </article>
 
 <!-- ==== 5장 서버 띄우기 ==== -->
@@ -653,7 +656,7 @@
 <article class="card" id="p09-ch5">
 <p class="chnum">5장</p>
 <h2>서버 띄우기 — net/http 에 처리기 둘</h2>
-<p class="chsub">처리기 셋은 http.Handler 일 뿐 → 앱은 ServeMux, 띄우는 것은 ListenAndServe → 서버 셋을 탭 뒤에 → 메아리의 답 → 견적의 답 → 경로 밖의 요청 → 판 머리글도 Content-Type 도 묻지 않는다 → 사용자와 헤더가 실행기에 닿는 길 → 정리</p>
+<p class="chsub">처리기 셋은 http.Handler 일 뿐 → 앱은 ServeMux, 띄우는 것은 ListenAndServe → 서버 셋을 탭 뒤에 → 메아리의 답 → 견적의 답 → 경로 밖의 요청 → 판 머리글도 Content-Type 도 묻지 않는다 → 사용자와 머리글이 실행기에 닿는 길 → 정리</p>
 </article>
 
 <article class="card" id="p09-srv-routes">
@@ -679,7 +682,7 @@
 
 <article class="card" id="p09-srv-spec">
 <h3>서버 셋을 탭 뒤에 — 메아리는 /, 견적은 POST /a2a</h3>
-<p class="lead"><a href="#p07-srv-spec">7부</a>·<a href="#p08-srv-spec">8부</a>와 같은 짜임입니다. 1단계 메아리, 2단계 견적(JSON-RPC 를 <code>POST /a2a</code> 에), 헤더를 되돌려 주는 실험 서버를 띄우고 각각 앞에 와이어 탭을 세웠습니다. 요청 본문은 <code>ex/run/09/rpc/*.json</code> 으로, 8부와 같은 파일입니다.</p>
+<p class="lead"><a href="#p07-srv-spec">7부</a>·<a href="#p08-srv-spec">8부</a>와 같은 짜임입니다. 1단계 메아리, 2단계 견적(JSON-RPC 를 <code>POST /a2a</code> 에), 머리글을 되돌려 주는 실험 서버를 띄우고 각각 앞에 와이어 탭을 세웠습니다. 요청 본문은 <code>ex/run/09/rpc/*.json</code> 으로, 8부와 같은 파일입니다.</p>
 <!--SPEC file=ex/run/09/serve.run-->
 <div class="note"><b>일부러 틀리게 보내는 넷</b> — 주석 "일부러 틀리게" 아래 두 <code>run</code> 가운데 앞의 것은 경로 밖(<code>POST /</code>, <code>GET /a2a</code>)으로, 뒤의 것은 판 머리글 없이 그리고 <code>text/plain</code> 으로 보냅니다. 모두 <code>-o /dev/null</code> 이라 답은 탭에서 읽습니다.</div>
 </article>
@@ -708,7 +711,7 @@
 <p class="lead">2단계는 <code>"POST " + path</code> 패턴(Go 1.22 의 ServeMux)으로 JSON-RPC 를 답니다. 경로를 벗어난 요청 둘(<code>POST /</code>, <code>GET /a2a</code>)의 답입니다.</p>
 <!--CODE file=ex/go/09/step2_task region=serve-->
 <!--OUT file=out/09/serve.txt wire=quote-wire ex=2-3 grep=^→|^←|Content-Type|found|Allowed note=POST / 와 GET /a2a 에 대한 답-->
-<div class="warn"><b>JSON-RPC 오류가 아니다</b> — 패턴에 맞지 않는 요청은 처리기에 닿지 않고 <code>net/http</code> 가 글 한 줄로 돌려보냅니다. <code>GET /a2a</code> 는 길은 있고 방법이 틀려 <code>405</code>(<code>Allow: POST</code>)입니다 — 파이썬 Starlette 와 같고, express 의 404 와 다릅니다(<a href="#p08-srv-path">8부</a>). 패턴 없이 <code>mux.Handle("/a2a", rpc)</code> 로 달면 <code>GET</code> 은 처리기가 받아 HTTP 200 의 <code>-32600</code> 이 됩니다(<a href="#p09-srv-routes">routes</a>).</div>
+<div class="warn"><b>JSON-RPC 오류가 아니다</b> — 패턴에 맞지 않는 요청은 처리기에 닿지 않고 <code>net/http</code> 가 글 한 줄로 돌려보냅니다. <code>GET /a2a</code> 는 길은 있고 방법이 틀려 <code>405</code>(<code>Allow: POST</code>)입니다 — 파이썬 Starlette 와 같고, express 의 404 와 다릅니다(<a href="#p08-srv-path">8부</a>). 패턴 없이 <code>mux.Handle("/a2a", rpc)</code> 로 달면 <code>GET</code> 은 처리기가 받아 HTTP 200 의 <code>-32600</code> 이 됩니다(<a href="#p09-srv-routes">http.Handler 일 뿐</a>).</div>
 </article>
 
 <article class="card" id="p09-srv-guard">
@@ -722,11 +725,11 @@
 </article>
 
 <article class="card" id="p09-srv-who">
-<h3>사용자는 호출 가로채기가, 헤더는 ServiceParams 가 실행기까지 나른다</h3>
+<h3>사용자는 호출 가로채기가, 머리글은 ServiceParams 가 실행기까지 나른다</h3>
 <p class="lead">JSON-RPC 처리기는 HTTP 요청마다 머리글로 <code>ServiceParams</code> 를 만들어 <code>CallContext</code> 에 싣습니다(<code>jsonrpc.go:50</code>). 사용자는 익명으로 시작하고, <code>CallInterceptor</code> 의 <code>Before</code> 에서 바꿀 수 있습니다. 받은 것을 파트 다섯으로 돌려주는 실행기에, 머리글로 사용자를 세우는 실험용 가로채기를 달았습니다.</p>
 <!--CODE file=ex/go/09/headers region=executor-->
 <!--CODE file=ex/go/09/headers region=user-->
-<!--OUT file=out/09/serve.txt wire=who-wire ex=1-2 grep=text.:\s.[^누] note=답의 파트 — 둘째 요청에만 X-Demo-User: kim (탭은 정해 둔 헤더만 적어 이 머리글은 안 보인다)-->
+<!--OUT file=out/09/serve.txt wire=who-wire ex=1-2 grep=text.:\s.[^누] note=답의 파트 — 둘째 요청에만 X-Demo-User: kim (탭은 정해 둔 머리글만 적어 이 머리글은 안 보인다)-->
 <ul>
 <li>가로채기는 <code>a2asrv.WithCallInterceptors(…)</code> 로 처리기에 답니다(<a href="#p09-rh-options">4장</a>). 같은 사용자 이름이 저장소의 주인 칸도 정합니다(<a href="#p09-store-owner">4장</a>). <code>ServiceParams</code> 의 열쇠는 소문자로 바뀌어 대소문자를 가리지 않고, 값은 목록(<code>[]string</code>)입니다.</li>
 <li><b>확장은 받은 그대로입니다</b> — 카드에 없는 확장도 <code>RequestedURIs()</code> 에 들어왔습니다. 파이썬과 같고, 카드의 것만 남기는 TS(<a href="#p08-srv-who">8부</a>)와 다릅니다. 확장은 14부, 진짜 인증(토큰)은 12부입니다.</li>
@@ -735,6 +738,7 @@
 
 <article class="card" id="p09-ch5-sum">
 <h3>5장 정리 — 서버를 세우는 손잡이, 세 SDK</h3>
+<p class="lead">위 아홉 줄은 왼쪽 열이 <a href="#p07-ch5-sum">7부</a>와 같고, 아래 둘은 <a href="#p08-ch5-sum">8부</a>에도 있는 줄입니다.</p>
 <div class="tblwrap">
 <table class="kv">
 <tr><th>할 일</th><th>Go SDK</th><th>파이썬 · TypeScript</th></tr>
@@ -742,11 +746,12 @@
 <tr><td>JSON-RPC 달기</td><td><code>mux.Handle("POST /a2a", a2asrv.NewJSONRPCHandler(h))</code></td><td><code>create_jsonrpc_routes</code> · <code>jsonRpcHandler</code></td></tr>
 <tr><td>HTTP+JSON 달기</td><td><code>a2asrv.NewRESTHandler(h)</code> — 13부</td><td><code>create_rest_routes</code> · <code>restHandler</code></td></tr>
 <tr><td>앱</td><td><code>http.NewServeMux()</code> — 표준 라이브러리</td><td>Starlette · express</td></tr>
-<tr><td>띄우기</td><td><code>http.ListenAndServe(addr, mux)</code> — 끄기는 <code>http.Server.Shutdown</code></td><td>uvicorn · <code>app.listen</code></td></tr>
-<tr><td>바깥 주소</td><td>카드 <code>a2a.NewAgentInterface(url, …)</code> 에 — 경로까지 mux 패턴과 같게</td><td>같음</td></tr>
-<tr><td>사용자 세우기</td><td><code>CallInterceptor.Before</code> 에서 <code>cc.User = a2asrv.NewAuthenticatedUser(…)</code></td><td><code>context_builder</code> · <code>userBuilder</code></td></tr>
+<tr><td>띄우기</td><td><code>http.ListenAndServe(addr, mux)</code></td><td>uvicorn · <code>app.listen</code></td></tr>
+<tr><td>바깥 주소</td><td>카드 <code>a2a.NewAgentInterface(url, …)</code> 에 — 경로까지 mux 패턴과 같게</td><td>같다</td></tr>
 <tr><td>요청 정보 → 실행기</td><td><code>ec.User</code>·<code>ec.ServiceParams.Get("…")</code>·<code>a2asrv.ExtensionsFrom(ctx)</code>(받은 그대로)</td><td><code>ServerCallContext</code> · <code>ctx.context</code>(카드의 확장만)</td></tr>
 <tr><td>경로 밖의 요청</td><td><code>net/http</code> 의 <code>404</code>·<code>405</code> 글 한 줄 (패턴 없으면 <code>-32600</code>)</td><td>Starlette 404·405 · express 404 HTML</td></tr>
+<tr><td>끄기</td><td><code>http.Server.Shutdown</code> — 처리기에는 끄는 메서드가 없다</td><td>lifespan 에서 <code>handler.aclose()</code> · 서버의 <code>close()</code></td></tr>
+<tr><td>사용자 세우기</td><td><code>CallInterceptor.Before</code> 에서 <code>cc.User = a2asrv.NewAuthenticatedUser(…)</code></td><td><code>context_builder</code> · <code>userBuilder</code></td></tr>
 <tr><td>머리글 검사</td><td>없음 — <code>A2A-Version</code>·Content-Type 을 보지 않는다</td><td>판 검사 · <code>-32009</code>·<code>-32005</code></td></tr>
 </table>
 </div>
@@ -756,5 +761,5 @@
 <h3>5장 퀴즈</h3>
 <p class="q">Q. 견적 서버를 띄운 뒤 동료가 <code>curl --json @quote.json http://127.0.0.1:10912/a2a</code> 로 시험했습니다(판 머리글 없음). TS 서버였다면 <code>-32009</code> 였을 이 요청에 Go 서버는 무엇을 답합니까? 같은 동료가 브라우저로 <code>http://127.0.0.1:10912/a2a</code> 를 열면 무엇을 봅니까?</p>
 <button>답 보기</button>
-<div class="a"><b>A.</b> COMPLETED Task 를 답합니다. Go 의 JSON-RPC 처리기는 <code>A2A-Version</code> 을 읽지 않습니다 — <a href="#p09-srv-guard">serve 캡처</a>에서 머리글 없는 요청의 상태가 <code>TASK_STATE_COMPLETED</code> 였습니다. 브라우저(GET)는 <code>405 Method Not Allowed</code> 글 한 줄을 봅니다. 견적 서버는 <code>"POST /a2a"</code> 패턴으로 달아, GET 은 처리기에 닿기 전에 ServeMux 가 거절합니다(<a href="#p09-srv-path">경로 밖</a>).</div>
+<div class="a"><b>A.</b> COMPLETED Task 를 답합니다. Go 의 JSON-RPC 처리기는 <code>A2A-Version</code> 을 읽지 않습니다 — <a href="#p09-srv-guard">판 머리글도 묻지 않는다</a>에서 머리글 없는 요청의 상태가 <code>TASK_STATE_COMPLETED</code> 였습니다. 브라우저(GET)는 <code>405 Method Not Allowed</code> 글 한 줄을 봅니다. 견적 서버는 <code>"POST /a2a"</code> 패턴으로 달아, GET 은 처리기에 닿기 전에 ServeMux 가 거절합니다(<a href="#p09-srv-path">경로 밖</a>).</div>
 </article>
