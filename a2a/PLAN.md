@@ -1128,3 +1128,10 @@ subagent task each.
   commit of this session (16a…18) plus this wrap-up.
 - Next: step 7 — review 1 (facts & evidence), review 2 (flow & style), `a2arun --check --all` ×2.
   Open decisions for review: py planner KeyError on unknown kid (part 17b), unused fact `v1-tsc`.
+
+### Review 1 started — guide `deck/REVIEW.md`, 14 batches (2026-10-20)
+- Batches (sequential, one reviewer at a time, commit per batch, log `scratch/review1-<X>-log.md`):
+  A 0–2 · B 3–4 · C 5 · D 6 · E 7 · F 8 · G 9 · H 10 · I 11 · J 12 · K 13–14 · L 15 · M 16–17 · N 18.
+- Batch A (0–2) done: 사실오류 5 · 증거불일치 1 · 근거없음 4 · 순서 5 · 표기 3 (+8 SRC links on part 2
+  quotes; fact `v1-tsc` dropped, `rel-v0-2-1` added). For batch L: p15-reg-roles says the role
+  table uses "둘째 태그" — tags put the role first and planner.py:128-130 matches any tag.
