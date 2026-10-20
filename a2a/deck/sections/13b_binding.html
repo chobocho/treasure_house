@@ -124,7 +124,7 @@
 <!--OUT file=out/13/grpc.txt server=py-tap lines=120-138 note=파이썬 서버-->
 <ul>
 <li><code>code: 5</code> 가 <code>NOT_FOUND</code> 이고, <code>details</code> 의 <code>google.rpc.ErrorInfo</code> 가 <code>reason: TASK_NOT_FOUND</code>·<code>domain: a2a-protocol.org</code> 입니다 — §10.6 의 MUST 와 §5.4 의 표 그대로이고, REST 의 <code>details</code>(<a href="#p13-rest-err-body">2장</a>)와 같은 메시지입니다.</li>
-<li>gRPC 라이브러리는 상태 코드와 글만 읽습니다. <code>details</code> 를 꺼내 A2A 오류로 되돌리는 것은 SDK 클라이언트의 몫입니다(파이썬 <code>status_from_call</code>, <code>utils/grpc_status.py</code>).</li>
+<li>gRPC 라이브러리는 상태 코드와 글만 읽습니다. <code>details</code> 를 꺼내 A2A 오류로 되돌리는 것은 SDK 클라이언트의 몫입니다(파이썬 <code>status_from_call</code>, <code>utils/grpc_status.py:46</code>).</li>
 </ul>
 </article>
 
@@ -146,13 +146,13 @@
 
 <article class="card" id="p13-grpc-md">
 <h3>메타데이터 — <code>a2a-version</code> 이 없거나 틀리면 TS 만 거절한다</h3>
-<p class="lead">§10.2 는 서비스 매개변수를 메타데이터에서 꺼내라고(MUST), <code>A2A-Version</code> 을 검사하라고(SHOULD) 합니다. 맨손 호출의 다섯째·여섯째가 그것을 시험했습니다(<a href="#p13-grpc-raw">요약</a>).</p>
+<p class="lead">§10.2 는 서비스 매개변수를 메타데이터에서 꺼내라고(MUST), <code>A2A-Version</code> 을 검사하라고(SHOULD) 합니다. 맨손 호출의 "A2A-Version 없음"·"A2A-Version 9.9" 가 그것을 시험했습니다(<a href="#p13-grpc-raw">요약</a>).</p>
 <!--OUT file=out/13/grpc.txt server=ts-tap lines=139-160 note=TypeScript 서버 — 메타데이터에 a2a-version 이 없다-->
 <ul>
-<li>TS 는 빈 값을 <code>'0.3'</code> 으로 읽고(§3.2.6 의 "0.3 will be assumed for empty header") 카드의 GRPC 인터페이스 판(<code>1.0</code>)과 맞지 않아 <code>FAILED_PRECONDITION</code> + <code>VERSION_NOT_SUPPORTED</code> 로 답했습니다. <code>9.9</code> 도 같습니다.</li>
+<li>TS 는 빈 값을 <code>'0.3'</code> 으로 읽고(§3.6.1 의 "0.3 will be assumed for empty header") 카드의 GRPC 인터페이스 판(<code>1.0</code>)과 맞지 않아 <code>FAILED_PRECONDITION</code> + <code>VERSION_NOT_SUPPORTED</code> 로 답했습니다. <code>9.9</code> 도 같습니다.</li>
 <li>파이썬·Go 는 둘 다 <code>OK</code> 였습니다. 파이썬 SDK 는 JSON-RPC·REST 처리에는 <code>@validate_version</code> 을 달았지만(<code>server/routes/rest_dispatcher.py:177</code> 등) <code>GrpcHandler</code> 에는 없고, Go SDK 에는 <code>ErrVersionNotSupported</code> 를 만드는 서버 코드가 없습니다(대응표에만 있다). §3.6.2 는 지원하지 않는 판에 <code>VersionNotSupportedError</code> 를 MUST 로 둡니다. 버전 협상 자체는 14부의 몫입니다.</li>
 </ul>
-<div class="note"><b>켜진 확장은 어디로 돌아오나</b> — 서버가 실제로 쓴 확장(<code>A2A-Extensions</code>)을 알리는 자리도 SDK 마다 다릅니다(소스): TS 는 머리 메타데이터(<code>buildMetadata</code> → <code>call.sendMetadata</code>, <code>server/grpc/index.js:955</code>), Go 는 꼬리(<code>grpc.SetTrailer</code>, <code>a2agrpc/v1/handler.go:313</code>), 파이썬 <code>GrpcHandler</code> 는 돌려보내지 않습니다. 이 장의 에이전트는 확장이 없어 와이어에는 나타나지 않습니다.</div>
+<div class="note"><b>켜진 확장은 어디로 돌아오나</b> — 서버가 실제로 쓴 확장(<code>A2A-Extensions</code>)을 알리는 자리도 SDK 마다 다릅니다(소스): TS 는 머리 메타데이터(<code>buildMetadata</code> → <code>call.sendMetadata</code>, <code>server/grpc/index.js:955</code>), Go 는 꼬리(<code>toTrailer</code> → <code>grpc.SetTrailer</code>, <code>a2agrpc/v1/handler.go:313</code>), 파이썬 <code>GrpcHandler</code> 는 돌려보내지 않습니다. 이 장의 에이전트는 확장이 없어 와이어에는 나타나지 않습니다.</div>
 </article>
 
 <article class="card" id="p13-grpc-stream">
@@ -194,15 +194,15 @@
 </article>
 
 <article class="card" id="p13-grpc-cl-ts">
-<h3>TypeScript 클라이언트 — 기본 공장에 <code>GrpcTransportFactory</code> 를 더한다</h3>
+<h3>TypeScript 클라이언트 — 기본 팩토리에 <code>GrpcTransportFactory</code> 를 더한다</h3>
 <!--CODE file=ex/ts/13/grpc_client.ts region=client-->
-<div class="note"><b>기본으로는 모른다</b> — 기본 전송은 JSON-RPC·REST 둘입니다(<a href="#p03-pick-why">3부</a>). gRPC 공장은 <code>@grpc/grpc-js</code> 를 끌어오므로 따로 들여와 <code>ClientFactoryOptions.createFrom</code> 으로 더합니다. 채널 자격 증명을 주지 않으면 평문입니다(<code>grpc.credentials.createInsecure()</code>, <code>client/transports/grpc/index.js:9671</code>). 오류는 <code>TaskNotFoundError</code> 를 상속한 <code>GrpcTaskNotFoundError</code> 로 옵니다(<code>:4282</code>).</div>
+<div class="note"><b>기본으로는 모른다</b> — 기본 전송은 JSON-RPC·REST 둘입니다(<a href="#p03-pick-why">3부</a>). gRPC 팩토리는 <code>@grpc/grpc-js</code> 를 끌어오므로 따로 들여와 <code>ClientFactoryOptions.createFrom</code> 으로 더합니다. 채널 자격 증명을 주지 않으면 평문입니다(<code>grpc.credentials.createInsecure()</code>, <code>client/transports/grpc/index.js:9671</code>). 오류는 <code>TaskNotFoundError</code> 를 상속한 <code>GrpcTaskNotFoundError</code> 로 옵니다(<code>:4282</code>).</div>
 </article>
 
 <article class="card" id="p13-grpc-cl-go">
 <h3>Go 클라이언트 — <code>a2agrpc.WithGRPCTransport(dial 옵션)</code></h3>
 <!--CODE file=ex/go/13/grpc_client/main.go region=client-->
-<div class="note"><b>dial 옵션을 그대로 넘긴다</b> — <code>WithGRPCTransport</code> 는 받은 <code>grpc.DialOption</code> 으로 <code>grpc.NewClient(iface.URL, …)</code> 를 부릅니다(<code>a2agrpc/v1/client.go:33</code>). 평문은 <code>insecure.NewCredentials()</code> 로 직접 고릅니다. 오류는 <code>FromGRPCError</code> 가 ErrorInfo 의 <code>reason</code> 과 상태 코드가 <b>둘 다</b> 맞는 표지 오류로 되돌립니다(<code>internal/grpcutil/errors.go</code>).</div>
+<div class="note"><b>dial 옵션을 그대로 넘긴다</b> — <code>WithGRPCTransport</code> 는 받은 <code>grpc.DialOption</code> 으로 <code>grpc.NewClient(iface.URL, …)</code> 를 부릅니다(<code>a2agrpc/v1/client.go:37</code>). 평문은 <code>insecure.NewCredentials()</code> 로 직접 고릅니다. 오류는 <code>FromGRPCError</code> 가 ErrorInfo 의 <code>reason</code> 과 상태 코드가 <b>둘 다</b> 맞는 표지 오류로 되돌립니다(<code>internal/grpcutil/errors.go:132</code>·<code>:166</code>).</div>
 </article>
 
 <article class="card" id="p13-grpc-matrix">
@@ -222,7 +222,7 @@
 <!--OUT file=out/13/gmatrix.txt server=py-tap lines=111-125 grep=^→|^  →|"configuration" note=TypeScript 클라이언트의 보내기-->
 <!--OUT file=out/13/gmatrix.txt server=py-tap lines=221-234 grep=^→|^  →|"configuration" note=Go 클라이언트의 보내기-->
 <ul>
-<li>세 SDK 클라이언트 모두 <code>a2a-version</code> 을 실었습니다 — 파이썬은 전송이 늘 붙이고(<code>_get_grpc_metadata</code>, <code>client/transports/grpc.py:299</code>), TS·Go 는 클라이언트가 고른 인터페이스의 판을 서비스 매개변수에 넣어 전송에 넘깁니다(TS <code>withNormalizedHeaders</code>, <code>client/index.js:5658</code> · Go <code>a2aclient/client.go:270</code>).</li>
+<li>세 SDK 클라이언트 모두 <code>a2a-version</code> 을 실었습니다 — 파이썬은 전송이 늘 붙이고(<code>_get_grpc_metadata</code>, <code>client/transports/grpc.py:299</code>), TS·Go 는 클라이언트가 고른 인터페이스의 판을 서비스 매개변수에 넣어 전송에 넘깁니다(TS <code>withNormalizedHeaders</code>, <code>client/index.js:5657</code> · Go <code>a2aclient/client.go:270</code>).</li>
 <li>파이썬·TS 는 비어 있는 <code>configuration</code> 메시지를 실어 보내고 Go 는 빼고 보냅니다. 서버에는 차이가 없습니다(셋 다 같은 답).</li>
 </ul>
 </article>
@@ -355,7 +355,7 @@
 <!--OUT file=out/13/pick.txt server=dead note=서버의 기록 — "GRPC 우선" 은 카드만 받고 끝났다-->
 <ul>
 <li>"GRPC 우선" 에서 세 SDK 모두 오류를 그대로 돌려주었고, 카드에 살아 있는 JSON-RPC·HTTP+JSON 문으로 다시 보내지 않았습니다. 대체는 SDK 가 해 주지 않으므로 부르는 쪽이 짜야 합니다.</li>
-<li>Go 의 공장은 후보를 차례로 시도하는 고리가 있지만(<code>a2aclient/factory.go:154</code>), 그것은 <b>전송을 만들 때</b>의 실패만 넘깁니다. <code>grpc.NewClient</code> 는 연결을 미루므로(<a href="#p13-grpc-cl-go">3장</a>) 죽은 포트는 만들 때 실패하지 않습니다. 주소가 아예 틀린 꼴이면 만들 때 실패하는데, 그 경우는 5장에서 봅니다.</li>
+<li>Go 의 팩토리는 후보를 차례로 시도하는 고리가 있지만(<code>a2aclient/factory.go:154</code>), 그것은 <b>전송을 만들 때</b>의 실패만 넘깁니다. 만들 때 실패했다면 팩토리가 붙이는 <code>failed to connect to …</code> 머리(<code>:161</code>)가 오류에 있었을 텐데, 위 Go 의 오류에는 없습니다 — <code>grpc.NewClient</code>(<a href="#p13-grpc-cl-go">3장</a>)는 만들 때 연결하지 않고, 첫 호출에서 실패했습니다. 주소의 꼴이 틀린 경우도 같습니다(<a href="#p13-skew-url">5장</a>).</li>
 </ul>
 </article>
 
@@ -413,7 +413,7 @@
 <div class="tblwrap">
 <table class="kv">
 <tr><th></th><th>보내는 동사(설치본)</th><th>받는 동사</th></tr>
-<tr><td>파이썬</td><td><code>'POST'</code>(<code>client/transports/rest.py:306</code>)</td><td>GET·POST</td></tr>
+<tr><td>파이썬</td><td><code>'POST'</code>(<code>client/transports/rest.py:308</code>)</td><td>GET·POST</td></tr>
 <tr><td>TypeScript</td><td><code>method: "POST"</code>(<code>_sendStreamingRequest</code>, <code>client/index.js:6378</code>)</td><td>GET·POST</td></tr>
 <tr><td>Go</td><td><code>method: "POST"</code>(<code>a2aclient/rest.go:320</code>)</td><td>GET·POST</td></tr>
 </table>
@@ -427,7 +427,7 @@
 <!--SPEC file=ex/run/13/gurl.run-->
 <!--OUT file=out/13/gurl.txt part=터미널 2-->
 <ul>
-<li>셋 다 카드의 문자열을 gRPC 의 대상(target)으로 그대로 넘겼고, 셋 다 그것을 주소로 읽지 못했습니다 — 파이썬·TS 는 이름 풀기에서(<code>UNAVAILABLE</code>), Go 는 <code>grpc.NewClient</code> 가 만들 때부터 거절했습니다. 스킴과 경로를 떼어 내는 SDK 는 없었습니다. (Go 는 만들 때 실패하므로, 카드에 다른 문이 더 있었다면 공장이 다음 후보로 넘어갔을 자리입니다 — <code>a2aclient/factory.go:154</code>, 재 보지는 않았다.)</li>
+<li>셋 다 카드의 문자열을 gRPC 의 대상(target)으로 그대로 넘겼고, 셋 다 그것을 주소로 읽지 못했습니다 — 파이썬·TS 는 이름 풀기에서(<code>UNAVAILABLE</code>), Go 는 대상 주소를 가르다가(<code>invalid target address</code>) 실패했습니다. 스킴과 경로를 떼어 내는 SDK 는 없었습니다. Go 의 오류에도 팩토리의 <code>failed to connect to …</code> 머리(<code>a2aclient/factory.go:161</code>)가 없으니 전송은 만들어졌고 첫 호출에서 실패한 것입니다 — 카드에 다른 문이 더 있었어도 팩토리가 넘어갈 자리가 아닙니다.</li>
 <li>gRPC 에는 URL 의 경로 자리가 없습니다(메서드가 <code>/lf.a2a.v1.A2AService/…</code> 경로를 쓴다). 스펙의 예처럼 <code>/a2a/grpc</code> 를 붙인 주소는 프록시가 경로를 갈라 주지 않는 한 뜻이 없습니다. 이 덱의 gRPC 카드가 <code>호스트:포트</code> 를 쓰는 까닭입니다.</li>
 </ul>
 </article>
@@ -448,7 +448,7 @@
 <tr><td>대체(fallback)</td><td>§5.2 SHOULD</td><td>셋 다 하지 않는다</td><td><a href="#p13-pick-fallback">4장</a></td></tr>
 </table>
 </div>
-<div class="key"><b>본문은 같고 경계가 흔들린다</b> — 열한 연산의 메시지와 A2A 오류의 뜻은 세 바인딩, 세 SDK 에서 한 번도 어긋나지 않았습니다. 어긋남은 모두 표와 proto 가 갈린 자리, 스펙이 SHOULD 로 두거나 말하지 않은 자리에 있었습니다.</div>
+<div class="key"><b>본문은 같고 경계가 흔들린다</b> — 이 부에서 보낸 연산의 메시지와 서버가 보낸 A2A 오류의 뜻(<code>reason</code>)은 세 바인딩, 세 SDK 에서 한 번도 어긋나지 않았습니다. 어긋남은 모두 표와 proto 가 갈린 자리, 스펙이 SHOULD 로 두거나 말하지 않은 자리에 있었습니다.</div>
 </article>
 
 <article class="card quiz" id="p13-ch5-quiz" data-quiz>

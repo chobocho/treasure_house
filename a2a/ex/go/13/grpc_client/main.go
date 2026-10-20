@@ -47,7 +47,7 @@ func one(ctx context.Context, label, url string) error {
 	if err != nil {
 		return err
 	}
-	// 기본 공장은 JSON-RPC·HTTP+JSON 뿐 — gRPC 전송을 더한다
+	// 기본 팩토리는 JSON-RPC·HTTP+JSON 뿐 — gRPC 전송을 더한다
 	plain := grpc.WithTransportCredentials(insecure.NewCredentials())
 	client, err := a2aclient.NewFromCard(ctx, card,
 		a2agrpc.WithGRPCTransport(plain))

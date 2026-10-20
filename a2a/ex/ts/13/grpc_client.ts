@@ -36,7 +36,7 @@ async function kindOf(call: () => Promise<unknown>) {
 
 // region: client
 async function one(label: string, url: string) {
-  // 기본 공장은 JSON-RPC·HTTP+JSON 뿐 — gRPC 전송 공장을 더한다
+  // 기본 팩토리는 JSON-RPC·HTTP+JSON 뿐 — gRPC 전송 팩토리를 더한다
   const options = ClientFactoryOptions.createFrom(
     ClientFactoryOptions.default,
     { transports: [new GrpcTransportFactory()] },

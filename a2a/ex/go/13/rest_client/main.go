@@ -44,7 +44,7 @@ func one(ctx context.Context, label, url string) error {
 	if err != nil {
 		return err
 	}
-	// Go 공장도 기본으로 JSON-RPC 와 HTTP+JSON 을 둘 다 안다
+	// Go 팩토리도 기본으로 JSON-RPC 와 HTTP+JSON 을 둘 다 안다
 	client, err := a2aclient.NewFromCard(ctx, card)
 	if err != nil {
 		return err

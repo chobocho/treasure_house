@@ -1,5 +1,5 @@
 # 카드가 판 0.3 문 하나만 적은 에이전트에 파이썬 SDK 로 묻는다.
-# 따로 켤 것이 없다 — 공장이 카드의 판을 보고 옛 전송을 고른다.
+# 따로 켤 것이 없다 — 팩토리가 카드의 판을 보고 옛 전송을 고른다.
 #   python 14/old_client.py URL
 import asyncio
 import sys

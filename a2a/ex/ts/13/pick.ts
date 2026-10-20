@@ -1,5 +1,5 @@
 // 카드에 문이 셋일 때 TS 클라이언트는 어느 문을 고르나.
-// 설정 셋으로 공장을 지어 같은 메시지를 보낸다. 어느 문으로
+// 설정 셋으로 팩토리를 지어 같은 메시지를 보낸다. 어느 문으로
 // 들어갔는지는 서버(13/doors_common.ts)의 기록이 말한다.
 //   node 13/pick.ts URL
 import { Message, TaskState } from "@a2a-js/sdk";

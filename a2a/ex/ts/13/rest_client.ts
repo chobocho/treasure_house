@@ -32,7 +32,7 @@ async function kindOf(call: () => Promise<unknown>) {
 
 // region: client
 async function one(label: string, url: string) {
-  // TS 공장은 기본으로 JSON-RPC 와 HTTP+JSON 을 둘 다 안다
+  // TS 팩토리는 기본으로 JSON-RPC 와 HTTP+JSON 을 둘 다 안다
   const client = await new ClientFactory().createFromUrl(url);
   const r = await client.sendMessage(msg());
   const state =

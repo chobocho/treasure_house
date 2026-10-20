@@ -1,5 +1,5 @@
 // 카드가 판 0.3 문 하나만 적은 에이전트에 Go SDK 클라이언트로 묻는다.
-// 옛 판의 전송은 a2acompat/a2av0 에 있고, 공장에 끼워야 쓴다.
+// 옛 판의 전송은 a2acompat/a2av0 에 있고, 팩토리에 끼워야 쓴다.
 //
 //	go run ./14/old_client URL
 package main
