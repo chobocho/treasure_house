@@ -480,6 +480,77 @@ class Appendix(Tree):
     def test_generated_slides_must_be_outside_an_article(self):
         self.appendix('<article class="card" id="p18-x"><!--GLOSSARY per=2--></article>\n')
         self.assertIn('GLOSSARY', self.errs())
+        for name in ('FIELDS', 'INDEX', 'QUIZZES'):
+            self.appendix('<article class="card" id="p18-x"><!--%s per=2--></article>\n' % name)
+            self.assertIn(name, self.errs())
+
+    # ── 필드 사전 — tools/appendix.py 가 proto 에서 만든 deck/fields.tsv ──
+    FIELDS = ('block\tkind\tname\tjson\ttype\tnum\trule\toneof\tcomment\n'
+              'A2AService\tservice\t\t\t\t\t\t\tProvides operations.\n'
+              'A2AService\trpc\tGetTask\tGetTask\tGetTaskRequest → Task\t\t\t\tGets a task.\n'
+              'Task\tmessage\t\t\t\t\t\t\t`Task` is the core unit.\n'
+              'Task\tfield\tid\tid\tstring\t1\tREQUIRED\t\tUnique id.\n'
+              'Task\tfield\tcontext_id\tcontextId\tmap<string, string>\t2\t\tc\tThe `context`.\n'
+              'Role\tenum\t\t\t\t\t\t\tThe sender.\n'
+              'Role\tvalue\tROLE_USER\tROLE_USER\t\t1\t\t\tFrom the client.\n'
+              'Role\tvalue\tROLE_AGENT\tROLE_AGENT\t\t2\tDEPRECATED\t\tFrom the agent.\n')
+
+    def test_fields_are_grouped_by_block_paged_and_linked(self):
+        self.put('deck/fields.tsv', self.FIELDS)
+        self.put('deck/proto_where.tsv', 'name\twhere\nTask\tp06-a\n')
+        self.appendix('<!--FIELDS per=3-->\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertEqual(r.per_part[18], 3)           # 표지 + Task 쪽 + Role 쪽 — 블록을 쪼개지 않는다
+        self.assertIn('id="p18-fields-1"', r.html)
+        self.assertIn('<h3>필드 사전 (1/2) — Task</h3>', r.html)
+        self.assertIn('<a href="#p06-a">Task</a>', r.html)
+        self.assertIn('<code>Task</code> is the core unit.', r.html)
+        self.assertIn('<td><code>id</code> <b>필수</b></td><td><code>string</code></td><td>1</td>'
+                      '<td>Unique id.</td>', r.html)
+        self.assertIn('<code>map&lt;string, string&gt;</code>', r.html)
+        self.assertIn('oneof c', r.html)
+        self.assertIn('<code>ROLE_AGENT</code> <b>폐기</b>', r.html)
+        self.assertNotIn('GetTask', r.html)          # rpc 는 메서드 대응표의 몫
+        self.put('deck/proto_where.tsv', 'name\twhere\nTask\tp99-x\n')
+        self.assertIn('p99-x', self.errs())
+
+    def test_a_block_longer_than_a_page_continues_with_its_head(self):
+        self.put('deck/fields.tsv', self.FIELDS)
+        self.appendix('<!--FIELDS per=2-->\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertEqual(r.html.count('<th colspan="4">Task'), 2)
+        self.assertIn('Task (이어서)', r.html)
+
+    def test_fields_without_a_table_is_an_error(self):
+        self.appendix('<!--FIELDS per=3-->\n')
+        self.assertIn('fields.tsv', self.errs())
+
+    # ── 찾아보기 — deck/index.tsv 의 슬라이드 id 를 덱의 쪽 번호로 ──
+    def test_index_links_show_page_numbers(self):
+        self.put('deck/index.tsv', 'ident\tkind\twhere\ncontextId\t필드\tp06-a,p06\n')
+        self.appendix('<!--INDEX per=10-->\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertIn('<td><code>contextId</code></td><td>필드</td>'
+                      '<td><a href="#p06-a">2</a> · <a href="#p06">1</a></td>', r.html)
+        self.assertIn('<h3>찾아보기 (1/1) — contextId</h3>', r.html)
+        self.put('deck/index.tsv', 'ident\tkind\twhere\ncontextId\t필드\tp06-gone\n')
+        self.assertIn('p06-gone', self.errs())
+
+    # ── 퀴즈 모음 — 앞 부들의 퀴즈 슬라이드를 부·장마다 ──
+    def test_quizzes_list_every_quiz_under_its_part_and_chapter(self):
+        self.section(self.ok_slide()
+                     + '<article class="card" id="p06-ch1">\n<p class="chnum">1장</p>\n<h2>목표</h2>\n</article>\n'
+                     + '<article class="card quiz" id="p06-ch1-quiz" data-quiz>\n<h3>1장 퀴즈</h3>\n</article>\n'
+                     + '<article class="card" id="p06-ch2">\n<p class="chnum">2장</p>\n<h2>라우팅</h2>\n</article>\n'
+                     + '<article class="card quiz" id="p06-q2" data-quiz>\n<h3>2장 퀴즈</h3>\n</article>\n')
+        self.appendix('<!--QUIZZES per=10-->\n')
+        r = self.build()
+        self.assertEqual(r.errors, [])
+        self.assertIn('<td><a href="#p06">6부</a> 맨손 구현</td>'
+                      '<td><a href="#p06-ch1-quiz">1장</a> · <a href="#p06-q2">2장</a></td>', r.html)
 
 
 class Width(unittest.TestCase):

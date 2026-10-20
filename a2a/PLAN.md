@@ -1103,3 +1103,19 @@ subagent task each.
   captures re-run (`--all --stale`) byte-identical.
 - AUTHORING: "캡처 정규화" entry (distinct from JCS 정규화).
 - `make all SKEL=1` green (1800 slides, 0 errors, 0 notices); manifest 295, 0 stale.
+
+### Part 18 complete — 60 slides; all parts written, full `make all` green (2026-10-20)
+- `18_appendix.html`: error tables (6), method tables (6, SDK client names ×3), field dictionary
+  (18, generated), glossary (10), index (11), sources + quizzes (5), `p18-wrap` → #top, `p18-end`.
+- New `tools/appendix.py` (24 tests): proto → `deck/fields.tsv` (44 messages, 2 enums, 176 fields,
+  11 rpcs) and sections' `<code>` → `deck/index.tsv` (216 entries; vocab = proto names +
+  `deck/index_extra.tsv`, first slide from `deck/proto_where.tsv`). `make deck` depends on
+  `appendix`; `--check` fails if stale; without `docs/` the committed fields.tsv is kept.
+- Builder directives `<!--FIELDS-->`, `<!--INDEX-->`, `<!--QUIZZES-->` (6 tests). Hand-written
+  `deck/glossary.tsv` (105 terms, every `where` a real id) — orchestrator fixed 테넌트 to the
+  proto's "opaque routing identifier". Field descriptions are the proto's English comments.
+- `deck/check_deck.js` counted SDK-source `TODO:` quoted inside `<code>` on 13_binding as
+  placeholders → inline code now excluded from the placeholder count.
+- `make all` (no SKEL) green: 1857 slides, 0 placeholders, 1856 blocks 0 mismatches, 179 tests.
+- Next: wrap-up (font is in make all; index.html card, README, history.md, commit deck HTML),
+  then review 1 and 2.

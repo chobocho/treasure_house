@@ -30,7 +30,7 @@ export GOFLAGS :=
 
 .DEFAULT_GOAL := help
 .PHONY: help deps docs tck sources data data-check test fmt lint ts-check golden run run-check \
-        manifest-check deck deck-verify deck-check font font-check all clean
+        manifest-check appendix deck deck-verify deck-check font font-check all clean
 
 help:                   ## 이 목록
 	@grep -hE '^[a-z][a-zA-Z0-9_-]*:.*?## ' $(MAKEFILE_LIST) \
@@ -133,7 +133,12 @@ manifest-check:         ## 돌리지 않고 입력·캡처 해시만 장부와 �
 # ── 덱 ─────────────────────────────────────────────────────────────
 # SKEL=1 이면 '준비 중입니다' 플레이스홀더와 아직 안 실은 예제를
 # 오류로 세지 않는다. 본문을 다 채우면 이 변수를 뗀다.
-deck:                   ## 조각 + 예제 + 캡처 → 덱 HTML 한 장
+# 부록의 필드 사전(proto 에서)과 찾아보기(조각에서)는 손으로 적으면 낡는다 —
+# 덱을 만들 때마다 먼저 다시 만든다(docs/ 가 없으면 필드 사전은 커밋된 것 그대로).
+appendix:               ## 부록 자료 → deck/fields.tsv · deck/index.tsv
+	$(PY) tools/appendix.py
+
+deck: appendix          ## 조각 + 예제 + 캡처 → 덱 HTML 한 장
 	$(PY) deck/build_deck.py $(if $(SKEL),--skeleton,)
 
 deck-verify:            ## 덱의 코드·출력이 원본과 같은지 역검증

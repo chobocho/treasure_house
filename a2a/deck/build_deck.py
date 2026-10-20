@@ -25,6 +25,11 @@
    슬라이드를 통째로 만들어 내는 지시자(부록용 — <article> 밖에 둔다):
      <!--GLOSSARY per=9-->   deck/glossary.tsv (ko·en·desc·where) → 가나다순 용어집
      <!--SOURCES per=10-->   data/sources.tsv → 출처 목록
+     <!--FIELDS per=18-->    deck/fields.tsv(tools/appendix.py 가 proto 에서) → 필드 사전.
+                             블록(메시지·enum)을 쪼개지 않고, deck/proto_where.tsv 가 가리키는
+                             슬라이드로 블록 이름을 잇는다
+     <!--INDEX per=20-->     deck/index.tsv(tools/appendix.py 가 조각에서) → 찾아보기, 쪽 번호로
+     <!--QUIZZES per=10-->   앞 부들의 퀴즈 슬라이드 → 부마다 한 줄, 장마다 링크
 
    검사는 build() 끝의 목록과 같다. 하나라도 걸리면 종료 코드 1.
    O(조각 글자 수 + 인용한 파일 크기) — 한 번 훑고 끝난다.
@@ -81,6 +86,14 @@ BOXDRAW = re.compile(r'[─-╿▀-▟]')
 CODELIKE = re.compile(r'"[A-Za-z_$][\w$-]*"\s*:|^\s*(?:def|func|import|from|const|let|var|class|'
                       r'package|return|async|await)\b|\bfunction\b|=>|;\s*$|^\s*\$ |'
                       r'^\s*(?:GET|POST|PUT|PATCH|DELETE) /|^\s*HTTP/\d', re.M)
+
+
+GENERATORS = ('GLOSSARY', 'SOURCES', 'FIELDS', 'INDEX', 'QUIZZES')
+
+
+def ticks(s):
+    """proto 주석의 `이름` → <code>이름</code>. 나머지는 이스케이프."""
+    return re.sub(r'`([^`]+)`', r'<code>\1</code>', esc(s))
 
 
 def read(p):
@@ -501,21 +514,118 @@ class Builder(object):
                 self.err('%s년 — 이 장의 근거(FACT·SRC 날짜·REL) 어디에도 없는 연도' % y)
 
     # ── 슬라이드를 만들어 내는 지시자 ─────────────────────────────
-    def pages(self, slug, title, head, rows, per):
-        """표의 행들을 per 개씩 끊어 슬라이드 여러 장으로. 장수는 예산에 그대로 잡힌다."""
+    def pages(self, slug, title, head, rows, per, keys=None):
+        """표의 행들을 per 개씩 끊어 슬라이드 여러 장으로. 장수는 예산에 그대로 잡힌다.
+           keys(행마다 이름)를 주면 제목에 그 쪽의 첫 이름 ~ 끝 이름을 붙인다."""
         per = max(1, per)
         chunks = [rows[i:i + per] for i in range(0, len(rows), per)] or [[]]
         out = []
         for n, chunk in enumerate(chunks, 1):
-            out.append('<article class="card" id="p%02d-%s-%d">\n<h3>%s (%d/%d)</h3>\n'
+            what = ''
+            if keys:
+                k = keys[(n - 1) * per:(n - 1) * per + len(chunk)]
+                what = ' — ' + esc(k[0] if len(k) == 1 or k[0] == k[-1] else '%s ~ %s' % (k[0], k[-1]))
+            out.append('<article class="card" id="p%02d-%s-%d">\n<h3>%s (%d/%d)%s</h3>\n'
                        '<div class="tblwrap">\n<table class="kv">\n<tr>%s</tr>\n%s\n</table>\n</div>\n</article>'
-                       % (self.part, slug, n, title, n, len(chunks),
+                       % (self.part, slug, n, title, n, len(chunks), what,
                           ''.join('<th>%s</th>' % h for h in head),
                           '\n'.join('<tr>%s</tr>' % ''.join('<td>%s</td>' % c for c in r) for r in chunk)))
         return '\n\n'.join(out)
 
+    def grouped_pages(self, slug, title, head, groups, per):
+        """[(블록 이름, 머리 행 html, [행 html …])] → 슬라이드들. 블록은 한 쪽에 들어가면
+           쪼개지 않고, 한 쪽보다 길면 다음 쪽에서 머리 행을 "(이어서)" 로 다시 단다.
+           O(행 수)."""
+        per = max(2, per)
+        pages, cur, names = [], [], []
+        for name, top, rows in groups:
+            if cur and len(cur) + 1 + len(rows) > per:
+                pages.append((names, cur))
+                cur, names = [], []
+            cur.append(top % '')
+            names.append(name)
+            for r in rows:
+                if len(cur) >= per:
+                    pages.append((names, cur))
+                    cur, names = [top % ' (이어서)'], []
+                cur.append(r)
+        if cur:
+            pages.append((names, cur))
+        out = []
+        for n, (names, rows) in enumerate(pages, 1):
+            what = (' — ' + (names[0] if len(names) == 1 else '%s ~ %s' % (names[0], names[-1]))
+                    if names else '')
+            out.append('<article class="card" id="p%02d-%s-%d">\n<h3>%s (%d/%d)%s</h3>\n'
+                       '<div class="tblwrap">\n<table class="kv">\n<tr>%s</tr>\n%s\n</table>\n</div>\n</article>'
+                       % (self.part, slug, n, title, n, len(pages), esc(what),
+                          ''.join('<th>%s</th>' % h for h in head), '\n'.join(rows)))
+        return '\n\n'.join(out)
+
+    def fields(self, per):
+        path = os.path.join(self.root, 'deck', 'fields.tsv')
+        if not os.path.isfile(path):
+            self.err('FIELDS: deck/fields.tsv 가 없다 (python3 tools/appendix.py)')
+            return ''
+        lines = [ln.split('\t') for ln in read(path).split('\n')[1:] if ln]
+        where = tsv(os.path.join(self.root, 'deck', 'proto_where.tsv'), 'name')
+        groups = []
+        for f in lines:
+            f = f + [''] * (9 - len(f))
+            block, kind, name, json, typ, num, rule, oneof, comment = f[:9]
+            if kind in ('message', 'enum'):
+                w = where.get(block, {}).get('where')
+                label = '<a href="#%s">%s</a>' % (w, esc(block)) if w else esc(block)
+                top = ('<tr><th colspan="4">%s%%s <span class="en">%s%s</span></th></tr>'
+                       % (label, kind + ' — ' if kind == 'enum' else '', ticks(comment)))
+                groups.append((block, top, []))
+            elif kind in ('field', 'value') and groups:
+                mark = {'REQUIRED': ' <b>필수</b>', 'DEPRECATED': ' <b>폐기</b>'}.get(rule, '')
+                sub = '<br><span class="en">oneof %s</span>' % esc(oneof) if oneof else ''
+                groups[-1][2].append('<tr><td><code>%s</code>%s%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'
+                                     % (esc(json), mark, sub, '<code>%s</code>' % esc(typ) if typ else '',
+                                        esc(num), ticks(comment)))
+        return self.grouped_pages('fields', '필드 사전', ('필드(JSON)', '타입', '#', '뜻(proto 주석)'),
+                                  groups, per)
+
+    def index(self, per):
+        path = os.path.join(self.root, 'deck', 'index.tsv')
+        if not os.path.isfile(path):
+            self.err('INDEX: deck/index.tsv 가 없다 (python3 tools/appendix.py)')
+            return ''
+        rows, keys = [], []
+        for ln in read(path).split('\n')[1:]:
+            if not ln:
+                continue
+            ident, kind, where = (ln.split('\t') + ['', ''])[:3]
+            links = []
+            for sid in [w for w in where.split(',') if w]:
+                if sid not in self.pageno:
+                    self.err('INDEX: %s 의 슬라이드 %s 가 앞 부에 없다 — 찾아보기가 낡았다 '
+                             '(python3 tools/appendix.py)' % (ident, sid))
+                    continue
+                links.append('<a href="#%s">%d</a>' % (sid, self.pageno[sid]))
+            rows.append(('<code>%s</code>' % esc(ident), esc(kind), ' · '.join(links)))
+            keys.append(ident)
+        return self.pages('index', '찾아보기', ('이름', '종류', '쪽'), rows, per, keys)
+
+    def quizzes(self, per):
+        parts = []
+        for part, sid, chap in self.quiz_list:
+            if not parts or parts[-1][0] != part:
+                parts.append((part, []))
+            parts[-1][1].append('<a href="#%s">%s</a>' % (sid, esc(chap)))
+        rows = [('<a href="#p%02d">%d부</a> %s' % (p, p, esc(self.part_title.get(p, ''))), ' · '.join(links))
+                for p, links in parts]
+        return self.pages('quizzes', '퀴즈 모음', ('부', '장마다 퀴즈'), rows, per)
+
     def generated(self, name, a):
         per = int(a['per']) if a.get('per', '').isdigit() else 12
+        if name == 'FIELDS':
+            return self.fields(per)
+        if name == 'INDEX':
+            return self.index(per)
+        if name == 'QUIZZES':
+            return self.quizzes(per)
         if name == 'GLOSSARY':
             terms = tsv(os.path.join(self.root, 'deck', 'glossary.tsv'), 'ko')
             rows = []
@@ -531,7 +641,7 @@ class Builder(object):
     def expand(self, m):
         name = m.group(1)
         a = {k: (q if q else u).strip() for k, q, u in ATTR.findall(m.group(2))}
-        if name in ('GLOSSARY', 'SOURCES'):
+        if name in GENERATORS:
             before = m.string[:m.start()]
             if before.count('<article') != before.count('</article>'):
                 self.err('%s 는 슬라이드를 만들어 낸다 — <article> 밖에 둔다' % name)
@@ -605,12 +715,30 @@ class Builder(object):
             if sid != 'top' and not re.match(r'^p%02d(-|$)' % part, sid):
                 self.err('id 는 p%02d 로 시작한다: %s' % (part, sid))
             self.subids.update(re.findall(r'\bid="([^"]+)"', m.group(2)))
+            self.count += 1
+            self.pageno[sid] = self.count
+            self.collect(part, sid, m.group(1), m.group(2))
             self.links += [(fname, h) for h in re.findall(r'href="#([^"]+)"', m.group(2))]
             self.nav_item(part, sid, m.group(1), m.group(2))
         if body.count('<article') != n or body.count('</article>') != n:
             self.err('<article> 열고 닫는 수가 맞지 않는다')
         self.r.per_part[part] = self.r.per_part.get(part, 0) + n
         return body
+
+    def collect(self, part, sid, attrs, inner):
+        """퀴즈 모음의 재료 — 부 표지의 제목, 장 표지의 "N장", 퀴즈 슬라이드."""
+        if sid == 'p%02d' % part:
+            h = re.search(r'<h2[^>]*>(.*?)</h2>', inner, re.S)
+            if h:
+                self.part_title[part] = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', h.group(1))).strip()
+            return
+        num = re.search(r'<p class="chnum">(.*?)</p>', inner)
+        if num:
+            self.chapter = re.sub(r'<[^>]+>', '', num.group(1)).strip()
+        if re.search(r'class="[^"]*\bquiz\b', attrs):
+            self.quiz_list.append((part, sid, self.chapter if self.chapter_part == part else '퀴즈'))
+        if num:
+            self.chapter_part = part
 
     def nav_item(self, part, sid, attrs, inner):
         h = re.search(r'<h[12][^>]*>(.*?)</h[12]>', inner, re.S)
@@ -630,6 +758,9 @@ class Builder(object):
         order = [ln.strip() for ln in read(os.path.join(d, 'order.txt')).split('\n')
                  if ln.strip() and not ln.startswith('#')]
         self.ids, self.subids, self.links = set(), set(), []
+        self.count, self.pageno = 0, {}            # 슬라이드 id → 덱의 쪽 번호(1부터)
+        self.quiz_list, self.part_title = [], {}
+        self.chapter, self.chapter_part = '', None
         self.nav = ['    <option value="top">챕터 이동…</option>']
         bodies = [self.fragment(f) for f in order]
         self.where = ''
