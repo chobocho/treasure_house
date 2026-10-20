@@ -210,6 +210,17 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
   `ex/run/12/bearer.run:3-4`; agent files `ex/ts/agents/settlement.ts:202`,
   `ex/go/agents/common/client.go:11`.
 
+**Decisions added after batch K (parts 13–14):**
+- A capture-legend `note=` labelling a line prefix ("줄 머리 = 서버") → "줄 앞의 이름 = …"; an
+  SDK's error-message prefix ("`failed to connect to …` 머리") → 앞부분.
+- Writing a response's headers: "SSE 머리를 쓴다" → "(SSE) 응답 머리글을 쓴다".
+- The English gloss "(trailer)" is on p13-grpc-err (the slide that explains it).
+- A quoted maxim as callout head → a 한다체 clause without comma ("엄격하게 보내고 너그럽게 받는다").
+- "N부에서 본 X(<a>N부</a>)" naming the part twice → link the first "N부" only.
+- A verb nominal naming our own code in a cell ("우리가 쓴 갈림") → noun phrase ("갈림 함수").
+- Sweep list adds: `ex/py/13/grpc_tap.py:109` label "← 머리" (not printed by any current capture,
+  but the edit stales every part-13 capture).
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
@@ -281,7 +292,7 @@ style-sheet decision you think is mistaken, with the reason).
 - 13부: header terms (SSE "머리를 씁니다", gRPC 머리/꼬리) → B; "키를 … 가나다순" →
   알파벳순.
 - 14부: p14-ver-err — table head "모양(§5.4)" while the JSON-RPC row's `reason` comes from
-  the ErrorInfo rule (§10.6·§11.6): make the head not over-attribute (no new claim);
+  the ErrorInfo rule (JSON-RPC §9.5 SHOULD; §10.6·§11.6 are gRPC/REST): make the head not over-attribute (no new claim);
   p14-ver-rest — the py REST server also logs "Task not found" for requests that pass: one
   clause so the reader is not misled.
 - 15부: p15-twice-fixed, p15-fix-tests, p15-deny-tests — how tests failed before the fix
