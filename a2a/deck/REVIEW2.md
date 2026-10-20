@@ -115,6 +115,18 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
 - A circled step label ("④⑥") may stay as quiz link text when the target slide is introduced
   by that label; in prose use a title phrase.
 
+**Decisions added after batch D (part 6):**
+- 해요체 endings (-니까요, -려고요, -게요, "…면요?") → 합니다체 ("… 때문입니다", "… 위해서입니다").
+- Accept/reject grid cells: "받음" → "받는다"; prose quoting the cell is reworded to match.
+- Generic byte/stream pieces (Node `data` pieces, decoder input) are 조각 too; 청크 only for
+  HTTP chunked framing, titles included.
+- A title count counts items of one kind ("취소 다섯 번" with a message among them is a
+  defect → "취소 넷과 말 하나").
+- Example-comment sweep list (orchestrator, after review 2) grows: `ex/py/06/rpc_probe.py:30-31`
+  "판 헤더" (also in out/06/errors.txt and quoted on p06-ch2-quiz — change all three
+  together), "판 헤더는 늘" in `ex/py/06/client.py:31`, `ex/ts/06/client.ts:27`,
+  `ex/go/06/client/main.go:100`, `ex/py/06/frames.py:1` "머리와", `ex/py/06/stall.py:2` "요청의 머리".
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
