@@ -104,6 +104,17 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
   statement, not an anecdote — keep it.
 - "~" in ranges (ports "10381~10383", "터미널 1~3", "0~17부") stays.
 
+**Decisions added after batch C (part 5):**
+- Table cells: "없음" is a noun and stays ("아티팩트 없음"); verb nominals (-음/-됨/-림/-김:
+  실림, 옮김, 취소됨, 숨김) become 한다체 ("실린다") or a noun phrase.
+- A parenthetical aside inside 합니다체 prose is 합니다체 too; 한다체 parentheticals only in
+  table cells and directive `note=`.
+- artifact chunk → **조각**; 청크 only for HTTP chunked transfer coding. Parts 6b and 10
+  still have 청크 for artifact chunks (6b ×11, 10 ×9) — fix them in batches D and H.
+- "첫머리" follows the 머리 rule: "첫 이벤트" or "앞부분" by meaning.
+- A circled step label ("④⑥") may stay as quiz link text when the target slide is introduced
+  by that label; in prose use a title phrase.
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does

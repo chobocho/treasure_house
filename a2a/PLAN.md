@@ -1162,3 +1162,4 @@ subagent task each.
   and two later `--check` passes identical — watch it under load.
 - R2 batch A (0~2부) done: 용어 29 (21 헤더/머리→머리글, 2 가나다순→알파벳순, 5 이 덱→이 책) · 문체 28 · 링크·시제 16 · 흐름 12 (chsub order, table leads) · 중복 7 (re-taught 0부 capture rules → back-links) · 제목 4 · 콜아웃 4. 7 style decisions added to REVIEW2 §B. Example comment for the final sweep: ex/py/02/raw_http.py:19 헤더.
 - R2 batch B (3~4부) done: 용어 30 (13 헤더→머리글, 16 장 as card/sheet counter) · 흐름 20 (17 table leads; p04-part-wire vs intro chapter fixed) · 문체 17 · 콜아웃 14 · 링크·시제 8 · 중복 3 · 제목 1. 5 style decisions added to REVIEW2 §B.
+- R2 batch C (5부) done: 문체 33 (24 -음/-됨 table cells) · 링크·시제 16 · 콜아웃 8 · 흐름 6 (9장 label, 4 cmp leads) · 용어 4 (청크→조각) · 제목 2. §F: p05-task-fields createdAt/lastModified; p05-cancel-plan anecdote removed. Term decision: artifact chunk = 조각 (AUTHORING); 6b and 10 still have 청크.
