@@ -1161,3 +1161,4 @@ subagent task each.
   Flake: `recover.run` twice gained an extra "[교통] 기사 배정" line (py step at 1000 ms beat the SIGKILL); 3rd run
   and two later `--check` passes identical — watch it under load.
 - R2 batch A (0~2부) done: 용어 29 (21 헤더/머리→머리글, 2 가나다순→알파벳순, 5 이 덱→이 책) · 문체 28 · 링크·시제 16 · 흐름 12 (chsub order, table leads) · 중복 7 (re-taught 0부 capture rules → back-links) · 제목 4 · 콜아웃 4. 7 style decisions added to REVIEW2 §B. Example comment for the final sweep: ex/py/02/raw_http.py:19 헤더.
+- R2 batch B (3~4부) done: 용어 30 (13 헤더→머리글, 16 장 as card/sheet counter) · 흐름 20 (17 table leads; p04-part-wire vs intro chapter fixed) · 문체 17 · 콜아웃 14 · 링크·시제 8 · 중복 3 · 제목 1. 5 style decisions added to REVIEW2 §B.

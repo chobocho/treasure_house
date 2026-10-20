@@ -92,6 +92,18 @@ noun phrases, or a short 한다체 clause when a condition must be stated ("팩�
   orchestrator fixes them in one sweep after review 2 (known: `ex/py/02/raw_http.py:19`
   "헤더 끝").
 
+**Decisions added after batch B (parts 3–4):**
+- 장 is never a counter for cards, documents or captures either ("카드 하나", "카드 여섯",
+  "JSON 문서").
+- "N장" as link text for a slide in the same part is fine when the target slide really is in
+  chapter N (the in-part form of "N부"); two adjacent links with the same "N장" text → use
+  title phrases.
+- Callout head: at most about 4 words, no comma or dash; a short 한다체 clause ("카드 받기는
+  성공한다") is a valid head.
+- "이 기계에서는 …" next to a capture that shows the fact ("이 기계는 UTC 라") is a
+  statement, not an anecdote — keep it.
+- "~" in ranges (ports "10381~10383", "터미널 1~3", "0~17부") stays.
+
 **Authoring notes.** Sentences that report what happened while the deck was being written
 and that no capture shows ("이 기계에서 한 번 어긋났습니다", "고치기 전에는 시험이 이렇게
 실패했습니다") are removed, or reworded into a statement the slide's capture or source does
