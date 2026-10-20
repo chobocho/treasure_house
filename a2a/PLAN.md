@@ -1087,3 +1087,19 @@ subagent task each.
   위원회(TSC) added to AUTHORING. Fact `v1-tsc` unused (duplicate of `v1-tsc-list`) — drop at
   review. `p01-mcp-here` links only `#p00` cover until part 0 exists.
 - `make all SKEL=1` green (1761 slides, 0 errors, 0 notices).
+
+### Part 0 complete — 42 slides; wiretap 502 log race fixed (2026-10-20)
+- `00_start.html` (incl. deck cover `#top`): ch1 promises (`p00-no-llm`, `p00-versions` — protocol
+  constants "1.0" ×3), ch2 scenario (feature tables link every feature), ch3 setup ×3
+  (`p00-env-tsc` alias story), ch4 reading captures (`p00-norm` lists a2arun RULES: path,
+  timestamp, `<ms>`, port ≥12000 (no capture triggers it), UUID `<idN>`; `p00-tap-sort`,
+  `p00-marks`), ch5 guide; `p00-wrap` → #p01.
+- Examples `00/versions` ×3; specs `ex/run/00/{env,tour}.run`. `env.run` is `sh:` only → manifest
+  tracks only spec + fixtures; changes to package.json/requirements/toolchain are caught by
+  `--check`, not by the manifest.
+- Links converted (10): 01_why `p01-mcp-here` → `#p00-no-llm`; 04b, 06, 06b, 07, 10b, 16b → p00 ids.
+- **Tool fix:** wiretap wrote the 502 log line after sending the response → `test_upstream_down_
+  gives_502` flaky (2/9 runs: empty log / missing file). Log now written first; 8/8 OK. 113
+  captures re-run (`--all --stale`) byte-identical.
+- AUTHORING: "캡처 정규화" entry (distinct from JCS 정규화).
+- `make all SKEL=1` green (1800 slides, 0 errors, 0 notices); manifest 295, 0 stale.

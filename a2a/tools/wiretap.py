@@ -205,15 +205,17 @@ class Tap(http.server.BaseHTTPRequestHandler):
             resp = up.getresponse()
         except OSError as e:
             msg = b'wiretap: upstream unreachable\n'
+            # 기록을 먼저 쓴다 — 답을 먼저 보내면 클라이언트가 기록 파일을 읽을 때
+            # 아직 비어 있을 수 있다(시험이 간헐적으로 빈 기록을 봤다).
+            self.log.write(req + ['← 502 Bad Gateway',
+                                  '  (탭: 127.0.0.1:%d 에 닿지 못했다 — %s)'
+                                  % (self.target, e.__class__.__name__)])
             self.send_response_only(502, 'Bad Gateway')
             self.send_header('Content-Type', 'text/plain; charset=utf-8')
             self.send_header('Content-Length', str(len(msg)))
             self.send_header('Connection', 'close')
             self.end_headers()
             self.wfile.write(msg)
-            self.log.write(req + ['← 502 Bad Gateway',
-                                  '  (탭: 127.0.0.1:%d 에 닿지 못했다 — %s)'
-                                  % (self.target, e.__class__.__name__)])
             up.close()
             return
         try:
