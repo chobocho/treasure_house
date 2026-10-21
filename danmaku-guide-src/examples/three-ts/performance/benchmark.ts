@@ -60,7 +60,7 @@ function benchmark(count: number, rounds: number) {
       } finally { instances?.dispose(); scene.clear(); }
     }
     return { count, renderer: driver, userAgent: navigator.userAgent, results,
-      method: '정적 장면·경로별 준비2회·render+gl.finish·생성/브라우저 시작/로직/전송 갱신 제외·게임 FPS 아님' };
+      method: '정적 장면·경로별 준비 2회·render+gl.finish·생성/브라우저 시작/로직/전송 갱신 제외·게임 FPS 아님' };
   } finally {
     geometry.dispose(); material.dispose(); renderer.dispose(); renderer.forceContextLoss();
   }

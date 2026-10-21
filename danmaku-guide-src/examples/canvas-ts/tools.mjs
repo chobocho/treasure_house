@@ -32,7 +32,7 @@ export async function serve(port = 8000) {
 
 // #region profile-load
 export async function profile(rounds = 5) {
-  if (!Number.isInteger(rounds) || rounds < 1 || rounds > 20) throw new Error('반복 수는 1부터20까지 정수');
+  if (!Number.isInteger(rounds) || rounds < 1 || rounds > 20) throw new Error('반복 수는 1부터 20까지 정수');
   const { Game } = await import(new URL('dist/canvas-lv7-logic.mjs', src));
   const stage = JSON.parse(readFileSync(new URL('lv7/stage.json', import.meta.url)));
   const inputs = JSON.parse(readFileSync(new URL('lv7/replay.json', import.meta.url)));
@@ -59,7 +59,7 @@ export async function profile(rounds = 5) {
   const medianMs = ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2;
   return { node: process.version, machine: process.arch, steps: 1800,
     activeSteps: finalGame.time, samplesMs, medianMs,
-    method: '초기화 제외·준비2회·Node 로직만·프로파일러 없음·게임 오버 뒤 호출 포함',
+    method: '초기화 제외·준비 2회·Node 로직만·프로파일러 없음·게임 오버 뒤 호출 포함',
     state: finalGame.snapshot() };
   // #endregion
 }
