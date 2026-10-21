@@ -1,6 +1,7 @@
 import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { pathToFileURL } from 'node:url';
+import { relative } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const src = new URL('../../', import.meta.url);
 
@@ -8,7 +9,8 @@ const src = new URL('../../', import.meta.url);
 export function deploy(target = new URL('dist/release/canvas.html', src)) {
   mkdirSync(new URL('./', target), { recursive: true });
   copyFileSync(new URL('dist/canvas-lv7.html', src), target);
-  return { file: target.pathname, bytes: readFileSync(target).length };
+  // 보고서는 덱 캡처로 공개되므로 작성자 컴퓨터의 절대 경로 대신 가이드 소스 기준 경로를 남긴다.
+  return { file: relative(fileURLToPath(src), fileURLToPath(target)), bytes: readFileSync(target).length };
 }
 // #endregion
 

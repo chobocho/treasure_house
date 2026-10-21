@@ -26,7 +26,7 @@ export function renderAppendix() {
     ['C++ wasm', '이번 가이드에서 속도 측정하지 않음', '측정값 없음', '기준 일치·ABI·메모리 진단만 검사']
   ];
   return [
-    '<article class="card section cover" id="part6"><h1>6부 · 부록</h1><p>구현 경로·기준 기록·실측 조건·문제 해결·출처를 한곳에서 확인합니다.</p></article>',
+    '<article class="card section" id="part6"><p class="chnum">6부</p><h2>부록</h2><p>구현 경로·기준 기록·실측 조건·문제 해결·출처를 한곳에서 확인합니다.</p></article>',
     '<article class="card section" id="ch6-reference"><h2>비교와 재현을 위한 참고표</h2><p>측정과 기준 파일에서 표를 생성하며 서로 다른 측정을 성능 순위로 해석하지 않습니다.</p></article>',
     card('tracks', '네 가지 구현 경로', '같은 규칙을 어떤 실행 환경과 표시 방식에 연결했는지 비교합니다. 배포 대상과 도구의 차이를 확인하고 이미 익숙한 경로부터 따라가도 됩니다.', table(['경로', '게임 계산', '화면', '실행 산출물'], [
       ['pygame', 'Python 고정 스텝', 'pygame 이미지', 'Python·pygame 실행 폴더'],

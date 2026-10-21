@@ -403,7 +403,8 @@ test('Canvas 배포 파일·로컬 HTTP·측정 결과를 실제 실행한다', 
   assert.ok(existsSync(new URL('examples/canvas-ts/tools.mjs', import.meta.url)), '배포·측정 도구가 있어야 한다');
   const { deploy, serve, profile } = await import('./examples/canvas-ts/tools.mjs');
   const target = new URL('dist/release/canvas.html', import.meta.url);
-  deploy(target);
+  // 캡처가 덱에 실리므로 작성자 컴퓨터의 절대 경로 대신 가이드 소스 기준 상대 경로를 보고한다.
+  assert.equal(deploy(target).file, 'dist/release/canvas.html');
   assert.equal(readFileSync(target, 'utf8'), readFileSync(new URL('dist/canvas-lv7.html', import.meta.url), 'utf8'));
   const server = await serve(0);
   try {
