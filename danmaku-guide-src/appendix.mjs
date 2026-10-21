@@ -20,8 +20,8 @@ export function renderAppendix() {
     return [`Lv${g.level}`, s.frame, s.bullets, s.enemies, s.score, s.lives, s.phase, s.checksum];
   });
   const methods = [
-    ['pygame', py.method, `${py.elapsedMs.toFixed(3)} ms`, `${py.steps}호출 / ${py.activeSteps}전투 스텝`],
-    ['Canvas 로직', canvas.method, `${canvas.medianMs.toFixed(3)} ms 중앙값`, `${canvas.samplesMs.length}표본 / ${canvas.steps}호출`],
+    ['pygame', py.method, `${py.elapsedMs.toFixed(3)} ms`, `${py.steps}회 호출 / 전투 ${py.activeSteps}스텝`],
+    ['Canvas 로직', canvas.method, `${canvas.medianMs.toFixed(3)} ms 중앙값`, `${canvas.samplesMs.length}표본 / ${canvas.steps}회 호출`],
     ...three.results.map((r) => [`Three ${r.mode}`, three.method, `${r.medianMs.toFixed(3)} ms 중앙값`, `${three.count}개 / 드로우 ${r.calls}회`]),
     ['C++ wasm', '이번 가이드에서 속도 측정하지 않음', '측정값 없음', '기준 일치·ABI·메모리 진단만 검사']
   ];
@@ -39,7 +39,7 @@ export function renderAppendix() {
       ['Lv5', '그레이즈·폭탄·아이템·파워'], ['Lv6', 'JSON 스테이지'], ['Lv7', '시작·정지·종료·입자·소리·저장']
     ])),
     card('goldens', '기준 기록의 마지막 체크포인트', '아래 값은 spec/golden 파일에서 자동으로 읽습니다. 각 레벨의 기존 pygame 기준이며 다른 경로가 실패해도 포트에 맞춰 덮어쓰지 않습니다. 상세 비교는 60·600·1800스텝에서 수행합니다.', table(['레벨', '호출', '탄환', '적', '점수', '목숨', '단계', '체크섬'], states)),
-    card('time', '호출 횟수와 전투 스텝', 'Lv7은 게임 오버 뒤에도 호출 프레임과 효과 갱신이 이어질 수 있지만 전투 시간은 멈춥니다. 기록의 1800호출을 1800번의 전투 갱신으로 해석하면 측정 비용을 잘못 비교하게 됩니다.', table(['현재 캡처', '전체 호출', '전투 진행'], [['pygame', py.steps, py.activeSteps], ['Canvas 로직', canvas.steps, canvas.activeSteps]])),
+    card('time', '호출 횟수와 전투 스텝', 'Lv7은 게임 오버 뒤에도 호출 프레임과 효과 갱신이 이어질 수 있지만 전투 시간은 멈춥니다. 지금의 기록 입력은 끝까지 살아남아 두 값이 같지만, 입력이 바뀌면 호출 수를 전투 갱신 수로 읽어 측정 비용을 잘못 비교할 수 있습니다.', table(['현재 캡처', '전체 호출', '전투 진행'], [['pygame', py.steps, py.activeSteps], ['Canvas 로직', canvas.steps, canvas.activeSteps]])),
     card('measurements', '실측값과 측정 범위', '이 표는 최신 captures의 실측 보고서를 읽어 생성합니다. Python 프로파일러·Node 로직·정적 WebGL 렌더는 측정 대상과 계측 비용이 다르므로 속도 순위나 게임 FPS로 비교하지 않습니다.', table(['경로', '포함/제외 조건', '기록값', '작업량'], methods)),
     card('environment', '측정 환경과 해석', '사용한 소프트웨어 드라이버와 런타임을 함께 기록합니다. 같은 이름의 GPU API라도 소프트웨어 렌더러의 수치를 실제 GPU 성능으로 일반화할 수 없습니다. 타이머 해상도 때문에 짧은 표본이 0ms로 나올 수도 있습니다.', table(['환경 항목', '실제 캡처 값'], [
       ['Python / 기계', `${py.python} / ${py.machine}`], ['Node / 기계', `${canvas.node} / ${canvas.machine}`],

@@ -24,7 +24,7 @@ const bytes = readFileSync(new URL('dist/wasm-lv3.wasm', src));
 const scripts = ['examples/cpp-wasm/lv3/replay.mjs', 'examples/cpp-wasm/memory-glue.mjs',
   'examples/cpp-wasm/lv3/main.js'].map((p) => readFileSync(new URL(p, src), 'utf8')).join('\n');
 const html = `<!doctype html><html lang="ko"><meta charset="utf-8">
-<title>C++ wasm Lv3 · 이동과 발사</title>
+<title>C++ wasm Lv3 · 네 가지 탄막 패턴</title>
 <style>body{background:#101827;color:white;font-family:sans-serif}canvas{max-width:100%;height:auto;outline:2px solid #64748b}canvas:focus{outline-color:#5eead4}</style>
 <h1>C++ wasm Lv3 · 네 가지 탄막 패턴</h1><p id="status" role="status">불러오는 중입니다.</p><p id="hud"></p>
 <canvas width="480" height="640" tabindex="0" aria-label="탄막 게임 화면"></canvas>

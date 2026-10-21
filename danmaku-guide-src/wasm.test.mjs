@@ -206,6 +206,9 @@ for (const level of [2, 3, 4, 5, 6, 7]) test(`C++ Lv${level}은 네이티브·No
   const { attachGame: attachLevel } = await import(`./examples/cpp-wasm/lv${level}/replay.mjs`);
   const build = spawnSync(process.execPath, [`examples/cpp-wasm/lv${level}/build.mjs`], { cwd: src, encoding: 'utf8' });
   assert.equal(build.status, 0, build.stdout + build.stderr);
+  // 레벨 빌드 스크립트를 복사해 만들 때 탭 제목만 이전 레벨로 남는 일을 막는다.
+  const page = readFileSync(new URL(`dist/wasm-lv${level}.html`, src), 'utf8');
+  assert.equal(page.match(/<title>([^<]*)<\/title>/)?.[1], page.match(/<h1>([^<]*)<\/h1>/)?.[1]);
   const bytes = readFileSync(new URL(`dist/wasm-lv${level}.wasm`, src));
   const module = new WebAssembly.Module(bytes);
   assert.deepEqual(WebAssembly.Module.imports(module), []);
