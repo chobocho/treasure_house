@@ -1,5 +1,5 @@
-# 클라이언트의 갈고리 둘 — 우리 httpx 클라이언트와 인터셉터.
-# 상대는 헤더를 되돌려 주는 실험 서버(07/headers.py)다. 그 서버엔
+# 클라이언트의 갈고리 둘 — 우리 httpx 클라이언트와 가로채기.
+# 상대는 머리글을 되돌려 주는 실험 서버(07/headers.py)다. 그 서버엔
 # 카드 경로가 없어 카드를 손에 쥔 채로 클라이언트를 만든다.
 #   python 07/client_hooks.py URL
 import asyncio
@@ -19,14 +19,14 @@ from step1_echo import card
 
 # region: interceptor
 class TeamHeader(ClientCallInterceptor):
-    """보내기 전에 헤더를 하나 달고, 받은 뒤 답의 타입을 찍는다."""
+    """보내기 전에 머리글을 하나 달고, 받은 뒤 답의 타입을 찍는다."""
 
     async def before(self, args):
         print(f"  before {args.method}")
         ctx = args.context or ClientCallContext()
         params = dict(ctx.service_parameters or {})
         params["X-Workshop-Team"] = "general-affairs"
-        ctx.service_parameters = params  # 이것이 HTTP 헤더가 된다
+        ctx.service_parameters = params  # 이것이 HTTP 머리글이 된다
         args.context = ctx
 
     async def after(self, args):

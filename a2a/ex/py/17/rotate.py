@@ -59,7 +59,7 @@ def store(*kids, strict=True):  # 클라이언트가 믿는 키 저장소
 # endregion
 
 
-def kid_of(sig):  # 보호 헤더(base64url JSON)의 kid
+def kid_of(sig):  # 보호 머리글(base64url JSON)의 kid
     raw = sig.protected + "=" * (-len(sig.protected) % 4)
     return json.loads(base64.urlsafe_b64decode(raw))["kid"]
 

@@ -1,7 +1,7 @@
 // 식사 에이전트 — 끼니마다 메뉴를 골라 스트리밍으로 알려 준다.
 //
 // 보여 주는 것: SendStreamingMessage(SSE), 끼니마다 WORKING 상태 갱신,
-// 식단표 아티팩트를 청크로 이어 붙이기(append·lastChunk), 파일 파트
+// 식단표 아티팩트를 조각으로 이어 붙이기(append·lastChunk), 파일 파트
 // (menu.md, raw)와 데이터 파트(견적)를 함께 돌려주기.
 import { TaskState } from "@a2a-js/sdk";
 import type {

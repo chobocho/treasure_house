@@ -1,6 +1,6 @@
-# 보안 요구의 AND 와 OR — 파이썬 SDK 의 AuthInterceptor 는 헤더를 몇
+# 보안 요구의 AND 와 OR — 파이썬 SDK 의 AuthInterceptor 는 머리글을 몇
 # 개 다나. 자격 증명은 둘(oauth 토큰, API 키) 다 쥐여 준다. 연결은
-# 없다 — 인터셉터의 before 만 불러 본다.
+# 없다 — 가로채기의 before 만 불러 본다.
 import asyncio
 
 from a2a.client import ClientCallContext
@@ -47,7 +47,7 @@ async def main():
         got = sorted(args.context.service_parameters or {})
         # 맵(schemes)을 도는 차례는 프로세스마다 달라 AND 는 수만 찍는다
         shown = got if len(reqs) > 1 else "…"
-        print(f"{name} → 헤더 {len(got)}개 {shown}")
+        print(f"{name} → 머리글 {len(got)}개 {shown}")
 
 
 # endregion

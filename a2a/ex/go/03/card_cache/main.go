@@ -1,5 +1,5 @@
 // 카드를 한 번 받고, 받은 ETag 으로 조건부 GET 을 한 번 더 한다.
-// net/http 만 — 서버가 캐시 헤더를 어떻게 다는지 보려는 것.
+// net/http 만 — 서버가 캐시 머리글을 어떻게 다는지 보려는 것.
 //
 //	go run ./03/card_cache 카드주소...
 package main
@@ -34,7 +34,7 @@ func get(url, etag string) (*http.Response, error) {
 
 // endregion
 
-// orDash 는 빈 헤더를 "-" 로 찍는다.
+// orDash 는 빈 머리글을 "-" 로 찍는다.
 func orDash(s string) string {
 	if s == "" {
 		return "-"

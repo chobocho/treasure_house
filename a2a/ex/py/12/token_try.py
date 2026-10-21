@@ -11,7 +11,7 @@ PLANNER = {"client_id": "planner", "client_secret": "planner-secret"}
 CC = {"grant_type": "client_credentials"}
 BASIC = base64.b64encode(b"planner:planner-secret").decode()
 
-# (표시, 폼, 머리) — 머리는 HTTP Basic 으로 클라이언트를 밝힐 때만
+# (표시, 폼, 머리글) — 머리글은 HTTP Basic 으로 클라이언트를 밝힐 때만
 CASES = [
     ("① 스코프 없이", {**CC, **PLANNER}, {}),
     ("② 조회만", {**CC, **PLANNER, "scope": "payment:read"}, {}),
@@ -44,7 +44,7 @@ for url in sys.argv[1:]:
     for mark, form, heads in CASES:
         status, body, h = ask(url, form, heads)
         print(f"{mark}: {status} {body}")
-        if mark.startswith("①"):  # 토큰이 든 응답의 캐시 머리
+        if mark.startswith("①"):  # 토큰이 든 응답의 캐시 머리글
             cache = h.get("Cache-Control", "(없음)")
     print(f"   ① 의 Cache-Control: {cache}")
 # endregion

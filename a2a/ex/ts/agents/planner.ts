@@ -171,7 +171,7 @@ function ask(parts: object[], contextId: string, more: object = {}) {
 async function send(c: AgentCard, message: Message, token?: string) {
   const client = await new ClientFactory().createFromAgentCard(c);
   const req = { tenant: "", message, configuration: undefined };
-  const auth: Record<string, string> = {}; // HTTP 헤더가 된다
+  const auth: Record<string, string> = {}; // HTTP 머리글이 된다
   if (token) auth.Authorization = `Bearer ${token}`;
   const r = await client.sendMessage(
     { ...req, metadata: undefined },

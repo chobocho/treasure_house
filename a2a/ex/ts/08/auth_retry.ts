@@ -1,4 +1,4 @@
-// 401 을 받으면 헤더를 바꿔 한 번 더 — TS SDK 의 인증 fetch.
+// 401 을 받으면 머리글을 바꿔 한 번 더 — TS SDK 의 인증 fetch.
 //   node 08/auth_retry.ts BASE
 import { Message } from "@a2a-js/sdk";
 import {

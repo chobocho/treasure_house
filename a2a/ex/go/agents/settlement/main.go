@@ -259,7 +259,7 @@ func signed(c *a2a.AgentCard, url string) []byte {
 		JWKSURL:    url + ".well-known/jwks.json",
 	})
 	check(err)
-	// 보호 헤더는 Go 의 map 이라 키가 정렬된다(alg,jku,kid,typ) —
+	// 보호 머리글은 Go 의 map 이라 키가 정렬된다(alg,jku,kid,typ) —
 	// 파이썬(PyJWT)과 같은 순서라서 서명까지 바이트가 같다.
 	sig, err := signer.Sign(context.Background(), common.ProtoJSON(c))
 	check(err)

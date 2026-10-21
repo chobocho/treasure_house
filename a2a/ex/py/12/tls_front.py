@@ -13,7 +13,7 @@ import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-# 홉마다 다시 정하는 헤더(RFC 9110 7.6.1)는 넘기지 않는다
+# 홉마다 다시 정하는 머리글(RFC 9110 7.6.1)은 넘기지 않는다
 HOP = {
     "connection",
     "keep-alive",

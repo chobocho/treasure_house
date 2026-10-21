@@ -1,5 +1,5 @@
 # 카드를 한 번 받고, 받은 ETag 으로 조건부 GET 을 한 번 더 한다.
-# 표준 라이브러리만 — 서버가 캐시 헤더를 어떻게 다는지 보려는 것.
+# 표준 라이브러리만 — 서버가 캐시 머리글을 어떻게 다는지 보려는 것.
 #   python 03/card_cache.py 카드주소...
 import sys
 from urllib.error import HTTPError

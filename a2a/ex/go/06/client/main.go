@@ -97,7 +97,7 @@ func pick(base string) (card, iface) {
 // region: rpc
 var n = 0 // JSON-RPC id 와 messageId 를 매기는 번호
 
-// rpc: 봉투를 싸서 고른 인터페이스의 url 로 — 판 헤더는 늘(§3.6.1).
+// rpc: 봉투를 싸서 고른 인터페이스의 url 로 — 판 머리글은 늘(§3.6.1).
 func rpc(in iface, method string, params map[string]any,
 ) *http.Response {
 	if in.Tenant != "" { // 카드에 tenant 가 있으면 그대로(§8.3.2)

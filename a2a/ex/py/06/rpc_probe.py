@@ -27,8 +27,8 @@ V1, V03, PATCH = (
     {"A2A-Version": "1.0.1"},
 )
 SEND = env("SendMessage", {"message": MSG})
-CASES = [  # (이름, 판 헤더, 본문)
-    ("판 헤더 없음", {}, SEND),
+CASES = [  # (이름, 판 머리글, 본문)
+    ("판 머리글 없음", {}, SEND),
     ("판 0.3", V03, SEND),
     ("판 0.3 + 옛 이름", V03, env("message/send", {"message": MSG})),
     ("판 1.0.1, 없는 작업", PATCH, env("GetTask", {"id": "nope"})),

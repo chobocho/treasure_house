@@ -19,7 +19,7 @@ from step1_echo import card
 class WhoExecutor(AgentExecutor):
     async def execute(self, ctx: RequestContext, queue: EventQueue):
         call = ctx.call_context  # 경로가 HTTP 요청에서 만든 것
-        headers = call.state["headers"]  # 헤더 이름은 소문자
+        headers = call.state["headers"]  # 머리글 이름은 소문자
         said = [
             f"user_name={call.user.user_name!r}",
             f"인증됨={call.user.is_authenticated}",

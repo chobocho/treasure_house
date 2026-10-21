@@ -24,7 +24,7 @@ async function pick(base: string): Promise<[Obj, Obj]> {
 // endregion
 
 // region: rpc
-// 봉투를 싸서 고른 인터페이스의 url 로 — 판 헤더는 늘(§3.6.1).
+// 봉투를 싸서 고른 인터페이스의 url 로 — 판 머리글은 늘(§3.6.1).
 function rpc(iface: Obj, method: string, params: Obj) {
   if (iface.tenant) params = { tenant: iface.tenant, ...params };
   const body = { jsonrpc: "2.0", id: ++n, method, params };

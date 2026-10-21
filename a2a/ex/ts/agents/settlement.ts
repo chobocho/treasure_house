@@ -199,7 +199,7 @@ function card(url: string, extended = false) {
 // 주면 oneof(securitySchemes)를 읽지 못해 다른 바이트에 서명한다.
 async function signed(c: object, url: string) {
   const pem = readFileSync(new URL("settlement-ed25519.pem", KEYS));
-  // 보호 헤더는 넣은 순서대로 직렬화된다. 파이썬(PyJWT)은 키를
+  // 보호 머리글은 넣은 순서대로 직렬화된다. 파이썬(PyJWT)은 키를
   // 정렬하므로 정렬된 순서로 넣어야 서명까지 바이트가 같다.
   const sign = generateAgentCardSignature(createPrivateKey(pem), {
     alg: "EdDSA",

@@ -106,7 +106,7 @@ class Tap(grpc.GenericRpcHandler):
 
     async def finish(self, code, text, call, ctx):
         say(f"← {code.name}" + (f" {text!r}" if text else ""))
-        show_md("← 머리", await call.initial_metadata())
+        show_md("← 머리글", await call.initial_metadata())
         trailer = await call.trailing_metadata()
         show_md("← 꼬리", trailer)
         ctx.set_trailing_metadata(tuple(trailer or ()))

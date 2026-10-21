@@ -20,7 +20,7 @@ import (
 
 // region: push
 // hookSender 는 푸시 알림을 웹훅에 POST 한다. SDK 의 HTTPPushSender
-// 를 쓰지 않는 까닭 둘: 토큰 헤더 이름이 A2A-Notification-Token 으로
+// 를 쓰지 않는 까닭 둘: 토큰 머리글 이름이 A2A-Notification-Token 으로
 // 파이썬·TS 의 X-A2A-Notification-Token 과 다르고(명세는 이름을 정하지
 // 않는다), 기본값이 루프백(127.0.0.1) 주소를 막는다.
 type hookSender struct{ client *http.Client }

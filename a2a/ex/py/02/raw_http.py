@@ -16,7 +16,7 @@ head = (
     "Content-Type: application/json\r\n"
     f"Content-Length: {len(body.encode())}\r\n"
     "Connection: close\r\n"  # 다 보내면 서버가 끊게 한다
-    "\r\n"  # 빈 줄 — 헤더 끝, 여기부터 본문
+    "\r\n"  # 빈 줄 — 머리글 끝, 여기부터 본문
 )
 request = (head + body).encode("utf-8")
 # endregion

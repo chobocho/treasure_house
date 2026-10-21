@@ -1,5 +1,5 @@
 // Go SDK 의 push.HTTPPushSender — 기본값이 루프백 웹훅을 막는 것과,
-// 막지 않게 했을 때 무슨 머리를 붙이는지를 본다. 웹훅 둘: 기록만 하는
+// 막지 않게 했을 때 무슨 머리글을 붙이는지를 본다. 웹훅 둘: 기록만 하는
 // 중계기(탭 뒤)와, 토큰 tok-ok 를 X-A2A-Notification-Token 에서 찾는
 // 수신기(hook_check). 교통 에이전트가 이 보내기를 쓰지 않는 까닭(4장)의
 // 증거다.
@@ -38,7 +38,7 @@ func main() {
 	// ③ 스킴이 bearer·basic 이 아니면 Authorization 을 붙이지 않는다
 	cfg.Auth.Scheme = "Digest"
 	fmt.Println("③ 허용, Digest →", open.SendPush(ctx, cfg, ev))
-	// ④ 맞는 토큰인데 — X- 머리를 찾는 수신기에 곧장
+	// ④ 맞는 토큰인데 — X- 머리글을 찾는 수신기에 곧장
 	cfg.URL, cfg.Auth.Scheme = check, "Bearer"
 	fmt.Println("④ 수신기에 →", open.SendPush(ctx, cfg, ev))
 }

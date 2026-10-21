@@ -26,7 +26,7 @@ def won(n):
 
 lodging, meals = story("chooseLodging"), story("planMeals")
 bus, sheet = story("chooseBuses"), story("settle", "story-approved")
-# 계획서 마크다운의 줄 머리 → 그 줄에 있어야 할 글
+# 계획서 마크다운의 줄 앞부분 → 그 줄에 있어야 할 글
 LINES = {
     "- 숙소:": [lodging["venueName"], f"{lodging['rooms']}실"]
     + [won(lodging["total"])],

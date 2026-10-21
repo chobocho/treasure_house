@@ -1,4 +1,4 @@
-# 카드 대신 ETag 하나만 주고, 받은 요청의 캐시 관련 헤더를 찍는 서버.
+# 카드 대신 ETag 하나만 주고, 받은 요청의 캐시 관련 머리글을 찍는 서버.
 # 클라이언트 라이브러리가 조건부 GET 에 무엇을 덧붙이는지 보려는 것.
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer

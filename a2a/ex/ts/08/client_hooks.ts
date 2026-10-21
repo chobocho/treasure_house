@@ -1,5 +1,5 @@
-// 클라이언트의 갈고리 둘 — 우리 fetch 와 인터셉터.
-// 상대는 헤더를 되돌려 주는 실험 서버(08/headers.ts)다. 그 서버엔
+// 클라이언트의 갈고리 둘 — 우리 fetch 와 가로채기.
+// 상대는 머리글을 되돌려 주는 실험 서버(08/headers.ts)다. 그 서버엔
 // 카드 경로가 없어 카드를 손에 쥔 채로 클라이언트를 만든다.
 //   node 08/client_hooks.ts URL
 import { Message, type Part } from "@a2a-js/sdk";
@@ -14,7 +14,7 @@ import {
 import { card } from "./step1_echo.ts";
 
 // region: fetch
-// 전송이 부르는 fetch — 나가는 요청의 판 헤더와 팀 헤더를 찍는다
+// 전송이 부르는 fetch — 나가는 요청의 판 머리글과 팀 머리글을 찍는다
 const logged: typeof fetch = (input, init) => {
   const h = new Headers(init?.headers);
   const ver = h.get("A2A-Version");
@@ -25,13 +25,13 @@ const logged: typeof fetch = (input, init) => {
 // endregion
 
 // region: interceptor
-// 보내기 전에 헤더를 하나 달고, 받은 뒤 답의 모양을 찍는다
+// 보내기 전에 머리글을 하나 달고, 받은 뒤 답의 모양을 찍는다
 class TeamHeader implements CallInterceptor {
   async before(args: BeforeArgs) {
     console.log(`  before ${args.input?.method}`);
     const opts = args.options ?? {};
     const team = { "X-Workshop-Team": "general-affairs" };
-    // serviceParameters 가 HTTP 헤더가 된다
+    // serviceParameters 가 HTTP 머리글이 된다
     opts.serviceParameters = { ...opts.serviceParameters, ...team };
     args.options = opts;
   }
@@ -59,7 +59,7 @@ const message = Message.fromJSON({
   parts: [{ text: "누구세요" }],
 });
 const req = { tenant: "", message, configuration: undefined };
-// 판 헤더를 손으로 0.3 이라고 적어 본다
+// 판 머리글을 손으로 0.3 이라고 적어 본다
 const r = await client.sendMessage(
   { ...req, metadata: undefined },
   { serviceParameters: { "A2A-Version": "0.3" } },

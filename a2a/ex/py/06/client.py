@@ -28,7 +28,7 @@ def pick(base):
 
 # region: rpc
 def rpc(iface, method, params):
-    """봉투를 싸서 고른 인터페이스의 url 로 — 판 헤더는 늘(§3.6.1)."""
+    """봉투를 싸서 고른 인터페이스의 url 로 — 판 머리글은 늘(§3.6.1)."""
     if iface.get("tenant"):  # 카드에 tenant 가 있으면 그대로(§8.3.2)
         params = {"tenant": iface["tenant"], **params}
     body = {"jsonrpc": "2.0", "id": next(N), "method": method}
