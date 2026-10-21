@@ -417,8 +417,8 @@ test('Canvas 배포 파일·로컬 HTTP·측정 결과를 실제 실행한다', 
   const report = await profile(3);
   assert.equal(report.samplesMs.length, 3);
   assert.ok(report.medianMs > 0);
-  // 나선을 이어 쏘도록 바꾼 뒤 기록 입력의 실제 플레이는 655스텝에서 끝난다(pygame Lv7 기준과 같은 값).
-  assert.equal(report.activeSteps, 655);
+  // 자동 조종으로 다시 만든 기록 입력은 1800스텝 내내 살아남는다(pygame Lv7 기준과 같은 값).
+  assert.equal(report.activeSteps, 1800);
   const golden = JSON.parse(readFileSync(new URL('spec/golden/lv7.json', import.meta.url)));
   assert.deepEqual(report.state, golden.checkpoints.at(-1));
   const pair = await profile(2);

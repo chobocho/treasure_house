@@ -91,3 +91,5 @@ Lv7은 `node examples/cpp-wasm/lv7/build.mjs`와 `dist/wasm-lv7.html`을 사용�
 부록은 `appendix.mjs`가 `spec/golden/*.json`, 성능 캡처3개, `examples/assets/LICENSES.md`에서 `parts/60-appendix.html`로 생성한다. 루트 빌드가 항상 다시 생성하므로 표를 손으로 수정하지 않는다. 측정 범위가 다른 수치로 성능 순위나 게임 FPS를 주장하지 않으며 wasm 속도 측정값은 없다.
 
 최종 산출물은1301장·내장 데모4개다. Mesa+Xvfb에서 전체 `npm test`140개와 V1~V23을 통과했다. `env DANMAKU_WEBGL_DRIVER=mesa LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a node capture-deck.mjs`는 표지·코드·도식·목차·네 데모의 오프라인 화면8개를 생성하며 목록은 `captures/DECK-CAPTURES.txt`에 남긴다.
+
+Lv7 기록 입력(`examples/*/lv7/replay.json`, 세 트랙 동일)은 `python3 examples/pygame/record_replay.py --write`가 결정적 자동 조종으로 만든다. 게임 복사본으로 20스텝 앞을 내다보며 피격을 피하고, 마지막 체크포인트가 보스 3단계가 되도록 3단계에서는 보스 체력을 40 아래로 깎지 않는다. 입력을 바꾼 뒤에는 `spec/golden/lv7.json`을 지우고 `generate_golden.py 7`로 다시 만든다.

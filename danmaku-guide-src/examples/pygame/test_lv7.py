@@ -17,6 +17,20 @@ def adapter(name):
 
 
 class Lv7Tests(unittest.TestCase):
+    def test_recorded_replay_reaches_final_boss_phase(self):
+        # 기준 기록이 보스 마지막 단계까지 검증하도록 기록 입력은 1800스텝 동안 살아남아야 한다.
+        import json
+        root = Path(__file__).resolve().parents[2]
+        golden = json.loads((root / 'spec/golden/lv7.json').read_text(encoding='utf-8'))
+        last = golden['checkpoints'][-1]
+        self.assertEqual(last['frame'], 1800)
+        self.assertEqual(last['phase'], 3)
+        self.assertGreaterEqual(last['lives'], 1)
+        replay = (Path(__file__).parent / 'lv7/replay.json').read_text(encoding='utf-8')
+        self.assertEqual(json.loads(replay), golden['inputs'])
+        for track in ('canvas-ts', 'three-ts'):
+            self.assertEqual((root / 'examples' / track / 'lv7/replay.json').read_text(encoding='utf-8'), replay)
+
     def test_title_start_pause_resume(self):
         m = load_game(7)
         g = m.Game(start=False)
