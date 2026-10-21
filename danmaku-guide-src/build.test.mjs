@@ -40,6 +40,15 @@ test('터미널 캡처는 실제 출력 파일에서 읽고 HTML을 이스케이
   assert.ok(output.includes('<div class="term">&lt;완료&gt;&amp;</div>'));
 });
 
+test('그림은 figures 모듈의 SVG를 인라인하고 잘못된 그림 자리는 거부한다', () => {
+  const output = assemble({ template, nav, parts: ['<div class="fig" data-fig="ring"></div>'] });
+  assert.match(output, /<div class="fig"><svg [^>]*role="img"/);
+  assert.ok(!output.includes('data-fig='));
+  for (const bad of ['<div class="fig" data-fig="missing"></div>', '<div class="fig" data-fig="ring">글</div>', '<p data-fig="ring"></p>']) {
+    assert.throws(() => assemble({ template, nav, parts: [bad] }));
+  }
+});
+
 test('빌드는 리터럴·출처 누락·없는 파일·경로 이탈을 거부한다', async () => {
   for (const code of ['<pre><code data-lang="py">print(1)</code></pre>', '<pre><code data-lang="py"></code></pre>', '<pre><code data-lang="py" data-src="pygame/missing.py#run"></code></pre>', '<pre><code data-lang="py" data-src="../../template.html"></code></pre>']) {
     assert.throws(() => assemble({ template, nav, src: new URL('.', import.meta.url).pathname, parts: [code] }));

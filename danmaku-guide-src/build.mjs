@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { resolveSnippet } from './snippets.mjs';
 import { writeAppendix } from './appendix.mjs';
+import { figureSvg } from './examples/foundations/figures.mjs';
 
 const SRC = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(SRC, '..');
@@ -14,6 +15,12 @@ const esc = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').
 
 function fillSources(part, src) {
   let count = 0;
+  // 그림은 예제와 같은 함수로 좌표를 계산한 SVG를 그대로 넣어 공식과 그림이 어긋나지 않게 한다.
+  part = part.replace(/<div class="fig" data-fig="([A-Za-z0-9]+)">([\s\S]*?)<\/div>/g, (_match, name, literal) => {
+    if (literal.trim()) throw new Error('그림 자리는 비어 있어야 한다');
+    return `<div class="fig">${figureSvg(name)}</div>`;
+  });
+  if (/\bdata-fig\s*=/.test(part)) throw new Error('그림은 빈 div.fig와 data-fig로만 넣는다');
   const html = part.replace(/<pre\b([^>]*)>\s*<code\b([^>]*)>([\s\S]*?)<\/code>\s*<\/pre>/g, (_match, preAttrs, codeAttrs, literal) => {
     count++;
     const ref = attr(codeAttrs, 'data-src');

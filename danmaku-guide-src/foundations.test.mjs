@@ -114,7 +114,42 @@ test('1부의 장별 최소 분량과 패턴 뷰어를 확인한다', () => {
   assert.ok(d.slides.length >= 111);
   assert.ok(d.main.includes('data-demo="pattern-viewer"'));
 });
+const mathUrl = new URL('examples/foundations/math.mjs', import.meta.url);
+const figureUrl = new URL('examples/foundations/figures.mjs', import.meta.url);
+test('수치 예시는 공식대로 계산한 값을 출력한다', async () => {
+  assert.ok(existsSync(mathUrl), '수치 예시 파일이 있어야 한다');
+  const { topics } = await import(mathUrl);
+  const out = (topic) => topics[topic]().join('\n');
+  assert.match(out('vectors'), /\(0\.6, 0\.8\), 길이 1/);
+  assert.match(out('vectors'), /길이 5\.656854/);
+  assert.match(out('angles'), /회전수 0\.4 = .*접은 값 0\.1, dsin 0\.587785/);
+  assert.match(out('angles'), /회전수 0\.9 = .*접은 값 -0\.1, dsin -0\.587785/);
+  assert.match(out('rotation'), /\(-0\.156434, 0\.987688\), 길이 1$/m);
+  assert.match(out('patterns'), /보이는 회전 0\.045/);
+  assert.match(out('patterns'), /틱 60: 0\.3539/);
+  assert.match(out('loop'), /논리 스텝 60번/);
+  assert.match(out('loop'), /α = 0\.5, 0, 0\.5/);
+  assert.match(out('collision'), /피격 true[\s\S]*피격 false[\s\S]*그레이즈 true/);
+  assert.match(out('random'), /270369, 67634689, 2647435461/);
+  assert.match(out('random'), /416 × 10324440 \+ 256/);
+});
+test('그림 모듈은 외부 참조 없는 SVG를 만들고 화살촉 id가 겹치지 않는다', async () => {
+  assert.ok(existsSync(figureUrl), '그림 모듈이 있어야 한다');
+  const { figures, figureSvg } = await import(figureUrl);
+  const ids = [];
+  for (const name of Object.keys(figures)) {
+    const svg = figureSvg(name);
+    assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 \d+ \d+"/, name);
+    assert.ok(svg.endsWith('</svg>'), name);
+    assert.ok(!/<script|\bhref=|url\(\s*['"]?https?:|NaN|undefined|Infinity/.test(svg), name);
+    assert.match(svg, /aria-label="[^"]{5,}"/, name);
+    ids.push(...[...svg.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]));
+  }
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(Object.keys(figures).length >= 20);
+  assert.throws(() => figureSvg('없음'));
+});
 test('공통 예제의 실행 검증 목록을 기록한다', () => {
   assert.ok(existsSync(url));
-  writeFileSync(new URL('examples/foundations/TESTED.txt', import.meta.url), 'foundations/core.mjs\nfoundations/viewer.mjs\nfoundations/antipatterns/frame-dependent.mjs\n');
+  writeFileSync(new URL('examples/foundations/TESTED.txt', import.meta.url), 'foundations/core.mjs\nfoundations/viewer.mjs\nfoundations/antipatterns/frame-dependent.mjs\nfoundations/math.mjs\nfoundations/figures.mjs\n');
 });

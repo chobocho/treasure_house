@@ -100,11 +100,13 @@ for (const level of levels) {
     } finally { await browser.close(); }
   });
 
-  test('Three Lv' + level + '는 출처가 있는 40장을 제공한다', () => {
+  // Lv3·Lv4에는 수학 그림 슬라이드(Lv3 3장, Lv4 2장)가 더해졌다.
+  const slideCount = { 3: 43, 4: 42 }[level] ?? 40;
+  test('Three Lv' + level + '는 출처가 있는 ' + slideCount + '장을 제공한다', () => {
     const file = new URL('parts/4' + level + '-three-lv' + level + '.html', import.meta.url);
     assert.ok(existsSync(file), '레벨별 설명 장이 있어야 한다');
     const html = readFileSync(file, 'utf8');
-    assert.equal(inspectDeck('<main class="prose">' + html + '</main>').slides.length, 40);
+    assert.equal(inspectDeck('<main class="prose">' + html + '</main>').slides.length, slideCount);
     assert.ok(html.includes('captures/three-lv' + level + '.txt'));
   });
 }

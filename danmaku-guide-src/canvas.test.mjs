@@ -107,11 +107,13 @@ for (const level of levels) {
     } finally { await browser.close(); }
   });
 
-  test('Canvas Lv' + level + '는 출처가 있는 40장을 제공한다', () => {
+  // Lv3·Lv4에는 수학 그림 슬라이드(Lv3 3장, Lv4 2장)가 더해졌다.
+  const slideCount = { 3: 43, 4: 42 }[level] ?? 40;
+  test('Canvas Lv' + level + '는 출처가 있는 ' + slideCount + '장을 제공한다', () => {
     const path = new URL('parts/3' + level + '-canvas-lv' + level + '.html', import.meta.url);
     assert.ok(existsSync(path), '레벨별 장이 있어야 한다');
     const html = readFileSync(path, 'utf8');
-    assert.equal(inspectDeck('<main class="prose">' + html + '</main>').slides.length, 40);
+    assert.equal(inspectDeck('<main class="prose">' + html + '</main>').slides.length, slideCount);
     assert.ok(html.includes('captures/canvas-lv' + level + '.txt'));
   });
 }
