@@ -1,0 +1,31 @@
+<article class="card section" id="ch5-lv6"><h2>Lv6 · C++ 데이터 스테이지</h2><p>JSON 검증은 JS에서 수행하고 C++ 커서로 게임 시간에 맞춰 이벤트를 실행합니다.</p></article>
+
+<article class="card" id="p5-lv6-01"><h3>JSON은 JS가 읽기</h3><p>wasm에는 JSON 파서를 넣지 않습니다. JS가 JSON을 읽고 검증한 이벤트를 숫자 인자로 전달합니다. 게임의 시간 진행과 커서 처리는 C++가 담당합니다.</p><p class="fname">cpp-wasm/lv6/replay.mjs</p><pre><code data-lang="js" data-src="cpp-wasm/lv6/replay.mjs#lv6-adapter"></code></pre></article>
+
+<article class="card" id="p5-lv6-02"><h3>배열과 최대 이벤트 수</h3><p>스테이지는 최대4096개의 이벤트 배열입니다. 배열이 아닌 값과 잘못된 이벤트 객체를 거부합니다. 빈 배열은 유효하며 자동 생성 규칙이 제거되어 적이나 보스가 나타나지 않습니다.</p><p class="fname">cpp-wasm/lv6/replay.mjs</p><pre><code data-lang="js" data-src="cpp-wasm/lv6/replay.mjs#lv6-stage-validate"></code></pre></article>
+
+<article class="card" id="p5-lv6-03"><h3>시간과 순서 검사</h3><p>frame은 음이 아닌 정수이며 앞 이벤트보다 작으면 안 됩니다. 같은 시점은 허용하고 원래 배열 순서를 유지합니다. 정렬을 자동으로 수행하면 작성 오류가 숨고 같은 시점의 의미가 달라질 수 있습니다.</p><p class="fname">cpp-wasm/lv6/replay.mjs</p><pre><code data-lang="js" data-src="cpp-wasm/lv6/replay.mjs#lv6-stage-validate"></code></pre></article>
+
+<article class="card" id="p5-lv6-04"><h3>종류와 필드 검사</h3><p>enemy는 frame·kind·pattern, boss는 frame·kind만 허용합니다. 패턴은0부터3의 정수입니다. 오타 필드나 보스의 불필요한 pattern도 검증 단계에서 거부합니다.</p><p class="fname">cpp-wasm/lv6/replay.mjs</p><pre><code data-lang="js" data-src="cpp-wasm/lv6/replay.mjs#lv6-stage-validate"></code></pre></article>
+
+<article class="card" id="p5-lv6-05"><h3>원본과 분리해 동결</h3><p>검증된 값을 새 튜플로 복사하고 안쪽과 바깥 배열을 모두 동결합니다. 호출자가 원본 JSON 객체를 고쳐도 게임에 전달한 스테이지가 바뀌지 않습니다. 검증은 로딩 시 수행합니다.</p><p class="fname">cpp-wasm/lv6/replay.mjs</p><pre><code data-lang="js" data-src="cpp-wasm/lv6/replay.mjs#lv6-stage-validate"></code></pre></article>
+
+<article class="card" id="p5-lv6-06"><h3>스테이지용 C ABI</h3><p>문자열 종류는 enemy를0, boss를1로 바꿔 전달합니다. C++도 개수·시간·정수 여부·종류·패턴·순서를 검사하고 실패를 반환합니다. 보스의 패턴 인자는 영으로 고정합니다.</p><p class="fname">cpp-wasm/lv6/game.cpp</p><pre><code data-lang="cpp" data-src="cpp-wasm/lv6/game.cpp#lv6-stage-add"></code></pre></article>
+
+<article class="card" id="p5-lv6-07"><h3>게임과 스테이지 초기화</h3><p>게임 초기화 뒤 검증된 이벤트를 순서대로 추가합니다. C++ 배열은 이벤트4096개를 수용하고 커서는 영부터 시작합니다. 이전 실행의 이벤트나 미완료 보스 요청을 새 게임으로 가져오지 않습니다.</p><p class="fname">cpp-wasm/lv6/game.hpp</p><pre><code data-lang="cpp" data-src="cpp-wasm/lv6/game.hpp#lv6-stage-state"></code></pre></article>
+
+<article class="card" id="p5-lv6-08"><h3>이벤트 커서는 한 번 전진</h3><p>현재 프레임 이하의 이벤트를 처리하고 커서를 증가시킵니다. 아직 이른 이벤트를 만나면 멈춥니다. 매 스텝마다 전체 스테이지를 처음부터 검사하지 않아 이벤트당 한 번만 방문합니다.</p><p class="fname">cpp-wasm/lv6/game.cpp</p><pre><code data-lang="cpp" data-src="cpp-wasm/lv6/game.cpp#lv6-stage-step"></code></pre></article>
+
+<article class="card" id="p5-lv6-09"><h3>적 패턴을 데이터로 지정</h3><p>일반 적 생성 함수에 패턴 번호를 전달합니다. 위치 난수 소비 순서는 그대로 유지하며 추가에 성공한 적에만 표식을 보관합니다. 적 풀이 포화되면 일반 적 이벤트는 재시도하지 않습니다.</p><p class="fname">cpp-wasm/lv6/game.cpp</p><pre><code data-lang="cpp" data-src="cpp-wasm/lv6/game.cpp#lv6-enemy-spawn"></code></pre></article>
+
+<article class="card" id="p5-lv6-10"><h3>보스 요청은 보관하기</h3><p>보스 이벤트를 읽으면 대기 플래그를 켭니다. 풀 포화로 생성에 실패하면 다음 스텝에 다시 시도합니다. 이미 등장한 보스가 있으면 중복 생성 없이 요청을 해제합니다.</p><p class="fname">cpp-wasm/lv6/game.cpp</p><pre><code data-lang="cpp" data-src="cpp-wasm/lv6/game.cpp#lv6-stage-step"></code></pre></article>
+
+<article class="card" id="p5-lv6-11"><h3>기존 주기 생성 제거</h3><p>기존90스텝 적 생성과600스텝 보스 등장 조건을 runStage 호출로 대체합니다. 둘을 함께 남기면 데이터 이벤트와 자동 생성이 겹칩니다. 빈 스테이지에서1000스텝 실행해 적이 없는지 검사합니다.</p><p class="fname">cpp-wasm/lv6/game.cpp</p><pre><code data-lang="cpp" data-src="cpp-wasm/lv6/game.cpp#lv6-step"></code></pre></article>
+
+<article class="card" id="p5-lv6-12"><h3>같은 JSON을 오프라인 파일에</h3><p>기존 Canvas Lv6와 바이트가 같은 stage.json을 사용합니다. 빌드가 JSON과 wasm·JS를 한 HTML에 넣고 브라우저는 내장 JSON을 읽습니다. 실행 중 별도 HTTP 요청은 필요 없습니다.</p><p class="fname">cpp-wasm/lv6/build.mjs</p><pre><code data-lang="js" data-src="cpp-wasm/lv6/build.mjs#lv6-offline-page"></code></pre></article>
+
+<article class="card" id="p5-lv6-13"><h3>스테이지 경계 검사</h3><p>네이티브는 같은 시간 순서·한 번 소비·보스 포화 재시도·중복 보스·용량 경계를 검사합니다. JS는 잘못된 시간·참값·패턴·필드·원본 격리를 확인합니다. 기존 pygame 기록은 세 환경에서 그대로 비교합니다.</p><p class="fname">cpp-wasm/lv6/game.cpp</p><pre><code data-lang="cpp" data-src="cpp-wasm/lv6/game.cpp#lv6-stage-add"></code></pre></article>
+
+<article class="card" id="p5-lv6-14"><h3>오프라인 스테이지 실행</h3><p>node examples/cpp-wasm/lv6/build.mjs로 빌드한 뒤 dist/wasm-lv6.html을 엽니다. 적의 패턴과 보스 시점은 stage.json에 있습니다. 수정 후 다시 빌드하면 검증된 데이터가 새 오프라인 파일에 포함됩니다.</p><p class="fname">cpp-wasm/lv6/build.mjs</p><pre><code data-lang="js" data-src="cpp-wasm/lv6/build.mjs#lv6-build"></code></pre></article>
+
+<article class="card quiz" id="p5-lv6-quiz" data-quiz><h3>데이터 스테이지 · 이해 확인</h3><p class="q">보스 이벤트에서 적 풀이 가득 차면 일반 적처럼 요청을 버릴까요?</p><button>답 보기</button><div class="a">일반 적은 생략하지만 보스는 대기 플래그로 요청을 보관하고 다음 스텝에 재시도합니다. 보스가 이미 등장했는지도 확인해 중복 생성을 막습니다.</div></article>
