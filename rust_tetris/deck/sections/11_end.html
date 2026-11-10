@@ -1,0 +1,141 @@
+<article class="card section" id="part5">
+<p class="chnum">5부</p>
+<h2>넓히기 — 연습 문제와 함정 모음</h2>
+<p class="chsub">코어에 규칙을 더하고, 세 판에 그대로 퍼지는 것을 확인한다</p>
+</article>
+
+<article class="card" id="ch11">
+<p class="chnum">11장</p>
+<h2>연습 문제</h2>
+<p class="chsub">시험을 먼저 · 코어만 고치기 · 세 판에서 확인하기</p>
+</article>
+
+<article class="card" id="ex-flow">
+<h3>연습의 순서 — 이 덱이 걸어온 길 그대로</h3>
+<ol class="steps">
+<li><b>시험 먼저</b> — <code class="nb">core/tests/game.rs</code> 에 <code class="nb">from_rows</code> 판 그림으로 상황을 만들고 기대 점수를 손으로 셈해 적는다.</li>
+<li><b>RED 확인</b> — <code class="nb">cargo test -p tetris-core</code> 가 그 시험에서 <b>값이 달라서</b> 실패하는지 본다(컴파일 오류는 RED 가 아니다).</li>
+<li><b>코어만 고친다</b> — <code class="nb">game.rs</code> 의 <code class="nb">lock_piece</code>·<code class="nb">rotate</code> 근처. 프런트엔드는 건드리지 않는다.</li>
+<li><b>GREEN</b> — <code class="nb">make test lint</code>.</li>
+<li><b>세 판 확인</b> — <code class="nb">make build wasm wasm-test</code>. 표시가 필요하면 그때 render·tui 의 패널에 한 줄.</li>
+</ol>
+<div class="note">규칙을 바꿨는데 프런트엔드를 고칠 곳이 없다면 1부의 경계 설계가 제 일을 한 것입니다.</div>
+</article>
+
+<article class="card" id="ex-tspin">
+<h3>연습 1 — T-스핀 판정</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>할 일</th><th>힌트</th></tr>
+<tr><td>마지막 동작이 회전이었나 기억하기</td><td><code>Game</code> 에 <code>bool</code> 필드 하나. <code>rotate</code> 성공 시 켜고, 이동·낙하 성공 시 끈다. 구조체 리터럴(<code>with_setup</code>)이 빠진 필드를 컴파일 오류로 알려 준다</td></tr>
+<tr><td>3-코너 규칙</td><td>T 상자(3×3)의 네 모서리 중 셋 이상이 막혔나 — <code>Board::is_free</code> 를 네 번. 벽·바닥도 막힌 것으로 친다(이미 그렇게 동작한다)</td></tr>
+<tr><td>점수</td><td>T-스핀 싱글 800 · 더블 1200 · 트리플 1600 (× 레벨)</td></tr>
+</table>
+</div>
+<div class="tip"><b>시험 그림</b> — 바닥에 T 하나 들어갈 홈을 판 판을 <code class="nb">from_rows</code> 로 그리고, <code class="nb">queue: &amp;[Kind::T]</code> 로 T 를 받아 회전으로 밀어 넣습니다. 1장의 킥 시험과 같은 방식입니다.</div>
+</article>
+
+<article class="card" id="ex-combo">
+<h3>연습 2 — 콤보와 백투백</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>규칙</th><th>뜻</th><th>어디를</th></tr>
+<tr><td>콤보</td><td>연속으로 줄을 지울 때마다 50 × 콤보 수 × 레벨</td><td><code>lock_piece</code> — 0줄이면 콤보를 끊는다</td></tr>
+<tr><td>백투백</td><td>테트리스·T-스핀이 끊기지 않고 이어지면 1.5배</td><td><code>LINE_SCORE</code> 를 곱하는 줄</td></tr>
+</table>
+</div>
+<div class="note"><b>Rust 다운 표현</b> — "직전 지우기가 어려운 지우기였나"를 <code class="nb">bool</code> 둘로 두지 말고 <code class="nb">enum LastClear { None, Normal, Difficult }</code> 처럼 상태 하나로 두면, <code class="nb">match</code> 가 빠진 경우를 짚어 줍니다. 1장의 교훈 그대로입니다.</div>
+</article>
+
+<article class="card" id="ex-effects">
+<h3>연습 3 — 효과음과 깜박임</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>판</th><th>방법</th></tr>
+<tr><td>공통</td><td>코어에는 이미 <code>last_clear()</code> 가 있다. 고정이 일어났는지 알리는 "사건 번호"를 하나 더 두면 프런트엔드가 프레임마다 비교할 수 있다</td></tr>
+<tr><td>TUI</td><td>터미널 벨 <code>\x07</code> 을 <code>present</code> 뒤에 한 바이트</td></tr>
+<tr><td>GUI</td><td><code>rodio</code> 크레이트(소리) — minifb 는 소리를 모른다</td></tr>
+<tr><td>WASM</td><td>Rust 를 고치지 않는다. JS 글루의 <code>onStats</code> 에서 줄 수가 늘면 Web Audio 로 소리</td></tr>
+</table>
+</div>
+<div class="key"><b>WASM 에 첫 import 를 넣고 싶다면</b> — Rust 에 <code class="nb">extern "C"</code> 블록으로 JS 함수를 선언하고 <code class="nb">instantiate(bytes, { env: { ... } })</code> 로 넘깁니다. 다만 "import 0개" 시험이 깨지는 것을 보고, 그 시험을 고칠지 설계를 지킬지 고르는 것까지가 연습입니다.</div>
+</article>
+
+<article class="card" id="ex-more">
+<h3>연습 4·5 — 최고 점수 · 더 넓은 판</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>연습</th><th>생각할 거리</th></tr>
+<tr><td>4. 최고 점수 저장</td><td>TUI·GUI 는 <code>std::fs</code> 로 파일 하나, WASM 은 JS 의 <code>localStorage</code>. 코어는 저장을 몰라야 한다 — 어디까지가 코어인지 다시 긋는 연습</td></tr>
+<tr><td>5. 판 크기를 바꾸기</td><td><code>WIDTH</code>·<code>HEIGHT</code> 가 <code>const</code> 라 타입(<code>[Row; HEIGHT]</code>)에 박혀 있다. 실행 중에 바꾸려면 <code>Vec</code> 으로 가거나, 상수 제네릭 <code>Board&lt;const W: usize, const H: usize&gt;</code> 으로 간다</td></tr>
+</table>
+</div>
+<div class="tip"><b>연습 5 는 트레이드오프 연습</b> — 고정 배열은 할당 0·복사 싸고, <code class="nb">Vec</code> 은 유연합니다. 2장 <code class="nb">sizes</code> 예제를 다시 돌려 크기가 어떻게 바뀌는지 보세요.</div>
+</article>
+
+<article class="card" id="pitfalls">
+<h3>함정 모음 — 이 덱에서 실제로 만난 것</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>함정</th><th>증상</th><th>나온 곳</th></tr>
+<tr><td><code>let _ = guard</code></td><td>경비원이 그 자리에서 drop</td><td>6장</td></tr>
+<tr><td><code>process::exit</code></td><td>Drop 이 안 불려 터미널이 raw 로 남는다</td><td>6장</td></tr>
+<tr><td><code>panic = "abort"</code> 를 release 에</td><td>패닉 때 Drop 없이 끝난다</td><td>9장 프로필</td></tr>
+<tr><td><code>as</code> 변환</td><td>큰 값이 조용히 잘린다</td><td>3장</td></tr>
+<tr><td>정수 넘침</td><td>디버그는 패닉, 릴리스는 감싸기</td><td>3장</td></tr>
+<tr><td><code>str::len()</code></td><td>글자 수가 아니라 UTF-8 바이트 수</td><td>2장, 5장</td></tr>
+<tr><td>FFI 밖으로 패닉</td><td>되감지 못하고 abort</td><td>9장</td></tr>
+<tr><td>옛 <code>memory.buffer</code> 뷰</td><td>grow 뒤 길이 0</td><td>10장</td></tr>
+<tr><td>두 표(Rust·JS)의 순서</td><td>컴파일러가 모른다</td><td>10장</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="make-targets">
+<h3>명령 모음 — <code>make</code></h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>목표</th><th>하는 일</th></tr>
+<tr><td><code>make test</code></td><td><code>cargo test --workspace</code> — 시험 81개</td></tr>
+<tr><td><code>make lint</code></td><td><code>cargo fmt --check</code> + <code>clippy -D warnings</code></td></tr>
+<tr><td><code>make build</code></td><td>TUI·GUI 릴리스 빌드</td></tr>
+<tr><td><code>make wasm</code> · <code>make wasm-test</code></td><td>.wasm 빌드 · node 시험 8개</td></tr>
+<tr><td><code>make record</code></td><td>tmux·Xvfb 로 실제 실행 화면 캡처</td></tr>
+<tr><td><code>make logs</code></td><td>덱의 "실행 결과" 상자를 전부 다시 돌려 <code>out/logs/</code> 에</td></tr>
+<tr><td><code>make deck</code> · <code>make check</code></td><td>덱 조립 · 글꼴·엔진·데모 검사</td></tr>
+<tr><td><code>make all</code></td><td>위를 차례로</td></tr>
+</table>
+</div>
+<div class="note"><b>덱의 코드는 어디서 왔나</b> — <code class="nb">deck/build.py</code> 가 소스의 <code class="nb">// ANCHOR:</code> 구간과 줄 범위를 잘라 싣고, 72칸·45줄을 넘으면 조립을 실패로 끝냅니다. 소스를 고치면 덱이 따라옵니다.</div>
+</article>
+
+<article class="card" id="further">
+<h3>더 읽을 거리</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>주제</th><th>자료</th></tr>
+<tr><td>Rust 전체</td><td><a href="https://doc.rust-lang.org/book/">The Rust Programming Language</a> · <a href="https://doc.rust-lang.org/rust-by-example/">Rust by Example</a></td></tr>
+<tr><td>2024 에디션 변경</td><td><a href="https://doc.rust-lang.org/edition-guide/rust-2024/">Edition Guide — Rust 2024</a> (<code>static mut</code> 참조, unsafe 속성)</td></tr>
+<tr><td>API 관례</td><td><a href="https://rust-lang.github.io/api-guidelines/">Rust API Guidelines</a> (게터 이름 등)</td></tr>
+<tr><td>테트리스 규칙</td><td><a href="https://tetris.wiki/Super_Rotation_System">TetrisWiki — SRS</a> · <a href="https://tetris.wiki/Tetris_Guideline">Tetris Guideline</a></td></tr>
+<tr><td>크레이트</td><td><a href="https://docs.rs/crossterm">crossterm</a> · <a href="https://docs.rs/minifb">minifb</a></td></tr>
+<tr><td>WASM</td><td><a href="https://developer.mozilla.org/en-US/docs/WebAssembly">MDN — WebAssembly</a> · <a href="https://rustwasm.github.io/docs/book/">Rust and WebAssembly</a> (wasm-bindgen 쪽 길)</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="fin">
+<h3>마치며</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>크레이트</th><th>줄 수(소스)</th><th>시험</th></tr>
+<tr><td>core</td><td>약 750</td><td>47 + 문서 1</td></tr>
+<tr><td>render</td><td>약 310</td><td>11</td></tr>
+<tr><td>tui</td><td>약 440</td><td>10</td></tr>
+<tr><td>gui</td><td>약 100</td><td>5</td></tr>
+<tr><td>wasm + 글루</td><td>약 300</td><td>7 + node 8</td></tr>
+</table>
+</div>
+<div class="key"><b>한 줄로</b> — 입출력 없는 코어를 먼저 만들고 시험으로 못 박으면, 터미널·창·브라우저는 각각 100~400줄의 얇은 껍데기가 됩니다. Rust 의 타입은 그 경계를 지키는 데 쓰였고, 빌림 검사기는 소유 관계가 나무 모양인 한 조용했습니다.</div>
+<p class="cap"><a href="#top">↑ 처음으로</a> · <a href="./index.html">🏰 보물창고</a></p>
+</article>

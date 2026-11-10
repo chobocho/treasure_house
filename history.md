@@ -1,3 +1,10 @@
+### [2026-11-10 18:24] Rust 테트리스 덱 완성 — TUI·GUI·WASM 5부 191장
+- **기획:** 규칙 코어 하나를 crossterm·minifb·손글루 WASM 세 판이 같이 쓰는 Go/Java/Python/JS 숙련자용 덱.
+- **TC:** 정상 — cargo 시험 81(core 47+doc 1·render 11·tui 10·gui 5·wasm 7), node 8. 경계 — 72칸·45줄 초과 0, 경로 노출 0.
+- **개발:** Rust_테트리스_만들기.html, rust_tetris/(core·render·tui·gui·wasm·deck·tools·out), index.html, README.md
+- **검증:** make all rc=0 (191장, check_deck 232 통과 0 실패, --check 통과)
+- **비고:** 폴드8 펼침 실기기 확인은 못 했다(WeasyPrint 374·1000px 정적 렌더만).
+
 ### [2026-10-22 03:12] Claude 운용 설정 정리 — /cp 명령 추가·지침 충돌 해소
 - **기획:** 사용 이력 분석 결과 중 2~3번. CLAUDE.md가 가리키던 /cp 가 없었고, 전역 대용량 문서 절을 참조했지만 그 절이 실제로는 없었다.
 - **TC:** 정상 — settings.json JSON 유효, 치환 대상 1회 일치. 경계 — 한글 깨짐 0건, 메모리 색인 링크 누락·고아 0건.

@@ -1,0 +1,113 @@
+<article class="card" id="ch03">
+<p class="chnum">3장</p>
+<h2>순서 — 난수와 7-bag</h2>
+<p class="chsub">크레이트 없이 쓰는 난수 · 정수 넘침 · VecDeque · impl Iterator</p>
+</article>
+
+<article class="card" id="why-no-rand">
+<h3>왜 <code>rand</code> 크레이트를 안 쓰나</h3>
+<!--CODE file=core/src/bag.rs lines=1-7-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이유</th><th>설명</th></tr>
+<tr><td>WASM</td><td><code>wasm32-unknown-unknown</code> 에는 OS 난수원이 없다. <code>rand</code> 는 <code>getrandom</code> 에 JS 글루를 붙여야 돈다</td></tr>
+<tr><td>재현</td><td>씨앗이 같으면 판이 같아야 시험·녹화·버그 재현이 된다</td></tr>
+<tr><td>크기</td><td>xorshift 는 20줄. 의존성 0 이 core 의 약속</td></tr>
+</table>
+</div>
+<div class="note"><b><code>use std::collections::VecDeque</code></b> — 양끝 큐. Java <code class="nb">ArrayDeque</code>, Python <code class="nb">collections.deque</code>. 표준 라이브러리는 의존성으로 치지 않습니다(WASM 에서도 <code class="nb">std</code> 의 컬렉션은 그대로 씁니다).</div>
+</article>
+
+<article class="card" id="rng">
+<h3>xorshift64* — 20줄 난수</h3>
+<!--CODE file=core/src/bag.rs anchor=rng-->
+</article>
+
+<article class="card" id="rng-read">
+<h3>난수 코드 읽기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>0x9E37_79B9_7F4A_7C15</code></td><td>숫자 사이 <code>_</code> 는 읽기용 구분자(Java·Python·JS 도 된다)</td></tr>
+<tr><td><code>seed.wrapping_add(...)</code></td><td>2⁶⁴ 에서 감싸는 덧셈 — <b>넘침이 의도</b>임을 적는다</td></tr>
+<tr><td><code>if z == 0 { 1 } else { z }</code></td><td><code>if</code> 도 식이다. 삼항 연산자가 따로 없다</td></tr>
+<tr><td><code>&amp;mut self</code></td><td><code>next_u64</code> 는 상태를 바꾸므로 고칠 수 있게 빌린다</td></tr>
+<tr><td><code>((r &gt;&gt; 32) * n as u64) &gt;&gt; 32</code></td><td>나머지(<code>%</code>) 대신 곱셈으로 범위를 줄이는 Lemire 의 방법</td></tr>
+</table>
+</div>
+<div class="warn"><b><code>as</code> 는 조용히 자른다</b> — <code class="nb">300u32 as u8</code> 은 44 입니다. 여기서는 <code class="nb">&gt;&gt; 32</code> 뒤라 값이 32비트에 들어간다는 걸 알고 쓴 것입니다. 넘칠 수 있는 곳에는 <code class="nb">u8::try_from</code> 을 씁니다.</div>
+</article>
+
+<article class="card" id="overflow">
+<h3>정수 넘침 — 디버그는 패닉, 릴리스는 감싼다</h3>
+<!--CODE file=tools/errors/overflow.rs-->
+<div class="g2">
+<div><!--RUN file=out/logs/overflow_debug.txt pick="1-4"--></div>
+<div><!--RUN file=out/logs/overflow_release.txt--></div>
+</div>
+<div class="key"><b>Java·Go 는 언제나 감싼다</b>, Python 은 큰 정수로 자란다. Rust 는 디버그 빌드에서 넘침을 버그로 잡고, 의도한 넘침은 <code class="nb">wrapping_*</code>·<code class="nb">checked_*</code>·<code class="nb">saturating_*</code> 로 적게 합니다. 4장의 <code class="nb">tick</code> 이 <code class="nb">saturating_add</code> 를 쓰는 이유입니다.</div>
+</article>
+
+<article class="card" id="bag">
+<h3>7-bag — 섞어서 한 봉지씩</h3>
+<!--CODE file=core/src/bag.rs anchor=bag-->
+<div class="note"><b>필드 이름 단축</b> — <code class="nb">Bag { rng: Rng::new(seed), queue: ... }</code> 처럼 값이 식이면 이름을 적고, 같은 이름의 변수면 생략합니다. <code class="nb">bag.refill()</code> 은 <code class="nb">let mut bag</code> 이라 부를 수 있습니다.</div>
+</article>
+
+<article class="card" id="bag-draw">
+<h3>채우기 · 꺼내기 · 엿보기</h3>
+<!--CODE file=core/src/bag.rs anchor=bag_draw-->
+</article>
+
+<article class="card" id="bag-read">
+<h3>7-bag 읽기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>prefix.iter().copied().collect()</code></td><td><code>&amp;Kind</code> 를 <code>Kind</code> 로 복사해 <code>VecDeque</code> 로 모은다</td></tr>
+<tr><td><code>let mut b = Kind::ALL;</code></td><td>상수 배열을 <b>복사</b>해 지역 변수로. 상수는 그대로다</td></tr>
+<tr><td><code>b.swap(i, j)</code></td><td>피셔–예이츠 셔플. O(n), 7! 가지 순서가 모두 같은 확률</td></tr>
+<tr><td><code>.expect("...")</code></td><td><code>None</code> 이면 이 메시지로 패닉. "여기는 절대 비지 않는다"는 주장</td></tr>
+<tr><td><code>impl Iterator&lt;Item = Kind&gt; + '_</code></td><td>"<code>Kind</code> 를 내는 어떤 반복자"를 돌려준다. <code>'_</code> 는 그 반복자가 <code>self</code> 를 빌리고 있다는 표시</td></tr>
+</table>
+</div>
+<div class="note"><b>큐를 언제나 7개 이상</b> — 미리보기 5칸을 그리려면 다음 조각들을 꺼내지 않고 볼 수 있어야 합니다. 봉지를 미리 하나 더 섞어 두는 것으로 해결했습니다.</div>
+</article>
+
+<article class="card" id="impl-iter">
+<h3><code>impl Trait</code> 반환 — 반복자를 그대로 내준다</h3>
+<div class="g2">
+<div class="cmp">
+<h5>Java</h5>
+<pre><code data-lang="java">Stream&lt;Kind&gt; peek() {
+    return queue.stream();
+}</code></pre>
+</div>
+<div class="cmp">
+<h5>Python</h5>
+<pre><code data-lang="py">def peek(self):
+    return iter(self.queue)</code></pre>
+</div>
+</div>
+<p>Rust 의 <code class="nb">peek</code> 은 <code class="nb">Vec</code> 을 새로 만들지 않고 큐를 빌린 반복자를 돌려줍니다. 4장의 <code class="nb">Game::next_kinds</code> 는 여기에 <code class="nb">.take(5)</code> 를 이어 붙일 뿐입니다.</p>
+<div class="tip"><b>빌림이 살아 있는 동안</b> — 반복자를 들고 있는 동안에는 <code class="nb">draw()</code>(<code class="nb">&amp;mut self</code>)를 부를 수 없습니다. 시험 <code class="nb">peek_shows_what_next_will_return</code> 이 <code class="nb">collect()</code> 로 먼저 <code class="nb">Vec</code> 에 받아 두는 이유입니다.</div>
+</article>
+
+<article class="card" id="bag-tests">
+<h3>봉지 시험 — 일곱 개마다 순열인가</h3>
+<!--CODE file=core/tests/bag.rs lines=56-77 cap="core/tests/bag.rs"-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>seq.chunks(7)</code></td><td>7개씩 끊은 슬라이스들. Python <code>itertools.batched</code></td></tr>
+<tr><td><code>u64::MAX</code></td><td>씨앗의 경계값도 하나</td></tr>
+<tr><td><code>"seed {seed}: {chunk:?}"</code></td><td>실패하면 어느 씨앗의 몇 번째 봉지인지 바로 보인다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="bag-run">
+<h3>3장 시험 결과</h3>
+<!--RUN file=out/logs/test_core.txt pick="1,8-20"-->
+<div class="note"><b><code>below_zero_panics - should panic ... ok</code></b> — <code class="nb">below(0)</code> 은 0으로 나누는 것과 같은 잘못된 호출이라 <code class="nb">assert!</code> 로 막았고, 그 패닉이 실제로 나는지도 시험합니다.</div>
+</article>

@@ -1,0 +1,170 @@
+<article class="card section" id="part3">
+<p class="chnum">3부</p>
+<h2>데스크톱 창 — 픽셀 버퍼와 minifb</h2>
+<p class="chsub">그리는 코드는 GUI·WASM 공용 크레이트 하나. 창 라이브러리는 버퍼만 받는다</p>
+</article>
+
+<article class="card" id="gui-shot-first">
+<h3>먼저 결과 — Xvfb 에서 실제로 띄운 창</h3>
+<!--IMG file=out/gui_play.png alt="minifb 창에 그린 테트리스 판" cap="cargo run -p tetris-gui --release -- --seed 7 · 462×588"-->
+</article>
+
+<article class="card" id="gui-choice">
+<h3>Rust GUI 생태계 — 무엇을 골랐나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>크레이트</th><th>성격</th><th>이 덱에서</th></tr>
+<tr><td><b>minifb</b></td><td><code>&amp;[u32]</code> 픽셀 버퍼를 창에 올리고 키를 읽는다. 끝</td><td>✔ — 그리는 코드를 직접 써야 해서 WASM 과 공유된다</td></tr>
+<tr><td>macroquad · ggez</td><td>게임 프레임워크. 도형·텍스처·소리</td><td>✘ — 편하지만 그리기가 프레임워크 안에 갇힌다</td></tr>
+<tr><td>egui · iced · Slint</td><td>위젯 GUI</td><td>✘ — 버튼·입력란이 필요한 앱용</td></tr>
+<tr><td>Bevy</td><td>ECS 게임 엔진</td><td>✘ — 테트리스에는 크다</td></tr>
+<tr><td>winit + pixels / softbuffer</td><td>창 + 버퍼 표시를 따로 고른다</td><td>△ — minifb 보다 유연, 코드는 두 배</td></tr>
+</table>
+</div>
+<div class="key"><b>고른 기준</b> — "픽셀 버퍼 하나"라는 경계는 브라우저 <code class="nb">canvas</code> 의 <code class="nb">ImageData</code> 와 정확히 같습니다. 그래서 4부 WASM 판이 렌더러를 한 줄도 안 고치고 씁니다.</div>
+</article>
+
+<article class="card" id="ch07">
+<p class="chnum">7장</p>
+<h2>픽셀 렌더러</h2>
+<p class="chsub">u32 버퍼 · 슬라이스 fill · 비트맵 글꼴 · let-else · 창 없이 시험하기</p>
+</article>
+
+<article class="card" id="render-crate">
+<h3><code>render</code> 크레이트 — 의존성은 core 하나</h3>
+<!--CODE file=render/Cargo.toml-->
+<!--CODE file=render/src/lib.rs lines=1-8-->
+<div class="note"><b>창도 브라우저도 모른다</b> — <code class="nb">render</code> 는 <code class="nb">&amp;Game</code> 을 받아 <code class="nb">Vec&lt;u32&gt;</code> 를 채울 뿐입니다. 그래서 창 없이 시험하고(11개), 창 없이 PNG 로도 뽑습니다(아래 <code class="nb">snapshot</code> 예제).</div>
+</article>
+
+<article class="card" id="colors">
+<h3>색 — 0RGB 정수와 섞기</h3>
+<!--CODE file=render/src/lib.rs anchor=colors-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>0x0031_C7EF</code></td><td>0x00RRGGBB. minifb 가 받는 그대로</td></tr>
+<tr><td><code>let ch = |s: u32| { ... };</code></td><td><code>a</code>·<code>b</code>·<code>wa</code>·<code>wb</code> 를 붙잡는 클로저. 채널(16·8·0비트)마다 부른다</td></tr>
+<tr><td><code>mix(c, 0xFF_FFFF, 3, 2)</code></td><td>흰색을 2/5 섞어 밝게 — 칸 테두리의 빛</td></tr>
+</table>
+</div>
+<div class="tip"><b>TUI 도 이 표를 쓴다</b> — 2부 <code class="nb">compose</code> 의 <code class="nb">rgb(color(k))</code>. 터미널의 24비트 색으로 바꿀 뿐 같은 값입니다.</div>
+</article>
+
+<article class="card" id="frame">
+<h3>그림판 — <code>struct Frame</code></h3>
+<!--CODE file=render/src/lib.rs lines=45-79-->
+<div class="note"><b>크기는 칸 하나로 정한다</b> — <code class="nb">Frame::new(28)</code> 이면 462×588. 화면이 크면 칸을 키우고, 레이아웃 계산은 전부 <code class="nb">cell</code> 의 배수라 비율이 그대로입니다.</div>
+</article>
+
+<article class="card" id="rect">
+<h3>사각형 채우기 — 잘라 내고 <code>fill</code></h3>
+<!--CODE file=render/src/lib.rs lines=91-97-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>(x + w).min(self.w)</code></td><td>오른쪽·아래로 넘치는 부분은 버퍼 끝에서 자른다</td></tr>
+<tr><td><code>y.min(y1)..y1</code></td><td>시작이 끝보다 크면 빈 범위 — 화면 밖 사각형은 아무것도 안 그린다</td></tr>
+<tr><td><code>self.px[a..b].fill(c)</code></td><td>한 줄을 슬라이스로 잘라 한 번에 채운다. 범위 검사는 자를 때 한 번뿐</td></tr>
+</table>
+</div>
+<div class="warn"><b>범위 검사는 사라지지 않는다</b> — <code class="nb">px[a..b]</code> 는 <code class="nb">b</code> 가 길이를 넘으면 패닉합니다. 위에서 <code class="nb">min</code> 으로 잘랐기 때문에 그럴 일이 없고, 시험 <code class="nb">smallest_cell_still_draws</code> 가 가장 작은 칸(8px)에서 이것을 확인합니다.</div>
+</article>
+
+<article class="card" id="block">
+<h3>입체 블록 — 사각형 다섯 개</h3>
+<!--CODE file=render/src/lib.rs anchor=block-->
+<!--IMG file=out/gui_start.png alt="시작 화면" cap="시작 직후 — 칸마다 위·왼쪽은 밝게, 아래·오른쪽은 어둡게"-->
+</article>
+
+<article class="card" id="font">
+<h3>5×7 비트맵 글꼴 — 글꼴 파일 없이</h3>
+<!--CODE file=render/src/font.rs lines=1-10-->
+<div class="g2">
+<div>
+<p><code class="nb">'0'</code> 의 일곱 줄(소스의 2진 리터럴):</p>
+<pre><code data-lang="text">0b01110   .###.
+0b10001   #...#
+0b10011   #..##
+0b10101   #.#.#
+0b11001   ##..#
+0b10001   #...#
+0b01110   .###.</code></pre>
+</div>
+<div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>Option&lt;[u8; 7]&gt;</code></td><td>없는 글자는 <code>None</code></td></tr>
+<tr><td><code>#[rustfmt::skip]</code></td><td>이 식만 포맷하지 않는다 — 표가 한 줄 한 글자로 남게</td></tr>
+<tr><td><code>to_ascii_uppercase()</code></td><td>소문자도 같은 모양</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="note">필요한 글자는 숫자 10개와 NEXT·HOLD·SCORE·LINES·LEVEL·PAUSED·GAME OVER 의 대문자뿐입니다. 시험 <code class="nb">font_covers_the_labels_only</code> 가 빠진 글자가 없는지 셉니다.</div>
+</article>
+
+<article class="card" id="text">
+<h3>글자 찍기 — <code>let ... else</code></h3>
+<!--CODE file=render/src/lib.rs anchor=text-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>let Some(g) = ... else { continue };</code></td><td>패턴이 맞으면 <code>g</code> 를 묶고, 아니면 <code>else</code> 블록(반드시 빠져나가야 한다). Swift 의 <code>guard let</code></td></tr>
+<tr><td><code>bits &amp; (0b10000 &gt;&gt; col)</code></td><td>왼쪽 비트부터 하나씩</td></tr>
+<tr><td><code>scale</code></td><td>한 비트 = scale×scale 픽셀. 칸이 커지면 글자도 커진다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="draw">
+<h3>한 프레임 — <code>draw</code> ①</h3>
+<!--CODE file=render/src/lib.rs lines=147-176-->
+<div class="note"><b>매번 처음부터 다 그린다</b> — 2부의 차분과 반대입니다. 462×588 이면 27만 픽셀이지만 전부 메모리 안의 연속된 배열 칠하기라 싸고, 창에 올리는 일은 minifb·브라우저가 합니다. "어디가 바뀌었나"를 추적하는 코드가 없으니 지울 때 남는 잔상 버그도 없습니다.</div>
+</article>
+
+<article class="card" id="draw2">
+<h3>한 프레임 — <code>draw</code> ②</h3>
+<!--CODE file=render/src/lib.rs lines=178-219-->
+<div class="tip"><b><code>saturating_sub</code></b> — 글자 폭이 판보다 넓어지는(칸이 아주 작은) 경우에도 <code class="nb">usize</code> 뺄셈이 넘치지 않게. 디버그 빌드라면 패닉, 릴리스라면 엄청 큰 x 가 되었을 자리입니다(3장).</div>
+</article>
+
+<article class="card" id="render-panel">
+<h3>패널 — 커서 <code>y</code> 를 내려 가며</h3>
+<!--CODE file=render/src/lib.rs anchor=panel-->
+</article>
+
+<article class="card" id="rgba">
+<h3>캔버스용 변환 — <code>as_chunks_mut</code></h3>
+<!--CODE file=render/src/lib.rs lines=81-89-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>out: &amp;mut [u8]</code></td><td>바깥(WASM 메모리)이 준 버퍼에 쓴다. 이 함수는 할당하지 않는다</td></tr>
+<tr><td><code>as_chunks_mut::&lt;4&gt;()</code></td><td><code>&amp;mut [u8]</code> 를 <code>&amp;mut [[u8; 4]]</code> 로 본다(Rust 1.88+). 나머지 조각은 <code>_</code></td></tr>
+<tr><td><code>*o = [r, g, b, 0xFF]</code></td><td>네 바이트를 배열 하나로 대입</td></tr>
+<tr><td><code>::&lt;4&gt;</code></td><td>"터보피시" — 제네릭 인자를 호출 자리에서 직접 적는 문법</td></tr>
+</table>
+</div>
+<div class="note"><b>왜 변환이 필요한가</b> — minifb 는 0RGB <code class="nb">u32</code>, 캔버스 <code class="nb">ImageData</code> 는 바이트 R·G·B·A 순서입니다. 리틀 엔디언 <code class="nb">u32</code> 를 그대로 넘기면 B·G·R·0 이 되어 색이 뒤집히고 투명해집니다.</div>
+</article>
+
+<article class="card" id="render-tests">
+<h3>픽셀 시험 — 칸 한가운데 색을 본다</h3>
+<!--CODE file=render/tests/render.rs lines=8-14 cap="render/tests/render.rs — 도우미"-->
+<!--CODE file=render/tests/render.rs lines=68-80 cap="render/tests/render.rs — 다시 그려도 같고, 옛 자리는 지워진다"-->
+<div class="tip"><b>스크린숏 비교 대신</b> — 이미지 전체를 골든 파일과 비교하면 색 하나 바꿀 때마다 시험이 깨집니다. 칸 한가운데 픽셀이 "판 색인가, T 색인가, 그림자 색인가"만 보면 규칙을 시험하면서도 꾸밈을 바꿀 자유가 남습니다.</div>
+</article>
+
+<article class="card" id="render-run">
+<h3>렌더러 시험 결과 — 11개</h3>
+<!--RUN file=out/logs/test_render.txt pick="1,10-23"-->
+</article>
+
+<article class="card" id="snapshot">
+<h3>창 없이 그림 뽑기 — PPM</h3>
+<!--CODE file=render/examples/snapshot.rs lines=34-48-->
+<!--RUN file=out/logs/snapshot.txt-->
+<div class="note"><b>PPM(P6)</b> 은 <code class="nb">"P6\n가로 세로\n255\n"</code> 머리말 뒤에 RGB 바이트를 늘어놓기만 하는 형식이라 라이브러리가 필요 없습니다. <code class="nb">write!</code> 는 <code class="nb">println!</code> 과 같은 형식 문법으로 아무 <code class="nb">Write</code> 에 씁니다. 창이 없는 CI 에서 화면을 확인하는 가장 싼 길입니다.</div>
+</article>

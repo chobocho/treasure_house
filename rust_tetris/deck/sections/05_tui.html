@@ -1,0 +1,193 @@
+<article class="card section" id="part2">
+<p class="chnum">2부</p>
+<h2>터미널 판 — crossterm</h2>
+<p class="chsub">코어를 바깥 세상에 처음 붙인다. 순수 함수로 화면을 만들고, 바뀐 칸만 쓴다</p>
+</article>
+
+<article class="card" id="ch05">
+<p class="chnum">5장</p>
+<h2>화면 합성과 차분</h2>
+<p class="chsub">외부 크레이트 · Vec · 슬라이스 · 반복자 zip · impl Write</p>
+</article>
+
+<article class="card" id="tui-shot-first">
+<h3>먼저 결과 — tmux 에서 실제로 돌린 화면</h3>
+<!--ANSI file=out/tui_play.ansi cap="cargo run -p tetris-tui --release -- --seed 7 (tmux capture-pane -e)"-->
+<div class="note">판 한 칸 = 글자 두 개. 터미널 글자는 세로로 길쭉해서 두 개를 붙여야 정사각형에 가깝습니다. <code class="nb">[]</code> 는 하드 드롭하면 떨어질 자리(그림자)입니다.</div>
+</article>
+
+<article class="card" id="why-crossterm">
+<h3>왜 crossterm 인가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>크레이트</th><th>무엇</th><th>이 덱에서</th></tr>
+<tr><td><b>crossterm</b></td><td>raw 모드·커서·색·키 이벤트. 윈도·맥·리눅스</td><td>✔ 씀 — 저수준이라 Rust 가 잘 보인다</td></tr>
+<tr><td>ratatui</td><td>crossterm 위의 위젯·레이아웃 프레임워크</td><td>✘ — 위젯이 차분 그리기를 대신 해 줘서 배울 게 숨는다</td></tr>
+<tr><td>termion</td><td>유닉스 전용 저수준</td><td>✘ — 윈도가 안 된다</td></tr>
+</table>
+</div>
+<!--CODE file=tui/Cargo.toml-->
+<div class="tip"><b><code>crossterm = "0.29"</code></b> 은 "0.29 이상 0.30 미만"입니다(캐럿 규칙. 0.x 에서는 둘째 자리가 주 버전). 정확한 버전은 <code class="nb">Cargo.lock</code> 에 고정되고, 그 파일을 커밋합니다 — 실행 파일이 있는 워크스페이스의 관례입니다.</div>
+</article>
+
+<article class="card" id="vdom">
+<h3>구조 — 터미널판 가상 DOM</h3>
+<div class="flow">
+<span class="box"><code>&amp;Game</code></span><span class="arr">→</span>
+<span class="box"><code>compose</code><br><small>순수 함수</small></span><span class="arr">→</span>
+<span class="box"><code>Screen</code><br><small>40×23 글자</small></span>
+</div>
+<div class="flow">
+<span class="box">이전 <code>Screen</code></span><span class="arr">→</span>
+<span class="box"><code>diff</code></span><span class="arr">→</span>
+<span class="box"><code>present</code><br><small>바뀐 칸만</small></span><span class="arr">→</span>
+<span class="box">터미널</span>
+</div>
+<!--CODE file=tui/src/lib.rs lines=1-4-->
+<div class="key"><b>터미널 없이 시험한다</b> — <code class="nb">compose</code>·<code class="nb">diff</code> 는 입출력이 없는 함수이고, <code class="nb">present</code> 는 "아무 <code class="nb">Write</code>" 에 씁니다. 시험은 <code class="nb">Vec&lt;u8&gt;</code> 에 쓰게 해 바이트를 들여다봅니다. React 의 render → reconcile → commit 과 같은 나눔입니다.</div>
+</article>
+
+<article class="card" id="screen">
+<h3>글자 격자 — <code>Cell</code> 과 <code>Screen</code></h3>
+<!--CODE file=tui/src/lib.rs lines=19-61-->
+</article>
+
+<article class="card" id="screen-read">
+<h3><code>Screen</code> 읽기 — 왜 <code>Vec</code> 인가</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>cells: Vec&lt;Cell&gt;</code></td><td>힙에 놓인 920칸. <code>Board</code> 처럼 배열로 두면 <code>Screen</code> 을 옮길 때마다 수 KB 를 복사한다</td></tr>
+<tr><td><code>vec![BLANK; W * H]</code></td><td>같은 값으로 채운 <code>Vec</code> 을 만드는 매크로</td></tr>
+<tr><td><code>y * W + x</code></td><td>2차원을 1차원 번호로 — 행 우선. <code>Vec&lt;Vec&lt;_&gt;&gt;</code> 보다 할당이 한 번</td></tr>
+<tr><td><code>fn set</code> (비공개)</td><td>범위 밖은 조용히 버린다 — 화면 그리기에서는 잘리는 게 맞다</td></tr>
+<tr><td><code>fn get</code> (공개)</td><td>범위 밖이면 패닉 — 시험이 엉뚱한 칸을 묻는 건 버그다</td></tr>
+</table>
+</div>
+<div class="note"><b><code>Cell</code> 은 <code>Copy</code></b> — <code class="nb">char</code>(4 B)와 crossterm <code class="nb">Color</code> 둘이라 작습니다. <code class="nb">self.cells[i]</code> 로 꺼내면 사본이 나오고, 빌림을 신경 쓸 일이 없습니다.</div>
+</article>
+
+<article class="card" id="put-str">
+<h3>글자 쓰기와 줄 읽기 — 슬라이스</h3>
+<!--CODE file=tui/src/lib.rs lines=63-84-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>s.chars().enumerate()</code></td><td>바이트가 아니라 글자 단위로</td></tr>
+<tr><td><code>Cell { ch, fg, bg }</code></td><td>필드 이름 단축 — 지역 변수 이름이 같다</td></tr>
+<tr><td><code>&amp;self.cells[a..b]</code></td><td>범위로 자른 슬라이스. 복사 없이 원본의 일부를 빌린다(Go 슬라이스, Python 은 복사)</td></tr>
+</table>
+</div>
+<div class="tip"><b>rustfmt 가 매개변수를 세로로 펼쳤다</b> — <code class="nb">max_width = 72</code> 에 안 들어가서입니다. 사람이 줄바꿈을 고민하지 않게 하는 것이 <code class="nb">gofmt</code> 와 같은 철학입니다.</div>
+</article>
+
+<article class="card" id="compose-board">
+<h3><code>compose</code> ① — 판과 빈 칸</h3>
+<!--CODE file=tui/src/lib.rs lines=129-162-->
+<div class="note"><b>색 표는 3부의 픽셀 렌더러 것</b> — <code class="nb">use tetris_render::{BOARD_BG, OVERLAY, color}</code> 를 함수 안에 적었습니다. <code class="nb">use</code> 는 블록 범위라 이 함수에서만 보입니다. 세 판이 같은 색을 쓰게 하는 가장 싼 방법입니다.</div>
+</article>
+
+<article class="card" id="compose-piece">
+<h3><code>compose</code> ② — 그림자 먼저, 조각은 위에</h3>
+<!--CODE file=tui/src/lib.rs lines=164-191-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>for (x, y) in ghost.cells()</code></td><td><code>[(i32, i32); 4]</code> 를 값으로 돌며 튜플을 바로 푼다</td></tr>
+<tr><td><code>if y &gt;= 0</code></td><td>판 위로 삐져나온 칸(회전 직후)은 그리지 않는다</td></tr>
+<tr><td><code>x as usize * 2</code></td><td><code>as</code> 가 <code>*</code> 보다 먼저 묶인다. 음수가 아님을 위에서 확인했다</td></tr>
+</table>
+</div>
+<div class="note">그림자를 먼저, 조각을 나중에 그립니다. 둘이 겹치면(바닥에 닿았을 때) 조각이 이깁니다 — 화가 알고리즘.</div>
+</article>
+
+<article class="card" id="compose-overlay">
+<h3><code>compose</code> ③ — 도움말과 덮개</h3>
+<!--CODE file=tui/src/lib.rs lines=193-224-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>let (msg, hint) = if ... { (...) } else { (...) };</code></td><td><code>if</code> 식이 튜플을 내고 바로 푼다</td></tr>
+<tr><td><code>for y in 9..=11</code></td><td><code>..=</code> 는 끝을 포함하는 범위</td></tr>
+<tr><td><code>let mid = |t: &amp;str| ...;</code></td><td>바깥 상수 <code>WIDTH</code> 를 쓰는 작은 클로저</td></tr>
+<tr><td><code>t.len()</code></td><td>바이트 수. 덮개 글자를 ASCII 로만 쓴 이유</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="panel">
+<h3>오른쪽 패널 — NEXT · HOLD · 점수</h3>
+<!--CODE file=tui/src/lib.rs lines=226-270-->
+</article>
+
+<article class="card" id="panel-read">
+<h3>패널 읽기 — 클로저가 <code>&amp;mut</code> 를 받는 이유</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>let label = |s: &amp;mut Screen, y, t: &amp;str| ...</code></td><td>화면을 <b>인자로</b> 받는다. 클로저가 <code>s</code> 를 붙잡아 두면, 그동안 <code>mini(s, ...)</code> 가 <code>s</code> 를 빌릴 수 없다</td></tr>
+<tr><td><code>if let Some(k) = game.hold()</code></td><td>한 갈래만 보는 <code>match</code>. Swift·Kotlin 의 <code>if let</code>/<code>?.let</code></td></tr>
+<tr><td><code>stats.into_iter().enumerate()</code></td><td>배열을 값으로 돌며 <code>(i, (이름, 값))</code> — 중첩 튜플도 한 번에 푼다</td></tr>
+<tr><td><code>&amp;v.to_string()</code></td><td>숫자 → <code>String</code> → <code>&amp;str</code> 로 빌려 넘김</td></tr>
+</table>
+</div>
+<div class="warn"><b>빌림 검사기를 처음 만나는 자리</b> — <code class="nb">label</code> 이 <code class="nb">s</code> 를 붙잡는 클로저(<code class="nb">|y, t| s.put_str(...)</code>)였다면 <code class="nb">label(...)</code> 과 <code class="nb">mini(s, ...)</code> 를 번갈아 부르는 순간 "두 번 가변 빌림" 오류가 납니다. 고치는 법은 간단합니다: 붙잡지 말고 넘겨받는다.</div>
+</article>
+
+<article class="card" id="diff">
+<h3>차분 — 반복자 다섯 단</h3>
+<!--CODE file=tui/src/lib.rs lines=273-283-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>단</th><th>나오는 것</th><th>Python 이라면</th></tr>
+<tr><td><code>.iter()</code></td><td><code>&amp;Cell</code></td><td><code>iter(prev)</code></td></tr>
+<tr><td><code>.zip(&amp;next.cells)</code></td><td><code>(&amp;Cell, &amp;Cell)</code></td><td><code>zip(prev, next)</code></td></tr>
+<tr><td><code>.enumerate()</code></td><td><code>(i, (a, b))</code></td><td><code>enumerate(...)</code></td></tr>
+<tr><td><code>.filter(|(_, (a, b))| a != b)</code></td><td>다른 칸만</td><td><code>if a != b</code></td></tr>
+<tr><td><code>.map(|(i, _)| i).collect()</code></td><td><code>Vec&lt;usize&gt;</code></td><td><code>[i for i, (a, b) in ... ]</code></td></tr>
+</table>
+</div>
+<div class="note"><b>비용</b> — 이 사슬은 중간 리스트 없이 손으로 쓴 <code class="nb">for</code> 루프와 거의 같은 기계어로 컴파일됩니다. "제로 코스트 추상화"라고 부르는 것이 이것입니다.</div>
+</article>
+
+<article class="card" id="present">
+<h3>터미널에 쓰기 — <code>present</code></h3>
+<!--CODE file=tui/src/lib.rs lines=285-321-->
+</article>
+
+<article class="card" id="impl-write">
+<h3><code>out: &amp;mut impl Write</code> — 어디에 쓰든</h3>
+<div class="g2">
+<div class="cmp">
+<h5>Go</h5>
+<pre><code data-lang="go">func Present(out io.Writer, ...) error</code></pre>
+</div>
+<div class="cmp">
+<h5>Java</h5>
+<pre><code data-lang="java">void present(OutputStream out, ...)
+    throws IOException</code></pre>
+</div>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>impl Write</code> (인자 자리)</td><td>"<code>Write</code> 를 구현한 어떤 타입" — 제네릭의 줄임. 호출마다 그 타입에 맞춘 사본이 컴파일된다(동적 호출 없음)</td></tr>
+<tr><td><code>io::Result&lt;()&gt;</code></td><td>성공이면 값 없음(<code>()</code>), 실패면 <code>io::Error</code></td></tr>
+<tr><td><code>queue!(out, ...)?</code></td><td>escape 시퀀스를 버퍼에 쌓는 매크로. 실패하면 <code>?</code> 가 바로 오류를 돌려준다 — Go 의 <code>if err != nil { return err }</code></td></tr>
+</table>
+</div>
+<div class="key"><b>실행 파일은 <code>BufWriter&lt;Stdout&gt;</code>, 시험은 <code>Vec&lt;u8&gt;</code></b> — 같은 함수가 둘 다 받습니다. 목(mock) 프레임워크가 필요 없습니다.</div>
+</article>
+
+<article class="card" id="bytes">
+<h3>차분이 아끼는 양 — 실제로 재기</h3>
+<!--CODE file=tui/examples/bytes.rs lines=6-31-->
+<!--RUN file=out/logs/bytes.txt-->
+<div class="note">전부 다시 그리면 프레임마다 2.3 KB, 바뀐 칸만 쓰면 0.2~0.5 KB. 초당 60프레임이면 140 KB/s 대 10~30 KB/s 차이이고, 아무 일도 없는 프레임은 거의 0입니다. SSH 너머에서 깜박임이 없는 이유입니다.</div>
+</article>
+
+<article class="card" id="tui-tests">
+<h3>화면 시험 — 터미널 없이</h3>
+<!--CODE file=tui/tests/screen.rs lines=118-143 cap="tui/tests/screen.rs"-->
+<div class="tip"><b><code>"\x1b[2J"</code></b> 는 "화면 전부 지우기" escape 시퀀스입니다. 첫 화면에는 있고 증분 화면에는 없어야 합니다. 바이트를 직접 보는 시험이라 crossterm 버전이 바뀌어 출력이 달라지면 바로 압니다.</div>
+</article>

@@ -1,0 +1,230 @@
+<article class="card" id="ch04">
+<p class="chnum">4장</p>
+<h2>게임 — 상태 기계 하나</h2>
+<p class="chsub">입력은 enum, 시간은 숫자 · 캡슐화 · 고정 지연 · 시험으로 규칙 못 박기</p>
+</article>
+
+<article class="card" id="game-design">
+<h3>코어의 바깥 경계 — 함수 두 개</h3>
+<div class="flow">
+<span class="box">키·패드·터치</span><span class="arr">→</span><span class="box"><code>apply(Action)</code></span>
+</div>
+<div class="flow">
+<span class="box">시계</span><span class="arr">→</span><span class="box"><code>tick(dt_ms)</code></span>
+</div>
+<div class="flow">
+<span class="box"><code>Game</code></span><span class="arr">→</span><span class="box">게터 → 화면</span>
+</div>
+<!--CODE file=core/src/game.rs lines=1-4-->
+<div class="key"><b>시계를 주입한다</b> — Go 에서 <code class="nb">time.Now</code> 를 인터페이스로 빼는 것, Java 에서 <code class="nb">Clock</code> 을 넘기는 것과 같은 생각을 더 단순하게 했습니다. 코어는 "몇 ms 지났다"만 받으므로 시험이 1초를 기다릴 필요가 없습니다.</div>
+</article>
+
+<article class="card" id="action">
+<h3>입력 — <code>enum Action</code></h3>
+<!--CODE file=core/src/game.rs anchor=action-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>프런트엔드</th><th>무엇을 <code>Action</code> 으로 바꾸나</th></tr>
+<tr><td>TUI (2부)</td><td>crossterm <code>KeyEvent</code></td></tr>
+<tr><td>GUI (3부)</td><td>minifb <code>Key</code></td></tr>
+<tr><td>WASM (4부)</td><td>JS 가 넘긴 정수 0~7</td></tr>
+</table>
+</div>
+<div class="note">키 배치는 바깥의 일이라 코어에는 "왼쪽 화살표"라는 말이 없습니다. 같은 <code class="nb">Action</code> 을 받으니 세 판의 동작이 정확히 같습니다.</div>
+</article>
+
+<article class="card" id="game-struct">
+<h3><code>struct Game</code> — 전부 닫힌 필드</h3>
+<!--CODE file=core/src/game.rs anchor=game-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>필드</th><th>왜 따로 있나</th></tr>
+<tr><td><code>hold_used</code></td><td>조각 하나에 홀드는 한 번 — 무한 홀드로 시간 끌기 방지</td></tr>
+<tr><td><code>fall_ms</code> / <code>lock_ms</code></td><td>공중에서는 중력을, 바닥에서는 고정 지연을 센다</td></tr>
+<tr><td><code>resets</code></td><td>바닥에서 움직여 고정을 미룬 횟수. 15번까지</td></tr>
+</table>
+</div>
+<div class="note"><b>모두 비공개</b> — 바깥에서 <code class="nb">score</code> 를 고치거나 <code class="nb">over</code> 를 되돌릴 길이 없습니다. 288바이트, 힙에 있는 것은 봉지의 <code class="nb">VecDeque</code> 하나뿐입니다.</div>
+</article>
+
+<article class="card" id="setup">
+<h3>시작하기 — <code>new</code> 와 <code>with_setup</code></h3>
+<!--CODE file=core/src/game.rs lines=53-82-->
+<div class="tip"><b>필드를 하나도 빼먹을 수 없다</b> — 구조체 리터럴은 모든 필드를 적어야 컴파일됩니다. 필드를 하나 더하면 이 자리가 컴파일 오류로 알려 줍니다. Go 의 "빠진 필드는 0" 과 반대입니다.</div>
+</article>
+
+<article class="card" id="gravity">
+<h3>중력 공식 — <code>f64</code> 한 번, 결과는 정수 ms</h3>
+<!--CODE file=core/src/game.rs anchor=gravity-->
+<!--RUN file=out/logs/gravity.txt-->
+<div class="note"><b>숫자 변환은 전부 명시적</b> — <code class="nb">l as f64</code>, <code class="nb">as i32</code>, <code class="nb">as u32</code>. Rust 는 <code class="nb">u32 * f64</code> 를 그냥 두지 않습니다. <code class="nb">.max(1)</code> 은 레벨 18 이상에서 0ms 가 되어 무한 루프에 빠지는 것을 막습니다.</div>
+</article>
+
+<article class="card" id="apply">
+<h3>입력 처리 — <code>apply</code></h3>
+<!--CODE file=core/src/game.rs anchor=apply-->
+</article>
+
+<article class="card" id="apply-read">
+<h3><code>apply</code> 읽기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>let ok = match a { ... };</code></td><td><code>match</code> 가 값을 낸다. 갈래마다 <code>bool</code></td></tr>
+<tr><td><code>Action::SoftDrop =&gt; { ...; ok }</code></td><td>블록도 식 — 마지막 줄 <code>ok</code> 가 갈래의 값</td></tr>
+<tr><td><code>return true;</code> (HardDrop·Hold)</td><td>고정 지연 초기화를 건너뛰고 바로 빠져나간다</td></tr>
+<tr><td><code>unreachable!(...)</code></td><td>"여기 오면 버그" — 위에서 이미 처리했지만 <code>match</code> 는 모든 갈래를 요구한다</td></tr>
+<tr><td><code>2 * dist as u32</code></td><td>그림자까지 거리 × 2점</td></tr>
+</table>
+</div>
+<div class="warn"><b><code>_ =&gt; false</code> 로 Pause 갈래를 뭉개지 않은 이유</b> — 그러면 나중에 <code class="nb">Action</code> 을 하나 더 넣어도 컴파일러가 이 <code class="nb">match</code> 를 짚어 주지 않습니다. 1장의 "빠짐없는 match" 를 스스로 버리는 셈입니다.</div>
+</article>
+
+<article class="card" id="lock-reset">
+<h3>고정 지연 — 움직이면 미뤄 주되 15번까지</h3>
+<!--CODE file=core/tests/game.rs lines=137-156 cap="core/tests/game.rs"-->
+<div class="note"><b>규칙의 경계를 시험이 정의한다</b> — 15번째 이동까지는 고정이 미뤄지고, 16번째는 이동만 되고 타이머는 안 돌아갑니다. "무한 회전으로 시간 끌기"를 막는 가이드라인 규칙입니다.</div>
+</article>
+
+<article class="card" id="tick">
+<h3>시간 흘리기 — <code>tick</code></h3>
+<!--CODE file=core/src/game.rs anchor=tick-->
+</article>
+
+<article class="card" id="tick-read">
+<h3><code>tick</code> 읽기 — 큰 dt 도 안전하게</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>상황</th><th>무엇이 일어나나</th></tr>
+<tr><td>공중</td><td><code>fall_ms</code> 를 쌓고, 한 칸 시간(g)이 찰 때마다 한 칸씩 내린다 — 프레임이 늦어도 칸을 건너뛰지 않는다</td></tr>
+<tr><td>바닥에 닿음</td><td>남은 시간은 버린다. 다음 <code>tick</code> 부터 고정 지연</td></tr>
+<tr><td>바닥</td><td><code>lock_ms</code> 가 500 이 되면 고정</td></tr>
+<tr><td><code>dt = u32::MAX</code></td><td><code>saturating_add</code> 라 넘치지 않는다</td></tr>
+</table>
+</div>
+<!--CODE file=core/tests/game.rs lines=158-166 cap="core/tests/game.rs — 창을 오래 내려 뒀다 돌아온 경우"-->
+</article>
+
+<article class="card" id="helpers">
+<h3>움직이기와 돌리기 — 비공개 도우미</h3>
+<!--CODE file=core/src/game.rs anchor=helpers-->
+</article>
+
+<article class="card" id="rotate-read">
+<h3><code>rotate</code> 읽기 — 시도하고, 맞으면 바꾼다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>for (dx, dy) in kicks(...)</code></td><td>길이 5 배열을 값으로 돈다. 튜플을 바로 풀어 받는다</td></tr>
+<tr><td><code>Piece { rot: to, ..self.cur }.moved(dx, dy)</code></td><td>회전한 사본을 만들고 킥만큼 옮긴 사본을 또 만든다. 원본 <code>self.cur</code> 는 그대로</td></tr>
+<tr><td><code>if self.board.fits(&amp;p) { self.cur = p; ... }</code></td><td>맞을 때만 대입 — 실패하면 아무것도 안 바뀐다</td></tr>
+<tr><td><code>fn grounded(&amp;self)</code></td><td>"한 칸 아래가 막혔나" — 읽기만 하니 <code>&amp;self</code></td></tr>
+</table>
+</div>
+<div class="key"><b>값 사본으로 시도하기</b> — <code class="nb">Piece</code> 가 12바이트 <code class="nb">Copy</code> 라서 "옮겨 보고 안 되면 되돌리기" 대신 "사본을 만들어 보고 되면 대입"이 공짜입니다. 되돌리는 코드가 없으니 되돌리다 틀릴 일도 없습니다.</div>
+</article>
+
+<article class="card" id="kick-tests">
+<h3>벽 킥 시험 — T 와 I</h3>
+<!--CODE file=core/tests/game.rs lines=181-201 cap="core/tests/game.rs"-->
+<div class="tip"><b><code>while g.apply(Action::Left) {}</code></b> — 몸통이 빈 <code class="nb">while</code>. <code class="nb">apply</code> 가 <code class="nb">false</code> 를 낼 때(벽)까지 민다. 바뀌었으면 <code class="nb">true</code> 를 돌려주게 만든 덕에 시험이 짧습니다.</div>
+</article>
+
+<article class="card" id="game-lock">
+<h3>고정 · 스폰 · 홀드</h3>
+<!--CODE file=core/src/game.rs anchor=lock-->
+</article>
+
+<article class="card" id="game-over">
+<h3>게임 오버는 두 가지</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>이름</th><th>언제</th><th>코드 · 시험</th></tr>
+<tr><td>block out</td><td>새 조각이 나올 자리가 이미 막혀 있다</td><td><code>spawn</code> · <code>block_out_when_spawn_is_covered</code></td></tr>
+<tr><td>lock out</td><td>조각이 판 위(y&lt;0)로 삐져나온 채 굳었다</td><td><code>Board::lock</code> 의 <code>false</code> · <code>lock_above_the_field_reports_false</code></td></tr>
+</table>
+</div>
+<!--CODE file=core/tests/game.rs lines=217-235 cap="core/tests/game.rs"-->
+</article>
+
+<article class="card" id="option-replace">
+<h3>홀드 한 줄 — <code>Option::replace</code></h3>
+<div class="g2">
+<div class="cmp">
+<h5>Python 으로 쓰면</h5>
+<pre><code data-lang="py">old, self.hold = self.hold, self.cur.kind
+nxt = old if old is not None else self.bag.draw()</code></pre>
+</div>
+<div class="cmp">
+<h5>Rust</h5>
+<pre><code data-lang="rust">let next = match self.hold.replace(self.cur.kind) {
+    Some(k) =&gt; k,
+    None =&gt; self.bag.draw(),
+};</code></pre>
+</div>
+</div>
+<p><code class="nb">replace</code> 는 새 값을 넣고 옛 값을 <code class="nb">Option</code> 으로 돌려줍니다. 옛 값이 없을 수 있다는 사실이 <code class="nb">match</code> 에 드러나 있어, "첫 홀드" 경우를 빠뜨릴 수 없습니다.</p>
+<!--CODE file=core/tests/game.rs lines=97-110 cap="core/tests/game.rs"-->
+</article>
+
+<article class="card" id="getters">
+<h3>게터 — 값으로, 빌림으로, 반복자로</h3>
+<!--CODE file=core/src/game.rs lines=248-271-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>반환 타입</th><th>왜</th></tr>
+<tr><td><code>&amp;Board</code></td><td>200바이트를 복사하지 않고 읽기 전용으로</td></tr>
+<tr><td><code>Piece</code></td><td>12바이트 <code>Copy</code> — 빌림보다 사본이 단순</td></tr>
+<tr><td><code>impl Iterator ... + '_</code></td><td>봉지를 빌린 채 다음 5개를 흘려준다</td></tr>
+</table>
+</div>
+<div class="note"><b>getter 이름에 <code>get_</code> 을 안 붙인다</b> — <code class="nb">score()</code>, <code class="nb">is_over()</code>. Rust API 지침의 관례입니다(Go 와 같고 Java 와 다르다).</div>
+</article>
+
+<article class="card" id="test-helpers">
+<h3>시험 도우미 — 판 그림 + 첫 조각</h3>
+<!--CODE file=core/tests/game.rs lines=1-13 cap="core/tests/game.rs — 앞부분"-->
+<!--CODE file=core/tests/game.rs lines=64-77 cap="core/tests/game.rs — 테트리스 한 방"-->
+<div class="tip"><b>점수까지 손으로 셈한다</b> — I 를 세워 오른쪽 끝으로 민 뒤 하드 드롭: 16칸 × 2점 + 4줄 800점 × 레벨 1. 숫자가 맞지 않으면 규칙 어딘가가 틀린 것입니다.</div>
+</article>
+
+<article class="card" id="closure-test">
+<h3>클로저로 두 번 돌리기 — 결정론 시험</h3>
+<!--CODE file=core/tests/game.rs lines=237-255 cap="core/tests/game.rs"-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>let play = |seed| { ... };</code></td><td>클로저. 인자 타입은 쓰임새(<code>Game::new(seed)</code>)에서 <code>u64</code> 로 추론</td></tr>
+<tr><td><code>0..200u32</code></td><td>숫자 뒤 접미사로 타입 지정</td></tr>
+<tr><td><code>(g.score(), g.board().to_rows())</code></td><td>튜플째 비교 — <code>PartialEq</code> 가 원소별로 묶인다</td></tr>
+</table>
+</div>
+<div class="note">같은 씨앗·같은 입력이면 같은 판. 이 성질 덕에 2부·3부의 녹화를 다시 찍을 수 있고, 4부의 WASM 판도 네이티브와 같은 순서로 조각이 나옵니다.</div>
+</article>
+
+<article class="card" id="game-run">
+<h3>4장 시험 결과 — 19개</h3>
+<!--RUN file=out/logs/test_core.txt pick="1,39-62"-->
+</article>
+
+<article class="card" id="clippy">
+<h3>clippy — 컴파일러 다음의 잔소리꾼</h3>
+<!--RUN file=out/logs/clippy_next.txt pick="1-11"-->
+<p><code class="nb">Bag</code> 의 꺼내기 메서드에 처음엔 <code class="nb">next</code> 라고 이름을 붙였습니다. clippy 는 표준 <code class="nb">Iterator::next</code> 와 헷갈린다며 트레이트를 구현하거나 이름을 바꾸라고 합니다. 이 덱은 이름을 <code class="nb">draw</code> 로 바꿨습니다(봉지는 끝나지 않으니 <code class="nb">Option</code> 을 내는 <code class="nb">Iterator</code> 가 어색합니다).</p>
+<!--RUN file=out/logs/clippy.txt-->
+<div class="tip"><b><code>-D warnings</code></b> — 경고를 오류로. <code class="nb">make lint</code> 가 이것과 <code class="nb">cargo fmt --check</code> 를 함께 돌립니다. golangci-lint, ESLint 를 CI 에 거는 것과 같은 자리입니다.</div>
+</article>
+
+<article class="card" id="part1-sum">
+<h3>1부 정리 — 코어에서 만난 Rust</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>장</th><th>Rust 기능</th><th>테트리스에서의 쓰임</th></tr>
+<tr><td>1</td><td><code>enum</code>, <code>match</code>, <code>derive</code>, <code>Copy</code>, 구조체 갱신</td><td>조각 일곱, 회전 넷, SRS 킥</td></tr>
+<tr><td>2</td><td>고정 배열, <code>Option</code>, <code>?</code>, <code>&amp;self</code>/<code>&amp;mut self</code>, doctest</td><td>판, 충돌, 줄 지우기</td></tr>
+<tr><td>3</td><td><code>wrapping_*</code>, <code>VecDeque</code>, <code>impl Iterator</code></td><td>재현되는 난수, 7-bag</td></tr>
+<tr><td>4</td><td>캡슐화, 식으로서의 <code>match</code>, <code>saturating_*</code>, 클로저</td><td>입력·중력·고정 지연·점수</td></tr>
+</table>
+</div>
+<div class="key"><b>빌림 검사기와 싸운 곳이 없다</b> — 판은 <code class="nb">Game</code> 혼자 갖고, 조각은 <code class="nb">Copy</code> 값이고, 바깥은 게터로 빌려 갈 뿐입니다. 소유 관계가 나무 모양이면 Rust 는 조용합니다. 2부부터는 이 코어를 바깥 세상에 붙입니다.</div>
+</article>

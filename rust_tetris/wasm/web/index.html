@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rust 테트리스 (WASM)</title>
+<style>
+  body { margin: 0; background: #10131a; color: #e8ecf4; font-family: system-ui, sans-serif;
+         display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px; }
+  canvas { width: min(100%, calc(70vh * 396 / 504)); image-rendering: pixelated;
+           touch-action: none; outline: none; }
+  .pad { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .pad button { min-width: 56px; min-height: 48px; font-size: 18px; border-radius: 10px;
+                border: 1px solid #3a4258; background: #1b2030; color: inherit; }
+</style>
+</head>
+<body>
+<!-- 실행: rust_tetris 에서 make wasm 뒤 `python3 -m http.server -d wasm/web` → http://localhost:8000
+     file:// 로 열면 fetch 가 막혀 .wasm 을 못 읽는다. -->
+<canvas id="game" tabindex="0" aria-label="테트리스 판"></canvas>
+<div class="pad">
+  <button data-a="left">◀</button><button data-a="soft">▼</button><button data-a="right">▶</button>
+  <button data-a="ccw">⟲</button><button data-a="cw">⟳</button><button data-a="hard">⤓</button>
+  <button data-a="hold">HOLD</button><button data-a="pause">⏸</button><button data-a="restart">↻</button>
+</div>
+<script src="tetris.js"></script>
+<script>
+(async () => {
+  const canvas = document.getElementById('game');
+  const ex = await RustTetris.load('tetris_wasm.wasm');
+  const pad = RustTetris.padReader();
+  const game = RustTetris.mount(canvas, ex, {
+    onFrame: now => pad(now, name => game.press(name)),
+  });
+  addEventListener('keydown', e => {
+    const name = RustTetris.keyName(e);
+    if (!name) return;
+    e.preventDefault(); // 방향키·스페이스로 페이지 스크롤 막기
+    game.press(name);
+  });
+  // 터치: 누르고 있으면 이동 버튼은 반복
+  for (const b of document.querySelectorAll('[data-a]')) {
+    let timer = 0;
+    const name = b.dataset.a;
+    const stop = () => { clearTimeout(timer); timer = 0; };
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      game.press(name);
+      if (name === 'left' || name === 'right' || name === 'soft') {
+        const again = () => { game.press(name); timer = setTimeout(again, 50); };
+        timer = setTimeout(again, 170);
+      }
+    });
+    for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, stop);
+  }
+  canvas.focus();
+})();
+</script>
+</body>
+</html>

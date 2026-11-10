@@ -1,0 +1,187 @@
+<article class="card section" id="part1">
+<p class="chnum">1부</p>
+<h2>코어 — 규칙을 타입으로</h2>
+<p class="chsub">화면도 키보드도 시계도 없는 테트리스. 의존성 0, 시험 47개</p>
+</article>
+
+<article class="card" id="ch01">
+<p class="chnum">1장</p>
+<h2>조각과 회전</h2>
+<p class="chsub">enum · derive · Copy · 구조체 갱신 문법 · SRS 월킥</p>
+</article>
+
+<article class="card" id="core-lib">
+<h3>크레이트의 입구 — <code>lib.rs</code></h3>
+<!--CODE file=core/src/lib.rs-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>Rust</th><th>뜻</th><th>Go / Java / Python</th></tr>
+<tr><td><code>//!</code></td><td>이 모듈 자체의 문서 주석</td><td>Go 의 package 주석, Python 모듈 docstring</td></tr>
+<tr><td><code>pub mod bag;</code></td><td><code>bag.rs</code> 를 공개 모듈로 붙인다</td><td>파일 = 모듈. Python 과 비슷</td></tr>
+<tr><td><code>pub use ...</code></td><td>안쪽 이름을 바깥으로 다시 내보낸다</td><td>Python <code>__init__.py</code> 의 <code>from .x import Y</code></td></tr>
+</table>
+</div>
+<div class="note">그래서 바깥에서는 <code class="nb">tetris_core::Game</code> 으로 짧게 쓰고, <code class="nb">tetris_core::game::LOCK_DELAY_MS</code> 처럼 모듈 경로로도 쓸 수 있습니다. 크레이트 이름의 <code>-</code> 는 코드에서 <code>_</code> 가 됩니다.</div>
+</article>
+
+<article class="card" id="kind-enum">
+<h3>일곱 조각 — <code>enum Kind</code></h3>
+<!--CODE file=core/src/piece.rs anchor=kind-->
+<div class="g2">
+<div class="cmp">
+<h5>Java</h5>
+<pre><code data-lang="java">enum Kind { I, O, T, S, Z, J, L }
+// 값 하나하나가 힙의 객체, 변수는 참조</code></pre>
+</div>
+<div class="cmp">
+<h5>Go</h5>
+<pre><code data-lang="go">type Kind uint8
+const ( I Kind = iota; O; T; S; Z; J; L )
+// Kind(99) 도 만들어진다</code></pre>
+</div>
+</div>
+<div class="key"><b>Rust 의 enum 은 닫혀 있다</b> — <code class="nb">Kind</code> 값은 일곱 중 하나뿐이고 다른 정수를 끼워 넣을 수 없습니다. 크기는 1바이트(아래 "크기 재기" 슬라이드).</div>
+</article>
+
+<article class="card" id="derive">
+<h3><code>#[derive(...)]</code> — 손으로 안 쓰는 구현들</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>트레이트</th><th>얻는 것</th><th>다른 언어의 자리</th></tr>
+<tr><td><code>Clone</code></td><td><code>.clone()</code> 으로 명시적 복제</td><td>Java <code>clone()</code></td></tr>
+<tr><td><code>Copy</code></td><td>대입·인자 전달이 이동이 아니라 비트 복사</td><td>Go 의 값 타입, Java 의 <code>int</code></td></tr>
+<tr><td><code>Debug</code></td><td><code>{:?}</code> 로 찍기 (<code>Kind::T</code> → <code>T</code>)</td><td>Java <code>toString()</code>, Python <code>__repr__</code></td></tr>
+<tr><td><code>PartialEq, Eq</code></td><td><code>==</code> 비교</td><td>Java <code>equals()</code>, Python <code>__eq__</code></td></tr>
+<tr><td><code>Hash</code></td><td><code>HashMap</code> 키로 쓰기</td><td>Java <code>hashCode()</code></td></tr>
+</table>
+</div>
+<div class="note"><b>derive 는 매크로</b> — 컴파일 시점에 <code class="nb">impl Clone for Kind { ... }</code> 같은 코드를 만들어 붙입니다. 런타임 리플렉션이 아닙니다. Java 의 Lombok, Python 의 <code class="nb">@dataclass</code> 와 같은 일을 컴파일러가 합니다.</div>
+</article>
+
+<article class="card" id="shapes">
+<h3>모양 표 — 상수 배열</h3>
+<!--CODE file=core/src/piece.rs anchor=shapes-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>타입</th><th>읽는 법</th></tr>
+<tr><td><code>(i32, i32)</code></td><td>튜플 — 이름 없는 묶음. Python 튜플과 같지만 길이·타입이 고정</td></tr>
+<tr><td><code>[(i32, i32); 4]</code></td><td>길이 4 고정 배열 — 스택에 놓이고 할당이 없다</td></tr>
+<tr><td><code>[[(i32, i32); 4]; 7]</code></td><td>그 배열 7개 = 조각 7종 × 칸 4개</td></tr>
+</table>
+</div>
+<div class="tip"><b><code>const</code> 는 컴파일 시점 값</b> — 쓰는 자리마다 그대로 박힙니다. 주소가 하나인 전역이 필요하면 <code class="nb">static</code> 을 씁니다(4부에서 다시 나옵니다).</div>
+</article>
+
+<article class="card" id="coords">
+<h3>좌표계 — y 는 아래로</h3>
+<div class="arr">
+<span class="c dead">·<span class="idx">0,0</span></span>
+<span class="c in">T<span class="idx">1,0</span></span>
+<span class="c dead">·<span class="idx">2,0</span></span>
+</div>
+<div class="arr">
+<span class="c in">T<span class="idx">0,1</span></span>
+<span class="c in">T<span class="idx">1,1</span></span>
+<span class="c in">T<span class="idx">2,1</span></span>
+</div>
+<p>T 의 스폰 모양 <code>[(1,0), (0,1), (1,1), (2,1)]</code> 을 3×3 상자에 놓은 그림입니다. 판도 같은 방향입니다. 맨 윗줄이 y=0, 바닥이 y=19 입니다.</p>
+<div class="warn"><b>SRS 문서는 y 가 위로</b> — 테트리스 위키의 킥 표는 수학 좌표(위가 +)입니다. 이 코드는 표를 위키 그대로 옮겨 두고, <code class="nb">kicks()</code> 한 곳에서만 y 부호를 뒤집습니다. 부호 실수를 한곳에 가두는 방법입니다.</div>
+</article>
+
+<article class="card" id="kind-impl">
+<h3><code>impl Kind</code> — 메서드</h3>
+<!--CODE file=core/src/piece.rs anchor=kind_impl-->
+</article>
+
+<article class="card" id="kind-impl-read">
+<h3><code>impl Kind</code> 읽기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>fn index(self)</code></td><td><code>self</code> 를 값으로 받는다. <code>Kind</code> 가 <code>Copy</code> 라 원본은 그대로다</td></tr>
+<tr><td><code>self as usize</code></td><td>필드 없는 enum 은 선언 순서대로 0, 1, 2… 로 바뀐다</td></tr>
+<tr><td><code>match self { ... _ => 3 }</code></td><td>식(expression)이라 값을 돌려준다. <code>_</code> 는 나머지 전부</td></tr>
+<tr><td><code>Option&lt;Kind&gt;</code></td><td>찾으면 <code>Some(k)</code>, 못 찾으면 <code>None</code>. 널 대신</td></tr>
+<tr><td><code>.into_iter().find(|k| ...)</code></td><td>Java <code>stream().filter().findFirst()</code>, Python <code>next((k for k in ...), None)</code></td></tr>
+<tr><td><code>b"IOTSZJL"[i] as char</code></td><td>바이트 문자열 리터럴. <code>&amp;[u8; 7]</code> 이다</td></tr>
+</table>
+</div>
+<div class="note"><b>세미콜론이 없는 마지막 줄</b> — 함수 본문의 마지막 식이 반환값입니다. <code class="nb">return</code> 은 중간에 빠져나갈 때만 씁니다.</div>
+</article>
+
+<article class="card" id="match-exhaustive">
+<h3>match 는 빠짐없이 — 컴파일러가 센다</h3>
+<p><code class="nb">box_size</code> 를 <code class="nb">_ =&gt;</code> 없이 쓰고 <code class="nb">T</code> 를 깜빡하면 이렇게 됩니다(실제 출력).</p>
+<!--RUN file=out/logs/e0004.txt pick="1-5,14-21"-->
+<div class="key"><b>Go 의 switch 와 다른 점</b> — Go 는 빠진 case 를 조용히 넘어가고, Java 도 enum switch 문에서는 경고뿐입니다(식 형태 switch 만 강제). Rust 는 <code class="nb">match</code> 가 항상 식이라 모든 경우가 값을 내야 합니다. 조각이나 동작을 하나 더 넣으면 고칠 곳을 컴파일러가 전부 짚어 줍니다.</div>
+</article>
+
+<article class="card" id="rot">
+<h3>회전 상태 — <code>enum Rot</code></h3>
+<!--CODE file=core/src/piece.rs anchor=rot-->
+<div class="note"><b>R0·R1·R2·R3</b> 은 SRS 문서의 0·R·2·L 입니다. 시계 방향은 +1, 반시계는 +3 (≡ −1 mod 4) — 음수 나머지를 피하는 흔한 요령입니다. <code class="nb">const ORDER</code> 처럼 <code>impl</code> 블록 안에 둔 상수를 연관 상수라고 부릅니다(Java 의 <code class="nb">static final</code>).</div>
+</article>
+
+<article class="card" id="piece-struct">
+<h3>떨어지는 조각 — <code>struct Piece</code></h3>
+<!--CODE file=core/src/piece.rs anchor=piece-->
+<div class="note"><b>필드마다 <code>pub</code></b> — Rust 의 공개 범위는 필드 단위입니다. <code class="nb">Piece</code> 는 값 묶음이라 다 열었고, 2장의 <code class="nb">Board</code>·4장의 <code class="nb">Game</code> 은 필드를 닫고 메서드로만 다룹니다. Go 의 대문자/소문자, Java 의 <code class="nb">public</code>/<code class="nb">private</code> 와 같은 자리입니다.</div>
+</article>
+
+<article class="card" id="piece-impl">
+<h3><code>impl Piece</code> — 스폰 · 칸 계산 · 이동</h3>
+<!--CODE file=core/src/piece.rs anchor=piece_impl-->
+</article>
+
+<article class="card" id="piece-read">
+<h3><code>Piece</code> 읽기 — 회전 공식과 구조체 갱신</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>Piece { kind, rot: Rot::R0, x, y: 0 }</code></td><td>이름이 같은 변수는 <code>kind</code> 처럼 줄여 쓴다(JS 객체 단축 속성과 같다)</td></tr>
+<tr><td><code>let mut out = ...</code></td><td>변수는 기본 불변. 고칠 변수에만 <code>mut</code></td></tr>
+<tr><td><code>for c in out.iter_mut()</code></td><td>배열 칸을 하나씩 <b>고칠 수 있게</b> 빌린다 — <code>c</code> 는 <code>&amp;mut (i32, i32)</code></td></tr>
+<tr><td><code>*c = (n - 1 - c.1, c.0)</code></td><td><code>*</code> 로 빌린 자리에 쓴다. <code>c.0</code>·<code>c.1</code> 은 튜플의 첫째·둘째</td></tr>
+<tr><td><code>Piece { x: ..., ..self }</code></td><td>구조체 갱신 문법 — 나머지 필드는 <code>self</code> 에서. JS <code>{...self, x}</code></td></tr>
+</table>
+</div>
+<div class="tip"><b>회전 표를 따로 두지 않았다</b> — 상자 안에서 (x, y) → (n−1−y, x) 를 회전 횟수만큼 돌리면 SRS 의 네 상태가 정확히 나옵니다. I(4×4)·O(2×2)도 같은 공식입니다. 시험 <code class="nb">t_and_i_states_match_srs</code> 가 이것을 확인합니다.</div>
+</article>
+
+<article class="card" id="copy-move">
+<h3><code>moved(self)</code> — 값으로 받고 새 값을 돌려준다</h3>
+<div class="g2">
+<div class="cmp">
+<h5>Go — 값 리시버</h5>
+<pre><code data-lang="go">func (p Piece) Moved(dx, dy int) Piece {
+    p.X += dx; p.Y += dy
+    return p
+}</code></pre>
+</div>
+<div class="cmp">
+<h5>Rust</h5>
+<pre><code data-lang="rust">pub fn moved(self, dx: i32, dy: i32) -&gt; Piece {
+    Piece { x: self.x + dx, y: self.y + dy, ..self }
+}</code></pre>
+</div>
+</div>
+<p><code class="nb">Piece</code> 는 12바이트짜리 <code class="nb">Copy</code> 라서 <code class="nb">self</code> 로 받아도 원본이 사라지지 않습니다. 시험 <code class="nb">spawn_position_and_moved</code> 가 <code class="nb">moved</code> 뒤에도 <code class="nb">t.x == 3</code> 인 것을 확인합니다.</p>
+<div class="warn"><b>Copy 를 붙이면 안 되는 것</b> — <code class="nb">Vec</code>·<code class="nb">String</code> 처럼 힙을 가진 타입은 <code class="nb">Copy</code> 가 될 수 없습니다(비트 복사로는 두 주인이 생긴다). 그래서 <code class="nb">Board</code>(200바이트 배열)는 <code class="nb">Clone</code> 만 붙였습니다. 크면 복사가 숨은 비용이 되기 때문입니다.</div>
+</article>
+
+<article class="card" id="srs-idea">
+<h3>SRS 월킥 — 막히면 옆으로 밀어 본다</h3>
+<ol class="steps">
+<li>제자리에서 돌린다. 들어가면 끝.</li>
+<li>안 들어가면 표의 2번째 이동(예: 왼쪽 1칸)을 더해 다시 시험.</li>
+<li>3·4·5번째까지 차례로. 다섯 다 막히면 회전 실패 — 조각은 그대로.</li>
+</ol>
+<p>이동값은 "어느 상태에서 어느 상태로"에 따라 다릅니다. J·L·S·T·Z 가 표 하나를 같이 쓰고, I 는 따로입니다. O 는 모양이 안 바뀌어 킥이 없습니다.</p>
+<div class="note"><b>벽에 붙은 T 를 돌리면</b> — 시험 <code class="nb">wall_kick_off_the_left_wall</code>: R 상태로 왼쪽 벽에 붙인 T(x=−1)를 반시계로 돌리면 제자리는 벽에 걸리고, 2번째 이동 (+1, 0)으로 x=0 에 들어갑니다.</div>
+</article>
+
+<article class="card" id="kick-tables">
+<h3>킥 표 — 위키 그대로 옮긴 상수</h3>
+<!--CODE file=core/src/piece.rs anchor=kicks-->
+<div class="tip"><b><code>type Kicks = ...</code></b> 는 타입 별칭입니다(Go 의 <code class="nb">type X = Y</code>, TS 의 <code class="nb">type</code>). 새 타입이 아니라 긴 이름의 줄임말입니다.</div>
+</article>

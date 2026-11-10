@@ -1,0 +1,170 @@
+<article class="card" id="ch06">
+<p class="chnum">6장</p>
+<h2>실행 파일 — 키 · Drop · 메인 루프</h2>
+<p class="chsub">데이터를 품은 enum · RAII 경비원 · 슬라이스 패턴 · 프레임 시간 계산</p>
+</article>
+
+<article class="card" id="command">
+<h3>키 → 명령 — 데이터를 품은 enum</h3>
+<!--CODE file=tui/src/lib.rs lines=87-94-->
+<div class="g2">
+<div class="cmp">
+<h5>Java 17+</h5>
+<pre><code data-lang="java">sealed interface Command
+    permits Play, Restart, Quit {}
+record Play(Action a) implements Command {}
+record Restart() implements Command {}
+record Quit() implements Command {}</code></pre>
+</div>
+<div class="cmp">
+<h5>TypeScript</h5>
+<pre><code data-lang="js">type Command =
+  | { kind: "play", action: Action }
+  | { kind: "restart" }
+  | { kind: "quit" };</code></pre>
+</div>
+</div>
+<div class="key"><b>합 타입</b> — <code class="nb">Play</code> 만 <code class="nb">Action</code> 을 품고, 나머지 둘은 빈손입니다. 코어의 <code class="nb">Action</code> 에 "끝내기"를 섞지 않고 프런트엔드 쪽에서 감쌌습니다. 코어는 프로그램이 끝난다는 것을 몰라도 됩니다.</div>
+</article>
+
+<article class="card" id="keys">
+<h3><code>key_to_command</code></h3>
+<!--CODE file=tui/src/lib.rs lines=96-125-->
+</article>
+
+<article class="card" id="keys-read">
+<h3>키 매핑 읽기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>KeyEventKind::Release</code></td><td>윈도 콘솔은 누를 때·뗄 때 둘 다 보낸다. 안 버리면 키가 두 번 먹는다</td></tr>
+<tr><td><code>modifiers.contains(CONTROL)</code></td><td>raw 모드에서는 Ctrl+C 가 SIGINT 가 아니라 그냥 키다 — 직접 잡아야 한다</td></tr>
+<tr><td><code>KeyCode::Char(c) =&gt; match ... { }</code></td><td>갈래 안에서 품은 값을 꺼내 또 <code>match</code></td></tr>
+<tr><td><code>'r' =&gt; return Some(Command::Restart)</code></td><td><code>match</code> 식 한가운데서 함수를 빠져나간다. 나머지 갈래는 <code>Action</code> 을 낸다</td></tr>
+</table>
+</div>
+<!--CODE file=tui/tests/screen.rs lines=170-182 cap="tui/tests/screen.rs — 윈도 동작을 리눅스에서 시험한다"-->
+</article>
+
+<article class="card" id="guard">
+<h3>터미널 되돌리기 — <code>Drop</code> 경비원</h3>
+<!--CODE file=tui/src/main.rs anchor=guard-->
+</article>
+
+<article class="card" id="raii">
+<h3>RAII — 소멸자가 확실히 불리는 언어</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>언어</th><th>정리 코드</th><th>빠뜨리기 쉬운 경우</th></tr>
+<tr><td>Go</td><td><code>defer restore()</code></td><td>defer 를 안 쓰면 그만. <code>os.Exit</code> 는 defer 를 건너뛴다</td></tr>
+<tr><td>Java</td><td>try-with-resources + <code>AutoCloseable</code></td><td><code>try (...)</code> 를 안 쓰면 그만</td></tr>
+<tr><td>Python</td><td><code>with</code> + <code>__exit__</code></td><td><code>with</code> 를 안 쓰면 그만</td></tr>
+<tr><td>Rust</td><td><code>impl Drop</code></td><td>값이 범위를 벗어나면 <b>언제나</b> — <code>?</code> 조기 반환, 패닉 풀림 포함</td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>struct TerminalGuard;</code></td><td>필드 없는 구조체 — 크기 0. 존재 자체가 "터미널을 바꿔 놓았다"는 표시</td></tr>
+<tr><td><code>execute!(...)?</code></td><td><code>queue!</code> 와 달리 바로 flush</td></tr>
+<tr><td><code>let _ = execute!(...);</code></td><td><code>drop</code> 은 오류를 돌려줄 수 없으니 일부러 버린다고 적는다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="underscore-trap">
+<h3>함정 — <code>_guard</code> 와 <code>_</code> 는 다르다</h3>
+<div class="g2">
+<div class="cmp good">
+<h5>✔ main.rs 의 실제 코드</h5>
+<pre><code data-lang="rust">let _guard = TerminalGuard::enter()?;
+// _guard 는 main 이 끝날 때 drop</code></pre>
+</div>
+<div class="cmp bad">
+<h5>✘ 한 글자 차이</h5>
+<pre><code data-lang="rust">let _ = TerminalGuard::enter()?;
+// 그 자리에서 바로 drop!
+// raw 모드가 곧장 풀린다</code></pre>
+</div>
+</div>
+<p><code class="nb">_guard</code> 는 "안 쓰는 변수"라 경고만 꺼 줄 뿐 이름이 있는 변수이고, 범위 끝까지 삽니다. <code class="nb">_</code> 는 변수가 아니라 "버리기" 패턴이라 값이 그 문장 끝에서 바로 해제됩니다.</p>
+<div class="warn"><b>Mutex 잠금에서도 같은 함정</b> — <code class="nb">let _ = m.lock()</code> 은 잠그자마자 풉니다. 경비원 타입은 언제나 이름을 붙여 받으세요.</div>
+</article>
+
+<article class="card" id="seed-args">
+<h3>인자 읽기 — 슬라이스 패턴</h3>
+<!--CODE file=tui/src/main.rs anchor=seed-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>패턴</th><th>맞는 경우</th></tr>
+<tr><td><code>[]</code></td><td>인자 없음 → 시각으로 씨앗</td></tr>
+<tr><td><code>[flag, n] if flag == "--seed"</code></td><td>정확히 둘이고 첫째가 <code>--seed</code> — <code>if</code> 는 갈래의 조건(가드)</td></tr>
+<tr><td><code>_</code></td><td>그 밖 전부 → 쓰는 법</td></tr>
+</table>
+</div>
+<div class="note"><b>인자가 더 많아지면</b> <code class="nb">clap</code> 크레이트(Go 의 <code class="nb">flag</code>/cobra, Python 의 <code class="nb">argparse</code>)를 씁니다. 옵션 하나에는 <code class="nb">match</code> 가 더 짧습니다. <code class="nb">n.parse()</code> 가 <code class="nb">u64</code> 로 해석되는 것은 반환 타입 <code class="nb">Result&lt;u64, String&gt;</code> 에서 추론됩니다.</div>
+</article>
+
+<article class="card" id="tui-main">
+<h3><code>main</code> ① — 준비</h3>
+<!--CODE file=tui/src/main.rs lines=65-88-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>fn main() -&gt; io::Result&lt;()&gt;</code></td><td><code>main</code> 도 <code>Result</code> 를 돌려줄 수 있다. <code>Err</code> 면 메시지를 찍고 종료 코드 1</td></tr>
+<tr><td><code>std::process::exit(2)</code></td><td>즉시 종료 — <b>Drop 이 안 불린다</b>. 그래서 경비원을 만들기 <b>전에만</b> 쓴다</td></tr>
+<tr><td><code>BufWriter::new(stdout())</code></td><td>Rust 의 <code>stdout</code> 은 줄 단위 버퍼라, 칸마다 쓰면 시스템 호출이 많다</td></tr>
+<tr><td><code>Option&lt;Screen&gt;</code></td><td>"아직 그린 적 없음"을 <code>None</code> 으로</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="tui-loop">
+<h3><code>main</code> ② — 프레임 루프</h3>
+<!--CODE file=tui/src/main.rs lines=89-118-->
+</article>
+
+<article class="card" id="tui-loop-read">
+<h3>루프 읽기 — 입력 · 시간 · 그리기</h3>
+<ol class="steps">
+<li><b>입력</b> — <code class="nb">poll(16ms)</code> 로 기다리다 키가 오면 처리하고, 이후로는 <code class="nb">poll(0)</code> 으로 쌓인 것만 비웁니다. 키가 없으면 16ms 뒤 다음 단계로.</li>
+<li><b>시간</b> — 지난 시간을 ms 정수로 넘기되, <code class="nb">last</code> 는 넘긴 만큼만 앞으로 옮깁니다. 0.7ms 같은 나머지가 버려지지 않고 다음 프레임에 더해집니다.</li>
+<li><b>그리기</b> — 합성 → 차분 → 출력. <code class="nb">prev.as_ref()</code> 는 <code class="nb">Option&lt;Screen&gt;</code> 을 <code class="nb">Option&lt;&amp;Screen&gt;</code> 으로 — 옮기지 않고 빌린다.</li>
+</ol>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>Some(Command::Restart) if game.is_over()</code></td><td>게임 중의 R 은 무시 — 가드가 거짓이면 아래 <code>_ =&gt; {}</code> 로 간다</td></tr>
+<tr><td><code>game = Game::new(...)</code></td><td>옛 <code>Game</code> 은 대입하는 순간 drop. 재시작이 대입 한 줄</td></tr>
+<tr><td><code>Event::Resize(..) =&gt; prev = None</code></td><td>창 크기가 바뀌면 터미널이 화면을 지우므로 다음 프레임은 전부 그린다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="tui-shots">
+<h3>실제 실행 — 시작 · 일시정지</h3>
+<!--ANSI file=out/tui_start.ansi cap="시작 직후 (--seed 7)"-->
+<!--ANSI file=out/tui_pause.ansi cap="P 를 누른 뒤"-->
+<div class="note"><b>녹화 방법</b> — <code class="nb">tools/record_tui.sh</code> 가 tmux 안에서 릴리스 빌드를 띄우고 <code class="nb">send-keys</code> 로 키를 보낸 뒤 <code class="nb">capture-pane -e</code> 로 색까지 떠 옵니다. 중력이 실제 시간으로 흐르므로 다시 찍으면 한두 줄 다를 수 있습니다.</div>
+</article>
+
+<article class="card" id="tui-run">
+<h3>2부 시험 결과 — 10개</h3>
+<!--RUN file=out/logs/test_tui.txt pick="2,9-13,15-29"-->
+<div class="tip"><b><code>unittests src/main.rs ... 0 tests</code></b> — 실행 파일 쪽에는 시험이 없습니다. 시험할 만한 것은 전부 <code class="nb">lib.rs</code> 로 뺐고, <code class="nb">main.rs</code> 에는 터미널과 시계를 만지는 얇은 껍데기만 남겼습니다.</div>
+</article>
+
+<article class="card" id="part2-sum">
+<h3>2부 정리</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>Rust 기능</th><th>쓰임</th></tr>
+<tr><td>외부 크레이트, <code>Cargo.lock</code></td><td>crossterm 0.29</td></tr>
+<tr><td><code>Vec</code>, 슬라이스, 반복자 사슬</td><td>글자 격자, 차분</td></tr>
+<tr><td><code>impl Write</code> 제네릭</td><td>터미널·시험 버퍼에 같은 함수로 쓰기</td></tr>
+<tr><td>데이터를 품은 enum, 매치 가드</td><td><code>Command::Play(Action)</code>, 게임 오버 뒤에만 재시작</td></tr>
+<tr><td><code>Drop</code> (RAII)</td><td>어떻게 끝나도 터미널 복구</td></tr>
+</table>
+</div>
+<div class="key"><b>얇은 껍데기 원칙</b> — 입출력이 닿는 코드(<code class="nb">main.rs</code>, 120줄)는 시험하지 않고 눈으로 확인했고, 나머지는 전부 순수 함수로 시험했습니다. 3부 GUI 판도 같은 모양입니다.</div>
+</article>

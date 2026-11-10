@@ -1,0 +1,174 @@
+<article class="card section" id="part4">
+<p class="chnum">4부</p>
+<h2>브라우저 판 — WASM 과 손글루</h2>
+<p class="chsub">wasm-bindgen 없이 C ABI 함수 일곱 개. JS 글루 160여 줄. 의존성 0, import 0</p>
+</article>
+
+<article class="card" id="ch09">
+<p class="chnum">9장</p>
+<h2>Rust 쪽 — 내보내기 함수</h2>
+<p class="chsub">cdylib · extern "C" · unsafe 속성 · thread_local + RefCell · 패닉과 FFI 경계</p>
+</article>
+
+<article class="card" id="wasm-why-manual">
+<h3>왜 wasm-bindgen 을 안 쓰나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th></th><th>wasm-bindgen + wasm-pack</th><th>이 덱 (손글루)</th></tr>
+<tr><td>JS 쪽</td><td>자동 생성된 글루 + 타입 선언</td><td>직접 쓴 <code>tetris.js</code> 164줄</td></tr>
+<tr><td>오가는 값</td><td>문자열·객체·클로저·<code>Result</code></td><td>정수뿐 (+ 메모리 주소)</td></tr>
+<tr><td>도구</td><td>wasm-pack, wasm-bindgen-cli(버전 맞춤 필요)</td><td><code>rustup target add</code> 하나</td></tr>
+<tr><td>배우는 것</td><td>속성 매크로 사용법</td><td>WASM 이 실제로 어떻게 생겼나</td></tr>
+</table>
+</div>
+<div class="key"><b>실무에서는</b> DOM 을 많이 만지거나 문자열을 주고받으면 wasm-bindgen 이 맞습니다. 게임처럼 "숫자 몇 개 넣고 픽셀 버퍼를 받는" 경계는 손으로 써도 짧고, 무엇이 오가는지 전부 보입니다.</div>
+</article>
+
+<article class="card" id="wasm-toml">
+<h3><code>wasm</code> 크레이트와 빌드 프로필</h3>
+<!--CODE file=wasm/Cargo.toml-->
+<!--CODE file=Cargo.toml lines=11-21 cap="Cargo.toml — WASM 전용 프로필"-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>설정</th><th>효과</th></tr>
+<tr><td><code>crate-type = ["cdylib", "rlib"]</code></td><td>cdylib 은 <code>.wasm</code>, rlib 은 네이티브 시험이 링크할 보통 라이브러리</td></tr>
+<tr><td><code>opt-level = "s"</code> · <code>lto</code> · <code>codegen-units = 1</code></td><td>크기 우선 최적화, 크레이트 경계를 넘는 인라인</td></tr>
+<tr><td><code>panic = "abort"</code></td><td>되감기 코드를 빼서 작게. 주석의 이유로 <code>release</code> 가 아니라 이 프로필에만</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="wasm-build">
+<h3>빌드 — 33 KB</h3>
+<!--RUN file=out/logs/wasm_build.txt-->
+<div class="note"><b>무엇이 들어 있나</b> — core(규칙) + render(그리기·글꼴) + 내보내기 함수 일곱 개 + <code class="nb">Vec</code> 할당기. 33,332 바이트를 이 덱이 base64 로 품고 있다가 표지 다음 장의 데모로 띄웁니다.</div>
+<div class="tip"><b>이 기계에서는</b> Termux 의 rustc 1.99 에 wasm32 표준 라이브러리 패키지를 풀어 만든 사설 sysroot 를 <code class="nb">RUSTFLAGS=--sysroot=…</code> 로 주어 빌드했습니다(<code class="nb">make wasm</code>). 보통 PC 라면 <code class="nb">rustup target add wasm32-unknown-unknown</code> 한 줄입니다.</div>
+</article>
+
+<article class="card" id="wasm-boundary">
+<h3>경계에는 숫자만 오간다</h3>
+<!--CODE file=wasm/src/lib.rs lines=1-9-->
+<div class="flow">
+<span class="box">JS</span><span class="arr">→ <code>tt_input(3)</code> →</span><span class="box">Rust <code>Game</code></span>
+</div>
+<div class="flow">
+<span class="box">JS</span><span class="arr">← 주소 <code>ptr</code> ←</span><span class="box"><code>tt_render()</code></span>
+</div>
+<div class="flow">
+<span class="box"><code>memory.buffer[ptr ..]</code></span><span class="arr">→</span><span class="box"><code>ImageData</code> → canvas</span>
+</div>
+<div class="note"><b>선형 메모리</b> — WASM 인스턴스의 메모리는 JS 에서 <code class="nb">ArrayBuffer</code> 하나로 보입니다. Rust 의 포인터는 그 버퍼 안의 바이트 번호일 뿐이라, JS 는 <code class="nb">new Uint8ClampedArray(memory.buffer, ptr, len)</code> 으로 복사 없이 픽셀을 봅니다.</div>
+</article>
+
+<article class="card" id="global-state">
+<h3>전역 상태 — <code>thread_local!</code> + <code>RefCell</code></h3>
+<!--CODE file=wasm/src/lib.rs anchor=state-->
+</article>
+
+<article class="card" id="static-mut">
+<h3>왜 <code>static mut</code> 이 아닌가 — 2024 에디션</h3>
+<!--CODE file=tools/errors/static_mut.rs-->
+<!--RUN file=out/logs/static_mut.txt pick="1-6,9-10"-->
+<div class="key"><b>Go·Java 라면</b> 그냥 전역 변수를 씁니다. Rust 에서 <code class="nb">static mut</code> 은 모든 접근이 <code class="nb">unsafe</code> 이고, 2024 에디션부터는 참조를 만드는 것 자체가 기본 오류입니다. 스레드 둘이 동시에 고치면 정의되지 않은 동작이기 때문입니다.</div>
+</article>
+
+<article class="card" id="refcell">
+<h3><code>RefCell</code> — 빌림 검사를 실행 시점으로</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>조각</th><th>하는 일</th></tr>
+<tr><td><code>thread_local!</code></td><td>스레드마다 따로인 전역. WASM 은 스레드가 하나라 사실상 전역 하나</td></tr>
+<tr><td><code>RefCell&lt;T&gt;</code></td><td><code>&amp;</code>/<code>&amp;mut</code> 규칙을 실행 중에 센다. 겹치면 패닉</td></tr>
+<tr><td><code>Option&lt;App&gt;</code></td><td><code>tt_init</code> 전에는 <code>None</code></td></tr>
+<tr><td><code>with_borrow_mut(|app| ...)</code></td><td>잠깐 <code>&amp;mut</code> 로 빌려 클로저를 돌리고 돌려준다</td></tr>
+<tr><td><code>const { RefCell::new(None) }</code></td><td>초기값이 상수식이라 지연 초기화 검사가 빠진다</td></tr>
+</table>
+</div>
+<div class="tblwrap">
+<table class="kv">
+<tr><th><code>with_app</code> 의 서명</th><th>뜻</th></tr>
+<tr><td><code>fn with_app&lt;R&gt;(default: R, f: impl FnOnce(&amp;mut App) -&gt; R) -&gt; R</code></td><td>상태가 있으면 <code>f</code> 의 결과, 없으면 <code>default</code>. 제네릭 <code>R</code> 이라 <code>u32</code>·<code>()</code>·포인터 어느 것이든</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="tt-init">
+<h3>내보내기 ① — <code>tt_init</code></h3>
+<!--CODE file=wasm/src/lib.rs anchor=init-->
+</article>
+
+<article class="card" id="no-mangle">
+<h3><code>#[unsafe(no_mangle)]</code> 와 <code>extern "C"</code></h3>
+<!--RUN file=out/logs/no_mangle.txt pick="1-11"-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>조각</th><th>뜻</th></tr>
+<tr><td><code>no_mangle</code></td><td>이름을 <code>tt_init</code> 그대로 내보낸다(보통은 <code>_ZN...h3f4</code> 처럼 꾸며진다)</td></tr>
+<tr><td><code>unsafe(...)</code></td><td>2024 에디션부터 필수. 같은 이름의 심볼이 둘이면 링커가 아무거나 고를 수 있어 "안전하지 않은 속성"이 됐다</td></tr>
+<tr><td><code>extern "C"</code></td><td>C 호출 규약. WASM 에서는 인자·반환이 i32/i64/f32/f64 로 내려간다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="seed-split">
+<h3>u64 씨앗을 32비트 둘로</h3>
+<div class="g2">
+<div class="cmp">
+<h5>Rust (<code>tt_init</code>)</h5>
+<pre><code data-lang="rust">let seed = (seed_hi as u64) &lt;&lt; 32 | seed_lo as u64;</code></pre>
+</div>
+<div class="cmp">
+<h5>JS (<code>tetris.js</code>)</h5>
+<pre><code data-lang="js">const lo = seed &gt;&gt;&gt; 0,
+      hi = Math.floor(seed / 2 ** 32) &gt;&gt;&gt; 0;</code></pre>
+</div>
+</div>
+<p>WASM 의 <code class="nb">i64</code> 는 JS 에서 <code class="nb">BigInt</code> 로 와야 합니다. JS 의 <code class="nb">Number</code> 는 2⁵³ 까지만 정확해서 <code class="nb">Date.now()</code> 는 괜찮지만 일반 u64 는 깨집니다. 32비트 둘로 쪼개면 양쪽 다 평범한 정수로 끝납니다.</p>
+<!--CODE file=wasm/tests/ffi.rs lines=62-72 cap="wasm/tests/ffi.rs — 위쪽 절반도 씨앗에 들어가나"-->
+</article>
+
+<article class="card" id="ffi-panic">
+<h3>FFI 경계 밖으로 패닉을 내보내면</h3>
+<!--CODE file=tools/errors/ffi_panic.rs-->
+<!--RUN file=out/logs/ffi_panic.txt pick="1-8,last"-->
+<div class="warn"><b><code>extern "C"</code> 함수는 되감을 수 없다</b> — 패닉이 경계를 넘으려 하면 <code class="nb">catch_unwind</code> 로도 못 잡고 프로세스가 끝납니다(종료 코드 134, SIGABRT). 그래서 <code class="nb">tt_init</code> 은 잘못된 <code class="nb">cell</code> 에 패닉하는 <code class="nb">Frame::new</code> 를 부르기 <b>전에</b> 범위를 검사하고 0 을 돌려줍니다. 브라우저라면 <code class="nb">RuntimeError: unreachable</code> 로 인스턴스가 죽습니다.</div>
+</article>
+
+<article class="card" id="tt-input">
+<h3>내보내기 ② — 입력과 시간</h3>
+<!--CODE file=wasm/src/lib.rs anchor=input-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>ACTIONS.get(code as usize)</code></td><td>99 같은 번호에 패닉 대신 <code>None</code> — 경계에서는 언제나 <code>get</code></td></tr>
+<tr><td><code>Some(&amp;act)</code></td><td>패턴으로 <code>&amp;Action</code> 을 풀어 값으로 받는다</td></tr>
+<tr><td><code>a.game.apply(act) as u32</code></td><td><code>bool</code> → 0/1. JS 에는 <code>bool</code> 이 없다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="tt-render">
+<h3>내보내기 ③ — 그리기와 상태 읽기</h3>
+<!--CODE file=wasm/src/lib.rs anchor=render-->
+</article>
+
+<article class="card" id="raw-ptr">
+<h3><code>*const u8</code> — 원시 포인터를 돌려주는 것은 안전하다</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>일</th><th><code>unsafe</code> 필요?</th></tr>
+<tr><td><code>a.rgba.as_ptr()</code> 로 포인터 만들기</td><td>아니오 — 그냥 숫자다</td></tr>
+<tr><td>포인터 돌려주기, 비교하기, <code>is_null()</code></td><td>아니오</td></tr>
+<tr><td>포인터가 가리키는 곳 읽기/쓰기</td><td><b>예</b> — 살아 있는 메모리인지 컴파일러가 모른다</td></tr>
+</table>
+</div>
+<!--CODE file=wasm/tests/ffi.rs lines=37-47 cap="wasm/tests/ffi.rs — 읽는 쪽(시험)에만 unsafe"-->
+<div class="note"><b>왜 주소가 안 바뀌나</b> — <code class="nb">rgba</code> 는 <code class="nb">tt_init</code> 에서 한 번 할당하고 크기를 바꾸지 않습니다. 시험 마지막 줄이 "두 번 불러도 같은 주소"를 확인합니다. <code class="nb">// 안전: ...</code> 주석은 <code class="nb">unsafe</code> 블록마다 왜 괜찮은지 적는 Rust 관례입니다.</div>
+</article>
+
+<article class="card" id="wasm-native-test">
+<h3>WASM 함수를 네이티브에서 시험하기</h3>
+<!--CODE file=wasm/tests/ffi.rs lines=1-28 cap="wasm/tests/ffi.rs"-->
+<!--RUN file=out/logs/test_wasm.txt pick="1,10-19"-->
+<div class="tip"><b>rlib 덕분</b> — <code class="nb">extern "C"</code> 함수도 Rust 에서는 보통 함수처럼 부를 수 있습니다. 시험은 스레드마다 돌고 <code class="nb">thread_local</code> 이라, 시험끼리 전역 상태가 섞이지 않습니다(파일 첫 주석).</div>
+</article>

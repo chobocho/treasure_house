@@ -1,0 +1,148 @@
+<article class="card" id="ch08">
+<p class="chnum">8장</p>
+<h2>창 띄우기 — minifb</h2>
+<p class="chsub">정적 슬라이스 표 · impl Fn 으로 키보드 바꿔 끼우기 · 60fps 루프 · 가상 X 서버로 녹화</p>
+</article>
+
+<article class="card" id="gui-toml">
+<h3><code>gui</code> 크레이트</h3>
+<!--CODE file=gui/Cargo.toml-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>OS</th><th>minifb 가 쓰는 것</th></tr>
+<tr><td>Windows</td><td>Win32 API</td></tr>
+<tr><td>macOS</td><td>Cocoa</td></tr>
+<tr><td>Linux</td><td>X11 (기본) 또는 Wayland 기능 — <code>libx11-dev</code> 등 헤더가 필요</td></tr>
+</table>
+</div>
+<div class="warn"><b>이 기계의 사정</b> — 안드로이드 Termux 의 Rust 타깃(<code class="nb">aarch64-linux-android</code>)에서는 minifb 가 컴파일되지 않습니다(플랫폼 구현 모듈이 없다). 그래서 GUI 판만은 proot Ubuntu 의 cargo 로 빌드했고, <code class="nb">make lint</code> 의 clippy 도 <code class="nb">--exclude tetris-gui</code> 로 이 크레이트를 뺍니다.</div>
+</article>
+
+<article class="card" id="bindings">
+<h3>키 배치 — 표 하나와 함수 하나</h3>
+<!--CODE file=gui/src/lib.rs anchor=bindings-->
+</article>
+
+<article class="card" id="bindings-read">
+<h3>키 배치 읽기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>const BINDINGS: &amp;[(Key, KeyRepeat, Action)]</code></td><td>길이를 타입에 안 적는 정적 슬라이스. 줄을 더해도 타입이 그대로다</td></tr>
+<tr><td><code>KeyRepeat::Yes</code></td><td>누르고 있으면 minifb 가 반복 신호를 준다(이동). 회전·드롭은 한 번</td></tr>
+<tr><td><code>pressed: impl Fn(Key, KeyRepeat) -&gt; bool</code></td><td>"키를 받아 눌렸는지 답하는 함수"면 무엇이든. 클로저도 된다</td></tr>
+<tr><td><code>.filter(|(k, r, _)| pressed(*k, *r))</code></td><td>튜플 참조를 풀어 받고 <code>*</code> 로 값을 꺼낸다</td></tr>
+</table>
+</div>
+<div class="g2">
+<div class="cmp">
+<h5>Go</h5>
+<pre><code data-lang="go">func Actions(pressed func(Key, Repeat) bool) []Action</code></pre>
+</div>
+<div class="cmp">
+<h5>Java</h5>
+<pre><code data-lang="java">List&lt;Action&gt; actions(
+    BiPredicate&lt;Key, Repeat&gt; pressed)</code></pre>
+</div>
+</div>
+</article>
+
+<article class="card" id="fn-traits">
+<h3><code>Fn</code> · <code>FnMut</code> · <code>FnOnce</code></h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>트레이트</th><th>클로저가 붙잡은 것을</th><th>여러 번 부를 수 있나</th></tr>
+<tr><td><code>Fn</code></td><td>읽기만 한다(<code>&amp;</code>)</td><td>예, 동시에도</td></tr>
+<tr><td><code>FnMut</code></td><td>고친다(<code>&amp;mut</code>)</td><td>예, 한 번에 하나씩</td></tr>
+<tr><td><code>FnOnce</code></td><td>가져가 버린다(이동)</td><td>한 번만</td></tr>
+</table>
+</div>
+<p><code class="nb">main.rs</code> 의 <code class="nb">|k, r| win.is_key_pressed(k, r)</code> 는 창을 읽기만 하므로 <code class="nb">Fn</code> 입니다. 다른 언어에서는 함수 타입 하나로 뭉뚱그리는 것을, Rust 는 "붙잡은 것을 어떻게 쓰나"로 나눠 빌림 규칙과 맞물리게 합니다.</p>
+<div class="note"><b>받는 쪽은 가장 느슨한 것을</b> — <code class="nb">actions</code> 는 <code class="nb">pressed</code> 를 여러 번 부르니 <code class="nb">FnOnce</code> 는 안 되고, 고칠 일이 없으니 <code class="nb">Fn</code> 으로 충분합니다.</div>
+</article>
+
+<article class="card" id="gui-key-tests">
+<h3>가짜 키보드로 시험하기</h3>
+<!--CODE file=gui/tests/keys.rs lines=45-54 cap="gui/tests/keys.rs"-->
+<!--RUN file=out/logs/test_gui.txt pick="2,15-24"-->
+<div class="tip"><b>한 프레임에 키 둘</b> — Space 와 ← 를 같이 누르면 표 순서대로 "왼쪽 → 하드 드롭". 순서가 반대면 다른 자리에 떨어집니다. 이 순서를 시험이 못 박아 둡니다.</div>
+</article>
+
+<article class="card" id="gui-main">
+<h3>GUI <code>main</code></h3>
+<!--CODE file=gui/src/main.rs anchor=main-->
+</article>
+
+<article class="card" id="gui-main-read">
+<h3>GUI <code>main</code> 읽기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>Window::new(...).unwrap_or_else(|e| { ...; exit(1) })</code></td><td>실패하면 메시지를 찍고 끝낸다. 클로저 본문이 <code>exit</code> 로 끝나 돌아오지 않으므로(<code>!</code> 타입) <code>Window</code> 를 내야 하는 자리에 맞는다</td></tr>
+<tr><td><code>set_target_fps(60)</code></td><td><code>update_with_buffer</code> 가 프레임 사이를 알아서 쉰다 — TUI 의 <code>poll(16ms)</code> 자리</td></tr>
+<tr><td><code>set_key_repeat_delay/rate</code></td><td>DAS·ARR — 첫 반복까지 170ms, 그 뒤 50ms 마다</td></tr>
+<tr><td><code>update_with_buffer(&amp;frame.px, w, h)</code></td><td>버퍼를 빌려 창에 올리고, 그사이 쌓인 키 이벤트를 모은다</td></tr>
+</table>
+</div>
+<div class="note"><b>창은 <code>Drop</code> 으로 닫힌다</b> — TUI 의 경비원 같은 코드를 쓰지 않았습니다. 창 자원은 minifb 의 <code class="nb">Window</code> 값이 drop 될 때 정리되므로, <code class="nb">win</code> 이 <code class="nb">main</code> 끝에서 범위를 벗어나는 것으로 충분합니다.</div>
+</article>
+
+<article class="card" id="tui-vs-gui">
+<h3>두 루프 나란히 — 같은 모양</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>단계</th><th>TUI (2부)</th><th>GUI (3부)</th></tr>
+<tr><td>입력</td><td><code>event::poll</code> + <code>key_to_command</code></td><td><code>actions(|k, r| win.is_key_pressed(k, r))</code></td></tr>
+<tr><td>시간</td><td colspan="2"><code>last.elapsed()</code> → <code>game.tick(ms)</code>, 나머지는 다음 프레임으로 (똑같은 세 줄)</td></tr>
+<tr><td>그리기</td><td><code>compose</code> → <code>diff</code> → <code>present</code></td><td><code>draw</code> → <code>update_with_buffer</code></td></tr>
+<tr><td>박자</td><td><code>poll(16ms)</code></td><td><code>set_target_fps(60)</code></td></tr>
+<tr><td>정리</td><td>직접 쓴 <code>TerminalGuard</code></td><td><code>Window</code> 의 <code>Drop</code></td></tr>
+</table>
+</div>
+<div class="key"><b>코어는 한 글자도 안 바뀌었다</b> — 프런트엔드가 바뀌어도 <code class="nb">apply</code>·<code class="nb">tick</code>·게터만 씁니다. 4부의 브라우저판도 이 표에 한 열을 더할 뿐입니다.</div>
+</article>
+
+<article class="card" id="xvfb">
+<h3>창을 시험하는 법 — 가상 X 서버</h3>
+<ol class="steps">
+<li><code class="nb">Xvfb :77 -screen 0 640x700x24</code> 를 뒤에 띄우고, <code class="nb">trap ... EXIT</code> 로 끝날 때 죽이게 걸어 둔다.</li>
+<li><code class="nb">DISPLAY=:77 tetris-gui --seed 7</code> — 창이 가상 화면에 뜬다.</li>
+<li><code class="nb">xdotool search --name Rust</code> 로 창을 찾고 <code class="nb">windowfocus</code> — 창 관리자가 없어서 포커스를 직접 준다.</li>
+<li><code class="nb">xdotool key Left …</code> 로 키 20개를 0.2초 간격으로, 사이사이 <code class="nb">xwd</code> 로 찍는다.</li>
+<li>마지막에 <code class="nb">q</code> 를 보내고 프로세스가 정말 끝났는지 <code class="nb">kill -0</code> 으로 확인한다.</li>
+</ol>
+<p class="cap">rust_tetris/tools/record_gui.sh 의 흐름</p>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>도구</th><th>하는 일</th></tr>
+<tr><td>Xvfb</td><td>화면 없는 X 서버. CI 에서 GUI 를 띄우는 표준 방법</td></tr>
+<tr><td>xdotool</td><td>XTEST 확장으로 진짜 키 입력을 만든다</td></tr>
+<tr><td>xwd → ImageMagick</td><td>창을 덤프해 PNG 로</td></tr>
+</table>
+</div>
+<div class="warn"><b><code>trap ... EXIT</code></b> — 스크립트가 어디서 실패하든 Xvfb 를 죽입니다. 셸판 <code class="nb">Drop</code> 입니다. 이 기계에서는 다른 프로젝트의 고아 Xvfb 가 로그로 디스크를 채운 적이 있습니다.</div>
+</article>
+
+<article class="card" id="gui-shots">
+<h3>실제 실행 — 시작 · 몇 조각 뒤 · 일시정지</h3>
+<div class="shots">
+<!--IMG file=out/gui_start.png alt="시작" cap="시작"-->
+<!--IMG file=out/gui_play.png alt="몇 조각 뒤" cap="키 20번 뒤 (홀드에 J)"-->
+<!--IMG file=out/gui_pause.png alt="일시정지" cap="P — 가운데 띠"-->
+</div>
+</article>
+
+<article class="card" id="part3-sum">
+<h3>3부 정리</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>Rust 기능</th><th>쓰임</th></tr>
+<tr><td>클로저, <code>Fn</code> 트레이트, <code>impl Fn</code> 인자</td><td>색 섞기, 가짜 키보드</td></tr>
+<tr><td><code>let ... else</code>, <code>if let</code></td><td>글꼴에 없는 글자 건너뛰기, 홀드 그리기</td></tr>
+<tr><td>슬라이스 <code>fill</code>, <code>as_chunks_mut</code>, 터보피시</td><td>픽셀 채우기, RGBA 변환</td></tr>
+<tr><td>정적 슬라이스 <code>&amp;[...]</code></td><td>키 배치 표</td></tr>
+<tr><td><code>#[rustfmt::skip]</code></td><td>글꼴 표 모양 지키기</td></tr>
+</table>
+</div>
+<div class="key"><b>렌더러를 창에서 떼어 냈더니</b> — 시험 11개가 창 없이 돌고, PPM 스냅숏이 공짜로 생기고, 다음 부의 브라우저판이 그대로 가져다 씁니다.</div>
+</article>

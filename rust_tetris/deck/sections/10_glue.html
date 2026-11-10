@@ -1,0 +1,155 @@
+<article class="card" id="ch10">
+<p class="chnum">10장</p>
+<h2>JS 쪽 — 손으로 쓴 글루</h2>
+<p class="chsub">instantiate · 선형 메모리 뷰 · requestAnimationFrame · 게임패드 · node 로 진짜 .wasm 시험</p>
+</article>
+
+<article class="card" id="glue-overview">
+<h3><code>tetris.js</code> 가 하는 세 가지</h3>
+<!--CODE file=wasm/web/tetris.js lines=1-8-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>함수</th><th>하는 일</th></tr>
+<tr><td><code>load(src)</code></td><td>URL 이나 바이트에서 인스턴스를 만든다</td></tr>
+<tr><td><code>mount(canvas, ex)</code></td><td>프레임 루프를 돌리고 조종기를 돌려준다</td></tr>
+<tr><td><code>keyName(e)</code> · <code>padReader()</code></td><td>키보드·게임패드 → 동작 이름</td></tr>
+</table>
+</div>
+<div class="note"><b>번들러가 없다</b> — <code class="nb">&lt;script src="tetris.js"&gt;</code> 한 줄로 쓰도록 즉시 실행 함수 안에 넣고 전역 <code class="nb">RustTetris</code> 하나만 내놓습니다. 이 덱은 그 파일을 그대로 안에 싣습니다.</div>
+</article>
+
+<article class="card" id="glue-codes">
+<h3>입력 번호 표 — 양쪽이 같은 순서</h3>
+<!--CODE file=wasm/web/tetris.js anchor=codes-->
+<!--CODE file=wasm/src/lib.rs lines=63-73 cap="wasm/src/lib.rs — 짝이 되는 Rust 표"-->
+<div class="warn"><b>손글루의 값</b> — 이 두 표가 어긋나면 컴파일러도 시험도 바로는 모릅니다. wasm-bindgen 이라면 enum 을 그대로 넘길 수 있는 자리입니다. 이 덱은 node 시험(뒤에)이 번호마다 실제로 무엇이 바뀌는지 확인하는 것으로 메웁니다.</div>
+</article>
+
+<article class="card" id="glue-load">
+<h3>불러오기 — import 가 없다</h3>
+<!--CODE file=wasm/web/tetris.js anchor=load-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>WebAssembly.instantiate(bytes, {})</code></td><td>둘째 인자는 WASM 이 가져다 쓸 JS 함수들. Rust 쪽이 <code>console.log</code> 도, 시계도, 난수도 안 쓰니 빈 객체</td></tr>
+<tr><td><code>instance.exports</code></td><td><code>tt_init</code>, <code>tt_render</code>, … 그리고 <code>memory</code></td></tr>
+</table>
+</div>
+<div class="key"><b>import 0개가 설계의 결과</b> — 1부에서 코어가 시계를 안 읽고(<code class="nb">tick(dt)</code>), 난수를 직접 만들고(xorshift), 3부에서 글꼴을 비트맵으로 품었기 때문입니다. 경계가 숫자 일곱 함수로 끝납니다.</div>
+</article>
+
+<article class="card" id="glue-mount">
+<h3><code>mount</code> ① — 초기화와 조종기</h3>
+<!--CODE file=wasm/web/tetris.js anchor=mount-->
+<div class="tip"><b><code>opts.seed ?? Date.now()</code></b> — <code class="nb">??</code> 는 <code class="nb">null</code>/<code class="nb">undefined</code> 일 때만 오른쪽. <code class="nb">seed: 0</code> 을 넘겨도 0 이 살아남습니다(<code class="nb">||</code> 였다면 시각으로 바뀐다).</div>
+</article>
+
+<article class="card" id="glue-frame">
+<h3><code>mount</code> ② — 프레임 루프</h3>
+<!--CODE file=wasm/web/tetris.js anchor=frame-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>줄</th><th>왜</th></tr>
+<tr><td><code>Math.min(100, now - last)</code></td><td>탭이 숨었다 돌아오면 수 초가 한 번에 온다. 조각이 순간이동하지 않게 프레임당 100ms 까지</td></tr>
+<tr><td><code>carry</code></td><td>16.7ms 의 0.7ms 를 버리지 않고 모은다 — TUI·GUI 의 <code>last += ms</code> 와 같은 일</td></tr>
+<tr><td><code>new Uint8ClampedArray(ex.memory.buffer, ptr, …)</code></td><td>복사 없는 뷰. <b>매 프레임 새로</b> 만든다</td></tr>
+</table>
+</div>
+</article>
+
+<article class="card" id="memory-grow">
+<h3>함정 — 메모리가 늘면 옛 뷰는 죽는다</h3>
+<!--CODE file=wasm/src/lib.rs lines=101-104 cap="wasm/src/lib.rs — tt_render 의 문서 주석"-->
+<p>Rust 의 <code class="nb">Vec</code> 이 더 큰 메모리를 요청하면 WASM 은 <code class="nb">memory.grow</code> 를 하고, 그 순간 JS 가 들고 있던 <code class="nb">memory.buffer</code> 는 길이 0 짜리 <b>떨어진(detached)</b> 버퍼가 됩니다. 뷰를 한 번 만들어 두고 재사용하면 언젠가 빈 화면이나 <code class="nb">TypeError</code> 를 봅니다.</p>
+<div class="note">이 게임은 <code class="nb">tt_init</code> 뒤로 할당이 거의 없어 실제로는 잘 안 일어나지만(점수 문자열 정도), 싸게 막을 수 있으니 막아 둡니다. wasm-bindgen 이 만든 글루도 같은 이유로 매번 뷰를 확인합니다.</div>
+</article>
+
+<article class="card" id="glue-keys">
+<h3>키보드 — 반복은 이동만</h3>
+<!--CODE file=wasm/web/tetris.js anchor=keyname-->
+<div class="tblwrap">
+<table class="kv">
+<tr><th>판</th><th>"누르고 있으면 반복"을 누가</th></tr>
+<tr><td>TUI</td><td>터미널의 키 반복 — 모든 키가 반복된다(Space 를 누르고 있으면 하드 드롭이 연달아 나간다)</td></tr>
+<tr><td>GUI</td><td>minifb <code>KeyRepeat::Yes/No</code> + 170ms/50ms 설정</td></tr>
+<tr><td>WASM</td><td>브라우저 <code>e.repeat</code> 를 보고 이동이 아니면 버린다</td></tr>
+</table>
+</div>
+<div class="note">세 판의 키 반복 처리가 다른 것은 바깥 세상이 다르기 때문입니다. 그래서 코어 밖에 둡니다.</div>
+</article>
+
+<article class="card" id="glue-pad">
+<h3>게임패드 — 매 프레임 읽고 가장자리만</h3>
+<!--CODE file=wasm/web/tetris.js anchor=pad-->
+</article>
+
+<article class="card" id="glue-pad-read">
+<h3>게임패드 읽기</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>코드</th><th>설명</th></tr>
+<tr><td><code>navigator.getGamepads()</code></td><td>이벤트가 아니라 상태를 <b>폴링</b>한다. 그래서 매 프레임 <code>onFrame</code> 에서 부른다</td></tr>
+<tr><td><code>held[name]</code></td><td>지난 프레임에도 눌려 있었나 — 누르는 "순간"만 동작</td></tr>
+<tr><td><code>next[name] = now + 170</code></td><td>이동은 170ms 뒤 50ms 마다 반복(GUI 와 같은 값)</td></tr>
+<tr><td><code>b.value &gt; 0.5</code></td><td>아날로그 트리거도 버튼으로</td></tr>
+</table>
+</div>
+<div class="tip"><b>클로저로 상태 숨기기</b> — <code class="nb">padReader()</code> 는 <code class="nb">held</code>·<code class="nb">next</code> 를 붙잡은 함수를 돌려줍니다. Rust 의 <code class="nb">FnMut</code> 클로저와 같은 모양입니다.</div>
+</article>
+
+<article class="card" id="web-page">
+<h3>단독 페이지 — <code>wasm/web/index.html</code></h3>
+<!--CODE file=wasm/web/index.html lines=26-40-->
+<div class="term"><span class="p">$</span> make wasm
+<span class="p">$</span> python3 -m http.server -d wasm/web
+<span class="c"># → http://localhost:8000</span></div>
+<div class="warn"><b><code>file://</code> 로 열면 안 된다</b> — 브라우저가 <code class="nb">fetch('tetris_wasm.wasm')</code> 을 막습니다. 로컬 서버가 필요합니다. 이 덱은 .wasm 을 base64 로 품어 <code class="nb">fetch</code> 없이 바이트로 <code class="nb">load</code> 하므로 파일 하나로 열립니다.</div>
+</article>
+
+<article class="card" id="node-test">
+<h3>진짜 .wasm 을 node 로 시험한다</h3>
+<!--CODE file=wasm/test/node_test.mjs anchor=exports-->
+<!--RUN file=out/logs/wasm_node.txt-->
+<div class="note"><b>네이티브 시험(9장)과 무엇이 다른가</b> — 9장은 같은 Rust 함수를 x86/ARM 으로 컴파일해 불렀고, 여기서는 <code class="nb">wasm32</code> 로 컴파일된 바로 그 파일을 V8 이 돌립니다. "import 0개"와 내보내기 이름은 이쪽에서만 확인할 수 있습니다.</div>
+</article>
+
+<article class="card" id="node-glue">
+<h3>글루까지 node 에서 — 가짜 rAF 와 캔버스</h3>
+<!--CODE file=wasm/test/node_test.mjs anchor=glue_mount cap="wasm/test/node_test.mjs — mount 를 가짜 캔버스에 붙여 프레임을 손으로 돌린다"-->
+<div class="tip"><b><code>vm.runInContext</code></b> 로 <code class="nb">tetris.js</code> 를 브라우저인 척하는 객체 위에서 실행합니다. <code class="nb">requestAnimationFrame</code> 을 "예약 표"로 바꿔 두면 프레임을 시험이 원하는 시각에 하나씩 돌릴 수 있습니다. Go 의 가짜 시계, Java 의 <code class="nb">Clock.fixed</code> 와 같은 요령입니다.</div>
+</article>
+
+<article class="card" id="deck-embed">
+<h3>이 덱에 싣기 — 키를 누가 갖나</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>문제</th><th>해법 (<code>rust_tetris/deck/demo.js</code>)</th></tr>
+<tr><td>←→ Space 는 덱이 페이지를 넘기는 키</td><td>게임이 키를 "쥐고" 있을 때만 캡처 단계에서 가로챈다. <code>Q</code> 나 ■ 로 돌려준다</td></tr>
+<tr><td>게임패드도 덱이 쓴다</td><td>쥐는 동안 <code>window.__deckPadOwner = true</code> — 덱 셸이 패드로 페이지를 넘기지 않는다</td></tr>
+<tr><td>다른 슬라이드로 가면</td><td>매 프레임 "내 슬라이드가 보이나"를 보고, 아니면 일시정지하고 루프를 재운다(<code>sleep</code>)</td></tr>
+<tr><td>데모가 둘</td><td><code>WebAssembly.compile</code> 은 한 번, 인스턴스만 따로</td></tr>
+</table>
+</div>
+<div class="note"><b>.wasm 을 base64 로</b> — <code class="nb">build.py</code> 가 <code class="nb">out/tetris_wasm.wasm</code> 을 읽어 문자열로 박습니다. 33 KB → 44 KB 정도로 늘지만, 덱이 파일 하나라는 약속을 지킵니다.</div>
+</article>
+
+<article class="card" id="play-again">
+<h3>다시 해 보기 — 4부까지 읽고 나서</h3>
+<!--TETRIS title="core + render + 내보내기 7개 = 33 KB"-->
+<div class="key"><b>지금 도는 것을 짚어 보면</b> — 키를 누를 때마다 <code class="nb">tt_input(번호)</code>, 프레임마다 <code class="nb">tt_tick(ms)</code> → <code class="nb">tt_render()</code> → <code class="nb">putImageData</code>. 규칙은 1부, 그림은 3부, 경계는 4부의 코드 그대로입니다.</div>
+</article>
+
+<article class="card" id="part4-sum">
+<h3>4부 정리</h3>
+<div class="tblwrap">
+<table class="kv">
+<tr><th>Rust 기능</th><th>쓰임</th></tr>
+<tr><td><code>crate-type = ["cdylib", "rlib"]</code>, 프로필</td><td>.wasm 과 네이티브 시험을 한 크레이트에서</td></tr>
+<tr><td><code>#[unsafe(no_mangle)] extern "C"</code></td><td>JS 가 부를 이름과 호출 규약</td></tr>
+<tr><td><code>thread_local!</code> + <code>RefCell</code></td><td><code>static mut</code> 없이 전역 게임 하나</td></tr>
+<tr><td>제네릭 + <code>FnOnce</code></td><td><code>with_app</code> 하나로 일곱 함수의 "init 전" 처리</td></tr>
+<tr><td>원시 포인터, <code>unsafe</code> 블록</td><td>버퍼 주소 넘기기(안전) / 시험에서 읽기(unsafe)</td></tr>
+</table>
+</div>
+<div class="key"><b>경계는 좁게, 실패는 값으로</b> — 패닉이 FFI 를 넘으면 abort 이므로, 내보내기 함수는 잘못된 입력에 0·널을 돌려줍니다. 경계 안쪽은 1~3부의 평범한 Rust 입니다.</div>
+</article>
