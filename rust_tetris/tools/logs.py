@@ -4,9 +4,10 @@
 각 파일의 첫 줄은 화면에 보일 명령(`$ ...`), 그 아래가 실제 출력이다.
 기대한 종료 코드와 다르면 그 자리에서 멈춘다 — 실패한 출력을 덱에 싣지 않기 위해.
 
-정규화는 두 가지뿐이다:
+정규화는 세 가지뿐이다:
   - 저장소 절대 경로를 지운다(덱에 기계 경로가 새지 않게)
   - 패닉 줄의 스레드 번호 `(12345)` 를 지운다(실행마다 달라진다)
+  - cargo 의 `Compiling …` 줄을 지운다(캐시 상태에 따라 있다 없다 해서 덱의 pick 줄 번호가 밀린다)
 """
 import os, re, subprocess, sys
 
@@ -83,6 +84,7 @@ RUNS = [
 def clean(text):
     text = text.replace(SRC + '/', '').replace(SRC, '.')
     text = re.sub(r"(thread '[^']*') \(\d+\)", r'\1', text)
+    text = re.sub(r'(?m)^ +Compiling .*\n', '', text)
     return text
 
 

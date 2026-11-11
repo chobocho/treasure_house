@@ -180,3 +180,10 @@ fn ctrl_c_quits_and_release_is_ignored() {
         "윈도는 뗄 때도 이벤트가 온다"
     );
 }
+
+#[test]
+#[should_panic]
+fn get_outside_the_row_panics() {
+    // x 가 W 이상이면 다음 행의 칸을 돌려주지 말고 터져야 한다
+    Screen::new().get(W, 0);
+}

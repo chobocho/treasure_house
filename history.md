@@ -1,3 +1,10 @@
+### [2026-11-11 02:06] Rust 테트리스 덱 리뷰 — 결함 13건 정정·게임패드 재시작 추가
+- **기획:** 섹션 13개·소스·로그를 전수 대조. 재시작 씨앗 고정(TUI·GUI), Screen::get x 미검사, 로그 pick 밀림, 사실·수치·표기 9건.
+- **TC:** 경계 — get(W, 0) 은 패닉(should_panic, RED 확인). 정상 — 패드 Select 는 restart 한 번만(node 글루 시험에 추가, RED 확인).
+- **개발:** rust_tetris/tui/src/{lib,main}.rs, gui/src/main.rs, wasm/web/tetris.js, tools/logs.py, deck/sections 8개, tui/tests/screen.rs, wasm/test/node_test.mjs 외 덱·카드·로그
+- **검증:** make all rc=0 (cargo 82 passed, node 8 passed, 191장, check_deck 232 통과 0 실패, --check 통과)
+- **비고:** main.rs 씨앗 수정은 시험 없는 껍데기라 RED 없음. Java switch 건은 javac 미실행. 실기기 레이아웃 미확인.
+
 ### [2026-11-10 18:24] Rust 테트리스 덱 완성 — TUI·GUI·WASM 5부 191장
 - **기획:** 규칙 코어 하나를 crossterm·minifb·손글루 WASM 세 판이 같이 쓰는 Go/Java/Python/JS 숙련자용 덱.
 - **TC:** 정상 — cargo 시험 81(core 47+doc 1·render 11·tui 10·gui 5·wasm 7), node 8. 경계 — 72칸·45줄 초과 0, 경로 노출 0.

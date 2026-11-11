@@ -24,6 +24,8 @@
 
 ## 진행 기록 (최신이 위)
 
+- 2026-11-11 리뷰: 재시작 씨앗 누적(TUI·GUI), `Screen::get` 행 범위 검사, 패드 Select=다시 시작, 덱 문구 9건 정정.
+  시험 82 + node 8. `logs.py` 가 cargo 의 `Compiling` 줄을 지운다 — 캐시 상태에 따라 pick 줄 번호가 밀렸었다.
 - 2026-11-10 덱 완성: 5부 11장 191장. `make all WASM_SYSROOT=…` 초록(시험 81 + node 8, 검사 232).
   build.py 의 72칸·45줄 제한에 맞춰 소스 주석·JS 글루·node 시험을 다시 접었고(동작 불변, 재시험),
   긴 앵커는 둘로 나눴다(bag→bag/bag_draw, mount→mount/frame). wasm 은 bag.rs 줄 이동으로 해시만 바뀜(33,332 B 그대로).

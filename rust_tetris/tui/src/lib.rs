@@ -51,7 +51,7 @@ impl Screen {
     }
 
     pub fn get(&self, x: usize, y: usize) -> Cell {
-        self.cells[y * W + x]
+        self.cells[y * W..(y + 1) * W][x]
     }
 
     fn set(&mut self, x: usize, y: usize, cell: Cell) {

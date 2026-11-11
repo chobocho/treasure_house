@@ -122,14 +122,14 @@
   /**
    * 게임패드 → 동작. 매 프레임 불러 준다. 버튼은 "눌리는 순간"만,
    * 십자키 좌우·아래는 170ms 뒤 50ms 간격으로 반복한다.
-   * 표준 배치: 0=A 1=B 2=X 3=Y 4=LB 5=RB 9=Start 12~15=십자키.
+   * 표준 배치: 0=A 1=B 2=X 3=Y 4=LB 5=RB 8=Select 9=Start 12~15=십자키.
    */
   function padReader() {
     const held = {}, next = {};
     const MAP = [
       [0, 'cw'], [1, 'ccw'], [2, 'hold'], [3, 'hard'], [4, 'hold'],
-      [5, 'hold'], [9, 'pause'], [12, 'hard'], [13, 'soft'],
-      [14, 'left'], [15, 'right'],
+      [5, 'hold'], [8, 'restart'], [9, 'pause'], [12, 'hard'],
+      [13, 'soft'], [14, 'left'], [15, 'right'],
     ];
     return function poll(now, press) {
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];

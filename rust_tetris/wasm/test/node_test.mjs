@@ -76,6 +76,7 @@ await test('글루: keyName 과 mount (가짜 캔버스)', async () => {
   // 가짜 rAF: 예약 번호 → 콜백. cancel 이 진짜로 지워야 sleep 을 시험할 수 있다
   const frames = new Map();
   let seq = 0, puts = 0;
+  const pads = [];
   const step = t => { const [id, fn] = frames.entries().next().value; frames.delete(id); fn(t); };
   const ctx = {
     globalThis: {}, performance: { now: () => 0 },
@@ -83,6 +84,7 @@ await test('글루: keyName 과 mount (가짜 캔버스)', async () => {
     cancelAnimationFrame: id => { frames.delete(id); },
     ImageData: class { constructor(d, w, h) { this.data = d; this.width = w; this.height = h; } },
     WebAssembly, Uint8ClampedArray, Math, Object, Set, Error, Date,
+    navigator: { getGamepads: () => pads },
   };
   ctx.globalThis = ctx;
   vm.createContext(ctx);
@@ -128,6 +130,14 @@ await test('글루: keyName 과 mount (가짜 캔버스)', async () => {
   assert.equal(frames.size, 1, '깨우면 다시 돈다');
   g2.stop();
   assert.equal(g.running, false);
+  // 게임패드: Select(8) 는 다시 시작 — 누르는 순간 한 번만
+  const btn = Array.from({ length: 16 }, () => ({ pressed: false, value: 0 }));
+  pads.push({ buttons: btn, axes: [] });
+  const poll = RT.padReader(), got = [];
+  btn[8].pressed = true;
+  poll(0, n => got.push(n));
+  poll(16, n => got.push(n));
+  assert.deepEqual(got, ['restart']);
 });
 
 console.log(`${passed} passed`);

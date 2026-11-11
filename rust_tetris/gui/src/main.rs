@@ -27,7 +27,7 @@ fn seed_from_args() -> u64 {
 
 // ANCHOR: main
 fn main() {
-    let seed = seed_from_args();
+    let mut seed = seed_from_args();
     let mut game = Game::new(seed);
     let mut frame = Frame::new(28); // 칸 28px → 창 462×588
 
@@ -47,7 +47,8 @@ fn main() {
             game.apply(a);
         }
         if game.is_over() && win.is_key_pressed(Key::R, KeyRepeat::No) {
-            game = Game::new(seed.wrapping_add(1));
+            seed = seed.wrapping_add(1); // 판마다 새 씨앗
+            game = Game::new(seed);
         }
 
         let ms = last.elapsed().as_millis() as u32;

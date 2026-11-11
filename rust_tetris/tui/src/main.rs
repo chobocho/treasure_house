@@ -64,7 +64,7 @@ fn seed_from_args() -> Result<u64, String> {
 
 // ANCHOR: main
 fn main() -> io::Result<()> {
-    let seed = match seed_from_args() {
+    let mut seed = match seed_from_args() {
         Ok(s) => s,
         Err(msg) => {
             eprintln!("{msg}");
@@ -95,7 +95,8 @@ fn main() -> io::Result<()> {
                 Event::Key(k) => match key_to_command(k) {
                     Some(Command::Quit) => return Ok(()),
                     Some(Command::Restart) if game.is_over() => {
-                        game = Game::new(seed.wrapping_add(1));
+                        seed = seed.wrapping_add(1); // 판마다 새 씨앗
+                        game = Game::new(seed);
                     }
                     Some(Command::Play(a)) => {
                         game.apply(a);
